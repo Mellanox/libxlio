@@ -1,0 +1,2 @@
+usr/include/mellanox/xlio_extra.h
+libxlio-debug.so usr/lib

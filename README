@@ -1,0 +1,1179 @@
+Introduction
+============
+
+Accelerated IO SW library (XLIO) boosts the performance of applications written over standard socket API such as
+web serving, reverse proxying, caching, load balancing, media streaming, and more. Reduction of latency, increasing
+throughput and effective CPU utilization is achieved by full network stack bypass and direct access to
+accelerated network hardware.
+XLIO dynamically links with these applications at run-time, redirect standard socket API calls allowing them to be
+be accelerated without modification.
+
+Build library from source
+========================
+
+Prerequisites:
+1. rdma-core upstream kernel and userspace verbs libraries (libibverbs, libmlx4, libmlx5, librdmacm)
+2. Autoconf, Automake, libtool, unzip, patch, libnl-devel (netlink 1 or 3)
+
+Build:
+1. ./autogen.sh
+2. ./configure --prefix=/usr
+3. make
+4. sudo make install
+
+
+Install library from rpm or debian
+=================================
+
+Installing:
+Install the package as any other rpm or debian package [rpm -i libxlio.X.Y.Z-R.rpm].
+The installation copies the XLIO library to: /usr/lib[64]/libxlio.so
+The XLIO monitoring utility is installed at: /usr/bin/xlio_stats
+The XLIO extra socket API is located at: /usr/include/mellanox/xlio_extra.h
+
+Post Installation:
+When working over Infiniband, we recommend to manually add persistence
+for the following system parameters:
+1. Force IPoIB to work in 'datagram' mode (disabling IPoIB 'connected' mode)
+   Modify "SET_IPOIB_CM=no" in file "/etc/infiniband/openib.conf"
+2. Force IGMP to work in V2 on IB interfaces
+   Add "net.ipv4.conf.all.force_igmp_version = 2" in file "/etc/sysctl.conf"
+
+Upgrading:
+Use rpm update procedure: # rpm -U libxlio.X.Y.Z-R.rpm
+You can upgrade by uninstalling (rpm -e) the previously installed package
+before starting to install the new library rpm.
+
+Uninstalling:
+When uninstalling remember to uninstall (rpm -e) the package before you
+uninstall ofed.
+
+Running:
+Set the environment variable LD_PRELOAD to libxlio.so and run your application.
+Example: # LD_PRELOAD=libxlio.so iperf -uc 224.22.22.22 -t 5
+
+
+
+Configuration Values
+====================
+
+On default startup the XLIO library logs to stderr the version, the modified
+configuration parameters being used and their values.
+Please notice that except XLIO_TRACELEVEL, library logs just those parameters whose value != default.
+
+Example:
+ XLIO INFO   : ---------------------------------------------------------------------------
+ XLIO INFO   : XLIO_VERSION: 1.0.0-0 Development Snapshot built on May 26 2021 17:00:30
+ XLIO INFO   : Git: 46d203af1d322799c8de5789ba4fe0955f8d9942
+ XLIO INFO   : Cmd Line: uname -r
+ XLIO INFO   : Current Time: Wed May 26 17:02:52 2021
+ XLIO INFO   : Pid: 31535
+ XLIO INFO   : OFED Version: MLNX_OFED_LINUX-5.2-0.4.8.0:
+ XLIO DEBUG  : System: 4.18.0-80.el8.x86_64
+ XLIO INFO   : Architecture: x86_64
+ XLIO INFO   : Node: r-aa-zorro006
+ XLIO INFO   : ---------------------------------------------------------------------------
+ XLIO INFO   : Log Level                      DEBUG                      [XLIO_TRACELEVEL]
+ XLIO DETAILS: Log Details                    0                          [XLIO_LOG_DETAILS]
+ XLIO DETAILS: Log Colors                     Enabled                    [XLIO_LOG_COLORS]
+ XLIO DETAILS: Log File                                                  [XLIO_LOG_FILE]
+ XLIO DETAILS: Stats File                                                [XLIO_STATS_FILE]
+ XLIO DETAILS: Stats shared memory directory  /tmp/xlio                  [XLIO_STATS_SHMEM_DIR]
+ XLIO DETAILS: SERVICE output directory       /tmp/xlio                  [XLIO_SERVICE_NOTIFY_DIR]
+ XLIO DETAILS: Stats FD Num (max)             100                        [XLIO_STATS_FD_NUM]
+ XLIO DETAILS: Conf File                      /etc/libxlio.conf          [XLIO_CONFIG_FILE]
+ XLIO DETAILS: Application ID                 XLIO_DEFAULT_APPLICATION_ID [XLIO_APPLICATION_ID]
+ XLIO DETAILS: Polling CPU idle usage         Disabled                   [XLIO_CPU_USAGE_STATS]
+ XLIO DETAILS: SigIntr Ctrl-C Handle          Disabled                   [XLIO_HANDLE_SIGINTR]
+ XLIO DETAILS: SegFault Backtrace             Disabled                   [XLIO_HANDLE_SIGSEGV]
+ XLIO DETAILS: Ring allocation logic TX       0 (Ring per interface)     [XLIO_RING_ALLOCATION_LOGIC_TX]
+ XLIO DETAILS: Ring allocation logic RX       0 (Ring per interface)     [XLIO_RING_ALLOCATION_LOGIC_RX]
+ XLIO INFO   : Ring migration ratio TX        -1                         [XLIO_RING_MIGRATION_RATIO_TX]
+ XLIO DETAILS: Ring migration ratio RX        100                        [XLIO_RING_MIGRATION_RATIO_RX]
+ XLIO DETAILS: Ring limit per interface       0 (no limit)               [XLIO_RING_LIMIT_PER_INTERFACE]
+ XLIO DETAILS: Ring On Device Memory TX       0                          [XLIO_RING_DEV_MEM_TX]
+ XLIO DETAILS: TCP max syn rate               0 (no limit)               [XLIO_TCP_MAX_SYN_RATE]
+ XLIO DETAILS: Zerocopy Mem Bufs              200000                     [XLIO_ZC_BUFS]
+ XLIO DETAILS: Zerocopy Cache Threshold       10240                      [XLIO_ZC_CACHE_THRESHOLD]
+ XLIO DETAILS: Tx Mem Segs TCP                1000000                    [XLIO_TX_SEGS_TCP]
+ XLIO DETAILS: Tx Mem Bufs                    200000                     [XLIO_TX_BUFS]
+ XLIO DETAILS: Tx Mem Buf size                0                          [XLIO_TX_BUF_SIZE]
+ XLIO DETAILS: ZC TX size                     32768                      [XLIO_ZC_TX_SIZE]
+ XLIO DETAILS: Tx QP WRE                      2048                       [XLIO_TX_WRE]
+ XLIO DETAILS: Tx QP WRE Batching             64                         [XLIO_TX_WRE_BATCHING]
+ XLIO DETAILS: Tx Max QP INLINE               204                        [XLIO_TX_MAX_INLINE]
+ XLIO DETAILS: Tx MC Loopback                 Enabled                    [XLIO_TX_MC_LOOPBACK]
+ XLIO DETAILS: Tx non-blocked eagains         Disabled                   [XLIO_TX_NONBLOCKED_EAGAINS]
+ XLIO DETAILS: Tx Prefetch Bytes              256                        [XLIO_TX_PREFETCH_BYTES]
+ XLIO DETAILS: TCP Send Buffer size           1000000                    [XLIO_TCP_SEND_BUFFER_SIZE]
+ XLIO DETAILS: Rx Mem Bufs                    200000                     [XLIO_RX_BUFS]
+ XLIO DETAILS: Rx QP WRE                      16000                      [XLIO_RX_WRE]
+ XLIO DETAILS: Rx QP WRE Batching             64                         [XLIO_RX_WRE_BATCHING]
+ XLIO DETAILS: Rx Byte Min Limit              65536                      [XLIO_RX_BYTES_MIN]
+ XLIO DETAILS: Rx Poll Loops                  100000                     [XLIO_RX_POLL]
+ XLIO DETAILS: Rx Poll Init Loops             0                          [XLIO_RX_POLL_INIT]
+ XLIO DETAILS: Rx UDP Poll OS Ratio           100                        [XLIO_RX_UDP_POLL_OS_RATIO]
+ XLIO DETAILS: HW TS Conversion               3                          [XLIO_HW_TS_CONVERSION]
+ XLIO DETAILS: Rx Poll Yield                  Disabled                   [XLIO_RX_POLL_YIELD]
+ XLIO DETAILS: Rx Prefetch Bytes              256                        [XLIO_RX_PREFETCH_BYTES]
+ XLIO DETAILS: Rx Prefetch Bytes Before Poll  0                          [XLIO_RX_PREFETCH_BYTES_BEFORE_POLL]
+ XLIO DETAILS: Rx CQ Drain Rate               Disabled                   [XLIO_RX_CQ_DRAIN_RATE_NSEC]
+ XLIO DETAILS: GRO max streams                32                         [XLIO_GRO_STREAMS_MAX]
+ XLIO DETAILS: TCP 3T rules                   Disabled                   [XLIO_TCP_3T_RULES]
+ XLIO DETAILS: UDP 3T rules                   Enabled                    [XLIO_UDP_3T_RULES]
+ XLIO DETAILS: ETH MC L2 only rules           Disabled                   [XLIO_ETH_MC_L2_ONLY_RULES]
+ XLIO DETAILS: Force Flowtag for MC           Disabled                   [XLIO_MC_FORCE_FLOWTAG]
+ XLIO DETAILS: Select Poll (usec)             100000                     [XLIO_SELECT_POLL]
+ XLIO DETAILS: Select Poll OS Force           Disabled                   [XLIO_SELECT_POLL_OS_FORCE]
+ XLIO DETAILS: Select Poll OS Ratio           10                         [XLIO_SELECT_POLL_OS_RATIO]
+ XLIO DETAILS: Select Skip OS                 4                          [XLIO_SELECT_SKIP_OS]
+ XLIO DETAILS: CQ Drain Interval (msec)       10                         [XLIO_PROGRESS_ENGINE_INTERVAL]
+ XLIO DETAILS: CQ Drain WCE (max)             10000                      [XLIO_PROGRESS_ENGINE_WCE_MAX]
+ XLIO DETAILS: CQ Interrupts Moderation       Enabled                    [XLIO_CQ_MODERATION_ENABLE]
+ XLIO DETAILS: CQ Moderation Count            48                         [XLIO_CQ_MODERATION_COUNT]
+ XLIO DETAILS: CQ Moderation Period (usec)    50                         [XLIO_CQ_MODERATION_PERIOD_USEC]
+ XLIO DETAILS: CQ AIM Max Count               560                        [XLIO_CQ_AIM_MAX_COUNT]
+ XLIO DETAILS: CQ AIM Max Period (usec)       250                        [XLIO_CQ_AIM_MAX_PERIOD_USEC]
+ XLIO DETAILS: CQ AIM Interval (msec)         250                        [XLIO_CQ_AIM_INTERVAL_MSEC]
+ XLIO DETAILS: CQ AIM Interrupts Rate (per sec) 5000                       [XLIO_CQ_AIM_INTERRUPTS_RATE_PER_SEC]
+ XLIO DETAILS: CQ Poll Batch (max)            16                         [XLIO_CQ_POLL_BATCH_MAX]
+ XLIO DETAILS: CQ Keeps QP Full               Enabled                    [XLIO_CQ_KEEP_QP_FULL]
+ XLIO DETAILS: QP Compensation Level          256                        [XLIO_QP_COMPENSATION_LEVEL]
+ XLIO DETAILS: Offloaded Sockets              Enabled                    [XLIO_OFFLOADED_SOCKETS]
+ XLIO DETAILS: Timer Resolution (msec)        10                         [XLIO_TIMER_RESOLUTION_MSEC]
+ XLIO DETAILS: TCP Timer Resolution (msec)    100                        [XLIO_TCP_TIMER_RESOLUTION_MSEC]
+ XLIO DETAILS: TCP control thread             0 (Disabled)               [XLIO_TCP_CTL_THREAD]
+ XLIO DETAILS: TCP timestamp option           0                          [XLIO_TCP_TIMESTAMP_OPTION]
+ XLIO DETAILS: TCP nodelay                    0                          [XLIO_TCP_NODELAY]
+ XLIO DETAILS: TCP quickack                   0                          [XLIO_TCP_QUICKACK]
+ XLIO DETAILS: Exception handling mode        -1(just log debug message) [XLIO_EXCEPTION_HANDLING]
+ XLIO DETAILS: Avoid sys-calls on tcp fd      Disabled                   [XLIO_AVOID_SYS_CALLS_ON_TCP_FD]
+ XLIO DETAILS: Allow privileged sock opt      Enabled                    [XLIO_ALLOW_PRIVILEGED_SOCK_OPT]
+ XLIO DETAILS: Delay after join (msec)        0                          [XLIO_WAIT_AFTER_JOIN_MSEC]
+ XLIO DETAILS: Internal Thread Affinity       -1                         [XLIO_INTERNAL_THREAD_AFFINITY]
+ XLIO DETAILS: Internal Thread Cpuset                                    [XLIO_INTERNAL_THREAD_CPUSET]
+ XLIO DETAILS: Internal Thread Arm CQ         Disabled                   [XLIO_INTERNAL_THREAD_ARM_CQ]
+ XLIO DETAILS: Internal Thread TCP Handling   0 (deferred)               [XLIO_INTERNAL_THREAD_TCP_TIMER_HANDLING]
+ XLIO DETAILS: Thread mode                    Multi spin lock            [XLIO_THREAD_MODE]
+ XLIO DETAILS: Buffer batching mode           1 (Batch and reclaim buffers) [XLIO_BUFFER_BATCHING_MODE]
+ XLIO DETAILS: Mem Allocate type              2 (Huge Pages)             [XLIO_MEM_ALLOC_TYPE]
+ XLIO DETAILS: Num of UC ARPs                 3                          [XLIO_NEIGH_UC_ARP_QUATA]
+ XLIO DETAILS: UC ARP delay (msec)            10000                      [XLIO_NEIGH_UC_ARP_DELAY_MSEC]
+ XLIO DETAILS: Num of neigh restart retries   1                          [XLIO_NEIGH_NUM_ERR_RETRIES]
+ XLIO DETAILS: IPOIB support                  Enabled                    [XLIO_IPOIB]
+ XLIO DETAILS: SocketXtreme mode              Disabled                   [XLIO_SOCKETXTREME]
+ XLIO DETAILS: TSO support                    Enabled                    [XLIO_TSO]
+ XLIO DETAILS: BF (Blue Flame)                Enabled                    [XLIO_BF]
+ XLIO DETAILS: Src port stirde                2                          [XLIO_SRC_PORT_STRIDE]
+ XLIO DETAILS: Number of Nginx workers        0                          [XLIO_NGINX_WORKERS_NUM]
+ XLIO DETAILS: fork() support                 Enabled                    [XLIO_FORK]
+ XLIO DETAILS: close on dup2()                Enabled                    [XLIO_CLOSE_ON_DUP2]
+ XLIO DETAILS: MTU                            0 (follow actual MTU)      [XLIO_MTU]
+ XLIO DETAILS: MSS                            0 (follow XLIO_MTU)        [XLIO_MSS]
+ XLIO DETAILS: TCP CC Algorithm               0 (LWIP)                   [XLIO_TCP_CC_ALGO]
+ XLIO DETAILS: TCP abort on close             Disabled                   [XLIO_TCP_ABORT_ON_CLOSE]
+ XLIO DETAILS: Polling Rx on Tx TCP           Disabled                   [XLIO_RX_POLL_ON_TX_TCP]
+ XLIO DETAILS: Trig dummy send getsockname()  Disabled                   [XLIO_TRIGGER_DUMMY_SEND_GETSOCKNAME]
+ XLIO INFO   : ---------------------------------------------------------------------------
+
+XLIO_TRACELEVEL
+Logging level the library will be using. Default is info
+Example: # XLIO_TRACELEVEL=debug
+
+none
+    Print no log at all
+panic
+    Panic level logging, this would generally cause fatal behavior and an exception
+    will be thrown by the library. Typically, this is caused by memory
+    allocation problems. This level is rarely used.
+error
+    Runtime ERRORs in the library.
+    Typically, these can provide insight for the developer of wrong internal
+    logic like: Errors from underlying OS or Infiniband verbs calls. internal
+    double mapping/unmapping of objects.
+warn
+    Runtime warning that do not disrupt the workflow of the application but
+    might warn of a problem in the setup or the overall setup configuration.
+    Typically, these can be address resolution failure (due to wrong routing
+    setup configuration), corrupted ip packets in the receive path or
+    unsupported functions requested by the user application
+info
+    General information passed to the user of the application. Bring up
+    configuration logging or some general info to help the user better
+    use the library
+details
+    Complete XLIO's configuration information.
+    Very high level insight of some of the critical decisions done in library.
+debug
+    High level insight to the operations done in the library. All socket API calls
+    are logged and internal high level control channels log there activity.
+fine
+    Low level run time logging of activity. This logging level includes basic
+    Tx and Rx logging in the fast path and it will lower application
+    performance. It is recommended to use this level with XLIO_LOG_FILE parameter.
+finer
+    Very low level run time logging of activity!
+    This logging level will DRASTICALLY lower application performance.
+    It is recommended to use this level with XLIO_LOG_FILE parameter.
+all
+    today this level is identical to finer
+
+XLIO_LOG_DETAILS
+Add details on each log line.
+0 = Basic log line
+1 = ThreadId
+2 = ProcessId + ThreadId
+3 = Time + ProcessId + ThreadId [Time is in milli-seconds from start of process]
+Default value is 0
+
+XLIO_LOG_COLORS
+Use color scheme when logging. Red for errors, purple for warnings and dim for
+low level debugs. XLIO_LOG_COLORS is automatically disabled when logging is direct
+to a non terminal device (e.g. XLIO_LOG_FILE is configured).
+Default value is 1 (Enabled)
+
+XLIO_LOG_FILE
+Redirect all logging to a specific user defined file.
+This is very useful when raising the XLIO_TRACELEVEL
+Library will replace a single '%d' appearing in the log file name with the pid of
+the process loaded with XLIO. This can help in running multiple instances of XLIO
+each with it's own log file name.
+Example:  XLIO_LOG_FILE=/tmp/vma_log.txt
+
+XLIO_SPEC
+XLIO predefined specification profiles.
+
+latency
+    Optimized for use cases that are keen on latency. i.e. Ping-Pong tests.
+
+    Latency SPEC changes the following default configuration
+     XLIO_RING_DEV_MEM_TX = 16384              (default: 0)
+     XLIO_TX_WRE = 256                         (default: 2048)
+     XLIO_TX_WRE_BATCHING = 4                  (default: 64)
+     XLIO_RX_WRE = 256                         (default: 16000)
+     XLIO_RX_WRE_BATCHING = 4                  (default: 64)
+     XLIO_RX_POLL = -1                         (default: 100000)
+     XLIO_TSO = Disable                        (default: Enable)
+     XLIO_RX_PREFETCH_BYTES_BEFORE_POLL = 256  (default: 0)
+     XLIO_GRO_STREAMS_MAX = 0                  (default: 32)
+     XLIO_SELECT_POLL = -1                     (default: 100000)
+     XLIO_SELECT_POLL_OS_FORCE = Enable        (default: Disabled)
+     XLIO_SELECT_POLL_OS_RATIO = 1             (default: 10)
+     XLIO_SELECT_SKIP_OS = 1                   (default: 4)
+     XLIO_PROGRESS_ENGINE_INTERVAL = 100       (default: 10)
+     XLIO_CQ_MODERATION_ENABLE = Disable       (default: Enabled)
+     XLIO_CQ_AIM_MAX_COUNT = 128               (default: 560)
+     XLIO_CQ_AIM_INTERVAL_MSEC = Disable       (default: 250)
+     XLIO_CQ_KEEP_QP_FULL = Disable            (default: Enable)
+     XLIO_TCP_NODELAY = Enable                 (default: Disable)
+     XLIO_AVOID_SYS_CALLS_ON_TCP_FD = Enable   (default: Disable)
+     XLIO_INTERNAL_THREAD_AFFINITY = 0         (default: -1)
+     XLIO_THREAD_MODE = Single                 (default: Multi spin lock)
+     XLIO_MEM_ALLOC_TYPE = 2                   (default: 1 (Contig Pages))
+
+    Example: XLIO_SPEC=latency
+
+multi_ring_latency
+     Optimized for use cases that are keen on latency where two applications communicate using send-only and receive-only TCP sockets
+
+    Multi ring latency SPEC changes the following default configuration
+     XLIO_MEM_ALLOC_TYPE = 2                    (default: 1 (Contig Pages))
+     XLIO_SELECT_POLL = -1                      (default: 100000)
+     XLIO_RX_POLL = -1                          (default: 100000)
+     XLIO_RING_ALLOCATION_LOGIC_TX = 20         (default: Ring per interface)
+     XLIO_RING_ALLOCATION_LOGIC_RX = 20         (default: Ring per interface)
+     XLIO_SELECT_POLL_OS_RATIO = 0              (default: 10)
+     XLIO_SELECT_SKIP_OS = 0                    (default: 4)
+     XLIO_RX_POLL_ON_TX_TCP = true              (default: false)
+     XLIO_TRIGGER_DUMMY_SEND_GETSOCKNAME = true (default: false)
+
+    Example: XLIO_SPEC=multi_ring_latency
+
+XLIO_STATS_FILE
+Redirect socket statistics to a specific user defined file.
+Library will dump each socket's statistics into a file when closing the socket.
+Example:  XLIO_STATS_FILE=/tmp/stats
+
+XLIO_STATS_SHMEM_DIR
+Set the directory path for the library to create the shared memory files for vma_stats.
+No files will be created when setting this value to empty string "".
+Default value is /tmp/
+
+XLIO_SERVICE_NOTIFY_DIR
+Set the directory path for XLIO to write files used by vmad.
+Default value is /tmp/vma/
+Note: when used vmad must be run with --notify-dir directing the same folder.
+
+XLIO_STATS_FD_NUM
+Max number of sockets monitored by XLIO statistic mechanism.
+Value range is 0 to 1024.
+Default value is 100
+
+XLIO_CONFIG_FILE
+Sets the full path to the XLIO configuration file.
+Default values is: /etc/libxlio.conf
+Example: XLIO_CONFIG_FILE=/tmp/libxlio.conf
+
+XLIO_APPLICATION_ID
+Specify a group of rules from libxlio.conf for XLIO to apply.
+Example: 'XLIO_APPLICATION_ID=iperf_server'.
+Default is "XLIO_DEFAULT_APPLICATION_ID" (match only the '*' group rule)
+
+XLIO_CPU_USAGE_STATS
+Calculate XLIO CPU usage during polling HW loops.
+This information is available through XLIO stats utility.
+Default value is 0 (Disabled)
+
+XLIO_HANDLE_SIGINTR
+When Enabled, the library handler will be called when interrupt signal is sent to the process.
+XLIO will also call to application's handler if exist.
+Value range is 0 to 1
+Default value is 0 (Disabled)
+
+XLIO_HANDLE_SIGSEGV
+When Enabled, print backtrace if segmentation fault happens.
+Value range is 0 to 1
+Default value is 0 (Disabled)
+
+XLIO_ZC_BUFS
+Number of global zerocopy data buffer elements allocation.
+Default value is 200000
+
+XLIO_ZC_CACHE_THRESHOLD
+Memory limit for zerocopy (mapping) cache in MB.
+Default value is 10240
+
+XLIO_TX_SEGS_TCP
+Number of TCP LWIP segments allocation for each XLIO process.
+Default value is 1000000
+
+XLIO_TX_BUFS
+Number of global Tx data buffer elements allocation.
+Default value is 200000
+
+XLIO_TX_BUF_SIZE
+Size of Tx data buffer elements allocation.
+Can not be less then MTU (Maximum Transfer Unit) and greater than 0xFF00.
+Default value is calculated basing on XLIO_MTU and XLIO_MSS.
+
+XLIO_TX_WRE
+Number of Work Request Elements allocated in all transmit QP's.
+The number of QP's can change according to the number of network offloaded
+interfaces.
+Default value is 2048
+
+XLIO_TX_WRE_BATCHING
+The number of Tx Work Request Elements used until a completion signal is requested.
+Tuning this parameter allows a better control of the jitter encountered from the
+Tx CQE handling. Setting a high batching value results in high PPS and lower
+average latency. Setting a low batching value results in lower latency std-dev.
+Value range is 1-64
+Default value is 64
+
+XLIO_TX_MAX_INLINE
+Max send inline data set for QP.
+Data copied into the INLINE space is at least 32 bytes of headers and
+the rest can be user datagram payload.
+XLIO_TX_MAX_INLINE=0 disables INLINEing on the Tx transmit path.
+In older releases this parameter was called: XLIO_MAX_INLINE
+Default XLIO_TX_MAX_INLINE is 204
+
+XLIO_TX_MC_LOOPBACK
+This parameter sets the initial value used by XLIO internally to controls the
+multicast loopback packets behavior during transmission.
+An application that calls setsockopt() with IP_MULTICAST_LOOP will run over
+the initial value set by this parameter.
+Read more in 'Multicast loopback behavior' in notes section below
+Default value is 1 (Enabled)
+
+XLIO_TX_NONBLOCKED_EAGAINS
+Return value 'OK' on all send operation done on a non-blocked UDP sockets. This
+is the OS default behavior. The datagram sent is silently dropped inside XLIO
+or the network stack.
+When set Enabled (set to 1), the library will return with error EAGAIN if it was unable
+accomplish the send operation and the datagram was dropped.
+In both cases a dropped Tx statistical counter is incremented.
+Default value is 0 (Disabled)
+
+XLIO_TX_PREFETCH_BYTES
+Accelerate offloaded send operation by optimizing cache. Different values
+give optimized send rate on different machines. We recommend you tune this
+for your specific hardware.
+Value range is 0 to MTU size
+Disable with a value of 0
+Default value is 256 bytes
+
+XLIO_RING_ALLOCATION_LOGIC_TX
+XLIO_RING_ALLOCATION_LOGIC_RX
+Ring allocation logic is used to separate the traffic to different rings.
+By default all sockets use the same ring for both RX and TX over the same interface.
+Even when specifying the logic to be per socket or thread, for different interfaces
+we use different rings. This is useful when tuning for a multi-threaded application
+and aiming for HW resource separation.
+Warning: This feature might hurt performance for applications which their main
+processing loop is based in select() and/or poll().
+The logic options are:
+0  - Ring per interface
+1  - Ring per ip address (using ip address)
+10 - Ring per socket (using socket fd as separator)
+20 - Ring per thread (using the id of the thread in which the socket was created)
+30 - Ring per core (using cpu id)
+31 - Ring per core - attach threads : attach each thread to a cpu core
+Default value is 0
+
+XLIO_RING_MIGRATION_RATIO_TX
+XLIO_RING_MIGRATION_RATIO_RX
+Ring migration ratio is used with the "ring per thread" logic in order to decide when
+it is beneficial to replace the socket's ring with the ring allocated for the current thread.
+Each XLIO_RING_MIGRATION_RATIO iterations (of accessing the ring) we check the current
+thread ID and see if our ring is matching the current thread.
+If not, we consider ring migration. If we keep accessing the ring from the same thread for some
+iterations, we migrate the socket to this thread ring.
+Use a value of -1 in order to disable migration.
+Default value is 100
+
+XLIO_RING_LIMIT_PER_INTERFACE
+Limit the number of rings that can be allocated per interface.
+For example, in ring allocation per socket logic, if the number of sockets using
+the same interface is larger than the limit, then several sockets will be sharing the
+same ring.
+[Note:XLIO_RX_BUFS might need to be adjusted in order to have enough buffers for all
+rings in the system. Each ring consume XLIO_RX_WRE buffers.]
+Use a value of 0 for unlimited number of rings.
+Default value is 0 (no limit)
+
+XLIO_RING_DEV_MEM_TX
+XLIO can use the On Device Memory to store the egress packet if it does not fit into
+the BF inline buffer. This improves application egress latency by reducing PCI transactions.
+Using XLIO_RING_DEV_MEM_TX, the user can set the amount of On Device Memory buffer allocated
+for each TX ring.
+The total size of the On Device Memory is limited to 256k for a single port HCA and to
+128k for dual port HCA.
+Default value is 0
+
+XLIO_RX_BUFS
+Number Rx data buffer elements allocation for the processes. These data buffers
+may be used by all QPs on all HCAs
+Default value is 200000
+
+XLIO_RX_WRE
+Number of Work Request Elements allocated in all receive QP's.
+Default value is 16000
+
+XLIO_RX_WRE_BATCHING
+Number of Work Request Elements and RX buffers to batch before recycling.
+Batching decrease latency mean, but might increase latency STD.
+Value range is 1-1024.
+Default value is 64
+
+XLIO_RX_BYTES_MIN
+Minimum value in bytes that will be used per socket by XLIO when applications
+call to setsockopt(SO_RCVBUF). If application tries to set a smaller value then
+configured in XLIO_RX_BYTES_MIN, XLIO will force this minimum limit value on the
+socket.XLIO offloaded socket's receive max limit of ready bytes count. If the
+application does not drain a sockets and the byte limit is reached, new
+received datagrams will be dropped.
+Monitor of the applications socket's usage of current, max and dropped bytes
+and packet counters can be done with vma_stats.
+Default value is 65536
+
+XLIO_RX_POLL
+The number of times to poll on Rx path for ready packets before going to sleep
+(wait for interrupt in blocked mode) or return -1 (in non-blocked mode).
+This Rx polling is done when the application is working with direct blocked
+calls to read(), recv(), recvfrom() & recvmsg().
+When Rx path has successful poll hits (see performance monitoring) the latency
+is improved dramatically. This comes on account of CPU utilization.
+Value range is -1, 0 to 100,000,000
+Where value of -1 is used for infinite polling
+Default value is 100000
+
+XLIO_TSO
+With Segmentation Offload, or TCP Large Send, TCP can pass a buffer to be
+transmitted that is bigger than the maximum transmission unit (MTU) supported
+by the medium. Intelligent adapters implement large sends by using the
+prototype TCP and IP headers of the incoming send buffer to carve out segments
+of required size. Copying the prototype header and options, then calculating
+the sequence number and checksum fields creates TCP segment headers.
+Expected benefits: Throughput increase and CPU unload.
+Default value is 1 (Enable)
+
+XLIO_RX_POLL_INIT
+XLIO maps all UDP sockets as potential offloaded capable. Only after the
+ADD_MEMBERSHIP does the offload start to work and the CQ polling kicks in XLIO.
+This parameter control the polling count during this transition phase where the
+socket is a UDP unicast socket and no multicast addresses where added to it.
+Once the first ADD_MEMBERSHIP is called the above XLIO_RX_POLL takes effect.
+Value range is similar to the above XLIO_RX_POLL
+Default value is 0
+
+XLIO_RX_UDP_POLL_OS_RATIO
+The above parameter will define the ratio between XLIO CQ poll and OS FD poll.
+This will result in a single poll of the not-offloaded sockets every
+XLIO_RX_UDP_POLL_OS_RATIO offloaded socket (CQ) polls. No matter if the CQ poll
+was a hit or miss. No matter if the socket is blocking or non-blocking.
+When disabled, only offloaded sockets are polled.
+This parameter replaces the two old parameters: XLIO_RX_POLL_OS_RATIO and
+XLIO_RX_SKIP_OS
+Disable with 0
+Default value is 100
+
+XLIO_HW_TS_CONVERSION
+The above parameter defines the time stamp conversion method.
+The value of XLIO_HW_TS_CONVERSION is determined by all devices - i.e if the hardware of
+one device does not support the conversion, then it will be disabled for the other devices.
+Options = [0,1,2,3,4]:
+0 = Disabled
+1 = Raw-HW time                           - only convert the time stamp to seconds.nano_seconds time
+                                            units (or disable if hardware does not supports).
+2 = Best possible - Raw-HW or system time - Sync to system time, then Raw hardware time -
+                                            disable if none of them are supported by hardware.
+3 = Sync to system time                   - convert the time stamp to seconds.nano_seconds time units.
+                                            comparable to receive software timestamp.
+                                            disable if hardware does not supports.
+4 = PTP Sync                              - convert the time stamp to seconds.nano_seconds time units.
+                                            in case it is not supported - will apply option 3 (or disable
+                                            if hardware does not supports).
+Default value: 3
+
+XLIO_RX_POLL_YIELD
+When an application is running with multiple threads, on a limited number of
+cores, there is a need for each thread polling inside the XLIO (read, readv,
+recv & recvfrom) to yield the CPU to other polling thread so not to starve
+them from processing incoming packets.
+Default value is 0 (Disable)
+
+XLIO_RX_PREFETCH_BYTES
+Size of receive buffer to prefetch into cache while processing ingress packets.
+The default is a single cache line of 64 bytes which should be at least 32
+bytes to cover the IPoIB+IP+UDP headers and a small part of the users payload.
+Increasing this can help improve performance for larger user payload sizes.
+Value range is 32 bytes to MTU size
+Default value is 256 bytes
+
+XLIO_RX_PREFETCH_BYTES_BEFORE_POLL
+Same as the above XLIO_RX_PREFETCH_BYTES, only that prefetch is done before
+actually getting the packets.
+This benefit low pps traffic latency.
+Disable with 0.
+Default value is 0
+
+XLIO_RX_CQ_DRAIN_RATE_NSEC
+Socket's receive path CQ drain logic rate control.
+When disabled (Default) the socket's receive path will first try to return a
+ready packet from the socket's receive ready packet queue. Only if that queue
+is empty will the socket check the CQ for ready completions for processing.
+When enabled, even if the socket's receive ready packet queue is not empty it
+will still check the CQ for ready completions for processing. This CQ polling
+rate is controls in nano-second resolution to prevent CPU consumption because
+of over CQ polling. This will enable a more 'real time' monitoring of the
+sockets ready packet queue.
+Recommended value is 100-5000 (nsec)
+Default value is 0 (Disable)
+
+XLIO_TCP_ABORT_ON_CLOSE
+This parameter controls how XLIO performs socket close operation. If enabled,
+XLIO sends RST segment and discards TCP state for the socket. Notice, in this
+scenario pending data segments may be unsent.
+If disabled, XLIO sends pending data segments and then FIN segment.
+Default: 0 (Disable)
+
+XLIO_RX_POLL_ON_TX_TCP
+This parameter enables/disables TCP RX polling during TCP TX operation for faster
+TCP ACK reception.
+Default: 0 (Disable)
+
+XLIO_TRIGGER_DUMMY_SEND_GETSOCKNAME
+This parameter triggers dummy packet send from getsockname(), this
+will warm up the caches.
+For more information regarding dummy send, see XLIO user manual document.
+Default: 0 (Disable)
+
+XLIO_GRO_STREAMS_MAX
+Control the number of TCP streams to perform GRO (generic receive offload) simultaneously.
+Disable GRO with a value of 0.
+Default value is 32
+
+XLIO_TCP_3T_RULES
+Use only 3 tuple rules for TCP, instead of using 5 tuple rules.
+This can improve performance for a server with listen socket which accept many
+connections.
+Default: 0 (Disable)
+
+XLIO_UDP_3T_RULES
+This parameter can be relevant in case application uses connected udp sockets.
+3 tuple rules are used in hardware flow steering rule when the parameter is enabled and
+5 tuple flow steering rule when it is disabled.
+Enabling this option can reduce hardware flow steering resources.
+But when it is disabled application might see benefits in latency and cycles per packet.
+Default: 1 (Enable)
+
+XLIO_ETH_MC_L2_ONLY_RULES
+Use only L2 rules for Ethernet Multicast.
+All loopback traffic will be handled by XLIO instead of OS.
+
+XLIO_MC_FORCE_FLOWTAG
+Forces the use of flow tag acceleration for multicast flows where setsockopt(SO_REUSEADDR) is
+set.
+Applicable if there are no other sockets opened for the same flow in system.
+
+XLIO_SELECT_POLL
+The duration in micro-seconds (usec) in which to poll the hardware on Rx path before
+going to sleep (pending an interrupt blocking on OS select(), poll() or epoll_wait().
+The max polling duration will be limited by the timeout the user is using when
+calling select(), poll() or epoll_wait().
+When select(), poll() or epoll_wait() path has successful receive poll hits
+(see performance monitoring) the latency is improved dramatically. This comes
+on account of CPU utilization.
+Value range is -1, 0 to 100,000,000
+Where value of -1 is used for infinite polling
+Where value of 0 is used for no polling (interrupt driven)
+Default value is 100000
+
+XLIO_SELECT_POLL_OS_FORCE
+This flag forces to poll the OS file descriptors while user thread calls
+select(), poll() or epoll_wait() even when no offloaded sockets are mapped.
+Enabling this flag causes XLIO to set XLIO_SELECT_POLL_OS_RATIO and
+XLIO_SELECT_SKIP_OS to 1. This will result in XLIO_SELECT_POLL number of
+times XLIO will poll the OS file descriptors, along side with offloaded
+sockets, if such sockets exists.
+Note that setting XLIO_SELECT_SKIP_OS and XLIO_SELECT_POLL_OS_RATIO
+directly will override the values these parameters gets while
+XLIO_SELECT_POLL_OS_FORCE is enabled.
+Enable with 1
+Disable with 0
+Default value is 0
+
+XLIO_SELECT_POLL_OS_RATIO
+This will enable polling of the OS file descriptors while user thread calls
+select() or poll() and the XLIO is busy in the offloaded sockets polling loop.
+This will result in a single poll of the not-offloaded sockets every
+XLIO_SELECT_POLL_RATIO offloaded sockets (CQ) polls.
+When disabled, only offloaded sockets are polled.
+(See XLIO_SELECT_POLL for more info)
+Disable with 0
+Default value is 10
+
+XLIO_SELECT_SKIP_OS
+Similar to XLIO_RX_SKIP_OS, but in select() or poll() this will force the XLIO
+to check the non offloaded fd even though an offloaded socket has ready
+packets found while polling.
+Default value is 4
+
+XLIO_PROGRESS_ENGINE_INTERVAL
+XLIO Internal thread safe check that the CQ is drained at least once
+every N milliseconds.
+This mechanism allows the library to progress the TCP stack even when the application
+doesn't access its socket (so it doesn't provide a context to XLIO).
+If CQ was already drained by the application receive
+socket API calls then this thread goes back to sleep without any processing.
+Disable with 0
+Default value is 10 msec
+
+XLIO_PROGRESS_ENGINE_WCE_MAX
+Each time XLIO's internal thread starts it's CQ draining, it will stop when
+reach this max value.
+The application is not limited by this value in the number of CQ elements
+it can ProcessId form calling any of the receive path socket APIs.
+Default value is 10000
+
+XLIO_CQ_MODERATION_ENABLE
+Enable CQ interrupt moderation.
+Default value is 1 (Enabled)
+
+XLIO_CQ_MODERATION_COUNT
+Number of packets to hold before generating interrupt.
+Default value is 48
+
+XLIO_CQ_MODERATION_PERIOD_USEC
+Period in micro-seconds for holding the packet before generating interrupt.
+Default value is 50
+
+XLIO_CQ_AIM_MAX_COUNT
+Maximum count value to use in the adaptive interrupt moderation algorithm.
+Default value is 560
+
+XLIO_CQ_AIM_MAX_PERIOD_USEC
+Maximum period value to use in the adaptive interrupt moderation algorithm.
+Default value is 250
+
+XLIO_CQ_AIM_INTERVAL_MSEC
+Frequency of interrupt moderation adaptation.
+Interval in milliseconds between adaptation attempts.
+Use value of 0 to disable adaptive interrupt moderation.
+Default value is 250
+
+XLIO_CQ_AIM_INTERRUPTS_RATE_PER_SEC
+Desired interrupts rate per second for each ring (CQ).
+The count and period parameters for CQ moderation will change automatically
+to achieve the desired interrupt rate for the current traffic rate.
+Default value is 5000
+
+XLIO_CQ_POLL_BATCH_MAX
+Max size of the array while polling the CQs in the XLIO
+Default value is 16
+
+XLIO_CQ_KEEP_QP_FULL
+If disabled (default), CQ will not try to compensate for each poll on the
+receive path. It will use a "debt" to remember how many WRE miss from each QP
+to fill it when buffers become available.
+If enabled, CQ will try to compensate QP for each polled receive completion. If
+buffers are short it will re-post a recently completed buffer. This causes a packet
+drop and will be monitored in the vma_stats.
+Default value is 1 (Enabled)
+
+XLIO_QP_COMPENSATION_LEVEL
+Number of spare receive buffer CQ holds to allow for filling up QP while full
+receive buffers are being processes inside XLIO.
+Default value is 256 buffers
+
+XLIO_USER_HUGE_PAGE_SIZE
+Size of huge pages used by user application for buffers provided as part
+of the TX Zero Copy socket API (sendmsg with MSG_ZEROCOPY flag)
+Default value is 2MB
+
+XLIO_OFFLOADED_SOCKETS
+Create all sockets as offloaded/not-offloaded by default.
+Value of 1 is for offloaded, 0 for not-offloaded.
+Default value is 1 (Enabled)
+
+XLIO_TIMER_RESOLUTION_MSEC
+Control XLIO internal thread wakeup timer resolution (in milliseconds)
+Default value is 10 (milliseconds)
+
+XLIO_TCP_TIMER_RESOLUTION_MSEC
+Control XLIO internal TCP timer resolution (fast timer) (in milliseconds).
+Minimum value is the internal thread wakeup timer resolution (XLIO_TIMER_RESOLUTION_MSEC).
+Default value is 100 (milliseconds)
+
+XLIO_TCP_CTL_THREAD
+Do all TCP control flows in the internal thread.
+This feature should be kept disabled if using blocking poll/select (epoll is OK).
+Use value of 0 to disable.
+Use value of 1 for waking up the thread when there is work to do.
+Use value of 2 for waiting for thread timer to expire.
+Default value is disabled
+
+XLIO_TCP_TIMESTAMP_OPTION
+If set, enable TCP timestamp option.
+Currently, LWIP is not supporting RTTM and PAWS mechanisms.
+See RFC1323 for info.
+Use value of 0 to disable.
+Use value of 1 for enable.
+Use value of 2 for OS follow up.
+Disabled by default (enabling causing a slight performance degradation).
+
+XLIO_TCP_NODELAY
+If set, disable the Nagle algorithm option for each TCP socket during initialization.
+This means that TCP segments are always sent as soon as possible, even if there is
+only a small amount of data.
+For more information on TCP_NODELAY flag refer to TCP manual page.
+Valid Values are:
+Use value of 0 to disable.
+Use value of 1 for enable.
+Default value is Disabled.
+
+XLIO_TCP_QUICKACK
+If set, disable delayed acknowledge ability.
+This means that TCP responds after every packet.
+For more information on TCP_QUICKACK flag refer to TCP manual page.
+Valid Values are:
+Use value of 0 to disable.
+Use value of 1 for enable.
+Default value is Disabled.
+
+XLIO_EXCEPTION_HANDLING
+Mode for handling missing support or error cases in Socket API or functionality by XLIO.
+Useful for quickly identifying XLIO unsupported Socket API or features
+Use value of -2 to exit() on XLIO startup failure.
+Use value of -1 for just handling at DEBUG severity.
+Use value of 0 to log DEBUG message and try recovering via Kernel network stack (un-offloading the socket).
+Use value of 1 to log ERROR message and try recovering via Kernel network stack (un-offloading the socket).
+Use value of 2 to log ERROR message and return API respectful error code.
+Use value of 3 to log ERROR message and abort application (throw vma_error exception).
+Default value is -1 (notice, that in the future the default value will be changed to 0)
+
+XLIO_AVOID_SYS_CALLS_ON_TCP_FD
+For TCP fd, avoid system calls for the supported options of:
+ioctl, fcntl, getsockopt, setsockopt.
+Non-supported options will go to OS.
+To activate, use XLIO_AVOID_SYS_CALLS_ON_TCP_FD=1.
+Default value is disabled
+
+XLIO_INTERNAL_THREAD_AFFINITY
+Control which CPU core(s) the XLIO internal thread is serviced on. The cpu set
+should be provided as *EITHER* a hexadecimal value that represents a bitmask. *OR* as a
+comma delimited of values (ranges are ok). Both the bitmask and comma delimited list
+methods are identical to what is supported by the taskset command. See the man page
+on taskset for additional information.
+Where value of -1 disables internal thread affinity setting by XLIO
+Bitmask Examples:
+0x00000001 - Run on processor 0.
+0x00000007 - Run on processors 1,2, and 3.
+Comma Delimited Examples:
+0,4,8      - Run on processors 0,4, and 8.
+0,1,7-10   - Run on processors 0,1,7,8,9 and 10.
+Default value is -1 (Disabled).
+
+XLIO_INTERNAL_THREAD_CPUSET
+Select a cpuset for XLIO internal thread (see man page of cpuset).
+The value is the path to the cpuset (for example: /dev/cpuset/my_set), or an empty
+string to run it on the same cpuset the process runs on.
+Default value is an empty string.
+
+XLIO_INTERNAL_THREAD_TCP_TIMER_HANDLING
+Select the internal thread policy when handling TCP timers
+Use value of 0 for deferred handling. The internal thread will not handle TCP timers upon timer
+expiration (once every 100ms) in order to let application threads handling it first
+Use value of 1 for immediate handling. The internal thread will try locking and handling TCP timers upon
+timer expiration (once every 100ms).  Application threads may be blocked till internal thread finishes handling TCP timers
+Default value is 0 (deferred handling)
+
+XLIO_INTERNAL_THREAD_ARM_CQ
+Wakeup the internal thread for each packet that the CQ receive.
+Poll and process the packet and bring it to the socket layer.
+This can minimize latency in case of a busy application which is not available to
+receive the packet when it arrived.
+However, this might decrease performance in case of high pps rate application.
+Default value is 0 (Disabled)
+
+XLIO_WAIT_AFTER_JOIN_MSEC
+This parameter indicates the time of delay the first packet send after
+receiving the multicast JOINED event from the SM
+This is helpful to over come loss of first few packets of an outgoing stream
+due to SM lengthy handling of MFT configuration on the switch chips
+Default value is 0 (milliseconds)
+
+XLIO_THREAD_MODE
+By default XLIO is ready for multi-threaded applications, meaning it is thread safe.
+If the users application is a single threaded one, then using this configuration
+parameter you can help eliminate XLIO locks and get even better performance.
+Single threaded application value is 0
+Multi threaded application using spin lock value is 1
+Multi threaded application using mutex lock value is 2
+Multi threaded application with more threads than cores using spin lock value is 3
+Default value is 1 (Multi with spin lock)
+
+XLIO_BUFFER_BATCHING_MODE
+Batching of returning Rx buffers and pulling Tx buffers per socket.
+In case the value is 0 then library will not use buffer batching.
+In case the value is 1 then library will use buffer batching and will try to periodically reclaim unused buffers.
+In case the value is 2 then library will use buffer batching with no reclaim.
+[future: other values are reserved]
+Default value is 1
+
+XLIO_MEM_ALLOC_TYPE
+This replaces the XLIO_HUGETBL parameter logic.
+XLIO will try to allocate data buffers as configured:
+	0 - "ANON" - using malloc
+	1 - "CONTIG" - using contiguous pages
+	2 - "HUGEPAGES" - using huge pages.
+OFED will also try to allocate QP & CQ memory accordingly:
+	0 - "ANON" - default - use current pages ANON small ones.
+	"HUGE" - force huge pages
+	"CONTIG" - force contig pages
+	1 - "PREFER_CONTIG" - try contig fallback to ANON small pages.
+	"PREFER_HUGE" - try huge fallback to ANON small pages.
+	2 - "ALL" - try huge fallback to contig if failed fallback to ANON small pages.
+To override OFED use: (MLX_QP_ALLOC_TYPE, MLX_CQ_ALLOC_TYPE)
+Default value is 1 (Contiguous pages)
+
+The following XLIO neigh parameters are for advanced users or Mellanox support only:
+
+XLIO_NEIGH_UC_ARP_QUATA
+XLIO will send UC ARP in case neigh state is NUD_STALE.
+In case that neigh state is still NUD_STALE XLIO will try
+XLIO_NEIGH_UC_ARP_QUATA retries to send UC ARP again and then will send BC ARP.
+
+XLIO_NEIGH_UC_ARP_DELAY_MSEC
+This parameter indicates number of msec to wait between every UC ARP.
+
+XLIO_NEIGH_NUM_ERR_RETRIES
+This number indicates number of retries to restart neigh state machine in case neigh got ERROR event.
+Default value is 1
+
+XLIO_BF
+This flag enables / disables BF (Blue Flame) usage of the ConnectX
+Default value is 1 (Enabled)
+
+XLIO_FORK
+Control whether XLIO should support fork. Setting this flag on will cause XLIO to
+call ibv_fork_init() function. ibv_fork_init() initializes libibverbs's data
+structures to handle fork() function calls correctly and avoid data corruption.
+If ibv_fork_init() is not called or returns a non-zero status, then libibverbs
+data structures are not fork()-safe and the effect of an application calling
+fork() is undefined.
+ibv_fork_init() works on Linux kernels 2.6.17 and higher which support the
+MADV_DONTFORK flag for madvise().
+Note that XLIO's default with huge pages enabled (XLIO_HUGETBL) you should use an
+OFED stack version that support fork()ing of with huge pages (OFED 1.5 and higher).
+Default value is 0 (Disabled)
+
+XLIO_CLOSE_ON_DUP2
+When this parameter is enabled, XLIO will handle the duplicate fd (oldfd),
+as if it was closed (clear internal data structures) and only then,
+will forward the call to the OS.
+This is, in practice, a very rudimentary dup2 support.
+It only supports the case, where dup2 is used to close file descriptors,
+Default value is 1 (Enabled)
+
+XLIO_SOCKETXTREME
+When this parameter is enabled, XLIO operates in SocketXtreme mode.
+SocketXtreme mode brings latency down, eliminating copy operations and
+increasing throughput allowing applications to further utilize true kernel
+bypass architecture. An application should use a socket extension API named SocketXtreme.
+Default value is 0 (Disabled)
+
+XLIO_MTU
+Size of each Rx and Tx data buffer (Maximum Transfer Unit).
+This value sets the fragmentation size of the packets sent by the library.
+If XLIO_MTU is 0 then for each interface XLIO will follow the actual MTU.
+If XLIO_MTU is greater than 0 then this MTU value is applicable to all interfaces regardless of their actual MTU
+Default value is 0 (following interface actual MTU)
+
+XLIO_MSS
+XLIO_MSS define the max TCP payload size that can sent without IP fragmentation.
+Value of 0 will set XLIO's TCP MSS to be aligned with XLIO_MTU configuration
+(leaving 40 bytes room for IP + TCP headers; "TCP MSS = XLIO_MTU - 40").
+Other XLIO_MSS values will force XLIO's TCP MSS to that specific value.
+Default value is 0 (following XLIO_MTU)
+
+XLIO_TCP_CC_ALGO
+TCP congestion control algorithm.
+The default algorithm coming with LWIP is a variation of Reno/New-Reno.
+The new Cubic algorithm was adapted from FreeBsd implementation.
+Use value of 0 for LWIP algorithm.
+Use value of 1 for Cubic algorithm.
+Use value of 2 in order to disable the congestion algorithm.
+Default value is 0 (LWIP).
+
+XLIO_TCP_SEND_BUFFER_SIZE
+TCP send buffer size in bytes of LWIP.
+Default value is 1000000.
+
+XLIO_ZC_TX_SIZE
+Determines the maximum segment size for zero copy buffers.
+Maximum value is 65535.
+Default value is 32768.
+
+XLIO_TCP_MAX_SYN_RATE
+Limit the number of TCP SYN packets that XLIO will handle
+per second per listen socket.
+For example, in case you use 10 for this value than XLIO will accept at most 10
+(could be less) new connections per second per listen socket.
+Use a value of 0 for un-limiting the number of TCP SYN packets that can be handled.
+Value range is 0 to 100000.
+Default value is 0 (no limit)
+
+
+XLIO Monitoring & Performance Counters
+=====================================
+The XLIO internal performance counters include information per user
+sockets and a global view on select() and epoll_wait() usage by the application.
+
+Use the 'xlio_stats' included utility to view the per socket information and
+performance counters during run time.
+Usage:
+        xlio_stats [-p pid] [-k directory] [-v view] [-d details] [-i interval]
+
+Defaults:
+        find_pid=enabled, directory="/tmp/", view=1, details=1, interval=1,
+
+Options:
+  -p, --pid=<pid>               Show XLIO statistics for process with pid: <pid>
+  -k, --directory=<directory>   Set shared memory directory path to <directory>
+  -n, --name=<application>      Show XLIO statistics for application: <application>
+  -f, --find_pid                Find and show statistics for XLIO instance running (default)
+  -F, --forbid_clean            By setting this flag inactive shared objects would not be removed
+  -i, --interval=<n>            Print report every <n> seconds
+  -c, --cycles=<n>              Do <n> report print cycles and exit, use 0 value for infinite (default)
+  -v, --view=<1|2|3|4|5>        Set view type:1- basic info,2- extra info,3- full info,4- mc groups,5- similar to 'netstat -tunaep'
+  -d, --details=<1|2>           Set details mode:1- to see totals,2- to see deltas
+  -z, --zero                    Zero counters
+  -l, --log_level=<level>       Set XLIO log level to <level>(1 <= level <= 7)
+  -S, --fd_dump=<fd> [<level>]  Dump statistics for fd number <fd> using log level <level>. use 0 value for all open fds
+  -D, --details_level=<level>   Set XLIO log details level to <level>(0 <= level <= 3)
+  -s, --sockets=<list|range>    Log only sockets that match <list> or <range>, format: 4-16 or 1,9 (or combination)
+  -V, --version                 Print version
+  -h, --help                    Print this help message
+
+
+Use XLIO_STATS_FILE to get internal XLIO statistics like vma_stats provide.
+If this parameter is set and the user application performed transmit or receive
+activity on a socket, then these values will be logs once the sockets are closed.
+
+Below is a logout example of a socket performance counters.
+Below the logout example there is some explanations about the numbers.
+
+XLIO: [fd=10] Tx Offload: 455 KB / 233020 / 0 / 3 [bytes/packets/drops/errors]
+XLIO: [fd=10] Tx OS info:   0 KB /      0 / 0 [bytes/packets/errors]
+XLIO: [fd=10] Rx Offload: 455 KB / 233020 / 0 / 0 [bytes/packets/eagains/errors]
+XLIO: [fd=10] Rx byte: max 200 / dropped 0 (0.00%) / limit 2000000
+XLIO: [fd=10] Rx pkt : max 1 / dropped 0 (0.00%)
+XLIO: [fd=10] Rx OS info:   0 KB /      0 / 0 [bytes/packets/errors]
+XLIO: [fd=10] Rx poll: 0 / 233020 (100.00%) [miss/hit]
+
+Looking good :)
+- No errors on transmit or receive on this socket (user fd=10)
+- All the traffic was offloaded. No packets transmitted or receive via the OS.
+- Just about no missed Rx polls (see XLIO_RX_POLL & XLIO_SELECT_POLL), meaning
+ the receiving thread did not get to a blocked state to cause a contexts
+ switch and hurt latency.
+- No dropped packets caused by socket receive buffer limit (see XLIO_RX_BYTES_MIN)
+
+Interrupt Moderation
+====================
+The basic idea behind interrupt moderation is that the HW will not generate
+interrupt for each packet, but instead only after some amount of packets received
+or after the packet was held for some time.
+
+The adaptive interrupt moderation change this packet count and time period
+automatically to reach a desired rate of interrupts.
+
+
+1. Use XLIO_RX_POLL=0 and XLIO_SELECT_POLL=0 to work in interrupt driven mode.
+
+2. Control the period and frame count parameters with:
+    XLIO_CQ_MODERATION_COUNT - hold #count frames before interrupt
+    XLIO_CQ_MODERATION_PERIOD_USEC - hold #usec before interrupt
+
+3. Control the adaptive algorithm with the following:
+    XLIO_CQ_AIM_MAX_COUNT - max possible #count frames to hold
+    XLIO_CQ_AIM_MAX_PERIOD_USEC - max possible #usec to hold
+    XLIO_CQ_AIM_INTERRUPTS_RATE_PER_SEC - desired interrupt rate
+    XLIO_CQ_AIM_INTERVAL_MSEC - frequency of adaptation
+
+4. Disable CQ moderation with XLIO_CQ_MODERATION_ENABLE=0
+5. Disable Adaptive CQ moderation with XLIO_CQ_AIM_INTERVAL_MSEC=0
+
+
+
+
+Notes
+=====
+* Multicast loopback behavior:
+	There is a different behavior between IPoIB and XLIO when dealing with
+	multicast packets at the same machine:
+	- When sending from XLIO application to IPoIB application on the same
+	machine the packet will never be accepted by the IPoIB side (even when
+	the loopback is enabled)
+	- When sending from IPoIB application to XLIO application on the same
+	machine, the packet will always be accepted by the XLIO side (even when
+	the loop is disabled
+
+
+Troubleshooting
+===============
+
+* High log level:
+
+ XLIO WARNING: *************************************************************
+ XLIO WARNING: * XLIO is currently configured with high log level          *
+ XLIO WARNING: * Application performance will decrease in this log level!  *
+ XLIO WARNING: * This log level is recommended for debugging purposes only *
+ XLIO WARNING: *************************************************************
+
+This warning message means that you are using XLIO with high log level:
+XLIO_TRACELEVEL variable value is set to 4 or more.
+In order to fix it - set XLIO_TRACELEVEL to it's default value: 3
+
+
+* CAP_NET_RAW and root access
+
+ XLIO_WARNING: ******************************************************************************
+ XLIO_WARNING: * Interface <Interface Name> will not be offloaded.
+ XLIO_WARNING: * Offloaded resources are restricted to root or user with CAP_NET_RAW privileges
+ XLIO_WARNING: * Read the CAP_NET_RAW and root access section in the XLIO's User Manual for more information
+ XLIO_WARNING: ******************************************************************************
+
+This warning message means that XLIO tried to create a hardware QP resource
+while the kernel requires this operation to be performed only by privileged
+users. Run as user root or grant CAP_NET_RAW privileges to your user
+
+* Huge pages out of resource:
+
+  XLIO WARNING: ***************************************************************
+  XLIO WARNING: * NO IMMEDIATE ACTION NEEDED!                                 *
+  XLIO WARNING: * Not enough hugepage resources for XLIO memory allocation.    *
+  XLIO WARNING: * XLIO will continue working with regular memory allocation.   *
+  XLIO INFO   : * Optional: 1. Switch to a different memory allocation type   *
+  XLIO_INFO   : * 	      (XLIO_MEM_ALLOC_TYPE= 0 or 1)		     *	
+  XLIO INFO   : *           2. Restart process after increasing the number of *
+  XLIO INFO   : *              hugepages resources in the system:             *
+  XLIO INFO   : * "cat /proc/meminfo |  grep -i HugePage"                     *
+  XLIO INFO   : * "echo 1000000000 > /proc/sys/kernel/shmmax"                 *
+  XLIO INFO   : * "echo 800 > /proc/sys/vm/nr_hugepages"                      *
+  XLIO WARNING: * Please refer to the memory allocation section in the XLIO's  *
+  XLIO WARNING: * User Manual for more information			     *
+  XLIO WARNING: ***************************************************************
+This warning message means that you are using XLIO with hugepages memory allocation,
+but not enough huge pages resources are available in the system.
+If you want XLIO to take full advantage of the performance benefits of huge pages then
+you should restart the application after adding more hugepages resources in your
+system similar to the details in the warning message above or trying to free unused hupepages
+shared memory segments with the below script.
+
+NOTE: Use 'ipcs -m' and 'ipcrm -m shmid' to check and clean unused shared memory segments.
+Below is a short script to help you release XLIO unused huge pages resources:
+    for shmid in `ipcs -m | grep 0x00000000 | awk '{print $2}'`;
+    do echo 'Clearing' $shmid; ipcrm -m $shmid;
+    done;
+
+
+* Not supported Bonding Configuration:
+
+ XLIO WARNING: ******************************************************************************
+ XLIO WARNING: XLIO doesn't support current bonding configuration of bond0.
+ XLIO WARNING: The only supported bonding mode is "802.3ad(#4)" or "active-backup(#1)"
+ XLIO WARNING: with "fail_over_mac=1" or "fail_over_mac=0".
+ XLIO WARNING: The effect of working in unsupported bonding mode is undefined.
+ XLIO WARNING: Read more about Bonding in the XLIO's User Manual
+ XLIO WARNING: ******************************************************************************
+
+This warning message means that XLIO has detected bonding device which is configured
+to work in mode which is not supported by XLIO, this means that XLIO will not support
+high availability events for that interface.
+XLIO currently supports just active-backup(#1) or 802.3ad(#4) and fail_over_mac = 1 or 0 mode.
+In order to fix this issue please change the bonding configuration.
+
+Example:
+
+Lets assume that the bonding device is bond0, which has two slaves: ib0 and
+ib1.
+
+Shut down the bond0 interface:
+#ifconfig bond0 down
+
+Find all the slaves of bond0:
+#cat sys/class/net/bond0/bonding/slaves
+ib0 ib1
+
+Free all the slaves:
+#echo -ib0 > /sys/class/net/bond0/bonding/slaves
+#echo -ib1 > /sys/class/net/bond0/bonding/slaves
+
+Change the bond mode:
+#echo active-backup > /sys/class/net/bond0/bonding/mode
+
+Change the fail_over_mac mode:
+#echo 1 > /sys/class/net/bond0/bonding/fail_over_mac
+
+Enslave the interfaces back:
+#echo +ib0 > /sys/class/net/bond0/bonding/slaves
+#echo +ib1 > /sys/class/net/bond0/bonding/slaves
+
+Bring up the bonding interface:
+#ifconfig bond0 up
+OR
+#ifconfig bond0 <ip> netmask <netmask> up
+
+* Not supported Bonding & VLAN Configuration:
+
+ XLIO WARNING: ******************************************************************
+ XLIO WARNING: bond0.10: vlan over bond while fail_over_mac=1 is not offloaded
+ XLIO WARNING: ******************************************************************
+
+This warning message means that XLIO has detected bonding device which is configured with
+VLAN over it while fail_over_mac=1.
+This means that the bond will not be offloaded.
+In order to fix this issue please change the bonding configuration.

@@ -1,0 +1,20 @@
+XLIO Testing Environment
+=======================
+
+This set of tests is based on Google Test C++ environment 
+https://github.com/google/googletest
+
+Testing XLIO Extended API
+------------------------
+1. Enable EXTRA_API_ENABLED in tests/gtest/vma/vma_base.cc
+2. Compile the gtests by issuing from root directory:
+   make -C tests/gtest
+3. Launch tests by issuing:
+   LD_PRELOAD=<path>/libxlio.so tests/gtest/gtest --addr=client_ip:server_ip
+
+Testing Environment
+-------------------
+The XLIO Extended API gtest environment requires that there be two interfaces
+connected back to back or via a switch. One is the server and the other is the
+client.
+

@@ -1,0 +1,37 @@
+.\" -*- groff -*-
+.\"
+.TH XLIO 7 "#BUILD_DATE#" libxlio "XLIO(#PRJ_LIBRARY_MAJOR#.#PRJ_LIBRARY_MINOR#.#PRJ_LIBRARY_REVISION#) User's Manual"
+.SH NAME
+XLIO \- Accelerated IO SW library.
+
+.SH SYNOPSIS
+.B libxlio.so
+
+.SH DESCRIPTION
+.B XLIO
+XLIO boosts the performance of applications written over standard socket API
+such as web serving, reverse proxying, caching, load balancing, media streaming,
+and more. Reduction of latency, increasing throughput and effective CPU utilization
+is achieved by full network stack bypass and direct access to accelerated
+network hardware.
+XLIO dynamically links with these applications at run-time, redirect standard
+socket API calls allowing them to be accelerated without modification.
+
+.SH FILES
+.I /etc/libxlio.conf
+.RS
+The system wide configuration file. Look inside libxlio.conf for instructions
+and examples.
+.RE
+.I /usr/share/doc/libxlio/README
+.RS
+General XLIO Library description.
+.RE
+
+.SH SEE ALSO
+.BR xliod (8),
+.BR xlio_stats (8)
+
+.SH "AUTHORS"
+.TP
+Igor Ivanov <igori@nvidia.com>

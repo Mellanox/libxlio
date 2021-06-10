@@ -1,0 +1,12 @@
+[Unit]
+Description=XLIO Daemon
+After=network.target
+
+[Service]
+Type=forking
+Restart=on-failure
+ExecStart=@prefix@/sbin/xliod
+RestartForceExitStatus=1 SIGTERM
+
+[Install]
+WantedBy=multi-user.target

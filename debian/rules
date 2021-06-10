@@ -1,0 +1,29 @@
+#!/usr/bin/make -f
+# -*- mode: makefile; coding: utf-8 -*-
+
+#export DH_VERBOSE=1
+
+%:
+	dh $@
+
+build: build-debug
+	@echo "Using extra configuration options: ${configure_options}"
+	./configure --with-ofed=/usr --prefix=/usr \
+		--libdir=/usr/lib --includedir=/usr/include --sysconfdir=/etc \
+		${configure_options}
+
+build-debug:
+	./configure --with-ofed=/usr --prefix=/usr \
+		--libdir=/usr/lib --includedir=/usr/include --sysconfdir=/etc \
+		--enable-opt-log=none --enable-debug ${configure_options}
+	make
+	cp -f src/vma/.libs/libxlio.so libxlio-debug.so
+	make clean
+
+
+# Commands not to run
+override_dh_auto_configure:
+
+# Workaround for missing dependency information in libmongoclient package
+override_dh_shlibdeps:
+	dh_shlibdeps --dpkg-shlibdeps-params=--ignore-missing-info

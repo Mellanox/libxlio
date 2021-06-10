@@ -1,0 +1,41 @@
+.\" -*- groff -*-
+.\"
+.TH XLIO 8 "#BUILD_DATE#" libxlio "XLIO(#PRJ_LIBRARY_MAJOR#.#PRJ_LIBRARY_MINOR#.#PRJ_LIBRARY_REVISION#) User's Manual"
+.SH NAME
+xliod \- Accelerated IO SW library (XLIO) daemon.
+
+.SH SYNOPSIS
+.B xliod
+[\-\-console] [\-\-pid,-p \fInum\fP] [\-\-fid,-f \fInum\fP]
+[\-\-force-rst] [\-\-verbose,\-v \fIlevel\fP]
+
+.SH DESCRIPTION
+xliod is the daemon program for xlio (7).
+
+xliod can be configured using command-line options
+
+The options are as follows:
+.sp
+\fB\-\-console\fP
+Enable foreground mode.
+.TP
+\fB\-\-pid,\-p \fP\fInum\fP
+Set prime number as maximum of processes per node.
+.TP
+\fB\-\-fid,\-f \fP\fInum\fP
+Set prime number as maximum of sockets per process.
+.TP
+\fB\-\-force\-rst\fP
+Force internal RST.
+.TP
+\fB\-\-verbose,\-v \fP\fIlevel\fP
+Output verbose level
+.TP
+
+.SH SEE ALSO
+.BR xlio (7),
+.BR xlio_stats (8)
+
+.SH "AUTHORS"
+.TP
+Igor Ivanov <igori@nvidia.com>

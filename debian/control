@@ -1,0 +1,81 @@
+Source: libxlio
+Section: net
+Priority: optional
+Maintainer: Igor Ivanov <igori@nvidia.com>
+Build-Depends: debhelper (>= 7),
+ pkg-config,
+ autoconf,
+ automake,
+ libibverbs-dev,
+ librdmacm-dev,
+ libnl-route-3-dev | libnl-dev,
+Homepage: https://github.com/Mellanox-lab/libxlio
+
+Package: libxlio
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: LD_PRELOAD-able library that boosts performance
+ libxlio is a LD_PRELOAD-able library that boosts performance of TCP and
+ UDP traffic. It allows application written over standard socket API to
+ handle fast path data traffic from user space over Ethernet and/or
+ Infiniband with full network stack bypass and get better throughput,
+ latency and packets/sec rate.
+ .
+ No application binary change is required for that.
+ library is supported by RDMA capable devices that support "verbs"
+ IBV_QPT_RAW_PACKET QP for Ethernet and/or IBV_QPT_UD QP for IPoIB.
+ .
+ This package includes the dynamic library itself.
+
+Package: libxlio-dev
+Section: libdevel
+Architecture: any
+Depends: ${misc:Depends}, libxlio (= ${binary:Version})
+Description: Development files for the libxlio library
+ libxlio is a LD_PRELOAD-able library that boosts performance of TCP and
+ UDP traffic. It allows application written over standard socket API to
+ handle fast path data traffic from user space over Ethernet and/or
+ Infiniband with full network stack bypass and get better throughput,
+ latency and packets/sec rate.
+ .
+ No application binary change is required for that.
+ library is supported by RDMA capable devices that support "verbs"
+ IBV_QPT_RAW_PACKET QP for Ethernet and/or IBV_QPT_UD QP for IPoIB.
+ .
+ This package includes headers for building programs with libxlio's interface
+ directly, as opposed to loading it dynamically with LD_PRELOAD.
+
+Package: libxlio-dbg
+Section: debug
+Architecture: any
+Depends: ${misc:Depends}, libxlio (= ${binary:Version})
+Description: Debugging symbols for the libxlio library
+ libxlio is a LD_PRELOAD-able library that boosts performance of TCP and
+ UDP traffic. It allows application written over standard socket API to
+ handle fast path data traffic from user space over Ethernet and/or
+ Infiniband with full network stack bypass and get better throughput,
+ latency and packets/sec rate.
+ .
+ No application binary change is required for that.
+ library is supported by RDMA capable devices that support "verbs"
+ IBV_QPT_RAW_PACKET QP for Ethernet and/or IBV_QPT_UD QP for IPoIB.
+ .
+ This package contains the debugging symbols associated with libxlio.
+
+Package: libxlio-utils
+Section: utils
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libxlio (= ${binary:Version})
+Description: Examples and tools for the libxlio library
+ libxlio is a LD_PRELOAD-able library that boosts performance of TCP and
+ UDP traffic. It allows application written over standard socket API to
+ handle fast path data traffic from user space over Ethernet and/or
+ Infiniband with full network stack bypass and get better throughput,
+ latency and packets/sec rate.
+ .
+ No application binary change is required for that.
+ library is supported by RDMA capable devices that support "verbs"
+ IBV_QPT_RAW_PACKET QP for Ethernet and/or IBV_QPT_UD QP for IPoIB.
+ .
+ This package contains the tool xlio_stats for collecting and
+ analyzing Libxlio statistic.

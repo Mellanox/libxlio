@@ -1,0 +1,104 @@
+Version 1.0.6-1:
+Date + Time 2021-06-10
+=============================================================
+Fixed:
+        - RM #2686808 Don't set TCP PSH flag for throughput profiles
+        - RM #2685998 Don't mask nor create 2nd rule for UDP
+
+Version 1.0.5-1:
+Date + Time 2021-06-08
+=============================================================
+Fixed:
+        - RM #2682063 Update output with vmad
+        - RM #2683954 Make TCP segs batching configurable
+        - RM #2047225 Improve socket state reset on reuse
+        - RM #2680431 Fallback to SW TLS when TIS/DEK fails
+
+Version 1.0.4-1:
+Date + Time 2021-06-03
+=============================================================
+Fixed:
+        - RM #2342345 Distribute processes across different IRQ vectors
+        - RM #2679474 Fix segfault during termination phase
+        - RM #2679482 Handle buffer allocation error in TLS
+        - RM #2678990 Remove asserts in mapping_cache destructor
+        - RM #2647722 Check requested TLS version/cipher
+
+Version 1.0.3-1:
+Date + Time 2021-06-01
+=============================================================
+Added:
+        - RM #2654385 Introduce XLIO environment variables and Extra API
+Fixed:
+        - RM #2647722 Fix corner cases for TLS blocking socket
+        - RM #2672303 Fix sendfile zerocopy TX flow
+        - RM #2668320 Fix m_p_n_rx_channel_fds update on bond ring restart
+
+Version 1.0.2-1:
+Date + Time 2021-05-28
+=============================================================
+Fixed:
+        - RM #2670696 Dump statistics of closed sockets
+
+Version 1.0.1-1:
+Date + Time 2021-05-27
+=============================================================
+Fixed:
+        - RM #2647722 Fix compilation error in uTLS code
+
+Version 1.0.0-1:
+Date + Time 2021-05-26
+=============================================================
+Added:
+        - RM #2647722 Add Tx TLS offload
+        - RM #2092860 Add TCP extra option support for Tx zero copy
+        - RM #2047225 RFC 6191 Reuse TIME-WAIT sockets
+
+Version 0.1.4-1:
+Date + Time 2021-05-20
+=============================================================
+Added:
+        - RM #2658995 Add ioctl() extra api
+        - RM #2510071 Clean up extra API
+        - RM #2436876 Improve --enable-debug configuration option
+        - RM #2575576 Add zero copy send operation using external mkey
+Fixed:
+        - RM #1714768 Fix issue in vma_recvfrom_zcopy()
+        - RM #2628370 Fix incorrect error message for fork()
+
+Version 0.1.3-1:
+Date + Time 2021-05-12
+=============================================================
+Added:
+        - RM #2654385 Rebrand all files inside library package
+
+Version 0.1.2-1:
+Date + Time 2021-04-21
+=============================================================
+Added:
+        - RM #2625717 Configure library to use TSO and NGINX code by default
+Fixed:
+        - RM #2357009 Fix wrong flow in DEFINED_NGINX configuration
+        - RM #2625704 Fix fork() processing for NGINX case
+
+Version 0.1.1-1:
+Date + Time 2021-04-19
+=============================================================
+Added:
+        - RM #2568298 Fix coverity scan 2020.06 issues
+        - RM #2497142 Move to google test 1.7 version
+        - RM #2583763 Extend CI ability
+        - RM #2563722 Remove MP-QP support from library as deprecated
+Fixed:
+        - RM #2233904 Improve ROCE LAG detection
+        - RM #2368612 Align rpm spec with last requirements
+        - RM #2130901 Fix issue in logic VMA_PROGRESS_ENGINE_WCE_MAX=0
+        - RM #2280628 Add missed TIMESTAMP option
+
+Version 0.1.0-1:
+Date + Time 2021-02-20
+=============================================================
+Added:
+        - RM #2405040 Add initial version on top of VMA 9.2.2
+          that includes send zero copy functionality and nginx
+          specific capabilities

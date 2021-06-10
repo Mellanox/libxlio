@@ -1,0 +1,534 @@
+###########################################################
+# false positive librdmacm.so
+{
+   rdmacm Cond rdma_get_devices
+   Memcheck:Cond
+   ...
+   fun:rdma_get_devices
+}
+{
+   rdmacm Value8 rdma_get_devices
+   Memcheck:Value8
+   ...
+   fun:rdma_get_devices
+}
+{
+   rdmacm Param rdma_get_devices
+   Memcheck:Param
+   write(buf)
+   ...
+   fun:rdma_get_devices
+}
+{
+   rdmacm Cond rdma_create_id
+   Memcheck:Cond
+   ...
+   obj:*/librdmacm.so*
+   fun:rdma_create_id
+}
+{
+   rdmacm Value8 rdma_create_id
+   Memcheck:Value8
+   ...
+   obj:*/librdmacm.so*
+   fun:rdma_create_id
+}
+{
+   rdmacm Value8 rdma_bind_addr
+   Memcheck:Value8
+   ...
+   fun:rdma_bind_addr
+}
+{
+   rdmacm Cond rdma_bind_addr
+   Memcheck:Cond
+   ...
+   fun:rdma_bind_addr
+}
+{
+   rdmacm Param rdma_bind_addr
+   Memcheck:Param
+   write(buf)
+   ...
+   fun:rdma_bind_addr
+}
+{
+   rdmacm Cond rdma_destroy_id
+   Memcheck:Cond
+   ...
+   fun:rdma_destroy_id
+}
+{
+   rdmacm Value8 rdma_destroy_id
+   Memcheck:Value8
+   ...
+   fun:rdma_destroy_id
+}
+{
+   rdmacm Param rdma_destroy_id
+   Memcheck:Param
+   write(buf)
+   ...
+   fun:rdma_destroy_id
+}
+{
+   rdma_create_event_channel
+   Memcheck:Cond
+   obj:/*librdmacm.so*
+   ...
+   fun:rdma_create_event_channel
+   fun:_ZN15neigh_table_mgrC1Ev
+}
+{
+   rdma_create_event_channel
+   Memcheck:Value8
+   obj:/*librdmacm.so*
+   ...
+   fun:rdma_create_event_channel
+   fun:_ZN15neigh_table_mgrC1Ev
+}
+# false positive verbs
+{
+   libibverbs Param ibv_exp_cmd_create_qp
+   Memcheck:Param
+   write(buf)
+   obj:*/libibverbs.so*
+   ...
+   fun:write
+   fun:ibv_exp_cmd_create_qp
+}
+{
+   libibverbs Param ibv_exp_cmd_create_flow
+   Memcheck:Param
+   write(buf)
+   ...
+   obj:*/libibverbs.so*
+   fun:ibv_exp_cmd_create_flow
+   fun:ibv_exp_create_flow
+}
+{
+   libibverbs Param ibv_exp_destroy_flow
+   Memcheck:Param
+   write(buf)
+   ...
+   fun:*cmd_destroy_flow
+   fun:ibv_exp*_destroy_flow
+}
+# issue in verbs_exp
+{
+   verbs resource_domain leak
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:allocate_send_db
+   fun:mlx5_exp_create_res_domain
+   fun:ibv_exp_create_res_domain
+}
+###########################################################
+# false positive libmlx5\4
+{
+   libmlx5 Param ibv_create_qp
+   Memcheck:Param
+   write(buf)
+   ...
+   fun:ibv_exp_cmd_create_qp
+   obj:*/libmlx*.so*
+   ...
+   fun:ibv_create_qp
+}
+{
+   libmlx5 Cond ibv_exp_cmd_query_device
+   Memcheck:Cond
+   fun:ibv_exp_cmd_query_device
+   obj:*/libmlx*.so*
+   ...
+   fun:ibv_open_device
+}
+{
+   libmlx Cond ibv_exp_modify_qp
+   Memcheck:Cond
+   obj:*/libmlx*.so*
+   ...
+   fun:ibv_exp_modify_qp
+}
+{
+   libmlx5 Cond ibv_destroy_qp
+   Memcheck:Cond
+   obj:*/libmlx*.so*
+   fun:_ZN6qp_mgrD1Ev
+}
+{
+   libibverbs Cond ibv_cmd_destroy_qp
+   Memcheck:Cond
+   fun:ibv_cmd_destroy_qp
+   obj:*/libmlx*.so*
+}
+{
+   libmlx5 Param ibv_exp_cmd_create_cq
+   Memcheck:Param
+   write(buf)
+   ...
+   fun:ibv_exp_cmd_create_cq
+   obj:*/libmlx*.so*
+   fun:ibv_exp_create_cq
+}
+{
+   libmlx5 Param ibv_cmd_destroy_cq
+   Memcheck:Param
+   write(buf)
+   ...
+   fun:ibv_cmd_destroy_cq
+   obj:/*libmlx*.so*
+   fun:ibv_destroy_cq*
+}
+{
+   libmlx5 Param ibv_cmd_dealloc_pd
+   Memcheck:Param
+   write(buf)
+   ...
+   fun:ibv_cmd_dealloc_pd
+   obj:/*libmlx*.so*
+}
+{
+   libmlx5 Cond ibv_destroy_cq
+   Memcheck:Cond
+   fun:ibv_cmd_destroy_cq
+   ...
+   fun:*_destroy_cq*
+}
+{
+   libmlx5 Param ibv_create_ah
+   Memcheck:Param
+   write(buf)
+   ...
+   obj:*/libmlx*.so*
+   fun:ibv_create_ah
+}
+{
+   libmlx5 Value8 ibv_create_ah
+   Memcheck:Value8
+   ...
+   obj:*/libmlx*.so*
+   fun:ibv_create_ah
+}
+{
+   libmlx5 Cond ibv_create_ah
+   Memcheck:Cond
+   ...
+   fun:ibv_create_ah
+}
+{
+   libmlx5 Param ibv_cmd_exp_reg_mr
+   Memcheck:Param
+   write(buf)
+   ...
+   fun:ibv_cmd_exp_reg_mr
+   obj:*/libmlx*.so*
+}
+{
+   libmlx4\5 Cond
+   Memcheck:Cond
+   ...
+   obj:*/libmlx*.so
+   ...
+   fun:_ZN6qp_mgrD1Ev
+}
+{
+   libmlx5 umr ibv_exp_create_mr
+   Memcheck:Param
+   write(buf)
+   ...
+   fun:write
+   fun:ibv_exp_cmd_create_mr
+}
+{
+   libmlx5 umr ibv_exp_cmd_create_wq
+   Memcheck:Param
+   write(buf)
+   ...
+   fun:write
+   fun:ibv_exp_cmd_create_wq
+   fun:mlx5_exp_create_wq
+}
+{
+   libmlx5 umr mlx5_poll_one Value8
+   Memcheck:Value8
+   ...
+   fun:mlx5_poll_one
+   ...
+   fun:_ZN11ring_eth_cbD1Ev
+}
+{
+   libmlx5 umr mlx5_poll_one Cond
+   Memcheck:Cond
+   ...
+   fun:mlx5_poll_one
+   ...
+   fun:_ZN11ring_eth_cbD0Ev
+}
+{
+   umr destroy qp
+   Memcheck:Value8
+   fun:get_sw_cqe
+   fun:__mlx5_cq_clean
+   ...
+   fun:_ZN14ib_ctx_handlerD1Ev
+}
+{
+   ring direct destroy
+   Memcheck:Cond
+   obj:*/libmlx5.so*
+   fun:*qp_mgr_eth_direct*
+   ...
+   fun:*release_ringEP21ring_alloc_logic_attr*
+}
+{
+   query mlx5 device
+   Memcheck:Cond
+   fun:ibv_exp_cmd_query_device
+   fun:mlx5_exp_query_device
+}
+{
+   mlx5_lock_cqs
+   Memcheck:Cond
+   fun:mlx5_lock_cqs
+   fun:mlx5_destroy_qp
+}
+{
+   mlx5_unlock_cqs
+   Memcheck:Cond
+   fun:mlx5_unlock_cqs
+   fun:mlx5_destroy_qp
+}
+
+###########################################################
+##### libmlx4 only
+{
+   libmlx4 Cond ibv_exp_query_device
+   Memcheck:Cond
+   obj:*/libmlx4*.so*
+   fun:ibv_exp_query_device
+}
+{
+   libmlx4 Param ibv_exp_create_cq
+   Memcheck:Param
+   mmap(length)
+   ...
+   obj:*/libmlx4*.so*
+   fun:ibv_exp_create_cq
+}
+{
+   libmlx4 Param ibv_exp_create_cq
+   Memcheck:Param
+   mmap(offset)
+   ...
+   obj:*/libmlx4*.so*
+   fun:ibv_exp_create_cq
+}
+{
+   libmlx4 Param ibv_exp_create_cq
+   Memcheck:Param
+   madvise(length)
+   fun:madvise
+   ...
+   obj:*/libmlx4*.so*
+   ...
+   fun:ibv_exp_create_cq
+}
+{
+   libmlx4 Cond ibv_exp_create_cq
+   Memcheck:Cond
+   ...
+   obj:*/libmlx4*.so*
+   fun:ibv_exp_create_cq
+}
+{
+   libmlx4 Cond ibv_exp_create_cq
+   Memcheck:Cond
+   obj:*/libmlx4*.so*
+   ...
+   fun:ibv_exp_create_cq
+}
+{
+   libmlx4 Param ibv_exp_create_cq
+   Memcheck:Param
+   write(buf)
+   ...
+   fun:ibv_exp_cmd_create_cq
+}
+{
+   libmlx4 Cond ibv_destroy_cq
+   Memcheck:Cond
+   ...
+   obj:*/libmlx4*.so*
+   ...
+   fun:ibv_destroy_cq
+}
+{
+   libmlx4 Param ibv_destroy_cq
+   Memcheck:Param
+   munmap(length)
+   fun:munmap
+   obj:*/libmlx4*.so*
+   fun:ibv_destroy_cq
+}
+{
+   libmlx4 Cond ibv_create_qp
+   Memcheck:Cond
+   ...
+   obj:*/libmlx4*.so*
+   ...
+   fun:ibv_create_qp
+}
+{
+   libmlx4 Param ibv_create_qp
+   Memcheck:Param
+   write(buf)
+   ...
+   fun:ibv_exp_cmd_create_qp
+}
+{
+   libmlx4 Cond ibv_modify_qp_from_init_to_rts
+   Memcheck:Cond
+   obj:*/libmlx4*.so*
+   obj:*/libibverbs.so*
+   fun:_Z35priv_ibv_modify_qp_from_init_to_rtsP6ibv_qpj
+}
+{
+   libmlx4 Cond ibv_destroy_qp
+   Memcheck:Cond
+   obj:*/libmlx4*.so*
+   ...
+   fun:_ZN20net_device_table_mgr22verify_eth_qp_creationEPKch
+}
+{
+   libmlx4 Value8 ibv_destroy_qp
+   Memcheck:Value8
+   obj:*/libmlx4*.so*
+   ...
+   fun:_ZN20net_device_table_mgr22verify_eth_qp_creationEPKch
+}
+{
+   libmlx4 Param ibv_cmd_reg_mr
+   Memcheck:Param
+   write(buf)
+   ...
+   fun:ibv_cmd_reg_mr
+   obj:*/libmlx4*.so*
+}
+{
+   libmlx4 Cond rdma_create_id
+   Memcheck:Cond
+   obj:*/librdmacm.so*
+   ...
+   fun:_ZN20net_device_table_mgr15map_net_devices*
+}
+{
+   libmlx4 Value8 rdma_create_id
+   Memcheck:Value8
+   obj:*/librdmacm.so*
+   ...
+   fun:_ZN20net_device_table_mgr15map_net_devicesEv
+}
+{
+   libmlx4 Value8
+   Memcheck:Value8
+   obj:*/libmlx4*.so
+   ...
+   fun:_ZN6qp_mgrD1Ev
+}
+{
+   libmlx4 Value8 ibv_create_qp
+   Memcheck:Value8
+   obj:*/libmlx4*.so
+   ...
+   fun:ibv_create_qp
+}
+{
+   libmlx4 ibv_exp_poll_cq
+   Memcheck:Value8
+   obj:*/libmlx4*.so
+   fun:ibv_exp_poll_cq
+}
+{
+   libmlx4 Param ibv_exp_cmd_modify_cq
+   Memcheck:Param
+   write(buf)
+   ...
+   fun:ibv_exp_cmd_modify_cq
+   obj:*/libmlx4*.so
+}
+{
+   libmlx4 Cond ibv_exp_poll_cq
+   Memcheck:Cond
+   obj:*/libmlx4*.so
+   fun:ibv_exp_poll_cq
+}
+{
+   libmlx4 Value8 ibv_exp_poll_cq
+   Memcheck:Value8
+   obj:*/libmlx4*.so
+   ...
+   fun:ibv_exp_poll_cq
+}
+{
+   libmlx4 Param ibv_destroy_cq
+   Memcheck:Param
+   madvise(length)
+   fun:madvise
+   ...
+   obj:*/libmlx4*.so
+   ...
+   fun:ibv_destroy_cq
+}
+###########################################################
+# sockperf
+{
+   sockperf Leak definite
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:_ZN6ServerI10IoRecvfrom9SwitchOffS1_E13server_acceptEi
+   fun:_ZN6ServerI10IoRecvfrom9SwitchOffS1_E6doLoopEv
+}
+###########################################################
+# libnl1
+{
+   ibnl Leak possible
+   Memcheck:Leak
+   match-leak-kinds: possible
+   ...
+   obj:*libnl.so*
+   fun:nl_cache_parse
+}
+{
+   ibnl leak definite
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:realloc
+   fun:__vasprintf_chk
+   fun:__asprintf_chk
+   ...
+   fun:nl_cache_pickup
+}
+{
+   ibnl malloc leak definite
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:__vasprintf_chk
+   fun:__asprintf_chk
+   fun:__nl_error
+   fun:nl_recvmsgs
+}
+###########################################################
+# libvma
+{
+   Param agent
+   Memcheck:Param
+   socketcall.sendto(msg)
+   fun:send
+   fun:_ZN5agent4sendEP9agent_msg
+   fun:_ZN5agent8progressEv
+   ...
+}
