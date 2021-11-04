@@ -56,6 +56,7 @@
 #include "vma/xlio_extra.h"
 
 #include <vma/sock/sockinfo_tcp.h>
+#include <vma/sock/sockinfo_udp.h>
 
 #include "fd_collection.h"
 #include "vma/util/instrumentation.h"
@@ -85,6 +86,7 @@ using namespace std;
 #if defined(DEFINED_NGINX)
 int g_worker_index = 0;
 bool g_b_add_second_4t_rule = false;
+map_udp_bounded_port_t g_map_udp_bounded_port;
 #endif
 
 struct os_api orig_os_api;
@@ -184,7 +186,9 @@ void get_orig_funcs()
 	GET_ORIG_FUNC(select);
 	GET_ORIG_FUNC(pselect);
 	GET_ORIG_FUNC(poll);
+	GET_ORIG_FUNC(__poll_chk);
 	GET_ORIG_FUNC(ppoll);
+	GET_ORIG_FUNC(__ppoll_chk);
 	GET_ORIG_FUNC(epoll_create);
 	GET_ORIG_FUNC(epoll_create1);
 	GET_ORIG_FUNC(epoll_ctl);
@@ -356,11 +360,35 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
 			g_p_fd_collection->del_epfd(fd, cleanup);
 		}
 
+#if defined(DEFINED_NGINX)
+		if (sockfd && sockfd->m_is_for_socket_pool) {
+			g_p_fd_collection->push_socket_pool(sockfd);
+			is_closable = false;
+		}
+#endif
 	}
+
 	return is_closable;
 }
 
 #if defined(DEFINED_NGINX)
+
+bool add_to_list(uint16_t port, map_port_list_t &map_port_list, int fd) {
+	bool is_new_list = false;
+	if (map_port_list.find(port) == map_port_list.end()) {
+		map_port_list[port] = new list<int>;;
+		is_new_list = true;
+	}
+
+	map_port_list_t::iterator iter = map_port_list.find(port);
+	if (iter != map_port_list.end()) {
+		iter->second->push_back(fd);
+		srdr_logdbg("worker %d, port=%d, fd=%d, pushed to list. ret=%d", g_worker_index, port, fd, is_new_list);
+	} else {
+		srdr_logerr("failed to create new port list");
+	}
+	return is_new_list;
+}
 
 int init_child_process_for_nginx()
 {
@@ -374,48 +402,95 @@ int init_child_process_for_nginx()
 		return 0;
 	}
 
-	srdr_logdbg("g_worker_index: %d Size is: %d\n", g_worker_index, g_p_fd_collection_parent_process->get_fd_map_size());
+	srdr_logdbg("g_worker_index: %d Size is: %d", g_worker_index, g_p_fd_collection_parent_process->get_fd_map_size());
+
+	map_port_list_t map_port_list;
+	list<uint16_t> port_list = {};
 	for (int i = 0; i < g_p_fd_collection_size_parent_process; i++) {
 		socket_fd_api* fd = g_p_fd_collection_parent_process->get_sockfd(i);
-		if (fd && fd->m_is_listen) {
+		if (fd) {
 			struct sockaddr_in addr;
 			int ret = 0;
 			socklen_t tmp_sin_len = sizeof(sockaddr_in);
 			fd->getsockname((struct sockaddr*) & addr, &tmp_sin_len);
-			srdr_logdbg("found listen socket %d\n", fd->get_fd());
-			g_p_fd_collection->addsocket(i, AF_INET, SOCK_STREAM);
-			fd = g_p_fd_collection->get_sockfd(i);
-			if (fd) {
-				ret = bind(i, (struct sockaddr*) & addr, tmp_sin_len);
-				if (ret < 0) {
-					srdr_logerr("bind() error\n");
-				}
-				ret = fd->prepareListen(); // for verifying that the socket is really offloaded
-				if (ret < 0) {
-					srdr_logerr("prepareListen error\n");
-					fd = NULL;
-				}
-				else if (ret > 0) { // Pass-through
-					handle_close(fd->get_fd(), false, true);
-					fd = NULL;
-				}
-				else {
-					srdr_logdbg("Prepare listen successfully offloaded\n");
-				}
-
+			if (fd->m_is_listen) {
+				srdr_logdbg("found listen socket %d\n", fd->get_fd());
+				g_p_fd_collection->addsocket(i, AF_INET, SOCK_STREAM);
+				fd = g_p_fd_collection->get_sockfd(i);
 				if (fd) {
-					ret = fd->listen(fd->m_back_log);
+					ret = bind(i, (struct sockaddr*) & addr, tmp_sin_len);
 					if (ret < 0) {
-						srdr_logerr("Listen error\n");
+						srdr_logerr("bind() error\n");
+					}
+					ret = fd->prepareListen(); // for verifying that the socket is really offloaded
+					if (ret < 0) {
+						srdr_logerr("prepareListen error\n");
+						fd = NULL;
+					}
+					else if (ret > 0) { // Pass-through
+						handle_close(fd->get_fd(), false, true);
+						fd = NULL;
 					}
 					else {
-						srdr_logdbg("Listen success\n");
+						srdr_logdbg("Prepare listen successfully offloaded\n");
 					}
+
+					if (fd) {
+						ret = fd->listen(fd->m_back_log);
+						if (ret < 0) {
+							srdr_logerr("Listen error\n");
+						}
+						else {
+							srdr_logdbg("Listen success\n");
+						}
+					}
+				}
+			} else {
+				// UDP sockets
+				sockinfo_udp* udp_sock = dynamic_cast<sockinfo_udp*>(fd);
+				if (udp_sock) {
+					int val, size = sizeof(int);
+					bool use_as_udp_listen_socket = true;
+					if (udp_sock->getsockopt(SOL_SOCKET, SO_REUSEPORT, &val, (socklen_t *)&size) < 0) {
+						srdr_logdbg("fd=%d - getsockopt() failed", i);
+						continue;
+					}
+					uint16_t port = ntohs(addr.sin_port);
+					use_as_udp_listen_socket = use_as_udp_listen_socket && val;
+					use_as_udp_listen_socket = use_as_udp_listen_socket && port;
+					if (!use_as_udp_listen_socket)
+						continue;
+
+					if (add_to_list(port, map_port_list, i))
+						port_list.push_back(port);
 				}
 			}
 		}
 	}
-
+	// UDP sockets
+	for (auto& p : port_list) {
+		map_port_list_t::iterator iter = map_port_list.find(p);
+		if (iter != map_port_list.end()) {
+			if ((int)iter->second->size() == safe_mce_sys().actual_nginx_workers_num) {
+				for (int j = 0; j < g_worker_index; j++) {
+					// pop "g_worker_index" number of fds from the list, so we can use the g_worker_index'th fd for worker number g_worker_index
+					iter->second->pop_front();
+				}
+				int fd = iter->second->front();
+				srdr_logdbg("worker %d is using fd=%d. bound to port=%d", g_worker_index, fd, p);
+				g_p_fd_collection->addsocket(fd, AF_INET, SOCK_DGRAM);
+				sockinfo_udp* new_udp_sock = dynamic_cast<sockinfo_udp*>(g_p_fd_collection->get_sockfd(fd));
+				if (new_udp_sock) {
+					g_map_udp_bounded_port[p] = true;
+					// in order to create new steering rules we call bind()
+					// we skip os.bind since it always fails
+					new_udp_sock->bind_no_os();
+				}
+			} else {
+				srdr_logdbg("not using port=%d. count is %u", p, (int)iter->second->size());
+			}
+		}
+	}
 	return 0;
 }
 
@@ -774,8 +849,15 @@ int socket_internal(int __domain, int __type, int __protocol, bool check_offload
 	BULLSEYE_EXCLUDE_BLOCK_START
 	if (!orig_os_api.socket) get_orig_funcs();
 	BULLSEYE_EXCLUDE_BLOCK_END
+	int fd;
 
-	int fd = orig_os_api.socket(__domain, __type, __protocol);
+#if defined(DEFINED_NGINX)
+	bool add_to_udp_pool = false;
+	if (g_p_fd_collection && g_p_fd_collection->pop_socket_pool(fd, add_to_udp_pool, __type & 0xf))
+		return fd;
+#endif
+
+	fd = orig_os_api.socket(__domain, __type, __protocol);
 	vlog_printf(VLOG_DEBUG, "ENTER: %s(domain=%s(%d), type=%s(%d), protocol=%d) = %d\n",__func__, socket_get_domain_str(__domain), __domain, socket_get_type_str(__type), __type, __protocol, fd);
 	if (fd < 0) {
 		return fd;
@@ -789,6 +871,11 @@ int socket_internal(int __domain, int __type, int __protocol, bool check_offload
 		if (offload_sockets)
 			g_p_fd_collection->addsocket(fd, __domain, __type, check_offload);
 	}
+
+#if defined(DEFINED_NGINX)
+	if (add_to_udp_pool)
+		g_p_fd_collection->handle_socket_pool(fd);
+#endif
 
 	return fd;
 }
@@ -917,6 +1004,8 @@ int accept4(int __fd, struct sockaddr *__addr, socklen_t *__addrlen, int __flags
 extern "C"
 int bind(int __fd, const struct sockaddr *__addr, socklen_t __addrlen)
 {
+	int errno_tmp = errno;
+
 	BULLSEYE_EXCLUDE_BLOCK_START
 	if (!orig_os_api.bind) get_orig_funcs();
 	BULLSEYE_EXCLUDE_BLOCK_END
@@ -941,10 +1030,14 @@ int bind(int __fd, const struct sockaddr *__addr, socklen_t __addrlen)
 		ret = orig_os_api.bind(__fd, __addr, __addrlen);
 	}
 
-	if (ret >= 0)
+	if (ret >= 0) {
+		/* Restore errno on function entry in case success */
+		errno = errno_tmp;
 		srdr_logdbg_exit("returned with %d", ret);
-	else
+	} else {
 		srdr_logdbg_exit("failed (errno=%d %m)", errno);
+	}
+
 	return ret;
 }
 
@@ -958,6 +1051,8 @@ int bind(int __fd, const struct sockaddr *__addr, socklen_t __addrlen)
 extern "C"
 int connect(int __fd, const struct sockaddr *__to, socklen_t __tolen)
 {
+	int errno_tmp = errno;
+
 	BULLSEYE_EXCLUDE_BLOCK_START
 	if (!orig_os_api.connect) get_orig_funcs();
 	BULLSEYE_EXCLUDE_BLOCK_END
@@ -989,10 +1084,14 @@ int connect(int __fd, const struct sockaddr *__to, socklen_t __tolen)
 		ret = orig_os_api.connect(__fd, __to, __tolen);
 	}
 
-	if (ret >= 0)
+	if (ret >= 0) {
+		/* Restore errno on function entry in case success */
+		errno = errno_tmp;
 		srdr_logdbg_exit("returned with %d", ret);
-	else
+	} else {
 		srdr_logdbg_exit("failed (errno=%d %m)", errno);
+	}
+
 	return ret;
 }
 
@@ -1313,6 +1412,7 @@ ssize_t read(int __fd, void *__buf, size_t __nbytes)
 	return orig_os_api.read(__fd, __buf, __nbytes);
 }
 
+#if defined HAVE___READ_CHK
 /* Checks that the buffer is big enough to contain the number of bytes
  * the user requests to read. If the buffer is too small, aborts,
  * else read NBYTES into BUF from FD.  Return the
@@ -1346,6 +1446,7 @@ ssize_t __read_chk(int __fd, void *__buf, size_t __nbytes, size_t __buflen)
 
 	return orig_os_api.__read_chk(__fd, __buf, __nbytes, __buflen);
 }
+#endif
 
 /* Read COUNT blocks into VECTOR from FD.  Return the
    number of bytes read, -1 for errors or 0 for EOF.
@@ -1397,6 +1498,7 @@ ssize_t recv(int __fd, void *__buf, size_t __nbytes, int __flags)
 	return orig_os_api.recv(__fd, __buf, __nbytes, __flags);
 }
 
+#if defined HAVE___RECV_CHK
 /* Checks that the buffer is big enough to contain the number of bytes
    the user requests to read. If the buffer is too small, aborts,
    else read N bytes into BUF from socket FD.
@@ -1429,6 +1531,7 @@ ssize_t __recv_chk(int __fd, void *__buf, size_t __nbytes, size_t __buflen, int 
 
 	return orig_os_api.__recv_chk(__fd, __buf, __nbytes, __buflen, __flags);
 }
+#endif
 
 /* Receive a message as described by MESSAGE from socket FD.
    Returns the number of bytes read or -1 for errors.
@@ -1586,6 +1689,7 @@ ssize_t recvfrom(int __fd, void *__buf, size_t __nbytes, int __flags,
 	return ret_val;
 }
 
+#if defined HAVE___RECVFROM_CHK
 /* Checks that the buffer is big enough to contain the number of bytes
    the user requests to read. If the buffer is too small, aborts,
    else read N bytes into BUF through socket FD.
@@ -1621,6 +1725,7 @@ ssize_t __recvfrom_chk(int __fd, void *__buf, size_t __nbytes, size_t __buflen, 
 
 	return orig_os_api.__recvfrom_chk(__fd, __buf, __nbytes, __buflen, __flags, __from, __fromlen);
 }
+#endif
 
 /* Write N bytes of BUF to FD.  Return the number written, or -1.
 
@@ -2261,6 +2366,29 @@ int poll(struct pollfd *__fds, nfds_t __nfds, int __timeout)
 	return poll_helper(__fds, __nfds, __timeout);
 }
 
+#if defined HAVE___POLL_CHK
+extern "C"
+int __poll_chk(struct pollfd *__fds, nfds_t __nfds, int __timeout, size_t __fdslen)
+{
+	if (!g_p_fd_collection) {
+		BULLSEYE_EXCLUDE_BLOCK_START
+		if (!orig_os_api.__poll_chk) get_orig_funcs();
+		BULLSEYE_EXCLUDE_BLOCK_END
+		return orig_os_api.__poll_chk(__fds, __nfds, __timeout, __fdslen);
+	}
+
+	BULLSEYE_EXCLUDE_BLOCK_START
+	if (__fdslen / sizeof(*__fds) < __nfds) {
+	    srdr_logpanic("buffer overflow detected");
+	}
+	BULLSEYE_EXCLUDE_BLOCK_END
+
+	srdr_logfunc_entry("nfds=%d, timeout=(%d milli-sec)", __nfds, __timeout);
+
+	return poll_helper(__fds, __nfds, __timeout);
+}
+#endif
+
 extern "C"
 int ppoll(struct pollfd *__fds, nfds_t __nfds, const struct timespec *__timeout, const sigset_t *__sigmask)
 {
@@ -2278,6 +2406,33 @@ int ppoll(struct pollfd *__fds, nfds_t __nfds, const struct timespec *__timeout,
 
 	return poll_helper(__fds, __nfds, timeout, __sigmask);
 }
+
+#if defined HAVE___PPOLL_CHK
+extern "C"
+int __ppoll_chk(struct pollfd *__fds, nfds_t __nfds, const struct timespec *__timeout, const sigset_t *__sigmask, size_t __fdslen)
+{
+	if (!g_p_fd_collection) {
+		BULLSEYE_EXCLUDE_BLOCK_START
+		if (!orig_os_api.__ppoll_chk) get_orig_funcs();
+		BULLSEYE_EXCLUDE_BLOCK_END
+		return orig_os_api.__ppoll_chk(__fds, __nfds, __timeout, __sigmask, __fdslen);
+	}
+
+	BULLSEYE_EXCLUDE_BLOCK_START
+	if (__fdslen / sizeof(*__fds) < __nfds) {
+	    srdr_logpanic("buffer overflow detected");
+	}
+
+	BULLSEYE_EXCLUDE_BLOCK_END
+
+	int timeout = (__timeout == NULL) ? -1 :
+	           (__timeout->tv_sec * 1000 + __timeout->tv_nsec / 1000000);
+
+	srdr_logfunc_entry("nfds=%d, timeout=(%d milli-sec)", __nfds, timeout);
+
+	return poll_helper(__fds, __nfds, timeout, __sigmask);
+}
+#endif
 
 void vma_epoll_create(int epfd, int size)
 {

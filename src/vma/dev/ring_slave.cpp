@@ -209,9 +209,9 @@ bool ring_slave::attach_flow(flow_tuple& flow_spec_5t, pkt_rcvr_sink *sink)
 		p_rfs = m_flow_udp_uc_map.get(rfs_key, NULL);
 		if (p_rfs == NULL) {
 			// No rfs object exists so a new one must be created and inserted in the flow map
-			if (safe_mce_sys().tcp_3t_rules) {
-				flow_tuple tcp_3t_only(flow_spec_5t.get_dst_ip(), flow_spec_5t.get_dst_port(), 0, 0, flow_spec_5t.get_protocol());
-				dst_port_filter = new rfs_rule_filter(m_udp_uc_dst_port_attach_map, rule_key.key, tcp_3t_only);
+			if (safe_mce_sys().udp_3t_rules) {
+				flow_tuple udp_3t_only(flow_spec_5t.get_dst_ip(), flow_spec_5t.get_dst_port(), 0, 0, flow_spec_5t.get_protocol());
+				dst_port_filter = new rfs_rule_filter(m_udp_uc_dst_port_attach_map, rule_key.key, udp_3t_only);
 			}
 			try {
 				p_tmp_rfs = new (std::nothrow)rfs_uc(&flow_spec_5t, this, dst_port_filter, flow_tag_id);
@@ -230,7 +230,12 @@ bool ring_slave::attach_flow(flow_tuple& flow_spec_5t, pkt_rcvr_sink *sink)
 				delete p_tmp_rfs;
 			} else {
 				p_rfs = p_tmp_rfs;
-				m_flow_udp_uc_map.set(rfs_key, p_rfs);
+#if defined(DEFINED_NGINX)
+				if (!g_b_add_second_4t_rule)
+#endif
+				{
+					m_flow_udp_uc_map.set(rfs_key, p_rfs);
+				}
 			}
 		}
 	} else if (flow_spec_5t.is_udp_mc()) {
@@ -489,6 +494,17 @@ bool ring_slave::detach_flow(flow_tuple& flow_spec_5t, pkt_rcvr_sink* sink)
 	return true;
 }
 
+
+#ifdef DEFINED_UTLS
+rfs_rule* ring_slave::tls_rx_create_rule(flow_tuple &flow_spec_5t, xlio_tir *tir)
+{
+	flow_spec_4t_key_t rfs_key(flow_spec_5t.get_dst_ip(), flow_spec_5t.get_src_ip(),
+				flow_spec_5t.get_dst_port(), flow_spec_5t.get_src_port());
+	rfs *p_rfs = m_flow_tcp_map.get(rfs_key, NULL);
+	return p_rfs->create_rule(tir, flow_spec_5t);
+}
+#endif /* DEFINED_UTLS */
+
 // calling sockinfo callback with RFS bypass
 static inline bool check_rx_packet(sockinfo *si, mem_buf_desc_t* p_rx_wc_buf_desc, void *fd_ready_array)
 {
@@ -553,6 +569,7 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t* p_rx_wc_buf_desc, void* pv_fd
 		sockinfo* si = NULL;
 		// trying to get sockinfo per flow_tag_id-1 as it was incremented at attach
 		// to allow mapping sockfd=0
+		assert(g_p_fd_collection);
 		si = static_cast <sockinfo* >(g_p_fd_collection->get_sockfd(p_rx_wc_buf_desc->rx.flow_tag_id-1));
 
 		if (likely((si != NULL) && si->flow_tag_enabled())) {

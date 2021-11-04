@@ -38,11 +38,75 @@
 #include "vma/util/sg_array.h"
 #include "vma/dev/dm_mgr.h"
 
-#ifdef DEFINED_UTLS
-#include <linux/tls.h>
-#endif /* DEFINED_UTLS */
+#include <vector>
 
 #if defined(DEFINED_DIRECT_VERBS)
+
+#define qp_logpanic 	__log_info_panic
+#define qp_logerr	__log_info_err
+#define qp_logwarn	__log_info_warn
+#define qp_loginfo	__log_info_info
+#define qp_logdbg	__log_info_dbg
+#define qp_logfunc	__log_info_func
+#define qp_logfuncall	__log_info_funcall
+
+enum {
+	XLIO_TI_UNKNOWN,
+	XLIO_TI_TIS,
+	XLIO_TI_TIR,
+};
+
+class xlio_ti {
+public:
+	xlio_ti()
+	{
+		m_type = XLIO_TI_UNKNOWN;
+		m_released = false;
+		m_ref = 0;
+		m_callback = NULL;
+		m_callback_arg = NULL;
+	}
+
+	inline void assign_callback(xlio_comp_cb_t callback, void *callback_arg)
+	{
+		m_callback = callback;
+		m_callback_arg = callback_arg;
+	}
+
+	/*
+	 * Reference counting. m_ref must be protected by ring tx lock. Device
+	 * layer (QP, CQ) is responsible for the reference counting.
+	 */
+
+	inline void get(void)
+	{
+		++m_ref;
+		assert(m_ref > 0);
+	}
+
+	inline uint32_t put(void)
+	{
+		assert(m_ref > 0);
+		return --m_ref;
+	}
+
+	uint8_t m_type;
+	bool m_released;
+	uint32_t m_ref;
+
+	xlio_comp_cb_t m_callback;
+	void *m_callback_arg;
+};
+
+/* WQE properties description. */
+struct sq_wqe_prop {
+	/* wr_id pointing to mem_buf_desc_t object. */
+	uint64_t wr_id;
+	/* Transport interface (TIS/TIR) current WQE holds reference to. */
+	xlio_ti *ti;
+	struct sq_wqe_prop *next;
+};
+typedef struct sq_wqe_prop sq_wqe_prop;
 
 class qp_mgr_eth_mlx5 : public qp_mgr_eth
 {
@@ -58,41 +122,79 @@ public:
 	vma_ib_mlx5_qp_t    m_mlx5_qp;
 
 #ifdef DEFINED_UTLS
-	void tls_context_setup(
-		const void *info, uint32_t tis_number,
-		uint32_t dek_id, uint32_t initial_tcp_sn);
-	void tls_tx_post_dump_wqe(uint32_t tis_number, void *addr, uint32_t len, uint32_t lkey);
+	xlio_tis* tls_context_setup_tx(const xlio_tls_info *info);
+	xlio_tir* tls_create_tir(bool cached);
+	int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info,
+				 uint32_t next_record_tcp_sn,
+				 xlio_comp_cb_t callback, void *callback_arg);
+	void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static);
+	void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn);
+	void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey);
+	void tls_release_tis(xlio_tis *tis);
+	void tls_release_tir(xlio_tir *tir);
+	void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first);
 #endif /* DEFINED_UTLS */
 	void post_nop_fence(void);
 
 protected:
-	void		trigger_completion_for_all_sent_packets();
-	void		init_sq();
 
-	uint64_t*   m_sq_wqe_idx_to_wrid;
-	uint64_t    m_rq_wqe_counter;
-private:
-	cq_mgr*		init_rx_cq_mgr(struct ibv_comp_channel* p_rx_comp_event_channel);
+	void		post_recv_buffer_rq(mem_buf_desc_t* p_mem_buf_desc);
+	void		trigger_completion_for_all_sent_packets();
+	bool 		init_rx_cq_mgr_prepare();
+	void		init_qp();
+	void            init_device_memory();
+	virtual cq_mgr*	init_rx_cq_mgr(struct ibv_comp_channel* p_rx_comp_event_channel);
 	virtual cq_mgr*	init_tx_cq_mgr(void);
+
+	void		ti_released(xlio_ti *ti);
+	inline bool	is_sq_wqe_prop_valid(sq_wqe_prop *p, sq_wqe_prop *prev)
+	{
+		unsigned p_i = p - m_sq_wqe_idx_to_prop;
+		unsigned prev_i = prev - m_sq_wqe_idx_to_prop;
+		return (p_i != m_sq_wqe_prop_last_signalled) &&
+			((m_tx_num_wr + p_i - m_sq_wqe_prop_last_signalled) % m_tx_num_wr <
+			 (m_tx_num_wr + prev_i - m_sq_wqe_prop_last_signalled) % m_tx_num_wr);
+	}
+
+	sq_wqe_prop* m_sq_wqe_idx_to_prop;
+	sq_wqe_prop* m_sq_wqe_prop_last;
+	unsigned     m_sq_wqe_prop_last_signalled;
+	uint64_t     m_rq_wqe_counter;
+private:
 	virtual bool	is_completion_need() { return !m_n_unsignaled_count || (m_dm_enabled && m_dm_mgr.is_completion_need()); };
 	virtual void	dm_release_data(mem_buf_desc_t* buff) { m_dm_mgr.release_data(buff); }
-
+	
 	inline void	set_signal_in_next_send_wqe();
-	int		send_to_wire(vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, bool request_comp, uint32_t tisn);
+	int		send_to_wire(vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, bool request_comp, xlio_tis *tis);
 	inline int	fill_wqe(vma_ibv_send_wr* p_send_wqe);
+	inline void	store_current_wqe_prop(uint64_t wr_id, xlio_ti *ti);
+	void		destroy_tis_cache(void);
 #ifdef DEFINED_UTLS
-	inline void tls_tx_fill_static_params_wqe(
+	inline void tls_fill_static_params_wqe(
 		struct mlx5_wqe_tls_static_params_seg* params,
-		const struct tls12_crypto_info_aes_gcm_128* info,
+		const struct xlio_tls_info* info,
 		uint32_t key_id, uint32_t resync_tcp_sn);
-	inline void tls_tx_post_static_params_wqe(
-		const struct tls12_crypto_info_aes_gcm_128* info,
-		uint32_t tis_number, uint32_t key_id, uint32_t resync_tcp_sn);
-	inline void tls_tx_fill_progress_params_wqe(
+	inline void tls_post_static_params_wqe(
+		xlio_ti *ti, const struct xlio_tls_info* info,
+		uint32_t tis_tir_number, uint32_t key_id,
+		uint32_t resync_tcp_sn, bool fence, bool is_tx);
+	inline void tls_fill_progress_params_wqe(
 		struct mlx5_wqe_tls_progress_params_seg* params,
-		uint32_t tis_number, uint32_t next_record_tcp_sn);
-	inline void tls_tx_post_progress_params_wqe(
-		uint32_t tis_number, uint32_t next_record_tcp_sn);
+		uint32_t tis_tir_number, uint32_t next_record_tcp_sn);
+	inline void tls_post_progress_params_wqe(
+		xlio_ti *ti, uint32_t tis_tir_number,
+		uint32_t next_record_tcp_sn, bool fence, bool is_tx);
+	inline void tls_get_progress_params_wqe(
+		xlio_ti *ti, uint32_t tirn, void *buf, uint32_t lkey);
+
+protected:
+	dpcp::tir* xlio_tir_to_dpcp_tir(xlio_tir *tir);
+	virtual dpcp::tir* create_tir(bool is_tls = false)
+	{
+		NOT_IN_USE(is_tls);
+		return NULL;
+	}
+private:
 #endif /* DEFINED_UTLS */
 #ifdef DEFINED_TSO
 	inline int	fill_wqe_send(vma_ibv_send_wr* pswr);
@@ -114,8 +216,15 @@ private:
 
 	int                 m_sq_wqe_hot_index;
 	uint16_t            m_sq_wqe_counter;
-	dm_mgr              m_dm_mgr;
+
 	bool                m_dm_enabled;
+	dm_mgr              m_dm_mgr;
+	/*
+	 * TIS cache. Protected by ring tx lock.
+	 * TODO Move to ring.
+	 */
+	std::vector<xlio_tis*> m_tis_cache;
+	std::vector<xlio_tir*> m_tir_cache;
 };
 #endif //defined(DEFINED_DIRECT_VERBS)
 #endif //QP_MGR_ETH_MLX5_H

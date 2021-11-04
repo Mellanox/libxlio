@@ -74,7 +74,9 @@ enum {
   PBUF_DESC_MDESC,
   PBUF_DESC_FD,
   PBUF_DESC_MAP,
-  PBUF_DESC_MKEY
+  PBUF_DESC_MKEY,
+  PBUF_DESC_STRIDE,
+  PBUF_DESC_TLS_RX,
 };
 
 typedef struct {
@@ -96,6 +98,8 @@ struct pbuf {
 
   /** length of this buffer */
   u16_t len;
+
+  u8_t  gro;
 
   /**
    * total length of this buffer and all next buffers in chain

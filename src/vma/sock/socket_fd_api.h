@@ -200,6 +200,9 @@ public:
 
 	virtual bool is_closable(){ return true; }
 
+#if defined(DEFINED_NGINX)
+	virtual void prepare_to_close_socket_pool(bool _push_pop) {NOT_IN_USE(_push_pop);}
+#endif
 
 	//In some cases we need the socket can't be deleted immidiatly
 	//(for example STREAME sockets)
@@ -272,6 +275,7 @@ protected:
 public:
 	bool m_is_closable;
 #if defined(DEFINED_NGINX)
+	bool m_is_for_socket_pool;      // true when this fd will be used for socket pool on close
 	bool m_is_listen;
 	int m_back_log;
 #endif

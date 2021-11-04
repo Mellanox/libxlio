@@ -64,6 +64,7 @@ public:
 
 	mem_buf_desc_t* get_buffer(pbuf_type type, pbuf_desc *desc, bool b_blocked = false);
 	void put_buffer(mem_buf_desc_t * p_desc);
+	void put_zc_buffer(mem_buf_desc_t * p_desc);
 
 protected:
 	transport_t 		get_transport(sockaddr_in to);
@@ -80,21 +81,22 @@ private:
 	const uint32_t       m_n_sysvar_user_huge_page_size;
 	uint64_t             m_user_huge_page_mask;
 
-	inline void		send_lwip_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, uint32_t tisn)
+	inline int		send_lwip_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, xlio_tis *tis)
 	{
 		if (unlikely(is_set(attr, VMA_TX_PACKET_DUMMY))) {
 			if (m_p_ring->get_hw_dummy_send_support(id, p_send_wqe)) {
 				vma_ibv_wr_opcode last_opcode = m_p_send_wqe_handler->set_opcode(*p_send_wqe, VMA_IBV_WR_NOP);
-				m_p_ring->send_lwip_buffer(id, p_send_wqe, attr, tisn);
+				m_p_ring->send_lwip_buffer(id, p_send_wqe, attr, tis);
 				m_p_send_wqe_handler->set_opcode(*p_send_wqe, last_opcode);
 			}
 			/* no need to free the buffer if dummy send is not supported, as for lwip buffers we have 2 ref counts, */
 			/* one for caller, and one for completion. for completion, we ref count in    */
 			/* send_lwip_buffer(). Since we are not going in, the caller will free the    */
 			/* buffer. */
-		} else {
-			m_p_ring->send_lwip_buffer(id, p_send_wqe, attr, tisn);
+			return 0;
 		}
+			
+		return m_p_ring->send_lwip_buffer(id, p_send_wqe, attr, tis);
 	}
 
 };

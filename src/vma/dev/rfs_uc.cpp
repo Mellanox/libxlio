@@ -134,23 +134,26 @@ bool rfs_uc::prepare_flow_spec()
 	if (m_flow_tuple.get_src_port() || m_flow_tuple.get_src_ip()) {
 		// set priority of 5-tuple to be higher than 3-tuple
 		// to make sure 5-tuple have higher priority on ConnectX-4
-		p_attach_flow_data->ibv_flow_attr.priority = 0;
+		p_attach_flow_data->ibv_flow_attr.priority = 1;
 	}
 #if defined(DEFINED_NGINX)
-	else if (safe_mce_sys().actual_nginx_workers_num > 0 && m_flow_tuple.get_protocol() != PROTO_UDP) {
-		int src_port;
-		if (g_b_add_second_4t_rule) {
-			src_port = safe_mce_sys().actual_nginx_workers_num + g_worker_index;
-		} else {
-			src_port = g_worker_index;
+	else if (safe_mce_sys().actual_nginx_workers_num > 0) {
+		if (m_flow_tuple.get_protocol() != PROTO_UDP ||
+			(g_map_udp_bounded_port.count(ntohs(m_flow_tuple.get_dst_port())))) {
+			int src_port;
+			if (g_b_add_second_4t_rule) {
+				src_port = safe_mce_sys().actual_nginx_workers_num + g_worker_index;
+			} else {
+				src_port = g_worker_index;
+			}
+			p_tcp_udp->val.src_port = htons((uint16_t)src_port * safe_mce_sys().src_port_stride);
+			p_tcp_udp->mask.src_port = htons((uint16_t)((safe_mce_sys().power_2_nginx_workers_num * safe_mce_sys().src_port_stride) - 2)); //htons(0xf);
+			p_attach_flow_data->ibv_flow_attr.priority = 1;
+			rfs_logdbg("safe_mce_sys().src_port_stride: %d safe_mce_sys().workers_num %d \n", safe_mce_sys().src_port_stride, safe_mce_sys().actual_nginx_workers_num);
+			rfs_logdbg("sp_tcp_udp->val.src_port: %d p_tcp_udp->mask.src_port %d \n", ntohs(p_tcp_udp->val.src_port), ntohs(p_tcp_udp->mask.src_port));
+			m_flow_tuple.m_src_port = p_tcp_udp->val.src_port;
+			m_flow_tuple.set_str();
 		}
-		p_tcp_udp->val.src_port = htons((uint16_t)src_port * safe_mce_sys().src_port_stride);
-		p_tcp_udp->mask.src_port = htons((uint16_t)((safe_mce_sys().power_2_nginx_workers_num * safe_mce_sys().src_port_stride) - 2)); //htons(0xf);
-		p_attach_flow_data->ibv_flow_attr.priority = 0;
-		rfs_logdbg("safe_mce_sys().src_port_stride: %d safe_mce_sys().workers_num %d \n", safe_mce_sys().src_port_stride, safe_mce_sys().actual_nginx_workers_num);
-		rfs_logdbg("sp_tcp_udp->val.src_port: %d p_tcp_udp->mask.src_port %d \n", ntohs(p_tcp_udp->val.src_port), ntohs(p_tcp_udp->mask.src_port));
-		m_flow_tuple.m_src_port = p_tcp_udp->val.src_port;
-		m_flow_tuple.set_str();
 	}
 #endif
 	if (m_flow_tag_id && attach_flow_data_eth) { // Will not attach flow_tag spec to rule for tag_id==0

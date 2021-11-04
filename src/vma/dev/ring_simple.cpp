@@ -37,6 +37,7 @@
 #include "vma/sock/fd_collection.h"
 #if defined(DEFINED_DIRECT_VERBS)
 #include "vma/dev/qp_mgr_eth_mlx5.h"
+#include "vma/dev/qp_mgr_eth_mlx5_dpcp.h"
 #endif
 
 #undef  MODULE_NAME
@@ -85,8 +86,11 @@ qp_mgr* ring_eth::create_qp_mgr(struct qp_mgr_desc *desc)
 {
 #if defined(DEFINED_DIRECT_VERBS)
 	if (qp_mgr::is_lib_mlx5(((ib_ctx_handler*)desc->slave->p_ib_ctx)->get_ibname())) {
-		return new qp_mgr_eth_mlx5(desc,
-				get_tx_num_wr(), m_partition);
+#if defined(DEFINED_DPCP) && (DEFINED_DPCP > 10114)
+		if (safe_mce_sys().enable_dpcp_rq)
+			return new qp_mgr_eth_mlx5_dpcp(desc, get_tx_num_wr(), m_partition);
+#endif
+		return new qp_mgr_eth_mlx5(desc, get_tx_num_wr(), m_partition);
 	}
 #endif
 	return new qp_mgr_eth(desc,
@@ -139,6 +143,10 @@ ring_simple::ring_simple(int if_index, ring* parent, ring_type_t type):
 #ifdef DEFINED_TSO
 	memset(&m_tso, 0, sizeof(m_tso));
 #endif /* DEFINED_TSO */
+#ifdef DEFINED_UTLS
+	memset(&m_tls, 0, sizeof(m_tls));
+#endif /* DEFINED_UTLS */
+	memset(&m_lro, 0, sizeof(m_lro));
 
 	m_socketxtreme.active = safe_mce_sys().enable_socketxtreme;
 	INIT_LIST_HEAD(&m_socketxtreme.ec_list);
@@ -259,6 +267,7 @@ void ring_simple::create_resources()
 	m_tx_num_wr_free = m_tx_num_wr;
 
 #ifdef DEFINED_TSO
+	/* Detect TSO capabilities */
 	memset(&m_tso, 0, sizeof(m_tso));
 	if (safe_mce_sys().enable_tso && (1 == validate_tso(get_if_index()))) {
 		if (vma_check_dev_attr_tso(m_p_ib_ctx->get_ibv_device_attr())) {
@@ -275,6 +284,57 @@ void ring_simple::create_resources()
 	ring_logdbg("ring attributes: m_tso:max_payload_sz = %d", get_max_payload_sz());
 	ring_logdbg("ring attributes: m_tso:max_header_sz = %d", get_max_header_sz());
 #endif /* DEFINED_TSO */
+
+	/* Detect LRO capabilities */
+	memset(&m_lro, 0, sizeof(m_lro));
+	if ((safe_mce_sys().enable_lro == option_3::ON) ||
+			((safe_mce_sys().enable_lro == option_3::AUTO) && (1 == validate_lro(get_if_index())))) {
+#if defined(DEFINED_DPCP) && (DEFINED_DPCP > 10114)
+		dpcp::adapter_hca_capabilities caps;
+
+		if (m_p_ib_ctx->get_dpcp_adapter() &&
+				(dpcp::DPCP_OK == m_p_ib_ctx->get_dpcp_adapter()->get_hca_capabilities(caps))) {
+			m_lro.cap = caps.lro_cap;
+			m_lro.psh_flag = caps.lro_psh_flag;
+			m_lro.time_stamp = caps.lro_time_stamp;
+			m_lro.max_msg_sz_mode = caps.lro_max_msg_sz_mode;
+			m_lro.min_mss_size = caps.lro_min_mss_size;
+
+			memcpy(m_lro.timer_supported_periods, caps.lro_timer_supported_periods, sizeof(m_lro.timer_supported_periods));
+			/* calculate possible payload size w/o using max_msg_sz_mode
+			 * because during memory buffer allocation L2+L3+L4 is reserved
+			 * adjust payload size to 256 bytes
+			 */
+			uint32_t actual_buf_size = (!safe_mce_sys().rx_buf_size && safe_mce_sys().enable_striding_rq ? 
+				min(65280U, safe_mce_sys().strq_stride_num_per_rwqe * safe_mce_sys().strq_stride_size_bytes) : safe_mce_sys().rx_buf_size);
+			m_lro.max_payload_sz = std::min(actual_buf_size, VMA_MLX5_PARAMS_LRO_PAYLOAD_SIZE) / 256U * 256U;
+		}
+#endif /* DEFINED_DPCP */
+	}
+	ring_logdbg("ring attributes: m_lro = %d", m_lro.cap);
+	ring_logdbg("ring attributes: m_lro:psh_flag = %d", m_lro.psh_flag);
+	ring_logdbg("ring attributes: m_lro:time_stamp = %d", m_lro.time_stamp);
+	ring_logdbg("ring attributes: m_lro:max_msg_sz_mode = %d", m_lro.max_msg_sz_mode);
+	ring_logdbg("ring attributes: m_lro:min_mss_size = %d", m_lro.min_mss_size);
+	ring_logdbg("ring attributes: m_lro:timer_supported_periods = [%d:%d:%d:%d]",
+			m_lro.timer_supported_periods[0],
+			m_lro.timer_supported_periods[1],
+			m_lro.timer_supported_periods[2],
+			m_lro.timer_supported_periods[3]);
+	ring_logdbg("ring attributes: m_lro:max_payload_sz = %d", m_lro.max_payload_sz);
+
+#ifdef DEFINED_UTLS
+	{
+		dpcp::adapter_hca_capabilities caps;
+		if (m_p_ib_ctx->get_dpcp_adapter() &&
+				(dpcp::DPCP_OK == m_p_ib_ctx->get_dpcp_adapter()->get_hca_capabilities(caps))) {
+			m_tls.tls_tx = caps.tls_tx;
+			m_tls.tls_rx = caps.tls_rx;
+		}
+		ring_logdbg("ring attributes: m_tls:tls_tx = %d", m_tls.tls_tx);
+		ring_logdbg("ring attributes: m_tls:tls_rx = %d", m_tls.tls_rx);
+	}
+#endif /* DEFINED_UTLS */
 
 	m_flow_tag_enabled = m_p_ib_ctx->get_flow_tag_capability();
 #if defined(DEFINED_NGINX)
@@ -460,11 +520,6 @@ int ring_simple::reclaim_recv_single_buffer(mem_buf_desc_t* rx_reuse)
 	return m_p_cq_mgr_rx->reclaim_recv_single_buffer(rx_reuse);
 }
 
-void ring_simple::mem_buf_desc_completion_with_error_rx(mem_buf_desc_t* p_rx_wc_buf_desc)
-{
-	m_p_cq_mgr_rx->mem_buf_desc_completion_with_error(p_rx_wc_buf_desc);
-}
-
 void ring_simple::mem_buf_desc_completion_with_error_tx(mem_buf_desc_t* p_tx_wc_buf_desc)
 {
 	if (m_b_qp_tx_first_flushed_completion_handled) {
@@ -639,17 +694,17 @@ void ring_simple::mem_buf_rx_release(mem_buf_desc_t* p_mem_buf_desc)
 }
 
 /* note that this function is inline, so keep it above the functions using it */
-inline int ring_simple::send_buffer(vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, uint32_t tisn)
+inline int ring_simple::send_buffer(vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, xlio_tis *tis)
 {
 	//Note: this is debatable logic as it count of WQEs waiting completion but
 	//our SQ is cyclic buffer so in reality only last WQE is still being sent
 	//and other SQ is mostly free to work on.
 	int ret = 0;
 	if (likely(m_tx_num_wr_free > 0)) {
-		ret = m_p_qp_mgr->send(p_send_wqe, attr, tisn);
+		ret = m_p_qp_mgr->send(p_send_wqe, attr, tis);
 		--m_tx_num_wr_free;
 	} else if (is_available_qp_wr(is_set(attr, VMA_TX_PACKET_BLOCK))) {
-		ret = m_p_qp_mgr->send(p_send_wqe, attr, tisn);
+		ret = m_p_qp_mgr->send(p_send_wqe, attr, tis);
 	} else {
 		ring_logdbg("silent packet drop, no available WR in QP!");
 		ret = -1;
@@ -657,6 +712,8 @@ inline int ring_simple::send_buffer(vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packe
 			mem_buf_desc_t* p_mem_buf_desc = (mem_buf_desc_t*)(p_send_wqe->wr_id);
 			p_mem_buf_desc->p_next_desc = NULL;
 		}
+
+		++m_p_ring_stat->simple.n_tx_dropped_wqes;
 	}
 	return ret;
 }
@@ -691,7 +748,7 @@ void ring_simple::send_ring_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wq
 	send_status_handler(ret, p_send_wqe);
 }
 
-void ring_simple::send_lwip_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, uint32_t tisn)
+int ring_simple::send_lwip_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, xlio_tis *tis)
 {
 	NOT_IN_USE(id);
 
@@ -707,8 +764,9 @@ void ring_simple::send_lwip_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wq
 	mem_buf_desc_t* p_mem_buf_desc = (mem_buf_desc_t*)(p_send_wqe->wr_id);
 	p_mem_buf_desc->lwip_pbuf.pbuf.ref++;
 #endif /* DEFINED_TSO */
-	int ret = send_buffer(p_send_wqe, attr, tisn);
+	int ret = send_buffer(p_send_wqe, attr, tis);
 	send_status_handler(ret, p_send_wqe);
+	return ret;
 }
 
 /*
@@ -850,6 +908,7 @@ mem_buf_desc_t* ring_simple::get_tx_buffers(pbuf_type type, uint32_t n_num_mem_b
 
 	head = pool->get_and_pop_back();
 	head->lwip_pbuf.pbuf.ref = 1;
+	assert(head->lwip_pbuf.pbuf.type == type);
 	head->lwip_pbuf.pbuf.type = type;
 	n_num_mem_bufs--;
 
@@ -858,6 +917,7 @@ mem_buf_desc_t* ring_simple::get_tx_buffers(pbuf_type type, uint32_t n_num_mem_b
 		next->p_next_desc = pool->get_and_pop_back();
 		next = next->p_next_desc;
 		next->lwip_pbuf.pbuf.ref = 1;
+		assert(head->lwip_pbuf.pbuf.type == type);
 		next->lwip_pbuf.pbuf.type = type;
 		n_num_mem_bufs--;
 	}

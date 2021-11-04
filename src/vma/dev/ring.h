@@ -38,7 +38,11 @@
 #include "vma/proto/flow_tuple.h"
 #include "vma/sock/socket_fd_api.h"
 
+/* Forward declarations */
+struct xlio_tls_info;
+class xlio_tis;
 class pkt_rcvr_sink;
+typedef void (*xlio_comp_cb_t)(void*); // Copied from qp_mgr.h
 
 #define ring_logpanic 		__log_info_panic
 #define ring_logerr			__log_info_err
@@ -90,7 +94,7 @@ public:
 	virtual int		mem_buf_tx_release(mem_buf_desc_t* p_mem_buf_desc_list, bool b_accounting, bool trylock = false) = 0;
 	virtual void		mem_buf_rx_release(mem_buf_desc_t* p_mem_buf_desc) { buffer_pool::free_rx_lwip_pbuf_custom(&p_mem_buf_desc->lwip_pbuf.pbuf); };
 	virtual void		send_ring_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr) = 0;
-	virtual void		send_lwip_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, uint32_t tisn) = 0;
+	virtual int		send_lwip_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, xlio_tis *tis) = 0;
 
 	// Funcs taken from cq_mgr.h
 	virtual int		get_num_resources() const = 0;
@@ -115,13 +119,13 @@ public:
 	virtual ring_user_id_t	generate_id(const address_t src_mac, const address_t dst_mac, uint16_t eth_proto, uint16_t encap_proto, uint32_t src_ip, uint32_t dst_ip, uint16_t src_port, uint16_t dst_port) = 0;
 	virtual int		modify_ratelimit(struct xlio_rate_limit_t &rate_limit) = 0;
 	virtual uint32_t        get_tx_user_lkey(void *addr, size_t length, void *p_mapping = NULL) = 0;
-        virtual uint32_t	get_max_inline_data() = 0;
+	virtual uint32_t	get_max_inline_data() = 0;
 #ifdef DEFINED_TSO
-        virtual uint32_t	get_max_send_sge(void) = 0;
-        virtual uint32_t	get_max_payload_sz(void) = 0;
-        virtual uint16_t	get_max_header_sz(void) = 0;
+	virtual uint32_t	get_max_send_sge(void) = 0;
+	virtual uint32_t	get_max_payload_sz(void) = 0;
+	virtual uint16_t	get_max_header_sz(void) = 0;
 	virtual uint32_t	get_tx_lkey(ring_user_id_t id) = 0;
-        virtual bool		is_tso(void) = 0;
+	virtual bool		is_tso(void) = 0;
 #endif /* DEFINED_TSO */
 	virtual ib_ctx_handler*	get_ctx(ring_user_id_t id) = 0;
 
@@ -135,22 +139,68 @@ public:
 	inline int get_if_index() { return m_if_index; }
 
 #ifdef DEFINED_UTLS
-	virtual void tls_context_setup(
-		const void *info, uint32_t tis_number,
-		uint32_t dek_id, uint32_t initial_tcp_sn)
+	virtual bool tls_tx_supported(void) { return false; }
+	virtual bool tls_rx_supported(void) { return false; }
+	virtual xlio_tis *tls_context_setup_tx(const xlio_tls_info *info)
 	{
 		NOT_IN_USE(info);
-		NOT_IN_USE(tis_number);
-		NOT_IN_USE(dek_id);
-		NOT_IN_USE(initial_tcp_sn);
+		return NULL;
 	}
-	virtual void tls_tx_post_dump_wqe(
-		uint32_t tis_number, void *addr, uint32_t len, uint32_t lkey)
+	virtual xlio_tir *tls_create_tir(bool cached)
 	{
-		NOT_IN_USE(tis_number);
+		NOT_IN_USE(cached);
+		return NULL;
+	}
+	virtual int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info,
+					 uint32_t next_record_tcp_sn,
+					 xlio_comp_cb_t callback, void *callback_arg)
+	{
+		NOT_IN_USE(tir);
+		NOT_IN_USE(info);
+		NOT_IN_USE(next_record_tcp_sn);
+		NOT_IN_USE(callback);
+		NOT_IN_USE(callback_arg);
+		return -1;
+	}
+	virtual rfs_rule *tls_rx_create_rule(flow_tuple &flow_spec_5t, xlio_tir *tir)
+	{
+		NOT_IN_USE(flow_spec_5t);
+		NOT_IN_USE(tir);
+		return NULL;
+	}
+	virtual void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static)
+	{
+		NOT_IN_USE(info);
+		NOT_IN_USE(tis);
+		NOT_IN_USE(skip_static);
+	}
+	virtual void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn)
+	{
+		NOT_IN_USE(tir);
+		NOT_IN_USE(info);
+		NOT_IN_USE(hw_resync_tcp_sn);
+	}
+	virtual void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey)
+	{
+		NOT_IN_USE(tir);
+		NOT_IN_USE(buf);
+		NOT_IN_USE(lkey);
+	}
+	virtual void tls_release_tis(xlio_tis *tis)
+	{
+		NOT_IN_USE(tis);
+	}
+	virtual void tls_release_tir(xlio_tir *tir)
+	{
+		NOT_IN_USE(tir);
+	}
+	virtual void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first)
+	{
+		NOT_IN_USE(tis);
 		NOT_IN_USE(addr);
 		NOT_IN_USE(len);
 		NOT_IN_USE(lkey);
+		NOT_IN_USE(first);
 	}
 #endif /* DEFINED_UTLS */
 	virtual void post_nop_fence(void) {}

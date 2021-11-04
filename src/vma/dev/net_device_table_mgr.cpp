@@ -467,6 +467,7 @@ int net_device_table_mgr::global_ring_wait_for_notification_and_process_element(
 	if (res > 0) {
 		for (int event_idx = 0; event_idx < res ; ++event_idx) {
 			int fd = events[event_idx].data.fd;	// This is the Rx cq channel fd
+			assert(g_p_fd_collection);
 			cq_channel_info* p_cq_ch_info = g_p_fd_collection->get_cq_channel_fd(fd);
 			if (p_cq_ch_info) {
 				ring* p_ready_ring = p_cq_ch_info->get_ring();

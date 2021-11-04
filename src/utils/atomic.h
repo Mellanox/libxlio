@@ -97,7 +97,6 @@ static bool atomic_cas(T old_value, T new_value, T *addr)
 
 /**
  * Add to the atomic variable.
- * @param i integer value to add.
  * @param v pointer of type atomic_t.
  * @return Value before add.
  */
@@ -108,13 +107,23 @@ static inline int atomic_fetch_and_inc(atomic_t *v)
 
 /**
  * Add to the atomic variable.
- * @param i integer value to add.
  * @param v pointer of type atomic_t.
  * @return Value before add.
  */
 static inline int atomic_fetch_and_dec(atomic_t *v)
 {
 	return atomic_fetch_and_add(-1, &v->counter);
+}
+
+/**
+ * Add to the atomic variable.
+ * @param x integer value to add.
+ * @param v pointer of type atomic_t.
+ * @return Value before add.
+ */
+static inline int atomic_fetch_add_relaxed(int x, atomic_t *v)
+{
+	return atomic_fetch_and_add_relaxed(x, &v->counter);
 }
 
 #endif /* ATOMIC_H_ */

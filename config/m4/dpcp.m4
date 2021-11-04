@@ -9,6 +9,22 @@
 #
 AC_DEFUN([DPCP_CAPABILITY_SETUP],
 [
+
+get_version_number()
+{
+    dpcp_cv_token=`grep dpcp_version "${with_dpcp}/include/mellanox/dpcp.h" | sed -n 's/^.*\([[0-9]]\+\.[[0-9]]\+\.[[0-9]]\+\).*$/\1/p' `
+
+    if egrep '^[[0-9]]+\.[[0-9]]+\.[[0-9]]+' <<<"$dpcp_cv_token" >/dev/null 2>&1 ; then
+        # It has the correct syntax.
+        n=${dpcp_cv_token//[[!0-9]]/ }
+        v=(${n//\./ })
+
+        echo "$((${v[[0]]} * 10000 + ${v[[1]]} * 100 + ${v[[2]]}))"
+    else
+        echo 0
+    fi
+}
+
 AC_ARG_WITH([dpcp],
     AS_HELP_STRING([--with-dpcp(=DIR)],
                    [Search for dpcp headers and libraries in DIR (default NO)]),
@@ -70,8 +86,15 @@ if test "$vma_cv_dpcp" -ne 0; then
     CPPFLAGS="$CPPFLAGS $vma_cv_dpcp_CPPFLAGS"
     LDFLAGS="$LDFLAGS $vma_cv_dpcp_LDFLAGS"
     AC_SUBST([DPCP_LIBS], ["-ldpcp"])
-    AC_DEFINE_UNQUOTED([DEFINED_DPCP], [1], [Define to 1 to use DPCP])
-    AC_MSG_RESULT([yes])
+    dpcp_version_number=($(get_version_number))
+
+    if test "$dpcp_version_number" -ne 0; then
+        AC_DEFINE_UNQUOTED([DEFINED_DPCP], [$dpcp_version_number], [Define to DPCP version number (major * 10000 + minor * 100 + patch)])
+        AC_MSG_RESULT([yes])
+    else
+        AC_MSG_RESULT([no])
+        AC_MSG_ERROR([dpcp exists but version can not be detected])
+    fi
 else
     AS_IF([test "x$with_dpcp" == xno],
         [AC_MSG_RESULT([no])],

@@ -36,6 +36,7 @@
 #include <sys/epoll.h>
 #include <netdb.h>
 #include <linux/sockios.h>
+#include <cinttypes>
 
 #include "utils/bullseye.h"
 #include "vlogger/vlogger.h"
@@ -587,6 +588,7 @@ bool sockinfo::try_un_offloading() // un-offload the socket if possible
 ////////////////////////////////////////////////////////////////////////////////
 int sockinfo::get_sock_by_L3_L4(in_protocol_t protocol, in_addr_t ip, in_port_t  port)
 {
+	assert(g_p_fd_collection);
 	int map_size = g_p_fd_collection->get_fd_map_size();
 	for (int i = 0; i < map_size; i++) {
 		socket_fd_api* p_sock_i = g_p_fd_collection->get_sockfd(i);
@@ -682,21 +684,25 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
 		return false;
 	}
 #if defined(DEFINED_NGINX)
-	if (safe_mce_sys().actual_nginx_workers_num > 0 && flow_key.get_protocol() != PROTO_UDP) {
-		if ((safe_mce_sys().actual_nginx_workers_num != safe_mce_sys().power_2_nginx_workers_num) && flow_key.is_3_tuple()) {
-			if (g_worker_index < (safe_mce_sys().power_2_nginx_workers_num % safe_mce_sys().actual_nginx_workers_num)) {
-				g_b_add_second_4t_rule = true;
-				flow_tuple_with_local_if new_key(flow_key.get_dst_ip(), flow_key.get_dst_port(), 0, 1, flow_key.get_protocol(), flow_key.get_local_if());
-				if (!p_nd_resources->p_ring->attach_flow(new_key, this)) {
-					lock_rx_q();
-					si_logerr("Failed to attach %s to ring %p", new_key.to_str(), p_nd_resources->p_ring);
-					g_b_add_second_4t_rule = false;
-					return false;
+	if (safe_mce_sys().actual_nginx_workers_num > 0) {
+		if (flow_key.get_protocol() != PROTO_UDP ||
+			(flow_key.get_protocol() == PROTO_UDP && g_map_udp_bounded_port.count(ntohs(flow_key.get_dst_port())))) {
+			if ((safe_mce_sys().actual_nginx_workers_num != safe_mce_sys().power_2_nginx_workers_num) && flow_key.is_3_tuple()) {
+				if (g_worker_index < (safe_mce_sys().power_2_nginx_workers_num % safe_mce_sys().actual_nginx_workers_num)) {
+					g_b_add_second_4t_rule = true;
+					flow_tuple_with_local_if new_key(flow_key.get_dst_ip(), flow_key.get_dst_port(), 0, 1, flow_key.get_protocol(), flow_key.get_local_if());
+					if (!p_nd_resources->p_ring->attach_flow(new_key, this)) {
+						lock_rx_q();
+						si_logerr("Failed to attach %s to ring %p", new_key.to_str(), p_nd_resources->p_ring);
+						g_b_add_second_4t_rule = false;
+						return false;
+					}
+					si_logdbg("Added second rule %s for index %d to ring %p", new_key.to_str(), g_worker_index, p_nd_resources->p_ring);
 				}
-				si_logdbg("Added second rule %s for index %d to ring %p", new_key.to_str(), g_worker_index, p_nd_resources->p_ring);
 			}
+			g_b_add_second_4t_rule = false;
 		}
-		g_b_add_second_4t_rule = false;
+
 	}
 #endif
 	lock_rx_q();
@@ -1166,6 +1172,10 @@ void sockinfo::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
 
 		b_any_activity = true;
 	}
+	if (m_p_socket_stats->strq_counters.n_strq_total_strides) {
+		vlog_printf(log_level, "Rx RQ Strides: %" PRIu64 " / %u [total/max-per-packet]\n",
+			m_p_socket_stats->strq_counters.n_strq_total_strides, m_p_socket_stats->strq_counters.n_strq_max_strides_per_packet);
+	}
 	if (m_p_socket_stats->counters.n_rx_os_bytes || m_p_socket_stats->counters.n_rx_os_packets || m_p_socket_stats->counters.n_rx_os_errors || m_p_socket_stats->counters.n_rx_os_eagain) {
 		vlog_printf(log_level, "Rx OS info : %d KB / %d / %d / %d [bytes/packets/eagains/errors]\n", m_p_socket_stats->counters.n_rx_os_bytes/1024, m_p_socket_stats->counters.n_rx_os_packets, m_p_socket_stats->counters.n_rx_os_eagain, m_p_socket_stats->counters.n_rx_os_errors);
 		b_any_activity = true;
@@ -1289,7 +1299,8 @@ void sockinfo::rx_del_ring_cb(flow_tuple_with_local_if &flow_key, ring* p_ring)
 			for (size_t i = 0; i < num_ring_rx_fds; i++) {
 				int cq_ch_fd = ring_rx_fds_array[i];
 				BULLSEYE_EXCLUDE_BLOCK_START
-				if (unlikely( orig_os_api.epoll_ctl(m_rx_epfd, EPOLL_CTL_DEL, cq_ch_fd, NULL))) {
+				if (unlikely((orig_os_api.epoll_ctl(m_rx_epfd, EPOLL_CTL_DEL, cq_ch_fd, NULL)) &&
+							 (!(errno == ENOENT || errno == EBADF)))) {
 					si_logerr("failed to delete cq channel fd from internal epfd (errno=%d %s)", errno, strerror(errno));
 				}
 				BULLSEYE_EXCLUDE_BLOCK_END
@@ -1337,7 +1348,7 @@ void sockinfo::rx_del_ring_cb(flow_tuple_with_local_if &flow_key, ring* p_ring)
 	reuse_descs(&temp_rx_reuse, base_ring);
 
 	if (temp_rx_reuse_global.size() > 0) {
-		g_buffer_pool_rx->put_buffers_after_deref_thread_safe(&temp_rx_reuse_global);
+		g_buffer_pool_rx_ptr->put_buffers_after_deref_thread_safe(&temp_rx_reuse_global);
 	}
 
 	lock_rx_q();
@@ -1411,7 +1422,7 @@ void sockinfo::reuse_descs(descq_t *reuseq, ring* p_ring)
 			sched_yield();
 		}
 		if (reuseq->size() > 0) {
-			g_buffer_pool_rx->put_buffers_after_deref_thread_safe(reuseq);
+			g_buffer_pool_rx_ptr->put_buffers_after_deref_thread_safe(reuseq);
 		}
 	}
 }

@@ -186,6 +186,7 @@ if test "x$vma_cv_verbs" == x3; then
         CHECK_VERBS_ATTRIBUTE([MLX5_OPCODE_NOP], [infiniband/mlx5dv.h], [IBV_WR_NOP])
         CHECK_VERBS_MEMBER([struct mlx5dv_clock_info.last_cycles], [infiniband/mlx5dv.h], [IBV_CLOCK_INFO])
         CHECK_VERBS_MEMBER([struct mlx5dv_context.num_lag_ports], [infiniband/mlx5dv.h], [ROCE_LAG])
+        CHECK_VERBS_ATTRIBUTE([MLX5DV_QP_MASK_RAW_QP_HANDLES], [infiniband/mlx5dv.h], [DV_RAW_QP_HANDLES])
     fi
 fi
 

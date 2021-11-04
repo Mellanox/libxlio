@@ -277,7 +277,7 @@ PACK_STRUCT_END
 
 /* This structure represents a TCP segment on the unsent, unacked and ooseq queues */
 struct tcp_seg {
-  struct tcp_seg *next;    /* used when putting segements on a queue */
+  struct tcp_seg *next;    /* used when putting segments on a queue */
   struct pbuf *p;          /* buffer containing data + TCP header */
 #if LWIP_TSO
   u32_t seqno;
@@ -305,6 +305,7 @@ struct tcp_seg {
 #define TF_SEG_OPTS_WNDSCALE	(u8_t)0x08U /* Include window scaling option */
 #define TF_SEG_OPTS_DUMMY_MSG	(u8_t)TCP_WRITE_DUMMY /* Include dummy send option */
 #define TF_SEG_OPTS_TSO         (u8_t)TCP_WRITE_TSO /* Use TSO send mode */
+#define TF_SEG_OPTS_NOMERGE     (u8_t)0x40U /* Don't merge with other segments */
 #define TF_SEG_OPTS_ZEROCOPY    (u8_t)TCP_WRITE_ZEROCOPY /* Use zerocopy send mode */
 
   struct tcp_hdr *tcphdr;  /* the TCP header */

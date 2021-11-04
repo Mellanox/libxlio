@@ -81,10 +81,16 @@
 #include <vma/util/utils.h>
 
 #include <vlogger/vlogger.h>
+#include <unordered_map>
+#include <list>
 
 #if defined(DEFINED_NGINX)
+typedef std::unordered_map<uint16_t, std::list<int>*> map_port_list_t;
+typedef std::unordered_map<uint16_t, bool> map_udp_bounded_port_t;
+
 extern int g_worker_index;
 extern bool g_b_add_second_4t_rule;
+extern map_udp_bounded_port_t g_map_udp_bounded_port;
 #endif
 
 struct mmsghdr;
@@ -128,16 +134,21 @@ struct os_api {
 	int (*getpeername) (int __fd, struct sockaddr *__name,socklen_t *__namelen);
 
 	ssize_t (*read) (int __fd, void *__buf, size_t __nbytes);
+#if defined HAVE___READ_CHK
 	ssize_t (*__read_chk) (int __fd, void *__buf, size_t __nbytes, size_t __buflen);
+#endif
 	ssize_t (*readv) (int __fd, const struct iovec *iov, int iovcnt);
 	ssize_t (*recv) (int __fd, void *__buf, size_t __n, int __flags);
+#if defined HAVE___RECV_CHK
 	ssize_t (*__recv_chk) (int __fd, void *__buf, size_t __n,  size_t __buflen, int __flags);
+#endif
 	ssize_t (*recvmsg) (int __fd, struct msghdr *__message, int __flags);
 	int (*recvmmsg) (int __fd, struct mmsghdr *__mmsghdr, unsigned int __vlen, int __flags, const struct timespec *__timeout);
 
 	ssize_t (*recvfrom) (int __fd, void *__restrict __buf, size_t __n, int __flags, struct sockaddr *__from, socklen_t *__fromlen);
+#if defined HAVE___RECVFROM_CHK
 	ssize_t (*__recvfrom_chk) (int __fd, void *__restrict __buf, size_t __n, size_t __buflen, int __flags, struct sockaddr *__from, socklen_t *__fromlen);
-
+#endif
 
 	ssize_t (*write) (int __fd, __const void *__buf, size_t __n);
 	ssize_t (*writev) (int __fd, const struct iovec *iov, int iovcnt);
@@ -152,7 +163,13 @@ struct os_api {
 	int (*pselect) (int __nfds, fd_set *__readfds, fd_set *__writefds, fd_set *__errorfds, const struct timespec *__timeout, const sigset_t *__sigmask);
 
 	int (*poll) (struct pollfd *__fds, nfds_t __nfds, int __timeout);
+#if defined HAVE___POLL_CHK
+	int (*__poll_chk) (struct pollfd *__fds, nfds_t __nfds, int __timeout, size_t __fdslen);
+#endif
 	int (*ppoll) (struct pollfd *__fds, nfds_t __nfds, const struct timespec *__timeout, const sigset_t *__sigmask);
+#if defined HAVE___PPOLL_CHK
+	int (*__ppoll_chk) (struct pollfd *__fds, nfds_t __nfds, const struct timespec *__timeout, const sigset_t *__sigmask, size_t __fdslen);
+#endif
 	int (*epoll_create) (int __size);
 	int (*epoll_create1) (int __flags);
 	int (*epoll_ctl) (int __epfd, int __op, int __fd, struct epoll_event *__event);

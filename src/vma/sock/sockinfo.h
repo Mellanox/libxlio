@@ -30,7 +30,7 @@
  * SOFTWARE.
  */
 
-#include <tr1/unordered_map>
+#include <unordered_map>
 #include <ifaddrs.h>
 
 #include "config.h"
@@ -132,7 +132,7 @@ typedef struct {
 	int 			refcnt;
 } net_device_resources_t;
 
-typedef std::tr1::unordered_map<in_addr_t, net_device_resources_t> rx_net_device_map_t;
+typedef std::unordered_map<in_addr_t, net_device_resources_t> rx_net_device_map_t;
 
 /*
  * Sockinfo setsockopt() return values
@@ -141,7 +141,7 @@ typedef std::tr1::unordered_map<in_addr_t, net_device_resources_t> rx_net_device
 #define	SOCKOPT_NO_VMA_SUPPORT       -1    // Socket option was found but not supported, error should be returned to user.
 #define	SOCKOPT_PASS_TO_OS            1	   // Should pass to TCP/UDP level or OS.
 
-namespace std { namespace tr1 {
+namespace std {
 template<>
 class hash<flow_tuple_with_local_if>
 {
@@ -152,15 +152,15 @@ public:
 		return tmp_key->hash();
 	}
 };
-}}
-typedef std::tr1::unordered_map<flow_tuple_with_local_if, ring*> rx_flow_map_t;
+}
+typedef std::unordered_map<flow_tuple_with_local_if, ring*> rx_flow_map_t;
 
 typedef struct {
 	int 			refcnt;
 	buff_info_t 		rx_reuse_info;
 } ring_info_t;
 
-typedef std::tr1::unordered_map<ring*, ring_info_t*> rx_ring_map_t;
+typedef std::unordered_map<ring*, ring_info_t*> rx_ring_map_t;
 
 // see route.c in Linux kernel
 const uint8_t ip_tos2prio[16] = {
@@ -212,6 +212,24 @@ public:
 	void socket_stats_init(void);
 
         socket_stats_t*         m_p_socket_stats;
+
+	void sock_pop_descs_rx_ready(descq_t *cache) {
+		lock_rx_q();
+		mem_buf_desc_t *temp;
+		const size_t size = get_size_m_rx_pkt_ready_list();
+
+		for (size_t i = 0 ; i < size; i++) {
+			temp = get_front_m_rx_pkt_ready_list();
+			pop_front_m_rx_pkt_ready_list();
+			cache->push_back(temp);
+		}
+		m_n_rx_pkt_ready_list_count = 0;
+		m_rx_ready_byte_count = 0;
+		m_p_socket_stats->n_rx_ready_pkt_count = 0;
+		m_p_socket_stats->n_rx_ready_byte_count = 0;
+
+		unlock_rx_q();
+	}
 
 private:
 	int				fcntl_helper(int __cmd, unsigned long int __arg, bool& bexit);
@@ -437,6 +455,12 @@ protected:
 		*__fromlen = sizeof(sockaddr_in);
 	}
 
+	inline void save_strq_stats(uint32_t packet_strides)
+	{
+		m_socket_stats.strq_counters.n_strq_total_strides += static_cast<uint64_t>(packet_strides);
+		m_socket_stats.strq_counters.n_strq_max_strides_per_packet = std::max(m_socket_stats.strq_counters.n_strq_max_strides_per_packet, packet_strides);
+	}
+
 	inline int dequeue_packet(iovec *p_iov, ssize_t sz_iov,
 		                  sockaddr_in *__from, socklen_t *__fromlen,
 		                  int in_flags, int *p_out_flags)
@@ -466,9 +490,17 @@ protected:
 			m_rx_pkt_ready_offset = 0;	
 		}
 		else {
+#ifdef DEFINED_UTLS
+			uint8_t tls_type = pdesc->rx.tls_type;
+#endif /* DEFINED_UTLS */
 			for (int i = 0; i < sz_iov && pdesc; i++) {
 				pos = 0;
 				while (pos < p_iov[i].iov_len && pdesc) {
+#ifdef DEFINED_UTLS
+					if (unlikely(pdesc->rx.tls_type != tls_type)) {
+						break;
+					}
+#endif /* DEFINED_UTLS */
 					nbytes = p_iov[i].iov_len - pos;
 					if (nbytes > bytes_left) nbytes = bytes_left;
 					memcpy((char *)(p_iov[i].iov_base) + pos, iov_base, nbytes);
@@ -529,7 +561,7 @@ protected:
                 if (p_ring->reclaim_recv_buffers(rx_reuse)) {
                     n_buff_num = 0;
                 } else {
-                	g_buffer_pool_rx->put_buffers_after_deref_thread_safe(rx_reuse);
+                	g_buffer_pool_rx_ptr->put_buffers_after_deref_thread_safe(rx_reuse);
                 	n_buff_num = 0;
                 }
                 m_rx_reuse_buf_postponed = false;
@@ -543,7 +575,7 @@ protected:
             vlog_printf(VLOG_DEBUG, "Buffer owner not found\n");
             // Awareness: these are best efforts: decRef without lock in case no CQ
             if(buff->dec_ref_count() <= 1 && (buff->lwip_pbuf.pbuf.ref-- <= 1))
-                g_buffer_pool_rx->put_buffers_thread_safe(buff);
+                g_buffer_pool_rx_ptr->put_buffers_thread_safe(buff);
 
         }
     }

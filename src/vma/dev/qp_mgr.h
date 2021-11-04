@@ -51,7 +51,12 @@
 #include "vma/infra/sender.h"
 #include "vma/dev/ib_ctx_handler.h"
 #include "vma/dev/cq_mgr.h"
+#include "vma/dev/rfs_rule.h"
 
+/* Forward declarations */
+struct xlio_tls_info;
+class xlio_tis;
+class xlio_tir;
 class buffer_pool;
 class cq_mgr;
 struct slave_data;
@@ -68,6 +73,10 @@ struct qp_mgr_desc {
 	const struct slave_data* slave;
 	struct ibv_comp_channel* rx_comp_event_channel;
 };
+
+/* Work request completion callback */
+/* TODO Add argument for completion status to handle errors. */
+typedef void (*xlio_comp_cb_t)(void*);
 
 /**
  * @class qp_mgr
@@ -89,6 +98,7 @@ class qp_mgr
 {
 friend class cq_mgr;
 friend class cq_mgr_mlx5;
+friend class cq_mgr_mlx5_strq;
 friend class cq_mgr_mp;
 public:
 	qp_mgr(struct qp_mgr_desc *desc, const uint32_t tx_num_wr);
@@ -99,18 +109,14 @@ public:
 
 	virtual void        post_recv_buffer(mem_buf_desc_t* p_mem_buf_desc); // Post for receive single mem_buf_desc
 	void                post_recv_buffers(descq_t* p_buffers, size_t count); // Post for receive a list of mem_buf_desc
-	int                 send(vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, uint32_t tisn);
+	int                 send(vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, xlio_tis *tis);
 
-#ifdef DEFINED_TSO
 	inline uint32_t     get_max_inline_data() const {
 		return m_qp_cap.max_inline_data;
 	}
 	inline uint32_t     get_max_send_sge() const {
 		return m_qp_cap.max_send_sge;
 	}
-#else
-	uint32_t            get_max_inline_data() const {return m_max_inline_data; }
-#endif /* DEFINED_TSO */
 	int                 get_port_num() const { return m_port_num; }
 	virtual uint16_t    get_partiton() const { return 0; };
 	virtual uint32_t    get_underly_qpn() const { return 0; };
@@ -123,7 +129,7 @@ public:
 	inline bool         get_hw_dummy_send_support() {return m_hw_dummy_send_support; }
 
 	virtual void        modify_qp_to_ready_state() = 0;
-	void                modify_qp_to_error_state();
+	virtual void        modify_qp_to_error_state();
 
 	void                release_rx_buffers();
 	void                release_tx_buffers();
@@ -132,24 +138,64 @@ public:
 	int                 modify_qp_ratelimit(struct xlio_rate_limit_t &rate_limit, uint32_t rl_changes);
 	static inline bool  is_lib_mlx5(const char* device_name) {return strstr(device_name, "mlx5");}
 	virtual void        dm_release_data(mem_buf_desc_t* buff) { NOT_IN_USE(buff); }
+	
+	virtual rfs_rule* create_rfs_rule(vma_ibv_flow_attr& attrs, xlio_tir *tir_ext);
 
 #ifdef DEFINED_UTLS
-	virtual void tls_context_setup(
-		const void* info, uint32_t tis_number,
-		uint32_t dek_id, uint32_t initial_tcp_sn)
+	virtual xlio_tis *tls_context_setup_tx(const xlio_tls_info* info)
 	{
 		NOT_IN_USE(info);
-		NOT_IN_USE(tis_number);
-		NOT_IN_USE(dek_id);
-		NOT_IN_USE(initial_tcp_sn);
+		return NULL;
 	}
-	virtual void tls_tx_post_dump_wqe(
-		uint32_t tis_number, void *addr, uint32_t len, uint32_t lkey)
+	virtual xlio_tir *tls_create_tir(bool cached)
 	{
-		NOT_IN_USE(tis_number);
+		NOT_IN_USE(cached);
+		return NULL;
+	}
+	virtual int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info* info,
+					 uint32_t next_record_tcp_sn,
+					 xlio_comp_cb_t callback, void *callback_arg)
+	{
+		NOT_IN_USE(tir);
+		NOT_IN_USE(info);
+		NOT_IN_USE(next_record_tcp_sn);
+		NOT_IN_USE(callback);
+		NOT_IN_USE(callback_arg);
+		return -1;
+	}
+	virtual void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static)
+	{
+		NOT_IN_USE(info);
+		NOT_IN_USE(tis);
+		NOT_IN_USE(skip_static);
+	}
+	virtual void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn)
+	{
+		NOT_IN_USE(tir);
+		NOT_IN_USE(info);
+		NOT_IN_USE(hw_resync_tcp_sn);
+	}
+	virtual void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey)
+	{
+		NOT_IN_USE(tir);
+		NOT_IN_USE(buf);
+		NOT_IN_USE(lkey);
+	}
+	virtual void tls_release_tis(xlio_tis *tis)
+	{
+		NOT_IN_USE(tis);
+	}
+	virtual void tls_release_tir(xlio_tir *tir)
+	{
+		NOT_IN_USE(tir);
+	}
+	virtual void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first)
+	{
+		NOT_IN_USE(tis);
 		NOT_IN_USE(addr);
 		NOT_IN_USE(len);
 		NOT_IN_USE(lkey);
+		NOT_IN_USE(first);
 	}
 #endif /* DEFINED_UTLS */
 	virtual void post_nop_fence(void) {}
@@ -162,11 +208,7 @@ protected:
 	uint8_t             m_port_num;
 	ib_ctx_handler*     m_p_ib_ctx_handler;
 
-#ifdef DEFINED_TSO
 	struct ibv_qp_cap   m_qp_cap;
-#else
-	uint32_t            m_max_inline_data;
-#endif /* DEFINED_TSO */
 	uint32_t            m_max_qp_wr;
 
 	cq_mgr*             m_p_cq_mgr_rx;
@@ -210,7 +252,7 @@ protected:
 
 	cq_mgr* handle_cq_initialization(uint32_t *num_wr, struct ibv_comp_channel* comp_event_channel, bool is_rx);
 
-	virtual int     send_to_wire(vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, bool request_comp, uint32_t tisn);
+	virtual int     send_to_wire(vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, bool request_comp, xlio_tis *tis);
 	virtual bool    is_completion_need() { return !m_n_unsignaled_count; };
 };
 

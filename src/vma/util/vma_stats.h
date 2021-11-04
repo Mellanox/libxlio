@@ -46,7 +46,7 @@
 
 #define NUM_OF_SUPPORTED_CQS                        16
 #define NUM_OF_SUPPORTED_RINGS                      16
-#define NUM_OF_SUPPORTED_BPOOLS                     3
+#define NUM_OF_SUPPORTED_BPOOLS                     4
 #define NUM_OF_SUPPORTED_EPFDS                      32
 #define SHMEM_STATS_SIZE(fds_num)                   sizeof(sh_mem_t) + (fds_num * sizeof(socket_instance_block_t))
 #define FILE_NAME_MAX_SIZE                          (NAME_MAX + 1)
@@ -167,15 +167,27 @@ typedef struct {
 	uint32_t    n_tx_sendfile_overflows;
 } socket_counters_t;
 
+#ifdef DEFINED_UTLS
 typedef struct {
 	uint32_t    n_tls_tx_records;
 	uint32_t    n_tls_tx_bytes;
 	uint32_t    n_tls_tx_resync;
 	uint32_t    n_tls_tx_resync_replay;
+	uint32_t    n_tls_rx_records;
+	uint32_t    n_tls_rx_records_enc;
+	uint32_t    n_tls_rx_records_partial;
+	uint32_t    n_tls_rx_bytes;
+	uint32_t    n_tls_rx_resync;
 } socket_tls_counters_t;
+#endif /* DEFINED_UTLS */
 
 typedef struct {
-	int         fd;
+	uint64_t n_strq_total_strides;
+	uint32_t n_strq_max_strides_per_packet;
+} socket_strq_counters_t;
+
+typedef struct {
+	int                          fd;
 	uint32_t                     inode;
 	uint32_t                     tcp_state;   // enum tcp_state
 	uint8_t                      socket_type; // SOCK_STREAM, SOCK_DGRAM, ...
@@ -197,7 +209,14 @@ typedef struct {
 	uint32_t                     n_rx_zcopy_pkt_count;
 	uint64_t                     n_tx_ready_byte_count;
 	socket_counters_t            counters;
+#ifdef DEFINED_UTLS
+	bool                         tls_tx_offload;
+	bool                         tls_rx_offload;
+	uint16_t                     tls_version;
+	uint16_t                     tls_cipher;
 	socket_tls_counters_t        tls_counters;
+#endif /* DEFINED_UTLS */
+	socket_strq_counters_t       strq_counters;
 	std::bitset<MC_TABLE_SIZE>   mc_grp_map;
 	ring_logic_t                 ring_alloc_logic_rx;
 	ring_logic_t                 ring_alloc_logic_tx;
@@ -214,7 +233,12 @@ typedef struct {
 		threadid_last_rx = threadid_last_tx = pid_t(0);
 		n_rx_ready_pkt_count = n_rx_ready_byte_count = n_rx_ready_byte_limit = n_rx_zcopy_pkt_count = n_tx_ready_byte_count = 0;
 		memset(&counters, 0, sizeof(counters));
+#ifdef DEFINED_UTLS
+		tls_tx_offload = tls_rx_offload = false;
+		tls_version = tls_cipher = 0;
 		memset(&tls_counters, 0, sizeof(tls_counters));
+#endif /* DEFINED_UTLS */
+		memset(&strq_counters, 0, sizeof(strq_counters));
 		mc_grp_map.reset();
 		ring_user_id_rx = ring_user_id_tx = 0;
 		ring_alloc_logic_rx = ring_alloc_logic_tx = RING_LOGIC_PER_INTERFACE;
@@ -233,10 +257,16 @@ typedef struct {
 
 // CQ stat info
 typedef struct {
+	uint64_t    n_rx_stride_count;
+	uint64_t    n_rx_packet_count;
+	uint64_t    n_rx_consumed_rwqe_count;
 	uint64_t    n_rx_pkt_drop;
+	uint64_t    n_rx_lro_packets;
+	uint64_t    n_rx_lro_bytes;
 	uint32_t    n_rx_sw_queue_len;
 	uint32_t    n_rx_drained_at_once_max;
 	uint32_t    n_buffer_pool_len;
+	uint16_t    n_rx_max_stirde_per_packet;
 } cq_stats_t;
 
 typedef struct {
@@ -266,7 +296,10 @@ typedef struct {
 	uint64_t    n_tx_byte_count;
 	uint64_t    n_tx_retransmits;
 	void*       p_ring_master;
+#ifdef DEFINED_UTLS
 	uint32_t    n_tx_tls_contexts;
+	uint32_t    n_rx_tls_contexts;
+#endif /* DEFINED_UTLS */
 	ring_type_t n_type;
 	union {
 		struct {
@@ -274,6 +307,7 @@ typedef struct {
 			uint64_t    n_rx_interrupt_received;
 			uint32_t    n_rx_cq_moderation_count;
 			uint32_t    n_rx_cq_moderation_period;
+			uint64_t    n_tx_dropped_wqes;
 			uint64_t    n_tx_dev_mem_pkt_count;
 			uint64_t    n_tx_dev_mem_byte_count;
 			uint64_t    n_tx_dev_mem_oob;

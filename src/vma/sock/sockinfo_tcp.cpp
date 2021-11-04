@@ -114,24 +114,6 @@ static bool is_inherited_option(int __level, int __optname)
 	return ret;
 }
 
-/**/
-/** inlining functions can only help if they are implemented before their usage **/
-/**/
-
-inline void sockinfo_tcp::lock_tcp_con()
-{
-	m_tcp_con_lock.lock();
-}
-
-inline void sockinfo_tcp::unlock_tcp_con()
-{
-	if (m_timer_pending) {
-		tcp_timer();
-	}
-
-	m_tcp_con_lock.unlock();
-}
-
 inline void sockinfo_tcp::init_pbuf_custom(mem_buf_desc_t *p_desc)
 {
 	p_desc->lwip_pbuf.pbuf.flags = PBUF_FLAG_IS_CUSTOM;
@@ -177,7 +159,7 @@ inline void sockinfo_tcp::return_pending_rx_buffs()
     if (m_rx_reuse_buf_pending) {
             if (m_p_rx_ring && m_p_rx_ring->reclaim_recv_buffers(&m_rx_reuse_buff.rx_reuse)) {
             } else {
-                    g_buffer_pool_rx->put_buffers_after_deref_thread_safe(&m_rx_reuse_buff.rx_reuse);
+                    g_buffer_pool_rx_ptr->put_buffers_after_deref_thread_safe(&m_rx_reuse_buff.rx_reuse);
             }
             m_rx_reuse_buff.n_buff_num = 0;
             set_rx_reuse_pending(false);
@@ -199,6 +181,30 @@ inline void sockinfo_tcp::return_pending_tx_buffs()
 
 inline void sockinfo_tcp::reuse_buffer(mem_buf_desc_t *buff)
 {
+	/* Special case when ZC buffers are used in RX path. */
+	if (buff->lwip_pbuf.pbuf.type == PBUF_ZEROCOPY) {
+		dst_entry_tcp *p_dst = (dst_entry_tcp *)(m_p_connected_dst_entry);
+		mem_buf_desc_t *underlying =
+			reinterpret_cast<mem_buf_desc_t*>(buff->lwip_pbuf.pbuf.desc.mdesc);
+
+		buff->lwip_pbuf.pbuf.desc.mdesc = NULL;
+		if (likely(p_dst)) {
+			p_dst->put_zc_buffer(buff);
+		} else {
+			g_buffer_pool_zc->put_buffers_thread_safe(buff);
+		}
+
+		if (underlying->lwip_pbuf.pbuf.ref > 1) {
+			--underlying->lwip_pbuf.pbuf.ref;
+			return;
+		}
+		/* Continue and release the underlying buffer. */
+		buff = underlying;
+		buff->lwip_pbuf.pbuf.ref = 1;
+		buff->lwip_pbuf.pbuf.next = NULL;
+		buff->p_next_desc = NULL;
+	}
+
 	set_rx_reuse_pending(false);
 	if (likely(m_p_rx_ring)) {
 		m_rx_reuse_buff.n_buff_num += buff->rx.n_frags;
@@ -210,7 +216,7 @@ inline void sockinfo_tcp::reuse_buffer(mem_buf_desc_t *buff)
 			if (m_p_rx_ring->reclaim_recv_buffers(&m_rx_reuse_buff.rx_reuse)) {
 				m_rx_reuse_buff.n_buff_num = 0;
 			} else {
-				g_buffer_pool_rx->put_buffers_after_deref_thread_safe(&m_rx_reuse_buff.rx_reuse);
+				g_buffer_pool_rx_ptr->put_buffers_after_deref_thread_safe(&m_rx_reuse_buff.rx_reuse);
 				m_rx_reuse_buff.n_buff_num = 0;
 			}
 			m_rx_reuse_buf_postponed = false;
@@ -236,7 +242,7 @@ sockinfo_tcp::sockinfo_tcp(int fd):
 {
 	si_tcp_logfuncall("");
 
-	m_ops = new sockinfo_tcp_ops(this);
+	m_ops = m_ops_tcp = new sockinfo_tcp_ops(this);
 	assert(m_ops != NULL); /* XXX */
 
 	m_accepted_conns.set_id("sockinfo_tcp (%p), fd = %d : m_accepted_conns", this, m_fd);
@@ -340,6 +346,16 @@ sockinfo_tcp::~sockinfo_tcp()
 
 	do_wakeup();
 
+	if (m_ops_tcp != m_ops) {
+		delete m_ops_tcp;
+	}
+	delete m_ops;
+	m_ops = NULL;
+
+	// Return buffers released in the TLS layer destructor
+	m_rx_reuse_buf_postponed = m_rx_reuse_buff.n_buff_num > 0;
+	return_reuse_buffers_postponed();
+
 	destructor_helper();
 
 	// Release preallocated buffers
@@ -357,9 +373,6 @@ sockinfo_tcp::~sockinfo_tcp()
 		m_socket_options_list.pop_front();
 		delete(opt);
 	}
-
-	delete m_ops;
-	m_ops = NULL;
 
 	unlock_tcp_con();
 
@@ -554,6 +567,7 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
 	state = is_closable();
 	if (state) {
 		m_state = SOCKINFO_CLOSED;
+		reset_ops();
 	}
 
 	unlock_tcp_con();
@@ -1158,31 +1172,34 @@ send_iov:
 		return ERR_OK;
 	}
 
+	ssize_t ret = 0;
 #ifdef DEFINED_TSO
 	if (likely((p_dst->is_valid()))) {
-		p_dst->fast_send((struct iovec *)lwip_iovec, count, attr);
+		ret = p_dst->fast_send((struct iovec *)lwip_iovec, count, attr);
 	} else {
-		p_dst->slow_send((struct iovec *)lwip_iovec, count, attr, p_si_tcp->m_so_ratelimit);
+		ret = p_dst->slow_send((struct iovec *)lwip_iovec, count, attr, p_si_tcp->m_so_ratelimit);
 	}
 #else
 	bool is_dummy = !!(flags & TF_SEG_OPTS_DUMMY_MSG);
 	bool is_rexmit = !!(flags & TCP_WRITE_REXMIT);
 	if (likely((p_dst->is_valid()))) {
-		p_dst->fast_send((struct iovec *)lwip_iovec, count, is_dummy, false, is_rexmit);
+		ret = p_dst->fast_send((struct iovec *)lwip_iovec, count, is_dummy, false, is_rexmit);
 	} else {
-		p_dst->slow_send((struct iovec *)lwip_iovec, count, is_dummy, p_si_tcp->m_so_ratelimit, false, is_rexmit);
+		ret = p_dst->slow_send((struct iovec *)lwip_iovec, count, is_dummy, p_si_tcp->m_so_ratelimit, false, is_rexmit);
 	}
 #endif
+
+	rc = p_si_tcp->m_ops->handle_send_ret(ret, seg);
 
 	if (p_dst->try_migrate_ring(p_si_tcp->m_tcp_con_lock)) {
 		p_si_tcp->m_p_socket_stats->counters.n_tx_migrations++;
 	}
 
-	if (is_set(attr.flags, VMA_TX_PACKET_REXMIT)) {
+	if (rc && is_set(attr.flags, VMA_TX_PACKET_REXMIT)) {
 		p_si_tcp->m_p_socket_stats->counters.n_tx_retransmits++;
 	}
 
-	return ERR_OK;
+	return (ret >= 0 ? ERR_OK : ERR_WOULDBLOCK);
 }
 
 err_t sockinfo_tcp::ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void* v_p_conn, uint16_t flags)
@@ -1231,6 +1248,16 @@ err_t sockinfo_tcp::ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void*
 {
 	sockinfo_tcp *p_si_tcp = (sockinfo_tcp *)pcb_container;
 	p_si_tcp->m_p_socket_stats->tcp_state = new_state;
+
+	if (p_si_tcp->m_state == SOCKINFO_CLOSING &&
+	    (new_state == CLOSED || new_state == TIME_WAIT)) {
+		/*
+		 * We don't need ULP for a closed socket. TLS layer releases
+		 * TIS/TIR/DEK objects on reset, so we try to do this in
+		 * the main thread to mitigate ring lock contention.
+		 */
+		p_si_tcp->reset_ops();
+	}
 
 	/* Update daemon about actual state for offloaded connection */
 	if (likely(p_si_tcp->m_sock_offload == TCP_SOCK_LWIP)) {
@@ -1338,22 +1365,7 @@ void sockinfo_tcp::err_lwip_cb(void *pcb_container, err_t err)
 	if (conn->m_sock_state != TCP_SOCK_BOUND) { //TODO: maybe we need to exclude more states?
 		conn->m_sock_state = TCP_SOCK_INITED;
 	}
-
-	/* In general VMA should avoid calling unregister_timer_event() for the same timer handle twice.
-	 * It is protected by checking m_timer_handle for NULL value that should be under lock.
-	 * In order to save locking time a quick check is done first to ensure that indeed the specific
-	 * timer has not been freed (avoiding the lock/unlock).
-	 * The 2nd check is to avoid a race of the timer been freed while the lock has been taken.
-	 */
-	if (conn->m_timer_handle) {
-		conn->lock_tcp_con();
-		if (conn->m_timer_handle) {
-			g_p_event_handler_manager->unregister_timer_event(conn, conn->m_timer_handle);
-			conn->m_timer_handle = NULL;
-		}
-		conn->unlock_tcp_con();
-	}
-
+	
 	conn->do_wakeup();
 }
 
@@ -1664,6 +1676,34 @@ err_t sockinfo_tcp::ack_recvd_lwip_cb(void *arg, struct tcp_pcb *tpcb, u16_t ack
 	return ERR_OK;
 }
 
+void sockinfo_tcp::tcp_shutdown_rx(void)
+{
+	/* Call this method under connection lock */
+
+	NOTIFY_ON_EVENTS(this, EPOLLIN|EPOLLRDHUP);
+
+	/* SOCKETXTREME comment:
+	 * Add this fd to the ready fd list
+	 * Note: No issue is expected in case socketxtreme_poll() usage because 'pv_fd_ready_array' is null
+	 * in such case and as a result update_fd_array() call means nothing
+	 */
+	io_mux_call::update_fd_array(m_iomux_ready_fd_array, m_fd);
+	do_wakeup();
+
+	tcp_shutdown(&m_pcb, 1, 0);
+
+	if (is_rts() || ((m_sock_state == TCP_SOCK_ASYNC_CONNECT) && (m_conn_state == TCP_CONN_CONNECTED))) {
+		m_sock_state = TCP_SOCK_CONNECTED_WR;
+	} else {
+		m_sock_state = TCP_SOCK_BOUND;
+	}
+	/*
+	 * We got FIN or fatal error, means that we will not receive any new
+	 * data. Need to remove the callback functions
+	 */
+	tcp_recv(&m_pcb, sockinfo_tcp::rx_drop_lwip_cb);
+}
+
 err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb,
                         struct pbuf *p, err_t err)
 {
@@ -1687,31 +1727,8 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb,
 			return ERR_OK;
 		}
 
-		NOTIFY_ON_EVENTS(conn, EPOLLIN|EPOLLRDHUP);
-				
-		/* SOCKETXTREME comment:
-		 * Add this fd to the ready fd list
-		 * Note: No issue is expected in case socketxtreme_poll() usage because 'pv_fd_ready_array' is null
-		 * in such case and as a result update_fd_array() call means nothing
-		 */
-		io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
-		conn->do_wakeup();
-
-		//tcp_close(&(conn->m_pcb));
-		//TODO: should be a move into half closed state (shut rx) instead of complete close
-		tcp_shutdown(&(conn->m_pcb), 1, 0);
 		__log_dbg("[fd=%d] null pbuf sock(%p %p) err=%d\n", conn->m_fd, &(conn->m_pcb), pcb, err);
-
-		if (conn->is_rts() || ((conn->m_sock_state == TCP_SOCK_ASYNC_CONNECT) && (conn->m_conn_state == TCP_CONN_CONNECTED))) {
-			conn->m_sock_state = TCP_SOCK_CONNECTED_WR;
-		} else {
-			conn->m_sock_state = TCP_SOCK_BOUND;
-		}
-		/*
-		 * We got FIN, means that we will not receive any new data
-		 * Need to remove the callback functions
-		 */
-		tcp_recv(&(conn->m_pcb), sockinfo_tcp::rx_drop_lwip_cb);
+		conn->tcp_shutdown_rx();
 
 		if (conn->m_parent != NULL) {
 			//in case we got FIN before we accepted the connection
@@ -1749,7 +1766,11 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb,
 	pbuf *p_curr_buff = p;
 	conn->m_connected.get_sa(p_first_desc->rx.src);
 
+	// We go over the p_first_desc again, so decrement what we did in rx_input_cb.
+	conn->m_socket_stats.strq_counters.n_strq_total_strides -= static_cast<uint64_t>(p_first_desc->strides_num);
+
 	while (p_curr_buff) {
+		conn->save_strq_stats(p_curr_desc->strides_num);
 		p_curr_desc->rx.context = conn;
 		p_first_desc->rx.n_frags++;
 		p_curr_desc->rx.frag.iov_base = p_curr_buff->payload;
@@ -2030,7 +2051,12 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec* p_iov, ssize_t sz_iov
 
 	while (m_rx_ready_byte_count < total_iov_sz) {
 		if (unlikely(g_b_exit || !is_rtr() || (rx_wait_lockless(poll_count, block_this_run) < 0))) {
-			return handle_rx_error(block_this_run);
+			int ret = handle_rx_error(block_this_run);
+			if (__msg && ret == 0) {
+				/* We don't return a control message in this case. */
+				__msg->msg_controllen = 0;
+			}
+			return ret;
 		}
 	}
 
@@ -2038,7 +2064,29 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec* p_iov, ssize_t sz_iov
 
 	si_tcp_logfunc("something in rx queues: %d %p", m_n_rx_pkt_ready_list_count, m_rx_pkt_ready_list.front());
 
+	bool process_cmsg = true;
 	if (total_iov_sz > 0) {
+#ifdef DEFINED_UTLS
+		/*
+		 * kTLS API doesn't require to set TLS_GET_RECORD_TYPE control
+		 * message for application data records (type 0x17). However,
+		 * OpenSSL returns an error if we don't insert 0x17 record type.
+		 */
+		if (__msg && __msg->msg_control) {
+			mem_buf_desc_t *pdesc = get_front_m_rx_pkt_ready_list();
+			if (pdesc && pdesc->rx.tls_type != 0 &&
+			    likely(__msg->msg_controllen >= CMSG_SPACE(1))) {
+				struct cmsghdr *cmsg = CMSG_FIRSTHDR(__msg);
+				cmsg->cmsg_level = SOL_TLS;
+				cmsg->cmsg_type = TLS_GET_RECORD_TYPE;
+				cmsg->cmsg_len = CMSG_LEN(1);
+				*CMSG_DATA(cmsg) = pdesc->rx.tls_type;
+				__msg->msg_controllen = CMSG_SPACE(1);
+				process_cmsg = false;
+			}
+		}
+#endif /* DEFINED_UTLS */
+
 		total_rx = dequeue_packet(p_iov, sz_iov, (sockaddr_in *)__from, __fromlen, in_flags, &out_flags);
 		if (total_rx < 0) {
 			unlock_tcp_con();
@@ -2047,7 +2095,7 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec* p_iov, ssize_t sz_iov
 	}
 
 	/* Handle all control message requests */
-	if (__msg && __msg->msg_control) {
+	if (__msg && __msg->msg_control && process_cmsg) {
 		handle_cmsg(__msg, in_flags);
 	}
 
@@ -2094,10 +2142,10 @@ void sockinfo_tcp::queue_rx_ctl_packet(struct tcp_pcb* pcb, mem_buf_desc_t *p_de
 {
 	/* in tcp_ctl_thread mode, always lock the child first*/
 	p_desc->inc_ref_count();
-	if (!p_desc->rx.tcp.gro)
+	if (!p_desc->lwip_pbuf.pbuf.gro)
 		init_pbuf_custom(p_desc);
 	else
-		p_desc->rx.tcp.gro = 0;
+		p_desc->lwip_pbuf.pbuf.gro = 0;
 	sockinfo_tcp *sock = (sockinfo_tcp*)pcb->my_container;
 
 	sock->m_rx_ctl_packets_list_lock.lock();
@@ -2121,6 +2169,7 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t* p_rx_pkt_mem_buf_desc_info, void*
 
 	lock_tcp_con();
 
+	save_strq_stats(p_rx_pkt_mem_buf_desc_info->strides_num);
 	m_iomux_ready_fd_array = (fd_array_t*)pv_fd_ready_array;
 
 	/* Try to process socketxtreme_poll() completion directly */
@@ -2174,8 +2223,8 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t* p_rx_pkt_mem_buf_desc_info, void*
 	}
 	p_rx_pkt_mem_buf_desc_info->inc_ref_count();
 
-	if (!p_rx_pkt_mem_buf_desc_info->rx.tcp.gro) init_pbuf_custom(p_rx_pkt_mem_buf_desc_info);
-	else p_rx_pkt_mem_buf_desc_info->rx.tcp.gro = 0;
+	if (!p_rx_pkt_mem_buf_desc_info->lwip_pbuf.pbuf.gro) init_pbuf_custom(p_rx_pkt_mem_buf_desc_info);
+	else p_rx_pkt_mem_buf_desc_info->lwip_pbuf.pbuf.gro = 0;
 
 	dropped_count = m_rx_cb_dropped_list.size();
 
@@ -3150,7 +3199,8 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb, 
 
 	listen_sock->m_received_syn_num++;
 	listen_sock->m_tcp_con_lock.unlock();
-	g_p_fd_collection->add_one_sockfd(new_sock->m_fd, new_sock);
+	assert(g_p_fd_collection);
+	g_p_fd_collection->reuse_sockfd(new_sock->m_fd, new_sock);
 
 	return ERR_OK;
 }
@@ -3841,14 +3891,17 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname,
 		case TCP_ULP:
 #ifdef DEFINED_UTLS
 			if (__optval && __optlen >= 3 && strncmp((char*)__optval, "tls", 3) == 0) {
-				si_tcp_logdbg("(TCP_ULP) val: tls");
-				sockinfo_tcp_ulp_tls *ulp = sockinfo_tcp_ulp_tls::instance();
-				lock_tcp_con();
-				ret = ulp->attach(this);
-				unlock_tcp_con();
-				return ret;
+				if (is_utls_supported(UTLS_MODE_TX | UTLS_MODE_RX)) {
+					si_tcp_logdbg("(TCP_ULP) val: tls");
+					sockinfo_tcp_ulp_tls *ulp = sockinfo_tcp_ulp_tls::instance();
+					lock_tcp_con();
+					ret = ulp->attach(this);
+					unlock_tcp_con();
+					return ret;
+				}
 			}
 #endif /* DEFINED_UTLS */
+			si_tcp_logdbg("(TCP_ULP) tls is not supported");
 			errno = ENOPROTOOPT;
 			ret = -1;
 			break;
@@ -4436,6 +4489,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
 		}
 
 		// poll cq. fd == cq channel fd.
+		assert(g_p_fd_collection);
 		cq_channel_info* p_cq_ch_info = g_p_fd_collection->get_cq_channel_fd(fd);
 		if (p_cq_ch_info) {
 			ring* p_ring = p_cq_ch_info->get_ring();
@@ -4537,7 +4591,7 @@ int sockinfo_tcp::zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags
 		
 			p_pkts->iov[p_pkts->sz_iov++] = p_desc_iter->rx.frag;
 			total_rx += p_desc_iter->rx.frag.iov_len;
-			
+
 			prev 		= p_desc_iter;
 			p_desc_iter = p_desc_iter->p_next_desc;	
 			len -= sizeof(iovec);
@@ -4790,8 +4844,12 @@ mem_buf_desc_t* sockinfo_tcp::tcp_tx_mem_buf_alloc(pbuf_type type)
 		desc = p_dst->get_buffer(type, NULL);
 		m_tcp_con_lock.unlock();
 	}
-
 	return desc;
+}
+
+void sockinfo_tcp::tcp_rx_mem_buf_free(mem_buf_desc_t *p_desc)
+{
+	reuse_buffer(p_desc);
 }
 
 struct pbuf * sockinfo_tcp::tcp_tx_pbuf_alloc(void* p_conn, pbuf_type type, pbuf_desc *desc, struct pbuf *p_buff)
@@ -4831,7 +4889,7 @@ void sockinfo_tcp::tcp_rx_pbuf_free(struct pbuf *p_buff)
 {
 	mem_buf_desc_t *desc = (mem_buf_desc_t *)p_buff;
 
-	if (desc->p_desc_owner != NULL)
+	if (desc->p_desc_owner != NULL && p_buff->type != PBUF_ZEROCOPY)
 		desc->p_desc_owner->mem_buf_rx_release(desc);
 	else
 		buffer_pool::free_rx_lwip_pbuf_custom(p_buff);
@@ -5141,10 +5199,18 @@ void tcp_timers_collection::handle_timer_expired(void* user_data)
 	while (iter) {
 		__log_funcall("timer expired on %p", iter->handler);
 		p_sock = dynamic_cast<sockinfo_tcp*>(iter->handler);
-		iter->handler->handle_timer_expired(iter->user_data);
-		if (p_sock && p_sock->is_destroyable_lock()) {
-			g_p_fd_collection->remove_pending_sockfd(p_sock);
-			p_sock->clean_obj();
+
+		/* It is not guaranteed that the same sockinfo object is met once
+		 * in this loop.
+		 * So in case sockinfo object is destroyed other processing
+		 * of the same object mast be ingored.
+		 * TODO Check on is_cleaned() is not safe completely.
+		 */
+		if (!(p_sock && p_sock->is_cleaned())) {
+			iter->handler->handle_timer_expired(iter->user_data);
+			if (p_sock && p_sock->is_destroyable_lock()) {
+				g_p_fd_collection->destroy_sockfd(p_sock);
+			}
 		}
 		iter = iter->next;
 	}
@@ -5219,4 +5285,29 @@ void sockinfo_tcp::update_header_field(data_updater *updater)
 	}
 
 	unlock_tcp_con();
+}
+
+bool sockinfo_tcp::is_utls_supported(int direction)
+{
+	bool result = false;
+
+#ifdef DEFINED_UTLS
+	ring *p_ring = get_tx_ring();
+
+	if (direction & UTLS_MODE_TX) {
+		result = result || (safe_mce_sys().enable_utls_tx &&
+				    p_ring && p_ring->tls_tx_supported());
+	}
+	if (direction & UTLS_MODE_RX) {
+		/*
+		 * For RX support we still can use TX ring capabilities,
+		 * because it refers to the same NIC as RX ring.
+		 */
+		result = result || (safe_mce_sys().enable_utls_rx &&
+				    p_ring && p_ring->tls_rx_supported());
+	}
+#else
+	NOT_IN_USE(direction);
+#endif /* DEFINED_UTLS */
+	return result;
 }

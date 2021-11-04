@@ -61,15 +61,6 @@
 
 #define cq_logdbg_no_funcname(log_fmt, log_args...) do { if (g_vlogger_level >= VLOG_DEBUG) vlog_printf(VLOG_DEBUG, MODULE_NAME "[%p]:%d: " log_fmt "\n", __INFO__, __LINE__, ##log_args); } while (0)
 
-#if VLIST_DEBUG
-#define VLIST_DEBUG_CQ_MGR_PRINT_ERROR_IS_MEMBER do { 	\
-		if (buff->buffer_node.is_list_member())         \
-			cq_logwarn("Buffer is already a member in a list! id=[%s]", buff->buffer_node.list_id()); \
-		} while (0)
-#else
-#define VLIST_DEBUG_CQ_MGR_PRINT_ERROR_IS_MEMBER
-#endif
-
 atomic_t cq_mgr::m_n_cq_id_counter = ATOMIC_INIT(1);
 
 uint64_t cq_mgr::m_n_global_sn = 0;
@@ -93,14 +84,14 @@ cq_mgr::cq_mgr(ring_simple* p_ring, ib_ctx_handler* p_ib_ctx_handler, int cq_siz
 	,m_sz_transport_header(0)
 	,m_p_ib_ctx_handler(p_ib_ctx_handler)
 	,m_n_sysvar_rx_num_wr_to_post_recv(safe_mce_sys().rx_num_wr_to_post_recv)
+	,m_rx_buffs_rdy_for_free_head(NULL)
+	,m_rx_buffs_rdy_for_free_tail(NULL)
 	,m_comp_event_channel(p_comp_event_channel)
 	,m_b_notification_armed(false)
 	,m_n_sysvar_qp_compensation_level(safe_mce_sys().qp_compensation_level)
-	,m_rx_lkey(g_buffer_pool_rx->find_lkey_by_ib_ctx_thread_safe(m_p_ib_ctx_handler))
+	,m_rx_lkey(g_buffer_pool_rx_rwqe->find_lkey_by_ib_ctx_thread_safe(m_p_ib_ctx_handler))
 	,m_b_sysvar_cq_keep_qp_full(safe_mce_sys().cq_keep_qp_full)
 	,m_n_out_of_free_bufs_warning(0)
-	,m_rx_buffs_rdy_for_free_head(NULL)
-	,m_rx_buffs_rdy_for_free_tail(NULL)
 {
 	BULLSEYE_EXCLUDE_BLOCK_START
 	if (m_rx_lkey == 0) {
@@ -213,10 +204,10 @@ cq_mgr::~cq_mgr()
 	if (m_rx_queue.size() + m_rx_pool.size()) {
 		cq_logdbg("Returning %lu buffers to global Rx pool (ready queue %lu, free pool %lu))", m_rx_queue.size() + m_rx_pool.size(), m_rx_queue.size(), m_rx_pool.size());
 
-		g_buffer_pool_rx->put_buffers_thread_safe(&m_rx_queue, m_rx_queue.size());
+		g_buffer_pool_rx_rwqe->put_buffers_thread_safe(&m_rx_queue, m_rx_queue.size());
 		m_p_cq_stat->n_rx_sw_queue_len = m_rx_queue.size();
 
-		g_buffer_pool_rx->put_buffers_thread_safe(&m_rx_pool, m_rx_pool.size());
+		g_buffer_pool_rx_rwqe->put_buffers_thread_safe(&m_rx_pool, m_rx_pool.size());
 		m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
 	}
 
@@ -269,7 +260,7 @@ void cq_mgr::add_qp_rx(qp_mgr* qp)
 		uint32_t n_num_mem_bufs = m_n_sysvar_rx_num_wr_to_post_recv;
 		if (n_num_mem_bufs > qp_rx_wr_num)
 			n_num_mem_bufs = qp_rx_wr_num;
-		bool res = g_buffer_pool_rx->get_buffers_thread_safe(temp_desc_list, m_p_ring, n_num_mem_bufs, m_rx_lkey);
+		bool res = g_buffer_pool_rx_rwqe->get_buffers_thread_safe(temp_desc_list, m_p_ring, n_num_mem_bufs, m_rx_lkey);
 		if (!res) {
 			VLOG_PRINTF_INFO_ONCE_THEN_ALWAYS(VLOG_WARNING, VLOG_DEBUG, "WARNING Out of mem_buf_desc from Rx buffer pool for qp_mgr qp_mgr initialization (qp=%p),\n"
 					"\tThis might happen due to wrong setting of VMA_RX_BUFS and VMA_RX_WRE. Please refer to README.txt for more info", qp);
@@ -279,7 +270,7 @@ void cq_mgr::add_qp_rx(qp_mgr* qp)
 		qp->post_recv_buffers(&temp_desc_list, temp_desc_list.size());
 		if (!temp_desc_list.empty()) {
 			cq_logdbg("qp post recv is already full (push=%d, planned=%d)", qp->get_rx_max_wr_num()-qp_rx_wr_num, qp->get_rx_max_wr_num());
-			g_buffer_pool_rx->put_buffers_thread_safe(&temp_desc_list, temp_desc_list.size());
+			g_buffer_pool_rx_rwqe->put_buffers_thread_safe(&temp_desc_list, temp_desc_list.size());
 			break;
 		}
 		qp_rx_wr_num -= n_num_mem_bufs;
@@ -314,13 +305,26 @@ void cq_mgr::add_qp_tx(qp_mgr* qp)
 	m_qp_rec.debt = 0;
 }
 
+void cq_mgr::del_qp_tx(qp_mgr *qp)
+{
+	BULLSEYE_EXCLUDE_BLOCK_START
+	if (m_qp_rec.qp != qp) {
+		cq_logdbg("wrong qp_mgr=%p != m_qp_rec.qp=%p", qp, m_qp_rec.qp);
+		return;
+	}
+	BULLSEYE_EXCLUDE_BLOCK_END
+	cq_logdbg("qp_mgr=%p", m_qp_rec.qp);
+
+	memset(&m_qp_rec, 0, sizeof(m_qp_rec));
+}
+
 bool cq_mgr::request_more_buffers()
 {
 	cq_logfuncall("Allocating additional %d buffers for internal use", m_n_sysvar_qp_compensation_level);
 
 	// Assume locked!
 	// Add an additional free buffer descs to RX cq mgr
-	bool res = g_buffer_pool_rx->get_buffers_thread_safe(m_rx_pool, m_p_ring, m_n_sysvar_qp_compensation_level, m_rx_lkey);
+	bool res = g_buffer_pool_rx_rwqe->get_buffers_thread_safe(m_rx_pool, m_p_ring, m_n_sysvar_qp_compensation_level, m_rx_lkey);
 	if (!res) {
 		cq_logfunc("Out of mem_buf_desc from RX free pool for internal object pool");
 		return false;
@@ -337,7 +341,7 @@ void cq_mgr::return_extra_buffers()
 	int buff_to_rel = m_rx_pool.size() - m_n_sysvar_qp_compensation_level;
 
 	cq_logfunc("releasing %d buffers to global rx pool", buff_to_rel);
-	g_buffer_pool_rx->put_buffers_thread_safe(&m_rx_pool, buff_to_rel);
+	g_buffer_pool_rx_rwqe->put_buffers_thread_safe(&m_rx_pool, buff_to_rel);
 	m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
 }
 
@@ -499,7 +503,7 @@ mem_buf_desc_t* cq_mgr::process_cq_element_rx(vma_ibv_wc* p_wce)
 			return NULL;
 		}
 		if (p_mem_buf_desc->p_desc_owner) {
-			m_p_ring->mem_buf_desc_completion_with_error_rx(p_mem_buf_desc);
+			reclaim_recv_buffer_helper(p_mem_buf_desc);
 			return NULL;
 		}
 		// AlexR: can this wce have a valid mem_buf_desc pointer?
@@ -587,6 +591,7 @@ void cq_mgr::reclaim_recv_buffer_helper(mem_buf_desc_t* buff)
 			while (buff) {
 				VLIST_DEBUG_CQ_MGR_PRINT_ERROR_IS_MEMBER;
 				temp = buff;
+				assert(temp->lwip_pbuf.pbuf.type != PBUF_ZEROCOPY);
 				buff = temp->p_next_desc;
 				temp->p_next_desc = NULL;
 				temp->p_prev_desc = NULL;
@@ -599,7 +604,7 @@ void cq_mgr::reclaim_recv_buffer_helper(mem_buf_desc_t* buff)
 		}
 		else {
 			cq_logfunc("Buffer returned to wrong CQ");
-			g_buffer_pool_rx->put_buffers_thread_safe(buff);
+			g_buffer_pool_rx_rwqe->put_buffers_thread_safe(buff);
 		}
 	}
 }
@@ -620,14 +625,6 @@ void cq_mgr::process_tx_buffer_list(mem_buf_desc_t* p_mem_buf_desc)
 		cq_logerr("got buffer of wrong owner, buf=%p, owner=%p", p_mem_buf_desc, p_mem_buf_desc ? p_mem_buf_desc->p_desc_owner : NULL);
 	}
 	BULLSEYE_EXCLUDE_BLOCK_END
-}
-
-void cq_mgr::mem_buf_desc_completion_with_error(mem_buf_desc_t* p_mem_buf_desc)
-{
-	cq_logfuncall("");
-	// lock(); Called from cq_mgr context which is already locked!!
-	reclaim_recv_buffer_helper(p_mem_buf_desc);
-	// unlock(); Called from cq_mgr context which is already locked!!
 }
 
 void cq_mgr::mem_buf_desc_return_to_owner(mem_buf_desc_t* p_mem_buf_desc, void* pv_fd_ready_array /*=NULL*/)
@@ -779,7 +776,7 @@ bool cq_mgr::reclaim_recv_buffers(descq_t *rx_reuse)
 
 int cq_mgr::drain_and_proccess(uintptr_t* p_recycle_buffers_last_wr_id /*=NULL*/)
 {
-	cq_logfuncall("cq was %s drained. %d processed wce since last check. %d wce in m_rx_queue", (m_b_was_drained?"":"not "), m_n_wce_counter, m_rx_queue.size());
+	cq_logfuncall("cq was %s drained. %d processed wce since last check. %d strides in m_rx_queue", (m_b_was_drained?"":"not "), m_n_wce_counter, m_rx_queue.size());
 
 	// CQ polling loop until max wce limit is reached for this interval or CQ is drained
 	uint32_t ret_total = 0;

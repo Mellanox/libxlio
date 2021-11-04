@@ -61,6 +61,10 @@ struct mlx5dv_qp {
 		uint32_t size;
 	} bf;
 	uint64_t comp_mask;
+	uint32_t tirn;
+	uint32_t tisn;
+	uint32_t rqn;
+	uint32_t sqn;
 };
 
 struct mlx5dv_cq {

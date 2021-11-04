@@ -95,11 +95,17 @@ bool rfs_uc_tcp_gro::rx_dispatch_packet(mem_buf_desc_t* p_rx_pkt_mem_buf_desc_in
 			goto out;
 		}
 
-		add_packet(p_rx_pkt_mem_buf_desc_info, p_ip_h, p_tcp_h);
-	}
+		if (!add_packet(p_rx_pkt_mem_buf_desc_info, p_ip_h, p_tcp_h)) {
+			flush_gro_desc(pv_fd_ready_array);
+			goto out;
+		}
 
-	if (m_gro_desc.buf_count >= m_n_buf_max || m_gro_desc.ip_tot_len >= m_n_byte_max) {
-		flush_gro_desc(pv_fd_ready_array);
+		/* Flush gro packet immediately in case
+		 * total number of agreggated packets exceeds limit
+		 */
+		if (m_gro_desc.buf_count >= m_n_buf_max) {
+			flush_gro_desc(pv_fd_ready_array);
+		}
 	}
 
 	return true;
@@ -108,10 +114,17 @@ out:
 	return rfs_uc::rx_dispatch_packet(p_rx_pkt_mem_buf_desc_info, pv_fd_ready_array);
 }
 
-void rfs_uc_tcp_gro::add_packet(mem_buf_desc_t* mem_buf_desc, struct iphdr* p_ip_h, tcphdr* p_tcp_h)
+bool rfs_uc_tcp_gro::add_packet(mem_buf_desc_t* mem_buf_desc, struct iphdr* p_ip_h, tcphdr* p_tcp_h)
 {
+	uint32_t ip_tot_len = m_gro_desc.ip_tot_len + mem_buf_desc->rx.sz_payload;
+
+	/* Do not aggregate packet if total payload exceeds ip_tot_len maximum value */
+	if (ip_tot_len >= m_n_byte_max) {
+		return false;
+	}
+
 	m_gro_desc.buf_count++;
-	m_gro_desc.ip_tot_len += mem_buf_desc->rx.sz_payload;
+	m_gro_desc.ip_tot_len = (uint16_t)ip_tot_len;
 	m_gro_desc.next_seq += mem_buf_desc->rx.sz_payload;
 	m_gro_desc.wnd = p_tcp_h->window;
 	m_gro_desc.ack = p_tcp_h->ack_seq;
@@ -136,6 +149,8 @@ void rfs_uc_tcp_gro::add_packet(mem_buf_desc_t* mem_buf_desc, struct iphdr* p_ip
 	m_gro_desc.p_last->p_next_desc = NULL;
 	mem_buf_desc->p_prev_desc = m_gro_desc.p_last;
 	m_gro_desc.p_last = mem_buf_desc;
+
+	return true;
 }
 
 void rfs_uc_tcp_gro::flush(void* pv_fd_ready_array)
@@ -170,7 +185,7 @@ void rfs_uc_tcp_gro::flush_gro_desc(void* pv_fd_ready_array)
 			p_tcp_ts_h->popts[2] = m_gro_desc.tsecr;
 		}
 
-		m_gro_desc.p_first->rx.tcp.gro = 1;
+		m_gro_desc.p_first->lwip_pbuf.pbuf.gro = 1;
 
 		m_gro_desc.p_first->lwip_pbuf.pbuf.flags = PBUF_FLAG_IS_CUSTOM;
 		m_gro_desc.p_first->lwip_pbuf.pbuf.tot_len = m_gro_desc.p_first->lwip_pbuf.pbuf.len = (m_gro_desc.p_first->sz_data - m_gro_desc.p_first->rx.tcp.n_transport_header_len);

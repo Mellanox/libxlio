@@ -68,7 +68,8 @@ public:
 	};
 
 public:
-	mem_buf_desc_t(uint8_t *buffer, size_t size,  pbuf_free_custom_fn custom_free_function) :
+	mem_buf_desc_t(uint8_t *buffer, size_t size, pbuf_type type,
+			pbuf_free_custom_fn custom_free_function) :
 		p_buffer(buffer),
 		m_flags(mem_buf_desc_t::TYPICAL),
 		lkey(0),
@@ -76,7 +77,8 @@ public:
 		p_prev_desc(0),
 		sz_buffer(size),
 		sz_data(0),
-		p_desc_owner(0) {
+		p_desc_owner(0),
+		strides_num(0U) {
 
 		memset(&lwip_pbuf, 0, sizeof(lwip_pbuf));
 		memset(&rx, 0, sizeof(rx));
@@ -84,6 +86,7 @@ public:
 		memset(&ee, 0, sizeof(ee));
 		reset_ref_count();
 
+		lwip_pbuf.pbuf.type = type;
 		lwip_pbuf.custom_free_function = custom_free_function;
 	}
 
@@ -92,7 +95,7 @@ public:
 	 * and extra fields to proceed customer specific requirements
 	 */
 	struct pbuf_custom lwip_pbuf;
-	uint8_t* const	p_buffer;
+	uint8_t* p_buffer;
 
 	static inline size_t buffer_node_offset(void) {
 		return NODE_OFFSET(mem_buf_desc_t, buffer_node);
@@ -101,32 +104,35 @@ public:
 
 	union {
 		struct {
+			iovec 		frag; // Datagram part base address and length
 			sockaddr_in	src; // L3 info
 			sockaddr_in	dst; // L3 info
 
-			iovec 		frag; // Datagram part base address and length
 			size_t		sz_payload; // This is the total amount of data of the packet, if (sz_payload>sz_data) means fragmented packet.
 			uint64_t	hw_raw_timestamp;
 			timestamps_t	timestamps;
 			void* 		context;
-			uint32_t	flow_tag_id; // Flow Tag ID of this received packet
 
 			union {
 				struct {
 					struct iphdr* 	p_ip_h;
 					struct tcphdr* 	p_tcp_h;
 					size_t		n_transport_header_len;
-					bool		gro;
 				} tcp;
 				struct {
 					in_addr_t	local_if; // L3 info
 				} udp;
 			};
 
+			uint32_t	flow_tag_id; // Flow Tag ID of this received packet
 			int8_t		n_frags;	//number of fragments
 			bool 		is_vma_thr; 	// specify whether packet drained from VMA internal thread or from user app thread
 			bool		is_sw_csum_need; // specify if software checksum is need for this packet
 			bool 		socketxtreme_polled;
+#ifdef DEFINED_UTLS
+			uint8_t		tls_decrypted;
+			uint8_t		tls_type;
+#endif /* DEFINED_UTLS */
 		} rx;
 		struct {
 			size_t		dev_mem_length; // Total data aligned to 4 bytes.
@@ -154,21 +160,23 @@ public:
 
 	/* This field is needed for error queue processing */
 	struct sock_extended_err	ee;
+	int    m_flags; /* object description */
+	uint32_t	lkey;      	// Buffers lkey for QP access
+	mem_buf_desc_t* p_next_desc;	// A general purpose linked list of mem_buf_desc
+	mem_buf_desc_t* p_prev_desc;
+	size_t  sz_buffer; 	// this is the size of the buffer
+	size_t	sz_data;   	// this is the amount of data inside the buffer (sz_data <= sz_buffer)
+
+	// Tx: qp_mgr owns the mem_buf_desc and the associated data buffer
+	// Rx: cq_mgr owns the mem_buf_desc and the associated data buffer
+	ring_slave* p_desc_owner;
 
 private:
 	atomic_t	n_ref_count;	// number of interested receivers (sockinfo) [can be modified only in cq_mgr context]
 
 public:
-	int    m_flags; /* object description */
-	uint32_t	lkey;      	// Buffers lkey for QP access
-	mem_buf_desc_t* p_next_desc;	// A general purpose linked list of mem_buf_desc
-	mem_buf_desc_t* p_prev_desc;
-	size_t const	sz_buffer; 	// this is the size of the buffer
-	size_t		sz_data;   	// this is the amount of data inside the buffer (sz_data <= sz_buffer)
 
-	// Tx: qp_mgr owns the mem_buf_desc and the associated data buffer
-	// Rx: cq_mgr owns the mem_buf_desc and the associated data buffer
-	ring_slave* p_desc_owner;
+	uint16_t strides_num;
 
 	inline mem_buf_desc_t* clone() {
 		mem_buf_desc_t* p_desc = new mem_buf_desc_t(*this);
@@ -185,12 +193,20 @@ public:
 		atomic_set(&n_ref_count, 0);
 	}
 
+	inline void  set_ref_count(int x) {
+		atomic_set(&n_ref_count, x);
+	}
+
 	inline int inc_ref_count() {
 		return atomic_fetch_and_inc(&n_ref_count);
 	}
 
 	inline int dec_ref_count() {
 		return atomic_fetch_and_dec(&n_ref_count);
+	}
+
+	inline int add_ref_count(int x) {
+		return atomic_fetch_add_relaxed(x, &n_ref_count);
 	}
 
 	inline unsigned int lwip_pbuf_inc_ref_count() {

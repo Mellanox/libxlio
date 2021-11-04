@@ -28,10 +28,10 @@ function check_daemon()
     local service="xlio"
 
     rm -rf ${out_log}
-    eval "${sudo_cmd} pkill -SIGINT xliod 2>/dev/null || true"
+    eval "${sudo_cmd} pkill -9 ${prj_service} 2>/dev/null || true"
 
     if systemctl >/dev/null 2>&1; then
-        service=${install_dir}/sbin/xliod
+        service=${install_dir}/sbin/${prj_service}
         service_arg=${install_dir}/lib/systemd/system/xlio.service
 
         echo "System has been booted with SystemD" >> ${out_log}
@@ -45,12 +45,12 @@ function check_daemon()
             ret=1
         fi
         sleep 3
-        if [ "0" == "$ret" -a "" == "$(pgrep xliod)" ]; then
+        if [ "0" == "$ret" -a "" == "$(pgrep ${prj_service})" ]; then
             ret=1
         fi
-        sudo pkill -9 xliod >>${out_log} 2>&1
+        sudo pkill -9 ${prj_service} >>${out_log} 2>&1
         sleep 3
-        if [ "0" == "$ret" -a "" != "$(pgrep xliod)" ]; then
+        if [ "0" == "$ret" -a "" != "$(pgrep ${prj_service})" ]; then
             ret=1
         fi
     else
@@ -64,7 +64,7 @@ function check_daemon()
             ret=1
         fi
         sleep 3
-        if [ "0" == "$ret" -a "" == "$(pgrep xliod)" ]; then
+        if [ "0" == "$ret" -a "" == "$(pgrep ${prj_service})" ]; then
             ret=1
         fi
         if [ $(${sudo_cmd} ${service} status >>${out_log} 2>&1 || echo $?) ]; then
@@ -74,13 +74,13 @@ function check_daemon()
             ret=1
         fi
         sleep 3
-        # Under docker containers xliod can be a zombie after killing
-        if [ "0" == "$ret" -a "" != "$(ps aux | grep xliod | egrep -v 'grep|defunct')" ]; then
+        # Under docker containers service can be a zombie after killing
+        if [ "0" == "$ret" -a "" != "$(ps aux | grep ${prj_service} | egrep -v 'grep|defunct')" ]; then
             ret=1
         fi
     fi
 
-    eval "${sudo_cmd} pkill -SIGINT xliod 2>/dev/null || true"
+    eval "${sudo_cmd} pkill -9 ${prj_service} 2>/dev/null || true"
 
     echo "$ret"
 }

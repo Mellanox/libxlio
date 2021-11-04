@@ -104,6 +104,10 @@ typedef struct vma_ib_mlx5_qp {
 		uint32_t size;
 		uint32_t offset;
 	} bf;
+	uint32_t tirn;
+	uint32_t tisn;
+	uint32_t rqn;
+	uint32_t sqn;
 } vma_ib_mlx5_qp_t;
 
 /* Completion queue */
@@ -155,6 +159,34 @@ struct mlx5_ifc_tls_progress_params_bits {
 	uint8_t reserved_at_44[0x4];
 	uint8_t hw_offset_record_number[0x18];
 };
+
+typedef struct vma_mlx5_cqe {
+	uint8_t pkt_info;
+	uint8_t rsvd0;
+	__be16 wqe_id;
+	uint8_t lro_tcppsh_abort_dupack;
+	uint8_t lro_min_ttl;
+	__be16 lro_tcp_win;
+	__be32 lro_ack_seq_num;
+	__be32 rx_hash_res;
+	uint8_t rx_hash_type;
+	uint8_t rsvd1[3];
+	__be16 csum;
+	uint8_t rsvd2[6];
+	uint8_t hds_ip_ext;
+	uint8_t l4_hdr_type_etc;
+	__be16 vlan_info;
+	uint8_t lro_num_seg;
+	uint8_t rsvd3[3];
+	__be32 flow_table_metadata;
+	uint8_t rsvd4[4];
+	__be32 byte_cnt;
+	__be64 timestamp;
+	__be32 sop_drop_qpn;
+	__be16 wqe_counter;
+	uint8_t rsvd5;
+	uint8_t op_own;
+} vma_mlx5_cqe;
 
 /* WQE segments structures */
 
@@ -312,6 +344,7 @@ enum {
 /* TLS static parameters TLS version */
 enum {
 	MLX5E_STATIC_PARAMS_CONTEXT_TLS_1_2 = 0x2,
+	MLX5E_STATIC_PARAMS_CONTEXT_TLS_1_3 = 0x3,
 };
 
 /* TLS static parameters encryption standard */
@@ -351,6 +384,16 @@ enum {
 	VMA_MLX5_OPCODE_DUMP = 0x23,
 };
 
+/*
+ * Parameters
+ */
+#define VMA_MLX5_PARAMS_LRO_PAYLOAD_SIZE          (64U * 1024U)
+#define VMA_MLX5_PARAMS_LRO_TIMEOUT               32
+#define VMA_MLX5_PARAMS_LRO_TIMEOUT_ARRAY_SIZE    4
+
+/*
+ * Interfaces
+ */
 int vma_ib_mlx5_get_qp(struct ibv_qp *qp, vma_ib_mlx5_qp_t *mlx5_qp, uint32_t flags = 0);
 int vma_ib_mlx5_post_recv(vma_ib_mlx5_qp_t *mlx5_qp, struct ibv_recv_wr *wr, struct ibv_recv_wr **bad_wr);
 

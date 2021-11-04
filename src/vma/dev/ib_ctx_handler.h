@@ -35,7 +35,7 @@
 #define IB_CTX_HANDLER_H
 
 #include <infiniband/verbs.h>
-#include <tr1/unordered_map>
+#include <unordered_map>
 
 #include "vma/event/event_handler_ibverbs.h"
 #include "vma/dev/time_converter.h"
@@ -48,7 +48,7 @@
 #endif /* DEFINED_DPCP */
 
 
-typedef std::tr1::unordered_map<uint32_t, struct ibv_mr*> mr_map_lkey_t;
+typedef std::unordered_map<uint32_t, struct ibv_mr*> mr_map_lkey_t;
 typedef hash_map<void *, uint32_t> user_lkey_map_t;
 
 struct pacing_caps_t {
@@ -82,10 +82,6 @@ public:
 #ifdef DEFINED_DPCP
 	dpcp::adapter*          set_dpcp_adapter();
 	dpcp::adapter*          get_dpcp_adapter() { return m_p_adapter; }
-#ifdef DEFINED_UTLS
-	dpcp::tis*              create_tis();
-	dpcp::dek*              create_dek(const void *key, uint32_t key_len);
-#endif /* DEFINED_UTLS */
 #endif /* DEFINED_DPCP */
 	vma_ibv_device_attr*    get_ibv_device_attr() { return vma_get_device_orig_attr(m_p_ibv_device_attr); }
 #ifdef DEFINED_TSO

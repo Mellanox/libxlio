@@ -292,7 +292,7 @@ void vma_allocator::align_simple_malloc(size_t sz_bytes)
 	long page_size = sysconf(_SC_PAGESIZE);
 
 	if (page_size > 0) {
-		m_length = (sz_bytes + page_size - 1) & (~page_size - 1);
+		m_length = (sz_bytes + page_size - 1) & ~(page_size - 1);
 		ret = posix_memalign(&m_data_block, page_size, m_length);
 		if (!ret) {
 			__log_info_dbg("allocated %zd aligned memory at %p",

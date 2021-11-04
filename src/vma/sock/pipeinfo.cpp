@@ -31,7 +31,7 @@
  */
 
 
-
+#include <cinttypes>
 #include <vlogger/vlogger.h>
 #include "utils/bullseye.h"
 #include <vma/event/event_handler_manager.h>
@@ -384,6 +384,11 @@ void pipeinfo::statistics_print()
 	if (m_p_socket_stats->counters.n_rx_ready_pkt_drop) {
 		si_logdbg_no_funcname("Rx pkt : max %d / dropped %d (%2.2f%%)", m_p_socket_stats->counters.n_rx_ready_pkt_max, m_p_socket_stats->counters.n_rx_ready_pkt_drop,
 			(m_p_socket_stats->counters.n_rx_packets ? (float)(m_p_socket_stats->counters.n_rx_ready_pkt_drop * 100) / (float)m_p_socket_stats->counters.n_rx_packets : 0));
+		b_any_activiy = true;
+	}
+	if (m_p_socket_stats->strq_counters.n_strq_total_strides) {
+		si_logdbg_no_funcname("Rx RQ Strides: %" PRIu64 " / %u [total/max-per-packet]\n",
+			m_p_socket_stats->strq_counters.n_strq_total_strides, m_p_socket_stats->strq_counters.n_strq_max_strides_per_packet);
 		b_any_activiy = true;
 	}
 	if (b_any_activiy == false) {

@@ -55,6 +55,9 @@
 #include "header.h"
 #include "ip_address.h"
 
+/* Forward declarations */
+class xlio_tis;
+
 struct socket_data {
 	int	fd;
 	uint8_t ttl;
@@ -66,7 +69,7 @@ typedef struct {
 	vma_wr_tx_packet_attr flags;
 	uint16_t mss;
 	uint32_t length;
-	uint32_t tisn;
+	xlio_tis *tis;
 } vma_send_attr;
 
 class dst_entry : public cache_observer, public tostr, public neigh_observer

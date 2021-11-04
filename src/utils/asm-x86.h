@@ -106,6 +106,17 @@ static inline int atomic_fetch_and_add(int x, volatile int *ptr)
 }
 
 /**
+ * Add to the atomic variable. Relaxed memory order.
+ * @param i integer value to add.
+ * @param v pointer of type atomic_t.
+ * @return Value before add.
+ */
+static inline int atomic_fetch_and_add_relaxed(int x, volatile int *ptr)
+{
+	return atomic_fetch_and_add(x, ptr);
+}
+
+/**
  * Read RDTSC register
  */
 static inline void gettimeoftsc(unsigned long long *p_tscval)

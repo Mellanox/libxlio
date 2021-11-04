@@ -172,6 +172,7 @@ TEST_F(vma_ring, ti_8) {
 	int rc = EOK;
 	int ring_fd = UNDEFINED_VALUE;
 	int fd;
+	struct sockaddr_in addr;
 
 	fd = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
 	ASSERT_LE(0, fd);
@@ -180,13 +181,11 @@ TEST_F(vma_ring, ti_8) {
 	 * XXX This is workaround for the situation when the socket from ti_7
 	 * is not destroyed in time and the following bind() fails due to
 	 * "Address already in use" error.
-	 * close() doesn't destroy socket immediately and shadow socket keeps
-	 * the bind address.
-	 * TODO Fix the root cause.
 	 */
-	sleep(1);
+	memcpy(&addr, &server_addr, sizeof(addr));
+	addr.sin_port = htons(ntohs(addr.sin_port) + 1);
 
-	rc = bind(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+	rc = bind(fd, (struct sockaddr *)&addr, sizeof(addr));
 	ASSERT_EQ(0, rc);
 
 	rc = listen(fd, 5);
@@ -241,7 +240,6 @@ TEST_F(vma_ring, ti_10) {
 
 	errno = EOK;
 	rc = setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, (void *)opt_val, opt_len);
-	ASSERT_EQ(EOK, errno);
 	ASSERT_EQ(0, rc);
 
 	rc = xlio_api->get_socket_rings_fds(fd, &ring_fd, 1);
@@ -288,7 +286,6 @@ TEST_F(vma_ring, ti_11) {
 
 	errno = EOK;
 	rc = setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, (void *)opt_val, opt_len);
-	ASSERT_EQ(EOK, errno);
 	ASSERT_EQ(0, rc);
 
 	rc = xlio_api->get_socket_rings_fds(fd, &ring_fd_bind_opt, 1);
@@ -335,7 +332,6 @@ TEST_F(vma_ring, ti_12) {
 
 	errno = EOK;
 	rc = setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, (void *)opt_val, opt_len);
-	ASSERT_EQ(EOK, errno);
 	ASSERT_EQ(0, rc);
 
 	rc = xlio_api->get_socket_rings_fds(fd, &ring_fd_bind_opt, 1);

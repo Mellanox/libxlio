@@ -101,7 +101,7 @@ ring_tap::~ring_tap()
 	}
 
 	/* Release RX buffer poll */
-	g_buffer_pool_rx->put_buffers_thread_safe(&m_rx_pool, m_rx_pool.size());
+	g_buffer_pool_rx_ptr->put_buffers_thread_safe(&m_rx_pool, m_rx_pool.size());
 
 	delete[] m_p_n_rx_channel_fds;
 
@@ -301,7 +301,7 @@ bool ring_tap::reclaim_recv_buffers(descq_t *rx_reuse)
 	if (m_rx_pool.size() >= m_sysvar_qp_compensation_level * 2) {
 		int buff_to_rel = m_rx_pool.size() - m_sysvar_qp_compensation_level;
 
-		g_buffer_pool_rx->put_buffers_thread_safe(&m_rx_pool, buff_to_rel);
+		g_buffer_pool_rx_ptr->put_buffers_thread_safe(&m_rx_pool, buff_to_rel);
 		m_p_ring_stat->tap.n_rx_buffers = m_rx_pool.size();
 	}
 
@@ -344,10 +344,10 @@ void ring_tap::send_ring_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe, 
 	send_status_handler(ret, p_send_wqe);
 }
 
-void ring_tap::send_lwip_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, uint32_t tisn)
+int ring_tap::send_lwip_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, xlio_tis *tis)
 {
 	NOT_IN_USE(id);
-	NOT_IN_USE(tisn);
+	NOT_IN_USE(tis);
 	compute_tx_checksum((mem_buf_desc_t*)(p_send_wqe->wr_id), attr & VMA_TX_PACKET_L3_CSUM, attr & VMA_TX_PACKET_L4_CSUM);
 
 	auto_unlocker lock(m_lock_ring_tx);
@@ -355,6 +355,7 @@ void ring_tap::send_lwip_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe, 
 	p_mem_buf_desc->lwip_pbuf.pbuf.ref++;
 	int ret = send_buffer(p_send_wqe, attr);
 	send_status_handler(ret, p_send_wqe);
+	return ret;
 }
 
 int ring_tap::prepare_flow_message(vma_msg_flow& data, msg_flow_t flow_action,
@@ -442,7 +443,7 @@ bool ring_tap::request_more_rx_buffers()
 	ring_logfuncall("Allocating additional %d buffers for internal use",
 			m_sysvar_qp_compensation_level);
 
-	bool res = g_buffer_pool_rx->get_buffers_thread_safe(m_rx_pool,
+	bool res = g_buffer_pool_rx_ptr->get_buffers_thread_safe(m_rx_pool,
 			this, m_sysvar_qp_compensation_level, 0);
 	if (!res) {
 		ring_logfunc("Out of mem_buf_desc from RX free pool for internal object pool");

@@ -54,13 +54,37 @@ AS_IF([test "x$enable_utls" != xno],
         ])
     ])
 
+vma_cv_utls_aes256=0
+AS_IF([test "$vma_cv_utls" -ne 0],
+    [
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <linux/tls.h>]],
+         [[struct tls12_crypto_info_aes_gcm_256 crypto_info;
+           char arr[TLS_CIPHER_AES_GCM_256_KEY_SIZE];
+           crypto_info.info.cipher_type = TLS_CIPHER_AES_GCM_256;
+           (void)crypto_info; (void)arr;]])],
+         [vma_cv_utls_aes256=1])
+    ])
+
+AC_CHECK_HEADER(
+    [openssl/evp.h], [],
+    # Currently, we don't support TX without RX, so disable UTLS completely
+    [vma_cv_utls=0])
+
 AC_MSG_CHECKING([for utls support])
 if test "$vma_cv_utls" -ne 0; then
     AC_DEFINE_UNQUOTED([DEFINED_UTLS], [1], [Define to 1 to enable UTLS])
     AC_MSG_RESULT([yes])
+
+    AC_MSG_CHECKING([for utls AES-256 support])
+    if test "$vma_cv_utls" -ne 0; then
+        AC_DEFINE_UNQUOTED([DEFINED_UTLS_AES256], [1], [Define to 1 to enable UTLS AES-256])
+        AC_MSG_RESULT([yes])
+    else
+        AC_MSG_RESULT([no])
+    fi
 else
     AS_IF([test "x$enable_utls" == xyes],
-        [AC_MSG_ERROR([utls support requested but kTLS not present])],
+        [AC_MSG_ERROR([utls support requested but kTLS or openssl not found])],
         [AC_MSG_RESULT([no])])
 fi
 ])

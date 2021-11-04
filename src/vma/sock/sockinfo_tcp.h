@@ -169,6 +169,8 @@ public:
 
 	struct tcp_pcb* get_syn_received_pcb(in_addr_t src_addr, in_port_t src_port, in_addr_t dest_addr, in_port_t dest_port);
 
+	inline struct tcp_pcb* get_pcb(void) { return &m_pcb; }
+
 	inline unsigned sndbuf_available(void)
 	{
 		return tcp_sndbuf(&m_pcb);
@@ -190,14 +192,17 @@ public:
 	virtual void update_header_field(data_updater *updater);
 	virtual bool rx_input_cb(mem_buf_desc_t* p_rx_pkt_mem_buf_desc_info, void* pv_fd_ready_array);
 	void abort_connection();
+	void tcp_shutdown_rx(void);
 
 	mem_buf_desc_t *tcp_tx_mem_buf_alloc(pbuf_type type);
+	void tcp_rx_mem_buf_free(mem_buf_desc_t *p_desc);
 	static struct pbuf * tcp_tx_pbuf_alloc(void* p_conn, pbuf_type type, pbuf_desc *desc, struct pbuf *p_buf);
 	static void tcp_tx_pbuf_free(void* p_conn, struct pbuf *p_buff);
 	static void tcp_rx_pbuf_free(struct pbuf *p_buff);
 	static struct tcp_seg * tcp_seg_alloc(void* p_conn);
 	static void tcp_seg_free(void* p_conn, struct tcp_seg * seg);
 	uint32_t get_next_tcp_seqno(void) { return m_pcb.snd_lbb; }
+	uint32_t get_next_tcp_seqno_rx(void) { return m_pcb.rcv_nxt; }
 
 	mem_buf_desc_t* tcp_tx_zc_alloc(mem_buf_desc_t* p_desc);
 	static void tcp_tx_zc_callback(mem_buf_desc_t* p_desc);
@@ -256,29 +261,60 @@ public:
 
 	void handle_timer_expired(void* user_data);
 
-	ib_ctx_handler *get_ctx(void) { return m_p_connected_dst_entry->get_ctx(); }
-	ring *get_ring(void) { return m_p_connected_dst_entry->get_ring(); }
+	inline ib_ctx_handler *get_ctx(void) { return m_p_connected_dst_entry->get_ctx(); }
+	inline ring *get_tx_ring(void) { return m_p_connected_dst_entry->get_ring(); }
+	inline ring *get_rx_ring(void) { return m_p_rx_ring; }
+	flow_tuple_with_local_if get_flow_tuple(void)
+	{
+		/* XXX Dosn't handle empty map and a map with multiple elements. */
+		auto rx_flow_iter = m_rx_flow_map.begin();
+		return rx_flow_iter->first;
+	}
 
 	/* Proxy to support ULP. TODO Refactor. */
-	sockinfo_tcp_ops *get_ops(void) { return m_ops; }
-	void set_ops(sockinfo_tcp_ops *ops) { m_ops = ops; }
-	void reset_ops(void)
+	inline sockinfo_tcp_ops *get_ops(void) { return m_ops; }
+	inline void set_ops(sockinfo_tcp_ops *ops)
 	{
-		delete m_ops;
-		m_ops = new sockinfo_tcp_ops(this);
-		assert(m_ops != NULL);
+		sockinfo_tcp_ops *old_ops = m_ops;
+		m_ops = ops;
+		if (old_ops != m_ops_tcp) {
+			delete old_ops;
+		}
 	}
-	sockinfo_tcp_ops *m_ops;
+	inline void reset_ops(void)
+	{
+		if (m_ops != m_ops_tcp) {
+			delete m_ops;
+			m_ops = m_ops_tcp;
+		}
+	}
+
+	bool is_utls_supported(int direction);
+
+	inline void lock_tcp_con(void)
+	{
+		m_tcp_con_lock.lock();
+	}
+	inline void unlock_tcp_con(void)
+	{
+		if (m_timer_pending) {
+			tcp_timer();
+		}
+		m_tcp_con_lock.unlock();
+	}
 
 	list_node<sockinfo_tcp, sockinfo_tcp::accepted_conns_node_offset> accepted_conns_node;
 
 protected:
-	virtual void		lock_rx_q();
-	virtual void		unlock_rx_q();
+	virtual void lock_rx_q();
+	virtual void unlock_rx_q();
 	virtual bool try_un_offloading(); // un-offload the socket if possible
 
 private:
 	int fcntl_helper(int __cmd, unsigned long int __arg, bool& bexit);
+
+	sockinfo_tcp_ops *m_ops;
+	sockinfo_tcp_ops *m_ops_tcp;
 
 	//lwip specific things
 	struct tcp_pcb m_pcb;
@@ -289,6 +325,7 @@ private:
 	sockinfo_tcp *m_parent;
 	//received packet source (true if its from internal thread)
 	bool m_vma_thr;
+	bool is_attached;
 	/* connection state machine */
 	int m_conn_timeout;
 	/* SNDBUF acconting */
@@ -352,8 +389,6 @@ private:
 
 	inline void init_pbuf_custom(mem_buf_desc_t *p_desc);
 
-	inline void lock_tcp_con();
-	inline void unlock_tcp_con();
 	void tcp_timer();
 
 	bool prepare_listen_to_close();
@@ -391,8 +426,10 @@ private:
 	//rx
 	//int rx_wait(int &poll_count, bool blocking = true);
 	static err_t ack_recvd_lwip_cb(void *arg, struct tcp_pcb *tpcb, u16_t space);
+public:
 	static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
 	static err_t rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
+private:
         
 	// Be sure that m_pcb is initialized
 	void set_conn_properties_from_pcb();
@@ -500,7 +537,6 @@ private:
 	void process_rx_ctl_packets();
 	bool check_dummy_send_conditions(const int flags, const iovec* p_iov, const ssize_t sz_iov);
 	static void put_agent_msg(void *arg);
-	bool is_attached;
 };
 typedef struct tcp_seg tcp_seg;
 

@@ -334,37 +334,6 @@ err:
 
 	return m_p_adapter;
 }
-
-#ifdef DEFINED_UTLS
-dpcp::tis* ib_ctx_handler::create_tis()
-{
-	dpcp::status status;
-	dpcp::tis *_tis;
-
-	/* TODO Make TLS configurable option */
-	uint64_t flags = dpcp::TIS_TLS_EN;
-
-	status = m_p_adapter->create_tis(flags, _tis);
-	if (status != dpcp::DPCP_OK) {
-		ibch_logerr("Failed to create TIS with TLS enabled, status: %d", status);
-		_tis = NULL;
-	}
-	return _tis;
-}
-
-dpcp::dek* ib_ctx_handler::create_dek(const void *key, uint32_t key_len)
-{
-	dpcp::status status;
-	dpcp::dek* _dek;
-
-	status = m_p_adapter->create_dek(dpcp::ENCRYPTION_KEY_TYPE_TLS, (void *)key, key_len, _dek);
-	if (status != dpcp::DPCP_OK) {
-		ibch_logerr("Failed to create DEK, status: %d", status);
-		_dek = NULL;
-	}
-	return _dek;
-}
-#endif /* DEFINED_UTLS */
 #endif /* DEFINED_DPCP */
 
 void ib_ctx_handler::set_ctx_time_converter_status(ts_conversion_mode_t conversion_mode)

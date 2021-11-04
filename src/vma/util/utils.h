@@ -291,6 +291,14 @@ size_t default_huge_page_size(void);
  */
 int validate_tso(int if_index);
 
+/**
+ * Get LRO support using interface index
+ *
+ * @param if_index input interface index
+ * @return 0/1 or -1 on failure
+ */
+int validate_lro(int if_index);
+
 static inline int get_procname(int pid, char *proc, size_t size)
 {
 	char app_full_name[PATH_MAX] = {0};
@@ -525,6 +533,10 @@ static inline int ilog_2(uint32_t n) {
 		++t;
 
 	return (int)t;
+}
+
+static inline bool is_ilog2(unsigned int x) {
+	return (1 >= __builtin_popcount(x));
 }
 
 #endif

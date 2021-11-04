@@ -76,7 +76,8 @@ typedef enum {
 enum {
 	IOCTL_USER_ALLOC_TX = (1 << 0),
 	IOCTL_USER_ALLOC_RX = (1 << 1),
-	IOCTL_USER_ALLOC_TX_ZC = (1 << 2)
+	IOCTL_USER_ALLOC_TX_ZC = (1 << 2),
+	IOCTL_USER_ALLOC_RX_STRIDE = (1 << 3)
 };
 
 typedef void* (*alloc_t)(size_t);
@@ -211,6 +212,31 @@ namespace vma_spec {
 	vma_spec_t from_int(const int int_spec, vma_spec_t def_value = MCE_SPEC_NONE);
 
 	const char * to_str(vma_spec_t level);
+}
+
+#define AUTO_ON_OFF_DEF \
+	AUTO = -1, \
+	OFF = 0, \
+	ON = 1
+
+#define OPTIONS_FROM_TO_STR_DEF \
+	mode_t from_str(const char* str, mode_t def_value); \
+	mode_t from_int(const int option, mode_t def_value); \
+	const char * to_str(mode_t option)
+
+namespace option_3 {
+	typedef enum {
+		AUTO_ON_OFF_DEF
+	} mode_t;
+	OPTIONS_FROM_TO_STR_DEF;
+}
+
+namespace option_strq {
+	typedef enum {
+		AUTO_ON_OFF_DEF,
+		REGULAR_RQ = 2
+	} mode_t;
+	OPTIONS_FROM_TO_STR_DEF;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -358,6 +384,7 @@ public:
 	uint32_t	tx_segs_batch_tcp;
 
 	uint32_t 	rx_num_bufs;
+	uint32_t 	rx_buf_size;
 	uint32_t        rx_bufs_batch;
 	uint32_t 	rx_num_wr;
 	uint32_t	rx_num_wr_to_post_recv;
@@ -372,14 +399,21 @@ public:
 	uint32_t	rx_cq_drain_rate_nsec;	// If enabled this will cause the Rx to drain all wce in CQ before returning to user, 
 						// Else (Default: Disbaled) it will return when first ready packet is in socket queue
 	uint32_t	rx_delta_tsc_between_cq_polls;
+	
+	uint32_t    strq_stride_num_per_rwqe;
+	uint32_t    strq_stride_size_bytes;
+	uint32_t    strq_strides_num_bufs;
+	uint32_t    strq_strides_compensation_level;
 
 	uint32_t	gro_streams_max;
 
+	bool		enable_striding_rq;
+	bool		enable_dpcp_rq;
 	bool		tcp_3t_rules;
 	bool		udp_3t_rules;
 	bool		eth_mc_l2_only_rules;
 	bool		mc_force_flowtag;
-
+	
 	int32_t		select_poll_num;
 	bool		select_poll_os_force;
 	uint32_t	select_poll_os_ratio;
@@ -434,6 +468,12 @@ public:
 #ifdef DEFINED_TSO
 	bool 		enable_tso;
 #endif /* DEFINED_TSO */
+	option_3::mode_t	enable_lro;
+	option_strq::mode_t	enable_strq_env;
+#ifdef DEFINED_UTLS
+	bool 		enable_utls_rx;
+	bool 		enable_utls_tx;
+#endif /* DEFINED_UTLS */
 	uint32_t	timer_netlink_update_msec;
 
 	//Neigh parameters
@@ -453,6 +493,7 @@ public:
 	int             actual_nginx_workers_num;
 	int             power_2_nginx_workers_num;
 	int             src_port_stride;
+	int             nginx_udp_socket_pool_size;
 #endif
 	uint32_t	tcp_send_buffer_size;
 	FILE *stats_file;
@@ -474,6 +515,8 @@ private:
 	bool cpuid_hv();
 	const char* cpuid_hv_vendor();
 	void read_hv();
+	void read_strq_strides_num();
+	void read_strq_stride_size_bytes();
 
 	// prevent unautothrized creation of objects
 	mce_sys_var () : sysctl_reader(sysctl_reader_t::instance()){
@@ -527,7 +570,14 @@ extern mce_sys_var & safe_mce_sys();
 #define SYS_VAR_TX_NONBLOCKED_EAGAINS                 "XLIO_TX_NONBLOCKED_EAGAINS"
 #define SYS_VAR_TX_PREFETCH_BYTES                     "XLIO_TX_PREFETCH_BYTES"
 
+#define SYS_VAR_STRQ                                  "XLIO_STRQ"
+#define SYS_VAR_STRQ_NUM_STRIDES                      "XLIO_STRQ_NUM_STRIDES"
+#define SYS_VAR_STRQ_STRIDE_SIZE_BYTES                "XLIO_STRQ_STRIDE_SIZE_BYTES"
+#define SYS_VAR_STRQ_STRIDES_NUM_BUFS                 "XLIO_STRQ_STRIDES_NUM_BUFS"
+#define SYS_VAR_STRQ_STRIDES_COMPENSATION_LEVEL       "XLIO_STRQ_STRIDES_COMPENSATION_LEVEL"
+
 #define SYS_VAR_RX_NUM_BUFS                           "XLIO_RX_BUFS"
+#define SYS_VAR_RX_BUF_SIZE                           "XLIO_RX_BUF_SIZE"
 #define SYS_VAR_RX_NUM_WRE                            "XLIO_RX_WRE"
 #define SYS_VAR_RX_NUM_WRE_TO_POST_RECV               "XLIO_RX_WRE_BATCHING"
 #define SYS_VAR_RX_NUM_POLLS                          "XLIO_RX_POLL"
@@ -591,6 +641,7 @@ extern mce_sys_var & safe_mce_sys();
 #define SYS_VAR_NGINX_DISTRIBUTE_CQ                   "XLIO_NGINX_DISTRIBUTE_CQ"
 #define SYS_VAR_NGINX_WORKERS_NUM                     "XLIO_NGINX_WORKERS_NUM"
 #define SYS_VAR_SRC_PORT_STRIDE                       "XLIO_SRC_PORT_STRIDE"
+#define SYS_VAR_NGINX_UDP_POOL_SIZE                   "XLIO_NGINX_UDP_POOL_SIZE"
 #endif
 #define SYS_VAR_TCP_MAX_SYN_RATE                      "XLIO_TCP_MAX_SYN_RATE"
 #define SYS_VAR_MSS                                   "XLIO_MSS"
@@ -604,6 +655,12 @@ extern mce_sys_var & safe_mce_sys();
 #ifdef DEFINED_TSO
 #define SYS_VAR_TSO                                   "XLIO_TSO"
 #endif /* DEFINED_TSO */
+#ifdef DEFINED_UTLS
+#define SYS_VAR_UTLS_RX                               "XLIO_UTLS_RX"
+#define SYS_VAR_UTLS_TX                               "XLIO_UTLS_TX"
+#endif /* DEFINED_UTLS */
+
+#define SYS_VAR_LRO                                   "XLIO_LRO"
 
 #define SYS_VAR_INTERNAL_THREAD_AFFINITY              "XLIO_INTERNAL_THREAD_AFFINITY"
 #define SYS_VAR_INTERNAL_THREAD_CPUSET                "XLIO_INTERNAL_THREAD_CPUSET"
@@ -669,7 +726,24 @@ extern mce_sys_var & safe_mce_sys();
 #else
 #define MCE_DEFAULT_TX_NUM_SGE                        (2)
 #endif
+
+#if defined(DEFINED_DPCP) && (DEFINED_DPCP > 10114)
+#define MCE_DEFAULT_STRQ                              (option_strq::ON)
+#else
+#define MCE_DEFAULT_STRQ                              (option_strq::OFF)
+#endif
+
+#define MCE_DEFAULT_STRQ_NUM_STRIDES                  (16384)
+#define MCE_DEFAULT_STRQ_STRIDE_SIZE_BYTES            (512)
+#define MCE_DEFAULT_STRQ_NUM_BUFS                     (64)
+#define MCE_DEFAULT_STRQ_NUM_WRE                      (8)
+#define MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV         (1)
+#define MCE_DEFAULT_STRQ_COMPENSATION_LEVEL           (1)
+#define MCE_DEFAULT_STRQ_STRIDES_NUM_BUFS             (262144)
+#define MCE_DEFAULT_STRQ_STRIDES_COMPENSATION_LEVEL   (16384)
+
 #define MCE_DEFAULT_RX_NUM_BUFS                       (200000)
+#define MCE_DEFAULT_RX_BUF_SIZE                       (0)
 #define MCE_DEFAULT_RX_BUFS_BATCH                     (64)
 #define MCE_DEFAULT_RX_NUM_WRE                        (16000)
 #define MCE_DEFAULT_RX_NUM_WRE_TO_POST_RECV           (64)
@@ -738,6 +812,7 @@ extern mce_sys_var & safe_mce_sys();
 #define MCE_DEFAULT_NGINX_DISTRIBUTE_CQ               (false)
 #define MCE_DEFAULT_NGINX_WORKERS_NUM                 (0) /* Nginx flow will be enabled by default for value greater than 0 */
 #define MCE_DEFAULT_SRC_PORT_STRIDE                   (2)
+#define MCE_DEFAULT_NGINX_UDP_POOL_SIZE               (0)
 #endif
 #define MCE_DEFAULT_MSS                               (0)
 #define MCE_DEFAULT_LWIP_CC_ALGO_MOD                  (0)
@@ -771,11 +846,16 @@ extern mce_sys_var & safe_mce_sys();
 #ifdef DEFINED_TSO
 #define MCE_DEFAULT_TSO                               (true)
 #endif /* DEFINED_TSO */
+#ifdef DEFINED_UTLS
+#define MCE_DEFAULT_UTLS_RX                           (true)
+#define MCE_DEFAULT_UTLS_TX                           (true)
+#endif /* DEFINED_UTLS */
+
+#define MCE_DEFAULT_LRO                               (option_3::AUTO)
 #define MCE_DEFAULT_TCP_ABORT_ON_CLOSE                (false)
 #define MCE_DEFAULT_RX_POLL_ON_TX_TCP                 (false)
 #define MCE_DEFAULT_TRIGGER_DUMMY_SEND_GETSOCKNAME    (false)
 #define MCE_ALIGNMENT                                 ((unsigned long)63)
-
 
 /*
  * This block consists of auxiliary constants
@@ -784,6 +864,7 @@ extern mce_sys_var & safe_mce_sys();
 #define TX_BUF_SIZE(mtu)                              ((mtu) + 92) // Tx buffers are larger in Ethernet (they include L2 for RAW QP)
 #define NUM_TX_WRE_TO_SIGNAL_MAX                      64
 #define NUM_RX_WRE_TO_POST_RECV_MAX                   1024
+#define MAX_MLX5_CQ_SIZE_ITEMS                        4194304
 #define TCP_MAX_SYN_RATE_TOP_LIMIT                    100000
 #define DEFAULT_MC_TTL                                64
 #define IFTYPE_PARAM_FILE                             "/sys/class/net/%s/type"
@@ -816,6 +897,11 @@ extern mce_sys_var & safe_mce_sys();
 
 #define MAX_STATS_FD_NUM                              1024
 #define MAX_WINDOW_SCALING                            14
+
+#define STRQ_MIN_STRIDES_NUM 		512
+#define STRQ_MAX_STRIDES_NUM 		65536
+#define STRQ_MIN_STRIDE_SIZE_BYTES 	64
+#define STRQ_MAX_STRIDE_SIZE_BYTES 	8192
 
 #define VIRTUALIZATION_FLAG	                          "hypervisor"
 

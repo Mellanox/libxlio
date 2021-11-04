@@ -492,7 +492,7 @@ tcp_timewait_input(struct tcp_pcb *pcb, tcp_in_data* in_data)
     return ERR_OK;
   }
   /* - fourth, check the SYN bit, */
-  if (in_data->flags & TCP_SYN) {
+  if ((in_data->flags & (TCP_SYN | TCP_ACK)) == TCP_SYN) {
     bool reusable;
 
     /* Check whether socket can be reused according to RFC 6191 */
@@ -527,9 +527,15 @@ tcp_timewait_input(struct tcp_pcb *pcb, tcp_in_data* in_data)
   }
 
   if ((in_data->tcplen > 0))  {
-    /* Acknowledge data or FIN */
-    pcb->flags |= TF_ACK_NOW;
-    return tcp_output(pcb);
+    if ((in_data->flags & (TCP_SYN | TCP_ACK)) == (TCP_SYN | TCP_ACK)) {
+      /* RST on out of state SYN-ACK */
+      tcp_rst(in_data->ackno, in_data->seqno + in_data->tcplen,
+              in_data->tcphdr->dest, in_data->tcphdr->src, pcb);
+    } else {
+      /* Acknowledge data or FIN */
+      pcb->flags |= TF_ACK_NOW;
+      return tcp_output(pcb);
+    }
   }
   return ERR_OK;
 }
@@ -822,30 +828,17 @@ tcp_oos_insert_segment(struct tcp_pcb *pcb, struct tcp_seg *cseg, struct tcp_seg
 static u32_t
 tcp_shrink_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t ackno)
 {
-  struct pbuf *cur_p = NULL;
-  struct pbuf *p = NULL;
-  u32_t len = 0;
+  struct pbuf *cur_p;
+  struct pbuf *p;
+  u32_t len;
   u32_t count = 0;
   u8_t optflags = 0;
-  u8_t optlen = 0;
+  u8_t optlen;
 
   assert(!(seg->flags & TF_SEG_OPTS_ZEROCOPY));
 
   if ((NULL == seg) || (NULL == seg->p) ||
       !(TCP_SEQ_GT(ackno, seg->seqno) && TCP_SEQ_LT(ackno, seg->seqno + TCP_TCPLEN(seg)))) {
-    return count;
-  }
-
-  /* Just shrink first pbuf */
-  if (TCP_SEQ_GT((seg->seqno + seg->p->len - TCP_HLEN), ackno)) {
-    u8_t *dataptr = (u8_t *)seg->tcphdr + LWIP_TCP_HDRLEN(seg->tcphdr);
-    len = ackno - seg->seqno;
-    seg->len -= len;
-    seg->p->len -= len;
-    seg->p->tot_len -= len;
-    seg->seqno = ackno;
-    seg->tcphdr->seqno = htonl(seg->seqno);
-    MEMMOVE(dataptr, dataptr + len, seg->p->len);
     return count;
   }
 
@@ -855,16 +848,37 @@ tcp_shrink_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t ackno)
   }
 #endif /* LWIP_TCP_TIMESTAMPS */
 
-  optlen += LWIP_TCP_OPT_LENGTH(optflags);
+  optlen = LWIP_TCP_OPT_LENGTH(optflags);
+
+  /* Just shrink first pbuf */
+  if (TCP_SEQ_GT((seg->seqno + seg->p->len - optlen - TCP_HLEN), ackno)) {
+    len = ackno - seg->seqno;
+    if (optlen > 0) {
+      /* tcp_output_segment() relies on aligned options area */
+      len &= 0xfffffffc;
+    }
+
+    seg->len -= len;
+    seg->seqno += len;
+    seg->tcphdr->seqno = htonl(seg->seqno);
+    p = seg->p;
+    p->tot_len -= len;
+    p->len -= len;
+    p->payload = (u8_t *)p->payload + len;
+    MEMMOVE(p->payload, seg->tcphdr, TCP_HLEN);
+    seg->tcphdr = p->payload;
+    return count;
+  }
 
   cur_p = seg->p->next;
 
   if (cur_p) {
     /* Process more than first pbuf */
-    seg->len -= (seg->p->len - TCP_HLEN - optlen);
-    seg->p->tot_len -= (seg->p->len - TCP_HLEN - optlen);
-    seg->seqno += (seg->p->len - TCP_HLEN - optlen);
+    len = seg->p->len - TCP_HLEN - optlen;
+    seg->len -= len;
+    seg->seqno += len;
     seg->tcphdr->seqno = htonl(seg->seqno);
+    seg->p->tot_len -= len;
     seg->p->len = TCP_HLEN + optlen;
   }
 
@@ -873,14 +887,13 @@ tcp_shrink_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t ackno)
       break;
     } else {
       seg->len -= cur_p->len;
-      seg->p->tot_len -= cur_p->len;
-      seg->p->next = cur_p->next;
       seg->seqno += cur_p->len;
       seg->tcphdr->seqno = htonl(seg->seqno);
+      seg->p->tot_len -= cur_p->len;
+      seg->p->next = cur_p->next;
 
       p = cur_p;
       cur_p = p->next;
-      seg->p->next = cur_p;
       p->next = NULL;
 
       if (p->type == PBUF_RAM || p->type == PBUF_ZEROCOPY) {
@@ -893,19 +906,28 @@ tcp_shrink_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t ackno)
   }
 
   if (cur_p) {
-    u8_t *dataptr = (u8_t *)seg->tcphdr + LWIP_TCP_HDRLEN(seg->tcphdr);
     len = ackno - seg->seqno;
-    seg->len -= len;
-    seg->p->len = TCP_HLEN + optlen + cur_p->len - len;
-    seg->p->tot_len -= len;
-    seg->seqno = ackno;
-    seg->tcphdr->seqno = htonl(seg->seqno);
-    MEMCPY(dataptr, cur_p->payload + len, cur_p->len - len);
+    if (optlen > 0) {
+      /* tcp_output_segment() relies on aligned options area */
+      len &= 0xfffffffc;
+    }
 
-    p = cur_p;
-    cur_p = p->next;
-    seg->p->next = cur_p;
-    p->next = NULL;
+    seg->len -= len;
+    seg->seqno += len;
+    seg->tcphdr->seqno = htonl(seg->seqno);
+    cur_p->tot_len -= len - optlen;
+    cur_p->len -= len - optlen;
+    cur_p->payload = (u8_t *)cur_p->payload + ((s32_t)len - (s32_t)optlen);
+
+    /* Add space for TCP header */
+    cur_p->tot_len += TCP_HLEN;
+    cur_p->len += TCP_HLEN;
+    cur_p->payload = (u8_t *)cur_p->payload - TCP_HLEN;
+    MEMCPY(cur_p->payload, seg->tcphdr, TCP_HLEN);
+    seg->tcphdr = cur_p->payload;
+
+    p = seg->p;
+    seg->p = cur_p;
 
     if (p->type == PBUF_RAM || p->type == PBUF_ZEROCOPY) {
       external_tcp_tx_pbuf_free(pcb, p);

@@ -67,6 +67,20 @@ static inline int atomic_fetch_and_add(int i, volatile int *ptr)
 #endif
 }
 
+/**
+ * Add to the atomic variable. Relaxed memory order.
+ * @param i integer value to add.
+ * @param v pointer of type atomic_t.
+ * @return Value before add.
+ */
+static inline int atomic_fetch_and_add_relaxed(int i, volatile int *ptr)
+{
+#ifdef __ATOMIC_RELAXED
+	return __atomic_fetch_add(ptr, i, __ATOMIC_RELAXED);
+#else
+    return __sync_fetch_and_add(ptr, i);
+#endif
+}
 
 /**
  * Read RDTSC register

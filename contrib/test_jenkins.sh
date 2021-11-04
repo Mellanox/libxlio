@@ -33,11 +33,20 @@ rel_path=$(dirname $0)
 abs_path=$(readlink -f $rel_path)
 
 echo
-echo "# rel_path ----------------->  ${rel_path}    "
-echo "# abs_path ----------------->  ${abs_path}       "
+echo "# rel_path ----------------->  ${rel_path}     "
+echo "# abs_path ----------------->  ${abs_path}     "
 echo
 
 source ${abs_path}/jenkins_tests/globals.sh
+
+# Cleanup target folder
+#
+cd $WORKSPACE > /dev/null 2>&1
+
+if [ $BUILD_NUMBER -le 0 ]; then
+    rm -rf ${WORKSPACE}/${prefix} > /dev/null 2>&1
+    rm -rf autom4te.cache > /dev/null 2>&1
+fi
 
 echo
 echo "# WORKSPACE ---------------->  ${WORKSPACE}    "
@@ -78,16 +87,33 @@ echo
 # check go/not go
 #
 do_check_env
+
+# set predefined configuration settings and extra options
+# that depend on environment
+#
+TARGET=${TARGET:=all}
+i=0
+if [ "$TARGET" == "all" -o "$TARGET" == "default" ]; then
+    target_list[$i]="default: --disable-tso --disable-nginx"
+    i=$((i+1))
+fi
+if [ "$TARGET" == "all" -o "$TARGET" == "extra" ]; then
+    target_list[$i]="extra: --enable-tso --enable-nginx"
+    i=$((i+1))
+fi
+if [ "$TARGET" == "all" -o "$TARGET" == "dpcp" ]; then
+    do_check_dpcp opt_value
+    if [ ! -z "${opt_value}" ]; then
+        target_list[$i]="dpcp: --enable-tso --enable-nginx --with-dpcp=${opt_value}"
+        i=$((i+1))
+    else
+        echo "Requested dpcp support can not be executed"
+    fi
+fi
+
 echo
 echo "======================================================"
 set -xe
-
-cd $WORKSPACE
-
-if [ $BUILD_NUMBER -le 0 ]; then
-    rm -rf ${WORKSPACE}/${prefix}
-    rm -rf autom4te.cache
-fi
 
 if [ ! -e configure ] && [ -e autogen.sh ]; then
     ./autogen.sh -s
@@ -98,11 +124,12 @@ for target_v in "${target_list[@]}"; do
     IFS=':' read target_name target_option <<< "$target_v"
 
     export jenkins_test_artifacts="${WORKSPACE}/${prefix}/xlio-${BUILD_NUMBER}-$(hostname -s)-${target_name}"
-    export jenkins_test_custom_configure="${target_option}"
+    export jenkins_test_custom_configure="${jenkins_test_custom_configure} ${target_option}"
     export jenkins_target="${target_name}"
     set +x
     echo "======================================================"
-    echo "Jenkins is checking for [${target_name}] target ..."
+    echo " Checking for [${jenkins_target}] target"
+    echo " Checking for [${jenkins_test_custom_configure}] options"
     echo "======================================================"
     set -x
 
@@ -237,13 +264,13 @@ for target_v in "${target_list[@]}"; do
         # Archive all logs in single file
         do_archive "${WORKSPACE}/${prefix}/${target_name}/*.tap"
 
-	    set +x
-	    gzip -f "${jenkins_test_artifacts}.tar"
-	    echo "======================================================"
-	    echo "Jenkins result for [${target_name}] target: return $rc"
-	    echo "Artifacts: ${jenkins_test_artifacts}.tar.gz"
-	    echo "======================================================"
-	    set -x
+        set +x
+        gzip -f "${jenkins_test_artifacts}.tar"
+        echo "======================================================"
+        echo "Jenkins result for [${target_name}] target: return $rc"
+        echo "Artifacts: ${jenkins_test_artifacts}.tar.gz"
+        echo "======================================================"
+        set -x
     fi
 
 done

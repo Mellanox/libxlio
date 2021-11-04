@@ -73,22 +73,21 @@ public:
 	bool			reclaim_recv_buffers_no_lock(mem_buf_desc_t* rx_reuse_lst); // No locks
 	virtual int		reclaim_recv_single_buffer(mem_buf_desc_t* rx_reuse); // No locks
 	virtual void		mem_buf_rx_release(mem_buf_desc_t* p_mem_buf_desc);
-	virtual int 		socketxtreme_poll(struct xlio_socketxtreme_completion_t *vma_completions, unsigned int ncompletions, int flags);	
+	virtual int             socketxtreme_poll(struct xlio_socketxtreme_completion_t *vma_completions, unsigned int ncompletions, int flags);
 	virtual int		drain_and_proccess();
 	virtual int		wait_for_notification_and_process_element(int cq_channel_fd, uint64_t* p_cq_poll_sn, void* pv_fd_ready_array = NULL);
 	// Tx completion handling at the qp_mgr level is just re listing the desc+data buffer in the free lists
 	void			mem_buf_desc_completion_with_error_tx(mem_buf_desc_t* p_tx_wc_buf_desc); // Assume locked...
-	void			mem_buf_desc_completion_with_error_rx(mem_buf_desc_t* p_rx_wc_buf_desc); // Assume locked...
 	void			mem_buf_desc_return_to_owner_tx(mem_buf_desc_t* p_mem_buf_desc);
 	void			mem_buf_desc_return_to_owner_rx(mem_buf_desc_t* p_mem_buf_desc, void* pv_fd_ready_array = NULL);
-	inline int		send_buffer(vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, uint32_t tisn);
+	inline int		send_buffer(vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, xlio_tis *tis);
 	virtual bool		is_up();
 	void			start_active_qp_mgr();
 	void			stop_active_qp_mgr();
 	virtual mem_buf_desc_t*	mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type, int n_num_mem_bufs = 1);
 	virtual int		mem_buf_tx_release(mem_buf_desc_t* p_mem_buf_desc_list, bool b_accounting, bool trylock = false);
 	virtual void		send_ring_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr);
-	virtual void		send_lwip_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, uint32_t tisn);
+	virtual int		send_lwip_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, xlio_tis *tis);
 	virtual void		mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t* p_mem_buf_desc);
 	virtual bool 		get_hw_dummy_send_support(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe);
 	inline void 		convert_hw_time_to_system_time(uint64_t hwtime, struct timespec* systime) { m_p_ib_ctx->convert_hw_time_to_system_time(hwtime, systime); }
@@ -111,22 +110,99 @@ public:
 	void			modify_cq_moderation(uint32_t period, uint32_t count);
 
 #ifdef DEFINED_UTLS
-	void tls_context_setup(
-		const void *info, uint32_t tis_number,
-		uint32_t dek_id, uint32_t initial_tcp_sn)
+	bool tls_tx_supported(void) { return m_tls.tls_tx; }
+	bool tls_rx_supported(void) { return m_tls.tls_rx; }
+	xlio_tis *tls_context_setup_tx(const xlio_tls_info *info)
 	{
 		auto_unlocker lock(m_lock_ring_tx);
-		m_p_qp_mgr->tls_context_setup(info, tis_number, dek_id, initial_tcp_sn);
-		++m_p_ring_stat->n_tx_tls_contexts;
+
+		xlio_tis *tis = m_p_qp_mgr->tls_context_setup_tx(info);
+		if (likely(tis != NULL)) {
+			++m_p_ring_stat->n_tx_tls_contexts;
+		}
+
+		/* Do polling to speedup handling of the completion. */
+		int ret;
+		do {
+			uint64_t cq_poll_sn = 0;
+			ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&cq_poll_sn);
+		} while (ret == 1);
+
+		return tis;
 	}
-	void tls_tx_post_dump_wqe(
-		uint32_t tis_number, void *addr, uint32_t len, uint32_t lkey)
+	xlio_tir *tls_create_tir(bool cached)
+	{
+		/*
+		 * This method can be called for either RX or TX ring.
+		 * Locking is required for TX ring with cached=true.
+		 */
+		auto_unlocker lock(m_lock_ring_tx);
+		return m_p_qp_mgr->tls_create_tir(cached);
+	}
+	int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info,
+				 uint32_t next_record_tcp_sn,
+				 xlio_comp_cb_t callback, void *callback_arg)
+	{
+		/* Protect with TX lock since we post WQEs to the send queue. */
+		auto_unlocker lock(m_lock_ring_tx);
+
+		int rc = m_p_qp_mgr->tls_context_setup_rx(tir, info, next_record_tcp_sn,
+							  callback, callback_arg);
+		if (likely(rc == 0)) {
+			++m_p_ring_stat->n_rx_tls_contexts;
+		}
+
+		/* Do polling to speedup handling of the completion. */
+		int ret;
+		do {
+			uint64_t cq_poll_sn = 0;
+			ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&cq_poll_sn);
+		} while (ret == 1);
+
+		return rc;
+	}
+	void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static)
+	{
+		auto_unlocker lock(m_lock_ring_tx);
+		m_p_qp_mgr->tls_context_resync_tx(info, tis, skip_static);
+	}
+	void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn)
+	{
+		auto_unlocker lock(m_lock_ring_tx);
+		m_p_qp_mgr->tls_resync_rx(tir, info, hw_resync_tcp_sn);
+	}
+	void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey)
 	{
 		auto_unlocker lock(m_lock_ring_tx);
 		if (lkey == LKEY_USE_DEFAULT) {
 			lkey = m_tx_lkey;
 		}
-		m_p_qp_mgr->tls_tx_post_dump_wqe(tis_number, addr, len, lkey);
+		m_p_qp_mgr->tls_get_progress_params_rx(tir, buf, lkey);
+		/* Do polling to speedup handling of the completion. */
+		int ret;
+		do {
+			uint64_t cq_poll_sn = 0;
+			ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&cq_poll_sn);
+		} while (ret == 1);
+	}
+	void tls_release_tis(xlio_tis *tis)
+	{
+		auto_unlocker lock(m_lock_ring_tx);
+		m_p_qp_mgr->tls_release_tis(tis);
+	}
+	void tls_release_tir(xlio_tir *tir)
+	{
+		/* TIR objects are protected with TX lock */
+		auto_unlocker lock(m_lock_ring_tx);
+		m_p_qp_mgr->tls_release_tir(tir);
+	}
+	void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first)
+	{
+		auto_unlocker lock(m_lock_ring_tx);
+		if (lkey == LKEY_USE_DEFAULT) {
+			lkey = m_tx_lkey;
+		}
+		m_p_qp_mgr->tls_tx_post_dump_wqe(tis, addr, len, lkey, first);
 	}
 #endif /* DEFINED_UTLS */
 	void post_nop_fence(void)
@@ -137,8 +213,10 @@ public:
 
 	friend class cq_mgr;
 	friend class cq_mgr_mlx5;
+	friend class cq_mgr_mlx5_strq;
 	friend class qp_mgr;
 	friend class qp_mgr_eth_mlx5;
+	friend class qp_mgr_eth_mlx5_dpcp;
 	friend class rfs;
 	friend class rfs_uc;
 	friend class rfs_uc_tcp_gro;
@@ -150,9 +228,7 @@ protected:
 	void			create_resources();
 	virtual void		init_tx_buffers(uint32_t count);
 	virtual void		inc_cq_moderation_stats(size_t sz_data);
-#ifdef DEFINED_TSO
         void                    set_tx_num_wr(int32_t num_wr) { m_tx_num_wr = m_tx_num_wr_free = num_wr; }
-#endif /* DEFINED_TSO */
 	uint32_t		get_tx_num_wr() { return m_tx_num_wr; }
 	uint32_t		get_mtu() { return m_mtu; }
 
@@ -251,6 +327,41 @@ private:
 		uint16_t max_header_sz;
 	} m_tso;
 #endif /* DEFINED_TSO */
+#ifdef DEFINED_UTLS
+	struct {
+		/* TLS TX offload is supported */
+		bool tls_tx;
+		/* TLS RX offload is supported */
+		bool tls_rx;
+	} m_tls;
+#endif /* DEFINED_UTLS */
+	struct {
+		/* Indicates LRO support */
+	    bool cap;
+
+	    /* Indicate LRO support for segments with PSH flag */
+	    bool psh_flag;
+
+	    /* Indicate LRO support for segments with TCP timestamp option */
+	    bool time_stamp;
+
+	    /* The maximum message size mode
+	     * 0x0 - TCP header + TCP payload
+	     * 0x1 - L2 + L3 + TCP header + TCP payload
+	     */
+	    uint8_t max_msg_sz_mode;
+
+	    /* The minimal size of TCP segment required for coalescing */
+	    uint16_t min_mss_size;
+
+	    /* Array of supported LRO timer periods in microseconds. */
+	    uint8_t timer_supported_periods[4];
+
+	    /* Maximum length of TCP payload for LRO
+	     * It is calculated from max_msg_sz_mode and safe_mce_sys().rx_buf_size
+	     */
+	    uint32_t max_payload_sz;
+	} m_lro;
 };
 
 class ring_eth : public ring_simple

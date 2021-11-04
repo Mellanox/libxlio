@@ -1209,6 +1209,38 @@ int validate_tso(int if_index)
 #endif
 }
 
+int validate_lro(int if_index)
+{
+#ifdef HAVE_LINUX_ETHTOOL_H
+	int ret = -1;
+	int fd = -1;
+	struct ifreq req;
+	struct ethtool_value eval;
+
+	fd = orig_os_api.socket(AF_INET, SOCK_DGRAM, 0);
+	if (fd < 0) {
+		__log_err("ERROR from socket() (errno=%d %m)", errno);
+		return -1;
+	}
+	memset(&req, 0, sizeof(req));
+	eval.cmd = ETHTOOL_GFLAGS;
+	req.ifr_ifindex = if_index;
+	if_indextoname(if_index, req.ifr_name);
+	req.ifr_data = (char *)&eval;
+	ret = orig_os_api.ioctl(fd, SIOCETHTOOL, &req);
+	if (ret < 0) {
+		__log_dbg("ioctl(SIOCETHTOOL) cmd=ETHTOOL_GFLAGS (errno=%d %m)", errno);
+	} else {
+		ret = (eval.data & ETH_FLAG_LRO ? 1 : 0);
+	}
+	orig_os_api.close(fd);
+	return ret;
+#else
+	NOT_IN_USE(if_index);
+	return -1;
+#endif
+}
+
 loops_timer::loops_timer()
 {
 	m_timeout_msec = -1;

@@ -41,6 +41,7 @@ config/m4/ltversion.m4
 config/m4/lt~obsolete.m4
 configure
 libtool
+stamp-h1
 
 # Tool
 cov-int/
@@ -56,19 +57,23 @@ obj/
 *.vcxproj
 *.vcxproj.filters
 *.vcxproj.user
+*.swp
 VTune Profiler Results/
 
-# VMA specific
+# XLIO specific
 src/utils/timetest
-src/stats/vma_stats
+src/stats/xlio_stats
 src/vlogger/vlogger_test
 src/state_machine/state_machine_test
-stamp-h1
+tests/gtest/gtest
 
 # build products
-VMA_VERSION
-build/libvma.spec
+build/libxlio.spec
 debian/changelog
-contrib/scripts/vma.init
-contrib/scripts/vma.service
-tools/daemon/vmad
+contrib/scripts/libxlio.spec
+contrib/scripts/xlio.init
+contrib/scripts/xlio.service
+docs/man/xlio.7
+docs/man/xlio_stats.8
+docs/man/xliod.8
+tools/daemon/xliod

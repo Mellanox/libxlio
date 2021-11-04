@@ -35,19 +35,13 @@
 
 #include <sys/mman.h>
 #include "cq_mgr_mlx5.h"
+#include "vma/proto/tls.h"
 #include "vma/util/utils.h"
 #include "vlogger/vlogger.h"
 #include "ring_simple.h"
 
 #undef  MODULE_NAME
 #define MODULE_NAME 	"qpm_mlx5"
-#define qp_logpanic 	__log_info_panic
-#define qp_logerr	__log_info_err
-#define qp_logwarn	__log_info_warn
-#define qp_loginfo	__log_info_info
-#define qp_logdbg	__log_info_dbg
-#define qp_logfunc	__log_info_func
-#define qp_logfuncall	__log_info_funcall
 
 #if !defined(MLX5_ETH_INLINE_HEADER_SIZE)
 #define MLX5_ETH_INLINE_HEADER_SIZE 18
@@ -137,10 +131,147 @@ static inline uint32_t get_mlx5_opcode(vma_ibv_wr_opcode verbs_opcode)
 	}
 }
 
+#ifdef DEFINED_UTLS
+class xlio_tis : public xlio_ti {
+public:
+	xlio_tis(dpcp::tis *_tis) :
+		xlio_ti()
+	{
+		dpcp::status ret;
+
+		m_type = XLIO_TI_TIS;
+		m_p_tis = _tis;
+		m_p_dek = NULL;
+		m_tisn = 0;
+		m_dek_id = 0;
+
+		/* Cache the tis number. Mustn't fail for a valid TIS object. */
+		ret = m_p_tis->get_tisn(m_tisn);
+		assert(ret == dpcp::DPCP_OK);
+		(void)ret;
+	}
+
+	~xlio_tis()
+	{
+		if (m_p_tis != NULL)
+			delete m_p_tis;
+		if (m_p_dek != NULL)
+			delete m_p_dek;
+	}
+
+	void reset(void)
+	{
+		assert(m_ref == 0);
+
+		if (m_p_dek != NULL) {
+			delete m_p_dek;
+			m_p_dek = NULL;
+		}
+		m_released = false;
+	}
+
+	inline uint32_t get_tisn(void)
+	{
+		return m_tisn;
+	}
+
+	inline void assign_dek(dpcp::dek *_dek)
+	{
+		m_p_dek = _dek;
+		m_dek_id = _dek->get_key_id();
+	}
+
+	inline uint32_t get_dek_id(void)
+	{
+		return m_dek_id;
+	}
+
+private:
+	dpcp::dek *m_p_dek;
+	dpcp::tis *m_p_tis;
+	uint32_t m_tisn;
+	uint32_t m_dek_id;
+};
+
+class xlio_tir : public xlio_ti {
+public:
+	xlio_tir(dpcp::tir *_tir) :
+		xlio_ti()
+	{
+		m_type = XLIO_TI_TIR;
+		m_p_tir = _tir;
+		m_p_dek = NULL;
+		m_tirn = 0;
+		m_dek_id = 0;
+
+		/* Cache the tir number. Mustn't fail for a valid TIR object. */
+		m_tirn = m_p_tir->get_tirn();
+		assert(m_tirn != 0);
+	}
+
+	~xlio_tir()
+	{
+		if (m_p_tir != NULL)
+			delete m_p_tir;
+		if (m_p_dek != NULL)
+			delete m_p_dek;
+	}
+
+	void reset(void)
+	{
+		assert(m_ref == 0);
+
+		if (m_p_dek != NULL) {
+			delete m_p_dek;
+			m_p_dek = NULL;
+		}
+		m_released = false;
+	}
+
+	inline uint32_t get_tirn(void)
+	{
+		return m_tirn;
+	}
+
+	inline void assign_dek(dpcp::dek *_dek)
+	{
+		m_p_dek = _dek;
+		m_dek_id = _dek->get_key_id();
+	}
+
+	inline uint32_t get_dek_id(void)
+	{
+		return m_dek_id;
+	}
+
+	dpcp::tir *m_p_tir;
+
+private:
+	dpcp::dek *m_p_dek;
+	uint32_t m_tirn;
+	uint32_t m_dek_id;
+};
+#else /* DEFINED_UTLS */
+class xlio_tis : public xlio_ti {
+public:
+	/* A stub class to compile without uTLS support. */
+	inline uint32_t get_tisn(void) { return 0; }
+	inline void reset(void) {}
+};
+class xlio_tir {
+public:
+	/* A stub class to compile without uTLS support. */
+	inline uint32_t get_tirn(void) { return 0; }
+	inline void reset(void) {}
+};
+#endif /* DEFINED_UTLS */
+
 qp_mgr_eth_mlx5::qp_mgr_eth_mlx5(struct qp_mgr_desc *desc,
                 const uint32_t tx_num_wr, const uint16_t vlan, bool call_configure):
         qp_mgr_eth(desc, tx_num_wr, vlan, false)
-        ,m_sq_wqe_idx_to_wrid(NULL)
+        ,m_sq_wqe_idx_to_prop(NULL)
+	,m_sq_wqe_prop_last(NULL)
+	,m_sq_wqe_prop_last_signalled(0)
         ,m_rq_wqe_counter(0)
         ,m_sq_wqes(NULL)
         ,m_sq_wqe_hot(NULL)
@@ -162,7 +293,7 @@ qp_mgr_eth_mlx5::qp_mgr_eth_mlx5(struct qp_mgr_desc *desc,
 	qp_logdbg("m_db_method=%d", m_db_method);
 }
 
-void qp_mgr_eth_mlx5::init_sq()
+void qp_mgr_eth_mlx5::init_qp()
 {
 	if (0 != vma_ib_mlx5_get_qp(m_qp, &m_mlx5_qp)) {
 		qp_logpanic("vma_ib_mlx5_get_qp failed (errno=%d %m)", errno);
@@ -185,23 +316,21 @@ void qp_mgr_eth_mlx5::init_sq()
 	 *     the 4 bytes used for stating the inline data size
 	 *   - 3 WQEBB are fully availabie for data inlining
 	 */
-#ifdef DEFINED_TSO
 	m_qp_cap.max_inline_data = OCTOWORD - 4 + 3 * WQEBB;
-#else
-	m_max_inline_data = OCTOWORD-4 + 3*WQEBB;
-#endif /* DEFINED_TSO */
 
-	if (m_sq_wqe_idx_to_wrid == NULL) {
-		m_sq_wqe_idx_to_wrid = (uint64_t*)mmap(NULL, m_tx_num_wr * sizeof(*m_sq_wqe_idx_to_wrid),
+	if (m_sq_wqe_idx_to_prop == NULL) {
+		m_sq_wqe_idx_to_prop = (sq_wqe_prop*)mmap(NULL, m_tx_num_wr * sizeof(*m_sq_wqe_idx_to_prop),
 			PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-		if (m_sq_wqe_idx_to_wrid == MAP_FAILED) {
-			qp_logerr("Failed allocating m_sq_wqe_idx_to_wrid (errno=%d %m)", errno);
+		if (m_sq_wqe_idx_to_prop == MAP_FAILED) {
+			qp_logerr("Failed allocating m_sq_wqe_idx_to_prop (errno=%d %m)", errno);
 			return;
 		}
+		m_sq_wqe_prop_last_signalled = m_tx_num_wr - 1;
+		m_sq_wqe_prop_last = NULL;
 	}
 
-	qp_logfunc("m_tx_num_wr=%d max_inline_data: %d m_sq_wqe_idx_to_wrid=%p",
-		    m_tx_num_wr, get_max_inline_data(), m_sq_wqe_idx_to_wrid);
+	qp_logfunc("m_tx_num_wr=%d max_inline_data: %d m_sq_wqe_idx_to_prop=%p",
+		    m_tx_num_wr, get_max_inline_data(), m_sq_wqe_idx_to_prop);
 
 	memset((void*)(uintptr_t)m_sq_wqe_hot, 0, sizeof(struct mlx5_eth_wqe));
 	m_sq_wqe_hot->ctrl.data[0] = htonl(MLX5_OPCODE_SEND);
@@ -214,11 +343,8 @@ void qp_mgr_eth_mlx5::init_sq()
 			m_qp, m_mlx5_qp.qpn, m_sq_wqes, m_sq_wqes_end,  m_tx_num_wr, m_mlx5_qp.bf.reg, m_mlx5_qp.bf.size, m_mlx5_qp.bf.offset);
 }
 
-void qp_mgr_eth_mlx5::up()
+void qp_mgr_eth_mlx5::init_device_memory()
 {
-	init_sq();
-	qp_mgr::up();
-
 	/* This limitation is done because of a observation
 	 * that dm_copy takes a lot of time on VMs w/o BF (RM:1542628)
 	 */
@@ -234,6 +360,13 @@ void qp_mgr_eth_mlx5::up()
 	}
 }
 
+void qp_mgr_eth_mlx5::up()
+{
+	init_qp();
+	qp_mgr::up();
+	init_device_memory();
+}
+
 void qp_mgr_eth_mlx5::down()
 {
 	if (m_dm_enabled) {
@@ -243,6 +376,15 @@ void qp_mgr_eth_mlx5::down()
 	qp_mgr::down();
 }
 
+void qp_mgr_eth_mlx5::destroy_tis_cache(void)
+{
+	while (!m_tis_cache.empty()) {
+		xlio_tis *tis = m_tis_cache.back();
+		m_tis_cache.pop_back();
+		delete tis;
+	}
+}
+
 //! Cleanup resources QP itself will be freed by base class DTOR
 qp_mgr_eth_mlx5::~qp_mgr_eth_mlx5()
 {
@@ -250,19 +392,27 @@ qp_mgr_eth_mlx5::~qp_mgr_eth_mlx5()
 		if (0 != munmap(m_rq_wqe_idx_to_wrid, m_rx_num_wr * sizeof(*m_rq_wqe_idx_to_wrid))) {
 			qp_logerr("Failed deallocating memory with munmap m_rq_wqe_idx_to_wrid (errno=%d %m)", errno);
 		}
-
 		m_rq_wqe_idx_to_wrid = NULL;
 	}
-	if (m_sq_wqe_idx_to_wrid) {
-		if (0 != munmap(m_sq_wqe_idx_to_wrid, m_tx_num_wr * sizeof(*m_sq_wqe_idx_to_wrid))) {
-			qp_logerr("Failed deallocating memory with munmap m_sq_wqe_idx_to_wrid (errno=%d %m)", errno);
+	if (m_sq_wqe_idx_to_prop) {
+		if (0 != munmap(m_sq_wqe_idx_to_prop, m_tx_num_wr * sizeof(*m_sq_wqe_idx_to_prop))) {
+			qp_logerr("Failed deallocating memory with munmap m_sq_wqe_idx_to_prop (errno=%d %m)", errno);
 		}
-
-		m_sq_wqe_idx_to_wrid = NULL;
+		m_sq_wqe_idx_to_prop = NULL;
 	}
+	destroy_tis_cache();
 }
 
 void qp_mgr_eth_mlx5::post_recv_buffer(mem_buf_desc_t* p_mem_buf_desc)
+{
+	m_ibv_rx_sg_array[m_curr_rx_wr].addr   = (uintptr_t)p_mem_buf_desc->p_buffer;
+	m_ibv_rx_sg_array[m_curr_rx_wr].length = p_mem_buf_desc->sz_buffer;
+	m_ibv_rx_sg_array[m_curr_rx_wr].lkey   = p_mem_buf_desc->lkey;
+
+	post_recv_buffer_rq(p_mem_buf_desc);
+}
+
+void qp_mgr_eth_mlx5::post_recv_buffer_rq(mem_buf_desc_t* p_mem_buf_desc)
 {
 	if (m_n_sysvar_rx_prefetch_bytes_before_poll) {
 		if (m_p_prev_rx_desc_pushed)
@@ -271,9 +421,6 @@ void qp_mgr_eth_mlx5::post_recv_buffer(mem_buf_desc_t* p_mem_buf_desc)
 	}
 
 	m_ibv_rx_wr_array[m_curr_rx_wr].wr_id  = (uintptr_t)p_mem_buf_desc;
-	m_ibv_rx_sg_array[m_curr_rx_wr].addr   = (uintptr_t)p_mem_buf_desc->p_buffer;
-	m_ibv_rx_sg_array[m_curr_rx_wr].length = p_mem_buf_desc->sz_buffer;
-	m_ibv_rx_sg_array[m_curr_rx_wr].lkey   = p_mem_buf_desc->lkey;
 
 	if (m_rq_wqe_idx_to_wrid) {
 		uint32_t index = m_rq_wqe_counter & (m_rx_num_wr - 1);
@@ -310,7 +457,8 @@ void qp_mgr_eth_mlx5::post_recv_buffer(mem_buf_desc_t* p_mem_buf_desc)
 	}
 }
 
-cq_mgr* qp_mgr_eth_mlx5::init_rx_cq_mgr(struct ibv_comp_channel* p_rx_comp_event_channel)
+
+bool qp_mgr_eth_mlx5::init_rx_cq_mgr_prepare()
 {
 	m_rx_num_wr = align32pow2(m_rx_num_wr);
 
@@ -318,10 +466,16 @@ cq_mgr* qp_mgr_eth_mlx5::init_rx_cq_mgr(struct ibv_comp_channel* p_rx_comp_event
 			PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 	if (m_rq_wqe_idx_to_wrid == MAP_FAILED) {
 		qp_logerr("Failed allocating m_rq_wqe_idx_to_wrid (errno=%d %m)", errno);
-		return NULL;
+		return false;
 	}
 
-	return new cq_mgr_mlx5(m_p_ring, m_p_ib_ctx_handler, m_rx_num_wr, p_rx_comp_event_channel, true);
+	return true;
+}
+
+cq_mgr* qp_mgr_eth_mlx5::init_rx_cq_mgr(struct ibv_comp_channel* p_rx_comp_event_channel)
+{
+	return (!init_rx_cq_mgr_prepare() ? NULL :
+		new cq_mgr_mlx5(m_p_ring, m_p_ib_ctx_handler, m_rx_num_wr, p_rx_comp_event_channel, true));
 }
 
 cq_mgr* qp_mgr_eth_mlx5::init_tx_cq_mgr()
@@ -582,7 +736,7 @@ inline int qp_mgr_eth_mlx5::fill_wqe(vma_ibv_send_wr *pswr)
 	sg_array sga(pswr->sg_list, pswr->num_sge);
 	int      inline_len = MLX5_ETH_INLINE_HEADER_SIZE;
 	int      data_len   = sga.length()-inline_len;
-	int      max_inline_len = m_max_inline_data;
+	int      max_inline_len = get_max_inline_data();
 	int      wqe_size = sizeof(struct mlx5_wqe_ctrl_seg)/OCTOWORD + sizeof(struct mlx5_wqe_eth_seg)/OCTOWORD;
 
 	uint8_t* cur_seg = (uint8_t*)m_sq_wqe_hot+sizeof(struct mlx5_wqe_ctrl_seg);
@@ -702,7 +856,6 @@ inline int qp_mgr_eth_mlx5::fill_wqe_send(vma_ibv_send_wr* pswr)
 	void *addr;
 	int sg_copy_ptr_index = 0;
 	size_t sg_copy_ptr_offset = 0;
-	int bottom_hdr_sz = 0;
 
 	ctrl = (struct mlx5_wqe_ctrl_seg *)m_sq_wqe_hot;
 	eseg = (struct mlx5_wqe_eth_seg *)((uint8_t *)m_sq_wqe_hot + sizeof(*ctrl));
@@ -755,7 +908,6 @@ inline int qp_mgr_eth_mlx5::fill_wqe_send(vma_ibv_send_wr* pswr)
 	for (i = sg_copy_ptr_index; i < (int)nelem; ++i) {
 		if (unlikely((uintptr_t)dseg >= (uintptr_t)m_sq_wqes_end)) {
 			dseg = (struct mlx5_wqe_data_seg *)m_sq_wqes;
-			bottom_hdr_sz = align_to_WQEBB_up(wqe_size) / 4;
 		}
 		if (likely(pswr->sg_list[i].length)) {
 			dseg->byte_count = htonl(pswr->sg_list[i].length - sg_copy_ptr_offset);
@@ -768,7 +920,7 @@ inline int qp_mgr_eth_mlx5::fill_wqe_send(vma_ibv_send_wr* pswr)
 	}
 
 	m_sq_wqe_hot->ctrl.data[1] = htonl((m_mlx5_qp.qpn << 8) | wqe_size);
-	ring_doorbell((uint64_t*)m_sq_wqe_hot, MLX5_DB_METHOD_DB, bottom_hdr_sz, align_to_WQEBB_up(wqe_size) / 4);
+	ring_doorbell((uint64_t*)m_sq_wqe_hot, MLX5_DB_METHOD_DB, align_to_WQEBB_up(wqe_size) / 4);
 
 	return wqe_size;
 }
@@ -853,13 +1005,23 @@ inline int qp_mgr_eth_mlx5::fill_wqe_lso(vma_ibv_send_wr* pswr)
 }
 #endif /* DEFINED_TSO */
 
+void qp_mgr_eth_mlx5::store_current_wqe_prop(uint64_t wr_id, xlio_ti *ti)
+{
+	m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index] = (sq_wqe_prop){ wr_id, ti, m_sq_wqe_prop_last };
+	m_sq_wqe_prop_last = &m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index];
+	if (ti != NULL) {
+		ti->get();
+	}
+}
+
 //! Send one RAW packet by MLX5 BlueFlame
 //
 #ifdef DEFINED_TSO
-int qp_mgr_eth_mlx5::send_to_wire(vma_ibv_send_wr *p_send_wqe, vma_wr_tx_packet_attr attr, bool request_comp, uint32_t tisn)
+int qp_mgr_eth_mlx5::send_to_wire(vma_ibv_send_wr *p_send_wqe, vma_wr_tx_packet_attr attr, bool request_comp, xlio_tis *tis)
 {
 	struct vma_mlx5_wqe_ctrl_seg *ctrl = NULL;
 	struct mlx5_wqe_eth_seg *eseg = NULL;
+	uint32_t tisn = tis ? tis->get_tisn() : 0;
 
 	ctrl = (struct vma_mlx5_wqe_ctrl_seg *)m_sq_wqe_hot;
 	eseg = (struct mlx5_wqe_eth_seg *)((uint8_t *)m_sq_wqe_hot + sizeof(*ctrl));
@@ -884,7 +1046,7 @@ int qp_mgr_eth_mlx5::send_to_wire(vma_ibv_send_wr *p_send_wqe, vma_wr_tx_packet_
 	fill_wqe(p_send_wqe);
 
 	/* Store buffer descriptor */
-	m_sq_wqe_idx_to_wrid[m_sq_wqe_hot_index] = (uintptr_t)p_send_wqe->wr_id;
+	store_current_wqe_prop((uintptr_t)p_send_wqe->wr_id, tis);
 
 	/* Preparing next WQE and index */
 	m_sq_wqe_hot = &(*m_sq_wqes)[m_sq_wqe_counter & (m_tx_num_wr - 1)];
@@ -901,9 +1063,10 @@ int qp_mgr_eth_mlx5::send_to_wire(vma_ibv_send_wr *p_send_wqe, vma_wr_tx_packet_
 	return 0;
 }
 #else
-int qp_mgr_eth_mlx5::send_to_wire(vma_ibv_send_wr *p_send_wqe, vma_wr_tx_packet_attr attr, bool request_comp, uint32_t tisn)
+int qp_mgr_eth_mlx5::send_to_wire(vma_ibv_send_wr *p_send_wqe, vma_wr_tx_packet_attr attr, bool request_comp, xlio_tis *tis)
 {
 	// Set current WQE's ethernet segment checksum flags
+	uint32_t tisn = tis ? tis->get_tisn() : 0;
 	struct vma_mlx5_wqe_ctrl_seg *ctrl = (struct vma_mlx5_wqe_ctrl_seg *)m_sq_wqe_hot;
 	struct mlx5_wqe_eth_seg* eth_seg = (struct mlx5_wqe_eth_seg*)((uint8_t*)m_sq_wqe_hot+sizeof(struct mlx5_wqe_ctrl_seg));
 	eth_seg->cs_flags = (uint8_t)(attr & (VMA_TX_PACKET_L3_CSUM | VMA_TX_PACKET_L4_CSUM) & 0xff);
@@ -913,7 +1076,7 @@ int qp_mgr_eth_mlx5::send_to_wire(vma_ibv_send_wr *p_send_wqe, vma_wr_tx_packet_
 	ctrl->tis_tir_num = htobe32(tisn << 8);
 
 	fill_wqe(p_send_wqe);
-	m_sq_wqe_idx_to_wrid[m_sq_wqe_hot_index] = (uintptr_t)p_send_wqe->wr_id;
+	store_current_wqe_prop((uintptr_t)p_send_wqe->wr_id, tis);
 
 	// Preparing next WQE and index
 	m_sq_wqe_hot = &(*m_sq_wqes)[m_sq_wqe_counter & (m_tx_num_wr - 1)];
@@ -932,42 +1095,151 @@ int qp_mgr_eth_mlx5::send_to_wire(vma_ibv_send_wr *p_send_wqe, vma_wr_tx_packet_
 #endif /* DEFINED_TSO */
 
 #ifdef DEFINED_UTLS
-void qp_mgr_eth_mlx5::tls_context_setup(
-	const void *info, uint32_t tis_number,
-	uint32_t dek_id, uint32_t initial_tcp_sn)
+xlio_tis *qp_mgr_eth_mlx5::tls_context_setup_tx(const xlio_tls_info *info)
 {
-	struct tls12_crypto_info_aes_gcm_128* crypto_info =
-		(struct tls12_crypto_info_aes_gcm_128*)info;
+	xlio_tis *tis;
+	uint32_t tisn;
+	dpcp::tis *_tis;
+	dpcp::dek *_dek;
+	dpcp::status status;
+	dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
 
-	tls_tx_post_static_params_wqe(crypto_info, tis_number, dek_id, 0);
-	tls_tx_post_progress_params_wqe(tis_number, initial_tcp_sn);
+	if (m_tis_cache.empty()) {
+		status = adapter->create_tis(dpcp::TIS_TLS_EN, _tis);
+		if (unlikely(status != dpcp::DPCP_OK)) {
+			qp_logerr("Failed to create TIS with TLS enabled, status: %d", status);
+			return NULL;
+		}
+
+		tis = new xlio_tis(_tis);
+		if (unlikely(tis == NULL)) {
+			delete _tis;
+			return NULL;
+		}
+	} else {
+		tis = m_tis_cache.back();
+		m_tis_cache.pop_back();
+	}
+
+	status = adapter->create_dek(dpcp::ENCRYPTION_KEY_TYPE_TLS,
+				     (void *)info->key, info->key_len, _dek);
+	if (unlikely(status != dpcp::DPCP_OK)) {
+		qp_logerr("Failed to create DEK, status: %d", status);
+		m_tis_cache.push_back(tis);
+		return NULL;
+	}
+	tis->assign_dek(_dek);
+	tisn = tis->get_tisn();
+
+	tls_post_static_params_wqe(tis, info, tisn, _dek->get_key_id(), 0, false, true);
+	tls_post_progress_params_wqe(tis, tisn, 0, false, true);
+	/* The 1st post after TLS configuration must be with fence. */
+	post_nop_fence();
+
+	assert(!tis->m_released);
+
+	return tis;
 }
 
-inline void qp_mgr_eth_mlx5::tls_tx_fill_static_params_wqe(
+void qp_mgr_eth_mlx5::tls_context_resync_tx(
+	const xlio_tls_info *info, xlio_tis *tis, bool skip_static)
+{
+	uint32_t tisn = tis->get_tisn();
+
+	if (!skip_static) {
+		tls_post_static_params_wqe(tis, info, tisn, tis->get_dek_id(), 0, true, true);
+	}
+	tls_post_progress_params_wqe(tis, tisn, 0, skip_static, true);
+}
+
+xlio_tir *qp_mgr_eth_mlx5::tls_create_tir(bool cached)
+{
+	xlio_tir *tir = NULL;
+
+	if (cached && !m_tir_cache.empty()) {
+		tir = m_tir_cache.back();
+		m_tir_cache.pop_back();
+	} else if (!cached) {
+		dpcp::tir *_tir = create_tir(true);
+
+		if (_tir != NULL) {
+			tir = new xlio_tir(_tir);
+		}
+		if (unlikely(tir == NULL && _tir != NULL)) {
+			delete _tir;
+		}
+	}
+	return tir;
+}
+
+int qp_mgr_eth_mlx5::tls_context_setup_rx(
+	xlio_tir *tir, const xlio_tls_info *info,
+	uint32_t next_record_tcp_sn,
+	xlio_comp_cb_t callback, void *callback_arg)
+{
+	uint32_t tirn;
+	dpcp::dek *_dek;
+	dpcp::status status;
+	dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
+
+	status = adapter->create_dek(dpcp::ENCRYPTION_KEY_TYPE_TLS,
+				     (void *)info->key, info->key_len, _dek);
+	if (unlikely(status != dpcp::DPCP_OK)) {
+		qp_logerr("Failed to create DEK, status: %d", status);
+		return -1;
+	}
+	tir->assign_dek(_dek);
+	tir->assign_callback(callback, callback_arg);
+	tirn = tir->get_tirn();
+
+	tls_post_static_params_wqe(NULL, info, tirn, _dek->get_key_id(), 0, false, false);
+	tls_post_progress_params_wqe(tir, tirn, next_record_tcp_sn, false, false);
+
+	assert(!tir->m_released);
+
+	return 0;
+}
+
+void qp_mgr_eth_mlx5::tls_resync_rx(
+	xlio_tir *tir, const xlio_tls_info *info,
+	uint32_t hw_resync_tcp_sn)
+{
+	tls_post_static_params_wqe(tir, info, tir->get_tirn(), tir->get_dek_id(),
+				   hw_resync_tcp_sn, false, false);
+}
+
+void qp_mgr_eth_mlx5::tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey)
+{
+	/* Address must be aligned by 64. */
+	assert((uintptr_t)buf == ((uintptr_t)buf >> 6U << 6U));
+
+	tls_get_progress_params_wqe(tir, tir->get_tirn(), buf, lkey);
+}
+
+inline void qp_mgr_eth_mlx5::tls_fill_static_params_wqe(
 	struct mlx5_wqe_tls_static_params_seg* params,
-	const struct tls12_crypto_info_aes_gcm_128* info,
+	const struct xlio_tls_info* info,
 	uint32_t key_id, uint32_t resync_tcp_sn)
 {
-	unsigned char *initial_rn, *gcm_iv;
-	uint16_t salt_sz, rec_seq_sz;
-	const unsigned char *salt, *rec_seq;
+	unsigned char *initial_rn, *iv;
 	uint8_t tls_version;
 	uint8_t* ctx;
 
 	ctx = params->ctx;
 
-	salt = info->salt;
-	rec_seq = info->rec_seq;
-	salt_sz = sizeof(info->salt);
-	rec_seq_sz = sizeof(info->rec_seq);
-
-	gcm_iv = DEVX_ADDR_OF(tls_static_params, ctx, gcm_iv);
+	iv = DEVX_ADDR_OF(tls_static_params, ctx, gcm_iv);
 	initial_rn = DEVX_ADDR_OF(tls_static_params, ctx, initial_record_number);
 
-	memcpy(gcm_iv, salt, salt_sz);
-	memcpy(initial_rn, rec_seq, rec_seq_sz);
+	memcpy(iv, info->salt, TLS_AES_GCM_SALT_LEN);
+	memcpy(initial_rn, info->rec_seq, TLS_AES_GCM_REC_SEQ_LEN);
+	if (info->tls_version == TLS_1_3_VERSION) {
+		iv = DEVX_ADDR_OF(tls_static_params, ctx, implicit_iv);
+		memcpy(iv, info->iv, TLS_AES_GCM_IV_LEN);
+	}
 
-	tls_version = MLX5E_STATIC_PARAMS_CONTEXT_TLS_1_2;
+	tls_version = (info->tls_version == TLS_1_2_VERSION) ?
+		MLX5E_STATIC_PARAMS_CONTEXT_TLS_1_2 :
+		MLX5E_STATIC_PARAMS_CONTEXT_TLS_1_3;
 
 	DEVX_SET(tls_static_params, ctx, tls_version, tls_version);
 	DEVX_SET(tls_static_params, ctx, const_1, 1);
@@ -977,9 +1249,10 @@ inline void qp_mgr_eth_mlx5::tls_tx_fill_static_params_wqe(
 	DEVX_SET(tls_static_params, ctx, dek_index, key_id);
 }
 
-inline void qp_mgr_eth_mlx5::tls_tx_post_static_params_wqe(
-	const struct tls12_crypto_info_aes_gcm_128* info,
-	uint32_t tis_number, uint32_t key_id, uint32_t resync_tcp_sn)
+inline void qp_mgr_eth_mlx5::tls_post_static_params_wqe(
+	xlio_ti *ti, const struct xlio_tls_info* info,
+	uint32_t tis_tir_number, uint32_t key_id,
+	uint32_t resync_tcp_sn, bool fence, bool is_tx)
 {
 	struct mlx5_set_tls_static_params_wqe* wqe =
 			reinterpret_cast<struct mlx5_set_tls_static_params_wqe*>(m_sq_wqe_hot);
@@ -987,7 +1260,8 @@ inline void qp_mgr_eth_mlx5::tls_tx_post_static_params_wqe(
 	struct vma_mlx5_wqe_umr_ctrl_seg* ucseg = &wqe->uctrl;
 	struct mlx5_mkey_seg* mkcseg = &wqe->mkc;
 	struct mlx5_wqe_tls_static_params_seg* tspseg = &wqe->params;
-	uint8_t opmod = MLX5_OPC_MOD_TLS_TIS_STATIC_PARAMS;
+	uint8_t opmod = is_tx ? MLX5_OPC_MOD_TLS_TIS_STATIC_PARAMS :
+				MLX5_OPC_MOD_TLS_TIR_STATIC_PARAMS;
 
 #define STATIC_PARAMS_DS_CNT DIV_ROUND_UP(sizeof(*wqe), MLX5_SEND_WQE_DS)
 
@@ -1028,8 +1302,8 @@ inline void qp_mgr_eth_mlx5::tls_tx_post_static_params_wqe(
 	memset(m_sq_wqe_hot, 0, sizeof(*m_sq_wqe_hot));
 	cseg->opmod_idx_opcode = htobe32(((m_sq_wqe_counter & 0xffff) << 8) | MLX5_OPCODE_UMR | (opmod << 24));
 	cseg->qpn_ds = htobe32((m_mlx5_qp.qpn << MLX5_WQE_CTRL_QPN_SHIFT) | STATIC_PARAMS_DS_CNT);
-	cseg->fm_ce_se = MLX5_FENCE_MODE_INITIATOR_SMALL;
-	cseg->tis_tir_num = htobe32(tis_number << 8);
+	cseg->fm_ce_se = fence ? MLX5_FENCE_MODE_INITIATOR_SMALL : 0;
+	cseg->tis_tir_num = htobe32(tis_tir_number << 8);
 
 	ucseg->flags = MLX5_UMR_INLINE;
 	ucseg->bsf_octowords = htobe16(DEVX_ST_SZ_BYTES(tls_static_params) / 16);
@@ -1060,8 +1334,8 @@ inline void qp_mgr_eth_mlx5::tls_tx_post_static_params_wqe(
 	memset(mkcseg, 0, sizeof(*mkcseg));
 	memset(tspseg, 0, sizeof(*tspseg));
 
-	tls_tx_fill_static_params_wqe(tspseg, info, key_id, resync_tcp_sn);
-	m_sq_wqe_idx_to_wrid[m_sq_wqe_hot_index] = 0;
+	tls_fill_static_params_wqe(tspseg, info, key_id, resync_tcp_sn);
+	store_current_wqe_prop(0, ti);
 
 #ifdef DEFINED_TSO
 	ring_doorbell((uint64_t*)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs, num_wqebbs_top);
@@ -1080,28 +1354,30 @@ inline void qp_mgr_eth_mlx5::tls_tx_post_static_params_wqe(
 	eth_seg->inline_hdr_sz = htons(MLX5_ETH_INLINE_HEADER_SIZE);
 }
 
-inline void qp_mgr_eth_mlx5::tls_tx_fill_progress_params_wqe(
+inline void qp_mgr_eth_mlx5::tls_fill_progress_params_wqe(
 	struct mlx5_wqe_tls_progress_params_seg* params,
-	uint32_t tis_number, uint32_t next_record_tcp_sn)
+	uint32_t tis_tir_number, uint32_t next_record_tcp_sn)
 {
 	uint8_t* ctx = params->ctx;
 
-	params->tis_tir_num = htobe32(tis_number);
+	params->tis_tir_num = htobe32(tis_tir_number);
 
 	DEVX_SET(tls_progress_params, ctx, next_record_tcp_sn, next_record_tcp_sn);
 	DEVX_SET(tls_progress_params, ctx, record_tracker_state, MLX5E_TLS_PROGRESS_PARAMS_RECORD_TRACKER_STATE_START);
 	DEVX_SET(tls_progress_params, ctx, auth_state, MLX5E_TLS_PROGRESS_PARAMS_AUTH_STATE_NO_OFFLOAD);
 }
 
-inline void qp_mgr_eth_mlx5::tls_tx_post_progress_params_wqe(
-	uint32_t tis_number, uint32_t next_record_tcp_sn)
+inline void qp_mgr_eth_mlx5::tls_post_progress_params_wqe(
+	xlio_ti *ti, uint32_t tis_tir_number,
+	uint32_t next_record_tcp_sn, bool fence, bool is_tx)
 {
 	uint16_t num_wqebbs = TLS_SET_PROGRESS_PARAMS_WQEBBS;
 
 	struct mlx5_set_tls_progress_params_wqe* wqe =
 			reinterpret_cast<struct mlx5_set_tls_progress_params_wqe*>(m_sq_wqe_hot);
 	struct vma_mlx5_wqe_ctrl_seg* cseg = &wqe->ctrl.ctrl;
-	uint8_t opmod = MLX5_OPC_MOD_TLS_TIS_PROGRESS_PARAMS;
+	uint8_t opmod = is_tx ? MLX5_OPC_MOD_TLS_TIS_PROGRESS_PARAMS :
+				MLX5_OPC_MOD_TLS_TIR_PROGRESS_PARAMS;
 
 	memset(wqe, 0, sizeof(*wqe));
 
@@ -1109,10 +1385,12 @@ inline void qp_mgr_eth_mlx5::tls_tx_post_progress_params_wqe(
 
 	cseg->opmod_idx_opcode = htobe32(((m_sq_wqe_counter & 0xffff) << 8) | VMA_MLX5_OPCODE_SET_PSV | (opmod << 24));
 	cseg->qpn_ds = htobe32((m_mlx5_qp.qpn << MLX5_WQE_CTRL_QPN_SHIFT) | PROGRESS_PARAMS_DS_CNT);
-	cseg->fm_ce_se = MLX5_FENCE_MODE_INITIATOR_SMALL;
+	/* Request completion for TLS RX offload to create TLS rule ASAP. */
+	cseg->fm_ce_se = (fence ? MLX5_FENCE_MODE_INITIATOR_SMALL : 0) |
+			 (is_tx ? 0 : MLX5_WQE_CTRL_CQ_UPDATE);
 
-	tls_tx_fill_progress_params_wqe(&wqe->params, tis_number, next_record_tcp_sn);
-	m_sq_wqe_idx_to_wrid[m_sq_wqe_hot_index] = 0;
+	tls_fill_progress_params_wqe(&wqe->params, tis_tir_number, next_record_tcp_sn);
+	store_current_wqe_prop(0, ti);
 
 #ifdef DEFINED_TSO
 	ring_doorbell((uint64_t*)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs);
@@ -1131,27 +1409,31 @@ inline void qp_mgr_eth_mlx5::tls_tx_post_progress_params_wqe(
 	eth_seg->inline_hdr_sz = htons(MLX5_ETH_INLINE_HEADER_SIZE);
 }
 
-void qp_mgr_eth_mlx5::tls_tx_post_dump_wqe(
-	uint32_t tis_number, void *addr, uint32_t len, uint32_t lkey)
+inline void qp_mgr_eth_mlx5::tls_get_progress_params_wqe(
+	xlio_ti *ti, uint32_t tirn, void *buf, uint32_t lkey)
 {
-	struct mlx5_dump_wqe* wqe = reinterpret_cast<struct mlx5_dump_wqe*>(m_sq_wqe_hot);
+	uint16_t num_wqebbs = TLS_GET_PROGRESS_WQEBBS;
+
+	struct mlx5_get_tls_progress_params_wqe* wqe =
+			reinterpret_cast<struct mlx5_get_tls_progress_params_wqe*>(m_sq_wqe_hot);
 	struct vma_mlx5_wqe_ctrl_seg* cseg = &wqe->ctrl.ctrl;
-	struct mlx5_wqe_data_seg* dseg = &wqe->data;
-	uint16_t num_wqebbs = TLS_DUMP_WQEBBS;
-	uint16_t ds_cnt = sizeof(*wqe) / MLX5_SEND_WQE_DS;
+	struct vma_mlx5_seg_get_psv* psv = &wqe->psv;
+	uint8_t opmod = MLX5_OPC_MOD_TLS_TIR_PROGRESS_PARAMS;
 
 	memset(wqe, 0, sizeof(*wqe));
 
-	cseg->opmod_idx_opcode = htobe32(((m_sq_wqe_counter & 0xffff) << 8) | VMA_MLX5_OPCODE_DUMP);
-	cseg->qpn_ds = htobe32((m_mlx5_qp.qpn << MLX5_WQE_CTRL_QPN_SHIFT) | ds_cnt);
-	cseg->fm_ce_se = MLX5_FENCE_MODE_INITIATOR_SMALL;
-	cseg->tis_tir_num = htobe32(tis_number << 8);
+#define PROGRESS_PARAMS_DS_CNT DIV_ROUND_UP(sizeof(*wqe), MLX5_SEND_WQE_DS)
 
-	dseg->addr       = htobe64((uintptr_t)addr);
-	dseg->lkey       = htobe32(lkey);
-	dseg->byte_count = htobe32(len);
+	cseg->opmod_idx_opcode = htobe32(((m_sq_wqe_counter & 0xffff) << 8) | VMA_MLX5_OPCODE_GET_PSV | (opmod << 24));
+	cseg->qpn_ds = htobe32((m_mlx5_qp.qpn << MLX5_WQE_CTRL_QPN_SHIFT) | PROGRESS_PARAMS_DS_CNT);
+	cseg->fm_ce_se = MLX5_WQE_CTRL_CQ_UPDATE;
 
-	m_sq_wqe_idx_to_wrid[m_sq_wqe_hot_index] = 0;
+	psv->num_psv = 1U << 4U;
+	psv->l_key = htobe32(lkey);
+	psv->psv_index[0] = htobe32(tirn);
+	psv->va = htobe64((uintptr_t)buf);
+
+	store_current_wqe_prop(0, ti);
 
 #ifdef DEFINED_TSO
 	ring_doorbell((uint64_t*)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs);
@@ -1168,7 +1450,92 @@ void qp_mgr_eth_mlx5::tls_tx_post_dump_wqe(
 	struct mlx5_wqe_eth_seg* eth_seg = (struct mlx5_wqe_eth_seg*)((uint8_t*)m_sq_wqe_hot + sizeof(struct mlx5_wqe_ctrl_seg));
 	eth_seg->inline_hdr_sz = htons(MLX5_ETH_INLINE_HEADER_SIZE);
 }
+
+void qp_mgr_eth_mlx5::tls_tx_post_dump_wqe(
+	xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first)
+{
+	struct mlx5_dump_wqe* wqe = reinterpret_cast<struct mlx5_dump_wqe*>(m_sq_wqe_hot);
+	struct vma_mlx5_wqe_ctrl_seg* cseg = &wqe->ctrl.ctrl;
+	struct mlx5_wqe_data_seg* dseg = &wqe->data;
+	uint32_t tisn = tis ? tis->get_tisn() : 0;
+	uint16_t num_wqebbs = TLS_DUMP_WQEBBS;
+	uint16_t ds_cnt = sizeof(*wqe) / MLX5_SEND_WQE_DS;
+
+	memset(wqe, 0, sizeof(*wqe));
+
+	cseg->opmod_idx_opcode = htobe32(((m_sq_wqe_counter & 0xffff) << 8) | VMA_MLX5_OPCODE_DUMP);
+	cseg->qpn_ds = htobe32((m_mlx5_qp.qpn << MLX5_WQE_CTRL_QPN_SHIFT) | ds_cnt);
+	cseg->fm_ce_se = first ? MLX5_FENCE_MODE_INITIATOR_SMALL : 0;
+	cseg->tis_tir_num = htobe32(tisn << 8);
+
+	dseg->addr       = htobe64((uintptr_t)addr);
+	dseg->lkey       = htobe32(lkey);
+	dseg->byte_count = htobe32(len);
+
+	store_current_wqe_prop(0, tis);
+
+#ifdef DEFINED_TSO
+	ring_doorbell((uint64_t*)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs);
+#else
+	ring_doorbell((uint64_t*)m_sq_wqe_hot, num_wqebbs);
+#endif
+
+	// Preparing next WQE as Ethernet send WQE and index:
+	m_sq_wqe_hot = &(*m_sq_wqes)[m_sq_wqe_counter & (m_tx_num_wr - 1)];
+	m_sq_wqe_hot_index = m_sq_wqe_counter & (m_tx_num_wr - 1);
+	memset(m_sq_wqe_hot, 0, sizeof(mlx5_eth_wqe));
+
+	// Fill Ethernet segment with header inline:
+	struct mlx5_wqe_eth_seg* eth_seg = (struct mlx5_wqe_eth_seg*)((uint8_t*)m_sq_wqe_hot + sizeof(struct mlx5_wqe_ctrl_seg));
+	eth_seg->inline_hdr_sz = htons(MLX5_ETH_INLINE_HEADER_SIZE);
+}
+
+void qp_mgr_eth_mlx5::tls_release_tis(xlio_tis *tis)
+{
+	/* TODO We don't have to lock ring to destroy DEK object (a garbage collector?). */
+
+	tis->m_released = true;
+	if (tis->m_ref == 0) {
+		tis->reset();
+		m_tis_cache.push_back(tis);
+	}
+}
+
+void qp_mgr_eth_mlx5::tls_release_tir(xlio_tir *tir)
+{
+	/* TODO We don't have to lock ring to destroy DEK object (a garbage collector?). */
+
+	tir->m_released = true;
+	tir->assign_callback(NULL, NULL);
+	if (tir->m_ref == 0) {
+		tir->reset();
+		m_tir_cache.push_back(tir);
+	}
+}
+
+dpcp::tir* qp_mgr_eth_mlx5::xlio_tir_to_dpcp_tir(xlio_tir *tir)
+{
+	return tir->m_p_tir;
+}
+
 #endif /* DEFINED_UTLS */
+
+void qp_mgr_eth_mlx5::ti_released(xlio_ti *ti)
+{
+	/* TODO We don't have to lock ring to destroy DEK object (a garbage collector?). */
+
+	assert(ti->m_released);
+	assert(ti->m_ref == 0);
+	if (ti->m_type == XLIO_TI_TIS) {
+		xlio_tis *tis = (xlio_tis*)ti;
+		tis->reset();
+		m_tis_cache.push_back(tis);
+	} else if (ti->m_type == XLIO_TI_TIR) {
+		xlio_tir *tir = (xlio_tir*)ti;
+		tir->reset();
+		m_tir_cache.push_back(tir);
+	}
+}
 
 void qp_mgr_eth_mlx5::post_nop_fence(void)
 {
@@ -1181,7 +1548,7 @@ void qp_mgr_eth_mlx5::post_nop_fence(void)
 	cseg->qpn_ds = htobe32((m_mlx5_qp.qpn << MLX5_WQE_CTRL_QPN_SHIFT) | 0x01);
 	cseg->fm_ce_se = MLX5_FENCE_MODE_INITIATOR_SMALL;
 
-	m_sq_wqe_idx_to_wrid[m_sq_wqe_hot_index] = 0;
+	store_current_wqe_prop(0, NULL);
 
 #ifdef DEFINED_TSO
 	ring_doorbell((uint64_t*)m_sq_wqe_hot, MLX5_DB_METHOD_DB, 1);

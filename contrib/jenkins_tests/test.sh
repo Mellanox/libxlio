@@ -34,7 +34,7 @@ fi
 
 test_ip_list=""
 test_list="tcp-pp tcp-tp tcp-ul"
-test_lib=$install_dir/lib/libxlio.so
+test_lib=$install_dir/lib/${prj_lib}
 
 if [ ! -z "${test_remote_ip}" ] ; then
 	[[ "${test_remote_ip}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || {\
@@ -57,13 +57,13 @@ if [ ! -z "${test_remote_ip}" ] ; then
 		if [[ "${rmt_os}" =~ .*"${local_os}".* ]] ; then
 			${sudo_cmd} scp -q ${test_app} ${rmt_user}@${test_remote_ip}:${sperf_exec_dir}
 			${sudo_cmd} scp -q ${test_lib} ${rmt_user}@${test_remote_ip}:${sperf_exec_dir}
-			eval "pid=$(${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} pidof xliod)"
+			eval "pid=$(${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} pidof ${prj_service})"
 			if [ ! -z "${pid}" ] ;  then 
-				echo "xliod pid=${pid}"
+				echo "${prj_service} pid=${pid}"
 				eval "${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} kill -9 ${pid}"
 			fi
-			${sudo_cmd} scp -q ${install_dir}/sbin/xliod ${rmt_user}@${test_remote_ip}:${sperf_exec_dir}
-			eval "${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} ${sudo_cmd} ${sperf_exec_dir}/xliod &"
+			${sudo_cmd} scp -q ${install_dir}/sbin/${prj_service} ${rmt_user}@${test_remote_ip}:${sperf_exec_dir}
+			eval "${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} ${sudo_cmd} ${sperf_exec_dir}/${prj_service} &"
 		else
 			${sudo_cmd} -E rsync -q -I -a -r --exclude jenkins --exclude '*.o' --exclude '.deps' --exclude '*.l*' \
 			-e ssh ${WORKSPACE} ${rmt_user}@${test_remote_ip}:${sperf_exec_dir}
@@ -101,18 +101,18 @@ for test_link in $test_ip_list; do
 
 		if [ ! -z "${test_remote_ip}" ] ; then
 
-			eval "pid=$(${sudo_cmd} pidof xliod)"
+			eval "pid=$(${sudo_cmd} pidof ${prj_service})"
 			[ ! -z "${pid}" ] && eval "${sudo_cmd} kill -9 ${pid}" 
-			eval "${sudo_cmd} ${install_dir}/sbin/xliod --console -v5 & "
+			eval "${sudo_cmd} ${install_dir}/sbin/${prj_service} --console -v5 & "
 
 			echo "BUILD_NUMBER=${BUILD_NUMBER}"
-			eval "pid=$(${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} pidof xliod)"
+			eval "pid=$(${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} pidof ${prj_service})"
 			if [ ! -z "${pid}" ] ;  then
-				echo "xliod pid=${pid}"
+				echo "${prj_service} pid=${pid}"
 				eval "${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} kill -9 ${pid}"
 			fi
-			${sudo_cmd} scp -q ${install_dir}/sbin/xliod ${rmt_user}@${test_remote_ip}:${sperf_exec_dir}
-			eval "${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} ${sudo_cmd} ${sperf_exec_dir}/xliod &"
+			${sudo_cmd} scp -q ${install_dir}/sbin/${prj_service} ${rmt_user}@${test_remote_ip}:${sperf_exec_dir}
+			eval "${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} ${sudo_cmd} ${sperf_exec_dir}/${prj_service} &"
 
 			vutil="$(dirname $0)/vutil.sh"
 			[ ! -e "${vutil}" ] && { echo "error vutil not found" ; exit 1 ; }
@@ -122,7 +122,7 @@ for test_link in $test_ip_list; do
 					-e "XLIO_TX_BUFS=20000 XLIO_RX_BUFS=20000"
 	
 		else
-			$timeout_exe $PWD/tests/verifier/verifier.pl -a ${test_app} -x " --load-vma=$test_lib " \
+			${sudo_cmd} $timeout_exe $PWD/tests/verifier/verifier.pl -a ${test_app} -x " --load-vma=$test_lib " \
 				-t ${test}:tc[1-9]$ -s ${test_ip} -l ${test_dir}/${test_name}.log \
 				-e " XLIO_TX_BUFS=20000 XLIO_RX_BUFS=20000 " \
 				--progress=0

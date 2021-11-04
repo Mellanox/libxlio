@@ -103,7 +103,7 @@ typedef hash_map<flow_spec_4t_key_t, rfs*> flow_spec_4t_map_t;
 
 struct counter_and_ibv_flows {
 	int counter;
-	std::vector<vma_ibv_flow*> ibv_flows;
+	std::vector<rfs_rule*> rfs_rule_vec;
 };
 
 // rule key based on ip and port
@@ -115,7 +115,7 @@ struct rule_key_t {
 	}
 };
 
-typedef std::tr1::unordered_map<uint64_t, struct counter_and_ibv_flows> rule_filter_map_t;
+typedef std::unordered_map<uint64_t, struct counter_and_ibv_flows> rule_filter_map_t;
 
 
 class ring_slave : public ring
@@ -140,6 +140,11 @@ public:
 
 	virtual bool        attach_flow(flow_tuple& flow_spec_5t, pkt_rcvr_sink* sink);
 	virtual bool        detach_flow(flow_tuple& flow_spec_5t, pkt_rcvr_sink* sink);
+
+#ifdef DEFINED_UTLS
+	/* Call this method in an RX ring. */
+	rfs_rule*           tls_rx_create_rule(flow_tuple &flow_spec_5t, xlio_tir *tir);
+#endif /* DEFINED_UTLS */
 
 	inline bool         is_simple() const { return m_type != RING_TAP; }
 	transport_type_t    get_transport_type() const { return m_transport_type; }

@@ -36,7 +36,6 @@
 
 #include <list>
 #include <vector>
-#include <tr1/unordered_map>
 #include <netinet/in.h>
 
 #include "config.h"
@@ -57,7 +56,6 @@
 
 // Send flow dst_entry map
 namespace std {
- namespace tr1 {
   template<>
    class hash<sock_addr>
    {
@@ -68,9 +66,8 @@ namespace std {
 		return tmp_key->hash();
 	}
    };
- }
 }
-typedef std::tr1::unordered_map<sock_addr, dst_entry*> dst_entry_map_t;
+typedef std::unordered_map<sock_addr, dst_entry*> dst_entry_map_t;
 
 
 struct mc_pending_pram
@@ -83,7 +80,7 @@ struct mc_pending_pram
 
 // Multicast pending list
 typedef std::list<struct mc_pending_pram> mc_pram_list_t;
-typedef std::tr1::unordered_map<in_addr_t, std::tr1::unordered_map<in_addr_t, int> > mc_memberships_map_t;
+typedef std::unordered_map<in_addr_t, std::unordered_map<in_addr_t, int> > mc_memberships_map_t;
 
 /**
  * @class udp sockinfo
@@ -100,6 +97,7 @@ public:
 
 	int 	prepare_to_connect(const sockaddr *__to, socklen_t __tolen);
 
+	int	bind_no_os();
 	int	bind(const struct sockaddr *__addr, socklen_t __addrlen);
 	int	connect(const struct sockaddr *__to, socklen_t __tolen);
 	int	getsockname(struct sockaddr *__name, socklen_t *__namelen);
@@ -172,6 +170,11 @@ public:
 	virtual bool prepare_to_close(bool process_shutdown = false);
 	virtual void update_header_field(data_updater *updater);
 
+#if defined(DEFINED_NGINX)
+	virtual void prepare_to_close_socket_pool(bool _push_pop);
+	bool is_closable() { return !m_is_for_socket_pool; }
+#endif
+
 private:
 
 	struct port_socket_t {
@@ -233,6 +236,7 @@ private:
 	void 		set_blocking(bool is_blocked);
 
 	void 		rx_ready_byte_count_limit_update(size_t n_rx_ready_bytes_limit); // Drop rx ready packets from head of queue
+	void 		drop_rx_ready_byte_count(size_t n_rx_bytes_limit);
 
 	void 		save_stats_threadid_rx(); // ThreadId will only saved if logger is at least in DEBUG(4) level
 	void 		save_stats_threadid_tx(); // ThreadId will only saved if logger is at least in DEBUG(4) level

@@ -41,7 +41,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <tr1/unordered_map>
+#include <unordered_map>
 
 /* Forward declaration */
 class mapping_cache;
@@ -58,17 +58,15 @@ struct file_uid_t {
 };
 
 namespace std {
-namespace tr1 {
 	template<>
 	struct hash<file_uid_t> {
 		std::size_t operator()(file_uid_t const& uid) const
 		{
-			std::size_t h1 = std::tr1::hash<unsigned long>()((unsigned long)uid.dev);
-			std::size_t h2 = std::tr1::hash<unsigned long>()((unsigned long)uid.ino);
+			std::size_t h1 = std::hash<unsigned long>()((unsigned long)uid.dev);
+			std::size_t h2 = std::hash<unsigned long>()((unsigned long)uid.ino);
 			return h1 ^ (h2 << 1);
 		}
 	};
-} /* namespace tr1 */
 } /* namespace std */
 
 typedef enum {
@@ -125,10 +123,10 @@ struct mapping_cache_stats {
 	uint32_t n_evicts;
 };
 
-typedef std::tr1::unordered_map<int, mapping_t*> mapping_fd_map_t;
-typedef std::tr1::unordered_map<int, mapping_t*>::iterator mapping_fd_map_iter_t;
-typedef std::tr1::unordered_map<file_uid_t, mapping_t*> mapping_uid_map_t;
-typedef std::tr1::unordered_map<file_uid_t, mapping_t*>::iterator mapping_uid_map_iter_t;
+typedef std::unordered_map<int, mapping_t*> mapping_fd_map_t;
+typedef std::unordered_map<int, mapping_t*>::iterator mapping_fd_map_iter_t;
+typedef std::unordered_map<file_uid_t, mapping_t*> mapping_uid_map_t;
+typedef std::unordered_map<file_uid_t, mapping_t*>::iterator mapping_uid_map_iter_t;
 typedef vma_list_t<mapping_t, mapping_t::mapping_node_offset> mapping_list_t;
 
 class mapping_cache : public lock_spin {

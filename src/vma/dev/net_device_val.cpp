@@ -928,7 +928,7 @@ void net_device_val::update_netvsc_slaves(int if_index, int if_flags)
 			m_slaves.push_back(s);
 
 			up_ib_ctx->set_ctx_time_converter_status(g_p_net_device_table_mgr->get_ctx_time_conversion_mode());
-			g_buffer_pool_rx->register_memory(s->p_ib_ctx);
+			g_buffer_pool_rx_rwqe->register_memory(s->p_ib_ctx);
 			g_buffer_pool_tx->register_memory(s->p_ib_ctx);
 			found = true;
 		}
@@ -1044,8 +1044,9 @@ int net_device_val::release_ring(resource_allocation_key *key)
 			for (size_t i = 0; i < num_ring_rx_fds; i++) {
 				int cq_ch_fd = ring_rx_fds_array[i];
 				BULLSEYE_EXCLUDE_BLOCK_START
-				if (unlikely(orig_os_api.epoll_ctl(g_p_net_device_table_mgr->global_ring_epfd_get(),
-						EPOLL_CTL_DEL, cq_ch_fd, NULL))) {
+				if (unlikely((orig_os_api.epoll_ctl(g_p_net_device_table_mgr->global_ring_epfd_get(),
+						EPOLL_CTL_DEL, cq_ch_fd, NULL)) &&
+						(!(errno == ENOENT || errno == EBADF)))) {
 					nd_logerr("Failed to delete RING notification fd to global_table_mgr_epfd (errno=%d %s)", errno, strerror(errno));
 				}
 				BULLSEYE_EXCLUDE_BLOCK_END

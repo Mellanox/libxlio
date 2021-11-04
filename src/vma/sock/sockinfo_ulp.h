@@ -36,11 +36,8 @@
 
 #include "socket_fd_api.h"		/* vma_tx_call_attr_t */
 #include "vma/proto/dst_entry.h"	/* vma_send_attr */
-
-#ifdef DEFINED_UTLS
-#include <mellanox/dpcp.h>
-#include <linux/tls.h>
-#endif /* DEFINED_UTLS */
+#include "vma/proto/tls.h"		/* xlio_tls_info */
+#include "vma/lwip/err.h"		/* err_t */
 
 #include <stdint.h>
 
@@ -48,22 +45,9 @@
  * TODO Make ULP layer generic (not TCP specific) and implement ULP manager.
  */
 
-#ifndef SOL_TLS
-#define SOL_TLS 282
-#endif
-#ifndef TCP_ULP
-#define TCP_ULP 31
-#endif
-
-#ifndef TLS_1_2_VERSION
-#define TLS_1_2_VERSION 0x0303
-#endif
-#ifndef TLS_CIPHER_AES_GCM_128
-#define TLS_CIPHER_AES_GCM_128 51
-#endif
-
 /* Forward declarations */
 class sockinfo_tcp;
+class xlio_tis;
 struct pbuf;
 
 class sockinfo_tcp_ulp {
@@ -79,12 +63,22 @@ public:
 	virtual int setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen);
 	virtual ssize_t tx(vma_tx_call_attr_t &tx_arg);
 	virtual int postrouting(struct pbuf *p, struct tcp_seg *seg, vma_send_attr &attr);
+	virtual bool handle_send_ret(ssize_t ret, struct tcp_seg *seg);
+
+	virtual err_t recv(struct pbuf *p) { NOT_IN_USE(p); return ERR_OK; };
 
 protected:
-	sockinfo_tcp *m_sock;
+	sockinfo_tcp *m_p_sock;
 };
 
 #ifdef DEFINED_UTLS
+
+enum xlio_utls_mode {
+	UTLS_MODE_TX = 1 << 0,
+	UTLS_MODE_RX = 1 << 1,
+};
+
+void xlio_tls_api_setup(void);
 
 class sockinfo_tcp_ulp_tls : public sockinfo_tcp_ulp {
 public:
@@ -100,16 +94,109 @@ public:
 	int setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen);
 	ssize_t tx(vma_tx_call_attr_t &tx_arg);
 	int postrouting(struct pbuf *p, struct tcp_seg *seg, vma_send_attr &attr);
+	bool handle_send_ret(ssize_t ret, struct tcp_seg *seg);
 
 private:
-	dpcp::tis *p_tis;
-	dpcp::dek *p_dek;
-	uint32_t m_tisn;
+	inline bool is_tx_tls13(void) {
+		return m_tls_info_tx.tls_version == TLS_1_3_VERSION;
+	}
+
+	int send_alert(uint8_t alert_type);
+	void terminate_session_fatal(uint8_t alert_type);
+
+	err_t tls_rx_consume_ready_packets(void);
+	err_t recv(struct pbuf *p);
+	void copy_by_offset(uint8_t *dst, uint32_t offset, uint32_t len);
+	uint16_t offset_to_host16(uint32_t offset);
+	int tls_rx_decrypt(struct pbuf *plist);
+	int tls_rx_encrypt(struct pbuf *plist);
+
+	uint64_t find_recno(uint32_t seqno);
+
+	static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
+	static void rx_comp_callback(void *arg);
+
+	enum tls_rx_state {
+		TLS_RX_SM_UNKNOWN = 0,
+		/* Initial state. The header of the first record is incomplete. */
+		TLS_RX_SM_HEADER,
+		/* The first unhandled record is incomplete. */
+		TLS_RX_SM_RECORD,
+		/* Terminal state when decryption/authentication fails. */
+		TLS_RX_SM_FAIL,
+	};
+
+	enum tls_decrypt_error {
+		TLS_DECRYPT_OK       =  0,
+		TLS_DECRYPT_INTERNAL = -1,
+		TLS_DECRYPT_BAD_MAC  = -2,
+	};
+
+	/* Values for the tls_offload field in CQE. */
+	enum tls_rx_decrypted {
+		TLS_RX_ENCRYPTED = 0x0,
+		TLS_RX_DECRYPTED = 0x1,
+		TLS_RX_RESYNC    = 0x2,
+		TLS_RX_AUTH_FAIL = 0x3,
+	};
+
+	enum tls_record_tracker_state {
+		TLS_TRACKER_START     = 0x0,
+		TLS_TRACKER_TRACKING  = 0x1,
+		TLS_TRACKER_SEARCHING = 0x2,
+	};
+
+	enum tls_auth_state {
+		TLS_AUTH_NO_OFFLOAD     = 0x0,
+		TLS_AUTH_OFFLOAD        = 0x1,
+		TLS_AUTH_AUTHENTICATION = 0x2,
+	};
+
+	ring *m_p_tx_ring;
+	ring *m_p_rx_ring;
+
+	/* Crypto info provided by application. */
+	struct xlio_tls_info m_tls_info_tx;
+	struct xlio_tls_info m_tls_info_rx;
+
+	/* TX specific fields */
+	xlio_tis *m_p_tis;
+
+	/* Whether offload is configured. */
+	bool m_is_tls_tx;
+	bool m_is_tls_rx;
+	/* TX flow expects in-order TCP segments. */
 	uint32_t m_expected_seqno;
-	bool m_is_tls;
-	uint64_t m_next_record_number;
-	uint8_t m_iv[8];
-	struct tls12_crypto_info_aes_gcm_128 m_crypto_info;
+	/* Track TX record number for TX resync flow. */
+	uint64_t m_next_recno_tx;
+
+	/* RX specific fields */
+	xlio_tir *m_p_tir;
+
+	/* OpenSSL objects for SW decryption. */
+	void *m_p_evp_cipher;
+	void *m_p_cipher_ctx;
+
+	/* List of RX buffers that contain unhandled records. */
+	vma_desc_list_t m_rx_bufs;
+	/* Record number of current or incomplete TLS record. */
+	uint64_t m_next_recno_rx;
+	/* Offset of the first unhandled record. */
+	uint32_t m_rx_offset;
+	/* Size of the first unhandled record. */
+	uint32_t m_rx_rec_len;
+	/* Number of bytes received after m_rx_offset. */
+	uint32_t m_rx_rec_rcvd;
+	/* State machine for TLS RX stream. */
+	enum tls_rx_state m_rx_sm;
+	/* Refused data by sockinfo_tcp::rx_lwip_cb() to be retried. */
+	struct pbuf *m_refused_data;
+	/* TLS flow steering rule. Created from an existing TCP rfs object. */
+	rfs_rule *m_rx_rule;
+	/* Buffer to hold GET_PSV data during resync. */
+	mem_buf_desc_t *m_rx_psv_buf;
+	/* Record number where resync request was received. */
+	uint64_t m_rx_resync_recno;
 };
 
 #endif /* DEFINED_UTLS */

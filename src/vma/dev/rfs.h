@@ -42,24 +42,25 @@
 #include "vma/proto/mem_buf_desc.h"
 #include "vma/proto/flow_tuple.h"
 
-
-#define rfs_logpanic 	__log_info_panic
-#define rfs_logerr	__log_info_err
-#define rfs_logwarn	__log_info_warn
-#define rfs_loginfo	__log_info_info
-#define rfs_logdbg	__log_info_dbg
-#define rfs_logfunc	__log_info_func
-#define rfs_logfuncall	__log_info_funcall
-
 #define RFS_SINKS_LIST_DEFAULT_LEN 32
 
 class qp_mgr;
 class pkt_rcvr_sink;
 
+/*
+ * Priority description:
+ *  2 - 3T rules
+ *  1 - 5T/4T rules
+ *  0 - 5T TLS rules
+ *
+ * TLS rules must take over from TCP rules, but we want to keep the TCP rules in
+ * shadow for socket reuse feature.
+ */
+
 /* ETHERNET
  */
 typedef struct attach_flow_data_eth_ipv4_tcp_udp_t {
-	struct ibv_flow *                       ibv_flow;
+	rfs_rule*                               rfs_flow;
 	qp_mgr*                                 p_qp_mgr;
 	struct ibv_flow_attr_eth_ipv4_tcp_udp {
 		vma_ibv_flow_attr             attr;
@@ -73,7 +74,7 @@ typedef struct attach_flow_data_eth_ipv4_tcp_udp_t {
 			attr.size = sizeof(struct ibv_flow_attr_eth_ipv4_tcp_udp) - sizeof(flow_tag);			
 			attr.num_of_specs = 3;
 			attr.type = VMA_IBV_FLOW_ATTR_NORMAL;
-			attr.priority = 1; // almost highest priority, 0 is used for 5-tuple later
+			attr.priority = 2; // almost highest priority, 1 is used for 5-tuple later
 			attr.port = port;
 		}
 		inline void add_flow_tag_spec(void) {
@@ -82,7 +83,7 @@ typedef struct attach_flow_data_eth_ipv4_tcp_udp_t {
 		}
 	} ibv_flow_attr;
 	attach_flow_data_eth_ipv4_tcp_udp_t(qp_mgr* qp_mgr) :
-		ibv_flow(NULL),
+		rfs_flow(NULL),
 		p_qp_mgr(qp_mgr),
 		ibv_flow_attr(qp_mgr->get_port_num()) {}
 } attach_flow_data_eth_ipv4_tcp_udp_t;
@@ -90,7 +91,7 @@ typedef struct attach_flow_data_eth_ipv4_tcp_udp_t {
 /* IPOIB (MC)
  */
 typedef struct attach_flow_data_ib_v2_t {
-	struct ibv_flow *                       ibv_flow;
+	rfs_rule*                               rfs_flow;
 	qp_mgr*                                 p_qp_mgr;
 	struct ibv_flow_attr_ib_v2 {
 		vma_ibv_flow_attr             attr;
@@ -102,12 +103,12 @@ typedef struct attach_flow_data_ib_v2_t {
 			attr.size = sizeof(struct ibv_flow_attr_ib_v2);
 			attr.num_of_specs = 2;
 			attr.type = VMA_IBV_FLOW_ATTR_NORMAL;
-			attr.priority = 1; // almost highest priority, 0 is used for 5-tuple later
+			attr.priority = 2; // almost highest priority, 1 is used for 5-tuple later
 			attr.port = port;
 		}
 	} ibv_flow_attr;
 	attach_flow_data_ib_v2_t(qp_mgr* qp_mgr) :
-		ibv_flow(NULL),
+		rfs_flow(NULL),
 		p_qp_mgr(qp_mgr),
 		ibv_flow_attr(qp_mgr->get_port_num()) {}
 
@@ -115,7 +116,7 @@ typedef struct attach_flow_data_ib_v2_t {
 
 #ifdef DEFINED_IBV_FLOW_SPEC_IB
 typedef struct attach_flow_data_ib_v1_t {
-	struct ibv_flow *                       ibv_flow;
+	rfs_rule*                               rfs_flow;
 	qp_mgr*                                 p_qp_mgr;
 	struct ibv_flow_attr_ib_v1 {
 		vma_ibv_flow_attr             attr;
@@ -126,12 +127,12 @@ typedef struct attach_flow_data_ib_v1_t {
 			attr.size = sizeof(struct ibv_flow_attr_ib_v1);
 			attr.num_of_specs = 1;
 			attr.type = VMA_IBV_FLOW_ATTR_NORMAL;
-			attr.priority = 1; // almost highest priority, 0 is used for 5-tuple later
+			attr.priority = 2; // almost highest priority, 1 is used for 5-tuple later
 			attr.port = port;
 		}
 	} ibv_flow_attr;
 	attach_flow_data_ib_v1_t(qp_mgr* qp_mgr) :
-		ibv_flow(NULL),
+		rfs_flow(NULL),
 		p_qp_mgr(qp_mgr),
 		ibv_flow_attr(qp_mgr->get_port_num()) {}
 
@@ -141,7 +142,7 @@ typedef struct attach_flow_data_ib_v1_t {
 /* IPOIB (UC)
  */
 typedef struct attach_flow_data_ib_ipv4_tcp_udp_v2_t {
-	struct ibv_flow *                       ibv_flow;
+	rfs_rule*                               rfs_flow;
 	qp_mgr*                                 p_qp_mgr;
 	struct ibv_flow_attr_ib_ipv4_tcp_udp_v2 {
 
@@ -154,19 +155,19 @@ typedef struct attach_flow_data_ib_ipv4_tcp_udp_v2_t {
 			attr.size = sizeof(struct ibv_flow_attr_ib_ipv4_tcp_udp_v2);
 			attr.num_of_specs = 2;
 			attr.type = VMA_IBV_FLOW_ATTR_NORMAL;
-			attr.priority = 1; // almost highest priority, 0 is used for 5-tuple later
+			attr.priority = 2; // almost highest priority, 1 is used for 5-tuple later
 			attr.port = port;
 		}
 	} ibv_flow_attr;
 	attach_flow_data_ib_ipv4_tcp_udp_v2_t(qp_mgr* qp_mgr) :
-		ibv_flow(NULL),
+		rfs_flow(NULL),
 		p_qp_mgr(qp_mgr),
 		ibv_flow_attr(qp_mgr->get_port_num()) {}
 } attach_flow_data_ib_ipv4_tcp_udp_v2_t;
 
 #ifdef DEFINED_IBV_FLOW_SPEC_IB
 typedef struct attach_flow_data_ib_ipv4_tcp_udp_v1_t {
-	struct ibv_flow *                       ibv_flow;
+	rfs_rule*                               rfs_flow;
 	qp_mgr*                                 p_qp_mgr;
 	struct ibv_flow_attr_ib_ipv4_tcp_udp_v1 {
 
@@ -180,19 +181,19 @@ typedef struct attach_flow_data_ib_ipv4_tcp_udp_v1_t {
 			attr.size = sizeof(struct ibv_flow_attr_ib_ipv4_tcp_udp_v1);
 			attr.num_of_specs = 3;
 			attr.type = VMA_IBV_FLOW_ATTR_NORMAL;
-			attr.priority = 1; // almost highest priority, 0 is used for 5-tuple later
+			attr.priority = 2; // almost highest priority, 1 is used for 5-tuple later
 			attr.port = port;
 		}
 	} ibv_flow_attr;
 	attach_flow_data_ib_ipv4_tcp_udp_v1_t(qp_mgr* qp_mgr) :
-		ibv_flow(NULL),
+		rfs_flow(NULL),
 		p_qp_mgr(qp_mgr),
 		ibv_flow_attr(qp_mgr->get_port_num()) {}
 } attach_flow_data_ib_ipv4_tcp_udp_v1_t;
 #endif /* DEFINED_IBV_FLOW_SPEC_IB */
 
 typedef struct attach_flow_data_t {
-	vma_ibv_flow *                       ibv_flow;
+	rfs_rule*                            rfs_flow;
 	qp_mgr*                                 p_qp_mgr;
 	vma_ibv_flow_attr                    ibv_flow_attr;
 } attach_flow_data_t;
@@ -234,6 +235,9 @@ public:
 	 */
 	bool 			attach_flow(pkt_rcvr_sink *sink); // Add a sink. If this is the first sink --> map the sink and attach flow to QP
 	bool 			detach_flow(pkt_rcvr_sink *sink); // Delete a sink. If this is the last sink --> delete it and detach flow from QP
+#ifdef DEFINED_UTLS
+	rfs_rule*		create_rule(xlio_tir* tir, flow_tuple &flow_spec); // Create a duplicate rule which points to specific TIR, caller is owner of the rule
+#endif /* DEFINED_UTLS */
 
 	uint32_t 		get_num_of_sinks() const { return m_n_sinks_list_entries; }
 	virtual bool 		rx_dispatch_packet(mem_buf_desc_t* p_rx_wc_buf_desc, void* pv_fd_ready_array) = 0;
@@ -249,8 +253,8 @@ protected:
 	uint32_t		m_flow_tag_id; // Associated with this rule, set by attach_flow()
 	bool 			m_b_tmp_is_attached; // Only temporary, while ibcm calls attach_flow with no sinks...
 
-	bool 			create_ibv_flow(); // Attach flow to all qps
-	bool 			destroy_ibv_flow(); // Detach flow from all qps
+	bool 			create_flow(); // Attach flow to all queues
+	bool 			destroy_flow(); // Detach flow from all queues
 	bool 			add_sink(pkt_rcvr_sink* p_sink);
 	bool 			del_sink(pkt_rcvr_sink* p_sink);
 	virtual bool 		prepare_flow_spec() = 0;

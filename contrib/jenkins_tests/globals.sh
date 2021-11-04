@@ -1,18 +1,9 @@
 #!/bin/bash
 
+main()
+{
 WORKSPACE=${WORKSPACE:=$(pwd)}
 BUILD_NUMBER=${BUILD_NUMBER:=0}
-
-TARGET=${TARGET:=all}
-i=0
-if [ "$TARGET" == "all" -o "$TARGET" == "default" ]; then
-	target_list[$i]="default: --disable-tso --disable-nginx"
-	i=$((i+1))
-fi
-if [ "$TARGET" == "all" -o "$TARGET" == "extra" ]; then
-	target_list[$i]="extra: --enable-tso --enable-nginx"
-	i=$((i+1))
-fi
 
 # exit code
 rc=0
@@ -35,6 +26,9 @@ style_dir=${WORKSPACE}/${prefix}/style
 tool_dir=${WORKSPACE}/${prefix}/tool
 commit_dir=${WORKSPACE}/${prefix}/commit
 
+prj_lib=libxlio.so
+prj_service=xliod
+
 nproc=$(grep processor /proc/cpuinfo|wc -l)
 make_opt="-j$(($nproc / 2 + 1))"
 if [ $(command -v timeout >/dev/null 2>&1 && echo $?) ]; then
@@ -42,6 +36,7 @@ if [ $(command -v timeout >/dev/null 2>&1 && echo $?) ]; then
 fi
 
 trap "on_exit" INT TERM ILL KILL FPE SEGV ALRM
+}
 
 function on_exit()
 {
@@ -49,6 +44,7 @@ function on_exit()
     echo "[${0##*/}]..................exit code = $rc"
     pkill -9 sockperf
     pkill -9 xlio
+    pkill -9 ${prj_service}
 }
 
 function do_cmd()
@@ -84,6 +80,8 @@ function do_archive()
 #
 function do_module()
 {
+    [ -z "$1" ] && return
+
     echo "Checking module $1"
     if [[ $(module avail 2>&1 | grep "$1" -q > /dev/null || echo $?) ]]; then
 	    echo "[SKIP] module tool does not exist"
@@ -262,3 +260,70 @@ function do_get_ip()
         fi
     done
 }
+
+do_version_check()
+{
+    local version="$1" operator="$2" value="$3"
+    awk -vv1="$version" -vv2="$value" 'BEGIN {
+        split(v1, a, /\./); split(v2, b, /\./);
+        if (a[1] == b[1]) {
+            exit (a[2] '$operator' b[2]) ? 0 : 1
+        }
+        else {
+            exit (a[1] '$operator' b[1]) ? 0 : 1
+        }
+    }'
+}
+
+do_check_dpcp()
+{
+    local ret=0
+    local version=$(echo "${jenkins_ofed}" | cut -f1-2 -d.)
+
+    if do_version_check $version '<' '5.2' ; then
+        return
+    fi
+    echo "Checking dpcp usage"
+
+    ret=0
+    pushd $(pwd) > /dev/null 2>&1
+    dpcp_dir=${WORKSPACE}/${prefix}/dpcp
+    mkdir -p ${dpcp_dir} > /dev/null 2>&1
+    cd ${dpcp_dir}
+
+    set +e
+    if [ $ret -eq 0 ]; then
+        eval "timeout -s SIGKILL 20s git clone git@github.com:Mellanox/dpcp.git . " > /dev/null 2>&1
+        ret=$?
+    fi
+
+    if [ $ret -eq 0 ]; then
+        last_tag=$(git tag -l --format "%(refname:short)" --sort=-version:refname | head -n1)
+        if [ -z "$last_tag" ]; then
+            ret=1
+        fi
+    fi
+
+    if [ $ret -eq 0 ]; then
+        eval "git checkout $last_tag" > /dev/null 2>&1
+        ret=$?
+    fi
+
+    if [ $ret -eq 0 ]; then
+        eval "./autogen.sh && ./configure --prefix=${dpcp_dir}/install && make $make_opt install" > /dev/null 2>&1
+        ret=$?
+    fi
+    set -e
+
+    popd > /dev/null 2>&1
+    if [ $ret -eq 0 ]; then
+        eval "$1=${dpcp_dir}/install"
+        echo "dpcp: $last_tag : ${dpcp_dir}/install"
+    else
+        echo "dpcp: no"
+    fi
+}
+
+#######################################################
+#
+main "$@"

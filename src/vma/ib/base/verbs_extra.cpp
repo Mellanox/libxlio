@@ -292,7 +292,7 @@ int priv_ibv_query_flow_tag_supported(struct ibv_qp *qp, uint8_t port_num)
 	ft_attr.attr.size = sizeof(ft_attr);
 	ft_attr.attr.num_of_specs = 4;
 	ft_attr.attr.type = VMA_IBV_FLOW_ATTR_NORMAL;
-	ft_attr.attr.priority = 1; // almost highest priority, 0 is used for 5-tuple later
+	ft_attr.attr.priority = 2; // almost highest priority, 1 is used for 5-tuple later
 	ft_attr.attr.port = port_num;
 
 	// Set filters
@@ -333,7 +333,7 @@ int priv_ibv_create_flow_supported(struct ibv_qp *qp, uint8_t port_num)
 	cf_attr.attr.size = sizeof(cf_attr);
 	cf_attr.attr.num_of_specs = 2;
 	cf_attr.attr.type = VMA_IBV_FLOW_ATTR_NORMAL;
-	cf_attr.attr.priority = 1; // almost highest priority, 0 is used for 5-tuple later
+	cf_attr.attr.priority = 2; // almost highest priority, 1 is used for 5-tuple later
 	cf_attr.attr.port = port_num;
 
 	ibv_flow_spec_ipv4_set(&cf_attr.ipv4, INADDR_LOOPBACK, INADDR_LOOPBACK); // L3 filter

@@ -45,6 +45,14 @@
 #include "vma/proto/vma_lwip.h"
 #include "vma/xlio_extra.h"
 
+#if VLIST_DEBUG
+#define VLIST_DEBUG_CQ_MGR_PRINT_ERROR_IS_MEMBER do { 	\
+		if (buff->buffer_node.is_list_member())         \
+			cq_logwarn("Buffer is already a member in a list! id=[%s]", buff->buffer_node.list_id()); \
+		} while (0)
+#else
+#define VLIST_DEBUG_CQ_MGR_PRINT_ERROR_IS_MEMBER
+#endif
 
 class net_device_mgr;
 class ring;
@@ -142,14 +150,15 @@ public:
 	// CQ implements the Rx mem_buf_desc_owner.
 	// These callbacks will be called for each Rx buffer that passed processed completion
 	// Rx completion handling at the cq_mgr level is forwarding the packet to the ib_comm_mgr layer
-	void	mem_buf_desc_completion_with_error(mem_buf_desc_t* p_rx_wc_buf_desc);
-	void	mem_buf_desc_return_to_owner(mem_buf_desc_t* p_mem_buf_desc, void* pv_fd_ready_array = NULL);
+	virtual void	mem_buf_desc_return_to_owner(mem_buf_desc_t* p_mem_buf_desc, void* pv_fd_ready_array = NULL);
 
 	virtual void	add_qp_rx(qp_mgr* qp);
 	virtual void	del_qp_rx(qp_mgr *qp);
-	virtual uint32_t	clean_cq();
 	
 	virtual void 	add_qp_tx(qp_mgr* qp);
+	virtual void	del_qp_tx(qp_mgr *qp);
+
+	virtual uint32_t	clean_cq();
 
 	bool	reclaim_recv_buffers(descq_t *rx_reuse);
 	bool	reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst);
@@ -184,13 +193,14 @@ protected:
 	 */
 	mem_buf_desc_t* process_cq_element_tx(vma_ibv_wc* p_wce);
 	mem_buf_desc_t* process_cq_element_rx(vma_ibv_wc* p_wce);
-	void            reclaim_recv_buffer_helper(mem_buf_desc_t* buff);
+	virtual void    reclaim_recv_buffer_helper(mem_buf_desc_t* buff);
 
 	// Returns true if the given buffer was used,
 	//false if the given buffer was not used.
 	bool		compensate_qp_poll_success(mem_buf_desc_t* buff);
 	inline uint32_t process_recv_queue(void* pv_fd_ready_array = NULL);
 
+	virtual void 	statistics_print();
 	virtual void	prep_ibv_cq(vma_ibv_cq_init_attr &attr) const;
 	//returns list of buffers to the owner.
 	void		process_tx_buffer_list(mem_buf_desc_t* p_mem_buf_desc);
@@ -211,28 +221,29 @@ protected:
 	cq_stats_t* 		m_p_cq_stat;
 	transport_type_t	m_transport_type;
 	mem_buf_desc_t*		m_p_next_rx_desc_poll;
-	const uint32_t		m_n_sysvar_rx_prefetch_bytes_before_poll;
+	uint32_t		m_n_sysvar_rx_prefetch_bytes_before_poll;
 	const uint32_t		m_n_sysvar_rx_prefetch_bytes;
 	size_t			m_sz_transport_header;
 	ib_ctx_handler*		m_p_ib_ctx_handler;
 	const uint32_t		m_n_sysvar_rx_num_wr_to_post_recv;
+	descq_t			m_rx_pool;
+
+	/* This fields are needed to track internal memory buffers
+	 * represented as struct xlio_buff_t
+	 * from user application by special VMA extended API
+	 */
+	mem_buf_desc_t*	m_rx_buffs_rdy_for_free_head;
+	mem_buf_desc_t*	m_rx_buffs_rdy_for_free_tail;
+
 private:
 	struct ibv_comp_channel *m_comp_event_channel;
 	bool			m_b_notification_armed;
 	const uint32_t		m_n_sysvar_qp_compensation_level;
 	const uint32_t		m_rx_lkey;
 	const bool		m_b_sysvar_cq_keep_qp_full;
-	descq_t			m_rx_pool;
 	int32_t			m_n_out_of_free_bufs_warning;
 	cq_stats_t 		m_cq_stat_static;
 	static atomic_t		m_n_cq_id_counter;
-
-	/* This fields are needed to track internal memory buffers
-	 * represented as struct xlio_buff_t
-	 * from user application by special VMA extended API
-	 */
-	mem_buf_desc_t*		m_rx_buffs_rdy_for_free_head;
-	mem_buf_desc_t*		m_rx_buffs_rdy_for_free_tail;
 
 	void		handle_tcp_ctl_packets(uint32_t rx_processed, void* pv_fd_ready_array);
 
@@ -241,8 +252,6 @@ private:
 
 	// returns safe_mce_sys().qp_compensation_level buffers to global pool
 	void 		return_extra_buffers() __attribute__((noinline));
-
-	void		statistics_print();
 
 	//Finds and sets the local if to which the buff is addressed (according to qpn and vlan id).
 	inline void	find_buff_dest_local_if(mem_buf_desc_t * buff);

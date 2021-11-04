@@ -45,11 +45,12 @@
 #include "vma/event/event_handler_manager.h"
 #include <vma/sock/cleanable_obj.h>
 #include "vma/dev/ring_tap.h"
+#include <stack>
 
 typedef vma_list_t<socket_fd_api, socket_fd_api::pendig_to_remove_node_offset> sock_fd_api_list_t;
 typedef vma_list_t<epfd_info, epfd_info::epfd_info_node_offset> epfd_info_list_t;
 
-typedef std::tr1::unordered_map<pthread_t, int> offload_thread_rule_t;
+typedef std::unordered_map<pthread_t, int> offload_thread_rule_t;
 
 #if (MAX_DEFINED_LOG_LEVEL < DEFINED_VLOG_FINER)
 #define fdcoll_logfuncall(log_fmt, log_args...)         ((void)0)
@@ -141,8 +142,8 @@ public:
 	 */
 	inline bool set_immediate_os_sample(int fd);
 
-	inline void add_one_sockfd(int fd, socket_fd_api *p_sfd_api_obj);
-	inline void remove_pending_sockfd(socket_fd_api *p_sfd_api_obj);
+	inline void reuse_sockfd(int fd, socket_fd_api *p_sfd_api_obj);
+	inline void destroy_sockfd(socket_fd_api *p_sfd_api_obj);
 	/**
 	 * Get sock_fd_api (sockinfo or pipeinfo) by fd.
 	 */
@@ -186,6 +187,11 @@ public:
 	 */
 	void 			statistics_print(int fd, vlog_levels_t log_level);
 
+#if defined(DEFINED_NGINX)
+	bool pop_socket_pool(int& fd, bool& add_to_udp_pool, int type);
+	void push_socket_pool(socket_fd_api *sockfd);
+	void handle_socket_pool(int fd);
+#endif
 private:
 	template <typename cls>	int del(int fd, bool b_cleanup, cls **map_type);
 	template <typename cls>	inline cls* get(int fd, cls **map_type);
@@ -198,7 +204,7 @@ private:
 
 	epfd_info_list_t		m_epfd_lst;
 	//Contains fds which are in closing process
-	sock_fd_api_list_t              m_pendig_to_remove_lst;
+	sock_fd_api_list_t              m_pending_to_remove_lst;
 
 	const bool			m_b_sysvar_offloaded_sockets;
 
@@ -218,6 +224,13 @@ private:
 	void  				handle_timer_expired(void* user_data);
 
 	void 				statistics_print_helper(int fd, vlog_levels_t log_level);
+
+#if defined(DEFINED_NGINX)
+	bool m_use_socket_pool;
+	std::stack<socket_fd_api*> m_socket_pool;
+	int m_socket_pool_size;
+	int m_socket_pool_counter;
+#endif
 };
 
 
@@ -258,18 +271,19 @@ inline bool fd_collection::set_immediate_os_sample(int fd)
 	return false;
 }
 
-inline void fd_collection::add_one_sockfd(int fd, socket_fd_api *p_sfd_api_obj)
+inline void fd_collection::reuse_sockfd(int fd, socket_fd_api *p_sfd_api_obj)
 {
 	lock();
-	m_pendig_to_remove_lst.erase(p_sfd_api_obj);
+	m_pending_to_remove_lst.erase(p_sfd_api_obj);
 	m_p_sockfd_map[fd] = p_sfd_api_obj;
 	unlock();
 }
 
-inline void fd_collection::remove_pending_sockfd(socket_fd_api *p_sfd_api_obj)
+inline void fd_collection::destroy_sockfd(socket_fd_api *p_sfd_api_obj)
 {
 	lock();
-	m_pendig_to_remove_lst.erase(p_sfd_api_obj);
+	m_pending_to_remove_lst.erase(p_sfd_api_obj);
+	p_sfd_api_obj->clean_obj();
 	unlock();
 }
 

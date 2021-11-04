@@ -107,6 +107,7 @@ Example:
  XLIO DETAILS: Tx Prefetch Bytes              256                        [XLIO_TX_PREFETCH_BYTES]
  XLIO DETAILS: TCP Send Buffer size           1000000                    [XLIO_TCP_SEND_BUFFER_SIZE]
  XLIO DETAILS: Rx Mem Bufs                    200000                     [XLIO_RX_BUFS]
+ XLIO DETAILS: Rx Mem Buf size                0                          [XLIO_RX_BUF_SIZE]
  XLIO DETAILS: Rx QP WRE                      16000                      [XLIO_RX_WRE]
  XLIO DETAILS: Rx QP WRE Batching             64                         [XLIO_RX_WRE_BATCHING]
  XLIO DETAILS: Rx Byte Min Limit              65536                      [XLIO_RX_BYTES_MIN]
@@ -163,8 +164,12 @@ Example:
  XLIO DETAILS: IPOIB support                  Enabled                    [XLIO_IPOIB]
  XLIO DETAILS: SocketXtreme mode              Disabled                   [XLIO_SOCKETXTREME]
  XLIO DETAILS: TSO support                    Enabled                    [XLIO_TSO]
+ XLIO DETAILS: UTLS RX support                Enabled                    [XLIO_UTLS_RX]
+ XLIO DETAILS: UTLS TX support                Enabled                    [XLIO_UTLS_TX]
+ XLIO DETAILS: LRO support                    auto                       [XLIO_LRO]
  XLIO DETAILS: BF (Blue Flame)                Enabled                    [XLIO_BF]
  XLIO DETAILS: Src port stirde                2                          [XLIO_SRC_PORT_STRIDE]
+ XLIO DETAILS: Size of UDP socket pool        0                          [XLIO_NGINX_UDP_POOL_SIZE]
  XLIO DETAILS: Number of Nginx workers        0                          [XLIO_NGINX_WORKERS_NUM]
  XLIO DETAILS: fork() support                 Enabled                    [XLIO_FORK]
  XLIO DETAILS: close on dup2()                Enabled                    [XLIO_CLOSE_ON_DUP2]
@@ -456,6 +461,11 @@ Number Rx data buffer elements allocation for the processes. These data buffers
 may be used by all QPs on all HCAs
 Default value is 200000
 
+XLIO_RX_BUF_SIZE
+Size of Rx data buffer elements allocation.
+Can not be less then MTU (Maximum Transfer Unit) and greater than 0xFF00.
+Default value is calculated basing on maximum MTU.
+
 XLIO_RX_WRE
 Number of Work Request Elements allocated in all receive QP's.
 Default value is 16000
@@ -498,6 +508,33 @@ the sequence number and checksum fields creates TCP segment headers.
 Expected benefits: Throughput increase and CPU unload.
 Default value is 1 (Enable)
 
+XLIO_UTLS_RX
+UTLS provides TLS data path acceleration. This is achieved by offloading Linux
+kTLS API. Refer to your TLS library documentation for kTLS support information.
+When this parameter is enabled, XLIO offloads TLS RX path if possible.
+Default value is 1 (Enable)
+
+XLIO_UTLS_TX
+When this parameter is enabled, XLIO offloads TLS TX path through kTLS API if
+possible. See XLIO_UTLS_RX for details.
+Default value is 1 (Enable)
+
+XLIO_LRO
+Large receive offload (LRO) is a technique for increasing inbound throughput of
+high-bandwidth network connections by reducing central processing unit (CPU)
+overhead. It works by aggregating multiple incoming packets from a single stream
+into a larger buffer before they are passed higher up the networking stack,
+thus reducing the number of packets that must be processed.
+Default value: auto
+
+auto
+    Depends on ethtool setting and adapter ability.
+    See ethtool -k <eth0> | grep large-receive-offload
+on
+    Enabled in case adapter supports it
+off
+    Disabled
+
 XLIO_RX_POLL_INIT
 XLIO maps all UDP sockets as potential offloaded capable. Only after the
 ADD_MEMBERSHIP does the offload start to work and the CQ polling kicks in XLIO.
@@ -517,6 +554,13 @@ This parameter replaces the two old parameters: XLIO_RX_POLL_OS_RATIO and
 XLIO_RX_SKIP_OS
 Disable with 0
 Default value is 100
+
+XLIO_NGINX_UDP_POOL_SIZE
+The above parameter defines the size of UDP socket pool for NGINX.
+For any value different that 0 - close() socket will not destroy the socket, but will
+place it in a pool for next socket UDP creation.
+Disable with 0
+Default value is 0
 
 XLIO_HW_TS_CONVERSION
 The above parameter defines the time stamp conversion method.
@@ -616,6 +660,31 @@ XLIO_MC_FORCE_FLOWTAG
 Forces the use of flow tag acceleration for multicast flows where setsockopt(SO_REUSEADDR) is
 set.
 Applicable if there are no other sockets opened for the same flow in system.
+
+XLIO_STRQ
+Enable/Disable Striding Receive Queues.
+Each WQE in a Striding RQ may receive several packets.
+Thus, the WQE buffer size is controlled by XLIO_STRQ_NUM_STRIDES x XLIO_STRQ_STRIDE_SIZE_BYTES
+Values: on, off
+Default: on (Enabled)
+
+XLIO_STRQ_NUM_STRIDES
+The number of strides in each receive WQE. Must be power of two and in range [512 - 65536]
+Default: 16384
+
+XLIO_STRQ_STRIDE_SIZE_BYTES
+The size, in bytes, of each stride in a receive WQE. Must be power of two and in range [64 - 8192]
+Default: 512
+
+XLIO_STRQ_STRIDES_NUM_BUFS
+The initial number of stride objects in the strides pool. Each received packet is represented by a stride object.
+Each stride object points to a portion of a buffer allocated for a receive WQE.
+When the pool runs out of stride objects it exapnds by another portion of this value.
+Default: 262144
+
+XLIO_STRQ_STRIDES_COMPENSATION_LEVEL
+Number of spare stride objects a CQ holds to allow faster allocation of a stride object when a packet arrives.
+Default: 16384
 
 XLIO_SELECT_POLL
 The duration in micro-seconds (usec) in which to poll the hardware on Rx path before

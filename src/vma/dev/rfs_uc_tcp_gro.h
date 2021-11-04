@@ -74,7 +74,7 @@ public:
 private:
 
 	inline void flush_gro_desc(void* pv_fd_ready_array);
-	inline void add_packet(mem_buf_desc_t* mem_buf_desc, iphdr* p_ip_h, tcphdr* p_tcp_h);
+	inline bool add_packet(mem_buf_desc_t* mem_buf_desc, iphdr* p_ip_h, tcphdr* p_tcp_h);
 	inline void init_gro_desc(mem_buf_desc_t* mem_buf_desc, iphdr* p_ip_h, tcphdr* p_tcp_h);
 	inline bool tcp_ip_check(mem_buf_desc_t* mem_buf_desc, iphdr* p_ip_h, tcphdr* p_tcp_h);
 	inline bool timestamp_check(tcphdr* p_tcp_h);

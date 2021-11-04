@@ -47,6 +47,10 @@
             default: true
             description: "Run static analysis using cppcheck tool."
         - bool:
+            name: "do_csbuild"
+            default: true
+            description: "Run static analysis using csbuild tool."
+        - bool:
             name: "do_service"
             default: true
             description: "Verify service."
@@ -93,14 +97,14 @@
             status-add-test-results: true
             auth-id: '549927eb-7f38-4a8f-997a-81dd63605782'
             org-list: ["Mellanox"]
-            white-list: ["swx-jenkins","swx-jenkins2","swx-jenkins3","mike-dubman","mellanox-github"]
+            white-list: ["swx-jenkins","swx-jenkins2","swx-jenkins3","mellanox-github"]
             allow-whitelist-orgs-as-admins: true
             cancel-builds-on-update: true
     pipeline-scm:
         scm:
             - git:
                 url: "{jjb_git}"
-                credentials-id: '6114d2a2-9b23-46d4-ab25-a13196894197'
+                credentials-id: 'ef94fa95-5480-41ea-863f-6525aace5bc9'
                 branches: ['$sha1']
                 shallow-clone: true
                 depth: 2

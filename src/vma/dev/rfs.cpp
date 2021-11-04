@@ -36,6 +36,7 @@
 #include "vma/dev/qp_mgr.h"
 #include "vma/dev/ring_simple.h"
 #include "vma/sock/sock-redirect.h"
+#include <cinttypes>
 
 #define MODULE_NAME 		"rfs"
 
@@ -64,7 +65,9 @@ inline void rfs::filter_keep_attached(rule_filter_map_t::iterator& filter_iter)
 
 	//save all ibv_flow rules only for filter
 	for (size_t i = 0; i < m_attach_flow_data_vector.size(); i++) {
-		filter_iter->second.ibv_flows.push_back(m_attach_flow_data_vector[i]->ibv_flow);
+		filter_iter->second.rfs_rule_vec.push_back(m_attach_flow_data_vector[i]->rfs_flow);
+		rfs_logdbg("filter_keep_attached copying rfs_flow, Tag: %" PRIu32 ", Flow: %s, Index: %zu, Ptr: %p, Counter: %" PRIu64, 
+			m_flow_tag_id, m_flow_tuple.to_str(), i, m_attach_flow_data_vector[i]->rfs_flow, filter_iter->first);
 	}
 }
 
@@ -81,15 +84,17 @@ inline void rfs::prepare_filter_detach(int& filter_counter, bool decrease_counte
 
 	if (decrease_counter) {
 		filter_iter->second.counter = filter_iter->second.counter > 0 ? filter_iter->second.counter - 1 : 0;
+		rfs_logdbg("prepare_filter_detach decrement counter, Tag: %" PRIu32 ", Flow: %s, Counter: %" PRIu64, 
+			m_flow_tag_id, m_flow_tuple.to_str(), filter_iter->first);
 	}
 
 	filter_counter = filter_iter->second.counter;
-	//if we do not need to detach_ibv_flow, still mark this rfs as detached
+	//if we do not need to destroy rfs_rule, still mark this rfs as detached
 	m_b_tmp_is_attached = (filter_counter == 0) && m_b_tmp_is_attached;
-	if (filter_counter != 0 || filter_iter->second.ibv_flows.empty()) return;
+	if (filter_counter != 0 || filter_iter->second.rfs_rule_vec.empty()) return;
 
 	BULLSEYE_EXCLUDE_BLOCK_START
-	if (m_attach_flow_data_vector.size() != filter_iter->second.ibv_flows.size()) {
+	if (m_attach_flow_data_vector.size() != filter_iter->second.rfs_rule_vec.size()) {
 		//sanity check for having the same number of qps on all rfs objects
 		rfs_logerr("all rfs objects in the ring should have the same number of elements");
 	}
@@ -97,10 +102,12 @@ inline void rfs::prepare_filter_detach(int& filter_counter, bool decrease_counte
 
 	for (size_t i = 0; i < m_attach_flow_data_vector.size(); i++) {
 		BULLSEYE_EXCLUDE_BLOCK_START
-		if (m_attach_flow_data_vector[i]->ibv_flow && m_attach_flow_data_vector[i]->ibv_flow != filter_iter->second.ibv_flows[i]) {
+		if (m_attach_flow_data_vector[i]->rfs_flow && m_attach_flow_data_vector[i]->rfs_flow != filter_iter->second.rfs_rule_vec[i]) {
 			rfs_logerr("our assumption that there should be only one rule for filter group is wrong");
-		} else if (filter_iter->second.ibv_flows[i]) {
-			m_attach_flow_data_vector[i]->ibv_flow = filter_iter->second.ibv_flows[i];
+		} else if (filter_iter->second.rfs_rule_vec[i]) {
+			m_attach_flow_data_vector[i]->rfs_flow = filter_iter->second.rfs_rule_vec[i];
+			rfs_logdbg("prepare_filter_detach copying rfs_flow, Tag: %" PRIu32 ", Flow: %s, Index: %zu, Ptr: %p, Counter: %" PRIu64, 
+				m_flow_tag_id, m_flow_tuple.to_str(), i, m_attach_flow_data_vector[i]->rfs_flow, filter_iter->first);
 		}
 		BULLSEYE_EXCLUDE_BLOCK_END
 	}
@@ -136,13 +143,13 @@ rfs::~rfs()
 		prepare_filter_detach(counter, true);
 		if (counter == 0) {
 			if (m_p_ring->is_simple()) {
-				destroy_ibv_flow();
+				destroy_flow();
 			}
 			m_p_rule_filter->m_map.erase(m_p_rule_filter->m_key);
 		}
 	} else if (m_b_tmp_is_attached) {
 		if (m_p_ring->is_simple()) {
-			destroy_ibv_flow();
+			destroy_flow();
 		}
 	}
 
@@ -242,7 +249,7 @@ bool rfs::attach_flow(pkt_rcvr_sink *sink)
 	// We also check if this is the FIRST sink so we need to call ibv_attach_flow
 	if ((m_n_sinks_list_entries == 0) && (!m_b_tmp_is_attached) && (filter_counter == 1)) {
 		if (m_p_ring->is_simple() &&
-				!create_ibv_flow()) {
+		        !create_flow()) {
 			return false;
 		}
 		filter_keep_attached(filter_iter);
@@ -250,7 +257,7 @@ bool rfs::attach_flow(pkt_rcvr_sink *sink)
 		rfs_logdbg("rfs: Joining existing flow");
 #if defined(DEFINED_NGINX)
 		if (g_b_add_second_4t_rule) { // This is second 4 tuple rule for the same worker (when num of workers is not power of two)
-			create_ibv_flow();
+			create_flow();
 			rfs_logdbg("Added second rule to nginx worker: %d", g_worker_index);
 		}
 #endif
@@ -284,44 +291,77 @@ bool rfs::detach_flow(pkt_rcvr_sink *sink)
 	// We also need to check if this is the LAST sink so we need to call ibv_attach_flow
 	if (m_p_ring->is_simple() &&
 			(m_n_sinks_list_entries == 0) && (filter_counter == 0)) {
-		ret = destroy_ibv_flow();
+		ret = destroy_flow();
 	}
 
 	return ret;
 }
 
-bool rfs::create_ibv_flow()
+#ifdef DEFINED_UTLS
+rfs_rule* rfs::create_rule(xlio_tir* tir, flow_tuple &flow_spec)
+{
+	rfs_rule *rule = NULL;
+
+	if (m_attach_flow_data_vector.size() == 1) {
+		attach_flow_data_t* iter = m_attach_flow_data_vector[0];
+		attach_flow_data_eth_ipv4_tcp_udp_t::ibv_flow_attr_eth_ipv4_tcp_udp *p_attr =
+			reinterpret_cast<attach_flow_data_eth_ipv4_tcp_udp_t::ibv_flow_attr_eth_ipv4_tcp_udp*>(&iter->ibv_flow_attr);
+
+		if (unlikely(p_attr->eth.type != VMA_IBV_FLOW_SPEC_ETH)) {
+			// We support only ETH rules for now
+			return NULL;
+		}
+
+		attach_flow_data_eth_ipv4_tcp_udp_t::ibv_flow_attr_eth_ipv4_tcp_udp flow_attr(*p_attr);
+		if (!m_flow_tuple.is_5_tuple()) {
+			// We need the most specific 5T rule
+			flow_attr.ipv4.val.src_ip = flow_spec.get_src_ip();
+			flow_attr.ipv4.mask.src_ip = FS_MASK_ON_32;
+			flow_attr.tcp_udp.val.src_port = flow_spec.get_src_port();
+			flow_attr.tcp_udp.mask.src_port = FS_MASK_ON_16;
+		}
+		// The highest priority to override TCP rule
+		flow_attr.attr.priority = 0;
+		rule = iter->p_qp_mgr->create_rfs_rule(flow_attr.attr, tir);
+	}
+	return rule;
+}
+#endif /* DEFINED_UTLS */
+
+bool rfs::create_flow()
 {
 	for (size_t i = 0; i < m_attach_flow_data_vector.size(); i++) {
 		attach_flow_data_t* iter = m_attach_flow_data_vector[i];
-		iter->ibv_flow = vma_ibv_create_flow(iter->p_qp_mgr->get_ibv_qp(), &(iter->ibv_flow_attr));
-		if (!iter->ibv_flow) {
-			rfs_logerr("Create of QP flow ID (tag: %d) failed with flow %s (errno=%d - %m)",
-				   m_flow_tag_id, m_flow_tuple.to_str(), errno); //TODO ALEXR - Add info about QP, spec, priority into log msg
+		iter->rfs_flow = iter->p_qp_mgr->create_rfs_rule(iter->ibv_flow_attr, NULL);
+		if (!iter->rfs_flow) {
+			rfs_logerr("Create RFS flow failed, Tag: %" PRIu32 ", Flow: %s, Priority: %" PRIu16 ", errno: %d - %m",
+				   m_flow_tag_id, m_flow_tuple.to_str(), iter->ibv_flow_attr.priority, errno); //TODO ALEXR - Add info about QP, spec into log msg
 			return false;
 		}
 	}
 
 	m_b_tmp_is_attached = true;
-	rfs_logdbg("ibv_create_flow succeeded with flow %s, tag_id: %d", m_flow_tuple.to_str(), m_flow_tag_id);
+	rfs_logdbg("Create RFS flow succeeded, Tag: %" PRIu32 ", Flow: %s", m_flow_tag_id, m_flow_tuple.to_str());
+
 	return true;
 }
 
-bool rfs::destroy_ibv_flow()
+bool rfs::destroy_flow()
 {
 	for (size_t i = 0; i < m_attach_flow_data_vector.size(); i++) {
 		attach_flow_data_t* iter = m_attach_flow_data_vector[i];
-		if (unlikely(!iter->ibv_flow)) {
-			rfs_logdbg("Destroy of QP flow ID failed - QP flow ID that was not created. This is OK for MC same ip diff port scenario."); //TODO ALEXR - Add info about QP, spec, priority into log msg
-		}
-		if (iter->ibv_flow) {
-			IF_VERBS_FAILURE_EX(vma_ibv_destroy_flow(iter->ibv_flow), EIO) {
-				rfs_logerr("Destroy of QP flow ID failed"); //TODO ALEXR - Add info about QP, spec, priority into log msg
-			} ENDIF_VERBS_FAILURE;
+		if (unlikely(!iter->rfs_flow)) {
+			rfs_logdbg("Destroy RFS flow failed, RFS flow was not created. "
+				"This is OK for MC same ip diff port scenario. Tag: %" PRIu32 ", Flow: %s, Priority: %" PRIu16,
+				m_flow_tag_id, m_flow_tuple.to_str(), iter->ibv_flow_attr.priority); //TODO ALEXR - Add info about QP, spec into log msg
+		} else {
+			delete iter->rfs_flow;
+			iter->rfs_flow = nullptr;
 		}
 	}
 
 	m_b_tmp_is_attached = false;
-	rfs_logdbg("ibv_destroy_flow with flow %s", m_flow_tuple.to_str());
+	rfs_logdbg("Destroy RFS flow succeeded, Tag: %" PRIu32 ", Flow: %s", m_flow_tag_id, m_flow_tuple.to_str());
+
 	return true;
 }

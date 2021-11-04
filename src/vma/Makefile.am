@@ -65,14 +65,18 @@ libxlio_la_SOURCES := \
 	dev/buffer_pool.cpp \
 	dev/cq_mgr.cpp \
 	dev/cq_mgr_mlx5.cpp \
+	dev/cq_mgr_mlx5_strq.cpp \
 	dev/dm_mgr.cpp \
 	dev/qp_mgr.cpp \
 	dev/qp_mgr_eth_mlx5.cpp \
+	dev/qp_mgr_eth_mlx5_dpcp.cpp \
 	dev/gro_mgr.cpp \
 	dev/rfs.cpp \
 	dev/rfs_uc.cpp \
 	dev/rfs_uc_tcp_gro.cpp \
 	dev/rfs_mc.cpp \
+	dev/rfs_rule_ibv.cpp \
+	dev/rfs_rule_dpcp.cpp \
 	dev/time_converter.cpp \
 	dev/time_converter_ptp.cpp \
 	dev/time_converter_ib_ctx.cpp \
@@ -165,6 +169,7 @@ libxlio_la_SOURCES := \
 	dev/buffer_pool.h \
 	dev/cq_mgr.h \
 	dev/cq_mgr_mlx5.h \
+	dev/cq_mgr_mlx5_strq.h \
 	dev/dm_mgr.h \
 	dev/gro_mgr.h \
 	dev/ib_ctx_handler_collection.h \
@@ -177,10 +182,14 @@ libxlio_la_SOURCES := \
 	dev/net_device_val.h \
 	dev/qp_mgr.h \
 	dev/qp_mgr_eth_mlx5.h \
+	dev/qp_mgr_eth_mlx5_dpcp.h \
 	dev/rfs.h \
 	dev/rfs_mc.h \
 	dev/rfs_uc.h \
 	dev/rfs_uc_tcp_gro.h \
+	dev/rfs_rule.h \
+	dev/rfs_rule_ibv.h \
+	dev/rfs_rule_dpcp.h \
 	dev/ring.h \
 	dev/ring_bond.h \
 	dev/ring_slave.h \
@@ -264,6 +273,7 @@ libxlio_la_SOURCES := \
 	proto/rule_entry.h \
 	proto/rule_table_mgr.h \
 	proto/rule_val.h \
+	proto/tls.h \
 	proto/vma_lwip.h \
 	\
 	sock/cleanable_obj.h \

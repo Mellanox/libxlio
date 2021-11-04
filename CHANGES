@@ -1,3 +1,86 @@
+Version 1.1.8-1:
+Date + Time 2021-11-04
+=============================================================
+Fixed:
+        - RM #2842211 Split rexmit segment into single-pbuf segments
+        - RM #2842211 TLS data corruption, preventing redundant resyncs
+
+Version 1.1.7-1:
+Date + Time 2021-11-03
+=============================================================
+Fixed:
+        - RM #2842211 TLS data corruption fix for ring silent dropped wqes
+        - RM #2833527 Limit strides in STRQ to 512
+
+Version 1.1.6-1:
+Date + Time 2021-11-01
+=============================================================
+Fixed:
+        - RM #2621445 Reset TLS layer only after close()
+        - RM #2688021 Insert fence after TLS configuration
+        - RM #2355757 Add numeric value support for XLIO_LRO and XLIO_STRQ
+
+Version 1.1.5-1:
+Date + Time 2021-10-29
+=============================================================
+Fixed:
+        - RM #2621445 Improve TLS RX flow
+        - RM #2838719 Fix segfault in sendmsg() for empty iov
+        - RM #2833836 Fix compilation issue --disable-tso --with-dpcp
+
+Version 1.1.4-1:
+Date + Time 2021-10-25
+=============================================================
+Added:
+        - RM #2621445 Support Rx TLS HW offload
+        - RM #2811477 Support of TLS v1.3 in TX path
+Fixed:
+        - RM #2355757 Changing XLIO_STRQ_ENABLED env var to XLIO_STRQ
+
+Version 1.1.3-1:
+Date + Time 2021-10-25
+=============================================================
+Fixed:
+        - RM #2821060 Fix for NGINX quic with non-power of 2 workers
+        - RM #2824476 Fix for unsafe m_pendig_to_remove_lst processing
+        - RM #2436876 Remove C++ Technical Report 1 (TR1) usage
+
+Version 1.1.2-1:
+Date + Time 2021-10-20
+=============================================================
+Added:
+        - RM #2355757 Striding-RQ support
+        - RM #2621445 Move knowledge of DevX out of sockets
+        - RM #2436876 Add C++11 Support requirement to a compiler
+Fixed:
+        - RM #2822230 Suppress unwanted error when cq fd is removed
+
+Version 1.1.1-1:
+Date + Time 2021-10-11
+=============================================================
+Added:
+        - RM #2649476 Add support for NGINX Proxy mode
+        - RM #2568769 Add QUIC support for NGINX
+Fixed:
+        - RM #2737636 Fixing TCP hanging CLOSED sockets
+
+Version 1.1.0-1:
+Date + Time 2021-10-07
+=============================================================
+Added:
+        - RM #2355713 Add HW LRO support
+        - RM #2756765 Add AES-256 cipher support to uTLS
+Fixed:
+        - RM #2740920 Add support for fortified glibc functions
+        - RM #2580679 Fix handling socket close flow
+        - RM #2801220 Don't miss ready EPOLLERR event
+        - RM #2789330 XLIO_UDP_3T_RULES flag is not taken into account
+        - RM #2722518 Merge only pbufs of the same type in a segment
+        - RM #2732799 delete dst_entry if already exists in udp connect
+        - RM #2716793 Handle SYN-ACK on TIME-WAIT sockets
+        - RM #2736737 Resolve crash during finalization
+        - RM #2690914 Fix data corruption in shrink operation
+
 Version 1.0.6-1:
 Date + Time 2021-06-10
 =============================================================

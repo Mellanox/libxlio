@@ -104,12 +104,14 @@ gtest_SOURCES = \
 	tcp/tcp_sendfile.cc \
 	tcp/tcp_send_zc.cc \
 	tcp/tcp_tls.cc \
+	tcp/tcp_rfs.cc \
 	\
 	udp/udp_base.cc \
 	udp/udp_bind.cc \
 	udp/udp_connect.cc \
 	udp/udp_send.cc \
 	udp/udp_sendto.cc \
+	udp/udp_rfs.cc \
 	\
 	vma/vma_base.cc \
 	vma/vma_ring.cc \

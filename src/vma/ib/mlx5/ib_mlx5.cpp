@@ -55,10 +55,15 @@ int vma_ib_mlx5_get_qp(struct ibv_qp *qp, vma_ib_mlx5_qp_t *mlx5_qp, uint32_t fl
 
 	obj.qp.in = qp;
 	obj.qp.out = &dqp;
+#if defined(DEFINED_DV_RAW_QP_HANDLES)
+	dqp.comp_mask |= MLX5DV_QP_MASK_RAW_QP_HANDLES;
+#endif /* DEFINED_DV_RAW_QP_HANDLES */
 	ret = vma_ib_mlx5dv_init_obj(&obj, MLX5DV_OBJ_QP);
 	if (ret != 0) {
 		goto out;
 	}
+
+	memset(mlx5_qp, 0, sizeof(*mlx5_qp));
 	VALGRIND_MAKE_MEM_DEFINED(&dqp, sizeof(dqp));
 	mlx5_qp->qp           = qp;
 	mlx5_qp->qpn          = qp->qp_num;
@@ -77,6 +82,12 @@ int vma_ib_mlx5_get_qp(struct ibv_qp *qp, vma_ib_mlx5_qp_t *mlx5_qp, uint32_t fl
 	mlx5_qp->bf.reg       = dqp.bf.reg;
 	mlx5_qp->bf.size      = dqp.bf.size;
 	mlx5_qp->bf.offset    = 0;
+#if defined(DEFINED_DV_RAW_QP_HANDLES)
+	mlx5_qp->tirn         = dqp.tirn;
+	mlx5_qp->tisn         = dqp.tisn;
+	mlx5_qp->rqn          = dqp.rqn;
+	mlx5_qp->sqn          = dqp.sqn;
+#endif /* DEFINED_DV_RAW_QP_HANDLES */
 
 	ret = ibv_query_qp(qp, &tmp_ibv_qp_attr, attr_mask, &tmp_ibv_qp_init_attr);
 	if (ret != 0) {
@@ -134,7 +145,7 @@ int vma_ib_mlx5_get_cq(struct ibv_cq *cq, vma_ib_mlx5_cq_t *mlx5_cq)
 	/* Move buffer forward for 128b CQE, so we would get pointer to the 2nd
 	 * 64b when polling.
 	 */
-	mlx5_cq->cq_buf       = (uint8_t *)dcq.buf + dcq.cqe_size - sizeof(struct mlx5_cqe64);
+	mlx5_cq->cq_buf       = (uint8_t *)dcq.buf + dcq.cqe_size - sizeof(struct vma_mlx5_cqe);
 
     return 0;
 }
@@ -202,6 +213,9 @@ out:
 		 * packets in illegal states.
 		 * This is only for Raw Packet QPs since they are represented
 		 * differently in the hardware.
+		 * For DPCP RQ, the RQ state is switched along with the QP-unused-rq,
+		 * and in such case if RQ.State == RST, doorbells are not processed anyway
+		 * and for RDY state without a TIR incomming messages never reach RQ (PRM 8.14.1).
 		 */
 		if (likely(!((mlx5_qp->qp->qp_type == IBV_QPT_RAW_PACKET ||
 				mlx5_qp->flags & VMA_IB_MLX5_QP_FLAGS_USE_UNDERLAY) &&

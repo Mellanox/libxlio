@@ -44,8 +44,25 @@
 
 #define MODULE_NAME 	"bpool"
 
-buffer_pool *g_buffer_pool_rx = NULL;
+// A pointer to differentiate between g_buffer_pool_rx_stride and g_buffer_pool_rx_rwqe 
+// and create an abstraction to the layers above device layer for cases when Striding RQ is on/off.
+// When Striding RQ is on, it points to g_buffer_pool_rx_stride since the upper layers work with strides.
+// When Striding RQ is off, it points to g_buffer_pool_rx_rwqe since the upper layers work with RWQEs buffers themselves.
+buffer_pool *g_buffer_pool_rx_ptr = NULL;
+
+// This buffer-pool holds buffer descriptors which represent strides in strided RWQEs.
+// These buffers descriptos do not actually own a buffer. 
+// Each such descriptor points into a portion of a buffer of a g_buffer_pool_rx_rwqe descriptor.
+buffer_pool *g_buffer_pool_rx_stride = NULL;
+
+// This buffer-pool holds the actual buffers for receive WQEs.
+buffer_pool *g_buffer_pool_rx_rwqe = NULL;
+
+// This buffer-pool holds the actual buffers for send WQEs.
 buffer_pool *g_buffer_pool_tx = NULL;
+
+// This buffer-pool holds buffer descriptors for zero copy TX.
+// These buffer descriptors do not actually own a buffer.
 buffer_pool *g_buffer_pool_zc = NULL;
 
 buffer_pool_area::buffer_pool_area(size_t buffer_nr)
@@ -68,7 +85,15 @@ inline void buffer_pool::put_buffer_helper(mem_buf_desc_t *buff)
 		__log_info_warn("Buffer is already a member in a list! id=[%s]", buff->buffer_node.list_id());
 	}
 #endif
+
+	if (buff->lwip_pbuf.pbuf.desc.attr == PBUF_DESC_STRIDE) {
+		mem_buf_desc_t* rwqe = reinterpret_cast<mem_buf_desc_t*>(buff->lwip_pbuf.pbuf.desc.mdesc);
+		if (buff->strides_num == rwqe->add_ref_count(-buff->strides_num)) // Is last stride.
+			g_buffer_pool_rx_rwqe->put_buffers_thread_safe(rwqe);
+	}
+
 	buff->p_next_desc = m_p_head;
+	assert(buff->lwip_pbuf.pbuf.type != PBUF_ZEROCOPY || this == g_buffer_pool_zc || g_buffer_pool_zc == NULL);
 	free_lwip_pbuf(&buff->lwip_pbuf);
 	m_p_head = buff;
 	m_n_buffers++;
@@ -92,7 +117,9 @@ void buffer_pool::expand(size_t count, void *data, size_t buf_size,
 	ptr_desc = (uint8_t *)area->m_area;
 
 	for (size_t i = 0; i < count; ++i) {
-		desc = new (ptr_desc) mem_buf_desc_t(ptr_data, buf_size, custom_free_function);
+		pbuf_type type = (ptr_data == NULL && custom_free_function == free_tx_lwip_pbuf_custom) ? PBUF_ZEROCOPY : PBUF_RAM;
+		desc = new (ptr_desc) mem_buf_desc_t(ptr_data, buf_size, type,
+							custom_free_function);
 		put_buffer_helper(desc);
 		ptr_desc += sizeof(mem_buf_desc_t);
 		if (ptr_data != NULL) {
@@ -107,14 +134,15 @@ void buffer_pool::expand(size_t count, void *data, size_t buf_size,
  * pbuf_free. */
 void buffer_pool::free_rx_lwip_pbuf_custom(struct pbuf *p_buff)
 {
-	g_buffer_pool_rx->put_buffers_thread_safe((mem_buf_desc_t *)p_buff);
+	buffer_pool *pool =
+		(p_buff->type == PBUF_ZEROCOPY) ? g_buffer_pool_zc : g_buffer_pool_rx_ptr;
+	pool->put_buffers_thread_safe((mem_buf_desc_t *)p_buff);
 }
 
 void buffer_pool::free_tx_lwip_pbuf_custom(struct pbuf *p_buff)
 {
-	buffer_pool *pool;
-
-	pool = (p_buff->type == PBUF_ZEROCOPY) ? g_buffer_pool_zc : g_buffer_pool_tx;
+	buffer_pool *pool =
+		(p_buff->type == PBUF_ZEROCOPY) ? g_buffer_pool_zc : g_buffer_pool_tx;
 	pool->put_buffers_thread_safe((mem_buf_desc_t *)p_buff);
 }
 
@@ -380,10 +408,26 @@ inline void buffer_pool::put_buffers(mem_buf_desc_t *buff_list)
 	}
 }
 
+inline void buffer_pool::put_buffers(mem_buf_desc_t **buff_vec, size_t count)
+{
+	__log_info_funcall("returning vector, present %zu, created %zu, returned %zu", m_n_buffers, m_n_buffers_created, count);
+	while (count-- > 0U)
+		put_buffer_helper(buff_vec[count]);
+
+	if (unlikely(m_n_buffers > m_n_buffers_created))
+		buffersPanic();
+}
+
 void buffer_pool::put_buffers_thread_safe(mem_buf_desc_t *buff_list)
 {
 	auto_unlocker lock(m_lock_spin);
 	put_buffers(buff_list);
+}
+
+void buffer_pool::put_buffers_thread_safe(mem_buf_desc_t **buff_vec, size_t count)
+{
+	auto_unlocker lock(m_lock_spin);
+	put_buffers(buff_vec, count);
 }
 
 void buffer_pool::put_buffers(descq_t *buffers, size_t count)

@@ -522,7 +522,7 @@
    fun:nl_recvmsgs
 }
 ###########################################################
-# libvma
+# libxlio
 {
    Param agent
    Memcheck:Param

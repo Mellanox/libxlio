@@ -244,8 +244,7 @@ ssize_t dst_entry_tcp::fast_send(const iovec* p_iov, const ssize_t sz_iov, vma_s
 			}
 		}
 
-		send_lwip_buffer(m_id, m_p_send_wqe, attr.flags, attr.tisn);
-
+		ret = send_lwip_buffer(m_id, m_p_send_wqe, attr.flags, attr.tis);
 	} else { // We don'nt support inline in this case, since we believe that this a very rare case
 		mem_buf_desc_t *p_mem_buf_desc;
 		size_t total_packet_len = 0;
@@ -372,7 +371,7 @@ ssize_t dst_entry_tcp::fast_send(const iovec* p_iov, const ssize_t sz_iov, bool 
 		p_tcp_iov[0].p_desc->tx.p_ip_h = &p_pkt->hdr.m_ip_hdr;
 		p_tcp_iov[0].p_desc->tx.p_tcp_h =(struct tcphdr*)((uint8_t*)(&(p_pkt->hdr.m_ip_hdr))+sizeof(p_pkt->hdr.m_ip_hdr));
 
-		send_lwip_buffer(m_id, m_p_send_wqe, attr, 0);
+		ret = send_lwip_buffer(m_id, m_p_send_wqe, attr, 0);
 
 		/* for DEBUG */
 		if ((uint8_t*)m_sge[0].addr < p_tcp_iov[0].p_desc->p_buffer || (uint8_t*)p_pkt < p_tcp_iov[0].p_desc->p_buffer) {
@@ -528,8 +527,8 @@ mem_buf_desc_t* dst_entry_tcp::get_buffer(pbuf_type type, pbuf_desc *desc, bool 
 		}
 
 		/* Initialize pbuf description */
-		p_mem_buf_desc->lwip_pbuf.pbuf.desc.attr = PBUF_DESC_NONE;
 		memset(&p_mem_buf_desc->lwip_pbuf.pbuf.desc, 0, sizeof(p_mem_buf_desc->lwip_pbuf.pbuf.desc));
+		p_mem_buf_desc->lwip_pbuf.pbuf.desc.attr = PBUF_DESC_NONE;
 		if (desc) {
 			memcpy(&p_mem_buf_desc->lwip_pbuf.pbuf.desc, desc, sizeof(p_mem_buf_desc->lwip_pbuf.pbuf.desc));
 			if (p_mem_buf_desc->lwip_pbuf.pbuf.desc.attr == PBUF_DESC_MDESC) {
@@ -570,5 +569,16 @@ void dst_entry_tcp::put_buffer(mem_buf_desc_t * p_desc)
 			p_desc->p_next_desc = NULL;
 			buffer_pool::free_tx_lwip_pbuf_custom(&p_desc->lwip_pbuf.pbuf);
 		}
+	}
+}
+
+void dst_entry_tcp::put_zc_buffer(mem_buf_desc_t * p_desc)
+{
+	if (likely(p_desc->lwip_pbuf.pbuf.ref <= 1)) {
+		p_desc->lwip_pbuf.pbuf.ref = 1;
+		p_desc->p_next_desc = m_p_zc_mem_buf_desc_list;
+		m_p_zc_mem_buf_desc_list = p_desc;
+	} else {
+		p_desc->lwip_pbuf.pbuf.ref--;
 	}
 }

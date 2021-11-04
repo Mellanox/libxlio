@@ -123,11 +123,6 @@ static int free_libvma_resources()
 		g_p_fd_collection->prepare_to_close();
 	}
 
-	/* Probably this timeout is needless as far as all TCP connections
-	 * are closed with shutdown option (tcp_abort()->tcp_abandon())
-	 */
-	usleep(50000);
-
 	//Handle pending received data, this is critical for proper TCP connection termination
 	if (g_p_net_device_table_mgr) {
 		g_p_net_device_table_mgr->global_ring_drain_and_procces();
@@ -137,7 +132,6 @@ static int free_libvma_resources()
 		igmp_mgr* g_p_igmp_mgr_tmp = g_p_igmp_mgr;
 		g_p_igmp_mgr = NULL;
 		delete g_p_igmp_mgr_tmp;
-		usleep(50000);
 	}
 
 	if (g_p_event_handler_manager)
@@ -179,8 +173,11 @@ static int free_libvma_resources()
 	if (g_buffer_pool_tx) delete g_buffer_pool_tx;
 	g_buffer_pool_tx = NULL;
 
-	if (g_buffer_pool_rx) delete g_buffer_pool_rx;
-	g_buffer_pool_rx = NULL;
+	if (g_buffer_pool_rx_stride) delete g_buffer_pool_rx_stride;
+	g_buffer_pool_rx_stride = NULL;
+
+	if (g_buffer_pool_rx_rwqe) delete g_buffer_pool_rx_rwqe;
+	g_buffer_pool_rx_rwqe = NULL;
 
 	if (g_zc_cache) delete g_zc_cache;
 	g_zc_cache = NULL;
@@ -490,7 +487,11 @@ void print_vma_global_settings()
 	VLOG_PARAM_STRING("UDP 3T rules", safe_mce_sys().udp_3t_rules, MCE_DEFAULT_UDP_3T_RULES, SYS_VAR_UDP_3T_RULES, safe_mce_sys().udp_3t_rules ? "Enabled " : "Disabled");
 	VLOG_PARAM_STRING("ETH MC L2 only rules", safe_mce_sys().eth_mc_l2_only_rules, MCE_DEFAULT_ETH_MC_L2_ONLY_RULES, SYS_VAR_ETH_MC_L2_ONLY_RULES, safe_mce_sys().eth_mc_l2_only_rules ? "Enabled " : "Disabled");
 	VLOG_PARAM_STRING("Force Flowtag for MC", safe_mce_sys().mc_force_flowtag, MCE_DEFAULT_MC_FORCE_FLOWTAG, SYS_VAR_MC_FORCE_FLOWTAG, safe_mce_sys().mc_force_flowtag ? "Enabled " : "Disabled");
-
+	VLOG_STR_PARAM_STRING("Striding RQ", option_strq::to_str(safe_mce_sys().enable_strq_env), option_strq::to_str(MCE_DEFAULT_STRQ), SYS_VAR_STRQ, option_strq::to_str(safe_mce_sys().enable_strq_env));
+	VLOG_PARAM_NUMBER("STRQ Strides per RWQE", safe_mce_sys().strq_stride_num_per_rwqe, MCE_DEFAULT_STRQ_NUM_STRIDES, SYS_VAR_STRQ_NUM_STRIDES);
+	VLOG_PARAM_NUMBER("STRQ Stride Size (Bytes)", safe_mce_sys().strq_stride_size_bytes, MCE_DEFAULT_STRQ_STRIDE_SIZE_BYTES, SYS_VAR_STRQ_STRIDE_SIZE_BYTES);
+	VLOG_PARAM_NUMBER("STRQ Initial Strides Per Ring", safe_mce_sys().strq_strides_num_bufs, MCE_DEFAULT_STRQ_STRIDES_NUM_BUFS, SYS_VAR_STRQ_STRIDES_NUM_BUFS);
+	VLOG_PARAM_NUMBER("STRQ Strides Compensation Level", safe_mce_sys().strq_strides_compensation_level, MCE_DEFAULT_STRQ_STRIDES_COMPENSATION_LEVEL, SYS_VAR_STRQ_STRIDES_COMPENSATION_LEVEL);
 	VLOG_PARAM_NUMBER("Select Poll (usec)", safe_mce_sys().select_poll_num, MCE_DEFAULT_SELECT_NUM_POLLS, SYS_VAR_SELECT_NUM_POLLS);
 	VLOG_PARAM_STRING("Select Poll OS Force", safe_mce_sys().select_poll_os_force, MCE_DEFAULT_SELECT_POLL_OS_FORCE, SYS_VAR_SELECT_POLL_OS_FORCE, safe_mce_sys().select_poll_os_force ? "Enabled " : "Disabled");
 
@@ -567,10 +568,17 @@ void print_vma_global_settings()
 #ifdef DEFINED_TSO
 	VLOG_PARAM_STRING("TSO support", safe_mce_sys().enable_tso, MCE_DEFAULT_TSO, SYS_VAR_TSO, safe_mce_sys().enable_tso ? "Enabled " : "Disabled");
 #endif /* DEFINED_TSO */
+#ifdef DEFINED_UTLS
+	VLOG_PARAM_STRING("UTLS RX support", safe_mce_sys().enable_utls_rx, MCE_DEFAULT_UTLS_RX, SYS_VAR_UTLS_RX, safe_mce_sys().enable_utls_rx ? "Enabled " : "Disabled");
+	VLOG_PARAM_STRING("UTLS TX support", safe_mce_sys().enable_utls_tx, MCE_DEFAULT_UTLS_TX, SYS_VAR_UTLS_TX, safe_mce_sys().enable_utls_tx ? "Enabled " : "Disabled");
+#endif /* DEFINED_UTLS */
+
+	VLOG_STR_PARAM_STRING("LRO support", option_3::to_str(safe_mce_sys().enable_lro), option_3::to_str(MCE_DEFAULT_LRO), SYS_VAR_LRO, option_3::to_str(safe_mce_sys().enable_lro));
 	VLOG_PARAM_STRING("BF (Blue Flame)", safe_mce_sys().handle_bf, MCE_DEFAULT_BF_FLAG, SYS_VAR_BF, safe_mce_sys().handle_bf ? "Enabled " : "Disabled");
 #if defined(DEFINED_NGINX)
 	VLOG_PARAM_NUMBER("Src port stirde", safe_mce_sys().src_port_stride, MCE_DEFAULT_SRC_PORT_STRIDE, SYS_VAR_SRC_PORT_STRIDE);
 	VLOG_PARAM_NUMBER("Number of Nginx workers", safe_mce_sys().actual_nginx_workers_num, MCE_DEFAULT_NGINX_WORKERS_NUM, SYS_VAR_NGINX_WORKERS_NUM);
+	VLOG_PARAM_NUMBER("Size of UDP socket pool", safe_mce_sys().nginx_udp_socket_pool_size, MCE_DEFAULT_NGINX_UDP_POOL_SIZE, SYS_VAR_NGINX_UDP_POOL_SIZE);
 #endif
 	VLOG_PARAM_STRING("fork() support", safe_mce_sys().handle_fork, MCE_DEFAULT_FORK_SUPPORT, SYS_VAR_FORK, safe_mce_sys().handle_fork ? "Enabled " : "Disabled");
 	VLOG_PARAM_STRING("close on dup2()", safe_mce_sys().close_on_dup2, MCE_DEFAULT_CLOSE_ON_DUP2, SYS_VAR_CLOSE_ON_DUP2, safe_mce_sys().close_on_dup2 ? "Enabled " : "Disabled");
@@ -674,6 +682,26 @@ do { \
 	} \
 } while (0);
 
+static size_t calc_rx_wqe_buff_size() {
+	size_t buff_size = RX_BUF_SIZE(safe_mce_sys().rx_buf_size ? safe_mce_sys().rx_buf_size : g_p_net_device_table_mgr->get_max_mtu());
+	if (safe_mce_sys().enable_striding_rq) {
+		size_t min_puff_size = g_p_net_device_table_mgr->get_max_mtu() + ETH_VLAN_HDR_LEN;
+		buff_size = safe_mce_sys().strq_stride_num_per_rwqe * safe_mce_sys().strq_stride_size_bytes;
+		if (buff_size < min_puff_size) {
+			vlog_printf(VLOG_INFO, "The requested "
+				SYS_VAR_STRQ_NUM_STRIDES "(%" PRIu32 ") * "
+				SYS_VAR_STRQ_STRIDE_SIZE_BYTES "(%" PRIu32 ") = %zu "
+				"is less then MTU + Headers (%zu)",
+				safe_mce_sys().strq_stride_num_per_rwqe, safe_mce_sys().strq_stride_size_bytes,
+				buff_size, min_puff_size);	
+
+			buff_size = g_p_net_device_table_mgr->get_max_mtu() + ETH_VLAN_HDR_LEN;
+		}
+	}
+
+	return buff_size;
+}
+
 static void do_global_ctors_helper()
 {
 	static lock_spin_recursive g_globals_lock;
@@ -720,12 +748,27 @@ static void do_global_ctors_helper()
 
  	NEW_CTOR(g_zc_cache, mapping_cache((size_t)safe_mce_sys().zc_cache_threshold * ONE_MB));
 
-	NEW_CTOR(g_buffer_pool_rx, buffer_pool(safe_mce_sys().rx_num_bufs,
-			RX_BUF_SIZE(g_p_net_device_table_mgr->get_max_mtu()),
+	safe_mce_sys().rx_buf_size = MIN((int)safe_mce_sys().rx_buf_size, (int)0xFF00);
+	if (safe_mce_sys().rx_buf_size <= get_lwip_tcp_mss(g_p_net_device_table_mgr->get_max_mtu(), safe_mce_sys().lwip_mss)) {
+		safe_mce_sys().rx_buf_size = 0;
+	}
+	
+	NEW_CTOR(g_buffer_pool_rx_rwqe, buffer_pool(safe_mce_sys().rx_num_bufs, calc_rx_wqe_buff_size(),
 			buffer_pool::free_rx_lwip_pbuf_custom,
 			(safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_RX ? safe_mce_sys().m_ioctl.user_alloc.memalloc : NULL),
 			(safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_RX ? safe_mce_sys().m_ioctl.user_alloc.memfree : NULL)));
- 	g_buffer_pool_rx->set_RX_TX_for_stats(true);
+ 	g_buffer_pool_rx_rwqe->set_RX_TX_for_stats(true);
+
+	if (safe_mce_sys().enable_striding_rq) {
+		NEW_CTOR(g_buffer_pool_rx_stride, buffer_pool(safe_mce_sys().strq_strides_compensation_level, 0,
+				buffer_pool::free_rx_lwip_pbuf_custom,
+				(safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_RX_STRIDE ? safe_mce_sys().m_ioctl.user_alloc.memalloc : NULL),
+				(safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_RX_STRIDE ? safe_mce_sys().m_ioctl.user_alloc.memfree : NULL)));
+		g_buffer_pool_rx_stride->set_RX_TX_for_stats(true);
+		g_buffer_pool_rx_ptr = g_buffer_pool_rx_stride;
+	} else {
+		g_buffer_pool_rx_ptr = g_buffer_pool_rx_rwqe;
+	}
 
 #ifdef DEFINED_TSO
 	safe_mce_sys().tx_buf_size = MIN((int)safe_mce_sys().tx_buf_size, (int)0xFF00);
@@ -807,6 +850,10 @@ static void do_global_ctors_helper()
 // 	neigh_test();
 //	igmp_test();
 	NEW_CTOR(g_p_ring_profile, ring_profiles_collection());
+
+#ifdef DEFINED_UTLS
+	xlio_tls_api_setup();
+#endif /* DEFINED_UTLS */
 }
 
 int do_global_ctors()
@@ -834,7 +881,9 @@ void reset_globals()
 	g_p_igmp_mgr = NULL;
 	g_p_ip_frag_manager = NULL;
 	g_zc_cache = NULL;
-	g_buffer_pool_rx = NULL;
+	g_buffer_pool_rx_ptr = NULL;
+	g_buffer_pool_rx_stride = NULL;
+	g_buffer_pool_rx_rwqe = NULL;
 	g_buffer_pool_tx = NULL;
 	g_buffer_pool_zc = NULL;
 	g_tcp_seg_pool = NULL;

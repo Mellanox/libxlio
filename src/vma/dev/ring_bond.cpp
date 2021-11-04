@@ -416,22 +416,23 @@ void ring_bond::send_ring_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe,
 	}
 }
 
-void ring_bond::send_lwip_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, uint32_t tisn)
+int ring_bond::send_lwip_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, xlio_tis *tis)
 {
 	mem_buf_desc_t* p_mem_buf_desc = (mem_buf_desc_t*)(p_send_wqe->wr_id);
 
 	auto_unlocker lock(m_lock_ring_tx);
 
 	if (is_active_member(p_mem_buf_desc->p_desc_owner, id)) {
-		m_xmit_rings[id]->send_lwip_buffer(id, p_send_wqe, attr, tisn);
-	} else {
-		ring_logfunc("active ring=%p, silent packet drop (%p), (HA event?)", m_xmit_rings[id], p_mem_buf_desc);
-		p_mem_buf_desc->p_next_desc = NULL;
-		/* no need to free the buffer here, as for lwip buffers we have 2 ref counts, */
-		/* one for caller, and one for completion. for completion, we ref count in    */
-		/* send_lwip_buffer(). Since we are not going in, the caller will free the    */
-		/* buffer. */
-	}
+		return m_xmit_rings[id]->send_lwip_buffer(id, p_send_wqe, attr, tis);
+	} 
+		
+	ring_logfunc("active ring=%p, silent packet drop (%p), (HA event?)", m_xmit_rings[id], p_mem_buf_desc);
+	p_mem_buf_desc->p_next_desc = NULL;
+	/* no need to free the buffer here, as for lwip buffers we have 2 ref counts, */
+	/* one for caller, and one for completion. for completion, we ref count in    */
+	/* send_lwip_buffer(). Since we are not going in, the caller will free the    */
+	/* buffer. */
+	return -1;
 }
 
 bool ring_bond::get_hw_dummy_send_support(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe)
@@ -619,13 +620,13 @@ bool ring_bond::reclaim_recv_buffers(descq_t *rx_reuse)
 	for (i = 0; i < m_bond_rings.size(); i++) {
 		if (buffer_per_ring[i].size() > 0) {
 			if (!m_bond_rings[i]->reclaim_recv_buffers(&buffer_per_ring[i])) {
-				g_buffer_pool_rx->put_buffers_after_deref_thread_safe(&buffer_per_ring[i]);
+				g_buffer_pool_rx_ptr->put_buffers_after_deref_thread_safe(&buffer_per_ring[i]);
 			}
 		}
 	}
 
 	if (buffer_per_ring[m_bond_rings.size()].size() > 0) {
-		g_buffer_pool_rx->put_buffers_after_deref_thread_safe(&buffer_per_ring[m_bond_rings.size()]);
+		g_buffer_pool_rx_ptr->put_buffers_after_deref_thread_safe(&buffer_per_ring[m_bond_rings.size()]);
 	}
 
 	m_lock_ring_rx.unlock();

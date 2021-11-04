@@ -428,30 +428,14 @@ sockinfo_udp::~sockinfo_udp()
 	si_udp_logfunc("done");
 }
 
-int sockinfo_udp::bind(const struct sockaddr *__addr, socklen_t __addrlen)
+int sockinfo_udp::bind_no_os()
 {
-	si_udp_logfunc("");
-
-
-	// We always call the orig_bind which will check sanity of the user socket api
-	// and the OS will also allocate a specific port that we can also use
-	int ret = orig_os_api.bind(m_fd, __addr, __addrlen);
-	if (ret) {
-		si_udp_logdbg("orig bind failed (ret=%d %m)", ret);
-		// TODO: Should we set errno again (maybe log write modified the orig.bind() errno)?
-		return ret;
-	}
-	if (unlikely(m_state == SOCKINFO_DESTROYING) || unlikely(g_b_exit)) {
-		errno = EBUSY;
-		return -1; // zero returned from orig_bind()
-	}
-
 	struct sockaddr_in bound_addr;
 	socklen_t boundlen = sizeof(struct sockaddr_in);
 	struct sockaddr *name = (struct sockaddr *)&bound_addr;
 	socklen_t *namelen = &boundlen;
 
-	ret = getsockname(name, namelen);
+	int ret = getsockname(name, namelen);
 	BULLSEYE_EXCLUDE_BLOCK_START
 	if (ret) {
 		si_udp_logdbg("getsockname failed (ret=%d %m)", ret);
@@ -473,10 +457,43 @@ int sockinfo_udp::bind(const struct sockaddr *__addr, socklen_t __addrlen)
 	return 0;
 }
 
+int sockinfo_udp::bind(const struct sockaddr *__addr, socklen_t __addrlen)
+{
+	si_udp_logfunc("");
+
+
+	// We always call the orig_bind which will check sanity of the user socket api
+	// and the OS will also allocate a specific port that we can also use
+	int ret = orig_os_api.bind(m_fd, __addr, __addrlen);
+	if (ret) {
+		si_udp_logdbg("orig bind failed (ret=%d %m)", ret);
+		// TODO: Should we set errno again (maybe log write modified the orig.bind() errno)?
+		return ret;
+	}
+	if (unlikely(m_state == SOCKINFO_DESTROYING) || unlikely(g_b_exit)) {
+		errno = EBUSY;
+		return -1; // zero returned from orig_bind()
+	}
+
+	return bind_no_os();
+}
+
 int sockinfo_udp::connect(const struct sockaddr *__to, socklen_t __tolen)
 {
 	sock_addr connect_to((struct sockaddr*)__to);
 	si_udp_logdbg("to %s", connect_to.to_str());
+
+#if defined(DEFINED_NGINX)
+	// check if we can skip "connect()" flow, to increase performance of redundant connect() calls
+	// we will use it for dedicated sockets for socket pool
+	// in case dst ip and port are the same as the last connect() call
+	if ((connect_to.get_sa_family() == AF_INET) && m_is_connected && m_is_for_socket_pool && m_state != SOCKINFO_DESTROYING) {
+		in_addr_t dst_ip = connect_to.get_in_addr();
+		in_port_t dst_port = connect_to.get_in_port();
+		if ((m_connected.get_in_addr() == dst_ip) && m_connected.get_in_port() == dst_port)
+			return 0;
+	}
+#endif
 
 	// We always call the orig_connect which will check sanity of the user socket api
 	// and the OS will also allocate a specific bound port that we can also use
@@ -496,11 +513,6 @@ int sockinfo_udp::connect(const struct sockaddr *__to, socklen_t __tolen)
 	// (this also support the default dissolve by AF_UNSPEC)
 	if (connect_to.get_sa_family() == AF_INET) {
 		m_connected.set_sa_family(AF_INET);
-		m_connected.set_in_addr(INADDR_ANY);
-		m_p_socket_stats->connected_ip = m_connected.get_in_addr();
-
-		m_connected.set_in_port(INPORT_ANY);
-		m_p_socket_stats->connected_port = m_connected.get_in_port();
 
 		in_addr_t dst_ip = connect_to.get_in_addr();
 		in_port_t dst_port = connect_to.get_in_port();
@@ -547,7 +559,12 @@ int sockinfo_udp::connect(const struct sockaddr *__to, socklen_t __tolen)
 			setPassthrough();
 			return 0;
 		}
-		// Create the new dst_entry
+		// Create the new dst_entry, delete if one already exists
+		if (m_p_connected_dst_entry) {
+			delete m_p_connected_dst_entry;
+			m_p_connected_dst_entry = NULL;
+		}
+
 		if (IN_MULTICAST_N(dst_ip)) {
 			socket_data data = { m_fd, m_n_mc_ttl, m_tos, m_pcp };
 			m_p_connected_dst_entry = new dst_entry_udp_mc(dst_ip, dst_port, src_port,
@@ -1223,16 +1240,22 @@ int sockinfo_udp::getsockopt(int __level, int __optname, void *__optval, socklen
 	return ret;
 }
 
-// Drop rx ready packets from head of queue
 void sockinfo_udp::rx_ready_byte_count_limit_update(size_t n_rx_ready_bytes_limit_new)
 {
 	si_udp_logfunc("new limit: %d Bytes (old: %d Bytes, min value %d Bytes)", n_rx_ready_bytes_limit_new, m_p_socket_stats->n_rx_ready_byte_limit, m_n_sysvar_rx_ready_byte_min_limit);
 	if (n_rx_ready_bytes_limit_new > 0 && n_rx_ready_bytes_limit_new < m_n_sysvar_rx_ready_byte_min_limit)
 		n_rx_ready_bytes_limit_new = m_n_sysvar_rx_ready_byte_min_limit;
 	m_p_socket_stats->n_rx_ready_byte_limit = n_rx_ready_bytes_limit_new;
+	drop_rx_ready_byte_count(m_p_socket_stats->n_rx_ready_byte_limit);
 
+	return;
+}
+
+// Drop rx ready packets from head of queue
+void sockinfo_udp::drop_rx_ready_byte_count(size_t n_rx_bytes_limit)
+{
 	m_lock_rcv.lock();
-	while (m_p_socket_stats->n_rx_ready_byte_count > m_p_socket_stats->n_rx_ready_byte_limit) {
+	while (m_p_socket_stats->n_rx_ready_byte_count > n_rx_bytes_limit) {
 		if (m_n_rx_pkt_ready_list_count) {
 			mem_buf_desc_t* p_rx_pkt_desc = m_rx_pkt_ready_list.get_and_pop_front();
 			m_n_rx_pkt_ready_list_count--;
@@ -1247,8 +1270,6 @@ void sockinfo_udp::rx_ready_byte_count_limit_update(size_t n_rx_ready_bytes_limi
 			break;
 	}
 	m_lock_rcv.unlock();
-
-	return;
 }
 
 ssize_t sockinfo_udp::rx(const rx_call_t call_type, iovec* p_iov,ssize_t sz_iov, 
@@ -1988,6 +2009,7 @@ bool sockinfo_udp::rx_input_cb(mem_buf_desc_t* p_desc, void* pv_fd_ready_array)
 	// And we must increment ref_counter before pushing this packet into the ready queue
 	//  to prevent race condition with the 'if( (--ref_count) <= 0)' in ib_comm_mgr
 	p_desc->inc_ref_count();
+	save_strq_stats(p_desc->strides_num);
 
 	if (p_desc->rx.socketxtreme_polled) {
 		fill_completion(p_desc);
@@ -2487,3 +2509,19 @@ void sockinfo_udp::update_header_field(data_updater *updater)
 		updater->update_field(*m_p_connected_dst_entry);
 	}
 }
+
+#if defined(DEFINED_NGINX)
+void sockinfo_udp::prepare_to_close_socket_pool(bool _push_pop) {
+	if (_push_pop) {
+		/* we move to SOCKINFO_DESTROYING because
+		 * 1. in every socket API call we check that state.
+		 *    it will allow us to maintain most of socket API correct while we skip socket closure
+		 * 2. SOCKINFO_DESTROYING state will discard packets in rx_input_cb
+		*/
+		m_state = SOCKINFO_DESTROYING;
+		drop_rx_ready_byte_count(0);
+	} else {
+		m_state = SOCKINFO_OPENED;
+	}
+}
+#endif

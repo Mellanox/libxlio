@@ -116,10 +116,10 @@ public:
 	/**
 	 * Return buffers to the pool.
 	 */
-	void		put_buffers(descq_t *buffers, size_t count);
 	void		put_buffers_thread_safe(descq_t *buffers, size_t count);
-	void		put_buffers(mem_buf_desc_t *buff_list);
+	
 	void		put_buffers_thread_safe(mem_buf_desc_t *buff_list);
+	void		put_buffers_thread_safe(mem_buf_desc_t **buff_vec, size_t count);
 	static void	free_rx_lwip_pbuf_custom(struct pbuf *p_buff);
 	static void	free_tx_lwip_pbuf_custom(struct pbuf *p_buff);
 
@@ -159,6 +159,9 @@ private:
 				pbuf_free_custom_fn custom_free_function);
 
 	void		buffersPanic();
+	void		put_buffers(descq_t *buffers, size_t count);
+	inline void	put_buffers(mem_buf_desc_t *buff_list);
+	inline void	put_buffers(mem_buf_desc_t **buff_vec, size_t count);
 
 	/**
 	 * dtor
@@ -166,7 +169,9 @@ private:
 	inline void	free_bpool_resources();
 };
 
-extern buffer_pool* g_buffer_pool_rx;
+extern buffer_pool* g_buffer_pool_rx_ptr;
+extern buffer_pool* g_buffer_pool_rx_stride;
+extern buffer_pool* g_buffer_pool_rx_rwqe;
 extern buffer_pool* g_buffer_pool_tx;
 extern buffer_pool* g_buffer_pool_zc;
 

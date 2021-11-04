@@ -484,8 +484,8 @@ void ip_frag_manager::return_buffers_to_owners(const owner_desc_map_t &buff_map)
 	owner_desc_map_t::const_iterator iter;
 
 	for (iter = buff_map.begin(); iter != buff_map.end(); ++iter) {
-		if(g_buffer_pool_rx)
-			g_buffer_pool_rx->put_buffers_thread_safe(iter->second);
+		if(g_buffer_pool_rx_ptr)
+			g_buffer_pool_rx_ptr->put_buffers_thread_safe(iter->second);
 	}
 }
 

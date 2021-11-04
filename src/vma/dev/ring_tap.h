@@ -53,7 +53,7 @@ public:
 	virtual bool reclaim_recv_buffers(mem_buf_desc_t *buff);
 	virtual int reclaim_recv_single_buffer(mem_buf_desc_t* rx_reuse) { NOT_IN_USE(rx_reuse); return -1; }
 	virtual void send_ring_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr);
-	virtual void send_lwip_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, uint32_t tisn);
+	virtual int send_lwip_buffer(ring_user_id_t id, vma_ibv_send_wr* p_send_wqe, vma_wr_tx_packet_attr attr, xlio_tis *tis);
 	virtual void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t* p_mem_buf_desc);
 	virtual mem_buf_desc_t* mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type, int n_num_mem_bufs = 1);
 	virtual int mem_buf_tx_release(mem_buf_desc_t* p_mem_buf_desc_list, bool b_accounting, bool trylock = false);
@@ -72,14 +72,14 @@ public:
 	void inc_cq_moderation_stats(size_t sz_data) { NOT_IN_USE(sz_data); }
 	virtual uint32_t get_tx_user_lkey(void *addr, size_t length, void *p_mapping = NULL) { NOT_IN_USE(p_mapping); NOT_IN_USE(addr); NOT_IN_USE(length); return (uint32_t)-1; }
 	virtual uint32_t get_underly_qpn() { return -1; }
-        virtual uint32_t get_max_inline_data() { return 0; }
+	virtual uint32_t get_max_inline_data() { return 0; }
 	ib_ctx_handler*  get_ctx(ring_user_id_t id) { NOT_IN_USE(id); return NULL; }
 #ifdef DEFINED_TSO
-        virtual uint32_t get_max_send_sge(void) { return 1; }
-        virtual uint32_t get_max_payload_sz(void) { return 0; }
-        virtual uint16_t get_max_header_sz(void) { return 0; }
+	virtual uint32_t get_max_send_sge(void) { return 1; }
+	virtual uint32_t get_max_payload_sz(void) { return 0; }
+	virtual uint16_t get_max_header_sz(void) { return 0; }
 	virtual uint32_t get_tx_lkey(ring_user_id_t id) { NOT_IN_USE(id); return 0; }
-        virtual bool is_tso(void) { return false; }
+	virtual bool is_tso(void) { return false; }
 #endif /* DEFINED_TSO */
 
 	inline void set_tap_data_available() { m_tap_data_available = true; }
