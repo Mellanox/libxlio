@@ -756,7 +756,7 @@ int libvma_yy_flex_debug = 0;
 char *libvma_yytext;
 /* Line 1 of config_scanner.l */
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1928,7 +1928,9 @@ static void libvma_yy_load_buffer_state  (void)
 
 {
 	int oerrno = errno;
-    
+
+	if (!b) return;
+
 	libvma_yy_flush_buffer(b );
 
 	b->yy_input_file = file;

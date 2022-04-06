@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -37,7 +37,8 @@
 
 #include "tcp_base.h"
 
-class tcp_connect : public tcp_base {};
+class tcp_connect : public tcp_base {
+};
 
 /**
  * @test tcp_connect.ti_1
@@ -45,28 +46,27 @@ class tcp_connect : public tcp_base {};
  *    Loop of blocking connect() to ip on the same node
  * @details
  */
-TEST_F(tcp_connect, DISABLED_ti_1) {
-	int rc = EOK;
-	int fd;
-	int i;
+TEST_F(tcp_connect, DISABLED_ti_1)
+{
+    int rc = EOK;
+    int fd;
+    int i;
 
-	fd = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
-	ASSERT_LE(0, fd);
+    fd = socket(m_family, SOCK_STREAM, IPPROTO_IP);
+    ASSERT_LE(0, fd);
 
-	rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
-	ASSERT_EQ(EOK, errno);
-	ASSERT_EQ(0, rc);
+    rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
+    ASSERT_EQ(EOK, errno);
+    ASSERT_EQ(0, rc);
 
-	for (i = 0; i < 10; i++) {
-		rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-		ASSERT_TRUE(ECONNREFUSED == errno) <<
-				"connect() attempt = " << i;
-		ASSERT_EQ((-1), rc) <<
-				"connect() attempt = " << i;
-		usleep(500);
-	}
+    for (i = 0; i < 10; i++) {
+        rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        ASSERT_TRUE(ECONNREFUSED == errno) << "connect() attempt = " << i;
+        ASSERT_EQ((-1), rc) << "connect() attempt = " << i;
+        usleep(500);
+    }
 
-	close(fd);
+    close(fd);
 }
 
 /**
@@ -75,33 +75,32 @@ TEST_F(tcp_connect, DISABLED_ti_1) {
  *    Loop of blocking connect() to remote ip
  * @details
  */
-TEST_F(tcp_connect, DISABLED_ti_2) {
-	int rc = EOK;
-	int fd;
-	int i;
+TEST_F(tcp_connect, DISABLED_ti_2)
+{
+    int rc = EOK;
+    int fd;
+    int i;
 
-	fd = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
-	ASSERT_LE(0, fd);
+    fd = socket(m_family, SOCK_STREAM, IPPROTO_IP);
+    ASSERT_LE(0, fd);
 
-	rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
-	ASSERT_EQ(EOK, errno);
-	ASSERT_EQ(0, rc);
+    rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
+    ASSERT_EQ(EOK, errno);
+    ASSERT_EQ(0, rc);
 
-	for (i = 0; i < 10; i++) {
-		rc = connect(fd, (struct sockaddr *)&remote_addr, sizeof(remote_addr));
-		ASSERT_TRUE(ECONNREFUSED == errno || ETIMEDOUT == errno) <<
-				"connect() attempt = " << i;
-		ASSERT_EQ((-1), rc) <<
-				"connect() attempt = " << i;
-		usleep(500);
-		if (ETIMEDOUT == errno) {
-			log_warn("Routing issue, consider another remote address instead of %s\n",
-					sys_addr2str(&remote_addr));
-			break;
-		}
-	}
+    for (i = 0; i < 10; i++) {
+        rc = connect(fd, (struct sockaddr *)&remote_addr, sizeof(remote_addr));
+        ASSERT_TRUE(ECONNREFUSED == errno || ETIMEDOUT == errno) << "connect() attempt = " << i;
+        ASSERT_EQ((-1), rc) << "connect() attempt = " << i;
+        usleep(500);
+        if (ETIMEDOUT == errno) {
+            log_warn("Routing issue, consider another remote address instead of %s\n",
+                     sys_addr2str((struct sockaddr *)&remote_addr));
+            break;
+        }
+    }
 
-	close(fd);
+    close(fd);
 }
 
 /**
@@ -110,26 +109,25 @@ TEST_F(tcp_connect, DISABLED_ti_2) {
  *    Loop of blocking connect() to unreachable ip
  * @details
  */
-TEST_F(tcp_connect, DISABLED_ti_3) {
-	int rc = EOK;
-	int fd;
-	int i;
+TEST_F(tcp_connect, DISABLED_ti_3)
+{
+    int rc = EOK;
+    int fd;
+    int i;
 
-	fd = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
-	ASSERT_LE(0, fd);
+    fd = socket(m_family, SOCK_STREAM, IPPROTO_IP);
+    ASSERT_LE(0, fd);
 
-	rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
-	ASSERT_EQ(EOK, errno);
-	ASSERT_EQ(0, rc);
+    rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
+    ASSERT_EQ(EOK, errno);
+    ASSERT_EQ(0, rc);
 
-	for (i = 0; i < 10; i++) {
-		rc = connect(fd, (struct sockaddr *)&bogus_addr, sizeof(bogus_addr));
-		ASSERT_EQ(EHOSTUNREACH, errno) <<
-				"connect() attempt = " << i;
-		ASSERT_EQ((-1), rc) <<
-				"connect() attempt = " << i;
-		usleep(500);
-	}
+    for (i = 0; i < 10; i++) {
+        rc = connect(fd, (struct sockaddr *)&bogus_addr, sizeof(bogus_addr));
+        ASSERT_EQ(EHOSTUNREACH, errno) << "connect() attempt = " << i;
+        ASSERT_EQ((-1), rc) << "connect() attempt = " << i;
+        usleep(500);
+    }
 
-	close(fd);
+    close(fd);
 }

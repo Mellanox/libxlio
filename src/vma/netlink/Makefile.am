@@ -10,7 +10,6 @@ libnetlink_la_SOURCES = \
 	neigh_info.cpp \
 	route_info.cpp \
 	link_info.cpp \
-	netlink_compatibility.cpp \
 	netlink_wrapper.cpp
 
 EXTRA_DIST = \
@@ -29,14 +28,12 @@ EXTRA_DIST = \
 #	neigh_info.cpp \
 #	route_info.cpp \
 #	link_info.cpp \
-#	netlink_compatibility.cpp \
 #	netlink_wrapper.cpp \
 #	../infra/subject_observer.cpp \
 #	../event/netlink_event.cpp \
 #	test_main.cpp \
 #	link_info.h \
 #	neigh_info.h \
-#	netlink_compatibility.h \
 #	netlink_wrapper.h \
 #	route_info.h
 

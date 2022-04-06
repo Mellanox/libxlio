@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -37,7 +37,8 @@
 
 #include "udp_base.h"
 
-class udp_connect : public udp_base {};
+class udp_connect : public udp_base {
+};
 
 /**
  * @test udp_connect.ti_1
@@ -45,34 +46,33 @@ class udp_connect : public udp_base {};
  *    Loop of blocking connect() to ip on the same node
  * @details
  */
-TEST_F(udp_connect, ti_1) {
-	int rc = EOK;
-	int fd;
-	int i;
+TEST_F(udp_connect, ti_1)
+{
+    int rc = EOK;
+    int fd;
+    int i;
 
-	fd = udp_base::sock_create();
-	ASSERT_LE(0, fd);
+    fd = udp_base::sock_create();
+    ASSERT_LE(0, fd);
 
-	errno = EOK;
-	rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
-	EXPECT_EQ(EOK, errno);
-	EXPECT_EQ(0, rc);
+    errno = EOK;
+    rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
+    EXPECT_EQ(EOK, errno);
+    EXPECT_EQ(0, rc);
 
-	errno = EOK;
-	rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-	EXPECT_EQ(EOK, errno);
-	EXPECT_EQ(0, rc);
+    errno = EOK;
+    rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+    EXPECT_EQ(EOK, errno);
+    EXPECT_EQ(0, rc);
 
-	for (i = 0; i < 10; i++) {
-		rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-		ASSERT_EQ(EOK, errno) <<
-				"connect() attempt = " << i << "\n" << close(fd);
-		ASSERT_EQ(0, rc) <<
-				"connect() attempt = " << i << "\n" << close(fd);
-		usleep(500);
-	}
+    for (i = 0; i < 10; i++) {
+        rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        ASSERT_EQ(EOK, errno) << "connect() attempt = " << i << "\n" << close(fd);
+        ASSERT_EQ(0, rc) << "connect() attempt = " << i << "\n" << close(fd);
+        usleep(500);
+    }
 
-	close(fd);
+    close(fd);
 }
 
 /**
@@ -81,34 +81,28 @@ TEST_F(udp_connect, ti_1) {
  *    Loop of blocking connect() to remote ip
  * @details
  */
-TEST_F(udp_connect, ti_2) {
-	int rc = EOK;
-	int fd;
-	int i;
+TEST_F(udp_connect, ti_2)
+{
+    int rc = EOK;
+    int fd;
+    int i;
 
-	fd = udp_base::sock_create();
-	ASSERT_LE(0, fd);
+    fd = udp_base::sock_create();
+    ASSERT_LE(0, fd);
 
-	errno = EOK;
-	rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
-	EXPECT_EQ(EOK, errno);
-	EXPECT_EQ(0, rc);
+    errno = EOK;
+    rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
+    EXPECT_EQ(EOK, errno);
+    EXPECT_EQ(0, rc);
 
-	errno = EOK;
-	rc = connect(fd, (struct sockaddr *)&remote_addr, sizeof(remote_addr));
-	EXPECT_EQ(EOK, errno);
-	EXPECT_EQ(0, rc);
+    for (i = 0; i < 10; i++) {
+        rc = connect(fd, (struct sockaddr *)&remote_addr, sizeof(remote_addr));
+        ASSERT_TRUE(EOK == errno) << "connect() attempt = " << i << "\n" << close(fd);
+        ASSERT_EQ(0, rc) << "connect() attempt = " << i << "\n" << close(fd);
+        usleep(500);
+    }
 
-	for (i = 0; i < 10; i++) {
-		rc = connect(fd, (struct sockaddr *)&remote_addr, sizeof(remote_addr));
-		ASSERT_EQ(EOK, errno) <<
-				"connect() attempt = " << i << "\n" << close(fd);
-		ASSERT_EQ(0, rc) <<
-				"connect() attempt = " << i << "\n" << close(fd);
-		usleep(500);
-	}
-
-	close(fd);
+    close(fd);
 }
 
 /**
@@ -117,34 +111,28 @@ TEST_F(udp_connect, ti_2) {
  *    Loop of blocking connect() to unreachable ip
  * @details
  */
-TEST_F(udp_connect, ti_3) {
-	int rc = EOK;
-	int fd;
-	int i;
+TEST_F(udp_connect, ti_3)
+{
+    int rc = EOK;
+    int fd;
+    int i;
 
-	fd = udp_base::sock_create();
-	ASSERT_LE(0, fd);
+    fd = udp_base::sock_create();
+    ASSERT_LE(0, fd);
 
-	errno = EOK;
-	rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
-	EXPECT_EQ(EOK, errno);
-	EXPECT_EQ(0, rc);
+    errno = EOK;
+    rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
+    EXPECT_EQ(EOK, errno);
+    EXPECT_EQ(0, rc);
 
-	errno = EOK;
-	rc = connect(fd, (struct sockaddr *)&bogus_addr, sizeof(bogus_addr));
-	EXPECT_EQ(EOK, errno);
-	EXPECT_EQ(0, rc);
+    for (i = 0; i < 10; i++) {
+        rc = connect(fd, (struct sockaddr *)&bogus_addr, sizeof(bogus_addr));
+        ASSERT_TRUE(EOK == errno) << "connect() attempt = " << i << "\n" << close(fd);
+        ASSERT_EQ(0, rc) << "connect() attempt = " << i << "\n" << close(fd);
+        usleep(500);
+    }
 
-	for (i = 0; i < 10; i++) {
-		rc = connect(fd, (struct sockaddr *)&bogus_addr, sizeof(bogus_addr));
-		ASSERT_EQ(EOK, errno) <<
-				"connect() attempt = " << i << "\n" << close(fd);
-		ASSERT_EQ(0, rc) <<
-				"connect() attempt = " << i << "\n" << close(fd);
-		usleep(500);
-	}
-
-	close(fd);
+    close(fd);
 }
 
 /**
@@ -153,26 +141,27 @@ TEST_F(udp_connect, ti_3) {
  *    Loop of blocking connect() to zero port
  * @details
  */
-TEST_F(udp_connect, ti_4) {
-	int rc = EOK;
-	int fd;
-	struct sockaddr_in addr;
+TEST_F(udp_connect, ti_4)
+{
+    int rc = EOK;
+    int fd;
+    sockaddr_store_t addr;
 
-	fd = udp_base::sock_create();
-	ASSERT_LE(0, fd);
+    fd = udp_base::sock_create();
+    ASSERT_LE(0, fd);
 
-	errno = EOK;
-	rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
-	EXPECT_EQ(EOK, errno);
-	EXPECT_EQ(0, rc);
+    errno = EOK;
+    rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
+    EXPECT_EQ(EOK, errno);
+    EXPECT_EQ(0, rc);
 
-	memcpy(&addr, &server_addr, sizeof(addr));
-	addr.sin_port = 0;
+    memcpy(&addr, &server_addr, sizeof(addr));
+    sys_set_port((struct sockaddr *)&addr, 0);
 
-	errno = EOK;
-	rc = connect(fd, (struct sockaddr *)&addr, sizeof(addr));
-	EXPECT_EQ(EOK, errno);
-	EXPECT_EQ(0, rc);
+    errno = EOK;
+    rc = connect(fd, (struct sockaddr *)&addr, sizeof(addr));
+    EXPECT_EQ(EOK, errno);
+    EXPECT_EQ(0, rc);
 
-	close(fd);
+    close(fd);
 }

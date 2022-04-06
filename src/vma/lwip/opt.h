@@ -38,6 +38,9 @@
 #ifndef __LWIP_OPT_H__
 #define __LWIP_OPT_H__
 
+#include <stdint.h>
+#include <arpa/inet.h>
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -847,29 +850,20 @@
 #define LWIP_CHECKSUM_ON_COPY           0
 #endif
 
-/**
- * LWIP_TSO: Enable Large Segment Offload capability.
- */
-#ifndef LWIP_TSO
-#ifdef DEFINED_TSO
-#define LWIP_TSO                        1
-#else
-#define LWIP_TSO                        0
-#endif /* DEFINED_TSO */
-#endif
-
 /* Define platform endianness */
 #ifndef BYTE_ORDER
 #define BYTE_ORDER LITTLE_ENDIAN
 #endif /* BYTE_ORDER */
 
 /* Define generic types used in lwIP */
-typedef unsigned   char    u8_t;
-typedef signed     char    s8_t;
-typedef unsigned   short   u16_t;
-typedef signed     short   s16_t;
-typedef unsigned   int     u32_t;
-typedef signed     int     s32_t;
+typedef uint8_t    u8_t;
+typedef int8_t     s8_t;
+typedef uint16_t    u16_t;
+typedef int16_t     s16_t;
+typedef uint32_t    u32_t;
+typedef int32_t     s32_t;
+typedef uint64_t    u64_t;
+typedef int64_t     s64_t;
 
 typedef unsigned long mem_ptr_t;
 
@@ -1079,10 +1073,16 @@ typedef unsigned long mem_ptr_t;
                                  } \
                                } \
                              } while(0)
+#define LWIP_DEBUGF_IP_ADDR(debug, message, ip_addr, is_ipv6) do { \
+    char _buf[INET6_ADDRSTRLEN] = "\0"; \
+    inet_ntop((is_ipv6) ? AF_INET6 : AF_INET, ip_addr, _buf, sizeof(_buf)); \
+    LWIP_DEBUGF(debug, ("%s : %s\n", message, _buf)); \
+} while(0)
 
 #else  /* LWIP_DEBUG_ENABLE */
 #define LWIP_PLATFORM_DIAG(x)
 #define LWIP_DEBUGF(debug, message)
+#define LWIP_DEBUGF_IP_ADDR(debug, message, ip_addr, is_ipv6)
 #endif /* LWIP_DEBUG_ENABLE */
 
 #endif /* __LWIP_OPT_H__ */

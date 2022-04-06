@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,18 +33,18 @@
 #ifndef TESTS_GTEST_UDP_BASE_H_
 #define TESTS_GTEST_UDP_BASE_H_
 
-
 /**
  * UDP Base class for tests
  */
 class udp_base : public testing::Test, public test_base {
 public:
     static int sock_create(void);
+    static int sock_create(sa_family_t family, bool reuse_addr = false);
     static int sock_create_nb(void);
 
 protected:
-	virtual void SetUp();
-	virtual void TearDown();
+    virtual void SetUp();
+    virtual void TearDown();
 };
 
 #endif /* TESTS_GTEST_UDP_BASE_H_ */

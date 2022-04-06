@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,29 +30,27 @@
  * SOFTWARE.
  */
 
-
 #include "rule_entry.h"
 #include "rule_table_mgr.h"
 #include "vma/infra/cache_subject_observer.h"
 
-#define MODULE_NAME 		"rre"
-#undef  MODULE_HDR_INFO
-#define MODULE_HDR_INFO         MODULE_NAME "[%s]:%d:%s() "
-#undef	__INFO__
-#define __INFO__		to_str().c_str()
+#define MODULE_NAME "rre"
+#undef MODULE_HDR_INFO
+#define MODULE_HDR_INFO MODULE_NAME "[%s]:%d:%s() "
+#undef __INFO__
+#define __INFO__ to_str().c_str()
 
-#define rr_entry_logdbg		__log_info_dbg
+#define rr_entry_logdbg __log_info_dbg
 
-rule_entry::rule_entry(route_rule_table_key rrk) :
-	cache_entry_subject<route_rule_table_key, std::deque<rule_val*>*>(rrk)
+rule_entry::rule_entry(route_rule_table_key rrk)
+    : cache_entry_subject<route_rule_table_key, std::deque<rule_val *> *>(rrk)
 {
-	m_val = &values;
+    m_val = &values;
 }
 
-bool rule_entry::get_val(INOUT std::deque<rule_val*>* &val)
+bool rule_entry::get_val(INOUT std::deque<rule_val *> *&val)
 {
-	rr_entry_logdbg("");
-	val = m_val;
-	return is_valid();
+    rr_entry_logdbg("");
+    val = m_val;
+    return is_valid();
 }
-

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,7 +30,6 @@
  * SOFTWARE.
  */
 
-
 #ifndef SEND_INFO
 #define SEND_INFO
 
@@ -43,70 +42,69 @@
 
 class event;
 
-
-class send_info : tostr
-{
+class send_info : tostr {
 public:
-	send_info(iovec *iov, size_t sz):
-		m_p_iov(iov),
-		m_sz_iov(sz){};
-	virtual ~send_info(){};
+    send_info(iovec *iov, size_t sz)
+        : m_p_iov(iov)
+        , m_sz_iov(sz) {};
+    virtual ~send_info() {};
 
-	iovec  *m_p_iov;
-	size_t m_sz_iov;
+    iovec *m_p_iov;
+    size_t m_sz_iov;
 };
 
-class neigh_send_info : public send_info
-{
+class neigh_send_info : public send_info {
 public:
-	neigh_send_info(iovec *iov, size_t sz, header *hdr, uint8_t proto,
-			uint32_t mtu, uint8_t tos):
-		send_info(iov, sz), m_p_header(hdr),m_mtu(mtu), m_tos(tos), m_protocol(proto){};
-	header *m_p_header;
-	uint32_t m_mtu;
-	uint8_t m_tos;
-	uint8_t m_protocol;
+    neigh_send_info(iovec *iov, size_t sz, header *hdr, uint8_t proto, uint32_t mtu, uint8_t tos)
+        : send_info(iov, sz)
+        , m_p_header(hdr)
+        , m_mtu(mtu)
+        , m_tos(tos)
+        , m_protocol(proto) {};
+    header *m_p_header;
+    uint32_t m_mtu;
+    uint8_t m_tos;
+    uint8_t m_protocol;
 };
 
-class send_data
-{
+class send_data {
 public:
-	send_data(const send_info *si);
-	virtual ~send_data();
-	iovec m_iov;
+    send_data(const send_info *si);
+    virtual ~send_data();
+    iovec m_iov;
 };
 
-class neigh_send_data : public send_data
-{
+class neigh_send_data : public send_data {
 public:
-	neigh_send_data(const neigh_send_info *nsi): send_data((const send_info*)nsi),
-			m_header(new header(*(nsi->m_p_header))),
-			m_mtu(nsi->m_mtu),
-			m_tos(nsi->m_tos),
-			m_protocol(nsi->m_protocol)
-	{
-	};
+    neigh_send_data(const neigh_send_info *nsi)
+        : send_data((const send_info *)nsi)
+        , m_header(nsi->m_p_header->copy())
+        , m_mtu(nsi->m_mtu)
+        , m_tos(nsi->m_tos)
+        , m_protocol(nsi->m_protocol) {};
 
-	virtual ~neigh_send_data()
-	{
-		if(m_header) {
-			delete m_header;
-		}
-	};
+    virtual ~neigh_send_data()
+    {
+        if (m_header) {
+            delete m_header;
+        }
+    };
 
-	header  *m_header;
-	uint32_t m_mtu;
-	uint8_t m_tos;
-	uint8_t m_protocol;
+    header *m_header;
+    uint32_t m_mtu;
+    uint8_t m_tos;
+    uint8_t m_protocol;
 };
 
-class send_event : public event
-{
+class send_event : public event {
 public:
-	send_event(send_info s_info): m_send_info(s_info) { m_type = SEND_EVENT; };
+    send_event(send_info s_info)
+        : m_send_info(s_info)
+    {
+        m_type = SEND_EVENT;
+    };
 
-	send_info m_send_info;
-
+    send_info m_send_info;
 };
 
 #endif /* SEND_INFO */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,7 +30,6 @@
  * SOFTWARE.
  */
 
-
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -40,37 +39,34 @@
 #include <stdint.h>
 #include <sys/time.h>
 
-
 #include "hash.h"
 #include "tc.h"
 #include "daemon.h"
-
 
 int open_store(void);
 void close_store(void);
 
 static void free_store_pid(void *ptr);
 
-
 int open_store(void)
 {
-	daemon_cfg.ht = hash_create(&free_store_pid, daemon_cfg.opt.max_pid_num);
+    daemon_cfg.ht = hash_create(&free_store_pid, daemon_cfg.opt.max_pid_num);
 
-	return (NULL == daemon_cfg.ht ? -EFAULT : 0);
+    return (NULL == daemon_cfg.ht ? -EFAULT : 0);
 }
 
 void close_store(void)
 {
-	hash_destroy(daemon_cfg.ht);
+    hash_destroy(daemon_cfg.ht);
 }
 
 static void free_store_pid(void *ptr)
 {
-	struct store_pid *value;
+    struct store_pid *value;
 
-	if (ptr) {
-		value = (struct store_pid *)ptr;
-		hash_destroy(value->ht);
-		free(value);
-	}
+    if (ptr) {
+        value = (struct store_pid *)ptr;
+        hash_destroy(value->ht);
+        free(value);
+    }
 }

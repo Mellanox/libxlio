@@ -172,20 +172,20 @@ All tests can be launched on single node that has two interfaces.
 
 Run tests under OS:
 ```shell
-$ ./tests/gtest --addr=1.1.3.6:1.1.4.6
+$ ./tests/gtest --addr=1.1.3.6,1.1.4.6
 ```
 or
 ```shell
-$ ./tests/gtest --if=ens2f0:ens2f1 --gtest_filter=tcp_sendfile.*
+$ ./tests/gtest --if=ens2f0,ens2f1 --gtest_filter=tcp_sendfile.*
 ```
 
 Run tests under XLIO:
 ```shell
-$ LD_PRELOAD=libxlio.so ./tests/gtest --addr=1.1.3.6:1.1.4.6
+$ LD_PRELOAD=libxlio.so ./tests/gtest --addr=1.1.3.6,1.1.4.6
 ```
 or
 ```shell
-$ LD_PRELOAD=libxlio.so ./tests/gtest --if=ens2f0:ens2f1 --gtest_filter=tcp_sendfile.*
+$ LD_PRELOAD=libxlio.so ./tests/gtest --if=ens2f0,ens2f1 --gtest_filter=tcp_sendfile.*
 ```
 
 

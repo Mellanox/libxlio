@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,30 +33,31 @@
 #ifndef TESTS_GTEST_TCP_BASE_H_
 #define TESTS_GTEST_TCP_BASE_H_
 
-
 /**
  * TCP Base class for tests
  */
 class tcp_base : virtual public testing::Test, virtual public test_base {
 public:
     static int sock_create(void);
+    static int sock_create(sa_family_t family, bool reuse_addr = false);
     static int sock_create_nb(void);
 
 protected:
-	virtual void SetUp();
-	virtual void TearDown();
-	void peer_wait(int fd) {
-		char keep_alive_check = 1;
-		struct timeval tv;
+    virtual void SetUp();
+    virtual void TearDown();
+    void peer_wait(int fd)
+    {
+        char keep_alive_check = 1;
+        struct timeval tv;
 
-		tv.tv_sec = 3;
-		tv.tv_usec = 0;
-		setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tv, sizeof tv);
-		while (0 < send(fd, &keep_alive_check, sizeof(keep_alive_check), MSG_NOSIGNAL)) {
-			usleep(100);
-		}
-		return ;
-	}
+        tv.tv_sec = 3;
+        tv.tv_usec = 0;
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (const char *)&tv, sizeof tv);
+        while (0 < send(fd, &keep_alive_check, sizeof(keep_alive_check), MSG_NOSIGNAL)) {
+            usleep(100);
+        }
+        return;
+    }
 };
 
 #endif /* TESTS_GTEST_TCP_BASE_H_ */

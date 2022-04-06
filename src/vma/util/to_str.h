@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,20 +30,18 @@
  * SOFTWARE.
  */
 
-
 /* This class should be inherited by all classed that need to be printed
-*/
+ */
 #ifndef TO_STR_H_
 #define TO_STR_H_
 
 #include <string>
 
 /* coverity[missing_move_assignment] */
-class tostr
-{
+class tostr {
 public:
-	virtual ~tostr(){};
-	virtual const std::string to_str() const { return std::string(""); };
+    virtual ~tostr() {};
+    virtual const std::string to_str() const { return std::string(""); };
 };
 
 #endif /* TO_STR_H_ */

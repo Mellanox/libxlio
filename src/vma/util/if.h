@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,7 +30,6 @@
  * SOFTWARE.
  */
 
-
 #ifndef VMA_IF_H_
 #define VMA_IF_H_
 
@@ -38,7 +37,7 @@
 #include <linux/if.h>
 
 /* defined in net/if.h but that conflicts with linux/if.h... */
-extern "C" unsigned int if_nametoindex (__const char *__ifname) __THROW;
-extern "C" char *if_indextoname (unsigned int __ifindex, char *__ifname) __THROW;
+extern "C" unsigned int if_nametoindex(__const char *__ifname) __THROW;
+extern "C" char *if_indextoname(unsigned int __ifindex, char *__ifname) __THROW;
 
 #endif

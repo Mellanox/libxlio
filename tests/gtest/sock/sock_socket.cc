@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -37,7 +37,8 @@
 
 #include "sock_base.h"
 
-class sock_socket : public sock_base {};
+class sock_socket : public sock_base {
+};
 
 /**
  * @test sock_socket.ti_1
@@ -45,15 +46,16 @@ class sock_socket : public sock_base {};
  *    Create UDP socket
  * @details
  */
-TEST_F(sock_socket, ti_1) {
-	int fd = UNDEFINED_VALUE;
+TEST_F(sock_socket, ti_1)
+{
+    int fd = UNDEFINED_VALUE;
 
-	errno = EOK;
-	fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
-	EXPECT_LE(0, fd);
-	EXPECT_EQ(EOK, errno);
+    errno = EOK;
+    fd = socket(m_family, SOCK_DGRAM, IPPROTO_IP);
+    EXPECT_LE(0, fd);
+    EXPECT_EQ(EOK, errno);
 
-	close(fd);
+    close(fd);
 }
 
 /**
@@ -62,15 +64,16 @@ TEST_F(sock_socket, ti_1) {
  *    Create TCP socket
  * @details
  */
-TEST_F(sock_socket, ti_2) {
-	int fd = UNDEFINED_VALUE;
+TEST_F(sock_socket, ti_2)
+{
+    int fd = UNDEFINED_VALUE;
 
-	errno = EOK;
-	fd = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
-	EXPECT_LE(0, fd);
-	EXPECT_EQ(EOK, errno);
+    errno = EOK;
+    fd = socket(m_family, SOCK_STREAM, IPPROTO_IP);
+    EXPECT_LE(0, fd);
+    EXPECT_EQ(EOK, errno);
 
-	close(fd);
+    close(fd);
 }
 
 /**
@@ -79,15 +82,16 @@ TEST_F(sock_socket, ti_2) {
  *    Create UNIX socket
  * @details
  */
-TEST_F(sock_socket, ti_3) {
-	int fd = UNDEFINED_VALUE;
+TEST_F(sock_socket, ti_3)
+{
+    int fd = UNDEFINED_VALUE;
 
-	errno = EOK;
-	fd = socket(PF_UNIX, SOCK_DGRAM, IPPROTO_IP);
-	EXPECT_LE(0, fd);
-	EXPECT_EQ(EOK, errno);
+    errno = EOK;
+    fd = socket(PF_UNIX, SOCK_DGRAM, IPPROTO_IP);
+    EXPECT_LE(0, fd);
+    EXPECT_EQ(EOK, errno);
 
-	close(fd);
+    close(fd);
 }
 
 /**
@@ -96,20 +100,21 @@ TEST_F(sock_socket, ti_3) {
  *    Create RAW socket
  * @details
  */
-TEST_F(sock_socket, ti_4) {
-	int fd = UNDEFINED_VALUE;
+TEST_F(sock_socket, ti_4)
+{
+    int fd = UNDEFINED_VALUE;
 
-	errno = EOK;
-	fd = socket(PF_INET, SOCK_RAW, IPPROTO_TCP);
-	if (sys_rootuser()) {
-		EXPECT_LE(0, fd);
-		EXPECT_EQ(EOK, errno);
-	} else {
-		EXPECT_EQ(-1, fd);
-		EXPECT_EQ(EPERM, errno);
-	}
+    errno = EOK;
+    fd = socket(m_family, SOCK_RAW, IPPROTO_TCP);
+    if (sys_rootuser()) {
+        EXPECT_LE(0, fd);
+        EXPECT_EQ(EOK, errno);
+    } else {
+        EXPECT_EQ(-1, fd);
+        EXPECT_EQ(EPERM, errno);
+    }
 
-	close(fd);
+    close(fd);
 }
 
 /**
@@ -118,18 +123,19 @@ TEST_F(sock_socket, ti_4) {
  *    Check domain argument
  * @details
  */
-TEST_F(sock_socket, ti_5) {
-	int fd = UNDEFINED_VALUE;
+TEST_F(sock_socket, ti_5)
+{
+    int fd = UNDEFINED_VALUE;
 
-	errno = EOK;
-	fd = socket(PF_UNSPEC, SOCK_DGRAM, IPPROTO_IP);
-	EXPECT_EQ(-1, fd);
-	EXPECT_EQ(EAFNOSUPPORT, errno);
+    errno = EOK;
+    fd = socket(PF_UNSPEC, SOCK_DGRAM, IPPROTO_IP);
+    EXPECT_EQ(-1, fd);
+    EXPECT_EQ(EAFNOSUPPORT, errno);
 
-	errno = EOK;
-	fd = socket(PF_MAX + 1, SOCK_STREAM, IPPROTO_IP);
-	EXPECT_EQ(-1, fd);
-	EXPECT_EQ(EAFNOSUPPORT, errno);
+    errno = EOK;
+    fd = socket(PF_MAX + 1, SOCK_STREAM, IPPROTO_IP);
+    EXPECT_EQ(-1, fd);
+    EXPECT_EQ(EAFNOSUPPORT, errno);
 }
 
 /**
@@ -138,13 +144,14 @@ TEST_F(sock_socket, ti_5) {
  *    Check type argument
  * @details
  */
-TEST_F(sock_socket, ti_6) {
-	int fd = UNDEFINED_VALUE;
+TEST_F(sock_socket, ti_6)
+{
+    int fd = UNDEFINED_VALUE;
 
-	errno = EOK;
-	fd = socket(PF_INET, 0x10, IPPROTO_IP);
-	EXPECT_EQ(-1, fd);
-	EXPECT_EQ(EINVAL, errno);
+    errno = EOK;
+    fd = socket(m_family, 0x10, IPPROTO_IP);
+    EXPECT_EQ(-1, fd);
+    EXPECT_EQ(EINVAL, errno);
 }
 
 /**
@@ -153,34 +160,35 @@ TEST_F(sock_socket, ti_6) {
  *    Check proto argument
  * @details
  */
-TEST_F(sock_socket, ti_7) {
-	int fd = UNDEFINED_VALUE;
+TEST_F(sock_socket, ti_7)
+{
+    int fd = UNDEFINED_VALUE;
 
-	errno = EOK;
-	fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	EXPECT_LE(0, fd);
-	EXPECT_EQ(EOK, errno);
+    errno = EOK;
+    fd = socket(m_family, SOCK_DGRAM, IPPROTO_UDP);
+    EXPECT_LE(0, fd);
+    EXPECT_EQ(EOK, errno);
 
-	close(fd);
+    close(fd);
 
-	errno = EOK;
-	fd = socket(PF_INET, SOCK_STREAM, IPPROTO_UDP);
-	EXPECT_EQ(-1, fd);
-	EXPECT_EQ(EPROTONOSUPPORT, errno);
+    errno = EOK;
+    fd = socket(m_family, SOCK_STREAM, IPPROTO_UDP);
+    EXPECT_EQ(-1, fd);
+    EXPECT_EQ(EPROTONOSUPPORT, errno);
 
-	close(fd);
+    close(fd);
 
-	errno = EOK;
-	fd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
-	EXPECT_LE(0, fd);
-	EXPECT_EQ(EOK, errno);
+    errno = EOK;
+    fd = socket(m_family, SOCK_STREAM, IPPROTO_TCP);
+    EXPECT_LE(0, fd);
+    EXPECT_EQ(EOK, errno);
 
-	close(fd);
+    close(fd);
 
-	errno = EOK;
-	fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_TCP);
-	EXPECT_EQ(-1, fd);
-	EXPECT_EQ(EPROTONOSUPPORT, errno);
+    errno = EOK;
+    fd = socket(m_family, SOCK_DGRAM, IPPROTO_TCP);
+    EXPECT_EQ(-1, fd);
+    EXPECT_EQ(EPROTONOSUPPORT, errno);
 
-	close(fd);
+    close(fd);
 }

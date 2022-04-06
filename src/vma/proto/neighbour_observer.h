@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,18 +30,15 @@
  * SOFTWARE.
  */
 
-
-
 #ifndef NEIGHBOUR_OBSERVER_H
 #define NEIGHBOUR_OBSERVER_H
 
 #include "vma/util/sys_vars.h"
 #include "vma/infra/subject_observer.h"
 
-class neigh_observer : public observer
-{
+class neigh_observer : public observer {
 public:
-	virtual transport_type_t get_obs_transport_type() const = 0;
+    virtual transport_type_t get_obs_transport_type() const = 0;
 };
 
 #endif /* NEIGHBOUR_OBSERVER_H */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,46 +30,51 @@
  * SOFTWARE.
  */
 
-
 #include <netinet/in.h>
 #include "neigh_info.h"
 
 #define ADDR_MAX_STR_LEN (128)
 
-netlink_neigh_info::netlink_neigh_info(struct rtnl_neigh* neigh) :
-		dst_addr_str(""), dst_addr(NULL), dst_addr_len(0), flags(0), ifindex(
-		                0), lladdr_str(""), lladdr(NULL), lladdr_len(0), state(
-		                0), type(0)
+netlink_neigh_info::netlink_neigh_info(struct rtnl_neigh *neigh)
+    : dst_addr_str("")
+    , dst_addr(NULL)
+    , dst_addr_len(0)
+    , flags(0)
+    , ifindex(0)
+    , lladdr_str("")
+    , lladdr(NULL)
+    , lladdr_len(0)
+    , state(0)
+    , type(0)
 {
-	fill(neigh);
+    fill(neigh);
 }
 
-void netlink_neigh_info::fill(struct rtnl_neigh* neigh)
+void netlink_neigh_info::fill(struct rtnl_neigh *neigh)
 {
-	if (!neigh) 
-		return;
+    if (!neigh) {
+        return;
+    }
 
-	nl_addr* addr;
-	char addr_str[ADDR_MAX_STR_LEN + 1];
+    nl_addr *addr;
+    char addr_str[ADDR_MAX_STR_LEN + 1];
 
-	addr = rtnl_neigh_get_dst(neigh);
-	if (addr) {
-		dst_addr_str = nl_addr2str(addr, addr_str, ADDR_MAX_STR_LEN);
-		dst_addr = (unsigned char*)nl_addr_get_binary_addr(addr);
-		dst_addr_len = nl_addr_get_len(addr);
-	}
+    addr = rtnl_neigh_get_dst(neigh);
+    if (addr) {
+        dst_addr_str = nl_addr2str(addr, addr_str, ADDR_MAX_STR_LEN);
+        dst_addr = (unsigned char *)nl_addr_get_binary_addr(addr);
+        dst_addr_len = nl_addr_get_len(addr);
+    }
 
-	addr = rtnl_neigh_get_lladdr(neigh);
-	if (addr) {
-		lladdr_str = nl_addr2str(addr, addr_str, ADDR_MAX_STR_LEN);
-		lladdr = (unsigned char*)nl_addr_get_binary_addr(addr);
-		lladdr_len = nl_addr_get_len(addr);
-	}
-	//addr_family = rtnl_neigh_get_family(neigh);
-	flags = rtnl_neigh_get_flags(neigh);
-	ifindex = rtnl_neigh_get_ifindex(neigh);
-	state = rtnl_neigh_get_state(neigh);
-	type = rtnl_neigh_get_type(neigh);
+    addr = rtnl_neigh_get_lladdr(neigh);
+    if (addr) {
+        lladdr_str = nl_addr2str(addr, addr_str, ADDR_MAX_STR_LEN);
+        lladdr = (unsigned char *)nl_addr_get_binary_addr(addr);
+        lladdr_len = nl_addr_get_len(addr);
+    }
+    addr_family = rtnl_neigh_get_family(neigh);
+    flags = rtnl_neigh_get_flags(neigh);
+    ifindex = rtnl_neigh_get_ifindex(neigh);
+    state = rtnl_neigh_get_state(neigh);
+    type = rtnl_neigh_get_type(neigh);
 }
-
-

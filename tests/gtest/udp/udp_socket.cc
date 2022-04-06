@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,29 +30,29 @@
  * SOFTWARE.
  */
 
+#include "common/def.h"
+#include "common/log.h"
+#include "common/sys.h"
+#include "common/base.h"
 
-#include "vma/proto/igmp_handler.h"
-#include <unordered_map>
+#include "udp_base.h"
 
-#ifndef IGMP_MANAGER_H
-#define IGMP_MANAGER_H
-
-
-typedef std::unordered_map<igmp_key, igmp_handler *> igmp_hdlr_map_t;
-
-class igmp_mgr : public lock_mutex
-{
-public:
-				igmp_mgr() {};
-				~igmp_mgr();
-	void 			process_igmp_packet(struct iphdr* p_ip_h, in_addr_t local_if);
-
-private:
-	igmp_hdlr_map_t 	m_igmp_hash;
-	igmp_handler* 		get_igmp_handler(const igmp_key &key, uint8_t igmp_code);
+class udp_socket : public udp_base {
 };
 
-extern igmp_mgr *g_p_igmp_mgr;
+/**
+ * @test udp_socket.ti_1_ipv4
+ * @brief
+ *    Create IPv4 UDP socket
+ * @details
+ */
+TEST_F(udp_socket, ti_1_ip_socket)
+{
+    int fd;
 
-#endif
+    fd = socket(m_family, SOCK_DGRAM, IPPROTO_IP);
+    EXPECT_LE(0, fd);
+    EXPECT_EQ(errno, EOK);
 
+    close(fd);
+}

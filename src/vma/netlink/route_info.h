@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,30 +30,26 @@
  * SOFTWARE.
  */
 
-
 #ifndef NETLINK_ROUTE_INFO_H_
 #define NETLINK_ROUTE_INFO_H_
 
 #include <netlink/route/rtnl.h>
 #include <netlink/route/route.h>
-#include <iostream>
 
 #include "vma/proto/route_val.h"
 
-class netlink_route_info
-{
+class netlink_route_info {
 public:
+    netlink_route_info(struct rtnl_route *nl_route_obj);
+    ~netlink_route_info();
 
-	netlink_route_info(struct rtnl_route* nl_route_obj);
-	~netlink_route_info();
-	
-	route_val*	get_route_val()	{ return m_route_val; };
+    const route_val &get_route_val() { return m_route_val; };
 
 private:
-	// fill all attributes using the provided netlink original route
-	void fill(struct rtnl_route* nl_route_obj);
-	
-	route_val* m_route_val;
+    // fill all attributes using the provided netlink original route
+    void fill(struct rtnl_route *nl_route_obj);
+
+    route_val m_route_val;
 };
 
 #endif /* NETLINK_ROUTE_INFO_H_ */

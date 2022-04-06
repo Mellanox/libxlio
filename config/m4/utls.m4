@@ -1,6 +1,6 @@
 # utls.m4 - TLS offload support
 #
-# Copyright (C) Mellanox Technologies Ltd. 2001-2021. ALL RIGHTS RESERVED.
+# Copyright (C) Mellanox Technologies Ltd. 2001-2022. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 

@@ -31,14 +31,6 @@ The installation copies the XLIO library to: /usr/lib[64]/libxlio.so
 The XLIO monitoring utility is installed at: /usr/bin/xlio_stats
 The XLIO extra socket API is located at: /usr/include/mellanox/xlio_extra.h
 
-Post Installation:
-When working over Infiniband, we recommend to manually add persistence
-for the following system parameters:
-1. Force IPoIB to work in 'datagram' mode (disabling IPoIB 'connected' mode)
-   Modify "SET_IPOIB_CM=no" in file "/etc/infiniband/openib.conf"
-2. Force IGMP to work in V2 on IB interfaces
-   Add "net.ipv4.conf.all.force_igmp_version = 2" in file "/etc/sysctl.conf"
-
 Upgrading:
 Use rpm update procedure: # rpm -U libxlio.X.Y.Z-R.rpm
 You can upgrade by uninstalling (rpm -e) the previously installed package
@@ -84,7 +76,7 @@ Example:
  XLIO DETAILS: Conf File                      /etc/libxlio.conf          [XLIO_CONFIG_FILE]
  XLIO DETAILS: Application ID                 XLIO_DEFAULT_APPLICATION_ID [XLIO_APPLICATION_ID]
  XLIO DETAILS: Polling CPU idle usage         Disabled                   [XLIO_CPU_USAGE_STATS]
- XLIO DETAILS: SigIntr Ctrl-C Handle          Disabled                   [XLIO_HANDLE_SIGINTR]
+ XLIO DETAILS: SigIntr Ctrl-C Handle          Enabled                    [XLIO_HANDLE_SIGINTR]
  XLIO DETAILS: SegFault Backtrace             Disabled                   [XLIO_HANDLE_SIGSEGV]
  XLIO DETAILS: Ring allocation logic TX       0 (Ring per interface)     [XLIO_RING_ALLOCATION_LOGIC_TX]
  XLIO DETAILS: Ring allocation logic RX       0 (Ring per interface)     [XLIO_RING_ALLOCATION_LOGIC_RX]
@@ -161,9 +153,8 @@ Example:
  XLIO DETAILS: Num of UC ARPs                 3                          [XLIO_NEIGH_UC_ARP_QUATA]
  XLIO DETAILS: UC ARP delay (msec)            10000                      [XLIO_NEIGH_UC_ARP_DELAY_MSEC]
  XLIO DETAILS: Num of neigh restart retries   1                          [XLIO_NEIGH_NUM_ERR_RETRIES]
- XLIO DETAILS: IPOIB support                  Enabled                    [XLIO_IPOIB]
  XLIO DETAILS: SocketXtreme mode              Disabled                   [XLIO_SOCKETXTREME]
- XLIO DETAILS: TSO support                    Enabled                    [XLIO_TSO]
+ XLIO DETAILS: TSO support                    auto                       [XLIO_TSO]
  XLIO DETAILS: UTLS RX support                Enabled                    [XLIO_UTLS_RX]
  XLIO DETAILS: UTLS TX support                Enabled                    [XLIO_UTLS_TX]
  XLIO DETAILS: LRO support                    auto                       [XLIO_LRO]
@@ -333,7 +324,7 @@ XLIO_HANDLE_SIGINTR
 When Enabled, the library handler will be called when interrupt signal is sent to the process.
 XLIO will also call to application's handler if exist.
 Value range is 0 to 1
-Default value is 0 (Disabled)
+Default value is 1 (Enabled)
 
 XLIO_HANDLE_SIGSEGV
 When Enabled, print backtrace if segmentation fault happens.
@@ -407,6 +398,13 @@ for your specific hardware.
 Value range is 0 to MTU size
 Disable with a value of 0
 Default value is 256 bytes
+
+XLIO_TX_BUFS_BATCH_TCP
+The number of buffers fetched from the ring pool by a socket at once.
+Higher number for less ring accesses to fetch buffers.
+Lower number for less memory consumption by a socket.
+Min value is 1
+Default value is 16
 
 XLIO_RING_ALLOCATION_LOGIC_TX
 XLIO_RING_ALLOCATION_LOGIC_RX
@@ -506,7 +504,15 @@ prototype TCP and IP headers of the incoming send buffer to carve out segments
 of required size. Copying the prototype header and options, then calculating
 the sequence number and checksum fields creates TCP segment headers.
 Expected benefits: Throughput increase and CPU unload.
-Default value is 1 (Enable)
+Default value: auto
+
+auto
+    Depends on ethtool setting and adapter ability.
+    See ethtool -k <eth0> | grep tcp-segmentation-offload
+on
+    Enabled in case adapter supports it
+off
+    Disabled
 
 XLIO_UTLS_RX
 UTLS provides TLS data path acceleration. This is achieved by offloading Linux
@@ -590,7 +596,7 @@ Default value is 0 (Disable)
 XLIO_RX_PREFETCH_BYTES
 Size of receive buffer to prefetch into cache while processing ingress packets.
 The default is a single cache line of 64 bytes which should be at least 32
-bytes to cover the IPoIB+IP+UDP headers and a small part of the users payload.
+bytes to cover the IP+UDP headers and a small part of the users payload.
 Increasing this can help improve performance for larger user payload sizes.
 Value range is 32 bytes to MTU size
 Default value is 256 bytes
@@ -1116,19 +1122,6 @@ automatically to reach a desired rate of interrupts.
 5. Disable Adaptive CQ moderation with XLIO_CQ_AIM_INTERVAL_MSEC=0
 
 
-
-
-Notes
-=====
-* Multicast loopback behavior:
-	There is a different behavior between IPoIB and XLIO when dealing with
-	multicast packets at the same machine:
-	- When sending from XLIO application to IPoIB application on the same
-	machine the packet will never be accepted by the IPoIB side (even when
-	the loopback is enabled)
-	- When sending from IPoIB application to XLIO application on the same
-	machine, the packet will always be accepted by the XLIO side (even when
-	the loop is disabled
 
 
 Troubleshooting

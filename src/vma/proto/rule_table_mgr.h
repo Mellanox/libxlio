@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,41 +30,49 @@
  * SOFTWARE.
  */
 
-
 #ifndef RULE_TABLE_MGR_H
 #define RULE_TABLE_MGR_H
 
-#include <unistd.h>
-#include <bits/sockaddr.h>
 #include "vma/infra/cache_subject_observer.h"
 #include "vma/proto/netlink_socket_mgr.h"
+#include "route_rule_table_key.h"
 #include "rule_entry.h"
+#include "rule_val.h"
+
+#include <vector>
+
+typedef std::vector<rule_val> rule_table_t;
 
 /*
-* This class manages routing rule related operation such as getting rules from kernel,
-* finding table ID for given destination info and cashing usage history for rule table.
-*/
-class rule_table_mgr : public netlink_socket_mgr<rule_val>, public cache_table_mgr<route_rule_table_key, std::deque<rule_val*>*> 
-{
+ * This class manages routing rule related operation such as getting rules from kernel,
+ * finding table ID for given destination info and cashing usage history for rule table.
+ */
+class rule_table_mgr : public netlink_socket_mgr,
+                       public cache_table_mgr<route_rule_table_key, std::deque<rule_val *> *> {
 public:
-	rule_table_mgr();
-	
-	rule_entry* 	create_new_entry(route_rule_table_key key, const observer *obs);
-	void 	   	update_entry(rule_entry* p_ent);
-	bool	 	rule_resolve(route_rule_table_key key, std::deque<unsigned char> &table_id_list);
+    rule_table_mgr();
+
+    bool rule_resolve(route_rule_table_key key, std::deque<uint32_t> &table_id_list);
 
 protected:
-	virtual bool	parse_enrty(nlmsghdr *nl_header, rule_val *p_val);
-	virtual void	update_tbl();
-	
-private:
+    virtual void parse_entry(struct nlmsghdr *nl_header);
+    virtual void update_tbl();
 
-	void		parse_attr(struct rtattr *rt_attribute, rule_val *p_val);
-	
-	bool		find_rule_val(route_rule_table_key key, std::deque<rule_val*>* &p_val);
-	bool 		is_matching_rule(route_rule_table_key rrk, rule_val* p_val);
+    rule_entry *create_new_entry(route_rule_table_key key, const observer *obs);
+
+private:
+    void parse_attr(struct rtattr *rt_attribute, rule_val &val);
+    void print_tbl();
+
+    void update_entry(rule_entry *p_ent);
+
+    bool find_rule_val(const route_rule_table_key &key, std::deque<rule_val *> *&p_val);
+    bool is_matching_rule(const route_rule_table_key &key, const rule_val &val);
+
+    rule_table_t m_table_in4;
+    rule_table_t m_table_in6;
 };
 
-extern rule_table_mgr* g_p_rule_table_mgr;
+extern rule_table_mgr *g_p_rule_table_mgr;
 
 #endif /* RULE_TABLE_MGR_H */

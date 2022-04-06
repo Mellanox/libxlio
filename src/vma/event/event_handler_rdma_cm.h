@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,7 +30,6 @@
  * SOFTWARE.
  */
 
-
 #ifndef EVENT_HANDLER_RDMA_CM_H
 #define EVENT_HANDLER_RDMA_CM_H
 
@@ -38,15 +37,15 @@
 
 /*
  * @class event_handler
- * An object registers with event_handler_manager to get event notification callbacks for the registered rdma_cm id's.
- * This callback function will be called when an event was received on the appropritae channel with the appropritae id.
- * The channels can be shared between several objects, but the id's in each channel has to be unic.
+ * An object registers with event_handler_manager to get event notification callbacks for the
+ * registered rdma_cm id's. This callback function will be called when an event was received on the
+ * appropritae channel with the appropritae id. The channels can be shared between several objects,
+ * but the id's in each channel has to be unic.
  */
-class event_handler_rdma_cm
-{
+class event_handler_rdma_cm {
 public:
-	virtual ~event_handler_rdma_cm() {};
-	virtual void handle_event_rdma_cm_cb(struct rdma_cm_event* p_event) = 0;
+    virtual ~event_handler_rdma_cm() {};
+    virtual void handle_event_rdma_cm_cb(struct rdma_cm_event *p_event) = 0;
 };
 
-#endif //EVENT_HANDLER_RDMA_CM_H
+#endif // EVENT_HANDLER_RDMA_CM_H

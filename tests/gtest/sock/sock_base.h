@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,14 +33,13 @@
 #ifndef TESTS_GTEST_SOCK_BASE_H_
 #define TESTS_GTEST_SOCK_BASE_H_
 
-
 /**
  * SOCK Base class for tests
  */
 class sock_base : public testing::Test, public test_base {
 protected:
-	virtual void SetUp();
-	virtual void TearDown();
+    virtual void SetUp();
+    virtual void TearDown();
 };
 
 #endif /* TESTS_GTEST_SOCK_BASE_H_ */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,20 +30,20 @@
  * SOFTWARE.
  */
 
-
 #include <stdlib.h>
 
 #include "vlogger.h"
 
 #if _BullseyeCoverage
-    #pragma BullseyeCoverage off
+#pragma BullseyeCoverage off
 #endif
 
 int main(int argc, char **argv)
 {
     vlog_levels_t vlog_levels_init = VLOG_WARNING;
-    if (argc > 1)
+    if (argc > 1) {
         vlog_levels_init = (vlog_levels_t)atoi(argv[1]);
+    }
 
     printf(">> starting vlogger in level: %d\n", (int)vlog_levels_init);
     vlog_start("Voltaire Logger test module: ", vlog_levels_init);
@@ -60,9 +60,9 @@ int main(int argc, char **argv)
 
     vlog_stop();
 
-	return 0;
+    return 0;
 }
 
 #if _BullseyeCoverage
-    #pragma BullseyeCoverage on
+#pragma BullseyeCoverage on
 #endif

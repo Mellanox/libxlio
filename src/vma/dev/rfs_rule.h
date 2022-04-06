@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -35,20 +35,17 @@
 
 #include <vlogger/vlogger.h>
 
-#define rfs_logpanic 	__log_info_panic
-#define rfs_logerr	__log_info_err
-#define rfs_logwarn	__log_info_warn
-#define rfs_loginfo	__log_info_info
-#define rfs_logdbg	__log_info_dbg
-#define rfs_logfunc	__log_info_func
-#define rfs_logfuncall	__log_info_funcall
+#define rfs_logpanic   __log_info_panic
+#define rfs_logerr     __log_info_err
+#define rfs_logwarn    __log_info_warn
+#define rfs_loginfo    __log_info_info
+#define rfs_logdbg     __log_info_dbg
+#define rfs_logfunc    __log_info_func
+#define rfs_logfuncall __log_info_funcall
 
-class rfs_rule
-{
+class rfs_rule {
 public:
-
     virtual ~rfs_rule() {}
 };
 
 #endif
-

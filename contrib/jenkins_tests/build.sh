@@ -14,8 +14,8 @@ cd ${build_dir}
 ln -s "${build_dir}/0/install" "${install_dir}"
 
 build_list="\
-default: \
-debug:--enable-opt-log=no --enable-debug"
+debug:--enable-opt-log=no --enable-debug \
+default: "
 
 
 build_tap=${WORKSPACE}/${prefix}/build.tap

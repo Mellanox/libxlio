@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,7 +30,6 @@
  * SOFTWARE.
  */
 
-
 extern int main_init(void);
 extern int main_destroy(void);
 
@@ -40,10 +39,10 @@ __attribute__((constructor)) causes the function to be called when
 library is firsrt loaded */
 int __attribute__((constructor)) sock_redirect_lib_load_constructor(void)
 {
-        return main_init();
+    return main_init();
 }
 
 int __attribute__((destructor)) sock_redirect_lib_load_destructor(void)
 {
-        return main_destroy();
+    return main_destroy();
 }

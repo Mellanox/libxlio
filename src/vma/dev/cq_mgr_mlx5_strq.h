@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -37,80 +37,78 @@
 #include <vector>
 #include "cq_mgr_mlx5.h"
 
-class cq_strides_cache
-{
+class cq_strides_cache {
 public:
+    cq_strides_cache(ring_slave *owner_ring);
+    ~cq_strides_cache();
 
-	cq_strides_cache(ring_slave* owner_ring);
-	~cq_strides_cache();
+    mem_buf_desc_t *next_stride();
 
-	mem_buf_desc_t* next_stride();
-
-	void return_stride(mem_buf_desc_t* desc);
+    void return_stride(mem_buf_desc_t *desc);
 
 private:
+    void get_from_global_pool();
+    void assign_retrieve_vec_ptrs();
+    void assign_return_vec_ptrs();
 
-	void get_from_global_pool();
-	void assign_retrieve_vec_ptrs();
-	void assign_return_vec_ptrs();
+    typedef std::vector<mem_buf_desc_t *> vec_type;
 
-	typedef std::vector<mem_buf_desc_t*> vec_type;
-
-	size_t _compensation_level;
-	vec_type _retrieve_vec;
-	vec_type _return_vec;
-	std::vector<vec_type> _block_vec;
-	size_t _block_vec_used = 0U;
-	mem_buf_desc_t** _retrieve_ptr = nullptr;
-	mem_buf_desc_t** _return_ptr = nullptr;
-	mem_buf_desc_t** _retrieve_ptr_end = nullptr;
-	mem_buf_desc_t** _return_ptr_end = nullptr;
-	ring_slave* _owner_ring = nullptr;
+    size_t _compensation_level;
+    vec_type _retrieve_vec;
+    vec_type _return_vec;
+    std::vector<vec_type> _block_vec;
+    size_t _block_vec_used = 0U;
+    mem_buf_desc_t **_retrieve_ptr = nullptr;
+    mem_buf_desc_t **_return_ptr = nullptr;
+    mem_buf_desc_t **_retrieve_ptr_end = nullptr;
+    mem_buf_desc_t **_return_ptr_end = nullptr;
+    ring_slave *_owner_ring = nullptr;
 };
 
-class cq_mgr_mlx5_strq : public cq_mgr_mlx5
-{
+class cq_mgr_mlx5_strq : public cq_mgr_mlx5 {
 public:
+    cq_mgr_mlx5_strq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
+                     uint32_t stride_size_bytes, uint32_t strides_num,
+                     struct ibv_comp_channel *p_comp_event_channel, bool call_configure = true);
 
-	cq_mgr_mlx5_strq(
-		ring_simple* p_ring, ib_ctx_handler* p_ib_ctx_handler, uint32_t cq_size,
-	uint32_t stride_size_bytes, uint32_t strides_num,
-		struct ibv_comp_channel* p_comp_event_channel, bool call_configure = true);
+    virtual ~cq_mgr_mlx5_strq() override;
 
-	virtual ~cq_mgr_mlx5_strq() override;
-
-	virtual int      drain_and_proccess(uintptr_t* p_recycle_buffers_last_wr_id = NULL) override;
-	virtual int      poll_and_process_element_rx(uint64_t* p_cq_poll_sn, void* pv_fd_ready_array = NULL) override;
-	virtual int      poll_and_process_element_rx(mem_buf_desc_t **p_desc_lst) override;
-	virtual void     mem_buf_desc_return_to_owner(mem_buf_desc_t* p_mem_buf_desc, void* pv_fd_ready_array = NULL) override;
-	virtual void     add_qp_rx(qp_mgr* qp) override;
-	virtual uint32_t clean_cq() override;
+    virtual int drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id = NULL) override;
+    virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
+                                            void *pv_fd_ready_array = NULL) override;
+    virtual int poll_and_process_element_rx(mem_buf_desc_t **p_desc_lst) override;
+    virtual void mem_buf_desc_return_to_owner(mem_buf_desc_t *p_mem_buf_desc,
+                                              void *pv_fd_ready_array = NULL) override;
+    virtual void add_qp_rx(qp_mgr *qp) override;
+    virtual uint32_t clean_cq() override;
 
 protected:
+    virtual void statistics_print() override;
+    virtual void reclaim_recv_buffer_helper(mem_buf_desc_t *buff) override;
 
-	virtual void statistics_print() override;
-	virtual void reclaim_recv_buffer_helper(mem_buf_desc_t* buff) override;
-
-	inline mem_buf_desc_t* poll(enum buff_status_e& status, mem_buf_desc_t*& buff_stride);
-	int poll_and_process_error_element_rx_sockextreme(struct vma_mlx5_cqe *cqe, void* pv_fd_ready_array);
+    inline mem_buf_desc_t *poll(enum buff_status_e &status, mem_buf_desc_t *&buff_stride);
+    int poll_and_process_error_element_rx_sockextreme(struct vma_mlx5_cqe *cqe,
+                                                      void *pv_fd_ready_array);
 
 private:
+    inline bool set_current_hot_buffer();
+    inline bool strq_cqe_to_mem_buff_desc(struct vma_mlx5_cqe *cqe, enum buff_status_e &status,
+                                          bool &is_filler);
+    void cqe_to_vma_wc_sockextreme(struct vma_mlx5_cqe *cqe, vma_ibv_wc *wc);
+    int drain_and_proccess_sockextreme(uintptr_t *p_recycle_buffers_last_wr_id);
+    inline int poll_and_process_element_rx_sockextreme(void *);
+    inline int drain_and_proccess_helper(mem_buf_desc_t *buff, mem_buf_desc_t *buff_wqe,
+                                         buff_status_e status,
+                                         uintptr_t *p_recycle_buffers_last_wr_id);
+    mem_buf_desc_t *process_strq_cq_element_rx(mem_buf_desc_t *p_mem_buf_desc,
+                                               enum buff_status_e status);
 
-	inline bool     set_current_hot_buffer();
-	inline bool	strq_cqe_to_mem_buff_desc(struct vma_mlx5_cqe *cqe, enum buff_status_e& status, bool& is_filler);
-	void		cqe_to_vma_wc_sockextreme(struct vma_mlx5_cqe *cqe, vma_ibv_wc *wc);
-	int		drain_and_proccess_sockextreme(uintptr_t* p_recycle_buffers_last_wr_id);
-	inline int 	poll_and_process_element_rx_sockextreme(void*);
-	inline int      drain_and_proccess_helper(mem_buf_desc_t* buff, mem_buf_desc_t* buff_wqe, buff_status_e status, uintptr_t* p_recycle_buffers_last_wr_id);
-	mem_buf_desc_t* process_strq_cq_element_rx(mem_buf_desc_t* p_mem_buf_desc, enum buff_status_e status);
-
-	cq_strides_cache _stride_cache;
-	mem_buf_desc_t* _hot_buffer_stride = nullptr;
-	const uint32_t _stride_size_bytes;
-	const uint32_t _strides_num;
-	const uint32_t _wqe_buff_size_bytes;
-	uint32_t _current_wqe_consumed_bytes = 0U;
+    cq_strides_cache _stride_cache;
+    mem_buf_desc_t *_hot_buffer_stride = nullptr;
+    const uint32_t _stride_size_bytes;
+    const uint32_t _strides_num;
+    const uint32_t _wqe_buff_size_bytes;
+    uint32_t _current_wqe_consumed_bytes = 0U;
 };
 
 #endif
-

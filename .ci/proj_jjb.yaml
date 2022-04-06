@@ -56,7 +56,7 @@
             description: "Verify service."
         - bool:
             name: "do_style"
-            default: false
+            default: true
             description: "Analysis source code for coding style."
         - bool:
             name: "do_coverity"
@@ -78,6 +78,10 @@
             name: "do_commit"
             default: true
             description: "Use commit message check."
+        - bool:
+            name: "do_tidy"
+            default: true
+            description: "Use clang-tidy  check."
         - bool:
             name: "do_artifact"
             default: true

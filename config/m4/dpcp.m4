@@ -1,6 +1,6 @@
 # dpcp.m4 - Library to operate with DevX
 # 
-# Copyright (C) Mellanox Technologies Ltd. 2001-2021. ALL RIGHTS RESERVED.
+# Copyright (C) Mellanox Technologies Ltd. 2001-2022. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -23,6 +23,11 @@ get_version_number()
     else
         echo 0
     fi
+}
+
+get_min_supported_version()
+{
+    echo 10120
 }
 
 AC_ARG_WITH([dpcp],
@@ -87,13 +92,15 @@ if test "$vma_cv_dpcp" -ne 0; then
     LDFLAGS="$LDFLAGS $vma_cv_dpcp_LDFLAGS"
     AC_SUBST([DPCP_LIBS], ["-ldpcp"])
     dpcp_version_number=($(get_version_number))
+    min_supported_version=($(get_min_supported_version))
 
-    if test "$dpcp_version_number" -ne 0; then
+    if test "$dpcp_version_number" -ge "$min_supported_version"; then
         AC_DEFINE_UNQUOTED([DEFINED_DPCP], [$dpcp_version_number], [Define to DPCP version number (major * 10000 + minor * 100 + patch)])
+        AC_DEFINE_UNQUOTED([DEFINED_DPCP_MIN], [$min_supported_version], [Define to DPCP version number (major * 10000 + minor * 100 + patch)])
         AC_MSG_RESULT([yes])
     else
         AC_MSG_RESULT([no])
-        AC_MSG_ERROR([dpcp exists but version can not be detected])
+        AC_MSG_ERROR([found incompatible dpcp version $dpcp_version_number (min supported version $min_supported_version) ])
     fi
 else
     AS_IF([test "x$with_dpcp" == xno],

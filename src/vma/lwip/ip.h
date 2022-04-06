@@ -34,25 +34,10 @@
 
 #include "vma/lwip/opt.h"
 #include "vma/lwip/ip_addr.h"
-#include "vma/lwip/pbuf.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#define IP_HLEN 20
-
-#define IP_PROTO_TCP     6
-
-/* This is passed as the destination address to ip_output_if (not
-   to ip_output), meaning that an IP header already is constructed
-   in the pbuf. This is used when TCP retransmits. */
-#ifdef IP_HDRINCL
-#undef IP_HDRINCL
-#endif /* IP_HDRINCL */
-#define IP_HDRINCL  NULL
-
-#define IP_PCB_ADDRHINT
 
 /* This is the common part of all PCB types. It needs to be at the
    beginning of a PCB type definition. It is located here so that
@@ -62,19 +47,13 @@ extern "C" {
   /* ip addresses in network byte order */ \
   ip_addr_t local_ip; \
   ip_addr_t remote_ip; \
+  bool is_ipv6; \
    /* Socket options */  \
   u8_t so_options;      \
    /* Type Of Service */ \
   u8_t tos;              \
   /* Time To Live */     \
-  u8_t ttl               \
-  /* link layer address resolution hint */ \
-  IP_PCB_ADDRHINT
-
-struct ip_pcb {
-/* Common members of all PCB types */
-  IP_PCB;
-};
+  u8_t ttl
 
 /*
  * Option flags per-socket. These are the same like SO_XXX.
@@ -93,74 +72,13 @@ struct ip_pcb {
 /* These flags are inherited (e.g. from a listen-pcb to a connection-pcb): */
 #define SOF_INHERITED   (SOF_REUSEADDR|SOF_KEEPALIVE|SOF_LINGER/*|SOF_DEBUG|SOF_DONTROUTE|SOF_OOBINLINE*/)
 
-PACK_STRUCT_BEGIN
-struct ip_hdr {
-  /* version / header length / type of service */
-  PACK_STRUCT_FIELD(u16_t _v_hl_tos);
-  /* total length */
-  PACK_STRUCT_FIELD(u16_t _len);
-  /* identification */
-  PACK_STRUCT_FIELD(u16_t _id);
-  /* fragment offset field */
-  PACK_STRUCT_FIELD(u16_t _offset);
-#define IP_RF 0x8000        /* reserved fragment flag */
-#define IP_DF 0x4000        /* dont fragment flag */
-#define IP_MF 0x2000        /* more fragments flag */
-#define IP_OFFMASK 0x1fff   /* mask for fragmenting bits */
-  /* time to live */
-  PACK_STRUCT_FIELD(u8_t _ttl);
-  /* protocol*/
-  PACK_STRUCT_FIELD(u8_t _proto);
-  /* checksum */
-  PACK_STRUCT_FIELD(u16_t _chksum);
-  /* source and destination IP addresses */
-  PACK_STRUCT_FIELD(ip_addr_p_t src);
-  PACK_STRUCT_FIELD(ip_addr_p_t dest); 
-} PACK_STRUCT_STRUCT;
-PACK_STRUCT_END
+#define IPV6_VERSION 6U
 
-#define IPH_V(hdr)  (ntohs((hdr)->_v_hl_tos) >> 12)
-#define IPH_HL(hdr) ((ntohs((hdr)->_v_hl_tos) >> 8) & 0x0f)
-#define IPH_TOS(hdr) (ntohs((hdr)->_v_hl_tos) & 0xff)
-#define IPH_LEN(hdr) ((hdr)->_len)
-#define IPH_ID(hdr) ((hdr)->_id)
-#define IPH_OFFSET(hdr) ((hdr)->_offset)
-#define IPH_TTL(hdr) ((hdr)->_ttl)
-#define IPH_PROTO(hdr) ((hdr)->_proto)
-#define IPH_CHKSUM(hdr) ((hdr)->_chksum)
-
-#define IPH_VHLTOS_SET(hdr, v, hl, tos) (hdr)->_v_hl_tos = (htons(((v) << 12) | ((hl) << 8) | (tos)))
-#define IPH_LEN_SET(hdr, len) (hdr)->_len = (len)
-#define IPH_ID_SET(hdr, id) (hdr)->_id = (id)
-#define IPH_OFFSET_SET(hdr, off) (hdr)->_offset = (off)
-#define IPH_TTL_SET(hdr, ttl) (hdr)->_ttl = (u8_t)(ttl)
-#define IPH_PROTO_SET(hdr, proto) (hdr)->_proto = (u8_t)(proto)
-#define IPH_CHKSUM_SET(hdr, chksum) (hdr)->_chksum = (chksum)
-
-/** Header of the input packet currently being processed. */
-extern const struct ip_hdr *current_header;
-/** Source IP address of current_header */
-extern __thread ip_addr_t current_iphdr_src;
-/** Destination IP address of current_header */
-extern __thread ip_addr_t current_iphdr_dest;
-
-/** Get the interface that received the current packet.
- * This function must only be called from a receive callback (udp_recv,
- * raw_recv, tcp_accept). It will return NULL otherwise. */
-#define ip_current_netif()  (current_netif)
-/** Get the IP header of the current packet.
- * This function must only be called from a receive callback (udp_recv,
- * raw_recv, tcp_accept). It will return NULL otherwise. */
-#define ip_current_header() (current_header)
-/** Source IP address of current_header */
-#define ip_current_src_addr()  (&current_iphdr_src)
-/** Destination IP address of current_header */
-#define ip_current_dest_addr() (&current_iphdr_dest)
+#define IP_HLEN 20U
+#define IPV6_HLEN 40U
 
 #ifdef __cplusplus
 }
 #endif
 
 #endif /* __LWIP_IP_H__ */
-
-

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -40,13 +40,13 @@
 
 void vma_base::SetUp()
 {
-	errno = EOK;
+    errno = EOK;
 
 #if defined(EXTRA_API_ENABLED) && (EXTRA_API_ENABLED == 1)
-	xlio_api = xlio_get_api();
-	SKIP_TRUE(xlio_api, "This test suite should be launched under libxlio.so");
+    xlio_api = xlio_get_api();
+    SKIP_TRUE(xlio_api, "This test suite should be launched under libxlio.so");
 #else
-	SKIP_TRUE(0, "Tests should be compiled as make CPPFLAGS=-DEXTRA_API_ENABLED=1")
+    SKIP_TRUE(0, "Tests should be compiled as make CPPFLAGS=-DEXTRA_API_ENABLED=1")
 #endif /* EXTRA_API_ENABLED */
 }
 

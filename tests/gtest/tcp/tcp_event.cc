@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -37,93 +37,98 @@
 
 #include "tcp_base.h"
 
-class tcp_event : public tcp_base {};
+class tcp_event : public tcp_base {
+};
 
-TEST_F(tcp_event, DISABLED_ti_1) {
-	int rc = EOK;
-	int fd;
-	struct epoll_event event;
+TEST_F(tcp_event, DISABLED_ti_1)
+{
+    int rc = EOK;
+    int fd;
+    struct epoll_event event;
 
-	fd = tcp_base::sock_create_nb();
-	ASSERT_LE(0, fd);
+    fd = tcp_base::sock_create_nb();
+    ASSERT_LE(0, fd);
 
-	rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-	ASSERT_EQ(EINPROGRESS, errno);
-	ASSERT_EQ((-1), rc);
+    rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+    ASSERT_EQ(EINPROGRESS, errno);
+    ASSERT_EQ((-1), rc);
 
-	event.events = 0;
-	event.data.fd = fd;
-	rc = test_base::event_wait(&event);
-	EXPECT_LT(0, rc);
-/*	EXPECT_EQ(EPOLLHUP, event.events); TODO: UNDER VMA */
-	EXPECT_EQ((uint32_t)(EPOLLERR | EPOLLHUP), event.events);
+    event.events = 0;
+    event.data.fd = fd;
+    rc = test_base::event_wait(&event);
+    EXPECT_LT(0, rc);
+    /*	EXPECT_EQ(EPOLLHUP, event.events); TODO: UNDER VMA */
+    EXPECT_EQ((uint32_t)(EPOLLERR | EPOLLHUP), event.events);
 
-	close(fd);
+    close(fd);
 }
 
-TEST_F(tcp_event, ti_2) {
-	int rc = EOK;
-	int fd;
-	struct epoll_event event;
+TEST_F(tcp_event, ti_2)
+{
+    int rc = EOK;
+    int fd;
+    struct epoll_event event;
 
-	fd = tcp_base::sock_create_nb();
-	ASSERT_LE(0, fd);
+    fd = tcp_base::sock_create_nb();
+    ASSERT_LE(0, fd);
 
-	rc = connect(fd, (struct sockaddr *)&remote_addr, sizeof(remote_addr));
-	ASSERT_EQ(EINPROGRESS, errno);
-	ASSERT_EQ((-1), rc);
+    rc = connect(fd, (struct sockaddr *)&remote_addr, sizeof(remote_addr));
+    ASSERT_EQ(EINPROGRESS, errno);
+    ASSERT_EQ((-1), rc);
 
-	event.events = 0;
-	event.data.fd = fd;
-	rc = test_base::event_wait(&event);
-	EXPECT_LT(0, rc);
-	EXPECT_EQ((uint32_t)(EPOLLERR | EPOLLHUP), event.events);
+    event.events = 0;
+    event.data.fd = fd;
+    rc = test_base::event_wait(&event);
+    EXPECT_LT(0, rc);
+    EXPECT_EQ((uint32_t)(EPOLLERR | EPOLLHUP), event.events);
 
-	close(fd);
+    close(fd);
 }
 
-TEST_F(tcp_event, DISABLED_ti_3) {
-	int rc = EOK;
-	int fd;
-	struct epoll_event event;
+TEST_F(tcp_event, DISABLED_ti_3)
+{
+    int rc = EOK;
+    int fd;
+    struct epoll_event event;
 
-	fd = tcp_base::sock_create_nb();
-	ASSERT_LE(0, fd);
+    fd = tcp_base::sock_create_nb();
+    ASSERT_LE(0, fd);
 
-	rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-	ASSERT_EQ(EINPROGRESS, errno);
-	ASSERT_EQ((-1), rc);
+    rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+    ASSERT_EQ(EINPROGRESS, errno);
+    ASSERT_EQ((-1), rc);
 
-	event.events = EPOLLOUT | EPOLLIN;
-	event.data.fd = fd;
-	rc = test_base::event_wait(&event);
-	EXPECT_LT(0, rc);
-	/*	EXPECT_EQ((EPOLLHUP | EPOLLIN), event.events); TODO: UNDER VMA */
-	EXPECT_EQ((uint32_t)(EPOLLERR | EPOLLHUP | EPOLLOUT | EPOLLIN), event.events);
+    event.events = EPOLLOUT | EPOLLIN;
+    event.data.fd = fd;
+    rc = test_base::event_wait(&event);
+    EXPECT_LT(0, rc);
+    /*	EXPECT_EQ((EPOLLHUP | EPOLLIN), event.events); TODO: UNDER VMA */
+    EXPECT_EQ((uint32_t)(EPOLLERR | EPOLLHUP | EPOLLOUT | EPOLLIN), event.events);
 
-	close(fd);
+    close(fd);
 }
 
-TEST_F(tcp_event, DISABLED_ti_4) {
-	int rc = EOK;
-	int fd;
-	struct epoll_event event;
+TEST_F(tcp_event, DISABLED_ti_4)
+{
+    int rc = EOK;
+    int fd;
+    struct epoll_event event;
 
-	fd = tcp_base::sock_create_nb();
-	ASSERT_LE(0, fd);
+    fd = tcp_base::sock_create_nb();
+    ASSERT_LE(0, fd);
 
-	rc = connect(fd, (struct sockaddr *)&remote_addr, sizeof(remote_addr));
-	ASSERT_EQ(EINPROGRESS, errno);
-	ASSERT_EQ((-1), rc);
+    rc = connect(fd, (struct sockaddr *)&remote_addr, sizeof(remote_addr));
+    ASSERT_EQ(EINPROGRESS, errno);
+    ASSERT_EQ((-1), rc);
 
-	event.events = EPOLLOUT | EPOLLIN;
-	event.data.fd = fd;
-	rc = test_base::event_wait(&event);
-	EXPECT_LT(0, rc);
-	/*	EXPECT_EQ((EPOLLERR | EPOLLHUP | EPOLLIN), event.events); TODO: UNDER VMA */
-	EXPECT_EQ((uint32_t)(EPOLLERR | EPOLLHUP | EPOLLOUT | EPOLLIN), event.events);
+    event.events = EPOLLOUT | EPOLLIN;
+    event.data.fd = fd;
+    rc = test_base::event_wait(&event);
+    EXPECT_LT(0, rc);
+    /*	EXPECT_EQ((EPOLLERR | EPOLLHUP | EPOLLIN), event.events); TODO: UNDER VMA */
+    EXPECT_EQ((uint32_t)(EPOLLERR | EPOLLHUP | EPOLLOUT | EPOLLIN), event.events);
 
-	close(fd);
+    close(fd);
 }
 
 /* VMA does not work as server/client from single process
@@ -160,7 +165,7 @@ static void _proc_server(void *ptr)
 	EXPECT_EQ(sizeof(peer_addr), socklen);
 
 	log_trace("Accepted connection: fd=%d from %s\n",
-			fd_peer, sys_addr2str((struct sockaddr_in *) &peer_addr));
+			fd_peer, sys_addr2str((struct sockaddr *) &peer_addr));
 
 	close(fd_peer);
 	close(fd);
@@ -192,7 +197,7 @@ static void _proc_client(void *ptr)
 	EXPECT_EQ((uint32_t)(EPOLLOUT), event.events);
 
 	log_trace("Established connection: fd=%d to %s\n",
-			fd, sys_addr2str((struct sockaddr_in *) &gtest_conf.server_addr));
+			fd, sys_addr2str((struct sockaddr *) &gtest_conf.server_addr));
 
 	close(fd);
 }

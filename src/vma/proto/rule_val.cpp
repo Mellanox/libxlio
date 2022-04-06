@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,84 +30,60 @@
  * SOFTWARE.
  */
 
-
-#include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
 
 #include "rule_val.h"
-#include "rule_table_mgr.h"
 
-#define MODULE_NAME 		"rrv"
+#define MODULE_NAME "rrv"
 
-#define rr_val_loginfo		__log_info_info
-#define rr_val_logdbg		__log_info_dbg
-#define rr_val_logfunc		__log_info_func
+#define rr_val_loginfo __log_info_info
+#define rr_val_logdbg  __log_info_dbg
+#define rr_val_logfunc __log_info_func
 
-rule_val::rule_val(): cache_observer()
+rule_val::rule_val()
+    : m_dst_addr(in6addr_any)
+    , m_src_addr(in6addr_any)
 {
-	m_protocol = 0;
-	m_scope = 0;
-	m_type = 0;
-	m_dst_addr = 0;
-	m_src_addr = 0;
-	memset(m_oif_name, 0, IFNAMSIZ * sizeof(char));
-	memset(m_iif_name, 0, IFNAMSIZ * sizeof(char));
-	m_priority = 0;
-	m_tos = 0;
-	m_table_id = 0;
-	m_is_valid = false;
-	memset(m_str, 0, BUFF_SIZE * sizeof(char));
-	
+    m_protocol = 0;
+    m_scope = 0;
+    m_type = 0;
+    m_tos = 0;
+    m_family = 0;
+    m_is_valid = false;
+    m_priority = 0;
+    m_table_id = 0;
+    memset(m_oif_name, 0, IFNAMSIZ * sizeof(char));
+    memset(m_iif_name, 0, IFNAMSIZ * sizeof(char));
 }
 
-//This function build string that represent a row in the rule table.
-void rule_val::set_str()
+const std::string rule_val::to_str() const
 {
-	char str_addr[INET_ADDRSTRLEN];
-	char str_x[100] = {0};
+    std::string rc;
 
-	sprintf(m_str, "Priority :%-10u", m_priority);
+    rc = "Priority: " + std::to_string(m_priority);
+    if (!m_src_addr.is_anyaddr()) {
+        rc += " from: " + m_src_addr.to_str(m_family);
+    }
+    if (!m_dst_addr.is_anyaddr()) {
+        rc += " to: " + m_dst_addr.to_str(m_family);
+    }
+    if (m_tos != 0) {
+        rc += " tos: " + std::to_string(m_tos);
+    }
+    if (m_iif_name[0] != '\0') {
+        rc += " iff: " + std::string(m_iif_name);
+    }
+    if (m_oif_name[0] != '\0') {
+        rc += " off: " + std::string(m_oif_name);
+    }
+    rc += " lookup table: ";
+    rc += (m_table_id == RT_TABLE_MAIN) ? "main" : std::to_string(m_table_id);
 
-	if (m_src_addr != 0) {
-		inet_ntop(AF_INET, &m_src_addr_in_addr, str_addr, sizeof(str_addr));
-		sprintf(str_x, " from :%-10s", str_addr);
-	}
-	strcat(m_str, str_x);
-
-	str_x[0] = '\0';
-	if (m_dst_addr != 0) {
-		inet_ntop(AF_INET, &m_dst_addr_in_addr, str_addr, sizeof(str_addr));
-		sprintf(str_x, " to :%-12s", str_addr);
-	}
-	strcat(m_str, str_x);
-
-	str_x[0] = '\0';
-    	if (m_tos != 0)	
-       		sprintf(str_x, " tos :%-11u", m_tos);
-	strcat(m_str, str_x);
-
-	str_x[0] = '\0';
-    	if (strcmp(m_iif_name, "") != 0)
-		sprintf(str_x, " iif :%-11s", m_iif_name);
-	strcat(m_str, str_x);
-
-	str_x[0] = '\0';
-    	if (strcmp(m_oif_name, "") != 0)
-		sprintf(str_x, " oif :%-11s", m_oif_name);		
-	strcat(m_str, str_x);
-
-	str_x[0] = '\0';
-   	if (m_table_id != RT_TABLE_MAIN)
-		sprintf(str_x, " lookup table :%-10u", m_table_id);
-	else
-		sprintf(str_x, " lookup table :%-10s", "main");
-	strcat(m_str, str_x);
+    return rc;
 }
 
-//This function prints a string that represent a row in the rule table as debug log.
+// This function prints a string that represent a row in the rule table as debug log.
 void rule_val::print_val()
 {
-	set_str();
-	rr_val_logdbg("%s", to_str());
+    rr_val_logdbg("%s", to_str().c_str());
 }

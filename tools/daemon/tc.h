@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -38,33 +38,28 @@
 #include <linux/if_ether.h>
 #include <linux/tc_act/tc_mirred.h>
 
-
 /* The tc_t opaque data type
  */
-typedef struct tc_object* tc_t;
+typedef struct tc_object *tc_t;
 
 struct tc_qdisc {
-	uint32_t handle;
-	uint32_t parent;
-	int prio;
+    uint32_t handle;
+    uint32_t parent;
+    int prio;
 };
 
+#define KERNEL_HT      0x800
+#define MAX_BKT        0xFF
+#define MAX_ID         0xFFE
+#define HANDLE_INVALID (uint32_t)(-1)
 
-#define KERNEL_HT 0x800
-#define MAX_BKT 0xFF
-#define MAX_ID  0xFFE
-#define HANDLE_INVALID    (uint32_t)(-1)
+#define HANDLE_SET(ht, bkt, id)                                                                    \
+    ((((uint32_t)(ht) << 20) & 0xFFF00000) | (((uint32_t)(bkt) << 12) & 0x000FF000) |              \
+     (((uint32_t)(id) << 0) & 0x00000FFF))
 
-#define HANDLE_SET(ht, bkt, id)  \
-	(                                          \
-	(((uint32_t)(ht)  << 20) & 0xFFF00000) |   \
-	(((uint32_t)(bkt) << 12) & 0x000FF000) |   \
-	(((uint32_t)(id)  << 0)  & 0x00000FFF)     \
-	)
-
-#define HANDLE_HT(value)          ((((uint32_t)(value)) & 0xFFF00000) >> 20)  /* 12bits by offset 20 */
-#define HANDLE_BKT(value)         ((((uint32_t)(value)) & 0x000FF000) >> 12)  /* 8bits by offset 12 */
-#define HANDLE_ID(value)          ((((uint32_t)(value)) & 0x00000FFF) >> 0)   /* 12bits by offset 0 */
+#define HANDLE_HT(value)  ((((uint32_t)(value)) & 0xFFF00000) >> 20) /* 12bits by offset 20 */
+#define HANDLE_BKT(value) ((((uint32_t)(value)) & 0x000FF000) >> 12) /* 8bits by offset 12 */
+#define HANDLE_ID(value)  ((((uint32_t)(value)) & 0x00000FFF) >> 0) /* 12bits by offset 0 */
 
 /**
  * Initialize a tc object.
@@ -226,8 +221,9 @@ int tc_add_filter_tap2dev(tc_t tc, int ifindex, int prio, int id, uint32_t ip, i
  * @return
  *   0 on success, -1 otherwise with errno set.
  */
-int tc_add_filter_dev2tap(tc_t tc, int ifindex, int prio, int ht, int bkt, int id,
-		int proto, uint32_t dst_ip, uint16_t dst_port, uint32_t src_ip, uint16_t src_port, int ifindex_to);
+int tc_add_filter_dev2tap(tc_t tc, int ifindex, int prio, int ht, int bkt, int id, int proto,
+                          uint32_t dst_ip, uint16_t dst_port, uint32_t src_ip, uint16_t src_port,
+                          int ifindex_to);
 
 /**
  * Remove specific filter as a TC request.

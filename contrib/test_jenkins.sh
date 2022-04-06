@@ -15,7 +15,7 @@
 
 echo "======================================================"
 echo
-echo "# starting on host --------->  $(hostname 2>/dev/null) "
+echo "# starting on host --------->  ${HOSTNAME} "
 echo "# arguments called with ---->  ${@}        "
 echo "# path to me --------------->  ${0}        "
 echo "# parent path -------------->  ${0%/*}     "
@@ -54,13 +54,20 @@ echo "# BUILD_NUMBER ------------->  ${BUILD_NUMBER} "
 echo "# TARGET ------------------->  ${TARGET}       "
 echo
 
+# When create artifact
 # Values: none, fail, always
 #
 jenkins_opt_artifacts=${jenkins_opt_artifacts:="always"}
 
+# Stop verification after number of erros
 # Values: 0..N test (max 100)
 #
 jenkins_opt_exit=${jenkins_opt_exit:="6"}
+
+# Style format behaivour (check, fix)
+# Values: no, yes
+#
+jenkins_opt_style_force=${jenkins_opt_style_force:="no"}
 
 # Test scenario list
 #
@@ -77,6 +84,7 @@ jenkins_test_vg=${jenkins_test_vg:="no"}
 jenkins_test_style=${jenkins_test_style:="no"}
 jenkins_test_tool=${jenkins_test_tool:="no"}
 jenkins_test_commit=${jenkins_test_commit:="no"}
+jenkins_test_tidy=${jenkins_test_tidy:="no"}
 
 echo
 for var in ${!jenkins_test_@}; do
@@ -94,17 +102,13 @@ do_check_env
 TARGET=${TARGET:=all}
 i=0
 if [ "$TARGET" == "all" -o "$TARGET" == "default" ]; then
-    target_list[$i]="default: --disable-tso --disable-nginx"
-    i=$((i+1))
-fi
-if [ "$TARGET" == "all" -o "$TARGET" == "extra" ]; then
-    target_list[$i]="extra: --enable-tso --enable-nginx"
+    target_list[$i]="default: --disable-nginx"
     i=$((i+1))
 fi
 if [ "$TARGET" == "all" -o "$TARGET" == "dpcp" ]; then
     do_check_dpcp opt_value
     if [ ! -z "${opt_value}" ]; then
-        target_list[$i]="dpcp: --enable-tso --enable-nginx --with-dpcp=${opt_value}"
+        target_list[$i]="dpcp: --enable-nginx --with-dpcp=${opt_value}"
         i=$((i+1))
     else
         echo "Requested dpcp support can not be executed"
@@ -123,7 +127,7 @@ for target_v in "${target_list[@]}"; do
     ret=0
     IFS=':' read target_name target_option <<< "$target_v"
 
-    export jenkins_test_artifacts="${WORKSPACE}/${prefix}/xlio-${BUILD_NUMBER}-$(hostname -s)-${target_name}"
+    export jenkins_test_artifacts="${WORKSPACE}/${prefix}/xlio-${BUILD_NUMBER}-${HOSTNAME}-${target_name}"
     export jenkins_test_custom_configure="${jenkins_test_custom_configure} ${target_option}"
     export jenkins_target="${target_name}"
     set +x
@@ -253,6 +257,16 @@ for target_v in "${target_list[@]}"; do
 	        ret=$?
 	        if [ $ret -gt 0 ]; then
 	           do_err "case: [commit: ret=$ret]"
+	        fi
+	        rc=$((rc + $ret))
+	    fi
+    fi
+    if [ 12 -lt "$jenkins_opt_exit" -o "$rc" -eq 0 ]; then
+	    if [ "$jenkins_test_tidy" = "yes" ]; then
+	        $WORKSPACE/contrib/jenkins_tests/tidy.sh
+	        ret=$?
+	        if [ $ret -gt 0 ]; then
+	           do_err "case: [tidy: ret=$ret]"
 	        fi
 	        rc=$((rc + $ret))
 	    fi

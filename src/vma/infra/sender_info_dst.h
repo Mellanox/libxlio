@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,24 +30,21 @@
  * SOFTWARE.
  */
 
-
 #ifndef SENDER_INFO_DST_H
 #define SENDER_INFO_DST_H
 
 #include "sender.h"
 #include "proto/dst_entry.h"
 
-class sender::send_info_dst: public sender::send_info
-{
+class sender::send_info_dst : public sender::send_info {
 public:
-	sender::send_info_dst(ibv_send_wr *send_wqe, dst_entry *dst_entry): m_p_send_wqe(send_wqe) {};
-	sender::send_info_dst(): m_p_send_wqe(NULL) {};
-	virtual ~send_info() {};
+    sender::send_info_dst(ibv_send_wr *send_wqe, dst_entry *dst_entry)
+        : m_p_send_wqe(send_wqe) {};
+    sender::send_info_dst()
+        : m_p_send_wqe(NULL) {};
+    virtual ~send_info() {};
 
-	dst_entry *m_p_send_wqe;
-
+    dst_entry *m_p_send_wqe;
 };
-
-
 
 #endif /* SENDER_INFO_DST_H */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,7 +30,6 @@
  * SOFTWARE.
  */
 
-
 #ifndef WAKEUP_H
 #define WAKEUP_H
 
@@ -40,26 +39,26 @@
 #include <sys/epoll.h>
 #include "utils/lock_wrapper.h"
 
-class wakeup
-{
+class wakeup {
 public:
-	wakeup(void);
-	virtual ~wakeup() {};
-	virtual void do_wakeup() = 0;
-	virtual bool is_wakeup_fd(int fd) = 0;
-	virtual void remove_wakeup_fd() = 0;
-	void going_to_sleep();
-	void return_from_sleep() { --m_is_sleeping; };
-	void wakeup_clear() { m_is_sleeping = 0; }
+    wakeup(void);
+    virtual ~wakeup() {};
+    virtual void do_wakeup() = 0;
+    virtual bool is_wakeup_fd(int fd) = 0;
+    virtual void remove_wakeup_fd() = 0;
+    void going_to_sleep();
+    void return_from_sleep() { --m_is_sleeping; };
+    void wakeup_clear() { m_is_sleeping = 0; }
 
 protected:
-	virtual void wakeup_set_epoll_fd(int epfd);
-	int m_is_sleeping;
+    virtual void wakeup_set_epoll_fd(int epfd);
+    int m_is_sleeping;
 
-	//lock_spin_recursive m_wakeup_lock; This lock is not needed for now. Maybe we will need it for epoll.
+    // lock_spin_recursive m_wakeup_lock; This lock is not needed for now. Maybe we will need it for
+    // epoll.
 
-	int m_epfd;
-	struct epoll_event m_ev;
+    int m_epfd;
+    struct epoll_event m_ev;
 };
 
 #endif /* WAKEUP_H */

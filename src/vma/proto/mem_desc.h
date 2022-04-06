@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -49,7 +49,7 @@
  */
 
 enum {
-	DATA_SOURCE_NR_MAX = 3,
+    DATA_SOURCE_NR_MAX = 3,
 };
 
 #define LKEY_USE_DEFAULT ((uint32_t)-2)
@@ -60,155 +60,150 @@ class mem_buf_desc_t;
 
 class mem_desc {
 public:
-	virtual ~mem_desc() {}
+    virtual ~mem_desc() {}
 
-	/* get() is always called under socket lock */
-	virtual void get(void) = 0;
-	/*
-	 * There is no guarantee that put() is protected by either
-	 * socket or ring lock
-	 */
-	virtual void put(void) = 0;
+    /* get() is always called under socket lock */
+    virtual void get(void) = 0;
+    /*
+     * There is no guarantee that put() is protected by either
+     * socket or ring lock
+     */
+    virtual void put(void) = 0;
 
-	/* get_lkey() is always called under socket lock */
-	virtual uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx,
-				  void *addr, size_t len)
-	{
-		NOT_IN_USE(desc);
-		NOT_IN_USE(ib_ctx);
-		NOT_IN_USE(addr);
-		NOT_IN_USE(len);
-		return (uint32_t)-1;
-	}
+    /* get_lkey() is always called under socket lock */
+    virtual uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, void *addr, size_t len)
+    {
+        NOT_IN_USE(desc);
+        NOT_IN_USE(ib_ctx);
+        NOT_IN_USE(addr);
+        NOT_IN_USE(len);
+        return (uint32_t)-1;
+    }
 };
 
 class mem_desc_compose : public mem_desc {
 public:
-	mem_desc_compose() : m_array_size(0)
-	{
-		atomic_set(&m_ref, 0);
-	}
+    mem_desc_compose()
+        : m_array_size(0)
+    {
+        atomic_set(&m_ref, 0);
+    }
 
-	void get(void)
-	{
-		int ref = atomic_fetch_and_inc(&m_ref);
+    void get(void)
+    {
+        int ref = atomic_fetch_and_inc(&m_ref);
 
-		if (ref == 0) {
-			for (int i = 0; i < m_array_size; ++i)
-				m_array[i]->get();
-		}
-	}
+        if (ref == 0) {
+            for (int i = 0; i < m_array_size; ++i)
+                m_array[i]->get();
+        }
+    }
 
-	void put(void)
-	{
-		int ref = atomic_fetch_and_dec(&m_ref);
+    void put(void)
+    {
+        int ref = atomic_fetch_and_dec(&m_ref);
 
-		if (ref == 1) {
-			for (int i = 0; i < m_array_size; ++i)
-				m_array[i]->put();
-			delete this;
-		}
-	}
+        if (ref == 1) {
+            for (int i = 0; i < m_array_size; ++i)
+                m_array[i]->put();
+            delete this;
+        }
+    }
 
-	uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx,
-			  void *addr, size_t len)
-	{
-		if (likely(m_array_size != 0)) {
-			return m_array[0]->get_lkey(desc, ib_ctx, addr, len);
-		} else {
-			return (uint32_t)-1;
-		}
-	}
+    uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, void *addr, size_t len)
+    {
+        if (likely(m_array_size != 0)) {
+            return m_array[0]->get_lkey(desc, ib_ctx, addr, len);
+        } else {
+            return (uint32_t)-1;
+        }
+    }
 
-	void add_child(mem_desc *child)
-	{
-		if (likely(m_array_size < DATA_SOURCE_NR_MAX))
-			m_array[m_array_size++] = child;
-	}
+    void add_child(mem_desc *child)
+    {
+        if (likely(m_array_size < DATA_SOURCE_NR_MAX))
+            m_array[m_array_size++] = child;
+    }
 
 private:
-	mem_desc *m_array[DATA_SOURCE_NR_MAX];
-	int m_array_size;
-	atomic_t m_ref;
+    mem_desc *m_array[DATA_SOURCE_NR_MAX];
+    int m_array_size;
+    atomic_t m_ref;
 };
 
 class zcopy_hugepage : public mem_desc, lock_spin {
 public:
-	zcopy_hugepage(void *addr, size_t size)
-	{
-		m_is_pinned = false;
-		m_addr = addr;
-		m_size = size;
-	}
+    zcopy_hugepage(void *addr, size_t size)
+    {
+        m_is_pinned = false;
+        m_addr = addr;
+        m_size = size;
+    }
 
-	~zcopy_hugepage()
-	{
-		/* TODO Unregister hugepage */
-	}
+    ~zcopy_hugepage()
+    { /* TODO Unregister hugepage */
+    }
 
-	void get(void)
-	{
-		/* Reference counting is not required, we never destroy hugepages. */
-	}
+    void get(void)
+    { /* Reference counting is not required, we never destroy hugepages. */
+    }
 
-	void put(void)
-	{
-		/* Reference counting is not required, we never destroy hugepages. */
-	}
+    void put(void)
+    { /* Reference counting is not required, we never destroy hugepages. */
+    }
 
-	uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx,
-			  void *addr, size_t len);
+    uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, void *addr, size_t len);
 
 public:
-	void *m_addr;
-	size_t m_size;
+    void *m_addr;
+    size_t m_size;
 
 private:
-	bool m_is_pinned;
-	uint32_t m_lkey;
-	/*
-	 * TODO Add bonding support:
-	 * - Collection of <ib_ctx, lkey> pairs
-	 * - Cache ib_ctx
-	 * - Remove m_is_pinned
-	 * - ib_ctx change is unlikely, we may find new lkey in O(N) time:
-	 *	if (unlikely(ib_ctx != m_ib_ctx_cached)) {
-	 *		m_lkey = find_or_register_new_lkey(ib_ctx);
-	 *		m_ib_ctx_cached = ib_ctx;
-	 *	}
-	 */
+    bool m_is_pinned;
+    uint32_t m_lkey;
+    /*
+     * TODO Add bonding support:
+     * - Collection of <ib_ctx, lkey> pairs
+     * - Cache ib_ctx
+     * - Remove m_is_pinned
+     * - ib_ctx change is unlikely, we may find new lkey in O(N) time:
+     *	if (unlikely(ib_ctx != m_ib_ctx_cached)) {
+     *		m_lkey = find_or_register_new_lkey(ib_ctx);
+     *		m_ib_ctx_cached = ib_ctx;
+     *	}
+     */
 };
 
 typedef hash_map<void *, zcopy_hugepage *> zcopy_hugepage_map_t;
 
 class zcopy_hugepage_mgr : public lock_spin {
 public:
-	zcopy_hugepage_mgr();
+    zcopy_hugepage_mgr();
 
-	zcopy_hugepage *get_hugepage(void *addr)
-	{
-		void *page_addr = (void *)((uintptr_t)addr & m_hugepage_mask);
-		zcopy_hugepage *page;
+    zcopy_hugepage *get_hugepage(void *addr)
+    {
+        void *page_addr = (void *)((uintptr_t)addr & m_hugepage_mask);
+        zcopy_hugepage *page;
 
-		lock();
+        lock();
 
-		page = m_hugepage_map.get(page_addr, NULL);
-		if (unlikely(page == NULL)) {
-			page = new zcopy_hugepage(page_addr, m_hugepage_size);
-			if (likely(page != NULL))
-				m_hugepage_map.set(page_addr, page);
-		}
+        page = m_hugepage_map.get(page_addr, NULL);
+        if (unlikely(page == NULL)) {
+            page = new zcopy_hugepage(page_addr, m_hugepage_size);
+            if (likely(page != NULL))
+                m_hugepage_map.set(page_addr, page);
+        }
 
-		unlock();
-		return page;
-	}
+        unlock();
+        return page;
+    }
 
 public:
-	size_t m_hugepage_size;
-	uintptr_t m_hugepage_mask;
+    size_t m_hugepage_size;
+    uintptr_t m_hugepage_mask;
 
 private:
-	zcopy_hugepage_map_t m_hugepage_map;
+    zcopy_hugepage_map_t m_hugepage_map;
 };
 
 #endif /* VMA_MEM_DESC_H */

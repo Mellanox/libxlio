@@ -29,7 +29,7 @@ if [ ! -z $(do_get_ip 'eth') ]; then
 	gtest_ip_list="$(do_get_ip 'eth')"
 fi
 if [ ! -z $(do_get_ip 'eth' '' $gtest_ip_list) ]; then
-	gtest_ip_list="${gtest_ip_list}:$(do_get_ip 'eth' '' $gtest_ip_list)"
+	gtest_ip_list="${gtest_ip_list},$(do_get_ip 'eth' '' $gtest_ip_list)"
 else
 	echo "[SKIP] two eth interfaces are required. found: ${gtest_ip_list}"
 	exit 0

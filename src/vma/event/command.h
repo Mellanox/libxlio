@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -40,42 +40,39 @@
 #include "vma/util/to_str.h"
 #include "vma/event/timer_handler.h"
 
-class command : public tostr
-{
+class command : public tostr {
 public:
-	command(){};
-	virtual ~command(){};
-	virtual void execute() = 0;
+    command() {};
+    virtual ~command() {};
+    virtual void execute() = 0;
+
 private:
-	//block copy ctor
-	command(const command &command);
+    // block copy ctor
+    command(const command &command);
 };
 
-class command_netlink: public command , public timer_handler
-{
+class command_netlink : public command, public timer_handler {
 public:
-	command_netlink(netlink_wrapper *executer): m_ntl_executer(executer) {};
+    command_netlink(netlink_wrapper *executer)
+        : m_ntl_executer(executer) {};
 
-	virtual void execute() {
-		if (m_ntl_executer) {
-			m_ntl_executer->handle_events();
-		}
-	}
+    virtual void execute()
+    {
+        if (m_ntl_executer) {
+            m_ntl_executer->handle_events();
+        }
+    }
 
-	const std::string to_str() const
-	{
-		return(string("command_netlink"));
-	}
+    const std::string to_str() const { return (std::string("command_netlink")); }
 
-	virtual void handle_timer_expired(void* a) {
-		NOT_IN_USE(a);
-		m_ntl_executer->neigh_timer_expired();
-	}
-
+    virtual void handle_timer_expired(void *a)
+    {
+        NOT_IN_USE(a);
+        m_ntl_executer->neigh_timer_expired();
+    }
 
 private:
-	netlink_wrapper *m_ntl_executer;
-
+    netlink_wrapper *m_ntl_executer;
 };
 
 #endif /* COMMAND_H_ */

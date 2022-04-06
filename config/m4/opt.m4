@@ -1,6 +1,6 @@
 # opt.m4 - Macros to control optimization
 # 
-# Copyright (C) Mellanox Technologies Ltd. 2001-2021. ALL RIGHTS RESERVED.
+# Copyright (C) Mellanox Technologies Ltd. 2001-2022. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -44,4 +44,14 @@ case "$enableval" in
 esac
 AC_DEFINE_UNQUOTED([MAX_DEFINED_LOG_LEVEL], [$enable_opt_log], [Log optimization level])
 AC_MSG_RESULT([$enableval])
+
+##########################
+# Force TX Polling control
+#
+# Polling TX is needed to get completions for send operations.
+# - It is important in case TX ZEROCOPY usage.
+# - For scenario w/o TX ZEROCOPY forcing this is not mandatory but
+#   can impact on final performance.
+#
+AC_DEFINE_UNQUOTED([DEFINED_FORCE_TX_POLLING], [1], [Define to 1 to force TX Polling])
 ])

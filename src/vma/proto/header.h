@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,14 +30,13 @@
  * SOFTWARE.
  */
 
-
-
 #ifndef HEADER_H
 #define HEADER_H
 
 #include <string.h>
 #include <linux/if_ether.h>
 #include <linux/if_vlan.h>
+#include <netinet/ip6.h>
 #include <netinet/ip.h>
 #include <netinet/udp.h>
 #include <netinet/tcp.h>
@@ -47,118 +46,210 @@
 #include "vma/util/to_str.h"
 #include "L2_address.h"
 #include "vma/util/sys_vars.h"
+#include "vma/lwip/ip.h"
+
+class dst_entry;
 
 // We align the frame so IP header will be 4 bytes align
 // And we align the L2 headers so IP header on both transport
 // types will be at the same offset from buffer start
-#define NET_IB_IP_ALIGN_SZ		16
-#define NET_ETH_IP_ALIGN_SZ		 6
-#define NET_ETH_VLAN_IP_ALIGN_SZ	 2
-#define NET_ETH_VLAN_PCP_OFFSET	13
+#define NET_ETH_IP_ALIGN_SZ      6
+#define NET_ETH_VLAN_IP_ALIGN_SZ 2
+#define NET_ETH_VLAN_PCP_OFFSET  13
 
-struct __attribute__ ((packed)) ib_hdr_template_t  {		// Offeset  Size
-	char		m_alignment[NET_IB_IP_ALIGN_SZ];	//    0      16  = 16
-	ipoibhdr	m_ipoib_hdr;				//   16       4  = 20
-//	iphdr		m_ip_hdr;				//   20      20  = 40
+struct __attribute__((packed)) eth_hdr_template_t { // Offeset  Size
+    char m_alignment[NET_ETH_IP_ALIGN_SZ]; //    0       6  =  6
+    ethhdr m_eth_hdr; //    6      14  = 20
 };
 
-struct __attribute__ ((packed)) eth_hdr_template_t  {		// Offeset  Size
-	char		m_alignment[NET_ETH_IP_ALIGN_SZ];	//    0       6  =  6
-	ethhdr		m_eth_hdr;				//    6      14  = 20
-//	iphdr		m_ip_hdr;				//   20      20  = 40
+struct __attribute__((packed)) vlan_eth_hdr_template_t { // Offeset  Size
+    char m_alignment[NET_ETH_VLAN_IP_ALIGN_SZ]; //    0       2  =  2
+    ethhdr m_eth_hdr; //    2      14  = 16
+    vlanhdr m_vlan_hdr; //   16       4  = 20
 };
 
-struct __attribute__ ((packed)) vlan_eth_hdr_template_t  {	// Offeset  Size
-	char		m_alignment[NET_ETH_VLAN_IP_ALIGN_SZ];	//    0       2  =  2
-	ethhdr		m_eth_hdr;				//    2      14  = 16
-	vlanhdr		m_vlan_hdr;				//   16       4  = 20
-//	iphdr		m_ip_hdr;				//   20      20  = 40
+union l2_hdr_template_t {
+    eth_hdr_template_t eth_hdr;
+    vlan_eth_hdr_template_t vlan_eth_hdr;
 };
 
-union l2_hdr_template_t  {
-	ib_hdr_template_t	ib_hdr;
-	eth_hdr_template_t	eth_hdr;
-	vlan_eth_hdr_template_t	vlan_eth_hdr;
+#define L2_ALIGNED_HLEN 20U
+#define UDP_HLEN        8U
+#ifndef TCP_HLEN
+#define TCP_HLEN 20U
+#endif
+
+static_assert(sizeof(l2_hdr_template_t) == L2_ALIGNED_HLEN, "wrong struct size");
+static_assert(sizeof(udphdr) == UDP_HLEN, "wrong struct size");
+static_assert(sizeof(tcphdr) == TCP_HLEN, "wrong struct size");
+
+struct __attribute__((packed, aligned)) tx_ipv4_hdr_template_t { // Offeset  Size
+    l2_hdr_template_t m_l2_hdr; //    0      20
+    iphdr m_ip_hdr; //   20      20
+    union {
+        udphdr m_udp_hdr; //   40      8
+        tcphdr m_tcp_hdr; //   40	  20
+    };
 };
 
-struct __attribute__ ((packed, aligned)) tx_hdr_template_t  {		// Offeset  Size
-	l2_hdr_template_t	m_l2_hdr;			//    0      20
-	iphdr			m_ip_hdr;			//   20      20
-	union {
-	udphdr			m_udp_hdr;			//   40       8
-	tcphdr			m_tcp_hdr;			//   40	     20
-	};
+union tx_ipv4_packet_template_t {
+    tx_ipv4_hdr_template_t hdr;
+    uint32_t words[15]; // change in tx_hdr_template_t size may require to modify this array size
 };
 
-union tx_packet_template_t {
-	tx_hdr_template_t	hdr;
-	uint32_t		words[15]; //change in tx_hdr_template_t size may require to modify this array size
+struct __attribute__((packed, aligned)) tx_ipv6_hdr_template_t { // Offeset  Size
+    l2_hdr_template_t m_l2_hdr; //    0      20
+    ip6_hdr m_ip_hdr; //   20      40
+    union {
+        udphdr m_udp_hdr; //   60       8
+        tcphdr m_tcp_hdr; //   60	  20
+    };
 };
 
+union tx_ipv6_packet_template_t {
+    tx_ipv6_hdr_template_t hdr;
+    uint32_t words[20]; // change in tx_hdr_template_t size may require to modify this array size
+};
 
-class header: public tostr
-{
+class header : public tostr {
 public:
-	header();
-	header(const header &h);
-	virtual ~header() {};
+    header();
+    header(const header &h);
+    virtual ~header() {};
+    virtual void init();
 
+    void configure_udp_header(uint16_t dest_port, uint16_t src_port);
+    void configure_tcp_ports(uint16_t dest_port, uint16_t src_port);
+    void configure_eth_headers(const L2_address &src, const L2_address &dst,
+                               uint16_t encapsulated_proto);
+    void configure_vlan_eth_headers(const L2_address &src, const L2_address &dst, uint16_t tci,
+                                    uint16_t encapsulated_proto);
+    void set_mac_to_eth_header(const L2_address &src, const L2_address &dst, ethhdr &eth_header);
+    bool set_vlan_pcp(uint8_t pcp);
+    void update_actual_hdr_addr();
 
-	void init();
-	void configure_udp_header(uint16_t dest_port, uint16_t src_port);
-	void configure_tcp_ports(uint16_t dest_port, uint16_t src_port);
-	void configure_ip_header(uint8_t protocol, in_addr_t src_addr, in_addr_t dest_addr, uint8_t ttl = 64, uint8_t tos = 0, uint16_t packet_id = 0);
-	void configure_ipoib_headers(uint32_t ipoib_header = IPOIB_HEADER);
-	void set_mac_to_eth_header(const L2_address &src, const L2_address &dst, ethhdr &eth_header);
-	void set_ip_ttl(uint8_t ttl);
-	void set_ip_tos(uint8_t tos);
-	void configure_eth_headers(const L2_address &src, const L2_address &dst, uint16_t encapsulated_proto = ETH_P_IP);
-	void configure_vlan_eth_headers(const L2_address &src, const L2_address &dst, uint16_t tci, uint16_t encapsulated_proto = ETH_P_IP);
-	bool set_vlan_pcp(uint8_t pcp);
-	void update_actual_hdr_addr();
+    virtual void configure_ip_header(uint8_t protocol, const ip_address &src,
+                                     const ip_address &dest, const dst_entry &_dst_entry,
+                                     uint16_t packet_id = 0) = 0;
+    virtual void set_ip_ttl_hop_limit(uint8_t ttl_hop_limit) = 0;
+    virtual void set_ip_tos(uint8_t tos) { NOT_IN_USE(tos); };
+    virtual void *get_hdr_addr() = 0;
+    virtual l2_hdr_template_t *get_l2_hdr() = 0;
+    virtual void *get_ip_hdr() = 0;
+    virtual udphdr *get_udp_hdr() = 0;
+    virtual tcphdr *get_tcp_hdr() = 0;
+    virtual void set_ip_len(uint16_t len) = 0;
+    virtual void copy_l2_hdr(void *p_h) = 0;
+    virtual void copy_l2_ip_hdr(void *p_h) = 0;
+    virtual void copy_l2_ip_udp_hdr(void *p_h) = 0;
+    virtual header *copy() = 0;
 
-	inline void copy_l2_ip_hdr(tx_packet_template_t *p_hdr)
-	{
-		// copy words every time, to optimize for speed
-		p_hdr->words[0] = m_header.words[0]; // dummy(16) + l2(16) (mac / dummy)
-		p_hdr->words[1] = m_header.words[1]; // l2 (32)            (mac / dummy)
-		p_hdr->words[2] = m_header.words[2]; // l2 (32)            (mac / dummy)
-		p_hdr->words[3] = m_header.words[3]; // l2 (32)            (mac / dummy)
-		p_hdr->words[4] = m_header.words[4]; // l2 (32)            (mac / vlan / ipoib)
-		p_hdr->words[5] = m_header.words[5]; // IP-> ver(4) + hdrlen(4) + tos(8) + totlen(16)
-		p_hdr->words[6] = m_header.words[6]; // IP-> id(16) + frag(16)
-		p_hdr->words[7] = m_header.words[7]; // IP-> ttl(8) + protocol(8) + checksum(16)
-		p_hdr->words[8] = m_header.words[8]; // IP-> saddr(32)
-		p_hdr->words[9] = m_header.words[9]; // IP-> daddr(32)
-	}
-
-	inline void copy_l2_ip_udp_hdr(tx_packet_template_t *p_hdr)
-	{
-		copy_l2_ip_hdr(p_hdr);
-		p_hdr->words[10] = m_header.words[10]; // UDP-> sport(16) + dst_port(16)
-		p_hdr->words[11] = m_header.words[11]; // UDP-> len(16) + check(16)
-	}
-
-	inline void copy_l2_hdr(tx_packet_template_t *p_hdr)
-	{
-		uint32_t *to_words   = p_hdr->words;
-		uint32_t *from_words = m_header.words;
-		to_words[0] = from_words[0]; // dummy(16) + l2(16) (mac / dummy)
-		to_words[1] = from_words[1]; // l2 (32)            (mac / dummy)
-		to_words[2] = from_words[2]; // l2 (32)            (mac / dummy)
-		to_words[3] = from_words[3]; // l2 (32)            (mac / dummy)
-		to_words[4] = from_words[4]; // l2 (32)            (mac / vlan / ipoib)
-	}
-
-	uintptr_t m_actual_hdr_addr;
-	tx_packet_template_t m_header;
-	uint16_t m_ip_header_len;
-	uint16_t m_transport_header_len;
-	uint16_t m_total_hdr_len;
-	uint16_t m_aligned_l2_l3_len;
-	uint16_t m_transport_header_tx_offset;
-	bool m_is_vlan_enabled;
-	transport_type_t m_transport_type;
+    uintptr_t m_actual_hdr_addr;
+    uint16_t m_ip_header_len;
+    uint16_t m_transport_header_len;
+    uint16_t m_total_hdr_len;
+    uint16_t m_aligned_l2_l3_len;
+    uint16_t m_transport_header_tx_offset;
+    bool m_is_vlan_enabled;
+    transport_type_t m_transport_type;
 };
 
+class header_ipv4 : public header {
+public:
+    header_ipv4();
+    virtual ~header_ipv4() {};
+    void init() override;
+
+    void configure_ip_header(uint8_t protocol, const ip_address &src, const ip_address &dest,
+                             const dst_entry &_dst_entry, uint16_t packet_id = 0) override;
+    void set_ip_ttl_hop_limit(uint8_t ttl_hop_limit) override;
+    void set_ip_tos(uint8_t tos) override;
+    void *get_hdr_addr() override { return (static_cast<void *>(&m_header)); }
+    l2_hdr_template_t *get_l2_hdr() override { return &m_header.hdr.m_l2_hdr; }
+    void *get_ip_hdr() override { return static_cast<void *>(&m_header.hdr.m_ip_hdr); }
+    udphdr *get_udp_hdr() override { return &m_header.hdr.m_udp_hdr; }
+    tcphdr *get_tcp_hdr() override { return &m_header.hdr.m_tcp_hdr; }
+    void set_ip_len(uint16_t len) override { m_header.hdr.m_ip_hdr.tot_len = htons(len); }
+    void copy_l2_ip_hdr(void *p_h) override;
+    void copy_l2_ip_udp_hdr(void *p_h) override;
+    void copy_l2_hdr(void *p_h) override;
+    header *copy() override { return new header_ipv4(*this); }
+
+private:
+    tx_ipv4_packet_template_t m_header;
+    header_ipv4(const header_ipv4 &h);
+};
+
+class header_ipv6 : public header {
+public:
+    header_ipv6();
+    virtual ~header_ipv6() {};
+    void init() override;
+
+    void configure_ip_header(uint8_t protocol, const ip_address &src, const ip_address &dest);
+    void configure_ip_header(uint8_t protocol, const ip_address &src, const ip_address &dest,
+                             const dst_entry &_dst_entry, uint16_t packet_id = 0) override;
+    void set_ip_ttl_hop_limit(uint8_t ttl_hop_limit) override;
+    void *get_hdr_addr() override { return (static_cast<void *>(&m_header)); }
+    l2_hdr_template_t *get_l2_hdr() override { return &m_header.hdr.m_l2_hdr; }
+    void *get_ip_hdr() override { return static_cast<void *>(&m_header.hdr.m_ip_hdr); }
+    udphdr *get_udp_hdr() override { return &m_header.hdr.m_udp_hdr; }
+    tcphdr *get_tcp_hdr() override { return &m_header.hdr.m_tcp_hdr; }
+    void set_ip_len(uint16_t len) override
+    {
+        m_header.hdr.m_ip_hdr.ip6_plen = htons(len - IPV6_HLEN);
+    }
+    void copy_l2_hdr(void *p_h) override;
+    void copy_l2_ip_hdr(void *p_h) override;
+    void copy_l2_ip_udp_hdr(void *p_h) override;
+    header *copy() override { return new header_ipv6(*this); }
+
+private:
+    tx_ipv6_packet_template_t m_header;
+    header_ipv6(const header_ipv6 &h);
+};
+
+#ifndef IPV6_HLEN
+#define IPV6_HLEN 40U
+#endif
+
+enum ip_version {
+    IPV4 = 4,
+    IPV6 = 6,
+};
+
+inline static enum ip_version ip_header_version(const void *p_ip_h)
+{
+    // IPv4 and IPv6 headers share the version field.
+    return static_cast<enum ip_version>(reinterpret_cast<const struct iphdr *>(p_ip_h)->version);
+}
+
+template <typename T> inline void fill_hdrs(const void *pkt, void *&ip_hdr, void *&tcp_udp_hdr)
+{
+    // tcp and udp are union headers in tx_ipv4_hdr_template_t and tx_ipv6_hdr_template_t
+    ip_hdr = (void *)(&(((T *)pkt)->m_ip_hdr));
+    tcp_udp_hdr = (void *)(&(((T *)pkt)->m_tcp_hdr));
+
+    NOT_IN_USE(ip_hdr);
+    NOT_IN_USE(tcp_udp_hdr);
+}
+
+inline void copy_l2_hdr_words(uint32_t *to_words, uint32_t *from_words)
+{
+    to_words[0] = from_words[0]; // dummy(16) + l2(16) (mac / dummy)
+    to_words[1] = from_words[1]; // l2 (32)            (mac / dummy)
+    to_words[2] = from_words[2]; // l2 (32)            (mac / dummy)
+    to_words[3] = from_words[3]; // l2 (32)            (mac / dummy)
+    to_words[4] = from_words[4]; // l2 (32)            (mac / vlan / ipoib)
+}
+
+inline void set_ipv4_len(void *ip, uint16_t len)
+{
+    reinterpret_cast<iphdr *>(ip)->tot_len = len;
+}
+
+inline void set_ipv6_len(void *ip, uint16_t len)
+{
+    reinterpret_cast<ip6_hdr *>(ip)->ip6_plen = len;
+}
 #endif /* HEADER_H */

@@ -10,7 +10,7 @@ Testing XLIO Extended API
 2. Compile the gtests by issuing from root directory:
    make -C tests/gtest
 3. Launch tests by issuing:
-   LD_PRELOAD=<path>/libxlio.so tests/gtest/gtest --addr=client_ip:server_ip
+   LD_PRELOAD=<path>/libxlio.so tests/gtest/gtest --addr=client_ip,server_ip
 
 Testing Environment
 -------------------

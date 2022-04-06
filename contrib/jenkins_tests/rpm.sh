@@ -18,7 +18,7 @@ opt_binrpm=1
 opt_checkpkg=1
 opt_rpm=0
 
-${WORKSPACE}/configure --prefix=${rpm_dir}/install $jenkins_test_custom_configure > "${rpm_dir}/cov.log" 2>&1
+${WORKSPACE}/configure --prefix=${rpm_dir}/install $jenkins_test_custom_configure > "${rpm_dir}/rpm.log" 2>&1
 
 if [ -x /usr/bin/dpkg-buildpackage ]; then
     echo "Build on debian"
@@ -63,7 +63,7 @@ fi
 
 if [ $opt_srcrpm -eq 1 ]; then
     if [ $opt_rpm -eq 1 ]; then
-        test_exec="rpmbuild -bs $rpmmacros $rpmopts $rpmspec"
+        test_exec="env RPM_BUILD_NCPUS=${NPROC} rpmbuild -bs $rpmmacros $rpmopts $rpmspec"
     else
         test_exec="dpkg-buildpackage -us -uc -S"
     fi
@@ -73,7 +73,7 @@ fi
 
 if [ $opt_binrpm -eq 1 ]; then
     if [ $opt_rpm -eq 1 ]; then
-        test_exec="rpmbuild -bb $rpmmacros $rpmopts $rpmspec"
+        test_exec="env RPM_BUILD_NCPUS=${NPROC} rpmbuild -bb $rpmmacros $rpmopts $rpmspec"
     else
         test_exec="dpkg-buildpackage -us -uc -b"
     fi
@@ -82,8 +82,9 @@ if [ $opt_binrpm -eq 1 ]; then
 fi
 
 if [ $opt_checkpkg -eq 1 ]; then
-    test_exec="env PRJ_RELEASE=1 ${WORKSPACE}/contrib/build_pkg.sh -b -s -i ${WORKSPACE} -o ${rpm_dir}/dist-pkg"
+    test_exec="env RPM_BUILD_NCPUS=${NPROC} PRJ_RELEASE=1 ${WORKSPACE}/contrib/build_pkg.sh -b -s -a \"configure_options=$jenkins_test_custom_configure\" -i ${WORKSPACE} -o ${rpm_dir}/dist-pkg"
     do_check_result "$test_exec" "$test_id" "checkpkg" "$rpm_tap" "${rpm_dir}/rpm-${test_id}"
+    do_archive "${rpm_dir}/dist-pkg/build_pkg.log"
     test_id=$((test_id+1))
 fi
 

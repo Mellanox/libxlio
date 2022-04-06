@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,7 +30,6 @@
  * SOFTWARE.
  */
 
-
 /* This class implements subject observer design pattern  */
 
 #ifndef SUBJECT_OBSERVER_H
@@ -42,28 +41,32 @@
 #include "vma/util/to_str.h"
 #include "vma/event/event.h"
 
-class observer
-{
+class observer {
 public:
-	virtual 		~observer() {};
-	virtual void 		notify_cb() { return; };
-	virtual void 		notify_cb(event * ev) { NOT_IN_USE(ev); notify_cb(); };
+    virtual ~observer() {};
+    virtual void notify_cb() { return; };
+    virtual void notify_cb(event *ev)
+    {
+        NOT_IN_USE(ev);
+        notify_cb();
+    };
 };
 
 typedef std::unordered_set<observer *> observers_t;
 
-class subject
-{
+class subject {
 public:
-				subject(const char* lock_name = "lock(subject)") : m_lock(lock_name) {};
-	virtual         	~subject() {};
-	bool 			register_observer(IN const observer* const new_observer);
-	bool 			unregister_observer(IN const observer* const old_observer);
-	void 	  		notify_observers(event * ev = NULL);
+    subject(const char *lock_name = "lock(subject)")
+        : m_lock(lock_name) {};
+    virtual ~subject() {};
+    virtual bool register_observer(IN const observer *const new_observer);
+    bool unregister_observer(IN const observer *const old_observer);
+    void notify_observers(event *ev = NULL);
 
 protected:
-	lock_mutex_recursive    m_lock;
-	observers_t             m_observers;  // list of pointers of all observers (using stl::set for uniqueness - preventing duplicates)
+    lock_mutex_recursive m_lock;
+    observers_t m_observers; // list of pointers of all observers (using stl::set for uniqueness -
+                             // preventing duplicates)
 };
 
 #endif /* SUBJECT_OBSERVER_H */

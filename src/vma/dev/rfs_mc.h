@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,12 +30,12 @@
  * SOFTWARE.
  */
 
-
 #ifndef RFS_MC_H
 #define RFS_MC_H
 
 #include "vma/dev/rfs.h"
 
+#define MODULE_NAME "rfs_mc"
 
 /**
  * @class rfs_mc
@@ -45,17 +45,49 @@
  *
  */
 
-
-class rfs_mc : public rfs
-{
+class rfs_mc : public rfs {
 public:
-	rfs_mc(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter* rule_filter = NULL, int32_t flow_tag_id = 0);
+    rfs_mc(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *rule_filter = NULL,
+           int32_t flow_tag_id = 0);
 
-	virtual bool rx_dispatch_packet(mem_buf_desc_t* p_rx_wc_buf_desc, void* pv_fd_ready_array);
+    virtual bool rx_dispatch_packet(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array);
 
 protected:
-	virtual bool prepare_flow_spec();
+    virtual bool prepare_flow_spec();
+
+    template <typename T>
+    void prepare_flow_spec_by_ip(qp_mgr *qp_mgr, attach_flow_data_t *&p_attach_flow_data,
+                                 vma_ibv_flow_spec_eth *&p_eth,
+                                 vma_ibv_flow_spec_tcp_udp *&p_tcp_udp);
 };
 
+template <typename T>
+void rfs_mc::prepare_flow_spec_by_ip(qp_mgr *qp_mgr, attach_flow_data_t *&p_attach_flow_data,
+                                     vma_ibv_flow_spec_eth *&p_eth,
+                                     vma_ibv_flow_spec_tcp_udp *&p_tcp_udp)
+{
+    T *attach_flow_data_eth = new (std::nothrow) T(qp_mgr);
+    if (!attach_flow_data_eth) {
+        return;
+    }
+
+    p_eth = &(attach_flow_data_eth->ibv_flow_attr.eth);
+    p_tcp_udp = &(attach_flow_data_eth->ibv_flow_attr.tcp_udp);
+    p_attach_flow_data = reinterpret_cast<attach_flow_data_t *>(attach_flow_data_eth);
+
+    const ip_address &dst_ip =
+        (safe_mce_sys().eth_mc_l2_only_rules ? ip_address::any_addr() : m_flow_tuple.get_dst_ip());
+
+    ibv_flow_spec_ip_set(&(attach_flow_data_eth->ibv_flow_attr.ip), dst_ip, ip_address::any_addr());
+
+    if (m_flow_tag_id) { // Will not attach flow_tag spec to rule for tag_id==0
+        ibv_flow_spec_flow_tag_set(&(attach_flow_data_eth->ibv_flow_attr.flow_tag), m_flow_tag_id);
+        attach_flow_data_eth->ibv_flow_attr.add_flow_tag_spec();
+        rfs_logdbg("Adding flow_tag spec to MC rule, num_of_specs: %d flow_tag_id: %d",
+                   attach_flow_data_eth->ibv_flow_attr.attr.num_of_specs, m_flow_tag_id);
+    }
+}
+
+#undef MODULE_NAME
 
 #endif /* RFS_MC_H */

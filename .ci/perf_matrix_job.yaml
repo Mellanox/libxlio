@@ -1,0 +1,28 @@
+---
+job: LIBXLIO
+
+runs_on_agents:
+  - {nodeLabel: 'vma-nolo06', category: 'base'}
+
+steps:
+  - name: Build libxlio.so
+    run: |
+      ./autogen.sh && ./configure --prefix=$PWD/install && make -j32 install && cp -a $PWD/install/lib/* contrib/xlio-bench/env/default-x86/lib
+    parallel: false
+    agentSelector:
+      - "{nodeLabel: 'vma-nolo06'}"
+
+  - name: Run bench bulk test
+    run: |
+      cd contrib/xlio-bench/bin && ./run_perf_test.sh
+    parallel: false
+    agentSelector:
+      - "{nodeLabel: 'vma-nolo06'}"
+    publishHTML:
+      reportDir: 'contrib/xlio-bench/reports'
+      reportFiles: "*.html"
+      reportName: 'Performance benchmark result'
+
+failFast: false
+
+taskName: '${arch}'

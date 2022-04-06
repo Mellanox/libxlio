@@ -95,9 +95,7 @@ enum cc_algo_mod lwip_cc_algo_module = CC_MOD_LWIP;
 
 u16_t lwip_tcp_mss = CONST_TCP_MSS;
 u32_t lwip_tcp_snd_buf = 0;
-#ifdef DEFINED_TSO
 u32_t lwip_zc_tx_size = 0;
-#endif // DEFINED_TSO
 
 
 u8_t enable_push_flag = 1;
@@ -335,11 +333,9 @@ tcp_abandon(struct tcp_pcb *pcb, int reset)
 {
   u32_t seqno, ackno;
   u16_t remote_port, local_port;
-  ip_addr_t remote_ip, local_ip;
 #if LWIP_CALLBACK_API  
   tcp_err_fn errf;
 #endif /* LWIP_CALLBACK_API */
-  void *errf_arg;
 
   /* get_tcp_state(pcb) LISTEN not allowed here */
   LWIP_ASSERT("don't call tcp_abort/tcp_abandon for listen-pcbs",
@@ -353,14 +349,12 @@ tcp_abandon(struct tcp_pcb *pcb, int reset)
     int send_rst = reset && (get_tcp_state(pcb) != CLOSED);
     seqno = pcb->snd_nxt;
     ackno = pcb->rcv_nxt;
-    ip_addr_copy(local_ip, pcb->local_ip);
-    ip_addr_copy(remote_ip, pcb->remote_ip);
     local_port = pcb->local_port;
     remote_port = pcb->remote_port;
 #if LWIP_CALLBACK_API
     errf = pcb->errf;
 #endif /* LWIP_CALLBACK_API */
-    errf_arg = pcb->my_container;
+    void *errf_arg = pcb->my_container;
     tcp_pcb_remove(pcb);
     if (pcb->unacked != NULL) {
       tcp_tx_segs_free(pcb, pcb->unacked);
@@ -381,8 +375,6 @@ tcp_abandon(struct tcp_pcb *pcb, int reset)
       tcp_rst(seqno, ackno, local_port, remote_port, pcb);
     }
   }
-  (void)local_ip;  /* Fix warning -Wunused-but-set-variable */
-  (void)remote_ip; /* Fix warning -Wunused-but-set-variable */
 }
 
 /**
@@ -412,16 +404,22 @@ tcp_abort(struct tcp_pcb *pcb)
  *        to any local address
  * @param port the local port to bind to
  * @return ERR_USE if the port is already in use
+ *         ERR_VAL if ipaddr type is invalid
  *         ERR_OK if bound
  */
 err_t
-tcp_bind(struct tcp_pcb *pcb, ip_addr_t *ipaddr, u16_t port)
+tcp_bind(struct tcp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port, bool is_ipv6)
 {
   LWIP_ERROR("tcp_bind: can only bind in state CLOSED", get_tcp_state(pcb) == CLOSED, return ERR_ISCONN);
+  LWIP_ERROR("tcp_bind: NULL ipaddr pointer", ipaddr != NULL, return ERR_VAL);
+  LWIP_ERROR("tcp_bind: IPv4 socket cannot bind to IPv6 address",
+             ((!pcb->is_ipv6 && !is_ipv6) || pcb->is_ipv6), return ERR_VAL);
 
- if (!ip_addr_isany(ipaddr)) {
-    pcb->local_ip = *ipaddr;
+  if (!ip_addr_isany(ipaddr, is_ipv6)) {
+      ip_addr_from_raw(&pcb->local_ip , ipaddr, is_ipv6);
+      pcb->is_ipv6 = is_ipv6;
   }
+
   pcb->local_port = port;
   LWIP_DEBUGF(TCP_DEBUG, ("tcp_bind: bind to port %"U16_F"\n", port));
 
@@ -471,7 +469,7 @@ tcp_listen(struct tcp_pcb_listen *listen_pcb, struct tcp_pcb *pcb)
   listen_pcb->so_options |= SOF_ACCEPTCONN;
   listen_pcb->ttl = pcb->ttl;
   listen_pcb->tos = pcb->tos;
-  ip_addr_copy(listen_pcb->local_ip, pcb->local_ip);
+  ip_addr_copy(&listen_pcb->local_ip, &pcb->local_ip, pcb->is_ipv6);
 #if LWIP_CALLBACK_API
   listen_pcb->accept = tcp_accept_null;
 #endif /* LWIP_CALLBACK_API */
@@ -479,7 +477,7 @@ tcp_listen(struct tcp_pcb_listen *listen_pcb, struct tcp_pcb *pcb)
 
 }
 
-/** 
+/**
  * Update the state that tracks the available window space to advertise.
  *
  * Returns how much extra window would be advertised if we sent an
@@ -567,26 +565,27 @@ tcp_recved(struct tcp_pcb *pcb, u32_t len)
  *         other err_t values if connect request couldn't be sent
  */
 err_t
-tcp_connect(struct tcp_pcb *pcb, ip_addr_t *ipaddr, u16_t port,
-      tcp_connected_fn connected)
+tcp_connect(struct tcp_pcb *pcb, const ip_addr_t *ipaddr,
+            u16_t port, bool is_ipv6, tcp_connected_fn connected)
 {
   err_t ret;
   u32_t iss;
 
   LWIP_ERROR("tcp_connect: can only connected from state CLOSED", get_tcp_state(pcb) == CLOSED, return ERR_ISCONN);
-
-  LWIP_DEBUGF(TCP_DEBUG, ("tcp_connect to port %"U16_F"\n", port));
-  if (ipaddr != NULL) {
-    pcb->remote_ip = *ipaddr;
-  } else {
-    return ERR_VAL;
-  }
-  pcb->remote_port = port;
+  LWIP_ERROR("tcp_bind: NULL ipaddr pointer", ipaddr != NULL, return ERR_VAL);
+  LWIP_ERROR("tcp_bind: IPv4 socket cannot bind to IPv6 address",
+             ((!pcb->is_ipv6 && !is_ipv6) || pcb->is_ipv6), return ERR_VAL);
 
   /* check if we have a route to the remote host */
-  if (ip_addr_isany(&(pcb->local_ip))) {
+  if (ip_addr_isany(&(pcb->local_ip), pcb->is_ipv6)) {
 	  LWIP_ASSERT("tcp_connect: need to find route to host", 0);
   }
+
+  LWIP_DEBUGF(TCP_DEBUG, ("tcp_connect to port %"U16_F"\n", port));
+
+  ip_addr_copy(&pcb->remote_ip , ipaddr, is_ipv6);
+  pcb->is_ipv6 = is_ipv6;
+  pcb->remote_port = port;
 
   if (pcb->local_port == 0) {
     return ERR_VAL;
@@ -599,29 +598,9 @@ tcp_connect(struct tcp_pcb *pcb, ip_addr_t *ipaddr, u16_t port,
   pcb->snd_lbb = iss;
   pcb->rcv_ann_right_edge = pcb->rcv_nxt;
   pcb->snd_wnd = TCP_WND;
-  /* 
-   * For effective and advertized MSS without MTU consideration:
-   * If MSS is configured - do not accept a higher value than 536 
-   * If MSS is not configured assume minimum value of 536 
-   * The send MSS is updated when an MSS option is received 
-   */
-  u16_t snd_mss = pcb->advtsd_mss = (LWIP_TCP_MSS) ? ((LWIP_TCP_MSS > 536) ? 536 : LWIP_TCP_MSS) : 536;
-  UPDATE_PCB_BY_MSS(pcb, snd_mss); 
-#if TCP_CALCULATE_EFF_SEND_MSS
-  /* 
-   * For advertized MSS with MTU knowledge - it is highly likely that it can be derived from the MTU towards the remote IP address. 
-   * Otherwise (if unlikely MTU==0)
-   * If LWIP_TCP_MSS>0 use it as MSS 
-   * If LWIP_TCP_MSS==0 set advertized MSS value to default 536
-   */
-  pcb->advtsd_mss = (LWIP_TCP_MSS > 0) ? tcp_eff_send_mss(LWIP_TCP_MSS, pcb) : tcp_mss_follow_mtu_with_default(536, pcb);
-  /* 
-   * For effective MSS with MTU knowledge - get the minimum between pcb->mss and the MSS derived from the 
-   * MTU towards the remote IP address 
-   * */
-  u16_t eff_mss = tcp_eff_send_mss(pcb->mss, pcb);
-  UPDATE_PCB_BY_MSS(pcb, eff_mss);
-#endif /* TCP_CALCULATE_EFF_SEND_MSS */
+
+  pcb->advtsd_mss = tcp_send_mss(pcb);
+  UPDATE_PCB_BY_MSS(pcb, pcb->advtsd_mss);
   pcb->cwnd = 1;
   pcb->ssthresh = pcb->mss * 10;
   pcb->connected = connected;
@@ -647,9 +626,6 @@ tcp_connect(struct tcp_pcb *pcb, ip_addr_t *ipaddr, u16_t port,
 void
 tcp_slowtmr(struct tcp_pcb* pcb)
 {
-#if !TCP_CC_ALGO_MOD
-  u32_t eff_wnd;
-#endif //!TCP_CC_ALGO_MOD
   u8_t pcb_remove;      /* flag if a PCB should be removed */
   u8_t pcb_reset;       /* flag if a RST should be sent when removing */
   err_t err;
@@ -762,9 +738,9 @@ tcp_slowtmr(struct tcp_pcb* pcb)
 		 (pcb->keep_idle + TCP_MAXIDLE) / slow_tmr_interval)
 #endif /* LWIP_TCP_KEEPALIVE */
 	  {
-		LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: KEEPALIVE timeout. Aborting connection to %"U16_F".%"U16_F".%"U16_F".%"U16_F".\n",
-								ip4_addr1_16(&pcb->remote_ip), ip4_addr2_16(&pcb->remote_ip),
-								ip4_addr3_16(&pcb->remote_ip), ip4_addr4_16(&pcb->remote_ip)));
+        LWIP_DEBUGF_IP_ADDR(TCP_DEBUG,
+                            "tcp_slowtmr: KEEPALIVE timeout. Aborting connection to ",
+                            pcb->remote_ip, pcb->is_ipv6);
 
 		++pcb_remove;
 		err = ERR_ABRT;
@@ -1013,11 +989,12 @@ tcp_recv_null(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
 }
 #endif /* LWIP_CALLBACK_API */
 
-void tcp_pcb_init (struct tcp_pcb* pcb, u8_t prio)
+void tcp_pcb_init (struct tcp_pcb* pcb, u8_t prio, void *container)
 {
 	u32_t iss;
 
 	memset(pcb, 0, sizeof(*pcb));
+	pcb->my_container = container;
 	pcb->max_snd_buff = TCP_SND_BUF;
 	pcb->prio = prio;
 	pcb->snd_buf = pcb->max_snd_buff;
@@ -1030,9 +1007,9 @@ void tcp_pcb_init (struct tcp_pcb* pcb, u8_t prio)
 	pcb->rcv_wnd_max_desired = TCP_WND_SCALED(pcb);
 	pcb->tos = 0;
 	pcb->ttl = TCP_TTL;
-	/* As initial send MSS, we use TCP_MSS but limit it to 536.
-	   The send MSS is updated when an MSS option is received. */
-	u16_t snd_mss = pcb->advtsd_mss = (LWIP_TCP_MSS) ? ((LWIP_TCP_MSS > 536) ? 536 : LWIP_TCP_MSS) : 536;
+	pcb->is_ipv6 = false;
+
+	u16_t snd_mss = pcb->advtsd_mss = tcp_send_mss(pcb);
 	UPDATE_PCB_BY_MSS(pcb, snd_mss);
 	pcb->max_unsent_len = pcb->max_tcp_snd_queuelen;
 	pcb->rto = 3000 / slow_tmr_interval;
@@ -1304,6 +1281,18 @@ tcp_clone_conn(struct tcp_pcb_listen *pcb, tcp_clone_conn_fn clone_conn)
 {
   pcb->clone_conn = clone_conn;
 }
+
+/**
+ * Used for specifying the function that should be when a accepted pcb is ready.
+ *
+ * @param pcb          Listen pcb
+ * @param accepted_pcb Callback function to call when the accepted pcb is ready.
+ */
+void
+tcp_accepted_pcb(struct tcp_pcb_listen *pcb, tcp_accepted_pcb_fn accepted_pcb)
+{
+  pcb->accepted_pcb = accepted_pcb;
+}
 #endif /* LWIP_CALLBACK_API */
 
 
@@ -1421,42 +1410,30 @@ tcp_next_iss(void)
   return iss;
 }
 
+u16_t
+tcp_send_mss(struct tcp_pcb *pcb)
+{
+    u16_t header_length = (pcb->is_ipv6 ? IPV6_HLEN : IP_HLEN) + TCP_HLEN;
 #if TCP_CALCULATE_EFF_SEND_MSS
-/**
- * Calcluates the effective send mss that can be used for a specific IP address
- * by using ip_route to determine the netif used to send to the address and
- * calculating the minimum of TCP_MSS and that netif's mtu (if set).
- */
-u16_t
-tcp_eff_send_mss(u16_t sendmss, struct tcp_pcb *pcb)
-{
-  u16_t mtu;
-
-  mtu = external_ip_route_mtu(pcb);
-  if (mtu != 0) {
-    sendmss = LWIP_MIN(sendmss, mtu - IP_HLEN - TCP_HLEN);
-  }
-  return sendmss;
-}
-
-/**
- * Calcluates the send mss that can be used for a specific IP address
- * by using ip_route to determine the netif used to send to the address. 
- * In case MTU is unkonw - return the default MSS 
- */
-u16_t
-tcp_mss_follow_mtu_with_default(u16_t defsendmss, struct tcp_pcb *pcb)
-{
-  u16_t mtu;
-
-  mtu = external_ip_route_mtu(pcb);
-  if (mtu != 0) {
-    defsendmss = mtu - IP_HLEN - TCP_HLEN;
-    defsendmss = LWIP_MAX(defsendmss, 1); /* MSS must be a positive number */
-  }
-  return defsendmss;
-}
+    u16_t external_mtu = external_ip_route_mtu(pcb);
+#else
+    u16_t external_mtu = 0;
 #endif /* TCP_CALCULATE_EFF_SEND_MSS */
+    u16_t mss;
+
+    if (LWIP_TCP_MSS > 0) {
+        if (external_mtu > header_length)
+            mss = LWIP_MIN(LWIP_TCP_MSS, external_mtu - header_length);
+        else
+            mss = LWIP_TCP_MSS;
+    } else {
+        if (external_mtu > header_length)
+            mss = external_mtu - header_length;
+        else
+            mss = (pcb->is_ipv6 ? IPV6_MIN_MTU : IPV4_MIN_MTU) - header_length;
+    }
+    return mss;
+}
 
 #if TCP_DEBUG || TCP_INPUT_DEBUG || TCP_OUTPUT_DEBUG
 /**

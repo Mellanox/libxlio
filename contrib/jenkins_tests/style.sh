@@ -4,80 +4,71 @@ source $(dirname $0)/globals.sh
 
 echo "Checking for codying style ..."
 
+do_module "dev/clang-9.0.1"
+
 cd $WORKSPACE
 
 rm -rf $style_dir
 mkdir -p $style_dir
 cd $style_dir
 
-stoplist_pattern=${stoplist_pattern:="WARNING"}
+test_app="clang-format"
 
-checkpatch=/hpc/local/scripts/checkpatch/checkpatch.pl
-if [ ! -e $checkpatch ]; then
-    set +e
-    eval wget  --no-check-certificate https://raw.githubusercontent.com/torvalds/linux/master/scripts/checkpatch.pl
-    ret=$?
-    if [ $ret -gt 0 ]; then break; fi
-    eval wget  --no-check-certificate https://github.com/torvalds/linux/blob/master/scripts/spelling.txt
-    ret=$?
-    if [ $ret -gt 0 ]; then break; fi
-    chmod +x checkpatch.pl
-    set -e
-    checkpatch=$style_dir/checkpatch.pl
+if [ $(command -v $test_app >/dev/null 2>&1 || echo $?) ]; then
+    echo can not find $test_app
+    exit 1
 fi
 
-if [ -e $checkpatch ]; then
+style_tap=${WORKSPACE}/${prefix}/style_test.tap
+rm -rf $style_tap
+ln -sf $WORKSPACE/contrib/jenkins_tests/style.conf $WORKSPACE/.clang-format
 
-    style_tap=${WORKSPACE}/${prefix}/style_test.tap
-    rm -rf $style_tap
-    check_files=$(find $WORKSPACE/src/state_machine/ -name '*.c' -o -name '*.cpp' -o -name '*.h')
-    check_files+=" "
-    check_files+=$(find $WORKSPACE/src/stats/ -name '*.c' -o -name '*.cpp' -o -name '*.h')
-    check_files+=" "
-    check_files+=$(find $WORKSPACE/src/vlogger/ -name '*.c' -o -name '*.cpp' -o -name '*.h')
-    check_files+=" "
-    check_files+=$(find $WORKSPACE/src/vma/dev/ -name '*.c' -o -name '*.cpp' -o -name '*.h')
-    check_files+=" "
-    check_files+=$(find $WORKSPACE/src/vma/event/ -name '*.c' -o -name '*.cpp' -o -name '*.h')
-    check_files+=" "
-    check_files+=$(find $WORKSPACE/src/vma/infra/ -name '*.c' -o -name '*.cpp' -o -name '*.h')
-    check_files+=" "
-    check_files+=$(find $WORKSPACE/src/vma/iomux/ -name '*.c' -o -name '*.cpp' -o -name '*.h')
-    check_files+=" "
-    check_files+=$(find $WORKSPACE/src/vma/netlink/ -name '*.c' -o -name '*.cpp' -o -name '*.h')
-    check_files+=" "
-    check_files+=$(find $WORKSPACE/src/vma/proto/ -name '*.c' -o -name '*.cpp' -o -name '*.h')
-    check_files+=" "
-    check_files+=$(find $WORKSPACE/src/vma/sock/ -name '*.c' -o -name '*.cpp' -o -name '*.h')
-    check_files+=" "
-    check_files+=$(find $WORKSPACE/src/vma -name '*.c' -o -name '*.cpp' -o -name '*.h')
 
-    echo "1..$(echo $check_files | wc -w)" > $style_tap
-    i=0
-    status="success"
-    nerrors=0
+check_files="$(find $WORKSPACE/src/ \( -path "*/lwip" \) ! -prune -o ! -name 'config_*' -a \( -iname '*.c' -o -iname '*.cpp' -o -iname '*.h' -o -iname '*.inl' -o -name '*.cc' \))"
+check_files+=" $(find $WORKSPACE/tools/daemon/ \( -iname '*.c' -o -iname '*.cpp' -o -iname '*.h' -o -iname '*.inl' -o -iname '*.cc' \))"
+check_files+=" $(find $WORKSPACE/tests/gtest/ \( -path "*/googletest" \) ! -prune -o ! \( -name 'tap.h' -o -name 'gtest.h' -o -name 'gtest-all.cc' \) -a \( -iname '*.c' -o -iname '*.cpp' -o -iname '*.h' -o -iname '*.inl' -o -iname '*.cc' \))"
 
-    for file in $check_files; do
-        set +e
-        ret=$(perl -X $checkpatch --file --terse --no-tree $file | grep -v -w $stoplist_pattern| wc -l)
-        nerrors=$((nerrors+ret))
-        set -e
+i=0
+nerrors=0
+
+for file in $check_files; do
+    set +eE
+    style_diff="${style_dir}/$(basename ${file}).diff"
+    if [ "$jenkins_opt_style_force" = "yes" ]; then
+        eval "env $test_app -i -style=file ${file}"
+    else
+        eval "env $test_app $test_app_opt -style=file \
+            ${file} \
+            | diff -u ${file} - | sed -e '1s|-- |--- a/|' -e '2s|+++ -|+++ b/$file|' \
+            > ${style_diff} 2>&1"
+    fi
+    [ -s ${style_diff} ]
+    ret=$((1-$?))
+    nerrors=$((nerrors+ret))
+    set -eE
+
+    file=$(basename ${file})
+    if [ $ret -gt 0 ]; then
         i=$((i+1))
-
-        fix_file=$(echo $file|sed -e s,$WORKSPACE/,,g)
-
-        if [ $ret -gt 0 ]; then
-            echo "not ok $i $fix_file # TODO" >> $style_tap
-            #status="error"
-            info="checkpatch.pl detected $nerrors style errors"
-        else
-            echo "ok $i $fix_file" >> $style_tap
-        fi
-    done
-
-    rc=$(($rc+$nerrors))
-
+        echo "not ok $i $file # See: ${file}.diff" >> $style_tap
+    else
+        rm -rf ${style_diff}
+    fi
+done
+if [ $nerrors -eq 0 ]; then
+    echo "1..1" > $style_tap
+    echo "ok 1 all $(echo "$check_files" | wc -l) files" >> $style_tap
+else
+    mv $style_tap ${style_tap}.backup
+    echo "1..$(cat ${style_tap}.backup | wc -l)" > $style_tap
+    cat ${style_tap}.backup >> $style_tap
+    rm -rf ${style_tap}.backup
 fi
+rc=$(($rc+$nerrors))
+
+module unload "dev/clang-9.0.1"
+
+do_archive "${style_dir}/*.diff"
 
 echo "[${0##*/}]..................exit code = $rc"
 exit $rc

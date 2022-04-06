@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -43,56 +43,62 @@
 
 class vma_tcp_recvfrom_zcopy : public vma_base, public tcp_base {
 protected:
-	void SetUp() {
-		uint64_t vma_extra_api_cap = XLIO_EXTRA_API_RECVFROM_ZCOPY | XLIO_EXTRA_API_RECVFROM_ZCOPY_FREE_PACKETS;
+    void SetUp()
+    {
+        uint64_t vma_extra_api_cap =
+            XLIO_EXTRA_API_RECVFROM_ZCOPY | XLIO_EXTRA_API_RECVFROM_ZCOPY_FREE_PACKETS;
 
-		vma_base::SetUp();
-		tcp_base::SetUp();
+        vma_base::SetUp();
+        tcp_base::SetUp();
 
-		SKIP_TRUE((xlio_api->cap_mask & vma_extra_api_cap) == vma_extra_api_cap,
-				"This test requires VMA capabilities as XLIO_EXTRA_API_RECVFROM_ZCOPY | XLIO_EXTRA_API_RECVFROM_ZCOPY_FREE_PACKETS");
+        SKIP_TRUE((xlio_api->cap_mask & vma_extra_api_cap) == vma_extra_api_cap,
+                  "This test requires VMA capabilities as XLIO_EXTRA_API_RECVFROM_ZCOPY | "
+                  "XLIO_EXTRA_API_RECVFROM_ZCOPY_FREE_PACKETS");
 
-		m_fd = -1;
-		m_test_buf = NULL;
-		m_test_buf_size = 0;
-	}
-	void TearDown()	{
-		if (m_test_buf) {
-			free_tmp_buffer(m_test_buf, m_test_buf_size);
-		}
+        m_fd = -1;
+        m_test_buf = NULL;
+        m_test_buf_size = 0;
+    }
+    void TearDown()
+    {
+        if (m_test_buf) {
+            free_tmp_buffer(m_test_buf, m_test_buf_size);
+        }
 
-		tcp_base::TearDown();
-		vma_base::TearDown();
-	}
-	void* create_tmp_buffer(size_t size, int *alloc_size = NULL) {
-		char *ptr = NULL;
-		int page_size = 0x200000;
-		size_t i = 0;
+        tcp_base::TearDown();
+        vma_base::TearDown();
+    }
+    void *create_tmp_buffer(size_t size, int *alloc_size = NULL)
+    {
+        char *ptr = NULL;
+        int page_size = 0x200000;
+        size_t i = 0;
 
-		size = (size + page_size - 1) & (~(page_size - 1));
-		ptr = (char *)memalign(page_size, size);
-		if (ptr) {
-			for (i = 0; i < size; i++) {
-				ptr[i] = 'a' + (i % ('z' - 'a' + 1));
-			}
-			if (alloc_size) {
-				*alloc_size = size;
-			}
-		} else {
-			ptr = NULL;
-		}
+        size = (size + page_size - 1) & (~(page_size - 1));
+        ptr = (char *)memalign(page_size, size);
+        if (ptr) {
+            for (i = 0; i < size; i++) {
+                ptr[i] = 'a' + (i % ('z' - 'a' + 1));
+            }
+            if (alloc_size) {
+                *alloc_size = size;
+            }
+        } else {
+            ptr = NULL;
+        }
 
-		return ptr;
-	}
-	void free_tmp_buffer(void *ptr, size_t size) {
-		UNREFERENCED_PARAMETER(size);
-		free(ptr);
-	}
+        return ptr;
+    }
+    void free_tmp_buffer(void *ptr, size_t size)
+    {
+        UNREFERENCED_PARAMETER(size);
+        free(ptr);
+    }
 
 protected:
-	int m_fd;
-	char *m_test_buf;
-	int m_test_buf_size;
+    int m_fd;
+    char *m_test_buf;
+    int m_test_buf_size;
 };
 
 /**
@@ -101,91 +107,93 @@ protected:
  *    Check for passing small receive buffer
  * @details
  */
-TEST_F(vma_tcp_recvfrom_zcopy, ti_1) {
-	int rc = EOK;
-	char test_msg[] = "Hello test";
+TEST_F(vma_tcp_recvfrom_zcopy, ti_1)
+{
+    int rc = EOK;
+    char test_msg[] = "Hello test";
 
-	m_test_buf = (char *)create_tmp_buffer(sizeof(test_msg));
-	ASSERT_TRUE(m_test_buf);
-	m_test_buf_size = sizeof(test_msg);
+    m_test_buf = (char *)create_tmp_buffer(sizeof(test_msg));
+    ASSERT_TRUE(m_test_buf);
+    m_test_buf_size = sizeof(test_msg);
 
-	memcpy(m_test_buf, test_msg, sizeof(test_msg));
+    memcpy(m_test_buf, test_msg, sizeof(test_msg));
 
-	int pid = fork();
+    int pid = fork();
 
-	if (0 == pid) {  /* I am the child */
-		struct epoll_event event;
+    if (0 == pid) { /* I am the child */
+        struct epoll_event event;
 
-		barrier_fork(pid);
+        barrier_fork(pid);
 
-		m_fd = tcp_base::sock_create();
-		ASSERT_LE(0, m_fd);
+        m_fd = tcp_base::sock_create();
+        ASSERT_LE(0, m_fd);
 
-		rc = bind(m_fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
-		ASSERT_EQ(0, rc);
+        rc = bind(m_fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
+        ASSERT_EQ(0, rc);
 
-		rc = connect(m_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-		ASSERT_EQ(0, rc);
+        rc = connect(m_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        ASSERT_EQ(0, rc);
 
-		log_trace("Established connection: fd=%d to %s\n",
-				m_fd, sys_addr2str((struct sockaddr_in *)&server_addr));
+        log_trace("Established connection: fd=%d to %s\n", m_fd,
+                  sys_addr2str((struct sockaddr *)&server_addr));
 
-		rc = send(m_fd, (void *)m_test_buf, m_test_buf_size, MSG_DONTWAIT);
-		EXPECT_EQ(m_test_buf_size, rc);
+        rc = send(m_fd, (void *)m_test_buf, m_test_buf_size, MSG_DONTWAIT);
+        EXPECT_EQ(m_test_buf_size, rc);
 
-		event.events = EPOLLOUT;
-		event.data.fd = m_fd;
-		rc = test_base::event_wait(&event);
-		EXPECT_LT(0, rc);
-		EXPECT_TRUE(EPOLLOUT | event.events);
+        event.events = EPOLLOUT;
+        event.data.fd = m_fd;
+        rc = test_base::event_wait(&event);
+        EXPECT_LT(0, rc);
+        EXPECT_TRUE(EPOLLOUT | event.events);
 
-		peer_wait(m_fd);
+        peer_wait(m_fd);
 
-		close(m_fd);
+        close(m_fd);
 
-		/* This exit is very important, otherwise the fork
-		 * keeps running and may duplicate other tests.
-		 */
-		exit(testing::Test::HasFailure());
-	} else {  /* I am the parent */
-		int l_fd;
-		struct sockaddr peer_addr;
-		socklen_t socklen;
-		int flags = 0;
-		size_t vma_header_size = sizeof(xlio_recvfrom_zcopy_packets_t) + sizeof(xlio_recvfrom_zcopy_packet_t) + sizeof(iovec);
-		char buf[m_test_buf_size + vma_header_size];
+        /* This exit is very important, otherwise the fork
+         * keeps running and may duplicate other tests.
+         */
+        exit(testing::Test::HasFailure());
+    } else { /* I am the parent */
+        int l_fd;
+        struct sockaddr peer_addr;
+        socklen_t socklen;
+        int flags = 0;
+        size_t vma_header_size = sizeof(xlio_recvfrom_zcopy_packets_t) +
+            sizeof(xlio_recvfrom_zcopy_packet_t) + sizeof(iovec);
+        char buf[m_test_buf_size + vma_header_size];
 
-		l_fd = tcp_base::sock_create();
-		ASSERT_LE(0, l_fd);
+        l_fd = tcp_base::sock_create();
+        ASSERT_LE(0, l_fd);
 
-		rc = bind(l_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-		ASSERT_EQ(0, rc);
+        rc = bind(l_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        ASSERT_EQ(0, rc);
 
-		rc = listen(l_fd, 5);
-		ASSERT_EQ(0, rc);
+        rc = listen(l_fd, 5);
+        ASSERT_EQ(0, rc);
 
-		barrier_fork(pid);
+        barrier_fork(pid);
 
-		socklen = sizeof(peer_addr);
-		m_fd = accept(l_fd, &peer_addr, &socklen);
-		ASSERT_LE(0, m_fd);
-		close(l_fd);
+        socklen = sizeof(peer_addr);
+        m_fd = accept(l_fd, &peer_addr, &socklen);
+        ASSERT_LE(0, m_fd);
+        close(l_fd);
 
-		log_trace("Accepted connection: fd=%d from %s\n",
-				m_fd, sys_addr2str((struct sockaddr_in *)&peer_addr));
+        log_trace("Accepted connection: fd=%d from %s\n", m_fd,
+                  sys_addr2str((struct sockaddr *)&peer_addr));
 
-		rc = xlio_api->recvfrom_zcopy(m_fd, (void *)buf, vma_header_size - 1, &flags, NULL, NULL);
-		EXPECT_EQ(-1, rc);
-		EXPECT_TRUE(ENOBUFS == errno);
+        rc = xlio_api->recvfrom_zcopy(m_fd, (void *)buf, vma_header_size - 1, &flags, NULL, NULL);
+        EXPECT_EQ(-1, rc);
+        EXPECT_TRUE(ENOBUFS == errno);
 
-		rc = xlio_api->recvfrom_zcopy(m_fd, (void *)buf, vma_header_size, &flags, NULL, NULL);
-		EXPECT_EQ(m_test_buf_size, rc);
-		EXPECT_TRUE(flags & MSG_XLIO_ZCOPY);
+        rc = xlio_api->recvfrom_zcopy(m_fd, (void *)buf, vma_header_size, &flags, NULL, NULL);
+        EXPECT_EQ(m_test_buf_size, rc);
+        EXPECT_TRUE(flags & MSG_XLIO_ZCOPY);
 
-		close(m_fd);
+        close(m_fd);
 
-		ASSERT_EQ(0, wait_fork(pid));
-	}
+        ASSERT_EQ(0, wait_fork(pid));
+    }
 }
 
 /**
@@ -194,101 +202,106 @@ TEST_F(vma_tcp_recvfrom_zcopy, ti_1) {
  *    Exchange single buffer
  * @details
  */
-TEST_F(vma_tcp_recvfrom_zcopy, ti_2_recv_once) {
-	int rc = EOK;
-	char test_msg[] = "Hello test";
+TEST_F(vma_tcp_recvfrom_zcopy, ti_2_recv_once)
+{
+    int rc = EOK;
+    char test_msg[] = "Hello test";
 
-	m_test_buf = (char *)create_tmp_buffer(sizeof(test_msg));
-	ASSERT_TRUE(m_test_buf);
-	m_test_buf_size = sizeof(test_msg);
+    m_test_buf = (char *)create_tmp_buffer(sizeof(test_msg));
+    ASSERT_TRUE(m_test_buf);
+    m_test_buf_size = sizeof(test_msg);
 
-	memcpy(m_test_buf, test_msg, sizeof(test_msg));
+    memcpy(m_test_buf, test_msg, sizeof(test_msg));
 
-	int pid = fork();
+    int pid = fork();
 
-	if (0 == pid) {  /* I am the child */
-		struct epoll_event event;
+    if (0 == pid) { /* I am the child */
+        struct epoll_event event;
 
-		barrier_fork(pid);
+        barrier_fork(pid);
 
-		m_fd = tcp_base::sock_create();
-		ASSERT_LE(0, m_fd);
+        m_fd = tcp_base::sock_create();
+        ASSERT_LE(0, m_fd);
 
-		rc = bind(m_fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
-		ASSERT_EQ(0, rc);
+        rc = bind(m_fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
+        ASSERT_EQ(0, rc);
 
-		rc = connect(m_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-		ASSERT_EQ(0, rc);
+        rc = connect(m_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        ASSERT_EQ(0, rc);
 
-		log_trace("Established connection: fd=%d to %s\n",
-				m_fd, sys_addr2str((struct sockaddr_in *)&server_addr));
+        log_trace("Established connection: fd=%d to %s\n", m_fd,
+                  sys_addr2str((struct sockaddr *)&server_addr));
 
-		rc = send(m_fd, (void *)m_test_buf, m_test_buf_size, MSG_DONTWAIT);
-		EXPECT_EQ(m_test_buf_size, rc);
+        rc = send(m_fd, (void *)m_test_buf, m_test_buf_size, MSG_DONTWAIT);
+        EXPECT_EQ(m_test_buf_size, rc);
 
-		event.events = EPOLLOUT;
-		event.data.fd = m_fd;
-		rc = test_base::event_wait(&event);
-		EXPECT_LT(0, rc);
-		EXPECT_TRUE(EPOLLOUT | event.events);
+        event.events = EPOLLOUT;
+        event.data.fd = m_fd;
+        rc = test_base::event_wait(&event);
+        EXPECT_LT(0, rc);
+        EXPECT_TRUE(EPOLLOUT | event.events);
 
-		peer_wait(m_fd);
+        peer_wait(m_fd);
 
-		close(m_fd);
+        close(m_fd);
 
-		/* This exit is very important, otherwise the fork
-		 * keeps running and may duplicate other tests.
-		 */
-		exit(testing::Test::HasFailure());
-	} else {  /* I am the parent */
-		int l_fd;
-		struct sockaddr peer_addr;
-		socklen_t socklen;
-		int flags = 0;
-		char buf[m_test_buf_size + sizeof(xlio_recvfrom_zcopy_packets_t) + sizeof(xlio_recvfrom_zcopy_packet_t) + sizeof(iovec)];
-		struct xlio_recvfrom_zcopy_packets_t *vma_packets;
-		struct xlio_recvfrom_zcopy_packet_t *vma_packet;
+        /* This exit is very important, otherwise the fork
+         * keeps running and may duplicate other tests.
+         */
+        exit(testing::Test::HasFailure());
+    } else { /* I am the parent */
+        int l_fd;
+        struct sockaddr peer_addr;
+        socklen_t socklen;
+        int flags = 0;
+        char buf[m_test_buf_size + sizeof(xlio_recvfrom_zcopy_packets_t) +
+                 sizeof(xlio_recvfrom_zcopy_packet_t) + sizeof(iovec)];
+        struct xlio_recvfrom_zcopy_packets_t *vma_packets;
+        struct xlio_recvfrom_zcopy_packet_t *vma_packet;
 
-		l_fd = tcp_base::sock_create();
-		ASSERT_LE(0, l_fd);
+        l_fd = tcp_base::sock_create();
+        ASSERT_LE(0, l_fd);
 
-		rc = bind(l_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-		ASSERT_EQ(0, rc);
+        rc = bind(l_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        ASSERT_EQ(0, rc);
 
-		rc = listen(l_fd, 5);
-		ASSERT_EQ(0, rc);
+        rc = listen(l_fd, 5);
+        ASSERT_EQ(0, rc);
 
-		barrier_fork(pid);
+        barrier_fork(pid);
 
-		socklen = sizeof(peer_addr);
-		m_fd = accept(l_fd, &peer_addr, &socklen);
-		ASSERT_LE(0, m_fd);
-		close(l_fd);
+        socklen = sizeof(peer_addr);
+        m_fd = accept(l_fd, &peer_addr, &socklen);
+        ASSERT_LE(0, m_fd);
+        close(l_fd);
 
-		log_trace("Accepted connection: fd=%d from %s\n",
-				m_fd, sys_addr2str((struct sockaddr_in *)&peer_addr));
+        log_trace("Accepted connection: fd=%d from %s\n", m_fd,
+                  sys_addr2str((struct sockaddr *)&peer_addr));
 
-		rc = xlio_api->recvfrom_zcopy(m_fd, (void *)buf, sizeof(buf), &flags, NULL, NULL);
-		EXPECT_EQ(m_test_buf_size, rc);
-		EXPECT_TRUE(flags & MSG_XLIO_ZCOPY);
-		vma_packets = (struct xlio_recvfrom_zcopy_packets_t *)buf;
-		EXPECT_EQ(1, vma_packets->n_packet_num);
-		vma_packet = (struct xlio_recvfrom_zcopy_packet_t *)(buf + sizeof(struct xlio_recvfrom_zcopy_packets_t));
-		EXPECT_EQ(1, vma_packet->sz_iov);
-		EXPECT_EQ(m_test_buf_size, vma_packet->iov[0].iov_len);
+        rc = xlio_api->recvfrom_zcopy(m_fd, (void *)buf, sizeof(buf), &flags, NULL, NULL);
+        EXPECT_EQ(m_test_buf_size, rc);
+        EXPECT_TRUE(flags & MSG_XLIO_ZCOPY);
+        vma_packets = (struct xlio_recvfrom_zcopy_packets_t *)buf;
+        EXPECT_EQ(1, vma_packets->n_packet_num);
+        vma_packet =
+            (struct xlio_recvfrom_zcopy_packet_t *)(buf +
+                                                    sizeof(struct xlio_recvfrom_zcopy_packets_t));
+        EXPECT_EQ(1, vma_packet->sz_iov);
+        EXPECT_EQ(m_test_buf_size, vma_packet->iov[0].iov_len);
 
-		log_trace("Test check: expected: '%s' actual: '%s'\n",
-				m_test_buf, (char *)vma_packet->iov[0].iov_base);
+        log_trace("Test check: expected: '%s' actual: '%s'\n", m_test_buf,
+                  (char *)vma_packet->iov[0].iov_base);
 
-		EXPECT_EQ(memcmp(vma_packet->iov[0].iov_base, m_test_buf, m_test_buf_size), 0);
+        EXPECT_EQ(memcmp(vma_packet->iov[0].iov_base, m_test_buf, m_test_buf_size), 0);
 
-		rc = xlio_api->recvfrom_zcopy_free_packets(m_fd, vma_packets->pkts, vma_packets->n_packet_num);
-		EXPECT_EQ(0, rc);
+        rc = xlio_api->recvfrom_zcopy_free_packets(m_fd, vma_packets->pkts,
+                                                   vma_packets->n_packet_num);
+        EXPECT_EQ(0, rc);
 
-		close(m_fd);
+        close(m_fd);
 
-		ASSERT_EQ(0, wait_fork(pid));
-	}
+        ASSERT_EQ(0, wait_fork(pid));
+    }
 }
 
 /**
@@ -297,148 +310,148 @@ TEST_F(vma_tcp_recvfrom_zcopy, ti_2_recv_once) {
  *    Exchange large data
  * @details
  */
-TEST_F(vma_tcp_recvfrom_zcopy, ti_3_large_data) {
-	int rc = EOK;
-	struct {
-		int buf_size;
-	} test_scenario [] = {
-			{1024}, {8192}, {12288}, {4096}, {1869}, {40960}
-	};
-	int i = 0;
+TEST_F(vma_tcp_recvfrom_zcopy, ti_3_large_data)
+{
+    int rc = EOK;
+    struct {
+        int buf_size;
+    } test_scenario[] = {{1024}, {8192}, {12288}, {4096}, {1869}, {40960}};
+    int i = 0;
 
-	for (i = 0; (i < (int)(sizeof(test_scenario) / sizeof(test_scenario[0]))); i++) {
-		int test_buf_size = test_scenario[i].buf_size;
-		char *test_buf = (char *)create_tmp_buffer(test_buf_size);
-		ASSERT_TRUE(test_buf);
+    for (i = 0; (i < (int)(sizeof(test_scenario) / sizeof(test_scenario[0]))); i++) {
+        int test_buf_size = test_scenario[i].buf_size;
+        char *test_buf = (char *)create_tmp_buffer(test_buf_size);
+        ASSERT_TRUE(test_buf);
 
-		log_trace("Test case [%d]: data size: %d\n",
-				i, test_buf_size);
-		server_addr.sin_port = htons(gtest_conf.port + i);
+        log_trace("Test case [%d]: data size: %d\n", i, test_buf_size);
+        sys_set_port((struct sockaddr *)&server_addr, m_port + i);
 
-		int pid = fork();
-		if (0 == pid) {  /* I am the child */
-			int opt_val = 1;
-			struct iovec vec[1];
-			struct msghdr msg;
+        int pid = fork();
+        if (0 == pid) { /* I am the child */
+            int opt_val = 1;
+            struct iovec vec[1];
+            struct msghdr msg;
 
-			barrier_fork(pid);
+            barrier_fork(pid);
 
-			m_fd = tcp_base::sock_create();
-			ASSERT_LE(0, m_fd);
+            m_fd = tcp_base::sock_create();
+            ASSERT_LE(0, m_fd);
 
-			opt_val = 1 << 21;
-			rc = setsockopt(m_fd, SOL_SOCKET, SO_SNDBUF, &opt_val, sizeof(opt_val));
-			ASSERT_EQ(0, rc);
+            opt_val = 1 << 21;
+            rc = setsockopt(m_fd, SOL_SOCKET, SO_SNDBUF, &opt_val, sizeof(opt_val));
+            ASSERT_EQ(0, rc);
 
-			rc = bind(m_fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
-			ASSERT_EQ(0, rc);
+            rc = bind(m_fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
+            ASSERT_EQ(0, rc);
 
-			rc = connect(m_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-			ASSERT_EQ(0, rc);
+            rc = connect(m_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+            ASSERT_EQ(0, rc);
 
-			log_trace("Established connection: fd=%d to %s\n",
-					m_fd, sys_addr2str((struct sockaddr_in *)&server_addr));
+            log_trace("Established connection: fd=%d to %s\n", m_fd,
+                      sys_addr2str((struct sockaddr *)&server_addr));
 
-			vec[0].iov_base = (void *)test_buf;
-			vec[0].iov_len = test_buf_size;
+            vec[0].iov_base = (void *)test_buf;
+            vec[0].iov_len = test_buf_size;
 
-			memset(&msg, 0, sizeof(struct msghdr));
-			msg.msg_iov = vec;
-			msg.msg_iovlen = sizeof(vec) / sizeof(vec[0]);
-			rc = sendmsg(m_fd, &msg, MSG_DONTWAIT);
-			EXPECT_EQ(vec[0].iov_len, rc);
+            memset(&msg, 0, sizeof(struct msghdr));
+            msg.msg_iov = vec;
+            msg.msg_iovlen = sizeof(vec) / sizeof(vec[0]);
+            rc = sendmsg(m_fd, &msg, MSG_DONTWAIT);
+            EXPECT_EQ(vec[0].iov_len, rc);
 
-			sleep(1);
-			peer_wait(m_fd);
+            sleep(1);
+            peer_wait(m_fd);
 
-			close(m_fd);
+            close(m_fd);
 
-			/* This exit is very important, otherwise the fork
-			 * keeps running and may duplicate other tests.
-			 */
-			exit(testing::Test::HasFailure());
-		} else {  /* I am the parent */
-			int l_fd;
-			struct sockaddr peer_addr;
-			socklen_t socklen;
-			int flags = 0;
-			char buf[1024];
-			struct xlio_recvfrom_zcopy_packets_t *vma_packets;
-			struct xlio_recvfrom_zcopy_packet_t *vma_packet;
-			struct iovec *vec;
-			int efd;
-			struct epoll_event event;
-			int total_len = 0;
+            /* This exit is very important, otherwise the fork
+             * keeps running and may duplicate other tests.
+             */
+            exit(testing::Test::HasFailure());
+        } else { /* I am the parent */
+            int l_fd;
+            struct sockaddr peer_addr;
+            socklen_t socklen;
+            int flags = 0;
+            char buf[1024];
+            struct xlio_recvfrom_zcopy_packets_t *vma_packets;
+            struct xlio_recvfrom_zcopy_packet_t *vma_packet;
+            struct iovec *vec;
+            int efd;
+            struct epoll_event event;
+            int total_len = 0;
 
-			efd = epoll_create1(0);
-			ASSERT_LE(0, efd);
+            efd = epoll_create1(0);
+            ASSERT_LE(0, efd);
 
-			l_fd = tcp_base::sock_create();
-			ASSERT_LE(0, l_fd);
+            l_fd = tcp_base::sock_create();
+            ASSERT_LE(0, l_fd);
 
-			rc = bind(l_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-			ASSERT_EQ(0, rc);
+            rc = bind(l_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+            ASSERT_EQ(0, rc);
 
-			rc = listen(l_fd, 5);
-			ASSERT_EQ(0, rc);
+            rc = listen(l_fd, 5);
+            ASSERT_EQ(0, rc);
 
-			barrier_fork(pid);
+            barrier_fork(pid);
 
-			socklen = sizeof(peer_addr);
-			m_fd = accept(l_fd, &peer_addr, &socklen);
-			ASSERT_LE(0, m_fd);
-			close(l_fd);
+            socklen = sizeof(peer_addr);
+            m_fd = accept(l_fd, &peer_addr, &socklen);
+            ASSERT_LE(0, m_fd);
+            close(l_fd);
 
-			log_trace("Accepted connection: fd=%d from %s\n",
-					m_fd, sys_addr2str((struct sockaddr_in *)&peer_addr));
+            log_trace("Accepted connection: fd=%d from %s\n", m_fd,
+                      sys_addr2str((struct sockaddr *)&peer_addr));
 
-			rc = test_base::sock_noblock(m_fd);
-			ASSERT_EQ(0, rc);
+            rc = test_base::sock_noblock(m_fd);
+            ASSERT_EQ(0, rc);
 
-			event.data.fd = m_fd;
-			event.events = EPOLLIN | EPOLLET;
-			epoll_ctl(efd, EPOLL_CTL_ADD, m_fd, &event);
+            event.data.fd = m_fd;
+            event.events = EPOLLIN | EPOLLET;
+            epoll_ctl(efd, EPOLL_CTL_ADD, m_fd, &event);
 
-			while (!child_fork_exit() && (total_len < test_buf_size)) {
-				if (epoll_wait(efd, &event, 1, -1)) {
-					if (event.events & EPOLLIN) {
-						char *ptr = buf;
-						int n = 0;
-						int j = 0;
-						int packet_len = 0;
+            while (!child_fork_exit() && (total_len < test_buf_size)) {
+                if (epoll_wait(efd, &event, 1, -1)) {
+                    if (event.events & EPOLLIN) {
+                        char *ptr = buf;
+                        int n = 0;
+                        int j = 0;
+                        int packet_len = 0;
 
-						rc = xlio_api->recvfrom_zcopy(m_fd, (void *)buf, sizeof(buf), &flags, NULL, NULL);
-						EXPECT_LT(0, rc);
-						EXPECT_TRUE(flags & MSG_XLIO_ZCOPY);
-						total_len += rc;
-						vma_packets = (struct xlio_recvfrom_zcopy_packets_t *)ptr;
-						for (n = 0; n < (int)vma_packets->n_packet_num; n++) {
-							packet_len = 0;
-							ptr += sizeof(struct xlio_recvfrom_zcopy_packets_t);
-							vma_packet = (struct xlio_recvfrom_zcopy_packet_t *)ptr;
-							ptr += sizeof(struct xlio_recvfrom_zcopy_packet_t);
-							vec = (struct iovec *)ptr;
-							for (j = 0; j < (int)vma_packet->sz_iov; j++) {
-								packet_len += vec[j].iov_len;
-							}
-							log_trace("packet[%d]: packet_id=%p sz_iov=%ld len=%d\n",
-									n, vma_packet->packet_id, vma_packet->sz_iov, packet_len);
-						}
+                        rc = xlio_api->recvfrom_zcopy(m_fd, (void *)buf, sizeof(buf), &flags, NULL,
+                                                      NULL);
+                        EXPECT_LT(0, rc);
+                        EXPECT_TRUE(flags & MSG_XLIO_ZCOPY);
+                        total_len += rc;
+                        vma_packets = (struct xlio_recvfrom_zcopy_packets_t *)ptr;
+                        for (n = 0; n < (int)vma_packets->n_packet_num; n++) {
+                            packet_len = 0;
+                            ptr += sizeof(struct xlio_recvfrom_zcopy_packets_t);
+                            vma_packet = (struct xlio_recvfrom_zcopy_packet_t *)ptr;
+                            ptr += sizeof(struct xlio_recvfrom_zcopy_packet_t);
+                            vec = (struct iovec *)ptr;
+                            for (j = 0; j < (int)vma_packet->sz_iov; j++) {
+                                packet_len += vec[j].iov_len;
+                            }
+                            log_trace("packet[%d]: packet_id=%p sz_iov=%ld len=%d\n", n,
+                                      vma_packet->packet_id, vma_packet->sz_iov, packet_len);
+                        }
 
-						rc = xlio_api->recvfrom_zcopy_free_packets(m_fd, vma_packets->pkts, vma_packets->n_packet_num);
-						EXPECT_EQ(0, rc);
-					}
-				}
-			}
-			EXPECT_EQ(test_buf_size, total_len);
+                        rc = xlio_api->recvfrom_zcopy_free_packets(m_fd, vma_packets->pkts,
+                                                                   vma_packets->n_packet_num);
+                        EXPECT_EQ(0, rc);
+                    }
+                }
+            }
+            EXPECT_EQ(test_buf_size, total_len);
 
-			close(m_fd);
-			free_tmp_buffer(test_buf, test_buf_size);
-			test_buf = NULL;
+            close(m_fd);
+            free_tmp_buffer(test_buf, test_buf_size);
+            test_buf = NULL;
 
-			ASSERT_EQ(0, wait_fork(pid));
-		}
-	}
+            ASSERT_EQ(0, wait_fork(pid));
+        }
+    }
 }
 
 #endif /* EXTRA_API_ENABLED */

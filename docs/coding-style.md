@@ -19,16 +19,34 @@ class MyClass {
     ...
 };
 
+namespace MyNestedNamespace {
+
+class MyOtherClass {
+    MyOtherClass();
+    ...
+};
+
+}
+
 }
 ```
 **Wrong:**
 ```
 namespace MyNamespace {
 
-class MyClass {
-    MyClass();
-    ...
-};
+    class MyClass {
+        MyClass();
+        ...
+    };
+
+    namespace MyNestedNamespace {
+
+        class MyOtherClass {
+            MyOtherClass();
+            ...
+        };
+
+    }
 
 }
 ```
@@ -70,7 +88,7 @@ x++;
 y++;
 if (condition) {
     do();
-    }
+}
 ```
 **Wrong:**
 ```
@@ -94,29 +112,6 @@ int Function()
 int Function() {
     ...
 }
-```
-
-- Inline functions defined inside class: place the open brace on the line preceding the code block.
-
-**Right:**
-```
-class MyClass {
-    inline int Function1() {
-        ...
-    }
-    inline int Function2() { ... }
-    ...
-};
-```
-**Wrong:**
-```
-class MyClass {
-    inline int Function1()
-    {
-        ...
-    }
-    ...
-};
 ```
 
 - Other braces: place the open brace on the line preceding the code block; place the close brace on its own line.
@@ -153,13 +148,13 @@ for (int i = 0; i < 10; ++i)
 }
 ```
 
-- Always brace controlled statements, even a single-line consequent of `if else else`. This is redundant, typically, but it avoids dangling else bugs, so it’s safer at scale than fine-tuning.
+- Always brace controlled statements, even a single-line consequent of `if else`. This is redundant, typically, but it avoids dangling else bugs, so it's safer at scale than fine-tuning.
 
 **Right:**
 ```
 if (condition) {
     do();
-    }
+}
 ```
 **Wrong:**
 ```
@@ -324,7 +319,7 @@ bool fooBar(bool Baz, char *str, std::vector<int> &Result);
 ```
 **Wrong:**
 ```
-bool fooBar(bool Baz, char *str, std::vector<int> &Result);
+bool fooBar(bool Baz, char* str, std::vector<int>& Result);
 ```
 
 ## #include Statements
@@ -368,3 +363,66 @@ bool fooBar(bool Baz, char *str, std::vector<int> &Result);
 	 * looks like this.
 	 */
 ```
+
+## Class layout
+
+Fields and methods must be grouped together respectively and regardless of their visibility. All the fields must be either at the top or bottom of a class definition. It is discouraged to mix methods and fields.
+
+Rationale: fields layout matters in context of padding and cache miss optimizations. Mixing fields and methods complicates visual perception and estimation of the resulting ABI.
+
+**Right:**
+```
+class foo {
+public:
+    foo();
+    void method1();
+
+protected:
+    void method2();
+
+private:
+    void method3();
+
+public:
+    int field1;
+
+protected:
+    int field2;
+
+private:
+    int field3;
+};
+```
+
+Visibility mode doesn't have to be repeated if it is not changed for the block with fields (or methods).
+
+**Right:**
+```
+class bar {
+public:
+    bar();
+    method1();
+
+private:
+    method2();
+
+    int field1;
+    int field2;
+};
+```
+
+## auto keyword
+
+*auto* keyword can simplify code, but it can also be harmful. Follow the recommendations:
+
+ 1. It is encouraged to use *auto* keyword for an iterator declaration and inside templates if it simplifies the code.
+ 2. Keyword *auto* may be used if the initializer is a class name and only if it doesn't complicates code readability and parsing.
+ 3. It is discouraged to use *auto* keyword in other situations.
+
+Rationale: there are multiple concerns for *auto* keyword:
+
+ * Can hide type of the variable and it will require to put more effort to derive the type and understand impact of the code.
+ * Hidden type complicates estimation of bit operations and integer promotion.
+ * Complicates parsing of the code, specific places can be unnoticed during conversion or routine changes.
+ * Can hide errors since specific code can be compilable after a type change, but become incorrect.
+ * Can hide performance critical knowledge (e.g. whether assignment uses copy or reference).

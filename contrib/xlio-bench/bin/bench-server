@@ -1,0 +1,191 @@
+#!/bin/bash
+
+ROOT_DIR="$(dirname $0)/.."
+
+set -e
+#set -x
+
+usage()
+{
+    echo -ne \
+        "\nUsage:" \
+        "\n    $(basename $0) [-?|-h|--help|help]" \
+        "\n    $(basename $0) <start|run> [options]" \
+        "\n    $(basename $0) <stop|status>" \
+        "\n    $(basename $0) <list>" \
+        "\n" \
+        "\nOptions:" \
+        "\n    -h, -?, --help                  print this help message" \
+        "\n    -e, --env         <name|path>   path or dir name under <root>/env" \
+        "\n    -w, --work-dir    <path>        path to place output files/logs" \
+        "\n    -t, --threads     <num>         number of wrk threads (default $(nproc))" \
+        "\n    -x, --xlio                      enable xlio" \
+        "\n\n"
+}
+
+on_exit()
+{
+    set +x
+    echo "on_exit"
+    server_stop
+    #nmon_stop "$(cat $ROOT_DIR/run/nmon.pid)"
+    #nmon_parse "$WORK_DIR"
+}
+
+platform()
+{
+    case "$(uname -m)" in
+        x86_64)  echo x86;;
+        aarch64) echo arm;;
+    esac
+}
+
+server_status()
+{
+    local -r nmon_pid="$ROOT_DIR/run/nmon.pid"
+    local -r nginx_pid="$ROOT_DIR/run/nginx.pid"
+
+    if [ -r "$nmon_pid" ]; then
+        echo "nmon is running with pid=$(cat $nmon_pid)"
+    else
+        echo "nmon is not running"
+    fi
+
+    if [ -r "$nginx_pid" ]; then
+        echo "nginx is running with pid=$(cat $nginx_pid)"
+    else
+        echo "nginx is not running"
+    fi
+}
+
+server_stop()
+{
+    local -r nmon_pid="$ROOT_DIR/run/nmon.pid"
+    local -r nginx_pid="$ROOT_DIR/run/nginx.pid"
+
+    echo "stopping nmon"
+    [ -r "$nmon_pid" ] && { kill "$(cat $nmon_pid)" || true; rm -f "$nmon_pid"; }
+
+    echo "stopping nginx"
+    [ -r "$nginx_pid" ] && { sudo kill "$(cat $nginx_pid)" || true; }
+    rm -f "$nginx_pid" || true
+
+    sudo pkill -f nginx
+}
+
+server_start()
+{
+    # defaults
+    local env_name="default-$(platform)"
+    local work_dir="$ROOT_DIR/run/bench-server"
+    local threads=$(nproc)
+    local background=0
+    local mode="kernel"
+
+    # parse options
+    while true; do
+        case "$1" in
+            -h|-\?|--help) usage; exit 0;;
+            -e|--env)      env_name=$2; shift 2;;
+            -w|--work-dir) work_dir="$2"; shift 2;;
+            -t|--threads)  threads=$2; shift 2;;
+            -d|--daemon)   background=1; shift;;
+            -x|--xlio)     mode="xlio"; shift;;
+            "") break;;
+            *) { echo "unknown option/arg: $1"; usage; exit 1; } >&2;;
+        esac
+    done
+
+    echo "args:"
+    echo "    env_name = $env_name"
+    echo "    work_dir = $work_dir"
+    echo "    daemon   = $background"
+    echo "    mode     = $mode"
+    echo "    threads  = $threads"
+    echo ""
+
+    # make sure nginx is stopped
+    server_stop || true
+
+    # build full path to environment dir
+    # check if environment name is a full path or just a name under <root>/env
+    if [ "$(basename $env_name)" = "$env_name" ]; then
+        local -r env_dir="$ROOT_DIR/env/$env_name"
+    else
+        local -r env_dir="$env_name"
+    fi
+    echo "env dir is $env_dir"
+
+    # create work dir
+    mkdir -p "$work_dir"
+
+    # generate payload files for nginx
+    echo "generate payload..."
+    source $ROOT_DIR/lib/data-utils.sh
+    local -r payload_dir="/tmp/$USER/html"
+    data_on_disk "$payload_dir"
+
+    # setup nginx work dir
+    echo "setup nginx work dir..."
+    local -r nginx_cmd="$env_dir/bin/nginx"
+    local -r nginx_cfg="$(realpath $env_dir/etc/nginx/nginx.conf)"
+    local -r nginx_dir="$work_dir/nginx"
+    mkdir -p "$nginx_dir/logs"
+    [ ! -L "$nginx_dir/html" ] && ln -s "$payload_dir" "$nginx_dir"
+
+    # map args to nginx directives
+    # (dynamically configurable options which are intentionally skipped in nginx.conf
+    # and provided via command line)
+    nginx_opts="worker_processes $threads;"
+    if (($background)); then
+            nginx_opts+=" daemon on;"
+            nginx_opts+=" error_log logs/error.log info;"
+    else
+            nginx_opts+=" daemon off;"
+            nginx_opts+=" error_log stderr info;"
+    fi
+
+    # setup sysctl params
+    echo "applying custom sysctl params (if any)..."
+    local -r sysctl_path="$env_dir/etc/sysctl.conf"
+    [ -f "$sysctl_path" ] && sudo sysctl -p "$sysctl_path"
+
+    # setup XLIO env/params (if enabled)
+    echo "looking for custom xlio params (if any)..."
+    local -r xlio_lib="$env_dir/lib/libxlio.so"
+    local xlio_vars=""
+    if [ "$mode" = "xlio" ]; then
+        xlio_vars+=" LD_PRELOAD=$xlio_lib XLIO_NGINX_WORKERS_NUM=$threads "
+        xlio_vars+=$(grep -sv "^#" "$env_dir/etc/xlio.env" | xargs)
+    fi
+
+    # start nmon in background to gather stats
+    echo "starting nmon in background.."
+    source $ROOT_DIR/lib/nmon-utils.sh
+    nmon_start "$work_dir" > "$ROOT_DIR/run/nmon.pid"
+    if ! (($background)); then
+        echo "register on exit handler to stop nmon..."
+        trap on_exit EXIT
+    fi
+
+    # start nginx
+    echo "starting nginx..."
+    ln -r -s "$nginx_dir/logs/nginx.pid" "$ROOT_DIR/run/"
+    set -x
+    sudo env $xlio_vars $nginx_cmd -g "$nginx_opts" -p "$nginx_dir" -c "$nginx_cfg" |& tee "$work_dir/nginx.out"
+}
+
+main()
+{
+    case "$1" in
+        run)    shift; server_start "$@";;
+        start)  shift; server_start --daemon "$@";;
+        stop)   shift; server_stop "$@";;
+        status) shift; server_status "$@";;
+        list)   echo "run start stop status list help"; exit 0;;
+        ""|help|-h|-\?|--help) usage; exit 0;;
+        *) { echo "unknown action $1"; usage; exit 1; } >&2;;
+    esac
+}
+
+main "$@"

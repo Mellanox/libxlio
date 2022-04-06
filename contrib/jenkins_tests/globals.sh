@@ -4,6 +4,7 @@ main()
 {
 WORKSPACE=${WORKSPACE:=$(pwd)}
 BUILD_NUMBER=${BUILD_NUMBER:=0}
+HOSTNAME=${HOSTNAME:=$(uname -n 2>/dev/null)}
 
 # exit code
 rc=0
@@ -25,12 +26,19 @@ vg_dir=${WORKSPACE}/${prefix}/vg
 style_dir=${WORKSPACE}/${prefix}/style
 tool_dir=${WORKSPACE}/${prefix}/tool
 commit_dir=${WORKSPACE}/${prefix}/commit
+tidy_dir=${WORKSPACE}/${prefix}/tidy
 
 prj_lib=libxlio.so
 prj_service=xliod
 
-nproc=$(grep processor /proc/cpuinfo|wc -l)
-make_opt="-j$(($nproc / 2 + 1))"
+NPROC=$(grep processor /proc/cpuinfo|wc -l)
+if [ $NPROC -lt 64 ]; then
+    NPROC=$(($NPROC / 2 + 1))
+else
+    NPROC=32
+fi
+make_opt="-j${NPROC}"
+
 if [ $(command -v timeout >/dev/null 2>&1 && echo $?) ]; then
     timeout_exe="timeout -s SIGKILL 20m"
 fi
@@ -287,29 +295,29 @@ do_check_dpcp()
 
     ret=0
     pushd $(pwd) > /dev/null 2>&1
-    dpcp_dir=${WORKSPACE}/${prefix}/dpcp
+    dpcp_dir=${WORKSPACE}/${prefix}/_dpcp-last
     mkdir -p ${dpcp_dir} > /dev/null 2>&1
     cd ${dpcp_dir}
 
     set +e
-    if [ $ret -eq 0 ]; then
+    if [ ! -d ${dpcp_dir}/install -a $ret -eq 0 ]; then
         eval "timeout -s SIGKILL 20s git clone git@github.com:Mellanox/dpcp.git . " > /dev/null 2>&1
         ret=$?
     fi
 
     if [ $ret -eq 0 ]; then
-        last_tag=$(git tag -l --format "%(refname:short)" --sort=-version:refname | head -n1)
+        last_tag=$(git describe --tags $(git rev-list --tags --max-count=1))
         if [ -z "$last_tag" ]; then
             ret=1
         fi
     fi
 
-    if [ $ret -eq 0 ]; then
+    if [ ! -d ${dpcp_dir}/install -a $ret -eq 0 ]; then
         eval "git checkout $last_tag" > /dev/null 2>&1
         ret=$?
     fi
 
-    if [ $ret -eq 0 ]; then
+    if [ ! -d ${dpcp_dir}/install -a $ret -eq 0 ]; then
         eval "./autogen.sh && ./configure --prefix=${dpcp_dir}/install && make $make_opt install" > /dev/null 2>&1
         ret=$?
     fi

@@ -49,7 +49,7 @@
  */
 
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -164,7 +164,7 @@ cubic_k(unsigned long wmax_pkts)
 	    (((s * s * 120) >> CUBIC_SHIFT) >> CUBIC_SHIFT);
 
 	/* Multiply by 2^p to undo the rebasing of s from above. */
-	return (K <<= p);
+	return (K << p);
 }
 
 /*

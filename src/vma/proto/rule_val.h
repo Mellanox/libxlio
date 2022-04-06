@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,75 +30,63 @@
  * SOFTWARE.
  */
 
-
 #ifndef RULE_VAL_H
 #define RULE_VAL_H
 
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include "vma/util/if.h"
+#include "vma/util/if.h" // IFNAMSIZ
+#include "vma/util/ip_address.h"
 #include "vma/infra/cache_subject_observer.h"
 
-#define BUFF_SIZE 255
+#include <string>
 
-/*
-This class will contain information for given routing rule entry.
-*/
-class rule_val : public cache_observer
-{
+// This class will contain information for given routing rule entry.
+class rule_val {
 public:
-	rule_val();
-	virtual ~rule_val() {};
+    rule_val();
 
-	inline void set_dst_addr(in_addr_t const &dst_addr) 	{ m_dst_addr = dst_addr; };
-	inline void set_src_addr(in_addr_t const &src_addr) 	{ m_src_addr = src_addr; };
-	inline void set_protocol(unsigned char protocol) 	{ m_protocol = protocol; };
-	inline void set_scope(unsigned char scope) 		{ m_scope = scope; };
-	inline void set_type(unsigned char type) 		{ m_type = type; };
-	inline void set_tos(unsigned char tos) 			{ m_tos = tos; };
-	inline void set_table_id(uint32_t table_id) 		{ m_table_id = table_id; };
-	inline void set_iif_name(char *iif_name) 		{ memcpy(m_iif_name, iif_name, IFNAMSIZ); };
-	inline void set_oif_name(char *oif_name) 		{ memcpy(m_oif_name, oif_name, IFNAMSIZ); };
-	inline void set_priority(uint32_t priority) 		{ m_priority = priority; };
+    inline void set_dst_addr(const ip_address &dst_addr) { m_dst_addr = dst_addr; };
+    inline void set_src_addr(const ip_address &src_addr) { m_src_addr = src_addr; };
+    inline void set_family(sa_family_t family) { m_family = family; };
+    inline void set_protocol(unsigned char protocol) { m_protocol = protocol; };
+    inline void set_scope(unsigned char scope) { m_scope = scope; };
+    inline void set_type(unsigned char type) { m_type = type; };
+    inline void set_tos(unsigned char tos) { m_tos = tos; };
+    inline void set_table_id(uint32_t table_id) { m_table_id = table_id; };
+    inline void set_iif_name(const char *iif_name) { memcpy(m_iif_name, iif_name, IFNAMSIZ); };
+    inline void set_oif_name(const char *oif_name) { memcpy(m_oif_name, oif_name, IFNAMSIZ); };
+    inline void set_priority(uint32_t priority) { m_priority = priority; };
 
-	void 	set_str();
+    inline const ip_address &get_dst_addr() const { return m_dst_addr; };
+    inline const ip_address &get_src_addr() const { return m_src_addr; };
+    inline sa_family_t get_family() const { return m_family; };
+    inline unsigned char get_tos() const { return m_tos; };
+    inline uint32_t get_table_id() const { return m_table_id; };
+    inline const char *get_iif_name() const { return m_iif_name; };
+    inline const char *get_oif_name() const { return m_oif_name; };
 
-	inline in_addr_t	get_dst_addr()	const		{ return m_dst_addr; };
-	inline in_addr_t	get_src_addr() const		{ return m_src_addr; };
-	inline unsigned char	get_tos() const		   	{ return m_tos; };
-	inline uint32_t 	get_table_id() const		{ return m_table_id; };
-	inline const char*  	get_iif_name() const		{ return m_iif_name; };
-	inline const char*  	get_oif_name() const		{ return m_oif_name; };
+    inline void set_state(bool state) { m_is_valid = state; };
+    inline bool is_valid() const { return m_is_valid; };
 
-	inline void set_state(bool state) 			{ m_is_valid = state; };
-	inline bool is_valid() const		 		{ return m_is_valid; };
-
-	void 	print_val();
-	char* 	to_str() { return m_str; };
+    void print_val();
+    const std::string to_str() const;
 
 private:
+    unsigned char m_protocol;
+    unsigned char m_scope;
+    unsigned char m_type;
+    unsigned char m_tos;
+    unsigned char m_family;
 
-	unsigned char	m_protocol;
-	unsigned char	m_scope;
-	unsigned char	m_type;
-	unsigned char	m_tos;
+    bool m_is_valid;
 
-	union {
-		in_addr_t 	m_dst_addr;
-		in_addr 	m_dst_addr_in_addr;
-	};
-	union {
-		in_addr_t 	m_src_addr;
-		in_addr 	m_src_addr_in_addr;
-	};
-	char 		m_iif_name[IFNAMSIZ];
-	char 		m_oif_name[IFNAMSIZ];
-	uint32_t	m_priority;
-	uint32_t	m_table_id;
-	
-	bool 		m_is_valid;
-	
-	char 		m_str[BUFF_SIZE];
+    uint32_t m_priority;
+    uint32_t m_table_id;
+
+    ip_address m_dst_addr;
+    ip_address m_src_addr;
+
+    char m_iif_name[IFNAMSIZ];
+    char m_oif_name[IFNAMSIZ];
 };
 
 #endif /* RULE_VAL_H */

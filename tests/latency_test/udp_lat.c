@@ -1,5 +1,5 @@
-o*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+/*
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1169,8 +1169,12 @@ xlio_recv_callback_retval_t myapp_vma_recv_pkt_filter_callback(
 	if (!user_params.stream_mode) {
 		/* get source addr to reply to */
 		struct sockaddr_in sendto_addr = fds_array[fd]->addr;
-		if (!fds_array[fd]->is_multicast)  /* In unicast case reply to sender*/
-			sendto_addr.sin_addr = vma_info->src->sin_addr;
+		if (!fds_array[fd]->is_multicast) {
+			/* In unicast case reply to sender*/
+			/* XXX msg_sendto() is IPv4 specific */
+			if (vma_info->src->sa_family == AF_INET)
+				sendto_addr.sin_addr = ((struct sockaddr_in *)vma_info->src)->sin_addr;
+		}
 		msg_sendto(fd, recvbuf, recvsize, &sendto_addr);
 	}
 
@@ -2422,10 +2426,11 @@ int main(int argc, char *argv[])
 		client_handler();
 		break;
 	case MODE_SERVER:
-	   if (user_params.mthread_server) {
-	           server_select_per_thread();
-	           break;
-	   }	   
+		if (user_params.mthread_server) {
+			server_select_per_thread();
+			break;
+		}
+		/* Fallthrough */
 	case MODE_BRIDGE:		
 		server_handler(fd_min, fd_max, fd_num); 
 		break;

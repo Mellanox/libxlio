@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -41,26 +41,25 @@ namespace cmn {
 
 class test_skip_exception : public std::exception {
 public:
-    test_skip_exception(const std::string& reason = "") : m_reason("[  SKIPPED ] ") {
+    test_skip_exception(const std::string &reason = "")
+        : m_reason("[  SKIPPED ] ")
+    {
         m_reason += reason;
     }
-    virtual ~test_skip_exception() _GLIBCXX_NOTHROW {
-    }
+    virtual ~test_skip_exception() _GLIBCXX_NOTHROW {}
 
-    const char* what() const _GLIBCXX_NOTHROW {
-        return m_reason.c_str();
-    }
+    const char *what() const _GLIBCXX_NOTHROW { return m_reason.c_str(); }
 
 private:
     std::string m_reason;
 };
 
-#define SKIP_TRUE(_expr, _reason) \
-    if (!(_expr)) { \
-		log_warn(_reason "\n"); \
-		GTEST_SKIP(); \
+#define SKIP_TRUE(_expr, _reason)                                                                  \
+    if (!(_expr)) {                                                                                \
+        log_warn(_reason "\n");                                                                    \
+        GTEST_SKIP();                                                                              \
     }
 
-} /* namespace: cmn */
+} // namespace cmn
 
 #endif /* TESTS_GTEST_COMMON_CMN_H_ */

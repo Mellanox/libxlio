@@ -1,6 +1,5 @@
 noinst_PROGRAMS = gtest
 
-#CXXFLAGS =
 # google test shows some warnings that are suppressed
 AM_CXXFLAGS = \
 	-Wno-error=sign-compare \
@@ -8,12 +7,13 @@ AM_CXXFLAGS = \
 	-g -O3 -std=c++11
 
 AM_CPPFLAGS = \
-	-DGTEST_LANG_CXX11=0 \
+	-DGTEST_LANG_CXX11=1 \
 	-DGTEST_HAS_PTHREAD=1 \
 	-DGTEST_USE_OWN_TR1_TUPLE=0 \
-	-DGTEST_HAS_TR1_TUPLE=1 \
-	-DGTEST_ENV_HAS_STD_TUPLE_=0 \
+	-DGTEST_HAS_TR1_TUPLE=0 \
+	-DGTEST_ENV_HAS_STD_TUPLE_=1 \
 	-DGTEST_USES_SIMPLE_RE=0 \
+	-DGTEST_HAS_COMBINE=0 \
 	-DPTHREADS \
 	\
 	-DGTEST_DONT_DEFINE_ASSERT_GT=0 \
@@ -91,6 +91,8 @@ gtest_SOURCES = \
 	\
 	mix/mix_base.cc \
 	mix/sg_array.cc \
+	mix/sock_addr.cc \
+	mix/ip_address.cc \
 	mix/mix_list.cc \
 	\
 	tcp/tcp_base.cc \
@@ -107,6 +109,7 @@ gtest_SOURCES = \
 	tcp/tcp_rfs.cc \
 	\
 	udp/udp_base.cc \
+	udp/udp_socket.cc \
 	udp/udp_bind.cc \
 	udp/udp_connect.cc \
 	udp/udp_send.cc \

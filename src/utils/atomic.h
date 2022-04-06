@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,7 +30,6 @@
  * SOFTWARE.
  */
 
-
 #ifndef ATOMIC_H_
 #define ATOMIC_H_
 
@@ -38,10 +37,13 @@
 #include "utils/bullseye.h"
 
 struct atomic_t {
-	__volatile__ int counter;
+    __volatile__ int counter;
 };
 
-#define ATOMIC_INIT(i)  { (i) }
+#define ATOMIC_INIT(i)                                                                             \
+    {                                                                                              \
+        (i)                                                                                        \
+    }
 
 /**
  * Read atomic variable.
@@ -57,12 +59,12 @@ struct atomic_t {
  * @param v pointer of type atomic_t.
  * @param i required value.
  */
-#define atomic_set(v,i) (((v)->counter) = (i))
+#define atomic_set(v, i) (((v)->counter) = (i))
 
 #if 0
 
 #if _BullseyeCoverage
-    #pragma BullseyeCoverage off
+#pragma BullseyeCoverage off
 #endif
 
 /**
@@ -90,7 +92,7 @@ static bool atomic_cas(T old_value, T new_value, T *addr)
 	return cmpxchg((unsigned long)old_value, (unsigned long)new_value, (void*)addr);
 }
 #if _BullseyeCoverage
-    #pragma BullseyeCoverage on
+#pragma BullseyeCoverage on
 #endif
 
 #endif
@@ -102,7 +104,7 @@ static bool atomic_cas(T old_value, T new_value, T *addr)
  */
 static inline int atomic_fetch_and_inc(atomic_t *v)
 {
-	return atomic_fetch_and_add(1, &v->counter);
+    return atomic_fetch_and_add(1, &v->counter);
 }
 
 /**
@@ -112,7 +114,7 @@ static inline int atomic_fetch_and_inc(atomic_t *v)
  */
 static inline int atomic_fetch_and_dec(atomic_t *v)
 {
-	return atomic_fetch_and_add(-1, &v->counter);
+    return atomic_fetch_and_add(-1, &v->counter);
 }
 
 /**
@@ -123,7 +125,7 @@ static inline int atomic_fetch_and_dec(atomic_t *v)
  */
 static inline int atomic_fetch_add_relaxed(int x, atomic_t *v)
 {
-	return atomic_fetch_and_add_relaxed(x, &v->counter);
+    return atomic_fetch_and_add_relaxed(x, &v->counter);
 }
 
 #endif /* ATOMIC_H_ */

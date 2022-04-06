@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -46,33 +46,46 @@ class ib_ctx_handler;
 
 class dm_mgr {
 public:
-
-	dm_mgr();
-	bool          allocate_resources(ib_ctx_handler* ib_ctx, ring_stats_t* ring_stats);
-	void          release_resources();
-	bool          copy_data(struct mlx5_wqe_data_seg* seg, uint8_t* src, uint32_t length, mem_buf_desc_t* buff);
-	void          release_data(mem_buf_desc_t* buff);
-	inline bool   is_completion_need() { return m_allocation - m_used < DM_COMPLETION_THRESHOLD; };
+    dm_mgr();
+    bool allocate_resources(ib_ctx_handler *ib_ctx, ring_stats_t *ring_stats);
+    void release_resources();
+    bool copy_data(struct mlx5_wqe_data_seg *seg, uint8_t *src, uint32_t length,
+                   mem_buf_desc_t *buff);
+    void release_data(mem_buf_desc_t *buff);
+    inline bool is_completion_need() { return m_allocation - m_used < DM_COMPLETION_THRESHOLD; };
 
 private:
-
-	struct ibv_mr  *m_p_dm_mr;
-	vma_ibv_dm     *m_p_ibv_dm;
-	ring_stats_t   *m_p_ring_stat;
-	size_t         m_allocation;         // Size of device memory buffer (bytes)
-	size_t         m_used;               // Next available index inside the buffer
-	size_t         m_head;               // Device memory used bytes
+    struct ibv_mr *m_p_dm_mr;
+    vma_ibv_dm *m_p_ibv_dm;
+    ring_stats_t *m_p_ring_stat;
+    size_t m_allocation; // Size of device memory buffer (bytes)
+    size_t m_used; // Next available index inside the buffer
+    size_t m_head; // Device memory used bytes
 };
 
 #else
 
+/* cppcheck-suppress ctuOneDefinitionRuleViolation */
 class dm_mgr {
 public:
-	inline bool   allocate_resources(ib_ctx_handler* ib_ctx, ring_stats_t* ring_stats) { NOT_IN_USE(ib_ctx); NOT_IN_USE(ring_stats); return false; };
-	inline void   release_resources() {};
-	inline bool   copy_data(struct mlx5_wqe_data_seg* seg, uint8_t* src, uint32_t length, mem_buf_desc_t* buff) { NOT_IN_USE(seg); NOT_IN_USE(src); NOT_IN_USE(length); NOT_IN_USE(buff); return false; };
-	inline void   release_data(mem_buf_desc_t* buff) { NOT_IN_USE(buff); };
-	inline bool   is_completion_need() { return false; };
+    inline bool allocate_resources(ib_ctx_handler *ib_ctx, ring_stats_t *ring_stats)
+    {
+        NOT_IN_USE(ib_ctx);
+        NOT_IN_USE(ring_stats);
+        return false;
+    };
+    inline void release_resources() {};
+    inline bool copy_data(struct mlx5_wqe_data_seg *seg, uint8_t *src, uint32_t length,
+                          mem_buf_desc_t *buff)
+    {
+        NOT_IN_USE(seg);
+        NOT_IN_USE(src);
+        NOT_IN_USE(length);
+        NOT_IN_USE(buff);
+        return false;
+    };
+    inline void release_data(mem_buf_desc_t *buff) { NOT_IN_USE(buff); };
+    inline bool is_completion_need() { return false; };
 };
 
 #endif /* DEFINED_IBV_DM */

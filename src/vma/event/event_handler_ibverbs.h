@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,21 +30,20 @@
  * SOFTWARE.
  */
 
-
 #ifndef EVENT_HANDLER_IBVERBS_H
 #define EVENT_HANDLER_IBVERBS_H
 
 /*
  * @class event_handler
- * An object registers with event_handler_manager to get event notification callbacks for the registered HCA context.
- * This callback function will be called when an event was received on the appropritae channel with the appropritae id.
- * The channels can be shared between several objects, but the id's in each channel has to be unic.
+ * An object registers with event_handler_manager to get event notification callbacks for the
+ * registered HCA context. This callback function will be called when an event was received on the
+ * appropritae channel with the appropritae id. The channels can be shared between several objects,
+ * but the id's in each channel has to be unic.
  */
-class event_handler_ibverbs
-{
+class event_handler_ibverbs {
 public:
-	virtual ~event_handler_ibverbs() {};
-	virtual void handle_event_ibverbs_cb(void* ev_data, void* user_data) = 0;
+    virtual ~event_handler_ibverbs() {};
+    virtual void handle_event_ibverbs_cb(void *ev_data, void *user_data) = 0;
 };
 
-#endif //EVENT_HANDLER_IBVERBS_H
+#endif // EVENT_HANDLER_IBVERBS_H

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,7 +30,6 @@
  * SOFTWARE.
  */
 
-
 #ifndef TIME_CONVERTER_PTP_H
 #define TIME_CONVERTER_PTP_H
 
@@ -41,20 +40,19 @@
 
 #ifdef DEFINED_IBV_CLOCK_INFO
 
-class time_converter_ptp : public time_converter
-{
+class time_converter_ptp : public time_converter {
 public:
-	time_converter_ptp(struct ibv_context* ctx);
-	virtual ~time_converter_ptp() {};
+    time_converter_ptp(struct ibv_context *ctx);
+    virtual ~time_converter_ptp() {};
 
-	inline void               convert_hw_time_to_system_time(uint64_t hwtime, struct timespec* systime);
-	virtual void              handle_timer_expired(void* user_data);
+    inline void convert_hw_time_to_system_time(uint64_t hwtime, struct timespec *systime);
+    virtual void handle_timer_expired(void *user_data);
 
 private:
-	struct ibv_context*       m_p_ibv_context;
+    struct ibv_context *m_p_ibv_context;
 
-	vma_ibv_clock_info        m_clock_values[2];
-	int                       m_clock_values_id;
+    vma_ibv_clock_info m_clock_values[2];
+    int m_clock_values_id;
 };
 
 #endif // DEFINED_IBV_CLOCK_INFO

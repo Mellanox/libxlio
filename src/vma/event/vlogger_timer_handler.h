@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,25 +30,24 @@
  * SOFTWARE.
  */
 
-
 #ifndef VLOGGER_TIMER_HANDLER_H
 #define VLOGGER_TIMER_HANDLER_H
 
 #include "timer_handler.h"
 
-#define UPDATE_VLOGGER_LEVELS_INTERVAL	100
+#define UPDATE_VLOGGER_LEVELS_INTERVAL 100
 
-class vlogger_timer_handler : public timer_handler
-{
+class vlogger_timer_handler : public timer_handler {
 public:
-	vlogger_timer_handler();
-	~vlogger_timer_handler();
+    vlogger_timer_handler();
+    ~vlogger_timer_handler();
+
 private:
-	void handle_timer_expired(void* user_data);
-	
-	void*	m_timer_handle;
+    void handle_timer_expired(void *user_data);
+
+    void *m_timer_handle;
 };
 
-extern vlogger_timer_handler* g_p_vlogger_timer_handler;
+extern vlogger_timer_handler *g_p_vlogger_timer_handler;
 
 #endif /*VLOGGER_TIMER_HANDLER_H*/

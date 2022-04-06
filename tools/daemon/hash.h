@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -39,17 +39,15 @@ extern "C" {
 
 /* The hash_t opaque data type
  */
-typedef struct hash_object* hash_t;
+typedef struct hash_object *hash_t;
 
 /* The hash key data type
  */
 typedef uint32_t hash_key_t;
 
-
 /* This type of function is used to free data inserted into hash table
  */
 typedef void (*hash_freefunc_t)(void *);
-
 
 /* hash_create():
  *

@@ -52,10 +52,17 @@
 #include <stdbool.h>
 #include <string.h>
 
+typedef struct parsed_ip_hdr {
+    bool is_ipv6;
+    s16_t header_length;
+    u16_t total_length;
+    const void *src, *dest;
+} parsed_ip_hdr_t;
+
 typedef struct tcp_in_data {
 	struct pbuf *recv_data;
 	struct tcp_hdr *tcphdr;
-	struct ip_hdr *iphdr;
+	parsed_ip_hdr_t iphdr;
 	u32_t seqno;
 	u32_t ackno;
 	struct tcp_seg inseg;
@@ -72,7 +79,7 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data* in_data);
 static bool tcp_parseopt_ts(u8_t *opts, u16_t opts_len, u32_t *tsval);
 static void tcp_parseopt(struct tcp_pcb *pcb, tcp_in_data* in_data);
 
-static err_t tcp_listen_input(struct tcp_pcb_listen *pcb, tcp_in_data* in_data);
+static void tcp_listen_input(struct tcp_pcb_listen *pcb, tcp_in_data* in_data);
 static err_t tcp_timewait_input(struct tcp_pcb *pcb, tcp_in_data* in_data);
 static s8_t tcp_quickack(struct tcp_pcb *pcb, tcp_in_data* in_data);
 
@@ -93,32 +100,43 @@ tcp_quickack(struct tcp_pcb *pcb, tcp_in_data* in_data)
 }
 
 #if LWIP_3RD_PARTY_L3
+static inline void fill_parsed_ip_hdr(const void *payload,
+                                      parsed_ip_hdr_t *iphdr)
+{
+    const u8_t *view_8byte = (const u8_t *)payload;
+    const u16_t *view_16byte = (const u16_t *)payload;
+
+    iphdr->is_ipv6 = (view_8byte[0] >> 4U) == IPV6_VERSION;
+    if (iphdr->is_ipv6) {
+        iphdr->src = (void *)&view_8byte[8];
+        iphdr->dest = (void *)&view_8byte[24];
+        iphdr->header_length = 40;
+        iphdr->total_length = ntohs(view_16byte[2U]) + iphdr->header_length;
+    } else {
+        iphdr->src = (const void *)&view_8byte[12];
+        iphdr->dest = (const void *)&view_8byte[16];
+        iphdr->header_length = ((view_8byte[0] & 0x0f) * 4);
+        iphdr->total_length = ntohs(view_16byte[1U]);
+    }
+}
+
 void
 L3_level_tcp_input(struct pbuf *p, struct tcp_pcb* pcb)
 {
     u8_t hdrlen;
     err_t err;
-    u16_t iphdr_len;
     tcp_in_data in_data;
 
     TCP_STATS_INC(tcp.recv);
-    in_data.iphdr = (struct ip_hdr *)p->payload;
+    fill_parsed_ip_hdr(p->payload, &in_data.iphdr);
 
-
-    iphdr_len = ntohs(IPH_LEN(in_data.iphdr));
     /* Trim pbuf. This should have been done at the netif layer,
      * but we'll do it anyway just to be sure that its done. */
-    pbuf_realloc(p, iphdr_len);
-
-    in_data.tcphdr = (struct tcp_hdr *)((u8_t *)p->payload + IPH_HL(in_data.iphdr) * 4);
-
-#if TCP_INPUT_DEBUG
-    tcp_debug_print(in_data.tcphdr);
-#endif
-
+    pbuf_realloc(p, in_data.iphdr.total_length);
 
     /* remove header from payload */
-    if (pbuf_header(p, -((s16_t)(IPH_HL(in_data.iphdr) * 4))) || (p->tot_len < sizeof(struct tcp_hdr))) {
+    if (pbuf_header(p, (-1) * in_data.iphdr.header_length)
+        || (p->tot_len < sizeof(struct tcp_hdr))) {
         /* drop short packets */
         LWIP_DEBUGF(TCP_INPUT_DEBUG, ("tcp_input: short packet (%"U16_F" bytes) discarded\n", (u16_t)p->tot_len));
         TCP_STATS_INC(tcp.lenerr);
@@ -126,6 +144,9 @@ L3_level_tcp_input(struct pbuf *p, struct tcp_pcb* pcb)
         pbuf_free(p);
         return;
     }
+
+    in_data.tcphdr = (struct tcp_hdr *)p->payload;
+    tcp_debug_print(in_data.tcphdr);
 
     /* Move the payload pointer in the pbuf so that it points to the
        TCP data instead of the TCP header. */
@@ -163,10 +184,6 @@ L3_level_tcp_input(struct pbuf *p, struct tcp_pcb* pcb)
 			/* Set up a tcp_seg structure. */
 			in_data.inseg.next = NULL;
 			in_data.inseg.len = p->tot_len;
-#if LWIP_TSO
-#else
-			in_data.inseg.dataptr = p->payload;
-#endif /* LWIP_TSO */
 			in_data.inseg.p = p;
 			in_data.inseg.tcphdr = in_data.tcphdr;
 
@@ -293,13 +310,11 @@ L3_level_tcp_input(struct pbuf *p, struct tcp_pcb* pcb)
 					in_data.inseg.p = NULL;
 				}
 			}
-    	 else if (PCB_IN_LISTEN_STATE(pcb)) {
-    		LWIP_DEBUGF(TCP_INPUT_DEBUG, ("tcp_input: packed for LISTENing connection.\n"));
-			// TODO: tcp_listen_input creates a pcb and puts in the active pcb list.
-			// how should we approach?
-			tcp_listen_input((struct tcp_pcb_listen*)pcb, &in_data);
-			pbuf_free(p);
-    	}
+      else if (PCB_IN_LISTEN_STATE(pcb)) {
+        LWIP_DEBUGF(TCP_INPUT_DEBUG, ("tcp_input: packed for LISTENing connection.\n"));
+        tcp_listen_input(pcb, &in_data);
+        pbuf_free(p);
+      }
     	else if (PCB_IN_TIME_WAIT_STATE(pcb)){
     		LWIP_DEBUGF(TCP_INPUT_DEBUG, ("tcp_input: packed for TIME_WAITing connection.\n"));
     		tcp_timewait_input(pcb, &in_data);
@@ -327,57 +342,53 @@ L3_level_tcp_input(struct pbuf *p, struct tcp_pcb* pcb)
 }
 #endif //LWIP_3RD_PARTY_L3
 /**
- * Called by tcp_input() when a segment arrives for a listening
- * connection (from tcp_input()).
+ * Called by L3_level_tcp_input() when a segment arrives for a listening
+ * connection (from L3_level_tcp_input()).
  *
  * @param pcb the tcp_pcb_listen for which a segment arrived
- * @return ERR_OK if the segment was processed
- *         another err_t on error
+ * @return The new pcb if there is one. Otherwise, NULL.
  *
- * @note the return value is not (yet?) used in tcp_input()
  * @note the segment which arrived is saved in global variables, therefore only the pcb
  *       involved is passed as a parameter to this function
  */
-static err_t
+static void
 tcp_listen_input(struct tcp_pcb_listen *pcb, tcp_in_data* in_data)
 {
   struct tcp_pcb *npcb = NULL;
   err_t rc;
 
-  if (in_data->flags & TCP_RST) {
-    /* An incoming RST should be ignored. Return. */
-    return ERR_OK;
-  }
-
-  if (in_data->flags & TCP_FIN) {
-    /* An incoming FIN should be ignored. Return. */
-    return ERR_OK;
+  if (in_data->flags & (TCP_RST | TCP_FIN)) {
+    /* An incoming RST should be ignored. Return.
+       An incoming FIN should be ignored. Return. */
+    return;
   }
 
   /* In the LISTEN state, we check for incoming SYN segments,
      creates a new PCB, and responds with a SYN|ACK. */
   if (in_data->flags & TCP_ACK) {
-    /* For incoming segments with the ACK flag set, respond with a
-       RST. */
+    /* For incoming segments with the ACK flag set, respond with a RST. */
     LWIP_DEBUGF(TCP_RST_DEBUG, ("tcp_listen_input: ACK in LISTEN, sending reset\n"));
     tcp_rst(in_data->ackno + 1, in_data->seqno + in_data->tcplen,
       in_data->tcphdr->dest, in_data->tcphdr->src, NULL);
   } else if (in_data->flags & TCP_SYN) {
     LWIP_DEBUGF(TCP_DEBUG, ("TCP connection request %"U16_F" -> %"U16_F".\n", in_data->tcphdr->src, in_data->tcphdr->dest));
 
-    TCP_EVENT_CLONE_PCB(pcb,&npcb,ERR_OK,rc);
+    TCP_EVENT_CLONE_PCB(pcb, &npcb, rc);
+
     /* If a new PCB could not be created (probably due to lack of memory),
        we don't do anything, but rely on the sender will retransmit the
        SYN at a time when we have more memory available. */
     if (npcb == NULL) {
       LWIP_DEBUGF(TCP_DEBUG, ("tcp_listen_input: could not allocate PCB\n"));
       TCP_STATS_INC(tcp.memerr);
-      return ERR_MEM;
+      return;
     }
+
     /* Set up the new PCB. */
-    ip_addr_copy(npcb->local_ip, in_data->iphdr->dest);
+    npcb->is_ipv6 = in_data->iphdr.is_ipv6;
+    ip_addr_from_raw(&npcb->local_ip, in_data->iphdr.dest, in_data->iphdr.is_ipv6);
     npcb->local_port = pcb->local_port;
-    ip_addr_copy(npcb->remote_ip, in_data->iphdr->src);
+    ip_addr_from_raw(&npcb->remote_ip, in_data->iphdr.src, in_data->iphdr.is_ipv6);
     npcb->remote_port = in_data->tcphdr->src;
     set_tcp_state(npcb, SYN_RCVD);
     npcb->rcv_nxt = in_data->seqno + 1;
@@ -396,7 +407,7 @@ tcp_listen_input(struct tcp_pcb_listen *pcb, tcp_in_data* in_data)
     npcb->rcv_scale = 0;
 
     /* calculate advtsd_mss before parsing MSS option such that the resulting mss will take into account the updated advertized MSS */
-    npcb->advtsd_mss = (LWIP_TCP_MSS > 0) ? tcp_eff_send_mss(LWIP_TCP_MSS, npcb) : tcp_mss_follow_mtu_with_default(536, npcb);
+    npcb->advtsd_mss = tcp_send_mss(npcb);
 
     /* Parse any options in the SYN. */
     tcp_parseopt(npcb, in_data);
@@ -410,26 +421,25 @@ tcp_listen_input(struct tcp_pcb_listen *pcb, tcp_in_data* in_data)
   	npcb->snd_wnd_max = npcb->snd_wnd;
   	npcb->ssthresh = npcb->snd_wnd;
 #if TCP_CALCULATE_EFF_SEND_MSS
-    u16_t snd_mss = tcp_eff_send_mss(npcb->mss, npcb);
-    UPDATE_PCB_BY_MSS(npcb, snd_mss); 
+    UPDATE_PCB_BY_MSS(npcb, npcb->advtsd_mss);
 #endif /* TCP_CALCULATE_EFF_SEND_MSS */
 
     /* Register the new PCB so that we can begin sending segments
      for it. */
-    TCP_EVENT_SYN_RECEIVED(pcb, npcb, ERR_OK, rc);
+    TCP_EVENT_SYN_RECEIVED(pcb, npcb, rc);
     if (rc != ERR_OK) {
-          return rc;
+          return;
     }
 
     /* Send a SYN|ACK together with the MSS option. */
-    rc = tcp_enqueue_flags(npcb, TCP_SYN | TCP_ACK);
-    if (rc != ERR_OK) {
+    if (ERR_OK == tcp_enqueue_flags(npcb, TCP_SYN | TCP_ACK)) {
+      tcp_output(npcb);
+    } else {
       tcp_abandon(npcb, 0);
-      return rc;
     }
-    return tcp_output(npcb);
+
+    TCP_EVENT_ACCEPTED_PCB(pcb, npcb);
   }
-  return ERR_OK;
 }
 
 /**
@@ -445,8 +455,7 @@ tcp_pcb_reuse(struct tcp_pcb *pcb, tcp_in_data *in_data)
   pcb->rcv_nxt = in_data->seqno + 1;
   pcb->rcv_ann_right_edge = pcb->rcv_nxt;
   pcb->snd_wl1 = in_data->seqno - 1;/* initialise to seqno-1 to force window update */
-  pcb->advtsd_mss = (LWIP_TCP_MSS > 0) ? tcp_eff_send_mss(LWIP_TCP_MSS, pcb) :
-                                         tcp_mss_follow_mtu_with_default(536, pcb);
+  pcb->advtsd_mss = tcp_send_mss(pcb);
   /* Parse any options in the SYN. */
   tcp_parseopt(pcb, in_data);
   pcb->rcv_wnd = TCP_WND_SCALED(pcb);
@@ -456,9 +465,8 @@ tcp_pcb_reuse(struct tcp_pcb *pcb, tcp_in_data *in_data)
   pcb->snd_wnd = SND_WND_SCALE(pcb, in_data->tcphdr->wnd);
   pcb->snd_wnd_max = pcb->snd_wnd;
   pcb->ssthresh = pcb->snd_wnd;
-  u16_t snd_mss = tcp_eff_send_mss(pcb->mss, pcb);
-  UPDATE_PCB_BY_MSS(pcb, snd_mss);
-  rc = pcb->syn_tw_handled_cb(pcb->listen_sock, pcb, ERR_OK);
+  UPDATE_PCB_BY_MSS(pcb, pcb->advtsd_mss);
+  rc = pcb->syn_tw_handled_cb(pcb->listen_sock, pcb);
   if (rc != ERR_OK) {
     return rc;
   }
@@ -619,8 +627,7 @@ tcp_process(struct tcp_pcb *pcb, tcp_in_data* in_data)
       set_tcp_state(pcb, ESTABLISHED);
 
 #if TCP_CALCULATE_EFF_SEND_MSS
-      u16_t eff_mss = tcp_eff_send_mss(pcb->mss, pcb);
-      UPDATE_PCB_BY_MSS(pcb, eff_mss);
+      UPDATE_PCB_BY_MSS(pcb, tcp_send_mss(pcb));
 #endif /* TCP_CALCULATE_EFF_SEND_MSS */
 
       /* Set ssthresh again after changing pcb->mss (already set in tcp_connect
@@ -803,11 +810,7 @@ tcp_oos_insert_segment(struct tcp_pcb *pcb, struct tcp_seg *cseg, struct tcp_seg
     if (next &&
         TCP_SEQ_GT(in_data->seqno + cseg->len, next->tcphdr->seqno)) {
       /* We need to trim the incoming segment. */
-#if LWIP_TSO
       cseg->len = (u32_t)(next->tcphdr->seqno - in_data->seqno);
-#else
-      cseg->len = (u16_t)(next->tcphdr->seqno - in_data->seqno);
-#endif /* LWIP_TSO */
       pbuf_realloc(cseg->p, cseg->len);
     }
   }
@@ -815,7 +818,6 @@ tcp_oos_insert_segment(struct tcp_pcb *pcb, struct tcp_seg *cseg, struct tcp_seg
 }
 #endif /* TCP_QUEUE_OOSEQ */
 
-#if LWIP_TSO
 /**
  * Called by tcp_output() to shrink TCP segment to lastackno.
  * This call should process retransmitted TSO segment.
@@ -992,7 +994,6 @@ tcp_shrink_zc_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t ackno)
 
   return count;
 }
-#endif /* LWIP_TSO */
 
 /**
  * Called by tcp_process. Checks if the given segment is an ACK for outstanding
@@ -1176,7 +1177,6 @@ tcp_receive(struct tcp_pcb *pcb, tcp_in_data* in_data)
 
       /* Remove segment from the unacknowledged list if the incoming
          ACK acknowlegdes them. */
-#if LWIP_TSO
       while (pcb->unacked != NULL) {
 
         /* The purpose of this processing is to avoid to send again
@@ -1195,10 +1195,6 @@ tcp_receive(struct tcp_pcb *pcb, tcp_in_data* in_data)
         if (!(TCP_SEQ_LEQ(pcb->unacked->seqno + TCP_TCPLEN(pcb->unacked), in_data->ackno))) {
           break;
         }
-#else
-      while (pcb->unacked != NULL &&
-             TCP_SEQ_LEQ(pcb->unacked->seqno + TCP_TCPLEN(pcb->unacked), in_data->ackno)) {
-#endif /* LWIP_TSO */
         LWIP_DEBUGF(TCP_INPUT_DEBUG, ("tcp_receive: removing %"U32_F":%"U32_F" from pcb->unacked\n",
                                       ntohl(pcb->unacked->tcphdr->seqno),
                                       ntohl(pcb->unacked->tcphdr->seqno) +
@@ -1394,10 +1390,6 @@ tcp_receive(struct tcp_pcb *pcb, tcp_in_data* in_data)
       }
       /* KJM following line changed to use p->payload rather than inseg->p->payload
          to fix bug #9076 */
-#if LWIP_TSO
-#else
-      in_data->inseg.dataptr = p->payload;
-#endif /* LWIP_TSO */
       in_data->inseg.len -= (u16_t)(pcb->rcv_nxt - in_data->seqno);
       in_data->inseg.tcphdr->seqno = in_data->seqno = pcb->rcv_nxt;
     }
@@ -1482,11 +1474,7 @@ tcp_receive(struct tcp_pcb *pcb, tcp_in_data* in_data)
                 TCP_SEQ_GT(in_data->seqno + in_data->tcplen,
                            next->tcphdr->seqno)) {
               /* inseg cannot have FIN here (already processed above) */
-#if LWIP_TSO
               in_data->inseg.len = (u32_t)(next->tcphdr->seqno - in_data->seqno);
-#else
-              in_data->inseg.len = (u16_t)(next->tcphdr->seqno - in_data->seqno);
-#endif /* LWIP_TSO */
               if (TCPH_FLAGS(in_data->inseg.tcphdr) & TCP_SYN) {
                 in_data->inseg.len -= 1;
               }
@@ -1650,11 +1638,7 @@ tcp_receive(struct tcp_pcb *pcb, tcp_in_data* in_data)
                   if (cseg != NULL) {
                     if (TCP_SEQ_GT(prev->tcphdr->seqno + prev->len, in_data->seqno)) {
                       /* We need to trim the prev segment. */
-#if LWIP_TSO
                       prev->len = (u32_t)(in_data->seqno - prev->tcphdr->seqno);
-#else
-                      prev->len = (u16_t)(in_data->seqno - prev->tcphdr->seqno);
-#endif /* LWIP_TSO */
                       pbuf_realloc(prev->p, prev->len);
                     }
                     prev->next = cseg;
@@ -1676,11 +1660,7 @@ tcp_receive(struct tcp_pcb *pcb, tcp_in_data* in_data)
                 if (next->next != NULL) {
                   if (TCP_SEQ_GT(next->tcphdr->seqno + next->len, in_data->seqno)) {
                     /* We need to trim the last segment. */
-#if LWIP_TSO
                     next->len = (u32_t)(in_data->seqno - next->tcphdr->seqno);
-#else
-                    next->len = (u16_t)(in_data->seqno - next->tcphdr->seqno);
-#endif /* LWIP_TSO */
                     pbuf_realloc(next->p, next->len);
                   }
                   /* check if the remote side overruns our receive window */

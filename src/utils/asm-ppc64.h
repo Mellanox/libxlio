@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,26 +30,25 @@
  * SOFTWARE.
  */
 
-
 #ifndef ASMPPC64_H_
 #define ASMPPC64_H_
 
 #include <stdint.h>
 #include <unistd.h>
 
-#define COPY_64B_NT(dst, src)	\
-	*dst++ = *src++;	\
-	*dst++ = *src++;	\
-	*dst++ = *src++;	\
-	*dst++ = *src++;	\
-	*dst++ = *src++;	\
-	*dst++ = *src++;	\
-	*dst++ = *src++;	\
-	*dst++ = *src++
+#define COPY_64B_NT(dst, src)                                                                      \
+    *dst++ = *src++;                                                                               \
+    *dst++ = *src++;                                                                               \
+    *dst++ = *src++;                                                                               \
+    *dst++ = *src++;                                                                               \
+    *dst++ = *src++;                                                                               \
+    *dst++ = *src++;                                                                               \
+    *dst++ = *src++;                                                                               \
+    *dst++ = *src++
 
-#define mb()	 asm volatile("sync" ::: "memory")
-#define rmb()	 asm volatile("lwsync" ::: "memory")
-#define wmb()	 rmb()
+#define mb()     asm volatile("sync" ::: "memory")
+#define rmb()    asm volatile("lwsync" ::: "memory")
+#define wmb()    rmb()
 #define wc_wmb() mb()
 
 /**
@@ -61,9 +60,9 @@
 static inline int atomic_fetch_and_add(int i, volatile int *ptr)
 {
 #ifdef __ATOMIC_ACQUIRE
-	return __atomic_fetch_add(ptr, i, __ATOMIC_ACQUIRE);
+    return __atomic_fetch_add(ptr, i, __ATOMIC_ACQUIRE);
 #else
-        return __sync_fetch_and_add(ptr, i);
+    return __sync_fetch_and_add(ptr, i);
 #endif
 }
 
@@ -76,7 +75,7 @@ static inline int atomic_fetch_and_add(int i, volatile int *ptr)
 static inline int atomic_fetch_and_add_relaxed(int i, volatile int *ptr)
 {
 #ifdef __ATOMIC_RELAXED
-	return __atomic_fetch_add(ptr, i, __ATOMIC_RELAXED);
+    return __atomic_fetch_add(ptr, i, __ATOMIC_RELAXED);
 #else
     return __sync_fetch_and_add(ptr, i);
 #endif
@@ -87,30 +86,29 @@ static inline int atomic_fetch_and_add_relaxed(int i, volatile int *ptr)
  */
 static inline void gettimeoftsc(unsigned long long *p_tscval)
 {
-	asm volatile ("mftb %0" : "=r" (*p_tscval) : );
+    asm volatile("mftb %0" : "=r"(*p_tscval) :);
 }
 
 /**
  * Cache Line Prefetch - Arch specific!
  */
 #ifndef L1_CACHE_BYTES
-#define L1_CACHE_BYTES		128
+#define L1_CACHE_BYTES 128
 #endif
 
 static inline void prefetch(void *x)
 {
-	//__builtin_prefetch();
-	__asm__ __volatile__ ("dcbt 0,%0,1" : : "r" (x));
+    //__builtin_prefetch();
+    __asm__ __volatile__("dcbt 0,%0,1" : : "r"(x));
 }
 
 static inline void prefetch_range(void *addr, size_t len)
 {
-	char *cp = (char*)addr;
-	char *end = (char*)addr + len;
-	for (; cp < end; cp += L1_CACHE_BYTES)
-		prefetch(cp);
+    char *cp = (char *)addr;
+    char *end = (char *)addr + len;
+    for (; cp < end; cp += L1_CACHE_BYTES) {
+        prefetch(cp);
+    }
 }
-
-
 
 #endif

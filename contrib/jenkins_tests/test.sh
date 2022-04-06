@@ -42,7 +42,7 @@ if [ ! -z "${test_remote_ip}" ] ; then
 		exit 1
 	}
 	test_ip_list="eth:${test_remote_ip}"
-	[ -z "${NODE_NAME}" ] && NODE_NAME=$(hostname)
+	[ -z "${NODE_NAME}" ] && NODE_NAME=${HOSTNAME}
 	sperf_exec_dir="/tmp/sockperf_exec_${NODE_NAME}"
 	rmt_user=root
  

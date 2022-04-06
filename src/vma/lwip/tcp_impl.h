@@ -115,7 +115,9 @@ void             set_tmr_resolution(u32_t v);
 #define TCP_FLAGS 0x3fU
 
 /* Length of the TCP header, excluding options. */
+#ifndef TCP_HLEN
 #define TCP_HLEN 20
+#endif
 
 #define TCP_FIN_WAIT_TIMEOUT 20000 /* milliseconds */
 #define TCP_SYN_RCVD_TIMEOUT 20000 /* milliseconds */
@@ -204,18 +206,24 @@ PACK_STRUCT_END
     else (ret) = ERR_ARG;                                      			  \
   } while (0)
 
-#define TCP_EVENT_SYN_RECEIVED(pcb,p_npcb,err,ret)               \
+#define TCP_EVENT_SYN_RECEIVED(pcb,p_npcb,ret)                 \
   do {                                                         \
     if((pcb)->syn_handled_cb != NULL)                            \
-      (ret) = (pcb)->syn_handled_cb((pcb)->callback_arg,(p_npcb),(err)); \
+      (ret) = (pcb)->syn_handled_cb((pcb)->callback_arg,(p_npcb)); \
     else (ret) = ERR_ARG;                                           \
   } while (0)
 
-#define TCP_EVENT_CLONE_PCB(pcb,p_npcb,err,ret)               \
+#define TCP_EVENT_CLONE_PCB(pcb,p_npcb,ret)                    \
   do {                                                         \
     if((pcb)->clone_conn != NULL)                            \
-      (ret) = (pcb)->clone_conn((pcb)->callback_arg,(p_npcb),(err)); \
+      (ret) = (pcb)->clone_conn((pcb)->callback_arg,(p_npcb)); \
     else (ret) = ERR_ARG;                                           \
+  } while (0)
+
+#define TCP_EVENT_ACCEPTED_PCB(pcb, newpcb)                         \
+  do {                                                         \
+    if((pcb)->accepted_pcb != NULL)                                 \
+      (pcb)->accepted_pcb((newpcb));                                \
   } while (0)
 
 #define TCP_EVENT_SENT(pcb,space,ret)                          \
@@ -279,14 +287,8 @@ PACK_STRUCT_END
 struct tcp_seg {
   struct tcp_seg *next;    /* used when putting segments on a queue */
   struct pbuf *p;          /* buffer containing data + TCP header */
-#if LWIP_TSO
   u32_t seqno;
   u32_t len;               /* the TCP length of this segment should allow >64K size */
-#else
-  void *dataptr;           /* pointer to the TCP data in the pbuf */
-  u32_t seqno;
-  u16_t len;               /* the TCP length of this segment should allow >64K size */
-#endif /* LWIP_TSO */
 
 #if TCP_OVERSIZE_DBGCHECK
   u16_t oversize_left;     /* Extra bytes available at the end of the last
@@ -309,8 +311,14 @@ struct tcp_seg {
 #define TF_SEG_OPTS_ZEROCOPY    (u8_t)TCP_WRITE_ZEROCOPY /* Use zerocopy send mode */
 
   struct tcp_hdr *tcphdr;  /* the TCP header */
-  /* TCP header for zerocopy segments, it must have enough room for options */
-  u32_t tcphdr_zc[20] __attribute__ ((aligned (16)));
+
+  /* L2+L3+TCP header for zerocopy segments, it must have enough room for options
+     This should have enough space for L2 (ETH+vLAN), L3 (IPv4/6), L4 (TCP)
+     L2 = 20: (6 for aligment, so IPv4 packet is 4 bytes aligned)
+     L3 = 20: for IPv4, 40 for IPv6 (Currently NO IP options are supported)
+     L4 = 40: TCP + options.
+  */
+  u32_t l2_l3_tcphdr_zc[25] __attribute__ ((aligned (16)));
 };
 
 #define LWIP_IS_DUMMY_SEGMENT(seg) (seg->flags & TF_SEG_OPTS_DUMMY_MSG)
@@ -462,10 +470,7 @@ u32_t tcp_next_iss(void);
 void tcp_keepalive(struct tcp_pcb *pcb);
 void tcp_zero_window_probe(struct tcp_pcb *pcb);
 
-#if TCP_CALCULATE_EFF_SEND_MSS
-u16_t tcp_eff_send_mss(u16_t sendmss, struct tcp_pcb *pcb);
-#endif /* TCP_CALCULATE_EFF_SEND_MSS */
-u16_t tcp_mss_follow_mtu_with_default(u16_t sendmss, struct tcp_pcb *pcb);
+u16_t tcp_send_mss(struct tcp_pcb *pcb);
 
 #if LWIP_CALLBACK_API
 err_t tcp_recv_null(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);

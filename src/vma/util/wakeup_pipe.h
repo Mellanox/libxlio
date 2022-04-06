@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,7 +30,6 @@
  * SOFTWARE.
  */
 
-
 #ifndef WAKEUP_PIPE_H
 #define WAKEUP_PIPE_H
 
@@ -40,21 +39,17 @@
 #include "wakeup.h"
 #include "utils/atomic.h"
 
-class wakeup_pipe : public wakeup
-{
+class wakeup_pipe : public wakeup {
 public:
-	wakeup_pipe(void);
-	~wakeup_pipe();
-	virtual void do_wakeup();
-	virtual inline bool is_wakeup_fd(int fd)
-	{
-		return fd == g_wakeup_pipes[0];
-	};
-	virtual void remove_wakeup_fd();
+    wakeup_pipe(void);
+    ~wakeup_pipe();
+    virtual void do_wakeup();
+    virtual inline bool is_wakeup_fd(int fd) { return fd == g_wakeup_pipes[0]; };
+    virtual void remove_wakeup_fd();
 
 private:
-	static int g_wakeup_pipes[2];
-	static atomic_t ref_count;
+    static int g_wakeup_pipes[2];
+    static atomic_t ref_count;
 };
 
 #endif /* WAKEUP_PIPE_H */

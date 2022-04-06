@@ -13,8 +13,8 @@ dnl===-----------------------------------------------------------------------===
 # Update version number here:
 #
 define([prj_ver_major], 1)
-define([prj_ver_minor], 1)
-define([prj_ver_revision], 8)
+define([prj_ver_minor], 2)
+define([prj_ver_revision], 9)
 define([prj_ver_release], esyscmd([echo ${PRJ_RELEASE:=0}]))
 
 
@@ -258,21 +258,6 @@ else
     AC_MSG_RESULT([no])
 fi
 
-# Control TSO usage
-#
-AC_ARG_ENABLE([tso],
-    AS_HELP_STRING([--enable-tso],
-        [Enable TSO availability (default=yes)]), [], [enable_tso=yes])
-AC_MSG_CHECKING(
-    [for tso support])
-if test "x$enable_tso" = xyes -a "x$vma_cv_attribute_ex_OPCODE_TSO" = xyes; then
-    AC_DEFINE_UNQUOTED([DEFINED_TSO], [1], [Define to 1 to use TSO])
-    AC_DEFINE_UNQUOTED([DEFINED_ZCOPY], [1], [Define to 1 to use ZERO COPY])
-    AC_MSG_RESULT([yes])
-else
-    AC_MSG_RESULT([no])
-fi
-
 # Control NGINX support
 #
 AC_ARG_ENABLE([nginx],
@@ -380,6 +365,22 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 [
   AC_MSG_RESULT([yes])
   AC_DEFINE(RECVMMSG_WITH_CONST_TIMESPEC, 1, [Define to 1 if 'struct timespec' for recvmmsg() is 'const struct timespec'])
+],
+[
+  AC_MSG_RESULT([no])
+])
+
+AC_MSG_CHECKING([for PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP support])
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+#include <pthread.h>
+]],
+[[
+  pthread_rwlockattr_t rw_attr;
+  pthread_rwlockattr_setkind_np(&rw_attr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
+]])],
+[
+  AC_MSG_RESULT([yes])
+  AC_DEFINE(HAVE_PTHREAD_RWLOCK_NP, 1, [Define to 1 if PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP exists'])
 ],
 [
   AC_MSG_RESULT([no])

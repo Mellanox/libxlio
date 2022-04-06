@@ -1,3 +1,83 @@
+Version 1.2.9-1:
+Date + Time 2022-04-06
+=============================================================
+Fixed:
+        - RM #3032222 Fix no offload traffic issue for nginx
+
+Version 1.2.8-1:
+Date + Time 2022-04-04
+=============================================================
+Fixed:
+        - RM #2783472 Recreating rdma channel in case of rdma_create_id failure
+        - RM #3008661 Handling IPv4 IPv6 dual stack listen
+        - RM #3018068 Fix stats output logic
+        - RM #3019742 Fix debian/copyright file
+
+Version 1.2.7-1:
+Date + Time 2022-03-25
+=============================================================
+Fixed:
+        - RM #3005039 IPv6 support for ring generate_id
+        - RM #2858875 Fix fork() - Use correct blocking state
+        - RM #2667588 Fixing IPv6 packet classification and prefix check
+        - RM #3010282 Send NDP manually if rdma_resolve_addr() fails
+
+Version 1.2.6-1:
+Date + Time 2022-03-15
+=============================================================
+Fixed:
+        - RM #2824810 Increase length of bytes counters
+        - RM #2875358 Fix incorrect output
+        - RM #2972951 Fix hypervisor check under x86_64
+        - RM #2945718 Show warning in visibility check
+        - RM #2667588 Support IPV6_V6ONLY sockopt for listen all
+        - RM #2982769 Fixing null mem_buf access on retransmission
+        - RM #2991762 Fix netlink source of IPv6 neighbors
+        - RM #2982769 Add XLIO_TX_BUFS_BATCH_TCP env variable
+        - RM #3000532 Fix seg fault and remove TODOs
+        - RM #2992772 Fix inlining lso data
+        - RM #2824810 Increase length of bytes counters
+
+Version 1.2.5-1:
+Date + Time 2022-02-28
+=============================================================
+Added:
+        - RM #2667588 The third stage of IPv6 support
+
+Version 1.2.4-1:
+Date + Time 2022-02-17
+=============================================================
+Added:
+        - RM #2667588 The second stage of IPv6 support
+
+Version 1.2.3-1:
+Date + Time 2022-02-04
+=============================================================
+Added:
+        - RM #2667588 The first stage of IPv6 support
+
+Version 1.2.2-1:
+Date + Time 2022-01-27
+=============================================================
+Added:
+        - RM #2563722 Removed unsupported code as non-tso and ipoib
+        - RM #928148 Export symbols from socket api only
+        - RM #2329439 Update gtest to support IPV6
+        - RM #2933472 Update License date to 2022
+        - RM #22943262 Optimize fill_wqe_send() function
+
+Version 1.2.1-1:
+Date + Time 2022-01-10
+=============================================================
+Fixed:
+        - RM #2903631 Fix a race condition on accepted socket
+
+Version 1.2.0-1:
+Date + Time 2021-12-23
+=============================================================
+Fixed:
+        - RM #2342345 Improve number of concurrent connections
+
 Version 1.1.8-1:
 Date + Time 2021-11-04
 =============================================================

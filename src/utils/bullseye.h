@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,10 +30,9 @@
  * SOFTWARE.
  */
 
-
 /*
  * Bullseye Coverage Definitions
-*/
+ */
 #ifndef BULLSEYE_H_
 #define BULLSEYE_H_
 
@@ -42,12 +41,11 @@
 #endif
 
 #if _BullseyeCoverage
-#define BULLSEYE_EXCLUDE_BLOCK_START	"BullseyeCoverage save off";
-#define BULLSEYE_EXCLUDE_BLOCK_END	"BullseyeCoverage restore";
+#define BULLSEYE_EXCLUDE_BLOCK_START "BullseyeCoverage save off";
+#define BULLSEYE_EXCLUDE_BLOCK_END   "BullseyeCoverage restore";
 #else
 #define BULLSEYE_EXCLUDE_BLOCK_START
 #define BULLSEYE_EXCLUDE_BLOCK_END
 #endif
-
 
 #endif /* BULLSEYE_H_ */

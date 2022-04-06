@@ -1,0 +1,79 @@
+- job-template:
+    name: "xlio-perf"
+    project-type: pipeline
+    properties:
+        - github:
+             url: "{jjb_git}"
+        - build-discarder:
+            days-to-keep: 50
+            num-to-keep: 20
+        - inject:
+            keep-system-variables: true
+            properties-content: |
+              jjb_proj=xlio-perf
+    description: Do NOT edit this job through the Web GUI !
+    concurrent: false
+    parameters:
+        - string:
+            name: "sha1"
+            default: master
+            description: "Source code version (branch, pull request or commit). Examples: <b>branch-name</b>, <b>tag-name</b>, <b>commit_ID</b> and <b>origin/pr/NNN/merge</b> (NNN is a pull request number)."
+        - choice:
+            name: "TEST_SUITE"
+            choices:
+              - medium
+              - very short
+            description: "The size of test suite. <b>Very short (3 minutes):</b> CPS & RPS, one payload size (10KB), HTTP only; <b>medium (15 minutes):</b> CPS & RPS, three payload sizes (10KB, 1MB, 10MB), HTTP & HTTPS."
+        - choice:
+            name: MODE
+            choices:
+              - xlio
+              - kernel
+            description: "Change to <b>kernel</b> to benchmark kernel performance without libxlio. <b>XLIO</b> mode is used by default."
+        - string:
+            name: "PR_ID"
+            default: "Manual_run"
+            description: "Pull request ID or any string to identify the benchmark result. Example: <b>ref 2022-02-17</b> will identify latest reference (baseline) benchmark."
+        - bool:
+            name: "SET_AS_BASELINE"
+            defaulte: false
+            description: "Remove previous baseline benchmark result and set this one as a baseline."
+        - string:
+            name: "conf_file"
+            default: ".ci/perf_matrix_job.yaml"
+            description: "Regex to select job config file. Do not change it."
+    triggers:
+        - github-pull-request:
+            cron: 'H/5 * * * *'
+            trigger-phrase: '.*\bbot:perf\b.*'
+            status-context: "Mellanox Lab"
+            success-status: "[PASS]"
+            failure-status: "[FAIL]"
+            error-status:   "[FAIL]"
+            status-add-test-results: true
+            auth-id: '549927eb-7f38-4a8f-997a-81dd63605782'
+            org-list: ["Mellanox"]
+            white-list: ["swx-jenkins","swx-jenkins2","swx-jenkins3","mellanox-github"]
+            allow-whitelist-orgs-as-admins: true
+            cancel-builds-on-update: true
+    pipeline-scm:
+        scm:
+            - git:
+                url: "{jjb_git}"
+                credentials-id: 'ef94fa95-5480-41ea-863f-6525aace5bc9'
+                branches: ['$sha1']
+                shallow-clone: true
+                depth: 2
+                refspec: "+refs/pull/*:refs/remotes/origin/pr/*"
+                browser: githubweb
+                browser-url: "{jjb_git}"
+        script-path: ".ci/Jenkinsfile"
+
+- project:
+    name: proj_name
+    jjb_email: 'aryabov@nvidia.com'
+    jjb_proj: 'xlio-perf'
+    jjb_git: 'https://github.com/Mellanox-lab/libxlio'
+    jjb_owner: 'Alexander Ryabov'
+    jobs:
+      - "xlio-perf"

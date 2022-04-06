@@ -1,0 +1,149 @@
+#!/bin/bash
+
+ROOT_DIR="$(realpath $(dirname $0)/..)"
+
+set -u
+set -e
+
+MAX_RETRIES=3
+TRY_NUM=1
+
+_usage()
+{
+    echo -ne \
+        "\nUsage:" \
+        "\n    $(basename $0) -?|-h|--help" \
+        "\n    $(basename $0) [options] <plan>" \
+        "\n" \
+        "\nOptions:" \
+        "\n    -h, -?, --help         print this help message" \
+        "\n    -w, --work-dir <path>  path to place output files/logs" \
+        "\n\n"
+}
+
+_match_env()
+{
+    # grep last column 'env' based on matching input
+    echo "$BULK_ENV_LIST" \
+        | grep -E "^($1|\*)[ \t]+($2|\*)[ \t]+($3|\*)[ \t]+($4|\*)[ \t]+($5|\*)[ \t]+($6|\*)[ \t]+[^ \t]+" \
+        | awk '{print $7}' \
+        | head -n1
+}
+
+_step()
+{
+    local -r type=${1:?}
+    local -r mode=${2:?}
+    local -r proto=${3:?}
+    local -r payload=${4:?}
+    local -r threads=${5:?}
+    local -r connections=${6:?}
+    local -r work_dir=${7:?}
+
+    local -r step_work_dir="$work_dir/$mode-$proto-$payload-$threads-$connections"
+
+    # skip if already completed
+    [[ -r "$step_work_dir/status" && "$(cat $step_work_dir/status)" = "0" ]] && return 0;
+
+    # lunch server
+    local -r server_work_dir="$step_work_dir/server"
+    local -r server_env_name=$(_match_env $mode $proto $payload $threads $connections $BULK_SERVER_MHOST)
+    local server_args="-e \"$server_env_name\" -w \"$server_work_dir\" -t $threads"
+    [ "$mode" = "xlio" ] && server_args+=" -x"
+    ssh "$BULK_SERVER_MHOST" "cd $ROOT_DIR && ./bench server start $server_args"
+    echo "Server has been started"
+
+    # delay after server startup (otherwise first connection may fail and so wrk will stuck)
+    sleep 10
+
+    echo "Sending warmup request"
+    if curl --retry-connrefused --retry 3 -m5 -sS -o /dev/null http://$BULK_SERVER_DHOST/10KB.bin; then
+        echo "Warmup OK"
+    else
+        if (( TRY_NUM > MAX_RETRIES )); then
+            echo "$TRY_NUM tries failed, giving up"
+            return 1
+        fi
+        TRY_NUM=$(( TRY_NUM + 1 ))
+        echo "Warmup request failed, trying to restart the server"
+        echo "Stopping the server"
+        ssh "$BULK_SERVER_MHOST" "cd $ROOT_DIR && ./bench server stop"
+        sleep 5
+        echo "Starting the server"
+        _step "$@"
+        return $?
+    fi
+
+    # lunch client
+    local -r client_count=$(echo "$BULK_CLIENT_MHOST" | wc -w)
+    local -r connections_per_client=$(($connections / $client_count))
+    local i=1
+    for cm in $BULK_CLIENT_MHOST; do
+        local client_work_dir="$step_work_dir/client-$i"
+        local client_env_name=$(_match_env $mode $proto $payload $threads $connections $cm)
+        local client_args="-e \"$client_env_name\" -w \"$client_work_dir\""
+        [ "$type" = "cps" ] && client_args+=" --cps"
+        client_args+=" -p $proto"
+        client_args+=" -c $connections_per_client"
+        client_args+=" -b \"$payload\""
+        client_args+=" $BULK_SERVER_DHOST"
+        ssh "$cm" "cd $ROOT_DIR && ./bench client -t 20 $client_args" &
+        i=$(($i+1))
+    done
+    wait
+    echo $? > "$step_work_dir/status"
+
+    # stop server
+    ssh "$BULK_SERVER_MHOST" "cd $ROOT_DIR && ./bench server stop"
+}
+
+_main()
+{
+    # defaults
+    local work_dir="$ROOT_DIR/run/bench-bulk"
+
+    # parse options
+    set +u
+    while true; do
+        case "$1" in
+            -h|-\?|--help) _usage; exit 0;;
+            -w|--work-dir) work_dir="$2"; shift 2;;
+            -?*) { echo "unknown option: $1"; _usage; exit 1; } >&2;;
+            *) break;;
+        esac
+    done
+
+    # parse args
+    [ -z "$1" ] && { echo "missing argument"; _usage; exit 1; } >&2
+    local -r plan=$1
+    set -u
+
+    # load vars from plan
+    mkdir -p "$work_dir"
+    source "$plan"
+
+    local -r total_steps=$(( \
+        $(echo "$BULK_MODES" | wc -w) \
+        * $(echo "$BULK_PROTOS" | wc -w) \
+        * $(echo "$BULK_PAYLOADS" | wc -w) \
+        * $(echo "$BULK_THREADS" | wc -w) \
+        * $(echo "$BULK_CONNECTIONS" | wc -w) \
+    ))
+
+    local id=1
+    for mode in $BULK_MODES; do
+        for proto in $BULK_PROTOS; do
+            for payload in $BULK_PAYLOADS; do
+                for tn in $BULK_THREADS; do
+                    for cn in $BULK_CONNECTIONS; do
+                        echo -e "\n\nStep $id/$total_steps at $(date +'%F %T')..."
+                        _step $BULK_TYPE $mode $proto $payload $tn $cn "$work_dir"
+                        id=$((id + 1))
+                    done
+                done
+            done
+        done
+    done |& tee "$work_dir/bench-bulk.out"
+}
+
+_main "$@"

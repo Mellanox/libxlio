@@ -1,6 +1,6 @@
 # verbs.m4 - Parsing verbs capabilities
 #
-# Copyright (C) Mellanox Technologies Ltd. 2001-2021. ALL RIGHTS RESERVED.
+# Copyright (C) Mellanox Technologies Ltd. 2001-2022. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -127,8 +127,6 @@ CHECK_VERBS_ATTRIBUTE([IBV_CQ_ATTR_MODERATE], [infiniband/verbs.h], [IBV_CQ_ATTR
 CHECK_VERBS_ATTRIBUTE([IBV_QPT_RAW_PACKET], [infiniband/verbs.h])
 CHECK_VERBS_ATTRIBUTE([IBV_WC_WITH_VLAN], [infiniband/verbs.h])
 CHECK_VERBS_ATTRIBUTE([IBV_ACCESS_ALLOCATE_MR], [infiniband/verbs.h])
-CHECK_VERBS_ATTRIBUTE([IBV_QP_CREATE_SOURCE_QPN], [infiniband/verbs.h], [IBV_QP_INIT_SOURCE_QPN])
-CHECK_VERBS_ATTRIBUTE([IBV_FLOW_SPEC_IB], [infiniband/verbs.h], [IBV_FLOW_SPEC_IB])
 CHECK_VERBS_ATTRIBUTE([IBV_DEVICE_RAW_IP_CSUM], [infiniband/verbs.h])
 CHECK_VERBS_ATTRIBUTE([IBV_SEND_IP_CSUM], [infiniband/verbs.h])
 CHECK_VERBS_ATTRIBUTE([IBV_FLOW_SPEC_ACTION_TAG], [infiniband/verbs.h], [IBV_FLOW_TAG])
@@ -144,13 +142,11 @@ if test "x$vma_cv_verbs" == x2; then
     CHECK_VERBS_ATTRIBUTE([IBV_EXP_CQ_MODERATION], [infiniband/verbs_exp.h], [IBV_CQ_ATTR_MODERATE])
     CHECK_VERBS_ATTRIBUTE([IBV_EXP_WR_NOP], [infiniband/verbs_exp.h], [IBV_WR_NOP])
     CHECK_VERBS_ATTRIBUTE([IBV_EXP_ACCESS_ALLOCATE_MR], [infiniband/verbs_exp.h])
-    CHECK_VERBS_ATTRIBUTE([IBV_EXP_QP_INIT_ATTR_ASSOCIATED_QPN], [infiniband/verbs_exp.h], [IBV_QP_INIT_SOURCE_QPN])
-    CHECK_VERBS_ATTRIBUTE([IBV_EXP_FLOW_SPEC_IB], [infiniband/verbs_exp.h], [IBV_FLOW_SPEC_IB])
     CHECK_VERBS_ATTRIBUTE([IBV_EXP_SEND_IP_CSUM], [infiniband/verbs_exp.h])
     CHECK_VERBS_ATTRIBUTE([IBV_EXP_DEVICE_ATTR_MAX_DM_SIZE], [infiniband/verbs_exp.h], [IBV_DM])
     CHECK_VERBS_ATTRIBUTE([IBV_EXP_QP_RATE_LIMIT], [infiniband/verbs_exp.h], [IBV_PACKET_PACING_CAPS])
     CHECK_VERBS_ATTRIBUTE([IBV_EXP_QP_SUPPORT_BURST], [infiniband/verbs_exp.h], [IBV_QP_SUPPORT_BURST])
-    CHECK_VERBS_ATTRIBUTE([IBV_EXP_WR_TSO], [infiniband/verbs_exp.h], [OPCODE_TSO])
+    CHECK_VERBS_ATTRIBUTE([IBV_EXP_WR_TSO], [infiniband/verbs_exp.h], [TSO])
     CHECK_VERBS_ATTRIBUTE([IBV_EXP_DEVICE_CROSS_CHANNEL], [infiniband/verbs_exp.h], [IBV_DEVICE_CROSS_CHANNEL])
 
     #
@@ -180,7 +176,7 @@ fi
 # Check Upstream
 #
 if test "x$vma_cv_verbs" == x3; then
-    CHECK_VERBS_ATTRIBUTE([IBV_WR_TSO], [infiniband/verbs.h], [OPCODE_TSO])
+    CHECK_VERBS_ATTRIBUTE([IBV_WR_TSO], [infiniband/verbs.h], [TSO])
 
     if test "x$vma_cv_directverbs" == x3; then
         CHECK_VERBS_ATTRIBUTE([MLX5_OPCODE_NOP], [infiniband/mlx5dv.h], [IBV_WR_NOP])

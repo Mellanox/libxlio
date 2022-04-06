@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,7 +30,6 @@
  * SOFTWARE.
  */
 
-
 /**
  * @file ibwu_bitmap.h
  *
@@ -48,15 +47,15 @@ typedef uint32_t bitmap_item_t;
 
 typedef struct bitmap bitmap_t;
 struct bitmap {
-	bitmap_item_t *bitmap; /**< The actual bitmap array of characters */
-	size_t size; /**< Bitmap size */
+    bitmap_item_t *bitmap; /**< The actual bitmap array of characters */
+    size_t size; /**< Bitmap size */
 };
 
 /* Number of bits in single bitmap item */
-#define BITMAP_ITEM_SIZE        (8 * sizeof(bitmap_item_t))
+#define BITMAP_ITEM_SIZE (8 * sizeof(bitmap_item_t))
 
 /* Number of items needed to store n bits */
-#define BITMAP_ARRAY_SIZE(n)    (((n) + BITMAP_ITEM_SIZE - 1) / BITMAP_ITEM_SIZE)
+#define BITMAP_ARRAY_SIZE(n) (((n) + BITMAP_ITEM_SIZE - 1) / BITMAP_ITEM_SIZE)
 
 /**
  * Initialize a bitmap.
@@ -68,15 +67,15 @@ struct bitmap {
  ***************************************************************************/
 static inline void bitmap_create(bitmap_t **bm, size_t size)
 {
-	*bm = (bitmap_t *)malloc(sizeof(**bm));
-	if (*bm) {
-		(*bm)->size = size;
-		(*bm)->bitmap =	(bitmap_item_t *)calloc(BITMAP_ARRAY_SIZE(size), sizeof(bitmap_item_t));
-		if (NULL == (*bm)->bitmap) {
-			free(*bm);
-			*bm = NULL;
-		}
-	}
+    *bm = (bitmap_t *)malloc(sizeof(**bm));
+    if (*bm) {
+        (*bm)->size = size;
+        (*bm)->bitmap = (bitmap_item_t *)calloc(BITMAP_ARRAY_SIZE(size), sizeof(bitmap_item_t));
+        if (NULL == (*bm)->bitmap) {
+            free(*bm);
+            *bm = NULL;
+        }
+    }
 }
 
 /**
@@ -88,8 +87,8 @@ static inline void bitmap_create(bitmap_t **bm, size_t size)
  ***************************************************************************/
 static inline void bitmap_destroy(bitmap_t *bm)
 {
-	free(bm->bitmap);
-	bm->size = 0;
+    free(bm->bitmap);
+    bm->size = 0;
 }
 
 /**
@@ -101,7 +100,7 @@ static inline void bitmap_destroy(bitmap_t *bm)
  ***************************************************************************/
 static inline size_t elem_idx(size_t bit)
 {
-	return (bit / BITMAP_ITEM_SIZE);
+    return (bit / BITMAP_ITEM_SIZE);
 }
 
 /**
@@ -113,7 +112,7 @@ static inline size_t elem_idx(size_t bit)
  ***************************************************************************/
 static inline bitmap_item_t bit_mask(size_t bit_idx)
 {
-	return (bitmap_item_t)(1 << (bit_idx % BITMAP_ITEM_SIZE));
+    return (bitmap_item_t)(1 << (bit_idx % BITMAP_ITEM_SIZE));
 }
 
 /**
@@ -125,7 +124,7 @@ static inline bitmap_item_t bit_mask(size_t bit_idx)
  ***************************************************************************/
 static inline size_t bitmap_size(bitmap_t *bm)
 {
-	return (bm->size);
+    return (bm->size);
 }
 
 /**
@@ -138,9 +137,9 @@ static inline size_t bitmap_size(bitmap_t *bm)
  ***************************************************************************/
 static inline void bitmap_set(bitmap_t *bm, size_t bit)
 {
-	size_t idx = elem_idx(bit);
-	bitmap_item_t mask = bit_mask(bit);
-	bm->bitmap[idx] |= mask;
+    size_t idx = elem_idx(bit);
+    bitmap_item_t mask = bit_mask(bit);
+    bm->bitmap[idx] |= mask;
 }
 
 /**
@@ -153,9 +152,9 @@ static inline void bitmap_set(bitmap_t *bm, size_t bit)
  ***************************************************************************/
 static inline void bitmap_clear(bitmap_t *bm, size_t bit)
 {
-	size_t idx = elem_idx(bit);
-	bitmap_item_t mask = bit_mask(bit);
-	bm->bitmap[idx] &= ~mask;
+    size_t idx = elem_idx(bit);
+    bitmap_item_t mask = bit_mask(bit);
+    bm->bitmap[idx] &= ~mask;
 }
 
 /**
@@ -168,9 +167,9 @@ static inline void bitmap_clear(bitmap_t *bm, size_t bit)
  ***************************************************************************/
 static inline void bitmap_flip(bitmap_t *bm, size_t bit)
 {
-	size_t idx = elem_idx(bit);
-	bitmap_item_t mask = bit_mask(bit);
-	bm->bitmap[idx] ^= mask;
+    size_t idx = elem_idx(bit);
+    bitmap_item_t mask = bit_mask(bit);
+    bm->bitmap[idx] ^= mask;
 }
 
 /**
@@ -183,9 +182,9 @@ static inline void bitmap_flip(bitmap_t *bm, size_t bit)
  ***************************************************************************/
 static inline int bitmap_test(bitmap_t *bm, size_t bit)
 {
-	size_t idx = elem_idx(bit);
-	bitmap_item_t mask = bit_mask(bit);
-	return (0 != (bm->bitmap[idx] & mask));
+    size_t idx = elem_idx(bit);
+    bitmap_item_t mask = bit_mask(bit);
+    return (0 != (bm->bitmap[idx] & mask));
 }
 
 /**
@@ -200,18 +199,18 @@ static inline int bitmap_test(bitmap_t *bm, size_t bit)
  ***************************************************************************/
 static inline int bitmap_test_group(bitmap_t *bm, size_t start, size_t count)
 {
-	size_t i;
-	int value = -1;
+    size_t i;
+    int value = -1;
 
-	if ((start + count) <= bm->size) {
-		value = bitmap_test(bm, start);
-		for (i = 1; i < count; i++) {
-			if (bitmap_test(bm, start + i) != value) {
-				return -1;
-			}
-		}
-	}
-	return value;
+    if ((start + count) <= bm->size) {
+        value = bitmap_test(bm, start);
+        for (i = 1; i < count; i++) {
+            if (bitmap_test(bm, start + i) != value) {
+                return -1;
+            }
+        }
+    }
+    return value;
 }
 
 /**
@@ -225,21 +224,20 @@ static inline int bitmap_test_group(bitmap_t *bm, size_t start, size_t count)
  * @retval  index  - on success
  * @retval  -1     - on failure
  ***************************************************************************/
-static inline int bitmap_find_group(bitmap_t *bm, size_t start, size_t count,
-		int value)
+static inline int bitmap_find_group(bitmap_t *bm, size_t start, size_t count, int value)
 {
-	size_t i;
-	size_t last;
+    size_t i;
+    size_t last;
 
-	if ((start + count) <= bm->size) {
-		last = bm->size - count;
-		for (i = start; i <= last; i++) {
-			if (value == bitmap_test_group(bm, i, count)) {
-				return i;
-			}
-		}
-	}
-	return -1;
+    if ((start + count) <= bm->size) {
+        last = bm->size - count;
+        for (i = start; i <= last; i++) {
+            if (value == bitmap_test_group(bm, i, count)) {
+                return i;
+            }
+        }
+    }
+    return -1;
 }
 
 /**
@@ -252,14 +250,14 @@ static inline int bitmap_find_group(bitmap_t *bm, size_t start, size_t count,
  ***************************************************************************/
 static inline int bitmap_find_first_zero(bitmap_t *bm)
 {
-	size_t i;
+    size_t i;
 
-	for (i = 0; i < BITMAP_ARRAY_SIZE(bm->size); i++) {
-		if (((bitmap_item_t)(-1)) != bm->bitmap[i]) {
-			return (i * BITMAP_ITEM_SIZE + ffs(~bm->bitmap[i]) - 1);
-		}
-	}
-	return -1;
+    for (i = 0; i < BITMAP_ARRAY_SIZE(bm->size); i++) {
+        if (((bitmap_item_t)(-1)) != bm->bitmap[i]) {
+            return (i * BITMAP_ITEM_SIZE + ffs(~bm->bitmap[i]) - 1);
+        }
+    }
+    return -1;
 }
 
 #ifdef __cplusplus
@@ -267,4 +265,3 @@ static inline int bitmap_find_first_zero(bitmap_t *bm)
 #endif
 
 #endif /* TOOLS_DAEMON_BITMAP_H_ */
-

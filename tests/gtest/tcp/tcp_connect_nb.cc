@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -37,7 +37,8 @@
 
 #include "tcp_base.h"
 
-class tcp_connect_nb : public tcp_base {};
+class tcp_connect_nb : public tcp_base {
+};
 
 /**
  * @test tcp_connect_nb.ti_1
@@ -45,5 +46,6 @@ class tcp_connect_nb : public tcp_base {};
  *    Loop of blocking connect() to ip on the same node
  * @details
  */
-TEST_F(tcp_connect_nb, ti_1) {
+TEST_F(tcp_connect_nb, ti_1)
+{
 }

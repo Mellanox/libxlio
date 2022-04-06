@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,7 +30,6 @@
  * SOFTWARE.
  */
 
-
 #ifndef EVENT_H
 #define EVENT_H
 
@@ -40,28 +39,28 @@
 #include "utils/bullseye.h"
 #include "vma/util/to_str.h"
 
-class event : public tostr  {
-        public:
-		enum type{
-			UNKNOWN_EVENT,
-			SEND_EVENT,
-			DROP_EVENT
-		};
+class event : public tostr {
+public:
+    enum type { UNKNOWN_EVENT, SEND_EVENT, DROP_EVENT };
 
-		type m_type;
-                event(void* notifier=NULL) : m_type(UNKNOWN_EVENT), m_notifier(notifier) {}
-                virtual ~event() {};
+    type m_type;
+    event(void *notifier = NULL)
+        : m_type(UNKNOWN_EVENT)
+        , m_notifier(notifier)
+    {
+    }
+    virtual ~event() {};
 
-                virtual  const std::string to_str() const
-                {
-                	char outstr[1024];
-                	sprintf(outstr, "EVENT_TYPE=%s NOTIFIER_PTR=%llu", typeid(*this).name(), (long long unsigned int)m_notifier);
-                	return std::string(outstr);
-                }
+    virtual const std::string to_str() const
+    {
+        char outstr[1024];
+        sprintf(outstr, "EVENT_TYPE=%s NOTIFIER_PTR=%llu", typeid(*this).name(),
+                (long long unsigned int)m_notifier);
+        return std::string(outstr);
+    }
 
-        private:
-                void* m_notifier;
+private:
+    void *m_notifier;
 };
-
 
 #endif /* EVENT_H */

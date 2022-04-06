@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -36,130 +36,141 @@
 
 #include <dirent.h>
 
-
 void sys_hexdump(const char *tag, void *ptr, int buflen)
 {
-	unsigned char *buf = (unsigned char *)ptr;
-	char out_buf[256];
-	int ret = 0;
-	int out_pos = 0;
-	int i, j;
+    unsigned char *buf = (unsigned char *)ptr;
+    char out_buf[256];
+    int ret = 0;
+    int out_pos = 0;
+    int i, j;
 
-	if (tag) {
-		log_trace("%s\n", tag);
-	}
-	if (ptr) {
-		return ;
-	}
-	log_trace("dump data at %p\n", ptr);
-	for (i = 0; i < buflen; i += 16) {
-		out_pos = 0;
-		ret = sprintf(out_buf + out_pos, "%06x: ", i);
-		if (ret < 0)
-		return;
-		out_pos += ret;
-		for (j = 0; j < 16; j++) {
-			if (i + j < buflen)
-			ret = sprintf(out_buf + out_pos, "%02x ",
-					buf[i + j]);
-			else
-			ret = sprintf(out_buf + out_pos, "   ");
-			if (ret < 0)
-			return;
-			out_pos += ret;
-		}
-		ret = sprintf(out_buf + out_pos, " ");
-		if (ret < 0)
-		return ;
-		out_pos += ret;
-		for (j = 0; j < 16; j++)
-		if (i + j < buflen) {
-			ret = sprintf(out_buf + out_pos, "%c",
-					isprint(buf[i+j]) ?
-					buf[i + j] :
-					'.');
-			if (ret < 0)
-			return;
-			out_pos += ret;
-		}
-		ret = sprintf(out_buf + out_pos, "\n");
-		if (ret < 0)
-		return ;
-		log_trace("%s", out_buf);
-	}
+    if (tag) {
+        log_trace("%s\n", tag);
+    }
+    if (ptr) {
+        return;
+    }
+    log_trace("dump data at %p\n", ptr);
+    for (i = 0; i < buflen; i += 16) {
+        out_pos = 0;
+        ret = sprintf(out_buf + out_pos, "%06x: ", i);
+        if (ret < 0) {
+            return;
+        }
+        out_pos += ret;
+        for (j = 0; j < 16; j++) {
+            if (i + j < buflen) {
+                ret = sprintf(out_buf + out_pos, "%02x ", buf[i + j]);
+            } else {
+                ret = sprintf(out_buf + out_pos, "   ");
+            }
+            if (ret < 0) {
+                return;
+            }
+            out_pos += ret;
+        }
+        ret = sprintf(out_buf + out_pos, " ");
+        if (ret < 0) {
+            return;
+        }
+        out_pos += ret;
+        for (j = 0; j < 16; j++) {
+            if (i + j < buflen) {
+                ret = sprintf(out_buf + out_pos, "%c", isprint(buf[i + j]) ? buf[i + j] : '.');
+                if (ret < 0) {
+                    return;
+                }
+                out_pos += ret;
+            }
+        }
+        ret = sprintf(out_buf + out_pos, "\n");
+        if (ret < 0) {
+            return;
+        }
+        log_trace("%s", out_buf);
+    }
 }
 
-int sys_get_addr(char *dst, struct sockaddr_in *addr)
+int sys_get_addr(const char *dst, struct sockaddr *addr)
 {
-	int rc = 0;
-	struct addrinfo *res;
+    int rc = 0;
+    struct addrinfo *res;
 
-	rc = getaddrinfo(dst, NULL, NULL, &res);
-	if (rc) {
-		log_error("getaddrinfo failed - invalid hostname or IP address\n");
-		return rc;
-	}
+    rc = getaddrinfo(dst, NULL, NULL, &res);
+    if (rc) {
+        log_error("getaddrinfo failed - invalid hostname or IP address\n");
+        return rc;
+    }
 
-	if (res->ai_family != PF_INET) {
-		rc = -1;
-		goto out;
-	}
+    if (!sys_check_af(res->ai_family)) {
+        rc = -1;
+        goto out;
+    }
 
-	*addr = *(struct sockaddr_in *)res->ai_addr;
+    addr->sa_family = res->ai_family;
+    memcpy(addr, res->ai_addr, res->ai_addrlen);
+
 out:
-	freeaddrinfo(res);
-	return rc;
+    freeaddrinfo(res);
+    return rc;
 }
 
-char *sys_addr2dev(struct sockaddr_in *addr, char *buf, size_t size)
+bool sys_cmp_addr(const struct sockaddr *addr1, const struct sockaddr *addr2)
 {
-	struct ifaddrs *interfaces;
-	struct ifaddrs *ifa;
-
-	if (buf && size && !getifaddrs(&interfaces)) {
-		buf[0] = '\0';
-		for (ifa = interfaces; ifa; ifa = ifa->ifa_next) {
-		    if (ifa->ifa_addr)
-		    {
-		        if (AF_INET == ifa->ifa_addr->sa_family)
-		        {
-		            struct sockaddr_in* inaddr = (struct sockaddr_in*)ifa->ifa_addr;
-
-		            if (inaddr->sin_addr.s_addr == addr->sin_addr.s_addr)
-		            {
-		                if (ifa->ifa_name)
-		                {
-		                	size_t n = sys_min(strlen(ifa->ifa_name), size - 1);
-		                    memcpy(buf, ifa->ifa_name, n);
-		                    buf[n] = '\0';
-		                    return buf;
-		                }
-		            }
-		        }
-		    }
-		}
-		freeifaddrs(interfaces);
-	}
-
-	return NULL;
+    if (addr1->sa_family == addr2->sa_family) {
+        switch (addr1->sa_family) {
+        case AF_INET:
+            return (((struct sockaddr_in *)addr1)->sin_addr.s_addr ==
+                    ((struct sockaddr_in *)addr2)->sin_addr.s_addr);
+        case AF_INET6:
+            return (sys_ipv6_addr_equal(&((const struct sockaddr_in6 *)addr1)->sin6_addr,
+                                        &((const struct sockaddr_in6 *)addr2)->sin6_addr));
+        }
+    }
+    return false;
 }
 
-int sys_dev2addr(char *dev, struct sockaddr_in *addr)
+char *sys_addr2dev(const struct sockaddr *addr, char *buf, size_t size)
 {
-	int rc = 0;
-    int fd;
+    struct ifaddrs *interfaces;
+    struct ifaddrs *ifa;
+
+    if (buf && size && !getifaddrs(&interfaces)) {
+        buf[0] = '\0';
+        for (ifa = interfaces; ifa; ifa = ifa->ifa_next) {
+            if (ifa->ifa_addr) {
+                if (sys_check_af(ifa->ifa_addr->sa_family)) {
+                    if (sys_cmp_addr(ifa->ifa_addr, addr)) {
+                        if (ifa->ifa_name) {
+                            size_t n = sys_min(strlen(ifa->ifa_name), size - 1);
+                            memcpy(buf, ifa->ifa_name, n);
+                            buf[n] = '\0';
+                            return buf;
+                        }
+                    }
+                }
+            }
+        }
+        freeifaddrs(interfaces);
+    }
+
+    return NULL;
+}
+
+// SIOCGIFADDR supports only IPv4.
+int sys_dev2addr(const char *dev, struct sockaddr *addr)
+{
+    int rc = 0;
     struct ifreq ifr;
-
-    fd = socket(AF_INET, SOCK_STREAM, 0);
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (fd < 0) {
-    	rc = -1;
-    	goto out;
+        rc = -1;
+        goto out;
     }
 
     ifr.ifr_addr.sa_family = AF_INET;
-
     ifr.ifr_name[sizeof(ifr.ifr_name) - 1] = 0;
-    strncpy(ifr.ifr_name , dev , sys_min(strlen(dev), sizeof(ifr.ifr_name) - 1));
+    strncpy(ifr.ifr_name, dev, sys_min(strlen(dev), sizeof(ifr.ifr_name) - 1));
 
     rc = ioctl(fd, SIOCGIFADDR, &ifr);
     if (rc >= 0 && addr) {
@@ -169,53 +180,96 @@ int sys_dev2addr(char *dev, struct sockaddr_in *addr)
     close(fd);
 
 out:
-	return rc;
+    return rc;
 }
 
-int sys_gateway(struct sockaddr_in *addr)
+bool sys_gateway(struct sockaddr *addr, sa_family_t family)
 {
-    char* gateway = NULL;
+    sockaddr_store_t temp_addr;
+    bool found = false;
     char line[256];
-    char cmd[] = "route -n | grep 'UG[ \t]' | awk '{print $2}'";
-    FILE* file = NULL;
+    const char cmd4[] = "route -n | grep 'UG[ \t]' | awk '{print $2}'";
+    const char cmd6[] = "route -6 -n | grep 'UG[ \t]' | awk '{print $2}'";
+    const char *cmd_ptr = (family == AF_INET ? cmd4 : cmd6);
 
-    file = popen(cmd, "r");
+    FILE *file = popen(cmd_ptr, "r");
+    if (!file) {
+        log_warn("Unable to execute '%s'.\n", cmd_ptr);
+        return false;
+    }
 
-    if(fgets(line, sizeof(line), file) != NULL) {
-    	gateway = line;
-    	addr->sin_addr.s_addr = inet_addr(gateway);
+    while (fgets(line, sizeof(line), file) != NULL && !found) {
+        size_t len = strlen(line);
+        if (line[len - 1] == '\n' || line[len - 1] == '\r') {
+            line[len - 1] = 0;
+        }
+        sys_str2addr(line, reinterpret_cast<struct sockaddr *>(&temp_addr), false);
+        found = (addr->sa_family == family);
+        if (found) {
+            sys_str2addr(line, addr, false);
+            log_trace("%s found gateway ip: %s\n", line, sys_addr2str(addr));
+        }
     }
 
     pclose(file);
 
-    return (gateway ? 0 : -1);
+    return found;
 }
 
-pid_t sys_procpid(const char* name)
+void sys_str2addr(const char *buf, struct sockaddr *addr, bool port)
 {
-    DIR* dir;
-    struct dirent* ent;
+    if (!buf) {
+        return;
+    }
+
+    if (!strchr(buf, ':')) {
+        inet_pton(AF_INET, buf, &((struct sockaddr_in *)addr)->sin_addr);
+        addr->sa_family = AF_INET;
+    } else {
+        struct sockaddr_in6 *addr6 = reinterpret_cast<struct sockaddr_in6 *>(addr);
+        inet_pton(AF_INET6, buf, &(addr6->sin6_addr));
+        addr->sa_family = AF_INET6;
+        addr6->sin6_flowinfo = 0;
+        addr6->sin6_scope_id = 0;
+    }
+
+    if (port) {
+        const char *p = strchr(buf, '[');
+        /* Scan port number */
+        if (p && strlen(p) > 1) {
+            unsigned int port_value;
+            if (sscanf(p, "[%u]", &port_value) == 1 && port_value <= 65535) {
+                sys_set_port(addr, port_value);
+            }
+        }
+    }
+}
+
+pid_t sys_procpid(const char *name)
+{
+    DIR *dir;
+    struct dirent *ent;
     char buf[512];
-    long  pid;
+    long pid;
     char pname[100] = {0};
     char state;
-    FILE *fp=NULL;
+    FILE *fp = NULL;
 
     if (!(dir = opendir("/proc"))) {
         perror("can't open /proc");
         return -1;
     }
 
-    while((ent = readdir(dir)) != NULL) {
+    while ((ent = readdir(dir)) != NULL) {
         long lpid = atol(ent->d_name);
-        if(lpid < 0) {
+        if (lpid < 0) {
             continue;
         }
         snprintf(buf, sizeof(buf), "/proc/%ld/stat", lpid);
         fp = fopen(buf, "r");
 
         if (fp) {
-            if ( (fscanf(fp, "%ld (%[^)]) %c", &pid, pname, &state)) != 3 ){
+            if ((fscanf(fp, "%ld (%[^)]) %c", &pid, pname, &state)) != 3) {
                 printf("fscanf failed \n");
                 fclose(fp);
                 closedir(dir);

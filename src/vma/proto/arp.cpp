@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,7 +30,6 @@
  * SOFTWARE.
  */
 
-
 #include <netinet/in.h>
 #include <linux/if_ether.h>
 #include <string.h>
@@ -41,35 +40,21 @@
 /* ARP message types (opcodes) */
 #define ARP_REQUEST 0x0001
 
-#define HWTYPE_ETHERNET 	0x0001
-#define HWTYPE_IB		0x0020
-#define IPv4_ALEN 		0x04
-#define ETHADDR_COPY(dst, src)  memcpy(dst, src, ETH_ALEN)
-#define IBADDR_COPY(dst, src)   memcpy(dst, src, IPOIB_HW_ADDR_LEN)
+#define HWTYPE_ETHERNET        0x0001
+#define HWTYPE_IB              0x0020
+#define IPv4_ALEN              0x04
+#define ETHADDR_COPY(dst, src) memcpy(dst, src, ETH_ALEN)
 
-void set_eth_arp_hdr(eth_arp_hdr *p_arph, in_addr_t ipsrc_addr, in_addr_t ipdst_addr, const uint8_t* hwsrc_addr, const uint8_t* hwdst_addr)
+void set_eth_arp_hdr(eth_arp_hdr *p_arph, in_addr_t ipsrc_addr, in_addr_t ipdst_addr,
+                     const uint8_t *hwsrc_addr, const uint8_t *hwdst_addr)
 {
-	p_arph->m_hwtype 	= htons(HWTYPE_ETHERNET);
-	p_arph->m_proto 	= htons(ETH_P_IP);
-	p_arph->m_hwlen		= ETH_ALEN;
-	p_arph->m_protolen 	= IPv4_ALEN;
-	p_arph->m_opcode	= htons(ARP_REQUEST);
-	ETHADDR_COPY(p_arph->m_shwaddr, hwsrc_addr);
-	p_arph->m_sipaddr	= ipsrc_addr;
-	ETHADDR_COPY(p_arph->m_dhwaddr, hwdst_addr);
-	p_arph->m_dipaddr	= ipdst_addr;
-}
-
-void set_ib_arp_hdr(ib_arp_hdr* p_arph, in_addr_t ipsrc_addr, in_addr_t ipdst_addr, const uint8_t* hwsrc_addr, const uint8_t* hwdst_addr)
-{
-	p_arph->m_hwtype 	= htons(HWTYPE_IB);
-	p_arph->m_proto 	= htons(ETH_P_IP);
-	p_arph->m_hwlen		= IPOIB_HW_ADDR_LEN;
-	p_arph->m_protolen 	= IPv4_ALEN;
-	p_arph->m_opcode	= htons(ARP_REQUEST);
-	IBADDR_COPY(p_arph->m_shwaddr, hwsrc_addr);
-	p_arph->m_sipaddr	= ipsrc_addr;
-	if(hwdst_addr)
-		IBADDR_COPY(p_arph->m_dhwaddr, hwdst_addr);
-	p_arph->m_dipaddr	= ipdst_addr;
+    p_arph->m_hwtype = htons(HWTYPE_ETHERNET);
+    p_arph->m_proto = htons(ETH_P_IP);
+    p_arph->m_hwlen = ETH_ALEN;
+    p_arph->m_protolen = IPv4_ALEN;
+    p_arph->m_opcode = htons(ARP_REQUEST);
+    ETHADDR_COPY(p_arph->m_shwaddr, hwsrc_addr);
+    p_arph->m_sipaddr = ipsrc_addr;
+    ETHADDR_COPY(p_arph->m_dhwaddr, hwdst_addr);
+    p_arph->m_dipaddr = ipdst_addr;
 }

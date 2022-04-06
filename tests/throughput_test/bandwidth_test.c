@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -645,7 +645,8 @@ int main(int argc, char *argv[]) {
 			}
 			break;
 		case 'r':
-			strncpy(send_rate, optarg, MAX_PATH_LENGTH);
+			strncpy(send_rate, optarg, MAX_PATH_LENGTH - 1);
+			send_rate[MAX_PATH_LENGTH - 1] = '\0';
 			user_params.sendRate=get_send_rate(send_rate);
 			
 			if (user_params.sendRateDetails == (char)KBYTE)

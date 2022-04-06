@@ -86,13 +86,11 @@ libxlio_la_SOURCES := \
 	dev/net_device_entry.cpp \
 	dev/net_device_table_mgr.cpp \
 	dev/wqe_send_handler.cpp \
-	dev/wqe_send_ib_handler.cpp \
 	dev/ring.cpp \
 	dev/ring_bond.cpp \
 	dev/ring_slave.cpp \
 	dev/ring_simple.cpp \
 	dev/ring_tap.cpp \
-	dev/ring_profile.cpp \
 	dev/ring_allocation_logic.cpp \
 	\
 	event/delta_timer.cpp \
@@ -126,6 +124,7 @@ libxlio_la_SOURCES := \
 	proto/vma_lwip.cpp \
 	proto/neighbour.cpp \
 	proto/neighbour_table_mgr.cpp \
+	proto/netlink_socket_mgr.cpp \
 	proto/L2_address.cpp \
 	proto/mem_desc.cpp \
 	proto/mapping.cpp \
@@ -141,8 +140,6 @@ libxlio_la_SOURCES := \
 	proto/dst_entry_tcp.cpp \
 	proto/header.cpp \
 	proto/arp.cpp \
-	proto/igmp_mgr.cpp \
-	proto/igmp_handler.cpp \
 	\
 	sock/sockinfo.cpp \
 	sock/sockinfo_udp.cpp \
@@ -195,10 +192,8 @@ libxlio_la_SOURCES := \
 	dev/ring_slave.h \
 	dev/ring_simple.h \
 	dev/ring_tap.h \
-	dev/ring_profile.h \
 	dev/ring_allocation_logic.h \
 	dev/wqe_send_handler.h \
-	dev/wqe_send_ib_handler.h \
 	\
 	event/command.h \
 	event/delta_timer.h \
@@ -242,7 +237,6 @@ libxlio_la_SOURCES := \
 	\
 	netlink/link_info.h \
 	netlink/neigh_info.h \
-	netlink/netlink_compatibility.h \
 	netlink/netlink_wrapper.h \
 	netlink/route_info.h \
 	\
@@ -254,9 +248,6 @@ libxlio_la_SOURCES := \
 	proto/dst_entry_udp_mc.h \
 	proto/flow_tuple.h \
 	proto/header.h \
-	proto/igmp_handler.h \
-	proto/igmp_mgr.h \
-	proto/ip_address.h \
 	proto/ip_frag.h \
 	proto/L2_address.h \
 	proto/mapping.h \
@@ -265,7 +256,6 @@ libxlio_la_SOURCES := \
 	proto/neighbour_observer.h \
 	proto/neighbour_table_mgr.h \
 	proto/netlink_socket_mgr.h \
-	proto/peer_key.h \
 	proto/route_entry.h \
 	proto/route_rule_table_key.h \
 	proto/route_table_mgr.h \
@@ -295,6 +285,7 @@ libxlio_la_SOURCES := \
 	util/libvma.h \
 	util/list.h \
 	util/sg_array.h \
+	util/ip_address.h \
 	util/sock_addr.h \
 	util/sysctl_reader.h \
 	util/sys_vars.h \

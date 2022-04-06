@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2021 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -36,28 +36,27 @@
 #include <stdint.h>
 
 #define MAX_AGGR_BYTE_PER_STREAM 0xFFFF
-#define MAX_GRO_BUFS 32
+#define MAX_GRO_BUFS             32
 
 class rfs_uc_tcp_gro;
 
-class gro_mgr
-{
+class gro_mgr {
 public:
-	gro_mgr(uint32_t flow_max, uint32_t buf_max);
-	bool 		reserve_stream(rfs_uc_tcp_gro* rfs_uc_tcp_gro);
-	bool 		is_stream_max();
-	inline uint32_t get_buf_max() { return m_n_buf_max;}
-	inline uint32_t get_byte_max() { return MAX_AGGR_BYTE_PER_STREAM;}
-	void 		flush_all(void* pv_fd_ready_array);
-	virtual 	~gro_mgr();
+    gro_mgr(uint32_t flow_max, uint32_t buf_max);
+    bool reserve_stream(rfs_uc_tcp_gro *rfs_uc_tcp_gro);
+    bool is_stream_max();
+    inline uint32_t get_buf_max() { return m_n_buf_max; }
+    inline uint32_t get_byte_max() { return MAX_AGGR_BYTE_PER_STREAM; }
+    void flush_all(void *pv_fd_ready_array);
+    virtual ~gro_mgr();
 
 private:
-	const uint32_t 	m_n_flow_max;
-	const uint32_t 	m_n_buf_max;
+    const uint32_t m_n_flow_max;
+    const uint32_t m_n_buf_max;
 
-	uint32_t 	m_n_flow_count;
+    uint32_t m_n_flow_count;
 
-	rfs_uc_tcp_gro** m_p_rfs_arr;
+    rfs_uc_tcp_gro **m_p_rfs_arr;
 };
 
 #endif /* GRO_MGR_H_ */
