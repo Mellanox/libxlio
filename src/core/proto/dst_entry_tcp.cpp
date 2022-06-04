@@ -230,7 +230,7 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
                     mem_desc *mdesc = (mem_desc *)p_tcp_iov[i].p_desc->lwip_pbuf.pbuf.desc.mdesc;
                     m_sge[i].lkey = mdesc->get_lkey(p_tcp_iov[i].p_desc, ib_ctx,
                                                     (void *)m_sge[i].addr, m_sge[i].length);
-                    if (m_sge[i].lkey == LKEY_USE_DEFAULT) {
+                    if (m_sge[i].lkey == LKEY_TX_DEFAULT) {
                         m_sge[i].lkey = m_p_ring->get_tx_lkey(m_id);
                     }
                 } else {

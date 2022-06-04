@@ -104,7 +104,7 @@ public:
         NOT_IN_USE(p_mapping);
         NOT_IN_USE(addr);
         NOT_IN_USE(length);
-        return (uint32_t)-1;
+        return LKEY_ERROR;
     }
     virtual uint32_t get_max_inline_data() { return 0; }
     ib_ctx_handler *get_ctx(ring_user_id_t id)

@@ -114,7 +114,7 @@ public:
         });
 
         if (itr == &m_iov[m_num_segments]) {
-            return LKEY_USE_DEFAULT;
+            return LKEY_TX_DEFAULT;
         }
         m_curr_lkey_index = std::distance(&m_iov[0U], itr);
         return m_aux_data[m_curr_lkey_index].mkey;
@@ -132,10 +132,10 @@ public:
             : iov({base, len})
             , mkey(key) {};
         chunk()
-            : chunk(nullptr, 0U, LKEY_USE_DEFAULT) {};
+            : chunk(nullptr, 0U, LKEY_TX_DEFAULT) {};
         inline bool is_valid()
         {
-            return iov.iov_base != nullptr && iov.iov_len != 0U && mkey != LKEY_USE_DEFAULT;
+            return iov.iov_base != nullptr && iov.iov_len != 0U && mkey != LKEY_TX_DEFAULT;
         }
     };
 

@@ -41,6 +41,9 @@
 #include "proto/mapping.h"
 #include "proto/mem_desc.h"
 
+// Forward declarations
+class ib_ctx_handler;
+
 inline static void free_lwip_pbuf(struct pbuf_custom *pbuf_custom)
 {
     mem_buf_desc_t *p_desc = (mem_buf_desc_t *)pbuf_custom;
@@ -70,14 +73,11 @@ public:
 
     static inline size_t node_offset(void) { return NODE_OFFSET(buffer_pool_area, m_node); }
 
-    /* Pointer to aligned area */
     void *m_area;
     size_t m_n_buffers;
 
 private:
-    /* Pointer to unaligned allocated block */
-    void *m_ptr;
-
+    xlio_allocator m_allocator;
     list_node<buffer_pool_area, buffer_pool_area::node_offset> m_node;
 };
 
@@ -143,7 +143,7 @@ private:
 
     bpool_stats_t *m_p_bpool_stat;
     bpool_stats_t m_bpool_stat_static;
-    xlio_allocator m_allocator;
+    xlio_allocator_hw m_allocator;
     buffer_pool_area_list_t m_areas;
     pbuf_free_custom_fn m_custom_free_function;
 

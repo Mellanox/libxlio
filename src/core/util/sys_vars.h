@@ -61,9 +61,10 @@ typedef enum {
     ALLOC_TYPE_ANON = 0,
     ALLOC_TYPE_CONTIG,
     ALLOC_TYPE_HUGEPAGES,
-    ALLOC_TYPE_EXTERNAL,
     ALLOC_TYPE_LAST_ALLOWED_TO_USE,
-    ALLOC_TYPE_REGISTER_MEMORY /* not allowed as a global parameter */
+
+    // External type cannot be configured with XLIO_MEM_ALLOC_TYPE
+    ALLOC_TYPE_EXTERNAL,
 } alloc_mode_t;
 
 enum {

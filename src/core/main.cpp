@@ -1012,6 +1012,7 @@ static void do_global_ctors_helper()
     PROFILE_BLOCK("xlio_ctors")
 
     g_init_global_ctors_done = true;
+    xlio_allocator::initialize();
     set_env_params();
     prepare_fork();
 
