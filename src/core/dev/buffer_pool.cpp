@@ -34,13 +34,11 @@
 #include "buffer_pool.h"
 
 #include <stdlib.h>
-#include <sys/param.h> // for MIN
 
 #include "utils/bullseye.h"
 #include "vlogger/vlogger.h"
 #include "util/sys_vars.h"
 #include "proto/mem_buf_desc.h"
-#include "ib_ctx_handler_collection.h"
 
 #define MODULE_NAME "bpool"
 
@@ -67,15 +65,14 @@ buffer_pool *g_buffer_pool_tx = NULL;
 buffer_pool *g_buffer_pool_zc = NULL;
 
 buffer_pool_area::buffer_pool_area(size_t buffer_nr)
+    : m_allocator(ALLOC_TYPE_HUGEPAGES)
 {
-    m_ptr = malloc(sizeof(mem_buf_desc_t) * buffer_nr + MCE_ALIGNMENT);
-    m_area = (void *)((unsigned long)((char *)m_ptr + MCE_ALIGNMENT) & (~MCE_ALIGNMENT));
+    m_area = m_allocator.alloc(sizeof(mem_buf_desc_t) * buffer_nr);
     m_n_buffers = buffer_nr;
 }
 
 buffer_pool_area::~buffer_pool_area()
 {
-    free(m_ptr);
 }
 
 // inlining a function only help in case it come before using it...
@@ -179,7 +176,9 @@ buffer_pool::buffer_pool(size_t buffer_count, size_t buf_size,
     }
 
     data_block = m_size ? m_allocator.alloc_and_reg_mr(m_size, NULL) : NULL;
-    assert(m_size == 0 || data_block != NULL);
+    if (unlikely(m_size != 0 && !data_block)) {
+        throw_xlio_exception("Failed allocating or registering data buffers");
+    }
 
     if (!buffer_count) {
         return;
@@ -223,7 +222,9 @@ void buffer_pool::free_bpool_resources()
 
 void buffer_pool::register_memory(ib_ctx_handler *p_ib_ctx_h)
 {
-    m_allocator.register_memory(m_size, p_ib_ctx_h, XLIO_IBV_ACCESS_LOCAL_WRITE);
+    if (!m_allocator.register_memory(p_ib_ctx_h)) {
+        __log_info_err("Failed to register memory for p_ib_ctx_h=%p", p_ib_ctx_h);
+    }
 }
 
 void buffer_pool::print_val_tbl()

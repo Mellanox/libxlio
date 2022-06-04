@@ -192,7 +192,7 @@ public:
     void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        if (lkey == LKEY_USE_DEFAULT) {
+        if (lkey == LKEY_TX_DEFAULT) {
             lkey = m_tx_lkey;
         }
         m_p_qp_mgr->tls_get_progress_params_rx(tir, buf, lkey);
@@ -215,7 +215,7 @@ public:
                               bool first) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        if (lkey == LKEY_USE_DEFAULT) {
+        if (lkey == LKEY_TX_DEFAULT) {
             lkey = m_tx_lkey;
         }
         m_p_qp_mgr->tls_tx_post_dump_wqe(tis, addr, len, lkey, first);

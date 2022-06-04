@@ -34,6 +34,7 @@
 #include "core/sock/sock-redirect.h"
 #include "core/util/instrumentation.h"
 
+#include <assert.h>
 #include <errno.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -58,7 +59,7 @@
 mapping_cache *g_zc_cache = NULL;
 
 mapping_t::mapping_t(file_uid_t &uid, mapping_cache *cache, ib_ctx_handler *p_ib_ctx)
-    : m_allocator()
+    : m_registrator()
 {
     m_state = MAPPING_STATE_UNMAPPED;
     m_fd = -1;
@@ -128,20 +129,27 @@ int mapping_t::map(int fd)
         mmap64(NULL, m_size, PROT_WRITE | PROT_READ, flags | MAP_NORESERVE | MAP_POPULATE, m_fd, 0);
     if (MAP_FAILED == m_addr) {
         map_logerr("mmap64() errno=%d (%s)", errno, strerror(errno));
-        orig_os_api.close(m_fd);
-        m_addr = NULL;
-        m_size = 0;
-        m_fd = -1;
-        goto failed;
+        goto failed_close_fd;
     }
 
-    /* This method doesn't return error. */
-    m_allocator.alloc_and_reg_mr(m_size, m_ib_ctx, m_addr);
+    result = m_registrator.register_memory(m_addr, m_size, m_ib_ctx);
+    if (!result) {
+        map_logerr("Failed to register mmapped memory");
+        goto failed_unmap;
+    }
     m_state = MAPPING_STATE_MAPPED;
 
     map_logdbg("Mapped: pid=%u fd=%d addr=%p size=%zu rw=%d.", (unsigned)getpid(), m_fd, m_addr,
                m_size, !!rw);
     return 0;
+
+failed_unmap:
+    (void)munmap(m_addr, m_size);
+failed_close_fd:
+    orig_os_api.close(m_fd);
+    m_addr = NULL;
+    m_size = 0;
+    m_fd = -1;
 failed:
     m_state = MAPPING_STATE_FAILED;
     return -1;
@@ -157,7 +165,7 @@ int mapping_t::unmap(void)
     map_logdbg("Unmapped: pid=%u fd=%d addr=%p size=%zu.", (unsigned)getpid(), m_fd, m_addr,
                m_size);
 
-    m_allocator.deregister_memory();
+    m_registrator.deregister_memory();
     rc = munmap(m_addr, m_size);
     if (rc < 0) {
         map_logerr("munmap() errno=%d (%s)", errno, strerror(errno));
@@ -179,7 +187,7 @@ uint32_t mapping_t::get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *p_ib_ctx, con
     NOT_IN_USE(addr);
     NOT_IN_USE(len);
 
-    return m_allocator.find_lkey_by_ib_ctx(p_ib_ctx);
+    return m_registrator.find_lkey_by_ib_ctx(p_ib_ctx);
 }
 
 bool mapping_t::memory_belongs(uintptr_t addr, size_t size)

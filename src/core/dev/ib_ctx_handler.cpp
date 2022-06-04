@@ -443,7 +443,7 @@ ts_conversion_mode_t ib_ctx_handler::get_ctx_time_converter_status()
 uint32_t ib_ctx_handler::mem_reg(void *addr, size_t length, uint64_t access)
 {
     struct ibv_mr *mr = NULL;
-    uint32_t lkey = (uint32_t)(-1);
+    uint32_t lkey = LKEY_ERROR;
 
     mr = ibv_reg_mr(m_p_ibv_pd, addr, length, access);
     VALGRIND_MAKE_MEM_DEFINED(mr, sizeof(ibv_mr));
@@ -499,7 +499,7 @@ uint32_t ib_ctx_handler::user_mem_reg(void *addr, size_t length, uint64_t access
         lkey = iter->second;
     } else {
         lkey = mem_reg(addr, length, access);
-        if (lkey == (uint32_t)(-1)) {
+        if (lkey == LKEY_ERROR) {
             ibch_logerr("Can't register user memory addr %p len %lx", addr, length);
         } else {
             m_user_mem_lkey_map[addr] = lkey;

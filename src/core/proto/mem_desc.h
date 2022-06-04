@@ -37,6 +37,8 @@
 
 #include <unordered_map>
 
+#include "utils/lock_wrapper.h"
+
 /*
  * Note, the following mem_desc implementations must be allocated with new()
  * (not by new[], nor by placement new, nor a local object on the stack,
@@ -51,8 +53,6 @@
 enum {
     DATA_SOURCE_NR_MAX = 3,
 };
-
-#define LKEY_USE_DEFAULT ((uint32_t)-2)
 
 /* forward declarations */
 class ib_ctx_handler;
@@ -78,7 +78,7 @@ public:
         NOT_IN_USE(ib_ctx);
         NOT_IN_USE(addr);
         NOT_IN_USE(len);
-        return (uint32_t)-1;
+        return LKEY_ERROR;
     }
 };
 
@@ -118,7 +118,7 @@ public:
         if (likely(m_array_size != 0)) {
             return m_array[0]->get_lkey(desc, ib_ctx, addr, len);
         } else {
-            return (uint32_t)-1;
+            return LKEY_ERROR;
         }
     }
 

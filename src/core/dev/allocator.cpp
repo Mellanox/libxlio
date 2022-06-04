@@ -30,392 +30,392 @@
  * SOFTWARE.
  */
 
-#include <dev/allocator.h>
-#include <sys/shm.h>
+#include "allocator.h"
+
+#include <stdlib.h>
 #include <sys/mman.h>
+
+#include "vlogger/vlogger.h"
+#include "ib_ctx_handler_collection.h"
+#include "util/vtypes.h"
 
 #define MODULE_NAME "allocator"
 
+static size_t s_hugepagemask = 0;
+
 xlio_allocator::xlio_allocator()
+    : xlio_allocator(nullptr, nullptr)
 {
-    __log_info_dbg("");
+}
 
-    m_shmid = -1;
-    m_length = 0;
-    m_data_block = NULL;
-    m_mem_alloc_type = safe_mce_sys().mem_alloc_type;
-    m_memalloc = NULL;
-    m_memfree = NULL;
-
-    __log_info_dbg("Done");
+xlio_allocator::xlio_allocator(alloc_mode_t preferable_type)
+    : xlio_allocator()
+{
+    if (m_type != ALLOC_TYPE_ANON) {
+        // Don't override ANON type since it can disable hugepages intentionally.
+        m_type = preferable_type;
+    }
 }
 
 xlio_allocator::xlio_allocator(alloc_t alloc_func, free_t free_func)
 {
-    __log_info_dbg("");
-
-    m_shmid = -1;
-    m_length = 0;
-    m_data_block = NULL;
-    m_mem_alloc_type = safe_mce_sys().mem_alloc_type;
+    m_type = safe_mce_sys().mem_alloc_type;
+    if (m_type == ALLOC_TYPE_CONTIG
+#ifdef XLIO_IBV_ACCESS_ALLOCATE_MR
+        && mce_sys_var::HYPER_MSHV == safe_mce_sys().hypervisor
+#endif
+    ) {
+        // Fallback to posix_memalign / malloc for MSHV or when IBV doesn't support it.
+        m_type = ALLOC_TYPE_ANON;
+    }
+    m_data = nullptr;
+    m_size = 0;
     m_memalloc = alloc_func;
     m_memfree = free_func;
     if (m_memalloc && m_memfree) {
-        m_mem_alloc_type = ALLOC_TYPE_EXTERNAL;
+        m_type = ALLOC_TYPE_EXTERNAL;
         __log_info_dbg("allocator uses external functions to allocate and free memory");
     }
-
-    __log_info_dbg("Done");
 }
 
+/*virtual*/
 xlio_allocator::~xlio_allocator()
 {
-    __log_info_dbg("");
+    dealloc();
+}
 
-    // Unregister memory
-    deregister_memory();
-    if (!m_data_block) {
-        __log_info_dbg("m_data_block is null");
-        return;
+/*static*/
+void xlio_allocator::initialize()
+{
+    s_hugepagemask = default_huge_page_size();
+    if (s_hugepagemask > 0) {
+        --s_hugepagemask;
     }
-    switch (m_mem_alloc_type) {
-    case ALLOC_TYPE_REGISTER_MEMORY:
-        // not allocated by us
+}
+
+void *xlio_allocator::alloc(size_t size)
+{
+    __log_info_dbg("Allocating %zu bytes", size);
+
+    switch (m_type) {
+    case ALLOC_TYPE_CONTIG:
+        // This type is allocated by ibv_reg_mr and is handled in xlio_allocator_hw. For basic
+        // xlio_allocator fallback to other methods.
+        // Fallthrough
+    case ALLOC_TYPE_HUGEPAGES:
+        m_data = alloc_huge(size);
+        if (m_data) {
+            break;
+        }
+        // Fallthrough
+    case ALLOC_TYPE_ANON:
+        long page_size;
+        page_size = sysconf(_SC_PAGESIZE);
+        if (page_size > 0) {
+            m_data = alloc_posix_memalign(size, (size_t)page_size);
+        }
+        if (!m_data) {
+            m_data = alloc_malloc(size);
+        }
         break;
     case ALLOC_TYPE_EXTERNAL:
-        m_memfree(m_data_block);
-        break;
-    case ALLOC_TYPE_CONTIG:
-        // freed as part of deregister_memory
-        break;
-    case ALLOC_TYPE_HUGEPAGES:
-        if (m_shmid > 0) {
-            if (shmdt(m_data_block) != 0) {
-                __log_info_err("shmem detach failure %m");
-            }
-        } else { // used mmap
-            if (munmap(m_data_block, m_length)) {
-                __log_info_err("failed freeing memory "
-                               "with munmap errno "
-                               "%d",
-                               errno);
-            }
+        if (m_memalloc) {
+            m_data = m_memalloc(size);
+            m_size = size;
         }
-        break;
-    case ALLOC_TYPE_ANON:
-        free(m_data_block);
+        if (!m_data) {
+            // We don't try other allocation methods, because this can affect application.
+            __log_info_warn("Failed allocating memory using external functions");
+        }
         break;
     default:
-        __log_info_err("Unknown memory allocation type %d", m_mem_alloc_type);
-        break;
+        __log_info_err("Cannot allocate memory: unexpected type (%d)", m_type);
     }
-    __log_info_dbg("Done");
+
+    if (m_data) {
+        __log_info_dbg("Allocated successfully: type=%d ptr=%p size=%zu", m_type, m_data, m_size);
+    }
+    return m_data;
 }
 
-void *xlio_allocator::alloc_and_reg_mr(size_t size, ib_ctx_handler *p_ib_ctx_h,
-                                       void *ptr /* NULL */)
+void *xlio_allocator::alloc_aligned(size_t size, size_t align)
 {
-    uint64_t access = XLIO_IBV_ACCESS_LOCAL_WRITE;
+    __log_info_dbg("Allocating %zu bytes aligned to %zu", size, align);
 
-    if (ptr) {
-        m_mem_alloc_type = ALLOC_TYPE_REGISTER_MEMORY;
+    if (m_type == ALLOC_TYPE_HUGEPAGES && (s_hugepagemask + 1) % align == 0) {
+        m_data = alloc_huge(size);
     }
-    switch (m_mem_alloc_type) {
-    case ALLOC_TYPE_REGISTER_MEMORY:
-        m_data_block = ptr;
-        register_memory(size, p_ib_ctx_h, access);
-        break;
-    case ALLOC_TYPE_EXTERNAL:
-        ptr = m_memalloc(size);
-        if (NULL == ptr) {
-            __log_info_dbg("Failed allocating using external functions, "
-                           "falling back to another memory allocation method");
-        } else {
-            m_data_block = ptr;
-            m_length = size;
-            register_memory(m_length, p_ib_ctx_h, access);
-            break;
-        }
-    // fallthrough
-    case ALLOC_TYPE_HUGEPAGES:
-        if (!hugetlb_alloc(size)) {
-            __log_info_dbg("Failed allocating huge pages, "
-                           "falling back to another memory allocation method");
-        } else {
-            __log_info_dbg("Huge pages allocation passed successfully");
-            m_mem_alloc_type = ALLOC_TYPE_HUGEPAGES;
-            register_memory(size, p_ib_ctx_h, access);
-            break;
-        }
-    // fallthrough
-    case ALLOC_TYPE_CONTIG:
-#ifdef XLIO_IBV_ACCESS_ALLOCATE_MR
-        if (mce_sys_var::HYPER_MSHV != safe_mce_sys().hypervisor) {
-            register_memory(size, p_ib_ctx_h, (access | XLIO_IBV_ACCESS_ALLOCATE_MR));
-            __log_info_dbg("Contiguous pages allocation passed successfully");
-            m_mem_alloc_type = ALLOC_TYPE_CONTIG;
-            break;
-        }
-#endif
-    // fallthrough
-    case ALLOC_TYPE_ANON:
-    default:
-        __log_info_dbg("allocating memory using malloc()");
-        align_simple_malloc(size); // if fail will raise exception
-        m_mem_alloc_type = ALLOC_TYPE_ANON;
-        register_memory(size, p_ib_ctx_h, access);
-        break;
+    if (!m_data) {
+        m_data = alloc_posix_memalign(size, align);
     }
-    __log_info_dbg("allocated memory using type: %d at %p, size %zd", m_mem_alloc_type,
-                   m_data_block, size);
-
-    return m_data_block;
+    if (m_data) {
+        __log_info_dbg("Allocated successfully: type=%d ptr=%p size=%zu alignment=%zu", m_type,
+                       m_data, m_size, align);
+    }
+    return m_data;
 }
 
-uint32_t xlio_allocator::find_lkey_by_ib_ctx(ib_ctx_handler *p_ib_ctx_h) const
-{
-    lkey_map_ib_ctx_map_t::const_iterator iter = m_lkey_map_ib_ctx.find(p_ib_ctx_h);
-    if (iter != m_lkey_map_ib_ctx.end()) {
-        return iter->second;
-    }
-
-    return (uint32_t)(-1);
-}
-
-bool xlio_allocator::hugetlb_alloc(size_t sz_bytes)
-{
-    static size_t hugepagemask = 0;
-
-    if (!hugepagemask) {
-        hugepagemask = default_huge_page_size();
-        if (!hugepagemask) {
-            return false;
-        }
-        hugepagemask -= 1;
-    }
-
-    m_length = (sz_bytes + hugepagemask) & (~hugepagemask);
-
-    if (hugetlb_mmap_alloc()) {
-        return true;
-    }
-    if (hugetlb_sysv_alloc()) {
-        return true;
-    }
-
-    VLOG_PRINTF_ONCE_THEN_DEBUG(VLOG_WARNING,
-                                "**************************************************************\n");
-    VLOG_PRINTF_ONCE_THEN_DEBUG(VLOG_WARNING,
-                                "* NO IMMEDIATE ACTION NEEDED!                                 \n");
-    VLOG_PRINTF_ONCE_THEN_DEBUG(VLOG_WARNING,
-                                "* Not enough hugepage resources for " PRODUCT_NAME
-                                " memory allocation.    \n");
-    VLOG_PRINTF_ONCE_THEN_DEBUG(VLOG_WARNING,
-                                "* " PRODUCT_NAME
-                                " will continue working with regular memory allocation.   \n");
-    VLOG_PRINTF_ONCE_THEN_DEBUG(
-        VLOG_INFO, "   * Optional:                                                   \n");
-    VLOG_PRINTF_ONCE_THEN_DEBUG(
-        VLOG_INFO, "   *   1. Switch to a different memory allocation type           \n");
-    VLOG_PRINTF_ONCE_THEN_DEBUG(
-        VLOG_INFO, "   *      (%s!= %d)                                              \n",
-        SYS_VAR_MEM_ALLOC_TYPE, ALLOC_TYPE_HUGEPAGES);
-    VLOG_PRINTF_ONCE_THEN_DEBUG(
-        VLOG_INFO, "   *   2. Restart process after increasing the number of         \n");
-    VLOG_PRINTF_ONCE_THEN_DEBUG(
-        VLOG_INFO, "   *      hugepages resources in the system:                     \n");
-    VLOG_PRINTF_ONCE_THEN_DEBUG(
-        VLOG_INFO, "   *      \"echo 1000000000 > /proc/sys/kernel/shmmax\"          \n");
-    VLOG_PRINTF_ONCE_THEN_DEBUG(
-        VLOG_INFO, "   *      \"echo 800 > /proc/sys/vm/nr_hugepages\"               \n");
-    VLOG_PRINTF_ONCE_THEN_DEBUG(
-        VLOG_WARNING,
-        "* Please refer to the memory allocation section in the " PRODUCT_NAME "'s  \n");
-    VLOG_PRINTF_ONCE_THEN_DEBUG(VLOG_WARNING,
-                                "* User Manual for more information                            \n");
-    VLOG_PRINTF_ONCE_THEN_DEBUG(VLOG_WARNING,
-                                "**************************************************************\n");
-    return false;
-}
-
-bool xlio_allocator::hugetlb_mmap_alloc()
+void *xlio_allocator::alloc_huge(size_t size)
 {
 #ifdef MAP_HUGETLB
-    __log_info_dbg("Allocating %zd bytes in huge tlb using mmap", m_length);
+    __log_info_dbg("Allocating %zu bytes in huge tlb using mmap", size);
 
-    m_data_block = mmap(NULL, m_length, PROT_READ | PROT_WRITE,
-                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_HUGETLB, -1, 0);
-    if (m_data_block == MAP_FAILED) {
-        __log_info_dbg("failed allocating %zd using mmap %d", m_length, errno);
-        m_data_block = NULL;
-        return false;
+    if (unlikely(s_hugepagemask == 0)) {
+        __log_info_dbg("Hugepages are not supported");
+        return nullptr;
     }
-    return true;
-#else
-    return false;
+
+    size = (size + s_hugepagemask) & ~s_hugepagemask;
+    m_data = mmap(NULL, size, PROT_READ | PROT_WRITE,
+                  MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_HUGETLB, -1, 0);
+    if (m_data == MAP_FAILED) {
+        __log_info_dbg("mmap failed (errno=%d)", errno);
+        if (errno == ENOMEM && m_type == ALLOC_TYPE_HUGEPAGES) {
+            print_hugepages_warning();
+        }
+        m_data = nullptr;
+    } else {
+        m_type = ALLOC_TYPE_HUGEPAGES;
+        m_size = size;
+    }
 #endif
+    return m_data;
 }
 
-bool xlio_allocator::hugetlb_sysv_alloc()
+void *xlio_allocator::alloc_posix_memalign(size_t size, size_t align)
 {
-    __log_info_dbg("Allocating %zd bytes in huge tlb with shmget", m_length);
-
-    // allocate memory
-    m_shmid = shmget(IPC_PRIVATE, m_length, SHM_HUGETLB | IPC_CREAT | SHM_R | SHM_W);
-    if (m_shmid < 0) {
-        return false;
+    int rc = posix_memalign(&m_data, align, size);
+    if (rc == 0 && m_data) {
+        m_type = ALLOC_TYPE_ANON;
+        m_size = size;
+    } else {
+        m_data = nullptr;
+        __log_info_dbg("posix_memalign failed: error=%d size=%zu align=%zu", rc, size, align);
     }
+    return m_data;
+}
 
-    // get pointer to allocated memory
-    m_data_block = shmat(m_shmid, NULL, 0);
-    if (m_data_block == (void *)-1) {
-        __log_info_warn("Shared memory attach failure (errno=%d %m)", errno);
-        shmctl(m_shmid, IPC_RMID, NULL);
-        m_shmid = -1;
-        m_data_block = NULL;
-        return false;
+void *xlio_allocator::alloc_malloc(size_t size)
+{
+    m_data = malloc(size);
+    if (m_data) {
+        m_type = ALLOC_TYPE_ANON;
+        m_size = size;
+    } else {
+        __log_info_dbg("malloc failed: errno=%d size=%zu", errno, size);
     }
+    return m_data;
+}
 
-    // mark 'to be destroyed' when process detaches from shmem segment
-    // this will clear the HugePage resources even if process if killed not nicely
-    if (shmctl(m_shmid, IPC_RMID, NULL)) {
-        __log_info_warn("Shared memory contrl mark 'to be destroyed' failed "
-                        "(errno=%d %m)",
-                        errno);
+void xlio_allocator::dealloc()
+{
+    if (!m_data) {
+        return;
     }
+    __log_info_dbg("Freeing memory: type=%d ptr=%p size=%zu", m_type, m_data, m_size);
 
-    // We want to determine now that we can lock it. Note: it was claimed
-    // that without actual mlock, linux might be buggy on this with huge-pages
-    int rc = mlock(m_data_block, m_length);
-    if (rc != 0) {
-        __log_info_warn("mlock of shared memory failure (errno=%d %m)", errno);
-        if (shmdt(m_data_block) != 0) {
-            __log_info_err("shmem detach failure %m");
+    switch (m_type) {
+    case ALLOC_TYPE_HUGEPAGES:
+        if (munmap(m_data, m_size) != 0) {
+            __log_info_err("munmap failed (errno=%d)", errno);
         }
-        m_data_block = NULL; // no value to try shmdt later
-        m_shmid = -1;
+        break;
+    case ALLOC_TYPE_ANON:
+        free(m_data);
+        break;
+    case ALLOC_TYPE_EXTERNAL:
+        if (m_memfree) {
+            m_memfree(m_data);
+        }
+        break;
+    case ALLOC_TYPE_CONTIG:
+        // Memory was allocated by ibv_reg_mr, don't free it here.
+        break;
+    default:
+        __log_info_err("Cannot free memory: unknown allocator type (%d)", m_type);
+    }
+    m_data = nullptr;
+}
+
+void xlio_allocator::print_hugepages_warning()
+{
+#define _P VLOG_PRINTF_ONCE_THEN_DEBUG
+    _P(VLOG_WARNING, "**************************************************************\n");
+    _P(VLOG_WARNING, "* NO IMMEDIATE ACTION NEEDED!                                 \n");
+    _P(VLOG_WARNING, "* Not enough hugepage resources for " PRODUCT_NAME " memory allocation.  \n");
+    _P(VLOG_WARNING, "* " PRODUCT_NAME " will continue working with regular memory allocation. \n");
+    _P(VLOG_INFO, "*   To avoid this message, either increase number of hugepages\n");
+    _P(VLOG_INFO, "*   or switch to a different memory allocation type           \n");
+    _P(VLOG_INFO, "*      (%s != %d)\n", SYS_VAR_MEM_ALLOC_TYPE, ALLOC_TYPE_HUGEPAGES);
+    _P(VLOG_WARNING, "* Please refer to the memory allocation section in the " PRODUCT_NAME "'s\n");
+    _P(VLOG_WARNING, "* User Manual for more information                            \n");
+    _P(VLOG_WARNING, "**************************************************************\n");
+#undef _P
+}
+
+xlio_registrator::xlio_registrator()
+{
+}
+
+/*virtual*/
+xlio_registrator::~xlio_registrator()
+{
+    deregister_memory();
+}
+
+uint32_t xlio_registrator::register_memory_single(void *data, size_t size,
+                                                  ib_ctx_handler *p_ib_ctx_h, uint64_t access)
+{
+    uint32_t lkey;
+
+    assert(p_ib_ctx_h);
+
+    lkey = p_ib_ctx_h->mem_reg(data, size, access);
+    if (lkey == LKEY_ERROR) {
+        __log_info_warn("Failure during memory registration on dev %s addr=%p size=%zu",
+                        p_ib_ctx_h->get_ibname(), data, size);
+        __log_info_warn("This might happen due to low MTT entries. "
+                        "Please refer to README for more info");
+        return LKEY_ERROR;
+    }
+
+    m_lkey_map_ib_ctx[p_ib_ctx_h] = lkey;
+    errno = 0; // ibv_reg_mr() set errno=12 despite successful returning
+    __log_info_dbg("Registered memory on dev %s addr=%p size=%zu", p_ib_ctx_h->get_ibname(), data,
+                   size);
+
+    return lkey;
+}
+
+bool xlio_registrator::register_memory(void *&data, size_t size, ib_ctx_handler *p_ib_ctx_h,
+                                       uint64_t access)
+{
+    uint32_t lkey;
+
+#ifdef XLIO_IBV_ACCESS_ALLOCATE_MR
+    bool do_allocation = !!(access & XLIO_IBV_ACCESS_ALLOCATE_MR);
+    if (do_allocation && data) {
+        __log_info_dbg("Failure: allocation is requested, but not NULL pointer provided");
         return false;
     }
+#endif
 
-    return true;
-}
-
-void xlio_allocator::align_simple_malloc(size_t sz_bytes)
-{
-    int ret = 0;
-    long page_size = sysconf(_SC_PAGESIZE);
-
-    if (page_size > 0) {
-        m_length = (sz_bytes + page_size - 1) & ~(page_size - 1);
-        ret = posix_memalign(&m_data_block, page_size, m_length);
-        if (!ret) {
-            __log_info_dbg("allocated %zd aligned memory at %p", m_length, m_data_block);
-            return;
+    if (p_ib_ctx_h) {
+        // Specific ib context path
+        lkey = register_memory_single(data, size, p_ib_ctx_h, access);
+#ifdef XLIO_IBV_ACCESS_ALLOCATE_MR
+        if (lkey != LKEY_ERROR && do_allocation) {
+            data = p_ib_ctx_h->get_mem_reg(lkey)->addr;
         }
+#endif
+        return lkey != LKEY_ERROR;
     }
-    __log_info_dbg("failed allocating memory with posix_memalign size %zd "
-                   "returned %d (errno=%d %s) ",
-                   m_length, ret, errno, strerror(errno));
 
-    m_length = sz_bytes;
-    m_data_block = malloc(sz_bytes);
-
-    if (m_data_block == NULL) {
-        __log_info_dbg("failed allocating data memory block "
-                       "(size=%lu bytes) (errno=%d %s)",
-                       sz_bytes, errno, strerror(errno));
-        throw_xlio_exception("failed allocating data memory block");
-    }
-    __log_info_dbg("allocated memory using malloc()");
-}
-
-void xlio_allocator::register_memory(size_t size, ib_ctx_handler *p_ib_ctx_h, uint64_t access)
-{
-    ib_context_map_t *ib_ctx_map = NULL;
-    ib_ctx_handler *p_ib_ctx_h_ref = p_ib_ctx_h;
-    uint32_t lkey = (uint32_t)(-1);
-    bool failed = false;
-
-    ib_ctx_map = g_p_ib_ctx_handler_collection->get_ib_cxt_list();
-    if (ib_ctx_map) {
-
+    // Path for all ib contextes
+    ib_context_map_t *ib_ctx_map = g_p_ib_ctx_handler_collection->get_ib_cxt_list();
+    if (likely(ib_ctx_map)) {
         for (const auto &ib_ctx_key_val : *ib_ctx_map) {
             p_ib_ctx_h = ib_ctx_key_val.second;
-            if (p_ib_ctx_h_ref && p_ib_ctx_h != p_ib_ctx_h_ref) {
-                continue;
-            }
-            lkey = p_ib_ctx_h->mem_reg(m_data_block, size, access);
-            if (lkey == (uint32_t)(-1)) {
-                __log_info_warn("Failure during memory registration on dev: %s addr=%p length=%lu",
-                                p_ib_ctx_h->get_ibname(), m_data_block, size);
-                failed = true;
-                break;
-            } else {
-                m_lkey_map_ib_ctx[p_ib_ctx_h] = lkey;
-                if (NULL == m_data_block) {
-                    m_data_block = p_ib_ctx_h->get_mem_reg(lkey)->addr;
-                }
-                errno = 0; // ibv_reg_mr() set errno=12 despite successful returning
+            lkey = register_memory_single(data, size, p_ib_ctx_h, access);
+
 #ifdef XLIO_IBV_ACCESS_ALLOCATE_MR
-                if ((access & XLIO_IBV_ACCESS_ALLOCATE_MR) != 0) { // contig pages mode
-                    // When using 'IBV_ACCESS_ALLOCATE_MR', ibv_reg_mr will return a pointer that
-                    // its 'addr' field will hold the address of the allocated memory. Second
-                    // registration and above is done using 'IBV_ACCESS_LOCAL_WRITE' and the 'addr'
-                    // we received from the first registration.
-                    access &= ~XLIO_IBV_ACCESS_ALLOCATE_MR;
-                }
+            if (lkey == LKEY_ERROR && do_allocation) {
+                data = nullptr;
+            }
+            if (lkey != LKEY_ERROR && (access & XLIO_IBV_ACCESS_ALLOCATE_MR)) {
+                data = p_ib_ctx_h->get_mem_reg(lkey)->addr;
+                access &= ~XLIO_IBV_ACCESS_ALLOCATE_MR;
+            }
 #endif
-                __log_info_dbg("Registered memory on dev: %s addr=%p length=%lu",
-                               p_ib_ctx_h->get_ibname(), m_data_block, size);
-            }
-            if (p_ib_ctx_h == p_ib_ctx_h_ref) {
-                break;
+
+            if (lkey == LKEY_ERROR) {
+                deregister_memory();
+                return false;
             }
         }
     }
-
-    /* Possible cases:
-     * 1. no IB device: it is not possible to register memory
-     *  - return w/o error
-     * 2. p_ib_ctx_h is null: try to register on all IB devices
-     *  - fatal return if at least one IB device can not register memory
-     *  - return w/o error in case no issue is observed
-     * 3. p_ib_ctx is defined: try to register on specific device
-     *  - fatal return if device is found and registration fails
-     *  - return w/o error in case no issue is observed or device is not found
-     */
-    if (failed) {
-        __log_info_warn("Failed registering memory, This might happen "
-                        "due to low MTT entries. Please refer to README.txt "
-                        "for more info");
-        if (m_data_block) {
-            __log_info_dbg("Failed registering memory block with device "
-                           "(ptr=%p size=%ld) (errno=%d %s)",
-                           m_data_block, size, errno, strerror(errno));
-        }
-        throw_xlio_exception("Failed registering memory");
-    }
-
-    return;
+    return true;
 }
 
-void xlio_allocator::deregister_memory()
+bool xlio_registrator::register_memory(void *data, size_t size, ib_ctx_handler *p_ib_ctx_h)
 {
-    ib_ctx_handler *p_ib_ctx_h = NULL;
-    ib_context_map_t *ib_ctx_map = NULL;
-    uint32_t lkey = (uint32_t)(-1);
+    return register_memory(data, size, p_ib_ctx_h, XLIO_IBV_ACCESS_LOCAL_WRITE);
+}
+
+void xlio_registrator::deregister_memory()
+{
+    ib_ctx_handler *p_ib_ctx_h;
+    ib_context_map_t *ib_ctx_map;
+    uint32_t lkey;
 
     ib_ctx_map = g_p_ib_ctx_handler_collection->get_ib_cxt_list();
     if (ib_ctx_map) {
-
         for (const auto &ib_ctx_key_val : *ib_ctx_map) {
             p_ib_ctx_h = ib_ctx_key_val.second;
             lkey = find_lkey_by_ib_ctx(p_ib_ctx_h);
-            if (lkey != (uint32_t)(-1)) {
+            if (lkey != LKEY_ERROR) {
                 p_ib_ctx_h->mem_dereg(lkey);
                 m_lkey_map_ib_ctx.erase(p_ib_ctx_h);
             }
         }
     }
     m_lkey_map_ib_ctx.clear();
+}
+
+uint32_t xlio_registrator::find_lkey_by_ib_ctx(ib_ctx_handler *p_ib_ctx_h) const
+{
+    auto iter = m_lkey_map_ib_ctx.find(p_ib_ctx_h);
+
+    return (iter != m_lkey_map_ib_ctx.end()) ? iter->second : LKEY_ERROR;
+}
+
+xlio_allocator_hw::xlio_allocator_hw()
+    : xlio_allocator()
+    , xlio_registrator()
+{
+}
+
+xlio_allocator_hw::xlio_allocator_hw(alloc_t alloc_func, free_t free_func)
+    : xlio_allocator(alloc_func, free_func)
+    , xlio_registrator()
+{
+}
+
+/*virtual*/
+xlio_allocator_hw::~xlio_allocator_hw()
+{
+}
+
+void *xlio_allocator_hw::alloc_and_reg_mr(size_t size, ib_ctx_handler *p_ib_ctx_h, uint64_t access)
+{
+    if (m_type != ALLOC_TYPE_CONTIG) {
+        m_data = alloc(size);
+        if (!m_data) {
+            return nullptr;
+        }
+    }
+
+#ifdef XLIO_IBV_ACCESS_ALLOCATE_MR
+    access &= ~XLIO_IBV_ACCESS_ALLOCATE_MR;
+    if (m_type == ALLOC_TYPE_CONTIG) {
+        // This type is allocated by ibv_reg_mr.
+        access |= XLIO_IBV_ACCESS_ALLOCATE_MR;
+        m_size = size;
+    }
+#endif
+
+    if (!xlio_registrator::register_memory(m_data, m_size, p_ib_ctx_h, access)) {
+        dealloc();
+    }
+    return m_data;
+}
+
+void *xlio_allocator_hw::alloc_and_reg_mr(size_t size, ib_ctx_handler *p_ib_ctx_h)
+{
+    return alloc_and_reg_mr(size, p_ib_ctx_h, XLIO_IBV_ACCESS_LOCAL_WRITE);
+}
+
+bool xlio_allocator_hw::register_memory(ib_ctx_handler *p_ib_ctx_h)
+{
+    return m_data && xlio_registrator::register_memory(m_data, m_size, p_ib_ctx_h);
 }

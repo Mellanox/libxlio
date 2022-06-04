@@ -86,12 +86,12 @@ static inline uint64_t ntohll(uint64_t x)
 #define IN_MULTICAST_N(a) IN_CLASSD_N(a)
 #define IS_BROADCAST_N(a) IN_CLASSE_N(a)
 
-// printf formating when IP is in network byte ordering (for LITTLE_ENDIAN)
+// printf formatting when IP is in network byte ordering (for LITTLE_ENDIAN)
 #define NETWORK_IP_PRINTQUAD_LITTLE_ENDIAN(ip)                                                     \
     (uint8_t)((ip)&0xff), (uint8_t)(((ip) >> 8) & 0xff), (uint8_t)(((ip) >> 16) & 0xff),           \
         (uint8_t)(((ip) >> 24) & 0xff)
 
-// printf formating when IP is in host byte ordering (for LITTLE_ENDIAN)
+// printf formatting when IP is in host byte ordering (for LITTLE_ENDIAN)
 #define HOST_IP_PRINTQUAD_LITTLE_ENDIAN(ip)                                                        \
     (uint8_t)(((ip) >> 24) & 0xff), (uint8_t)(((ip) >> 16) & 0xff), (uint8_t)(((ip) >> 8) & 0xff), \
         (uint8_t)((ip)&0xff)
@@ -165,5 +165,10 @@ struct __attribute__((packed)) vlanhdr {
 
 // Fake fd for non-existent shadow socket
 #define SOCKET_FAKE_FD (-2)
+
+// Special value to indicate an error in API that returns an lkey
+#define LKEY_ERROR ((uint32_t)-1)
+// Special value that means to use lkey from TX buffer pool
+#define LKEY_TX_DEFAULT ((uint32_t)-2)
 
 #endif // VTYPES_H

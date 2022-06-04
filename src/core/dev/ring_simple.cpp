@@ -1184,7 +1184,7 @@ uint32_t ring_simple::get_tx_user_lkey(void *addr, size_t length, void *p_mappin
             lkey = iter->second;
         } else {
             lkey = m_p_ib_ctx->user_mem_reg(addr, length, XLIO_IBV_ACCESS_LOCAL_WRITE);
-            if (lkey == (uint32_t)(-1)) {
+            if (lkey == LKEY_ERROR) {
                 ring_logerr("Can't register user memory addr %p len %lx", addr, length);
             } else {
                 m_user_lkey_map[addr] = lkey;

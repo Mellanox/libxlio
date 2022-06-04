@@ -33,11 +33,11 @@
 #ifndef _MAPPING_H
 #define _MAPPING_H
 
-#include "core/dev/allocator.h"
-#include "core/proto/mem_desc.h"
-#include "core/util/xlio_list.h"
+#include "dev/allocator.h"
+#include "proto/mem_desc.h"
+#include "util/xlio_list.h"
+#include "utils/lock_wrapper.h"
 
-#include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -93,6 +93,9 @@ public:
 
     static inline size_t mapping_node_offset(void) { return NODE_OFFSET(mapping_t, m_node); }
 
+private:
+    int duplicate_fd(int fd, bool &rw);
+
 public:
     mapping_state_t m_state;
     int m_fd;
@@ -101,13 +104,11 @@ public:
     size_t m_size;
     uint32_t m_ref;
     uint32_t m_owners;
-    ib_ctx_handler *m_ib_ctx;
-    xlio_allocator m_allocator;
 
 private:
-    int duplicate_fd(int fd, bool &rw);
-
     mapping_cache *p_cache;
+    ib_ctx_handler *m_ib_ctx;
+    xlio_registrator m_registrator;
     list_node<mapping_t, mapping_t::mapping_node_offset> m_node;
 };
 

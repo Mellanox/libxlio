@@ -252,7 +252,7 @@ public:
         const uintptr_t ubuf = (uintptr_t)m_p_buf->p_buffer;
 
         if (ubuf <= uaddr && uaddr < ubuf + m_p_buf->sz_buffer) {
-            return LKEY_USE_DEFAULT;
+            return LKEY_TX_DEFAULT;
         } else {
             return m_p_zc_owner->get_lkey(desc, ib_ctx, addr, len);
         }
@@ -889,7 +889,7 @@ int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_
                 bool is_zerocopy = rec->m_p_zc_owner != nullptr;
                 unsigned mss = m_p_sock->get_mss();
                 uint32_t totlen = seg->seqno - rec->m_seqno;
-                uint32_t lkey = LKEY_USE_DEFAULT;
+                uint32_t lkey = LKEY_TX_DEFAULT;
                 uint32_t hdrlen = 0;
                 uint32_t taillen = 0;
 
@@ -941,7 +941,7 @@ int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_
                     if (is_zerocopy) {
                         /* hdrlen and taillen are prepared above. */
                         m_p_tx_ring->tls_tx_post_dump_wqe(m_p_tis, (void *)addr, hdrlen,
-                                                          LKEY_USE_DEFAULT, true);
+                                                          LKEY_TX_DEFAULT, true);
                         addr_tail = addr + hdrlen;
                         addr = rec->m_p_zc_data;
                         totlen = totlen - hdrlen - taillen; /* Remaining ZC part. */
@@ -963,7 +963,7 @@ int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_
 
                     if (is_zerocopy && taillen) {
                         m_p_tx_ring->tls_tx_post_dump_wqe(m_p_tis, (void *)addr_tail, taillen,
-                                                          LKEY_USE_DEFAULT, false);
+                                                          LKEY_TX_DEFAULT, false);
                         --dump_nr;
                     }
                 }
@@ -1295,7 +1295,7 @@ err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
         if (likely(m_rx_psv_buf->sz_buffer >= (size_t)(payload - m_rx_psv_buf->p_buffer + 64))) {
             memset(m_rx_psv_buf->lwip_pbuf.pbuf.payload, 0, 64);
             m_rx_resync_recno = m_next_recno_rx;
-            m_p_tx_ring->tls_get_progress_params_rx(m_p_tir, payload, LKEY_USE_DEFAULT);
+            m_p_tx_ring->tls_get_progress_params_rx(m_p_tir, payload, LKEY_TX_DEFAULT);
             ++m_p_sock->m_p_socket_stats->tls_counters.n_tls_rx_resync;
         }
     }
