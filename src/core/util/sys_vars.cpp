@@ -1731,19 +1731,6 @@ void mce_sys_var::get_env_params()
         neigh_uc_arp_quata = (uint32_t)atoi(env_ptr);
     }
 
-    if ((getenv(SYS_VAR_HUGETBL)) != NULL) {
-        vlog_printf(VLOG_WARNING,
-                    "******************************************************************************"
-                    "****************************************\n");
-        vlog_printf(VLOG_WARNING,
-                    "The '%s' parameter is no longer supported, please refer to '%s' in README.txt "
-                    "for more info\n",
-                    SYS_VAR_HUGETBL, SYS_VAR_MEM_ALLOC_TYPE);
-        vlog_printf(VLOG_WARNING,
-                    "******************************************************************************"
-                    "****************************************\n");
-    }
-
     if ((env_ptr = getenv(SYS_VAR_MEM_ALLOC_TYPE)) != NULL) {
         mem_alloc_type = (alloc_mode_t)atoi(env_ptr);
     }

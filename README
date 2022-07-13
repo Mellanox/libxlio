@@ -941,7 +941,6 @@ In case the value is 2 then library will use buffer batching with no reclaim.
 Default value is 1
 
 XLIO_MEM_ALLOC_TYPE
-This replaces the XLIO_HUGETBL parameter logic.
 XLIO will try to allocate data buffers as configured:
 	0 - "ANON" - using malloc
 	2 - "HUGEPAGES" - using huge pages.
@@ -978,11 +977,7 @@ structures to handle fork() function calls correctly and avoid data corruption.
 If ibv_fork_init() is not called or returns a non-zero status, then libibverbs
 data structures are not fork()-safe and the effect of an application calling
 fork() is undefined.
-ibv_fork_init() works on Linux kernels 2.6.17 and higher which support the
-MADV_DONTFORK flag for madvise().
-Note that XLIO's default with huge pages enabled (XLIO_HUGETBL) you should use an
-OFED stack version that support fork()ing of with huge pages (OFED 1.5 and higher).
-Default value is 0 (Disabled)
+Default value is 1 (Enabled)
 
 XLIO_CLOSE_ON_DUP2
 When this parameter is enabled, XLIO will handle the duplicate fd (oldfd),

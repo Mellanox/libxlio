@@ -633,7 +633,6 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_WAIT_AFTER_JOIN_MSEC      "XLIO_WAIT_AFTER_JOIN_MSEC"
 #define SYS_VAR_THREAD_MODE               "XLIO_THREAD_MODE"
 #define SYS_VAR_BUFFER_BATCHING_MODE      "XLIO_BUFFER_BATCHING_MODE"
-#define SYS_VAR_HUGETBL                   "XLIO_HUGETBL"
 #define SYS_VAR_MEM_ALLOC_TYPE            "XLIO_MEM_ALLOC_TYPE"
 #define SYS_VAR_FORK                      "XLIO_FORK"
 #define SYS_VAR_BF                        "XLIO_BF"
