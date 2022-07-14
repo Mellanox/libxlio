@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -62,6 +62,11 @@ enum { CMSG_XLIO_IOCTL_USER_ALLOC = 2900 };
  * Flags for Dummy send API
  */
 #define XLIO_SND_FLAGS_DUMMY MSG_SYN // equals to 0x400
+
+/*
+ * Magic value for xlio_get_api (NVDAXLIO)
+ */
+#define XLIO_MAGIC_NUMBER (0x4f494c584144564eULL)
 
 /*
  * Return values for the receive packet notify callback function
@@ -313,6 +318,12 @@ typedef xlio_recv_callback_retval_t (*xlio_recv_callback_t)(int fd, size_t sz_io
  * XLIO Extended Socket API
  */
 struct __attribute__((packed)) xlio_api_t {
+
+    /**
+     * Used to verify that API structure returned from xlio_get_api call is
+     * compatible with current XLIO library version.
+     */
+    uint64_t magic;
 
     /**
      * Used to identify which methods were initialized by XLIO as part of xlio_get_api().
@@ -572,8 +583,12 @@ static inline struct xlio_api_t *xlio_get_api()
     socklen_t len = sizeof(api_ptr);
 
     /* coverity[negative_returns] */
-    int err = getsockopt(-1, SOL_SOCKET, SO_XLIO_GET_API, &api_ptr, &len);
+    int err = getsockopt(-2, SOL_SOCKET, SO_XLIO_GET_API, &api_ptr, &len);
     if (err < 0) {
+        return NULL;
+    }
+    if (len < sizeof(struct xlio_api_t *) || api_ptr == NULL ||
+        api_ptr->magic != XLIO_MAGIC_NUMBER) {
         return NULL;
     }
     return api_ptr;

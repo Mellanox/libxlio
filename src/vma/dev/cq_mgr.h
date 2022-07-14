@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -38,7 +38,6 @@
 #include "vma/dev/qp_mgr.h"
 #include "vma/dev/ib_ctx_handler.h"
 #include "vma/util/sys_vars.h"
-#include "vma/util/hash_map.h"
 #include "vma/util/vma_stats.h"
 #include "vma/proto/mem_buf_desc.h"
 #include "vma/proto/vma_lwip.h"

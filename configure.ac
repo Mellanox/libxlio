@@ -13,8 +13,8 @@ dnl===-----------------------------------------------------------------------===
 # Update version number here:
 #
 define([prj_ver_major], 1)
-define([prj_ver_minor], 2)
-define([prj_ver_revision], 9)
+define([prj_ver_minor], 3)
+define([prj_ver_revision], 5)
 define([prj_ver_release], esyscmd([echo ${PRJ_RELEASE:=0}]))
 
 
@@ -317,6 +317,9 @@ show_section_title "Check for functions, types and structures"
 # Check fortified glibc functions
 #
 AC_CHECK_FUNCS(__read_chk __recv_chk __recvfrom_chk __poll_chk __ppoll_chk)
+
+# Check for gettid(). The wrapper appeared in glibc-2.30
+AC_CHECK_FUNCS(gettid)
 
 AC_MSG_CHECKING([for SOF_TIMESTAMPING_SOFTWARE support])
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[

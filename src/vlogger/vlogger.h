@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -347,7 +347,9 @@ extern vma_log_cb_t g_vlogger_cb;
 #define vlog_func_all_enter() vlog_printf(VLOG_FINER, "ENTER %s\n", __PRETTY_FUNCTION__);
 #define vlog_func_all_exit()  vlog_printf(VLOG_FINER, "EXIT %s\n", __PRETTY_FUNCTION__);
 
+#ifndef HAVE_GETTID
 pid_t gettid(void); // Check vlogger.cpp for implementation
+#endif
 
 void printf_backtrace(void);
 

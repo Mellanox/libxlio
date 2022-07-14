@@ -11,6 +11,9 @@ kubernetes:
   cloud: swx-k8s-spray
   nodeSelector: 'beta.kubernetes.io/os=linux'
 
+  limits: '{memory: 8Gi, cpu: 8000m}'
+  requests: '{memory: 8Gi, cpu: 8000m}'
+
 volumes:
   - {mountPath: /hpc/local/bin, hostPath: /hpc/local/bin}
   - {mountPath: /hpc/local/oss, hostPath: /hpc/local/oss}
@@ -28,6 +31,7 @@ runs_on_dockers:
   - {name: 'sl15sp2-mofed-x86_64', url: 'harbor.mellanox.com/swx-infra/x86_64/sles15sp2/builder:mofed-5.2-2.2.0.0', category: 'base', arch: 'x86_64'}
   - {name: 'fc31-mofed-x86_64',    url: 'harbor.mellanox.com/swx-infra/x86_64/fedora31/builder:mofed-5.1-1.0.7.0', category: 'base', arch: 'x86_64'}
   - {name: 'ub20.04-mofed-x86_64', url: 'harbor.mellanox.com/swx-infra/x86_64/ubuntu20.04/builder:mofed-5.2-2.2.0.0', category: 'base', arch: 'x86_64'}
+  - {name: 'ub22.04-mofed-x86_64', url: 'harbor.mellanox.com/hpcx/x86_64/ubuntu22.04/builder:mofed-5.7-0.1.1.0', category: 'base', arch: 'x86_64'}
 
 #  - {name: 'ub20.04-mofed-x86_64', url: 'harbor.mellanox.com/sw-linux-devops/mofed-5.5-0.3.0.0:ubuntu20.04-amd64', category: 'base', arch: 'x86_64'}
 #  - {name: 'ub20.04-mofed-aarch64', url: 'harbor.mellanox.com/swx-infra/aarch64/ubuntu20.04/builder:mofed-5.2-1.0.4.0', category: 'base', arch: 'aarch64'}
@@ -42,6 +46,7 @@ runs_on_dockers:
 # tool
   - {name: 'toolbox', url: 'harbor.mellanox.com/hpcx/x86_64/rhel8.3/builder:inbox', category: 'tool', arch: 'x86_64'}
   - {name: 'blackduck', url: 'harbor.mellanox.com/toolbox/ngci-centos:7.9.2009.2', category: 'tool', arch: 'x86_64'}
+  - {name: 'header-check', url: 'harbor.mellanox.com/toolbox/header_check:0.0.14', category: 'tool', arch: 'x86_64', tag: '0.0.14'}
 
 runs_on_agents:
   - {nodeLabel: 'r-aa-fatty09', category: 'base'}
@@ -73,6 +78,16 @@ steps:
       echo "variant: ${variant}"
       echo "======================================================"
       echo
+    parallel: false
+
+  - name: Copyrights
+    enable: ${do_copyrights}
+    run: env WORKSPACE=$PWD ./contrib/jenkins_tests/copyrights.sh
+    containerSelector:
+      - "{name: 'header-check', category: 'tool', variant: 1}"
+    agentSelector:
+      - "{nodeLabel: 'skip-agent'}"
+    archiveArtifacts: '*.log,*.tar.gz'
     parallel: false
 
   - name: Autogen
@@ -443,7 +458,7 @@ steps:
     module: ngci
     run: NGCIBlackDuckScan
     args:
-      projectName: "libvma"
+      projectName: "libxlio"
       projectVersion: "0.1.0"
       projectSrcPath: "src"
       attachArtifact: true

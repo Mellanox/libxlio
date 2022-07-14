@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -92,8 +92,9 @@ qp_mgr *ring_eth::create_qp_mgr(struct qp_mgr_desc *desc)
 #if defined(DEFINED_DIRECT_VERBS)
     if (qp_mgr::is_lib_mlx5(((ib_ctx_handler *)desc->slave->p_ib_ctx)->get_ibname())) {
 #if defined(DEFINED_DPCP)
-        if (safe_mce_sys().enable_dpcp_rq)
+        if (safe_mce_sys().enable_dpcp_rq) {
             return new qp_mgr_eth_mlx5_dpcp(desc, get_tx_num_wr(), m_partition);
+        }
 #endif
         return new qp_mgr_eth_mlx5(desc, get_tx_num_wr(), m_partition);
     }
@@ -347,9 +348,11 @@ void ring_simple::create_resources()
             (dpcp::DPCP_OK == m_p_ib_ctx->get_dpcp_adapter()->get_hca_capabilities(caps))) {
             m_tls.tls_tx = caps.tls_tx;
             m_tls.tls_rx = caps.tls_rx;
+            m_tls.tls_synchronize_dek = caps.synchronize_dek;
         }
         ring_logdbg("ring attributes: m_tls:tls_tx = %d", m_tls.tls_tx);
         ring_logdbg("ring attributes: m_tls:tls_rx = %d", m_tls.tls_rx);
+        ring_logdbg("ring attributes: m_tls:tls_synchronize_dek = %d", m_tls.tls_synchronize_dek);
     }
 #endif /* DEFINED_UTLS */
 
@@ -1214,13 +1217,15 @@ uint32_t ring_simple::get_tx_user_lkey(void *addr, size_t length, void *p_mappin
      * TODO In the 1st mode we don't support memory deregistration.
      */
     if (p_mapping == NULL) {
-        lkey = m_user_lkey_map.get(addr, 0);
-        if (!lkey) {
+        auto iter = m_user_lkey_map.find(addr);
+        if (iter != m_user_lkey_map.end()) {
+            lkey = iter->second;
+        } else {
             lkey = m_p_ib_ctx->user_mem_reg(addr, length, VMA_IBV_ACCESS_LOCAL_WRITE);
             if (lkey == (uint32_t)(-1)) {
                 ring_logerr("Can't register user memory addr %p len %lx", addr, length);
             } else {
-                m_user_lkey_map.set(addr, lkey);
+                m_user_lkey_map[addr] = lkey;
             }
         }
     } else {

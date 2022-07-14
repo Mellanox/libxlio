@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -192,10 +192,13 @@ public:
     virtual void set_immediate_os_sample();
     virtual void unset_immediate_os_sample();
 
+    virtual bool is_outgoing() { return false; }
+    virtual bool is_incoming() { return false; }
     virtual bool is_closable() { return true; }
 
 #if defined(DEFINED_NGINX)
     virtual void prepare_to_close_socket_pool(bool _push_pop) { NOT_IN_USE(_push_pop); }
+    virtual void set_params_for_socket_pool() {}
 #endif
 
     // In some cases we need the socket can't be deleted immidiatly

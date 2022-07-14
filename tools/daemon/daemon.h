@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -57,6 +57,10 @@
 #ifdef HAVE_LINUX_LIMITS_H
 #include <linux/limits.h>
 #endif
+
+#include <netinet/ip.h> /* for struct iphdr */
+#include <netinet/ip6.h> /* for struct ip6_hdr */
+#include <netinet/tcp.h>
 
 #include "vma/util/agent_def.h"
 #include "vma/util/list.h"
@@ -150,7 +154,8 @@ struct module_cfg {
     int lock_fd;
     const char *sock_file;
     int sock_fd;
-    int raw_fd;
+    int raw_fd_ip4;
+    int raw_fd_ip6;
     int notify_fd;
     const char *notify_dir;
     hash_t ht;
@@ -159,6 +164,18 @@ struct module_cfg {
 };
 
 extern struct module_cfg daemon_cfg;
+
+/**
+ * @struct sockaddr_store
+ * @brief Describe socket address ipv4/ipv6
+ */
+struct sockaddr_store {
+    union {
+        sa_family_t family;
+        struct sockaddr_in addr4;
+        struct sockaddr_in6 addr6;
+    };
+};
 
 /**
  * @struct store_pid
@@ -178,10 +195,8 @@ struct store_pid {
  */
 struct store_fid {
     int fid; /**< Socket id */
-    uint32_t src_ip; /**< Source IP address */
-    uint32_t dst_ip; /**< Destination IP address */
-    uint16_t src_port; /**< Source port number */
-    uint16_t dst_port; /**< Destination port number */
+    struct sockaddr_store src; /**< Source address */
+    struct sockaddr_store dst; /**< Destination address */
     uint8_t type; /**< Connection type */
     uint8_t state; /**< Current TCP state of the connection */
 };
@@ -197,12 +212,8 @@ struct store_flow {
     uint32_t if_id; /**< Interface index */
     uint32_t tap_id; /**< Tap device index */
     struct {
-        uint32_t dst_ip;
-        uint16_t dst_port;
-        struct {
-            uint32_t src_ip;
-            uint16_t src_port;
-        } t5;
+        struct sockaddr_store src; /**< Source address */
+        struct sockaddr_store dst; /**< Destination address */
     } flow;
 };
 
@@ -213,22 +224,29 @@ ssize_t sys_sendto(int sockfd, const void *buf, size_t len, int flags,
 
 char *sys_exec(const char *format, ...);
 
-static inline char *sys_addr2str(struct sockaddr_in *addr)
+static inline char *sys_addr2str(struct sockaddr_store *addr)
 {
     static char buf[100];
-    static __thread char addrbuf[sizeof(buf) + sizeof(addr->sin_port) + 5];
-    inet_ntop(AF_INET, &addr->sin_addr, buf, sizeof(buf) - 1);
-    sprintf(addrbuf, "%s:%d", buf, ntohs(addr->sin_port));
+    static __thread char addrbuf[sizeof(buf) + sizeof(uint16_t) + 5];
+    if (addr->family == AF_INET) {
+        inet_ntop(addr->family, &addr->addr4.sin_addr, buf, sizeof(buf) - 1);
+        sprintf(addrbuf, "%s:%d", buf, ntohs(addr->addr4.sin_port));
+    } else {
+        inet_ntop(addr->family, &addr->addr6.sin6_addr, buf, sizeof(buf) - 1);
+        sprintf(addrbuf, "%s:%d", buf, ntohs(addr->addr6.sin6_port));
+    }
 
     return addrbuf;
 }
 
-static inline char *sys_ip2str(uint32_t ip)
+static inline char *sys_ip2str(struct sockaddr_store *addr)
 {
     static __thread char ipbuf[100];
-    struct in_addr value = {0};
-    value.s_addr = ip;
-    inet_ntop(AF_INET, &value, ipbuf, sizeof(ipbuf) - 1);
+    if (addr->family == AF_INET) {
+        inet_ntop(addr->family, &addr->addr4.sin_addr, ipbuf, sizeof(ipbuf) - 1);
+    } else {
+        inet_ntop(addr->family, &addr->addr6.sin6_addr, ipbuf, sizeof(ipbuf) - 1);
+    }
 
     return ipbuf;
 }
@@ -324,7 +342,7 @@ static inline void sys_hexdump(void *ptr, int buflen)
             return;
         }
         out_pos += ret;
-        for (j = 0; j < 16; j++)
+        for (j = 0; j < 16; j++) {
             if (i + j < buflen) {
                 ret = sprintf(out_buf + out_pos, "%c", isprint(buf[i + j]) ? buf[i + j] : '.');
                 if (ret < 0) {
@@ -332,6 +350,7 @@ static inline void sys_hexdump(void *ptr, int buflen)
                 }
                 out_pos += ret;
             }
+        }
         ret = sprintf(out_buf + out_pos, "\n");
         if (ret < 0) {
             return;

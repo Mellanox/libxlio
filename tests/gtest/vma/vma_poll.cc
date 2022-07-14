@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -108,11 +108,10 @@ TEST_F(vma_poll, ti_1)
         ASSERT_LE(0, fd);
 
         rc = bind(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-        ASSERT_EQ(0, rc);
+        CHECK_ERR_OK(rc);
 
         rc = listen(fd, 5);
-        ASSERT_EQ(EOK, errno);
-        ASSERT_EQ(0, rc);
+        CHECK_ERR_OK(rc);
 
         rc = xlio_api->get_socket_rings_fds(fd, &_vma_ring_fd, 1);
         ASSERT_EQ(1, rc);
@@ -137,6 +136,7 @@ TEST_F(vma_poll, ti_1)
         close(fd);
 
         ASSERT_EQ(0, wait_fork(pid));
+        sleep(1U); // XLIO timers to clean fd.
     }
 }
 
@@ -172,7 +172,7 @@ TEST_F(vma_poll, ti_2)
                   sys_addr2str((struct sockaddr *)&server_addr));
 
         rc = send(fd, (void *)msg, sizeof(msg), 0);
-        EXPECT_EQ(sizeof(msg), rc);
+        EXPECT_EQ(static_cast<int>(sizeof(msg)), rc);
 
         close(fd);
 
@@ -190,11 +190,10 @@ TEST_F(vma_poll, ti_2)
         ASSERT_LE(0, fd);
 
         rc = bind(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-        ASSERT_EQ(0, rc);
+        CHECK_ERR_OK(rc);
 
         rc = listen(fd, 5);
-        ASSERT_EQ(EOK, errno);
-        ASSERT_EQ(0, rc);
+        CHECK_ERR_OK(rc);
 
         rc = xlio_api->get_socket_rings_fds(fd, &_vma_ring_fd, 1);
         ASSERT_EQ(1, rc);
@@ -221,7 +220,7 @@ TEST_F(vma_poll, ti_2)
                 rc = 0;
             }
             if (vma_comps.events & XLIO_SOCKETXTREME_PACKET) {
-                EXPECT_EQ(1, vma_comps.packet.num_bufs);
+                EXPECT_EQ(1U, vma_comps.packet.num_bufs);
                 EXPECT_LE(0, (int)vma_comps.user_data);
                 EXPECT_EQ(sizeof(msg), vma_comps.packet.total_len);
                 EXPECT_TRUE(vma_comps.packet.buff_lst->payload);
@@ -235,6 +234,7 @@ TEST_F(vma_poll, ti_2)
         close(fd);
 
         ASSERT_EQ(0, wait_fork(pid));
+        sleep(1U); // XLIO timers to clean fd.
     }
 }
 
@@ -270,7 +270,7 @@ TEST_F(vma_poll, ti_3)
                   sys_addr2str((struct sockaddr *)&server_addr));
 
         rc = send(fd, (void *)msg, sizeof(msg), 0);
-        EXPECT_EQ(sizeof(msg), rc);
+        EXPECT_EQ(static_cast<int>(sizeof(msg)), rc);
 
         close(fd);
 
@@ -289,11 +289,10 @@ TEST_F(vma_poll, ti_3)
         ASSERT_LE(0, fd);
 
         rc = bind(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-        ASSERT_EQ(0, rc);
+        CHECK_ERR_OK(rc);
 
         rc = listen(fd, 5);
-        ASSERT_EQ(EOK, errno);
-        ASSERT_EQ(0, rc);
+        CHECK_ERR_OK(rc);
 
         rc = xlio_api->get_socket_rings_fds(fd, &_vma_ring_fd, 1);
         ASSERT_EQ(1, rc);
@@ -324,7 +323,7 @@ TEST_F(vma_poll, ti_3)
                 rc = 0;
             }
             if (vma_comps.events & XLIO_SOCKETXTREME_PACKET) {
-                EXPECT_EQ(1, vma_comps.packet.num_bufs);
+                EXPECT_EQ(1U, vma_comps.packet.num_bufs);
                 EXPECT_EQ((uintptr_t)user_data, (uintptr_t)vma_comps.user_data);
                 EXPECT_EQ(sizeof(msg), vma_comps.packet.total_len);
                 EXPECT_TRUE(vma_comps.packet.buff_lst->payload);
@@ -339,6 +338,7 @@ TEST_F(vma_poll, ti_3)
         close(fd);
 
         ASSERT_EQ(0, wait_fork(pid));
+        sleep(1U); // XLIO timers to clean fd.
     }
 }
 
@@ -369,7 +369,7 @@ TEST_F(vma_poll, ti_4)
 
         rc = sendto(fd, (void *)msg, sizeof(msg), 0, (struct sockaddr *)&server_addr,
                     sizeof(server_addr));
-        EXPECT_EQ(sizeof(msg), rc);
+        EXPECT_EQ(static_cast<int>(sizeof(msg)), rc);
 
         close(fd);
 
@@ -404,7 +404,7 @@ TEST_F(vma_poll, ti_4)
                 break;
             }
             if (vma_comps.events & XLIO_SOCKETXTREME_PACKET) {
-                EXPECT_EQ(1, vma_comps.packet.num_bufs);
+                EXPECT_EQ(1U, vma_comps.packet.num_bufs);
                 EXPECT_LE(0, (int)vma_comps.user_data);
                 EXPECT_EQ(sizeof(msg), vma_comps.packet.total_len);
                 EXPECT_TRUE(vma_comps.packet.buff_lst->payload);
@@ -418,6 +418,7 @@ TEST_F(vma_poll, ti_4)
         close(fd);
 
         ASSERT_EQ(0, wait_fork(pid));
+        sleep(1U); // XLIO timers to clean fd.
     }
 }
 

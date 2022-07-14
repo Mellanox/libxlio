@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -468,7 +468,7 @@ uint32_t ib_ctx_handler::mem_reg(void *addr, size_t length, uint64_t access)
 
 void ib_ctx_handler::mem_dereg(uint32_t lkey)
 {
-    mr_map_lkey_t::iterator iter = m_mr_map_lkey.find(lkey);
+    auto iter = m_mr_map_lkey.find(lkey);
     if (iter != m_mr_map_lkey.end()) {
         struct ibv_mr *mr = iter->second;
         ibch_logdbg("dev:%s (%p) addr=%p length=%lu pd=%p", get_ibname(), m_p_ibv_device, mr->addr,
@@ -487,7 +487,7 @@ void ib_ctx_handler::mem_dereg(uint32_t lkey)
 
 struct ibv_mr *ib_ctx_handler::get_mem_reg(uint32_t lkey)
 {
-    mr_map_lkey_t::iterator iter = m_mr_map_lkey.find(lkey);
+    auto iter = m_mr_map_lkey.find(lkey);
     if (iter != m_mr_map_lkey.end()) {
         return iter->second;
     }
@@ -500,13 +500,15 @@ uint32_t ib_ctx_handler::user_mem_reg(void *addr, size_t length, uint64_t access
     auto_unlocker lock(m_lock_umr);
     uint32_t lkey;
 
-    lkey = m_user_mem_lkey_map.get(addr, 0);
-    if (!lkey) {
+    auto iter = m_user_mem_lkey_map.find(addr);
+    if (iter != m_user_mem_lkey_map.end()) {
+        lkey = iter->second;
+    } else {
         lkey = mem_reg(addr, length, access);
         if (lkey == (uint32_t)(-1)) {
             ibch_logerr("Can't register user memory addr %p len %lx", addr, length);
         } else {
-            m_user_mem_lkey_map.set(addr, lkey);
+            m_user_mem_lkey_map[addr] = lkey;
         }
     }
 

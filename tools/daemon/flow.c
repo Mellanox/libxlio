@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -72,13 +72,14 @@ struct flow_ctx {
 
 /**
  * @struct flow_element
- * @brief It is an object described tc element
+ * @brief Object to describe tc element
  */
 struct flow_element {
     struct list_head item; /**< link sequence of elements in list */
     struct list_head list; /**< head of children list */
     int ref; /**< reference counter */
-    uint32_t value[2]; /**< data */
+    uint32_t
+        value[5]; /**< data - size should be enough to keep ifindex, ipv4, ipv6, flow type etc. */
     union {
         struct flow_ctx *ctx; /**< data related if */
         uint32_t ht_id; /**< data related ip (16 bytes for internal ht id 16 bytes ht id) */
@@ -95,7 +96,7 @@ static inline void get_htid(struct flow_ctx *ctx, int prio, int *ht_krn, int *ht
 static inline void free_htid(struct flow_ctx *ctx, int ht_id);
 static inline void add_pending_list(pid_t pid, struct flow_ctx *ctx, int if_index, int ht_id,
                                     int prio, int *rc);
-static inline void free_pending_list(pid_t pid, struct flow_ctx *ctx, int if_index);
+static inline void free_pending_list(pid_t pid, struct flow_ctx *ctx, int if_index, short proto);
 static inline int get_prio(struct store_flow *value);
 static inline int get_bkt(struct store_flow *value);
 static inline int get_protocol(struct store_flow *value);
@@ -130,12 +131,13 @@ int add_flow(struct store_pid *pid_value, struct store_flow *value)
     struct list_head *cur_head = NULL;
     struct flow_element *cur_element = NULL;
     struct list_head *cur_entry = NULL;
-    uint32_t ip = value->flow.dst_ip;
+    uint32_t ip = value->flow.dst.addr4.sin_addr.s_addr;
     int ht = HANDLE_HT(value->handle);
     int bkt = HANDLE_BKT(value->handle);
     int id = HANDLE_ID(value->handle);
     int ht_internal = KERNEL_HT;
     struct flow_ctx *ctx = NULL;
+    short proto = (value->flow.dst.family == AF_INET ? ETH_P_IP : ETH_P_IPV6);
 
     /* Egress rules should be created for new tap device
      */
@@ -211,7 +213,7 @@ int add_flow(struct store_pid *pid_value, struct store_flow *value)
               cur_element->value[0], cur_element->ref);
 
     /* table list processing
-     * table id calculation is based on ip and type
+     * table id calculation is based on type and ip (ipv4/ipv6)
      * so as first step let find if hash table referenced in this flow exists
      * in the list of tables related specific interface or allocate new element related one
      */
@@ -234,14 +236,14 @@ int add_flow(struct store_pid *pid_value, struct store_flow *value)
 
         get_htid(ctx, get_prio(value), &ht_internal, &ht);
 
-        if (tc_add_filter_divisor(daemon_cfg.tc, value->if_id, get_prio(value), ht) < 0) {
+        if (tc_add_filter_divisor(daemon_cfg.tc, value->if_id, get_prio(value), ht, proto) < 0) {
             log_error("[%d] failed tc_add_filter_divisor() errno = %d\n", pid, errno);
             free(cur_element);
             rc = -EFAULT;
             goto err;
         }
-        if (tc_add_filter_link(daemon_cfg.tc, value->if_id, get_prio(value), ht_internal, ht, ip) <
-            0) {
+        if (tc_add_filter_link(daemon_cfg.tc, value->if_id, get_prio(value), ht_internal, ht,
+                               &value->flow.dst) < 0) {
             log_error("[%d] failed tc_add_filter_link() errno = %d\n", pid, errno);
             free(cur_element);
             rc = -EFAULT;
@@ -319,15 +321,13 @@ int add_flow(struct store_pid *pid_value, struct store_flow *value)
         case VMA_MSG_FLOW_TCP_3T:
         case VMA_MSG_FLOW_UDP_3T:
             rc = tc_add_filter_dev2tap(daemon_cfg.tc, value->if_id, get_prio(value), ht, bkt, id,
-                                       get_protocol(value), value->flow.dst_ip,
-                                       value->flow.dst_port, 0, 0, value->tap_id);
+                                       get_protocol(value), &value->flow.dst, NULL, value->tap_id);
             break;
         case VMA_MSG_FLOW_TCP_5T:
         case VMA_MSG_FLOW_UDP_5T:
             rc = tc_add_filter_dev2tap(daemon_cfg.tc, value->if_id, get_prio(value), ht, bkt, id,
-                                       get_protocol(value), value->flow.dst_ip,
-                                       value->flow.dst_port, value->flow.t5.src_ip,
-                                       value->flow.t5.src_port, value->tap_id);
+                                       get_protocol(value), &value->flow.dst, &value->flow.src,
+                                       value->tap_id);
             break;
         default:
             break;
@@ -350,7 +350,7 @@ int add_flow(struct store_pid *pid_value, struct store_flow *value)
     log_debug("[%d] add flow (node): 0x%p value: %d ref: %d\n", pid, cur_element,
               cur_element->value[0], cur_element->ref);
 
-    free_pending_list(pid, ctx, value->if_id);
+    free_pending_list(pid, ctx, value->if_id, proto);
 
 err:
 
@@ -369,13 +369,14 @@ int del_flow(struct store_pid *pid_value, struct store_flow *value)
     struct list_head *cur_entry = NULL;
     struct flow_element *save_element[3];
     struct list_head *save_entry[3];
-    uint32_t ip = value->flow.dst_ip;
+    uint32_t ip = value->flow.dst.addr4.sin_addr.s_addr;
     int ht = HANDLE_HT(value->handle);
     int bkt = HANDLE_BKT(value->handle);
     int id = HANDLE_ID(value->handle);
     int ht_internal = KERNEL_HT;
     struct flow_ctx *ctx = NULL;
     int found = 0;
+    short proto = (value->flow.dst.family == AF_INET ? ETH_P_IP : ETH_P_IPV6);
 
     errno = 0;
 
@@ -454,8 +455,8 @@ int del_flow(struct store_pid *pid_value, struct store_flow *value)
                               cur_element->value[0], cur_element->value[1], cur_element->ref);
                     if (list_empty(&cur_element->list) && (cur_element->ref <= 0)) {
 
-                        if (tc_del_filter(daemon_cfg.tc, value->if_id, get_prio(value), ht, bkt,
-                                          id) < 0) {
+                        if (tc_del_filter(daemon_cfg.tc, value->if_id, get_prio(value), ht, bkt, id,
+                                          proto) < 0) {
                             log_warn("[%d] failed tc_del_filter() errno = %d\n", pid, errno);
                             rc = -EFAULT;
                         }
@@ -485,8 +486,8 @@ int del_flow(struct store_pid *pid_value, struct store_flow *value)
                       cur_element->value[0], cur_element->value[1], cur_element->ref);
             if (list_empty(&cur_element->list) && (cur_element->ref <= 0)) {
 
-                if (tc_del_filter(daemon_cfg.tc, value->if_id, get_prio(value), ht_internal, 0,
-                                  ht) < 0) {
+                if (tc_del_filter(daemon_cfg.tc, value->if_id, get_prio(value), ht_internal, 0, ht,
+                                  proto) < 0) {
                     log_warn("[%d] failed tc_del_filter() errno = %d\n", pid, errno);
                     rc = -EFAULT;
                 }
@@ -513,7 +514,7 @@ int del_flow(struct store_pid *pid_value, struct store_flow *value)
             }
 
             assert(ctx == cur_element->ctx);
-            free_pending_list(pid, cur_element->ctx, value->if_id);
+            free_pending_list(pid, cur_element->ctx, value->if_id, proto);
             bitmap_destroy(cur_element->ctx->ht);
             free(cur_element->ctx);
             ctx = NULL;
@@ -522,7 +523,7 @@ int del_flow(struct store_pid *pid_value, struct store_flow *value)
         }
     }
 
-    free_pending_list(pid, ctx, value->if_id);
+    free_pending_list(pid, ctx, value->if_id, proto);
 
     log_debug("[%d] del flow filter: %x:%x:%x rc=%d\n", pid, ht, bkt, id, rc);
 
@@ -535,6 +536,7 @@ static int add_flow_egress(struct store_pid *pid_value, struct store_flow *value
     pid_t pid = pid_value->pid;
     struct list_head *cur_entry = NULL;
     struct store_flow *cur_flow = NULL;
+    int prio = 0;
 
     errno = 0;
 
@@ -563,16 +565,25 @@ static int add_flow_egress(struct store_pid *pid_value, struct store_flow *value
 
         if (!getifaddrs(&ifaddr)) {
             for (ifa = ifaddr; NULL != ifa; ifa = ifa->ifa_next) {
-                if (ifa->ifa_addr->sa_family == AF_INET && !(ifa->ifa_flags & IFF_LOOPBACK) &&
+                if ((ifa->ifa_addr->sa_family == AF_INET || ifa->ifa_addr->sa_family == AF_INET6) &&
+                    !(ifa->ifa_flags & IFF_LOOPBACK) &&
                     value->if_id == if_nametoindex(ifa->ifa_name)) {
+
+                    /* Ignore link-local IPv6 address */
+                    if (ifa->ifa_addr->sa_family == AF_INET6) {
+                        struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)(ifa->ifa_addr);
+                        if (IN6_IS_ADDR_LINKLOCAL(&sa6->sin6_addr) ||
+                            IN6_IS_ADDR_MC_LINKLOCAL(&sa6->sin6_addr)) {
+                            continue;
+                        }
+                    }
 
                     /* Create filter to redirect traffic from tap device to lo device
                      * in case destination address relates netvsc
                      */
                     if (tc_add_filter_tap2dev(
-                            daemon_cfg.tc, value->tap_id, 1, handle,
-                            ((struct sockaddr_in *)ifa->ifa_addr)->sin_addr.s_addr,
-                            sys_lo_ifindex()) < 0) {
+                            daemon_cfg.tc, value->tap_id, ++prio, handle, ifa->ifa_addr->sa_family,
+                            (struct sockaddr_store *)ifa->ifa_addr, sys_lo_ifindex()) < 0) {
                         log_error("[%d] failed tc_add_filter_tap2dev() errno = %d\n", pid, errno);
                         rc = -EFAULT;
                         goto err;
@@ -587,11 +598,19 @@ static int add_flow_egress(struct store_pid *pid_value, struct store_flow *value
          * Use another prio value for common filter just to separate one
          * actually the same value should work too
          */
-        if (tc_add_filter_tap2dev(daemon_cfg.tc, value->tap_id, 2, handle, 0, value->if_id) < 0) {
+        if (tc_add_filter_tap2dev(daemon_cfg.tc, value->tap_id, ++prio, handle, AF_INET, NULL,
+                                  value->if_id) < 0) {
             log_error("[%d] failed tc_add_filter_tap2dev() errno = %d\n", pid, errno);
             rc = -EFAULT;
             goto err;
         }
+#if 0 /* TODO: does not work */
+        if (tc_add_filter_tap2dev(daemon_cfg.tc, value->tap_id, ++prio, handle, AF_INET6, NULL, value->if_id) < 0) {
+            log_error("[%d] failed tc_add_filter_tap2dev() errno = %d\n", pid, errno);
+            rc = -EFAULT;
+            goto err;
+        }
+#endif
     }
 
 err:
@@ -635,7 +654,7 @@ static inline void get_htid(struct flow_ctx *ctx, int prio, int *ht_krn, int *ht
     }
 }
 
-static inline void free_pending_list(pid_t pid, struct flow_ctx *ctx, int if_index)
+static inline void free_pending_list(pid_t pid, struct flow_ctx *ctx, int if_index, short proto)
 {
     struct htid_node_t *cur_element = NULL;
     struct list_head *cur_entry = NULL, *tmp_entry = NULL;
@@ -645,8 +664,8 @@ static inline void free_pending_list(pid_t pid, struct flow_ctx *ctx, int if_ind
         {
             cur_element = list_entry(cur_entry, struct htid_node_t, node);
 
-            if (tc_del_filter(daemon_cfg.tc, if_index, cur_element->prio, cur_element->htid, 0, 0) <
-                0) {
+            if (tc_del_filter(daemon_cfg.tc, if_index, cur_element->prio, cur_element->htid, 0, 0,
+                              proto) < 0) {
                 continue;
             }
 
@@ -691,7 +710,9 @@ static inline int get_prio(struct store_flow *value)
 
 static inline int get_bkt(struct store_flow *value)
 {
-    return ntohs(value->flow.dst_port) & 0xFF;
+    uint16_t port = (value->flow.dst.family == AF_INET ? value->flow.dst.addr4.sin_port
+                                                       : value->flow.dst.addr6.sin6_port);
+    return ntohs(port) & 0xFF;
 }
 
 static inline int get_protocol(struct store_flow *value)

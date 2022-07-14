@@ -14,7 +14,7 @@ from distutils.util import strtobool
 from uuid import uuid4
 
 
-wrk_out_tpl = """Running {duration:d}s test @ {url}
+wrk_out_tpl = """Running {duration} test @ {url}
 {num_threads:>d} threads and {num_connections:d} connections
 {}
 {}

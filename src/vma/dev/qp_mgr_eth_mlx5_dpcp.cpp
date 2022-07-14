@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -44,11 +44,13 @@ qp_mgr_eth_mlx5_dpcp::qp_mgr_eth_mlx5_dpcp(struct qp_mgr_desc *desc, uint32_t tx
                                            uint16_t vlan)
     : qp_mgr_eth_mlx5(desc, tx_num_wr, vlan, false)
 {
-    if (configure(desc))
+    if (configure(desc)) {
         throw_vma_exception("Failed creating qp_mgr_eth_mlx5_dpcp");
+    }
 
-    if (!configure_rq_dpcp())
+    if (!configure_rq_dpcp()) {
         throw_vma_exception("Failed to create qp_mgr_eth_mlx5_dpcp");
+    }
 }
 
 bool qp_mgr_eth_mlx5_dpcp::configure_rq_dpcp()
@@ -85,8 +87,9 @@ bool qp_mgr_eth_mlx5_dpcp::configure_rq_dpcp()
     }
 
     // Create the QP
-    if (!prepare_rq(mlx5_cq.cq_num))
+    if (!prepare_rq(mlx5_cq.cq_num)) {
         return false;
+    }
 
     return true;
 }
@@ -179,8 +182,9 @@ bool qp_mgr_eth_mlx5_dpcp::store_rq_mlx5_params(dpcp::basic_rq &new_rq)
 
     new_rq.get_wqe_num(m_mlx5_qp.rq.wqe_cnt);
     new_rq.get_wq_stride_sz(m_mlx5_qp.rq.stride);
-    if (safe_mce_sys().enable_striding_rq)
+    if (safe_mce_sys().enable_striding_rq) {
         m_mlx5_qp.rq.stride /= 16U;
+    }
 
     m_mlx5_qp.rq.wqe_shift = ilog_2(m_mlx5_qp.rq.stride);
     m_mlx5_qp.rq.head = 0;
@@ -194,12 +198,14 @@ bool qp_mgr_eth_mlx5_dpcp::store_rq_mlx5_params(dpcp::basic_rq &new_rq)
 
 void qp_mgr_eth_mlx5_dpcp::init_tir_rq()
 {
-    if (_rq && !store_rq_mlx5_params(*_rq))
+    if (_rq && !store_rq_mlx5_params(*_rq)) {
         qp_logpanic("Failed to retrieve DPCP RQ parameters (errno=%d %m)", errno);
+    }
 
     _tir.reset(create_tir());
-    if (!_tir)
+    if (!_tir) {
         qp_logpanic("TIR creation for qp_mgr_eth_mlx5_dpcp failed (errno=%d %m)", errno);
+    }
 }
 
 void qp_mgr_eth_mlx5_dpcp::up()
@@ -224,14 +230,16 @@ rfs_rule *qp_mgr_eth_mlx5_dpcp::create_rfs_rule(vma_ibv_flow_attr &attrs, xlio_t
     if (tir_ext && m_p_ib_ctx_handler && m_p_ib_ctx_handler->get_dpcp_adapter()) {
         std::unique_ptr<rfs_rule_dpcp> new_rule(new rfs_rule_dpcp());
         if (new_rule->create(attrs, *xlio_tir_to_dpcp_tir(tir_ext),
-                             *m_p_ib_ctx_handler->get_dpcp_adapter()))
+                             *m_p_ib_ctx_handler->get_dpcp_adapter())) {
             return new_rule.release();
+        }
     } else
 #endif /* DEFINED_UTLS */
         if (_tir && m_p_ib_ctx_handler && m_p_ib_ctx_handler->get_dpcp_adapter()) {
         std::unique_ptr<rfs_rule_dpcp> new_rule(new rfs_rule_dpcp());
-        if (new_rule->create(attrs, *_tir, *m_p_ib_ctx_handler->get_dpcp_adapter()))
+        if (new_rule->create(attrs, *_tir, *m_p_ib_ctx_handler->get_dpcp_adapter())) {
             return new_rule.release();
+        }
     }
 
     NOT_IN_USE(tir_ext);
@@ -251,23 +259,32 @@ void qp_mgr_eth_mlx5_dpcp::modify_qp_to_error_state()
     qp_mgr_eth_mlx5::modify_qp_to_error_state();
 
     dpcp::status rc = _rq->modify_state(dpcp::RQ_ERR);
-    if (dpcp::DPCP_OK != rc)
+
+    /* During plugout theres is possibility that kernel
+     * remove device resources before working process complete
+     * removing process. As a result ibv api function can
+     * return EIO=5 errno code.
+     */
+    if (dpcp::DPCP_OK != rc && errno != EIO) {
         qp_logerr("Failed to modify rq state to ERR, rc: %d, rqn: %" PRIu32, static_cast<int>(rc),
                   m_mlx5_qp.rqn);
+    }
 }
 
 void qp_mgr_eth_mlx5_dpcp::modify_rq_to_ready_state()
 {
     dpcp::status rc = _rq->modify_state(dpcp::RQ_RDY);
-    if (dpcp::DPCP_OK != rc)
+    if (dpcp::DPCP_OK != rc) {
         qp_logerr("Failed to modify rq state to RDY, rc: %d, rqn: %" PRIu32, static_cast<int>(rc),
                   m_mlx5_qp.rqn);
+    }
 }
 
 cq_mgr *qp_mgr_eth_mlx5_dpcp::init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel)
 {
-    if (unlikely(!safe_mce_sys().enable_striding_rq))
+    if (unlikely(!safe_mce_sys().enable_striding_rq)) {
         return qp_mgr_eth_mlx5::init_rx_cq_mgr(p_rx_comp_event_channel);
+    }
 
     return (!init_rx_cq_mgr_prepare()
                 ? nullptr

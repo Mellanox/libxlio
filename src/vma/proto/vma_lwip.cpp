@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -126,7 +126,6 @@ vma_lwip::vma_lwip()
     register_tcp_tx_pbuf_free(sockinfo_tcp::tcp_tx_pbuf_free);
     register_tcp_seg_alloc(sockinfo_tcp::tcp_seg_alloc);
     register_tcp_seg_free(sockinfo_tcp::tcp_seg_free);
-    register_ip_output(sockinfo_tcp::ip_output);
     register_tcp_state_observer(sockinfo_tcp::tcp_state_observer);
     register_ip_route_mtu(sockinfo_tcp::get_route_mtu);
     register_sys_now(sys_now);

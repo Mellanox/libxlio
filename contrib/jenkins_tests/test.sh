@@ -87,7 +87,10 @@ else
 		test_ip_list="${test_ip_list} ib:$(do_get_ip 'ib')"
 	fi
 	if [ ! -z $(do_get_ip 'eth') ]; then
-		test_ip_list="${test_ip_list} eth:$(do_get_ip 'eth')"
+		test_ip_list="${test_ip_list} eth_ip4:$(do_get_ip 'eth')"
+	fi
+	if [ ! -z $(do_get_ip 'inet6') ]; then
+		test_ip_list="${test_ip_list} eth_ip6:$(do_get_ip 'inet6')"
 	fi
 fi
 

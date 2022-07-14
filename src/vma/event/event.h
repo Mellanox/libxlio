@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -37,9 +37,8 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "utils/bullseye.h"
-#include "vma/util/to_str.h"
 
-class event : public tostr {
+class event {
 public:
     enum type { UNKNOWN_EVENT, SEND_EVENT, DROP_EVENT };
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -43,10 +43,9 @@
 #include <netinet/igmp.h>
 
 #include "vma/util/vtypes.h"
-#include "vma/util/to_str.h"
 #include "L2_address.h"
 #include "vma/util/sys_vars.h"
-#include "vma/lwip/ip.h"
+#include "vma/lwip/ip_addr.h"
 
 class dst_entry;
 
@@ -111,7 +110,7 @@ union tx_ipv6_packet_template_t {
     uint32_t words[20]; // change in tx_hdr_template_t size may require to modify this array size
 };
 
-class header : public tostr {
+class header {
 public:
     header();
     header(const header &h);

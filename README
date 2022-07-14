@@ -97,6 +97,8 @@ Example:
  XLIO DETAILS: Tx MC Loopback                 Enabled                    [XLIO_TX_MC_LOOPBACK]
  XLIO DETAILS: Tx non-blocked eagains         Disabled                   [XLIO_TX_NONBLOCKED_EAGAINS]
  XLIO DETAILS: Tx Prefetch Bytes              256                        [XLIO_TX_PREFETCH_BYTES]
+ XLIO DETAILS: Tx Bufs Batch TCP              16                         [XLIO_TX_BUFS_BATCH_TCP]
+ XLIO DETAILS: Tx Segs Batch TCP              64                         [XLIO_TX_SEGS_BATCH_TCP]
  XLIO DETAILS: TCP Send Buffer size           1000000                    [XLIO_TCP_SEND_BUFFER_SIZE]
  XLIO DETAILS: Rx Mem Bufs                    200000                     [XLIO_RX_BUFS]
  XLIO DETAILS: Rx Mem Buf size                0                          [XLIO_RX_BUF_SIZE]
@@ -406,6 +408,11 @@ Lower number for less memory consumption by a socket.
 Min value is 1
 Default value is 16
 
+XLIO_TX_SEGS_BATCH_TCP
+The number of TCP segments fetched from the segments pool by a socket at once.
+Min value is 1
+Default value is 64
+
 XLIO_RING_ALLOCATION_LOGIC_TX
 XLIO_RING_ALLOCATION_LOGIC_RX
 Ring allocation logic is used to separate the traffic to different rings.
@@ -645,9 +652,11 @@ Disable GRO with a value of 0.
 Default value is 32
 
 XLIO_TCP_3T_RULES
-Use only 3 tuple rules for TCP, instead of using 5 tuple rules.
-This can improve performance for a server with listen socket which accept many
-connections.
+Use only 3 tuple rules for incoming TCP connections, instead of using 5 tuple
+rules. This can improve performance for a server with listen socket which
+accepts many connections.
+Outgoing TCP connections that are established with connect() syscall aren't
+affected by this option.
 Default: 0 (Disable)
 
 XLIO_UDP_3T_RULES
@@ -953,7 +962,7 @@ OFED will also try to allocate QP & CQ memory accordingly:
 To override OFED use: (MLX_QP_ALLOC_TYPE, MLX_CQ_ALLOC_TYPE)
 Default value is 1 (Contiguous pages)
 
-The following XLIO neigh parameters are for advanced users or Mellanox support only:
+The following XLIO neigh parameters are for advanced users or internal support only:
 
 XLIO_NEIGH_UC_ARP_QUATA
 XLIO will send UC ARP in case neigh state is NUD_STALE.

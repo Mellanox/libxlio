@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -141,10 +141,12 @@ const char *get_color(vlog_levels_t level)
 }
 } // namespace log_level
 
+#ifndef HAVE_GETTID
 pid_t gettid(void)
 {
     return syscall(__NR_gettid);
 }
+#endif
 
 #if _BullseyeCoverage
 #pragma BullseyeCoverage off

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -733,7 +733,7 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
     // Attach tuple
     BULLSEYE_EXCLUDE_BLOCK_START
     unlock_rx_q();
-    if (!p_nd_resources->p_ring->attach_flow(flow_key, this)) {
+    if (!p_nd_resources->p_ring->attach_flow(flow_key, this, is_outgoing())) {
         lock_rx_q();
         si_logdbg("Failed to attach %s to ring %p", flow_key.to_str().c_str(),
                   p_nd_resources->p_ring);
@@ -753,13 +753,16 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
                     flow_tuple_with_local_if new_key(
                         flow_key.get_dst_ip(), flow_key.get_dst_port(), ip_address::any_addr(), 1,
                         flow_key.get_protocol(), flow_key.get_family(), flow_key.get_local_if());
-                    if (!p_nd_resources->p_ring->attach_flow(new_key, this)) {
+                    p_nd_resources =
+                        create_nd_resources(ip_addr(new_key.get_local_if(), new_key.get_family()));
+                    if (!p_nd_resources->p_ring->attach_flow(new_key, this, false)) {
                         lock_rx_q();
                         si_logerr("Failed to attach %s to ring %p", new_key.to_str().c_str(),
                                   p_nd_resources->p_ring);
                         g_b_add_second_4t_rule = false;
                         return false;
                     }
+                    m_rx_flow_map[new_key] = p_nd_resources->p_ring;
                     si_logdbg("Added second rule %s for index %d to ring %p",
                               new_key.to_str().c_str(), g_worker_index, p_nd_resources->p_ring);
                 }
@@ -1014,7 +1017,7 @@ void sockinfo::do_rings_migration(resource_allocation_key &old_key)
             // Attach tuple
             BULLSEYE_EXCLUDE_BLOCK_START
             unlock_rx_q();
-            if (!new_ring->attach_flow(flow_key, this)) {
+            if (!new_ring->attach_flow(flow_key, this, is_outgoing())) {
                 si_logerr("Failed to attach %s to ring %p", flow_key.to_str().c_str(), new_ring);
                 rx_del_ring_cb(new_ring);
                 rc = p_nd_resources->p_ndv->release_ring(new_key);

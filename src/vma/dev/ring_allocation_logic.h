@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -89,10 +89,9 @@ public:
     }
     uint64_t calc_res_key_by_logic();
     inline void enable_migration(bool active) { m_active = active; }
-    const char *to_str();
+    const std::string to_str() const;
 
 protected:
-    char m_str[RAL_STR_MAX_LENGTH];
     const char *m_type;
     const void *m_owner;
 

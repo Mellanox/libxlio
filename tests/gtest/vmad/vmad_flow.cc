@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -86,8 +86,15 @@ TEST_F(vmad_flow, ti_1)
     m_data.hdr.status = 1;
     m_data.action = VMA_MSG_FLOW_ADD;
     m_data.type = VMA_MSG_FLOW_TCP_3T;
-    m_data.flow.dst_ip = ((struct sockaddr_in *)&server_addr)->sin_addr.s_addr;
-    m_data.flow.dst_port = htons(sys_get_port((struct sockaddr *)&server_addr));
+    m_data.flow.dst.family = m_family;
+    if (m_family == PF_INET) {
+        m_data.flow.dst.addr.ipv4 = ((struct sockaddr_in *)&server_addr)->sin_addr.s_addr;
+    } else {
+        memcpy(&m_data.flow.dst.addr.ipv6[0],
+               &((struct sockaddr_in6 *)&server_addr)->sin6_addr.s6_addr[0],
+               sizeof(m_data.flow.dst.addr.ipv6));
+    }
+    m_data.flow.dst.port = htons(sys_get_port((struct sockaddr *)&server_addr));
 
     errno = 0;
     rc = send(m_sock_fd, &m_data, sizeof(m_data), 0);
@@ -124,10 +131,24 @@ TEST_F(vmad_flow, ti_2)
     m_data.hdr.status = 1;
     m_data.action = VMA_MSG_FLOW_ADD;
     m_data.type = VMA_MSG_FLOW_TCP_5T;
-    m_data.flow.dst_ip = ((struct sockaddr_in *)&server_addr)->sin_addr.s_addr;
-    m_data.flow.dst_port = htons(sys_get_port((struct sockaddr *)&server_addr));
-    m_data.flow.t5.src_ip = ((struct sockaddr_in *)&client_addr)->sin_addr.s_addr;
-    m_data.flow.t5.src_port = htons(sys_get_port((struct sockaddr *)&client_addr));
+    m_data.flow.src.family = m_family;
+    if (m_family == PF_INET) {
+        m_data.flow.src.addr.ipv4 = ((struct sockaddr_in *)&client_addr)->sin_addr.s_addr;
+    } else {
+        memcpy(&m_data.flow.src.addr.ipv6[0],
+               &((struct sockaddr_in6 *)&client_addr)->sin6_addr.s6_addr[0],
+               sizeof(m_data.flow.src.addr.ipv6));
+    }
+    m_data.flow.src.port = htons(sys_get_port((struct sockaddr *)&client_addr));
+    m_data.flow.dst.family = m_family;
+    if (m_family == PF_INET) {
+        m_data.flow.dst.addr.ipv4 = ((struct sockaddr_in *)&server_addr)->sin_addr.s_addr;
+    } else {
+        memcpy(&m_data.flow.dst.addr.ipv6[0],
+               &((struct sockaddr_in6 *)&server_addr)->sin6_addr.s6_addr[0],
+               sizeof(m_data.flow.dst.addr.ipv6));
+    }
+    m_data.flow.dst.port = htons(sys_get_port((struct sockaddr *)&server_addr));
 
     errno = 0;
     rc = send(m_sock_fd, &m_data, sizeof(m_data), 0);
@@ -164,8 +185,15 @@ TEST_F(vmad_flow, ti_3)
     m_data.hdr.status = 1;
     m_data.action = VMA_MSG_FLOW_ADD;
     m_data.type = VMA_MSG_FLOW_TCP_3T;
-    m_data.flow.dst_ip = ((struct sockaddr_in *)&server_addr)->sin_addr.s_addr;
-    m_data.flow.dst_port = htons(sys_get_port((struct sockaddr *)&server_addr));
+    m_data.flow.dst.family = m_family;
+    if (m_family == PF_INET) {
+        m_data.flow.dst.addr.ipv4 = ((struct sockaddr_in *)&server_addr)->sin_addr.s_addr;
+    } else {
+        memcpy(&m_data.flow.dst.addr.ipv6[0],
+               &((struct sockaddr_in6 *)&server_addr)->sin6_addr.s6_addr[0],
+               sizeof(m_data.flow.dst.addr.ipv6));
+    }
+    m_data.flow.dst.port = htons(sys_get_port((struct sockaddr *)&server_addr));
 
     errno = 0;
     rc = send(m_sock_fd, &m_data, sizeof(m_data), 0);
@@ -219,10 +247,24 @@ TEST_F(vmad_flow, ti_4)
     m_data.hdr.status = 1;
     m_data.action = VMA_MSG_FLOW_ADD;
     m_data.type = VMA_MSG_FLOW_TCP_5T;
-    m_data.flow.dst_ip = ((struct sockaddr_in *)&server_addr)->sin_addr.s_addr;
-    m_data.flow.dst_port = htons(sys_get_port((struct sockaddr *)&server_addr));
-    m_data.flow.t5.src_ip = ((struct sockaddr_in *)&client_addr)->sin_addr.s_addr;
-    m_data.flow.t5.src_port = htons(sys_get_port((struct sockaddr *)&client_addr));
+    m_data.flow.src.family = m_family;
+    if (m_family == PF_INET) {
+        m_data.flow.src.addr.ipv4 = ((struct sockaddr_in *)&client_addr)->sin_addr.s_addr;
+    } else {
+        memcpy(&m_data.flow.src.addr.ipv6[0],
+               &((struct sockaddr_in6 *)&client_addr)->sin6_addr.s6_addr[0],
+               sizeof(m_data.flow.src.addr.ipv6));
+    }
+    m_data.flow.src.port = htons(sys_get_port((struct sockaddr *)&client_addr));
+    m_data.flow.dst.family = m_family;
+    if (m_family == PF_INET) {
+        m_data.flow.dst.addr.ipv4 = ((struct sockaddr_in *)&server_addr)->sin_addr.s_addr;
+    } else {
+        memcpy(&m_data.flow.dst.addr.ipv6[0],
+               &((struct sockaddr_in6 *)&server_addr)->sin6_addr.s6_addr[0],
+               sizeof(m_data.flow.dst.addr.ipv6));
+    }
+    m_data.flow.dst.port = htons(sys_get_port((struct sockaddr *)&server_addr));
 
     errno = 0;
     rc = send(m_sock_fd, &m_data, sizeof(m_data), 0);
@@ -276,8 +318,15 @@ TEST_F(vmad_flow, ti_5)
     m_data.hdr.status = 1;
     m_data.action = VMA_MSG_FLOW_ADD;
     m_data.type = VMA_MSG_FLOW_UDP_3T;
-    m_data.flow.dst_ip = ((struct sockaddr_in *)&server_addr)->sin_addr.s_addr;
-    m_data.flow.dst_port = htons(sys_get_port((struct sockaddr *)&server_addr));
+    m_data.flow.dst.family = m_family;
+    if (m_family == PF_INET) {
+        m_data.flow.dst.addr.ipv4 = ((struct sockaddr_in *)&server_addr)->sin_addr.s_addr;
+    } else {
+        memcpy(&m_data.flow.dst.addr.ipv6[0],
+               &((struct sockaddr_in6 *)&server_addr)->sin6_addr.s6_addr[0],
+               sizeof(m_data.flow.dst.addr.ipv6));
+    }
+    m_data.flow.dst.port = htons(sys_get_port((struct sockaddr *)&server_addr));
 
     errno = 0;
     rc = send(m_sock_fd, &m_data, sizeof(m_data), 0);
@@ -314,10 +363,24 @@ TEST_F(vmad_flow, ti_6)
     m_data.hdr.status = 1;
     m_data.action = VMA_MSG_FLOW_ADD;
     m_data.type = VMA_MSG_FLOW_UDP_5T;
-    m_data.flow.dst_ip = ((struct sockaddr_in *)&server_addr)->sin_addr.s_addr;
-    m_data.flow.dst_port = htons(sys_get_port((struct sockaddr *)&server_addr));
-    m_data.flow.t5.src_ip = ((struct sockaddr_in *)&client_addr)->sin_addr.s_addr;
-    m_data.flow.t5.src_port = htons(sys_get_port((struct sockaddr *)&client_addr));
+    m_data.flow.src.family = m_family;
+    if (m_family == PF_INET) {
+        m_data.flow.src.addr.ipv4 = ((struct sockaddr_in *)&client_addr)->sin_addr.s_addr;
+    } else {
+        memcpy(&m_data.flow.src.addr.ipv6[0],
+               &((struct sockaddr_in6 *)&client_addr)->sin6_addr.s6_addr[0],
+               sizeof(m_data.flow.src.addr.ipv6));
+    }
+    m_data.flow.src.port = htons(sys_get_port((struct sockaddr *)&client_addr));
+    m_data.flow.dst.family = m_family;
+    if (m_family == PF_INET) {
+        m_data.flow.dst.addr.ipv4 = ((struct sockaddr_in *)&server_addr)->sin_addr.s_addr;
+    } else {
+        memcpy(&m_data.flow.dst.addr.ipv6[0],
+               &((struct sockaddr_in6 *)&server_addr)->sin6_addr.s6_addr[0],
+               sizeof(m_data.flow.dst.addr.ipv6));
+    }
+    m_data.flow.dst.port = htons(sys_get_port((struct sockaddr *)&server_addr));
 
     errno = 0;
     rc = send(m_sock_fd, &m_data, sizeof(m_data), 0);

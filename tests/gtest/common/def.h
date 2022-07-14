@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -100,6 +100,12 @@
 #define EOK 0 /* no error */
 #endif
 
+#define CHECK_ERR_OK(rc)                                                                           \
+    EXPECT_EQ(0, (rc));                                                                            \
+    if ((rc) < 0) {                                                                                \
+        ASSERT_EQ(EOK, errno);                                                                     \
+    }
+
 #ifndef container_of
 /**
  * container_of - cast a member of a structure out to the containing structure
@@ -125,6 +131,7 @@ struct gtest_configure_t {
     sockaddr_store_t server_addr;
     sockaddr_store_t remote_addr;
     uint16_t port;
+    bool def_gw_exists;
 };
 
 #endif /* TESTS_GTEST_COMMON_DEF_H_ */

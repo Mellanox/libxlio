@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -233,10 +233,10 @@ void ring_tap::tap_destroy()
     }
 }
 
-bool ring_tap::attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink)
+bool ring_tap::attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink, bool force_5t)
 {
     auto_unlocker lock(m_lock_ring_rx);
-    bool ret = ring_slave::attach_flow(flow_spec_5t, sink);
+    bool ret = ring_slave::attach_flow(flow_spec_5t, sink, force_5t);
 
     if (ret && (flow_spec_5t.is_tcp() || flow_spec_5t.is_udp_uc())) {
         int rc = 0;
@@ -352,8 +352,6 @@ int ring_tap::send_lwip_buffer(ring_user_id_t id, vma_ibv_send_wr *p_send_wqe,
                         attr & VMA_TX_PACKET_L4_CSUM);
 
     auto_unlocker lock(m_lock_ring_tx);
-    mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)(p_send_wqe->wr_id);
-    p_mem_buf_desc->lwip_pbuf.pbuf.ref++;
     int ret = send_buffer(p_send_wqe, attr);
     send_status_handler(ret, p_send_wqe);
     return ret;
@@ -373,15 +371,27 @@ int ring_tap::prepare_flow_message(vma_msg_flow &data, msg_flow_t flow_action,
     data.if_id = get_parent()->get_if_index();
     data.tap_id = get_if_index();
 
-    data.flow.dst_ip = flow_spec_5t.get_dst_ip().get_in_addr();
-    data.flow.dst_port = flow_spec_5t.get_dst_port();
+    data.flow.dst.family = flow_spec_5t.get_family();
+    data.flow.dst.port = flow_spec_5t.get_dst_port();
+    if (data.flow.dst.family == AF_INET) {
+        data.flow.dst.addr.ipv4 = flow_spec_5t.get_dst_ip().get_in4_addr().s_addr;
+    } else {
+        memcpy(&data.flow.dst.addr.ipv6[0], &flow_spec_5t.get_dst_ip().get_in6_addr(),
+               sizeof(data.flow.dst.addr.ipv6));
+    }
 
     if (flow_spec_5t.is_3_tuple()) {
         data.type = flow_spec_5t.is_tcp() ? VMA_MSG_FLOW_TCP_3T : VMA_MSG_FLOW_UDP_3T;
     } else {
         data.type = flow_spec_5t.is_tcp() ? VMA_MSG_FLOW_TCP_5T : VMA_MSG_FLOW_UDP_5T;
-        data.flow.t5.src_ip = flow_spec_5t.get_src_ip().get_in_addr();
-        data.flow.t5.src_port = flow_spec_5t.get_src_port();
+        data.flow.src.family = flow_spec_5t.get_family();
+        data.flow.src.port = flow_spec_5t.get_src_port();
+        if (data.flow.src.family == AF_INET) {
+            data.flow.src.addr.ipv4 = flow_spec_5t.get_src_ip().get_in4_addr().s_addr;
+        } else {
+            memcpy(&data.flow.src.addr.ipv6[0], &flow_spec_5t.get_src_ip().get_in6_addr(),
+                   sizeof(data.flow.src.addr.ipv6));
+        }
     }
 
     rc = g_p_agent->send_msg_flow(&data);

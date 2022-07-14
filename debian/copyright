@@ -3,7 +3,7 @@ Upstream-Name: libvma
 Source: https://github.com/Mellanox/libvma
 
 Files: *
-Copyright: 2001-2022 Mellanox Technologies, Ltd.
+Copyright: 2001-2022 NVIDIA CORPORATION & AFFILIATES.
 License: GPL-2 or BSD
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -53,12 +53,10 @@ Files: src/vma/lwip/def.h
  src/vma/lwip/err.h
  src/vma/lwip/init.c
  src/vma/lwip/init.h
- src/vma/lwip/ip.h
  src/vma/lwip/ip_addr.h
  src/vma/lwip/opt.h
  src/vma/lwip/pbuf.c
  src/vma/lwip/pbuf.h
- src/vma/lwip/stats.h
  src/vma/lwip/tcp.c
  src/vma/lwip/tcp.h
  src/vma/lwip/tcp_impl.h

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -31,12 +31,11 @@
  */
 
 #include "vma/ib/base/verbs_extra.h"
-#include "vma/util/to_str.h"
 
 #ifndef IB_WQE_TEMPLATE_H
 #define IB_WQE_TEMPLATE_H
 
-class wqe_send_handler : public tostr {
+class wqe_send_handler {
 public:
     wqe_send_handler();
     virtual ~wqe_send_handler();

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -170,6 +170,7 @@ TEST_F(vma_ring, ti_7)
     EXPECT_EQ(UNDEFINED_VALUE, ring_fd);
 
     close(fd);
+    sleep(1U); // XLIO timers to clean fd.
 }
 
 TEST_F(vma_ring, ti_8)
@@ -177,20 +178,12 @@ TEST_F(vma_ring, ti_8)
     int rc = EOK;
     int ring_fd = UNDEFINED_VALUE;
     int fd;
-    struct sockaddr_in addr;
 
     fd = socket(m_family, SOCK_STREAM, IPPROTO_IP);
     ASSERT_LE(0, fd);
 
-    /*
-     * XXX This is workaround for the situation when the socket from ti_7
-     * is not destroyed in time and the following bind() fails due to
-     * "Address already in use" error.
-     */
-    memcpy(&addr, &server_addr, sizeof(addr));
-    addr.sin_port = htons(ntohs(addr.sin_port) + 1);
-
-    rc = bind(fd, (struct sockaddr *)&addr, sizeof(addr));
+    rc = bind(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+    ASSERT_EQ(EOK, errno);
     ASSERT_EQ(0, rc);
 
     rc = listen(fd, 5);
@@ -201,6 +194,7 @@ TEST_F(vma_ring, ti_8)
     EXPECT_LE(0, ring_fd);
 
     close(fd);
+    sleep(1U); // XLIO timers to clean fd.
 }
 
 TEST_F(vma_ring, ti_9)
@@ -254,6 +248,7 @@ TEST_F(vma_ring, ti_10)
     EXPECT_LE(0, ring_fd);
 
     close(fd);
+    sleep(1U); // XLIO timers to clean fd.
 }
 
 TEST_F(vma_ring, ti_11)
@@ -265,6 +260,8 @@ TEST_F(vma_ring, ti_11)
     int fd;
     char opt_val[100];
     socklen_t opt_len;
+
+    SKIP_TRUE(def_gw_exists, "No Default Gateway");
 
     SKIP_TRUE(sys_rootuser(), "This test requires root permission");
 
@@ -315,6 +312,7 @@ TEST_F(vma_ring, ti_11)
     EXPECT_TRUE(ring_fd_bind_opt == ring_fd_connect);
 
     close(fd);
+    sleep(1U); // XLIO timers to clean fd.
 }
 
 TEST_F(vma_ring, ti_12)
@@ -326,6 +324,8 @@ TEST_F(vma_ring, ti_12)
     int fd;
     char opt_val[100];
     socklen_t opt_len;
+
+    SKIP_TRUE(def_gw_exists, "No Default Gateway");
 
     SKIP_TRUE(sys_rootuser(), "This test requires root permission");
 
@@ -376,6 +376,7 @@ TEST_F(vma_ring, ti_12)
     EXPECT_TRUE(ring_fd_bind == ring_fd_connect);
 
     close(fd);
+    sleep(1U); // XLIO timers to clean fd.
 }
 
 #endif /* EXTRA_API_ENABLED */

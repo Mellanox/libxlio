@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -39,6 +39,7 @@
 #include "vma/util/utils.h"
 #include "vlogger/vlogger.h"
 #include "ring_simple.h"
+#include <utility>
 
 #undef MODULE_NAME
 #define MODULE_NAME "qpm_mlx5"
@@ -141,7 +142,6 @@ public:
 
         m_type = XLIO_TI_TIS;
         m_p_tis = _tis;
-        m_p_dek = NULL;
         m_tisn = 0;
         m_dek_id = 0;
 
@@ -156,34 +156,31 @@ public:
         if (m_p_tis != NULL) {
             delete m_p_tis;
         }
-        if (m_p_dek != NULL) {
-            delete m_p_dek;
-        }
     }
 
-    void reset(void)
+    void reset(qp_mgr_eth_mlx5 &qpmgr)
     {
         assert(m_ref == 0);
 
-        if (m_p_dek != NULL) {
-            delete m_p_dek;
-            m_p_dek = NULL;
+        if (m_dek) {
+            qpmgr.put_dek(std::move(m_dek));
         }
+
         m_released = false;
     }
 
     inline uint32_t get_tisn(void) { return m_tisn; }
 
-    inline void assign_dek(dpcp::dek *_dek)
+    inline void assign_dek(std::unique_ptr<dpcp::dek> &&dek_obj)
     {
-        m_p_dek = _dek;
-        m_dek_id = _dek->get_key_id();
+        m_dek.swap(dek_obj);
+        m_dek_id = m_dek->get_key_id();
     }
 
     inline uint32_t get_dek_id(void) { return m_dek_id; }
 
 private:
-    dpcp::dek *m_p_dek;
+    std::unique_ptr<dpcp::dek> m_dek;
     dpcp::tis *m_p_tis;
     uint32_t m_tisn;
     uint32_t m_dek_id;
@@ -248,7 +245,7 @@ class xlio_tis : public xlio_ti {
 public:
     /* A stub class to compile without uTLS support. */
     inline uint32_t get_tisn(void) { return 0; }
-    inline void reset(void) {}
+    inline void reset(qp_mgr_eth_mlx5 &qpmgr) { NOT_IN_USE(qpmgr); }
 };
 class xlio_tir : public xlio_ti {
 public:
@@ -914,12 +911,89 @@ int qp_mgr_eth_mlx5::send_to_wire(vma_ibv_send_wr *p_send_wqe, vma_wr_tx_packet_
 }
 
 #ifdef DEFINED_UTLS
+
+std::unique_ptr<dpcp::dek> qp_mgr_eth_mlx5::get_new_dek(const void *key, uint32_t key_size_bytes)
+{
+    dpcp::dek *out_dek = nullptr;
+    dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
+    if (likely(adapter)) {
+        dpcp::status rc =
+            adapter->create_dek(dpcp::ENCRYPTION_KEY_TYPE_TLS, key, key_size_bytes, out_dek);
+        if (unlikely(rc != dpcp::DPCP_OK)) {
+            qp_logwarn("Failed to create new DEK, status: %d", rc);
+            if (out_dek) {
+                delete out_dek;
+                out_dek = nullptr;
+            }
+        }
+    }
+
+    return std::unique_ptr<dpcp::dek>(out_dek);
+}
+
+std::unique_ptr<dpcp::dek> qp_mgr_eth_mlx5::get_dek(const void *key, uint32_t key_size_bytes)
+{
+    // If the amount of available DEKs in m_dek_put_cache is smaller than
+    // low-watermark we continue to create new DEKs. This is to avoid situations
+    // where one DEKs is returned and then fetched in a throttlling manner
+    // causing too frequent crypto-sync.
+    // It is also possible that crypto-sync may have higher impact with higher number
+    // of active connections.
+    if (unlikely(!m_p_ring->tls_sync_dek_supported()) ||
+        (unlikely(m_dek_get_cache.empty()) &&
+         (m_dek_put_cache.size() <= safe_mce_sys().utls_low_wmark_dek_cache_size))) {
+        return get_new_dek(key, key_size_bytes);
+    }
+
+    if (unlikely(m_dek_get_cache.empty())) {
+        qp_logdbg("Empty DEK get cache. Swapping caches and do Sync-Crypto. Put-Cache size: %zu",
+                  m_dek_put_cache.size());
+
+        dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
+        if (unlikely(!adapter)) {
+            return std::unique_ptr<dpcp::dek>(nullptr);
+        }
+
+        dpcp::status rc = adapter->sync_crypto_tls();
+        if (unlikely(rc != dpcp::DPCP_OK)) {
+            qp_logwarn("Failed to flush DEK HW cache, status: %d", rc);
+            return get_new_dek(key, key_size_bytes);
+        }
+
+        m_dek_get_cache.swap(m_dek_put_cache);
+    }
+
+    std::unique_ptr<dpcp::dek> out_dek(std::move(m_dek_get_cache.front()));
+    m_dek_get_cache.pop_front();
+
+    dpcp::dek::attr attrs;
+    attrs.key = const_cast<void *>(key);
+    attrs.key_size_bytes = key_size_bytes;
+    dpcp::status rc = out_dek->modify(attrs);
+    if (unlikely(rc != dpcp::DPCP_OK)) {
+        qp_logwarn("Failed to modify DEK, status: %d", rc);
+        out_dek.reset(nullptr);
+    }
+
+    return out_dek;
+}
+
+void qp_mgr_eth_mlx5::put_dek(std::unique_ptr<dpcp::dek> &&dek_obj)
+{
+    // We don't allow unlimited DEK cache to avoid system DEK starvation.
+    if (likely(m_p_ring->tls_sync_dek_supported()) &&
+        m_dek_put_cache.size() < safe_mce_sys().utls_high_wmark_dek_cache_size) {
+        m_dek_put_cache.emplace_back(std::forward<std::unique_ptr<dpcp::dek>>(dek_obj));
+    } else {
+        dek_obj.reset(nullptr);
+    }
+}
+
 xlio_tis *qp_mgr_eth_mlx5::tls_context_setup_tx(const xlio_tls_info *info)
 {
     xlio_tis *tis;
     uint32_t tisn;
     dpcp::tis *_tis;
-    dpcp::dek *_dek;
     dpcp::status status;
     dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
 
@@ -940,17 +1014,16 @@ xlio_tis *qp_mgr_eth_mlx5::tls_context_setup_tx(const xlio_tls_info *info)
         m_tis_cache.pop_back();
     }
 
-    status =
-        adapter->create_dek(dpcp::ENCRYPTION_KEY_TYPE_TLS, (void *)info->key, info->key_len, _dek);
-    if (unlikely(status != dpcp::DPCP_OK)) {
-        qp_logerr("Failed to create DEK, status: %d", status);
+    std::unique_ptr<dpcp::dek> dek_obj(get_dek(info->key, info->key_len));
+    if (unlikely(!dek_obj)) {
         m_tis_cache.push_back(tis);
         return NULL;
     }
-    tis->assign_dek(_dek);
+
+    tis->assign_dek(std::move(dek_obj));
     tisn = tis->get_tisn();
 
-    tls_post_static_params_wqe(tis, info, tisn, _dek->get_key_id(), 0, false, true);
+    tls_post_static_params_wqe(tis, info, tisn, tis->get_dek_id(), 0, false, true);
     tls_post_progress_params_wqe(tis, tisn, 0, false, true);
     /* The 1st post after TLS configuration must be with fence. */
     post_nop_fence();
@@ -1299,12 +1372,9 @@ void qp_mgr_eth_mlx5::tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t l
 
 void qp_mgr_eth_mlx5::tls_release_tis(xlio_tis *tis)
 {
-    /* TODO We don't have to lock ring to destroy DEK object (a garbage collector?). */
-
     tis->m_released = true;
     if (tis->m_ref == 0) {
-        tis->reset();
-        m_tis_cache.push_back(tis);
+        put_tis_in_cache(tis);
     }
 }
 
@@ -1328,17 +1398,19 @@ dpcp::tir *qp_mgr_eth_mlx5::xlio_tir_to_dpcp_tir(xlio_tir *tir)
 
 void qp_mgr_eth_mlx5::ti_released(xlio_ti *ti)
 {
-    /* TODO We don't have to lock ring to destroy DEK object (a garbage collector?). */
-
     assert(ti->m_released);
     assert(ti->m_ref == 0);
     if (ti->m_type == XLIO_TI_TIS) {
-        xlio_tis *tis = (xlio_tis *)ti;
-        tis->reset();
-        m_tis_cache.push_back(tis);
+        put_tis_in_cache(static_cast<xlio_tis *>(ti));
     } else if (ti->m_type == XLIO_TI_TIR) {
         put_tir_in_cache(static_cast<xlio_tir *>(ti));
     }
+}
+
+void qp_mgr_eth_mlx5::put_tis_in_cache(xlio_tis *tis)
+{
+    tis->reset(*this); // This will also return the DEK object to the DEK pool.
+    m_tis_cache.push_back(tis);
 }
 
 void qp_mgr_eth_mlx5::put_tir_in_cache(xlio_tir *tir)
@@ -1440,6 +1512,26 @@ void qp_mgr_eth_mlx5::trigger_completion_for_all_sent_packets()
         send_to_wire(&send_wr,
                      (vma_wr_tx_packet_attr)(VMA_TX_PACKET_L3_CSUM | VMA_TX_PACKET_L4_CSUM), true,
                      0);
+    }
+}
+
+void qp_mgr_eth_mlx5::reset_inflight_zc_buffers_ctx(void *ctx)
+{
+    sq_wqe_prop *p = m_sq_wqe_prop_last;
+    sq_wqe_prop *prev;
+    if (p) {
+        unsigned p_i = p - m_sq_wqe_idx_to_prop;
+        if (p_i == m_sq_wqe_prop_last_signalled) {
+            return;
+        }
+        do {
+            mem_buf_desc_t *desc = (mem_buf_desc_t *)p->wr_id;
+            if (desc && desc->tx.zc.ctx == ctx) {
+                desc->tx.zc.ctx = nullptr;
+            }
+            prev = p;
+            p = p->next;
+        } while (p && is_sq_wqe_prop_valid(p, prev));
     }
 }
 

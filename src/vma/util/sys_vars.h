@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -350,6 +350,7 @@ public:
     char stats_shmem_dirname[PATH_MAX];
     char conf_filename[PATH_MAX];
     char service_notify_dir[PATH_MAX];
+    bool service_enable;
     bool log_colors;
     bool handle_sigintr;
     bool handle_segfault;
@@ -466,6 +467,11 @@ public:
 #ifdef DEFINED_UTLS
     bool enable_utls_rx;
     bool enable_utls_tx;
+    // DEK cache size high-watermark. Max number of DEKs to be stored in the cache.
+    size_t utls_high_wmark_dek_cache_size;
+    // DEK cache size low-watermark. Min number of available DEKs required in the cache
+    // to perform Crypto-Sync and reuse.
+    size_t utls_low_wmark_dek_cache_size;
 #endif /* DEFINED_UTLS */
     uint32_t timer_netlink_update_msec;
 
@@ -488,6 +494,7 @@ public:
     int power_2_nginx_workers_num;
     int src_port_stride;
     int nginx_udp_socket_pool_size;
+    int nginx_udp_socket_pool_rx_num_buffs_reuse;
 #endif
     uint32_t tcp_send_buffer_size;
     FILE *stats_file;
@@ -534,8 +541,9 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_LOG_DETAILS         "XLIO_LOG_DETAILS"
 #define SYS_VAR_LOG_FILENAME        "XLIO_LOG_FILE"
 #define SYS_VAR_STATS_FILENAME      "XLIO_STATS_FILE"
-#define SYS_VAR_SERVICE_DIR         "XLIO_SERVICE_NOTIFY_DIR"
 #define SYS_VAR_STATS_SHMEM_DIRNAME "XLIO_STATS_SHMEM_DIR"
+#define SYS_VAR_SERVICE_DIR         "XLIO_SERVICE_NOTIFY_DIR"
+#define SYS_VAR_SERVICE_ENABLE      "XLIO_SERVICE_ENABLE"
 #define SYS_VAR_CONF_FILENAME       "XLIO_CONFIG_FILE"
 #define SYS_VAR_LOG_COLORS          "XLIO_LOG_COLORS"
 #define SYS_VAR_APPLICATION_ID      "XLIO_APPLICATION_ID"
@@ -563,6 +571,7 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_TX_NONBLOCKED_EAGAINS "XLIO_TX_NONBLOCKED_EAGAINS"
 #define SYS_VAR_TX_PREFETCH_BYTES     "XLIO_TX_PREFETCH_BYTES"
 #define SYS_VAR_TX_BUFS_BATCH_TCP     "XLIO_TX_BUFS_BATCH_TCP"
+#define SYS_VAR_TX_SEGS_BATCH_TCP     "XLIO_TX_SEGS_BATCH_TCP"
 
 #define SYS_VAR_STRQ                            "XLIO_STRQ"
 #define SYS_VAR_STRQ_NUM_STRIDES                "XLIO_STRQ_NUM_STRIDES"
@@ -632,10 +641,11 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_CLOSE_ON_DUP2             "XLIO_CLOSE_ON_DUP2"
 #define SYS_VAR_MTU                       "XLIO_MTU"
 #if defined(DEFINED_NGINX)
-#define SYS_VAR_NGINX_DISTRIBUTE_CQ "XLIO_NGINX_DISTRIBUTE_CQ"
-#define SYS_VAR_NGINX_WORKERS_NUM   "XLIO_NGINX_WORKERS_NUM"
-#define SYS_VAR_SRC_PORT_STRIDE     "XLIO_SRC_PORT_STRIDE"
-#define SYS_VAR_NGINX_UDP_POOL_SIZE "XLIO_NGINX_UDP_POOL_SIZE"
+#define SYS_VAR_NGINX_DISTRIBUTE_CQ               "XLIO_NGINX_DISTRIBUTE_CQ"
+#define SYS_VAR_NGINX_WORKERS_NUM                 "XLIO_NGINX_WORKERS_NUM"
+#define SYS_VAR_SRC_PORT_STRIDE                   "XLIO_SRC_PORT_STRIDE"
+#define SYS_VAR_NGINX_UDP_POOL_SIZE               "XLIO_NGINX_UDP_POOL_SIZE"
+#define SYS_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE "XLIO_NGINX_UDP_POOL_REUSE_BUFFS"
 #endif
 #define SYS_VAR_TCP_MAX_SYN_RATE "XLIO_TCP_MAX_SYN_RATE"
 #define SYS_VAR_MSS              "XLIO_MSS"
@@ -647,8 +657,10 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_SOCKETXTREME "XLIO_SOCKETXTREME"
 #define SYS_VAR_TSO          "XLIO_TSO"
 #ifdef DEFINED_UTLS
-#define SYS_VAR_UTLS_RX "XLIO_UTLS_RX"
-#define SYS_VAR_UTLS_TX "XLIO_UTLS_TX"
+#define SYS_VAR_UTLS_RX                        "XLIO_UTLS_RX"
+#define SYS_VAR_UTLS_TX                        "XLIO_UTLS_TX"
+#define SYS_VAR_UTLS_HIGH_WMARK_DEK_CACHE_SIZE "XLIO_UTLS_HIGH_WMARK_DEK_CACHE_SIZE"
+#define SYS_VAR_UTLS_LOW_WMARK_DEK_CACHE_SIZE  "XLIO_UTLS_LOW_WMARK_DEK_CACHE_SIZE"
 #endif /* DEFINED_UTLS */
 
 #define SYS_VAR_LRO "XLIO_LRO"
@@ -680,8 +692,9 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_LOG_FILE                 ("")
 #define MCE_DEFAULT_CONF_FILE                ("/etc/libxlio.conf")
 #define MCE_DEFAULT_STATS_FILE               ("")
-#define MCE_DEFAULT_SERVICE_FOLDER           (VMA_AGENT_PATH)
 #define MCE_DEFAULT_STATS_SHMEM_DIR          (VMA_AGENT_PATH)
+#define MCE_DEFAULT_SERVICE_FOLDER           (VMA_AGENT_PATH)
+#define MCE_DEFAULT_SERVICE_ENABLE           (false)
 #define MCE_DEFAULT_LOG_DETAILS              (0)
 #define MCE_DEFAULT_LOG_COLORS               (true)
 #define MCE_DEFAULT_APP_ID                   ("XLIO_DEFAULT_APPLICATION_ID")
@@ -798,8 +811,9 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_NGINX_DISTRIBUTE_CQ (false)
 #define MCE_DEFAULT_NGINX_WORKERS_NUM                                                              \
     (0) /* Nginx flow will be enabled by default for value greater than 0 */
-#define MCE_DEFAULT_SRC_PORT_STRIDE     (2)
-#define MCE_DEFAULT_NGINX_UDP_POOL_SIZE (0)
+#define MCE_DEFAULT_SRC_PORT_STRIDE                   (2)
+#define MCE_DEFAULT_NGINX_UDP_POOL_SIZE               (0)
+#define MCE_DEFAULT_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE (0)
 #endif
 #define MCE_DEFAULT_MSS                                (0)
 #define MCE_DEFAULT_LWIP_CC_ALGO_MOD                   (0)
@@ -831,8 +845,10 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_SOCKETXTREME            (false)
 #define MCE_DEFAULT_TSO                     (option_3::AUTO)
 #ifdef DEFINED_UTLS
-#define MCE_DEFAULT_UTLS_RX (false)
-#define MCE_DEFAULT_UTLS_TX (true)
+#define MCE_DEFAULT_UTLS_RX                        (false)
+#define MCE_DEFAULT_UTLS_TX                        (true)
+#define MCE_DEFAULT_UTLS_HIGH_WMARK_DEK_CACHE_SIZE (1024)
+#define MCE_DEFAULT_UTLS_LOW_WMARK_DEK_CACHE_SIZE  (512)
 #endif /* DEFINED_UTLS */
 
 #define MCE_DEFAULT_LRO                            (option_3::AUTO)

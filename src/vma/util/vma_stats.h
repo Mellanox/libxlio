@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -48,6 +48,7 @@
 #define NUM_OF_SUPPORTED_CQS         16
 #define NUM_OF_SUPPORTED_RINGS       16
 #define NUM_OF_SUPPORTED_BPOOLS      4
+#define NUM_OF_SUPPORTED_GLOBALS     1
 #define NUM_OF_SUPPORTED_EPFDS       32
 #define SHMEM_STATS_SIZE(fds_num)    sizeof(sh_mem_t) + (fds_num * sizeof(socket_instance_block_t))
 #define FILE_NAME_MAX_SIZE           (NAME_MAX + 1)
@@ -288,6 +289,7 @@ typedef struct {
     uint32_t n_rx_sw_queue_len;
     uint32_t n_rx_drained_at_once_max;
     uint32_t n_buffer_pool_len;
+    uint32_t n_rx_cqe_error;
     uint16_t n_rx_max_stirde_per_packet;
 } cq_stats_t;
 
@@ -353,6 +355,18 @@ typedef struct {
     bpool_stats_t bpool_stats;
 } bpool_instance_block_t;
 
+// Global stat info
+typedef struct {
+    uint32_t n_tcp_seg_pool_size;
+    uint32_t n_tcp_seg_pool_no_segs;
+    uint32_t n_pending_sockets;
+} global_stats_t;
+
+typedef struct {
+    bool b_enabled;
+    global_stats_t global_stats;
+} global_instance_block_t;
+
 // Version info
 typedef struct {
     uint8_t vma_lib_maj;
@@ -372,6 +386,7 @@ typedef struct sh_mem_t {
     cq_instance_block_t cq_inst_arr[NUM_OF_SUPPORTED_CQS];
     ring_instance_block_t ring_inst_arr[NUM_OF_SUPPORTED_RINGS];
     bpool_instance_block_t bpool_inst_arr[NUM_OF_SUPPORTED_BPOOLS];
+    global_instance_block_t global_inst_arr[NUM_OF_SUPPORTED_GLOBALS];
     mc_grp_info_t mc_info;
     iomux_stats_t iomux;
     size_t max_skt_inst_num; // number of elements allocated in 'socket_instance_block_t
@@ -414,6 +429,7 @@ typedef struct sh_mem_t {
         memset(cq_inst_arr, 0, sizeof(cq_inst_arr));
         memset(ring_inst_arr, 0, sizeof(ring_inst_arr));
         memset(bpool_inst_arr, 0, sizeof(bpool_inst_arr));
+        memset(global_inst_arr, 0, sizeof(global_inst_arr));
         memset(&mc_info, 0, sizeof(mc_info));
         memset(&iomux, 0, sizeof(iomux));
         for (uint32_t i = 0; i < max_skt_inst_num; i++) {
@@ -448,6 +464,9 @@ void vma_stats_instance_remove_cq_block(cq_stats_t *);
 
 void vma_stats_instance_create_bpool_block(bpool_stats_t *);
 void vma_stats_instance_remove_bpool_block(bpool_stats_t *);
+
+void vma_stats_instance_create_global_block(global_stats_t *);
+void vma_stats_instance_remove_global_block(global_stats_t *);
 
 void vma_stats_instance_get_poll_block(iomux_func_stats_t *);
 void vma_stats_instance_get_select_block(iomux_func_stats_t *);

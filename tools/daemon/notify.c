@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -38,8 +38,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <sys/socket.h>
-#include <netinet/ip.h>
-#include <netinet/tcp.h>
 
 #ifdef HAVE_SYS_INOTIFY_H
 #include <sys/inotify.h>
@@ -69,28 +67,40 @@
 #endif
 
 struct rst_info {
-    struct sockaddr_in local_addr;
-    struct sockaddr_in remote_addr;
+    struct sockaddr_store local_addr;
+    struct sockaddr_store remote_addr;
     uint32_t seqno;
 };
 
 #pragma pack(push, 1)
-struct tcp_msg {
+struct tcp_msg4 {
     struct iphdr ip;
     struct tcphdr tcp;
     uint8_t data[8192];
 };
-#pragma pack(pop)
 
-#pragma pack(push, 1)
-struct pseudo_header {
+struct tcp_msg6 {
+    struct tcphdr tcp;
+    uint8_t data[8192];
+};
+
+struct pseudo_header4 {
     uint32_t source_address;
     uint32_t dest_address;
     uint8_t placeholder;
     uint8_t protocol;
     uint16_t tcp_length;
     struct tcphdr tcp;
-} pseudo_header;
+};
+
+struct pseudo_header6 {
+    uint8_t source_address[16];
+    uint8_t dest_address[16];
+    uint32_t pkt_length;
+    uint8_t placeholder[3];
+    uint8_t next_header;
+    struct tcphdr tcp;
+};
 #pragma pack(pop)
 
 int open_notify(void);
@@ -106,7 +116,11 @@ static int clean_process(pid_t pid);
 static int check_process(pid_t pid);
 static unsigned short calc_csum(unsigned short *ptr, int nbytes);
 static int get_seqno(struct rst_info *rst);
+static int get_seqno_ip4(struct rst_info *rst);
+static int get_seqno_ip6(struct rst_info *rst);
 static int send_rst(struct rst_info *rst);
+static int send_rst_ip4(struct rst_info *rst);
+static int send_rst_ip6(struct rst_info *rst);
 
 #ifdef HAVE_SYS_INOTIFY_H
 static int open_inotify(void);
@@ -157,8 +171,12 @@ void close_notify(void)
         close(daemon_cfg.notify_fd);
     }
 
-    if (daemon_cfg.raw_fd > 0) {
-        close(daemon_cfg.raw_fd);
+    if (daemon_cfg.raw_fd_ip4 > 0) {
+        close(daemon_cfg.raw_fd_ip4);
+    }
+
+    if (daemon_cfg.raw_fd_ip6 > 0) {
+        close(daemon_cfg.raw_fd_ip6);
     }
 }
 
@@ -239,17 +257,37 @@ static int create_raw_socket(void)
     int rc = 0;
     int optval = 1;
 
-    /* Create RAW socket to use for sending RST to peers */
-    daemon_cfg.raw_fd = socket(PF_INET, SOCK_RAW, IPPROTO_TCP);
-    if (daemon_cfg.raw_fd < 0) {
+    /* Create RAW IPv4 socket to use for sending RST to peers */
+    daemon_cfg.raw_fd_ip4 = socket(PF_INET, SOCK_RAW, IPPROTO_TCP);
+    if (daemon_cfg.raw_fd_ip4 < 0) {
         /* socket creation failed, may be because of non-root privileges */
-        log_error("Failed to call socket() errno %d (%s)\n", errno, strerror(errno));
+        log_error("Failed to call socket(ip4) errno %d (%s)\n", errno, strerror(errno));
         rc = -errno;
         goto err;
     }
 
     optval = 1;
-    rc = setsockopt(daemon_cfg.raw_fd, IPPROTO_IP, IP_HDRINCL, &optval, sizeof(optval));
+    /* Inform the kernel the IP header is already attached via a socket option */
+    rc = setsockopt(daemon_cfg.raw_fd_ip4, IPPROTO_IP, IP_HDRINCL, &optval, sizeof(optval));
+    if (rc < 0) {
+        log_error("Failed to call setsockopt() errno %d (%s)\n", errno, strerror(errno));
+        rc = -errno;
+        goto err;
+    }
+
+    /* Create RAW IPv6 socket to use for sending RST to peers */
+    daemon_cfg.raw_fd_ip6 = socket(PF_INET6, SOCK_RAW, IPPROTO_TCP);
+    if (daemon_cfg.raw_fd_ip6 < 0) {
+        /* socket creation failed, may be because of non-root privileges */
+        log_error("Failed to call socket(ip6) errno %d (%s)\n", errno, strerror(errno));
+        rc = -errno;
+        goto err;
+    }
+
+    optval = -1;
+    /* Set the ipv6 checksum option, so the kernel will calculate tcp checksum itself or -1 to
+     * disable */
+    rc = setsockopt(daemon_cfg.raw_fd_ip6, IPPROTO_IPV6, IPV6_CHECKSUM, &optval, sizeof(optval));
     if (rc < 0) {
         log_error("Failed to call setsockopt() errno %d (%s)\n", errno, strerror(errno));
         rc = -errno;
@@ -329,13 +367,9 @@ static int clean_process(pid_t pid)
                      *    3.1 [H] should reply to an unknown SYN/ACK by RST.
                      *    3.2 [P1] sends RST using SeqNo from SYN/ACK.
                      */
-                    rst.local_addr.sin_family = AF_INET;
-                    rst.local_addr.sin_port = fid_value->src_port;
-                    rst.local_addr.sin_addr.s_addr = fid_value->src_ip;
-                    rst.remote_addr.sin_family = AF_INET;
-                    rst.remote_addr.sin_port = fid_value->dst_port;
-                    rst.remote_addr.sin_addr.s_addr = fid_value->dst_ip;
-                    rst.seqno = 1;
+                    memcpy(&rst.local_addr, &fid_value->src, sizeof(rst.local_addr));
+                    memcpy(&rst.remote_addr, &fid_value->dst, sizeof(rst.remote_addr));
+                    rst.seqno = htonl(1);
 
                     if (0 == get_seqno(&rst) && daemon_cfg.opt.force_rst) {
                         send_rst(&rst);
@@ -407,8 +441,21 @@ static unsigned short calc_csum(unsigned short *ptr, int nbytes)
 static int get_seqno(struct rst_info *rst)
 {
     int rc = 0;
-    struct tcp_msg msg;
-    struct pseudo_header pheader;
+
+    if (rst->local_addr.family == AF_INET) {
+        rc = get_seqno_ip4(rst);
+    } else {
+        rc = get_seqno_ip6(rst);
+    }
+
+    return rc;
+}
+
+static int get_seqno_ip4(struct rst_info *rst)
+{
+    int rc = 0;
+    struct tcp_msg4 msg;
+    struct pseudo_header4 pheader;
     int attempt = 3; /* Do maximum number of attempts */
     struct timeval t_end = TIMEVAL_INITIALIZER;
     struct timeval t_now = TIMEVAL_INITIALIZER;
@@ -428,15 +475,15 @@ static int get_seqno(struct rst_info *rst)
     msg.ip.ttl = 0x40;
     msg.ip.protocol = IPPROTO_TCP;
     msg.ip.check = 0;
-    msg.ip.saddr = rst->local_addr.sin_addr.s_addr;
-    msg.ip.daddr = rst->remote_addr.sin_addr.s_addr;
+    msg.ip.saddr = rst->local_addr.addr4.sin_addr.s_addr;
+    msg.ip.daddr = rst->remote_addr.addr4.sin_addr.s_addr;
 
     /* Calculate IP header checksum */
     msg.ip.check = calc_csum((unsigned short *)&msg.ip, sizeof(msg.ip));
 
     /* TCP Header */
-    msg.tcp.source = rst->local_addr.sin_port;
-    msg.tcp.dest = rst->remote_addr.sin_port;
+    msg.tcp.source = rst->local_addr.addr4.sin_port;
+    msg.tcp.dest = rst->remote_addr.addr4.sin_port;
     msg.tcp.seq = rst->seqno;
     msg.tcp.ack_seq = 0;
     msg.tcp.doff = 5;
@@ -461,7 +508,7 @@ static int get_seqno(struct rst_info *rst)
 
     do {
         /* Send invalid SYN packet */
-        rc = sys_sendto(daemon_cfg.raw_fd, &msg, sizeof(msg) - sizeof(msg.data), 0,
+        rc = sys_sendto(daemon_cfg.raw_fd_ip4, &msg, sizeof(msg) - sizeof(msg.data), 0,
                         (struct sockaddr *)&rst->remote_addr, sizeof(rst->remote_addr));
         if (rc < 0) {
             goto out;
@@ -475,17 +522,17 @@ static int get_seqno(struct rst_info *rst)
         tv_add(&t_end, &t_wait, &t_end);
 
         do {
-            struct tcp_msg msg_recv;
-            struct sockaddr_in gotaddr;
+            struct tcp_msg4 msg_recv;
+            struct sockaddr_store gotaddr;
             socklen_t addrlen = sizeof(gotaddr);
             fd_set readfds;
 
             FD_ZERO(&readfds);
-            FD_SET(daemon_cfg.raw_fd, &readfds);
+            FD_SET(daemon_cfg.raw_fd_ip4, &readfds);
 
             /* Use t_difference to determine timeout for select so we don't wait longer than t_wait
              */
-            rc = select(daemon_cfg.raw_fd + 1, &readfds, NULL, NULL, &t_wait);
+            rc = select(daemon_cfg.raw_fd_ip4 + 1, &readfds, NULL, NULL, &t_wait);
             gettimeofday(&t_now, NULL);
 
             /**
@@ -499,7 +546,7 @@ static int get_seqno(struct rst_info *rst)
 
             memcpy(&gotaddr, &rst->remote_addr, addrlen);
             memset(&msg_recv, 0, sizeof(msg_recv));
-            rc = recvfrom(daemon_cfg.raw_fd, &msg_recv, sizeof(msg_recv), 0,
+            rc = recvfrom(daemon_cfg.raw_fd_ip4, &msg_recv, sizeof(msg_recv), 0,
                           (struct sockaddr *)&gotaddr, &addrlen);
             if (rc < 0) {
                 goto out;
@@ -520,11 +567,128 @@ out:
     return -EAGAIN;
 }
 
+static int get_seqno_ip6(struct rst_info *rst)
+{
+    int rc = 0;
+    struct tcp_msg6 msg;
+    struct pseudo_header6 pheader;
+    int attempt = 3; /* Do maximum number of attempts */
+    struct timeval t_end = TIMEVAL_INITIALIZER;
+    struct timeval t_now = TIMEVAL_INITIALIZER;
+    struct timeval t_wait =
+        TIMEVAL_INITIALIZER; /* Defines wait interval, holds difference between t_now and t_end */
+
+    /* zero out the packet */
+    memset(&msg, 0, sizeof(msg));
+
+    /* TCP Header */
+    msg.tcp.source = rst->local_addr.addr6.sin6_port;
+    msg.tcp.dest = rst->remote_addr.addr6.sin6_port;
+    msg.tcp.seq = rst->seqno;
+    msg.tcp.ack_seq = 0;
+    msg.tcp.doff = 5;
+    msg.tcp.fin = 0;
+    msg.tcp.syn = 1;
+    msg.tcp.rst = 0;
+    msg.tcp.psh = 0;
+    msg.tcp.ack = 0;
+    msg.tcp.urg = 0;
+    msg.tcp.window = 0;
+    msg.tcp.check = 0;
+    msg.tcp.urg_ptr = 0;
+
+    /* Calculate TCP header checksum */
+    memcpy(pheader.source_address, &rst->local_addr.addr6.sin6_addr.s6_addr[0],
+           sizeof(pheader.source_address));
+    memcpy(pheader.dest_address, &rst->remote_addr.addr6.sin6_addr.s6_addr[0],
+           sizeof(pheader.dest_address));
+    pheader.pkt_length = htons(sizeof(struct tcphdr));
+    pheader.placeholder[0] = 0;
+    pheader.placeholder[1] = 0;
+    pheader.placeholder[2] = 0;
+    pheader.next_header = IPPROTO_TCP;
+    bcopy((const void *)&msg.tcp, (void *)&pheader.tcp, sizeof(struct tcphdr));
+    msg.tcp.check = calc_csum((unsigned short *)&pheader, sizeof(pheader));
+
+    do {
+        /* Send invalid SYN packet remote port should be set to zero */
+        rst->remote_addr.addr6.sin6_port = 0;
+        rc = sys_sendto(daemon_cfg.raw_fd_ip6, &msg, sizeof(msg) - sizeof(msg.data), 0,
+                        (struct sockaddr *)&rst->remote_addr, sizeof(rst->remote_addr));
+        rst->remote_addr.addr6.sin6_port = msg.tcp.dest;
+        if (rc < 0) {
+            goto out;
+        }
+        log_debug("send SYN to: %s\n", sys_addr2str(&rst->remote_addr));
+        t_wait.tv_sec = daemon_cfg.opt.retry_interval / 1000;
+        t_wait.tv_usec = (daemon_cfg.opt.retry_interval % 1000) * 1000;
+        gettimeofday(&t_end, NULL);
+
+        /* Account for wrapping of tv_usec, use utils macro for timeradd() */
+        tv_add(&t_end, &t_wait, &t_end);
+
+        do {
+            struct tcp_msg6 msg_recv;
+            struct sockaddr_store gotaddr;
+            socklen_t addrlen = sizeof(gotaddr);
+            fd_set readfds;
+
+            FD_ZERO(&readfds);
+            FD_SET(daemon_cfg.raw_fd_ip6, &readfds);
+
+            /* Use t_difference to determine timeout for select so we don't wait longer than t_wait
+             */
+            rc = select(daemon_cfg.raw_fd_ip6 + 1, &readfds, NULL, NULL, &t_wait);
+            gettimeofday(&t_now, NULL);
+
+            /**
+             * Determine and save difference between t_now and t_end for select on next iteration.
+             */
+            tv_sub(&t_end, &t_now, &t_wait);
+
+            if (rc == 0) {
+                continue;
+            }
+
+            memcpy(&gotaddr, &rst->remote_addr, addrlen);
+            memset(&msg_recv, 0, sizeof(msg_recv));
+            rc = recvfrom(daemon_cfg.raw_fd_ip6, &msg_recv, sizeof(msg_recv), 0,
+                          (struct sockaddr *)&gotaddr, &addrlen);
+            if (rc < 0) {
+                goto out;
+            }
+            if (msg_recv.tcp.source == msg.tcp.dest && msg_recv.tcp.dest == msg.tcp.source &&
+                msg_recv.tcp.ack == 1) {
+                rst->seqno = msg_recv.tcp.ack_seq;
+                log_debug("recv SYN|ACK from: %s with SegNo: %d\n", sys_addr2str(&gotaddr),
+                          ntohl(rst->seqno));
+                return 0;
+            }
+        } while (tv_cmp(&t_now, &t_end, <));
+    } while (--attempt);
+
+out:
+    return -EAGAIN;
+}
+
 static int send_rst(struct rst_info *rst)
 {
     int rc = 0;
-    struct tcp_msg msg;
-    struct pseudo_header pheader;
+
+    if (rst->local_addr.family == AF_INET) {
+        rc = send_rst_ip4(rst);
+    } else {
+        rc = send_rst_ip6(rst);
+    }
+
+    return rc;
+}
+
+static int send_rst_ip4(struct rst_info *rst)
+{
+    int rc = 0;
+    struct tcp_msg4 msg;
+    struct pseudo_header4 pheader;
 
     /* zero out the packet */
     memset(&msg, 0, sizeof(msg));
@@ -539,15 +703,15 @@ static int send_rst(struct rst_info *rst)
     msg.ip.ttl = 0x40;
     msg.ip.protocol = IPPROTO_TCP;
     msg.ip.check = 0;
-    msg.ip.saddr = rst->local_addr.sin_addr.s_addr;
-    msg.ip.daddr = rst->remote_addr.sin_addr.s_addr;
+    msg.ip.saddr = rst->local_addr.addr4.sin_addr.s_addr;
+    msg.ip.daddr = rst->remote_addr.addr4.sin_addr.s_addr;
 
     /* Calculate IP header checksum */
     msg.ip.check = calc_csum((unsigned short *)&msg.ip, sizeof(msg.ip));
 
     /* TCP Header */
-    msg.tcp.source = rst->local_addr.sin_port;
-    msg.tcp.dest = rst->remote_addr.sin_port;
+    msg.tcp.source = rst->local_addr.addr4.sin_port;
+    msg.tcp.dest = rst->remote_addr.addr4.sin_port;
     msg.tcp.seq = rst->seqno;
     msg.tcp.ack_seq = 0;
     msg.tcp.doff = 5;
@@ -570,8 +734,61 @@ static int send_rst(struct rst_info *rst)
     bcopy((const void *)&msg.tcp, (void *)&pheader.tcp, sizeof(struct tcphdr));
     msg.tcp.check = calc_csum((unsigned short *)&pheader, sizeof(pheader));
 
-    rc = sys_sendto(daemon_cfg.raw_fd, &msg, sizeof(msg) - sizeof(msg.data), 0,
+    rc = sys_sendto(daemon_cfg.raw_fd_ip4, &msg, sizeof(msg) - sizeof(msg.data), 0,
                     (struct sockaddr *)&rst->remote_addr, sizeof(rst->remote_addr));
+    if (rc < 0) {
+        goto out;
+    }
+    log_debug("send RST to: %s\n", sys_addr2str(&rst->remote_addr));
+
+    rc = 0;
+
+out:
+    return rc;
+}
+
+static int send_rst_ip6(struct rst_info *rst)
+{
+    int rc = 0;
+    struct tcp_msg6 msg;
+    struct pseudo_header6 pheader;
+
+    /* zero out the packet */
+    memset(&msg, 0, sizeof(msg));
+
+    /* TCP Header */
+    msg.tcp.source = rst->local_addr.addr6.sin6_port;
+    msg.tcp.dest = rst->remote_addr.addr6.sin6_port;
+    msg.tcp.seq = rst->seqno;
+    msg.tcp.ack_seq = 0;
+    msg.tcp.doff = 5;
+    msg.tcp.fin = 0;
+    msg.tcp.syn = 0;
+    msg.tcp.rst = 1;
+    msg.tcp.psh = 0;
+    msg.tcp.ack = 0;
+    msg.tcp.urg = 0;
+    msg.tcp.window = 0;
+    msg.tcp.check = 0;
+    msg.tcp.urg_ptr = 0;
+
+    /* Calculate TCP header checksum */
+    memcpy(pheader.source_address, &rst->local_addr.addr6.sin6_addr.s6_addr[0],
+           sizeof(pheader.source_address));
+    memcpy(pheader.dest_address, &rst->remote_addr.addr6.sin6_addr.s6_addr[0],
+           sizeof(pheader.dest_address));
+    pheader.pkt_length = htons(sizeof(struct tcphdr));
+    pheader.placeholder[0] = 0;
+    pheader.placeholder[1] = 0;
+    pheader.placeholder[2] = 0;
+    pheader.next_header = IPPROTO_TCP;
+    bcopy((const void *)&msg.tcp, (void *)&pheader.tcp, sizeof(struct tcphdr));
+    msg.tcp.check = calc_csum((unsigned short *)&pheader, sizeof(pheader));
+
+    rst->remote_addr.addr6.sin6_port = 0;
+    rc = sys_sendto(daemon_cfg.raw_fd_ip6, &msg, sizeof(msg) - sizeof(msg.data), 0,
+                    (struct sockaddr *)&rst->remote_addr, sizeof(rst->remote_addr));
+    rst->remote_addr.addr6.sin6_port = msg.tcp.dest;
     if (rc < 0) {
         goto out;
     }

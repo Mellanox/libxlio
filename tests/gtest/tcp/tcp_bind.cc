@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -34,6 +34,7 @@
 #include "common/log.h"
 #include "common/sys.h"
 #include "common/base.h"
+#include "common/cmn.h"
 #include "src/vma/util/sock_addr.h"
 #include "tcp_base.h"
 
@@ -139,6 +140,8 @@ TEST_F(tcp_bind, ti_2)
 {
     int rc = EOK;
     int fd;
+
+    SKIP_TRUE(def_gw_exists, "No Default Gateway");
 
     fd = tcp_base::sock_create();
     ASSERT_LE(0, fd);

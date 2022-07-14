@@ -2,7 +2,7 @@
 #
 # Testing script for XLIO, to run from Jenkins CI
 #
-# Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
+# Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -75,6 +75,7 @@ jenkins_test_build=${jenkins_test_build:="no"}
 
 jenkins_test_compiler=${jenkins_test_compiler:="no"}
 jenkins_test_rpm=${jenkins_test_rpm:="no"}
+jenkins_test_copyrights=${jenkins_test_copyrights:="no"}
 jenkins_test_cov=${jenkins_test_cov:="no"}
 jenkins_test_cppcheck=${jenkins_test_cppcheck:="no"}
 jenkins_test_csbuild=${jenkins_test_csbuild:="no"}
@@ -267,6 +268,16 @@ for target_v in "${target_list[@]}"; do
 	        ret=$?
 	        if [ $ret -gt 0 ]; then
 	           do_err "case: [tidy: ret=$ret]"
+	        fi
+	        rc=$((rc + $ret))
+	    fi
+    fi
+    if [ 13 -lt "$jenkins_opt_exit" -o "$rc" -eq 0 ]; then
+	    if [ "$jenkins_test_copyrights" = "yes" ]; then
+	        $WORKSPACE/contrib/jenkins_tests/copyrights.sh
+	        ret=$?
+	        if [ $ret -gt 0 ]; then
+	           do_err "case: [copyrights: ret=$ret]"
 	        fi
 	        rc=$((rc + $ret))
 	    fi

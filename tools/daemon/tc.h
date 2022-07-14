@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -37,6 +37,8 @@
 #include <linux/pkt_cls.h>
 #include <linux/if_ether.h>
 #include <linux/tc_act/tc_mirred.h>
+
+struct sockaddr_store;
 
 /* The tc_t opaque data type
  */
@@ -87,6 +89,8 @@ void tc_destroy(tc_t tc);
  *   The TC object.
  * @param[in] ifindex
  *   The netdevice ifindex where the rule will be applied.
+ * @param[in] proto
+ *   Protocol (IPv4/IPv6).
  * @param[in] type
  *   The type of TC message to create (RTM_NEWTFILTER, RTM_NEWQDISC, etc.).
  * @param[in] flags
@@ -97,7 +101,8 @@ void tc_destroy(tc_t tc);
  * @return
  *     @a none
  */
-void tc_req(tc_t tc, int ifindex, uint16_t type, uint16_t flags, struct tc_qdisc qdisc);
+void tc_req(tc_t tc, int ifindex, short proto, uint16_t type, uint16_t flags,
+            struct tc_qdisc qdisc);
 
 /**
  * Add qdisc as a TC request.
@@ -136,11 +141,13 @@ int tc_del_qdisc(tc_t tc, int ifindex);
  *   Priority value.
  * @param[in] ht
  *   Hash table index.
+ * @param[in] proto
+ *   Protocol (IPv4/IPv6).
  *
  * @return
  *   0 on success, -1 otherwise with errno set.
  */
-int tc_add_filter_divisor(tc_t tc, int ifindex, int prio, int ht);
+int tc_add_filter_divisor(tc_t tc, int ifindex, int prio, int ht, short proto);
 
 /**
  * Add filter link as a TC request.
@@ -161,7 +168,7 @@ int tc_add_filter_divisor(tc_t tc, int ifindex, int prio, int ht);
  * @return
  *   0 on success, -1 otherwise with errno set.
  */
-int tc_add_filter_link(tc_t tc, int ifindex, int prio, int ht, int id, uint32_t ip);
+int tc_add_filter_link(tc_t tc, int ifindex, int prio, int ht, int id, struct sockaddr_store *ip);
 
 /**
  * Add filter to redirect traffic from tap device
@@ -173,23 +180,20 @@ int tc_add_filter_link(tc_t tc, int ifindex, int prio, int ht, int id, uint32_t 
  *   The tap device ifindex.
  * @param[in] prio
  *   Priority value.
- * @param[in] ht
- *   Hash table index.
  * @param[in] id
  *   Item index.
  * @param[in] proto
- *   Protocol type as tcp, udp etc.
- * @param[in] proto
+ *   Protocol (IPv4/IPv6).
+ * @param[in] ip
  *   Destination ip.
- * @param[in] proto
- *   Destination port.
  * @param[in] ifindex
  *   The netdevice ifindex where the rule will be applied.
  *
  * @return
  *   0 on success, -1 otherwise with errno set.
  */
-int tc_add_filter_tap2dev(tc_t tc, int ifindex, int prio, int id, uint32_t ip, int ifindex_to);
+int tc_add_filter_tap2dev(tc_t tc, int ifindex, int prio, int id, short proto,
+                          struct sockaddr_store *ip, int ifindex_to);
 
 /**
  * Add filter to redirect traffic from ethernet device
@@ -205,24 +209,20 @@ int tc_add_filter_tap2dev(tc_t tc, int ifindex, int prio, int id, uint32_t ip, i
  *   Hash table index.
  * @param[in] id
  *   Item index.
- * @param[in] proto
+ * @param[in] l4_proto
  *   Protocol type as tcp, udp etc.
  * @param[in] dst_ip
  *   Destination ip.
- * @param[in] dst_port
- *   Destination port.
  * @param[in] src_ip
  *   Source ip.
- * @param[in] src_port
- *   Source port.
  * @param[in] ifindex
  *   The tap device ifindex.
  *
  * @return
  *   0 on success, -1 otherwise with errno set.
  */
-int tc_add_filter_dev2tap(tc_t tc, int ifindex, int prio, int ht, int bkt, int id, int proto,
-                          uint32_t dst_ip, uint16_t dst_port, uint32_t src_ip, uint16_t src_port,
+int tc_add_filter_dev2tap(tc_t tc, int ifindex, int prio, int ht, int bkt, int id, int l4_proto,
+                          struct sockaddr_store *dst_ip, struct sockaddr_store *src_ip,
                           int ifindex_to);
 
 /**
@@ -238,12 +238,14 @@ int tc_add_filter_dev2tap(tc_t tc, int ifindex, int prio, int ht, int bkt, int i
  *   Hash table index.
  * @param[in] bkt
  *   Bucket index.
- * @param[in] ht
+ * @param[in] id
  *   Item index.
+ * @param[in] proto
+ *   Protocol (IPv4/IPv6).
  *
  * @return
  *   0 on success, -1 otherwise with errno set.
  */
-int tc_del_filter(tc_t tc, int ifindex, int prio, int ht, int bkt, int id);
+int tc_del_filter(tc_t tc, int ifindex, int prio, int ht, int bkt, int id, short proto);
 
 #endif /* TOOLS_DAEMON_TC_H_ */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -34,7 +34,7 @@
 #include "common/log.h"
 #include "common/sys.h"
 #include "common/base.h"
-
+#include "common/cmn.h"
 #include "tcp_base.h"
 
 class tcp_event : public tcp_base {
@@ -68,6 +68,8 @@ TEST_F(tcp_event, ti_2)
     int rc = EOK;
     int fd;
     struct epoll_event event;
+
+    SKIP_TRUE(def_gw_exists, "No Default Gateway");
 
     fd = tcp_base::sock_create_nb();
     ASSERT_LE(0, fd);

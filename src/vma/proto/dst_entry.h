@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -120,6 +120,11 @@ public:
 
     uint8_t get_tos() const { return m_tos; }
     uint8_t get_ttl_hop_limit() const { return m_ttl; }
+
+    void reset_inflight_zc_buffers_ctx(void *ctx)
+    {
+        m_p_ring->reset_inflight_zc_buffers_ctx(m_id, ctx);
+    }
 
 protected:
     ip_address m_dst_ip;

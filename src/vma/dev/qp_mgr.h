@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -44,7 +44,6 @@
 #include "vma/util/sys_vars.h"
 #include "vma/util/libvma.h"
 #include "vma/util/if.h"
-#include "vma/util/hash_map.h"
 #include "vma/lwip/opt.h"
 #include "vma/proto/mem_buf_desc.h"
 #include "vma/infra/sender.h"
@@ -191,6 +190,8 @@ public:
     }
 #endif /* DEFINED_UTLS */
     virtual void post_nop_fence(void) {}
+
+    virtual void reset_inflight_zc_buffers_ctx(void *ctx) { NOT_IN_USE(ctx); }
 
 protected:
     struct ibv_qp *m_qp;

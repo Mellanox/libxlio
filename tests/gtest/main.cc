@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -87,10 +87,10 @@ static int _def_config(void)
 
 static void set_def_remote_address()
 {
-    bool rc_gw = sys_gateway((struct sockaddr *)&gtest_conf.remote_addr,
-                             gtest_conf.server_addr.addr.sin_family);
+    gtest_conf.def_gw_exists = sys_gateway((struct sockaddr *)&gtest_conf.remote_addr,
+                                           gtest_conf.server_addr.addr.sin_family);
     if (gtest_conf.server_addr.addr.sin_family == AF_INET6) {
-        if (!rc_gw) {
+        if (!gtest_conf.def_gw_exists) {
             sys_str2addr("::[8888]", (struct sockaddr *)&gtest_conf.remote_addr, true);
         } else {
             gtest_conf.remote_addr.addr6.sin6_port = htons(8888);

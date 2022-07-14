@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -52,7 +52,6 @@ header::header()
 }
 
 header::header(const header &h)
-    : tostr()
 {
     m_ip_header_len = h.m_ip_header_len;
     m_transport_header_len = h.m_transport_header_len;

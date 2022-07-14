@@ -36,10 +36,8 @@
 
 #include "vma/lwip/opt.h"
 
-#if LWIP_TCP /* don't build if not configured for use in lwipopts.h */
-
 #include "vma/lwip/pbuf.h"
-#include "vma/lwip/ip.h"
+#include "vma/lwip/ip_addr.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -54,13 +52,9 @@ extern u16_t lwip_tcp_mss;
 extern u32_t lwip_tcp_snd_buf;
 extern u32_t lwip_zc_tx_size;
 
-#if LWIP_3RD_PARTY_L3
 struct tcp_seg;
 typedef err_t (*ip_output_fn)(struct pbuf *p, struct tcp_seg *seg, void* p_conn, u16_t flags);
-void register_ip_output(ip_output_fn fn);
-#endif /* LWIP_3RD_PARTY_L3 */
 
-#if LWIP_3RD_PARTY_BUFS
 typedef struct pbuf * (*tcp_tx_pbuf_alloc_fn)(void* p_conn, pbuf_type type, pbuf_desc *desc, struct pbuf *p_buff);
 
 void register_tcp_tx_pbuf_alloc(tcp_tx_pbuf_alloc_fn fn);
@@ -82,7 +76,6 @@ extern tcp_tx_pbuf_alloc_fn external_tcp_tx_pbuf_alloc;
 extern tcp_tx_pbuf_free_fn external_tcp_tx_pbuf_free;
 extern tcp_seg_alloc_fn external_tcp_seg_alloc;
 extern tcp_seg_free_fn external_tcp_seg_free;
-#endif /* LWIP_3RD_PARTY_BUFS */
 
 
 struct tcp_pcb;
@@ -151,17 +144,6 @@ typedef err_t (*tcp_recv_fn)(void *arg, struct tcp_pcb *tpcb,
 typedef err_t (*tcp_sent_fn)(void *arg, struct tcp_pcb *tpcb,
                               u16_t len);
 
-/** Function prototype for tcp poll callback functions. Called periodically as
- * specified by @see tcp_poll.
- *
- * @param arg Additional argument to pass to the callback function (@see tcp_arg())
- * @param tpcb tcp pcb
- * @return ERR_OK: try to send some data by calling tcp_output
- *            Only return ERR_ABRT if you have called tcp_abort from within the
- *            callback function!
- */
-typedef err_t (*tcp_poll_fn)(void *arg, struct tcp_pcb *tpcb);
-
 /** Function prototype for tcp error callback functions. Called when the pcb
  * receives a RST or is unexpectedly closed for any other reason.
  *
@@ -221,49 +203,33 @@ static const char * const tcp_state_str[] = {
 #define PCB_IN_ACTIVE_STATE(pcb) (get_tcp_state(pcb) > LISTEN && get_tcp_state(pcb) < TIME_WAIT)
 #define PCB_IN_TIME_WAIT_STATE(pcb) (get_tcp_state(pcb) == TIME_WAIT)
 
-#if LWIP_CALLBACK_API
-  /* Function to call when a listener has been connected.
-   * @param arg user-supplied argument (tcp_pcb.callback_arg)
-   * @param pcb a new tcp_pcb that now is connected
-   * @param err an error argument (TODO: that is current always ERR_OK?)
-   * @return ERR_OK: accept the new connection,
-   *                 any other err_t abortsthe new connection
-   */
-#define DEF_ACCEPT_CALLBACK  tcp_accept_fn accept;
-#else /* LWIP_CALLBACK_API */
-#define DEF_ACCEPT_CALLBACK
-#endif /* LWIP_CALLBACK_API */
-
-
 /* allow user to be notified upon tcp_state changes */
 typedef void (*tcp_state_observer_fn)(void* pcb_container, enum tcp_state new_state);
 void register_tcp_state_observer(tcp_state_observer_fn fn);
 extern tcp_state_observer_fn external_tcp_state_observer;
 
-/**
- * members common to struct tcp_pcb and struct tcp_listen_pcb
+/*
+ * Option flags per-socket. These are the same like SO_XXX.
  */
-#define TCP_PCB_COMMON(type) \
-  enum tcp_state private_state; /* TCP state - should only be touched thru get/set functions */ \
-  u8_t prio; \
-  void *callback_arg; \
-  void *my_container; \
-  /* Function to be called when sending data. */ \
-  ip_output_fn ip_output; \
-  /* the accept callback for listen- and normal pcbs, if LWIP_CALLBACK_API */ \
-  DEF_ACCEPT_CALLBACK \
-  /* ports are in host byte order */ \
-  u16_t local_port; \
-  u32_t rcv_wnd;   /* receiver window available */ \
-  u32_t rcv_ann_wnd; /* receiver window to announce */ \
-  u32_t rcv_wnd_max; /* maximum available receive window */ \
-  u32_t rcv_wnd_max_desired;
+/*#define SOF_DEBUG       (u8_t)0x01U     Unimplemented: turn on debugging info recording */
+#define SOF_ACCEPTCONN    (u8_t)0x02U  /* socket has had listen() */
+#define SOF_REUSEADDR     (u8_t)0x04U  /* allow local address reuse */
+#define SOF_KEEPALIVE     (u8_t)0x08U  /* keep connections alive */
+/*#define SOF_DONTROUTE   (u8_t)0x10U     Unimplemented: just use interface addresses */
+#define SOF_BROADCAST     (u8_t)0x20U  /* permit to send and to receive broadcast messages (see IP_SOF_BROADCAST option) */
+/*#define SOF_USELOOPBACK (u8_t)0x40U     Unimplemented: bypass hardware when possible */
+#define SOF_LINGER        (u8_t)0x80U  /* linger on close if data present */
+/*#define SOF_OOBINLINE   (u16_t)0x0100U     Unimplemented: leave received OOB data in line */
+/*#define SOF_REUSEPORT   (u16_t)0x0200U     Unimplemented: allow local address & port reuse */
+
+/* These flags are inherited (e.g. from a listen-pcb to a connection-pcb): */
+#define SOF_INHERITED   (SOF_REUSEADDR|SOF_KEEPALIVE|SOF_LINGER/*|SOF_DEBUG|SOF_DONTROUTE|SOF_OOBINLINE*/)
+
 
 #define RCV_WND_SCALE(pcb, wnd) (((wnd) >> (pcb)->rcv_scale))
 #define SND_WND_SCALE(pcb, wnd) ((u32_t)(wnd) << (pcb)->snd_scale)
-
 #define TCPWND_MIN16(x)    ((u16_t)LWIP_MIN((x), 0xFFFF))
-#define VMA_NO_TCP_PCB_LISTEN_STRUCT 1
+
 /* Note: max_tcp_snd_queuelen is now a multiple by 16 (was 4 before) to match max_unsent_len */
 #define UPDATE_PCB_BY_MSS(pcb, snd_mss) \
 	(pcb)->mss = (snd_mss); \
@@ -273,10 +239,36 @@ extern tcp_state_observer_fn external_tcp_state_observer;
 
 /* the TCP protocol control block */
 struct tcp_pcb {
-/** common PCB members */
-  IP_PCB;
-/** protocol specific PCB members */
-  TCP_PCB_COMMON(struct tcp_pcb);
+  /** IP specific PCB members */
+
+  /* IP addresses in network byte order (either IPv4 or IPv6) */
+  ip_addr_t local_ip;
+  ip_addr_t remote_ip;
+  bool is_ipv6;
+  /* Socket options */
+  u8_t so_options;
+  /* Type Of Service */
+  u8_t tos;
+  /* Time To Live */
+  u8_t ttl;
+
+  /** TCP specific PCB members */
+
+  enum tcp_state private_state; /* TCP state - should only be touched thru get/set functions */
+  u8_t prio;
+  void *callback_arg;
+  void *my_container;
+  /* Function to be called when sending data. */
+  ip_output_fn ip_output;
+  /* the accept callback for listen- and normal pcbs */
+  tcp_accept_fn accept;
+  /* ports are in host byte order */
+  u16_t local_port;
+  u32_t rcv_wnd;   /* receiver window available */
+  u32_t rcv_ann_wnd; /* receiver window to announce */
+  u32_t rcv_wnd_max; /* maximum available receive window */
+  u32_t rcv_wnd_max_desired;
+
   void *listen_sock;
   tcp_syn_handled_fn syn_tw_handled_cb;
 
@@ -303,7 +295,6 @@ struct tcp_pcb {
   /* Timers */
   u8_t tcp_timer; /* Timer counter to handle calling slow-timer from tcp_tmr() */
   u32_t tmr;
-  u8_t polltmr, pollinterval;
   
   /* Retransmission timer. */
   s16_t rtime;
@@ -373,18 +364,14 @@ struct tcp_pcb {
   struct tcp_seg *seg_alloc; /* Available tcp_seg element for use */
   struct pbuf *pbuf_alloc; /* Available pbuf element for use */
 
-#if LWIP_CALLBACK_API
   /* Function to be called when more send buffer space is available. */
   tcp_sent_fn sent;
   /* Function to be called when (in-sequence) data has arrived. */
   tcp_recv_fn recv;
   /* Function to be called when a connection has been set up. */
   tcp_connected_fn connected;
-  /* Function which is called periodically. */
-  tcp_poll_fn poll;
   /* Function to be called whenever a fatal error occurs. */
   tcp_err_fn errf;
-#endif /* LWIP_CALLBACK_API */
 
   u8_t enable_ts_opt;
 #if LWIP_TCP_TIMESTAMPS
@@ -409,14 +396,16 @@ struct tcp_pcb {
 
   u8_t snd_scale;
   u8_t rcv_scale;
-#ifdef VMA_NO_TCP_PCB_LISTEN_STRUCT
+
   tcp_syn_handled_fn syn_handled_cb;
   tcp_clone_conn_fn clone_conn;
   tcp_accepted_pcb_fn accepted_pcb;
-#endif /* VMA_NO_TCP_PCB_LISTEN_STRUCT */
 
   /* Delayed ACK control: number of quick acks */
   u8_t quickack;
+
+  /* Set to true in a specific section of RX path to avoid tcp_output() */
+  u8_t is_in_input;
 
   /* TSO description */
   struct {
@@ -439,38 +428,6 @@ struct tcp_pcb {
 typedef u16_t (*ip_route_mtu_fn)(struct tcp_pcb *pcb);
 void register_ip_route_mtu(ip_route_mtu_fn fn);
 
-#ifdef VMA_NO_TCP_PCB_LISTEN_STRUCT
-#define tcp_pcb_listen tcp_pcb
-#else
-struct tcp_pcb_listen {  
-/* Common members of all PCB types */
-  IP_PCB;
-/* Protocol specific PCB members */
-  TCP_PCB_COMMON(struct tcp_pcb_listen);
-  tcp_syn_handled_fn syn_handled_cb;
-  tcp_clone_conn_fn clone_conn;
-  tcp_accepted_pcb_fn accepted_pcb;
-};
-#endif /* VMA_NO_TCP_PCB_LISTEN_STRUCT */
-
-#if LWIP_EVENT_API
-
-enum lwip_event {
-  LWIP_EVENT_ACCEPT,
-  LWIP_EVENT_SENT,
-  LWIP_EVENT_RECV,
-  LWIP_EVENT_CONNECTED,
-  LWIP_EVENT_POLL,
-  LWIP_EVENT_ERR
-};
-
-err_t lwip_tcp_event(void *arg, struct tcp_pcb *pcb,
-         enum lwip_event,
-         struct pbuf *p,
-         u16_t size,
-         err_t err);
-
-#endif /* LWIP_EVENT_API */
 
 #if defined(__GNUC__) && (((__GNUC__ == 4) && (__GNUC_MINOR__ >= 4)) || (__GNUC__ > 4))
 #pragma GCC visibility push(hidden)
@@ -484,12 +441,11 @@ void tcp_pcb_recycle(struct tcp_pcb* pcb);
 void             tcp_arg     		(struct tcp_pcb *pcb, void *arg);
 void             tcp_ip_output          (struct tcp_pcb *pcb, ip_output_fn ip_output);
 void             tcp_accept  		(struct tcp_pcb *pcb, tcp_accept_fn accept);
-void             tcp_syn_handled	(struct tcp_pcb_listen *pcb, tcp_syn_handled_fn syn_handled);
-void             tcp_clone_conn		(struct tcp_pcb_listen *pcb, tcp_clone_conn_fn clone_conn);
-void             tcp_accepted_pcb	(struct tcp_pcb_listen *pcb, tcp_accepted_pcb_fn accepted_pcb);
+void             tcp_syn_handled	(struct tcp_pcb *pcb, tcp_syn_handled_fn syn_handled);
+void             tcp_clone_conn		(struct tcp_pcb *pcb, tcp_clone_conn_fn clone_conn);
+void             tcp_accepted_pcb	(struct tcp_pcb *pcb, tcp_accepted_pcb_fn accepted_pcb);
 void             tcp_recv    		(struct tcp_pcb *pcb, tcp_recv_fn recv);
 void             tcp_sent    		(struct tcp_pcb *pcb, tcp_sent_fn sent);
-void             tcp_poll    		(struct tcp_pcb *pcb, tcp_poll_fn poll, u8_t interval);
 void             tcp_err     		(struct tcp_pcb *pcb, tcp_err_fn err);
 
 #define          tcp_mss(pcb)             (((pcb)->flags & TF_TIMESTAMP) ? ((pcb)->mss - 12)  : (pcb)->mss)
@@ -511,7 +467,7 @@ err_t            tcp_bind    (struct tcp_pcb *pcb, const ip_addr_t *ipaddr,
 err_t            tcp_connect (struct tcp_pcb *pcb, const ip_addr_t *ipaddr,
                               u16_t port, bool is_ipv6, tcp_connected_fn connected);
 
-err_t            tcp_listen(struct tcp_pcb_listen *listen_pcb, struct tcp_pcb *conn_pcb);
+err_t            tcp_listen(struct tcp_pcb *listen_pcb, struct tcp_pcb *conn_pcb);
 
 void             tcp_abort (struct tcp_pcb *pcb);
 err_t            tcp_close   (struct tcp_pcb *pcb);
@@ -547,7 +503,5 @@ s32_t            tcp_is_wnd_available(struct tcp_pcb *pcb, u32_t data_len);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* LWIP_TCP */
 
 #endif /* __LWIP_TCP_H__ */

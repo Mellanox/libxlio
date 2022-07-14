@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -541,9 +541,10 @@ bool neigh_entry::post_send_udp(neigh_send_data *n_send_data)
         m_sge.lkey = m_p_ring->get_tx_lkey(m_id);
         m_send_wqe.wr_id = (uintptr_t)p_mem_buf_desc;
 
-        neigh_logdbg("%s packet_sz=%d, payload_sz=%zd, ip_offset=%d id=%d", h->to_str().c_str(),
+        neigh_logdbg("packet_sz=%d, payload_sz=%zd, ip_offset=%d id=%d",
                      m_sge.length - h->m_transport_header_len, sz_user_data_to_copy,
                      n_ip_frag_offset, ntohs(id));
+        NOT_IN_USE(id); // Fix unused-but-set error when bebug logs are disabled
 
         tmp = p_mem_buf_desc->p_next_desc;
         p_mem_buf_desc->p_next_desc = NULL;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -35,6 +35,8 @@
 
 #include "ring_slave.h"
 
+#include <unordered_map>
+
 #include "vma/dev/gro_mgr.h"
 #include "vma/dev/qp_mgr.h"
 #include "vma/dev/net_device_table_mgr.h"
@@ -48,8 +50,6 @@ struct cq_moderation_info {
     uint64_t prev_bytes;
     uint32_t missed_rounds;
 };
-
-typedef hash_map<void *, uint32_t> user_lkey_map_t;
 
 /**
  * @class ring simple
@@ -130,6 +130,7 @@ public:
 #ifdef DEFINED_UTLS
     bool tls_tx_supported(void) { return m_tls.tls_tx; }
     bool tls_rx_supported(void) { return m_tls.tls_rx; }
+    bool tls_sync_dek_supported() { return m_tls.tls_synchronize_dek; }
     xlio_tis *tls_context_setup_tx(const xlio_tls_info *info)
     {
         auto_unlocker lock(m_lock_ring_tx);
@@ -228,6 +229,13 @@ public:
         m_p_qp_mgr->post_nop_fence();
     }
 
+    void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)
+    {
+        auto_unlocker lock(m_lock_ring_tx);
+        NOT_IN_USE(id);
+        m_p_qp_mgr->reset_inflight_zc_buffers_ctx(ctx);
+    }
+
     friend class cq_mgr;
     friend class cq_mgr_mlx5;
     friend class cq_mgr_mlx5_strq;
@@ -254,7 +262,7 @@ protected:
     struct cq_moderation_info m_cq_moderation_info;
     cq_mgr *m_p_cq_mgr_rx;
     cq_mgr *m_p_cq_mgr_tx;
-    user_lkey_map_t m_user_lkey_map;
+    std::unordered_map<void *, uint32_t> m_user_lkey_map;
 
 private:
     bool is_socketxtreme(void) { return m_socketxtreme.active; }
@@ -357,6 +365,8 @@ private:
         bool tls_tx;
         /* TLS RX offload is supported */
         bool tls_rx;
+        /* TLS DEK modify Crypto-Sync is supported */
+        bool tls_synchronize_dek;
     } m_tls;
 #endif /* DEFINED_UTLS */
     struct {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -242,6 +242,8 @@ void cq_mgr::statistics_print()
         cq_logdbg_no_funcname("Packets dropped: %12llu",
                               (unsigned long long int)m_p_cq_stat->n_rx_pkt_drop);
         cq_logdbg_no_funcname("Drained max: %17u", m_p_cq_stat->n_rx_drained_at_once_max);
+        cq_logdbg_no_funcname("CQE errors: %18llu",
+                              (unsigned long long int)m_p_cq_stat->n_rx_cqe_error);
     }
 }
 
@@ -473,6 +475,7 @@ void cq_mgr::process_cq_element_log_helper(mem_buf_desc_t *p_mem_buf_desc, vma_i
                    p_wce->pkey_index, p_wce->slid, p_wce->sl, p_wce->dlid_path_bits,
                    p_wce->imm_data);
 
+        m_p_cq_stat->n_rx_cqe_error++;
         if (p_mem_buf_desc) {
             cq_logwarn("mem_buf_desc: lkey=%#x, p_buffer=%p, sz_buffer=%lu", p_mem_buf_desc->lkey,
                        p_mem_buf_desc->p_buffer, p_mem_buf_desc->sz_buffer);

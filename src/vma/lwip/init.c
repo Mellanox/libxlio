@@ -39,7 +39,6 @@
 #include "lwip/opt.h"
 
 #include "lwip/init.h"
-#include "lwip/stats.h"
 #include "lwip/pbuf.h"
 #include "lwip/tcp_impl.h"
 
@@ -51,7 +50,6 @@ void
 lwip_init(void)
 {
   /* Modules initialization */
-  stats_init();
   pbuf_init();
   tcp_init();
 }

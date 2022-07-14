@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -38,7 +38,6 @@
 #include <unordered_set>
 #include "utils/lock_wrapper.h"
 #include "vma/util/vtypes.h"
-#include "vma/util/to_str.h"
 #include "vma/event/event.h"
 
 class observer {

@@ -40,25 +40,12 @@
 extern "C" {
 #endif
 
-/** Align a memory pointer to the alignment defined by MEM_ALIGNMENT
- * so that ADDR % MEM_ALIGNMENT == 0
- */
-#ifndef LWIP_MEM_ALIGN
-#define LWIP_MEM_ALIGN(addr) ((void *)(((mem_ptr_t)(addr) + MEM_ALIGNMENT - 1) & ~(mem_ptr_t)(MEM_ALIGNMENT-1)))
-#endif
-
-/** Currently, the pbuf_custom code is only needed for one specific configuration of IP_FRAG */
-#define LWIP_SUPPORT_CUSTOM_PBUF 1
-
-#define PBUF_TRANSPORT_HLEN 20
-#define PBUF_IP_HLEN        20
-
 typedef enum {
-  PBUF_RAM, /* pbuf data is stored in RAM */
-  PBUF_ROM, /* pbuf data is stored in ROM */
-  PBUF_REF, /* pbuf comes from the pbuf pool */
-  PBUF_POOL, /* pbuf payload refers to RAM */
-  PBUF_ZEROCOPY /* pbuf data used directly from user */
+  PBUF_NONE,    /* impossible type to catch zeroed pbuf objects */
+  PBUF_RAM,     /* pbuf data is stored in RAM */
+  PBUF_REF,     /* pbuf is an incoming buffer with custom free function */
+  PBUF_STACK,   /* pbuf is allocated on stack and mustn't be freed */
+  PBUF_ZEROCOPY /* pbuf points to user's memory which mustn't be modified */
 } pbuf_type;
 
 
@@ -127,7 +114,6 @@ struct pbuf {
   pbuf_desc desc;
 };
 
-#if LWIP_SUPPORT_CUSTOM_PBUF
 /** Prototype for a function to free a custom pbuf */
 typedef void (*pbuf_free_custom_fn)(struct pbuf *p);
 
@@ -138,7 +124,6 @@ struct pbuf_custom {
   /** This function is called when pbuf_free deallocates this pbuf(_custom) */
   pbuf_free_custom_fn custom_free_function;
 };
-#endif /* LWIP_SUPPORT_CUSTOM_PBUF */
 
 /* Initializes the pbuf module. This call is empty for now, but may not be in future. */
 #define pbuf_init()

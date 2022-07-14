@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -654,6 +654,8 @@ void mce_sys_var::get_env_params()
     strcpy(internal_thread_cpuset, MCE_DEFAULT_INTERNAL_THREAD_CPUSET);
     strcpy(internal_thread_affinity_str, MCE_DEFAULT_INTERNAL_THREAD_AFFINITY_STR);
 
+    service_enable = MCE_DEFAULT_SERVICE_ENABLE;
+
     log_level = VLOG_DEFAULT;
     log_details = MCE_DEFAULT_LOG_DETAILS;
     log_colors = MCE_DEFAULT_LOG_COLORS;
@@ -758,6 +760,8 @@ void mce_sys_var::get_env_params()
 #ifdef DEFINED_UTLS
     enable_utls_rx = MCE_DEFAULT_UTLS_RX;
     enable_utls_tx = MCE_DEFAULT_UTLS_TX;
+    utls_high_wmark_dek_cache_size = MCE_DEFAULT_UTLS_HIGH_WMARK_DEK_CACHE_SIZE;
+    utls_low_wmark_dek_cache_size = MCE_DEFAULT_UTLS_LOW_WMARK_DEK_CACHE_SIZE;
 #endif /* DEFINED_UTLS */
     enable_lro = MCE_DEFAULT_LRO;
     handle_fork = MCE_DEFAULT_FORK_SUPPORT;
@@ -770,6 +774,7 @@ void mce_sys_var::get_env_params()
     power_2_nginx_workers_num = MCE_DEFAULT_NGINX_WORKERS_NUM;
     src_port_stride = MCE_DEFAULT_SRC_PORT_STRIDE;
     nginx_udp_socket_pool_size = MCE_DEFAULT_NGINX_UDP_POOL_SIZE;
+    nginx_udp_socket_pool_rx_num_buffs_reuse = MCE_DEFAULT_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE;
 #endif
     lwip_mss = MCE_DEFAULT_MSS;
     lwip_cc_algo_mod = MCE_DEFAULT_LWIP_CC_ALGO_MOD;
@@ -837,7 +842,6 @@ void mce_sys_var::get_env_params()
     if (actual_nginx_workers_num > 0 && mce_spec == MCE_SPEC_NONE) {
         mce_spec = MCE_SPEC_NGINX_669;
     }
-
 #endif // DEFINED_NGINX
 
     switch (mce_spec) {
@@ -1140,6 +1144,15 @@ void mce_sys_var::get_env_params()
         read_env_variable_with_pid(service_notify_dir, sizeof(service_notify_dir), env_ptr);
     }
 
+    if ((env_ptr = getenv(SYS_VAR_SERVICE_ENABLE)) != NULL) {
+        service_enable = atoi(env_ptr) ? true : false;
+    }
+    if (HYPER_MSHV == hypervisor && !service_enable) {
+        service_enable = true;
+        vlog_printf(VLOG_DEBUG, "%s parameter is forced to 'true' for MSHV hypervisor\n",
+                    SYS_VAR_SERVICE_ENABLE);
+    }
+
     if ((env_ptr = getenv(SYS_VAR_LOG_LEVEL)) != NULL) {
         log_level = log_level::from_str(env_ptr, VLOG_DEFAULT);
     }
@@ -1262,6 +1275,13 @@ void mce_sys_var::get_env_params()
         tx_bufs_batch_tcp = (uint32_t)atoi(env_ptr);
         if (tx_bufs_batch_tcp < 1) {
             tx_bufs_batch_tcp = 1;
+        }
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_TX_SEGS_BATCH_TCP)) != NULL) {
+        tx_segs_batch_tcp = (uint32_t)atoi(env_ptr);
+        if (tx_segs_batch_tcp < 1) {
+            tx_segs_batch_tcp = 1;
         }
     }
 
@@ -1782,6 +1802,19 @@ void mce_sys_var::get_env_params()
     if ((env_ptr = getenv(SYS_VAR_UTLS_TX)) != NULL) {
         enable_utls_tx = atoi(env_ptr) ? true : false;
     }
+
+    if ((env_ptr = getenv(SYS_VAR_UTLS_HIGH_WMARK_DEK_CACHE_SIZE)) != NULL) {
+        int temp = atoi(env_ptr);
+        utls_high_wmark_dek_cache_size = (temp >= 0 ? static_cast<size_t>(temp) : 0);
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_UTLS_LOW_WMARK_DEK_CACHE_SIZE)) != NULL) {
+        int temp = atoi(env_ptr);
+        utls_low_wmark_dek_cache_size = (temp >= 0 ? static_cast<size_t>(temp) : 0);
+        if (utls_low_wmark_dek_cache_size >= utls_high_wmark_dek_cache_size) {
+            utls_low_wmark_dek_cache_size = utls_high_wmark_dek_cache_size / 2U;
+        }
+    }
 #endif /* DEFINED_UTLS */
 
     if ((env_ptr = getenv(SYS_VAR_LRO)) != NULL) {
@@ -1802,7 +1835,14 @@ void mce_sys_var::get_env_params()
     }
     if ((env_ptr = getenv(SYS_VAR_NGINX_WORKERS_NUM)) != NULL) {
         actual_nginx_workers_num = (uint32_t)atoi(env_ptr);
-        power_2_nginx_workers_num = pow(2, ceil(log(actual_nginx_workers_num) / log(2)));
+        // Round up to a power of 2 value. Assume the number doesn't exceed 32bit.
+        power_2_nginx_workers_num = actual_nginx_workers_num - 1;
+        power_2_nginx_workers_num |= power_2_nginx_workers_num >> 1;
+        power_2_nginx_workers_num |= power_2_nginx_workers_num >> 2;
+        power_2_nginx_workers_num |= power_2_nginx_workers_num >> 4;
+        power_2_nginx_workers_num |= power_2_nginx_workers_num >> 8;
+        power_2_nginx_workers_num |= power_2_nginx_workers_num >> 16;
+        power_2_nginx_workers_num++;
     }
     vlog_printf(VLOG_DEBUG, "Actual nginx workers num: %d Power of  two nginx workers num: %d\n",
                 actual_nginx_workers_num, power_2_nginx_workers_num);
@@ -1811,6 +1851,9 @@ void mce_sys_var::get_env_params()
     }
     if ((env_ptr = getenv(SYS_VAR_NGINX_UDP_POOL_SIZE)) != NULL) {
         nginx_udp_socket_pool_size = (uint32_t)atoi(env_ptr);
+    }
+    if ((env_ptr = getenv(SYS_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE)) != NULL) {
+        nginx_udp_socket_pool_rx_num_buffs_reuse = (uint32_t)atoi(env_ptr);
     }
 #endif // DEFINED_NGINX
     if ((env_ptr = getenv(SYS_VAR_MSS)) != NULL) {

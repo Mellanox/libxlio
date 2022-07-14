@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -69,7 +69,7 @@ public:
     virtual int wait_for_notification_and_process_element(int cq_channel_fd, uint64_t *p_cq_poll_sn,
                                                           void *pv_fd_ready_array = NULL);
     virtual int get_num_resources() const { return m_bond_rings.size(); };
-    virtual bool attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink);
+    virtual bool attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink, bool force_5t = false);
     virtual bool detach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink);
     virtual void restart();
     virtual mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
@@ -108,6 +108,11 @@ public:
                           unsigned int ncompletions, int flags);
     virtual void slave_create(int if_index) = 0;
     virtual void slave_destroy(int if_index);
+
+    void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)
+    {
+        m_xmit_rings[id]->reset_inflight_zc_buffers_ctx(id, ctx);
+    }
 
 protected:
     void update_cap(ring_slave *slave = NULL);

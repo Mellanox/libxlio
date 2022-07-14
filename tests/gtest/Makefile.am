@@ -96,17 +96,18 @@ gtest_SOURCES = \
 	mix/mix_list.cc \
 	\
 	tcp/tcp_base.cc \
-	tcp/tcp_socket.cc \
 	tcp/tcp_bind.cc \
 	tcp/tcp_connect.cc \
 	tcp/tcp_connect_nb.cc \
 	tcp/tcp_event.cc \
+	tcp/tcp_rfs.cc \
 	tcp/tcp_send.cc \
 	tcp/tcp_sendto.cc \
 	tcp/tcp_sendfile.cc \
 	tcp/tcp_send_zc.cc \
+	tcp/tcp_socket.cc \
+	tcp/tcp_sockopt.cc \
 	tcp/tcp_tls.cc \
-	tcp/tcp_rfs.cc \
 	\
 	udp/udp_base.cc \
 	udp/udp_socket.cc \

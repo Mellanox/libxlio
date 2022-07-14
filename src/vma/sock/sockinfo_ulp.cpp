@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -688,8 +688,11 @@ ssize_t sockinfo_tcp_ops_tls::tx(vma_tx_call_attr_t &tx_arg)
                 goto done;
             }
             ++m_next_recno_tx;
-            /* Prepare unique explicit_nonce for the next TLS1.2 record. */
-            ++m_tls_info_tx.iv64;
+            /* Prepare unique explicit_nonce for the next TLS1.2 record.
+               TLS1.3 always uses the initial IV.*/
+            if (!is_tx_tls13()) {
+                ++m_tls_info_tx.iv64;
+            }
 
             /* Control sendmsg() support */
             if (tx_arg.opcode == TX_SENDMSG && tx_arg.attr.msg.hdr != NULL) {
@@ -785,7 +788,6 @@ done:
 
 int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, vma_send_attr &attr)
 {
-    NOT_IN_USE(p);
     if (m_is_tls_tx && seg != NULL && p->type != PBUF_RAM) {
         if (seg->len != 0) {
             if (unlikely(seg->seqno != m_expected_seqno)) {
@@ -794,7 +796,7 @@ int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, vma_s
                 bool skip_static;
 
                 /* For zerocopy the 1st pbuf is always a TCP header and the pbuf is on stack */
-                assert(p->type == PBUF_ROM); /* TCP header pbuf */
+                assert(p->type == PBUF_STACK); /* TCP header pbuf */
                 assert(p->next != NULL && p->next->desc.attr == PBUF_DESC_MDESC);
                 tls_record *rec = dynamic_cast<tls_record *>((mem_desc *)p->next->desc.mdesc);
                 if (unlikely(rec == NULL)) {

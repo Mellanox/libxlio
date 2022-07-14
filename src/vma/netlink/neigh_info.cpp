@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -39,6 +39,7 @@ netlink_neigh_info::netlink_neigh_info(struct rtnl_neigh *neigh)
     : dst_addr_str("")
     , dst_addr(NULL)
     , dst_addr_len(0)
+    , addr_family(0)
     , flags(0)
     , ifindex(0)
     , lladdr_str("")

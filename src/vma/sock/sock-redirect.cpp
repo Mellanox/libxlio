@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -35,6 +35,11 @@
 #include <sys/time.h>
 #include <dlfcn.h>
 #include <iostream>
+#if defined(DEFINED_NGINX)
+#include <algorithm>
+#include <iterator>
+#include <vector>
+#endif // DEFINED_NGINX
 #include <fcntl.h>
 
 #include "utils/compiler.h"
@@ -81,6 +86,7 @@ using namespace std;
 #define EP_MAX_EVENTS (int)((INT_MAX / sizeof(struct epoll_event)))
 
 #if defined(DEFINED_NGINX)
+static std::vector<pid_t> g_nginx_worker_pids = {};
 int g_worker_index = 0;
 bool g_b_add_second_4t_rule = false;
 map_udp_bounded_port_t g_map_udp_bounded_port;
@@ -207,6 +213,7 @@ void get_orig_funcs()
     GET_ORIG_FUNC(signal);
 #if defined(DEFINED_NGINX)
     GET_ORIG_FUNC(setuid);
+    GET_ORIG_FUNC(waitpid);
 #endif // DEFINED_NGINX
 }
 
@@ -254,7 +261,7 @@ char *sprintf_sockaddr(char *buf, int buflen, const struct sockaddr *_addr, sock
 
 bool handle_close(int fd, bool cleanup, bool passthrough)
 {
-    bool is_closable = true;
+    bool to_close_now = true;
     bool is_for_udp_pool = false;
     srdr_logfunc("Cleanup fd=%d", fd);
 
@@ -268,22 +275,18 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
 
         socket_fd_api *sockfd = fd_collection_get_sockfd(fd);
         if (sockfd) {
-            sockfd->m_is_closable = !passthrough;
+            sockfd->m_is_closable = !passthrough && sockfd->is_incoming();
+            /*
+             * Don't call close() syscall for incoming sockets, because such a TCP socket can
+             * exist after closing and be reused. In this case, keep shadow socket alive until
+             * the socket is destroyed.
+             */
+            to_close_now = !sockfd->m_is_closable;
 #if defined(DEFINED_NGINX)
             // save this value before pointer is destructed
             is_for_udp_pool = sockfd->m_is_for_socket_pool;
 #endif
             g_p_fd_collection->del_sockfd(fd, cleanup);
-            /*
-             * Don't call close() syscall for socket's descriptor,
-             * because TCP socket can exist after closing and
-             * be reused. Keep shadow socket alive until socket
-             * is destroyed.
-             * We mustn't close shadow socket in socket's destructor
-             * in case of passthrough, because the descriptor is
-             * still in use for syscalls.
-             */
-            is_closable = passthrough;
         }
         if (fd_collection_get_epfd(fd)) {
             g_p_fd_collection->del_epfd(fd, cleanup);
@@ -292,14 +295,14 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
 #if defined(DEFINED_NGINX)
         if (is_for_udp_pool) {
             g_p_fd_collection->push_socket_pool(sockfd);
-            is_closable = false;
+            to_close_now = false;
         }
 #else
         NOT_IN_USE(is_for_udp_pool);
 #endif
     }
 
-    return is_closable;
+    return to_close_now;
 }
 
 #if defined(DEFINED_NGINX)
@@ -1060,7 +1063,7 @@ extern "C" EXPORT_SYMBOL int getsockopt(int __fd, int __level, int __optname, vo
 {
     srdr_logdbg_entry("fd=%d, level=%d, optname=%d", __fd, __level, __optname);
 
-    if (__fd == -1 && __level == SOL_SOCKET && __optname == SO_XLIO_GET_API && __optlen &&
+    if (__fd == -2 && __level == SOL_SOCKET && __optname == SO_XLIO_GET_API && __optlen &&
         *__optlen >= sizeof(struct xlio_api_t *)) {
         static struct xlio_api_t *xlio_api = NULL;
 
@@ -1072,6 +1075,7 @@ extern "C" EXPORT_SYMBOL int getsockopt(int __fd, int __level, int __optname, vo
             xlio_api = new struct xlio_api_t();
 
             memset(xlio_api, 0, sizeof(struct xlio_api_t));
+            xlio_api->magic = XLIO_MAGIC_NUMBER;
             xlio_api->cap_mask = 0;
             SET_EXTRA_API(register_recv_callback, vma_register_recv_callback,
                           XLIO_EXTRA_API_REGISTER_RECV_CALLBACK);
@@ -1104,6 +1108,7 @@ extern "C" EXPORT_SYMBOL int getsockopt(int __fd, int __level, int __optname, vo
         }
 
         *((xlio_api_t **)__optval) = xlio_api;
+        *__optlen = sizeof(struct xlio_api_t *);
         return 0;
     }
 
@@ -2755,12 +2760,24 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
     BULLSEYE_EXCLUDE_BLOCK_END
 
 #if defined(DEFINED_NGINX)
-    if ((safe_mce_sys().actual_nginx_workers_num > 0) &&
-        (g_worker_index >= safe_mce_sys().actual_nginx_workers_num)) {
-        srdr_logerr("g_worker_index: %d exceeds: %d", g_worker_index,
-                    safe_mce_sys().actual_nginx_workers_num);
-        errno = ENOMEM;
-        return -1;
+    int worker_index = 0;
+    if (safe_mce_sys().actual_nginx_workers_num > 0) {
+        if (g_nginx_worker_pids.size() <
+            static_cast<std::size_t>(safe_mce_sys().actual_nginx_workers_num)) {
+            g_nginx_worker_pids.resize(safe_mce_sys().actual_nginx_workers_num, -1);
+            g_worker_index = -1;
+        }
+
+        auto nginx_pid_slot_iter =
+            std::find(g_nginx_worker_pids.begin(), g_nginx_worker_pids.end(), -1);
+        if (nginx_pid_slot_iter == g_nginx_worker_pids.end()) {
+            srdr_logerr(
+                "Cannot fork: number of running worker processes are at configured maximum (%d)",
+                safe_mce_sys().actual_nginx_workers_num);
+            errno = ENOMEM;
+            return -1;
+        }
+        worker_index = std::distance(g_nginx_worker_pids.begin(), nginx_pid_slot_iter);
     }
 #endif
 
@@ -2769,6 +2786,7 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
         g_is_forked_child = true;
         srdr_logdbg_exit("Child Process: returned with %d", pid);
 #if defined(DEFINED_NGINX)
+        g_worker_index = worker_index;
         /* Library is fully initialized in case application
          * calls socket(), getsockopt(), epoll_create(), epoll_create1(), pipe()
          * In other cases global objects can be invalid.
@@ -2815,7 +2833,7 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
         srdr_logdbg_exit("Parent Process: returned with %d", pid);
 #if defined(DEFINED_NGINX)
         if (safe_mce_sys().actual_nginx_workers_num > 0) {
-            g_worker_index++;
+            g_nginx_worker_pids.at(worker_index) = pid;
         }
 #endif
     } else {
@@ -2969,17 +2987,19 @@ static void handle_signal(int signum)
 
 extern "C" EXPORT_SYMBOL sighandler_t signal(int signum, sighandler_t handler)
 {
-    srdr_logdbg_entry("signum=%d, handler=%p", signum, handler);
-
     if (!orig_os_api.signal) {
         get_orig_funcs();
     }
 
-    if (handler && handler != SIG_ERR && handler != SIG_DFL && handler != SIG_IGN) {
-        // Only SIGINT is supported for now
-        if (signum == SIGINT) {
-            g_sighandler = handler;
-            return orig_os_api.signal(SIGINT, &handle_signal);
+    if (safe_mce_sys().handle_sigintr) {
+        srdr_logdbg_entry("signum=%d, handler=%p", signum, handler);
+
+        if (handler && handler != SIG_ERR && handler != SIG_DFL && handler != SIG_IGN) {
+            // Only SIGINT is supported for now
+            if (signum == SIGINT) {
+                g_sighandler = handler;
+                return orig_os_api.signal(SIGINT, &handle_signal);
+            }
         }
     }
 
@@ -3013,6 +3033,27 @@ extern "C" EXPORT_SYMBOL int setuid(uid_t uid)
     }
 
     return orig_rc;
+}
+
+extern "C" EXPORT_SYMBOL pid_t waitpid(pid_t pid, int *wstatus, int options)
+{
+    pid_t child_pid = orig_os_api.waitpid(pid, wstatus, options);
+    /* This segment is used as part of NGINX worker termination recovery mechanism. The mechanism
+     * marks the worker PID slot as vacant with -1 later to reuse it in the fork system call.The
+     * implicit assumptions here are that:
+     *     * NGINX monitors the worker process termination with waitpid system call.
+     *     * NGINX internally updates that it currently has less than the worker number it needs.
+     *     * NGINX at some future point forks a new worker process(es) to replenish the worker
+     * process tally.
+     */
+    if (safe_mce_sys().actual_nginx_workers_num > 0 && child_pid > 0 && !WIFCONTINUED(*wstatus)) {
+        auto worker_pid =
+            std::find(g_nginx_worker_pids.begin(), g_nginx_worker_pids.end(), child_pid);
+        if (worker_pid != g_nginx_worker_pids.end()) {
+            *worker_pid = -1;
+        }
+    }
+    return child_pid;
 }
 
 #endif // DEFINED_NGINX

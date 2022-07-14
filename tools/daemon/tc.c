@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -64,6 +64,7 @@ static int pack_key(struct tc_u32_sel *sel, uint32_t key, uint32_t mask, int off
 static int pack_key8(struct tc_u32_sel *sel, uint32_t key, uint32_t mask, int off, int offmask);
 static int pack_key16(struct tc_u32_sel *sel, uint32_t key, uint32_t mask, int off, int offmask);
 static int pack_key32(struct tc_u32_sel *sel, uint32_t key, uint32_t mask, int off, int offmask);
+static int pack_ip6(struct tc_u32_sel *sel, uint8_t *addr, uint32_t mask, int off, int offmask);
 #endif /* USE_NETLINK */
 
 tc_t tc_create(void)
@@ -97,7 +98,7 @@ void tc_destroy(tc_t tc)
     }
 }
 
-void tc_req(tc_t tc, int ifindex, uint16_t type, uint16_t flags, struct tc_qdisc qdisc)
+void tc_req(tc_t tc, int ifindex, short proto, uint16_t type, uint16_t flags, struct tc_qdisc qdisc)
 {
     memset(&tc->req, 0, sizeof(tc->req));
 
@@ -111,7 +112,7 @@ void tc_req(tc_t tc, int ifindex, uint16_t type, uint16_t flags, struct tc_qdisc
     tc->req.msg.tcm_ifindex = ifindex;
     tc->req.msg.tcm_handle = qdisc.handle;
     tc->req.msg.tcm_parent = qdisc.parent;
-    tc->req.msg.tcm_info = TC_H_MAKE(qdisc.prio << 16, htons(ETH_P_IP));
+    tc->req.msg.tcm_info = TC_H_MAKE(qdisc.prio << 16, htons(proto));
 }
 
 int tc_add_qdisc(tc_t tc, int ifindex)
@@ -124,7 +125,7 @@ int tc_add_qdisc(tc_t tc, int ifindex)
     struct tc_qdisc qdisc = {TC_H_MAKE(TC_H_INGRESS, 0), TC_H_INGRESS, 0};
     struct rtattr *opts = NULL;
 
-    tc_req(tc, ifindex, RTM_NEWQDISC, (NLM_F_REQUEST | NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE),
+    tc_req(tc, ifindex, 0, RTM_NEWQDISC, (NLM_F_REQUEST | NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE),
            qdisc);
 
     nl_attr_add(&tc->req.hdr, TCA_KIND, "ingress", sizeof("ingress"));
@@ -174,7 +175,7 @@ int tc_del_qdisc(tc_t tc, int ifindex)
     struct tc_qdisc qdisc = {TC_H_MAKE(TC_H_INGRESS, 0), TC_H_INGRESS, 0};
     struct rtattr *opts = NULL;
 
-    tc_req(tc, ifindex, RTM_DELQDISC, 0, qdisc);
+    tc_req(tc, ifindex, 0, RTM_DELQDISC, 0, qdisc);
 
     nl_attr_add(&tc->req.hdr, TCA_KIND, "ingress", sizeof("ingress"));
 
@@ -213,11 +214,11 @@ err:
     return rc;
 }
 
-int tc_add_filter_divisor(tc_t tc, int ifindex, int prio, int ht)
+int tc_add_filter_divisor(tc_t tc, int ifindex, int prio, int ht, short proto)
 {
     int rc = 0;
 
-    log_debug("apply filter divisor using if_id: %d\n", ifindex);
+    log_debug("apply filter divisor using if_id: %d proto: %04hx\n", ifindex, proto);
 
 #if defined(USE_NETLINK) && (USE_NETLINK == 1)
     struct tc_qdisc qdisc = {HANDLE_SET(ht, 0, 0), 0xffff0000, prio};
@@ -225,8 +226,8 @@ int tc_add_filter_divisor(tc_t tc, int ifindex, int prio, int ht)
     uint32_t opt_divisor = 256;
     struct rtattr *opts = NULL;
 
-    tc_req(tc, ifindex, RTM_NEWTFILTER, (NLM_F_REQUEST | NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE),
-           qdisc);
+    tc_req(tc, ifindex, proto, RTM_NEWTFILTER,
+           (NLM_F_REQUEST | NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE), qdisc);
 
     nl_attr_add(&tc->req.hdr, TCA_KIND, opt_kind, sizeof(opt_kind));
 
@@ -254,9 +255,9 @@ int tc_add_filter_divisor(tc_t tc, int ifindex, int prio, int ht)
     }
 
     out_buf =
-        sys_exec("tc filter add dev %s parent ffff: prio %d handle %x: protocol ip u32 divisor 256 "
+        sys_exec("tc filter add dev %s parent ffff: prio %d handle %x: protocol %s u32 divisor 256 "
                  "> /dev/null 2>&1 || echo $?",
-                 if_name, prio, ht);
+                 if_name, prio, ht, (proto == ETH_P_IP ? "ip" : "ipv6"));
     if (NULL == out_buf || (out_buf[0] != '\0' && out_buf[0] != '0')) {
         rc = -1;
         goto err;
@@ -267,9 +268,10 @@ err:
     return rc;
 }
 
-int tc_add_filter_link(tc_t tc, int ifindex, int prio, int ht, int id, uint32_t ip)
+int tc_add_filter_link(tc_t tc, int ifindex, int prio, int ht, int id, struct sockaddr_store *ip)
 {
     int rc = 0;
+    short proto = (ip->family == AF_INET ? ETH_P_IP : ETH_P_IPV6);
 
     log_debug("add link filter using if_id: %d\n", ifindex);
 
@@ -281,11 +283,11 @@ int tc_add_filter_link(tc_t tc, int ifindex, int prio, int ht, int id, uint32_t 
     struct rtattr *opts = NULL;
     struct {
         struct tc_u32_sel sel;
-        struct tc_u32_key keys[5];
+        struct tc_u32_key keys[20];
     } opt_sel;
 
-    tc_req(tc, ifindex, RTM_NEWTFILTER, (NLM_F_REQUEST | NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE),
-           qdisc);
+    tc_req(tc, ifindex, proto, RTM_NEWTFILTER,
+           (NLM_F_REQUEST | NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE), qdisc);
 
     nl_attr_add(&tc->req.hdr, TCA_KIND, opt_kind, sizeof(opt_kind));
 
@@ -303,7 +305,11 @@ int tc_add_filter_link(tc_t tc, int ifindex, int prio, int ht, int id, uint32_t 
      * dst: 16
      * addr/mask: ip/0xffffffff
      */
-    pack_key32(&opt_sel.sel, ntohl(ip), 0xffffffff, 16, 0);
+    if (proto == ETH_P_IP) {
+        pack_key32(&opt_sel.sel, ntohl(ip->addr4.sin_addr.s_addr), 0xffffffff, 16, 0);
+    } else {
+        pack_ip6(&opt_sel.sel, ip->addr6.sin6_addr.s6_addr, 0xffffffff, 16, 0);
+    }
     nl_attr_add(&tc->req.hdr, TCA_U32_SEL, &opt_sel,
                 sizeof(opt_sel.sel) + opt_sel.sel.nkeys * sizeof(opt_sel.sel.keys[0]));
     nl_attr_nest_end(&tc->req.hdr, opts);
@@ -327,10 +333,11 @@ int tc_add_filter_link(tc_t tc, int ifindex, int prio, int ht, int id, uint32_t 
         goto err;
     }
 
-    out_buf = sys_exec("tc filter add dev %s protocol ip parent ffff: prio %d handle ::%x u32 "
-                       "ht %x:: match ip dst %s/32 hashkey mask 0x000000ff at 20 link %x: "
+    out_buf = sys_exec("tc filter add dev %s protocol %s parent ffff: prio %d handle ::%x u32 "
+                       "ht %x:: match ip dst %s hashkey mask 0x000000ff at 20 link %x: "
                        "> /dev/null 2>&1 || echo $?",
-                       if_name, prio, id, ht, sys_ip2str(ip), id);
+                       if_name, (proto == ETH_P_IP ? "ip" : "ipv6"), prio, id, ht,
+                       (proto == ETH_P_IP ? "ip" : "ip6"), sys_ip2str(ip), id);
     if (NULL == out_buf || (out_buf[0] != '\0' && out_buf[0] != '0')) {
         rc = -1;
         goto err;
@@ -341,10 +348,12 @@ err:
     return rc;
 }
 
-int tc_add_filter_tap2dev(tc_t tc, int ifindex, int prio, int id, uint32_t ip, int ifindex_to)
+int tc_add_filter_tap2dev(tc_t tc, int ifindex, int prio, int id, short proto,
+                          struct sockaddr_store *ip, int ifindex_to)
 {
     int rc = 0;
 
+    proto = (proto == AF_INET ? ETH_P_IP : ETH_P_IPV6);
     log_debug("add filter to redirect traffic from if_id: %d to if_id: %d\n", ifindex, ifindex_to);
 
 #if defined(USE_NETLINK) && (USE_NETLINK == 1)
@@ -354,11 +363,11 @@ int tc_add_filter_tap2dev(tc_t tc, int ifindex, int prio, int id, uint32_t ip, i
     struct rtattr *opts = NULL;
     struct {
         struct tc_u32_sel sel;
-        struct tc_u32_key keys[5];
+        struct tc_u32_key keys[20];
     } opt_sel;
 
-    tc_req(tc, ifindex, RTM_NEWTFILTER, (NLM_F_REQUEST | NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE),
-           qdisc);
+    tc_req(tc, ifindex, proto, RTM_NEWTFILTER,
+           (NLM_F_REQUEST | NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE), qdisc);
 
     nl_attr_add(&tc->req.hdr, TCA_KIND, opt_kind, sizeof(opt_kind));
 
@@ -401,12 +410,21 @@ int tc_add_filter_tap2dev(tc_t tc, int ifindex, int prio, int id, uint32_t ip, i
     memset(&opt_sel, 0, sizeof(opt_sel));
     /* match option for ip protocol:
      * dst: 16
-     * addr/mask: ip/0xffffffff
+     * addr/mask: addr/0xffffffff
      */
     if (ip) {
-        pack_key32(&opt_sel.sel, ntohl(ip), 0xffffffff, 16, 0);
+        if (proto == ETH_P_IP) {
+            pack_key32(&opt_sel.sel, ntohl(ip->addr4.sin_addr.s_addr), 0xffffffff, 16, 0);
+        } else {
+            pack_ip6(&opt_sel.sel, ip->addr6.sin6_addr.s6_addr, 0xffffffff, 16, 0);
+        }
     } else {
-        pack_key32(&opt_sel.sel, ntohl(ip), 0, 0, 0);
+        if (proto == ETH_P_IP) {
+            pack_key32(&opt_sel.sel, ntohl(0), 0, 0, 0);
+        } else {
+            uint32_t s_addr[4] = {0, 0, 0, 0};
+            pack_ip6(&opt_sel.sel, (uint8_t *)s_addr, 0xffffffff, 0, 0);
+        }
     }
     opt_sel.sel.flags |= TC_U32_TERMINAL;
     nl_attr_add(&tc->req.hdr, TCA_U32_SEL, &opt_sel,
@@ -440,17 +458,18 @@ int tc_add_filter_tap2dev(tc_t tc, int ifindex, int prio, int id, uint32_t ip, i
     }
 
     if (ip) {
-        out_buf = sys_exec("tc filter add dev %s protocol ip parent ffff: prio %d "
+        out_buf = sys_exec("tc filter add dev %s protocol %s parent ffff: prio %d "
                            "handle ::%d u32 ht 800:: "
-                           "match ip dst %s/32 action mirred egress redirect dev %s "
+                           "match %s dst %s action mirred egress redirect dev %s "
                            "> /dev/null 2>&1 || echo $?",
-                           tap_name, prio, id, sys_ip2str(ip), if_name);
+                           tap_name, (proto == ETH_P_IP ? "ip" : "ipv6"), prio, id,
+                           (proto == ETH_P_IP ? "ip" : "ip6"), sys_ip2str(ip), if_name);
     } else {
-        out_buf = sys_exec("tc filter add dev %s protocol ip parent ffff: prio %d "
+        out_buf = sys_exec("tc filter add dev %s protocol %s parent ffff: prio %d "
                            "handle ::%d u32 ht 800:: "
                            "match u8 0 0 action mirred egress redirect dev %s "
                            "> /dev/null 2>&1 || echo $?",
-                           tap_name, prio, id, if_name);
+                           tap_name, (proto == ETH_P_IP ? "ip" : "ipv6"), prio, id, if_name);
     }
     if (NULL == out_buf || (out_buf[0] != '\0' && out_buf[0] != '0')) {
         rc = -1;
@@ -462,11 +481,17 @@ err:
     return rc;
 }
 
-int tc_add_filter_dev2tap(tc_t tc, int ifindex, int prio, int ht, int bkt, int id, int proto,
-                          uint32_t dst_ip, uint16_t dst_port, uint32_t src_ip, uint16_t src_port,
+int tc_add_filter_dev2tap(tc_t tc, int ifindex, int prio, int ht, int bkt, int id, int l4_proto,
+                          struct sockaddr_store *dst_ip, struct sockaddr_store *src_ip,
                           int ifindex_to)
 {
     int rc = 0;
+    short proto = (dst_ip->family == AF_INET ? ETH_P_IP : ETH_P_IPV6);
+    uint16_t dst_port =
+        (dst_ip->family == AF_INET ? dst_ip->addr4.sin_port : dst_ip->addr6.sin6_port);
+    uint16_t src_port =
+        (src_ip ? (src_ip->family == AF_INET ? src_ip->addr4.sin_port : src_ip->addr6.sin6_port)
+                : 0);
 
     log_debug("add filter to redirect traffic from if_id: %d to if_id: %d\n", ifindex, ifindex_to);
 
@@ -480,8 +505,8 @@ int tc_add_filter_dev2tap(tc_t tc, int ifindex, int prio, int ht, int bkt, int i
         struct tc_u32_key keys[10];
     } opt_sel;
 
-    tc_req(tc, ifindex, RTM_NEWTFILTER, (NLM_F_REQUEST | NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE),
-           qdisc);
+    tc_req(tc, ifindex, proto, RTM_NEWTFILTER,
+           (NLM_F_REQUEST | NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE), qdisc);
 
     nl_attr_add(&tc->req.hdr, TCA_KIND, opt_kind, sizeof(opt_kind));
 
@@ -523,17 +548,25 @@ int tc_add_filter_dev2tap(tc_t tc, int ifindex, int prio, int ht, int bkt, int i
     nl_attr_add(&tc->req.hdr, TCA_U32_HASH, &opt_ht, sizeof(opt_ht));
     memset(&opt_sel, 0, sizeof(opt_sel));
     /* [match] protocol option */
-    pack_key8(&opt_sel.sel, proto, 0xff, 9, 0);
+    pack_key8(&opt_sel.sel, l4_proto, 0xff, 9, 0);
     /* [match] nofrag option */
     pack_key16(&opt_sel.sel, 0, 0x3fff, 6, 0);
-    if (src_port) {
+    if (src_ip) {
         /* [match] src option */
-        pack_key32(&opt_sel.sel, ntohl(src_ip), 0xffffffff, 12, 0);
+        if (proto == ETH_P_IP) {
+            pack_key32(&opt_sel.sel, ntohl(src_ip->addr4.sin_addr.s_addr), 0xffffffff, 12, 0);
+        } else {
+            pack_ip6(&opt_sel.sel, src_ip->addr6.sin6_addr.s6_addr, 0xffffffff, 12, 0);
+        }
         /* [match] sport option */
         pack_key16(&opt_sel.sel, ntohs(src_port), 0xffff, 20, 0);
     }
     /* [match] dst option */
-    pack_key32(&opt_sel.sel, ntohl(dst_ip), 0xffffffff, 16, 0);
+    if (proto == ETH_P_IP) {
+        pack_key32(&opt_sel.sel, ntohl(dst_ip->addr4.sin_addr.s_addr), 0xffffffff, 16, 0);
+    } else {
+        pack_ip6(&opt_sel.sel, dst_ip->addr6.sin6_addr.s6_addr, 0xffffffff, 16, 0);
+    }
     /* [match] dport option */
     pack_key16(&opt_sel.sel, ntohs(dst_port), 0xffff, 22, 0);
     opt_sel.sel.flags |= TC_U32_TERMINAL;
@@ -568,29 +601,34 @@ int tc_add_filter_dev2tap(tc_t tc, int ifindex, int prio, int ht, int bkt, int i
         goto err;
     }
 
-    if (src_port) {
+    if (src_ip) {
         strncpy(str_tmp, sys_ip2str(src_ip), sizeof(str_tmp));
         str_tmp[sizeof(str_tmp) - 1] = '\0';
-        out_buf = sys_exec("tc filter add dev %s parent ffff: protocol ip "
+        out_buf = sys_exec("tc filter add dev %s parent ffff: protocol %s "
                            "prio %d handle ::%x u32 ht %x:%x: "
-                           "match ip protocol %d 0xff "
-                           "match ip nofrag "
-                           "match ip src %s/32 match ip sport %d 0xffff "
-                           "match ip dst %s/32 match ip dport %d 0xffff "
+                           "match %s protocol %d 0xff "
+                           "match %s nofrag "
+                           "match %s src %s match ip sport %d 0xffff "
+                           "match %s dst %s match ip dport %d 0xffff "
                            "action mirred egress redirect dev %s "
                            "> /dev/null 2>&1 || echo $?",
-                           if_name, prio, id, ht, bkt, proto, str_tmp, src_port, sys_ip2str(dst_ip),
-                           ntohs(dst_port), tap_name);
+                           if_name, (proto == ETH_P_IP ? "ip" : "ipv6"), prio, id, ht, bkt,
+                           (proto == ETH_P_IP ? "ip" : "ip6"), l4_proto,
+                           (proto == ETH_P_IP ? "ip" : "ip6"), (proto == ETH_P_IP ? "ip" : "ip6"),
+                           str_tmp, src_port, (proto == ETH_P_IP ? "ip" : "ip6"),
+                           sys_ip2str(dst_ip), ntohs(dst_port), tap_name);
     } else {
-        out_buf = sys_exec("tc filter add dev %s parent ffff: protocol ip "
+        out_buf = sys_exec("tc filter add dev %s parent ffff: protocol %s "
                            "prio %d handle ::%x u32 ht %x:%x: "
-                           "match ip protocol %d 0xff "
-                           "match ip nofrag "
-                           "match ip dst %s/32 match ip dport %d 0xffff "
+                           "match %s protocol %d 0xff "
+                           "match %s nofrag "
+                           "match %s dst %s match ip dport %d 0xffff "
                            "action mirred egress redirect dev %s "
                            "> /dev/null 2>&1 || echo $?",
-                           if_name, prio, id, ht, bkt, proto, sys_ip2str(dst_ip), ntohs(dst_port),
-                           tap_name);
+                           if_name, (proto == ETH_P_IP ? "ip" : "ipv6"), prio, id, ht, bkt,
+                           (proto == ETH_P_IP ? "ip" : "ip6"), l4_proto,
+                           (proto == ETH_P_IP ? "ip" : "ip6"), (proto == ETH_P_IP ? "ip" : "ip6"),
+                           sys_ip2str(dst_ip), ntohs(dst_port), tap_name);
     }
     if (NULL == out_buf || (out_buf[0] != '\0' && out_buf[0] != '0')) {
         rc = -1;
@@ -602,17 +640,17 @@ err:
     return rc;
 }
 
-int tc_del_filter(tc_t tc, int ifindex, int prio, int ht, int bkt, int id)
+int tc_del_filter(tc_t tc, int ifindex, int prio, int ht, int bkt, int id, short proto)
 {
     int rc = 0;
 
-    log_debug("remove filter for if_id: %d\n", ifindex);
+    log_debug("remove filter for if_id: %d proto: %04hx\n", ifindex, proto);
 
 #if defined(USE_NETLINK) && (USE_NETLINK == 1)
     struct tc_qdisc qdisc = {HANDLE_SET(ht, bkt, id), 0xffff0000, prio};
     char opt_kind[] = "u32";
 
-    tc_req(tc, ifindex, RTM_DELTFILTER, 0, qdisc);
+    tc_req(tc, ifindex, proto, RTM_DELTFILTER, 0, qdisc);
 
     nl_attr_add(&tc->req.hdr, TCA_KIND, opt_kind, sizeof(opt_kind));
 
@@ -635,9 +673,9 @@ int tc_del_filter(tc_t tc, int ifindex, int prio, int ht, int bkt, int id)
         goto err;
     }
 
-    out_buf = sys_exec("tc filter del dev %s parent ffff: protocol ip prio %d handle %x:%x:%x u32 "
+    out_buf = sys_exec("tc filter del dev %s parent ffff: protocol %s prio %d handle %x:%x:%x u32 "
                        "> /dev/null 2>&1 || echo $?",
-                       if_name, prio, ht, bkt, id);
+                       if_name, (proto == ETH_P_IP ? "ip" : "ipv6"), prio, ht, bkt, id);
     if (NULL == out_buf || (out_buf[0] != '\0' && out_buf[0] != '0')) {
         rc = -1;
         goto err;
@@ -718,5 +756,23 @@ static int pack_key32(struct tc_u32_sel *sel, uint32_t key, uint32_t mask, int o
     mask = htonl(mask);
 
     return pack_key(sel, key, mask, off, offmask);
+}
+
+static int pack_ip6(struct tc_u32_sel *sel, uint8_t *addr, uint32_t mask, int off, int offmask)
+{
+    int ret = 0;
+    int i = 0;
+    uint32_t key = 0;
+
+    for (i = 0; i < 4; i++) {
+        key = htonl(((uint32_t *)addr)[i]);
+        mask = htonl(mask);
+        ret = pack_key(sel, key, mask, off + 4 * (i - 1), offmask);
+        if (ret) {
+            return ret;
+        }
+    }
+
+    return ret;
 }
 #endif /* USE_NETLINK */

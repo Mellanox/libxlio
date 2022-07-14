@@ -32,7 +32,6 @@
 #ifndef __LWIP_IP_ADDR_H__
 #define __LWIP_IP_ADDR_H__
 
-#include <string.h>
 #include <stdbool.h>
 #include "vma/lwip/opt.h"
 #include "vma/lwip/def.h"
@@ -41,6 +40,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define IPV6_VERSION 6U
 
 /* RFC879 Section 1. Introduction */
 #define IPV4_MIN_MTU 576U

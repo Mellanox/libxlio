@@ -40,14 +40,17 @@ def check_benchmark():
                 bench_rps = bench.get("Rate(RPS)")
                 assert bench_rps is not None, f"Cannot get current benchmark's RPS ({benchmark_id=}, failing the check"
                 base = get_baseline(bench)
-                base_rps = base["Rate(RPS)"]
-                res = round(bench_rps / base_rps, 2)
-                if res > fail_treshold:
-                    print(f"Benchmark {benchmark_id} is OK compared to the baseline.")
+                if base:
+                    base_rps = base["Rate(RPS)"]
+                    res = round(bench_rps / base_rps, 2)
+                    if res > fail_treshold:
+                        print(f"Benchmark {benchmark_id} is OK compared to the baseline.")
+                    else:
+                        print(f"""Benchmark {benchmark_id} has FAILED: it is {res} of the baseline result (expected to be at least {fail_treshold}). Benchmarked RPS: {bench_rps}, baseline RPS: {base_rps}, benchmark parameters: proto={bench["Proto(http/https)"]}, payload={bench["Payload"]}, bulk type={bench["type"].upper()}""")
+                        print("It's safe to ignore this check right now.")
+                        exit_code = 1
                 else:
-                    print(f"""Benchmark {benchmark_id} has FAILED: it is {res} of the baseline result (expected to be at least {fail_treshold}). Benchmarked RPS: {bench_rps}, baseline RPS: {base_rps}, benchmark parameters: proto={bench["Proto(http/https)"]}, payload={bench["Payload"]}, bulk type={bench["type"].upper()}""")
-                    print("It's safe to ignore this check right now.")
-                    exit_code = 1
+                    print("There is no baseline value for this benchmark")
         except AssertionError as e:
             print(e)
             exit_code = 1

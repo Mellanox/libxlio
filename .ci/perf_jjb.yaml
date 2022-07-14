@@ -46,7 +46,7 @@
         - github-pull-request:
             cron: 'H/5 * * * *'
             trigger-phrase: '.*\bbot:perf\b.*'
-            status-context: "Mellanox Lab"
+            status-context: "xlio-perf"
             success-status: "[PASS]"
             failure-status: "[FAIL]"
             error-status:   "[FAIL]"

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -78,7 +78,8 @@ public:
 
     virtual void print_val();
 
-    virtual bool attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink) = 0;
+    virtual bool attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink,
+                             bool force_5t = false) = 0;
     virtual bool detach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink) = 0;
 
     virtual void restart() = 0;
@@ -209,6 +210,12 @@ public:
     }
 #endif /* DEFINED_UTLS */
     virtual void post_nop_fence(void) {}
+
+    virtual void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)
+    {
+        NOT_IN_USE(id);
+        NOT_IN_USE(ctx);
+    }
 
 protected:
     inline void set_parent(ring *parent) { m_parent = (parent ? parent : this); }

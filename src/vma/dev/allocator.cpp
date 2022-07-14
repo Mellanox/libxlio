@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -337,10 +337,9 @@ void vma_allocator::register_memory(size_t size, ib_ctx_handler *p_ib_ctx_h, uin
 
     ib_ctx_map = g_p_ib_ctx_handler_collection->get_ib_cxt_list();
     if (ib_ctx_map) {
-        ib_context_map_t::iterator iter;
 
-        for (iter = ib_ctx_map->begin(); iter != ib_ctx_map->end(); iter++) {
-            p_ib_ctx_h = iter->second;
+        for (const auto &ib_ctx_key_val : *ib_ctx_map) {
+            p_ib_ctx_h = ib_ctx_key_val.second;
             if (p_ib_ctx_h_ref && p_ib_ctx_h != p_ib_ctx_h_ref) {
                 continue;
             }
@@ -407,10 +406,9 @@ void vma_allocator::deregister_memory()
 
     ib_ctx_map = g_p_ib_ctx_handler_collection->get_ib_cxt_list();
     if (ib_ctx_map) {
-        ib_context_map_t::iterator iter;
 
-        for (iter = ib_ctx_map->begin(); iter != ib_ctx_map->end(); iter++) {
-            p_ib_ctx_h = iter->second;
+        for (const auto &ib_ctx_key_val : *ib_ctx_map) {
+            p_ib_ctx_h = ib_ctx_key_val.second;
             lkey = find_lkey_by_ib_ctx(p_ib_ctx_h);
             if (lkey != (uint32_t)(-1)) {
                 p_ib_ctx_h->mem_dereg(lkey);

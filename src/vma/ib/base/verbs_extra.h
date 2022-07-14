@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -623,8 +623,7 @@ inline void ibv_flow_spec_set_single_ip(spec_ipv6_type &spec_ip_val, spec_ipv6_t
                                         const ip_address &in_ip)
 {
     memcpy(&spec_ip_val, &in_ip.get_in6_addr(), sizeof(spec_ipv6_type));
-    uint64_t *p_src_msk = reinterpret_cast<uint64_t *>(spec_ip_mask);
-    p_src_msk[0] = p_src_msk[1] = (!in_ip.is_anyaddr() ? FS_MASK_ON_64 : 0U);
+    memset(&spec_ip_mask, in_ip.is_anyaddr() ? 0 : 0xff, sizeof(spec_ipv6_type));
 }
 
 static inline void ibv_flow_spec_ip_set(vma_ibv_flow_spec_ipv4 *ipv4, const ip_address &dst_ip,

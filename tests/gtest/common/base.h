@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -51,13 +51,14 @@ protected:
     virtual void cleanup();
     virtual void init();
     bool barrier();
-    void barrier_fork(int);
+    void barrier_fork(int pid, bool sync_parent = false);
     bool child_fork_exit() { return m_break_signal; }
 
     sockaddr_store_t client_addr;
     sockaddr_store_t server_addr;
     sockaddr_store_t remote_addr;
     sockaddr_store_t bogus_addr;
+    bool def_gw_exists;
     static uint16_t m_port;
     static int m_family;
 

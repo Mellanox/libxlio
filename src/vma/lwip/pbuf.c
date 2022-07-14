@@ -63,9 +63,7 @@
 
 #include "vma/lwip/opt.h"
 
-#include "vma/lwip/stats.h"
 #include "vma/lwip/pbuf.h"
-
 
 #if TCP_QUEUE_OOSEQ
 #include "vma/lwip/tcp_impl.h"
@@ -94,10 +92,8 @@ pbuf_realloc(struct pbuf *p, u16_t new_len)
   s32_t grow;
 
   LWIP_ASSERT("pbuf_realloc: p != NULL", p != NULL);
-  LWIP_ASSERT("pbuf_realloc: sane p->type", p->type == PBUF_POOL ||
-              p->type == PBUF_ROM ||
-              p->type == PBUF_RAM ||
-              p->type == PBUF_REF);
+  LWIP_ASSERT("pbuf_realloc: sane p->type",
+              p->type == PBUF_RAM || p->type == PBUF_REF);
 
   /* desired length larger than current length? */
   if (new_len >= p->tot_len) {
@@ -150,6 +146,8 @@ pbuf_realloc(struct pbuf *p, u16_t new_len)
  *
  * Adjusts the ->payload pointer so that space for a header
  * (dis)appears in the pbuf payload.
+ * Only PBUF_RAM and PBUF_REF buffers are allowed. PBUF_REF buffers are used in
+ * the RX path.
  *
  * The ->payload, ->tot_len and ->len fields are adjusted.
  *
@@ -157,64 +155,32 @@ pbuf_realloc(struct pbuf *p, u16_t new_len)
  * @param header_size_increment Number of bytes to increment header size which
  * increases the size of the pbuf. New space is on the front.
  * (Using a negative value decreases the header size.)
- * If hdr_size_inc is 0, this function does nothing and returns succesful.
+ * If hdr_size_inc is 0, this function does nothing and returns success.
  *
- * PBUF_ROM and PBUF_REF type buffers cannot have their sizes increased, so
- * the call will fail. A check is made that the increase in header size does
- * not move the payload pointer in front of the start of the buffer.
  * @return non-zero on failure, zero on success.
- *
  */
 u8_t
 pbuf_header(struct pbuf *p, s16_t header_size_increment)
 {
-  u16_t type;
-  void *payload;
-  u16_t increment_magnitude;
-
   LWIP_ASSERT("p != NULL", p != NULL);
-  if ((header_size_increment == 0) || (p == NULL)) {
-    return 0;
-  }
- 
-  if (header_size_increment < 0){
-    increment_magnitude = -header_size_increment;
-    /* Check that we aren't going to move off the end of the pbuf */
-    LWIP_ERROR("increment_magnitude <= p->len", (increment_magnitude <= p->len), return 1);
-  } else {
-    increment_magnitude = header_size_increment;
-  }
 
-  type = p->type;
-  /* remember current payload pointer */
-  payload = p->payload;
-
-  /* pbuf types containing payloads? */
-  if (type == PBUF_RAM || type == PBUF_POOL) {
-    /* set new payload pointer */
-    p->payload = (u8_t *)p->payload - header_size_increment;
-  /* pbuf types refering to external payloads? */
-  } else if (type == PBUF_REF || type == PBUF_ROM) {
-    /* hide a header in the payload? */
-    if ((header_size_increment < 0) && (increment_magnitude > p->len))
-      return 1;
-    /* AlexV: we need to check that the header EXPANTION is legal for PBUF_REF & PBUF_ROM pbufs! */
-    p->payload = (u8_t *)p->payload - header_size_increment;
-  } else if (type == PBUF_ZEROCOPY) {
-    /* temporary do the same as for PBUF_RAM until zcopy support is not ready */
-    p->payload = (u8_t *)p->payload - header_size_increment;
-  } else {
-    /* Unknown type */
-    LWIP_ASSERT("bad pbuf type", 0);
+  if (p->type != PBUF_RAM && p->type != PBUF_REF) {
     return 1;
   }
+
+  /* Check that we aren't going to move off the end of the pbuf */
+  if (header_size_increment < 0 && (u16_t)(-header_size_increment) > p->len) {
+    return 1;
+  }
+
+  /* set new payload pointer */
+  p->payload = (u8_t *)p->payload - header_size_increment;
   /* modify pbuf length fields */
   p->len += header_size_increment;
   p->tot_len += header_size_increment;
 
-  LWIP_DEBUGF(PBUF_DEBUG | LWIP_DBG_TRACE, ("pbuf_header: old %p new %p (%"S16_F")\n",
-    (void *)payload, (void *)p->payload, header_size_increment));
-  (void)payload; /* Fix warning -Wunused-but-set-variable */
+  LWIP_DEBUGF(PBUF_DEBUG | LWIP_DBG_TRACE, ("pbuf_header: new %p (%"S16_F")\n",
+    (void *)p->payload, header_size_increment));
 
   return 0;
 }
@@ -255,7 +221,6 @@ pbuf_header(struct pbuf *p, s16_t header_size_increment)
 u8_t
 pbuf_free(struct pbuf *p)
 {
-  u16_t type;
   struct pbuf *q;
   u8_t count;
 
@@ -269,9 +234,7 @@ pbuf_free(struct pbuf *p)
   LWIP_DEBUGF(PBUF_DEBUG | LWIP_DBG_TRACE, ("pbuf_free(%p)\n", (void *)p));
 
   LWIP_ASSERT("pbuf_free: sane type",
-    p->type == PBUF_RAM || p->type == PBUF_ROM ||
-    p->type == PBUF_REF || p->type == PBUF_POOL ||
-    p->type == PBUF_ZEROCOPY);
+    p->type == PBUF_RAM || p->type == PBUF_REF || p->type == PBUF_ZEROCOPY);
 
   count = 0;
   /* de-allocate all consecutive pbufs from the head of the chain that
@@ -287,7 +250,6 @@ pbuf_free(struct pbuf *p)
       /* remember next pbuf in chain for next iteration */
       q = p->next;
       LWIP_DEBUGF( PBUF_DEBUG | LWIP_DBG_TRACE, ("pbuf_free: deallocating %p\n", (void *)p));
-      type = p->type;
       /* is this a custom pbuf? */
       if ((p->flags & PBUF_FLAG_IS_CUSTOM) != 0) {
         struct pbuf_custom *pc = (struct pbuf_custom*)p;
@@ -306,7 +268,6 @@ pbuf_free(struct pbuf *p)
     }
   }
 
-  (void)type;
   /* return number of de-allocated pbufs */
   return count;
 }
@@ -361,8 +322,8 @@ pbuf_cat(struct pbuf *h, struct pbuf *t)
 {
   struct pbuf *p;
 
-  LWIP_ERROR_ABORT("(h != NULL) && (t != NULL) (programmer violates API)",
-             ((h != NULL) && (t != NULL)), return;);
+  LWIP_ASSERT("(h != NULL) && (t != NULL) (programmer violates API)",
+              ((h != NULL) && (t != NULL)));
 
   /* proceed to last pbuf of chain */
   for (p = h; p->next != NULL; p = p->next) {

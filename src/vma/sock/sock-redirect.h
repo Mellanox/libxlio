@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -187,6 +187,7 @@ struct os_api {
     sighandler_t (*signal)(int signum, sighandler_t handler);
 #if defined(DEFINED_NGINX)
     int (*setuid)(uid_t uid);
+    pid_t (*waitpid)(pid_t pid, int *wstatus, int options);
 #endif // DEFINED_NGINX
 };
 

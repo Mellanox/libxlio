@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -282,12 +282,12 @@ TEST_F(vma_tcp_recvfrom_zcopy, ti_2_recv_once)
         EXPECT_EQ(m_test_buf_size, rc);
         EXPECT_TRUE(flags & MSG_XLIO_ZCOPY);
         vma_packets = (struct xlio_recvfrom_zcopy_packets_t *)buf;
-        EXPECT_EQ(1, vma_packets->n_packet_num);
+        EXPECT_EQ(1U, vma_packets->n_packet_num);
         vma_packet =
             (struct xlio_recvfrom_zcopy_packet_t *)(buf +
                                                     sizeof(struct xlio_recvfrom_zcopy_packets_t));
-        EXPECT_EQ(1, vma_packet->sz_iov);
-        EXPECT_EQ(m_test_buf_size, vma_packet->iov[0].iov_len);
+        EXPECT_EQ(1U, vma_packet->sz_iov);
+        EXPECT_EQ(static_cast<size_t>(m_test_buf_size), vma_packet->iov[0].iov_len);
 
         log_trace("Test check: expected: '%s' actual: '%s'\n", m_test_buf,
                   (char *)vma_packet->iov[0].iov_base);
@@ -357,7 +357,7 @@ TEST_F(vma_tcp_recvfrom_zcopy, ti_3_large_data)
             msg.msg_iov = vec;
             msg.msg_iovlen = sizeof(vec) / sizeof(vec[0]);
             rc = sendmsg(m_fd, &msg, MSG_DONTWAIT);
-            EXPECT_EQ(vec[0].iov_len, rc);
+            EXPECT_EQ(static_cast<int>(vec[0].iov_len), rc);
 
             sleep(1);
             peer_wait(m_fd);

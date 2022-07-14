@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -153,6 +153,8 @@ void fd_collection::clear()
         socket_fd_api *p_sfd_api = m_pending_to_remove_lst.get_and_pop_back();
         p_sfd_api->clean_obj();
     }
+
+    g_global_stat_static.n_pending_sockets = 0U;
 
     /* Clean up all left overs sockinfo
      */
@@ -553,6 +555,7 @@ int fd_collection::del_sockfd(int fd, bool b_cleanup /*=false*/)
             // This socket will be handled and destroyed now by fd_col.
             // This will be done from fd_col timer handler.
             if (m_p_sockfd_map[fd] == p_sfd_api) {
+                ++g_global_stat_static.n_pending_sockets;
                 m_p_sockfd_map[fd] = NULL;
                 m_pending_to_remove_lst.push_front(p_sfd_api);
             }
@@ -690,6 +693,6 @@ void fd_collection::handle_socket_pool(int fd)
         m_use_socket_pool = false;
         return;
     }
-    sockfd->m_is_for_socket_pool = true;
+    sockfd->set_params_for_socket_pool();
 }
 #endif

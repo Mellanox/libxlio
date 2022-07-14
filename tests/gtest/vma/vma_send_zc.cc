@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -514,8 +514,8 @@ TEST_F(vma_send_zc, ti_3_few_send)
 
         rc = do_recv_expected_completion(m_fd, lo, hi, test_iter);
         EXPECT_EQ(test_iter, rc);
-        EXPECT_EQ(0, lo);
-        EXPECT_EQ((test_iter - 1), hi);
+        EXPECT_EQ(0U, lo);
+        EXPECT_EQ(static_cast<uint32_t>(test_iter - 1), hi);
 
         peer_wait(m_fd);
 
@@ -669,8 +669,8 @@ TEST_F(vma_send_zc, ti_4_large_send)
 
         rc = do_recv_expected_completion(m_fd, lo, hi, 1);
         EXPECT_EQ(1, rc);
-        EXPECT_EQ(0, lo);
-        EXPECT_EQ(0, hi);
+        EXPECT_EQ(0U, lo);
+        EXPECT_EQ(0U, hi);
 
         peer_wait(m_fd);
 

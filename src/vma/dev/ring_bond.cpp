@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -99,7 +99,7 @@ void ring_bond::print_val()
                 ((uintptr_t)this == (uintptr_t)m_parent ? 0 : m_parent), "bond");
 }
 
-bool ring_bond::attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink)
+bool ring_bond::attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink, bool force_5t)
 {
     bool ret = true;
     struct flow_sink_t value = {flow_spec_5t, sink};
@@ -110,7 +110,7 @@ bool ring_bond::attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink)
     m_rx_flows.push_back(value);
 
     for (uint32_t i = 0; i < m_recv_rings.size(); i++) {
-        bool step_ret = m_recv_rings[i]->attach_flow(flow_spec_5t, sink);
+        bool step_ret = m_recv_rings[i]->attach_flow(flow_spec_5t, sink, force_5t);
         ret = ret && step_ret;
     }
 
@@ -800,9 +800,12 @@ void ring_bond::popup_recv_rings()
      * - For NETVSC device all rings (vf and tap) should be ready for receive.
      */
     for (uint32_t i = 0; i < m_bond_rings.size(); i++) {
+        if (p_ndev->get_is_bond() == net_device_val::NETVSC) {
+            m_recv_rings.push_back(m_bond_rings[i]);
+            continue;
+        }
         for (uint32_t j = 0; j < slaves.size(); j++) {
-            if ((slaves[j]->if_index != m_bond_rings[i]->get_if_index()) &&
-                ((p_ndev->get_is_bond() != net_device_val::NETVSC))) {
+            if (slaves[j]->if_index != m_bond_rings[i]->get_if_index()) {
                 continue;
             }
             if (slaves[j]->lag_tx_port_affinity < 2) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -62,7 +62,7 @@ typedef enum { AGENT_INACTIVE, AGENT_ACTIVE, AGENT_CLOSED } agent_state_t;
 typedef void (*agent_cb_t)(void *arg);
 
 /**
- * @struct agent_msg_t
+ * @struct agent_callback_t
  * @brief Callback queue element.
  *
  * This structure describes function call that is

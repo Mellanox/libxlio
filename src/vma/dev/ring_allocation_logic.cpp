@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -37,7 +37,7 @@
 #undef MODULE_HDR_INFO
 #define MODULE_HDR_INFO MODULE_NAME "%s:%d:%s() "
 #undef __INFO__
-#define __INFO__ to_str()
+#define __INFO__ to_str().c_str()
 
 #define ral_logpanic   __log_info_panic
 #define ral_logerr     __log_info_err
@@ -56,7 +56,6 @@ ring_allocation_logic::ring_allocation_logic()
     , m_active(true)
     , m_res_key()
 {
-    m_str[0] = '\0';
     m_type = "";
 }
 
@@ -68,15 +67,14 @@ ring_allocation_logic::ring_allocation_logic(ring_logic_t allocation_logic,
     , m_source(source)
     , m_migration_try_count(ring_migration_ratio)
 {
+    m_type = "";
+
     if (ring_profile.get_ring_alloc_logic() == RING_LOGIC_PER_INTERFACE) {
         ring_profile.set_ring_alloc_logic(allocation_logic);
     }
     m_res_key = resource_allocation_key(ring_profile);
     m_migration_candidate = 0;
     m_res_key.set_user_id_key(calc_res_key_by_logic());
-
-    m_str[0] = '\0';
-    m_type = "";
 
     m_active = true;
 }
@@ -190,12 +188,13 @@ bool ring_allocation_logic::should_migrate_ring()
     return true;
 }
 
-const char *ring_allocation_logic::to_str()
+const std::string ring_allocation_logic::to_str() const
 {
-    if (unlikely(m_str[0] == '\0')) {
-        snprintf(m_str, sizeof(m_str), "[%s=%p]", m_type, m_owner);
-    }
-    return m_str;
+    std::stringstream ss;
+
+    ss << '[' << m_type << '=' << m_owner << ']';
+
+    return ss.str();
 }
 
 cpu_manager g_cpu_manager;

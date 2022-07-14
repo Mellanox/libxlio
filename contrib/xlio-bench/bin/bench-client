@@ -41,7 +41,7 @@ main()
     local connections=$(nproc)
     local proto="http"
     local payload="0B"
-    local duration=40
+    local duration="${BULK_STEP_DURATION:-120}"
     local cps=0
     #local delay=1
 

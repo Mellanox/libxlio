@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -104,6 +104,8 @@ bool g_init_global_ctors_done = true;
 static command_netlink *s_cmd_nl = NULL;
 #define MAX_VERSION_STR_LEN 128
 #define ONE_MB              (1024 * 1024)
+
+global_stats_t g_global_stat_static;
 
 static int free_libvma_resources()
 {
@@ -508,7 +510,8 @@ void print_vma_global_settings()
     }
 
     VLOG_PARAM_NUMBER("Ring migration ratio TX", safe_mce_sys().ring_migration_ratio_tx,
-                      MCE_DEFAULT_RING_MIGRATION_RATIO_TX, SYS_VAR_RING_MIGRATION_RATIO_TX);
+                      (safe_mce_sys().enable_tso ? -1 : MCE_DEFAULT_RING_MIGRATION_RATIO_TX),
+                      SYS_VAR_RING_MIGRATION_RATIO_TX);
     VLOG_PARAM_NUMBER("Ring migration ratio RX", safe_mce_sys().ring_migration_ratio_rx,
                       MCE_DEFAULT_RING_MIGRATION_RATIO_RX, SYS_VAR_RING_MIGRATION_RATIO_RX);
 
@@ -560,15 +563,22 @@ void print_vma_global_settings()
                       MCE_DEFAULT_TX_PREFETCH_BYTES, SYS_VAR_TX_PREFETCH_BYTES);
     VLOG_PARAM_NUMBER("Tx Bufs Batch TCP", safe_mce_sys().tx_bufs_batch_tcp,
                       MCE_DEFAULT_TX_BUFS_BATCH_TCP, SYS_VAR_TX_BUFS_BATCH_TCP);
+    VLOG_PARAM_NUMBER("Tx Segs Batch TCP", safe_mce_sys().tx_segs_batch_tcp,
+                      MCE_DEFAULT_TX_SEGS_BATCH_TCP, SYS_VAR_TX_SEGS_BATCH_TCP);
     VLOG_PARAM_NUMBER("TCP Send Buffer size", safe_mce_sys().tcp_send_buffer_size,
                       MCE_DEFAULT_TCP_SEND_BUFFER_SIZE, SYS_VAR_TCP_SEND_BUFFER_SIZE);
-
-    VLOG_PARAM_NUMBER("Rx Mem Bufs", safe_mce_sys().rx_num_bufs, MCE_DEFAULT_RX_NUM_BUFS,
-                      SYS_VAR_RX_NUM_BUFS);
-    VLOG_PARAM_NUMBER("Rx QP WRE", safe_mce_sys().rx_num_wr, MCE_DEFAULT_RX_NUM_WRE,
-                      SYS_VAR_RX_NUM_WRE);
+    VLOG_PARAM_NUMBER(
+        "Rx Mem Bufs", safe_mce_sys().rx_num_bufs,
+        (safe_mce_sys().enable_striding_rq ? MCE_DEFAULT_STRQ_NUM_BUFS : MCE_DEFAULT_RX_NUM_BUFS),
+        SYS_VAR_RX_NUM_BUFS);
+    VLOG_PARAM_NUMBER(
+        "Rx QP WRE", safe_mce_sys().rx_num_wr,
+        (safe_mce_sys().enable_striding_rq ? MCE_DEFAULT_STRQ_NUM_WRE : MCE_DEFAULT_RX_NUM_WRE),
+        SYS_VAR_RX_NUM_WRE);
     VLOG_PARAM_NUMBER("Rx QP WRE Batching", safe_mce_sys().rx_num_wr_to_post_recv,
-                      MCE_DEFAULT_RX_NUM_WRE_TO_POST_RECV, SYS_VAR_RX_NUM_WRE_TO_POST_RECV);
+                      (safe_mce_sys().enable_striding_rq ? MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV
+                                                         : MCE_DEFAULT_RX_NUM_WRE_TO_POST_RECV),
+                      SYS_VAR_RX_NUM_WRE_TO_POST_RECV);
     VLOG_PARAM_NUMBER("Rx Byte Min Limit", safe_mce_sys().rx_ready_byte_min_limit,
                       MCE_DEFAULT_RX_BYTE_MIN_LIMIT, SYS_VAR_RX_BYTE_MIN_LIMIT);
     VLOG_PARAM_NUMBER("Rx Poll Loops", safe_mce_sys().rx_poll_num, MCE_DEFAULT_RX_NUM_POLLS,
@@ -697,7 +707,9 @@ void print_vma_global_settings()
                       MCE_DEFAULT_CQ_KEEP_QP_FULL, SYS_VAR_CQ_KEEP_QP_FULL,
                       safe_mce_sys().cq_keep_qp_full ? "Enabled" : "Disabled");
     VLOG_PARAM_NUMBER("QP Compensation Level", safe_mce_sys().qp_compensation_level,
-                      MCE_DEFAULT_QP_COMPENSATION_LEVEL, SYS_VAR_QP_COMPENSATION_LEVEL);
+                      (safe_mce_sys().enable_striding_rq ? MCE_DEFAULT_STRQ_COMPENSATION_LEVEL
+                                                         : MCE_DEFAULT_QP_COMPENSATION_LEVEL),
+                      SYS_VAR_QP_COMPENSATION_LEVEL);
     VLOG_PARAM_STRING("Offloaded Sockets", safe_mce_sys().offloaded_sockets,
                       MCE_DEFAULT_OFFLOADED_SOCKETS, SYS_VAR_OFFLOADED_SOCKETS,
                       safe_mce_sys().offloaded_sockets ? "Enabled" : "Disabled");
@@ -783,6 +795,12 @@ void print_vma_global_settings()
                       SYS_VAR_UTLS_RX, safe_mce_sys().enable_utls_rx ? "Enabled " : "Disabled");
     VLOG_PARAM_STRING("UTLS TX support", safe_mce_sys().enable_utls_tx, MCE_DEFAULT_UTLS_TX,
                       SYS_VAR_UTLS_TX, safe_mce_sys().enable_utls_tx ? "Enabled " : "Disabled");
+    VLOG_PARAM_NUMBER(
+        "UTLS high watermark DEK cache size", safe_mce_sys().utls_high_wmark_dek_cache_size,
+        MCE_DEFAULT_UTLS_HIGH_WMARK_DEK_CACHE_SIZE, SYS_VAR_UTLS_HIGH_WMARK_DEK_CACHE_SIZE);
+    VLOG_PARAM_NUMBER(
+        "UTLS low watermark DEK cache size", safe_mce_sys().utls_low_wmark_dek_cache_size,
+        MCE_DEFAULT_UTLS_LOW_WMARK_DEK_CACHE_SIZE, SYS_VAR_UTLS_LOW_WMARK_DEK_CACHE_SIZE);
 #endif /* DEFINED_UTLS */
 #if defined(DEFINED_NGINX)
     VLOG_PARAM_NUMBER("Src port stirde", safe_mce_sys().src_port_stride,
@@ -791,6 +809,9 @@ void print_vma_global_settings()
                       MCE_DEFAULT_NGINX_WORKERS_NUM, SYS_VAR_NGINX_WORKERS_NUM);
     VLOG_PARAM_NUMBER("Size of UDP socket pool", safe_mce_sys().nginx_udp_socket_pool_size,
                       MCE_DEFAULT_NGINX_UDP_POOL_SIZE, SYS_VAR_NGINX_UDP_POOL_SIZE);
+    VLOG_PARAM_NUMBER(
+        "Max RX reuse buffs UDP pool", safe_mce_sys().nginx_udp_socket_pool_rx_num_buffs_reuse,
+        MCE_DEFAULT_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE, SYS_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE);
 #endif
     VLOG_PARAM_STRING("fork() support", safe_mce_sys().handle_fork, MCE_DEFAULT_FORK_SUPPORT,
                       SYS_VAR_FORK, safe_mce_sys().handle_fork ? "Enabled " : "Disabled");
@@ -914,6 +935,11 @@ extern "C" void sock_redirect_exit(void)
     finit_instrumentation(safe_mce_sys().vma_time_measure_filename);
 #endif
     vlog_printf(VLOG_DEBUG, "%s()\n", __FUNCTION__);
+
+    if (g_init_global_ctors_done) {
+        vma_stats_instance_remove_global_block(&g_global_stat_static);
+    }
+
     vma_shmem_stats_close();
 }
 
@@ -971,9 +997,13 @@ static void do_global_ctors_helper()
     }
 
     /* Open communication with daemon */
-    NEW_CTOR(g_p_agent, agent());
-    vlog_printf(VLOG_DEBUG, "Agent setup state: g_p_agent=%p active=%d\n", g_p_agent,
-                (g_p_agent ? g_p_agent->state() : -1));
+    if (safe_mce_sys().service_enable) {
+        NEW_CTOR(g_p_agent, agent());
+        vlog_printf(VLOG_DEBUG, "Agent setup state: g_p_agent=%p active=%d\n", g_p_agent,
+                    (g_p_agent ? g_p_agent->state() : -1));
+    } else {
+        vlog_printf(VLOG_DEBUG, "Agent is disabled\n");
+    }
 
     // Create all global managment objects
     NEW_CTOR(g_p_event_handler_manager, event_handler_manager());
@@ -981,6 +1011,9 @@ static void do_global_ctors_helper()
     vma_shmem_stats_open(&g_p_vlogger_level, &g_p_vlogger_details);
     *g_p_vlogger_level = g_vlogger_level;
     *g_p_vlogger_details = g_vlogger_details;
+
+    memset(&g_global_stat_static, 0, sizeof(g_global_stat_static));
+    vma_stats_instance_create_global_block(&g_global_stat_static);
 
     // Create new netlink listener
     NEW_CTOR(g_p_netlink_handler, netlink_wrapper());

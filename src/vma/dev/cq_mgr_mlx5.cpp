@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -47,6 +47,7 @@
 
 #define cq_logfunc    __log_info_func
 #define cq_logdbg     __log_info_dbg
+#define cq_logwarn    __log_info_warn
 #define cq_logerr     __log_info_err
 #define cq_logpanic   __log_info_panic
 #define cq_logfuncall __log_info_funcall
@@ -250,6 +251,16 @@ void cq_mgr_mlx5::cqe_to_mem_buff_desc(struct vma_mlx5_cqe *cqe, mem_buf_desc_t 
          */
         break;
     }
+    }
+
+    // increase cqe error counter should be done once, here (regular flow) OR in
+    // cqe_to_vma_wc function (socketxtreme)
+    switch (MLX5_CQE_OPCODE(cqe->op_own)) {
+    case MLX5_CQE_INVALID:
+    case MLX5_CQE_REQ_ERR:
+    case MLX5_CQE_RESP_ERR:
+        m_p_cq_stat->n_rx_cqe_error++;
+        break;
     }
 }
 
@@ -522,6 +533,11 @@ int cq_mgr_mlx5::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd
                         !compensate_qp_poll_success(buff)) {
                         process_recv_buffer(buff, pv_fd_ready_array);
                     }
+                } else {
+                    m_p_cq_stat->n_rx_pkt_drop++;
+                    if (++m_qp_rec.debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv) {
+                        compensate_qp_poll_failed();
+                    }
                 }
             } else {
                 m_b_was_drained = true;
@@ -625,6 +641,7 @@ inline void cq_mgr_mlx5::cqe_to_vma_wc(struct vma_mlx5_cqe *cqe, vma_ibv_wc *wc)
         wc->status = IBV_WC_SUCCESS;
         return;
     default:
+        m_p_cq_stat->n_rx_cqe_error++;
         break;
     }
 
@@ -633,6 +650,11 @@ inline void cq_mgr_mlx5::cqe_to_vma_wc(struct vma_mlx5_cqe *cqe, vma_ibv_wc *wc)
         wc->status = IBV_WC_WR_FLUSH_ERR;
     } else {
         wc->status = IBV_WC_GENERAL_ERR;
+        cq_logwarn("cqe: syndrome=0x%x vendor=0x%x hw=0x%x (type=0x%x) wqe_opcode_qpn=0x%x "
+                   "wqe_counter=0x%x",
+                   ecqe->syndrome, ecqe->vendor_err_synd, *((uint8_t *)&ecqe->rsvd1 + 16),
+                   *((uint8_t *)&ecqe->rsvd1 + 17), ntohl(ecqe->s_wqe_opcode_qpn),
+                   ntohs(ecqe->wqe_counter));
     }
 
     wc->vendor_err = ecqe->vendor_err_synd;
@@ -806,12 +828,15 @@ int cq_mgr_mlx5::poll_and_process_error_element_rx(struct vma_mlx5_cqe *cqe,
     ++m_qp->m_mlx5_qp.rq.tail;
 
     m_rx_hot_buffer = cq_mgr::process_cq_element_rx(&wce);
-    if (m_rx_hot_buffer) {
-        if (vma_wc_opcode(wce) & VMA_IBV_WC_RECV) {
-            if ((++m_qp_rec.debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
-                !compensate_qp_poll_success(m_rx_hot_buffer)) {
-                process_recv_buffer(m_rx_hot_buffer, pv_fd_ready_array);
-            }
+    if (m_rx_hot_buffer && (vma_wc_opcode(wce) & VMA_IBV_WC_RECV)) {
+        if ((++m_qp_rec.debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
+            !compensate_qp_poll_success(m_rx_hot_buffer)) {
+            process_recv_buffer(m_rx_hot_buffer, pv_fd_ready_array);
+        }
+    } else {
+        m_p_cq_stat->n_rx_pkt_drop++;
+        if ((++m_qp_rec.debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv)) {
+            compensate_qp_poll_failed();
         }
     }
     m_rx_hot_buffer = NULL;

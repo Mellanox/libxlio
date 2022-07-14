@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,9 +33,9 @@
 #ifndef VMA_MEM_DESC_H
 #define VMA_MEM_DESC_H
 
-#include "vma/util/hash_map.h"
-
 #include <stdint.h>
+
+#include <unordered_map>
 
 /*
  * Note, the following mem_desc implementations must be allocated with new()
@@ -174,8 +174,6 @@ private:
      */
 };
 
-typedef hash_map<void *, zcopy_hugepage *> zcopy_hugepage_map_t;
-
 class zcopy_hugepage_mgr : public lock_spin {
 public:
     zcopy_hugepage_mgr();
@@ -187,11 +185,14 @@ public:
 
         lock();
 
-        page = m_hugepage_map.get(page_addr, NULL);
-        if (unlikely(page == NULL)) {
+        auto iter = m_hugepage_map.find(page_addr);
+        if (likely(iter != m_hugepage_map.end())) {
+            page = iter->second;
+        } else {
             page = new zcopy_hugepage(page_addr, m_hugepage_size);
-            if (likely(page != NULL))
-                m_hugepage_map.set(page_addr, page);
+            if (likely(page != NULL)) {
+                m_hugepage_map[page_addr] = page;
+            }
         }
 
         unlock();
@@ -203,7 +204,7 @@ public:
     uintptr_t m_hugepage_mask;
 
 private:
-    zcopy_hugepage_map_t m_hugepage_map;
+    std::unordered_map<void *, zcopy_hugepage *> m_hugepage_map;
 };
 
 #endif /* VMA_MEM_DESC_H */

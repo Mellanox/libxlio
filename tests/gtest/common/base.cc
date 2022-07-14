@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -92,6 +92,8 @@ test_base::test_base()
         inet_pton(AF_INET6, "2001:1:1:1:1:1:1:1",
                   &(((struct sockaddr_in6 *)&bogus_addr)->sin6_addr));
     }
+
+    def_gw_exists = gtest_conf.def_gw_exists;
 
     m_efd_signal = 0;
     m_efd = eventfd(m_efd_signal, 0);
@@ -210,12 +212,12 @@ int test_base::wait_fork(int pid)
     }
 }
 
-void test_base::barrier_fork(int pid)
+void test_base::barrier_fork(int pid, bool sync_parent)
 {
     ssize_t ret;
 
     m_break_signal = 0;
-    if (0 == pid) {
+    if ((0 == pid && !sync_parent) || (0 != pid && sync_parent)) {
         prctl(PR_SET_PDEATHSIG, SIGTERM);
         do {
             ret = read(m_efd, &m_efd_signal, sizeof(m_efd_signal));

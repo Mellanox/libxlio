@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -262,7 +262,7 @@ static int config_def(void)
     daemon_cfg.sock_file = VMA_AGENT_ADDR;
     daemon_cfg.sock_fd = -1;
     daemon_cfg.sig = 0;
-    daemon_cfg.raw_fd = -1;
+    daemon_cfg.raw_fd_ip4 = -1;
     daemon_cfg.notify_fd = -1;
     daemon_cfg.notify_dir = VMA_AGENT_PATH;
     daemon_cfg.ht = NULL;
@@ -360,7 +360,7 @@ static int config_set(int argc, char **argv)
 
 static void usage(void)
 {
-    printf(MODULE_NAME " is a part of Mellanox's Messaging Accelerator (VMA) product\n"
+    printf(MODULE_NAME " is a part of NVIDIA Accelerated IO (XLIO) product\n"
                        "that boosts performance for message-based and streaming applications.\n");
     printf("version: %s (0x%X)\n\n", PACKAGE_VERSION, VMA_AGENT_VER);
 

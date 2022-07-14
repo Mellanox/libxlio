@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -510,7 +510,8 @@ bool dst_entry::prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_
         if (resolve_net_dev(is_connect)) {
             set_src_addr();
             // overwrite mtu from route if exists
-            m_max_udp_payload_size = get_route_mtu() - sizeof(struct iphdr);
+            m_max_udp_payload_size =
+                get_route_mtu() - ((get_sa_family() == AF_INET) ? IP_HLEN : IPV6_HLEN);
             m_max_ip_payload_size = m_max_udp_payload_size & ~0x7;
             if (resolve_ring()) {
                 b_is_offloaded = true;

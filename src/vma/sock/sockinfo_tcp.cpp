@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -69,6 +69,8 @@
 #define si_tcp_logdbg     __log_info_dbg
 #define si_tcp_logfunc    __log_info_func
 #define si_tcp_logfuncall __log_info_funcall
+
+extern global_stats_t g_global_stat_static;
 
 tcp_seg_pool *g_tcp_seg_pool = NULL;
 tcp_timers_collection *g_tcp_timers_collection = NULL;
@@ -251,6 +253,9 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     m_ops = m_ops_tcp = new sockinfo_tcp_ops(this);
     assert(m_ops != NULL); /* XXX */
 
+    m_b_incoming = false;
+    m_b_attached = false; // For socket reuse
+
     m_accepted_conns.set_id("sockinfo_tcp (%p), fd = %d : m_accepted_conns", this, m_fd);
     m_rx_pkt_ready_list.set_id("sockinfo_tcp (%p), fd = %d : m_rx_pkt_ready_list", this, m_fd);
     m_rx_cb_dropped_list.set_id("sockinfo_tcp (%p), fd = %d : m_rx_cb_dropped_list", this, m_fd);
@@ -331,9 +336,10 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
         }
     }
 
+    if (g_p_agent != NULL) {
+        g_p_agent->register_cb((agent_cb_t)&sockinfo_tcp::put_agent_msg, (void *)this);
+    }
     si_tcp_logdbg("TCP PCB FLAGS: 0x%x", m_pcb.flags);
-    g_p_agent->register_cb((agent_cb_t)&sockinfo_tcp::put_agent_msg, (void *)this);
-    is_attached = false;
     si_tcp_logfunc("done");
 }
 
@@ -398,8 +404,9 @@ sockinfo_tcp::~sockinfo_tcp()
             m_rx_ctl_reuse_list.size());
     }
 
-    g_p_agent->unregister_cb((agent_cb_t)&sockinfo_tcp::put_agent_msg, (void *)this);
-
+    if (g_p_agent != NULL) {
+        g_p_agent->unregister_cb((agent_cb_t)&sockinfo_tcp::put_agent_msg, (void *)this);
+    }
     si_tcp_logdbg("sock closed");
 }
 
@@ -540,6 +547,10 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
 
     return_reuse_buffers_postponed();
 
+    if (m_b_zc && m_p_connected_dst_entry) {
+        m_p_connected_dst_entry->reset_inflight_zc_buffers_ctx(this);
+    }
+
     /* According to "UNIX Network Programming" third edition,
      * setting SO_LINGER with timeout 0 prior to calling close()
      * will cause the normal termination sequence not to be initiated.
@@ -557,9 +568,9 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
 
         if (is_listen_socket) {
             tcp_accept(&m_pcb, 0);
-            tcp_syn_handled((struct tcp_pcb_listen *)(&m_pcb), 0);
-            tcp_clone_conn((struct tcp_pcb_listen *)(&m_pcb), 0);
-            tcp_accepted_pcb((struct tcp_pcb_listen *)(&m_pcb), 0);
+            tcp_syn_handled(&m_pcb, 0);
+            tcp_clone_conn(&m_pcb, 0);
+            tcp_accepted_pcb(&m_pcb, 0);
             prepare_listen_to_close(); // close pending to accept sockets
         } else {
             tcp_recv(&m_pcb, sockinfo_tcp::rx_drop_lwip_cb);
@@ -585,6 +596,14 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
     if (state) {
         m_state = SOCKINFO_CLOSED;
         reset_ops();
+    } else if (!is_listen_socket) {
+        // This solution is good for current Nginx case however,
+        // There is still possibility of race in case of multithreded polling.
+        // Once we unlock this connection there are still two operations that are racebale:
+        // 1. In fd_collection::del_sockfd after this method is done.
+        // 2. In handle_close when fd_collection::del_sockfd is finished and we remove the
+        //    socket from epfds.
+        m_pcb.syn_tw_handled_cb = &sockinfo_tcp::syn_received_timewait_cb;
     }
 
     unlock_tcp_con();
@@ -769,17 +788,34 @@ void sockinfo_tcp::put_agent_msg(void *arg)
     if (p_si_tcp->is_server() || get_tcp_state(&p_si_tcp->m_pcb) == LISTEN) {
         return;
     }
+    if (unlikely(g_p_agent == NULL)) {
+        return;
+    }
 
     data.hdr.code = VMA_MSG_STATE;
     data.hdr.ver = VMA_AGENT_VER;
     data.hdr.pid = getpid();
+    data.hdr.status = 0;
+    data.hdr.reserve[0] = 0; // suppress coverity warning
     data.fid = p_si_tcp->get_fd();
     data.state = get_tcp_state(&p_si_tcp->m_pcb);
     data.type = SOCK_STREAM;
-    data.src_ip = p_si_tcp->m_bound.get_ip_addr().get_in_addr();
-    data.src_port = p_si_tcp->m_bound.get_in_port();
-    data.dst_ip = p_si_tcp->m_connected.get_ip_addr().get_in_addr();
-    data.dst_port = p_si_tcp->m_connected.get_in_port();
+    data.src.family = p_si_tcp->m_bound.get_sa_family();
+    data.src.port = p_si_tcp->m_bound.get_in_port();
+    if (data.src.family == AF_INET) {
+        data.src.addr.ipv4 = p_si_tcp->m_bound.get_ip_addr().get_in4_addr().s_addr;
+    } else {
+        memcpy(&data.src.addr.ipv6[0], &p_si_tcp->m_bound.get_ip_addr().get_in6_addr(),
+               sizeof(data.src.addr.ipv6));
+    }
+    data.dst.family = p_si_tcp->m_connected.get_sa_family();
+    data.dst.port = p_si_tcp->m_connected.get_in_port();
+    if (data.dst.family == AF_INET) {
+        data.dst.addr.ipv4 = p_si_tcp->m_connected.get_ip_addr().get_in4_addr().s_addr;
+    } else {
+        memcpy(&data.dst.addr.ipv6[0], &p_si_tcp->m_connected.get_ip_addr().get_in6_addr(),
+               sizeof(data.src.addr.ipv6));
+    }
 
     g_p_agent->put((const void *)&data, sizeof(data), (intptr_t)data.fid);
 }
@@ -996,10 +1032,14 @@ retry_is_ready:
                 goto err;
             }
             if (unlikely(g_b_exit)) {
-                ret = -1;
-                errno = EINTR;
-                si_tcp_logdbg("returning with: EINTR");
-                goto err;
+                if (total_tx > 0) {
+                    goto done;
+                } else {
+                    ret = -1;
+                    errno = EINTR;
+                    si_tcp_logdbg("returning with: EINTR");
+                    goto err;
+                }
             }
 
             err = tcp_write(&m_pcb, tx_ptr, tx_size, apiflags, &tx_arg.priv);
@@ -1154,6 +1194,7 @@ err_t sockinfo_tcp::ip_output(struct pbuf *p, struct tcp_seg *seg, void *v_p_con
 
 zc_fill_iov:
     /* For zerocopy, 1st pbuf contains pointer to TCP header */
+    assert(p->type == PBUF_STACK);
     lwip_iovec[0].tcphdr = p->payload;
     attr.length += p->len;
     p = p->next;
@@ -1273,7 +1314,7 @@ err_t sockinfo_tcp::ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void 
     }
 
     /* Update daemon about actual state for offloaded connection */
-    if (likely(p_si_tcp->m_sock_offload == TCP_SOCK_LWIP)) {
+    if (g_p_agent != NULL && likely(p_si_tcp->m_sock_offload == TCP_SOCK_LWIP)) {
         p_si_tcp->put_agent_msg((void *)p_si_tcp);
     }
 }
@@ -2358,7 +2399,7 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
         case TCP_SOCK_CONNECTED_RD:
         case TCP_SOCK_CONNECTED_WR:
         case TCP_SOCK_CONNECTED_RDWR:
-            if (report_connected) {
+            if (report_connected && !m_b_blocking) {
                 report_connected = false;
                 unlock_tcp_con();
                 return 0;
@@ -2436,6 +2477,7 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
     }
 
     fit_rcv_wnd(true);
+    report_connected = true;
 
     const ip_address &ip = m_connected.get_ip_addr();
     int err =
@@ -2444,37 +2486,49 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
     if (err != ERR_OK) {
         // todo consider setPassthrough and go to OS
         destructor_helper();
+        m_conn_state = TCP_CONN_FAILED;
         errno = ECONNREFUSED;
         si_tcp_logerr("bad connect, err=%d", err);
         unlock_tcp_con();
         return -1;
     }
 
-    // Now we should register socket to TCP timer
+    // Now we should register socket to TCP timer.
+    // It is important to register it before wait_for_conn_ready_blocking(),
+    // since wait_for_conn_ready_blocking may block on epoll_wait and the timer sends SYN rexmits.
     register_timer();
 
     if (!m_b_blocking) {
         errno = EINPROGRESS;
         m_error_status = EINPROGRESS;
         m_sock_state = TCP_SOCK_ASYNC_CONNECT;
-        report_connected = true;
         unlock_tcp_con();
         si_tcp_logdbg("NON blocking connect");
         return -1;
     }
 
-    // if (target_family == USE_VMA || target_family == USE_ULP || arget_family == USE_DEFAULT)
-    int rc = wait_for_conn_ready();
-    // handle ret from async connect
+    // Blocking Path
+    int rc = wait_for_conn_ready_blocking();
+    // Handle ret from blocking connect
     if (rc < 0) {
-        // todo consider setPassthrough and go to OS
+        // Interuppted wait for blocking socket currently considered as failure.
+        if (errno == EINTR || errno == EAGAIN) {
+            m_conn_state = TCP_CONN_FAILED;
+        }
+
+        tcp_close(&m_pcb);
+
         destructor_helper();
         unlock_tcp_con();
-        // errno is set inside wait_for_conn_ready
+        si_tcp_logdbg("Blocking connect error, m_sock_state=%d", static_cast<int>(m_sock_state));
+
+        // The errno is set inside wait_for_conn_ready_blocking
         return -1;
     }
+
     setPassthrough(false);
     unlock_tcp_con();
+
     return 0;
 }
 
@@ -2708,15 +2762,15 @@ int sockinfo_tcp::listen(int backlog)
         // and update the relevant fields of tcp_listen_pcb.
         struct tcp_pcb tmp_pcb;
         memcpy(&tmp_pcb, &m_pcb, sizeof(struct tcp_pcb));
-        tcp_listen((struct tcp_pcb_listen *)(&m_pcb), &tmp_pcb);
+        tcp_listen(&m_pcb, &tmp_pcb);
     }
 
     m_sock_state = TCP_SOCK_ACCEPT_READY;
 
     tcp_accept(&m_pcb, sockinfo_tcp::accept_lwip_cb);
-    tcp_syn_handled((struct tcp_pcb_listen *)(&m_pcb), sockinfo_tcp::syn_received_lwip_cb);
-    tcp_clone_conn((struct tcp_pcb_listen *)(&m_pcb), sockinfo_tcp::clone_conn_cb);
-    tcp_accepted_pcb((struct tcp_pcb_listen *)(&m_pcb), sockinfo_tcp::accepted_pcb_cb);
+    tcp_syn_handled(&m_pcb, sockinfo_tcp::syn_received_lwip_cb);
+    tcp_clone_conn(&m_pcb, sockinfo_tcp::clone_conn_cb);
+    tcp_accepted_pcb(&m_pcb, sockinfo_tcp::accepted_pcb_cb);
 
     bool success = attach_as_uc_receiver(ROLE_TCP_SERVER);
 
@@ -2983,6 +3037,7 @@ sockinfo_tcp *sockinfo_tcp::accept_clone()
     si->lock_tcp_con();
 
     si->m_parent = this;
+    si->m_b_incoming = true;
 
     si->m_sock_state = TCP_SOCK_BOUND;
     si->setPassthrough(false);
@@ -3110,9 +3165,9 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
 
     /* if attach failed, we should continue getting traffic through the listen socket */
     // todo register as 3-tuple rule for the case the listener is gone?
-    if (!new_sock->is_attached) {
+    if (!new_sock->m_b_attached) {
         new_sock->attach_as_uc_receiver(role_t(NULL), true);
-        new_sock->is_attached = true;
+        new_sock->m_b_attached = true;
     }
 
     if (new_sock->m_sysvar_tcp_ctl_thread > CTL_THREAD_DISABLE) {
@@ -3245,8 +3300,6 @@ err_t sockinfo_tcp::clone_conn_cb(void *arg, struct tcp_pcb **newpcb)
         /* XXX We have to search for correct listen socket every time,
          * because the listen socket may be closed and reopened. */
         new_sock->m_pcb.listen_sock = (void *)conn;
-        /* XXX Do similar as for other callbacks. */
-        new_sock->m_pcb.syn_tw_handled_cb = &sockinfo_tcp::syn_received_timewait_cb;
     } else {
         ret_val = ERR_MEM;
     }
@@ -3269,13 +3322,16 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
 {
     sockinfo_tcp *listen_sock = (sockinfo_tcp *)((arg));
 
-    if (!listen_sock || !newpcb) {
+    if (unlikely(!listen_sock || !newpcb)) {
         return ERR_VAL;
     }
 
     sockinfo_tcp *new_sock = (sockinfo_tcp *)((newpcb->my_container));
 
     ASSERT_LOCKED(new_sock->m_tcp_con_lock);
+    if (unlikely(!new_sock->is_incoming())) {
+        return ERR_VAL;
+    }
 
     /*
      * We reuse socket, so remove ULP. Currently there is no interface to
@@ -3302,6 +3358,7 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb);
     tcp_err(&new_sock->m_pcb, sockinfo_tcp::err_lwip_cb);
     tcp_sent(&new_sock->m_pcb, sockinfo_tcp::ack_recvd_lwip_cb);
+    new_sock->m_pcb.syn_tw_handled_cb = nullptr;
     new_sock->wakeup_clear();
     if (new_sock->m_sysvar_tcp_ctl_thread > CTL_THREAD_DISABLE) {
         tcp_ip_output(&new_sock->m_pcb, sockinfo_tcp::ip_output_syn_ack);
@@ -3439,10 +3496,7 @@ void sockinfo_tcp::set_sock_options(sockinfo_tcp *new_sock)
 {
     si_tcp_logdbg("Applying all socket options on %p, fd %d", new_sock, new_sock->get_fd());
 
-    socket_options_list_t::iterator options_iter;
-    for (options_iter = m_socket_options_list.begin(); options_iter != m_socket_options_list.end();
-         options_iter++) {
-        socket_option_t *opt = *options_iter;
+    for (const auto &opt : m_socket_options_list) {
         new_sock->setsockopt(opt->level, opt->optname, opt->optval, opt->optlen);
     }
     errno = 0;
@@ -3494,7 +3548,7 @@ err_t sockinfo_tcp::connect_lwip_cb(void *arg, struct tcp_pcb *tpcb, err_t err)
     return ERR_OK;
 }
 
-int sockinfo_tcp::wait_for_conn_ready()
+int sockinfo_tcp::wait_for_conn_ready_blocking()
 {
     int poll_count = 0;
 
@@ -3505,8 +3559,17 @@ int sockinfo_tcp::wait_for_conn_ready()
          * therefore in this case the m_conn_state will not be changed only
          * m_sock_state
          */
-        if (rx_wait(poll_count, m_b_blocking) < 0) {
+        if (rx_wait(poll_count, true) < 0) {
             si_tcp_logdbg("connect interrupted");
+
+            // Internally rx_wait uses epoll_wait wich may return unrecoverable error.
+            // However, we do not want to expose internal errors due to epoll usage to the outside.
+            // Consequently, since this method is used by blocking connect, we rewrite the errno
+            // with one that is compatible with connect() API.
+            if (errno != EINTR && errno != EAGAIN) {
+                errno = EIO;
+                m_conn_state = TCP_CONN_FAILED;
+            }
             return -1;
         }
 
@@ -3527,11 +3590,14 @@ int sockinfo_tcp::wait_for_conn_ready()
     }
     if (m_conn_state != TCP_CONN_CONNECTED) {
         if (m_conn_state == TCP_CONN_TIMEOUT) {
-            m_conn_state = TCP_CONN_FAILED;
             errno = ETIMEDOUT;
         } else {
             errno = ECONNREFUSED;
+            if (m_conn_state < TCP_CONN_FAILED) {
+                m_conn_state = TCP_CONN_FAILED;
+            }
         }
+
         si_tcp_logdbg("bad connect -> timeout or none listening");
         return -1;
     }
@@ -3744,8 +3810,7 @@ int sockinfo_tcp::shutdown(int __how)
     if (is_server()) {
         if (shut_rx) {
             tcp_accept(&m_pcb, 0);
-            tcp_syn_handled((struct tcp_pcb_listen *)(&m_pcb),
-                            sockinfo_tcp::syn_received_drop_lwip_cb);
+            tcp_syn_handled(&m_pcb, sockinfo_tcp::syn_received_drop_lwip_cb);
         }
     } else {
         if (get_tcp_state(&m_pcb) != LISTEN && shut_rx && m_n_rx_pkt_ready_list_count) {
@@ -3802,26 +3867,6 @@ int sockinfo_tcp::fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit)
     bexit = false;
     return 0;
 }
-
-/*
- * TCP options from netinet/tcp.h
- * including file directly conflicts with lwipopts.h (TCP_MSS define)
- */
-/*
- * User-settable options (used with setsockopt).
- */
-#define TCP_NODELAY      1 /* Don't delay send to coalesce packets  */
-#define TCP_MAXSEG       2 /* Set maximum segment size  */
-#define TCP_CORK         3 /* Control sending of partial frames  */
-#define TCP_KEEPIDLE     4 /* Start keeplives after this period */
-#define TCP_KEEPINTVL    5 /* Interval between keepalives */
-#define TCP_KEEPCNT      6 /* Number of keepalives before death */
-#define TCP_SYNCNT       7 /* Number of SYN retransmits */
-#define TCP_LINGER2      8 /* Life time of orphaned FIN-WAIT-2 state */
-#define TCP_DEFER_ACCEPT 9 /* Wake up listener only when data arrive */
-#define TCP_WINDOW_CLAMP 10 /* Bound advertised window */
-#define TCP_INFO         11 /* Information about this connection. */
-#define TCP_QUICKACK     12 /* Block/reenable quick ACKs.  */
 
 int sockinfo_tcp::fcntl(int __cmd, unsigned long int __arg)
 {
@@ -4247,6 +4292,35 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                              allow_privileged_sock_opt);
 }
 
+void sockinfo_tcp::get_tcp_info(struct tcp_info *ti)
+{
+    unsigned state = get_tcp_state(&m_pcb);
+
+    memset(ti, 0, sizeof(*ti));
+
+    static const uint8_t pcb_to_tcp_state[] = {
+        [CLOSED] = TCP_CLOSE,         [LISTEN] = TCP_LISTEN,           [SYN_SENT] = TCP_SYN_SENT,
+        [SYN_RCVD] = TCP_SYN_RECV,    [ESTABLISHED] = TCP_ESTABLISHED, [FIN_WAIT_1] = TCP_FIN_WAIT1,
+        [FIN_WAIT_2] = TCP_FIN_WAIT2, [CLOSE_WAIT] = TCP_CLOSE_WAIT,   [CLOSING] = TCP_CLOSING,
+        [LAST_ACK] = TCP_LAST_ACK,    [TIME_WAIT] = TCP_TIME_WAIT,
+    };
+
+    ti->tcpi_state = state < sizeof(pcb_to_tcp_state) ? pcb_to_tcp_state[state] : 0;
+    ti->tcpi_options = (!!(m_pcb.flags & TF_TIMESTAMP) * TCPI_OPT_TIMESTAMPS) |
+        (!!(m_pcb.flags & TF_WND_SCALE) * TCPI_OPT_WSCALE);
+    // We keep rto with TCP slow timer granularity and need to convert it to usec.
+    ti->tcpi_rto = m_pcb.rto * safe_mce_sys().tcp_timer_resolution_msec * 2 * 1000U;
+    ti->tcpi_advmss = m_pcb.advtsd_mss;
+    ti->tcpi_snd_mss = m_pcb.mss;
+    ti->tcpi_retransmits = m_pcb.nrtx;
+    // ti->tcpi_retrans - we don't keep it and calculation would be O(N).
+    ti->tcpi_total_retrans = m_p_socket_stats->counters.n_tx_retransmits;
+    ti->tcpi_snd_cwnd = m_pcb.cwnd / m_pcb.mss;
+    ti->tcpi_snd_ssthresh = m_pcb.ssthresh / m_pcb.mss;
+
+    // Currently we miss per segment statistics and most of congestion control fields.
+}
+
 int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
                                      socklen_t *__optlen)
 {
@@ -4281,6 +4355,16 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
             } else {
                 errno = EINVAL;
             }
+            break;
+        case TCP_INFO:
+            struct tcp_info ti;
+            unsigned len;
+            get_tcp_info(&ti);
+            // Due to compatibility reasons TCP_INFO can return partial result.
+            len = std::min<unsigned>(sizeof(ti), *__optlen);
+            memcpy(__optval, &ti, len);
+            *__optlen = len;
+            ret = 0;
             break;
         default:
             ret = SOCKOPT_HANDLE_BY_OS;
@@ -4759,8 +4843,13 @@ int sockinfo_tcp::zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags
         m_p_socket_stats->n_rx_zcopy_pkt_count++;
 
         if (len < 0 && p_desc_iter) {
-            p_desc_iter->lwip_pbuf.pbuf.tot_len =
+            p_desc_iter->rx.sz_payload = p_desc_iter->lwip_pbuf.pbuf.tot_len =
                 prev->lwip_pbuf.pbuf.tot_len - prev->lwip_pbuf.pbuf.len;
+            /* TODO:
+             * After the split we create inconsistency in pbuf.tot_len in the left part.
+             * We need to reduce tot_len for every buffer in the left list or we mustn't
+             * rely on the values after a split operation.
+             */
             p_desc_iter->rx.n_frags = --prev->rx.n_frags;
             p_desc_iter->rx.src = prev->rx.src;
             p_desc_iter->inc_ref_count();
@@ -5054,7 +5143,7 @@ struct pbuf *sockinfo_tcp::tcp_tx_pbuf_alloc(void *p_conn, pbuf_type type, pbuf_
                 mem_buf_desc_t *p_prev_desc = (mem_buf_desc_t *)p_buff;
                 p_desc->m_flags |= mem_buf_desc_t::ZCOPY;
                 p_desc->tx.zc.id = p_prev_desc->tx.zc.id;
-                p_desc->tx.zc.count = 1;
+                p_desc->tx.zc.count = p_prev_desc->tx.zc.count;
                 p_desc->tx.zc.len = p_desc->lwip_pbuf.pbuf.len;
                 p_desc->tx.zc.ctx = p_prev_desc->tx.zc.ctx;
                 p_desc->tx.zc.callback = tcp_tx_zc_callback;
@@ -5273,6 +5362,7 @@ tcp_seg_pool::tcp_seg_pool(int size)
         m_tcp_segs_array[i].next = &m_tcp_segs_array[i + 1];
     }
     m_p_head = &m_tcp_segs_array[0];
+    g_global_stat_static.n_tcp_seg_pool_size = size;
 }
 
 tcp_seg_pool::~tcp_seg_pool()
@@ -5287,6 +5377,7 @@ void tcp_seg_pool::free_tsp_resources()
 
 tcp_seg *tcp_seg_pool::get_tcp_segs(int amount)
 {
+    int orig_amount = amount;
     tcp_seg *head, *next, *prev;
     if (unlikely(amount <= 0)) {
         return NULL;
@@ -5300,12 +5391,16 @@ tcp_seg *tcp_seg_pool::get_tcp_segs(int amount)
         amount--;
     }
     if (amount) {
+        // run out of segments
+        g_global_stat_static.n_tcp_seg_pool_no_segs++;
         unlock();
         return NULL;
     }
     prev->next = NULL;
     m_p_head = next;
+    g_global_stat_static.n_tcp_seg_pool_size -= orig_amount;
     unlock();
+
     return head;
 }
 
@@ -5316,13 +5411,15 @@ void tcp_seg_pool::put_tcp_segs(tcp_seg *seg_list)
         return;
     }
 
-    while (next->next) {
+    int i;
+    for (i = 1; next->next; i++) {
         next = next->next;
     }
 
     lock();
     next->next = m_p_head;
     m_p_head = seg_list;
+    g_global_stat_static.n_tcp_seg_pool_size += i;
     unlock();
 }
 
@@ -5410,7 +5507,9 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
     m_n_location = (m_n_location + 1) % m_n_intervals_size;
 
     /* Processing all messages for the daemon */
-    g_p_agent->progress();
+    if (g_p_agent != NULL) {
+        g_p_agent->progress();
+    }
 }
 
 void tcp_timers_collection::add_new_timer(timer_node_t *node, timer_handler *handler,

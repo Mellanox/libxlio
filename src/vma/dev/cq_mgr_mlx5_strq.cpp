@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -73,7 +73,7 @@ cq_strides_cache::cq_strides_cache(ring_slave *owner_ring)
 
 cq_strides_cache::~cq_strides_cache()
 {
-    while (_block_vec_used-- > 1U) {
+    while (_block_vec_used-- > 0U) {
         g_buffer_pool_rx_stride->put_buffers_thread_safe(_block_vec[_block_vec_used].data(),
                                                          _block_vec[_block_vec_used].size());
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,13 +33,17 @@
 #ifndef NETLINK_EVENT_H_
 #define NETLINK_EVENT_H_
 
-#include <netlink/msg.h>
 #include "config.h"
+
+#include <netlink/msg.h>
+#include <linux/rtnetlink.h>
+
+#include <string>
+
 #include "vma/event/event.h"
 #include "vma/netlink/neigh_info.h"
 #include "vma/netlink/route_info.h"
 #include "vma/netlink/link_info.h"
-#include <linux/rtnetlink.h>
 
 class netlink_link;
 class netlink_neigh;

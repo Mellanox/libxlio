@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -58,7 +58,12 @@ protected:
     virtual cq_mgr *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel) override;
 
 private:
+#ifdef DEFINED_UTLS
+    // TODO: Move UTLS related code to this class and remove qp_mgr_eth_mlx5::create_tir()
+    dpcp::tir *create_tir(bool is_tls = false) override;
+#else
     dpcp::tir *create_tir(bool is_tls = false);
+#endif
     bool configure_rq_dpcp();
     bool prepare_rq(uint32_t cqn);
     bool store_rq_mlx5_params(dpcp::basic_rq &new_rq);

@@ -90,11 +90,15 @@
             name: "do_blackduck"
             default: true
             description: "Run BlackDuck."
+        - bool:
+            name: "do_copyrights"
+            default: true
+            description: "Check copyrights in source headers"
     triggers:
         - github-pull-request:
             cron: 'H/5 * * * *'
             trigger-phrase: '.*\bbot:retest\b.*'
-            status-context: "Mellanox Lab"
+            status-context: "xlio-base"
             success-status: "[PASS]"
             failure-status: "[FAIL]"
             error-status:   "[FAIL]"

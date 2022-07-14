@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -237,6 +237,15 @@ public:
         return (m_sock_offload == TCP_SOCK_LWIP && !is_server() && m_conn_state != TCP_CONN_INIT);
     }
 
+    bool is_outgoing()
+    {
+        const bool is_listen_socket = is_server() || get_tcp_state(&m_pcb) == LISTEN;
+        // Excluding incoming and listen sockets we can determine outgoing sockets.
+        return !m_b_incoming && !is_listen_socket;
+    }
+
+    bool is_incoming() { return m_b_incoming; }
+
     bool is_connected() { return m_sock_state == TCP_SOCK_CONNECTED_RDWR; }
 
     inline bool is_rtr()
@@ -311,6 +320,7 @@ protected:
 
 private:
     int fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit);
+    void get_tcp_info(struct tcp_info *ti);
 
     sockinfo_tcp_ops *m_ops;
     sockinfo_tcp_ops *m_ops_tcp;
@@ -324,7 +334,8 @@ private:
     sockinfo_tcp *m_parent;
     // received packet source (true if its from internal thread)
     bool m_vma_thr;
-    bool is_attached;
+    bool m_b_incoming;
+    bool m_b_attached;
     /* connection state machine */
     int m_conn_timeout;
     /* SNDBUF acconting */
@@ -359,7 +370,9 @@ private:
     lock_spin_recursive m_tcp_con_lock;
     bool m_timer_pending;
 
-    bool report_connected; // used for reporting 'connected' on second non-blocking call to connect.
+    // used for reporting 'connected' on second non-blocking call to connect or
+    // second call to failed connect blocking socket.
+    bool report_connected;
 
     int m_error_status;
 
@@ -419,7 +432,7 @@ private:
     // clone socket in accept call
     sockinfo_tcp *accept_clone();
     // connect() helper & callback func
-    int wait_for_conn_ready();
+    int wait_for_conn_ready_blocking();
     static err_t connect_lwip_cb(void *arg, struct tcp_pcb *tpcb, err_t err);
     // tx
     unsigned tx_wait(int &err, bool blocking);

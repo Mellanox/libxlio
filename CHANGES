@@ -1,3 +1,77 @@
+Version 1.3.5-1:
+Date + Time 2022-07-14
+=============================================================
+Fixed:
+        - RM #3137171 Updating coverity version to 2021.12
+        - RM #3137171 Fixing coverity 2021.12 findings
+
+Version 1.3.4-1:
+Date + Time 2022-07-13
+=============================================================
+Fixed:
+        - RM #3100949 Fix a warning on a socket destruction with zcopy receive
+        - RM #3092555 Fix pcb resources leak for failed blocking connect
+
+Version 1.3.3-1:
+Date + Time 2022-07-06
+=============================================================
+Fixed:
+        - RM #3100949 Fix SYN retransmits for blocking connect()
+        - RM #2398936 Fix send zerocopy split operation
+        - RM #2678393 Fix return value on partial write when SIGINT is handled
+        - RM #2678856 Close all but incoming TCP sockets immediately on close()
+        - RM #3113450 Fix race between socket close and ZC completion callback
+        - RM #3130360 Fix destructor of cq_strides_cache
+
+Version 1.3.2-1:
+Date + Time 2022-06-25
+=============================================================
+Added:
+        - RM #3115378 Print verbose info on error CQE
+        - RM #2866014 Hide default params startup log when using STRQ
+        - RM #3048432 Add statistics for rx cqe error
+Fixed:
+        - RM #3100949 Fix blocking socket connect timer race
+        - RM #3100979 Use XLIO_HANDLE_SIGINTR for signal() API
+        - RM #2685979 Fix refcount for 2nd steering rule
+        - RM #3115495 Fix compilation error with disabled debug logs
+
+Version 1.3.1-1:
+Date + Time 2022-06-08
+=============================================================
+Added:
+        - RM #2982776 DEK cache and Modify
+        - RM #2982776 Adding pending sockets statistics
+        - RM #3077408 Make xlio_get_api not interfering with vma_get_api
+Fixed:
+        - RM #3077676 fix calc of max_udp_payload_size
+
+Version 1.3.0-1:
+Date + Time 2022-05-20
+=============================================================
+Added:
+        - RM #3055604 Add support of TCP_INFO option
+        - RM #2667588 Add IPv6 support for daemon
+Fixed:
+        - RM #2648131 Force 5T rules for outgoing TCP sockets
+        - RM #3073693 Avoid float for number of workers calculation
+
+Version 1.2.10-1:
+Date + Time 2022-04-28
+=============================================================
+Added:
+        - RM #2982769 Add XLIO_TX_SEGS_BATCH_TCP env variable
+Fixed:
+        - RM #2737656 Disable communication with service by default
+        - RM #3045735 Fix no traffic during disabled sriov (azure)
+        - RM #3048432 reuse buff for udp socket pool
+        - RM #3048433 add rx buffers compensation after cqe error
+        - RM #2885753 Fixing reusing socket in process of closing
+        - RM #3036032 Fix misaligned address access in IPv6 spec
+        - RM #3046720 Nginx worker thread crash recovery
+        - RM #3016626 Fixing TLS1.3 resync
+        - RM #3015420 Update Copyright notice
+
 Version 1.2.9-1:
 Date + Time 2022-04-06
 =============================================================

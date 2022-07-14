@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2022 Mellanox Technologies, Ltd. All rights reserved.
+ * Copyright (c) 2001-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -46,6 +46,7 @@ static lock_spin g_lock_skt_inst_arr("g_lock_skt_inst_arr");
 static lock_spin g_lock_ring_inst_arr("g_lock_ring_inst_arr");
 static lock_spin g_lock_cq_inst_arr("g_lock_cq_inst_arr");
 static lock_spin g_lock_bpool_inst_arr("g_lock_bpool_inst_arr");
+static lock_spin g_lock_global_inst("g_lock_global_inst");
 static lock_spin g_lock_iomux("g_lock_iomux");
 
 static sh_mem_info_t g_sh_mem_info;
@@ -67,6 +68,7 @@ bool printed_sock_limit_info = false;
 bool printed_ring_limit_info = false;
 bool printed_cq_limit_info = false;
 bool printed_bpool_limit_info = false;
+bool printed_global_limit_info = false;
 
 stats_data_reader::stats_data_reader()
     : m_timer_handler(NULL)
@@ -166,6 +168,7 @@ void vma_shmem_stats_open(vlog_levels_t **p_p_vma_log_level, uint8_t **p_p_vma_l
     int ret;
     size_t shmem_size = 0;
     mode_t saved_mode;
+    const char *dir_path = safe_mce_sys().stats_shmem_dirname;
 
     g_p_stats_data_reader = new stats_data_reader();
 
@@ -186,17 +189,22 @@ void vma_shmem_stats_open(vlog_levels_t **p_p_vma_log_level, uint8_t **p_p_vma_l
 
     p_shmem = buf;
 
-    if (strlen(safe_mce_sys().stats_shmem_dirname) <= 0) {
+    if (strlen(dir_path) == 0) {
+        goto no_shmem;
+    }
+
+    if ((mkdir(dir_path, 0777) != 0) && (errno != EEXIST)) {
+        vlog_printf(VLOG_DEBUG, "Failed to create folder %s (errno = %d)\n", dir_path, errno);
         goto no_shmem;
     }
 
     g_sh_mem_info.filename_sh_stats[0] = '\0';
     g_sh_mem_info.p_sh_stats = MAP_FAILED;
     ret = snprintf(g_sh_mem_info.filename_sh_stats, sizeof(g_sh_mem_info.filename_sh_stats),
-                   "%s/xliostat.%d", safe_mce_sys().stats_shmem_dirname, getpid());
+                   "%s/xliostat.%d", dir_path, getpid());
     if (!((0 < ret) && (ret < (int)sizeof(g_sh_mem_info.filename_sh_stats)))) {
-        vlog_printf(VLOG_ERROR, "%s: Could not create file under %s %s\n", __func__,
-                    safe_mce_sys().stats_shmem_dirname, strerror(errno));
+        vlog_printf(VLOG_ERROR, "%s: Could not create file under %s %s\n", __func__, dir_path,
+                    strerror(errno));
         goto no_shmem;
     }
     saved_mode = umask(0);
@@ -629,6 +637,61 @@ void vma_stats_instance_remove_bpool_block(bpool_stats_t *local_stats_addr)
     vlog_printf(VLOG_ERROR, "%s:%d: Could not find user pointer (%p)\n", __func__, __LINE__,
                 p_bpool_stats);
     g_lock_bpool_inst_arr.unlock();
+}
+
+void vma_stats_instance_create_global_block(global_stats_t *local_stats_addr)
+{
+    global_stats_t *p_instance_global = NULL;
+    g_lock_global_inst.lock();
+    for (int i = 0; i < NUM_OF_SUPPORTED_GLOBALS; i++) {
+        if (!g_sh_mem->global_inst_arr[i].b_enabled) {
+            g_sh_mem->global_inst_arr[i].b_enabled = true;
+            p_instance_global = &g_sh_mem->global_inst_arr[i].global_stats;
+            memset(p_instance_global, 0, sizeof(global_stats_t));
+            break;
+        }
+    }
+
+    if (p_instance_global == NULL) {
+        if (!printed_global_limit_info) {
+            printed_global_limit_info = true;
+            vlog_printf(VLOG_INFO, "Statistics can monitor up to %d globals\n",
+                        NUM_OF_SUPPORTED_GLOBALS);
+        }
+    } else {
+        g_p_stats_data_reader->add_data_reader(local_stats_addr, p_instance_global,
+                                               sizeof(global_stats_t));
+        __log_dbg("Added global local=%p shm=%p", local_stats_addr, p_instance_global);
+    }
+    g_lock_global_inst.unlock();
+}
+
+void vma_stats_instance_remove_global_block(global_stats_t *local_stats_addr)
+{
+    g_lock_global_inst.lock();
+    __log_dbg("Remove global local=%p", local_stats_addr);
+
+    global_stats_t *p_global_stats =
+        (global_stats_t *)g_p_stats_data_reader->pop_data_reader(local_stats_addr);
+
+    if (p_global_stats == NULL) {
+        __log_dbg("application p_global_stats pointer is NULL");
+        g_lock_global_inst.unlock();
+        return;
+    }
+
+    // Search sh_mem block to release
+    for (int i = 0; i < NUM_OF_SUPPORTED_GLOBALS; i++) {
+        if (&g_sh_mem->global_inst_arr[i].global_stats == p_global_stats) {
+            g_sh_mem->global_inst_arr[i].b_enabled = false;
+            g_lock_global_inst.unlock();
+            return;
+        }
+    }
+
+    vlog_printf(VLOG_ERROR, "%s:%d: Could not find user pointer (%p)\n", __func__, __LINE__,
+                p_global_stats);
+    g_lock_global_inst.unlock();
 }
 
 void vma_stats_instance_get_poll_block(iomux_func_stats_t *local_stats_addr)
