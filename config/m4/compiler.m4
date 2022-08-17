@@ -114,6 +114,25 @@ int main(int argc, char** argv)
 #endif  // __cplusplus >= 201402L
 ]])
             ;;
+        17)
+m4_define([_prj_cv_compiler_body_17], [[
+#ifndef __cplusplus
+#error This is not a C++ compiler
+#elif __cplusplus < 201703L
+#error This is not a C++17 compiler
+#else
+int main(int argc, char** argv)
+{
+    (void)argc;
+    (void)argv;
+    // Check constexpr lambda
+    auto identity = [](int n) constexpr { return n; };
+    static_assert(identity(123) == 123);
+    return 0;
+}
+#endif  // __cplusplus >= 201703L
+]])
+            ;;
         *)
             AC_MSG_ERROR([invalid first argument as [$1] to [$0]])
             ;;
@@ -238,5 +257,5 @@ else
     AC_MSG_RESULT([yes])
 fi
 
-CHECK_COMPILER_CXX([11], [std], [])
+CHECK_COMPILER_CXX([14], [std], [])
 ])
