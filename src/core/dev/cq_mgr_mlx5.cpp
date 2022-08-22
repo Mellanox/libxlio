@@ -96,7 +96,7 @@ uint32_t cq_mgr_mlx5::clean_cq()
             for (int i = 0; i < ret; i++) {
                 buff = process_cq_element_tx(&wce[i]);
                 if (buff) {
-                    m_rx_queue.push_back(buff);
+                    m_p_ring->mem_buf_desc_return_single_to_owner_tx(buff);
                 }
             }
             ret_total += ret;
