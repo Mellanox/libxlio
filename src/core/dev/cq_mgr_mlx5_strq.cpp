@@ -196,7 +196,6 @@ uint32_t cq_mgr_mlx5_strq::clean_cq()
 {
     uint32_t ret_total = 0;
     uint64_t cq_poll_sn = 0;
-    mem_buf_desc_t *buff;
 
     /* Sanity check for cq: initialization of tx and rx cq has difference:
      * rx - is done in qp_mgr::up()
@@ -208,7 +207,7 @@ uint32_t cq_mgr_mlx5_strq::clean_cq()
 
     mem_buf_desc_t *stride_buf = nullptr;
     buff_status_e status = BS_OK;
-    while ((buff = poll(status, stride_buf)) || stride_buf) {
+    while (poll(status, stride_buf) || stride_buf) {
         if (stride_buf && cqe_process_rx(stride_buf, status)) {
             m_rx_queue.push_back(stride_buf);
         }

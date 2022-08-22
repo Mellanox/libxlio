@@ -290,7 +290,6 @@ mapping_t *mapping_cache::get_mapping(int local_fd, void *p_ctx)
     mapping_fd_map_iter_t iter;
     file_uid_t uid;
     struct stat st;
-    int rc;
     ib_ctx_handler *p_ib_ctx = (ib_ctx_handler *)p_ctx;
 
     lock();
@@ -304,8 +303,7 @@ mapping_t *mapping_cache::get_mapping(int local_fd, void *p_ctx)
     }
 
     if (mapping == NULL) {
-        rc = fstat(local_fd, &st);
-        if (rc != 0) {
+        if (fstat(local_fd, &st) != 0) {
             map_logerr("fstat() errno=%d (%s)", errno, strerror(errno));
             goto quit;
         }
@@ -322,7 +320,7 @@ quit:
 
         /* Mapping object may be unmapped, call mmap() in this case */
         if (mapping->m_state == MAPPING_STATE_UNMAPPED) {
-            rc = mapping->map(local_fd);
+            mapping->map(local_fd);
         }
     }
 

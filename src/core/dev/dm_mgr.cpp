@@ -246,6 +246,7 @@ bool dm_mgr::copy_data(struct mlx5_wqe_data_seg *seg, uint8_t *src, uint32_t len
     m_p_ring_stat->simple.n_tx_dev_mem_pkt_count++;
     m_p_ring_stat->simple.n_tx_dev_mem_byte_count += length;
 
+    NOT_IN_USE(continuous_left);
     dm_logfunc("Send completed successfully! Buffer[%p] length[%d] length_aligned_8[%d] "
                "continuous_left[%zu] head[%zu] used[%zu]",
                buff, length, length_aligned_8, continuous_left, m_head, m_used);

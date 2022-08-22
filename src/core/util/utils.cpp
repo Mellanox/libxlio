@@ -248,7 +248,7 @@ void compute_tx_checksum(mem_buf_desc_t *p_mem_buf_desc, bool l3_csum, bool l4_c
                     // sum for payload is done in dst_entry_udp since it requires the entire payload
                     // and it is stored in udp_hdr->check
                     struct udphdr *udp_hdr = p_mem_buf_desc->tx.p_udp_h;
-                    l4_checksum = udp_hdr->check = compute_ipv6_udp_frag_checksum(ipv6, udp_hdr);
+                    udp_hdr->check = l4_checksum = compute_ipv6_udp_frag_checksum(ipv6, udp_hdr);
                 }
             } else {
                 __log_err("Could not calculate L4 SW checksum. next protocol: %d", protocol);
@@ -256,6 +256,8 @@ void compute_tx_checksum(mem_buf_desc_t *p_mem_buf_desc, bool l3_csum, bool l4_c
         }
     }
 
+    NOT_IN_USE(l4_checksum);
+    NOT_IN_USE(l3_checksum);
     __log_entry_func("SW checksum calculation: L3 = %d, L4 = %d", l3_checksum, l4_checksum);
 }
 
