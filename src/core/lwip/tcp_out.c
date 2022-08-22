@@ -1484,9 +1484,7 @@ void tcp_split_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t wnd)
         /* Segment with more than one pbuffer and seg->p->len <= lentosend
            split segment pbuff chain. At least one pBuffer will be sent */
         struct pbuf *pnewhead = seg->p->next;
-        struct pbuf *pnewhead_orig = seg->p->next;
         struct pbuf *pnewtail = seg->p;
-        struct pbuf *pnewtail_orig = seg->p;
         struct pbuf *ptmp = seg->p;
         u32_t headchainlen = seg->p->len;
 
@@ -1512,9 +1510,6 @@ void tcp_split_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t wnd)
                                          optflags))) {
             LWIP_DEBUGF(TCP_OUTPUT_DEBUG | 2,
                         ("tcp_split_segment: could not allocate memory for segment\n"));
-            /* Avoid corrupting original segment's buffer in case of failure */
-            pnewhead = pnewhead_orig;
-            pnewtail = pnewtail_orig;
             return;
         }
 

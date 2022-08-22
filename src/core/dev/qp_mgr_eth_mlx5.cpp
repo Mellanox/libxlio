@@ -676,11 +676,10 @@ inline int qp_mgr_eth_mlx5::fill_wqe(xlio_ibv_send_wr *pswr)
 
 inline int qp_mgr_eth_mlx5::fill_wqe_send(xlio_ibv_send_wr *pswr)
 {
-    struct mlx5_wqe_ctrl_seg *ctrl = NULL;
     struct mlx5_wqe_eth_seg *eseg = NULL;
     struct mlx5_wqe_data_seg *dseg = NULL;
     void *seg = NULL;
-    int wqe_size = sizeof(*ctrl) / OCTOWORD;
+    int wqe_size = sizeof(mlx5_wqe_ctrl_seg) / OCTOWORD;
     size_t nelem = pswr->num_sge;
     uint32_t inl_hdr_size = MLX5_ETH_INLINE_HEADER_SIZE;
     size_t inl_hdr_copy_size = 0;
@@ -690,9 +689,7 @@ inline int qp_mgr_eth_mlx5::fill_wqe_send(xlio_ibv_send_wr *pswr)
     int sg_copy_ptr_index = 0;
     size_t sg_copy_ptr_offset = 0;
 
-    ctrl = (struct mlx5_wqe_ctrl_seg *)m_sq_wqe_hot;
-    eseg = (struct mlx5_wqe_eth_seg *)((uint8_t *)m_sq_wqe_hot + sizeof(*ctrl));
-
+    eseg = (struct mlx5_wqe_eth_seg *)((uint8_t *)m_sq_wqe_hot + sizeof(mlx5_wqe_ctrl_seg));
     addr = (void *)(uintptr_t)pswr->sg_list[0].addr;
     length = (size_t)pswr->sg_list[0].length;
 
