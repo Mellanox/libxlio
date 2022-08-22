@@ -835,9 +835,9 @@ inline int qp_mgr_eth_mlx5::fill_wqe_lso(xlio_ibv_send_wr *pswr)
     return wqe_size;
 }
 
-void qp_mgr_eth_mlx5::store_current_wqe_prop(uint64_t wr_id, xlio_ti *ti)
+void qp_mgr_eth_mlx5::store_current_wqe_prop(mem_buf_desc_t *buf, xlio_ti *ti)
 {
-    m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index] = (sq_wqe_prop) {wr_id, ti, m_sq_wqe_prop_last};
+    m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index] = (sq_wqe_prop) {buf, ti, m_sq_wqe_prop_last};
     m_sq_wqe_prop_last = &m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index];
     if (ti != NULL) {
         ti->get();
@@ -877,7 +877,7 @@ int qp_mgr_eth_mlx5::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packe
     fill_wqe(p_send_wqe);
 
     /* Store buffer descriptor */
-    store_current_wqe_prop((uintptr_t)p_send_wqe->wr_id, tis);
+    store_current_wqe_prop(reinterpret_cast<mem_buf_desc_t *>(p_send_wqe->wr_id), tis);
 
     /* Preparing next WQE and index */
     m_sq_wqe_hot = &(*m_sq_wqes)[m_sq_wqe_counter & (m_tx_num_wr - 1)];
@@ -1232,7 +1232,7 @@ inline void qp_mgr_eth_mlx5::tls_post_static_params_wqe(xlio_ti *ti,
     memset(tspseg, 0, sizeof(*tspseg));
 
     tls_fill_static_params_wqe(tspseg, info, key_id, resync_tcp_sn);
-    store_current_wqe_prop(0, ti);
+    store_current_wqe_prop(nullptr, ti);
 
     ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs, num_wqebbs_top);
     dbg_dump_wqe((uint32_t *)m_sq_wqe_hot, sizeof(mlx5_set_tls_static_params_wqe));
@@ -1286,7 +1286,7 @@ inline void qp_mgr_eth_mlx5::tls_post_progress_params_wqe(xlio_ti *ti, uint32_t 
         (fence ? MLX5_FENCE_MODE_INITIATOR_SMALL : 0) | (is_tx ? 0 : MLX5_WQE_CTRL_CQ_UPDATE);
 
     tls_fill_progress_params_wqe(&wqe->params, tis_tir_number, next_record_tcp_sn);
-    store_current_wqe_prop(0, ti);
+    store_current_wqe_prop(nullptr, ti);
 
     ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs);
     dbg_dump_wqe((uint32_t *)m_sq_wqe_hot, sizeof(mlx5_set_tls_progress_params_wqe));
@@ -1327,7 +1327,7 @@ inline void qp_mgr_eth_mlx5::tls_get_progress_params_wqe(xlio_ti *ti, uint32_t t
     psv->psv_index[0] = htobe32(tirn);
     psv->va = htobe64((uintptr_t)buf);
 
-    store_current_wqe_prop(0, ti);
+    store_current_wqe_prop(nullptr, ti);
 
     ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs);
 
@@ -1363,7 +1363,7 @@ void qp_mgr_eth_mlx5::tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t l
     dseg->lkey = htobe32(lkey);
     dseg->byte_count = htobe32(len);
 
-    store_current_wqe_prop(0, tis);
+    store_current_wqe_prop(nullptr, tis);
 
     ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs);
 
@@ -1445,7 +1445,7 @@ void qp_mgr_eth_mlx5::post_nop_fence(void)
     cseg->qpn_ds = htobe32((m_mlx5_qp.qpn << MLX5_WQE_CTRL_QPN_SHIFT) | 0x01);
     cseg->fm_ce_se = MLX5_FENCE_MODE_INITIATOR_SMALL;
 
-    store_current_wqe_prop(0, NULL);
+    store_current_wqe_prop(nullptr, NULL);
 
     ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, 1);
 
@@ -1466,20 +1466,18 @@ void qp_mgr_eth_mlx5::post_nop_fence(void)
 // So we can post_send anything we want :)
 void qp_mgr_eth_mlx5::trigger_completion_for_all_sent_packets()
 {
-    qp_logfunc("unsignaled count=%d, last=%p", m_n_unsignaled_count, m_p_last_tx_mem_buf_desc);
+    qp_logfunc("unsignaled count=%d", m_n_unsignaled_count);
 
-    if (m_p_last_tx_mem_buf_desc) { // Meaning that there is at least one post_send in the QP
-                                    // mem_buf_desc that wasn't signaled for completion
+    if (!is_signal_requested_for_last_wqe()) {
+        // Post a dummy WQE and request a signal to complete all the unsignaled WQEs in SQ
         qp_logdbg("Need to send closing tx wr...");
-        // Allocate new send buffer
         mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(0, true, PBUF_RAM);
-        m_p_ring->m_missing_buf_ref_count--; // Align Tx buffer accounting since we will be
-                                             // bypassing the normal send calls
+        // Align Tx buffer accounting since we will be bypassing the normal send calls
+        m_p_ring->m_missing_buf_ref_count--;
         if (!p_mem_buf_desc) {
             qp_logerr("no buffer in pool");
             return;
         }
-        p_mem_buf_desc->p_next_desc = m_p_last_tx_mem_buf_desc;
 
         // Prepare dummy packet: zeroed payload ('0000').
         // For ETH it replaces the MAC header!! (Nothing is going on the wire, QP in error state)
@@ -1533,7 +1531,7 @@ void qp_mgr_eth_mlx5::reset_inflight_zc_buffers_ctx(void *ctx)
             return;
         }
         do {
-            mem_buf_desc_t *desc = (mem_buf_desc_t *)p->wr_id;
+            mem_buf_desc_t *desc = p->buf;
             if (desc && desc->tx.zc.ctx == ctx) {
                 desc->tx.zc.ctx = nullptr;
             }

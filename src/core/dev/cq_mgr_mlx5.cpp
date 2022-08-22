@@ -486,16 +486,13 @@ void cq_mgr_mlx5::handle_sq_wqe_prop(unsigned index)
      * We keep index of the last completed WQE and stop processing the list
      * when we reach the index. This condition is checked in
      * is_sq_wqe_prop_valid().
-     *
-     * TODO We can move buffers handling here. In this case, we can
-     * associate a WQE with a set of scatter-gather buffers and remove
-     * fake mem_buf_desct_t object for retransmitted TCP segments.
-     * This approach will solve data corruption issue with retransmitted
-     * scatter-gather TCP segments.
      */
 
     do {
-        if (p->ti != NULL) {
+        if (p->buf) {
+            m_p_ring->mem_buf_desc_return_single_locked(p->buf);
+        }
+        if (p->ti) {
             xlio_ti *ti = p->ti;
             if (ti->m_callback) {
                 ti->m_callback(ti->m_callback_arg);
@@ -511,6 +508,7 @@ void cq_mgr_mlx5::handle_sq_wqe_prop(unsigned index)
         p = p->next;
     } while (p != NULL && m_qp->is_sq_wqe_prop_valid(p, prev));
 
+    m_p_ring->return_tx_pool_to_global_pool();
     m_qp->m_sq_wqe_prop_last_signalled = index;
 }
 
@@ -519,7 +517,6 @@ int cq_mgr_mlx5::poll_and_process_error_element_tx(struct xlio_mlx5_cqe *cqe,
 {
     uint16_t wqe_ctr = ntohs(cqe->wqe_counter);
     unsigned index = wqe_ctr & (m_qp->m_tx_num_wr - 1);
-    mem_buf_desc_t *buff = NULL;
     xlio_ibv_wc wce;
 
     // spoil the global sn if we have packets ready
@@ -537,13 +534,10 @@ int cq_mgr_mlx5::poll_and_process_error_element_tx(struct xlio_mlx5_cqe *cqe,
 
     memset(&wce, 0, sizeof(wce));
     if (m_qp->m_sq_wqe_idx_to_prop) {
-        wce.wr_id = m_qp->m_sq_wqe_idx_to_prop[index].wr_id;
+        wce.wr_id = reinterpret_cast<uint64_t>(m_qp->m_sq_wqe_idx_to_prop[index].buf);
         cqe_to_xlio_wc(cqe, &wce);
 
-        buff = cq_mgr::process_cq_element_tx(&wce);
-        if (buff) {
-            cq_mgr::process_tx_buffer_list(buff);
-        }
+        cq_mgr::process_cq_element_tx(&wce);
         handle_sq_wqe_prop(index);
         return 1;
     }
@@ -562,7 +556,6 @@ int cq_mgr_mlx5::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
     if (likely(cqe)) {
         uint16_t wqe_ctr = ntohs(cqe->wqe_counter);
         unsigned index = wqe_ctr & (m_qp->m_tx_num_wr - 1);
-        mem_buf_desc_t *buff = (mem_buf_desc_t *)(uintptr_t)m_qp->m_sq_wqe_idx_to_prop[index].wr_id;
         // spoil the global sn if we have packets ready
         union __attribute__((packed)) {
             uint64_t global_sn;
@@ -576,9 +569,6 @@ int cq_mgr_mlx5::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
 
         *p_cq_poll_sn = m_n_global_sn = next_sn.global_sn;
 
-        if (likely(buff != NULL)) {
-            cq_mgr::process_tx_buffer_list(buff);
-        }
         handle_sq_wqe_prop(index);
         ret = 1;
     } else if (cqe_err) {
