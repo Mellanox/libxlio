@@ -464,8 +464,10 @@ void cq_mgr::process_cq_element_log_helper(mem_buf_desc_t *p_mem_buf_desc, xlio_
         cq_logdbg("wce: pkey_index=%#x, slid=%#x, sl=%#x, dlid_path_bits=%#x, imm_data=%#x",
                   p_wce->pkey_index, p_wce->slid, p_wce->sl, p_wce->dlid_path_bits,
                   p_wce->imm_data);
-        cq_logdbg("mem_buf_desc: lkey=%#x, p_buffer=%p, sz_buffer=%lu", p_mem_buf_desc->lkey,
-                  p_mem_buf_desc->p_buffer, p_mem_buf_desc->sz_buffer);
+        if (p_mem_buf_desc) {
+            cq_logdbg("mem_buf_desc: lkey=%#x, p_buffer=%p, sz_buffer=%lu", p_mem_buf_desc->lkey,
+                      p_mem_buf_desc->p_buffer, p_mem_buf_desc->sz_buffer);
+        }
     } else if (p_wce->status != IBV_WC_WR_FLUSH_ERR) {
         cq_logwarn("wce: wr_id=%#lx, status=%#x, vendor_err=%#x, qp_num=%#x", p_wce->wr_id,
                    p_wce->status, p_wce->vendor_err, p_wce->qp_num);
@@ -493,32 +495,10 @@ mem_buf_desc_t *cq_mgr::process_cq_element_tx(xlio_ibv_wc *p_wce)
     // Assume locked!!!
     cq_logfuncall("");
 
-    // Get related mem_buf_desc pointer from the wr_id
     mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)(uintptr_t)p_wce->wr_id;
-
     if (unlikely(p_wce->status != IBV_WC_SUCCESS)) {
         process_cq_element_log_helper(p_mem_buf_desc, p_wce);
-
-        if (p_mem_buf_desc == NULL) {
-            cq_logdbg("wce->wr_id = 0!!! When status != IBV_WC_SUCCESS");
-            return NULL;
-        }
-        if (p_mem_buf_desc->p_desc_owner) {
-            m_p_ring->mem_buf_desc_completion_with_error_tx(p_mem_buf_desc);
-        } else {
-            // AlexR: can this wce have a valid mem_buf_desc pointer?
-            // AlexR: are we throwing away a data buffer and a mem_buf_desc element?
-            cq_logdbg("no desc_owner(wr_id=%lu, qp_num=%x)", p_wce->wr_id, p_wce->qp_num);
-        }
-
-        return NULL;
     }
-
-    if (p_mem_buf_desc == NULL) {
-        cq_logdbg("wce->wr_id = 0!!! When status == IBV_WC_SUCCESS");
-        return NULL;
-    }
-
     return p_mem_buf_desc;
 }
 

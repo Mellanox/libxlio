@@ -108,7 +108,6 @@ ring_simple::ring_simple(int if_index, ring *parent, ring_type_t type)
     , m_zc_num_bufs(0)
     , m_tx_num_wr(0)
     , m_tx_num_wr_free(0)
-    , m_b_qp_tx_first_flushed_completion_handled(false)
     , m_missing_buf_ref_count(0)
     , m_tx_lkey(0)
     , m_gro_mgr(safe_mce_sys().gro_streams_max, MAX_GRO_BUFS)
@@ -485,14 +484,6 @@ int ring_simple::reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse)
 
 void ring_simple::mem_buf_desc_completion_with_error_tx(mem_buf_desc_t *p_tx_wc_buf_desc)
 {
-    if (m_b_qp_tx_first_flushed_completion_handled) {
-        p_tx_wc_buf_desc->p_next_desc =
-            NULL; // All wr are flushed so we need to disconnect the Tx list
-    } else {
-        m_b_qp_tx_first_flushed_completion_handled =
-            true; // This is true for all wr except for the first one which might point to already
-                  // sent wr
-    }
     m_tx_num_wr_free += mem_buf_tx_release(p_tx_wc_buf_desc, false, false);
 }
 
@@ -528,6 +519,12 @@ void ring_simple::mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf
     p_mem_buf_desc->lwip_pbuf.pbuf.ref -=
         std::min<unsigned>(p_mem_buf_desc->lwip_pbuf.pbuf.ref, ref - 1);
     put_tx_single_buffer(p_mem_buf_desc);
+}
+
+// Call under m_lock_ring_tx lock
+void ring_simple::mem_buf_desc_return_single_locked(mem_buf_desc_t *buff)
+{
+    m_tx_num_wr_free += put_tx_buffer_helper(buff);
 }
 
 int ring_simple::drain_and_proccess()
@@ -919,38 +916,49 @@ void ring_simple::return_to_global_pool()
     }
 }
 
+void ring_simple::return_tx_pool_to_global_pool()
+{
+    return_to_global_pool();
+}
+
+int ring_simple::put_tx_buffer_helper(mem_buf_desc_t *buff)
+{
+    if (buff->tx.dev_mem_length) {
+        m_p_qp_mgr->dm_release_data(buff);
+    }
+
+    // Potential race, ref is protected here by ring_tx lock, and in dst_entry_tcp &
+    // sockinfo_tcp by tcp lock
+    if (likely(buff->lwip_pbuf.pbuf.ref)) {
+        buff->lwip_pbuf.pbuf.ref--;
+    } else {
+        ring_logerr("ref count of %p is already zero, double free??", buff);
+    }
+
+    if (buff->lwip_pbuf.pbuf.ref == 0) {
+        descq_t &pool = buff->lwip_pbuf.pbuf.type == PBUF_ZEROCOPY ? m_zc_pool : m_tx_pool;
+        buff->p_next_desc = nullptr;
+        free_lwip_pbuf(&buff->lwip_pbuf);
+        pool.push_back(buff);
+        // Return number of freed buffers
+        return 1;
+    }
+    return 0;
+}
+
 // call under m_lock_ring_tx lock
 int ring_simple::put_tx_buffers(mem_buf_desc_t *buff_list)
 {
-    int count = 0, freed = 0;
-    mem_buf_desc_t *next;
+    int count = 0;
+    int freed = 0;
 
     while (buff_list) {
-        next = buff_list->p_next_desc;
-        buff_list->p_next_desc = NULL;
-
-        if (buff_list->tx.dev_mem_length) {
-            m_p_qp_mgr->dm_release_data(buff_list);
-        }
-
-        // potential race, ref is protected here by ring_tx lock, and in dst_entry_tcp &
-        // sockinfo_tcp by tcp lock
-        if (likely(buff_list->lwip_pbuf.pbuf.ref)) {
-            buff_list->lwip_pbuf.pbuf.ref--;
-        } else {
-            ring_logerr("ref count of %p is already zero, double free??", buff_list);
-        }
-
-        if (buff_list->lwip_pbuf.pbuf.ref == 0) {
-            descq_t &pool = buff_list->lwip_pbuf.pbuf.type == PBUF_ZEROCOPY ? m_zc_pool : m_tx_pool;
-            free_lwip_pbuf(&buff_list->lwip_pbuf);
-            pool.push_back(buff_list);
-            freed++;
-        }
+        mem_buf_desc_t *next = buff_list->p_next_desc;
+        freed += put_tx_buffer_helper(buff_list);
         count++;
         buff_list = next;
     }
-    ring_logfunc("buf_list: %p count: %d freed: %d\n", buff_list, count, freed);
+    ring_logfunc("count: %d freed: %d\n", count, freed);
 
     return_to_global_pool();
 
@@ -963,27 +971,8 @@ int ring_simple::put_tx_single_buffer(mem_buf_desc_t *buff)
     int count = 0;
 
     if (likely(buff)) {
-        if (buff->tx.dev_mem_length) {
-            m_p_qp_mgr->dm_release_data(buff);
-        }
-
-        // potential race, ref is protected here by ring_tx lock, and in dst_entry_tcp &
-        // sockinfo_tcp by tcp lock
-        if (likely(buff->lwip_pbuf.pbuf.ref)) {
-            buff->lwip_pbuf.pbuf.ref--;
-        } else {
-            ring_logerr("ref count of %p is already zero, double free??", buff);
-        }
-
-        if (buff->lwip_pbuf.pbuf.ref == 0) {
-            descq_t &pool = buff->lwip_pbuf.pbuf.type == PBUF_ZEROCOPY ? m_zc_pool : m_tx_pool;
-            buff->p_next_desc = NULL;
-            free_lwip_pbuf(&buff->lwip_pbuf);
-            pool.push_back(buff);
-            count++;
-        }
+        count = put_tx_buffer_helper(buff);
     }
-
     return_to_global_pool();
 
     return count;
@@ -1075,7 +1064,6 @@ void ring_simple::start_active_qp_mgr()
         /* TODO: consider avoid using sleep */
         /* coverity[sleep] */
         m_p_qp_mgr->up();
-        m_b_qp_tx_first_flushed_completion_handled = false;
         m_up = true;
     }
     m_lock_ring_tx.unlock();

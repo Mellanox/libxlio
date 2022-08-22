@@ -98,6 +98,8 @@ public:
                                  xlio_wr_tx_packet_attr attr, xlio_tis *tis);
     virtual void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc);
     virtual void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc, unsigned ref);
+    void mem_buf_desc_return_single_locked(mem_buf_desc_t *buff);
+    void return_tx_pool_to_global_pool();
     virtual bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe);
     inline void convert_hw_time_to_system_time(uint64_t hwtime, struct timespec *systime)
     {
@@ -107,7 +109,7 @@ public:
     virtual int get_tx_channel_fd() const
     {
         return m_p_tx_comp_event_channel ? m_p_tx_comp_event_channel->fd : -1;
-    };
+    }
     virtual uint32_t get_tx_user_lkey(void *addr, size_t length, void *p_mapping = NULL);
     virtual uint32_t get_max_inline_data();
     ib_ctx_handler *get_ctx(ring_user_id_t id)
@@ -268,6 +270,7 @@ protected:
 private:
     inline void send_status_handler(int ret, xlio_ibv_send_wr *p_send_wqe);
     inline mem_buf_desc_t *get_tx_buffers(pbuf_type type, uint32_t n_num_mem_bufs);
+    inline int put_tx_buffer_helper(mem_buf_desc_t *buff);
     inline int put_tx_buffers(mem_buf_desc_t *buff_list);
     inline int put_tx_single_buffer(mem_buf_desc_t *buff);
     inline void return_to_global_pool();
@@ -290,7 +293,6 @@ private:
     uint32_t m_zc_num_bufs;
     uint32_t m_tx_num_wr;
     int32_t m_tx_num_wr_free;
-    bool m_b_qp_tx_first_flushed_completion_handled;
     uint32_t m_missing_buf_ref_count;
     uint32_t m_tx_lkey; // this is the registered memory lkey for a given specific device for the
                         // buffer pool use

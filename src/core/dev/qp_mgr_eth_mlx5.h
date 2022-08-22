@@ -99,8 +99,8 @@ public:
 
 /* WQE properties description. */
 struct sq_wqe_prop {
-    /* wr_id pointing to mem_buf_desc_t object. */
-    uint64_t wr_id;
+    /* A buffer held by the WQE. This is NULL for control WQEs. */
+    mem_buf_desc_t *buf;
     /* Transport interface (TIS/TIR) current WQE holds reference to. */
     xlio_ti *ti;
     struct sq_wqe_prop *next;
@@ -179,7 +179,7 @@ private:
     int send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, bool request_comp,
                      xlio_tis *tis);
     inline int fill_wqe(xlio_ibv_send_wr *p_send_wqe);
-    inline void store_current_wqe_prop(uint64_t wr_id, xlio_ti *ti);
+    inline void store_current_wqe_prop(mem_buf_desc_t *wr_id, xlio_ti *ti);
     void destroy_tis_cache(void);
 #ifdef DEFINED_UTLS
     inline void tls_fill_static_params_wqe(struct mlx5_wqe_tls_static_params_seg *params,

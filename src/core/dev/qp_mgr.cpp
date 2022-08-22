@@ -82,7 +82,6 @@ qp_mgr::qp_mgr(struct qp_mgr_desc *desc, const uint32_t tx_num_wr)
     , m_curr_rx_wr(0)
     , m_last_posted_rx_wr_id(0)
     , m_n_unsignaled_count(0)
-    , m_p_last_tx_mem_buf_desc(NULL)
     , m_p_prev_rx_desc_pushed(NULL)
     , m_n_ip_id_base(0)
     , m_n_ip_id_offset(0)
@@ -335,9 +334,6 @@ void qp_mgr::up()
     release_rx_buffers(); // We might have old flushed cqe's in our CQ still from previous HA event
     release_tx_buffers();
 
-    /* clean any link to completions with error we might have */
-    m_p_last_tx_mem_buf_desc = NULL;
-
     modify_qp_to_ready_state();
 
     m_p_cq_mgr_rx->add_qp_rx(this);
@@ -439,11 +435,9 @@ void qp_mgr::trigger_completion_for_all_sent_packets()
     // NOTE: Since the QP is in ERROR state no packets will be sent on the wire!
     // So we can post_send anything we want :)
 
-    qp_logdbg("unsignaled count=%d, last=%p", m_n_unsignaled_count, m_p_last_tx_mem_buf_desc);
-    if (m_p_last_tx_mem_buf_desc) { // Meaning that there is at least one post_send in the QP
-                                    // mem_buf_desc that wasn't signaled for completion
+    qp_logdbg("unsignaled count=%d", m_n_unsignaled_count);
+    if (!is_signal_requested_for_last_wqe()) {
         qp_logdbg("Need to send closing tx wr...");
-        // Allocate new send buffer
         mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(0, true, PBUF_RAM);
         m_p_ring->m_missing_buf_ref_count--; // Align Tx buffer accounting since we will be
                                              // bypassing the normal send calls
@@ -451,7 +445,6 @@ void qp_mgr::trigger_completion_for_all_sent_packets()
             qp_logerr("no buffer in pool");
             return;
         }
-        p_mem_buf_desc->p_next_desc = m_p_last_tx_mem_buf_desc;
 
         // Prepare dummy packet: zeroed payload ('0000').
         // For ETH it replaces the MAC header!! (Nothing is going on the wire, QP in error state)
@@ -634,8 +627,6 @@ int qp_mgr::send(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio
 #ifdef XLIO_TIME_MEASURE
     TAKE_T_TX_POST_SEND_END;
 #endif
-    // Link this new mem_buf_desc to the previous one sent
-    p_mem_buf_desc->p_next_desc = m_p_last_tx_mem_buf_desc;
 
     if (request_comp) {
         int ret;
@@ -653,7 +644,6 @@ int qp_mgr::send(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio
         qp_logfunc("polling succeeded on tx cq_mgr (%d wce)", ret);
     } else {
         m_n_unsignaled_count--;
-        m_p_last_tx_mem_buf_desc = p_mem_buf_desc;
     }
 
     return 0;

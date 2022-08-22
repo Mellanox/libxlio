@@ -224,8 +224,6 @@ protected:
 
     // send wr
     uint32_t m_n_unsignaled_count;
-    mem_buf_desc_t *m_p_last_tx_mem_buf_desc; // Remembered so we can list several mem_buf_desc_t on
-                                              // a single notification request
 
     mem_buf_desc_t *m_p_prev_rx_desc_pushed;
 
@@ -239,7 +237,10 @@ protected:
     inline void set_unsignaled_count(void)
     {
         m_n_unsignaled_count = m_n_sysvar_tx_num_wr_to_signal - 1;
-        m_p_last_tx_mem_buf_desc = NULL;
+    }
+    inline bool is_signal_requested_for_last_wqe()
+    {
+        return m_n_unsignaled_count == m_n_sysvar_tx_num_wr_to_signal - 1;
     }
 
     virtual cq_mgr *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel);
