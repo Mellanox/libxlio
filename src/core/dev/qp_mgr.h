@@ -66,6 +66,18 @@ class ring_eth_cb;
 #define MAX_SUPPORTED_IB_INLINE_SIZE 884
 #endif
 
+enum {
+    SQ_CREDITS_UMR = 3U,
+    SQ_CREDITS_SET_PSV = 1U,
+    SQ_CREDITS_GET_PSV = 1U,
+    SQ_CREDITS_DUMP = 1U,
+    SQ_CREDITS_NOP = 1U,
+    SQ_CREDITS_TLS_TX_CONTEXT = SQ_CREDITS_UMR + SQ_CREDITS_SET_PSV,
+    SQ_CREDITS_TLS_RX_CONTEXT = SQ_CREDITS_UMR + SQ_CREDITS_SET_PSV,
+    SQ_CREDITS_TLS_RX_RESYNC = SQ_CREDITS_UMR,
+    SQ_CREDITS_TLS_RX_GET_PSV = SQ_CREDITS_GET_PSV,
+};
+
 struct qp_mgr_desc {
     ring_simple *ring;
     const struct slave_data *slave;
@@ -106,11 +118,12 @@ public:
     virtual void up();
     virtual void down();
 
-    virtual void post_recv_buffer(
-        mem_buf_desc_t *p_mem_buf_desc); // Post for receive single mem_buf_desc
-    void post_recv_buffers(descq_t *p_buffers,
-                           size_t count); // Post for receive a list of mem_buf_desc
-    int send(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio_tis *tis);
+    // Post for receive single mem_buf_desc
+    virtual void post_recv_buffer(mem_buf_desc_t *p_mem_buf_desc);
+    // Post for receive a list of mem_buf_desc
+    void post_recv_buffers(descq_t *p_buffers, size_t count);
+    int send(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio_tis *tis,
+             unsigned credits);
 
     inline uint32_t get_max_inline_data() const { return m_qp_cap.max_inline_data; }
     inline uint32_t get_max_send_sge() const { return m_qp_cap.max_send_sge; }
@@ -191,6 +204,52 @@ public:
     virtual void post_nop_fence(void) {}
 
     virtual void reset_inflight_zc_buffers_ctx(void *ctx) { NOT_IN_USE(ctx); }
+    virtual bool credits_get(unsigned credits)
+    {
+        NOT_IN_USE(credits);
+        return true;
+    }
+    virtual void credits_return(unsigned credits) { NOT_IN_USE(credits); }
+    inline unsigned credits_calculate(xlio_ibv_send_wr *p_send_wqe)
+    {
+        /* Credit is a logical value which is opaque for users. Only qp_mgr can interpret the
+         * value and currently, one credit equals to one WQEBB in the SQ.
+         *
+         * Current method does best effort to predict how many WQEBBs will be used to send
+         * p_send_wqe in send_to_wire(). The predicted value may be higher than actual, but
+         * mustn't be lower.
+         *
+         * There are 3 branches in this order:
+         *  1. Full non-TSO packet inline
+         *  2. Non-TSO packet with scatter-gather elements and no inline data
+         *  3. TSO packet with inline headers
+         *
+         * Formulas details:
+         *  1. WQEBB is 64 bytes, the 1st WQEBB contains ctrl segment, eth segment and 18 bytes of
+         *     inline data. So, we take the 1st WQEBB and number of WQEBBs for the packet minus 18
+         *     bytes.
+         *  2. Data segment for each scatter-gather element is 16 bytes. Therefore, WQEBB can hold
+         *     up to 4 data segments. The 1st element fits into the 1st WQEBB after the eth segment.
+         *     So, we take the 1st WQEBB and number of WQEBBs for scatter-gather elements minus 1.
+         *  3. Inline header starts from offset 46 in WQE (2 bytes before 16 bytes alignment).
+         *     Decrease inline header size by 2 to align it to 16 bytes boundary at the right edge.
+         *     This compensates data segments alignment. Add the 2 bytes back and length of
+         *     scatter-gather elements. Take into account that 18 bytes goes to the 1st WQEBB and
+         *     add the 1st WQEBB to the result.
+         */
+        if (xlio_send_wr_opcode(*p_send_wqe) != XLIO_IBV_WR_TSO) {
+            if (p_send_wqe->num_sge == 1 && p_send_wqe->sg_list->length <= 204) {
+                return (p_send_wqe->sg_list->length + 63U - 18U) / 64U + 1U;
+            } else {
+                return (p_send_wqe->num_sge + 3U - 1U) / 4U + 1U;
+            }
+        } else {
+            return (((p_send_wqe->tso.hdr_sz + 15U - 2U) & ~15U) + 2U + p_send_wqe->num_sge * 16U -
+                    18U + 63U) /
+                64U +
+                1U;
+        }
+    }
 
 protected:
     struct ibv_qp *m_qp;
@@ -250,7 +309,7 @@ protected:
                                      bool is_rx);
 
     virtual int send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
-                             bool request_comp, xlio_tis *tis);
+                             bool request_comp, xlio_tis *tis, unsigned credits);
     virtual bool is_completion_need() { return !m_n_unsignaled_count; };
 };
 

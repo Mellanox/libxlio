@@ -76,10 +76,6 @@ public:
     virtual int drain_and_proccess();
     virtual int wait_for_notification_and_process_element(int cq_channel_fd, uint64_t *p_cq_poll_sn,
                                                           void *pv_fd_ready_array = NULL);
-    // Tx completion handling at the qp_mgr level is just re listing the desc+data buffer in the
-    // free lists
-    void mem_buf_desc_completion_with_error_tx(
-        mem_buf_desc_t *p_tx_wc_buf_desc); // Assume locked...
     void mem_buf_desc_return_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc);
     void mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc,
                                          void *pv_fd_ready_array = NULL);
@@ -239,6 +235,18 @@ public:
         m_p_qp_mgr->reset_inflight_zc_buffers_ctx(ctx);
     }
 
+    bool credits_get(unsigned credits)
+    {
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        return m_p_qp_mgr->credits_get(credits);
+    }
+
+    void credits_return(unsigned credits)
+    {
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        m_p_qp_mgr->credits_return(credits);
+    }
+
     friend class cq_mgr;
     friend class cq_mgr_mlx5;
     friend class cq_mgr_mlx5_strq;
@@ -256,9 +264,9 @@ protected:
     void create_resources();
     virtual void init_tx_buffers(uint32_t count);
     virtual void inc_cq_moderation_stats(size_t sz_data);
-    void set_tx_num_wr(int32_t num_wr) { m_tx_num_wr = m_tx_num_wr_free = num_wr; }
-    uint32_t get_tx_num_wr() { return m_tx_num_wr; }
-    uint32_t get_mtu() { return m_mtu; }
+    inline void set_tx_num_wr(uint32_t num_wr) { m_tx_num_wr = num_wr; }
+    inline uint32_t get_tx_num_wr() { return m_tx_num_wr; }
+    inline uint32_t get_mtu() { return m_mtu; }
 
     ib_ctx_handler *m_p_ib_ctx;
     qp_mgr *m_p_qp_mgr;
@@ -274,7 +282,7 @@ private:
     inline int put_tx_buffers(mem_buf_desc_t *buff_list);
     inline int put_tx_single_buffer(mem_buf_desc_t *buff);
     inline void return_to_global_pool();
-    bool is_available_qp_wr(bool b_block);
+    bool is_available_qp_wr(bool b_block, unsigned credits);
     void save_l2_address(const L2_address *p_l2_addr)
     {
         delete_l2_address();
@@ -292,7 +300,6 @@ private:
     uint32_t m_tx_num_bufs;
     uint32_t m_zc_num_bufs;
     uint32_t m_tx_num_wr;
-    int32_t m_tx_num_wr_free;
     uint32_t m_missing_buf_ref_count;
     uint32_t m_tx_lkey; // this is the registered memory lkey for a given specific device for the
                         // buffer pool use

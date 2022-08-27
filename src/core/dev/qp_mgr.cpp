@@ -474,15 +474,10 @@ void qp_mgr::trigger_completion_for_all_sent_packets()
         // Close the Tx unsignaled send list
         set_unsignaled_count();
 
-        if (!m_p_ring->m_tx_num_wr_free) {
-            qp_logdbg("failed to trigger completion for all packets due to no available wr");
-            return;
-        }
-        m_p_ring->m_tx_num_wr_free--;
-
+        // We don't check for available space in SQ, because this is legacy code.
         send_to_wire(&send_wr,
                      (xlio_wr_tx_packet_attr)(XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM),
-                     true, NULL);
+                     true, NULL, 0);
     }
 }
 
@@ -549,10 +544,11 @@ void qp_mgr::post_recv_buffers(descq_t *p_buffers, size_t count)
 }
 
 inline int qp_mgr::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
-                                bool request_comp, xlio_tis *tis)
+                                bool request_comp, xlio_tis *tis, unsigned credits)
 {
     NOT_IN_USE(attr);
     NOT_IN_USE(tis);
+    NOT_IN_USE(credits);
     int ret = 0;
     xlio_ibv_send_wr *bad_wr = NULL;
 
@@ -585,7 +581,8 @@ inline int qp_mgr::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_
     return ret;
 }
 
-int qp_mgr::send(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio_tis *tis)
+int qp_mgr::send(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio_tis *tis,
+                 unsigned credits)
 {
     mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)p_send_wqe->wr_id;
     /* Control tx completions:
@@ -609,7 +606,8 @@ int qp_mgr::send(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio
     RDTSC_TAKE_START(g_rdtsc_instr_info_arr[RDTSC_FLOW_TX_VERBS_POST_SEND]);
 #endif // RDTSC_MEASURE_TX_SENDTO_TO_AFTER_POST_SEND
 
-    if (send_to_wire(p_send_wqe, attr, request_comp, tis)) {
+    // TODO send_to_wire() and send() can return void after removing ibverbs support
+    if (send_to_wire(p_send_wqe, attr, request_comp, tis, credits)) {
 #ifdef XLIO_TIME_MEASURE
         INC_ERR_TX_COUNT;
 #endif

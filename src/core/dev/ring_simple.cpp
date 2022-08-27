@@ -107,7 +107,6 @@ ring_simple::ring_simple(int if_index, ring *parent, ring_type_t type)
     , m_tx_num_bufs(0)
     , m_zc_num_bufs(0)
     , m_tx_num_wr(0)
-    , m_tx_num_wr_free(0)
     , m_missing_buf_ref_count(0)
     , m_tx_lkey(0)
     , m_gro_mgr(safe_mce_sys().gro_streams_max, MAX_GRO_BUFS)
@@ -205,9 +204,6 @@ ring_simple::~ring_simple()
                      : "good accounting"),
                 (m_tx_num_bufs + m_zc_num_bufs - m_tx_pool.size() - m_zc_pool.size() -
                  m_missing_buf_ref_count));
-    ring_logdbg("Tx WR num: free count = %d, total = %d, %s (%d)", m_tx_num_wr_free, m_tx_num_wr,
-                ((m_tx_num_wr - m_tx_num_wr_free) ? "bad accounting!!" : "good accounting"),
-                (m_tx_num_wr - m_tx_num_wr_free));
     ring_logdbg("Rx buffer pool: %lu free global buffers available", m_tx_pool.size());
 
     // Release verbs resources
@@ -259,8 +255,6 @@ void ring_simple::create_resources()
         m_tx_num_wr = max_qp_wr;
     }
     ring_logdbg("ring attributes: m_tx_num_wr = %d", m_tx_num_wr);
-
-    m_tx_num_wr_free = m_tx_num_wr;
 
     /* Detect TSO capabilities */
     memset(&m_tso, 0, sizeof(m_tso));
@@ -482,11 +476,6 @@ int ring_simple::reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse)
     return m_p_cq_mgr_rx->reclaim_recv_single_buffer(rx_reuse);
 }
 
-void ring_simple::mem_buf_desc_completion_with_error_tx(mem_buf_desc_t *p_tx_wc_buf_desc)
-{
-    m_tx_num_wr_free += mem_buf_tx_release(p_tx_wc_buf_desc, false, false);
-}
-
 void ring_simple::mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc,
                                                   void *pv_fd_ready_array /*NULL*/)
 {
@@ -499,7 +488,7 @@ void ring_simple::mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc
 void ring_simple::mem_buf_desc_return_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc)
 {
     ring_logfuncall("");
-    RING_LOCK_AND_RUN(m_lock_ring_tx, m_tx_num_wr_free += put_tx_buffers(p_mem_buf_desc));
+    RING_LOCK_AND_RUN(m_lock_ring_tx, put_tx_buffers(p_mem_buf_desc));
 }
 
 void ring_simple::mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc)
@@ -524,7 +513,7 @@ void ring_simple::mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf
 // Call under m_lock_ring_tx lock
 void ring_simple::mem_buf_desc_return_single_locked(mem_buf_desc_t *buff)
 {
-    m_tx_num_wr_free += put_tx_buffer_helper(buff);
+    put_tx_buffer_helper(buff);
 }
 
 int ring_simple::drain_and_proccess()
@@ -683,23 +672,16 @@ void ring_simple::mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc)
 inline int ring_simple::send_buffer(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
                                     xlio_tis *tis)
 {
-    // Note: this is debatable logic as it count of WQEs waiting completion but
-    // our SQ is cyclic buffer so in reality only last WQE is still being sent
-    // and other SQ is mostly free to work on.
     int ret = 0;
-    if (likely(m_tx_num_wr_free > 0)) {
-        ret = m_p_qp_mgr->send(p_send_wqe, attr, tis);
-        --m_tx_num_wr_free;
-    } else if (is_available_qp_wr(is_set(attr, XLIO_TX_PACKET_BLOCK))) {
-        ret = m_p_qp_mgr->send(p_send_wqe, attr, tis);
-    } else {
-        ring_logdbg("silent packet drop, no available WR in QP!");
-        ret = -1;
-        if (p_send_wqe) {
-            mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)(p_send_wqe->wr_id);
-            p_mem_buf_desc->p_next_desc = NULL;
-        }
+    unsigned credits = m_p_qp_mgr->credits_calculate(p_send_wqe);
 
+    if (likely(m_p_qp_mgr->credits_get(credits)) ||
+        is_available_qp_wr(is_set(attr, XLIO_TX_PACKET_BLOCK), credits)) {
+        ret = m_p_qp_mgr->send(p_send_wqe, attr, tis, credits);
+    } else {
+        ring_logdbg("Silent packet drop, SQ is full!");
+        ret = -1;
+        reinterpret_cast<mem_buf_desc_t *>(p_send_wqe->wr_id)->p_next_desc = nullptr;
         ++m_p_ring_stat->simple.n_tx_dropped_wqes;
     }
     return ret;
@@ -742,24 +724,30 @@ int ring_simple::send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wq
 /*
  * called under m_lock_ring_tx lock
  */
-bool ring_simple::is_available_qp_wr(bool b_block)
+bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
 {
-    int ret = 0;
+    bool granted;
+    int ret;
     uint64_t poll_sn = 0;
 
-    while (m_tx_num_wr_free <= 0) {
-        // Try to poll once in the hope that we get a few freed tx mem_buf_desc
+    // TODO credits_get() does TX polling. Call current method only for bocking mode?
+
+    do {
+        // Try to poll once in the hope that we get space in SQ
         ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
         if (ret < 0) {
             ring_logdbg("failed polling on tx cq_mgr (qp_mgr=%p, cq_mgr_tx=%p) (ret=%d %m)",
                         m_p_qp_mgr, m_p_cq_mgr_tx, ret);
             /* coverity[missing_unlock] */
             return false;
-        } else if (ret > 0) {
-            ring_logfunc("polling succeeded on tx cq_mgr (%d wce)", ret);
-        } else if (b_block) {
-            // Arm & Block on tx cq_mgr notification channel
-            // until we get a few freed tx mem_buf_desc & data buffers
+        }
+        granted = m_p_qp_mgr->credits_get(credits);
+        if (granted) {
+            break;
+        }
+
+        if (b_block) {
+            // Arm & Block on tx cq_mgr notification channel until we get space in SQ
 
             // Only a single thread should block on next Tx cqe event, hence the dedicated lock!
             /* coverity[double_unlock] TODO: RM#1049980 */
@@ -768,76 +756,71 @@ bool ring_simple::is_available_qp_wr(bool b_block)
             /* coverity[double_lock] TODO: RM#1049980 */
             m_lock_ring_tx.lock();
 
-            if (m_tx_num_wr_free <= 0) {
-                // Arm the CQ event channel for next Tx buffer release (tx cqe)
-                ret = m_p_cq_mgr_tx->request_notification(poll_sn);
-                if (ret < 0) {
-                    // this is most likely due to cq_poll_sn out of sync, need to poll_cq again
-                    ring_logdbg("failed arming tx cq_mgr (qp_mgr=%p, cq_mgr_tx=%p) (errno=%d %m)",
-                                m_p_qp_mgr, m_p_cq_mgr_tx, errno);
-                } else if (ret == 0) {
+            // TODO Resolve race window between previous polling and request_notification
+            ret = m_p_cq_mgr_tx->request_notification(poll_sn);
+            if (ret < 0) {
+                // this is most likely due to cq_poll_sn out of sync, need to poll_cq again
+                ring_logdbg("failed arming tx cq_mgr (qp_mgr=%p, cq_mgr_tx=%p) (errno=%d %m)",
+                            m_p_qp_mgr, m_p_cq_mgr_tx, errno);
+            } else if (ret == 0) {
+                // prepare to block
+                // CQ is armed, block on the CQ's Tx event channel (fd)
+                struct pollfd poll_fd = {/*.fd=*/0, /*.events=*/POLLIN, /*.revents=*/0};
+                poll_fd.fd = get_tx_comp_event_channel()->fd;
 
-                    // prepare to block
-                    // CQ is armed, block on the CQ's Tx event channel (fd)
-                    struct pollfd poll_fd = {/*.fd=*/0, /*.events=*/POLLIN, /*.revents=*/0};
-                    poll_fd.fd = get_tx_comp_event_channel()->fd;
+                // Now it is time to release the ring lock (for restart events to be handled
+                // while this thread block on CQ channel)
+                /* coverity[double_unlock] TODO: RM#1049980 */
+                m_lock_ring_tx.unlock();
 
-                    // Now it is time to release the ring lock (for restart events to be handled
-                    // while this thread block on CQ channel)
-                    /* coverity[double_unlock] TODO: RM#1049980 */
-                    m_lock_ring_tx.unlock();
+                ret = orig_os_api.poll(&poll_fd, 1, -1);
+                if (ret <= 0) {
+                    ring_logdbg("failed blocking on tx cq_mgr (errno=%d %m)", errno);
+                    m_lock_ring_tx_buf_wait.unlock();
+                    /* coverity[double_lock] TODO: RM#1049980 */
+                    m_lock_ring_tx.lock();
+                    /* coverity[missing_unlock] */
+                    return false;
+                }
+                /* coverity[double_lock] TODO: RM#1049980 */
+                m_lock_ring_tx.lock();
 
-                    ret = orig_os_api.poll(&poll_fd, 1, -1);
-                    if (ret <= 0) {
-                        ring_logdbg("failed blocking on tx cq_mgr (errno=%d %m)", errno);
+                // Find the correct Tx cq_mgr from the CQ event,
+                // It might not be the active_cq object since we have a single TX CQ comp
+                // channel for all cq_mgr's
+                cq_mgr *p_cq_mgr_tx = get_cq_mgr_from_cq_event(get_tx_comp_event_channel());
+                if (p_cq_mgr_tx) {
+
+                    // Allow additional CQ arming now
+                    p_cq_mgr_tx->m_b_notification_armed = false;
+
+                    // Perform a non blocking event read, clear the fd channel
+                    ret = p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
+                    if (ret < 0) {
+                        ring_logdbg("failed handling Tx cq_mgr channel (qp_mgr=%p, "
+                                    "cq_mgr_tx=%p) (errno=%d %m)",
+                                    m_p_qp_mgr, m_p_cq_mgr_tx, errno);
+                        /* coverity[double_unlock] TODO: RM#1049980 */
+                        m_lock_ring_tx.unlock();
                         m_lock_ring_tx_buf_wait.unlock();
                         /* coverity[double_lock] TODO: RM#1049980 */
                         m_lock_ring_tx.lock();
-                        /* coverity[missing_unlock] */
                         return false;
                     }
-                    /* coverity[double_lock] TODO: RM#1049980 */
-                    m_lock_ring_tx.lock();
-
-                    // Find the correct Tx cq_mgr from the CQ event,
-                    // It might not be the active_cq object since we have a single TX CQ comp
-                    // channel for all cq_mgr's
-                    cq_mgr *p_cq_mgr_tx = get_cq_mgr_from_cq_event(get_tx_comp_event_channel());
-                    if (p_cq_mgr_tx) {
-
-                        // Allow additional CQ arming now
-                        p_cq_mgr_tx->m_b_notification_armed = false;
-
-                        // Perform a non blocking event read, clear the fd channel
-                        ret = p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
-                        if (ret < 0) {
-                            ring_logdbg("failed handling Tx cq_mgr channel (qp_mgr=%p, "
-                                        "cq_mgr_tx=%p) (errno=%d %m)",
-                                        m_p_qp_mgr, m_p_cq_mgr_tx, errno);
-                            /* coverity[double_unlock] TODO: RM#1049980 */
-                            m_lock_ring_tx.unlock();
-                            m_lock_ring_tx_buf_wait.unlock();
-                            /* coverity[double_lock] TODO: RM#1049980 */
-                            m_lock_ring_tx.lock();
-                            return false;
-                        }
-                        ring_logfunc("polling/blocking succeeded on tx cq_mgr (we got %d wce)",
-                                     ret);
-                    }
+                    ring_logfunc("polling/blocking succeeded on tx cq_mgr (we got %d wce)", ret);
                 }
             }
+
             /* coverity[double_unlock] TODO: RM#1049980 */
             m_lock_ring_tx.unlock();
             m_lock_ring_tx_buf_wait.unlock();
             /* coverity[double_lock] TODO: RM#1049980 */
             m_lock_ring_tx.lock();
-        } else {
-            return false;
         }
-    }
+    } while (b_block);
 
-    --m_tx_num_wr_free;
-    return true;
+    /* coverity[missing_unlock] */
+    return granted;
 }
 
 void ring_simple::init_tx_buffers(uint32_t count)

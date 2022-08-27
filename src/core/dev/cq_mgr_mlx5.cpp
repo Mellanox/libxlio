@@ -474,6 +474,7 @@ void cq_mgr_mlx5::handle_sq_wqe_prop(unsigned index)
 {
     sq_wqe_prop *p = &m_qp->m_sq_wqe_idx_to_prop[index];
     sq_wqe_prop *prev;
+    unsigned credits = 0;
 
     /*
      * TX completions can be signalled for a set of WQEs as an optimization.
@@ -503,12 +504,14 @@ void cq_mgr_mlx5::handle_sq_wqe_prop(unsigned index)
                 m_qp->ti_released(ti);
             }
         }
+        credits += p->credits;
 
         prev = p;
         p = p->next;
     } while (p != NULL && m_qp->is_sq_wqe_prop_valid(p, prev));
 
     m_p_ring->return_tx_pool_to_global_pool();
+    m_qp->credits_return(credits);
     m_qp->m_sq_wqe_prop_last_signalled = index;
 }
 

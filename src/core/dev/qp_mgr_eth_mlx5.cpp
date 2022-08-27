@@ -247,6 +247,7 @@ qp_mgr_eth_mlx5::qp_mgr_eth_mlx5(struct qp_mgr_desc *desc, const uint32_t tx_num
     , m_sq_wqe_idx_to_prop(NULL)
     , m_sq_wqe_prop_last(NULL)
     , m_sq_wqe_prop_last_signalled(0)
+    , m_sq_free_credits(0)
     , m_rq_wqe_counter(0)
     , m_sq_wqes(NULL)
     , m_sq_wqe_hot(NULL)
@@ -286,6 +287,7 @@ void qp_mgr_eth_mlx5::init_qp()
     m_sq_wqe_hot_index = 0;
 
     m_tx_num_wr = (m_sq_wqes_end - (uint8_t *)m_sq_wqe_hot) / WQEBB;
+    m_sq_free_credits = m_tx_num_wr;
     /* Maximum BF inlining consists of:
      * - CTRL:
      *   - 1st WQEBB is mostly used for CTRL and ETH segment (where ETH header is inlined)
@@ -757,9 +759,11 @@ inline int qp_mgr_eth_mlx5::fill_wqe_send(xlio_ibv_send_wr *pswr)
     }
 
     m_sq_wqe_hot->ctrl.data[1] = htonl((m_mlx5_qp.qpn << 8) | wqe_size);
-    ring_doorbell((uint64_t *)m_sq_wqe_hot, m_db_method, align_to_WQEBB_up(wqe_size) / 4);
+    int wqebbs = align_to_WQEBB_up(wqe_size) / 4;
+    /* TODO FIXME Split into top and bottom parts */
+    ring_doorbell((uint64_t *)m_sq_wqe_hot, m_db_method, wqebbs);
 
-    return wqe_size;
+    return wqebbs;
 }
 
 //! Filling wqe for LSO
@@ -834,6 +838,7 @@ inline int qp_mgr_eth_mlx5::fill_wqe_lso(xlio_ibv_send_wr *pswr)
     m_sq_wqe_hot->ctrl.data[1] = htonl((m_mlx5_qp.qpn << 8) | wqe_size);
 
     // sending by BlueFlame or DoorBell covering wrap around
+    // TODO Make a single doorbell call
     if (likely(inl_hdr_size <= 4)) {
         if (likely(inl_hdr_copy_size == 0)) {
             ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, inl_hdr_size);
@@ -844,12 +849,17 @@ inline int qp_mgr_eth_mlx5::fill_wqe_lso(xlio_ibv_send_wr *pswr)
     } else {
         ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, inl_hdr_size);
     }
-    return wqe_size;
+    return align_to_WQEBB_up(wqe_size) / 4;
 }
 
-void qp_mgr_eth_mlx5::store_current_wqe_prop(mem_buf_desc_t *buf, xlio_ti *ti)
+void qp_mgr_eth_mlx5::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits, xlio_ti *ti)
 {
-    m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index] = (sq_wqe_prop) {buf, ti, m_sq_wqe_prop_last};
+    m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index] = sq_wqe_prop {
+        .buf = buf,
+        .credits = credits,
+        .ti = ti,
+        .next = m_sq_wqe_prop_last,
+    };
     m_sq_wqe_prop_last = &m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index];
     if (ti != NULL) {
         ti->get();
@@ -859,7 +869,7 @@ void qp_mgr_eth_mlx5::store_current_wqe_prop(mem_buf_desc_t *buf, xlio_ti *ti)
 //! Send one RAW packet by MLX5 BlueFlame
 //
 int qp_mgr_eth_mlx5::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
-                                  bool request_comp, xlio_tis *tis)
+                                  bool request_comp, xlio_tis *tis, unsigned credits)
 {
     struct xlio_mlx5_wqe_ctrl_seg *ctrl = NULL;
     struct mlx5_wqe_eth_seg *eseg = NULL;
@@ -885,11 +895,13 @@ int qp_mgr_eth_mlx5::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packe
     eseg->rsvd2 = 0;
     eseg->cs_flags = (uint8_t)(attr & (XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM) & 0xff);
 
-    /* Complete WQE */
-    fill_wqe(p_send_wqe);
-
     /* Store buffer descriptor */
-    store_current_wqe_prop(reinterpret_cast<mem_buf_desc_t *>(p_send_wqe->wr_id), tis);
+    store_current_wqe_prop(reinterpret_cast<mem_buf_desc_t *>(p_send_wqe->wr_id), credits, tis);
+
+    /* Complete WQE */
+    int wqebbs = fill_wqe(p_send_wqe);
+    assert(wqebbs > 0 && (unsigned)wqebbs <= credits);
+    NOT_IN_USE(wqebbs);
 
     /* Preparing next WQE and index */
     m_sq_wqe_hot = &(*m_sq_wqes)[m_sq_wqe_counter & (m_tx_num_wr - 1)];
@@ -1245,7 +1257,7 @@ inline void qp_mgr_eth_mlx5::tls_post_static_params_wqe(xlio_ti *ti,
     memset(tspseg, 0, sizeof(*tspseg));
 
     tls_fill_static_params_wqe(tspseg, info, key_id, resync_tcp_sn);
-    store_current_wqe_prop(nullptr, ti);
+    store_current_wqe_prop(nullptr, SQ_CREDITS_UMR, ti);
 
     ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs, num_wqebbs_top);
     dbg_dump_wqe((uint32_t *)m_sq_wqe_hot, sizeof(mlx5_set_tls_static_params_wqe));
@@ -1299,7 +1311,7 @@ inline void qp_mgr_eth_mlx5::tls_post_progress_params_wqe(xlio_ti *ti, uint32_t 
         (fence ? MLX5_FENCE_MODE_INITIATOR_SMALL : 0) | (is_tx ? 0 : MLX5_WQE_CTRL_CQ_UPDATE);
 
     tls_fill_progress_params_wqe(&wqe->params, tis_tir_number, next_record_tcp_sn);
-    store_current_wqe_prop(nullptr, ti);
+    store_current_wqe_prop(nullptr, SQ_CREDITS_SET_PSV, ti);
 
     ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs);
     dbg_dump_wqe((uint32_t *)m_sq_wqe_hot, sizeof(mlx5_set_tls_progress_params_wqe));
@@ -1340,7 +1352,7 @@ inline void qp_mgr_eth_mlx5::tls_get_progress_params_wqe(xlio_ti *ti, uint32_t t
     psv->psv_index[0] = htobe32(tirn);
     psv->va = htobe64((uintptr_t)buf);
 
-    store_current_wqe_prop(nullptr, ti);
+    store_current_wqe_prop(nullptr, SQ_CREDITS_GET_PSV, ti);
 
     ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs);
 
@@ -1376,7 +1388,7 @@ void qp_mgr_eth_mlx5::tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t l
     dseg->lkey = htobe32(lkey);
     dseg->byte_count = htobe32(len);
 
-    store_current_wqe_prop(nullptr, tis);
+    store_current_wqe_prop(nullptr, SQ_CREDITS_DUMP, tis);
 
     ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs);
 
@@ -1458,7 +1470,7 @@ void qp_mgr_eth_mlx5::post_nop_fence(void)
     cseg->qpn_ds = htobe32((m_mlx5_qp.qpn << MLX5_WQE_CTRL_QPN_SHIFT) | 0x01);
     cseg->fm_ce_se = MLX5_FENCE_MODE_INITIATOR_SMALL;
 
-    store_current_wqe_prop(nullptr, NULL);
+    store_current_wqe_prop(nullptr, SQ_CREDITS_NOP, NULL);
 
     ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, 1);
 
@@ -1518,18 +1530,18 @@ void qp_mgr_eth_mlx5::trigger_completion_for_all_sent_packets()
         send_wr.next = NULL;
         xlio_send_wr_opcode(send_wr) = XLIO_IBV_WR_SEND;
 
-        // Close the Tx unsignaled send list
-        set_unsignaled_count();
-
-        if (!m_p_ring->m_tx_num_wr_free) {
-            qp_logdbg("failed to trigger completion for all packets due to no available wr");
+        unsigned credits = credits_calculate(&send_wr);
+        if (!credits_get(credits)) {
+            // TODO Wait for available space in SQ to post the WQE. This method mustn't fail,
+            // because we may want to wait until all the WQEs are completed and we need to post
+            // something and request signal.
+            qp_logdbg("No space in SQ to trigger completions with a post operation");
             return;
         }
-        m_p_ring->m_tx_num_wr_free--;
 
         send_to_wire(&send_wr,
                      (xlio_wr_tx_packet_attr)(XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM),
-                     true, 0);
+                     true, nullptr, credits);
     }
 }
 
