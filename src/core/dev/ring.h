@@ -197,6 +197,14 @@ public:
         NOT_IN_USE(ctx);
     }
 
+    // TODO Add id argument for bonding
+    virtual bool credits_get(unsigned credits)
+    {
+        NOT_IN_USE(credits);
+        return false;
+    }
+    virtual void credits_return(unsigned credits) { NOT_IN_USE(credits); }
+
 protected:
     inline void set_parent(ring *parent) { m_parent = (parent ? parent : this); }
     inline void set_if_index(int if_index) { m_if_index = if_index; }

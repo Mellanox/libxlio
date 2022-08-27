@@ -101,6 +101,8 @@ public:
 struct sq_wqe_prop {
     /* A buffer held by the WQE. This is NULL for control WQEs. */
     mem_buf_desc_t *buf;
+    /* Number of credits (usually number of WQEBBs). */
+    unsigned credits;
     /* Transport interface (TIS/TIR) current WQE holds reference to. */
     xlio_ti *ti;
     struct sq_wqe_prop *next;
@@ -141,6 +143,16 @@ public:
 #endif
 
     void reset_inflight_zc_buffers_ctx(void *ctx);
+    // TODO Make credits API inline.
+    bool credits_get(unsigned credits)
+    {
+        if (m_sq_free_credits >= credits) {
+            m_sq_free_credits -= credits;
+            return true;
+        }
+        return false;
+    }
+    void credits_return(unsigned credits) { m_sq_free_credits += credits; }
 
 protected:
     void post_recv_buffer_rq(mem_buf_desc_t *p_mem_buf_desc);
@@ -166,6 +178,7 @@ protected:
     sq_wqe_prop *m_sq_wqe_idx_to_prop;
     sq_wqe_prop *m_sq_wqe_prop_last;
     unsigned m_sq_wqe_prop_last_signalled;
+    unsigned m_sq_free_credits;
     uint64_t m_rq_wqe_counter;
 
 private:
@@ -175,11 +188,10 @@ private:
     };
     virtual void dm_release_data(mem_buf_desc_t *buff) { m_dm_mgr.release_data(buff); }
 
-    inline void set_signal_in_next_send_wqe();
     int send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, bool request_comp,
-                     xlio_tis *tis);
+                     xlio_tis *tis, unsigned credits);
     inline int fill_wqe(xlio_ibv_send_wr *p_send_wqe);
-    inline void store_current_wqe_prop(mem_buf_desc_t *wr_id, xlio_ti *ti);
+    inline void store_current_wqe_prop(mem_buf_desc_t *wr_id, unsigned credits, xlio_ti *ti);
     void destroy_tis_cache(void);
 #ifdef DEFINED_UTLS
     inline void tls_fill_static_params_wqe(struct mlx5_wqe_tls_static_params_seg *params,

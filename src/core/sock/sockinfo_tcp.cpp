@@ -1192,7 +1192,7 @@ err_t sockinfo_tcp::ip_output(struct pbuf *p, struct tcp_seg *seg, void *v_p_con
 
     int rc = p_si_tcp->m_ops->postrouting(p, seg, attr);
     if (rc != 0) {
-        return ERR_RTE;
+        return rc;
     }
 
     if (flags & TCP_WRITE_ZEROCOPY) {

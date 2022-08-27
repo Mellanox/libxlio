@@ -223,7 +223,7 @@ enum {
     /* If possible, we won't produce TLS records smaller that this value. */
     TLS_RECORD_SMALLEST = 256U,
     TLS_RECORD_MAX = 16384U,
-    /* Block size which is enough to hold TLS header/trailer for zerocopy records. */
+    /* Block size big enough to hold TLS header/trailer for zerocopy records. */
     TLS_ZC_BLOCK = 32U,
 };
 
@@ -626,12 +626,18 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
         (base_info->version == TLS_1_2_VERSION) ? TLS_12_RECORD_OVERHEAD : TLS_13_RECORD_OVERHEAD;
 
     if (__optname == TLS_TX) {
+        if (!m_p_tx_ring->credits_get(SQ_CREDITS_TLS_TX_CONTEXT)) {
+            si_ulp_logdbg("No available space in SQ to create TLS TX context");
+            errno = ENOPROTOOPT;
+            return -1;
+        }
         m_expected_seqno = m_p_sock->get_next_tcp_seqno();
         m_next_recno_tx = be64toh(recno_be64);
         m_p_tis = m_p_tx_ring->tls_context_setup_tx(&m_tls_info_tx);
-        /* We don't need key for TX anymore */
+        /* We don't need key for TX anymore. */
         memset(m_tls_info_tx.key, 0, keylen);
         if (unlikely(!m_p_tis)) {
+            m_p_tx_ring->credits_return(SQ_CREDITS_TLS_TX_CONTEXT);
             errno = ENOPROTOOPT;
             return -1;
         }
@@ -664,8 +670,17 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
 
         if (m_p_tir) {
             uint32_t next_seqno_rx = m_p_sock->get_next_tcp_seqno_rx();
-            int rc = m_p_tx_ring->tls_context_setup_rx(m_p_tir, &m_tls_info_rx, next_seqno_rx,
+            int rc = -1;
+
+            if (m_p_tx_ring->credits_get(SQ_CREDITS_TLS_RX_CONTEXT)) {
+                rc = m_p_tx_ring->tls_context_setup_rx(m_p_tir, &m_tls_info_rx, next_seqno_rx,
                                                        &rx_comp_callback, this);
+                if (unlikely(rc != 0)) {
+                    m_p_tx_ring->credits_return(SQ_CREDITS_TLS_RX_CONTEXT);
+                }
+            } else {
+                si_ulp_logdbg("No available space in SQ to create TLS RX context");
+            }
             if (unlikely(rc != 0)) {
                 m_p_tx_ring->tls_release_tir(m_p_tir);
                 m_p_tir = nullptr;
@@ -735,7 +750,7 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
 
     xlio_tx_call_attr_t tls_arg;
     struct iovec *p_iov;
-    struct iovec tls_iov[3];
+    struct iovec tls_iov[3]; /* 3 elements are for zerocopy case: header, payload and trailer. */
     uint64_t last_recno;
     ssize_t ret;
     size_t pos;
@@ -899,7 +914,7 @@ int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_
                 assert(p->next && p->next->desc.attr == PBUF_DESC_MDESC);
                 tls_record *rec = dynamic_cast<tls_record *>((mem_desc *)p->next->desc.mdesc);
                 if (unlikely(!rec)) {
-                    return -1;
+                    return ERR_RTE;
                 }
 
                 si_ulp_logdbg("TX resync flow: record_number=%lu seqno%u", rec->m_record_number,
@@ -913,6 +928,42 @@ int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_
                 unsigned mss = m_p_sock->get_mss();
                 uint32_t totlen = seg->seqno - rec->m_seqno;
                 uint32_t lkey = LKEY_USE_DEFAULT;
+                uint32_t hdrlen = 0;
+                uint32_t taillen = 0;
+
+                if (is_zerocopy) {
+                    hdrlen = std::min<uint32_t>(
+                        TLS_RECORD_HDR_LEN + (is_tx_tls13() ? 0 : TLS_RECORD_IV_LEN), totlen);
+                    taillen = TLS_RECORD_TAG_LEN + !!is_tx_tls13();
+                    /* Determine the trailer portion to resend. */
+                    taillen = std::max<uint32_t>(totlen + taillen, rec->m_size) - rec->m_size;
+                }
+
+                /*
+                 * Request precise number of credits for DUMP WQEs and UMR/SET_PSV WQEs:
+                 *
+                 * - Number of DUMP WQEs:
+                 *   DUMP WQEs don't support TSO, therefore, we send data in MSS length blocks.
+                 *   For zerocopy case we send header and trailer in separated WQEs, because
+                 *   they're not contiguous with the payload.
+                 *
+                 * - Credits formula:
+                 *   Resync contains from optional UMR, SET_PSV, multiple DUMP WQEs. If there
+                 *   are no DUMP WQEs (resync happens at the beginning of a TLS record) we need
+                 *   to post a single NOP WQE.
+                 *
+                 * TODO Send DUMP WQEs in MTU length blocks instead of MSS.
+                 */
+                unsigned dump_nr =
+                    (totlen - hdrlen - taillen + mss - 1) / mss + (hdrlen != 0) + (taillen != 0);
+                unsigned credits = SQ_CREDITS_SET_PSV + !skip_static * SQ_CREDITS_UMR +
+                    dump_nr * SQ_CREDITS_DUMP + !dump_nr * SQ_CREDITS_NOP;
+                si_ulp_logdbg("TX resync flow: requesting %u credits to resync %" PRIu32 " bytes",
+                              credits, totlen);
+                if (!m_p_tx_ring->credits_get(credits)) {
+                    si_ulp_logdbg("TX resync flow: no available %u credits in SQ", credits);
+                    return ERR_WOULDBLOCK;
+                }
 
                 if (!skip_static) {
                     memcpy(m_tls_info_tx.rec_seq, &recno_be64, TLS_AES_GCM_REC_SEQ_LEN);
@@ -923,16 +974,10 @@ int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_
                     m_p_tx_ring->post_nop_fence();
                 } else {
                     bool b_fence = true;
-                    uint32_t hdrlen;
-                    uint32_t taillen = 0;
                     uint8_t *addr_tail;
 
                     if (is_zerocopy) {
-                        hdrlen = std::min<uint32_t>(
-                            TLS_RECORD_HDR_LEN + (is_tx_tls13() ? 0 : TLS_RECORD_IV_LEN), totlen);
-                        taillen = TLS_RECORD_TAG_LEN + !!is_tx_tls13();
-                        /* Determine the trailer portion to be resend. */
-                        taillen = std::max<uint32_t>(totlen + taillen, rec->m_size) - rec->m_size;
+                        /* hdrlen and taillen are prepared above. */
                         m_p_tx_ring->tls_tx_post_dump_wqe(m_p_tis, (void *)addr, hdrlen,
                                                           LKEY_USE_DEFAULT, true);
                         addr_tail = addr + hdrlen;
@@ -941,6 +986,7 @@ int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_
                         lkey = rec->get_lkey(reinterpret_cast<mem_buf_desc_t *>(p),
                                              m_p_sock->get_ctx(), addr, totlen);
                         b_fence = false;
+                        --dump_nr;
                     }
 
                     while (totlen > 0) {
@@ -950,14 +996,18 @@ int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_
                         totlen -= len;
                         addr += len;
                         b_fence = false;
+                        --dump_nr;
                     }
 
                     if (is_zerocopy && taillen) {
                         m_p_tx_ring->tls_tx_post_dump_wqe(m_p_tis, (void *)addr_tail, taillen,
                                                           LKEY_USE_DEFAULT, false);
+                        --dump_nr;
                     }
                 }
 
+                assert(dump_nr == 0);
+                NOT_IN_USE(dump_nr);
                 m_expected_seqno = seg->seqno;
 
                 /* Statistics */
@@ -1273,7 +1323,9 @@ err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
         p = ptmp;
     }
 
-    if (unlikely(resync_requested && !m_rx_psv_buf)) {
+    if (unlikely(resync_requested && !m_rx_psv_buf) &&
+        m_p_tx_ring->credits_get(SQ_CREDITS_TLS_RX_GET_PSV)) {
+        /* If we fail to request credits we will retry resync flow with the next incoming packet. */
         m_rx_psv_buf = m_p_sock->tcp_tx_mem_buf_alloc(PBUF_RAM);
         m_rx_psv_buf->lwip_pbuf.pbuf.payload =
             (void *)(((uintptr_t)m_rx_psv_buf->p_buffer + 63U) >> 6U << 6U);
@@ -1545,9 +1597,14 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
         int tracker = params->state >> 6U;
         int auth = (params->state >> 4U) & 0x3U;
         if (tracker == TLS_TRACKER_TRACKING && auth == TLS_AUTH_NO_OFFLOAD) {
-            uint64_t recno_be64 = htobe64(utls->find_recno(resync_seqno));
-            memcpy(utls->m_tls_info_rx.rec_seq, &recno_be64, TLS_AES_GCM_REC_SEQ_LEN);
-            utls->m_p_tx_ring->tls_resync_rx(utls->m_p_tir, &utls->m_tls_info_rx, resync_seqno);
+            if (utls->m_p_tx_ring->credits_get(SQ_CREDITS_TLS_RX_RESYNC)) {
+                uint64_t recno_be64 = htobe64(utls->find_recno(resync_seqno));
+                memcpy(utls->m_tls_info_rx.rec_seq, &recno_be64, TLS_AES_GCM_REC_SEQ_LEN);
+                utls->m_p_tx_ring->tls_resync_rx(utls->m_p_tir, &utls->m_tls_info_rx, resync_seqno);
+            } else {
+                /* We will retry RX resync with the next incoming packet. */
+                vlog_printf(VLOG_DEBUG, "Skip TLS RX resync due to full SQ\n");
+            }
         } else {
             /* TODO Investigate this case. It isn't described in PRM. */
         }
