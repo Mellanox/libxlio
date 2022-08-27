@@ -597,7 +597,7 @@ int qp_mgr::send(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio
      * - First call of send() should do completion. It means that
      *   m_n_unsignaled_count must be zero for this time.
      */
-    bool request_comp = (is_completion_need() || (p_mem_buf_desc->m_flags & mem_buf_desc_t::ZCOPY));
+    bool request_comp = (p_mem_buf_desc->m_flags & mem_buf_desc_t::ZCOPY);
 
     qp_logfunc("VERBS send, unsignaled_count: %d", m_n_unsignaled_count);
 
@@ -628,22 +628,15 @@ int qp_mgr::send(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio
     TAKE_T_TX_POST_SEND_END;
 #endif
 
-    if (request_comp) {
-        int ret;
-
-        set_unsignaled_count();
-
-        // Poll the Tx CQ
+    if (request_comp || is_signal_requested_for_last_wqe()) {
         uint64_t dummy_poll_sn = 0;
-        ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
+        int ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
         BULLSEYE_EXCLUDE_BLOCK_START
         if (ret < 0) {
             qp_logerr("error from cq_mgr_tx->process_next_element (ret=%d %m)", ret);
         }
         BULLSEYE_EXCLUDE_BLOCK_END
         qp_logfunc("polling succeeded on tx cq_mgr (%d wce)", ret);
-    } else {
-        m_n_unsignaled_count--;
     }
 
     return 0;
