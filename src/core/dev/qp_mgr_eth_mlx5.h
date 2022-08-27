@@ -218,6 +218,8 @@ private:
     int m_sq_wqe_hot_index;
     uint16_t m_sq_wqe_counter;
 
+    bool m_b_fence_needed;
+
     bool m_dm_enabled;
     dm_mgr m_dm_mgr;
     /*

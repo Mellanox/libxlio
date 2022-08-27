@@ -253,7 +253,8 @@ qp_mgr_eth_mlx5::qp_mgr_eth_mlx5(struct qp_mgr_desc *desc, const uint32_t tx_num
     , m_sq_wqes_end(NULL)
     , m_sq_wqe_hot_index(0)
     , m_sq_wqe_counter(0)
-    , m_dm_enabled(0)
+    , m_b_fence_needed(false)
+    , m_dm_enabled(false)
 {
     // Check device capabilities for dummy send support
     m_hw_dummy_send_support = xlio_is_nop_supported(m_p_ib_ctx_handler->get_ibv_device_attr());
@@ -478,17 +479,28 @@ cq_mgr *qp_mgr_eth_mlx5::init_tx_cq_mgr()
                            m_p_ring->get_tx_comp_event_channel(), false);
 }
 
-inline void qp_mgr_eth_mlx5::set_signal_in_next_send_wqe()
-{
-    volatile struct mlx5_eth_wqe *wqe = &(*m_sq_wqes)[m_sq_wqe_counter & (m_tx_num_wr - 1)];
-    wqe->ctrl.data[2] = htonl(8);
-}
-
 inline void qp_mgr_eth_mlx5::ring_doorbell(uint64_t *wqe, int db_method, int num_wqebb,
                                            int num_wqebb_top)
 {
     uint64_t *dst = (uint64_t *)((uint8_t *)m_mlx5_qp.bf.reg + m_mlx5_qp.bf.offset);
     uint64_t *src = wqe;
+    struct xlio_mlx5_wqe_ctrl_seg *ctrl = reinterpret_cast<struct xlio_mlx5_wqe_ctrl_seg *>(wqe);
+
+    /* TODO Refactor m_n_unsignedled_count, is_completion_need(), set_unsignaled_count():
+     * Some logic is hidden inside the methods and in one branch the field is changed directly.
+     */
+    if (is_completion_need()) {
+        ctrl->fm_ce_se |= MLX5_WQE_CTRL_CQ_UPDATE;
+    }
+    if (ctrl->fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE) {
+        set_unsignaled_count();
+    } else {
+        --m_n_unsignaled_count;
+    }
+    if (unlikely(m_b_fence_needed)) {
+        ctrl->fm_ce_se |= MLX5_FENCE_MODE_INITIATOR_SMALL;
+        m_b_fence_needed = false;
+    }
 
     m_sq_wqe_counter = (m_sq_wqe_counter + num_wqebb + num_wqebb_top) & 0xFFFF;
 
@@ -497,7 +509,7 @@ inline void qp_mgr_eth_mlx5::ring_doorbell(uint64_t *wqe, int db_method, int num
     wmb();
     *m_mlx5_qp.sq.dbrec = htonl(m_sq_wqe_counter);
 
-    // This wc_wmb ensures ordering between DB record and BF copy */
+    // This wc_wmb ensures ordering between DB record and BF copy
     wc_wmb();
     if (likely(db_method == MLX5_DB_METHOD_BF)) {
         /* Copying src to BlueFlame register buffer by Write Combining cnt WQEBBs
@@ -1029,7 +1041,7 @@ xlio_tis *qp_mgr_eth_mlx5::tls_context_setup_tx(const xlio_tls_info *info)
     tls_post_static_params_wqe(tis, info, tisn, tis->get_dek_id(), 0, false, true);
     tls_post_progress_params_wqe(tis, tisn, 0, false, true);
     /* The 1st post after TLS configuration must be with fence. */
-    post_nop_fence();
+    m_b_fence_needed = true;
 
     assert(!tis->m_released);
 
@@ -1045,6 +1057,7 @@ void qp_mgr_eth_mlx5::tls_context_resync_tx(const xlio_tls_info *info, xlio_tis 
         tls_post_static_params_wqe(tis, info, tisn, tis->get_dek_id(), 0, true, true);
     }
     tls_post_progress_params_wqe(tis, tisn, 0, skip_static, true);
+    m_b_fence_needed = true;
 }
 
 xlio_tir *qp_mgr_eth_mlx5::tls_create_tir(bool cached)
@@ -1514,7 +1527,6 @@ void qp_mgr_eth_mlx5::trigger_completion_for_all_sent_packets()
         }
         m_p_ring->m_tx_num_wr_free--;
 
-        set_signal_in_next_send_wqe();
         send_to_wire(&send_wr,
                      (xlio_wr_tx_packet_attr)(XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM),
                      true, 0);
