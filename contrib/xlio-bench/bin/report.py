@@ -12,19 +12,10 @@ import parse
 import elastic_tools
 from distutils.util import strtobool
 from uuid import uuid4
+import json
 
 
-wrk_out_tpl = """Running {duration} test @ {url}
-{num_threads:>d} threads and {num_connections:d} connections
-{}
-{}
-{}
-{}
-Requests/sec:{rps:>f}
-Transfer/sec:{throughput:>f}{throughput_unit}
-"""
-
-output_dir_tpl = "{mode}-{proto}-{payload_size}-{num_threads}-{num_connections}"
+output_dir_tpl = "{mode}-{proto}-{payload_size}-{num_threads}-{num_connections}-{tls_mode}"
 nginx_out_tpl = "XLIO INFO   : Number of Nginx workers{workers:>d}"
 exit_code = 0
 # pr_id = os.environ.get("CHANGE_ID")  # get Github PR ID from Jenkins Pull Request Builder plugin
@@ -56,15 +47,17 @@ def search(template, text):
     else:
         raise TemplateMatchException(f"String '{text}' doesn't match template '{template}'")
 
-
-def to_gb(num_bytes, units):
-    human_bytes = {
-        "gb": 1024 ** 3,
-        "mb": 1024 ** 2,
-        "kb": 1024,
+def dehumanize(size_str):
+    units = {
+        "KB": 1000,
+        "MB": 1000 ** 2,
+        "GB": 1000 ** 3,
+        "B":  1,
     }
-    num_bytes *= human_bytes[units]
-    return num_bytes / 1024 ** 3
+    size_str = size_str.upper()
+    for u in units.keys():
+        if size_str.endswith(u):
+            return int(size_str.replace(u, "")) * units[u]
 
 
 def find_first(path, glob_pattern):
@@ -90,9 +83,22 @@ def process_dir(run_id, output_dir):
     try:
         settings = search(output_dir_tpl, output_dir.name)
 
-        with open_and_handle_errors(output_dir, "**/wrk.out") as wrk_file:
-            text = wrk_file.read()
-            wrk_data = search(wrk_out_tpl, text)
+        wrk_data = []
+        for json_file in output_dir.glob("**/client*/wrk.out.json"):
+            print(f"Loading {json_file}")
+            wrk_data.append(json.load(open(json_file))["json_report"])
+        print(f"wrk_data={wrk_data}")
+        if not wrk_data:
+            print(f"Cannot load any data from wrk.out.json files in {output_dir}")
+            sys.exit(1)
+
+        wrk_sum = {}
+        for key in ["requests", "bytes"]:
+            wrk_sum[key] = sum([d[key] for d in wrk_data])
+        duration = wrk_data[0]["duration"] / 1_000_000
+        rps = round(wrk_sum["requests"] / duration, 2)
+        gigabits = wrk_sum["bytes"] * 8 / 1000 ** 3
+        throughput = round(gigabits / duration, 3)
 
         with open_and_handle_errors(output_dir, "**/*server*/nginx_num_workers") as nginx_file:
             nginx_data = {"workers": int(nginx_file.read().strip())}
@@ -107,7 +113,7 @@ def process_dir(run_id, output_dir):
                     samples_idle.append(float(row[5]))
             nmon_data["cpu_usage"] = round(mean([100 - s for s in samples_idle[10:]]), 3)
 
-        print(f"Processed directory {output_dir}, run ID {run_id}")
+        print(f"Processed directory {output_dir}, run ID {run_id}, results: RPS={rps}, throughput={throughput} Gbit/s")
 
         created_at = datetime.fromtimestamp(output_dir.stat().st_ctime)
         return {
@@ -119,8 +125,9 @@ def process_dir(run_id, output_dir):
             "Proto(http/https)": settings["proto"],
             "Workers": nginx_data["workers"],
             "Payload": settings["payload_size"],
-            "Throughput(Gbps)": wrk_data["throughput"],
-            "Rate(RPS)": wrk_data["rps"],
+            "payload_bytes": dehumanize(settings["payload_size"]),
+            "Throughput(Gbps)": throughput,
+            "Rate(RPS)": rps,
             "CPU(%)": nmon_data["cpu_usage"],
             "CPUs": nmon_data["cpus"],
             # "nmon_data": nmon_data,
@@ -129,18 +136,12 @@ def process_dir(run_id, output_dir):
             "branch": pr_id,
             "is_baseline": set_as_baseline,
             "is_head": False,
+            "duration": round(duration),
         }
     except Exception as e:
         print(f"Error while processing {output_dir}: {e}")
         traceback.print_tb(e.__traceback__)
         exit_code = 1
-
-
-def print_csv(data, file_obj):
-    writer = csv.DictWriter(file_obj, data[0].keys())
-    writer.writeheader()
-    for d in data:
-        writer.writerow(d)
 
 
 def get_dirs_from_args(args):
