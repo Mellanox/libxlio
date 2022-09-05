@@ -95,17 +95,17 @@ main()
     echo "setup wrk work dir..."
     mkdir -p "$work_dir"
     
-    local -r wrk_cmd="$env_dir/bin/wrk"
+    local -r wrk_cmd="$ROOT_DIR/lib/wrk-json.sh"
 
     # start wrk
     if (($cps)); then
         set -x
         stdbuf -oL $wrk_cmd -t "$threads" -c "$connections" -d "$duration" -H 'Connection: close' \
-            "$proto://$peer/$payload.bin" |& ( trap '' INT; tee "$work_dir/wrk.out" )
+            "$proto://$peer/$payload.bin" |& ( trap '' INT; tee "$work_dir/wrk.out.json" )
     else
         set -x
         stdbuf -oL $wrk_cmd -t "$threads" -c "$connections" -d "$duration" \
-            "$proto://$peer/$payload.bin" |& ( trap '' INT; tee "$work_dir/wrk.out" )
+            "$proto://$peer/$payload.bin" |& ( trap '' INT; tee "$work_dir/wrk.out.json" )
     fi
 }
 
