@@ -191,8 +191,8 @@ protected:
      * - for Tx wce the data buffers will be released to the associated ring before the mem_buf_desc
      * are returned
      */
-    mem_buf_desc_t *process_cq_element_tx(xlio_ibv_wc *p_wce);
-    mem_buf_desc_t *process_cq_element_rx(xlio_ibv_wc *p_wce);
+    mem_buf_desc_t *cqe_log_and_get_buf_tx(xlio_ibv_wc *p_wce);
+    mem_buf_desc_t *cqe_process_rx(xlio_ibv_wc *p_wce);
     virtual void reclaim_recv_buffer_helper(mem_buf_desc_t *buff);
 
     // Returns true if the given buffer was used,
