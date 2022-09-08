@@ -184,9 +184,9 @@ uint32_t cq_mgr::clean_cq()
     while ((ret = poll(wce, MCE_MAX_CQ_POLL_BATCH, &cq_poll_sn)) > 0) {
         for (int i = 0; i < ret; i++) {
             if (m_b_is_rx) {
-                buff = process_cq_element_rx(&wce[i]);
+                buff = cqe_process_rx(&wce[i]);
             } else {
-                buff = process_cq_element_tx(&wce[i]);
+                buff = cqe_log_and_get_buf_tx(&wce[i]);
             }
             if (buff) {
                 m_rx_queue.push_back(buff);
@@ -490,7 +490,7 @@ void cq_mgr::process_cq_element_log_helper(mem_buf_desc_t *p_mem_buf_desc, xlio_
                priv_ibv_wc_status_str(p_wce->status), p_wce->status, p_wce->wr_id, p_wce->qp_num);
 }
 
-mem_buf_desc_t *cq_mgr::process_cq_element_tx(xlio_ibv_wc *p_wce)
+mem_buf_desc_t *cq_mgr::cqe_log_and_get_buf_tx(xlio_ibv_wc *p_wce)
 {
     // Assume locked!!!
     cq_logfuncall("");
@@ -502,7 +502,7 @@ mem_buf_desc_t *cq_mgr::process_cq_element_tx(xlio_ibv_wc *p_wce)
     return p_mem_buf_desc;
 }
 
-mem_buf_desc_t *cq_mgr::process_cq_element_rx(xlio_ibv_wc *p_wce)
+mem_buf_desc_t *cq_mgr::cqe_process_rx(xlio_ibv_wc *p_wce)
 {
     // Assume locked!!!
     cq_logfuncall("");
@@ -692,7 +692,7 @@ int cq_mgr::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_read
         }
 
         for (int i = 0; i < ret; i++) {
-            mem_buf_desc_t *buff = process_cq_element_rx((&wce[i]));
+            mem_buf_desc_t *buff = cqe_process_rx((&wce[i]));
             if (buff) {
                 if (xlio_wc_opcode(wce[i]) & XLIO_IBV_WC_RECV) {
                     if ((++m_qp_rec.debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
@@ -726,7 +726,7 @@ int cq_mgr::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
         }
 
         for (int i = 0; i < ret; i++) {
-            mem_buf_desc_t *buff = process_cq_element_tx((&wce[i]));
+            mem_buf_desc_t *buff = cqe_log_and_get_buf_tx((&wce[i]));
             if (buff) {
                 process_tx_buffer_list(buff);
             }
@@ -834,7 +834,7 @@ int cq_mgr::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id /*=NULL*/
         }
 
         for (int i = 0; i < ret; i++) {
-            mem_buf_desc_t *buff = process_cq_element_rx(&wce[i]);
+            mem_buf_desc_t *buff = cqe_process_rx(&wce[i]);
             if (buff) {
                 if (p_recycle_buffers_last_wr_id) {
                     m_p_cq_stat->n_rx_pkt_drop++;

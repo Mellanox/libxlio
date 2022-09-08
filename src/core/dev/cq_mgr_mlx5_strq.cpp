@@ -209,7 +209,7 @@ uint32_t cq_mgr_mlx5_strq::clean_cq()
     mem_buf_desc_t *stride_buf = nullptr;
     buff_status_e status = BS_OK;
     while ((buff = poll(status, stride_buf)) || stride_buf) {
-        if (stride_buf && process_cq_element_rx(stride_buf, status)) {
+        if (stride_buf && cqe_process_rx(stride_buf, status)) {
             m_rx_queue.push_back(stride_buf);
         }
 
@@ -579,7 +579,7 @@ int cq_mgr_mlx5_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *
 
         if (buff) {
             ++ret;
-            if (process_cq_element_rx(buff, status)) {
+            if (cqe_process_rx(buff, status)) {
                 ++ret_rx_processed;
                 process_recv_buffer(buff, pv_fd_ready_array);
             }

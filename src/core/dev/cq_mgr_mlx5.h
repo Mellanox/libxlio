@@ -67,8 +67,7 @@ public:
     virtual int poll_and_process_element_tx(uint64_t *p_cq_poll_sn);
     int poll_and_process_error_element_tx(struct xlio_mlx5_cqe *cqe, uint64_t *p_cq_poll_sn);
 
-    virtual mem_buf_desc_t *process_cq_element_rx(mem_buf_desc_t *p_mem_buf_desc,
-                                                  enum buff_status_e status);
+    mem_buf_desc_t *cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc, enum buff_status_e status);
     virtual void add_qp_rx(qp_mgr *qp);
     void set_qp_rq(qp_mgr *qp);
     virtual void add_qp_tx(qp_mgr *qp);
