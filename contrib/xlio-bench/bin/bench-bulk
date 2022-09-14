@@ -38,12 +38,23 @@ _step()
     local -r payload=${4:?}
     local -r threads=${5:?}
     local -r connections=${6:?}
-    local -r work_dir=${7:?}
+    local -r tls_mode=${7:?}
+    local -r work_dir=${8:?}
 
-    local -r step_work_dir="$work_dir/$mode-$proto-$payload-$threads-$connections"
+    local -r step_work_dir="$work_dir/$mode-$proto-$payload-$threads-$connections-${tls_mode}tls"
 
     # skip if already completed
     [[ -r "$step_work_dir/status" && "$(cat $step_work_dir/status)" = "0" ]] && return 0;
+
+    # toggle hardware TLS on all Mellanox interfaces:
+    local IFACE
+    for IFACE in $(lshw -class network -short -quiet |grep MT.*Family | awk '{print $2}'); do
+        if [[ "$tls_mode" == "hw" ]]; then
+            ethtool -K "$IFACE" tls-hw-rx-offload on || true # ethtool -K will fail if tls-hw-rx-offload is not supported
+        else
+            ethtool -K "$IFACE" tls-hw-rx-offload off || true
+        fi
+    done
 
     # lunch server
     local -r server_work_dir="$step_work_dir/server"
@@ -129,6 +140,7 @@ _main()
         * $(echo "$BULK_PAYLOADS" | wc -w) \
         * $(echo "$BULK_THREADS" | wc -w) \
         * $(echo "$BULK_CONNECTIONS" | wc -w) \
+        * $(echo "$BULK_TLS_MODE" | wc -w) \
     ))
 
     local id=1
@@ -137,9 +149,11 @@ _main()
             for payload in $BULK_PAYLOADS; do
                 for tn in $BULK_THREADS; do
                     for cn in $BULK_CONNECTIONS; do
-                        echo -e "\n\nStep $id/$total_steps at $(date +'%F %T')..."
-                        _step $BULK_TYPE $mode $proto $payload $tn $cn "$work_dir"
-                        id=$((id + 1))
+                        for tls_mode in $BULK_TLS_MODE; do
+                            echo -e "\n\nStep $id/$total_steps at $(date +'%F %T')..."
+                            _step $BULK_TYPE $mode $proto $payload $tn $cn $tls_mode "$work_dir"
+                            id=$((id + 1))
+                        done
                     done
                 done
             done
