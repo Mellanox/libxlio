@@ -115,6 +115,13 @@ def process_dir(run_id, output_dir):
 
         print(f"Processed directory {output_dir}, run ID {run_id}, results: RPS={rps}, throughput={throughput} Gbit/s")
 
+        with open("/proc/cpuinfo") as cpuinfo:
+            for line in cpuinfo:
+                if line.startswith("cpu MHz"):
+                    mhz = int(float(line.split()[-1]))
+
+        cpu_cycles_per_req = mhz * 10 ** 6 * nginx_data["workers"] * nmon_data["cpu_usage"] / 100 / rps
+
         created_at = datetime.fromtimestamp(output_dir.stat().st_ctime)
         return {
             "benchmark_id": benchmark_id,  # common ID of several shapshots (one benchmark run)
@@ -130,6 +137,8 @@ def process_dir(run_id, output_dir):
             "Rate(RPS)": rps,
             "CPU(%)": nmon_data["cpu_usage"],
             "CPUs": nmon_data["cpus"],
+            "cpu_freq": mhz,
+            "cpu_cycles_per_req": cpu_cycles_per_req,
             # "nmon_data": nmon_data,
             "run_id": str(run_id),
             "title": f"pr{pr_id}_run{run_id}_{settings['proto']}_{settings['mode']}_{nginx_data['workers']}_{settings['payload_size']}",
