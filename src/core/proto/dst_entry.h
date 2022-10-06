@@ -124,6 +124,16 @@ public:
         m_p_ring->reset_inflight_zc_buffers_ctx(m_id, ctx);
     }
 
+    inline bool is_the_same_ifname(const std::string &ifname)
+    {
+        return ifname.compare(m_p_net_dev_val->get_ifname()) == 0;
+    }
+
+    inline bool is_the_same_ifname(const std::string &&ifname)
+    {
+        return is_the_same_ifname(ifname);
+    }
+
 protected:
     ip_address m_dst_ip;
     in_port_t m_dst_port;
