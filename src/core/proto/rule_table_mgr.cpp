@@ -111,11 +111,6 @@ void rule_table_mgr::parse_entry(struct nlmsghdr *nl_header)
     // get rule entry header
     rt_msg = (struct rtmsg *)NLMSG_DATA(nl_header);
 
-    // we are not concerned about the local and default rule table
-    if (rt_msg->rtm_table == RT_TABLE_LOCAL) {
-        return;
-    }
-
     val.set_family(rt_msg->rtm_family);
     val.set_protocol(rt_msg->rtm_protocol);
     val.set_scope(rt_msg->rtm_scope);

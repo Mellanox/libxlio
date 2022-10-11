@@ -243,10 +243,6 @@ void route_table_mgr::parse_entry(struct nlmsghdr *nl_header)
     // get route entry header
     rt_msg = (struct rtmsg *)NLMSG_DATA(nl_header);
 
-    // we are not concerned about the local and default route table
-    if (rt_msg->rtm_table == RT_TABLE_LOCAL) {
-        return;
-    }
     if (rt_msg->rtm_family != AF_INET && rt_msg->rtm_family != AF_INET6) {
         return;
     }
