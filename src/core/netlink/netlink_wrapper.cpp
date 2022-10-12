@@ -191,8 +191,7 @@ void netlink_wrapper::route_cache_callback(nl_object *obj)
     if (route) {
         int table_id = rtnl_route_get_table(route);
         int family = rtnl_route_get_family(route);
-        if ((table_id > (int)RT_TABLE_UNSPEC) && (table_id != RT_TABLE_LOCAL) &&
-            (family == AF_INET || family == AF_INET6)) {
+        if ((table_id > (int)RT_TABLE_UNSPEC) && (family == AF_INET || family == AF_INET6)) {
             route_nl_event new_event(g_nl_rcv_arg.msghdr, route, g_nl_rcv_arg.netlink);
             nl_logdbg("notify on route event: %s", new_event.to_str().c_str());
             netlink_wrapper::notify_observers(&new_event, nlgrpROUTE);
