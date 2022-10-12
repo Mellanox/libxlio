@@ -89,7 +89,7 @@ const std::string route_val::to_str() const
     return rc;
 }
 
-void route_val::print_val()
+void route_val::print_val() const
 {
     rt_val_logdbg("%s", to_str().c_str());
 }

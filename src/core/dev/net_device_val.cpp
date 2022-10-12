@@ -537,7 +537,7 @@ const std::string net_device_val::to_str_ex() const
     return rc;
 }
 
-void net_device_val::print_val()
+void net_device_val::print_val() const
 {
     nd_logdbg("%s", to_str_ex().c_str());
 
