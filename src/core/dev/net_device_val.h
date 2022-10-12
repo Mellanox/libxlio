@@ -232,7 +232,7 @@ public:
     bool ipv6_optimistic_dad() const { return m_ipv6_optimistic_dad; }
     bool ipv6_use_optimistic() const { return m_ipv6_use_optimistic; }
     int ipv6_use_tempaddr() const { return m_ipv6_use_tempaddr; }
-    void print_val();
+    void print_val() const;
     void set_ip_array();
 
     ring *reserve_ring(resource_allocation_key *); // create if not exists

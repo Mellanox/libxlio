@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 
+#include <algorithm>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -347,39 +348,50 @@ void route_table_mgr::parse_attr(struct rtattr *rt_attribute, route_val &val)
 void route_table_mgr::print_tbl()
 {
     if (g_vlogger_level >= VLOG_DEBUG) {
-        for (auto iter = m_table_in6.begin(); iter != m_table_in6.end(); ++iter) {
-            (*iter).print_val();
+        for (const auto &table_entry : m_table_in6) {
+            table_entry.print_val();
         }
-        for (auto iter = m_table_in4.begin(); iter != m_table_in4.end(); ++iter) {
-            (*iter).print_val();
+        for (const auto &table_entry : m_table_in4) {
+            table_entry.print_val();
         }
     }
+}
+
+static inline route_val *find_route_val(route_table_t &table, const ip_address &dst,
+                                        uint32_t table_id)
+{
+    int longest_prefix = -1;
+    route_val *found {nullptr};
+
+    /* This code block does too much:
+     *  - std::views::filter(not(is_deleted))
+     *  - std::views::filter([&] (route_val &val) {return val.get_table_id() == table_id;})
+     *  - std::ranges::max(...filters..., [&] (route_val &a, route_val &b)
+     *                    {return a.get_dst_pref_len() > b.get_dst_pref_len();})
+     *  - Return the result or nullptr
+     */
+    for (auto &val : table) {
+        bool is_valid_entry_with_longer_prefix = !val.is_deleted() &&
+            val.get_table_id() == table_id &&
+            val.get_dst_addr().is_equal_with_prefix(dst, val.get_dst_pref_len(),
+                                                    val.get_family()) &&
+            val.get_dst_pref_len() > longest_prefix;
+
+        if (is_valid_entry_with_longer_prefix) {
+            longest_prefix = val.get_dst_pref_len();
+            found = &val;
+        }
+    }
+
+    return found;
 }
 
 bool route_table_mgr::find_route_val(route_table_t &table, const ip_address &dst, uint32_t table_id,
                                      route_val *&p_val)
 {
-    route_val *correct_route_val = NULL;
-    int longest_prefix = -1;
+    p_val = ::find_route_val(table, dst, table_id);
 
-    for (auto iter = table.begin(); iter != table.end(); ++iter) {
-        route_val &val = *iter;
-        if (!val.is_deleted()) { // Value was not deleted
-            if (val.get_table_id() == table_id) { // Found a match in routing table ID
-                if (val.get_dst_addr().is_equal_with_prefix(dst, val.get_dst_pref_len(),
-                                                            val.get_family())) {
-                    // Found a match in routing table
-                    if (val.get_dst_pref_len() > longest_prefix) {
-                        // This is the longest prefix match
-                        longest_prefix = val.get_dst_pref_len();
-                        correct_route_val = &val;
-                    }
-                }
-            }
-        }
-    }
-    if (correct_route_val) {
-        p_val = correct_route_val;
+    if (p_val) {
         rt_mgr_logdbg("dst addr '%s' -> route val: %s, if_name: %s",
                       dst.to_str(p_val->get_family()).c_str(), p_val->to_str().c_str(),
                       p_val->get_if_name());
@@ -404,19 +416,23 @@ bool route_table_mgr::route_resolve(IN route_rule_table_key key, OUT route_resul
     g_p_rule_table_mgr->rule_resolve(key, table_id_list);
 
     std::lock_guard<decltype(m_lock)> lock(m_lock);
-    for (auto iter = table_id_list.begin(); iter != table_id_list.end(); ++iter) {
-        if (find_route_val(rt, dst_addr, *iter, p_val)) {
+
+    for (auto table_id : table_id_list) {
+        p_val = ::find_route_val(rt, dst_addr, table_id);
+        if (p_val) {
             res.src = p_val->get_src_addr();
+            res.gw = p_val->get_gw_addr();
+            res.mtu = p_val->get_mtu();
+
             rt_mgr_logdbg("dst ip '%s' resolved to src addr '%s'", dst_addr.to_str(family).c_str(),
                           res.src.to_str(family).c_str());
-            res.gw = p_val->get_gw_addr();
             rt_mgr_logdbg("dst ip '%s' resolved to gw addr '%s'", dst_addr.to_str(family).c_str(),
                           res.gw.to_str(family).c_str());
-            res.mtu = p_val->get_mtu();
             rt_mgr_logdbg("found route mtu %d", res.mtu);
             return true;
         }
     }
+
     /* prevent usage on false return */
     return false;
 }
@@ -424,8 +440,7 @@ bool route_table_mgr::route_resolve(IN route_rule_table_key key, OUT route_resul
 void route_table_mgr::update_rte_netdev(route_table_t &table)
 {
     // Create route_entry for each netdev to receive port up/down events for net_dev_entry
-    for (auto iter = table.begin(); iter != table.end(); ++iter) {
-        route_val &val = *iter;
+    for (auto val : table) {
         const ip_address &src_addr = val.get_src_addr();
         auto iter_rte = m_rte_list_for_each_net_dev.find(src_addr);
         // If src_addr of interface exists in the map, no need to create another route_entry
@@ -453,8 +468,8 @@ void route_table_mgr::update_entry(INOUT route_entry *p_ent, bool b_register_to_
         if (p_rr_entry && p_rr_entry->get_val(p_rr_val)) {
             route_val *p_val = NULL;
             const ip_address &peer_ip = p_ent->get_key().get_dst_ip();
-            for (auto p_rule_val = p_rr_val->begin(); p_rule_val != p_rr_val->end(); ++p_rule_val) {
-                uint32_t table_id = (*p_rule_val)->get_table_id();
+            for (auto p_rule_val : *p_rr_val) {
+                uint32_t table_id = p_rule_val->get_table_id();
                 if (find_route_val(rt, peer_ip, table_id, p_val)) {
                     p_ent->set_val(p_val);
                     if (b_register_to_net_dev) {

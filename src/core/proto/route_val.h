@@ -77,7 +77,7 @@ public:
     inline bool is_deleted() const { return m_b_deleted; };
 
     const std::string to_str() const;
-    void print_val();
+    void print_val() const;
 
     bool operator==(const route_val &val) const
     {
