@@ -63,11 +63,12 @@ public:
     inline uint32_t get_table_id() const { return m_table_id; };
     inline const char *get_iif_name() const { return m_iif_name; };
     inline const char *get_oif_name() const { return m_oif_name; };
+    inline uint32_t get_priority() const { return m_priority; };
 
     inline void set_state(bool state) { m_is_valid = state; };
     inline bool is_valid() const { return m_is_valid; };
 
-    void print_val();
+    void print_val() const;
     const std::string to_str() const;
 
 private:

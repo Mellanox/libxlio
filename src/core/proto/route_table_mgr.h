@@ -52,10 +52,17 @@ struct route_result {
     ip_address src;
     ip_address gw;
     uint32_t mtu;
+
     route_result()
         : src(in6addr_any)
         , gw(in6addr_any)
         , mtu(0)
+    {
+    }
+    route_result(route_val &rv)
+        : src(rv.get_src_addr())
+        , gw(rv.get_gw_addr())
+        , mtu(rv.get_mtu())
     {
     }
 };
@@ -77,9 +84,6 @@ protected:
     route_entry *create_new_entry(route_rule_table_key key, const observer *obs);
 
 private:
-    bool find_route_val(route_table_t &table, const ip_address &dst_addr, uint32_t table_id,
-                        route_val *&p_val);
-
     // save current main rt table
     void update_tbl();
     void parse_attr(struct rtattr *rt_attribute, route_val &val);
