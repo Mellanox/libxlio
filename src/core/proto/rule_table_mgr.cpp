@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 
+#include <algorithm>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -66,6 +67,7 @@
 #define DEFAULT_RULE_TABLE_SIZE 64
 
 rule_table_mgr *g_p_rule_table_mgr = NULL;
+static inline bool is_matching_rule(const route_rule_table_key &key, const rule_val &val);
 
 rule_table_mgr::rule_table_mgr()
     : netlink_socket_mgr()
@@ -167,11 +169,11 @@ void rule_table_mgr::parse_attr(struct rtattr *rt_attribute, rule_val &val)
 void rule_table_mgr::print_tbl()
 {
     if (g_vlogger_level >= VLOG_DEBUG) {
-        for (auto iter = m_table_in6.begin(); iter != m_table_in6.end(); ++iter) {
-            (*iter).print_val();
+        for (const auto &rule : m_table_in6) {
+            rule.print_val();
         }
-        for (auto iter = m_table_in4.begin(); iter != m_table_in4.end(); ++iter) {
-            (*iter).print_val();
+        for (const auto &rule : m_table_in4) {
+            rule.print_val();
         }
     }
 }
@@ -218,29 +220,25 @@ void rule_table_mgr::update_entry(rule_entry *p_ent)
 //		p_val	: list of rule_val object that will contain information about all rule that match
 // destination info
 // Returns true if at least one rule match destination info, false otherwise.
-bool rule_table_mgr::find_rule_val(const route_rule_table_key &key, std::deque<rule_val *> *&p_val)
+bool rule_table_mgr::find_rule_val(const route_rule_table_key &key, std::deque<rule_val *> *p_val)
 {
     rr_mgr_logfunc("destination info %s:", key.to_str().c_str());
 
     rule_table_t &table = key.get_family() == AF_INET ? m_table_in4 : m_table_in6;
+    bool found = false;
 
-    for (auto iter = table.begin(); iter != table.end(); ++iter) {
-        rule_val &val = *iter;
-        if (val.is_valid() && is_matching_rule(key, val)) {
+    for (auto &val : table) {
+        if (::is_matching_rule(key, val)) {
+            found = true;
             p_val->push_back(&val);
             rr_mgr_logdbg("found rule val: %s", val.to_str().c_str());
         }
     }
 
-    return !p_val->empty();
+    return found;
 }
 
-// Check matching between given destination info. and specific rule from rule table.
-// Parameters:
-//		key		: key object that contain information about destination.
-//		p_val	: rule_val object that contain information about specific rule from rule table
-// Returns true if destination info match rule value, false otherwise.
-bool rule_table_mgr::is_matching_rule(const route_rule_table_key &key, const rule_val &val)
+static inline bool is_matching_rule(const route_rule_table_key &key, const rule_val &val)
 {
     const ip_address &m_dst_ip = key.get_dst_ip();
     const ip_address &m_src_ip = key.get_src_ip();
@@ -254,7 +252,7 @@ bool rule_table_mgr::is_matching_rule(const route_rule_table_key &key, const rul
 
     // Only destination IP, source IP and TOS are checked with rule, since IIF and OIF is not filled
     // in dst_entry object.
-    return
+    return val.is_valid() &&
         // Check match in address family
         (val.get_family() == key.get_family()) &&
         // Check match in destination IP
@@ -272,22 +270,26 @@ bool rule_table_mgr::is_matching_rule(const route_rule_table_key &key, const rul
 // Find table ID for given destination info.
 // Parameters:
 //		key			: key object that contain information about destination.
-//		table_id_list	: list that will contain table ID for all rule that match destination info
-// Returns true if at least one rule match destination info, false otherwise.
-bool rule_table_mgr::rule_resolve(route_rule_table_key key, std::deque<uint32_t> &table_id_list)
+// Returns a collection of rule table IDs sorted by priority
+std::vector<uint32_t> rule_table_mgr::rule_resolve(route_rule_table_key key)
 {
     rr_mgr_logdbg("dst info: '%s'", key.to_str().c_str());
 
+    std::vector<uint32_t> res;
     std::deque<rule_val *> values;
-    std::deque<rule_val *> *p_values = &values;
-    std::lock_guard<decltype(m_lock)> lock(m_lock);
-    if (find_rule_val(key, p_values)) {
-        for (auto val = values.begin(); val != values.end(); ++val) {
-            table_id_list.push_back((*val)->get_table_id());
-            rr_mgr_logdbg("dst info: '%s' resolved to table ID '%u'", key.to_str().c_str(),
-                          (*val)->get_table_id());
+
+    {
+        std::lock_guard<decltype(m_lock)> lock(m_lock);
+        if (!find_rule_val(key, &values)) {
+            return res;
         }
     }
+    std::sort(values.begin(), values.end(), [](const rule_val *rhs, const rule_val *lhs) {
+        return rhs->get_priority() < lhs->get_priority();
+    });
+    res.reserve(values.size());
+    std::transform(values.begin(), values.end(), std::back_inserter(res),
+                   [](rule_val *rule) { return rule->get_table_id(); });
 
-    return !table_id_list.empty();
+    return res;
 }

@@ -52,7 +52,7 @@ class rule_table_mgr : public netlink_socket_mgr,
 public:
     rule_table_mgr();
 
-    bool rule_resolve(route_rule_table_key key, std::deque<uint32_t> &table_id_list);
+    std::vector<uint32_t> rule_resolve(route_rule_table_key key);
 
 protected:
     virtual void parse_entry(struct nlmsghdr *nl_header);
@@ -66,8 +66,7 @@ private:
 
     void update_entry(rule_entry *p_ent);
 
-    bool find_rule_val(const route_rule_table_key &key, std::deque<rule_val *> *&p_val);
-    bool is_matching_rule(const route_rule_table_key &key, const rule_val &val);
+    bool find_rule_val(const route_rule_table_key &key, std::deque<rule_val *> *p_val);
 
     rule_table_t m_table_in4;
     rule_table_t m_table_in6;

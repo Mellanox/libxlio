@@ -83,7 +83,7 @@ const std::string rule_val::to_str() const
 }
 
 // This function prints a string that represent a row in the rule table as debug log.
-void rule_val::print_val()
+void rule_val::print_val() const
 {
     rr_val_logdbg("%s", to_str().c_str());
 }

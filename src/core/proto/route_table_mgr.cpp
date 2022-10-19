@@ -68,6 +68,8 @@
 #define DEFAULT_ROUTE_TABLE_SIZE 256
 #define MAX_ROUTE_TABLE_SIZE     32768
 
+static inline route_val *find_route_val(route_table_t &table, const ip_address &dst,
+                                        uint32_t table_id);
 route_table_mgr *g_p_route_table_mgr = NULL;
 
 route_table_mgr::route_table_mgr()
@@ -130,8 +132,7 @@ void route_table_mgr::update_tbl()
 void route_table_mgr::rt_mgr_update_source_ip(route_table_t &table)
 {
     // for route entries which still have no src ip and no gw
-    for (auto iter = table.begin(); iter != table.end(); ++iter) {
-        route_val &val = *iter;
+    for (route_val &val : table) {
         if (!val.get_src_addr().is_anyaddr() || !val.get_gw_addr().is_anyaddr()) {
             continue;
         }
@@ -177,12 +178,11 @@ void route_table_mgr::rt_mgr_update_source_ip(route_table_t &table)
     do {
         prev_num_unresolved_src = num_unresolved_src;
         num_unresolved_src = 0;
-        for (auto iter = table.begin(); iter != table.end(); ++iter) {
-            route_val &val = *iter;
+        for (route_val &val : table) {
             if (!val.get_gw_addr().is_anyaddr() && val.get_src_addr().is_anyaddr()) {
                 route_val *p_val_dst;
                 uint32_t table_id = val.get_table_id();
-                if (find_route_val(table, val.get_gw_addr(), table_id, p_val_dst)) {
+                if ((p_val_dst = ::find_route_val(table, val.get_gw_addr(), table_id)) != nullptr) {
                     if (!p_val_dst->get_src_addr().is_anyaddr()) {
                         val.set_src_addr(p_val_dst->get_src_addr());
                     } else if (&val == p_val_dst) { // gateway of the entry lead to same entry
@@ -363,13 +363,6 @@ static inline route_val *find_route_val(route_table_t &table, const ip_address &
     int longest_prefix = -1;
     route_val *found {nullptr};
 
-    /* This code block does too much:
-     *  - std::views::filter(not(is_deleted))
-     *  - std::views::filter([&] (route_val &val) {return val.get_table_id() == table_id;})
-     *  - std::ranges::max(...filters..., [&] (route_val &a, route_val &b)
-     *                    {return a.get_dst_pref_len() > b.get_dst_pref_len();})
-     *  - Return the result or nullptr
-     */
     for (auto &val : table) {
         bool is_valid_entry_with_longer_prefix = !val.is_deleted() &&
             val.get_table_id() == table_id &&
@@ -386,22 +379,6 @@ static inline route_val *find_route_val(route_table_t &table, const ip_address &
     return found;
 }
 
-bool route_table_mgr::find_route_val(route_table_t &table, const ip_address &dst, uint32_t table_id,
-                                     route_val *&p_val)
-{
-    p_val = ::find_route_val(table, dst, table_id);
-
-    if (p_val) {
-        rt_mgr_logdbg("dst addr '%s' -> route val: %s, if_name: %s",
-                      dst.to_str(p_val->get_family()).c_str(), p_val->to_str().c_str(),
-                      p_val->get_if_name());
-        return true;
-    }
-
-    rt_mgr_logdbg("destination gw wasn't found");
-    return false;
-}
-
 bool route_table_mgr::route_resolve(IN route_rule_table_key key, OUT route_result &res)
 {
     rt_mgr_logdbg("key: %s", key.to_str().c_str());
@@ -411,18 +388,15 @@ bool route_table_mgr::route_resolve(IN route_rule_table_key key, OUT route_resul
 
     route_table_t &rt = family == AF_INET ? m_table_in4 : m_table_in6;
     route_val *p_val = NULL;
-    std::deque<uint32_t> table_id_list;
 
-    g_p_rule_table_mgr->rule_resolve(key, table_id_list);
+    auto table_id_list = g_p_rule_table_mgr->rule_resolve(key);
 
     std::lock_guard<decltype(m_lock)> lock(m_lock);
 
-    for (auto table_id : table_id_list) {
+    for (const auto &table_id : table_id_list) {
         p_val = ::find_route_val(rt, dst_addr, table_id);
         if (p_val) {
-            res.src = p_val->get_src_addr();
-            res.gw = p_val->get_gw_addr();
-            res.mtu = p_val->get_mtu();
+            res = *p_val;
 
             rt_mgr_logdbg("dst ip '%s' resolved to src addr '%s'", dst_addr.to_str(family).c_str(),
                           res.src.to_str(family).c_str());
@@ -440,7 +414,7 @@ bool route_table_mgr::route_resolve(IN route_rule_table_key key, OUT route_resul
 void route_table_mgr::update_rte_netdev(route_table_t &table)
 {
     // Create route_entry for each netdev to receive port up/down events for net_dev_entry
-    for (auto val : table) {
+    for (const auto &val : table) {
         const ip_address &src_addr = val.get_src_addr();
         auto iter_rte = m_rte_list_for_each_net_dev.find(src_addr);
         // If src_addr of interface exists in the map, no need to create another route_entry
@@ -468,9 +442,10 @@ void route_table_mgr::update_entry(INOUT route_entry *p_ent, bool b_register_to_
         if (p_rr_entry && p_rr_entry->get_val(p_rr_val)) {
             route_val *p_val = NULL;
             const ip_address &peer_ip = p_ent->get_key().get_dst_ip();
-            for (auto p_rule_val : *p_rr_val) {
+            for (const auto &p_rule_val : *p_rr_val) {
                 uint32_t table_id = p_rule_val->get_table_id();
-                if (find_route_val(rt, peer_ip, table_id, p_val)) {
+
+                if ((p_val = ::find_route_val(rt, peer_ip, table_id)) != nullptr) {
                     p_ent->set_val(p_val);
                     if (b_register_to_net_dev) {
                         // Check if broadcast IPv4 which is NOT supported
