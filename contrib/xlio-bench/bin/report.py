@@ -32,7 +32,7 @@ pr_id = os.environ.get("ghprbPullId", os.environ.get("PR_ID"))  # get Github PR 
 # source_branch = os.environ.get("ghprbSourceBranch")
 set_as_baseline = os.environ.get("SET_AS_BASELINE", "false")
 set_as_baseline = strtobool(set_as_baseline) == 1  # converting string value from Jenkins to bool
-dashboard_url = "http://dev-r-vrt-018.mtr.labs.mlnx:5601/s/xlio/app/visualize#/edit/{dashboard_id}?_a=(query:(language:kuery,query:'{query}'))"
+dashboard_url = "http://r-elk.mtr.labs.mlnx/s/xlio/app/visualize#/edit/{dashboard_id}?_a=(query:(language:kuery,query:'{query}'))"
 dashboards = {
     "rps": {
         "88c498f0-484d-11ec-bf01-8162e9e81821": ("RPS per payload", "type:rps and (benchmark_id:{benchmark_id} or is_baseline:true)"),
@@ -94,10 +94,8 @@ def process_dir(run_id, output_dir):
             text = wrk_file.read()
             wrk_data = search(wrk_out_tpl, text)
 
-        with open_and_handle_errors(output_dir, "**/*server*/nginx.out") as nginx_file:
-            for line in nginx_file:
-                if "Nginx workers" in line:
-                    nginx_data = search(nginx_out_tpl, line)
+        with open_and_handle_errors(output_dir, "**/*server*/nginx_num_workers") as nginx_file:
+            nginx_data = {"workers": int(nginx_file.read().strip())}
 
         with open_and_handle_errors(output_dir, "**/*server*/*.nmon") as nmon_file:
             nmon_data = {}
@@ -113,7 +111,8 @@ def process_dir(run_id, output_dir):
 
         created_at = datetime.fromtimestamp(output_dir.stat().st_ctime)
         return {
-            "benchmark_id": benchmark_id,
+            "benchmark_id": benchmark_id,  # common ID of several shapshots (one benchmark run)
+            "snapshot_id": str(uuid4()),  # unique ID of this shapshot
             "created_at": created_at,
             "ID": f"{run_id}-{created_at}",
             "mode": settings["mode"],
@@ -129,6 +128,7 @@ def process_dir(run_id, output_dir):
             "title": f"pr{pr_id}_run{run_id}_{settings['proto']}_{settings['mode']}_{nginx_data['workers']}_{settings['payload_size']}",
             "branch": pr_id,
             "is_baseline": set_as_baseline,
+            "is_head": False,
         }
     except Exception as e:
         print(f"Error while processing {output_dir}: {e}")

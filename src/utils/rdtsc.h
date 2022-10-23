@@ -142,7 +142,7 @@ inline int gettimefromtsc(struct timespec *ts)
     ts_delta.tv_nsec = nsec_delta - ts_delta.tv_sec * NSEC_PER_SEC;
     ts_add(&ts_start, &ts_delta, ts);
 
-#ifndef VMA_TIME_MEASURE
+#ifndef XLIO_TIME_MEASURE
     // Once a second re-sync our start time with real time-of-day
     if (tsc_delta > get_tsc_rate_per_second()) {
         ts_clear(&ts_start);
@@ -154,7 +154,7 @@ inline int gettimefromtsc(struct timespec *ts)
 
 static inline int gettime(struct timespec *ts)
 {
-#ifdef VMA_TIME_MEASURE
+#ifdef XLIO_TIME_MEASURE
     return clock_gettime(CLOCK_MONOTONIC, ts);
 #else
     return gettimefromtsc(ts);

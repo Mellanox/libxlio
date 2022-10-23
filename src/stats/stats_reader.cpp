@@ -53,16 +53,16 @@
 #include <sys/utsname.h>
 #include <sys/stat.h>
 #include "utils/rdtsc.h"
-#include "vma/util/utils.h"
-#include "vma/util/vma_stats.h"
-#include "vma/util/sys_vars.h"
+#include "core/util/utils.h"
+#include "core/util/xlio_stats.h"
+#include "core/util/sys_vars.h"
 
 using namespace std;
 
 typedef std::list<int> fd_list_t;
 
 typedef struct {
-    in_addr_t mc_grp;
+    ip_addr mc_grp {0};
     fd_list_t fd_list;
 } mc_group_fds_t;
 
@@ -118,7 +118,7 @@ typedef enum { e_K = 1024, e_M = 1048576 } units_t;
 #define DEFAULT_DETAILS_MODE    e_totals
 #define DEFAULT_PROC_IDENT_MODE e_by_runn_proccess
 #define VLOG_DETAILS_NUM        4
-#define INIT_VMA_LOG_DETAILS    -1
+#define INIT_XLIO_LOG_DETAILS   -1
 #define NANO_TO_MICRO(n)        (((n) + 500) / 1000)
 #define SEC_TO_MICRO(n)         ((n)*1000000)
 #define TIME_DIFF_in_MICRO(start, end)                                                             \
@@ -1106,7 +1106,7 @@ void show_iomux_stats(iomux_stats_t *p_curr_stats, iomux_stats_t *p_prev_stats,
 // Find mc_grp in mc_group_fds array.
 // if exist: add the fd to the list.
 // if not: add the mc group to the array and the fd to the list
-void add_fd_to_array(int fd, in_addr_t mc_grp, mc_group_fds_t *mc_group_fds, int *array_size)
+void add_fd_to_array(int fd, ip_addr mc_grp, mc_group_fds_t *mc_group_fds, int *array_size)
 {
     // Go over the mc_group_fds array
     int i = 0;
@@ -1134,7 +1134,7 @@ void print_mc_group_fds(mc_group_fds_t *mc_group_fds, int array_size)
     for (int i = 0; i < array_size; i++) {
         char mcg_str[256];
         /* cppcheck-suppress wrongPrintfScanfArgNum */
-        sprintf(mcg_str, "[%d.%d.%d.%d]", NIPQUAD(mc_group_fds[i].mc_grp));
+        sprintf(mcg_str, "[%s]", mc_group_fds[i].mc_grp.to_str().c_str());
         printf("%-22s", mcg_str);
         for (const auto &fd : mc_group_fds[i].fd_list) {
             printf("%d ", fd);
@@ -1205,12 +1205,12 @@ void print_version(int pid)
     }
 }
 
-int check_vma_ver_compatability(version_info_t *p_stat_ver_info)
+int check_xlio_ver_compatability(version_info_t *p_stat_ver_info)
 {
-    return (p_stat_ver_info->vma_lib_maj == PRJ_LIBRARY_MAJOR &&
-            p_stat_ver_info->vma_lib_min == PRJ_LIBRARY_MINOR &&
-            p_stat_ver_info->vma_lib_rel == PRJ_LIBRARY_RELEASE &&
-            p_stat_ver_info->vma_lib_rev == PRJ_LIBRARY_REVISION);
+    return (p_stat_ver_info->xlio_lib_maj == PRJ_LIBRARY_MAJOR &&
+            p_stat_ver_info->xlio_lib_min == PRJ_LIBRARY_MINOR &&
+            p_stat_ver_info->xlio_lib_rel == PRJ_LIBRARY_RELEASE &&
+            p_stat_ver_info->xlio_lib_rev == PRJ_LIBRARY_REVISION);
 }
 
 void cleanup(sh_mem_info *p_sh_mem_info)
@@ -1274,15 +1274,15 @@ void set_defaults()
     user_params.view_mode = DEFAULT_VIEW_MODE;
     user_params.print_details_mode = DEFAULT_DETAILS_MODE;
     user_params.proc_ident_mode = DEFAULT_PROC_IDENT_MODE;
-    user_params.vma_log_level = VLOG_INIT;
-    user_params.vma_details_level = INIT_VMA_LOG_DETAILS;
+    user_params.xlio_log_level = VLOG_INIT;
+    user_params.xlio_details_level = INIT_XLIO_LOG_DETAILS;
     user_params.forbid_cleaning = false;
     user_params.zero_counters = false;
     user_params.write_auth = true; // needed to set read flag on
     user_params.cycles = DEFAULT_CYCLES;
     user_params.fd_dump = STATS_FD_STATISTICS_DISABLED;
     user_params.fd_dump_log_level = STATS_FD_STATISTICS_LOG_LEVEL_DEFAULT;
-    user_params.vma_stats_path = MCE_DEFAULT_STATS_SHMEM_DIR;
+    user_params.xlio_stats_path = MCE_DEFAULT_STATS_SHMEM_DIR;
 
     alloc_fd_mask();
     if (g_fd_mask) {
@@ -1528,9 +1528,9 @@ void clean_inactive_sh_ibj()
     int module_name_size = strlen(MODULE_NAME);
     int pid_offset = module_name_size + 1;
 
-    dir = opendir(user_params.vma_stats_path.c_str());
+    dir = opendir(user_params.xlio_stats_path.c_str());
     if (dir == NULL) {
-        log_system_err("opendir %s failed\n", user_params.vma_stats_path.c_str());
+        log_system_err("opendir %s failed\n", user_params.xlio_stats_path.c_str());
         return;
     }
     dirent = readdir(dir);
@@ -1543,7 +1543,7 @@ void clean_inactive_sh_ibj()
                 int n = -1;
 
                 n = snprintf(to_delete, sizeof(to_delete), "%s/%s",
-                             user_params.vma_stats_path.c_str(), dirent->d_name);
+                             user_params.xlio_stats_path.c_str(), dirent->d_name);
                 if (likely((0 < n) && (n < (int)sizeof(to_delete)))) {
                     unlink(to_delete);
                 }
@@ -1554,7 +1554,7 @@ void clean_inactive_sh_ibj()
     closedir(dir);
 }
 
-char *look_for_vma_stat_active_sh_obj(char *app_name)
+char *look_for_xlio_stat_active_sh_obj(char *app_name)
 {
     DIR *dir;
     struct dirent *dirent;
@@ -1563,9 +1563,9 @@ char *look_for_vma_stat_active_sh_obj(char *app_name)
     int module_name_size = strlen(MODULE_NAME);
     int pid_offset = module_name_size + 1;
 
-    dir = opendir(user_params.vma_stats_path.c_str());
+    dir = opendir(user_params.xlio_stats_path.c_str());
     if (dir == NULL) {
-        log_system_err("opendir %s failed\n", user_params.vma_stats_path.c_str());
+        log_system_err("opendir %s failed\n", user_params.xlio_stats_path.c_str());
         return NULL;
     }
     dirent = readdir(dir);
@@ -1762,7 +1762,7 @@ int get_pid(char *proc_desc, char *argv0)
             app_name = proc_desc;
         }
 
-        char *pid_str = look_for_vma_stat_active_sh_obj(app_name);
+        char *pid_str = look_for_xlio_stat_active_sh_obj(app_name);
         if (pid_str) {
             errno = 0;
             pid = strtol(pid_str, NULL, 0);
@@ -1786,14 +1786,14 @@ void set_dumping_data(sh_mem_t *p_sh_mem)
     p_sh_mem->fd_dump_log_level = user_params.fd_dump_log_level;
 }
 
-void set_vma_log_level(sh_mem_t *p_sh_mem)
+void set_xlio_log_level(sh_mem_t *p_sh_mem)
 {
-    p_sh_mem->log_level = user_params.vma_log_level;
+    p_sh_mem->log_level = user_params.xlio_log_level;
 }
 
-void set_vma_log_details_level(sh_mem_t *p_sh_mem)
+void set_xlio_log_details_level(sh_mem_t *p_sh_mem)
 {
-    p_sh_mem->log_details_level = (int)user_params.vma_details_level;
+    p_sh_mem->log_details_level = (int)user_params.xlio_details_level;
 }
 
 //////////////////forward declarations /////////////////////////////
@@ -1888,7 +1888,7 @@ int main(int argc, char **argv)
             proc_desc[sizeof(proc_desc) - 1] = '\0';
             break;
         case 'k':
-            user_params.vma_stats_path = std::string((char *)optarg);
+            user_params.xlio_stats_path = std::string((char *)optarg);
             break;
         case 's': {
             if (update_fds_mask(optarg)) {
@@ -1914,7 +1914,7 @@ int main(int argc, char **argv)
                 return 1;
             }
             user_params.write_auth = true;
-            user_params.vma_log_level = log_level;
+            user_params.xlio_log_level = log_level;
         } break;
         case 'S': {
             errno = 0;
@@ -1949,7 +1949,7 @@ int main(int argc, char **argv)
                 return 1;
             }
             user_params.write_auth = true;
-            user_params.vma_details_level = details_level;
+            user_params.xlio_details_level = details_level;
         } break;
         case 'n':
             user_params.proc_ident_mode = e_by_app_name;
@@ -2013,7 +2013,7 @@ int init_print_process_stats(sh_mem_info_t &sh_mem_info)
     sh_mem_t *sh_mem;
     int pid = sh_mem_info.pid;
 
-    sprintf(sh_mem_info.filename_sh_stats, "%s/xliostat.%d", user_params.vma_stats_path.c_str(),
+    sprintf(sh_mem_info.filename_sh_stats, "%s/xliostat.%d", user_params.xlio_stats_path.c_str(),
             pid);
 
     if (user_params.write_auth) { // S_IRUSR | S_IWUSR | S_IRGRP
@@ -2045,12 +2045,12 @@ int init_print_process_stats(sh_mem_info_t &sh_mem_info)
             version_check = 0;
         }
     } else {
-        if (!check_vma_ver_compatability(&sh_mem->ver_info)) {
+        if (!check_xlio_ver_compatability(&sh_mem->ver_info)) {
             log_err("Version %d.%d.%d.%d is not compatible with " PRODUCT_NAME
                     " version %d.%d.%d.%d\n",
                     PRJ_LIBRARY_MAJOR, PRJ_LIBRARY_MINOR, PRJ_LIBRARY_REVISION, PRJ_LIBRARY_RELEASE,
-                    sh_mem->ver_info.vma_lib_maj, sh_mem->ver_info.vma_lib_min,
-                    sh_mem->ver_info.vma_lib_rev, sh_mem->ver_info.vma_lib_rel);
+                    sh_mem->ver_info.xlio_lib_maj, sh_mem->ver_info.xlio_lib_min,
+                    sh_mem->ver_info.xlio_lib_rev, sh_mem->ver_info.xlio_lib_rel);
             version_check = 0;
         }
     }
@@ -2090,17 +2090,17 @@ int init_print_process_stats(sh_mem_info_t &sh_mem_info)
     if (user_params.zero_counters == true) {
         zero_counters(sh_mem);
     }
-    if (user_params.vma_log_level != VLOG_INIT) {
-        set_vma_log_level(sh_mem);
+    if (user_params.xlio_log_level != VLOG_INIT) {
+        set_xlio_log_level(sh_mem);
     }
-    if (user_params.vma_details_level != INIT_VMA_LOG_DETAILS) {
-        set_vma_log_details_level(sh_mem);
+    if (user_params.xlio_details_level != INIT_XLIO_LOG_DETAILS) {
+        set_xlio_log_details_level(sh_mem);
     }
     if (user_params.fd_dump != STATS_FD_STATISTICS_DISABLED) {
         set_dumping_data(sh_mem);
     }
 
-    // here we indicate VMA to write to shmem
+    // here we indicate XLIO to write to shmem
     inc_read_counter(sh_mem);
     return 0;
 }
@@ -2122,9 +2122,9 @@ void get_all_processes_pids(std::vector<int> &pids)
     const int MODULE_NAME_SIZE = strlen(MODULE_NAME);
     const int PID_OFFSET = MODULE_NAME_SIZE + 1;
 
-    DIR *dir = opendir(user_params.vma_stats_path.c_str());
+    DIR *dir = opendir(user_params.xlio_stats_path.c_str());
     if (dir == NULL) {
-        log_system_err("opendir %s failed\n", user_params.vma_stats_path.c_str());
+        log_system_err("opendir %s failed\n", user_params.xlio_stats_path.c_str());
         return;
     }
 
@@ -2153,7 +2153,7 @@ int print_processes_stats(const std::vector<int> &pids)
     int num_instances = 0;
     sh_mem_info_t sh_mem_info[SIZE];
 
-    // 1. N * prepare shmem and indicate VMA to update shmem
+    // 1. N * prepare shmem and indicate XLIO to update shmem
     for (int i = 0; i < SIZE; ++i) {
         sh_mem_info[num_instances].pid = pids[i];
         if (0 == init_print_process_stats(sh_mem_info[num_instances])) {
@@ -2163,7 +2163,7 @@ int print_processes_stats(const std::vector<int> &pids)
 
     // 2. one sleep to rule them all
     usleep(STATS_READER_DELAY *
-           1000); // After 'init_print_process_stats' we wait for VMA publisher to recognize
+           1000); // After 'init_print_process_stats' we wait for XLIO publisher to recognize
                   // that we asked for statistics, otherwise, the first read will be zero
 
     // 3. N * read from shmem, write to user, and shmem cleanup

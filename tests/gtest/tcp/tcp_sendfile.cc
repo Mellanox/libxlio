@@ -36,7 +36,7 @@
 #include "common/log.h"
 #include "common/sys.h"
 #include "common/base.h"
-#include "src/vma/util/sock_addr.h"
+#include "src/core/util/sock_addr.h"
 #include "tcp_base.h"
 
 class tcp_sendfile : public tcp_base {
@@ -142,9 +142,8 @@ TEST_F(tcp_sendfile, ti_1_basic)
         rc = connect(m_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
         ASSERT_EQ(0, rc);
 
-        log_trace("Established connection: fd=%d to %s from %s\n", m_fd,
-                  sockaddr2str((struct sockaddr *)&server_addr).c_str(),
-                  sockaddr2str((struct sockaddr *)&client_addr).c_str());
+        log_trace("Established connection: fd=%d to %s from %s\n", m_fd, SOCK_STR(server_addr),
+                  SOCK_STR(client_addr));
 
         while (m_test_file_size > 0) {
             rc = sendfile(m_fd, m_test_file, &test_file_offset, m_test_file_size);
@@ -185,8 +184,7 @@ TEST_F(tcp_sendfile, ti_1_basic)
         ASSERT_LE(0, m_fd);
         close(l_fd);
 
-        log_trace("Accepted connection: fd=%d from %s\n", m_fd,
-                  sockaddr2str((struct sockaddr *)&peer_addr).c_str());
+        log_trace("Accepted connection: fd=%d from %s\n", m_fd, SOCK_STR(peer_addr));
 
         int i = m_test_buf_size;
         while (i > 0 && !child_fork_exit()) {

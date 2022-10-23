@@ -259,12 +259,12 @@ static int config_def(void)
 
     daemon_cfg.lock_file = "/var/lock/" MODULE_NAME ".lock";
     daemon_cfg.lock_fd = -1;
-    daemon_cfg.sock_file = VMA_AGENT_ADDR;
+    daemon_cfg.sock_file = XLIO_AGENT_ADDR;
     daemon_cfg.sock_fd = -1;
     daemon_cfg.sig = 0;
     daemon_cfg.raw_fd_ip4 = -1;
     daemon_cfg.notify_fd = -1;
-    daemon_cfg.notify_dir = VMA_AGENT_PATH;
+    daemon_cfg.notify_dir = XLIO_AGENT_PATH;
     daemon_cfg.ht = NULL;
     daemon_cfg.tc = NULL;
 
@@ -349,7 +349,7 @@ static int config_set(int argc, char **argv)
     log_debug("lock file: %s\n", daemon_cfg.lock_file);
     log_debug("sock file: %s\n", daemon_cfg.sock_file);
     log_debug("notify dir: %s\n", daemon_cfg.notify_dir);
-    log_debug("format version: 0x%X\n", VMA_AGENT_VER);
+    log_debug("format version: 0x%X\n", XLIO_AGENT_VER);
 
     if (0 != rc) {
         usage();
@@ -362,7 +362,7 @@ static void usage(void)
 {
     printf(MODULE_NAME " is a part of NVIDIA Accelerated IO (XLIO) product\n"
                        "that boosts performance for message-based and streaming applications.\n");
-    printf("version: %s (0x%X)\n\n", PACKAGE_VERSION, VMA_AGENT_VER);
+    printf("version: %s (0x%X)\n\n", PACKAGE_VERSION, XLIO_AGENT_VER);
 
     printf("Usage: " MODULE_NAME " [options]\n"
            "\t--console                       Enable foreground mode (default: %s)\n"
@@ -375,7 +375,7 @@ static void usage(void)
            "\t--verbose,-v <level>            Output verbose level (default: %d).\n"
            "\t--retry-interval,-r <num>       Set SYN pkt retry interval in [ms] (default: %d).\n"
            "\t--help,-h                       Print help and exit\n",
-           (daemon_cfg.opt.mode ? "on" : "off"), VMA_AGENT_PATH, daemon_cfg.opt.max_pid_num,
+           (daemon_cfg.opt.mode ? "on" : "off"), XLIO_AGENT_PATH, daemon_cfg.opt.max_pid_num,
            daemon_cfg.opt.max_fid_num, (daemon_cfg.opt.force_rst ? "on" : "off"),
            daemon_cfg.opt.log_level, daemon_cfg.opt.retry_interval);
 

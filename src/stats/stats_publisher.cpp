@@ -35,9 +35,9 @@
 #endif
 
 #include "stats/stats_data_reader.h"
-#include "vma/util/vma_stats.h"
-#include "vma/sock/sock-redirect.h"
-#include "vma/event/event_handler_manager.h"
+#include "core/util/xlio_stats.h"
+#include "core/sock/sock-redirect.h"
+#include "core/event/event_handler_manager.h"
 
 #define MODULE_NAME "STATS: "
 
@@ -155,13 +155,13 @@ void *stats_data_reader::pop_data_reader(void *local_addr)
 
 void write_version_details_to_shmem(version_info_t *p_ver_info)
 {
-    p_ver_info->vma_lib_maj = PRJ_LIBRARY_MAJOR;
-    p_ver_info->vma_lib_min = PRJ_LIBRARY_MINOR;
-    p_ver_info->vma_lib_rev = PRJ_LIBRARY_REVISION;
-    p_ver_info->vma_lib_rel = PRJ_LIBRARY_RELEASE;
+    p_ver_info->xlio_lib_maj = PRJ_LIBRARY_MAJOR;
+    p_ver_info->xlio_lib_min = PRJ_LIBRARY_MINOR;
+    p_ver_info->xlio_lib_rev = PRJ_LIBRARY_REVISION;
+    p_ver_info->xlio_lib_rel = PRJ_LIBRARY_RELEASE;
 }
 
-void vma_shmem_stats_open(vlog_levels_t **p_p_vma_log_level, uint8_t **p_p_vma_log_details)
+void xlio_shmem_stats_open(vlog_levels_t **p_p_xlio_log_level, uint8_t **p_p_xlio_log_details)
 {
     void *buf = NULL;
     void *p_shmem = NULL;
@@ -272,16 +272,16 @@ success:
               safe_mce_sys().stats_fd_num_max);
 
     // Update the shmem initial log values
-    g_sh_mem->log_level = **p_p_vma_log_level;
-    g_sh_mem->log_details_level = **p_p_vma_log_details;
+    g_sh_mem->log_level = **p_p_xlio_log_level;
+    g_sh_mem->log_details_level = **p_p_xlio_log_details;
 
     // Update the shmem with initial fd dump values
     g_sh_mem->fd_dump = STATS_FD_STATISTICS_DISABLED;
     g_sh_mem->fd_dump_log_level = STATS_FD_STATISTICS_LOG_LEVEL_DEFAULT;
 
     // ReMap internal log level to ShMem area
-    *p_p_vma_log_level = &g_sh_mem->log_level;
-    *p_p_vma_log_details = &g_sh_mem->log_details_level;
+    *p_p_xlio_log_level = &g_sh_mem->log_level;
+    *p_p_xlio_log_details = &g_sh_mem->log_details_level;
 
     g_p_stats_data_reader->register_to_timer();
 
@@ -294,12 +294,12 @@ shmem_error:
     g_sh_mem_info.p_sh_stats = MAP_FAILED;
     g_sh_mem = &g_local_sh_mem;
     g_sh_mem->reset();
-    *p_p_vma_log_level = &g_sh_mem->log_level;
-    *p_p_vma_log_details = &g_sh_mem->log_details_level;
+    *p_p_xlio_log_level = &g_sh_mem->log_level;
+    *p_p_xlio_log_details = &g_sh_mem->log_details_level;
     BULLSEYE_EXCLUDE_BLOCK_END
 }
 
-void vma_shmem_stats_close()
+void xlio_shmem_stats_close()
 {
     if (g_sh_mem_info.p_sh_stats && g_sh_mem_info.p_sh_stats != MAP_FAILED) {
         __log_dbg("file '%s' fd %d shared memory at %p with %d max blocks",
@@ -335,7 +335,7 @@ void vma_shmem_stats_close()
     g_p_stats_data_reader = NULL;
 }
 
-void vma_stats_instance_create_socket_block(socket_stats_t *local_stats_addr)
+void xlio_stats_instance_create_socket_block(socket_stats_t *local_stats_addr)
 {
     socket_stats_t *p_skt_stats = NULL;
     g_lock_skt_inst_arr.lock();
@@ -373,7 +373,7 @@ out:
     g_lock_skt_inst_arr.unlock();
 }
 
-void vma_stats_instance_remove_socket_block(socket_stats_t *local_addr)
+void xlio_stats_instance_remove_socket_block(socket_stats_t *local_addr)
 {
 
     g_lock_skt_inst_arr.lock();
@@ -383,7 +383,7 @@ void vma_stats_instance_remove_socket_block(socket_stats_t *local_addr)
         (socket_stats_t *)g_p_stats_data_reader->pop_data_reader(local_addr);
 
     if (p_skt_stats == NULL) {
-        __log_dbg("application vma_stats pointer is NULL");
+        __log_dbg("application xlio_stats pointer is NULL");
         g_lock_skt_inst_arr.unlock();
         return;
     }
@@ -411,7 +411,7 @@ void vma_stats_instance_remove_socket_block(socket_stats_t *local_addr)
     g_lock_skt_inst_arr.unlock();
 }
 
-void vma_stats_mc_group_add(in_addr_t mc_grp, socket_stats_t *p_socket_stats)
+void xlio_stats_mc_group_add(const ip_address &mc_grp, socket_stats_t *p_socket_stats)
 {
     int empty_entry = -1;
     int index_to_insert = -1;
@@ -422,7 +422,8 @@ void vma_stats_mc_group_add(in_addr_t mc_grp, socket_stats_t *p_socket_stats)
         if (g_sh_mem->mc_info.mc_grp_tbl[grp_idx].sock_num == 0 && empty_entry == -1) {
             empty_entry = grp_idx;
         } else if (g_sh_mem->mc_info.mc_grp_tbl[grp_idx].sock_num &&
-                   g_sh_mem->mc_info.mc_grp_tbl[grp_idx].mc_grp == mc_grp) {
+                   g_sh_mem->mc_info.mc_grp_tbl[grp_idx].mc_grp ==
+                       ip_addr(mc_grp, p_socket_stats->sa_family)) {
             index_to_insert = grp_idx;
         }
     }
@@ -431,7 +432,8 @@ void vma_stats_mc_group_add(in_addr_t mc_grp, socket_stats_t *p_socket_stats)
         index_to_insert = empty_entry;
     } else if (index_to_insert == -1 && g_sh_mem->mc_info.max_grp_num < MC_TABLE_SIZE) {
         index_to_insert = g_sh_mem->mc_info.max_grp_num;
-        g_sh_mem->mc_info.mc_grp_tbl[index_to_insert].mc_grp = mc_grp;
+        g_sh_mem->mc_info.mc_grp_tbl[index_to_insert].mc_grp =
+            ip_addr(mc_grp, p_socket_stats->sa_family);
         g_sh_mem->mc_info.max_grp_num++;
     }
 
@@ -445,12 +447,13 @@ void vma_stats_mc_group_add(in_addr_t mc_grp, socket_stats_t *p_socket_stats)
     }
 }
 
-void vma_stats_mc_group_remove(in_addr_t mc_grp, socket_stats_t *p_socket_stats)
+void xlio_stats_mc_group_remove(const ip_address &mc_grp, socket_stats_t *p_socket_stats)
 {
     g_lock_mc_info.lock();
     for (int grp_idx = 0; grp_idx < g_sh_mem->mc_info.max_grp_num; grp_idx++) {
         if (g_sh_mem->mc_info.mc_grp_tbl[grp_idx].sock_num &&
-            g_sh_mem->mc_info.mc_grp_tbl[grp_idx].mc_grp == mc_grp) {
+            g_sh_mem->mc_info.mc_grp_tbl[grp_idx].mc_grp ==
+                ip_addr(mc_grp, p_socket_stats->sa_family)) {
             p_socket_stats->mc_grp_map.set((size_t)grp_idx, 0);
             g_sh_mem->mc_info.mc_grp_tbl[grp_idx].sock_num--;
             if (!g_sh_mem->mc_info.mc_grp_tbl[grp_idx].sock_num) {
@@ -461,7 +464,7 @@ void vma_stats_mc_group_remove(in_addr_t mc_grp, socket_stats_t *p_socket_stats)
     g_lock_mc_info.unlock();
 }
 
-void vma_stats_instance_create_ring_block(ring_stats_t *local_stats_addr)
+void xlio_stats_instance_create_ring_block(ring_stats_t *local_stats_addr)
 {
     ring_stats_t *p_instance_ring = NULL;
     g_lock_ring_inst_arr.lock();
@@ -487,7 +490,7 @@ void vma_stats_instance_create_ring_block(ring_stats_t *local_stats_addr)
     g_lock_ring_inst_arr.unlock();
 }
 
-void vma_stats_instance_remove_ring_block(ring_stats_t *local_stats_addr)
+void xlio_stats_instance_remove_ring_block(ring_stats_t *local_stats_addr)
 {
     g_lock_ring_inst_arr.lock();
     __log_dbg("Remove ring local=%p", local_stats_addr);
@@ -496,7 +499,7 @@ void vma_stats_instance_remove_ring_block(ring_stats_t *local_stats_addr)
         (ring_stats_t *)g_p_stats_data_reader->pop_data_reader(local_stats_addr);
 
     if (p_ring_stats == NULL) { // happens on the tx cq (why don't we keep tx cq stats?)
-        __log_dbg("application vma_stats pointer is NULL");
+        __log_dbg("application xlio_stats pointer is NULL");
         g_lock_ring_inst_arr.unlock();
         return;
     }
@@ -524,7 +527,7 @@ void vma_stats_instance_remove_ring_block(ring_stats_t *local_stats_addr)
     g_lock_ring_inst_arr.unlock();
 }
 
-void vma_stats_instance_create_cq_block(cq_stats_t *local_stats_addr)
+void xlio_stats_instance_create_cq_block(cq_stats_t *local_stats_addr)
 {
     cq_stats_t *p_instance_cq = NULL;
     g_lock_cq_inst_arr.lock();
@@ -549,7 +552,7 @@ void vma_stats_instance_create_cq_block(cq_stats_t *local_stats_addr)
     g_lock_cq_inst_arr.unlock();
 }
 
-void vma_stats_instance_remove_cq_block(cq_stats_t *local_stats_addr)
+void xlio_stats_instance_remove_cq_block(cq_stats_t *local_stats_addr)
 {
     g_lock_cq_inst_arr.lock();
     __log_dbg("Remove cq local=%p", local_stats_addr);
@@ -557,7 +560,7 @@ void vma_stats_instance_remove_cq_block(cq_stats_t *local_stats_addr)
     cq_stats_t *p_cq_stats = (cq_stats_t *)g_p_stats_data_reader->pop_data_reader(local_stats_addr);
 
     if (p_cq_stats == NULL) { // happens on the tx cq (why don't we keep tx cq stats?)
-        __log_dbg("application vma_stats pointer is NULL");
+        __log_dbg("application xlio_stats pointer is NULL");
         g_lock_cq_inst_arr.unlock();
         return;
     }
@@ -585,7 +588,7 @@ void vma_stats_instance_remove_cq_block(cq_stats_t *local_stats_addr)
     g_lock_cq_inst_arr.unlock();
 }
 
-void vma_stats_instance_create_bpool_block(bpool_stats_t *local_stats_addr)
+void xlio_stats_instance_create_bpool_block(bpool_stats_t *local_stats_addr)
 {
     bpool_stats_t *p_instance_bpool = NULL;
     g_lock_bpool_inst_arr.lock();
@@ -611,7 +614,7 @@ void vma_stats_instance_create_bpool_block(bpool_stats_t *local_stats_addr)
     g_lock_bpool_inst_arr.unlock();
 }
 
-void vma_stats_instance_remove_bpool_block(bpool_stats_t *local_stats_addr)
+void xlio_stats_instance_remove_bpool_block(bpool_stats_t *local_stats_addr)
 {
     g_lock_bpool_inst_arr.lock();
     __log_dbg("Remove bpool local=%p", local_stats_addr);
@@ -620,7 +623,7 @@ void vma_stats_instance_remove_bpool_block(bpool_stats_t *local_stats_addr)
         (bpool_stats_t *)g_p_stats_data_reader->pop_data_reader(local_stats_addr);
 
     if (p_bpool_stats == NULL) {
-        __log_dbg("application vma_stats pointer is NULL");
+        __log_dbg("application xlio_stats pointer is NULL");
         g_lock_bpool_inst_arr.unlock();
         return;
     }
@@ -639,7 +642,7 @@ void vma_stats_instance_remove_bpool_block(bpool_stats_t *local_stats_addr)
     g_lock_bpool_inst_arr.unlock();
 }
 
-void vma_stats_instance_create_global_block(global_stats_t *local_stats_addr)
+void xlio_stats_instance_create_global_block(global_stats_t *local_stats_addr)
 {
     global_stats_t *p_instance_global = NULL;
     g_lock_global_inst.lock();
@@ -666,7 +669,7 @@ void vma_stats_instance_create_global_block(global_stats_t *local_stats_addr)
     g_lock_global_inst.unlock();
 }
 
-void vma_stats_instance_remove_global_block(global_stats_t *local_stats_addr)
+void xlio_stats_instance_remove_global_block(global_stats_t *local_stats_addr)
 {
     g_lock_global_inst.lock();
     __log_dbg("Remove global local=%p", local_stats_addr);
@@ -694,19 +697,19 @@ void vma_stats_instance_remove_global_block(global_stats_t *local_stats_addr)
     g_lock_global_inst.unlock();
 }
 
-void vma_stats_instance_get_poll_block(iomux_func_stats_t *local_stats_addr)
+void xlio_stats_instance_get_poll_block(iomux_func_stats_t *local_stats_addr)
 {
     g_p_stats_data_reader->add_data_reader(local_stats_addr, &g_sh_mem->iomux.poll,
                                            sizeof(iomux_func_stats_t));
 }
 
-void vma_stats_instance_get_select_block(iomux_func_stats_t *local_stats_addr)
+void xlio_stats_instance_get_select_block(iomux_func_stats_t *local_stats_addr)
 {
     g_p_stats_data_reader->add_data_reader(local_stats_addr, &g_sh_mem->iomux.select,
                                            sizeof(iomux_func_stats_t));
 }
 
-void vma_stats_instance_create_epoll_block(int fd, iomux_func_stats_t *local_stats_addr)
+void xlio_stats_instance_create_epoll_block(int fd, iomux_func_stats_t *local_stats_addr)
 {
     g_lock_iomux.lock();
 
@@ -727,14 +730,14 @@ void vma_stats_instance_create_epoll_block(int fd, iomux_func_stats_t *local_sta
     return;
 }
 
-void vma_stats_instance_remove_epoll_block(iomux_func_stats_t *local_stats_addr)
+void xlio_stats_instance_remove_epoll_block(iomux_func_stats_t *local_stats_addr)
 {
     g_lock_iomux.lock();
     iomux_func_stats_t *ep_func_stats =
         (iomux_func_stats_t *)g_p_stats_data_reader->pop_data_reader(local_stats_addr);
 
     if (NULL == ep_func_stats) {
-        __log_dbg("application vma_stats pointer is NULL");
+        __log_dbg("application xlio_stats pointer is NULL");
         g_lock_iomux.unlock();
         return;
     }

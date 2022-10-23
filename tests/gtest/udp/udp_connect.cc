@@ -36,6 +36,7 @@
 #include "common/base.h"
 #include "common/cmn.h"
 #include "udp_base.h"
+#include "src/core/util/sock_addr.h"
 
 class udp_connect : public udp_base {
 };
@@ -170,4 +171,128 @@ TEST_F(udp_connect, ti_4)
     EXPECT_EQ(0, rc);
 
     close(fd);
+}
+
+/**
+ * @test udp_connect.mapped_ipv4_connect
+ * @brief
+ *    IPv6 mapped IPv4 connect
+ *
+ * @details
+ */
+TEST_F(udp_connect, mapped_ipv4_connect)
+{
+    if (!test_mapped_ipv4()) {
+        return;
+    }
+
+    auto check_connect = [this](bool withbind) {
+        int pid = fork();
+        if (0 == pid) { // Child
+            barrier_fork(pid);
+
+            int fd = udp_base::sock_create_fa(AF_INET6, false);
+            EXPECT_LE_ERRNO(0, fd);
+            if (0 <= fd) {
+                sockaddr_store_t client_ipv4 = client_addr;
+                sockaddr_store_t server_ipv4 = server_addr;
+                ipv4_to_mapped(client_ipv4);
+                ipv4_to_mapped(server_ipv4);
+
+                int rc = 0;
+                if (withbind) {
+                    rc = bind(fd, &client_ipv4.addr, sizeof(client_ipv4));
+                }
+
+                EXPECT_EQ_ERRNO(0, rc);
+                if (0 == rc) {
+                    rc = connect(fd, &server_ipv4.addr, sizeof(server_ipv4));
+                    EXPECT_EQ_ERRNO(0, rc);
+                    if (0 == rc) {
+                        log_trace("Established connection: fd=%d to %s from %s\n", fd,
+                                  SOCK_STR(server_ipv4), SOCK_STR(client_ipv4));
+
+                        sockaddr_store_t peer_addr;
+                        struct sockaddr *ppeer = &peer_addr.addr;
+                        socklen_t socklen = sizeof(peer_addr);
+                        memset(&peer_addr, 0, socklen);
+
+                        getpeername(fd, ppeer, &socklen);
+                        EXPECT_EQ_MAPPED_IPV4(peer_addr.addr6, server_addr.addr4.sin_addr.s_addr);
+
+                        if (withbind) {
+                            socklen = sizeof(peer_addr);
+                            memset(&peer_addr, 0, socklen);
+                            getsockname(fd, ppeer, &socklen);
+                            EXPECT_EQ_MAPPED_IPV4(peer_addr.addr6,
+                                                  client_addr.addr4.sin_addr.s_addr);
+                        }
+
+                        char buffer[8] = {0};
+                        rc = send(fd, buffer, sizeof(buffer), 0);
+                        EXPECT_EQ_ERRNO(8, rc);
+                    }
+                }
+
+                close(fd);
+            }
+
+            // This exit is very important, otherwise the fork
+            // keeps running and may duplicate other tests.
+            exit(testing::Test::HasFailure());
+        } else { // Parent
+            int fd = udp_base::sock_create_to(AF_INET, false, 10);
+            EXPECT_LE_ERRNO(0, fd);
+            if (0 <= fd) {
+                int rc = bind(fd, &server_addr.addr, sizeof(server_addr));
+                EXPECT_EQ_ERRNO(0, rc);
+                if (0 == rc) {
+                    barrier_fork(pid);
+
+                    char buffer[8] = {0};
+                    rc = recv(fd, buffer, sizeof(buffer), 0);
+                    EXPECT_EQ_ERRNO(8, rc);
+                }
+
+                close(fd);
+            }
+
+            EXPECT_EQ(0, wait_fork(pid));
+        }
+    };
+
+    log_trace("Without bind\n");
+    check_connect(false);
+    log_trace("With bind\n");
+    check_connect(true);
+}
+
+/**
+ * @test udp_connect.mapped_ipv4_connect_v6only
+ * @brief
+ *    IPv6 mapped IPv4 connect IPv6-Only socket
+ * @details
+ */
+TEST_F(udp_connect, mapped_ipv4_connect_v6only)
+{
+    if (!test_mapped_ipv4()) {
+        return;
+    }
+
+    int fd = udp_base::sock_create_fa(AF_INET6, false);
+    EXPECT_LE_ERRNO(0, fd);
+    if (0 <= fd) {
+        sockaddr_store_t server_ipv4 = server_addr;
+        ipv4_to_mapped(server_ipv4);
+
+        int ipv6only = 1;
+        int rc = setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &ipv6only, sizeof(ipv6only));
+        EXPECT_EQ_ERRNO(0, rc);
+
+        rc = connect(fd, &server_ipv4.addr, sizeof(server_ipv4));
+        EXPECT_LE_ERRNO(rc, -1);
+        EXPECT_EQ(errno, ENETUNREACH);
+
+        close(fd);
+    }
 }

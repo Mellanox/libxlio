@@ -46,9 +46,9 @@ test_id=0
 if [ $opt_tarball -eq 1 ]; then
     # Automake 1.10.1 has a bug https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=456632
     if [ -n "$(automake --version | grep 'automake (GNU automake) 1.10.1')" ]; then
-        test_exec='make dist'
+        test_exec='make $make_opt dist'
     else
-        test_exec='make dist && make distcheck'
+        test_exec='make $make_opt dist && make $make_opt distcheck'
     fi
 
     do_check_result "$test_exec" "$test_id" "tarball" "$rpm_tap" "${rpm_dir}/rpm-${test_id}"

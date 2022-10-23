@@ -19,17 +19,27 @@ rm -rf $test_dir
 mkdir -p $test_dir
 cd $test_dir
 
+test_app="sockperf"
+
+# Download sockperf to use verifier
 do_cmd "wget -O sockperf_v2.zip https://github.com/Mellanox/sockperf/archive/sockperf_v2.zip && unzip sockperf_v2.zip && mv sockperf-sockperf_v2 sockperf"
 cd sockperf
 
-./autogen.sh
-./configure --prefix=$PWD/install CPPFLAGS="-I${install_dir}/include"
-make install
-test_app="$PWD/install/bin/sockperf"
+# This unit requires sockperf so check for existence
+if [ $(command -v ${tool_app} >/dev/null 2>&1 || echo $?) ]; then
+    set +e
+    ./autogen.sh
+    ./configure --prefix=$PWD/install CPPFLAGS="-I${install_dir}/include"
+    make install
+    test_app="$PWD/install/bin/sockperf"
+    set -e
 
-if [ $(command -v $test_app >/dev/null 2>&1 || echo $?) ]; then
-	echo can not find $test_app
-	exit 1
+    if [ $(command -v ${test_app} >/dev/null 2>&1 || echo $?) ]; then
+        echo "[SKIP] $test_app does not exist"
+        exit 1
+    fi
+else
+    test_app="$(command -v ${test_app})"
 fi
 
 test_ip_list=""
@@ -72,7 +82,7 @@ if [ ! -z "${test_remote_ip}" ] ; then
 				subdir=${WORKSPACE##*/}
 				cmd="cd ${sperf_exec_dir}/${subdir} && "
 				cmd+="./autogen.sh && ./configure && make ${make_opt} && "
-				cmd+="cp src/vma/.libs/*.so ${sperf_exec_dir} &&"
+				cmd+="cp src/core/.libs/*.so ${sperf_exec_dir} &&"
 				cmd+="cd ${sperf_exec_dir} && "
 				cmd+="unzip sockperf_v2.zip && cd sockperf-sockperf_v2 && "
 				cmd+="./autogen.sh && ./configure && make ${make_opt} && cp sockperf ${sperf_exec_dir}"
@@ -102,36 +112,42 @@ for test_link in $test_ip_list; do
 		test_name=${test_in}-${test}
 		test_tap=${WORKSPACE}/${prefix}/test-${test_name}.tap
 
-		if [ ! -z "${test_remote_ip}" ] ; then
+		for i in $(seq 3); do
+			if [ ! -z "${test_remote_ip}" ] ; then
 
-			eval "pid=$(${sudo_cmd} pidof ${prj_service})"
-			[ ! -z "${pid}" ] && eval "${sudo_cmd} kill -9 ${pid}" 
-			eval "${sudo_cmd} ${install_dir}/sbin/${prj_service} --console -v5 & "
+				eval "pid=$(${sudo_cmd} pidof ${prj_service})"
+				[ ! -z "${pid}" ] && eval "${sudo_cmd} kill -9 ${pid}" 
+				eval "${sudo_cmd} ${install_dir}/sbin/${prj_service} --console -v5 & "
 
-			echo "BUILD_NUMBER=${BUILD_NUMBER}"
-			eval "pid=$(${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} pidof ${prj_service})"
-			if [ ! -z "${pid}" ] ;  then
-				echo "${prj_service} pid=${pid}"
-				eval "${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} kill -9 ${pid}"
+				echo "BUILD_NUMBER=${BUILD_NUMBER}"
+				eval "pid=$(${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} pidof ${prj_service})"
+				if [ ! -z "${pid}" ] ;  then
+					echo "${prj_service} pid=${pid}"
+					eval "${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} kill -9 ${pid}"
+				fi
+				${sudo_cmd} scp -q ${install_dir}/sbin/${prj_service} ${rmt_user}@${test_remote_ip}:${sperf_exec_dir}
+				eval "${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} ${sudo_cmd} ${sperf_exec_dir}/${prj_service} &"
+
+				vutil="$(dirname $0)/vutil.sh"
+				[ ! -e "${vutil}" ] && { echo "error vutil not found" ; exit 1 ; }
+
+				${sudo_cmd} $timeout_exe ${vutil}  -a "${test_app}" -x "--load-vma=${test_lib} " -t "${test}:tc[1-9]$" \
+						-s "${test_remote_ip}" -p "${test_remote_port}" -l "${test_dir}/${test_name}.log" \
+						-e "XLIO_TX_BUFS=20000 XLIO_RX_BUFS=20000"
+			else
+				${sudo_cmd} $timeout_exe $PWD/tests/verifier/verifier.pl -a ${test_app} -x " --load-vma=$test_lib " \
+					-t ${test}:tc[1-9]$ -s ${test_ip} -l ${test_dir}/${test_name}.log \
+					-e " XLIO_TX_BUFS=20000 XLIO_RX_BUFS=20000 " \
+					--progress=0
 			fi
-			${sudo_cmd} scp -q ${install_dir}/sbin/${prj_service} ${rmt_user}@${test_remote_ip}:${sperf_exec_dir}
-			eval "${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} ${sudo_cmd} ${sperf_exec_dir}/${prj_service} &"
 
-			vutil="$(dirname $0)/vutil.sh"
-			[ ! -e "${vutil}" ] && { echo "error vutil not found" ; exit 1 ; }
-
-			${sudo_cmd} $timeout_exe ${vutil}  -a "${test_app}" -x "--load-vma=${test_lib} " -t "${test}:tc[1-9]$" \
-					-s "${test_remote_ip}" -p "${test_remote_port}" -l "${test_dir}/${test_name}.log" \
-					-e "XLIO_TX_BUFS=20000 XLIO_RX_BUFS=20000"
-	
-		else
-			${sudo_cmd} $timeout_exe $PWD/tests/verifier/verifier.pl -a ${test_app} -x " --load-vma=$test_lib " \
-				-t ${test}:tc[1-9]$ -s ${test_ip} -l ${test_dir}/${test_name}.log \
-				-e " XLIO_TX_BUFS=20000 XLIO_RX_BUFS=20000 " \
-				--progress=0
-		fi
-
-		cp $PWD/${test_name}.dump ${test_dir}/${test_name}.dump
+			cp $PWD/${test_name}.dump ${test_dir}/${test_name}.dump
+			if grep -q 'FAIL' ${test_dir}/${test_name}.dump; then
+				rm -fv ${test_dir}/${test_name}.log ${test_dir}/${test_name}.dump
+			else
+				break
+			fi
+		done
 		grep -e 'PASS' -e 'FAIL' ${test_dir}/${test_name}.dump > ${test_dir}/${test_name}.tmp
 
 		do_archive "${test_dir}/${test_name}.dump" "${test_dir}/${test_name}.log"

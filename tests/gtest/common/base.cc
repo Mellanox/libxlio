@@ -121,6 +121,103 @@ void test_base::cleanup()
 {
 }
 
+bool test_base::test_mapped_ipv4() const
+{
+    return (m_family != AF_INET6);
+}
+
+void test_base::ipv4_to_mapped(sockaddr_store_t &inout)
+{
+    in_port_t port = inout.addr4.sin_port;
+    in_addr addr = inout.addr4.sin_addr;
+    memset(&inout, 0, sizeof(inout));
+    inout.addr6.sin6_family = AF_INET6;
+    inout.addr6.sin6_port = port;
+    reinterpret_cast<uint16_t *>(&inout.addr6.sin6_addr)[5] = 0xFFFFU;
+    reinterpret_cast<in_addr *>(&inout.addr6.sin6_addr)[3] = addr;
+}
+
+int test_base_sock::set_socket_rcv_timeout(int fd, int timeout_sec)
+{
+    struct timeval tv;
+    tv.tv_sec = timeout_sec;
+    tv.tv_usec = 0;
+    return setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+}
+
+int test_base_sock::sock_create_to(sa_family_t family, bool reuse_addr, int timeout_sec) const
+{
+    int fd = sock_create_fa(family, reuse_addr);
+    if (fd >= 0 && 0 != set_socket_rcv_timeout(fd, timeout_sec)) {
+        close(fd);
+        fd = -1;
+    }
+
+    return fd;
+}
+
+int test_base_sock::sock_create_fa_nb(sa_family_t family) const
+{
+    int fd = sock_create_fa(family, false);
+    if (fd < 0) {
+        return fd;
+    }
+
+    int rc = test_base::sock_noblock(fd);
+    if (rc < 0) {
+        log_error("failed sock_noblock() %s\n", strerror(errno));
+        goto err;
+    }
+
+    return fd;
+
+err:
+    close(fd);
+
+    return (-1);
+}
+
+int test_base_sock::sock_create_typed(sa_family_t family, int type, bool reuse_addr)
+{
+    int rc;
+    int fd;
+    int opt_val = (reuse_addr ? 1 : 0);
+
+    fd = socket(family, type, IPPROTO_IP);
+    if (fd < 0) {
+        log_error("failed socket(%hu) %s\n", family, strerror(errno));
+        return -1;
+    }
+
+    rc = setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt_val, sizeof(opt_val));
+    if (rc < 0) {
+        log_error("failed setsockopt(SO_REUSEADDR) %s\n", strerror(errno));
+        goto err;
+    }
+
+    return fd;
+
+err:
+    close(fd);
+
+    return (-1);
+}
+
+int test_base_sock::bind_to_device(int fd, const sockaddr_store_t &addr_store)
+{
+    char ifname[128] = {0};
+    char *rcs = sys_addr2dev(&addr_store.addr, ifname, sizeof(ifname));
+    if (rcs) {
+        log_trace("SO_BINDTODEVICE: fd=%d as %s on %s\n", fd, sys_addr2str(&addr_store.addr),
+                  ifname);
+
+        return setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, ifname, strlen(ifname));
+    }
+
+    errno = ENOMEDIUM;
+    return -1;
+}
+
 bool test_base::barrier()
 {
     int ret = pthread_barrier_wait(&m_barrier);

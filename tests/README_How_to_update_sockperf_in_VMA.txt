@@ -1,4 +1,4 @@
-As of Oct 2015, sockperf was entirely splitted out of VMA.
+As of Oct 2015, sockperf was entirely splitted out of XLIO.
 sockperf is anyhow a standalone project in github (and previously in googlecode).
 Recently sockperf started to have an *.rpm and *.deb for itself.
 Resources:

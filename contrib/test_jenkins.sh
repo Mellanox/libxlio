@@ -22,7 +22,7 @@ echo "# parent path -------------->  ${0%/*}     "
 echo "# name --------------------->  ${0##*/}    "
 echo
 
-PATH=${PATH}:/hpc/local/bin:/hpc/local/oss/vma/
+PATH=${PATH}:/hpc/local/bin:/hpc/local/oss/xlio/
 MODULEPATH=${MODULEPATH}:/hpc/local/etc/modulefiles
 
 echo

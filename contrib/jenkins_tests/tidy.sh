@@ -57,7 +57,7 @@ if [ ! -e $WORKSPACE/.clang-format ]; then
     ln -sf $WORKSPACE/contrib/jenkins_tests/style.conf $WORKSPACE/.clang-format
 fi
 
-check_files="$(find $WORKSPACE/src/ \( -path "*/lwip" \) ! -prune -o ! -name 'config_*' -a \( -iname '*.c' -o -iname '*.cpp' -o -iname '*.hpp' -o -iname '*.h' -o -iname '*.inl' \) 2>&1 | tee -a "${tidy_dir}/${test_name}.log")"
+check_files="$(find $WORKSPACE/src/ ! -name 'config_*' -a \( -iname '*.c' -o -iname '*.cpp' -o -iname '*.hpp' -o -iname '*.h' -o -iname '*.inl' \) 2>&1 | tee -a "${tidy_dir}/${test_name}.log")"
 check_files+=" $(find $WORKSPACE/tools/daemon/ \( -iname '*.c' -o -iname '*.cpp' -o -iname '*.hpp' -o -iname '*.h' -o -iname '*.inl' \) 2>&1 | tee -a "${tidy_dir}/${test_name}.log")"
 check_files+=" $(find $WORKSPACE/tests/gtest/ \( -path "*/googletest" \) ! -prune -o ! -name 'tap.h' -a \( -iname '*.c' -o -iname '*.cpp' -o -iname '*.cc' -o -iname '*.hpp' -o -iname '*.h' -o -iname '*.inl' \) 2>&1 | tee -a "${tidy_dir}/${test_name}.log")"
 

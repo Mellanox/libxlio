@@ -35,11 +35,11 @@
 #endif
 
 #include <cinttypes>
-#include "vma/util/utils.h"
-#include "vma/util/vma_stats.h"
-#include "vma/lwip/tcp.h"
-#include "vma/xlio_extra.h"
-#include "vma/util/sys_vars.h"
+#include "core/util/utils.h"
+#include "core/util/xlio_stats.h"
+#include "core/lwip/tcp.h"
+#include "core/xlio_extra.h"
+#include "core/util/sys_vars.h"
 
 typedef enum { e_K = 1024, e_M = 1048576 } units_t;
 
@@ -132,8 +132,8 @@ void print_full_stats(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, 
         for (int grp_idx = 0; grp_idx < p_mc_grp_info->max_grp_num; grp_idx++) {
             if (p_si_stats->mc_grp_map.test(grp_idx)) {
                 /* cppcheck-suppress wrongPrintfScanfArgNum */
-                fprintf(filename, "- Member of = [%d.%d.%d.%d]\n",
-                        NIPQUAD(p_mc_grp_info->mc_grp_tbl[grp_idx].mc_grp));
+                fprintf(filename, "- Member of = [%s]\n",
+                        p_mc_grp_info->mc_grp_tbl[grp_idx].mc_grp.to_str().c_str());
             }
         }
     }

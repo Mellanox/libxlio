@@ -37,7 +37,7 @@
 #@date: 20June2015
 #
 # This script performs non blocking connect to a given TCP server
-# It can serve for checking VMA behaviour with async connect when the server
+# It can serve for checking XLIO behaviour with async connect when the server
 # is up or down
 #
 import socket, select, os, time, sys, fcntl, errno

@@ -21,6 +21,7 @@ usage()
         "\n    -p, --proto       <http|https>  protocol to use for connections (default http)" \
         "\n    -b, --payload     <name>        payload to use in request (default 0B)" \
         "\n        --cps                       enable CPS mode instead of RPS (effectively adds option -H 'Connection: close')" \
+        "\n        --duration    <num>         duration in seconds (default 30)" \
         "\n\n"
 }
 
@@ -41,7 +42,7 @@ main()
     local connections=$(nproc)
     local proto="http"
     local payload="0B"
-    local duration="${BULK_STEP_DURATION:-120}"
+    local duration="30"
     local cps=0
     #local delay=1
 
@@ -56,6 +57,7 @@ main()
             -p|--proto)      proto=$2; shift 2;;
             -b|--payload)    payload=$2; shift 2;;
             --cps)           cps=1; shift;;
+            --duration)      duration=$2; shift 2;;
             #-d|--delay)      delay=$2; shift 2;;
             --) break;;
             -?*) { echo "unknown option: $1"; usage; exit 1; } >&2;;

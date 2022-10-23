@@ -870,7 +870,7 @@ static int proc_fanotify(void *buffer, int nbyte)
                       data->fd, pathname);
 
             rc = snprintf(buf, sizeof(buf) - 1, "%s/%s.%d.pid", daemon_cfg.notify_dir,
-                          VMA_AGENT_BASE_NAME, data->pid);
+                          XLIO_AGENT_BASE_NAME, data->pid);
             if ((rc < 0) || (rc == (sizeof(buf) - 1))) {
                 rc = -ENOMEM;
                 log_error("failed allocate pid file errno %d (%s)\n", errno, strerror(errno));
@@ -895,7 +895,7 @@ static int proc_fanotify(void *buffer, int nbyte)
                     strcpy(pathname, buf);
                     unlink(pathname);
                     if (snprintf(pathname, sizeof(pathname) - 1, "%s/%s.%d.sock",
-                                 daemon_cfg.notify_dir, VMA_AGENT_BASE_NAME, data->pid) > 0) {
+                                 daemon_cfg.notify_dir, XLIO_AGENT_BASE_NAME, data->pid) > 0) {
                         unlink(pathname);
                     }
                 } else if (-ESRCH == rc) {
@@ -954,7 +954,7 @@ static int proc_inotify(void *buffer, int nbyte)
 
         /* Monitor only events from files */
         if ((data->len > 0) && !(data->mask & IN_ISDIR) &&
-            (1 == sscanf(data->name, VMA_AGENT_BASE_NAME ".%d.pid", &pid)) &&
+            (1 == sscanf(data->name, XLIO_AGENT_BASE_NAME ".%d.pid", &pid)) &&
             hash_get(daemon_cfg.ht, pid)) {
 
             char buf[PATH_MAX];
@@ -974,7 +974,7 @@ static int proc_inotify(void *buffer, int nbyte)
             log_debug("getting event ([0x%x] pid: %d name: %s)\n", data->mask, pid, pathname);
 
             rc = snprintf(buf, sizeof(buf) - 1, "%s/%s.%d.pid", daemon_cfg.notify_dir,
-                          VMA_AGENT_BASE_NAME, pid);
+                          XLIO_AGENT_BASE_NAME, pid);
             if ((rc < 0) || (rc == (sizeof(buf) - 1))) {
                 rc = -ENOMEM;
                 log_error("failed allocate pid file errno %d (%s)\n", errno, strerror(errno));
@@ -997,7 +997,7 @@ static int proc_inotify(void *buffer, int nbyte)
                     log_debug("[%d] cleanup after unexpected termination\n", pid);
                     unlink(buf);
                     if (snprintf(buf, sizeof(buf) - 1, "%s/%s.%d.sock", daemon_cfg.notify_dir,
-                                 VMA_AGENT_BASE_NAME, pid) > 0) {
+                                 XLIO_AGENT_BASE_NAME, pid) > 0) {
                         unlink(buf);
                     }
                 } else if (-ESRCH == rc) {

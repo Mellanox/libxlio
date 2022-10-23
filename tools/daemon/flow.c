@@ -141,7 +141,7 @@ int add_flow(struct store_pid *pid_value, struct store_flow *value)
 
     /* Egress rules should be created for new tap device
      */
-    if (VMA_MSG_FLOW_EGRESS == value->type) {
+    if (XLIO_MSG_FLOW_EGRESS == value->type) {
         return add_flow_egress(pid_value, value);
     }
 
@@ -318,13 +318,13 @@ int add_flow(struct store_pid *pid_value, struct store_flow *value)
         }
 
         switch (value->type) {
-        case VMA_MSG_FLOW_TCP_3T:
-        case VMA_MSG_FLOW_UDP_3T:
+        case XLIO_MSG_FLOW_TCP_3T:
+        case XLIO_MSG_FLOW_UDP_3T:
             rc = tc_add_filter_dev2tap(daemon_cfg.tc, value->if_id, get_prio(value), ht, bkt, id,
                                        get_protocol(value), &value->flow.dst, NULL, value->tap_id);
             break;
-        case VMA_MSG_FLOW_TCP_5T:
-        case VMA_MSG_FLOW_UDP_5T:
+        case XLIO_MSG_FLOW_TCP_5T:
+        case XLIO_MSG_FLOW_UDP_5T:
             rc = tc_add_filter_dev2tap(daemon_cfg.tc, value->if_id, get_prio(value), ht, bkt, id,
                                        get_protocol(value), &value->flow.dst, &value->flow.src,
                                        value->tap_id);
@@ -718,12 +718,12 @@ static inline int get_bkt(struct store_flow *value)
 static inline int get_protocol(struct store_flow *value)
 {
     switch (value->type) {
-    case VMA_MSG_FLOW_UDP_3T:
-    case VMA_MSG_FLOW_UDP_5T:
+    case XLIO_MSG_FLOW_UDP_3T:
+    case XLIO_MSG_FLOW_UDP_5T:
         return IPPROTO_UDP;
 
-    case VMA_MSG_FLOW_TCP_3T:
-    case VMA_MSG_FLOW_TCP_5T:
+    case XLIO_MSG_FLOW_TCP_3T:
+    case XLIO_MSG_FLOW_TCP_5T:
         return IPPROTO_TCP;
 
     default:

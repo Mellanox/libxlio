@@ -45,16 +45,16 @@ eval "find ${WORKSPACE}/src -name '*.h' -o -name '*.cpp' -o -name '*.c' -o -name
 	-I${WORKSPACE}/src/stats \
 	-I${WORKSPACE}/src/utils \
 	-I${WORKSPACE}/src/vlogger \
-	-I${WORKSPACE}/src/vma \
-	-I${WORKSPACE}/src/vma/dev \
-	-I${WORKSPACE}/src/vma/event \
-	-I${WORKSPACE}/src/vma/infra \
-	-I${WORKSPACE}/src/vma/iomux \
-	-I${WORKSPACE}/src/vma/lwip \
-	-I${WORKSPACE}/src/vma/netlink \
-	-I${WORKSPACE}/src/vma/proto \
-	-I${WORKSPACE}/src/vma/sock \
-	-I${WORKSPACE}/src/vma/util \
+	-I${WORKSPACE}/src/core \
+	-I${WORKSPACE}/src/core/dev \
+	-I${WORKSPACE}/src/core/event \
+	-I${WORKSPACE}/src/core/infra \
+	-I${WORKSPACE}/src/core/iomux \
+	-I${WORKSPACE}/src/core/lwip \
+	-I${WORKSPACE}/src/core/netlink \
+	-I${WORKSPACE}/src/core/proto \
+	-I${WORKSPACE}/src/core/sock \
+	-I${WORKSPACE}/src/core/util \
 	--inline-suppr --suppress=memleak:config_parser.y \
 	--template='{severity}: {id}: {file}:{line}: {message}' \
 	--file-list=- 2> ${cppcheck_dir}/cppcheck.err 1> ${cppcheck_dir}/cppcheck.log"

@@ -12,9 +12,9 @@ dnl===-----------------------------------------------------------------------===
 
 # Update version number here:
 #
-define([prj_ver_major], 1)
-define([prj_ver_minor], 3)
-define([prj_ver_revision], 5)
+define([prj_ver_major], 2)
+define([prj_ver_minor], 0)
+define([prj_ver_revision], 6)
 define([prj_ver_release], esyscmd([echo ${PRJ_RELEASE:=0}]))
 
 
@@ -163,7 +163,7 @@ AC_MSG_CHECKING(
 AC_ARG_ENABLE([time_measure],
     AS_HELP_STRING([--enable-time-measure],
         [turn on time measuring]),
-    [CPPFLAGS+=" -DVMA_TIME_MEASURE";
+    [CPPFLAGS+=" -DXLIO_TIME_MEASURE";
      AC_MSG_RESULT([yes])],
     [AC_MSG_RESULT([no])]
 )
@@ -232,12 +232,7 @@ AC_ARG_ENABLE([thread-lock],
 AC_MSG_CHECKING(
     [for thread locking support])
 if test "x$enable_thread_lock" = "xno"; then
-    if test "x$enable_socketxtreme" = xyes; then
-        AC_DEFINE([DEFINED_NO_THREAD_LOCK], 1, [Define to 1 to disable thread locking])
-        AC_MSG_RESULT([no])
-    else
-        AC_MSG_RESULT([yes (socketxtreme is not enabled)])
-    fi
+	AC_MSG_RESULT([no])
 else
     AC_MSG_RESULT([yes])
 fi
@@ -273,7 +268,7 @@ else
 fi
 
 AC_MSG_CHECKING([for md5 version of library statistics is])
-STATS_PROTOCOL_VER=`md5sum ${srcdir}/src/vma/util/vma_stats.h | awk '{ print $1}'`
+STATS_PROTOCOL_VER=`md5sum ${srcdir}/src/core/util/xlio_stats.h | awk '{ print $1}'`
 AC_DEFINE_UNQUOTED(STATS_PROTOCOL_VER, "${STATS_PROTOCOL_VER}", [Stats Protocol Version])
 AC_SUBST(STATS_PROTOCOL_VER)
 AC_MSG_RESULT(${STATS_PROTOCOL_VER})
@@ -398,9 +393,9 @@ show_section_title "Configure makefiles"
 AC_CONFIG_FILES([
 		Makefile
 		src/Makefile
-		src/vma/Makefile
-		src/vma/infra/Makefile
-		src/vma/netlink/Makefile
+		src/core/Makefile
+		src/core/infra/Makefile
+		src/core/netlink/Makefile
 		src/utils/Makefile
 		src/vlogger/Makefile
 		src/stats/Makefile

@@ -65,7 +65,7 @@ TEST_F(tcp_socket, ti_1_ip_socket)
 TEST_F(tcp_socket, ti_2_ipv6only_listen_all)
 {
     // Test only for IPv4 to IPv6 mode.
-    if (server_addr.addr.sin_family != AF_INET6 || client_addr.addr.sin_family != AF_INET) {
+    if (server_addr.addr.sa_family != AF_INET6 || client_addr.addr.sa_family != AF_INET) {
         return;
     }
 
@@ -76,7 +76,7 @@ TEST_F(tcp_socket, ti_2_ipv6only_listen_all)
         if (0 == pid) { /* I am the child */
             barrier_fork(pid);
 
-            int fd = tcp_base::sock_create(client_addr.addr.sin_family);
+            int fd = tcp_base::sock_create_fa(client_addr.addr.sa_family);
             ASSERT_LE(0, fd);
 
             rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
@@ -88,7 +88,7 @@ TEST_F(tcp_socket, ti_2_ipv6only_listen_all)
 
                 close(fd);
 
-                fd = tcp_base::sock_create(AF_INET6);
+                fd = tcp_base::sock_create_fa(AF_INET6);
                 ASSERT_LE(0, fd);
 
                 rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));

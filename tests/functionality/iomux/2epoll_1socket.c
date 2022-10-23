@@ -107,21 +107,21 @@ static int create_and_bind(char *port)
 
 int main(int argc, char *argv[])
 {
-	int sfd, s, with_vma;
+	int sfd, s, with_xlio;
 	int efd, efd2;
 	struct epoll_event event;
 	struct epoll_event *events;
 
 	if (argc != 2) {
-		printf("--> Usage: ./2epoll_1socket <with_vma>\n");
-		printf("--> With VMA run ./2epoll_1socket 1\n");
+		printf("--> Usage: ./2epoll_1socket <with_xlio>\n");
+		printf("--> With XLIO run ./2epoll_1socket 1\n");
 		printf("--> With  OS run ./2epoll_1socket 0\n");
 		return EXIT_FAILURE;
 	}
 
-	with_vma = atoi(argv[1]);
-	if (with_vma)
-		printf("--> running with VMA\n");
+	with_xlio = atoi(argv[1]);
+	if (with_xlio)
+		printf("--> running with XLIO\n");
 	else
 		printf("--> running with OS\n");
 
@@ -171,7 +171,7 @@ int main(int argc, char *argv[])
 	printf("--> socket %d was registered to epoll %d\n", sfd, efd);
 
 	s = epoll_ctl(efd2, EPOLL_CTL_ADD, sfd, &event);
-	if (with_vma) {
+	if (with_xlio) {
 		if (s == -1) {
 			if (errno == ENOMEM) {
 				printf("--> socket %d was already registered to epoll %d, cant register to another epfd %d, errno = %d\n", sfd, efd, efd2, errno);
@@ -182,7 +182,7 @@ int main(int argc, char *argv[])
 				goto failure;
 			}
 		} else {
-			printf("--> epoll_ctl didnot return with error, VMA support only 1 epfd for each socket\n", sfd, efd, efd2, errno);
+			printf("--> epoll_ctl didnot return with error, XLIO support only 1 epfd for each socket\n", sfd, efd, efd2, errno);
 			goto failure;
 		}
 	} else {

@@ -86,6 +86,7 @@ _step()
         client_args+=" -p $proto"
         client_args+=" -c $connections_per_client"
         client_args+=" -b \"$payload\""
+        client_args+=" --duration $BULK_STEP_DURATION"
         client_args+=" $BULK_SERVER_DHOST"
         ssh "$cm" "cd $ROOT_DIR && ./bench client -t 20 $client_args" &
         i=$(($i+1))

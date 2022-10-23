@@ -37,38 +37,38 @@ All of the configurable parameters are described along with their default parame
 Exchange side printout:
 =======================
 
-[odeds@hail18 Debug]$ VMA_RX_POLL=-1 LD_PRELOAD=/.autodirect/mtrswgwork/odeds/workspace/vma/6.1/last/src/vma/.libs/libvma.so exchange -l 1.1.1.18
- VMA INFO   : -------------------------------------------------
- VMA INFO   : Version: 6.1.7.0
- VMA INFO   : Current Time: Thu May  3 15:28:26 2012
- VMA INFO   : Cmd Line: exchange -l 1.1.1.18
- VMA INFO   : Pid: 25628
- VMA INFO   : OFED Version: OFED-VMA-1.5.3-0010:
- VMA INFO   : System: 2.6.32-71.el6.x86_64
- VMA INFO   : Architecture: x86_64
- VMA INFO   : Node: hail18
- VMA INFO   : ---------------------------------------------------------
- VMA INFO   :  Log Level                      3                          [VMA_TRACELEVEL]
- VMA INFO   :  Log File                                                  [VMA_LOG_FILE]
- VMA INFO   :  Rx Poll Loops                  -1                         [VMA_RX_POLL]
- VMA INFO   : ---------------------------------------------------------
- VMA INFO   : ***************************************************************
- VMA INFO   : * This VMA license was granted to: cust                       *
- VMA INFO   : * Successfully passed license validation, starting VMA.       *
- VMA INFO   : ***************************************************************
+[odeds@hail18 Debug]$ XLIO_RX_POLL=-1 LD_PRELOAD=<path to>/libxlio.so exchange -l 1.1.1.18
+ XLIO INFO   : -------------------------------------------------
+ XLIO INFO   : Version: 6.1.7.0
+ XLIO INFO   : Current Time: Thu May  3 15:28:26 2012
+ XLIO INFO   : Cmd Line: exchange -l 1.1.1.18
+ XLIO INFO   : Pid: 25628
+ XLIO INFO   : OFED Version: OFED-XLIO-1.5.3-0010:
+ XLIO INFO   : System: 2.6.32-71.el6.x86_64
+ XLIO INFO   : Architecture: x86_64
+ XLIO INFO   : Node: hail18
+ XLIO INFO   : ---------------------------------------------------------
+ XLIO INFO   :  Log Level                      3                          [XLIO_TRACELEVEL]
+ XLIO INFO   :  Log File                                                  [XLIO_LOG_FILE]
+ XLIO INFO   :  Rx Poll Loops                  -1                         [XLIO_RX_POLL]
+ XLIO INFO   : ---------------------------------------------------------
+ XLIO INFO   : ***************************************************************
+ XLIO INFO   : * This XLIO license was granted to: cust                       *
+ XLIO INFO   : * Successfully passed license validation, starting XLIO.       *
+ XLIO INFO   : ***************************************************************
 Opening datagram MC socket
- VMA WARNING: ***************************************************************
- VMA WARNING: * NO IMMEDIATE ACTION NEEDED!                                 *
- VMA WARNING: * Not enough hugepage resources for VMA memory allocation.    *
- VMA WARNING: * VMA will continue working with regular memory allocation.   *
- VMA INFO   : * Optional: 1. Disable VMA's hugepage support (VMA_HUGETBL=0) *
- VMA INFO   : *           2. Restart process after increasing the number of *
- VMA INFO   : *              hugepages resources in the system:             *
- VMA INFO   : * "cat /proc/meminfo |  grep -i HugePage"                     *
- VMA INFO   : * "echo 1000000000 > /proc/sys/kernel/shmmax"                 *
- VMA INFO   : * "echo 800 > /proc/sys/vm/nr_hugepages"                      *
- VMA WARNING: * Read more about the Huge Pages in the VMA's User Manual     *
- VMA WARNING: ***************************************************************
+ XLIO WARNING: ***************************************************************
+ XLIO WARNING: * NO IMMEDIATE ACTION NEEDED!                                 *
+ XLIO WARNING: * Not enough hugepage resources for XLIO memory allocation.    *
+ XLIO WARNING: * XLIO will continue working with regular memory allocation.   *
+ XLIO INFO   : * Optional: 1. Disable XLIO's hugepage support (XLIO_HUGETBL=0) *
+ XLIO INFO   : *           2. Restart process after increasing the number of *
+ XLIO INFO   : *              hugepages resources in the system:             *
+ XLIO INFO   : * "cat /proc/meminfo |  grep -i HugePage"                     *
+ XLIO INFO   : * "echo 1000000000 > /proc/sys/kernel/shmmax"                 *
+ XLIO INFO   : * "echo 800 > /proc/sys/vm/nr_hugepages"                      *
+ XLIO WARNING: * Read more about the Huge Pages in the XLIO's User Manual     *
+ XLIO WARNING: ***************************************************************
 Connecting..
 Opening datagram UC socket....OK.
 Binding datagram UC socket...OK.
@@ -119,38 +119,38 @@ BW(Gbps)= 0.135, MPS=     90898
 Trader side printout:
 =====================
 
-[odeds@hail19 Debug]$ VMA_RX_POLL=-1 LD_PRELOAD=/.autodirect/mtrswgwork/odeds/workspace/vma/6.1/last/src/vma/.libs/libvma.so ./trader -l 1.1.1.19 -ua 1.1.1.18
- VMA INFO   : -------------------------------------------------
- VMA INFO   : Version: 6.1.7.0
- VMA INFO   : Current Time: Thu May  3 15:28:57 2012
- VMA INFO   : Cmd Line: ./trader -l 1.1.1.19 -ua 1.1.1.18
- VMA INFO   : Pid: 27087
- VMA INFO   : OFED Version: OFED-VMA-1.5.3-0010:
- VMA INFO   : System: 2.6.32-71.el6.x86_64
- VMA INFO   : Architecture: x86_64
- VMA INFO   : Node: hail19
- VMA INFO   : ---------------------------------------------------------
- VMA INFO   :  Log Level                      3                          [VMA_TRACELEVEL]
- VMA INFO   :  Log File                                                  [VMA_LOG_FILE]
- VMA INFO   :  Rx Poll Loops                  -1                         [VMA_RX_POLL]
- VMA INFO   : ---------------------------------------------------------
- VMA INFO   : ***************************************************************
- VMA INFO   : * This VMA license was granted to: Mellanox internal evaluation license. Not for external use! *
- VMA INFO   : * Successfully passed license validation, starting VMA.       *
- VMA INFO   : ***************************************************************
+[odeds@hail19 Debug]$ XLIO_RX_POLL=-1 LD_PRELOAD=<path to>/libxlio.so ./trader -l 1.1.1.19 -ua 1.1.1.18
+ XLIO INFO   : -------------------------------------------------
+ XLIO INFO   : Version: 6.1.7.0
+ XLIO INFO   : Current Time: Thu May  3 15:28:57 2012
+ XLIO INFO   : Cmd Line: ./trader -l 1.1.1.19 -ua 1.1.1.18
+ XLIO INFO   : Pid: 27087
+ XLIO INFO   : OFED Version: OFED-XLIO-1.5.3-0010:
+ XLIO INFO   : System: 2.6.32-71.el6.x86_64
+ XLIO INFO   : Architecture: x86_64
+ XLIO INFO   : Node: hail19
+ XLIO INFO   : ---------------------------------------------------------
+ XLIO INFO   :  Log Level                      3                          [XLIO_TRACELEVEL]
+ XLIO INFO   :  Log File                                                  [XLIO_LOG_FILE]
+ XLIO INFO   :  Rx Poll Loops                  -1                         [XLIO_RX_POLL]
+ XLIO INFO   : ---------------------------------------------------------
+ XLIO INFO   : ***************************************************************
+ XLIO INFO   : * This XLIO license was granted to: Mellanox internal evaluation license. Not for external use! *
+ XLIO INFO   : * Successfully passed license validation, starting XLIO.       *
+ XLIO INFO   : ***************************************************************
 Opening MC datagram socket 1
- VMA WARNING: ***************************************************************
- VMA WARNING: * NO IMMEDIATE ACTION NEEDED!                                 *
- VMA WARNING: * Not enough hugepage resources for VMA memory allocation.    *
- VMA WARNING: * VMA will continue working with regular memory allocation.   *
- VMA INFO   : * Optional: 1. Disable VMA's hugepage support (VMA_HUGETBL=0) *
- VMA INFO   : *           2. Restart process after increasing the number of *
- VMA INFO   : *              hugepages resources in the system:             *
- VMA INFO   : * "cat /proc/meminfo |  grep -i HugePage"                     *
- VMA INFO   : * "echo 1000000000 > /proc/sys/kernel/shmmax"                 *
- VMA INFO   : * "echo 800 > /proc/sys/vm/nr_hugepages"                      *
- VMA WARNING: * Read more about the Huge Pages in the VMA's User Manual     *
- VMA WARNING: ***************************************************************
+ XLIO WARNING: ***************************************************************
+ XLIO WARNING: * NO IMMEDIATE ACTION NEEDED!                                 *
+ XLIO WARNING: * Not enough hugepage resources for XLIO memory allocation.    *
+ XLIO WARNING: * XLIO will continue working with regular memory allocation.   *
+ XLIO INFO   : * Optional: 1. Disable XLIO's hugepage support (XLIO_HUGETBL=0) *
+ XLIO INFO   : *           2. Restart process after increasing the number of *
+ XLIO INFO   : *              hugepages resources in the system:             *
+ XLIO INFO   : * "cat /proc/meminfo |  grep -i HugePage"                     *
+ XLIO INFO   : * "echo 1000000000 > /proc/sys/kernel/shmmax"                 *
+ XLIO INFO   : * "echo 800 > /proc/sys/vm/nr_hugepages"                      *
+ XLIO WARNING: * Read more about the Huge Pages in the XLIO's User Manual     *
+ XLIO WARNING: ***************************************************************
 Opening MC datagram socket num = 1....OK.
 Setting SO_REUSEADDR on MC socket num = 1...OK.
 Binding MC datagram socket num = 1...OK.

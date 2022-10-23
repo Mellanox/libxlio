@@ -13,9 +13,9 @@ FD_NUMBER=${FD_NUMBER:-"1 2 5 10 25 50 100 250 500"}
 LOOP=${LOOP:-"1"}
 SOCKPERF=${SOCKPERF:-sockperf}
 DURATION=${DURATION:-30}
-VMA_SELECT_POLL_VAL=${VMA_SELECT_POLL_VAL:-"-1 0 1000 1000000"}
-VMA_RX_POLL_VAL=${VMA_RX_POLL_VAL:-"-1"}
-VMA_ENV_FLAGS=${VMA_ENV_FLAGS:-"LD_PRELOAD=libvma.so"}
+XLIO_SELECT_POLL_VAL=${XLIO_SELECT_POLL_VAL:-"-1 0 1000 1000000"}
+XLIO_RX_POLL_VAL=${XLIO_RX_POLL_VAL:-"-1"}
+XLIO_ENV_FLAGS=${XLIO_ENV_FLAGS:-"LD_PRELOAD=libxlio.so"}
 IOMUX_TYPE=${IOMUX_TYPE:-"s p e"}
 SERVER_FLAG=${SERVER_FLAG:-" "}
 CLIENT_FLAG=${CLIENT_FLAG:=" "}
@@ -105,7 +105,7 @@ function create_feed_file_multi()
 function tp_udp_mc_imux_test()
 {
 	echo "TP measurement UDP MC FEED_FILE" >> ${OUT_FILE}
-	echo "VMA_SELECT_POLL Imoux_type Fd_number Message-size PPS Message-rate bandwidth" >> ${OUT_FILE}
+	echo "XLIO_SELECT_POLL Imoux_type Fd_number Message-size PPS Message-rate bandwidth" >> ${OUT_FILE}
 
 	for imoux_type in ${IOMUX_TYPE}; do
 		for fd_num in ${FD_NUMBER}; do
@@ -113,15 +113,15 @@ function tp_udp_mc_imux_test()
 			create_feed_file_multi ${fd_num} ${FEED_FILE}
 			scp "${FEED_FILE}" "${SERVER}:${FEED_FILE}"
 
-			for select_poll in ${VMA_SELECT_POLL_VAL}; do
+			for select_poll in ${XLIO_SELECT_POLL_VAL}; do
 				ssh $SERVER pkill -f sockperf
 				sleep 1
-				ssh $SERVER env VMA_RX_POLL="-1" VMA_SELECT_POLL=${select_poll} ${VMA_ENV_FLAGS} ${SOCKPERF} server -f ${FEED_FILE} -F ${imoux_type} ${SERVER_FLAG} &
+				ssh $SERVER env XLIO_RX_POLL="-1" XLIO_SELECT_POLL=${select_poll} ${XLIO_ENV_FLAGS} ${SOCKPERF} server -f ${FEED_FILE} -F ${imoux_type} ${SERVER_FLAG} &
 				sleep 5
 				for pps_num in ${PPS}; do
 					for j in ${M_SIZE}; do
 						echo -n "${select_poll} ${imoux_type} ${fd_num} $j ${pps_num} " >> ${OUT_FILE}
-						run_throughput_test "-m ${j} --mps ${pps_num} -t ${DURATION} -f ${FEED_FILE} -F ${imoux_type}" "VMA_SELECT_POLL=${select_poll} VMA_RX_POLL=-1 ${VMA_ENV_FLAGS}"
+						run_throughput_test "-m ${j} --mps ${pps_num} -t ${DURATION} -f ${FEED_FILE} -F ${imoux_type}" "XLIO_SELECT_POLL=${select_poll} XLIO_RX_POLL=-1 ${XLIO_ENV_FLAGS}"
 					done
 				done
 			done
@@ -135,17 +135,17 @@ function tp_udp_mc_imux_test()
 function tp_test()
 {
 	echo "TP measurement UDP MC" >> ${OUT_FILE}
-	echo "VMA_RX_POLL Message-size PPS Message-rate bandwidth" >> ${OUT_FILE}
+	echo "XLIO_RX_POLL Message-size PPS Message-rate bandwidth" >> ${OUT_FILE}
 
-	for rx_poll in ${VMA_RX_POLL_VAL}; do
+	for rx_poll in ${XLIO_RX_POLL_VAL}; do
 		ssh $SERVER pkill -f sockperf
 		sleep 1
-		ssh $SERVER env VMA_SELECT_POLL="-1" VMA_RX_POLL=${rx_poll} ${VMA_ENV_FLAGS} ${SOCKPERF} server -i ${SERVER_ADD} ${SERVER_FLAG} &
+		ssh $SERVER env XLIO_SELECT_POLL="-1" XLIO_RX_POLL=${rx_poll} ${XLIO_ENV_FLAGS} ${SOCKPERF} server -i ${SERVER_ADD} ${SERVER_FLAG} &
 		sleep 5
 		for pps_num in ${PPS}; do
 			for j in ${M_SIZE}; do
 				echo -n "${rx_poll} $j ${pps_num} " >> ${OUT_FILE}
-				run_throughput_test "-m ${j} --mps ${pps_num} -t ${DURATION} -i ${SERVER_ADD}" "VMA_SELECT_POLL=-1 VMA_RX_POLL=${rx_poll} ${VMA_ENV_FLAGS}"
+				run_throughput_test "-m ${j} --mps ${pps_num} -t ${DURATION} -i ${SERVER_ADD}" "XLIO_SELECT_POLL=-1 XLIO_RX_POLL=${rx_poll} ${XLIO_ENV_FLAGS}"
 			done
 		done
 	done
@@ -157,7 +157,7 @@ function tp_test()
 function pp_udp_mc_imux_test()
 {
 	echo "Latency Ping-pong measurement UDP MC FEED_FILE" >> ${OUT_FILE}
-	echo "VMA_SELECT_POLL Imoux_type Fd_number Message-size PPS std-dev dropped-messages duplicated-messages out-of-order-messages Average_Latency Total_observations Max_Latency 99%_percentile 50%_percentile Min_Latency" >> ${OUT_FILE}
+	echo "XLIO_SELECT_POLL Imoux_type Fd_number Message-size PPS std-dev dropped-messages duplicated-messages out-of-order-messages Average_Latency Total_observations Max_Latency 99%_percentile 50%_percentile Min_Latency" >> ${OUT_FILE}
 
 	for imoux_type in ${IOMUX_TYPE}; do
 		for fd_num in ${FD_NUMBER}; do
@@ -165,15 +165,15 @@ function pp_udp_mc_imux_test()
 			create_feed_file_multi ${fd_num} ${FEED_FILE}
 			scp "${FEED_FILE}" "${SERVER}:${FEED_FILE}"
 
-			for select_poll in ${VMA_SELECT_POLL_VAL}; do
+			for select_poll in ${XLIO_SELECT_POLL_VAL}; do
 				ssh $SERVER pkill -f sockperf
 				sleep 1
-				ssh $SERVER env VMA_RX_POLL="-1" VMA_SELECT_POLL=${select_poll} ${VMA_ENV_FLAGS} ${SOCKPERF} server -f ${FEED_FILE} -F ${imoux_type} ${SERVER_FLAG} &
+				ssh $SERVER env XLIO_RX_POLL="-1" XLIO_SELECT_POLL=${select_poll} ${XLIO_ENV_FLAGS} ${SOCKPERF} server -f ${FEED_FILE} -F ${imoux_type} ${SERVER_FLAG} &
 				sleep 5
 				for pps_num in ${PPS}; do
 					for j in ${M_SIZE}; do
 						echo -n "${select_poll} ${imoux_type} ${fd_num} $j ${pps_num} " >> ${OUT_FILE}
-						run_latancy_test "pp -m ${j} --mps ${pps_num} -t ${DURATION} -f ${FEED_FILE} -F ${imoux_type}" "VMA_SELECT_POLL=${select_poll} VMA_RX_POLL=-1 ${VMA_ENV_FLAGS}"
+						run_latancy_test "pp -m ${j} --mps ${pps_num} -t ${DURATION} -f ${FEED_FILE} -F ${imoux_type}" "XLIO_SELECT_POLL=${select_poll} XLIO_RX_POLL=-1 ${XLIO_ENV_FLAGS}"
 					done
 				done
 			done
@@ -187,17 +187,17 @@ function pp_udp_mc_imux_test()
 function pp_test()
 {
 	echo "Latency Ping-pong measurement UDP" >> ${OUT_FILE}
-	echo "VMA_RX_POLL Message-size PPS std-dev dropped-messages duplicated-messages out-of-order-messages Average_Latency Total_observations Max_Latency 99%_percentile 50%_percentile Min_Latency" >> ${OUT_FILE}
+	echo "XLIO_RX_POLL Message-size PPS std-dev dropped-messages duplicated-messages out-of-order-messages Average_Latency Total_observations Max_Latency 99%_percentile 50%_percentile Min_Latency" >> ${OUT_FILE}
 
-	for rx_poll in ${VMA_RX_POLL_VAL}; do
+	for rx_poll in ${XLIO_RX_POLL_VAL}; do
 		ssh $SERVER pkill -f sockperf
 		sleep 1
-		ssh $SERVER env VMA_SELECT_POLL="-1" VMA_RX_POLL=${rx_poll} ${VMA_ENV_FLAGS} ${SOCKPERF} server -i ${SERVER_ADD} ${SERVER_FLAG} &
+		ssh $SERVER env XLIO_SELECT_POLL="-1" XLIO_RX_POLL=${rx_poll} ${XLIO_ENV_FLAGS} ${SOCKPERF} server -i ${SERVER_ADD} ${SERVER_FLAG} &
 		sleep 5
 		for pps_num in ${PPS}; do
 			for j in ${M_SIZE}; do
 				echo -n "${rx_poll} $j ${pps_num} " >> ${OUT_FILE}
-				run_latancy_test "pp -m ${j} --mps ${pps_num} -t ${DURATION} -i ${SERVER_ADD}" "VMA_SELECT_POLL=-1 VMA_RX_POLL=${rx_poll} ${VMA_ENV_FLAGS}"
+				run_latancy_test "pp -m ${j} --mps ${pps_num} -t ${DURATION} -i ${SERVER_ADD}" "XLIO_SELECT_POLL=-1 XLIO_RX_POLL=${rx_poll} ${XLIO_ENV_FLAGS}"
 			done
 		done
 	done
@@ -209,7 +209,7 @@ function pp_test()
 function pp_tcp_imux_test()
 {
 	echo "Latency Ping-pong measurement TCP FEED_FILE" >> ${OUT_FILE}
-	echo "VMA_SELECT_POLL Imoux_type Fd_number Message-size PPS std-dev dropped-messages duplicated-messages out-of-order-messages Average_Latency Total_observations Max_Latency 99%_percentile 50%_percentile Min_Latency" >> ${OUT_FILE}
+	echo "XLIO_SELECT_POLL Imoux_type Fd_number Message-size PPS std-dev dropped-messages duplicated-messages out-of-order-messages Average_Latency Total_observations Max_Latency 99%_percentile 50%_percentile Min_Latency" >> ${OUT_FILE}
 
 	for imoux_type in ${IOMUX_TYPE}; do
 		for fd_num in ${FD_NUMBER}; do
@@ -217,15 +217,15 @@ function pp_tcp_imux_test()
 			create_feed_file_tcp ${fd_num} ${SERVER_ADD} 10005 ${FEED_FILE}
 			scp "${FEED_FILE}" "${SERVER}:${FEED_FILE}"
 
-			for select_poll in ${VMA_SELECT_POLL_VAL}; do
+			for select_poll in ${XLIO_SELECT_POLL_VAL}; do
 				ssh $SERVER pkill -f sockperf
 				sleep 1
-				ssh $SERVER env VMA_RX_POLL="-1" VMA_SELECT_POLL=${select_poll} ${VMA_ENV_FLAGS} ${SOCKPERF} server -f ${FEED_FILE} -F ${imoux_type} ${SERVER_FLAG} &
+				ssh $SERVER env XLIO_RX_POLL="-1" XLIO_SELECT_POLL=${select_poll} ${XLIO_ENV_FLAGS} ${SOCKPERF} server -f ${FEED_FILE} -F ${imoux_type} ${SERVER_FLAG} &
 				sleep 5
 				for pps_num in ${PPS}; do
 					for j in ${M_SIZE}; do
 						echo -n "${select_poll} ${imoux_type} ${fd_num} $j ${pps_num} " >> ${OUT_FILE}
-						run_latancy_test "pp -m ${j} --mps ${pps_num} -t ${DURATION} -f ${FEED_FILE} -F ${imoux_type}" "VMA_SELECT_POLL=${select_poll} VMA_RX_POLL=-1 ${VMA_ENV_FLAGS}"
+						run_latancy_test "pp -m ${j} --mps ${pps_num} -t ${DURATION} -f ${FEED_FILE} -F ${imoux_type}" "XLIO_SELECT_POLL=${select_poll} XLIO_RX_POLL=-1 ${XLIO_ENV_FLAGS}"
 					done
 				done
 			done
@@ -240,7 +240,7 @@ function pp_tcp_imux_test()
 function pp_udp_uc_imux_test()
 {
 	echo "Latency Ping-pong measurement UDP UC FEED_FILE" >> ${OUT_FILE}
-	echo "VMA_SELECT_POLL Imoux_type Fd_number Message-size PPS std-dev dropped-messages duplicated-messages out-of-order-messages Average_Latency Total_observations Max_Latency 99%_percentile 50%_percentile Min_Latency" >> ${OUT_FILE}
+	echo "XLIO_SELECT_POLL Imoux_type Fd_number Message-size PPS std-dev dropped-messages duplicated-messages out-of-order-messages Average_Latency Total_observations Max_Latency 99%_percentile 50%_percentile Min_Latency" >> ${OUT_FILE}
 
 	for imoux_type in ${IOMUX_TYPE}; do
 		for fd_num in ${FD_NUMBER}; do
@@ -248,15 +248,15 @@ function pp_udp_uc_imux_test()
 			create_feed_file_uni ${fd_num} ${SERVER_ADD} 10005 ${FEED_FILE}
 			scp "${FEED_FILE}" "${SERVER}:${FEED_FILE}"
 
-			for select_poll in ${VMA_SELECT_POLL_VAL}; do
+			for select_poll in ${XLIO_SELECT_POLL_VAL}; do
 				ssh $SERVER pkill -f sockperf
 				sleep 1
-				ssh $SERVER env VMA_RX_POLL="-1" VMA_SELECT_POLL=${select_poll} ${VMA_ENV_FLAGS} ${SOCKPERF} server -f ${FEED_FILE} -F ${imoux_type} ${SERVER_FLAG} &
+				ssh $SERVER env XLIO_RX_POLL="-1" XLIO_SELECT_POLL=${select_poll} ${XLIO_ENV_FLAGS} ${SOCKPERF} server -f ${FEED_FILE} -F ${imoux_type} ${SERVER_FLAG} &
 				sleep 5
 				for pps_num in ${PPS}; do
 					for j in ${M_SIZE}; do
 						echo -n "${select_poll} ${imoux_type} ${fd_num} $j ${pps_num} " >> ${OUT_FILE}
-						run_latancy_test "pp -m ${j} --mps ${pps_num} -t ${DURATION} -f ${FEED_FILE} -F ${imoux_type}" "VMA_SELECT_POLL=${select_poll} VMA_RX_POLL=-1 ${VMA_ENV_FLAGS}"
+						run_latancy_test "pp -m ${j} --mps ${pps_num} -t ${DURATION} -f ${FEED_FILE} -F ${imoux_type}" "XLIO_SELECT_POLL=${select_poll} XLIO_RX_POLL=-1 ${XLIO_ENV_FLAGS}"
 					done
 				done
 			done
@@ -285,11 +285,11 @@ echo "FD_NUMBER - value:            ${FD_NUMBER}"
 echo "LOOP - value:                 ${LOOP}"
 echo "SOCKPERF - value:             ${SOCKPERF}"
 echo "DURATION - value:             ${DURATION}"
-echo "VMA_SELECT_POLL_VAL - value:  ${VMA_SELECT_POLL_VAL}"
+echo "XLIO_SELECT_POLL_VAL - value:  ${XLIO_SELECT_POLL_VAL}"
 echo "SERVER_FLAG - value:			${SERVER_FLAG}"
 echo "CLIENT_FLAG - value:			${CLIENT_FLAG}"
-echo "VMA_RX_POLL_VAL - value:      ${VMA_RX_POLL_VAL}"
-echo "VMA_ENV_FLAGS - value:        ${VMA_ENV_FLAGS}"
+echo "XLIO_RX_POLL_VAL - value:      ${XLIO_RX_POLL_VAL}"
+echo "XLIO_ENV_FLAGS - value:        ${XLIO_ENV_FLAGS}"
 echo "IOMUX_TYPE - value:			${IOMUX_TYPE}"
 
 if [ $# -ne 3 ]; then

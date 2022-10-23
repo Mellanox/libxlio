@@ -62,8 +62,8 @@
 #include <netinet/ip6.h> /* for struct ip6_hdr */
 #include <netinet/tcp.h>
 
-#include "vma/util/agent_def.h"
-#include "vma/util/list.h"
+#include "core/util/agent_def.h"
+#include "core/util/list.h"
 #include "utils/clock.h"
 
 #define MODULE_NAME "xliod"

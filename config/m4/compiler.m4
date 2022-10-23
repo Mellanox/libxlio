@@ -40,26 +40,26 @@
 # - [definition] can be omitted if it is equal to attribute
 #
 AC_DEFUN([CHECK_COMPILER_ATTRIBUTE], [
-    AC_CACHE_VAL(vma_cv_attribute_[$1], [
+    AC_CACHE_VAL(prj_cv_attribute_[$1], [
         #
         # Try to compile using the C compiler
         #
         AC_TRY_COMPILE([$2],[],
-                       [vma_cv_attribute_$1=yes],
-                       [vma_cv_attribute_$1=no])
-        AS_IF([test "x$vma_cv_attribute_$1" = "xyes"], [
+                       [prj_cv_attribute_$1=yes],
+                       [prj_cv_attribute_$1=no])
+        AS_IF([test "x$prj_cv_attribute_$1" = "xyes"], [
             AC_LANG_PUSH(C++)
             AC_TRY_COMPILE([extern "C" {
                            $2
                            }],[],
-                           [vma_cv_attribute_$1=yes],
-                           [vma_cv_attribute_$1=no])
+                           [prj_cv_attribute_$1=yes],
+                           [prj_cv_attribute_$1=no])
             AC_LANG_POP(C++)
         ])
     ])
     AC_MSG_CHECKING([for attribute $1])
-    AC_MSG_RESULT([$vma_cv_attribute_$1])
-    AS_IF([test "x$vma_cv_attribute_$1" = "xyes"], [
+    AC_MSG_RESULT([$prj_cv_attribute_$1])
+    AS_IF([test "x$prj_cv_attribute_$1" = "xyes"], [
         AS_IF([test "x$3" = "x"],
             [AC_DEFINE_UNQUOTED([HAVE_$1], [1], [Define to 1 if attribute $1 is supported])],
             [AC_DEFINE_UNQUOTED([HAVE_$3], [1], [Define to 1 if attribute $1 is supported])]
@@ -75,7 +75,7 @@ AC_DEFUN([CHECK_COMPILER_ATTRIBUTE], [
 AC_DEFUN([CHECK_COMPILER_CXX], [
     case "$1" in
         11)
-m4_define([_vma_cv_compiler_body_11], [[
+m4_define([_prj_cv_compiler_body_11], [[
 #ifndef __cplusplus
 #error This is not a C++ compiler
 #elif __cplusplus < 201103L
@@ -95,7 +95,7 @@ int main(int argc, char** argv)
 ]])
             ;;
         14)
-m4_define([_vma_cv_compiler_body_14], [[
+m4_define([_prj_cv_compiler_body_14], [[
 #ifndef __cplusplus
 #error This is not a C++ compiler
 #elif __cplusplus < 201402L
@@ -120,35 +120,35 @@ int main(int argc, char** argv)
     esac
     case "$2" in
         std)
-            vma_cv_option=-std=c++$1
+            prj_cv_option=-std=c++$1
             ;;
         gnu)
-            vma_cv_option=-std=gnu++$1
+            prj_cv_option=-std=gnu++$1
             ;;
         *)
             AC_MSG_ERROR([invalid first argument as [$2] to [$0]])
             ;;
     esac
 
-    AC_CACHE_VAL(vma_cv_compiler_cxx_[$1], [
-        vma_cv_compiler_save_CXXFLAGS="$CXXFLAGS"
-        CXXFLAGS="$vma_cv_option $CXXFLAGS"
+    AC_CACHE_VAL(prj_cv_compiler_cxx_[$1], [
+        prj_cv_compiler_save_CXXFLAGS="$CXXFLAGS"
+        CXXFLAGS="$prj_cv_option $CXXFLAGS"
 
         #
         # Try to compile using the C++ compiler
         #
         AC_LANG_PUSH(C++)
-        AC_COMPILE_IFELSE([AC_LANG_SOURCE(_vma_cv_compiler_body_[$1])],
-                       [vma_cv_compiler_cxx_$1=yes],
-                       [vma_cv_compiler_cxx_$1=no])
+        AC_COMPILE_IFELSE([AC_LANG_SOURCE(_prj_cv_compiler_body_[$1])],
+                       [prj_cv_compiler_cxx_$1=yes],
+                       [prj_cv_compiler_cxx_$1=no])
         AC_LANG_POP(C++)
 
-        CXXFLAGS="$vma_cv_compiler_save_CXXFLAGS"
+        CXXFLAGS="$prj_cv_compiler_save_CXXFLAGS"
     ])
     AC_MSG_CHECKING([for compiler c++ [$1]])
-    AC_MSG_RESULT([$vma_cv_compiler_cxx_$1])
-    AS_IF([test "x$vma_cv_compiler_cxx_[$1]" = "xyes"],
-        [CXXFLAGS="$vma_cv_option $CXXFLAGS"],
+    AC_MSG_RESULT([$prj_cv_compiler_cxx_$1])
+    AS_IF([test "x$prj_cv_compiler_cxx_[$1]" = "xyes"],
+        [CXXFLAGS="$prj_cv_option $CXXFLAGS"],
         [AC_MSG_ERROR([A compiler with support for C++[$1] language features is required])]
     )
 ])
@@ -222,7 +222,7 @@ if test "x$enable_symbol_visibility" = xno; then
          void dummyfunc (void) {}],
         [ATTRIBUTE_VISIBILITY])
     AC_MSG_CHECKING([for symbols visibility])
-    AS_IF([test "x$vma_cv_attribute_visibility" = "xyes"],
+    AS_IF([test "x$prj_cv_attribute_visibility" = "xyes"],
         [CXXFLAGS="$CXXFLAGS -fvisibility=hidden"
          CFLAGS="$CFLAGS -fvisibility=hidden"
          AC_DEFINE_UNQUOTED([DEFINED_EXPORT_SYMBOL], [1], [Define to 1 to hide symbols])

@@ -1,3 +1,71 @@
+Version 2.0.6-1:
+Date + Time 2022-10-06
+=============================================================
+Fixed:
+        - RM #3217614 Fix IPv6 MC address check in neigh_eth
+        - RM #3132299 Fix buffer length in zero copy
+        - RM #3202977 Fix type overflow during trimming TCP seg
+        - RM #3139461 Implement TCP_CONGESTION option
+        - RM #3217442 Handle IPV6_RECVPKTINFO setsockopt option
+        - RM #2842211 Don't leave unacked empty on send failure
+
+Version 2.0.5-1:
+Date + Time 2022-09-22
+=============================================================
+Added:
+        - RM #3120089 Rename vma string by xlio
+Fixed:
+        - RM #3215653 Fix corrupted TLS1.3 zerocopy records
+        - RM #3190144 Fix TCP timer timeout calculation
+        - RM #3213178 Not to choose IPv4-Mapped as src
+        - RM #3197112 Fixing IPv6 addr selection longest prefix match
+
+Version 2.0.4-1:
+Date + Time 2022-09-14
+=============================================================
+Added:
+        - RM #3120089 Remove Sockextreme|Callback APIs and non-mlnx5 support
+        - RM #3064947 Rename /vma directory with /core
+Fixed:
+        - RM #3183546 Fixing the handling of null elements in tx iov
+        - RM #3068125 Ignore multipath routes
+        - RM #3206778 Fix TLS1.3 broken in SSL_sendfile
+        - RM #3207336 MC IPv6 - Fix for if_index=0
+        - RM #3209278 Fix IPv6 frag offset
+
+Version 2.0.3-1:
+Date + Time 2022-09-08
+=============================================================
+Added:
+        - RM #2667588 IPv6 Mapped IPv4
+        - RM #2667588 IPv6 Multicast
+        - RM #3097181 SSL_sendfile
+        - RM #3139461 Remove shadow socket for incoming TCP connections
+
+Version 2.0.2-1:
+Date + Time 2022-09-06
+=============================================================
+Added:
+        - RM #3179050 Change license agreement
+        - RM #3179050 Align with dpcp 1.1.30 API
+
+Version 2.0.1-1:
+Date + Time 2022-08-24
+=============================================================
+Added:
+        - RM #2667588 IPv6 source address selection algorithm
+        - RM #3071816 Implement TCP_USER_TIMEOUT
+
+Version 2.0.0-1:
+Date + Time 2022-08-15
+=============================================================
+Added:
+        - RM #3079802 Add UDP SW Checksum
+        - RM #2667588 support for ipv6 udp fragmentation
+        - RM #2621445 TLS 1.3 support in RX path
+Fixed:
+        - RM #3113450 Fix socket in SOCKINFO_UNDEFINED state
+
 Version 1.3.5-1:
 Date + Time 2022-07-14
 =============================================================

@@ -41,7 +41,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#include "vma/lwip/tcp.h" /* display TCP states */
+#include "core/lwip/tcp.h" /* display TCP states */
 #include "hash.h"
 #include "tc.h"
 #include "daemon.h"
@@ -53,10 +53,10 @@ int proc_message(void);
 extern int add_flow(struct store_pid *pid_value, struct store_flow *value);
 extern int del_flow(struct store_pid *pid_value, struct store_flow *value);
 
-static int proc_msg_init(struct vma_hdr *msg_hdr, size_t size, struct sockaddr_un *peeraddr);
-static int proc_msg_exit(struct vma_hdr *msg_hdr, size_t size);
-static int proc_msg_state(struct vma_hdr *msg_hdr, size_t size);
-static int proc_msg_flow(struct vma_hdr *msg_hdr, size_t size, struct sockaddr_un *peeraddr);
+static int proc_msg_init(struct xlio_hdr *msg_hdr, size_t size, struct sockaddr_un *peeraddr);
+static int proc_msg_exit(struct xlio_hdr *msg_hdr, size_t size);
+static int proc_msg_state(struct xlio_hdr *msg_hdr, size_t size);
+static int proc_msg_flow(struct xlio_hdr *msg_hdr, size_t size, struct sockaddr_un *peeraddr);
 
 int open_message(void)
 {
@@ -64,7 +64,7 @@ int open_message(void)
     int optval = 1;
     struct sockaddr_un server_addr;
 
-    /* Create UNIX UDP socket to receive data from VMA processes */
+    /* Create UNIX UDP socket to receive data from XLIO processes */
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sun_family = AF_UNIX;
     strncpy(server_addr.sun_path, daemon_cfg.sock_file, sizeof(server_addr.sun_path) - 1);
@@ -126,7 +126,7 @@ int proc_message(void)
     socklen_t addrlen = sizeof(peeraddr);
     char msg_recv[4096];
     int len = 0;
-    struct vma_hdr *msg_hdr = NULL;
+    struct xlio_hdr *msg_hdr = NULL;
 
 again:
     len = recvfrom(daemon_cfg.sock_fd, &msg_recv, sizeof(msg_recv), 0, (struct sockaddr *)&peeraddr,
@@ -142,27 +142,27 @@ again:
 
     /* Parse and process messages */
     while (len > 0) {
-        if (len < (int)sizeof(struct vma_hdr)) {
+        if (len < (int)sizeof(struct xlio_hdr)) {
             rc = -EBADMSG;
             log_error("Invalid message lenght from %s as %d errno %d (%s)\n",
                       (addrlen > 0 ? peeraddr.sun_path : "n/a"), len, errno, strerror(errno));
             goto err;
         }
-        msg_hdr = (struct vma_hdr *)&msg_recv;
+        msg_hdr = (struct xlio_hdr *)&msg_recv;
         log_debug("getting message ([%d] ver: %d pid: %d)\n", msg_hdr->code, msg_hdr->ver,
                   msg_hdr->pid);
 
         switch (msg_hdr->code) {
-        case VMA_MSG_INIT:
+        case XLIO_MSG_INIT:
             rc = proc_msg_init(msg_hdr, len, &peeraddr);
             break;
-        case VMA_MSG_STATE:
+        case XLIO_MSG_STATE:
             rc = proc_msg_state(msg_hdr, len);
             break;
-        case VMA_MSG_EXIT:
+        case XLIO_MSG_EXIT:
             rc = proc_msg_exit(msg_hdr, len);
             break;
-        case VMA_MSG_FLOW:
+        case XLIO_MSG_FLOW:
             /* Note: special loopback logic, it
              * should be added first as far as observed issue with delay
              * in activation loopback filters in case two processes
@@ -188,24 +188,24 @@ err:
     return rc;
 }
 
-static int proc_msg_init(struct vma_hdr *msg_hdr, size_t size, struct sockaddr_un *peeraddr)
+static int proc_msg_init(struct xlio_hdr *msg_hdr, size_t size, struct sockaddr_un *peeraddr)
 {
-    struct vma_msg_init *data;
+    struct xlio_msg_init *data;
     struct store_pid *value;
     size_t err = 0;
 
     assert(msg_hdr);
-    assert(msg_hdr->code == VMA_MSG_INIT);
+    assert(msg_hdr->code == XLIO_MSG_INIT);
     assert(size);
 
-    data = (struct vma_msg_init *)msg_hdr;
+    data = (struct xlio_msg_init *)msg_hdr;
     if (size < sizeof(*data)) {
         return -EBADMSG;
     }
 
     /* Message protocol version check */
-    if (data->hdr.ver > VMA_AGENT_VER) {
-        log_error("Protocol message mismatch (VMA_AGENT_VER = %d) errno %d (%s)\n", VMA_AGENT_VER,
+    if (data->hdr.ver > XLIO_AGENT_VER) {
+        log_error("Protocol message mismatch (XLIO_AGENT_VER = %d) errno %d (%s)\n", XLIO_AGENT_VER,
                   errno, strerror(errno));
         err = -EBADMSG;
         goto send_response;
@@ -243,8 +243,8 @@ static int proc_msg_init(struct vma_hdr *msg_hdr, size_t size, struct sockaddr_u
     log_debug("[%d] put into the storage\n", data->hdr.pid);
 
 send_response:
-    data->hdr.code |= VMA_MSG_ACK;
-    data->hdr.ver = VMA_AGENT_VER;
+    data->hdr.code |= XLIO_MSG_ACK;
+    data->hdr.ver = XLIO_AGENT_VER;
     if (0 > sys_sendto(daemon_cfg.sock_fd, data, sizeof(*data), 0, (struct sockaddr *)peeraddr,
                        sizeof(*peeraddr))) {
         log_warn("Failed sendto() message errno %d (%s)\n", errno, strerror(errno));
@@ -253,16 +253,16 @@ send_response:
     return err ? err : (sizeof(*data));
 }
 
-static int proc_msg_exit(struct vma_hdr *msg_hdr, size_t size)
+static int proc_msg_exit(struct xlio_hdr *msg_hdr, size_t size)
 {
-    struct vma_msg_exit *data;
+    struct xlio_msg_exit *data;
     struct store_pid *pid_value = NULL;
 
     assert(msg_hdr);
-    assert(msg_hdr->code == VMA_MSG_EXIT);
+    assert(msg_hdr->code == XLIO_MSG_EXIT);
     assert(size);
 
-    data = (struct vma_msg_exit *)msg_hdr;
+    data = (struct xlio_msg_exit *)msg_hdr;
     if (size < sizeof(*data)) {
         return -EBADMSG;
     }
@@ -288,17 +288,17 @@ static int proc_msg_exit(struct vma_hdr *msg_hdr, size_t size)
     return (sizeof(*data));
 }
 
-static int proc_msg_state(struct vma_hdr *msg_hdr, size_t size)
+static int proc_msg_state(struct xlio_hdr *msg_hdr, size_t size)
 {
-    struct vma_msg_state *data;
+    struct xlio_msg_state *data;
     struct store_pid *pid_value;
     struct store_fid *value;
 
     assert(msg_hdr);
-    assert(msg_hdr->code == VMA_MSG_STATE);
+    assert(msg_hdr->code == XLIO_MSG_STATE);
     assert(size);
 
-    data = (struct vma_msg_state *)msg_hdr;
+    data = (struct xlio_msg_state *)msg_hdr;
     if (size < sizeof(*data)) {
         return -EBADMSG;
     }
@@ -375,10 +375,10 @@ static int proc_msg_state(struct vma_hdr *msg_hdr, size_t size)
     return (sizeof(*data));
 }
 
-static int proc_msg_flow(struct vma_hdr *msg_hdr, size_t size, struct sockaddr_un *peeraddr)
+static int proc_msg_flow(struct xlio_hdr *msg_hdr, size_t size, struct sockaddr_un *peeraddr)
 {
     int rc = 0;
-    struct vma_msg_flow *data;
+    struct xlio_msg_flow *data;
     struct store_pid *pid_value;
     struct store_flow *value = NULL;
     struct store_flow *cur_flow = NULL;
@@ -387,17 +387,17 @@ static int proc_msg_flow(struct vma_hdr *msg_hdr, size_t size, struct sockaddr_u
     int ack = 0;
 
     assert(msg_hdr);
-    assert((msg_hdr->code & ~VMA_MSG_ACK) == VMA_MSG_FLOW);
+    assert((msg_hdr->code & ~XLIO_MSG_ACK) == XLIO_MSG_FLOW);
     assert(size);
 
-    data = (struct vma_msg_flow *)msg_hdr;
+    data = (struct xlio_msg_flow *)msg_hdr;
     if (size < sizeof(*data)) {
         rc = -EBADMSG;
         goto err;
     }
 
     /* Note: special loopback logic */
-    if (NULL == peeraddr && data->type == VMA_MSG_FLOW_EGRESS) {
+    if (NULL == peeraddr && data->type == XLIO_MSG_FLOW_EGRESS) {
         return 0;
     }
 
@@ -437,12 +437,12 @@ static int proc_msg_flow(struct vma_hdr *msg_hdr, size_t size, struct sockaddr_u
     }
 
     switch (data->type) {
-    case VMA_MSG_FLOW_EGRESS:
-    case VMA_MSG_FLOW_TCP_3T:
-    case VMA_MSG_FLOW_UDP_3T:
+    case XLIO_MSG_FLOW_EGRESS:
+    case XLIO_MSG_FLOW_TCP_3T:
+    case XLIO_MSG_FLOW_UDP_3T:
         break;
-    case VMA_MSG_FLOW_TCP_5T:
-    case VMA_MSG_FLOW_UDP_5T:
+    case XLIO_MSG_FLOW_TCP_5T:
+    case XLIO_MSG_FLOW_UDP_5T:
         value->flow.src.family = data->flow.src.family;
         if (value->flow.src.family == AF_INET) {
             value->flow.src.addr4.sin_port = data->flow.src.port;
@@ -470,13 +470,13 @@ static int proc_msg_flow(struct vma_hdr *msg_hdr, size_t size, struct sockaddr_u
             rc = -EFAULT;
             goto err;
         }
-    } else if ((VMA_MSG_FLOW_TCP_5T == data->type || VMA_MSG_FLOW_UDP_5T == data->type) &&
+    } else if ((XLIO_MSG_FLOW_TCP_5T == data->type || XLIO_MSG_FLOW_UDP_5T == data->type) &&
                sys_iplocal(value->flow.src.addr4.sin_addr.s_addr)) {
         rc = 0;
         goto err;
     }
 
-    if (VMA_MSG_FLOW_ADD == data->action) {
+    if (XLIO_MSG_FLOW_ADD == data->action) {
         list_for_each(cur_entry, &pid_value->flow_list)
         {
             cur_flow = list_entry(cur_entry, struct store_flow, item);
@@ -499,7 +499,7 @@ static int proc_msg_flow(struct vma_hdr *msg_hdr, size_t size, struct sockaddr_u
         }
     }
 
-    if (VMA_MSG_FLOW_DEL == data->action) {
+    if (XLIO_MSG_FLOW_DEL == data->action) {
         list_for_each(cur_entry, &pid_value->flow_list)
         {
             cur_flow = list_entry(cur_entry, struct store_flow, item);
@@ -519,7 +519,7 @@ static int proc_msg_flow(struct vma_hdr *msg_hdr, size_t size, struct sockaddr_u
 
 err:
     if (ack) {
-        data->hdr.code |= VMA_MSG_ACK;
+        data->hdr.code |= XLIO_MSG_ACK;
         data->hdr.status = (rc ? 1 : 0);
         if (0 > sys_sendto(daemon_cfg.sock_fd, &data->hdr, sizeof(data->hdr), 0,
                            (struct sockaddr *)peeraddr, sizeof(*peeraddr))) {

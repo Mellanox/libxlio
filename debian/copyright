@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: libvma
-Source: https://github.com/Mellanox/libvma
+Upstream-Name: libxlio
+Source: https://github.com/Mellanox-lab/libxlio
 
 Files: *
 Copyright: 2001-2022 NVIDIA CORPORATION & AFFILIATES.
@@ -37,11 +37,11 @@ License: GPL-2 or BSD
  be found at /usr/share/common-licenses/GPL-2
 
 Files:
- src/vma/lwip/cc.c
- src/vma/lwip/cc.h
- src/vma/lwip/cc_cubic.c
- src/vma/lwip/cc_cubic.h
- src/vma/lwip/cc_lwip.c
+ src/core/lwip/cc.c
+ src/core/lwip/cc.h
+ src/core/lwip/cc_cubic.c
+ src/core/lwip/cc_cubic.h
+ src/core/lwip/cc_lwip.c
 Copyright:
  2007-2008, Swinburne University of Technology, Melbourne, Australia.
  2009-2010, Lawrence Stewart <lstewart@freebsd.org>
@@ -49,19 +49,19 @@ Copyright:
  2001-2018 Mellanox Technologies, Ltd.
 License: GPLv2 and 2BSD
 
-Files: src/vma/lwip/def.h
- src/vma/lwip/err.h
- src/vma/lwip/init.c
- src/vma/lwip/init.h
- src/vma/lwip/ip_addr.h
- src/vma/lwip/opt.h
- src/vma/lwip/pbuf.c
- src/vma/lwip/pbuf.h
- src/vma/lwip/tcp.c
- src/vma/lwip/tcp.h
- src/vma/lwip/tcp_impl.h
- src/vma/lwip/tcp_in.c
- src/vma/lwip/tcp_out.c
+Files: src/core/lwip/def.h
+ src/core/lwip/err.h
+ src/core/lwip/init.c
+ src/core/lwip/init.h
+ src/core/lwip/ip_addr.h
+ src/core/lwip/opt.h
+ src/core/lwip/pbuf.c
+ src/core/lwip/pbuf.h
+ src/core/lwip/tcp.c
+ src/core/lwip/tcp.h
+ src/core/lwip/tcp_impl.h
+ src/core/lwip/tcp_in.c
+ src/core/lwip/tcp_out.c
 Copyright: 2001-2004, Swedish Institute of Computer Science.
 License: BSD-3-clause
  * Redistribution and use in source and binary forms, with or without modification, 
@@ -139,8 +139,8 @@ License: Expat
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
 
-Files: src/vma/config_parser.c
- src/vma/config_parser.h
+Files: src/core/config_parser.c
+ src/core/config_parser.h
 Copyright: 1984, 1989-1990, 2000-2012, Free Software Foundation, Inc.
 License: GPL-3+-bison
  This program is free software: you can redistribute it and/or modify

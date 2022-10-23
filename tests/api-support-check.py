@@ -35,10 +35,10 @@
 
 #@date: 18Oct2015
 #
-# This script performs ioctl/fcntl/setsockopt tests for verifying VMA coverage and behavior
+# This script performs ioctl/fcntl/setsockopt tests for verifying XLIO coverage and behavior
 
 # example for usage:
-# LD_PRELOAD=libvma.so VMA_EXCEPTION_HANDLING=1 ./tests/api-support-check.py
+# LD_PRELOAD=libxlio.so XLIO_EXCEPTION_HANDLING=1 ./tests/api-support-check.py
 #
 import socket, sys, fcntl
 import struct, os

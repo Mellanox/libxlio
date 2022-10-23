@@ -44,7 +44,7 @@ if [ $(command -v $test_app_path >/dev/null 2>&1 || echo $?) ]; then
 
 		./autogen.sh
 		./configure --prefix=$PWD/install CPPFLAGS="-I${install_dir}/include"
-		make install
+		make $make_opt install
 		test_app_path="$PWD/install/bin/sockperf"
 
 		cd $vg_dir

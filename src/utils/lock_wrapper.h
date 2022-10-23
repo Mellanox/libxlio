@@ -372,26 +372,4 @@ public:
     ~lock_mutex_recursive() {};
 };
 
-/**
- * automatic unlock at end of scope where this object was defined on
- * Input: lock_base of lock kind as reference
- */
-class auto_unlocker {
-public:
-    inline auto_unlocker(lock_base &lock)
-        : m_lock(lock)
-    {
-        m_lock.lock();
-        // printf("[%s %p] locked\n", m_lock.to_str(), this);
-    };
-    inline ~auto_unlocker()
-    {
-        // printf("[%s %p] unlocking\n", m_lock.to_str(), this);
-        m_lock.unlock();
-    };
-
-private:
-    lock_base &m_lock;
-};
-
 #endif // LOCK_WRAPPER_H

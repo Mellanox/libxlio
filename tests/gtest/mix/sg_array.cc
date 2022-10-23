@@ -33,8 +33,8 @@
 
 #include "mix_base.h"
 
-#include "src/vma/ib/base/verbs_extra.h"
-#include "src/vma/util/sg_array.h"
+#include "src/core/ib/base/verbs_extra.h"
+#include "src/core/util/sg_array.h"
 
 class sg_array_test : public mix_base {
 public:

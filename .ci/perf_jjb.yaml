@@ -22,8 +22,10 @@
             name: "TEST_SUITE"
             choices:
               - medium
+              - long
+              - extra long
               - very short
-            description: "The size of test suite. <b>Very short (3 minutes):</b> CPS & RPS, one payload size (10KB), HTTP only; <b>medium (15 minutes):</b> CPS & RPS, three payload sizes (10KB, 1MB, 10MB), HTTP & HTTPS."
+            description: "The size of test suite. <b>Very short (3 minutes):</b> CPS & RPS, one payload size (10KB), HTTPS only, step duration 15 seconds; <b>medium (15 minutes):</b> CPS & RPS, three payload sizes (10KB, 1MB, 10MB), HTTPS, step duration 2 minutes; <b>long (about 1 hours):</b> CPS & RPS, same three payload sizes, HTTPS, step duration 5 minutes; <b>extra long (several hours):</b> all of the above, with each step duration 10 minutes"
         - choice:
             name: MODE
             choices:
@@ -36,7 +38,7 @@
             description: "Pull request ID or any string to identify the benchmark result. Example: <b>ref 2022-02-17</b> will identify latest reference (baseline) benchmark."
         - bool:
             name: "SET_AS_BASELINE"
-            defaulte: false
+            default: false
             description: "Remove previous baseline benchmark result and set this one as a baseline."
         - string:
             name: "conf_file"

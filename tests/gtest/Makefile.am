@@ -70,7 +70,7 @@ gtest_LDADD = libgtest.la  $(VERBS_LIBS)
 gtest_CPPFLAGS = \
 	-I$(top_srcdir)/ \
 	-I$(top_srcdir)/src \
-	-I$(top_srcdir)/src/vma \
+	-I$(top_srcdir)/src/core \
 	-I$(top_srcdir)/tests/gtest \
 	-I$(top_srcdir)/tests/gtest/googletest/include \
 	$(AM_CPPFLAGS)
@@ -95,7 +95,7 @@ gtest_SOURCES = \
 	mix/ip_address.cc \
 	mix/mix_list.cc \
 	\
-	tcp/tcp_base.cc \
+	tcp/tcp_accept.cc \
 	tcp/tcp_bind.cc \
 	tcp/tcp_connect.cc \
 	tcp/tcp_connect_nb.cc \
@@ -109,28 +109,25 @@ gtest_SOURCES = \
 	tcp/tcp_sockopt.cc \
 	tcp/tcp_tls.cc \
 	\
-	udp/udp_base.cc \
 	udp/udp_socket.cc \
 	udp/udp_bind.cc \
 	udp/udp_connect.cc \
+	udp/udp_recv.cc \
 	udp/udp_send.cc \
 	udp/udp_sendto.cc \
 	udp/udp_rfs.cc \
 	\
-	vma/vma_base.cc \
-	vma/vma_ring.cc \
-	vma/vma_poll.cc \
-	vma/vma_sockopt.cc \
-	vma/vma_send_zc.cc \
-	vma/vma_recvfrom_zcopy.cc \
-	vma/vma_ioctl.cc \
+	core/xlio_base.cc \
+	core/xlio_sockopt.cc \
+	core/xlio_send_zc.cc \
+	core/xlio_ioctl.cc \
 	\
-	vmad/vmad_base.cc \
-	vmad/vmad_bitmap.cc \
-	vmad/vmad_hash.cc \
-	vmad/vmad_init.cc \
-	vmad/vmad_state.cc \
-	vmad/vmad_flow.cc
+	xliod/xliod_base.cc \
+	xliod/xliod_bitmap.cc \
+	xliod/xliod_hash.cc \
+	xliod/xliod_init.cc \
+	xliod/xliod_state.cc \
+	xliod/xliod_flow.cc
 
 noinst_HEADERS = \
 	common/tap.h \
@@ -149,9 +146,9 @@ noinst_HEADERS = \
 	\
 	udp/udp_base.h \
 	\
-	vma/vma_base.h \
+	core/xlio_base.h \
 	\
-	vmad/vmad_base.h
+	xliod/xliod_base.h
 
 gtest_DEPENDENCIES = \
 	libgtest.la

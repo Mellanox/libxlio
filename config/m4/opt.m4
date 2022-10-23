@@ -36,7 +36,7 @@
 ##########################
 # Logging control
 #
-# VMA defined log levels
+# XLIO defined log levels
 #
 AC_DEFUN([OPT_CAPABILITY_SETUP],
 [

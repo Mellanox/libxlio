@@ -328,7 +328,7 @@ const char *get_color(vlog_levels_t level);
 #define VLOGGER_STR_COLOR_TERMINATION_STR "\e[0m"
 #define VLOGGER_STR_TERMINATION_SIZE      6
 
-typedef void (*vma_log_cb_t)(int log_level, const char *str);
+typedef void (*xlio_log_cb_t)(int log_level, const char *str);
 
 extern char g_vlogger_module_name[VLOG_MODULE_MAX_LEN];
 extern FILE *g_vlogger_file;
@@ -339,7 +339,7 @@ extern uint8_t g_vlogger_details;
 extern uint8_t *g_p_vlogger_details;
 extern uint32_t g_vlogger_usec_on_startup;
 extern bool g_vlogger_log_in_colors;
-extern vma_log_cb_t g_vlogger_cb;
+extern xlio_log_cb_t g_vlogger_cb;
 
 #define vlog_func_enter() vlog_printf(VLOG_FINE, "ENTER %s\n", __PRETTY_FUNCTION__);
 #define vlog_func_exit()  vlog_printf(VLOG_FINE, "EXIT %s\n", __PRETTY_FUNCTION__);

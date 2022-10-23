@@ -38,7 +38,7 @@
 
 #include "mix_base.h"
 
-#include "src/vma/util/list.h"
+#include "src/core/util/list.h"
 
 struct element {
     struct list_head item;

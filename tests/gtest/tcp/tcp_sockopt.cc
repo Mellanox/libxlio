@@ -30,6 +30,11 @@
  * SOFTWARE.
  */
 
+#include <sys/socket.h>
+#include <sys/types.h> /* See NOTES */
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include "googletest/include/gtest/gtest.h"
 #include "common/def.h"
 #include "common/log.h"
 #include "common/sys.h"
@@ -167,4 +172,163 @@ TEST_F(tcp_sockopt, ti_1_getsockopt_tcp_info)
     };
 
     test_lambda();
+}
+
+/**
+ * @test tcp_sockopt.ti_2_tcp_congestion
+ * @brief
+ *    TCP_CONGESTION option to change and check congestion control mechanism.
+ * @details
+ */
+TEST_F(tcp_sockopt, ti_2_tcp_congestion)
+{
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    ASSERT_LE(0, fd);
+
+    char buf[16];
+    socklen_t len = 0;
+    int rc = getsockopt(fd, IPPROTO_TCP, TCP_CONGESTION, buf, &len);
+    EXPECT_EQ(0, rc);
+    EXPECT_EQ(0U, len);
+
+#if 0
+    // XLIO isn't complient with kernel in this case
+    rc = getsockopt(fd, IPPROTO_TCP, TCP_CONGESTION, NULL, &len);
+    EXPECT_EQ(0, rc);
+    EXPECT_EQ(0U, len);
+#endif
+
+    rc = getsockopt(fd, IPPROTO_TCP, TCP_CONGESTION, buf, NULL);
+    EXPECT_EQ(-1, rc);
+    EXPECT_EQ(EFAULT, errno);
+
+    rc = setsockopt(fd, IPPROTO_TCP, TCP_CONGESTION, buf, 0);
+    EXPECT_EQ(-1, rc);
+    EXPECT_EQ(EINVAL, errno);
+
+#if 0
+    // XLIO isn't complient with kernel in this case
+    rc = setsockopt(fd, IPPROTO_TCP, TCP_CONGESTION, NULL, 0);
+    EXPECT_EQ(-1, rc);
+    EXPECT_EQ(EINVAL, errno);
+#endif
+
+    rc = setsockopt(fd, IPPROTO_TCP, TCP_CONGESTION, NULL, 5);
+    EXPECT_EQ(-1, rc);
+    EXPECT_EQ(EFAULT, errno);
+
+    // Assume reno is supported everywhere
+    snprintf(buf, sizeof(buf), "reno");
+    // Note, len doesn't include terminating '\0'
+    len = strlen(buf);
+    rc = setsockopt(fd, IPPROTO_TCP, TCP_CONGESTION, buf, len);
+    EXPECT_EQ(0, rc);
+    if (rc == 0) {
+        len = sizeof(buf);
+        rc = getsockopt(fd, IPPROTO_TCP, TCP_CONGESTION, buf, &len);
+        EXPECT_EQ(0, rc);
+        EXPECT_LT(0U, len);
+    }
+    if (rc == 0) {
+        std::string cc_name(buf, strnlen(buf, len));
+        EXPECT_EQ(std::string("reno"), cc_name);
+    }
+}
+
+class tcp_set_get_sockopt : public ::testing::Test {
+protected:
+    void SetUp() override
+    {
+        m_ipv4_tcp_socket_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+        m_ipv6_tcp_socket_fd = socket(AF_INET6, SOCK_STREAM, IPPROTO_IP);
+        EXPECT_GE(m_ipv4_tcp_socket_fd, 0);
+        EXPECT_GE(m_ipv6_tcp_socket_fd, 0);
+    }
+
+    void TearDown() override
+    {
+        close(m_ipv4_tcp_socket_fd);
+        close(m_ipv6_tcp_socket_fd);
+    }
+    int m_ipv4_tcp_socket_fd = -1;
+    int m_ipv6_tcp_socket_fd = -1;
+};
+
+class tcp_set_get_sockopt_on_udp_socket : public ::testing::Test {
+protected:
+    void SetUp() override
+    {
+        m_ipv4_udp_socket_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+        m_ipv6_udp_socket_fd = socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP);
+        EXPECT_GE(m_ipv4_udp_socket_fd, 0);
+        EXPECT_GE(m_ipv6_udp_socket_fd, 0);
+    }
+
+    void TearDown() override
+    {
+        close(m_ipv4_udp_socket_fd);
+        close(m_ipv6_udp_socket_fd);
+    }
+    int m_ipv4_udp_socket_fd = -1;
+    int m_ipv6_udp_socket_fd = -1;
+};
+
+TEST_F(tcp_set_get_sockopt_on_udp_socket, set_and_get_tcp_ipv4_user_timeout_fails)
+{
+    unsigned int user_timeout_ms = 5000U;
+    int result = setsockopt(m_ipv4_udp_socket_fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &user_timeout_ms,
+                            sizeof(user_timeout_ms));
+    EXPECT_EQ(result, -1) << "IPPROTO_TCP is unsupported for UDP sockets";
+
+    socklen_t optlen;
+    result =
+        getsockopt(m_ipv4_udp_socket_fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &user_timeout_ms, &optlen);
+    EXPECT_EQ(result, -1) << "IPPROTO_TCP is unsupported for UDP sockets";
+}
+
+TEST_F(tcp_set_get_sockopt_on_udp_socket, set_and_get_tcp_ipv6_user_timeout_fails)
+{
+    unsigned int user_timeout_ms = 5000U;
+    int result = setsockopt(m_ipv6_udp_socket_fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &user_timeout_ms,
+                            sizeof(user_timeout_ms));
+    EXPECT_EQ(result, -1) << "IPPROTO_TCP is unsupported for UDP sockets";
+
+    socklen_t optlen;
+    result =
+        getsockopt(m_ipv6_udp_socket_fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &user_timeout_ms, &optlen);
+    EXPECT_EQ(result, -1) << "IPPROTO_TCP is unsupported for UDP sockets";
+}
+
+TEST_F(tcp_set_get_sockopt, set_and_get_tcp_ipv4_user_timeout)
+{
+    const unsigned int user_timeout_ms = 5000U;
+    int result = setsockopt(m_ipv4_tcp_socket_fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &user_timeout_ms,
+                            sizeof(user_timeout_ms));
+    EXPECT_EQ(result, 0) << "IPPROTO_TCP is unsupported for UDP sockets";
+
+    socklen_t optlen = -1;
+    unsigned int output_user_timeout_ms = -1;
+
+    result = getsockopt(m_ipv4_tcp_socket_fd, IPPROTO_TCP, TCP_USER_TIMEOUT,
+                        &output_user_timeout_ms, &optlen);
+    EXPECT_EQ(result, 0) << "getsockopt failed for TCP_USER_TIMEOUT";
+    EXPECT_EQ(optlen, sizeof(output_user_timeout_ms)) << "Unexpected parameter size";
+    EXPECT_EQ(output_user_timeout_ms, user_timeout_ms) << "Unexpected timeout value";
+}
+
+TEST_F(tcp_set_get_sockopt, set_and_get_tcp_ipv6_user_timeout)
+{
+    const unsigned int user_timeout_ms = 5000U;
+    int result = setsockopt(m_ipv6_tcp_socket_fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &user_timeout_ms,
+                            sizeof(user_timeout_ms));
+    EXPECT_EQ(result, 0) << "IPPROTO_TCP is unsupported for UDP sockets";
+
+    socklen_t optlen = -1;
+    unsigned int output_user_timeout_ms = -1;
+
+    result = getsockopt(m_ipv6_tcp_socket_fd, IPPROTO_TCP, TCP_USER_TIMEOUT,
+                        &output_user_timeout_ms, &optlen);
+    EXPECT_EQ(result, 0) << "getsockopt failed for TCP_USER_TIMEOUT";
+    EXPECT_EQ(optlen, sizeof(output_user_timeout_ms)) << "Unexpected parameter size";
+    EXPECT_EQ(output_user_timeout_ms, user_timeout_ms) << "Unexpected timeout value";
 }

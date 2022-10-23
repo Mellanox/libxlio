@@ -31,7 +31,7 @@
  */
 
 #include "mix_base.h"
-#include "src/vma/util/ip_address.h"
+#include "src/core/util/ip_address.h"
 
 #define SOCKLEN4 static_cast<socklen_t>(sizeof(sockaddr_in))
 #define SOCKLEN6 static_cast<socklen_t>(sizeof(sockaddr_in6))
@@ -324,4 +324,23 @@ TEST_F(ip_address_test, ip_addr_strings)
     addr6.m_2[1] = 0x9999AAAAFFFF0000;
     sa1_6 = ip_addr(addr6.m_1);
     EXPECT_TRUE(sa1_6.to_str() == "[::ffff:170.170.153.153]");
+}
+
+TEST_F(ip_address_test, mapped_ipv4)
+{
+    ip_v6 mapped_addr;
+    mapped_addr.m_2[0] = mapped_addr.m_2[1] = 0x0ULL;
+    uint16_t *raw16 = reinterpret_cast<uint16_t *>(mapped_addr.m_2 + 1);
+    raw16[1] = 0xFFFFU;
+    raw16[2] = htons(0x7F01);
+    raw16[3] = htons(0x8001);
+
+    ip_address ip_mapped(mapped_addr.m_1);
+    EXPECT_TRUE(ip_mapped.is_mapped_ipv4());
+    EXPECT_TRUE(ip_mapped.to_str(AF_INET6) == "[::ffff:127.1.128.1]");
+
+    ip_address sa1_4(m_addr4.m_1);
+    ip_address to_mapped(sa1_4.to_mapped_ipv4());
+    EXPECT_TRUE(to_mapped.is_mapped_ipv4());
+    EXPECT_TRUE(to_mapped.to_str(AF_INET6) == "[::ffff:153.153.170.170]");
 }

@@ -88,8 +88,8 @@ static int _def_config(void)
 static void set_def_remote_address()
 {
     gtest_conf.def_gw_exists = sys_gateway((struct sockaddr *)&gtest_conf.remote_addr,
-                                           gtest_conf.server_addr.addr.sin_family);
-    if (gtest_conf.server_addr.addr.sin_family == AF_INET6) {
+                                           gtest_conf.server_addr.addr.sa_family);
+    if (gtest_conf.server_addr.addr.sa_family == AF_INET6) {
         if (!gtest_conf.def_gw_exists) {
             sys_str2addr("::[8888]", (struct sockaddr *)&gtest_conf.remote_addr, true);
         } else {
@@ -129,14 +129,14 @@ static int _set_config(int argc, char **argv)
             }
 
             if (token1) {
-                rc = sys_get_addr(token1, (struct sockaddr *)&gtest_conf.client_addr);
+                rc = sys_get_addr(token1, &gtest_conf.client_addr.addr);
                 if (rc < 0) {
                     rc = -EINVAL;
                     log_fatal("Failed to resolve ip address %s\n", token1);
                 }
             }
             if (token2) {
-                rc = sys_get_addr(token2, (struct sockaddr *)&gtest_conf.server_addr);
+                rc = sys_get_addr(token2, &gtest_conf.server_addr.addr);
                 if (rc < 0) {
                     rc = -EINVAL;
                     log_fatal("Failed to resolve ip address %s\n", token2);

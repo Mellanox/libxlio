@@ -38,7 +38,7 @@
 #
 # This script performs non blocking connect (and disconnect) to a given TCP server
 # It can serve for checking [latency] effect of connect/disconnect on other client (sockperf)
-# Also it can be used directly with [sockperf] server by adding debug calls to LogDuration in vma code
+# Also it can be used directly with [sockperf] server by adding debug calls to LogDuration in xlio code
 # (note: most effect is expected by 1st packet from a machine; hence, feel free to decrease num sockets)
 #
 #

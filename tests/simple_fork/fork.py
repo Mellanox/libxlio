@@ -1,8 +1,8 @@
 #!/usr/bin/python
 
-#LD_PRELOAD=libvma.so ./fork.py
-#VMA_MEM_ALLOC_TYPE=2 LD_PRELOAD=libvma.so ./fork.py
-#VMA_MEM_ALLOC_TYPE=2 VMA_LOG_FILE="/tmp/libvma.log.%d" VMA_TRACELEVEL=4 LD_PRELOAD=libvma.so ./fork.py
+#LD_PRELOAD=libxlio.so ./fork.py
+#XLIO_MEM_ALLOC_TYPE=2 LD_PRELOAD=libxlio.so ./fork.py
+#XLIO_MEM_ALLOC_TYPE=2 XLIO_LOG_FILE="/tmp/libxlio.log.%d" XLIO_TRACELEVEL=4 LD_PRELOAD=libxlio.so ./fork.py
 
 import os
 import socket

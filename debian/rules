@@ -17,7 +17,7 @@ build-debug:
 		--libdir=/usr/lib --includedir=/usr/include --sysconfdir=/etc \
 		--enable-opt-log=none --enable-debug ${configure_options}
 	make
-	cp -f src/vma/.libs/libxlio.so libxlio-debug.so
+	cp -f src/core/.libs/libxlio.so libxlio-debug.so
 	make clean
 
 

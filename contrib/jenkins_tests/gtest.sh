@@ -56,10 +56,10 @@ eval "${sudo_cmd} pkill -9 ${prj_service} 2>/dev/null || true"
 eval "${sudo_cmd} ${install_dir}/sbin/${prj_service} --console -v5 &"
 
 # Exclude EXTRA API tests
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=-vma_*:tcp_send_zc* --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic.xml"
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=-xlio_*:tcp_send_zc* --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic.xml"
 rc=$(($rc+$?))
 
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=-vma_*:tcp_send_zc* --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic-ipv6.xml"
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=-xlio_*:tcp_send_zc* --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic-ipv6.xml"
 rc=$(($rc+$?))
 
 make -C tests/gtest clean
@@ -67,19 +67,11 @@ make -C tests/gtest CPPFLAGS="-DEXTRA_API_ENABLED=1"
 rc=$(($rc+$?))
 
 # Verify XLIO EXTRA API tests
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=vma_*:-vma_poll.*:vma_ring.*:vma_send_zc.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra.xml"
-rc=$(($rc+$?))
-
-# Verify XLIO EXTRA API socketxtreme mode tests
-eval "${sudo_cmd} $timeout_exe env XLIO_SOCKETXTREME=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=vma_poll.*:vma_ring.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-socketxtreme.xml"
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=xlio_*:-xlio_poll.*:xlio_ring.*:xlio_send_zc.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra.xml"
 rc=$(($rc+$?))
 
 # Verify XLIO EXTRA API tests IPv6
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=vma_*:-vma_poll.*:vma_ring.*:vma_send_zc.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra-ipv6.xml"
-rc=$(($rc+$?))
-
-# Verify XLIO EXTRA API socketxtreme mode tests IPv6
-eval "${sudo_cmd} $timeout_exe env XLIO_SOCKETXTREME=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=vma_poll.*:vma_ring.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-socketxtreme-ipv6.xml"
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=xlio_*:-xlio_poll.*:xlio_ring.*:xlio_send_zc.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra-ipv6.xml"
 rc=$(($rc+$?))
 
 eval "${sudo_cmd} pkill -9 ${prj_service} 2>/dev/null || true"

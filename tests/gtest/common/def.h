@@ -120,7 +120,8 @@
 #define UNDEFINED_VALUE (-1)
 
 typedef union {
-    struct sockaddr_in addr;
+    struct sockaddr addr;
+    struct sockaddr_in addr4;
     struct sockaddr_in6 addr6;
 } sockaddr_store_t;
 

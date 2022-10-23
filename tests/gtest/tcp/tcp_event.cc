@@ -57,7 +57,7 @@ TEST_F(tcp_event, DISABLED_ti_1)
     event.data.fd = fd;
     rc = test_base::event_wait(&event);
     EXPECT_LT(0, rc);
-    /*	EXPECT_EQ(EPOLLHUP, event.events); TODO: UNDER VMA */
+    /*	EXPECT_EQ(EPOLLHUP, event.events); TODO: UNDER XLIO */
     EXPECT_EQ((uint32_t)(EPOLLERR | EPOLLHUP), event.events);
 
     close(fd);
@@ -104,7 +104,7 @@ TEST_F(tcp_event, DISABLED_ti_3)
     event.data.fd = fd;
     rc = test_base::event_wait(&event);
     EXPECT_LT(0, rc);
-    /*	EXPECT_EQ((EPOLLHUP | EPOLLIN), event.events); TODO: UNDER VMA */
+    /*	EXPECT_EQ((EPOLLHUP | EPOLLIN), event.events); TODO: UNDER XLIO */
     EXPECT_EQ((uint32_t)(EPOLLERR | EPOLLHUP | EPOLLOUT | EPOLLIN), event.events);
 
     close(fd);
@@ -127,13 +127,13 @@ TEST_F(tcp_event, DISABLED_ti_4)
     event.data.fd = fd;
     rc = test_base::event_wait(&event);
     EXPECT_LT(0, rc);
-    /*	EXPECT_EQ((EPOLLERR | EPOLLHUP | EPOLLIN), event.events); TODO: UNDER VMA */
+    /*	EXPECT_EQ((EPOLLERR | EPOLLHUP | EPOLLIN), event.events); TODO: UNDER XLIO */
     EXPECT_EQ((uint32_t)(EPOLLERR | EPOLLHUP | EPOLLOUT | EPOLLIN), event.events);
 
     close(fd);
 }
 
-/* VMA does not work as server/client from single process
+/* XLIO does not work as server/client from single process
  * in addition gcc 8.x reports 'cast between incompatible function types' warning
  * but _proc_server() and _proc_client() can not return void* due to google test
  * limitations as all functions using EXPECT_X, ASSERT_X should return void

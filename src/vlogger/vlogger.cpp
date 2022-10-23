@@ -42,8 +42,8 @@
 #include <fcntl.h>
 
 #include "utils/bullseye.h"
-#include "vma/util/utils.h"
-#include "vma/util/sys_vars.h"
+#include "core/util/utils.h"
+#include "core/util/sys_vars.h"
 
 #define VLOG_DEFAULT_MODULE_NAME "XLIO"
 #define XLIO_LOG_CB_ENV_VAR      "XLIO_LOG_CB_FUNC_PTR"
@@ -57,7 +57,7 @@ uint8_t g_vlogger_details = 0;
 uint8_t *g_p_vlogger_details = NULL;
 uint32_t g_vlogger_usec_on_startup = 0;
 bool g_vlogger_log_in_colors = MCE_DEFAULT_LOG_COLORS;
-vma_log_cb_t g_vlogger_cb = NULL;
+xlio_log_cb_t g_vlogger_cb = NULL;
 
 namespace log_level {
 typedef struct {
@@ -216,11 +216,11 @@ void printf_backtrace(void)
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
-// NOTE: this function matches 'bool vma_log_set_cb_func(vma_log_cb_t log_cb)' that
+// NOTE: this function matches 'bool xlio_log_set_cb_func(xlio_log_cb_t log_cb)' that
 // we gave customers; hence, you must not change our side without considering their side
-static vma_log_cb_t vma_log_get_cb_func()
+static xlio_log_cb_t xlio_log_get_cb_func()
 {
-    vma_log_cb_t log_cb = NULL;
+    xlio_log_cb_t log_cb = NULL;
     const char *const CB_STR = getenv(XLIO_LOG_CB_ENV_VAR);
     if (!CB_STR || !*CB_STR) {
         return NULL;
@@ -237,7 +237,7 @@ void vlog_start(const char *log_module_name, vlog_levels_t log_level, const char
 {
     g_vlogger_file = stderr;
 
-    g_vlogger_cb = vma_log_get_cb_func();
+    g_vlogger_cb = xlio_log_get_cb_func();
 
     strncpy(g_vlogger_module_name, log_module_name, sizeof(g_vlogger_module_name) - 1);
     g_vlogger_module_name[sizeof(g_vlogger_module_name) - 1] = '\0';

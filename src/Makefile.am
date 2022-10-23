@@ -1,1 +1,1 @@
-SUBDIRS := utils vlogger state_machine stats vma
+SUBDIRS := utils vlogger state_machine stats core

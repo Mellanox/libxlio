@@ -25,4 +25,6 @@ steps:
 
 failFast: false
 
+timeout_minutes: 240
+
 taskName: '${arch}'

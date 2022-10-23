@@ -30,17 +30,17 @@ general:
         #
         # Auto generated files
         #
-        - ".*src/vma/config_parser.*"
-        - ".*src/vma/config_scanner\\.c"
+        - ".*src/core/config_parser.*"
+        - ".*src/core/config_scanner\\.c"
 
 nbu-open-source:
     include:
         - ".*"
     exclude:
-        - ".*src/vma/lwip/.*"
+        - ".*src/core/lwip/.*"
         - ".*tests/gtest/common/tap\\.h"
         - ".*tests/gtest/googletest/.*"
-        - ".*src/vma/util/list\\.h"
+        - ".*src/core/util/list\\.h"
         - ".*contrib/scripts/libxlio\\.spec\\.in"
         - ".*contrib/scripts/xlio\\.service\\.in"
         - ".*docs/man/.*\\.in"

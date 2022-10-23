@@ -37,7 +37,7 @@
 #@date: 05July2015
 #
 # This script performs blocking connect to a given TCP server
-# It can serve for checking VMA behaviour with a blocking connect when the server
+# It can serve for checking XLIO behaviour with a blocking connect when the server
 # is up or down
 #
 import socket, select, os, time, sys, fcntl

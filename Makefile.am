@@ -50,5 +50,5 @@ tests:
 
 demo:
 	$(MAKE)
-	$(MAKE) -C src/vma/infra
+	$(MAKE) -C src/core/infra
 

@@ -35,14 +35,14 @@
 #include "common/sys.h"
 #include "common/base.h"
 #include "common/cmn.h"
-#include "src/vma/util/sock_addr.h"
+#include "src/core/util/sock_addr.h"
 #include "tcp_base.h"
 
 class tcp_bind : public tcp_base {
 public:
     tcp_bind()
-        : m_src_port(server_addr.addr.sin_family == AF_INET ? server_addr.addr.sin_port
-                                                            : server_addr.addr6.sin6_port)
+        : m_src_port(server_addr.addr.sa_family == AF_INET ? server_addr.addr4.sin_port
+                                                           : server_addr.addr6.sin6_port)
         , m_addr_all_ipv4(AF_INET, &ip_address::any_addr().get_in4_addr(), m_src_port)
         , m_addr_all_ipv6(AF_INET6, &ip_address::any_addr().get_in6_addr(), m_src_port)
     {
@@ -51,8 +51,8 @@ public:
 protected:
     bool create_ipv4_ipv6_sockets(bool reuse_addr)
     {
-        m_fd4 = tcp_base::sock_create(AF_INET, reuse_addr);
-        m_fd6 = tcp_base::sock_create(AF_INET6, reuse_addr);
+        m_fd4 = tcp_base::sock_create_fa(AF_INET, reuse_addr);
+        m_fd6 = tcp_base::sock_create_fa(AF_INET6, reuse_addr);
         EXPECT_LE(0, m_fd4);
         EXPECT_LE(0, m_fd6);
         return (m_fd4 > 0 && m_fd6 > 0);
@@ -63,7 +63,7 @@ protected:
         int rc = close(m_fd6);
         usleep(500000U); // XLIO timers to clean fd.
         EXPECT_EQ(0, rc);
-        m_fd6 = tcp_base::sock_create(AF_INET6, reuse_addr);
+        m_fd6 = tcp_base::sock_create_fa(AF_INET6, reuse_addr);
         EXPECT_LE(0, m_fd6);
         return (m_fd6 > 0);
     }
@@ -391,4 +391,135 @@ TEST_F(tcp_bind, bind_IP6_4_dual_stack_reuse_addr_listen)
     EXPECT_EQ(0, listen4());
 
     EXPECT_TRUE(close_ipv4_ipv6_sockets());
+}
+
+/**
+ * @test tcp_bind.mapped_ipv4_bind
+ * @brief
+ *    IPv6 mapped IPv4 bind
+ *
+ * @details
+ */
+TEST_F(tcp_bind, mapped_ipv4_bind)
+{
+    if (!test_mapped_ipv4()) {
+        return;
+    }
+
+    auto check_bind = [this](bool bindtodevice) {
+        int pid = fork();
+        if (0 == pid) { // Child
+            barrier_fork(pid);
+
+            int fd = tcp_base::sock_create_fa(AF_INET, false);
+            EXPECT_LE_ERRNO(0, fd);
+            if (0 <= fd) {
+                int rc = bind(fd, &client_addr.addr, sizeof(client_addr));
+                EXPECT_EQ_ERRNO(0, rc);
+                if (0 == rc) {
+                    log_trace("Bound client: fd=%d\n", fd);
+
+                    rc = connect(fd, &server_addr.addr, sizeof(server_addr));
+                    EXPECT_EQ_ERRNO(0, rc);
+                    if (0 == rc) {
+                        log_trace("Established connection: fd=%d to %s from %s\n", fd,
+                                  SOCK_STR(server_addr), SOCK_STR(client_addr));
+
+                        char buffer[8] = {0};
+                        send(fd, buffer, sizeof(buffer), 0);
+
+                        peer_wait(fd);
+                    }
+                }
+
+                close(fd);
+            }
+
+            // This exit is very important, otherwise the fork
+            // keeps running and may duplicate other tests.
+            exit(testing::Test::HasFailure());
+        } else { // Parent
+            int l_fd = tcp_base::sock_create_to(AF_INET6, false, 10);
+            EXPECT_LE_ERRNO(0, l_fd);
+            if (0 <= l_fd) {
+                sockaddr_store_t server_ipv4 = server_addr;
+                ipv4_to_mapped(server_ipv4);
+
+                log_trace("Binding: fd=%d, %s\n", l_fd, SOCK_STR(server_ipv4));
+
+                int rc = 0;
+                if (bindtodevice) {
+                    rc = bind_to_device(l_fd, server_addr);
+                }
+                EXPECT_EQ_ERRNO(0, rc);
+                if (0 == rc) {
+                    rc = bind(l_fd, &server_ipv4.addr, sizeof(server_ipv4));
+                    EXPECT_EQ_ERRNO(0, rc);
+                    if (0 == rc) {
+                        log_trace("Bound server: fd=%d\n", l_fd);
+
+                        rc = listen(l_fd, 5);
+                        EXPECT_EQ_ERRNO(0, rc);
+                        if (0 == rc) {
+                            barrier_fork(pid);
+
+                            log_trace("Listening: fd=%d\n", l_fd);
+
+                            int fd = accept(l_fd, nullptr, 0U);
+                            EXPECT_LE_ERRNO(0, fd);
+                            if (0 <= fd) {
+                                log_trace("Accepted connection: fd=%d\n", fd);
+
+                                char buffer[8] = {0};
+                                rc = recv(fd, buffer, sizeof(buffer), 0);
+                                EXPECT_EQ_ERRNO(8, rc);
+
+                                close(fd);
+                            }
+                        }
+                    }
+                }
+
+                close(l_fd);
+            }
+
+            EXPECT_EQ(0, wait_fork(pid));
+        }
+    };
+
+    log_trace("Checking bind()\n");
+    check_bind(false);
+    // Disabled for CI, XLIO inconformability.
+    // log_trace("Checking bind() with SO_BINDTODEVICE\n");
+    // check_bind(true);
+}
+
+/**
+ * @test tcp_bind.mapped_ipv4_bind_v6only
+ * @brief
+ *    IPv6 mapped IPv4 connect IPv6-Only socket
+ * @details
+ */
+TEST_F(tcp_bind, mapped_ipv4_bind_v6only)
+{
+    if (!test_mapped_ipv4()) {
+        return;
+    }
+
+    int fd = tcp_base::sock_create_fa(AF_INET6, false);
+    EXPECT_LE_ERRNO(0, fd);
+    if (0 <= fd) {
+        sockaddr_store_t server_ipv4 = server_addr;
+        ipv4_to_mapped(server_ipv4);
+
+        int ipv6only = 1;
+        int rc = setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &ipv6only, sizeof(ipv6only));
+        EXPECT_EQ_ERRNO(0, rc);
+
+        rc = bind(fd, &server_ipv4.addr, sizeof(server_ipv4));
+        EXPECT_LE_ERRNO(rc, -1);
+        EXPECT_EQ(errno, EINVAL);
+
+        close(fd);
+    }
 }

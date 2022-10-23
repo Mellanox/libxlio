@@ -109,10 +109,8 @@ TEST_F(udp_sendto, ti_3)
     int rc = EOK;
     int fd;
     char buf[65528] = "hello";
-    size_t max_possible_size = (client_addr.addr.sin_family == AF_INET ? 65507 : 65527);
 
-    SKIP_TRUE((client_addr.addr.sin_family == AF_INET),
-              "IPv6 Fragmentation is currently unsupported");
+    size_t max_possible_size = (client_addr.addr.sa_family == AF_INET ? 65507 : 65527);
 
     fd = udp_base::sock_create();
     ASSERT_LE(0, fd);

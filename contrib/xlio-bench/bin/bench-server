@@ -172,6 +172,7 @@ server_start()
     echo "starting nginx..."
     ln -r -s "$nginx_dir/logs/nginx.pid" "$ROOT_DIR/run/"
     set -x
+    echo $threads > "$work_dir/nginx_num_workers"
     sudo env $xlio_vars $nginx_cmd -g "$nginx_opts" -p "$nginx_dir" -c "$nginx_cfg" |& tee "$work_dir/nginx.out"
 }
 

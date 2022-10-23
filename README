@@ -155,7 +155,6 @@ Example:
  XLIO DETAILS: Num of UC ARPs                 3                          [XLIO_NEIGH_UC_ARP_QUATA]
  XLIO DETAILS: UC ARP delay (msec)            10000                      [XLIO_NEIGH_UC_ARP_DELAY_MSEC]
  XLIO DETAILS: Num of neigh restart retries   1                          [XLIO_NEIGH_NUM_ERR_RETRIES]
- XLIO DETAILS: SocketXtreme mode              Disabled                   [XLIO_SOCKETXTREME]
  XLIO DETAILS: TSO support                    auto                       [XLIO_TSO]
  XLIO DETAILS: UTLS RX support                Enabled                    [XLIO_UTLS_RX]
  XLIO DETAILS: UTLS TX support                Enabled                    [XLIO_UTLS_TX]
@@ -236,7 +235,7 @@ This is very useful when raising the XLIO_TRACELEVEL
 Library will replace a single '%d' appearing in the log file name with the pid of
 the process loaded with XLIO. This can help in running multiple instances of XLIO
 each with it's own log file name.
-Example:  XLIO_LOG_FILE=/tmp/vma_log.txt
+Example:  XLIO_LOG_FILE=/tmp/xlio_log.txt
 
 XLIO_SPEC
 XLIO predefined specification profiles.
@@ -293,14 +292,14 @@ Library will dump each socket's statistics into a file when closing the socket.
 Example:  XLIO_STATS_FILE=/tmp/stats
 
 XLIO_STATS_SHMEM_DIR
-Set the directory path for the library to create the shared memory files for vma_stats.
+Set the directory path for the library to create the shared memory files for xlio_stats.
 No files will be created when setting this value to empty string "".
 Default value is /tmp/
 
 XLIO_SERVICE_NOTIFY_DIR
-Set the directory path for XLIO to write files used by vmad.
-Default value is /tmp/vma/
-Note: when used vmad must be run with --notify-dir directing the same folder.
+Set the directory path for XLIO to write files used by xliod.
+Default value is /tmp/xlio/
+Note: when used xliod must be run with --notify-dir directing the same folder.
 
 XLIO_STATS_FD_NUM
 Max number of sockets monitored by XLIO statistic mechanism.
@@ -489,7 +488,7 @@ socket.XLIO offloaded socket's receive max limit of ready bytes count. If the
 application does not drain a sockets and the byte limit is reached, new
 received datagrams will be dropped.
 Monitor of the applications socket's usage of current, max and dropped bytes
-and packet counters can be done with vma_stats.
+and packet counters can be done with xlio_stats.
 Default value is 65536
 
 XLIO_RX_POLL
@@ -803,7 +802,7 @@ receive path. It will use a "debt" to remember how many WRE miss from each QP
 to fill it when buffers become available.
 If enabled, CQ will try to compensate QP for each polled receive completion. If
 buffers are short it will re-post a recently completed buffer. This causes a packet
-drop and will be monitored in the vma_stats.
+drop and will be monitored in the xlio_stats.
 Default value is 1 (Enabled)
 
 XLIO_QP_COMPENSATION_LEVEL
@@ -874,7 +873,7 @@ Use value of -1 for just handling at DEBUG severity.
 Use value of 0 to log DEBUG message and try recovering via Kernel network stack (un-offloading the socket).
 Use value of 1 to log ERROR message and try recovering via Kernel network stack (un-offloading the socket).
 Use value of 2 to log ERROR message and return API respectful error code.
-Use value of 3 to log ERROR message and abort application (throw vma_error exception).
+Use value of 3 to log ERROR message and abort application (throw xlio_error exception).
 Default value is -1 (notice, that in the future the default value will be changed to 0)
 
 XLIO_AVOID_SYS_CALLS_ON_TCP_FD
@@ -1001,13 +1000,6 @@ This is, in practice, a very rudimentary dup2 support.
 It only supports the case, where dup2 is used to close file descriptors,
 Default value is 1 (Enabled)
 
-XLIO_SOCKETXTREME
-When this parameter is enabled, XLIO operates in SocketXtreme mode.
-SocketXtreme mode brings latency down, eliminating copy operations and
-increasing throughput allowing applications to further utilize true kernel
-bypass architecture. An application should use a socket extension API named SocketXtreme.
-Default value is 0 (Disabled)
-
 XLIO_MTU
 Size of each Rx and Tx data buffer (Maximum Transfer Unit).
 This value sets the fragmentation size of the packets sent by the library.
@@ -1082,7 +1074,7 @@ Options:
   -h, --help                    Print this help message
 
 
-Use XLIO_STATS_FILE to get internal XLIO statistics like vma_stats provide.
+Use XLIO_STATS_FILE to get internal XLIO statistics like xlio_stats provide.
 If this parameter is set and the user application performed transmit or receive
 activity on a socket, then these values will be logs once the sockets are closed.
 
