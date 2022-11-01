@@ -262,10 +262,6 @@ void route_table_mgr::parse_entry(struct nlmsghdr *nl_header)
     rt_attribute = (struct rtattr *)RTM_RTA(rt_msg);
 
     for (; RTA_OK(rt_attribute, len); rt_attribute = RTA_NEXT(rt_attribute, len)) {
-        if (rt_attribute->rta_type == RTA_MULTIPATH) {
-            // Ignore multipath routes, because XLIO doesn't support them yet
-            return;
-        }
         parse_attr(rt_attribute, val);
     }
     val.set_state(true);
@@ -276,18 +272,19 @@ void route_table_mgr::parse_entry(struct nlmsghdr *nl_header)
 
 void route_table_mgr::parse_attr(struct rtattr *rt_attribute, route_val &val)
 {
+    char if_name[IFNAMSIZ];
+
     switch (rt_attribute->rta_type) {
     case RTA_DST:
         val.set_dst_addr(ip_address((void *)RTA_DATA(rt_attribute), val.get_family()));
         break;
-    // next hop IPv4 address
+    // next hop address
     case RTA_GATEWAY:
         val.set_gw(ip_address((void *)RTA_DATA(rt_attribute), val.get_family()));
         break;
     // unique ID associated with the network interface
     case RTA_OIF:
         val.set_if_index(*(int *)RTA_DATA(rt_attribute));
-        char if_name[IFNAMSIZ];
         if_indextoname(val.get_if_index(), if_name);
         val.set_if_name(if_name);
         break;
@@ -314,6 +311,33 @@ void route_table_mgr::parse_attr(struct rtattr *rt_attribute, route_val &val)
                 break;
             }
             rta = RTA_NEXT(rta, len);
+        }
+        break;
+    }
+    case RTA_MULTIPATH: {
+        struct rtnexthop *rtnh = (struct rtnexthop *)RTA_DATA(rt_attribute);
+        int rtnh_len = RTA_PAYLOAD(rt_attribute);
+        while (RTNH_OK(rtnh, rtnh_len)) {
+            val.set_if_index(rtnh->rtnh_ifindex);
+            if_indextoname(val.get_if_index(), if_name);
+            val.set_if_name(if_name);
+
+            int len = rtnh->rtnh_len - sizeof(*rtnh);
+            for (struct rtattr *rta = RTNH_DATA(rtnh); RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
+                parse_attr(rta, val);
+            }
+
+            const ip_address &gw_addr = val.get_gw_addr();
+            if (!gw_addr.is_anyaddr() && !gw_addr.is_linklocal(val.get_family())) {
+                // Currently, we support only a single nexthop per multipath route
+                // and we found a good one.
+                // If the gw is link-local we will check the next nexthop if present.
+                // FIXME We cannot rely on that the next entry overwrites all the attributes.
+                break;
+            }
+
+            rtnh = RTNH_NEXT(rtnh);
+            rtnh_len -= RTNH_ALIGN(rtnh->rtnh_len);
         }
         break;
     }
