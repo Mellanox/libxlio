@@ -141,6 +141,12 @@ public:
 
     bool is_anyaddr() const { return *this == any_addr(); };
 
+    bool is_linklocal(sa_family_t family) const
+    {
+        return family == AF_INET ? (ntohl(m_ip) & 0xFFFF0000U) == 0xA9FE0000U
+                                 : IN6_IS_ADDR_LINKLOCAL(&m_ip6);
+    }
+
     bool is_loopback_class(sa_family_t family) const
     {
         return (family == AF_INET ? LOOPBACK_N(m_ip) : *this == loopback6_addr());
