@@ -177,6 +177,16 @@ typedef struct {
     uint32_t n_strq_max_strides_per_packet;
 } socket_strq_counters_t;
 
+typedef struct {
+    uint32_t n_rx_syn;
+    uint32_t n_rx_syn_tw;
+    uint32_t n_rx_fin;
+    uint32_t n_conn_established;
+    uint32_t n_conn_accepted;
+    uint32_t n_conn_dropped;
+    uint32_t n_conn_backlog;
+} socket_listen_counters_t;
+
 typedef struct socket_stats_t {
     int fd;
     uint32_t inode;
@@ -209,6 +219,7 @@ typedef struct socket_stats_t {
     socket_tls_counters_t tls_counters;
 #endif /* DEFINED_UTLS */
     socket_strq_counters_t strq_counters;
+    socket_listen_counters_t listen_counters;
     std::bitset<MC_TABLE_SIZE> mc_grp_map;
     ring_logic_t ring_alloc_logic_rx;
     ring_logic_t ring_alloc_logic_tx;
@@ -234,6 +245,7 @@ typedef struct socket_stats_t {
         memset(&tls_counters, 0, sizeof(tls_counters));
 #endif /* DEFINED_UTLS */
         memset(&strq_counters, 0, sizeof(strq_counters));
+        memset(&listen_counters, 0, sizeof(listen_counters));
         mc_grp_map.reset();
         ring_user_id_rx = ring_user_id_tx = 0;
         ring_alloc_logic_rx = ring_alloc_logic_tx = RING_LOGIC_PER_INTERFACE;

@@ -303,6 +303,24 @@ void update_delta_stat(socket_stats_t *p_curr_stat, socket_stats_t *p_prev_stat)
         (p_curr_stat->counters.n_tx_sendfile_overflows -
          p_prev_stat->counters.n_tx_sendfile_overflows) /
         delay;
+
+    p_prev_stat->listen_counters.n_rx_syn =
+        (p_curr_stat->listen_counters.n_rx_syn - p_prev_stat->listen_counters.n_rx_syn) / delay;
+    p_prev_stat->listen_counters.n_rx_syn_tw =
+        (p_curr_stat->listen_counters.n_rx_syn_tw - p_prev_stat->listen_counters.n_rx_syn_tw) /
+        delay;
+    p_prev_stat->listen_counters.n_rx_fin =
+        (p_curr_stat->listen_counters.n_rx_fin - p_prev_stat->listen_counters.n_rx_fin) / delay;
+    p_prev_stat->listen_counters.n_conn_established =
+        (p_curr_stat->listen_counters.n_conn_established -
+         p_prev_stat->listen_counters.n_conn_established) /
+        delay;
+    p_prev_stat->listen_counters.n_conn_accepted = (p_curr_stat->listen_counters.n_conn_accepted -
+                                                    p_prev_stat->listen_counters.n_conn_accepted) /
+        delay;
+    p_prev_stat->listen_counters.n_conn_dropped = (p_curr_stat->listen_counters.n_conn_dropped -
+                                                   p_prev_stat->listen_counters.n_conn_dropped) /
+        delay;
 }
 
 void update_delta_iomux_stat(iomux_func_stats_t *p_curr_stats, iomux_func_stats_t *p_prev_stats)
