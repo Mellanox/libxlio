@@ -277,6 +277,25 @@ void print_full_stats(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, 
     }
 #endif /* DEFINED_UTLS */
 
+    if (p_si_stats->tcp_state == LISTEN || p_si_stats->listen_counters.n_rx_syn) {
+        fprintf(filename, "Listen Backlog: %u [current]\n",
+                p_si_stats->listen_counters.n_conn_backlog);
+        fprintf(
+            filename, "Listen Accepts: %u / %u / %u / %u [accepted/established/SYNs/reused]%s\n",
+            p_si_stats->listen_counters.n_conn_accepted,
+            p_si_stats->listen_counters.n_conn_established, p_si_stats->listen_counters.n_rx_syn,
+            p_si_stats->listen_counters.n_rx_syn_tw, post_fix);
+        if (p_si_stats->listen_counters.n_conn_dropped != 0) {
+            fprintf(filename, "Listen Errors: %u / %u [dropped/FINs]%s\n",
+                    p_si_stats->listen_counters.n_conn_dropped,
+                    p_si_stats->listen_counters.n_rx_fin, post_fix);
+        }
+        b_any_activiy = b_any_activiy || p_si_stats->listen_counters.n_conn_accepted ||
+            p_si_stats->listen_counters.n_conn_established ||
+            p_si_stats->listen_counters.n_rx_syn || p_si_stats->listen_counters.n_rx_syn_tw ||
+            p_si_stats->listen_counters.n_conn_dropped;
+    }
+
     if (b_any_activiy == false) {
         fprintf(filename, "Rx and Tx where not active\n");
     }

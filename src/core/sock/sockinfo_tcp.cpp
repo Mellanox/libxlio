@@ -1726,6 +1726,8 @@ int sockinfo_tcp::handle_child_FIN(sockinfo_tcp *child_conn)
     } else {
         si_tcp_logdbg("received FIN before accept() was called");
         m_received_syn_num--;
+        m_p_socket_stats->listen_counters.n_rx_fin++;
+        m_p_socket_stats->listen_counters.n_conn_dropped++;
         child_conn->m_parent = NULL;
         unlock_tcp_con();
         child_conn->lock_tcp_con();
@@ -2830,6 +2832,7 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
     BULLSEYE_EXCLUDE_BLOCK_END
 
     m_ready_conn_cnt--;
+    m_p_socket_stats->listen_counters.n_conn_backlog--;
     tcp_accepted(m_sock);
 
     class flow_tuple key;
@@ -2874,13 +2877,14 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
                 break;
             }
 
+            m_p_socket_stats->listen_counters.n_conn_dropped++;
             return ret;
         }
     }
 
+    m_p_socket_stats->listen_counters.n_conn_accepted++;
     ns->m_p_socket_stats->set_connected_ip(ns->m_connected);
     ns->m_p_socket_stats->connected_port = ns->m_connected.get_in_port();
-
     ns->m_p_socket_stats->set_bound_if(ns->m_bound);
     ns->m_p_socket_stats->bound_port = ns->m_bound.get_in_port();
 
@@ -2918,9 +2922,13 @@ sockinfo_tcp *sockinfo_tcp::accept_clone()
     sockinfo_tcp *si;
     int fd;
 
+    // Clone is always called first when a SYN packet received by a listen socket.
+    m_p_socket_stats->listen_counters.n_rx_syn++;
+
     // Create the socket object. We skip shadow sockets for incoming connections.
     fd = socket_internal(m_family, SOCK_STREAM, 0, false, false);
     if (fd < 0) {
+        m_p_socket_stats->listen_counters.n_conn_dropped++;
         return 0;
     }
 
@@ -3078,6 +3086,8 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
 
     conn->m_accepted_conns.push_back(new_sock);
     conn->m_ready_conn_cnt++;
+    conn->m_p_socket_stats->listen_counters.n_conn_established++;
+    conn->m_p_socket_stats->listen_counters.n_conn_backlog++;
 
     NOTIFY_ON_EVENTS(conn, EPOLLIN);
 
@@ -3251,6 +3261,7 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     listen_sock->m_syn_received[key] = newpcb;
 
     listen_sock->m_received_syn_num++;
+    listen_sock->m_p_socket_stats->listen_counters.n_rx_syn_tw++;
     listen_sock->m_tcp_con_lock.unlock();
     assert(g_p_fd_collection);
     g_p_fd_collection->reuse_sockfd(new_sock->m_fd, new_sock);
@@ -3301,6 +3312,7 @@ err_t sockinfo_tcp::syn_received_lwip_cb(void *arg, struct tcp_pcb *newpcb)
 
         close(new_sock->get_fd());
         listen_sock->m_tcp_con_lock.lock();
+        listen_sock->m_p_socket_stats->listen_counters.n_conn_dropped++;
         return ERR_ABRT;
     }
 
