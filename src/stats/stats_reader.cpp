@@ -37,21 +37,24 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <iostream>
 #include <fcntl.h>
 #include <errno.h>
-#include <list>
 #include <signal.h>
 #include <getopt.h> /* getopt()*/
 #include <errno.h>
 #include <dirent.h>
 #include <string.h>
-#include <vector>
-#include <cinttypes>
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/utsname.h>
 #include <sys/stat.h>
+
+#include <cinttypes>
+#include <iostream>
+#include <list>
+#include <vector>
+#include <unordered_map>
+
 #include "utils/rdtsc.h"
 #include "core/util/utils.h"
 #include "core/util/xlio_stats.h"
@@ -1313,7 +1316,8 @@ void set_defaults()
     user_params.zero_counters = false;
     user_params.write_auth = true; // needed to set read flag on
     user_params.cycles = DEFAULT_CYCLES;
-    user_params.fd_dump = STATS_FD_STATISTICS_DISABLED;
+    user_params.dump = DUMP_DISABLED;
+    user_params.fd_dump = 0;
     user_params.fd_dump_log_level = STATS_FD_STATISTICS_LOG_LEVEL_DEFAULT;
     user_params.xlio_stats_path = MCE_DEFAULT_STATS_SHMEM_DIR;
 
@@ -1369,14 +1373,16 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
     iomux_stats_t prev_iomux_blocks;
     iomux_stats_t curr_iomux_blocks;
 
-    if (user_params.fd_dump != STATS_FD_STATISTICS_DISABLED) {
-        if (user_params.fd_dump) {
-            log_msg("Dumping Fd %d to " PRODUCT_NAME " using log level = %s...",
-                    user_params.fd_dump, log_level::to_str(user_params.fd_dump_log_level));
-        } else {
-            log_msg("Dumping all Fd's to " PRODUCT_NAME " using log level = %s...",
-                    log_level::to_str(user_params.fd_dump_log_level));
-        }
+    if (user_params.dump != DUMP_DISABLED) {
+        static std::unordered_map<int, const char *> dump_type_names = {
+            {DUMP_DISABLED, "Unknown"},
+            {DUMP_FD, "Fd"},
+            {DUMP_ROUTE, "Routing"},
+            {DUMP_NEIGH, "Neighboring"}};
+
+        const char *name = dump_type_names[user_params.dump] ?: "Unknown";
+        log_msg("Dumping %s information to " PRODUCT_NAME " using log level = %s...", name,
+                log_level::to_str(user_params.fd_dump_log_level));
         return;
     }
 
@@ -1815,6 +1821,7 @@ int get_pid(char *proc_desc, char *argv0)
 
 void set_dumping_data(sh_mem_t *p_sh_mem)
 {
+    p_sh_mem->dump = user_params.dump;
     p_sh_mem->fd_dump = user_params.fd_dump;
     p_sh_mem->fd_dump_log_level = user_params.fd_dump_log_level;
 }
@@ -1845,31 +1852,38 @@ int main(int argc, char **argv)
 
     while (1) {
         int c = 0;
+        int option_index = 0;
 
-        static struct option long_options[] = {{"interval", 1, NULL, 'i'},
-                                               {"cycles", 1, NULL, 'c'},
-                                               {"view", 1, NULL, 'v'},
-                                               {"details", 1, NULL, 'd'},
-                                               {"pid", 1, NULL, 'p'},
-                                               {"directory", 1, NULL, 'k'},
-                                               {"sockets", 1, NULL, 's'},
-                                               {"version", 0, NULL, 'V'},
-                                               {"zero", 0, NULL, 'z'},
-                                               {"log_level", 1, NULL, 'l'},
-                                               {"fd_dump", 1, NULL, 'S'},
-                                               {"details_level", 1, NULL, 'D'},
-                                               {"name", 1, NULL, 'n'},
-                                               {"find_pid", 0, NULL, 'f'},
-                                               {"forbid_clean", 0, NULL, 'F'},
-                                               {"help", 0, NULL, 'h'},
-                                               {0, 0, 0, 0}};
+        static struct option long_options[] = {
+            {"interval", 1, NULL, 'i'},      {"cycles", 1, NULL, 'c'},  {"view", 1, NULL, 'v'},
+            {"details", 1, NULL, 'd'},       {"pid", 1, NULL, 'p'},     {"directory", 1, NULL, 'k'},
+            {"sockets", 1, NULL, 's'},       {"version", 0, NULL, 'V'}, {"zero", 0, NULL, 'z'},
+            {"log_level", 1, NULL, 'l'},     {"dump", 1, NULL, 0},      {"fd_dump", 1, NULL, 'S'},
+            {"details_level", 1, NULL, 'D'}, {"name", 1, NULL, 'n'},    {"find_pid", 0, NULL, 'f'},
+            {"forbid_clean", 0, NULL, 'F'},  {"help", 0, NULL, 'h'},    {0, 0, 0, 0}};
 
-        if ((c = getopt_long(argc, argv, "i:c:v:d:p:k:s:Vzl:S:D:n:fFh?", long_options, NULL)) ==
-            -1) {
+        if ((c = getopt_long(argc, argv, "i:c:v:d:p:k:s:Vzl:S:D:n:fFh?", long_options,
+                             &option_index)) == -1) {
             break;
         }
 
         switch (c) {
+        case 0: {
+            if (strcmp("dump", long_options[option_index].name) == 0) {
+                if (strcasecmp("fd", optarg) == 0) {
+                    user_params.dump = DUMP_FD;
+                } else if (strcasecmp("route", optarg) == 0) {
+                    user_params.dump = DUMP_ROUTE;
+                } else if (strcasecmp("neigh", optarg) == 0) {
+                    user_params.dump = DUMP_NEIGH;
+                } else {
+                    log_err("'--dump' Invalid argument: %s", optarg);
+                    usage(argv[0]);
+                    cleanup(NULL);
+                    return 1;
+                }
+            }
+        } break;
         case 'i': {
             errno = 0;
             int interval = strtol(optarg, NULL, 0);
@@ -1959,6 +1973,7 @@ int main(int argc, char **argv)
                 cleanup(NULL);
                 return 1;
             }
+            user_params.dump = DUMP_FD;
             user_params.fd_dump = fd_to_dump;
             if (++optind < argc && *argv[optind] != '-') {
                 vlog_levels_t dump_log_level = log_level::from_str(argv[optind], VLOG_INIT);
@@ -2129,7 +2144,7 @@ int init_print_process_stats(sh_mem_info_t &sh_mem_info)
     if (user_params.xlio_details_level != INIT_XLIO_LOG_DETAILS) {
         set_xlio_log_details_level(sh_mem);
     }
-    if (user_params.fd_dump != STATS_FD_STATISTICS_DISABLED) {
+    if (user_params.dump != DUMP_DISABLED) {
         set_dumping_data(sh_mem);
     }
 

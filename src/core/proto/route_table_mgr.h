@@ -67,6 +67,14 @@ struct route_result {
     }
 };
 
+typedef struct {
+    uint32_t n_lookup_hit;
+    uint32_t n_lookup_miss;
+    uint32_t n_updates_newroute;
+    uint32_t n_updates_delroute;
+    uint32_t n_updates_unhandled;
+} route_table_stats_t;
+
 class route_table_mgr : public netlink_socket_mgr,
                         public cache_table_mgr<route_rule_table_key, route_val *>,
                         public observer {
@@ -77,6 +85,8 @@ public:
     bool route_resolve(IN route_rule_table_key key, OUT route_result &res);
 
     virtual void notify_cb(event *ev);
+
+    void dump_tbl();
 
 protected:
     virtual void parse_entry(struct nlmsghdr *nl_header);
@@ -104,6 +114,8 @@ private:
     route_table_t m_table_in4;
     // IPv6 routing information
     route_table_t m_table_in6;
+    // Statistics
+    route_table_stats_t m_stats;
 };
 
 extern route_table_mgr *g_p_route_table_mgr;
