@@ -111,12 +111,13 @@ void stats_data_reader::handle_timer_expired(void *ctx)
         return;
     }
 
-    if (g_sh_mem->fd_dump != STATS_FD_STATISTICS_DISABLED) {
+    if (unlikely(g_sh_mem->dump != DUMP_DISABLED)) {
         if (g_p_event_handler_manager) {
-            g_p_event_handler_manager->statistics_print(g_sh_mem->fd_dump,
+            g_p_event_handler_manager->statistics_print(g_sh_mem->dump, g_sh_mem->fd_dump,
                                                         g_sh_mem->fd_dump_log_level);
         }
-        g_sh_mem->fd_dump = STATS_FD_STATISTICS_DISABLED;
+        g_sh_mem->dump = DUMP_DISABLED;
+        g_sh_mem->fd_dump = 0;
         g_sh_mem->fd_dump_log_level = STATS_FD_STATISTICS_LOG_LEVEL_DEFAULT;
     }
     stats_read_map_t::iterator iter;
@@ -276,7 +277,8 @@ success:
     g_sh_mem->log_details_level = **p_p_xlio_log_details;
 
     // Update the shmem with initial fd dump values
-    g_sh_mem->fd_dump = STATS_FD_STATISTICS_DISABLED;
+    g_sh_mem->dump = DUMP_DISABLED;
+    g_sh_mem->fd_dump = 0;
     g_sh_mem->fd_dump_log_level = STATS_FD_STATISTICS_LOG_LEVEL_DEFAULT;
 
     // ReMap internal log level to ShMem area

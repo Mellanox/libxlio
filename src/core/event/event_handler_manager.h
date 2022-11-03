@@ -43,6 +43,7 @@
 #include "core/event/command.h"
 #include "core/event/delta_timer.h"
 #include "core/event/timers_group.h"
+#include "core/util/xlio_stats.h"
 
 class timer_handler;
 class event_handler_ibverbs;
@@ -178,7 +179,7 @@ public:
 
     void update_epfd(int fd, int operation, int events);
     void query_for_ibverbs_event(int async_fd);
-    void statistics_print(int fd, vlog_levels_t log_level);
+    void statistics_print(dump_type_t dump_type, int fd, vlog_levels_t log_level);
 
 private:
     pthread_t m_event_handler_tid;

@@ -59,11 +59,17 @@
 #define STATS_READER_DELAY                                                                         \
     STATS_PUBLISHER_TIMER_PERIOD + 5 // reader will wait for xlio to wakeup and write statistics to
                                      // shmem (with extra 5 msec overhead)
-#define STATS_FD_STATISTICS_DISABLED          -1
 #define STATS_FD_STATISTICS_LOG_LEVEL_DEFAULT VLOG_DEFAULT
 
 // statistic file
 extern FILE *g_stats_file;
+
+typedef enum {
+    DUMP_DISABLED,
+    DUMP_FD,
+    DUMP_ROUTE,
+    DUMP_NEIGH,
+} dump_type_t;
 
 // Common iomux stats
 typedef struct {
@@ -84,16 +90,17 @@ typedef enum { e_basic = 1, e_medium, e_full, e_mc_groups, e_netstat_like } view
 typedef enum { e_by_pid_str, e_by_app_name, e_by_runn_proccess } proc_ident_mode_t;
 
 struct user_params_t {
+    bool forbid_cleaning;
+    bool zero_counters;
+    bool write_auth;
     int interval;
     print_details_mode_t print_details_mode;
     view_mode_t view_mode;
-    bool forbid_cleaning;
     vlog_levels_t xlio_log_level;
     int xlio_details_level;
-    bool zero_counters;
     proc_ident_mode_t proc_ident_mode;
-    bool write_auth;
     int cycles;
+    dump_type_t dump;
     int fd_dump;
     vlog_levels_t fd_dump_log_level;
     std::string xlio_stats_path;
@@ -394,6 +401,7 @@ typedef struct sh_mem_t {
     char stats_protocol_ver[32];
     vlog_levels_t log_level;
     uint8_t log_details_level;
+    dump_type_t dump;
     int fd_dump;
     vlog_levels_t fd_dump_log_level;
     cq_instance_block_t cq_inst_arr[NUM_OF_SUPPORTED_CQS];
@@ -437,6 +445,7 @@ typedef struct sh_mem_t {
         max_skt_inst_num = 0;
         log_level = (vlog_levels_t)0;
         log_details_level = 0;
+        dump = DUMP_DISABLED;
         fd_dump = 0;
         fd_dump_log_level = (vlog_levels_t)0;
         memset(cq_inst_arr, 0, sizeof(cq_inst_arr));

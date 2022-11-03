@@ -38,6 +38,7 @@
 #include "core/dev/ring_allocation_logic.h"
 #include "core/sock/fd_collection.h"
 #include "core/sock/sock-redirect.h" // calling orig_os_api.epoll()
+#include "core/proto/route_table_mgr.h"
 #include "timer_handler.h"
 #include "event_handler_ibverbs.h"
 #include "event_handler_rdma_cm.h"
@@ -799,10 +800,26 @@ void event_handler_manager::query_for_ibverbs_event(int async_fd)
     process_ibverbs_event(i);
 }
 
-void event_handler_manager::statistics_print(int fd, vlog_levels_t log_level)
+void event_handler_manager::statistics_print(dump_type_t dump_type, int fd, vlog_levels_t log_level)
 {
-    if (m_b_continue_running && g_p_fd_collection) {
-        g_p_fd_collection->statistics_print(fd, log_level);
+    if (m_b_continue_running) {
+        switch (dump_type) {
+        case DUMP_FD:
+            if (g_p_fd_collection) {
+                g_p_fd_collection->statistics_print(fd, log_level);
+            }
+            break;
+        case DUMP_ROUTE:
+            if (g_p_route_table_mgr) {
+                g_p_route_table_mgr->dump_tbl();
+            }
+            break;
+        case DUMP_NEIGH:
+            // Not implemented yet
+            break;
+        default:
+            evh_logdbg("Impossible statistics dump request (type=%d).", dump_type);
+        }
     }
 }
 

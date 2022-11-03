@@ -78,6 +78,8 @@ route_table_mgr::route_table_mgr()
 {
     rt_mgr_logdbg("");
 
+    memset(&m_stats, 0, sizeof(m_stats));
+
     m_table_in4.reserve(DEFAULT_ROUTE_TABLE_SIZE);
     m_table_in6.reserve(DEFAULT_ROUTE_TABLE_SIZE);
 
@@ -115,6 +117,40 @@ route_table_mgr::~route_table_mgr()
         m_cache_tbl.erase(cache_itr);
     }
     rt_mgr_logdbg("Done");
+}
+
+void route_table_mgr::dump_tbl()
+{
+    std::lock_guard<decltype(m_lock)> lock(m_lock);
+
+    auto print_tbl = [&](route_table_t &table, bool print_deleted) {
+        size_t active_nr = 0;
+
+        for (auto iter = table.begin(); iter != table.end(); ++iter) {
+            if (print_deleted || !iter->is_deleted()) {
+                rt_mgr_loginfo("  %s", iter->to_str().c_str());
+            }
+            active_nr += !iter->is_deleted();
+        }
+        rt_mgr_loginfo("Total: %zu active and %zu deleted entries.", active_nr,
+                       table.size() - active_nr);
+        if (table.size() == MAX_ROUTE_TABLE_SIZE) {
+            rt_mgr_loginfo("Table is full!");
+        }
+    };
+
+    rt_mgr_loginfo("Routing table IPv4:");
+    print_tbl(m_table_in4, false);
+    rt_mgr_loginfo("");
+    rt_mgr_loginfo("Routing table IPv6:");
+    print_tbl(m_table_in6, false);
+
+    rt_mgr_loginfo("");
+    rt_mgr_loginfo("Routing table lookup stats: %u / %u [hit/miss]", m_stats.n_lookup_hit,
+                   m_stats.n_lookup_miss);
+    rt_mgr_loginfo("Routing table update stats: %u / %u / %u [new/del/unhandled]",
+                   m_stats.n_updates_newroute, m_stats.n_updates_delroute,
+                   m_stats.n_updates_unhandled);
 }
 
 void route_table_mgr::update_tbl()
@@ -403,10 +439,12 @@ bool route_table_mgr::route_resolve(IN route_rule_table_key key, OUT route_resul
             rt_mgr_logdbg("dst ip '%s' resolved to gw addr '%s'", dst_addr.to_str(family).c_str(),
                           res.gw.to_str(family).c_str());
             rt_mgr_logdbg("found route mtu %d", res.mtu);
+            ++m_stats.n_lookup_hit;
             return true;
         }
     }
 
+    ++m_stats.n_lookup_miss;
     /* prevent usage on false return */
     return false;
 }
@@ -555,11 +593,14 @@ void route_table_mgr::notify_cb(event *ev)
     switch (route_netlink_ev->nl_type) {
     case RTM_NEWROUTE:
         new_route_event(p_netlink_route_info->get_route_val());
+        ++m_stats.n_updates_newroute;
         break;
     case RTM_DELROUTE:
         del_route_event(p_netlink_route_info->get_route_val());
+        ++m_stats.n_updates_delroute;
         break;
     default:
+        ++m_stats.n_updates_unhandled;
         rt_mgr_logdbg("Route event (%u) is not handled", route_netlink_ev->nl_type);
         break;
     }
