@@ -1,7 +1,7 @@
 Source: libxlio
 Section: net
 Priority: optional
-Maintainer: Igor Ivanov <igori@nvidia.com>
+Maintainer: NVIDIA CORPORATION <networking-support@nvidia.com>
 Build-Depends: debhelper (>= 7),
  pkg-config,
  autoconf,
