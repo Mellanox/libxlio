@@ -4619,7 +4619,7 @@ int sockinfo_tcp::getpeername(sockaddr *__name, socklen_t *__namelen)
         return orig_os_api.getpeername(m_fd, __name, __namelen);
     }
 
-    if (m_conn_state != TCP_CONN_CONNECTED) {
+    if (m_conn_state < TCP_CONN_CONNECTED) {
         errno = ENOTCONN;
         return -1;
     }
