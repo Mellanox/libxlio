@@ -122,12 +122,6 @@ if [ $1 = 1 ]; then
         %else
             systemctl --no-reload enable xlio.service >/dev/null 2>&1 || true
         %endif
-    elif [ -e /sbin/chkconfig ]; then
-        /sbin/chkconfig --add xlio
-    elif [ -e /usr/sbin/update-rc.d ]; then
-        /usr/sbin/update-rc.d xlio defaults
-    else
-        %{_libdir}/lsb/install_initd %{_sysconfdir}/init.d/xlio
     fi
 fi
 
@@ -144,15 +138,6 @@ if [ $1 = 0 ]; then
             systemctl --no-reload disable xlio.service >/dev/null 2>&1 || true
             systemctl stop xlio.service || true
         %endif
-    elif [ -e /sbin/chkconfig ]; then
-        %{_sysconfdir}/init.d/xlio stop
-        /sbin/chkconfig --del xlio
-    elif [ -e /usr/sbin/update-rc.d ]; then
-        %{_sysconfdir}/init.d/xlio stop
-        /usr/sbin/update-rc.d -f xlio remove
-    else
-        %{_sysconfdir}/init.d/xlio stop
-        %{_libdir}/lsb/remove_initd %{_sysconfdir}/init.d/xlio
     fi
 fi
 
@@ -183,8 +168,6 @@ fi
 %{_sbindir}/xliod
 %if "%{use_systemd}" == "1"
 %{_prefix}/lib/systemd/system/xlio.service
-%else
-%{_sysconfdir}/init.d/xlio
 %endif
 %{_mandir}/man7/xlio.*
 %{_mandir}/man8/xliod.*
