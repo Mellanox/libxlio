@@ -1,3 +1,9 @@
+Version 2.0.7-1:
+Date + Time 2022-11-14
+=============================================================
+Fixed:
+        - RM #3253852 Support only systemctl for xlio service setup/removal
+
 Version 2.0.6-1:
 Date + Time 2022-10-06
 =============================================================
