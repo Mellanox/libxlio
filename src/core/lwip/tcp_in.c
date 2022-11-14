@@ -403,7 +403,8 @@ static void tcp_listen_input(struct tcp_pcb *pcb, tcp_in_data *in_data)
         npcb->snd_wnd_max = npcb->snd_wnd;
         npcb->ssthresh = npcb->snd_wnd;
 #if TCP_CALCULATE_EFF_SEND_MSS
-        UPDATE_PCB_BY_MSS(npcb, npcb->advtsd_mss);
+        // mss can be changed by tcp_parseopt, need to take the MIN
+        UPDATE_PCB_BY_MSS(npcb, LWIP_MIN(npcb->mss, npcb->advtsd_mss));
 #endif /* TCP_CALCULATE_EFF_SEND_MSS */
 
         /* Register the new PCB so that we can begin sending segments
@@ -436,7 +437,7 @@ static err_t tcp_pcb_reuse(struct tcp_pcb *pcb, tcp_in_data *in_data)
     pcb->rcv_nxt = in_data->seqno + 1;
     pcb->rcv_ann_right_edge = pcb->rcv_nxt;
     pcb->snd_wl1 = in_data->seqno - 1; /* initialise to seqno-1 to force window update */
-    pcb->advtsd_mss = tcp_send_mss(pcb);
+    pcb->mss = pcb->advtsd_mss = tcp_send_mss(pcb);
     /* Parse any options in the SYN. */
     tcp_parseopt(pcb, in_data);
     pcb->rcv_wnd = TCP_WND_SCALED(pcb);
@@ -446,7 +447,9 @@ static err_t tcp_pcb_reuse(struct tcp_pcb *pcb, tcp_in_data *in_data)
     pcb->snd_wnd = SND_WND_SCALE(pcb, in_data->tcphdr->wnd);
     pcb->snd_wnd_max = pcb->snd_wnd;
     pcb->ssthresh = pcb->snd_wnd;
-    UPDATE_PCB_BY_MSS(pcb, pcb->advtsd_mss);
+
+    // mss can be changed by tcp_parseopt, need to take the MIN
+    UPDATE_PCB_BY_MSS(pcb, LWIP_MIN(pcb->mss, pcb->advtsd_mss));
     rc = pcb->syn_tw_handled_cb(pcb->listen_sock, pcb);
     if (rc != ERR_OK) {
         return rc;
@@ -610,7 +613,8 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
             set_tcp_state(pcb, ESTABLISHED);
 
 #if TCP_CALCULATE_EFF_SEND_MSS
-            UPDATE_PCB_BY_MSS(pcb, tcp_send_mss(pcb));
+            // mss can be changed by tcp_parseopt, need to take the MIN
+            UPDATE_PCB_BY_MSS(pcb, LWIP_MIN(pcb->mss, tcp_send_mss(pcb)));
 #endif /* TCP_CALCULATE_EFF_SEND_MSS */
 
             /* Set ssthresh again after changing pcb->mss (already set in tcp_connect
