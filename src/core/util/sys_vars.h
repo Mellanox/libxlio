@@ -48,17 +48,11 @@
 
 typedef enum {
     MCE_SPEC_NONE = 0,
-    MCE_SPEC_SOCKPERF_ULTRA_LATENCY_10,
-    MCE_SPEC_SOCKPERF_LATENCY_15,
-    MCE_SPEC_29WEST_LBM_29,
-    MCE_SPEC_WOMBAT_FH_LBM_554,
-    MCE_SPEC_MCD_623,
-    MCE_SPEC_MCD_IRQ_624,
-    MCE_SPEC_RTI_784,
-    MCE_SPEC_LL_7750,
+    MCE_SPEC_SOCKPERF_ULTRA_LATENCY,
+    MCE_SPEC_SOCKPERF_LATENCY,
     MCE_SPEC_LL_MULTI_RING,
-    MCE_SPEC_NGINX_669,
-    MCE_SPEC_NGINX_DPU_670,
+    MCE_SPEC_NGINX,
+    MCE_SPEC_NGINX_DPU
 
     MCE_SPEC_ALL /* last element */
 } xlio_spec_t;
@@ -340,8 +334,6 @@ public:
     char app_id[MAX_APP_ID_LENGHT];
 
     uint32_t mce_spec;
-    uint32_t mce_spec_param1;
-    uint32_t mce_spec_param2;
 
     vlog_levels_t log_level;
     uint32_t log_details;
@@ -650,8 +642,6 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_MSS              "XLIO_MSS"
 #define SYS_VAR_TCP_CC_ALGO      "XLIO_TCP_CC_ALGO"
 #define SYS_VAR_SPEC             "XLIO_SPEC"
-#define SYS_VAR_SPEC_PARAM1      "XLIO_SPEC_PARAM1"
-#define SYS_VAR_SPEC_PARAM2      "XLIO_SPEC_PARAM2"
 
 #define SYS_VAR_TSO "XLIO_TSO"
 #ifdef DEFINED_UTLS

@@ -104,33 +104,22 @@ typedef struct {
     const char **input_names;
 } xlio_spec_names;
 
-static const char *names_none[] = {"none", "0", NULL};
-static const char *spec_names_ulatency[] = {"ultra-latency", "10", NULL};
-static const char *spec_names_latency[] = {"latency", "15", NULL};
-static const char *spec_names_29west[] = {"29west", "29", NULL};
-static const char *spec_names_wombat_fh[] = {"wombat_fh", "554", NULL};
-static const char *spec_names_mcd[] = {"mcd", "623", NULL};
-static const char *spec_names_mcd_irq[] = {"mcd-irq", "624", NULL};
-static const char *spec_names_rti[] = {"rti", "784", NULL};
-static const char *spec_names_7750[] = {"7750", NULL};
+static const char *names_none[] = {"none", NULL};
+static const char *spec_names_ulatency[] = {"ultra-latency", NULL};
+static const char *spec_names_latency[] = {"latency", NULL};
 static const char *spec_names_multi_ring[] = {"multi_ring_latency", NULL};
-static const char *spec_names_nginx[] = {"nginx", "669", NULL};
-static const char *spec_names_nginx_dpu[] = {"nginx_dpu", "670", NULL};
+static const char *spec_names_nginx[] = {"nginx", NULL};
+static const char *spec_names_nginx_dpu[] = {"nginx_dpu", NULL};
+static const char *spec_names_nvme_bf2[] = {"nvme_bf2", NULL};
 
 // must be by order because "to_str" relies on that!
 static const xlio_spec_names specs[] = {
     {MCE_SPEC_NONE, "NONE", (const char **)names_none},
-    {MCE_SPEC_SOCKPERF_ULTRA_LATENCY_10, "Ultra Latency", (const char **)spec_names_ulatency},
-    {MCE_SPEC_SOCKPERF_LATENCY_15, "Latency", (const char **)spec_names_latency},
-    {MCE_SPEC_29WEST_LBM_29, "29West LBM Logic", (const char **)spec_names_29west},
-    {MCE_SPEC_WOMBAT_FH_LBM_554, "Wombat FH LBM Logic", (const char **)spec_names_wombat_fh},
-    {MCE_SPEC_MCD_623, "Memcached Logic", (const char **)spec_names_mcd},
-    {MCE_SPEC_MCD_IRQ_624, "Memcached Interrupt Mode", (const char **)spec_names_mcd_irq},
-    {MCE_SPEC_RTI_784, "RTI Logic", (const char **)spec_names_rti},
-    {MCE_SPEC_LL_7750, "7750 Low Latency Profile", (const char **)spec_names_7750},
+    {MCE_SPEC_SOCKPERF_ULTRA_LATENCY, "Ultra Latency", (const char **)spec_names_ulatency},
+    {MCE_SPEC_SOCKPERF_LATENCY, "Latency", (const char **)spec_names_latency},
     {MCE_SPEC_LL_MULTI_RING, "Multi Ring Latency Profile", (const char **)spec_names_multi_ring},
-    {MCE_SPEC_NGINX_669, "Nginx Profile", (const char **)spec_names_nginx},
-    {MCE_SPEC_NGINX_DPU_670, "Nginx Profile for DPU", (const char **)spec_names_nginx_dpu},
+    {MCE_SPEC_NGINX, "Nginx Profile", (const char **)spec_names_nginx},
+    {MCE_SPEC_NGINX_DPU, "Nginx Profile for DPU", (const char **)spec_names_nginx_dpu}
 };
 
 // convert str to _spec_t; upon error - returns the given 'def_value'
@@ -778,8 +767,6 @@ void mce_sys_var::get_env_params()
     lwip_mss = MCE_DEFAULT_MSS;
     lwip_cc_algo_mod = MCE_DEFAULT_LWIP_CC_ALGO_MOD;
     mce_spec = MCE_SPEC_NONE;
-    mce_spec_param1 = 1;
-    mce_spec_param2 = 1;
 
     neigh_num_err_retries = MCE_DEFAULT_NEIGH_NUM_ERR_RETRIES;
     neigh_uc_arp_quata = MCE_DEFAULT_NEIGH_UC_ARP_QUATA;
@@ -826,12 +813,12 @@ void mce_sys_var::get_env_params()
     // In order to ease the usage of Nginx cases, we apply Nginx profile when
     // user will choose to use Nginx workers environment variable.
     if (actual_nginx_workers_num > 0 && mce_spec == MCE_SPEC_NONE) {
-        mce_spec = MCE_SPEC_NGINX_669;
+        mce_spec = MCE_SPEC_NGINX;
     }
 #endif // DEFINED_NGINX
 
     switch (mce_spec) {
-    case MCE_SPEC_SOCKPERF_ULTRA_LATENCY_10:
+    case MCE_SPEC_SOCKPERF_ULTRA_LATENCY:
         tx_num_segs_tcp = 512; // MCE_DEFAULT_TX_NUM_SEGS_TCP (1000000)
         tx_num_bufs = 512; // MCE_DEFAULT_TX_NUM_BUFS (200000)
         tx_num_wr = 256; // MCE_DEFAULT_TX_NUM_WRE (3000)
@@ -870,7 +857,7 @@ void mce_sys_var::get_env_params()
         }
         break;
 
-    case MCE_SPEC_SOCKPERF_LATENCY_15:
+    case MCE_SPEC_SOCKPERF_LATENCY:
         tx_num_wr = 256; // MCE_DEFAULT_TX_NUM_WRE (3000)
         tx_num_wr_to_signal = 4; // MCE_DEFAULT_TX_NUM_WRE_TO_SIGNAL(64)
         tx_bufs_batch_udp = 1; // MCE_DEFAULT_TX_BUFS_BATCH_UDP (8)
@@ -904,75 +891,6 @@ void mce_sys_var::get_env_params()
         }
 
         break;
-
-    case MCE_SPEC_29WEST_LBM_29:
-        mce_spec_param1 = 5000; // [u-sec] Time out to send next pipe_write
-        mce_spec_param2 = 50; // Num of max sequential pipe_write to drop
-        rx_poll_num = 0;
-        rx_udp_poll_os_ratio = 100;
-        select_poll_num = 100000;
-        select_poll_os_ratio = 100;
-        select_skip_os_fd_check = 50;
-        break;
-
-    case MCE_SPEC_WOMBAT_FH_LBM_554:
-        mce_spec_param1 = 5000; // [u-sec] Time out to send next pipe_write
-        mce_spec_param2 = 50; // Num of max sequential pipe_write to drop
-        rx_poll_num = 0;
-        rx_udp_poll_os_ratio = 100;
-        select_poll_num = 0;
-        select_skip_os_fd_check = 20;
-        break;
-
-    case MCE_SPEC_RTI_784:
-        rx_poll_num = -1;
-        // TODO - Need to replace old QP/CQ allocation logic here
-        //		qp_allocation_logic 	= QP_ALLOC_LOGIC__QP_PER_PEER_IP_PER_LOCAL_IP;
-        //		cq_allocation_logic	= CQ_ALLOC_LOGIC__CQ_PER_QP;
-        break;
-
-    case MCE_SPEC_MCD_623:
-        ring_allocation_logic_rx = RING_LOGIC_PER_CORE_ATTACH_THREADS;
-        ring_allocation_logic_tx = RING_LOGIC_PER_CORE_ATTACH_THREADS;
-        break;
-
-    case MCE_SPEC_MCD_IRQ_624:
-        ring_allocation_logic_rx = RING_LOGIC_PER_CORE_ATTACH_THREADS;
-        ring_allocation_logic_tx = RING_LOGIC_PER_CORE_ATTACH_THREADS;
-        select_poll_num = 0;
-        rx_poll_num = 0;
-        cq_moderation_enable = false;
-        break;
-
-    case MCE_SPEC_LL_7750:
-        tx_num_bufs = 8192; // MCE_DEFAULT_TX_NUM_BUFS (200000), Global TX data buffers allocated
-        log_level = VLOG_WARNING; // VLOG_DEFAULT(VLOG_INFO)
-        stats_fd_num_max =
-            1024; // MCE_DEFAULT_STATS_FD_NUM(100), max. number of sockets monitored by stats tool
-        strcpy(internal_thread_affinity_str,
-               "0x3"); // MCE_DEFAULT_INTERNAL_THREAD_AFFINITY_STR(-1), first 2 cores
-        rx_poll_num = -1; // MCE_DEFAULT_RX_NUM_POLLS(100000), Infinite RX poll for ready packets
-                          // (during read/recv)
-        select_poll_num = -1; // MCE_DEFAULT_SELECT_NUM_POLLS(100000), Infinite poll the hardware on
-                              // RX (before sleeping in epoll/select, etc)
-        select_poll_os_ratio = 0; // MCE_DEFAULT_SELECT_POLL_OS_RATIO(10), Disable polling OS fd's
-                                  // (re-enabled if bound on OS fd)
-        tcp_3t_rules = true; // MCE_DEFAULT_TCP_3T_RULES(false), Use only 3 tuple rules for TCP
-        avoid_sys_calls_on_tcp_fd = 1; // MCE_DEFAULT_AVOID_SYS_CALLS_ON_TCP_FD (false), Disable
-                                       // handling control packets on a separate thread
-        buffer_batching_mode =
-            BUFFER_BATCHING_NONE; // MCE_DEFAULT_BUFFER_BATCHING_MODE(BUFFER_BATCHING_WITH_RECLAIM),
-                                  // Disable handling control packets on a separate thread
-        tcp_ctl_thread = CTL_THREAD_NO_WAKEUP; // MCE_DEFAULT_TCP_CTL_THREAD (CTL_THREAD_DISABLE),
-                                               // wait for thread timer to expire
-
-        if (!enable_striding_rq) {
-            rx_num_bufs = 204800; // MCE_DEFAULT_RX_NUM_BUFS (200000), RX data buffers used on all
-                                  // QPs on all HCAs
-        }
-
-        break;
-
     case MCE_SPEC_LL_MULTI_RING:
         mem_alloc_type = ALLOC_TYPE_HUGEPAGES; // MCE_DEFAULT_MEM_ALLOC_TYPE (ALLOC_TYPE_CONTIG)
         select_poll_num = -1; // MCE_DEFAULT_SELECT_NUM_POLLS (100000)
@@ -988,7 +906,7 @@ void mce_sys_var::get_env_params()
         break;
 
 #ifdef DEFINED_NGINX
-    case MCE_SPEC_NGINX_669:
+    case MCE_SPEC_NGINX:
         rx_bufs_batch = 8; // MCE_DEFAULT_RX_BUFS_BATCH (64), RX buffers batch size.
         tx_num_bufs =
             1000000; // MCE_DEFAULT_TX_NUM_BUFS (200000), Global TX data buffers allocated.
@@ -1039,7 +957,7 @@ void mce_sys_var::get_env_params()
 
         break;
 
-    case MCE_SPEC_NGINX_DPU_670:
+    case MCE_SPEC_NGINX_DPU:
         // The top part is different from NGINX SPEC
         rx_poll_on_tx_tcp = false; // MCE_DEFAULT_RX_POLL_ON_TX_TCP(false), Do polling on RX queue
                                    // on TX operations, helpful to maintain TCP stack management.
@@ -1096,18 +1014,9 @@ void mce_sys_var::get_env_params()
 
         break;
 #endif // DEFINED_NGINX
-
     case MCE_SPEC_NONE:
     default:
         break;
-    }
-
-    if ((env_ptr = getenv(SYS_VAR_SPEC_PARAM1)) != NULL) {
-        mce_spec_param1 = (uint32_t)atoi(env_ptr);
-    }
-
-    if ((env_ptr = getenv(SYS_VAR_SPEC_PARAM2)) != NULL) {
-        mce_spec_param2 = (uint32_t)atoi(env_ptr);
     }
 
     if ((env_ptr = getenv(SYS_VAR_LOG_FILENAME)) != NULL) {
