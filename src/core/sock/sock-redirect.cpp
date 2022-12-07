@@ -2427,12 +2427,6 @@ extern "C" EXPORT_SYMBOL int socketpair(int __domain, int __type, int __protocol
    Returns 0 if successful, -1 if not.  */
 extern "C" EXPORT_SYMBOL int pipe(int __filedes[2])
 {
-    bool offload_pipe = safe_mce_sys().mce_spec == MCE_SPEC_29WEST_LBM_29 ||
-        safe_mce_sys().mce_spec == MCE_SPEC_WOMBAT_FH_LBM_554;
-    if (offload_pipe) {
-        DO_GLOBAL_CTORS();
-    }
-
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!orig_os_api.pipe) {
         get_orig_funcs();
@@ -2448,11 +2442,6 @@ extern "C" EXPORT_SYMBOL int pipe(int __filedes[2])
         handle_close(fdrd, true);
         int fdwr = __filedes[1];
         handle_close(fdwr, true);
-
-        // Create new pipeinfo object for this new fd pair
-        if (offload_pipe) {
-            g_p_fd_collection->addpipe(fdrd, fdwr);
-        }
     }
 
     return ret;

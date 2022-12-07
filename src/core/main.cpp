@@ -447,14 +447,6 @@ void print_xlio_global_settings()
     if (safe_mce_sys().mce_spec != MCE_SPEC_NONE) {
         vlog_printf(VLOG_INFO, FORMAT_STRING, "Spec",
                     xlio_spec::to_str((xlio_spec_t)safe_mce_sys().mce_spec), SYS_VAR_SPEC);
-
-        if (safe_mce_sys().mce_spec == MCE_SPEC_29WEST_LBM_29 ||
-            safe_mce_sys().mce_spec == MCE_SPEC_WOMBAT_FH_LBM_554) {
-            vlog_printf(VLOG_INFO, FORMAT_NUMBER, "Param 1:", safe_mce_sys().mce_spec_param1,
-                        SYS_VAR_SPEC_PARAM1);
-            vlog_printf(VLOG_INFO, FORMAT_NUMBER, "Param 2:", safe_mce_sys().mce_spec_param2,
-                        SYS_VAR_SPEC_PARAM2);
-        }
     }
 
     VLOG_STR_PARAM_STRING("Log Level", log_level::to_str(safe_mce_sys().log_level), "",
