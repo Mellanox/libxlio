@@ -52,8 +52,8 @@ typedef enum {
     MCE_SPEC_SOCKPERF_LATENCY,
     MCE_SPEC_LL_MULTI_RING,
     MCE_SPEC_NGINX,
-    MCE_SPEC_NGINX_DPU
-
+    MCE_SPEC_NGINX_DPU,
+    MCE_SPEC_NVME_BF2,
     MCE_SPEC_ALL /* last element */
 } xlio_spec_t;
 
