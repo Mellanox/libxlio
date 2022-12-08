@@ -1,3 +1,13 @@
+Version 2.1.0-1:
+Date + Time 2022-12-08
+=============================================================
+Added:
+        - RM #3240274 Move to C++14 Add support for C++17
+Fixed:
+        - RM #3226553 IPv6 MC SO_BINDTODEVICE on connected socket
+        - RM #3068125 Support a single nexthop per multipath route
+        - RM #3213178 Offload MC traffic for local table entries
+
 Version 2.0.7-1:
 Date + Time 2022-11-14
 =============================================================
