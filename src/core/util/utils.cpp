@@ -35,7 +35,6 @@
 #include <errno.h>
 #include <sys/resource.h>
 #include <string.h>
-#include <iostream>
 #include "core/util/if.h"
 #include <sys/stat.h>
 #include <linux/if_ether.h>
@@ -44,7 +43,6 @@
 #include <linux/rtnetlink.h>
 #include <linux/sockios.h>
 #include <linux/netlink.h>
-#include <limits>
 #include <math.h>
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
@@ -55,6 +53,10 @@
 #include <netinet/udp.h>
 #include <netlink/route/link.h>
 #include <netlink/msg.h>
+
+#include <array>
+#include <iostream>
+#include <limits>
 
 #include "utils/bullseye.h"
 #include "vlogger/vlogger.h"

@@ -4217,18 +4217,19 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
 
 void sockinfo_tcp::get_tcp_info(struct tcp_info *ti)
 {
-    unsigned state = get_tcp_state(&m_pcb);
+    int state = get_tcp_state(&m_pcb);
 
     memset(ti, 0, sizeof(*ti));
 
-    static const uint8_t pcb_to_tcp_state[] = {
-        [CLOSED] = TCP_CLOSE,         [LISTEN] = TCP_LISTEN,           [SYN_SENT] = TCP_SYN_SENT,
-        [SYN_RCVD] = TCP_SYN_RECV,    [ESTABLISHED] = TCP_ESTABLISHED, [FIN_WAIT_1] = TCP_FIN_WAIT1,
-        [FIN_WAIT_2] = TCP_FIN_WAIT2, [CLOSE_WAIT] = TCP_CLOSE_WAIT,   [CLOSING] = TCP_CLOSING,
-        [LAST_ACK] = TCP_LAST_ACK,    [TIME_WAIT] = TCP_TIME_WAIT,
-    };
+    static std::map<int, int> pcb_to_tcp_state = {
+        {CLOSED, TCP_CLOSE},         {LISTEN, TCP_LISTEN},           {SYN_SENT, TCP_SYN_SENT},
+        {SYN_RCVD, TCP_SYN_RECV},    {ESTABLISHED, TCP_ESTABLISHED}, {FIN_WAIT_1, TCP_FIN_WAIT1},
+        {FIN_WAIT_2, TCP_FIN_WAIT2}, {CLOSE_WAIT, TCP_CLOSE_WAIT},   {CLOSING, TCP_CLOSING},
+        {LAST_ACK, TCP_LAST_ACK},    {TIME_WAIT, TCP_TIME_WAIT}};
 
-    ti->tcpi_state = state < sizeof(pcb_to_tcp_state) ? pcb_to_tcp_state[state] : 0;
+    assert(pcb_to_tcp_state.size() == TCP_STATE_NR);
+
+    ti->tcpi_state = state < TCP_STATE_NR ? pcb_to_tcp_state[state] : 0;
     ti->tcpi_options = (!!(m_pcb.flags & TF_TIMESTAMP) * TCPI_OPT_TIMESTAMPS) |
         (!!(m_pcb.flags & TF_WND_SCALE) * TCPI_OPT_WSCALE);
     // We keep rto with TCP slow timer granularity and need to convert it to usec.

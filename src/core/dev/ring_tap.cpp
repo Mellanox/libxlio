@@ -586,11 +586,12 @@ int ring_tap::mem_buf_tx_release(mem_buf_desc_t *buff_list, bool b_accounting, b
         count++;
         buff_list = next;
     }
-    ring_logfunc("buf_list: %p count: %d freed: %d\n", buff_list, count, freed);
 
     return_to_global_pool();
-
     m_lock_ring_tx.unlock();
+
+    ring_logfunc("buf_list: %p count: %d freed: %d\n", buff_list, count, freed);
+    NOT_IN_USE(freed);
 
     return count;
 }

@@ -941,9 +941,11 @@ int ring_simple::put_tx_buffers(mem_buf_desc_t *buff_list)
         count++;
         buff_list = next;
     }
-    ring_logfunc("count: %d freed: %d\n", count, freed);
 
     return_to_global_pool();
+
+    ring_logfunc("count: %d freed: %d\n", count, freed);
+    NOT_IN_USE(freed);
 
     return count;
 }

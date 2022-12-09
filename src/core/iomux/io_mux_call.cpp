@@ -408,6 +408,7 @@ void io_mux_call::polling_loops()
     }
 
     __if_dbg("2nd scenario exit (loop %d, elapsed %d)", poll_counter, m_elapsed.tv_usec);
+    NOT_IN_USE(poll_counter);
 }
 
 void io_mux_call::blocking_loops()

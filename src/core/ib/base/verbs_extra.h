@@ -315,7 +315,11 @@ typedef struct {
         qp_attr.typical_pkt_sz = rate_limit.typical_pkt_sz;                                        \
     }
 typedef struct ibv_qp_rate_limit_attr xlio_ibv_rate_limit_attr;
-#define xlio_ibv_modify_qp_rate_limit(qp, attr, mask) ibv_modify_qp_rate_limit(qp, attr)
+#define xlio_ibv_modify_qp_rate_limit(qp, attr, mask)                                              \
+    ({                                                                                             \
+        NOT_IN_USE(mask);                                                                          \
+        ibv_modify_qp_rate_limit(qp, attr);                                                        \
+    })
 #define xlio_ibv_init_qps_attr(qp_attr)                                                            \
     {                                                                                              \
         NOT_IN_USE(qp_attr);                                                                       \
