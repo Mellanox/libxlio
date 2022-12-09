@@ -168,16 +168,17 @@ typedef err_t (*tcp_connected_fn)(void *arg, struct tcp_pcb *tpcb, err_t err);
 
 enum tcp_state {
     CLOSED = 0,
-    LISTEN = 1,
-    SYN_SENT = 2,
-    SYN_RCVD = 3,
-    ESTABLISHED = 4,
-    FIN_WAIT_1 = 5,
-    FIN_WAIT_2 = 6,
-    CLOSE_WAIT = 7,
-    CLOSING = 8,
-    LAST_ACK = 9,
-    TIME_WAIT = 10
+    LISTEN,
+    SYN_SENT,
+    SYN_RCVD,
+    ESTABLISHED,
+    FIN_WAIT_1,
+    FIN_WAIT_2,
+    CLOSE_WAIT,
+    CLOSING,
+    LAST_ACK,
+    TIME_WAIT,
+    TCP_STATE_NR
 };
 
 static const char *const tcp_state_str[] = {"CLOSED",      "LISTEN",     "SYN_SENT",   "SYN_RCVD",

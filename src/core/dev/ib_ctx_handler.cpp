@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 
+#include <array>
 #include <mutex>
 #include <infiniband/verbs.h>
 
