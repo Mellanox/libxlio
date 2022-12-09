@@ -960,6 +960,9 @@ void update_iomux_deltas(iomux_stats_t *p_curr_iomux_stats, iomux_stats_t *p_pre
 
 void print_full_iomux_deltas(iomux_stats_t *p_curr_iomux_stats, iomux_stats_t *p_prev_iomux_stats)
 {
+    if (unlikely(!p_curr_iomux_stats || !p_prev_iomux_stats)) {
+        return;
+    }
     update_iomux_deltas(p_curr_iomux_stats, p_prev_iomux_stats);
     print_iomux_totals(p_prev_iomux_stats, NULL);
 }
@@ -967,6 +970,9 @@ void print_full_iomux_deltas(iomux_stats_t *p_curr_iomux_stats, iomux_stats_t *p
 void print_basic_iomux_deltas(iomux_stats_t *p_curr_stats, iomux_stats_t *p_prev_stats,
                               int *p_printed_lines_num)
 {
+    if (unlikely(!p_curr_stats || !p_prev_stats)) {
+        return;
+    }
     update_iomux_deltas(p_curr_stats, p_prev_stats);
     print_iomux_totals(p_prev_stats, p_printed_lines_num);
 }
@@ -986,6 +992,9 @@ void print_full_iomux_stats(iomux_stats_t *p_curr_stats, iomux_stats_t *p_prev_s
 void print_ring_deltas(ring_instance_block_t *p_curr_ring_stats,
                        ring_instance_block_t *p_prev_ring_stats)
 {
+    if (unlikely(!p_curr_ring_stats || !p_prev_ring_stats)) {
+        return;
+    }
     for (int i = 0; i < NUM_OF_SUPPORTED_RINGS; i++) {
         update_delta_ring_stat(&p_curr_ring_stats[i].ring_stats, &p_prev_ring_stats[i].ring_stats);
     }
@@ -994,6 +1003,9 @@ void print_ring_deltas(ring_instance_block_t *p_curr_ring_stats,
 
 void print_cq_deltas(cq_instance_block_t *p_curr_cq_stats, cq_instance_block_t *p_prev_cq_stats)
 {
+    if (unlikely(!p_curr_cq_stats || !p_prev_cq_stats)) {
+        return;
+    }
     for (int i = 0; i < NUM_OF_SUPPORTED_CQS; i++) {
         update_delta_cq_stat(&p_curr_cq_stats[i].cq_stats, &p_prev_cq_stats[i].cq_stats);
     }
@@ -1003,6 +1015,9 @@ void print_cq_deltas(cq_instance_block_t *p_curr_cq_stats, cq_instance_block_t *
 void print_bpool_deltas(bpool_instance_block_t *p_curr_bpool_stats,
                         bpool_instance_block_t *p_prev_bpool_stats)
 {
+    if (unlikely(!p_curr_bpool_stats || !p_prev_bpool_stats)) {
+        return;
+    }
     for (int i = 0; i < NUM_OF_SUPPORTED_BPOOLS; i++) {
         update_delta_bpool_stat(&p_curr_bpool_stats[i].bpool_stats,
                                 &p_prev_bpool_stats[i].bpool_stats);
@@ -1013,10 +1028,10 @@ void print_bpool_deltas(bpool_instance_block_t *p_curr_bpool_stats,
 void print_global_deltas(global_instance_block_t *p_curr_global_stats,
                          global_instance_block_t *p_prev_global_stats)
 {
+    if (unlikely(!p_curr_global_stats || !p_prev_global_stats)) {
+        return;
+    }
     for (int i = 0; i < NUM_OF_SUPPORTED_GLOBALS; i++) {
-        if (!p_curr_global_stats || !p_prev_global_stats) {
-            break;
-        }
         update_delta_global_stat(&p_curr_global_stats[i].global_stats,
                                  &p_prev_global_stats[i].global_stats);
     }
