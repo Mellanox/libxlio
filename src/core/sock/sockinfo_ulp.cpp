@@ -45,15 +45,6 @@
 #define si_ulp_loginfo __log_info_info
 #define si_ulp_logerr  __log_info_err
 
-/*
- * sockinfo_tcp_ops
- */
-
-sockinfo_tcp_ops::sockinfo_tcp_ops(sockinfo_tcp *sock)
-{
-    m_p_sock = sock;
-}
-
 /*inline*/
 ring *sockinfo_tcp_ops::get_tx_ring(void)
 {
@@ -174,37 +165,6 @@ static inline uint8_t get_alert_level(uint8_t alert_type)
         break;
     }
     return TLS_ALERT_LEVEL_FATAL;
-}
-
-/*
- * sockinfo_tcp_ulp_tls
- */
-
-sockinfo_tcp_ulp_tls g_sockinfo_tcp_ulp_tls;
-
-int sockinfo_tcp_ulp_tls::attach(sockinfo_tcp *sock)
-{
-    sockinfo_tcp_ops_tls *ops;
-
-    if (unlikely(!sock->is_rts())) {
-        errno = ENOTCONN;
-        return -1;
-    }
-
-    ops = new sockinfo_tcp_ops_tls(sock);
-    if (unlikely(!ops)) {
-        errno = ENOMEM;
-        return -1;
-    }
-    sock->set_ops(ops);
-
-    return 0;
-}
-
-/*static*/
-sockinfo_tcp_ulp_tls *sockinfo_tcp_ulp_tls::instance(void)
-{
-    return &g_sockinfo_tcp_ulp_tls;
 }
 
 /*
