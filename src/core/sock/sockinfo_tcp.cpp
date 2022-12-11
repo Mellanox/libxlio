@@ -757,9 +757,9 @@ unsigned sockinfo_tcp::tx_wait(int &err, bool blocking)
 static inline bool cannot_do_requested_dummy_send(const tcp_pcb &pcb,
                                                   const xlio_tx_call_attr_t &tx_arg)
 {
-    int flags = tx_arg.attr.msg.flags;
-    const iovec *p_iov = tx_arg.attr.msg.iov;
-    size_t sz_iov = tx_arg.attr.msg.sz_iov;
+    int flags = tx_arg.msg.flags;
+    const iovec *p_iov = tx_arg.msg.iov;
+    size_t sz_iov = tx_arg.msg.sz_iov;
 
     uint8_t optflags = TF_SEG_OPTS_DUMMY_MSG;
     uint16_t mss_local = std::min<uint16_t>(pcb.mss, pcb.snd_wnd_max / 2U);
@@ -847,7 +847,7 @@ static inline bool cannot_do_requested_partial_write(const tcp_pcb &pcb,
                                                      const xlio_tx_call_attr_t &tx_arg,
                                                      bool is_blocking, size_t total_iov_len)
 {
-    return !BLOCK_THIS_RUN(is_blocking, tx_arg.attr.msg.flags) &&
+    return !BLOCK_THIS_RUN(is_blocking, tx_arg.msg.flags) &&
         (tx_arg.xlio_flags & TX_FLAG_NO_PARTIAL_WRITE) &&
         unlikely(tcp_sndbuf(&pcb) < total_iov_len);
 }
@@ -865,22 +865,18 @@ static inline bool tcp_wnd_unavalable(const tcp_pcb &pcb, size_t total_iov_len)
 
 ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
 {
-    iovec *p_iov = tx_arg.attr.msg.iov;
-    size_t sz_iov = tx_arg.attr.msg.sz_iov;
-    struct sockaddr *__dst = tx_arg.attr.msg.addr;
-    socklen_t __dstlen = tx_arg.attr.msg.len;
-    int __flags = tx_arg.attr.msg.flags;
+    iovec *p_iov = tx_arg.msg.iov;
+    size_t sz_iov = tx_arg.msg.sz_iov;
+    struct sockaddr *__dst = tx_arg.msg.addr;
+    socklen_t __dstlen = tx_arg.msg.len;
+    int __flags = tx_arg.msg.flags;
     int errno_tmp = errno;
-    int total_tx = 0;
     int ret = 0;
     int poll_count = 0;
     uint16_t apiflags = 0;
     err_t err;
-    bool is_dummy = IS_DUMMY_PACKET(__flags);
-    bool block_this_run = BLOCK_THIS_RUN(m_b_blocking, __flags);
     bool is_send_zerocopy = false;
     void *tx_ptr = NULL;
-    __off64_t file_offset = 0;
     struct xlio_pd_key *pd_key_array = NULL;
 
     /* Let allow OS to process all invalid scenarios to avoid any
@@ -947,6 +943,8 @@ retry_is_ready:
          */
         apiflags |= XLIO_TX_FILE;
     }
+
+    bool is_dummy = IS_DUMMY_PACKET(__flags);
     if (unlikely(is_dummy)) {
         apiflags |= XLIO_TX_PACKET_DUMMY;
     }
@@ -978,6 +976,9 @@ retry_is_ready:
         return -1;
     }
 
+    int total_tx = 0;
+    __off64_t file_offset = 0;
+    bool block_this_run = BLOCK_THIS_RUN(m_b_blocking, __flags);
     for (size_t i = 0; i < sz_iov; i++) {
         si_tcp_logfunc("iov:%d base=%p len=%d", i, p_iov[i].iov_base, p_iov[i].iov_len);
         if (unlikely(!p_iov[i].iov_base)) {
@@ -5614,7 +5615,7 @@ void sockinfo_tcp::update_header_field(data_updater *updater)
     unlock_tcp_con();
 }
 
-bool sockinfo_tcp::is_utls_supported(int direction)
+bool sockinfo_tcp::is_utls_supported(int direction) const
 {
     bool result = false;
 

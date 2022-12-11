@@ -93,16 +93,14 @@ enum {
  */
 typedef struct xlio_tx_call_attr {
     tx_call_t opcode;
-    union {
-        struct {
-            struct iovec *iov;
-            ssize_t sz_iov;
-            int flags;
-            struct sockaddr *addr;
-            socklen_t len;
-            const struct msghdr *hdr;
-        } msg;
-    } attr;
+    struct {
+        struct iovec *iov;
+        ssize_t sz_iov;
+        int flags;
+        struct sockaddr *addr;
+        socklen_t len;
+        const struct msghdr *hdr;
+    } msg;
 
     unsigned xlio_flags;
     pbuf_desc priv;
@@ -110,7 +108,7 @@ typedef struct xlio_tx_call_attr {
     void clear(void)
     {
         opcode = TX_UNDEF;
-        memset(&attr, 0, sizeof(attr));
+        memset(&msg, 0, sizeof(msg));
         memset(&priv, 0, sizeof(priv));
         priv.attr = PBUF_DESC_NONE;
         xlio_flags = 0;

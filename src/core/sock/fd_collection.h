@@ -68,7 +68,7 @@ public:
     cq_channel_info(ring *p_ring)
         : m_p_ring(p_ring) {};
     ~cq_channel_info() {};
-    ring *get_ring() const { return m_p_ring; };
+    ring *get_ring() const noexcept { return m_p_ring; };
 
 protected:
     ring *m_p_ring;
