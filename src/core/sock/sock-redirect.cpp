@@ -1533,8 +1533,8 @@ extern "C" EXPORT_SYMBOL ssize_t write(int __fd, __const void *__buf, size_t __n
         xlio_tx_call_attr_t tx_arg;
 
         tx_arg.opcode = TX_WRITE;
-        tx_arg.attr.msg.iov = piov;
-        tx_arg.attr.msg.sz_iov = 1;
+        tx_arg.msg.iov = piov;
+        tx_arg.msg.sz_iov = 1;
 
         return p_socket_object->tx(tx_arg);
     }
@@ -1561,8 +1561,8 @@ extern "C" EXPORT_SYMBOL ssize_t writev(int __fd, const struct iovec *iov, int i
         xlio_tx_call_attr_t tx_arg;
 
         tx_arg.opcode = TX_WRITEV;
-        tx_arg.attr.msg.iov = (struct iovec *)iov;
-        tx_arg.attr.msg.sz_iov = iovcnt;
+        tx_arg.msg.iov = (struct iovec *)iov;
+        tx_arg.msg.sz_iov = iovcnt;
 
         return p_socket_object->tx(tx_arg);
     }
@@ -1590,9 +1590,9 @@ extern "C" EXPORT_SYMBOL ssize_t send(int __fd, __const void *__buf, size_t __nb
         xlio_tx_call_attr_t tx_arg;
 
         tx_arg.opcode = TX_SEND;
-        tx_arg.attr.msg.iov = piov;
-        tx_arg.attr.msg.sz_iov = 1;
-        tx_arg.attr.msg.flags = __flags;
+        tx_arg.msg.iov = piov;
+        tx_arg.msg.sz_iov = 1;
+        tx_arg.msg.flags = __flags;
 
         return p_socket_object->tx(tx_arg);
     }
@@ -1626,17 +1626,17 @@ extern "C" EXPORT_SYMBOL ssize_t sendmsg(int __fd, __const struct msghdr *__msg,
         xlio_tx_call_attr_t tx_arg;
 
         tx_arg.opcode = TX_SENDMSG;
-        tx_arg.attr.msg.iov = __msg->msg_iov;
-        tx_arg.attr.msg.sz_iov = (ssize_t)__msg->msg_iovlen;
-        tx_arg.attr.msg.flags = __flags;
-        tx_arg.attr.msg.addr = (struct sockaddr *)(__CONST_SOCKADDR_ARG)__msg->msg_name;
-        tx_arg.attr.msg.len = (socklen_t)__msg->msg_namelen;
-        tx_arg.attr.msg.hdr = __msg;
+        tx_arg.msg.iov = __msg->msg_iov;
+        tx_arg.msg.sz_iov = (ssize_t)__msg->msg_iovlen;
+        tx_arg.msg.flags = __flags;
+        tx_arg.msg.addr = (struct sockaddr *)(__CONST_SOCKADDR_ARG)__msg->msg_name;
+        tx_arg.msg.len = (socklen_t)__msg->msg_namelen;
+        tx_arg.msg.hdr = __msg;
 
         if (0 < __msg->msg_controllen) {
             struct cmsghdr *cmsg = CMSG_FIRSTHDR((struct msghdr *)__msg);
             if ((cmsg->cmsg_level == SOL_SOCKET) && (cmsg->cmsg_type == SCM_XLIO_PD)) {
-                if ((tx_arg.attr.msg.flags & MSG_ZEROCOPY) &&
+                if ((tx_arg.msg.flags & MSG_ZEROCOPY) &&
                     (__msg->msg_iovlen ==
                      ((cmsg->cmsg_len - CMSG_LEN(0)) / sizeof(struct xlio_pd_key)))) {
                     tx_arg.priv.attr = PBUF_DESC_MKEY;
@@ -1690,12 +1690,12 @@ extern "C" EXPORT_SYMBOL int sendmmsg(int __fd, struct mmsghdr *__mmsghdr, unsig
             xlio_tx_call_attr_t tx_arg;
 
             tx_arg.opcode = TX_SENDMSG;
-            tx_arg.attr.msg.iov = __mmsghdr[i].msg_hdr.msg_iov;
-            tx_arg.attr.msg.sz_iov = (ssize_t)__mmsghdr[i].msg_hdr.msg_iovlen;
-            tx_arg.attr.msg.flags = __flags;
-            tx_arg.attr.msg.addr = (struct sockaddr *)(__SOCKADDR_ARG)__mmsghdr[i].msg_hdr.msg_name;
-            tx_arg.attr.msg.len = (socklen_t)__mmsghdr[i].msg_hdr.msg_namelen;
-            tx_arg.attr.msg.hdr = &__mmsghdr[i].msg_hdr;
+            tx_arg.msg.iov = __mmsghdr[i].msg_hdr.msg_iov;
+            tx_arg.msg.sz_iov = (ssize_t)__mmsghdr[i].msg_hdr.msg_iovlen;
+            tx_arg.msg.flags = __flags;
+            tx_arg.msg.addr = (struct sockaddr *)(__SOCKADDR_ARG)__mmsghdr[i].msg_hdr.msg_name;
+            tx_arg.msg.len = (socklen_t)__mmsghdr[i].msg_hdr.msg_namelen;
+            tx_arg.msg.hdr = &__mmsghdr[i].msg_hdr;
 
             int ret = p_socket_object->tx(tx_arg);
             if (ret < 0) {
@@ -1749,11 +1749,11 @@ extern "C" EXPORT_SYMBOL ssize_t sendto(int __fd, __const void *__buf, size_t __
         xlio_tx_call_attr_t tx_arg;
 
         tx_arg.opcode = TX_SENDTO;
-        tx_arg.attr.msg.iov = piov;
-        tx_arg.attr.msg.sz_iov = 1;
-        tx_arg.attr.msg.flags = __flags;
-        tx_arg.attr.msg.addr = (struct sockaddr *)__to;
-        tx_arg.attr.msg.len = __tolen;
+        tx_arg.msg.iov = piov;
+        tx_arg.msg.sz_iov = 1;
+        tx_arg.msg.flags = __flags;
+        tx_arg.msg.addr = (struct sockaddr *)__to;
+        tx_arg.msg.len = __tolen;
 
         return p_socket_object->tx(tx_arg);
     }
@@ -1834,9 +1834,9 @@ static ssize_t sendfile_helper(socket_fd_api *p_socket_object, int in_fd, __off6
         piov[0].iov_len = count;
 
         tx_arg.opcode = TX_FILE;
-        tx_arg.attr.msg.iov = piov;
-        tx_arg.attr.msg.sz_iov = 1;
-        tx_arg.attr.msg.flags = MSG_ZEROCOPY;
+        tx_arg.msg.iov = piov;
+        tx_arg.msg.sz_iov = 1;
+        tx_arg.msg.flags = MSG_ZEROCOPY;
         tx_arg.priv.attr = PBUF_DESC_MAP;
         tx_arg.priv.map = (void *)mapping;
         totSent = p_socket_object->tx(tx_arg);
@@ -1848,8 +1848,8 @@ static ssize_t sendfile_helper(socket_fd_api *p_socket_object, int in_fd, __off6
             s->m_p_socket_stats->counters.n_tx_sendfile_fallbacks++;
             tx_arg.clear();
             tx_arg.opcode = TX_FILE;
-            tx_arg.attr.msg.iov = piov;
-            tx_arg.attr.msg.sz_iov = 1;
+            tx_arg.msg.iov = piov;
+            tx_arg.msg.sz_iov = 1;
             tx_arg.priv.attr = PBUF_DESC_FD;
             tx_arg.priv.fd = in_fd;
             piov[0].iov_base = (void *)&cur_offset;
@@ -1868,8 +1868,8 @@ static ssize_t sendfile_helper(socket_fd_api *p_socket_object, int in_fd, __off6
         }
 
         tx_arg.opcode = TX_WRITE;
-        tx_arg.attr.msg.iov = piov;
-        tx_arg.attr.msg.sz_iov = 1;
+        tx_arg.msg.iov = piov;
+        tx_arg.msg.sz_iov = 1;
 
         /* The off argument of mmap() is constrained to be aligned and
          * sized according to the value returned by sysconf()

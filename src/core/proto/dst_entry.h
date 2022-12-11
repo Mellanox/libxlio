@@ -63,12 +63,12 @@ struct socket_data {
     uint32_t pcp;
 };
 
-typedef struct {
+struct xlio_send_attr {
     xlio_wr_tx_packet_attr flags;
     uint16_t mss;
     size_t length;
     xlio_tis *tis;
-} xlio_send_attr;
+};
 
 class dst_entry : public cache_observer, public tostr, public neigh_observer {
 

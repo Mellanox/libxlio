@@ -274,10 +274,12 @@ public:
     {
         return m_p_connected_dst_entry ? m_p_connected_dst_entry->get_ctx() : nullptr;
     }
-    inline ring *get_tx_ring(void)
+
+    inline ring *get_tx_ring(void) const noexcept
     {
         return m_p_connected_dst_entry ? m_p_connected_dst_entry->get_ring() : nullptr;
     }
+
     inline ring *get_rx_ring(void) { return m_p_rx_ring; }
     const flow_tuple_with_local_if &get_flow_tuple(void)
     {
@@ -297,7 +299,7 @@ public:
     }
     inline void reset_ops(void) noexcept { set_ops(m_ops_tcp); }
 
-    bool is_utls_supported(int direction);
+    bool is_utls_supported(int direction) const;
 
     inline void lock_tcp_con(void) { m_tcp_con_lock.lock(); }
     inline void unlock_tcp_con(void)

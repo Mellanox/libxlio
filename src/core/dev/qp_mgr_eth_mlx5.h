@@ -55,48 +55,6 @@ enum {
     XLIO_TI_TIR,
 };
 
-class xlio_ti {
-public:
-    xlio_ti()
-    {
-        m_type = XLIO_TI_UNKNOWN;
-        m_released = false;
-        m_ref = 0;
-        m_callback = NULL;
-        m_callback_arg = NULL;
-    }
-
-    inline void assign_callback(xlio_comp_cb_t callback, void *callback_arg)
-    {
-        m_callback = callback;
-        m_callback_arg = callback_arg;
-    }
-
-    /*
-     * Reference counting. m_ref must be protected by ring tx lock. Device
-     * layer (QP, CQ) is responsible for the reference counting.
-     */
-
-    inline void get(void)
-    {
-        ++m_ref;
-        assert(m_ref > 0);
-    }
-
-    inline uint32_t put(void)
-    {
-        assert(m_ref > 0);
-        return --m_ref;
-    }
-
-    uint8_t m_type;
-    bool m_released;
-    uint32_t m_ref;
-
-    xlio_comp_cb_t m_callback;
-    void *m_callback_arg;
-};
-
 /* WQE properties description. */
 struct sq_wqe_prop {
     /* A buffer held by the WQE. This is NULL for control WQEs. */

@@ -88,6 +88,44 @@ struct qp_mgr_desc {
 /* TODO Add argument for completion status to handle errors. */
 typedef void (*xlio_comp_cb_t)(void *);
 
+class xlio_ti {
+public:
+    xlio_ti() = default;
+    virtual ~xlio_ti() {};
+
+    virtual uint32_t get_id() { return 0; };
+
+    inline void assign_callback(xlio_comp_cb_t callback, void *callback_arg)
+    {
+        m_callback = callback;
+        m_callback_arg = callback_arg;
+    }
+
+    /*
+     * Reference counting. m_ref must be protected by ring tx lock. Device
+     * layer (QP, CQ) is responsible for the reference counting.
+     */
+
+    inline void get(void)
+    {
+        ++m_ref;
+        assert(m_ref > 0);
+    }
+
+    inline uint32_t put(void)
+    {
+        assert(m_ref > 0);
+        return --m_ref;
+    }
+
+    uint8_t m_type;
+    bool m_released;
+    uint32_t m_ref;
+
+    xlio_comp_cb_t m_callback;
+    void *m_callback_arg;
+};
+
 /**
  * @class qp_mgr
  *
