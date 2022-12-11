@@ -270,8 +270,14 @@ public:
 
     void handle_timer_expired(void *user_data);
 
-    inline ib_ctx_handler *get_ctx(void) { return m_p_connected_dst_entry->get_ctx(); }
-    inline ring *get_tx_ring(void) { return m_p_connected_dst_entry->get_ring(); }
+    inline ib_ctx_handler *get_ctx(void)
+    {
+        return m_p_connected_dst_entry ? m_p_connected_dst_entry->get_ctx() : nullptr;
+    }
+    inline ring *get_tx_ring(void)
+    {
+        return m_p_connected_dst_entry ? m_p_connected_dst_entry->get_ring() : nullptr;
+    }
     inline ring *get_rx_ring(void) { return m_p_rx_ring; }
     const flow_tuple_with_local_if &get_flow_tuple(void)
     {
