@@ -49,14 +49,10 @@ class sockinfo_tcp;
 class xlio_tis;
 struct pbuf;
 
-class sockinfo_tcp_ulp {
-public:
-    virtual int attach(sockinfo_tcp *sock) = 0;
-};
-
 class sockinfo_tcp_ops {
 public:
-    sockinfo_tcp_ops(sockinfo_tcp *sock);
+    sockinfo_tcp_ops(sockinfo_tcp *sock)
+        : m_p_sock(sock) {};
     virtual ~sockinfo_tcp_ops() {}
 
     inline ring *get_tx_ring(void);
@@ -73,7 +69,7 @@ public:
     };
 
 protected:
-    sockinfo_tcp *m_p_sock;
+    sockinfo_tcp *const m_p_sock;
 };
 
 #ifdef DEFINED_UTLS
@@ -85,21 +81,15 @@ enum xlio_utls_mode {
 
 void xlio_tls_api_setup(void);
 
-class sockinfo_tcp_ulp_tls : public sockinfo_tcp_ulp {
-public:
-    int attach(sockinfo_tcp *sock);
-    static sockinfo_tcp_ulp_tls *instance(void);
-};
-
 class sockinfo_tcp_ops_tls : public sockinfo_tcp_ops {
 public:
     sockinfo_tcp_ops_tls(sockinfo_tcp *sock);
     ~sockinfo_tcp_ops_tls();
 
-    int setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen);
-    ssize_t tx(xlio_tx_call_attr_t &tx_arg);
-    int postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_send_attr &attr);
-    bool handle_send_ret(ssize_t ret, struct tcp_seg *seg);
+    int setsockopt(int, int, const void *, socklen_t) override;
+    ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
+    int postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_send_attr &attr) override;
+    bool handle_send_ret(ssize_t ret, struct tcp_seg *seg) override;
 
     void get_record_buf(mem_buf_desc_t *&buf, uint8_t *&data, bool is_zerocopy);
 

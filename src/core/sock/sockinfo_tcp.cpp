@@ -3944,9 +3944,20 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             if (__optval && __optlen >= 3 && strncmp((char *)__optval, "tls", 3) == 0) {
                 if (is_utls_supported(UTLS_MODE_TX | UTLS_MODE_RX)) {
                     si_tcp_logdbg("(TCP_ULP) val: tls");
-                    sockinfo_tcp_ulp_tls *ulp = sockinfo_tcp_ulp_tls::instance();
+                    if (unlikely(!is_rts())) {
+                        errno = ENOTCONN;
+                        ret = -1;
+                        break;
+                    }
+
+                    sockinfo_tcp_ops_tls *ops = new sockinfo_tcp_ops_tls(this);
+                    if (unlikely(!ops)) {
+                        errno = ENOMEM;
+                        ret = -1;
+                        break;
+                    }
                     lock_tcp_con();
-                    ret = ulp->attach(this);
+                    set_ops(ops);
                     unlock_tcp_con();
                     /* On success we call kernel setsockopt() in case this socket is not connected
                        and is unoffloaded later.  */

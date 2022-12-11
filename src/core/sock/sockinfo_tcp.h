@@ -288,21 +288,14 @@ public:
 
     /* Proxy to support ULP. TODO Refactor. */
     inline sockinfo_tcp_ops *get_ops(void) { return m_ops; }
-    inline void set_ops(sockinfo_tcp_ops *ops)
+    inline void set_ops(sockinfo_tcp_ops *ops) noexcept
     {
-        sockinfo_tcp_ops *old_ops = m_ops;
-        m_ops = ops;
-        if (old_ops != m_ops_tcp) {
-            delete old_ops;
+        std::swap(ops, m_ops);
+        if (ops != m_ops_tcp) {
+            delete ops;
         }
     }
-    inline void reset_ops(void)
-    {
-        if (m_ops != m_ops_tcp) {
-            delete m_ops;
-            m_ops = m_ops_tcp;
-        }
-    }
+    inline void reset_ops(void) noexcept { set_ops(m_ops_tcp); }
 
     bool is_utls_supported(int direction);
 
