@@ -3950,9 +3950,13 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             unlock_tcp_con();
             si_tcp_logdbg("(TCP_QUICKACK) value: %d", val);
             break;
-        case TCP_ULP:
+        case TCP_ULP: {
+            sockinfo_tcp_ops *ops {nullptr};
+            if (__optval && __optlen >= 4 && strncmp((char *)__optval, "nvme", 4) == 0) {
+                ops = new sockinfo_tcp_ops_nvme(this);
+            }
 #ifdef DEFINED_UTLS
-            if (__optval && __optlen >= 3 && strncmp((char *)__optval, "tls", 3) == 0) {
+            else if (__optval && __optlen >= 3 && strncmp((char *)__optval, "tls", 3) == 0) {
                 if (is_utls_supported(UTLS_MODE_TX | UTLS_MODE_RX)) {
                     si_tcp_logdbg("(TCP_ULP) val: tls");
                     if (unlikely(!is_rts())) {
@@ -3960,26 +3964,30 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                         ret = -1;
                         break;
                     }
-
-                    sockinfo_tcp_ops_tls *ops = new sockinfo_tcp_ops_tls(this);
-                    if (unlikely(!ops)) {
-                        errno = ENOMEM;
-                        ret = -1;
-                        break;
-                    }
-                    lock_tcp_con();
-                    set_ops(ops);
-                    unlock_tcp_con();
-                    /* On success we call kernel setsockopt() in case this socket is not connected
-                       and is unoffloaded later.  */
-                    break;
+                    ops = new sockinfo_tcp_ops_tls(this);
                 }
             }
 #endif /* DEFINED_UTLS */
-            si_tcp_logdbg("(TCP_ULP) tls is not supported");
-            errno = ENOPROTOOPT;
-            ret = -1;
-            break;
+            else {
+                si_tcp_logdbg("(TCP_ULP) %s option is not supported", (char *)__optval);
+                errno = ENOPROTOOPT;
+                ret = -1;
+                break;
+            }
+
+            if (unlikely(!ops)) {
+                errno = ENOMEM;
+                ret = -1;
+                break;
+            }
+
+            lock_tcp_con();
+            set_ops(ops);
+            unlock_tcp_con();
+            /* On success we call kernel setsockopt() in case this socket is not connected
+               and is unoffloaded later.  */
+            return 0;
+        }
         case TCP_CONGESTION:
             if (__optval && __optlen > 0) {
                 std::string cc_name((const char *)__optval,
