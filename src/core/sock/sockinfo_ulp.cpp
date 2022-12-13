@@ -422,6 +422,7 @@ sockinfo_tcp_ops_tls::~sockinfo_tcp_ops_tls()
         m_p_tx_ring->tls_release_tis(m_p_tis);
         m_p_tis = nullptr;
         if (m_zc_stor) {
+            /* Release references taken in advance, but not used. See get_record_buf(). */
             unsigned extra_ref = (m_zc_stor->sz_buffer - m_zc_stor_offset) / TLS_ZC_BLOCK;
             m_p_sock->get_tx_ring()->mem_buf_desc_return_single_multi_ref(m_zc_stor, extra_ref + 1);
             m_zc_stor = nullptr;
@@ -481,6 +482,8 @@ void sockinfo_tcp_ops_tls::get_record_buf(mem_buf_desc_t *&buf, uint8_t *&data, 
      * TLS records. In such a way we optimize buffers/memory usage (since zerocopy TLS record
      * requires 29 bytes to hold the header/trailer). Also this improves locality and MTT cache
      * miss rate.
+     * Every block holds a reference to the TX buffer. We increase the reference counter in
+     * advance to avoid additional locking.
      */
     if (!m_zc_stor) {
         m_zc_stor = m_p_sock->tcp_tx_mem_buf_alloc(PBUF_RAM);
