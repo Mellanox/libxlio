@@ -410,7 +410,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::detach_flow(flow_tuple &flow_spec_5t, 
                 ring_logdbg("Could not find matching counter for UDP src port!");
             } else {
                 keep_in_map = m_ring.m_udp_uc_dst_port_attach_map[rule_key].counter =
-                    MAX(0, ((dst_port_iter->second.counter) - 1));
+                    std::max(0, ((dst_port_iter->second.counter) - 1));
             }
         }
         auto itr = m_flow_udp_uc_map.find(rfs_key);
@@ -445,7 +445,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::detach_flow(flow_tuple &flow_spec_5t, 
                 BULLSEYE_EXCLUDE_BLOCK_END
             } else {
                 keep_in_map = m_ring.m_l2_mc_ip_attach_map[rule_key].counter =
-                    MAX(0, ((l2_mc_iter->second.counter) - 1));
+                    std::max(0, ((l2_mc_iter->second.counter) - 1));
             }
         }
 
@@ -481,7 +481,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::detach_flow(flow_tuple &flow_spec_5t, 
                 BULLSEYE_EXCLUDE_BLOCK_END
             } else {
                 keep_in_map = m_ring.m_tcp_dst_port_attach_map[rule_key].counter =
-                    MAX(0, ((dst_port_iter->second.counter) - 1));
+                    std::max(0, ((dst_port_iter->second.counter) - 1));
             }
         }
         auto itr = m_flow_tcp_map.find(rfs_key);

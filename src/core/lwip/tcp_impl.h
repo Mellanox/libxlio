@@ -298,7 +298,7 @@ struct tcp_seg {
 #define LWIP_IS_DUMMY_SEGMENT(seg) (seg->flags & TF_SEG_OPTS_DUMMY_MSG)
 
 #if LWIP_TCP_TIMESTAMPS
-#define LWIP_TCP_OPT_LEN_TS 12
+#define LWIP_TCP_OPT_LEN_TS 12U
 #endif
 
 /* This macro calculates total length of tcp additional options

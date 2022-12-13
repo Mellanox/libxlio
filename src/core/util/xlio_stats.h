@@ -36,6 +36,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <bitset>
+#include <limits.h>
 #include <netinet/in.h>
 #include <linux/if.h>
 #include <sys/types.h>

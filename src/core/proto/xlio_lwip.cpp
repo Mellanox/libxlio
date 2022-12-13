@@ -181,12 +181,12 @@ uint32_t get_lwip_tcp_mss(uint32_t mtu, uint32_t lwip_mss)
         default:
             // set MSS to match XLIO_MTU, MSS is equal to (XLIO_MTU-40), but forced to be at
             // least 1.
-            _lwip_tcp_mss = (MAX(mtu, (IP_HLEN + TCP_HLEN + 1)) - IP_HLEN - TCP_HLEN);
+            _lwip_tcp_mss = (std::max(mtu, (IP_HLEN + TCP_HLEN + 1)) - IP_HLEN - TCP_HLEN);
             break;
         }
         break;
     default:
-        _lwip_tcp_mss = (MAX(lwip_mss, 1));
+        _lwip_tcp_mss = (std::max(lwip_mss, 1U));
         break;
     }
     return _lwip_tcp_mss;

@@ -33,9 +33,9 @@
 #ifndef RDTSC_H
 #define RDTSC_H
 
+#include <algorithm>
 #include <time.h>
 #include <stdio.h>
-#include <sys/param.h> // for MAX & MIN
 
 #include "asm.h"
 #include "clock.h"
@@ -49,8 +49,8 @@ typedef unsigned long long tscval_t;
 
 /**
  * Read the CPU's Hz (based on /proc/cpuinfo Mhz report)
- * Provide the MAX and MIN values, which might be the case if core are running at power control
- *states Return true on success, false on any failure
+ * Provide the std::max and std::min values, which might be the case if core are running at power
+ *control states Return true on success, false on any failure
  **/
 static bool get_cpu_hz(double &hz_min, double &hz_max)
 {
@@ -86,8 +86,8 @@ static bool get_cpu_hz(double &hz_min, double &hz_max)
             hz_max = hz_min = mhz;
             continue;
         }
-        hz_min = MIN(hz_min, mhz);
-        hz_max = MAX(hz_max, mhz);
+        hz_min = std::min(hz_min, mhz);
+        hz_max = std::max(hz_max, mhz);
     }
     fclose(f);
 
