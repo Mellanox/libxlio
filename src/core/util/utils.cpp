@@ -626,7 +626,7 @@ int get_window_scaling_factor(int tcp_rmem_max, int core_rmem_max)
     __log_func("calculate OS tcp scaling window factor");
 
     int scaling_factor = 0;
-    int space = MAX(tcp_rmem_max, core_rmem_max);
+    int space = std::max(tcp_rmem_max, core_rmem_max);
 
     while (space > 0xffff && scaling_factor < MAX_WINDOW_SCALING) {
         space >>= 1;

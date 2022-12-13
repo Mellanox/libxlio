@@ -46,7 +46,7 @@
 #define MODULE_HDR MODULE_NAME "%d:%s() "
 
 #define ALIGN_WR_DOWN(_num_wr_) (std::max(32, ((_num_wr_) & ~(0xf))))
-#define RING_TX_BUFS_COMPENSATE 256
+#define RING_TX_BUFS_COMPENSATE 256U
 
 #define RING_LOCK_AND_RUN(__lock__, __func_and_params__)                                           \
     __lock__.lock();                                                                               \
@@ -844,7 +844,7 @@ mem_buf_desc_t *ring_simple::get_tx_buffers(pbuf_type type, uint32_t n_num_mem_b
     descq_t &pool = type == PBUF_ZEROCOPY ? m_zc_pool : m_tx_pool;
 
     if (unlikely(pool.size() < n_num_mem_bufs)) {
-        int count = MAX(RING_TX_BUFS_COMPENSATE, n_num_mem_bufs);
+        int count = std::max(RING_TX_BUFS_COMPENSATE, n_num_mem_bufs);
         if (request_more_tx_buffers(type, count, m_tx_lkey)) {
             /*
              * TODO Unify request_more_tx_buffers so ring_slave
@@ -1025,9 +1025,10 @@ void ring_simple::adapt_cq_moderation()
 
     uint32_t ir_rate = safe_mce_sys().cq_aim_interrupts_rate_per_sec;
 
-    int count = MIN(avg_packet_rate / ir_rate, safe_mce_sys().cq_aim_max_count);
-    int period = MIN(safe_mce_sys().cq_aim_max_period_usec,
-                     ((1000000 / ir_rate) - (1000000 / MAX(avg_packet_rate, ir_rate))));
+    uint32_t count = std::min(avg_packet_rate / ir_rate, safe_mce_sys().cq_aim_max_count);
+    uint32_t period = std::min<uint32_t>(
+        safe_mce_sys().cq_aim_max_period_usec,
+        ((1000000UL / ir_rate) - (1000000UL / std::max(avg_packet_rate, ir_rate))));
 
     if (avg_packet_size < 1024 && avg_packet_rate < 450000) {
         modify_cq_moderation(0, 0); // latency mode

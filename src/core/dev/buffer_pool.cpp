@@ -450,10 +450,9 @@ void buffer_pool::put_buffers_thread_safe(mem_buf_desc_t **buff_vec, size_t coun
 void buffer_pool::put_buffers(descq_t *buffers, size_t count)
 {
     mem_buf_desc_t *buff_list, *next;
-    size_t amount;
     __log_info_funcall("returning %lu, present %lu, created %lu", count, m_n_buffers,
                        m_n_buffers_created);
-    for (amount = MIN(count, buffers->size()); amount > 0; amount--) {
+    for (size_t amount = std::min(count, buffers->size()); amount > 0; amount--) {
         buff_list = buffers->get_and_pop_back();
         while (buff_list) {
             next = buff_list->p_next_desc;

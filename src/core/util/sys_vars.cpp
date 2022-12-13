@@ -416,7 +416,7 @@ void mce_sys_var::read_env_variable_with_pid(char *mce_sys_name, size_t mce_sys_
             mce_sys_name[0] = '\0';
         }
     } else { // has at least one occurrence of %d - replace the first one with the process PID
-        size_t bytes_num = MIN((size_t)(d_pos - env_ptr), mce_sys_max_size - 1);
+        size_t bytes_num = std::min<size_t>(d_pos - env_ptr, mce_sys_max_size - 1);
         strncpy(mce_sys_name, env_ptr, bytes_num);
         mce_sys_name[bytes_num] = '\0';
         n = snprintf(mce_sys_name + bytes_num, mce_sys_max_size - bytes_num - 1, "%d", getpid());
@@ -1177,7 +1177,8 @@ void mce_sys_var::get_env_params()
     }
 
     if ((env_ptr = getenv(SYS_VAR_TX_NUM_WRE_TO_SIGNAL)) != NULL) {
-        tx_num_wr_to_signal = MIN(NUM_TX_WRE_TO_SIGNAL_MAX, MAX(1, (uint32_t)atoi(env_ptr)));
+        tx_num_wr_to_signal =
+            std::min<uint32_t>(NUM_TX_WRE_TO_SIGNAL_MAX, std::max(1, atoi(env_ptr)));
     }
     if (tx_num_wr <= (tx_num_wr_to_signal * 2)) {
         tx_num_wr = tx_num_wr_to_signal * 2;
@@ -1250,23 +1251,23 @@ void mce_sys_var::get_env_params()
     }
 
     if ((env_ptr = getenv(SYS_VAR_RING_MIGRATION_RATIO_TX)) != NULL) {
-        ring_migration_ratio_tx = (int32_t)atoi(env_ptr);
+        ring_migration_ratio_tx = atoi(env_ptr);
     }
 
     if ((env_ptr = getenv(SYS_VAR_RING_MIGRATION_RATIO_RX)) != NULL) {
-        ring_migration_ratio_rx = (int32_t)atoi(env_ptr);
+        ring_migration_ratio_rx = atoi(env_ptr);
     }
 
     if ((env_ptr = getenv(SYS_VAR_RING_LIMIT_PER_INTERFACE)) != NULL) {
-        ring_limit_per_interface = MAX(0, (int32_t)atoi(env_ptr));
+        ring_limit_per_interface = std::max(0, atoi(env_ptr));
     }
 
     if ((env_ptr = getenv(SYS_VAR_RING_DEV_MEM_TX)) != NULL) {
-        ring_dev_mem_tx = MAX(0, (int32_t)atoi(env_ptr));
+        ring_dev_mem_tx = std::max(0, atoi(env_ptr));
     }
 
     if ((env_ptr = getenv(SYS_VAR_TCP_MAX_SYN_RATE)) != NULL) {
-        tcp_max_syn_rate = MIN(TCP_MAX_SYN_RATE_TOP_LIMIT, MAX(0, (int32_t)atoi(env_ptr)));
+        tcp_max_syn_rate = std::min(TCP_MAX_SYN_RATE_TOP_LIMIT, std::max(0, atoi(env_ptr)));
     }
 
     if ((env_ptr = getenv(SYS_VAR_RX_NUM_BUFS)) != NULL) {
@@ -1278,7 +1279,7 @@ void mce_sys_var::get_env_params()
     }
 
     if ((env_ptr = getenv(SYS_VAR_RX_NUM_WRE_TO_POST_RECV)) != NULL) {
-        rx_num_wr_to_post_recv = MIN(NUM_RX_WRE_TO_POST_RECV_MAX, MAX(1, (uint32_t)atoi(env_ptr)));
+        rx_num_wr_to_post_recv = std::min(NUM_RX_WRE_TO_POST_RECV_MAX, std::max(1, atoi(env_ptr)));
     }
 
     if ((env_ptr = getenv(SYS_VAR_RX_NUM_WRE)) != NULL) {
@@ -1392,7 +1393,7 @@ void mce_sys_var::get_env_params()
     rx_delta_tsc_between_cq_polls = tsc_per_second * rx_cq_drain_rate_nsec / NSEC_PER_SEC;
 
     if ((env_ptr = getenv(SYS_VAR_GRO_STREAMS_MAX)) != NULL) {
-        gro_streams_max = MAX(atoi(env_ptr), 0);
+        gro_streams_max = std::max(atoi(env_ptr), 0);
     }
 
     if ((env_ptr = getenv(SYS_VAR_TCP_3T_RULES)) != NULL) {
