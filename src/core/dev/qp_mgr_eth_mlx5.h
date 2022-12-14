@@ -92,6 +92,30 @@ public:
     void tls_release_tir(xlio_tir *tir);
     void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first);
 #endif /* DEFINED_UTLS */
+#ifdef DEFINED_DPCP
+    class nvme_tis : public xlio_ti {
+    public:
+        nvme_tis(dpcp::tis *tis, uint32_t tisn)
+            : xlio_ti()
+            , m_p_tis(tis)
+            , m_tisn(tisn)
+        {
+        }
+
+        virtual ~nvme_tis() { m_p_tis.reset(); };
+
+        uint32_t get_id() override { return m_tisn; };
+        nvme_tis(const nvme_tis &) = delete;
+
+        inline uint32_t get_tisn(void) noexcept { return m_tisn; }
+
+    private:
+        std::unique_ptr<dpcp::tis> m_p_tis;
+        uint32_t m_tisn;
+    };
+
+    std::unique_ptr<xlio_ti> create_nvme_context() const override;
+#endif /* DEFINED_DPCP */
     void post_nop_fence(void);
 
 #if defined(DEFINED_UTLS)

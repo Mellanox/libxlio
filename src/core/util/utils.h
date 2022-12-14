@@ -45,7 +45,9 @@
 #include "core/proto/mem_buf_desc.h"
 #include "core/util/xlio_stats.h"
 
+#ifndef ARRAY_SIZE
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
+#endif /* ARRAY_SIZE */
 
 /**
  * Check if file type is regular

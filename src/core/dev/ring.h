@@ -189,6 +189,18 @@ public:
         NOT_IN_USE(first);
     }
 #endif /* DEFINED_UTLS */
+    virtual std::unique_ptr<xlio_ti> create_nvme_context() { return nullptr; };
+
+    enum {
+        NVME_CRC_TX = 1 << 0,
+        NVME_CRC_RX = 1 << 1,
+        NVME_ZEROCOPY = 1 << 2,
+    };
+
+    virtual int get_supported_nvme_feature_mask() const
+    {
+        return 0;
+    }
     virtual void post_nop_fence(void) {}
 
     virtual void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)

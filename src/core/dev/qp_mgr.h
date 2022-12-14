@@ -239,6 +239,7 @@ public:
         NOT_IN_USE(first);
     }
 #endif /* DEFINED_UTLS */
+    virtual std::unique_ptr<xlio_ti> create_nvme_context() const { return nullptr; }
     virtual void post_nop_fence(void) {}
 
     virtual void reset_inflight_zc_buffers_ctx(void *ctx) { NOT_IN_USE(ctx); }

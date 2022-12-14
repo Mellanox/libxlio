@@ -1582,35 +1582,3 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
     }
 }
 #endif /* DEFINED_UTLS */
-
-int sockinfo_tcp_ops_nvme::setsockopt(int __level, int __optname, const void *__optval,
-                                      socklen_t __optlen)
-{
-    return m_p_sock->tcp_setsockopt(__level, __optname, __optval, __optlen);
-}
-
-ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
-{
-    return m_p_sock->tcp_tx(tx_arg);
-}
-
-int sockinfo_tcp_ops_nvme::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_send_attr &attr)
-{
-    NOT_IN_USE(p);
-    NOT_IN_USE(seg);
-    NOT_IN_USE(attr);
-    return 0;
-}
-
-bool sockinfo_tcp_ops_nvme::handle_send_ret(ssize_t ret, struct tcp_seg *seg)
-{
-    NOT_IN_USE(ret);
-    NOT_IN_USE(seg);
-    return true;
-}
-
-err_t sockinfo_tcp_ops_nvme::recv(struct pbuf *p)
-{
-    NOT_IN_USE(p);
-    return ERR_OK;
-};

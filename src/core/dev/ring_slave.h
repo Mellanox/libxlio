@@ -322,7 +322,7 @@ protected:
     rule_filter_map_t m_udp_uc_dst_port_attach_map;
 
     lock_spin_recursive m_lock_ring_rx;
-    lock_spin_recursive m_lock_ring_tx;
+    mutable lock_spin_recursive m_lock_ring_tx;
 
     descq_t m_tx_pool;
     descq_t m_zc_pool;

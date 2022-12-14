@@ -46,6 +46,7 @@
 
 #include "sockinfo.h"
 #include "sockinfo_ulp.h"
+#include "sockinfo_nvme.h"
 
 #define BLOCK_THIS_RUN(blocking, flags) (blocking && !(flags & MSG_DONTWAIT))
 
@@ -275,7 +276,7 @@ public:
         return m_p_connected_dst_entry ? m_p_connected_dst_entry->get_ctx() : nullptr;
     }
 
-    inline ring *get_tx_ring(void) const noexcept
+    inline ring *get_tx_ring(void) const noexcept 
     {
         return m_p_connected_dst_entry ? m_p_connected_dst_entry->get_ring() : nullptr;
     }
@@ -300,6 +301,8 @@ public:
     inline void reset_ops(void) noexcept { set_ops(m_ops_tcp); }
 
     bool is_utls_supported(int direction) const;
+
+    int get_supported_nvme_feature_mask() const;
 
     inline void lock_tcp_con(void) { m_tcp_con_lock.lock(); }
     inline void unlock_tcp_con(void)

@@ -148,6 +148,7 @@ libxlio_la_SOURCES := \
 	sock/pipeinfo.cpp \
 	sock/socket_fd_api.cpp \
 	sock/sock-redirect.cpp \
+	sock/sockinfo_nvme.cpp \
 	\
 	util/wakeup.cpp \
 	util/wakeup_pipe.cpp \
@@ -261,6 +262,7 @@ libxlio_la_SOURCES := \
 	proto/rule_val.h \
 	proto/tls.h \
 	proto/xlio_lwip.h \
+	proto/nvme_parse_input_args.h \
 	\
 	sock/cleanable_obj.h \
 	sock/fd_collection.h \
@@ -273,6 +275,7 @@ libxlio_la_SOURCES := \
 	sock/sockinfo_udp.h \
 	sock/sockinfo_ulp.h \
 	sock/sock-redirect.h \
+	sock/sockinfo_nvme.h \
 	\
 	util/chunk_list.h \
 	util/if.h \

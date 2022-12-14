@@ -3953,8 +3953,12 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             break;
         case TCP_ULP: {
             sockinfo_tcp_ops *ops {nullptr};
+            bool is_nvme = false;
             if (__optval && __optlen >= 4 && strncmp((char *)__optval, "nvme", 4) == 0) {
-                ops = new sockinfo_tcp_ops_nvme(this);
+                auto nvme_feature_mask = get_supported_nvme_feature_mask();
+                ops = nvme_feature_mask ? new sockinfo_tcp_ops_nvme(this, nvme_feature_mask)
+                                        : nullptr;
+                is_nvme = true;
                 si_tcp_logdbg("(TCP_NVME) val: nvme");
             }
 #ifdef DEFINED_UTLS
@@ -3986,9 +3990,13 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             lock_tcp_con();
             set_ops(ops);
             unlock_tcp_con();
+
+            if (is_nvme) {
+                return 0;
+            }
             /* On success we call kernel setsockopt() in case this socket is not connected
                and is unoffloaded later.  */
-            return 0;
+            break;
         }
         case TCP_CONGESTION:
             if (__optval && __optlen > 0) {
@@ -5636,4 +5644,13 @@ bool sockinfo_tcp::is_utls_supported(int direction) const
     NOT_IN_USE(direction);
 #endif /* DEFINED_UTLS */
     return result;
+}
+
+int sockinfo_tcp::get_supported_nvme_feature_mask() const
+{
+    ring *p_ring = get_tx_ring();
+    if (p_ring == nullptr) {
+        return false;
+    }
+    return p_ring->get_supported_nvme_feature_mask();
 }

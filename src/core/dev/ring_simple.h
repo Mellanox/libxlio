@@ -216,6 +216,34 @@ public:
         m_p_qp_mgr->tls_tx_post_dump_wqe(tis, addr, len, lkey, first);
     }
 #endif /* DEFINED_UTLS */
+
+    enum {
+        NVME_CRC_TX = 1 << 0,
+        NVME_CRC_RX = 1 << 1,
+        NVME_ZEROCOPY = 1 << 2,
+    };
+
+#ifdef DEFINED_DPCP
+    int get_supported_nvme_feature_mask() const override
+    {
+        dpcp::adapter_hca_capabilities caps {};
+        auto adapter = m_p_ib_ctx->get_dpcp_adapter();
+
+        if (adapter == nullptr || (dpcp::DPCP_OK != adapter->get_hca_capabilities(caps)) ||
+            !caps.nvmeotcp_caps.enabled) {
+            return 0;
+        }
+        return (NVME_CRC_TX * caps.nvmeotcp_caps.crc_tx) |
+            (NVME_CRC_RX * caps.nvmeotcp_caps.crc_rx) |
+            (NVME_ZEROCOPY * caps.nvmeotcp_caps.zerocopy);
+    }
+
+    std::unique_ptr<xlio_ti> create_nvme_context() override {
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        return m_p_qp_mgr->create_nvme_context();
+    }
+#endif /* DEFINED_DPCP */
+
     void post_nop_fence(void)
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
