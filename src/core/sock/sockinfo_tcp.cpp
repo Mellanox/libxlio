@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 
+#include <numeric>
 #include <stdio.h>
 #include <sys/time.h>
 #include <netinet/tcp.h>
@@ -753,16 +754,19 @@ unsigned sockinfo_tcp::tx_wait(int &err, bool blocking)
     return sz;
 }
 
-bool sockinfo_tcp::check_dummy_send_conditions(const int flags, const iovec *p_iov,
-                                               const ssize_t sz_iov)
+static inline bool cannot_do_requested_dummy_send(const tcp_pcb &pcb,
+                                                  const xlio_tx_call_attr_t &tx_arg)
 {
-    // Calculate segment max length
+    int flags = tx_arg.attr.msg.flags;
+    const iovec *p_iov = tx_arg.attr.msg.iov;
+    size_t sz_iov = tx_arg.attr.msg.sz_iov;
+
     uint8_t optflags = TF_SEG_OPTS_DUMMY_MSG;
-    uint16_t mss_local = std::min<uint16_t>(m_pcb.mss, m_pcb.snd_wnd_max / 2U);
-    mss_local = mss_local ? mss_local : m_pcb.mss;
+    uint16_t mss_local = std::min<uint16_t>(pcb.mss, pcb.snd_wnd_max / 2U);
+    mss_local = mss_local ? mss_local : pcb.mss;
 
 #if LWIP_TCP_TIMESTAMPS
-    if ((m_pcb.flags & TF_TIMESTAMP)) {
+    if ((pcb.flags & TF_TIMESTAMP)) {
         optflags |= TF_SEG_OPTS_TS;
         mss_local = std::max<uint16_t>(mss_local, LWIP_TCP_OPT_LEN_TS + 1U);
     }
@@ -771,17 +775,26 @@ bool sockinfo_tcp::check_dummy_send_conditions(const int flags, const iovec *p_i
     u16_t max_len = mss_local - LWIP_TCP_OPT_LENGTH(optflags);
 
     // Calculate window size
-    u32_t wnd = std::min(m_pcb.snd_wnd, m_pcb.cwnd);
+    u32_t wnd = std::min(pcb.snd_wnd, pcb.cwnd);
 
-    return !m_pcb.unsent && // Unsent queue should be empty
-        !(flags & MSG_MORE) && // Verify MSG_MORE flags is not set
-        sz_iov ==
-        1 && // We want to prevent a case in which we call tcp_write() for scatter/gather element.
-        p_iov->iov_len && // We have data to sent
-        p_iov->iov_len <= max_len && // Data will not be split into more then one segment
-        wnd && // Window is not empty
-        (p_iov->iov_len + m_pcb.snd_lbb - m_pcb.lastack) <=
-        wnd; // Window allows the dummy packet it to be sent
+    /* The functions asks the inverse of can do dummy send; thus the truth table might look like:
+     * |                   |Is dummy|Not dummy|
+     * |-------------------|--------|---------|
+     * |Can't do dummy send| True   |  False  |
+     * |Can do dummy send  | False  |  False  |
+     *
+     * !m_pcb.unsent - Unsent queue should be empty
+     * !(flags & MSG_MORE) - MSG_MORE flag is not set
+     * sz_iov == 1U - Prevent calling tcp_write() for scatter/gather element
+     * p_iov->iov_len - There is data to send
+     * p_iov->iov_len <= max_len - The data will not be split into more then one segment
+     * wnd - The window is not empty
+     * (p_iov->iov_len + m_pcb.snd_lbb - m_pcb.lastack) <= wnd - The window allows the dummy packet
+     * it to be sent
+     */
+    bool can_do_dummy_send = !pcb.unsent && !(flags & MSG_MORE) && sz_iov == 1U && p_iov->iov_len &&
+        p_iov->iov_len <= max_len && wnd && (p_iov->iov_len + pcb.snd_lbb - pcb.lastack) <= wnd;
+    return IS_DUMMY_PACKET(flags) && !can_do_dummy_send;
 }
 
 void sockinfo_tcp::put_agent_msg(void *arg)
@@ -830,25 +843,42 @@ ssize_t sockinfo_tcp::tx(xlio_tx_call_attr_t &tx_arg)
     return m_ops->tx(tx_arg);
 }
 
+static inline bool cannot_do_requested_partial_write(const tcp_pcb &pcb,
+                                                     const xlio_tx_call_attr_t &tx_arg,
+                                                     bool is_blocking, size_t total_iov_len)
+{
+    return !BLOCK_THIS_RUN(is_blocking, tx_arg.attr.msg.flags) &&
+        (tx_arg.xlio_flags & TX_FLAG_NO_PARTIAL_WRITE) &&
+        unlikely(tcp_sndbuf(&pcb) < total_iov_len);
+}
+
+static inline bool tcp_wnd_unavalable(const tcp_pcb &pcb, size_t total_iov_len)
+{
+#ifdef DEFINED_TCP_TX_WND_AVAILABILITY
+    return !tcp_is_wnd_available(&pcb, total_iov_len);
+#else
+    NOT_IN_USE(pcb);
+    NOT_IN_USE(total_iov_len);
+    return false;
+#endif
+}
+
 ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
 {
     iovec *p_iov = tx_arg.attr.msg.iov;
-    ssize_t sz_iov = tx_arg.attr.msg.sz_iov;
+    size_t sz_iov = tx_arg.attr.msg.sz_iov;
     struct sockaddr *__dst = tx_arg.attr.msg.addr;
     socklen_t __dstlen = tx_arg.attr.msg.len;
     int __flags = tx_arg.attr.msg.flags;
     int errno_tmp = errno;
     int total_tx = 0;
-    unsigned tx_size;
-    unsigned pos = 0;
     int ret = 0;
     int poll_count = 0;
     uint16_t apiflags = 0;
     err_t err;
-    bool is_dummy = false;
-    bool block_this_run = false;
+    bool is_dummy = IS_DUMMY_PACKET(__flags);
+    bool block_this_run = BLOCK_THIS_RUN(m_b_blocking, __flags);
     bool is_send_zerocopy = false;
-    bool no_partial_write;
     void *tx_ptr = NULL;
     __off64_t file_offset = 0;
     struct xlio_pd_key *pd_key_array = NULL;
@@ -856,8 +886,14 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
     /* Let allow OS to process all invalid scenarios to avoid any
      * inconsistencies in setting errno values
      */
-    if (unlikely(m_sock_offload != TCP_SOCK_LWIP) || unlikely(!p_iov) || unlikely(0 >= sz_iov)) {
-        goto tx_packet_to_os;
+    if (unlikely(m_sock_offload != TCP_SOCK_LWIP) || unlikely(!p_iov) || unlikely(0 == sz_iov)) {
+#ifdef XLIO_TIME_MEASURE
+        INC_GO_TO_OS_TX_COUNT;
+#endif
+
+        ret = socket_fd_api::tx_os(tx_arg.opcode, p_iov, sz_iov, __flags, __dst, __dstlen);
+        save_stats_tx_os(ret);
+        return ret;
     }
 
 #ifdef XLIO_TIME_MEASURE
@@ -902,20 +938,6 @@ retry_is_ready:
         rx_wait_helper(poll_count, false);
     }
 
-    lock_tcp_con();
-
-    is_dummy = IS_DUMMY_PACKET(__flags);
-    block_this_run = BLOCK_THIS_RUN(m_b_blocking, __flags);
-
-    if (unlikely(is_dummy)) {
-        apiflags |= XLIO_TX_PACKET_DUMMY;
-        if (!check_dummy_send_conditions(__flags, p_iov, sz_iov)) {
-            unlock_tcp_con();
-            errno = EAGAIN;
-            return -1;
-        }
-    }
-
     if (tx_arg.opcode == TX_FILE) {
         /*
          * TX_FILE is a special operation which reads a single file.
@@ -925,33 +947,9 @@ retry_is_ready:
          */
         apiflags |= XLIO_TX_FILE;
     }
-
-    no_partial_write = ((!block_this_run) && (tx_arg.xlio_flags & TX_FLAG_NO_PARTIAL_WRITE));
-
-#ifdef DEFINED_TCP_TX_WND_AVAILABILITY
-#else
-    if (no_partial_write)
-#endif
-    {
-        tx_size = 0;
-        for (ssize_t i = 0; i < sz_iov; ++i) {
-            tx_size += p_iov[i].iov_len;
-        }
+    if (unlikely(is_dummy)) {
+        apiflags |= XLIO_TX_PACKET_DUMMY;
     }
-
-    if (no_partial_write && unlikely(tcp_sndbuf(&m_pcb) < tx_size)) {
-        unlock_tcp_con();
-        errno = EAGAIN;
-        return -1;
-    }
-
-#ifdef DEFINED_TCP_TX_WND_AVAILABILITY
-    if (!tcp_is_wnd_available(&m_pcb, tx_size)) {
-        unlock_tcp_con();
-        errno = EAGAIN;
-        return -1;
-    }
-#endif
 
     /* To force zcopy flow there are two possible ways
      * - send() MSG_ZEROCOPY flag should be passed by user application
@@ -965,13 +963,27 @@ retry_is_ready:
             (tx_arg.priv.attr == PBUF_DESC_MKEY ? (struct xlio_pd_key *)tx_arg.priv.map : NULL);
     }
 
-    for (int i = 0; i < sz_iov; i++) {
+    si_tcp_logfunc("tx: iov=%p niovs=%zu", p_iov, sz_iov);
+
+    size_t total_iov_len =
+        std::accumulate(&p_iov[0], &p_iov[sz_iov], 0U,
+                        [](size_t sum, const iovec &curr) { return sum + curr.iov_len; });
+    lock_tcp_con();
+
+    if (cannot_do_requested_dummy_send(m_pcb, tx_arg) ||
+        cannot_do_requested_partial_write(m_pcb, tx_arg, m_b_blocking, total_iov_len) ||
+        tcp_wnd_unavalable(m_pcb, total_iov_len)) {
+        unlock_tcp_con();
+        errno = EAGAIN;
+        return -1;
+    }
+
+    for (size_t i = 0; i < sz_iov; i++) {
         si_tcp_logfunc("iov:%d base=%p len=%d", i, p_iov[i].iov_base, p_iov[i].iov_len);
         if (unlikely(!p_iov[i].iov_base)) {
             continue;
         }
 
-        pos = 0;
         if ((tx_arg.opcode == TX_FILE) && !(apiflags & XLIO_TX_PACKET_ZEROCOPY)) {
             file_offset = *(__off64_t *)p_iov[i].iov_base;
             tx_ptr = &file_offset;
@@ -981,8 +993,9 @@ retry_is_ready:
                 tx_arg.priv.mkey = pd_key_array[i].mkey;
             }
         }
+        unsigned pos = 0;
         while (pos < p_iov[i].iov_len) {
-            tx_size = tcp_sndbuf(&m_pcb);
+            unsigned tx_size = tcp_sndbuf(&m_pcb);
 
             /* Process a case when space is not available at the sending socket
              * to hold the message to be transmitted
@@ -1016,7 +1029,6 @@ retry_is_ready:
                             rx_wait(poll_count, false);
                             m_tx_consecutive_eagain_count = 0;
                         }
-                        ret = -1;
                         errno = EAGAIN;
                         goto err;
                     }
@@ -1045,7 +1057,6 @@ retry_is_ready:
         retry_write:
             if (unlikely(!is_rts())) {
                 si_tcp_logdbg("TX on disconnected socket");
-                ret = -1;
                 errno = ECONNRESET;
                 goto err;
             }
@@ -1053,7 +1064,6 @@ retry_is_ready:
                 if (total_tx > 0) {
                     goto done;
                 } else {
-                    ret = -1;
                     errno = EINTR;
                     si_tcp_logdbg("returning with: EINTR");
                     goto err;
@@ -1086,7 +1096,6 @@ retry_is_ready:
                     if (total_tx > 0) {
                         goto done;
                     } else {
-                        ret = -1;
                         errno = EAGAIN;
                         goto err;
                     }
@@ -1155,16 +1164,7 @@ err:
         m_p_socket_stats->counters.n_tx_errors++;
     }
     unlock_tcp_con();
-    return ret;
-
-tx_packet_to_os:
-#ifdef XLIO_TIME_MEASURE
-    INC_GO_TO_OS_TX_COUNT;
-#endif
-
-    ret = socket_fd_api::tx_os(tx_arg.opcode, p_iov, sz_iov, __flags, __dst, __dstlen);
-    save_stats_tx_os(ret);
-    return ret;
+    return -1;
 }
 
 /*
@@ -3954,6 +3954,7 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             sockinfo_tcp_ops *ops {nullptr};
             if (__optval && __optlen >= 4 && strncmp((char *)__optval, "nvme", 4) == 0) {
                 ops = new sockinfo_tcp_ops_nvme(this);
+                si_tcp_logdbg("(TCP_NVME) val: nvme");
             }
 #ifdef DEFINED_UTLS
             else if (__optval && __optlen >= 3 && strncmp((char *)__optval, "tls", 3) == 0) {
