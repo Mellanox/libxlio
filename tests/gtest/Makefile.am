@@ -122,6 +122,8 @@ gtest_SOURCES = \
 	core/xlio_send_zc.cc \
 	core/xlio_ioctl.cc \
 	\
+	nvme/nvme.cc \
+	\
 	xliod/xliod_base.cc \
 	xliod/xliod_bitmap.cc \
 	xliod/xliod_hash.cc \

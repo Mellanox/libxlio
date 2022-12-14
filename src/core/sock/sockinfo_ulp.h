@@ -53,7 +53,7 @@ class sockinfo_tcp_ops {
 public:
     sockinfo_tcp_ops(sockinfo_tcp *sock)
         : m_p_sock(sock) {};
-    virtual ~sockinfo_tcp_ops() {}
+    virtual ~sockinfo_tcp_ops() { }
 
     inline ring *get_tx_ring(void);
 
@@ -203,18 +203,4 @@ private:
 };
 
 #endif /* DEFINED_UTLS */
-
-class sockinfo_tcp_ops_nvme : public sockinfo_tcp_ops {
-public:
-    sockinfo_tcp_ops_nvme(sockinfo_tcp *sock)
-        : sockinfo_tcp_ops(sock) {};
-    ~sockinfo_tcp_ops_nvme() = default;
-
-    int setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen) override;
-    ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
-    int postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_send_attr &attr) override;
-    bool handle_send_ret(ssize_t ret, struct tcp_seg *seg) override;
-    err_t recv(struct pbuf *p) override;
-};
-
 #endif /* _SOCKINFO_ULP_H */

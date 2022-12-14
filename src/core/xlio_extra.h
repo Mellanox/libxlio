@@ -95,9 +95,16 @@ struct xlio_pd_attr {
  * @param mkey - memory key
  */
 struct xlio_pd_key {
-    uint32_t flags;
+    union {
+        uint32_t flags;
+        uint32_t message_length;
+    };
     uint32_t mkey;
 };
+
+#define SOL_NVME 666
+#define NVME_TX 11
+#define NVME_RX 22
 
 /**
  * Represents one packet

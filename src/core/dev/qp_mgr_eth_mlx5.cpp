@@ -1430,6 +1430,31 @@ dpcp::tir *qp_mgr_eth_mlx5::xlio_tir_to_dpcp_tir(xlio_tir *tir)
 
 #endif /* DEFINED_UTLS */
 
+#ifdef DEFINED_DPCP
+std::unique_ptr<xlio_ti> qp_mgr_eth_mlx5::create_nvme_context() const
+{
+    dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
+    dpcp::tis::attr tis_attr = {
+        .flags = dpcp::TIS_ATTR_TRANSPORT_DOMAIN | dpcp::TIS_ATTR_NVMEOTCP | dpcp::TIS_ATTR_PD,
+        .tls_en = false,
+        .nvmeotcp = true,
+        .transport_domain = adapter->get_td(),
+        .pd = adapter->get_pd(),
+    };
+
+    dpcp::tis *tis = nullptr;
+    uint32_t tisn = 0;
+    if (unlikely(adapter->create_tis(tis_attr, tis) != dpcp::DPCP_OK) ||
+        unlikely(tis->get_tisn(tisn) != dpcp::DPCP_OK)) {
+        qp_logerr("Failed to create TIS with NVME enabled");
+        delete tis;
+        return nullptr;
+    }
+
+    return std::make_unique<nvme_tis>(tis, tisn);
+}
+#endif /* DEFINED_DPCP */
+
 void qp_mgr_eth_mlx5::ti_released(xlio_ti *ti)
 {
     assert(ti->m_released);

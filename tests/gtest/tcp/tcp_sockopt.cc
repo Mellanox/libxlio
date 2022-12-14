@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 
+#include <chrono>
 #include <sys/socket.h>
 #include <sys/types.h> /* See NOTES */
 #include <netinet/in.h>
@@ -40,6 +41,7 @@
 #include "common/sys.h"
 #include "common/base.h"
 #include "tcp_base.h"
+#include "core/xlio_extra.h"
 
 #define HELLO_STR "hello"
 
@@ -331,24 +333,4 @@ TEST_F(tcp_set_get_sockopt, set_and_get_tcp_ipv6_user_timeout)
     EXPECT_EQ(result, 0) << "getsockopt failed for TCP_USER_TIMEOUT";
     EXPECT_EQ(optlen, sizeof(output_user_timeout_ms)) << "Unexpected parameter size";
     EXPECT_EQ(output_user_timeout_ms, user_timeout_ms) << "Unexpected timeout value";
-}
-
-TEST_F(tcp_set_get_sockopt, set_ipv6_ulp_nvme)
-{
-    const std::string option = "nvme";
-    /* int result = setsockopt(m_ipv6_tcp_socket_fd, IPPROTO_TCP, TCP_ULP, "tls", */
-    /*                         3); */
-    int result =
-        setsockopt(m_ipv6_tcp_socket_fd, IPPROTO_TCP, TCP_ULP, option.c_str(), option.length());
-    ASSERT_EQ(result, 0) << "TCP_ULP is unsupported for TCP sockets";
-}
-
-TEST_F(tcp_set_get_sockopt, set_ipv4_ulp_nvme)
-{
-    const std::string option = "nvme";
-    /* int result = setsockopt(m_ipv4_tcp_socket_fd, IPPROTO_TCP, TCP_ULP, "tls", */
-    /*                         3); */
-    int result =
-        setsockopt(m_ipv4_tcp_socket_fd, IPPROTO_TCP, TCP_ULP, option.c_str(), option.length());
-    ASSERT_EQ(result, 0) << "TCP_ULP is unsupported for TCP sockets";
 }
