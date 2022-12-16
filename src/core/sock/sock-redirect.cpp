@@ -618,13 +618,13 @@ int socket_internal(int __domain, int __type, int __protocol, bool shadow, bool 
         }
         /* If shadow socket is created, but XLIO object fails, we still return shadow socket
            fd and such a socket won't be offloaded.  */
-    }
 
 #if defined(DEFINED_NGINX)
-    if (add_to_udp_pool) {
-        g_p_fd_collection->handle_socket_pool(fd);
-    }
+        if (add_to_udp_pool) {
+            g_p_fd_collection->handle_socket_pool(fd);
+        }
 #endif
+    }
 
     assert(fd != SOCKET_FAKE_FD);
     return fd;
