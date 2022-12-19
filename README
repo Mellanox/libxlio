@@ -20,7 +20,7 @@ Build:
 2. ./configure --prefix=/usr
 3. make
 4. sudo make install
-
+5. sudo make install
 
 Install library from rpm or debian
 =================================
