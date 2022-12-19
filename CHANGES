@@ -1,3 +1,16 @@
+Version 2.1.1-1:
+Date + Time 2022-12-19
+=============================================================
+Added:
+        - RM #3194032 Credit System
+        - RM #3290993 New nvme_bf2 SPEC for NVMEoTCP BF2
+        - RM #3254123 Listen socket statistics
+        - RM #3254123 Dump routing table on xlio_stats request
+
+Fixed:
+        - RM #3263352 Don't override MSS from TCP options
+        - RM #3290995 Removing legacy SPECs
+
 Version 2.1.0-1:
 Date + Time 2022-12-08
 =============================================================
