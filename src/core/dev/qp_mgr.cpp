@@ -273,12 +273,6 @@ int qp_mgr::configure(struct qp_mgr_desc *desc)
     m_qp_cap.max_recv_sge = min(tmp_ibv_qp_attr.cap.max_recv_sge, m_qp_cap.max_recv_sge);
     m_qp_cap.max_inline_data = min(tmp_ibv_qp_attr.cap.max_inline_data, m_qp_cap.max_inline_data);
 
-    if (m_qp_cap.max_send_wr < m_tx_num_wr) {
-        qp_logdbg("Amount of requested TX_WRE %d lowered to %d", m_tx_num_wr, m_qp_cap.max_send_wr);
-        m_tx_num_wr = m_qp_cap.max_send_wr;
-        m_p_ring->set_tx_num_wr(m_tx_num_wr);
-    }
-
     qp_logdbg("Used QP (num=%d) "
               "wre: tx = %d rx = %d "
               "sge: tx = %d rx = %d "

@@ -286,8 +286,12 @@ void qp_mgr_eth_mlx5::init_qp()
 
     m_sq_wqe_hot_index = 0;
 
+    uint32_t old_wr_val = m_tx_num_wr;
     m_tx_num_wr = (m_sq_wqes_end - (uint8_t *)m_sq_wqe_hot) / WQEBB;
-    m_sq_free_credits = m_tx_num_wr;
+
+    // We use the min between CQ size and the QP size (that might be increases by ibv creation).
+    m_sq_free_credits = std::min(m_tx_num_wr, old_wr_val);
+
     /* Maximum BF inlining consists of:
      * - CTRL:
      *   - 1st WQEBB is mostly used for CTRL and ETH segment (where ETH header is inlined)
