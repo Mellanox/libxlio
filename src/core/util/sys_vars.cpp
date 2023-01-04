@@ -930,7 +930,6 @@ void mce_sys_var::get_env_params()
                                   // TX operations, helpful to maintain TCP stack management.
         enable_tso =
             option_3::ON; // MCE_DEFAULT_TSO(option_3::AUTO), Enable TCP Segmentation Offload(=TSO).
-        tx_num_wr = 4096; // MCE_DEFAULT_TX_NUM_WRE (2048), Amount of WREs in TX queue.
         timer_resolution_msec = 256; // MCE_DEFAULT_TIMER_RESOLUTION_MSEC (10), Internal thread
                                      // timer resolution, reduce CPU utilization of internal thread.
         tcp_timer_resolution_msec =
@@ -985,7 +984,6 @@ void mce_sys_var::get_env_params()
                                           // threaded mode to reduce locking.
         enable_tso =
             option_3::ON; // MCE_DEFAULT_TSO(true), Enable TCP Segmentation Offload(=TSO) mechanism.
-        tx_num_wr = 4096; // MCE_DEFAULT_TX_NUM_WRE (2048), Amount of WREs in TX queue.
         timer_resolution_msec = 32; // MCE_DEFAULT_TIMER_RESOLUTION_MSEC (10), Internal thread timer
                                     // resolution, reduce CPU utilization of internal thread.
         tcp_timer_resolution_msec =
@@ -1191,17 +1189,6 @@ void mce_sys_var::get_env_params()
         vlog_printf(VLOG_WARNING, "%s  must be smaller or equal to %d [%d]\n",
                     SYS_VAR_TX_MAX_INLINE, MAX_SUPPORTED_IB_INLINE_SIZE, tx_max_inline);
         tx_max_inline = MAX_SUPPORTED_IB_INLINE_SIZE;
-    }
-
-#define _ALIGN(x, y) ((((x) + (y)-1) / (y)) * (y))
-    unsigned int cx4_max_tx_wre_for_inl =
-        (16 * 1024 * 64) / (_ALIGN(_ALIGN(tx_max_inline - 12, 64) + 12, 64));
-#undef _ALIGN
-    if (tx_num_wr > cx4_max_tx_wre_for_inl) {
-        vlog_printf(VLOG_WARNING, "For the given %s [%d], %s [%d] must be smaller than %d\n",
-                    SYS_VAR_TX_MAX_INLINE, tx_max_inline, SYS_VAR_TX_NUM_WRE, tx_num_wr,
-                    cx4_max_tx_wre_for_inl);
-        tx_num_wr = cx4_max_tx_wre_for_inl;
     }
 
     if ((env_ptr = getenv(SYS_VAR_TX_MC_LOOPBACK)) != NULL) {

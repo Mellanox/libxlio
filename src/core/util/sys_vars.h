@@ -702,7 +702,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_TX_NUM_SEGS_TCP          (1000000)
 #define MCE_DEFAULT_TX_NUM_BUFS              (200000)
 #define MCE_DEFAULT_TX_BUF_SIZE              (0)
-#define MCE_DEFAULT_TX_NUM_WRE               (2048)
+#define MCE_DEFAULT_TX_NUM_WRE               (32768)
 #define MCE_DEFAULT_TX_NUM_WRE_TO_SIGNAL     (64)
 #define MCE_DEFAULT_TX_MAX_INLINE            (204) //+18(always inline ETH header) = 222
 #define MCE_DEFAULT_TX_BUILD_IP_CHKSUM       (true)

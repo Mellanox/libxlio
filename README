@@ -91,7 +91,7 @@ Example:
  XLIO DETAILS: Tx Mem Bufs                    200000                     [XLIO_TX_BUFS]
  XLIO DETAILS: Tx Mem Buf size                0                          [XLIO_TX_BUF_SIZE]
  XLIO DETAILS: ZC TX size                     32768                      [XLIO_ZC_TX_SIZE]
- XLIO DETAILS: Tx QP WRE                      2048                       [XLIO_TX_WRE]
+ XLIO DETAILS: Tx QP WRE                      32768                      [XLIO_TX_WRE]
  XLIO DETAILS: Tx QP WRE Batching             64                         [XLIO_TX_WRE_BATCHING]
  XLIO DETAILS: Tx Max QP INLINE               204                        [XLIO_TX_MAX_INLINE]
  XLIO DETAILS: Tx MC Loopback                 Enabled                    [XLIO_TX_MC_LOOPBACK]
@@ -245,7 +245,7 @@ latency
 
     Latency SPEC changes the following default configuration
      XLIO_RING_DEV_MEM_TX = 16384              (default: 0)
-     XLIO_TX_WRE = 256                         (default: 2048)
+     XLIO_TX_WRE = 256                         (default: 32768)
      XLIO_TX_WRE_BATCHING = 4                  (default: 64)
      XLIO_RX_WRE = 256                         (default: 16000)
      XLIO_RX_WRE_BATCHING = 4                  (default: 64)
@@ -357,7 +357,7 @@ XLIO_TX_WRE
 Number of Work Request Elements allocated in all transmit QP's.
 The number of QP's can change according to the number of network offloaded
 interfaces.
-Default value is 2048
+Default value is 32768
 
 XLIO_TX_WRE_BATCHING
 The number of Tx Work Request Elements used until a completion signal is requested.
