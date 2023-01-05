@@ -297,6 +297,12 @@ protected:
     {
         m_n_unsignaled_count = m_n_sysvar_tx_num_wr_to_signal - 1;
     }
+    inline void dec_unsignaled_count(void)
+    {
+        if (m_n_unsignaled_count > 0) {
+            --m_n_unsignaled_count;
+        }
+    }
     inline bool is_signal_requested_for_last_wqe()
     {
         return m_n_unsignaled_count == m_n_sysvar_tx_num_wr_to_signal - 1;
