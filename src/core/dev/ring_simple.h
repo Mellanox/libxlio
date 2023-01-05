@@ -182,6 +182,9 @@ public:
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         m_p_qp_mgr->tls_context_resync_tx(info, tis, skip_static);
+
+        uint64_t dummy_poll_sn = 0;
+        m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
     }
     void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn)
     {
