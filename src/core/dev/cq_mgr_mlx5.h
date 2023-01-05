@@ -65,7 +65,6 @@ public:
     virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array = NULL);
 
     virtual int poll_and_process_element_tx(uint64_t *p_cq_poll_sn);
-    int poll_and_process_error_element_tx(struct xlio_mlx5_cqe *cqe, uint64_t *p_cq_poll_sn);
 
     mem_buf_desc_t *cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc, enum buff_status_e status);
     virtual void add_qp_rx(qp_mgr *qp);
@@ -83,12 +82,11 @@ protected:
     virtual mem_buf_desc_t *poll(enum buff_status_e &status);
     int poll_and_process_error_element_rx(struct xlio_mlx5_cqe *cqe, void *pv_fd_ready_array);
 
-    inline struct xlio_mlx5_cqe *get_cqe(struct xlio_mlx5_cqe **cqe_err = NULL);
+    inline struct xlio_mlx5_cqe *get_cqe(uint32_t &num_polled_cqes);
+    void log_cqe_error(struct xlio_mlx5_cqe *cqe);
     inline void cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc,
                                      enum buff_status_e &status);
     void cqe_to_xlio_wc(struct xlio_mlx5_cqe *cqe, xlio_ibv_wc *wc);
-    inline struct xlio_mlx5_cqe *check_error_completion(struct xlio_mlx5_cqe *cqe, uint32_t *ci,
-                                                        uint8_t op_own);
     inline void update_global_sn(uint64_t &cq_poll_sn, uint32_t rettotal);
     void lro_update_hdr(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc);
 
@@ -119,48 +117,36 @@ inline void cq_mgr_mlx5::update_global_sn(uint64_t &cq_poll_sn, uint32_t num_pol
     cq_poll_sn = m_n_global_sn;
 }
 
-inline struct xlio_mlx5_cqe *cq_mgr_mlx5::check_error_completion(struct xlio_mlx5_cqe *cqe,
-                                                                 uint32_t *ci, uint8_t op_own)
+inline struct xlio_mlx5_cqe *cq_mgr_mlx5::get_cqe(uint32_t &num_polled_cqes)
 {
-    switch (op_own >> 4) {
-    case MLX5_CQE_REQ_ERR:
-    case MLX5_CQE_RESP_ERR:
-        ++(*ci);
-        rmb();
-        *m_mlx5_cq.dbrec = htonl((*ci));
-        return cqe;
-
-    case MLX5_CQE_INVALID:
-    default:
-        return NULL; /* No CQE */
-    }
-}
-
-inline struct xlio_mlx5_cqe *cq_mgr_mlx5::get_cqe(struct xlio_mlx5_cqe **cqe_err)
-{
+    struct xlio_mlx5_cqe *cqe_ret = nullptr;
     struct xlio_mlx5_cqe *cqe =
         (struct xlio_mlx5_cqe *)(((uint8_t *)m_mlx5_cq.cq_buf) +
                                  ((m_mlx5_cq.cq_ci & (m_mlx5_cq.cqe_count - 1))
                                   << m_mlx5_cq.cqe_size_log));
-    uint8_t op_own = cqe->op_own;
 
-    /* Check ownership and invalid opcode
-     * Return cqe_err for 0x80 - MLX5_CQE_REQ_ERR, MLX5_CQE_RESP_ERR or MLX5_CQE_INVALID
+    /* According to PRM, SW ownership bit flips with every CQ overflow. Since cqe_count is
+     * a power of 2, we use it to get cq_ci bit just after the significant bits. The bit changes
+     * with each CQ overflow and actually equals to the SW ownership bit.
      */
-    if (unlikely((op_own & MLX5_CQE_OWNER_MASK) == !(m_mlx5_cq.cq_ci & m_mlx5_cq.cqe_count))) {
-        return NULL;
-    } else if (unlikely((op_own >> 4) == MLX5_CQE_INVALID)) {
-        return NULL;
-    } else if (cqe_err && (op_own & 0x80)) {
-        *cqe_err = check_error_completion(cqe, &m_mlx5_cq.cq_ci, op_own);
-        return NULL;
+    while (((cqe->op_own & MLX5_CQE_OWNER_MASK) == !!(m_mlx5_cq.cq_ci & m_mlx5_cq.cqe_count)) &&
+           ((cqe->op_own >> 4) != MLX5_CQE_INVALID)) {
+        ++m_mlx5_cq.cq_ci;
+        ++num_polled_cqes;
+        cqe_ret = cqe;
+        if (unlikely(cqe->op_own & 0x80)) {
+            // This is likely an error CQE. Return it explicitly to log the errors.
+            break;
+        }
+        cqe = (struct xlio_mlx5_cqe *)(((uint8_t *)m_mlx5_cq.cq_buf) +
+                                       ((m_mlx5_cq.cq_ci & (m_mlx5_cq.cqe_count - 1))
+                                        << m_mlx5_cq.cqe_size_log));
     }
-
-    ++m_mlx5_cq.cq_ci;
-    rmb();
-    *m_mlx5_cq.dbrec = htonl(m_mlx5_cq.cq_ci);
-
-    return cqe;
+    if (cqe_ret) {
+        rmb();
+        *m_mlx5_cq.dbrec = htonl(m_mlx5_cq.cq_ci);
+    }
+    return cqe_ret;
 }
 
 #endif /* DEFINED_DIRECT_VERBS */

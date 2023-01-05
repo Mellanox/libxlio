@@ -140,11 +140,8 @@ public:
         }
 
         /* Do polling to speedup handling of the completion. */
-        int ret;
-        do {
-            uint64_t cq_poll_sn = 0;
-            ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&cq_poll_sn);
-        } while (ret == 1);
+        uint64_t dummy_poll_sn = 0;
+        m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
 
         return tis;
     }
@@ -170,11 +167,8 @@ public:
         }
 
         /* Do polling to speedup handling of the completion. */
-        int ret;
-        do {
-            uint64_t cq_poll_sn = 0;
-            ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&cq_poll_sn);
-        } while (ret == 1);
+        uint64_t dummy_poll_sn = 0;
+        m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
 
         return rc;
     }
@@ -199,11 +193,8 @@ public:
         }
         m_p_qp_mgr->tls_get_progress_params_rx(tir, buf, lkey);
         /* Do polling to speedup handling of the completion. */
-        int ret;
-        do {
-            uint64_t cq_poll_sn = 0;
-            ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&cq_poll_sn);
-        } while (ret == 1);
+        uint64_t dummy_poll_sn = 0;
+        m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
     }
     void tls_release_tis(xlio_tis *tis)
     {

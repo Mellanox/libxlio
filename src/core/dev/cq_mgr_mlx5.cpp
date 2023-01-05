@@ -436,6 +436,10 @@ inline void cq_mgr_mlx5::cqe_to_xlio_wc(struct xlio_mlx5_cqe *cqe, xlio_ibv_wc *
 {
     struct mlx5_err_cqe *ecqe = (struct mlx5_err_cqe *)cqe;
 
+    /* TODO This is legacy method. Replace it with mlx5 specific implemenation for
+     * poll_and_process_error_element_rx().
+     */
+
     switch (cqe->op_own >> 4) {
     case MLX5_CQE_RESP_WR_IMM:
         cq_logerr("IBV_WC_RECV_RDMA_WITH_IMM is not supported");
@@ -468,6 +472,24 @@ inline void cq_mgr_mlx5::cqe_to_xlio_wc(struct xlio_mlx5_cqe *cqe, xlio_ibv_wc *
     }
 
     wc->vendor_err = ecqe->vendor_err_synd;
+}
+
+void cq_mgr_mlx5::log_cqe_error(struct xlio_mlx5_cqe *cqe)
+{
+    struct mlx5_err_cqe *ecqe = (struct mlx5_err_cqe *)cqe;
+
+    /* TODO We can also ask qp_mgr to log WQE fields from SQ. But at first, we need to remove
+     * prefetch and memset of the next WQE there. Credit system will guarantee that we don't
+     * reuse the WQE at this point.
+     */
+
+    if (MLX5_CQE_SYNDROME_WR_FLUSH_ERR != ecqe->syndrome) {
+        cq_logwarn("cqe: syndrome=0x%x vendor=0x%x hw=0x%x (type=0x%x) wqe_opcode_qpn=0x%x "
+                   "wqe_counter=0x%x",
+                   ecqe->syndrome, ecqe->vendor_err_synd, *((uint8_t *)&ecqe->rsvd1 + 16),
+                   *((uint8_t *)&ecqe->rsvd1 + 17), ntohl(ecqe->s_wqe_opcode_qpn),
+                   ntohs(ecqe->wqe_counter));
+    }
 }
 
 void cq_mgr_mlx5::handle_sq_wqe_prop(unsigned index)
@@ -515,70 +537,31 @@ void cq_mgr_mlx5::handle_sq_wqe_prop(unsigned index)
     m_qp->m_sq_wqe_prop_last_signalled = index;
 }
 
-int cq_mgr_mlx5::poll_and_process_error_element_tx(struct xlio_mlx5_cqe *cqe,
-                                                   uint64_t *p_cq_poll_sn)
-{
-    uint16_t wqe_ctr = ntohs(cqe->wqe_counter);
-    unsigned index = wqe_ctr & (m_qp->m_tx_num_wr - 1);
-    xlio_ibv_wc wce;
-
-    // spoil the global sn if we have packets ready
-    union __attribute__((packed)) {
-        uint64_t global_sn;
-        struct {
-            uint32_t cq_id;
-            uint32_t cq_sn;
-        } bundle;
-    } next_sn;
-    next_sn.bundle.cq_sn = ++m_n_cq_poll_sn;
-    next_sn.bundle.cq_id = m_cq_id;
-
-    *p_cq_poll_sn = m_n_global_sn = next_sn.global_sn;
-
-    memset(&wce, 0, sizeof(wce));
-    if (m_qp->m_sq_wqe_idx_to_prop) {
-        wce.wr_id = reinterpret_cast<uint64_t>(m_qp->m_sq_wqe_idx_to_prop[index].buf);
-        cqe_to_xlio_wc(cqe, &wce);
-
-        cq_mgr::cqe_log_and_get_buf_tx(&wce);
-        handle_sq_wqe_prop(index);
-        return 1;
-    }
-    return 0;
-}
-
 int cq_mgr_mlx5::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
 {
-    // Assume locked!!!
     cq_logfuncall("");
 
+    static auto is_error_opcode = [&](uint8_t opcode) {
+        return opcode == MLX5_CQE_REQ_ERR || opcode == MLX5_CQE_RESP_ERR;
+    };
+
     int ret = 0;
-    xlio_mlx5_cqe *cqe_err = NULL;
-    xlio_mlx5_cqe *cqe = get_cqe(&cqe_err);
+    uint32_t num_polled_cqes = 0;
+    xlio_mlx5_cqe *cqe = get_cqe(num_polled_cqes);
 
     if (likely(cqe)) {
-        uint16_t wqe_ctr = ntohs(cqe->wqe_counter);
-        unsigned index = wqe_ctr & (m_qp->m_tx_num_wr - 1);
-        // spoil the global sn if we have packets ready
-        union __attribute__((packed)) {
-            uint64_t global_sn;
-            struct {
-                uint32_t cq_id;
-                uint32_t cq_sn;
-            } bundle;
-        } next_sn;
-        next_sn.bundle.cq_sn = ++m_n_cq_poll_sn;
-        next_sn.bundle.cq_id = m_cq_id;
+        unsigned index = ntohs(cqe->wqe_counter) & (m_qp->m_tx_num_wr - 1);
 
-        *p_cq_poll_sn = m_n_global_sn = next_sn.global_sn;
+        // All error opcodes have the most significant bit set.
+        if (unlikely(cqe->op_own & 0x80) && is_error_opcode(cqe->op_own >> 4)) {
+            m_p_cq_stat->n_rx_cqe_error++;
+            log_cqe_error(cqe);
+        }
 
         handle_sq_wqe_prop(index);
         ret = 1;
-    } else if (cqe_err) {
-        ret = poll_and_process_error_element_tx(cqe_err, p_cq_poll_sn);
-    } else {
-        *p_cq_poll_sn = m_n_global_sn;
     }
+    update_global_sn(*p_cq_poll_sn, num_polled_cqes);
 
     return ret;
 }
