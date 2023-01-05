@@ -486,7 +486,7 @@ cq_mgr *qp_mgr_eth_mlx5::init_tx_cq_mgr()
 }
 
 inline void qp_mgr_eth_mlx5::ring_doorbell(uint64_t *wqe, int db_method, int num_wqebb,
-                                           int num_wqebb_top)
+                                           int num_wqebb_top, bool skip_comp /*=false*/)
 {
     uint64_t *dst = (uint64_t *)((uint8_t *)m_mlx5_qp.bf.reg + m_mlx5_qp.bf.offset);
     uint64_t *src = wqe;
@@ -495,13 +495,13 @@ inline void qp_mgr_eth_mlx5::ring_doorbell(uint64_t *wqe, int db_method, int num
     /* TODO Refactor m_n_unsignedled_count, is_completion_need(), set_unsignaled_count():
      * Some logic is hidden inside the methods and in one branch the field is changed directly.
      */
-    if (is_completion_need()) {
+    if (!skip_comp && is_completion_need()) {
         ctrl->fm_ce_se |= MLX5_WQE_CTRL_CQ_UPDATE;
     }
     if (ctrl->fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE) {
         set_unsignaled_count();
     } else {
-        --m_n_unsignaled_count;
+        dec_unsignaled_count();
     }
     if (unlikely(m_b_fence_needed)) {
         ctrl->fm_ce_se |= MLX5_FENCE_MODE_INITIATOR_SMALL;
@@ -1260,7 +1260,7 @@ inline void qp_mgr_eth_mlx5::tls_post_static_params_wqe(xlio_ti *ti,
     tls_fill_static_params_wqe(tspseg, info, key_id, resync_tcp_sn);
     store_current_wqe_prop(nullptr, SQ_CREDITS_UMR, ti);
 
-    ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs, num_wqebbs_top);
+    ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs, num_wqebbs_top, true);
     dbg_dump_wqe((uint32_t *)m_sq_wqe_hot, sizeof(mlx5_set_tls_static_params_wqe));
 
     // Preparing next WQE as Ethernet send WQE and index:
@@ -1391,7 +1391,7 @@ void qp_mgr_eth_mlx5::tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t l
 
     store_current_wqe_prop(nullptr, SQ_CREDITS_DUMP, tis);
 
-    ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs);
+    ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs, 0, true);
 
     // Preparing next WQE as Ethernet send WQE and index:
     m_sq_wqe_hot = &(*m_sq_wqes)[m_sq_wqe_counter & (m_tx_num_wr - 1)];
