@@ -1531,7 +1531,19 @@ int sockinfo_udp::resolve_if_ip(const int if_index, const ip_address &ip, ip_add
             : m_so_bindtodevice_ip;
         if (g_p_route_table_mgr->route_resolve(route_rule_table_key(ip, src_ip, m_family, m_tos),
                                                res)) {
-            resolved_ip = res.src;
+            // Get the first IP to represent the interface.
+            const auto &iparray =
+                g_p_net_device_table_mgr->get_net_device_val(res.if_index)->get_ip_array(AF_INET6);
+            if (iparray.size() == 0U) {
+                // Current implementation does not support interface without a representor IP.
+                si_udp_logdbg("No representor IP for interface: %d", res.if_index);
+                return -1;
+            }
+
+            resolved_ip =
+                (iparray.size() > 0U ? iparray.front()->local_addr : ip_address::any_addr());
+            si_udp_logdbg("Selected representor IP %s for interface %d",
+                          resolved_ip.to_str(m_family).c_str(), res.if_index);
         } else {
             // If we could not resolve routing - pass to OS, MC will not be offloaded
             si_udp_logdbg("Route was not resolved for IP:%s", ip.to_str(m_family).c_str());

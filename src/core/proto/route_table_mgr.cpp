@@ -160,7 +160,6 @@ void route_table_mgr::update_tbl()
     netlink_socket_mgr::update_tbl(ROUTE_DATA_TYPE);
 
     rt_mgr_update_source_ip(m_table_in4);
-    rt_mgr_update_source_ip(m_table_in6);
 
     return;
 }
@@ -434,11 +433,10 @@ bool route_table_mgr::route_resolve(IN route_rule_table_key key, OUT route_resul
         if (p_val) {
             res = *p_val;
 
-            rt_mgr_logdbg("dst ip '%s' resolved to src addr '%s'", dst_addr.to_str(family).c_str(),
-                          res.src.to_str(family).c_str());
-            rt_mgr_logdbg("dst ip '%s' resolved to gw addr '%s'", dst_addr.to_str(family).c_str(),
-                          res.gw.to_str(family).c_str());
-            rt_mgr_logdbg("found route mtu %d", res.mtu);
+            rt_mgr_logdbg("dst ip '%s' resolved to if_index: %d, src-addr: %s, gw-addr: %s, "
+                          "route-mtu: %" PRIu32,
+                          dst_addr.to_str(family).c_str(), res.if_index,
+                          res.src.to_str(family).c_str(), res.gw.to_str(family).c_str(), res.mtu);
             ++m_stats.n_lookup_hit;
             return true;
         }
