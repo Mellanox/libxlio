@@ -1357,7 +1357,7 @@ uint16_t sockinfo_tcp::get_route_mtu(struct tcp_pcb *pcb)
         return res.mtu;
     }
 
-    net_device_val *ndv = g_p_net_device_table_mgr->get_net_device_val(ip_addr(res.src, family));
+    net_device_val *ndv = g_p_net_device_table_mgr->get_net_device_val(res.if_index);
     if (ndv && ndv->get_mtu() > 0) {
         return ndv->get_mtu();
     }
