@@ -1,3 +1,11 @@
+Version 2.1.2-1:
+Date + Time 2023-01-10
+=============================================================
+Fixed:
+        - RM #3308350 Prevent CQ overflow
+        - RM #3319895 Improve TX completions processing
+        - RM #3318396 Update the copyright statement to 2023
+
 Version 2.1.1-1:
 Date + Time 2022-12-19
 =============================================================
