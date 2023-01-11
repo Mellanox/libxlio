@@ -104,10 +104,11 @@ public:
 
         virtual ~nvme_tis() { m_p_tis.reset(); };
 
-        uint32_t get_id() override { return m_tisn; };
+        uint32_t get_id() const override { return m_tisn; };
         nvme_tis(const nvme_tis &) = delete;
+        nvme_tis &operator=(const nvme_tis &) = delete;
 
-        inline uint32_t get_tisn(void) noexcept { return m_tisn; }
+        inline uint32_t get_tisn(void) const noexcept { return m_tisn; }
 
     private:
         std::unique_ptr<dpcp::tis> m_p_tis;

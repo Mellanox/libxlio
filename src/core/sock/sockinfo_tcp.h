@@ -276,7 +276,7 @@ public:
         return m_p_connected_dst_entry ? m_p_connected_dst_entry->get_ctx() : nullptr;
     }
 
-    inline ring *get_tx_ring(void) const noexcept 
+    inline ring *get_tx_ring(void) const noexcept
     {
         return m_p_connected_dst_entry ? m_p_connected_dst_entry->get_ring() : nullptr;
     }

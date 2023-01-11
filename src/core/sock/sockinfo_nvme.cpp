@@ -40,8 +40,7 @@
 #define si_nvme_loginfo __log_info_info
 #define si_nvme_logerr  __log_info_err
 
-int sockinfo_tcp_ops_nvme::setsockopt(int level, int optname, const void *optval,
-                                      socklen_t optlen)
+int sockinfo_tcp_ops_nvme::setsockopt(int level, int optname, const void *optval, socklen_t optlen)
 {
     if (level != SOL_NVME) {
         return m_p_sock->tcp_setsockopt(level, optname, optval, optlen);
@@ -104,4 +103,3 @@ int sockinfo_tcp_ops_nvme::setsockopt_tx()
     }
     return 0;
 }
-

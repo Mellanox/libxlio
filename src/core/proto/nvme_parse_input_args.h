@@ -108,6 +108,10 @@ private:
     };
 
     iovec m_iov[64U];
+    /* The aux_data member contains an array of structures with message_length and mkey fields.
+     * message_length indicates the start of the PDU while mkey the memory key of the
+     * pre-registered memory regions. A zero mkey indicates non-registered memory.
+     */
     xlio_pd_key m_aux_data[64U];
     size_t m_iov_num;
     size_t m_current_view_index;

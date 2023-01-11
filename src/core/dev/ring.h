@@ -33,6 +33,7 @@
 #ifndef RING_H
 #define RING_H
 
+#include <memory>
 #include "ib/base/verbs_extra.h"
 #include "proto/flow_tuple.h"
 #include "sock/socket_fd_api.h"
@@ -197,10 +198,7 @@ public:
         NVME_ZEROCOPY = 1 << 2,
     };
 
-    virtual int get_supported_nvme_feature_mask() const
-    {
-        return 0;
-    }
+    virtual int get_supported_nvme_feature_mask() const { return 0; }
     virtual void post_nop_fence(void) {}
 
     virtual void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)
