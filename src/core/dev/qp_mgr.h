@@ -33,6 +33,7 @@
 #ifndef QP_MGR_H
 #define QP_MGR_H
 
+#include <memory>
 #include <errno.h>
 #include <ifaddrs.h>
 
@@ -93,7 +94,7 @@ public:
     xlio_ti() = default;
     virtual ~xlio_ti() {};
 
-    virtual uint32_t get_id() { return 0; };
+    virtual uint32_t get_id() const { return 0; };
 
     inline void assign_callback(xlio_comp_cb_t callback, void *callback_arg)
     {

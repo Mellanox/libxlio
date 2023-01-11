@@ -103,8 +103,8 @@ struct xlio_pd_key {
 };
 
 #define SOL_NVME 666
-#define NVME_TX 11
-#define NVME_RX 22
+#define NVME_TX  11
+#define NVME_RX  22
 
 /**
  * Represents one packet

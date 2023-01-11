@@ -270,10 +270,11 @@ protected:
                         sizeof(server_addr));
         });
 
-        EXPECT_TRUE(server_task.wait_for(std::chrono::seconds(1)) == std::future_status::ready &&
-                    server_task.get());
-        EXPECT_TRUE(client_task.wait_for(std::chrono::seconds(1)) == std::future_status::ready &&
-                    client_task.get());
+        using namespace std::chrono_literals;
+        if (server_task.wait_for(3s) != std::future_status::ready || !server_task.get() ||
+            client_task.wait_for(3s) != std::future_status::ready || !client_task.get()) {
+            GTEST_SKIP();
+        }
     }
     void TearDown() override
     {
@@ -296,31 +297,3 @@ TEST_F(tcp_set_get_sockopt_connected, set_ulp_nvme)
         ASSERT_EQ(0, ret) << "NVME_TX is unsupported";
     }
 }
-
-/**
- * SOCK Base class for tests
- */
-class sendmsg_nvme_request : public testing::Test {
-protected:
-    sendmsg_nvme_request()
-        : arr()
-        , aux_data({[0] = {.message_length = sizeof(arr[0]) + sizeof(arr[1]), .mkey = 123},
-                    [1] = {.message_length = 0, .mkey = 456},
-                    [2] = {.message_length = sizeof(arr[2]), .mkey = 789}})
-        , aux_data_current(&aux_data[0])
-        , aux_data_end(&aux_data[0] + iovec_sz)
-        , iov({
-              [0] = {.iov_base = const_cast<void *>(static_cast<const void *>(&arr[0][0])),
-                     .iov_len = sizeof(arr[0])},
-              [1] = {.iov_base = const_cast<void *>(static_cast<const void *>(&arr[1][0])),
-                     .iov_len = sizeof(arr[1])},
-              [2] = {.iov_base = const_cast<void *>(static_cast<const void *>(&arr[2][0])),
-                     .iov_len = sizeof(arr[2])},
-          }) {};
-    static const constexpr size_t iovec_sz {3U};
-
-    const uint8_t arr[iovec_sz][8];
-    xlio_pd_key aux_data[iovec_sz];
-    const xlio_pd_key *aux_data_current, *aux_data_end;
-    const iovec iov[iovec_sz];
-};

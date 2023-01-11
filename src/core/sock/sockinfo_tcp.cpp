@@ -3875,6 +3875,7 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
     int val, ret = 0;
     bool supported = true;
     bool allow_privileged_sock_opt = false;
+    bool is_nvme = false;
 
     if ((ret = sockinfo::setsockopt(__level, __optname, __optval, __optlen)) !=
         SOCKOPT_PASS_TO_OS) {
@@ -3953,7 +3954,6 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             break;
         case TCP_ULP: {
             sockinfo_tcp_ops *ops {nullptr};
-            bool is_nvme = false;
             if (__optval && __optlen >= 4 && strncmp((char *)__optval, "nvme", 4) == 0) {
                 auto nvme_feature_mask = get_supported_nvme_feature_mask();
                 ops = nvme_feature_mask ? new sockinfo_tcp_ops_nvme(this, nvme_feature_mask)
@@ -3990,10 +3990,6 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             lock_tcp_con();
             set_ops(ops);
             unlock_tcp_con();
-
-            if (is_nvme) {
-                return 0;
-            }
             /* On success we call kernel setsockopt() in case this socket is not connected
                and is unoffloaded later.  */
             break;
@@ -4249,6 +4245,10 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
         // Unsupported level.
         ret = SOCKOPT_HANDLE_BY_OS;
         supported = false;
+    }
+
+    if (is_nvme) {
+        return 0;
     }
 
     if (ret == -1) {

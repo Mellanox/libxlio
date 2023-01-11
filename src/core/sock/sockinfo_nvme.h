@@ -51,6 +51,7 @@ public:
     err_t recv(struct pbuf *p) override;
 
     int m_nvme_feature_mask;
+
 private:
     int setsockopt_tx();
     std::unique_ptr<xlio_ti> m_p_tis;

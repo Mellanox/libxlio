@@ -30,7 +30,6 @@
  * SOFTWARE.
  */
 
-#include <chrono>
 #include <sys/socket.h>
 #include <sys/types.h> /* See NOTES */
 #include <netinet/in.h>
@@ -41,7 +40,6 @@
 #include "common/sys.h"
 #include "common/base.h"
 #include "tcp_base.h"
-#include "core/xlio_extra.h"
 
 #define HELLO_STR "hello"
 
