@@ -93,7 +93,7 @@ enum {
  */
 typedef struct xlio_tx_call_attr {
     tx_call_t opcode;
-    struct {
+    struct _msg {
         struct iovec *iov;
         ssize_t sz_iov;
         int flags;
@@ -105,6 +105,13 @@ typedef struct xlio_tx_call_attr {
     unsigned xlio_flags;
     pbuf_desc priv;
 
+    xlio_tx_call_attr(tx_call_t op, _msg &&m, unsigned flags, pbuf_desc &&pdesc)
+        : opcode(op)
+        , msg(std::move(m))
+        , xlio_flags(flags)
+        , priv(std::move(pdesc)) {};
+
+    ~xlio_tx_call_attr() {};
     void clear(void)
     {
         opcode = TX_UNDEF;

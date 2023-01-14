@@ -71,7 +71,8 @@ public:
     virtual void put(void) = 0;
 
     /* get_lkey() is always called under socket lock */
-    virtual uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, void *addr, size_t len)
+    virtual uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, const void *addr,
+                              size_t len)
     {
         NOT_IN_USE(desc);
         NOT_IN_USE(ib_ctx);
@@ -110,7 +111,7 @@ public:
         }
     }
 
-    uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, void *addr, size_t len)
+    uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, const void *addr, size_t len)
     {
         if (likely(m_array_size != 0)) {
             return m_array[0]->get_lkey(desc, ib_ctx, addr, len);
@@ -152,7 +153,7 @@ public:
     { /* Reference counting is not required, we never destroy hugepages. */
     }
 
-    uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, void *addr, size_t len);
+    uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, const void *addr, size_t len);
 
 public:
     void *m_addr;

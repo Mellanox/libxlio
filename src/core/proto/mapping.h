@@ -82,7 +82,7 @@ public:
     int unmap(void);
 
     /* mem_desc interface */
-    uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, void *addr, size_t len);
+    uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, const void *addr, size_t len);
     void get(void);
     void put(void);
 

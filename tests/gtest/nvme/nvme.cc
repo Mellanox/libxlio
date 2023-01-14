@@ -44,7 +44,7 @@
 using namespace std;
 
 /**
- * SOCK Base class for tests
+ * Test NVMe request processing
  */
 class nvme_new_request : public testing::Test {
 protected:
@@ -131,96 +131,229 @@ TEST_F(nvme_new_request, is_new_nvme_pdu_with_valid_arguments)
 }
 
 /**
- * @test nvme_new_request.NVME_from_batch_fails_with_nullptr_iov
+ * @test nvme_new_request.from_batch_fails_with_nullptr_iov
  * @brief
- *    Check the proper NVMEoTCP_TX construction
+ *    Check the proper nvmeotcp_tx construction
  * @details
  */
-TEST_F(nvme_new_request, NVME_from_batch_fails_with_nullptr_iov)
+TEST_F(nvme_new_request, from_batch_fails_with_nullptr_iov)
 {
-    auto nvme = nvmeotcp_tx::from_batch(nullptr, aux_data_current, iovec_sz);
-    ASSERT_FALSE(nvme->is_valid()) << "NVMEoTCP_TX should be invalid with nullptr iov";
+    auto nvme = nvmeotcp_tx(nullptr, aux_data_current, iovec_sz);
+    ASSERT_FALSE(nvme.is_valid()) << "NVMEoTCP_TX should be invalid with nullptr iov";
 }
 
 /**
- * @test nvme_new_request.NVME_from_batch_fails_with_nullptr_aux_data
+ * @test nvme_new_request.from_batch_fails_with_nullptr_aux_data
  * @brief
- *    Check the proper NVMEoTCP_TX construction
+ *    Check the proper nvmeotcp_tx construction
  * @details
  */
-TEST_F(nvme_new_request, NVME_from_batch_fails_with_nullptr_aux_data)
+TEST_F(nvme_new_request, from_batch_fails_with_nullptr_aux_data)
 {
-    auto nvme = nvmeotcp_tx::from_batch(iov, nullptr, iovec_sz);
-    ASSERT_FALSE(nvme->is_valid()) << "NVMEoTCP_TX should be invalid with nullptr aux_data";
+    auto nvme = nvmeotcp_tx(iov, nullptr, iovec_sz);
+    ASSERT_FALSE(nvme.is_valid()) << "NVMEoTCP_TX should be invalid with nullptr aux_data";
 }
 
 /**
- * @test nvme_new_request.NVME_from_batch_fails_with_zero_iov_num
+ * @test nvme_new_request.from_batch_fails_with_zero_iov_num
  * @brief
- *    Check the proper NVMEoTCP_TX construction
+ *    Check the proper nvmeotcp_tx construction
  * @details
  */
-TEST_F(nvme_new_request, NVME_from_batch_fails_with_zero_iov_num)
+TEST_F(nvme_new_request, from_batch_fails_with_zero_iov_num)
 {
-    auto nvme = nvmeotcp_tx::from_batch(iov, aux_data_current, 0U);
-    ASSERT_FALSE(nvme->is_valid()) << "NVMEoTCP_TX should be invalid with zero iov_num";
+    auto nvme = nvmeotcp_tx(iov, aux_data_current, 0U);
+    ASSERT_FALSE(nvme.is_valid()) << "NVMEoTCP_TX should be invalid with zero iov_num";
 }
 
 /**
- * @test nvme_new_request.NVME_from_batch_correctly_initialized
+ * @test nvme_new_request.from_batch_correctly_initialized
  * @brief
- *    Check the proper NVMEoTCP_TX construction
+ *    Check the proper nvmeotcp_tx construction
  * @details
  */
-TEST_F(nvme_new_request, NVME_from_batch_correctly_initialized)
+TEST_F(nvme_new_request, from_batch_correctly_initialized)
 {
-    auto nvme = nvmeotcp_tx::from_batch(iov, aux_data_current, iovec_sz);
-    ASSERT_TRUE(nvme->is_valid()) << "NVMEoTCP_TX should be valid";
+    auto nvme = nvmeotcp_tx(iov, aux_data_current, iovec_sz);
+    ASSERT_TRUE(nvme.is_valid()) << "NVMEoTCP_TX should be valid";
 }
 
 /**
- * @test nvme_new_request.NVME_get_next_iovec_view_fails_with_invalid_nvme
+ * @test nvme_new_request.get_next_pdu_fails_with_invalid_nvme
  * @brief
- *    Check the proper NVMEoTCP_TX construction
+ *    Check the proper nvmeotcp_tx construction
  * @details
  */
-TEST_F(nvme_new_request, NVME_get_next_iovec_view_fails_with_invalid_nvme)
+TEST_F(nvme_new_request, get_next_pdu_fails_with_invalid_nvme)
 {
-    auto nvme = nvmeotcp_tx::from_batch(iov, aux_data_current, 0U);
-    auto view = nvme->get_next_iovec_view();
+    auto nvme = nvmeotcp_tx(iov, aux_data_current, 0U);
+    auto pdu = nvme.get_next_pdu(1U);
 
-    ASSERT_FALSE(view.is_valid()) << "Invalid NVMEoTCP_TX should produce invalid view";
+    ASSERT_EQ(nullptr, pdu) << "Invalid nvmeotcp_tx should produce invalid pdu";
 }
 
 /**
- * @test nvme_new_request.NVME_get_next_iovec_view_succeeds
+ * @test nvme_new_request.get_next_pdu_succeeds
  * @brief
- *    Check the proper NVMEoTCP_TX construction
+ *    Check the proper nvmeotcp_tx construction
  * @details
  */
-TEST_F(nvme_new_request, NVME_get_next_iovec_view_succeeds)
+TEST_F(nvme_new_request, get_next_pdu_succeeds)
 {
-    auto nvme = nvmeotcp_tx::from_batch(iov, aux_data_current, iovec_sz);
-    auto view = nvme->get_next_iovec_view();
+    auto nvme = nvmeotcp_tx(iov, aux_data_current, iovec_sz);
+    auto pdu = nvme.get_next_pdu(1U);
 
-    ASSERT_EQ(2U, view.m_iov_num);
-    ASSERT_TRUE(view.is_valid());
-    ASSERT_EQ(sizeof(arr[0]), view.m_iov[0].iov_len);
-    ASSERT_EQ(&arr[0], view.m_iov[0].iov_base);
-    ASSERT_EQ(sizeof(arr[1]), view.m_iov[1].iov_len);
-    ASSERT_EQ(&arr[1], view.m_iov[1].iov_base);
-    ASSERT_EQ(16U, view.m_aux_data[0].message_length);
-    ASSERT_EQ(0U, view.m_aux_data[1].message_length);
-    ASSERT_EQ(aux_data[0].mkey, view.m_aux_data[0].mkey);
-    ASSERT_EQ(aux_data[1].mkey, view.m_aux_data[1].mkey);
+    ASSERT_NE(nullptr, pdu);
+    ASSERT_TRUE(pdu->is_valid());
+    ASSERT_EQ(2U, pdu->m_iov_num);
+    ASSERT_EQ(sizeof(arr[0]), pdu->m_iov[0].iov_len);
+    ASSERT_EQ(&arr[0], pdu->m_iov[0].iov_base);
+    ASSERT_EQ(16U, pdu->m_aux_data[0].message_length);
+    ASSERT_EQ(aux_data[0].mkey, pdu->m_aux_data[0].mkey);
+    ASSERT_EQ(sizeof(arr[1]), pdu->m_iov[1].iov_len);
+    ASSERT_EQ(&arr[1], pdu->m_iov[1].iov_base);
+    ASSERT_EQ(0U, pdu->m_aux_data[1].message_length);
+    ASSERT_EQ(aux_data[1].mkey, pdu->m_aux_data[1].mkey);
 
-    view = nvme->get_next_iovec_view();
-    ASSERT_EQ(1U, view.m_iov_num);
-    ASSERT_TRUE(view.is_valid());
-    ASSERT_EQ(sizeof(arr[2]), view.m_iov[0].iov_len);
-    ASSERT_EQ(&arr[2], view.m_iov[0].iov_base);
-    ASSERT_EQ(8U, view.m_aux_data[0].message_length);
-    ASSERT_EQ(aux_data[2].mkey, view.m_aux_data[0].mkey);
+    pdu = nvme.get_next_pdu(2U);
+    ASSERT_EQ(1U, pdu->m_iov_num);
+    ASSERT_NE(nullptr, pdu);
+    ASSERT_TRUE(pdu->is_valid());
+    ASSERT_EQ(sizeof(arr[2]), pdu->m_iov[0].iov_len);
+    ASSERT_EQ(&arr[2], pdu->m_iov[0].iov_base);
+    ASSERT_EQ(8U, pdu->m_aux_data[0].message_length);
+    ASSERT_EQ(aux_data[2].mkey, pdu->m_aux_data[0].mkey);
+
+    pdu = nvme.get_next_pdu(3U);
+    ASSERT_EQ(nullptr, pdu);
+}
+
+/**
+ * @test nvme_new_request.get_next_pdu_succeeds
+ * @brief
+ *    Check correct segmentation of the iovec pdu
+ * @details
+ */
+TEST_F(nvme_new_request, pdu_get_segment)
+{
+    auto nvme = nvmeotcp_tx(iov, aux_data_current, iovec_sz);
+    auto pdu = nvme.get_next_pdu(1U);
+
+    ASSERT_NE(nullptr, pdu);
+    EXPECT_TRUE((pdu->is_valid())) << "The pdu should be valid";
+    iovec out_iov[64U] = {{nullptr, 0}};
+    xlio_pd_key out_aux_data[64U] = {{0, 0}};
+
+    auto num_iovs_in_segment = pdu->get_segment(6U, out_iov, out_aux_data, 64U);
+    ASSERT_EQ(1U, num_iovs_in_segment) << "The pdu contains 16, 6 should be available";
+    num_iovs_in_segment = pdu->get_segment(10U, out_iov, out_aux_data, 64U);
+    ASSERT_EQ(2U, num_iovs_in_segment) << "The pdu contains 10, 10 should be available";
+    num_iovs_in_segment = pdu->get_segment(100U, out_iov, out_aux_data, 64U);
+    ASSERT_EQ(0U, num_iovs_in_segment) << "The pdu contains 0";
+
+    pdu = nvme.get_next_pdu(17U);
+    ASSERT_NE(nullptr, pdu);
+    EXPECT_TRUE((pdu->is_valid())) << "The pdu should be valid";
+    num_iovs_in_segment = pdu->get_segment(666U, out_iov, out_aux_data, 64U);
+    ASSERT_EQ(1U, num_iovs_in_segment) << "The pdu contains 8";
+}
+
+class nvme_pdu_mdesc_test_suite : public nvme_new_request {
+protected:
+    nvme_pdu_mdesc_test_suite()
+        : pdu_mdesc(nvmeotcp_tx(iov, aux_data_current, iovec_sz).get_next_pdu(1U)) {};
+    ~nvme_pdu_mdesc_test_suite() = default;
+    nvme_pdu_mdesc pdu_mdesc;
+};
+
+/**
+ * @test nvme_pdu_mdesc_test_suite.nvme_pdu_mdesc_get_lkey_before_range_fails
+ * @brief
+ *    Check correct segmentation of the iovec pdu
+ * @details
+ */
+TEST_F(nvme_pdu_mdesc_test_suite, nvme_pdu_mdesc_get_lkey_before_range_fails)
+{
+    auto addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[0][0]) - 1U);
+    ASSERT_EQ(LKEY_USE_DEFAULT, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 1U));
+}
+
+/**
+ * @test nvme_pdu_mdesc_test_suite.nvme_pdu_mdesc_get_lkey_after_range_fails
+ * @brief
+ *    Check correct segmentation of the iovec pdu
+ * @details
+ */
+TEST_F(nvme_pdu_mdesc_test_suite, nvme_pdu_mdesc_get_lkey_after_range_fails)
+{
+    auto addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[1][7]) + 1U);
+    ASSERT_EQ(LKEY_USE_DEFAULT, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 1U));
+}
+
+/**
+ * @test nvme_pdu_mdesc_test_suite.nvme_pdu_mdesc_get_lkey_addr_overlaps_start_of_range_fails
+ * @brief
+ *    Check correct segmentation of the iovec pdu
+ * @details
+ */
+TEST_F(nvme_pdu_mdesc_test_suite, nvme_pdu_mdesc_get_lkey_addr_overlaps_start_of_range_fails)
+{
+    auto addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[0][0]) - 1U);
+    ASSERT_EQ(LKEY_USE_DEFAULT, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 4U));
+}
+
+/**
+ * @test nvme_pdu_mdesc_test_suite.nvme_pdu_mdesc_get_lkey_addr_overlaps_end_of_range_fails
+ * @brief
+ *    Check correct segmentation of the iovec pdu
+ * @details
+ */
+TEST_F(nvme_pdu_mdesc_test_suite, nvme_pdu_mdesc_get_lkey_addr_overlaps_end_of_range_fails)
+{
+    auto addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[0][6]));
+    ASSERT_EQ(LKEY_USE_DEFAULT, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 4U));
+}
+
+/**
+ * @test nvme_pdu_mdesc_test_suite.nvme_pdu_mdesc_get_lkey_full_match_succeeds
+ * @brief
+ *    Check correct segmentation of the iovec pdu
+ * @details
+ */
+TEST_F(nvme_pdu_mdesc_test_suite, nvme_pdu_mdesc_get_lkey_full_match_succeeds)
+{
+    auto addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[0][0]));
+    ASSERT_EQ(aux_data[0].mkey, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 8U));
+
+    addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[1][0]));
+    ASSERT_EQ(aux_data[1].mkey, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 8U));
+}
+
+/**
+ * @test nvme_pdu_mdesc_test_suite.nvme_pdu_mdesc_get_lkey_partial_match_succeeds
+ * @brief
+ *    Check correct segmentation of the iovec pdu
+ * @details
+ */
+TEST_F(nvme_pdu_mdesc_test_suite, nvme_pdu_mdesc_get_lkey_partial_match_succeeds)
+{
+    auto addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[0][1]));
+    ASSERT_EQ(aux_data[0].mkey, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 7U));
+
+    addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[0][0]));
+    ASSERT_EQ(aux_data[0].mkey, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 7U));
+
+    addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[0][1]));
+    ASSERT_EQ(aux_data[0].mkey, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 6U));
+
+    addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[1][1]));
+    ASSERT_EQ(aux_data[1].mkey, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 7U));
+
+    addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[1][0]));
+    ASSERT_EQ(aux_data[1].mkey, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 7U));
+
+    addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[1][1]));
+    ASSERT_EQ(aux_data[1].mkey, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 6U));
 }
 
 class xlio_ti_test : public testing::Test {

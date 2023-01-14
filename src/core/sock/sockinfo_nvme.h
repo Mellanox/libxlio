@@ -32,7 +32,9 @@
 
 #ifndef _SOCKINFO_NVME_H
 #define _SOCKINFO_NVME_H
+#include <memory>
 #include "sockinfo_ulp.h" /* sockinfo_tcp_ops */
+#include "proto/nvme_parse_input_args.h"
 #include "lwip/err.h" /* err_t */
 
 typedef struct xlio_tx_call_attr xlio_tx_call_attr_t;
@@ -41,8 +43,10 @@ class sockinfo_tcp_ops_nvme : public sockinfo_tcp_ops {
 public:
     sockinfo_tcp_ops_nvme(sockinfo_tcp *sock, int nvme_feature_mask)
         : sockinfo_tcp_ops(sock)
-        , m_nvme_feature_mask(nvme_feature_mask) {};
-    ~sockinfo_tcp_ops_nvme() = default;
+        , m_nvme_feature_mask(nvme_feature_mask)
+        , m_pdu_mdesc(nullptr)
+        , m_is_tx_offload(false) {};
+    ~sockinfo_tcp_ops_nvme() { if (m_pdu_mdesc) m_pdu_mdesc->put(); }
 
     int setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen) override;
     ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
@@ -55,6 +59,8 @@ public:
 private:
     int setsockopt_tx();
     std::unique_ptr<xlio_ti> m_p_tis;
+    nvme_pdu_mdesc *m_pdu_mdesc;
+    bool m_is_tx_offload;
 };
 
 #endif /* _SOCKINFO_NVME_H */

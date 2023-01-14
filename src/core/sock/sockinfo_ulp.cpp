@@ -246,7 +246,7 @@ public:
         }
     }
 
-    uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, void *addr, size_t len)
+    uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, const void *addr, size_t len)
     {
         const uintptr_t uaddr = (uintptr_t)addr;
         const uintptr_t ubuf = (uintptr_t)m_p_buf->p_buffer;

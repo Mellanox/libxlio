@@ -172,7 +172,7 @@ int mapping_t::unmap(void)
     return rc;
 }
 
-uint32_t mapping_t::get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *p_ib_ctx, void *addr, size_t len)
+uint32_t mapping_t::get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *p_ib_ctx, const void *addr, size_t len)
 {
     NOT_IN_USE(desc);
     NOT_IN_USE(addr);

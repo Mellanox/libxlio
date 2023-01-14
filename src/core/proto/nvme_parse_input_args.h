@@ -32,6 +32,8 @@
 
 #ifndef XLIO_NVME_PARSE_INPUT_ARGS_H
 #define XLIO_NVME_PARSE_INPUT_ARGS_H
+#include <atomic>
+#include "proto/mem_desc.h"
 
 static inline bool is_valid_aux_data_array(const xlio_pd_key *aux, size_t aux_data_sz)
 {
@@ -46,23 +48,24 @@ static inline bool is_new_nvme_pdu(const xlio_pd_key *aux, size_t aux_data_sz)
 struct nvmeotcp_tx {
 
     nvmeotcp_tx() = default;
-    inline bool is_valid() const { return m_iov_num != 0U; }
-
-    static nvmeotcp_tx *from_batch(const iovec *iov, const xlio_pd_key *aux_data, size_t num)
+    inline bool is_valid() const
     {
-        return new nvmeotcp_tx(iov, aux_data, num);
+        return m_iov != nullptr && m_aux_data != nullptr && m_iov_num != 0U;
     }
 
-    struct iovec_view;
-    const iovec_view get_next_iovec_view()
+    struct pdu;
+    std::unique_ptr<pdu> get_next_pdu(uint32_t seqnum)
     {
-        if (!is_valid()) {
-            return iovec_view();
+        /* Roll to the start of the next DPU */
+        while (m_current_pdu_iov_index < 64U &&
+               m_aux_data[m_current_pdu_iov_index].message_length == 0U) {
+            ++m_current_pdu_iov_index;
         }
+
         /* The iovec batches may contain multiple NVME PDUs. Each PDU may span multiple complete
          * iovec segments. */
-        size_t remaining_pdu_length = m_aux_data[m_current_view_index].message_length;
-        size_t current_index = m_current_view_index;
+        size_t remaining_pdu_length = m_aux_data[m_current_pdu_iov_index].message_length;
+        size_t current_index = m_current_pdu_iov_index;
 
         while (remaining_pdu_length != 0U && remaining_pdu_length >= m_iov[current_index].iov_len) {
             remaining_pdu_length -= m_iov[current_index].iov_len;
@@ -70,51 +73,135 @@ struct nvmeotcp_tx {
         }
 
         if (current_index <= m_iov_num && remaining_pdu_length == 0) {
-            iovec_view view {&m_iov[m_current_view_index], &m_aux_data[m_current_view_index],
-                             current_index - m_current_view_index};
-            m_current_view_index = current_index;
-            return view;
+            auto _pdu = std::make_unique<pdu>(&m_iov[m_current_pdu_iov_index],
+                                              &m_aux_data[m_current_pdu_iov_index],
+                                              current_index - m_current_pdu_iov_index, seqnum);
+            m_current_pdu_iov_index = current_index;
+            return _pdu;
         }
-        return iovec_view();
+        return nullptr;
     }
 
-    struct iovec_view {
-        iovec_view(const iovec *iov, const xlio_pd_key *aux_data, size_t num)
-            : m_iov(iov)
-            , m_aux_data(aux_data)
-            , m_iov_num(num) {};
-
-        iovec_view() = default;
-        inline bool is_valid() const
+    struct pdu {
+        pdu(const iovec *iov, const xlio_pd_key *aux_data, size_t num, uint32_t seqnum)
+            : m_iov()
+            , m_aux_data()
+            , m_iov_num(num)
+            , m_curr_iov_index(0U)
+            , m_curr_iov_offset(0U)
+            , m_seqnum(seqnum)
         {
-            return m_iov != nullptr && m_aux_data != nullptr && m_iov_num != 0U;
+            if (iov != nullptr && aux_data != nullptr && num <= 64U) {
+                memcpy(&m_iov[0U], iov, m_iov_num * sizeof(*iov));
+                memcpy(&m_aux_data[0U], aux_data, m_iov_num * sizeof(iovec));
+            } else {
+                m_iov_num = 0U;
+            }
+        };
+
+        size_t get_segment(size_t num_bytes, iovec *iov, xlio_pd_key *aux_data, size_t iov_num)
+        {
+            if (iov == nullptr || iov_num == 0U) {
+                return 0;
+            }
+            memset(iov, 0, sizeof(iovec) * iov_num);
+            memset(aux_data, 0, sizeof(xlio_pd_key) * iov_num);
+            size_t out_iov_idx = 0U;
+            while (num_bytes != 0U && m_curr_iov_index < 64U && out_iov_idx < iov_num) {
+                iov[out_iov_idx].iov_base =
+                    reinterpret_cast<uint8_t *>(m_iov[m_curr_iov_index].iov_base) +
+                    m_curr_iov_offset;
+                aux_data[out_iov_idx] = m_aux_data[m_curr_iov_index];
+                size_t bytes_in_curr_iov = m_iov[m_curr_iov_index].iov_len - m_curr_iov_offset;
+
+                if (bytes_in_curr_iov > num_bytes) {
+                    m_curr_iov_offset += num_bytes;
+                    iov[out_iov_idx].iov_len = num_bytes;
+                } else {
+                    m_curr_iov_offset = 0U;
+                    m_curr_iov_index++;
+                    iov[out_iov_idx].iov_len = bytes_in_curr_iov;
+                }
+                num_bytes -= iov[out_iov_idx].iov_len;
+                out_iov_idx += (bytes_in_curr_iov > 0U);
+            }
+            return out_iov_idx;
         }
-        const iovec *m_iov;
-        const xlio_pd_key *m_aux_data;
+
+        inline iovec current_iov()
+        {
+            if (!is_valid() || m_curr_iov_index >= m_iov_num ||
+                m_iov[m_curr_iov_index].iov_len <= m_curr_iov_offset) {
+                return {nullptr, 0U};
+            }
+            return iovec {
+                reinterpret_cast<uint8_t *>(m_iov[m_curr_iov_index].iov_base) + m_curr_iov_offset,
+                m_iov[m_curr_iov_index].iov_len - m_curr_iov_offset};
+        }
+
+        pdu() = default;
+        inline bool is_valid() const { return m_iov_num != 0U; }
+        iovec m_iov[64U];
+        /* The aux_data member contains an array of structures with message_length and mkey fields.
+         * message_length indicates the start of the PDU while mkey the memory key of the
+         * pre-registered memory regions. A zero mkey indicates non-registered memory.
+         */
+        xlio_pd_key m_aux_data[64U];
         size_t m_iov_num;
+        size_t m_curr_iov_index;
+        size_t m_curr_iov_offset;
+        uint32_t m_seqnum;
     };
+
+    nvmeotcp_tx(const iovec *iov, const xlio_pd_key *aux_data, size_t iov_num)
+        : m_iov(iov)
+        , m_aux_data(aux_data)
+        , m_iov_num(iov_num)
+        , m_current_pdu_iov_index(0) {};
 
 private:
-    nvmeotcp_tx(const iovec *iov, const xlio_pd_key *aux_data, size_t iov_num)
-        : m_iov_num(iov_num)
-        , m_current_view_index(0)
-    {
-        if (iov != nullptr && aux_data != nullptr && iov_num <= 64U) {
-            memcpy(&m_iov[0], iov, m_iov_num * sizeof(*iov));
-            memcpy(&m_aux_data[0], aux_data, m_iov_num * sizeof(iovec));
-        } else {
-            m_iov_num = 0;
-        }
-    };
-
-    iovec m_iov[64U];
-    /* The aux_data member contains an array of structures with message_length and mkey fields.
-     * message_length indicates the start of the PDU while mkey the memory key of the
-     * pre-registered memory regions. A zero mkey indicates non-registered memory.
-     */
-    xlio_pd_key m_aux_data[64U];
+    const iovec *m_iov;
+    const xlio_pd_key *m_aux_data;
     size_t m_iov_num;
-    size_t m_current_view_index;
+    size_t m_current_pdu_iov_index;
+};
+
+class nvme_pdu_mdesc : public mem_desc {
+public:
+    nvme_pdu_mdesc(std::unique_ptr<nvmeotcp_tx::pdu> pdu)
+        : m_pdu(std::move(pdu))
+        , m_ref(1) {};
+
+    ~nvme_pdu_mdesc() = default;
+
+    void get(void) override { m_ref.fetch_add(1, std::memory_order_relaxed); }
+
+    void put(void) override
+    {
+        int ref = m_ref.fetch_sub(1, std::memory_order_relaxed);
+
+        if (ref == 1) {
+            delete this;
+        }
+    }
+
+    uint32_t get_lkey(mem_buf_desc_t *, ib_ctx_handler *, const void *addr, size_t len) override
+    {
+        uintptr_t addr_start = reinterpret_cast<uintptr_t>(addr);
+        uintptr_t addr_end = addr_start + len;
+
+        for (size_t i = 0; i < m_pdu->m_iov_num; i++) {
+            uintptr_t range_start = reinterpret_cast<uintptr_t>(m_pdu->m_iov[i].iov_base);
+            uintptr_t range_end = range_start + m_pdu->m_iov[i].iov_len;
+            if (range_start <= addr_start && addr_end <= range_end) {
+                return m_pdu->m_aux_data[i].mkey;
+            }
+        }
+        return LKEY_USE_DEFAULT;
+    }
+
+    std::unique_ptr<nvmeotcp_tx::pdu> m_pdu;
+    std::atomic_int m_ref;
 };
 
 #endif /* XLIO_NVME_PARSE_INPUT_ARGS_H */
