@@ -33,6 +33,7 @@
 #include "sockinfo_tcp.h"
 #include "sockinfo_ulp.h"
 #include "sockinfo_nvme.h"
+#include "proto/nvme_parse_input_args.h"
 
 #define MODULE_NAME "si_nvme"
 
@@ -61,7 +62,9 @@ int sockinfo_tcp_ops_nvme::setsockopt(int level, int optname, const void *optval
             errno = ENOTSUP;
             return -1;
         }
-        return setsockopt_tx();
+        int ret = setsockopt_tx();
+        m_is_tx_offload = (ret == 0);
+        return ret;
     }
 
     return 0;
@@ -97,6 +100,7 @@ int sockinfo_tcp_ops_nvme::setsockopt_tx()
 {
     ring *p_ring = m_p_sock->get_tx_ring();
     m_p_tis = p_ring != nullptr ? p_ring->create_nvme_context() : nullptr;
+
     if (m_p_tis == nullptr) {
         errno = ENOTSUP;
         return -1;

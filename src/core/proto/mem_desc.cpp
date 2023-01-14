@@ -34,7 +34,7 @@
 #include "core/proto/mem_desc.h"
 #include "core/util/sys_vars.h"
 
-uint32_t zcopy_hugepage::get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, void *addr,
+uint32_t zcopy_hugepage::get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, const void *addr,
                                   size_t len)
 {
     NOT_IN_USE(desc);
