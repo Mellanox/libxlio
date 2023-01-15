@@ -242,20 +242,20 @@ TEST_F(nvme_new_request, pdu_get_segment)
     ASSERT_NE(nullptr, pdu);
     EXPECT_TRUE((pdu->is_valid())) << "The pdu should be valid";
     iovec out_iov[64U] = {{nullptr, 0}};
-    xlio_pd_key out_aux_data[64U] = {{0, 0}};
+    decltype(pdu->get_segment(6U, out_iov, 64U)) segment;
 
-    auto num_iovs_in_segment = pdu->get_segment(6U, out_iov, out_aux_data, 64U);
-    ASSERT_EQ(1U, num_iovs_in_segment) << "The pdu contains 16, 6 should be available";
-    num_iovs_in_segment = pdu->get_segment(10U, out_iov, out_aux_data, 64U);
-    ASSERT_EQ(2U, num_iovs_in_segment) << "The pdu contains 10, 10 should be available";
-    num_iovs_in_segment = pdu->get_segment(100U, out_iov, out_aux_data, 64U);
-    ASSERT_EQ(0U, num_iovs_in_segment) << "The pdu contains 0";
+    segment = pdu->get_first_segment(666U, out_iov, 64U);
+    ASSERT_EQ(2U, segment.first) << "Wrong number of segments";
+    ASSERT_EQ(16U, segment.second) << "The actual bytes calculation is wrong";
+    ASSERT_EQ(8U, out_iov[0].iov_len) << "iov_len is incorrect";
 
     pdu = nvme.get_next_pdu(17U);
     ASSERT_NE(nullptr, pdu);
-    EXPECT_TRUE((pdu->is_valid())) << "The pdu should be valid";
-    num_iovs_in_segment = pdu->get_segment(666U, out_iov, out_aux_data, 64U);
-    ASSERT_EQ(1U, num_iovs_in_segment) << "The pdu contains 8";
+    EXPECT_TRUE(pdu->is_valid()) << "The PDU should be valid";
+    segment = pdu->get_segment(666U, out_iov, 64U);
+    ASSERT_EQ(1U, segment.first) << "Wrong number of segments";
+    ASSERT_EQ(8U, segment.second) << "The actual bytes calculation is wrong";
+    ASSERT_EQ(8U, out_iov[0].iov_len) << "iov_len is incorrect";
 }
 
 class nvme_pdu_mdesc_test_suite : public nvme_new_request {
