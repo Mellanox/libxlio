@@ -5153,6 +5153,9 @@ struct pbuf *sockinfo_tcp::tcp_tx_pbuf_alloc(void *p_conn, pbuf_type type, pbuf_
                 p_desc->tx.zc.ctx = p_prev_desc->tx.zc.ctx;
                 p_desc->tx.zc.callback = tcp_tx_zc_callback;
                 p_prev_desc->tx.zc.count = 0;
+                if (p_si_tcp->m_last_zcdesc == p_prev_desc) {
+                    p_si_tcp->m_last_zcdesc = p_desc;
+                }
             } else {
                 p_si_tcp->tcp_tx_zc_alloc(p_desc);
             }
@@ -5240,6 +5243,9 @@ cleanup:
     /* Clean up */
     p_desc->m_flags &= ~mem_buf_desc_t::ZCOPY;
     memset(&p_desc->tx.zc, 0, sizeof(p_desc->tx.zc));
+    if (sock && p_desc == sock->m_last_zcdesc) {
+        sock->m_last_zcdesc = nullptr;
+    }
 }
 
 void sockinfo_tcp::tcp_tx_zc_handle(mem_buf_desc_t *p_desc)
