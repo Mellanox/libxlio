@@ -945,7 +945,7 @@ void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
     pcb->ttl = TCP_TTL;
     pcb->is_ipv6 = false;
 
-    u16_t snd_mss = pcb->advtsd_mss = tcp_send_mss(pcb);
+    u16_t snd_mss = pcb->advtsd_mss = tcp_initial_mss(pcb);
     UPDATE_PCB_BY_MSS(pcb, snd_mss);
     pcb->max_unsent_len = pcb->max_tcp_snd_queuelen;
     pcb->user_timeout_ms = 0;
@@ -1311,30 +1311,30 @@ u32_t tcp_next_iss(void)
     return iss;
 }
 
+static const u16_t IPV6_HEADER_LEN = IPV6_HLEN + TCP_HLEN;
+static const u16_t IPV4_HEADER_LEN = IP_HLEN + TCP_HLEN;
+static const u16_t IPV6_MIN_MSS = IPV6_MIN_MTU - IPV6_HEADER_LEN;
+static const u16_t IPV4_MIN_MSS = IPV4_MIN_MTU - IPV4_HEADER_LEN;
+
+u16_t tcp_initial_mss(struct tcp_pcb *pcb)
+{
+    return unlikely(LWIP_TCP_MSS > 0) ? LWIP_TCP_MSS : (pcb->is_ipv6 ? IPV6_MIN_MSS : IPV4_MIN_MSS);
+}
+
 u16_t tcp_send_mss(struct tcp_pcb *pcb)
 {
-    u16_t header_length = (pcb->is_ipv6 ? IPV6_HLEN : IP_HLEN) + TCP_HLEN;
-#if TCP_CALCULATE_EFF_SEND_MSS
-    u16_t external_mtu = external_ip_route_mtu(pcb);
-#else
     u16_t external_mtu = 0;
+#if TCP_CALCULATE_EFF_SEND_MSS
+    external_mtu = external_ip_route_mtu(pcb); // Take route or device mtu.
 #endif /* TCP_CALCULATE_EFF_SEND_MSS */
-    u16_t mss;
 
-    if (LWIP_TCP_MSS > 0) {
-        if (external_mtu > header_length) {
-            mss = LWIP_MIN(LWIP_TCP_MSS, external_mtu - header_length);
-        } else {
-            mss = LWIP_TCP_MSS;
-        }
-    } else {
-        if (external_mtu > header_length) {
-            mss = external_mtu - header_length;
-        } else {
-            mss = (pcb->is_ipv6 ? IPV6_MIN_MTU : IPV4_MIN_MTU) - header_length;
-        }
+    u16_t header_length = (pcb->is_ipv6 ? IPV6_HEADER_LEN : IPV4_HEADER_LEN);
+    if (external_mtu > header_length) {
+        u16_t mss = external_mtu - header_length;
+        return unlikely(LWIP_TCP_MSS > 0) ? LWIP_MIN(LWIP_TCP_MSS, mss) : mss;
     }
-    return mss;
+
+    return tcp_initial_mss(pcb);
 }
 
 void tcp_set_keepalive(struct tcp_pcb *pcb, u32_t idle, u32_t intvl, u32_t cnt)

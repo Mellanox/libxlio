@@ -370,6 +370,7 @@ u32_t tcp_next_iss(void);
 void tcp_keepalive(struct tcp_pcb *pcb);
 void tcp_zero_window_probe(struct tcp_pcb *pcb);
 
+u16_t tcp_initial_mss(struct tcp_pcb *pcb);
 u16_t tcp_send_mss(struct tcp_pcb *pcb);
 
 err_t tcp_recv_null(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
