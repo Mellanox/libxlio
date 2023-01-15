@@ -33,6 +33,7 @@
 #ifndef XLIO_NVME_PARSE_INPUT_ARGS_H
 #define XLIO_NVME_PARSE_INPUT_ARGS_H
 #include <atomic>
+#include <utility>
 #include "proto/mem_desc.h"
 
 static inline bool is_valid_aux_data_array(const xlio_pd_key *aux, size_t aux_data_sz)
@@ -56,6 +57,10 @@ struct nvmeotcp_tx {
     struct pdu;
     std::unique_ptr<pdu> get_next_pdu(uint32_t seqnum)
     {
+        if (!is_valid()) {
+            return nullptr;
+        }
+
         /* Roll to the start of the next DPU */
         while (m_current_pdu_iov_index < 64U &&
                m_aux_data[m_current_pdu_iov_index].message_length == 0U) {
@@ -99,33 +104,50 @@ struct nvmeotcp_tx {
             }
         };
 
-        size_t get_segment(size_t num_bytes, iovec *iov, xlio_pd_key *aux_data, size_t iov_num)
+        /* Return value first is the number of iov elements second is the actual number of bytes in
+         * iov */
+        std::pair<size_t, size_t> get_segment(size_t num_bytes, iovec *iov, size_t iov_num)
         {
-            if (iov == nullptr || iov_num == 0U) {
-                return 0;
+            if (num_bytes == 0U || iov == nullptr || iov_num == 0U || m_curr_iov_index >= 64U) {
+                return {0U, 0U};
             }
-            memset(iov, 0, sizeof(iovec) * iov_num);
-            memset(aux_data, 0, sizeof(xlio_pd_key) * iov_num);
+
             size_t out_iov_idx = 0U;
-            while (num_bytes != 0U && m_curr_iov_index < 64U && out_iov_idx < iov_num) {
+            size_t remaining_num_bytes = num_bytes;
+            while (remaining_num_bytes != 0U && m_curr_iov_index < 64U && out_iov_idx < iov_num) {
                 iov[out_iov_idx].iov_base =
                     reinterpret_cast<uint8_t *>(m_iov[m_curr_iov_index].iov_base) +
                     m_curr_iov_offset;
-                aux_data[out_iov_idx] = m_aux_data[m_curr_iov_index];
+                if (m_iov[m_curr_iov_index].iov_len == 0U ||
+                    m_iov[m_curr_iov_index].iov_base == nullptr) {
+                    m_curr_iov_index++;
+                    continue;
+                }
                 size_t bytes_in_curr_iov = m_iov[m_curr_iov_index].iov_len - m_curr_iov_offset;
 
-                if (bytes_in_curr_iov > num_bytes) {
-                    m_curr_iov_offset += num_bytes;
-                    iov[out_iov_idx].iov_len = num_bytes;
+                if (bytes_in_curr_iov > remaining_num_bytes) {
+                    m_curr_iov_offset += remaining_num_bytes;
+                    iov[out_iov_idx].iov_len = remaining_num_bytes;
                 } else {
                     m_curr_iov_offset = 0U;
                     m_curr_iov_index++;
                     iov[out_iov_idx].iov_len = bytes_in_curr_iov;
                 }
-                num_bytes -= iov[out_iov_idx].iov_len;
+                remaining_num_bytes -= iov[out_iov_idx].iov_len;
                 out_iov_idx += (bytes_in_curr_iov > 0U);
             }
-            return out_iov_idx;
+
+            /* Optimization - zero only unfilled iovecs */
+            memset(&iov[out_iov_idx], 0, sizeof(iovec) * (iov_num - out_iov_idx));
+            return {out_iov_idx, num_bytes - remaining_num_bytes};
+        }
+
+        inline std::pair<size_t, size_t> get_first_segment(size_t num_bytes, iovec *iov,
+                                                           size_t iov_num)
+        {
+            m_curr_iov_index = 0U;
+            m_curr_iov_offset = 0U;
+            return get_segment(num_bytes, iov, iov_num);
         }
 
         inline iovec current_iov()

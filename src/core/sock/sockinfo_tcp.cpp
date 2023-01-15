@@ -3955,10 +3955,14 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
         case TCP_ULP: {
             sockinfo_tcp_ops *ops {nullptr};
             if (__optval && __optlen >= 4 && strncmp((char *)__optval, "nvme", 4) == 0) {
-                auto nvme_feature_mask = get_supported_nvme_feature_mask();
-                ops = nvme_feature_mask ? new sockinfo_tcp_ops_nvme(this, nvme_feature_mask)
-                                        : nullptr;
                 is_nvme = true;
+                auto nvme_feature_mask = get_supported_nvme_feature_mask();
+                if (nvme_feature_mask == 0U) {
+                    errno = ENOTSUP;
+                    ret = -1;
+                    break;
+                }
+                ops = new sockinfo_tcp_ops_nvme(this, nvme_feature_mask);
                 si_tcp_logdbg("(TCP_NVME) val: nvme");
             }
 #ifdef DEFINED_UTLS
@@ -4247,11 +4251,7 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
         supported = false;
     }
 
-    if (is_nvme) {
-        return 0;
-    }
-
-    if (ret == -1) {
+    if (ret == -1 || is_nvme) {
         // Avoid saving inherited option or calling kernel setsockopt() if XLIO fails explicitly.
         return ret;
     }

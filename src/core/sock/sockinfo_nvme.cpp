@@ -72,10 +72,56 @@ int sockinfo_tcp_ops_nvme::setsockopt(int level, int optname, const void *optval
 
 ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
 {
-    return m_p_sock->tcp_tx(tx_arg);
+    if (!m_is_tx_offload) {
+        return m_p_sock->tcp_tx(tx_arg);
+    }
+
+    if (tx_arg.opcode != TX_SENDMSG || tx_arg.priv.attr != PBUF_DESC_MKEY) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    auto aux_data = reinterpret_cast<xlio_pd_key *>(tx_arg.priv.map);
+    auto msg = tx_arg.msg.hdr;
+    auto nvme = nvmeotcp_tx(msg->msg_iov, aux_data, msg->msg_iovlen);
+
+    if (m_pdu_mdesc == nullptr) {
+        if (!is_new_nvme_pdu(aux_data, msg->msg_iovlen)) {
+            errno = EINVAL;
+            return -1;
+        }
+        auto pdu = nvme.get_next_pdu(m_p_sock->get_next_tcp_seqno());
+        if (pdu == nullptr) {
+            errno = EINVAL;
+            return -1;
+        }
+        m_pdu_mdesc = new nvme_pdu_mdesc(std::move(pdu));
+    }
+
+    if (m_pdu_mdesc == nullptr) {
+        return -1;
+    }
+
+    do {
+        iovec iov[64U];
+        auto sz_iov = m_pdu_mdesc->m_pdu->get_segment(m_p_sock->sndbuf_available(), &iov[0], 64U);
+        xlio_tx_call_attr_t nvme_tx_arg {tx_arg.opcode,
+                                         xlio_tx_call_attr_t::_msg {
+                                             .iov = &iov[0],
+                                             .sz_iov = static_cast<ssize_t>(sz_iov.first),
+                                             .flags = MSG_ZEROCOPY,
+                                             .addr = nullptr,
+                                             .len = 0U,
+                                             .hdr = nullptr,
+                                         },
+                                         TX_FLAG_NO_PARTIAL_WRITE,
+                                         pbuf_desc {PBUF_DESC_MDESC, .mdesc = m_pdu_mdesc}};
+
+    } while (true);
+    return 0;
 }
 
-int sockinfo_tcp_ops_nvme::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_send_attr &attr)
+int sockinfo_tcp_ops_nvme::postrouting(pbuf *p, tcp_seg *seg, xlio_send_attr &attr)
 {
     NOT_IN_USE(p);
     NOT_IN_USE(seg);
@@ -83,14 +129,14 @@ int sockinfo_tcp_ops_nvme::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio
     return 0;
 }
 
-bool sockinfo_tcp_ops_nvme::handle_send_ret(ssize_t ret, struct tcp_seg *seg)
+bool sockinfo_tcp_ops_nvme::handle_send_ret(ssize_t ret, tcp_seg *seg)
 {
     NOT_IN_USE(ret);
     NOT_IN_USE(seg);
     return true;
 }
 
-err_t sockinfo_tcp_ops_nvme::recv(struct pbuf *p)
+err_t sockinfo_tcp_ops_nvme::recv(pbuf *p)
 {
     NOT_IN_USE(p);
     return ERR_OK;
