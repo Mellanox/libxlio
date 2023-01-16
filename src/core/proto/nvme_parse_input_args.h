@@ -33,7 +33,6 @@
 #ifndef XLIO_NVME_PARSE_INPUT_ARGS_H
 #define XLIO_NVME_PARSE_INPUT_ARGS_H
 #include <atomic>
-#include <utility>
 #include "proto/mem_desc.h"
 
 static inline bool is_valid_aux_data_array(const xlio_pd_key *aux, size_t aux_data_sz)
@@ -104,9 +103,17 @@ struct nvmeotcp_tx {
             }
         };
 
-        /* Return value first is the number of iov elements second is the actual number of bytes in
-         * iov */
-        std::pair<size_t, size_t> get_segment(size_t num_bytes, iovec *iov, size_t iov_num)
+        inline constexpr size_t length() const { return m_aux_data[0].message_length; };
+
+        struct segment {
+            size_t iov_num, length;
+            segment() = default;
+            inline bool is_valid() const { return iov_num != 0U && length != 0U; }
+        };
+
+
+        /* Return value first is the number of iov elements second is the actual number of bytes in iov */
+        segment get_segment(size_t num_bytes, iovec *iov, size_t iov_num) const
         {
             if (num_bytes == 0U || iov == nullptr || iov_num == 0U || m_curr_iov_index >= 64U) {
                 return {0U, 0U};
@@ -114,23 +121,25 @@ struct nvmeotcp_tx {
 
             size_t out_iov_idx = 0U;
             size_t remaining_num_bytes = num_bytes;
-            while (remaining_num_bytes != 0U && m_curr_iov_index < 64U && out_iov_idx < iov_num) {
+            size_t curr_iov_index = m_curr_iov_index;
+            size_t curr_iov_offset = m_curr_iov_offset;
+            while (remaining_num_bytes != 0U && curr_iov_index < m_iov_num && out_iov_idx < iov_num) {
                 iov[out_iov_idx].iov_base =
-                    reinterpret_cast<uint8_t *>(m_iov[m_curr_iov_index].iov_base) +
-                    m_curr_iov_offset;
-                if (m_iov[m_curr_iov_index].iov_len == 0U ||
-                    m_iov[m_curr_iov_index].iov_base == nullptr) {
-                    m_curr_iov_index++;
+                    reinterpret_cast<uint8_t *>(m_iov[curr_iov_index].iov_base) +
+                    curr_iov_offset;
+                if (m_iov[curr_iov_index].iov_len == 0U ||
+                    m_iov[curr_iov_index].iov_base == nullptr) {
+                    curr_iov_index++;
                     continue;
                 }
-                size_t bytes_in_curr_iov = m_iov[m_curr_iov_index].iov_len - m_curr_iov_offset;
+                size_t bytes_in_curr_iov = m_iov[curr_iov_index].iov_len - curr_iov_offset;
 
                 if (bytes_in_curr_iov > remaining_num_bytes) {
-                    m_curr_iov_offset += remaining_num_bytes;
+                    curr_iov_offset += remaining_num_bytes;
                     iov[out_iov_idx].iov_len = remaining_num_bytes;
                 } else {
-                    m_curr_iov_offset = 0U;
-                    m_curr_iov_index++;
+                    curr_iov_offset = 0U;
+                    curr_iov_index++;
                     iov[out_iov_idx].iov_len = bytes_in_curr_iov;
                 }
                 remaining_num_bytes -= iov[out_iov_idx].iov_len;
@@ -142,11 +151,29 @@ struct nvmeotcp_tx {
             return {out_iov_idx, num_bytes - remaining_num_bytes};
         }
 
-        inline std::pair<size_t, size_t> get_first_segment(size_t num_bytes, iovec *iov,
-                                                           size_t iov_num)
+        void consume(size_t num_bytes)
         {
+            while (m_curr_iov_index < m_iov_num && num_bytes != 0U) {
+                size_t bytes_in_curr_iov = m_iov[m_curr_iov_index].iov_len - m_curr_iov_offset;
+                if (bytes_in_curr_iov <= num_bytes) {
+                    m_curr_iov_offset = 0;
+                    m_curr_iov_index++;
+                    num_bytes -= bytes_in_curr_iov;
+                } else {
+                    m_curr_iov_offset += num_bytes;
+                    break;
+                }
+            }
+        }
+
+        inline void reset() {
             m_curr_iov_index = 0U;
             m_curr_iov_offset = 0U;
+        }
+
+        inline segment get_first_segment(size_t num_bytes, iovec *iov, size_t iov_num)
+        {
+            reset();
             return get_segment(num_bytes, iov, iov_num);
         }
 
