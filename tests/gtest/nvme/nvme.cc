@@ -243,10 +243,29 @@ TEST_F(nvme_new_request, pdu_get_segment)
     EXPECT_TRUE((pdu->is_valid())) << "The pdu should be valid";
     iovec out_iov[64U] = {{nullptr, 0}};
 
-    auto segment = pdu->get_first_segment(666U, out_iov, 64U);
+    auto segment = pdu->get_first_segment(6U, out_iov, 64U);
+    ASSERT_EQ(1U, segment.iov_num) << "Wrong number of segments";
+    ASSERT_EQ(6U, segment.length) << "The actual bytes calculation is wrong";
+    ASSERT_EQ(6U, out_iov[0].iov_len) << "iov_len is incorrect";
+    pdu->consume(segment.length);
+
+    segment = pdu->get_segment(11U, out_iov, 64U);
+    ASSERT_EQ(2U, segment.iov_num) << "Wrong number of segments";
+    ASSERT_EQ(10U, segment.length) << "The actual bytes calculation is wrong";
+    ASSERT_EQ(2U, out_iov[0].iov_len) << "iov_len is incorrect";
+    ASSERT_EQ(8U, out_iov[1].iov_len) << "iov_len is incorrect";
+    pdu->consume(segment.length);
+
+    segment = pdu->get_segment(100U, out_iov, 64U);
+    ASSERT_EQ(0U, segment.iov_num) << "Wrong number of segments";
+    ASSERT_EQ(0U, segment.length) << "The actual bytes calculation is wrong";
+    pdu->consume(segment.length);
+
+    segment = pdu->get_first_segment(666U, out_iov, 64U);
     ASSERT_EQ(2U, segment.iov_num) << "Wrong number of segments";
     ASSERT_EQ(16U, segment.length) << "The actual bytes calculation is wrong";
     ASSERT_EQ(8U, out_iov[0].iov_len) << "iov_len is incorrect";
+    pdu->consume(segment.length);
 
     pdu = nvme.get_next_pdu(17U);
     ASSERT_NE(nullptr, pdu);
