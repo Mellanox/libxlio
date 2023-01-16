@@ -103,7 +103,7 @@ struct nvmeotcp_tx {
             }
         };
 
-        inline constexpr size_t length() const { return m_aux_data[0].message_length; };
+        inline size_t length() const { return m_aux_data[0].message_length; };
 
         struct segment {
             size_t iov_num, length;
