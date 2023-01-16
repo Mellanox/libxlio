@@ -74,10 +74,10 @@ public:
     qp_mgr_eth_mlx5(struct qp_mgr_desc *desc, const uint32_t tx_num_wr, const uint16_t vlan,
                     bool call_configure = true);
     virtual ~qp_mgr_eth_mlx5();
-    virtual void up();
-    virtual void down();
-    virtual void post_recv_buffer(
-        mem_buf_desc_t *p_mem_buf_desc); // Post for receive single mem_buf_desc
+    void up() override;
+    void down() override;
+    void post_recv_buffer(
+        mem_buf_desc_t *p_mem_buf_desc) override; // Post for receive single mem_buf_desc
     xlio_ib_mlx5_qp_t m_mlx5_qp;
 
 #ifdef DEFINED_UTLS
@@ -115,9 +115,9 @@ public:
         uint32_t m_tisn;
     };
 
-    std::unique_ptr<xlio_ti> create_nvme_context() const override;
+    std::unique_ptr<xlio_ti> create_nvme_context(uint32_t) override;
 #endif /* DEFINED_DPCP */
-    void post_nop_fence(void);
+    void post_nop_fence(void) override;
 
 #if defined(DEFINED_UTLS)
     std::unique_ptr<dpcp::dek> get_new_dek(const void *key, uint32_t key_size_bytes);
@@ -125,9 +125,9 @@ public:
     void put_dek(std::unique_ptr<dpcp::dek> &&dek_obj);
 #endif
 
-    void reset_inflight_zc_buffers_ctx(void *ctx);
+    void reset_inflight_zc_buffers_ctx(void *ctx) override;
     // TODO Make credits API inline.
-    bool credits_get(unsigned credits)
+    bool credits_get(unsigned credits) override
     {
         if (m_sq_free_credits >= credits) {
             m_sq_free_credits -= credits;
@@ -135,16 +135,16 @@ public:
         }
         return false;
     }
-    void credits_return(unsigned credits) { m_sq_free_credits += credits; }
+    void credits_return(unsigned credits) override { m_sq_free_credits += credits; }
 
 protected:
     void post_recv_buffer_rq(mem_buf_desc_t *p_mem_buf_desc);
-    void trigger_completion_for_all_sent_packets();
+    void trigger_completion_for_all_sent_packets() override;
     bool init_rx_cq_mgr_prepare();
     void init_qp();
     void init_device_memory();
-    virtual cq_mgr *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel);
-    virtual cq_mgr *init_tx_cq_mgr(void);
+    cq_mgr *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel) override;
+    cq_mgr *init_tx_cq_mgr(void) override;
 
     void put_tir_in_cache(xlio_tir *tir);
     void put_tis_in_cache(xlio_tis *tis);
@@ -165,17 +165,20 @@ protected:
     uint64_t m_rq_wqe_counter;
 
 private:
-    virtual bool is_completion_need()
+    void update_next_wqe_hot();
+
+    bool is_completion_need() override
     {
         return !m_n_unsignaled_count || (m_dm_enabled && m_dm_mgr.is_completion_need());
     };
-    virtual void dm_release_data(mem_buf_desc_t *buff) { m_dm_mgr.release_data(buff); }
+    void dm_release_data(mem_buf_desc_t *buff) override { m_dm_mgr.release_data(buff); }
 
     int send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, bool request_comp,
-                     xlio_tis *tis, unsigned credits);
+                     xlio_tis *tis, unsigned credits) override;
     inline int fill_wqe(xlio_ibv_send_wr *p_send_wqe);
     inline void store_current_wqe_prop(mem_buf_desc_t *wr_id, unsigned credits, xlio_ti *ti);
     void destroy_tis_cache(void);
+
 #ifdef DEFINED_UTLS
     inline void tls_fill_static_params_wqe(struct mlx5_wqe_tls_static_params_seg *params,
                                            const struct xlio_tls_info *info, uint32_t key_id,
@@ -199,6 +202,9 @@ protected:
 
 private:
 #endif /* DEFINED_UTLS */
+#ifdef DEFINED_DPCP
+    inline void nvme_setup_tx_offload(uint32_t tisn, uint32_t tcp_seqno);
+#endif /* DEFINED_DPCP */
     inline int fill_wqe_send(xlio_ibv_send_wr *pswr);
     inline int fill_wqe_lso(xlio_ibv_send_wr *pswr);
     inline void ring_doorbell(uint64_t *wqe, int db_method, int num_wqebb, int num_wqebb_top = 0,

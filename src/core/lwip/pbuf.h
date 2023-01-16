@@ -68,9 +68,9 @@ enum {
 typedef struct {
     int attr;
     union {
-        int fd;
         void *map;
         void *mdesc;
+        int fd;
         u32_t mkey;
     };
 } pbuf_desc;

@@ -204,12 +204,12 @@ err_t sockinfo_tcp_ops_nvme::recv(pbuf *p)
 int sockinfo_tcp_ops_nvme::setsockopt_tx()
 {
     ring *p_ring = m_p_sock->get_tx_ring();
-    m_p_tis = p_ring != nullptr ? p_ring->create_nvme_context() : nullptr;
+    m_expected_seqno = m_p_sock->get_next_tcp_seqno();
+    m_p_tis = p_ring != nullptr ? p_ring->create_nvme_context(m_expected_seqno) : nullptr;
 
     if (m_p_tis == nullptr) {
         errno = ENOTSUP;
         return -1;
     }
-    m_expected_seqno = m_p_sock->get_next_tcp_seqno();
     return 0;
 }

@@ -33,13 +33,13 @@
 
 #if defined(DEFINED_DIRECT_VERBS)
 
+#include <cstddef>
 #include <sys/mman.h>
 #include "cq_mgr_mlx5.h"
 #include "proto/tls.h"
 #include "util/utils.h"
 #include "vlogger/vlogger.h"
 #include "ring_simple.h"
-#include <utility>
 
 #undef MODULE_NAME
 #define MODULE_NAME "qpm_mlx5"
@@ -374,6 +374,19 @@ void qp_mgr_eth_mlx5::destroy_tis_cache(void)
         m_tis_cache.pop_back();
         delete tis;
     }
+}
+
+void qp_mgr_eth_mlx5::update_next_wqe_hot()
+{
+    // Preparing next WQE as Ethernet send WQE and index:
+    m_sq_wqe_hot = &(*m_sq_wqes)[m_sq_wqe_counter & (m_tx_num_wr - 1)];
+    m_sq_wqe_hot_index = m_sq_wqe_counter & (m_tx_num_wr - 1);
+    memset(m_sq_wqe_hot, 0, sizeof(mlx5_eth_wqe));
+
+    // Fill Ethernet segment with header inline:
+    struct mlx5_wqe_eth_seg *eth_seg =
+        (struct mlx5_wqe_eth_seg *)((uint8_t *)m_sq_wqe_hot + sizeof(struct mlx5_wqe_ctrl_seg));
+    eth_seg->inline_hdr_sz = htons(MLX5_ETH_INLINE_HEADER_SIZE);
 }
 
 //! Cleanup resources QP itself will be freed by base class DTOR
@@ -1180,7 +1193,7 @@ inline void qp_mgr_eth_mlx5::tls_post_static_params_wqe(xlio_ti *ti,
     struct mlx5_set_tls_static_params_wqe *wqe =
         reinterpret_cast<struct mlx5_set_tls_static_params_wqe *>(m_sq_wqe_hot);
     struct xlio_mlx5_wqe_ctrl_seg *cseg = &wqe->ctrl.ctrl;
-    struct xlio_mlx5_wqe_umr_ctrl_seg *ucseg = &wqe->uctrl;
+    xlio_mlx5_wqe_umr_ctrl_seg *ucseg = &wqe->uctrl;
     struct mlx5_mkey_seg *mkcseg = &wqe->mkc;
     struct mlx5_wqe_tls_static_params_seg *tspseg = &wqe->params;
     uint8_t opmod = is_tx ? MLX5_OPC_MOD_TLS_TIS_STATIC_PARAMS : MLX5_OPC_MOD_TLS_TIR_STATIC_PARAMS;
@@ -1263,15 +1276,7 @@ inline void qp_mgr_eth_mlx5::tls_post_static_params_wqe(xlio_ti *ti,
     ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs, num_wqebbs_top, true);
     dbg_dump_wqe((uint32_t *)m_sq_wqe_hot, sizeof(mlx5_set_tls_static_params_wqe));
 
-    // Preparing next WQE as Ethernet send WQE and index:
-    m_sq_wqe_hot = &(*m_sq_wqes)[m_sq_wqe_counter & (m_tx_num_wr - 1)];
-    m_sq_wqe_hot_index = m_sq_wqe_counter & (m_tx_num_wr - 1);
-    memset(m_sq_wqe_hot, 0, sizeof(mlx5_eth_wqe));
-
-    // Fill Ethernet segment with header inline:
-    struct mlx5_wqe_eth_seg *eth_seg =
-        (struct mlx5_wqe_eth_seg *)((uint8_t *)m_sq_wqe_hot + sizeof(struct mlx5_wqe_ctrl_seg));
-    eth_seg->inline_hdr_sz = htons(MLX5_ETH_INLINE_HEADER_SIZE);
+    update_next_wqe_hot();
 }
 
 inline void qp_mgr_eth_mlx5::tls_fill_progress_params_wqe(
@@ -1317,15 +1322,7 @@ inline void qp_mgr_eth_mlx5::tls_post_progress_params_wqe(xlio_ti *ti, uint32_t 
     ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs);
     dbg_dump_wqe((uint32_t *)m_sq_wqe_hot, sizeof(mlx5_set_tls_progress_params_wqe));
 
-    // Preparing next WQE as Ethernet send WQE and index:
-    m_sq_wqe_hot = &(*m_sq_wqes)[m_sq_wqe_counter & (m_tx_num_wr - 1)];
-    m_sq_wqe_hot_index = m_sq_wqe_counter & (m_tx_num_wr - 1);
-    memset(m_sq_wqe_hot, 0, sizeof(mlx5_eth_wqe));
-
-    // Fill Ethernet segment with header inline:
-    struct mlx5_wqe_eth_seg *eth_seg =
-        (struct mlx5_wqe_eth_seg *)((uint8_t *)m_sq_wqe_hot + sizeof(struct mlx5_wqe_ctrl_seg));
-    eth_seg->inline_hdr_sz = htons(MLX5_ETH_INLINE_HEADER_SIZE);
+    update_next_wqe_hot();
 }
 
 inline void qp_mgr_eth_mlx5::tls_get_progress_params_wqe(xlio_ti *ti, uint32_t tirn, void *buf,
@@ -1357,15 +1354,7 @@ inline void qp_mgr_eth_mlx5::tls_get_progress_params_wqe(xlio_ti *ti, uint32_t t
 
     ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs);
 
-    // Preparing next WQE as Ethernet send WQE and index:
-    m_sq_wqe_hot = &(*m_sq_wqes)[m_sq_wqe_counter & (m_tx_num_wr - 1)];
-    m_sq_wqe_hot_index = m_sq_wqe_counter & (m_tx_num_wr - 1);
-    memset(m_sq_wqe_hot, 0, sizeof(mlx5_eth_wqe));
-
-    // Fill Ethernet segment with header inline:
-    struct mlx5_wqe_eth_seg *eth_seg =
-        (struct mlx5_wqe_eth_seg *)((uint8_t *)m_sq_wqe_hot + sizeof(struct mlx5_wqe_ctrl_seg));
-    eth_seg->inline_hdr_sz = htons(MLX5_ETH_INLINE_HEADER_SIZE);
+    update_next_wqe_hot();
 }
 
 void qp_mgr_eth_mlx5::tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
@@ -1393,15 +1382,7 @@ void qp_mgr_eth_mlx5::tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t l
 
     ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs, 0, true);
 
-    // Preparing next WQE as Ethernet send WQE and index:
-    m_sq_wqe_hot = &(*m_sq_wqes)[m_sq_wqe_counter & (m_tx_num_wr - 1)];
-    m_sq_wqe_hot_index = m_sq_wqe_counter & (m_tx_num_wr - 1);
-    memset(m_sq_wqe_hot, 0, sizeof(mlx5_eth_wqe));
-
-    // Fill Ethernet segment with header inline:
-    struct mlx5_wqe_eth_seg *eth_seg =
-        (struct mlx5_wqe_eth_seg *)((uint8_t *)m_sq_wqe_hot + sizeof(struct mlx5_wqe_ctrl_seg));
-    eth_seg->inline_hdr_sz = htons(MLX5_ETH_INLINE_HEADER_SIZE);
+    update_next_wqe_hot();
 }
 
 void qp_mgr_eth_mlx5::tls_release_tis(xlio_tis *tis)
@@ -1431,7 +1412,99 @@ dpcp::tir *qp_mgr_eth_mlx5::xlio_tir_to_dpcp_tir(xlio_tir *tir)
 #endif /* DEFINED_UTLS */
 
 #ifdef DEFINED_DPCP
-std::unique_ptr<xlio_ti> qp_mgr_eth_mlx5::create_nvme_context() const
+static inline void nvme_fill_static_params_control(xlio_mlx5_wqe_ctrl_seg *cseg,
+                                                   xlio_mlx5_wqe_umr_ctrl_seg *ucseg,
+                                                   uint32_t producer_index, uint32_t qpn,
+                                                   uint32_t tisn, uint8_t fence_flags)
+{
+    memset(cseg, 0, sizeof(*cseg));
+    memset(ucseg, 0, sizeof(*ucseg));
+    cseg->opmod_idx_opcode =
+        htobe32(((producer_index & 0xffff) << 8) | MLX5_OPCODE_UMR |
+                (MLX5_CTRL_SEGMENT_OPC_MOD_UMR_NVMEOTCP_TIS_STATIC_PARAMS << 24));
+    size_t num_wqe_ds = 12U;
+    cseg->qpn_ds = htobe32((qpn << MLX5_WQE_CTRL_QPN_SHIFT) | num_wqe_ds);
+    cseg->fm_ce_se = fence_flags;
+    cseg->tis_tir_num = htobe32(tisn << MLX5_WQE_CTRL_TIR_TIS_INDEX_SHIFT);
+
+    ucseg->flags = MLX5_UMR_INLINE;
+    ucseg->bsf_octowords = htobe16(MLX5E_TRANSPORT_STATIC_PARAMS_OCTWORD_SIZE);
+}
+
+static inline void nvme_fill_static_params_transport_params(
+    mlx5_wqe_transport_static_params_seg *params, uint32_t tcp_seqno)
+
+{
+    memset(params, 0, sizeof(*params));
+    void *ctx = params->ctx;
+
+    DEVX_SET(transport_static_params, ctx, const_1, 1);
+    DEVX_SET(transport_static_params, ctx, const_2, 2);
+    DEVX_SET(transport_static_params, ctx, acc_type, MLX5_TRANSPORT_STATIC_PARAMS_ACC_TYPE_NVMETCP);
+    DEVX_SET(transport_static_params, ctx, nvme_resync_tcp_sn, tcp_seqno);
+    DEVX_SET(transport_static_params, ctx, pda, /* pda */ 0);
+    DEVX_SET(transport_static_params, ctx, ddgst_en, NVME_TCP_DATA_DIGEST_ENABLE);
+    DEVX_SET(transport_static_params, ctx, ddgst_offload_en, /* ddgst_offload_en */ 1);
+    DEVX_SET(transport_static_params, ctx, hddgst_en, 0);
+    DEVX_SET(transport_static_params, ctx, hdgst_offload_en, 0);
+    DEVX_SET(transport_static_params, ctx, ti, MLX5_TRANSPORT_STATIC_PARAMS_TI_INITIATOR);
+    DEVX_SET(transport_static_params, ctx, const1, 1);
+    DEVX_SET(transport_static_params, ctx, zero_copy_en, 0);
+}
+
+static inline void nvme_fill_progress_wqe(mlx5e_set_nvmeotcp_progress_params_wqe *wqe,
+                                          uint32_t producer_index, uint32_t qpn, uint32_t tisn,
+                                          uint32_t tcp_seqno, uint8_t fence_flags)
+{
+    memset(wqe, 0, sizeof(*wqe));
+    auto cseg = &wqe->ctrl.ctrl;
+
+    constexpr size_t progres_params_ds = DIV_ROUND_UP(sizeof(*wqe), MLX5_SEND_WQE_DS);
+    cseg->opmod_idx_opcode =
+        htobe32(((producer_index & 0xffff) << 8) | XLIO_MLX5_OPCODE_SET_PSV |
+                (MLX5_CTRL_SEGMENT_OPC_MOD_UMR_NVMEOTCP_TIS_PROGRESS_PARAMS << 24));
+    cseg->qpn_ds = htobe32((qpn << MLX5_WQE_CTRL_QPN_SHIFT) | progres_params_ds);
+    cseg->fm_ce_se = fence_flags;
+
+    mlx5_seg_nvmeotcp_progress_params *params = &wqe->params;
+    params->tir_num = htobe32(tisn);
+    void *ctx = params->ctx;
+
+    DEVX_SET(nvmeotcp_progress_params, ctx, next_pdu_tcp_sn, tcp_seqno);
+    DEVX_SET(nvmeotcp_progress_params, ctx, pdu_tracker_state,
+             MLX5E_NVMEOTCP_PROGRESS_PARAMS_PDU_TRACKER_STATE_START);
+    /* if (is_tx) offloading state == 0*/
+    DEVX_SET(nvmeotcp_progress_params, ctx, offloading_state, 0);
+}
+
+inline void qp_mgr_eth_mlx5::nvme_setup_tx_offload(uint32_t tisn, uint32_t tcp_seqno)
+{
+    auto wqebb_ptr = [this](size_t wqebb_index = 0U, size_t offset = 0U) {
+        return reinterpret_cast<void *>(
+            reinterpret_cast<uintptr_t>(
+                &(*m_sq_wqes)[(m_sq_wqe_counter + wqebb_index) & (m_tx_num_wr - 1)]) +
+            offset);
+    };
+    auto *cseg = reinterpret_cast<xlio_mlx5_wqe_ctrl_seg *>(wqebb_ptr(0U));
+    auto *ucseg = reinterpret_cast<xlio_mlx5_wqe_umr_ctrl_seg *>(wqebb_ptr(0U, sizeof(*cseg)));
+
+    nvme_fill_static_params_control(cseg, ucseg, m_sq_wqe_counter, m_mlx5_qp.qpn, tisn, 0);
+    memset(wqebb_ptr(1U), 0, sizeof(mlx5_mkey_seg));
+
+    auto *params = reinterpret_cast<mlx5_wqe_transport_static_params_seg *>(wqebb_ptr(2U));
+    nvme_fill_static_params_transport_params(params, tcp_seqno);
+    ring_doorbell(reinterpret_cast<uint64_t *>(m_sq_wqe_hot), MLX5_DB_METHOD_DB,
+                  MLX5E_TRANSPORT_SET_STATIC_PARAMS_WQEBBS);
+    update_next_wqe_hot();
+
+    auto *wqe = reinterpret_cast<mlx5e_set_nvmeotcp_progress_params_wqe *>(m_sq_wqe_hot);
+    nvme_fill_progress_wqe(wqe, m_sq_wqe_counter, m_mlx5_qp.qpn, tisn, tcp_seqno, 0);
+    ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB,
+                  MLX5E_NVMEOTCP_PROGRESS_PARAMS_WQEBBS);
+    update_next_wqe_hot();
+}
+
+std::unique_ptr<xlio_ti> qp_mgr_eth_mlx5::create_nvme_context(uint32_t seqno)
 {
     dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
     dpcp::tis::attr tis_attr = {
@@ -1450,6 +1523,7 @@ std::unique_ptr<xlio_ti> qp_mgr_eth_mlx5::create_nvme_context() const
         delete tis;
         return nullptr;
     }
+    nvme_setup_tx_offload(tisn, seqno);
 
     return std::make_unique<nvme_tis>(tis, tisn);
 }
@@ -1500,15 +1574,7 @@ void qp_mgr_eth_mlx5::post_nop_fence(void)
 
     ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, 1);
 
-    // Preparing next WQE as Ethernet send WQE and index:
-    m_sq_wqe_hot = &(*m_sq_wqes)[m_sq_wqe_counter & (m_tx_num_wr - 1)];
-    m_sq_wqe_hot_index = m_sq_wqe_counter & (m_tx_num_wr - 1);
-    memset(m_sq_wqe_hot, 0, sizeof(mlx5_eth_wqe));
-
-    // Fill Ethernet segment with header inline:
-    struct mlx5_wqe_eth_seg *eth_seg =
-        (struct mlx5_wqe_eth_seg *)((uint8_t *)m_sq_wqe_hot + sizeof(struct mlx5_wqe_ctrl_seg));
-    eth_seg->inline_hdr_sz = htons(MLX5_ETH_INLINE_HEADER_SIZE);
+    update_next_wqe_hot();
 }
 
 //! Handle releasing of Tx buffers

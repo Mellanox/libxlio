@@ -111,8 +111,8 @@ struct nvmeotcp_tx {
             inline bool is_valid() const { return iov_num != 0U && length != 0U; }
         };
 
-
-        /* Return value first is the number of iov elements second is the actual number of bytes in iov */
+        /* Return value first is the number of iov elements second is the actual number of bytes in
+         * iov */
         segment get_segment(size_t num_bytes, iovec *iov, size_t iov_num) const
         {
             if (num_bytes == 0U || iov == nullptr || iov_num == 0U || m_curr_iov_index >= 64U) {
@@ -123,10 +123,10 @@ struct nvmeotcp_tx {
             size_t remaining_num_bytes = num_bytes;
             size_t curr_iov_index = m_curr_iov_index;
             size_t curr_iov_offset = m_curr_iov_offset;
-            while (remaining_num_bytes != 0U && curr_iov_index < m_iov_num && out_iov_idx < iov_num) {
+            while (remaining_num_bytes != 0U && curr_iov_index < m_iov_num &&
+                   out_iov_idx < iov_num) {
                 iov[out_iov_idx].iov_base =
-                    reinterpret_cast<uint8_t *>(m_iov[curr_iov_index].iov_base) +
-                    curr_iov_offset;
+                    reinterpret_cast<uint8_t *>(m_iov[curr_iov_index].iov_base) + curr_iov_offset;
                 if (m_iov[curr_iov_index].iov_len == 0U ||
                     m_iov[curr_iov_index].iov_base == nullptr) {
                     curr_iov_index++;
@@ -166,7 +166,8 @@ struct nvmeotcp_tx {
             }
         }
 
-        inline void reset() {
+        inline void reset()
+        {
             m_curr_iov_index = 0U;
             m_curr_iov_offset = 0U;
         }

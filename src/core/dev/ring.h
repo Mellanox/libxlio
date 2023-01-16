@@ -190,7 +190,7 @@ public:
         NOT_IN_USE(first);
     }
 #endif /* DEFINED_UTLS */
-    virtual std::unique_ptr<xlio_ti> create_nvme_context() { return nullptr; };
+    virtual std::unique_ptr<xlio_ti> create_nvme_context(uint32_t) { return nullptr; };
 
     enum {
         NVME_CRC_TX = 1 << 0,

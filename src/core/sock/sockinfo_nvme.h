@@ -47,7 +47,11 @@ public:
         , m_pdu_mdesc(nullptr)
         , m_expected_seqno(0U)
         , m_is_tx_offload(false) {};
-    ~sockinfo_tcp_ops_nvme() { if (m_pdu_mdesc) m_pdu_mdesc->put(); }
+    ~sockinfo_tcp_ops_nvme()
+    {
+        if (m_pdu_mdesc)
+            m_pdu_mdesc->put();
+    }
 
     int setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen) override;
     ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
