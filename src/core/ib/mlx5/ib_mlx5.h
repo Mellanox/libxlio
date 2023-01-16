@@ -151,6 +151,69 @@ struct mlx5_ifc_tls_progress_params_bits {
     uint8_t hw_offset_record_number[0x18];
 };
 
+struct mlx5_mkey_seg {
+    /* This is a two bit field occupying bits 31-30.
+     * bit 31 is always 0,
+     * bit 30 is zero for regular MRs and 1 (e.g free) for UMRs that do not have translation
+     */
+    uint8_t status;
+    uint8_t pcie_control;
+    uint8_t flags;
+    uint8_t version;
+    __be32 qpn_mkey7_0;
+    uint8_t rsvd1[4];
+    __be32 flags_pd;
+    __be64 start_addr;
+    __be64 len;
+    __be32 bsfs_octo_size;
+    uint8_t rsvd2[16];
+    __be32 xlt_oct_size;
+    uint8_t rsvd3[3];
+    uint8_t log2_page_size;
+    uint8_t rsvd4[4];
+};
+
+/* PRM static stransport params */
+struct mlx5_ifc_transport_static_params_bits {
+    uint8_t const_2[0x2];
+    uint8_t tls_version[0x4];
+    uint8_t const_1[0x2];
+    uint8_t reserved_at_8[0x14];
+    uint8_t acc_type[0x4];
+
+    uint8_t reserved_at_20[0x20];
+
+    uint8_t initial_record_number[0x40];
+
+    uint8_t resync_tcp_sn[0x20];
+
+    uint8_t gcm_iv[0x20];
+
+    uint8_t implicit_iv[0x40];
+
+    uint8_t reserved_at_100[0x8];
+    uint8_t dek_index[0x18];
+
+    uint8_t reserved_at_120[0x14];
+
+    uint8_t const1[0x1];
+    uint8_t ti[0x1];
+    uint8_t zero_copy_en[0x1];
+    uint8_t ddgst_offload_en[0x1];
+    uint8_t hdgst_offload_en[0x1];
+    uint8_t ddgst_en[0x1];
+    uint8_t hddgst_en[0x1];
+    uint8_t pda[0x5];
+
+    uint8_t nvme_resync_tcp_sn[0x20];
+
+    uint8_t reserved_at_160[0xa0];
+};
+
+#define MLX5_CTRL_SEGMENT_OPC_MOD_UMR_TIR_PARAMS                   0x2
+#define MLX5_CTRL_SEGMENT_OPC_MOD_UMR_TIS_PARAMS                   0x1
+#define MLX5_CTRL_SEGMENT_OPC_MOD_UMR_UMR                          0x0
+
 /* Bit mask for TCP PUSH flag in lro_tcppsh_abort_dupack field. */
 #define MLX5_CQE_LRO_TCP_PUSH_MASK 0x40
 
@@ -198,7 +261,8 @@ typedef struct xlio_mlx5_wqe_ctrl_seg {
     };
 } xlio_mlx5_wqe_ctrl_seg;
 
-typedef struct xlio_mlx5_wqe_umr_ctrl_seg {
+/* Name collision with mlx5dv.h */
+struct xlio_mlx5_wqe_umr_ctrl_seg {
     uint8_t flags;
     uint8_t rsvd0[3];
     __be16 xlt_octowords;
@@ -209,29 +273,7 @@ typedef struct xlio_mlx5_wqe_umr_ctrl_seg {
     __be64 mkey_mask;
     __be32 xlt_offset_47_16;
     uint8_t rsvd1[28];
-} xlio_mlx5_wqe_umr_ctrl_seg;
-
-typedef struct mlx5_mkey_seg {
-    /* This is a two bit field occupying bits 31-30.
-     * bit 31 is always 0,
-     * bit 30 is zero for regular MRs and 1 (e.g free) for UMRs that do not have tanslation
-     */
-    uint8_t status;
-    uint8_t pcie_control;
-    uint8_t flags;
-    uint8_t version;
-    __be32 qpn_mkey7_0;
-    uint8_t rsvd1[4];
-    __be32 flags_pd;
-    __be64 start_addr;
-    __be64 len;
-    __be32 bsfs_octo_size;
-    uint8_t rsvd2[16];
-    __be32 xlt_oct_size;
-    uint8_t rsvd3[3];
-    uint8_t log2_page_size;
-    uint8_t rsvd4[4];
-} mlx5_mkey_seg;
+};
 
 typedef struct mlx5_wqe_tls_static_params_seg {
     uint8_t ctx[DEVX_ST_SZ_BYTES(tls_static_params)];
@@ -258,10 +300,10 @@ typedef struct mlx5_eth_wqe {
 } mlx5_eth_wqe;
 
 typedef struct mlx5_set_tls_static_params_wqe {
-    struct mlx5_wqe ctrl;
-    struct xlio_mlx5_wqe_umr_ctrl_seg uctrl;
-    struct mlx5_mkey_seg mkc;
-    struct mlx5_wqe_tls_static_params_seg params;
+    mlx5_wqe ctrl;
+    xlio_mlx5_wqe_umr_ctrl_seg uctrl;
+    mlx5_mkey_seg mkc;
+    mlx5_wqe_tls_static_params_seg params;
 } mlx5_set_tls_static_params_wqe;
 
 typedef struct mlx5_set_tls_progress_params_wqe {
@@ -296,6 +338,83 @@ typedef struct mlx5_get_tls_progress_params_wqe {
 #define TLS_GET_PROGRESS_WQEBBS                                                                    \
     (DIV_ROUND_UP(sizeof(mlx5_get_tls_progress_params_wqe), MLX5_SEND_WQE_BB))
 #define TLS_DUMP_WQEBBS (DIV_ROUND_UP(sizeof(struct mlx5_dump_wqe), MLX5_SEND_WQE_BB))
+
+#define MLX5_CTRL_SEGMENT_OPC_MOD_UMR_NVMEOTCP_TIR_STATIC_PARAMS   0x2
+#define MLX5_CTRL_SEGMENT_OPC_MOD_UMR_NVMEOTCP_TIS_STATIC_PARAMS   0x1
+#define MLX5_CTRL_SEGMENT_OPC_MOD_UMR_NVMEOTCP_TIR_PROGRESS_PARAMS 0x4
+#define MLX5_CTRL_SEGMENT_OPC_MOD_UMR_NVMEOTCP_TIS_PROGRESS_PARAMS 0x3
+
+#define MLX5E_NVMEOTCP_PROGRESS_PARAMS_WQEBBS                                                      \
+    (DIV_ROUND_UP(MLX5E_NVMEOTCP_PROGRESS_PARAMS_WQE_SZ, MLX5_SEND_WQE_BB))
+
+#define MLX5E_TRANSPORT_SET_STATIC_PARAMS_WQEBBS                                                   \
+    (DIV_ROUND_UP(sizeof(struct mlx5e_set_transport_static_params_wqe), MLX5_SEND_WQE_BB))
+
+#define MLX5E_NVMEOTCP_PROGRESS_PARAMS_WQE_SZ                                                      \
+    (sizeof(struct mlx5e_set_nvmeotcp_progress_params_wqe))
+
+#define MLX5E_NVMEOTCP_PROGRESS_PARAMS_DS_CNT                                                      \
+    DIV_ROUND_UP(MLX5E_NVMEOTCP_PROGRESS_PARAMS_WQE_SZ, MLX5_SEND_WQE_DS)
+
+#define MLX5E_TRANSPORT_STATIC_PARAMS_WQE_SZ (sizeof(struct mlx5e_set_transport_static_params_wqe))
+
+#define MLX5E_TRANSPORT_STATIC_PARAMS_DS_CNT                                                       \
+    (DIV_ROUND_UP(MLX5E_TRANSPORT_STATIC_PARAMS_WQE_SZ, MLX5_SEND_WQE_DS))
+
+#define MLX5E_TRANSPORT_STATIC_PARAMS_OCTWORD_SIZE                                                 \
+    (DEVX_ST_SZ_BYTES(transport_static_params) / MLX5_SEND_WQE_DS)
+
+struct mlx5_ifc_nvmeotcp_progress_params_bits {
+    uint8_t next_pdu_tcp_sn[0x20];
+
+    uint8_t hw_resync_tcp_sn[0x20];
+
+    uint8_t pdu_tracker_state[0x2];
+    uint8_t offloading_state[0x2];
+    uint8_t reserved_at_44[0xc];
+    uint8_t cccid_ttag[0x10];
+};
+
+enum {
+    MLX5E_NVMEOTCP_PROGRESS_PARAMS_PDU_TRACKER_STATE_START = 0,
+    MLX5E_NVMEOTCP_PROGRESS_PARAMS_PDU_TRACKER_STATE_TRACKING = 1,
+    MLX5E_NVMEOTCP_PROGRESS_PARAMS_PDU_TRACKER_STATE_SEARCHING = 2,
+};
+
+enum {
+    MLX5_TRANSPORT_STATIC_PARAMS_ACC_TYPE_NVMETCP = 0x2,
+};
+
+enum nvme_tcp_digest_option {
+    NVME_TCP_HDR_DIGEST_ENABLE = (1 << 0),
+    NVME_TCP_DATA_DIGEST_ENABLE = (1 << 1),
+};
+
+enum {
+    MLX5_TRANSPORT_STATIC_PARAMS_TI_INITIATOR = 0x0,
+    MLX5_TRANSPORT_STATIC_PARAMS_TI_TARGET = 0x1,
+};
+
+struct mlx5_seg_nvmeotcp_progress_params {
+    __be32 tir_num;
+    uint8_t ctx[DEVX_ST_SZ_BYTES(nvmeotcp_progress_params)];
+};
+
+struct mlx5e_set_nvmeotcp_progress_params_wqe {
+    struct mlx5_wqe ctrl;
+    struct mlx5_seg_nvmeotcp_progress_params params;
+};
+
+struct mlx5_wqe_transport_static_params_seg {
+    uint8_t ctx[DEVX_ST_SZ_BYTES(transport_static_params)];
+};
+
+struct mlx5e_set_transport_static_params_wqe {
+    mlx5_wqe ctrl;
+    xlio_mlx5_wqe_umr_ctrl_seg uctrl;
+    mlx5_mkey_seg mkc;
+    mlx5_wqe_transport_static_params_seg params;
+};
 
 /* WQE control segment fence flags */
 enum {
@@ -360,13 +479,14 @@ enum {
 };
 
 /* WQE offsets */
-#define MLX5_WQE_CTRL_DS_MASK         0x3f
-#define MLX5_WQE_CTRL_QPN_MASK        0xffffff00
-#define MLX5_WQE_CTRL_QPN_SHIFT       8
-#define MLX5_WQE_DS_UNITS             16
-#define MLX5_WQE_CTRL_OPCODE_MASK     0xff
-#define MLX5_WQE_CTRL_WQE_INDEX_MASK  0x00ffff00
-#define MLX5_WQE_CTRL_WQE_INDEX_SHIFT 8
+#define MLX5_WQE_CTRL_DS_MASK             0x3f
+#define MLX5_WQE_CTRL_QPN_MASK            0xffffff00
+#define MLX5_WQE_CTRL_QPN_SHIFT           8
+#define MLX5_WQE_DS_UNITS                 16
+#define MLX5_WQE_CTRL_OPCODE_MASK         0xff
+#define MLX5_WQE_CTRL_WQE_INDEX_MASK      0x00ffff00
+#define MLX5_WQE_CTRL_WQE_INDEX_SHIFT     8
+#define MLX5_WQE_CTRL_TIR_TIS_INDEX_SHIFT 8
 
 /*
  * WQE opcode list.
@@ -375,6 +495,7 @@ enum {
     XLIO_MLX5_OPCODE_SET_PSV = 0x20,
     XLIO_MLX5_OPCODE_GET_PSV = 0x21,
     XLIO_MLX5_OPCODE_DUMP = 0x23,
+    XLIO_MLX5_OPCODE_UMR = 0x25,
 };
 
 /*
