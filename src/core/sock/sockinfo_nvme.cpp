@@ -152,22 +152,33 @@ ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
     tx_func tx = [sock = m_p_sock](xlio_tx_call_attr_t &attr) { return sock->tcp_tx(attr); };
 
     ssize_t bytes_sent = 0;
-    do {
-        ssize_t ret = send_pdu(m_pdu_mdesc, sndbuf_available, tx);
-        if (ret == 0) {
-            m_pdu_mdesc->m_pdu->consume(ret);
-            bytes_sent += ret;
-        } else if (ret == 0 && bytes_sent > 0) {
-            return bytes_sent;
-        } else {
-            return ret;
+    ssize_t ret = 0;
+
+    while (nvme &&
+           (ret = send_pdu(m_pdu_mdesc, sndbuf_available, tx)) ==
+               static_cast<ssize_t>(m_pdu_mdesc->m_pdu->length())) {
+        bytes_sent += ret;
+        auto pdu = nvme.get_next_pdu(m_p_sock->get_next_tcp_seqno());
+        if (pdu == nullptr) {
+            errno = EINVAL;
+            return -1;
         }
-    } while (true);
-    return 0;
+        m_pdu_mdesc->put();
+        m_pdu_mdesc = new nvme_pdu_mdesc(std::move(pdu));
+        if (m_pdu_mdesc == nullptr) {
+            break;
+        }
+    }
+
+    return (ret == 0 && bytes_sent > 0) ? bytes_sent : ret;
 }
 
 int sockinfo_tcp_ops_nvme::postrouting(pbuf *p, tcp_seg *seg, xlio_send_attr &attr)
 {
+    if (!m_is_tx_offload) {
+        return 0;
+    }
+
     NOT_IN_USE(p);
     NOT_IN_USE(seg);
     NOT_IN_USE(attr);
@@ -176,8 +187,11 @@ int sockinfo_tcp_ops_nvme::postrouting(pbuf *p, tcp_seg *seg, xlio_send_attr &at
 
 bool sockinfo_tcp_ops_nvme::handle_send_ret(ssize_t ret, tcp_seg *seg)
 {
-    NOT_IN_USE(ret);
-    NOT_IN_USE(seg);
+    if (ret < 0 && seg) {
+        /* m_expected_seqno -= seg->len; */
+        return false;
+    }
+
     return true;
 }
 
