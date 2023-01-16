@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 
+#include <functional>
 #include "sockinfo_tcp.h"
 #include "sockinfo_ulp.h"
 #include "sockinfo_nvme.h"
@@ -70,6 +71,51 @@ int sockinfo_tcp_ops_nvme::setsockopt(int level, int optname, const void *optval
     return 0;
 }
 
+using tx_func = std::function<ssize_t(xlio_tx_call_attr_t &)>;
+using segment_size_func = std::function<size_t()>;
+
+static inline ssize_t send_pdu_segment(iovec *iov, size_t sz_iov, mem_desc *desc, tx_func tx)
+{
+    pbuf_desc pdesc;
+    pdesc.attr = PBUF_DESC_MDESC;
+    pdesc.mdesc = desc;
+    xlio_tx_call_attr_t nvme_tx_arg {TX_SENDMSG,
+                                     xlio_tx_call_attr_t::_msg {
+                                         .iov = &iov[0],
+                                         .sz_iov = static_cast<ssize_t>(sz_iov),
+                                         .flags = MSG_ZEROCOPY,
+                                         .addr = nullptr,
+                                         .len = 0U,
+                                         .hdr = nullptr,
+                                     },
+                                     TX_FLAG_NO_PARTIAL_WRITE, std::move(pdesc)};
+    return tx(nvme_tx_arg);
+}
+
+static inline ssize_t send_pdu(nvme_pdu_mdesc *desc, segment_size_func segment_available,
+                               tx_func tx)
+{
+    ssize_t bytes_sent = 0;
+    do {
+        iovec iov[64U];
+        auto segment = desc->m_pdu->get_segment(segment_available(), &iov[0], 64U);
+        if (!segment.is_valid()) {
+            break;
+        }
+        ssize_t ret = send_pdu_segment(&iov[0], segment.iov_num, desc, tx);
+        if (ret > 0) {
+            desc->m_pdu->consume(ret);
+            bytes_sent += ret;
+        } else if (ret == 0 && bytes_sent > 0) {
+            break;
+        } else {
+            bytes_sent = ret;
+            break;
+        }
+    } while (true);
+    return bytes_sent;
+}
+
 ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
 {
     if (!m_is_tx_offload) {
@@ -102,21 +148,20 @@ ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
         return -1;
     }
 
-    do {
-        iovec iov[64U];
-        auto sz_iov = m_pdu_mdesc->m_pdu->get_segment(m_p_sock->sndbuf_available(), &iov[0], 64U);
-        xlio_tx_call_attr_t nvme_tx_arg {tx_arg.opcode,
-                                         xlio_tx_call_attr_t::_msg {
-                                             .iov = &iov[0],
-                                             .sz_iov = static_cast<ssize_t>(sz_iov.first),
-                                             .flags = MSG_ZEROCOPY,
-                                             .addr = nullptr,
-                                             .len = 0U,
-                                             .hdr = nullptr,
-                                         },
-                                         TX_FLAG_NO_PARTIAL_WRITE,
-                                         pbuf_desc {PBUF_DESC_MDESC, .mdesc = m_pdu_mdesc}};
+    segment_size_func sndbuf_available = [sock = m_p_sock]() { return sock->sndbuf_available(); };
+    tx_func tx = [sock = m_p_sock](xlio_tx_call_attr_t &attr) { return sock->tcp_tx(attr); };
 
+    ssize_t bytes_sent = 0;
+    do {
+        ssize_t ret = send_pdu(m_pdu_mdesc, sndbuf_available, tx);
+        if (ret == 0) {
+            m_pdu_mdesc->m_pdu->consume(ret);
+            bytes_sent += ret;
+        } else if (ret == 0 && bytes_sent > 0) {
+            return bytes_sent;
+        } else {
+            return ret;
+        }
     } while (true);
     return 0;
 }
