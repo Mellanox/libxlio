@@ -45,6 +45,7 @@ public:
         : sockinfo_tcp_ops(sock)
         , m_nvme_feature_mask(nvme_feature_mask)
         , m_pdu_mdesc(nullptr)
+        , m_expected_seqno(0U)
         , m_is_tx_offload(false) {};
     ~sockinfo_tcp_ops_nvme() { if (m_pdu_mdesc) m_pdu_mdesc->put(); }
 
@@ -60,6 +61,7 @@ private:
     int setsockopt_tx();
     std::unique_ptr<xlio_ti> m_p_tis;
     nvme_pdu_mdesc *m_pdu_mdesc;
+    uint32_t m_expected_seqno;
     bool m_is_tx_offload;
 };
 
