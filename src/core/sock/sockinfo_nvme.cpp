@@ -210,5 +210,6 @@ int sockinfo_tcp_ops_nvme::setsockopt_tx()
         errno = ENOTSUP;
         return -1;
     }
+    m_expected_seqno = m_p_sock->get_next_tcp_seqno();
     return 0;
 }
