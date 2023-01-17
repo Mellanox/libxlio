@@ -1,3 +1,10 @@
+Version 2.1.3-1:
+Date + Time 2023-01-17
+=============================================================
+Fixed:
+        - RM #3231710 Fix Zero Copy Tx Notification and Rx ref count for mem_buf chains
+        - RM #3302217 Fixing incorrect handling of routing src field for IPv6
+
 Version 2.1.2-1:
 Date + Time 2023-01-10
 =============================================================
