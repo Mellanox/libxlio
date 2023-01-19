@@ -210,9 +210,9 @@ struct mlx5_ifc_transport_static_params_bits {
     uint8_t reserved_at_160[0xa0];
 };
 
-#define MLX5_CTRL_SEGMENT_OPC_MOD_UMR_TIR_PARAMS                   0x2
-#define MLX5_CTRL_SEGMENT_OPC_MOD_UMR_TIS_PARAMS                   0x1
-#define MLX5_CTRL_SEGMENT_OPC_MOD_UMR_UMR                          0x0
+#define MLX5_CTRL_SEGMENT_OPC_MOD_UMR_TIR_PARAMS 0x2
+#define MLX5_CTRL_SEGMENT_OPC_MOD_UMR_TIS_PARAMS 0x1
+#define MLX5_CTRL_SEGMENT_OPC_MOD_UMR_UMR        0x0
 
 /* Bit mask for TCP PUSH flag in lro_tcppsh_abort_dupack field. */
 #define MLX5_CQE_LRO_TCP_PUSH_MASK 0x40
