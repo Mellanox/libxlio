@@ -498,12 +498,12 @@ cq_mgr *qp_mgr_eth_mlx5::init_tx_cq_mgr()
                            m_p_ring->get_tx_comp_event_channel(), false);
 }
 
-inline void qp_mgr_eth_mlx5::ring_doorbell(uint64_t *wqe, int db_method, int num_wqebb,
-                                           int num_wqebb_top, bool skip_comp /*=false*/)
+inline void qp_mgr_eth_mlx5::ring_doorbell(int db_method, int num_wqebb, int num_wqebb_top,
+                                           bool skip_comp /*=false*/)
 {
     uint64_t *dst = (uint64_t *)((uint8_t *)m_mlx5_qp.bf.reg + m_mlx5_qp.bf.offset);
-    uint64_t *src = wqe;
-    struct xlio_mlx5_wqe_ctrl_seg *ctrl = reinterpret_cast<struct xlio_mlx5_wqe_ctrl_seg *>(wqe);
+    uint64_t *src = reinterpret_cast<uint64_t *>(m_sq_wqe_hot);
+    struct xlio_mlx5_wqe_ctrl_seg *ctrl = reinterpret_cast<struct xlio_mlx5_wqe_ctrl_seg *>(src);
 
     /* TODO Refactor m_n_unsignedled_count, is_completion_need(), set_unsignaled_count():
      * Some logic is hidden inside the methods and in one branch the field is changed directly.
@@ -625,7 +625,7 @@ inline int qp_mgr_eth_mlx5::fill_wqe(xlio_ibv_send_wr *pswr)
             rest_space = align_to_WQEBB_up(wqe_size) / 4;
             qp_logfunc("data_len: %d inline_len: %d wqe_size: %d wqebbs: %d", data_len - inline_len,
                        inline_len, wqe_size, rest_space);
-            ring_doorbell((uint64_t *)m_sq_wqe_hot, m_db_method, rest_space);
+            ring_doorbell(m_db_method, rest_space);
             return rest_space;
         } else {
             // wrap around case, first filling till the end of m_sq_wqes
@@ -670,7 +670,7 @@ inline int qp_mgr_eth_mlx5::fill_wqe(xlio_ibv_send_wr *pswr)
             dbg_dump_wqe((uint32_t *)m_sq_wqe_hot, rest_space * 4 * 16);
             dbg_dump_wqe((uint32_t *)m_sq_wqes, max_inline_len * 4 * 16);
 
-            ring_doorbell((uint64_t *)m_sq_wqe_hot, m_db_method, rest_space, max_inline_len);
+            ring_doorbell(m_db_method, rest_space, max_inline_len);
             return rest_space + max_inline_len;
         }
     } else {
@@ -775,7 +775,7 @@ inline int qp_mgr_eth_mlx5::fill_wqe_send(xlio_ibv_send_wr *pswr)
     m_sq_wqe_hot->ctrl.data[1] = htonl((m_mlx5_qp.qpn << 8) | wqe_size);
     int wqebbs = align_to_WQEBB_up(wqe_size) / 4;
     /* TODO FIXME Split into top and bottom parts */
-    ring_doorbell((uint64_t *)m_sq_wqe_hot, m_db_method, wqebbs);
+    ring_doorbell(m_db_method, wqebbs);
 
     return wqebbs;
 }
@@ -855,13 +855,12 @@ inline int qp_mgr_eth_mlx5::fill_wqe_lso(xlio_ibv_send_wr *pswr)
     // TODO Make a single doorbell call
     if (likely(inl_hdr_size <= 4)) {
         if (likely(inl_hdr_copy_size == 0)) {
-            ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, inl_hdr_size);
+            ring_doorbell(MLX5_DB_METHOD_DB, inl_hdr_size);
         } else {
-            ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, inl_hdr_copy_size,
-                          inl_hdr_size - inl_hdr_copy_size);
+            ring_doorbell(MLX5_DB_METHOD_DB, inl_hdr_copy_size, inl_hdr_size - inl_hdr_copy_size);
         }
     } else {
-        ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, inl_hdr_size);
+        ring_doorbell(MLX5_DB_METHOD_DB, inl_hdr_size);
     }
     return align_to_WQEBB_up(wqe_size) / 4;
 }
@@ -1273,7 +1272,7 @@ inline void qp_mgr_eth_mlx5::tls_post_static_params_wqe(xlio_ti *ti,
     tls_fill_static_params_wqe(tspseg, info, key_id, resync_tcp_sn);
     store_current_wqe_prop(nullptr, SQ_CREDITS_UMR, ti);
 
-    ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs, num_wqebbs_top, true);
+    ring_doorbell(MLX5_DB_METHOD_DB, num_wqebbs, num_wqebbs_top, true);
     dbg_dump_wqe((uint32_t *)m_sq_wqe_hot, sizeof(mlx5_set_tls_static_params_wqe));
 
     update_next_wqe_hot();
@@ -1319,7 +1318,7 @@ inline void qp_mgr_eth_mlx5::tls_post_progress_params_wqe(xlio_ti *ti, uint32_t 
     tls_fill_progress_params_wqe(&wqe->params, tis_tir_number, next_record_tcp_sn);
     store_current_wqe_prop(nullptr, SQ_CREDITS_SET_PSV, ti);
 
-    ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs);
+    ring_doorbell(MLX5_DB_METHOD_DB, num_wqebbs);
     dbg_dump_wqe((uint32_t *)m_sq_wqe_hot, sizeof(mlx5_set_tls_progress_params_wqe));
 
     update_next_wqe_hot();
@@ -1352,7 +1351,7 @@ inline void qp_mgr_eth_mlx5::tls_get_progress_params_wqe(xlio_ti *ti, uint32_t t
 
     store_current_wqe_prop(nullptr, SQ_CREDITS_GET_PSV, ti);
 
-    ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs);
+    ring_doorbell(MLX5_DB_METHOD_DB, num_wqebbs);
 
     update_next_wqe_hot();
 }
@@ -1380,7 +1379,7 @@ void qp_mgr_eth_mlx5::tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t l
 
     store_current_wqe_prop(nullptr, SQ_CREDITS_DUMP, tis);
 
-    ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, num_wqebbs, 0, true);
+    ring_doorbell(MLX5_DB_METHOD_DB, num_wqebbs, 0, true);
 
     update_next_wqe_hot();
 }
@@ -1493,14 +1492,12 @@ inline void qp_mgr_eth_mlx5::nvme_setup_tx_offload(uint32_t tisn, uint32_t tcp_s
 
     auto *params = reinterpret_cast<mlx5_wqe_transport_static_params_seg *>(wqebb_ptr(2U));
     nvme_fill_static_params_transport_params(params, tcp_seqno);
-    ring_doorbell(reinterpret_cast<uint64_t *>(m_sq_wqe_hot), MLX5_DB_METHOD_DB,
-                  MLX5E_TRANSPORT_SET_STATIC_PARAMS_WQEBBS);
+    ring_doorbell(MLX5_DB_METHOD_DB, MLX5E_TRANSPORT_SET_STATIC_PARAMS_WQEBBS);
     update_next_wqe_hot();
 
     auto *wqe = reinterpret_cast<mlx5e_set_nvmeotcp_progress_params_wqe *>(m_sq_wqe_hot);
     nvme_fill_progress_wqe(wqe, m_sq_wqe_counter, m_mlx5_qp.qpn, tisn, tcp_seqno, 0);
-    ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB,
-                  MLX5E_NVMEOTCP_PROGRESS_PARAMS_WQEBBS);
+    ring_doorbell(MLX5_DB_METHOD_DB, MLX5E_NVMEOTCP_PROGRESS_PARAMS_WQEBBS);
     update_next_wqe_hot();
 }
 
@@ -1572,7 +1569,7 @@ void qp_mgr_eth_mlx5::post_nop_fence(void)
 
     store_current_wqe_prop(nullptr, SQ_CREDITS_NOP, NULL);
 
-    ring_doorbell((uint64_t *)m_sq_wqe_hot, MLX5_DB_METHOD_DB, 1);
+    ring_doorbell(MLX5_DB_METHOD_DB, 1);
 
     update_next_wqe_hot();
 }

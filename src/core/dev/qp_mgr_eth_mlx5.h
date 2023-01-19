@@ -207,7 +207,7 @@ private:
 #endif /* DEFINED_DPCP */
     inline int fill_wqe_send(xlio_ibv_send_wr *pswr);
     inline int fill_wqe_lso(xlio_ibv_send_wr *pswr);
-    inline void ring_doorbell(uint64_t *wqe, int db_method, int num_wqebb, int num_wqebb_top = 0,
+    inline void ring_doorbell(int db_method, int num_wqebb, int num_wqebb_top = 0,
                               bool skip_comp = false);
     inline int fill_inl_segment(sg_array &sga, uint8_t *cur_seg, uint8_t *data_addr,
                                 int max_inline_len, int inline_len);
