@@ -95,9 +95,9 @@ struct nvmeotcp_tx {
             , m_curr_iov_offset(0U)
             , m_seqnum(seqnum)
         {
-            if (iov != nullptr && aux_data != nullptr && num <= 64U) {
+            if (iov != nullptr && aux_data != nullptr && m_iov_num <= 64U) {
                 memcpy(&m_iov[0U], iov, m_iov_num * sizeof(*iov));
-                memcpy(&m_aux_data[0U], aux_data, m_iov_num * sizeof(iovec));
+                memcpy(&m_aux_data[0U], aux_data, m_iov_num * sizeof(*aux_data));
             } else {
                 m_iov_num = 0U;
             }
@@ -115,7 +115,8 @@ struct nvmeotcp_tx {
          * iov */
         segment get_segment(size_t num_bytes, iovec *iov, size_t iov_num) const
         {
-            if (num_bytes == 0U || iov == nullptr || iov_num == 0U || m_curr_iov_index >= 64U) {
+            if (num_bytes == 0U || iov == nullptr || iov_num == 0U ||
+                m_curr_iov_index >= m_iov_num) {
                 return {0U, 0U};
             }
 
