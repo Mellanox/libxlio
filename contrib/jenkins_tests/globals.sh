@@ -299,7 +299,8 @@ do_check_dpcp()
 
     set +e
     if [ ! -d ${dpcp_dir}/install -a $ret -eq 0 ]; then
-        eval "timeout -s SIGKILL 20s git clone git@github.com:Mellanox/dpcp.git . " > /dev/null 2>&1
+		branch=${main:-ghprbTargetBranch}
+		eval "timeout -s SIGKILL 30s git clone --branch $branch git@github.com:Mellanox/dpcp.git . " > /dev/null 2>&1
         ret=$?
     fi
 
