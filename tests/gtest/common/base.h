@@ -95,7 +95,7 @@ protected:
     virtual void cleanup();
     virtual void init();
     bool barrier();
-    void barrier_fork(int pid, bool sync_parent = false);
+    void barrier_fork(int pid = 0, bool sync_parent = false);
     bool child_fork_exit() { return m_break_signal; }
     bool test_mapped_ipv4() const;
 

@@ -77,7 +77,7 @@ using segment_size_func = std::function<size_t()>;
 static inline ssize_t send_pdu_segment(iovec *iov, size_t sz_iov, mem_desc *desc, tx_func tx)
 {
     pbuf_desc pdesc;
-    pdesc.attr = PBUF_DESC_MDESC;
+    pdesc.attr = PBUF_DESC_NVME_TX;
     pdesc.mdesc = desc;
     xlio_tx_call_attr_t nvme_tx_arg {TX_SENDMSG,
                                      xlio_tx_call_attr_t::_msg {
@@ -104,6 +104,7 @@ static inline ssize_t send_pdu(nvme_pdu_mdesc *desc, segment_size_func segment_a
         }
         ssize_t ret = send_pdu_segment(&iov[0], segment.iov_num, desc, tx);
         if (ret > 0) {
+            
             desc->m_pdu->consume(ret);
             bytes_sent += ret;
         } else if (ret == 0 && bytes_sent > 0) {
@@ -153,15 +154,13 @@ ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
 
     ssize_t bytes_sent = 0;
     ssize_t ret = 0;
-
     while (nvme &&
            (ret = send_pdu(m_pdu_mdesc, sndbuf_available, tx)) ==
                static_cast<ssize_t>(m_pdu_mdesc->m_pdu->length())) {
         bytes_sent += ret;
         auto pdu = nvme.get_next_pdu(m_p_sock->get_next_tcp_seqno());
         if (pdu == nullptr) {
-            errno = EINVAL;
-            return -1;
+            break;
         }
         m_pdu_mdesc->put();
         m_pdu_mdesc = new nvme_pdu_mdesc(std::move(pdu));

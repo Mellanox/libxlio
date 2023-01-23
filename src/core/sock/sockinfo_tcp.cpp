@@ -5168,7 +5168,8 @@ struct pbuf *sockinfo_tcp::tcp_tx_pbuf_alloc(void *p_conn, pbuf_type type, pbuf_
         p_desc = p_dst->get_buffer(type, desc);
         if (p_desc && (p_desc->lwip_pbuf.pbuf.type == PBUF_ZEROCOPY) &&
             ((p_desc->lwip_pbuf.pbuf.desc.attr == PBUF_DESC_NONE) ||
-             (p_desc->lwip_pbuf.pbuf.desc.attr == PBUF_DESC_MKEY))) {
+             (p_desc->lwip_pbuf.pbuf.desc.attr == PBUF_DESC_MKEY) ||
+             p_desc->lwip_pbuf.pbuf.desc.attr == PBUF_DESC_NVME_TX)) {
             /* Prepare error queue fields for send zerocopy */
             if (p_buff) {
                 /* It is a special case that can happen as a result

@@ -225,7 +225,8 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
                 if (PBUF_DESC_MKEY == p_tcp_iov[i].p_desc->lwip_pbuf.pbuf.desc.attr) {
                     /* PBUF_DESC_MKEY - value is provided by user */
                     m_sge[i].lkey = p_tcp_iov[i].p_desc->lwip_pbuf.pbuf.desc.mkey;
-                } else if (PBUF_DESC_MDESC == p_tcp_iov[i].p_desc->lwip_pbuf.pbuf.desc.attr) {
+                } else if (PBUF_DESC_MDESC == p_tcp_iov[i].p_desc->lwip_pbuf.pbuf.desc.attr ||
+                           PBUF_DESC_NVME_TX == p_tcp_iov[i].p_desc->lwip_pbuf.pbuf.desc.attr) {
                     mem_desc *mdesc = (mem_desc *)p_tcp_iov[i].p_desc->lwip_pbuf.pbuf.desc.mdesc;
                     m_sge[i].lkey = mdesc->get_lkey(p_tcp_iov[i].p_desc, ib_ctx,
                                                     (void *)m_sge[i].addr, m_sge[i].length);
@@ -408,7 +409,8 @@ mem_buf_desc_t *dst_entry_tcp::get_buffer(pbuf_type type, pbuf_desc *desc,
         if (desc) {
             memcpy(&p_mem_buf_desc->lwip_pbuf.pbuf.desc, desc,
                    sizeof(p_mem_buf_desc->lwip_pbuf.pbuf.desc));
-            if (p_mem_buf_desc->lwip_pbuf.pbuf.desc.attr == PBUF_DESC_MDESC) {
+            if (p_mem_buf_desc->lwip_pbuf.pbuf.desc.attr == PBUF_DESC_MDESC ||
+                p_mem_buf_desc->lwip_pbuf.pbuf.desc.attr == PBUF_DESC_NVME_TX) {
                 mem_desc *mdesc = (mem_desc *)p_mem_buf_desc->lwip_pbuf.pbuf.desc.mdesc;
                 mdesc->get();
             } else if (p_mem_buf_desc->lwip_pbuf.pbuf.type == PBUF_ZEROCOPY &&
