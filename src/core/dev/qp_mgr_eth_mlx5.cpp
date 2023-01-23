@@ -1491,7 +1491,7 @@ inline void qp_mgr_eth_mlx5::nvme_setup_tx_offload(uint32_t tisn, uint32_t tcp_s
     memset(wqebb_ptr(1U), 0, sizeof(mlx5_mkey_seg));
 
     auto *params = reinterpret_cast<mlx5_wqe_transport_static_params_seg *>(wqebb_ptr(2U));
-    nvme_fill_static_params_transport_params(params, tcp_seqno);
+    nvme_fill_static_params_transport_params(params, 0);
     ring_doorbell(MLX5_DB_METHOD_DB, MLX5E_TRANSPORT_SET_STATIC_PARAMS_WQEBBS);
     update_next_wqe_hot();
 
