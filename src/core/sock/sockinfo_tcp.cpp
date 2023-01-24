@@ -4643,7 +4643,7 @@ void sockinfo_tcp::get_tcp_info(struct tcp_info *ti)
 
     memset(ti, 0, sizeof(*ti));
 
-    static std::map<int, int> pcb_to_tcp_state = {
+    static std::unordered_map<int, int> pcb_to_tcp_state = {
         {CLOSED, TCP_CLOSE},         {LISTEN, TCP_LISTEN},           {SYN_SENT, TCP_SYN_SENT},
         {SYN_RCVD, TCP_SYN_RECV},    {ESTABLISHED, TCP_ESTABLISHED}, {FIN_WAIT_1, TCP_FIN_WAIT1},
         {FIN_WAIT_2, TCP_FIN_WAIT2}, {CLOSE_WAIT, TCP_CLOSE_WAIT},   {CLOSING, TCP_CLOSING},
