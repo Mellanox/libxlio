@@ -53,10 +53,9 @@ AS_IF([test "$prj_cv_dpcp" -ne 0],
          [[dpcp::tis* _tis;
            dpcp::dek* _dek;
            int key_type = (int)dpcp::DEK_ATTR_TLS;
-           key_type = key_type;
            int tis_bit = (int)dpcp::TIS_ATTR_TLS;
-           tis_bit = tis_bit;
-           (void)_tis; (void)_dek;]])],
+           (void)_tis; (void)_dek;
+           (void)key_type; (void)tis_bit;]])],
          [prj_cv_dpcp_1_1_3=1])
     AC_LANG_POP()
     ])
