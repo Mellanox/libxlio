@@ -1313,7 +1313,6 @@ void tcp_split_rexmit(struct tcp_pcb *pcb, struct tcp_seg *seg)
     u8_t optflags = 0;
     u8_t optlen = 0;
     u32_t seqno = 0;
-    u32_t pbuf_tot_len_orig = 0;
 
 #if LWIP_TCP_TIMESTAMPS
     if ((pcb->flags & TF_TIMESTAMP)) {
@@ -1336,16 +1335,15 @@ void tcp_split_rexmit(struct tcp_pcb *pcb, struct tcp_seg *seg)
     cur_p = seg->p->next;
 
     while (cur_p) {
-        pbuf_tot_len_orig = cur_p->tot_len;
         cur_p->len += optlen;
-        cur_p->tot_len = cur_p->len;
+        cur_p->tot_len += optlen;
         cur_p->payload = (u8_t *)cur_p->payload - optlen;
 
         seqno = cur_seg->seqno + cur_seg->p->len - tcp_hlen_delta - optlen;
         if (NULL == (new_seg = tcp_create_segment(pcb, cur_p, 0, seqno, optflags))) {
             /* Avoid corrupting original segment's buffer in case of failure */
             cur_p->len -= optlen;
-            cur_p->tot_len = pbuf_tot_len_orig;
+            cur_p->tot_len -= optlen;
             cur_p->payload = (u8_t *)cur_p->payload + optlen;
             return;
         }
