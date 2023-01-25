@@ -104,7 +104,7 @@ static inline ssize_t send_pdu(nvme_pdu_mdesc *desc, segment_size_func segment_a
         }
         ssize_t ret = send_pdu_segment(&iov[0], segment.iov_num, desc, tx);
         if (ret > 0) {
-            
+
             desc->m_pdu->consume(ret);
             bytes_sent += ret;
         } else if (ret == 0 && bytes_sent > 0) {
@@ -123,7 +123,7 @@ ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
         return m_p_sock->tcp_tx(tx_arg);
     }
 
-    if (tx_arg.opcode != TX_SENDMSG || tx_arg.priv.attr != PBUF_DESC_MKEY) {
+    if (tx_arg.opcode != TX_SENDMSG || tx_arg.priv.attr != PBUF_DESC_NVME_TX) {
         errno = EINVAL;
         return -1;
     }
@@ -180,7 +180,9 @@ int sockinfo_tcp_ops_nvme::postrouting(pbuf *p, tcp_seg *seg, xlio_send_attr &at
 
     NOT_IN_USE(p);
     NOT_IN_USE(seg);
-    NOT_IN_USE(attr);
+    if (seg != nullptr && seg->len != 0) {
+        attr.tis = m_p_tis.get();
+    }
     return 0;
 }
 
@@ -204,8 +206,9 @@ int sockinfo_tcp_ops_nvme::setsockopt_tx()
 {
     ring *p_ring = m_p_sock->get_tx_ring();
     m_expected_seqno = m_p_sock->get_next_tcp_seqno();
-    m_p_tis = p_ring != nullptr ? p_ring->create_nvme_context(m_expected_seqno) : nullptr;
-
+    if (p_ring != nullptr && m_p_tis == nullptr) {
+        m_p_tis.reset(p_ring->create_nvme_context(m_expected_seqno));
+    }
     if (m_p_tis == nullptr) {
         errno = ENOTSUP;
         return -1;

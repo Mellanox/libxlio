@@ -93,29 +93,7 @@ public:
     void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first);
 #endif /* DEFINED_UTLS */
 #ifdef DEFINED_DPCP
-    class nvme_tis : public xlio_ti {
-    public:
-        nvme_tis(dpcp::tis *tis, uint32_t tisn)
-            : xlio_ti()
-            , m_p_tis(tis)
-            , m_tisn(tisn)
-        {
-        }
-
-        virtual ~nvme_tis() { m_p_tis.reset(); };
-
-        uint32_t get_id() const override { return m_tisn; };
-        nvme_tis(const nvme_tis &) = delete;
-        nvme_tis &operator=(const nvme_tis &) = delete;
-
-        inline uint32_t get_tisn(void) const noexcept { return m_tisn; }
-
-    private:
-        std::unique_ptr<dpcp::tis> m_p_tis;
-        uint32_t m_tisn;
-    };
-
-    std::unique_ptr<xlio_ti> create_nvme_context(uint32_t) override;
+    xlio_tis *create_nvme_context(uint32_t) override;
 #endif /* DEFINED_DPCP */
     void post_nop_fence(void) override;
 
@@ -237,4 +215,123 @@ private:
 #endif
 };
 #endif // defined(DEFINED_DIRECT_VERBS)
+
+#if defined(DEFINED_UTLS) || defined(DEFINED_DPCP)
+class xlio_tis : public xlio_ti {
+public:
+    xlio_tis(dpcp::tis *_tis)
+        : xlio_ti()
+        , m_dek()
+        , m_p_tis(_tis)
+        , m_tisn(0U)
+        , m_dek_id(0U)
+    {
+        dpcp::status ret = m_p_tis->get_tisn(m_tisn);
+        assert(ret == dpcp::DPCP_OK);
+        (void)ret;
+    }
+
+    ~xlio_tis()
+    {
+        if (m_p_tis != NULL) {
+            delete m_p_tis;
+        }
+    }
+
+    void reset(qp_mgr_eth_mlx5 &qpmgr)
+    {
+        assert(m_ref == 0);
+
+        if (m_dek) {
+            qpmgr.put_dek(std::move(m_dek));
+        }
+
+        m_released = false;
+    }
+
+    inline uint32_t get_tisn(void) { return m_tisn; }
+
+    inline void assign_dek(std::unique_ptr<dpcp::dek> &&dek_obj)
+    {
+        m_dek.swap(dek_obj);
+        m_dek_id = m_dek->get_key_id();
+    }
+
+    inline uint32_t get_dek_id(void) { return m_dek_id; }
+
+private:
+    std::unique_ptr<dpcp::dek> m_dek;
+    dpcp::tis *m_p_tis;
+    uint32_t m_tisn;
+    uint32_t m_dek_id;
+};
+
+class xlio_tir : public xlio_ti {
+public:
+    xlio_tir(dpcp::tir *_tir)
+        : xlio_ti()
+    {
+        m_type = XLIO_TI_TIR;
+        m_p_tir = _tir;
+        m_p_dek = NULL;
+        m_tirn = 0;
+        m_dek_id = 0;
+
+        /* Cache the tir number. Mustn't fail for a valid TIR object. */
+        m_tirn = m_p_tir->get_tirn();
+        assert(m_tirn != 0);
+    }
+
+    ~xlio_tir()
+    {
+        if (m_p_tir != NULL) {
+            delete m_p_tir;
+        }
+        if (m_p_dek != NULL) {
+            delete m_p_dek;
+        }
+    }
+
+    void reset(void)
+    {
+        assert(m_ref == 0);
+
+        if (m_p_dek != NULL) {
+            delete m_p_dek;
+            m_p_dek = NULL;
+        }
+        m_released = false;
+    }
+
+    inline uint32_t get_tirn(void) { return m_tirn; }
+
+    inline void assign_dek(dpcp::dek *_dek)
+    {
+        m_p_dek = _dek;
+        m_dek_id = _dek->get_key_id();
+    }
+
+    inline uint32_t get_dek_id(void) { return m_dek_id; }
+
+    dpcp::tir *m_p_tir;
+
+private:
+    dpcp::dek *m_p_dek;
+    uint32_t m_tirn;
+    uint32_t m_dek_id;
+};
+#else /* DEFINED_UTLS or DEFINED_DPCP */
+class xlio_tis : public xlio_ti {
+public:
+    /* A stub class to compile without uTLS support. */
+    inline uint32_t get_tisn(void) { return 0; }
+    inline void reset(qp_mgr_eth_mlx5 &qpmgr) { NOT_IN_USE(qpmgr); }
+};
+class xlio_tir : public xlio_ti {
+public:
+    /* A stub class to compile without uTLS support. */
+    inline uint32_t get_tirn(void) { return 0; }
+    inline void reset(void) {}
+};
+#endif /* DEFINED_UTLS or DEFINED_DPCP */
 #endif // QP_MGR_ETH_MLX5_H

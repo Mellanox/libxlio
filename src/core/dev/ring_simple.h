@@ -231,7 +231,7 @@ public:
             (NVME_ZEROCOPY * caps.nvmeotcp_caps.zerocopy);
     }
 
-    std::unique_ptr<xlio_ti> create_nvme_context(uint32_t seqno) override
+    xlio_tis *create_nvme_context(uint32_t seqno) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         return m_p_qp_mgr->create_nvme_context(seqno);
