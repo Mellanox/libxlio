@@ -1635,11 +1635,16 @@ extern "C" EXPORT_SYMBOL ssize_t sendmsg(int __fd, __const struct msghdr *__msg,
 
         if (0 < __msg->msg_controllen) {
             struct cmsghdr *cmsg = CMSG_FIRSTHDR((struct msghdr *)__msg);
-            if ((cmsg->cmsg_level == SOL_SOCKET) && (cmsg->cmsg_type == SCM_XLIO_PD)) {
+            if ((cmsg->cmsg_level == SOL_SOCKET) &&
+                (cmsg->cmsg_type == SCM_XLIO_PD || cmsg->cmsg_type == SCM_XLIO_NVME_PD)) {
                 if ((tx_arg.msg.flags & MSG_ZEROCOPY) &&
                     (__msg->msg_iovlen ==
                      ((cmsg->cmsg_len - CMSG_LEN(0)) / sizeof(struct xlio_pd_key)))) {
-                    tx_arg.priv.attr = PBUF_DESC_MKEY;
+                    if (cmsg->cmsg_type == SCM_XLIO_PD) {
+                        tx_arg.priv.attr = PBUF_DESC_MKEY;
+                    } else {
+                        tx_arg.priv.attr = PBUF_DESC_NVME_TX;
+                    }
                     tx_arg.priv.map = (void *)CMSG_DATA(cmsg);
                 } else {
                     errno = EINVAL;

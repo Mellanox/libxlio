@@ -55,6 +55,7 @@
 #define SO_XLIO_SHUTDOWN_RX      2821
 #define SO_XLIO_PD               2822
 #define SCM_XLIO_PD              SO_XLIO_PD
+#define SCM_XLIO_NVME_PD         2823
 
 enum { CMSG_XLIO_IOCTL_USER_ALLOC = 2900 };
 

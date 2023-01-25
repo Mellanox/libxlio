@@ -34,6 +34,7 @@
 #define _SOCKINFO_NVME_H
 #include <memory>
 #include "sockinfo_ulp.h" /* sockinfo_tcp_ops */
+#include "dev/qp_mgr_eth_mlx5.h"
 #include "proto/nvme_parse_input_args.h"
 #include "lwip/err.h" /* err_t */
 
@@ -44,6 +45,7 @@ public:
     sockinfo_tcp_ops_nvme(sockinfo_tcp *sock, int nvme_feature_mask)
         : sockinfo_tcp_ops(sock)
         , m_nvme_feature_mask(nvme_feature_mask)
+        , m_p_tis(nullptr)
         , m_pdu_mdesc(nullptr)
         , m_expected_seqno(0U)
         , m_is_tx_offload(false) {};
@@ -63,7 +65,7 @@ public:
 
 private:
     int setsockopt_tx();
-    std::unique_ptr<xlio_ti> m_p_tis;
+    std::unique_ptr<xlio_tis> m_p_tis;
     nvme_pdu_mdesc *m_pdu_mdesc;
     uint32_t m_expected_seqno;
     bool m_is_tx_offload;

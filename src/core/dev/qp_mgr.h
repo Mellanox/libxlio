@@ -94,8 +94,6 @@ public:
     xlio_ti() = default;
     virtual ~xlio_ti() {};
 
-    virtual uint32_t get_id() const { return 0; };
-
     inline void assign_callback(xlio_comp_cb_t callback, void *callback_arg)
     {
         m_callback = callback;
@@ -240,7 +238,7 @@ public:
         NOT_IN_USE(first);
     }
 #endif /* DEFINED_UTLS */
-    virtual std::unique_ptr<xlio_ti> create_nvme_context(uint32_t) { return nullptr; }
+    virtual xlio_tis *create_nvme_context(uint32_t) { return nullptr; }
     virtual void post_nop_fence(void) {}
 
     virtual void reset_inflight_zc_buffers_ctx(void *ctx) { NOT_IN_USE(ctx); }
