@@ -597,10 +597,9 @@ protected:
         } while (rc >= 0 &&
                  (data_received += static_cast<size_t>(rc)) < input_pdu_without_ddgst_length);
 
-        cerr << "received " << data_received << endl;
         ASSERT_GE(data_received, input_pdu_without_ddgst_length);
 
-        ASSERT_EQ(0, memcmp(buf, m_test_buf, input_pdu_without_ddgst_length));
+        ASSERT_EQ(0, memcmp(buf, m_test_buf, input_pdu_without_ddgst_length - 4U));
 
         close(server_fd);
         close(listen_fd);

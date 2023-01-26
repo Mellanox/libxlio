@@ -105,12 +105,9 @@ static inline ssize_t send_pdu(nvme_pdu_mdesc *desc, segment_size_func segment_a
             break;
         }
         ssize_t ret = send_pdu_segment(&iov[0], segment.iov_num, desc, tx);
-        if (ret > 0) {
-
+        if (ret >= 0) {
             desc->m_pdu->consume(ret);
             bytes_sent += ret;
-        } else if (ret == 0 && bytes_sent > 0) {
-            break;
         } else {
             bytes_sent = ret;
             break;
@@ -156,35 +153,33 @@ ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
 
     ssize_t bytes_sent = 0;
     ssize_t ret = 0;
-    while (nvme &&
-           (ret = send_pdu(m_pdu_mdesc, sndbuf_available, tx)) ==
-               static_cast<ssize_t>(m_pdu_mdesc->m_pdu->length())) {
-        bytes_sent += ret;
+    while ((ret = send_pdu(m_pdu_mdesc, sndbuf_available, tx)) ==
+           static_cast<ssize_t>(m_pdu_mdesc->m_pdu->length())) {
+        m_pdu_mdesc->put();
+        m_pdu_mdesc = nullptr;
         auto pdu = nvme.get_next_pdu(m_p_sock->get_next_tcp_seqno());
         if (pdu == nullptr) {
             break;
         }
-        m_pdu_mdesc->put();
         m_pdu_mdesc = new nvme_pdu_mdesc(std::move(pdu));
         if (m_pdu_mdesc == nullptr) {
             break;
         }
+        bytes_sent += ret;
     }
 
-    return (ret == 0 && bytes_sent > 0) ? bytes_sent : ret;
+    return ret >= 0 ? (bytes_sent + ret) : ret;
 }
 
 int sockinfo_tcp_ops_nvme::postrouting(pbuf *p, tcp_seg *seg, xlio_send_attr &attr)
 {
-    if (!m_is_tx_offload) {
+    if (!m_is_tx_offload || p == nullptr || seg == nullptr || seg->len == 0U) {
         return 0;
     }
+    assert(p->desc.attr == PBUF_DESC_NVME_TX);
 
-    NOT_IN_USE(p);
-    NOT_IN_USE(seg);
-    if (seg != nullptr && seg->len != 0) {
-        attr.tis = m_p_tis.get();
-    }
+    attr.tis = m_p_tis.get();
+    /* auto nvme_pdu = dynamic_cast<nvme_pdu_mdesc *>(static_cast<mem_desc *>(p->desc.mdesc)); */
     return 0;
 }
 
