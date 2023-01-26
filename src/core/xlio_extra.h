@@ -107,6 +107,14 @@ struct xlio_pd_key {
 #define NVME_TX   1
 #define NVME_RX   2
 
+enum {
+    XLIO_NVME_DDGST_ENABLE = 1U << 31,
+    XLIO_NVME_DDGST_OFFLOAD = 1U << 30,
+    XLIO_NVME_HDGST_ENABLE = 1U << 29,
+    XLIO_NVME_HDGST_OFFLOAD = 1U << 28,
+    XLIO_NVME_PDA_MASK = ((1U << 4) - 1U),
+};
+
 /**
  * Represents one packet
  * Used in receive zero-copy extended API.

@@ -231,10 +231,10 @@ public:
             (NVME_ZEROCOPY * caps.nvmeotcp_caps.zerocopy);
     }
 
-    xlio_tis *create_nvme_context(uint32_t seqno) override
+    xlio_tis *create_nvme_context(uint32_t seqno, uint32_t config) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        return m_p_qp_mgr->create_nvme_context(seqno);
+        return m_p_qp_mgr->create_nvme_context(seqno, config);
     }
 #endif /* DEFINED_DPCP */
 

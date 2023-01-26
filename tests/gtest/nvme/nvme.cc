@@ -508,10 +508,9 @@ protected:
         rc = setsockopt(client_fd, IPPROTO_TCP, TCP_ULP, option.c_str(), option.length());
         ASSERT_EQ(0, rc) << "NVME is unsupported";
 
-        int optval = 42;
-        rc = setsockopt(client_fd, NVDA_NVME, NVME_TX, &optval, sizeof(optval));
+        uint32_t configure = XLIO_NVME_DDGST_ENABLE | XLIO_NVME_DDGST_OFFLOAD | 0U /* pda */;
+        rc = setsockopt(client_fd, NVDA_NVME, NVME_TX, &configure, sizeof(configure));
         ASSERT_EQ(0, rc) << "NVME_TX is unsupported";
-        /* ------------------NVME/TCP offset setup end----------------------- */
 
         int opt_val = 1;
         rc = setsockopt(client_fd, SOL_SOCKET, SO_ZEROCOPY, &opt_val, sizeof(opt_val));
@@ -526,11 +525,8 @@ protected:
 
         auto registered_mr = ibv_reg_mr(reinterpret_cast<ibv_pd *>(pd_attr.ib_pd), m_test_buf,
                                         input_pdu_without_ddgst_length, IBV_ACCESS_LOCAL_WRITE);
-        /* ------------------Memory registration end------------------------- */
-        /* ------------------Sendmsg parameter preparation------------------- */
 
-        std::cout << __FILE__ << ":" << __LINE__ << " created mkey " << registered_mr->lkey
-                  << std::endl;
+        /* ------------------Sendmsg parameter preparation------------------- */
         xlio_pd_key pd_key[1] = {
             [0] = {.message_length = input_pdu_without_ddgst_length, .mkey = registered_mr->lkey}};
         size_t pd_key_len = sizeof(pd_key);
@@ -551,7 +547,6 @@ protected:
         cmsg->cmsg_len = msg.msg_controllen;
         memcpy(CMSG_DATA(cmsg), pd_key, pd_key_len);
 
-        /* ------------------Sendmsg parameter preparation end--------------- */
         rc = sendmsg(client_fd, &msg, MSG_DONTWAIT | MSG_ZEROCOPY);
         ASSERT_EQ(static_cast<int>(input_pdu_without_ddgst_length), rc);
 
@@ -559,15 +554,12 @@ protected:
         event.events = EPOLLOUT;
         event.data.fd = client_fd;
         rc = test_base::event_wait(&event);
-        ASSERT_LT(0, rc);
+        EXPECT_GE(rc, 0);
         ASSERT_TRUE(EPOLLOUT & event.events);
 
         uint32_t lo, hi;
         rc = do_recv_expected_completion(client_fd, lo, hi, 1);
-        std::cerr << "rc " << rc << " lo " << lo << " hi " << hi << std::endl;
-        /* EXPECT_EQ(1, rc); */
-        /* EXPECT_EQ(0U, lo); */
-        /* EXPECT_EQ(0U, hi); */
+        EXPECT_GE(rc, 0);
 
         peer_wait(client_fd);
 

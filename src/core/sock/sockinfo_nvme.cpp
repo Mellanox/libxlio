@@ -63,7 +63,9 @@ int sockinfo_tcp_ops_nvme::setsockopt(int level, int optname, const void *optval
             errno = ENOTSUP;
             return -1;
         }
-        int ret = setsockopt_tx();
+        uint32_t config =
+            (optlen < sizeof(uint32_t)) ? 0U : *reinterpret_cast<const uint32_t *>(optval);
+        int ret = setsockopt_tx(config);
         m_is_tx_offload = (ret == 0);
         return ret;
     }
@@ -202,12 +204,12 @@ err_t sockinfo_tcp_ops_nvme::recv(pbuf *p)
     return ERR_OK;
 };
 
-int sockinfo_tcp_ops_nvme::setsockopt_tx()
+int sockinfo_tcp_ops_nvme::setsockopt_tx(const uint32_t &config)
 {
     ring *p_ring = m_p_sock->get_tx_ring();
     m_expected_seqno = m_p_sock->get_next_tcp_seqno();
     if (p_ring != nullptr && m_p_tis == nullptr) {
-        m_p_tis.reset(p_ring->create_nvme_context(m_expected_seqno));
+        m_p_tis.reset(p_ring->create_nvme_context(m_expected_seqno, config));
     }
     if (m_p_tis == nullptr) {
         errno = ENOTSUP;

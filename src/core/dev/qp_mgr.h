@@ -238,7 +238,7 @@ public:
         NOT_IN_USE(first);
     }
 #endif /* DEFINED_UTLS */
-    virtual xlio_tis *create_nvme_context(uint32_t) { return nullptr; }
+    virtual xlio_tis *create_nvme_context(uint32_t, uint32_t) { return nullptr; }
     virtual void post_nop_fence(void) {}
 
     virtual void reset_inflight_zc_buffers_ctx(void *ctx) { NOT_IN_USE(ctx); }

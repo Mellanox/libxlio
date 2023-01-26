@@ -64,7 +64,7 @@ public:
     int m_nvme_feature_mask;
 
 private:
-    int setsockopt_tx();
+    int setsockopt_tx(const uint32_t &config);
     std::unique_ptr<xlio_tis> m_p_tis;
     nvme_pdu_mdesc *m_pdu_mdesc;
     uint32_t m_expected_seqno;
