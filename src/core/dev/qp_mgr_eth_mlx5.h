@@ -93,7 +93,7 @@ public:
     void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first);
 #endif /* DEFINED_UTLS */
 #ifdef DEFINED_DPCP
-    xlio_tis *create_nvme_context(uint32_t) override;
+    xlio_tis *create_nvme_context(uint32_t seqno, uint32_t config) override;
 #endif /* DEFINED_DPCP */
     void post_nop_fence(void) override;
 
@@ -181,7 +181,7 @@ protected:
 private:
 #endif /* DEFINED_UTLS */
 #ifdef DEFINED_DPCP
-    inline void nvme_setup_tx_offload(uint32_t tisn, uint32_t tcp_seqno);
+    inline void nvme_setup_tx_offload(uint32_t tisn, uint32_t tcp_segno, uint32_t config);
 #endif /* DEFINED_DPCP */
     inline int fill_wqe_send(xlio_ibv_send_wr *pswr);
     inline int fill_wqe_lso(xlio_ibv_send_wr *pswr);

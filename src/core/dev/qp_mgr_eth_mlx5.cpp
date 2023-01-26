@@ -1308,7 +1308,7 @@ static inline void nvme_fill_static_params_control(xlio_mlx5_wqe_ctrl_seg *cseg,
 }
 
 static inline void nvme_fill_static_params_transport_params(
-    mlx5_wqe_transport_static_params_seg *params, uint32_t tcp_seqno)
+    mlx5_wqe_transport_static_params_seg *params, uint32_t config)
 
 {
     memset(params, 0, sizeof(*params));
@@ -1317,12 +1317,14 @@ static inline void nvme_fill_static_params_transport_params(
     DEVX_SET(transport_static_params, ctx, const_1, 1);
     DEVX_SET(transport_static_params, ctx, const_2, 2);
     DEVX_SET(transport_static_params, ctx, acc_type, MLX5_TRANSPORT_STATIC_PARAMS_ACC_TYPE_NVMETCP);
-    DEVX_SET(transport_static_params, ctx, nvme_resync_tcp_sn, tcp_seqno);
-    DEVX_SET(transport_static_params, ctx, pda, /* pda */ 0);
-    DEVX_SET(transport_static_params, ctx, ddgst_en, NVME_TCP_DATA_DIGEST_ENABLE);
-    DEVX_SET(transport_static_params, ctx, ddgst_offload_en, /* ddgst_offload_en */ 1);
-    DEVX_SET(transport_static_params, ctx, hddgst_en, 0);
-    DEVX_SET(transport_static_params, ctx, hdgst_offload_en, 0);
+    DEVX_SET(transport_static_params, ctx, nvme_resync_tcp_sn, 0);
+    DEVX_SET(transport_static_params, ctx, pda, static_cast<uint8_t>(config & XLIO_NVME_PDA_MASK));
+    DEVX_SET(transport_static_params, ctx, ddgst_en, bool(config & XLIO_NVME_DDGST_ENABLE));
+    DEVX_SET(transport_static_params, ctx, ddgst_offload_en,
+             bool(config & XLIO_NVME_DDGST_OFFLOAD));
+    DEVX_SET(transport_static_params, ctx, hddgst_en, bool(config & XLIO_NVME_HDGST_ENABLE));
+    DEVX_SET(transport_static_params, ctx, hdgst_offload_en,
+             bool(config & XLIO_NVME_HDGST_OFFLOAD));
     DEVX_SET(transport_static_params, ctx, ti, MLX5_TRANSPORT_STATIC_PARAMS_TI_INITIATOR);
     DEVX_SET(transport_static_params, ctx, const1, 1);
     DEVX_SET(transport_static_params, ctx, zero_copy_en, 0);
@@ -1353,7 +1355,8 @@ static inline void nvme_fill_progress_wqe(mlx5e_set_nvmeotcp_progress_params_wqe
     DEVX_SET(nvmeotcp_progress_params, ctx, offloading_state, 0);
 }
 
-inline void qp_mgr_eth_mlx5::nvme_setup_tx_offload(uint32_t tisn, uint32_t tcp_seqno)
+inline void qp_mgr_eth_mlx5::nvme_setup_tx_offload(uint32_t tisn, uint32_t tcp_seqno,
+                                                   uint32_t config)
 {
     auto wqebb_ptr = [this](size_t wqebb_index = 0U, size_t offset = 0U) {
         return reinterpret_cast<void *>(
@@ -1368,7 +1371,7 @@ inline void qp_mgr_eth_mlx5::nvme_setup_tx_offload(uint32_t tisn, uint32_t tcp_s
     memset(wqebb_ptr(1U), 0, sizeof(mlx5_mkey_seg));
 
     auto *params = reinterpret_cast<mlx5_wqe_transport_static_params_seg *>(wqebb_ptr(2U));
-    nvme_fill_static_params_transport_params(params, 0);
+    nvme_fill_static_params_transport_params(params, config);
     ring_doorbell(MLX5_DB_METHOD_DB, MLX5E_TRANSPORT_SET_STATIC_PARAMS_WQEBBS);
     update_next_wqe_hot();
 
@@ -1378,7 +1381,7 @@ inline void qp_mgr_eth_mlx5::nvme_setup_tx_offload(uint32_t tisn, uint32_t tcp_s
     update_next_wqe_hot();
 }
 
-xlio_tis *qp_mgr_eth_mlx5::create_nvme_context(uint32_t seqno)
+xlio_tis *qp_mgr_eth_mlx5::create_nvme_context(uint32_t seqno, uint32_t config)
 {
     dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
     dpcp::tis::attr tis_attr = {
@@ -1397,7 +1400,7 @@ xlio_tis *qp_mgr_eth_mlx5::create_nvme_context(uint32_t seqno)
         delete tis;
         return nullptr;
     }
-    nvme_setup_tx_offload(tisn, seqno);
+    nvme_setup_tx_offload(tisn, seqno, config);
 
     return new xlio_tis(tis);
 }
