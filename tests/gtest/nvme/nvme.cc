@@ -30,9 +30,9 @@
  * SOFTWARE.
  */
 
-#include <array>
+#include <algorithm>
 #include <functional>
-#include <future>
+#include <vector>
 #include "common/def.h"
 #include "common/base.h"
 #include "dev/qp_mgr_eth_mlx5.h"
@@ -42,6 +42,7 @@
 #include <sys/uio.h>
 
 using namespace std;
+using test_iovec = vector<iovec>;
 
 /**
  * Test NVMe request processing
@@ -473,39 +474,61 @@ static const size_t input_pdu_without_ddgst_length = 1100U;
 
 class nvme_tx : public tcp_send_zc {
 protected:
+    struct mr {
+        ibv_mr *reg_handle;
+        void *memory;
+        uint32_t size;
+        mr() = default;
+        mr(ibv_mr *hndl, void *mem, uint32_t sz)
+            : reg_handle(hndl)
+            , memory(mem)
+            , size(sz) {};
+        ~mr()
+        {
+            ibv_dereg_mr(reg_handle);
+            free(memory);
+        }
+    };
+
+    struct auto_close_socket {
+        auto_close_socket()
+            : auto_close_socket(-1) {};
+        auto_close_socket(int fd)
+            : m_fd(fd) {};
+        ~auto_close_socket() { close(m_fd); }
+        int m_fd;
+    };
+    vector<auto_close_socket> sockets;
+    vector<mr> mrs;
+
     void SetUp() override
     {
 #ifndef DEFINED_DPCP
         GTEST_SKIP();
 #endif /* DEFINED_DPCP */
-        int test_buf_size = 0;
-        m_test_buf = reinterpret_cast<char *>(
-            create_tmp_buffer(input_pdu_without_ddgst_length, &test_buf_size));
-
-        ASSERT_NE(nullptr, m_test_buf) << "Valid test buffer reguired";
-        ASSERT_GE(test_buf_size, 0) << "Need larger test data buffer";
-        ASSERT_GE(static_cast<size_t>(test_buf_size), input_pdu_without_ddgst_length)
-            << "Need larger test data buffer";
-        memcpy(m_test_buf, input_pdu_without_ddgst, input_pdu_without_ddgst_length);
+    }
+    void TearDown() override
+    {
+        sockets.clear();
+        mrs.clear();
     }
 
-    void client_process()
+    void client_process(test_iovec &pdus)
     {
         auto client_fd = tcp_base::sock_create();
         ASSERT_GE(client_fd, 0) << "Unable to open the client socket";
+        sockets.emplace_back(client_fd);
 
-        auto rc = bind(client_fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
-        ASSERT_EQ(0, rc) << "Unable to bind to address "
-                         << sys_addr2str((struct sockaddr *)&client_addr);
+        auto rc = bind(client_fd, (sockaddr *)&client_addr, sizeof(client_addr));
+        ASSERT_EQ(0, rc) << "Unable to bind to address " << sys_addr2str((sockaddr *)&client_addr);
 
         barrier_fork();
-        rc = connect(client_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        rc = connect(client_fd, (sockaddr *)&server_addr, sizeof(server_addr));
         ASSERT_EQ(0, rc) << "Unable to connect to address "
-                         << sys_addr2str((struct sockaddr *)&server_addr);
+                         << sys_addr2str((sockaddr *)&server_addr);
 
         /* ------------------NVME/TCP offset setup--------------------------- */
-        const std::string option = "nvme";
-        rc = setsockopt(client_fd, IPPROTO_TCP, TCP_ULP, option.c_str(), option.length());
+        rc = setsockopt(client_fd, IPPROTO_TCP, TCP_ULP, "nvme", 4);
         ASSERT_EQ(0, rc) << "NVME is unsupported";
 
         uint32_t configure = XLIO_NVME_DDGST_ENABLE | XLIO_NVME_DDGST_OFFLOAD | 0U /* pda */;
@@ -515,28 +538,41 @@ protected:
         int opt_val = 1;
         rc = setsockopt(client_fd, SOL_SOCKET, SO_ZEROCOPY, &opt_val, sizeof(opt_val));
         ASSERT_EQ(0, rc);
-        /* ------------------Memory registration----------------------------- */
-        struct xlio_pd_attr pd_attr;
+
+        /* ------------------Memory domain extraction------------------------ */
+        xlio_pd_attr pd_attr;
         auto pd_attr_in_out_len = static_cast<socklen_t>(sizeof(pd_attr));
         rc = getsockopt(client_fd, SOL_SOCKET, SO_XLIO_PD, &pd_attr, &pd_attr_in_out_len);
         ASSERT_EQ(0, rc);
         ASSERT_EQ(sizeof(pd_attr), pd_attr_in_out_len);
         ASSERT_NE(nullptr, pd_attr.ib_pd);
 
-        auto registered_mr = ibv_reg_mr(reinterpret_cast<ibv_pd *>(pd_attr.ib_pd), m_test_buf,
-                                        input_pdu_without_ddgst_length, IBV_ACCESS_LOCAL_WRITE);
+        /* ------------------Memory registration----------------------------- */
+        size_t total_tx_len = 0;
+        mrs.reserve(pdus.size());
+        for (const auto &pdu : pdus) {
+            auto buf = create_tmp_buffer(pdu.iov_len);
+            ASSERT_NE(nullptr, buf) << "Valid test buffer reguired";
+            memcpy(buf, pdu.iov_base, pdu.iov_len);
+            total_tx_len += pdu.iov_len;
+            auto pd = reinterpret_cast<ibv_pd *>(pd_attr.ib_pd);
+            auto reg_mr = ibv_reg_mr(pd, buf, pdu.iov_len, IBV_ACCESS_LOCAL_WRITE);
+            ASSERT_NE(nullptr, reg_mr) << "Memory registration failed";
+            mrs.emplace_back(reg_mr, buf, pdu.iov_len);
+        }
 
         /* ------------------Sendmsg parameter preparation------------------- */
-        xlio_pd_key pd_key[1] = {
-            [0] = {.message_length = input_pdu_without_ddgst_length, .mkey = registered_mr->lkey}};
-        size_t pd_key_len = sizeof(pd_key);
-        iovec iov[1] = {[0] = {.iov_base = m_test_buf, .iov_len = input_pdu_without_ddgst_length}};
+        vector<iovec> iov {};
+        transform(mrs.begin(), mrs.end(), back_inserter(iov), [](mr &m) {
+            return iovec {m.memory, m.size};
+        });
+        size_t pd_key_len = sizeof(xlio_pd_key) * mrs.size();
         alignas(cmsghdr) uint8_t cmsg_buf[CMSG_SPACE(pd_key_len)] = {0U};
         msghdr msg = {
             .msg_name = nullptr,
             .msg_namelen = 0,
             .msg_iov = &iov[0],
-            .msg_iovlen = 1,
+            .msg_iovlen = pdus.size(),
             .msg_control = &cmsg_buf[0U],
             .msg_controllen = CMSG_LEN(pd_key_len),
             .msg_flags = 0,
@@ -545,12 +581,16 @@ protected:
         cmsg->cmsg_level = SOL_SOCKET;
         cmsg->cmsg_type = SCM_XLIO_NVME_PD;
         cmsg->cmsg_len = msg.msg_controllen;
-        memcpy(CMSG_DATA(cmsg), pd_key, pd_key_len);
 
-        rc = sendmsg(client_fd, &msg, MSG_DONTWAIT | MSG_ZEROCOPY);
-        ASSERT_EQ(static_cast<int>(input_pdu_without_ddgst_length), rc);
+        transform(mrs.begin(), mrs.end(), reinterpret_cast<xlio_pd_key *>(CMSG_DATA(cmsg)),
+                  [](mr &m) {
+                      return xlio_pd_key {.message_length = m.size, .mkey = m.reg_handle->lkey};
+                  });
 
-        struct epoll_event event;
+        rc = sendmsg(client_fd, &msg, MSG_ZEROCOPY);
+        ASSERT_EQ(static_cast<int>(total_tx_len), rc) << strerror(errno);
+
+        epoll_event event;
         event.events = EPOLLOUT;
         event.data.fd = client_fd;
         rc = test_base::event_wait(&event);
@@ -562,24 +602,20 @@ protected:
         EXPECT_GE(rc, 0);
 
         peer_wait(client_fd);
-
-        close(client_fd);
-        ibv_dereg_mr(registered_mr);
     }
 
-    void server_process(int child_pid)
+    void server_process(int child_pid, test_iovec &pdus)
     {
         int listen_fd;
-        struct sockaddr peer_addr;
+        sockaddr peer_addr;
         socklen_t socklen;
-        char buf[input_pdu_without_ddgst_length + 10];
 
         listen_fd = tcp_base::sock_create();
         ASSERT_LE(0, listen_fd);
+        sockets.emplace_back(listen_fd);
 
-        auto rc = bind(listen_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-        ASSERT_EQ(0, rc) << "Unable to bind to address "
-                         << sys_addr2str((struct sockaddr *)&server_addr);
+        auto rc = bind(listen_fd, (sockaddr *)&server_addr, sizeof(server_addr));
+        ASSERT_EQ(0, rc) << "Unable to bind to address " << sys_addr2str((sockaddr *)&server_addr);
 
         rc = listen(listen_fd, 5);
         ASSERT_EQ(0, rc) << "Unable to listen";
@@ -589,33 +625,58 @@ protected:
         socklen = sizeof(peer_addr);
         auto server_fd = accept(listen_fd, &peer_addr, &socklen);
         ASSERT_LE(0, server_fd);
+        sockets.emplace_back(server_fd);
 
-        size_t data_received = 0;
-        rc = 0;
-        do {
-            rc = recv(server_fd, (void *)&buf[data_received], sizeof(buf) - data_received, 0);
-        } while (rc >= 0 &&
-                 (data_received += static_cast<size_t>(rc)) < input_pdu_without_ddgst_length);
+        for (const auto &pdu : pdus) {
+            char buf[pdu.iov_len] = {0};
+            size_t data_received = 0;
+            rc = 0;
+            do {
+                rc = recv(server_fd, (void *)&buf[data_received], pdu.iov_len - data_received, 0);
+            } while ((rc >= 0 || (rc == -1 && errno == EINTR)) &&
+                     (data_received += rc < 0 ? 0U : static_cast<size_t>(rc)) < pdu.iov_len);
 
-        ASSERT_GE(data_received, input_pdu_without_ddgst_length);
+            ASSERT_GE(data_received, pdu.iov_len);
 
-        ASSERT_EQ(0, memcmp(buf, m_test_buf, input_pdu_without_ddgst_length - 4U));
-
-        close(server_fd);
-        close(listen_fd);
+            ASSERT_NE(0, memcmp(buf, pdu.iov_base, pdu.iov_len));
+            ASSERT_EQ(0, memcmp(buf, pdu.iov_base, pdu.iov_len - 4U));
+        }
 
         ASSERT_EQ(0, wait_fork(child_pid));
     }
 };
 
-TEST_F(nvme_tx, please_fail)
+TEST_F(nvme_tx, send_single_pdu)
 {
     int pid = fork();
+    test_iovec pdus = {
+        {.iov_base = static_cast<void *>(const_cast<uint8_t *>(input_pdu_without_ddgst)),
+         .iov_len = input_pdu_without_ddgst_length}};
 
     if (0 == pid) { /* I am the child */
-        client_process();
+        client_process(pdus);
         exit(testing::Test::HasFailure());
     } else {
-        server_process(pid);
+        server_process(pid, pdus);
+    }
+}
+
+TEST_F(nvme_tx, send_multiple_pdus)
+{
+    int pid = fork();
+    test_iovec pdus = {
+        {.iov_base = static_cast<void *>(const_cast<uint8_t *>(input_pdu_without_ddgst)),
+         .iov_len = input_pdu_without_ddgst_length},
+        {.iov_base = static_cast<void *>(const_cast<uint8_t *>(input_pdu_without_ddgst)),
+         .iov_len = input_pdu_without_ddgst_length},
+        {.iov_base = static_cast<void *>(const_cast<uint8_t *>(input_pdu_without_ddgst)),
+         .iov_len = input_pdu_without_ddgst_length},
+    };
+
+    if (0 == pid) { /* I am the child */
+        client_process(pdus);
+        exit(testing::Test::HasFailure());
+    } else {
+        server_process(pid, pdus);
     }
 }
