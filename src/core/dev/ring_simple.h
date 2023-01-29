@@ -216,13 +216,6 @@ public:
         m_p_qp_mgr->tls_tx_post_dump_wqe(tis, addr, len, lkey, first);
     }
 #endif /* DEFINED_UTLS */
-
-    enum {
-        NVME_CRC_TX = 1 << 0,
-        NVME_CRC_RX = 1 << 1,
-        NVME_ZEROCOPY = 1 << 2,
-    };
-
 #ifdef DEFINED_DPCP
     int get_supported_nvme_feature_mask() const override
     {

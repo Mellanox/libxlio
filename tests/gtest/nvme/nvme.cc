@@ -138,8 +138,8 @@ TEST_F(nvme_new_request, is_new_nvme_pdu_with_valid_arguments)
  */
 TEST_F(nvme_new_request, NVME_from_batch_fails_with_nullptr_iov)
 {
-    auto nvme = NVMEoTCP_TX::from_batch(nullptr, aux_data_current, iovec_sz);
-    ASSERT_FALSE(*nvme) << "NVMEoTCP_TX should be invalid with nullptr iov";
+    auto nvme = nvmeotcp_tx::from_batch(nullptr, aux_data_current, iovec_sz);
+    ASSERT_FALSE(nvme->is_valid()) << "NVMEoTCP_TX should be invalid with nullptr iov";
 }
 
 /**
@@ -150,8 +150,8 @@ TEST_F(nvme_new_request, NVME_from_batch_fails_with_nullptr_iov)
  */
 TEST_F(nvme_new_request, NVME_from_batch_fails_with_nullptr_aux_data)
 {
-    auto nvme = NVMEoTCP_TX::from_batch(iov, nullptr, iovec_sz);
-    ASSERT_FALSE(*nvme) << "NVMEoTCP_TX should be invalid with nullptr aux_data";
+    auto nvme = nvmeotcp_tx::from_batch(iov, nullptr, iovec_sz);
+    ASSERT_FALSE(nvme->is_valid()) << "NVMEoTCP_TX should be invalid with nullptr aux_data";
 }
 
 /**
@@ -162,8 +162,8 @@ TEST_F(nvme_new_request, NVME_from_batch_fails_with_nullptr_aux_data)
  */
 TEST_F(nvme_new_request, NVME_from_batch_fails_with_zero_iov_num)
 {
-    auto nvme = NVMEoTCP_TX::from_batch(iov, aux_data_current, 0U);
-    ASSERT_FALSE(*nvme) << "NVMEoTCP_TX should be invalid with zero iov_num";
+    auto nvme = nvmeotcp_tx::from_batch(iov, aux_data_current, 0U);
+    ASSERT_FALSE(nvme->is_valid()) << "NVMEoTCP_TX should be invalid with zero iov_num";
 }
 
 /**
@@ -174,8 +174,8 @@ TEST_F(nvme_new_request, NVME_from_batch_fails_with_zero_iov_num)
  */
 TEST_F(nvme_new_request, NVME_from_batch_correctly_initialized)
 {
-    auto nvme = NVMEoTCP_TX::from_batch(iov, aux_data_current, iovec_sz);
-    ASSERT_TRUE(*nvme) << "NVMEoTCP_TX should be valid";
+    auto nvme = nvmeotcp_tx::from_batch(iov, aux_data_current, iovec_sz);
+    ASSERT_TRUE(nvme->is_valid()) << "NVMEoTCP_TX should be valid";
 }
 
 /**
@@ -186,10 +186,10 @@ TEST_F(nvme_new_request, NVME_from_batch_correctly_initialized)
  */
 TEST_F(nvme_new_request, NVME_get_next_iovec_view_fails_with_invalid_nvme)
 {
-    auto nvme = NVMEoTCP_TX::from_batch(iov, aux_data_current, 0U);
+    auto nvme = nvmeotcp_tx::from_batch(iov, aux_data_current, 0U);
     auto view = nvme->get_next_iovec_view();
 
-    ASSERT_FALSE(view) << "Invalid NVMEoTCP_TX should produce invalid view";
+    ASSERT_FALSE(view.is_valid()) << "Invalid NVMEoTCP_TX should produce invalid view";
 }
 
 /**
@@ -200,11 +200,11 @@ TEST_F(nvme_new_request, NVME_get_next_iovec_view_fails_with_invalid_nvme)
  */
 TEST_F(nvme_new_request, NVME_get_next_iovec_view_succeeds)
 {
-    auto nvme = NVMEoTCP_TX::from_batch(iov, aux_data_current, iovec_sz);
+    auto nvme = nvmeotcp_tx::from_batch(iov, aux_data_current, iovec_sz);
     auto view = nvme->get_next_iovec_view();
 
     ASSERT_EQ(2U, view.m_iov_num);
-    ASSERT_TRUE(view);
+    ASSERT_TRUE(view.is_valid());
     ASSERT_EQ(sizeof(arr[0]), view.m_iov[0].iov_len);
     ASSERT_EQ(&arr[0], view.m_iov[0].iov_base);
     ASSERT_EQ(sizeof(arr[1]), view.m_iov[1].iov_len);
@@ -216,7 +216,7 @@ TEST_F(nvme_new_request, NVME_get_next_iovec_view_succeeds)
 
     view = nvme->get_next_iovec_view();
     ASSERT_EQ(1U, view.m_iov_num);
-    ASSERT_TRUE(view);
+    ASSERT_TRUE(view.is_valid());
     ASSERT_EQ(sizeof(arr[2]), view.m_iov[0].iov_len);
     ASSERT_EQ(&arr[2], view.m_iov[0].iov_base);
     ASSERT_EQ(8U, view.m_aux_data[0].message_length);
@@ -242,7 +242,7 @@ TEST_F(xlio_ti_test, default_constructor)
     ASSERT_EQ(nullptr, ti.m_callback_arg);
 }
 
-class tcp_set_get_sockopt_connected : public tcp_base {
+class nvme_setsockopt : public tcp_base {
 protected:
     void SetUp() override
     {
@@ -286,14 +286,14 @@ protected:
     int client_socket = -1;
 };
 
-TEST_F(tcp_set_get_sockopt_connected, set_ulp_nvme)
+TEST_F(nvme_setsockopt, set_ulp_nvme)
 {
     const std::string option = "nvme";
     int result = setsockopt(client_socket, IPPROTO_TCP, TCP_ULP, option.c_str(), option.length());
 
     if (result == 0) {
         int optval = 42;
-        int ret = setsockopt(client_socket, SOL_NVME, NVME_TX, &optval, sizeof(optval));
+        int ret = setsockopt(client_socket, NVDA_NVME, NVME_TX, &optval, sizeof(optval));
         ASSERT_EQ(0, ret) << "NVME_TX is unsupported";
     }
 }
