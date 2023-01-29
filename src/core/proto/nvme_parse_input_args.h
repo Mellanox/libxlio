@@ -43,20 +43,20 @@ static inline bool is_new_nvme_pdu(const xlio_pd_key *aux, size_t aux_data_sz)
     return is_valid_aux_data_array(aux, aux_data_sz) && aux->message_length > 0 && aux->mkey != 0U;
 }
 
-struct NVMEoTCP_TX {
+struct nvmeotcp_tx {
 
-    NVMEoTCP_TX() = default;
-    operator bool() const { return m_iov_num != 0U; }
+    nvmeotcp_tx() = default;
+    inline bool is_valid() const { return m_iov_num != 0U; }
 
-    static NVMEoTCP_TX *from_batch(const iovec *iov, const xlio_pd_key *aux_data, size_t num)
+    static nvmeotcp_tx *from_batch(const iovec *iov, const xlio_pd_key *aux_data, size_t num)
     {
-        return new NVMEoTCP_TX(iov, aux_data, num);
+        return new nvmeotcp_tx(iov, aux_data, num);
     }
 
     struct iovec_view;
     const iovec_view get_next_iovec_view()
     {
-        if (!*this) {
+        if (!is_valid()) {
             return iovec_view();
         }
         /* The iovec batches may contain multiple NVME PDUs. Each PDU may span multiple complete
@@ -85,7 +85,7 @@ struct NVMEoTCP_TX {
             , m_iov_num(num) {};
 
         iovec_view() = default;
-        operator bool() const
+        inline bool is_valid() const
         {
             return m_iov != nullptr && m_aux_data != nullptr && m_iov_num != 0U;
         }
@@ -95,7 +95,7 @@ struct NVMEoTCP_TX {
     };
 
 private:
-    NVMEoTCP_TX(const iovec *iov, const xlio_pd_key *aux_data, size_t iov_num)
+    nvmeotcp_tx(const iovec *iov, const xlio_pd_key *aux_data, size_t iov_num)
         : m_iov_num(iov_num)
         , m_current_view_index(0)
     {

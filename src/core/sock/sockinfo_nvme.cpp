@@ -42,7 +42,7 @@
 
 int sockinfo_tcp_ops_nvme::setsockopt(int level, int optname, const void *optval, socklen_t optlen)
 {
-    if (level != SOL_NVME) {
+    if (level != NVDA_NVME) {
         return m_p_sock->tcp_setsockopt(level, optname, optval, optlen);
     }
 
