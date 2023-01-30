@@ -900,31 +900,44 @@ void qp_mgr_eth_mlx5::put_dek(std::unique_ptr<dpcp::dek> &&dek_obj)
     }
 }
 
+#define DPCP_TIS_FLAGS (dpcp::TIS_ATTR_TRANSPORT_DOMAIN | dpcp::TIS_ATTR_PD)
+xlio_tis *qp_mgr_eth_mlx5::create_tis(uint32_t flags)
+{
+    dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
+    if (unlikely(adapter == nullptr)) {
+        return nullptr;
+    }
+    dpcp::tis::attr tis_attr = {
+        .flags = flags,
+        .tls_en = bool(flags & dpcp::TIS_ATTR_TLS),
+        .nvmeotcp = bool(flags & dpcp::TIS_ATTR_NVMEOTCP),
+        .transport_domain = adapter->get_td(),
+        .pd = adapter->get_pd(),
+    };
+
+    dpcp::tis *dpcp_tis = nullptr;
+    uint32_t tisn = 0;
+    if (unlikely(adapter->create_tis(tis_attr, dpcp_tis) != dpcp::DPCP_OK) ||
+        unlikely(dpcp_tis->get_tisn(tisn) != dpcp::DPCP_OK)) {
+        qp_logerr("Failed to create TIS with NVME enabled");
+        delete dpcp_tis;
+        return nullptr;
+    }
+    auto tis = new xlio_tis(dpcp_tis);
+    if (unlikely(tis == NULL)) {
+        delete dpcp_tis;
+        return nullptr;
+    }
+    return tis;
+}
+
 xlio_tis *qp_mgr_eth_mlx5::tls_context_setup_tx(const xlio_tls_info *info)
 {
     xlio_tis *tis;
-    uint32_t tisn;
-    dpcp::tis *_tis = nullptr;
-    dpcp::status status;
-    dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
-
     if (m_tis_cache.empty()) {
-        struct dpcp::tis::attr tis_attr;
-        memset(&tis_attr, 0, sizeof(tis_attr));
-        tis_attr.flags = dpcp::TIS_ATTR_TRANSPORT_DOMAIN | dpcp::TIS_ATTR_TLS | dpcp::TIS_ATTR_PD;
-        tis_attr.transport_domain = adapter->get_td();
-        tis_attr.tls_en = 1;
-        tis_attr.pd = adapter->get_pd();
-        status = adapter->create_tis(tis_attr, _tis);
-        if (unlikely(status != dpcp::DPCP_OK)) {
-            qp_logerr("Failed to create TIS with TLS enabled, status: %d", status);
-            return NULL;
-        }
-
-        tis = new xlio_tis(_tis);
-        if (unlikely(tis == NULL)) {
-            delete _tis;
-            return NULL;
+        tis = create_tis(DPCP_TIS_FLAGS | dpcp::TIS_ATTR_TLS);
+        if (unlikely(tis == nullptr)) {
+            return nullptr;
         }
     } else {
         tis = m_tis_cache.back();
@@ -934,11 +947,11 @@ xlio_tis *qp_mgr_eth_mlx5::tls_context_setup_tx(const xlio_tls_info *info)
     std::unique_ptr<dpcp::dek> dek_obj(get_dek(info->key, info->key_len));
     if (unlikely(!dek_obj)) {
         m_tis_cache.push_back(tis);
-        return NULL;
+        return nullptr;
     }
 
     tis->assign_dek(std::move(dek_obj));
-    tisn = tis->get_tisn();
+    uint32_t tisn = tis->get_tisn();
 
     tls_post_static_params_wqe(tis, info, tisn, tis->get_dek_id(), 0, false, true);
     tls_post_progress_params_wqe(tis, tisn, 0, false, true);
@@ -1383,24 +1396,14 @@ inline void qp_mgr_eth_mlx5::nvme_setup_tx_offload(uint32_t tisn, uint32_t tcp_s
 
 xlio_tis *qp_mgr_eth_mlx5::create_nvme_context(uint32_t seqno, uint32_t config)
 {
-    dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
-    dpcp::tis::attr tis_attr = {
-        .flags = dpcp::TIS_ATTR_TRANSPORT_DOMAIN | dpcp::TIS_ATTR_NVMEOTCP | dpcp::TIS_ATTR_PD,
-        .tls_en = false,
-        .nvmeotcp = true,
-        .transport_domain = adapter->get_td(),
-        .pd = adapter->get_pd(),
-    };
-
-    dpcp::tis *tis = nullptr;
-    uint32_t tisn = 0;
-    if (unlikely(adapter->create_tis(tis_attr, tis) != dpcp::DPCP_OK) ||
-        unlikely(tis->get_tisn(tisn) != dpcp::DPCP_OK)) {
-        qp_logerr("Failed to create TIS with NVME enabled");
-        delete tis;
+    xlio_tis *tis = create_tis(DPCP_TIS_FLAGS | dpcp::TIS_ATTR_NVMEOTCP);
+    if (unlikely(tis == nullptr)) {
         return nullptr;
     }
-    nvme_setup_tx_offload(tisn, seqno, config);
+    nvme_setup_tx_offload(tis->get_tisn(), seqno, config);
+
+    return tis;
+}
 
     return new xlio_tis(tis);
 }
