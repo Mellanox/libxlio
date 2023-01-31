@@ -1364,19 +1364,13 @@ static inline void nvme_fill_progress_wqe(mlx5e_set_nvmeotcp_progress_params_wqe
 inline void qp_mgr_eth_mlx5::nvme_setup_tx_offload(uint32_t tisn, uint32_t tcp_seqno,
                                                    uint32_t config)
 {
-    auto wqebb_ptr = [this](size_t wqebb_index = 0U, size_t offset = 0U) {
-        return reinterpret_cast<void *>(
-            reinterpret_cast<uintptr_t>(
-                &(*m_sq_wqes)[(m_sq_wqe_counter + wqebb_index) & (m_tx_num_wr - 1)]) +
-            offset);
-    };
-    auto *cseg = reinterpret_cast<xlio_mlx5_wqe_ctrl_seg *>(wqebb_ptr(0U));
-    auto *ucseg = reinterpret_cast<xlio_mlx5_wqe_umr_ctrl_seg *>(wqebb_ptr(0U, sizeof(*cseg)));
+    auto *cseg = wqebb_get<xlio_mlx5_wqe_ctrl_seg *>(0U);
+    auto *ucseg = wqebb_get<xlio_mlx5_wqe_umr_ctrl_seg *>(0U, sizeof(*cseg));
 
     nvme_fill_static_params_control(cseg, ucseg, m_sq_wqe_counter, m_mlx5_qp.qpn, tisn, 0);
-    memset(wqebb_ptr(1U), 0, sizeof(mlx5_mkey_seg));
+    memset(wqebb_get<void *>(1U), 0, sizeof(mlx5_mkey_seg));
 
-    auto *params = reinterpret_cast<mlx5_wqe_transport_static_params_seg *>(wqebb_ptr(2U));
+    auto *params = wqebb_get<mlx5_wqe_transport_static_params_seg *>(2U);
     nvme_fill_static_params_transport_params(params, config);
     ring_doorbell(MLX5_DB_METHOD_DB, MLX5E_TRANSPORT_SET_STATIC_PARAMS_WQEBBS);
     update_next_wqe_hot();
