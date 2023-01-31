@@ -882,78 +882,48 @@ std::unique_ptr<dpcp::dek> qp_mgr_eth_mlx5::get_dek(const void *key, uint32_t ke
     return out_dek;
 }
 
-void qp_mgr_eth_mlx5::put_dek(std::unique_ptr<dpcp::dek> &&dek_obj)
+void qp_mgr_eth_mlx5::put_dek(xlio_dek &&dek_obj)
 {
+    if (dek_obj == nullptr) {
+        return;
+    }
     // We don't allow unlimited DEK cache to avoid system DEK starvation.
     if (likely(m_p_ring->tls_sync_dek_supported()) &&
         m_dek_put_cache.size() < safe_mce_sys().utls_high_wmark_dek_cache_size) {
         m_dek_put_cache.emplace_back(std::forward<std::unique_ptr<dpcp::dek>>(dek_obj));
-    } else {
-        dek_obj.reset(nullptr);
     }
-}
-
-#define DPCP_TIS_FLAGS (dpcp::TIS_ATTR_TRANSPORT_DOMAIN | dpcp::TIS_ATTR_PD)
-xlio_tis *qp_mgr_eth_mlx5::create_tis(uint32_t flags)
-{
-    dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
-    if (unlikely(adapter == nullptr)) {
-        return nullptr;
-    }
-    dpcp::tis::attr tis_attr = {
-        .flags = flags,
-        .tls_en = bool(flags & dpcp::TIS_ATTR_TLS),
-        .nvmeotcp = bool(flags & dpcp::TIS_ATTR_NVMEOTCP),
-        .transport_domain = adapter->get_td(),
-        .pd = adapter->get_pd(),
-    };
-
-    dpcp::tis *dpcp_tis = nullptr;
-    uint32_t tisn = 0;
-    if (unlikely(adapter->create_tis(tis_attr, dpcp_tis) != dpcp::DPCP_OK) ||
-        unlikely(dpcp_tis->get_tisn(tisn) != dpcp::DPCP_OK)) {
-        qp_logerr("Failed to create TIS with NVME enabled");
-        delete dpcp_tis;
-        return nullptr;
-    }
-    auto tis = new xlio_tis(dpcp_tis);
-    if (unlikely(tis == NULL)) {
-        delete dpcp_tis;
-        return nullptr;
-    }
-    return tis;
 }
 
 xlio_tis *qp_mgr_eth_mlx5::tls_context_setup_tx(const xlio_tls_info *info)
 {
-    xlio_tis *tis;
+    std::unique_ptr<xlio_tis> tis;
     if (m_tis_cache.empty()) {
         tis = create_tis(DPCP_TIS_FLAGS | dpcp::TIS_ATTR_TLS);
         if (unlikely(tis == nullptr)) {
             return nullptr;
         }
     } else {
-        tis = m_tis_cache.back();
+        tis.reset(m_tis_cache.back());
         m_tis_cache.pop_back();
     }
 
-    std::unique_ptr<dpcp::dek> dek_obj(get_dek(info->key, info->key_len));
+    auto dek_obj = get_dek(info->key, info->key_len);
     if (unlikely(!dek_obj)) {
-        m_tis_cache.push_back(tis);
+        m_tis_cache.push_back(tis.release());
         return nullptr;
     }
 
     tis->assign_dek(std::move(dek_obj));
     uint32_t tisn = tis->get_tisn();
 
-    tls_post_static_params_wqe(tis, info, tisn, tis->get_dek_id(), 0, false, true);
-    tls_post_progress_params_wqe(tis, tisn, 0, false, true);
+    tls_post_static_params_wqe(tis.get(), info, tisn, tis->get_dek_id(), 0, false, true);
+    tls_post_progress_params_wqe(tis.get(), tisn, 0, false, true);
     /* The 1st post after TLS configuration must be with fence. */
     m_b_fence_needed = true;
 
     assert(!tis->m_released);
 
-    return tis;
+    return tis.release();
 }
 
 void qp_mgr_eth_mlx5::tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis,
@@ -1288,12 +1258,42 @@ void qp_mgr_eth_mlx5::tls_release_tir(xlio_tir *tir)
 
 dpcp::tir *qp_mgr_eth_mlx5::xlio_tir_to_dpcp_tir(xlio_tir *tir)
 {
-    return tir->m_p_tir;
+    return tir->m_p_tir.get();
 }
 
 #endif /* DEFINED_UTLS */
 
 #ifdef DEFINED_DPCP
+std::unique_ptr<xlio_tis> qp_mgr_eth_mlx5::create_tis(uint32_t flags) const
+{
+    dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
+    if (unlikely(adapter == nullptr)) {
+        return nullptr;
+    }
+    dpcp::tis::attr tis_attr = {
+        .flags = flags,
+        .tls_en = bool(flags & dpcp::TIS_ATTR_TLS),
+        .nvmeotcp = bool(flags & dpcp::TIS_ATTR_NVMEOTCP),
+        .transport_domain = adapter->get_td(),
+        .pd = adapter->get_pd(),
+    };
+
+    dpcp::tis *dpcp_tis = nullptr;
+    uint32_t tisn = 0;
+    if (unlikely(adapter->create_tis(tis_attr, dpcp_tis) != dpcp::DPCP_OK) ||
+        unlikely(dpcp_tis->get_tisn(tisn) != dpcp::DPCP_OK)) {
+        qp_logerr("Failed to create TIS with NVME enabled");
+        delete dpcp_tis;
+        return nullptr;
+    }
+    auto tis = new xlio_tis(dpcp_tis);
+    if (unlikely(tis == NULL)) {
+        delete dpcp_tis;
+        return nullptr;
+    }
+    return std::unique_ptr<xlio_tis>(tis);
+}
+
 static inline void nvme_fill_static_params_control(xlio_mlx5_wqe_ctrl_seg *cseg,
                                                    xlio_mlx5_wqe_umr_ctrl_seg *ucseg,
                                                    uint32_t producer_index, uint32_t qpn,
@@ -1389,16 +1389,13 @@ inline void qp_mgr_eth_mlx5::nvme_setup_tx_offload(uint32_t tisn, uint32_t tcp_s
 
 xlio_tis *qp_mgr_eth_mlx5::create_nvme_context(uint32_t seqno, uint32_t config)
 {
-    xlio_tis *tis = create_tis(DPCP_TIS_FLAGS | dpcp::TIS_ATTR_NVMEOTCP);
+    std::unique_ptr<xlio_tis> tis = create_tis(DPCP_TIS_FLAGS | dpcp::TIS_ATTR_NVMEOTCP);
     if (unlikely(tis == nullptr)) {
         return nullptr;
     }
     nvme_setup_tx_offload(tis->get_tisn(), seqno, config);
 
-    return tis;
-}
-
-    return new xlio_tis(tis);
+    return tis.release();
 }
 #endif /* DEFINED_DPCP */
 
@@ -1415,13 +1412,13 @@ void qp_mgr_eth_mlx5::ti_released(xlio_ti *ti)
 
 void qp_mgr_eth_mlx5::put_tis_in_cache(xlio_tis *tis)
 {
-    tis->reset(*this); // This will also return the DEK object to the DEK pool.
+    put_dek(tis->release_dek());
     m_tis_cache.push_back(tis);
 }
 
 void qp_mgr_eth_mlx5::put_tir_in_cache(xlio_tir *tir)
 {
-    tir->reset();
+    put_dek(tir->release_dek());
 
     // Because the absense of TIR flush command, reusing a TIR
     // may result in undefined behaviour.

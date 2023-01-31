@@ -238,7 +238,8 @@ public:
         NOT_IN_USE(first);
     }
 #endif /* DEFINED_UTLS */
-    virtual xlio_tis *create_nvme_context(uint32_t, uint32_t) { return nullptr; }
+    virtual std::unique_ptr<xlio_tis> create_tis(uint32_t) const { return nullptr; };
+    virtual xlio_tis *create_nvme_context(uint32_t, uint32_t) { return nullptr; };
     virtual void post_nop_fence(void) {}
 
     virtual void reset_inflight_zc_buffers_ctx(void *ctx) { NOT_IN_USE(ctx); }
@@ -381,4 +382,115 @@ private:
     const uint16_t m_vlan;
 };
 
+enum {
+    XLIO_TI_UNKNOWN,
+    XLIO_TI_TIS,
+    XLIO_TI_TIR,
+};
+
+#if defined(DEFINED_UTLS) || defined(DEFINED_DPCP)
+using xlio_dek = std::unique_ptr<dpcp::dek>;
+
+class xlio_tis : public xlio_ti {
+public:
+    xlio_tis(dpcp::tis *_tis)
+        : xlio_ti()
+        , m_dek()
+        , m_p_tis(_tis)
+        , m_tisn(0U)
+        , m_dek_id(0U)
+    {
+        dpcp::status ret = m_p_tis->get_tisn(m_tisn);
+        assert(ret == dpcp::DPCP_OK);
+        (void)ret;
+    }
+
+    ~xlio_tis()
+    {
+        if (m_p_tis != NULL) {
+            delete m_p_tis;
+        }
+    }
+
+    inline xlio_dek release_dek()
+    {
+        assert(m_ref == 0);
+        m_released = false;
+        return std::move(m_dek);
+    }
+
+    inline uint32_t get_tisn(void) { return m_tisn; }
+
+    inline void assign_dek(xlio_dek &&dek_ptr)
+    {
+        m_dek = std::move(dek_ptr);
+        m_dek_id = m_dek->get_key_id();
+    }
+
+    inline uint32_t get_dek_id(void) { return m_dek_id; }
+
+private:
+    xlio_dek m_dek;
+    dpcp::tis *m_p_tis;
+    uint32_t m_tisn;
+    uint32_t m_dek_id;
+};
+
+class xlio_tir : public xlio_ti {
+public:
+    xlio_tir(dpcp::tir *_tir)
+        : xlio_ti()
+    {
+        m_type = XLIO_TI_TIR;
+        m_p_tir.reset(_tir);
+        m_dek = NULL;
+        m_tirn = 0;
+        m_dek_id = 0;
+
+        /* Cache the tir number. Mustn't fail for a valid TIR object. */
+        m_tirn = m_p_tir->get_tirn();
+        assert(m_tirn != 0);
+    }
+
+    ~xlio_tir() = default;
+
+    inline xlio_dek release_dek()
+    {
+        assert(m_ref == 0);
+        m_released = false;
+        return std::move(m_dek);
+    }
+
+    inline uint32_t get_tirn(void) { return m_tirn; }
+
+    inline void assign_dek(void *dek_ptr)
+    {
+        m_dek.reset(reinterpret_cast<dpcp::dek *>(dek_ptr));
+        m_dek_id = m_dek->get_key_id();
+    }
+
+    inline uint32_t get_dek_id(void) { return m_dek_id; }
+
+    std::unique_ptr<dpcp::tir> m_p_tir;
+
+private:
+    xlio_dek m_dek;
+    uint32_t m_tirn;
+    uint32_t m_dek_id;
+};
+#else /* DEFINED_UTLS or DEFINED_DPCP */
+using xlio_dek = void *;
+class xlio_tis : public xlio_ti {
+public:
+    /* A stub class to compile without uTLS support. */
+    inline uint32_t get_tisn(void) { return 0; }
+    inline xlio_dek release_dek() { return nullptr; };
+};
+class xlio_tir : public xlio_ti {
+public:
+    /* A stub class to compile without uTLS support. */
+    inline uint32_t get_tirn(void) { return 0; }
+    inline xlio_dek release_dek() { return nullptr; };
+};
+#endif /* DEFINED_UTLS or DEFINED_DPCP */
 #endif

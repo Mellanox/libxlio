@@ -217,6 +217,11 @@ public:
     }
 #endif /* DEFINED_UTLS */
 #ifdef DEFINED_DPCP
+    std::unique_ptr<xlio_tis> create_tis(uint32_t flags) const override
+    {
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        return m_p_qp_mgr->create_tis(flags);
+    }
     int get_supported_nvme_feature_mask() const override
     {
         dpcp::adapter_hca_capabilities caps {};
