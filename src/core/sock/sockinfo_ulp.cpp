@@ -32,7 +32,6 @@
 
 #include "sockinfo_tcp.h"
 #include "sockinfo_ulp.h"
-#include "dev/qp_mgr_eth_mlx5.h"
 
 #include <algorithm>
 #include <assert.h>

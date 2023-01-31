@@ -366,9 +366,7 @@ typedef struct mlx5_get_tls_progress_params_wqe {
 
 struct mlx5_ifc_nvmeotcp_progress_params_bits {
     uint8_t next_pdu_tcp_sn[0x20];
-
     uint8_t hw_resync_tcp_sn[0x20];
-
     uint8_t pdu_tracker_state[0x2];
     uint8_t offloading_state[0x2];
     uint8_t reserved_at_44[0xc];

@@ -1640,11 +1640,8 @@ extern "C" EXPORT_SYMBOL ssize_t sendmsg(int __fd, __const struct msghdr *__msg,
                 if ((tx_arg.msg.flags & MSG_ZEROCOPY) &&
                     (__msg->msg_iovlen ==
                      ((cmsg->cmsg_len - CMSG_LEN(0)) / sizeof(struct xlio_pd_key)))) {
-                    if (cmsg->cmsg_type == SCM_XLIO_PD) {
-                        tx_arg.priv.attr = PBUF_DESC_MKEY;
-                    } else {
-                        tx_arg.priv.attr = PBUF_DESC_NVME_TX;
-                    }
+                    tx_arg.priv.attr =
+                        (cmsg->cmsg_type == SCM_XLIO_PD) ? PBUF_DESC_MKEY : PBUF_DESC_NVME_TX;
                     tx_arg.priv.map = (void *)CMSG_DATA(cmsg);
                 } else {
                     errno = EINVAL;
