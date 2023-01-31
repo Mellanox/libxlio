@@ -793,19 +793,12 @@ int qp_mgr_eth_mlx5::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packe
     assert(wqebbs > 0 && (unsigned)wqebbs <= credits);
     NOT_IN_USE(wqebbs);
 
-    /* Preparing next WQE and index */
-    m_sq_wqe_hot = &(*m_sq_wqes)[m_sq_wqe_counter & (m_tx_num_wr - 1)];
+    update_next_wqe_hot();
+
     qp_logfunc(
         "m_sq_wqe_hot: %p m_sq_wqe_hot_index: %d wqe_counter: %d new_hot_index: %d wr_id: %llx",
         m_sq_wqe_hot, m_sq_wqe_hot_index, m_sq_wqe_counter, (m_sq_wqe_counter & (m_tx_num_wr - 1)),
         p_send_wqe->wr_id);
-    m_sq_wqe_hot_index = m_sq_wqe_counter & (m_tx_num_wr - 1);
-
-    memset((void *)m_sq_wqe_hot, 0, sizeof(struct mlx5_eth_wqe));
-
-    /* Fill Ethernet segment with header inline */
-    eseg = (struct mlx5_wqe_eth_seg *)((uint8_t *)m_sq_wqe_hot + sizeof(struct mlx5_wqe_ctrl_seg));
-    eseg->inline_hdr_sz = htons(MLX5_ETH_INLINE_HEADER_SIZE);
 
     return 0;
 }
