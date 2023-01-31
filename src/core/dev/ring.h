@@ -190,6 +190,7 @@ public:
         NOT_IN_USE(first);
     }
 #endif /* DEFINED_UTLS */
+    virtual std::unique_ptr<xlio_tis> create_tis(uint32_t) const { return nullptr; };
     virtual xlio_tis *create_nvme_context(uint32_t, uint32_t) { return nullptr; };
 
     enum {
