@@ -1343,12 +1343,12 @@ static inline void nvme_fill_progress_wqe(mlx5e_set_nvmeotcp_progress_params_wqe
     memset(wqe, 0, sizeof(*wqe));
     auto cseg = &wqe->ctrl.ctrl;
 
-    constexpr size_t progres_params_ds = DIV_ROUND_UP(sizeof(*wqe), MLX5_SEND_WQE_DS);
+    size_t progres_params_ds = DIV_ROUND_UP(sizeof(*wqe), MLX5_SEND_WQE_DS);
     cseg->opmod_idx_opcode =
         htobe32(((producer_index & 0xffff) << 8) | XLIO_MLX5_OPCODE_SET_PSV |
                 (MLX5_CTRL_SEGMENT_OPC_MOD_UMR_NVMEOTCP_TIS_PROGRESS_PARAMS << 24));
     cseg->qpn_ds = htobe32((qpn << MLX5_WQE_CTRL_QPN_SHIFT) | progres_params_ds);
-    cseg->fm_ce_se = fence_flags | MLX5_FENCE_MODE_INITIATOR_SMALL;
+    cseg->fm_ce_se = fence_flags;
 
     mlx5_seg_nvmeotcp_progress_params *params = &wqe->params;
     params->tir_num = htobe32(tisn);
@@ -1361,35 +1361,28 @@ static inline void nvme_fill_progress_wqe(mlx5e_set_nvmeotcp_progress_params_wqe
     DEVX_SET(nvmeotcp_progress_params, ctx, offloading_state, 0);
 }
 
-inline void qp_mgr_eth_mlx5::nvme_setup_tx_offload(uint32_t tisn, uint32_t tcp_seqno,
-                                                   uint32_t config)
+void qp_mgr_eth_mlx5::nvme_set_static_conext(xlio_tis *tis, uint32_t config)
 {
     auto *cseg = wqebb_get<xlio_mlx5_wqe_ctrl_seg *>(0U);
     auto *ucseg = wqebb_get<xlio_mlx5_wqe_umr_ctrl_seg *>(0U, sizeof(*cseg));
 
-    nvme_fill_static_params_control(cseg, ucseg, m_sq_wqe_counter, m_mlx5_qp.qpn, tisn, 0);
+    nvme_fill_static_params_control(cseg, ucseg, m_sq_wqe_counter, m_mlx5_qp.qpn, tis->get_tisn(),
+                                    0);
     memset(wqebb_get<void *>(1U), 0, sizeof(mlx5_mkey_seg));
 
     auto *params = wqebb_get<mlx5_wqe_transport_static_params_seg *>(2U);
     nvme_fill_static_params_transport_params(params, config);
     ring_doorbell(MLX5_DB_METHOD_DB, MLX5E_TRANSPORT_SET_STATIC_PARAMS_WQEBBS);
     update_next_wqe_hot();
-
-    auto *wqe = reinterpret_cast<mlx5e_set_nvmeotcp_progress_params_wqe *>(m_sq_wqe_hot);
-    nvme_fill_progress_wqe(wqe, m_sq_wqe_counter, m_mlx5_qp.qpn, tisn, tcp_seqno, 0);
-    ring_doorbell(MLX5_DB_METHOD_DB, MLX5E_NVMEOTCP_PROGRESS_PARAMS_WQEBBS);
-    update_next_wqe_hot();
 }
 
-xlio_tis *qp_mgr_eth_mlx5::create_nvme_context(uint32_t seqno, uint32_t config)
+void qp_mgr_eth_mlx5::nvme_set_progress_conext(xlio_tis *tis, uint32_t tcp_seqno)
 {
-    std::unique_ptr<xlio_tis> tis = create_tis(DPCP_TIS_FLAGS | dpcp::TIS_ATTR_NVMEOTCP);
-    if (unlikely(tis == nullptr)) {
-        return nullptr;
-    }
-    nvme_setup_tx_offload(tis->get_tisn(), seqno, config);
-
-    return tis.release();
+    auto *wqe = reinterpret_cast<mlx5e_set_nvmeotcp_progress_params_wqe *>(m_sq_wqe_hot);
+    nvme_fill_progress_wqe(wqe, m_sq_wqe_counter, m_mlx5_qp.qpn, tis->get_tisn(), tcp_seqno,
+                           MLX5_FENCE_MODE_INITIATOR_SMALL);
+    ring_doorbell(MLX5_DB_METHOD_DB, MLX5E_NVMEOTCP_PROGRESS_PARAMS_WQEBBS);
+    update_next_wqe_hot();
 }
 #endif /* DEFINED_DPCP */
 
@@ -1439,6 +1432,16 @@ void qp_mgr_eth_mlx5::post_nop_fence(void)
     ring_doorbell(MLX5_DB_METHOD_DB, 1);
 
     update_next_wqe_hot();
+}
+
+void qp_mgr_eth_mlx5::post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
+                                    bool is_first)
+{
+    NOT_IN_USE(tis);
+    NOT_IN_USE(addr);
+    NOT_IN_USE(len);
+    NOT_IN_USE(lkey);
+    NOT_IN_USE(is_first);
 }
 
 //! Handle releasing of Tx buffers

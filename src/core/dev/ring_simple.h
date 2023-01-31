@@ -236,17 +236,30 @@ public:
             (NVME_ZEROCOPY * caps.nvmeotcp_caps.zerocopy);
     }
 
-    xlio_tis *create_nvme_context(uint32_t seqno, uint32_t config) override
+    void nvme_set_static_conext(xlio_tis *tis, uint32_t config) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        return m_p_qp_mgr->create_nvme_context(seqno, config);
+        m_p_qp_mgr->nvme_set_static_conext(tis, config);
+    }
+
+    void nvme_set_progress_conext(xlio_tis *tis, uint32_t tcp_seqno) override
+    {
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        m_p_qp_mgr->nvme_set_progress_conext(tis, tcp_seqno);
     }
 #endif /* DEFINED_DPCP */
 
-    void post_nop_fence(void)
+    void post_nop_fence(void) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         m_p_qp_mgr->post_nop_fence();
+    }
+
+    void post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
+                       bool is_first) override
+    {
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        m_p_qp_mgr->post_dump_wqe(tis, addr, len, lkey, is_first);
     }
 
     void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)

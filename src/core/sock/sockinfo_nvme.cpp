@@ -66,7 +66,7 @@ int sockinfo_tcp_ops_nvme::setsockopt(int level, int optname, const void *optval
         uint32_t config =
             (optlen < sizeof(uint32_t)) ? 0U : *reinterpret_cast<const uint32_t *>(optval);
         int ret = setsockopt_tx(config);
-        m_is_tx_offload = (ret == 0);
+        m_is_tx_offload = (ret == 0) && (XLIO_NVME_DDGST_MASK == (config & XLIO_NVME_DDGST_MASK));
         return ret;
     }
 
@@ -178,9 +178,37 @@ int sockinfo_tcp_ops_nvme::postrouting(pbuf *p, tcp_seg *seg, xlio_send_attr &at
         return 0;
     }
     assert(p->desc.attr == PBUF_DESC_NVME_TX);
+    assert(m_p_tis != nullptr);
 
     attr.tis = m_p_tis.get();
-    /* auto nvme_pdu = dynamic_cast<nvme_pdu_mdesc *>(static_cast<mem_desc *>(p->desc.mdesc)); */
+    if (likely(seg->seqno == m_expected_seqno)) {
+        return 0;
+    }
+
+    ring *p_ring = m_p_sock->get_tx_ring();
+    if (p_ring == nullptr) {
+        return ERR_OK;
+    }
+
+    auto nvme_pdu_rec =
+        dynamic_cast<nvme_pdu_mdesc *>(static_cast<mem_desc *>(p->next->desc.mdesc));
+    if (unlikely(nvme_pdu_rec == nullptr)) {
+        return ERR_RTE;
+    }
+
+    auto &pdu = nvme_pdu_rec->m_pdu;
+    p_ring->nvme_set_progress_conext(m_p_tis.get(), pdu->m_seqnum);
+    /* The requested segment is in the beginning of the PDU */
+    if (unlikely(seg->seqno == pdu->m_seqnum)) {
+        p_ring->post_nop_fence();
+        return 0;
+    }
+
+    assert(seg->seqno >= pdu->m_seqnum);
+    /* size_t datalen_to_dump_post = seg->seqno - pdu->m_seqnum; */
+    /* const auto mss = m_p_sock->get_mss(); */
+    /* pdu->reset(); */
+
     return 0;
 }
 
@@ -196,20 +224,24 @@ bool sockinfo_tcp_ops_nvme::handle_send_ret(ssize_t ret, tcp_seg *seg)
 
 err_t sockinfo_tcp_ops_nvme::recv(pbuf *p)
 {
-    NOT_IN_USE(p);
-    return ERR_OK;
-};
+    return p != nullptr ? ERR_OK : ERR_ARG;
+}
 
 int sockinfo_tcp_ops_nvme::setsockopt_tx(const uint32_t &config)
 {
     ring *p_ring = m_p_sock->get_tx_ring();
-    m_expected_seqno = m_p_sock->get_next_tcp_seqno();
-    if (p_ring != nullptr && m_p_tis == nullptr) {
-        m_p_tis.reset(p_ring->create_nvme_context(m_expected_seqno, config));
+    if (p_ring == nullptr) {
+        errno = ENOTSUP;
+        return -1;
     }
+    m_p_tis = p_ring->create_tis(DPCP_TIS_FLAGS | DPCP_TIS_NVME_FLAG);
     if (m_p_tis == nullptr) {
         errno = ENOTSUP;
         return -1;
     }
+
+    m_expected_seqno = m_p_sock->get_next_tcp_seqno();
+    p_ring->nvme_set_static_conext(m_p_tis.get(), config);
+    p_ring->nvme_set_progress_conext(m_p_tis.get(), m_expected_seqno);
     return 0;
 }
