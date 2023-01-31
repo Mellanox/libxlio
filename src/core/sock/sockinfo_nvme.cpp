@@ -145,6 +145,7 @@ ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
     }
 
     if (m_pdu_mdesc == nullptr) {
+        errno = ENOMEM;
         return -1;
     }
 

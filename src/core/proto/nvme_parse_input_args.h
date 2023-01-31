@@ -126,13 +126,13 @@ struct nvmeotcp_tx {
             size_t curr_iov_offset = m_curr_iov_offset;
             while (remaining_num_bytes != 0U && curr_iov_index < m_iov_num &&
                    out_iov_idx < iov_num) {
-                iov[out_iov_idx].iov_base =
-                    reinterpret_cast<uint8_t *>(m_iov[curr_iov_index].iov_base) + curr_iov_offset;
                 if (m_iov[curr_iov_index].iov_len == 0U ||
                     m_iov[curr_iov_index].iov_base == nullptr) {
                     curr_iov_index++;
                     continue;
                 }
+                iov[out_iov_idx].iov_base =
+                    reinterpret_cast<uint8_t *>(m_iov[curr_iov_index].iov_base) + curr_iov_offset;
                 size_t bytes_in_curr_iov = m_iov[curr_iov_index].iov_len - curr_iov_offset;
 
                 if (bytes_in_curr_iov > remaining_num_bytes) {
