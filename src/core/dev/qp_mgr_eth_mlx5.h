@@ -90,12 +90,14 @@ public:
 #define DPCP_TIS_FLAGS     (dpcp::TIS_ATTR_TRANSPORT_DOMAIN | dpcp::TIS_ATTR_PD)
 #define DPCP_TIS_NVME_FLAG (dpcp::TIS_ATTR_NVMEOTCP)
     std::unique_ptr<xlio_tis> create_tis(uint32_t flags) const override;
-    xlio_tis *create_nvme_context(uint32_t seqno, uint32_t config) override;
+    void nvme_set_static_conext(xlio_tis *tis, uint32_t config) override;
+    void nvme_set_progress_conext(xlio_tis *tis, uint32_t tcp_seqno) override;
 #else
 #define DPCP_TIS_FLAGS     (0U)
 #define DPCP_TIS_NVME_FLAG (0U)
 #endif /* DEFINED_DPCP */
     void post_nop_fence(void) override;
+    void post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first) override;
 
 #if defined(DEFINED_UTLS)
     std::unique_ptr<dpcp::dek> get_new_dek(const void *key, uint32_t key_size_bytes);
@@ -192,9 +194,6 @@ protected:
 
 private:
 #endif /* DEFINED_UTLS */
-#ifdef DEFINED_DPCP
-    inline void nvme_setup_tx_offload(uint32_t tisn, uint32_t tcp_segno, uint32_t config);
-#endif /* DEFINED_DPCP */
     inline int fill_wqe_send(xlio_ibv_send_wr *pswr);
     inline int fill_wqe_lso(xlio_ibv_send_wr *pswr);
     inline void ring_doorbell(int db_method, int num_wqebb, int num_wqebb_top = 0,

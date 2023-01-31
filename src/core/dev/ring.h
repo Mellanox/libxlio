@@ -190,8 +190,21 @@ public:
         NOT_IN_USE(first);
     }
 #endif /* DEFINED_UTLS */
-    virtual std::unique_ptr<xlio_tis> create_tis(uint32_t) const { return nullptr; };
-    virtual xlio_tis *create_nvme_context(uint32_t, uint32_t) { return nullptr; };
+    virtual std::unique_ptr<xlio_tis> create_tis(uint32_t flag) const
+    {
+        NOT_IN_USE(flag);
+        return nullptr;
+    }
+    virtual void nvme_set_static_conext(xlio_tis *tis, uint32_t config)
+    {
+        NOT_IN_USE(tis);
+        NOT_IN_USE(config);
+    };
+    virtual void nvme_set_progress_conext(xlio_tis *tis, uint32_t tcp_seqno)
+    {
+        NOT_IN_USE(tis);
+        NOT_IN_USE(tcp_seqno);
+    };
 
     enum {
         NVME_CRC_TX = 1 << 0,
@@ -200,7 +213,15 @@ public:
     };
 
     virtual int get_supported_nvme_feature_mask() const { return 0; }
-    virtual void post_nop_fence(void) {}
+    virtual void post_nop_fence(void) { }
+    virtual void post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first)
+    {
+        NOT_IN_USE(tis);
+        NOT_IN_USE(addr);
+        NOT_IN_USE(len);
+        NOT_IN_USE(lkey);
+        NOT_IN_USE(first);
+    }
 
     virtual void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)
     {
