@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 
+#include <algorithm>
 #include <functional>
 #include "sockinfo_tcp.h"
 #include "sockinfo_ulp.h"
@@ -66,7 +67,8 @@ int sockinfo_tcp_ops_nvme::setsockopt(int level, int optname, const void *optval
         uint32_t config =
             (optlen < sizeof(uint32_t)) ? 0U : *reinterpret_cast<const uint32_t *>(optval);
         int ret = setsockopt_tx(config);
-        m_is_tx_offload = (ret == 0) && (XLIO_NVME_DDGST_MASK == (config & XLIO_NVME_DDGST_MASK));
+        m_is_tx_offload = (ret == 0);
+        m_is_ddgs_on = m_is_tx_offload && (XLIO_NVME_DDGST_MASK == (config & XLIO_NVME_DDGST_MASK));
         return ret;
     }
 
@@ -174,7 +176,7 @@ ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
 
 int sockinfo_tcp_ops_nvme::postrouting(pbuf *p, tcp_seg *seg, xlio_send_attr &attr)
 {
-    if (!m_is_tx_offload || p == nullptr || seg == nullptr || seg->len == 0U) {
+    if (!m_is_ddgs_on || p == nullptr || seg == nullptr || seg->len == 0U) {
         return 0;
     }
     assert(p->desc.attr == PBUF_DESC_NVME_TX);
@@ -182,7 +184,7 @@ int sockinfo_tcp_ops_nvme::postrouting(pbuf *p, tcp_seg *seg, xlio_send_attr &at
 
     attr.tis = m_p_tis.get();
     if (likely(seg->seqno == m_expected_seqno)) {
-        return 0;
+        return ERR_OK;
     }
 
     ring *p_ring = m_p_sock->get_tx_ring();
@@ -197,19 +199,41 @@ int sockinfo_tcp_ops_nvme::postrouting(pbuf *p, tcp_seg *seg, xlio_send_attr &at
     }
 
     auto &pdu = nvme_pdu_rec->m_pdu;
+    assert(pdu->is_valid());
     p_ring->nvme_set_progress_conext(m_p_tis.get(), pdu->m_seqnum);
+
     /* The requested segment is in the beginning of the PDU */
     if (unlikely(seg->seqno == pdu->m_seqnum)) {
         p_ring->post_nop_fence();
-        return 0;
+        return ERR_OK;
+    }
+    assert(seg->seqno >= pdu->m_seqnum);
+
+    size_t datalen_to_dump_post = seg->seqno - pdu->m_seqnum;
+    const size_t mss = m_p_sock->get_mss();
+
+    pdu->reset();
+    /* Send the first segment */
+    iovec iov = pdu->current_iov();
+    if (iov.iov_base == nullptr) {
+        return ERR_RTE;
+    }
+    iov.iov_len = std::min({iov.iov_len, mss, datalen_to_dump_post});
+    p_ring->post_dump_wqe(m_p_tis.get(), iov.iov_base, iov.iov_len, pdu->current_mkey(), true);
+    pdu->consume(iov.iov_len);
+    datalen_to_dump_post -= iov.iov_len;
+
+    /* Send the rest of the segments */
+    while (datalen_to_dump_post > 0U) {
+        iov.iov_len = std::min({iov.iov_len, mss, datalen_to_dump_post});
+        p_ring->post_dump_wqe(m_p_tis.get(), iov.iov_base, iov.iov_len, pdu->current_mkey(), true);
+        pdu->consume(iov.iov_len);
+        datalen_to_dump_post -= iov.iov_len;
     }
 
-    assert(seg->seqno >= pdu->m_seqnum);
-    /* size_t datalen_to_dump_post = seg->seqno - pdu->m_seqnum; */
-    /* const auto mss = m_p_sock->get_mss(); */
-    /* pdu->reset(); */
+    m_expected_seqno = seg->seqno;
 
-    return 0;
+    return ERR_OK;
 }
 
 bool sockinfo_tcp_ops_nvme::handle_send_ret(ssize_t ret, tcp_seg *seg)

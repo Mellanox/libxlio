@@ -1212,29 +1212,7 @@ inline void qp_mgr_eth_mlx5::tls_get_progress_params_wqe(xlio_ti *ti, uint32_t t
 void qp_mgr_eth_mlx5::tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
                                            bool first)
 {
-    struct mlx5_dump_wqe *wqe = reinterpret_cast<struct mlx5_dump_wqe *>(m_sq_wqe_hot);
-    struct xlio_mlx5_wqe_ctrl_seg *cseg = &wqe->ctrl.ctrl;
-    struct mlx5_wqe_data_seg *dseg = &wqe->data;
-    uint32_t tisn = tis ? tis->get_tisn() : 0;
-    uint16_t num_wqebbs = TLS_DUMP_WQEBBS;
-    uint16_t ds_cnt = sizeof(*wqe) / MLX5_SEND_WQE_DS;
-
-    memset(wqe, 0, sizeof(*wqe));
-
-    cseg->opmod_idx_opcode = htobe32(((m_sq_wqe_counter & 0xffff) << 8) | XLIO_MLX5_OPCODE_DUMP);
-    cseg->qpn_ds = htobe32((m_mlx5_qp.qpn << MLX5_WQE_CTRL_QPN_SHIFT) | ds_cnt);
-    cseg->fm_ce_se = first ? MLX5_FENCE_MODE_INITIATOR_SMALL : 0;
-    cseg->tis_tir_num = htobe32(tisn << 8);
-
-    dseg->addr = htobe64((uintptr_t)addr);
-    dseg->lkey = htobe32(lkey);
-    dseg->byte_count = htobe32(len);
-
-    store_current_wqe_prop(nullptr, SQ_CREDITS_DUMP, tis);
-
-    ring_doorbell(MLX5_DB_METHOD_DB, num_wqebbs, 0, true);
-
-    update_next_wqe_hot();
+    post_dump_wqe(tis, addr, len, lkey, first);
 }
 
 void qp_mgr_eth_mlx5::tls_release_tis(xlio_tis *tis)
@@ -1435,11 +1413,29 @@ void qp_mgr_eth_mlx5::post_nop_fence(void)
 void qp_mgr_eth_mlx5::post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
                                     bool is_first)
 {
-    NOT_IN_USE(tis);
-    NOT_IN_USE(addr);
-    NOT_IN_USE(len);
-    NOT_IN_USE(lkey);
-    NOT_IN_USE(is_first);
+    struct mlx5_dump_wqe *wqe = reinterpret_cast<struct mlx5_dump_wqe *>(m_sq_wqe_hot);
+    struct xlio_mlx5_wqe_ctrl_seg *cseg = &wqe->ctrl.ctrl;
+    struct mlx5_wqe_data_seg *dseg = &wqe->data;
+    uint32_t tisn = tis ? tis->get_tisn() : 0;
+    uint16_t num_wqebbs = XLIO_DUMP_WQEBBS;
+    uint16_t ds_cnt = sizeof(*wqe) / MLX5_SEND_WQE_DS;
+
+    memset(wqe, 0, sizeof(*wqe));
+
+    cseg->opmod_idx_opcode = htobe32(((m_sq_wqe_counter & 0xffff) << 8) | XLIO_MLX5_OPCODE_DUMP);
+    cseg->qpn_ds = htobe32((m_mlx5_qp.qpn << MLX5_WQE_CTRL_QPN_SHIFT) | ds_cnt);
+    cseg->fm_ce_se = is_first ? MLX5_FENCE_MODE_INITIATOR_SMALL : 0;
+    cseg->tis_tir_num = htobe32(tisn << 8);
+
+    dseg->addr = htobe64((uintptr_t)addr);
+    dseg->lkey = htobe32(lkey);
+    dseg->byte_count = htobe32(len);
+
+    store_current_wqe_prop(nullptr, SQ_CREDITS_DUMP, tis);
+
+    ring_doorbell(MLX5_DB_METHOD_DB, num_wqebbs, 0, true);
+
+    update_next_wqe_hot();
 }
 
 //! Handle releasing of Tx buffers

@@ -318,7 +318,7 @@ typedef struct mlx5_get_tls_progress_params_wqe {
     (DIV_ROUND_UP(sizeof(mlx5_set_tls_progress_params_wqe), MLX5_SEND_WQE_BB))
 #define TLS_GET_PROGRESS_WQEBBS                                                                    \
     (DIV_ROUND_UP(sizeof(mlx5_get_tls_progress_params_wqe), MLX5_SEND_WQE_BB))
-#define TLS_DUMP_WQEBBS (DIV_ROUND_UP(sizeof(struct mlx5_dump_wqe), MLX5_SEND_WQE_BB))
+#define XLIO_DUMP_WQEBBS (DIV_ROUND_UP(sizeof(struct mlx5_dump_wqe), MLX5_SEND_WQE_BB))
 
 #define MLX5_CTRL_SEGMENT_OPC_MOD_UMR_NVMEOTCP_TIR_STATIC_PARAMS   0x2
 #define MLX5_CTRL_SEGMENT_OPC_MOD_UMR_NVMEOTCP_TIS_STATIC_PARAMS   0x1
