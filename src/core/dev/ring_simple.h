@@ -64,64 +64,64 @@ public:
     ring_simple(int if_index, ring *parent, ring_type_t type);
     virtual ~ring_simple();
 
-    virtual int request_notification(cq_type_t cq_type, uint64_t poll_sn);
-    virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array = NULL);
-    virtual int poll_and_process_element_tx(uint64_t *p_cq_poll_sn);
-    virtual void adapt_cq_moderation();
-    virtual bool reclaim_recv_buffers(descq_t *rx_reuse);
-    virtual bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst);
+    int request_notification(cq_type_t cq_type, uint64_t poll_sn) override;
+    int poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array = NULL) override;
+    int poll_and_process_element_tx(uint64_t *p_cq_poll_sn) override;
+    void adapt_cq_moderation() override;
+    bool reclaim_recv_buffers(descq_t *rx_reuse) override;
+    bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst) override;
     bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst); // No locks
-    virtual int reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse); // No locks
-    virtual void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc);
-    virtual int drain_and_proccess();
-    virtual int wait_for_notification_and_process_element(int cq_channel_fd, uint64_t *p_cq_poll_sn,
-                                                          void *pv_fd_ready_array = NULL);
+    int reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse) override; // No locks
+    void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc) override;
+    int drain_and_proccess() override;
+    int wait_for_notification_and_process_element(int cq_channel_fd, uint64_t *p_cq_poll_sn,
+                                                          void *pv_fd_ready_array = NULL) override;
     void mem_buf_desc_return_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc);
     void mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc,
                                          void *pv_fd_ready_array = NULL);
     inline int send_buffer(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
                            xlio_tis *tis);
-    virtual bool is_up();
+    bool is_up() override;
     void start_active_qp_mgr();
     void stop_active_qp_mgr();
-    virtual mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
-                                           int n_num_mem_bufs = 1);
-    virtual int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool b_accounting,
-                                   bool trylock = false);
-    virtual void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                                  xlio_wr_tx_packet_attr attr);
-    virtual int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                                 xlio_wr_tx_packet_attr attr, xlio_tis *tis);
-    virtual void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc);
-    virtual void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc, unsigned ref);
+    mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
+                                           int n_num_mem_bufs = 1) override;
+    int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool b_accounting,
+                                   bool trylock = false) override;
+    void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
+                                  xlio_wr_tx_packet_attr attr) override;
+    int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
+                                 xlio_wr_tx_packet_attr attr, xlio_tis *tis) override;
+    void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc) override;
+    void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc, unsigned ref) override;
     void mem_buf_desc_return_single_locked(mem_buf_desc_t *buff);
     void return_tx_pool_to_global_pool();
-    virtual bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe);
+    bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe) override;
     inline void convert_hw_time_to_system_time(uint64_t hwtime, struct timespec *systime)
     {
         m_p_ib_ctx->convert_hw_time_to_system_time(hwtime, systime);
     }
-    virtual int modify_ratelimit(struct xlio_rate_limit_t &rate_limit);
-    virtual int get_tx_channel_fd() const
+    int modify_ratelimit(struct xlio_rate_limit_t &rate_limit) override;
+    int get_tx_channel_fd() const override
     {
         return m_p_tx_comp_event_channel ? m_p_tx_comp_event_channel->fd : -1;
     }
-    virtual uint32_t get_tx_user_lkey(void *addr, size_t length, void *p_mapping = NULL);
-    virtual uint32_t get_max_inline_data();
-    ib_ctx_handler *get_ctx(ring_user_id_t id)
+    uint32_t get_tx_user_lkey(void *addr, size_t length, void *p_mapping = NULL) override;
+    uint32_t get_max_inline_data() override;
+    ib_ctx_handler *get_ctx(ring_user_id_t id) override
     {
         NOT_IN_USE(id);
         return m_p_ib_ctx;
     }
-    virtual uint32_t get_max_send_sge(void);
-    virtual uint32_t get_max_payload_sz(void);
-    virtual uint16_t get_max_header_sz(void);
-    virtual uint32_t get_tx_lkey(ring_user_id_t id)
+    uint32_t get_max_send_sge(void) override;
+    uint32_t get_max_payload_sz(void) override;
+    uint16_t get_max_header_sz(void) override;
+    uint32_t get_tx_lkey(ring_user_id_t id) override
     {
         NOT_IN_USE(id);
         return m_tx_lkey;
     }
-    virtual bool is_tso(void);
+    bool is_tso(void) override;
 
     struct ibv_comp_channel *get_tx_comp_event_channel() { return m_p_tx_comp_event_channel; }
     void modify_cq_moderation(uint32_t period, uint32_t count);
@@ -262,20 +262,20 @@ public:
         m_p_qp_mgr->post_dump_wqe(tis, addr, len, lkey, is_first);
     }
 
-    void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)
+    void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         NOT_IN_USE(id);
         m_p_qp_mgr->reset_inflight_zc_buffers_ctx(ctx);
     }
 
-    bool credits_get(unsigned credits)
+    bool credits_get(unsigned credits) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         return m_p_qp_mgr->credits_get(credits);
     }
 
-    void credits_return(unsigned credits)
+    void credits_return(unsigned credits) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         m_p_qp_mgr->credits_return(credits);
@@ -297,7 +297,7 @@ protected:
     virtual qp_mgr *create_qp_mgr(struct qp_mgr_desc *desc) = 0;
     void create_resources();
     virtual void init_tx_buffers(uint32_t count);
-    virtual void inc_cq_moderation_stats(size_t sz_data);
+    void inc_cq_moderation_stats(size_t sz_data) override;
     inline void set_tx_num_wr(uint32_t num_wr) { m_tx_num_wr = num_wr; }
     inline uint32_t get_tx_num_wr() { return m_tx_num_wr; }
     inline uint32_t get_mtu() { return m_mtu; }
@@ -413,7 +413,7 @@ public:
     }
 
 protected:
-    virtual qp_mgr *create_qp_mgr(struct qp_mgr_desc *desc);
+    qp_mgr *create_qp_mgr(struct qp_mgr_desc *desc) override;
 };
 
 #endif // RING_SIMPLE_H
