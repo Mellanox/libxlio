@@ -123,28 +123,19 @@ struct mlx5_ifc_tls_static_params_bits {
     uint8_t const_1[0x2];
     uint8_t reserved_at_8[0x14];
     uint8_t encryption_standard[0x4];
-
     uint8_t reserved_at_20[0x20];
-
     uint8_t initial_record_number[0x40];
-
     uint8_t resync_tcp_sn[0x20];
-
     uint8_t gcm_iv[0x20];
-
     uint8_t implicit_iv[0x40];
-
     uint8_t reserved_at_100[0x8];
     uint8_t dek_index[0x18];
-
     uint8_t reserved_at_120[0xe0];
 };
 
 struct mlx5_ifc_tls_progress_params_bits {
     uint8_t next_record_tcp_sn[0x20];
-
     uint8_t hw_resync_tcp_sn[0x20];
-
     uint8_t record_tracker_state[0x2];
     uint8_t auth_state[0x2];
     uint8_t reserved_at_44[0x4];
@@ -180,22 +171,14 @@ struct mlx5_ifc_transport_static_params_bits {
     uint8_t const_1[0x2];
     uint8_t reserved_at_8[0x14];
     uint8_t acc_type[0x4];
-
     uint8_t reserved_at_20[0x20];
-
     uint8_t initial_record_number[0x40];
-
     uint8_t resync_tcp_sn[0x20];
-
     uint8_t gcm_iv[0x20];
-
     uint8_t implicit_iv[0x40];
-
     uint8_t reserved_at_100[0x8];
     uint8_t dek_index[0x18];
-
     uint8_t reserved_at_120[0x14];
-
     uint8_t const1[0x1];
     uint8_t ti[0x1];
     uint8_t zero_copy_en[0x1];
@@ -204,9 +187,7 @@ struct mlx5_ifc_transport_static_params_bits {
     uint8_t ddgst_en[0x1];
     uint8_t hddgst_en[0x1];
     uint8_t pda[0x5];
-
     uint8_t nvme_resync_tcp_sn[0x20];
-
     uint8_t reserved_at_160[0xa0];
 };
 
