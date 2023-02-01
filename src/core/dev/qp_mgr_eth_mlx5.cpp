@@ -1405,8 +1405,6 @@ void qp_mgr_eth_mlx5::put_tis_in_cache(xlio_tis *tis)
 
 void qp_mgr_eth_mlx5::put_tir_in_cache(xlio_tir *tir)
 {
-    put_dek(tir->release_dek());
-
     // Because the absense of TIR flush command, reusing a TIR
     // may result in undefined behaviour.
     // Until a flush command is available the TIR cache is disabled.

@@ -213,7 +213,7 @@ public:
     };
 
     virtual int get_supported_nvme_feature_mask() const { return 0; }
-    virtual void post_nop_fence(void) { }
+    virtual void post_nop_fence(void) {}
     virtual void post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first)
     {
         NOT_IN_USE(tis);
