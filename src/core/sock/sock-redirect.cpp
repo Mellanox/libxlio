@@ -1632,6 +1632,7 @@ extern "C" EXPORT_SYMBOL ssize_t sendmsg(int __fd, __const struct msghdr *__msg,
         tx_arg.msg.addr = (struct sockaddr *)(__CONST_SOCKADDR_ARG)__msg->msg_name;
         tx_arg.msg.len = (socklen_t)__msg->msg_namelen;
         tx_arg.msg.hdr = __msg;
+        tx_arg.priv.attr = PBUF_NONE;
 
         if (0 < __msg->msg_controllen) {
             struct cmsghdr *cmsg = CMSG_FIRSTHDR((struct msghdr *)__msg);
@@ -1648,6 +1649,9 @@ extern "C" EXPORT_SYMBOL ssize_t sendmsg(int __fd, __const struct msghdr *__msg,
                     return -1;
                 }
             }
+        } else if (tx_arg.msg.flags & MSG_ZEROCOPY) {
+            errno = EINVAL;
+            return -1;
         }
 
         return p_socket_object->tx(tx_arg);

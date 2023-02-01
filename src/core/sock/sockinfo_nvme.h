@@ -48,7 +48,10 @@ public:
         , m_p_tis(nullptr)
         , m_pdu_mdesc(nullptr)
         , m_expected_seqno(0U)
-        , m_is_tx_offload(false) {};
+        , m_is_tx_offload(false)
+        , m_is_ddgs_on(false)
+    {
+    }
     ~sockinfo_tcp_ops_nvme()
     {
         if (m_pdu_mdesc)
@@ -69,6 +72,7 @@ private:
     nvme_pdu_mdesc *m_pdu_mdesc;
     uint32_t m_expected_seqno;
     bool m_is_tx_offload;
+    bool m_is_ddgs_on;
 };
 
 #endif /* _SOCKINFO_NVME_H */

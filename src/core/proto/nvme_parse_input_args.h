@@ -179,16 +179,21 @@ struct nvmeotcp_tx {
             return get_segment(num_bytes, iov, iov_num);
         }
 
+        /* Call this method after testing that the PDU is valid */
         inline iovec current_iov()
         {
-            if (!is_valid() || m_curr_iov_index >= m_iov_num ||
+            if (m_curr_iov_index >= m_iov_num ||
                 m_iov[m_curr_iov_index].iov_len <= m_curr_iov_offset) {
                 return {nullptr, 0U};
             }
+            assert(m_iov[m_curr_iov_index].iov_base != nullptr);
             return iovec {
                 reinterpret_cast<uint8_t *>(m_iov[m_curr_iov_index].iov_base) + m_curr_iov_offset,
                 m_iov[m_curr_iov_index].iov_len - m_curr_iov_offset};
         }
+
+        /* Call when the PDU state is known */
+        inline uint32_t current_mkey() { return m_aux_data[m_curr_iov_index].mkey; }
 
         pdu() = default;
         inline bool is_valid() const { return m_iov_num != 0U; }
