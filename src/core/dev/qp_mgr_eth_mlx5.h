@@ -96,6 +96,18 @@ public:
 #define DPCP_TIS_FLAGS     (0U)
 #define DPCP_TIS_NVME_FLAG (0U)
 #endif /* DEFINED_DPCP */
+    /* Get a memory inside a wqebb at a wqebb_num offset from the m_sq_wqe_hot and account for
+     * m_sq_wqe_counter wrap-around. Use offset_in_wqebb to for the internal address. Use the
+     * template parameter to cast the resulting address to the required pointer type */
+    template <typename T>
+    constexpr inline T wqebb_get(size_t wqebb_num, size_t offset_in_wqebb = 0U)
+    {
+        return reinterpret_cast<T>(
+            reinterpret_cast<uintptr_t>(
+                &(*m_sq_wqes)[(m_sq_wqe_counter + wqebb_num) & (m_tx_num_wr - 1)]) +
+            offset_in_wqebb);
+    }
+
     void post_nop_fence(void) override;
     void post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first) override;
 
@@ -178,18 +190,6 @@ protected:
     {
         NOT_IN_USE(is_tls);
         return NULL;
-    }
-
-    /* Get a memory inside a wqebb at a wqebb_num offset from the m_sq_wqe_hot and account for
-     * m_sq_wqe_counter wrap-around. Use offset_in_wqebb to for the internal address. Use the
-     * template parameter to cast the resulting address to the required pointer type */
-    template <typename T>
-    constexpr inline T wqebb_get(size_t wqebb_num, size_t offset_in_wqebb = 0U)
-    {
-        return reinterpret_cast<T>(
-            reinterpret_cast<uintptr_t>(
-                &(*m_sq_wqes)[(m_sq_wqe_counter + wqebb_num) & (m_tx_num_wr - 1)]) +
-            offset_in_wqebb);
     }
 
 private:
