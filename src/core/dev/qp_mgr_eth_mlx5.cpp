@@ -1350,6 +1350,7 @@ void qp_mgr_eth_mlx5::nvme_set_static_conext(xlio_tis *tis, uint32_t config)
 
     auto *params = wqebb_get<mlx5_wqe_transport_static_params_seg *>(2U);
     nvme_fill_static_params_transport_params(params, config);
+    store_current_wqe_prop(nullptr, SQ_CREDITS_UMR, tis);
     ring_doorbell(MLX5_DB_METHOD_DB, MLX5E_TRANSPORT_SET_STATIC_PARAMS_WQEBBS);
     update_next_wqe_hot();
 }
@@ -1359,6 +1360,7 @@ void qp_mgr_eth_mlx5::nvme_set_progress_conext(xlio_tis *tis, uint32_t tcp_seqno
     auto *wqe = reinterpret_cast<mlx5e_set_nvmeotcp_progress_params_wqe *>(m_sq_wqe_hot);
     nvme_fill_progress_wqe(wqe, m_sq_wqe_counter, m_mlx5_qp.qpn, tis->get_tisn(), tcp_seqno,
                            MLX5_FENCE_MODE_INITIATOR_SMALL);
+    store_current_wqe_prop(nullptr, SQ_CREDITS_SET_PSV, tis);
     ring_doorbell(MLX5_DB_METHOD_DB, MLX5E_NVMEOTCP_PROGRESS_PARAMS_WQEBBS);
     update_next_wqe_hot();
 }

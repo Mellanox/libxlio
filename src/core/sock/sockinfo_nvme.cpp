@@ -174,18 +174,27 @@ ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
     return ret >= 0 ? (bytes_sent + ret) : ret;
 }
 
+static inline bool requst_credits_for_resync(ring *p_ring, size_t datalen, size_t mss)
+{
+    unsigned dump_nr = (datalen + mss - 1) / mss;
+    unsigned credits = SQ_CREDITS_SET_PSV + dump_nr * SQ_CREDITS_DUMP + !dump_nr * SQ_CREDITS_NOP;
+    return p_ring->credits_get(credits);
+}
+
 int sockinfo_tcp_ops_nvme::postrouting(pbuf *p, tcp_seg *seg, xlio_send_attr &attr)
 {
     if (!m_is_ddgs_on || p == nullptr || seg == nullptr || seg->len == 0U) {
-        return 0;
+        return ERR_OK;
     }
-    assert(p->desc.attr == PBUF_DESC_NVME_TX);
     assert(m_p_tis != nullptr);
 
     attr.tis = m_p_tis.get();
     if (likely(seg->seqno == m_expected_seqno)) {
+        m_expected_seqno += seg->len;
         return ERR_OK;
     }
+    assert(p->next != nullptr);
+    assert(p->next->desc.attr == PBUF_DESC_NVME_TX);
 
     ring *p_ring = m_p_sock->get_tx_ring();
     if (p_ring == nullptr) {
@@ -200,46 +209,51 @@ int sockinfo_tcp_ops_nvme::postrouting(pbuf *p, tcp_seg *seg, xlio_send_attr &at
 
     auto &pdu = nvme_pdu_rec->m_pdu;
     assert(pdu->is_valid());
-    p_ring->nvme_set_progress_conext(m_p_tis.get(), pdu->m_seqnum);
-
-    /* The requested segment is in the beginning of the PDU */
-    if (unlikely(seg->seqno == pdu->m_seqnum)) {
-        p_ring->post_nop_fence();
-        return ERR_OK;
-    }
     assert(seg->seqno >= pdu->m_seqnum);
+    assert(seg->seqno < pdu->m_seqnum + pdu->length());
 
     size_t datalen_to_dump_post = seg->seqno - pdu->m_seqnum;
     const size_t mss = m_p_sock->get_mss();
 
-    pdu->reset();
-    /* Send the first segment */
-    iovec iov = pdu->current_iov();
-    if (iov.iov_base == nullptr) {
-        return ERR_RTE;
+    if (!requst_credits_for_resync(p_ring, datalen_to_dump_post, mss)) {
+        si_nvme_logdbg("Not enough room in SQ for resync");
+        return ERR_WOULDBLOCK;
     }
-    iov.iov_len = std::min({iov.iov_len, mss, datalen_to_dump_post});
-    p_ring->post_dump_wqe(m_p_tis.get(), iov.iov_base, iov.iov_len, pdu->current_mkey(), true);
-    pdu->consume(iov.iov_len);
-    datalen_to_dump_post -= iov.iov_len;
+    p_ring->nvme_set_progress_conext(m_p_tis.get(), pdu->m_seqnum);
 
-    /* Send the rest of the segments */
-    while (datalen_to_dump_post > 0U) {
+    /* The requested segment is in the beginning of the PDU */
+    if (unlikely(datalen_to_dump_post == 0U)) {
+        p_ring->post_nop_fence();
+        m_expected_seqno = seg->seqno + seg->len;
+        return ERR_OK;
+    }
+
+    pdu->reset();
+    bool is_first = true;
+    /* Advance the TIS context from the PDU start seqnum to seg->seqno */
+    do {
+        /* Send the first segment */
+        iovec iov = pdu->current_iov();
+        if (iov.iov_base == nullptr) {
+            /* datalen_to_dump_post should be 0 before we exhaust the PDU */
+            return ERR_RTE;
+        }
         iov.iov_len = std::min({iov.iov_len, mss, datalen_to_dump_post});
-        p_ring->post_dump_wqe(m_p_tis.get(), iov.iov_base, iov.iov_len, pdu->current_mkey(), true);
+        p_ring->post_dump_wqe(m_p_tis.get(), iov.iov_base, iov.iov_len, pdu->current_mkey(),
+                              is_first);
         pdu->consume(iov.iov_len);
         datalen_to_dump_post -= iov.iov_len;
-    }
+        is_first = false;
+    } while (datalen_to_dump_post > 0U);
 
-    m_expected_seqno = seg->seqno;
-
+    m_expected_seqno = seg->seqno + seg->len;
     return ERR_OK;
 }
 
 bool sockinfo_tcp_ops_nvme::handle_send_ret(ssize_t ret, tcp_seg *seg)
 {
     if (ret < 0 && seg) {
-        /* m_expected_seqno -= seg->len; */
+        m_expected_seqno -= seg->len;
         return false;
     }
 
@@ -264,6 +278,11 @@ int sockinfo_tcp_ops_nvme::setsockopt_tx(const uint32_t &config)
         return -1;
     }
 
+    if (!p_ring->credits_get(SQ_CREDITS_UMR + SQ_CREDITS_SET_PSV)) {
+        si_nvme_logdbg("No available space in SQ to create the TX context");
+        errno = ENOPROTOOPT;
+        return -1;
+    }
     m_expected_seqno = m_p_sock->get_next_tcp_seqno();
     p_ring->nvme_set_static_conext(m_p_tis.get(), config);
     p_ring->nvme_set_progress_conext(m_p_tis.get(), m_expected_seqno);
