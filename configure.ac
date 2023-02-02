@@ -12,9 +12,9 @@ dnl===-----------------------------------------------------------------------===
 
 # Update version number here:
 #
-define([prj_ver_major], 2)
-define([prj_ver_minor], 1)
-define([prj_ver_revision], 4)
+define([prj_ver_major], 3)
+define([prj_ver_minor], 0)
+define([prj_ver_revision], 0)
 define([prj_ver_release], esyscmd([echo ${PRJ_RELEASE:=0}]))
 
 
