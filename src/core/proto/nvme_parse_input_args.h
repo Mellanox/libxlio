@@ -187,6 +187,7 @@ struct nvmeotcp_tx {
                 return {nullptr, 0U};
             }
             assert(m_iov[m_curr_iov_index].iov_base != nullptr);
+            assert(m_iov[m_curr_iov_index].iov_len != 0);
             return iovec {
                 reinterpret_cast<uint8_t *>(m_iov[m_curr_iov_index].iov_base) + m_curr_iov_offset,
                 m_iov[m_curr_iov_index].iov_len - m_curr_iov_offset};

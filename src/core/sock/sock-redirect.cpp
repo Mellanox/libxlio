@@ -1649,9 +1649,6 @@ extern "C" EXPORT_SYMBOL ssize_t sendmsg(int __fd, __const struct msghdr *__msg,
                     return -1;
                 }
             }
-        } else if (tx_arg.msg.flags & MSG_ZEROCOPY) {
-            errno = EINVAL;
-            return -1;
         }
 
         return p_socket_object->tx(tx_arg);

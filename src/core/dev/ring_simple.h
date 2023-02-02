@@ -65,7 +65,8 @@ public:
     virtual ~ring_simple();
 
     int request_notification(cq_type_t cq_type, uint64_t poll_sn) override;
-    int poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array = NULL) override;
+    int poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
+                                    void *pv_fd_ready_array = NULL) override;
     int poll_and_process_element_tx(uint64_t *p_cq_poll_sn) override;
     void adapt_cq_moderation() override;
     bool reclaim_recv_buffers(descq_t *rx_reuse) override;
@@ -75,7 +76,7 @@ public:
     void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc) override;
     int drain_and_proccess() override;
     int wait_for_notification_and_process_element(int cq_channel_fd, uint64_t *p_cq_poll_sn,
-                                                          void *pv_fd_ready_array = NULL) override;
+                                                  void *pv_fd_ready_array = NULL) override;
     void mem_buf_desc_return_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc);
     void mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc,
                                          void *pv_fd_ready_array = NULL);
@@ -85,15 +86,16 @@ public:
     void start_active_qp_mgr();
     void stop_active_qp_mgr();
     mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
-                                           int n_num_mem_bufs = 1) override;
+                                   int n_num_mem_bufs = 1) override;
     int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool b_accounting,
-                                   bool trylock = false) override;
+                           bool trylock = false) override;
     void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                                  xlio_wr_tx_packet_attr attr) override;
+                          xlio_wr_tx_packet_attr attr) override;
     int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                                 xlio_wr_tx_packet_attr attr, xlio_tis *tis) override;
+                         xlio_wr_tx_packet_attr attr, xlio_tis *tis) override;
     void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc) override;
-    void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc, unsigned ref) override;
+    void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc,
+                                              unsigned ref) override;
     void mem_buf_desc_return_single_locked(mem_buf_desc_t *buff);
     void return_tx_pool_to_global_pool();
     bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe) override;

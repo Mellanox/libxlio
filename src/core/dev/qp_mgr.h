@@ -436,7 +436,7 @@ public:
         return std::move(m_dek);
     }
 
-    inline uint32_t get_tisn(void) { return m_tisn; }
+    inline uint32_t get_tisn(void) noexcept { return m_tisn; }
 
     inline void assign_dek(xlio_dek &&dek_ptr)
     {
@@ -444,7 +444,7 @@ public:
         m_dek_id = m_dek->get_key_id();
     }
 
-    inline uint32_t get_dek_id(void) { return m_dek_id; }
+    inline uint32_t get_dek_id(void) noexcept { return m_dek_id; }
 
 private:
     xlio_dek m_dek;
