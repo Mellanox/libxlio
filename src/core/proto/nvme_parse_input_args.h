@@ -33,6 +33,7 @@
 #ifndef XLIO_NVME_PARSE_INPUT_ARGS_H
 #define XLIO_NVME_PARSE_INPUT_ARGS_H
 #include <atomic>
+#include <stdlib.h>
 #include "proto/mem_desc.h"
 
 static inline bool is_valid_aux_data_array(const xlio_pd_key *aux, size_t aux_data_sz)
@@ -225,20 +226,56 @@ private:
 
 class nvme_pdu_mdesc : public mem_desc {
 public:
-    nvme_pdu_mdesc(std::unique_ptr<nvmeotcp_tx::pdu> pdu)
-        : m_pdu(std::move(pdu))
+    nvme_pdu_mdesc(size_t num_segments, iovec *iov, xlio_pd_key *aux_data, uint32_t seqno,
+                   size_t length, std::unique_ptr<uint8_t[]> &&container)
+        : m_num_segments(num_segments)
+        , m_iov(iov)
+        , m_aux_data(aux_data)
+        , m_seqno(seqno)
+        , m_length(length)
+        , m_view({num_segments, 0U})
+        , m_container(std::move(container))
         , m_ref(1) {};
 
-    ~nvme_pdu_mdesc() = default;
+    ~nvme_pdu_mdesc() override
+    {
+        m_iov = nullptr;
+        m_aux_data = nullptr;
+        m_container.reset();
+    }
+
+    static inline nvme_pdu_mdesc *create(size_t num_segments, const iovec *iov,
+                                         const xlio_pd_key *aux_data, uint32_t seqno, size_t length)
+    {
+        const auto offsetof_iov = sizeof(nvme_pdu_mdesc);
+        auto offsetof_aux_data = sizeof(nvme_pdu_mdesc) + (num_segments * sizeof(iovec));
+        static_assert(offsetof_iov % alignof(iovec) == 0U, "The offset of iov is not OK");
+        assert(offsetof_aux_data % alignof(xlio_pd_key) == 0U);
+
+        auto this_addr = reinterpret_cast<uint8_t *>(aligned_alloc(
+            alignof(nvme_pdu_mdesc),
+            num_segments * (sizeof(iovec) + sizeof(xlio_pd_key)) + sizeof(nvme_pdu_mdesc)));
+        if (this_addr == nullptr) {
+            return nullptr;
+        }
+        auto container = std::unique_ptr<uint8_t[]>(this_addr);
+        auto iov_addr = reinterpret_cast<iovec *>(&this_addr[offsetof_iov]);
+        auto aux_data_addr = reinterpret_cast<xlio_pd_key *>(&this_addr[offsetof_aux_data]);
+
+        memcpy(iov_addr, iov, num_segments * sizeof(iovec));
+        memcpy(aux_data_addr, aux_data, num_segments * sizeof(xlio_pd_key));
+
+        return new (this_addr) nvme_pdu_mdesc(num_segments, iov_addr, aux_data_addr, seqno, length,
+                                              std::move(container));
+    }
 
     void get(void) override { m_ref.fetch_add(1, std::memory_order_relaxed); }
 
     void put(void) override
     {
         int ref = m_ref.fetch_sub(1, std::memory_order_relaxed);
-
         if (ref == 1) {
-            delete this;
+            this->~nvme_pdu_mdesc();
         }
     }
 
@@ -247,17 +284,50 @@ public:
         uintptr_t addr_start = reinterpret_cast<uintptr_t>(addr);
         uintptr_t addr_end = addr_start + len;
 
-        for (size_t i = 0; i < m_pdu->m_iov_num; i++) {
-            uintptr_t range_start = reinterpret_cast<uintptr_t>(m_pdu->m_iov[i].iov_base);
-            uintptr_t range_end = range_start + m_pdu->m_iov[i].iov_len;
-            if (range_start <= addr_start && addr_end <= range_end) {
-                return m_pdu->m_aux_data[i].mkey;
-            }
+        auto itr = std::find_if(&m_iov[0U], &m_iov[m_num_segments], [&](const iovec &iov) {
+            uintptr_t range_start = reinterpret_cast<uintptr_t>(iov.iov_base);
+            uintptr_t range_end = range_start + iov.iov_len;
+            return (range_start <= addr_start && addr_end <= range_end);
+        });
+
+        if (itr == &m_iov[m_num_segments]) {
+            return LKEY_USE_DEFAULT;
         }
-        return LKEY_USE_DEFAULT;
+        return m_aux_data[std::distance(&m_iov[0U], itr)].mkey;
     }
 
-    std::unique_ptr<nvmeotcp_tx::pdu> m_pdu;
+    struct chunk {
+        iovec iov;
+        uint32_t mkey;
+        chunk(void *base, size_t len, uint32_t key)
+            : iov({base, len})
+            , mkey(key) {};
+        chunk()
+            : chunk(nullptr, 0U, LKEY_USE_DEFAULT) {};
+        inline bool is_valid()
+        {
+            return iov.iov_base != nullptr && iov.iov_len != 0U && mkey != LKEY_USE_DEFAULT;
+        }
+    };
+
+    /* returns the distance in bytes from the begining of the PDU containing the given seqno and
+     * resets the internal state to the appropriate iov. In case of failiure returns m_length */
+    size_t reset(uint32_t seqno);
+    chunk next_chunk(size_t length);
+
+    size_t m_num_segments;
+    iovec *m_iov;
+    xlio_pd_key *m_aux_data;
+    uint32_t m_seqno;
+    size_t m_length;
+
+private:
+    struct view {
+        size_t index;
+        size_t offset;
+    };
+    view m_view;
+    std::unique_ptr<uint8_t[]> m_container;
     std::atomic_int m_ref;
 };
 

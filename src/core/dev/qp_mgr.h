@@ -413,8 +413,6 @@ private:
 };
 
 #if defined(DEFINED_UTLS) || defined(DEFINED_DPCP)
-using xlio_dek = std::unique_ptr<dpcp::dek>;
-
 class xlio_tis : public xlio_ti {
 public:
     xlio_tis(dpcp::tis *_tis)
@@ -437,7 +435,7 @@ public:
         }
     }
 
-    inline xlio_dek release_dek()
+    inline std::unique_ptr<dpcp::dek> release_dek()
     {
         assert(m_ref == 0);
         m_released = false;
@@ -446,7 +444,7 @@ public:
 
     inline uint32_t get_tisn(void) noexcept { return m_tisn; }
 
-    inline void assign_dek(xlio_dek &&dek_ptr)
+    inline void assign_dek(std::unique_ptr<dpcp::dek> &&dek_ptr)
     {
         m_dek = std::move(dek_ptr);
         m_dek_id = m_dek->get_key_id();
@@ -455,7 +453,7 @@ public:
     inline uint32_t get_dek_id(void) noexcept { return m_dek_id; }
 
 private:
-    xlio_dek m_dek;
+    std::unique_ptr<dpcp::dek> m_dek;
     dpcp::tis *m_p_tis;
     uint32_t m_tisn;
     uint32_t m_dek_id;
@@ -479,7 +477,7 @@ public:
 
     ~xlio_tir() = default;
 
-    inline xlio_dek release_dek()
+    inline std::unique_ptr<dpcp::dek> release_dek()
     {
         assert(m_ref == 0);
         m_released = false;
@@ -499,23 +497,22 @@ public:
     std::unique_ptr<dpcp::tir> m_p_tir;
 
 private:
-    xlio_dek m_dek;
+    std::unique_ptr<dpcp::dek> m_dek;
     uint32_t m_tirn;
     uint32_t m_dek_id;
 };
 #else /* DEFINED_UTLS or DEFINED_DPCP */
-using xlio_dek = void *;
+/* A stub classes to compile without uTLS support. */
 class xlio_tis : public xlio_ti {
 public:
-    /* A stub class to compile without uTLS support. */
     inline uint32_t get_tisn(void) { return 0; }
-    inline xlio_dek release_dek() { return nullptr; };
+    inline void *release_dek() { return nullptr; };
 };
 class xlio_tir : public xlio_ti {
 public:
     /* A stub class to compile without uTLS support. */
     inline uint32_t get_tirn(void) { return 0; }
-    inline xlio_dek release_dek() { return nullptr; };
+    inline void *release_dek() { return nullptr; };
 };
 #endif /* DEFINED_UTLS or DEFINED_DPCP */
 #endif

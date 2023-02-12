@@ -882,7 +882,7 @@ std::unique_ptr<dpcp::dek> qp_mgr_eth_mlx5::get_dek(const void *key, uint32_t ke
     return out_dek;
 }
 
-void qp_mgr_eth_mlx5::put_dek(xlio_dek &&dek_obj)
+void qp_mgr_eth_mlx5::put_dek(std::unique_ptr<dpcp::dek> &&dek_obj)
 {
     if (dek_obj == nullptr) {
         return;

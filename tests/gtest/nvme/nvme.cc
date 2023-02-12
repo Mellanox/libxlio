@@ -280,99 +280,105 @@ TEST_F(nvme_new_request, pdu_get_segment)
 class nvme_pdu_mdesc_test_suite : public nvme_new_request {
 protected:
     nvme_pdu_mdesc_test_suite()
-        : pdu_mdesc(nvmeotcp_tx(iov, aux_data_current, iovec_sz).get_next_pdu(1U)) {};
-    ~nvme_pdu_mdesc_test_suite() = default;
-    nvme_pdu_mdesc pdu_mdesc;
+        : pdu_mdesc(nvme_pdu_mdesc::create(iovec_sz, iov, aux_data_current, 888U, sizeof(arr))) {};
+    static_assert(sizeof(arr) == 24U);
+    ~nvme_pdu_mdesc_test_suite()
+    {
+        if (pdu_mdesc != nullptr) {
+            pdu_mdesc->put();
+        }
+    };
+    nvme_pdu_mdesc *pdu_mdesc;
 };
 
 /**
- * @test nvme_pdu_mdesc_test_suite.nvme_pdu_mdesc_get_lkey_before_range_fails
+ * @test nvme_pdu_mdesc_test_suite.get_lkey_before_range_fails
  * @brief
  *    Check correct segmentation of the iovec pdu
  * @details
  */
-TEST_F(nvme_pdu_mdesc_test_suite, nvme_pdu_mdesc_get_lkey_before_range_fails)
+TEST_F(nvme_pdu_mdesc_test_suite, get_lkey_before_range_fails)
 {
     auto addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[0][0]) - 1U);
-    ASSERT_EQ(LKEY_USE_DEFAULT, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 1U));
+    ASSERT_EQ(LKEY_USE_DEFAULT, pdu_mdesc->get_lkey(nullptr, nullptr, addr, 1U));
 }
 
 /**
- * @test nvme_pdu_mdesc_test_suite.nvme_pdu_mdesc_get_lkey_after_range_fails
+ * @test nvme_pdu_mdesc_test_suite.get_lkey_after_range_fails
  * @brief
  *    Check correct segmentation of the iovec pdu
  * @details
  */
-TEST_F(nvme_pdu_mdesc_test_suite, nvme_pdu_mdesc_get_lkey_after_range_fails)
+TEST_F(nvme_pdu_mdesc_test_suite, get_lkey_after_range_fails)
 {
-    auto addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[1][7]) + 1U);
-    ASSERT_EQ(LKEY_USE_DEFAULT, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 1U));
+    auto addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[2][7]) + 1U);
+    ASSERT_EQ(LKEY_USE_DEFAULT, pdu_mdesc->get_lkey(nullptr, nullptr, addr, 1U));
 }
 
 /**
- * @test nvme_pdu_mdesc_test_suite.nvme_pdu_mdesc_get_lkey_addr_overlaps_start_of_range_fails
+ * @test nvme_pdu_mdesc_test_suite.get_lkey_addr_overlaps_start_of_range_fails
  * @brief
  *    Check correct segmentation of the iovec pdu
  * @details
  */
-TEST_F(nvme_pdu_mdesc_test_suite, nvme_pdu_mdesc_get_lkey_addr_overlaps_start_of_range_fails)
+TEST_F(nvme_pdu_mdesc_test_suite, get_lkey_addr_overlaps_start_of_range_fails)
 {
     auto addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[0][0]) - 1U);
-    ASSERT_EQ(LKEY_USE_DEFAULT, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 4U));
+    ASSERT_EQ(LKEY_USE_DEFAULT, pdu_mdesc->get_lkey(nullptr, nullptr, addr, 4U));
 }
 
 /**
- * @test nvme_pdu_mdesc_test_suite.nvme_pdu_mdesc_get_lkey_addr_overlaps_end_of_range_fails
+ * @test nvme_pdu_mdesc_test_suite.get_lkey_addr_overlaps_end_of_range_fails
  * @brief
  *    Check correct segmentation of the iovec pdu
  * @details
  */
-TEST_F(nvme_pdu_mdesc_test_suite, nvme_pdu_mdesc_get_lkey_addr_overlaps_end_of_range_fails)
+TEST_F(nvme_pdu_mdesc_test_suite, get_lkey_addr_overlaps_end_of_range_fails)
 {
     auto addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[0][6]));
-    ASSERT_EQ(LKEY_USE_DEFAULT, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 4U));
+    ASSERT_EQ(LKEY_USE_DEFAULT, pdu_mdesc->get_lkey(nullptr, nullptr, addr, 4U));
 }
 
 /**
- * @test nvme_pdu_mdesc_test_suite.nvme_pdu_mdesc_get_lkey_full_match_succeeds
+ * @test nvme_pdu_mdesc_test_suite.get_lkey_full_match_succeeds
  * @brief
  *    Check correct segmentation of the iovec pdu
  * @details
  */
-TEST_F(nvme_pdu_mdesc_test_suite, nvme_pdu_mdesc_get_lkey_full_match_succeeds)
+TEST_F(nvme_pdu_mdesc_test_suite, get_lkey_full_match_succeeds)
 {
     auto addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[0][0]));
-    ASSERT_EQ(aux_data[0].mkey, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 8U));
+    ASSERT_EQ(aux_data[0].mkey, pdu_mdesc->get_lkey(nullptr, nullptr, addr, 8U));
 
     addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[1][0]));
-    ASSERT_EQ(aux_data[1].mkey, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 8U));
+    ASSERT_EQ(aux_data[1].mkey, pdu_mdesc->get_lkey(nullptr, nullptr, addr, 8U));
 }
 
 /**
- * @test nvme_pdu_mdesc_test_suite.nvme_pdu_mdesc_get_lkey_partial_match_succeeds
+ * @test nvme_pdu_mdesc_test_suite.get_lkey_partial_match_succeeds
  * @brief
  *    Check correct segmentation of the iovec pdu
  * @details
  */
-TEST_F(nvme_pdu_mdesc_test_suite, nvme_pdu_mdesc_get_lkey_partial_match_succeeds)
+TEST_F(nvme_pdu_mdesc_test_suite, get_lkey_partial_match_succeeds)
 {
     auto addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[0][1]));
-    ASSERT_EQ(aux_data[0].mkey, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 7U));
+    ASSERT_EQ(aux_data[0].mkey, pdu_mdesc->get_lkey(nullptr, nullptr, addr, 7U));
 
     addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[0][0]));
-    ASSERT_EQ(aux_data[0].mkey, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 7U));
+    ASSERT_EQ(aux_data[0].mkey, pdu_mdesc->get_lkey(nullptr, nullptr, addr, 7U));
 
     addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[0][1]));
-    ASSERT_EQ(aux_data[0].mkey, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 6U));
+    ASSERT_EQ(aux_data[0].mkey, pdu_mdesc->get_lkey(nullptr, nullptr, addr, 6U));
 
     addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[1][1]));
-    ASSERT_EQ(aux_data[1].mkey, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 7U));
+    ASSERT_EQ(aux_data[1].mkey, pdu_mdesc->get_lkey(nullptr, nullptr, addr, 7U));
 
     addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[1][0]));
-    ASSERT_EQ(aux_data[1].mkey, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 7U));
+    ASSERT_EQ(aux_data[1].mkey, pdu_mdesc->get_lkey(nullptr, nullptr, addr, 7U));
 
     addr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(&arr[1][1]));
-    ASSERT_EQ(aux_data[1].mkey, pdu_mdesc.get_lkey(nullptr, nullptr, addr, 6U));
+    ASSERT_EQ(aux_data[1].mkey, pdu_mdesc->get_lkey(nullptr, nullptr, addr, 6U));
 }
 
 class xlio_ti_test : public testing::Test {
@@ -613,7 +619,9 @@ protected:
         listen_fd = tcp_base::sock_create();
         ASSERT_LE(0, listen_fd);
         sockets.emplace_back(listen_fd);
-
+        int reuse_on = 1;
+        ASSERT_EQ(0, setsockopt(listen_fd, SOL_SOCKET, SO_REUSEPORT, &reuse_on, sizeof(reuse_on)))
+            << "Unable to reuse the server port";
         auto rc = bind(listen_fd, (sockaddr *)&server_addr, sizeof(server_addr));
         ASSERT_EQ(0, rc) << "Unable to bind to address " << sys_addr2str((sockaddr *)&server_addr);
 
