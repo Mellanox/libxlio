@@ -180,11 +180,13 @@ int sockinfo_tcp_ops_nvme::postrouting(pbuf *p, tcp_seg *seg, xlio_send_attr &at
 
     ring *p_ring = m_p_sock->get_tx_ring();
     if (p_ring == nullptr) {
-        return ERR_OK;
+        si_nvme_logerr("No ring");
+        return ERR_RTE;
     }
 
     auto nvme_mdesc = dynamic_cast<nvme_pdu_mdesc *>(static_cast<mem_desc *>(p->next->desc.mdesc));
     if (unlikely(nvme_mdesc == nullptr)) {
+        si_nvme_logerr("NVME momory descriptor not found");
         return ERR_RTE;
     }
 
@@ -213,6 +215,8 @@ int sockinfo_tcp_ops_nvme::postrouting(pbuf *p, tcp_seg *seg, xlio_send_attr &at
         auto chunk = nvme_mdesc->next_chunk(std::min(mss, datalen_to_dump_post));
         if (!chunk.is_valid()) {
             /* datalen_to_dump_post should be 0 before we exhaust the PDU */
+            si_nvme_logerr("Unable to dump post segment of size %zu",
+                           std::min(mss, datalen_to_dump_post));
             return ERR_RTE;
         }
         p_ring->post_dump_wqe(m_p_tis.get(), chunk.iov.iov_base, chunk.iov.iov_len, chunk.mkey,
@@ -286,7 +290,7 @@ size_t nvme_pdu_mdesc::reset(uint32_t seqno)
             pdu_length -= m_iov[curr_index].iov_len;
         }
 
-        if (pdu_length == 0U) {
+        if (pdu_length != 0U) {
             si_nvme_logerr("Unable to iterate PDUs - corrupted mdesc");
             return m_length;
         }
