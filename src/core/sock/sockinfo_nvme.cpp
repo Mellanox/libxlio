@@ -64,8 +64,11 @@ int sockinfo_tcp_ops_nvme::setsockopt(int level, int optname, const void *optval
             errno = ENOTSUP;
             return -1;
         }
-        uint32_t config =
-            (optlen < sizeof(uint32_t)) ? 0U : *reinterpret_cast<const uint32_t *>(optval);
+        if (optlen != sizeof(uint32_t)) {
+            errno = EINVAL;
+            return -1;
+        }
+        uint32_t config = *reinterpret_cast<const uint32_t *>(optval);
         int ret = setsockopt_tx(config);
         m_is_tx_offload = (ret == 0);
         m_is_ddgs_on = m_is_tx_offload && (XLIO_NVME_DDGST_MASK == (config & XLIO_NVME_DDGST_MASK));
@@ -75,49 +78,6 @@ int sockinfo_tcp_ops_nvme::setsockopt(int level, int optname, const void *optval
     return 0;
 }
 
-using tx_func = std::function<ssize_t(xlio_tx_call_attr_t &)>;
-using segment_size_func = std::function<size_t()>;
-
-static inline ssize_t send_pdu_segment(iovec *iov, size_t sz_iov, mem_desc *desc, tx_func tx)
-{
-    pbuf_desc pdesc;
-    pdesc.attr = PBUF_DESC_NVME_TX;
-    pdesc.mdesc = desc;
-    xlio_tx_call_attr_t nvme_tx_arg {TX_SENDMSG,
-                                     xlio_tx_call_attr_t::_msg {
-                                         .iov = &iov[0],
-                                         .sz_iov = static_cast<ssize_t>(sz_iov),
-                                         .flags = MSG_ZEROCOPY,
-                                         .addr = nullptr,
-                                         .len = 0U,
-                                         .hdr = nullptr,
-                                     },
-                                     TX_FLAG_NO_PARTIAL_WRITE, std::move(pdesc)};
-    return tx(nvme_tx_arg);
-}
-
-static inline ssize_t send_pdu(nvme_pdu_mdesc *desc, segment_size_func segment_available,
-                               tx_func tx)
-{
-    ssize_t bytes_sent = 0;
-    do {
-        iovec iov[64U];
-        auto segment = desc->m_pdu->get_segment(segment_available(), &iov[0], 64U);
-        if (!segment.is_valid()) {
-            break;
-        }
-        ssize_t ret = send_pdu_segment(&iov[0], segment.iov_num, desc, tx);
-        if (ret >= 0) {
-            desc->m_pdu->consume(ret);
-            bytes_sent += ret;
-        } else {
-            bytes_sent = ret;
-            break;
-        }
-    } while (true);
-    return bytes_sent;
-}
-
 ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
 {
     if (!m_is_tx_offload) {
@@ -125,53 +85,75 @@ ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
     }
 
     if (tx_arg.opcode != TX_SENDMSG || tx_arg.priv.attr != PBUF_DESC_NVME_TX) {
+        si_nvme_logdbg("Invalid opcode or priv attribute");
+        errno = EINVAL;
+        return -1;
+    }
+    auto aux_data = reinterpret_cast<xlio_pd_key *>(tx_arg.priv.map);
+    auto msg = tx_arg.msg.hdr;
+
+    if (msg->msg_iov == nullptr || aux_data == nullptr || msg->msg_iovlen == 0U ||
+        aux_data[0].message_length == 0U) {
+        si_nvme_logerr("Invalid msg_iov, msg_iovlen, or auxiliary data");
         errno = EINVAL;
         return -1;
     }
 
-    auto aux_data = reinterpret_cast<xlio_pd_key *>(tx_arg.priv.map);
-    auto msg = tx_arg.msg.hdr;
-    auto nvme = nvmeotcp_tx(msg->msg_iov, aux_data, msg->msg_iovlen);
+    size_t num_iovecs {0U};
+    size_t total_tx_length {0U};
+    unsigned sndbuf_len = m_p_sock->sndbuf_available();
 
-    if (m_pdu_mdesc == nullptr) {
-        if (!is_new_nvme_pdu(aux_data, msg->msg_iovlen)) {
+    /* The new request points at a new PDU */
+    while (num_iovecs < msg->msg_iovlen && sndbuf_len > total_tx_length) {
+        size_t data_len = aux_data[num_iovecs].message_length;
+        /* Check if there is enough place in sndbuf for the current PDU */
+        if (sndbuf_len < total_tx_length + data_len) {
+            break;
+        }
+        total_tx_length += data_len;
+
+        /* Iterate the PDU iovecs */
+        while (num_iovecs < msg->msg_iovlen && data_len >= msg->msg_iov[num_iovecs].iov_len) {
+            data_len -= msg->msg_iov[num_iovecs].iov_len;
+            num_iovecs++;
+        }
+
+        if (data_len != 0) {
+            si_nvme_logerr("Invalid iovec - incomplete PDU?");
             errno = EINVAL;
             return -1;
         }
-        auto pdu = nvme.get_next_pdu(m_p_sock->get_next_tcp_seqno());
-        if (pdu == nullptr) {
-            errno = EINVAL;
-            return -1;
-        }
-        m_pdu_mdesc = new nvme_pdu_mdesc(std::move(pdu));
     }
+    if (num_iovecs == 0U || total_tx_length == 0U) {
+        si_nvme_logerr("Found %zu iovecs with length %zu to fit in sndbuff %u", num_iovecs,
+                       total_tx_length, sndbuf_len);
+        m_p_sock->set_reguired_send_block(aux_data[num_iovecs].message_length);
+        errno = ENOBUFS;
+        return -1;
+    }
+    m_p_sock->set_reguired_send_block(1U);
 
-    if (m_pdu_mdesc == nullptr) {
+    /* Update tx_arg before sending to TCP */
+    auto *desc = nvme_pdu_mdesc::create(num_iovecs, msg->msg_iov, aux_data,
+                                        m_p_sock->get_next_tcp_seqno(), total_tx_length);
+    if (desc == nullptr) {
+        si_nvme_logerr("Unable to allocate nvme_mdesc");
         errno = ENOMEM;
         return -1;
     }
+    /* Ambiguous reuse of the enum */
+    tx_arg.priv.attr = PBUF_DESC_NVME_TX;
+    tx_arg.priv.mdesc = reinterpret_cast<void *>(desc);
+    tx_arg.msg.iov = desc->m_iov;
+    tx_arg.msg.sz_iov = static_cast<ssize_t>(desc->m_num_segments);
 
-    segment_size_func sndbuf_available = [sock = m_p_sock]() { return sock->sndbuf_available(); };
-    tx_func tx = [sock = m_p_sock](xlio_tx_call_attr_t &attr) { return sock->tcp_tx(attr); };
-
-    ssize_t bytes_sent = 0;
-    ssize_t ret = 0;
-    while ((ret = send_pdu(m_pdu_mdesc, sndbuf_available, tx)) ==
-           static_cast<ssize_t>(m_pdu_mdesc->m_pdu->length())) {
-        m_pdu_mdesc->put();
-        m_pdu_mdesc = nullptr;
-        auto pdu = nvme.get_next_pdu(m_p_sock->get_next_tcp_seqno());
-        if (pdu == nullptr) {
-            break;
-        }
-        m_pdu_mdesc = new nvme_pdu_mdesc(std::move(pdu));
-        if (m_pdu_mdesc == nullptr) {
-            break;
-        }
-        bytes_sent += ret;
+    ssize_t ret = m_p_sock->tcp_tx(tx_arg);
+    if (ret < static_cast<ssize_t>(total_tx_length)) {
+        si_nvme_logerr("Sent %zd instead of %zu", ret, total_tx_length);
     }
 
-    return ret >= 0 ? (bytes_sent + ret) : ret;
+    desc->put();
+    return ret;
 }
 
 static inline bool requst_credits_for_resync(ring *p_ring, size_t datalen, size_t mss)
@@ -201,25 +183,22 @@ int sockinfo_tcp_ops_nvme::postrouting(pbuf *p, tcp_seg *seg, xlio_send_attr &at
         return ERR_OK;
     }
 
-    auto nvme_pdu_rec =
-        dynamic_cast<nvme_pdu_mdesc *>(static_cast<mem_desc *>(p->next->desc.mdesc));
-    if (unlikely(nvme_pdu_rec == nullptr)) {
+    auto nvme_mdesc = dynamic_cast<nvme_pdu_mdesc *>(static_cast<mem_desc *>(p->next->desc.mdesc));
+    if (unlikely(nvme_mdesc == nullptr)) {
         return ERR_RTE;
     }
 
-    auto &pdu = nvme_pdu_rec->m_pdu;
-    assert(pdu->is_valid());
-    assert(seg->seqno >= pdu->m_seqnum);
-    assert(seg->seqno < pdu->m_seqnum + pdu->length());
+    assert(seg->seqno >= nvme_mdesc->m_seqno);
+    assert(seg->seqno < nvme_mdesc->m_seqno + nvme_mdesc->m_length);
 
-    size_t datalen_to_dump_post = seg->seqno - pdu->m_seqnum;
     const size_t mss = m_p_sock->get_mss();
+    size_t datalen_to_dump_post = nvme_mdesc->reset(seg->seqno);
 
     if (!requst_credits_for_resync(p_ring, datalen_to_dump_post, mss)) {
         si_nvme_logdbg("Not enough room in SQ for resync");
         return ERR_WOULDBLOCK;
     }
-    p_ring->nvme_set_progress_context(m_p_tis.get(), pdu->m_seqnum);
+    p_ring->nvme_set_progress_context(m_p_tis.get(), nvme_mdesc->m_seqno);
 
     /* The requested segment is in the beginning of the PDU */
     if (unlikely(datalen_to_dump_post == 0U)) {
@@ -228,21 +207,17 @@ int sockinfo_tcp_ops_nvme::postrouting(pbuf *p, tcp_seg *seg, xlio_send_attr &at
         return ERR_OK;
     }
 
-    pdu->reset();
     bool is_first = true;
     /* Advance the TIS context from the PDU start seqnum to seg->seqno */
     do {
-        /* Send the first segment */
-        iovec iov = pdu->current_iov();
-        if (iov.iov_base == nullptr) {
+        auto chunk = nvme_mdesc->next_chunk(std::min(mss, datalen_to_dump_post));
+        if (!chunk.is_valid()) {
             /* datalen_to_dump_post should be 0 before we exhaust the PDU */
             return ERR_RTE;
         }
-        iov.iov_len = std::min({iov.iov_len, mss, datalen_to_dump_post});
-        p_ring->post_dump_wqe(m_p_tis.get(), iov.iov_base, iov.iov_len, pdu->current_mkey(),
+        p_ring->post_dump_wqe(m_p_tis.get(), chunk.iov.iov_base, chunk.iov.iov_len, chunk.mkey,
                               is_first);
-        pdu->consume(iov.iov_len);
-        datalen_to_dump_post -= iov.iov_len;
+        datalen_to_dump_post -= chunk.iov.iov_len;
         is_first = false;
     } while (datalen_to_dump_post > 0U);
 
@@ -287,4 +262,56 @@ int sockinfo_tcp_ops_nvme::setsockopt_tx(const uint32_t &config)
     p_ring->nvme_set_static_context(m_p_tis.get(), config);
     p_ring->nvme_set_progress_context(m_p_tis.get(), m_expected_seqno);
     return 0;
+}
+
+size_t nvme_pdu_mdesc::reset(uint32_t seqno)
+{
+    if (seqno > m_seqno + m_length) {
+        return m_length;
+    }
+
+    size_t curr_pdu_seqno = m_seqno;
+    size_t curr_index = 0U;
+
+    /* Outer loop, iterate PDUs */
+    while (curr_pdu_seqno + m_aux_data[curr_index].message_length <= seqno) {
+        assert(m_aux_data[curr_index].message_length != 0U);
+
+        auto pdu_length = m_aux_data[curr_index].message_length;
+        curr_pdu_seqno += pdu_length;
+
+        /* Inner loop, iterate iovecs */
+        while (curr_index < m_num_segments && pdu_length >= m_iov[curr_index].iov_len) {
+            curr_index++;
+            pdu_length -= m_iov[curr_index].iov_len;
+        }
+
+        if (pdu_length == 0U) {
+            si_nvme_logerr("Unable to iterate PDUs - corrupted mdesc");
+            return m_length;
+        }
+    }
+
+    m_view.index = curr_index;
+    m_view.offset = 0U;
+    return seqno - curr_pdu_seqno;
+}
+
+nvme_pdu_mdesc::chunk nvme_pdu_mdesc::next_chunk(size_t length)
+{
+    if (m_view.index >= m_num_segments || length == 0U) {
+        return chunk();
+    }
+
+    auto iov_base = reinterpret_cast<void *>(
+        reinterpret_cast<uintptr_t>(m_iov[m_view.index].iov_base) + m_view.offset);
+    size_t iov_len = std::min(m_iov[m_view.index].iov_len - m_view.offset, length);
+    uint32_t mkey = m_aux_data[m_view.index].mkey;
+    if (m_view.offset + iov_len == std::min(m_iov[m_view.index].iov_len, length)) {
+        m_view.offset = 0U;
+        m_view.index++;
+    } else {
+        m_view.offset += iov_len;
+    }
+    return chunk(iov_base, iov_len, mkey);
 }

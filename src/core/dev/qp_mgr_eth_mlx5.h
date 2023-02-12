@@ -114,8 +114,10 @@ public:
 #if defined(DEFINED_UTLS)
     std::unique_ptr<dpcp::dek> get_new_dek(const void *key, uint32_t key_size_bytes);
     std::unique_ptr<dpcp::dek> get_dek(const void *key, uint32_t key_size_bytes);
+    void put_dek(std::unique_ptr<dpcp::dek> &&dek_obj);
+#else
+    void put_dek(void *dek_obj);
 #endif
-    void put_dek(xlio_dek &&dek_obj);
 
     void reset_inflight_zc_buffers_ctx(void *ctx) override;
     // TODO Make credits API inline.

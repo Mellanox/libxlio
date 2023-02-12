@@ -32,14 +32,18 @@
 
 #ifndef _SOCKINFO_NVME_H
 #define _SOCKINFO_NVME_H
+#include <algorithm>
 #include <memory>
+#include <sys/uio.h>
 #include "sockinfo_ulp.h" /* sockinfo_tcp_ops */
 #include "dev/qp_mgr_eth_mlx5.h"
 #include "proto/nvme_parse_input_args.h"
+#include "xlio_extra.h"
 #include "lwip/err.h" /* err_t */
 
 typedef struct xlio_tx_call_attr xlio_tx_call_attr_t;
 struct xlio_send_attr;
+
 class sockinfo_tcp_ops_nvme : public sockinfo_tcp_ops {
 public:
     sockinfo_tcp_ops_nvme(sockinfo_tcp *sock, int nvme_feature_mask)
@@ -67,12 +71,13 @@ public:
     int m_nvme_feature_mask;
 
 private:
-    int setsockopt_tx(const uint32_t &config);
     std::unique_ptr<xlio_tis> m_p_tis;
     nvme_pdu_mdesc *m_pdu_mdesc;
     uint32_t m_expected_seqno;
     bool m_is_tx_offload;
     bool m_is_ddgs_on;
+
+    int setsockopt_tx(const uint32_t &config);
 };
 
 #endif /* _SOCKINFO_NVME_H */

@@ -250,6 +250,7 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     , m_sysvar_internal_thread_tcp_timer_handling(safe_mce_sys().internal_thread_tcp_timer_handling)
     , m_sysvar_rx_poll_on_tx_tcp(safe_mce_sys().rx_poll_on_tx_tcp)
     , m_user_huge_page_mask(~((uint64_t)safe_mce_sys().user_huge_page_size - 1))
+    , m_required_send_block(1U)
 {
     si_tcp_logfuncall("");
 
@@ -1753,8 +1754,9 @@ err_t sockinfo_tcp::ack_recvd_lwip_cb(void *arg, struct tcp_pcb *tpcb, u16_t ack
 
     conn->m_p_socket_stats->n_tx_ready_byte_count -= ack;
 
-    NOTIFY_ON_EVENTS(conn, EPOLLOUT);
-
+    if (conn->sndbuf_available() >= conn->m_required_send_block) {
+        NOTIFY_ON_EVENTS(conn, EPOLLOUT);
+    }
     vlog_func_exit();
 
     return ERR_OK;
@@ -3604,7 +3606,7 @@ bool sockinfo_tcp::is_writeable()
         goto noblock;
     }
 
-    if (tcp_sndbuf(&m_pcb) > 0) {
+    if (tcp_sndbuf(&m_pcb) > m_required_send_block) {
         goto noblock;
     }
 
