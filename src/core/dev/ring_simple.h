@@ -238,16 +238,16 @@ public:
             (NVME_ZEROCOPY * caps.nvmeotcp_caps.zerocopy);
     }
 
-    void nvme_set_static_conext(xlio_tis *tis, uint32_t config) override
+    void nvme_set_static_context(xlio_tis *tis, uint32_t config) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_p_qp_mgr->nvme_set_static_conext(tis, config);
+        m_p_qp_mgr->nvme_set_static_context(tis, config);
     }
 
-    void nvme_set_progress_conext(xlio_tis *tis, uint32_t tcp_seqno) override
+    void nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_p_qp_mgr->nvme_set_progress_conext(tis, tcp_seqno);
+        m_p_qp_mgr->nvme_set_progress_context(tis, tcp_seqno);
     }
 #endif /* DEFINED_DPCP */
 
