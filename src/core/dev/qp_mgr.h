@@ -252,12 +252,12 @@ public:
     }
 #endif /* DEFINED_UTLS */
     virtual std::unique_ptr<xlio_tis> create_tis(uint32_t) const { return nullptr; };
-    virtual void nvme_set_static_conext(xlio_tis *tis, uint32_t config)
+    virtual void nvme_set_static_context(xlio_tis *tis, uint32_t config)
     {
         NOT_IN_USE(tis);
         NOT_IN_USE(config);
     };
-    virtual void nvme_set_progress_conext(xlio_tis *tis, uint32_t tcp_seqno)
+    virtual void nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno)
     {
         NOT_IN_USE(tis);
         NOT_IN_USE(tcp_seqno);

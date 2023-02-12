@@ -1339,7 +1339,7 @@ static inline void nvme_fill_progress_wqe(mlx5e_set_nvmeotcp_progress_params_wqe
     DEVX_SET(nvmeotcp_progress_params, ctx, offloading_state, 0);
 }
 
-void qp_mgr_eth_mlx5::nvme_set_static_conext(xlio_tis *tis, uint32_t config)
+void qp_mgr_eth_mlx5::nvme_set_static_context(xlio_tis *tis, uint32_t config)
 {
     auto *cseg = wqebb_get<xlio_mlx5_wqe_ctrl_seg *>(0U);
     auto *ucseg = wqebb_get<xlio_mlx5_wqe_umr_ctrl_seg *>(0U, sizeof(*cseg));
@@ -1355,7 +1355,7 @@ void qp_mgr_eth_mlx5::nvme_set_static_conext(xlio_tis *tis, uint32_t config)
     update_next_wqe_hot();
 }
 
-void qp_mgr_eth_mlx5::nvme_set_progress_conext(xlio_tis *tis, uint32_t tcp_seqno)
+void qp_mgr_eth_mlx5::nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno)
 {
     auto *wqe = reinterpret_cast<mlx5e_set_nvmeotcp_progress_params_wqe *>(m_sq_wqe_hot);
     nvme_fill_progress_wqe(wqe, m_sq_wqe_counter, m_mlx5_qp.qpn, tis->get_tisn(), tcp_seqno,

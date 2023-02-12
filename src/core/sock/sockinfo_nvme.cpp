@@ -219,7 +219,7 @@ int sockinfo_tcp_ops_nvme::postrouting(pbuf *p, tcp_seg *seg, xlio_send_attr &at
         si_nvme_logdbg("Not enough room in SQ for resync");
         return ERR_WOULDBLOCK;
     }
-    p_ring->nvme_set_progress_conext(m_p_tis.get(), pdu->m_seqnum);
+    p_ring->nvme_set_progress_context(m_p_tis.get(), pdu->m_seqnum);
 
     /* The requested segment is in the beginning of the PDU */
     if (unlikely(datalen_to_dump_post == 0U)) {
@@ -284,7 +284,7 @@ int sockinfo_tcp_ops_nvme::setsockopt_tx(const uint32_t &config)
         return -1;
     }
     m_expected_seqno = m_p_sock->get_next_tcp_seqno();
-    p_ring->nvme_set_static_conext(m_p_tis.get(), config);
-    p_ring->nvme_set_progress_conext(m_p_tis.get(), m_expected_seqno);
+    p_ring->nvme_set_static_context(m_p_tis.get(), config);
+    p_ring->nvme_set_progress_context(m_p_tis.get(), m_expected_seqno);
     return 0;
 }
