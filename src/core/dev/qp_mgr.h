@@ -85,13 +85,26 @@ struct qp_mgr_desc {
     struct ibv_comp_channel *rx_comp_event_channel;
 };
 
+enum {
+    XLIO_TI_UNKNOWN,
+    XLIO_TI_TIS,
+    XLIO_TI_TIR,
+};
+
 /* Work request completion callback */
 /* TODO Add argument for completion status to handle errors. */
 typedef void (*xlio_comp_cb_t)(void *);
 
 class xlio_ti {
 public:
-    xlio_ti() = default;
+    xlio_ti()
+    {
+        m_type = XLIO_TI_UNKNOWN;
+        m_released = false;
+        m_ref = 0;
+        m_callback = NULL;
+        m_callback_arg = NULL;
+    }
     virtual ~xlio_ti() {};
 
     inline void assign_callback(xlio_comp_cb_t callback, void *callback_arg)
@@ -399,12 +412,6 @@ private:
     const uint16_t m_vlan;
 };
 
-enum {
-    XLIO_TI_UNKNOWN,
-    XLIO_TI_TIS,
-    XLIO_TI_TIR,
-};
-
 #if defined(DEFINED_UTLS) || defined(DEFINED_DPCP)
 using xlio_dek = std::unique_ptr<dpcp::dek>;
 
@@ -417,6 +424,7 @@ public:
         , m_tisn(0U)
         , m_dek_id(0U)
     {
+        m_type = XLIO_TI_TIS;
         dpcp::status ret = m_p_tis->get_tisn(m_tisn);
         assert(ret == dpcp::DPCP_OK);
         (void)ret;
