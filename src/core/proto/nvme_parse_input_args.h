@@ -50,12 +50,7 @@ public:
         , m_container(std::move(container))
         , m_ref(1) {};
 
-    ~nvme_pdu_mdesc() override
-    {
-        m_iov = nullptr;
-        m_aux_data = nullptr;
-        m_container.reset();
-    }
+    ~nvme_pdu_mdesc() override { m_container.reset(); }
 
     static inline nvme_pdu_mdesc *create(size_t num_segments, const iovec *iov,
                                          const xlio_pd_key *aux_data, uint32_t seqno, size_t length)

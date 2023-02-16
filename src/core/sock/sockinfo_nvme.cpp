@@ -156,7 +156,7 @@ ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
     return ret;
 }
 
-static inline bool requst_credits_for_resync(ring *p_ring, size_t datalen, size_t mss)
+static inline bool request_credits_for_resync(ring *p_ring, size_t datalen, size_t mss)
 {
     unsigned dump_nr = (datalen + mss - 1) / mss;
     unsigned credits = SQ_CREDITS_SET_PSV + dump_nr * SQ_CREDITS_DUMP + !dump_nr * SQ_CREDITS_NOP;
@@ -196,7 +196,7 @@ int sockinfo_tcp_ops_nvme::postrouting(pbuf *p, tcp_seg *seg, xlio_send_attr &at
     const size_t mss = m_p_sock->get_mss();
     size_t datalen_to_dump_post = nvme_mdesc->reset(seg->seqno);
 
-    if (!requst_credits_for_resync(p_ring, datalen_to_dump_post, mss)) {
+    if (!request_credits_for_resync(p_ring, datalen_to_dump_post, mss)) {
         si_nvme_logdbg("Not enough room in SQ for resync");
         return ERR_WOULDBLOCK;
     }
