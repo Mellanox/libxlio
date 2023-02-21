@@ -718,8 +718,8 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
     ssize_t ret;
     size_t pos;
     int errno_save;
-    bool block_this_run = BLOCK_THIS_RUN(m_p_sock->is_blocking(), tx_arg.msg.flags);
-    bool is_zerocopy = tx_arg.msg.flags & MSG_ZEROCOPY;
+    bool block_this_run = BLOCK_THIS_RUN(m_p_sock->is_blocking(), tx_arg.attr.flags);
+    bool is_zerocopy = tx_arg.attr.flags & MSG_ZEROCOPY;
     uint8_t tls_type = 0x17;
 
     if (!m_is_tls_tx) {
@@ -729,19 +729,19 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
     errno_save = errno;
 
     tls_arg.opcode = TX_FILE; /* Not to use hugepage zerocopy path */
-    tls_arg.msg.flags = MSG_ZEROCOPY;
+    tls_arg.attr.flags = MSG_ZEROCOPY;
     tls_arg.xlio_flags = TX_FLAG_NO_PARTIAL_WRITE;
-    tls_arg.msg.iov = tls_iov;
-    tls_arg.msg.sz_iov = is_zerocopy ? 3 : 1;
+    tls_arg.attr.iov = tls_iov;
+    tls_arg.attr.sz_iov = is_zerocopy ? 3 : 1;
     tls_arg.priv.attr = PBUF_DESC_MDESC;
 
-    p_iov = tx_arg.msg.iov;
+    p_iov = tx_arg.attr.iov;
     last_recno = m_next_recno_tx;
     ret = 0;
 
     /* Control sendmsg() support */
-    if (tx_arg.opcode == TX_SENDMSG && tx_arg.msg.hdr) {
-        struct msghdr *__msg = (struct msghdr *)tx_arg.msg.hdr;
+    if (tx_arg.opcode == TX_SENDMSG && tx_arg.attr.hdr) {
+        struct msghdr *__msg = (struct msghdr *)tx_arg.attr.hdr;
         struct cmsghdr *cmsg;
         if (__msg->msg_controllen != 0) {
             for (cmsg = CMSG_FIRSTHDR(__msg); cmsg; cmsg = CMSG_NXTHDR(__msg, cmsg)) {
@@ -752,7 +752,7 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
         }
     }
 
-    for (ssize_t i = 0; i < tx_arg.msg.sz_iov; ++i) {
+    for (ssize_t i = 0; i < tx_arg.attr.sz_iov; ++i) {
         pos = 0;
         while (pos < p_iov[i].iov_len) {
             tls_record *rec;
@@ -804,26 +804,26 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
             tosend = rec->append_data((uint8_t *)p_iov[i].iov_base + pos, tosend, is_tx_tls13());
             /* Set type after all data, because for TLS1.3 it is in the tail. */
             rec->set_type(tls_type, is_tx_tls13());
-            rec->fill_iov(tls_arg.msg.iov, ARRAY_SIZE(tls_iov), is_tx_tls13());
+            rec->fill_iov(tls_arg.attr.iov, ARRAY_SIZE(tls_iov), is_tx_tls13());
             tls_arg.priv.mdesc = reinterpret_cast<void *>(rec);
             pos += tosend;
 
         retry:
             ret2 = m_p_sock->tcp_tx(tls_arg);
-            if (block_this_run && (ret2 != (ssize_t)tls_arg.msg.iov[0].iov_len)) {
+            if (block_this_run && (ret2 != (ssize_t)tls_arg.attr.iov[0].iov_len)) {
                 if ((ret2 >= 0) || (errno == EINTR && !g_b_exit)) {
                     ret2 = ret2 < 0 ? 0 : ret2;
-                    tls_arg.msg.iov[0].iov_len -= ret2;
-                    tls_arg.msg.iov[0].iov_base =
-                        (void *)((uint8_t *)tls_arg.msg.iov[0].iov_base + ret2);
+                    tls_arg.attr.iov[0].iov_len -= ret2;
+                    tls_arg.attr.iov[0].iov_base =
+                        (void *)((uint8_t *)tls_arg.attr.iov[0].iov_base + ret2);
                     goto retry;
                 }
-                if (tls_arg.msg.iov[0].iov_len != rec->m_size) {
+                if (tls_arg.attr.iov[0].iov_len != rec->m_size) {
                     /* We cannot recover from a fail in the middle of a TLS record */
                     if (!g_b_exit) {
                         m_p_sock->abort_connection();
                     }
-                    ret += (rec->m_size - tls_arg.msg.iov[0].iov_len);
+                    ret += (rec->m_size - tls_arg.attr.iov[0].iov_len);
                     rec->put();
                     goto done;
                 }
@@ -1029,10 +1029,10 @@ int sockinfo_tcp_ops_tls::send_alert(uint8_t alert_type)
     /* Send alert through TLS offloaded sendmsg() path. */
     xlio_tx_call_attr_t tx_arg;
     tx_arg.opcode = TX_SENDMSG;
-    tx_arg.msg.iov = msg.msg_iov;
-    tx_arg.msg.sz_iov = (ssize_t)msg.msg_iovlen;
-    tx_arg.msg.flags = 0;
-    tx_arg.msg.hdr = &msg;
+    tx_arg.attr.iov = msg.msg_iov;
+    tx_arg.attr.sz_iov = (ssize_t)msg.msg_iovlen;
+    tx_arg.attr.flags = 0;
+    tx_arg.attr.hdr = &msg;
     ssize_t ret = tx(tx_arg);
 
     return ret > 0 ? 0 : -1;

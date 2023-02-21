@@ -86,36 +86,29 @@ enum {
     TX_FLAG_NO_PARTIAL_WRITE = 1 << 0,
 };
 
-/* This structure describes an attributes of send operation
- * Used attributes can depend on a type of operation
- * attr.file - is used by TX_FILE
- * attr.msg - is used by TX_WRITE, TX_WRITEV, TX_SEND, TX_SENDTO, TX_SENDMSG
+/* This structure describes the send operation attributes
+ * Used attributes can be of different types TX_FILE, TX_WRITE, TX_WRITEV, TX_SEND, TX_SENDTO,
+ * TX_SENDMSG
  */
 typedef struct xlio_tx_call_attr {
     tx_call_t opcode;
-    struct _msg {
+    struct _attr {
         struct iovec *iov;
         ssize_t sz_iov;
         int flags;
         struct sockaddr *addr;
         socklen_t len;
         const struct msghdr *hdr;
-    } msg;
+    } attr;
 
     unsigned xlio_flags;
     pbuf_desc priv;
-
-    xlio_tx_call_attr(tx_call_t op, _msg &&m, unsigned flags, pbuf_desc &&pdesc)
-        : opcode(op)
-        , msg(std::move(m))
-        , xlio_flags(flags)
-        , priv(std::move(pdesc)) {};
 
     ~xlio_tx_call_attr() {};
     void clear(void)
     {
         opcode = TX_UNDEF;
-        memset(&msg, 0, sizeof(msg));
+        memset(&attr, 0, sizeof(attr));
         memset(&priv, 0, sizeof(priv));
         priv.attr = PBUF_DESC_NONE;
         xlio_flags = 0;
