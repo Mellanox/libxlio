@@ -528,7 +528,12 @@ rfs_rule *steering_handler<KEY4T, KEY2T, HDR>::tls_rx_create_rule(const flow_tup
 {
     KEY4T rfs_key(flow_spec_5t.get_dst_ip(), flow_spec_5t.get_src_ip(), flow_spec_5t.get_dst_port(),
                   flow_spec_5t.get_src_port());
-    rfs *p_rfs = m_flow_tcp_map.find(rfs_key)->second;
+    auto itr = m_flow_tcp_map.find(rfs_key);
+    if (itr == end(m_flow_tcp_map)) {
+        ring_logerr("Could not find rfs for flow: %s", flow_spec_5t.to_str().c_str());
+        return NULL;
+    }
+    rfs *p_rfs = itr->second;
     return p_rfs->create_rule(tir, flow_spec_5t);
 }
 
