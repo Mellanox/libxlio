@@ -274,11 +274,11 @@ void pipeinfo::handle_timer_expired(void *user_data)
 
 ssize_t pipeinfo::tx(xlio_tx_call_attr_t &tx_arg)
 {
-    const iovec *p_iov = tx_arg.msg.iov;
-    const ssize_t sz_iov = tx_arg.msg.sz_iov;
-    const int __flags = tx_arg.msg.flags;
-    const struct sockaddr *__to = tx_arg.msg.addr;
-    const socklen_t __tolen = tx_arg.msg.len;
+    const iovec *p_iov = tx_arg.attr.iov;
+    const ssize_t sz_iov = tx_arg.attr.sz_iov;
+    const int __flags = tx_arg.attr.flags;
+    const struct sockaddr *__to = tx_arg.attr.addr;
+    const socklen_t __tolen = tx_arg.attr.len;
     ssize_t ret = -1;
 
     pi_logfunc("");

@@ -90,7 +90,7 @@ ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
         return -1;
     }
     auto aux_data = reinterpret_cast<xlio_pd_key *>(tx_arg.priv.map);
-    auto msg = tx_arg.msg.hdr;
+    auto msg = tx_arg.attr.hdr;
 
     if (msg->msg_iov == nullptr || aux_data == nullptr || msg->msg_iovlen == 0U ||
         aux_data[0].message_length == 0U) {
@@ -144,8 +144,8 @@ ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
     /* Ambiguous reuse of the enum */
     tx_arg.priv.attr = PBUF_DESC_NVME_TX;
     tx_arg.priv.mdesc = reinterpret_cast<void *>(desc);
-    tx_arg.msg.iov = desc->m_iov;
-    tx_arg.msg.sz_iov = static_cast<ssize_t>(desc->m_num_segments);
+    tx_arg.attr.iov = desc->m_iov;
+    tx_arg.attr.sz_iov = static_cast<ssize_t>(desc->m_num_segments);
 
     ssize_t ret = m_p_sock->tcp_tx(tx_arg);
     if (ret < static_cast<ssize_t>(total_tx_length)) {

@@ -758,9 +758,9 @@ unsigned sockinfo_tcp::tx_wait(int &err, bool blocking)
 static inline bool cannot_do_requested_dummy_send(const tcp_pcb &pcb,
                                                   const xlio_tx_call_attr_t &tx_arg)
 {
-    int flags = tx_arg.msg.flags;
-    const iovec *p_iov = tx_arg.msg.iov;
-    size_t sz_iov = tx_arg.msg.sz_iov;
+    int flags = tx_arg.attr.flags;
+    const iovec *p_iov = tx_arg.attr.iov;
+    size_t sz_iov = tx_arg.attr.sz_iov;
 
     uint8_t optflags = TF_SEG_OPTS_DUMMY_MSG;
     uint16_t mss_local = std::min<uint16_t>(pcb.mss, pcb.snd_wnd_max / 2U);
@@ -848,7 +848,7 @@ static inline bool cannot_do_requested_partial_write(const tcp_pcb &pcb,
                                                      const xlio_tx_call_attr_t &tx_arg,
                                                      bool is_blocking, size_t total_iov_len)
 {
-    return !BLOCK_THIS_RUN(is_blocking, tx_arg.msg.flags) &&
+    return !BLOCK_THIS_RUN(is_blocking, tx_arg.attr.flags) &&
         (tx_arg.xlio_flags & TX_FLAG_NO_PARTIAL_WRITE) &&
         unlikely(tcp_sndbuf(&pcb) < total_iov_len);
 }
@@ -866,11 +866,11 @@ static inline bool tcp_wnd_unavalable(const tcp_pcb &pcb, size_t total_iov_len)
 
 ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
 {
-    iovec *p_iov = tx_arg.msg.iov;
-    size_t sz_iov = tx_arg.msg.sz_iov;
-    struct sockaddr *__dst = tx_arg.msg.addr;
-    socklen_t __dstlen = tx_arg.msg.len;
-    int __flags = tx_arg.msg.flags;
+    iovec *p_iov = tx_arg.attr.iov;
+    size_t sz_iov = tx_arg.attr.sz_iov;
+    struct sockaddr *__dst = tx_arg.attr.addr;
+    socklen_t __dstlen = tx_arg.attr.len;
+    int __flags = tx_arg.attr.flags;
     int errno_tmp = errno;
     int ret = 0;
     int poll_count = 0;

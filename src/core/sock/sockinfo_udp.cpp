@@ -2025,11 +2025,11 @@ int sockinfo_udp::rx_request_notification(uint64_t poll_sn)
 
 ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
 {
-    const iovec *p_iov = tx_arg.msg.iov;
-    const ssize_t sz_iov = tx_arg.msg.sz_iov;
-    const int __flags = tx_arg.msg.flags;
-    const struct sockaddr *__dst = tx_arg.msg.addr;
-    const socklen_t __dstlen = tx_arg.msg.len;
+    const iovec *p_iov = tx_arg.attr.iov;
+    const ssize_t sz_iov = tx_arg.attr.sz_iov;
+    const int __flags = tx_arg.attr.flags;
+    const struct sockaddr *__dst = tx_arg.attr.addr;
+    const socklen_t __dstlen = tx_arg.attr.len;
     int errno_tmp = errno;
     int ret = 0;
     bool is_dummy = IS_DUMMY_PACKET(__flags);
