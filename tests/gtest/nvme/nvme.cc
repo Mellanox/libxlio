@@ -43,14 +43,6 @@
 #include <sys/uio.h>
 
 using namespace std;
-using test_iovec = vector<iovec>;
-
-static ssize_t total_test_iovec_size(test_iovec &pdus)
-{
-    return std::accumulate(pdus.begin(), pdus.end(), 0, [](ssize_t accumulator, const iovec &iov) {
-        return accumulator + iov.iov_len;
-    });
-}
 
 class xlio_ti_test : public testing::Test {
 };
@@ -71,6 +63,15 @@ TEST_F(xlio_ti_test, default_constructor)
     ASSERT_EQ(nullptr, ti.m_callback_arg);
 }
 
+#ifdef DEFINED_DPCP
+using test_iovec = vector<iovec>;
+
+static ssize_t total_test_iovec_size(test_iovec &pdus)
+{
+    return std::accumulate(pdus.begin(), pdus.end(), 0, [](ssize_t accumulator, const iovec &iov) {
+        return accumulator + iov.iov_len;
+    });
+}
 static uint8_t pdu_full[] = {
     0x04, 0x03, 0x48, 0x4c, 0x50, 0x10, 0x00, 0x00, 0x01, 0x40, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -374,12 +375,6 @@ protected:
     uint8_t *cmsg_buffer;
     vector<iovec> msghdr_iov {};
 
-    void SetUp() override
-    {
-#ifndef DEFINED_DPCP
-        GTEST_SKIP();
-#endif /* DEFINED_DPCP */
-    }
     void TearDown() override
     {
         sockets.clear();
@@ -659,25 +654,4 @@ TEST_F(nvme_tx, send_multiple_pdus)
         server_process(pid, rx_iovs);
     }
 }
-
-/* TEST_F(nvme_tx, send_multi_iov_pdu) */
-/* { */
-/*     int pid = fork(); */
-/*     static_assert(input_pdu_without_ddgst_length > 80U); */
-
-/*     auto base = reinterpret_cast<uintptr_t>(input_pdu_without_ddgst); */
-/*     size_t data_size = input_pdu_without_ddgst_length; */
-
-/*     test_iovec iovs = { */
-/*         {.iov_base = reinterpret_cast<void *>(base), .iov_len = 76U}, */
-/*         {.iov_base = reinterpret_cast<void *>(base + 76U), .iov_len = data_size - 80U}, */
-/*         {.iov_base = reinterpret_cast<void *>(base + data_size - 4U), .iov_len = 4U}, */
-/*     }; */
-
-/*     if (0 == pid) { /1* I am the child *1/ */
-/*         client_process(iovs); */
-/*         exit(testing::Test::HasFailure()); */
-/*     } else { */
-/*         server_process(pid, iovs); */
-/*     } */
-/* } */
+#endif /* DEFINED_DPCP */
