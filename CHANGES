@@ -1,3 +1,11 @@
+Version 3.0.1-1:
+Date + Time 2023-02-22
+=============================================================
+Fixed:
+        - RM #3257479 NVME TX offload tx completions and performance
+        - RM #3360012 Fix tis objects leak
+        - RM #3360125 Nginx performance degradation with https cps
+
 Version 3.0.0-1:
 Date + Time 2023-02-02
 =============================================================
