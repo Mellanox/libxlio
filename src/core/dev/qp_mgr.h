@@ -85,25 +85,21 @@ struct qp_mgr_desc {
     struct ibv_comp_channel *rx_comp_event_channel;
 };
 
-enum {
-    XLIO_TI_UNKNOWN,
-    XLIO_TI_TIS,
-    XLIO_TI_TIR,
-};
-
 /* Work request completion callback */
 /* TODO Add argument for completion status to handle errors. */
 typedef void (*xlio_comp_cb_t)(void *);
 
 class xlio_ti {
 public:
-    xlio_ti()
+    enum ti_type : uint8_t { UNKNOWN, TLS_TIS, TLS_TIR, NVME_TIS, NVME_TIR };
+
+    xlio_ti(ti_type type = UNKNOWN)
+        : m_type(type)
+        , m_released(false)
+        , m_ref(0)
+        , m_callback(nullptr)
+        , m_callback_arg(nullptr)
     {
-        m_type = XLIO_TI_UNKNOWN;
-        m_released = false;
-        m_ref = 0;
-        m_callback = NULL;
-        m_callback_arg = NULL;
     }
     virtual ~xlio_ti() {};
 
@@ -130,7 +126,7 @@ public:
         return --m_ref;
     }
 
-    uint8_t m_type;
+    ti_type m_type;
     bool m_released;
     uint32_t m_ref;
 
@@ -417,25 +413,19 @@ private:
 #if defined(DEFINED_UTLS) || defined(DEFINED_DPCP)
 class xlio_tis : public xlio_ti {
 public:
-    xlio_tis(dpcp::tis *_tis)
-        : xlio_ti()
+    xlio_tis(std::unique_ptr<dpcp::tis> _tis, xlio_ti::ti_type type)
+        : xlio_ti(type)
         , m_dek()
-        , m_p_tis(_tis)
+        , m_p_tis(std::move(_tis))
         , m_tisn(0U)
         , m_dek_id(0U)
     {
-        m_type = XLIO_TI_TIS;
         dpcp::status ret = m_p_tis->get_tisn(m_tisn);
         assert(ret == dpcp::DPCP_OK);
         (void)ret;
     }
 
-    ~xlio_tis()
-    {
-        if (m_p_tis != NULL) {
-            delete m_p_tis;
-        }
-    }
+    ~xlio_tis() = default;
 
     inline std::unique_ptr<dpcp::dek> release_dek()
     {
@@ -456,17 +446,16 @@ public:
 
 private:
     std::unique_ptr<dpcp::dek> m_dek;
-    dpcp::tis *m_p_tis;
+    std::unique_ptr<dpcp::tis> m_p_tis;
     uint32_t m_tisn;
     uint32_t m_dek_id;
 };
 
 class xlio_tir : public xlio_ti {
 public:
-    xlio_tir(dpcp::tir *_tir)
-        : xlio_ti()
+    xlio_tir(dpcp::tir *_tir, xlio_ti::ti_type type)
+        : xlio_ti(type)
     {
-        m_type = XLIO_TI_TIR;
         m_p_tir.reset(_tir);
         m_dek = NULL;
         m_tirn = 0;

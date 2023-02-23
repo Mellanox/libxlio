@@ -138,8 +138,8 @@ protected:
     cq_mgr *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel) override;
     cq_mgr *init_tx_cq_mgr(void) override;
 
-    void put_tir_in_cache(xlio_tir *tir);
-    void put_tis_in_cache(xlio_tis *tis);
+    void put_tls_tir_in_cache(xlio_tir *tir);
+    void put_tls_tis_in_cache(xlio_tis *tis);
     void ti_released(xlio_ti *ti);
 
     inline bool is_sq_wqe_prop_valid(sq_wqe_prop *p, sq_wqe_prop *prev)
@@ -217,8 +217,8 @@ private:
      * TIS cache. Protected by ring tx lock.
      * TODO Move to ring.
      */
-    std::vector<xlio_tis *> m_tis_cache;
-    std::vector<xlio_tir *> m_tir_cache;
+    std::vector<xlio_tis *> m_tls_tis_cache;
+    std::vector<xlio_tir *> m_tls_tir_cache;
 
 #if defined(DEFINED_UTLS)
     std::list<std::unique_ptr<dpcp::dek>> m_dek_get_cache;

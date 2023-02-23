@@ -247,9 +247,9 @@ void qp_mgr_eth_mlx5::down()
 #if defined(DEFINED_UTLS)
 void qp_mgr_eth_mlx5::destroy_tis_cache(void)
 {
-    while (!m_tis_cache.empty()) {
-        xlio_tis *tis = m_tis_cache.back();
-        m_tis_cache.pop_back();
+    while (!m_tls_tis_cache.empty()) {
+        xlio_tis *tis = m_tls_tis_cache.back();
+        m_tls_tis_cache.pop_back();
         delete tis;
     }
 }
@@ -899,19 +899,19 @@ void qp_mgr_eth_mlx5::put_dek(std::unique_ptr<dpcp::dek> &&dek_obj)
 xlio_tis *qp_mgr_eth_mlx5::tls_context_setup_tx(const xlio_tls_info *info)
 {
     std::unique_ptr<xlio_tis> tis;
-    if (m_tis_cache.empty()) {
+    if (m_tls_tis_cache.empty()) {
         tis = create_tis(DPCP_TIS_FLAGS | dpcp::TIS_ATTR_TLS);
         if (unlikely(tis == nullptr)) {
             return nullptr;
         }
     } else {
-        tis.reset(m_tis_cache.back());
-        m_tis_cache.pop_back();
+        tis.reset(m_tls_tis_cache.back());
+        m_tls_tis_cache.pop_back();
     }
 
     auto dek_obj = get_dek(info->key, info->key_len);
     if (unlikely(!dek_obj)) {
-        m_tis_cache.push_back(tis.release());
+        m_tls_tis_cache.push_back(tis.release());
         return nullptr;
     }
 
@@ -944,14 +944,14 @@ xlio_tir *qp_mgr_eth_mlx5::tls_create_tir(bool cached)
 {
     xlio_tir *tir = NULL;
 
-    if (cached && !m_tir_cache.empty()) {
-        tir = m_tir_cache.back();
-        m_tir_cache.pop_back();
+    if (cached && !m_tls_tir_cache.empty()) {
+        tir = m_tls_tir_cache.back();
+        m_tls_tir_cache.pop_back();
     } else if (!cached) {
         dpcp::tir *_tir = create_tir(true);
 
         if (_tir != NULL) {
-            tir = new xlio_tir(_tir);
+            tir = new xlio_tir(_tir, xlio_ti::ti_type::TLS_TIR);
         }
         if (unlikely(tir == NULL && _tir != NULL)) {
             delete _tir;
@@ -1219,9 +1219,10 @@ void qp_mgr_eth_mlx5::tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t l
 
 void qp_mgr_eth_mlx5::tls_release_tis(xlio_tis *tis)
 {
+    assert(tis != nullptr && tis->m_type == xlio_ti::ti_type::TLS_TIS);
     tis->m_released = true;
     if (tis->m_ref == 0) {
-        put_tis_in_cache(tis);
+        put_tls_tis_in_cache(tis);
     }
 }
 
@@ -1229,10 +1230,11 @@ void qp_mgr_eth_mlx5::tls_release_tir(xlio_tir *tir)
 {
     /* TODO We don't have to lock ring to destroy DEK object (a garbage collector?). */
 
+    assert(tir != nullptr && tir->m_type == xlio_ti::ti_type::TLS_TIR);
     tir->m_released = true;
     tir->assign_callback(NULL, NULL);
     if (tir->m_ref == 0) {
-        put_tir_in_cache(tir);
+        put_tls_tir_in_cache(tir);
     }
 }
 
@@ -1241,8 +1243,6 @@ dpcp::tir *qp_mgr_eth_mlx5::xlio_tir_to_dpcp_tir(xlio_tir *tir)
     return tir->m_p_tir.get();
 }
 #else /* DEFINED_UTLS */
-void qp_mgr_eth_mlx5::put_tir_in_cache(xlio_tir *) {};
-void qp_mgr_eth_mlx5::put_tis_in_cache(xlio_tis *) {};
 void qp_mgr_eth_mlx5::ti_released(xlio_ti *) {};
 void qp_mgr_eth_mlx5::destroy_tis_cache(void) {};
 #endif /* DEFINED_UTLS */
@@ -1251,31 +1251,27 @@ void qp_mgr_eth_mlx5::destroy_tis_cache(void) {};
 std::unique_ptr<xlio_tis> qp_mgr_eth_mlx5::create_tis(uint32_t flags) const
 {
     dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
-    if (unlikely(adapter == nullptr)) {
+    bool is_tls = flags & dpcp::TIS_ATTR_TLS, is_nvme = flags & dpcp::TIS_ATTR_NVMEOTCP;
+    if (unlikely(adapter == nullptr || (is_tls && is_nvme))) {
         return nullptr;
     }
+
     dpcp::tis::attr tis_attr = {
         .flags = flags,
-        .tls_en = bool(flags & dpcp::TIS_ATTR_TLS),
-        .nvmeotcp = bool(flags & dpcp::TIS_ATTR_NVMEOTCP),
+        .tls_en = is_tls,
+        .nvmeotcp = is_nvme,
         .transport_domain = adapter->get_td(),
         .pd = adapter->get_pd(),
     };
 
     dpcp::tis *dpcp_tis = nullptr;
-    uint32_t tisn = 0;
-    if (unlikely(adapter->create_tis(tis_attr, dpcp_tis) != dpcp::DPCP_OK) ||
-        unlikely(dpcp_tis->get_tisn(tisn) != dpcp::DPCP_OK)) {
+    if (unlikely(adapter->create_tis(tis_attr, dpcp_tis) != dpcp::DPCP_OK)) {
         qp_logerr("Failed to create TIS with NVME enabled");
-        delete dpcp_tis;
         return nullptr;
     }
-    auto tis = new xlio_tis(dpcp_tis);
-    if (unlikely(tis == NULL)) {
-        delete dpcp_tis;
-        return nullptr;
-    }
-    return std::unique_ptr<xlio_tis>(tis);
+
+    auto tis_type = is_tls ? xlio_ti::ti_type::TLS_TIS : xlio_ti::ti_type::NVME_TIS;
+    return std::make_unique<xlio_tis>(std::unique_ptr<dpcp::tis>(dpcp_tis), tis_type);
 }
 
 static inline void nvme_fill_static_params_control(xlio_mlx5_wqe_ctrl_seg *cseg,
@@ -1377,26 +1373,26 @@ void qp_mgr_eth_mlx5::ti_released(xlio_ti *ti)
 {
     assert(ti->m_released);
     assert(ti->m_ref == 0);
-    if (ti->m_type == XLIO_TI_TIS) {
-        put_tis_in_cache(static_cast<xlio_tis *>(ti));
-    } else if (ti->m_type == XLIO_TI_TIR) {
-        put_tir_in_cache(static_cast<xlio_tir *>(ti));
+    if (ti->m_type == xlio_ti::ti_type::TLS_TIS) {
+        put_tls_tis_in_cache(static_cast<xlio_tis *>(ti));
+    } else if (ti->m_type == xlio_ti::ti_type::TLS_TIR) {
+        put_tls_tir_in_cache(static_cast<xlio_tir *>(ti));
     }
 }
 
-void qp_mgr_eth_mlx5::put_tis_in_cache(xlio_tis *tis)
+void qp_mgr_eth_mlx5::put_tls_tis_in_cache(xlio_tis *tis)
 {
     put_dek(tis->release_dek());
-    m_tis_cache.push_back(tis);
+    m_tls_tis_cache.push_back(tis);
 }
 
-void qp_mgr_eth_mlx5::put_tir_in_cache(xlio_tir *tir)
+void qp_mgr_eth_mlx5::put_tls_tir_in_cache(xlio_tir *tir)
 {
     // Because the absense of TIR flush command, reusing a TIR
     // may result in undefined behaviour.
     // Until a flush command is available the TIR cache is disabled.
     // Re-enabling TIR cache should also add destroy_tir_cache on ring cleanup.
-    // m_tir_cache.push_back(tir);
+    // m_tls_tir_cache.push_back(tir);
 
     delete tir;
 }

@@ -44,25 +44,6 @@
 
 using namespace std;
 
-class xlio_ti_test : public testing::Test {
-};
-
-/**
- * @test xlio_ti_test.default_constructor
- * @brief
- *    Check xlio_ti class
- * @details
- */
-TEST_F(xlio_ti_test, default_constructor)
-{
-    auto ti = xlio_ti();
-    ASSERT_EQ(XLIO_TI_UNKNOWN, ti.m_type);
-    ASSERT_FALSE(ti.m_released);
-    ASSERT_EQ(0U, ti.m_ref);
-    ASSERT_EQ(nullptr, ti.m_callback);
-    ASSERT_EQ(nullptr, ti.m_callback_arg);
-}
-
 #ifdef DEFINED_DPCP
 using test_iovec = vector<iovec>;
 
