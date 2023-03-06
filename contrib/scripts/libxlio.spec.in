@@ -4,7 +4,7 @@
 %{!?make_build: %global make_build %{__make} %{?_smp_mflags} %{?mflags} V=1}
 %{!?run_ldconfig: %global run_ldconfig %{?ldconfig}}
 %{!?_pkgdocdir: %global _pkgdocdir %{_docdir}/%{name}-%{version}}
-%global use_systemd %(if systemctl >/dev/null 2>&1; then echo -n '1'; else echo -n '0'; fi)
+%global use_systemd %(if command -v systemctl >/dev/null 2>&1; then echo -n '1'; else echo -n '0'; fi)
 
 Name: libxlio
 Version: @VERSION@
@@ -112,7 +112,7 @@ install -m 755 ./%{name}-debug.so $RPM_BUILD_ROOT/%{_libdir}/%{name}-debug.so
 %{run_ldconfig}
 %endif
 if [ $1 = 1 ]; then
-    if systemctl >/dev/null 2>&1; then
+    if command -v systemctl >/dev/null 2>&1; then
         %if 0%{?systemd_post:1} || 0%{?service_add_post:1}
             %if 0%{?service_add_post:1}
             %service_add_post xlio.service
@@ -127,7 +127,7 @@ fi
 
 %preun
 if [ $1 = 0 ]; then
-    if systemctl >/dev/null 2>&1; then
+    if command -v systemctl >/dev/null 2>&1; then
         %if 0%{?systemd_preun:1} || 0%{?service_del_preun:1}
             %if 0%{?service_del_preun:1}
             %service_del_preun xlio.service
@@ -147,7 +147,7 @@ fi
 %else
 %{run_ldconfig}
 %endif
-if systemctl >/dev/null 2>&1; then
+if command -v systemctl >/dev/null 2>&1; then
         %if 0%{?systemd_postun_with_restart:1} || 0%{?service_del_postun:1}
             %if 0%{?service_del_postun:1}
             %service_del_postun xlio.service
