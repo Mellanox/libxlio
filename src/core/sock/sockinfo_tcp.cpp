@@ -2060,7 +2060,8 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
     unlock_tcp_con();
 
     while (m_rx_ready_byte_count < total_iov_sz) {
-        if (unlikely(g_b_exit || !is_rtr() || (rx_wait_lockless(poll_count, block_this_run) < 0))) {
+        if (unlikely(g_b_exit || !is_rtr() || (m_skip_cq_poll_in_rx && (errno = EAGAIN)) ||
+                     (rx_wait_lockless(poll_count, block_this_run) < 0))) {
             int ret = handle_rx_error(block_this_run);
             if (__msg && ret == 0) {
                 /* We don't return a control message in this case. */

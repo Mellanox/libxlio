@@ -171,6 +171,7 @@ Example:
  XLIO DETAILS: TCP abort on close             Disabled                   [XLIO_TCP_ABORT_ON_CLOSE]
  XLIO DETAILS: Polling Rx on Tx TCP           Disabled                   [XLIO_RX_POLL_ON_TX_TCP]
  XLIO DETAILS: Trig dummy send getsockname()  Disabled                   [XLIO_TRIGGER_DUMMY_SEND_GETSOCKNAME]
+ XLIO DETAILS: Skip CQ polling in rx          0 (Disabled)               [XLIO_SKIP_POLL_IN_RX]
  XLIO INFO   : ---------------------------------------------------------------------------
 
 XLIO_TRACELEVEL
@@ -622,6 +623,13 @@ This parameter triggers dummy packet send from getsockname(), this
 will warm up the caches.
 For more information regarding dummy send, see XLIO user manual document.
 Default: 0 (Disable)
+
+XLIO_SKIP_POLL_IN_RX
+Allow TCP socket to skip CQ polling in rx socket call.
+0 - Disabled
+1 - Skip always
+2 - Skip only if this socket was added to epoll before
+Default: 0 (Disabled)
 
 XLIO_GRO_STREAMS_MAX
 Control the number of TCP streams to perform GRO (generic receive offload) simultaneously.

@@ -66,6 +66,7 @@ sockinfo::sockinfo(int fd, int domain)
     , m_b_rcvtstamp(false)
     , m_b_rcvtstampns(false)
     , m_b_zc(false)
+    , m_skip_cq_poll_in_rx(safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_ENABLE)
     , m_n_tsing_flags(0)
     , m_protocol(PROTO_UNDEFINED)
     , m_src_sel_flags(0U)
@@ -1251,6 +1252,10 @@ int sockinfo::add_epoll_context(epfd_info *epfd)
         goto unlock_locks;
     }
 
+    if (safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_EPOLL_ONLY) {
+        m_skip_cq_poll_in_rx = true;
+    }
+
     sock_ring_map_iter = m_rx_ring_map.begin();
     while (sock_ring_map_iter != m_rx_ring_map.end()) {
         notify_epoll_context_add_ring(sock_ring_map_iter->first);
@@ -1283,6 +1288,9 @@ void sockinfo::remove_epoll_context(epfd_info *epfd)
     }
 
     socket_fd_api::remove_epoll_context(epfd);
+    if (safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_EPOLL_ONLY) {
+        m_skip_cq_poll_in_rx = false;
+    }
 
     unlock_rx_q();
     m_rx_ring_map_lock.unlock();
