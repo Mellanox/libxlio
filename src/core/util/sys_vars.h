@@ -171,6 +171,12 @@ typedef enum {
     TCP_TS_OPTION_LAST
 } tcp_ts_opt_t;
 
+typedef enum {
+    SKIP_POLL_IN_RX_DISABLE = 0,
+    SKIP_POLL_IN_RX_ENABLE = 1,
+    SKIP_POLL_IN_RX_EPOLL_ONLY = 2
+} skip_poll_in_rx_t;
+
 static inline const char *ctl_thread_str(tcp_ctl_thread_t logic)
 {
     switch (logic) {
@@ -451,6 +457,7 @@ public:
     bool internal_thread_arm_cq_enabled;
     internal_thread_tcp_timer_handling_t internal_thread_tcp_timer_handling;
     bool handle_bf;
+    skip_poll_in_rx_t skip_poll_in_rx;
 
     option_3::mode_t enable_tso;
     option_3::mode_t enable_lro;
@@ -671,6 +678,7 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_RX_CQ_WAIT_CTRL                "XLIO_RX_CQ_WAIT_CTRL"
 #define SYS_VAR_TRIGGER_DUMMY_SEND_GETSOCKNAME "XLIO_TRIGGER_DUMMY_SEND_GETSOCKNAME"
 #define SYS_VAR_TCP_SEND_BUFFER_SIZE           "XLIO_TCP_SEND_BUFFER_SIZE"
+#define SYS_VAR_SKIP_POLL_IN_RX                "XLIO_SKIP_POLL_IN_RX"
 
 /*
  * This block consists of default values for library specific
@@ -844,6 +852,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_TRIGGER_DUMMY_SEND_GETSOCKNAME (false)
 #define MCE_DEFAULT_RX_CQ_WAIT_CTRL                (false)
 #define MCE_ALIGNMENT                              ((unsigned long)63)
+#define MCE_DEFAULT_SKIP_POLL_IN_RX                (SKIP_POLL_IN_RX_DISABLE)
 
 /*
  * This block consists of auxiliary constants

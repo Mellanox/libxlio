@@ -238,6 +238,7 @@ protected:
     bool m_b_rcvtstamp;
     bool m_b_rcvtstampns;
     bool m_b_zc;
+    bool m_skip_cq_poll_in_rx;
     uint8_t m_n_tsing_flags;
     in_protocol_t m_protocol;
     uint8_t m_src_sel_flags;

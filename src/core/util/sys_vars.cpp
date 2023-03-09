@@ -778,6 +778,7 @@ void mce_sys_var::get_env_params()
     rx_cq_wait_ctrl = MCE_DEFAULT_RX_CQ_WAIT_CTRL;
     trigger_dummy_send_getsockname = MCE_DEFAULT_TRIGGER_DUMMY_SEND_GETSOCKNAME;
     tcp_send_buffer_size = MCE_DEFAULT_TCP_SEND_BUFFER_SIZE;
+    skip_poll_in_rx = MCE_DEFAULT_SKIP_POLL_IN_RX;
 #ifdef XLIO_TIME_MEASURE
     xlio_time_measure_num_samples = MCE_DEFAULT_TIME_MEASURE_NUM_SAMPLES;
 #endif
@@ -1807,6 +1808,14 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_TCP_SEND_BUFFER_SIZE)) != NULL) {
         tcp_send_buffer_size = (uint32_t)atoi(env_ptr);
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_SKIP_POLL_IN_RX)) != NULL) {
+        int temp = atoi(env_ptr);
+        if (temp < 0 || temp > SKIP_POLL_IN_RX_EPOLL_ONLY) {
+            temp = 0;
+        }
+        skip_poll_in_rx = (skip_poll_in_rx_t)temp;
     }
 
 #ifdef XLIO_TIME_MEASURE

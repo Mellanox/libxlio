@@ -841,6 +841,12 @@ void print_xlio_global_settings()
         "Trig dummy send getsockname()", safe_mce_sys().trigger_dummy_send_getsockname,
         MCE_DEFAULT_TRIGGER_DUMMY_SEND_GETSOCKNAME, SYS_VAR_TRIGGER_DUMMY_SEND_GETSOCKNAME,
         safe_mce_sys().trigger_dummy_send_getsockname ? "Enabled " : "Disabled");
+    VLOG_PARAM_STRING(
+        "Skip CQ polling in rx", safe_mce_sys().skip_poll_in_rx, MCE_DEFAULT_SKIP_POLL_IN_RX,
+        SYS_VAR_SKIP_POLL_IN_RX,
+        safe_mce_sys().skip_poll_in_rx
+            ? (safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_ENABLE ? "Enabled " : "Epoll Only")
+            : "Disabled");
 
 #ifdef XLIO_TIME_MEASURE
     VLOG_PARAM_NUMBER("Time Measure Num Samples", safe_mce_sys().xlio_time_measure_num_samples,
