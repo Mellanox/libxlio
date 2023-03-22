@@ -331,7 +331,7 @@ void ring_simple::create_resources()
     }
 #endif /* DEFINED_UTLS */
 
-    m_flow_tag_enabled = m_p_ib_ctx->get_flow_tag_capability();
+    m_flow_tag_enabled = !safe_mce_sys().disable_flow_tag && m_p_ib_ctx->get_flow_tag_capability();
 #if defined(DEFINED_NGINX)
     if (safe_mce_sys().actual_nginx_workers_num > 0) {
         m_flow_tag_enabled = false;

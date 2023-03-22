@@ -302,10 +302,9 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
         }
 
         if (flow_tag_id &&
-            (flow_spec_5t.is_3_tuple() || safe_mce_sys().gro_streams_max ||
-             (!force_5t && safe_mce_sys().tcp_3t_rules))) {
-            ring_logdbg("flow tag id = %d is disabled for socket fd = %d to be processed on RFS!",
-                        flow_tag_id, si->get_fd());
+            (flow_spec_5t.is_3_tuple() || (!force_5t && safe_mce_sys().tcp_3t_rules))) {
+            ring_loginfo("flow tag id = %d is disabled for socket fd = %d to be processed on RFS!",
+                         flow_tag_id, si->get_fd());
             flow_tag_id = FLOW_TAG_MASK;
         }
 
@@ -340,6 +339,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
             BULLSEYE_EXCLUDE_BLOCK_END
 
             p_rfs = p_tmp_rfs;
+            si->rfs_ptr = p_rfs;
 #if defined(DEFINED_NGINX)
             if (!g_b_add_second_4t_rule)
 #endif
@@ -670,7 +670,7 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
                              p_tcp_h->fin ? "F" : "", ntohl(p_tcp_h->seq), ntohl(p_tcp_h->ack_seq),
                              ntohs(p_tcp_h->window), p_rx_wc_buf_desc->rx.sz_payload);
 
-                return check_rx_packet(si, p_rx_wc_buf_desc, pv_fd_ready_array);
+                return si->rfs_ptr->rx_dispatch_packet(p_rx_wc_buf_desc, pv_fd_ready_array);
             }
 
             if (likely(protocol == IPPROTO_UDP)) {

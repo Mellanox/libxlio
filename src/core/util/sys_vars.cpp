@@ -701,6 +701,7 @@ void mce_sys_var::get_env_params()
     strq_strides_compensation_level = MCE_DEFAULT_STRQ_STRIDES_COMPENSATION_LEVEL;
 
     gro_streams_max = MCE_DEFAULT_GRO_STREAMS_MAX;
+    disable_flow_tag = MCE_DEFAULT_DISABLE_FLOW_TAG;
 
     tcp_3t_rules = MCE_DEFAULT_TCP_3T_RULES;
     udp_3t_rules = MCE_DEFAULT_UDP_3T_RULES;
@@ -1396,8 +1397,18 @@ void mce_sys_var::get_env_params()
         eth_mc_l2_only_rules = atoi(env_ptr) ? true : false;
     }
 
+    if ((env_ptr = getenv(SYS_VAR_DISABLE_FLOW_TAG)) != NULL) {
+        disable_flow_tag = std::max(atoi(env_ptr), 0) ? true : false;
+    }
+    // mc_force_flowtag must be after disable_flow_tag
     if ((env_ptr = getenv(SYS_VAR_MC_FORCE_FLOWTAG)) != NULL) {
         mc_force_flowtag = atoi(env_ptr) ? true : false;
+        if (disable_flow_tag) {
+            vlog_printf(VLOG_WARNING, "%s and %s can't be set together. Disabling %s\n",
+                        SYS_VAR_DISABLE_FLOW_TAG, SYS_VAR_MC_FORCE_FLOWTAG,
+                        SYS_VAR_MC_FORCE_FLOWTAG);
+            mc_force_flowtag = 0;
+        }
     }
 
     if ((env_ptr = getenv(SYS_VAR_SELECT_NUM_POLLS)) != NULL) {
