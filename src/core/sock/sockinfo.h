@@ -227,6 +227,7 @@ public:
     sa_family_t get_family() { return m_family; }
     /* Last memory descriptor with zcopy operation method */
     mem_buf_desc_t *m_last_zcdesc;
+    rfs *rfs_ptr = nullptr;
 
 private:
     int fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit);
