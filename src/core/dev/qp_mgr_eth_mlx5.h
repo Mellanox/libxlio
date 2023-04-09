@@ -115,8 +115,6 @@ public:
     std::unique_ptr<dpcp::dek> get_new_dek(const void *key, uint32_t key_size_bytes);
     std::unique_ptr<dpcp::dek> get_dek(const void *key, uint32_t key_size_bytes);
     void put_dek(std::unique_ptr<dpcp::dek> &&dek_obj);
-#else
-    void put_dek(void *dek_obj);
 #endif
 
     void reset_inflight_zc_buffers_ctx(void *ctx) override;
@@ -143,6 +141,7 @@ protected:
     void put_tir_in_cache(xlio_tir *tir);
     void put_tis_in_cache(xlio_tis *tis);
     void ti_released(xlio_ti *ti);
+
     inline bool is_sq_wqe_prop_valid(sq_wqe_prop *p, sq_wqe_prop *prev)
     {
         unsigned p_i = p - m_sq_wqe_idx_to_prop;
@@ -172,8 +171,7 @@ private:
     inline int fill_wqe(xlio_ibv_send_wr *p_send_wqe);
     inline void store_current_wqe_prop(mem_buf_desc_t *wr_id, unsigned credits, xlio_ti *ti);
     void destroy_tis_cache(void);
-
-#ifdef DEFINED_UTLS
+#if defined(DEFINED_UTLS)
     inline void tls_fill_static_params_wqe(struct mlx5_wqe_tls_static_params_seg *params,
                                            const struct xlio_tls_info *info, uint32_t key_id,
                                            uint32_t resync_tcp_sn);

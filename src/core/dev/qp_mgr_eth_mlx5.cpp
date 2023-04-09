@@ -244,6 +244,7 @@ void qp_mgr_eth_mlx5::down()
     qp_mgr::down();
 }
 
+#if defined(DEFINED_UTLS)
 void qp_mgr_eth_mlx5::destroy_tis_cache(void)
 {
     while (!m_tis_cache.empty()) {
@@ -252,6 +253,7 @@ void qp_mgr_eth_mlx5::destroy_tis_cache(void)
         delete tis;
     }
 }
+#endif /* defined(DEFINED_UTLS) */
 
 void qp_mgr_eth_mlx5::update_next_wqe_hot()
 {
@@ -1238,7 +1240,11 @@ dpcp::tir *qp_mgr_eth_mlx5::xlio_tir_to_dpcp_tir(xlio_tir *tir)
 {
     return tir->m_p_tir.get();
 }
-
+#else /* DEFINED_UTLS */
+void qp_mgr_eth_mlx5::put_tir_in_cache(xlio_tir *) {};
+void qp_mgr_eth_mlx5::put_tis_in_cache(xlio_tis *) {};
+void qp_mgr_eth_mlx5::ti_released(xlio_ti *) {};
+void qp_mgr_eth_mlx5::destroy_tis_cache(void) {};
 #endif /* DEFINED_UTLS */
 
 #ifdef DEFINED_DPCP
@@ -1366,6 +1372,7 @@ void qp_mgr_eth_mlx5::nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqn
 }
 #endif /* DEFINED_DPCP */
 
+#if defined(DEFINED_UTLS)
 void qp_mgr_eth_mlx5::ti_released(xlio_ti *ti)
 {
     assert(ti->m_released);
@@ -1393,6 +1400,7 @@ void qp_mgr_eth_mlx5::put_tir_in_cache(xlio_tir *tir)
 
     delete tir;
 }
+#endif /* defined(DEFINED_UTLS) */
 
 void qp_mgr_eth_mlx5::post_nop_fence(void)
 {
