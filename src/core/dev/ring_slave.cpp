@@ -303,8 +303,8 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
 
         if (flow_tag_id &&
             (flow_spec_5t.is_3_tuple() || (!force_5t && safe_mce_sys().tcp_3t_rules))) {
-            ring_loginfo("flow tag id = %d is disabled for socket fd = %d to be processed on RFS!",
-                         flow_tag_id, si->get_fd());
+            ring_logdbg("flow tag id = %d is disabled for socket fd = %d to be processed on RFS!",
+                        flow_tag_id, si->get_fd());
             flow_tag_id = FLOW_TAG_MASK;
         }
 
