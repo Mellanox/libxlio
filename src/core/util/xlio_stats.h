@@ -164,6 +164,9 @@ typedef struct {
     uint32_t n_tx_dummy;
     uint32_t n_tx_sendfile_fallbacks;
     uint32_t n_tx_sendfile_overflows;
+    uint32_t n_rx_pkts;
+    uint32_t n_rx_frags;
+    uint32_t n_gro;
 } socket_counters_t;
 
 #ifdef DEFINED_UTLS

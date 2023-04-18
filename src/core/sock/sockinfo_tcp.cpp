@@ -1853,6 +1853,9 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
     // We go over the p_first_desc again, so decrement what we did in rx_input_cb.
     conn->m_socket_stats.strq_counters.n_strq_total_strides -=
         static_cast<uint64_t>(p_first_desc->rx.strides_num);
+    conn->m_socket_stats.counters.n_rx_pkts++;
+    // Assume that all chained buffers are GRO packets
+    conn->m_socket_stats.counters.n_gro += !!p->next;
 
     // To avoid reset ref count for first mem_buf_desc, save it and set after the while
     int head_ref = p_first_desc->get_ref_count();
@@ -1882,6 +1885,7 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
     conn->m_rx_ready_byte_count += p->tot_len;
     conn->m_p_socket_stats->n_rx_ready_byte_count += p->tot_len;
     conn->m_p_socket_stats->n_rx_ready_pkt_count++;
+    conn->m_socket_stats.counters.n_rx_frags += p_first_desc->rx.n_frags;
     conn->m_p_socket_stats->counters.n_rx_ready_pkt_max =
         std::max((uint32_t)conn->m_p_socket_stats->n_rx_ready_pkt_count,
                  conn->m_p_socket_stats->counters.n_rx_ready_pkt_max);
