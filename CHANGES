@@ -1,3 +1,10 @@
+Version 3.0.2-1:
+Date + Time 2023-04-18
+=============================================================
+Added:
+        - RM #3411072 Enable flow-tag with GRO
+        - RM #3409166 Add option to skip CQ poll in Rx for TCP sockets
+
 Version 3.0.1-1:
 Date + Time 2023-02-22
 =============================================================
