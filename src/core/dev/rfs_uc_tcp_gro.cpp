@@ -257,6 +257,11 @@ void rfs_uc_tcp_gro::flush_gro_desc(void *pv_fd_ready_array)
                ntohl(m_gro_desc.p_tcp_h->seq), ntohl(m_gro_desc.p_tcp_h->ack_seq),
                ntohs(m_gro_desc.p_tcp_h->window), m_gro_desc.ip_tot_len, m_gro_desc.buf_count);
 
+    auto &cq_stats = *p_ring->m_p_cq_mgr_rx->m_p_cq_stat;
+    cq_stats.n_rx_gro_packets++;
+    cq_stats.n_rx_gro_frags += m_gro_desc.buf_count;
+    cq_stats.n_rx_gro_bytes += m_gro_desc.p_first->lwip_pbuf.pbuf.tot_len;
+
     if (!rfs_uc::rx_dispatch_packet(m_gro_desc.p_first, pv_fd_ready_array)) {
         p_ring->reclaim_recv_buffers_no_lock(m_gro_desc.p_first);
     }

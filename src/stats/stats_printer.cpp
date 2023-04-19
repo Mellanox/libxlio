@@ -190,6 +190,12 @@ void print_full_stats(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, 
                 p_si_stats->counters.n_rx_bytes / BYTES_TRAFFIC_UNIT,
                 p_si_stats->counters.n_rx_pkts, p_si_stats->counters.n_rx_frags,
                 p_si_stats->counters.n_gro);
+        if (p_si_stats->counters.n_rx_pkts) {
+            fprintf(filename,
+                    "Avg. GRO packet size: %" PRIu64 " fragments per packet: %" PRIu32 "\n",
+                    p_si_stats->counters.n_rx_bytes / p_si_stats->counters.n_rx_pkts,
+                    p_si_stats->counters.n_rx_frags / p_si_stats->counters.n_rx_pkts);
+        }
     }
     if (p_si_stats->counters.n_rx_os_bytes || p_si_stats->counters.n_rx_os_packets ||
         p_si_stats->counters.n_rx_os_eagain || p_si_stats->counters.n_rx_os_errors) {

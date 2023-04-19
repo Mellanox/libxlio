@@ -420,6 +420,9 @@ void update_delta_cq_stat(cq_stats_t *p_curr_cq_stats, cq_stats_t *p_prev_cq_sta
         p_prev_cq_stats->n_buffer_pool_len = p_curr_cq_stats->n_buffer_pool_len;
         p_prev_cq_stats->n_rx_lro_packets = p_curr_cq_stats->n_rx_lro_packets;
         p_prev_cq_stats->n_rx_lro_bytes = p_curr_cq_stats->n_rx_lro_bytes;
+        p_prev_cq_stats->n_rx_gro_packets = p_curr_cq_stats->n_rx_gro_packets;
+        p_prev_cq_stats->n_rx_gro_frags = p_curr_cq_stats->n_rx_gro_frags;
+        p_prev_cq_stats->n_rx_gro_bytes = p_curr_cq_stats->n_rx_gro_bytes;
         p_prev_cq_stats->n_rx_consumed_rwqe_count = (p_curr_cq_stats->n_rx_consumed_rwqe_count -
                                                      p_prev_cq_stats->n_rx_consumed_rwqe_count) /
             delay;
@@ -580,6 +583,15 @@ void print_cq_stats(cq_instance_block_t *p_cq_inst_arr)
                 printf(FORMAT_RING_PACKETS,
                        "Rx lro:", p_cq_stats->n_rx_lro_bytes / BYTES_TRAFFIC_UNIT,
                        p_cq_stats->n_rx_lro_packets, post_fix);
+            }
+            if (p_cq_stats->n_rx_gro_packets) {
+                printf(FORMAT_RING_PACKETS,
+                       "Rx GRO:", p_cq_stats->n_rx_gro_bytes / BYTES_TRAFFIC_UNIT,
+                       p_cq_stats->n_rx_gro_packets, post_fix);
+                printf(FORMAT_STATS_64bit, "Avg GRO packet size:",
+                       p_cq_stats->n_rx_gro_bytes / p_cq_stats->n_rx_gro_packets, post_fix);
+                printf(FORMAT_STATS_64bit, "GRO frags per packet:",
+                       p_cq_stats->n_rx_gro_frags / p_cq_stats->n_rx_gro_packets, post_fix);
             }
         }
     }

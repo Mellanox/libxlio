@@ -92,6 +92,7 @@ class cq_mgr {
     friend class ring; // need to expose the m_n_global_sn only to ring
     friend class ring_simple; // need to expose the m_n_global_sn only to ring
     friend class ring_bond; // need to expose the m_n_global_sn only to ring
+    friend class rfs_uc_tcp_gro; // need for stats
 
 public:
     cq_mgr(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int cq_size,
