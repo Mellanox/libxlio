@@ -183,7 +183,13 @@ rfs::~rfs()
     delete[] m_sinks_list;
 
     while (m_attach_flow_data_vector.size() > 0) {
-        delete m_attach_flow_data_vector.back();
+        attach_flow_data_t *flow_data = m_attach_flow_data_vector.back();
+        if (reinterpret_cast<ibv_flow_attr_eth *>(&flow_data->ibv_flow_attr)->eth.val.ether_type ==
+            htons(ETH_P_IP)) {
+            delete reinterpret_cast<attach_flow_data_eth_ipv4_tcp_udp_t *>(flow_data);
+        } else {
+            delete reinterpret_cast<attach_flow_data_eth_ipv6_tcp_udp_t *>(flow_data);
+        }
         m_attach_flow_data_vector.pop_back();
     }
 }
