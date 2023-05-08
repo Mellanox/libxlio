@@ -74,6 +74,14 @@ rc=$(($rc+$?))
 eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=xlio_*:-xlio_poll.*:xlio_ring.*:xlio_send_zc.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra-ipv6.xml"
 rc=$(($rc+$?))
 
+# Verify XLIO EXTRA API socketxtreme mode tests
+eval "${sudo_cmd} $timeout_exe env XLIO_SOCKETXTREME=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=xlio_poll.*:xlio_ring.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-socketxtreme.xml"
+rc=$(($rc+$?))
+
+# Verify XLIO EXTRA API socketxtreme mode tests IPv6
+eval "${sudo_cmd} $timeout_exe env XLIO_SOCKETXTREME=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=xlio_poll.*:xlio_ring.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-socketxtreme-ipv6.xml"
+rc=$(($rc+$?))
+
 eval "${sudo_cmd} pkill -9 ${prj_service} 2>/dev/null || true"
 
 set -eE

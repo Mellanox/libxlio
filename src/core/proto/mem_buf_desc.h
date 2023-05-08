@@ -143,6 +143,7 @@ public:
             bool is_xlio_thr; // specify whether packet drained from XLIO internal thread or from
                               // user app thread
             bool is_sw_csum_need; // specify if software checksum is need for this packet
+            bool socketxtreme_polled;
 #ifdef DEFINED_UTLS
             uint8_t tls_decrypted;
             uint8_t tls_type;

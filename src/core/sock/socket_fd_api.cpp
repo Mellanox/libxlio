@@ -300,6 +300,13 @@ ssize_t socket_fd_api::tx_os(const tx_call_t call_type, const iovec *p_iov, cons
     return (ssize_t)-1;
 }
 
+int socket_fd_api::register_callback(xlio_recv_callback_t callback, void *context)
+{
+    NOT_IN_USE(callback);
+    NOT_IN_USE(context);
+    return -1;
+}
+
 int socket_fd_api::recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
                                                size_t count)
 {

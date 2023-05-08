@@ -948,6 +948,11 @@ bool ring_bond::is_tso(void)
     return false;
 }
 
+int ring_bond::socketxtreme_poll(struct xlio_socketxtreme_completion_t *, unsigned int, int)
+{
+    return 0;
+}
+
 void ring_bond::slave_destroy(int if_index)
 {
     ring_slave *cur_slave = NULL;

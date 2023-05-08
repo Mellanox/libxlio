@@ -232,7 +232,12 @@ AC_ARG_ENABLE([thread-lock],
 AC_MSG_CHECKING(
     [for thread locking support])
 if test "x$enable_thread_lock" = "xno"; then
-	AC_MSG_RESULT([no])
+    if test "x$enable_socketxtreme" = xyes; then
+        AC_DEFINE([DEFINED_NO_THREAD_LOCK], 1, [Define to 1 to disable thread locking])
+        AC_MSG_RESULT([no])
+    else
+        AC_MSG_RESULT([yes (socketxtreme is not enabled)])
+    fi
 else
     AC_MSG_RESULT([yes])
 fi

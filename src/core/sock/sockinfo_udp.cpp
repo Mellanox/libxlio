@@ -2284,30 +2284,116 @@ int sockinfo_udp::rx_verify_available_data()
     return ret;
 }
 
-inline void sockinfo_udp::update_ready(mem_buf_desc_t *p_desc, void *pv_fd_ready_array)
+/**
+ *	Performs inspection by registered user callback
+ *
+ */
+inline xlio_recv_callback_retval_t sockinfo_udp::inspect_by_user_cb(mem_buf_desc_t *p_desc)
+{
+    xlio_info_t pkt_info;
+
+    pkt_info.struct_sz = sizeof(pkt_info);
+    pkt_info.packet_id = (void *)p_desc;
+    pkt_info.src = p_desc->rx.src.get_p_sa();
+    pkt_info.dst = p_desc->rx.dst.get_p_sa();
+    pkt_info.socket_ready_queue_pkt_count = m_p_socket_stats->n_rx_ready_pkt_count;
+    pkt_info.socket_ready_queue_byte_count = m_p_socket_stats->n_rx_ready_byte_count;
+
+    if (m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE) {
+        pkt_info.hw_timestamp = p_desc->rx.timestamps.hw;
+    }
+    if (p_desc->rx.timestamps.sw.tv_sec) {
+        pkt_info.sw_timestamp = p_desc->rx.timestamps.sw;
+    }
+
+    // fill io vector array with data buffer pointers
+    iovec iov[p_desc->rx.n_frags];
+    int nr_frags = 0;
+
+    for (mem_buf_desc_t *tmp = p_desc; tmp; tmp = tmp->p_next_desc) {
+        iov[nr_frags++] = tmp->rx.frag;
+    }
+
+    // call user callback
+    return m_rx_callback(m_fd, nr_frags, iov, &pkt_info, m_rx_callback_context);
+}
+
+/* Update completion with
+ * XLIO_SOCKETXTREME_PACKET related data
+ */
+inline void sockinfo_udp::fill_completion(mem_buf_desc_t *p_desc)
+{
+    struct xlio_socketxtreme_completion_t *completion;
+
+    // xlio_socketxtreme_completion_t is IPv4 only.
+    assert(p_desc->rx.src.get_sa_family() == AF_INET);
+
+    /* Try to process socketxtreme_poll() completion directly */
+    m_socketxtreme.completion = m_p_rx_ring->get_comp();
+
+    if (m_socketxtreme.completion) {
+        completion = m_socketxtreme.completion;
+    } else {
+        completion = &m_socketxtreme.ec.completion;
+    }
+
+    completion->packet.num_bufs = p_desc->rx.n_frags;
+    completion->packet.total_len = 0;
+    p_desc->rx.src.get_sa(reinterpret_cast<struct sockaddr *>(&completion->src),
+                          sizeof(completion->src));
+
+    if (m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE) {
+        completion->packet.hw_timestamp = p_desc->rx.timestamps.hw;
+    }
+
+    for (mem_buf_desc_t *tmp_p = p_desc; tmp_p; tmp_p = tmp_p->p_next_desc) {
+        completion->packet.total_len += tmp_p->rx.sz_payload;
+        completion->packet.buff_lst = (struct xlio_buff_t *)tmp_p;
+        completion->packet.buff_lst->next = (struct xlio_buff_t *)tmp_p->p_next_desc;
+        completion->packet.buff_lst->payload = p_desc->rx.frag.iov_base;
+        completion->packet.buff_lst->len = p_desc->rx.frag.iov_len;
+    }
+
+    NOTIFY_ON_EVENTS(this, XLIO_SOCKETXTREME_PACKET);
+
+    save_stats_rx_offload(completion->packet.total_len);
+    m_socketxtreme.completion = NULL;
+    m_socketxtreme.last_buff_lst = NULL;
+}
+
+/**
+ *	Performs packet processing for NON-SOCKETXTREME cases and store packet
+ *	in ready queue.
+ */
+inline void sockinfo_udp::update_ready(mem_buf_desc_t *p_desc, void *pv_fd_ready_array,
+                                       xlio_recv_callback_retval_t cb_ret)
 {
     // In ZERO COPY case we let the user's application manage the ready queue
-    m_lock_rcv.lock();
-    // Save rx packet info in our ready list
-    m_rx_pkt_ready_list.push_back(p_desc);
-    m_n_rx_pkt_ready_list_count++;
-    m_rx_ready_byte_count += p_desc->rx.sz_payload;
-    m_p_socket_stats->counters.n_rx_data_pkts++;
-    m_p_socket_stats->counters.n_rx_bytes += p_desc->rx.sz_payload;
-    m_p_socket_stats->n_rx_ready_pkt_count++;
-    m_p_socket_stats->n_rx_ready_byte_count += p_desc->rx.sz_payload;
-    m_p_socket_stats->counters.n_rx_ready_pkt_max =
-        std::max((uint32_t)m_p_socket_stats->n_rx_ready_pkt_count,
-                 m_p_socket_stats->counters.n_rx_ready_pkt_max);
-    m_p_socket_stats->counters.n_rx_ready_byte_max =
-        std::max((uint32_t)m_p_socket_stats->n_rx_ready_byte_count,
-                 m_p_socket_stats->counters.n_rx_ready_byte_max);
-    do_wakeup();
-    m_lock_rcv.unlock();
+    if (cb_ret != XLIO_PACKET_HOLD) {
+        m_lock_rcv.lock();
+        // Save rx packet info in our ready list
+        m_rx_pkt_ready_list.push_back(p_desc);
+        m_n_rx_pkt_ready_list_count++;
+        m_rx_ready_byte_count += p_desc->rx.sz_payload;
+        m_p_socket_stats->n_rx_ready_pkt_count++;
+        m_p_socket_stats->n_rx_ready_byte_count += p_desc->rx.sz_payload;
+        m_p_socket_stats->counters.n_rx_ready_pkt_max =
+            std::max((uint32_t)m_p_socket_stats->n_rx_ready_pkt_count,
+                     m_p_socket_stats->counters.n_rx_ready_pkt_max);
+        m_p_socket_stats->counters.n_rx_ready_byte_max =
+            std::max((uint32_t)m_p_socket_stats->n_rx_ready_byte_count,
+                     m_p_socket_stats->counters.n_rx_ready_byte_max);
+        do_wakeup();
+        m_lock_rcv.unlock();
+    } else {
+        m_p_socket_stats->n_rx_zcopy_pkt_count++;
+    }
 
     NOTIFY_ON_EVENTS(this, EPOLLIN);
 
+    // Add this fd to the ready fd list
     /*
+     * Note: No issue is expected in case socketxtreme_poll() usage because 'pv_fd_ready_array' is
      * null in such case and as a result update_fd_array() call means nothing
      */
     io_mux_call::update_fd_array((fd_array_t *)pv_fd_ready_array, m_fd);
@@ -2459,13 +2545,23 @@ bool sockinfo_udp::rx_input_cb(mem_buf_desc_t *p_desc, void *pv_fd_ready_array)
 
     process_timestamps(p_desc);
 
+    xlio_recv_callback_retval_t cb_ret = XLIO_PACKET_RECV;
+    if (m_rx_callback && ((cb_ret = inspect_by_user_cb(p_desc)) == XLIO_PACKET_DROP)) {
+        si_udp_logfunc("rx packet discarded - by user callback");
+        return false;
+    }
     // Yes, we want to keep this packet!
     // And we must increment ref_counter before pushing this packet into the ready queue
     //  to prevent race condition with the 'if( (--ref_count) <= 0)' in ib_comm_mgr
     p_desc->inc_ref_count();
     save_strq_stats(p_desc->rx.strides_num);
 
-    update_ready(p_desc, pv_fd_ready_array);
+    if (p_desc->rx.socketxtreme_polled) {
+        fill_completion(p_desc);
+        p_desc->rx.socketxtreme_polled = false;
+    } else {
+        update_ready(p_desc, pv_fd_ready_array, cb_ret);
+    }
     return true;
 }
 
@@ -2722,7 +2818,9 @@ int sockinfo_udp::mc_change_membership_ip4(const mc_pending_pram *p_mc_pram)
         // i.e. sockets should discard datagrams which sent to an unbound ip address.
         if (!m_bound.is_anyaddr() && mc_grp != m_bound.get_ip_addr()) {
             // Ignore for socketXtreme because m_bound is used as part of the legacy implementation
-            return -1; // Socket was bound to a different ip address
+            if (!safe_mce_sys().enable_socketxtreme) {
+                return -1; // Socket was bound to a different ip address
+            }
         }
 
         flow_tuple_with_local_if flow_key(mc_grp, m_bound.get_in_port(), m_connected.get_ip_addr(),

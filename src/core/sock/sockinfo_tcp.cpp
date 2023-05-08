@@ -133,8 +133,10 @@ inline void sockinfo_tcp::init_pbuf_custom(mem_buf_desc_t *p_desc)
     p_desc->lwip_pbuf.pbuf.next = NULL;
     p_desc->lwip_pbuf.pbuf.payload = (u8_t *)p_desc->p_buffer + p_desc->rx.n_transport_header_len;
 
-    /* Override default free function to return rx pbuf to the CQ cache */
-    p_desc->lwip_pbuf.custom_free_function = sockinfo_tcp::tcp_rx_pbuf_free;
+    if (!is_socketxtreme()) {
+        /* Override default free function to return rx pbuf to the CQ cache */
+        p_desc->lwip_pbuf.custom_free_function = sockinfo_tcp::tcp_rx_pbuf_free;
+    }
 }
 
 /* change default rx_wait impl to flow based one */
@@ -630,7 +632,12 @@ void sockinfo_tcp::handle_socket_linger()
     memset(&elapsed, 0, sizeof(elapsed));
     gettime(&start);
     while ((tv_to_usec(&elapsed) <= linger_time_usec) && (m_pcb.unsent || m_pcb.unacked)) {
-        rx_wait(poll_cnt, false);
+        /* SOCKETXTREME WA: Don't call rx_wait() in order not to miss events in socketxtreme_poll()
+         * flow. TBD: find proper solution! rx_wait(poll_cnt, false);
+         * */
+        if (!is_socketxtreme()) {
+            rx_wait(poll_cnt, false);
+        }
         tcp_output(&m_pcb);
         gettime(&current);
         tv_sub(&current, &start, &elapsed);
@@ -1420,6 +1427,12 @@ void sockinfo_tcp::err_lwip_cb(void *pcb_container, err_t err)
             NOTIFY_ON_EVENTS(conn, (EPOLLIN | EPOLLHUP));
         }
 
+        /* SOCKETXTREME comment:
+         * Add this fd to the ready fd list
+         * Note: No issue is expected in case socketxtreme_poll() usage because 'pv_fd_ready_array'
+         * is null in such case and as a result update_fd_array() call means nothing
+         */
+
         io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
     }
 
@@ -1736,6 +1749,11 @@ void sockinfo_tcp::tcp_shutdown_rx(void)
 
     NOTIFY_ON_EVENTS(this, EPOLLIN | EPOLLRDHUP);
 
+    /* SOCKETXTREME comment:
+     * Add this fd to the ready fd list
+     * Note: No issue is expected in case socketxtreme_poll() usage because 'pv_fd_ready_array' is
+     * null in such case and as a result update_fd_array() call means nothing
+     */
     io_mux_call::update_fd_array(m_iomux_ready_fd_array, m_fd);
     do_wakeup();
 
@@ -1848,26 +1866,112 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
     }
     p_first_desc->set_ref_count(head_ref);
 
-    conn->m_rx_pkt_ready_list.push_back(p_first_desc);
-    conn->m_n_rx_pkt_ready_list_count++;
-    conn->m_rx_ready_byte_count += p->tot_len;
-    conn->m_p_socket_stats->counters.n_rx_bytes += p->tot_len;
-    conn->m_p_socket_stats->n_rx_ready_byte_count += p->tot_len;
-    conn->m_p_socket_stats->n_rx_ready_pkt_count++;
-    conn->m_socket_stats.counters.n_rx_frags += p_first_desc->rx.n_frags;
-    conn->m_p_socket_stats->counters.n_rx_ready_pkt_max =
-        std::max((uint32_t)conn->m_p_socket_stats->n_rx_ready_pkt_count,
-                 conn->m_p_socket_stats->counters.n_rx_ready_pkt_max);
-    conn->m_p_socket_stats->counters.n_rx_ready_byte_max =
-        std::max((uint32_t)conn->m_p_socket_stats->n_rx_ready_byte_count,
-                 conn->m_p_socket_stats->counters.n_rx_ready_byte_max);
+    xlio_recv_callback_retval_t callback_retval = XLIO_PACKET_RECV;
 
-    // notify io_mux
-    NOTIFY_ON_EVENTS(conn, EPOLLIN);
-    io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
+    if (conn->m_rx_callback && !conn->m_xlio_thr && !conn->m_n_rx_pkt_ready_list_count) {
+        mem_buf_desc_t *tmp;
+        xlio_info_t pkt_info;
+        int nr_frags = 0;
 
-    // OLG: Now we should wakeup all threads that are sleeping on this socket.
-    conn->do_wakeup();
+        pkt_info.struct_sz = sizeof(pkt_info);
+        pkt_info.packet_id = (void *)p_first_desc;
+        pkt_info.src = p_first_desc->rx.src.get_p_sa();
+        pkt_info.dst = p_first_desc->rx.dst.get_p_sa();
+        pkt_info.socket_ready_queue_pkt_count = conn->m_p_socket_stats->n_rx_ready_pkt_count;
+        pkt_info.socket_ready_queue_byte_count = conn->m_p_socket_stats->n_rx_ready_byte_count;
+
+        if (conn->m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE) {
+            pkt_info.hw_timestamp = p_first_desc->rx.timestamps.hw;
+        }
+        if (p_first_desc->rx.timestamps.sw.tv_sec) {
+            pkt_info.sw_timestamp = p_first_desc->rx.timestamps.sw;
+        }
+
+        // fill io vector array with data buffer pointers
+        iovec iov[p_first_desc->rx.n_frags];
+        nr_frags = 0;
+        for (tmp = p_first_desc; tmp; tmp = tmp->p_next_desc) {
+            iov[nr_frags++] = tmp->rx.frag;
+        }
+
+        // call user callback
+        callback_retval =
+            conn->m_rx_callback(conn->m_fd, nr_frags, iov, &pkt_info, conn->m_rx_callback_context);
+    }
+
+    if (callback_retval == XLIO_PACKET_DROP) {
+        conn->m_rx_cb_dropped_list.push_back(p_first_desc);
+
+        // In ZERO COPY case we let the user's application manage the ready queue
+    } else {
+        if (conn->is_socketxtreme()) {
+            /* Update vma_completion with
+             * XLIO_SOCKETXTREME_PACKET related data
+             */
+            struct xlio_socketxtreme_completion_t *completion;
+            struct xlio_buff_t *buf_lst;
+
+            // xlio_socketxtreme_completion_t is IPv4 only.
+            assert(p_first_desc->rx.src.get_sa_family() == AF_INET);
+
+            if (conn->m_socketxtreme.completion) {
+                completion = conn->m_socketxtreme.completion;
+                buf_lst = conn->m_socketxtreme.last_buff_lst;
+            } else {
+                completion = &conn->m_socketxtreme.ec.completion;
+                buf_lst = conn->m_socketxtreme.ec.last_buff_lst;
+            }
+
+            if (!buf_lst) {
+                completion->packet.buff_lst = (struct xlio_buff_t *)p_first_desc;
+                completion->packet.total_len = p->tot_len;
+                p_first_desc->rx.src.get_sa(reinterpret_cast<struct sockaddr *>(&completion->src),
+                                            sizeof(completion->src));
+                completion->packet.num_bufs = p_first_desc->rx.n_frags;
+
+                if (conn->m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE) {
+                    completion->packet.hw_timestamp = p_first_desc->rx.timestamps.hw;
+                }
+
+                NOTIFY_ON_EVENTS(conn, XLIO_SOCKETXTREME_PACKET);
+                conn->save_stats_rx_offload(completion->packet.total_len);
+            } else {
+                mem_buf_desc_t *prev_lst_tail_desc = (mem_buf_desc_t *)buf_lst;
+                mem_buf_desc_t *list_head_desc = (mem_buf_desc_t *)completion->packet.buff_lst;
+                prev_lst_tail_desc->p_next_desc = p_first_desc;
+                list_head_desc->rx.n_frags += p_first_desc->rx.n_frags;
+                p_first_desc->rx.n_frags = 0;
+                completion->packet.total_len += p->tot_len;
+                completion->packet.num_bufs += list_head_desc->rx.n_frags;
+                pbuf_cat((pbuf *)completion->packet.buff_lst, p);
+            }
+        } else {
+            if (callback_retval == XLIO_PACKET_RECV) {
+                // Save rx packet info in our ready list
+                conn->m_rx_pkt_ready_list.push_back(p_first_desc);
+                conn->m_n_rx_pkt_ready_list_count++;
+                conn->m_rx_ready_byte_count += p->tot_len;
+                conn->m_p_socket_stats->n_rx_ready_byte_count += p->tot_len;
+                conn->m_p_socket_stats->n_rx_ready_pkt_count++;
+                conn->m_p_socket_stats->counters.n_rx_ready_pkt_max =
+                    std::max((uint32_t)conn->m_p_socket_stats->n_rx_ready_pkt_count,
+                             conn->m_p_socket_stats->counters.n_rx_ready_pkt_max);
+                conn->m_p_socket_stats->counters.n_rx_ready_byte_max =
+                    std::max((uint32_t)conn->m_p_socket_stats->n_rx_ready_byte_count,
+                             conn->m_p_socket_stats->counters.n_rx_ready_byte_max);
+            }
+            // notify io_mux
+            NOTIFY_ON_EVENTS(conn, EPOLLIN);
+        }
+        io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
+
+        if (callback_retval != XLIO_PACKET_HOLD) {
+            // OLG: Now we should wakeup all threads that are sleeping on this socket.
+            conn->do_wakeup();
+        } else {
+            conn->m_p_socket_stats->n_rx_zcopy_pkt_count++;
+        }
+    }
 
     /*
      * RCVBUFF Accounting: tcp_recved here(stream into the 'internal' buffer) only if the user
@@ -1875,8 +1979,12 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
      */
     rcv_buffer_space = std::max(
         0, conn->m_rcvbuff_max - conn->m_rcvbuff_current - (int)conn->m_pcb.rcv_wnd_max_desired);
-    bytes_to_tcp_recved = std::min(rcv_buffer_space, (int)p->tot_len);
-    conn->m_rcvbuff_current += p->tot_len;
+    if (callback_retval == XLIO_PACKET_DROP) {
+        bytes_to_tcp_recved = (int)p->tot_len;
+    } else {
+        bytes_to_tcp_recved = std::min(rcv_buffer_space, (int)p->tot_len);
+        conn->m_rcvbuff_current += p->tot_len;
+    }
 
     if (likely(bytes_to_tcp_recved > 0)) {
         tcp_recved(&(conn->m_pcb), bytes_to_tcp_recved);
@@ -2164,6 +2272,12 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
     m_socket_stats.counters.n_rx_packets++;
     m_iomux_ready_fd_array = (fd_array_t *)pv_fd_ready_array;
 
+    /* Try to process socketxtreme_poll() completion directly */
+    if (p_rx_pkt_mem_buf_desc_info->rx.socketxtreme_polled) {
+        m_socketxtreme.completion = m_p_rx_ring->get_comp();
+        m_socketxtreme.last_buff_lst = NULL;
+    }
+
     if (unlikely(get_tcp_state(&m_pcb) == LISTEN)) {
         pcb = get_syn_received_pcb(p_rx_pkt_mem_buf_desc_info->rx.src,
                                    p_rx_pkt_mem_buf_desc_info->rx.dst);
@@ -2195,6 +2309,8 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
                 si_tcp_logdbg("SYN/CTL packet drop. established-backlog=%d (limit=%d) "
                               "num_con_waiting=%d (limit=%d)",
                               (int)m_syn_received.size(), m_backlog, num_con_waiting, MAX_SYN_RCVD);
+                m_socketxtreme.completion = NULL;
+                m_socketxtreme.last_buff_lst = NULL;
                 unlock_tcp_con();
                 return false; // return without inc_ref_count() => packet will be dropped
             }
@@ -2205,6 +2321,8 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
             queue_rx_ctl_packet(
                 pcb, p_rx_pkt_mem_buf_desc_info); // TODO: need to trigger queue pulling from accept
                                                   // in case no tcp_ctl_thread
+            m_socketxtreme.completion = NULL;
+            m_socketxtreme.last_buff_lst = NULL;
             unlock_tcp_con();
             return true;
         }
@@ -2246,10 +2364,17 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
     sock->m_xlio_thr = false;
 
     if (sock != this) {
+        if (unlikely(sock->m_socketxtreme.completion)) {
+            sock->m_socketxtreme.completion = NULL;
+            sock->m_socketxtreme.last_buff_lst = NULL;
+        }
         sock->m_tcp_con_lock.unlock();
     }
 
     m_iomux_ready_fd_array = NULL;
+    m_socketxtreme.completion = NULL;
+    m_socketxtreme.last_buff_lst = NULL;
+    p_rx_pkt_mem_buf_desc_info->rx.socketxtreme_polled = false;
 
     while (dropped_count--) {
         mem_buf_desc_t *p_rx_pkt_desc = m_rx_cb_dropped_list.get_and_pop_front();
@@ -2975,6 +3100,33 @@ void sockinfo_tcp::auto_accept_connection(sockinfo_tcp *parent, sockinfo_tcp *ch
     child->m_p_socket_stats->set_bound_if(child->m_bound);
     child->m_p_socket_stats->bound_port = child->m_bound.get_in_port();
 
+    xlio_socketxtreme_completion_t &parent_compl =
+        (child->m_socketxtreme.completion ? *parent->m_socketxtreme.completion
+                                          : parent->m_socketxtreme.ec.completion);
+
+    child->m_connected.get_sa(reinterpret_cast<sockaddr *>(&parent_compl.src),
+                              static_cast<socklen_t>(sizeof(parent_compl.src)));
+
+    /* Update xlio_completion with
+     * XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED related data
+     */
+    if (likely(child->m_parent)) {
+
+        if (child->m_socketxtreme.completion) {
+            child->m_socketxtreme.completion->src = parent->m_socketxtreme.completion->src;
+            child->m_socketxtreme.completion->listen_fd = child->m_parent->get_fd();
+        } else {
+            child->m_socketxtreme.ec.completion.src = parent->m_socketxtreme.ec.completion.src;
+            child->m_socketxtreme.ec.completion.listen_fd = child->m_parent->get_fd();
+        }
+        NOTIFY_ON_EVENTS(child, XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED);
+    } else {
+        vlog_printf(VLOG_ERROR,
+                    "XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED: can't find listen socket for new "
+                    "connected socket with [fd=%d]\n",
+                    child->get_fd());
+    }
+
     child->unlock_tcp_con();
     parent->lock_tcp_con();
 
@@ -3075,12 +3227,16 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     // todo check that listen socket was not closed by now ? (is_server())
     conn->m_ready_pcbs.erase(&new_sock->m_pcb);
 
-    conn->m_accepted_conns.push_back(new_sock);
-    conn->m_ready_conn_cnt++;
+    if (conn->is_socketxtreme()) {
+        auto_accept_connection(conn, new_sock);
+    } else {
+        conn->m_accepted_conns.push_back(new_sock);
+        conn->m_ready_conn_cnt++;
+ 
+        NOTIFY_ON_EVENTS(conn, EPOLLIN);
+    }
     conn->m_p_socket_stats->listen_counters.n_conn_established++;
     conn->m_p_socket_stats->listen_counters.n_conn_backlog++;
-
-    NOTIFY_ON_EVENTS(conn, EPOLLIN);
 
     // OLG: Now we should wakeup all threads that are sleeping on this socket.
     conn->do_wakeup();
@@ -5116,6 +5272,12 @@ int sockinfo_tcp::recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_
 
     unlock_tcp_con();
     return ret;
+}
+
+int sockinfo_tcp::free_buffs(uint16_t len)
+{
+    tcp_recved(&m_pcb, len);
+    return 0;
 }
 
 mem_buf_desc_t *sockinfo_tcp::tcp_tx_mem_buf_alloc(pbuf_type type)

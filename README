@@ -154,6 +154,7 @@ Example:
  XLIO DETAILS: Num of UC ARPs                 3                          [XLIO_NEIGH_UC_ARP_QUATA]
  XLIO DETAILS: UC ARP delay (msec)            10000                      [XLIO_NEIGH_UC_ARP_DELAY_MSEC]
  XLIO DETAILS: Num of neigh restart retries   1                          [XLIO_NEIGH_NUM_ERR_RETRIES]
+ XLIO DETAILS: SocketXtreme mode              Disabled                   [XLIO_SOCKETXTREME]
  XLIO DETAILS: TSO support                    auto                       [XLIO_TSO]
  XLIO DETAILS: UTLS RX support                Enabled                    [XLIO_UTLS_RX]
  XLIO DETAILS: UTLS TX support                Enabled                    [XLIO_UTLS_TX]
@@ -989,6 +990,13 @@ will forward the call to the OS.
 This is, in practice, a very rudimentary dup2 support.
 It only supports the case, where dup2 is used to close file descriptors,
 Default value is 1 (Enabled)
+
+XLIO_SOCKETXTREME
+When this parameter is enabled, XLIO operates in SocketXtreme mode.
+SocketXtreme mode brings latency down, eliminating copy operations and
+increasing throughput allowing applications to further utilize true kernel
+bypass architecture. An application should use a socket extension API named SocketXtreme.
+Default value is 0 (Disabled)
 
 XLIO_MTU
 Size of each Rx and Tx data buffer (Maximum Transfer Unit).

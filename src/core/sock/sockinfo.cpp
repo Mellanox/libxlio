@@ -89,6 +89,8 @@ sockinfo::sockinfo(int fd, int domain)
     , m_ring_alloc_log_rx(safe_mce_sys().ring_allocation_logic_rx)
     , m_ring_alloc_log_tx(safe_mce_sys().ring_allocation_logic_tx)
     , m_pcp(0)
+    , m_rx_callback(NULL)
+    , m_rx_callback_context(NULL)
     , m_fd_context((void *)((uintptr_t)m_fd))
     , m_flow_tag_id(0)
     , m_rx_cq_wait_ctrl(safe_mce_sys().rx_cq_wait_ctrl)
@@ -119,6 +121,10 @@ sockinfo::sockinfo(int fd, int domain)
 
     atomic_set(&m_zckey, 0);
     m_last_zcdesc = NULL;
+
+    m_socketxtreme.ec.clear();
+    m_socketxtreme.completion = NULL;
+    m_socketxtreme.last_buff_lst = NULL;
 
     m_connected.set_sa_family(m_family);
     m_bound.set_sa_family(m_family);
@@ -1600,6 +1606,7 @@ void sockinfo::rx_del_ring_cb(ring *p_ring)
                  * ring should not have events related closed socket
                  * in wait list
                  */
+                m_p_rx_ring->del_ec(&m_socketxtreme.ec);
                 if (m_rx_ring_map.size() == 1) {
                     m_p_rx_ring = m_rx_ring_map.begin()->first;
                 } else {
@@ -1866,6 +1873,13 @@ void sockinfo::destructor_helper()
     m_p_connected_dst_entry = NULL;
 }
 
+int sockinfo::register_callback(xlio_recv_callback_t callback, void *context)
+{
+    m_rx_callback = callback;
+    m_rx_callback_context = context;
+    return 0;
+}
+
 int sockinfo::modify_ratelimit(dst_entry *p_dst_entry, struct xlio_rate_limit_t &rate_limit)
 {
     if (m_ring_alloc_log_tx.get_ring_alloc_logic() == RING_LOGIC_PER_SOCKET ||
@@ -1893,6 +1907,10 @@ int sockinfo::get_rings_num()
 {
     int count = 0;
     size_t num_rx_channel_fds;
+    if (is_socketxtreme()) {
+        /* socketXtreme mode support just single ring */
+        return 1;
+    }
 
     rx_ring_map_t::iterator it = m_rx_ring_map.begin();
     for (; it != m_rx_ring_map.end(); ++it) {
@@ -1907,6 +1925,12 @@ int *sockinfo::get_rings_fds(int &res_length)
     res_length = 0;
     int index = 0;
     size_t num_rx_channel_fds;
+
+    if (is_socketxtreme()) {
+        /* socketXtreme mode support just single ring */
+        res_length = 1;
+        return m_p_rx_ring->get_rx_channel_fds(num_rx_channel_fds);
+    }
 
     if (m_p_rings_fds) {
         return m_p_rings_fds;

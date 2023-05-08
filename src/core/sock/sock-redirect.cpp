@@ -419,6 +419,21 @@ int init_child_process_for_nginx()
 // extended API functions
 //-----------------------------------------------------------------------------
 
+extern "C" int xlio_register_recv_callback(int __fd, xlio_recv_callback_t __callback,
+                                           void *__context)
+{
+    srdr_logfunc_entry("fd=%d", __fd);
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        p_socket_object->register_callback(__callback, __context);
+        return 0;
+    }
+    errno = EINVAL;
+    return -1;
+}
+
 extern "C" int xlio_recvfrom_zcopy(int __fd, void *__buf, size_t __nbytes, int *__flags,
                                    struct sockaddr *__from, socklen_t *__fromlen)
 {
@@ -452,6 +467,156 @@ extern "C" int xlio_recvfrom_zcopy_free_packets(int __fd, struct xlio_recvfrom_z
 
     errno = EINVAL;
     return -1;
+}
+
+static int dummy_xlio_socketxtreme_poll(int fd, struct xlio_socketxtreme_completion_t *completions,
+                                       unsigned int ncompletions, int flags)
+{
+    NOT_IN_USE(fd);
+    NOT_IN_USE(completions);
+    NOT_IN_USE(ncompletions);
+    NOT_IN_USE(flags);
+    VLOG_PRINTF_ONCE_THEN_ALWAYS(
+        VLOG_WARNING, VLOG_DEBUG,
+        "socketXtreme was not enabled during runtime. Set %s to use. Ignoring...",
+        SYS_VAR_SOCKETXTREME);
+    errno = EOPNOTSUPP;
+    return -1;
+}
+
+extern "C" int xlio_socketxtreme_poll(int fd, struct xlio_socketxtreme_completion_t *completions,
+                                     unsigned int ncompletions, int flags)
+{
+    int ret_val = -1;
+    cq_channel_info *cq_ch_info = NULL;
+
+    cq_ch_info = g_p_fd_collection->get_cq_channel_fd(fd);
+
+    if (likely(cq_ch_info)) {
+        ring *p_ring = cq_ch_info->get_ring();
+
+        ret_val = p_ring->socketxtreme_poll(completions, ncompletions, flags);
+#ifdef RDTSC_MEASURE_RX_PROCCESS_BUFFER_TO_RECIVEFROM
+        RDTSC_TAKE_END(g_rdtsc_instr_info_arr[RDTSC_FLOW_PROCCESS_RX_BUFFER_TO_RECIVEFROM]);
+#endif // RDTSC_MEASURE_RX_PROCCESS_BUFFER_TO_RECIVEFROM
+
+#ifdef RDTSC_MEASURE_RX_LWIP_TO_RECEVEFROM
+        RDTSC_TAKE_END(g_rdtsc_instr_info_arr[RDTSC_FLOW_RX_LWIP_TO_RECEVEFROM]);
+#endif // RDTSC_MEASURE_RX_LWIP_TO_RECEVEFROM
+
+#ifdef RDTSC_MEASURE_RX_CQE_RECEIVEFROM
+        RDTSC_TAKE_END(g_rdtsc_instr_info_arr[RDTSC_FLOW_RX_CQE_TO_RECEIVEFROM]);
+#endif // RDTSC_MEASURE_RX_CQE_RECEIVEFROM
+
+#ifdef RDTSC_MEASURE_RECEIVEFROM_TO_SENDTO
+        RDTSC_TAKE_START(g_rdtsc_instr_info_arr[RDTSC_FLOW_RECEIVEFROM_TO_SENDTO]);
+#endif // RDTSC_MEASURE_RECEIVEFROM_TO_SENDTO
+        return ret_val;
+    } else {
+        errno = EBADFD;
+        return ret_val;
+    }
+}
+
+static int dummy_xlio_socketxtreme_free_packets(struct xlio_socketxtreme_packet_desc_t *packets,
+                                               int num)
+{
+    NOT_IN_USE(packets);
+    NOT_IN_USE(num);
+    VLOG_PRINTF_ONCE_THEN_ALWAYS(
+        VLOG_WARNING, VLOG_DEBUG,
+        "socketXtreme was not enabled during runtime. Set %s to use. Ignoring...",
+        SYS_VAR_SOCKETXTREME);
+    errno = EOPNOTSUPP;
+    return -1;
+}
+
+extern "C" int xlio_socketxtreme_free_packets(struct xlio_socketxtreme_packet_desc_t *packets,
+                                             int num)
+{
+    mem_buf_desc_t *desc = NULL;
+    socket_fd_api *p_socket_object = NULL;
+
+    if (likely(packets)) {
+        for (int i = 0; i < num; i++) {
+            desc = (mem_buf_desc_t *)packets[i].buff_lst;
+            if (desc) {
+                p_socket_object = (socket_fd_api *)desc->rx.context;
+                ring_slave *rng = desc->p_desc_owner;
+                if (p_socket_object) {
+                    p_socket_object->free_buffs(packets[i].total_len);
+                }
+                if (rng) {
+                    rng->reclaim_recv_buffers(desc);
+                } else {
+                    goto err;
+                }
+            } else {
+                goto err;
+            }
+        }
+    } else {
+        goto err;
+    }
+
+    return 0;
+
+err:
+    errno = EINVAL;
+    return -1;
+}
+
+static int dummy_xlio_socketxtreme_ref_buff(xlio_buff_t *buff)
+{
+    NOT_IN_USE(buff);
+    VLOG_PRINTF_ONCE_THEN_ALWAYS(
+        VLOG_WARNING, VLOG_DEBUG,
+        "socketXtreme was not enabled during runtime. Set %s to use. Ignoring...",
+        SYS_VAR_SOCKETXTREME);
+    errno = EOPNOTSUPP;
+    return -1;
+}
+
+extern "C" int xlio_socketxtreme_ref_buff(xlio_buff_t *buff)
+{
+    int ret_val = 0;
+    mem_buf_desc_t *desc = NULL;
+
+    if (likely(buff)) {
+        desc = (mem_buf_desc_t *)buff;
+        ret_val = desc->lwip_pbuf_inc_ref_count();
+    } else {
+        errno = EINVAL;
+        ret_val = -1;
+    }
+    return ret_val;
+}
+
+static int dummy_xlio_socketxtreme_free_buff(xlio_buff_t *buff)
+{
+    NOT_IN_USE(buff);
+    VLOG_PRINTF_ONCE_THEN_ALWAYS(
+        VLOG_WARNING, VLOG_DEBUG,
+        "socketXtreme was not enabled during runtime. Set %s to use. Ignoring...",
+        SYS_VAR_SOCKETXTREME);
+    errno = EOPNOTSUPP;
+    return -1;
+}
+
+extern "C" int xlio_socketxtreme_free_buff(xlio_buff_t *buff)
+{
+    int ret_val = 0;
+    mem_buf_desc_t *desc = NULL;
+
+    if (likely(buff)) {
+        desc = (mem_buf_desc_t *)buff;
+        ring_slave *rng = desc->p_desc_owner;
+        ret_val = rng->reclaim_recv_single_buffer(desc);
+    } else {
+        errno = EINVAL;
+        ret_val = -1;
+    }
+    return ret_val;
 }
 
 extern "C" int xlio_get_socket_rings_num(int fd)
@@ -911,12 +1076,15 @@ extern "C" EXPORT_SYMBOL int getsockopt(int __fd, int __level, int __optname, vo
         srdr_logdbg("User request for " PRODUCT_NAME " Extra API pointers");
 
         if (NULL == xlio_api) {
+            bool enable_socketxtreme = safe_mce_sys().enable_socketxtreme;
 
             xlio_api = new struct xlio_api_t();
 
             memset(xlio_api, 0, sizeof(struct xlio_api_t));
             xlio_api->magic = XLIO_MAGIC_NUMBER;
             xlio_api->cap_mask = 0;
+            SET_EXTRA_API(register_recv_callback, xlio_register_recv_callback,
+                          XLIO_EXTRA_API_REGISTER_RECV_CALLBACK);
             SET_EXTRA_API(recvfrom_zcopy, xlio_recvfrom_zcopy, XLIO_EXTRA_API_RECVFROM_ZCOPY);
             SET_EXTRA_API(recvfrom_zcopy_free_packets, xlio_recvfrom_zcopy_free_packets,
                           XLIO_EXTRA_API_RECVFROM_ZCOPY_FREE_PACKETS);
@@ -926,6 +1094,21 @@ extern "C" EXPORT_SYMBOL int getsockopt(int __fd, int __level, int __optname, vo
                           XLIO_EXTRA_API_GET_SOCKET_RINGS_NUM);
             SET_EXTRA_API(get_socket_rings_fds, xlio_get_socket_rings_fds,
                           XLIO_EXTRA_API_GET_SOCKET_RINGS_FDS);
+            SET_EXTRA_API(socketxtreme_poll,
+                          enable_socketxtreme ? xlio_socketxtreme_poll : dummy_xlio_socketxtreme_poll,
+                          XLIO_EXTRA_API_SOCKETXTREME_POLL);
+            SET_EXTRA_API(socketxtreme_free_packets,
+                          enable_socketxtreme ? xlio_socketxtreme_free_packets
+                                              : dummy_xlio_socketxtreme_free_packets,
+                          XLIO_EXTRA_API_SOCKETXTREME_FREE_PACKETS);
+            SET_EXTRA_API(
+                socketxtreme_ref_buff,
+                enable_socketxtreme ? xlio_socketxtreme_ref_buff : dummy_xlio_socketxtreme_ref_buff,
+                XLIO_EXTRA_API_SOCKETXTREME_REF_XLIO_BUFF);
+            SET_EXTRA_API(
+                socketxtreme_free_buff,
+                enable_socketxtreme ? xlio_socketxtreme_free_buff : dummy_xlio_socketxtreme_free_buff,
+                XLIO_EXTRA_API_SOCKETXTREME_FREE_XLIO_BUFF);
             SET_EXTRA_API(dump_fd_stats, xlio_dump_fd_stats, XLIO_EXTRA_API_DUMP_FD_STATS);
             SET_EXTRA_API(ioctl, xlio_ioctl, XLIO_EXTRA_API_IOCTL);
         }

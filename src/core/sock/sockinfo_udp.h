@@ -155,7 +155,9 @@ public:
     virtual int rx_verify_available_data();
 
     /**
-     *	This callback will handle ready rx packet notification.
+     *	This callback will handle ready rx packet notification,
+     *	in case packet is OK, completion for SOCKETXTREME mode
+     *	will be filled or in other cases packet go to ready queue.
      *	If packet to be discarded, packet ref. counter will not be
      *	incremented and method returns false.
      *	Normally it is single point from sockinfo to be called from ring level.
@@ -291,7 +293,10 @@ private:
         }
     }
 
-    inline void update_ready(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array);
+    inline xlio_recv_callback_retval_t inspect_by_user_cb(mem_buf_desc_t *p_desc);
+    inline void fill_completion(mem_buf_desc_t *p_desc);
+    inline void update_ready(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array,
+                             xlio_recv_callback_retval_t cb_ret);
 
     virtual void post_deqeue(bool release_buff);
     virtual int zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags);

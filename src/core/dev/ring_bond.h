@@ -105,6 +105,8 @@ public:
     virtual uint16_t get_max_header_sz(void);
     virtual uint32_t get_tx_lkey(ring_user_id_t id) { return m_xmit_rings[id]->get_tx_lkey(id); }
     virtual bool is_tso(void);
+    int socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_completions,
+                          unsigned int ncompletions, int flags);
     virtual void slave_create(int if_index) = 0;
     virtual void slave_destroy(int if_index);
 
@@ -153,6 +155,11 @@ private:
     void devide_buffers_helper(descq_t *rx_reuse, descq_t *buffer_per_ring);
     int devide_buffers_helper(mem_buf_desc_t *p_mem_buf_desc_list,
                               mem_buf_desc_t **buffer_per_ring);
+
+    bool is_socketxtreme(void) { return false; }
+    void put_ec(struct ring_ec *ec) { NOT_IN_USE(ec); }
+    void del_ec(struct ring_ec *ec) { NOT_IN_USE(ec); }
+    struct xlio_socketxtreme_completion_t *get_comp(void) { return NULL; }
 
     net_device_val::bond_type m_type;
     net_device_val::bond_xmit_hash_policy m_xmit_hash_policy;

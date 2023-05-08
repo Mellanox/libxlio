@@ -74,6 +74,8 @@ public:
     bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst); // No locks
     int reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse) override; // No locks
     void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc) override;
+    int socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_completions,
+                                  unsigned int ncompletions, int flags) override;
     int drain_and_proccess() override;
     int wait_for_notification_and_process_element(int cq_channel_fd, uint64_t *p_cq_poll_sn,
                                                   void *pv_fd_ready_array = NULL) override;
@@ -312,6 +314,58 @@ protected:
     std::unordered_map<void *, uint32_t> m_user_lkey_map;
 
 private:
+    bool is_socketxtreme(void) { return m_socketxtreme.active; }
+
+    void put_ec(struct ring_ec *ec)
+    {
+        m_socketxtreme.lock_ec_list.lock();
+        list_add_tail(&ec->list, &m_socketxtreme.ec_list);
+        m_socketxtreme.lock_ec_list.unlock();
+    }
+
+    void del_ec(struct ring_ec *ec)
+    {
+        m_socketxtreme.lock_ec_list.lock();
+        list_del_init(&ec->list);
+        ec->clear();
+        m_socketxtreme.lock_ec_list.unlock();
+    }
+
+    inline ring_ec *get_ec(void)
+    {
+        struct ring_ec *ec = NULL;
+
+        m_socketxtreme.lock_ec_list.lock();
+        if (!list_empty(&m_socketxtreme.ec_list)) {
+            ec = list_entry(m_socketxtreme.ec_list.next, struct ring_ec, list);
+            list_del_init(&ec->list);
+        }
+        m_socketxtreme.lock_ec_list.unlock();
+        return ec;
+    }
+
+    struct xlio_socketxtreme_completion_t *get_comp(void) { return m_socketxtreme.completion; }
+
+    struct {
+        /* queue of event completion elements
+         * this queue is stored events related different sockinfo (sockets)
+         * In current implementation every sockinfo (socket) can have single event
+         * in this queue
+         */
+        struct list_head ec_list;
+
+        /* Thread-safety lock for get/put operations under the queue */
+        lock_spin lock_ec_list;
+
+        /* This completion is introduced to process events directly w/o
+         * storing them in the queue of event completion elements
+         */
+        struct xlio_socketxtreme_completion_t *completion;
+
+        /* This flag is enabled in case socketxtreme_poll() call is done */
+        bool active;
+    } m_socketxtreme;
+
     inline void send_status_handler(int ret, xlio_ibv_send_wr *p_send_wqe);
     inline mem_buf_desc_t *get_tx_buffers(pbuf_type type, uint32_t n_num_mem_bufs);
     inline int put_tx_buffer_helper(mem_buf_desc_t *buff);

@@ -58,6 +58,20 @@ typedef enum { CQT_RX, CQT_TX } cq_type_t;
 
 typedef size_t ring_user_id_t;
 
+/* Ring event completion */
+struct ring_ec {
+    struct list_head list;
+    struct xlio_socketxtreme_completion_t completion;
+    struct xlio_buff_t *last_buff_lst;
+
+    inline void clear()
+    {
+        INIT_LIST_HEAD(&list);
+        memset(&completion, 0, sizeof(completion));
+        last_buff_lst = NULL;
+    }
+};
+
 class ring {
 public:
     ring();
@@ -128,6 +142,14 @@ public:
     virtual uint32_t get_tx_lkey(ring_user_id_t id) = 0;
     virtual bool is_tso(void) = 0;
     virtual ib_ctx_handler *get_ctx(ring_user_id_t id) = 0;
+
+    virtual int socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_completions,
+                                  unsigned int ncompletions, int flags) = 0;
+
+    virtual bool is_socketxtreme(void) = 0;
+    virtual void put_ec(struct ring_ec *ec) = 0;
+    virtual void del_ec(struct ring_ec *ec) = 0;
+    virtual struct xlio_socketxtreme_completion_t *get_comp(void) = 0;
 
     inline int get_if_index() { return m_if_index; }
 

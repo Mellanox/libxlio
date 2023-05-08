@@ -69,6 +69,21 @@ enum { CMSG_XLIO_IOCTL_USER_ALLOC = 2900 };
  */
 #define XLIO_MAGIC_NUMBER (0x4f494c584144564eULL)
 
+/*
+ * Return values for the receive packet notify callback function
+ */
+typedef enum {
+    XLIO_PACKET_DROP, /* The library will drop the received packet and recycle
+                        the buffer if no other socket needs it */
+
+    XLIO_PACKET_RECV, /* The library will queue the received packet on this socket ready queue.
+                        The application will read it with the usual recv socket APIs */
+
+    XLIO_PACKET_HOLD /* Application will handle the queuing of the received packet. The application
+                       must return the descriptor to the library using the free packet function
+           But not in the context of XLIO's callback itself. */
+} xlio_recv_callback_retval_t;
+
 /**
  * @brief Pass this structure as an argument into getsockopt() with @ref SO_XLIO_PD
  * 	to get protection domain information from ring used for current socket.
@@ -115,6 +130,64 @@ enum {
     XLIO_NVME_PDA_MASK = ((1U << 4) - 1U),
     XLIO_NVME_DDGST_MASK = (XLIO_NVME_DDGST_ENABLE | XLIO_NVME_DDGST_OFFLOAD),
 };
+
+/************ SocketXtreme API types definition start***************/
+
+enum {
+    XLIO_SOCKETXTREME_PACKET = (1ULL << 32), /* New packet is available */
+    XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED =
+        (1ULL << 33) /* New connection is auto accepted by server */
+};
+
+/*
+ * Represents specific buffer
+ * Used in SocketXtreme extended API.
+ */
+struct xlio_buff_t {
+    struct xlio_buff_t *next; /* next buffer (for last buffer next == NULL) */
+    void *payload; /* pointer to data */
+    uint16_t len; /* data length */
+};
+
+/**
+ * Represents one specific packet
+ * Used in SocketXtreme extended API.
+ */
+struct xlio_socketxtreme_packet_desc_t {
+    size_t num_bufs; /* number of packet's buffers */
+    uint16_t total_len; /* total data length */
+    struct xlio_buff_t *buff_lst; /* list of packet's buffers */
+    struct timespec hw_timestamp; /* packet hw_timestamp */
+};
+
+/*
+ * Represents specific completion form.
+ * Used in SocketXtreme extended API.
+ */
+struct xlio_socketxtreme_completion_t {
+    /* Packet is valid in case XLIO_SOCKETXTREME_PACKET event is set
+     */
+    struct xlio_socketxtreme_packet_desc_t packet;
+    /* Set of events
+     */
+    uint64_t events;
+    /* User provided data.
+     * By default this field has FD of the socket
+     * User is able to change the content using setsockopt()
+     * with level argument SOL_SOCKET and opname as SO_XLIO_USER_DATA
+     */
+    uint64_t user_data;
+    /* Source address (in network byte order) set for:
+     * XLIO_SOCKETXTREME_PACKET and XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED events
+     */
+    struct sockaddr_in src;
+    /* Connected socket's parent/listen socket fd number.
+     * Valid in case XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED event is set.
+     */
+    int listen_fd;
+};
+
+/************ SocketXtreme API types definition end ***************/
 
 /**
  * Represents one packet
@@ -209,15 +282,54 @@ struct xlio_ring_alloc_logic_attr {
 };
 
 enum {
+    XLIO_EXTRA_API_REGISTER_RECV_CALLBACK = (1 << 0),
     XLIO_EXTRA_API_RECVFROM_ZCOPY = (1 << 1),
     XLIO_EXTRA_API_RECVFROM_ZCOPY_FREE_PACKETS = (1 << 2),
     XLIO_EXTRA_API_ADD_CONF_RULE = (1 << 3),
     XLIO_EXTRA_API_THREAD_OFFLOAD = (1 << 4),
     XLIO_EXTRA_API_GET_SOCKET_RINGS_NUM = (1 << 5),
     XLIO_EXTRA_API_GET_SOCKET_RINGS_FDS = (1 << 6),
+    XLIO_EXTRA_API_SOCKETXTREME_POLL = (1 << 7),
+    XLIO_EXTRA_API_SOCKETXTREME_FREE_PACKETS = (1 << 8),
+    XLIO_EXTRA_API_SOCKETXTREME_REF_XLIO_BUFF = (1 << 9),
+    XLIO_EXTRA_API_SOCKETXTREME_FREE_XLIO_BUFF = (1 << 10),
     XLIO_EXTRA_API_DUMP_FD_STATS = (1 << 11),
     XLIO_EXTRA_API_IOCTL = (1 << 12),
 };
+
+/**
+ *
+ * Notification callback for incoming packet on socket
+ * @param fd Socket's file descriptor which this packet refers to
+ * @param iov iovector structure array point holding the packet
+ *            received data buffer pointers and size of each buffer
+ * @param iov_sz Size of iov array
+ * @param xlio_info Additional information on the packet and socket
+ * @param context User-defined value provided during callback
+ *                registration for each socket
+ *
+ *   This callback function should be registered by the library calling
+ * register_recv_callback() in the extended API. It can be unregistered by
+ * setting a NULL function pointer. The library will call the callback to notify
+ * of new incoming packets after the IP & UDP header processing and before
+ * they are queued in the socket's receive queue.
+ *   Context of the callback will always be from one of the user's application
+ * threads when calling the following socket APIs: select, poll, epoll, recv,
+ * recvfrom, recvmsg, read, readv.
+ *
+ * Notes:
+ * - The application can call all of the Socket APIs control and send from
+ *   within the callback context.
+ * - Packet loss might occur depending on the applications behavior in the
+ *   callback context.
+ * - Parameters `iov' and `xlio_info' are only valid until callback context
+ *   is returned to the library. User should copy these structures for later use
+ *   if working with zero copy logic.
+ */
+typedef xlio_recv_callback_retval_t (*xlio_recv_callback_t)(int fd, size_t sz_iov,
+                                                            struct iovec iov[],
+                                                            struct xlio_info_t *xlio_info,
+                                                            void *context);
 
 /**
  * XLIO Extended Socket API
@@ -236,6 +348,18 @@ struct __attribute__((packed)) xlio_api_t {
      * Order of fields in this structure should not be changed to keep abi compatibility.
      */
     uint64_t cap_mask;
+
+    /**
+     * Register a received packet notification callback.
+     *
+     * @param s Socket file descriptor.
+     * @param callback Callback function.
+     * @param context user contex for callback function.
+     * @return 0 - success, -1 - error
+     *
+     * errno is set to: EINVAL - not offloaded socket
+     */
+    int (*register_recv_callback)(int s, xlio_recv_callback_t callback, void *context);
 
     /**
      * Zero-copy revcfrom implementation.
@@ -327,13 +451,119 @@ struct __attribute__((packed)) xlio_api_t {
      */
     int (*get_socket_rings_fds)(int fd, int *ring_fds, int ring_fds_sz);
 
+    /**
+     * socketxtreme_poll() polls for completions
+     *
+     * @param fd File descriptor.
+     * @param completions Array of completions.
+     * @param ncompletions Maximum number of completion to return.
+     * @param flags Flags.
+     * @return On success, return the number of ready completions.
+     * 	   On error, -1 is returned, and TBD:errno is set?.
+     *
+     * This function polls the `fd` for completions and returns maximum `ncompletions` ready
+     * completions via `completions` array.
+     * The `fd` can represent a ring, socket or epoll file descriptor.
+     *
+     * Completions are indicated for incoming packets and/or for other events.
+     * If XLIO_SOCKETXTREME_PACKET flag is enabled in xlio_socketxtreme_completion_t.events field
+     * the completion points to incoming packet descriptor that can be accesses
+     * via xlio_socketxtreme_completion_t.packet field.
+     * Packet descriptor points to library specific buffers that contain data scattered
+     * by HW, so the data is deliver to application with zero copy.
+     * Notice: after application finished using the returned packets
+     * and their buffers it must free them using socketxtreme_free_packets(),
+     * socketxtreme_free_buff() functions.
+     *
+     * If XLIO_SOCKETXTREME_PACKET flag is disabled xlio_socketxtreme_completion_t.packet field is
+     * reserved.
+     *
+     * In addition to packet arrival event (indicated by XLIO_SOCKETXTREME_PACKET flag)
+     * The library also reports XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED event and standard
+     * epoll events via xlio_socketxtreme_completion_t.events field.
+     * XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED event is reported when new connection is
+     * accepted by the server.
+     * When working with socketxtreme_poll() new connections are accepted
+     * automatically and accept(listen_socket) must not be called.
+     * XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED event is reported for the new
+     * connected/child socket (xlio_socketxtreme_completion_t.user_data refers to child socket)
+     * and EPOLLIN event is not generated for the listen socket.
+     * For events other than packet arrival and new connection acceptance
+     * xlio_socketxtreme_completion_t.events bitmask composed using standard epoll API
+     * events types.
+     * Notice: the same completion can report multiple events, for example
+     * XLIO_SOCKETXTREME_PACKET flag can be enabled together with EPOLLOUT event,
+     * etc...
+     *
+     * * errno is set to: EOPNOTSUPP - socketXtreme was not enabled during configuration time.
+     */
+    int (*socketxtreme_poll)(int fd, struct xlio_socketxtreme_completion_t *completions,
+                             unsigned int ncompletions, int flags);
+
+    /**
+     * Frees packets received by socketxtreme_poll().
+     *
+     * @param packets Packets to free.
+     * @param num Number of packets in `packets` array
+     * @return 0 on success, -1 on failure
+     *
+     * For each packet in `packet` array this function:
+     * - Updates receive queue size and the advertised TCP
+     *   window size, if needed, for the socket that received
+     *   the packet.
+     * - Frees the library specific buffer list that is associated with the packet.
+     *   Notice: for each buffer in buffer list the library decreases buffer's
+     *   reference count and only buffers with reference count zero are deallocated.
+     *   Notice:
+     *   - Application can increase buffer reference count,
+     *     in order to hold the buffer even after socketxtreme_free_packets()
+     *     was called for the buffer, using socketxtreme_ref_buff().
+     *   - Application is responsible to free buffers, that
+     *     couldn't be deallocated during socketxtreme_free_packets() due to
+     *     non zero reference count, using socketxtreme_free_buff() function.
+     *
+     * errno is set to: EINVAL - NULL pointer is provided.
+     *                  EOPNOTSUPP - socketXtreme was not enabled during configuration time.
+     */
+    int (*socketxtreme_free_packets)(struct xlio_socketxtreme_packet_desc_t *packets, int num);
+
+    /* This function increments the reference count of the buffer.
+     * This function should be used in order to hold the buffer
+     * even after socketxtreme_free_packets() call.
+     * When buffer is not needed any more it should be freed via
+     * socketxtreme_free_buff().
+     *
+     * @param buff Buffer to update.
+     * @return On success, return buffer's reference count after the change
+     * 	   On errors -1 is returned
+     *
+     * errno is set to: EINVAL - NULL pointer is provided.
+     *                  EOPNOTSUPP - socketXtreme was not enabled during configuration time.
+     */
+    int (*socketxtreme_ref_buff)(struct xlio_buff_t *buff);
+
+    /* This function decrements the buff reference count.
+     * When buff's reference count reaches zero, the buff is
+     * deallocated.
+     *
+     * @param buff Buffer to free.
+     * @return On success, return buffer's reference count after the change
+     * 	   On error -1 is returned
+     *
+     * Notice: return value zero means that buffer was deallocated.
+     *
+     * errno is set to: EINVAL - NULL pointer is provided.
+     *                  EOPNOTSUPP - socketXtreme was not enabled during configuration time.
+     */
+    int (*socketxtreme_free_buff)(struct xlio_buff_t *buff);
+
     /*
      * Dump fd statistics using the library logger.
      * @param fd to dump, 0 for all open fds.
      * @param log_level dumping level corresponding vlog_levels_t enum (vlogger.h).
      * @return 0 on success, or error code on failure.
      *
-     * errno is set to: EOPNOTSUPP
+     * errno is set to: EOPNOTSUPP - Function is not supported when socketXtreme is enabled.
      */
     int (*dump_fd_stats)(int fd, int log_level);
 

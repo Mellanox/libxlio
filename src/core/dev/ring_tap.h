@@ -84,6 +84,15 @@ public:
     }
     virtual void adapt_cq_moderation() {}
 
+    virtual int socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_completions,
+                                  unsigned int ncompletions, int flags)
+    {
+        NOT_IN_USE(xlio_completions);
+        NOT_IN_USE(ncompletions);
+        NOT_IN_USE(flags);
+        return 0;
+    }
+
     virtual int modify_ratelimit(struct xlio_rate_limit_t &rate_limit)
     {
         NOT_IN_USE(rate_limit);
@@ -127,6 +136,11 @@ private:
     void send_status_handler(int ret, xlio_ibv_send_wr *p_send_wqe);
     void tap_create(net_device_val *p_ndev);
     void tap_destroy();
+
+    bool is_socketxtreme(void) { return false; }
+    void put_ec(struct ring_ec *ec) { NOT_IN_USE(ec); }
+    void del_ec(struct ring_ec *ec) { NOT_IN_USE(ec); }
+    struct xlio_socketxtreme_completion_t *get_comp(void) { return NULL; }
 
     /* These fields are NETVSC mode specific */
     int m_tap_fd; /* file descriptor of tap device */

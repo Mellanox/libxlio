@@ -442,6 +442,7 @@ public:
     bool handle_bf;
     skip_poll_in_rx_t skip_poll_in_rx;
 
+    bool enable_socketxtreme;
     option_3::mode_t enable_tso;
     option_3::mode_t enable_lro;
     option_strq::mode_t enable_strq_env;
@@ -640,6 +641,7 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_TCP_CC_ALGO      "XLIO_TCP_CC_ALGO"
 #define SYS_VAR_SPEC             "XLIO_SPEC"
 
+#define SYS_VAR_SOCKETXTREME "XLIO_SOCKETXTREME"
 #define SYS_VAR_TSO "XLIO_TSO"
 #ifdef DEFINED_UTLS
 #define SYS_VAR_UTLS_RX                        "XLIO_UTLS_RX"
@@ -830,6 +832,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_CQ_ADAPTIVE_MODERATION_DISABLED (0)
 #define MCE_MIN_CQ_POLL_BATCH               (1)
 #define MCE_MAX_CQ_POLL_BATCH               (128)
+#define MCE_DEFAULT_SOCKETXTREME            (false)
 #define MCE_DEFAULT_TSO                     (option_3::AUTO)
 #ifdef DEFINED_UTLS
 #define MCE_DEFAULT_UTLS_RX                        (false)

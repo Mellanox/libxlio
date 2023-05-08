@@ -144,6 +144,10 @@ ring_simple::ring_simple(int if_index, ring *parent, ring_type_t type)
     memset(&m_tls, 0, sizeof(m_tls));
 #endif /* DEFINED_UTLS */
     memset(&m_lro, 0, sizeof(m_lro));
+
+    m_socketxtreme.active = safe_mce_sys().enable_socketxtreme;
+    INIT_LIST_HEAD(&m_socketxtreme.ec_list);
+    m_socketxtreme.completion = NULL;
 }
 
 ring_simple::~ring_simple()
@@ -221,7 +225,17 @@ ring_simple::~ring_simple()
     m_lock_ring_tx.unlock();
     m_lock_ring_rx.unlock();
 
-    ring_logdbg("delete ring_simple() completed");
+    ring_logdbg("queue of event completion elements is %s",
+                (list_empty(&m_socketxtreme.ec_list) ? "empty" : "not empty"));
+    while (!list_empty(&m_socketxtreme.ec_list)) {
+        struct ring_ec *ec = NULL;
+        ec = get_ec();
+        if (ec) {
+            del_ec(ec);
+        }
+    }
+
+   ring_logdbg("delete ring_simple() completed");
 }
 
 void ring_simple::create_resources()
@@ -431,6 +445,61 @@ int ring_simple::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
     int ret = 0;
     RING_TRY_LOCK_RUN_AND_UPDATE_RET(m_lock_ring_tx,
                                      m_p_cq_mgr_tx->poll_and_process_element_tx(p_cq_poll_sn));
+    return ret;
+}
+
+int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_completions,
+                                   unsigned int ncompletions, int flags)
+{
+    int ret = 0;
+    int i = 0;
+
+    NOT_IN_USE(flags);
+
+    if (likely(xlio_completions) && ncompletions) {
+        struct ring_ec *ec = NULL;
+
+        m_socketxtreme.completion = xlio_completions;
+
+        while (!g_b_exit && (i < (int)ncompletions)) {
+            m_socketxtreme.completion->events = 0;
+            /* Check list size to avoid locking */
+            if (!list_empty(&m_socketxtreme.ec_list)) {
+                ec = get_ec();
+                if (ec) {
+                    memcpy(m_socketxtreme.completion, &ec->completion, sizeof(ec->completion));
+                    ec->clear();
+                    m_socketxtreme.completion++;
+                    i++;
+                }
+            } else {
+                /* Internal thread can raise event on this stage before we
+                 * start rx processing. In this case we can return event
+                 * in right order. It is done to avoid locking and
+                 * may be it is not so critical
+                 */
+                mem_buf_desc_t *desc;
+                if (likely(m_p_cq_mgr_rx->poll_and_process_element_rx(&desc))) {
+                    desc->rx.socketxtreme_polled = true;
+                    rx_process_buffer(desc, NULL);
+                    if (m_socketxtreme.completion->events) {
+                        m_socketxtreme.completion++;
+                        i++;
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+
+        m_socketxtreme.completion = NULL;
+
+        ret = i;
+    } else {
+        ret = -1;
+        errno = EINVAL;
+    }
+
     return ret;
 }
 

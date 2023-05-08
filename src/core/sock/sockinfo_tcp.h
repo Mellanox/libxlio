@@ -175,6 +175,9 @@ public:
     virtual int recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
                                             size_t count);
 
+    /* This function is used for socketxtreme mode */
+    virtual int free_buffs(uint16_t len);
+
     virtual void statistics_print(vlog_levels_t log_level = VLOG_DEBUG);
 
     inline struct tcp_pcb *get_pcb(void) { return &m_pcb; }
