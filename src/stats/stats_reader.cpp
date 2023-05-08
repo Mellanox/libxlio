@@ -154,6 +154,8 @@ uint32_t g_fd_map_size = e_K;
 // statistic file
 FILE *g_stats_file = stdout;
 
+extern user_params_t user_params;
+
 void usage(const char *argv0)
 {
     printf("\n" PRODUCT_NAME " Statistics\n");
@@ -195,7 +197,7 @@ void usage(const char *argv0)
 
 void update_delta_stat(socket_stats_t *p_curr_stat, socket_stats_t *p_prev_stat)
 {
-    int delay = INTERVAL;
+    int delay = user_params.interval;
     p_prev_stat->counters.n_tx_sent_byte_count =
         (p_curr_stat->counters.n_tx_sent_byte_count - p_prev_stat->counters.n_tx_sent_byte_count) /
         delay;
@@ -220,6 +222,10 @@ void update_delta_stat(socket_stats_t *p_curr_stat, socket_stats_t *p_prev_stat)
         (p_curr_stat->counters.n_rx_bytes - p_prev_stat->counters.n_rx_bytes) / delay;
     p_prev_stat->counters.n_rx_packets =
         (p_curr_stat->counters.n_rx_packets - p_prev_stat->counters.n_rx_packets) / delay;
+    p_prev_stat->counters.n_rx_data_pkts =
+        (p_curr_stat->counters.n_rx_data_pkts - p_prev_stat->counters.n_rx_data_pkts) / delay;
+    p_prev_stat->counters.n_rx_frags =
+        (p_curr_stat->counters.n_rx_frags - p_prev_stat->counters.n_rx_frags) / delay;
     p_prev_stat->counters.n_rx_eagain =
         (p_curr_stat->counters.n_rx_eagain - p_prev_stat->counters.n_rx_eagain) / delay;
     p_prev_stat->counters.n_rx_errors =
@@ -328,7 +334,7 @@ void update_delta_stat(socket_stats_t *p_curr_stat, socket_stats_t *p_prev_stat)
 
 void update_delta_iomux_stat(iomux_func_stats_t *p_curr_stats, iomux_func_stats_t *p_prev_stats)
 {
-    int delay = INTERVAL;
+    int delay = user_params.interval;
     if (p_curr_stats && p_prev_stats) {
         p_prev_stats->n_iomux_errors =
             (p_curr_stats->n_iomux_errors - p_prev_stats->n_iomux_errors) / delay;
@@ -348,7 +354,7 @@ void update_delta_iomux_stat(iomux_func_stats_t *p_curr_stats, iomux_func_stats_
 
 void update_delta_ring_stat(ring_stats_t *p_curr_ring_stats, ring_stats_t *p_prev_ring_stats)
 {
-    int delay = INTERVAL;
+    int delay = user_params.interval;
     if (p_curr_ring_stats && p_prev_ring_stats) {
         p_prev_ring_stats->n_rx_byte_count =
             (p_curr_ring_stats->n_rx_byte_count - p_prev_ring_stats->n_rx_byte_count) / delay;
@@ -411,18 +417,23 @@ void update_delta_ring_stat(ring_stats_t *p_curr_ring_stats, ring_stats_t *p_pre
 
 void update_delta_cq_stat(cq_stats_t *p_curr_cq_stats, cq_stats_t *p_prev_cq_stats)
 {
-    int delay = INTERVAL;
+    int delay = user_params.interval;
     if (p_curr_cq_stats && p_prev_cq_stats) {
         p_prev_cq_stats->n_rx_drained_at_once_max = p_curr_cq_stats->n_rx_drained_at_once_max;
         p_prev_cq_stats->n_rx_pkt_drop =
             (p_curr_cq_stats->n_rx_pkt_drop - p_prev_cq_stats->n_rx_pkt_drop) / delay;
         p_prev_cq_stats->n_rx_sw_queue_len = p_curr_cq_stats->n_rx_sw_queue_len;
         p_prev_cq_stats->n_buffer_pool_len = p_curr_cq_stats->n_buffer_pool_len;
-        p_prev_cq_stats->n_rx_lro_packets = p_curr_cq_stats->n_rx_lro_packets;
-        p_prev_cq_stats->n_rx_lro_bytes = p_curr_cq_stats->n_rx_lro_bytes;
-        p_prev_cq_stats->n_rx_gro_packets = p_curr_cq_stats->n_rx_gro_packets;
-        p_prev_cq_stats->n_rx_gro_frags = p_curr_cq_stats->n_rx_gro_frags;
-        p_prev_cq_stats->n_rx_gro_bytes = p_curr_cq_stats->n_rx_gro_bytes;
+        p_prev_cq_stats->n_rx_lro_packets =
+            (p_curr_cq_stats->n_rx_lro_packets - p_prev_cq_stats->n_rx_lro_packets) / delay;
+        p_prev_cq_stats->n_rx_lro_bytes =
+            (p_curr_cq_stats->n_rx_lro_bytes - p_prev_cq_stats->n_rx_lro_bytes) / delay;
+        p_prev_cq_stats->n_rx_gro_packets =
+            (p_curr_cq_stats->n_rx_gro_packets - p_prev_cq_stats->n_rx_gro_packets) / delay;
+        p_prev_cq_stats->n_rx_gro_frags =
+            (p_curr_cq_stats->n_rx_gro_frags - p_prev_cq_stats->n_rx_gro_frags) / delay;
+        p_prev_cq_stats->n_rx_gro_bytes =
+            (p_curr_cq_stats->n_rx_gro_bytes - p_prev_cq_stats->n_rx_gro_bytes) / delay;
         p_prev_cq_stats->n_rx_consumed_rwqe_count = (p_curr_cq_stats->n_rx_consumed_rwqe_count -
                                                      p_prev_cq_stats->n_rx_consumed_rwqe_count) /
             delay;
@@ -431,13 +442,14 @@ void update_delta_cq_stat(cq_stats_t *p_curr_cq_stats, cq_stats_t *p_prev_cq_sta
         p_prev_cq_stats->n_rx_packet_count =
             (p_curr_cq_stats->n_rx_packet_count - p_prev_cq_stats->n_rx_packet_count) / delay;
         p_prev_cq_stats->n_rx_max_stirde_per_packet = p_curr_cq_stats->n_rx_max_stirde_per_packet;
-        p_prev_cq_stats->n_rx_cqe_error = p_curr_cq_stats->n_rx_cqe_error;
+        p_prev_cq_stats->n_rx_cqe_error =
+            (p_curr_cq_stats->n_rx_cqe_error - p_prev_cq_stats->n_rx_cqe_error) / delay;
     }
 }
 
 void update_delta_bpool_stat(bpool_stats_t *p_curr_bpool_stats, bpool_stats_t *p_prev_bpool_stats)
 {
-    int delay = INTERVAL;
+    int delay = user_params.interval;
     if (p_curr_bpool_stats && p_prev_bpool_stats) {
         p_prev_bpool_stats->n_buffer_pool_size = p_curr_bpool_stats->n_buffer_pool_size;
         p_prev_bpool_stats->n_buffer_pool_no_bufs = (p_curr_bpool_stats->n_buffer_pool_no_bufs -
@@ -449,7 +461,7 @@ void update_delta_bpool_stat(bpool_stats_t *p_curr_bpool_stats, bpool_stats_t *p
 void update_delta_global_stat(global_stats_t *p_curr_global_stats,
                               global_stats_t *p_prev_global_stats)
 {
-    int delay = INTERVAL;
+    int delay = user_params.interval;
     if (p_curr_global_stats && p_prev_global_stats) {
         p_prev_global_stats->n_tcp_seg_pool_size = p_curr_global_stats->n_tcp_seg_pool_size;
         p_prev_global_stats->n_tcp_seg_pool_no_segs =
@@ -590,8 +602,9 @@ void print_cq_stats(cq_instance_block_t *p_cq_inst_arr)
                        p_cq_stats->n_rx_gro_packets, post_fix);
                 printf(FORMAT_STATS_64bit, "Avg GRO packet size:",
                        p_cq_stats->n_rx_gro_bytes / p_cq_stats->n_rx_gro_packets, post_fix);
-                printf(FORMAT_STATS_64bit, "GRO frags per packet:",
-                       p_cq_stats->n_rx_gro_frags / p_cq_stats->n_rx_gro_packets, post_fix);
+                printf(
+                    FORMAT_STATS_double, "GRO frags per packet:",
+                    static_cast<double>(p_cq_stats->n_rx_gro_frags) / p_cq_stats->n_rx_gro_packets);
             }
         }
     }

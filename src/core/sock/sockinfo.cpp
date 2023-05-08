@@ -772,13 +772,12 @@ int sockinfo::get_sock_by_L3_L4(in_protocol_t protocol, const ip_address &ip, in
 
 void sockinfo::save_stats_rx_offload(int nbytes)
 {
-    if (nbytes >= 0) {
-        m_p_socket_stats->counters.n_rx_bytes += nbytes;
-        m_p_socket_stats->counters.n_rx_packets++;
-    } else if (errno == EAGAIN) {
-        m_p_socket_stats->counters.n_rx_eagain++;
-    } else {
-        m_p_socket_stats->counters.n_rx_errors++;
+    if (nbytes < 0) {
+        if (errno == EAGAIN) {
+            m_p_socket_stats->counters.n_rx_eagain++;
+        } else {
+            m_p_socket_stats->counters.n_rx_errors++;
+        }
     }
 }
 
@@ -1369,6 +1368,18 @@ void sockinfo::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
             "Rx Offload : %" PRIu64 " KB / %d / %d / %d [kilobytes/packets/eagains/errors]\n",
             m_p_socket_stats->counters.n_rx_bytes / 1024, m_p_socket_stats->counters.n_rx_packets,
             m_p_socket_stats->counters.n_rx_eagain, m_p_socket_stats->counters.n_rx_errors);
+        vlog_printf(
+            log_level,
+            "Rx data packets: %" PRIu64 " / %u / %u / %u [kilobytes/packets/frags/chained]\n",
+            m_p_socket_stats->counters.n_rx_bytes / 1024, m_p_socket_stats->counters.n_rx_data_pkts,
+            m_p_socket_stats->counters.n_rx_frags, m_p_socket_stats->counters.n_gro);
+        if (m_p_socket_stats->counters.n_rx_data_pkts) {
+            vlog_printf(
+                log_level, "Avg. aggr packet size: %" PRIu64 " fragments per packet: %.1f\n",
+                m_p_socket_stats->counters.n_rx_bytes / m_p_socket_stats->counters.n_rx_data_pkts,
+                static_cast<double>(m_p_socket_stats->counters.n_rx_frags) /
+                    m_p_socket_stats->counters.n_rx_data_pkts);
+        }
 
         if (m_p_socket_stats->counters.n_rx_packets) {
             float rx_drop_percentage = 0;

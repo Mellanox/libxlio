@@ -64,15 +64,15 @@ rfs_uc_tcp_gro::rfs_uc_tcp_gro(flow_tuple *flow_spec_5t, ring_slave *p_ring,
     , m_b_active(false)
     , m_b_reserved(false)
 {
-    ring_simple *p_check_ring = dynamic_cast<ring_simple *>(p_ring);
+    m_p_ring_simple = dynamic_cast<ring_simple *>(p_ring);
 
-    if (!p_check_ring) {
+    if (!m_p_ring_simple) {
         rfs_logpanic("Incompatible ring type");
     }
 
-    m_p_gro_mgr = &(p_check_ring->m_gro_mgr);
+    m_p_gro_mgr = &(m_p_ring_simple->m_gro_mgr);
     m_n_buf_max = m_p_gro_mgr->get_buf_max();
-    uint32_t mtu = p_check_ring->get_mtu();
+    uint32_t mtu = m_p_ring_simple->get_mtu();
     m_n_byte_max = m_p_gro_mgr->get_byte_max() - mtu;
     memset(&m_gro_desc, 0, sizeof(m_gro_desc));
 }
@@ -152,6 +152,11 @@ out:
         flush_gro_desc(pv_fd_ready_array);
     }
 
+    cq_stats_t &cq_stats = *m_p_ring_simple->m_p_cq_mgr_rx->m_p_cq_stat;
+    cq_stats.n_rx_gro_packets++;
+    cq_stats.n_rx_gro_frags += 1;
+    cq_stats.n_rx_gro_bytes += p_rx_pkt_mem_buf_desc_info->lwip_pbuf.pbuf.tot_len;
+
     return rfs_uc::rx_dispatch_packet(p_rx_pkt_mem_buf_desc_info, pv_fd_ready_array);
 }
 
@@ -207,12 +212,6 @@ struct __attribute__((packed)) tcphdr_ts {
 
 void rfs_uc_tcp_gro::flush_gro_desc(void *pv_fd_ready_array)
 {
-    ring_simple *p_ring = dynamic_cast<ring_simple *>(m_p_ring);
-
-    if (!p_ring) {
-        rfs_logpanic("Incompatible ring type");
-    }
-
     if (!m_b_active) {
         return;
     }
@@ -257,13 +256,13 @@ void rfs_uc_tcp_gro::flush_gro_desc(void *pv_fd_ready_array)
                ntohl(m_gro_desc.p_tcp_h->seq), ntohl(m_gro_desc.p_tcp_h->ack_seq),
                ntohs(m_gro_desc.p_tcp_h->window), m_gro_desc.ip_tot_len, m_gro_desc.buf_count);
 
-    auto &cq_stats = *p_ring->m_p_cq_mgr_rx->m_p_cq_stat;
+    cq_stats_t &cq_stats = *m_p_ring_simple->m_p_cq_mgr_rx->m_p_cq_stat;
     cq_stats.n_rx_gro_packets++;
     cq_stats.n_rx_gro_frags += m_gro_desc.buf_count;
     cq_stats.n_rx_gro_bytes += m_gro_desc.p_first->lwip_pbuf.pbuf.tot_len;
 
     if (!rfs_uc::rx_dispatch_packet(m_gro_desc.p_first, pv_fd_ready_array)) {
-        p_ring->reclaim_recv_buffers_no_lock(m_gro_desc.p_first);
+        m_p_ring_simple->reclaim_recv_buffers_no_lock(m_gro_desc.p_first);
     }
 
     m_b_active = false;

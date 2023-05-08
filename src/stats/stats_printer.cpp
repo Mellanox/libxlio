@@ -186,15 +186,16 @@ void print_full_stats(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, 
                 p_si_stats->counters.n_rx_packets, p_si_stats->counters.n_rx_eagain,
                 p_si_stats->counters.n_rx_errors, post_fix);
         b_any_activiy = true;
-        fprintf(filename, "Rx GRO: %" PRIu64 " / %u / %u / %u [kilobytes/packets/frags/chained]\n",
+        fprintf(filename,
+                "Rx data packets: %" PRIu64 " / %u / %u / %u [kilobytes/packets/frags/chained]\n",
                 p_si_stats->counters.n_rx_bytes / BYTES_TRAFFIC_UNIT,
-                p_si_stats->counters.n_rx_pkts, p_si_stats->counters.n_rx_frags,
+                p_si_stats->counters.n_rx_data_pkts, p_si_stats->counters.n_rx_frags,
                 p_si_stats->counters.n_gro);
-        if (p_si_stats->counters.n_rx_pkts) {
-            fprintf(filename,
-                    "Avg. GRO packet size: %" PRIu64 " fragments per packet: %" PRIu32 "\n",
-                    p_si_stats->counters.n_rx_bytes / p_si_stats->counters.n_rx_pkts,
-                    p_si_stats->counters.n_rx_frags / p_si_stats->counters.n_rx_pkts);
+        if (p_si_stats->counters.n_rx_data_pkts) {
+            fprintf(filename, "Avg. aggr packet size: %" PRIu64 " fragments per packet: %.1f\n",
+                    p_si_stats->counters.n_rx_bytes / p_si_stats->counters.n_rx_data_pkts,
+                    static_cast<double>(p_si_stats->counters.n_rx_frags) /
+                        p_si_stats->counters.n_rx_data_pkts);
         }
     }
     if (p_si_stats->counters.n_rx_os_bytes || p_si_stats->counters.n_rx_os_packets ||
@@ -206,7 +207,7 @@ void print_full_stats(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, 
                 p_si_stats->counters.n_rx_os_errors, post_fix);
         b_any_activiy = true;
     }
-    if (p_si_stats->counters.n_rx_packets || p_si_stats->n_rx_ready_pkt_count) {
+    if (p_si_stats->counters.n_rx_data_pkts || p_si_stats->n_rx_ready_pkt_count) {
         fprintf(filename, "Rx byte: cur %lu / max %u / dropped%s %u / limit %u\n",
                 p_si_stats->n_rx_ready_byte_count, p_si_stats->counters.n_rx_ready_byte_max,
                 post_fix, p_si_stats->counters.n_rx_ready_byte_drop,

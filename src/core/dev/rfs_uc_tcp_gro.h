@@ -83,6 +83,7 @@ private:
     inline bool timestamp_check(tcphdr *p_tcp_h);
 
     gro_mgr *m_p_gro_mgr;
+    ring_simple *m_p_ring_simple;
     bool m_b_active;
     bool m_b_reserved;
     struct gro_mem_buf_desc m_gro_desc;

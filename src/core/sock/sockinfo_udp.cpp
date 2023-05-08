@@ -2287,6 +2287,8 @@ inline void sockinfo_udp::update_ready(mem_buf_desc_t *p_desc, void *pv_fd_ready
     m_rx_pkt_ready_list.push_back(p_desc);
     m_n_rx_pkt_ready_list_count++;
     m_rx_ready_byte_count += p_desc->rx.sz_payload;
+    m_p_socket_stats->counters.n_rx_data_pkts++;
+    m_p_socket_stats->counters.n_rx_bytes += p_desc->rx.sz_payload;
     m_p_socket_stats->n_rx_ready_pkt_count++;
     m_p_socket_stats->n_rx_ready_byte_count += p_desc->rx.sz_payload;
     m_p_socket_stats->counters.n_rx_ready_pkt_max =
@@ -2319,6 +2321,8 @@ bool sockinfo_udp::packet_is_loopback(mem_buf_desc_t *p_desc)
 
 bool sockinfo_udp::rx_input_cb(mem_buf_desc_t *p_desc, void *pv_fd_ready_array)
 {
+    m_p_socket_stats->counters.n_rx_packets++;
+
     if (unlikely((m_state == SOCKINFO_DESTROYING) || g_b_exit)) {
         si_udp_logfunc("rx packet discarded - fd closed");
         return false;

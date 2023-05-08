@@ -1853,7 +1853,7 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
     // We go over the p_first_desc again, so decrement what we did in rx_input_cb.
     conn->m_socket_stats.strq_counters.n_strq_total_strides -=
         static_cast<uint64_t>(p_first_desc->rx.strides_num);
-    conn->m_socket_stats.counters.n_rx_pkts++;
+    conn->m_socket_stats.counters.n_rx_data_pkts++;
     // Assume that all chained buffers are GRO packets
     conn->m_socket_stats.counters.n_gro += !!p->next;
 
@@ -1883,6 +1883,7 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
     conn->m_rx_pkt_ready_list.push_back(p_first_desc);
     conn->m_n_rx_pkt_ready_list_count++;
     conn->m_rx_ready_byte_count += p->tot_len;
+    conn->m_p_socket_stats->counters.n_rx_bytes += p->tot_len;
     conn->m_p_socket_stats->n_rx_ready_byte_count += p->tot_len;
     conn->m_p_socket_stats->n_rx_ready_pkt_count++;
     conn->m_socket_stats.counters.n_rx_frags += p_first_desc->rx.n_frags;
@@ -2191,6 +2192,7 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
     lock_tcp_con();
 
     save_strq_stats(p_rx_pkt_mem_buf_desc_info->rx.strides_num);
+    m_socket_stats.counters.n_rx_packets++;
     m_iomux_ready_fd_array = (fd_array_t *)pv_fd_ready_array;
 
     if (unlikely(get_tcp_state(&m_pcb) == LISTEN)) {
