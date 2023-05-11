@@ -288,7 +288,7 @@ public:
                                        uint16_t src_port, uint16_t dst_port);
     virtual bool is_up() = 0;
     virtual void inc_tx_retransmissions_stats(ring_user_id_t id);
-    virtual bool rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array);
+    bool rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array);
     virtual int reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse) = 0;
     virtual void inc_cq_moderation_stats(size_t sz_data) = 0;
 
