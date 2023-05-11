@@ -234,6 +234,7 @@ private:
     bool attach_as_uc_receiver_anyip(sa_family_t family, role_t role, bool skip_rules);
 
 protected:
+    bool m_flow_tag_enabled; // for this socket
     bool m_b_blocking;
     bool m_b_pktinfo;
     bool m_b_rcvtstamp;
@@ -312,7 +313,6 @@ protected:
     struct xlio_rate_limit_t m_so_ratelimit;
     void *m_fd_context; // Context data stored with socket
     uint32_t m_flow_tag_id; // Flow Tag for this socket
-    bool m_flow_tag_enabled; // for this socket
     bool m_rx_cq_wait_ctrl;
     uint8_t m_n_uc_ttl_hop_lim;
     bool m_is_ipv6only;

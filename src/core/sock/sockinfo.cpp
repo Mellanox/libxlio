@@ -61,6 +61,7 @@
 
 sockinfo::sockinfo(int fd, int domain)
     : socket_fd_api(fd)
+    , m_flow_tag_enabled(false)
     , m_b_blocking(true)
     , m_b_pktinfo(false)
     , m_b_rcvtstamp(false)
@@ -90,7 +91,6 @@ sockinfo::sockinfo(int fd, int domain)
     , m_pcp(0)
     , m_fd_context((void *)((uintptr_t)m_fd))
     , m_flow_tag_id(0)
-    , m_flow_tag_enabled(false)
     , m_rx_cq_wait_ctrl(safe_mce_sys().rx_cq_wait_ctrl)
     , m_n_uc_ttl_hop_lim(m_family == AF_INET
                              ? safe_mce_sys().sysctl_reader.get_net_ipv4_ttl()
