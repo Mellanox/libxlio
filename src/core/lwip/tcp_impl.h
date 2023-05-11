@@ -184,10 +184,15 @@ PACK_STRUCT_END
 #define TCP_TCPLEN(seg)                                                                            \
     ((seg)->len + (((TCPH_FLAGS((seg)->tcphdr) & (TCP_FIN | TCP_SYN)) != 0) ? 1U : 0U))
 
+/** Version of TCP_TCPLEN which uses cached TCP flags. It avoids extra dereference, however,
+ *  it can be used only with outgoing segments.
+ */
+#define TCP_SEGLEN(seg) ((seg)->len + ((((seg)->tcp_flags & (TCP_FIN | TCP_SYN)) != 0) ? 1U : 0U))
+
 /** Flags used on input processing, not on pcb->flags
  */
 #define TF_RESET   (u8_t)0x08U /* Connection was reset. */
-#define TF_CLOSED  (u8_t)0x10U /* Connection was sucessfully closed. */
+#define TF_CLOSED  (u8_t)0x10U /* Connection was successfully closed. */
 #define TF_GOT_FIN (u8_t)0x20U /* Connection was closed by the remote end. */
 
 #define TCP_EVENT_ACCEPT(pcb, err, ret)                                                            \
@@ -289,6 +294,8 @@ struct tcp_seg {
 #define TF_SEG_OPTS_TSO       (u8_t) TCP_WRITE_TSO /* Use TSO send mode */
 #define TF_SEG_OPTS_NOMERGE   (u8_t)0x40U /* Don't merge with other segments */
 #define TF_SEG_OPTS_ZEROCOPY  (u8_t) TCP_WRITE_ZEROCOPY /* Use zerocopy send mode */
+
+    u8_t tcp_flags; /* Cached TCP flags for outgoing segments */
 
     /* L2+L3+TCP header for zerocopy segments, it must have enough room for options
        This should have enough space for L2 (ETH+vLAN), L3 (IPv4/6), L4 (TCP)

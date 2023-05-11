@@ -56,16 +56,17 @@ typedef struct parsed_ip_hdr {
     const void *src, *dest;
 } parsed_ip_hdr_t;
 
+/* TODO Remove duplicate knowledge in tcp_in_data (seqno, TCP flags, length, tcphdr). */
 typedef struct tcp_in_data {
     struct pbuf *recv_data;
     struct tcp_hdr *tcphdr;
     parsed_ip_hdr_t iphdr;
     u32_t seqno;
     u32_t ackno;
-    struct tcp_seg inseg;
     u16_t tcplen;
     u8_t flags;
     u8_t recv_flags;
+    struct tcp_seg inseg;
 } tcp_in_data;
 
 /* Forward declarations. */
@@ -174,6 +175,7 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb)
             in_data.inseg.tcphdr = in_data.tcphdr;
             in_data.inseg.seqno = in_data.seqno;
             in_data.inseg.flags = 0;
+            in_data.inseg.tcp_flags = in_data.flags;
 
             in_data.recv_data = NULL;
             in_data.recv_flags = 0;
@@ -834,7 +836,7 @@ static u32_t tcp_shrink_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t 
     assert(!(seg->flags & TF_SEG_OPTS_ZEROCOPY));
 
     if ((NULL == seg) || (NULL == seg->p) ||
-        !(TCP_SEQ_GT(ackno, seg->seqno) && TCP_SEQ_LT(ackno, seg->seqno + TCP_TCPLEN(seg)))) {
+        !(TCP_SEQ_GT(ackno, seg->seqno) && TCP_SEQ_LT(ackno, seg->seqno + TCP_SEGLEN(seg)))) {
         return count;
     }
 
@@ -960,7 +962,7 @@ static u32_t tcp_shrink_zc_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32
     assert(seg->p != NULL);
     assert(seg->flags & TF_SEG_OPTS_ZEROCOPY);
 
-    if (!(TCP_SEQ_GT(ackno, seg->seqno) && TCP_SEQ_LT(ackno, seg->seqno + TCP_TCPLEN(seg)))) {
+    if (!(TCP_SEQ_GT(ackno, seg->seqno) && TCP_SEQ_LT(ackno, seg->seqno + TCP_SEGLEN(seg)))) {
         return 0;
     }
 
@@ -1170,7 +1172,7 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
                 ("tcp_receive: ACK for %" U32_F ", unacked->seqno %" U32_F ":%" U32_F "\n",
                  in_data->ackno, pcb->unacked != NULL ? ntohl(pcb->unacked->tcphdr->seqno) : 0,
                  pcb->unacked != NULL
-                     ? ntohl(pcb->unacked->tcphdr->seqno) + TCP_TCPLEN(pcb->unacked)
+                     ? ntohl(pcb->unacked->tcphdr->seqno) + TCP_SEGLEN(pcb->unacked)
                      : 0));
 
             /* Remove segment from the unacknowledged list if the incoming
@@ -1190,14 +1192,14 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
                     pcb->snd_queuelen -= removed;
                 }
 
-                if (!(TCP_SEQ_LEQ(pcb->unacked->seqno + TCP_TCPLEN(pcb->unacked),
+                if (!(TCP_SEQ_LEQ(pcb->unacked->seqno + TCP_SEGLEN(pcb->unacked),
                                   in_data->ackno))) {
                     break;
                 }
                 LWIP_DEBUGF(TCP_INPUT_DEBUG,
                             ("tcp_receive: removing %" U32_F ":%" U32_F " from pcb->unacked\n",
                              ntohl(pcb->unacked->tcphdr->seqno),
-                             ntohl(pcb->unacked->tcphdr->seqno) + TCP_TCPLEN(pcb->unacked)));
+                             ntohl(pcb->unacked->tcphdr->seqno) + TCP_SEGLEN(pcb->unacked)));
 
                 next = pcb->unacked;
                 pcb->unacked = pcb->unacked->next;
@@ -1206,7 +1208,7 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
                 LWIP_ASSERT("pcb->snd_queuelen >= pbuf_clen(next->p)",
                             (pcb->snd_queuelen >= pbuf_clen(next->p)));
                 /* Prevent ACK for FIN to generate a sent event */
-                if ((pcb->acked != 0) && ((TCPH_FLAGS(next->tcphdr) & TCP_FIN) != 0)) {
+                if ((pcb->acked != 0) && ((next->tcp_flags & TCP_FIN) != 0)) {
                     pcb->acked--;
                 }
 
@@ -1244,12 +1246,12 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
            in fact have been sent once. */
         while (pcb->unsent != NULL &&
                TCP_SEQ_BETWEEN(in_data->ackno,
-                               ntohl(pcb->unsent->tcphdr->seqno) + TCP_TCPLEN(pcb->unsent),
+                               ntohl(pcb->unsent->tcphdr->seqno) + TCP_SEGLEN(pcb->unsent),
                                pcb->snd_nxt)) {
             LWIP_DEBUGF(TCP_INPUT_DEBUG,
                         ("tcp_receive: removing %" U32_F ":%" U32_F " from pcb->unsent\n",
                          ntohl(pcb->unsent->tcphdr->seqno),
-                         ntohl(pcb->unsent->tcphdr->seqno) + TCP_TCPLEN(pcb->unsent)));
+                         ntohl(pcb->unsent->tcphdr->seqno) + TCP_SEGLEN(pcb->unsent)));
 
             next = pcb->unsent;
             pcb->unsent = pcb->unsent->next;
@@ -1258,7 +1260,7 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
             LWIP_ASSERT("pcb->snd_queuelen >= pbuf_clen(next->p)",
                         (pcb->snd_queuelen >= pbuf_clen(next->p)));
             /* Prevent ACK for FIN to generate a sent event */
-            if ((pcb->acked != 0) && ((TCPH_FLAGS(next->tcphdr) & TCP_FIN) != 0)) {
+            if ((pcb->acked != 0) && ((next->tcp_flags & TCP_FIN) != 0)) {
                 pcb->acked--;
             }
             pcb->snd_queuelen -= pbuf_clen(next->p);

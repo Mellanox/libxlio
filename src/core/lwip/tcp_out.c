@@ -146,6 +146,7 @@ err_t tcp_send_fin(struct tcp_pcb *pcb)
         if ((TCPH_FLAGS(last_unsent->tcphdr) & (TCP_SYN | TCP_FIN | TCP_RST)) == 0) {
             /* no SYN/FIN/RST flag in the header, we can add the FIN flag */
             TCPH_SET_FLAG(last_unsent->tcphdr, TCP_FIN);
+            last_unsent->tcp_flags |= TCP_FIN;
             pcb->flags |= TF_FIN;
             return ERR_OK;
         }
@@ -200,6 +201,7 @@ static struct tcp_seg *tcp_create_segment(struct tcp_pcb *pcb, struct pbuf *p, u
     }
 
     seg->flags = optflags;
+    seg->tcp_flags = flags;
     seg->p = p;
     seg->len = p->tot_len - optlen;
     seg->seqno = seqno;
@@ -647,7 +649,7 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
 
         LWIP_DEBUGF(TCP_OUTPUT_DEBUG | LWIP_DBG_TRACE,
                     ("tcp_write: queueing %" U32_F ":%" U32_F "\n", ntohl(seg->tcphdr->seqno),
-                     ntohl(seg->tcphdr->seqno) + TCP_TCPLEN(seg)));
+                     ntohl(seg->tcphdr->seqno) + TCP_SEGLEN(seg)));
 
         pos += seglen;
     }
@@ -825,7 +827,7 @@ err_t tcp_enqueue_flags(struct tcp_pcb *pcb, u8_t flags)
     LWIP_DEBUGF(
         TCP_OUTPUT_DEBUG | LWIP_DBG_TRACE,
         ("tcp_enqueue_flags: queueing %" U32_F ":%" U32_F " (0x%" X16_F ")\n",
-         ntohl(seg->tcphdr->seqno), ntohl(seg->tcphdr->seqno) + TCP_TCPLEN(seg), (u16_t)flags));
+         ntohl(seg->tcphdr->seqno), ntohl(seg->tcphdr->seqno) + TCP_SEGLEN(seg), (u16_t)flags));
 
     /* Now append seg to pcb->unsent queue */
     if (pcb->unsent == NULL) {
@@ -933,7 +935,9 @@ static void tcp_seg_move_flags(struct tcp_seg *from, struct tcp_seg *to, u8_t fl
 
     if ((from != to) && (to != NULL) && from_flags) {
         TCPH_SET_FLAG(to->tcphdr, from_flags);
+        to->tcp_flags = from_flags;
         TCPH_UNSET_FLAG(from->tcphdr, flags);
+        from->tcp_flags &= ~flags;
     }
 }
 
@@ -1750,12 +1754,12 @@ err_t tcp_output(struct tcp_pcb *pcb)
             }
 
             pcb->unsent = seg->next;
-            snd_nxt = seg->seqno + TCP_TCPLEN(seg);
+            snd_nxt = seg->seqno + TCP_SEGLEN(seg);
             if (TCP_SEQ_LT(pcb->snd_nxt, snd_nxt) && !LWIP_IS_DUMMY_SEGMENT(seg)) {
                 pcb->snd_nxt = snd_nxt;
             }
             /* put segment on unacknowledged list if length > 0 */
-            if (TCP_TCPLEN(seg) > 0) {
+            if (TCP_SEGLEN(seg) > 0) {
                 seg->next = NULL;
                 // unroll dummy segment
                 if (LWIP_IS_DUMMY_SEGMENT(seg)) {
