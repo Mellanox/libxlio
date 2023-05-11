@@ -724,7 +724,7 @@ void event_handler_manager::priv_unregister_command_events(command_reg_info_t &i
 
 void event_handler_manager::handle_registration_action(reg_action_t &reg_action)
 {
-    if (!m_b_continue_running) {
+    if (!m_b_continue_running && reg_action.type != UNREGISTER_TIMERS_AND_DELETE) {
         return;
     }
 
