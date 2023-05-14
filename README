@@ -557,7 +557,7 @@ XLIO_HW_TS_CONVERSION
 The above parameter defines the time stamp conversion method.
 The value of XLIO_HW_TS_CONVERSION is determined by all devices - i.e if the hardware of
 one device does not support the conversion, then it will be disabled for the other devices.
-Options = [0,1,2,3,4]:
+Options = [0,1,2,3,4,5]:
 0 = Disabled
 1 = Raw-HW time                           - only convert the time stamp to seconds.nano_seconds time
                                             units (or disable if hardware does not supports).
@@ -567,6 +567,9 @@ Options = [0,1,2,3,4]:
                                             comparable to receive software timestamp.
                                             disable if hardware does not supports.
 4 = PTP Sync                              - convert the time stamp to seconds.nano_seconds time units.
+                                            in case it is not supported - will apply option 3 (or disable
+                                            if hardware does not supports).
+5 = RTC Sync                              - convert the time stamp to seconds.nano_seconds time units.
                                             in case it is not supported - will apply option 3 (or disable
                                             if hardware does not supports).
 Default value: 3

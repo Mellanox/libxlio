@@ -78,6 +78,7 @@ libxlio_la_SOURCES := \
 	dev/rfs_rule_dpcp.cpp \
 	dev/time_converter.cpp \
 	dev/time_converter_ptp.cpp \
+	dev/time_converter_rtc.cpp \
 	dev/time_converter_ib_ctx.cpp \
 	dev/ib_ctx_handler.cpp \
 	dev/ib_ctx_handler_collection.cpp \
@@ -173,6 +174,7 @@ libxlio_la_SOURCES := \
 	dev/ib_ctx_handler.h \
 	dev/time_converter.h \
 	dev/time_converter_ptp.h \
+	dev/time_converter_rtc.h \
 	dev/time_converter_ib_ctx.h \
 	dev/net_device_entry.h \
 	dev/net_device_table_mgr.h \

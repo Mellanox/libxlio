@@ -41,6 +41,7 @@
 #include "ib/base/verbs_extra.h"
 #include "dev/time_converter_ib_ctx.h"
 #include "dev/time_converter_ptp.h"
+#include "dev/time_converter_rtc.h"
 #include "util/valgrind.h"
 #include "event/event_handler_manager.h"
 
@@ -414,6 +415,9 @@ void ib_ctx_handler::set_ctx_time_converter_status(ts_conversion_mode_t conversi
                      "reverting to mode TS_CONVERSION_MODE_SYNC");
 #endif // DEFINED_IBV_CLOCK_INFO
     } break;
+    case TS_CONVERSION_MODE_RTC:
+        m_p_ctx_time_converter = new time_converter_rtc();
+        break;
     default:
         m_p_ctx_time_converter = new time_converter_ib_ctx(m_p_ibv_context, conversion_mode,
                                                            m_p_ibv_device_attr->hca_core_clock);

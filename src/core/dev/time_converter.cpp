@@ -147,6 +147,12 @@ ts_conversion_mode_t time_converter::update_device_converters_status(net_device_
                 ? TS_CONVERSION_MODE_PTP
                 : TS_CONVERSION_MODE_DISABLE;
             break;
+        case TS_CONVERSION_MODE_RTC:
+            ts_conversion_mode =
+                devs_status == (XLIO_QUERY_DEVICE_SUPPORTED | XLIO_QUERY_VALUES_SUPPORTED)
+                ? TS_CONVERSION_MODE_RTC
+                : TS_CONVERSION_MODE_DISABLE;
+            break;
         default:
             ts_conversion_mode = TS_CONVERSION_MODE_DISABLE;
             break;

@@ -111,6 +111,11 @@ bool qp_mgr_eth_mlx5_dpcp::prepare_rq(uint32_t cqn)
     rqattrs.wqe_num = m_qp_cap.max_recv_wr;
     rqattrs.wqe_sz = m_qp_cap.max_recv_sge;
 
+    if (safe_mce_sys().hw_ts_conversion_mode == TS_CONVERSION_MODE_RTC) {
+        qp_logdbg("Enabled RTC timestamp format for RQ");
+        rqattrs.ts_format = dpcp::rq_ts_format::RQ_TS_REAL_TIME;
+    }
+
     std::unique_ptr<dpcp::basic_rq> new_rq;
     dpcp::status rc = dpcp::DPCP_OK;
 
