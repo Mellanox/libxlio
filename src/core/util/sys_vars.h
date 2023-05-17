@@ -642,7 +642,7 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_SPEC             "XLIO_SPEC"
 
 #define SYS_VAR_SOCKETXTREME "XLIO_SOCKETXTREME"
-#define SYS_VAR_TSO "XLIO_TSO"
+#define SYS_VAR_TSO          "XLIO_TSO"
 #ifdef DEFINED_UTLS
 #define SYS_VAR_UTLS_RX                        "XLIO_UTLS_RX"
 #define SYS_VAR_UTLS_TX                        "XLIO_UTLS_TX"

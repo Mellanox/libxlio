@@ -414,7 +414,6 @@ protected:
         }
     }
 
-
     bool is_shadow_socket_present() { return m_fd >= 0 && m_fd != m_rx_epfd; }
     inline bool is_socketxtreme() { return (m_p_rx_ring && m_p_rx_ring->is_socketxtreme()); }
 

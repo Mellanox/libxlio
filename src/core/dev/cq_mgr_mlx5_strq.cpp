@@ -472,15 +472,15 @@ int cq_mgr_mlx5_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id
 
             ret_total +=
                 drain_and_proccess_helper(buff, buff_wqe, status, p_recycle_buffers_last_wr_id);
-         }
- 
+        }
+
         update_global_sn(cq_poll_sn, ret_total);
 
         m_p_ring->m_gro_mgr.flush_all(nullptr);
         m_n_wce_counter = 0; // Actually strides count.
         m_b_was_drained = false;
-     }
- 
+    }
+
     // Update cq statistics
     m_p_cq_stat->n_rx_sw_queue_len = m_rx_queue.size();
     m_p_cq_stat->n_rx_drained_at_once_max =

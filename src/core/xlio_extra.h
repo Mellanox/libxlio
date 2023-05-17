@@ -334,6 +334,11 @@ typedef xlio_recv_callback_retval_t (*xlio_recv_callback_t)(int fd, size_t sz_io
 /**
  * XLIO Extended Socket API
  */
+
+enum {
+    SOCKETXTREME_POLL_TX = (1 << 15),
+};
+
 struct __attribute__((packed)) xlio_api_t {
 
     /**
@@ -458,6 +463,7 @@ struct __attribute__((packed)) xlio_api_t {
      * @param completions Array of completions.
      * @param ncompletions Maximum number of completion to return.
      * @param flags Flags.
+     *              SOCKETXTREME_POLL_TX - poll tx completions
      * @return On success, return the number of ready completions.
      * 	   On error, -1 is returned, and TBD:errno is set?.
      *

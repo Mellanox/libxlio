@@ -71,11 +71,11 @@ public:
     void adapt_cq_moderation() override;
     bool reclaim_recv_buffers(descq_t *rx_reuse) override;
     bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst) override;
-    bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst); // No locks
+    bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst) override; // No locks
     int reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse) override; // No locks
     void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc) override;
     int socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_completions,
-                                  unsigned int ncompletions, int flags) override;
+                          unsigned int ncompletions, int flags) override;
     int drain_and_proccess() override;
     int wait_for_notification_and_process_element(int cq_channel_fd, uint64_t *p_cq_poll_sn,
                                                   void *pv_fd_ready_array = NULL) override;
@@ -314,16 +314,16 @@ protected:
     std::unordered_map<void *, uint32_t> m_user_lkey_map;
 
 private:
-    bool is_socketxtreme(void) { return m_socketxtreme.active; }
+    bool is_socketxtreme(void) override { return m_socketxtreme.active; }
 
-    void put_ec(struct ring_ec *ec)
+    void put_ec(struct ring_ec *ec) override
     {
         m_socketxtreme.lock_ec_list.lock();
         list_add_tail(&ec->list, &m_socketxtreme.ec_list);
         m_socketxtreme.lock_ec_list.unlock();
     }
 
-    void del_ec(struct ring_ec *ec)
+    void del_ec(struct ring_ec *ec) override
     {
         m_socketxtreme.lock_ec_list.lock();
         list_del_init(&ec->list);
@@ -344,7 +344,10 @@ private:
         return ec;
     }
 
-    struct xlio_socketxtreme_completion_t *get_comp(void) { return m_socketxtreme.completion; }
+    struct xlio_socketxtreme_completion_t *get_comp(void) override
+    {
+        return m_socketxtreme.completion;
+    }
 
     struct {
         /* queue of event completion elements

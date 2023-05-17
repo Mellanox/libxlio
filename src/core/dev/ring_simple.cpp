@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 
+#include <mutex>
 #include "ring_simple.h"
 
 #include "util/valgrind.h"
@@ -235,7 +236,7 @@ ring_simple::~ring_simple()
         }
     }
 
-   ring_logdbg("delete ring_simple() completed");
+    ring_logdbg("delete ring_simple() completed");
 }
 
 void ring_simple::create_resources()
@@ -454,12 +455,16 @@ int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_c
     int ret = 0;
     int i = 0;
 
-    NOT_IN_USE(flags);
-
     if (likely(xlio_completions) && ncompletions) {
         struct ring_ec *ec = NULL;
-
         m_socketxtreme.completion = xlio_completions;
+
+        if ((flags & SOCKETXTREME_POLL_TX) && list_empty(&m_socketxtreme.ec_list)) {
+            uint64_t poll_sn = 0;
+            const std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+            while (m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn) > 0) {
+            }
+        }
 
         while (!g_b_exit && (i < (int)ncompletions)) {
             m_socketxtreme.completion->events = 0;

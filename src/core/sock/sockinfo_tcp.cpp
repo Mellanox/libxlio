@@ -133,8 +133,8 @@ inline void sockinfo_tcp::init_pbuf_custom(mem_buf_desc_t *p_desc)
     p_desc->lwip_pbuf.pbuf.next = NULL;
     p_desc->lwip_pbuf.pbuf.payload = (u8_t *)p_desc->p_buffer + p_desc->rx.n_transport_header_len;
 
+    /* Override default free function to return rx pbuf to the CQ cache */
     if (!is_socketxtreme()) {
-        /* Override default free function to return rx pbuf to the CQ cache */
         p_desc->lwip_pbuf.custom_free_function = sockinfo_tcp::tcp_rx_pbuf_free;
     }
 }
@@ -1924,6 +1924,11 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
 
             if (!buf_lst) {
                 completion->packet.buff_lst = (struct xlio_buff_t *)p_first_desc;
+                if (conn->m_socketxtreme.completion) {
+                    conn->m_socketxtreme.last_buff_lst = (struct xlio_buff_t *)p_first_desc;
+                } else {
+                    conn->m_socketxtreme.ec.last_buff_lst = (struct xlio_buff_t *)p_first_desc;
+                }
                 completion->packet.total_len = p->tot_len;
                 p_first_desc->rx.src.get_sa(reinterpret_cast<struct sockaddr *>(&completion->src),
                                             sizeof(completion->src));
@@ -3232,7 +3237,7 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     } else {
         conn->m_accepted_conns.push_back(new_sock);
         conn->m_ready_conn_cnt++;
- 
+
         NOTIFY_ON_EVENTS(conn, EPOLLIN);
     }
     conn->m_p_socket_stats->listen_counters.n_conn_established++;

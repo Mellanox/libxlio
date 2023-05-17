@@ -374,7 +374,7 @@ int cq_mgr_mlx5::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id /*=N
                 }
             }
             ret_total += ret;
-         }
+        }
     } else {
         while (((m_n_sysvar_progress_engine_wce_max > m_n_wce_counter) && (!m_b_was_drained)) ||
                (p_recycle_buffers_last_wr_id)) {
@@ -386,9 +386,9 @@ int cq_mgr_mlx5::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id /*=N
                 m_p_ring->m_gro_mgr.flush_all(NULL);
                 return ret_total;
             }
- 
+
             ++m_n_wce_counter;
- 
+
             if (cqe_process_rx(buff, status)) {
                 if (p_recycle_buffers_last_wr_id) {
                     m_p_cq_stat->n_rx_pkt_drop++;
@@ -397,7 +397,7 @@ int cq_mgr_mlx5::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id /*=N
                     bool procces_now = false;
                     if (m_transport_type == XLIO_TRANSPORT_ETH) {
                         procces_now = is_eth_tcp_frame(buff);
-                     }
+                    }
                     /* We process immediately all non udp/ip traffic.. */
                     if (procces_now) {
                         buff->rx.is_xlio_thr = true;
@@ -413,21 +413,21 @@ int cq_mgr_mlx5::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id /*=N
                             !compensate_qp_poll_success(buff_cur)) {
                             m_rx_queue.push_front(buff_cur);
                         }
-                     }
-                 }
-             }
+                    }
+                }
+            }
 
             if (p_recycle_buffers_last_wr_id) {
                 *p_recycle_buffers_last_wr_id = (uintptr_t)buff;
             }
 
             ++ret_total;
-         }
- 
+        }
+
         update_global_sn(cq_poll_sn, ret_total);
- 
+
         m_p_ring->m_gro_mgr.flush_all(NULL);
-     }
+    }
 
     m_n_wce_counter = 0;
     m_b_was_drained = false;
@@ -515,7 +515,7 @@ int cq_mgr_mlx5::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd
 
                 if (unlikely(++m_qp_rec.debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv)) {
                     (void)compensate_qp_poll_success(m_rx_hot_buffer);
-                 }
+                }
                 process_recv_buffer(m_rx_hot_buffer, pv_fd_ready_array);
                 ++ret_rx_processed;
                 m_rx_hot_buffer = NULL;
@@ -539,11 +539,11 @@ int cq_mgr_mlx5::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd
                     if (++m_qp_rec.debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv) {
                         compensate_qp_poll_failed();
                     }
-                 }
+                }
             } else {
                 m_b_was_drained = true;
                 break;
-             }
+            }
         }
 
         update_global_sn(*p_cq_poll_sn, ret);
@@ -552,11 +552,11 @@ int cq_mgr_mlx5::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd
             ret_rx_processed += ret;
             m_n_wce_counter += ret;
             m_p_ring->m_gro_mgr.flush_all(pv_fd_ready_array);
-         } else {
+        } else {
             compensate_qp_poll_failed();
-         }
-     }
- 
+        }
+    }
+
     return ret_rx_processed;
 }
 
@@ -580,7 +580,7 @@ int cq_mgr_mlx5::poll_and_process_element_rx(mem_buf_desc_t **p_desc_lst)
         ++m_qp->m_mlx5_qp.rq.tail;
 
         cqe_to_mem_buff_desc(cqe, m_rx_hot_buffer, status);
- 
+
         if (unlikely(++m_qp_rec.debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv)) {
             (void)compensate_qp_poll_success(m_rx_hot_buffer);
         }
@@ -589,7 +589,7 @@ int cq_mgr_mlx5::poll_and_process_element_rx(mem_buf_desc_t **p_desc_lst)
         m_rx_hot_buffer = NULL;
     }
     /* TODO Abriskin */
- 
+
     return packets_num;
 }
 

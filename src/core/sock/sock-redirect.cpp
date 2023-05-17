@@ -470,7 +470,7 @@ extern "C" int xlio_recvfrom_zcopy_free_packets(int __fd, struct xlio_recvfrom_z
 }
 
 static int dummy_xlio_socketxtreme_poll(int fd, struct xlio_socketxtreme_completion_t *completions,
-                                       unsigned int ncompletions, int flags)
+                                        unsigned int ncompletions, int flags)
 {
     NOT_IN_USE(fd);
     NOT_IN_USE(completions);
@@ -485,7 +485,7 @@ static int dummy_xlio_socketxtreme_poll(int fd, struct xlio_socketxtreme_complet
 }
 
 extern "C" int xlio_socketxtreme_poll(int fd, struct xlio_socketxtreme_completion_t *completions,
-                                     unsigned int ncompletions, int flags)
+                                      unsigned int ncompletions, int flags)
 {
     int ret_val = -1;
     cq_channel_info *cq_ch_info = NULL;
@@ -519,7 +519,7 @@ extern "C" int xlio_socketxtreme_poll(int fd, struct xlio_socketxtreme_completio
 }
 
 static int dummy_xlio_socketxtreme_free_packets(struct xlio_socketxtreme_packet_desc_t *packets,
-                                               int num)
+                                                int num)
 {
     NOT_IN_USE(packets);
     NOT_IN_USE(num);
@@ -532,7 +532,7 @@ static int dummy_xlio_socketxtreme_free_packets(struct xlio_socketxtreme_packet_
 }
 
 extern "C" int xlio_socketxtreme_free_packets(struct xlio_socketxtreme_packet_desc_t *packets,
-                                             int num)
+                                              int num)
 {
     mem_buf_desc_t *desc = NULL;
     socket_fd_api *p_socket_object = NULL;
@@ -546,9 +546,7 @@ extern "C" int xlio_socketxtreme_free_packets(struct xlio_socketxtreme_packet_de
                 if (p_socket_object) {
                     p_socket_object->free_buffs(packets[i].total_len);
                 }
-                if (rng) {
-                    rng->reclaim_recv_buffers(desc);
-                } else {
+                if (!rng || !rng->reclaim_recv_buffers_no_lock(desc)) {
                     goto err;
                 }
             } else {
@@ -1094,9 +1092,10 @@ extern "C" EXPORT_SYMBOL int getsockopt(int __fd, int __level, int __optname, vo
                           XLIO_EXTRA_API_GET_SOCKET_RINGS_NUM);
             SET_EXTRA_API(get_socket_rings_fds, xlio_get_socket_rings_fds,
                           XLIO_EXTRA_API_GET_SOCKET_RINGS_FDS);
-            SET_EXTRA_API(socketxtreme_poll,
-                          enable_socketxtreme ? xlio_socketxtreme_poll : dummy_xlio_socketxtreme_poll,
-                          XLIO_EXTRA_API_SOCKETXTREME_POLL);
+            SET_EXTRA_API(
+                socketxtreme_poll,
+                enable_socketxtreme ? xlio_socketxtreme_poll : dummy_xlio_socketxtreme_poll,
+                XLIO_EXTRA_API_SOCKETXTREME_POLL);
             SET_EXTRA_API(socketxtreme_free_packets,
                           enable_socketxtreme ? xlio_socketxtreme_free_packets
                                               : dummy_xlio_socketxtreme_free_packets,
@@ -1105,10 +1104,10 @@ extern "C" EXPORT_SYMBOL int getsockopt(int __fd, int __level, int __optname, vo
                 socketxtreme_ref_buff,
                 enable_socketxtreme ? xlio_socketxtreme_ref_buff : dummy_xlio_socketxtreme_ref_buff,
                 XLIO_EXTRA_API_SOCKETXTREME_REF_XLIO_BUFF);
-            SET_EXTRA_API(
-                socketxtreme_free_buff,
-                enable_socketxtreme ? xlio_socketxtreme_free_buff : dummy_xlio_socketxtreme_free_buff,
-                XLIO_EXTRA_API_SOCKETXTREME_FREE_XLIO_BUFF);
+            SET_EXTRA_API(socketxtreme_free_buff,
+                          enable_socketxtreme ? xlio_socketxtreme_free_buff
+                                              : dummy_xlio_socketxtreme_free_buff,
+                          XLIO_EXTRA_API_SOCKETXTREME_FREE_XLIO_BUFF);
             SET_EXTRA_API(dump_fd_stats, xlio_dump_fd_stats, XLIO_EXTRA_API_DUMP_FD_STATS);
             SET_EXTRA_API(ioctl, xlio_ioctl, XLIO_EXTRA_API_IOCTL);
         }

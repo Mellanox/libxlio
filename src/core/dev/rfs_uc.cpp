@@ -119,8 +119,7 @@ bool rfs_uc::prepare_flow_spec()
             }
             p_tcp_udp->val.src_port = htons((uint16_t)src_port * safe_mce_sys().src_port_stride);
             p_tcp_udp->mask.src_port = htons((uint16_t)(
-                (safe_mce_sys().power_2_nginx_workers_num * safe_mce_sys().src_port_stride) -
-                2)); // htons(0xf);
+                (safe_mce_sys().power_2_nginx_workers_num * safe_mce_sys().src_port_stride) - 2));
             p_attach_flow_data->ibv_flow_attr.priority = 1;
             rfs_logdbg("safe_mce_sys().src_port_stride: %d safe_mce_sys().workers_num %d \n",
                        safe_mce_sys().src_port_stride, safe_mce_sys().actual_nginx_workers_num);
@@ -144,8 +143,8 @@ bool rfs_uc::rx_dispatch_packet(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_re
     static int enable_socketxtreme = safe_mce_sys().enable_socketxtreme;
     uint32_t num_sinks = (enable_socketxtreme ? 1 : m_n_sinks_list_entries);
 
-     p_rx_wc_buf_desc->reset_ref_count();
- 
+    p_rx_wc_buf_desc->reset_ref_count();
+
     for (uint32_t i = 0; i < num_sinks; ++i) {
         if (likely(m_sinks_list[i])) {
 #ifdef RDTSC_MEASURE_RX_DISPATCH_PACKET
