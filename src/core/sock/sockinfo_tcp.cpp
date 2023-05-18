@@ -216,6 +216,13 @@ inline void sockinfo_tcp::reuse_buffer(mem_buf_desc_t *buff)
         buff->p_next_desc = NULL;
     }
 
+    if (safe_mce_sys().buffer_batching_mode == BUFFER_BATCHING_NONE) {
+        if (!m_p_rx_ring || !m_p_rx_ring->reclaim_recv_buffers(buff)) {
+            g_buffer_pool_rx_ptr->put_buffer_after_deref_thread_safe(buff);
+        }
+        return;
+    }
+
     set_rx_reuse_pending(false);
     if (likely(m_p_rx_ring)) {
         m_rx_reuse_buff.n_buff_num += buff->rx.n_frags;

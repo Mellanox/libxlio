@@ -483,6 +483,14 @@ void buffer_pool::put_buffers_after_deref_thread_safe(descq_t *pDeque)
     }
 }
 
+void buffer_pool::put_buffer_after_deref_thread_safe(mem_buf_desc_t *buff)
+{
+    if (buff->dec_ref_count() <= 1 && (buff->lwip_pbuf.pbuf.ref-- <= 1)) {
+        std::lock_guard<decltype(m_lock)> lock(m_lock);
+        put_buffers(buff);
+    }
+}
+
 size_t buffer_pool::get_free_count()
 {
     return m_n_buffers;

@@ -500,6 +500,13 @@ protected:
         ring *p_ring = buff->p_desc_owner->get_parent();
         rx_ring_map_t::iterator iter = m_rx_ring_map.find(p_ring);
         if (likely(iter != m_rx_ring_map.end())) {
+            if (safe_mce_sys().buffer_batching_mode == BUFFER_BATCHING_NONE) {
+                if (!p_ring->reclaim_recv_buffers(buff)) {
+                    g_buffer_pool_rx_ptr->put_buffer_after_deref_thread_safe(buff);
+                }
+                return;
+            }
+
             descq_t *rx_reuse = &iter->second->rx_reuse_info.rx_reuse;
             int &n_buff_num = iter->second->rx_reuse_info.n_buff_num;
             rx_reuse->push_back(buff);
@@ -523,9 +530,7 @@ protected:
             // In case ring was deleted while buffers where still queued
             vlog_printf(VLOG_DEBUG, "Buffer owner not found\n");
             // Awareness: these are best efforts: decRef without lock in case no CQ
-            if (buff->dec_ref_count() <= 1 && (buff->lwip_pbuf.pbuf.ref-- <= 1)) {
-                g_buffer_pool_rx_ptr->put_buffers_thread_safe(buff);
-            }
+            g_buffer_pool_rx_ptr->put_buffer_after_deref_thread_safe(buff);
         }
     }
 

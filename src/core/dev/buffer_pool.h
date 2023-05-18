@@ -122,6 +122,7 @@ public:
      * Assume locked owner!!! Return buffers to the pool with ref_count check.
      */
     void put_buffers_after_deref_thread_safe(descq_t *pDeque);
+    void put_buffer_after_deref_thread_safe(mem_buf_desc_t *buff);
 
     /**
      * @return Number of free buffers in the pool.
