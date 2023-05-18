@@ -56,108 +56,13 @@
                         ##log_args);                                                               \
     } while (0)
 
-#define CQ_CACHE_MIN_STRIDES 16U
-#define MAX_CACHED_BLOCKS    3ULL
-
-cq_strides_cache::cq_strides_cache(ring_slave *owner_ring)
-    : _compensation_level(
-          std::max(CQ_CACHE_MIN_STRIDES, safe_mce_sys().strq_strides_compensation_level))
-    , _retrieve_vec(_compensation_level)
-    , _return_vec(_compensation_level)
-    , _block_vec(MAX_CACHED_BLOCKS, _return_vec)
-    , _owner_ring(owner_ring)
-{
-    get_from_global_pool();
-    assign_return_vec_ptrs();
-}
-
-cq_strides_cache::~cq_strides_cache()
-{
-    while (_block_vec_used-- > 0U) {
-        g_buffer_pool_rx_stride->put_buffers_thread_safe(_block_vec[_block_vec_used].data(),
-                                                         _block_vec[_block_vec_used].size());
-    }
-
-    g_buffer_pool_rx_stride->put_buffers_thread_safe(_retrieve_ptr,
-                                                     _retrieve_ptr_end - _retrieve_ptr + 1U);
-    g_buffer_pool_rx_stride->put_buffers_thread_safe(_return_vec.data(),
-                                                     _return_ptr - _return_vec.data());
-}
-
-mem_buf_desc_t *cq_strides_cache::next_stride()
-{
-    if (unlikely(_retrieve_ptr > _retrieve_ptr_end)) {
-        if (likely(_block_vec_used > 0U)) {
-            _block_vec[--_block_vec_used].swap(_retrieve_vec);
-            assign_retrieve_vec_ptrs();
-        } else {
-            get_from_global_pool();
-        }
-    }
-
-    return *_retrieve_ptr++;
-}
-
-void cq_strides_cache::return_stride(mem_buf_desc_t *desc)
-{
-    if (unlikely(_return_ptr > _return_ptr_end)) {
-        _block_vec[_block_vec_used++].swap(
-            _return_vec); // Swap the empty new vector with the full _return_vec.
-        if (_block_vec_used >= MAX_CACHED_BLOCKS) {
-            --_block_vec_used;
-            g_buffer_pool_rx_stride->put_buffers_thread_safe(_block_vec[_block_vec_used].data(),
-                                                             _block_vec[_block_vec_used].size());
-        }
-
-        assign_return_vec_ptrs();
-    }
-
-    *_return_ptr++ = desc;
-}
-
-void cq_strides_cache::get_from_global_pool()
-{
-    descq_t deque;
-    if (!g_buffer_pool_rx_stride->get_buffers_thread_safe(deque, _owner_ring, _compensation_level,
-                                                          0U)) {
-        // This pool should be an infinite pool
-        __log_info_panic("Unable to retrieve strides from global pool, Free: %zu, Requested: %zu",
-                         g_buffer_pool_rx_stride->get_free_count(), _compensation_level);
-    }
-
-    if (unlikely(deque.size() > _retrieve_vec.size() || deque.size() <= 0U)) {
-        // If we get here it's a bug in get_buffers_thread_safe()
-        _retrieve_vec.resize(std::max(deque.size(), static_cast<size_t>(CQ_CACHE_MIN_STRIDES)));
-    }
-
-    assign_retrieve_vec_ptrs();
-
-    while (!deque.empty()) {
-        *_retrieve_ptr++ = deque.get_and_pop_front();
-    }
-
-    _retrieve_ptr = _retrieve_vec.data();
-}
-
-void cq_strides_cache::assign_retrieve_vec_ptrs()
-{
-    _retrieve_ptr = _retrieve_vec.data();
-    _retrieve_ptr_end = &_retrieve_vec.data()[_retrieve_vec.size() - 1U];
-}
-
-void cq_strides_cache::assign_return_vec_ptrs()
-{
-    _return_ptr = _return_vec.data();
-    _return_ptr_end = &_return_vec.data()[_return_vec.size() - 1U];
-}
-
 cq_mgr_mlx5_strq::cq_mgr_mlx5_strq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler,
                                    uint32_t cq_size, uint32_t stride_size_bytes,
                                    uint32_t strides_num,
                                    struct ibv_comp_channel *p_comp_event_channel,
                                    bool call_configure)
     : cq_mgr_mlx5(p_ring, p_ib_ctx_handler, cq_size, p_comp_event_channel, true, call_configure)
-    , _stride_cache(p_ring)
+    , _owner_ring(p_ring)
     , _stride_size_bytes(stride_size_bytes)
     , _strides_num(strides_num)
     , _wqe_buff_size_bytes(strides_num * stride_size_bytes)
@@ -165,6 +70,8 @@ cq_mgr_mlx5_strq::cq_mgr_mlx5_strq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx
     cq_logfunc("");
     m_n_sysvar_rx_prefetch_bytes_before_poll =
         std::min(m_n_sysvar_rx_prefetch_bytes_before_poll, stride_size_bytes);
+
+    return_stride(next_stride()); // Fill _stride_cache
 }
 
 cq_mgr_mlx5_strq::~cq_mgr_mlx5_strq()
@@ -188,7 +95,35 @@ cq_mgr_mlx5_strq::~cq_mgr_mlx5_strq()
     }
 
     if (_hot_buffer_stride) {
-        _stride_cache.return_stride(_hot_buffer_stride);
+        return_stride(_hot_buffer_stride);
+    }
+
+    g_buffer_pool_rx_stride->put_buffers_thread_safe(&_stride_cache, _stride_cache.size());
+}
+
+mem_buf_desc_t *cq_mgr_mlx5_strq::next_stride()
+{
+    if (unlikely(_stride_cache.size() <= 0U)) {
+        if (!g_buffer_pool_rx_stride->get_buffers_thread_safe(
+                _stride_cache, _owner_ring, safe_mce_sys().strq_strides_compensation_level, 0U)) {
+            // This pool should be an infinite pool
+            __log_info_panic(
+                "Unable to retrieve strides from global pool, Free: %zu, Requested: %u",
+                g_buffer_pool_rx_stride->get_free_count(),
+                safe_mce_sys().strq_strides_compensation_level);
+        }
+    }
+
+    return _stride_cache.get_and_pop_back();
+}
+
+void cq_mgr_mlx5_strq::return_stride(mem_buf_desc_t *desc)
+{
+    _stride_cache.push_back(desc);
+
+    if (unlikely(_stride_cache.size() >= safe_mce_sys().strq_strides_compensation_level * 2U)) {
+        g_buffer_pool_rx_stride->put_buffers_thread_safe(
+            &_stride_cache, _stride_cache.size() - safe_mce_sys().strq_strides_compensation_level);
     }
 }
 
@@ -264,7 +199,7 @@ mem_buf_desc_t *cq_mgr_mlx5_strq::poll(enum buff_status_e &status, mem_buf_desc_
     }
 
     if (likely(!_hot_buffer_stride)) {
-        _hot_buffer_stride = _stride_cache.next_stride();
+        _hot_buffer_stride = next_stride();
         prefetch((void *)_hot_buffer_stride);
         prefetch((uint8_t *)m_mlx5_cq.cq_buf +
                  ((m_mlx5_cq.cq_ci & (m_mlx5_cq.cqe_count - 1)) << m_mlx5_cq.cqe_size_log));
@@ -657,7 +592,7 @@ void cq_mgr_mlx5_strq::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
                 temp->p_prev_desc = nullptr;
                 temp->reset_ref_count();
                 free_lwip_pbuf(&temp->lwip_pbuf);
-                _stride_cache.return_stride(temp);
+                return_stride(temp);
             }
 
             m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();

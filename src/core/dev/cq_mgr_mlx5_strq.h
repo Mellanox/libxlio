@@ -37,34 +37,6 @@
 #include <vector>
 #include "cq_mgr_mlx5.h"
 
-class cq_strides_cache {
-public:
-    cq_strides_cache(ring_slave *owner_ring);
-    ~cq_strides_cache();
-
-    mem_buf_desc_t *next_stride();
-
-    void return_stride(mem_buf_desc_t *desc);
-
-private:
-    void get_from_global_pool();
-    void assign_retrieve_vec_ptrs();
-    void assign_return_vec_ptrs();
-
-    typedef std::vector<mem_buf_desc_t *> vec_type;
-
-    size_t _compensation_level;
-    vec_type _retrieve_vec;
-    vec_type _return_vec;
-    std::vector<vec_type> _block_vec;
-    size_t _block_vec_used = 0U;
-    mem_buf_desc_t **_retrieve_ptr = nullptr;
-    mem_buf_desc_t **_return_ptr = nullptr;
-    mem_buf_desc_t **_retrieve_ptr_end = nullptr;
-    mem_buf_desc_t **_return_ptr_end = nullptr;
-    ring_slave *_owner_ring = nullptr;
-};
-
 class cq_mgr_mlx5_strq : public cq_mgr_mlx5 {
 public:
     cq_mgr_mlx5_strq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
@@ -88,6 +60,9 @@ protected:
     inline mem_buf_desc_t *poll(enum buff_status_e &status, mem_buf_desc_t *&buff_stride);
 
 private:
+    mem_buf_desc_t *next_stride();
+    void return_stride(mem_buf_desc_t *desc);
+
     inline bool set_current_hot_buffer();
     inline bool strq_cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe, enum buff_status_e &status,
                                           bool &is_filler);
@@ -97,7 +72,8 @@ private:
     mem_buf_desc_t *process_strq_cq_element_rx(mem_buf_desc_t *p_mem_buf_desc,
                                                enum buff_status_e status);
 
-    cq_strides_cache _stride_cache;
+    descq_t _stride_cache;
+    ring_slave *_owner_ring = nullptr;
     mem_buf_desc_t *_hot_buffer_stride = nullptr;
     const uint32_t _stride_size_bytes;
     const uint32_t _strides_num;
