@@ -639,6 +639,8 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
                 daddr = &p_ip_h6->ip6_dst;
                 family = AF_INET6;
             }
+            // Remove ethernet padding from the data size
+            p_rx_wc_buf_desc->sz_data = transport_header_len + ip_hdr_len + ip_payload_len;
 
             ring_logfunc("FAST PATH Rx packet info: transport_header_len: %d, IP_header_len: %d L3 "
                          "proto: %d flow_tag_id: %d",
@@ -934,6 +936,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::rx_process_buffer_no_flow_id(
     ext_hdr_data hdr_data;
     hdr_parse(p_ip_h, hdr_data, sz_data);
 
+    // Remove ethernet padding from the data size.
     p_rx_wc_buf_desc->sz_data -= (sz_data - ip_tot_len);
 
     uint16_t n_frag_offset = (hdr_data.ip_frag_off & IP_OFFMASK) * 8;
