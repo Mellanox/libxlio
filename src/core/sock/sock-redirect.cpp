@@ -467,23 +467,21 @@ extern "C" int xlio_get_socket_rings_num(int fd)
 
 extern "C" int xlio_get_socket_rings_fds(int fd, int *ring_fds, int ring_fds_sz)
 {
-    int *p_rings_fds = NULL;
-    socket_fd_api *p_socket_object = NULL;
-    int rings_num = 0;
-
     if (ring_fds_sz <= 0 || ring_fds == NULL) {
         errno = EINVAL;
         return -1;
     }
-    p_socket_object = fd_collection_get_sockfd(fd);
+
+    socket_fd_api *p_socket_object = fd_collection_get_sockfd(fd);
     if (p_socket_object && p_socket_object->check_rings()) {
-        p_rings_fds = p_socket_object->get_rings_fds(rings_num);
-        for (int i = 0; i < min(ring_fds_sz, rings_num); i++) {
-            ring_fds[i] = p_rings_fds[i];
-        }
+        int rings_num = 0;
+        int *p_rings_fds = p_socket_object->get_rings_fds(rings_num);
+        int num_rings_to_copy = min(ring_fds_sz, rings_num);
+        std::copy(&p_rings_fds[0], &p_rings_fds[num_rings_to_copy], ring_fds);
+        return num_rings_to_copy;
     }
 
-    return min(ring_fds_sz, rings_num);
+    return 0;
 }
 
 extern "C" int xlio_add_conf_rule(const char *config_line)
