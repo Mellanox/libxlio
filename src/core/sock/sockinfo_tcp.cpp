@@ -2156,9 +2156,10 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
 void sockinfo_tcp::register_timer()
 {
     if (m_timer_handle == NULL) {
+        /* user_data is the socket itself for a fast cast in the timer_expired(). */
         m_timer_handle = g_p_event_handler_manager->register_timer_event(
-            safe_mce_sys().tcp_timer_resolution_msec, this, PERIODIC_TIMER, 0,
-            g_tcp_timers_collection);
+            safe_mce_sys().tcp_timer_resolution_msec, this, PERIODIC_TIMER,
+            reinterpret_cast<void *>(this), g_tcp_timers_collection);
     } else {
         si_tcp_logdbg("register_timer was called more than once. Something might be wrong, or "
                       "connect was called twice.");
@@ -5543,9 +5544,12 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
     NOT_IN_USE(user_data);
     timer_node_t *iter = m_p_intervals[m_n_location];
     sockinfo_tcp *p_sock;
+
+    m_n_location = (m_n_location + 1) % m_n_intervals_size;
+
     while (iter) {
         __log_funcall("timer expired on %p", iter->handler);
-        p_sock = dynamic_cast<sockinfo_tcp *>(iter->handler);
+        p_sock = reinterpret_cast<sockinfo_tcp *>(iter->user_data);
 
         /* It is not guaranteed that the same sockinfo object is met once
          * in this loop.
@@ -5561,7 +5565,6 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
         }
         iter = iter->next;
     }
-    m_n_location = (m_n_location + 1) % m_n_intervals_size;
 
     /* Processing all messages for the daemon */
     if (g_p_agent != NULL) {
