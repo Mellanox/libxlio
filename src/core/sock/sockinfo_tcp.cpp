@@ -2305,6 +2305,7 @@ void sockinfo_tcp::passthrough_unlock(const char *dbg)
     setPassthrough();
     unlock_tcp_con();
     si_tcp_logdbg("%s", dbg);
+    NOT_IN_USE(dbg); // Suppress --enable-opt-log=high warning
 }
 
 /**

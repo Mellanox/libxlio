@@ -543,12 +543,14 @@ void net_device_val::print_val() const
 
     nd_logdbg("  IPv4 list: %s", (m_ipv4.empty() ? "empty " : ""));
     std::for_each(m_ipv4.begin(), m_ipv4.end(), [this](const std::unique_ptr<ip_data> &ip) {
+        NOT_IN_USE(ip); // Suppress --enable-opt-log=high warning
         nd_logdbg("    inet: %s/%d flags: 0x%X scope: 0x%x", ip->local_addr.to_str(AF_INET).c_str(),
                   ip->prefixlen, ip->flags, ip->scope);
     });
 
     nd_logdbg("  IPv6 list: %s", (m_ipv6.empty() ? "empty " : ""));
     std::for_each(m_ipv6.begin(), m_ipv6.end(), [this](const std::unique_ptr<ip_data> &ip) {
+        NOT_IN_USE(ip); // Suppress --enable-opt-log=high warning
         nd_logdbg("    inet6: %s/%d flags: 0x%X scope: 0x%x",
                   ip->local_addr.to_str(AF_INET6).c_str(), ip->prefixlen, ip->flags, ip->scope);
     });

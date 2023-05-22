@@ -648,9 +648,8 @@ bool neigh_entry::post_send_udp_ipv6_not_fragmented(neigh_send_data *n_send_data
     m_sge.lkey = m_p_ring->get_tx_lkey(m_id);
     m_send_wqe.wr_id = reinterpret_cast<uintptr_t>(p_mem_buf_desc);
 
-    uint32_t id = reinterpret_cast<ip6_hdr *>(p_ip_hdr)->ip6_flow;
     neigh_logdbg("packet_sz=%d, payload_sz=%zd, id=%d", m_sge.length - h->m_transport_header_len,
-                 sz_data_payload, ntohl(id));
+                 sz_data_payload, ntohl(reinterpret_cast<ip6_hdr *>(p_ip_hdr)->ip6_flow));
 
     // We don't check the return value of post send when we reach the HW we consider that we
     // completed our job
