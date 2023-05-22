@@ -1050,6 +1050,10 @@ void tcp_pcb_recycle(struct tcp_pcb *pcb)
         tcp_tx_pbuf_free(pcb, pcb->pbuf_alloc);
         pcb->pbuf_alloc = NULL;
     }
+    if (pcb->refused_data) {
+        pbuf_free(pcb->refused_data);
+        pcb->refused_data = NULL;
+    }
 }
 
 struct pbuf *tcp_tx_pbuf_alloc(struct tcp_pcb *pcb, u16_t length, pbuf_type type, pbuf_desc *desc,

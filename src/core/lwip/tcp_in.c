@@ -179,8 +179,8 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb)
             in_data.recv_flags = 0;
 
             /* If there is data which was previously "refused" by upper layer */
-            while (pcb->refused_data !=
-                   NULL) { // 'while' instead of 'if' because windows scale uses large pbuf
+            /* 'while' instead of 'if' because windows scale uses large pbuf */
+            while (pcb->refused_data != NULL) {
                 struct pbuf *rest;
                 pbuf_split_64k(pcb->refused_data, &rest);
 
