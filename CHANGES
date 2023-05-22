@@ -1,3 +1,14 @@
+Version 3.1.0-1:
+Date + Time 2023-05-22
+=============================================================
+Added:
+        - RM #3461282 Add GRO aggregation statistics
+Fixed:
+        - RM #3433756 Fix ASAN warning
+        - RM #3432189 Fix --disable-utls compilation issues
+        - RM #3455917 Fix crash in IPv6 MC when device not found
+        - RM #3455924 Don't treat ethernet padding as payload
+
 Version 3.0.2-1:
 Date + Time 2023-04-18
 =============================================================
