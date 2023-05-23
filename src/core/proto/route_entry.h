@@ -62,6 +62,7 @@ public:
     const std::string to_str() const;
 
     virtual void notify_cb();
+    virtual void notify_cb(event *ev);
 
 private:
     void register_to_net_device();

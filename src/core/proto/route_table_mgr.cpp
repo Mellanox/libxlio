@@ -84,7 +84,7 @@ route_table_mgr::route_table_mgr()
     m_table_in6.reserve(DEFAULT_ROUTE_TABLE_SIZE);
 
     // Read Route table from kernel and save it in local variable.
-    update_tbl();
+    update_tbl(ROUTE_DATA_TYPE);
 
     update_rte_netdev(m_table_in4);
     update_rte_netdev(m_table_in6);
@@ -153,11 +153,11 @@ void route_table_mgr::dump_tbl()
                    m_stats.n_updates_unhandled);
 }
 
-void route_table_mgr::update_tbl()
+void route_table_mgr::update_tbl(nl_data_t data_type)
 {
     std::lock_guard<decltype(m_lock)> lock(m_lock);
 
-    netlink_socket_mgr::update_tbl(ROUTE_DATA_TYPE);
+    netlink_socket_mgr::update_tbl(data_type);
 
     rt_mgr_update_source_ip(m_table_in4);
 

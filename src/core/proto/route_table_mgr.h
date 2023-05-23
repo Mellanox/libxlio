@@ -87,18 +87,18 @@ public:
 
     bool route_resolve(IN route_rule_table_key key, OUT route_result &res);
 
-    virtual void notify_cb(event *ev);
+    virtual void notify_cb(event *ev) override;
 
     void dump_tbl();
 
 protected:
-    virtual void parse_entry(struct nlmsghdr *nl_header);
+    virtual void parse_entry(struct nlmsghdr *nl_header) override;
 
-    route_entry *create_new_entry(route_rule_table_key key, const observer *obs);
+    route_entry *create_new_entry(route_rule_table_key key, const observer *obs) override;
 
 private:
     // save current main rt table
-    void update_tbl();
+    void update_tbl(nl_data_t data_type) override;
     void parse_attr(struct rtattr *rt_attribute, route_val &val);
     void print_tbl();
 

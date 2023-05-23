@@ -80,7 +80,7 @@ rule_table_mgr::rule_table_mgr()
     m_table_in6.reserve(DEFAULT_RULE_TABLE_SIZE);
 
     // Read Rule table from kernel and save it in local variable.
-    update_tbl();
+    update_tbl(RULE_DATA_TYPE);
 
     // Print table
     print_tbl();
@@ -89,11 +89,11 @@ rule_table_mgr::rule_table_mgr()
 }
 
 // This function uses Netlink to get routing rules saved in kernel then saved it locally.
-void rule_table_mgr::update_tbl()
+void rule_table_mgr::update_tbl(nl_data_t data_type)
 {
     std::lock_guard<decltype(m_lock)> lock(m_lock);
 
-    netlink_socket_mgr::update_tbl(RULE_DATA_TYPE);
+    netlink_socket_mgr::update_tbl(data_type);
 
     return;
 }

@@ -55,10 +55,10 @@ public:
     std::vector<uint32_t> rule_resolve(route_rule_table_key key);
 
 protected:
-    virtual void parse_entry(struct nlmsghdr *nl_header);
-    virtual void update_tbl();
+    virtual void parse_entry(struct nlmsghdr *nl_header) override;
+    virtual void update_tbl(nl_data_t data_type) override;
 
-    rule_entry *create_new_entry(route_rule_table_key key, const observer *obs);
+    rule_entry *create_new_entry(route_rule_table_key key, const observer *obs) override;
 
 private:
     void parse_attr(struct rtattr *rt_attribute, rule_val &val);

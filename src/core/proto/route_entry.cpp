@@ -135,3 +135,9 @@ void route_entry::notify_cb()
     }
     notify_observers();
 }
+
+void route_entry::notify_cb(event *ev)
+{
+    NOT_IN_USE(ev);
+    notify_cb();
+}

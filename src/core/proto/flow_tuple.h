@@ -69,14 +69,14 @@ public:
     flow_tuple &operator=(const flow_tuple &ft);
     flow_tuple &operator=(flow_tuple &&ft);
 
-    virtual bool operator==(flow_tuple const &other) const
+    bool operator==(flow_tuple const &other) const
     {
         return (m_dst_port == other.m_dst_port) && (m_dst_ip == other.m_dst_ip) &&
             (m_src_port == other.m_src_port) && (m_src_ip == other.m_src_ip) &&
             (m_protocol == other.m_protocol) && (m_family == other.m_family);
     }
 
-    virtual bool operator<(flow_tuple const &other) const
+    bool operator<(flow_tuple const &other) const
     {
         if (m_dst_port != other.m_dst_port) {
             return m_dst_port < other.m_dst_port;
@@ -122,12 +122,12 @@ public:
 
     const ip_address &get_local_if() const { return m_local_if; }
 
-    virtual bool operator==(flow_tuple_with_local_if const &other) const
+    bool operator==(flow_tuple_with_local_if const &other) const
     {
         return ((m_local_if == other.m_local_if) && flow_tuple::operator==(other));
     }
 
-    virtual bool operator<(flow_tuple_with_local_if const &other) const
+    bool operator<(flow_tuple_with_local_if const &other) const
     {
         if (m_local_if != other.m_local_if) {
             return m_local_if.less_than_raw(other.m_local_if);
