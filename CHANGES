@@ -1,3 +1,14 @@
+Version 3.1.1-1:
+Date + Time 2023-05-23
+=============================================================
+Added:
+        - RM #3473570 Use stack for RX stride cache
+        - RM #3465969 Remove dynamic_cast in the TCP timers
+        - RM #3465969 L2 cache improvements
+Fixed:
+        - RM #3473570 Fixed RX No-Batching mode to reclaim buffers immediately
+        - RM #3465969 Free refused_data on socket recycle
+
 Version 3.1.0-1:
 Date + Time 2023-05-22
 =============================================================
