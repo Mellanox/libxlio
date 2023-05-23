@@ -1772,9 +1772,66 @@ void sockinfo_tcp::tcp_shutdown_rx(void)
     tcp_recv(&m_pcb, sockinfo_tcp::rx_drop_lwip_cb);
 }
 
+inline void sockinfo_tcp::rx_lwip_cb_socketxtreme(sockinfo_tcp *conn, struct pbuf *p)
+{
+    mem_buf_desc_t *p_first_desc = (mem_buf_desc_t *)p;
+    /* Update xlio_completion with
+     * XLIO_SOCKETXTREME_PACKET related data
+     */
+    struct xlio_socketxtreme_completion_t *completion;
+    struct xlio_buff_t *buf_lst;
+
+    // xlio_socketxtreme_completion_t is IPv4 only.
+    assert(p_first_desc->rx.src.get_sa_family() == AF_INET);
+
+    if (conn->m_socketxtreme.completion) {
+        completion = conn->m_socketxtreme.completion;
+        buf_lst = conn->m_socketxtreme.last_buff_lst;
+    } else {
+        completion = &conn->m_socketxtreme.ec.completion;
+        buf_lst = conn->m_socketxtreme.ec.last_buff_lst;
+    }
+
+    if (!buf_lst) {
+        completion->packet.buff_lst = (struct xlio_buff_t *)p_first_desc;
+	if (conn->m_socketxtreme.completion) {
+		conn->m_socketxtreme.last_buff_lst = (struct xlio_buff_t *)p_first_desc;
+	} else {
+		conn->m_socketxtreme.ec.last_buff_lst = (struct xlio_buff_t *)p_first_desc;
+	}
+        completion->packet.total_len = p->tot_len;
+        p_first_desc->rx.src.get_sa(reinterpret_cast<struct sockaddr *>(&completion->src),
+                                    sizeof(completion->src));
+        completion->packet.num_bufs = p_first_desc->rx.n_frags;
+
+        if (conn->m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE) {
+            completion->packet.hw_timestamp = p_first_desc->rx.timestamps.hw;
+        }
+
+        if (conn->m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE) {
+            completion->packet.hw_timestamp = p_first_desc->rx.timestamps.hw;
+        }
+
+        if (conn->m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE) {
+            completion->packet.hw_timestamp = p_first_desc->rx.timestamps.hw;
+        }
+
+        NOTIFY_ON_EVENTS(conn, XLIO_SOCKETXTREME_PACKET);
+        conn->save_stats_rx_offload(completion->packet.total_len);
+    } else {
+        mem_buf_desc_t *prev_lst_tail_desc = (mem_buf_desc_t *)buf_lst;
+        mem_buf_desc_t *list_head_desc = (mem_buf_desc_t *)completion->packet.buff_lst;
+        prev_lst_tail_desc->p_next_desc = p_first_desc;
+        list_head_desc->rx.n_frags += p_first_desc->rx.n_frags;
+        p_first_desc->rx.n_frags = 0;
+        completion->packet.total_len += p->tot_len;
+        completion->packet.num_bufs += list_head_desc->rx.n_frags;
+        pbuf_cat((pbuf *)completion->packet.buff_lst, p);
+    }
+}
+
 err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
 {
-
     sockinfo_tcp *conn = (sockinfo_tcp *)arg;
     uint32_t bytes_to_tcp_recved, non_tcp_receved_bytes_remaining, bytes_to_shrink;
     int rcv_buffer_space;
@@ -1807,8 +1864,8 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
             if ((delete_fd = parent->handle_child_FIN(conn))) {
                 // close will clean sockinfo_tcp object and the opened OS socket
                 close(delete_fd);
-                conn->lock_tcp_con(); // todo sock and fd_collection destruction race? if so, conn
-                                      // might be invalid? delay close to internal thread?
+                conn->lock_tcp_con(); // todo sock and fd_collection destruction race? if so,
+                                      // conn might be invalid? delay close to internal thread?
                 return ERR_ABRT;
             }
             conn->lock_tcp_con();
@@ -1905,51 +1962,7 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
         // In ZERO COPY case we let the user's application manage the ready queue
     } else {
         if (conn->is_socketxtreme()) {
-            /* Update vma_completion with
-             * XLIO_SOCKETXTREME_PACKET related data
-             */
-            struct xlio_socketxtreme_completion_t *completion;
-            struct xlio_buff_t *buf_lst;
-
-            // xlio_socketxtreme_completion_t is IPv4 only.
-            assert(p_first_desc->rx.src.get_sa_family() == AF_INET);
-
-            if (conn->m_socketxtreme.completion) {
-                completion = conn->m_socketxtreme.completion;
-                buf_lst = conn->m_socketxtreme.last_buff_lst;
-            } else {
-                completion = &conn->m_socketxtreme.ec.completion;
-                buf_lst = conn->m_socketxtreme.ec.last_buff_lst;
-            }
-
-            if (!buf_lst) {
-                completion->packet.buff_lst = (struct xlio_buff_t *)p_first_desc;
-                if (conn->m_socketxtreme.completion) {
-                    conn->m_socketxtreme.last_buff_lst = (struct xlio_buff_t *)p_first_desc;
-                } else {
-                    conn->m_socketxtreme.ec.last_buff_lst = (struct xlio_buff_t *)p_first_desc;
-                }
-                completion->packet.total_len = p->tot_len;
-                p_first_desc->rx.src.get_sa(reinterpret_cast<struct sockaddr *>(&completion->src),
-                                            sizeof(completion->src));
-                completion->packet.num_bufs = p_first_desc->rx.n_frags;
-
-                if (conn->m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE) {
-                    completion->packet.hw_timestamp = p_first_desc->rx.timestamps.hw;
-                }
-
-                NOTIFY_ON_EVENTS(conn, XLIO_SOCKETXTREME_PACKET);
-                conn->save_stats_rx_offload(completion->packet.total_len);
-            } else {
-                mem_buf_desc_t *prev_lst_tail_desc = (mem_buf_desc_t *)buf_lst;
-                mem_buf_desc_t *list_head_desc = (mem_buf_desc_t *)completion->packet.buff_lst;
-                prev_lst_tail_desc->p_next_desc = p_first_desc;
-                list_head_desc->rx.n_frags += p_first_desc->rx.n_frags;
-                p_first_desc->rx.n_frags = 0;
-                completion->packet.total_len += p->tot_len;
-                completion->packet.num_bufs += list_head_desc->rx.n_frags;
-                pbuf_cat((pbuf *)completion->packet.buff_lst, p);
-            }
+            rx_lwip_cb_socketxtreme(conn, p);
         } else {
             if (callback_retval == XLIO_PACKET_RECV) {
                 // Save rx packet info in our ready list
@@ -2198,7 +2211,8 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
     }
 
     /*
-     * RCVBUFF Accounting: Going 'out' of the internal buffer: if some bytes are not tcp_recved yet
+     * RCVBUFF Accounting: Going 'out' of the internal buffer: if some bytes are not tcp_recved
+     * yet
      * - do that. The packet might not be 'acked' (tcp_recved)
      *
      */
@@ -2307,8 +2321,8 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
                 established_backlog_full = true;
             }
 
-            // 2nd - check that we allow secondary backlog (don't check map of peer packets to avoid
-            // races)
+            // 2nd - check that we allow secondary backlog (don't check map of peer packets to
+            // avoid races)
             if (MAX_SYN_RCVD == 0 && established_backlog_full) {
                 // TODO: consider check if we can now drain into Q of established
                 si_tcp_logdbg("SYN/CTL packet drop. established-backlog=%d (limit=%d) "
@@ -2324,8 +2338,8 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
             established_backlog_full) { /* 2nd check only worth when MAX_SYN_RCVD>0 for non
                                            tcp_ctl_thread  */
             queue_rx_ctl_packet(
-                pcb, p_rx_pkt_mem_buf_desc_info); // TODO: need to trigger queue pulling from accept
-                                                  // in case no tcp_ctl_thread
+                pcb, p_rx_pkt_mem_buf_desc_info); // TODO: need to trigger queue pulling from
+                                                  // accept in case no tcp_ctl_thread
             m_socketxtreme.completion = NULL;
             m_socketxtreme.last_buff_lst = NULL;
             unlock_tcp_con();
@@ -2518,7 +2532,8 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
 
     // Now we should register socket to TCP timer.
     // It is important to register it before wait_for_conn_ready_blocking(),
-    // since wait_for_conn_ready_blocking may block on epoll_wait and the timer sends SYN rexmits.
+    // since wait_for_conn_ready_blocking may block on epoll_wait and the timer sends SYN
+    // rexmits.
     register_timer();
 
     if (!m_b_blocking) {
@@ -2731,7 +2746,8 @@ int sockinfo_tcp::prepareListen()
         m_sock_state = TCP_SOCK_ACCEPT_READY;
     } else {
 
-        // if (target_family == USE_XLIO || target_family == USE_ULP || arget_family == USE_DEFAULT)
+        // if (target_family == USE_XLIO || target_family == USE_ULP || arget_family ==
+        // USE_DEFAULT)
         setPassthrough(false);
         m_sock_state = TCP_SOCK_LISTEN_READY;
     }
@@ -2810,7 +2826,8 @@ int sockinfo_tcp::listen(int backlog)
         return orig_os_api.listen(m_fd, orig_backlog);
     }
 
-    // Calling to orig_listen() by default to monitor connection requests for not offloaded sockets
+    // Calling to orig_listen() by default to monitor connection requests for not offloaded
+    // sockets
     BULLSEYE_EXCLUDE_BLOCK_START
     if (orig_os_api.listen(m_fd, orig_backlog)) {
         // NOTE: The attach_as_uc_receiver at this stage already created steering rules.
@@ -3088,8 +3105,8 @@ void sockinfo_tcp::auto_accept_connection(sockinfo_tcp *parent, sockinfo_tcp *ch
     class flow_tuple key;
     sockinfo_tcp::create_flow_tuple_key_from_pcb(key, &(child->m_pcb));
 
-    // Since pcb is already contained in connected sockinfo_tcp no need to keep it listen's socket
-    // SYN list
+    // Since pcb is already contained in connected sockinfo_tcp no need to keep it listen's
+    // socket SYN list
     if (!parent->m_syn_received.erase(key)) {
         // Should we worry about that?
         __log_dbg("Can't find the established pcb in syn received list");
@@ -3181,7 +3198,8 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
               get_tcp_state(&conn->m_pcb), new_sock->m_fd, get_tcp_state(&new_sock->m_pcb));
 
     /* Configure Nagle algorithm settings as they were set at the parent socket.
-       This can happened if XLIO_TCP_NAGLE flag was set, but we disabled it for the parent socket.
+       This can happened if XLIO_TCP_NAGLE flag was set, but we disabled it for the parent
+       socket.
      */
     if ((conn_nagle_disabled = tcp_nagle_disabled(&conn->m_pcb)) !=
         tcp_nagle_disabled(&new_sock->m_pcb)) {
@@ -3457,9 +3475,10 @@ err_t sockinfo_tcp::syn_received_lwip_cb(void *arg, struct tcp_pcb *newpcb)
         new_sock->setPassthrough();
         set_tcp_state(&new_sock->m_pcb, CLOSED);
 
-        // This method is called from a flow (tcp_listen_input, L3_level_tcp_input) which priorly
-        // called clone_conn_cb which creates a locked new socket. Before we call to close() we need
-        // to unlock the socket, so close() can perform as a regular close() call.
+        // This method is called from a flow (tcp_listen_input, L3_level_tcp_input) which
+        // priorly called clone_conn_cb which creates a locked new socket. Before we call to
+        // close() we need to unlock the socket, so close() can perform as a regular close()
+        // call.
         new_sock->unlock_tcp_con();
 
         close(new_sock->get_fd());
@@ -3504,9 +3523,9 @@ err_t sockinfo_tcp::syn_received_drop_lwip_cb(void *arg, struct tcp_pcb *newpcb)
         new_sock->abort_connection();
     }
 
-    // This method is called from a flow (tcp_listen_input, L3_level_tcp_input) which priorly called
-    // clone_conn_cb which creates a locked new socket. Before we call to close() we need to unlock
-    // the socket, so close() can perform as a regular close() call.
+    // This method is called from a flow (tcp_listen_input, L3_level_tcp_input) which priorly
+    // called clone_conn_cb which creates a locked new socket. Before we call to close() we need
+    // to unlock the socket, so close() can perform as a regular close() call.
     new_sock->unlock_tcp_con();
 
     close(new_sock->get_fd());
@@ -3599,9 +3618,9 @@ int sockinfo_tcp::wait_for_conn_ready_blocking()
             si_tcp_logdbg("connect interrupted");
 
             // Internally rx_wait uses epoll_wait wich may return unrecoverable error.
-            // However, we do not want to expose internal errors due to epoll usage to the outside.
-            // Consequently, since this method is used by blocking connect, we rewrite the errno
-            // with one that is compatible with connect() API.
+            // However, we do not want to expose internal errors due to epoll usage to the
+            // outside. Consequently, since this method is used by blocking connect, we rewrite
+            // the errno with one that is compatible with connect() API.
             if (errno != EINTR && errno != EAGAIN) {
                 errno = EIO;
                 m_conn_state = TCP_CONN_FAILED;
@@ -4392,7 +4411,8 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
     }
 
     if (ret == -1 || is_nvme) {
-        // Avoid saving inherited option or calling kernel setsockopt() if XLIO fails explicitly.
+        // Avoid saving inherited option or calling kernel setsockopt() if XLIO fails
+        // explicitly.
         return ret;
     }
     if (!is_incoming() && m_sock_state <= TCP_SOCK_ACCEPT_READY && __optval != NULL &&
@@ -4499,7 +4519,8 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
             strncpy((char *)__optval, cc_name, cc_len);
             *__optlen = cc_len;
             ret = 0;
-            // XLIO doesn't meet Linux kernel behavior if (__optval == NULL && __optlen != NULL).
+            // XLIO doesn't meet Linux kernel behavior if (__optval == NULL && __optlen !=
+            // NULL).
             break;
         case TCP_USER_TIMEOUT:
             if (*__optlen >= sizeof(unsigned int)) {
@@ -4923,7 +4944,8 @@ mem_buf_desc_t *sockinfo_tcp::get_next_desc(mem_buf_desc_t *p_desc)
 
     m_n_rx_pkt_ready_list_count--;
     if (p_desc->p_next_desc) {
-        // vlog_printf(VLOG_ERROR, "detected chained pbufs! REF %u\n", p_desc->lwip_pbuf.pbuf.ref);
+        // vlog_printf(VLOG_ERROR, "detected chained pbufs! REF %u\n",
+        // p_desc->lwip_pbuf.pbuf.ref);
         mem_buf_desc_t *prev = p_desc;
         p_desc = p_desc->p_next_desc;
         prev->rx.sz_payload = prev->lwip_pbuf.pbuf.len;
@@ -5125,10 +5147,10 @@ void sockinfo_tcp::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
     // Socket data
     vlog_printf(log_level, "Socket state : %s\n", tcp_sock_state_str[sock_state]);
     vlog_printf(log_level, "Connection state : %s\n", tcp_conn_state_str[conn_state]);
-    vlog_printf(
-        log_level,
-        "Receive buffer : m_rcvbuff_current %d, m_rcvbuff_max %d, m_rcvbuff_non_tcp_recved %d\n",
-        rcvbuff_current, rcvbuff_max, rcvbuff_non_tcp_recved);
+    vlog_printf(log_level,
+                "Receive buffer : m_rcvbuff_current %d, m_rcvbuff_max %d, "
+                "m_rcvbuff_non_tcp_recved %d\n",
+                rcvbuff_current, rcvbuff_max, rcvbuff_non_tcp_recved);
     vlog_printf(log_level,
                 "Rx lists size : m_rx_pkt_ready_list %d, m_rx_ctl_packets_list %d, "
                 "m_rx_ctl_reuse_list %d\n",
@@ -5160,10 +5182,10 @@ void sockinfo_tcp::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
         vlog_printf(log_level, "Window scaling : DISABLED\n");
 
         // Receive and send windows
-        vlog_printf(
-            log_level,
-            "Receive window : rcv_wnd %u, rcv_ann_wnd %u, rcv_wnd_max %u, rcv_wnd_max_desired %u\n",
-            pcb.rcv_wnd, pcb.rcv_ann_wnd, pcb.rcv_wnd_max, pcb.rcv_wnd_max_desired);
+        vlog_printf(log_level,
+                    "Receive window : rcv_wnd %u, rcv_ann_wnd %u, rcv_wnd_max %u, "
+                    "rcv_wnd_max_desired %u\n",
+                    pcb.rcv_wnd, pcb.rcv_ann_wnd, pcb.rcv_wnd_max, pcb.rcv_wnd_max_desired);
 
         vlog_printf(log_level, "Send window : snd_wnd %u, snd_wnd_max %u\n", pcb.snd_wnd,
                     pcb.snd_wnd_max);

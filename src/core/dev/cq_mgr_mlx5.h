@@ -74,6 +74,9 @@ public:
     virtual uint32_t clean_cq();
     virtual void get_cq_event(int count = 1) { xlio_ib_mlx5_get_cq_event(&m_mlx5_cq, count); };
 
+    int drain_and_proccess_socketxtreme(uintptr_t *p_recycle_buffers_last_wr_id);
+    int poll_and_process_element_rx_socketxtreme(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array);
+
 protected:
     qp_mgr_eth_mlx5 *m_qp;
     xlio_ib_mlx5_cq_t m_mlx5_cq;
