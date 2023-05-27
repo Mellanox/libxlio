@@ -63,7 +63,7 @@ public:
 
     virtual int drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id = NULL);
     virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array = NULL);
-    virtual int poll_and_process_element_rx(mem_buf_desc_t **p_desc_lst);
+    virtual int poll_and_process_element_rx_socketxtreme(mem_buf_desc_t **p_desc_lst);
 
     virtual int poll_and_process_element_tx(uint64_t *p_cq_poll_sn);
 

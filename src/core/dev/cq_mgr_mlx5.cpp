@@ -572,7 +572,7 @@ int cq_mgr_mlx5::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd
     return ret_rx_processed;
 }
 
-int cq_mgr_mlx5::poll_and_process_element_rx(mem_buf_desc_t **p_desc_lst)
+int cq_mgr_mlx5::poll_and_process_element_rx_socketxtreme(mem_buf_desc_t **p_desc_lst)
 {
     int packets_num = 0;
 

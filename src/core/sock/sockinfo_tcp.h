@@ -416,7 +416,7 @@ private:
     static void create_flow_tuple_key_from_pcb(flow_tuple &key, struct tcp_pcb *pcb);
 
     // auto accept function
-    static void auto_accept_connection(sockinfo_tcp *parent, sockinfo_tcp *child);
+    static void accept_connection_socketxtreme(sockinfo_tcp *parent, sockinfo_tcp *child);
 
     // accept cb func
     static err_t accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t err);

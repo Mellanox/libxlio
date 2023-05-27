@@ -659,7 +659,7 @@ void cq_mgr_mlx5_strq::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
 }
 
 // Sockextreme only.
-int cq_mgr_mlx5_strq::poll_and_process_element_rx(mem_buf_desc_t **p_desc_lst)
+int cq_mgr_mlx5_strq::poll_and_process_element_rx_socketxtreme(mem_buf_desc_t **p_desc_lst)
 {
     buff_status_e status = BS_OK;
     mem_buf_desc_t *buff = nullptr;

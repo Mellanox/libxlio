@@ -48,7 +48,7 @@ public:
     virtual int drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id = NULL) override;
     virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
                                             void *pv_fd_ready_array = NULL) override;
-    virtual int poll_and_process_element_rx(mem_buf_desc_t **p_desc_lst) override;
+    virtual int poll_and_process_element_rx_socketxtreme(mem_buf_desc_t **p_desc_lst) override;
     virtual void mem_buf_desc_return_to_owner(mem_buf_desc_t *p_mem_buf_desc,
                                               void *pv_fd_ready_array = NULL) override;
     virtual void add_qp_rx(qp_mgr *qp) override;

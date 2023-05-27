@@ -3098,7 +3098,7 @@ sockinfo_tcp *sockinfo_tcp::accept_clone()
 }
 
 // Must be taken under parent's tcp connection lock
-void sockinfo_tcp::auto_accept_connection(sockinfo_tcp *parent, sockinfo_tcp *child)
+void sockinfo_tcp::accept_connection_socketxtreme(sockinfo_tcp *parent, sockinfo_tcp *child)
 {
     tcp_accepted(parent->m_sock);
 
@@ -3251,7 +3251,7 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     conn->m_ready_pcbs.erase(&new_sock->m_pcb);
 
     if (conn->is_socketxtreme()) {
-        auto_accept_connection(conn, new_sock);
+        accept_connection_socketxtreme(conn, new_sock);
     } else {
         conn->m_accepted_conns.push_back(new_sock);
         conn->m_ready_conn_cnt++;

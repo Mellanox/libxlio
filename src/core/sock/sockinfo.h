@@ -417,6 +417,22 @@ protected:
     bool is_shadow_socket_present() { return m_fd >= 0 && m_fd != m_rx_epfd; }
     inline bool is_socketxtreme() { return (m_p_rx_ring && m_p_rx_ring->is_socketxtreme()); }
 
+    inline void set_events_socketxtreme(uint64_t events)
+    {
+        if (m_socketxtreme.completion) {
+            if (!m_socketxtreme.completion->events) {
+                m_socketxtreme.completion->user_data = (uint64_t)m_fd_context;
+            }
+            m_socketxtreme.completion->events |= events;
+        } else {
+            if (!m_socketxtreme.ec.completion.events) {
+                m_socketxtreme.ec.completion.user_data = (uint64_t)m_fd_context;
+                m_p_rx_ring->put_ec(&m_socketxtreme.ec);
+            }
+            m_socketxtreme.ec.completion.events |= events;
+        }
+    }
+
     inline void set_events(uint64_t events)
     {
         static int enable_socketxtreme = safe_mce_sys().enable_socketxtreme;
@@ -424,18 +440,7 @@ protected:
         if (enable_socketxtreme && m_state == SOCKINFO_OPENED) {
             /* Collect all events if rx ring is enabled */
             if (is_socketxtreme()) {
-                if (m_socketxtreme.completion) {
-                    if (!m_socketxtreme.completion->events) {
-                        m_socketxtreme.completion->user_data = (uint64_t)m_fd_context;
-                    }
-                    m_socketxtreme.completion->events |= events;
-                } else {
-                    if (!m_socketxtreme.ec.completion.events) {
-                        m_socketxtreme.ec.completion.user_data = (uint64_t)m_fd_context;
-                        m_p_rx_ring->put_ec(&m_socketxtreme.ec);
-                    }
-                    m_socketxtreme.ec.completion.events |= events;
-                }
+                set_events_socketxtreme(events);
             }
         }
 
