@@ -45,7 +45,7 @@ runs_on_dockers:
   - {name: 'header-check', url: 'harbor.mellanox.com/toolbox/header_check:0.0.14', category: 'tool', arch: 'x86_64', tag: '0.0.14'}
 
 runs_on_agents:
-  - {nodeLabel: 'r-aa-fatty09', category: 'base'}
+  - {nodeLabel: 'beni09', category: 'base'}
 
 matrix:
   axes:
@@ -217,7 +217,7 @@ steps:
     containerSelector:
       - "{name: 'skip-container'}"
     agentSelector:
-      - "{nodeLabel: 'r-aa-fatty09', variant:1}"
+      - "{nodeLabel: 'beni09', variant:1}"
     run: |
       [ "x${do_cppcheck}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_cppcheck=${action} ./contrib/test_jenkins.sh
@@ -234,7 +234,7 @@ steps:
     containerSelector:
       - "{name: 'skip-container'}"
     agentSelector:
-      - "{nodeLabel: 'r-aa-fatty09', variant:1}"
+      - "{nodeLabel: 'beni09', variant:1}"
     run: |
       [ "x${do_csbuild}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_csbuild=${action} ./contrib/test_jenkins.sh
@@ -251,7 +251,7 @@ steps:
     containerSelector:
       - "{name: 'skip-container'}"
     agentSelector:
-      - "{nodeLabel: 'r-aa-fatty09', variant:2}"
+      - "{nodeLabel: 'beni09', variant:2}"
     run: |
       [ "x${do_tidy}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_tidy=${action} ./contrib/test_jenkins.sh
@@ -268,7 +268,7 @@ steps:
     containerSelector:
       - "{name: 'skip-container'}"
     agentSelector:
-      - "{nodeLabel: 'r-aa-fatty09', variant:1}"
+      - "{nodeLabel: 'beni09', variant:1}"
     run: |
       [ "x${do_test}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_run=${action} ./contrib/test_jenkins.sh
@@ -285,7 +285,7 @@ steps:
     containerSelector:
       - "{name: 'skip-container'}"
     agentSelector:
-      - "{nodeLabel: 'r-aa-fatty09'}"
+      - "{nodeLabel: 'beni09'}"
     run: |
       [ "x${do_gtest}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_gtest=${action} ./contrib/test_jenkins.sh
@@ -304,7 +304,7 @@ steps:
     containerSelector:
       - "{name: 'skip-container'}"
     agentSelector:
-      - "{nodeLabel: 'r-aa-fatty09', variant:1}"
+      - "{nodeLabel: 'beni09', variant:1}"
     run: |
       [ "x${do_valgrind}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_vg=${action} ./contrib/test_jenkins.sh
