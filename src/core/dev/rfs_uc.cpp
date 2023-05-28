@@ -140,8 +140,7 @@ bool rfs_uc::prepare_flow_spec()
 
 bool rfs_uc::rx_dispatch_packet(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array)
 {
-    static int enable_socketxtreme = safe_mce_sys().enable_socketxtreme;
-    uint32_t num_sinks = (enable_socketxtreme ? 1 : m_n_sinks_list_entries);
+    uint32_t num_sinks = (safe_mce_sys().enable_socketxtreme ? 1 : m_n_sinks_list_entries);
 
     p_rx_wc_buf_desc->reset_ref_count();
 

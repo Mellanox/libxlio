@@ -435,13 +435,9 @@ protected:
 
     inline void set_events(uint64_t events)
     {
-        static int enable_socketxtreme = safe_mce_sys().enable_socketxtreme;
-
-        if (enable_socketxtreme && m_state == SOCKINFO_OPENED) {
-            /* Collect all events if rx ring is enabled */
-            if (is_socketxtreme()) {
-                set_events_socketxtreme(events);
-            }
+        /* Collect all events if rx ring is enabled */
+        if (safe_mce_sys().enable_socketxtreme && is_socketxtreme() && m_state == SOCKINFO_OPENED) {
+            set_events_socketxtreme(events);
         }
 
         socket_fd_api::notify_epoll_context((uint32_t)events);

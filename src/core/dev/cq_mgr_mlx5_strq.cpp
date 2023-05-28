@@ -455,7 +455,7 @@ int cq_mgr_mlx5_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id
     //   QP down logic to release rx buffers should force polling to do this.
     //   Not null argument indicates one.
 
-    if (m_b_sysvar_enable_socketxtreme) {
+    if (safe_mce_sys().enable_socketxtreme) {
         ret_total = drain_and_proccess_sockextreme(p_recycle_buffers_last_wr_id);
     } else {
         while (((m_n_sysvar_progress_engine_wce_max > m_n_wce_counter) && (!m_b_was_drained)) ||
@@ -552,7 +552,7 @@ int cq_mgr_mlx5_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *
                        m_n_sysvar_rx_prefetch_bytes_before_poll);
     }
 
-    if (m_b_sysvar_enable_socketxtreme) {
+    if (safe_mce_sys().enable_socketxtreme) {
         ret_rx_processed += poll_and_process_element_rx_sockextreme(pv_fd_ready_array);
     } else {
         buff_status_e status = BS_OK;

@@ -58,7 +58,6 @@ cq_mgr_mlx5::cq_mgr_mlx5(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, 
     : cq_mgr(p_ring, p_ib_ctx_handler, cq_size, p_comp_event_channel, is_rx, call_configure)
     , m_qp(NULL)
     , m_rx_hot_buffer(NULL)
-    , m_b_sysvar_enable_socketxtreme(safe_mce_sys().enable_socketxtreme)
 {
     cq_logfunc("");
 
@@ -377,7 +376,7 @@ int cq_mgr_mlx5::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id /*=N
      *   Not null argument indicates one.
      */
 
-    if (m_b_sysvar_enable_socketxtreme) {
+    if (safe_mce_sys().enable_socketxtreme) {
         ret_total = drain_and_proccess_socketxtreme(p_recycle_buffers_last_wr_id);
     } else {
         while (((m_n_sysvar_progress_engine_wce_max > m_n_wce_counter) && (!m_b_was_drained)) ||
@@ -531,7 +530,7 @@ int cq_mgr_mlx5::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd
                        m_n_sysvar_rx_prefetch_bytes_before_poll);
     }
 
-    if (m_b_sysvar_enable_socketxtreme) {
+    if (safe_mce_sys().enable_socketxtreme) {
         ret_rx_processed +=
             poll_and_process_element_rx_socketxtreme(p_cq_poll_sn, pv_fd_ready_array);
     } else {

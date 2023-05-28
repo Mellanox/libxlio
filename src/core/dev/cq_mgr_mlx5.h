@@ -81,7 +81,6 @@ protected:
     qp_mgr_eth_mlx5 *m_qp;
     xlio_ib_mlx5_cq_t m_mlx5_cq;
     mem_buf_desc_t *m_rx_hot_buffer;
-    const bool m_b_sysvar_enable_socketxtreme;
 
     inline struct xlio_mlx5_cqe *check_cqe(void);
     virtual mem_buf_desc_t *poll(enum buff_status_e &status);
