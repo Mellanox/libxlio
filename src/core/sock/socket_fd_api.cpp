@@ -60,12 +60,16 @@ socket_fd_api::socket_fd_api(int fd)
 
 socket_fd_api::~socket_fd_api()
 {
+    bool toclose = safe_mce_sys().deferred_close && m_fd >= 0;
+
 #if defined(DEFINED_NGINX)
-    if (m_is_for_socket_pool && m_fd >= 0) {
-        // Sockets from a socket pool are not closed during close(), so do it now.
+    // Sockets from a socket pool are not closed during close(), so do it now.
+    toclose = toclose || (m_is_for_socket_pool && m_fd >= 0);
+#endif
+
+    if (toclose) {
         orig_os_api.close(m_fd);
     }
-#endif
 }
 
 void socket_fd_api::destructor_helper()

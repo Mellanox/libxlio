@@ -832,6 +832,9 @@ void print_xlio_global_settings()
     VLOG_PARAM_NUMSTR("TCP CC Algorithm", safe_mce_sys().lwip_cc_algo_mod,
                       MCE_DEFAULT_LWIP_CC_ALGO_MOD, SYS_VAR_TCP_CC_ALGO,
                       lwip_cc_algo_str(safe_mce_sys().lwip_cc_algo_mod));
+    VLOG_PARAM_STRING("Deferred close", safe_mce_sys().deferred_close, MCE_DEFAULT_DEFERRED_CLOSE,
+                      SYS_VAR_DEFERRED_CLOSE,
+                      safe_mce_sys().deferred_close ? "Enabled " : "Disabled");
     VLOG_PARAM_STRING("TCP abort on close", safe_mce_sys().tcp_abort_on_close,
                       MCE_DEFAULT_TCP_ABORT_ON_CLOSE, SYS_VAR_TCP_ABORT_ON_CLOSE,
                       safe_mce_sys().tcp_abort_on_close ? "Enabled " : "Disabled");
