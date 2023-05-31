@@ -415,7 +415,7 @@ protected:
     }
 
     bool is_shadow_socket_present() { return m_fd >= 0 && m_fd != m_rx_epfd; }
-    inline bool is_socketxtreme() { return (m_p_rx_ring && m_p_rx_ring->is_socketxtreme()); }
+    inline bool is_socketxtreme() { return safe_mce_sys().enable_socketxtreme; }
 
     inline void set_events_socketxtreme(uint64_t events)
     {
@@ -436,7 +436,7 @@ protected:
     inline void set_events(uint64_t events)
     {
         /* Collect all events if rx ring is enabled */
-        if (safe_mce_sys().enable_socketxtreme && is_socketxtreme() && m_state == SOCKINFO_OPENED) {
+        if (is_socketxtreme() && m_state == SOCKINFO_OPENED) {
             set_events_socketxtreme(events);
         }
 

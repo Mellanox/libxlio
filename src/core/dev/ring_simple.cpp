@@ -146,7 +146,6 @@ ring_simple::ring_simple(int if_index, ring *parent, ring_type_t type)
 #endif /* DEFINED_UTLS */
     memset(&m_lro, 0, sizeof(m_lro));
 
-    m_socketxtreme.active = safe_mce_sys().enable_socketxtreme;
     INIT_LIST_HEAD(&m_socketxtreme.ec_list);
     m_socketxtreme.completion = NULL;
 }

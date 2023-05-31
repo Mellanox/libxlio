@@ -314,7 +314,7 @@ protected:
     std::unordered_map<void *, uint32_t> m_user_lkey_map;
 
 private:
-    bool is_socketxtreme(void) override { return m_socketxtreme.active; }
+    bool is_socketxtreme(void) override { return safe_mce_sys().enable_socketxtreme; }
 
     void put_ec(struct ring_ec *ec) override
     {
@@ -364,9 +364,6 @@ private:
          * storing them in the queue of event completion elements
          */
         struct xlio_socketxtreme_completion_t *completion;
-
-        /* This flag is enabled in case socketxtreme_poll() call is done */
-        bool active;
     } m_socketxtreme;
 
     inline void send_status_handler(int ret, xlio_ibv_send_wr *p_send_wqe);
