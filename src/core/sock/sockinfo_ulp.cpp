@@ -660,7 +660,6 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
         tcp_recv(m_p_sock->get_pcb(), sockinfo_tcp_ops_tls::rx_lwip_cb);
         m_p_sock->m_p_socket_stats->tls_rx_offload = true;
         m_p_sock->unlock_tcp_con();
-
     }
 
     m_p_sock->m_p_socket_stats->tls_version = base_info->version;

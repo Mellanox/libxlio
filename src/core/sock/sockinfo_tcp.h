@@ -455,7 +455,7 @@ public:
     static err_t rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
                                          err_t err);
     static err_t rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, struct pbuf *p,
-		    err_t err);
+                                          err_t err);
     static err_t rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
     inline void rx_lwip_cb_socketxtreme(pbuf *p);
 

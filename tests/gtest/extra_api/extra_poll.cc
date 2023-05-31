@@ -49,6 +49,7 @@ protected:
         xlio_base::SetUp();
 
         SKIP_TRUE((getenv("XLIO_SOCKETXTREME")), "This test requires XLIO_SOCKETXTREME=1");
+        SKIP_TRUE(m_family == PF_INET, "sockextreme API supports IPv4 only");
     }
     void TearDown() { xlio_base::TearDown(); }
 

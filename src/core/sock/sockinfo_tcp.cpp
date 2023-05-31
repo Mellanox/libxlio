@@ -2044,7 +2044,8 @@ err_t sockinfo_tcp::rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *pcb, stru
     return ERR_OK;
 }
 
-err_t sockinfo_tcp::rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
+err_t sockinfo_tcp::rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, struct pbuf *p,
+                                             err_t err)
 {
     sockinfo_tcp *conn = (sockinfo_tcp *)arg;
 
@@ -2096,8 +2097,8 @@ err_t sockinfo_tcp::rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, str
         }
 
         // call user callback
-        callback_retval = conn->m_rx_callback(conn->m_fd, nr_frags, iov, &pkt_info,
-                                              conn->m_rx_callback_context);
+        callback_retval =
+            conn->m_rx_callback(conn->m_fd, nr_frags, iov, &pkt_info, conn->m_rx_callback_context);
     }
 
     if (callback_retval == XLIO_PACKET_DROP) {
@@ -2127,8 +2128,7 @@ err_t sockinfo_tcp::rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, str
      */
     uint32_t bytes_to_tcp_recved;
     int rcv_buffer_space = std::max(
-                                    0,
-                                    conn->m_rcvbuff_max - conn->m_rcvbuff_current - (int)conn->m_pcb.rcv_wnd_max_desired);
+        0, conn->m_rcvbuff_max - conn->m_rcvbuff_current - (int)conn->m_pcb.rcv_wnd_max_desired);
     if (callback_retval == XLIO_PACKET_DROP) {
         bytes_to_tcp_recved = (int)p->tot_len;
     } else {
