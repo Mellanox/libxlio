@@ -51,6 +51,7 @@ void register_sys_now(sys_now_fn fn);
 extern u16_t lwip_tcp_mss;
 extern u32_t lwip_tcp_snd_buf;
 extern u32_t lwip_zc_tx_size;
+extern u32_t lwip_tcp_nodelay_treshold;
 
 struct tcp_seg;
 typedef err_t (*ip_output_fn)(struct pbuf *p, struct tcp_seg *seg, void *p_conn, u16_t flags);
@@ -324,6 +325,7 @@ struct tcp_pcb {
     u32_t snd_wnd_max; /* the maximum sender window announced by the remote host */
     u32_t snd_wl1, snd_wl2; /* Sequence and acknowledgement numbers of last
                                window update. */
+
     u32_t snd_lbb; /* Sequence number of next byte to be buffered. */
 
     u32_t acked;
@@ -344,6 +346,7 @@ struct tcp_pcb {
     u16_t tcp_oversize_val;
 #endif /* TCP_OVERSIZE */
     u16_t max_unsent_len;
+
     /* These are ordered by sequence number: */
     struct tcp_seg *unsent; /* Unsent (queued) segments. */
     struct tcp_seg *last_unsent; /* Last unsent (queued) segment. */

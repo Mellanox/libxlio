@@ -718,6 +718,8 @@ void print_xlio_global_settings()
                       MCE_DEFAULT_TCP_TIMESTAMP_OPTION, SYS_VAR_TCP_TIMESTAMP_OPTION);
     VLOG_PARAM_NUMBER("TCP nodelay", safe_mce_sys().tcp_nodelay, MCE_DEFAULT_TCP_NODELAY,
                       SYS_VAR_TCP_NODELAY);
+    VLOG_PARAM_NUMBER("TCP nodelay treshold", safe_mce_sys().tcp_nodelay_treshold,
+                      MCE_DEFAULT_TCP_NODELAY_TRESHOLD, SYS_VAR_TCP_NODELAY_TRESHOLD);
     VLOG_PARAM_NUMBER("TCP quickack", safe_mce_sys().tcp_quickack, MCE_DEFAULT_TCP_QUICKACK,
                       SYS_VAR_TCP_QUICKACK);
     VLOG_PARAM_NUMSTR(xlio_exception_handling::getName(), (int)safe_mce_sys().exception_handling,

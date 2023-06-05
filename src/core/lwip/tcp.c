@@ -85,11 +85,12 @@ void register_tcp_state_observer(tcp_state_observer_fn fn)
 enum cc_algo_mod lwip_cc_algo_module = CC_MOD_LWIP;
 
 u16_t lwip_tcp_mss = CONST_TCP_MSS;
-u32_t lwip_tcp_snd_buf = 0;
-u32_t lwip_zc_tx_size = 0;
-
 u8_t enable_push_flag = 1;
 u8_t enable_ts_option = 0;
+u32_t lwip_tcp_snd_buf = 0;
+u32_t lwip_zc_tx_size = 0;
+u32_t lwip_tcp_nodelay_treshold = 0;
+
 /* slow timer value */
 static u32_t slow_tmr_interval;
 /* Incremented every coarse grained timer shot (typically every slow_tmr_interval ms). */

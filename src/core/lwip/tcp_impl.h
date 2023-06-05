@@ -74,17 +74,22 @@ void set_tmr_resolution(u32_t v);
 #pragma GCC visibility pop
 #endif
 
+#define tcp_nodelay_treshold(tpcb)                                                                 \
+    (((tpcb)->unsent != NULL) && ((tpcb)->unsent->len >= lwip_tcp_nodelay_treshold))
+
 /**
  * This is the Nagle algorithm: try to combine user data to send as few TCP
  * segments as possible. Only send if
  * - no previously transmitted data on the connection remains unacknowledged or
- * - the TF_NODELAY flag is set (nagle algorithm turned off for this pcb) or
+ * - the TF_NODELAY flag is set (nagle algorithm turned off for this pcb)
+ *   and unset length is above treshold or
  * - the only unsent segment is at least pcb->mss bytes long (or there is more
  *   than one unsent segment - with lwIP, this can happen although unsent->len < mss)
  * - or if we are in fast-retransmit (TF_INFR)
  */
 #define tcp_do_output_nagle(tpcb)                                                                  \
-    ((((tpcb)->unacked == NULL) || ((tpcb)->flags & (TF_NODELAY | TF_INFR)) ||                     \
+    ((((tpcb)->unacked == NULL) || (((tpcb)->flags & TF_NODELAY) && tcp_nodelay_treshold(tpcb)) || \
+      ((tpcb)->flags & TF_INFR) ||                                                                 \
       (((tpcb)->unsent != NULL) &&                                                                 \
        (((tpcb)->unsent->next != NULL) || ((tpcb)->unsent->len >= (tpcb)->mss))) ||                \
       ((tcp_sndbuf(tpcb) == 0) || (tcp_sndqueuelen(tpcb) >= (tpcb)->max_tcp_snd_queuelen)))        \

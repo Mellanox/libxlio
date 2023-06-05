@@ -369,6 +369,7 @@ public:
     uint32_t tx_num_bufs;
     uint32_t tx_buf_size;
     uint32_t zc_tx_size;
+    uint32_t tcp_nodelay_treshold;
     uint32_t tx_num_wr;
     uint32_t tx_num_wr_to_signal;
     uint32_t tx_max_inline;
@@ -564,6 +565,7 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_TX_NUM_BUFS           "XLIO_TX_BUFS"
 #define SYS_VAR_TX_BUF_SIZE           "XLIO_TX_BUF_SIZE"
 #define SYS_VAR_ZC_TX_SIZE            "XLIO_ZC_TX_SIZE"
+#define SYS_VAR_TCP_NODELAY_TRESHOLD  "XLIO_TCP_NODELAY_TRESHOLD"
 #define SYS_VAR_TX_NUM_WRE            "XLIO_TX_WRE"
 #define SYS_VAR_TX_NUM_WRE_TO_SIGNAL  "XLIO_TX_WRE_BATCHING"
 #define SYS_VAR_TX_MAX_INLINE         "XLIO_TX_MAX_INLINE"
@@ -709,6 +711,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_TCP_MAX_SYN_RATE         (0)
 #define MCE_DEFAULT_ZC_NUM_BUFS              (200000)
 #define MCE_DEFAULT_ZC_TX_SIZE               (32768)
+#define MCE_DEFAULT_TCP_NODELAY_TRESHOLD     (0)
 #define MCE_DEFAULT_ZC_CACHE_THRESHOLD       (10 * 1024) // 10GB
 #define MCE_DEFAULT_TX_NUM_SEGS_TCP          (1000000)
 #define MCE_DEFAULT_TX_NUM_BUFS              (200000)

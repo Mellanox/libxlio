@@ -667,6 +667,7 @@ void mce_sys_var::get_env_params()
     tx_num_bufs = MCE_DEFAULT_TX_NUM_BUFS;
     tx_buf_size = MCE_DEFAULT_TX_BUF_SIZE;
     zc_tx_size = MCE_DEFAULT_ZC_TX_SIZE;
+    tcp_nodelay_treshold = MCE_DEFAULT_TCP_NODELAY_TRESHOLD;
     tx_num_wr = MCE_DEFAULT_TX_NUM_WRE;
     tx_num_wr_to_signal = MCE_DEFAULT_TX_NUM_WRE_TO_SIGNAL;
     tx_max_inline = MCE_DEFAULT_TX_MAX_INLINE;
@@ -1170,6 +1171,10 @@ void mce_sys_var::get_env_params()
                         zc_tx_size, MCE_MAX_ZC_TX_SIZE);
             zc_tx_size = MCE_DEFAULT_ZC_TX_SIZE;
         }
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_TCP_NODELAY_TRESHOLD)) != NULL) {
+        tcp_nodelay_treshold = (uint32_t)atoi(env_ptr);
     }
 
     if ((env_ptr = getenv(SYS_VAR_TX_NUM_WRE)) != NULL) {
