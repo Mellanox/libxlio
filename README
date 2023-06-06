@@ -391,6 +391,11 @@ The number of TCP segments fetched from the segments pool by a socket at once.
 Min value is 1
 Default value is 64
 
+XLIO_TX_SEGS_RING_BATCH_TCP
+The number of TCP segments fetched from the segments pool by a ring at once.
+Min value is 1
+Default value is 1024
+
 XLIO_RING_ALLOCATION_LOGIC_TX
 XLIO_RING_ALLOCATION_LOGIC_RX
 Ring allocation logic is used to separate the traffic to different rings.

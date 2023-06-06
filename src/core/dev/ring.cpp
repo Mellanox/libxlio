@@ -59,7 +59,7 @@ struct tcp_seg *ring::get_tcp_segs(uint32_t num)
     std::lock_guard<decltype(m_tcp_seg_lock)> lock(m_tcp_seg_lock);
 
     if (num > m_tcp_seg_count) {
-        uint32_t getsize = std::max(1024U, num - m_tcp_seg_count);
+        uint32_t getsize = std::max(safe_mce_sys().tx_segs_ring_batch_tcp, num - m_tcp_seg_count);
         auto seg_list = g_tcp_seg_pool->get_tcp_seg_list(static_cast<int>(getsize));
         if (!seg_list.first) {
             return nullptr;
@@ -88,15 +88,15 @@ struct tcp_seg *ring::get_tcp_segs(uint32_t num)
 
 void ring::put_tcp_segs(struct tcp_seg *seg)
 {
-    static const uint32_t RETURN_TO_GLOBAL_TRESHOLD =
-        2048;
+    static const uint32_t return_treshold = safe_mce_sys().tx_segs_ring_batch_tcp * 2U;
+
     if (likely(seg)) {
         std::lock_guard<decltype(m_tcp_seg_lock)> lock(m_tcp_seg_lock);
 
         seg->next = m_tcp_seg_list;
         m_tcp_seg_list = seg;
         ++m_tcp_seg_count;
-        if (m_tcp_seg_count > RETURN_TO_GLOBAL_TRESHOLD) {
+        if (m_tcp_seg_count > return_treshold) {
             int count = m_tcp_seg_count / 2;
             struct tcp_seg *next = m_tcp_seg_list;
             for (int i = 0; i < count - 1; i++) {

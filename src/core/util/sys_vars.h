@@ -501,6 +501,7 @@ public:
     int nginx_udp_socket_pool_rx_num_buffs_reuse;
 #endif
     uint32_t tcp_send_buffer_size;
+    uint32_t tx_segs_ring_batch_tcp;
     FILE *stats_file;
     /* This field should be used to store and use data for XLIO_EXTRA_API_IOCTL */
     struct {
@@ -577,7 +578,7 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_TX_PREFETCH_BYTES     "XLIO_TX_PREFETCH_BYTES"
 #define SYS_VAR_TX_BUFS_BATCH_TCP     "XLIO_TX_BUFS_BATCH_TCP"
 #define SYS_VAR_TX_SEGS_BATCH_TCP     "XLIO_TX_SEGS_BATCH_TCP"
-
+#define SYS_VAR_TX_SEGS_RING_BATCH_TCP "XLIO_TX_SEGS_RING_BATCH_TCP"
 #define SYS_VAR_STRQ                            "XLIO_STRQ"
 #define SYS_VAR_STRQ_NUM_STRIDES                "XLIO_STRQ_NUM_STRIDES"
 #define SYS_VAR_STRQ_STRIDE_SIZE_BYTES          "XLIO_STRQ_STRIDE_SIZE_BYTES"
@@ -730,6 +731,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_TX_BUFS_BATCH_UDP        (8)
 #define MCE_DEFAULT_TX_BUFS_BATCH_TCP        (16)
 #define MCE_DEFAULT_TX_SEGS_BATCH_TCP        (64)
+#define MCE_DEFAULT_TX_SEGS_RING_BATCH_TCP   (1024)
 #define MCE_DEFAULT_TX_NUM_SGE               (4)
 
 #if defined(DEFINED_DPCP)

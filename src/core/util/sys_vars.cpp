@@ -677,7 +677,7 @@ void mce_sys_var::get_env_params()
     tx_bufs_batch_udp = MCE_DEFAULT_TX_BUFS_BATCH_UDP;
     tx_bufs_batch_tcp = MCE_DEFAULT_TX_BUFS_BATCH_TCP;
     tx_segs_batch_tcp = MCE_DEFAULT_TX_SEGS_BATCH_TCP;
-
+    tx_segs_ring_batch_tcp = MCE_DEFAULT_TX_SEGS_RING_BATCH_TCP;
     rx_num_bufs = MCE_DEFAULT_RX_NUM_BUFS;
     rx_buf_size = MCE_DEFAULT_RX_BUF_SIZE;
     rx_bufs_batch = MCE_DEFAULT_RX_BUFS_BATCH;
@@ -1219,9 +1219,16 @@ void mce_sys_var::get_env_params()
     }
 
     if ((env_ptr = getenv(SYS_VAR_TX_SEGS_BATCH_TCP)) != NULL) {
-        tx_segs_batch_tcp = (uint32_t)atoi(env_ptr);
+        tx_segs_batch_tcp = (int32_t)atoi(env_ptr);
         if (tx_segs_batch_tcp < 1) {
             tx_segs_batch_tcp = 1;
+        }
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_TX_SEGS_RING_BATCH_TCP)) != NULL) {
+        tx_segs_ring_batch_tcp = (int32_t)atoi(env_ptr);
+        if (tx_segs_ring_batch_tcp < 1) {
+            tx_segs_ring_batch_tcp = 1;
         }
     }
 
