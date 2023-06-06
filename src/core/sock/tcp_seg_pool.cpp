@@ -62,10 +62,15 @@ tcp_seg_pool::~tcp_seg_pool()
 
 tcp_seg *tcp_seg_pool::get_tcp_segs(int amount)
 {
+    return get_tcp_seg_list(amount).first;
+}
+
+std::pair<tcp_seg *,tcp_seg *> tcp_seg_pool::get_tcp_seg_list(int amount)
+{
     int orig_amount = amount;
     tcp_seg *head, *next, *prev;
     if (unlikely(amount <= 0)) {
-        return NULL;
+        return std::make_pair(nullptr, nullptr);
     }
     lock();
     head = next = m_p_head;
@@ -79,14 +84,14 @@ tcp_seg *tcp_seg_pool::get_tcp_segs(int amount)
         // run out of segments
         g_global_stat_static.n_tcp_seg_pool_no_segs++;
         unlock();
-        return NULL;
+        return std::make_pair(nullptr, nullptr);
     }
     prev->next = NULL;
     m_p_head = next;
     g_global_stat_static.n_tcp_seg_pool_size -= orig_amount;
     unlock();
 
-    return head;
+    return std::make_pair(head, prev);
 }
 
 void tcp_seg_pool::put_tcp_segs(tcp_seg *seg_list)

@@ -327,10 +327,6 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
 
     m_tcp_seg_count = 0;
     m_tcp_seg_in_use = 0;
-    m_tcp_seg_list = g_tcp_seg_pool->get_tcp_segs(m_sysvar_tx_segs_batch_tcp);
-    if (m_tcp_seg_list) {
-        m_tcp_seg_count += m_sysvar_tx_segs_batch_tcp;
-    }
     m_tx_consecutive_eagain_count = 0;
 
     // Disable Nagle algorithm if XLIO_TCP_NODELAY flag was set.
@@ -5365,10 +5361,26 @@ void sockinfo_tcp::tcp_seg_free(void *p_conn, struct tcp_seg *seg)
 struct tcp_seg *sockinfo_tcp::get_tcp_seg()
 {
     struct tcp_seg *head = NULL;
+
+    dst_entry_tcp *p_dst = static_cast<dst_entry_tcp *>(m_p_connected_dst_entry);
+    if (m_sysvar_tx_segs_batch_tcp == 1 && likely(p_dst) && likely(p_dst->get_ring())) {
+        head = p_dst->get_ring()->get_tcp_segs(1);
+        if (head) {
+            ++m_tcp_seg_count;
+            ++m_tcp_seg_in_use;
+        }
+        return head;
+    }
+
     if (!m_tcp_seg_list) {
-        m_tcp_seg_list = g_tcp_seg_pool->get_tcp_segs(m_sysvar_tx_segs_batch_tcp);
+        if (likely(p_dst) && likely(p_dst->get_ring())) {
+            m_tcp_seg_list = p_dst->get_ring()->get_tcp_segs(m_sysvar_tx_segs_batch_tcp);
+        } else {
+            m_tcp_seg_list = g_tcp_seg_pool->get_tcp_segs(m_sysvar_tx_segs_batch_tcp);
+        }
+
         if (unlikely(!m_tcp_seg_list)) {
-            return NULL;
+            return nullptr;
         }
         m_tcp_seg_count += m_sysvar_tx_segs_batch_tcp;
     }
@@ -5387,6 +5399,22 @@ void sockinfo_tcp::put_tcp_seg(struct tcp_seg *seg)
         return;
     }
 
+    auto put_segs = [this](struct tcp_seg *pseg) {
+        dst_entry_tcp *p_dst = static_cast<dst_entry_tcp *>(m_p_connected_dst_entry);
+        if (likely(p_dst) && likely(p_dst->get_ring())) {
+            p_dst->get_ring()->put_tcp_segs(pseg);
+        } else {
+            g_tcp_seg_pool->put_tcp_segs(pseg);
+        }
+    };
+
+    if (m_sysvar_tx_segs_batch_tcp == 1) {
+        put_segs(seg);
+        --m_tcp_seg_count;
+        --m_tcp_seg_in_use;
+        return;
+    }
+
     seg->next = m_tcp_seg_list;
     m_tcp_seg_list = seg;
     m_tcp_seg_in_use--;
@@ -5400,10 +5428,9 @@ void sockinfo_tcp::put_tcp_seg(struct tcp_seg *seg)
         struct tcp_seg *head = m_tcp_seg_list;
         m_tcp_seg_list = next->next;
         next->next = NULL;
-        g_tcp_seg_pool->put_tcp_segs(head);
+        put_segs(head);
         m_tcp_seg_count -= count;
     }
-    return;
 }
 
 tcp_timers_collection::tcp_timers_collection(int period, int resolution)

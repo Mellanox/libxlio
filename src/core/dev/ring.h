@@ -37,6 +37,7 @@
 #include "ib/base/verbs_extra.h"
 #include "proto/flow_tuple.h"
 #include "sock/socket_fd_api.h"
+#include "sock/tcp_seg_pool.h"
 
 /* Forward declarations */
 struct xlio_tls_info;
@@ -237,12 +238,19 @@ public:
     }
     virtual void credits_return(unsigned credits) { NOT_IN_USE(credits); }
 
+    struct tcp_seg *get_tcp_segs(uint32_t num);
+    void put_tcp_segs(struct tcp_seg *seg);
+
 protected:
     inline void set_parent(ring *parent) { m_parent = (parent ? parent : this); }
     inline void set_if_index(int if_index) { m_if_index = if_index; }
 
     int *m_p_n_rx_channel_fds;
     ring *m_parent;
+
+    struct tcp_seg *m_tcp_seg_list;
+    uint32_t m_tcp_seg_count;
+    lock_spin_recursive m_tcp_seg_lock;
 
     int m_if_index; /* Interface index */
 };

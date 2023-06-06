@@ -33,6 +33,7 @@
 #ifndef TCP_SEG_POOL_H
 #define TCP_SEG_POOL_H
 
+#include <utility>
 #include "utils/lock_wrapper.h"
 #include "lwip/tcp_impl.h"
 
@@ -41,6 +42,7 @@ public:
     tcp_seg_pool(int size);
     virtual ~tcp_seg_pool();
 
+    std::pair<tcp_seg *,tcp_seg *> get_tcp_seg_list(int amount);
     tcp_seg *get_tcp_segs(int amount);
     void put_tcp_segs(tcp_seg *seg_list);
 
