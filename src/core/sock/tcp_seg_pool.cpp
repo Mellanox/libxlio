@@ -45,7 +45,6 @@ tcp_seg_pool::tcp_seg_pool(int size)
     m_tcp_segs_array = new struct tcp_seg[size];
     if (m_tcp_segs_array == NULL) {
         __log_dbg("TCP segments allocation failed");
-        free_tsp_resources();
         throw_xlio_exception("TCP segments allocation failed");
     }
     memset(m_tcp_segs_array, 0, sizeof(tcp_seg) * size);
@@ -57,11 +56,6 @@ tcp_seg_pool::tcp_seg_pool(int size)
 }
 
 tcp_seg_pool::~tcp_seg_pool()
-{
-    free_tsp_resources();
-}
-
-void tcp_seg_pool::free_tsp_resources()
 {
     delete[] m_tcp_segs_array;
 }

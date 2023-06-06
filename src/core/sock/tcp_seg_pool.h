@@ -47,7 +47,6 @@ public:
 private:
     tcp_seg *m_tcp_segs_array;
     tcp_seg *m_p_head;
-    void free_tsp_resources(void);
 };
 
 extern tcp_seg_pool *g_tcp_seg_pool;
