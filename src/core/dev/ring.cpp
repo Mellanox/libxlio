@@ -54,11 +54,12 @@ ring::~ring()
     }
 }
 
-struct tcp_seg *ring::get_tcp_segs(uint32_t num)
+// Assumed num > 0.
+tcp_seg *ring::get_tcp_segs(uint32_t num)
 {
     std::lock_guard<decltype(m_tcp_seg_lock)> lock(m_tcp_seg_lock);
 
-    if (num > m_tcp_seg_count) {
+    if (unlikely(num > m_tcp_seg_count)) {
         uint32_t getsize = std::max(safe_mce_sys().tx_segs_ring_batch_tcp, num - m_tcp_seg_count);
         auto seg_list = g_tcp_seg_pool->get_tcp_seg_list(static_cast<int>(getsize));
         if (!seg_list.first) {
@@ -69,45 +70,37 @@ struct tcp_seg *ring::get_tcp_segs(uint32_t num)
         m_tcp_seg_count += getsize;
     }
 
-    struct tcp_seg *head = m_tcp_seg_list;
+    tcp_seg *head = m_tcp_seg_list;
+    tcp_seg *last = head;
     m_tcp_seg_count -= num;
-    if (likely(num == 1)) { // If we use batch > 1 we should not get here often.
-        m_tcp_seg_list = head->next;
-        head->next = nullptr;
-    } else if (num--) { // Check if num > 0 and decrement for inner while.
-        struct tcp_seg *last = head;
-        while (num--) {
-            last = last->next;
-        }
-        m_tcp_seg_list = last->next;
-        last->next = nullptr;
+    while (unlikely(num-- > 1U)) { // For batching we are not expecting to get here often.
+        last = last->next;
     }
+
+    m_tcp_seg_list = last->next;
+    last->next = nullptr;
 
     return head;
 }
 
-void ring::put_tcp_segs(struct tcp_seg *seg)
+// Assumed seg is not nullptr
+void ring::put_tcp_segs(tcp_seg *seg)
 {
     static const uint32_t return_treshold = safe_mce_sys().tx_segs_ring_batch_tcp * 2U;
 
-    if (likely(seg)) {
-        std::lock_guard<decltype(m_tcp_seg_lock)> lock(m_tcp_seg_lock);
+    std::lock_guard<decltype(m_tcp_seg_lock)> lock(m_tcp_seg_lock);
 
-        seg->next = m_tcp_seg_list;
-        m_tcp_seg_list = seg;
+    tcp_seg *seg_temp = m_tcp_seg_list;
+    m_tcp_seg_list = seg;
+    while (unlikely(seg->next)) { // For batching we are not expecting to get here often.
+        seg = seg->next;
         ++m_tcp_seg_count;
-        if (m_tcp_seg_count > return_treshold) {
-            int count = m_tcp_seg_count / 2;
-            struct tcp_seg *next = m_tcp_seg_list;
-            for (int i = 0; i < count - 1; i++) {
-                next = next->next;
-            }
-            struct tcp_seg *head = m_tcp_seg_list;
-            m_tcp_seg_list = next->next;
-            next->next = nullptr;
-            g_tcp_seg_pool->put_tcp_segs(head);
-            m_tcp_seg_count -= count;
-        }
+    }
+
+    seg->next = seg_temp;   
+    if (unlikely(++m_tcp_seg_count > return_treshold)) {
+        g_tcp_seg_pool->put_tcp_segs(
+            tcp_seg_pool::split_tcp_segs(m_tcp_seg_count / 2, m_tcp_seg_list, m_tcp_seg_count));
     }
 }
 

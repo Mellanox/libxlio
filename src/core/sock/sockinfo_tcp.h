@@ -381,13 +381,13 @@ private:
     int m_error_status;
 
     const buffer_batching_mode_t m_sysvar_buffer_batching_mode;
-    const int m_sysvar_tx_segs_batch_tcp;
+    const uint32_t m_sysvar_tx_segs_batch_tcp;
     const tcp_ctl_thread_t m_sysvar_tcp_ctl_thread;
     const internal_thread_tcp_timer_handling_t m_sysvar_internal_thread_tcp_timer_handling;
 
     struct tcp_seg *m_tcp_seg_list;
-    int m_tcp_seg_count;
-    int m_tcp_seg_in_use;
+    uint32_t m_tcp_seg_count;
+    uint32_t m_tcp_seg_in_use;
 
     xlio_desc_list_t m_rx_pkt_ready_list;
     xlio_desc_list_t m_rx_cb_dropped_list;
@@ -554,6 +554,7 @@ private:
     void fit_snd_bufs_to_nagle(bool disable_nagle);
 
     inline struct tcp_seg *get_tcp_seg();
+    inline void return_tcp_segs(struct tcp_seg *seg);
     inline void put_tcp_seg(struct tcp_seg *seg);
 
     void queue_rx_ctl_packet(struct tcp_pcb *pcb, mem_buf_desc_t *p_desc);

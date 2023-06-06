@@ -46,6 +46,8 @@ public:
     tcp_seg *get_tcp_segs(int amount);
     void put_tcp_segs(tcp_seg *seg_list);
 
+    static tcp_seg *split_tcp_segs(uint32_t count, tcp_seg *&tcp_seg_list, uint32_t &total_count);
+
 private:
     tcp_seg *m_tcp_segs_array;
     tcp_seg *m_p_head;

@@ -255,6 +255,7 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     , m_sysvar_tx_segs_batch_tcp(safe_mce_sys().tx_segs_batch_tcp)
     , m_sysvar_tcp_ctl_thread(safe_mce_sys().tcp_ctl_thread)
     , m_sysvar_internal_thread_tcp_timer_handling(safe_mce_sys().internal_thread_tcp_timer_handling)
+    , m_tcp_seg_list(nullptr)
     , m_sysvar_rx_poll_on_tx_tcp(safe_mce_sys().rx_poll_on_tx_tcp)
     , m_user_huge_page_mask(~((uint64_t)safe_mce_sys().user_huge_page_size - 1))
     , m_required_send_block(1U)
@@ -389,7 +390,7 @@ sockinfo_tcp::~sockinfo_tcp()
     if (m_tcp_seg_in_use) {
         si_tcp_logwarn("still %d tcp segs in use!", m_tcp_seg_in_use);
     }
-    if (m_tcp_seg_count) {
+    if (m_tcp_seg_list) {
         g_tcp_seg_pool->put_tcp_segs(m_tcp_seg_list);
     }
 
@@ -5360,12 +5361,10 @@ void sockinfo_tcp::tcp_seg_free(void *p_conn, struct tcp_seg *seg)
 
 struct tcp_seg *sockinfo_tcp::get_tcp_seg()
 {
-    struct tcp_seg *head = NULL;
-
-    dst_entry_tcp *p_dst = static_cast<dst_entry_tcp *>(m_p_connected_dst_entry);
-    if (m_sysvar_tx_segs_batch_tcp == 1 && likely(p_dst) && likely(p_dst->get_ring())) {
-        head = p_dst->get_ring()->get_tcp_segs(1);
-        if (head) {
+    struct tcp_seg *head = nullptr;
+    //dst_entry_tcp *p_dst = static_cast<dst_entry_tcp *>(m_p_connected_dst_entry);
+    if (m_sysvar_tx_segs_batch_tcp == 1U && likely(m_p_rx_ring)) {
+        if ((head = m_p_rx_ring->get_tcp_segs(1U))) {
             ++m_tcp_seg_count;
             ++m_tcp_seg_in_use;
         }
@@ -5373,11 +5372,9 @@ struct tcp_seg *sockinfo_tcp::get_tcp_seg()
     }
 
     if (!m_tcp_seg_list) {
-        if (likely(p_dst) && likely(p_dst->get_ring())) {
-            m_tcp_seg_list = p_dst->get_ring()->get_tcp_segs(m_sysvar_tx_segs_batch_tcp);
-        } else {
-            m_tcp_seg_list = g_tcp_seg_pool->get_tcp_segs(m_sysvar_tx_segs_batch_tcp);
-        }
+        m_tcp_seg_list = (likely(m_p_rx_ring))
+            ? m_p_rx_ring->get_tcp_segs(m_sysvar_tx_segs_batch_tcp)
+            : g_tcp_seg_pool->get_tcp_segs(m_sysvar_tx_segs_batch_tcp);
 
         if (unlikely(!m_tcp_seg_list)) {
             return nullptr;
@@ -5387,10 +5384,17 @@ struct tcp_seg *sockinfo_tcp::get_tcp_seg()
 
     head = m_tcp_seg_list;
     m_tcp_seg_list = head->next;
-    head->next = NULL;
+    head->next = nullptr;
     m_tcp_seg_in_use++;
 
     return head;
+}
+
+void sockinfo_tcp::return_tcp_segs(struct tcp_seg *seg)
+{
+    //dst_entry_tcp *p_dst = static_cast<dst_entry_tcp *>(m_p_connected_dst_entry);
+    (likely(m_p_rx_ring)) ? m_p_rx_ring->put_tcp_segs(seg)
+                          : g_tcp_seg_pool->put_tcp_segs(seg);
 }
 
 void sockinfo_tcp::put_tcp_seg(struct tcp_seg *seg)
@@ -5399,37 +5403,20 @@ void sockinfo_tcp::put_tcp_seg(struct tcp_seg *seg)
         return;
     }
 
-    auto put_segs = [this](struct tcp_seg *pseg) {
-        dst_entry_tcp *p_dst = static_cast<dst_entry_tcp *>(m_p_connected_dst_entry);
-        if (likely(p_dst) && likely(p_dst->get_ring())) {
-            p_dst->get_ring()->put_tcp_segs(pseg);
-        } else {
-            g_tcp_seg_pool->put_tcp_segs(pseg);
-        }
-    };
-
-    if (m_sysvar_tx_segs_batch_tcp == 1) {
-        put_segs(seg);
+    if (m_sysvar_tx_segs_batch_tcp == 1U) {
+        seg->next = nullptr; // Very important. We occasionaly get here trashed seg->next.
+        return_tcp_segs(seg);
         --m_tcp_seg_count;
         --m_tcp_seg_in_use;
-        return;
-    }
-
-    seg->next = m_tcp_seg_list;
-    m_tcp_seg_list = seg;
-    m_tcp_seg_in_use--;
-    if (m_tcp_seg_count > 2 * m_sysvar_tx_segs_batch_tcp &&
-        m_tcp_seg_in_use < m_tcp_seg_count / 2) {
-        int count = (m_tcp_seg_count - m_tcp_seg_in_use) / 2;
-        struct tcp_seg *next = m_tcp_seg_list;
-        for (int i = 0; i < count - 1; i++) {
-            next = next->next;
+    } else {
+        seg->next = m_tcp_seg_list;
+        m_tcp_seg_list = seg;
+        m_tcp_seg_in_use--;
+        if (m_tcp_seg_count > 2U * m_sysvar_tx_segs_batch_tcp &&
+            m_tcp_seg_in_use < m_tcp_seg_count / 2U) {
+            return_tcp_segs(tcp_seg_pool::split_tcp_segs(
+                (m_tcp_seg_count - m_tcp_seg_in_use) / 2U, m_tcp_seg_list, m_tcp_seg_count));
         }
-        struct tcp_seg *head = m_tcp_seg_list;
-        m_tcp_seg_list = next->next;
-        next->next = NULL;
-        put_segs(head);
-        m_tcp_seg_count -= count;
     }
 }
 
