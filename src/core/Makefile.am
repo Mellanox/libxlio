@@ -145,6 +145,7 @@ libxlio_la_SOURCES := \
 	sock/sockinfo_udp.cpp \
 	sock/sockinfo_ulp.cpp \
 	sock/sockinfo_tcp.cpp \
+	sock/tcp_seg_pool.cpp \
 	sock/fd_collection.cpp \
 	sock/pipeinfo.cpp \
 	sock/socket_fd_api.cpp \
@@ -276,6 +277,7 @@ libxlio_la_SOURCES := \
 	sock/sockinfo_tcp.h \
 	sock/sockinfo_udp.h \
 	sock/sockinfo_ulp.h \
+	sock/tcp_seg_pool.h \
 	sock/sock-redirect.h \
 	sock/sockinfo_nvme.h \
 	\

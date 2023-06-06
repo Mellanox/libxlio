@@ -566,22 +566,6 @@ private:
 };
 typedef struct tcp_seg tcp_seg;
 
-class tcp_seg_pool : lock_spin {
-public:
-    tcp_seg_pool(int size);
-    virtual ~tcp_seg_pool();
-
-    tcp_seg *get_tcp_segs(int amount);
-    void put_tcp_segs(tcp_seg *seg_list);
-
-private:
-    tcp_seg *m_tcp_segs_array;
-    tcp_seg *m_p_head;
-    void free_tsp_resources(void);
-};
-
-extern tcp_seg_pool *g_tcp_seg_pool;
-
 class tcp_timers_collection : public timers_group, public cleanable_obj {
 public:
     tcp_timers_collection(int period, int resolution);

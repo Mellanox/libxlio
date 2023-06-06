@@ -69,6 +69,7 @@
 #include "sock/fd_collection.h"
 #include "sock/sockinfo_tcp.h"
 #include "sock/sockinfo_udp.h"
+#include "sock/tcp_seg_pool.h"
 #include "iomux/io_mux_call.h"
 
 #include "util/instrumentation.h"
