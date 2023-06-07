@@ -21,14 +21,14 @@ rc=$?
 
 
 test_ip_list=""
-#if [ ! -z $(do_get_ip 'ib' 'mlx5') ]; then
-#	test_ip_list="${test_ip_list} ib:$(do_get_ip 'ib' 'mlx5')"
+#if [ ! -z $(do_get_ip 'ib') ]; then
+#	test_ip_list="${test_ip_list} ib:$(do_get_ip 'ib')"
 #fi
-if [ ! -z "$(do_get_ip 'eth' 'mlx5')" ]; then
-	test_ip_list="${test_ip_list} eth_ip4:$(do_get_ip 'eth' 'mlx5')"
+if [ ! -z "$(do_get_ip 'eth')" ]; then
+	test_ip_list="${test_ip_list} eth_ip4:$(do_get_ip 'eth')"
 fi
-if [ ! -z "$(do_get_ip 'eth' 'mlx5')" ]; then
-	test_ip_list="${test_ip_list} eth_ip6:$(do_get_ip 'inet6' 'mlx5')"
+if [ ! -z "$(do_get_ip 'eth')" ]; then
+	test_ip_list="${test_ip_list} eth_ip6:$(do_get_ip 'inet6')"
 fi
 test_list="tcp:--tcp udp:"
 test_lib=${vg_dir}/install/lib/${prj_lib}

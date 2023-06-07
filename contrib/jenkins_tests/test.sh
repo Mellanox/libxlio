@@ -26,7 +26,7 @@ do_cmd "wget -O sockperf_v2.zip https://github.com/Mellanox/sockperf/archive/soc
 cd sockperf
 
 # This unit requires sockperf so check for existence
-if [ $(command -v ${tool_app} >/dev/null 2>&1 || echo $?) ]; then
+if [ $(command -v ${test_app} >/dev/null 2>&1 || echo $?) ]; then
     set +e
     ./autogen.sh
     ./configure --prefix=$PWD/install CPPFLAGS="-I${install_dir}/include"
