@@ -426,7 +426,7 @@ extern "C" int xlio_register_recv_callback(int __fd, xlio_recv_callback_t __call
 
     socket_fd_api *p_socket_object = NULL;
     p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
+    if (p_socket_object && !safe_mce_sys().enable_socketxtreme) {
         p_socket_object->register_callback(__callback, __context);
         return 0;
     }

@@ -452,10 +452,26 @@ private:
 
 public:
     static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
+    static err_t rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
+                                         err_t err);
+    static err_t rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, struct pbuf *p,
+		    err_t err);
     static err_t rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
-    static inline void rx_lwip_cb_socketxtreme(sockinfo_tcp *conn, struct pbuf *p);
+    inline void rx_lwip_cb_socketxtreme(pbuf *p);
+
+    virtual int register_callback(xlio_recv_callback_t callback, void *context)
+    {
+        tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_recv_callback);
+        return sockinfo::register_callback(callback, context);
+    }
 
 private:
+    inline err_t handle_fin(struct tcp_pcb *pcb, err_t err);
+    inline void handle_rx_lwip_cb_error(pbuf *p);
+    inline void rx_lwip_cb_error(pbuf *p);
+    inline void rx_lwip_process_chained_pbufs(pbuf *p);
+    inline void rx_lwip_shrink_rcv_wnd(size_t pbuf_tot_len, int nbytes);
+    inline void save_packet_info_in_ready_list(pbuf *p);
     // Be sure that m_pcb is initialized
     void set_conn_properties_from_pcb();
     void set_sock_options(sockinfo_tcp *new_sock);

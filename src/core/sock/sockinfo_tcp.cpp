@@ -295,7 +295,11 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     si_tcp_logdbg("new pcb %p pcb state %d", &m_pcb, get_tcp_state(&m_pcb));
     tcp_arg(&m_pcb, this);
     tcp_ip_output(&m_pcb, sockinfo_tcp::ip_output);
-    tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb);
+    if (is_socketxtreme()) {
+        tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_socketxtreme);
+    } else {
+        tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb);
+    }
     tcp_err(&m_pcb, sockinfo_tcp::err_lwip_cb);
     tcp_sent(&m_pcb, sockinfo_tcp::ack_recvd_lwip_cb);
 
@@ -1772,66 +1776,9 @@ void sockinfo_tcp::tcp_shutdown_rx(void)
     tcp_recv(&m_pcb, sockinfo_tcp::rx_drop_lwip_cb);
 }
 
-inline void sockinfo_tcp::rx_lwip_cb_socketxtreme(sockinfo_tcp *conn, struct pbuf *p)
-{
-    mem_buf_desc_t *p_first_desc = (mem_buf_desc_t *)p;
-    /* Update xlio_completion with
-     * XLIO_SOCKETXTREME_PACKET related data
-     */
-    struct xlio_socketxtreme_completion_t *completion;
-    struct xlio_buff_t *buf_lst;
-
-    // xlio_socketxtreme_completion_t is IPv4 only.
-    assert(p_first_desc->rx.src.get_sa_family() == AF_INET);
-
-    if (conn->m_socketxtreme.completion) {
-        completion = conn->m_socketxtreme.completion;
-        buf_lst = conn->m_socketxtreme.last_buff_lst;
-    } else {
-        completion = &conn->m_socketxtreme.ec.completion;
-        buf_lst = conn->m_socketxtreme.ec.last_buff_lst;
-    }
-
-    if (!buf_lst) {
-        completion->packet.buff_lst = (struct xlio_buff_t *)p_first_desc;
-	if (conn->m_socketxtreme.completion) {
-		conn->m_socketxtreme.last_buff_lst = (struct xlio_buff_t *)p_first_desc;
-	} else {
-		conn->m_socketxtreme.ec.last_buff_lst = (struct xlio_buff_t *)p_first_desc;
-	}
-        completion->packet.total_len = p->tot_len;
-        p_first_desc->rx.src.get_sa(reinterpret_cast<struct sockaddr *>(&completion->src),
-                                    sizeof(completion->src));
-        completion->packet.num_bufs = p_first_desc->rx.n_frags;
-
-        if (conn->m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE) {
-            completion->packet.hw_timestamp = p_first_desc->rx.timestamps.hw;
-        }
-
-        if (conn->m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE) {
-            completion->packet.hw_timestamp = p_first_desc->rx.timestamps.hw;
-        }
-
-        if (conn->m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE) {
-            completion->packet.hw_timestamp = p_first_desc->rx.timestamps.hw;
-        }
-
-        NOTIFY_ON_EVENTS(conn, XLIO_SOCKETXTREME_PACKET);
-        conn->save_stats_rx_offload(completion->packet.total_len);
-    } else {
-        mem_buf_desc_t *prev_lst_tail_desc = (mem_buf_desc_t *)buf_lst;
-        mem_buf_desc_t *list_head_desc = (mem_buf_desc_t *)completion->packet.buff_lst;
-        prev_lst_tail_desc->p_next_desc = p_first_desc;
-        list_head_desc->rx.n_frags += p_first_desc->rx.n_frags;
-        p_first_desc->rx.n_frags = 0;
-        completion->packet.total_len += p->tot_len;
-        completion->packet.num_bufs += list_head_desc->rx.n_frags;
-        pbuf_cat((pbuf *)completion->packet.buff_lst, p);
-    }
-}
-
 err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
 {
+
     sockinfo_tcp *conn = (sockinfo_tcp *)arg;
     uint32_t bytes_to_tcp_recved, non_tcp_receved_bytes_remaining, bytes_to_shrink;
     int rcv_buffer_space;
@@ -1845,64 +1792,165 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
 
     // if is FIN
     if (unlikely(!p)) {
-
-        if (conn->is_server()) {
-            vlog_printf(VLOG_ERROR, "listen socket should not receive FIN\n");
-            return ERR_OK;
-        }
-
-        __log_dbg("[fd=%d] null pbuf sock(%p %p) err=%d", conn->m_fd, &(conn->m_pcb), pcb, err);
-        conn->tcp_shutdown_rx();
-
-        if (conn->m_parent != NULL) {
-            // in case we got FIN before we accepted the connection
-            int delete_fd = 0;
-            sockinfo_tcp *parent = conn->m_parent;
-            /* TODO need to add some refcount inside parent in case parent and child are closed
-             * together*/
-            conn->unlock_tcp_con();
-            if ((delete_fd = parent->handle_child_FIN(conn))) {
-                // close will clean sockinfo_tcp object and the opened OS socket
-                close(delete_fd);
-                conn->lock_tcp_con(); // todo sock and fd_collection destruction race? if so,
-                                      // conn might be invalid? delay close to internal thread?
-                return ERR_ABRT;
-            }
-            conn->lock_tcp_con();
-        }
-        return ERR_OK;
+        return conn->handle_fin(pcb, err);
     }
-    if (unlikely(err != ERR_OK)) {
-        // notify io_mux
-        NOTIFY_ON_EVENTS(conn, EPOLLERR);
 
-        conn->do_wakeup();
-        vlog_printf(VLOG_ERROR, "%s:%d %s\n", __func__, __LINE__, "recv error!!!");
-        pbuf_free(p);
-        conn->m_sock_state = TCP_SOCK_INITED;
+    if (unlikely(err != ERR_OK)) {
+        conn->handle_rx_lwip_cb_error(p);
         return err;
     }
-    mem_buf_desc_t *p_first_desc = (mem_buf_desc_t *)p;
 
+    conn->rx_lwip_process_chained_pbufs(p);
+
+    conn->save_packet_info_in_ready_list(p);
+
+    // notify io_mux
+    NOTIFY_ON_EVENTS(conn, EPOLLIN);
+    io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
+
+    // OLG: Now we should wakeup all threads that are sleeping on this socket.
+    conn->do_wakeup();
+
+    /*
+     * RCVBUFF Accounting: tcp_recved here(stream into the 'internal' buffer) only if the user
+     * buffer is not 'filled'
+     */
+    rcv_buffer_space = std::max(
+        0, conn->m_rcvbuff_max - conn->m_rcvbuff_current - (int)conn->m_pcb.rcv_wnd_max_desired);
+    bytes_to_tcp_recved = std::min(rcv_buffer_space, (int)p->tot_len);
+    conn->m_rcvbuff_current += p->tot_len;
+
+    if (likely(bytes_to_tcp_recved > 0)) {
+        tcp_recved(&(conn->m_pcb), bytes_to_tcp_recved);
+    }
+
+    non_tcp_receved_bytes_remaining = p->tot_len - bytes_to_tcp_recved;
+
+    if (non_tcp_receved_bytes_remaining > 0) {
+        bytes_to_shrink = 0;
+        if (conn->m_pcb.rcv_wnd_max > conn->m_pcb.rcv_wnd_max_desired) {
+            bytes_to_shrink = std::min(conn->m_pcb.rcv_wnd_max - conn->m_pcb.rcv_wnd_max_desired,
+                                       non_tcp_receved_bytes_remaining);
+            conn->m_pcb.rcv_wnd_max -= bytes_to_shrink;
+        }
+        conn->m_rcvbuff_non_tcp_recved += non_tcp_receved_bytes_remaining - bytes_to_shrink;
+    }
+
+    vlog_func_exit();
+    return ERR_OK;
+}
+
+inline void sockinfo_tcp::rx_lwip_cb_socketxtreme(pbuf *p)
+{
+    mem_buf_desc_t *p_first_desc = (mem_buf_desc_t *)p;
+    /* Update xlio_completion with
+     * XLIO_SOCKETXTREME_PACKET related data
+     */
+    struct xlio_socketxtreme_completion_t *completion;
+    struct xlio_buff_t *buf_lst;
+
+    // xlio_socketxtreme_completion_t is IPv4 only.
+    assert(p_first_desc->rx.src.get_sa_family() == AF_INET);
+
+    if (m_socketxtreme.completion) {
+        completion = m_socketxtreme.completion;
+        buf_lst = m_socketxtreme.last_buff_lst;
+    } else {
+        completion = &m_socketxtreme.ec.completion;
+        buf_lst = m_socketxtreme.ec.last_buff_lst;
+    }
+
+    if (!buf_lst) {
+        completion->packet.buff_lst = (struct xlio_buff_t *)p_first_desc;
+        if (m_socketxtreme.completion) {
+            m_socketxtreme.last_buff_lst = (struct xlio_buff_t *)p_first_desc;
+        } else {
+            m_socketxtreme.ec.last_buff_lst = (struct xlio_buff_t *)p_first_desc;
+        }
+        completion->packet.total_len = p->tot_len;
+        p_first_desc->rx.src.get_sa(reinterpret_cast<struct sockaddr *>(&completion->src),
+                                    sizeof(completion->src));
+        completion->packet.num_bufs = p_first_desc->rx.n_frags;
+
+        if (m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE) {
+            completion->packet.hw_timestamp = p_first_desc->rx.timestamps.hw;
+        }
+
+        NOTIFY_ON_EVENTS(this, XLIO_SOCKETXTREME_PACKET);
+        save_stats_rx_offload(completion->packet.total_len);
+    } else {
+        mem_buf_desc_t *prev_lst_tail_desc = (mem_buf_desc_t *)buf_lst;
+        mem_buf_desc_t *list_head_desc = (mem_buf_desc_t *)completion->packet.buff_lst;
+        prev_lst_tail_desc->p_next_desc = p_first_desc;
+        list_head_desc->rx.n_frags += p_first_desc->rx.n_frags;
+        p_first_desc->rx.n_frags = 0;
+        completion->packet.total_len += p->tot_len;
+        completion->packet.num_bufs += list_head_desc->rx.n_frags;
+        pbuf_cat((pbuf *)completion->packet.buff_lst, p);
+    }
+}
+
+inline err_t sockinfo_tcp::handle_fin(struct tcp_pcb *pcb, err_t err)
+{
+    if (is_server()) {
+        vlog_printf(VLOG_ERROR, "listen socket should not receive FIN\n");
+        return ERR_OK;
+    }
+
+    __log_dbg("[fd=%d] null pbuf sock(%p %p) err=%d", m_fd, &(m_pcb), pcb, err);
+    tcp_shutdown_rx();
+
+    if (m_parent != nullptr) {
+        // in case we got FIN before we accepted the connection
+        int delete_fd = 0;
+        sockinfo_tcp *parent = m_parent;
+        /* TODO need to add some refcount inside parent in case parent and child are closed
+         * together*/
+        unlock_tcp_con();
+        if ((delete_fd = parent->handle_child_FIN(this))) {
+            // close will clean sockinfo_tcp object and the opened OS socket
+            close(delete_fd);
+            lock_tcp_con(); // todo sock and fd_collection destruction race? if so,
+            // conn might be invalid? delay close to internal thread?
+            return ERR_ABRT;
+        }
+        lock_tcp_con();
+    }
+    return ERR_OK;
+}
+
+inline void sockinfo_tcp::handle_rx_lwip_cb_error(pbuf *p)
+{
+    // notify io_mux
+    NOTIFY_ON_EVENTS(this, EPOLLERR);
+
+    do_wakeup();
+    vlog_printf(VLOG_ERROR, "%s:%d %s\n", __func__, __LINE__, "recv error!!!");
+    pbuf_free(p);
+    m_sock_state = TCP_SOCK_INITED;
+}
+
+inline void sockinfo_tcp::rx_lwip_process_chained_pbufs(pbuf *p)
+{
+    mem_buf_desc_t *p_first_desc = (mem_buf_desc_t *)p;
     p_first_desc->rx.sz_payload = p->tot_len;
     p_first_desc->rx.n_frags = 0;
 
-    mem_buf_desc_t *p_curr_desc = p_first_desc;
-
-    pbuf *p_curr_buff = p;
-    conn->m_connected.get_sa(reinterpret_cast<sockaddr *>(&p_first_desc->rx.src),
-                             static_cast<socklen_t>(sizeof(p_first_desc->rx.src)));
+    m_connected.get_sa(reinterpret_cast<sockaddr *>(&p_first_desc->rx.src),
+                       static_cast<socklen_t>(sizeof(p_first_desc->rx.src)));
 
     // We go over the p_first_desc again, so decrement what we did in rx_input_cb.
-    conn->m_socket_stats.strq_counters.n_strq_total_strides -=
+    m_socket_stats.strq_counters.n_strq_total_strides -=
         static_cast<uint64_t>(p_first_desc->rx.strides_num);
-    conn->m_socket_stats.counters.n_rx_data_pkts++;
+    m_socket_stats.counters.n_rx_data_pkts++;
     // Assume that all chained buffers are GRO packets
-    conn->m_socket_stats.counters.n_gro += !!p->next;
+    m_socket_stats.counters.n_gro += !!p->next;
 
     // To avoid reset ref count for first mem_buf_desc, save it and set after the while
     int head_ref = p_first_desc->get_ref_count();
-    while (p_curr_buff) {
+
+    for (auto p_curr_desc = reinterpret_cast<mem_buf_desc_t *>(p); p != nullptr;
+         p = p->next, p_curr_desc = p_curr_desc->p_next_desc) {
         /* Here we reset ref count for all mem_buf_desc except for the head (p_first_desc).
         Chain of pbufs can contain some pbufs with ref count >=1 like in ooo or flow tag flows.
         While processing Rx packets we may split buffer chains and we increment ref count
@@ -1911,20 +1959,116 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
         TODO: remove ref count for TCP. */
         p_curr_desc->reset_ref_count();
 
-        conn->save_strq_stats(p_curr_desc->rx.strides_num);
-        p_curr_desc->rx.context = conn;
+        save_strq_stats(p_curr_desc->rx.strides_num);
+        p_curr_desc->rx.context = this;
         p_first_desc->rx.n_frags++;
-        p_curr_desc->rx.frag.iov_base = p_curr_buff->payload;
-        p_curr_desc->rx.frag.iov_len = p_curr_buff->len;
-        p_curr_desc->p_next_desc = (mem_buf_desc_t *)p_curr_buff->next;
-        conn->process_timestamps(p_curr_desc);
-        p_curr_buff = p_curr_buff->next;
-        p_curr_desc = p_curr_desc->p_next_desc;
+        p_curr_desc->rx.frag.iov_base = p->payload;
+        p_curr_desc->rx.frag.iov_len = p->len;
+        p_curr_desc->p_next_desc = reinterpret_cast<mem_buf_desc_t *>(p->next);
+        process_timestamps(p_curr_desc);
     }
     p_first_desc->set_ref_count(head_ref);
+}
+
+inline void sockinfo_tcp::save_packet_info_in_ready_list(pbuf *p)
+{
+    m_rx_pkt_ready_list.push_back(reinterpret_cast<mem_buf_desc_t *>(p));
+    m_n_rx_pkt_ready_list_count++;
+    m_rx_ready_byte_count += p->tot_len;
+    m_p_socket_stats->n_rx_ready_byte_count += p->tot_len;
+    m_p_socket_stats->n_rx_ready_pkt_count++;
+    m_p_socket_stats->counters.n_rx_ready_pkt_max =
+        std::max((uint32_t)m_p_socket_stats->n_rx_ready_pkt_count,
+                 m_p_socket_stats->counters.n_rx_ready_pkt_max);
+    m_p_socket_stats->counters.n_rx_ready_byte_max =
+        std::max((uint32_t)m_p_socket_stats->n_rx_ready_byte_count,
+                 m_p_socket_stats->counters.n_rx_ready_byte_max);
+}
+
+inline void sockinfo_tcp::rx_lwip_shrink_rcv_wnd(size_t pbuf_tot_len, int bytes_received)
+{
+    if (likely(bytes_received > 0)) {
+        tcp_recved(&(m_pcb), bytes_received);
+    }
+
+    int non_tcp_receved_bytes_remaining = pbuf_tot_len - bytes_received;
+
+    if (non_tcp_receved_bytes_remaining > 0) {
+        uint32_t bytes_to_shrink = 0;
+        if (m_pcb.rcv_wnd_max > m_pcb.rcv_wnd_max_desired) {
+            bytes_to_shrink = std::min(m_pcb.rcv_wnd_max - m_pcb.rcv_wnd_max_desired,
+                                       static_cast<uint32_t>(non_tcp_receved_bytes_remaining));
+            m_pcb.rcv_wnd_max -= bytes_to_shrink;
+        }
+        m_rcvbuff_non_tcp_recved += non_tcp_receved_bytes_remaining - bytes_to_shrink;
+    }
+}
+
+err_t sockinfo_tcp::rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *pcb, struct pbuf *p,
+                                            err_t err)
+{
+    sockinfo_tcp *conn = (sockinfo_tcp *)arg;
+
+    NOT_IN_USE(pcb);
+    assert((uintptr_t)pcb->my_container == (uintptr_t)arg);
+
+    vlog_func_enter();
+
+    ASSERT_LOCKED(conn->m_tcp_con_lock);
+
+    // if is FIN
+    if (unlikely(!p)) {
+        return conn->handle_fin(pcb, err);
+    }
+
+    if (unlikely(err != ERR_OK)) {
+        conn->handle_rx_lwip_cb_error(p);
+        return err;
+    }
+    conn->rx_lwip_process_chained_pbufs(p);
+    conn->rx_lwip_cb_socketxtreme(p);
+    io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
+    conn->do_wakeup();
+    /*
+     * RCVBUFF Accounting: tcp_recved here(stream into the 'internal' buffer) only if the user
+     * buffer is not 'filled'
+     */
+    int rcv_buffer_space = std::max(
+        0, conn->m_rcvbuff_max - conn->m_rcvbuff_current - (int)conn->m_pcb.rcv_wnd_max_desired);
+    uint32_t bytes_to_tcp_recved = std::min(rcv_buffer_space, (int)p->tot_len);
+    conn->m_rcvbuff_current += p->tot_len;
+
+    conn->rx_lwip_shrink_rcv_wnd(p->tot_len, bytes_to_tcp_recved);
+
+    vlog_func_exit();
+    return ERR_OK;
+}
+
+err_t sockinfo_tcp::rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
+{
+    sockinfo_tcp *conn = (sockinfo_tcp *)arg;
+
+    NOT_IN_USE(pcb);
+    assert((uintptr_t)pcb->my_container == (uintptr_t)arg);
+
+    vlog_func_enter();
+
+    ASSERT_LOCKED(conn->m_tcp_con_lock);
+
+    // if is FIN
+    if (unlikely(!p)) {
+        return conn->handle_fin(pcb, err);
+    }
+
+    if (unlikely(err != ERR_OK)) {
+        conn->handle_rx_lwip_cb_error(p);
+        return err;
+    }
+    conn->rx_lwip_process_chained_pbufs(p);
 
     xlio_recv_callback_retval_t callback_retval = XLIO_PACKET_RECV;
 
+    mem_buf_desc_t *p_first_desc = (mem_buf_desc_t *)p;
     if (conn->m_rx_callback && !conn->m_xlio_thr && !conn->m_n_rx_pkt_ready_list_count) {
         mem_buf_desc_t *tmp;
         xlio_info_t pkt_info;
@@ -1952,8 +2096,8 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
         }
 
         // call user callback
-        callback_retval =
-            conn->m_rx_callback(conn->m_fd, nr_frags, iov, &pkt_info, conn->m_rx_callback_context);
+        callback_retval = conn->m_rx_callback(conn->m_fd, nr_frags, iov, &pkt_info,
+                                              conn->m_rx_callback_context);
     }
 
     if (callback_retval == XLIO_PACKET_DROP) {
@@ -1961,26 +2105,12 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
 
         // In ZERO COPY case we let the user's application manage the ready queue
     } else {
-        if (conn->is_socketxtreme()) {
-            rx_lwip_cb_socketxtreme(conn, p);
-        } else {
-            if (callback_retval == XLIO_PACKET_RECV) {
-                // Save rx packet info in our ready list
-                conn->m_rx_pkt_ready_list.push_back(p_first_desc);
-                conn->m_n_rx_pkt_ready_list_count++;
-                conn->m_rx_ready_byte_count += p->tot_len;
-                conn->m_p_socket_stats->n_rx_ready_byte_count += p->tot_len;
-                conn->m_p_socket_stats->n_rx_ready_pkt_count++;
-                conn->m_p_socket_stats->counters.n_rx_ready_pkt_max =
-                    std::max((uint32_t)conn->m_p_socket_stats->n_rx_ready_pkt_count,
-                             conn->m_p_socket_stats->counters.n_rx_ready_pkt_max);
-                conn->m_p_socket_stats->counters.n_rx_ready_byte_max =
-                    std::max((uint32_t)conn->m_p_socket_stats->n_rx_ready_byte_count,
-                             conn->m_p_socket_stats->counters.n_rx_ready_byte_max);
-            }
-            // notify io_mux
-            NOTIFY_ON_EVENTS(conn, EPOLLIN);
+        if (callback_retval == XLIO_PACKET_RECV) {
+            // Save rx packet info in our ready list
+            conn->save_packet_info_in_ready_list(p);
         }
+        // notify io_mux
+        NOTIFY_ON_EVENTS(conn, EPOLLIN);
         io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
 
         if (callback_retval != XLIO_PACKET_HOLD) {
@@ -1995,8 +2125,10 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
      * RCVBUFF Accounting: tcp_recved here(stream into the 'internal' buffer) only if the user
      * buffer is not 'filled'
      */
-    rcv_buffer_space = std::max(
-        0, conn->m_rcvbuff_max - conn->m_rcvbuff_current - (int)conn->m_pcb.rcv_wnd_max_desired);
+    uint32_t bytes_to_tcp_recved;
+    int rcv_buffer_space = std::max(
+                                    0,
+                                    conn->m_rcvbuff_max - conn->m_rcvbuff_current - (int)conn->m_pcb.rcv_wnd_max_desired);
     if (callback_retval == XLIO_PACKET_DROP) {
         bytes_to_tcp_recved = (int)p->tot_len;
     } else {
@@ -2004,22 +2136,7 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
         conn->m_rcvbuff_current += p->tot_len;
     }
 
-    if (likely(bytes_to_tcp_recved > 0)) {
-        tcp_recved(&(conn->m_pcb), bytes_to_tcp_recved);
-    }
-
-    non_tcp_receved_bytes_remaining = p->tot_len - bytes_to_tcp_recved;
-
-    if (non_tcp_receved_bytes_remaining > 0) {
-        bytes_to_shrink = 0;
-        if (conn->m_pcb.rcv_wnd_max > conn->m_pcb.rcv_wnd_max_desired) {
-            bytes_to_shrink = std::min(conn->m_pcb.rcv_wnd_max - conn->m_pcb.rcv_wnd_max_desired,
-                                       non_tcp_receved_bytes_remaining);
-            conn->m_pcb.rcv_wnd_max -= bytes_to_shrink;
-        }
-        conn->m_rcvbuff_non_tcp_recved += non_tcp_receved_bytes_remaining - bytes_to_shrink;
-    }
-
+    conn->rx_lwip_shrink_rcv_wnd(p->tot_len, bytes_to_tcp_recved);
     vlog_func_exit();
     return ERR_OK;
 }
@@ -3187,7 +3304,13 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
 
     tcp_ip_output(&(new_sock->m_pcb), sockinfo_tcp::ip_output);
     tcp_arg(&(new_sock->m_pcb), new_sock);
-    tcp_recv(&(new_sock->m_pcb), sockinfo_tcp::rx_lwip_cb);
+
+    if (new_sock->is_socketxtreme()) {
+        tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb_socketxtreme);
+    } else {
+        tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb);
+    }
+
     tcp_err(&(new_sock->m_pcb), sockinfo_tcp::err_lwip_cb);
 
     ASSERT_LOCKED(new_sock->m_tcp_con_lock);
@@ -3407,7 +3530,13 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     new_sock->m_sock_state = TCP_SOCK_INITED;
     new_sock->m_conn_state = TCP_CONN_INIT;
     new_sock->m_parent = listen_sock;
-    tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb);
+
+    if (new_sock->is_socketxtreme()) {
+        tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb_socketxtreme);
+    } else {
+        tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb);
+    }
+
     tcp_err(&new_sock->m_pcb, sockinfo_tcp::err_lwip_cb);
     tcp_sent(&new_sock->m_pcb, sockinfo_tcp::ack_recvd_lwip_cb);
     new_sock->m_pcb.syn_tw_handled_cb = nullptr;
