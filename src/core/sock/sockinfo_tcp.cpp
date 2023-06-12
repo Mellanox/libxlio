@@ -1780,7 +1780,7 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
 {
 
     sockinfo_tcp *conn = (sockinfo_tcp *)arg;
-    uint32_t bytes_to_tcp_recved, non_tcp_receved_bytes_remaining, bytes_to_shrink;
+    uint32_t bytes_to_tcp_recved;
     int rcv_buffer_space;
 
     NOT_IN_USE(pcb);
@@ -1820,27 +1820,13 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
     bytes_to_tcp_recved = std::min(rcv_buffer_space, (int)p->tot_len);
     conn->m_rcvbuff_current += p->tot_len;
 
-    if (likely(bytes_to_tcp_recved > 0)) {
-        tcp_recved(&(conn->m_pcb), bytes_to_tcp_recved);
-    }
-
-    non_tcp_receved_bytes_remaining = p->tot_len - bytes_to_tcp_recved;
-
-    if (non_tcp_receved_bytes_remaining > 0) {
-        bytes_to_shrink = 0;
-        if (conn->m_pcb.rcv_wnd_max > conn->m_pcb.rcv_wnd_max_desired) {
-            bytes_to_shrink = std::min(conn->m_pcb.rcv_wnd_max - conn->m_pcb.rcv_wnd_max_desired,
-                                       non_tcp_receved_bytes_remaining);
-            conn->m_pcb.rcv_wnd_max -= bytes_to_shrink;
-        }
-        conn->m_rcvbuff_non_tcp_recved += non_tcp_receved_bytes_remaining - bytes_to_shrink;
-    }
+    conn->rx_lwip_shrink_rcv_wnd(p->tot_len, bytes_to_tcp_recved);
 
     vlog_func_exit();
     return ERR_OK;
 }
 
-inline void sockinfo_tcp::rx_lwip_cb_socketxtreme(pbuf *p)
+inline void sockinfo_tcp::rx_lwip_cb_socketxtreme_helper(pbuf *p)
 {
     mem_buf_desc_t *p_first_desc = (mem_buf_desc_t *)p;
     /* Update xlio_completion with
@@ -2026,7 +2012,7 @@ err_t sockinfo_tcp::rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *pcb, stru
         return err;
     }
     conn->rx_lwip_process_chained_pbufs(p);
-    conn->rx_lwip_cb_socketxtreme(p);
+    conn->rx_lwip_cb_socketxtreme_helper(p);
     io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
     conn->do_wakeup();
     /*
