@@ -572,80 +572,34 @@ inline int qp_mgr_eth_mlx5::fill_wqe(xlio_ibv_send_wr *pswr)
 
 inline int qp_mgr_eth_mlx5::fill_wqe_send(xlio_ibv_send_wr *pswr)
 {
-    struct mlx5_wqe_eth_seg *eseg = NULL;
-    struct mlx5_wqe_data_seg *dseg = NULL;
-    void *seg = NULL;
+    struct mlx5_wqe_eth_seg *eseg;
+    struct mlx5_wqe_data_seg *dseg;
     int wqe_size = sizeof(mlx5_wqe_ctrl_seg) / OCTOWORD;
-    size_t nelem = pswr->num_sge;
-    uint32_t inl_hdr_size = MLX5_ETH_INLINE_HEADER_SIZE;
-    size_t inl_hdr_copy_size = 0;
-    int i = 0;
-    size_t length;
-    void *addr;
-    int sg_copy_ptr_index = 0;
-    size_t sg_copy_ptr_offset = 0;
 
     eseg = (struct mlx5_wqe_eth_seg *)((uint8_t *)m_sq_wqe_hot + sizeof(mlx5_wqe_ctrl_seg));
-    addr = (void *)(uintptr_t)pswr->sg_list[0].addr;
-    length = (size_t)pswr->sg_list[0].length;
+    eseg->inline_hdr_sz = 0;
 
-    if (likely(length >= MLX5_ETH_INLINE_HEADER_SIZE)) {
-        inl_hdr_copy_size = inl_hdr_size;
-        /* coverity[overrun-buffer-arg] */
-        /* coverity[buffer_size] */
-        /* cppcheck-suppress bufferAccessOutOfBounds */
-        memcpy(eseg->inline_hdr_start, addr, inl_hdr_copy_size);
-    } else {
-        uint32_t inl_hdr_size_left = inl_hdr_size;
-
-        for (i = 0; i < (int)nelem && (size_t)inl_hdr_size_left > 0; ++i) {
-            addr = (void *)(uintptr_t)pswr->sg_list[i].addr;
-            length = (size_t)pswr->sg_list[i].length;
-
-            inl_hdr_copy_size = std::min((int)length, (int)inl_hdr_size_left);
-            memcpy(eseg->inline_hdr_start + (MLX5_ETH_INLINE_HEADER_SIZE - inl_hdr_size_left), addr,
-                   inl_hdr_copy_size);
-            inl_hdr_size_left -= inl_hdr_copy_size;
-        }
-
-        if (i) {
-            --i;
-        }
-    }
-
-    eseg->inline_hdr_sz = htons(inl_hdr_size);
-
-    /* If we copied all the sge into the inline-headers, then we need to
-     * start copying from the next sge into the data-segment.
+    /* Unlike Linux kernel, rdma-core defines mlx5_wqe_eth_seg as 32 bytes, because it contains
+     * 18 bytes of inline header. We don't want to inline partial header to avoid an extra copy
+     * and code complication. Therefore, we cannot rely on the structure definition and need to
+     * hardcode 16 bytes here.
      */
-    if (unlikely(length == inl_hdr_copy_size)) {
-        ++i;
-        inl_hdr_copy_size = 0;
-    }
+    wqe_size += 1;
+    dseg = (struct mlx5_wqe_data_seg *)((uintptr_t)eseg + OCTOWORD);
 
-    sg_copy_ptr_index = i;
-    sg_copy_ptr_offset = inl_hdr_copy_size;
-
-    seg = eseg;
-    seg = (void *)((uintptr_t)seg + sizeof(struct mlx5_wqe_eth_seg));
-    wqe_size += sizeof(struct mlx5_wqe_eth_seg) / OCTOWORD;
-
-    dseg = (struct mlx5_wqe_data_seg *)seg;
-    for (i = sg_copy_ptr_index; i < (int)nelem; ++i) {
+    for (int i = 0; i < pswr->num_sge; ++i) {
         if (unlikely((uintptr_t)dseg >= (uintptr_t)m_sq_wqes_end)) {
             dseg = (struct mlx5_wqe_data_seg *)m_sq_wqes;
         }
         if (likely(pswr->sg_list[i].length)) {
-            dseg->byte_count = htonl(pswr->sg_list[i].length - sg_copy_ptr_offset);
+            dseg->byte_count = htonl(pswr->sg_list[i].length);
             /* Try to copy data to On Device Memory in first */
             if (!(m_dm_enabled &&
-                  m_dm_mgr.copy_data(
-                      dseg, (uint8_t *)((uintptr_t)pswr->sg_list[i].addr + sg_copy_ptr_offset),
-                      pswr->sg_list[i].length, (mem_buf_desc_t *)pswr->wr_id))) {
+                  m_dm_mgr.copy_data(dseg, (uint8_t *)((uintptr_t)pswr->sg_list[i].addr),
+                                     pswr->sg_list[i].length, (mem_buf_desc_t *)pswr->wr_id))) {
                 dseg->lkey = htonl(pswr->sg_list[i].lkey);
-                dseg->addr = htonll((uintptr_t)pswr->sg_list[i].addr + sg_copy_ptr_offset);
+                dseg->addr = htonll((uintptr_t)pswr->sg_list[i].addr);
             }
-            sg_copy_ptr_offset = 0;
             ++dseg;
             wqe_size += sizeof(struct mlx5_wqe_data_seg) / OCTOWORD;
         }
