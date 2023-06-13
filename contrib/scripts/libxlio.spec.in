@@ -89,7 +89,7 @@ cp -f src/core/.libs/%{name}.so %{name}-debug.so
 %{make_build} clean
 %endif
 
-%configure --docdir=%{_pkgdocdir} \
+%configure --enable-opt-log=high --docdir=%{_pkgdocdir} \
            %{?configure_options}
 %{make_build}
 
