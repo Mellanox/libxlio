@@ -148,7 +148,6 @@ Example:
  XLIO DETAILS: Internal Thread Affinity       -1                         [XLIO_INTERNAL_THREAD_AFFINITY]
  XLIO DETAILS: Internal Thread Cpuset                                    [XLIO_INTERNAL_THREAD_CPUSET]
  XLIO DETAILS: Internal Thread Arm CQ         Disabled                   [XLIO_INTERNAL_THREAD_ARM_CQ]
- XLIO DETAILS: Internal Thread TCP Handling   0 (deferred)               [XLIO_INTERNAL_THREAD_TCP_TIMER_HANDLING]
  XLIO DETAILS: Thread mode                    Multi spin lock            [XLIO_THREAD_MODE]
  XLIO DETAILS: Buffer batching mode           1 (Batch and reclaim buffers) [XLIO_BUFFER_BATCHING_MODE]
  XLIO DETAILS: Mem Allocate type              2 (Huge Pages)             [XLIO_MEM_ALLOC_TYPE]
@@ -902,14 +901,6 @@ Select a cpuset for XLIO internal thread (see man page of cpuset).
 The value is the path to the cpuset (for example: /dev/cpuset/my_set), or an empty
 string to run it on the same cpuset the process runs on.
 Default value is an empty string.
-
-XLIO_INTERNAL_THREAD_TCP_TIMER_HANDLING
-Select the internal thread policy when handling TCP timers
-Use value of 0 for deferred handling. The internal thread will not handle TCP timers upon timer
-expiration (once every 100ms) in order to let application threads handling it first
-Use value of 1 for immediate handling. The internal thread will try locking and handling TCP timers upon
-timer expiration (once every 100ms).  Application threads may be blocked till internal thread finishes handling TCP timers
-Default value is 0 (deferred handling)
 
 XLIO_INTERNAL_THREAD_ARM_CQ
 Wakeup the internal thread for each packet that the CQ receive.

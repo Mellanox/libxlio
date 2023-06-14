@@ -746,10 +746,6 @@ void print_xlio_global_settings()
     VLOG_PARAM_STRING("Internal Thread Arm CQ", safe_mce_sys().internal_thread_arm_cq_enabled,
                       MCE_DEFAULT_INTERNAL_THREAD_ARM_CQ_ENABLED, SYS_VAR_INTERNAL_THREAD_ARM_CQ,
                       safe_mce_sys().internal_thread_arm_cq_enabled ? "Enabled " : "Disabled");
-    VLOG_PARAM_NUMSTR(
-        "Internal Thread TCP Handling", safe_mce_sys().internal_thread_tcp_timer_handling,
-        MCE_DEFAULT_INTERNAL_THREAD_TCP_TIMER_HANDLING, SYS_VAR_INTERNAL_THREAD_TCP_TIMER_HANDLING,
-        internal_thread_tcp_timer_handling_str(safe_mce_sys().internal_thread_tcp_timer_handling));
     VLOG_PARAM_STRING("Thread mode", safe_mce_sys().thread_mode, MCE_DEFAULT_THREAD_MODE,
                       SYS_VAR_THREAD_MODE, thread_mode_str(safe_mce_sys().thread_mode));
     VLOG_PARAM_NUMSTR("Buffer batching mode", safe_mce_sys().buffer_batching_mode,

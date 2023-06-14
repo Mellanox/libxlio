@@ -312,13 +312,7 @@ public:
 
     inline int trylock_tcp_con(void) { return m_tcp_con_lock.trylock(); }
     inline void lock_tcp_con(void) { m_tcp_con_lock.lock(); }
-    inline void unlock_tcp_con(void)
-    {
-        if (m_timer_pending) {
-            tcp_timer();
-        }
-        m_tcp_con_lock.unlock();
-    }
+    inline void unlock_tcp_con(void) { m_tcp_con_lock.unlock(); }
 
     list_node<sockinfo_tcp, sockinfo_tcp::accepted_conns_node_offset> accepted_conns_node;
 
@@ -379,7 +373,6 @@ private:
 
     void *m_timer_handle;
     lock_mutex_recursive m_tcp_con_lock;
-    bool m_timer_pending;
 
     // used for reporting 'connected' on second non-blocking call to connect or
     // second call to failed connect blocking socket.
@@ -390,7 +383,6 @@ private:
     const buffer_batching_mode_t m_sysvar_buffer_batching_mode;
     const uint32_t m_sysvar_tx_segs_batch_tcp;
     const tcp_ctl_thread_t m_sysvar_tcp_ctl_thread;
-    const internal_thread_tcp_timer_handling_t m_sysvar_internal_thread_tcp_timer_handling;
 
     struct tcp_seg *m_tcp_seg_list;
     uint32_t m_tcp_seg_count;
