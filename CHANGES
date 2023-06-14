@@ -1,3 +1,18 @@
+Version 3.10.0-1:
+Date + Time 2023-06-14
+=============================================================
+Added:
+        - RM #3377639 Separate NVMe from TLS xlio_tis/r
+        - RM #3472589 Add RTC timestamp format
+        - RM #3495435 Add XLIO_TCP_NODELAY_TRESHOLD
+        - RM #3497651 Use ConnectX-7 in CI by default
+        - RM #3500110 Avoid outgoing TCP header dereference in tcp_receive
+        - RM #3500109 Disable debug logs in the release builds
+        - RM #3500111 Remove partial inline from SEND WQEs
+Fixed:
+        - RM #3373882 Fix compilation issue with gcc 13
+        - RM #3502107 Fix missed sockets in the stats file
+
 Version 3.1.1-1:
 Date + Time 2023-05-23
 =============================================================
