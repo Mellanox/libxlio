@@ -120,9 +120,11 @@ epfd_info::~epfd_info()
         BULLSEYE_EXCLUDE_BLOCK_START
         if (sock_fd) {
             unlock();
+            /* coverity[double_lock] */
             m_ring_map_lock.lock();
             sock_fd->remove_epoll_context(this);
             m_ring_map_lock.unlock();
+            /* coverity[double_lock] */
             lock();
         } else {
             __log_err(

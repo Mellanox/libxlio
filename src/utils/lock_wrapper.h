@@ -319,6 +319,76 @@ protected:
 };
 
 /**
+ * pthread recursive mutex
+ */
+class lock_mutex_recursive : public lock_mutex {
+public:
+    lock_mutex_recursive(const char *name = "lock_mutex_recursive")
+        : lock_mutex(name, PTHREAD_MUTEX_RECURSIVE)
+        , m_lock_count(0)
+    {
+        memset(&m_invalid_owner, 0xff, sizeof(m_invalid_owner));
+        m_owner = m_invalid_owner;
+    };
+    ~lock_mutex_recursive() {};
+
+    inline int lock()
+    {
+        DEFINED_NO_THREAD_LOCK_RETURN_0
+        pthread_t self = pthread_self();
+        if (m_owner == self) {
+            ++m_lock_count;
+            return 0;
+        }
+        LOCK_BASE_START_LOCK_WAIT
+        int ret = lock_mutex::lock();
+        if (likely(ret == 0)) {
+            ++m_lock_count;
+            m_owner = self;
+        }
+        LOCK_BASE_END_LOCK_WAIT
+        return ret;
+    };
+    inline int trylock()
+    {
+        DEFINED_NO_THREAD_LOCK_RETURN_0
+        pthread_t self = pthread_self();
+        if (m_owner == self) {
+            ++m_lock_count;
+            return 0;
+        }
+        int ret = lock_mutex::trylock();
+        if (ret == 0) {
+            ++m_lock_count;
+            m_owner = self;
+        }
+        return ret;
+    };
+    inline int unlock()
+    {
+        DEFINED_NO_THREAD_LOCK_RETURN_0
+        if (--m_lock_count == 0) {
+            m_owner = m_invalid_owner;
+            return lock_mutex::unlock();
+        }
+        return 0;
+    };
+    inline int is_locked_by_me()
+    {
+        DEFINED_NO_THREAD_LOCK_RETURN_1
+        pthread_t self = pthread_self();
+        return ((m_owner == self && m_lock_count) ? m_lock_count : 0);
+    };
+
+    inline int get_num_locks() { return m_lock_count; };
+
+protected:
+    pthread_t m_owner;
+    pthread_t m_invalid_owner;
+    int m_lock_count;
+};
+
+/**
  * pthread rwlock
  */
 class lock_rw {
@@ -360,16 +430,6 @@ public:
 
 protected:
     pthread_rwlock_t m_lock;
-};
-
-/**
- * pthread recursive mutex
- */
-class lock_mutex_recursive : public lock_mutex {
-public:
-    lock_mutex_recursive(const char *name = "lock_mutex_recursive")
-        : lock_mutex(name, PTHREAD_MUTEX_RECURSIVE) {};
-    ~lock_mutex_recursive() {};
 };
 
 #endif // LOCK_WRAPPER_H

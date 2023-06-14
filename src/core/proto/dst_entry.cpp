@@ -657,6 +657,7 @@ void dst_entry::do_ring_migration(lock_base &socket_lock, resource_allocation_ke
                m_p_ring, new_key->to_str().c_str(), new_ring);
 
     socket_lock.lock();
+    /* coverity[double_lock] */
     m_slow_path_lock.lock();
 
     set_state(false);

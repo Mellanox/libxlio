@@ -378,7 +378,7 @@ private:
     int m_backlog;
 
     void *m_timer_handle;
-    lock_spin_recursive m_tcp_con_lock;
+    lock_mutex_recursive m_tcp_con_lock;
     bool m_timer_pending;
 
     // used for reporting 'connected' on second non-blocking call to connect or

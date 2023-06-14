@@ -4702,6 +4702,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
     }
 
     // arming CQs
+    /* coverity[double_lock] */
     m_rx_ring_map_lock.lock();
     if (likely(m_p_rx_ring)) {
         ret = m_p_rx_ring->request_notification(CQT_RX, poll_sn);
