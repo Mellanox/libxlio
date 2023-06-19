@@ -41,6 +41,7 @@
 ring::ring()
     : m_p_n_rx_channel_fds(NULL)
     , m_parent(NULL)
+    , m_tcp_seg_list(nullptr)
     , m_tcp_seg_count(0U)
 {
     m_if_index = 0;
@@ -73,8 +74,12 @@ tcp_seg *ring::get_tcp_segs(uint32_t num)
     tcp_seg *head = m_tcp_seg_list;
     tcp_seg *last = head;
     m_tcp_seg_count -= num;
-    while (unlikely(num-- > 1U)) { // For batching we are not expecting to get here often.
-        last = last->next;
+
+    // For non-batching, improves branch prediction. For batching, we do not get here often.
+    if (unlikely(num > 1U)) {
+        while (likely(num-- > 1U)) { // Find the last returned element.
+            last = last->next;
+        }
     }
 
     m_tcp_seg_list = last->next;
@@ -92,12 +97,16 @@ void ring::put_tcp_segs(tcp_seg *seg)
 
     tcp_seg *seg_temp = m_tcp_seg_list;
     m_tcp_seg_list = seg;
-    while (unlikely(seg->next)) { // For batching we are not expecting to get here often.
-        seg = seg->next;
-        ++m_tcp_seg_count;
+
+    // For non-batching, improves branch prediction. For batching, we do not get here often.
+    if (unlikely(seg->next)) {
+        while (likely(seg->next)) {
+            seg = seg->next;
+            ++m_tcp_seg_count; // Count all except the first.
+        }
     }
 
-    seg->next = seg_temp;   
+    seg->next = seg_temp;
     if (unlikely(++m_tcp_seg_count > return_treshold)) {
         g_tcp_seg_pool->put_tcp_segs(
             tcp_seg_pool::split_tcp_segs(m_tcp_seg_count / 2, m_tcp_seg_list, m_tcp_seg_count));

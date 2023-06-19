@@ -123,10 +123,18 @@ xlio_lwip::xlio_lwip()
     lwip_init();
     lwip_logdbg("LWIP subsystem initialized");
 
+    // In case of batching is not requested we fetch tcp_seg from the ring directly.
+    // This creates hot segments, CPU cache wise.
+    if (safe_mce_sys().tx_segs_batch_tcp == 1U) {
+        register_tcp_seg_alloc(sockinfo_tcp::tcp_seg_alloc_direct);
+        register_tcp_seg_free(sockinfo_tcp::tcp_seg_free_direct);
+    } else {
+        register_tcp_seg_alloc(sockinfo_tcp::tcp_seg_alloc_cached);
+        register_tcp_seg_free(sockinfo_tcp::tcp_seg_free_cached);
+    }
+
     register_tcp_tx_pbuf_alloc(sockinfo_tcp::tcp_tx_pbuf_alloc);
     register_tcp_tx_pbuf_free(sockinfo_tcp::tcp_tx_pbuf_free);
-    register_tcp_seg_alloc(sockinfo_tcp::tcp_seg_alloc);
-    register_tcp_seg_free(sockinfo_tcp::tcp_seg_free);
     register_tcp_state_observer(sockinfo_tcp::tcp_state_observer);
     register_ip_route_mtu(sockinfo_tcp::get_route_mtu);
     register_sys_now(sys_now);

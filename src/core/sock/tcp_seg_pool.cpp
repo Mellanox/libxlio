@@ -65,7 +65,7 @@ tcp_seg *tcp_seg_pool::get_tcp_segs(int amount)
     return get_tcp_seg_list(amount).first;
 }
 
-std::pair<tcp_seg *,tcp_seg *> tcp_seg_pool::get_tcp_seg_list(int amount)
+std::pair<tcp_seg *, tcp_seg *> tcp_seg_pool::get_tcp_seg_list(int amount)
 {
     int orig_amount = amount;
     tcp_seg *head, *next, *prev;
@@ -114,7 +114,7 @@ void tcp_seg_pool::put_tcp_segs(tcp_seg *seg_list)
 }
 
 // Splitting seg list such that first 'count' segs are returned and 'tcp_seg_list'
-// is updated to point to the remaining segs. 
+// is updated to point to the remaining segs.
 // The length of tcp_seg_list is assumed to be at least 'count' long.
 tcp_seg *tcp_seg_pool::split_tcp_segs(uint32_t count, tcp_seg *&tcp_seg_list, uint32_t &total_count)
 {

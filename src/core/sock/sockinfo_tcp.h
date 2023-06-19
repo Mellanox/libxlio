@@ -204,8 +204,10 @@ public:
                                           struct pbuf *p_buf);
     static void tcp_tx_pbuf_free(void *p_conn, struct pbuf *p_buff);
     static void tcp_rx_pbuf_free(struct pbuf *p_buff);
-    static struct tcp_seg *tcp_seg_alloc(void *p_conn);
-    static void tcp_seg_free(void *p_conn, struct tcp_seg *seg);
+    static struct tcp_seg *tcp_seg_alloc_direct(void *p_conn);
+    static struct tcp_seg *tcp_seg_alloc_cached(void *p_conn);
+    static void tcp_seg_free_direct(void *p_conn, struct tcp_seg *seg);
+    static void tcp_seg_free_cached(void *p_conn, struct tcp_seg *seg);
     uint32_t get_next_tcp_seqno(void) { return m_pcb.snd_lbb; }
     uint32_t get_next_tcp_seqno_rx(void) { return m_pcb.rcv_nxt; }
 
@@ -553,9 +555,11 @@ private:
     void fit_snd_bufs(unsigned int new_max);
     void fit_snd_bufs_to_nagle(bool disable_nagle);
 
-    inline struct tcp_seg *get_tcp_seg();
+    inline struct tcp_seg *get_tcp_seg_cached();
+    inline struct tcp_seg *get_tcp_seg_direct();
+    inline void put_tcp_seg_cached(struct tcp_seg *seg);
+    inline void put_tcp_seg_direct(struct tcp_seg *seg);
     inline void return_tcp_segs(struct tcp_seg *seg);
-    inline void put_tcp_seg(struct tcp_seg *seg);
 
     void queue_rx_ctl_packet(struct tcp_pcb *pcb, mem_buf_desc_t *p_desc);
     bool process_peer_ctl_packets(xlio_desc_list_t &peer_packets);
