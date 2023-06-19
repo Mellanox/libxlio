@@ -1828,52 +1828,54 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
 
 inline void sockinfo_tcp::rx_lwip_cb_socketxtreme_helper(pbuf *p)
 {
-    mem_buf_desc_t *p_first_desc = (mem_buf_desc_t *)p;
-    /* Update xlio_completion with
-     * XLIO_SOCKETXTREME_PACKET related data
+    // Use ring_ec if complition was not provided by the user
+    xlio_socketxtreme_completion_t *completion =
+        (m_socketxtreme.completion) ? m_socketxtreme.completion : &m_socketxtreme.ec.completion;
+    mem_buf_desc_t *current_desc = (mem_buf_desc_t *)p;
+
+    // Is IPv4 only.
+    assert(current_desc->rx.src.get_sa_family() == AF_INET);
+
+    /*
+     * When the completion object is used for the first time the buff_lst is NULL and we
+     * assign current_desc(i.e. the current pbuf to it.
+     * On the consequent passes we chain the xlio_buff_t objects.
      */
-    struct xlio_socketxtreme_completion_t *completion;
-    struct xlio_buff_t *buf_lst;
-
-    // xlio_socketxtreme_completion_t is IPv4 only.
-    assert(p_first_desc->rx.src.get_sa_family() == AF_INET);
-
-    if (m_socketxtreme.completion) {
-        completion = m_socketxtreme.completion;
-        buf_lst = m_socketxtreme.last_buff_lst;
-    } else {
-        completion = &m_socketxtreme.ec.completion;
-        buf_lst = m_socketxtreme.ec.last_buff_lst;
-    }
-
-    if (!buf_lst) {
-        completion->packet.buff_lst = (struct xlio_buff_t *)p_first_desc;
+    if (!completion->packet.buff_lst) {
+        completion->packet.buff_lst = (xlio_buff_t *)current_desc;
         if (m_socketxtreme.completion) {
-            m_socketxtreme.last_buff_lst = (struct xlio_buff_t *)p_first_desc;
+            m_socketxtreme.last_buff_lst = (xlio_buff_t *)current_desc;
         } else {
-            m_socketxtreme.ec.last_buff_lst = (struct xlio_buff_t *)p_first_desc;
+            m_socketxtreme.ec.last_buff_lst = (xlio_buff_t *)current_desc;
         }
         completion->packet.total_len = p->tot_len;
-        p_first_desc->rx.src.get_sa(reinterpret_cast<struct sockaddr *>(&completion->src),
+        current_desc->rx.src.get_sa(reinterpret_cast<sockaddr *>(&completion->src),
                                     sizeof(completion->src));
-        completion->packet.num_bufs = p_first_desc->rx.n_frags;
+        completion->packet.num_bufs = current_desc->rx.n_frags;
 
         if (m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE) {
-            completion->packet.hw_timestamp = p_first_desc->rx.timestamps.hw;
+            completion->packet.hw_timestamp = current_desc->rx.timestamps.hw;
         }
 
         NOTIFY_ON_EVENTS(this, XLIO_SOCKETXTREME_PACKET);
-        save_stats_rx_offload(completion->packet.total_len);
     } else {
-        mem_buf_desc_t *prev_lst_tail_desc = (mem_buf_desc_t *)buf_lst;
-        mem_buf_desc_t *list_head_desc = (mem_buf_desc_t *)completion->packet.buff_lst;
-        prev_lst_tail_desc->p_next_desc = p_first_desc;
-        list_head_desc->rx.n_frags += p_first_desc->rx.n_frags;
-        p_first_desc->rx.n_frags = 0;
+        auto *list_head_desc = reinterpret_cast<mem_buf_desc_t *>(completion->packet.buff_lst);
+        list_head_desc->rx.n_frags += current_desc->rx.n_frags;
+        current_desc->rx.n_frags = 0;
         completion->packet.total_len += p->tot_len;
-        completion->packet.num_bufs += list_head_desc->rx.n_frags;
+        completion->packet.num_bufs = list_head_desc->rx.n_frags;
         pbuf_cat((pbuf *)completion->packet.buff_lst, p);
+        if (m_socketxtreme.completion) {
+            reinterpret_cast<mem_buf_desc_t *>(m_socketxtreme.last_buff_lst)->p_next_desc =
+                current_desc;
+            m_socketxtreme.last_buff_lst = (xlio_buff_t *)current_desc;
+        } else {
+            reinterpret_cast<mem_buf_desc_t *>(m_socketxtreme.ec.last_buff_lst)->p_next_desc =
+                current_desc;
+            m_socketxtreme.ec.last_buff_lst = (xlio_buff_t *)current_desc;
+        }
     }
+    save_stats_rx_offload(completion->packet.total_len);
 }
 
 inline err_t sockinfo_tcp::handle_fin(struct tcp_pcb *pcb, err_t err)
@@ -1883,6 +1885,8 @@ inline err_t sockinfo_tcp::handle_fin(struct tcp_pcb *pcb, err_t err)
         return ERR_OK;
     }
 
+    NOT_IN_USE(pcb);
+    NOT_IN_USE(err);
     __log_dbg("[fd=%d] null pbuf sock(%p %p) err=%d", m_fd, &(m_pcb), pcb, err);
     tcp_shutdown_rx();
 
