@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 
+#include <functional>
 #include <numeric>
 #include <stdio.h>
 #include <sys/time.h>
@@ -1826,56 +1827,56 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
     return ERR_OK;
 }
 
-inline void sockinfo_tcp::rx_lwip_cb_socketxtreme_helper(pbuf *p)
+static inline void _rx_lwip_cb_socketxtreme_helper(pbuf *p,
+                                                   xlio_socketxtreme_completion_t *completion,
+                                                   xlio_buff_t *&buff_list_tail,
+                                                   bool use_hw_timestamp,
+                                                   std::function<void(void)> notify)
 {
-    // Use ring_ec if complition was not provided by the user
-    xlio_socketxtreme_completion_t *completion =
-        (m_socketxtreme.completion) ? m_socketxtreme.completion : &m_socketxtreme.ec.completion;
     mem_buf_desc_t *current_desc = (mem_buf_desc_t *)p;
+    xlio_buff_t *&buff_list_head = completion->packet.buff_lst;
 
     // Is IPv4 only.
     assert(current_desc->rx.src.get_sa_family() == AF_INET);
 
-    /*
-     * When the completion object is used for the first time the buff_lst is NULL and we
-     * assign current_desc(i.e. the current pbuf to it.
-     * On the consequent passes we chain the xlio_buff_t objects.
-     */
-    if (!completion->packet.buff_lst) {
-        completion->packet.buff_lst = (xlio_buff_t *)current_desc;
-        if (m_socketxtreme.completion) {
-            m_socketxtreme.last_buff_lst = (xlio_buff_t *)current_desc;
-        } else {
-            m_socketxtreme.ec.last_buff_lst = (xlio_buff_t *)current_desc;
-        }
-        completion->packet.total_len = p->tot_len;
+    if (buff_list_head == nullptr) { // New completion
+        buff_list_head = reinterpret_cast<xlio_buff_t *>(p);
+
         current_desc->rx.src.get_sa(reinterpret_cast<sockaddr *>(&completion->src),
                                     sizeof(completion->src));
-        completion->packet.num_bufs = current_desc->rx.n_frags;
-
-        if (m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE) {
+        if (use_hw_timestamp) {
             completion->packet.hw_timestamp = current_desc->rx.timestamps.hw;
         }
 
-        NOTIFY_ON_EVENTS(this, XLIO_SOCKETXTREME_PACKET);
+        completion->packet.total_len = p->tot_len;
+        completion->packet.num_bufs = current_desc->rx.n_frags;
+        notify();
     } else {
-        auto *list_head_desc = reinterpret_cast<mem_buf_desc_t *>(completion->packet.buff_lst);
-        list_head_desc->rx.n_frags += current_desc->rx.n_frags;
+        auto &n_frags = reinterpret_cast<mem_buf_desc_t *>(buff_list_head)->rx.n_frags;
+        n_frags += current_desc->rx.n_frags;
         current_desc->rx.n_frags = 0;
         completion->packet.total_len += p->tot_len;
-        completion->packet.num_bufs = list_head_desc->rx.n_frags;
-        pbuf_cat((pbuf *)completion->packet.buff_lst, p);
-        if (m_socketxtreme.completion) {
-            reinterpret_cast<mem_buf_desc_t *>(m_socketxtreme.last_buff_lst)->p_next_desc =
-                current_desc;
-            m_socketxtreme.last_buff_lst = (xlio_buff_t *)current_desc;
-        } else {
-            reinterpret_cast<mem_buf_desc_t *>(m_socketxtreme.ec.last_buff_lst)->p_next_desc =
-                current_desc;
-            m_socketxtreme.ec.last_buff_lst = (xlio_buff_t *)current_desc;
-        }
+        completion->packet.num_bufs = n_frags;
+        pbuf_cat(reinterpret_cast<pbuf *>(buff_list_head), p);
     }
-    save_stats_rx_offload(completion->packet.total_len);
+    buff_list_tail = reinterpret_cast<xlio_buff_t *>(p);
+}
+
+inline void sockinfo_tcp::rx_lwip_cb_socketxtreme_helper(pbuf *p)
+{
+    auto notify = [this]() { NOTIFY_ON_EVENTS(this, XLIO_SOCKETXTREME_PACKET); };
+    bool use_hw_timestamp = (m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE);
+
+    // Use ring_ec if complition was not provided by the user
+    if (m_socketxtreme.completion) {
+        _rx_lwip_cb_socketxtreme_helper(p, m_socketxtreme.completion, m_socketxtreme.last_buff_lst,
+                                        use_hw_timestamp, notify);
+        save_stats_rx_offload(m_socketxtreme.completion->packet.total_len);
+    } else {
+        _rx_lwip_cb_socketxtreme_helper(p, &m_socketxtreme.ec.completion,
+                                        m_socketxtreme.ec.last_buff_lst, use_hw_timestamp, notify);
+        save_stats_rx_offload(m_socketxtreme.ec.completion.packet.total_len);
+    }
 }
 
 inline err_t sockinfo_tcp::handle_fin(struct tcp_pcb *pcb, err_t err)
