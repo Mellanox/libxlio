@@ -460,12 +460,16 @@ void event_handler_manager::post_new_reg_action(reg_action_t &reg_action)
 
     evh_logfunc("add event action %s (%d)", reg_action_str(reg_action.type), reg_action.type);
 
+    bool is_empty = false;
     m_reg_action_q_lock.lock();
-    if (m_reg_action_q.empty()) {
+    if (m_p_reg_action_q_to_push_to->empty()) {
+        is_empty = true;
+    }
+    m_p_reg_action_q_to_push_to->push_back(reg_action);
+    m_reg_action_q_lock.unlock();
+    if (is_empty) {
         do_wakeup();
     }
-    m_reg_action_q.push_back(reg_action);
-    m_reg_action_q_lock.unlock();
 }
 
 void event_handler_manager::priv_register_timer_handler(timer_reg_info_t &info)
@@ -1003,22 +1007,21 @@ void *event_handler_manager::thread_loop()
                     &poll_sn, NULL);
             } else if (is_wakeup_fd(p_events[idx].data.fd)) {
                 // a request for registration was sent
+                m_reg_action_q_lock.lock();
+                reg_action_q_t *temp = m_p_reg_action_q_to_push_to;
+                m_p_reg_action_q_to_push_to = m_p_reg_action_q_to_pop_from;
+                m_p_reg_action_q_to_pop_from = temp;
+                return_from_sleep();
+                remove_wakeup_fd();
+                going_to_sleep();
+                m_reg_action_q_lock.unlock();
+
                 reg_action_t reg_action;
-                while (1) {
-                    m_reg_action_q_lock.lock();
-                    if (m_reg_action_q.empty()) {
-                        return_from_sleep();
-                        remove_wakeup_fd();
-                        going_to_sleep();
-                        m_reg_action_q_lock.unlock();
-                        break;
-                    }
-                    reg_action = m_reg_action_q.front();
-                    m_reg_action_q.pop_front();
-                    m_reg_action_q_lock.unlock();
+                while (!m_p_reg_action_q_to_pop_from->empty()) {
+                    reg_action = m_p_reg_action_q_to_pop_from->front();
+                    m_p_reg_action_q_to_pop_from->pop_front();
                     handle_registration_action(reg_action);
                 }
-                break;
             }
         }
 

@@ -188,7 +188,10 @@ private:
     int m_epfd;
 
     // pipe for the event registration handling
-    reg_action_q_t m_reg_action_q;
+    reg_action_q_t m_reg_action_q1;
+    reg_action_q_t m_reg_action_q2;
+    reg_action_q_t *m_p_reg_action_q_to_push_to = &m_reg_action_q1;
+    reg_action_q_t *m_p_reg_action_q_to_pop_from = &m_reg_action_q2;
     lock_spin m_reg_action_q_lock;
     timer m_timer;
 
