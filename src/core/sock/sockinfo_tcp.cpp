@@ -439,11 +439,11 @@ void sockinfo_tcp::clean_obj()
     }
 
     m_timer_handle = NULL;
+    unlock_tcp_con();
+
     if (g_p_event_handler_manager->is_running()) {
         g_p_event_handler_manager->unregister_timers_event_and_delete(this);
-        unlock_tcp_con();
     } else {
-        unlock_tcp_con();
         cleanable_obj::clean_obj();
     }
 }
@@ -1678,11 +1678,7 @@ void sockinfo_tcp::handle_timer_expired(void *user_data)
         // sets it as true for its next iteration (within 100ms), letting
         // application threads have a chance of running tcp_timer()
         if (m_timer_pending) {
-            if (m_tcp_con_lock.trylock()) {
-                return;
-            }
             tcp_timer();
-            m_tcp_con_lock.unlock();
         }
         m_timer_pending = true;
     } else { // IMMEDIATE
@@ -1693,12 +1689,8 @@ void sockinfo_tcp::handle_timer_expired(void *user_data)
         // any thread (internal or application) will try locking
         // and running the tcp_timer
         m_timer_pending = true;
-        if (m_tcp_con_lock.trylock()) {
-            return;
-        }
 
         tcp_timer();
-        m_tcp_con_lock.unlock();
     }
 }
 
@@ -5492,7 +5484,6 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
     m_n_location = (m_n_location + 1) % m_n_intervals_size;
 
     while (iter) {
-        __log_funcall("timer expired on %p", iter->handler);
         p_sock = reinterpret_cast<sockinfo_tcp *>(iter->user_data);
 
         /* It is not guaranteed that the same sockinfo object is met once
@@ -5501,11 +5492,14 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
          * of the same object mast be ingored.
          * TODO Check on is_cleaned() is not safe completely.
          */
-        if (p_sock && !p_sock->is_cleaned()) {
-            iter->handler->handle_timer_expired(iter->user_data);
-            if (p_sock->is_destroyable_lock()) {
-                g_p_fd_collection->destroy_sockfd(p_sock);
+        if (!p_sock->trylock_tcp_con()) {
+            if (!p_sock->is_cleaned()) {
+                p_sock->handle_timer_expired(iter->user_data);
+                if (p_sock->is_destroyable_no_lock()) {
+                    g_p_fd_collection->destroy_sockfd(p_sock);
+                }
             }
+            p_sock->unlock_tcp_con();
         }
         iter = iter->next;
     }

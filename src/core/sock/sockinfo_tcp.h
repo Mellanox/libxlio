@@ -231,6 +231,10 @@ public:
         m_tcp_con_lock.unlock();
         return state;
     }
+    bool inline is_destroyable_no_lock(void)
+    {
+        return get_tcp_state(&m_pcb) == CLOSED && m_state == SOCKINFO_CLOSING;
+    }
     bool skip_os_select()
     {
         // calling os select on offloaded TCP sockets makes no sense unless it's a listen socket
@@ -306,6 +310,7 @@ public:
 
     int get_supported_nvme_feature_mask() const;
 
+    inline int trylock_tcp_con(void) { return m_tcp_con_lock.trylock(); }
     inline void lock_tcp_con(void) { m_tcp_con_lock.lock(); }
     inline void unlock_tcp_con(void)
     {
