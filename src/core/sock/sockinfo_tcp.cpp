@@ -1833,7 +1833,7 @@ static inline void _rx_lwip_cb_socketxtreme_helper(pbuf *p,
                                                    bool use_hw_timestamp,
                                                    std::function<void(void)> notify)
 {
-    mem_buf_desc_t *current_desc = (mem_buf_desc_t *)p;
+    mem_buf_desc_t *current_desc = reinterpret_cast<mem_buf_desc_t *>(p);
     xlio_buff_t *&buff_list_head = completion->packet.buff_lst;
 
     // Is IPv4 only.
@@ -1842,6 +1842,7 @@ static inline void _rx_lwip_cb_socketxtreme_helper(pbuf *p,
     if (buff_list_head == nullptr) { // New completion
         buff_list_head = reinterpret_cast<xlio_buff_t *>(p);
 
+        assert(reinterpret_cast<mem_buf_desc_t *>(p)->rx.n_frags > 0);
         current_desc->rx.src.get_sa(reinterpret_cast<sockaddr *>(&completion->src),
                                     sizeof(completion->src));
         if (use_hw_timestamp) {
@@ -1852,12 +1853,19 @@ static inline void _rx_lwip_cb_socketxtreme_helper(pbuf *p,
         completion->packet.num_bufs = current_desc->rx.n_frags;
         notify();
     } else {
-        auto &n_frags = reinterpret_cast<mem_buf_desc_t *>(buff_list_head)->rx.n_frags;
-        n_frags += current_desc->rx.n_frags;
-        current_desc->rx.n_frags = 0;
+        assert(buff_list_tail != nullptr);
         completion->packet.total_len += p->tot_len;
-        completion->packet.num_bufs = n_frags;
+        completion->packet.num_bufs += current_desc->rx.n_frags;
+
+        auto membuff_list_tail = reinterpret_cast<mem_buf_desc_t *>(buff_list_tail);
+        while (membuff_list_tail->p_next_desc) {
+            membuff_list_tail = membuff_list_tail->p_next_desc;
+        }
+        membuff_list_tail->p_next_desc = current_desc;
+        reinterpret_cast<mem_buf_desc_t *>(buff_list_head)->rx.n_frags =
+            completion->packet.num_bufs;
         pbuf_cat(reinterpret_cast<pbuf *>(buff_list_head), p);
+        current_desc->rx.n_frags = 0;
     }
     buff_list_tail = reinterpret_cast<xlio_buff_t *>(p);
 }
@@ -1867,6 +1875,7 @@ inline void sockinfo_tcp::rx_lwip_cb_socketxtreme_helper(pbuf *p)
     auto notify = [this]() { NOTIFY_ON_EVENTS(this, XLIO_SOCKETXTREME_PACKET); };
     bool use_hw_timestamp = (m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE);
 
+    assert(p);
     // Use ring_ec if complition was not provided by the user
     if (m_socketxtreme.completion) {
         _rx_lwip_cb_socketxtreme_helper(p, m_socketxtreme.completion, m_socketxtreme.last_buff_lst,
@@ -1923,7 +1932,7 @@ inline void sockinfo_tcp::handle_rx_lwip_cb_error(pbuf *p)
 
 inline void sockinfo_tcp::rx_lwip_process_chained_pbufs(pbuf *p)
 {
-    mem_buf_desc_t *p_first_desc = (mem_buf_desc_t *)p;
+    mem_buf_desc_t *p_first_desc = reinterpret_cast<mem_buf_desc_t *>(p);
     p_first_desc->rx.sz_payload = p->tot_len;
     p_first_desc->rx.n_frags = 0;
 
@@ -1940,7 +1949,7 @@ inline void sockinfo_tcp::rx_lwip_process_chained_pbufs(pbuf *p)
     // To avoid reset ref count for first mem_buf_desc, save it and set after the while
     int head_ref = p_first_desc->get_ref_count();
 
-    for (auto p_curr_desc = reinterpret_cast<mem_buf_desc_t *>(p); p != nullptr;
+    for (auto *p_curr_desc = p_first_desc; p_curr_desc != nullptr;
          p = p->next, p_curr_desc = p_curr_desc->p_next_desc) {
         /* Here we reset ref count for all mem_buf_desc except for the head (p_first_desc).
         Chain of pbufs can contain some pbufs with ref count >=1 like in ooo or flow tag flows.

@@ -455,8 +455,6 @@ int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_c
     int i = 0;
 
     if (likely(xlio_completions) && ncompletions) {
-        struct ring_ec *ec = NULL;
-        m_socketxtreme.completion = xlio_completions;
 
         if ((flags & SOCKETXTREME_POLL_TX) && list_empty(&m_socketxtreme.ec_list)) {
             uint64_t poll_sn = 0;
@@ -465,11 +463,12 @@ int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_c
             }
         }
 
+        m_socketxtreme.completion = xlio_completions;
         while (!g_b_exit && (i < (int)ncompletions)) {
             m_socketxtreme.completion->events = 0;
             /* Check list size to avoid locking */
             if (!list_empty(&m_socketxtreme.ec_list)) {
-                ec = get_ec();
+                ring_ec *ec = get_ec();
                 if (ec) {
                     memcpy(m_socketxtreme.completion, &ec->completion, sizeof(ec->completion));
                     ec->clear();
