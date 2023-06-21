@@ -62,7 +62,7 @@ tcp_seg *ring::get_tcp_segs(uint32_t num)
 
     if (unlikely(num > m_tcp_seg_count)) {
         uint32_t getsize = std::max(safe_mce_sys().tx_segs_ring_batch_tcp, num - m_tcp_seg_count);
-        auto seg_list = g_tcp_seg_pool->get_tcp_seg_list(static_cast<int>(getsize));
+        auto seg_list = g_tcp_seg_pool->get_tcp_seg_list(getsize);
         if (!seg_list.first) {
             return nullptr;
         }

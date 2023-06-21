@@ -40,7 +40,7 @@ extern global_stats_t g_global_stat_static;
 
 tcp_seg_pool *g_tcp_seg_pool = NULL;
 
-tcp_seg_pool::tcp_seg_pool(int size)
+tcp_seg_pool::tcp_seg_pool(uint32_t size)
 {
     m_tcp_segs_array = new struct tcp_seg[size];
     if (m_tcp_segs_array == NULL) {
@@ -48,7 +48,7 @@ tcp_seg_pool::tcp_seg_pool(int size)
         throw_xlio_exception("TCP segments allocation failed");
     }
     memset(m_tcp_segs_array, 0, sizeof(tcp_seg) * size);
-    for (int i = 0; i < size - 1; i++) {
+    for (uint32_t i = 0; i < size - 1; i++) {
         m_tcp_segs_array[i].next = &m_tcp_segs_array[i + 1];
     }
     m_p_head = &m_tcp_segs_array[0];
@@ -60,14 +60,14 @@ tcp_seg_pool::~tcp_seg_pool()
     delete[] m_tcp_segs_array;
 }
 
-tcp_seg *tcp_seg_pool::get_tcp_segs(int amount)
+tcp_seg *tcp_seg_pool::get_tcp_segs(uint32_t amount)
 {
     return get_tcp_seg_list(amount).first;
 }
 
-std::pair<tcp_seg *, tcp_seg *> tcp_seg_pool::get_tcp_seg_list(int amount)
+std::pair<tcp_seg *, tcp_seg *> tcp_seg_pool::get_tcp_seg_list(uint32_t amount)
 {
-    int orig_amount = amount;
+    uint32_t orig_amount = amount;
     tcp_seg *head, *next, *prev;
     if (unlikely(amount <= 0)) {
         return std::make_pair(nullptr, nullptr);

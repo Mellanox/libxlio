@@ -39,11 +39,11 @@
 
 class tcp_seg_pool : lock_spin {
 public:
-    tcp_seg_pool(int size);
+    tcp_seg_pool(uint32_t size);
     virtual ~tcp_seg_pool();
 
-    std::pair<tcp_seg *, tcp_seg *> get_tcp_seg_list(int amount);
-    tcp_seg *get_tcp_segs(int amount);
+    std::pair<tcp_seg *, tcp_seg *> get_tcp_seg_list(uint32_t amount);
+    tcp_seg *get_tcp_segs(uint32_t amount);
     void put_tcp_segs(tcp_seg *seg_list);
 
     static tcp_seg *split_tcp_segs(uint32_t count, tcp_seg *&tcp_seg_list, uint32_t &total_count);

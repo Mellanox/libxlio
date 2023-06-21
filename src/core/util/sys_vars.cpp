@@ -1219,14 +1219,14 @@ void mce_sys_var::get_env_params()
     }
 
     if ((env_ptr = getenv(SYS_VAR_TX_SEGS_BATCH_TCP)) != NULL) {
-        tx_segs_batch_tcp = (int32_t)atoi(env_ptr);
+        tx_segs_batch_tcp = (uint32_t)atoi(env_ptr);
         if (tx_segs_batch_tcp < 1) {
             tx_segs_batch_tcp = 1;
         }
     }
 
     if ((env_ptr = getenv(SYS_VAR_TX_SEGS_RING_BATCH_TCP)) != NULL) {
-        tx_segs_ring_batch_tcp = (int32_t)atoi(env_ptr);
+        tx_segs_ring_batch_tcp = (uint32_t)atoi(env_ptr);
         if (tx_segs_ring_batch_tcp < 1) {
             tx_segs_ring_batch_tcp = 1;
         }
