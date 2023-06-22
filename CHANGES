@@ -1,3 +1,15 @@
+Version 3.10.1-1:
+Date + Time 2023-06-22
+=============================================================
+Added:
+        - RM #3496306 Adding ring TCP segment cache
+Fixed:
+        - RM #3506903 Remove deferred timers logic
+        - RM #3506903 Improve locking mechanism
+        - RM #3506903 Improve timers efficiency
+        - RM #3506903 Do not fail getpeername if possible
+        - RM #3440429 WA for race between rfs destruction and port/fd reuse
+
 Version 3.10.0-1:
 Date + Time 2023-06-14
 =============================================================
