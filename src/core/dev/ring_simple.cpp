@@ -463,6 +463,7 @@ int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_c
             }
         }
 
+        const std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
         m_socketxtreme.completion = xlio_completions;
         while (!g_b_exit && (i < (int)ncompletions)) {
             m_socketxtreme.completion->events = 0;

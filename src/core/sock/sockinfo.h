@@ -420,13 +420,11 @@ protected:
     inline void set_events_socketxtreme(uint64_t events)
     {
         if (m_socketxtreme.completion) {
-            if (!m_socketxtreme.completion->events) {
-                m_socketxtreme.completion->user_data = (uint64_t)m_fd_context;
-            }
+            m_socketxtreme.completion->user_data = (uint64_t)m_fd_context;
             m_socketxtreme.completion->events |= events;
         } else {
+            m_socketxtreme.ec.completion.user_data = (uint64_t)m_fd_context;
             if (!m_socketxtreme.ec.completion.events) {
-                m_socketxtreme.ec.completion.user_data = (uint64_t)m_fd_context;
                 m_p_rx_ring->put_ec(&m_socketxtreme.ec);
             }
             m_socketxtreme.ec.completion.events |= events;

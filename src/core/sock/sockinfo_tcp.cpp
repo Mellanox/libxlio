@@ -1975,8 +1975,10 @@ inline void sockinfo_tcp::save_packet_info_in_ready_list(pbuf *p)
     m_rx_pkt_ready_list.push_back(reinterpret_cast<mem_buf_desc_t *>(p));
     m_n_rx_pkt_ready_list_count++;
     m_rx_ready_byte_count += p->tot_len;
+    m_p_socket_stats->counters.n_rx_bytes += p->tot_len;
     m_p_socket_stats->n_rx_ready_byte_count += p->tot_len;
     m_p_socket_stats->n_rx_ready_pkt_count++;
+    m_socket_stats.counters.n_rx_frags += reinterpret_cast<mem_buf_desc_t *>(p)->rx.n_frags;
     m_p_socket_stats->counters.n_rx_ready_pkt_max =
         std::max((uint32_t)m_p_socket_stats->n_rx_ready_pkt_count,
                  m_p_socket_stats->counters.n_rx_ready_pkt_max);
@@ -2026,6 +2028,10 @@ err_t sockinfo_tcp::rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *pcb, stru
         return err;
     }
     conn->rx_lwip_process_chained_pbufs(p);
+
+    conn->m_p_socket_stats->counters.n_rx_bytes += p->tot_len;
+    conn->m_socket_stats.counters.n_rx_frags += reinterpret_cast<mem_buf_desc_t *>(p)->rx.n_frags;
+
     conn->rx_lwip_cb_socketxtreme_helper(p);
     io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
     conn->do_wakeup();
@@ -2066,6 +2072,9 @@ err_t sockinfo_tcp::rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, str
         return err;
     }
     conn->rx_lwip_process_chained_pbufs(p);
+
+    conn->m_p_socket_stats->counters.n_rx_bytes += p->tot_len;
+    conn->m_socket_stats.counters.n_rx_frags += reinterpret_cast<mem_buf_desc_t *>(p)->rx.n_frags;
 
     xlio_recv_callback_retval_t callback_retval = XLIO_PACKET_RECV;
 

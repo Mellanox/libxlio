@@ -181,16 +181,14 @@ void print_full_stats(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, 
     if (p_si_stats->counters.n_rx_bytes || p_si_stats->counters.n_rx_packets ||
         p_si_stats->counters.n_rx_eagain || p_si_stats->counters.n_rx_errors) {
         fprintf(filename,
-                "Rx Offload: %" PRIu64 " / %u / %u / %u [kilobytes/packets/eagains/errors]%s\n",
-                p_si_stats->counters.n_rx_bytes / BYTES_TRAFFIC_UNIT,
-                p_si_stats->counters.n_rx_packets, p_si_stats->counters.n_rx_eagain,
-                p_si_stats->counters.n_rx_errors, post_fix);
+                "Rx Offload: %" PRIu64 " / %u / %u / %u [bytes/packets/eagains/errors]%s\n",
+                p_si_stats->counters.n_rx_bytes, p_si_stats->counters.n_rx_packets,
+                p_si_stats->counters.n_rx_eagain, p_si_stats->counters.n_rx_errors, post_fix);
         b_any_activiy = true;
         fprintf(filename,
-                "Rx data packets: %" PRIu64 " / %u / %u / %u [kilobytes/packets/frags/chained]\n",
-                p_si_stats->counters.n_rx_bytes / BYTES_TRAFFIC_UNIT,
-                p_si_stats->counters.n_rx_data_pkts, p_si_stats->counters.n_rx_frags,
-                p_si_stats->counters.n_gro);
+                "Rx data packets: %" PRIu64 " / %u / %u / %u [bytes/packets/frags/chained]\n",
+                p_si_stats->counters.n_rx_bytes, p_si_stats->counters.n_rx_data_pkts,
+                p_si_stats->counters.n_rx_frags, p_si_stats->counters.n_gro);
         if (p_si_stats->counters.n_rx_data_pkts) {
             fprintf(filename, "Avg. aggr packet size: %" PRIu64 " fragments per packet: %.1f\n",
                     p_si_stats->counters.n_rx_bytes / p_si_stats->counters.n_rx_data_pkts,
