@@ -1,3 +1,11 @@
+Version 3.10.2-1:
+Date + Time 2023-06-29
+=============================================================
+Added:
+        - RM #3388776 Improve systemd check for chroot environment
+        - RM #3465989 Received packet notification callback API
+        - RM #3465972 Introduce SocketXtream
+
 Version 3.10.1-1:
 Date + Time 2023-06-22
 =============================================================
