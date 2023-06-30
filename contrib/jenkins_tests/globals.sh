@@ -294,30 +294,43 @@ do_check_dpcp()
     ret=0
     pushd $(pwd) > /dev/null 2>&1
     dpcp_dir=${WORKSPACE}/${prefix}/_dpcp-last
-    mkdir -p ${dpcp_dir} > /dev/null 2>&1
+    mkdir -p ${dpcp_dir}
     cd ${dpcp_dir}
+
+    # libdpcp_path="<repo>|<branch>|<commit>"
+    # Example:
+    # https://<user>:<password>@<repo>|<branch>|<sha>
+    # https://<repo>|<branch>
+    # git@<repo>
+    #
+    libdpcp_path=${libdpcp_path:="https://github.com/Mellanox/libdpcp|master"}
+    libdpcp_repo=$(echo $libdpcp_path | cut -d'|' -f1)
+    libdpcp_branch=$(echo $libdpcp_path | cut -d'|' -f2)
+    libdpcp_commit=$(echo $libdpcp_path | cut -d'|' -f3)
+    echo "dpcp repo: $libdpcp_repo"
+    echo "dpcp branch: $libdpcp_branch"
+    echo "dpcp commit: $libdpcp_commit"
 
     set +e
     if [ ! -d ${dpcp_dir}/install -a $ret -eq 0 ]; then
-		branch=${main:-ghprbTargetBranch}
-		eval "timeout -s SIGKILL 30s git clone --branch $branch git@github.com:Mellanox/dpcp.git . " > /dev/null 2>&1
+		eval "timeout -s SIGKILL 30s git clone -b ${libdpcp_branch} ${libdpcp_repo} . "
         ret=$?
     fi
 
-    if [ $ret -eq 0 ]; then
-        last_tag=$(git describe --tags $(git rev-list --tags --max-count=1))
-        if [ -z "$last_tag" ]; then
-            ret=1
+    if [ -z "$libdpcp_commit" -a $ret -eq 0 ]; then
+        libdpcp_commit=$(git describe --tags $(git rev-list --tags --max-count=1))
+        if [ -z "$libdpcp_commit" ]; then
+            libdpcp_commit=$(git rev-parse --short HEAD)
         fi
     fi
 
     if [ ! -d ${dpcp_dir}/install -a $ret -eq 0 ]; then
-        eval "git checkout $last_tag" > /dev/null 2>&1
+        eval "git checkout $libdpcp_commit"
         ret=$?
     fi
 
     if [ ! -d ${dpcp_dir}/install -a $ret -eq 0 ]; then
-        eval "./autogen.sh && ./configure --prefix=${dpcp_dir}/install && make $make_opt install" > /dev/null 2>&1
+        eval "./autogen.sh && ./configure --prefix=${dpcp_dir}/install && make $make_opt install"
         ret=$?
     fi
     set -e

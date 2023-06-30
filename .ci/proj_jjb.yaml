@@ -18,6 +18,10 @@
             name: "sha1"
             default: master
             description: "Commit to be checked, set by PR"
+        - string:
+            name: "libdpcp_path"
+            default: "https://github.com/Mellanox/libdpcp|master"
+            description: "Path to libdpcp source. Format: https://<user>:<password>@<repo>|<branch>|<sha>"
         - bool:
             name: "build_dockers"
             default: false

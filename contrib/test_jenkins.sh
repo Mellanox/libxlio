@@ -113,6 +113,8 @@ if [ "$TARGET" == "all" -o "$TARGET" == "dpcp" ]; then
         i=$((i+1))
     else
         echo "Requested dpcp support can not be executed"
+		do_err "target: $TARGET"
+		exit 1
     fi
 fi
 
