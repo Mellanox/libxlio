@@ -355,18 +355,6 @@ struct __attribute__((packed)) xlio_api_t {
     uint64_t cap_mask;
 
     /**
-     * Register a received packet notification callback.
-     *
-     * @param s Socket file descriptor.
-     * @param callback Callback function.
-     * @param context user contex for callback function.
-     * @return 0 - success, -1 - error
-     *
-     * errno is set to: EINVAL - not offloaded socket
-     */
-    int (*register_recv_callback)(int s, xlio_recv_callback_t callback, void *context);
-
-    /**
      * Zero-copy revcfrom implementation.
      *
      * @param s Socket file descriptor.
@@ -455,6 +443,45 @@ struct __attribute__((packed)) xlio_api_t {
      * errno is set to: EINVAL - not a offloaded fd + TBD
      */
     int (*get_socket_rings_fds)(int fd, int *ring_fds, int ring_fds_sz);
+
+    /*
+     * Dump fd statistics using the library logger.
+     * @param fd to dump, 0 for all open fds.
+     * @param log_level dumping level corresponding vlog_levels_t enum (vlogger.h).
+     * @return 0 on success, or error code on failure.
+     *
+     * errno is set to: EOPNOTSUPP - Function is not supported when socketXtreme is enabled.
+     */
+    int (*dump_fd_stats)(int fd, int log_level);
+
+    /**
+     * This function allows to communicate with library using extendable protocol
+     * based on struct cmshdr.
+     *
+     * Ancillary data is a sequence of cmsghdr structures with appended data.
+     * The sequence of cmsghdr structures should never be accessed directly.
+     * Instead, use only the following macros: CMSG_ALIGN, CMSG_SPACE, CMSG_DATA,
+     * CMSG_LEN.
+     *
+     * @param cmsg_hdr - point to control message
+     * @param cmsg_len - the byte count of the ancillary data,
+     *                   which contains the size of the structure header.
+     *
+     * @return -1 on failure and 0 on success
+     */
+    int (*ioctl)(void *cmsg_hdr, size_t cmsg_len);
+
+    /**
+     * Register a received packet notification callback.
+     *
+     * @param s Socket file descriptor.
+     * @param callback Callback function.
+     * @param context user contex for callback function.
+     * @return 0 - success, -1 - error
+     *
+     * errno is set to: EINVAL - not offloaded socket
+     */
+    int (*register_recv_callback)(int s, xlio_recv_callback_t callback, void *context);
 
     /**
      * socketxtreme_poll() polls for completions
@@ -562,33 +589,6 @@ struct __attribute__((packed)) xlio_api_t {
      *                  EOPNOTSUPP - socketXtreme was not enabled during configuration time.
      */
     int (*socketxtreme_free_buff)(struct xlio_buff_t *buff);
-
-    /*
-     * Dump fd statistics using the library logger.
-     * @param fd to dump, 0 for all open fds.
-     * @param log_level dumping level corresponding vlog_levels_t enum (vlogger.h).
-     * @return 0 on success, or error code on failure.
-     *
-     * errno is set to: EOPNOTSUPP - Function is not supported when socketXtreme is enabled.
-     */
-    int (*dump_fd_stats)(int fd, int log_level);
-
-    /**
-     * This function allows to communicate with library using extendable protocol
-     * based on struct cmshdr.
-     *
-     * Ancillary data is a sequence of cmsghdr structures with appended data.
-     * The sequence of cmsghdr structures should never be accessed directly.
-     * Instead, use only the following macros: CMSG_ALIGN, CMSG_SPACE, CMSG_DATA,
-     * CMSG_LEN.
-     *
-     * @param cmsg_hdr - point to control message
-     * @param cmsg_len - the byte count of the ancillary data,
-     *                   which contains the size of the structure header.
-     *
-     * @return -1 on failure and 0 on success
-     */
-    int (*ioctl)(void *cmsg_hdr, size_t cmsg_len);
 };
 
 /**
