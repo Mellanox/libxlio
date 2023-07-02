@@ -437,6 +437,7 @@ sockinfo_udp::sockinfo_udp(int fd, int domain)
 sockinfo_udp::~sockinfo_udp()
 {
     si_udp_logfunc("");
+    g_global_stat_static.socket_udp_destructor_counter.fetch_add(1, std::memory_order_relaxed);
 
     // Remove all RX ready queue buffers (Push into reuse queue per ring)
     si_udp_logdbg("Releasing %d ready rx packets (total of %lu bytes)", m_n_rx_pkt_ready_list_count,

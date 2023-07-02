@@ -122,7 +122,7 @@ public:
     /**
      * Remove pipeinfo/sockinfo.
      */
-    int del_sockfd(int fd, bool b_cleanup = false);
+    int del_sockfd(int fd, bool b_cleanup = false, bool is_for_udp_pool = false);
 
     /**
      * Remove epfd_info.

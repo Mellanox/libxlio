@@ -44,6 +44,10 @@
 #include <errno.h>
 #include <dirent.h>
 #include <string.h>
+#include <ctime>
+#include <iomanip>
+#include <vector>
+#include <cinttypes>
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/utsname.h>
@@ -59,6 +63,8 @@
 #include "core/util/utils.h"
 #include "core/util/xlio_stats.h"
 #include "core/util/sys_vars.h"
+#include "stats/stats_data_reader.h"
+#include <sstream>
 
 using namespace std;
 
@@ -99,6 +105,7 @@ typedef enum { e_K = 1024, e_M = 1048576 } units_t;
 #define CYCLES_SEPARATOR                                                                           \
     "-------------------------------------------------------------------------------\n"
 #define FORMAT_STATS_32bit     "%-20s %u\n"
+#define FORMAT_STATS_s_32bit   "%-20s %d\n"
 #define FORMAT_STATS_64bit     "%-20s %" PRIu64 " %-3s\n"
 #define FORMAT_STATS_double    "%-20s %.1f\n"
 #define FORMAT_RING_PACKETS    "%-20s %zu / %zu [kilobytes/packets] %-3s\n"
@@ -191,6 +198,7 @@ void usage(const char *argv0)
            " log details level to <level>(0 <= level <= 3)\n");
     printf("  -s, --sockets=<list|range>\tLog only sockets that match <list> or <range>, format: "
            "4-16 or 1,9 (or combination)\n");
+    printf("  -C, --csv_file=<file path>\tA path to the statics CSV file\n");
     printf("  -V, --version\t\t\tPrint version\n");
     printf("  -h, --help\t\t\tPrint this help message\n");
 }
@@ -471,6 +479,14 @@ void update_delta_global_stat(global_stats_t *p_curr_global_stats,
         p_prev_global_stats->n_pending_sockets =
             (p_curr_global_stats->n_pending_sockets - p_prev_global_stats->n_pending_sockets) /
             delay;
+        p_prev_global_stats->socket_tcp_destructor_counter =
+            (p_curr_global_stats->socket_tcp_destructor_counter.load() -
+             p_prev_global_stats->socket_tcp_destructor_counter.load()) /
+            delay;
+        p_prev_global_stats->socket_udp_destructor_counter =
+            (p_curr_global_stats->socket_udp_destructor_counter.load() -
+             p_prev_global_stats->socket_udp_destructor_counter.load()) /
+            delay;
     }
 }
 
@@ -660,7 +676,11 @@ void print_global_stats(global_instance_block_t *p_global_inst_arr)
                    "No segments error:", p_global_stats->n_tcp_seg_pool_no_segs);
             printf("======================================================\n");
             printf("\tGLOBAL\n");
-            printf(FORMAT_STATS_32bit, "Pending sockets:", p_global_stats->n_pending_sockets);
+            printf(FORMAT_STATS_s_32bit, "Pending sockets:", p_global_stats->n_pending_sockets);
+            printf(FORMAT_STATS_s_32bit,
+                   "Destructed TCP sockets:", p_global_stats->socket_tcp_destructor_counter.load());
+            printf(FORMAT_STATS_s_32bit,
+                   "Destructed UDP sockets:", p_global_stats->socket_udp_destructor_counter.load());
         }
     }
     printf("======================================================\n");
@@ -1074,10 +1094,10 @@ void print_bpool_deltas(bpool_instance_block_t *p_curr_bpool_stats,
 void print_global_deltas(global_instance_block_t *p_curr_global_stats,
                          global_instance_block_t *p_prev_global_stats)
 {
-    if (unlikely(!p_curr_global_stats || !p_prev_global_stats)) {
-        return;
-    }
     for (int i = 0; i < NUM_OF_SUPPORTED_GLOBALS; i++) {
+        if (!p_curr_global_stats || !p_prev_global_stats) {
+            break;
+        }
         update_delta_global_stat(&p_curr_global_stats[i].global_stats,
                                  &p_prev_global_stats[i].global_stats);
     }
@@ -1397,6 +1417,11 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
     global_instance_block_t curr_global_blocks[NUM_OF_SUPPORTED_GLOBALS];
     iomux_stats_t prev_iomux_blocks;
     iomux_stats_t curr_iomux_blocks;
+    socket_listen_counter_aggregate socket_counters {user_params.print_details_mode == e_deltas};
+    tls_context_counters_show tls_counters {user_params.print_details_mode == e_deltas};
+    global_counters_show global_counters {user_params.print_details_mode == e_deltas};
+    cpu_usage_show cpu_usage;
+    ring_packet_aggregate ring_packets {user_params.print_details_mode == e_deltas};
 
     if (user_params.dump != DUMP_DISABLED) {
         static std::unordered_map<int, const char *> dump_type_names = {
@@ -1433,6 +1458,10 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
     memset((void *)curr_ring_blocks, 0, sizeof(ring_instance_block_t) * NUM_OF_SUPPORTED_RINGS);
     memset((void *)prev_bpool_blocks, 0, sizeof(bpool_instance_block_t) * NUM_OF_SUPPORTED_BPOOLS);
     memset((void *)curr_bpool_blocks, 0, sizeof(bpool_instance_block_t) * NUM_OF_SUPPORTED_BPOOLS);
+    for (int i = 0; i < NUM_OF_SUPPORTED_GLOBALS; i++) {
+        prev_global_blocks[i].init();
+        curr_global_blocks[i].init();
+    }
     memset((void *)prev_global_blocks, 0,
            sizeof(global_instance_block_t) * NUM_OF_SUPPORTED_GLOBALS);
     memset((void *)curr_global_blocks, 0,
@@ -1458,6 +1487,11 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
         }
     }
 
+    if (user_params.csv_stream.is_open()) {
+        user_params.csv_stream << "Date,Time," << ring_packets.hdr_val << socket_counters.hdr_val
+                               << tls_counters.hdr_val << global_counters.hdr_val
+                               << cpu_usage.hdr_val << "\n";
+    }
     set_signal_action();
 
     while (!g_b_exit && proc_running && cycles) {
@@ -1481,6 +1515,17 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
                    NUM_OF_SUPPORTED_GLOBALS * sizeof(global_instance_block_t));
             curr_iomux_blocks = p_sh_mem->iomux;
         }
+
+        if (user_params.csv_stream.is_open()) {
+            char buf[64] = "N/A,N/A,";
+            time_t t = time(nullptr);
+            strftime(buf, sizeof(buf), "%F,%T,", localtime(&t));
+            user_params.csv_stream
+                << buf << ring_packets.update(p_sh_mem) << socket_counters.update(p_sh_mem)
+                << tls_counters.update(p_sh_mem) << global_counters.update(p_sh_mem)
+                << cpu_usage.update() << "\n";
+        }
+
         switch (user_params.view_mode) {
         case e_full:
             ret = system("clear");
@@ -1879,15 +1924,27 @@ int main(int argc, char **argv)
         int c = 0;
         int option_index = 0;
 
-        static struct option long_options[] = {
-            {"interval", 1, NULL, 'i'},      {"cycles", 1, NULL, 'c'},  {"view", 1, NULL, 'v'},
-            {"details", 1, NULL, 'd'},       {"pid", 1, NULL, 'p'},     {"directory", 1, NULL, 'k'},
-            {"sockets", 1, NULL, 's'},       {"version", 0, NULL, 'V'}, {"zero", 0, NULL, 'z'},
-            {"log_level", 1, NULL, 'l'},     {"dump", 1, NULL, 0},      {"fd_dump", 1, NULL, 'S'},
-            {"details_level", 1, NULL, 'D'}, {"name", 1, NULL, 'n'},    {"find_pid", 0, NULL, 'f'},
-            {"forbid_clean", 0, NULL, 'F'},  {"help", 0, NULL, 'h'},    {0, 0, 0, 0}};
+        static struct option long_options[] = {{"interval", 1, NULL, 'i'},
+                                               {"cycles", 1, NULL, 'c'},
+                                               {"view", 1, NULL, 'v'},
+                                               {"details", 1, NULL, 'd'},
+                                               {"pid", 1, NULL, 'p'},
+                                               {"directory", 1, NULL, 'k'},
+                                               {"sockets", 1, NULL, 's'},
+                                               {"version", 0, NULL, 'V'},
+                                               {"zero", 0, NULL, 'z'},
+                                               {"log_level", 1, NULL, 'l'},
+                                               {"dump", 1, NULL, 0},
+                                               {"fd_dump", 1, NULL, 'S'},
+                                               {"details_level", 1, NULL, 'D'},
+                                               {"name", 1, NULL, 'n'},
+                                               {"find_pid", 0, NULL, 'f'},
+                                               {"forbid_clean", 0, NULL, 'F'},
+                                               {"help", 0, NULL, 'h'},
+                                               {"csv_file", 1, NULL, 'C'},
+                                               {0, 0, 0, 0}};
 
-        if ((c = getopt_long(argc, argv, "i:c:v:d:p:k:s:Vzl:S:D:n:fFh?", long_options,
+        if ((c = getopt_long(argc, argv, "i:c:v:d:p:k:s:Vzl:S:C:D:n:fFh?", long_options,
                              &option_index)) == -1) {
             break;
         }
@@ -2009,6 +2066,15 @@ int main(int argc, char **argv)
                     return 1;
                 }
                 user_params.fd_dump_log_level = dump_log_level;
+            }
+        } break;
+        case 'C': {
+            user_params.csv_stream.open(optarg);
+            if (!user_params.csv_stream.is_open()) {
+                log_err("Unable to open file: %s", optarg);
+                usage(argv[0]);
+                cleanup(NULL);
+                return 1;
             }
         } break;
         case 'D': {
@@ -2245,4 +2311,46 @@ int print_processes_stats(const std::vector<int> &pids)
     }
 
     return 0;
+}
+
+///////////////////////////
+void cpu_stats::capture()
+{
+    std::ifstream fileStat("/proc/stat");
+    std::string line;
+    std::getline(fileStat, line);
+    if (!line.compare(0, 3, "cpu")) {
+        read(line);
+    } else {
+        log_system_err("Read /proc/stat failed, unexpected line %s\n", line.c_str());
+        enabled = false;
+    }
+    fileStat.close();
+}
+
+void cpu_stats::read(const std::string &line)
+{
+    std::istringstream ss(line);
+    std::string label;
+    ss >> label;
+    for (int i = 0; i < TOTAL_CONTEXTS; ++i) {
+        ss >> times[i];
+    }
+}
+
+size_t cpu_stats::get_active_time() const
+{
+    return times[USER] + times[NICE] + times[SYSTEM] + times[IRQ] + times[SOFTIRQ] + times[STEAL] +
+        times[GUEST] + times[GUEST_NICE];
+}
+
+size_t cpu_stats::get_total_time() const
+{
+    return times[USER] + times[NICE] + times[SYSTEM] + times[IDLE] + times[IOWAIT] + times[IRQ] +
+        times[SOFTIRQ] + times[STEAL] + times[GUEST] + times[GUEST_NICE];
+}
+
+size_t cpu_stats::get_context_time(enum cpu_context context) const
+{
+    return times[context];
 }

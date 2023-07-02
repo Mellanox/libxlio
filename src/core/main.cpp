@@ -1034,7 +1034,7 @@ static void do_global_ctors_helper()
     *g_p_vlogger_level = g_vlogger_level;
     *g_p_vlogger_details = g_vlogger_details;
 
-    memset(&g_global_stat_static, 0, sizeof(g_global_stat_static));
+    g_global_stat_static.init();
     xlio_stats_instance_create_global_block(&g_global_stat_static);
 
     // Create new netlink listener

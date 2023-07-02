@@ -344,3 +344,99 @@ TEST_F(ip_address_test, mapped_ipv4)
     EXPECT_TRUE(to_mapped.is_mapped_ipv4());
     EXPECT_TRUE(to_mapped.to_str(AF_INET6) == "[::ffff:153.153.170.170]");
 }
+
+#include "src/core/util/xlio_stats.h"
+#include "src/stats/stats_data_reader.h"
+#include <sstream>
+using std::ostream;
+
+class stats_base : public testing::Test {
+public:
+    std::stringstream out;
+    uint8_t buffer[sizeof(sh_mem_t) + sizeof(socket_instance_block_t) * 15];
+    sh_mem_t &mem;
+    stats_base()
+        : buffer()
+        , mem(*reinterpret_cast<sh_mem_t *>(buffer))
+    {
+        mem.reset();
+#ifdef DEFINED_UTLS
+        mem.ring_inst_arr[0].b_enabled = true;
+        mem.ring_inst_arr[0].ring_stats.n_tx_tls_contexts = 1;
+        mem.ring_inst_arr[0].ring_stats.n_rx_tls_contexts = 10;
+        mem.ring_inst_arr[NUM_OF_SUPPORTED_RINGS - 1].b_enabled = true;
+        mem.ring_inst_arr[NUM_OF_SUPPORTED_RINGS - 1].ring_stats.n_tx_tls_contexts = 102;
+        mem.ring_inst_arr[NUM_OF_SUPPORTED_RINGS - 1].ring_stats.n_rx_tls_contexts = 120;
+#endif /* DEFINED_UTLS */
+
+        mem.skt_inst_arr[0].b_enabled = true;
+        mem.skt_inst_arr[0].skt_stats.listen_counters =
+            socket_listen_counters_t {1, 1, 2, 3, 5, 8, 13};
+        mem.skt_inst_arr[0].skt_stats.sa_family = AF_INET;
+        mem.skt_inst_arr[15].b_enabled = true;
+        mem.skt_inst_arr[15].skt_stats.listen_counters =
+            socket_listen_counters_t {21, 34, 55, 89, 144, 233, 377};
+        mem.skt_inst_arr[15].skt_stats.sa_family = AF_INET;
+        mem.skt_inst_arr[11].b_enabled = true;
+        mem.skt_inst_arr[11].skt_stats.listen_counters =
+            socket_listen_counters_t {21, 34, 55, 89, 144, 233, 377};
+        mem.skt_inst_arr[11].skt_stats.sa_family = AF_INET6;
+        mem.max_skt_inst_num = 16;
+    }
+
+protected:
+    void SetUp() override { out.str(""); }
+};
+
+#ifdef DEFINED_UTLS
+
+TEST_F(stats_base, ts_tls_presenter_entry_null_sh_mem)
+{
+    tls_context_counters_show comb;
+
+    out << comb.update(nullptr);
+    ASSERT_NE(out.str().find("0,0"), std::string::npos) << out.str();
+    ASSERT_GE(out.str().size(), std::string("0,0").size()) << out.str();
+}
+
+TEST_F(stats_base, ts_tls_presenter_delta_mode)
+{
+    tls_context_counters_show comb(true);
+
+    comb.update(&mem);
+    out << comb.update(&mem);
+    ASSERT_NE(out.str().find("0,0"), std::string::npos) << out.str();
+}
+
+TEST_F(stats_base, ts_tls_presenter_total_mode)
+{
+    tls_context_counters_show comb(false);
+
+    out << comb.update(&mem);
+    ASSERT_NE(out.str().find("103,130"), std::string::npos) << out.str();
+}
+#endif /* DEFINED_UTLS */
+
+TEST_F(stats_base, socket_listen_counter_resenter_entry_delta_mode)
+{
+    socket_listen_counter_aggregate repr(true);
+    out << repr.update(&mem);
+
+    ASSERT_NE(out.str().find("22,35,57,92,149,241,390,21,34,55,89,144,233,377"), std::string::npos)
+        << out.str();
+    out.str("");
+    out << repr.update(&mem);
+    ASSERT_NE(out.str().find("0,0,0,0,0,0,0,0,0,0,0,0,0,0"), std::string::npos) << out.str();
+}
+
+TEST_F(stats_base, socket_listen_counter_resenter_entry_total_mode)
+{
+    socket_listen_counter_aggregate repr(false);
+    out << repr.update(&mem);
+    ASSERT_NE(out.str().find("22,35,57,92,149,241,390,21,34,55,89,144,233,377"), std::string::npos)
+        << out.str();
+    out.str("");
+    out << repr.update(&mem);
+    ASSERT_NE(out.str().find("22,35,57,92,149,241,390,21,34,55,89,144,233,377"), std::string::npos)
+        << out.str();
+}

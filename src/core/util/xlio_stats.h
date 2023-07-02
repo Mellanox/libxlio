@@ -45,6 +45,7 @@
 #include <core/xlio_extra.h>
 #include <core/util/sock_addr.h>
 #include <assert.h>
+#include <atomic>
 
 #define NUM_OF_SUPPORTED_CQS         16
 #define NUM_OF_SUPPORTED_RINGS       16
@@ -104,6 +105,7 @@ struct user_params_t {
     int fd_dump;
     vlog_levels_t fd_dump_log_level;
     std::string xlio_stats_path;
+    std::ofstream csv_stream;
 };
 
 extern user_params_t user_params;
@@ -188,14 +190,39 @@ typedef struct {
     uint32_t n_strq_max_strides_per_packet;
 } socket_strq_counters_t;
 
-typedef struct {
+typedef struct socket_listen_counters {
     uint32_t n_rx_syn;
     uint32_t n_rx_syn_tw;
     uint32_t n_rx_fin;
     uint32_t n_conn_established;
     uint32_t n_conn_accepted;
     uint32_t n_conn_dropped;
-    uint32_t n_conn_backlog;
+    int n_conn_backlog;
+
+    socket_listen_counters() = default;
+    ~socket_listen_counters() = default;
+
+    socket_listen_counters &operator+=(const socket_listen_counters &rhs)
+    {
+        n_rx_syn += rhs.n_rx_syn;
+        n_rx_syn_tw += rhs.n_rx_syn_tw;
+        n_rx_fin += rhs.n_rx_fin;
+        n_conn_established += rhs.n_conn_established;
+        n_conn_accepted += rhs.n_conn_accepted;
+        n_conn_dropped += rhs.n_conn_dropped;
+        n_conn_backlog += rhs.n_conn_backlog;
+        return *this;
+    }
+    socket_listen_counters operator-(const socket_listen_counters &rhs)
+    {
+        return {n_rx_syn - rhs.n_rx_syn,
+                n_rx_syn_tw - rhs.n_rx_syn_tw,
+                n_rx_fin - rhs.n_rx_fin,
+                n_conn_established - rhs.n_conn_established,
+                n_conn_accepted - rhs.n_conn_accepted,
+                n_conn_dropped - rhs.n_conn_dropped,
+                n_conn_backlog - rhs.n_conn_backlog};
+    }
 } socket_listen_counters_t;
 
 typedef struct socket_stats_t {
@@ -385,12 +412,27 @@ typedef struct {
 typedef struct {
     uint32_t n_tcp_seg_pool_size;
     uint32_t n_tcp_seg_pool_no_segs;
-    uint32_t n_pending_sockets;
+    int n_pending_sockets;
+    std::atomic<int> socket_tcp_destructor_counter;
+    std::atomic<int> socket_udp_destructor_counter;
+    void init()
+    {
+        n_tcp_seg_pool_size = 0;
+        n_tcp_seg_pool_no_segs = 0;
+        n_pending_sockets = 0;
+        socket_tcp_destructor_counter = 0;
+        socket_udp_destructor_counter = 0;
+    }
 } global_stats_t;
 
 typedef struct {
     bool b_enabled;
     global_stats_t global_stats;
+    void init()
+    {
+        b_enabled = false;
+        global_stats.init();
+    };
 } global_instance_block_t;
 
 // Version info
@@ -457,7 +499,7 @@ typedef struct sh_mem_t {
         memset(cq_inst_arr, 0, sizeof(cq_inst_arr));
         memset(ring_inst_arr, 0, sizeof(ring_inst_arr));
         memset(bpool_inst_arr, 0, sizeof(bpool_inst_arr));
-        memset(global_inst_arr, 0, sizeof(global_inst_arr));
+        global_inst_arr->init();
         mc_info.max_grp_num = 0;
         for (uint32_t i = 0; i < MC_TABLE_SIZE; i++) {
             mc_info.mc_grp_tbl[i].mc_grp = {ip_address::any_addr(), 0};

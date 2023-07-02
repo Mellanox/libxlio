@@ -156,7 +156,7 @@ void fd_collection::clear()
         p_sfd_api->clean_obj();
     }
 
-    g_global_stat_static.n_pending_sockets = 0U;
+    g_global_stat_static.n_pending_sockets = 0;
 
     /* Clean up all left overs sockinfo
      */
@@ -522,7 +522,7 @@ int fd_collection::add_cq_channel_fd(int cq_ch_fd, ring *p_ring)
     return 0;
 }
 
-int fd_collection::del_sockfd(int fd, bool b_cleanup /*=false*/)
+int fd_collection::del_sockfd(int fd, bool b_cleanup /*=false*/, bool is_for_udp_pool /*=false*/)
 {
     int ret_val = -1;
     socket_fd_api *p_sfd_api;
@@ -544,8 +544,12 @@ int fd_collection::del_sockfd(int fd, bool b_cleanup /*=false*/)
             // Delete it from fd_col and add it to pending_to_remove list.
             // This socket will be handled and destroyed now by fd_col.
             // This will be done from fd_col timer handler.
+            // Used for UDP socket pool as well
+            // so closed UDP sockets will be deleted at the end of the world
             if (m_p_sockfd_map[fd] == p_sfd_api) {
-                ++g_global_stat_static.n_pending_sockets;
+                if (!is_for_udp_pool) {
+                    ++g_global_stat_static.n_pending_sockets;
+                }
                 m_p_sockfd_map[fd] = NULL;
                 m_pending_to_remove_lst.push_front(p_sfd_api);
             }

@@ -652,7 +652,7 @@ void xlio_stats_instance_create_global_block(global_stats_t *local_stats_addr)
         if (!g_sh_mem->global_inst_arr[i].b_enabled) {
             g_sh_mem->global_inst_arr[i].b_enabled = true;
             p_instance_global = &g_sh_mem->global_inst_arr[i].global_stats;
-            memset(p_instance_global, 0, sizeof(global_stats_t));
+            p_instance_global->init();
             break;
         }
     }

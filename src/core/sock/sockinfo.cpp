@@ -173,6 +173,7 @@ void sockinfo::socket_stats_init(void)
     m_p_socket_stats->ring_user_id_rx = m_ring_alloc_logic.calc_res_key_by_logic();
     m_p_socket_stats->ring_user_id_tx =
         ring_allocation_logic_tx(get_fd(), m_ring_alloc_log_tx, this).calc_res_key_by_logic();
+    m_p_socket_stats->sa_family = m_family;
 }
 
 void sockinfo::set_blocking(bool is_blocked)

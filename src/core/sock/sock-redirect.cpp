@@ -282,7 +282,7 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
             // Save this value before pointer is destructed
             is_for_udp_pool = sockfd->m_is_for_socket_pool;
 #endif
-            g_p_fd_collection->del_sockfd(fd, cleanup);
+            g_p_fd_collection->del_sockfd(fd, cleanup, is_for_udp_pool);
             if (safe_mce_sys().deferred_close) {
                 to_close_now = false;
             }

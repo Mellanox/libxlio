@@ -388,6 +388,7 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
 sockinfo_tcp::~sockinfo_tcp()
 {
     si_tcp_logfunc("");
+    g_global_stat_static.socket_tcp_destructor_counter.fetch_add(1, std::memory_order_relaxed);
 
     lock_tcp_con();
 
