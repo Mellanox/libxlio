@@ -4,8 +4,9 @@
 # clang/cclang++ compilers (llvm-toolset-X package)
 # clang-format (llvm-toolset-X package)
 # clang-tidy (clang-tools-extra package)
-# compiledb - Tool for generating Clang's JSON Compilation Database file
+# compiledb - (pip install compiledb) Tool for generating Clang's JSON Compilation Database file
 #             for GNU make-based build systems. (pip install compiledb)
+# clang version 13.0.1
 ##############################
 
 source $(dirname $0)/globals.sh

@@ -58,8 +58,9 @@ public:
     }
     ~sockinfo_tcp_ops_nvme()
     {
-        if (m_pdu_mdesc)
+        if (m_pdu_mdesc) {
             m_pdu_mdesc->put();
+        }
     }
 
     int setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen) override;
