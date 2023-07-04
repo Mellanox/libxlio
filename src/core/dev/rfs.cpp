@@ -147,6 +147,11 @@ rfs::rfs(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *rule_fil
         m_flow_tag_id = 0;
     }
 #endif
+#if defined(DEFINED_ENVOY)
+    if (g_p_app->workers_num > 0 && g_p_app->get_worker_id() >= 0) {
+        m_flow_tag_id = 0;
+    }
+#endif /* DEFINED_ENVOY */
 
     BULLSEYE_EXCLUDE_BLOCK_START
     if (m_sinks_list == NULL) {
@@ -206,6 +211,11 @@ bool rfs::add_sink(pkt_rcvr_sink *p_sink)
         return true;
     }
 #endif
+#if defined(DEFINED_ENVOY)
+    if (g_p_app->add_second_4t_rule && g_p_app->get_worker_id() >= 0) {
+        return true;
+    }
+#endif /* DEFINED_ENVOY */
     // Check all sinks list array if already exists.
     for (i = 0; i < m_n_sinks_list_entries; ++i) {
         if (m_sinks_list[i] == p_sink) {
@@ -292,6 +302,12 @@ bool rfs::attach_flow(pkt_rcvr_sink *sink)
             rfs_logdbg("Added second rule to nginx worker: %d", g_worker_index);
         }
 #endif
+#if defined(DEFINED_ENVOY)
+        if (g_p_app->add_second_4t_rule && g_p_app->get_worker_id() >= 0) {
+            create_flow();
+            rfs_logdbg("Added second rule to worker: %d", g_p_app->get_worker_id());
+        }
+#endif /* DEFINED_ENVOY */
     }
 
     if (sink) {

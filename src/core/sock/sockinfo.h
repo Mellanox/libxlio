@@ -170,7 +170,7 @@ public:
         SOCKINFO_DESTROYING
     };
 
-#ifdef DEFINED_NGINX
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     virtual void copy_sockopt_fork(const socket_fd_api *copy_from);
     void set_m_n_sysvar_rx_num_buffs_reuse(int val) { m_n_sysvar_rx_num_buffs_reuse = val; }
 #endif

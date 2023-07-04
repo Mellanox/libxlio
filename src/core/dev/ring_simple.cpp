@@ -350,6 +350,11 @@ void ring_simple::create_resources()
         m_flow_tag_enabled = false;
     }
 #endif // DEFINED_NGINX
+#if defined(DEFINED_ENVOY)
+    if (g_p_app->workers_num > 0 && g_p_app->get_worker_id() >= 0) {
+        m_flow_tag_enabled = false;
+    }
+#endif /* DEFINED_ENVOY */
     ring_logdbg("ring attributes: m_flow_tag_enabled = %d", m_flow_tag_enabled);
 
     m_p_rx_comp_event_channel = ibv_create_comp_channel(

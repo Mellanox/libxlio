@@ -2787,6 +2787,11 @@ int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
         // For Nginx child ignore OS bind.
     } else
 #endif // DEFINED_NGINX
+#if defined(DEFINED_ENVOY)
+    if (g_p_app->workers_num > 0 && g_p_app->get_worker_id() >= 0) {
+        // g_p_app->get_worker_id() >= 0
+    } else
+#endif /* DEFINED_ENVOY */
     {
         if (ret < 0) {
             UNLOCK_RET(ret);
@@ -2864,6 +2869,13 @@ int sockinfo_tcp::prepareListen()
         }
     }
 #endif // DEFINED_NGINX
+#if defined(DEFINED_ENVOY)
+    if (g_p_app->workers_num > 0) {
+        if (m_sock_state == TCP_SOCK_LISTEN_READY) {
+            return 0; // prepareListen() had been called before...
+        }
+    }
+#endif /* DEFINED_ENVOY */
 
     if (is_server()) {
         return 0; // listen had been called before...
@@ -2919,6 +2931,12 @@ int sockinfo_tcp::listen(int backlog)
         backlog = 65535;
     } else
 #endif // DEFINED_NGINX
+#if defined(DEFINED_ENVOY)
+    if (g_p_app->workers_num > 0 && g_p_app->get_worker_id() >= 0) {
+        // TODO: consider adding  correct processing of this case
+        backlog = 65535;
+    } else
+#endif /* DEFINED_ENVOY */
     {
         if (backlog > safe_mce_sys().sysctl_reader.get_listen_maxconn()) {
             si_tcp_logdbg("truncating listen backlog=%d to the maximun=%d", backlog,

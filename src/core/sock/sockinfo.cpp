@@ -757,7 +757,7 @@ int sockinfo::getsockopt(int __level, int __optname, void *__optval, socklen_t *
     return ret;
 }
 
-#ifdef DEFINED_NGINX
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
 void sockinfo::copy_sockopt_fork(const socket_fd_api *copy_from)
 {
     const sockinfo *skinfo = dynamic_cast<const sockinfo *>(copy_from);
@@ -913,6 +913,35 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
         }
     }
 #endif
+#if defined(DEFINED_ENVOY)
+    if (g_p_app->workers_num > 0 && g_p_app->get_worker_id() >= 0) {
+        if (flow_key.get_protocol() != PROTO_UDP) {
+            if ((g_p_app->workers_num != g_p_app->workers_pow2) && flow_key.is_3_tuple()) {
+                if (g_p_app->attr.envoy.map_thread_id.at(gettid()) <
+                    (g_p_app->workers_pow2 % g_p_app->workers_num)) {
+                    g_p_app->add_second_4t_rule = true;
+                    flow_tuple_with_local_if new_key(
+                        flow_key.get_dst_ip(), flow_key.get_dst_port(), ip_address::any_addr(), 1,
+                        flow_key.get_protocol(), flow_key.get_family(), flow_key.get_local_if());
+                    p_nd_resources =
+                        create_nd_resources(ip_addr(new_key.get_local_if(), new_key.get_family()));
+                    if (!p_nd_resources->p_ring->attach_flow(new_key, this, false)) {
+                        lock_rx_q();
+                        si_logerr("Failed to attach %s to ring %p", new_key.to_str().c_str(),
+                                  p_nd_resources->p_ring);
+                        g_p_app->add_second_4t_rule = false;
+                        return false;
+                    }
+                    m_rx_flow_map[new_key] = p_nd_resources->p_ring;
+                    si_logdbg("Added second rule %s for index %d to ring %p",
+                              new_key.to_str().c_str(), g_p_app->get_worker_id(),
+                              p_nd_resources->p_ring);
+                }
+            }
+            g_p_app->add_second_4t_rule = false;
+        }
+    }
+#endif /* DEFINED_ENVOY */
     lock_rx_q();
     BULLSEYE_EXCLUDE_BLOCK_END
 

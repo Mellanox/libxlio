@@ -228,7 +228,7 @@ public:
 
     virtual fd_type_t get_type() = 0;
 
-#ifdef DEFINED_NGINX
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     // This socket options copy is currently implemented for nginx and for very specific options.
     // This copy is called as part of fork() flow of nginx specifically.
     // If a generic fork() is implemented, this copy should be reimplemented in a more generic way,
@@ -296,7 +296,7 @@ protected:
     epfd_info *m_econtext;
 
 public:
-#if defined(DEFINED_NGINX)
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     bool m_is_for_socket_pool; // true when this fd will be used for socket pool on close
     bool m_is_listen;
     int m_back_log;

@@ -93,6 +93,9 @@ int g_worker_index = -1;
 bool g_b_add_second_4t_rule = false;
 map_udp_bounded_port_t g_map_udp_bounded_port;
 #endif
+#if defined(DEFINED_ENVOY)
+struct app_conf *g_p_app = NULL;
+#endif /* DEFINED_ENVOY */
 
 struct os_api orig_os_api;
 struct sigaction g_act_prev;
@@ -257,7 +260,7 @@ char *sprintf_sockaddr(char *buf, int buflen, const struct sockaddr *_addr, sock
     sock_addr sa(_addr, _addrlen);
 
     snprintf(buf, buflen, "%s, addr=%s", socket_get_domain_str(sa.get_sa_family()),
-             sa.to_str_ip_port().c_str());
+             sa.to_str_ip_port(true).c_str());
     return buf;
 }
 
@@ -415,6 +418,86 @@ int init_child_process_for_nginx()
 }
 
 #endif // DEFINED_NGINX
+
+#if defined(DEFINED_ENVOY)
+
+static int init_worker(int worker_id, int listen_fd)
+{
+    srdr_logdbg("worker: %d fd: %d", worker_id, listen_fd);
+
+    int ret = 0;
+    socket_fd_api *child_sock_fd_api = nullptr;
+
+    std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+
+    if (worker_id > 0) {
+        sockinfo *si;
+        int parent_fd = -1;
+        const auto itr = g_p_app->attr.envoy.map_dup_fd.find(listen_fd);
+        if (itr != g_p_app->attr.envoy.map_dup_fd.end()) {
+            parent_fd = itr->second;
+        }
+
+        if (parent_fd < 0) {
+            srdr_logerr("parent fd is not found");
+            return -1;
+        }
+
+        socket_fd_api *parent_sock_fd_api = g_p_fd_collection->get_sockfd(parent_fd);
+        if (!parent_sock_fd_api || !(si = dynamic_cast<sockinfo *>(parent_sock_fd_api))) {
+            srdr_logerr("parent socinfo is not found");
+            return -1;
+        }
+
+        int block_type = si->is_blocking() ? 0 : SOCK_NONBLOCK;
+        sock_addr sa;
+        socklen_t sa_len = sa.get_socklen();
+
+        parent_sock_fd_api->getsockname(sa.get_p_sa(), &sa_len);
+        if (parent_sock_fd_api->m_is_listen) {
+            srdr_logdbg("found listen socket %d", parent_sock_fd_api->get_fd());
+            g_p_fd_collection->addsocket(listen_fd, si->get_family(), SOCK_STREAM | block_type);
+            child_sock_fd_api = g_p_fd_collection->get_sockfd(listen_fd);
+            if (child_sock_fd_api) {
+                child_sock_fd_api->copy_sockopt_fork(parent_sock_fd_api);
+
+                ret = bind(listen_fd, sa.get_p_sa(), sa_len);
+                if (ret < 0) {
+                    srdr_logerr("bind() error");
+                }
+
+                // is the socket really offloaded
+                ret = child_sock_fd_api->prepareListen();
+                if (ret < 0) {
+                    srdr_logerr("prepareListen error");
+                    child_sock_fd_api = nullptr;
+                } else if (ret > 0) { // Pass-through
+                    handle_close(child_sock_fd_api->get_fd(), false, true);
+                    child_sock_fd_api = nullptr;
+                } else {
+                    srdr_logdbg("Prepare listen successfully offloaded");
+                }
+            }
+        }
+    } else {
+        child_sock_fd_api = g_p_fd_collection->get_sockfd(listen_fd);
+    }
+
+    if (child_sock_fd_api) {
+        if (child_sock_fd_api) {
+            ret = child_sock_fd_api->listen(child_sock_fd_api->m_back_log);
+            if (ret < 0) {
+                srdr_logerr("Listen error");
+            } else {
+                srdr_logdbg("Listen success");
+            }
+        }
+    }
+
+    return 0;
+}
+
+#endif /* DEFINED_ENVOY */
 
 //-----------------------------------------------------------------------------
 // extended API functions
@@ -876,6 +959,24 @@ extern "C" EXPORT_SYMBOL int listen(int __fd, int backlog)
 
     srdr_logdbg_entry("fd=%d, backlog=%d", __fd, backlog);
 
+#if defined(DEFINED_ENVOY)
+    if (g_p_app->workers_num > 0) {
+        /* Envoy uses dup() call for listen socket on workers_N (N > 0)
+         * dup() call does not create socket object and does not store fd
+         * in fd_collection in current implementation
+         * so as a result duplicated fd is not returned by fd_collection_get_sockfd(__fd) and
+         * listen() call for duplicated fds are ignored.
+         * Original listen socket is not ignored by listen() function.
+         *
+         * Store all duplicated fd in map_listen_fd with tid
+         * Store all listen fd in map_listen_fd with tid
+         * Identify correct listen fd during epoll_ctl(ADD) call by tid. It should be different.
+         */
+        std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+        g_p_app->attr.envoy.map_listen_fd[__fd] = gettid();
+    }
+#endif /* DEFINED_ENVOY */
+
     socket_fd_api *p_socket_object = NULL;
     p_socket_object = fd_collection_get_sockfd(__fd);
 
@@ -894,6 +995,12 @@ extern "C" EXPORT_SYMBOL int listen(int __fd, int backlog)
                 p_socket_object->m_back_log = backlog;
             } else
 #endif
+#if defined(DEFINED_ENVOY)
+            if (g_p_app->workers_num > 0) {
+                p_socket_object->m_is_listen = true;
+                p_socket_object->m_back_log = backlog;
+            } else 
+#endif /* DEFINED_ENVOY */
             {
                 return p_socket_object->listen(backlog);
             }
@@ -2604,6 +2711,56 @@ extern "C" EXPORT_SYMBOL int epoll_ctl(int __epfd, int __op, int __fd, struct ep
     if (!epfd_info) {
         errno = EBADF;
     } else {
+#if defined(DEFINED_ENVOY)
+        if (g_p_app->workers_num > 0) {
+            auto iter = g_p_app->attr.envoy.map_listen_fd.find(__fd);
+            if (iter != g_p_app->attr.envoy.map_listen_fd.end()) {
+                socket_fd_api *p_socket_object = NULL;
+                p_socket_object = fd_collection_get_sockfd(__fd);
+                if (iter->second == gettid()) {
+                    /* process listen sockets from main thread */
+                    if (p_socket_object) {
+                        rc = p_socket_object->listen(p_socket_object->m_back_log);
+                        if (rc < 0) {
+                            return rc;
+                        }
+                    }
+                    std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+                    g_p_app->attr.envoy.map_listen_fd.erase(iter);
+                } else if (__op == EPOLL_CTL_ADD) {
+                    static int worker_id = 0;
+
+                    /* original listen socket should be on*/
+                    int sleep_count = 1000;
+                    while (!p_socket_object && !worker_id) {
+                        if (!sleep_count--) {
+                            return -1;
+                        }
+                        const struct timespec short_sleep = {0, 1000};
+                        nanosleep(&short_sleep, NULL);
+                    }
+                    std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+                    g_p_app->attr.envoy.map_listen_fd[__fd] = gettid();
+                    g_p_app->attr.envoy.map_thread_id[gettid()] = worker_id;
+                    rc = init_worker(worker_id, __fd);
+                    if (rc != 0) {
+                        srdr_logerr(
+                            "Failed to initialize worker %d, (errno=%d %m)", worker_id,
+                            errno);
+                        g_p_app->attr.envoy.map_listen_fd.erase(__fd);
+                        g_p_app->attr.envoy.map_thread_id.erase(gettid());
+                        return rc;
+                    }
+                    worker_id++;
+                } else if (__op == EPOLL_CTL_DEL) {
+                    std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+                    g_p_app->attr.envoy.map_listen_fd.erase(__fd);
+                    g_p_app->attr.envoy.map_thread_id.erase(gettid());
+                }
+            }
+        }
+#endif /* DEFINED_ENVOY */
+
         // TODO handle race - if close() gets here..
         rc = epfd_info->ctl(__op, __fd, __event);
     }
@@ -2795,7 +2952,13 @@ extern "C" EXPORT_SYMBOL int dup(int __fd)
 
     // Sanity check to remove any old sockinfo object using the same fd!!
     handle_close(fid, true);
-
+#if defined(DEFINED_ENVOY)
+    if (g_p_app && g_p_app->type == app_conf::APP_ENVOY) {
+        std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+        g_p_app->attr.envoy.map_dup_fd[fid] = __fd;
+        g_p_app->attr.envoy.map_dup_fd[__fd] = __fd;
+    }
+#endif /* DEFINED_ENVOY */
     return fid;
 }
 

@@ -262,6 +262,12 @@ static int free_libxlio_resources()
     }
 #endif /* DEFINED_NGINX */
 
+#if defined(DEFINED_ENVOY)
+    if (g_p_app) {
+        delete g_p_app;
+    }
+#endif /* DEFINED_ENVOY */
+
     return 0;
 }
 
@@ -814,6 +820,10 @@ void print_xlio_global_settings()
         "Max RX reuse buffs UDP pool", safe_mce_sys().nginx_udp_socket_pool_rx_num_buffs_reuse,
         MCE_DEFAULT_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE, SYS_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE);
 #endif
+#if defined(DEFINED_ENVOY)
+    VLOG_PARAM_NUMBER("Number of Envoy workers", safe_mce_sys().envoy.workers_num,
+                      MCE_DEFAULT_ENVOY_WORKERS_NUM, SYS_VAR_ENVOY_WORKERS_NUM);
+#endif /* DEFINED_ENVOY */
     VLOG_PARAM_STRING("fork() support", safe_mce_sys().handle_fork, MCE_DEFAULT_FORK_SUPPORT,
                       SYS_VAR_FORK, safe_mce_sys().handle_fork ? "Enabled " : "Disabled");
     VLOG_PARAM_STRING("close on dup2()", safe_mce_sys().close_on_dup2, MCE_DEFAULT_CLOSE_ON_DUP2,
@@ -1175,6 +1185,22 @@ static void do_global_ctors_helper()
 #ifdef DEFINED_UTLS
     xlio_tls_api_setup();
 #endif /* DEFINED_UTLS */
+
+#ifdef DEFINED_ENVOY
+    NEW_CTOR(g_p_app, app_conf());
+    g_p_app->type = app_conf::APP_ENVOY;
+    g_p_app->workers_num = safe_mce_sys().envoy.workers_num;
+    g_p_app->src_port_stride = 2; // safe_mce_sys().src_port_stride;
+    g_p_app->add_second_4t_rule = false;
+    // Round up to a power of 2 value. Assume the number doesn't exceed 32bit.
+    g_p_app->workers_pow2 = g_p_app->workers_num - 1;
+    g_p_app->workers_pow2 |= g_p_app->workers_pow2 >> 1;
+    g_p_app->workers_pow2 |= g_p_app->workers_pow2 >> 2;
+    g_p_app->workers_pow2 |= g_p_app->workers_pow2 >> 4;
+    g_p_app->workers_pow2 |= g_p_app->workers_pow2 >> 8;
+    g_p_app->workers_pow2 |= g_p_app->workers_pow2 >> 16;
+    g_p_app->workers_pow2++;
+#endif /* DEFINED_ENVOY */
 }
 
 int do_global_ctors()
