@@ -77,10 +77,12 @@
 #include <core/util/xlio_stats.h>
 #include <core/util/sys_vars.h>
 #include <core/util/utils.h>
+#include <utils/lock_wrapper.h>
 
 #include <vlogger/vlogger.h>
 #include <unordered_map>
 #include <vector>
+#include <mutex>
 
 #if defined(DEFINED_NGINX)
 typedef std::unordered_map<uint16_t, bool> map_udp_bounded_port_t;
@@ -90,6 +92,49 @@ extern int g_worker_index;
 extern bool g_b_add_second_4t_rule;
 extern map_udp_bounded_port_t g_map_udp_bounded_port;
 #endif
+#if defined(DEFINED_ENVOY)
+struct app_conf {
+    enum { APP_NONE, APP_NGINX, APP_ENVOY } type;
+    lock_spin_recursive m_lock;
+    int workers_num;
+    int workers_pow2;
+    int src_port_stride;
+    bool add_second_4t_rule;
+    struct attr {
+        struct envoy {
+            std::unordered_map<int, pid_t> map_listen_fd;
+            std::unordered_map<pid_t, int> map_thread_id;
+            std::unordered_map<int, int> map_dup_fd;
+        } envoy;
+    } attr;
+
+    app_conf()
+    {
+        this->type = APP_NONE;
+        m_lock = lock_spin_recursive("app_conf");
+        this->workers_num = 0;
+        this->workers_pow2 = 0;
+        this->src_port_stride = 2;
+        this->add_second_4t_rule = false;
+        this->attr.envoy.map_listen_fd.clear();
+        this->attr.envoy.map_thread_id.clear();
+        this->attr.envoy.map_dup_fd.clear();
+    }
+
+    ~app_conf() {}
+
+    inline int get_worker_id()
+    {
+        std::lock_guard<decltype(this->m_lock)> lock(this->m_lock);
+        auto itr = this->attr.envoy.map_thread_id.find(gettid());
+        if (itr != this->attr.envoy.map_thread_id.end()) {
+            return itr->second;
+        }
+        return -1;
+    }
+};
+extern struct app_conf *g_p_app;
+#endif /* DEFINED_ENVOY */
 
 struct mmsghdr;
 

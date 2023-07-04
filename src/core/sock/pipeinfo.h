@@ -45,7 +45,7 @@ public:
 
     virtual void clean_obj();
 
-#ifdef DEFINED_NGINX
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     virtual void copy_sockopt_fork(const socket_fd_api *copy_from) { NOT_IN_USE(copy_from); }
 #endif
 
