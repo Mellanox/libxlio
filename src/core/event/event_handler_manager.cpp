@@ -234,15 +234,22 @@ void event_handler_manager::register_command_event(int fd, command *cmd)
     post_new_reg_action(reg_action);
 }
 
-event_handler_manager::event_handler_manager()
-    : m_reg_action_q_lock("reg_action_q_lock")
+event_handler_manager::event_handler_manager(bool internal_thread_mode)
+    : m_internal_thread_mode(internal_thread_mode)
+    , m_reg_action_q_lock("reg_action_q_lock")
     , m_b_sysvar_internal_thread_arm_cq_enabled(safe_mce_sys().internal_thread_arm_cq_enabled)
     , m_n_sysvar_xlio_time_measure_num_samples(safe_mce_sys().xlio_time_measure_num_samples)
     , m_n_sysvar_timer_resolution_msec(safe_mce_sys().timer_resolution_msec)
 {
     evh_logfunc("");
 
-    m_cq_epfd = 0;
+    m_cq_epfd = m_epfd = 0;
+    m_event_handler_tid = 0;
+
+    if (!m_internal_thread_mode) {
+        m_b_continue_running = true;
+        return;
+    }
 
     m_epfd = orig_os_api.epoll_create(INITIAL_EVENTS_NUM);
     BULLSEYE_EXCLUDE_BLOCK_START
@@ -254,12 +261,9 @@ event_handler_manager::event_handler_manager()
     BULLSEYE_EXCLUDE_BLOCK_END
 
     m_b_continue_running = true;
-    m_event_handler_tid = 0;
 
     wakeup_set_epoll_fd(m_epfd);
     going_to_sleep();
-
-    return;
 }
 
 event_handler_manager::~event_handler_manager()
@@ -452,7 +456,10 @@ const char *event_handler_manager::reg_action_str(event_action_type_e reg_action
 // get new action of event (register / unregister), and post to the thread's pipe
 void event_handler_manager::post_new_reg_action(reg_action_t &reg_action)
 {
-    if (!m_b_continue_running) {
+    if (!m_internal_thread_mode) { // For thread-local event_handler_manager
+        m_p_reg_action_q_to_push_to->push_back(reg_action);
+        return;
+    } else if (!m_b_continue_running) {
         return;
     }
 

@@ -325,6 +325,7 @@ protected:
     virtual void lock_rx_q();
     virtual void unlock_rx_q();
     virtual bool try_un_offloading(); // un-offload the socket if possible
+    virtual int os_epoll_wait(epoll_event *ep_events, int maxevents);
 
 private:
     int fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit);
@@ -443,7 +444,7 @@ private:
     static err_t connect_lwip_cb(void *arg, struct tcp_pcb *tpcb, err_t err);
     // tx
     unsigned tx_wait(int &err, bool blocking);
-
+    int os_epoll_wait_with_tcp_timers(epoll_event *ep_events, int maxevents);
     int handle_child_FIN(sockinfo_tcp *child_conn);
 
     // rx

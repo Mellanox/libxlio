@@ -98,6 +98,8 @@ public:
     // run "tick" func for all the registered timer handler that their timeout expiered
     void process_registered_timers();
 
+    void process_registered_timers_uncond();
+
     void debug_print_list();
 
 private:

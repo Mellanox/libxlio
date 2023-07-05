@@ -50,7 +50,7 @@
 #include "proto/xlio_lwip.h"
 #include "proto/dst_entry_tcp.h"
 #include "iomux/io_mux_call.h"
-
+#include "event/thread_local_event_handler.h"
 #include "sock-redirect.h"
 #include "fd_collection.h"
 #include "sockinfo_tcp.h"
@@ -122,6 +122,13 @@ static bool is_inherited_option(int __level, int __optname)
     }
 
     return ret;
+}
+
+static event_handler_manager *get_event_mgr()
+{
+    return (safe_mce_sys().tcp_ctl_thread != CTL_THREAD_DELEGATE_TCP_TIMERS
+                ? g_p_event_handler_manager
+                : &g_thread_local_event_handler);
 }
 
 inline void sockinfo_tcp::init_pbuf_custom(mem_buf_desc_t *p_desc)
@@ -433,16 +440,18 @@ void sockinfo_tcp::clean_obj()
     lock_tcp_con();
     set_cleaned();
 
+    event_handler_manager *p_event_mgr = get_event_mgr();
+
     /* Remove group timers from g_tcp_timers_collection */
-    if (g_p_event_handler_manager->is_running() && m_timer_handle) {
-        g_p_event_handler_manager->unregister_timer_event(this, m_timer_handle);
+    if (p_event_mgr->is_running() && m_timer_handle) {
+        p_event_mgr->unregister_timer_event(this, m_timer_handle);
     }
 
     m_timer_handle = NULL;
     unlock_tcp_con();
 
-    if (g_p_event_handler_manager->is_running()) {
-        g_p_event_handler_manager->unregister_timers_event_and_delete(this);
+    if (p_event_mgr->is_running()) {
+        p_event_mgr->unregister_timers_event_and_delete(this);
     } else {
         cleanable_obj::clean_obj();
     }
@@ -1544,7 +1553,8 @@ void sockinfo_tcp::process_my_ctl_packets()
     while (!temp_list.empty()) {
         mem_buf_desc_t *desc = temp_list.get_and_pop_front();
 
-        static const unsigned int MAX_SYN_RCVD = m_sysvar_tcp_ctl_thread > CTL_THREAD_DISABLE
+        static const unsigned int MAX_SYN_RCVD =
+            m_sysvar_tcp_ctl_thread > CTL_THREAD_DELEGATE_TCP_TIMERS
             ? safe_mce_sys().sysctl_reader.get_tcp_max_syn_backlog()
             : 0;
         // NOTE: currently, in case tcp_ctl_thread is disabled, only established backlog is
@@ -1671,7 +1681,7 @@ void sockinfo_tcp::handle_timer_expired(void *user_data)
     NOT_IN_USE(user_data);
     si_tcp_logfunc("");
 
-    if (m_sysvar_tcp_ctl_thread > CTL_THREAD_DISABLE) {
+    if (m_sysvar_tcp_ctl_thread > CTL_THREAD_DELEGATE_TCP_TIMERS) {
         process_rx_ctl_packets();
     }
 
@@ -2367,7 +2377,7 @@ void sockinfo_tcp::register_timer()
 {
     if (m_timer_handle == NULL) {
         /* user_data is the socket itself for a fast cast in the timer_expired(). */
-        m_timer_handle = g_p_event_handler_manager->register_timer_event(
+        m_timer_handle = get_event_mgr()->register_timer_event(
             safe_mce_sys().tcp_timer_resolution_msec, this, PERIODIC_TIMER,
             reinterpret_cast<void *>(this), g_tcp_timers_collection);
     } else {
@@ -2428,7 +2438,8 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
 
             /// respect TCP listen backlog - See redmine issue #565962
             /// distinguish between backlog of established sockets vs. backlog of syn-rcvd
-            static const unsigned int MAX_SYN_RCVD = m_sysvar_tcp_ctl_thread > CTL_THREAD_DISABLE
+            static const unsigned int MAX_SYN_RCVD =
+                m_sysvar_tcp_ctl_thread > CTL_THREAD_DELEGATE_TCP_TIMERS
                 ? safe_mce_sys().sysctl_reader.get_tcp_max_syn_backlog()
                 : 0;
             // NOTE: currently, in case tcp_ctl_thread is disabled, only established backlog is
@@ -2456,7 +2467,7 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
                 return false; // return without inc_ref_count() => packet will be dropped
             }
         }
-        if (m_sysvar_tcp_ctl_thread > CTL_THREAD_DISABLE ||
+        if (m_sysvar_tcp_ctl_thread > CTL_THREAD_DELEGATE_TCP_TIMERS ||
             established_backlog_full) { /* 2nd check only worth when MAX_SYN_RCVD>0 for non
                                            tcp_ctl_thread  */
             queue_rx_ctl_packet(
@@ -2979,7 +2990,7 @@ int sockinfo_tcp::listen(int backlog)
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    if (m_sysvar_tcp_ctl_thread > CTL_THREAD_DISABLE) {
+    if (m_sysvar_tcp_ctl_thread > CTL_THREAD_DELEGATE_TCP_TIMERS) {
         m_timer_handle = g_p_event_handler_manager->register_timer_event(
             safe_mce_sys().timer_resolution_msec, this, PERIODIC_TIMER, 0, NULL);
     }
@@ -3212,7 +3223,7 @@ sockinfo_tcp *sockinfo_tcp::accept_clone()
     si->m_sock_state = TCP_SOCK_BOUND;
     si->setPassthrough(false);
 
-    if (m_sysvar_tcp_ctl_thread > CTL_THREAD_DISABLE) {
+    if (m_sysvar_tcp_ctl_thread > CTL_THREAD_DELEGATE_TCP_TIMERS) {
         tcp_ip_output(&si->m_pcb, sockinfo_tcp::ip_output_syn_ack);
     }
 
@@ -3348,7 +3359,7 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
         new_sock->m_b_attached = true;
     }
 
-    if (new_sock->m_sysvar_tcp_ctl_thread > CTL_THREAD_DISABLE) {
+    if (new_sock->m_sysvar_tcp_ctl_thread > CTL_THREAD_DELEGATE_TCP_TIMERS) {
         new_sock->m_xlio_thr = true;
 
         // Before handling packets from flow steering the child should process everything it got
@@ -3546,7 +3557,7 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     tcp_sent(&new_sock->m_pcb, sockinfo_tcp::ack_recvd_lwip_cb);
     new_sock->m_pcb.syn_tw_handled_cb = nullptr;
     new_sock->wakeup_clear();
-    if (new_sock->m_sysvar_tcp_ctl_thread > CTL_THREAD_DISABLE) {
+    if (new_sock->m_sysvar_tcp_ctl_thread > CTL_THREAD_DELEGATE_TCP_TIMERS) {
         tcp_ip_output(&new_sock->m_pcb, sockinfo_tcp::ip_output_syn_ack);
     }
 
@@ -3794,6 +3805,39 @@ int sockinfo_tcp::wait_for_conn_ready_blocking()
     m_sock_state = TCP_SOCK_CONNECTED_RDWR;
     si_tcp_logdbg("TCP PCB FLAGS: 0x%x", m_pcb.flags);
     return 0;
+}
+
+int sockinfo_tcp::os_epoll_wait(epoll_event *ep_events, int maxevents)
+{
+    return (likely(m_sysvar_tcp_ctl_thread != CTL_THREAD_DELEGATE_TCP_TIMERS)
+                ? orig_os_api.epoll_wait(m_rx_epfd, ep_events, maxevents,
+                                         m_loops_timer.time_left_msec())
+                : os_epoll_wait_with_tcp_timers(ep_events, maxevents));
+}
+
+int sockinfo_tcp::os_epoll_wait_with_tcp_timers(epoll_event *ep_events, int maxevents)
+{
+    int rc;
+    int sys_timer_resolution_msec = static_cast<int>(safe_mce_sys().tcp_timer_resolution_msec);
+    do {
+        int next_timeout =
+            (m_loops_timer.time_left_msec() < 0 // Is infinite.
+                 ? sys_timer_resolution_msec
+                 : std::min(m_loops_timer.time_left_msec(), sys_timer_resolution_msec));
+
+        rc = orig_os_api.epoll_wait(m_rx_epfd, ep_events, maxevents, next_timeout);
+
+        if (rc != 0 || m_loops_timer.time_left_msec() == 0) {
+            break;
+        }
+
+        // epol_wait timeout
+        // We must run here TCP timers because we are in a mode when TCP timers are
+        // handled by the context threads instead of the internal thread.
+        g_thread_local_event_handler.do_tasks();
+    } while (1);
+
+    return rc;
 }
 
 bool sockinfo_tcp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array)
@@ -5764,8 +5808,10 @@ void tcp_timers_collection::clean_obj()
 
     set_cleaned();
     m_timer_handle = NULL;
-    if (g_p_event_handler_manager->is_running()) {
-        g_p_event_handler_manager->unregister_timers_event_and_delete(this);
+
+    event_handler_manager *p_event_mgr = get_event_mgr();
+    if (p_event_mgr->is_running()) {
+        p_event_mgr->unregister_timers_event_and_delete(this);
     } else {
         cleanable_obj::clean_obj();
     }
@@ -5822,8 +5868,8 @@ void tcp_timers_collection::add_new_timer(timer_node_t *node, timer_handler *han
     m_n_next_insert_bucket = (m_n_next_insert_bucket + 1) % m_n_intervals_size;
 
     if (m_n_count == 0) {
-        m_timer_handle = g_p_event_handler_manager->register_timer_event(m_n_resolution, this,
-                                                                         PERIODIC_TIMER, NULL);
+        m_timer_handle =
+            get_event_mgr()->register_timer_event(m_n_resolution, this, PERIODIC_TIMER, NULL);
     }
     m_n_count++;
 
@@ -5856,7 +5902,7 @@ void tcp_timers_collection::remove_timer(timer_node_t *node)
     m_n_count--;
     if (m_n_count == 0) {
         if (m_timer_handle) {
-            g_p_event_handler_manager->unregister_timer_event(this, m_timer_handle);
+            get_event_mgr()->unregister_timer_event(this, m_timer_handle);
             m_timer_handle = NULL;
         }
     }

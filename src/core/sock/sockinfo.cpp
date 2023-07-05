@@ -1450,6 +1450,11 @@ int sockinfo::os_wait_sock_rx_epfd(epoll_event *ep_events, int maxevents)
         return ret;
     }
 
+    return os_epoll_wait(ep_events, maxevents);
+}
+
+int sockinfo::os_epoll_wait(epoll_event *ep_events, int maxevents)
+{
     return orig_os_api.epoll_wait(m_rx_epfd, ep_events, maxevents, m_loops_timer.time_left_msec());
 }
 

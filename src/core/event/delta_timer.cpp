@@ -267,6 +267,36 @@ void timer::process_registered_timers()
     }
 }
 
+void timer::process_registered_timers_uncond()
+{
+    timer_node_t *iter = m_list_head;
+    timer_node_t *next_iter;
+    while (iter) {
+        tmr_logfuncall("timer executed on %p", iter->handler);
+
+        iter->handler->handle_timer_expired(iter->user_data);
+
+        next_iter = iter->next;
+
+        switch (iter->req_type) {
+        case PERIODIC_TIMER:
+            break;
+
+        case ONE_SHOT_TIMER:
+            remove_timer(iter, iter->handler);
+            break;
+
+            BULLSEYE_EXCLUDE_BLOCK_START
+        case INVALID_TIMER:
+        default:
+            tmr_logwarn("invalid timer expired on %p", iter->handler);
+            break;
+        }
+        BULLSEYE_EXCLUDE_BLOCK_END
+        iter = next_iter;
+    }
+}
+
 // insert allocated node to the list
 void timer::insert_to_list(timer_node_t *new_node)
 {

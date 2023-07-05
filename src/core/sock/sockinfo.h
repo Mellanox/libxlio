@@ -355,7 +355,7 @@ protected:
     virtual timestamps_t *get_socket_timestamps() = 0;
     virtual void update_socket_timestamps(timestamps_t *ts) = 0;
     virtual void post_deqeue(bool release_buff) = 0;
-
+    virtual int os_epoll_wait(epoll_event *ep_events, int maxevents);
     virtual int zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags) = 0;
     virtual int register_callback(xlio_recv_callback_t callback, void *context);
 

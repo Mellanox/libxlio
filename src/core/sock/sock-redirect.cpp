@@ -46,7 +46,7 @@
 #include "utils/lock_wrapper.h"
 #include <proto/ip_frag.h>
 #include <dev/buffer_pool.h>
-#include <event/event_handler_manager.h>
+#include <event/thread_local_event_handler.h>
 #include <event/vlogger_timer_handler.h>
 #include <iomux/poll_call.h>
 #include <iomux/select_call.h>
@@ -491,6 +491,10 @@ extern "C" int xlio_socketxtreme_poll(int fd, struct xlio_socketxtreme_completio
     cq_channel_info *cq_ch_info = NULL;
 
     cq_ch_info = g_p_fd_collection->get_cq_channel_fd(fd);
+
+    if (safe_mce_sys().tcp_ctl_thread == CTL_THREAD_DELEGATE_TCP_TIMERS) {
+        g_thread_local_event_handler.do_tasks();
+    }
 
     if (likely(cq_ch_info)) {
         ring *p_ring = cq_ch_info->get_ring();
@@ -2544,6 +2548,10 @@ inline int epoll_wait_helper(int __epfd, struct epoll_event *__events, int __max
         srdr_logdbg("invalid value for maxevents: %d", __maxevents);
         errno = EINVAL;
         return -1;
+    }
+
+    if (safe_mce_sys().tcp_ctl_thread == CTL_THREAD_DELEGATE_TCP_TIMERS) {
+        g_thread_local_event_handler.do_tasks();
     }
 
     epoll_event extra_events_buffer[__maxevents];

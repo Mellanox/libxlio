@@ -154,7 +154,7 @@ typedef std::map<timer_handler *, void *> timer_list_t;
 */
 class event_handler_manager : public wakeup_pipe {
 public:
-    event_handler_manager();
+    event_handler_manager(bool internal_thread_mode = true);
     ~event_handler_manager();
 
     void *register_timer_event(int timeout_msec, timer_handler *handler, timer_req_type_t req_type,
@@ -181,9 +181,10 @@ public:
     void query_for_ibverbs_event(int async_fd);
     void statistics_print(dump_type_t dump_type, int fd, vlog_levels_t log_level);
 
-private:
+protected:
     pthread_t m_event_handler_tid;
     bool m_b_continue_running;
+    bool m_internal_thread_mode;
     int m_cq_epfd;
     int m_epfd;
 
