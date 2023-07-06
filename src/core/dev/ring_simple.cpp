@@ -98,8 +98,8 @@ qp_mgr *ring_eth::create_qp_mgr(struct qp_mgr_desc *desc)
     return new qp_mgr_eth_mlx5(desc, get_tx_num_wr(), m_partition);
 }
 
-ring_simple::ring_simple(int if_index, ring *parent, ring_type_t type)
-    : ring_slave(if_index, parent, type)
+ring_simple::ring_simple(int if_index, ring *parent, ring_type_t type, bool use_locks)
+    : ring_slave(if_index, parent, type, use_locks)
     , m_p_ib_ctx(NULL)
     , m_p_qp_mgr(NULL)
     , m_p_cq_mgr_rx(NULL)

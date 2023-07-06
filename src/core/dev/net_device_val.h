@@ -235,7 +235,7 @@ public:
     void print_val() const;
     void set_ip_array();
 
-    ring *reserve_ring(resource_allocation_key *); // create if not exists
+    ring *reserve_ring(resource_allocation_key *key, bool use_locks = true); // create if not exists
     int release_ring(resource_allocation_key *); // delete from m_hash if ref_cnt == 0
     state get_state() const { return m_state; } // not sure, look at state init at c'tor
     virtual const std::string to_str() const;
@@ -260,7 +260,7 @@ public:
 
 protected:
     void set_slave_array();
-    virtual ring *create_ring(resource_allocation_key *key) = 0;
+    virtual ring *create_ring(resource_allocation_key *key, bool use_locks) = 0;
     virtual void create_br_address(const char *ifname) = 0;
     virtual L2_address *create_L2_address(const char *ifname) = 0;
 
@@ -329,7 +329,7 @@ public:
     const std::string to_str() const;
 
 protected:
-    virtual ring *create_ring(resource_allocation_key *key);
+    virtual ring *create_ring(resource_allocation_key *key, bool use_locks);
     void parse_prio_egress_map();
 
 private:

@@ -373,7 +373,8 @@ bool dst_entry::resolve_ring()
         if (!m_p_ring) {
             dst_logdbg("getting a ring");
             m_p_ring =
-                m_p_net_dev_val->reserve_ring(m_ring_alloc_logic.create_new_key(m_pkt_src_ip));
+                m_p_net_dev_val->reserve_ring(m_ring_alloc_logic.create_new_key(m_pkt_src_ip),
+                                              dst_entry::use_socket_ring_locks());
         }
         if (m_p_ring) {
             if (m_sge) {
@@ -594,6 +595,11 @@ bool dst_entry::prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_
     return m_b_is_offloaded;
 }
 
+bool dst_entry::use_socket_ring_locks()
+{
+    return (safe_mce_sys().tcp_ctl_thread != CTL_THREAD_DELEGATE_TCP_TIMERS);
+}
+
 bool dst_entry::try_migrate_ring(lock_base &socket_lock)
 {
     bool ret = false;
@@ -640,7 +646,7 @@ void dst_entry::do_ring_migration(lock_base &socket_lock, resource_allocation_ke
     m_slow_path_lock.unlock();
     socket_lock.unlock();
 
-    ring *new_ring = m_p_net_dev_val->reserve_ring(new_key);
+    ring *new_ring = m_p_net_dev_val->reserve_ring(new_key, dst_entry::use_socket_ring_locks());
     if (!new_ring) {
         socket_lock.lock();
         return;

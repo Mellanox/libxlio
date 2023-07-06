@@ -86,6 +86,8 @@ public:
                               struct xlio_rate_limit_t &rate_limit, int flags = 0,
                               socket_fd_api *sock = 0, tx_call_t call_type = TX_UNDEF) = 0;
 
+    static bool use_socket_ring_locks();
+
     bool try_migrate_ring(lock_base &socket_lock);
 
     bool is_offloaded() { return m_b_is_offloaded; }

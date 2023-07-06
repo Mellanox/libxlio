@@ -134,9 +134,17 @@ static event_handler_manager *get_event_mgr()
 
 static tcp_timers_collection *get_tcp_timer_collection()
 {
-    return (safe_mce_sys().tcp_ctl_thread != CTL_THREAD_DISABLE_TCP_TIMERS
+    return (safe_mce_sys().tcp_ctl_thread != CTL_THREAD_DELEGATE_TCP_TIMERS
                 ? g_tcp_timers_collection
                 : &g_thread_local_tcp_timers);
+}
+
+static lock_base *get_new_tcp_lock()
+{
+    return (
+        safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS
+            ? static_cast<lock_base *>(multilock::create_new_lock(MULTILOCK_RECURSIVE, "tcp_con"))
+            : static_cast<lock_base *>(new lock_dummy));
 }
 
 inline void sockinfo_tcp::init_pbuf_custom(mem_buf_desc_t *p_desc)
@@ -262,7 +270,7 @@ inline void sockinfo_tcp::reuse_buffer(mem_buf_desc_t *buff)
 sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     : sockinfo(fd, domain)
     , m_timer_handle(NULL)
-    , m_tcp_con_lock(MULTILOCK_RECURSIVE, "tcp_con")
+    , m_tcp_con_lock(get_new_tcp_lock())
     , m_sysvar_buffer_batching_mode(safe_mce_sys().buffer_batching_mode)
     , m_sysvar_tx_segs_batch_tcp(safe_mce_sys().tx_segs_batch_tcp)
     , m_sysvar_tcp_ctl_thread(safe_mce_sys().tcp_ctl_thread)

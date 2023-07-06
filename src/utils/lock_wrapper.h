@@ -38,6 +38,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <assert.h>
+#include <memory>
 #include "types.h"
 #include "utils/bullseye.h"
 #include "utils/rdtsc.h"
@@ -136,6 +137,8 @@ public:
 
     virtual inline int unlock() { return 0; };
 
+    virtual inline int is_locked_by_me() { return 0; }
+
     const char *to_str() { return m_lock_name; }
 
 private:
@@ -211,6 +214,11 @@ public:
         LOCK_BASE_UNLOCK
         return pthread_spin_unlock(&m_lock);
     };
+    inline int is_locked_by_me()
+    {
+        assert(!"lock_spin::is_locked_by_me is unsupported");
+        return 0; // Unsupported
+    }
 
 protected:
     pthread_spinlock_t m_lock;
@@ -321,6 +329,11 @@ public:
         LOCK_BASE_UNLOCK
         return pthread_mutex_unlock(&m_lock);
     };
+    inline int is_locked_by_me()
+    {
+        assert(!"lock_mutex::is_locked_by_me is unsupported");
+        return 0; // Unsupported
+    }
 
 protected:
     pthread_mutex_t m_lock;
@@ -388,8 +401,6 @@ public:
         return ((m_owner == self && m_lock_count) ? m_lock_count : 0);
     };
 
-    inline int get_num_locks() { return m_lock_count; };
-
 protected:
     pthread_t m_owner;
     pthread_t m_invalid_owner;
@@ -440,11 +451,29 @@ protected:
     pthread_rwlock_t m_lock;
 };
 
+class lock_dummy : public lock_base {
+public:
+    lock_dummy(const char *name = "lock_dummy")
+        : lock_base(name) {};
+
+    inline int lock() { return 0; }
+    inline int trylock() { return 0; }
+    inline int unlock() { return 0; }
+    inline int is_locked_by_me() { return 1; }
+};
+
 class multilock {
 public:
     multilock(lock_base *_lock)
-        : m_lock(_lock) {};
+        : m_lock(_lock)
+    {
+    }
     multilock(multilock_recursive_t _recursive, const char *_str)
+        : m_lock(create_new_lock(_recursive, _str))
+    {
+    }
+
+    static lock_base *create_new_lock(multilock_recursive_t _recursive, const char *_str)
     {
         lock_base *lock = nullptr;
         switch (safe_mce_sys().multilock) {
@@ -458,9 +487,10 @@ public:
             break;
         default:
             vlog_printf(VLOG_ERROR, "multilock type is not supported.\n");
-            return;
+            return nullptr;
         }
-        m_lock.reset(lock);
+
+        return lock;
     }
 
     inline int lock() { return m_lock->lock(); }

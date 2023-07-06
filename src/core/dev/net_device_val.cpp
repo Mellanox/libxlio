@@ -1000,7 +1000,7 @@ const std::string net_device_val::to_str() const
     return std::string("Net Device: " + m_name);
 }
 
-ring *net_device_val::reserve_ring(resource_allocation_key *key)
+ring *net_device_val::reserve_ring(resource_allocation_key *key, bool use_locks)
 {
     nd_logfunc("");
     std::lock_guard<decltype(m_lock)> lock(m_lock);
@@ -1012,7 +1012,7 @@ ring *net_device_val::reserve_ring(resource_allocation_key *key)
         nd_logdbg("Creating new RING for %s", key->to_str().c_str());
         // copy key since we keep pointer and socket can die so map will lose pointer
         resource_allocation_key *new_key = new resource_allocation_key(*key);
-        the_ring = create_ring(new_key);
+        the_ring = create_ring(new_key, use_locks);
         if (!the_ring) {
             return NULL;
         }
@@ -1407,7 +1407,7 @@ out:
     }
 }
 
-ring *net_device_val_eth::create_ring(resource_allocation_key *key)
+ring *net_device_val_eth::create_ring(resource_allocation_key *key, bool use_locks)
 {
     ring *ring = NULL;
 
@@ -1416,7 +1416,7 @@ ring *net_device_val_eth::create_ring(resource_allocation_key *key)
     try {
         switch (m_bond) {
         case NO_BOND:
-            ring = new ring_eth(get_if_idx());
+            ring = new ring_eth(get_if_idx(), nullptr, RING_ETH, true, use_locks);
             break;
         case ACTIVE_BACKUP:
         case LAG_8023ad:

@@ -47,12 +47,19 @@
 // AF_INET address 0.0.0.0:0, used for 3T flow spec keys.
 static const sock_addr s_sock_addrany;
 
-ring_slave::ring_slave(int if_index, ring *parent, ring_type_t type)
+static lock_base *get_new_lock(const char *name, bool real_lock)
+{
+    return (real_lock
+                ? static_cast<lock_base *>(multilock::create_new_lock(MULTILOCK_RECURSIVE, name))
+                : static_cast<lock_base *>(new lock_dummy()));
+}
+
+ring_slave::ring_slave(int if_index, ring *parent, ring_type_t type, bool use_locks)
     : ring()
     , m_steering_ipv4(*this)
     , m_steering_ipv6(*this)
-    , m_lock_ring_rx(MULTILOCK_RECURSIVE, "ring_slave:lock_rx")
-    , m_lock_ring_tx(MULTILOCK_RECURSIVE, "ring_slave:lock_tx")
+    , m_lock_ring_rx(get_new_lock("ring_slave:lock_rx", use_locks))
+    , m_lock_ring_tx(get_new_lock("ring_slave:lock_tx", use_locks))
     , m_p_ring_stat(new ring_stats_t)
     , m_partition(0)
     , m_flow_tag_enabled(false)

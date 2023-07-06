@@ -990,7 +990,8 @@ net_device_resources_t *sockinfo::create_nd_resources(const ip_addr &ip_local)
             key = m_ring_alloc_logic.create_new_key(ip_local);
         }
         m_rx_ring_map_lock.unlock();
-        nd_resources.p_ring = nd_resources.p_ndv->reserve_ring(key);
+        nd_resources.p_ring =
+            nd_resources.p_ndv->reserve_ring(key, dst_entry::use_socket_ring_locks());
         lock_rx_q();
         if (!nd_resources.p_ring) {
             si_logdbg("Failed to reserve ring for allocation key %s on ip %s",
@@ -1099,7 +1100,8 @@ void sockinfo::do_rings_migration(resource_allocation_key &old_key)
         net_device_resources_t *p_nd_resources = &(rx_nd_iter->second);
         ring *p_old_ring = p_nd_resources->p_ring;
         unlock_rx_q();
-        ring *new_ring = p_nd_resources->p_ndv->reserve_ring(new_key);
+        ring *new_ring =
+            p_nd_resources->p_ndv->reserve_ring(new_key, dst_entry::use_socket_ring_locks());
         if (new_ring == p_old_ring) {
             rc = p_nd_resources->p_ndv->release_ring(&old_key);
             if (rc < 0) {

@@ -273,7 +273,7 @@ private:
 
 class ring_slave : public ring {
 public:
-    ring_slave(int if_index, ring *parent, ring_type_t type);
+    ring_slave(int if_index, ring *parent, ring_type_t type, bool use_locks);
     virtual ~ring_slave();
 
     virtual void print_val();

@@ -43,7 +43,7 @@
 #define MODULE_HDR MODULE_NAME "%d:%s() "
 
 ring_tap::ring_tap(int if_index, ring *parent)
-    : ring_slave(if_index, parent, RING_TAP)
+    : ring_slave(if_index, parent, RING_TAP, true)
     , m_tap_fd(-1)
     , m_vf_ring(NULL)
     , m_sysvar_qp_compensation_level(safe_mce_sys().qp_compensation_level)
