@@ -172,6 +172,7 @@ Example:
  XLIO DETAILS: Polling Rx on Tx TCP           Disabled                   [XLIO_RX_POLL_ON_TX_TCP]
  XLIO DETAILS: Trig dummy send getsockname()  Disabled                   [XLIO_TRIGGER_DUMMY_SEND_GETSOCKNAME]
  XLIO DETAILS: Skip CQ polling in rx          0 (Disabled)               [XLIO_SKIP_POLL_IN_RX]
+ XLIO DETAILS: Lock Type                      0 (Spin)                   [XLIO_MULTILOCK]
  XLIO INFO   : ---------------------------------------------------------------------------
 
 XLIO_TRACELEVEL
@@ -1039,6 +1040,12 @@ Use a value of 0 for un-limiting the number of TCP SYN packets that can be handl
 Value range is 0 to 100000.
 Default value is 0 (no limit)
 
+XLIO_MULTILOCK
+Control locking type mechanism for some specific flows.
+Note that usage of Mutex might increase latency.
+0 - Spin
+1 - Mutex
+Default: 0 (Spin)
 
 XLIO Monitoring & Performance Counters
 =====================================

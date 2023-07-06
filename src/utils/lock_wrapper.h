@@ -41,6 +41,9 @@
 #include "types.h"
 #include "utils/bullseye.h"
 #include "utils/rdtsc.h"
+#include <memory>
+#include <vlogger/vlogger.h>
+#include <core/util/sys_vars.h>
 
 // todo disable assert
 #define ASSERT_LOCKED(lock)     assert((lock).is_locked_by_me())
@@ -82,6 +85,11 @@ public:
     virtual int lock() = 0;
     virtual int trylock() = 0;
     virtual int unlock() = 0;
+    virtual int is_locked_by_me()
+    {
+        vlog_printf(VLOG_ERROR, "is_locked_by_me() used for not supported class.\n");
+        return 0;
+    }
 
     const char *to_str() { return m_lock_name; }
 
@@ -430,6 +438,39 @@ public:
 
 protected:
     pthread_rwlock_t m_lock;
+};
+
+class multilock {
+public:
+    multilock(lock_base *_lock)
+        : m_lock(_lock) {};
+    multilock(multilock_recursive_t _recursive, const char *_str)
+    {
+        lock_base *lock = nullptr;
+        switch (safe_mce_sys().multilock) {
+        case MULTILOCK_SPIN:
+            lock = (_recursive == MULTILOCK_RECURSIVE) ? new lock_spin_recursive(_str)
+                                                       : new lock_spin(_str);
+            break;
+        case MULTILOCK_MUTEX:
+            lock = (_recursive == MULTILOCK_RECURSIVE) ? new lock_mutex_recursive(_str)
+                                                       : new lock_mutex(_str);
+            break;
+        default:
+            vlog_printf(VLOG_ERROR, "multilock type is not supported.\n");
+            return;
+        }
+        m_lock.reset(lock);
+    }
+
+    inline int lock() { return m_lock->lock(); }
+    inline int trylock() { return m_lock->trylock(); }
+    inline int unlock() { return m_lock->unlock(); }
+    lock_base &get_lock_base() { return *m_lock; }
+    inline int is_locked_by_me() { return m_lock->is_locked_by_me(); }
+
+private:
+    std::unique_ptr<lock_base> m_lock;
 };
 
 #endif // LOCK_WRAPPER_H

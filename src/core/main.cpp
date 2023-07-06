@@ -856,6 +856,9 @@ void print_xlio_global_settings()
         safe_mce_sys().skip_poll_in_rx
             ? (safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_ENABLE ? "Enabled " : "Epoll Only")
             : "Disabled");
+    VLOG_PARAM_STRING("Lock Type", safe_mce_sys().multilock, MCE_DEFAULT_MULTILOCK,
+                      SYS_VAR_MULTILOCK,
+                      (safe_mce_sys().multilock == MULTILOCK_SPIN ? "Spin " : "Mutex"));
 
 #ifdef XLIO_TIME_MEASURE
     VLOG_PARAM_NUMBER("Time Measure Num Samples", safe_mce_sys().xlio_time_measure_num_samples,

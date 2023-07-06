@@ -178,6 +178,16 @@ typedef enum {
     SKIP_POLL_IN_RX_EPOLL_ONLY = 2
 } skip_poll_in_rx_t;
 
+typedef enum {
+    MULTILOCK_SPIN = 0,
+    MULTILOCK_MUTEX = 1,
+} multilock_t;
+
+typedef enum {
+    MULTILOCK_RECURSIVE = 0,
+    MULTILOCK_NON_RECURSIVE = 1,
+} multilock_recursive_t;
+
 static inline const char *ctl_thread_str(tcp_ctl_thread_t logic)
 {
     switch (logic) {
@@ -441,6 +451,7 @@ public:
     bool internal_thread_arm_cq_enabled;
     bool handle_bf;
     skip_poll_in_rx_t skip_poll_in_rx;
+    multilock_t multilock;
 
     bool enable_socketxtreme;
     option_3::mode_t enable_tso;
@@ -671,6 +682,7 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_TRIGGER_DUMMY_SEND_GETSOCKNAME "XLIO_TRIGGER_DUMMY_SEND_GETSOCKNAME"
 #define SYS_VAR_TCP_SEND_BUFFER_SIZE           "XLIO_TCP_SEND_BUFFER_SIZE"
 #define SYS_VAR_SKIP_POLL_IN_RX                "XLIO_SKIP_POLL_IN_RX"
+#define SYS_VAR_MULTILOCK                      "XLIO_MULTILOCK"
 
 /*
  * This block consists of default values for library specific
@@ -849,6 +861,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_RX_CQ_WAIT_CTRL                (false)
 #define MCE_ALIGNMENT                              ((unsigned long)63)
 #define MCE_DEFAULT_SKIP_POLL_IN_RX                (SKIP_POLL_IN_RX_DISABLE)
+#define MCE_DEFAULT_MULTILOCK                      (MULTILOCK_SPIN)
 
 /*
  * This block consists of auxiliary constants

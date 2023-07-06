@@ -782,6 +782,7 @@ void mce_sys_var::get_env_params()
     trigger_dummy_send_getsockname = MCE_DEFAULT_TRIGGER_DUMMY_SEND_GETSOCKNAME;
     tcp_send_buffer_size = MCE_DEFAULT_TCP_SEND_BUFFER_SIZE;
     skip_poll_in_rx = MCE_DEFAULT_SKIP_POLL_IN_RX;
+    multilock = MCE_DEFAULT_MULTILOCK;
 #ifdef XLIO_TIME_MEASURE
     xlio_time_measure_num_samples = MCE_DEFAULT_TIME_MEASURE_NUM_SAMPLES;
 #endif
@@ -1858,6 +1859,14 @@ void mce_sys_var::get_env_params()
             temp = 0;
         }
         skip_poll_in_rx = (skip_poll_in_rx_t)temp;
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_MULTILOCK)) != NULL) {
+        int temp = atoi(env_ptr);
+        if (temp < 0 || temp > MULTILOCK_MUTEX) {
+            temp = 0;
+        }
+        multilock = (multilock_t)temp;
     }
 
 #ifdef XLIO_TIME_MEASURE
