@@ -1111,9 +1111,12 @@ static void do_global_ctors_helper()
 
     NEW_CTOR(g_tcp_seg_pool, tcp_seg_pool(safe_mce_sys().tx_num_segs_tcp));
 
-    NEW_CTOR(g_tcp_timers_collection,
-             tcp_timers_collection(safe_mce_sys().tcp_timer_resolution_msec,
-                                   safe_mce_sys().timer_resolution_msec));
+    // For delegated TCP timers the global collection is not used.
+    if (safe_mce_sys().tcp_ctl_thread != CTL_THREAD_DELEGATE_TCP_TIMERS) {
+        NEW_CTOR(g_tcp_timers_collection,
+                 tcp_timers_collection(safe_mce_sys().tcp_timer_resolution_msec,
+                                       safe_mce_sys().timer_resolution_msec));
+    }
 
     NEW_CTOR(g_p_vlogger_timer_handler, vlogger_timer_handler());
 

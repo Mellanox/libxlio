@@ -76,6 +76,7 @@
 extern global_stats_t g_global_stat_static;
 
 tcp_timers_collection *g_tcp_timers_collection = NULL;
+thread_local thread_local_tcp_timers g_thread_local_tcp_timers;
 
 /*
  * The following socket options are inherited by a connected TCP socket from the listening socket:
@@ -129,6 +130,13 @@ static event_handler_manager *get_event_mgr()
     return (safe_mce_sys().tcp_ctl_thread != CTL_THREAD_DELEGATE_TCP_TIMERS
                 ? g_p_event_handler_manager
                 : &g_thread_local_event_handler);
+}
+
+static tcp_timers_collection *get_tcp_timer_collection()
+{
+    return (safe_mce_sys().tcp_ctl_thread != CTL_THREAD_DISABLE_TCP_TIMERS
+                ? g_tcp_timers_collection
+                : &g_thread_local_tcp_timers);
 }
 
 inline void sockinfo_tcp::init_pbuf_custom(mem_buf_desc_t *p_desc)
@@ -2379,7 +2387,7 @@ void sockinfo_tcp::register_timer()
         /* user_data is the socket itself for a fast cast in the timer_expired(). */
         m_timer_handle = get_event_mgr()->register_timer_event(
             safe_mce_sys().tcp_timer_resolution_msec, this, PERIODIC_TIMER,
-            reinterpret_cast<void *>(this), g_tcp_timers_collection);
+            reinterpret_cast<void *>(this), get_tcp_timer_collection());
     } else {
         si_tcp_logdbg("register_timer was called more than once. Something might be wrong, or "
                       "connect was called twice.");
@@ -5910,6 +5918,17 @@ void tcp_timers_collection::remove_timer(timer_node_t *node)
     __log_dbg("TCP timer handler [%p] was removed", node->handler);
 
     free(node);
+}
+
+thread_local_tcp_timers::thread_local_tcp_timers()
+    : tcp_timers_collection(safe_mce_sys().tcp_timer_resolution_msec,
+                            safe_mce_sys().tcp_timer_resolution_msec)
+{
+}
+
+thread_local_tcp_timers::~thread_local_tcp_timers()
+{
+    m_timer_handle = nullptr;
 }
 
 void sockinfo_tcp::update_header_field(data_updater *updater)

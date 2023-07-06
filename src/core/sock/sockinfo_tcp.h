@@ -606,8 +606,9 @@ protected:
     // called for stopping (unregistering) a timer
     void remove_timer(timer_node_t *node);
 
-private:
     void *m_timer_handle;
+
+private:
     timer_node_t **m_p_intervals;
 
     int m_n_period;
@@ -620,6 +621,13 @@ private:
     void free_tta_resources();
 };
 
+class thread_local_tcp_timers : public tcp_timers_collection {
+public:
+    thread_local_tcp_timers();
+    ~thread_local_tcp_timers();
+};
+
 extern tcp_timers_collection *g_tcp_timers_collection;
+extern thread_local thread_local_tcp_timers g_thread_local_tcp_timers;
 
 #endif

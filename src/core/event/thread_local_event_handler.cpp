@@ -44,7 +44,7 @@ void thread_local_event_handler::do_tasks()
 {
     auto curr_time = chrono::steady_clock::now();
     if (likely(
-            safe_mce_sys().timer_resolution_msec >
+            safe_mce_sys().tcp_timer_resolution_msec >
             chrono::duration_cast<std::chrono::milliseconds>(curr_time - _last_run_time).count())) {
         return;
     }
