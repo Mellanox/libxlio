@@ -49,15 +49,24 @@ class source_t {
 public:
     int m_fd;
     ip_address m_ip;
+    const void *m_object;
 
     source_t(int fd)
         : m_fd(fd)
         , m_ip(ip_address::any_addr())
+        , m_object(nullptr)
     {
     }
     source_t(const ip_address &ip)
         : m_fd(-1)
         , m_ip(ip)
+        , m_object(nullptr)
+    {
+    }
+    source_t(const void *object)
+        : m_fd(-1)
+        , m_ip(ip_address::any_addr())
+        , m_object(object)
     {
     }
 };

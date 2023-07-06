@@ -110,6 +110,9 @@ uint64_t ring_allocation_logic::calc_res_key_by_logic()
         res_key = sched_getcpu();
         break;
         BULLSEYE_EXCLUDE_BLOCK_START
+    case RING_LOGIC_PER_OBJECT:
+        res_key = reinterpret_cast<uint64_t>(m_source.m_object);
+        break;
     default:
         // not suppose to get here
         ral_logdbg("non-valid ring logic = %d", m_res_key.get_ring_alloc_logic());

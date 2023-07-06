@@ -219,8 +219,9 @@ neigh_entry::neigh_entry(neigh_key key, transport_type_t _type, bool is_init_res
         }
     }
 
-    ring_alloc_logic_attr ring_attr(safe_mce_sys().ring_allocation_logic_tx);
-    m_ring_allocation_logic = ring_allocation_logic_tx(m_src_addr, ring_attr, this);
+    // Allocate one ring for g_p_neigh_table_mgr. All eigh_entry objects will share the same ring.
+    ring_alloc_logic_attr ring_attr(RING_LOGIC_PER_OBJECT);
+    m_ring_allocation_logic = ring_allocation_logic_tx(g_p_neigh_table_mgr, ring_attr, this);
 
     if (is_init_resources) {
         m_p_ring = m_p_dev->reserve_ring(m_ring_allocation_logic.get_key());
