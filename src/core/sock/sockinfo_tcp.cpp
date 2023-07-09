@@ -307,7 +307,7 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     m_conn_state = TCP_CONN_INIT;
     m_conn_timeout = CONNECT_DEFAULT_TIMEOUT_MS;
     setPassthrough(false); // by default we try to accelerate
-    si_tcp_logdbg("tcp socket created");
+    si_tcp_logdbg("tcp socket created, lock_name=%s", m_tcp_con_lock.to_str());
 
     tcp_pcb_init(&m_pcb, TCP_PRIO_NORMAL, this);
 
@@ -1059,6 +1059,11 @@ retry_is_ready:
                     } else {
                         m_tx_consecutive_eagain_count++;
                         if (m_tx_consecutive_eagain_count >= TX_CONSECUTIVE_EAGAIN_THREASHOLD) {
+                            if (safe_mce_sys().tcp_ctl_thread == CTL_THREAD_DELEGATE_TCP_TIMERS) {
+                                // Slow path. We must attempt TCP timers here for applications that
+                                // do not check for EV_OUT.
+                                g_thread_local_event_handler.do_tasks();
+                            }
                             // in case of zero sndbuf and non-blocking just try once polling CQ for
                             // ACK
                             rx_wait(poll_count, false);
@@ -2392,6 +2397,9 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
 void sockinfo_tcp::register_timer()
 {
     if (m_timer_handle == NULL) {
+        si_tcp_logdbg("Registering TCP socket timer: socket: %p, thread-col: %p, global-col: %p",
+                      this, get_tcp_timer_collection(), g_tcp_timers_collection);
+
         /* user_data is the socket itself for a fast cast in the timer_expired(). */
         m_timer_handle = get_event_mgr()->register_timer_event(
             safe_mce_sys().tcp_timer_resolution_msec, this, PERIODIC_TIMER,

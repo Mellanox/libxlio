@@ -498,6 +498,7 @@ public:
     inline int unlock() { return m_lock->unlock(); }
     lock_base &get_lock_base() { return *m_lock; }
     inline int is_locked_by_me() { return m_lock->is_locked_by_me(); }
+    inline const char *to_str() { return m_lock->to_str(); }
 
 private:
     std::unique_ptr<lock_base> m_lock;

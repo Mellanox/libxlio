@@ -1598,6 +1598,13 @@ void mce_sys_var::get_env_params()
         tcp_ctl_thread = (tcp_ctl_thread_t)atoi(env_ptr);
         if (tcp_ctl_thread >= CTL_THREAD_LAST || tcp_ctl_thread < 0) {
             tcp_ctl_thread = MCE_DEFAULT_TCP_CTL_THREAD;
+        } else if (tcp_ctl_thread == CTL_THREAD_DELEGATE_TCP_TIMERS) {
+            if (progress_engine_interval_msec != MCE_CQ_DRAIN_INTERVAL_DISABLED) {
+                vlog_printf(VLOG_DEBUG, "%s parameter is forced to %d in case %s=%s is enabled\n",
+                            SYS_VAR_PROGRESS_ENGINE_INTERVAL, MCE_CQ_DRAIN_INTERVAL_DISABLED,
+                            SYS_VAR_TCP_CTL_THREAD, ctl_thread_str(tcp_ctl_thread));
+            }
+            progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
         }
     }
 

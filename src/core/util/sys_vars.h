@@ -194,6 +194,8 @@ static inline const char *ctl_thread_str(tcp_ctl_thread_t logic)
     switch (logic) {
     case CTL_THREAD_DISABLE:
         return "(Disabled)";
+    case CTL_THREAD_DELEGATE_TCP_TIMERS:
+        return "(Delegated TCP timers)";
     case CTL_THREAD_WITH_WAKEUP:
         return "(Enabled - with wakeup)";
     case CTL_THREAD_NO_WAKEUP:
