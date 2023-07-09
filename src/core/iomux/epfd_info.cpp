@@ -59,7 +59,7 @@ epfd_info::epfd_info(int epfd, int size)
     , m_epfd(epfd)
     , m_size(size)
     , m_ring_map_lock("epfd_ring_map_lock")
-    , m_lock_poll_os("epfd_lock_poll_os")
+    , m_lock_poll_os(MULTILOCK_NON_RECURSIVE, "epfd_lock_poll_os")
     , m_sysvar_thread_mode(safe_mce_sys().thread_mode)
     , m_b_os_data_available(false)
 {

@@ -247,6 +247,7 @@ inline void sockinfo_tcp::reuse_buffer(mem_buf_desc_t *buff)
 sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     : sockinfo(fd, domain)
     , m_timer_handle(NULL)
+    , m_tcp_con_lock(MULTILOCK_RECURSIVE, "tcp_con")
     , m_sysvar_buffer_batching_mode(safe_mce_sys().buffer_batching_mode)
     , m_sysvar_tx_segs_batch_tcp(safe_mce_sys().tx_segs_batch_tcp)
     , m_sysvar_tcp_ctl_thread(safe_mce_sys().tcp_ctl_thread)
@@ -1270,7 +1271,7 @@ send_iov:
 
     rc = p_si_tcp->m_ops->handle_send_ret(ret, seg);
 
-    if (p_dst->try_migrate_ring(p_si_tcp->m_tcp_con_lock)) {
+    if (p_dst->try_migrate_ring(p_si_tcp->m_tcp_con_lock.get_lock_base())) {
         p_si_tcp->m_p_socket_stats->counters.n_tx_migrations++;
     }
 

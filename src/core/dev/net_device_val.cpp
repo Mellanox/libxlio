@@ -157,7 +157,7 @@ const std::string ring_alloc_logic_attr::to_str() const
 }
 
 net_device_val::net_device_val(struct net_device_val_desc *desc)
-    : m_lock("net_device_val lock")
+    : m_lock(MULTILOCK_RECURSIVE, "net_device_val")
 {
     bool valid = false;
     ib_ctx_handler *ib_ctx;

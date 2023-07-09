@@ -267,7 +267,7 @@ protected:
     L2_address *m_p_L2_addr;
     L2_address *m_p_br_addr;
     transport_type_t m_transport_type;
-    lock_mutex_recursive m_lock;
+    multilock m_lock;
     rings_hash_map_t m_h_ring_map;
     sys_image_guid_map_t m_sys_image_guid_map;
     rings_key_redirection_hash_map_t m_h_ring_key_redirection_map;

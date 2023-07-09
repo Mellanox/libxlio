@@ -254,7 +254,7 @@ protected:
     in_protocol_t m_protocol;
     uint8_t m_src_sel_flags;
 
-    lock_mutex_recursive m_lock_rcv;
+    multilock m_lock_rcv;
     lock_mutex m_lock_snd;
     lock_mutex m_rx_migration_lock;
 
