@@ -548,7 +548,11 @@ extern "C" int xlio_socketxtreme_free_packets(struct xlio_socketxtreme_packet_de
                 if (p_socket_object) {
                     p_socket_object->free_buffs(packets[i].total_len);
                 }
-                if (!rng || !rng->reclaim_recv_buffers_no_lock(desc)) {
+                if (rng) {
+                    if (!rng->reclaim_recv_buffers(desc)) {
+                        g_buffer_pool_rx_ptr->put_buffers_thread_safe(desc);
+                    }
+                } else {
                     goto err;
                 }
             } else {
