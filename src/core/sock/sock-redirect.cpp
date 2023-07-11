@@ -499,8 +499,6 @@ extern "C" int xlio_socketxtreme_poll(int fd, struct xlio_socketxtreme_completio
     if (likely(cq_ch_info)) {
         ring *p_ring = cq_ch_info->get_ring();
 
-        assert(completions && ncompletions);
-        memset(completions, 0, sizeof(*completions) * ncompletions);
         ret_val = p_ring->socketxtreme_poll(completions, ncompletions, flags);
 #ifdef RDTSC_MEASURE_RX_PROCCESS_BUFFER_TO_RECIVEFROM
         RDTSC_TAKE_END(g_rdtsc_instr_info_arr[RDTSC_FLOW_PROCCESS_RX_BUFFER_TO_RECIVEFROM]);
@@ -800,7 +798,6 @@ int socket_internal(int __domain, int __type, int __protocol, bool shadow, bool 
 #endif
     }
 
-    assert(fd != SOCKET_FAKE_FD);
     return fd;
 }
 
@@ -2806,8 +2803,7 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
          * calls socket(), getsockopt(), epoll_create(), epoll_create1(), pipe()
          * In other cases global objects can be invalid.
          */
-        if (g_init_global_ctors_done) {
-            assert(g_p_fd_collection);
+        if (g_init_global_ctors_done && g_p_fd_collection) {
             g_p_fd_collection_size_parent_process = g_p_fd_collection->get_fd_map_size();
             g_p_fd_collection_parent_process = g_p_fd_collection;
         }
