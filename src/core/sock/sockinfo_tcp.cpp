@@ -147,20 +147,25 @@ static lock_base *get_new_tcp_lock()
             : static_cast<lock_base *>(new lock_dummy));
 }
 
-inline void sockinfo_tcp::init_pbuf_custom(mem_buf_desc_t *p_desc)
+inline void sockinfo_tcp::lwip_pbuf_init_custom(mem_buf_desc_t *p_desc)
 {
-    p_desc->lwip_pbuf.pbuf.flags = PBUF_FLAG_IS_CUSTOM;
-    p_desc->lwip_pbuf.pbuf.len = p_desc->lwip_pbuf.pbuf.tot_len =
-        (p_desc->sz_data - p_desc->rx.n_transport_header_len);
-    p_desc->lwip_pbuf.pbuf.ref = 1;
-    p_desc->lwip_pbuf.pbuf.type = PBUF_REF;
-    p_desc->lwip_pbuf.pbuf.next = NULL;
-    p_desc->lwip_pbuf.pbuf.payload = (u8_t *)p_desc->p_buffer + p_desc->rx.n_transport_header_len;
-
     /* Override default free function to return rx pbuf to the CQ cache */
-    if (!is_socketxtreme()) {
-        p_desc->lwip_pbuf.custom_free_function = sockinfo_tcp::tcp_rx_pbuf_free;
+    static pbuf_free_custom_fn custom_free_function =
+        (is_socketxtreme() ? p_desc->lwip_pbuf.custom_free_function
+                           : sockinfo_tcp::tcp_rx_pbuf_free);
+
+    if (!p_desc->lwip_pbuf.pbuf.gro) {
+        p_desc->lwip_pbuf.pbuf.flags = PBUF_FLAG_IS_CUSTOM;
+        p_desc->lwip_pbuf.pbuf.len = p_desc->lwip_pbuf.pbuf.tot_len =
+            (p_desc->sz_data - p_desc->rx.n_transport_header_len);
+        p_desc->lwip_pbuf.pbuf.ref = 1;
+        p_desc->lwip_pbuf.pbuf.type = PBUF_REF;
+        p_desc->lwip_pbuf.pbuf.next = NULL;
+        p_desc->lwip_pbuf.pbuf.payload =
+            (u8_t *)p_desc->p_buffer + p_desc->rx.n_transport_header_len;
+        p_desc->lwip_pbuf.custom_free_function = custom_free_function;
     }
+    p_desc->lwip_pbuf.pbuf.gro = 0;
 }
 
 /* change default rx_wait impl to flow based one */
@@ -2423,11 +2428,8 @@ void sockinfo_tcp::queue_rx_ctl_packet(struct tcp_pcb *pcb, mem_buf_desc_t *p_de
 {
     /* in tcp_ctl_thread mode, always lock the child first*/
     p_desc->inc_ref_count();
-    if (!p_desc->lwip_pbuf.pbuf.gro) {
-        init_pbuf_custom(p_desc);
-    } else {
-        p_desc->lwip_pbuf.pbuf.gro = 0;
-    }
+    lwip_pbuf_init_custom(p_desc);
+
     sockinfo_tcp *sock = (sockinfo_tcp *)pcb->my_container;
 
     sock->m_rx_ctl_packets_list_lock.lock();
@@ -2513,13 +2515,9 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
     } else {
         pcb = &m_pcb;
     }
-    p_rx_pkt_mem_buf_desc_info->inc_ref_count();
 
-    if (!p_rx_pkt_mem_buf_desc_info->lwip_pbuf.pbuf.gro) {
-        init_pbuf_custom(p_rx_pkt_mem_buf_desc_info);
-    } else {
-        p_rx_pkt_mem_buf_desc_info->lwip_pbuf.pbuf.gro = 0;
-    }
+    p_rx_pkt_mem_buf_desc_info->inc_ref_count();
+    lwip_pbuf_init_custom(p_rx_pkt_mem_buf_desc_info);
 
     dropped_count = m_rx_cb_dropped_list.size();
 

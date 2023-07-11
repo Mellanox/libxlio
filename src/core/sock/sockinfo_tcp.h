@@ -407,7 +407,7 @@ private:
     uint64_t m_user_huge_page_mask;
     unsigned m_required_send_block;
 
-    inline void init_pbuf_custom(mem_buf_desc_t *p_desc);
+    inline void lwip_pbuf_init_custom(mem_buf_desc_t *p_desc);
 
     void tcp_timer();
 
