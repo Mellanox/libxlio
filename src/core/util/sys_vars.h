@@ -747,7 +747,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_RX_BUF_SIZE                   (0)
 #define MCE_DEFAULT_RX_BUFS_BATCH                 (64)
 #define MCE_DEFAULT_RX_NUM_WRE                    (16000)
-#define MCE_DEFAULT_RX_NUM_WRE_TO_POST_RECV       (64)
+#define MCE_DEFAULT_RX_NUM_WRE_TO_POST_RECV       (1024)
 #define MCE_DEFAULT_RX_NUM_SGE                    (1)
 #define MCE_DEFAULT_RX_NUM_POLLS                  (100000)
 #define MCE_DEFAULT_RX_NUM_POLLS_INIT             (0)

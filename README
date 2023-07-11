@@ -103,7 +103,7 @@ Example:
  XLIO DETAILS: Rx Mem Bufs                    200000                     [XLIO_RX_BUFS]
  XLIO DETAILS: Rx Mem Buf size                0                          [XLIO_RX_BUF_SIZE]
  XLIO DETAILS: Rx QP WRE                      16000                      [XLIO_RX_WRE]
- XLIO DETAILS: Rx QP WRE Batching             64                         [XLIO_RX_WRE_BATCHING]
+ XLIO DETAILS: Rx QP WRE Batching             1024                       [XLIO_RX_WRE_BATCHING]
  XLIO DETAILS: Rx Byte Min Limit              65536                      [XLIO_RX_BYTES_MIN]
  XLIO DETAILS: Rx Poll Loops                  100000                     [XLIO_RX_POLL]
  XLIO DETAILS: Rx Poll Init Loops             0                          [XLIO_RX_POLL_INIT]
@@ -463,7 +463,7 @@ XLIO_RX_WRE_BATCHING
 Number of Work Request Elements and RX buffers to batch before recycling.
 Batching decrease latency mean, but might increase latency STD.
 Value range is 1-1024.
-Default value is 64
+Default value is 1024
 
 XLIO_RX_BYTES_MIN
 Minimum value in bytes that will be used per socket by XLIO when applications
