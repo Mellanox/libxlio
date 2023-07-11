@@ -63,7 +63,7 @@ public:
 
     virtual int drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id = NULL);
     virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array = NULL);
-    virtual int poll_and_process_element_rx_socketxtreme(mem_buf_desc_t **p_desc_lst);
+    virtual mem_buf_desc_t *poll_and_process_socketxtreme();
 
     virtual int poll_and_process_element_tx(uint64_t *p_cq_poll_sn);
 
@@ -74,9 +74,6 @@ public:
     virtual uint32_t clean_cq();
     virtual void get_cq_event(int count = 1) { xlio_ib_mlx5_get_cq_event(&m_mlx5_cq, count); };
 
-    int drain_and_proccess_socketxtreme(uintptr_t *p_recycle_buffers_last_wr_id);
-    int poll_and_process_element_rx_socketxtreme(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array);
-
 protected:
     qp_mgr_eth_mlx5 *m_qp;
     xlio_ib_mlx5_cq_t m_mlx5_cq;
@@ -84,9 +81,8 @@ protected:
 
     inline struct xlio_mlx5_cqe *check_cqe(void);
     virtual mem_buf_desc_t *poll(enum buff_status_e &status);
-    int poll_and_process_error_element_rx(struct xlio_mlx5_cqe *cqe, void *pv_fd_ready_array);
 
-    inline struct xlio_mlx5_cqe *get_cqe(uint32_t &num_polled_cqes);
+    inline struct xlio_mlx5_cqe *get_cqe_tx(uint32_t &num_polled_cqes);
     void log_cqe_error(struct xlio_mlx5_cqe *cqe);
     inline void cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc,
                                      enum buff_status_e &status);
@@ -96,6 +92,9 @@ protected:
 
 private:
     void handle_sq_wqe_prop(unsigned index);
+    int drain_and_proccess_socketxtreme(uintptr_t *p_recycle_buffers_last_wr_id);
+    int drain_and_proccess_helper(mem_buf_desc_t *buff, buff_status_e status,
+                                  uintptr_t *p_recycle_buffers_last_wr_id);
 
     virtual int req_notify_cq() { return xlio_ib_mlx5_req_notify_cq(&m_mlx5_cq, 0); };
 };
@@ -121,7 +120,7 @@ inline void cq_mgr_mlx5::update_global_sn(uint64_t &cq_poll_sn, uint32_t num_pol
     cq_poll_sn = m_n_global_sn;
 }
 
-inline struct xlio_mlx5_cqe *cq_mgr_mlx5::get_cqe(uint32_t &num_polled_cqes)
+inline struct xlio_mlx5_cqe *cq_mgr_mlx5::get_cqe_tx(uint32_t &num_polled_cqes)
 {
     struct xlio_mlx5_cqe *cqe_ret = nullptr;
     struct xlio_mlx5_cqe *cqe =

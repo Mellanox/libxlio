@@ -737,10 +737,10 @@ int cq_mgr::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
     return ret;
 }
 
-int cq_mgr::poll_and_process_element_rx_socketxtreme(mem_buf_desc_t **)
+mem_buf_desc_t *cq_mgr::poll_and_process_socketxtreme()
 {
     cq_logerr("SocketXtreme mode is supported by mlx5 cq manager only");
-    return 0;
+    return nullptr;
 }
 
 bool cq_mgr::reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst)

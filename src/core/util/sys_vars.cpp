@@ -797,7 +797,6 @@ void mce_sys_var::get_env_params()
     }
     if (enable_socketxtreme) {
         /* Set following parameters as default for SocketXtreme mode */
-        rx_num_wr = 1024;
         gro_streams_max = 0;
         progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
     }

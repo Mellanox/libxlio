@@ -372,10 +372,9 @@ inline bool cq_mgr_mlx5_strq::strq_cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cq
     return false;
 }
 
-inline int cq_mgr_mlx5_strq::drain_and_proccess_helper(mem_buf_desc_t *buff,
-                                                       mem_buf_desc_t *buff_wqe,
-                                                       buff_status_e status,
-                                                       uintptr_t *p_recycle_buffers_last_wr_id)
+int cq_mgr_mlx5_strq::drain_and_proccess_helper(mem_buf_desc_t *buff, mem_buf_desc_t *buff_wqe,
+                                                buff_status_e status,
+                                                uintptr_t *p_recycle_buffers_last_wr_id)
 {
     int ret_total = 0;
     if (buff_wqe && (++m_qp_rec.debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv) &&
@@ -413,7 +412,7 @@ inline int cq_mgr_mlx5_strq::drain_and_proccess_helper(mem_buf_desc_t *buff,
     return ret_total;
 }
 
-int cq_mgr_mlx5_strq::drain_and_proccess_sockextreme(uintptr_t *p_recycle_buffers_last_wr_id)
+int cq_mgr_mlx5_strq::drain_and_proccess_socketxtreme(uintptr_t *p_recycle_buffers_last_wr_id)
 {
     uint32_t ret_total = 0;
     while (((m_n_sysvar_progress_engine_wce_max > m_n_wce_counter) && (!m_b_was_drained)) ||
@@ -456,7 +455,7 @@ int cq_mgr_mlx5_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id
     //   Not null argument indicates one.
 
     if (safe_mce_sys().enable_socketxtreme) {
-        ret_total = drain_and_proccess_sockextreme(p_recycle_buffers_last_wr_id);
+        ret_total = drain_and_proccess_socketxtreme(p_recycle_buffers_last_wr_id);
     } else {
         while (((m_n_sysvar_progress_engine_wce_max > m_n_wce_counter) && (!m_b_was_drained)) ||
                p_recycle_buffers_last_wr_id) {
@@ -515,7 +514,7 @@ mem_buf_desc_t *cq_mgr_mlx5_strq::process_strq_cq_element_rx(mem_buf_desc_t *p_m
     return p_mem_buf_desc;
 }
 
-int cq_mgr_mlx5_strq::poll_and_process_element_rx_sockextreme(void *pv_fd_ready_array)
+mem_buf_desc_t *cq_mgr_mlx5_strq::poll_and_process_socketxtreme()
 {
     buff_status_e status = BS_OK;
     mem_buf_desc_t *buff = nullptr;
@@ -525,15 +524,7 @@ int cq_mgr_mlx5_strq::poll_and_process_element_rx_sockextreme(void *pv_fd_ready_
         compensate_qp_poll_failed(); // Reuse this method as success.
     }
 
-    if (buff) {
-        ++m_n_wce_counter;
-        if (cqe_process_rx(buff, status)) {
-            process_recv_buffer(buff, pv_fd_ready_array);
-            return 1;
-        }
-    }
-
-    return 0;
+    return (buff && cqe_process_rx(buff, status) ? buff : nullptr);
 }
 
 int cq_mgr_mlx5_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array)
@@ -553,7 +544,11 @@ int cq_mgr_mlx5_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *
     }
 
     if (safe_mce_sys().enable_socketxtreme) {
-        ret_rx_processed += poll_and_process_element_rx_sockextreme(pv_fd_ready_array);
+        mem_buf_desc_t *buff = poll_and_process_socketxtreme();
+        if (buff) {
+            process_recv_buffer(buff, pv_fd_ready_array);
+            ++ret_rx_processed;
+        }
     } else {
         buff_status_e status = BS_OK;
         uint32_t ret = 0;
@@ -656,27 +651,6 @@ void cq_mgr_mlx5_strq::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
             g_buffer_pool_rx_ptr->put_buffers_thread_safe(buff);
         }
     }
-}
-
-// Sockextreme only.
-int cq_mgr_mlx5_strq::poll_and_process_element_rx_socketxtreme(mem_buf_desc_t **p_desc_lst)
-{
-    buff_status_e status = BS_OK;
-    mem_buf_desc_t *buff = nullptr;
-    mem_buf_desc_t *buff_wqe = poll(status, buff);
-
-    if ((buff_wqe && (++m_qp_rec.debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv)) || !buff) {
-        compensate_qp_poll_failed(); // Reuse this method as success.
-    }
-
-    if (buff) {
-        if (cqe_process_rx(buff, status)) {
-            *p_desc_lst = buff;
-            return 1;
-        }
-    }
-
-    return 0;
 }
 
 #endif /* DEFINED_DIRECT_VERBS */
