@@ -2322,7 +2322,7 @@ inline xlio_recv_callback_retval_t sockinfo_udp::inspect_by_user_cb(mem_buf_desc
 /* Update completion with
  * XLIO_SOCKETXTREME_PACKET related data
  */
-inline void sockinfo_udp::fill_completion(mem_buf_desc_t *p_desc)
+inline void sockinfo_udp::rx_udp_cb_socketxtreme_helper(mem_buf_desc_t *p_desc)
 {
     struct xlio_socketxtreme_completion_t *completion;
 
@@ -2330,7 +2330,10 @@ inline void sockinfo_udp::fill_completion(mem_buf_desc_t *p_desc)
     assert(p_desc->rx.src.get_sa_family() == AF_INET);
 
     /* Try to process socketxtreme_poll() completion directly */
-    m_socketxtreme.completion = m_p_rx_ring->get_comp();
+    if (p_desc->rx.socketxtreme_polled) {
+        m_socketxtreme.completion = m_p_rx_ring->get_comp();
+        m_socketxtreme.last_buff_lst = NULL;
+    }
 
     if (m_socketxtreme.completion) {
         completion = m_socketxtreme.completion;
@@ -2557,8 +2560,8 @@ bool sockinfo_udp::rx_input_cb(mem_buf_desc_t *p_desc, void *pv_fd_ready_array)
     p_desc->inc_ref_count();
     save_strq_stats(p_desc->rx.strides_num);
 
-    if (p_desc->rx.socketxtreme_polled) {
-        fill_completion(p_desc);
+    if (is_socketxtreme()) {
+        rx_udp_cb_socketxtreme_helper(p_desc);
         p_desc->rx.socketxtreme_polled = false;
     } else {
         update_ready(p_desc, pv_fd_ready_array, cb_ret);
