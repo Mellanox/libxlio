@@ -122,7 +122,8 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     atomic_set(&m_zckey, 0);
     m_last_zcdesc = NULL;
 
-    m_socketxtreme.ec.clear();
+    m_socketxtreme.ec_cache.clear();
+    m_socketxtreme.ec = &m_socketxtreme.ec_cache;
 
     m_connected.set_sa_family(m_family);
     m_bound.set_sa_family(m_family);
@@ -1610,7 +1611,7 @@ void sockinfo::rx_del_ring_cb(ring *p_ring)
                  * ring should not have events related closed socket
                  * in wait list
                  */
-                m_p_rx_ring->del_ec(&m_socketxtreme.ec);
+                m_p_rx_ring->del_ec(m_socketxtreme.ec);
                 if (m_rx_ring_map.size() == 1) {
                     m_p_rx_ring = m_rx_ring_map.begin()->first;
                 } else {
