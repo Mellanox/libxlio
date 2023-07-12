@@ -498,7 +498,6 @@ mem_buf_desc_t *cq_mgr_mlx5_strq::process_strq_cq_element_rx(mem_buf_desc_t *p_m
      */
     p_mem_buf_desc->rx.is_xlio_thr = false;
     p_mem_buf_desc->rx.context = nullptr;
-    p_mem_buf_desc->rx.socketxtreme_polled = false;
 
     if (unlikely(status != BS_OK)) {
         reclaim_recv_buffer_helper(p_mem_buf_desc);

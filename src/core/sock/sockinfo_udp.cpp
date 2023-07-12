@@ -2329,17 +2329,7 @@ inline void sockinfo_udp::rx_udp_cb_socketxtreme_helper(mem_buf_desc_t *p_desc)
     // xlio_socketxtreme_completion_t is IPv4 only.
     assert(p_desc->rx.src.get_sa_family() == AF_INET);
 
-    /* Try to process socketxtreme_poll() completion directly */
-    if (p_desc->rx.socketxtreme_polled) {
-        m_socketxtreme.completion = m_p_rx_ring->get_comp();
-        m_socketxtreme.last_buff_lst = NULL;
-    }
-
-    if (m_socketxtreme.completion) {
-        completion = m_socketxtreme.completion;
-    } else {
-        completion = &m_socketxtreme.ec.completion;
-    }
+    completion = &m_socketxtreme.ec.completion;
 
     completion->packet.num_bufs = p_desc->rx.n_frags;
     completion->packet.total_len = 0;
@@ -2361,8 +2351,6 @@ inline void sockinfo_udp::rx_udp_cb_socketxtreme_helper(mem_buf_desc_t *p_desc)
     NOTIFY_ON_EVENTS(this, XLIO_SOCKETXTREME_PACKET);
 
     save_stats_rx_offload(completion->packet.total_len);
-    m_socketxtreme.completion = NULL;
-    m_socketxtreme.last_buff_lst = NULL;
 }
 
 /**
@@ -2562,7 +2550,6 @@ bool sockinfo_udp::rx_input_cb(mem_buf_desc_t *p_desc, void *pv_fd_ready_array)
 
     if (is_socketxtreme()) {
         rx_udp_cb_socketxtreme_helper(p_desc);
-        p_desc->rx.socketxtreme_polled = false;
     } else {
         update_ready(p_desc, pv_fd_ready_array, cb_ret);
     }

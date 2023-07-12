@@ -147,7 +147,6 @@ ring_simple::ring_simple(int if_index, ring *parent, ring_type_t type, bool use_
     memset(&m_lro, 0, sizeof(m_lro));
 
     INIT_LIST_HEAD(&m_socketxtreme.ec_list);
-    m_socketxtreme.completion = NULL;
 }
 
 ring_simple::~ring_simple()
@@ -463,15 +462,14 @@ int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_c
         }
 
         const std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
-        m_socketxtreme.completion = xlio_completions;
         while (!g_b_exit && (i < (int)ncompletions)) {
             /* Check list size to avoid locking */
             if (!list_empty(&m_socketxtreme.ec_list)) {
                 ring_ec *ec = get_ec();
                 if (ec) {
-                    memcpy(m_socketxtreme.completion, &ec->completion, sizeof(ec->completion));
+                    memcpy(xlio_completions, &ec->completion, sizeof(ec->completion));
                     ec->clear();
-                    m_socketxtreme.completion++;
+                    xlio_completions++;
                     i++;
                 }
             } else {
@@ -483,19 +481,12 @@ int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_c
                 m_socketxtreme.completion->events = 0;
                 mem_buf_desc_t *desc = m_p_cq_mgr_rx->poll_and_process_socketxtreme();
                 if (likely(desc)) {
-                    desc->rx.socketxtreme_polled = true;
                     rx_process_buffer(desc, NULL);
-                    if (m_socketxtreme.completion->events) {
-                        m_socketxtreme.completion++;
-                        i++;
-                    }
                 } else {
                     break;
                 }
             }
         }
-
-        m_socketxtreme.completion = NULL;
 
         ret = i;
     } else {

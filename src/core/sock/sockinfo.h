@@ -232,8 +232,6 @@ public:
          * Current design support single event for socket at a particular time
          */
         struct ring_ec ec;
-        struct xlio_socketxtreme_completion_t *completion;
-        struct xlio_buff_t *last_buff_lst;
     } m_socketxtreme;
 
     rfs *rfs_ptr = nullptr;
@@ -419,16 +417,11 @@ protected:
 
     inline void set_events_socketxtreme(uint64_t events)
     {
-        if (m_socketxtreme.completion) {
-            m_socketxtreme.completion->user_data = (uint64_t)m_fd_context;
-            m_socketxtreme.completion->events |= events;
-        } else {
-            m_socketxtreme.ec.completion.user_data = (uint64_t)m_fd_context;
-            if (!m_socketxtreme.ec.completion.events) {
-                m_p_rx_ring->put_ec(&m_socketxtreme.ec);
-            }
-            m_socketxtreme.ec.completion.events |= events;
+        m_socketxtreme.ec.completion.user_data = (uint64_t)m_fd_context;
+        if (!m_socketxtreme.ec.completion.events) {
+            m_p_rx_ring->put_ec(&m_socketxtreme.ec);
         }
+        m_socketxtreme.ec.completion.events |= events;
     }
 
     inline void set_events(uint64_t events)

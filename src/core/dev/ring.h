@@ -150,7 +150,6 @@ public:
     virtual bool is_socketxtreme(void) = 0;
     virtual void put_ec(struct ring_ec *ec) = 0;
     virtual void del_ec(struct ring_ec *ec) = 0;
-    virtual struct xlio_socketxtreme_completion_t *get_comp(void) = 0;
 
     inline int get_if_index() { return m_if_index; }
 

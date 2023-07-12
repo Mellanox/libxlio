@@ -344,11 +344,6 @@ private:
         return ec;
     }
 
-    struct xlio_socketxtreme_completion_t *get_comp(void) override
-    {
-        return m_socketxtreme.completion;
-    }
-
     struct {
         /* queue of event completion elements
          * this queue is stored events related different sockinfo (sockets)
@@ -359,11 +354,6 @@ private:
 
         /* Thread-safety lock for get/put operations under the queue */
         lock_spin lock_ec_list;
-
-        /* This completion is introduced to process events directly w/o
-         * storing them in the queue of event completion elements
-         */
-        struct xlio_socketxtreme_completion_t *completion;
     } m_socketxtreme;
 
     inline void send_status_handler(int ret, xlio_ibv_send_wr *p_send_wqe);

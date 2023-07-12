@@ -140,7 +140,6 @@ private:
     bool is_socketxtreme(void) { return false; }
     void put_ec(struct ring_ec *ec) { NOT_IN_USE(ec); }
     void del_ec(struct ring_ec *ec) { NOT_IN_USE(ec); }
-    struct xlio_socketxtreme_completion_t *get_comp(void) { return NULL; }
 
     /* These fields are NETVSC mode specific */
     int m_tap_fd; /* file descriptor of tap device */

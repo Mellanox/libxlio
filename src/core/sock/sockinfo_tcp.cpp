@@ -1915,16 +1915,9 @@ inline void sockinfo_tcp::rx_lwip_cb_socketxtreme_helper(pbuf *p)
     bool use_hw_timestamp = (m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE);
 
     assert(p);
-    // Use ring_ec if complition was not provided by the user
-    if (m_socketxtreme.completion) {
-        _rx_lwip_cb_socketxtreme_helper(p, m_socketxtreme.completion, m_socketxtreme.last_buff_lst,
-                                        use_hw_timestamp, notify);
-        save_stats_rx_offload(m_socketxtreme.completion->packet.total_len);
-    } else {
-        _rx_lwip_cb_socketxtreme_helper(p, &m_socketxtreme.ec.completion,
-                                        m_socketxtreme.ec.last_buff_lst, use_hw_timestamp, notify);
-        save_stats_rx_offload(m_socketxtreme.ec.completion.packet.total_len);
-    }
+    _rx_lwip_cb_socketxtreme_helper(p, &m_socketxtreme.ec.completion,
+                                    m_socketxtreme.ec.last_buff_lst, use_hw_timestamp, notify);
+    save_stats_rx_offload(m_socketxtreme.ec.completion.packet.total_len);
 }
 
 inline err_t sockinfo_tcp::handle_fin(struct tcp_pcb *pcb, err_t err)
@@ -2458,12 +2451,6 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
     m_socket_stats.counters.n_rx_packets++;
     m_iomux_ready_fd_array = (fd_array_t *)pv_fd_ready_array;
 
-    /* Try to process socketxtreme_poll() completion directly */
-    if (p_rx_pkt_mem_buf_desc_info->rx.socketxtreme_polled) {
-        m_socketxtreme.completion = m_p_rx_ring->get_comp();
-        m_socketxtreme.last_buff_lst = NULL;
-    }
-
     if (unlikely(get_tcp_state(&m_pcb) == LISTEN)) {
         pcb = get_syn_received_pcb(p_rx_pkt_mem_buf_desc_info->rx.src,
                                    p_rx_pkt_mem_buf_desc_info->rx.dst);
@@ -2495,8 +2482,6 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
                 si_tcp_logdbg("SYN/CTL packet drop. established-backlog=%d (limit=%d) "
                               "num_con_waiting=%d (limit=%d)",
                               (int)m_syn_received.size(), m_backlog, num_con_waiting, MAX_SYN_RCVD);
-                m_socketxtreme.completion = NULL;
-                m_socketxtreme.last_buff_lst = NULL;
                 unlock_tcp_con();
                 return false; // return without inc_ref_count() => packet will be dropped
             }
@@ -2507,8 +2492,6 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
             queue_rx_ctl_packet(
                 pcb, p_rx_pkt_mem_buf_desc_info); // TODO: need to trigger queue pulling from
                                                   // accept in case no tcp_ctl_thread
-            m_socketxtreme.completion = NULL;
-            m_socketxtreme.last_buff_lst = NULL;
             unlock_tcp_con();
             return true;
         }
@@ -2546,17 +2529,10 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
     sock->m_xlio_thr = false;
 
     if (sock != this) {
-        if (unlikely(sock->m_socketxtreme.completion)) {
-            sock->m_socketxtreme.completion = NULL;
-            sock->m_socketxtreme.last_buff_lst = NULL;
-        }
         sock->m_tcp_con_lock.unlock();
     }
 
     m_iomux_ready_fd_array = NULL;
-    m_socketxtreme.completion = NULL;
-    m_socketxtreme.last_buff_lst = NULL;
-    p_rx_pkt_mem_buf_desc_info->rx.socketxtreme_polled = false;
 
     while (dropped_count--) {
         mem_buf_desc_t *p_rx_pkt_desc = m_rx_cb_dropped_list.get_and_pop_front();
@@ -3286,9 +3262,7 @@ void sockinfo_tcp::accept_connection_socketxtreme(sockinfo_tcp *parent, sockinfo
     child->m_p_socket_stats->set_bound_if(child->m_bound);
     child->m_p_socket_stats->bound_port = child->m_bound.get_in_port();
 
-    xlio_socketxtreme_completion_t &parent_compl =
-        (child->m_socketxtreme.completion ? *parent->m_socketxtreme.completion
-                                          : parent->m_socketxtreme.ec.completion);
+    xlio_socketxtreme_completion_t &parent_compl = parent->m_socketxtreme.ec.completion;
 
     child->m_connected.get_sa(reinterpret_cast<sockaddr *>(&parent_compl.src),
                               static_cast<socklen_t>(sizeof(parent_compl.src)));
@@ -3298,13 +3272,8 @@ void sockinfo_tcp::accept_connection_socketxtreme(sockinfo_tcp *parent, sockinfo
      */
     if (likely(child->m_parent)) {
 
-        if (child->m_socketxtreme.completion) {
-            child->m_socketxtreme.completion->src = parent->m_socketxtreme.completion->src;
-            child->m_socketxtreme.completion->listen_fd = child->m_parent->get_fd();
-        } else {
-            child->m_socketxtreme.ec.completion.src = parent->m_socketxtreme.ec.completion.src;
-            child->m_socketxtreme.ec.completion.listen_fd = child->m_parent->get_fd();
-        }
+        child->m_socketxtreme.ec.completion.src = parent->m_socketxtreme.ec.completion.src;
+        child->m_socketxtreme.ec.completion.listen_fd = child->m_parent->get_fd();
         NOTIFY_ON_EVENTS(child, XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED);
     } else {
         vlog_printf(VLOG_ERROR,

@@ -556,7 +556,6 @@ mem_buf_desc_t *cq_mgr::cqe_process_rx(xlio_ibv_wc *p_wce)
         // CQ
         p_mem_buf_desc->rx.is_xlio_thr = false;
         p_mem_buf_desc->rx.context = this;
-        p_mem_buf_desc->rx.socketxtreme_polled = false;
 
         // this is not a deadcode if timestamping is defined in verbs API
         // coverity[dead_error_condition]

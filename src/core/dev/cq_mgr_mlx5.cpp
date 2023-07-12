@@ -417,7 +417,6 @@ mem_buf_desc_t *cq_mgr_mlx5::cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc,
      */
     p_mem_buf_desc->rx.is_xlio_thr = false;
     p_mem_buf_desc->rx.context = NULL;
-    p_mem_buf_desc->rx.socketxtreme_polled = false;
 
     if (unlikely(status != BS_OK)) {
         m_p_next_rx_desc_poll = NULL;

@@ -123,8 +123,6 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     m_last_zcdesc = NULL;
 
     m_socketxtreme.ec.clear();
-    m_socketxtreme.completion = NULL;
-    m_socketxtreme.last_buff_lst = NULL;
 
     m_connected.set_sa_family(m_family);
     m_bound.set_sa_family(m_family);

@@ -159,7 +159,6 @@ private:
     bool is_socketxtreme(void) { return false; }
     void put_ec(struct ring_ec *ec) { NOT_IN_USE(ec); }
     void del_ec(struct ring_ec *ec) { NOT_IN_USE(ec); }
-    struct xlio_socketxtreme_completion_t *get_comp(void) { return NULL; }
 
     net_device_val::bond_type m_type;
     net_device_val::bond_xmit_hash_policy m_xmit_hash_policy;
