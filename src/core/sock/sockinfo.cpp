@@ -123,7 +123,10 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     m_last_zcdesc = NULL;
 
     m_socketxtreme.ec_cache.clear();
-    m_socketxtreme.ec = &m_socketxtreme.ec_cache;
+    struct ring_ec ec;
+    ec.clear();
+    m_socketxtreme.ec_cache.push_back(ec);
+    m_socketxtreme.ec = &m_socketxtreme.ec_cache.back();
 
     m_connected.set_sa_family(m_family);
     m_bound.set_sa_family(m_family);
@@ -159,6 +162,8 @@ sockinfo::~sockinfo()
     }
 
     xlio_stats_instance_remove_socket_block(m_p_socket_stats);
+
+    m_socketxtreme.ec_cache.clear();
 }
 
 void sockinfo::socket_stats_init(void)
@@ -1606,12 +1611,14 @@ void sockinfo::rx_del_ring_cb(ring *p_ring)
             delete p_ring_info;
 
             if (m_p_rx_ring == base_ring) {
-                /* Remove event from rx ring if it is active
-                 * or just reinitialize
-                 * ring should not have events related closed socket
+                /* Ring should not have completion events related closed socket
                  * in wait list
                  */
-                m_p_rx_ring->del_ec(m_socketxtreme.ec);
+                for (auto &ec : m_socketxtreme.ec_cache) {
+                    if (0 != ec.completion.events) {
+                        m_p_rx_ring->del_ec(&ec);
+                    }
+                }
                 if (m_rx_ring_map.size() == 1) {
                     m_p_rx_ring = m_rx_ring_map.begin()->first;
                 } else {

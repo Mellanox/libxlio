@@ -31,6 +31,7 @@
  */
 
 #include <unordered_map>
+#include <deque>
 #include <ifaddrs.h>
 
 #include "config.h"
@@ -228,10 +229,11 @@ public:
     /* Last memory descriptor with zcopy operation method */
     mem_buf_desc_t *m_last_zcdesc;
     struct {
-        /* Track internal events to return in socketxtreme_poll()
-         * Current design support single event for socket at a particular time
+        /* Use std::deque in current design as far as it allows pushing
+         * elements on either end without moving around any other element
+         * but trade this for slightly worse iteration speeds.
          */
-        struct ring_ec ec_cache;
+        std::deque<struct ring_ec> ec_cache;
         struct ring_ec *ec;
     } m_socketxtreme;
 
@@ -420,9 +422,25 @@ protected:
     {
         m_socketxtreme.ec->completion.user_data = (uint64_t)m_fd_context;
         if (!m_socketxtreme.ec->completion.events) {
+            m_socketxtreme.ec->completion.events |= events;
             m_p_rx_ring->put_ec(m_socketxtreme.ec);
+
+            m_socketxtreme.ec = NULL;
+            for (auto &ec : m_socketxtreme.ec_cache) {
+                if (0 == ec.completion.events) {
+                    m_socketxtreme.ec = &ec;
+                    break;
+                }
+            }
+            if (NULL == m_socketxtreme.ec) {
+                struct ring_ec ec;
+                ec.clear();
+                m_socketxtreme.ec_cache.push_back(ec);
+                m_socketxtreme.ec = &m_socketxtreme.ec_cache.back();
+            }
+        } else {
+            m_socketxtreme.ec->completion.events |= events;
         }
-        m_socketxtreme.ec->completion.events |= events;
     }
 
     inline void set_events(uint64_t events)
