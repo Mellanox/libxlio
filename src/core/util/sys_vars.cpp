@@ -1603,8 +1603,19 @@ void mce_sys_var::get_env_params()
                 vlog_printf(VLOG_DEBUG, "%s parameter is forced to %d in case %s=%s is enabled\n",
                             SYS_VAR_PROGRESS_ENGINE_INTERVAL, MCE_CQ_DRAIN_INTERVAL_DISABLED,
                             SYS_VAR_TCP_CTL_THREAD, ctl_thread_str(tcp_ctl_thread));
+
+                progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
             }
-            progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
+            if (ring_allocation_logic_tx != RING_LOGIC_PER_THREAD ||
+                ring_allocation_logic_rx != RING_LOGIC_PER_THREAD) {
+                vlog_printf(VLOG_DEBUG,
+                            "%s,%s parameter is forced to %s in case %s=%s is enabled\n",
+                            SYS_VAR_RING_ALLOCATION_LOGIC_TX, SYS_VAR_RING_ALLOCATION_LOGIC_RX,
+                            ring_logic_str(RING_LOGIC_PER_THREAD), SYS_VAR_TCP_CTL_THREAD,
+                            ctl_thread_str(tcp_ctl_thread));
+
+                ring_allocation_logic_tx = ring_allocation_logic_rx = RING_LOGIC_PER_THREAD;
+            }
         }
     }
 
