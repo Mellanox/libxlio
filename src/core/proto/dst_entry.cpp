@@ -597,7 +597,7 @@ bool dst_entry::prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_
 
 bool dst_entry::use_socket_ring_locks()
 {
-    return (safe_mce_sys().tcp_ctl_thread != CTL_THREAD_DELEGATE_TCP_TIMERS);
+    return (safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS);
 }
 
 bool dst_entry::try_migrate_ring(lock_base &socket_lock)

@@ -825,11 +825,14 @@ Minimum value is the internal thread wakeup timer resolution (XLIO_TIMER_RESOLUT
 Default value is 100 (milliseconds)
 
 XLIO_TCP_CTL_THREAD
-Do all TCP control flows in the internal thread.
+Select which TCP control flows are done in the internal thread.
 This feature should be kept disabled if using blocking poll/select (epoll is OK).
-Use value of 0 to disable.
-Use value of 1 for waking up the thread when there is work to do.
-Use value of 2 for waiting for thread timer to expire.
+Use value of 'disable' to disable.
+Use value of 'delegate' to handle TCP timers in application context threads.
+  In this mode the socket must be handled by the same thread from the time of its creation
+  to the time of its destruction. Otherwise, it may lead to an unexpected behaviour.
+Use value of 'with_wakeup' for waking up the thread when there is work to do.
+Use value of 'no_wakeup' for waiting for thread timer to expire.
 Default value is disabled
 
 XLIO_TCP_TIMESTAMP_OPTION

@@ -240,6 +240,15 @@ static option_t<mode_t> options[] = {AUTO_ON_OFF_IMPL,
 OPTION_FROM_TO_STR_IMPL
 } // namespace option_strq
 
+namespace option_tcp_ctl_thread {
+static option_t<mode_t> options[] = {
+    {CTL_THREAD_DISABLE, "Disable", {"disable", NULL, NULL}},
+    {CTL_THREAD_DELEGATE_TCP_TIMERS, "Delegated TCP timers", {"delegate", NULL, NULL}},
+    {CTL_THREAD_WITH_WAKEUP, "With Wakeup", {"with_wakeup", NULL, NULL}},
+    {CTL_THREAD_NO_WAKEUP, "No Wakeup", {"no_wakeup", NULL, NULL}}};
+OPTION_FROM_TO_STR_IMPL
+} // namespace option_tcp_ctl_thread
+
 int mce_sys_var::list_to_cpuset(char *cpulist, cpu_set_t *cpu_set)
 {
     char comma[] = ",";
@@ -1595,14 +1604,12 @@ void mce_sys_var::get_env_params()
     }
 
     if ((env_ptr = getenv(SYS_VAR_TCP_CTL_THREAD)) != NULL) {
-        tcp_ctl_thread = (tcp_ctl_thread_t)atoi(env_ptr);
-        if (tcp_ctl_thread >= CTL_THREAD_LAST || tcp_ctl_thread < 0) {
-            tcp_ctl_thread = MCE_DEFAULT_TCP_CTL_THREAD;
-        } else if (tcp_ctl_thread == CTL_THREAD_DELEGATE_TCP_TIMERS) {
+        tcp_ctl_thread = option_tcp_ctl_thread::from_str(env_ptr, MCE_DEFAULT_TCP_CTL_THREAD);
+        if (tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
             if (progress_engine_interval_msec != MCE_CQ_DRAIN_INTERVAL_DISABLED) {
                 vlog_printf(VLOG_DEBUG, "%s parameter is forced to %d in case %s=%s is enabled\n",
                             SYS_VAR_PROGRESS_ENGINE_INTERVAL, MCE_CQ_DRAIN_INTERVAL_DISABLED,
-                            SYS_VAR_TCP_CTL_THREAD, ctl_thread_str(tcp_ctl_thread));
+                            SYS_VAR_TCP_CTL_THREAD, option_tcp_ctl_thread::to_str(tcp_ctl_thread));
 
                 progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
             }
@@ -1612,7 +1619,7 @@ void mce_sys_var::get_env_params()
                             "%s,%s parameter is forced to %s in case %s=%s is enabled\n",
                             SYS_VAR_RING_ALLOCATION_LOGIC_TX, SYS_VAR_RING_ALLOCATION_LOGIC_RX,
                             ring_logic_str(RING_LOGIC_PER_THREAD), SYS_VAR_TCP_CTL_THREAD,
-                            ctl_thread_str(tcp_ctl_thread));
+                            option_tcp_ctl_thread::to_str(tcp_ctl_thread));
 
                 ring_allocation_logic_tx = ring_allocation_logic_rx = RING_LOGIC_PER_THREAD;
             }

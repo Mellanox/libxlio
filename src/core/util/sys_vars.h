@@ -189,23 +189,6 @@ typedef enum {
     MULTILOCK_NON_RECURSIVE = 1,
 } multilock_recursive_t;
 
-static inline const char *ctl_thread_str(tcp_ctl_thread_t logic)
-{
-    switch (logic) {
-    case CTL_THREAD_DISABLE:
-        return "(Disabled)";
-    case CTL_THREAD_DELEGATE_TCP_TIMERS:
-        return "(Delegated TCP timers)";
-    case CTL_THREAD_WITH_WAKEUP:
-        return "(Enabled - with wakeup)";
-    case CTL_THREAD_NO_WAKEUP:
-        return "(Enabled - no wakeup)";
-    default:
-        break;
-    }
-    return "unsupported";
-}
-
 namespace xlio_spec {
 // convert str to vXLIO_spec_t; upon error - returns the given 'def_value'
 xlio_spec_t from_str(const char *str, xlio_spec_t def_value = MCE_SPEC_NONE);
@@ -232,6 +215,17 @@ namespace option_strq {
 typedef enum { AUTO_ON_OFF_DEF, REGULAR_RQ = 2 } mode_t;
 OPTIONS_FROM_TO_STR_DEF;
 } // namespace option_strq
+
+namespace option_tcp_ctl_thread {
+typedef enum {
+    CTL_THREAD_DISABLE = 0,
+    CTL_THREAD_DELEGATE_TCP_TIMERS,
+    CTL_THREAD_WITH_WAKEUP,
+    CTL_THREAD_NO_WAKEUP,
+    CTL_THREAD_LAST
+} mode_t;
+OPTIONS_FROM_TO_STR_DEF;
+} // namespace option_tcp_ctl_thread
 
 ////////////////////////////////////////////////////////////////////////////////
 class xlio_exception_handling {
@@ -431,7 +425,7 @@ public:
     bool offloaded_sockets;
     uint32_t timer_resolution_msec;
     uint32_t tcp_timer_resolution_msec;
-    tcp_ctl_thread_t tcp_ctl_thread;
+    option_tcp_ctl_thread::mode_t tcp_ctl_thread;
     tcp_ts_opt_t tcp_ts_opt;
     bool tcp_nodelay;
     bool tcp_quickack;
@@ -794,7 +788,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_OFFLOADED_SOCKETS              (true)
 #define MCE_DEFAULT_TIMER_RESOLUTION_MSEC          (10)
 #define MCE_DEFAULT_TCP_TIMER_RESOLUTION_MSEC      (100)
-#define MCE_DEFAULT_TCP_CTL_THREAD                 (CTL_THREAD_DISABLE)
+#define MCE_DEFAULT_TCP_CTL_THREAD                 (option_tcp_ctl_thread::CTL_THREAD_DISABLE)
 #define MCE_DEFAULT_TCP_TIMESTAMP_OPTION           (TCP_TS_OPTION_DISABLE)
 #define MCE_DEFAULT_TCP_NODELAY                    (false)
 #define MCE_DEFAULT_TCP_QUICKACK                   (false)

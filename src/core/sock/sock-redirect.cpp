@@ -492,7 +492,7 @@ extern "C" int xlio_socketxtreme_poll(int fd, struct xlio_socketxtreme_completio
 
     cq_ch_info = g_p_fd_collection->get_cq_channel_fd(fd);
 
-    if (safe_mce_sys().tcp_ctl_thread == CTL_THREAD_DELEGATE_TCP_TIMERS) {
+    if (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
         g_thread_local_event_handler.do_tasks();
     }
 
@@ -2550,7 +2550,7 @@ inline int epoll_wait_helper(int __epfd, struct epoll_event *__events, int __max
         return -1;
     }
 
-    if (safe_mce_sys().tcp_ctl_thread == CTL_THREAD_DELEGATE_TCP_TIMERS) {
+    if (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
         g_thread_local_event_handler.do_tasks();
     }
 

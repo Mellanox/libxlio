@@ -714,9 +714,10 @@ void print_xlio_global_settings()
                       MCE_DEFAULT_TIMER_RESOLUTION_MSEC, SYS_VAR_TIMER_RESOLUTION_MSEC);
     VLOG_PARAM_NUMBER("TCP Timer Resolution (msec)", safe_mce_sys().tcp_timer_resolution_msec,
                       MCE_DEFAULT_TCP_TIMER_RESOLUTION_MSEC, SYS_VAR_TCP_TIMER_RESOLUTION_MSEC);
-    VLOG_PARAM_NUMSTR("TCP control thread", safe_mce_sys().tcp_ctl_thread,
-                      MCE_DEFAULT_TCP_CTL_THREAD, SYS_VAR_TCP_CTL_THREAD,
-                      ctl_thread_str(safe_mce_sys().tcp_ctl_thread));
+    VLOG_PARAM_STRING(
+        "TCP control thread", option_tcp_ctl_thread::to_str(safe_mce_sys().tcp_ctl_thread),
+        option_tcp_ctl_thread::to_str(MCE_DEFAULT_TCP_CTL_THREAD), SYS_VAR_TCP_CTL_THREAD,
+        option_tcp_ctl_thread::to_str(safe_mce_sys().tcp_ctl_thread));
     VLOG_PARAM_NUMBER("TCP timestamp option", safe_mce_sys().tcp_ts_opt,
                       MCE_DEFAULT_TCP_TIMESTAMP_OPTION, SYS_VAR_TCP_TIMESTAMP_OPTION);
     VLOG_PARAM_NUMBER("TCP nodelay", safe_mce_sys().tcp_nodelay, MCE_DEFAULT_TCP_NODELAY,
@@ -1112,7 +1113,7 @@ static void do_global_ctors_helper()
     NEW_CTOR(g_tcp_seg_pool, tcp_seg_pool(safe_mce_sys().tx_num_segs_tcp));
 
     // For delegated TCP timers the global collection is not used.
-    if (safe_mce_sys().tcp_ctl_thread != CTL_THREAD_DELEGATE_TCP_TIMERS) {
+    if (safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
         NEW_CTOR(g_tcp_timers_collection,
                  tcp_timers_collection(safe_mce_sys().tcp_timer_resolution_msec,
                                        safe_mce_sys().timer_resolution_msec));
