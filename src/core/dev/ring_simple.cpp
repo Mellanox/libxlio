@@ -478,11 +478,11 @@ int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_c
                  * in right order. It is done to avoid locking and
                  * may be it is not so critical
                  */
-                m_socketxtreme.completion->events = 0;
                 mem_buf_desc_t *desc = m_p_cq_mgr_rx->poll_and_process_socketxtreme();
                 if (likely(desc)) {
                     rx_process_buffer(desc, NULL);
                 } else {
+                    m_gro_mgr.flush_all(NULL);
                     break;
                 }
             }
