@@ -89,6 +89,7 @@ private:
     struct gro_mem_buf_desc m_gro_desc;
     uint32_t m_n_buf_max;
     uint32_t m_n_byte_max;
+    struct tcp_pcb *m_pcb;
 };
 
 #endif /* RFS_UC_TCP_GRO_H */

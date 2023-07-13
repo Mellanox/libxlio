@@ -35,6 +35,7 @@
 #include "dev/gro_mgr.h"
 #include "dev/ring_simple.h"
 #include <netinet/ip6.h>
+#include <sock/sockinfo_tcp.h>
 
 #define MODULE_NAME "rfs_uc_tcp_gro"
 
@@ -63,6 +64,7 @@ rfs_uc_tcp_gro::rfs_uc_tcp_gro(flow_tuple *flow_spec_5t, ring_slave *p_ring,
     : rfs_uc(flow_spec_5t, p_ring, rule_filter, flow_tag_id)
     , m_b_active(false)
     , m_b_reserved(false)
+    , m_pcb(nullptr)
 {
     m_p_ring_simple = dynamic_cast<ring_simple *>(p_ring);
 
@@ -298,6 +300,21 @@ bool rfs_uc_tcp_gro::tcp_check(mem_buf_desc_t *mem_buf_desc, tcphdr *p_tcp_h)
     }
 
     if (p_tcp_h->doff != TCP_H_LEN_NO_OPTIONS && p_tcp_h->doff != TCP_H_LEN_TIMESTAMP) {
+        return false;
+    }
+
+    // Set pbc once here since in constructor we don't have sockinfo yet
+    if (unlikely(!m_pcb)) {
+        sockinfo_tcp *sock = dynamic_cast<sockinfo_tcp *>(m_sinks_list[0]);
+        if (unlikely(!sock)) {
+            __log_err("sockinfo_tcp is null, can't check for already received packets");
+            return true;
+        }
+        m_pcb = sock->get_pcb();
+    }
+
+    // Dont accumulate packets that already received before
+    if (TCP_SEQ_LT(ntohl(p_tcp_h->seq) + mem_buf_desc->rx.sz_payload - 1, m_pcb->rcv_nxt)) {
         return false;
     }
 
