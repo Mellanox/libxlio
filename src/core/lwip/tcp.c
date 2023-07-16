@@ -160,7 +160,7 @@ static err_t tcp_close_shutdown(struct tcp_pcb *pcb, u8_t rst_on_unacked_data)
                 /* move to TIME_WAIT since we close actively */
                 set_tcp_state(pcb, TIME_WAIT);
             } else {
-                /* CLOSE_WAIT: deallocate the pcb since we already sent a RST for it */
+                set_tcp_state(pcb, CLOSED);
             }
 
             return ERR_OK;
