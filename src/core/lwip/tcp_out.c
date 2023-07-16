@@ -393,9 +393,9 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
     off_t offset = 0;
     off_t offset_next = 0;
 
-    int is_zerocopy = ((apiflags & TCP_WRITE_ZEROCOPY) ? 1 : 0);
-    int is_file = ((apiflags & TCP_WRITE_FILE) && !(apiflags & TCP_WRITE_ZEROCOPY) ? 1 : 0);
-    pbuf_type type = (apiflags & TCP_WRITE_ZEROCOPY ? PBUF_ZEROCOPY : PBUF_RAM);
+    bool is_zerocopy = !!(apiflags & TCP_WRITE_ZEROCOPY);
+    bool is_file = (apiflags & (TCP_WRITE_FILE | TCP_WRITE_ZEROCOPY)) == TCP_WRITE_FILE;
+    pbuf_type type = (apiflags & TCP_WRITE_ZEROCOPY) ? PBUF_ZEROCOPY : PBUF_RAM;
 
     int byte_queued = pcb->snd_nxt - pcb->lastack;
     if (len < pcb->mss && !(apiflags & TCP_WRITE_DUMMY)) {
@@ -418,11 +418,11 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
         mss_local = lwip_zc_tx_size;
     }
 
-    optflags |= (apiflags & TCP_WRITE_DUMMY ? TF_SEG_OPTS_DUMMY_MSG : 0);
-    optflags |= (apiflags & TCP_WRITE_ZEROCOPY ? TF_SEG_OPTS_ZEROCOPY : 0);
+    optflags |= (apiflags & TCP_WRITE_DUMMY) ? TF_SEG_OPTS_DUMMY_MSG : 0;
+    optflags |= (apiflags & TCP_WRITE_ZEROCOPY) ? TF_SEG_OPTS_ZEROCOPY : 0;
 
 #if LWIP_TCP_TIMESTAMPS
-    if ((pcb->flags & TF_TIMESTAMP)) {
+    if (pcb->flags & TF_TIMESTAMP) {
         optflags |= TF_SEG_OPTS_TS;
     }
 #endif /* LWIP_TCP_TIMESTAMPS */
@@ -522,8 +522,8 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
          * (len==0). The new pbuf is kept in concat_p and pbuf_cat'ed at
          * the end.
          */
-        if (!(apiflags & (TCP_WRITE_FILE | TCP_WRITE_ZEROCOPY)) && (pos < len) && (space > 0) &&
-            (pcb->last_unsent->len > 0) && (tot_p < (int)pcb->tso.max_send_sge)) {
+        if (!is_file && (pos < len) && (space > 0) && (pcb->last_unsent->len > 0) &&
+            (tot_p < (int)pcb->tso.max_send_sge)) {
 
             u16_t seglen = space < len - pos ? space : len - pos;
 
