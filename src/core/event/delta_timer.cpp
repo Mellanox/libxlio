@@ -258,6 +258,7 @@ void timer::process_registered_timers()
 
             BULLSEYE_EXCLUDE_BLOCK_START
         case INVALID_TIMER:
+            /* fallthrough */
         default:
             tmr_logwarn("invalid timer expired on %p", iter->handler);
             break;
@@ -288,6 +289,7 @@ void timer::process_registered_timers_uncond()
 
             BULLSEYE_EXCLUDE_BLOCK_START
         case INVALID_TIMER:
+            /* fallthrough */
         default:
             tmr_logwarn("invalid timer expired on %p", iter->handler);
             break;

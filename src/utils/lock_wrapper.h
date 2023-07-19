@@ -454,7 +454,9 @@ protected:
 class lock_dummy : public lock_base {
 public:
     lock_dummy(const char *name = "lock_dummy")
-        : lock_base(name) {};
+        : lock_base(name)
+    {
+    }
 
     inline int lock() { return 0; }
     inline int trylock() { return 0; }
@@ -468,6 +470,7 @@ public:
         : m_lock(_lock)
     {
     }
+
     multilock(multilock_recursive_t _recursive, const char *_str)
         : m_lock(create_new_lock(_recursive, _str))
     {

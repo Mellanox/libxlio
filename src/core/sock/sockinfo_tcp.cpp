@@ -1575,8 +1575,7 @@ void sockinfo_tcp::process_my_ctl_packets()
     while (!temp_list.empty()) {
         mem_buf_desc_t *desc = temp_list.get_and_pop_front();
 
-        static const unsigned int MAX_SYN_RCVD =
-            m_sysvar_tcp_ctl_thread > option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS
+        static const unsigned int MAX_SYN_RCVD = tcp_ctl_thread_on(m_sysvar_tcp_ctl_thread)
             ? safe_mce_sys().sysctl_reader.get_tcp_max_syn_backlog()
             : 0;
         // NOTE: currently, in case tcp_ctl_thread is disabled, only established backlog is
@@ -1703,7 +1702,7 @@ void sockinfo_tcp::handle_timer_expired(void *user_data)
     NOT_IN_USE(user_data);
     si_tcp_logfunc("");
 
-    if (m_sysvar_tcp_ctl_thread > option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+    if (tcp_ctl_thread_on(m_sysvar_tcp_ctl_thread)) {
         process_rx_ctl_packets();
     }
 
@@ -2463,8 +2462,7 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
 
             /// respect TCP listen backlog - See redmine issue #565962
             /// distinguish between backlog of established sockets vs. backlog of syn-rcvd
-            static const unsigned int MAX_SYN_RCVD =
-                m_sysvar_tcp_ctl_thread > option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS
+            static const unsigned int MAX_SYN_RCVD = tcp_ctl_thread_on(m_sysvar_tcp_ctl_thread)
                 ? safe_mce_sys().sysctl_reader.get_tcp_max_syn_backlog()
                 : 0;
             // NOTE: currently, in case tcp_ctl_thread is disabled, only established backlog is
@@ -2492,9 +2490,9 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
                 return false; // return without inc_ref_count() => packet will be dropped
             }
         }
-        if (m_sysvar_tcp_ctl_thread > option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS ||
-            established_backlog_full) { /* 2nd check only worth when MAX_SYN_RCVD>0 for non
-                                           tcp_ctl_thread  */
+
+        // 2nd check only worth when MAX_SYN_RCVD>0 for non tcp_ctl_thread
+        if (tcp_ctl_thread_on(m_sysvar_tcp_ctl_thread) || established_backlog_full) {
             queue_rx_ctl_packet(
                 pcb, p_rx_pkt_mem_buf_desc_info); // TODO: need to trigger queue pulling from
                                                   // accept in case no tcp_ctl_thread
@@ -3015,7 +3013,7 @@ int sockinfo_tcp::listen(int backlog)
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    if (m_sysvar_tcp_ctl_thread > option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+    if (tcp_ctl_thread_on(m_sysvar_tcp_ctl_thread)) {
         m_timer_handle = g_p_event_handler_manager->register_timer_event(
             safe_mce_sys().timer_resolution_msec, this, PERIODIC_TIMER, 0, NULL);
     }
@@ -3249,7 +3247,7 @@ sockinfo_tcp *sockinfo_tcp::accept_clone()
     si->m_sock_state = TCP_SOCK_BOUND;
     si->setPassthrough(false);
 
-    if (m_sysvar_tcp_ctl_thread > option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+    if (tcp_ctl_thread_on(m_sysvar_tcp_ctl_thread)) {
         tcp_ip_output(&si->m_pcb, sockinfo_tcp::ip_output_syn_ack);
     }
 
@@ -3385,7 +3383,7 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
         new_sock->m_b_attached = true;
     }
 
-    if (new_sock->m_sysvar_tcp_ctl_thread > option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+    if (tcp_ctl_thread_on(new_sock->m_sysvar_tcp_ctl_thread)) {
         new_sock->m_xlio_thr = true;
 
         // Before handling packets from flow steering the child should process everything it got
@@ -3583,7 +3581,7 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     tcp_sent(&new_sock->m_pcb, sockinfo_tcp::ack_recvd_lwip_cb);
     new_sock->m_pcb.syn_tw_handled_cb = nullptr;
     new_sock->wakeup_clear();
-    if (new_sock->m_sysvar_tcp_ctl_thread > option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+    if (tcp_ctl_thread_on(new_sock->m_sysvar_tcp_ctl_thread)) {
         tcp_ip_output(&new_sock->m_pcb, sockinfo_tcp::ip_output_syn_ack);
     }
 

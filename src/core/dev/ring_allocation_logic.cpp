@@ -89,7 +89,7 @@ uint64_t ring_allocation_logic::calc_res_key_by_logic()
     switch (m_res_key.get_ring_alloc_logic()) {
     case RING_LOGIC_PER_INTERFACE:
         res_key = 0;
-        if (safe_mce_sys().tcp_ctl_thread > option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+        if (tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)) {
             res_key = 1;
         }
         break;

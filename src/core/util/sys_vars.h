@@ -227,6 +227,8 @@ typedef enum {
 OPTIONS_FROM_TO_STR_DEF;
 } // namespace option_tcp_ctl_thread
 
+#define tcp_ctl_thread_on(var) ((var) > option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS)
+
 ////////////////////////////////////////////////////////////////////////////////
 class xlio_exception_handling {
 public:
