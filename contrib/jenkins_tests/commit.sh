@@ -26,7 +26,8 @@ function current_ancestor()
 
 function current_commits()
 {
-    git log --pretty=%H $(current_ancestor)..$(current_head)
+    # jenkins uses depth=2
+    git log -2 --pretty=%H $(current_head)
 }
 
 function check_commit()
