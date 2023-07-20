@@ -539,23 +539,20 @@ extern "C" int xlio_socketxtreme_free_packets(struct xlio_socketxtreme_packet_de
                                               int num)
 {
     mem_buf_desc_t *desc = NULL;
-    socket_fd_api *p_socket_object = NULL;
+    sockinfo_tcp *p_socket_object = NULL;
 
     if (likely(packets)) {
         for (int i = 0; i < num; i++) {
-            desc = (mem_buf_desc_t *)packets[i].buff_lst;
-            if (desc) {
-                p_socket_object = (socket_fd_api *)desc->rx.context;
-                ring_slave *rng = desc->p_desc_owner;
-                if (p_socket_object) {
-                    p_socket_object->free_buffs(packets[i].total_len);
-                }
-                if (rng) {
-                    if (!rng->reclaim_recv_buffers(desc)) {
+            desc = reinterpret_cast<mem_buf_desc_t *>(packets[i].buff_lst);
+            if (likely(desc)) {
+                p_socket_object = reinterpret_cast<sockinfo_tcp *>(desc->rx.context);
+                if (likely(p_socket_object)) {
+                    p_socket_object->socketxtreme_recv_buffs_tcp(desc, packets[i].total_len);
+                } else {
+                    ring_slave *rng = desc->p_desc_owner;
+                    if (!rng || !rng->reclaim_recv_buffers(desc)) {
                         g_buffer_pool_rx_ptr->put_buffers_thread_safe(desc);
                     }
-                } else {
-                    goto err;
                 }
             } else {
                 goto err;

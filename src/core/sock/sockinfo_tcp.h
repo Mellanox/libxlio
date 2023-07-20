@@ -172,11 +172,11 @@ public:
     virtual int getsockname(sockaddr *__name, socklen_t *__namelen);
     virtual int getpeername(sockaddr *__name, socklen_t *__namelen);
 
+    inline void non_tcp_recved(int rx_len);
     virtual int recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
                                             size_t count);
 
-    /* This function is used for socketxtreme mode */
-    virtual int free_buffs(uint16_t len);
+    void socketxtreme_recv_buffs_tcp(mem_buf_desc_t *desc, uint16_t len);
 
     virtual void statistics_print(vlog_levels_t log_level = VLOG_DEBUG);
 

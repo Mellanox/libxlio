@@ -459,8 +459,7 @@ int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_c
         if ((flags & SOCKETXTREME_POLL_TX) && list_empty(&m_socketxtreme.ec_list)) {
             uint64_t poll_sn = 0;
             const std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-            while (m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn) > 0) {
-            }
+            m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
         }
 
         const std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);

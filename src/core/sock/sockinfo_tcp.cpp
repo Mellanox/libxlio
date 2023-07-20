@@ -5462,12 +5462,22 @@ void sockinfo_tcp::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
 #endif
 }
 
+inline void sockinfo_tcp::non_tcp_recved(int rx_len)
+{
+    m_rcvbuff_current -= rx_len;
+    // data that was not tcp_recved should do it now.
+    if (m_rcvbuff_non_tcp_recved > 0) {
+        int bytes_to_tcp_recved = std::min(m_rcvbuff_non_tcp_recved, rx_len);
+        tcp_recved(&m_pcb, bytes_to_tcp_recved);
+        m_rcvbuff_non_tcp_recved -= bytes_to_tcp_recved;
+    }
+}
+
 int sockinfo_tcp::recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
                                               size_t count)
 {
     int ret = 0;
     unsigned int index = 0;
-    int bytes_to_tcp_recved;
     int total_rx = 0, offset = 0;
     mem_buf_desc_t *buff;
     char *buf = (char *)pkts;
@@ -5495,23 +5505,19 @@ int sockinfo_tcp::recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_
     }
 
     if (total_rx > 0) {
-        m_rcvbuff_current -= total_rx;
-        // data that was not tcp_recved should do it now.
-        if (m_rcvbuff_non_tcp_recved > 0) {
-            bytes_to_tcp_recved = std::min(m_rcvbuff_non_tcp_recved, total_rx);
-            tcp_recved(&m_pcb, bytes_to_tcp_recved);
-            m_rcvbuff_non_tcp_recved -= bytes_to_tcp_recved;
-        }
+        non_tcp_recved(total_rx);
     }
 
     unlock_tcp_con();
     return ret;
 }
 
-int sockinfo_tcp::free_buffs(uint16_t len)
+void sockinfo_tcp::socketxtreme_recv_buffs_tcp(mem_buf_desc_t *desc, uint16_t len)
 {
-    tcp_recved(&m_pcb, len);
-    return 0;
+    lock_tcp_con();
+    reuse_buffer(desc);
+    non_tcp_recved(len);
+    unlock_tcp_con();
 }
 
 mem_buf_desc_t *sockinfo_tcp::tcp_tx_mem_buf_alloc(pbuf_type type)
