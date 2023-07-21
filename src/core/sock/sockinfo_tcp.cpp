@@ -1859,13 +1859,15 @@ static inline void _rx_lwip_cb_socketxtreme_helper(pbuf *p,
                                                    std::function<void(void)> notify)
 {
     mem_buf_desc_t *current_desc = reinterpret_cast<mem_buf_desc_t *>(p);
-    xlio_buff_t *&buff_list_head = completion->packet.buff_lst;
 
     // Is IPv4 only.
     assert(current_desc->rx.src.get_sa_family() == AF_INET);
 
-    if (buff_list_head == nullptr) { // New completion
-        buff_list_head = reinterpret_cast<xlio_buff_t *>(p);
+    if (buff_list_tail == nullptr) {
+        // New completion
+        completion->packet.buff_lst = reinterpret_cast<xlio_buff_t *>(p);
+        completion->packet.total_len = p->tot_len;
+        completion->packet.num_bufs = current_desc->rx.n_frags;
 
         assert(reinterpret_cast<mem_buf_desc_t *>(p)->rx.n_frags > 0);
         current_desc->rx.src.get_sa(reinterpret_cast<sockaddr *>(&completion->src),
@@ -1873,12 +1875,10 @@ static inline void _rx_lwip_cb_socketxtreme_helper(pbuf *p,
         if (use_hw_timestamp) {
             completion->packet.hw_timestamp = current_desc->rx.timestamps.hw;
         }
-
-        completion->packet.total_len = p->tot_len;
-        completion->packet.num_bufs = current_desc->rx.n_frags;
         notify();
     } else {
-        assert(buff_list_tail != nullptr);
+        // Update existing completion
+        xlio_buff_t *&buff_list_head = completion->packet.buff_lst;
         completion->packet.total_len += p->tot_len;
         completion->packet.num_bufs += current_desc->rx.n_frags;
 

@@ -466,7 +466,6 @@ int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_c
         const std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
         m_socketxtreme.completion = xlio_completions;
         while (!g_b_exit && (i < (int)ncompletions)) {
-            m_socketxtreme.completion->events = 0;
             /* Check list size to avoid locking */
             if (!list_empty(&m_socketxtreme.ec_list)) {
                 ring_ec *ec = get_ec();
@@ -482,6 +481,7 @@ int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_c
                  * in right order. It is done to avoid locking and
                  * may be it is not so critical
                  */
+                m_socketxtreme.completion->events = 0;
                 mem_buf_desc_t *desc = m_p_cq_mgr_rx->poll_and_process_socketxtreme();
                 if (likely(desc)) {
                     desc->rx.socketxtreme_polled = true;
