@@ -459,14 +459,14 @@ void sockinfo_tcp::clean_obj()
     event_handler_manager *p_event_mgr = get_event_mgr();
 
     /* Remove group timers from g_tcp_timers_collection */
-    if (p_event_mgr->is_running() && m_timer_handle) {
+    if (p_event_mgr->is_running() && m_timer_handle && !g_b_exit) {
         p_event_mgr->unregister_timer_event(this, m_timer_handle);
     }
 
     m_timer_handle = NULL;
     unlock_tcp_con();
 
-    if (p_event_mgr->is_running()) {
+    if (p_event_mgr->is_running() && !g_b_exit) {
         p_event_mgr->unregister_timers_event_and_delete(this);
     } else {
         cleanable_obj::clean_obj();

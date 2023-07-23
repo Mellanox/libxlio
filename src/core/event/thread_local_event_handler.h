@@ -45,6 +45,9 @@ public:
 
     void do_tasks();
 
+protected:
+    virtual void post_new_reg_action(reg_action_t &reg_action) override;
+
 private:
     void do_tasks_for_thread_local();
 

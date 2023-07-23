@@ -40,6 +40,12 @@ thread_local_event_handler::thread_local_event_handler()
 {
 }
 
+void thread_local_event_handler::post_new_reg_action(reg_action_t &reg_action)
+{
+    // For thread local event handler registration can be immediate.
+    handle_registration_action(reg_action);
+}
+
 void thread_local_event_handler::do_tasks()
 {
     auto curr_time = chrono::steady_clock::now();
@@ -56,17 +62,5 @@ void thread_local_event_handler::do_tasks()
 
 void thread_local_event_handler::do_tasks_for_thread_local()
 {
-    // Handle registration events.
-    reg_action_q_t *temp = m_p_reg_action_q_to_push_to;
-    m_p_reg_action_q_to_push_to = m_p_reg_action_q_to_pop_from;
-    m_p_reg_action_q_to_pop_from = temp;
-
-    reg_action_t reg_action;
-    while (!m_p_reg_action_q_to_pop_from->empty()) {
-        reg_action = m_p_reg_action_q_to_pop_from->front();
-        m_p_reg_action_q_to_pop_from->pop_front();
-        handle_registration_action(reg_action);
-    }
-
     m_timer.process_registered_timers_uncond();
 }
