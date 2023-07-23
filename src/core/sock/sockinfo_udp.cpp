@@ -371,7 +371,7 @@ const char *setsockopt_level_to_str(int level)
 tscval_t g_si_tscv_last_poll = 0;
 
 sockinfo_udp::sockinfo_udp(int fd, int domain)
-    : sockinfo(fd, domain)
+    : sockinfo(fd, domain, true)
     , m_mc_tx_src_ip(in6addr_any, domain)
     , m_b_mc_tx_loop(
           safe_mce_sys().tx_mc_loopback_default) // default value is 'true'. User can change this

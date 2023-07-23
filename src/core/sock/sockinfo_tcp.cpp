@@ -267,8 +267,13 @@ inline void sockinfo_tcp::reuse_buffer(mem_buf_desc_t *buff)
     }
 }
 
+static inline bool use_socket_ring_locks()
+{
+    return (safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS);
+}
+
 sockinfo_tcp::sockinfo_tcp(int fd, int domain)
-    : sockinfo(fd, domain)
+    : sockinfo(fd, domain, use_socket_ring_locks())
     , m_timer_handle(NULL)
     , m_tcp_con_lock(get_new_tcp_lock())
     , m_sysvar_buffer_batching_mode(safe_mce_sys().buffer_batching_mode)

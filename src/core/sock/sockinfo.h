@@ -158,7 +158,7 @@ class sockinfo : public socket_fd_api,
                  public pkt_sndr_source,
                  public wakeup_pipe {
 public:
-    sockinfo(int fd, int domain);
+    sockinfo(int fd, int domain, bool use_ring_locks);
     virtual ~sockinfo();
 
     enum sockinfo_state {

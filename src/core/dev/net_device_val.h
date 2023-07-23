@@ -58,22 +58,24 @@ class ib_ctx_handler;
 class ring_alloc_logic_attr {
 public:
     ring_alloc_logic_attr();
-    ring_alloc_logic_attr(ring_logic_t ring_logic);
+    ring_alloc_logic_attr(ring_logic_t ring_logic, bool use_locks);
     ring_alloc_logic_attr(const ring_alloc_logic_attr &other);
     void set_ring_alloc_logic(ring_logic_t logic);
     void set_memory_descriptor(iovec &mem_desc);
     void set_user_id_key(uint64_t user_id_key);
+    void set_use_locks(bool use_locks);
     const std::string to_str() const;
     inline ring_logic_t get_ring_alloc_logic() { return m_ring_alloc_logic; }
     inline iovec *get_memory_descriptor() { return &m_mem_desc; }
     inline uint64_t get_user_id_key() { return m_user_id_key; }
+    inline bool get_use_locks() { return m_use_locks; }
 
     bool operator==(const ring_alloc_logic_attr &other) const
     {
         return (m_ring_alloc_logic == other.m_ring_alloc_logic &&
                 m_user_id_key == other.m_user_id_key &&
                 m_mem_desc.iov_base == other.m_mem_desc.iov_base &&
-                m_mem_desc.iov_len == other.m_mem_desc.iov_len);
+                m_mem_desc.iov_len == other.m_mem_desc.iov_len && m_use_locks == other.m_use_locks);
     }
 
     bool operator!=(const ring_alloc_logic_attr &other) const { return !(*this == other); }
@@ -86,6 +88,7 @@ public:
             m_hash = other.m_hash;
             m_mem_desc.iov_base = other.m_mem_desc.iov_base;
             m_mem_desc.iov_len = other.m_mem_desc.iov_len;
+            m_use_locks = other.m_use_locks;
         }
         return *this;
     }
@@ -104,6 +107,7 @@ private:
     /* either user_idx or key as defined in ring_logic_t */
     uint64_t m_user_id_key;
     iovec m_mem_desc;
+    bool m_use_locks;
     void init();
 };
 
@@ -235,7 +239,7 @@ public:
     void print_val() const;
     void set_ip_array();
 
-    ring *reserve_ring(resource_allocation_key *key, bool use_locks = true); // create if not exists
+    ring *reserve_ring(resource_allocation_key *key); // create if not exists
     int release_ring(resource_allocation_key *); // delete from m_hash if ref_cnt == 0
     state get_state() const { return m_state; } // not sure, look at state init at c'tor
     virtual const std::string to_str() const;
@@ -260,7 +264,7 @@ public:
 
 protected:
     void set_slave_array();
-    virtual ring *create_ring(resource_allocation_key *key, bool use_locks) = 0;
+    virtual ring *create_ring(resource_allocation_key *key) = 0;
     virtual void create_br_address(const char *ifname) = 0;
     virtual L2_address *create_L2_address(const char *ifname) = 0;
 
@@ -329,7 +333,7 @@ public:
     const std::string to_str() const;
 
 protected:
-    virtual ring *create_ring(resource_allocation_key *key, bool use_locks);
+    virtual ring *create_ring(resource_allocation_key *key);
     void parse_prio_egress_map();
 
 private:

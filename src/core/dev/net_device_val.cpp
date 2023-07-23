@@ -73,15 +73,17 @@
 ring_alloc_logic_attr::ring_alloc_logic_attr()
     : m_ring_alloc_logic(RING_LOGIC_PER_INTERFACE)
     , m_user_id_key(0)
+    , m_use_locks(true)
 {
     m_mem_desc.iov_base = NULL;
     m_mem_desc.iov_len = 0;
     init();
 }
 
-ring_alloc_logic_attr::ring_alloc_logic_attr(ring_logic_t ring_logic)
+ring_alloc_logic_attr::ring_alloc_logic_attr(ring_logic_t ring_logic, bool use_locks)
     : m_ring_alloc_logic(ring_logic)
     , m_user_id_key(0)
+    , m_use_locks(use_locks)
 {
     m_mem_desc.iov_base = NULL;
     m_mem_desc.iov_len = 0;
@@ -93,6 +95,7 @@ ring_alloc_logic_attr::ring_alloc_logic_attr(const ring_alloc_logic_attr &other)
     , m_ring_alloc_logic(other.m_ring_alloc_logic)
     , m_user_id_key(other.m_user_id_key)
     , m_mem_desc(other.m_mem_desc)
+    , m_use_locks(other.m_use_locks)
 {
 }
 
@@ -117,6 +120,7 @@ void ring_alloc_logic_attr::init()
     HASH_ITER(m_user_id_key, uint64_t);
     HASH_ITER(m_mem_desc.iov_base, uintptr_t);
     HASH_ITER(m_mem_desc.iov_len, size_t);
+    HASH_ITER(m_use_locks, bool);
 
     m_hash = h;
 #undef HASH_ITER
@@ -146,12 +150,21 @@ void ring_alloc_logic_attr::set_user_id_key(uint64_t user_id_key)
     }
 }
 
+void ring_alloc_logic_attr::set_use_locks(bool use_locks)
+{
+    if (m_use_locks != use_locks) {
+        m_use_locks = use_locks;
+        init();
+    }
+}
+
 const std::string ring_alloc_logic_attr::to_str() const
 {
     std::stringstream ss;
 
     ss << "allocation logic " << m_ring_alloc_logic << " key " << m_user_id_key << " user address "
-       << m_mem_desc.iov_base << " user length " << m_mem_desc.iov_len;
+       << m_mem_desc.iov_base << " user length " << m_mem_desc.iov_len << " use locks "
+       << !!m_use_locks;
 
     return ss.str();
 }
@@ -1000,7 +1013,7 @@ const std::string net_device_val::to_str() const
     return std::string("Net Device: " + m_name);
 }
 
-ring *net_device_val::reserve_ring(resource_allocation_key *key, bool use_locks)
+ring *net_device_val::reserve_ring(resource_allocation_key *key)
 {
     nd_logfunc("");
     std::lock_guard<decltype(m_lock)> lock(m_lock);
@@ -1012,7 +1025,7 @@ ring *net_device_val::reserve_ring(resource_allocation_key *key, bool use_locks)
         nd_logdbg("Creating new RING for %s", key->to_str().c_str());
         // copy key since we keep pointer and socket can die so map will lose pointer
         resource_allocation_key *new_key = new resource_allocation_key(*key);
-        the_ring = create_ring(new_key, use_locks);
+        the_ring = create_ring(new_key);
         if (!the_ring) {
             return NULL;
         }
@@ -1407,16 +1420,15 @@ out:
     }
 }
 
-ring *net_device_val_eth::create_ring(resource_allocation_key *key, bool use_locks)
+ring *net_device_val_eth::create_ring(resource_allocation_key *key)
 {
     ring *ring = NULL;
-
-    NOT_IN_USE(key);
 
     try {
         switch (m_bond) {
         case NO_BOND:
-            ring = new ring_eth(get_if_idx(), nullptr, RING_ETH, true, use_locks);
+            ring = new ring_eth(get_if_idx(), nullptr, RING_ETH, true,
+                                (key ? key->get_use_locks() : true));
             break;
         case ACTIVE_BACKUP:
         case LAG_8023ad:

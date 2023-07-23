@@ -220,7 +220,7 @@ neigh_entry::neigh_entry(neigh_key key, transport_type_t _type, bool is_init_res
     }
 
     // Allocate one ring for g_p_neigh_table_mgr. All eigh_entry objects will share the same ring.
-    ring_alloc_logic_attr ring_attr(RING_LOGIC_PER_OBJECT);
+    ring_alloc_logic_attr ring_attr(RING_LOGIC_PER_OBJECT, true);
     m_ring_allocation_logic = ring_allocation_logic_tx(g_p_neigh_table_mgr, ring_attr, this);
 
     if (is_init_resources) {

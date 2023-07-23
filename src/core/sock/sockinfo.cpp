@@ -59,7 +59,7 @@
 #define si_logfunc    __log_info_func
 #define si_logfuncall __log_info_funcall
 
-sockinfo::sockinfo(int fd, int domain)
+sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     : socket_fd_api(fd)
     , m_flow_tag_enabled(false)
     , m_b_blocking(true)
@@ -86,8 +86,8 @@ sockinfo::sockinfo(int fd, int domain)
     , m_rx_ready_byte_count(0)
     , m_n_sysvar_rx_num_buffs_reuse(safe_mce_sys().rx_bufs_batch)
     , m_n_sysvar_rx_poll_num(safe_mce_sys().rx_poll_num)
-    , m_ring_alloc_log_rx(safe_mce_sys().ring_allocation_logic_rx)
-    , m_ring_alloc_log_tx(safe_mce_sys().ring_allocation_logic_tx)
+    , m_ring_alloc_log_rx(safe_mce_sys().ring_allocation_logic_rx, use_ring_locks)
+    , m_ring_alloc_log_tx(safe_mce_sys().ring_allocation_logic_tx, use_ring_locks)
     , m_pcp(0)
     , m_rx_callback(NULL)
     , m_rx_callback_context(NULL)
@@ -990,8 +990,7 @@ net_device_resources_t *sockinfo::create_nd_resources(const ip_addr &ip_local)
             key = m_ring_alloc_logic.create_new_key(ip_local);
         }
         m_rx_ring_map_lock.unlock();
-        nd_resources.p_ring =
-            nd_resources.p_ndv->reserve_ring(key, dst_entry::use_socket_ring_locks());
+        nd_resources.p_ring = nd_resources.p_ndv->reserve_ring(key);
         lock_rx_q();
         if (!nd_resources.p_ring) {
             si_logdbg("Failed to reserve ring for allocation key %s on ip %s",
@@ -1100,8 +1099,7 @@ void sockinfo::do_rings_migration(resource_allocation_key &old_key)
         net_device_resources_t *p_nd_resources = &(rx_nd_iter->second);
         ring *p_old_ring = p_nd_resources->p_ring;
         unlock_rx_q();
-        ring *new_ring =
-            p_nd_resources->p_ndv->reserve_ring(new_key, dst_entry::use_socket_ring_locks());
+        ring *new_ring = p_nd_resources->p_ndv->reserve_ring(new_key);
         if (new_ring == p_old_ring) {
             rc = p_nd_resources->p_ndv->release_ring(&old_key);
             if (rc < 0) {
