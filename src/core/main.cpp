@@ -250,6 +250,12 @@ static int free_libxlio_resources()
         g_stats_file = NULL;
     }
 
+#if defined(DEFINED_NGINX)
+    if (g_p_nginx_worker_pids && (g_worker_index == -1)) {
+        delete g_p_nginx_worker_pids;
+    }
+#endif /* DEFINED_NGINX */
+
     return 0;
 }
 

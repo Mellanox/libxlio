@@ -86,8 +86,8 @@ using namespace std;
 #define EP_MAX_EVENTS (int)((INT_MAX / sizeof(struct epoll_event)))
 
 #if defined(DEFINED_NGINX)
-static std::vector<pid_t> g_nginx_worker_pids = {};
-int g_worker_index = 0;
+std::vector<pid_t> *g_p_nginx_worker_pids = NULL;
+int g_worker_index = -1;
 bool g_b_add_second_4t_rule = false;
 map_udp_bounded_port_t g_map_udp_bounded_port;
 #endif
@@ -2772,23 +2772,27 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
 
 #if defined(DEFINED_NGINX)
     int worker_index = 0;
-    if (safe_mce_sys().actual_nginx_workers_num > 0) {
-        if (g_nginx_worker_pids.size() <
+    /* This section is actual for parent process only */
+    if (safe_mce_sys().actual_nginx_workers_num > 0 && (g_worker_index == -1)) {
+        if (NULL == g_p_nginx_worker_pids) {
+            g_p_nginx_worker_pids = new std::vector<pid_t>();
+        }
+
+        if (g_p_nginx_worker_pids->size() <
             static_cast<std::size_t>(safe_mce_sys().actual_nginx_workers_num)) {
-            g_nginx_worker_pids.resize(safe_mce_sys().actual_nginx_workers_num, -1);
-            g_worker_index = -1;
+            g_p_nginx_worker_pids->resize(safe_mce_sys().actual_nginx_workers_num, -1);
         }
 
         auto nginx_pid_slot_iter =
-            std::find(g_nginx_worker_pids.begin(), g_nginx_worker_pids.end(), -1);
-        if (nginx_pid_slot_iter == g_nginx_worker_pids.end()) {
+            std::find(g_p_nginx_worker_pids->begin(), g_p_nginx_worker_pids->end(), -1);
+        if (nginx_pid_slot_iter == g_p_nginx_worker_pids->end()) {
             srdr_logerr(
                 "Cannot fork: number of running worker processes are at configured maximum (%d)",
                 safe_mce_sys().actual_nginx_workers_num);
             errno = ENOMEM;
             return -1;
         }
-        worker_index = std::distance(g_nginx_worker_pids.begin(), nginx_pid_slot_iter);
+        worker_index = std::distance(g_p_nginx_worker_pids->begin(), nginx_pid_slot_iter);
     }
 #endif
 
@@ -2844,7 +2848,7 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
         srdr_logdbg_exit("Parent Process: returned with %d", pid);
 #if defined(DEFINED_NGINX)
         if (safe_mce_sys().actual_nginx_workers_num > 0) {
-            g_nginx_worker_pids.at(worker_index) = pid;
+            g_p_nginx_worker_pids->at(worker_index) = pid;
         }
 #endif
     } else {
@@ -3059,8 +3063,8 @@ extern "C" EXPORT_SYMBOL pid_t waitpid(pid_t pid, int *wstatus, int options)
      */
     if (safe_mce_sys().actual_nginx_workers_num > 0 && child_pid > 0 && !WIFCONTINUED(*wstatus)) {
         auto worker_pid =
-            std::find(g_nginx_worker_pids.begin(), g_nginx_worker_pids.end(), child_pid);
-        if (worker_pid != g_nginx_worker_pids.end()) {
+            std::find(g_p_nginx_worker_pids->begin(), g_p_nginx_worker_pids->end(), child_pid);
+        if (worker_pid != g_p_nginx_worker_pids->end()) {
             *worker_pid = -1;
         }
     }

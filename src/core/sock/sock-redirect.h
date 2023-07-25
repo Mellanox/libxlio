@@ -85,6 +85,7 @@
 #if defined(DEFINED_NGINX)
 typedef std::unordered_map<uint16_t, bool> map_udp_bounded_port_t;
 
+extern std::vector<pid_t> *g_p_nginx_worker_pids;
 extern int g_worker_index;
 extern bool g_b_add_second_4t_rule;
 extern map_udp_bounded_port_t g_map_udp_bounded_port;
