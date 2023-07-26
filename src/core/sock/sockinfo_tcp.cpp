@@ -1325,7 +1325,7 @@ send_iov:
 
     rc = p_si_tcp->m_ops->handle_send_ret(ret, seg);
 
-    if (p_dst->try_migrate_ring(p_si_tcp->m_tcp_con_lock.get_lock_base())) {
+    if (p_dst->try_migrate_ring_tx(p_si_tcp->m_tcp_con_lock.get_lock_base())) {
         p_si_tcp->m_p_socket_stats->counters.n_tx_migrations++;
     }
 
@@ -3891,7 +3891,7 @@ bool sockinfo_tcp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array)
         return false;
     }
 
-    consider_rings_migration();
+    consider_rings_migration_rx();
 
     m_rx_ring_map_lock.lock();
     while (!g_b_exit && is_rtr()) {
@@ -5019,7 +5019,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
     n = 0;
     // if in listen state go directly to wait part
 
-    consider_rings_migration();
+    consider_rings_migration_rx();
 
     // There's only one CQ
     m_rx_ring_map_lock.lock();

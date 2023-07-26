@@ -60,7 +60,7 @@ dst_entry::dst_entry(const sock_addr &dst, uint16_t src_port, socket_data &sock_
     , m_so_bindtodevice_ip(in6addr_any)
     , m_route_src_ip(in6addr_any)
     , m_pkt_src_ip(in6addr_any)
-    , m_ring_alloc_logic(sock_data.fd, ring_alloc_logic, this)
+    , m_ring_alloc_logic_tx(sock_data.fd, ring_alloc_logic, this)
     , m_p_tx_mem_buf_desc_list(NULL)
     , m_p_zc_mem_buf_desc_list(NULL)
     , m_b_tx_mem_buf_desc_list_pending(false)
@@ -110,7 +110,7 @@ dst_entry::~dst_entry()
             m_p_zc_mem_buf_desc_list = NULL;
         }
 
-        m_p_net_dev_val->release_ring(m_ring_alloc_logic.get_key());
+        m_p_net_dev_val->release_ring(m_ring_alloc_logic_tx.get_key());
         m_p_ring = NULL;
     }
 
@@ -374,7 +374,7 @@ bool dst_entry::resolve_ring()
         if (!m_p_ring) {
             dst_logdbg("getting a ring");
             m_p_ring =
-                m_p_net_dev_val->reserve_ring(m_ring_alloc_logic.create_new_key(m_pkt_src_ip));
+                m_p_net_dev_val->reserve_ring(m_ring_alloc_logic_tx.create_new_key(m_pkt_src_ip));
         }
         if (m_p_ring) {
             if (m_sge) {
@@ -408,7 +408,7 @@ bool dst_entry::release_ring()
                 m_p_zc_mem_buf_desc_list = NULL;
             }
             dst_logdbg("releasing a ring");
-            m_p_net_dev_val->release_ring(m_ring_alloc_logic.get_key());
+            m_p_net_dev_val->release_ring(m_ring_alloc_logic_tx.get_key());
             m_p_ring = NULL;
         }
         ret_val = true;
@@ -609,14 +609,14 @@ bool dst_entry::prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_
     return m_b_is_offloaded;
 }
 
-bool dst_entry::try_migrate_ring(lock_base &socket_lock)
+bool dst_entry::try_migrate_ring_tx(lock_base &socket_lock)
 {
     bool ret = false;
-    if (m_ring_alloc_logic.is_logic_support_migration()) {
+    if (m_ring_alloc_logic_tx.is_logic_support_migration()) {
         if (!m_tx_migration_lock.trylock()) {
-            if (m_ring_alloc_logic.should_migrate_ring()) {
-                resource_allocation_key old_key(*m_ring_alloc_logic.get_key());
-                do_ring_migration(socket_lock, old_key);
+            if (m_ring_alloc_logic_tx.should_migrate_ring()) {
+                resource_allocation_key old_key(*m_ring_alloc_logic_tx.get_key());
+                do_ring_migration_tx(socket_lock, old_key);
                 ret = true;
             }
             m_tx_migration_lock.unlock();
@@ -633,7 +633,7 @@ int dst_entry::get_route_mtu()
     return m_p_net_dev_val->get_mtu();
 }
 
-void dst_entry::do_ring_migration(lock_base &socket_lock, resource_allocation_key &old_key)
+void dst_entry::do_ring_migration_tx(lock_base &socket_lock, resource_allocation_key &old_key)
 {
     m_slow_path_lock.lock();
 
@@ -642,8 +642,8 @@ void dst_entry::do_ring_migration(lock_base &socket_lock, resource_allocation_ke
         return;
     }
 
-    uint64_t new_calc_id = m_ring_alloc_logic.calc_res_key_by_logic();
-    resource_allocation_key *new_key = m_ring_alloc_logic.get_key();
+    uint64_t new_calc_id = m_ring_alloc_logic_tx.calc_res_key_by_logic();
+    resource_allocation_key *new_key = m_ring_alloc_logic_tx.get_key();
     // Check again if migration is needed before migration
     if (old_key.get_user_id_key() == new_calc_id &&
         old_key.get_ring_alloc_logic() == new_key->get_ring_alloc_logic()) {
@@ -831,13 +831,13 @@ uint32_t dst_entry::get_priority_by_tc_class(uint32_t pcp)
 bool dst_entry::update_ring_alloc_logic(int fd, lock_base &socket_lock,
                                         resource_allocation_key &ring_alloc_logic)
 {
-    resource_allocation_key old_key(*m_ring_alloc_logic.get_key());
+    resource_allocation_key old_key(*m_ring_alloc_logic_tx.get_key());
 
-    m_ring_alloc_logic = ring_allocation_logic_tx(fd, ring_alloc_logic, this);
+    m_ring_alloc_logic_tx = ring_allocation_logic_tx(fd, ring_alloc_logic, this);
 
-    if (*m_ring_alloc_logic.get_key() != old_key) {
+    if (*m_ring_alloc_logic_tx.get_key() != old_key) {
         std::lock_guard<decltype(m_tx_migration_lock)> locker(m_tx_migration_lock);
-        do_ring_migration(socket_lock, old_key);
+        do_ring_migration_tx(socket_lock, old_key);
         return true;
     }
 

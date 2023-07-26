@@ -175,7 +175,7 @@ public:
     void set_m_n_sysvar_rx_num_buffs_reuse(int val) { m_n_sysvar_rx_num_buffs_reuse = val; }
 #endif
 
-    virtual void consider_rings_migration();
+    virtual void consider_rings_migration_rx();
     virtual int add_epoll_context(epfd_info *epfd);
     virtual void remove_epoll_context(epfd_info *epfd);
 
@@ -285,7 +285,7 @@ protected:
 
     rx_ring_map_t m_rx_ring_map; // CQ map
     lock_mutex_recursive m_rx_ring_map_lock;
-    ring_allocation_logic_rx m_ring_alloc_logic;
+    ring_allocation_logic_rx m_ring_alloc_logic_rx;
 
     loops_timer m_loops_timer;
 
@@ -368,7 +368,7 @@ protected:
     bool detach_receiver(flow_tuple_with_local_if &flow_key);
     net_device_resources_t *create_nd_resources(const ip_addr &ip_local);
     bool destroy_nd_resources(const ip_addr &ip_local);
-    void do_rings_migration(resource_allocation_key &old_key);
+    void do_rings_migration_rx(resource_allocation_key &old_key);
     int set_ring_attr(xlio_ring_alloc_logic_attr *attr);
     int set_ring_attr_helper(ring_alloc_logic_attr *sock_attr, xlio_ring_alloc_logic_attr *attr);
 

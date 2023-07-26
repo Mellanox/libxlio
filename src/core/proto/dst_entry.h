@@ -87,7 +87,7 @@ public:
                               struct xlio_rate_limit_t &rate_limit, int flags = 0,
                               socket_fd_api *sock = 0, tx_call_t call_type = TX_UNDEF) = 0;
 
-    bool try_migrate_ring(lock_base &socket_lock);
+    bool try_migrate_ring_tx(lock_base &socket_lock);
 
     bool is_offloaded() { return m_b_is_offloaded; }
     void set_bound_addr(const ip_address &addr);
@@ -159,7 +159,7 @@ protected:
     neigh_val *m_p_neigh_val;
 
     ring *m_p_ring;
-    ring_allocation_logic_tx m_ring_alloc_logic;
+    ring_allocation_logic_tx m_ring_alloc_logic_tx;
     mem_buf_desc_t *m_p_tx_mem_buf_desc_list;
     mem_buf_desc_t *m_p_zc_mem_buf_desc_list;
     int m_b_tx_mem_buf_desc_list_pending;
@@ -206,7 +206,7 @@ protected:
     bool alloc_transport_dep_res();
     bool alloc_neigh_val(transport_type_t tranport);
     bool get_routing_addr_sel_src(ip_address &out_ip) const;
-    void do_ring_migration(lock_base &socket_lock, resource_allocation_key &old_key);
+    void do_ring_migration_tx(lock_base &socket_lock, resource_allocation_key &old_key);
     inline void set_tx_buff_list_pending(bool is_pending = true)
     {
         m_b_tx_mem_buf_desc_list_pending = is_pending;
