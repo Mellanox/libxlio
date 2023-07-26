@@ -167,9 +167,9 @@ bool ring_allocation_logic::should_migrate_ring()
     if (m_migration_try_count < count_max) {
         m_migration_try_count++;
         return false;
-    } else {
-        m_migration_try_count = 0;
     }
+
+    m_migration_try_count = 0;
 
     if (!m_migration_candidate) {
         // save current used allocation key
