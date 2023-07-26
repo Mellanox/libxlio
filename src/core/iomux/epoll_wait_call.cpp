@@ -156,7 +156,7 @@ int epoll_wait_call::get_current_events()
     unlock();
 
     /*
-     * for checking ring migration we need a socket context.
+     * for checking ring migration rx we need a socket context.
      * in epoll we separate the rings from the sockets, so only here we access the sockets.
      * therefore, it is most convenient to check it here.
      * we need to move the ring migration to the epfd, going over the registered sockets,
@@ -166,7 +166,7 @@ int epoll_wait_call::get_current_events()
      */
     while (!socket_fd_list.empty()) {
         socket_fd_api *sockfd = socket_fd_list.get_and_pop_front();
-        sockfd->consider_rings_migration();
+        sockfd->consider_rings_migration_rx();
     }
 
     return (i);

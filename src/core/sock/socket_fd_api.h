@@ -236,7 +236,7 @@ public:
     virtual void copy_sockopt_fork(const socket_fd_api *copy_from) = 0;
 #endif
 
-    virtual void consider_rings_migration() {}
+    virtual void consider_rings_migration_rx() {}
     virtual int add_epoll_context(epfd_info *epfd);
     virtual void remove_epoll_context(epfd_info *epfd);
     int get_epoll_context_fd();
