@@ -94,7 +94,7 @@ public:
     bool is_logic_support_migration()
     {
         return m_res_key.get_ring_alloc_logic() >= RING_LOGIC_PER_THREAD &&
-            m_ring_migration_ratio > 0;
+            m_res_key.get_ring_alloc_logic() < RING_LOGIC_PER_OBJECT && m_ring_migration_ratio > 0;
     }
     uint64_t calc_res_key_by_logic();
     inline void enable_migration(bool active) { m_active = active; }

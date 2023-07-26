@@ -1004,6 +1004,7 @@ net_device_resources_t *sockinfo::create_nd_resources(const ip_addr &ip_local)
         }
 
         unlock_rx_q();
+        m_rx_migration_lock.lock();
         m_rx_ring_map_lock.lock();
         resource_allocation_key *key;
         if (m_rx_ring_map.size() && m_ring_alloc_logic.is_logic_support_migration()) {
@@ -1013,6 +1014,7 @@ net_device_resources_t *sockinfo::create_nd_resources(const ip_addr &ip_local)
         }
         m_rx_ring_map_lock.unlock();
         nd_resources.p_ring = nd_resources.p_ndv->reserve_ring(key);
+        m_rx_migration_lock.unlock();
         lock_rx_q();
         if (!nd_resources.p_ring) {
             si_logdbg("Failed to reserve ring for allocation key %s on ip %s",
