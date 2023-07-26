@@ -81,7 +81,7 @@ Example:
  XLIO DETAILS: Ring allocation logic TX       0 (Ring per interface)     [XLIO_RING_ALLOCATION_LOGIC_TX]
  XLIO DETAILS: Ring allocation logic RX       0 (Ring per interface)     [XLIO_RING_ALLOCATION_LOGIC_RX]
  XLIO INFO   : Ring migration ratio TX        -1                         [XLIO_RING_MIGRATION_RATIO_TX]
- XLIO DETAILS: Ring migration ratio RX        100                        [XLIO_RING_MIGRATION_RATIO_RX]
+ XLIO DETAILS: Ring migration ratio RX        -1                         [XLIO_RING_MIGRATION_RATIO_RX]
  XLIO DETAILS: Ring limit per interface       0 (no limit)               [XLIO_RING_LIMIT_PER_INTERFACE]
  XLIO DETAILS: Ring On Device Memory TX       0                          [XLIO_RING_DEV_MEM_TX]
  XLIO DETAILS: TCP max syn rate               0 (no limit)               [XLIO_TCP_MAX_SYN_RATE]
@@ -424,7 +424,7 @@ thread ID and see if our ring is matching the current thread.
 If not, we consider ring migration. If we keep accessing the ring from the same thread for some
 iterations, we migrate the socket to this thread ring.
 Use a value of -1 in order to disable migration.
-Default value is 100
+Default value is -1
 
 XLIO_RING_LIMIT_PER_INTERFACE
 Limit the number of rings that can be allocated per interface.
