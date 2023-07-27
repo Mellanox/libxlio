@@ -351,7 +351,9 @@ unsigned short compute_udp_checksum_tx(const ip6_hdr *ipv6, const uint16_t *payl
 {
     uint16_t ipLen = ntohs(ipv6->ip6_plen);
     uint32_t sum = compute_pseudo_header(ipv6, IPPROTO_UDP, ntohs(udp->len));
-    return compute_payload_checksum(payload, ipLen, sum);
+
+    // For UDP, checksum zero means no checksum. Zero must be replaced with 0xffff.
+    return compute_payload_checksum(payload, ipLen, sum) ?: 0xffff;
 }
 
 /*
@@ -370,7 +372,11 @@ unsigned short compute_ipv6_udp_frag_checksum(const ip6_hdr *ipv6, udphdr *udp)
         sum = (sum & 0xffff) + (sum >> 16);
     }
 
-    sum = ~sum;
+    // For UDP, checksum zero means no checksum. Zero must be replaced with 0xffff.
+    if (sum != 0xffff) {
+        sum = ~sum;
+    }
+
     return static_cast<unsigned short>(sum);
 }
 
