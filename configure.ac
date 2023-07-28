@@ -270,6 +270,20 @@ else
     AC_MSG_RESULT([no])
 fi
 
+# Control Envoy support
+#
+AC_ARG_ENABLE([envoy],
+    AS_HELP_STRING([--enable-envoy],
+        [Enable Envoy availability (default=no)]), [], [enable_envoy=no])
+AC_MSG_CHECKING(
+    [for envoy support])
+if test "x$enable_envoy" = xyes; then
+    AC_DEFINE_UNQUOTED([DEFINED_ENVOY], [1], [Define to 1 to support Envoy])
+    AC_MSG_RESULT([yes])
+else
+    AC_MSG_RESULT([no])
+fi
+
 AC_MSG_CHECKING([for md5 version of library statistics is])
 STATS_PROTOCOL_VER=`md5sum ${srcdir}/src/core/util/xlio_stats.h | awk '{ print $1}'`
 AC_DEFINE_UNQUOTED(STATS_PROTOCOL_VER, "${STATS_PROTOCOL_VER}", [Stats Protocol Version])
