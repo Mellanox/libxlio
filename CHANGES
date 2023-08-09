@@ -1,3 +1,18 @@
+Version 3.20.1-1:
+Date + Time 2023-08-09
+=============================================================
+Added:
+        - RM #3531436 Socketxtreme GRO
+        - RM #3465972 SocketXtreme improvements
+        - RM #3541126 Aggregate zerocopy buffers in a single segment
+        - RM #3531441 Termination socket cleanup for delegated TCP timers
+        - RM #3526588 Make xlio_exit symbol visible
+        - RM #3506903 CSV stats printer + debug coutners
+Fixed:
+        - RM #3531871 Socketxtreme latency
+        - RM #3522495 CI for dpcp configuration
+        - RM #3217860 UDP checksum zero
+
 Version 3.20.0-1:
 Date + Time 2023-07-20
 =============================================================
