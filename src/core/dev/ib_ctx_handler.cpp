@@ -448,9 +448,7 @@ uint32_t ib_ctx_handler::mem_reg(void *addr, size_t length, uint64_t access)
     mr = ibv_reg_mr(m_p_ibv_pd, addr, length, access);
     VALGRIND_MAKE_MEM_DEFINED(mr, sizeof(ibv_mr));
     if (NULL == mr) {
-        ibch_logerr("failed registering a memory region "
-                    "(errno=%d %m)",
-                    errno);
+        print_warning_rlimit_memlock(length, errno);
     } else {
         m_mr_map_lkey[mr->lkey] = mr;
         lkey = mr->lkey;
