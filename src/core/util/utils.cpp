@@ -205,6 +205,20 @@ void print_roce_lag_warnings(const char *interface, char *disable_path /* = NULL
                 "********************\n");
 }
 
+void print_warning_rlimit_memlock(size_t length, int error)
+{
+    vlog_printf(VLOG_ERROR,
+                "**********************************************************************************"
+                "********************\n");
+    vlog_printf(VLOG_ERROR, "* Failed registering a memory region of size %zu bytes\n", length);
+    vlog_printf(VLOG_ERROR, "* (errno=%d %m)\n", error);
+    vlog_printf(VLOG_ERROR, "* Could be due to lack of locked memory in kernel.\n");
+    vlog_printf(VLOG_ERROR, "* Please check max allowed locked memory (ulimit -l)\n");
+    vlog_printf(VLOG_ERROR,
+                "**********************************************************************************"
+                "********************\n");
+}
+
 void compute_tx_checksum(mem_buf_desc_t *p_mem_buf_desc, bool l3_csum, bool l4_csum)
 {
     unsigned short l3_checksum = -1, l4_checksum = -1;
