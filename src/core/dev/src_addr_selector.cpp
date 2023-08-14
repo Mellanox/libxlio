@@ -238,12 +238,23 @@ const ip_data *src_addr_selector::ipv6_select_saddr(const net_device_val &dst_de
     return max_score.get_ip(); // May return nullptr, if no address found.
 }
 
+static inline uint32_t is_ip_match_subnet(in_addr ipv4_addr, class ip_data *ip)
+{
+    uint32_t mask = 0xffffffff << (32 - ip->prefixlen);
+    return !(ntohl(ipv4_addr.s_addr ^ ip->local_addr.get_in4_addr().s_addr) & mask);
+}
+
 const ip_data *src_addr_selector::ipv4_select_saddr(const net_device_val &dst_dev,
                                                     const ip_address &dst_addr, uint8_t flags)
 {
-    NOT_IN_USE(dst_addr);
     NOT_IN_USE(flags);
 
     const auto &ip_arr = dst_dev.get_ip_array(AF_INET);
+    for (auto iter = ip_arr.begin(); iter < ip_arr.end(); iter++) {
+        if (is_ip_match_subnet(dst_addr.get_in4_addr(), iter->get())) {
+            return iter->get();
+        }
+    }
+
     return (!ip_arr[0]->local_addr.is_anyaddr() ? ip_arr[0].get() : nullptr);
 }
