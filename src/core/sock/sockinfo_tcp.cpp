@@ -5841,13 +5841,15 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
          * TODO Check on is_cleaned() is not safe completely.
          */
         if (!p_sock->trylock_tcp_con()) {
+            bool destroyable = false;
             if (!p_sock->is_cleaned()) {
                 p_sock->handle_timer_expired(iter->user_data);
-                if (p_sock->is_destroyable_no_lock()) {
-                    g_p_fd_collection->destroy_sockfd(p_sock);
-                }
+                destroyable = p_sock->is_destroyable_no_lock();
             }
             p_sock->unlock_tcp_con();
+            if (destroyable) {
+                g_p_fd_collection->destroy_sockfd(p_sock);
+            }
         }
         iter = iter->next;
     }
