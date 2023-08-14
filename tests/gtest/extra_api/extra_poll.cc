@@ -125,7 +125,7 @@ TEST_F(socketxtreme_poll, ti_1)
         rc = 0;
         while (rc == 0 && !child_fork_exit()) {
             rc = xlio_api->socketxtreme_poll(_xlio_ring_fd, &xlio_comps, 1, 0);
-            if (xlio_comps.events & XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED) {
+            if (rc > 0 && xlio_comps.events & XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED) {
                 EXPECT_EQ(fd, (int)xlio_comps.listen_fd);
                 fd_peer = (int)xlio_comps.user_data;
                 EXPECT_LE(0, fd_peer);
@@ -207,6 +207,9 @@ TEST_F(socketxtreme_poll, ti_2)
         rc = 0;
         while (rc == 0 && !child_fork_exit()) {
             rc = xlio_api->socketxtreme_poll(_xlio_ring_fd, &xlio_comps, 1, 0);
+            if (rc == 0) {
+                continue;
+            }
             if ((xlio_comps.events & EPOLLERR) || (xlio_comps.events & EPOLLHUP) ||
                 (xlio_comps.events & EPOLLRDHUP)) {
                 log_trace("Close connection: fd=%d event: 0x%lx\n", (int)xlio_comps.user_data,
@@ -306,6 +309,9 @@ TEST_F(socketxtreme_poll, ti_3)
         rc = 0;
         while (rc == 0 && !child_fork_exit()) {
             rc = xlio_api->socketxtreme_poll(_xlio_ring_fd, &xlio_comps, 1, 0);
+            if (rc == 0) {
+                continue;
+            }
             if ((xlio_comps.events & EPOLLERR) || (xlio_comps.events & EPOLLHUP) ||
                 (xlio_comps.events & EPOLLRDHUP)) {
                 log_trace("Close connection: event: 0x%lx\n", xlio_comps.events);
