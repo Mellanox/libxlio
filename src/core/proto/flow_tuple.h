@@ -151,4 +151,10 @@ public:
 };
 } // namespace std
 
+namespace std {
+template <> class hash<flow_tuple> {
+public:
+    size_t operator()(const flow_tuple &key) const { return key.hash(); }
+};
+} // namespace std
 #endif /* FLOW_TUPLE_H */

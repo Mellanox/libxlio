@@ -328,6 +328,7 @@ protected:
     uint32_t m_flow_tag_id; // Flow Tag for this socket
     bool m_rx_cq_wait_ctrl;
     uint8_t m_n_uc_ttl_hop_lim;
+    bool m_bind_no_port;
     bool m_is_ipv6only;
     int *m_p_rings_fds;
     virtual void set_blocking(bool is_blocked);

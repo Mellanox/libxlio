@@ -64,6 +64,8 @@ enum tcp_sock_offload_e {
 
 enum tcp_sock_state_e {
     TCP_SOCK_INITED = 1,
+    TCP_SOCK_BOUND_NO_PORT, // internal state that indicate that bind() called after
+                            // IP_BIND_ADDRESS_NO_PORT, but before connect()
     TCP_SOCK_BOUND,
     TCP_SOCK_LISTEN_READY, // internal state that indicate that prepareListen was called
     TCP_SOCK_ACCEPT_READY,
@@ -172,6 +174,8 @@ public:
     virtual int getsockname(sockaddr *__name, socklen_t *__namelen);
     virtual int getpeername(sockaddr *__name, socklen_t *__namelen);
 
+    inline bool handle_bind_no_port(int &bind_ret, in_port_t in_port, const sockaddr *__addr,
+                                    socklen_t __addrlen);
     inline void non_tcp_recved(int rx_len);
     virtual int recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
                                             size_t count);
