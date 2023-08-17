@@ -56,6 +56,9 @@
 #include "sockinfo_tcp.h"
 #include "tcp_seg_pool.h"
 
+#define UNLOCK_RET(_ret)                                                                           \
+    unlock_tcp_con();                                                                              \
+    return _ret;
 // debugging macros
 #define MODULE_NAME "si_tcp"
 
@@ -77,6 +80,7 @@ extern global_stats_t g_global_stat_static;
 
 tcp_timers_collection *g_tcp_timers_collection = NULL;
 thread_local thread_local_tcp_timers g_thread_local_tcp_timers;
+bind_no_port *g_bind_no_port = NULL;
 
 /*
  * The following socket options are inherited by a connected TCP socket from the listening socket:
@@ -278,7 +282,7 @@ static inline bool use_socket_ring_locks()
 }
 
 sockinfo_tcp::sockinfo_tcp(int fd, int domain)
-    : sockinfo(fd, domain, use_socket_ring_locks())
+    : sockinfo(fd, domain, use_socket_ring_locks(), SOCK_STREAM)
     , m_timer_handle(NULL)
     , m_tcp_con_lock(get_new_tcp_lock())
     , m_sysvar_buffer_batching_mode(safe_mce_sys().buffer_batching_mode)
@@ -415,6 +419,10 @@ sockinfo_tcp::~sockinfo_tcp()
     // Return buffers released in the TLS layer destructor
     m_rx_reuse_buf_postponed = m_rx_reuse_buff.n_buff_num > 0;
     return_reuse_buffers_postponed();
+
+    if (m_bind_no_port) {
+        g_bind_no_port->release_port(m_bound, m_connected);
+    }
 
     destructor_helper();
 
@@ -2573,7 +2581,7 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
     }
 
     // Calling connect more than once should return error codes
-    if (m_sock_state != TCP_SOCK_INITED && m_sock_state != TCP_SOCK_BOUND) {
+    if (m_sock_state > TCP_SOCK_BOUND) {
         switch (m_sock_state) {
         case TCP_SOCK_CONNECTED_RD:
         case TCP_SOCK_CONNECTED_WR:
@@ -2599,12 +2607,20 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
     }
 
     // take local ip from new sock and local port from acceptor
-    if (m_sock_state != TCP_SOCK_BOUND && bind(m_bound.get_p_sa(), m_bound.get_socklen()) == -1) {
+    if (m_sock_state == TCP_SOCK_INITED && bind(m_bound.get_p_sa(), m_bound.get_socklen()) == -1) {
         passthrough_unlock("non offloaded socket --> connect only via OS");
         return -1;
     }
 
     m_connected.set_sockaddr(__to, __tolen);
+    if (m_sock_state == TCP_SOCK_BOUND_NO_PORT) {
+        if (bind(m_bound.get_p_sa(), m_bound.get_socklen()) == -1) {
+            m_connected.clear_sa();
+            passthrough_unlock("non offloaded socket --> connect only via OS");
+            return -1;
+        }
+    }
+
     if (!validate_and_convert_mapped_ipv4(m_connected)) {
         passthrough_unlock("Mapped IPv4 on IPv6-Only socket --> connect only via OS");
         return -1;
@@ -2719,24 +2735,20 @@ int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
 
     int ret = 0;
 
-    si_tcp_logdbg("to %s", sockaddr2str(__addr, __addrlen, true).c_str());
+    si_tcp_logdbg("to %s, m_bind_no_port=%d", sockaddr2str(__addr, __addrlen, true).c_str(),
+                  m_bind_no_port);
 
-    if (m_sock_state == TCP_SOCK_BOUND) {
-        si_tcp_logfuncall("already bounded");
-        errno = EINVAL;
-        return -1;
-    }
-
-    if (m_sock_state != TCP_SOCK_INITED) {
+    if (m_sock_state > TCP_SOCK_BOUND) {
         // print error so we can better track apps not following our assumptions ;)
         si_tcp_logdbg("socket is in wrong state for bind: %d", m_sock_state);
         errno = EINVAL; // EADDRINUSE; //todo or EINVAL for RM BGATE 1545 case 1
         return -1;
     }
+    in_port_t in_port = get_sa_port(__addr, __addrlen);
 
     lock_tcp_con();
 
-    if (INPORT_ANY == get_sa_port(__addr, __addrlen) && (m_pcb.so_options & SOF_REUSEADDR)) {
+    if (INPORT_ANY == in_port && (m_pcb.so_options & SOF_REUSEADDR)) {
         int reuse = 0;
         ret = orig_os_api.setsockopt(m_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
         BULLSEYE_EXCLUDE_BLOCK_START
@@ -2762,7 +2774,27 @@ int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
         }
     } else {
         si_tcp_logdbg("OS bind to %s", sockaddr2str(__addr, __addrlen, true).c_str());
-        ret = orig_os_api.bind(m_fd, __addr, __addrlen);
+        if (INPORT_ANY == in_port && m_bind_no_port) {
+            if (m_sock_state == TCP_SOCK_BOUND_NO_PORT) {
+                // bind call from connect()
+                if ((ret = g_bind_no_port->bind_and_set_port_map(m_bound, m_connected, m_fd))) {
+                    UNLOCK_RET(ret);
+                }
+            } else {
+                // first bind call with port 0, we set SO_REUSEPORT so we will be able to bind to a
+                // specific port later when we reuse port
+                int so_reuseport = 1;
+                if ((ret = orig_os_api.setsockopt(m_fd, SOL_SOCKET, SO_REUSEPORT, &so_reuseport,
+                                                  sizeof(so_reuseport)))) {
+                    UNLOCK_RET(ret);
+                }
+                m_bound.set_sockaddr(__addr, __addrlen);
+                m_sock_state = TCP_SOCK_BOUND_NO_PORT;
+                UNLOCK_RET(ret);
+            }
+        } else {
+            ret = orig_os_api.bind(m_fd, __addr, __addrlen);
+        }
     }
 
 #if defined(DEFINED_NGINX)
@@ -2772,8 +2804,7 @@ int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
 #endif // DEFINED_NGINX
     {
         if (ret < 0) {
-            unlock_tcp_con();
-            return ret;
+            UNLOCK_RET(ret);
         }
     }
 
@@ -2783,8 +2814,7 @@ int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
     BULLSEYE_EXCLUDE_BLOCK_START
     if (orig_os_api.getsockname(m_fd, addr.get_p_sa(), &addr_len)) {
         si_tcp_logerr("get sockname failed");
-        unlock_tcp_con();
-        return -1; // error
+        UNLOCK_RET(-1);
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
@@ -2794,8 +2824,7 @@ int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
     if (!addr.is_supported()) {
         si_tcp_logdbg("Illegal family %d", addr.get_sa_family());
         errno = EAFNOSUPPORT;
-        unlock_tcp_con();
-        return -1; // error
+        UNLOCK_RET(-1);
     }
     m_pcb.is_ipv6 = (addr.get_sa_family() == AF_INET6);
     m_bound = addr;
@@ -2814,8 +2843,7 @@ int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
         tcp_bind(&m_pcb, reinterpret_cast<const ip_addr_t *>(&ip), ntohs(m_bound.get_in_port()),
                  m_pcb.is_ipv6)) {
         errno = EINVAL;
-        unlock_tcp_con();
-        return -1; // error
+        UNLOCK_RET(-1);
     }
 
     m_sock_state = TCP_SOCK_BOUND;
@@ -2825,8 +2853,7 @@ int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
     m_p_socket_stats->set_bound_if(m_bound);
     m_p_socket_stats->bound_port = m_bound.get_in_port();
 
-    unlock_tcp_con();
-    return 0;
+    UNLOCK_RET(0);
 }
 
 int sockinfo_tcp::prepareListen()

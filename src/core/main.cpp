@@ -152,6 +152,11 @@ static int free_libxlio_resources()
     }
     g_p_route_table_mgr = NULL;
 
+    if (g_bind_no_port) {
+        delete g_bind_no_port;
+    }
+    g_bind_no_port = NULL;
+
     if (g_p_rule_table_mgr) {
         delete g_p_rule_table_mgr;
     }
@@ -1052,6 +1057,8 @@ static void do_global_ctors_helper()
 
     NEW_CTOR(g_p_route_table_mgr, route_table_mgr());
 
+    NEW_CTOR(g_bind_no_port, bind_no_port());
+
     NEW_CTOR(g_zc_cache, mapping_cache((size_t)safe_mce_sys().zc_cache_threshold * ONE_MB));
 
     safe_mce_sys().rx_buf_size = std::min(safe_mce_sys().rx_buf_size, 0xFF00U);
@@ -1209,6 +1216,7 @@ void reset_globals()
     g_p_event_handler_manager = NULL;
     g_p_agent = NULL;
     g_p_route_table_mgr = NULL;
+    g_bind_no_port = NULL;
     g_p_rule_table_mgr = NULL;
     g_stats_file = NULL;
     g_p_net_device_table_mgr = NULL;

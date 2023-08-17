@@ -311,9 +311,9 @@ public:
         return sockaddr2str(&u_sa.m_sa, sizeof(u_sa), port);
     }
 
-protected:
     void clear_sa() { memset(&u_sa, 0, sizeof(u_sa)); }
 
+protected:
     union {
         struct sockaddr m_sa;
         struct sockaddr_in m_sa_in;

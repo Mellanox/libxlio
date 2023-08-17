@@ -64,6 +64,8 @@ enum tcp_sock_offload_e {
 
 enum tcp_sock_state_e {
     TCP_SOCK_INITED = 1,
+    TCP_SOCK_BOUND_NO_PORT, // internal state that indicate that bind() called after
+                            // IP_BIND_ADDRESS_NO_PORT, but before connect()
     TCP_SOCK_BOUND,
     TCP_SOCK_LISTEN_READY, // internal state that indicate that prepareListen was called
     TCP_SOCK_ACCEPT_READY,

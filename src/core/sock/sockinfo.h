@@ -159,7 +159,7 @@ class sockinfo : public socket_fd_api,
                  public pkt_sndr_source,
                  public wakeup_pipe {
 public:
-    sockinfo(int fd, int domain, bool use_ring_locks);
+    sockinfo(int fd, int domain, bool use_ring_locks, uint8_t sock_type);
     virtual ~sockinfo();
 
     enum sockinfo_state {
@@ -203,6 +203,10 @@ public:
 
     bool validate_and_convert_mapped_ipv4(sock_addr &sock) const;
     void socket_stats_init(void);
+    uint8_t get_sock_type()
+    {
+        return m_sock_type;
+    }
 
     socket_stats_t *m_p_socket_stats;
 
@@ -254,6 +258,7 @@ protected:
     uint8_t m_n_tsing_flags;
     in_protocol_t m_protocol;
     uint8_t m_src_sel_flags;
+    uint8_t m_sock_type;
 
     multilock m_lock_rcv;
     lock_mutex m_lock_snd;
@@ -328,6 +333,7 @@ protected:
     uint32_t m_flow_tag_id; // Flow Tag for this socket
     bool m_rx_cq_wait_ctrl;
     uint8_t m_n_uc_ttl_hop_lim;
+    int m_bind_no_port;
     bool m_is_ipv6only;
     int *m_p_rings_fds;
     virtual void set_blocking(bool is_blocked);
@@ -643,5 +649,110 @@ protected:
     }
     //////////////////////////////////////////////////////////////////
 };
+
+class bind_no_port_mapper {
+public:
+    bind_no_port_mapper()
+    {
+        m_src.clear_sa();
+        m_dst.clear_sa();
+    };
+    bind_no_port_mapper(const sock_addr &src, const sock_addr &dst)
+    {
+        m_src = src;
+        m_dst = dst;
+    };
+
+    bool operator==(const struct bind_no_port_mapper &p) const
+    {
+        return (m_src == p.m_src) && (m_dst == p.m_dst);
+    }
+    size_t hash() const { return m_src.hash() ^ m_dst.hash(); }
+
+    sock_addr m_src; // Does not contain a valid port - source port should be chosen according to
+                     // specific logic
+    sock_addr m_dst;
+};
+
+namespace std {
+template <> class hash<bind_no_port_mapper> {
+public:
+    size_t operator()(const bind_no_port_mapper &key) const { return key.hash(); }
+};
+} // namespace std
+
+typedef std::unordered_map<bind_no_port_mapper, bool> port_no_bind_map_t;
+struct port_map_list {
+    std::list<in_port_t>::iterator it;
+    port_no_bind_map_t map;
+};
+
+class bind_no_port {
+public:
+    /*  Logic of IP_BIND_ADDRESS_NO_PORT
+        In case we need a new port from OS, we call bind with port 0,
+        Otherwise - we call bind with specific port from our DB. */
+    int bind_and_set_port_map(const sock_addr &src, const sock_addr &dst, int fd)
+    {
+        int ret = 0;
+        sock_addr addr(src);
+        socklen_t addr_len = sizeof(addr);
+        std::lock_guard<decltype(m_lock)> lock(m_lock);
+
+        in_port_t reused_port = 0;
+        bind_no_port_mapper temp_mapper(src, dst);
+        for (std::list<in_port_t>::iterator _port_it = m_port_list.begin();
+             _port_it != m_port_list.end(); ++_port_it) {
+            auto _iter = arr[*_port_it].map.find(temp_mapper);
+            if (_iter == arr[*_port_it].map.end()) {
+                reused_port = *_port_it;
+                arr[*_port_it].it = _port_it;
+                break;
+            }
+        }
+
+        if (reused_port) {
+            addr.set_in_port(reused_port);
+            arr[reused_port].map[temp_mapper] = true;
+        }
+
+        if ((ret = orig_os_api.bind(fd, addr.get_p_sa(), addr_len))) {
+            return ret;
+        }
+
+        if (!reused_port) {
+            if ((ret = orig_os_api.getsockname(fd, addr.get_p_sa(), &addr_len))) {
+                return ret;
+            }
+            in_port_t new_port = addr.get_in_port();
+            m_port_list.push_front(new_port);
+            arr[new_port].map[temp_mapper] = true;
+            arr[new_port].it = m_port_list.begin();
+        }
+        return ret;
+    }
+
+    void release_port(const sock_addr &src, const sock_addr &dst)
+    {
+        bind_no_port_mapper temp_mapper(src, dst);
+        in_port_t port_to_release = temp_mapper.m_src.get_in_port();
+        temp_mapper.m_src.set_in_port(0);
+        std::lock_guard<decltype(m_lock)> lock(m_lock);
+
+        if (arr[port_to_release].map.find(temp_mapper) != arr[port_to_release].map.end()) {
+            arr[port_to_release].map.erase(temp_mapper);
+            if (arr[port_to_release].map.size() == 0) {
+                m_port_list.erase(arr[port_to_release].it);
+            }
+        }
+    }
+
+private:
+    lock_spin_recursive m_lock;
+    std::list<in_port_t> m_port_list;
+    struct port_map_list arr[65536];
+};
+
+extern bind_no_port *g_bind_no_port;
 
 #endif /* BASE_SOCKINFO_H */
