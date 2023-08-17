@@ -368,6 +368,7 @@ void qp_mgr::release_rx_buffers()
     if (m_curr_rx_wr) {
         qp_logdbg("Returning %d pending post_recv buffers to CQ owner", m_curr_rx_wr);
         while (m_curr_rx_wr) {
+            // Cleaning unposted buffers. Unposted buffers are not attached to any strides.
             --m_curr_rx_wr;
             mem_buf_desc_t *p_mem_buf_desc =
                 (mem_buf_desc_t *)(uintptr_t)m_ibv_rx_wr_array[m_curr_rx_wr].wr_id;

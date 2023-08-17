@@ -450,11 +450,11 @@ int ring_simple::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
 int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_completions,
                                    unsigned int ncompletions, int flags)
 {
-    int ret = 0;
     int i = 0;
+    unsigned int pkts = 0U;
+    bool do_poll = true;
 
     if (likely(xlio_completions) && ncompletions) {
-
         if ((flags & SOCKETXTREME_POLL_TX) && list_empty(&m_socketxtreme.ec_list)) {
             uint64_t poll_sn = 0;
             const std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
@@ -463,7 +463,6 @@ int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_c
 
         const std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
         while (!g_b_exit && (i < (int)ncompletions)) {
-            /* Check list size to avoid locking */
             if (!list_empty(&m_socketxtreme.ec_list)) {
                 ring_ec *ec = get_ec();
                 if (ec) {
@@ -472,29 +471,33 @@ int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_c
                     xlio_completions++;
                     i++;
                 }
-            } else {
-                /* Internal thread can raise event on this stage before we
-                 * start rx processing. In this case we can return event
-                 * in right order. It is done to avoid locking and
-                 * may be it is not so critical
-                 */
+            } else if (likely(do_poll)) {
                 mem_buf_desc_t *desc = m_p_cq_mgr_rx->poll_and_process_socketxtreme();
                 if (likely(desc)) {
                     rx_process_buffer(desc, NULL);
+
+                    // To avoid too many unflushed GRO sessions, We flush GRO and continue polling.
+                    // Otherwise this loop may continue for too long and result in way more
+                    // completions than ncompletions, what is not optimal for performance.
+                    // Not each packet results in a real completion but this check is good enough.
+                    if (++pkts >= ncompletions) {
+                        m_gro_mgr.flush_all(NULL);
+                        pkts = 0U;
+                    }
                 } else {
                     m_gro_mgr.flush_all(NULL);
-                    break;
+                    do_poll = false;
                 }
+            } else {
+                break;
             }
         }
-
-        ret = i;
     } else {
-        ret = -1;
+        i = -1;
         errno = EINVAL;
     }
 
-    return ret;
+    return i;
 }
 
 int ring_simple::wait_for_notification_and_process_element(int cq_channel_fd,
