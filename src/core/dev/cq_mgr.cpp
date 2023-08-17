@@ -656,12 +656,13 @@ void cq_mgr::process_tx_buffer_list(mem_buf_desc_t *p_mem_buf_desc)
     BULLSEYE_EXCLUDE_BLOCK_END
 }
 
+// This method is called when ring release returns unposted buffers.
 void cq_mgr::mem_buf_desc_return_to_owner(mem_buf_desc_t *p_mem_buf_desc,
                                           void *pv_fd_ready_array /*=NULL*/)
 {
     cq_logfuncall("");
     NOT_IN_USE(pv_fd_ready_array);
-    reclaim_recv_buffer_helper(p_mem_buf_desc);
+    cq_mgr::reclaim_recv_buffer_helper(p_mem_buf_desc);
 }
 
 int cq_mgr::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array)
@@ -734,12 +735,6 @@ int cq_mgr::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
     }
 
     return ret;
-}
-
-mem_buf_desc_t *cq_mgr::poll_and_process_socketxtreme()
-{
-    cq_logerr("SocketXtreme mode is supported by mlx5 cq manager only");
-    return nullptr;
 }
 
 bool cq_mgr::reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst)

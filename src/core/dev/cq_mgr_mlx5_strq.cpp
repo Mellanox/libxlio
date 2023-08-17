@@ -412,29 +412,6 @@ int cq_mgr_mlx5_strq::drain_and_proccess_helper(mem_buf_desc_t *buff, mem_buf_de
     return ret_total;
 }
 
-int cq_mgr_mlx5_strq::drain_and_proccess_socketxtreme(uintptr_t *p_recycle_buffers_last_wr_id)
-{
-    uint32_t ret_total = 0;
-    while (((m_n_sysvar_progress_engine_wce_max > m_n_wce_counter) && (!m_b_was_drained)) ||
-           p_recycle_buffers_last_wr_id) {
-        buff_status_e status = BS_OK;
-        mem_buf_desc_t *buff = nullptr;
-        mem_buf_desc_t *buff_wqe = poll(status, buff);
-        if (!buff && !buff_wqe) {
-            m_b_was_drained = true;
-            return ret_total;
-        }
-
-        ret_total +=
-            drain_and_proccess_helper(buff, buff_wqe, status, p_recycle_buffers_last_wr_id);
-    }
-
-    m_n_wce_counter = 0; // Actually strides count.
-    m_b_was_drained = false;
-
-    return ret_total;
-}
-
 int cq_mgr_mlx5_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id)
 {
     cq_logfuncall("cq was %s drained. %d processed wce since last check. %d wce in m_rx_queue",
@@ -448,37 +425,31 @@ int cq_mgr_mlx5_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id
     // Internal thread:
     //   Frequency of real polling can be controlled by
     //   PROGRESS_ENGINE_INTERVAL and PROGRESS_ENGINE_WCE_MAX.
-    // socketxtreme:
-    //   User does socketxtreme_poll()
     // Cleanup:
     //   QP down logic to release rx buffers should force polling to do this.
     //   Not null argument indicates one.
 
-    if (safe_mce_sys().enable_socketxtreme) {
-        ret_total = drain_and_proccess_socketxtreme(p_recycle_buffers_last_wr_id);
-    } else {
-        while (((m_n_sysvar_progress_engine_wce_max > m_n_wce_counter) && (!m_b_was_drained)) ||
-               p_recycle_buffers_last_wr_id) {
-            buff_status_e status = BS_OK;
-            mem_buf_desc_t *buff = nullptr;
-            mem_buf_desc_t *buff_wqe = poll(status, buff);
-            if (!buff && !buff_wqe) {
-                update_global_sn(cq_poll_sn, ret_total);
-                m_b_was_drained = true;
-                m_p_ring->m_gro_mgr.flush_all(nullptr);
-                return ret_total;
-            }
-
-            ret_total +=
-                drain_and_proccess_helper(buff, buff_wqe, status, p_recycle_buffers_last_wr_id);
+    while (((m_n_sysvar_progress_engine_wce_max > m_n_wce_counter) && (!m_b_was_drained)) ||
+           p_recycle_buffers_last_wr_id) {
+        buff_status_e status = BS_OK;
+        mem_buf_desc_t *buff = nullptr;
+        mem_buf_desc_t *buff_wqe = poll(status, buff);
+        if (!buff && !buff_wqe) {
+            update_global_sn(cq_poll_sn, ret_total);
+            m_b_was_drained = true;
+            m_p_ring->m_gro_mgr.flush_all(nullptr);
+            return ret_total;
         }
 
-        update_global_sn(cq_poll_sn, ret_total);
-
-        m_p_ring->m_gro_mgr.flush_all(nullptr);
-        m_n_wce_counter = 0; // Actually strides count.
-        m_b_was_drained = false;
+        ret_total +=
+            drain_and_proccess_helper(buff, buff_wqe, status, p_recycle_buffers_last_wr_id);
     }
+
+    update_global_sn(cq_poll_sn, ret_total);
+
+    m_p_ring->m_gro_mgr.flush_all(nullptr);
+    m_n_wce_counter = 0; // Actually strides count.
+    m_b_was_drained = false;
 
     // Update cq statistics
     m_p_cq_stat->n_rx_sw_queue_len = m_rx_queue.size();
@@ -542,43 +513,35 @@ int cq_mgr_mlx5_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *
                        m_n_sysvar_rx_prefetch_bytes_before_poll);
     }
 
-    if (safe_mce_sys().enable_socketxtreme) {
-        mem_buf_desc_t *buff = poll_and_process_socketxtreme();
+    buff_status_e status = BS_OK;
+    uint32_t ret = 0;
+    while (ret < m_n_sysvar_cq_poll_batch_max) {
+        mem_buf_desc_t *buff = nullptr;
+        mem_buf_desc_t *buff_wqe = poll(status, buff);
+
+        if (buff_wqe && (++m_qp_rec.debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv)) {
+            compensate_qp_poll_failed(); // Reuse this method as success.
+        }
+
         if (buff) {
-            process_recv_buffer(buff, pv_fd_ready_array);
-            ++ret_rx_processed;
+            ++ret;
+            if (cqe_process_rx(buff, status)) {
+                ++ret_rx_processed;
+                process_recv_buffer(buff, pv_fd_ready_array);
+            }
+        } else if (!buff_wqe) {
+            m_b_was_drained = true;
+            break;
         }
+    }
+
+    update_global_sn(*p_cq_poll_sn, ret);
+
+    if (likely(ret > 0)) {
+        m_n_wce_counter += ret; // Actually strides count.
+        m_p_ring->m_gro_mgr.flush_all(pv_fd_ready_array);
     } else {
-        buff_status_e status = BS_OK;
-        uint32_t ret = 0;
-        while (ret < m_n_sysvar_cq_poll_batch_max) {
-            mem_buf_desc_t *buff = nullptr;
-            mem_buf_desc_t *buff_wqe = poll(status, buff);
-
-            if (buff_wqe && (++m_qp_rec.debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv)) {
-                compensate_qp_poll_failed(); // Reuse this method as success.
-            }
-
-            if (buff) {
-                ++ret;
-                if (cqe_process_rx(buff, status)) {
-                    ++ret_rx_processed;
-                    process_recv_buffer(buff, pv_fd_ready_array);
-                }
-            } else if (!buff_wqe) {
-                m_b_was_drained = true;
-                break;
-            }
-        }
-
-        update_global_sn(*p_cq_poll_sn, ret);
-
-        if (likely(ret > 0)) {
-            m_n_wce_counter += ret; // Actually strides count.
-            m_p_ring->m_gro_mgr.flush_all(pv_fd_ready_array);
-        } else {
-            compensate_qp_poll_failed();
-        }
+        compensate_qp_poll_failed();
     }
 
     return ret_rx_processed;
@@ -591,14 +554,6 @@ void cq_mgr_mlx5_strq::add_qp_rx(qp_mgr *qp)
     _hot_buffer_stride = nullptr;
     _current_wqe_consumed_bytes = 0U;
     cq_mgr::add_qp_rx(qp);
-}
-
-void cq_mgr_mlx5_strq::mem_buf_desc_return_to_owner(mem_buf_desc_t *p_mem_buf_desc,
-                                                    void *pv_fd_ready_array)
-{
-    cq_logfuncall("");
-    NOT_IN_USE(pv_fd_ready_array);
-    cq_mgr::reclaim_recv_buffer_helper(p_mem_buf_desc);
 }
 
 void cq_mgr_mlx5_strq::statistics_print()

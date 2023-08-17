@@ -62,9 +62,8 @@ public:
     virtual ~cq_mgr_mlx5();
 
     virtual int drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id = NULL);
-    virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array = NULL);
     virtual mem_buf_desc_t *poll_and_process_socketxtreme();
-
+    virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array = NULL);
     virtual int poll_and_process_element_tx(uint64_t *p_cq_poll_sn);
 
     mem_buf_desc_t *cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc, enum buff_status_e status);
@@ -86,7 +85,6 @@ protected:
     void log_cqe_error(struct xlio_mlx5_cqe *cqe);
     inline void cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc,
                                      enum buff_status_e &status);
-    void cqe_to_xlio_wc(struct xlio_mlx5_cqe *cqe, xlio_ibv_wc *wc);
     inline void update_global_sn(uint64_t &cq_poll_sn, uint32_t rettotal);
     void lro_update_hdr(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc);
 
