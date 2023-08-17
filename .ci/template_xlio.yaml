@@ -1,0 +1,52 @@
+#
+# Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES, ALL RIGHTS RESERVED.
+#
+# This software product is a proprietary product of NVIDIA CORPORATION &
+# AFFILIATES (the "Company") and all right, title, and interest in and to the
+# software product, including all associated intellectual property rights, are
+# and shall remain exclusively with the Company.
+#
+# This software product is governed by the End User License Agreement
+# provided with the software product.
+#
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: xlio-pkg-creator
+spec:
+  restartPolicy: Never
+  hostNetwork: true
+  volumes:
+  - name: packages
+    hostPath:
+      path: /etc/xlio_pkg/
+      type: DirectoryOrCreate
+  - name: publishpkg
+    hostPath:
+      path: /hpc/noarch/xlio_artifacts/
+      type: DirectoryOrCreate
+  containers:
+    - name: xlio-pkg-creator
+      image: nvcr.io/nvstaging/doca/doca:PATHTOIMG
+      imagePullPolicy: Always
+      command: ["/bin/bash", "-c"]
+      args: ["/etc/xlio_pkg/set_env.sh BRANCH BUILD_ID"]
+      securityContext:
+        privileged: true
+        capabilities: 
+          add: ["SYS_ADMIN"]
+        seccompProfile:
+          type: Unconfined
+      resources:
+      requests:
+        memory: "32Gi"
+        cpu: "16"
+      limits:
+        memory: "32Gi"
+        cpu: "16"
+      volumeMounts:
+      - name: packages
+        mountPath: /etc/xlio_pkg/
+      - name: publishpkg
+        mountPath: /hpc/noarch/xlio_artifacts/
