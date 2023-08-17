@@ -97,6 +97,7 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     , m_n_uc_ttl_hop_lim(m_family == AF_INET
                              ? safe_mce_sys().sysctl_reader.get_net_ipv4_ttl()
                              : safe_mce_sys().sysctl_reader.get_net_ipv6_hop_limit())
+    , m_bind_no_port(false)
     , m_is_ipv6only(safe_mce_sys().sysctl_reader.get_ipv6_bindv6only())
     , m_p_rings_fds(NULL)
 {
@@ -539,6 +540,22 @@ int sockinfo::setsockopt(int __level, int __optname, const void *__optval, sockl
                 }
             }
             break;
+        case IP_BIND_ADDRESS_NO_PORT: {
+            if (__optval && __optlen == sizeof(int)) {
+                int val = *(int *)__optval;
+                m_bind_no_port = !!val;
+                // In TCP connect flow we don't call os.connect, as oposed to UDP connect flow.
+                // Therefore, UDP flow can support IP_BIND_ADDRESS_NO_PORT out-of-box using kernel
+                // calls.
+                ret = (PROTO_TCP == get_protocol()) ? SOCKOPT_INTERNAL_XLIO_SUPPORT
+                                                    : SOCKOPT_HANDLE_BY_OS;
+                break;
+            }
+            ret = SOCKOPT_NO_XLIO_SUPPORT;
+            errno = EINVAL;
+            si_logdbg("IP_BIND_ADDRESS_NO_PORT - NOT HANDLED, optval or optlen are not valid");
+            break;
+        }
         default:
             break;
         }
