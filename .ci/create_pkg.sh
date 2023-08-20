@@ -8,9 +8,11 @@ SRDIR="/etc/xlio_pkg/"
 RDIR="/etc/kubelet.d/"
 
 cd $SRDIR
+function get_container_status() {
+        rcont=`crictl ps -s running -q --name xlio`
+}
 
-rcont=`crictl ps -s running -q --name xlio`
-
+get_container_status
 while [ ! -z "$rcont" ]
  do
 	 echo "The build server is busy"
@@ -28,11 +30,12 @@ if [ -z "$rcont" ]
 fi
 
 sleep 60
-
+get_container_status
 while [ ! -z "$rcont" ]
  do
 	 echo "System is busy. Building packages"
 	 sleep 1;
+	 get_container_status
  done;
 
 echo "Package creation completed"
