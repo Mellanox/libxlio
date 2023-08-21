@@ -44,14 +44,14 @@ AC_DEFUN([CHECK_COMPILER_ATTRIBUTE], [
         #
         # Try to compile using the C compiler
         #
-        AC_TRY_COMPILE([$2],[],
+        AC_COMPILE_IFELSE([AC_LANG_PROGRAM([$2],[])],
                        [prj_cv_attribute_$1=yes],
                        [prj_cv_attribute_$1=no])
         AS_IF([test "x$prj_cv_attribute_$1" = "xyes"], [
             AC_LANG_PUSH(C++)
-            AC_TRY_COMPILE([extern "C" {
+            AC_COMPILE_IFELSE([AC_LANG_PROGRAM([extern "C" {
                            $2
-                           }],[],
+                           }],[])],
                            [prj_cv_attribute_$1=yes],
                            [prj_cv_attribute_$1=no])
             AC_LANG_POP(C++)
@@ -213,7 +213,7 @@ esac
 # Control debug support
 #
 AC_ARG_ENABLE([debug],
-    AC_HELP_STRING([--enable-debug],
+    AS_HELP_STRING([--enable-debug],
         [Enable debug mode (default=no)]), [], [enable_debug=no])
 AC_MSG_CHECKING(
     [for debug support])
@@ -230,7 +230,7 @@ fi
 # Control symbols visibility
 #
 AC_ARG_ENABLE([symbol_visibility],
-    AC_HELP_STRING([--enable-symbol-visibility],
+    AS_HELP_STRING([--enable-symbol-visibility],
         [Enable symbols visibility (default=no)]), [], [enable_symbol_visibility=no])
 if test "x$enable_symbol_visibility" = xno; then
     CHECK_COMPILER_ATTRIBUTE([visibility],
