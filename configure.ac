@@ -26,7 +26,7 @@ AC_INIT(libxlio, [prj_ver_major.prj_ver_minor.prj_ver_revision], support@mellano
 # Definitions will be placed in this file rather than
 # in the DEFS variable
 #
-AC_CONFIG_HEADER([config.h])
+AC_CONFIG_HEADERS([config.h])
 
 PRJ_LIBRARY_MAJOR=prj_ver_major
 PRJ_LIBRARY_MINOR=prj_ver_minor
@@ -110,8 +110,6 @@ show_section_title "Configure build tools"
 LT_INIT([disable-static])
 AC_PROG_CC
 AC_PROG_CXX
-AC_PROG_YACC
-AM_PROG_LEX
 
 # Check for pkg-config package
 #
@@ -261,7 +259,7 @@ fi
 # Control NGINX support
 #
 AC_ARG_ENABLE([nginx],
-    AC_HELP_STRING([--enable-nginx],
+    AS_HELP_STRING([--enable-nginx],
         [Enable NGINX availability (default=yes)]), [], [enable_nginx=yes])
 AC_MSG_CHECKING(
     [for nginx support])
@@ -288,8 +286,6 @@ show_section_title "Check for header files"
 
 # Look for Standard headers
 #
-AC_HEADER_STDC
-
 AC_CHECK_HEADERS([sys/prctl.h sys/inotify.h sys/fanotify.h sys/capability.h])
 AC_CHECK_HEADERS([linux/ethtool.h linux/tls.h])
 
