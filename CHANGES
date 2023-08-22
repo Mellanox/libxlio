@@ -1,3 +1,12 @@
+Version 3.20.2-1:
+Date + Time 2023-08-22
+=============================================================
+Fixed:
+        - RM #3531436 socketxtreme polling and GRO flush segfaults
+        - RM #3574901 Unlock sockinfo_tcp before destruction
+        - RM #3575217 Choose ipv4 source ip according to subnet
+        - RM #3531436 gtest/socketxtreme_poll tests
+
 Version 3.20.1-1:
 Date + Time 2023-08-09
 =============================================================
