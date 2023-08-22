@@ -33,15 +33,13 @@
 #include "allocator.h"
 
 #include <stdlib.h>
-#include <sys/mman.h>
 
 #include "vlogger/vlogger.h"
 #include "ib_ctx_handler_collection.h"
+#include "util/hugepage_mgr.h"
 #include "util/vtypes.h"
 
 #define MODULE_NAME "allocator"
-
-static size_t s_hugepagemask = 0;
 
 xlio_allocator::xlio_allocator()
     : xlio_allocator(nullptr, nullptr)
@@ -74,15 +72,6 @@ xlio_allocator::xlio_allocator(alloc_t alloc_func, free_t free_func)
 xlio_allocator::~xlio_allocator()
 {
     dealloc();
-}
-
-/*static*/
-void xlio_allocator::initialize()
-{
-    s_hugepagemask = default_huge_page_size();
-    if (s_hugepagemask > 0) {
-        --s_hugepagemask;
-    }
 }
 
 void *xlio_allocator::alloc(size_t size)
@@ -130,7 +119,9 @@ void *xlio_allocator::alloc_aligned(size_t size, size_t align)
 {
     __log_info_dbg("Allocating %zu bytes aligned to %zu", size, align);
 
-    if (m_type == ALLOC_TYPE_HUGEPAGES && (s_hugepagemask + 1) % align == 0) {
+    if (m_type == ALLOC_TYPE_HUGEPAGES) {
+        // We should check that hugepage provides requested alignment, however,
+        // it is unlikely to have alignment bigger than a hugepage (at least 2MB).
         m_data = alloc_huge(size);
     }
     if (!m_data) {
@@ -145,28 +136,19 @@ void *xlio_allocator::alloc_aligned(size_t size, size_t align)
 
 void *xlio_allocator::alloc_huge(size_t size)
 {
-#ifdef MAP_HUGETLB
     __log_info_dbg("Allocating %zu bytes in huge tlb using mmap", size);
 
-    if (unlikely(s_hugepagemask == 0)) {
-        __log_info_dbg("Hugepages are not supported");
-        return nullptr;
+    size_t actual_size = size;
+    m_data = g_hugepage_mgr.alloc_hugepages(actual_size);
+    if (!m_data && g_hugepage_mgr.get_default_hugepage() && m_type == ALLOC_TYPE_HUGEPAGES) {
+        // Print a warning message on allocation error if hugepages are supported
+        // and this is not a fallback from a different allocation method.
+        print_hugepages_warning();
     }
-
-    size = (size + s_hugepagemask) & ~s_hugepagemask;
-    m_data = mmap(NULL, size, PROT_READ | PROT_WRITE,
-                  MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_HUGETLB, -1, 0);
-    if (m_data == MAP_FAILED) {
-        __log_info_dbg("mmap failed (errno=%d)", errno);
-        if (errno == ENOMEM && m_type == ALLOC_TYPE_HUGEPAGES) {
-            print_hugepages_warning();
-        }
-        m_data = nullptr;
-    } else {
+    if (m_data) {
         m_type = ALLOC_TYPE_HUGEPAGES;
-        m_size = size;
+        m_size = actual_size;
     }
-#endif
     return m_data;
 }
 
@@ -204,9 +186,7 @@ void xlio_allocator::dealloc()
 
     switch (m_type) {
     case ALLOC_TYPE_HUGEPAGES:
-        if (munmap(m_data, m_size) != 0) {
-            __log_info_err("munmap failed (errno=%d)", errno);
-        }
+        g_hugepage_mgr.dealloc_hugepages(m_data, m_size);
         break;
     case ALLOC_TYPE_ANON:
         free(m_data);

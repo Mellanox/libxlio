@@ -65,7 +65,7 @@ buffer_pool *g_buffer_pool_tx = NULL;
 buffer_pool *g_buffer_pool_zc = NULL;
 
 buffer_pool_area::buffer_pool_area(size_t buffer_nr)
-    : m_allocator(ALLOC_TYPE_HUGEPAGES)
+    : m_allocator(ALLOC_TYPE_ANON)
 {
     m_area = m_allocator.alloc(sizeof(mem_buf_desc_t) * buffer_nr);
     m_n_buffers = buffer_nr;
@@ -156,7 +156,6 @@ buffer_pool::buffer_pool(size_t buffer_count, size_t buf_size,
     , m_allocator(alloc_func, free_func)
 {
     size_t sz_aligned_element = 0;
-    void *ptr_data = NULL;
     void *data_block;
 
     __log_info_func("count = %d", buffer_count);
@@ -166,30 +165,27 @@ buffer_pool::buffer_pool(size_t buffer_count, size_t buf_size,
     memset(m_p_bpool_stat, 0, sizeof(*m_p_bpool_stat));
     xlio_stats_instance_create_bpool_block(m_p_bpool_stat);
 
-    if (buf_size == 0) {
+    if (buf_size == 0 || buffer_count == 0) {
         m_size = 0;
-    } else if (buffer_count) {
-        sz_aligned_element = (buf_size + MCE_ALIGNMENT) & (~MCE_ALIGNMENT);
-        m_size = sz_aligned_element * buffer_count + MCE_ALIGNMENT;
     } else {
-        m_size = buf_size;
+        sz_aligned_element = (buf_size + MCE_ALIGNMENT) & (~MCE_ALIGNMENT);
+        m_size = sz_aligned_element * buffer_count;
     }
 
+    // xlio_allocator will likely align data_block on the hugepage or the page size boundary.
     data_block = m_size ? m_allocator.alloc_and_reg_mr(m_size, NULL) : NULL;
     if (unlikely(m_size != 0 && !data_block)) {
         throw_xlio_exception("Failed allocating or registering data buffers");
     }
-
-    if (!buffer_count) {
-        return;
-    }
-
     if (m_size) {
-        // Align pointers
-        ptr_data = (void *)((unsigned long)((char *)data_block + MCE_ALIGNMENT) & (~MCE_ALIGNMENT));
+        // xlio_allocator may allocate more memory than requested. Utilize it.
+        m_size = m_allocator.size();
+        buffer_count = m_size / sz_aligned_element;
     }
 
-    expand(buffer_count, ptr_data, sz_aligned_element, custom_free_function);
+    if (buffer_count > 0) {
+        expand(buffer_count, data_block, sz_aligned_element, custom_free_function);
+    }
 
     print_val_tbl();
 

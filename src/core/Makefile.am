@@ -154,6 +154,7 @@ libxlio_la_SOURCES := \
 	sock/sockinfo_nvme.cpp \
 	sock/bind_no_port.cpp \
 	\
+	util/hugepage_mgr.cpp \
 	util/wakeup.cpp \
 	util/wakeup_pipe.cpp \
 	util/match.cpp \
@@ -286,6 +287,7 @@ libxlio_la_SOURCES := \
 	sock/bind_no_port.h \
 	\
 	util/chunk_list.h \
+	util/hugepage_mgr.h \
 	util/if.h \
 	util/instrumentation.h \
 	util/libxlio.h \

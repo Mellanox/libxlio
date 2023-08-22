@@ -50,8 +50,6 @@ public:
     xlio_allocator(alloc_t alloc_func, free_t free_func);
     virtual ~xlio_allocator();
 
-    static void initialize();
-
     void *alloc(size_t size);
     void *alloc_aligned(size_t size, size_t align);
 
@@ -60,6 +58,8 @@ public:
     void *alloc_malloc(size_t size);
 
     void dealloc();
+
+    inline size_t size() { return m_size; }
 
 private:
     void print_hugepages_warning();
