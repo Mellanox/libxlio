@@ -1629,15 +1629,6 @@ bool net_device_val::verify_qp_creation(const char *ifname, enum ibv_qp_type qp_
     }
     VALGRIND_MAKE_MEM_DEFINED(channel, sizeof(ibv_comp_channel));
     context = p_ib_ctx->get_ibv_context();
-#if defined(DEFINED_NGINX)
-    /*
-     * For NGINX scenario we may want to distribute CQs across multiple
-     * CPUs to improve CPS in case of multiple NGINX worker processes.
-     */
-    if (safe_mce_sys().nginx_distribute_cq_interrupts) {
-        comp_vector = g_worker_index % context->num_comp_vectors;
-    }
-#endif
     cq = xlio_ibv_create_cq(context, safe_mce_sys().tx_num_wr, (void *)this, channel, comp_vector,
                             &attr);
     if (!cq) {

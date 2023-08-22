@@ -129,7 +129,7 @@ void cq_mgr::configure(int cq_size)
      * For NGINX scenario we may want to distribute CQs across multiple
      * CPUs to improve CPS in case of multiple NGINX worker processes.
      */
-    if (safe_mce_sys().nginx_distribute_cq_interrupts) {
+    if (safe_mce_sys().nginx_distribute_cq_interrupts && g_worker_index >= 0) {
         comp_vector = g_worker_index % context->num_comp_vectors;
     }
 #endif
