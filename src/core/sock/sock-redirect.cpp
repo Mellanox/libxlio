@@ -369,27 +369,26 @@ int init_child_process_for_nginx()
             // UDP sockets
             sockinfo_udp *udp_sock = dynamic_cast<sockinfo_udp *>(parent_sock_fd_api);
             if (udp_sock) {
-                int optval;
-                socklen_t optlen = sizeof(optval);
-                if (udp_sock->getsockopt(SOL_SOCKET, SO_REUSEPORT, &optval, &optlen) < 0) {
-                    srdr_logdbg("fd=%d - getsockopt() failed", sock_fd);
-                    continue;
-                }
+                int reuse_port;
+                socklen_t optlen = sizeof(reuse_port);
                 uint16_t port = ntohs(sa.get_in_port());
-                bool use_as_udp_listen_socket = optval && port;
-                if (!use_as_udp_listen_socket) {
+                if ((port == 0) ||
+                    (udp_sock->getsockopt(SOL_SOCKET, SO_REUSEPORT, &reuse_port, &optlen) < 0)) {
                     continue;
                 }
-
                 /*
-                 * DANGER: This code depends on a very specific NGINX implementation detail.
-                 * NGINX master process creates a QUIC UDP socket per worker process per port
-                 * before fork(). To ensure that the copy of the global g_p_fd_collection that
-                 * this child process has contains *only* the `sockinfo_udp` pointers that
-                 * belong to it we discard all the `sock_fd`s we aggregated in the
-                 * udp_sockets_per_port and take the one indexed by the g_worker_index.
+                 * Specific NGINX implementation.
+                 *
+                 * In case of "reuseport" directive
+                 * NGINX master process creates a UDP socket per worker process per port before it
+                 * forks. Therefore, each worker process attaches a single UDP socket out of
+                 * #worker_processes.
+                 *
+                 * Without "reuseport" directive, NGINX master process creates a single UDP socket
+                 * before it forks. Therefore, all worker processes attach the UDP socket (single).
                  */
-                if (unlikely(udp_sockets_per_port[port] == g_worker_index)) {
+
+                if ((reuse_port == 0) || (udp_sockets_per_port[port] == g_worker_index)) {
                     srdr_logdbg("worker %d is using fd=%d. bound to port=%d", g_worker_index,
                                 sock_fd, port);
                     g_p_fd_collection->addsocket(sock_fd, si->get_family(),
