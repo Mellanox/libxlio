@@ -89,7 +89,7 @@ using namespace std;
 
 #if defined(DEFINED_NGINX)
 std::vector<pid_t> *g_p_nginx_worker_pids = NULL;
-int g_worker_index = 0;
+int g_worker_index = -1;
 bool g_b_add_second_4t_rule = false;
 map_udp_bounded_port_t g_map_udp_bounded_port;
 #endif
@@ -2871,7 +2871,7 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
 #if defined(DEFINED_NGINX)
     int worker_index = 0;
     /* This section is actual for parent process only */
-    if (safe_mce_sys().actual_nginx_workers_num > 0) {
+    if ((safe_mce_sys().actual_nginx_workers_num > 0) && (g_worker_index == -1)) {
         if (NULL == g_p_nginx_worker_pids) {
             g_p_nginx_worker_pids = new std::vector<pid_t>();
         }
@@ -2879,7 +2879,6 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
         if (g_p_nginx_worker_pids->size() <
             static_cast<std::size_t>(safe_mce_sys().actual_nginx_workers_num)) {
             g_p_nginx_worker_pids->resize(safe_mce_sys().actual_nginx_workers_num, -1);
-            g_worker_index = -1;
         }
 
         auto nginx_pid_slot_iter =
