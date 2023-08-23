@@ -2925,32 +2925,30 @@ int sockinfo_tcp::listen(int backlog)
 
     int orig_backlog = backlog;
 
-#if defined(DEFINED_NGINX)
-    if (safe_mce_sys().actual_nginx_workers_num > 0) {
-        // TODO: consider adding  correct processing of this case
-        backlog = 65535;
-    } else
-#endif // DEFINED_NGINX
-#if defined(DEFINED_ENVOY)
-    if (g_p_app->workers_num > 0 && g_p_app->get_worker_id() >= 0) {
-        // TODO: consider adding  correct processing of this case
-        backlog = 65535;
-    } else
-#endif /* DEFINED_ENVOY */
-    {
+    /* If listen() is called with a backlog argument value that is less than 0,
+     * the function behaves as if it had been called with a backlog argument value of 0.
+     * A backlog argument of 0 may allow the socket to accept connections,
+     * in which case the length of the listen queue may be set to an implementation-defined
+     * minimum value.
+     * Note:
+     *   backlog behaivour depends on m_sysvar_tcp_ctl_thread status
+     */
+    if (backlog <= 0) {
+        si_tcp_logdbg("changing listen backlog=%d to the minimum=%d", backlog, 1);
+        backlog = 1;
+    } else {
+        if (backlog >= 5 && backlog < 128) {
+            backlog = 10 + 2 * backlog; // TODO: this place is not clear
+        }
+        /* If an application calls listen() with a backlog value larger than net.core.somaxconn,
+         * then the backlog for that listener will be silently truncated to the somaxconn value.
+         */
         if (backlog > safe_mce_sys().sysctl_reader.get_listen_maxconn()) {
             si_tcp_logdbg("truncating listen backlog=%d to the maximun=%d", backlog,
                           safe_mce_sys().sysctl_reader.get_listen_maxconn());
             backlog = safe_mce_sys().sysctl_reader.get_listen_maxconn();
-        } else if (backlog <= 0) {
-            si_tcp_logdbg("changing listen backlog=%d to the minimum=%d", backlog, 1);
-            backlog = 1;
-        }
-        if (backlog >= 5) {
-            backlog = 10 + 2 * backlog; // allow grace, inspired by Linux
         }
     }
-
     lock_tcp_con();
 
     if (is_server()) {
