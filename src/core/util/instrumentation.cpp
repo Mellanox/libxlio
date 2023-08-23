@@ -34,6 +34,10 @@
 #include "instrumentation.h"
 #include <string.h>
 
+#if defined(DEFINED_PROF)
+atomic_t ibprof_handle::m_current_id = atomic_t {1};
+#endif /* DEFINED_PROF */
+
 #ifdef RDTSC_MEASURE
 uint16_t g_rdtsc_cost = 0;
 instr_info g_rdtsc_instr_info_arr[RDTSC_FLOW_MAX];
