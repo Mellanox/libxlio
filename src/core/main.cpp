@@ -1009,8 +1009,9 @@ static void do_global_ctors_helper()
     if (g_init_global_ctors_done) {
         return;
     }
-    g_init_global_ctors_done = true;
+    PROFILE_BLOCK("xlio_ctors")
 
+    g_init_global_ctors_done = true;
     set_env_params();
     prepare_fork();
 
@@ -1291,6 +1292,7 @@ void check_netperf_flags()
  */
 extern "C" int xlio_init(void)
 {
+    PROFILE_FUNC
 
     get_orig_funcs();
     safe_mce_sys();
@@ -1328,6 +1330,8 @@ extern "C" int xlio_init(void)
 extern "C" EXPORT_SYMBOL int xlio_exit(void)
 {
     int rc = 0;
+
+    PROFILE_FUNC
 
     if (g_init_global_ctors_done) {
         rc = free_libxlio_resources();

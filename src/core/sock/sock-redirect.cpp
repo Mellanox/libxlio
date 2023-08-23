@@ -754,6 +754,7 @@ int socket_internal(int __domain, int __type, int __protocol, bool shadow, bool 
         DO_GLOBAL_CTORS();
     }
 
+    PROFILE_BLOCK("socket")
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!orig_os_api.socket) {
         get_orig_funcs();
@@ -800,6 +801,8 @@ int socket_internal(int __domain, int __type, int __protocol, bool shadow, bool 
 
 extern "C" EXPORT_SYMBOL int close(int __fd)
 {
+    PROFILE_FUNC
+
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!orig_os_api.close) {
         get_orig_funcs();
@@ -816,6 +819,8 @@ extern "C" EXPORT_SYMBOL int close(int __fd)
 
 extern "C" EXPORT_SYMBOL void __res_iclose(res_state statp, bool free_addr)
 {
+    PROFILE_FUNC
+
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!orig_os_api.__res_iclose) {
         get_orig_funcs();
@@ -845,6 +850,8 @@ extern "C" EXPORT_SYMBOL void __res_iclose(res_state statp, bool free_addr)
    Returns 0 on success, -1 for errors.  */
 extern "C" EXPORT_SYMBOL int shutdown(int __fd, int __how)
 {
+    PROFILE_FUNC
+
     srdr_logdbg_entry("fd=%d, how=%d", __fd, __how);
 
     socket_fd_api *p_socket_object = NULL;
@@ -864,6 +871,8 @@ extern "C" EXPORT_SYMBOL int shutdown(int __fd, int __how)
 
 extern "C" EXPORT_SYMBOL int listen(int __fd, int backlog)
 {
+    PROFILE_FUNC
+
     srdr_logdbg_entry("fd=%d, backlog=%d", __fd, backlog);
 
     socket_fd_api *p_socket_object = NULL;
@@ -902,6 +911,8 @@ extern "C" EXPORT_SYMBOL int listen(int __fd, int backlog)
 
 extern "C" EXPORT_SYMBOL int accept(int __fd, struct sockaddr *__addr, socklen_t *__addrlen)
 {
+    PROFILE_FUNC
+
     socket_fd_api *p_socket_object = NULL;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
@@ -920,6 +931,8 @@ extern "C" EXPORT_SYMBOL int accept(int __fd, struct sockaddr *__addr, socklen_t
 extern "C" EXPORT_SYMBOL int accept4(int __fd, struct sockaddr *__addr, socklen_t *__addrlen,
                                      int __flags)
 {
+    PROFILE_FUNC
+
     socket_fd_api *p_socket_object = NULL;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
@@ -939,6 +952,8 @@ extern "C" EXPORT_SYMBOL int accept4(int __fd, struct sockaddr *__addr, socklen_
 extern "C" EXPORT_SYMBOL int bind(int __fd, const struct sockaddr *__addr, socklen_t __addrlen)
 {
     int errno_tmp = errno;
+
+    PROFILE_FUNC
 
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!orig_os_api.bind) {
@@ -986,6 +1001,8 @@ extern "C" EXPORT_SYMBOL int bind(int __fd, const struct sockaddr *__addr, sockl
 extern "C" EXPORT_SYMBOL int connect(int __fd, const struct sockaddr *__to, socklen_t __tolen)
 {
     int errno_tmp = errno;
+
+    PROFILE_FUNC
 
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!orig_os_api.connect) {
@@ -1039,6 +1056,8 @@ extern "C" EXPORT_SYMBOL int setsockopt(int __fd, int __level, int __optname,
         return -1;
     }
 
+    PROFILE_FUNC
+
     int ret = 0;
     socket_fd_api *p_socket_object = NULL;
 
@@ -1069,6 +1088,8 @@ extern "C" EXPORT_SYMBOL int setsockopt(int __fd, int __level, int __optname,
 extern "C" EXPORT_SYMBOL int getsockopt(int __fd, int __level, int __optname, void *__optval,
                                         socklen_t *__optlen)
 {
+    PROFILE_FUNC
+
     srdr_logdbg_entry("fd=%d, level=%d, optname=%d", __fd, __level, __optname);
 
     if (__fd == -2 && __level == SOL_SOCKET && __optname == SO_XLIO_GET_API && __optlen &&
@@ -1156,6 +1177,8 @@ extern "C" EXPORT_SYMBOL int getsockopt(int __fd, int __level, int __optname, vo
    */
 extern "C" EXPORT_SYMBOL int fcntl(int __fd, int __cmd, ...)
 {
+    PROFILE_FUNC
+
     srdr_logfunc_entry("fd=%d, cmd=%d", __fd, __cmd);
 
     int res = -1;
@@ -1203,6 +1226,8 @@ extern "C" EXPORT_SYMBOL int fcntl(int __fd, int __cmd, ...)
 
 extern "C" EXPORT_SYMBOL int fcntl64(int __fd, int __cmd, ...)
 {
+    PROFILE_FUNC
+
     srdr_logfunc_entry("fd=%d, cmd=%d", __fd, __cmd);
 
     int res = -1;
@@ -1252,6 +1277,8 @@ extern "C" EXPORT_SYMBOL int fcntl64(int __fd, int __cmd, ...)
    Return value depends on REQUEST.  Usually -1 indicates error. */
 extern "C" EXPORT_SYMBOL int ioctl(int __fd, unsigned long int __request, ...)
 {
+    PROFILE_FUNC
+
     srdr_logfunc_entry("fd=%d, request=%d", __fd, __request);
 
     int res = -1;
@@ -1285,6 +1312,8 @@ extern "C" EXPORT_SYMBOL int ioctl(int __fd, unsigned long int __request, ...)
 
 extern "C" EXPORT_SYMBOL int getsockname(int __fd, struct sockaddr *__name, socklen_t *__namelen)
 {
+    PROFILE_FUNC
+
     srdr_logdbg_entry("fd=%d", __fd);
 
     int ret = 0;
@@ -1320,6 +1349,8 @@ extern "C" EXPORT_SYMBOL int getsockname(int __fd, struct sockaddr *__name, sock
 
 extern "C" EXPORT_SYMBOL int getpeername(int __fd, struct sockaddr *__name, socklen_t *__namelen)
 {
+    PROFILE_FUNC
+
     srdr_logdbg_entry("fd=%d", __fd);
 
     int ret = 0;
@@ -1351,6 +1382,8 @@ extern "C" EXPORT_SYMBOL int getpeername(int __fd, struct sockaddr *__name, sock
    __THROW.  */
 extern "C" EXPORT_SYMBOL ssize_t read(int __fd, void *__buf, size_t __nbytes)
 {
+    PROFILE_FUNC
+
     srdr_logfuncall_entry("fd=%d", __fd);
 
     socket_fd_api *p_socket_object = NULL;
@@ -1382,6 +1415,8 @@ extern "C" EXPORT_SYMBOL ssize_t read(int __fd, void *__buf, size_t __nbytes)
    __THROW.  */
 extern "C" EXPORT_SYMBOL ssize_t __read_chk(int __fd, void *__buf, size_t __nbytes, size_t __buflen)
 {
+    PROFILE_FUNC
+
     srdr_logfuncall_entry("fd=%d", __fd);
 
     socket_fd_api *p_socket_object = NULL;
@@ -1417,6 +1452,8 @@ extern "C" EXPORT_SYMBOL ssize_t __read_chk(int __fd, void *__buf, size_t __nbyt
 
 extern "C" EXPORT_SYMBOL ssize_t readv(int __fd, const struct iovec *iov, int iovcnt)
 {
+    PROFILE_FUNC
+
     srdr_logfuncall_entry("fd=%d", __fd);
 
     socket_fd_api *p_socket_object = NULL;
@@ -1442,6 +1479,8 @@ extern "C" EXPORT_SYMBOL ssize_t readv(int __fd, const struct iovec *iov, int io
    __THROW.  */
 extern "C" EXPORT_SYMBOL ssize_t recv(int __fd, void *__buf, size_t __nbytes, int __flags)
 {
+    PROFILE_FUNC
+
     srdr_logfuncall_entry("fd=%d", __fd);
 
     socket_fd_api *p_socket_object = NULL;
@@ -1472,6 +1511,8 @@ extern "C" EXPORT_SYMBOL ssize_t recv(int __fd, void *__buf, size_t __nbytes, in
 extern "C" EXPORT_SYMBOL ssize_t __recv_chk(int __fd, void *__buf, size_t __nbytes, size_t __buflen,
                                             int __flags)
 {
+    PROFILE_FUNC
+
     srdr_logfuncall_entry("fd=%d", __fd);
 
     socket_fd_api *p_socket_object = NULL;
@@ -1505,6 +1546,8 @@ extern "C" EXPORT_SYMBOL ssize_t __recv_chk(int __fd, void *__buf, size_t __nbyt
    __THROW.  */
 extern "C" EXPORT_SYMBOL ssize_t recvmsg(int __fd, struct msghdr *__msg, int __flags)
 {
+    PROFILE_FUNC
+
     srdr_logfuncall_entry("fd=%d", __fd);
 
     if (__msg == NULL) {
@@ -1560,6 +1603,8 @@ extern "C" EXPORT_SYMBOL
              struct timespec *__timeout)
 #endif
 {
+    PROFILE_FUNC
+
     int num_of_msg = 0;
     struct timespec start_time = TIMESPEC_INITIALIZER, current_time = TIMESPEC_INITIALIZER,
                     delta_time = TIMESPEC_INITIALIZER;
@@ -1630,6 +1675,8 @@ extern "C" EXPORT_SYMBOL ssize_t recvfrom(int __fd, void *__buf, size_t __nbytes
 {
     ssize_t ret_val = 0;
 
+    PROFILE_FUNC
+
     srdr_logfuncall_entry("fd=%d", __fd);
 
     socket_fd_api *p_socket_object = NULL;
@@ -1679,6 +1726,8 @@ extern "C" EXPORT_SYMBOL ssize_t __recvfrom_chk(int __fd, void *__buf, size_t __
                                                 size_t __buflen, int __flags,
                                                 struct sockaddr *__from, socklen_t *__fromlen)
 {
+    PROFILE_FUNC
+
     srdr_logfuncall_entry("fd=%d", __fd);
 
     socket_fd_api *p_socket_object = NULL;
@@ -1711,6 +1760,8 @@ extern "C" EXPORT_SYMBOL ssize_t __recvfrom_chk(int __fd, void *__buf, size_t __
    __THROW.  */
 extern "C" EXPORT_SYMBOL ssize_t write(int __fd, __const void *__buf, size_t __nbytes)
 {
+    PROFILE_FUNC
+
     srdr_logfuncall_entry("fd=%d, nbytes=%d", __fd, __nbytes);
 
     socket_fd_api *p_socket_object = NULL;
@@ -1740,6 +1791,8 @@ extern "C" EXPORT_SYMBOL ssize_t write(int __fd, __const void *__buf, size_t __n
    __THROW.  */
 extern "C" EXPORT_SYMBOL ssize_t writev(int __fd, const struct iovec *iov, int iovcnt)
 {
+    PROFILE_FUNC
+
     srdr_logfuncall_entry("fd=%d, %d iov blocks", __fd, iovcnt);
 
     socket_fd_api *p_socket_object = NULL;
@@ -1768,6 +1821,8 @@ extern "C" EXPORT_SYMBOL ssize_t writev(int __fd, const struct iovec *iov, int i
    __THROW.  */
 extern "C" EXPORT_SYMBOL ssize_t send(int __fd, __const void *__buf, size_t __nbytes, int __flags)
 {
+    PROFILE_FUNC
+
     srdr_logfuncall_entry("fd=%d, nbytes=%d", __fd, __nbytes);
 
     socket_fd_api *p_socket_object = NULL;
@@ -1805,6 +1860,8 @@ extern "C" EXPORT_SYMBOL ssize_t send(int __fd, __const void *__buf, size_t __nb
    __THROW.  */
 extern "C" EXPORT_SYMBOL ssize_t sendmsg(int __fd, __const struct msghdr *__msg, int __flags)
 {
+    PROFILE_FUNC
+
     srdr_logfuncall_entry("fd=%d", __fd);
 
     socket_fd_api *p_socket_object = NULL;
@@ -1865,6 +1922,8 @@ extern "C" EXPORT_SYMBOL int sendmmsg(int __fd, struct mmsghdr *__mmsghdr, unsig
 {
     int num_of_msg = 0;
 
+    PROFILE_FUNC
+
     srdr_logfuncall_entry("fd=%d, mmsghdr length=%d flags=%x", __fd, __vlen, __flags);
 
     if (__mmsghdr == NULL) {
@@ -1923,6 +1982,8 @@ extern "C" EXPORT_SYMBOL int sendmmsg(int __fd, struct mmsghdr *__mmsghdr, unsig
 extern "C" EXPORT_SYMBOL ssize_t sendto(int __fd, __const void *__buf, size_t __nbytes, int __flags,
                                         const struct sockaddr *__to, socklen_t __tolen)
 {
+    PROFILE_FUNC
+
 #ifdef RDTSC_MEASURE_TX_SENDTO_TO_AFTER_POST_SEND
     RDTSC_TAKE_START(g_rdtsc_instr_info_arr[RDTSC_FLOW_SENDTO_TO_AFTER_POST_SEND]);
 #endif // RDTSC_MEASURE_TX_SENDTO_TO_AFTER_POST_SEND
@@ -2144,6 +2205,8 @@ static ssize_t sendfile_helper(socket_fd_api *p_socket_object, int in_fd, __off6
 
 extern "C" EXPORT_SYMBOL ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count)
 {
+    PROFILE_FUNC
+
     srdr_logfuncall_entry("out_fd=%d, in_fd=%d, offset=%p, *offset=%zu, count=%d", out_fd, in_fd,
                           offset, offset ? *offset : 0, count);
 
@@ -2160,6 +2223,8 @@ extern "C" EXPORT_SYMBOL ssize_t sendfile(int out_fd, int in_fd, off_t *offset, 
 
 extern "C" EXPORT_SYMBOL ssize_t sendfile64(int out_fd, int in_fd, __off64_t *offset, size_t count)
 {
+    PROFILE_FUNC
+
     srdr_logfuncall_entry("out_fd=%d, in_fd=%d, offset=%p, *offset=%zu, count=%d", out_fd, in_fd,
                           offset, offset ? *offset : 0, count);
 
@@ -2270,6 +2335,8 @@ static int select_helper(int __nfds, fd_set *__readfds, fd_set *__writefds, fd_s
 extern "C" EXPORT_SYMBOL int select(int __nfds, fd_set *__readfds, fd_set *__writefds,
                                     fd_set *__exceptfds, struct timeval *__timeout)
 {
+    PROFILE_FUNC
+
     if (!g_p_fd_collection) {
         BULLSEYE_EXCLUDE_BLOCK_START
         if (!orig_os_api.select) {
@@ -2293,6 +2360,8 @@ extern "C" EXPORT_SYMBOL int pselect(int __nfds, fd_set *__readfds, fd_set *__wr
                                      fd_set *__errorfds, const struct timespec *__timeout,
                                      const sigset_t *__sigmask)
 {
+    PROFILE_FUNC
+
     if (!g_p_fd_collection) {
         BULLSEYE_EXCLUDE_BLOCK_START
         if (!orig_os_api.pselect) {
@@ -2344,6 +2413,8 @@ static int poll_helper(struct pollfd *__fds, nfds_t __nfds, int __timeout,
 
 extern "C" EXPORT_SYMBOL int poll(struct pollfd *__fds, nfds_t __nfds, int __timeout)
 {
+    PROFILE_FUNC
+
     if (!g_p_fd_collection) {
         BULLSEYE_EXCLUDE_BLOCK_START
         if (!orig_os_api.poll) {
@@ -2362,6 +2433,8 @@ extern "C" EXPORT_SYMBOL int poll(struct pollfd *__fds, nfds_t __nfds, int __tim
 extern "C" EXPORT_SYMBOL int __poll_chk(struct pollfd *__fds, nfds_t __nfds, int __timeout,
                                         size_t __fdslen)
 {
+    PROFILE_FUNC
+
     if (!g_p_fd_collection) {
         BULLSEYE_EXCLUDE_BLOCK_START
         if (!orig_os_api.__poll_chk) {
@@ -2386,6 +2459,8 @@ extern "C" EXPORT_SYMBOL int __poll_chk(struct pollfd *__fds, nfds_t __nfds, int
 extern "C" EXPORT_SYMBOL int ppoll(struct pollfd *__fds, nfds_t __nfds,
                                    const struct timespec *__timeout, const sigset_t *__sigmask)
 {
+    PROFILE_FUNC
+
     if (!g_p_fd_collection) {
         BULLSEYE_EXCLUDE_BLOCK_START
         if (!orig_os_api.ppoll) {
@@ -2408,6 +2483,8 @@ extern "C" EXPORT_SYMBOL int __ppoll_chk(struct pollfd *__fds, nfds_t __nfds,
                                          const struct timespec *__timeout,
                                          const sigset_t *__sigmask, size_t __fdslen)
 {
+    PROFILE_FUNC
+
     if (!g_p_fd_collection) {
         BULLSEYE_EXCLUDE_BLOCK_START
         if (!orig_os_api.__ppoll_chk) {
@@ -2452,6 +2529,8 @@ extern "C" EXPORT_SYMBOL int epoll_create(int __size)
 {
     DO_GLOBAL_CTORS();
 
+    PROFILE_FUNC
+
     if (__size <= 0) {
         srdr_logdbg("invalid size (size=%d) - must be a positive integer", __size);
         errno = EINVAL;
@@ -2480,6 +2559,8 @@ extern "C" EXPORT_SYMBOL int epoll_create1(int __flags)
 {
     DO_GLOBAL_CTORS();
 
+    PROFILE_FUNC
+
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!orig_os_api.epoll_create1) {
         get_orig_funcs();
@@ -2506,6 +2587,8 @@ extern "C" EXPORT_SYMBOL int epoll_create1(int __flags)
    is interested in and any associated user data.  */
 extern "C" EXPORT_SYMBOL int epoll_ctl(int __epfd, int __op, int __fd, struct epoll_event *__event)
 {
+    PROFILE_FUNC
+
     const static char *op_names[] = {"<null>", "ADD", "DEL", "MOD"};
     NOT_IN_USE(op_names); /* to suppress warning in case MAX_DEFINED_LOG_LEVEL */
     if (__event) {
@@ -2573,6 +2656,8 @@ inline int epoll_wait_helper(int __epfd, struct epoll_event *__events, int __max
 extern "C" EXPORT_SYMBOL int epoll_wait(int __epfd, struct epoll_event *__events, int __maxevents,
                                         int __timeout)
 {
+    PROFILE_FUNC
+
     srdr_logfunc_entry("epfd=%d, maxevents=%d, timeout=(%d milli-sec)", __epfd, __maxevents,
                        __timeout);
 
@@ -2582,6 +2667,8 @@ extern "C" EXPORT_SYMBOL int epoll_wait(int __epfd, struct epoll_event *__events
 extern "C" EXPORT_SYMBOL int epoll_pwait(int __epfd, struct epoll_event *__events, int __maxevents,
                                          int __timeout, const sigset_t *__sigmask)
 {
+    PROFILE_FUNC
+
     srdr_logfunc_entry("epfd=%d, maxevents=%d, timeout=(%d milli-sec)", __epfd, __maxevents,
                        __timeout);
 
@@ -2594,6 +2681,8 @@ extern "C" EXPORT_SYMBOL int epoll_pwait(int __epfd, struct epoll_event *__event
    one will be chosen automatically.  Returns 0 on success, -1 for errors.  */
 extern "C" EXPORT_SYMBOL int socketpair(int __domain, int __type, int __protocol, int __sv[2])
 {
+    PROFILE_FUNC
+
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!orig_os_api.socketpair) {
         get_orig_funcs();
@@ -2621,6 +2710,8 @@ extern "C" EXPORT_SYMBOL int socketpair(int __domain, int __type, int __protocol
    Returns 0 if successful, -1 if not.  */
 extern "C" EXPORT_SYMBOL int pipe(int __filedes[2])
 {
+    PROFILE_FUNC
+
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!orig_os_api.pipe) {
         get_orig_funcs();
@@ -2647,6 +2738,8 @@ extern "C" EXPORT_SYMBOL int open(__const char *__file, int __oflag, ...)
     va_start(va, __oflag);
     mode_t mode = va_arg(va, mode_t);
 
+    PROFILE_FUNC
+
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!orig_os_api.open) {
         get_orig_funcs();
@@ -2666,6 +2759,8 @@ extern "C" EXPORT_SYMBOL int open(__const char *__file, int __oflag, ...)
 
 extern "C" EXPORT_SYMBOL int creat(const char *__pathname, mode_t __mode)
 {
+    PROFILE_FUNC
+
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!orig_os_api.creat) {
         get_orig_funcs();
@@ -2685,6 +2780,8 @@ extern "C" EXPORT_SYMBOL int creat(const char *__pathname, mode_t __mode)
 /* Duplicate FD, returning a new file descriptor on the same file.  */
 extern "C" EXPORT_SYMBOL int dup(int __fd)
 {
+    PROFILE_FUNC
+
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!orig_os_api.dup) {
         get_orig_funcs();
@@ -2704,6 +2801,8 @@ extern "C" EXPORT_SYMBOL int dup(int __fd)
 /* Duplicate FD to FD2, closing FD2 and making it open on the same file.  */
 extern "C" EXPORT_SYMBOL int dup2(int __fd, int __fd2)
 {
+    PROFILE_FUNC
+
     if (safe_mce_sys().close_on_dup2 && __fd != __fd2) {
         srdr_logdbg("oldfd=%d, newfd=%d. Closing %d in XLIO.", __fd, __fd2, __fd2);
         handle_close(__fd2);
@@ -2729,6 +2828,8 @@ extern "C" EXPORT_SYMBOL int dup2(int __fd, int __fd2)
 extern "C" EXPORT_SYMBOL int clone(int (*__fn)(void *), void *__child_stack, int __flags,
                                    void *__arg)
 {
+    PROFILE_FUNC
+
     srdr_logfunc_entry("flags=%#x", __flags);
 
     BULLSEYE_EXCLUDE_BLOCK_START
@@ -2746,6 +2847,8 @@ extern "C" EXPORT_SYMBOL int clone(int (*__fn)(void *), void *__child_stack, int
 
 extern "C" EXPORT_SYMBOL pid_t fork(void)
 {
+    PROFILE_FUNC
+
     srdr_logdbg("ENTER: **********");
 
     if (!g_init_global_ctors_done) {
@@ -2855,6 +2958,8 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
 /* Redirect vfork to fork  */
 extern "C" EXPORT_SYMBOL pid_t vfork(void)
 {
+    PROFILE_FUNC
+
     return fork();
 }
 
@@ -2863,6 +2968,8 @@ extern "C" EXPORT_SYMBOL pid_t vfork(void)
    redirects stdin, stdout, and stderr to /dev/null.  */
 extern "C" EXPORT_SYMBOL int daemon(int __nochdir, int __noclose)
 {
+    PROFILE_FUNC
+
     srdr_logdbg("ENTER: ***** (%d, %d) *****", __nochdir, __noclose);
 
     if (!g_init_global_ctors_done) {
@@ -2926,6 +3033,8 @@ extern "C" EXPORT_SYMBOL int sigaction(int signum, const struct sigaction *act,
                                        struct sigaction *oldact)
 {
     int ret = 0;
+
+    PROFILE_FUNC
 
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!orig_os_api.sigaction) {
@@ -2996,6 +3105,8 @@ static void handle_signal(int signum)
 
 extern "C" EXPORT_SYMBOL sighandler_t signal(int signum, sighandler_t handler)
 {
+    PROFILE_FUNC
+
     if (!orig_os_api.signal) {
         get_orig_funcs();
     }
@@ -3019,6 +3130,8 @@ extern "C" EXPORT_SYMBOL sighandler_t signal(int signum, sighandler_t handler)
 
 extern "C" EXPORT_SYMBOL int setuid(uid_t uid)
 {
+    PROFILE_FUNC
+
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!orig_os_api.setuid) {
         get_orig_funcs();
@@ -3046,6 +3159,8 @@ extern "C" EXPORT_SYMBOL int setuid(uid_t uid)
 
 extern "C" EXPORT_SYMBOL pid_t waitpid(pid_t pid, int *wstatus, int options)
 {
+    PROFILE_FUNC
+
     pid_t child_pid = orig_os_api.waitpid(pid, wstatus, options);
     /* This segment is used as part of NGINX worker termination recovery mechanism. The mechanism
      * marks the worker PID slot as vacant with -1 later to reuse it in the fork system call.The
