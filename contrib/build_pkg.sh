@@ -63,7 +63,7 @@ opt_input=${opt_input:=$(pwd)}
 opt_output=${opt_output:=${opt_input}/pkg}
 
 pkg_name=libxlio
-pkg_url="https://github.com/Mellanox-lab/${pkg_name}"
+pkg_url=${pkg_url:="https://github.com/Mellanox/${pkg_name}"}
 pkg_dir=${opt_output}
 pkg_log=${pkg_dir}/build_pkg.log
 pkg_src="${pkg_name}*"
