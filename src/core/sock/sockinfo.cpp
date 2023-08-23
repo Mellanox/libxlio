@@ -763,6 +763,7 @@ void sockinfo::copy_sockopt_fork(const socket_fd_api *copy_from)
     const sockinfo *skinfo = dynamic_cast<const sockinfo *>(copy_from);
     if (skinfo) {
         m_is_ipv6only = skinfo->m_is_ipv6only;
+        m_back_log = skinfo->m_back_log;
     }
 }
 #endif // DEFINED_NGINX
