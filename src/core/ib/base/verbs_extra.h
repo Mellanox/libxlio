@@ -222,9 +222,6 @@ typedef struct ibv_tso_caps xlio_ibv_tso_caps;
 typedef struct ibv_send_wr xlio_ibv_send_wr;
 // ibv_reg_mr
 #define XLIO_IBV_ACCESS_LOCAL_WRITE IBV_ACCESS_LOCAL_WRITE
-#ifdef DEFINED_IBV_ACCESS_ALLOCATE_MR
-#define XLIO_IBV_ACCESS_ALLOCATE_MR IBV_ACCESS_ALLOCATE_MR
-#endif
 // flow steering
 #define XLIO_IBV_FLOW_ATTR_NORMAL                IBV_FLOW_ATTR_NORMAL
 #define XLIO_IBV_FLOW_ATTR_FLAGS_ALLOW_LOOP_BACK IBV_FLOW_ATTR_FLAGS_ALLOW_LOOP_BACK

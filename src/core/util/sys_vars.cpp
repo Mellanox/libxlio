@@ -866,7 +866,6 @@ void mce_sys_var::get_env_params()
         progress_engine_interval_msec = 0;
         cq_keep_qp_full = false; // MCE_DEFAULT_CQ_KEEP_QP_FULL(true)
         thread_mode = THREAD_MODE_SINGLE;
-        mem_alloc_type = ALLOC_TYPE_HUGEPAGES;
         tcp_nodelay = true; // MCE_DEFAULT_TCP_NODELAY (false)
         ring_dev_mem_tx = 16384; // MCE_DEFAULT_RING_DEV_MEM_TX (0)
         strcpy(internal_thread_affinity_str, "0"); // MCE_DEFAULT_INTERNAL_THREAD_AFFINITY_STR;
@@ -898,7 +897,6 @@ void mce_sys_var::get_env_params()
         gro_streams_max = 0; // MCE_DEFAULT_GRO_STREAMS_MAX (32)
         cq_keep_qp_full = false; // MCE_DEFAULT_CQ_KEEP_QP_FULL (true)
         thread_mode = THREAD_MODE_SINGLE; // MCE_DEFAULT_THREAD_MODE (THREAD_MODE_MULTI)
-        mem_alloc_type = ALLOC_TYPE_HUGEPAGES; // MCE_DEFAULT_MEM_ALLOC_TYPE (ALLOC_TYPE_CONTIG)
         strcpy(internal_thread_affinity_str, "0"); // MCE_DEFAULT_INTERNAL_THREAD_AFFINITY_STR
                                                    // ("-1")
         progress_engine_interval_msec = 100; // MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC (10)
@@ -918,7 +916,6 @@ void mce_sys_var::get_env_params()
 
         break;
     case MCE_SPEC_LL_MULTI_RING:
-        mem_alloc_type = ALLOC_TYPE_HUGEPAGES; // MCE_DEFAULT_MEM_ALLOC_TYPE (ALLOC_TYPE_CONTIG)
         select_poll_num = -1; // MCE_DEFAULT_SELECT_NUM_POLLS (100000)
         rx_poll_num = -1; // MCE_DEFAULT_RX_NUM_POLLS(100000)
         ring_allocation_logic_tx =
@@ -1753,17 +1750,6 @@ void mce_sys_var::get_env_params()
     if (mem_alloc_type < 0 || mem_alloc_type >= ALLOC_TYPE_LAST_ALLOWED_TO_USE) {
         mem_alloc_type = MCE_DEFAULT_MEM_ALLOC_TYPE;
     }
-    if (mce_sys_var::HYPER_MSHV == hypervisor && mem_alloc_type == ALLOC_TYPE_CONTIG) {
-        char mem_str[sizeof(int) + 1] = {0};
-        len = snprintf(mem_str, sizeof(mem_str), "%d", ALLOC_TYPE_HUGEPAGES);
-        if (likely((0 < len) && (len < (int)sizeof(mem_str)))) {
-            setenv(SYS_VAR_MEM_ALLOC_TYPE, mem_str,
-                   1); // Setenv to avoid core dump while valgrind is used.
-        }
-        vlog_printf(VLOG_DEBUG, "The '%s' parameter can not be %d for %s.\n",
-                    SYS_VAR_MEM_ALLOC_TYPE, mem_alloc_type, cpuid_hv_vendor());
-        mem_alloc_type = ALLOC_TYPE_HUGEPAGES;
-    }
 
     if ((env_ptr = getenv(SYS_VAR_BF)) != NULL) {
         handle_bf = atoi(env_ptr) ? true : false;
@@ -1948,7 +1934,6 @@ void set_env_params()
         setenv("MLX_QP_ALLOC_TYPE", "ALL", 0);
         setenv("MLX_CQ_ALLOC_TYPE", "ALL", 0);
         break;
-    case ALLOC_TYPE_CONTIG:
     default:
         setenv("MLX_QP_ALLOC_TYPE", "PREFER_CONTIG", 0);
         setenv("MLX_CQ_ALLOC_TYPE", "PREFER_CONTIG", 0);
