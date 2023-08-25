@@ -57,7 +57,7 @@ xlio_allocator::xlio_allocator(alloc_mode_t preferable_type)
 
 xlio_allocator::xlio_allocator(alloc_t alloc_func, free_t free_func)
 {
-    m_type = safe_mce_sys().mem_alloc_type;
+    m_type = static_cast<alloc_mode_t>(safe_mce_sys().mem_alloc_type);
     m_data = nullptr;
     m_size = 0;
     m_memalloc = alloc_func;

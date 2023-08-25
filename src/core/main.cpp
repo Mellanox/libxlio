@@ -759,20 +759,10 @@ void print_xlio_global_settings()
     VLOG_PARAM_NUMSTR("Buffer batching mode", safe_mce_sys().buffer_batching_mode,
                       MCE_DEFAULT_BUFFER_BATCHING_MODE, SYS_VAR_BUFFER_BATCHING_MODE,
                       buffer_batching_mode_str(safe_mce_sys().buffer_batching_mode));
-    switch (safe_mce_sys().mem_alloc_type) {
-    case ALLOC_TYPE_HUGEPAGES:
-        VLOG_PARAM_NUMSTR("Mem Allocate type", safe_mce_sys().mem_alloc_type,
-                          MCE_DEFAULT_MEM_ALLOC_TYPE, SYS_VAR_MEM_ALLOC_TYPE, "(Huge Pages)");
-        break;
-    case ALLOC_TYPE_ANON:
-        VLOG_PARAM_NUMSTR("Mem Allocate type", safe_mce_sys().mem_alloc_type,
-                          MCE_DEFAULT_MEM_ALLOC_TYPE, SYS_VAR_MEM_ALLOC_TYPE, "(Malloc)");
-        break;
-    default:
-        VLOG_PARAM_NUMSTR("Mem Allocate type", safe_mce_sys().mem_alloc_type,
-                          MCE_DEFAULT_MEM_ALLOC_TYPE, SYS_VAR_MEM_ALLOC_TYPE, "(Unknown)");
-        break;
-    }
+    VLOG_PARAM_STRING("Mem Allocation type",
+                      option_alloc_type::to_str(safe_mce_sys().mem_alloc_type),
+                      option_alloc_type::to_str(MCE_DEFAULT_MEM_ALLOC_TYPE), SYS_VAR_MEM_ALLOC_TYPE,
+                      option_alloc_type::to_str(safe_mce_sys().mem_alloc_type));
 
     VLOG_PARAM_NUMBER("Num of UC ARPs", safe_mce_sys().neigh_uc_arp_quata,
                       MCE_DEFAULT_NEIGH_UC_ARP_QUATA, SYS_VAR_NEIGH_UC_ARP_QUATA);
