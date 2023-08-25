@@ -250,6 +250,12 @@ static option_t<mode_t> options[] = {
 OPTION_FROM_TO_STR_IMPL
 } // namespace option_tcp_ctl_thread
 
+namespace option_alloc_type {
+static option_t<mode_t> options[] = {{ANON, "Regular pages", {"ANON", "ANONYMOUS", NULL}},
+                                     {HUGE, "Huge pages", {"HUGE", "HUGEPAGES", NULL}}};
+OPTION_FROM_TO_STR_IMPL
+} // namespace option_alloc_type
+
 int mce_sys_var::list_to_cpuset(char *cpulist, cpu_set_t *cpu_set)
 {
     char comma[] = ",";
@@ -1733,10 +1739,7 @@ void mce_sys_var::get_env_params()
     }
 
     if ((env_ptr = getenv(SYS_VAR_MEM_ALLOC_TYPE)) != NULL) {
-        mem_alloc_type = (alloc_mode_t)atoi(env_ptr);
-    }
-    if (mem_alloc_type < 0 || mem_alloc_type >= ALLOC_TYPE_LAST_ALLOWED_TO_USE) {
-        mem_alloc_type = MCE_DEFAULT_MEM_ALLOC_TYPE;
+        mem_alloc_type = option_alloc_type::from_str(env_ptr, MCE_DEFAULT_MEM_ALLOC_TYPE);
     }
 
     if ((env_ptr = getenv(SYS_VAR_BF)) != NULL) {
@@ -1910,10 +1913,10 @@ void set_env_params()
     const char *ibv_alloc_type = "PREFER_CONTIG";
 
     switch (safe_mce_sys().mem_alloc_type) {
-    case ALLOC_TYPE_ANON:
+    case option_alloc_type::ANON:
         ibv_alloc_type = "ANON";
         break;
-    case ALLOC_TYPE_HUGEPAGES:
+    case option_alloc_type::HUGE:
         setenv("RDMAV_HUGEPAGES_SAFE", "1", 0);
         // Don't request hugepages from rdma-core in case of giant default hugepage size,
         // otherwise, we will waste a lot of memory. Consider 32MB hugepages as acceptable.

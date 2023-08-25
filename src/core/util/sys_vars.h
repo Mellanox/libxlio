@@ -57,15 +57,6 @@ typedef enum {
     MCE_SPEC_ALL /* last element */
 } xlio_spec_t;
 
-typedef enum {
-    ALLOC_TYPE_ANON = 0,
-    ALLOC_TYPE_HUGEPAGES,
-    ALLOC_TYPE_LAST_ALLOWED_TO_USE,
-
-    // External type cannot be configured with XLIO_MEM_ALLOC_TYPE
-    ALLOC_TYPE_EXTERNAL,
-} alloc_mode_t;
-
 enum {
     IOCTL_USER_ALLOC_TX = (1 << 0),
     IOCTL_USER_ALLOC_RX = (1 << 1),
@@ -228,6 +219,23 @@ OPTIONS_FROM_TO_STR_DEF;
 } // namespace option_tcp_ctl_thread
 
 #define tcp_ctl_thread_on(var) ((var) > option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS)
+
+namespace option_alloc_type {
+typedef enum {
+    ANON = 0,
+    HUGE = 2,
+} mode_t;
+OPTIONS_FROM_TO_STR_DEF;
+} // namespace option_alloc_type
+
+typedef enum {
+    ALLOC_TYPE_ANON = option_alloc_type::ANON,
+    ALLOC_TYPE_HUGEPAGES = option_alloc_type::HUGE,
+    ALLOC_TYPE_LAST_ALLOWED_TO_USE,
+
+    // External type cannot be configured with XLIO_MEM_ALLOC_TYPE
+    ALLOC_TYPE_EXTERNAL,
+} alloc_mode_t;
 
 ////////////////////////////////////////////////////////////////////////////////
 class xlio_exception_handling {
@@ -438,7 +446,7 @@ public:
     uint32_t wait_after_join_msec;
     thread_mode_t thread_mode;
     buffer_batching_mode_t buffer_batching_mode;
-    alloc_mode_t mem_alloc_type;
+    option_alloc_type::mode_t mem_alloc_type;
     bool handle_fork;
     bool close_on_dup2;
     uint32_t mtu; /* effective MTU. If mtu==0 then auto calculate the MTU */
@@ -799,7 +807,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_WAIT_AFTER_JOIN_MSEC           (0)
 #define MCE_DEFAULT_THREAD_MODE                    (THREAD_MODE_MULTI)
 #define MCE_DEFAULT_BUFFER_BATCHING_MODE           (BUFFER_BATCHING_WITH_RECLAIM)
-#define MCE_DEFAULT_MEM_ALLOC_TYPE                 (ALLOC_TYPE_HUGEPAGES)
+#define MCE_DEFAULT_MEM_ALLOC_TYPE                 (option_alloc_type::HUGE)
 #define MCE_DEFAULT_FORK_SUPPORT                   (true)
 #define MCE_DEFAULT_BF_FLAG                        (true)
 #define MCE_DEFAULT_CLOSE_ON_DUP2                  (true)
