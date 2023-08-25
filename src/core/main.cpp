@@ -774,10 +774,9 @@ void print_xlio_global_settings()
         VLOG_PARAM_NUMSTR("Mem Allocate type", safe_mce_sys().mem_alloc_type,
                           MCE_DEFAULT_MEM_ALLOC_TYPE, SYS_VAR_MEM_ALLOC_TYPE, "(Malloc)");
         break;
-    case ALLOC_TYPE_CONTIG:
     default:
         VLOG_PARAM_NUMSTR("Mem Allocate type", safe_mce_sys().mem_alloc_type,
-                          MCE_DEFAULT_MEM_ALLOC_TYPE, SYS_VAR_MEM_ALLOC_TYPE, "(Contig Pages)");
+                          MCE_DEFAULT_MEM_ALLOC_TYPE, SYS_VAR_MEM_ALLOC_TYPE, "(Unknown)");
         break;
     }
 

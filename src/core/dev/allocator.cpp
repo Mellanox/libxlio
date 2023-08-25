@@ -60,14 +60,6 @@ xlio_allocator::xlio_allocator(alloc_mode_t preferable_type)
 xlio_allocator::xlio_allocator(alloc_t alloc_func, free_t free_func)
 {
     m_type = safe_mce_sys().mem_alloc_type;
-    if (m_type == ALLOC_TYPE_CONTIG
-#ifdef XLIO_IBV_ACCESS_ALLOCATE_MR
-        && mce_sys_var::HYPER_MSHV == safe_mce_sys().hypervisor
-#endif
-    ) {
-        // Fallback to posix_memalign / malloc for MSHV or when IBV doesn't support it.
-        m_type = ALLOC_TYPE_ANON;
-    }
     m_data = nullptr;
     m_size = 0;
     m_memalloc = alloc_func;
@@ -98,10 +90,6 @@ void *xlio_allocator::alloc(size_t size)
     __log_info_dbg("Allocating %zu bytes", size);
 
     switch (m_type) {
-    case ALLOC_TYPE_CONTIG:
-        // This type is allocated by ibv_reg_mr and is handled in xlio_allocator_hw. For basic
-        // xlio_allocator fallback to other methods.
-        // Fallthrough
     case ALLOC_TYPE_HUGEPAGES:
         m_data = alloc_huge(size);
         if (m_data) {
@@ -228,9 +216,6 @@ void xlio_allocator::dealloc()
             m_memfree(m_data);
         }
         break;
-    case ALLOC_TYPE_CONTIG:
-        // Memory was allocated by ibv_reg_mr, don't free it here.
-        break;
     default:
         __log_info_err("Cannot free memory: unknown allocator type (%d)", m_type);
     }
@@ -270,6 +255,10 @@ uint32_t xlio_registrator::register_memory_single(void *data, size_t size,
 
     assert(p_ib_ctx_h);
 
+    if (unlikely(!data)) {
+        return LKEY_ERROR;
+    }
+
     lkey = p_ib_ctx_h->mem_reg(data, size, access);
     if (lkey == LKEY_ERROR) {
         __log_info_warn("Failure during memory registration on dev %s addr=%p size=%zu",
@@ -287,27 +276,14 @@ uint32_t xlio_registrator::register_memory_single(void *data, size_t size,
     return lkey;
 }
 
-bool xlio_registrator::register_memory(void *&data, size_t size, ib_ctx_handler *p_ib_ctx_h,
+bool xlio_registrator::register_memory(void *data, size_t size, ib_ctx_handler *p_ib_ctx_h,
                                        uint64_t access)
 {
     uint32_t lkey;
 
-#ifdef XLIO_IBV_ACCESS_ALLOCATE_MR
-    bool do_allocation = !!(access & XLIO_IBV_ACCESS_ALLOCATE_MR);
-    if (do_allocation && data) {
-        __log_info_dbg("Failure: allocation is requested, but not NULL pointer provided");
-        return false;
-    }
-#endif
-
     if (p_ib_ctx_h) {
         // Specific ib context path
         lkey = register_memory_single(data, size, p_ib_ctx_h, access);
-#ifdef XLIO_IBV_ACCESS_ALLOCATE_MR
-        if (lkey != LKEY_ERROR && do_allocation) {
-            data = p_ib_ctx_h->get_mem_reg(lkey)->addr;
-        }
-#endif
         return lkey != LKEY_ERROR;
     }
 
@@ -317,16 +293,6 @@ bool xlio_registrator::register_memory(void *&data, size_t size, ib_ctx_handler 
         for (const auto &ib_ctx_key_val : *ib_ctx_map) {
             p_ib_ctx_h = ib_ctx_key_val.second;
             lkey = register_memory_single(data, size, p_ib_ctx_h, access);
-
-#ifdef XLIO_IBV_ACCESS_ALLOCATE_MR
-            if (lkey == LKEY_ERROR && do_allocation) {
-                data = nullptr;
-            }
-            if (lkey != LKEY_ERROR && (access & XLIO_IBV_ACCESS_ALLOCATE_MR)) {
-                data = p_ib_ctx_h->get_mem_reg(lkey)->addr;
-                access &= ~XLIO_IBV_ACCESS_ALLOCATE_MR;
-            }
-#endif
 
             if (lkey == LKEY_ERROR) {
                 deregister_memory();
@@ -388,21 +354,10 @@ xlio_allocator_hw::~xlio_allocator_hw()
 
 void *xlio_allocator_hw::alloc_and_reg_mr(size_t size, ib_ctx_handler *p_ib_ctx_h, uint64_t access)
 {
-    if (m_type != ALLOC_TYPE_CONTIG) {
-        m_data = alloc(size);
-        if (!m_data) {
-            return nullptr;
-        }
+    m_data = alloc(size);
+    if (!m_data) {
+        return nullptr;
     }
-
-#ifdef XLIO_IBV_ACCESS_ALLOCATE_MR
-    access &= ~XLIO_IBV_ACCESS_ALLOCATE_MR;
-    if (m_type == ALLOC_TYPE_CONTIG) {
-        // This type is allocated by ibv_reg_mr.
-        access |= XLIO_IBV_ACCESS_ALLOCATE_MR;
-        m_size = size;
-    }
-#endif
 
     if (!xlio_registrator::register_memory(m_data, m_size, p_ib_ctx_h, access)) {
         dealloc();

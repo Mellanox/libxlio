@@ -79,7 +79,7 @@ public:
     xlio_registrator();
     virtual ~xlio_registrator();
 
-    bool register_memory(void *&data, size_t size, ib_ctx_handler *p_ib_ctx_h, uint64_t access);
+    bool register_memory(void *data, size_t size, ib_ctx_handler *p_ib_ctx_h, uint64_t access);
     bool register_memory(void *data, size_t size, ib_ctx_handler *p_ib_ctx_h);
     void deregister_memory();
 

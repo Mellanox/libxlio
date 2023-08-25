@@ -59,7 +59,6 @@ typedef enum {
 
 typedef enum {
     ALLOC_TYPE_ANON = 0,
-    ALLOC_TYPE_CONTIG,
     ALLOC_TYPE_HUGEPAGES,
     ALLOC_TYPE_LAST_ALLOWED_TO_USE,
 
@@ -801,15 +800,11 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_WAIT_AFTER_JOIN_MSEC           (0)
 #define MCE_DEFAULT_THREAD_MODE                    (THREAD_MODE_MULTI)
 #define MCE_DEFAULT_BUFFER_BATCHING_MODE           (BUFFER_BATCHING_WITH_RECLAIM)
-#ifndef XLIO_IBV_ACCESS_ALLOCATE_MR
-#define MCE_DEFAULT_MEM_ALLOC_TYPE (ALLOC_TYPE_HUGEPAGES)
-#else
-#define MCE_DEFAULT_MEM_ALLOC_TYPE (ALLOC_TYPE_CONTIG)
-#endif
-#define MCE_DEFAULT_FORK_SUPPORT  (true)
-#define MCE_DEFAULT_BF_FLAG       (true)
-#define MCE_DEFAULT_CLOSE_ON_DUP2 (true)
-#define MCE_DEFAULT_MTU           (0)
+#define MCE_DEFAULT_MEM_ALLOC_TYPE                 (ALLOC_TYPE_HUGEPAGES)
+#define MCE_DEFAULT_FORK_SUPPORT                   (true)
+#define MCE_DEFAULT_BF_FLAG                        (true)
+#define MCE_DEFAULT_CLOSE_ON_DUP2                  (true)
+#define MCE_DEFAULT_MTU                            (0)
 #if defined(DEFINED_NGINX)
 #define MCE_DEFAULT_NGINX_DISTRIBUTE_CQ (false)
 #define MCE_DEFAULT_NGINX_WORKERS_NUM                                                              \
