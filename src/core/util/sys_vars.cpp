@@ -49,6 +49,7 @@
 
 #include "vlogger/vlogger.h"
 #include "utils/rdtsc.h"
+#include "core/util/hugepage_mgr.h"
 #include "core/util/xlio_stats.h"
 #include "core/util/utils.h"
 #include "core/event/event_handler_manager.h"
@@ -1889,41 +1890,47 @@ void set_env_params()
     // Need to call setenv() only after getenv() is done, because /bin/sh has
     // a custom setenv() which overrides original environment.
 
-    // setenv("MLX4_SINGLE_THREADED", "1", 0);
-
     /*
-     * MLX4_DEVICE_FATAL_CLEANUP/MLX5_DEVICE_FATAL_CLEANUP/RDMAV_ALLOW_DISASSOC_DESTROY
+     * MLX5_DEVICE_FATAL_CLEANUP/RDMAV_ALLOW_DISASSOC_DESTROY
      * tells ibv_destroy functions we want to get success errno value
      * in case of calling them when the device was removed.
      * It helps to destroy resources in DEVICE_FATAL state
      */
-    setenv("MLX4_DEVICE_FATAL_CLEANUP", "1", 1);
     setenv("MLX5_DEVICE_FATAL_CLEANUP", "1", 1);
     setenv("RDMAV_ALLOW_DISASSOC_DESTROY", "1", 1);
 
     if (safe_mce_sys().handle_bf) {
-        setenv("MLX4_POST_SEND_PREFER_BF", "1", 1);
         setenv("MLX5_POST_SEND_PREFER_BF", "1", 1);
     } else {
         /* todo - these seem not to work if inline is on, since libmlx is doing (inl || bf) when
          * deciding to bf*/
-        setenv("MLX4_POST_SEND_PREFER_BF", "0", 1);
         setenv("MLX5_POST_SEND_PREFER_BF", "0", 1);
     }
 
+    const char *ibv_alloc_type = "PREFER_CONTIG";
+
     switch (safe_mce_sys().mem_alloc_type) {
     case ALLOC_TYPE_ANON:
-        setenv("MLX_QP_ALLOC_TYPE", "ANON", 0);
-        setenv("MLX_CQ_ALLOC_TYPE", "ANON", 0);
+        ibv_alloc_type = "ANON";
         break;
     case ALLOC_TYPE_HUGEPAGES:
         setenv("RDMAV_HUGEPAGES_SAFE", "1", 0);
-        setenv("MLX_QP_ALLOC_TYPE", "ALL", 0);
-        setenv("MLX_CQ_ALLOC_TYPE", "ALL", 0);
+        // Don't request hugepages from rdma-core in case of giant default hugepage size,
+        // otherwise, we will waste a lot of memory. Consider 32MB hugepages as acceptable.
+        if (g_hugepage_mgr.get_default_hugepage() <= 32U * 1024U * 1024U) {
+            ibv_alloc_type = "ALL";
+        }
         break;
     default:
-        setenv("MLX_QP_ALLOC_TYPE", "PREFER_CONTIG", 0);
-        setenv("MLX_CQ_ALLOC_TYPE", "PREFER_CONTIG", 0);
+        // Use default allocation type.
         break;
+    }
+
+    // Don't override user defined values.
+    if (getenv("MLX_QP_ALLOC_TYPE") == nullptr) {
+        setenv("MLX_QP_ALLOC_TYPE", ibv_alloc_type, 0);
+    }
+    if (getenv("MLX_CQ_ALLOC_TYPE") == nullptr) {
+        setenv("MLX_CQ_ALLOC_TYPE", ibv_alloc_type, 0);
     }
 }

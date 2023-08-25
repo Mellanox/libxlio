@@ -942,14 +942,14 @@ Default value is 1
 
 XLIO_MEM_ALLOC_TYPE
 XLIO will try to allocate data buffers as configured:
-	0 - "ANON" - using malloc
-	2 - "HUGEPAGES" - using huge pages.
-OFED will also try to allocate QP & CQ memory accordingly:
-	0 - "ANON" - default - use current pages ANON small ones.
-	"HUGE" - force huge pages
-	"CONTIG" - force contig pages
-	2 - "ALL" - try huge fallback to contig if failed fallback to ANON small pages.
-To override OFED use: (MLX_QP_ALLOC_TYPE, MLX_CQ_ALLOC_TYPE)
+	0 or "ANON" - using malloc
+	2 or "HUGE" - using huge pages.
+XLIO also overrides rdma-core parameters MLX_QP_ALLOC_TYPE and MLX_CQ_ALLOC_TYPE
+accordingly:
+  XLIO parameter | rdma-core parameter
+  ---------------+--------------------
+        ANON     |        ANON
+        HUGE     | ALL (PREFER_CONTIG for >32MB hugepage)
 Default value is 2 (Huge pages)
 
 The following XLIO neigh parameters are for advanced users or internal support only:
