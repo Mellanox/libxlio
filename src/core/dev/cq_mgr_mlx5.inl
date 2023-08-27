@@ -33,7 +33,7 @@
 #ifndef CQ_MGR_MLX5_INL_H
 #define CQ_MGR_MLX5_INL_H
 
-#include "dev/cq_mgr_mlx5.h"
+#include "dev/cq_mgr_regrq.h"
 
 #if defined(DEFINED_DIRECT_VERBS)
 
