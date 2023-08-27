@@ -55,7 +55,6 @@ cq_mgr_regrq::cq_mgr_regrq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler
                          struct ibv_comp_channel *p_comp_event_channel, bool is_rx,
                          bool call_configure)
     : cq_mgr(p_ring, p_ib_ctx_handler, cq_size, p_comp_event_channel, is_rx, call_configure)
-    , m_rx_hot_buffer(NULL)
 {
     cq_logfunc("");
 }
@@ -88,7 +87,7 @@ uint32_t cq_mgr_regrq::clean_cq()
         int ret = 0;
         /* coverity[stack_use_local_overflow] */
         xlio_ibv_wc wce[MCE_MAX_CQ_POLL_BATCH];
-        while ((ret = cq_mgr::poll(wce, MCE_MAX_CQ_POLL_BATCH, &cq_poll_sn)) > 0) {
+        while ((ret = poll_tx(wce, MCE_MAX_CQ_POLL_BATCH, &cq_poll_sn)) > 0) {
             for (int i = 0; i < ret; i++) {
                 buff = cqe_log_and_get_buf_tx(&wce[i]);
                 if (buff) {
@@ -102,10 +101,53 @@ uint32_t cq_mgr_regrq::clean_cq()
     return ret_total;
 }
 
+int cq_mgr_regrq::poll_tx(xlio_ibv_wc *p_wce, int num_entries, uint64_t *p_cq_poll_sn)
+{
+    // Assume locked!!!
+    cq_logfuncall("");
+
+    int ret = xlio_ibv_poll_cq(m_p_ibv_cq, num_entries, p_wce);
+    if (ret <= 0) {
+        // Zero polled wce OR ibv_poll_cq() has driver specific errors
+        // so we can't really do anything with them
+        *p_cq_poll_sn = m_n_global_sn;
+        return 0;
+    } 
+
+    if (unlikely(g_vlogger_level >= VLOG_FUNC_ALL)) {
+        for (int i = 0; i < ret; i++) {
+            cq_logfuncall("wce[%d] info wr_id=%x, status=%x, opcode=%x, vendor_err=%x, "
+                          "byte_len=%d, imm_data=%x",
+                          i, p_wce[i].wr_id, p_wce[i].status, xlio_wc_opcode(p_wce[i]),
+                          p_wce[i].vendor_err, p_wce[i].byte_len, p_wce[i].imm_data);
+            cq_logfuncall("qp_num=%x, src_qp=%x, wc_flags=%x, pkey_index=%x, slid=%x, sl=%x, "
+                          "dlid_path_bits=%x",
+                          p_wce[i].qp_num, p_wce[i].src_qp, xlio_wc_flags(p_wce[i]),
+                          p_wce[i].pkey_index, p_wce[i].slid, p_wce[i].sl, p_wce[i].dlid_path_bits);
+        }
+    }
+
+    // spoil the global sn if we have packets ready
+    union __attribute__((packed)) {
+        uint64_t global_sn;
+        struct {
+            uint32_t cq_id;
+            uint32_t cq_sn;
+        } bundle;
+    } next_sn;
+    next_sn.bundle.cq_sn = ++m_n_cq_poll_sn;
+    next_sn.bundle.cq_id = m_cq_id;
+
+    *p_cq_poll_sn = m_n_global_sn = next_sn.global_sn;
+
+    return ret;
+}
+
+
 cq_mgr_regrq::~cq_mgr_regrq()
 {
     cq_logfunc("");
-    cq_logdbg("destroying CQ as %s", (m_b_is_rx ? "Rx" : "Tx"));
+    cq_logdbg("destroying CQ REGRQ as %s", (m_b_is_rx ? "Rx" : "Tx"));
 }
 
 mem_buf_desc_t *cq_mgr_regrq::poll(enum buff_status_e &status)
@@ -344,37 +386,6 @@ int cq_mgr_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id /*=
     return ret_total;
 }
 
-mem_buf_desc_t *cq_mgr_regrq::cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc,
-                                            enum buff_status_e status)
-{
-    /* Assume locked!!! */
-    cq_logfuncall("");
-
-    /* we use context to verify that on reclaim rx buffer path we return the buffer to the right CQ
-     */
-    p_mem_buf_desc->rx.is_xlio_thr = false;
-    p_mem_buf_desc->rx.context = NULL;
-
-    if (unlikely(status != BS_OK)) {
-        m_p_next_rx_desc_poll = NULL;
-        reclaim_recv_buffer_helper(p_mem_buf_desc);
-        return NULL;
-    }
-
-    if (m_n_sysvar_rx_prefetch_bytes_before_poll) {
-        m_p_next_rx_desc_poll = p_mem_buf_desc->p_prev_desc;
-        p_mem_buf_desc->p_prev_desc = NULL;
-    }
-
-    VALGRIND_MAKE_MEM_DEFINED(p_mem_buf_desc->p_buffer, p_mem_buf_desc->sz_data);
-
-    prefetch_range((uint8_t *)p_mem_buf_desc->p_buffer + m_sz_transport_header,
-                   std::min(p_mem_buf_desc->sz_data - m_sz_transport_header,
-                            (size_t)m_n_sysvar_rx_prefetch_bytes));
-
-    return p_mem_buf_desc;
-}
-
 mem_buf_desc_t *cq_mgr_regrq::poll_and_process_socketxtreme()
 {
     buff_status_e status = BS_OK;
@@ -448,80 +459,11 @@ int cq_mgr_regrq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_f
     return ret_rx_processed;
 }
 
-void cq_mgr_regrq::set_qp_rq(qp_mgr *qp)
-{
-    m_qp = static_cast<qp_mgr_eth_mlx5 *>(qp);
-
-    m_qp->m_rq_wqe_counter = 0; // In case of bonded qp, wqe_counter must be reset to zero
-    m_rx_hot_buffer = NULL;
-
-    if (0 != xlio_ib_mlx5_get_cq(m_p_ibv_cq, &m_mlx5_cq)) {
-        cq_logpanic("xlio_ib_mlx5_get_cq failed (errno=%d %m)", errno);
-    }
-    VALGRIND_MAKE_MEM_DEFINED(&m_mlx5_cq, sizeof(m_mlx5_cq));
-    cq_logfunc("qp_mgr=%p m_mlx5_cq.dbrec=%p m_mlx5_cq.cq_buf=%p", m_qp, m_mlx5_cq.dbrec,
-               m_mlx5_cq.cq_buf);
-}
-
 void cq_mgr_regrq::add_qp_rx(qp_mgr *qp)
 {
     cq_logfunc("");
     set_qp_rq(qp);
     cq_mgr::add_qp_rx(qp);
-}
-
-void cq_mgr_regrq::lro_update_hdr(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc)
-{
-    struct ethhdr *p_eth_h = (struct ethhdr *)(p_rx_wc_buf_desc->p_buffer);
-    struct tcphdr *p_tcp_h;
-    size_t transport_header_len = ETH_HDR_LEN;
-
-    if (p_eth_h->h_proto == htons(ETH_P_8021Q)) {
-        transport_header_len = ETH_VLAN_HDR_LEN;
-    }
-
-    if (0x02 == ((cqe->l4_hdr_type_etc >> 2) & 0x3)) {
-        // CQE indicates IPv4 in the l3_hdr_type field
-        struct iphdr *p_ip_h = (struct iphdr *)(p_rx_wc_buf_desc->p_buffer + transport_header_len);
-
-        assert(p_ip_h->version == IPV4_VERSION);
-        assert(p_ip_h->protocol == IPPROTO_TCP);
-
-        p_ip_h->ttl = cqe->lro_min_ttl;
-        p_ip_h->tot_len = htons(ntohl(cqe->byte_cnt) - transport_header_len);
-        p_ip_h->check = 0; // Ignore.
-
-        p_tcp_h = (struct tcphdr *)((uint8_t *)p_ip_h + (int)(p_ip_h->ihl) * 4);
-    } else {
-        // Assume LRO can happen for either IPv4 or IPv6 L3 protocol. Skip checking l3_hdr_type.
-        struct ip6_hdr *p_ip6_h =
-            (struct ip6_hdr *)(p_rx_wc_buf_desc->p_buffer + transport_header_len);
-
-        assert(0x01 == ((cqe->l4_hdr_type_etc >> 2) & 0x3)); // IPv6 L3 header.
-        assert(ip_header_version(p_ip6_h) == IPV6);
-        assert(p_ip6_h->ip6_nxt == IPPROTO_TCP);
-        assert(ntohl(cqe->byte_cnt) >= transport_header_len + IPV6_HLEN);
-
-        p_ip6_h->ip6_hlim = cqe->lro_min_ttl;
-        // Payload length doesn't include main header.
-        p_ip6_h->ip6_plen = htons(ntohl(cqe->byte_cnt) - transport_header_len - IPV6_HLEN);
-
-        // LRO doesn't create a session for packets with extension headers, so IPv6 header is 40b.
-        p_tcp_h = (struct tcphdr *)((uint8_t *)p_ip6_h + IPV6_HLEN);
-    }
-
-    p_tcp_h->psh = !!(cqe->lro_tcppsh_abort_dupack & MLX5_CQE_LRO_TCP_PUSH_MASK);
-
-    /* TCP packet <ACK> flag is set, and packet carries no data or
-     * TCP packet <ACK> flag is set, and packet carries data
-     */
-    if ((0x03 == ((cqe->l4_hdr_type_etc >> 4) & 0x7)) ||
-        (0x04 == ((cqe->l4_hdr_type_etc >> 4) & 0x7))) {
-        p_tcp_h->ack = 1;
-        p_tcp_h->ack_seq = cqe->lro_ack_seq_num;
-        p_tcp_h->window = cqe->lro_tcp_win;
-        p_tcp_h->check = 0; // Ignore.
-    }
 }
 
 #endif /* DEFINED_DIRECT_VERBS */

@@ -63,6 +63,12 @@ class ring_simple;
 #define LOCAL_IF_INFO_INVALID                                                                      \
     (local_if_info_t) { 0, 0 }
 
+/* Get CQE opcode. */
+#define MLX5_CQE_OPCODE(op_own) ((op_own) >> 4)
+
+/* Get CQE owner bit. */
+#define MLX5_CQE_OWNER(op_own) ((op_own)&MLX5_CQE_OWNER_MASK)
+
 struct cq_request_info_t {
     struct ibv_device *p_ibv_device;
     struct ibv_context *p_ibv_context;
@@ -96,6 +102,14 @@ class cq_mgr {
     friend class rfs_uc_tcp_gro; // need for stats
 
 public:
+    enum buff_status_e {
+        BS_OK,
+        BS_CQE_RESP_WR_IMM_NOT_SUPPORTED,
+        BS_IBV_WC_WR_FLUSH_ERR,
+        BS_CQE_INVALID,
+        BS_GENERAL_ERR
+    };
+
     cq_mgr(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int cq_size,
            struct ibv_comp_channel *p_comp_event_channel, bool is_rx, bool config = true);
     virtual ~cq_mgr();
@@ -136,7 +150,7 @@ public:
      * @return >=0 number of wce processed
      *         < 0 error
      */
-    virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array = NULL);
+    virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array = NULL) = 0;
     int poll_and_process_element_tx(uint64_t *p_cq_poll_sn);
     virtual mem_buf_desc_t *poll_and_process_socketxtreme() { return nullptr; };
 
@@ -146,7 +160,7 @@ public:
      * @return  >=0 number of wce processed
      *          < 0 error
      */
-    virtual int drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id = NULL);
+    virtual int drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id = NULL) = 0;
 
     // CQ implements the Rx mem_buf_desc_owner.
     // These callbacks will be called for each Rx buffer that passed processed completion
@@ -160,7 +174,7 @@ public:
     void add_qp_tx(qp_mgr *qp);
     virtual void del_qp_tx(qp_mgr *qp);
 
-    virtual uint32_t clean_cq();
+    virtual uint32_t clean_cq() = 0;
 
     bool reclaim_recv_buffers(descq_t *rx_reuse);
     bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst);
@@ -183,11 +197,16 @@ protected:
      * @p_cq_poll_sn global unique wce id that maps last wce polled
      * @return Number of successfully polled wce
      */
-    int poll(xlio_ibv_wc *p_wce, int num_entries, uint64_t *p_cq_poll_sn);
     void compensate_qp_poll_failed();
+    void set_qp_rq(qp_mgr *qp);
+    void lro_update_hdr(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc);
     inline void process_recv_buffer(mem_buf_desc_t *buff, void *pv_fd_ready_array = NULL);
     
     inline void update_global_sn(uint64_t &cq_poll_sn, uint32_t rettotal);
+
+    inline struct xlio_mlx5_cqe *check_cqe(void);
+
+    mem_buf_desc_t *cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc, enum buff_status_e status);
 
     /* Process a WCE... meaning...
      * - extract the mem_buf_desc from the wce.wr_id and then loop on all linked mem_buf_desc
@@ -197,7 +216,6 @@ protected:
      * are returned
      */
     mem_buf_desc_t *cqe_log_and_get_buf_tx(xlio_ibv_wc *p_wce);
-    mem_buf_desc_t *cqe_process_rx(xlio_ibv_wc *p_wce);
     virtual void reclaim_recv_buffer_helper(mem_buf_desc_t *buff);
 
     // Returns true if the given buffer was used,
@@ -212,6 +230,7 @@ protected:
 
     xlio_ib_mlx5_cq_t m_mlx5_cq;
     qp_mgr_eth_mlx5 *m_qp;
+    mem_buf_desc_t *m_rx_hot_buffer;
     struct ibv_cq *m_p_ibv_cq;
     bool m_b_is_rx;
     descq_t m_rx_queue;
@@ -281,8 +300,6 @@ private:
 // Since we have a single TX CQ comp channel for all cq_mgr's, it might not be the active_cq object
 cq_mgr *get_cq_mgr_from_cq_event(struct ibv_comp_channel *p_cq_channel);
 
-#if defined(DEFINED_DIRECT_VERBS)
-
 inline void cq_mgr::update_global_sn(uint64_t &cq_poll_sn, uint32_t num_polled_cqes)
 {
     if (num_polled_cqes > 0) {
@@ -336,6 +353,23 @@ inline struct xlio_mlx5_cqe *cq_mgr::get_cqe_tx(uint32_t &num_polled_cqes)
     return cqe_ret;
 }
 
-#endif /* DEFINED_DIRECT_VERBS */
+inline struct xlio_mlx5_cqe *cq_mgr::check_cqe(void)
+{
+    struct xlio_mlx5_cqe *cqe =
+        (struct xlio_mlx5_cqe *)(((uint8_t *)m_mlx5_cq.cq_buf) +
+                                 ((m_mlx5_cq.cq_ci & (m_mlx5_cq.cqe_count - 1))
+                                  << m_mlx5_cq.cqe_size_log));
+    /*
+     * CQE ownership is defined by Owner bit in the CQE.
+     * The value indicating SW ownership is flipped every
+     *  time CQ wraps around.
+     * */
+    if (likely((MLX5_CQE_OPCODE(cqe->op_own)) != MLX5_CQE_INVALID) &&
+        !((MLX5_CQE_OWNER(cqe->op_own)) ^ !!(m_mlx5_cq.cq_ci & m_mlx5_cq.cqe_count))) {
+        return cqe;
+    }
+
+    return NULL;
+}
 
 #endif // CQ_MGR_H
