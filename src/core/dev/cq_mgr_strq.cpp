@@ -41,7 +41,7 @@
 #include "ring_simple.h"
 #include <cinttypes>
 
-#define MODULE_NAME "cq_mgr_mlx5_strq"
+#define MODULE_NAME "cq_mgr_strq"
 
 #define cq_logfunc    __log_info_func
 #define cq_logdbg     __log_info_dbg
@@ -55,11 +55,11 @@
                         ##log_args);                                                               \
     } while (0)
 
-cq_mgr_mlx5_strq::cq_mgr_mlx5_strq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler,
-                                   uint32_t cq_size, uint32_t stride_size_bytes,
-                                   uint32_t strides_num,
-                                   struct ibv_comp_channel *p_comp_event_channel,
-                                   bool call_configure)
+cq_mgr_strq::cq_mgr_strq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler,
+                         uint32_t cq_size, uint32_t stride_size_bytes,
+                         uint32_t strides_num,
+                         struct ibv_comp_channel *p_comp_event_channel,
+                         bool call_configure)
     : cq_mgr_regrq(p_ring, p_ib_ctx_handler, cq_size, p_comp_event_channel, true, call_configure)
     , _owner_ring(p_ring)
     , _stride_size_bytes(stride_size_bytes)
@@ -73,7 +73,7 @@ cq_mgr_mlx5_strq::cq_mgr_mlx5_strq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx
     return_stride(next_stride()); // Fill _stride_cache
 }
 
-cq_mgr_mlx5_strq::~cq_mgr_mlx5_strq()
+cq_mgr_strq::~cq_mgr_strq()
 {
     cq_logfunc("");
     cq_logdbg("destroying CQ STRQ");
@@ -100,7 +100,7 @@ cq_mgr_mlx5_strq::~cq_mgr_mlx5_strq()
     g_buffer_pool_rx_stride->put_buffers_thread_safe(&_stride_cache, _stride_cache.size());
 }
 
-mem_buf_desc_t *cq_mgr_mlx5_strq::next_stride()
+mem_buf_desc_t *cq_mgr_strq::next_stride()
 {
     if (unlikely(_stride_cache.size() <= 0U)) {
         if (!g_buffer_pool_rx_stride->get_buffers_thread_safe(
@@ -116,7 +116,7 @@ mem_buf_desc_t *cq_mgr_mlx5_strq::next_stride()
     return _stride_cache.get_and_pop_back();
 }
 
-void cq_mgr_mlx5_strq::return_stride(mem_buf_desc_t *desc)
+void cq_mgr_strq::return_stride(mem_buf_desc_t *desc)
 {
     _stride_cache.push_back(desc);
 
@@ -126,7 +126,7 @@ void cq_mgr_mlx5_strq::return_stride(mem_buf_desc_t *desc)
     }
 }
 
-uint32_t cq_mgr_mlx5_strq::clean_cq()
+uint32_t cq_mgr_strq::clean_cq()
 {
     uint32_t ret_total = 0;
     uint64_t cq_poll_sn = 0;
@@ -155,7 +155,7 @@ uint32_t cq_mgr_mlx5_strq::clean_cq()
     return ret_total;
 }
 
-bool cq_mgr_mlx5_strq::set_current_hot_buffer()
+bool cq_mgr_strq::set_current_hot_buffer()
 {
     if (likely(m_qp->m_mlx5_qp.rq.tail != (m_qp->m_mlx5_qp.rq.head))) {
         uint32_t index = m_qp->m_mlx5_qp.rq.tail & (m_qp_rec.qp->m_rx_num_wr - 1);
@@ -170,7 +170,7 @@ bool cq_mgr_mlx5_strq::set_current_hot_buffer()
     return false;
 }
 
-mem_buf_desc_t *cq_mgr_mlx5_strq::poll(enum buff_status_e &status, mem_buf_desc_t *&buff_stride)
+mem_buf_desc_t *cq_mgr_strq::poll(enum buff_status_e &status, mem_buf_desc_t *&buff_stride)
 {
     mem_buf_desc_t *buff = NULL;
 
@@ -261,7 +261,7 @@ mem_buf_desc_t *cq_mgr_mlx5_strq::poll(enum buff_status_e &status, mem_buf_desc_
     return buff;
 }
 
-inline bool cq_mgr_mlx5_strq::strq_cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe,
+inline bool cq_mgr_strq::strq_cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe,
                                                         enum buff_status_e &status, bool &is_filler)
 {
     struct mlx5_err_cqe *ecqe;
@@ -371,9 +371,9 @@ inline bool cq_mgr_mlx5_strq::strq_cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cq
     return false;
 }
 
-int cq_mgr_mlx5_strq::drain_and_proccess_helper(mem_buf_desc_t *buff, mem_buf_desc_t *buff_wqe,
-                                                buff_status_e status,
-                                                uintptr_t *p_recycle_buffers_last_wr_id)
+int cq_mgr_strq::drain_and_proccess_helper(mem_buf_desc_t *buff, mem_buf_desc_t *buff_wqe,
+                                           buff_status_e status,
+                                           uintptr_t *p_recycle_buffers_last_wr_id)
 {
     int ret_total = 0;
     if (buff_wqe && (++m_qp_rec.debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv) &&
@@ -411,7 +411,7 @@ int cq_mgr_mlx5_strq::drain_and_proccess_helper(mem_buf_desc_t *buff, mem_buf_de
     return ret_total;
 }
 
-int cq_mgr_mlx5_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id)
+int cq_mgr_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id)
 {
     cq_logfuncall("cq was %s drained. %d processed wce since last check. %d wce in m_rx_queue",
                   (m_b_was_drained ? "" : "not "), m_n_wce_counter, m_rx_queue.size());
@@ -458,7 +458,7 @@ int cq_mgr_mlx5_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id
     return ret_total;
 }
 
-mem_buf_desc_t *cq_mgr_mlx5_strq::process_strq_cq_element_rx(mem_buf_desc_t *p_mem_buf_desc,
+mem_buf_desc_t *cq_mgr_strq::process_strq_cq_element_rx(mem_buf_desc_t *p_mem_buf_desc,
                                                              enum buff_status_e status)
 {
     /* Assume locked!!! */
@@ -483,7 +483,7 @@ mem_buf_desc_t *cq_mgr_mlx5_strq::process_strq_cq_element_rx(mem_buf_desc_t *p_m
     return p_mem_buf_desc;
 }
 
-mem_buf_desc_t *cq_mgr_mlx5_strq::poll_and_process_socketxtreme()
+mem_buf_desc_t *cq_mgr_strq::poll_and_process_socketxtreme()
 {
     buff_status_e status = BS_OK;
     mem_buf_desc_t *buff = nullptr;
@@ -496,7 +496,7 @@ mem_buf_desc_t *cq_mgr_mlx5_strq::poll_and_process_socketxtreme()
     return (buff && cqe_process_rx(buff, status) ? buff : nullptr);
 }
 
-int cq_mgr_mlx5_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array)
+int cq_mgr_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array)
 {
     /* Assume locked!!! */
     cq_logfuncall("");
@@ -546,7 +546,7 @@ int cq_mgr_mlx5_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *
     return ret_rx_processed;
 }
 
-void cq_mgr_mlx5_strq::add_qp_rx(qp_mgr *qp)
+void cq_mgr_strq::add_qp_rx(qp_mgr *qp)
 {
     cq_logfunc("");
     set_qp_rq(qp);
@@ -555,7 +555,7 @@ void cq_mgr_mlx5_strq::add_qp_rx(qp_mgr *qp)
     cq_mgr::add_qp_rx(qp);
 }
 
-void cq_mgr_mlx5_strq::statistics_print()
+void cq_mgr_strq::statistics_print()
 {
     cq_mgr::statistics_print();
     cq_logdbg_no_funcname("RWQE consumed: %12" PRIu64, m_p_cq_stat->n_rx_consumed_rwqe_count);
@@ -567,7 +567,7 @@ void cq_mgr_mlx5_strq::statistics_print()
     cq_logdbg_no_funcname("LRO bytes: %12" PRIu64, m_p_cq_stat->n_rx_lro_bytes);
 }
 
-void cq_mgr_mlx5_strq::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
+void cq_mgr_strq::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
 {
     if (buff->dec_ref_count() <= 1 && (buff->lwip_pbuf.pbuf.ref-- <= 1)) {
         if (likely(buff->p_desc_owner == m_p_ring)) {

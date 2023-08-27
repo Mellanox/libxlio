@@ -30,20 +30,20 @@
  * SOFTWARE.
  */
 
-#ifndef CQ_MGR_MLX5_STRQ_H
-#define CQ_MGR_MLX5_STRQ_H
+#ifndef CQ_MGR_STRQ_H
+#define CQ_MGR_STRQ_H
 
 #include <config.h>
 #include <vector>
 #include "cq_mgr_regrq.h"
 
-class cq_mgr_mlx5_strq : public cq_mgr_regrq {
+class cq_mgr_strq : public cq_mgr_regrq {
 public:
-    cq_mgr_mlx5_strq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
-                     uint32_t stride_size_bytes, uint32_t strides_num,
-                     struct ibv_comp_channel *p_comp_event_channel, bool call_configure = true);
+    cq_mgr_strq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
+                uint32_t stride_size_bytes, uint32_t strides_num,
+                struct ibv_comp_channel *p_comp_event_channel, bool call_configure = true);
 
-    virtual ~cq_mgr_mlx5_strq() override;
+    virtual ~cq_mgr_strq() override;
 
     virtual int drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id = NULL) override;
     virtual mem_buf_desc_t *poll_and_process_socketxtreme() override;
