@@ -38,8 +38,7 @@
 class cq_mgr_regrq : public cq_mgr {
 public:
     cq_mgr_regrq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
-                struct ibv_comp_channel *p_comp_event_channel, bool is_rx,
-                bool call_configure = true);
+                struct ibv_comp_channel *p_comp_event_channel);
     virtual ~cq_mgr_regrq();
 
     virtual int drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id = NULL) override;
@@ -51,7 +50,6 @@ public:
 
 protected:
     mem_buf_desc_t *poll(enum buff_status_e &status);
-    int poll_tx(xlio_ibv_wc *p_wce, int num_entries, uint64_t *p_cq_poll_sn);
     inline void cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc,
                                      enum buff_status_e &status);
 
