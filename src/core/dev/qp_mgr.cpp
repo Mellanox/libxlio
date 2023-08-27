@@ -132,46 +132,6 @@ qp_mgr::~qp_mgr()
     qp_logdbg("delete done");
 }
 
-cq_mgr *qp_mgr::handle_cq_initialization(uint32_t *num_wr,
-                                         struct ibv_comp_channel *comp_event_channel, bool is_rx)
-{
-    qp_logfunc("");
-    cq_mgr *cq = NULL;
-
-    try {
-        cq = new cq_mgr(m_p_ring, m_p_ib_ctx_handler, *num_wr, comp_event_channel, is_rx);
-    } catch (xlio_exception &e) {
-        // This is a workaround for an issue with cq creation of mlx4 devices on
-        // upstream-driver VMs over Windows Hypervisor.
-        if (safe_mce_sys().hypervisor == mce_sys_var::HYPER_MSHV && m_p_ib_ctx_handler->is_mlx4() &&
-            *num_wr > MAX_UPSTREAM_CQ_MSHV_SIZE) {
-            qp_logdbg("cq creation failed with cq_size of %d. retrying with size of %d", *num_wr,
-                      MAX_UPSTREAM_CQ_MSHV_SIZE);
-            *num_wr = MAX_UPSTREAM_CQ_MSHV_SIZE;
-            try {
-                cq = new cq_mgr(m_p_ring, m_p_ib_ctx_handler, *num_wr, comp_event_channel, is_rx);
-            } catch (xlio_exception &) {
-            }
-        }
-
-        if (!cq) {
-            qp_logerr("%s", e.message);
-        }
-    }
-
-    return cq;
-}
-
-cq_mgr *qp_mgr::init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel)
-{
-    return handle_cq_initialization(&m_rx_num_wr, p_rx_comp_event_channel, true);
-}
-
-cq_mgr *qp_mgr::init_tx_cq_mgr()
-{
-    return handle_cq_initialization(&m_tx_num_wr, m_p_ring->get_tx_comp_event_channel(), false);
-}
-
 int qp_mgr::configure(struct qp_mgr_desc *desc)
 {
     qp_logdbg("Creating QP of transport type '%s' on ibv device '%s' [%p] on port %d",

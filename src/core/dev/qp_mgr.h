@@ -375,11 +375,8 @@ protected:
         return m_n_unsignaled_count == m_n_sysvar_tx_num_wr_to_signal - 1;
     }
 
-    virtual cq_mgr *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel);
-    virtual cq_mgr *init_tx_cq_mgr(void);
-
-    cq_mgr *handle_cq_initialization(uint32_t *num_wr, struct ibv_comp_channel *comp_event_channel,
-                                     bool is_rx);
+    virtual cq_mgr *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel) = 0;
+    virtual cq_mgr *init_tx_cq_mgr(void) = 0;
 
     virtual int send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
                              bool request_comp, xlio_tis *tis, unsigned credits);
