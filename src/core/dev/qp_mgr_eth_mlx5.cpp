@@ -35,7 +35,7 @@
 
 #include <cstddef>
 #include <sys/mman.h>
-#include "cq_mgr_mlx5.h"
+#include "cq_mgr_regrq.h"
 #include "proto/tls.h"
 #include "util/utils.h"
 #include "vlogger/vlogger.h"

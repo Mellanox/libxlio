@@ -36,7 +36,7 @@
 #include <cinttypes>
 #include "ring_simple.h"
 #include "rfs_rule_dpcp.h"
-#include "cq_mgr_mlx5_strq.h"
+#include "cq_mgr_strq.h"
 
 #define MODULE_NAME "qp_mgr_eth_mlx5_dpcp"
 

@@ -30,7 +30,7 @@
  * SOFTWARE.
  */
 
-#include "cq_mgr_mlx5_strq.h"
+#include "cq_mgr_strq.h"
 
 #if defined(DEFINED_DIRECT_VERBS)
 
