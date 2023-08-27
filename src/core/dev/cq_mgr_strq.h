@@ -35,9 +35,9 @@
 
 #include <config.h>
 #include <vector>
-#include "cq_mgr_regrq.h"
+#include "cq_mgr.h"
 
-class cq_mgr_strq : public cq_mgr_regrq {
+class cq_mgr_strq : public cq_mgr {
 public:
     cq_mgr_strq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
                 uint32_t stride_size_bytes, uint32_t strides_num,
@@ -56,7 +56,7 @@ protected:
     virtual void statistics_print() override;
     virtual void reclaim_recv_buffer_helper(mem_buf_desc_t *buff) override;
 
-    inline mem_buf_desc_t *poll(enum buff_status_e &status, mem_buf_desc_t *&buff_stride);
+    mem_buf_desc_t *poll(enum buff_status_e &status, mem_buf_desc_t *&buff_stride);
 
 private:
     mem_buf_desc_t *next_stride();
