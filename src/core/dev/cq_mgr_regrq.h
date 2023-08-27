@@ -67,7 +67,6 @@ public:
     void set_qp_rq(qp_mgr *qp); // MOVE
     virtual void add_qp_tx(qp_mgr *qp); // MOVE
     virtual uint32_t clean_cq();
-    virtual void get_cq_event(int count = 1) { xlio_ib_mlx5_get_cq_event(&m_mlx5_cq, count); }; // MOVE
 
 protected:
     mem_buf_desc_t *m_rx_hot_buffer; // MOVE
@@ -82,8 +81,6 @@ protected:
 private:
     int drain_and_proccess_helper(mem_buf_desc_t *buff, buff_status_e status,
                                   uintptr_t *p_recycle_buffers_last_wr_id);
-
-    virtual int req_notify_cq() { return xlio_ib_mlx5_req_notify_cq(&m_mlx5_cq, 0); }; // MOVE
 };
 
 inline struct xlio_mlx5_cqe *cq_mgr_regrq::check_cqe(void)
