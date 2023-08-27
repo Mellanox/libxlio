@@ -153,7 +153,7 @@ public:
  */
 class qp_mgr {
     friend class cq_mgr;
-    friend class cq_mgr_mlx5;
+    friend class cq_mgr_regrq;
     friend class cq_mgr_mlx5_strq;
     friend class cq_mgr_mp;
 

@@ -36,7 +36,6 @@
 
 #include <util/valgrind.h>
 #include "cq_mgr.inl"
-#include "cq_mgr_mlx5.inl"
 #include "qp_mgr.h"
 #include "qp_mgr_eth_mlx5.h"
 #include "ring_simple.h"
@@ -61,7 +60,7 @@ cq_mgr_mlx5_strq::cq_mgr_mlx5_strq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx
                                    uint32_t strides_num,
                                    struct ibv_comp_channel *p_comp_event_channel,
                                    bool call_configure)
-    : cq_mgr_mlx5(p_ring, p_ib_ctx_handler, cq_size, p_comp_event_channel, true, call_configure)
+    : cq_mgr_regrq(p_ring, p_ib_ctx_handler, cq_size, p_comp_event_channel, true, call_configure)
     , _owner_ring(p_ring)
     , _stride_size_bytes(stride_size_bytes)
     , _strides_num(strides_num)

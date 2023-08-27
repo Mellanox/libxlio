@@ -37,7 +37,7 @@
 #include <vector>
 #include "cq_mgr_regrq.h"
 
-class cq_mgr_mlx5_strq : public cq_mgr_mlx5 {
+class cq_mgr_mlx5_strq : public cq_mgr_regrq {
 public:
     cq_mgr_mlx5_strq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
                      uint32_t stride_size_bytes, uint32_t strides_num,
