@@ -173,7 +173,7 @@ public:
     // unmaps the qpn and vlan id
     void unmap_vlan_and_qpn(int qp_num, uint16_t vlan_id);
 
-    virtual void get_cq_event(int count = 1) { NOT_IN_USE(count); };
+    void get_cq_event(int count = 1) { xlio_ib_mlx5_get_cq_event(&m_mlx5_cq, count); };
 
 protected:
     /**
@@ -188,7 +188,7 @@ protected:
     inline void process_recv_buffer(mem_buf_desc_t *buff, void *pv_fd_ready_array = NULL);
     
     inline void update_global_sn(uint64_t &cq_poll_sn, uint32_t rettotal);
-    
+
     /* Process a WCE... meaning...
      * - extract the mem_buf_desc from the wce.wr_id and then loop on all linked mem_buf_desc
      *   and deliver them to their owner for further processing (sockinfo on Tx path and ib_conn_mgr
@@ -274,7 +274,7 @@ private:
 
     void process_cq_element_log_helper(mem_buf_desc_t *p_mem_buf_desc, xlio_ibv_wc *p_wce);
 
-    virtual int req_notify_cq() { return ibv_req_notify_cq(m_p_ibv_cq, 0); };
+    int req_notify_cq() { return xlio_ib_mlx5_req_notify_cq(&m_mlx5_cq, 0); };
 };
 
 // Helper gunction to extract the Tx cq_mgr from the CQ event,
