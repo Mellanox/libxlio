@@ -157,7 +157,7 @@ public:
     virtual void add_qp_rx(qp_mgr *qp);
     virtual void del_qp_rx(qp_mgr *qp);
 
-    virtual void add_qp_tx(qp_mgr *qp);
+    void add_qp_tx(qp_mgr *qp);
     virtual void del_qp_tx(qp_mgr *qp);
 
     virtual uint32_t clean_cq();

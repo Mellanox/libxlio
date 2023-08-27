@@ -331,6 +331,15 @@ void cq_mgr::add_qp_tx(qp_mgr *qp)
     cq_logdbg("qp_mgr=%p", qp);
     m_qp_rec.qp = qp;
     m_qp_rec.debt = 0;
+
+    m_qp = static_cast<qp_mgr_eth_mlx5 *>(qp);
+
+    if (0 != xlio_ib_mlx5_get_cq(m_p_ibv_cq, &m_mlx5_cq)) {
+        cq_logpanic("xlio_ib_mlx5_get_cq failed (errno=%d %m)", errno);
+    }
+
+    cq_logfunc("qp_mgr=%p m_mlx5_cq.dbrec=%p m_mlx5_cq.cq_buf=%p", m_qp, m_mlx5_cq.dbrec,
+               m_mlx5_cq.cq_buf);
 }
 
 void cq_mgr::del_qp_tx(qp_mgr *qp)
