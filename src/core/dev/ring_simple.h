@@ -362,7 +362,7 @@ protected:
     qp_mgr *m_p_qp_mgr;
     struct cq_moderation_info m_cq_moderation_info;
     cq_mgr *m_p_cq_mgr_rx;
-    cq_mgr *m_p_cq_mgr_tx;
+    cq_mgr_tx *m_p_cq_mgr_tx;
     std::unordered_map<void *, uint32_t> m_user_lkey_map;
 
 private:

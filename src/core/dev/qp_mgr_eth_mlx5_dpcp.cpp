@@ -297,7 +297,7 @@ cq_mgr *qp_mgr_eth_mlx5_dpcp::init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_
                                   safe_mce_sys().strq_stride_num_per_rwqe * m_rx_num_wr,
                                   safe_mce_sys().strq_stride_size_bytes,
                                   safe_mce_sys().strq_stride_num_per_rwqe,
-                                  p_rx_comp_event_channel, true));
+                                  p_rx_comp_event_channel));
 }
 
 void qp_mgr_eth_mlx5_dpcp::post_recv_buffer(mem_buf_desc_t *p_mem_buf_desc)
