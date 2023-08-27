@@ -434,12 +434,6 @@ void ib_ctx_handler::set_ctx_time_converter_status(ts_conversion_mode_t conversi
 #endif // DEFINED_IBV_CQ_TIMESTAMP
 }
 
-ts_conversion_mode_t ib_ctx_handler::get_ctx_time_converter_status()
-{
-    return m_p_ctx_time_converter ? m_p_ctx_time_converter->get_converter_status()
-                                  : TS_CONVERSION_MODE_DISABLE;
-}
-
 uint32_t ib_ctx_handler::mem_reg(void *addr, size_t length, uint64_t access)
 {
     struct ibv_mr *mr = NULL;

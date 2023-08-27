@@ -50,7 +50,7 @@
 #include "ring_simple.h"
 #include "qp_mgr_eth_mlx5.h"
 
-#define MODULE_NAME "cqm"
+#define MODULE_NAME "cq_mgr"
 
 #define cq_logpanic   __log_info_panic
 #define cq_logerr     __log_info_err
@@ -67,41 +67,24 @@
                         ##log_args);                                                               \
     } while (0)
 
-atomic_t cq_mgr::m_n_cq_id_counter = ATOMIC_INIT(1);
+atomic_t cq_mgr::m_n_cq_id_counter_rx = ATOMIC_INIT(1);
 
-uint64_t cq_mgr::m_n_global_sn = 0;
+uint64_t cq_mgr::m_n_global_sn_rx = 0;
 
 cq_mgr::cq_mgr(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int cq_size,
-               struct ibv_comp_channel *p_comp_event_channel, bool is_rx, bool config)
-    : m_qp(NULL)
-    , m_rx_hot_buffer(NULL)
-    , m_p_ibv_cq(NULL)
-    , m_b_is_rx(is_rx)
-    , m_cq_id(0)
-    , m_n_cq_poll_sn(0)
-    , m_p_ring(p_ring)
-    , m_n_wce_counter(0)
-    , m_b_was_drained(false)
-    , m_b_is_rx_hw_csum_on(false)
+               struct ibv_comp_channel *p_comp_event_channel)
+    : m_p_ring(p_ring)
     , m_n_sysvar_cq_poll_batch_max(safe_mce_sys().cq_poll_batch_max)
     , m_n_sysvar_progress_engine_wce_max(safe_mce_sys().progress_engine_wce_max)
-    , m_p_cq_stat(&m_cq_stat_static) // use local copy of stats by default (on rx cq get shared
-                                     // memory stats)
-    , m_transport_type(m_p_ring->get_transport_type())
-    , m_p_next_rx_desc_poll(NULL)
+    , m_p_cq_stat(&m_cq_stat_static) // use local copy of stats by default
     , m_n_sysvar_rx_prefetch_bytes_before_poll(safe_mce_sys().rx_prefetch_bytes_before_poll)
     , m_n_sysvar_rx_prefetch_bytes(safe_mce_sys().rx_prefetch_bytes)
-    , m_sz_transport_header(0)
     , m_p_ib_ctx_handler(p_ib_ctx_handler)
     , m_n_sysvar_rx_num_wr_to_post_recv(safe_mce_sys().rx_num_wr_to_post_recv)
-    , m_rx_buffs_rdy_for_free_head(NULL)
-    , m_rx_buffs_rdy_for_free_tail(NULL)
     , m_comp_event_channel(p_comp_event_channel)
-    , m_b_notification_armed(false)
     , m_n_sysvar_qp_compensation_level(safe_mce_sys().qp_compensation_level)
     , m_rx_lkey(g_buffer_pool_rx_rwqe->find_lkey_by_ib_ctx_thread_safe(m_p_ib_ctx_handler))
     , m_b_sysvar_cq_keep_qp_full(safe_mce_sys().cq_keep_qp_full)
-    , m_n_out_of_free_bufs_warning(0)
 {
     BULLSEYE_EXCLUDE_BLOCK_START
     if (m_rx_lkey == 0) {
@@ -113,10 +96,8 @@ cq_mgr::cq_mgr(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int cq_siz
     memset(&m_qp_rec, 0, sizeof(m_qp_rec));
     m_rx_queue.set_id("cq_mgr (%p) : m_rx_queue", this);
     m_rx_pool.set_id("cq_mgr (%p) : m_rx_pool", this);
-    m_cq_id = atomic_fetch_and_inc(&m_n_cq_id_counter); // cq id is nonzero
-    if (config) {
-        configure(cq_size);
-    }
+    m_cq_id_rx = atomic_fetch_and_inc(&m_n_cq_id_counter_rx); // cq id is nonzero
+    configure(cq_size);
 
     memset(&m_mlx5_cq, 0, sizeof(m_mlx5_cq));
 }
@@ -125,8 +106,6 @@ void cq_mgr::configure(int cq_size)
 {
     xlio_ibv_cq_init_attr attr;
     memset(&attr, 0, sizeof(attr));
-
-    prep_ibv_cq(attr);
 
     struct ibv_context *context = m_p_ib_ctx_handler->get_ibv_context();
     int comp_vector = 0;
@@ -147,42 +126,21 @@ void cq_mgr::configure(int cq_size)
     }
     BULLSEYE_EXCLUDE_BLOCK_END
     VALGRIND_MAKE_MEM_DEFINED(m_p_ibv_cq, sizeof(ibv_cq));
-    switch (m_transport_type) {
-    case XLIO_TRANSPORT_ETH:
-        m_sz_transport_header = ETH_HDR_LEN;
-        break;
-        BULLSEYE_EXCLUDE_BLOCK_START
-    default:
-        cq_logpanic("Unknown transport type: %d", m_transport_type);
-        break;
-        BULLSEYE_EXCLUDE_BLOCK_END
-    }
+    
+    xlio_stats_instance_create_cq_block(m_p_cq_stat);
+    
+    m_b_is_rx_hw_csum_on =
+        xlio_is_rx_hw_csum_supported(m_p_ib_ctx_handler->get_ibv_device_attr());
 
-    if (m_b_is_rx) {
-        xlio_stats_instance_create_cq_block(m_p_cq_stat);
-    }
-
-    if (m_b_is_rx) {
-        m_b_is_rx_hw_csum_on =
-            xlio_is_rx_hw_csum_supported(m_p_ib_ctx_handler->get_ibv_device_attr());
-        cq_logdbg("RX CSUM support = %d", m_b_is_rx_hw_csum_on);
-    }
-
-    cq_logdbg("Created CQ as %s with fd[%d] and of size %d elements (ibv_cq_hndl=%p)",
-              (m_b_is_rx ? "Rx" : "Tx"), get_channel_fd(), cq_size, m_p_ibv_cq);
-}
-
-void cq_mgr::prep_ibv_cq(xlio_ibv_cq_init_attr &attr) const
-{
-    if (m_p_ib_ctx_handler->get_ctx_time_converter_status()) {
-        xlio_ibv_cq_init_ts_attr(&attr);
-    }
+    cq_logdbg("RX CSUM support = %d", m_b_is_rx_hw_csum_on);
+    
+    cq_logdbg("Created CQ as Rx with fd[%d] and of size %d elements (ibv_cq_hndl=%p)",
+              get_channel_fd(), cq_size, m_p_ibv_cq);
 }
 
 cq_mgr::~cq_mgr()
 {
-    cq_logfunc("");
-    cq_logdbg("destroying CQ as %s", (m_b_is_rx ? "Rx" : "Tx"));
+    cq_logdbg("Destroying Rx CQ");
 
     if (m_rx_buffs_rdy_for_free_head) {
         reclaim_recv_buffers(m_rx_buffs_rdy_for_free_head);
@@ -209,11 +167,9 @@ cq_mgr::~cq_mgr()
     VALGRIND_MAKE_MEM_UNDEFINED(m_p_ibv_cq, sizeof(ibv_cq));
 
     statistics_print();
-    if (m_b_is_rx) {
-        xlio_stats_instance_remove_cq_block(m_p_cq_stat);
-    }
+    xlio_stats_instance_remove_cq_block(m_p_cq_stat);
 
-    cq_logdbg("done");
+    cq_logdbg("Destroying Rx CQ done");
 }
 
 void cq_mgr::statistics_print()
@@ -226,16 +182,6 @@ void cq_mgr::statistics_print()
         cq_logdbg_no_funcname("CQE errors: %18llu",
                               (unsigned long long int)m_p_cq_stat->n_rx_cqe_error);
     }
-}
-
-ibv_cq *cq_mgr::get_ibv_cq_hndl()
-{
-    return m_p_ibv_cq;
-}
-
-int cq_mgr::get_channel_fd()
-{
-    return m_comp_event_channel->fd;
 }
 
 void cq_mgr::set_qp_rq(qp_mgr *qp)
@@ -313,36 +259,6 @@ void cq_mgr::del_qp_rx(qp_mgr *qp)
     return_extra_buffers();
 
     clean_cq();
-    memset(&m_qp_rec, 0, sizeof(m_qp_rec));
-}
-
-void cq_mgr::add_qp_tx(qp_mgr *qp)
-{
-    // Assume locked!
-    cq_logdbg("qp_mgr=%p", qp);
-    m_qp_rec.qp = qp;
-    m_qp_rec.debt = 0;
-
-    m_qp = static_cast<qp_mgr_eth_mlx5 *>(qp);
-
-    if (0 != xlio_ib_mlx5_get_cq(m_p_ibv_cq, &m_mlx5_cq)) {
-        cq_logpanic("xlio_ib_mlx5_get_cq failed (errno=%d %m)", errno);
-    }
-
-    cq_logfunc("qp_mgr=%p m_mlx5_cq.dbrec=%p m_mlx5_cq.cq_buf=%p", m_qp, m_mlx5_cq.dbrec,
-               m_mlx5_cq.cq_buf);
-}
-
-void cq_mgr::del_qp_tx(qp_mgr *qp)
-{
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (m_qp_rec.qp != qp) {
-        cq_logdbg("wrong qp_mgr=%p != m_qp_rec.qp=%p", qp, m_qp_rec.qp);
-        return;
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-    cq_logdbg("qp_mgr=%p", m_qp_rec.qp);
-
     memset(&m_qp_rec, 0, sizeof(m_qp_rec));
 }
 
@@ -428,59 +344,6 @@ void cq_mgr::return_extra_buffers()
     cq_logfunc("releasing %d buffers to global rx pool", buff_to_rel);
     g_buffer_pool_rx_rwqe->put_buffers_thread_safe(&m_rx_pool, buff_to_rel);
     m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
-}
-
-void cq_mgr::process_cq_element_log_helper(mem_buf_desc_t *p_mem_buf_desc, xlio_ibv_wc *p_wce)
-{
-    BULLSEYE_EXCLUDE_BLOCK_START
-    // wce with bad status value
-    if (p_wce->status == IBV_WC_SUCCESS) {
-        cq_logdbg("wce: wr_id=%#lx, status=%#x, vendor_err=%#x, qp_num=%#x", p_wce->wr_id,
-                  p_wce->status, p_wce->vendor_err, p_wce->qp_num);
-        if (m_b_is_rx_hw_csum_on && !xlio_wc_rx_hw_csum_ok(*p_wce)) {
-            cq_logdbg("wce: bad rx_csum");
-        }
-        cq_logdbg("wce: opcode=%#x, byte_len=%u, src_qp=%#x, wc_flags=%#lx", xlio_wc_opcode(*p_wce),
-                  p_wce->byte_len, p_wce->src_qp, (unsigned long)xlio_wc_flags(*p_wce));
-        cq_logdbg("wce: pkey_index=%#x, slid=%#x, sl=%#x, dlid_path_bits=%#x, imm_data=%#x",
-                  p_wce->pkey_index, p_wce->slid, p_wce->sl, p_wce->dlid_path_bits,
-                  p_wce->imm_data);
-        if (p_mem_buf_desc) {
-            cq_logdbg("mem_buf_desc: lkey=%#x, p_buffer=%p, sz_buffer=%lu", p_mem_buf_desc->lkey,
-                      p_mem_buf_desc->p_buffer, p_mem_buf_desc->sz_buffer);
-        }
-    } else if (p_wce->status != IBV_WC_WR_FLUSH_ERR) {
-        cq_logwarn("wce: wr_id=%#lx, status=%#x, vendor_err=%#x, qp_num=%#x", p_wce->wr_id,
-                   p_wce->status, p_wce->vendor_err, p_wce->qp_num);
-        cq_loginfo("wce: opcode=%#x, byte_len=%u, src_qp=%#x, wc_flags=%#lx",
-                   xlio_wc_opcode(*p_wce), p_wce->byte_len, p_wce->src_qp,
-                   (unsigned long)xlio_wc_flags(*p_wce));
-        cq_loginfo("wce: pkey_index=%#x, slid=%#x, sl=%#x, dlid_path_bits=%#x, imm_data=%#x",
-                   p_wce->pkey_index, p_wce->slid, p_wce->sl, p_wce->dlid_path_bits,
-                   p_wce->imm_data);
-
-        m_p_cq_stat->n_rx_cqe_error++;
-        if (p_mem_buf_desc) {
-            cq_logwarn("mem_buf_desc: lkey=%#x, p_buffer=%p, sz_buffer=%lu", p_mem_buf_desc->lkey,
-                       p_mem_buf_desc->p_buffer, p_mem_buf_desc->sz_buffer);
-        }
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    cq_logfunc("wce error status '%s' [%d] (wr_id=%p, qp_num=%x)",
-               priv_ibv_wc_status_str(p_wce->status), p_wce->status, p_wce->wr_id, p_wce->qp_num);
-}
-
-mem_buf_desc_t *cq_mgr::cqe_log_and_get_buf_tx(xlio_ibv_wc *p_wce)
-{
-    // Assume locked!!!
-    cq_logfuncall("");
-
-    mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)(uintptr_t)p_wce->wr_id;
-    if (unlikely(p_wce->status != IBV_WC_SUCCESS)) {
-        process_cq_element_log_helper(p_mem_buf_desc, p_wce);
-    }
-    return p_mem_buf_desc;
 }
 
 mem_buf_desc_t *cq_mgr::cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc,
@@ -573,29 +436,6 @@ void cq_mgr::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
     }
 }
 
-void cq_mgr::process_tx_buffer_list(mem_buf_desc_t *p_mem_buf_desc)
-{
-    // Assume locked!!!
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (p_mem_buf_desc &&
-        (p_mem_buf_desc->p_desc_owner ==
-         m_p_ring /*|| m_p_ring->get_parent()->is_member(p_mem_buf_desc->p_desc_owner)*/)) {
-        m_p_ring->mem_buf_desc_return_to_owner_tx(p_mem_buf_desc);
-        /* if decided to free buffers of another ring here, need to modify return_to_owner to check
-         * owner and return to gpool. */
-    } else if (p_mem_buf_desc && m_p_ring->get_parent()->is_member(p_mem_buf_desc->p_desc_owner)) {
-        cq_logerr("got buffer of wrong owner, high-availability event? buf=%p, owner=%p",
-                  p_mem_buf_desc, p_mem_buf_desc ? p_mem_buf_desc->p_desc_owner : NULL);
-        /* if decided to free buffers here, remember its a list and need to deref members. */
-        // p_mem_buf_desc->p_desc_owner->mem_buf_desc_return_to_owner_tx(p_mem_buf_desc); /* this
-        // can cause a deadlock between rings, use trylock? */
-    } else {
-        cq_logerr("got buffer of wrong owner, buf=%p, owner=%p", p_mem_buf_desc,
-                  p_mem_buf_desc ? p_mem_buf_desc->p_desc_owner : NULL);
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-}
-
 // This method is called when ring release returns unposted buffers.
 void cq_mgr::mem_buf_desc_return_to_owner(mem_buf_desc_t *p_mem_buf_desc,
                                           void *pv_fd_ready_array /*=NULL*/)
@@ -662,46 +502,15 @@ bool cq_mgr::reclaim_recv_buffers(descq_t *rx_reuse)
     return true;
 }
 
-//  1 -> busy
-//  0 -> ok
-// -1 -> error
-int cq_mgr::ack_and_request_notification()
-{
-    int res, cq_ev_count = 0;
-    ibv_cq *ib_cq;
-    void *cq_context;
-    do {
-        res = ibv_get_cq_event(m_comp_event_channel, &ib_cq, &cq_context);
-        if (res == 0) {
-            ++cq_ev_count;
-        }
-    } while (res == 0);
-    if (errno != EAGAIN) {
-        return -1;
-    }
-    if (cq_ev_count > 0) {
-        get_cq_event(cq_ev_count);
-        ibv_ack_cq_events(m_p_ibv_cq, cq_ev_count);
-        return 1;
-    }
-    IF_VERBS_FAILURE(req_notify_cq())
-    {
-        cq_logerr("Failure arming the qp_mgr notification channel (errno=%d %m)", errno);
-        return -1;
-    }
-    ENDIF_VERBS_FAILURE
-    return 0;
-}
-
 int cq_mgr::request_notification(uint64_t poll_sn)
 {
     int ret = -1;
 
     cq_logfuncall("");
 
-    if ((m_n_global_sn > 0 && poll_sn != m_n_global_sn)) {
+    if ((m_n_global_sn_rx > 0 && poll_sn != m_n_global_sn_rx)) {
         // The cq_mgr's has receive packets pending processing (or got processed since cq_poll_sn)
-        cq_logfunc("miss matched poll sn (user=0x%lx, cq=0x%lx)", poll_sn, m_n_cq_poll_sn);
+        cq_logfunc("miss matched poll sn (user=0x%lx, cq=0x%lx)", poll_sn, m_n_cq_poll_sn_rx);
         return 1;
     }
 
@@ -710,7 +519,7 @@ int cq_mgr::request_notification(uint64_t poll_sn)
         cq_logfunc("arming cq_mgr notification channel");
 
         // Arm the CQ notification channel
-        IF_VERBS_FAILURE(req_notify_cq())
+        IF_VERBS_FAILURE(xlio_ib_mlx5_req_notify_cq(&m_mlx5_cq, 0))
         {
             cq_logerr("Failure arming the qp_mgr notification channel (errno=%d %m)", errno);
         }
@@ -764,11 +573,7 @@ int cq_mgr::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
             m_b_notification_armed = false;
 
             // Now try processing the ready element
-            if (m_b_is_rx) {
-                ret = poll_and_process_element_rx(p_cq_poll_sn, pv_fd_ready_array);
-            } else {
-                ret = poll_and_process_element_tx(p_cq_poll_sn);
-            }
+            ret = poll_and_process_element_rx(p_cq_poll_sn, pv_fd_ready_array);
         }
         ENDIF_VERBS_FAILURE;
     } else {
@@ -777,120 +582,4 @@ int cq_mgr::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
     }
 
     return ret;
-}
-
-cq_mgr *get_cq_mgr_from_cq_event(struct ibv_comp_channel *p_cq_channel)
-{
-    cq_mgr *p_cq_mgr = NULL;
-    struct ibv_cq *p_cq_hndl = NULL;
-    void *p_context; // deal with compiler warnings
-
-    // read & ack the CQ event
-    IF_VERBS_FAILURE(ibv_get_cq_event(p_cq_channel, &p_cq_hndl, &p_context))
-    {
-        vlog_printf(VLOG_INFO,
-                    MODULE_NAME ":%d: waiting on cq_mgr event returned with error (errno=%d %m)\n",
-                    __LINE__, errno);
-    }
-    else
-    {
-        p_cq_mgr = (cq_mgr *)p_context; // Save the cq_mgr
-        p_cq_mgr->get_cq_event();
-        ibv_ack_cq_events(p_cq_hndl, 1); // Ack the ibv event
-    }
-    ENDIF_VERBS_FAILURE;
-
-    return p_cq_mgr;
-}
-
-int cq_mgr::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
-{
-    cq_logfuncall("");
-
-    static auto is_error_opcode = [&](uint8_t opcode) {
-        return opcode == MLX5_CQE_REQ_ERR || opcode == MLX5_CQE_RESP_ERR;
-    };
-
-    int ret = 0;
-    uint32_t num_polled_cqes = 0;
-    xlio_mlx5_cqe *cqe = get_cqe_tx(num_polled_cqes);
-
-    if (likely(cqe)) {
-        unsigned index = ntohs(cqe->wqe_counter) & (m_qp->m_tx_num_wr - 1);
-
-        // All error opcodes have the most significant bit set.
-        if (unlikely(cqe->op_own & 0x80) && is_error_opcode(cqe->op_own >> 4)) {
-            m_p_cq_stat->n_rx_cqe_error++;
-            log_cqe_error(cqe);
-        }
-
-        handle_sq_wqe_prop(index);
-        ret = 1;
-    }
-    update_global_sn(*p_cq_poll_sn, num_polled_cqes);
-
-    return ret;
-}
-
-void cq_mgr::log_cqe_error(struct xlio_mlx5_cqe *cqe)
-{
-    struct mlx5_err_cqe *ecqe = (struct mlx5_err_cqe *)cqe;
-
-    /* TODO We can also ask qp_mgr to log WQE fields from SQ. But at first, we need to remove
-     * prefetch and memset of the next WQE there. Credit system will guarantee that we don't
-     * reuse the WQE at this point.
-     */
-
-    if (MLX5_CQE_SYNDROME_WR_FLUSH_ERR != ecqe->syndrome) {
-        cq_logwarn("cqe: syndrome=0x%x vendor=0x%x hw=0x%x (type=0x%x) wqe_opcode_qpn=0x%x "
-                   "wqe_counter=0x%x",
-                   ecqe->syndrome, ecqe->vendor_err_synd, *((uint8_t *)&ecqe->rsvd1 + 16),
-                   *((uint8_t *)&ecqe->rsvd1 + 17), ntohl(ecqe->s_wqe_opcode_qpn),
-                   ntohs(ecqe->wqe_counter));
-    }
-}
-
-void cq_mgr::handle_sq_wqe_prop(unsigned index)
-{
-    sq_wqe_prop *p = &m_qp->m_sq_wqe_idx_to_prop[index];
-    sq_wqe_prop *prev;
-    unsigned credits = 0;
-
-    /*
-     * TX completions can be signalled for a set of WQEs as an optimization.
-     * Therefore, for every TX completion we may need to handle multiple
-     * WQEs. Since every WQE can have various size and the WQE index is
-     * wrapped around, we build a linked list to simplify things. Each
-     * element of the linked list represents properties of a previously
-     * posted WQE.
-     *
-     * We keep index of the last completed WQE and stop processing the list
-     * when we reach the index. This condition is checked in
-     * is_sq_wqe_prop_valid().
-     */
-
-    do {
-        if (p->buf) {
-            m_p_ring->mem_buf_desc_return_single_locked(p->buf);
-        }
-        if (p->ti) {
-            xlio_ti *ti = p->ti;
-            if (ti->m_callback) {
-                ti->m_callback(ti->m_callback_arg);
-            }
-
-            ti->put();
-            if (unlikely(ti->m_released && ti->m_ref == 0)) {
-                m_qp->ti_released(ti);
-            }
-        }
-        credits += p->credits;
-
-        prev = p;
-        p = p->next;
-    } while (p != NULL && m_qp->is_sq_wqe_prop_valid(p, prev));
-
-    m_p_ring->return_tx_pool_to_global_pool();
-    m_qp->credits_return(credits);
-    m_qp->m_sq_wqe_prop_last_signalled = index;
 }

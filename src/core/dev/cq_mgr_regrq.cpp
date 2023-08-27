@@ -52,9 +52,8 @@
 #define cq_logfuncall __log_info_funcall
 
 cq_mgr_regrq::cq_mgr_regrq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
-                         struct ibv_comp_channel *p_comp_event_channel, bool is_rx,
-                         bool call_configure)
-    : cq_mgr(p_ring, p_ib_ctx_handler, cq_size, p_comp_event_channel, is_rx, call_configure)
+                         struct ibv_comp_channel *p_comp_event_channel)
+    : cq_mgr(p_ring, p_ib_ctx_handler, cq_size, p_comp_event_channel)
 {
     cq_logfunc("");
 }
@@ -65,89 +64,30 @@ uint32_t cq_mgr_regrq::clean_cq()
     uint64_t cq_poll_sn = 0;
     mem_buf_desc_t *buff;
 
-    if (m_b_is_rx) {
-        /* Sanity check for cq: initialization of tx and rx cq has difference:
-         * tx - is done in qp_mgr::configure()
-         * rx - is done in qp_mgr::up()
-         * as a result rx cq can be created but not initialized
-         */
-        if (NULL == m_qp) {
-            return 0;
-        }
-
-        buff_status_e status = BS_OK;
-        while ((buff = poll(status))) {
-            if (cqe_process_rx(buff, status)) {
-                m_rx_queue.push_back(buff);
-            }
-            ++ret_total;
-        }
-        update_global_sn(cq_poll_sn, ret_total);
-    } else { // Tx
-        int ret = 0;
-        /* coverity[stack_use_local_overflow] */
-        xlio_ibv_wc wce[MCE_MAX_CQ_POLL_BATCH];
-        while ((ret = poll_tx(wce, MCE_MAX_CQ_POLL_BATCH, &cq_poll_sn)) > 0) {
-            for (int i = 0; i < ret; i++) {
-                buff = cqe_log_and_get_buf_tx(&wce[i]);
-                if (buff) {
-                    m_p_ring->mem_buf_desc_return_single_to_owner_tx(buff);
-                }
-            }
-            ret_total += ret;
-        }
+    /* Sanity check for cq: initialization of tx and rx cq has difference:
+        * tx - is done in qp_mgr::configure()
+        * rx - is done in qp_mgr::up()
+        * as a result rx cq can be created but not initialized
+        */
+    if (NULL == m_qp) {
+        return 0;
     }
+
+    buff_status_e status = BS_OK;
+    while ((buff = poll(status))) {
+        if (cqe_process_rx(buff, status)) {
+            m_rx_queue.push_back(buff);
+        }
+        ++ret_total;
+    }
+    update_global_sn_rx(cq_poll_sn, ret_total);
 
     return ret_total;
 }
 
-int cq_mgr_regrq::poll_tx(xlio_ibv_wc *p_wce, int num_entries, uint64_t *p_cq_poll_sn)
-{
-    // Assume locked!!!
-    cq_logfuncall("");
-
-    int ret = xlio_ibv_poll_cq(m_p_ibv_cq, num_entries, p_wce);
-    if (ret <= 0) {
-        // Zero polled wce OR ibv_poll_cq() has driver specific errors
-        // so we can't really do anything with them
-        *p_cq_poll_sn = m_n_global_sn;
-        return 0;
-    } 
-
-    if (unlikely(g_vlogger_level >= VLOG_FUNC_ALL)) {
-        for (int i = 0; i < ret; i++) {
-            cq_logfuncall("wce[%d] info wr_id=%x, status=%x, opcode=%x, vendor_err=%x, "
-                          "byte_len=%d, imm_data=%x",
-                          i, p_wce[i].wr_id, p_wce[i].status, xlio_wc_opcode(p_wce[i]),
-                          p_wce[i].vendor_err, p_wce[i].byte_len, p_wce[i].imm_data);
-            cq_logfuncall("qp_num=%x, src_qp=%x, wc_flags=%x, pkey_index=%x, slid=%x, sl=%x, "
-                          "dlid_path_bits=%x",
-                          p_wce[i].qp_num, p_wce[i].src_qp, xlio_wc_flags(p_wce[i]),
-                          p_wce[i].pkey_index, p_wce[i].slid, p_wce[i].sl, p_wce[i].dlid_path_bits);
-        }
-    }
-
-    // spoil the global sn if we have packets ready
-    union __attribute__((packed)) {
-        uint64_t global_sn;
-        struct {
-            uint32_t cq_id;
-            uint32_t cq_sn;
-        } bundle;
-    } next_sn;
-    next_sn.bundle.cq_sn = ++m_n_cq_poll_sn;
-    next_sn.bundle.cq_id = m_cq_id;
-
-    *p_cq_poll_sn = m_n_global_sn = next_sn.global_sn;
-
-    return ret;
-}
-
-
 cq_mgr_regrq::~cq_mgr_regrq()
 {
-    cq_logfunc("");
-    cq_logdbg("destroying CQ REGRQ as %s", (m_b_is_rx ? "Rx" : "Tx"));
+    cq_logdbg("Destroying CQ REGRQ");
 }
 
 mem_buf_desc_t *cq_mgr_regrq::poll(enum buff_status_e &status)
@@ -309,8 +249,7 @@ int cq_mgr_regrq::drain_and_proccess_helper(mem_buf_desc_t *buff, buff_status_e 
             m_p_cq_stat->n_rx_pkt_drop++;
             reclaim_recv_buffer_helper(buff);
         } else {
-            bool procces_now =
-                (m_transport_type == XLIO_TRANSPORT_ETH ? is_eth_tcp_frame(buff) : false);
+            bool procces_now = is_eth_tcp_frame(buff);
 
             if (procces_now) { // We process immediately all non udp/ip traffic..
                 buff->rx.is_xlio_thr = true;
@@ -361,7 +300,7 @@ int cq_mgr_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id /*=
         buff_status_e status = BS_OK;
         mem_buf_desc_t *buff = poll(status);
         if (NULL == buff) {
-            update_global_sn(cq_poll_sn, ret_total);
+            update_global_sn_rx(cq_poll_sn, ret_total);
             m_b_was_drained = true;
             m_p_ring->m_gro_mgr.flush_all(NULL);
             return ret_total;
@@ -374,10 +313,8 @@ int cq_mgr_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id /*=
                 m_p_cq_stat->n_rx_pkt_drop++;
                 reclaim_recv_buffer_helper(buff);
             } else {
-                bool procces_now = false;
-                if (m_transport_type == XLIO_TRANSPORT_ETH) {
-                    procces_now = is_eth_tcp_frame(buff);
-                }
+                bool procces_now = is_eth_tcp_frame(buff);
+
                 /* We process immediately all non udp/ip traffic.. */
                 if (procces_now) {
                     buff->rx.is_xlio_thr = true;
@@ -404,7 +341,7 @@ int cq_mgr_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id /*=
         ++ret_total;
     }
 
-    update_global_sn(cq_poll_sn, ret_total);
+    update_global_sn_rx(cq_poll_sn, ret_total);
 
     m_p_ring->m_gro_mgr.flush_all(NULL);
 
@@ -479,7 +416,7 @@ int cq_mgr_regrq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_f
         }
     }
 
-    update_global_sn(*p_cq_poll_sn, ret);
+    update_global_sn_rx(*p_cq_poll_sn, ret);
 
     if (likely(ret > 0)) {
         ret_rx_processed += ret;

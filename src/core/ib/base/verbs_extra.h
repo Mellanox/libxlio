@@ -171,10 +171,6 @@ typedef int xlio_ibv_cq_init_attr;
 // rx hw timestamp
 #define XLIO_IBV_WC_WITH_TIMESTAMP 0
 #define xlio_wc_timestamp(wc)      0
-#define xlio_ibv_cq_init_ts_attr(attr)                                                             \
-    {                                                                                              \
-        NOT_IN_USE(attr);                                                                          \
-    }
 
 #ifdef DEFINED_IBV_CQ_TIMESTAMP
 #define XLIO_IBV_DEVICE_ATTR_HCA_CORE_CLOCK 0

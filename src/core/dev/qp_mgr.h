@@ -50,6 +50,7 @@
 #include "infra/sender.h"
 #include "dev/ib_ctx_handler.h"
 #include "dev/cq_mgr.h"
+#include "dev/cq_mgr_tx.h"
 #include "dev/rfs_rule.h"
 
 /* Forward declarations */
@@ -155,7 +156,7 @@ class qp_mgr {
     friend class cq_mgr;
     friend class cq_mgr_regrq;
     friend class cq_mgr_strq;
-    friend class cq_mgr_mp;
+    friend class cq_mgr_tx;
 
 public:
     qp_mgr(struct qp_mgr_desc *desc, const uint32_t tx_num_wr);
@@ -176,7 +177,7 @@ public:
     int get_port_num() const { return m_port_num; }
     virtual uint16_t get_partiton() const { return 0; };
     struct ibv_qp *get_ibv_qp() const { return m_qp; };
-    class cq_mgr *get_tx_cq_mgr() const { return m_p_cq_mgr_tx; }
+    class cq_mgr_tx *get_tx_cq_mgr() const { return m_p_cq_mgr_tx; }
     class cq_mgr *get_rx_cq_mgr() const { return m_p_cq_mgr_rx; }
     virtual uint32_t get_rx_max_wr_num();
     // This function can be replaced with a parameter during ring creation.
@@ -330,7 +331,7 @@ protected:
     uint32_t m_max_qp_wr;
 
     cq_mgr *m_p_cq_mgr_rx;
-    cq_mgr *m_p_cq_mgr_tx;
+    cq_mgr_tx *m_p_cq_mgr_tx;
 
     uint32_t m_rx_num_wr;
     uint32_t m_tx_num_wr;
@@ -376,7 +377,7 @@ protected:
     }
 
     virtual cq_mgr *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel) = 0;
-    virtual cq_mgr *init_tx_cq_mgr(void) = 0;
+    virtual cq_mgr_tx *init_tx_cq_mgr(void) = 0;
 
     virtual int send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
                              bool request_comp, xlio_tis *tis, unsigned credits);

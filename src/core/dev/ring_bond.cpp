@@ -307,7 +307,7 @@ void ring_bond::restart()
         popup_xmit_rings();
 
         int ret = 0;
-        uint64_t poll_sn = cq_mgr::m_n_global_sn;
+        uint64_t poll_sn = cq_mgr::m_n_global_sn_rx;
         ret = request_notification(CQT_RX, poll_sn);
         if (ret < 0) {
             ring_logdbg("failed arming rx cq_mgr (errno=%d %m)", errno);

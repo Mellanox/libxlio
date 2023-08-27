@@ -60,33 +60,11 @@ class qp_mgr;
 class qp_mgr_eth_mlx5;
 class ring_simple;
 
-#define LOCAL_IF_INFO_INVALID                                                                      \
-    (local_if_info_t) { 0, 0 }
-
 /* Get CQE opcode. */
 #define MLX5_CQE_OPCODE(op_own) ((op_own) >> 4)
 
 /* Get CQE owner bit. */
 #define MLX5_CQE_OWNER(op_own) ((op_own)&MLX5_CQE_OWNER_MASK)
-
-struct cq_request_info_t {
-    struct ibv_device *p_ibv_device;
-    struct ibv_context *p_ibv_context;
-    int n_port;
-    qp_mgr *p_qp_mgr;
-};
-
-struct buff_lst_info_t {
-    mem_buf_desc_t *buff_lst;
-    uint32_t n_buff_num;
-};
-
-typedef std::pair<uint32_t, uint32_t> local_if_info_key_t;
-
-typedef struct local_if_info_t {
-    in_addr_t addr;
-    uint32_t attached_grp_ref_cnt;
-} local_if_info_t;
 
 struct qp_rec {
     qp_mgr *qp;
@@ -96,9 +74,9 @@ struct qp_rec {
 // Class cq_mgr
 //
 class cq_mgr {
-    friend class ring; // need to expose the m_n_global_sn only to ring
-    friend class ring_simple; // need to expose the m_n_global_sn only to ring
-    friend class ring_bond; // need to expose the m_n_global_sn only to ring
+    friend class ring; // need to expose the m_n_global_sn_rx only to ring
+    friend class ring_simple; // need to expose the m_n_global_sn_rx only to ring
+    friend class ring_bond; // need to expose the m_n_global_sn_rx only to ring
     friend class rfs_uc_tcp_gro; // need for stats
 
 public:
@@ -111,15 +89,14 @@ public:
     };
 
     cq_mgr(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int cq_size,
-           struct ibv_comp_channel *p_comp_event_channel, bool is_rx, bool config = true);
+           struct ibv_comp_channel *p_comp_event_channel);
     virtual ~cq_mgr();
 
     void configure(int cq_size);
 
-    ibv_cq *get_ibv_cq_hndl();
-    int get_channel_fd();
-    // ack events and rearm CQ
-    int ack_and_request_notification();
+    ibv_cq *get_ibv_cq_hndl() { return m_p_ibv_cq; }
+    int get_channel_fd() { return m_comp_event_channel->fd; }
+
     /**
      * Arm the managed CQ's notification channel
      * Calling this more then once without get_event() will return without
@@ -151,7 +128,6 @@ public:
      *         < 0 error
      */
     virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array = NULL) = 0;
-    int poll_and_process_element_tx(uint64_t *p_cq_poll_sn);
     virtual mem_buf_desc_t *poll_and_process_socketxtreme() { return nullptr; };
 
     /**
@@ -171,21 +147,12 @@ public:
     virtual void add_qp_rx(qp_mgr *qp);
     virtual void del_qp_rx(qp_mgr *qp);
 
-    void add_qp_tx(qp_mgr *qp);
-    virtual void del_qp_tx(qp_mgr *qp);
-
     virtual uint32_t clean_cq() = 0;
 
     bool reclaim_recv_buffers(descq_t *rx_reuse);
     bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst);
     bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst);
     int reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse);
-
-    // maps between qpn and vlan id to the local interface
-    void map_vlan_and_qpn_to_local_if(int qp_num, uint16_t vlan_id, in_addr_t local_if);
-
-    // unmaps the qpn and vlan id
-    void unmap_vlan_and_qpn(int qp_num, uint16_t vlan_id);
 
     void get_cq_event(int count = 1) { xlio_ib_mlx5_get_cq_event(&m_mlx5_cq, count); };
 
@@ -202,20 +169,12 @@ protected:
     void lro_update_hdr(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc);
     inline void process_recv_buffer(mem_buf_desc_t *buff, void *pv_fd_ready_array = NULL);
     
-    inline void update_global_sn(uint64_t &cq_poll_sn, uint32_t rettotal);
+    inline void update_global_sn_rx(uint64_t &cq_poll_sn, uint32_t rettotal);
 
     inline struct xlio_mlx5_cqe *check_cqe(void);
 
     mem_buf_desc_t *cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc, enum buff_status_e status);
 
-    /* Process a WCE... meaning...
-     * - extract the mem_buf_desc from the wce.wr_id and then loop on all linked mem_buf_desc
-     *   and deliver them to their owner for further processing (sockinfo on Tx path and ib_conn_mgr
-     * on Rx path)
-     * - for Tx wce the data buffers will be released to the associated ring before the mem_buf_desc
-     * are returned
-     */
-    mem_buf_desc_t *cqe_log_and_get_buf_tx(xlio_ibv_wc *p_wce);
     virtual void reclaim_recv_buffer_helper(mem_buf_desc_t *buff);
 
     // Returns true if the given buffer was used,
@@ -224,32 +183,27 @@ protected:
     inline uint32_t process_recv_queue(void *pv_fd_ready_array = NULL);
 
     virtual void statistics_print();
-    virtual void prep_ibv_cq(xlio_ibv_cq_init_attr &attr) const;
-    // returns list of buffers to the owner.
-    void process_tx_buffer_list(mem_buf_desc_t *p_mem_buf_desc);
 
     xlio_ib_mlx5_cq_t m_mlx5_cq;
-    qp_mgr_eth_mlx5 *m_qp;
-    mem_buf_desc_t *m_rx_hot_buffer;
-    struct ibv_cq *m_p_ibv_cq;
-    bool m_b_is_rx;
+    qp_mgr_eth_mlx5 *m_qp = nullptr;
+    mem_buf_desc_t *m_rx_hot_buffer = nullptr;
+    struct ibv_cq *m_p_ibv_cq = nullptr;
     descq_t m_rx_queue;
-    static uint64_t m_n_global_sn;
-    uint32_t m_cq_id;
-    uint32_t m_n_cq_poll_sn;
+    static uint64_t m_n_global_sn_rx;
+    uint32_t m_cq_id_rx = 0U;
+    uint32_t m_n_cq_poll_sn_rx = 0U;
     ring_simple *m_p_ring;
-    uint32_t m_n_wce_counter;
-    bool m_b_was_drained;
-    bool m_b_is_rx_hw_csum_on;
+    uint32_t m_n_wce_counter = 0U;
+    bool m_b_was_drained = false;
+    bool m_b_is_rx_hw_csum_on = false;
     qp_rec m_qp_rec;
     const uint32_t m_n_sysvar_cq_poll_batch_max;
     const uint32_t m_n_sysvar_progress_engine_wce_max;
     cq_stats_t *m_p_cq_stat;
-    transport_type_t m_transport_type;
-    mem_buf_desc_t *m_p_next_rx_desc_poll;
+    mem_buf_desc_t *m_p_next_rx_desc_poll = nullptr;
     uint32_t m_n_sysvar_rx_prefetch_bytes_before_poll;
     const uint32_t m_n_sysvar_rx_prefetch_bytes;
-    size_t m_sz_transport_header;
+    size_t m_sz_transport_header = ETH_HDR_LEN;
     ib_ctx_handler *m_p_ib_ctx_handler;
     const uint32_t m_n_sysvar_rx_num_wr_to_post_recv;
     descq_t m_rx_pool;
@@ -258,49 +212,26 @@ protected:
      * represented as struct xlio_buff_t
      * from user application by special XLIO extended API
      */
-    mem_buf_desc_t *m_rx_buffs_rdy_for_free_head;
-    mem_buf_desc_t *m_rx_buffs_rdy_for_free_tail;
+    mem_buf_desc_t *m_rx_buffs_rdy_for_free_head = nullptr;
+    mem_buf_desc_t *m_rx_buffs_rdy_for_free_tail = nullptr;
 
 private:
     struct ibv_comp_channel *m_comp_event_channel;
-    bool m_b_notification_armed;
+    bool m_b_notification_armed = false;
     const uint32_t m_n_sysvar_qp_compensation_level;
     const uint32_t m_rx_lkey;
     const bool m_b_sysvar_cq_keep_qp_full;
-    int32_t m_n_out_of_free_bufs_warning;
     cq_stats_t m_cq_stat_static;
-    static atomic_t m_n_cq_id_counter;
-
-    inline struct xlio_mlx5_cqe *get_cqe_tx(uint32_t &num_polled_cqes);
-
-    void log_cqe_error(struct xlio_mlx5_cqe *cqe);
-
-    void handle_sq_wqe_prop(unsigned index);
-
-    void handle_tcp_ctl_packets(uint32_t rx_processed, void *pv_fd_ready_array);
+    static atomic_t m_n_cq_id_counter_rx;
 
     // requests safe_mce_sys().qp_compensation_level buffers from global pool
     bool request_more_buffers() __attribute__((noinline));
 
     // returns safe_mce_sys().qp_compensation_level buffers to global pool
     void return_extra_buffers() __attribute__((noinline));
-
-    // Finds and sets the local if to which the buff is addressed (according to qpn and vlan id).
-    inline void find_buff_dest_local_if(mem_buf_desc_t *buff);
-
-    // Finds and sets the xlio if to which the buff is addressed (according to qpn).
-    inline void find_buff_dest_xlio_if_ctx(mem_buf_desc_t *buff);
-
-    void process_cq_element_log_helper(mem_buf_desc_t *p_mem_buf_desc, xlio_ibv_wc *p_wce);
-
-    int req_notify_cq() { return xlio_ib_mlx5_req_notify_cq(&m_mlx5_cq, 0); };
 };
 
-// Helper gunction to extract the Tx cq_mgr from the CQ event,
-// Since we have a single TX CQ comp channel for all cq_mgr's, it might not be the active_cq object
-cq_mgr *get_cq_mgr_from_cq_event(struct ibv_comp_channel *p_cq_channel);
-
-inline void cq_mgr::update_global_sn(uint64_t &cq_poll_sn, uint32_t num_polled_cqes)
+inline void cq_mgr::update_global_sn_rx(uint64_t &cq_poll_sn, uint32_t num_polled_cqes)
 {
     if (num_polled_cqes > 0) {
         // spoil the global sn if we have packets ready
@@ -311,46 +242,14 @@ inline void cq_mgr::update_global_sn(uint64_t &cq_poll_sn, uint32_t num_polled_c
                 uint32_t cq_sn;
             } bundle;
         } next_sn;
-        m_n_cq_poll_sn += num_polled_cqes;
-        next_sn.bundle.cq_sn = m_n_cq_poll_sn;
-        next_sn.bundle.cq_id = m_cq_id;
+        m_n_cq_poll_sn_rx += num_polled_cqes;
+        next_sn.bundle.cq_sn = m_n_cq_poll_sn_rx;
+        next_sn.bundle.cq_id = m_cq_id_rx;
 
-        m_n_global_sn = next_sn.global_sn;
+        m_n_global_sn_rx = next_sn.global_sn;
     }
 
-    cq_poll_sn = m_n_global_sn;
-}
-
-inline struct xlio_mlx5_cqe *cq_mgr::get_cqe_tx(uint32_t &num_polled_cqes)
-{
-    struct xlio_mlx5_cqe *cqe_ret = nullptr;
-    struct xlio_mlx5_cqe *cqe =
-        (struct xlio_mlx5_cqe *)(((uint8_t *)m_mlx5_cq.cq_buf) +
-                                 ((m_mlx5_cq.cq_ci & (m_mlx5_cq.cqe_count - 1))
-                                  << m_mlx5_cq.cqe_size_log));
-
-    /* According to PRM, SW ownership bit flips with every CQ overflow. Since cqe_count is
-     * a power of 2, we use it to get cq_ci bit just after the significant bits. The bit changes
-     * with each CQ overflow and actually equals to the SW ownership bit.
-     */
-    while (((cqe->op_own & MLX5_CQE_OWNER_MASK) == !!(m_mlx5_cq.cq_ci & m_mlx5_cq.cqe_count)) &&
-           ((cqe->op_own >> 4) != MLX5_CQE_INVALID)) {
-        ++m_mlx5_cq.cq_ci;
-        ++num_polled_cqes;
-        cqe_ret = cqe;
-        if (unlikely(cqe->op_own & 0x80)) {
-            // This is likely an error CQE. Return it explicitly to log the errors.
-            break;
-        }
-        cqe = (struct xlio_mlx5_cqe *)(((uint8_t *)m_mlx5_cq.cq_buf) +
-                                       ((m_mlx5_cq.cq_ci & (m_mlx5_cq.cqe_count - 1))
-                                        << m_mlx5_cq.cqe_size_log));
-    }
-    if (cqe_ret) {
-        rmb();
-        *m_mlx5_cq.dbrec = htonl(m_mlx5_cq.cq_ci);
-    }
-    return cqe_ret;
+    cq_poll_sn = m_n_global_sn_rx;
 }
 
 inline struct xlio_mlx5_cqe *cq_mgr::check_cqe(void)
