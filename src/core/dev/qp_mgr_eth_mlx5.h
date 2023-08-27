@@ -62,7 +62,7 @@ struct sq_wqe_prop {
 typedef struct sq_wqe_prop sq_wqe_prop;
 
 class qp_mgr_eth_mlx5 : public qp_mgr_eth {
-    friend class cq_mgr_mlx5;
+    friend class cq_mgr_regrq;
 
 public:
     qp_mgr_eth_mlx5(struct qp_mgr_desc *desc, const uint32_t tx_num_wr, const uint16_t vlan,

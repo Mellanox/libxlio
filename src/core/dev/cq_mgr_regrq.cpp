@@ -36,14 +36,13 @@
 
 #include <util/valgrind.h>
 #include "cq_mgr.inl"
-#include "cq_mgr_mlx5.inl"
 #include "qp_mgr.h"
 #include "qp_mgr_eth_mlx5.h"
 #include "ring_simple.h"
 
 #include <netinet/ip6.h>
 
-#define MODULE_NAME "cqm_mlx5"
+#define MODULE_NAME "cq_mgr_regrq"
 
 #define cq_logfunc    __log_info_func
 #define cq_logdbg     __log_info_dbg
@@ -52,7 +51,7 @@
 #define cq_logpanic   __log_info_panic
 #define cq_logfuncall __log_info_funcall
 
-cq_mgr_mlx5::cq_mgr_mlx5(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
+cq_mgr_regrq::cq_mgr_regrq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
                          struct ibv_comp_channel *p_comp_event_channel, bool is_rx,
                          bool call_configure)
     : cq_mgr(p_ring, p_ib_ctx_handler, cq_size, p_comp_event_channel, is_rx, call_configure)
@@ -64,7 +63,7 @@ cq_mgr_mlx5::cq_mgr_mlx5(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, 
     memset(&m_mlx5_cq, 0, sizeof(m_mlx5_cq));
 }
 
-uint32_t cq_mgr_mlx5::clean_cq()
+uint32_t cq_mgr_regrq::clean_cq()
 {
     uint32_t ret_total = 0;
     uint64_t cq_poll_sn = 0;
@@ -106,13 +105,13 @@ uint32_t cq_mgr_mlx5::clean_cq()
     return ret_total;
 }
 
-cq_mgr_mlx5::~cq_mgr_mlx5()
+cq_mgr_regrq::~cq_mgr_regrq()
 {
     cq_logfunc("");
     cq_logdbg("destroying CQ as %s", (m_b_is_rx ? "Rx" : "Tx"));
 }
 
-mem_buf_desc_t *cq_mgr_mlx5::poll(enum buff_status_e &status)
+mem_buf_desc_t *cq_mgr_regrq::poll(enum buff_status_e &status)
 {
     mem_buf_desc_t *buff = NULL;
 
@@ -185,7 +184,7 @@ mem_buf_desc_t *cq_mgr_mlx5::poll(enum buff_status_e &status)
     return buff;
 }
 
-void cq_mgr_mlx5::cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc,
+void cq_mgr_regrq::cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc,
                                        enum buff_status_e &status)
 {
     struct mlx5_err_cqe *ecqe;
@@ -262,7 +261,7 @@ void cq_mgr_mlx5::cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t
     }
 }
 
-int cq_mgr_mlx5::drain_and_proccess_helper(mem_buf_desc_t *buff, buff_status_e status,
+int cq_mgr_regrq::drain_and_proccess_helper(mem_buf_desc_t *buff, buff_status_e status,
                                            uintptr_t *p_recycle_buffers_last_wr_id)
 {
     ++m_n_wce_counter;
@@ -298,7 +297,7 @@ int cq_mgr_mlx5::drain_and_proccess_helper(mem_buf_desc_t *buff, buff_status_e s
     return 1;
 }
 
-int cq_mgr_mlx5::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id /*=NULL*/)
+int cq_mgr_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id /*=NULL*/)
 {
     cq_logfuncall("cq was %s drained. %d processed wce since last check. %d wce in m_rx_queue",
                   (m_b_was_drained ? "" : "not "), m_n_wce_counter, m_rx_queue.size());
@@ -381,7 +380,7 @@ int cq_mgr_mlx5::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id /*=N
     return ret_total;
 }
 
-mem_buf_desc_t *cq_mgr_mlx5::cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc,
+mem_buf_desc_t *cq_mgr_regrq::cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc,
                                             enum buff_status_e status)
 {
     /* Assume locked!!! */
@@ -412,7 +411,7 @@ mem_buf_desc_t *cq_mgr_mlx5::cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc,
     return p_mem_buf_desc;
 }
 
-mem_buf_desc_t *cq_mgr_mlx5::poll_and_process_socketxtreme()
+mem_buf_desc_t *cq_mgr_regrq::poll_and_process_socketxtreme()
 {
     buff_status_e status = BS_OK;
     mem_buf_desc_t *buff_wqe = poll(status);
@@ -433,7 +432,7 @@ mem_buf_desc_t *cq_mgr_mlx5::poll_and_process_socketxtreme()
     return nullptr;
 }
 
-int cq_mgr_mlx5::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array)
+int cq_mgr_regrq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array)
 {
     /* Assume locked!!! */
     cq_logfuncall("");
@@ -485,7 +484,7 @@ int cq_mgr_mlx5::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd
     return ret_rx_processed;
 }
 
-void cq_mgr_mlx5::log_cqe_error(struct xlio_mlx5_cqe *cqe)
+void cq_mgr_regrq::log_cqe_error(struct xlio_mlx5_cqe *cqe)
 {
     struct mlx5_err_cqe *ecqe = (struct mlx5_err_cqe *)cqe;
 
@@ -503,7 +502,7 @@ void cq_mgr_mlx5::log_cqe_error(struct xlio_mlx5_cqe *cqe)
     }
 }
 
-void cq_mgr_mlx5::handle_sq_wqe_prop(unsigned index)
+void cq_mgr_regrq::handle_sq_wqe_prop(unsigned index)
 {
     sq_wqe_prop *p = &m_qp->m_sq_wqe_idx_to_prop[index];
     sq_wqe_prop *prev;
@@ -548,7 +547,7 @@ void cq_mgr_mlx5::handle_sq_wqe_prop(unsigned index)
     m_qp->m_sq_wqe_prop_last_signalled = index;
 }
 
-int cq_mgr_mlx5::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
+int cq_mgr_regrq::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
 {
     cq_logfuncall("");
 
@@ -577,7 +576,7 @@ int cq_mgr_mlx5::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
     return ret;
 }
 
-void cq_mgr_mlx5::set_qp_rq(qp_mgr *qp)
+void cq_mgr_regrq::set_qp_rq(qp_mgr *qp)
 {
     m_qp = static_cast<qp_mgr_eth_mlx5 *>(qp);
 
@@ -592,14 +591,14 @@ void cq_mgr_mlx5::set_qp_rq(qp_mgr *qp)
                m_mlx5_cq.cq_buf);
 }
 
-void cq_mgr_mlx5::add_qp_rx(qp_mgr *qp)
+void cq_mgr_regrq::add_qp_rx(qp_mgr *qp)
 {
     cq_logfunc("");
     set_qp_rq(qp);
     cq_mgr::add_qp_rx(qp);
 }
 
-void cq_mgr_mlx5::add_qp_tx(qp_mgr *qp)
+void cq_mgr_regrq::add_qp_tx(qp_mgr *qp)
 {
     // Assume locked!
     cq_mgr::add_qp_tx(qp);
@@ -613,7 +612,7 @@ void cq_mgr_mlx5::add_qp_tx(qp_mgr *qp)
                m_mlx5_cq.cq_buf);
 }
 
-void cq_mgr_mlx5::lro_update_hdr(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc)
+void cq_mgr_regrq::lro_update_hdr(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc)
 {
     struct ethhdr *p_eth_h = (struct ethhdr *)(p_rx_wc_buf_desc->p_buffer);
     struct tcphdr *p_tcp_h;

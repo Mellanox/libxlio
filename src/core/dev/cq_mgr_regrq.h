@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef CQ_MGR_MLX5_H
-#define CQ_MGR_MLX5_H
+#ifndef CQ_MGR_REGRQ_H
+#define CQ_MGR_REGRQ_H
 
 #include "cq_mgr.h"
 #include "qp_mgr_eth_mlx5.h"
@@ -46,7 +46,7 @@ class qp_mgr_eth_mlx5;
 /* Get CQE owner bit. */
 #define MLX5_CQE_OWNER(op_own) ((op_own)&MLX5_CQE_OWNER_MASK)
 
-class cq_mgr_mlx5 : public cq_mgr {
+class cq_mgr_regrq : public cq_mgr {
 public:
     enum buff_status_e {
         BS_OK,
@@ -56,10 +56,10 @@ public:
         BS_GENERAL_ERR
     };
 
-    cq_mgr_mlx5(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
+    cq_mgr_regrq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
                 struct ibv_comp_channel *p_comp_event_channel, bool is_rx,
                 bool call_configure = true);
-    virtual ~cq_mgr_mlx5();
+    virtual ~cq_mgr_regrq();
 
     virtual int drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id = NULL);
     virtual mem_buf_desc_t *poll_and_process_socketxtreme();
@@ -97,7 +97,7 @@ private:
     virtual int req_notify_cq() { return xlio_ib_mlx5_req_notify_cq(&m_mlx5_cq, 0); };
 };
 
-inline void cq_mgr_mlx5::update_global_sn(uint64_t &cq_poll_sn, uint32_t num_polled_cqes)
+inline void cq_mgr_regrq::update_global_sn(uint64_t &cq_poll_sn, uint32_t num_polled_cqes)
 {
     if (num_polled_cqes > 0) {
         // spoil the global sn if we have packets ready
@@ -118,7 +118,7 @@ inline void cq_mgr_mlx5::update_global_sn(uint64_t &cq_poll_sn, uint32_t num_pol
     cq_poll_sn = m_n_global_sn;
 }
 
-inline struct xlio_mlx5_cqe *cq_mgr_mlx5::get_cqe_tx(uint32_t &num_polled_cqes)
+inline struct xlio_mlx5_cqe *cq_mgr_regrq::get_cqe_tx(uint32_t &num_polled_cqes)
 {
     struct xlio_mlx5_cqe *cqe_ret = nullptr;
     struct xlio_mlx5_cqe *cqe =
@@ -148,6 +148,25 @@ inline struct xlio_mlx5_cqe *cq_mgr_mlx5::get_cqe_tx(uint32_t &num_polled_cqes)
         *m_mlx5_cq.dbrec = htonl(m_mlx5_cq.cq_ci);
     }
     return cqe_ret;
+}
+
+inline struct xlio_mlx5_cqe *cq_mgr_regrq::check_cqe(void)
+{
+    struct xlio_mlx5_cqe *cqe =
+        (struct xlio_mlx5_cqe *)(((uint8_t *)m_mlx5_cq.cq_buf) +
+                                 ((m_mlx5_cq.cq_ci & (m_mlx5_cq.cqe_count - 1))
+                                  << m_mlx5_cq.cqe_size_log));
+    /*
+     * CQE ownership is defined by Owner bit in the CQE.
+     * The value indicating SW ownership is flipped every
+     *  time CQ wraps around.
+     * */
+    if (likely((MLX5_CQE_OPCODE(cqe->op_own)) != MLX5_CQE_INVALID) &&
+        !((MLX5_CQE_OWNER(cqe->op_own)) ^ !!(m_mlx5_cq.cq_ci & m_mlx5_cq.cqe_count))) {
+        return cqe;
+    }
+
+    return NULL;
 }
 
 #endif /* DEFINED_DIRECT_VERBS */

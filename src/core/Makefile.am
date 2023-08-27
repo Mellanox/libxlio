@@ -26,7 +26,6 @@ SUBDIRS = infra netlink
 
 EXTRA_DIST = \
 	dev/cq_mgr.inl \
-	dev/cq_mgr_mlx5.inl \
 	util/libxlio.conf
 
 sysconf_DATA = util/libxlio.conf
