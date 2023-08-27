@@ -55,12 +55,9 @@ cq_mgr_regrq::cq_mgr_regrq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler
                          struct ibv_comp_channel *p_comp_event_channel, bool is_rx,
                          bool call_configure)
     : cq_mgr(p_ring, p_ib_ctx_handler, cq_size, p_comp_event_channel, is_rx, call_configure)
-    , m_qp(NULL)
     , m_rx_hot_buffer(NULL)
 {
     cq_logfunc("");
-
-    memset(&m_mlx5_cq, 0, sizeof(m_mlx5_cq));
 }
 
 uint32_t cq_mgr_regrq::clean_cq()
@@ -449,98 +446,6 @@ int cq_mgr_regrq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_f
     }
 
     return ret_rx_processed;
-}
-
-void cq_mgr_regrq::log_cqe_error(struct xlio_mlx5_cqe *cqe)
-{
-    struct mlx5_err_cqe *ecqe = (struct mlx5_err_cqe *)cqe;
-
-    /* TODO We can also ask qp_mgr to log WQE fields from SQ. But at first, we need to remove
-     * prefetch and memset of the next WQE there. Credit system will guarantee that we don't
-     * reuse the WQE at this point.
-     */
-
-    if (MLX5_CQE_SYNDROME_WR_FLUSH_ERR != ecqe->syndrome) {
-        cq_logwarn("cqe: syndrome=0x%x vendor=0x%x hw=0x%x (type=0x%x) wqe_opcode_qpn=0x%x "
-                   "wqe_counter=0x%x",
-                   ecqe->syndrome, ecqe->vendor_err_synd, *((uint8_t *)&ecqe->rsvd1 + 16),
-                   *((uint8_t *)&ecqe->rsvd1 + 17), ntohl(ecqe->s_wqe_opcode_qpn),
-                   ntohs(ecqe->wqe_counter));
-    }
-}
-
-void cq_mgr_regrq::handle_sq_wqe_prop(unsigned index)
-{
-    sq_wqe_prop *p = &m_qp->m_sq_wqe_idx_to_prop[index];
-    sq_wqe_prop *prev;
-    unsigned credits = 0;
-
-    /*
-     * TX completions can be signalled for a set of WQEs as an optimization.
-     * Therefore, for every TX completion we may need to handle multiple
-     * WQEs. Since every WQE can have various size and the WQE index is
-     * wrapped around, we build a linked list to simplify things. Each
-     * element of the linked list represents properties of a previously
-     * posted WQE.
-     *
-     * We keep index of the last completed WQE and stop processing the list
-     * when we reach the index. This condition is checked in
-     * is_sq_wqe_prop_valid().
-     */
-
-    do {
-        if (p->buf) {
-            m_p_ring->mem_buf_desc_return_single_locked(p->buf);
-        }
-        if (p->ti) {
-            xlio_ti *ti = p->ti;
-            if (ti->m_callback) {
-                ti->m_callback(ti->m_callback_arg);
-            }
-
-            ti->put();
-            if (unlikely(ti->m_released && ti->m_ref == 0)) {
-                m_qp->ti_released(ti);
-            }
-        }
-        credits += p->credits;
-
-        prev = p;
-        p = p->next;
-    } while (p != NULL && m_qp->is_sq_wqe_prop_valid(p, prev));
-
-    m_p_ring->return_tx_pool_to_global_pool();
-    m_qp->credits_return(credits);
-    m_qp->m_sq_wqe_prop_last_signalled = index;
-}
-
-int cq_mgr_regrq::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
-{
-    cq_logfuncall("");
-
-    static auto is_error_opcode = [&](uint8_t opcode) {
-        return opcode == MLX5_CQE_REQ_ERR || opcode == MLX5_CQE_RESP_ERR;
-    };
-
-    int ret = 0;
-    uint32_t num_polled_cqes = 0;
-    xlio_mlx5_cqe *cqe = get_cqe_tx(num_polled_cqes);
-
-    if (likely(cqe)) {
-        unsigned index = ntohs(cqe->wqe_counter) & (m_qp->m_tx_num_wr - 1);
-
-        // All error opcodes have the most significant bit set.
-        if (unlikely(cqe->op_own & 0x80) && is_error_opcode(cqe->op_own >> 4)) {
-            m_p_cq_stat->n_rx_cqe_error++;
-            log_cqe_error(cqe);
-        }
-
-        handle_sq_wqe_prop(index);
-        ret = 1;
-    }
-    update_global_sn(*p_cq_poll_sn, num_polled_cqes);
-
-    return ret;
 }
 
 void cq_mgr_regrq::set_qp_rq(qp_mgr *qp)
