@@ -35,7 +35,7 @@
 
 #include <config.h>
 #include <vector>
-#include "cq_mgr_mlx5.h"
+#include "cq_mgr_regrq.h"
 
 class cq_mgr_mlx5_strq : public cq_mgr_mlx5 {
 public:
