@@ -57,6 +57,7 @@
 class net_device_mgr;
 class ring;
 class qp_mgr;
+class qp_mgr_eth_mlx5;
 class ring_simple;
 
 #define LOCAL_IF_INFO_INVALID                                                                      \
@@ -136,7 +137,7 @@ public:
      *         < 0 error
      */
     virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array = NULL);
-    virtual int poll_and_process_element_tx(uint64_t *p_cq_poll_sn);
+    int poll_and_process_element_tx(uint64_t *p_cq_poll_sn);
     virtual mem_buf_desc_t *poll_and_process_socketxtreme() { return nullptr; };
 
     /**
@@ -185,7 +186,9 @@ protected:
     int poll(xlio_ibv_wc *p_wce, int num_entries, uint64_t *p_cq_poll_sn);
     void compensate_qp_poll_failed();
     inline void process_recv_buffer(mem_buf_desc_t *buff, void *pv_fd_ready_array = NULL);
-
+    
+    inline void update_global_sn(uint64_t &cq_poll_sn, uint32_t rettotal);
+    
     /* Process a WCE... meaning...
      * - extract the mem_buf_desc from the wce.wr_id and then loop on all linked mem_buf_desc
      *   and deliver them to their owner for further processing (sockinfo on Tx path and ib_conn_mgr
@@ -207,6 +210,8 @@ protected:
     // returns list of buffers to the owner.
     void process_tx_buffer_list(mem_buf_desc_t *p_mem_buf_desc);
 
+    xlio_ib_mlx5_cq_t m_mlx5_cq;
+    qp_mgr_eth_mlx5 *m_qp;
     struct ibv_cq *m_p_ibv_cq;
     bool m_b_is_rx;
     descq_t m_rx_queue;
@@ -247,6 +252,12 @@ private:
     cq_stats_t m_cq_stat_static;
     static atomic_t m_n_cq_id_counter;
 
+    inline struct xlio_mlx5_cqe *get_cqe_tx(uint32_t &num_polled_cqes);
+
+    void log_cqe_error(struct xlio_mlx5_cqe *cqe);
+
+    void handle_sq_wqe_prop(unsigned index);
+
     void handle_tcp_ctl_packets(uint32_t rx_processed, void *pv_fd_ready_array);
 
     // requests safe_mce_sys().qp_compensation_level buffers from global pool
@@ -269,5 +280,62 @@ private:
 // Helper gunction to extract the Tx cq_mgr from the CQ event,
 // Since we have a single TX CQ comp channel for all cq_mgr's, it might not be the active_cq object
 cq_mgr *get_cq_mgr_from_cq_event(struct ibv_comp_channel *p_cq_channel);
+
+#if defined(DEFINED_DIRECT_VERBS)
+
+inline void cq_mgr::update_global_sn(uint64_t &cq_poll_sn, uint32_t num_polled_cqes)
+{
+    if (num_polled_cqes > 0) {
+        // spoil the global sn if we have packets ready
+        union __attribute__((packed)) {
+            uint64_t global_sn;
+            struct {
+                uint32_t cq_id;
+                uint32_t cq_sn;
+            } bundle;
+        } next_sn;
+        m_n_cq_poll_sn += num_polled_cqes;
+        next_sn.bundle.cq_sn = m_n_cq_poll_sn;
+        next_sn.bundle.cq_id = m_cq_id;
+
+        m_n_global_sn = next_sn.global_sn;
+    }
+
+    cq_poll_sn = m_n_global_sn;
+}
+
+inline struct xlio_mlx5_cqe *cq_mgr::get_cqe_tx(uint32_t &num_polled_cqes)
+{
+    struct xlio_mlx5_cqe *cqe_ret = nullptr;
+    struct xlio_mlx5_cqe *cqe =
+        (struct xlio_mlx5_cqe *)(((uint8_t *)m_mlx5_cq.cq_buf) +
+                                 ((m_mlx5_cq.cq_ci & (m_mlx5_cq.cqe_count - 1))
+                                  << m_mlx5_cq.cqe_size_log));
+
+    /* According to PRM, SW ownership bit flips with every CQ overflow. Since cqe_count is
+     * a power of 2, we use it to get cq_ci bit just after the significant bits. The bit changes
+     * with each CQ overflow and actually equals to the SW ownership bit.
+     */
+    while (((cqe->op_own & MLX5_CQE_OWNER_MASK) == !!(m_mlx5_cq.cq_ci & m_mlx5_cq.cqe_count)) &&
+           ((cqe->op_own >> 4) != MLX5_CQE_INVALID)) {
+        ++m_mlx5_cq.cq_ci;
+        ++num_polled_cqes;
+        cqe_ret = cqe;
+        if (unlikely(cqe->op_own & 0x80)) {
+            // This is likely an error CQE. Return it explicitly to log the errors.
+            break;
+        }
+        cqe = (struct xlio_mlx5_cqe *)(((uint8_t *)m_mlx5_cq.cq_buf) +
+                                       ((m_mlx5_cq.cq_ci & (m_mlx5_cq.cqe_count - 1))
+                                        << m_mlx5_cq.cqe_size_log));
+    }
+    if (cqe_ret) {
+        rmb();
+        *m_mlx5_cq.dbrec = htonl(m_mlx5_cq.cq_ci);
+    }
+    return cqe_ret;
+}
+
+#endif /* DEFINED_DIRECT_VERBS */
 
 #endif // CQ_MGR_H
