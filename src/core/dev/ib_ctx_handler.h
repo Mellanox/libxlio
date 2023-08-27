@@ -93,7 +93,6 @@ public:
     uint32_t user_mem_reg(void *addr, size_t length, uint64_t access);
     bool is_removed() { return m_removed; }
     void set_ctx_time_converter_status(ts_conversion_mode_t conversion_mode);
-    ts_conversion_mode_t get_ctx_time_converter_status();
     void set_flow_tag_capability(bool flow_tag_capability);
     bool get_flow_tag_capability() { return m_flow_tag_enabled; } // m_flow_tag_capability
     void set_burst_capability(bool burst);

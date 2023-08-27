@@ -58,9 +58,8 @@
 cq_mgr_strq::cq_mgr_strq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler,
                          uint32_t cq_size, uint32_t stride_size_bytes,
                          uint32_t strides_num,
-                         struct ibv_comp_channel *p_comp_event_channel,
-                         bool call_configure)
-    : cq_mgr(p_ring, p_ib_ctx_handler, cq_size, p_comp_event_channel, true, call_configure)
+                         struct ibv_comp_channel *p_comp_event_channel)
+    : cq_mgr(p_ring, p_ib_ctx_handler, cq_size, p_comp_event_channel)
     , _owner_ring(p_ring)
     , _stride_size_bytes(stride_size_bytes)
     , _strides_num(strides_num)
@@ -150,7 +149,7 @@ uint32_t cq_mgr_strq::clean_cq()
         stride_buf = nullptr;
     }
 
-    update_global_sn(cq_poll_sn, ret_total);
+    update_global_sn_rx(cq_poll_sn, ret_total);
 
     return ret_total;
 }
@@ -356,8 +355,7 @@ int cq_mgr_strq::drain_and_proccess_helper(mem_buf_desc_t *buff, mem_buf_desc_t 
                 m_p_cq_stat->n_rx_pkt_drop++;
                 reclaim_recv_buffer_helper(buff);
             } else {
-                bool procces_now =
-                    (m_transport_type == XLIO_TRANSPORT_ETH ? is_eth_tcp_frame(buff) : false);
+                bool procces_now = is_eth_tcp_frame(buff);
 
                 // We process immediately all non udp/ip traffic..
                 if (procces_now) {
@@ -400,7 +398,7 @@ int cq_mgr_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id)
         mem_buf_desc_t *buff = nullptr;
         mem_buf_desc_t *buff_wqe = poll(status, buff);
         if (!buff && !buff_wqe) {
-            update_global_sn(cq_poll_sn, ret_total);
+            update_global_sn_rx(cq_poll_sn, ret_total);
             m_b_was_drained = true;
             m_p_ring->m_gro_mgr.flush_all(nullptr);
             return ret_total;
@@ -410,7 +408,7 @@ int cq_mgr_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id)
             drain_and_proccess_helper(buff, buff_wqe, status, p_recycle_buffers_last_wr_id);
     }
 
-    update_global_sn(cq_poll_sn, ret_total);
+    update_global_sn_rx(cq_poll_sn, ret_total);
 
     m_p_ring->m_gro_mgr.flush_all(nullptr);
     m_n_wce_counter = 0; // Actually strides count.
@@ -500,7 +498,7 @@ int cq_mgr_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd
         }
     }
 
-    update_global_sn(*p_cq_poll_sn, ret);
+    update_global_sn_rx(*p_cq_poll_sn, ret);
 
     if (likely(ret > 0)) {
         m_n_wce_counter += ret; // Actually strides count.
