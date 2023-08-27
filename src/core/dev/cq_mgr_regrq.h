@@ -65,7 +65,6 @@ public:
     mem_buf_desc_t *cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc, enum buff_status_e status); // MOVE
     virtual void add_qp_rx(qp_mgr *qp);
     void set_qp_rq(qp_mgr *qp); // MOVE
-    virtual void add_qp_tx(qp_mgr *qp); // MOVE
     virtual uint32_t clean_cq();
 
 protected:
