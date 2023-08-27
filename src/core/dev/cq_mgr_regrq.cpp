@@ -470,20 +470,6 @@ void cq_mgr_regrq::add_qp_rx(qp_mgr *qp)
     cq_mgr::add_qp_rx(qp);
 }
 
-void cq_mgr_regrq::add_qp_tx(qp_mgr *qp)
-{
-    // Assume locked!
-    cq_mgr::add_qp_tx(qp);
-    m_qp = static_cast<qp_mgr_eth_mlx5 *>(qp);
-
-    if (0 != xlio_ib_mlx5_get_cq(m_p_ibv_cq, &m_mlx5_cq)) {
-        cq_logpanic("xlio_ib_mlx5_get_cq failed (errno=%d %m)", errno);
-    }
-
-    cq_logfunc("qp_mgr=%p m_mlx5_cq.dbrec=%p m_mlx5_cq.cq_buf=%p", m_qp, m_mlx5_cq.dbrec,
-               m_mlx5_cq.cq_buf);
-}
-
 void cq_mgr_regrq::lro_update_hdr(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc)
 {
     struct ethhdr *p_eth_h = (struct ethhdr *)(p_rx_wc_buf_desc->p_buffer);
