@@ -93,7 +93,7 @@ cq_mgr_rx::cq_mgr_rx(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int 
     BULLSEYE_EXCLUDE_BLOCK_END
 
     memset(&m_cq_stat_static, 0, sizeof(m_cq_stat_static));
-    memset(&m_qp_rec, 0, sizeof(m_qp_rec));
+
     m_rx_queue.set_id("cq_mgr_rx (%p) : m_rx_queue", this);
     m_rx_pool.set_id("cq_mgr_rx (%p) : m_rx_pool", this);
     m_cq_id_rx = atomic_fetch_and_inc(&m_n_cq_id_counter_rx); // cq id is nonzero
@@ -184,7 +184,7 @@ void cq_mgr_rx::statistics_print()
     }
 }
 
-void cq_mgr_rx::set_qp_rq(qp_mgr *qp)
+void cq_mgr_rx::add_qp_rx(qp_mgr *qp)
 {
     m_qp = static_cast<qp_mgr_eth_mlx5 *>(qp);
 
@@ -194,14 +194,11 @@ void cq_mgr_rx::set_qp_rq(qp_mgr *qp)
     if (0 != xlio_ib_mlx5_get_cq(m_p_ibv_cq, &m_mlx5_cq)) {
         cq_logpanic("xlio_ib_mlx5_get_cq failed (errno=%d %m)", errno);
     }
+
     VALGRIND_MAKE_MEM_DEFINED(&m_mlx5_cq, sizeof(m_mlx5_cq));
     cq_logfunc("qp_mgr=%p m_mlx5_cq.dbrec=%p m_mlx5_cq.cq_buf=%p", m_qp, m_mlx5_cq.dbrec,
                m_mlx5_cq.cq_buf);
-}
 
-void cq_mgr_rx::add_qp_rx(qp_mgr *qp)
-{
-    cq_logdbg("qp_mgr=%p", qp);
     descq_t temp_desc_list;
     temp_desc_list.set_id("cq_mgr_rx (%p) : temp_desc_list", this);
 
@@ -239,27 +236,27 @@ void cq_mgr_rx::add_qp_rx(qp_mgr *qp)
         }
         qp_rx_wr_num -= n_num_mem_bufs;
     }
+
     cq_logdbg("Successfully post_recv qp with %d new Rx buffers (planned=%d)",
               qp->get_rx_max_wr_num() - qp_rx_wr_num, qp->get_rx_max_wr_num());
 
-    // Add qp_mgr to map
-    m_qp_rec.qp = qp;
-    m_qp_rec.debt = 0;
+    m_debt = 0;
 }
 
 void cq_mgr_rx::del_qp_rx(qp_mgr *qp)
 {
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (m_qp_rec.qp != qp) {
-        cq_logdbg("wrong qp_mgr=%p != m_qp_rec.qp=%p", qp, m_qp_rec.qp);
+    if (m_qp != qp) {
+        cq_logdbg("wrong qp_mgr=%p != m_qp=%p", qp, m_qp);
         return;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
-    cq_logdbg("qp_mgr=%p", m_qp_rec.qp);
+    cq_logdbg("qp_mgr=%p", m_qp);
     return_extra_buffers();
 
     clean_cq();
-    memset(&m_qp_rec, 0, sizeof(m_qp_rec));
+    m_qp = nullptr;
+    m_debt = 0;
 }
 
 void cq_mgr_rx::lro_update_hdr(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc)
@@ -382,15 +379,15 @@ bool cq_mgr_rx::compensate_qp_poll_success(mem_buf_desc_t *buff_cur)
     // Assume locked!!!
     // Compensate QP for all completions that we found
     if (m_rx_pool.size() || request_more_buffers()) {
-        size_t buffers = std::min<size_t>(m_qp_rec.debt, m_rx_pool.size());
-        m_qp_rec.qp->post_recv_buffers(&m_rx_pool, buffers);
-        m_qp_rec.debt -= buffers;
+        size_t buffers = std::min<size_t>(m_debt, m_rx_pool.size());
+        m_qp->post_recv_buffers(&m_rx_pool, buffers);
+        m_debt -= buffers;
         m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
     } else if (m_b_sysvar_cq_keep_qp_full ||
-               m_qp_rec.debt + MCE_MAX_CQ_POLL_BATCH > (int)m_qp_rec.qp->m_rx_num_wr) {
+               m_debt + MCE_MAX_CQ_POLL_BATCH > (int)m_qp->m_rx_num_wr) {
         m_p_cq_stat->n_rx_pkt_drop++;
-        m_qp_rec.qp->post_recv_buffer(buff_cur);
-        --m_qp_rec.debt;
+        m_qp->post_recv_buffer(buff_cur);
+        --m_debt;
         return true;
     }
 
@@ -401,11 +398,11 @@ void cq_mgr_rx::compensate_qp_poll_failed()
 {
     // Assume locked!!!
     // Compensate QP for all completions debt
-    if (m_qp_rec.debt) {
+    if (m_debt) {
         if (likely(m_rx_pool.size() || request_more_buffers())) {
-            size_t buffers = std::min<size_t>(m_qp_rec.debt, m_rx_pool.size());
-            m_qp_rec.qp->post_recv_buffers(&m_rx_pool, buffers);
-            m_qp_rec.debt -= buffers;
+            size_t buffers = std::min<size_t>(m_debt, m_rx_pool.size());
+            m_qp->post_recv_buffers(&m_rx_pool, buffers);
+            m_debt -= buffers;
             m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
         }
     }

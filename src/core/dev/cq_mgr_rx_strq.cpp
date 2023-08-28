@@ -157,7 +157,7 @@ uint32_t cq_mgr_rx_strq::clean_cq()
 bool cq_mgr_rx_strq::set_current_hot_buffer()
 {
     if (likely(m_qp->m_mlx5_qp.rq.tail != (m_qp->m_mlx5_qp.rq.head))) {
-        uint32_t index = m_qp->m_mlx5_qp.rq.tail & (m_qp_rec.qp->m_rx_num_wr - 1);
+        uint32_t index = m_qp->m_mlx5_qp.rq.tail & (m_qp->m_rx_num_wr - 1);
         m_rx_hot_buffer = (mem_buf_desc_t *)m_qp->m_rq_wqe_idx_to_wrid[index];
         m_rx_hot_buffer->set_ref_count(_strides_num);
         m_qp->m_rq_wqe_idx_to_wrid[index] = 0;
@@ -375,7 +375,7 @@ int cq_mgr_rx_strq::drain_and_proccess_helper(mem_buf_desc_t *buff, mem_buf_desc
                                               uintptr_t *p_recycle_buffers_last_wr_id)
 {
     int ret_total = 0;
-    if (buff_wqe && (++m_qp_rec.debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv) &&
+    if (buff_wqe && (++m_debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv) &&
         !p_recycle_buffers_last_wr_id) {
         compensate_qp_poll_failed(); // Reuse this method as success.
     }
@@ -487,7 +487,7 @@ mem_buf_desc_t *cq_mgr_rx_strq::poll_and_process_socketxtreme()
     mem_buf_desc_t *buff = nullptr;
     mem_buf_desc_t *buff_wqe = poll(status, buff);
 
-    if ((buff_wqe && (++m_qp_rec.debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv)) || !buff) {
+    if ((buff_wqe && (++m_debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv)) || !buff) {
         compensate_qp_poll_failed(); // Reuse this method as success.
     }
 
@@ -516,7 +516,7 @@ int cq_mgr_rx_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv
         mem_buf_desc_t *buff = nullptr;
         mem_buf_desc_t *buff_wqe = poll(status, buff);
 
-        if (buff_wqe && (++m_qp_rec.debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv)) {
+        if (buff_wqe && (++m_debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv)) {
             compensate_qp_poll_failed(); // Reuse this method as success.
         }
 
@@ -547,7 +547,6 @@ int cq_mgr_rx_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv
 void cq_mgr_rx_strq::add_qp_rx(qp_mgr *qp)
 {
     cq_logfunc("");
-    set_qp_rq(qp);
     _hot_buffer_stride = nullptr;
     _current_wqe_consumed_bytes = 0U;
     cq_mgr_rx::add_qp_rx(qp);
