@@ -62,8 +62,8 @@ struct sq_wqe_prop {
 typedef struct sq_wqe_prop sq_wqe_prop;
 
 class qp_mgr_eth_mlx5 : public qp_mgr_eth {
-    friend class cq_mgr;
-    friend class cq_mgr_regrq;
+    friend class cq_mgr_rx;
+    friend class cq_mgr_rx_regrq;
     friend class cq_mgr_tx;
 
 public:
@@ -139,7 +139,7 @@ protected:
     bool init_rx_cq_mgr_prepare();
     void init_qp();
     void init_device_memory();
-    cq_mgr *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel) override;
+    cq_mgr_rx *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel) override;
     cq_mgr_tx *init_tx_cq_mgr(void) override;
 
     void put_tls_tir_in_cache(xlio_tir *tir);

@@ -392,7 +392,7 @@ void ring_simple::create_resources()
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    // save cq_mgr pointers
+    // save pointers
     m_p_cq_mgr_rx = m_p_qp_mgr->get_rx_cq_mgr();
     m_p_cq_mgr_tx = m_p_qp_mgr->get_tx_cq_mgr();
 
@@ -606,16 +606,16 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
         // Try to poll once in the hope that we get a few freed tx mem_buf_desc
         ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
         if (ret < 0) {
-            ring_logdbg("failed polling on tx cq_mgr (qp_mgr=%p, cq_mgr_tx=%p) (ret=%d %m)",
+            ring_logdbg("failed polling on cq_mgr_tx (qp_mgr=%p, cq_mgr_tx=%p) (ret=%d %m)",
                         m_p_qp_mgr, m_p_cq_mgr_tx, ret);
             /* coverity[double_unlock] TODO: RM#1049980 */
             m_lock_ring_tx.unlock();
             return NULL;
         } else if (ret > 0) {
-            ring_logfunc("polling succeeded on tx cq_mgr (%d wce)", ret);
+            ring_logfunc("polling succeeded on cq_mgr_tx (%d wce)", ret);
             buff_list = get_tx_buffers(type, n_num_mem_bufs);
         } else if (b_block) { // (ret == 0)
-            // Arm & Block on tx cq_mgr notification channel
+            // Arm & Block on tx cq_mgr_tx notification channel
             // until we get a few freed tx mem_buf_desc & data buffers
 
             // Only a single thread should block on next Tx cqe event, hence the dedicated lock!
@@ -632,7 +632,7 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
                 ret = m_p_cq_mgr_tx->request_notification(poll_sn);
                 if (ret < 0) {
                     // this is most likely due to cq_poll_sn out of sync, need to poll_cq again
-                    ring_logdbg("failed arming tx cq_mgr (qp_mgr=%p, cq_mgr_tx=%p) (errno=%d %m)",
+                    ring_logdbg("failed arming cq_mgr_tx (qp_mgr=%p, cq_mgr_tx=%p) (errno=%d %m)",
                                 m_p_qp_mgr, m_p_cq_mgr_tx, errno);
                 } else if (ret == 0) {
 
@@ -654,16 +654,16 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
                         buff_list = get_tx_buffers(type, n_num_mem_bufs);
                         continue;
                     } else if (ret < 0) {
-                        ring_logdbg("failed blocking on tx cq_mgr (errno=%d %m)", errno);
+                        ring_logdbg("failed blocking on cq_mgr_tx (errno=%d %m)", errno);
                         m_lock_ring_tx_buf_wait.unlock();
                         return NULL;
                     }
                     /* coverity[double_lock] TODO: RM#1049980 */
                     m_lock_ring_tx.lock();
 
-                    // Find the correct Tx cq_mgr from the CQ event,
+                    // Find the correct cq_mgr_tx from the CQ event,
                     // It might not be the active_cq object since we have a single TX CQ comp
-                    // channel for all cq_mgr's
+                    // channel for all cq_mgr_tx's
                     cq_mgr_tx *p_cq_mgr_tx = cq_mgr_tx::get_cq_mgr_from_cq_event(get_tx_comp_event_channel());
                     if (p_cq_mgr_tx) {
 
@@ -673,7 +673,7 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
                         // Perform a non blocking event read, clear the fd channel
                         ret = p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
                         if (ret < 0) {
-                            ring_logdbg("failed handling Tx cq_mgr channel (qp_mgr=%p, "
+                            ring_logdbg("failed handling cq_mgr_tx channel (qp_mgr=%p, "
                                         "cq_mgr_tx=%p) (errno=%d %m)",
                                         m_p_qp_mgr, m_p_cq_mgr_tx, errno);
                             /* coverity[double_unlock] TODO: RM#1049980 */
@@ -681,7 +681,7 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
                             m_lock_ring_tx_buf_wait.unlock();
                             return NULL;
                         }
-                        ring_logfunc("polling/blocking succeeded on tx cq_mgr (we got %d wce)",
+                        ring_logfunc("polling/blocking succeeded on cq_mgr_tx (we got %d wce)",
                                      ret);
                     }
                 }
@@ -802,7 +802,7 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
         // Try to poll once in the hope that we get space in SQ
         ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
         if (ret < 0) {
-            ring_logdbg("failed polling on tx cq_mgr (qp_mgr=%p, cq_mgr_tx=%p) (ret=%d %m)",
+            ring_logdbg("failed polling on cq_mgr_tx (qp_mgr=%p, cq_mgr_tx=%p) (ret=%d %m)",
                         m_p_qp_mgr, m_p_cq_mgr_tx, ret);
             /* coverity[missing_unlock] */
             return false;
@@ -813,7 +813,7 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
         }
 
         if (b_block) {
-            // Arm & Block on tx cq_mgr notification channel until we get space in SQ
+            // Arm & Block on cq_mgr_tx notification channel until we get space in SQ
 
             // Only a single thread should block on next Tx cqe event, hence the dedicated lock!
             /* coverity[double_unlock] TODO: RM#1049980 */
@@ -826,7 +826,7 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
             ret = m_p_cq_mgr_tx->request_notification(poll_sn);
             if (ret < 0) {
                 // this is most likely due to cq_poll_sn out of sync, need to poll_cq again
-                ring_logdbg("failed arming tx cq_mgr (qp_mgr=%p, cq_mgr_tx=%p) (errno=%d %m)",
+                ring_logdbg("failed arming cq_mgr_tx (qp_mgr=%p, cq_mgr_tx=%p) (errno=%d %m)",
                             m_p_qp_mgr, m_p_cq_mgr_tx, errno);
             } else if (ret == 0) {
                 // prepare to block
@@ -841,7 +841,7 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
 
                 ret = orig_os_api.poll(&poll_fd, 1, -1);
                 if (ret <= 0) {
-                    ring_logdbg("failed blocking on tx cq_mgr (errno=%d %m)", errno);
+                    ring_logdbg("failed blocking on cq_mgr_tx (errno=%d %m)", errno);
                     m_lock_ring_tx_buf_wait.unlock();
                     /* coverity[double_lock] TODO: RM#1049980 */
                     m_lock_ring_tx.lock();
@@ -851,9 +851,9 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
                 /* coverity[double_lock] TODO: RM#1049980 */
                 m_lock_ring_tx.lock();
 
-                // Find the correct Tx cq_mgr from the CQ event,
+                // Find the correct cq_mgr_tx from the CQ event,
                 // It might not be the active_cq object since we have a single TX CQ comp
-                // channel for all cq_mgr's
+                // channel for all cq_mgr_tx's
                 cq_mgr_tx *p_cq_mgr_tx = cq_mgr_tx::get_cq_mgr_from_cq_event(get_tx_comp_event_channel());
                 if (p_cq_mgr_tx) {
 
@@ -863,7 +863,7 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
                     // Perform a non blocking event read, clear the fd channel
                     ret = p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
                     if (ret < 0) {
-                        ring_logdbg("failed handling Tx cq_mgr channel (qp_mgr=%p, "
+                        ring_logdbg("failed handling cq_mgr_tx channel (qp_mgr=%p, "
                                     "cq_mgr_tx=%p) (errno=%d %m)",
                                     m_p_qp_mgr, m_p_cq_mgr_tx, errno);
                         /* coverity[double_unlock] TODO: RM#1049980 */
@@ -873,7 +873,7 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
                         m_lock_ring_tx.lock();
                         return false;
                     }
-                    ring_logfunc("polling/blocking succeeded on tx cq_mgr (we got %d wce)", ret);
+                    ring_logfunc("polling/blocking succeeded on cq_mgr_tx (we got %d wce)", ret);
                 }
             }
 

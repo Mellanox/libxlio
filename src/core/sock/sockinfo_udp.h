@@ -132,7 +132,7 @@ public:
     /**
      * Arm the event channel(s) assosiated with this sockinfo
      * Fill the fd_set (p_rxfds) with the correct fd channel values and the p_nfds with the (max_fd
-     * + 1) Fill the p_cq_mgr_fd_map with the pointer to the cq_mgr asosiated with the fd Return
+     * + 1) Fill the p_cq_mgr_fd_map with the pointer to the cq_mgr_rx asosiated with the fd Return
      * count of channels (fds) that where mapped
      */
     int rx_request_notification(uint64_t poll_sn);

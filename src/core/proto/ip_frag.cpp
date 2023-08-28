@@ -162,7 +162,7 @@ void ip_frag_manager::free_frag_resources(void)
 
     unlock();
 
-    // Must call cq_mgr outside the lock to avoid ABBA deadlock
+    // Must call cq_mgr_rx outside the lock to avoid ABBA deadlock
     return_buffers_to_owners(temp_buff_map);
 
     delete[] desc_base;
@@ -565,7 +565,7 @@ void ip_frag_manager::handle_timer_expired(void *user_data)
     PRINT_STATISTICS();
     unlock();
 
-    // Must call cq_mgr outside the lock to avoid ABBA deadlock
+    // Must call cq_mgr_rx outside the lock to avoid ABBA deadlock
     return_buffers_to_owners(temp_buff_map);
 }
 

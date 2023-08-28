@@ -201,14 +201,14 @@ int cq_mgr_tx::request_notification(uint64_t poll_sn)
     cq_logfuncall("");
 
     if ((m_n_global_sn_tx > 0 && poll_sn != m_n_global_sn_tx)) {
-        // The cq_mgr's has receive packets pending processing (or got processed since cq_poll_sn)
+        // The cq_mgr_tx's has receive packets pending processing (or got processed since cq_poll_sn)
         cq_logfunc("miss matched poll sn (user=0x%lx, cq=0x%lx)", poll_sn, m_n_cq_poll_sn_tx);
         return 1;
     }
 
     if (m_b_notification_armed == false) {
 
-        cq_logfunc("arming cq_mgr notification channel");
+        cq_logfunc("arming cq_mgr_tx notification channel");
 
         // Arm the CQ notification channel
         IF_VERBS_FAILURE(xlio_ib_mlx5_req_notify_cq(&m_mlx5_cq, 0))
@@ -222,7 +222,7 @@ int cq_mgr_tx::request_notification(uint64_t poll_sn)
         }
         ENDIF_VERBS_FAILURE;
     } else {
-        // cq_mgr notification channel already armed
+        // cq_mgr_tx notification channel already armed
         ret = 0;
     }
 
@@ -240,12 +240,12 @@ cq_mgr_tx *cq_mgr_tx::get_cq_mgr_from_cq_event(struct ibv_comp_channel *p_cq_cha
     IF_VERBS_FAILURE(ibv_get_cq_event(p_cq_channel, &p_cq_hndl, &p_context))
     {
         vlog_printf(VLOG_INFO,
-                    MODULE_NAME ":%d: waiting on cq_mgr event returned with error (errno=%d %m)\n",
+                    MODULE_NAME ":%d: waiting on cq_mgr_tx event returned with error (errno=%d %m)\n",
                     __LINE__, errno);
     }
     else
     {
-        p_cq_mgr = (cq_mgr_tx *)p_context; // Save the cq_mgr
+        p_cq_mgr = (cq_mgr_tx *)p_context; // Save the cq_mgr_tx
         p_cq_mgr->get_cq_event();
         ibv_ack_cq_events(p_cq_hndl, 1); // Ack the ibv event
     }

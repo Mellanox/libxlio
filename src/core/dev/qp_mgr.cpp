@@ -37,7 +37,7 @@
 #include "util/instrumentation.h"
 #include "iomux/io_mux_call.h"
 #include "buffer_pool.h"
-#include "cq_mgr.h"
+#include "cq_mgr_rx.h"
 #include "ring_simple.h"
 #include "util/valgrind.h"
 #include "dev/rfs_rule_ibv.h"
@@ -163,7 +163,7 @@ int qp_mgr::configure(struct qp_mgr_desc *desc)
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    // Modify the Rx and Tx cq_mgr to use a non-blocking event channel
+    // Modify the cq_mgr_rx and cq_mgr_tx to use a non-blocking event channel
     set_fd_block_mode(m_p_cq_mgr_rx->get_channel_fd(), false);
     set_fd_block_mode(m_p_cq_mgr_tx->get_channel_fd(), false);
 
@@ -340,7 +340,7 @@ void qp_mgr::release_rx_buffers()
         }
     }
     // Wait for all FLUSHed WQE on Rx CQ
-    qp_logdbg("draining rx cq_mgr %p (last_posted_rx_wr_id = %lu)", m_p_cq_mgr_rx,
+    qp_logdbg("draining cq_mgr_rx %p (last_posted_rx_wr_id = %lu)", m_p_cq_mgr_rx,
               m_last_posted_rx_wr_id);
     uintptr_t last_polled_rx_wr_id = 0;
     while (m_p_cq_mgr_rx && last_polled_rx_wr_id != m_last_posted_rx_wr_id && errno != EIO &&
@@ -348,7 +348,7 @@ void qp_mgr::release_rx_buffers()
 
         // Process the FLUSH'ed WQE's
         int ret = m_p_cq_mgr_rx->drain_and_proccess(&last_polled_rx_wr_id);
-        qp_logdbg("draining completed on rx cq_mgr (%d wce) last_polled_rx_wr_id = %lu", ret,
+        qp_logdbg("draining completed on cq_mgr_rx (%d wce) last_polled_rx_wr_id = %lu", ret,
                   last_polled_rx_wr_id);
 
         total_ret += ret;
@@ -364,7 +364,7 @@ void qp_mgr::release_rx_buffers()
         nanosleep(&short_sleep, NULL);
     }
     m_last_posted_rx_wr_id = 0; // Clear the posted WR_ID flag, we just clear the entire RQ
-    qp_logdbg("draining completed with a total of %d wce's on rx cq_mgr", total_ret);
+    qp_logdbg("draining completed with a total of %d wce's on cq_mgr_rx", total_ret);
     NOT_IN_USE(total_ret); // Suppress --enable-opt-log=high warning
 }
 
@@ -372,11 +372,11 @@ void qp_mgr::release_tx_buffers()
 {
     int ret;
     uint64_t poll_sn = 0;
-    qp_logdbg("draining tx cq_mgr %p", m_p_cq_mgr_tx);
+    qp_logdbg("draining cq_mgr_tx %p", m_p_cq_mgr_tx);
     while (m_p_cq_mgr_tx && m_qp &&
            ((ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn)) > 0) &&
            (errno != EIO && !m_p_ib_ctx_handler->is_removed())) {
-        qp_logdbg("draining completed on tx cq_mgr (%d wce)", ret);
+        qp_logdbg("draining completed on cq_mgr_tx (%d wce)", ret);
     }
     NOT_IN_USE(ret); // Suppress --enable-opt-log=high warning
 }
@@ -494,7 +494,7 @@ void qp_mgr::post_recv_buffer(mem_buf_desc_t *p_mem_buf_desc)
 void qp_mgr::post_recv_buffers(descq_t *p_buffers, size_t count)
 {
     qp_logfuncall("");
-    // Called from cq_mgr context under cq_mgr::LOCK!
+    // Called from cq_mgr_rx context under cq_mgr_rx::LOCK!
     while (count--) {
         post_recv_buffer(p_buffers->get_and_pop_front());
     }
@@ -568,7 +568,7 @@ int qp_mgr::send(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio
             qp_logerr("error from cq_mgr_tx->process_next_element (ret=%d %m)", ret);
         }
         BULLSEYE_EXCLUDE_BLOCK_END
-        qp_logfunc("polling succeeded on tx cq_mgr (%d wce)", ret);
+        qp_logfunc("polling succeeded on cq_mgr_tx (%d wce)", ret);
     }
 
     return 0;
