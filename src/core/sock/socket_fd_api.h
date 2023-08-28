@@ -37,7 +37,7 @@
 #include <sys/socket.h>
 #include "xlio_extra.h"
 
-#include <dev/cq_mgr.h>
+#include <dev/cq_mgr_rx.h>
 #include <dev/buffer_pool.h>
 #include <sock/cleanable_obj.h>
 
@@ -53,7 +53,7 @@
 
 #define IS_DUMMY_PACKET(flags) (flags & XLIO_SND_FLAGS_DUMMY)
 
-class cq_mgr;
+class cq_mgr_rx;
 class epfd_info;
 class mem_buf_desc_t;
 

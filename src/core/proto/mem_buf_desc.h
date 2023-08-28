@@ -184,13 +184,13 @@ public:
     size_t sz_buffer; // this is the size of the buffer
     size_t sz_data; // this is the amount of data inside the buffer (sz_data <= sz_buffer)
 
-    // Tx: qp_mgr owns the mem_buf_desc and the associated data buffer
-    // Rx: cq_mgr owns the mem_buf_desc and the associated data buffer
+    // Tx: cq_mgr_tx owns the mem_buf_desc and the associated data buffer
+    // Rx: cq_mgr_rx owns the mem_buf_desc and the associated data buffer
     ring_slave *p_desc_owner;
 
 private:
     atomic_t n_ref_count; // number of interested receivers (sockinfo) [can be modified only in
-                          // cq_mgr context]
+                          // cq_mgr_rx context]
 
 public:
     inline void clear_transport_data(void)

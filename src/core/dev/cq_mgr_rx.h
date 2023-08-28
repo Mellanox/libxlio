@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef CQ_MGR_H
-#define CQ_MGR_H
+#ifndef CQ_MGR_RX_H
+#define CQ_MGR_RX_H
 
 #include "ib/base/verbs_extra.h"
 #include "utils/atomic.h"
@@ -71,9 +71,7 @@ struct qp_rec {
     int debt;
 };
 
-// Class cq_mgr
-//
-class cq_mgr {
+class cq_mgr_rx {
     friend class ring; // need to expose the m_n_global_sn_rx only to ring
     friend class ring_simple; // need to expose the m_n_global_sn_rx only to ring
     friend class ring_bond; // need to expose the m_n_global_sn_rx only to ring
@@ -88,9 +86,9 @@ public:
         BS_GENERAL_ERR
     };
 
-    cq_mgr(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int cq_size,
-           struct ibv_comp_channel *p_comp_event_channel);
-    virtual ~cq_mgr();
+    cq_mgr_rx(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int cq_size,
+              struct ibv_comp_channel *p_comp_event_channel);
+    virtual ~cq_mgr_rx();
 
     void configure(int cq_size);
 
@@ -140,7 +138,7 @@ public:
 
     // CQ implements the Rx mem_buf_desc_owner.
     // These callbacks will be called for each Rx buffer that passed processed completion
-    // Rx completion handling at the cq_mgr level is forwarding the packet to the ib_comm_mgr layer
+    // Rx completion handling at the cq_mgr_rx level is forwarding the packet to the ib_comm_mgr layer
     void mem_buf_desc_return_to_owner(mem_buf_desc_t *p_mem_buf_desc,
                                       void *pv_fd_ready_array = NULL);
 
@@ -231,7 +229,7 @@ private:
     void return_extra_buffers() __attribute__((noinline));
 };
 
-inline void cq_mgr::update_global_sn_rx(uint64_t &cq_poll_sn, uint32_t num_polled_cqes)
+inline void cq_mgr_rx::update_global_sn_rx(uint64_t &cq_poll_sn, uint32_t num_polled_cqes)
 {
     if (num_polled_cqes > 0) {
         // spoil the global sn if we have packets ready
@@ -252,7 +250,7 @@ inline void cq_mgr::update_global_sn_rx(uint64_t &cq_poll_sn, uint32_t num_polle
     cq_poll_sn = m_n_global_sn_rx;
 }
 
-inline struct xlio_mlx5_cqe *cq_mgr::check_cqe(void)
+inline struct xlio_mlx5_cqe *cq_mgr_rx::check_cqe(void)
 {
     struct xlio_mlx5_cqe *cqe =
         (struct xlio_mlx5_cqe *)(((uint8_t *)m_mlx5_cq.cq_buf) +
