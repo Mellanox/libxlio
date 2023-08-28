@@ -37,7 +37,7 @@
 #include "proto/mem_buf_desc.h"
 #include "sock/socket_fd_api.h"
 #include "dev/buffer_pool.h"
-#include "dev/cq_mgr.h"
+#include "dev/cq_mgr_rx.h"
 #include "xlio_extra.h"
 
 // LWIP includes

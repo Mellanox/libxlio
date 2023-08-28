@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#include "cq_mgr.h"
-#include "cq_mgr.inl"
+#include "cq_mgr_rx.h"
+#include "cq_mgr_rx.inl"
 #include <errno.h>
 #include <fcntl.h>
 #include <math.h>
@@ -50,7 +50,7 @@
 #include "ring_simple.h"
 #include "qp_mgr_eth_mlx5.h"
 
-#define MODULE_NAME "cq_mgr"
+#define MODULE_NAME "cq_mgr_rx"
 
 #define cq_logpanic   __log_info_panic
 #define cq_logerr     __log_info_err
@@ -67,12 +67,12 @@
                         ##log_args);                                                               \
     } while (0)
 
-atomic_t cq_mgr::m_n_cq_id_counter_rx = ATOMIC_INIT(1);
+atomic_t cq_mgr_rx::m_n_cq_id_counter_rx = ATOMIC_INIT(1);
 
-uint64_t cq_mgr::m_n_global_sn_rx = 0;
+uint64_t cq_mgr_rx::m_n_global_sn_rx = 0;
 
-cq_mgr::cq_mgr(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int cq_size,
-               struct ibv_comp_channel *p_comp_event_channel)
+cq_mgr_rx::cq_mgr_rx(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int cq_size,
+                     struct ibv_comp_channel *p_comp_event_channel)
     : m_p_ring(p_ring)
     , m_n_sysvar_cq_poll_batch_max(safe_mce_sys().cq_poll_batch_max)
     , m_n_sysvar_progress_engine_wce_max(safe_mce_sys().progress_engine_wce_max)
@@ -94,15 +94,15 @@ cq_mgr::cq_mgr(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int cq_siz
 
     memset(&m_cq_stat_static, 0, sizeof(m_cq_stat_static));
     memset(&m_qp_rec, 0, sizeof(m_qp_rec));
-    m_rx_queue.set_id("cq_mgr (%p) : m_rx_queue", this);
-    m_rx_pool.set_id("cq_mgr (%p) : m_rx_pool", this);
+    m_rx_queue.set_id("cq_mgr_rx (%p) : m_rx_queue", this);
+    m_rx_pool.set_id("cq_mgr_rx (%p) : m_rx_pool", this);
     m_cq_id_rx = atomic_fetch_and_inc(&m_n_cq_id_counter_rx); // cq id is nonzero
     configure(cq_size);
 
     memset(&m_mlx5_cq, 0, sizeof(m_mlx5_cq));
 }
 
-void cq_mgr::configure(int cq_size)
+void cq_mgr_rx::configure(int cq_size)
 {
     xlio_ibv_cq_init_attr attr;
     memset(&attr, 0, sizeof(attr));
@@ -138,7 +138,7 @@ void cq_mgr::configure(int cq_size)
               get_channel_fd(), cq_size, m_p_ibv_cq);
 }
 
-cq_mgr::~cq_mgr()
+cq_mgr_rx::~cq_mgr_rx()
 {
     cq_logdbg("Destroying Rx CQ");
 
@@ -172,7 +172,7 @@ cq_mgr::~cq_mgr()
     cq_logdbg("Destroying Rx CQ done");
 }
 
-void cq_mgr::statistics_print()
+void cq_mgr_rx::statistics_print()
 {
     if (m_p_cq_stat->n_rx_pkt_drop || m_p_cq_stat->n_rx_sw_queue_len ||
         m_p_cq_stat->n_rx_drained_at_once_max || m_p_cq_stat->n_buffer_pool_len) {
@@ -184,7 +184,7 @@ void cq_mgr::statistics_print()
     }
 }
 
-void cq_mgr::set_qp_rq(qp_mgr *qp)
+void cq_mgr_rx::set_qp_rq(qp_mgr *qp)
 {
     m_qp = static_cast<qp_mgr_eth_mlx5 *>(qp);
 
@@ -199,11 +199,11 @@ void cq_mgr::set_qp_rq(qp_mgr *qp)
                m_mlx5_cq.cq_buf);
 }
 
-void cq_mgr::add_qp_rx(qp_mgr *qp)
+void cq_mgr_rx::add_qp_rx(qp_mgr *qp)
 {
     cq_logdbg("qp_mgr=%p", qp);
     descq_t temp_desc_list;
-    temp_desc_list.set_id("cq_mgr (%p) : temp_desc_list", this);
+    temp_desc_list.set_id("cq_mgr_rx (%p) : temp_desc_list", this);
 
     m_p_cq_stat->n_rx_drained_at_once_max = 0;
 
@@ -247,7 +247,7 @@ void cq_mgr::add_qp_rx(qp_mgr *qp)
     m_qp_rec.debt = 0;
 }
 
-void cq_mgr::del_qp_rx(qp_mgr *qp)
+void cq_mgr_rx::del_qp_rx(qp_mgr *qp)
 {
     BULLSEYE_EXCLUDE_BLOCK_START
     if (m_qp_rec.qp != qp) {
@@ -262,7 +262,7 @@ void cq_mgr::del_qp_rx(qp_mgr *qp)
     memset(&m_qp_rec, 0, sizeof(m_qp_rec));
 }
 
-void cq_mgr::lro_update_hdr(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc)
+void cq_mgr_rx::lro_update_hdr(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc)
 {
     struct ethhdr *p_eth_h = (struct ethhdr *)(p_rx_wc_buf_desc->p_buffer);
     struct tcphdr *p_tcp_h;
@@ -316,7 +316,7 @@ void cq_mgr::lro_update_hdr(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_b
     }
 }
 
-bool cq_mgr::request_more_buffers()
+bool cq_mgr_rx::request_more_buffers()
 {
     cq_logfuncall("Allocating additional %d buffers for internal use",
                   m_n_sysvar_qp_compensation_level);
@@ -334,7 +334,7 @@ bool cq_mgr::request_more_buffers()
     return true;
 }
 
-void cq_mgr::return_extra_buffers()
+void cq_mgr_rx::return_extra_buffers()
 {
     if (m_rx_pool.size() < m_n_sysvar_qp_compensation_level * 2) {
         return;
@@ -346,8 +346,8 @@ void cq_mgr::return_extra_buffers()
     m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
 }
 
-mem_buf_desc_t *cq_mgr::cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc,
-                                       enum buff_status_e status)
+mem_buf_desc_t *cq_mgr_rx::cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc,
+                                          enum buff_status_e status)
 {
     /* Assume locked!!! */
     cq_logfuncall("");
@@ -377,7 +377,7 @@ mem_buf_desc_t *cq_mgr::cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc,
     return p_mem_buf_desc;
 }
 
-bool cq_mgr::compensate_qp_poll_success(mem_buf_desc_t *buff_cur)
+bool cq_mgr_rx::compensate_qp_poll_success(mem_buf_desc_t *buff_cur)
 {
     // Assume locked!!!
     // Compensate QP for all completions that we found
@@ -397,7 +397,7 @@ bool cq_mgr::compensate_qp_poll_success(mem_buf_desc_t *buff_cur)
     return false;
 }
 
-void cq_mgr::compensate_qp_poll_failed()
+void cq_mgr_rx::compensate_qp_poll_failed()
 {
     // Assume locked!!!
     // Compensate QP for all completions debt
@@ -411,7 +411,7 @@ void cq_mgr::compensate_qp_poll_failed()
     }
 }
 
-void cq_mgr::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
+void cq_mgr_rx::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
 {
     if (buff->dec_ref_count() <= 1 && (buff->lwip_pbuf.pbuf.ref-- <= 1)) {
         if (likely(buff->p_desc_owner == m_p_ring)) {
@@ -437,15 +437,15 @@ void cq_mgr::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
 }
 
 // This method is called when ring release returns unposted buffers.
-void cq_mgr::mem_buf_desc_return_to_owner(mem_buf_desc_t *p_mem_buf_desc,
+void cq_mgr_rx::mem_buf_desc_return_to_owner(mem_buf_desc_t *p_mem_buf_desc,
                                           void *pv_fd_ready_array /*=NULL*/)
 {
     cq_logfuncall("");
     NOT_IN_USE(pv_fd_ready_array);
-    cq_mgr::reclaim_recv_buffer_helper(p_mem_buf_desc);
+    cq_mgr_rx::reclaim_recv_buffer_helper(p_mem_buf_desc);
 }
 
-bool cq_mgr::reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst)
+bool cq_mgr_rx::reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst)
 {
     if (m_rx_buffs_rdy_for_free_head) {
         reclaim_recv_buffer_helper(m_rx_buffs_rdy_for_free_head);
@@ -457,7 +457,7 @@ bool cq_mgr::reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst)
     return true;
 }
 
-bool cq_mgr::reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst)
+bool cq_mgr_rx::reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst)
 {
     if (likely(rx_reuse_lst)) {
         reclaim_recv_buffer_helper(rx_reuse_lst);
@@ -466,7 +466,7 @@ bool cq_mgr::reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst)
     return false;
 }
 
-int cq_mgr::reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse)
+int cq_mgr_rx::reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse)
 {
     int ret_val = 0;
 
@@ -489,10 +489,10 @@ int cq_mgr::reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse)
     return ret_val;
 }
 
-bool cq_mgr::reclaim_recv_buffers(descq_t *rx_reuse)
+bool cq_mgr_rx::reclaim_recv_buffers(descq_t *rx_reuse)
 {
     cq_logfuncall("");
-    // Called from outside cq_mgr context which is not locked!!
+    // Called from outside cq_mgr_rx context which is not locked!!
     while (!rx_reuse->empty()) {
         mem_buf_desc_t *buff = rx_reuse->get_and_pop_front();
         reclaim_recv_buffer_helper(buff);
@@ -502,21 +502,21 @@ bool cq_mgr::reclaim_recv_buffers(descq_t *rx_reuse)
     return true;
 }
 
-int cq_mgr::request_notification(uint64_t poll_sn)
+int cq_mgr_rx::request_notification(uint64_t poll_sn)
 {
     int ret = -1;
 
     cq_logfuncall("");
 
     if ((m_n_global_sn_rx > 0 && poll_sn != m_n_global_sn_rx)) {
-        // The cq_mgr's has receive packets pending processing (or got processed since cq_poll_sn)
+        // The cq_mgr_rx's has receive packets pending processing (or got processed since cq_poll_sn)
         cq_logfunc("miss matched poll sn (user=0x%lx, cq=0x%lx)", poll_sn, m_n_cq_poll_sn_rx);
         return 1;
     }
 
     if (m_b_notification_armed == false) {
 
-        cq_logfunc("arming cq_mgr notification channel");
+        cq_logfunc("arming cq_mgr_rx notification channel");
 
         // Arm the CQ notification channel
         IF_VERBS_FAILURE(xlio_ib_mlx5_req_notify_cq(&m_mlx5_cq, 0))
@@ -530,7 +530,7 @@ int cq_mgr::request_notification(uint64_t poll_sn)
         }
         ENDIF_VERBS_FAILURE;
     } else {
-        // cq_mgr notification channel already armed
+        // cq_mgr_rx notification channel already armed
         ret = 0;
     }
 
@@ -538,7 +538,7 @@ int cq_mgr::request_notification(uint64_t poll_sn)
     return ret;
 }
 
-int cq_mgr::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
+int cq_mgr_rx::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
                                                       void *pv_fd_ready_array)
 {
     int ret = -1;
@@ -546,24 +546,24 @@ int cq_mgr::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
     cq_logfunc("");
 
     if (m_b_notification_armed) {
-        cq_mgr *p_cq_mgr_context = NULL;
+        cq_mgr_rx *p_cq_mgr_context = NULL;
         struct ibv_cq *p_cq_hndl = NULL;
         void *p; // deal with compiler warnings
 
-        // Block on the cq_mgr's notification event channel
+        // Block on the cq_mgr_rx's notification event channel
         IF_VERBS_FAILURE(ibv_get_cq_event(m_comp_event_channel, &p_cq_hndl, &p))
         {
-            cq_logfunc("waiting on cq_mgr event returned with error (errno=%d %m)", errno);
+            cq_logfunc("waiting on cq_mgr_rx event returned with error (errno=%d %m)", errno);
         }
         else
         {
             get_cq_event();
-            p_cq_mgr_context = (cq_mgr *)p;
+            p_cq_mgr_context = (cq_mgr_rx *)p;
             if (p_cq_mgr_context != this) {
-                cq_logerr("mismatch with cq_mgr returned from new event (event->cq_mgr->%p)",
+                cq_logerr("mismatch with cq_mgr_rx returned from new event (event->cq_mgr_rx->%p)",
                           p_cq_mgr_context);
                 // this can be if we are using a single channel for several/all cq_mgrs
-                // in this case we need to deliver the event to the correct cq_mgr
+                // in this case we need to deliver the event to the correct cq_mgr_rx
             }
 
             // Ack event

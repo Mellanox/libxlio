@@ -286,9 +286,9 @@ public:
         m_p_qp_mgr->credits_return(credits);
     }
 
-    friend class cq_mgr;
-    friend class cq_mgr_regrq;
-    friend class cq_mgr_strq;
+    friend class cq_mgr_rx;
+    friend class cq_mgr_rx_regrq;
+    friend class cq_mgr_rx_strq;
     friend class qp_mgr;
     friend class qp_mgr_eth_mlx5;
     friend class qp_mgr_eth_mlx5_dpcp;
@@ -361,7 +361,7 @@ protected:
     ib_ctx_handler *m_p_ib_ctx;
     qp_mgr *m_p_qp_mgr;
     struct cq_moderation_info m_cq_moderation_info;
-    cq_mgr *m_p_cq_mgr_rx;
+    cq_mgr_rx *m_p_cq_mgr_rx;
     cq_mgr_tx *m_p_cq_mgr_tx;
     std::unordered_map<void *, uint32_t> m_user_lkey_map;
 
