@@ -51,6 +51,7 @@ hugepage_mgr g_hugepage_mgr;
 
 hugepage_mgr::hugepage_mgr()
 {
+    memset(&m_stats, 0, sizeof(m_stats));
     m_default_hugepage = read_meminfo("Hugepagesize:");
     update();
 }
@@ -115,26 +116,41 @@ void *hugepage_mgr::alloc_hugepages(size_t &size)
 {
     size_t hugepage = find_optimal_hugepage(size);
     size_t hugepage_mask = hugepage - 1;
+    size_t actual_size = size;
     void *ptr = nullptr;
 
     if (hugepage) {
-        int map_extra = 0;
+        int map_flags = 0;
 
         if (hugepage != m_default_hugepage) {
-            map_extra = (int)log2(hugepage) << MAP_HUGE_SHIFT;
+            map_flags = (int)log2(hugepage) << MAP_HUGE_SHIFT;
         }
-        size = (size + hugepage_mask) & ~hugepage_mask;
+        actual_size = (size + hugepage_mask) & ~hugepage_mask;
 
-        __log_info_dbg("Allocating %zu bytes with hugepages %zu kB", size, hugepage / 1024U);
+        __log_info_dbg("Allocating %zu bytes with hugepages %zu kB", actual_size, hugepage / 1024U);
 
-        ptr = mmap(NULL, size, PROT_READ | PROT_WRITE,
-                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_HUGETLB | map_extra, -1, 0);
+        ptr = mmap(NULL, actual_size, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_HUGETLB | map_flags, -1, 0);
         if (ptr == MAP_FAILED) {
             ptr = nullptr;
             __log_info_dbg("mmap failed (errno=%d)", errno);
         } else {
-            m_hugepages[hugepage].nr_hugepages_free -= size / hugepage;
+            m_hugepages[hugepage].nr_hugepages_free -= actual_size / hugepage;
         }
+    }
+
+    // Statistics
+    m_stats.total_requested += actual_size;
+    if (ptr) {
+        m_hugepages[hugepage].nr_hugepages_allocated += actual_size / hugepage;
+        ++m_hugepages[hugepage].nr_allocations;
+        ++m_stats.allocations;
+        m_stats.total_allocated += actual_size;
+        m_stats.total_unused += actual_size - size;
+
+        size = actual_size;
+    } else {
+        ++m_stats.fails;
     }
     return ptr;
 }
@@ -149,16 +165,38 @@ void hugepage_mgr::dealloc_hugepages(void *ptr, size_t size)
     // and not freed in runtime.
 }
 
-void hugepage_mgr::print_report()
+void hugepage_mgr::print_report(bool short_report /*=false*/)
 {
+    const size_t ONE_MB = 1024U * 1024U;
     std::vector<size_t> hugepages;
 
     get_supported_hugepages(hugepages);
-    __log_info_info("Hugepages info:");
-    for (size_t hugepage : hugepages) {
-        __log_info_info("  %zu kB : total=%u free=%u", hugepage / 1024U,
-                get_total_hugepages(hugepage), get_free_hugepages(hugepage));
+    vlog_printf(VLOG_INFO, "Hugepages info:\n");
+    if (safe_mce_sys().hugepage_log2) {
+        vlog_printf(VLOG_INFO, "  User forced to use %lu kB hugepages (%s=%u).\n",
+                    (1LU << safe_mce_sys().hugepage_log2) / 1024U, SYS_VAR_HUGEPAGE_LOG2,
+                    safe_mce_sys().hugepage_log2);
     }
+    for (size_t hugepage : hugepages) {
+        vlog_printf(VLOG_INFO, "  %zu kB : total=%u free=%u\n", hugepage / 1024U,
+                    get_total_hugepages(hugepage), get_free_hugepages(hugepage));
+    }
+
+    if (short_report) {
+        return;
+    }
+
+    vlog_printf(VLOG_INFO, "Hugepages statistics:\n");
+    for (size_t hugepage : hugepages) {
+        vlog_printf(VLOG_INFO, "  %zu kB : allocated_pages=%u allocations=%u\n", hugepage / 1024U,
+                    m_hugepages[hugepage].nr_hugepages_allocated,
+                    m_hugepages[hugepage].nr_allocations);
+    }
+    vlog_printf(VLOG_INFO, "  Total: allocations=%u fails=%u\n", m_stats.allocations,
+                m_stats.fails);
+    vlog_printf(VLOG_INFO, "  Total: allocated=%zuMB requested=%zuMB unused_space=%zuMB\n",
+                m_stats.total_allocated / ONE_MB, m_stats.total_requested / ONE_MB,
+                m_stats.total_unused / ONE_MB);
 }
 
 void hugepage_mgr::read_sysfs()
@@ -174,6 +212,8 @@ void hugepage_mgr::read_sysfs()
 
                 m_hugepages[key].nr_hugepages_total = read_file_uint(path + "/nr_hugepages");
                 m_hugepages[key].nr_hugepages_free = read_file_uint(path + "/free_hugepages");
+                m_hugepages[key].nr_hugepages_allocated = 0U;
+                m_hugepages[key].nr_allocations = 0U;
             }
         }
         closedir(dir);
