@@ -43,6 +43,8 @@
 struct hugepage_metadata {
     uint32_t nr_hugepages_total;
     uint32_t nr_hugepages_free;
+    unsigned nr_hugepages_allocated;
+    unsigned nr_allocations;
 };
 
 class hugepage_mgr {
@@ -57,7 +59,7 @@ public:
     void *alloc_hugepages(size_t &size);
     void dealloc_hugepages(void *ptr, size_t size);
 
-    void print_report();
+    void print_report(bool short_report = false);
 
 private:
     enum {
@@ -111,6 +113,14 @@ private:
 
     size_t m_default_hugepage;
     std::unordered_map<size_t, hugepage_metadata> m_hugepages;
+
+    struct {
+        unsigned allocations;
+        unsigned fails;
+        size_t total_allocated;
+        size_t total_requested;
+        size_t total_unused;
+    } m_stats;
 };
 
 extern hugepage_mgr g_hugepage_mgr;
