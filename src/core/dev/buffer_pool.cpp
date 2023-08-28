@@ -65,7 +65,7 @@ buffer_pool *g_buffer_pool_tx = NULL;
 buffer_pool *g_buffer_pool_zc = NULL;
 
 buffer_pool_area::buffer_pool_area(size_t buffer_nr)
-    : m_allocator(ALLOC_TYPE_ANON)
+    : m_allocator(ALLOC_TYPE_PREFER_HUGE)
 {
     m_area = m_allocator.alloc(sizeof(mem_buf_desc_t) * buffer_nr);
     m_n_buffers = buffer_nr;

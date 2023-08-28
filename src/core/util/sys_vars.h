@@ -233,6 +233,8 @@ typedef enum {
     ALLOC_TYPE_HUGEPAGES = option_alloc_type::HUGE,
     ALLOC_TYPE_LAST_ALLOWED_TO_USE,
 
+    // Same as ALLOC_TYPE_HUGE, but doesn't print a warning on the fallback
+    ALLOC_TYPE_PREFER_HUGE,
     // External type cannot be configured with XLIO_MEM_ALLOC_TYPE
     ALLOC_TYPE_EXTERNAL,
 } alloc_mode_t;
