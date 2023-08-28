@@ -46,8 +46,8 @@ public:
               ibv_comp_channel *p_comp_event_channel);
     ~cq_mgr_tx();
 
-    // Helper gunction to extract the Tx cq_mgr from the CQ event,
-    // Since we have a single TX CQ comp channel for all cq_mgr's, it might not be the active_cq object
+    // Helper gunction to extract the cq_mgr_tx from the CQ event,
+    // Since we have a single TX CQ comp channel for all cq_mgr_tx's, it might not be the active_cq object
     static cq_mgr_tx *get_cq_mgr_from_cq_event(struct ibv_comp_channel *p_cq_channel);
 
     ibv_cq *get_ibv_cq_hndl() { return m_p_ibv_cq; }

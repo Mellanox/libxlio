@@ -33,7 +33,7 @@
 #ifndef CQ_MGR_INL_H
 #define CQ_MGR_INL_H
 
-#include "cq_mgr.h"
+#include "cq_mgr_rx.h"
 #include "ring_simple.h"
 #include "util/utils.h"
 
@@ -41,7 +41,7 @@
 /** inlining functions can only help if they are implemented before their usage **/
 /**/
 
-inline void cq_mgr::process_recv_buffer(mem_buf_desc_t *p_mem_buf_desc, void *pv_fd_ready_array)
+inline void cq_mgr_rx::process_recv_buffer(mem_buf_desc_t *p_mem_buf_desc, void *pv_fd_ready_array)
 {
     // Assume locked!!!
 
@@ -52,7 +52,7 @@ inline void cq_mgr::process_recv_buffer(mem_buf_desc_t *p_mem_buf_desc, void *pv
     }
 }
 
-inline uint32_t cq_mgr::process_recv_queue(void *pv_fd_ready_array)
+inline uint32_t cq_mgr_rx::process_recv_queue(void *pv_fd_ready_array)
 {
     // Assume locked!!!
     // If we have packets in the queue, dequeue one and process it

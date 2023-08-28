@@ -35,7 +35,7 @@
 
 #include <cstddef>
 #include <sys/mman.h>
-#include "cq_mgr_regrq.h"
+#include "cq_mgr_rx_regrq.h"
 #include "proto/tls.h"
 #include "util/utils.h"
 #include "vlogger/vlogger.h"
@@ -363,11 +363,11 @@ bool qp_mgr_eth_mlx5::init_rx_cq_mgr_prepare()
     return true;
 }
 
-cq_mgr *qp_mgr_eth_mlx5::init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel)
+cq_mgr_rx *qp_mgr_eth_mlx5::init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel)
 {
     return (!init_rx_cq_mgr_prepare() ? NULL
-                                      : new cq_mgr_regrq(m_p_ring, m_p_ib_ctx_handler, m_rx_num_wr,
-                                                         p_rx_comp_event_channel));
+                                      : new cq_mgr_rx_regrq(m_p_ring, m_p_ib_ctx_handler, m_rx_num_wr,
+                                                            p_rx_comp_event_channel));
 }
 
 cq_mgr_tx *qp_mgr_eth_mlx5::init_tx_cq_mgr()

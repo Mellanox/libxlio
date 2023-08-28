@@ -33,13 +33,13 @@
 #ifndef CQ_MGR_REGRQ_H
 #define CQ_MGR_REGRQ_H
 
-#include "cq_mgr.h"
+#include "cq_mgr_rx.h"
 
-class cq_mgr_regrq : public cq_mgr {
+class cq_mgr_rx_regrq : public cq_mgr_rx {
 public:
-    cq_mgr_regrq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
+    cq_mgr_rx_regrq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
                 struct ibv_comp_channel *p_comp_event_channel);
-    virtual ~cq_mgr_regrq();
+    virtual ~cq_mgr_rx_regrq();
 
     virtual int drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id = NULL) override;
     virtual mem_buf_desc_t *poll_and_process_socketxtreme();

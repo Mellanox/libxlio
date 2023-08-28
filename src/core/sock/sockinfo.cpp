@@ -1575,7 +1575,7 @@ void sockinfo::rx_add_ring_cb(ring *p_ring)
         do_wakeup(); // A ready wce can be pending due to the drain logic (cq channel will not wake
                      // up by itself)
     } else {
-        // Increase ref count on cq_mgr object
+        // Increase ref count on cq_mgr_rx object
         rx_ring_iter->second->refcnt++;
     }
 
@@ -1599,7 +1599,7 @@ void sockinfo::rx_del_ring_cb(ring *p_ring)
 
     bool notify_epoll = false;
 
-    // Remove the rx cq_mgr from our rx cq map
+    // Remove the rx cq_mgr_rx from our rx cq map
     unlock_rx_q();
     m_rx_ring_map_lock.lock();
     lock_rx_q();
@@ -1616,13 +1616,13 @@ void sockinfo::rx_del_ring_cb(ring *p_ring)
     if (rx_ring_iter != m_rx_ring_map.end()) {
         BULLSEYE_EXCLUDE_BLOCK_END
         ring_info_t *p_ring_info = rx_ring_iter->second;
-        // Decrease ref count on cq_mgr object
+        // Decrease ref count on cq_mgr_rx object
         p_ring_info->refcnt--;
 
-        // Is this the last reference to this cq_mgr?
+        // Is this the last reference to this cq_mgr_rx?
         if (p_ring_info->refcnt == 0) {
 
-            // Move all cq_mgr->rx_reuse buffers to temp reuse queue related to p_rx_cq_mgr
+            // Move all cq_mgr_rx->rx_reuse buffers to temp reuse queue related to p_rx_cq_mgr
             move_descs(base_ring, &temp_rx_reuse, &p_ring_info->rx_reuse_info.rx_reuse, true);
             move_descs(base_ring, &temp_rx_reuse_global, &p_ring_info->rx_reuse_info.rx_reuse,
                        false);

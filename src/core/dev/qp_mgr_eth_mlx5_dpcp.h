@@ -55,7 +55,7 @@ public:
     virtual void post_recv_buffer(mem_buf_desc_t *p_mem_buf_desc) override;
 
 protected:
-    virtual cq_mgr *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel) override;
+    virtual cq_mgr_rx *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel) override;
 
 private:
 #ifdef DEFINED_UTLS

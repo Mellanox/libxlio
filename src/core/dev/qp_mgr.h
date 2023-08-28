@@ -49,7 +49,7 @@
 #include "proto/mem_buf_desc.h"
 #include "infra/sender.h"
 #include "dev/ib_ctx_handler.h"
-#include "dev/cq_mgr.h"
+#include "dev/cq_mgr_rx.h"
 #include "dev/cq_mgr_tx.h"
 #include "dev/rfs_rule.h"
 
@@ -58,7 +58,7 @@ struct xlio_tls_info;
 class xlio_tis;
 class xlio_tir;
 class buffer_pool;
-class cq_mgr;
+class cq_mgr_rx;
 struct slave_data;
 class ring;
 class ring_simple;
@@ -153,9 +153,9 @@ public:
  *
  */
 class qp_mgr {
-    friend class cq_mgr;
-    friend class cq_mgr_regrq;
-    friend class cq_mgr_strq;
+    friend class cq_mgr_rx;
+    friend class cq_mgr_rx_regrq;
+    friend class cq_mgr_rx_strq;
     friend class cq_mgr_tx;
 
 public:
@@ -178,7 +178,7 @@ public:
     virtual uint16_t get_partiton() const { return 0; };
     struct ibv_qp *get_ibv_qp() const { return m_qp; };
     class cq_mgr_tx *get_tx_cq_mgr() const { return m_p_cq_mgr_tx; }
-    class cq_mgr *get_rx_cq_mgr() const { return m_p_cq_mgr_rx; }
+    class cq_mgr_rx *get_rx_cq_mgr() const { return m_p_cq_mgr_rx; }
     virtual uint32_t get_rx_max_wr_num();
     // This function can be replaced with a parameter during ring creation.
     // chain of calls may serve as cache warm for dummy send feature.
@@ -330,7 +330,7 @@ protected:
     struct ibv_qp_cap m_qp_cap;
     uint32_t m_max_qp_wr;
 
-    cq_mgr *m_p_cq_mgr_rx;
+    cq_mgr_rx *m_p_cq_mgr_rx;
     cq_mgr_tx *m_p_cq_mgr_tx;
 
     uint32_t m_rx_num_wr;
@@ -376,7 +376,7 @@ protected:
         return m_n_unsignaled_count == m_n_sysvar_tx_num_wr_to_signal - 1;
     }
 
-    virtual cq_mgr *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel) = 0;
+    virtual cq_mgr_rx *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel) = 0;
     virtual cq_mgr_tx *init_tx_cq_mgr(void) = 0;
 
     virtual int send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
