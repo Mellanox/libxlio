@@ -79,6 +79,8 @@ void *xlio_allocator::alloc(size_t size)
     __log_info_dbg("Allocating %zu bytes", size);
 
     switch (m_type) {
+    case ALLOC_TYPE_PREFER_HUGE:
+        // Fallthrough
     case ALLOC_TYPE_HUGEPAGES:
         m_data = alloc_huge(size);
         if (m_data) {
@@ -119,7 +121,7 @@ void *xlio_allocator::alloc_aligned(size_t size, size_t align)
 {
     __log_info_dbg("Allocating %zu bytes aligned to %zu", size, align);
 
-    if (m_type == ALLOC_TYPE_HUGEPAGES) {
+    if (m_type == ALLOC_TYPE_HUGEPAGES || m_type == ALLOC_TYPE_PREFER_HUGE) {
         // We should check that hugepage provides requested alignment, however,
         // it is unlikely to have alignment bigger than a hugepage (at least 2MB).
         m_data = alloc_huge(size);
