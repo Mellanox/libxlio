@@ -64,7 +64,7 @@
 
 #define MAX_UPSTREAM_CQ_MSHV_SIZE 8192
 
-qp_mgr::qp_mgr(struct qp_mgr_desc *desc, const uint32_t tx_num_wr)
+qp_mgr::qp_mgr(struct qp_mgr_desc *desc, const uint32_t tx_num_wr, uint16_t vlan)
     : m_qp(NULL)
     , m_rq_wqe_idx_to_wrid(NULL)
     , m_p_ring((ring_simple *)desc->ring)
@@ -85,6 +85,7 @@ qp_mgr::qp_mgr(struct qp_mgr_desc *desc, const uint32_t tx_num_wr)
     , m_p_prev_rx_desc_pushed(NULL)
     , m_n_ip_id_base(0)
     , m_n_ip_id_offset(0)
+    , m_vlan(vlan)
 {
     memset(&m_qp_cap, 0, sizeof(m_qp_cap));
     m_qp_cap.max_inline_data = safe_mce_sys().tx_max_inline;
@@ -574,7 +575,7 @@ int qp_mgr::send(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio
     return 0;
 }
 
-void qp_mgr_eth::modify_qp_to_ready_state()
+void qp_mgr::modify_qp_to_ready_state()
 {
     qp_logdbg("");
     int ret = 0;
@@ -595,7 +596,7 @@ void qp_mgr_eth::modify_qp_to_ready_state()
     BULLSEYE_EXCLUDE_BLOCK_END
 }
 
-int qp_mgr_eth::prepare_ibv_qp(xlio_ibv_qp_init_attr &qp_init_attr)
+int qp_mgr::prepare_ibv_qp(xlio_ibv_qp_init_attr &qp_init_attr)
 {
     qp_logdbg("");
     int ret = 0;
