@@ -159,7 +159,7 @@ class qp_mgr {
     friend class cq_mgr_tx;
 
 public:
-    qp_mgr(struct qp_mgr_desc *desc, const uint32_t tx_num_wr);
+    qp_mgr(struct qp_mgr_desc *desc, const uint32_t tx_num_wr, uint16_t vlan);
     virtual ~qp_mgr();
 
     virtual void up();
@@ -175,7 +175,7 @@ public:
     inline uint32_t get_max_inline_data() const { return m_qp_cap.max_inline_data; }
     inline uint32_t get_max_send_sge() const { return m_qp_cap.max_send_sge; }
     int get_port_num() const { return m_port_num; }
-    virtual uint16_t get_partiton() const { return 0; };
+    uint16_t get_partiton() const { return m_vlan; };
     struct ibv_qp *get_ibv_qp() const { return m_qp; };
     class cq_mgr_tx *get_tx_cq_mgr() const { return m_p_cq_mgr_tx; }
     class cq_mgr_rx *get_rx_cq_mgr() const { return m_p_cq_mgr_rx; }
@@ -184,7 +184,7 @@ public:
     // chain of calls may serve as cache warm for dummy send feature.
     inline bool get_hw_dummy_send_support() { return m_hw_dummy_send_support; }
 
-    virtual void modify_qp_to_ready_state() = 0;
+    virtual void modify_qp_to_ready_state();
     virtual void modify_qp_to_error_state();
 
     void release_rx_buffers();
@@ -357,10 +357,11 @@ protected:
     // generating packet IDs
     uint16_t m_n_ip_id_base;
     uint16_t m_n_ip_id_offset;
+    uint16_t m_vlan;
     struct xlio_rate_limit_t m_rate_limit;
 
     int configure(struct qp_mgr_desc *desc);
-    virtual int prepare_ibv_qp(xlio_ibv_qp_init_attr &qp_init_attr) = 0;
+    int prepare_ibv_qp(xlio_ibv_qp_init_attr &qp_init_attr);
     inline void set_unsignaled_count(void)
     {
         m_n_unsignaled_count = m_n_sysvar_tx_num_wr_to_signal - 1;
@@ -383,30 +384,6 @@ protected:
                              bool request_comp, xlio_tis *tis, unsigned credits);
     virtual bool is_completion_need() { return !m_n_unsignaled_count; }
     virtual bool is_rq_empty() const { return false; }
-};
-
-class qp_mgr_eth : public qp_mgr {
-public:
-    qp_mgr_eth(struct qp_mgr_desc *desc, const uint32_t tx_num_wr, const uint16_t vlan,
-               bool call_configure = true)
-        : qp_mgr(desc, tx_num_wr)
-        , m_vlan(vlan)
-    {
-        if (call_configure && configure(desc)) {
-            throw_xlio_exception("failed creating qp");
-        }
-    };
-
-    virtual ~qp_mgr_eth() {}
-
-    virtual void modify_qp_to_ready_state();
-    virtual uint16_t get_partiton() const { return m_vlan; };
-
-protected:
-    virtual int prepare_ibv_qp(xlio_ibv_qp_init_attr &qp_init_attr);
-
-private:
-    const uint16_t m_vlan;
 };
 
 #if defined(DEFINED_UTLS) || defined(DEFINED_DPCP)
