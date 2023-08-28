@@ -62,7 +62,7 @@ public:
     inline size_t size() { return m_size; }
 
 private:
-    void print_hugepages_warning();
+    void print_hugepages_warning(size_t requested_size);
 
 protected:
     alloc_mode_t m_type;
