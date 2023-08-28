@@ -145,7 +145,7 @@ void *xlio_allocator::alloc_huge(size_t size)
     if (!m_data && g_hugepage_mgr.get_default_hugepage() && m_type == ALLOC_TYPE_HUGEPAGES) {
         // Print a warning message on allocation error if hugepages are supported
         // and this is not a fallback from a different allocation method.
-        print_hugepages_warning();
+        print_hugepages_warning(size);
     }
     if (m_data) {
         m_type = ALLOC_TYPE_HUGEPAGES;
@@ -204,20 +204,27 @@ void xlio_allocator::dealloc()
     m_data = nullptr;
 }
 
-void xlio_allocator::print_hugepages_warning()
+void xlio_allocator::print_hugepages_warning(size_t requested_size)
 {
-#define _P VLOG_PRINTF_ONCE_THEN_DEBUG
-    _P(VLOG_WARNING, "**************************************************************\n");
-    _P(VLOG_WARNING, "* NO IMMEDIATE ACTION NEEDED!                                 \n");
-    _P(VLOG_WARNING, "* Not enough hugepage resources for " PRODUCT_NAME " memory allocation.  \n");
-    _P(VLOG_WARNING, "* " PRODUCT_NAME " will continue working with regular memory allocation. \n");
-    _P(VLOG_INFO, "*   To avoid this message, either increase number of hugepages\n");
-    _P(VLOG_INFO, "*   or switch to a different memory allocation type           \n");
-    _P(VLOG_INFO, "*      (%s != %d)\n", SYS_VAR_MEM_ALLOC_TYPE, ALLOC_TYPE_HUGEPAGES);
-    _P(VLOG_WARNING, "* Please refer to the memory allocation section in the " PRODUCT_NAME "'s\n");
-    _P(VLOG_WARNING, "* User Manual for more information                            \n");
-    _P(VLOG_WARNING, "**************************************************************\n");
-#undef _P
+    static bool s_printed_once = false;
+
+    if (!s_printed_once) {
+        s_printed_once = true;
+        vlog_printf(VLOG_WARNING, "************************************************************\n");
+        vlog_printf(VLOG_WARNING, "NO IMMEDIATE ACTION NEEDED!\n");
+        vlog_printf(VLOG_WARNING, "Not enough suitable hugepages to allocate %zu kB.\n",
+                    requested_size / 1024U);
+        vlog_printf(VLOG_WARNING, "Allocation will be done with regular pages.\n");
+        vlog_printf(VLOG_WARNING, "To avoid this message, either increase number of hugepages\n");
+        vlog_printf(VLOG_WARNING, "or switch to a different memory allocation type:\n");
+        vlog_printf(VLOG_WARNING, "  %s=ANON\n", SYS_VAR_MEM_ALLOC_TYPE);
+
+        g_hugepage_mgr.print_report(true);
+
+        vlog_printf(VLOG_WARNING, "************************************************************\n");
+    } else {
+        __log_info_dbg("Failed to allocated %zu kB with hugepages.", requested_size / 1024U);
+    }
 }
 
 xlio_registrator::xlio_registrator()
