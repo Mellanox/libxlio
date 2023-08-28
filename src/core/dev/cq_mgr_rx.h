@@ -66,11 +66,6 @@ class ring_simple;
 /* Get CQE owner bit. */
 #define MLX5_CQE_OWNER(op_own) ((op_own)&MLX5_CQE_OWNER_MASK)
 
-struct qp_rec {
-    qp_mgr *qp;
-    int debt;
-};
-
 class cq_mgr_rx {
     friend class ring; // need to expose the m_n_global_sn_rx only to ring
     friend class ring_simple; // need to expose the m_n_global_sn_rx only to ring
@@ -163,7 +158,6 @@ protected:
      * @return Number of successfully polled wce
      */
     void compensate_qp_poll_failed();
-    void set_qp_rq(qp_mgr *qp);
     void lro_update_hdr(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc);
     inline void process_recv_buffer(mem_buf_desc_t *buff, void *pv_fd_ready_array = NULL);
     
@@ -194,7 +188,7 @@ protected:
     uint32_t m_n_wce_counter = 0U;
     bool m_b_was_drained = false;
     bool m_b_is_rx_hw_csum_on = false;
-    qp_rec m_qp_rec;
+    int m_debt = 0;
     const uint32_t m_n_sysvar_cq_poll_batch_max;
     const uint32_t m_n_sysvar_progress_engine_wce_max;
     cq_stats_t *m_p_cq_stat;
