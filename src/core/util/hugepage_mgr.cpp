@@ -43,6 +43,7 @@
 #include <sstream>
 
 #include "vlogger/vlogger.h"
+#include "util/sys_vars.h"
 
 #define MODULE_NAME "hugepage_mgr"
 
@@ -81,8 +82,13 @@ size_t hugepage_mgr::find_optimal_hugepage(size_t size)
     std::vector<size_t> hugepages;
     size_t best_hugepage = 0;
 
-    get_supported_hugepages(hugepages);
-    std::sort(hugepages.begin(), hugepages.end(), std::greater<size_t>());
+    if (safe_mce_sys().hugepage_log2 == 0) {
+        get_supported_hugepages(hugepages);
+        std::sort(hugepages.begin(), hugepages.end(), std::greater<size_t>());
+    } else {
+        // User requested specific hugepage size - don't check other types.
+        hugepages.push_back(1LU << safe_mce_sys().hugepage_log2);
+    }
 
     // This is naive algorithm and may work inefficiently in complex scenarios.
     for (size_t hugepage : hugepages) {

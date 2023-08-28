@@ -761,6 +761,7 @@ void mce_sys_var::get_env_params()
     thread_mode = MCE_DEFAULT_THREAD_MODE;
     buffer_batching_mode = MCE_DEFAULT_BUFFER_BATCHING_MODE;
     mem_alloc_type = MCE_DEFAULT_MEM_ALLOC_TYPE;
+    hugepage_log2 = MCE_DEFAULT_HUGEPAGE_LOG2;
     enable_socketxtreme = MCE_DEFAULT_SOCKETXTREME;
     enable_tso = MCE_DEFAULT_TSO;
 #ifdef DEFINED_UTLS
@@ -1740,6 +1741,28 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_MEM_ALLOC_TYPE)) != NULL) {
         mem_alloc_type = option_alloc_type::from_str(env_ptr, MCE_DEFAULT_MEM_ALLOC_TYPE);
+    }
+    if ((env_ptr = getenv(SYS_VAR_HUGEPAGE_LOG2)) != NULL) {
+        unsigned val = (unsigned)atoi(env_ptr);
+
+        // mmap() uses 6 bits for the hugepage size log2
+        if (val < 64U) {
+            hugepage_log2 = val;
+        } else {
+            hugepage_log2 = MCE_DEFAULT_HUGEPAGE_LOG2;
+            vlog_printf(VLOG_WARNING, "%s parameter can be in range [0, 63], but set to %u\n",
+                        SYS_VAR_HUGEPAGE_LOG2, val);
+        }
+        if (hugepage_log2 != 0 && !g_hugepage_mgr.is_hugepage_supported(1LU << hugepage_log2)) {
+            vlog_printf(VLOG_WARNING,
+                        "Requested hugepage %zu kB is not supported. "
+                        "XLIO will autodetect optimal hugepage.",
+                        (1LU << hugepage_log2) / 1024LU);
+            /* Value 0 means default autodetection behavior. Don't set MCE_DEFAULT_HUGEPAGE_LOG2
+             * here, because it can be defined to an unsupported specific value.
+             */
+            hugepage_log2 = 0;
+        }
     }
 
     if ((env_ptr = getenv(SYS_VAR_BF)) != NULL) {
