@@ -96,7 +96,7 @@ mem_buf_desc_t *cq_mgr_rx_regrq::poll(enum buff_status_e &status)
 
     if (unlikely(NULL == m_rx_hot_buffer)) {
         if (likely(m_qp->m_mlx5_qp.rq.tail != (m_qp->m_mlx5_qp.rq.head))) {
-            uint32_t index = m_qp->m_mlx5_qp.rq.tail & (m_qp_rec.qp->m_rx_num_wr - 1);
+            uint32_t index = m_qp->m_mlx5_qp.rq.tail & (m_qp->m_rx_num_wr - 1);
             m_rx_hot_buffer = (mem_buf_desc_t *)m_qp->m_rq_wqe_idx_to_wrid[index];
             m_qp->m_rq_wqe_idx_to_wrid[index] = 0;
             prefetch((void *)m_rx_hot_buffer);
@@ -220,14 +220,14 @@ int cq_mgr_rx_regrq::drain_and_proccess_helper(mem_buf_desc_t *buff, buff_status
 
             if (procces_now) { // We process immediately all non udp/ip traffic..
                 buff->rx.is_xlio_thr = true;
-                if ((++m_qp_rec.debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
+                if ((++m_debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
                     !compensate_qp_poll_success(buff)) {
                     process_recv_buffer(buff, nullptr);
                 }
             } else { // udp/ip traffic we just put in the cq's rx queue
                 m_rx_queue.push_back(buff);
                 mem_buf_desc_t *buff_cur = m_rx_queue.get_and_pop_front();
-                if ((++m_qp_rec.debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
+                if ((++m_debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
                     !compensate_qp_poll_success(buff_cur)) {
                     m_rx_queue.push_front(buff_cur);
                 }
@@ -285,7 +285,7 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
                 /* We process immediately all non udp/ip traffic.. */
                 if (procces_now) {
                     buff->rx.is_xlio_thr = true;
-                    if ((++m_qp_rec.debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
+                    if ((++m_debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
                         !compensate_qp_poll_success(buff)) {
                         process_recv_buffer(buff, NULL);
                     }
@@ -293,7 +293,7 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
                     m_rx_queue.push_back(buff);
                     mem_buf_desc_t *buff_cur = m_rx_queue.front();
                     m_rx_queue.pop_front();
-                    if ((++m_qp_rec.debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
+                    if ((++m_debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
                         !compensate_qp_poll_success(buff_cur)) {
                         m_rx_queue.push_front(buff_cur);
                     }
@@ -330,11 +330,11 @@ mem_buf_desc_t *cq_mgr_rx_regrq::poll_and_process_socketxtreme()
 
     if (buff_wqe) {
         if (cqe_process_rx(buff_wqe, status)) {
-            if ((++m_qp_rec.debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
+            if ((++m_debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
                 !compensate_qp_poll_success(buff_wqe)) {
                 return buff_wqe;
             }
-        } else if (++m_qp_rec.debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv) {
+        } else if (++m_debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv) {
             compensate_qp_poll_failed();
         }
     } else {
@@ -367,13 +367,13 @@ int cq_mgr_rx_regrq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *p
         if (buff) {
             ++ret;
             if (cqe_process_rx(buff, status)) {
-                if ((++m_qp_rec.debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
+                if ((++m_debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
                     !compensate_qp_poll_success(buff)) {
                     process_recv_buffer(buff, pv_fd_ready_array);
                 }
             } else {
                 m_p_cq_stat->n_rx_pkt_drop++;
-                if (++m_qp_rec.debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv) {
+                if (++m_debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv) {
                     compensate_qp_poll_failed();
                 }
             }
@@ -394,13 +394,6 @@ int cq_mgr_rx_regrq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *p
     }
 
     return ret_rx_processed;
-}
-
-void cq_mgr_rx_regrq::add_qp_rx(qp_mgr *qp)
-{
-    cq_logfunc("");
-    set_qp_rq(qp);
-    cq_mgr_rx::add_qp_rx(qp);
 }
 
 #endif /* DEFINED_DIRECT_VERBS */
