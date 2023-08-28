@@ -120,7 +120,7 @@ static inline uint32_t get_mlx5_opcode(xlio_ibv_wr_opcode verbs_opcode)
 
 qp_mgr_eth_mlx5::qp_mgr_eth_mlx5(struct qp_mgr_desc *desc, const uint32_t tx_num_wr,
                                  const uint16_t vlan, bool call_configure)
-    : qp_mgr_eth(desc, tx_num_wr, vlan, false)
+    : qp_mgr(desc, tx_num_wr, vlan)
     , m_sq_wqe_idx_to_prop(NULL)
     , m_sq_wqe_prop_last(NULL)
     , m_sq_wqe_prop_last_signalled(0)
@@ -138,7 +138,7 @@ qp_mgr_eth_mlx5::qp_mgr_eth_mlx5(struct qp_mgr_desc *desc, const uint32_t tx_num
     m_hw_dummy_send_support = xlio_is_nop_supported(m_p_ib_ctx_handler->get_ibv_device_attr());
 
     if (call_configure && configure(desc)) {
-        throw_xlio_exception("failed creating qp_mgr_eth");
+        throw_xlio_exception("failed creating qp_mgr_eth_mlx5");
     }
 
     memset(&m_mlx5_qp, 0, sizeof(m_mlx5_qp));
