@@ -16,6 +16,7 @@ Please visit our [documentation site](https://docs.nvidia.com/networking/categor
 * [Licenses](#licenses)
 * [Information](#information)
 * [Contribution](#contribution)
+* [Configuration](#configuration)
 
 <hr>
 
@@ -118,3 +119,5 @@ See [README](./README) file
 ## Contribution
 [Contribution](./docs/contributing.md) guidelines for this project
 
+## Configuration
+[Configuration](./docs/configuration.md) options description
