@@ -846,14 +846,13 @@ void mce_sys_var::get_env_params()
     mtu = MCE_DEFAULT_MTU;
 #if defined(DEFINED_NGINX)
     nginx_distribute_cq_interrupts = MCE_DEFAULT_NGINX_DISTRIBUTE_CQ;
-    actual_nginx_workers_num = MCE_DEFAULT_NGINX_WORKERS_NUM;
-    power_2_nginx_workers_num = MCE_DEFAULT_NGINX_WORKERS_NUM;
     src_port_stride = MCE_DEFAULT_SRC_PORT_STRIDE;
     nginx_udp_socket_pool_size = MCE_DEFAULT_NGINX_UDP_POOL_SIZE;
     nginx_udp_socket_pool_rx_num_buffs_reuse = MCE_DEFAULT_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE;
 #endif
-#if defined(DEFINED_ENVOY)
-    envoy.workers_num = MCE_DEFAULT_ENVOY_WORKERS_NUM;
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+    app.type = APP_NONE;
+    app.workers_num = MCE_DEFAULT_APP_WORKERS_NUM;
 #endif /* DEFINED_ENVOY */
     lwip_mss = MCE_DEFAULT_MSS;
     lwip_cc_algo_mod = MCE_DEFAULT_LWIP_CC_ALGO_MOD;
@@ -913,13 +912,11 @@ void mce_sys_var::get_env_params()
 
 #if defined(DEFINED_NGINX)
     if ((env_ptr = getenv(SYS_VAR_NGINX_WORKERS_NUM)) != NULL) {
-        actual_nginx_workers_num = (uint32_t)atoi(env_ptr);
-    }
-
-    // In order to ease the usage of Nginx cases, we apply Nginx profile when
-    // user will choose to use Nginx workers environment variable.
-    if (actual_nginx_workers_num > 0 && mce_spec == MCE_SPEC_NONE) {
-        mce_spec = MCE_SPEC_NGINX;
+        // In order to ease the usage of Nginx cases, we apply Nginx profile when
+        // user will choose to use Nginx workers environment variable.
+        if (atoi(env_ptr) > 0 && mce_spec == MCE_SPEC_NONE) {
+            mce_spec = MCE_SPEC_NGINX;
+        }
     }
 #endif // DEFINED_NGINX
 
@@ -1891,22 +1888,13 @@ void mce_sys_var::get_env_params()
     }
 
 #if defined(DEFINED_NGINX)
+    if ((env_ptr = getenv(SYS_VAR_NGINX_WORKERS_NUM)) != NULL) {
+        app.type = APP_NGINX;
+        app.workers_num = (uint32_t)atoi(env_ptr);
+    }
     if ((env_ptr = getenv(SYS_VAR_NGINX_DISTRIBUTE_CQ)) != NULL) {
         nginx_distribute_cq_interrupts = atoi(env_ptr) ? true : false;
     }
-    if ((env_ptr = getenv(SYS_VAR_NGINX_WORKERS_NUM)) != NULL) {
-        actual_nginx_workers_num = (uint32_t)atoi(env_ptr);
-        // Round up to a power of 2 value. Assume the number doesn't exceed 32bit.
-        power_2_nginx_workers_num = actual_nginx_workers_num - 1;
-        power_2_nginx_workers_num |= power_2_nginx_workers_num >> 1;
-        power_2_nginx_workers_num |= power_2_nginx_workers_num >> 2;
-        power_2_nginx_workers_num |= power_2_nginx_workers_num >> 4;
-        power_2_nginx_workers_num |= power_2_nginx_workers_num >> 8;
-        power_2_nginx_workers_num |= power_2_nginx_workers_num >> 16;
-        power_2_nginx_workers_num++;
-    }
-    vlog_printf(VLOG_DEBUG, "Actual nginx workers num: %d Power of  two nginx workers num: %d\n",
-                actual_nginx_workers_num, power_2_nginx_workers_num);
     if ((env_ptr = getenv(SYS_VAR_SRC_PORT_STRIDE)) != NULL) {
         src_port_stride = (uint32_t)atoi(env_ptr);
     }
@@ -1919,7 +1907,8 @@ void mce_sys_var::get_env_params()
 #endif // DEFINED_NGINX
 #if defined(DEFINED_ENVOY)
     if ((env_ptr = getenv(SYS_VAR_ENVOY_WORKERS_NUM)) != NULL) {
-        envoy.workers_num = (uint32_t)atoi(env_ptr);
+        app.type = APP_ENVOY;
+        app.workers_num = (uint32_t)atoi(env_ptr);
     }
 #endif /* DEFINED_ENVOY */
     if ((env_ptr = getenv(SYS_VAR_MSS)) != NULL) {

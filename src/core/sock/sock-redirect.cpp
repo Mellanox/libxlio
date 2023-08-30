@@ -90,10 +90,9 @@ using namespace std;
 #if defined(DEFINED_NGINX)
 std::vector<pid_t> *g_p_nginx_worker_pids = NULL;
 int g_worker_index = -1;
-bool g_b_add_second_4t_rule = false;
 map_udp_bounded_port_t g_map_udp_bounded_port;
 #endif
-#if defined(DEFINED_ENVOY)
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
 struct app_conf *g_p_app = NULL;
 #endif /* DEFINED_ENVOY */
 
@@ -313,7 +312,7 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
 
 int init_child_process_for_nginx()
 {
-    if (safe_mce_sys().actual_nginx_workers_num <= 0) {
+    if (g_p_app->workers_num <= 0) {
         return 0;
     }
 
@@ -960,7 +959,7 @@ extern "C" EXPORT_SYMBOL int listen(int __fd, int backlog)
     srdr_logdbg_entry("fd=%d, backlog=%d", __fd, backlog);
 
 #if defined(DEFINED_ENVOY)
-    if (g_p_app->workers_num > 0) {
+    if (g_p_app->type == APP_ENVOY && g_p_app->workers_num > 0) {
         /* Envoy uses dup() call for listen socket on workers_N (N > 0)
          * dup() call does not create socket object and does not store fd
          * in fd_collection in current implementation
@@ -990,13 +989,13 @@ extern "C" EXPORT_SYMBOL int listen(int __fd, int backlog)
             handle_close(__fd, false, true);
         } else {
 #if defined(DEFINED_NGINX)
-            if (safe_mce_sys().actual_nginx_workers_num > 0) {
+            if (g_p_app->type == APP_NGINX && g_p_app->workers_num > 0) {
                 p_socket_object->m_is_listen = true;
                 p_socket_object->m_back_log = backlog;
             } else
 #endif
 #if defined(DEFINED_ENVOY)
-            if (g_p_app->workers_num > 0) {
+            if (g_p_app->type == APP_ENVOY && g_p_app->workers_num > 0) {
                 p_socket_object->m_is_listen = true;
                 p_socket_object->m_back_log = backlog;
             } else 
@@ -2712,7 +2711,7 @@ extern "C" EXPORT_SYMBOL int epoll_ctl(int __epfd, int __op, int __fd, struct ep
         errno = EBADF;
     } else {
 #if defined(DEFINED_ENVOY)
-        if (g_p_app->workers_num > 0) {
+        if (g_p_app->type == APP_ENVOY && g_p_app->workers_num > 0) {
             auto iter = g_p_app->attr.envoy.map_listen_fd.find(__fd);
             if (iter != g_p_app->attr.envoy.map_listen_fd.end()) {
                 socket_fd_api *p_socket_object = NULL;
@@ -2953,7 +2952,7 @@ extern "C" EXPORT_SYMBOL int dup(int __fd)
     // Sanity check to remove any old sockinfo object using the same fd!!
     handle_close(fid, true);
 #if defined(DEFINED_ENVOY)
-    if (g_p_app && g_p_app->type == app_conf::APP_ENVOY) {
+    if (g_p_app && g_p_app->type == APP_ENVOY) {
         std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
         g_p_app->attr.envoy.map_dup_fd[fid] = __fd;
         g_p_app->attr.envoy.map_dup_fd[__fd] = __fd;
@@ -3034,14 +3033,14 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
 #if defined(DEFINED_NGINX)
     int worker_index = 0;
     /* This section is actual for parent process only */
-    if ((safe_mce_sys().actual_nginx_workers_num > 0) && (g_worker_index == -1)) {
+    if (g_p_app->type == APP_NGINX && (g_p_app->workers_num > 0) && (g_worker_index == -1)) {
         if (NULL == g_p_nginx_worker_pids) {
             g_p_nginx_worker_pids = new std::vector<pid_t>();
         }
 
         if (g_p_nginx_worker_pids->size() <
-            static_cast<std::size_t>(safe_mce_sys().actual_nginx_workers_num)) {
-            g_p_nginx_worker_pids->resize(safe_mce_sys().actual_nginx_workers_num, -1);
+            static_cast<std::size_t>(g_p_app->workers_num)) {
+            g_p_nginx_worker_pids->resize(g_p_app->workers_num, -1);
         }
 
         auto nginx_pid_slot_iter =
@@ -3049,7 +3048,7 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
         if (nginx_pid_slot_iter == g_p_nginx_worker_pids->end()) {
             srdr_logerr(
                 "Cannot fork: number of running worker processes are at configured maximum (%d)",
-                safe_mce_sys().actual_nginx_workers_num);
+                g_p_app->workers_num);
             errno = ENOMEM;
             return -1;
         }
@@ -3107,7 +3106,7 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
     } else if (pid > 0) {
         srdr_logdbg_exit("Parent Process: returned with %d", pid);
 #if defined(DEFINED_NGINX)
-        if (safe_mce_sys().actual_nginx_workers_num > 0) {
+        if (g_p_app->type == APP_NGINX && g_p_app->workers_num > 0) {
             g_p_nginx_worker_pids->at(worker_index) = pid;
         }
 #endif
@@ -3333,7 +3332,7 @@ extern "C" EXPORT_SYMBOL pid_t waitpid(pid_t pid, int *wstatus, int options)
      *     * NGINX at some future point forks a new worker process(es) to replenish the worker
      * process tally.
      */
-    if (safe_mce_sys().actual_nginx_workers_num > 0 && child_pid > 0 && !WIFCONTINUED(*wstatus)) {
+    if (g_p_app->type == APP_NGINX && g_p_app->workers_num > 0 && child_pid > 0 && !WIFCONTINUED(*wstatus)) {
         auto worker_pid =
             std::find(g_p_nginx_worker_pids->begin(), g_p_nginx_worker_pids->end(), child_pid);
         if (worker_pid != g_p_nginx_worker_pids->end()) {

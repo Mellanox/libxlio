@@ -108,21 +108,21 @@ bool rfs_uc::prepare_flow_spec()
         p_attach_flow_data->ibv_flow_attr.priority = 1;
     }
 #if defined(DEFINED_NGINX)
-    else if (safe_mce_sys().actual_nginx_workers_num > 0) {
+    else if (g_p_app->type == APP_NGINX && g_p_app->workers_num > 0) {
         if (m_flow_tuple.get_protocol() != PROTO_UDP ||
             (g_map_udp_bounded_port.count(ntohs(m_flow_tuple.get_dst_port())))) {
             int src_port;
-            if (g_b_add_second_4t_rule) {
-                src_port = safe_mce_sys().actual_nginx_workers_num + g_worker_index;
+            if (g_p_app->add_second_4t_rule) {
+                src_port = g_p_app->workers_num + g_worker_index;
             } else {
                 src_port = g_worker_index;
             }
             p_tcp_udp->val.src_port = htons((uint16_t)src_port * safe_mce_sys().src_port_stride);
             p_tcp_udp->mask.src_port = htons((uint16_t)(
-                (safe_mce_sys().power_2_nginx_workers_num * safe_mce_sys().src_port_stride) - 2));
+                (g_p_app->workers_pow2 * safe_mce_sys().src_port_stride) - 2));
             p_attach_flow_data->ibv_flow_attr.priority = 1;
             rfs_logdbg("safe_mce_sys().src_port_stride: %d safe_mce_sys().workers_num %d \n",
-                       safe_mce_sys().src_port_stride, safe_mce_sys().actual_nginx_workers_num);
+                       safe_mce_sys().src_port_stride, g_p_app->workers_num);
             rfs_logdbg("sp_tcp_udp->val.src_port: %d p_tcp_udp->mask.src_port %d \n",
                        ntohs(p_tcp_udp->val.src_port), ntohs(p_tcp_udp->mask.src_port));
             m_flow_tuple.set_src_port(p_tcp_udp->val.src_port);
@@ -130,7 +130,7 @@ bool rfs_uc::prepare_flow_spec()
     }
 #endif
 #if defined(DEFINED_ENVOY)
-    else if (g_p_app->workers_num > 0 && g_p_app->get_worker_id() >= 0) {
+    else if (g_p_app->type == APP_ENVOY &&  g_p_app->workers_num > 0 && g_p_app->get_worker_id() >= 0) {
         if (m_flow_tuple.get_protocol() != PROTO_UDP) {
             int src_port;
             if (g_p_app->add_second_4t_rule) {
