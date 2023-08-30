@@ -143,12 +143,12 @@ rfs::rfs(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *rule_fil
     m_sinks_list = new pkt_rcvr_sink *[m_n_sinks_list_max_length];
 
 #if defined(DEFINED_NGINX)
-    if (safe_mce_sys().actual_nginx_workers_num > 0) {
+    if (g_p_app->type == APP_NGINX && g_p_app->workers_num > 0) {
         m_flow_tag_id = 0;
     }
 #endif
 #if defined(DEFINED_ENVOY)
-    if (g_p_app->workers_num > 0 && g_p_app->get_worker_id() >= 0) {
+    if (g_p_app->type == APP_ENVOY && g_p_app->workers_num > 0 && g_p_app->get_worker_id() >= 0) {
         m_flow_tag_id = 0;
     }
 #endif /* DEFINED_ENVOY */
@@ -206,13 +206,13 @@ bool rfs::add_sink(pkt_rcvr_sink *p_sink)
     rfs_logfunc("called with sink (%p)", p_sink);
 
 #if defined(DEFINED_NGINX)
-    if (g_b_add_second_4t_rule) { // if 4 tuple rules per worker is 2, no need to add same sink
+    if (g_p_app->type == APP_NGINX && g_p_app->add_second_4t_rule) { // if 4 tuple rules per worker is 2, no need to add same sink
                                   // second time
         return true;
     }
 #endif
 #if defined(DEFINED_ENVOY)
-    if (g_p_app->add_second_4t_rule && g_p_app->get_worker_id() >= 0) {
+    if (g_p_app->type == APP_ENVOY && g_p_app->add_second_4t_rule && g_p_app->get_worker_id() >= 0) {
         return true;
     }
 #endif /* DEFINED_ENVOY */
@@ -296,14 +296,14 @@ bool rfs::attach_flow(pkt_rcvr_sink *sink)
     } else {
         rfs_logdbg("rfs: Joining existing flow");
 #if defined(DEFINED_NGINX)
-        if (g_b_add_second_4t_rule) { // This is second 4 tuple rule for the same worker (when num
+        if (g_p_app->type == APP_NGINX && g_p_app->add_second_4t_rule) { // This is second 4 tuple rule for the same worker (when num
                                       // of workers is not power of two)
             create_flow();
             rfs_logdbg("Added second rule to nginx worker: %d", g_worker_index);
         }
 #endif
 #if defined(DEFINED_ENVOY)
-        if (g_p_app->add_second_4t_rule && g_p_app->get_worker_id() >= 0) {
+        if (g_p_app->type == APP_ENVOY && g_p_app->add_second_4t_rule && g_p_app->get_worker_id() >= 0) {
             create_flow();
             rfs_logdbg("Added second rule to worker: %d", g_p_app->get_worker_id());
         }

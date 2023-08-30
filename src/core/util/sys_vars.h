@@ -131,6 +131,8 @@ typedef enum {
 // See ibv_transport_type for general verbs transport types
 typedef enum { XLIO_TRANSPORT_UNKNOWN = -1, XLIO_TRANSPORT_ETH } transport_type_t;
 
+typedef enum { APP_NONE, APP_NGINX, APP_ENVOY } app_type_t;
+
 static inline const char *priv_xlio_transport_type_str(transport_type_t transport_type)
 {
     BULLSEYE_EXCLUDE_BLOCK_START
@@ -501,16 +503,15 @@ public:
     bool trigger_dummy_send_getsockname;
 #if defined(DEFINED_NGINX)
     bool nginx_distribute_cq_interrupts;
-    int actual_nginx_workers_num;
-    int power_2_nginx_workers_num;
     int src_port_stride;
     int nginx_udp_socket_pool_size;
     int nginx_udp_socket_pool_rx_num_buffs_reuse;
 #endif
-#if defined(DEFINED_ENVOY)
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     struct {
+        app_type_t type;
         int workers_num;
-    } envoy;
+    } app;
 #endif /* DEFINED_ENVOY */
     uint32_t tcp_send_buffer_size;
     uint32_t tx_segs_ring_batch_tcp;
@@ -832,14 +833,12 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_MTU                            (0)
 #if defined(DEFINED_NGINX)
 #define MCE_DEFAULT_NGINX_DISTRIBUTE_CQ (false)
-#define MCE_DEFAULT_NGINX_WORKERS_NUM                                                              \
-    (0) /* Nginx flow will be enabled by default for value greater than 0 */
 #define MCE_DEFAULT_SRC_PORT_STRIDE                   (2)
 #define MCE_DEFAULT_NGINX_UDP_POOL_SIZE               (0)
 #define MCE_DEFAULT_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE (0)
 #endif
-#if defined(DEFINED_ENVOY)
-#define MCE_DEFAULT_ENVOY_WORKERS_NUM (0)
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+#define MCE_DEFAULT_APP_WORKERS_NUM (0)
 #endif /* DEFINED_ENVOY */
 #define MCE_DEFAULT_MSS                          (0)
 #define MCE_DEFAULT_LWIP_CC_ALGO_MOD             (0)

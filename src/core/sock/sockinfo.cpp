@@ -883,16 +883,16 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
         return false;
     }
 #if defined(DEFINED_NGINX)
-    if (safe_mce_sys().actual_nginx_workers_num > 0) {
+    if (g_p_app->type == APP_NGINX && g_p_app->workers_num > 0) {
         if (flow_key.get_protocol() != PROTO_UDP ||
             (flow_key.get_protocol() == PROTO_UDP &&
              g_map_udp_bounded_port.count(ntohs(flow_key.get_dst_port())))) {
-            if ((safe_mce_sys().actual_nginx_workers_num !=
-                 safe_mce_sys().power_2_nginx_workers_num) &&
+            if ((g_p_app->workers_num !=
+                 g_p_app->workers_pow2) &&
                 flow_key.is_3_tuple()) {
-                if (g_worker_index < (safe_mce_sys().power_2_nginx_workers_num %
-                                      safe_mce_sys().actual_nginx_workers_num)) {
-                    g_b_add_second_4t_rule = true;
+                if (g_worker_index < (g_p_app->workers_pow2 %
+                                      g_p_app->workers_num)) {
+                    g_p_app->add_second_4t_rule = true;
                     flow_tuple_with_local_if new_key(
                         flow_key.get_dst_ip(), flow_key.get_dst_port(), ip_address::any_addr(), 1,
                         flow_key.get_protocol(), flow_key.get_family(), flow_key.get_local_if());
@@ -902,7 +902,7 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
                         lock_rx_q();
                         si_logerr("Failed to attach %s to ring %p", new_key.to_str().c_str(),
                                   p_nd_resources->p_ring);
-                        g_b_add_second_4t_rule = false;
+                        g_p_app->add_second_4t_rule = false;
                         return false;
                     }
                     m_rx_flow_map[new_key] = p_nd_resources->p_ring;
@@ -910,12 +910,12 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
                               new_key.to_str().c_str(), g_worker_index, p_nd_resources->p_ring);
                 }
             }
-            g_b_add_second_4t_rule = false;
+            g_p_app->add_second_4t_rule = false;
         }
     }
 #endif
 #if defined(DEFINED_ENVOY)
-    if (g_p_app->workers_num > 0 && g_p_app->get_worker_id() >= 0) {
+    if (g_p_app->type == APP_ENVOY && g_p_app->workers_num > 0 && g_p_app->get_worker_id() >= 0) {
         if (flow_key.get_protocol() != PROTO_UDP) {
             if ((g_p_app->workers_num != g_p_app->workers_pow2) && flow_key.is_3_tuple()) {
                 if (g_p_app->attr.envoy.map_thread_id.at(gettid()) <

@@ -89,12 +89,11 @@ typedef std::unordered_map<uint16_t, bool> map_udp_bounded_port_t;
 
 extern std::vector<pid_t> *g_p_nginx_worker_pids;
 extern int g_worker_index;
-extern bool g_b_add_second_4t_rule;
 extern map_udp_bounded_port_t g_map_udp_bounded_port;
 #endif
-#if defined(DEFINED_ENVOY)
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
 struct app_conf {
-    enum { APP_NONE, APP_NGINX, APP_ENVOY } type;
+    app_type_t type;
     lock_spin_recursive m_lock;
     int workers_num;
     int workers_pow2;

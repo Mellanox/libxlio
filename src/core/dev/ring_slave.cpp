@@ -228,12 +228,12 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
 
             p_rfs = p_tmp_rfs;
 #if defined(DEFINED_NGINX)
-            if (g_b_add_second_4t_rule) {
+            if (g_p_app->type == APP_NGINX && g_p_app->add_second_4t_rule) {
                 /* nothing */
             } else
 #endif
 #if defined(DEFINED_ENVOY)
-            if (g_p_app->add_second_4t_rule && g_p_app->get_worker_id() >= 0) {
+            if (g_p_app->type == APP_ENVOY && g_p_app->add_second_4t_rule && g_p_app->get_worker_id() >= 0) {
                 /* nothing */
             } else
 #endif /* DEFINED_ENVOY */
@@ -355,12 +355,12 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
             p_rfs = p_tmp_rfs;
             si->rfs_ptr = p_rfs;
 #if defined(DEFINED_NGINX)
-            if (g_b_add_second_4t_rule) {
+            if (g_p_app->type == APP_NGINX && g_p_app->add_second_4t_rule) {
                 /* nothing */
             } else
 #endif
 #if defined(DEFINED_ENVOY)
-            if (g_p_app->add_second_4t_rule && g_p_app->get_worker_id() >= 0) {
+            if (g_p_app->type == APP_ENVOY && g_p_app->add_second_4t_rule && g_p_app->get_worker_id() >= 0) {
                 /* nothing */
             } else
 #endif /* DEFINED_ENVOY */
@@ -391,7 +391,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     /* coverity[leaked_storage]
-     * Storage leak happens due to g_b_add_second_4t_rule logic
+     * Storage leak happens due to g_p_app->add_second_4t_rule logic
      * created new rfs pointed by p_rfs is not stored in map
      * and as a result it is not destroyed
      */

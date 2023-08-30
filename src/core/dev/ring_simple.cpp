@@ -346,12 +346,12 @@ void ring_simple::create_resources()
 
     m_flow_tag_enabled = !safe_mce_sys().disable_flow_tag && m_p_ib_ctx->get_flow_tag_capability();
 #if defined(DEFINED_NGINX)
-    if (safe_mce_sys().actual_nginx_workers_num > 0) {
+    if (g_p_app->type == APP_NGINX && g_p_app->workers_num > 0) {
         m_flow_tag_enabled = false;
     }
 #endif // DEFINED_NGINX
 #if defined(DEFINED_ENVOY)
-    if (g_p_app->workers_num > 0 && g_p_app->get_worker_id() >= 0) {
+    if (g_p_app->type == APP_ENVOY && g_p_app->workers_num > 0 && g_p_app->get_worker_id() >= 0) {
         m_flow_tag_enabled = false;
     }
 #endif /* DEFINED_ENVOY */
