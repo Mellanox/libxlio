@@ -503,7 +503,6 @@ public:
     bool trigger_dummy_send_getsockname;
 #if defined(DEFINED_NGINX)
     bool nginx_distribute_cq_interrupts;
-    int src_port_stride;
     int nginx_udp_socket_pool_size;
     int nginx_udp_socket_pool_rx_num_buffs_reuse;
 #endif
@@ -511,8 +510,9 @@ public:
     struct {
         app_type_t type;
         int workers_num;
+        int src_port_stride;
     } app;
-#endif /* DEFINED_ENVOY */
+#endif
     uint32_t tcp_send_buffer_size;
     uint32_t tx_segs_ring_batch_tcp;
     FILE *stats_file;
@@ -664,13 +664,15 @@ extern mce_sys_var &safe_mce_sys();
 #if defined(DEFINED_NGINX)
 #define SYS_VAR_NGINX_DISTRIBUTE_CQ               "XLIO_NGINX_DISTRIBUTE_CQ"
 #define SYS_VAR_NGINX_WORKERS_NUM                 "XLIO_NGINX_WORKERS_NUM"
-#define SYS_VAR_SRC_PORT_STRIDE                   "XLIO_SRC_PORT_STRIDE"
 #define SYS_VAR_NGINX_UDP_POOL_SIZE               "XLIO_NGINX_UDP_POOL_SIZE"
 #define SYS_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE "XLIO_NGINX_UDP_POOL_REUSE_BUFFS"
 #endif
 #if defined(DEFINED_ENVOY)
 #define SYS_VAR_ENVOY_WORKERS_NUM "XLIO_ENVOY_WORKERS_NUM"
 #endif /* DEFINED_ENVOY */
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+#define SYS_VAR_SRC_PORT_STRIDE "XLIO_SRC_PORT_STRIDE"
+#endif
 #define SYS_VAR_TCP_MAX_SYN_RATE "XLIO_TCP_MAX_SYN_RATE"
 #define SYS_VAR_MSS              "XLIO_MSS"
 #define SYS_VAR_TCP_CC_ALGO      "XLIO_TCP_CC_ALGO"
@@ -833,13 +835,13 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_MTU                            (0)
 #if defined(DEFINED_NGINX)
 #define MCE_DEFAULT_NGINX_DISTRIBUTE_CQ (false)
-#define MCE_DEFAULT_SRC_PORT_STRIDE                   (2)
 #define MCE_DEFAULT_NGINX_UDP_POOL_SIZE               (0)
 #define MCE_DEFAULT_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE (0)
 #endif
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
 #define MCE_DEFAULT_APP_WORKERS_NUM (0)
-#endif /* DEFINED_ENVOY */
+#define MCE_DEFAULT_SRC_PORT_STRIDE (2)
+#endif
 #define MCE_DEFAULT_MSS                          (0)
 #define MCE_DEFAULT_LWIP_CC_ALGO_MOD             (0)
 #define MCE_DEFAULT_INTERNAL_THREAD_AFFINITY     (-1)

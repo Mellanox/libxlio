@@ -766,7 +766,7 @@ void sockinfo::copy_sockopt_fork(const socket_fd_api *copy_from)
         m_back_log = skinfo->m_back_log;
     }
 }
-#endif // DEFINED_NGINX
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 bool sockinfo::try_un_offloading() // un-offload the socket if possible

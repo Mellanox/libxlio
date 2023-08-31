@@ -846,14 +846,14 @@ void mce_sys_var::get_env_params()
     mtu = MCE_DEFAULT_MTU;
 #if defined(DEFINED_NGINX)
     nginx_distribute_cq_interrupts = MCE_DEFAULT_NGINX_DISTRIBUTE_CQ;
-    src_port_stride = MCE_DEFAULT_SRC_PORT_STRIDE;
     nginx_udp_socket_pool_size = MCE_DEFAULT_NGINX_UDP_POOL_SIZE;
     nginx_udp_socket_pool_rx_num_buffs_reuse = MCE_DEFAULT_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE;
 #endif
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     app.type = APP_NONE;
     app.workers_num = MCE_DEFAULT_APP_WORKERS_NUM;
-#endif /* DEFINED_ENVOY */
+    app.src_port_stride = MCE_DEFAULT_SRC_PORT_STRIDE;
+#endif
     lwip_mss = MCE_DEFAULT_MSS;
     lwip_cc_algo_mod = MCE_DEFAULT_LWIP_CC_ALGO_MOD;
     mce_spec = MCE_SPEC_NONE;
@@ -1895,9 +1895,6 @@ void mce_sys_var::get_env_params()
     if ((env_ptr = getenv(SYS_VAR_NGINX_DISTRIBUTE_CQ)) != NULL) {
         nginx_distribute_cq_interrupts = atoi(env_ptr) ? true : false;
     }
-    if ((env_ptr = getenv(SYS_VAR_SRC_PORT_STRIDE)) != NULL) {
-        src_port_stride = (uint32_t)atoi(env_ptr);
-    }
     if ((env_ptr = getenv(SYS_VAR_NGINX_UDP_POOL_SIZE)) != NULL) {
         nginx_udp_socket_pool_size = (uint32_t)atoi(env_ptr);
     }
@@ -1910,7 +1907,10 @@ void mce_sys_var::get_env_params()
         app.type = APP_ENVOY;
         app.workers_num = (uint32_t)atoi(env_ptr);
     }
-#endif /* DEFINED_ENVOY */
+    if ((env_ptr = getenv(SYS_VAR_SRC_PORT_STRIDE)) != NULL) {
+        app.src_port_stride = (uint32_t)atoi(env_ptr);
+    }
+#endif
     if ((env_ptr = getenv(SYS_VAR_MSS)) != NULL) {
         lwip_mss = (uint32_t)atoi(env_ptr);
     }
