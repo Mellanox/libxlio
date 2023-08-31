@@ -810,10 +810,9 @@ void print_xlio_global_settings()
         MCE_DEFAULT_UTLS_LOW_WMARK_DEK_CACHE_SIZE, SYS_VAR_UTLS_LOW_WMARK_DEK_CACHE_SIZE);
 #endif /* DEFINED_UTLS */
 #if defined(DEFINED_NGINX)
-    VLOG_PARAM_NUMBER("Src port stirde", safe_mce_sys().src_port_stride,
-                      MCE_DEFAULT_SRC_PORT_STRIDE, SYS_VAR_SRC_PORT_STRIDE);
-    VLOG_PARAM_NUMBER("Number of Nginx workers", (safe_mce_sys().app.type == APP_NGINX ?
-                      safe_mce_sys().app.workers_num : MCE_DEFAULT_APP_WORKERS_NUM),
+    VLOG_PARAM_NUMBER("Number of Nginx workers",
+                      (safe_mce_sys().app.type == APP_NGINX ? safe_mce_sys().app.workers_num
+                                                            : MCE_DEFAULT_APP_WORKERS_NUM),
                       MCE_DEFAULT_APP_WORKERS_NUM, SYS_VAR_NGINX_WORKERS_NUM);
     VLOG_PARAM_NUMBER("Size of UDP socket pool", safe_mce_sys().nginx_udp_socket_pool_size,
                       MCE_DEFAULT_NGINX_UDP_POOL_SIZE, SYS_VAR_NGINX_UDP_POOL_SIZE);
@@ -822,10 +821,15 @@ void print_xlio_global_settings()
         MCE_DEFAULT_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE, SYS_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE);
 #endif
 #if defined(DEFINED_ENVOY)
-    VLOG_PARAM_NUMBER("Number of Envoy workers", (safe_mce_sys().app.type == APP_ENVOY ?
-                      safe_mce_sys().app.workers_num : MCE_DEFAULT_APP_WORKERS_NUM),
+    VLOG_PARAM_NUMBER("Number of Envoy workers",
+                      (safe_mce_sys().app.type == APP_ENVOY ? safe_mce_sys().app.workers_num
+                                                            : MCE_DEFAULT_APP_WORKERS_NUM),
                       MCE_DEFAULT_APP_WORKERS_NUM, SYS_VAR_ENVOY_WORKERS_NUM);
 #endif /* DEFINED_ENVOY */
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+    VLOG_PARAM_NUMBER("Src port stirde", safe_mce_sys().app.src_port_stride,
+                      MCE_DEFAULT_SRC_PORT_STRIDE, SYS_VAR_SRC_PORT_STRIDE);
+#endif
     VLOG_PARAM_STRING("fork() support", safe_mce_sys().handle_fork, MCE_DEFAULT_FORK_SUPPORT,
                       SYS_VAR_FORK, safe_mce_sys().handle_fork ? "Enabled " : "Disabled");
     VLOG_PARAM_STRING("close on dup2()", safe_mce_sys().close_on_dup2, MCE_DEFAULT_CLOSE_ON_DUP2,
@@ -1192,7 +1196,7 @@ static void do_global_ctors_helper()
     NEW_CTOR(g_p_app, app_conf());
     g_p_app->type = safe_mce_sys().app.type;
     g_p_app->workers_num = safe_mce_sys().app.workers_num;
-    g_p_app->src_port_stride = 2; // safe_mce_sys().src_port_stride;
+    g_p_app->src_port_stride = safe_mce_sys().app.src_port_stride;
     g_p_app->add_second_4t_rule = false;
     // Round up to a power of 2 value. Assume the number doesn't exceed 32bit.
     g_p_app->workers_pow2 = g_p_app->workers_num - 1;
@@ -1202,7 +1206,7 @@ static void do_global_ctors_helper()
     g_p_app->workers_pow2 |= g_p_app->workers_pow2 >> 8;
     g_p_app->workers_pow2 |= g_p_app->workers_pow2 >> 16;
     g_p_app->workers_pow2++;
-#endif /* DEFINED_ENVOY */
+#endif
 }
 
 int do_global_ctors()

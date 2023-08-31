@@ -133,7 +133,7 @@ struct app_conf {
     }
 };
 extern struct app_conf *g_p_app;
-#endif /* DEFINED_ENVOY */
+#endif
 
 struct mmsghdr;
 
