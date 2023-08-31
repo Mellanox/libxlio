@@ -34,6 +34,7 @@
 #define TCP_SEG_POOL_H
 
 #include <utility>
+#include "dev/allocator.h"
 #include "utils/lock_wrapper.h"
 #include "lwip/tcp_impl.h"
 
@@ -49,8 +50,8 @@ public:
     static tcp_seg *split_tcp_segs(uint32_t count, tcp_seg *&tcp_seg_list, uint32_t &total_count);
 
 private:
-    tcp_seg *m_tcp_segs_array;
     tcp_seg *m_p_head;
+    xlio_allocator m_allocator;
 };
 
 extern tcp_seg_pool *g_tcp_seg_pool;

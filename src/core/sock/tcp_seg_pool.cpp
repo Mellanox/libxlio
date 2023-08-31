@@ -41,23 +41,27 @@ extern global_stats_t g_global_stat_static;
 tcp_seg_pool *g_tcp_seg_pool = NULL;
 
 tcp_seg_pool::tcp_seg_pool(uint32_t size)
+    : m_allocator(ALLOC_TYPE_PREFER_HUGE)
 {
-    m_tcp_segs_array = new struct tcp_seg[size];
-    if (m_tcp_segs_array == NULL) {
+    tcp_seg *tcp_segs_array = (tcp_seg *)m_allocator.alloc(sizeof(tcp_seg) * size);
+    if (!tcp_segs_array) {
         __log_dbg("TCP segments allocation failed");
         throw_xlio_exception("TCP segments allocation failed");
     }
-    memset(m_tcp_segs_array, 0, sizeof(tcp_seg) * size);
+
+    // Allocator can allocate more memory than requested - utilize it.
+    size = m_allocator.size() / sizeof(tcp_seg);
+
+    memset(tcp_segs_array, 0, sizeof(tcp_seg) * size);
     for (uint32_t i = 0; i < size - 1; i++) {
-        m_tcp_segs_array[i].next = &m_tcp_segs_array[i + 1];
+        tcp_segs_array[i].next = &tcp_segs_array[i + 1];
     }
-    m_p_head = &m_tcp_segs_array[0];
+    m_p_head = &tcp_segs_array[0];
     g_global_stat_static.n_tcp_seg_pool_size = size;
 }
 
 tcp_seg_pool::~tcp_seg_pool()
 {
-    delete[] m_tcp_segs_array;
 }
 
 tcp_seg *tcp_seg_pool::get_tcp_segs(uint32_t amount)
