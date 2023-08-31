@@ -101,7 +101,7 @@ private:
     void terminate_session_fatal(uint8_t alert_type);
 
     err_t tls_rx_consume_ready_packets(void);
-    err_t recv(struct pbuf *p);
+    err_t recv(struct pbuf *p) override;
     void copy_by_offset(uint8_t *dst, uint32_t offset, uint32_t len);
     uint16_t offset_to_host16(uint32_t offset);
     int tls_rx_decrypt(struct pbuf *plist);
