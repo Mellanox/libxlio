@@ -95,8 +95,9 @@ public:
         int ref = atomic_fetch_and_inc(&m_ref);
 
         if (ref == 0) {
-            for (int i = 0; i < m_array_size; ++i)
+            for (int i = 0; i < m_array_size; ++i) {
                 m_array[i]->get();
+            }
         }
     }
 
@@ -105,8 +106,9 @@ public:
         int ref = atomic_fetch_and_dec(&m_ref);
 
         if (ref == 1) {
-            for (int i = 0; i < m_array_size; ++i)
+            for (int i = 0; i < m_array_size; ++i) {
                 m_array[i]->put();
+            }
             delete this;
         }
     }
@@ -122,8 +124,9 @@ public:
 
     void add_child(mem_desc *child)
     {
-        if (likely(m_array_size < DATA_SOURCE_NR_MAX))
+        if (likely(m_array_size < DATA_SOURCE_NR_MAX)) {
             m_array[m_array_size++] = child;
+        }
     }
 
 private:
