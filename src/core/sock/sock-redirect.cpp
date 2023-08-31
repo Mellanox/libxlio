@@ -336,7 +336,7 @@ int init_child_process_for_nginx()
         sock_addr sa;
         socklen_t sa_len = sa.get_socklen();
         parent_sock_fd_api->getsockname(sa.get_p_sa(), &sa_len);
-        if (parent_sock_fd_api->m_is_listen) {
+        if (PROTO_TCP == si->get_protocol()) {
             srdr_logdbg("found listen socket %d", parent_sock_fd_api->get_fd());
             g_p_fd_collection->addsocket(sock_fd, si->get_family(), SOCK_STREAM | block_type);
             socket_fd_api *child_sock_fd_api = g_p_fd_collection->get_sockfd(sock_fd);
@@ -453,7 +453,7 @@ static int init_worker(int worker_id, int listen_fd)
         socklen_t sa_len = sa.get_socklen();
 
         parent_sock_fd_api->getsockname(sa.get_p_sa(), &sa_len);
-        if (parent_sock_fd_api->m_is_listen) {
+        if (PROTO_TCP == si->get_protocol()) {
             srdr_logdbg("found listen socket %d", parent_sock_fd_api->get_fd());
             g_p_fd_collection->addsocket(listen_fd, si->get_family(), SOCK_STREAM | block_type);
             child_sock_fd_api = g_p_fd_collection->get_sockfd(listen_fd);
@@ -990,13 +990,11 @@ extern "C" EXPORT_SYMBOL int listen(int __fd, int backlog)
         } else {
 #if defined(DEFINED_NGINX)
             if (g_p_app->type == APP_NGINX && g_p_app->workers_num > 0) {
-                p_socket_object->m_is_listen = true;
                 p_socket_object->m_back_log = backlog;
             } else
 #endif
 #if defined(DEFINED_ENVOY)
             if (g_p_app->type == APP_ENVOY && g_p_app->workers_num > 0) {
-                p_socket_object->m_is_listen = true;
                 p_socket_object->m_back_log = backlog;
             } else 
 #endif /* DEFINED_ENVOY */
