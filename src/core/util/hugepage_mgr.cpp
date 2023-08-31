@@ -39,6 +39,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <mutex>
 #include <fstream>
 #include <sstream>
 
@@ -58,11 +59,15 @@ hugepage_mgr::hugepage_mgr()
 
 void hugepage_mgr::update()
 {
+    std::lock_guard<decltype(m_lock)> lock(m_lock);
+
+    m_hugepages.clear();
     read_sysfs();
 }
 
 bool hugepage_mgr::is_hugepage_supported(size_t hugepage)
 {
+    std::lock_guard<decltype(m_lock)> lock(m_lock);
     return m_hugepages.find(hugepage) != m_hugepages.end();
 }
 
@@ -114,6 +119,8 @@ size_t hugepage_mgr::find_optimal_hugepage(size_t size)
 
 void *hugepage_mgr::alloc_hugepages(size_t &size)
 {
+    std::lock_guard<decltype(m_lock)> lock(m_lock);
+
     size_t hugepage = find_optimal_hugepage(size);
     size_t hugepage_mask = hugepage - 1;
     size_t actual_size = size;
@@ -167,6 +174,8 @@ void hugepage_mgr::dealloc_hugepages(void *ptr, size_t size)
 
 void hugepage_mgr::print_report(bool short_report /*=false*/)
 {
+    std::lock_guard<decltype(m_lock)> lock(m_lock);
+
     const size_t ONE_MB = 1024U * 1024U;
     std::vector<size_t> hugepages;
 
