@@ -502,7 +502,6 @@ public:
     hyper_t hypervisor;
     bool trigger_dummy_send_getsockname;
 #if defined(DEFINED_NGINX)
-    bool nginx_distribute_cq_interrupts;
     int nginx_udp_socket_pool_size;
     int nginx_udp_socket_pool_rx_num_buffs_reuse;
 #endif
@@ -511,6 +510,7 @@ public:
         app_type_t type;
         int workers_num;
         int src_port_stride;
+        bool distribute_cq_interrupts;
     } app;
 #endif
     uint32_t tcp_send_buffer_size;
@@ -662,7 +662,6 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_CLOSE_ON_DUP2             "XLIO_CLOSE_ON_DUP2"
 #define SYS_VAR_MTU                       "XLIO_MTU"
 #if defined(DEFINED_NGINX)
-#define SYS_VAR_NGINX_DISTRIBUTE_CQ               "XLIO_NGINX_DISTRIBUTE_CQ"
 #define SYS_VAR_NGINX_WORKERS_NUM                 "XLIO_NGINX_WORKERS_NUM"
 #define SYS_VAR_NGINX_UDP_POOL_SIZE               "XLIO_NGINX_UDP_POOL_SIZE"
 #define SYS_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE "XLIO_NGINX_UDP_POOL_REUSE_BUFFS"
@@ -672,6 +671,7 @@ extern mce_sys_var &safe_mce_sys();
 #endif /* DEFINED_ENVOY */
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
 #define SYS_VAR_SRC_PORT_STRIDE "XLIO_SRC_PORT_STRIDE"
+#define SYS_VAR_DISTRIBUTE_CQ   "XLIO_DISTRIBUTE_CQ"
 #endif
 #define SYS_VAR_TCP_MAX_SYN_RATE "XLIO_TCP_MAX_SYN_RATE"
 #define SYS_VAR_MSS              "XLIO_MSS"
@@ -834,13 +834,13 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_CLOSE_ON_DUP2                  (true)
 #define MCE_DEFAULT_MTU                            (0)
 #if defined(DEFINED_NGINX)
-#define MCE_DEFAULT_NGINX_DISTRIBUTE_CQ (false)
 #define MCE_DEFAULT_NGINX_UDP_POOL_SIZE               (0)
 #define MCE_DEFAULT_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE (0)
 #endif
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
 #define MCE_DEFAULT_APP_WORKERS_NUM (0)
 #define MCE_DEFAULT_SRC_PORT_STRIDE (2)
+#define MCE_DEFAULT_DISTRIBUTE_CQ   (false)
 #endif
 #define MCE_DEFAULT_MSS                          (0)
 #define MCE_DEFAULT_LWIP_CC_ALGO_MOD             (0)
