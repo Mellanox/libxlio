@@ -131,10 +131,10 @@ public:
     void modify_cq_moderation(uint32_t period, uint32_t count);
 
 #ifdef DEFINED_UTLS
-    bool tls_tx_supported(void) { return m_tls.tls_tx; }
-    bool tls_rx_supported(void) { return m_tls.tls_rx; }
+    bool tls_tx_supported(void) override { return m_tls.tls_tx; }
+    bool tls_rx_supported(void) override { return m_tls.tls_rx; }
     bool tls_sync_dek_supported() { return m_tls.tls_synchronize_dek; }
-    xlio_tis *tls_context_setup_tx(const xlio_tls_info *info)
+    xlio_tis *tls_context_setup_tx(const xlio_tls_info *info) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
 
@@ -149,7 +149,7 @@ public:
 
         return tis;
     }
-    xlio_tir *tls_create_tir(bool cached)
+    xlio_tir *tls_create_tir(bool cached) override
     {
         /*
          * This method can be called for either RX or TX ring.
@@ -159,7 +159,7 @@ public:
         return m_p_qp_mgr->tls_create_tir(cached);
     }
     int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t next_record_tcp_sn,
-                             xlio_comp_cb_t callback, void *callback_arg)
+                             xlio_comp_cb_t callback, void *callback_arg) override
     {
         /* Protect with TX lock since we post WQEs to the send queue. */
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
@@ -176,7 +176,7 @@ public:
 
         return rc;
     }
-    void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static)
+    void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         m_p_qp_mgr->tls_context_resync_tx(info, tis, skip_static);
@@ -184,12 +184,12 @@ public:
         uint64_t dummy_poll_sn = 0;
         m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
     }
-    void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn)
+    void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         m_p_qp_mgr->tls_resync_rx(tir, info, hw_resync_tcp_sn);
     }
-    void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey)
+    void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         if (lkey == LKEY_USE_DEFAULT) {
@@ -200,18 +200,19 @@ public:
         uint64_t dummy_poll_sn = 0;
         m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
     }
-    void tls_release_tis(xlio_tis *tis)
+    void tls_release_tis(xlio_tis *tis) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         m_p_qp_mgr->tls_release_tis(tis);
     }
-    void tls_release_tir(xlio_tir *tir)
+    void tls_release_tir(xlio_tir *tir) override
     {
         /* TIR objects are protected with TX lock */
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         m_p_qp_mgr->tls_release_tir(tir);
     }
-    void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first)
+    void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
+                              bool first) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         if (lkey == LKEY_USE_DEFAULT) {
