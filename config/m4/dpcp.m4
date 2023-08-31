@@ -118,7 +118,7 @@ AS_IF([test "x$with_dpcp" == xno],
 AC_MSG_CHECKING([for dpcp support])
 if test "$prj_cv_dpcp" -ne 0; then
     CPPFLAGS="$CPPFLAGS $prj_cv_dpcp_CPPFLAGS"
-    LDFLAGS="$LDFLAGS $prj_cv_dpcp_LDFLAGS"
+    LDFLAGS="$prj_cv_dpcp_LDFLAGS $LDFLAGS"
     AC_SUBST([DPCP_LIBS], ["-ldpcp"])
     dpcp_version_number=($(get_version_number))
     min_supported_version=($(get_min_supported_version))
