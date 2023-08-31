@@ -298,7 +298,6 @@ protected:
 public:
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     bool m_is_for_socket_pool; // true when this fd will be used for socket pool on close
-    bool m_is_listen;
     int m_back_log;
 #endif
 };

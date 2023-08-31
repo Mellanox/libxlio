@@ -52,7 +52,6 @@ socket_fd_api::socket_fd_api(int fd)
     , m_econtext(NULL)
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     , m_is_for_socket_pool(false)
-    , m_is_listen(false)
     , m_back_log(0)
 #endif
 {
