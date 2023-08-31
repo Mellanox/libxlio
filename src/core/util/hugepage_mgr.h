@@ -40,6 +40,8 @@
 #include <vector>
 #include <unordered_map>
 
+#include "utils/lock_wrapper.h"
+
 struct hugepage_metadata {
     uint32_t nr_hugepages_total;
     uint32_t nr_hugepages_free;
@@ -112,6 +114,7 @@ private:
     }
 
     size_t m_default_hugepage;
+    lock_mutex m_lock;
     std::unordered_map<size_t, hugepage_metadata> m_hugepages;
 
     struct {
