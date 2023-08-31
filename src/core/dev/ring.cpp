@@ -32,6 +32,7 @@
 
 #include "ring.h"
 #include "proto/route_table_mgr.h"
+#include "sock/tcp_seg_pool.h"
 
 #undef MODULE_NAME
 #define MODULE_NAME "ring"

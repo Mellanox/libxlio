@@ -37,7 +37,6 @@
 #include "ib/base/verbs_extra.h"
 #include "proto/flow_tuple.h"
 #include "sock/socket_fd_api.h"
-#include "sock/tcp_seg_pool.h"
 
 /* Forward declarations */
 struct xlio_tls_info;
