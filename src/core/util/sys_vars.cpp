@@ -157,6 +157,75 @@ const char *to_str(xlio_spec_t level)
 
 } // namespace xlio_spec
 
+namespace option_size {
+enum {
+    ONE_BYTE = 1U,
+    ONE_KB = 1024U,
+    ONE_MB = 1024U * 1024U,
+    ONE_GB = 1024U * 1024U * 1024U,
+};
+
+// Supported base: dec, hex, oct
+// Supported suffixes: one letter (K, M, G) and two letters (KB, MB, GB)
+//                     in lower or upper case
+//
+// All other formats or extra letters are considered as invalid input and
+// 0 is returned. Currently, there is no difference between 0 input and
+// a failure.
+size_t from_str(const char *str)
+{
+    char *endptr;
+    unsigned long val = strtoul(str, &endptr, 0);
+
+    struct size_suffix {
+        std::vector<const char *> vals;
+        unsigned long multiplier;
+    };
+    static const std::vector<size_suffix> suffixes = {{
+                                                          {"B", ""},
+                                                          ONE_BYTE,
+                                                      },
+                                                      {
+                                                          {"KB", "K"},
+                                                          ONE_KB,
+                                                      },
+                                                      {
+                                                          {"MB", "M"},
+                                                          ONE_MB,
+                                                      },
+                                                      {
+                                                          {"GB", "G"},
+                                                          ONE_GB,
+                                                      }};
+
+    for (auto &suffix : suffixes) {
+        for (auto sfx : suffix.vals) {
+            if (strcasecmp(sfx, endptr) == 0) {
+                return static_cast<size_t>(val * suffix.multiplier);
+            }
+        }
+    }
+
+    // Invalid suffix in the input string
+    return 0U;
+}
+
+const char *to_str(size_t size)
+{
+    static char str[64];
+    static const char *suffixes[] = {"", " KB", " MB", " GB", nullptr};
+    int sfx_idx = 0;
+
+    while ((size / 1024U >= 10 || (size > 0 && size % 1024U == 0)) && suffixes[sfx_idx + 1]) {
+        ++sfx_idx;
+        size /= 1024U;
+    }
+    snprintf(str, sizeof(str), "%zu%s", size, suffixes[sfx_idx]);
+
+    return str;
+}
+} // namespace option_size
+
 namespace option_x {
 template <typename MODE, typename OPT, size_t N>
 MODE from_str(const char *str, MODE def_value, const OPT (&options)[N])

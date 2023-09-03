@@ -197,6 +197,11 @@ const char *to_str(xlio_spec_t level);
     mode_t from_int(const int option, mode_t def_value);                                           \
     const char *to_str(mode_t option)
 
+namespace option_size {
+size_t from_str(const char *str);
+const char *to_str(size_t size);
+} // namespace option_size
+
 namespace option_3 {
 typedef enum { AUTO_ON_OFF_DEF } mode_t;
 OPTIONS_FROM_TO_STR_DEF;
