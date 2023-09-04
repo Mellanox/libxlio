@@ -315,7 +315,7 @@ void neigh_entry::empty_unsent_queue()
 
     while (!m_unsent_queue.empty()) {
         neigh_send_data *n_send_data = m_unsent_queue.front();
-        if (prepare_to_send_packet(n_send_data->m_header)) {
+        if (prepare_to_send_packet(n_send_data)) {
             if (post_send_packet(n_send_data)) {
                 neigh_logdbg("sent one packet");
             } else {
@@ -1798,8 +1798,9 @@ bool neigh_eth::send_neighbor_solicitation()
     return true;
 }
 
-bool neigh_eth::prepare_to_send_packet(header *h)
+bool neigh_eth::prepare_to_send_packet(neigh_send_data *snd_data)
 {
+    header *h = snd_data->m_header;
     neigh_logdbg("");
 
     net_device_val_eth *netdevice_eth = dynamic_cast<net_device_val_eth *>(m_p_dev);
@@ -1824,8 +1825,9 @@ bool neigh_eth::prepare_to_send_packet(header *h)
     wqe_sh.init_wqe(m_send_wqe, &m_sge, 1);
 
     uint16_t ether_type = (ip_header_version(h->get_ip_hdr()) == IPV4) ? ETH_P_IP : ETH_P_IPV6;
-    if (netdevice_eth->get_vlan()) { // vlan interface
-        h->configure_vlan_eth_headers(*src, *dst, netdevice_eth->get_vlan(), ether_type);
+    if (netdevice_eth->get_vlan() || snd_data->m_external_vlan_tag) { // vlan interface
+        uint16_t vlan_tag = (snd_data->m_external_vlan_tag ?: netdevice_eth->get_vlan());
+        h->configure_vlan_eth_headers(*src, *dst, vlan_tag, ether_type);
     } else {
         h->configure_eth_headers(*src, *dst, ether_type);
     }
