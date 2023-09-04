@@ -106,7 +106,6 @@ bool g_is_forked_child = false;
 bool g_init_global_ctors_done = true;
 static command_netlink *s_cmd_nl = NULL;
 #define MAX_VERSION_STR_LEN 128
-#define ONE_MB              (1024 * 1024)
 
 global_stats_t g_global_stat_static;
 
@@ -543,16 +542,17 @@ void print_xlio_global_settings()
 
     VLOG_PARAM_NUMBER("Zerocopy Mem Bufs", safe_mce_sys().zc_num_bufs, MCE_DEFAULT_ZC_NUM_BUFS,
                       SYS_VAR_ZC_NUM_BUFS);
-    VLOG_PARAM_NUMBER("Zerocopy Cache Threshold", safe_mce_sys().zc_cache_threshold,
-                      MCE_DEFAULT_ZC_CACHE_THRESHOLD, SYS_VAR_ZC_CACHE_THRESHOLD);
+    VLOG_PARAM_STRING("Zerocopy Cache Threshold", safe_mce_sys().zc_cache_threshold,
+                      MCE_DEFAULT_ZC_CACHE_THRESHOLD, SYS_VAR_ZC_CACHE_THRESHOLD,
+                      option_size::to_str(safe_mce_sys().zc_cache_threshold));
     VLOG_PARAM_NUMBER("Tx Mem Segs TCP", safe_mce_sys().tx_num_segs_tcp,
                       MCE_DEFAULT_TX_NUM_SEGS_TCP, SYS_VAR_TX_NUM_SEGS_TCP);
     VLOG_PARAM_NUMBER("Tx Mem Bufs", safe_mce_sys().tx_num_bufs, MCE_DEFAULT_TX_NUM_BUFS,
                       SYS_VAR_TX_NUM_BUFS);
-    VLOG_PARAM_NUMBER("Tx Mem Buf size", safe_mce_sys().tx_buf_size, MCE_DEFAULT_TX_BUF_SIZE,
-                      SYS_VAR_TX_BUF_SIZE);
-    VLOG_PARAM_NUMBER("ZC TX size", safe_mce_sys().zc_tx_size, MCE_DEFAULT_ZC_TX_SIZE,
-                      SYS_VAR_ZC_TX_SIZE);
+    VLOG_PARAM_STRING("Tx Mem Buf size", safe_mce_sys().tx_buf_size, MCE_DEFAULT_TX_BUF_SIZE,
+                      SYS_VAR_TX_BUF_SIZE, option_size::to_str(safe_mce_sys().tx_buf_size));
+    VLOG_PARAM_STRING("ZC TX size", safe_mce_sys().zc_tx_size, MCE_DEFAULT_ZC_TX_SIZE,
+                      SYS_VAR_ZC_TX_SIZE, option_size::to_str(safe_mce_sys().zc_tx_size));
     VLOG_PARAM_NUMBER("Tx QP WRE", safe_mce_sys().tx_num_wr, MCE_DEFAULT_TX_NUM_WRE,
                       SYS_VAR_TX_NUM_WRE);
     VLOG_PARAM_NUMBER("Tx QP WRE Batching", safe_mce_sys().tx_num_wr_to_signal,
@@ -573,8 +573,9 @@ void print_xlio_global_settings()
                       MCE_DEFAULT_TX_SEGS_BATCH_TCP, SYS_VAR_TX_SEGS_BATCH_TCP);
     VLOG_PARAM_NUMBER("Tx Segs Ring Batch TCP", safe_mce_sys().tx_segs_ring_batch_tcp,
                       MCE_DEFAULT_TX_SEGS_RING_BATCH_TCP, SYS_VAR_TX_SEGS_RING_BATCH_TCP);
-    VLOG_PARAM_NUMBER("TCP Send Buffer size", safe_mce_sys().tcp_send_buffer_size,
-                      MCE_DEFAULT_TCP_SEND_BUFFER_SIZE, SYS_VAR_TCP_SEND_BUFFER_SIZE);
+    VLOG_PARAM_STRING("TCP Send Buffer size", safe_mce_sys().tcp_send_buffer_size,
+                      MCE_DEFAULT_TCP_SEND_BUFFER_SIZE, SYS_VAR_TCP_SEND_BUFFER_SIZE,
+                      option_size::to_str(safe_mce_sys().tcp_send_buffer_size));
     VLOG_PARAM_NUMBER(
         "Rx Mem Bufs", safe_mce_sys().rx_num_bufs,
         (safe_mce_sys().enable_striding_rq ? MCE_DEFAULT_STRQ_NUM_BUFS : MCE_DEFAULT_RX_NUM_BUFS),
@@ -1052,7 +1053,7 @@ static void do_global_ctors_helper()
 
     NEW_CTOR(g_bind_no_port, bind_no_port());
 
-    NEW_CTOR(g_zc_cache, mapping_cache((size_t)safe_mce_sys().zc_cache_threshold * ONE_MB));
+    NEW_CTOR(g_zc_cache, mapping_cache(safe_mce_sys().zc_cache_threshold));
 
     safe_mce_sys().rx_buf_size = std::min(safe_mce_sys().rx_buf_size, 0xFF00U);
     if (safe_mce_sys().rx_buf_size <=

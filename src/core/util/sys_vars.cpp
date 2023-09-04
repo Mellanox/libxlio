@@ -1036,7 +1036,7 @@ void mce_sys_var::get_env_params()
             256; // MCE_DEFAULT_TCP_TIMER_RESOLUTION_MSEC (10), TCP logical timer resolution, reduce
                  // CPU utilization of internal thread.
         tcp_send_buffer_size =
-            2000000; // MCE_DEFAULT_TCP_SEND_BUFFER_SIZE (1000000), LWIP TCP send buffer size.
+            2 * 1024 * 1024; // MCE_DEFAULT_TCP_SEND_BUFFER_SIZE (1 MB), LWIP TCP send buffer size.
         tcp_push_flag = false; // MCE_DEFAULT_TCP_PUSH_FLAG (true), When false, we don't set PSH
                                // flag in outgoing TCP segments.
         progress_engine_wce_max =
@@ -1090,7 +1090,7 @@ void mce_sys_var::get_env_params()
             256; // MCE_DEFAULT_TCP_TIMER_RESOLUTION_MSEC (10), TCP logical timer resolution, reduce
                  // CPU utilization of internal thread.
         tcp_send_buffer_size =
-            2000000; // MCE_DEFAULT_TCP_SEND_BUFFER_SIZE (1000000), LWIP TCP send buffer size.
+            2 * 1024 * 1024; // MCE_DEFAULT_TCP_SEND_BUFFER_SIZE (1 MB), LWIP TCP send buffer size.
         tcp_push_flag = false; // MCE_DEFAULT_TCP_PUSH_FLAG (true), When false, we don't set PSH
                                // flag in outgoing TCP segments.
         progress_engine_wce_max =
@@ -1245,7 +1245,7 @@ void mce_sys_var::get_env_params()
     }
 
     if ((env_ptr = getenv(SYS_VAR_ZC_CACHE_THRESHOLD)) != NULL) {
-        zc_cache_threshold = (uint32_t)atoi(env_ptr);
+        zc_cache_threshold = option_size::from_str(env_ptr);
     }
 
     if ((env_ptr = getenv(SYS_VAR_TX_NUM_SEGS_TCP)) != NULL) {
@@ -1257,14 +1257,14 @@ void mce_sys_var::get_env_params()
     }
 
     if ((env_ptr = getenv(SYS_VAR_TX_BUF_SIZE)) != NULL) {
-        tx_buf_size = (uint32_t)atoi(env_ptr);
+        tx_buf_size = (uint32_t)option_size::from_str(env_ptr);
     }
 
     if ((env_ptr = getenv(SYS_VAR_ZC_TX_SIZE)) != NULL) {
-        zc_tx_size = (uint32_t)atoi(env_ptr);
+        zc_tx_size = (uint32_t)option_size::from_str(env_ptr);
         if (zc_tx_size > MCE_MAX_ZC_TX_SIZE) {
-            vlog_printf(VLOG_ERROR,
-                        "ZC TX size [%d] exceeds the maximum (max=%d), setting to default.\n",
+            vlog_printf(VLOG_WARNING,
+                        "ZC TX size [%u] exceeds the maximum (max=%u), setting to default.\n",
                         zc_tx_size, MCE_MAX_ZC_TX_SIZE);
             zc_tx_size = MCE_DEFAULT_ZC_TX_SIZE;
         }
@@ -1373,7 +1373,7 @@ void mce_sys_var::get_env_params()
     }
 
     if ((env_ptr = getenv(SYS_VAR_RX_BUF_SIZE)) != NULL) {
-        rx_buf_size = (uint32_t)atoi(env_ptr);
+        rx_buf_size = (uint32_t)option_size::from_str(env_ptr);
     }
 
     if ((env_ptr = getenv(SYS_VAR_RX_NUM_WRE_TO_POST_RECV)) != NULL) {
@@ -1659,9 +1659,9 @@ void mce_sys_var::get_env_params()
     }
 
     if ((env_ptr = getenv(SYS_VAR_USER_HUGE_PAGE_SIZE)) != NULL) {
-        user_huge_page_size = (size_t)atoi(env_ptr);
-        if (!user_huge_page_size) {
-            user_huge_page_size = (size_t)strtoul(env_ptr, NULL, 16);
+        user_huge_page_size = option_size::from_str(env_ptr);
+        if (user_huge_page_size == 0) {
+            user_huge_page_size = g_hugepage_mgr.get_default_hugepage();
         }
     }
 
@@ -1943,7 +1943,7 @@ void mce_sys_var::get_env_params()
     }
 
     if ((env_ptr = getenv(SYS_VAR_TCP_SEND_BUFFER_SIZE)) != NULL) {
-        tcp_send_buffer_size = (uint32_t)atoi(env_ptr);
+        tcp_send_buffer_size = (uint32_t)option_size::from_str(env_ptr);
     }
 
     if ((env_ptr = getenv(SYS_VAR_SKIP_POLL_IN_RX)) != NULL) {
