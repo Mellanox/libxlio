@@ -735,7 +735,8 @@ ssize_t dst_entry::pass_buff_to_neigh(const iovec *p_iov, size_t sz_iov, uint32_
 
     if (m_p_neigh_entry) {
         neigh_send_info n_send_info(const_cast<iovec *>(p_iov), sz_iov, m_header_neigh,
-                                    get_protocol_type(), get_route_mtu(), m_tos, packet_id);
+                                    get_protocol_type(), get_route_mtu(), m_tos, packet_id,
+                                    m_external_vlan_tag);
         ret_val = m_p_neigh_entry->send(n_send_info);
     }
 

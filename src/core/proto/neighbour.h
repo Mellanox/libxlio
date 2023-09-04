@@ -288,7 +288,7 @@ protected:
     void send_discovery_request();
     virtual bool send_arp_request(bool) { return true; };
     virtual bool send_neighbor_solicitation() { return true; };
-    virtual bool prepare_to_send_packet(header *) { return true; };
+    virtual bool prepare_to_send_packet(neigh_send_data *) { return true; };
     void handle_timer_expired(void *user_data) override;
 
     virtual ring_user_id_t generate_ring_user_id(header *h = NULL)
@@ -340,7 +340,7 @@ private:
     bool priv_handle_neigh_is_l2_changed(address_t) override;
     bool send_arp_request(bool is_broadcast) override;
     bool send_neighbor_solicitation() override;
-    bool prepare_to_send_packet(header *) override;
+    bool prepare_to_send_packet(neigh_send_data *) override;
 };
 
 #endif /* NEIGHBOUR_H */
