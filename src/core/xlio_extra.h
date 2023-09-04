@@ -56,6 +56,7 @@
 #define SO_XLIO_PD               2822
 #define SCM_XLIO_PD              SO_XLIO_PD
 #define SCM_XLIO_NVME_PD         2823
+#define SO_XLIO_EXT_VLAN_TAG     2824
 
 enum { CMSG_XLIO_IOCTL_USER_ALLOC = 2900 };
 

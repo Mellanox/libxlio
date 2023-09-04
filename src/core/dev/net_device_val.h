@@ -260,7 +260,7 @@ public:
     void update_netvsc_slaves(int if_index, int if_flags);
     void register_to_ibverbs_events(event_handler_ibverbs *handler);
     void unregister_to_ibverbs_events(event_handler_ibverbs *handler);
-    int get_priority_by_tc_class(uint32_t tc_class);
+    uint32_t get_priority_by_tc_class(uint32_t tc_class);
 
 protected:
     void set_slave_array();

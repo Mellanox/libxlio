@@ -717,6 +717,7 @@ void sockinfo_tcp::create_dst_entry()
         }
 
         m_p_connected_dst_entry->set_src_sel_prefs(m_src_sel_flags);
+        m_p_connected_dst_entry->set_external_vlan_tag(m_external_vlan_tag);
     }
 }
 
@@ -4576,6 +4577,20 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             ret = SOCKOPT_HANDLE_BY_OS;
             si_tcp_logdbg("(SO_ZEROCOPY) m_b_zc: %d", m_b_zc);
             break;
+        case SO_XLIO_EXT_VLAN_TAG:
+            if (__optlen == sizeof(int)) {
+                int tempval = *reinterpret_cast<const int *>(__optval);
+                if (tempval >= 0 && tempval <= UINT16_MAX) {
+                    m_external_vlan_tag = static_cast<uint16_t>(tempval);
+                    ret = SOCKOPT_INTERNAL_XLIO_SUPPORT;
+                    si_tcp_logdbg("(SO_XLIO_EXT_VLAN_TAG) m_external_vlan_tag: %" PRIu16,
+                                  m_external_vlan_tag);
+                    break;
+                }
+            }
+            ret = SOCKOPT_NO_XLIO_SUPPORT;
+            errno = EINVAL;
+            break;
         default:
             ret = SOCKOPT_HANDLE_BY_OS;
             supported = false;
@@ -4597,9 +4612,12 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
         m_socket_options_list.push_back(
             new socket_option_t(__level, __optname, __optval, __optlen));
     }
-    if (safe_mce_sys().avoid_sys_calls_on_tcp_fd && ret != SOCKOPT_HANDLE_BY_OS && is_connected()) {
+    if ((ret == SOCKOPT_INTERNAL_XLIO_SUPPORT) ||
+        (safe_mce_sys().avoid_sys_calls_on_tcp_fd && ret != SOCKOPT_HANDLE_BY_OS &&
+         is_connected())) {
         return ret;
     }
+
     return setsockopt_kernel(__level, __optname, __optval, __optlen, supported,
                              allow_privileged_sock_opt);
 }
