@@ -68,6 +68,7 @@ dst_entry::dst_entry(const sock_addr &dst, uint16_t src_port, socket_data &sock_
     , m_tos(sock_data.tos)
     , m_pcp(sock_data.pcp)
     , m_id(0)
+    , m_external_vlan_tag(0U)
     , m_src_port(src_port)
 {
     dst_logdbg("dst:%s:%d src: %d", m_dst_ip.to_str(m_family).c_str(), ntohs(m_dst_port),
@@ -457,11 +458,13 @@ bool dst_entry::conf_l2_hdr_and_snd_wqe_eth()
         BULLSEYE_EXCLUDE_BLOCK_START
         if (src && dst) {
             BULLSEYE_EXCLUDE_BLOCK_END
-            if (netdevice_eth->get_vlan()) { // vlan interface
+            if (netdevice_eth->get_vlan() || m_external_vlan_tag) { // vlan interface
                 uint32_t prio = get_priority_by_tc_class(m_pcp);
-                uint16_t vlan_tci = (prio << NET_ETH_VLAN_PCP_OFFSET) | netdevice_eth->get_vlan();
+                uint16_t vlan_tag = (m_external_vlan_tag ?: netdevice_eth->get_vlan());
+                uint16_t vlan_tci = (prio << NET_ETH_VLAN_PCP_OFFSET) | vlan_tag;
                 m_header->configure_vlan_eth_headers(
                     *src, *dst, vlan_tci, (get_sa_family() == AF_INET6) ? ETH_P_IPV6 : ETH_P_IP);
+                dst_logdbg("Using vlan. tag: %" PRIu16 ", prio: %" PRIu32, vlan_tag, prio);
             } else {
                 m_header->configure_eth_headers(
                     *src, *dst, (get_sa_family() == AF_INET6) ? ETH_P_IPV6 : ETH_P_IP);
@@ -798,7 +801,7 @@ int dst_entry::modify_ratelimit(struct xlio_rate_limit_t &rate_limit)
     return 0;
 }
 
-int dst_entry::get_priority_by_tc_class(uint32_t pcp)
+uint32_t dst_entry::get_priority_by_tc_class(uint32_t pcp)
 {
     // translate class to priority
     if (m_p_net_dev_val) {

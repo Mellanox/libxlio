@@ -1366,7 +1366,7 @@ void net_device_val_eth::configure()
     }
 }
 
-int net_device_val::get_priority_by_tc_class(uint32_t tc_class)
+uint32_t net_device_val::get_priority_by_tc_class(uint32_t tc_class)
 {
     tc_class_priority_map::iterator it = m_class_prio_map.find(tc_class);
     if (it == m_class_prio_map.end()) {

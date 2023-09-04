@@ -115,10 +115,9 @@ public:
     inline ring *get_ring() { return m_p_ring; }
     inline ib_ctx_handler *get_ctx() { return m_p_ring->get_ctx(m_id); }
     inline sa_family_t get_sa_family() { return m_family; }
-
     uint8_t get_tos() const { return m_tos; }
     uint8_t get_ttl_hop_limit() const { return m_ttl_hop_limit; }
-
+    void set_external_vlan_tag(uint16_t vlan_tag) { m_external_vlan_tag = vlan_tag; }
     void reset_inflight_zc_buffers_ctx(void *ctx)
     {
         m_p_ring->reset_inflight_zc_buffers_ctx(m_id, ctx);
@@ -174,7 +173,7 @@ protected:
     ring_user_id_t m_id;
     uint16_t m_max_ip_payload_size;
     uint16_t m_max_udp_payload_size;
-
+    uint16_t m_external_vlan_tag;
     uint16_t m_src_port;
     bool m_b_is_offloaded;
     bool m_b_force_os;
@@ -209,7 +208,7 @@ protected:
     {
         m_b_tx_mem_buf_desc_list_pending = is_pending;
     }
-    int get_priority_by_tc_class(uint32_t tc_clas);
+    uint32_t get_priority_by_tc_class(uint32_t tc_clas);
     inline void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
                                  xlio_wr_tx_packet_attr attr)
     {
