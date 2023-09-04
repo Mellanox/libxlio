@@ -143,12 +143,12 @@ rfs::rfs(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *rule_fil
     m_sinks_list = new pkt_rcvr_sink *[m_n_sinks_list_max_length];
 
 #if defined(DEFINED_NGINX)
-    if (g_p_app->type == APP_NGINX && g_p_app->workers_num > 0) {
+    if (g_p_app->type == APP_NGINX) {
         m_flow_tag_id = 0;
     }
 #endif
 #if defined(DEFINED_ENVOY)
-    if (g_p_app->type == APP_ENVOY && g_p_app->workers_num > 0 && g_p_app->get_worker_id() >= 0) {
+    if (g_p_app->type == APP_ENVOY && g_p_app->get_worker_id() >= 0) {
         m_flow_tag_id = 0;
     }
 #endif /* DEFINED_ENVOY */

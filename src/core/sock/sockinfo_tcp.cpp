@@ -2788,7 +2788,7 @@ int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
     } else
 #endif // DEFINED_NGINX
 #if defined(DEFINED_ENVOY)
-    if (g_p_app->type == APP_ENVOY && g_p_app->workers_num > 0 && g_p_app->get_worker_id() >= 0) {
+    if (g_p_app->type == APP_ENVOY && g_p_app->get_worker_id() >= 0) {
         // g_p_app->get_worker_id() >= 0
     } else
 #endif /* DEFINED_ENVOY */
@@ -2863,14 +2863,14 @@ int sockinfo_tcp::prepareListen()
     }
 
 #if defined(DEFINED_NGINX)
-    if (g_p_app->type == APP_NGINX && g_p_app->workers_num > 0) {
+    if (g_p_app->type == APP_NGINX) {
         if (m_sock_state == TCP_SOCK_LISTEN_READY) {
             return 0; // prepareListen() had been called before...
         }
     }
 #endif // DEFINED_NGINX
 #if defined(DEFINED_ENVOY)
-    if (g_p_app->type == APP_ENVOY && g_p_app->workers_num > 0) {
+    if (g_p_app->type == APP_ENVOY) {
         if (m_sock_state == TCP_SOCK_LISTEN_READY) {
             return 0; // prepareListen() had been called before...
         }

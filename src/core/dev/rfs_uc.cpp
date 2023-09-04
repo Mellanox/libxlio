@@ -108,7 +108,7 @@ bool rfs_uc::prepare_flow_spec()
         p_attach_flow_data->ibv_flow_attr.priority = 1;
     }
 #if defined(DEFINED_NGINX)
-    else if (g_p_app->type == APP_NGINX && g_p_app->workers_num > 0) {
+    else if (g_p_app->type == APP_NGINX) {
         if (m_flow_tuple.get_protocol() != PROTO_UDP ||
             (g_map_udp_bounded_port.count(ntohs(m_flow_tuple.get_dst_port())))) {
             int src_port;
@@ -130,7 +130,7 @@ bool rfs_uc::prepare_flow_spec()
     }
 #endif
 #if defined(DEFINED_ENVOY)
-    else if (g_p_app->type == APP_ENVOY &&  g_p_app->workers_num > 0 && g_p_app->get_worker_id() >= 0) {
+    else if (g_p_app->type == APP_ENVOY && g_p_app->get_worker_id() >= 0) {
         if (m_flow_tuple.get_protocol() != PROTO_UDP) {
             int src_port;
             if (g_p_app->add_second_4t_rule) {

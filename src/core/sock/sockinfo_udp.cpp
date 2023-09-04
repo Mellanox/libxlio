@@ -543,8 +543,8 @@ int sockinfo_udp::connect(const struct sockaddr *__to, socklen_t __tolen)
     // check if we can skip "connect()" flow, to increase performance of redundant connect() calls
     // we will use it for dedicated sockets for socket pool
     // in case dst ip and port are the same as the last connect() call
-    if (m_is_connected && m_is_for_socket_pool && m_state != SOCKINFO_DESTROYING &&
-        m_connected == connect_to) {
+    if (g_p_app->type == APP_NGINX && m_is_connected && m_is_for_socket_pool &&
+        m_state != SOCKINFO_DESTROYING && m_connected == connect_to) {
         return 0;
     }
 #endif
