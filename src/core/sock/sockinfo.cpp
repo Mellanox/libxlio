@@ -883,7 +883,7 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
         return false;
     }
 #if defined(DEFINED_NGINX)
-    if (g_p_app->type == APP_NGINX && g_p_app->workers_num > 0) {
+    if (g_p_app->type == APP_NGINX) {
         if (flow_key.get_protocol() != PROTO_UDP ||
             (flow_key.get_protocol() == PROTO_UDP &&
              g_map_udp_bounded_port.count(ntohs(flow_key.get_dst_port())))) {
@@ -915,7 +915,7 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
     }
 #endif
 #if defined(DEFINED_ENVOY)
-    if (g_p_app->type == APP_ENVOY && g_p_app->workers_num > 0 && g_p_app->get_worker_id() >= 0) {
+    if (g_p_app->type == APP_ENVOY && g_p_app->get_worker_id() >= 0) {
         if (flow_key.get_protocol() != PROTO_UDP) {
             if ((g_p_app->workers_num != g_p_app->workers_pow2) && flow_key.is_3_tuple()) {
                 if (g_p_app->map_thread_id.at(gettid()) <

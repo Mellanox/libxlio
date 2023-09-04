@@ -295,7 +295,7 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
         }
 
 #if defined(DEFINED_NGINX)
-        if (is_for_udp_pool) {
+        if (g_p_app->type == APP_NGINX && is_for_udp_pool) {
             g_p_fd_collection->push_socket_pool(sockfd);
             to_close_now = false;
         }
@@ -311,10 +311,6 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
 
 int init_child_process_for_nginx()
 {
-    if (g_p_app->workers_num <= 0) {
-        return 0;
-    }
-
     DO_GLOBAL_CTORS();
 
     if (!g_p_fd_collection_parent_process) {
@@ -845,7 +841,7 @@ int socket_internal(int __domain, int __type, int __protocol, bool shadow, bool 
 
 #if defined(DEFINED_NGINX)
     bool add_to_udp_pool = false;
-    if (g_p_fd_collection && offload_sockets &&
+    if (g_p_app && g_p_app->type == APP_NGINX && g_p_fd_collection && offload_sockets &&
         g_p_fd_collection->pop_socket_pool(fd, add_to_udp_pool, __type & 0xf)) {
         return fd;
     }
@@ -872,7 +868,7 @@ int socket_internal(int __domain, int __type, int __protocol, bool shadow, bool 
            fd and such a socket won't be offloaded.  */
 
 #if defined(DEFINED_NGINX)
-        if (add_to_udp_pool) {
+        if (g_p_app && g_p_app->type == APP_NGINX && add_to_udp_pool) {
             g_p_fd_collection->handle_socket_pool(fd);
         }
 #endif
@@ -958,7 +954,7 @@ extern "C" EXPORT_SYMBOL int listen(int __fd, int backlog)
     srdr_logdbg_entry("fd=%d, backlog=%d", __fd, backlog);
 
 #if defined(DEFINED_ENVOY)
-    if (g_p_app->type == APP_ENVOY && g_p_app->workers_num > 0) {
+    if (g_p_app->type == APP_ENVOY) {
         /* Envoy uses dup() call for listen socket on workers_N (N > 0)
          * dup() call does not create socket object and does not store fd
          * in fd_collection in current implementation
@@ -988,12 +984,12 @@ extern "C" EXPORT_SYMBOL int listen(int __fd, int backlog)
             handle_close(__fd, false, true);
         } else {
 #if defined(DEFINED_NGINX)
-            if (g_p_app->type == APP_NGINX && g_p_app->workers_num > 0) {
+            if (g_p_app->type == APP_NGINX) {
                 p_socket_object->m_back_log = backlog;
             } else
 #endif
 #if defined(DEFINED_ENVOY)
-            if (g_p_app->type == APP_ENVOY && g_p_app->workers_num > 0) {
+            if (g_p_app->type == APP_ENVOY) {
                 p_socket_object->m_back_log = backlog;
             } else 
 #endif /* DEFINED_ENVOY */
@@ -2708,7 +2704,7 @@ extern "C" EXPORT_SYMBOL int epoll_ctl(int __epfd, int __op, int __fd, struct ep
         errno = EBADF;
     } else {
 #if defined(DEFINED_ENVOY)
-        if (g_p_app->type == APP_ENVOY && g_p_app->workers_num > 0) {
+        if (g_p_app->type == APP_ENVOY) {
             auto iter = g_p_app->map_listen_fd.find(__fd);
             if (iter != g_p_app->map_listen_fd.end()) {
                 socket_fd_api *p_socket_object = NULL;
@@ -3031,7 +3027,7 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
     static int worker_index = -1;
     /* This section is actual for parent process only */
     std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-    if (g_p_app->type == APP_NGINX && (g_p_app->workers_num > 0) && (g_worker_index == -1)) {
+    if (g_p_app->type == APP_NGINX && (g_worker_index == -1)) {
         if (!g_p_app->unused_worker_id.empty()) {
             auto itr = g_p_app->unused_worker_id.begin();
             worker_index = *itr;
@@ -3105,7 +3101,7 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
     } else if (pid > 0) {
         srdr_logdbg_exit("Parent Process: returned with %d", pid);
 #if defined(DEFINED_NGINX)
-        if (g_p_app->type == APP_NGINX && g_p_app->workers_num > 0) {
+        if (g_p_app->type == APP_NGINX) {
             g_p_app->map_thread_id[pid] = worker_index;
         }
 #endif
@@ -3331,7 +3327,7 @@ extern "C" EXPORT_SYMBOL pid_t waitpid(pid_t pid, int *wstatus, int options)
      *     * NGINX at some future point forks a new worker process(es) to replenish the worker
      * process tally.
      */
-    if (g_p_app->type == APP_NGINX && g_p_app->workers_num > 0 && child_pid > 0 && !WIFCONTINUED(*wstatus)) {
+    if (g_p_app->type == APP_NGINX && child_pid > 0 && !WIFCONTINUED(*wstatus)) {
         std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
         g_p_app->unused_worker_id.insert(g_p_app->get_worker_id());
         g_p_app->map_thread_id.erase(getpid());

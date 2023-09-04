@@ -260,6 +260,7 @@ static int free_libxlio_resources()
     if (g_p_app) {
         delete g_p_app;
     }
+    g_p_app = NULL;
 #endif
 
     return 0;

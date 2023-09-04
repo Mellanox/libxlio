@@ -62,8 +62,10 @@ socket_fd_api::~socket_fd_api()
     bool toclose = safe_mce_sys().deferred_close && m_fd >= 0;
 
 #if defined(DEFINED_NGINX)
-    // Sockets from a socket pool are not closed during close(), so do it now.
-    toclose = toclose || (m_is_for_socket_pool && m_fd >= 0);
+    if (g_p_app->type == APP_NGINX) {
+        // Sockets from a socket pool are not closed during close(), so do it now.
+        toclose = toclose || (m_is_for_socket_pool && m_fd >= 0);
+    }
 #endif
 
     if (toclose) {

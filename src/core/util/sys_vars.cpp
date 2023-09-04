@@ -1889,8 +1889,10 @@ void mce_sys_var::get_env_params()
 
 #if defined(DEFINED_NGINX)
     if ((env_ptr = getenv(SYS_VAR_NGINX_WORKERS_NUM)) != NULL) {
-        app.type = APP_NGINX;
         app.workers_num = (uint32_t)atoi(env_ptr);
+        if (app.workers_num > 0) {
+            app.type = APP_NGINX;
+        }
     }
     if ((env_ptr = getenv(SYS_VAR_NGINX_UDP_POOL_SIZE)) != NULL) {
         nginx_udp_socket_pool_size = (uint32_t)atoi(env_ptr);
@@ -1903,6 +1905,9 @@ void mce_sys_var::get_env_params()
     if ((env_ptr = getenv(SYS_VAR_ENVOY_WORKERS_NUM)) != NULL) {
         app.type = APP_ENVOY;
         app.workers_num = (uint32_t)atoi(env_ptr);
+        if (app.workers_num > 0) {
+            app.type = APP_ENVOY;
+        }
     }
 #endif /* DEFINED_ENVOY */
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
