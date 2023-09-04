@@ -918,7 +918,7 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
     if (g_p_app->type == APP_ENVOY && g_p_app->workers_num > 0 && g_p_app->get_worker_id() >= 0) {
         if (flow_key.get_protocol() != PROTO_UDP) {
             if ((g_p_app->workers_num != g_p_app->workers_pow2) && flow_key.is_3_tuple()) {
-                if (g_p_app->attr.envoy.map_thread_id.at(gettid()) <
+                if (g_p_app->map_thread_id.at(gettid()) <
                     (g_p_app->workers_pow2 % g_p_app->workers_num)) {
                     g_p_app->add_second_4t_rule = true;
                     flow_tuple_with_local_if new_key(

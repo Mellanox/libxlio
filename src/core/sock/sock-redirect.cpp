@@ -88,7 +88,6 @@ using namespace std;
 #define EP_MAX_EVENTS (int)((INT_MAX / sizeof(struct epoll_event)))
 
 #if defined(DEFINED_NGINX)
-std::vector<pid_t> *g_p_nginx_worker_pids = NULL;
 int g_worker_index = -1;
 map_udp_bounded_port_t g_map_udp_bounded_port;
 #endif
@@ -432,8 +431,8 @@ static int init_worker(int worker_id, int listen_fd)
     if (worker_id > 0) {
         sockinfo *si;
         int parent_fd = -1;
-        const auto itr = g_p_app->attr.envoy.map_dup_fd.find(listen_fd);
-        if (itr != g_p_app->attr.envoy.map_dup_fd.end()) {
+        const auto itr = g_p_app->map_dup_fd.find(listen_fd);
+        if (itr != g_p_app->map_dup_fd.end()) {
             parent_fd = itr->second;
         }
 
@@ -972,7 +971,7 @@ extern "C" EXPORT_SYMBOL int listen(int __fd, int backlog)
          * Identify correct listen fd during epoll_ctl(ADD) call by tid. It should be different.
          */
         std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-        g_p_app->attr.envoy.map_listen_fd[__fd] = gettid();
+        g_p_app->map_listen_fd[__fd] = gettid();
     }
 #endif /* DEFINED_ENVOY */
 
@@ -2710,8 +2709,8 @@ extern "C" EXPORT_SYMBOL int epoll_ctl(int __epfd, int __op, int __fd, struct ep
     } else {
 #if defined(DEFINED_ENVOY)
         if (g_p_app->type == APP_ENVOY && g_p_app->workers_num > 0) {
-            auto iter = g_p_app->attr.envoy.map_listen_fd.find(__fd);
-            if (iter != g_p_app->attr.envoy.map_listen_fd.end()) {
+            auto iter = g_p_app->map_listen_fd.find(__fd);
+            if (iter != g_p_app->map_listen_fd.end()) {
                 socket_fd_api *p_socket_object = NULL;
                 p_socket_object = fd_collection_get_sockfd(__fd);
                 if (iter->second == gettid()) {
@@ -2723,7 +2722,7 @@ extern "C" EXPORT_SYMBOL int epoll_ctl(int __epfd, int __op, int __fd, struct ep
                         }
                     }
                     std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-                    g_p_app->attr.envoy.map_listen_fd.erase(iter);
+                    g_p_app->map_listen_fd.erase(iter);
                 } else if (__op == EPOLL_CTL_ADD) {
                     static int worker_id = 0;
 
@@ -2737,22 +2736,22 @@ extern "C" EXPORT_SYMBOL int epoll_ctl(int __epfd, int __op, int __fd, struct ep
                         nanosleep(&short_sleep, NULL);
                     }
                     std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-                    g_p_app->attr.envoy.map_listen_fd[__fd] = gettid();
-                    g_p_app->attr.envoy.map_thread_id[gettid()] = worker_id;
+                    g_p_app->map_listen_fd[__fd] = gettid();
+                    g_p_app->map_thread_id[gettid()] = worker_id;
                     rc = init_worker(worker_id, __fd);
                     if (rc != 0) {
                         srdr_logerr(
                             "Failed to initialize worker %d, (errno=%d %m)", worker_id,
                             errno);
-                        g_p_app->attr.envoy.map_listen_fd.erase(__fd);
-                        g_p_app->attr.envoy.map_thread_id.erase(gettid());
+                        g_p_app->map_listen_fd.erase(__fd);
+                        g_p_app->map_thread_id.erase(gettid());
                         return rc;
                     }
                     worker_id++;
                 } else if (__op == EPOLL_CTL_DEL) {
                     std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-                    g_p_app->attr.envoy.map_listen_fd.erase(__fd);
-                    g_p_app->attr.envoy.map_thread_id.erase(gettid());
+                    g_p_app->map_listen_fd.erase(__fd);
+                    g_p_app->map_thread_id.erase(gettid());
                 }
             }
         }
@@ -2952,8 +2951,8 @@ extern "C" EXPORT_SYMBOL int dup(int __fd)
 #if defined(DEFINED_ENVOY)
     if (g_p_app && g_p_app->type == APP_ENVOY) {
         std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-        g_p_app->attr.envoy.map_dup_fd[fid] = __fd;
-        g_p_app->attr.envoy.map_dup_fd[__fd] = __fd;
+        g_p_app->map_dup_fd[fid] = __fd;
+        g_p_app->map_dup_fd[__fd] = __fd;
     }
 #endif /* DEFINED_ENVOY */
     return fid;
@@ -3029,28 +3028,25 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
     BULLSEYE_EXCLUDE_BLOCK_END
 
 #if defined(DEFINED_NGINX)
-    int worker_index = 0;
+    static int worker_index = -1;
     /* This section is actual for parent process only */
+    std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
     if (g_p_app->type == APP_NGINX && (g_p_app->workers_num > 0) && (g_worker_index == -1)) {
-        if (NULL == g_p_nginx_worker_pids) {
-            g_p_nginx_worker_pids = new std::vector<pid_t>();
+        if (!g_p_app->unused_worker_id.empty()) {
+            auto itr = g_p_app->unused_worker_id.begin();
+            worker_index = *itr;
+            g_p_app->unused_worker_id.erase(itr);
+        } else {
+            if (worker_index < g_p_app->workers_num) {
+                worker_index++;
+            } else {
+                srdr_logerr(
+                    "Cannot fork: number of running worker processes are at configured maximum (%d)",
+                    g_p_app->workers_num);
+                errno = ENOMEM;
+                return -1;
+            }
         }
-
-        if (g_p_nginx_worker_pids->size() <
-            static_cast<std::size_t>(g_p_app->workers_num)) {
-            g_p_nginx_worker_pids->resize(g_p_app->workers_num, -1);
-        }
-
-        auto nginx_pid_slot_iter =
-            std::find(g_p_nginx_worker_pids->begin(), g_p_nginx_worker_pids->end(), -1);
-        if (nginx_pid_slot_iter == g_p_nginx_worker_pids->end()) {
-            srdr_logerr(
-                "Cannot fork: number of running worker processes are at configured maximum (%d)",
-                g_p_app->workers_num);
-            errno = ENOMEM;
-            return -1;
-        }
-        worker_index = std::distance(g_p_nginx_worker_pids->begin(), nginx_pid_slot_iter);
     }
 #endif
 
@@ -3059,14 +3055,17 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
         g_is_forked_child = true;
         srdr_logdbg_exit("Child Process: returned with %d", pid);
 #if defined(DEFINED_NGINX)
-        g_worker_index = worker_index;
-        /* Library is fully initialized in case application
-         * calls socket(), getsockopt(), epoll_create(), epoll_create1(), pipe()
-         * In other cases global objects can be invalid.
-         */
-        if (g_init_global_ctors_done && g_p_fd_collection) {
-            g_p_fd_collection_size_parent_process = g_p_fd_collection->get_fd_map_size();
-            g_p_fd_collection_parent_process = g_p_fd_collection;
+        if (g_p_app->type == APP_NGINX) {
+            g_worker_index = worker_index;
+            g_p_app->map_thread_id[getpid()] = worker_index;
+            /* Library is fully initialized in case application
+            * calls socket(), getsockopt(), epoll_create(), epoll_create1(), pipe()
+            * In other cases global objects can be invalid.
+            */
+            if (g_init_global_ctors_done && g_p_fd_collection) {
+                g_p_fd_collection_size_parent_process = g_p_fd_collection->get_fd_map_size();
+                g_p_fd_collection_parent_process = g_p_fd_collection;
+            }
         }
 #endif // DEFINED_NGINX
        // Child's process - restart module
@@ -3089,15 +3088,17 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
         sock_redirect_main();
 
 #if defined(DEFINED_NGINX)
-        /* Do this only for regular user, not allowed for root user.
-         * Root user will be handled in setuid call.
-         * g_p_fd_collection_size_parent_process and g_p_fd_collection_parent_process should be
-         * initialized
-         */
-        if (geteuid() != 0 && g_init_global_ctors_done) {
-            int rc = init_child_process_for_nginx();
-            if (rc != 0) {
-                srdr_logerr("Failed to initialize child process with PID %d for Nginx", getpid());
+        if (g_p_app->type == APP_NGINX) {
+            /* Do this only for regular user, not allowed for root user.
+            * Root user will be handled in setuid call.
+            * g_p_fd_collection_size_parent_process and g_p_fd_collection_parent_process should be
+            * initialized
+            */
+            if (geteuid() != 0 && g_init_global_ctors_done) {
+                int rc = init_child_process_for_nginx();
+                if (rc != 0) {
+                    srdr_logerr("Failed to initialize child process with PID %d for Nginx", getpid());
+                }
             }
         }
 #endif // DEFINED_NGINX
@@ -3105,7 +3106,7 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
         srdr_logdbg_exit("Parent Process: returned with %d", pid);
 #if defined(DEFINED_NGINX)
         if (g_p_app->type == APP_NGINX && g_p_app->workers_num > 0) {
-            g_p_nginx_worker_pids->at(worker_index) = pid;
+            g_p_app->map_thread_id[pid] = worker_index;
         }
 #endif
     } else {
@@ -3305,7 +3306,7 @@ extern "C" EXPORT_SYMBOL int setuid(uid_t uid)
     }
 
     // Do this only for root user, regular user will be handled in fork call.
-    if (previous_uid == 0) {
+    if (g_p_app->type == APP_NGINX && previous_uid == 0) {
         int rc = init_child_process_for_nginx();
         if (rc != 0) {
             srdr_logerr("Failed to initialize child process with PID %d for Nginx, (errno=%d %m)",
@@ -3331,11 +3332,9 @@ extern "C" EXPORT_SYMBOL pid_t waitpid(pid_t pid, int *wstatus, int options)
      * process tally.
      */
     if (g_p_app->type == APP_NGINX && g_p_app->workers_num > 0 && child_pid > 0 && !WIFCONTINUED(*wstatus)) {
-        auto worker_pid =
-            std::find(g_p_nginx_worker_pids->begin(), g_p_nginx_worker_pids->end(), child_pid);
-        if (worker_pid != g_p_nginx_worker_pids->end()) {
-            *worker_pid = -1;
-        }
+        std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+        g_p_app->unused_worker_id.insert(g_p_app->get_worker_id());
+        g_p_app->map_thread_id.erase(getpid());
     }
     return child_pid;
 }
