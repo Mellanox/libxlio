@@ -1472,21 +1472,22 @@ check_single_record:
         }
     }
 
-    assert(pres->tot_len == (m_rx_rec_len - m_tls_rec_overhead));
-
     /* Statistics */
     m_p_sock->m_p_socket_stats->tls_counters.n_tls_rx_records += 1U;
-    m_p_sock->m_p_socket_stats->tls_counters.n_tls_rx_bytes += pres->tot_len;
+    m_p_sock->m_p_socket_stats->tls_counters.n_tls_rx_bytes += likely(pres) ? pres->tot_len : 0;
     /* Adjust TCP counters with received TLS header/trailer. */
     m_p_sock->m_p_socket_stats->counters.n_rx_bytes += m_tls_rec_overhead;
 
     ++m_next_recno_rx;
 
     tcp_recved(m_p_sock->get_pcb(), m_tls_rec_overhead);
-    err = sockinfo_tcp::rx_lwip_cb((void *)m_p_sock, m_p_sock->get_pcb(), pres, ERR_OK);
-    if (err != ERR_OK) {
-        /* Underlying buffers are held by 'pres', we can free them below. */
-        m_refused_data = pres;
+    if (likely(pres)) {
+        assert(pres->tot_len == (m_rx_rec_len - m_tls_rec_overhead));
+        err = sockinfo_tcp::rx_lwip_cb((void *)m_p_sock, m_p_sock->get_pcb(), pres, ERR_OK);
+        if (err != ERR_OK) {
+            /* Underlying buffers are held by 'pres', we can free them below. */
+            m_refused_data = pres;
+        }
     }
 
     /* Free received underlying buffers. */

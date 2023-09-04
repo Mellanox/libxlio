@@ -1057,7 +1057,6 @@ retry_is_ready:
             if (tx_size == 0) {
                 if (unlikely(!is_rts())) {
                     si_tcp_logdbg("TX on disconnected socket");
-                    ret = -1;
                     errno = ECONNRESET;
                     goto err;
                 }
