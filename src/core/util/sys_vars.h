@@ -368,8 +368,8 @@ public:
     int ring_dev_mem_tx;
     int tcp_max_syn_rate;
 
+    size_t zc_cache_threshold;
     uint32_t zc_num_bufs;
-    uint32_t zc_cache_threshold;
     uint32_t tx_num_segs_tcp;
     uint32_t tx_num_bufs;
     uint32_t tx_buf_size;
@@ -703,7 +703,7 @@ extern mce_sys_var &safe_mce_sys();
  * This block consists of default values for library specific
  * configuration variables
  */
-#define MCE_DEFAULT_TCP_SEND_BUFFER_SIZE     (1000000)
+#define MCE_DEFAULT_TCP_SEND_BUFFER_SIZE     (1024 * 1024)
 #define MCE_DEFAULT_LOG_FILE                 ("")
 #define MCE_DEFAULT_CONF_FILE                ("/etc/libxlio.conf")
 #define MCE_DEFAULT_STATS_FILE               ("")
@@ -726,7 +726,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_ZC_NUM_BUFS              (200000)
 #define MCE_DEFAULT_ZC_TX_SIZE               (32768)
 #define MCE_DEFAULT_TCP_NODELAY_TRESHOLD     (0)
-#define MCE_DEFAULT_ZC_CACHE_THRESHOLD       (10 * 1024) // 10GB
+#define MCE_DEFAULT_ZC_CACHE_THRESHOLD       (10LU * 1024 * 1024 * 1024) // 10GB
 #define MCE_DEFAULT_TX_NUM_SEGS_TCP          (1000000)
 #define MCE_DEFAULT_TX_NUM_BUFS              (200000)
 #define MCE_DEFAULT_TX_BUF_SIZE              (0)
