@@ -198,6 +198,8 @@ protected:
     virtual void configure_ip_header(header *h, uint16_t packet_id = 0);
     virtual void configure_headers() { conf_hdrs_and_snd_wqe(); };
     bool conf_hdrs_and_snd_wqe();
+    void configure_eth_headers(header *header, const L2_address &src, const L2_address &dst,
+                               uint16_t dev_vlan);
     virtual bool conf_l2_hdr_and_snd_wqe_eth();
     virtual void init_sge() {};
     bool alloc_transport_dep_res();

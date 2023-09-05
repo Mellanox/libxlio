@@ -427,6 +427,21 @@ void dst_entry::configure_ip_header(header *h, uint16_t packet_id)
     h->configure_ip_header(get_protocol_type(), m_pkt_src_ip, m_dst_ip, *this, packet_id);
 }
 
+void dst_entry::configure_eth_headers(header *header, const L2_address &src, const L2_address &dst,
+                                      uint16_t dev_vlan)
+{
+    uint16_t proto = ((get_sa_family() == AF_INET6) ? ETH_P_IPV6 : ETH_P_IP);
+    if (dev_vlan || m_external_vlan_tag) { // vlan interface
+        uint32_t prio = get_priority_by_tc_class(m_pcp);
+        uint16_t vlan_tag = (m_external_vlan_tag ?: dev_vlan);
+        uint16_t vlan_tci = (prio << NET_ETH_VLAN_PCP_OFFSET) | vlan_tag;
+        header->configure_vlan_eth_headers(src, dst, vlan_tci, proto);
+        dst_logdbg("Using vlan. tag: %" PRIu16 ", prio: %" PRIu32, vlan_tag, prio);
+    } else {
+        header->configure_eth_headers(src, dst, proto);
+    }
+}
+
 bool dst_entry::conf_l2_hdr_and_snd_wqe_eth()
 {
     bool ret_val = false;
@@ -448,7 +463,8 @@ bool dst_entry::conf_l2_hdr_and_snd_wqe_eth()
                                               get_sge_lst_4_not_inline_send(), 1);
     m_p_send_wqe_handler->init_wqe(m_fragmented_send_wqe, get_sge_lst_4_not_inline_send(), 1);
 
-    net_device_val_eth *netdevice_eth = dynamic_cast<net_device_val_eth *>(m_p_net_dev_val);
+    const net_device_val_eth *netdevice_eth =
+        dynamic_cast<const net_device_val_eth *>(m_p_net_dev_val);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (netdevice_eth) {
         BULLSEYE_EXCLUDE_BLOCK_END
@@ -458,17 +474,7 @@ bool dst_entry::conf_l2_hdr_and_snd_wqe_eth()
         BULLSEYE_EXCLUDE_BLOCK_START
         if (src && dst) {
             BULLSEYE_EXCLUDE_BLOCK_END
-            if (netdevice_eth->get_vlan() || m_external_vlan_tag) { // vlan interface
-                uint32_t prio = get_priority_by_tc_class(m_pcp);
-                uint16_t vlan_tag = (m_external_vlan_tag ?: netdevice_eth->get_vlan());
-                uint16_t vlan_tci = (prio << NET_ETH_VLAN_PCP_OFFSET) | vlan_tag;
-                m_header->configure_vlan_eth_headers(
-                    *src, *dst, vlan_tci, (get_sa_family() == AF_INET6) ? ETH_P_IPV6 : ETH_P_IP);
-                dst_logdbg("Using vlan. tag: %" PRIu16 ", prio: %" PRIu32, vlan_tag, prio);
-            } else {
-                m_header->configure_eth_headers(
-                    *src, *dst, (get_sa_family() == AF_INET6) ? ETH_P_IPV6 : ETH_P_IP);
-            }
+            configure_eth_headers(m_header, *src, *dst, netdevice_eth->get_vlan());
             init_sge();
             ret_val = true;
         } else {
@@ -730,13 +736,18 @@ ssize_t dst_entry::pass_buff_to_neigh(const iovec *p_iov, size_t sz_iov, uint32_
     dst_logdbg("");
 
     // For IPv4 - packet_id will be taken from header
-    // For IPv6 - packet_id will be taken from neigh_send_info
+    // For IPv6 - packet_id will be taken from neigh_send_data
     configure_ip_header(m_header_neigh, (uint16_t)(packet_id & 0xffff));
 
-    if (m_p_neigh_entry) {
-        neigh_send_info n_send_info(const_cast<iovec *>(p_iov), sz_iov, m_header_neigh,
-                                    get_protocol_type(), get_route_mtu(), m_tos, packet_id,
-                                    m_external_vlan_tag);
+    const L2_address *dummy =
+        m_p_net_dev_val->get_l2_address(); // Real MAC addresses will be filled by neigh
+    const net_device_val_eth *netdevice_eth =
+        dynamic_cast<const net_device_val_eth *>(m_p_net_dev_val);
+    if (m_p_neigh_entry && netdevice_eth && dummy) {
+        configure_eth_headers(m_header_neigh, *dummy, *dummy, netdevice_eth->get_vlan());
+
+        neigh_send_data n_send_info(const_cast<iovec *>(p_iov), sz_iov, m_header_neigh,
+                                    get_route_mtu(), packet_id);
         ret_val = m_p_neigh_entry->send(n_send_info);
     }
 

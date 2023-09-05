@@ -30,49 +30,63 @@
  * SOFTWARE.
  */
 
-/*
- * sender.cpp
- *
- *  Created on: Feb 28, 2013
- *      Author: olgas
- */
-
 #include "core/infra/sender.h"
 
-send_data::send_data(const send_info *si)
+neigh_send_data::neigh_send_data(iovec *iov, size_t sz, header *hdr, uint32_t mtu,
+                                 uint32_t packet_id)
+    : m_header(hdr->copy())
+    , m_mtu(mtu)
+    , m_packet_id(packet_id)
 {
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (si == NULL) {
-        m_iov.iov_base = NULL;
+    if (!iov || sz == 0U) {
+        m_iov.iov_base = nullptr;
         m_iov.iov_len = 0;
         return;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    uint8_t *buff = NULL;
+    uint8_t *buff = nullptr;
     size_t total_len = 0;
 
-    for (uint32_t i = 0; i < si->m_sz_iov; i++) {
-        total_len += si->m_p_iov[i].iov_len;
+    for (uint32_t i = 0; i < sz; i++) {
+        total_len += iov[i].iov_len;
     }
 
     buff = new uint8_t[total_len];
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (NULL == buff) {
-        m_iov.iov_base = NULL;
+    if (!buff) {
+        m_iov.iov_base = nullptr;
         m_iov.iov_len = 0;
         return;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    memcpy_fromiovec(buff, si->m_p_iov, si->m_sz_iov, 0, total_len);
+    memcpy_fromiovec(buff, iov, sz, 0, total_len);
     m_iov.iov_base = buff;
     m_iov.iov_len = total_len;
 }
 
-send_data::~send_data()
+neigh_send_data::neigh_send_data(neigh_send_data &&snd_data)
+{
+    m_header = snd_data.m_header;
+    snd_data.m_header = nullptr;
+
+    m_iov = snd_data.m_iov;
+    snd_data.m_iov.iov_base = nullptr;
+    snd_data.m_iov.iov_len = 0U;
+
+    m_mtu = snd_data.m_mtu;
+    m_packet_id = snd_data.m_packet_id;
+}
+
+neigh_send_data::~neigh_send_data()
 {
     if (m_iov.iov_base) {
         delete[]((uint8_t *)m_iov.iov_base);
+    }
+
+    if (m_header) {
+        delete m_header;
     }
 }

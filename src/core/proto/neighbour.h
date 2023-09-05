@@ -229,7 +229,7 @@ public:
     static void dofunc_enter_ready(const sm_info_t &func_info);
 
     // Implementing pure virtual function of sender
-    virtual int send(neigh_send_info &s_info);
+    virtual int send(neigh_send_data &s_info);
 
 protected:
     rdma_cm_id *m_cma_id;

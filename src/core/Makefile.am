@@ -216,7 +216,6 @@ libxlio_la_SOURCES := \
 	ib/mlx5/ib_mlx5.h \
 	\
 	infra/sender.h \
-	infra/sender_info_dst.h \
 	infra/subject_observer.h \
 	infra/cache_subject_observer.h \
 	\
