@@ -281,6 +281,7 @@ libxlio_la_SOURCES := \
 	sock/sockinfo_ulp.h \
 	sock/tcp_seg_pool.h \
 	sock/sock-redirect.h \
+	sock/sock-redirect-internal.h \
 	sock/sockinfo_nvme.h \
 	\
 	util/chunk_list.h \
