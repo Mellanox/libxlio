@@ -40,12 +40,8 @@
 
 class event {
 public:
-    enum type { UNKNOWN_EVENT, SEND_EVENT, DROP_EVENT };
-
-    type m_type;
     event(void *notifier = NULL)
-        : m_type(UNKNOWN_EVENT)
-        , m_notifier(notifier)
+        : m_notifier(notifier)
     {
     }
     virtual ~event() {};

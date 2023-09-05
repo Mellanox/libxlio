@@ -125,6 +125,7 @@ public:
     void configure_vlan_eth_headers(const L2_address &src, const L2_address &dst, uint16_t tci,
                                     uint16_t encapsulated_proto);
     void set_mac_to_eth_header(const L2_address &src, const L2_address &dst, ethhdr &eth_header);
+    void set_mac_to_eth_header(const L2_address &src, const L2_address &dst);
     bool set_vlan_pcp(uint8_t pcp);
     void update_actual_hdr_addr();
 
@@ -135,6 +136,8 @@ public:
     virtual void set_ip_tos(uint8_t tos) { NOT_IN_USE(tos); };
     virtual void *get_hdr_addr() = 0;
     virtual l2_hdr_template_t *get_l2_hdr() = 0;
+    virtual const l2_hdr_template_t *get_l2_hdr() const = 0;
+    virtual uint16_t get_l4_protocol() const = 0;
     virtual void *get_ip_hdr() = 0;
     virtual udphdr *get_udp_hdr() = 0;
     virtual tcphdr *get_tcp_hdr() = 0;
@@ -166,6 +169,8 @@ public:
     void set_ip_tos(uint8_t tos) override;
     void *get_hdr_addr() override { return (static_cast<void *>(&m_header)); }
     l2_hdr_template_t *get_l2_hdr() override { return &m_header.hdr.m_l2_hdr; }
+    const l2_hdr_template_t *get_l2_hdr() const override { return &m_header.hdr.m_l2_hdr; }
+    virtual uint16_t get_l4_protocol() const override { return m_header.hdr.m_ip_hdr.protocol; }
     void *get_ip_hdr() override { return static_cast<void *>(&m_header.hdr.m_ip_hdr); }
     udphdr *get_udp_hdr() override { return &m_header.hdr.m_udp_hdr; }
     tcphdr *get_tcp_hdr() override { return &m_header.hdr.m_tcp_hdr; }
@@ -192,6 +197,8 @@ public:
     void set_ip_ttl_hop_limit(uint8_t ttl_hop_limit) override;
     void *get_hdr_addr() override { return (static_cast<void *>(&m_header)); }
     l2_hdr_template_t *get_l2_hdr() override { return &m_header.hdr.m_l2_hdr; }
+    const l2_hdr_template_t *get_l2_hdr() const override { return &m_header.hdr.m_l2_hdr; }
+    virtual uint16_t get_l4_protocol() const override { return m_header.hdr.m_ip_hdr.ip6_nxt; }
     void *get_ip_hdr() override { return static_cast<void *>(&m_header.hdr.m_ip_hdr); }
     udphdr *get_udp_hdr() override { return &m_header.hdr.m_udp_hdr; }
     tcphdr *get_tcp_hdr() override { return &m_header.hdr.m_tcp_hdr; }

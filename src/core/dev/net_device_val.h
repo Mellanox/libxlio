@@ -329,7 +329,7 @@ public:
             configure();
         }
     }
-    uint16_t get_vlan() { return m_vlan; }
+    uint16_t get_vlan() const { return m_vlan; }
     const std::string to_str() const;
 
 protected:

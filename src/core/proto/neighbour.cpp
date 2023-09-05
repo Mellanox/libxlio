@@ -292,12 +292,12 @@ void neigh_entry::clean_obj()
     }
 }
 
-int neigh_entry::send(neigh_send_info &s_info)
+int neigh_entry::send(neigh_send_data &s_info)
 {
     neigh_logdbg("");
     std::lock_guard<decltype(m_lock)> lock(m_lock);
     // Need to copy send info
-    neigh_send_data *ns_data = new neigh_send_data(&s_info);
+    neigh_send_data *ns_data = new neigh_send_data(std::move(s_info));
 
     m_unsent_queue.push_back(ns_data);
     int ret = ns_data->m_iov.iov_len;
@@ -408,9 +408,10 @@ void neigh_entry::send_discovery_request()
 
 bool neigh_entry::post_send_packet(neigh_send_data *p_n_send_data)
 {
-    neigh_logdbg("ENTER post_send_packet protocol = %d", p_n_send_data->m_protocol);
+    neigh_logdbg("ENTER post_send_packet protocol = %d",
+                 p_n_send_data->m_header->get_l4_protocol());
     m_id = generate_ring_user_id(p_n_send_data->m_header);
-    switch (p_n_send_data->m_protocol) {
+    switch (p_n_send_data->m_header->get_l4_protocol()) {
     case IPPROTO_UDP: {
         // Assume a single iovec. If changed - see send_data::send_data
         size_t sz_data_payload = p_n_send_data->m_iov.iov_len;
@@ -1800,22 +1801,14 @@ bool neigh_eth::send_neighbor_solicitation()
 
 bool neigh_eth::prepare_to_send_packet(neigh_send_data *snd_data)
 {
-    header *h = snd_data->m_header;
     neigh_logdbg("");
 
-    net_device_val_eth *netdevice_eth = dynamic_cast<net_device_val_eth *>(m_p_dev);
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (netdevice_eth == NULL) {
-        neigh_logerr("Net dev is NULL dropping the packet");
-        return false;
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
+    header *h = snd_data->m_header;
     const L2_address *src = m_p_dev->get_l2_address();
     const L2_address *dst = m_val->get_l2_address();
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (src == NULL || dst == NULL) {
+    if (!src || !dst) {
         neigh_logdbg("src or dst is NULL not sending ARP");
         return false;
     }
@@ -1824,15 +1817,9 @@ bool neigh_eth::prepare_to_send_packet(neigh_send_data *snd_data)
     wqe_send_handler wqe_sh;
     wqe_sh.init_wqe(m_send_wqe, &m_sge, 1);
 
-    uint16_t ether_type = (ip_header_version(h->get_ip_hdr()) == IPV4) ? ETH_P_IP : ETH_P_IPV6;
-    if (netdevice_eth->get_vlan() || snd_data->m_external_vlan_tag) { // vlan interface
-        uint16_t vlan_tag = (snd_data->m_external_vlan_tag ?: netdevice_eth->get_vlan());
-        h->configure_vlan_eth_headers(*src, *dst, vlan_tag, ether_type);
-    } else {
-        h->configure_eth_headers(*src, *dst, ether_type);
-    }
+    h->set_mac_to_eth_header(*src, *dst);
 
-    return (true);
+    return true;
 }
 
 static ip_address get_ip_header_addr(bool is_src, header *h)
