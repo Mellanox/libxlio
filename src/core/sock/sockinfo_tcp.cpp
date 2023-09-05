@@ -2783,7 +2783,7 @@ int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
     }
 
 #if defined(DEFINED_NGINX)
-    if (g_p_app->type == APP_NGINX && g_p_fd_collection_parent_process) {
+    if (g_p_app->type == APP_NGINX && g_worker_index >= 0) {
         // For Nginx child ignore OS bind.
     } else
 #endif // DEFINED_NGINX

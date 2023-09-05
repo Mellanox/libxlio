@@ -321,10 +321,6 @@ inline int fd_collection::get_fd_map_size()
 }
 
 extern fd_collection *g_p_fd_collection;
-#if defined(DEFINED_NGINX)
-extern fd_collection *g_p_fd_collection_parent_process;
-extern int g_p_fd_collection_size_parent_process;
-#endif // DEFINED_NGINX
 
 inline socket_fd_api *fd_collection_get_sockfd(int fd)
 {
