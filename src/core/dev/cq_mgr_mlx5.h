@@ -79,7 +79,7 @@ protected:
     mem_buf_desc_t *m_rx_hot_buffer;
 
     inline struct xlio_mlx5_cqe *check_cqe(void);
-    virtual mem_buf_desc_t *poll(enum buff_status_e &status);
+    mem_buf_desc_t *poll(enum buff_status_e &status);
 
     inline struct xlio_mlx5_cqe *get_cqe_tx(uint32_t &num_polled_cqes);
     void log_cqe_error(struct xlio_mlx5_cqe *cqe);

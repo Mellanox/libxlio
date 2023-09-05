@@ -64,7 +64,7 @@ public:
     // true)
     ssize_t tx(xlio_tx_call_attr_t &tx_arg);
 
-    void statistics_print();
+    void statistics_print(vlog_levels_t log_level = VLOG_DEBUG);
 
     virtual inline fd_type_t get_type() { return FD_TYPE_PIPE; }
 

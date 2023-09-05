@@ -182,7 +182,7 @@ protected:
      * @p_cq_poll_sn global unique wce id that maps last wce polled
      * @return Number of successfully polled wce
      */
-    virtual int poll(xlio_ibv_wc *p_wce, int num_entries, uint64_t *p_cq_poll_sn);
+    int poll(xlio_ibv_wc *p_wce, int num_entries, uint64_t *p_cq_poll_sn);
     void compensate_qp_poll_failed();
     inline void process_recv_buffer(mem_buf_desc_t *buff, void *pv_fd_ready_array = NULL);
 

@@ -329,9 +329,11 @@ void pipeinfo::write_lbm_pipe_enhance()
     orig_os_api.write(m_fd, buf, 1);
 }
 
-void pipeinfo::statistics_print()
+void pipeinfo::statistics_print(vlog_levels_t log_level)
 {
     bool b_any_activiy = false;
+    NOT_IN_USE(log_level);
+
     if (m_p_socket_stats->counters.n_tx_sent_byte_count ||
         m_p_socket_stats->counters.n_tx_sent_pkt_count || m_p_socket_stats->counters.n_tx_errors ||
         m_p_socket_stats->counters.n_tx_eagain) {

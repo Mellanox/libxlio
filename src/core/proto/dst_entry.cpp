@@ -421,6 +421,12 @@ void dst_entry::notify_cb()
     set_state(false);
 }
 
+void dst_entry::notify_cb(event *ev)
+{
+    NOT_IN_USE(ev);
+    notify_cb();
+}
+
 void dst_entry::configure_ip_header(header *h, uint16_t packet_id)
 {
     h->configure_ip_header(get_protocol_type(), m_pkt_src_ip, m_dst_ip, *this, packet_id);
