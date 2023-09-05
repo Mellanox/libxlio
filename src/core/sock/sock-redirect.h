@@ -107,6 +107,7 @@ struct app_conf {
     std::unordered_map<int, int> map_dup_fd;
     /* Collection of unused unique identifiers limited by workers_num */
     std::set<int> unused_worker_id;
+    void *context;
 
     app_conf()
     {
@@ -120,6 +121,7 @@ struct app_conf {
         this->map_thread_id.clear();
         this->map_dup_fd.clear();
         this->unused_worker_id.clear();
+        this->context = NULL;
     }
 
     ~app_conf() {}

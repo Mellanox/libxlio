@@ -56,18 +56,13 @@
 #define fdcoll_logfunc    __log_func
 
 fd_collection *g_p_fd_collection = NULL;
-#if defined(DEFINED_NGINX)
-fd_collection *g_p_fd_collection_parent_process = NULL;
-int g_p_fd_collection_size_parent_process = 0;
-#endif // DEFINED_NGINX
 
 fd_collection::fd_collection()
     : lock_mutex_recursive("fd_collection")
     , m_b_sysvar_offloaded_sockets(safe_mce_sys().offloaded_sockets)
 #if defined(DEFINED_NGINX)
     // Avoid using socket pool for the master process (which doesn't have parent fd_collection)
-    , m_use_socket_pool(safe_mce_sys().nginx_udp_socket_pool_size &&
-                        g_p_fd_collection_parent_process)
+    , m_use_socket_pool(safe_mce_sys().nginx_udp_socket_pool_size && g_worker_index >= 0)
     , m_socket_pool_size(safe_mce_sys().nginx_udp_socket_pool_size)
     , m_socket_pool_counter(0)
 #endif
