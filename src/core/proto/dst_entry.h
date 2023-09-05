@@ -78,6 +78,7 @@ public:
     virtual ~dst_entry();
 
     virtual void notify_cb();
+    virtual void notify_cb(event *ev);
 
     virtual bool prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_rules = false,
                                  bool is_connect = false);
