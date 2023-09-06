@@ -61,7 +61,6 @@ void hugepage_mgr::update()
 {
     std::lock_guard<decltype(m_lock)> lock(m_lock);
 
-    m_hugepages.clear();
     read_sysfs();
 }
 
@@ -83,10 +82,38 @@ bool hugepage_mgr::is_hugepage_acceptable(size_t hugepage, size_t size)
         hugepage_metric(hugepage, size) <= HUGEPAGE_METRIC_ACCEPTABLE;
 }
 
-size_t hugepage_mgr::find_optimal_hugepage(size_t size)
+void *hugepage_mgr::alloc_hugepages_helper(size_t &size, size_t hugepage)
 {
+    size_t hugepage_mask = hugepage - 1;
+    size_t actual_size = (size + hugepage_mask) & ~hugepage_mask;
+    void *ptr = nullptr;
+    int map_flags = 0;
+
+    __log_info_dbg("Allocating %zu bytes with hugepages %zu kB", actual_size, hugepage / 1024U);
+
+    if (hugepage != m_default_hugepage) {
+        map_flags = (int)log2(hugepage) << MAP_HUGE_SHIFT;
+    }
+
+    ptr = mmap(NULL, actual_size, PROT_READ | PROT_WRITE,
+               MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_HUGETLB | map_flags, -1, 0);
+    if (ptr == MAP_FAILED) {
+        ptr = nullptr;
+        __log_info_dbg("mmap failed (errno=%d), skipping hugepage %zu kB", errno, hugepage / 1024U);
+    } else {
+        size = actual_size;
+    }
+    return ptr;
+}
+
+void *hugepage_mgr::alloc_hugepages(size_t &size)
+{
+    std::lock_guard<decltype(m_lock)> lock(m_lock);
+
+    size_t hugepage = 0;
+    size_t actual_size = size;
+    void *ptr = nullptr;
     std::vector<size_t> hugepages;
-    size_t best_hugepage = 0;
 
     if (safe_mce_sys().hugepage_log2 == 0) {
         get_supported_hugepages(hugepages);
@@ -96,66 +123,30 @@ size_t hugepage_mgr::find_optimal_hugepage(size_t size)
         hugepages.push_back(1LU << safe_mce_sys().hugepage_log2);
     }
 
-    // This is naive algorithm and may work inefficiently in complex scenarios.
-    for (size_t hugepage : hugepages) {
-        if (get_free_hugepages(hugepage) * hugepage >= size) {
-            if (is_hugepage_optimal(hugepage, size)) {
-                return hugepage;
-            }
-            if (is_hugepage_acceptable(hugepage, size) && best_hugepage == 0) {
-                best_hugepage = hugepage;
-            }
+    for (auto iter = hugepages.begin(); !ptr && iter != hugepages.end(); ++iter) {
+        hugepage = *iter;
+        if (get_total_hugepages(hugepage) && is_hugepage_optimal(hugepage, size)) {
+            ptr = alloc_hugepages_helper(actual_size, hugepage);
         }
     }
-
-    if (best_hugepage &&
-        hugepage_unused_space(best_hugepage, size) > HUGEPAGE_UNUSED_WARNING_THRESHOLD) {
-        __log_info_dbg("Allocating %zu bytes with hugepages %zu kB.", size, best_hugepage / 1024U);
-        __log_info_dbg("%zu bytes of the last hugepage may be unused.",
-                       best_hugepage - size % best_hugepage);
+    for (auto iter = hugepages.begin(); !ptr && iter != hugepages.end(); ++iter) {
+        hugepage = *iter;
+        if (get_total_hugepages(hugepage) && is_hugepage_acceptable(hugepage, size)) {
+            ptr = alloc_hugepages_helper(actual_size, hugepage);
+        }
     }
-    return best_hugepage;
-}
-
-void *hugepage_mgr::alloc_hugepages(size_t &size)
-{
-    std::lock_guard<decltype(m_lock)> lock(m_lock);
-
-    size_t hugepage = find_optimal_hugepage(size);
-    size_t hugepage_mask = hugepage - 1;
-    size_t actual_size = size;
-    void *ptr = nullptr;
-
-    if (hugepage) {
-        int map_flags = 0;
-
-        if (hugepage != m_default_hugepage) {
-            map_flags = (int)log2(hugepage) << MAP_HUGE_SHIFT;
-        }
-        actual_size = (size + hugepage_mask) & ~hugepage_mask;
-
-        __log_info_dbg("Allocating %zu bytes with hugepages %zu kB", actual_size, hugepage / 1024U);
-
-        ptr = mmap(NULL, actual_size, PROT_READ | PROT_WRITE,
-                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_HUGETLB | map_flags, -1, 0);
-        if (ptr == MAP_FAILED) {
-            ptr = nullptr;
-            __log_info_dbg("mmap failed (errno=%d)", errno);
-        } else {
-            m_hugepages[hugepage].nr_hugepages_free -= actual_size / hugepage;
-        }
+    if (ptr) {
+        size = actual_size;
     }
 
     // Statistics
     m_stats.total_requested += actual_size;
     if (ptr) {
-        m_hugepages[hugepage].nr_hugepages_allocated += actual_size / hugepage;
-        ++m_hugepages[hugepage].nr_allocations;
         ++m_stats.allocations;
         m_stats.total_allocated += actual_size;
         m_stats.total_unused += actual_size - size;
-
-        size = actual_size;
+        m_hugepages[hugepage].nr_hugepages_allocated += actual_size / hugepage;
+        ++m_hugepages[hugepage].nr_allocations;
     } else {
         ++m_stats.fails;
     }
@@ -168,8 +159,6 @@ void hugepage_mgr::dealloc_hugepages(void *ptr, size_t size)
     if (rc != 0) {
         __log_info_dbg("munmap failed (errno=%d)", errno);
     }
-    // We don't track released hugepages. Usually they're used for preallocation
-    // and not freed in runtime.
 }
 
 void hugepage_mgr::print_report(bool short_report /*=false*/)
@@ -178,6 +167,9 @@ void hugepage_mgr::print_report(bool short_report /*=false*/)
 
     const size_t ONE_MB = 1024U * 1024U;
     std::vector<size_t> hugepages;
+
+    // Update hugepage information to mitigate potential race with other processes.
+    read_sysfs();
 
     get_supported_hugepages(hugepages);
     vlog_printf(VLOG_INFO, "Hugepages info:\n");
@@ -221,8 +213,6 @@ void hugepage_mgr::read_sysfs()
 
                 m_hugepages[key].nr_hugepages_total = read_file_uint(path + "/nr_hugepages");
                 m_hugepages[key].nr_hugepages_free = read_file_uint(path + "/free_hugepages");
-                m_hugepages[key].nr_hugepages_allocated = 0U;
-                m_hugepages[key].nr_allocations = 0U;
             }
         }
         closedir(dir);

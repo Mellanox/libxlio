@@ -47,6 +47,14 @@ struct hugepage_metadata {
     uint32_t nr_hugepages_free;
     unsigned nr_hugepages_allocated;
     unsigned nr_allocations;
+
+    hugepage_metadata()
+    {
+        nr_hugepages_total = 0;
+        nr_hugepages_free = 0;
+        nr_hugepages_allocated = 0;
+        nr_allocations = 0;
+    }
 };
 
 class hugepage_mgr {
@@ -78,7 +86,7 @@ private:
 
     bool is_hugepage_optimal(size_t hugepage, size_t size);
     bool is_hugepage_acceptable(size_t hugepage, size_t size);
-    size_t find_optimal_hugepage(size_t size);
+    void *alloc_hugepages_helper(size_t &size, size_t hugepage);
 
     // Returns unused bytes in the tail hugepage because of alignment.
     size_t hugepage_unused_space(size_t hugepage, size_t size)
