@@ -4210,15 +4210,11 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
     // todo check optlen and set proper errno on failure
     si_tcp_logfunc("level=%d, optname=%d", __level, __optname);
 
-    int val, ret = 0;
-    bool supported = true;
-    bool allow_privileged_sock_opt = false;
-    bool is_nvme = false;
-
-    if ((ret = sockinfo::setsockopt(__level, __optname, __optval, __optlen)) !=
+    int ret_opt;
+    if ((ret_opt = sockinfo::setsockopt(__level, __optname, __optval, __optlen)) !=
         SOCKOPT_PASS_TO_OS) {
         if (!is_incoming() &&
-            (ret == SOCKOPT_INTERNAL_XLIO_SUPPORT || ret == SOCKOPT_HANDLE_BY_OS) &&
+            (ret_opt == SOCKOPT_INTERNAL_XLIO_SUPPORT || ret_opt == SOCKOPT_HANDLE_BY_OS) &&
             m_sock_state <= TCP_SOCK_ACCEPT_READY && __optval != NULL &&
             is_inherited_option(__level, __optname)) {
             socket_option_t *opt_curr = new socket_option_t(__level, __optname, __optval, __optlen);
@@ -4230,17 +4226,22 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             }
         }
 
-        return (ret == SOCKOPT_HANDLE_BY_OS
+        return (ret_opt == SOCKOPT_HANDLE_BY_OS
                     ? setsockopt_kernel(__level, __optname, __optval, __optlen, true, false)
-                    : ret);
+                    : ret_opt);
     }
 
-    ret = 0;
+    int val = 0;
+    bool supported = true;
+    bool allow_privileged_sock_opt = false;
+    bool pass_to_os_cond = true; // Pass to OS depending on a condition below
+    bool pass_to_os_always = false; // Pass to OS regardless the condition below.
+    int ret = 0;
 
     if (__level == IPPROTO_IP) {
         switch (__optname) {
         case IP_TOS: /* might be missing ECN logic */
-            ret = SOCKOPT_HANDLE_BY_OS;
+            pass_to_os_always = true;
             if (__optlen == sizeof(int)) {
                 val = *(int *)__optval;
             } else if (__optlen == sizeof(uint8_t)) {
@@ -4262,7 +4263,7 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             }
             break;
         default:
-            ret = SOCKOPT_HANDLE_BY_OS;
+            pass_to_os_always = true;
             supported = false;
             break;
         }
@@ -4293,7 +4294,7 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
         case TCP_ULP: {
             sockinfo_tcp_ops *ops {nullptr};
             if (__optval && __optlen >= 4 && strncmp((char *)__optval, "nvme", 4) == 0) {
-                is_nvme = true;
+                pass_to_os_cond = false;
                 auto nvme_feature_mask = get_supported_nvme_feature_mask();
                 if (nvme_feature_mask == 0U) {
                     errno = ENOTSUP;
@@ -4391,7 +4392,7 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
         } break;
 #endif /* LWIP_TCP_KEEPALIVE */
         default:
-            ret = SOCKOPT_HANDLE_BY_OS;
+            pass_to_os_always = true;
             supported = false;
             break;
         }
@@ -4405,7 +4406,7 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             } else {
                 m_pcb.so_options &= ~SOF_REUSEADDR;
             }
-            ret = SOCKOPT_HANDLE_BY_OS; // SO_REUSEADDR is also relevant on OS
+            pass_to_os_always = true; // SO_REUSEADDR is also relevant on OS
             unlock_tcp_con();
             si_tcp_logdbg("(SO_REUSEADDR) val: %d", val);
             break;
@@ -4566,7 +4567,7 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                 return -1;
             }
             unlock_tcp_con();
-            ret = SOCKOPT_HANDLE_BY_OS;
+            pass_to_os_always = true;
             break;
         }
         case SO_ZEROCOPY:
@@ -4575,7 +4576,7 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                 m_b_zc = *(bool *)__optval;
                 unlock_tcp_con();
             }
-            ret = SOCKOPT_HANDLE_BY_OS;
+            pass_to_os_always = true;
             si_tcp_logdbg("(SO_ZEROCOPY) m_b_zc: %d", m_b_zc);
             break;
         case SO_XLIO_EXT_VLAN_TAG:
@@ -4583,44 +4584,46 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                 int tempval = *reinterpret_cast<const int *>(__optval);
                 if (tempval >= 0 && tempval <= UINT16_MAX) {
                     m_external_vlan_tag = static_cast<uint16_t>(tempval);
-                    ret = SOCKOPT_INTERNAL_XLIO_SUPPORT;
+                    pass_to_os_cond = false;
                     si_tcp_logdbg("(SO_XLIO_EXT_VLAN_TAG) m_external_vlan_tag: %" PRIu16,
                                   m_external_vlan_tag);
                     break;
                 }
             }
-            ret = SOCKOPT_NO_XLIO_SUPPORT;
+            ret = -1;
             errno = EINVAL;
             break;
         default:
-            ret = SOCKOPT_HANDLE_BY_OS;
+            pass_to_os_always = true;
             supported = false;
             break;
         }
     } else {
         // Unsupported level.
-        ret = SOCKOPT_HANDLE_BY_OS;
+        pass_to_os_always = true;
         supported = false;
     }
 
-    if (ret == -1 || is_nvme) {
+    if (ret == -1) {
         // Avoid saving inherited option or calling kernel setsockopt() if XLIO fails
         // explicitly.
         return ret;
     }
+
     if (!is_incoming() && m_sock_state <= TCP_SOCK_ACCEPT_READY && __optval != NULL &&
         is_inherited_option(__level, __optname)) {
         m_socket_options_list.push_back(
             new socket_option_t(__level, __optname, __optval, __optlen));
     }
-    if ((ret == SOCKOPT_INTERNAL_XLIO_SUPPORT) ||
-        (safe_mce_sys().avoid_sys_calls_on_tcp_fd && ret != SOCKOPT_HANDLE_BY_OS &&
-         is_connected())) {
-        return ret;
+
+    if ((safe_mce_sys().avoid_sys_calls_on_tcp_fd && !pass_to_os_always && is_connected())) {
+        pass_to_os_cond = false;
     }
 
-    return setsockopt_kernel(__level, __optname, __optval, __optlen, supported,
-                             allow_privileged_sock_opt);
+    return ((pass_to_os_always || pass_to_os_cond)
+                ? setsockopt_kernel(__level, __optname, __optval, __optlen, supported,
+                                    allow_privileged_sock_opt)
+                : ret);
 }
 
 void sockinfo_tcp::get_tcp_info(struct tcp_info *ti)
