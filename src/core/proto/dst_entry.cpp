@@ -190,9 +190,7 @@ void dst_entry::set_src_addr()
 bool dst_entry::get_routing_addr_sel_src(ip_address &out_ip) const
 {
     if (m_p_rt_val) {
-        // For AF_INET we keep the legacy source selection logic which uses modified routing src
-        out_ip =
-            (m_family == AF_INET ? m_p_rt_val->get_src_addr() : m_p_rt_val->get_cfg_src_addr());
+        out_ip = m_p_rt_val->get_src_addr();
         return !out_ip.is_anyaddr();
     }
 

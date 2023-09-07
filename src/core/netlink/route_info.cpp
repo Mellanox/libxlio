@@ -103,7 +103,6 @@ void netlink_route_info::fill(struct rtnl_route *nl_route_obj)
         // TODO: improve error handling
         assert(family == nl_addr_get_family(addr));
         m_route_val.set_src_addr(ip_address((void *)nl_addr_get_binary_addr(addr), family));
-        m_route_val.set_cfg_src_addr(ip_address((void *)nl_addr_get_binary_addr(addr), family));
     }
 
     rtnl_nexthop *nh = rtnl_route_nexthop_n(nl_route_obj, 0);
