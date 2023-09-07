@@ -227,16 +227,9 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
             BULLSEYE_EXCLUDE_BLOCK_END
 
             p_rfs = p_tmp_rfs;
-#if defined(DEFINED_NGINX)
-            if (g_p_app->type == APP_NGINX && g_p_app->add_second_4t_rule) {
-                /* nothing */
-            } else
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+            if (g_p_app->type == APP_NONE || !g_p_app->add_second_4t_rule)
 #endif
-#if defined(DEFINED_ENVOY)
-            if (g_p_app->type == APP_ENVOY && g_p_app->add_second_4t_rule) {
-                /* nothing */
-            } else
-#endif /* DEFINED_ENVOY */
             {
                 m_flow_udp_uc_map[rfs_key] = p_rfs;
             }
@@ -354,16 +347,9 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
 
             p_rfs = p_tmp_rfs;
             si->rfs_ptr = p_rfs;
-#if defined(DEFINED_NGINX)
-            if (g_p_app->type == APP_NGINX && g_p_app->add_second_4t_rule) {
-                /* nothing */
-            } else
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+            if (g_p_app->type == APP_NONE || !g_p_app->add_second_4t_rule)
 #endif
-#if defined(DEFINED_ENVOY)
-            if (g_p_app->type == APP_ENVOY && g_p_app->add_second_4t_rule) {
-                /* nothing */
-            } else
-#endif /* DEFINED_ENVOY */
             {
                 m_flow_tcp_map[rfs_key] = p_rfs;
             }

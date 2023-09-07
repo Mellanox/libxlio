@@ -345,16 +345,11 @@ void ring_simple::create_resources()
 #endif /* DEFINED_UTLS */
 
     m_flow_tag_enabled = !safe_mce_sys().disable_flow_tag && m_p_ib_ctx->get_flow_tag_capability();
-#if defined(DEFINED_NGINX)
-    if (g_p_app->type == APP_NGINX && g_p_app->get_worker_id() >= 0) {
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+    if (g_p_app->type != APP_NONE && g_p_app->get_worker_id() >= 0) {
         m_flow_tag_enabled = false;
     }
-#endif // DEFINED_NGINX
-#if defined(DEFINED_ENVOY)
-    if (g_p_app->type == APP_ENVOY && g_p_app->get_worker_id() >= 0) {
-        m_flow_tag_enabled = false;
-    }
-#endif /* DEFINED_ENVOY */
+#endif
     ring_logdbg("ring attributes: m_flow_tag_enabled = %d", m_flow_tag_enabled);
 
     m_p_rx_comp_event_channel = ibv_create_comp_channel(

@@ -107,31 +107,15 @@ bool rfs_uc::prepare_flow_spec()
         // to make sure 5-tuple have higher priority on ConnectX-4
         p_attach_flow_data->ibv_flow_attr.priority = 1;
     }
-#if defined(DEFINED_NGINX)
-    else if (g_p_app->type == APP_NGINX && g_p_app->get_worker_id() >= 0) {
-        if (m_flow_tuple.get_protocol() != PROTO_UDP ||
-            (g_map_udp_bounded_port.count(ntohs(m_flow_tuple.get_dst_port())))) {
-            int src_port;
-            if (g_p_app->add_second_4t_rule) {
-                src_port = g_p_app->workers_num + g_p_app->get_worker_id();
-            } else {
-                src_port = g_p_app->get_worker_id();
-            }
-            p_tcp_udp->val.src_port = htons((uint16_t)src_port * g_p_app->src_port_stride);
-            p_tcp_udp->mask.src_port = htons((uint16_t)(
-                (g_p_app->workers_pow2 * g_p_app->src_port_stride) - 2));
-            p_attach_flow_data->ibv_flow_attr.priority = 1;
-            rfs_logdbg("src_port_stride: %d workers_num %d \n",
-                       g_p_app->src_port_stride, g_p_app->workers_num);
-            rfs_logdbg("sp_tcp_udp->val.src_port: %d p_tcp_udp->mask.src_port %d \n",
-                       ntohs(p_tcp_udp->val.src_port), ntohs(p_tcp_udp->mask.src_port));
-            m_flow_tuple.set_src_port(p_tcp_udp->val.src_port);
-        }
-    }
-#endif
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+    else if (g_p_app->type != APP_NONE && g_p_app->get_worker_id() >= 0) {
 #if defined(DEFINED_ENVOY)
-    else if (g_p_app->type == APP_ENVOY && g_p_app->get_worker_id() >= 0) {
-        if (m_flow_tuple.get_protocol() != PROTO_UDP) {
+        if (m_flow_tuple.get_protocol() != PROTO_UDP)
+#else
+        if (m_flow_tuple.get_protocol() != PROTO_UDP ||
+            (g_map_udp_bounded_port.count(ntohs(m_flow_tuple.get_dst_port()))))
+#endif
+        {
             int src_port;
             if (g_p_app->add_second_4t_rule) {
                 src_port = g_p_app->workers_num + g_p_app->get_worker_id();
@@ -149,7 +133,7 @@ bool rfs_uc::prepare_flow_spec()
             m_flow_tuple.set_src_port(p_tcp_udp->val.src_port);
         }
     }
-#endif /* DEFINED_ENVOY */
+#endif
 
     rfs_logfunc("transport type: %d, num_of_specs: %d flow_tag_id: %d",
                 p_ring->get_transport_type(), p_attach_flow_data->ibv_flow_attr.num_of_specs,
