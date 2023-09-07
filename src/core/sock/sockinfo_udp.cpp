@@ -1127,30 +1127,15 @@ int sockinfo_udp::setsockopt(int __level, int __optname, __const void *__optval,
                 break;
             }
 
-            // Find local interface IP address
+            // Find local if for this MC ADD/DROP
             if (INADDR_ANY == mc_if) {
-                in_addr_t dst_ip = mc_grp;
-                in_addr_t src_ip = 0;
-
-                if ((!m_bound.is_anyaddr()) && (!m_bound.is_mc())) {
-                    src_ip = m_bound.get_ip_addr().get_in_addr();
-                } else if (!m_so_bindtodevice_ip.is_anyaddr()) {
-                    src_ip = m_so_bindtodevice_ip.get_in_addr();
-                }
-                // Find local if for this MC ADD/DROP
-                route_result res;
-                g_p_route_table_mgr->route_resolve(
-                    route_rule_table_key(ip_address(dst_ip), ip_address(src_ip), AF_INET, m_tos),
-                    res);
-                mc_if = res.src.get_in_addr();
-                si_udp_logdbg(
-                    "IPPROTO_IP, %s=%d.%d.%d.%d, mc_if:INADDR_ANY (resolved to: %d.%d.%d.%d)",
-                    setsockopt_ip_opt_to_str(__optname), NIPQUAD(mc_grp), NIPQUAD(mc_if));
-            } else {
-                si_udp_logdbg("IPPROTO_IP, %s=%d.%d.%d.%d, mc_if:%d.%d.%d.%d mc_src:%d.%d.%d.%d",
-                              setsockopt_ip_opt_to_str(__optname), NIPQUAD(mc_grp), NIPQUAD(mc_if),
-                              NIPQUAD(mreqprm.imr_sourceaddr.s_addr));
+                ip_address resolved_ip;
+                resolve_if_ip(0, ip_address(mc_grp), resolved_ip);
+                mc_if = resolved_ip.get_in_addr();
             }
+
+            si_udp_logdbg("IPPROTO_IP, %s=%d.%d.%d.%d, mc_if:%d.%d.%d.%d mc_if:%d.%d.%d.%d",
+                          setsockopt_ip_opt_to_str(__optname), NIPQUAD(mc_grp), NIPQUAD(mc_if));
 
             // Add multicast group membership
             if (mc_change_membership_start_helper_ip4(ip_address(mc_grp), __optname)) {
@@ -2777,16 +2762,7 @@ int sockinfo_udp::mc_change_membership_ip4(const mc_pending_pram *p_mc_pram)
     }
 
     if (mc_if.is_anyaddr()) {
-        const ip_address &dst_ip = mc_grp;
-        const ip_address &src_ip = (!m_bound.is_anyaddr() && !m_bound.is_mc())
-            ? m_bound.get_ip_addr()
-            : m_so_bindtodevice_ip;
-
-        // Find local if for this MC ADD/DROP
-        route_result res;
-        g_p_route_table_mgr->route_resolve(route_rule_table_key(dst_ip, src_ip, AF_INET, m_tos),
-                                           res);
-        mc_if = res.src;
+        resolve_if_ip(0, ip_address(mc_grp), mc_if);
     }
 
     // Check if local_if is offloadable
