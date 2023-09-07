@@ -301,114 +301,7 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
     return to_close_now;
 }
 
-#if defined(DEFINED_NGINX)
-
-int init_child_process_for_nginx()
-{
-    DO_GLOBAL_CTORS();
-
-    srdr_logdbg("worker: %d number of listen fd: %d", g_p_app->get_worker_id(),
-                (int)g_p_app->map_listen_fd.size());
-
-    std::unordered_map<uint16_t, uint16_t> udp_sockets_per_port;
-    sockinfo *si;
-
-    auto itr = g_p_app->map_listen_fd.begin();
-    while (itr != g_p_app->map_listen_fd.end()) {
-        int listen_fd = itr->first;
-        itr++;
-        socket_fd_api *parent_sock_fd_api = ((fd_collection *)g_p_app->context)->get_sockfd(listen_fd);
-        if (!parent_sock_fd_api || !(si = dynamic_cast<sockinfo *>(parent_sock_fd_api))) {
-            continue;
-        }
-        int block_type = si->is_blocking() ? 0 : SOCK_NONBLOCK;
-        sock_addr sa;
-        socklen_t sa_len = sa.get_socklen();
-
-        parent_sock_fd_api->getsockname(sa.get_p_sa(), &sa_len);
-        if (PROTO_TCP == si->get_protocol()) {
-            srdr_logdbg("found listen socket %d", parent_sock_fd_api->get_fd());
-            g_p_fd_collection->addsocket(listen_fd, si->get_family(), SOCK_STREAM | block_type);
-            socket_fd_api *child_sock_fd_api = g_p_fd_collection->get_sockfd(listen_fd);
-            int ret = 0;
-            if (child_sock_fd_api) {
-                child_sock_fd_api->copy_sockopt_fork(parent_sock_fd_api);
-
-                ret = bind(listen_fd, sa.get_p_sa(), sa_len);
-                if (ret < 0) {
-                    srdr_logerr("bind() error");
-                }
-                // is the socket really offloaded
-                ret = child_sock_fd_api->prepareListen();
-                if (ret < 0) {
-                    srdr_logerr("prepareListen error");
-                    child_sock_fd_api = nullptr;
-                } else if (ret > 0) { // Pass-through
-                    handle_close(child_sock_fd_api->get_fd(), false, true);
-                    child_sock_fd_api = nullptr;
-                } else {
-                    srdr_logdbg("Prepare listen successfully offloaded");
-                }
-
-                if (child_sock_fd_api) {
-                    ret = child_sock_fd_api->listen(child_sock_fd_api->m_back_log);
-                    if (ret < 0) {
-                        srdr_logerr("Listen error");
-                    } else {
-                        srdr_logdbg("Listen success");
-                    }
-                }
-            }
-        } else {
-            // UDP sockets
-            sockinfo_udp *udp_sock = dynamic_cast<sockinfo_udp *>(parent_sock_fd_api);
-            if (udp_sock) {
-                int reuse_port;
-                socklen_t optlen = sizeof(reuse_port);
-                uint16_t port = ntohs(sa.get_in_port());
-                if ((port == 0) ||
-                    (udp_sock->getsockopt(SOL_SOCKET, SO_REUSEPORT, &reuse_port, &optlen) < 0)) {
-                    continue;
-                }
-                /*
-                 * Specific NGINX implementation.
-                 *
-                 * In case of "reuseport" directive
-                 * NGINX master process creates a UDP socket per worker process per port before it
-                 * forks. Therefore, each worker process attaches a single UDP socket out of
-                 * #worker_processes.
-                 *
-                 * Without "reuseport" directive, NGINX master process creates a single UDP socket
-                 * before it forks. Therefore, all worker processes attach the UDP socket (single).
-                 */
-
-                if ((reuse_port == 0) || (udp_sockets_per_port[port] == g_p_app->get_worker_id())) {
-                    srdr_logdbg("worker %d is using fd=%d. bound to port=%d", g_p_app->get_worker_id(),
-                                listen_fd, port);
-                    g_p_fd_collection->addsocket(listen_fd, si->get_family(),
-                                                 SOCK_DGRAM | block_type);
-                    sockinfo_udp *new_udp_sock =
-                        dynamic_cast<sockinfo_udp *>(g_p_fd_collection->get_sockfd(listen_fd));
-                    if (new_udp_sock) {
-                        new_udp_sock->copy_sockopt_fork(udp_sock);
-
-                        g_map_udp_bounded_port[port] = true;
-                        // in order to create new steering rules we call bind()
-                        // we skip os.bind since it always fails
-                        new_udp_sock->bind_no_os();
-                    }
-                }
-                udp_sockets_per_port[port]++;
-            }
-        }
-    }
-
-    return 0;
-}
-
-#endif // DEFINED_NGINX
-
-#if defined(DEFINED_ENVOY)
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
 
 static int init_worker(int worker_id, int listen_fd)
 {
@@ -416,77 +309,135 @@ static int init_worker(int worker_id, int listen_fd)
 
     int ret = 0;
     socket_fd_api *child_sock_fd_api = nullptr;
+    int parent_fd = listen_fd;
+    fd_collection *p_fd_collection = (fd_collection *)g_p_app->context;
 
-    std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-
-    if (worker_id > 0) {
-        sockinfo *si;
-        int parent_fd = -1;
-        const auto itr = g_p_app->map_dup_fd.find(listen_fd);
-        if (itr != g_p_app->map_dup_fd.end()) {
-            parent_fd = itr->second;
-        }
-
-        if (parent_fd < 0) {
-            srdr_logerr("parent fd is not found");
-            return -1;
-        }
-
-        socket_fd_api *parent_sock_fd_api = g_p_fd_collection->get_sockfd(parent_fd);
-        if (!parent_sock_fd_api || !(si = dynamic_cast<sockinfo *>(parent_sock_fd_api))) {
-            srdr_logerr("parent socinfo is not found");
-            return -1;
-        }
-
-        int block_type = si->is_blocking() ? 0 : SOCK_NONBLOCK;
-        sock_addr sa;
-        socklen_t sa_len = sa.get_socklen();
-
-        parent_sock_fd_api->getsockname(sa.get_p_sa(), &sa_len);
-        if (PROTO_TCP == si->get_protocol()) {
-            srdr_logdbg("found listen socket %d", parent_sock_fd_api->get_fd());
-            g_p_fd_collection->addsocket(listen_fd, si->get_family(), SOCK_STREAM | block_type);
-            child_sock_fd_api = g_p_fd_collection->get_sockfd(listen_fd);
-            if (child_sock_fd_api) {
-                child_sock_fd_api->copy_sockopt_fork(parent_sock_fd_api);
-
-                ret = bind(listen_fd, sa.get_p_sa(), sa_len);
-                if (ret < 0) {
-                    srdr_logerr("bind() error");
-                }
-
-                // is the socket really offloaded
-                ret = child_sock_fd_api->prepareListen();
-                if (ret < 0) {
-                    srdr_logerr("prepareListen error");
-                    child_sock_fd_api = nullptr;
-                } else if (ret > 0) { // Pass-through
-                    handle_close(child_sock_fd_api->get_fd(), false, true);
-                    child_sock_fd_api = nullptr;
-                } else {
-                    srdr_logdbg("Prepare listen successfully offloaded");
-                }
+    /* Find information about parent socket
+     * Envoy:
+     * - g_p_fd_collection has all actual fds
+     * - worker 0 has socket object in g_p_fd_collection (parent fd)
+     * - Other workers should find parent fd to create child socket objects
+     *   basing on parent socket objects.
+     * Nginx:
+     * - should use fd_collection from parent process stored at g_p_app->context
+     */
+    if (g_p_app->type == APP_ENVOY) {
+        p_fd_collection = g_p_fd_collection;
+        if (worker_id > 0) {
+            parent_fd = -1;
+            const auto itr = g_p_app->map_dup_fd.find(listen_fd);
+            if (itr != g_p_app->map_dup_fd.end()) {
+                parent_fd = itr->second;
             }
+            if (parent_fd < 0) {
+                return -1;
+            }
+        } else {
+            ret = -1;
+            child_sock_fd_api = p_fd_collection->get_sockfd(listen_fd);
+            if (child_sock_fd_api) {
+                ret = child_sock_fd_api->listen(child_sock_fd_api->m_back_log);
+            }
+            return ret;
         }
-    } else {
-        child_sock_fd_api = g_p_fd_collection->get_sockfd(listen_fd);
     }
 
-    if (child_sock_fd_api) {
+    /* This part should be ignored by Envoy worker 0
+     * Envoy: parent_fd is fd of parent socket
+     * Nginx: parent_fd is equal to listen_fd
+     */
+    sockinfo *si;
+    socket_fd_api *parent_sock_fd_api = p_fd_collection->get_sockfd(parent_fd);
+    if (!parent_sock_fd_api || !(si = dynamic_cast<sockinfo *>(parent_sock_fd_api))) {
+        srdr_logerr("parent sockinfo is not found");
+        return -1;
+    }
+
+    int block_type = si->is_blocking() ? 0 : SOCK_NONBLOCK;
+    sock_addr sa;
+    socklen_t sa_len = sa.get_socklen();
+
+    parent_sock_fd_api->getsockname(sa.get_p_sa(), &sa_len);
+    if (PROTO_TCP == si->get_protocol()) {
+        srdr_logdbg("found listen socket %d", parent_sock_fd_api->get_fd());
+        g_p_fd_collection->addsocket(listen_fd, si->get_family(), SOCK_STREAM | block_type);
+        child_sock_fd_api = g_p_fd_collection->get_sockfd(listen_fd);
         if (child_sock_fd_api) {
-            ret = child_sock_fd_api->listen(child_sock_fd_api->m_back_log);
+            child_sock_fd_api->copy_sockopt_fork(parent_sock_fd_api);
+
+            ret = bind(listen_fd, sa.get_p_sa(), sa_len);
             if (ret < 0) {
-                srdr_logerr("Listen error");
-            } else {
-                srdr_logdbg("Listen success");
+                srdr_logerr("bind() error");
             }
+
+            // is the socket really offloaded
+            ret = child_sock_fd_api->prepareListen();
+            if (ret < 0) {
+                srdr_logerr("prepareListen error");
+                child_sock_fd_api = nullptr;
+            } else if (ret > 0) { // Pass-through
+                handle_close(child_sock_fd_api->get_fd(), false, true);
+                child_sock_fd_api = nullptr;
+            } else {
+                srdr_logdbg("Prepare listen successfully offloaded");
+            }
+
+            if (child_sock_fd_api) {
+                ret = child_sock_fd_api->listen(child_sock_fd_api->m_back_log);
+                if (ret < 0) {
+                    srdr_logerr("Listen error");
+                } else {
+                    srdr_logdbg("Listen success");
+                }
+            }
+        }
+    }
+    if (PROTO_UDP == si->get_protocol()) {
+        sockinfo_udp *udp_sock = dynamic_cast<sockinfo_udp *>(parent_sock_fd_api);
+        if (udp_sock) {
+            std::unordered_map<uint16_t, uint16_t> udp_sockets_per_port;
+            int reuse_port;
+            socklen_t optlen = sizeof(reuse_port);
+            uint16_t port = ntohs(sa.get_in_port());
+            if ((port == 0) ||
+                (udp_sock->getsockopt(SOL_SOCKET, SO_REUSEPORT, &reuse_port, &optlen) < 0)) {
+                return -1;
+            }
+
+            /*
+             * Specific NGINX implementation.
+             *
+             * In case of "reuseport" directive
+             * NGINX master process creates a UDP socket per worker process per port before it
+             * forks. Therefore, each worker process attaches a single UDP socket out of
+             * #worker_processes.
+             *
+             * Without "reuseport" directive, NGINX master process creates a single UDP socket
+             * before it forks. Therefore, all worker processes attach the UDP socket (single).
+             */
+            if ((reuse_port == 0) || (udp_sockets_per_port[port] == g_p_app->get_worker_id())) {
+                srdr_logdbg("worker %d is using fd=%d. bound to port=%d", g_p_app->get_worker_id(),
+                            listen_fd, port);
+                g_p_fd_collection->addsocket(listen_fd, si->get_family(), SOCK_DGRAM | block_type);
+                sockinfo_udp *new_udp_sock =
+                    dynamic_cast<sockinfo_udp *>(g_p_fd_collection->get_sockfd(listen_fd));
+                if (new_udp_sock) {
+                    new_udp_sock->copy_sockopt_fork(udp_sock);
+
+                    g_map_udp_bounded_port[port] = true;
+                    // in order to create new steering rules we call bind()
+                    // we skip os.bind since it always fails
+                    new_udp_sock->bind_no_os();
+                }
+            }
+            udp_sockets_per_port[port]++;
         }
     }
 
     return 0;
 }
 
-#endif /* DEFINED_ENVOY */
+#endif
 
 //-----------------------------------------------------------------------------
 // extended API functions
@@ -961,7 +912,7 @@ extern "C" EXPORT_SYMBOL int listen(int __fd, int backlog)
          * Store all duplicated fd in map_listen_fd with tid
          * Store all listen fd in map_listen_fd with tid
          * Identify correct listen fd during epoll_ctl(ADD) call by tid. It should be different.
-         * 
+         *
          * Nginx:
          * Nginx store all listen fd in map_listen_fd to proceed later in children processes
          * after fork() call.
@@ -2731,9 +2682,8 @@ extern "C" EXPORT_SYMBOL int epoll_ctl(int __epfd, int __op, int __fd, struct ep
                     g_p_app->map_thread_id[gettid()] = worker_id;
                     rc = init_worker(worker_id, __fd);
                     if (rc != 0) {
-                        srdr_logerr(
-                            "Failed to initialize worker %d, (errno=%d %m)", worker_id,
-                            errno);
+                        srdr_logerr("Failed to initialize worker %d, (errno=%d %m)", worker_id,
+                                    errno);
                         g_p_app->map_listen_fd.erase(__fd);
                         g_p_app->map_thread_id.erase(gettid());
                         return rc;
@@ -3031,9 +2981,9 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
             if (worker_index < g_p_app->workers_num) {
                 worker_index++;
             } else {
-                srdr_logerr(
-                    "Cannot fork: number of running worker processes are at configured maximum (%d)",
-                    g_p_app->workers_num);
+                srdr_logerr("Cannot fork: number of running worker processes are at configured "
+                            "maximum (%d)",
+                            g_p_app->workers_num);
                 errno = ENOMEM;
                 return -1;
             }
@@ -3043,20 +2993,13 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
 
     pid_t pid = orig_os_api.fork();
     if (pid == 0) {
+#if defined(DEFINED_NGINX)
+        void *p_fd_collection_temp = g_p_fd_collection;
+#endif // DEFINED_NGINX
         g_is_forked_child = true;
         srdr_logdbg_exit("Child Process: returned with %d", pid);
-#if defined(DEFINED_NGINX)
-        if (g_p_app && g_p_app->type == APP_NGINX) {
-            g_p_app->map_thread_id[gettid()] = worker_index;
-            /* Child process needs information about
-             * listen socket_fd_api objects, so pass this using g_p_fd_collection.
-             * It is possible as far as parent`s g_p_fd_collection is not deleted
-             * by reset_globals()
-             */
-            g_p_app->context = (void *)g_p_fd_collection;
-        }
-#endif // DEFINED_NGINX
-       // Child's process - restart module
+
+        // Child's process - restart module
         vlog_stop();
 
         // In case of child process, we want all global objects to re-construct
@@ -3077,13 +3020,31 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
 
 #if defined(DEFINED_NGINX)
         if (g_p_app && g_p_app->type == APP_NGINX) {
+            g_p_app->map_thread_id[gettid()] = worker_index;
+            /* Child process needs information about
+             * listen socket_fd_api objects, so pass this using parent`s g_p_fd_collection.
+             * It is possible as far as parent`s g_p_fd_collection is not deleted
+             * by reset_globals()
+             */
+            g_p_app->context = (void *)p_fd_collection_temp;
+
             /* Do this only for regular user, not allowed for root user.
              * Root user will be handled in setuid call.
              */
             if (geteuid() != 0) {
-                int rc = init_child_process_for_nginx();
-                if (rc != 0) {
-                    srdr_logerr("Failed to initialize child process with PID %d", getpid());
+                DO_GLOBAL_CTORS();
+                std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+
+                auto itr = g_p_app->map_listen_fd.begin();
+                while (itr != g_p_app->map_listen_fd.end()) {
+                    int listen_fd = itr->first;
+                    itr++;
+                    int rc = init_worker(g_p_app->get_worker_id(), listen_fd);
+                    if (rc != 0) {
+                        srdr_logerr("Failed to initialize worker %d, (errno=%d %m)",
+                                    g_p_app->get_worker_id(), errno);
+                        break;
+                    }
                 }
             }
         }
@@ -3293,11 +3254,20 @@ extern "C" EXPORT_SYMBOL int setuid(uid_t uid)
 
     // Do this only for root user, regular user will be handled in fork call.
     if (g_p_app && g_p_app->type == APP_NGINX && previous_uid == 0) {
-        int rc = init_child_process_for_nginx();
-        if (rc != 0) {
-            srdr_logerr("Failed to initialize child process with PID %d for Nginx, (errno=%d %m)",
-                        getpid(), errno);
-            orig_rc = -1;
+        DO_GLOBAL_CTORS();
+        std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+
+        auto itr = g_p_app->map_listen_fd.begin();
+        while (itr != g_p_app->map_listen_fd.end()) {
+            int listen_fd = itr->first;
+            itr++;
+            int rc = init_worker(g_p_app->get_worker_id(), listen_fd);
+            if (rc != 0) {
+                srdr_logerr("Failed to initialize worker %d, (errno=%d %m)",
+                            g_p_app->get_worker_id(), errno);
+                orig_rc = -1;
+                break;
+            }
         }
     }
 
