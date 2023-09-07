@@ -886,9 +886,7 @@ bool sockinfo_tcp::prepare_dst_to_send(bool is_accepted_socket /* = false */)
     bool ret_val = false;
 
     if (m_p_connected_dst_entry) {
-        bool skip_rules = is_accepted_socket;
-        bool is_connect = !is_accepted_socket;
-        ret_val = m_p_connected_dst_entry->prepare_to_send(m_so_ratelimit, skip_rules, is_connect);
+        ret_val = m_p_connected_dst_entry->prepare_to_send(m_so_ratelimit, is_accepted_socket);
         if (ret_val) {
             /* dst_entry has resolved tx ring,
              * so it is a time to provide TSO information to PCB
