@@ -49,25 +49,8 @@ typedef std::unordered_map<ip_address, route_entry *> in_addr_route_entry_map_t;
 typedef std::vector<route_val> route_table_t;
 
 struct route_result {
-    ip_address src;
-    ip_address gw;
     uint32_t mtu;
     int if_index;
-
-    route_result()
-        : src(in6addr_any)
-        , gw(in6addr_any)
-        , mtu(0)
-        , if_index(0)
-    {
-    }
-    route_result(route_val &rv)
-        : src(rv.get_src_addr())
-        , gw(rv.get_gw_addr())
-        , mtu(rv.get_mtu())
-        , if_index(rv.get_if_index())
-    {
-    }
 };
 
 typedef struct {
