@@ -37,11 +37,6 @@
 #include <sys/time.h>
 #include <dlfcn.h>
 #include <iostream>
-#if defined(DEFINED_NGINX)
-#include <algorithm>
-#include <iterator>
-#include <vector>
-#endif // DEFINED_NGINX
 #include <fcntl.h>
 
 #include "utils/compiler.h"
@@ -953,7 +948,7 @@ extern "C" EXPORT_SYMBOL int listen(int __fd, int backlog)
 
     srdr_logdbg_entry("fd=%d, backlog=%d", __fd, backlog);
 
-#if defined(DEFINED_ENVOY) || defined(DEFINED_ENVOY)
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     if (g_p_app && g_p_app->type != APP_NONE) {
         /* Envoy:
          * Envoy uses dup() call for listen socket on workers_N (N > 0)
@@ -988,16 +983,11 @@ extern "C" EXPORT_SYMBOL int listen(int __fd, int backlog)
         if (ret > 0) { // Passthrough
             handle_close(__fd, false, true);
         } else {
-#if defined(DEFINED_NGINX)
-            if (g_p_app->type == APP_NGINX) {
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+            if (g_p_app->type != APP_NONE) {
                 p_socket_object->m_back_log = backlog;
             } else
 #endif
-#if defined(DEFINED_ENVOY)
-            if (g_p_app->type == APP_ENVOY) {
-                p_socket_object->m_back_log = backlog;
-            } else 
-#endif /* DEFINED_ENVOY */
             {
                 return p_socket_object->listen(backlog);
             }

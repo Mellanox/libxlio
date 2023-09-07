@@ -2782,16 +2782,11 @@ int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
         ret = orig_os_api.bind(m_fd, __addr, __addrlen);
     }
 
-#if defined(DEFINED_NGINX)
-    if (g_p_app->type == APP_NGINX && g_p_app->get_worker_id() >= 0) {
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+    if (g_p_app->type != APP_NONE && g_p_app->get_worker_id() >= 0) {
         // For worker ignore OS bind.
     } else
-#endif // DEFINED_NGINX
-#if defined(DEFINED_ENVOY)
-    if (g_p_app->type == APP_ENVOY && g_p_app->get_worker_id() >= 0) {
-        // For worker ignore OS bind.
-    } else
-#endif /* DEFINED_ENVOY */
+#endif
     {
         if (ret < 0) {
             UNLOCK_RET(ret);
@@ -2862,20 +2857,13 @@ int sockinfo_tcp::prepareListen()
         return -1;
     }
 
-#if defined(DEFINED_NGINX)
-    if (g_p_app->type == APP_NGINX) {
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+    if (g_p_app->type != APP_NONE) {
         if (m_sock_state == TCP_SOCK_LISTEN_READY) {
             return 0; // prepareListen() had been called before...
         }
     }
-#endif // DEFINED_NGINX
-#if defined(DEFINED_ENVOY)
-    if (g_p_app->type == APP_ENVOY) {
-        if (m_sock_state == TCP_SOCK_LISTEN_READY) {
-            return 0; // prepareListen() had been called before...
-        }
-    }
-#endif /* DEFINED_ENVOY */
+#endif
 
     if (is_server()) {
         return 0; // listen had been called before...
