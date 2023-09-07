@@ -2783,13 +2783,13 @@ int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
     }
 
 #if defined(DEFINED_NGINX)
-    if (g_p_app->type == APP_NGINX && g_worker_index >= 0) {
-        // For Nginx child ignore OS bind.
+    if (g_p_app->type == APP_NGINX && g_p_app->get_worker_id() >= 0) {
+        // For worker ignore OS bind.
     } else
 #endif // DEFINED_NGINX
 #if defined(DEFINED_ENVOY)
     if (g_p_app->type == APP_ENVOY && g_p_app->get_worker_id() >= 0) {
-        // g_p_app->get_worker_id() >= 0
+        // For worker ignore OS bind.
     } else
 #endif /* DEFINED_ENVOY */
     {
