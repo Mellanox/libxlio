@@ -91,8 +91,7 @@ public:
     virtual void notify_cb();
     virtual void notify_cb(event *ev);
 
-    virtual bool prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_rules = false,
-                                 bool is_connect = false);
+    virtual bool prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_rules = false);
     virtual ssize_t fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr) = 0;
     virtual ssize_t slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr,
                               struct xlio_rate_limit_t &rate_limit, int flags = 0,
@@ -151,7 +150,6 @@ protected:
     header *m_header_neigh;
     ip_address m_bound_ip;
     ip_address m_so_bindtodevice_ip;
-    ip_address m_route_src_ip; // source IP used to register in route manager
     ip_address m_pkt_src_ip; // source IP address copied into IP header
     lock_mutex_recursive m_slow_path_lock;
     lock_mutex m_tx_migration_lock;
@@ -196,7 +194,7 @@ protected:
 
     virtual bool offloaded_according_to_rules();
     virtual void init_members();
-    virtual bool resolve_net_dev(bool is_connect = false);
+    virtual bool resolve_net_dev();
     virtual void set_src_addr();
     bool update_net_dev_val();
     bool update_rt_val();

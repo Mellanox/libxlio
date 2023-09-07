@@ -59,7 +59,6 @@ dst_entry::dst_entry(const sock_addr &dst, uint16_t src_port, socket_data &sock_
                                                        : (header *)(new header_ipv4()))
     , m_bound_ip(in6addr_any)
     , m_so_bindtodevice_ip(in6addr_any)
-    , m_route_src_ip(in6addr_any)
     , m_pkt_src_ip(in6addr_any)
     , m_ring_alloc_logic_tx(sock_data.fd, ring_alloc_logic)
     , m_p_tx_mem_buf_desc_list(nullptr)
@@ -92,7 +91,7 @@ dst_entry::~dst_entry()
 
     if (m_p_rt_entry) {
         g_p_route_table_mgr->unregister_observer(
-            route_rule_table_key(m_dst_ip, m_route_src_ip, m_family, m_tos), this);
+            route_rule_table_key(m_dst_ip, m_bound_ip, m_family, m_tos), this);
         m_p_rt_entry = nullptr;
     }
 
@@ -164,8 +163,8 @@ void dst_entry::init_members()
 
 void dst_entry::set_src_addr()
 {
-    if (!m_route_src_ip.is_anyaddr()) {
-        m_pkt_src_ip = m_route_src_ip;
+    if (!m_bound_ip.is_anyaddr()) {
+        m_pkt_src_ip = m_bound_ip;
         dst_logfunc("Selected source address (bind): %s",
                     m_pkt_src_ip.to_str(get_sa_family()).c_str());
     } else if (get_routing_addr_sel_src(m_pkt_src_ip)) {
@@ -276,7 +275,7 @@ bool dst_entry::update_rt_val()
     return ret_val;
 }
 
-bool dst_entry::resolve_net_dev(bool is_connect)
+bool dst_entry::resolve_net_dev()
 {
     bool ret_val = false;
 
@@ -295,37 +294,12 @@ bool dst_entry::resolve_net_dev(bool is_connect)
     // When XLIO will support routing with OIF, we need to check changing in outgoing interface
     // Source address changes is not checked since multiple bind is not allowed on the same socket
     if (!m_p_rt_entry) {
-        m_route_src_ip = m_bound_ip;
-        route_rule_table_key rtk(m_dst_ip, m_route_src_ip, m_family, m_tos);
-        dst_logfunc("Fetching rt_entry %s", m_route_src_ip.to_str(m_family).c_str());
+        route_rule_table_key rtk(m_dst_ip, m_bound_ip, m_family, m_tos);
+        dst_logfunc("Fetching rt_entry %s", m_bound_ip.to_str(m_family).c_str());
         if (g_p_route_table_mgr->register_observer(rtk, this, &p_ces)) {
             // In case this is the first time we trying to resolve route entry,
             // means that register_observer was run
             m_p_rt_entry = dynamic_cast<route_entry *>(p_ces);
-
-            // Routing entry src-addr is used for src-addr selection algorithm and not
-            // as a key for matching routing rules. Moreover, this can be a forcefully
-            // set src addr by XLIO. We keep this logic for IPv4 only for backward compliancy.
-            if (m_family == AF_INET && is_connect && m_route_src_ip.is_anyaddr()) {
-                dst_logfunc("Checking rt_entry src addr");
-                route_val *p_rt_val = nullptr;
-                if (m_p_rt_entry && m_p_rt_entry->get_val(p_rt_val) &&
-                    !p_rt_val->get_src_addr().is_anyaddr()) {
-                    g_p_route_table_mgr->unregister_observer(rtk, this);
-                    m_route_src_ip = p_rt_val->get_src_addr();
-
-                    dst_logfunc("Chaning m_route_src_ip to %s",
-                                m_route_src_ip.to_str(m_family).c_str());
-
-                    route_rule_table_key new_rtk(m_dst_ip, m_route_src_ip, m_family, m_tos);
-                    if (g_p_route_table_mgr->register_observer(new_rtk, this, &p_ces)) {
-                        m_p_rt_entry = dynamic_cast<route_entry *>(p_ces);
-                    } else {
-                        dst_logdbg("Error in route resolving logic");
-                        return ret_val;
-                    }
-                }
-            }
         } else {
             dst_logdbg("Error in registering route entry");
             return ret_val;
@@ -540,8 +514,7 @@ bool dst_entry::offloaded_according_to_rules()
     return ret_val;
 }
 
-bool dst_entry::prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_rules,
-                                bool is_connect)
+bool dst_entry::prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_rules)
 {
     bool resolved = false;
     m_slow_path_lock.lock();
@@ -557,7 +530,7 @@ bool dst_entry::prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_
     if (!m_b_force_os && !is_valid()) {
         bool b_is_offloaded = false;
         set_state(true);
-        if (resolve_net_dev(is_connect)) {
+        if (resolve_net_dev()) {
             set_src_addr();
             // overwrite mtu from route if exists
             m_max_udp_payload_size =
