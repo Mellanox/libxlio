@@ -90,8 +90,6 @@ private:
     void update_rte_netdev(route_table_t &table);
     void update_entry(INOUT route_entry *p_ent, bool b_register_to_net_dev = false);
 
-    void rt_mgr_update_source_ip(route_table_t &table);
-
     void new_route_event(const route_val &netlink_route_val);
     void del_route_event(const route_val &netlink_route_val);
 
