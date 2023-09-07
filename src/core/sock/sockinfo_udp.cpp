@@ -631,7 +631,7 @@ int sockinfo_udp::connect(const struct sockaddr *__to, socklen_t __tolen)
         m_p_connected_dst_entry->set_so_bindtodevice_addr(m_so_bindtodevice_ip);
     }
     m_p_connected_dst_entry->set_src_sel_prefs(m_src_sel_flags);
-    m_p_connected_dst_entry->prepare_to_send(m_so_ratelimit, false, true);
+    m_p_connected_dst_entry->prepare_to_send(m_so_ratelimit, false);
 
     return 0;
 }

@@ -47,7 +47,7 @@ protected:
     bool m_b_mc_loopback_enabled;
 
     virtual void set_src_addr();
-    virtual bool resolve_net_dev(bool is_connect = false);
+    virtual bool resolve_net_dev();
 };
 
 #endif /* DST_ENTRY_UDP_MC_H */

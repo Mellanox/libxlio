@@ -80,9 +80,8 @@ void dst_entry_udp_mc::set_src_addr()
 }
 
 // The following function supposed to be called under m_lock
-bool dst_entry_udp_mc::resolve_net_dev(bool is_connect)
+bool dst_entry_udp_mc::resolve_net_dev()
 {
-    NOT_IN_USE(is_connect);
     bool ret_val = false;
     cache_entry_subject<int, net_device_val *> *net_dev_entry = nullptr;
 
