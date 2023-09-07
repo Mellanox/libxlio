@@ -433,12 +433,14 @@ bool route_table_mgr::route_resolve(IN route_rule_table_key key, OUT route_resul
     for (const auto &table_id : table_id_list) {
         p_val = ::find_route_val(rt, dst_addr, table_id);
         if (p_val) {
-            res = *p_val;
+            res.mtu = p_val->get_mtu();
+            res.if_index = p_val->get_if_index();
 
             rt_mgr_logdbg("dst ip '%s' resolved to if_index: %d, src-addr: %s, gw-addr: %s, "
                           "route-mtu: %" PRIu32,
                           dst_addr.to_str(family).c_str(), res.if_index,
-                          res.src.to_str(family).c_str(), res.gw.to_str(family).c_str(), res.mtu);
+                          p_val->get_src_addr().to_str(family).c_str(),
+                          p_val->get_gw_addr().to_str(family).c_str(), res.mtu);
             ++m_stats.n_lookup_hit;
             return true;
         }
