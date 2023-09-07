@@ -46,7 +46,6 @@ public:
     inline void set_dst_pref_len(uint8_t dst_pref_len) { m_dst_pref_len = dst_pref_len; };
     inline void set_dst_addr(ip_address const &dst_addr) { m_dst_addr = dst_addr; };
     inline void set_src_addr(ip_address const &src_addr) { m_src_addr = src_addr; };
-    inline void set_cfg_src_addr(const ip_address &cfg_src_addr) { m_cfg_src_addr = cfg_src_addr; };
     inline void set_gw(ip_address const &gw) { m_gw_addr = gw; };
     inline void set_family(sa_family_t family) { m_family = family; };
     inline void set_protocol(unsigned char protocol) { m_protocol = protocol; };
@@ -60,7 +59,6 @@ public:
     inline uint8_t get_dst_pref_len() const { return m_dst_pref_len; };
     inline const ip_address &get_dst_addr() const { return m_dst_addr; };
     inline const ip_address &get_src_addr() const { return m_src_addr; };
-    inline const ip_address &get_cfg_src_addr() const { return m_cfg_src_addr; };
     inline const ip_address &get_gw_addr() const { return m_gw_addr; };
     inline sa_family_t get_family() const { return m_family; };
     inline unsigned char get_protocol() const { return m_protocol; };
@@ -91,14 +89,6 @@ private:
     ip_address m_dst_addr;
     ip_address m_src_addr;
     ip_address m_gw_addr;
-
-    // The src addr as fetched from routing configuration and which will be used for source address
-    // selection. Currently it is impossible to use m_src_addr because in case the entry has no src
-    // addr configured, we forcefully set m_src_addr by looking at the addresses on the inetrface.
-    // Such an address may not be suitable for IPv6/IPv4 address selection. However, m_src_addr
-    // is used also as Key for rule_entry and as so, cannot be easily refactored.
-    // The more corrent way to key the entry is to used device index instead of a speculated source.
-    ip_address m_cfg_src_addr;
 
     unsigned char m_family;
     unsigned char m_protocol;

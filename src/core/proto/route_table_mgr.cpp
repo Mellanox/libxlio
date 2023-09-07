@@ -205,7 +205,6 @@ void route_table_mgr::parse_attr(struct rtattr *rt_attribute, route_val &val)
     case RTA_SRC:
     case RTA_PREFSRC:
         val.set_src_addr(ip_address((void *)RTA_DATA(rt_attribute), val.get_family()));
-        val.set_cfg_src_addr(ip_address((void *)RTA_DATA(rt_attribute), val.get_family()));
         break;
     case RTA_TABLE:
         val.set_table_id(*(uint32_t *)RTA_DATA(rt_attribute));
@@ -318,9 +317,9 @@ bool route_table_mgr::route_resolve(IN route_rule_table_key key, OUT route_resul
 
             rt_mgr_logdbg("dst ip '%s' resolved to if_index: %d, src-addr: %s, gw-addr: %s, "
                           "route-mtu: %" PRIu32,
-                          dst_addr.to_str(family).c_str(), res.if_index,
+                          dst_addr.to_str(family).c_str(), p_val->get_if_index(),
                           p_val->get_src_addr().to_str(family).c_str(),
-                          p_val->get_gw_addr().to_str(family).c_str(), res.mtu);
+                          p_val->get_gw_addr().to_str(family).c_str(), p_val->get_mtu());
             ++m_stats.n_lookup_hit;
             return true;
         }
@@ -396,7 +395,6 @@ void route_table_mgr::new_route_event(const route_val &netlink_route_val)
     val.set_dst_addr(netlink_route_val.get_dst_addr());
     val.set_dst_pref_len(netlink_route_val.get_dst_pref_len());
     val.set_src_addr(netlink_route_val.get_src_addr());
-    val.set_cfg_src_addr(netlink_route_val.get_cfg_src_addr());
     val.set_gw(netlink_route_val.get_gw_addr());
     val.set_family(netlink_route_val.get_family());
     val.set_protocol(netlink_route_val.get_protocol());

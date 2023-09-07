@@ -968,8 +968,8 @@ int sockinfo_udp::setsockopt(int __level, int __optname, __const void *__optval,
 
             m_mc_tx_src_ip = ip_addr(mreqn.imr_address.s_addr);
 
-            si_udp_logdbg("IPPROTO_IP, %s=%d.%d.%d.%d", setsockopt_ip_opt_to_str(__optname),
-                          NIPQUAD(m_mc_tx_src_ip.get_in_addr()));
+            si_udp_logdbg("IPPROTO_IP, %s=%s", setsockopt_ip_opt_to_str(__optname),
+                          m_mc_tx_src_ip.to_str().c_str());
             m_p_socket_stats->mc_tx_if = m_mc_tx_src_ip;
         } break;
 
@@ -1096,21 +1096,24 @@ int sockinfo_udp::setsockopt(int __level, int __optname, __const void *__optval,
             mc_if = mreqprm.imr_interface.s_addr;
 
             if (!IN_MULTICAST_N(mc_grp)) {
-                si_udp_logdbg(
-                    "setsockopt(%s) will be passed to OS for handling, IP %d.%d.%d.%d is not MC ",
-                    setsockopt_ip_opt_to_str(__optname), NIPQUAD(mc_grp));
+                si_udp_logdbg("setsockopt(%s) will be passed to OS for handling, IP %s is not MC ",
+                              setsockopt_ip_opt_to_str(__optname),
+                              ip_address(mc_grp).to_str(AF_INET).c_str());
                 break;
             }
 
-            // Find local if for this MC ADD/DROP
+            // Find local interface for this MC ADD/DROP
             if (INADDR_ANY == mc_if) {
                 ip_address resolved_ip;
                 resolve_if_ip(0, ip_address(mc_grp), resolved_ip);
                 mc_if = resolved_ip.get_in_addr();
             }
 
-            si_udp_logdbg("IPPROTO_IP, %s=%d.%d.%d.%d, mc_if:%d.%d.%d.%d mc_if:%d.%d.%d.%d",
-                          setsockopt_ip_opt_to_str(__optname), NIPQUAD(mc_grp), NIPQUAD(mc_if));
+            si_udp_logdbg("IPPROTO_IP, %s=%s, mc_if:%s imr_sourceaddr:%s",
+                          setsockopt_ip_opt_to_str(__optname),
+                          ip_address(mc_grp).to_str(AF_INET).c_str(),
+                          ip_address(mc_if).to_str(AF_INET).c_str(),
+                          ip_address(mreqprm.imr_sourceaddr.s_addr).to_str(AF_INET).c_str());
 
             // Add multicast group membership
             if (mc_change_membership_start_helper_ip4(ip_address(mc_grp), __optname)) {
@@ -1139,8 +1142,9 @@ int sockinfo_udp::setsockopt(int __level, int __optname, __const void *__optval,
             else if (!g_p_net_device_table_mgr->get_net_device_val(ip_addr(mc_if))) {
                 // call orig setsockopt() and don't try to offlaod
                 si_udp_logdbg("setsockopt(%s) will be passed to OS for handling - not offload "
-                              "interface (%d.%d.%d.%d)",
-                              setsockopt_ip_opt_to_str(__optname), NIPQUAD(mc_if));
+                              "interface (%s)",
+                              setsockopt_ip_opt_to_str(__optname),
+                              ip_address(mc_if).to_str(AF_INET).c_str());
                 goto_os = true;
             }
             // offloaded, check if need to pend
@@ -2100,10 +2104,6 @@ ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
 
                 // Save new dst_entry in map
                 m_dst_entry_map[dst] = p_dst_entry;
-                /* ADD logging
-                si_udp_logfunc("Address %d.%d.%d.%d failed resolving as Tx on supported devices for
-                interfaces %d.%d.%d.%d (tx-ing to os)", NIPQUAD(to_ip), NIPQUAD(local_if));
-            */
             }
         }
     } else if (unlikely(!p_dst_entry)) {
