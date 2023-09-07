@@ -207,7 +207,6 @@ void route_table_mgr::parse_attr(struct rtattr *rt_attribute, route_val &val)
     case RTA_SRC:
     case RTA_PREFSRC:
         val.set_src_addr(ip_address((void *)RTA_DATA(rt_attribute), val.get_family()));
-        val.set_cfg_src_addr(ip_address((void *)RTA_DATA(rt_attribute), val.get_family()));
         break;
     case RTA_TABLE:
         val.set_table_id(*(uint32_t *)RTA_DATA(rt_attribute));
@@ -398,7 +397,6 @@ void route_table_mgr::new_route_event(const route_val &netlink_route_val)
     val.set_dst_addr(netlink_route_val.get_dst_addr());
     val.set_dst_pref_len(netlink_route_val.get_dst_pref_len());
     val.set_src_addr(netlink_route_val.get_src_addr());
-    val.set_cfg_src_addr(netlink_route_val.get_cfg_src_addr());
     val.set_gw(netlink_route_val.get_gw_addr());
     val.set_family(netlink_route_val.get_family());
     val.set_protocol(netlink_route_val.get_protocol());
