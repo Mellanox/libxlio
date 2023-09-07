@@ -88,7 +88,6 @@
 #if defined(DEFINED_NGINX)
 typedef std::unordered_map<uint16_t, bool> map_udp_bounded_port_t;
 
-extern int g_worker_index;
 extern map_udp_bounded_port_t g_map_udp_bounded_port;
 #endif
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)

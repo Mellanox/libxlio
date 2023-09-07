@@ -883,15 +883,13 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
         return false;
     }
 #if defined(DEFINED_NGINX)
-    if (g_p_app->type == APP_NGINX) {
+    if (g_p_app->type == APP_NGINX && g_p_app->get_worker_id() >= 0) {
         if (flow_key.get_protocol() != PROTO_UDP ||
             (flow_key.get_protocol() == PROTO_UDP &&
              g_map_udp_bounded_port.count(ntohs(flow_key.get_dst_port())))) {
-            if ((g_p_app->workers_num !=
-                 g_p_app->workers_pow2) &&
-                flow_key.is_3_tuple()) {
-                if (g_worker_index < (g_p_app->workers_pow2 %
-                                      g_p_app->workers_num)) {
+            if ((g_p_app->workers_num != g_p_app->workers_pow2) && flow_key.is_3_tuple()) {
+                if (g_p_app->get_worker_id() < (g_p_app->workers_pow2 % g_p_app->workers_num)) {
+#endif
                     g_p_app->add_second_4t_rule = true;
                     flow_tuple_with_local_if new_key(
                         flow_key.get_dst_ip(), flow_key.get_dst_port(), ip_address::any_addr(), 1,
@@ -907,7 +905,8 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
                     }
                     m_rx_flow_map[new_key] = p_nd_resources->p_ring;
                     si_logdbg("Added second rule %s for index %d to ring %p",
-                              new_key.to_str().c_str(), g_worker_index, p_nd_resources->p_ring);
+                              new_key.to_str().c_str(), g_p_app->get_worker_id(),
+                              p_nd_resources->p_ring);
                 }
             }
             g_p_app->add_second_4t_rule = false;
@@ -918,8 +917,7 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
     if (g_p_app->type == APP_ENVOY && g_p_app->get_worker_id() >= 0) {
         if (flow_key.get_protocol() != PROTO_UDP) {
             if ((g_p_app->workers_num != g_p_app->workers_pow2) && flow_key.is_3_tuple()) {
-                if (g_p_app->map_thread_id.at(gettid()) <
-                    (g_p_app->workers_pow2 % g_p_app->workers_num)) {
+                if (g_p_app->get_worker_id() < (g_p_app->workers_pow2 % g_p_app->workers_num)) {
                     g_p_app->add_second_4t_rule = true;
                     flow_tuple_with_local_if new_key(
                         flow_key.get_dst_ip(), flow_key.get_dst_port(), ip_address::any_addr(), 1,

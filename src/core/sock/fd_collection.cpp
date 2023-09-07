@@ -62,7 +62,7 @@ fd_collection::fd_collection()
     , m_b_sysvar_offloaded_sockets(safe_mce_sys().offloaded_sockets)
 #if defined(DEFINED_NGINX)
     // Avoid using socket pool for the master process (which doesn't have parent fd_collection)
-    , m_use_socket_pool(safe_mce_sys().nginx_udp_socket_pool_size && g_worker_index >= 0)
+    , m_use_socket_pool(safe_mce_sys().nginx_udp_socket_pool_size && g_p_app->get_worker_id() >= 0)
     , m_socket_pool_size(safe_mce_sys().nginx_udp_socket_pool_size)
     , m_socket_pool_counter(0)
 #endif
@@ -671,7 +671,7 @@ void fd_collection::handle_socket_pool(int fd)
     }
 
     if (m_socket_pool_counter >= m_socket_pool_size) {
-        fdcoll_logdbg("Nginx worker num %d reached max UDP socket pool size (%d).", g_worker_index,
+        fdcoll_logdbg("Worker %d reached max UDP socket pool size (%d).", g_p_app->get_worker_id(),
                       m_socket_pool_size);
         m_use_socket_pool = false;
         return;

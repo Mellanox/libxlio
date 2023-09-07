@@ -233,7 +233,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
             } else
 #endif
 #if defined(DEFINED_ENVOY)
-            if (g_p_app->type == APP_ENVOY && g_p_app->add_second_4t_rule && g_p_app->get_worker_id() >= 0) {
+            if (g_p_app->type == APP_ENVOY && g_p_app->add_second_4t_rule) {
                 /* nothing */
             } else
 #endif /* DEFINED_ENVOY */
@@ -360,7 +360,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
             } else
 #endif
 #if defined(DEFINED_ENVOY)
-            if (g_p_app->type == APP_ENVOY && g_p_app->add_second_4t_rule && g_p_app->get_worker_id() >= 0) {
+            if (g_p_app->type == APP_ENVOY && g_p_app->add_second_4t_rule) {
                 /* nothing */
             } else
 #endif /* DEFINED_ENVOY */
