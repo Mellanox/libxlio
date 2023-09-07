@@ -87,9 +87,6 @@ route_table_mgr::route_table_mgr()
     // Read Route table from kernel and save it in local variable.
     update_tbl(ROUTE_DATA_TYPE);
 
-    update_rte_netdev(m_table_in4);
-    update_rte_netdev(m_table_in6);
-
     // Print table
     print_tbl();
 
@@ -103,14 +100,6 @@ route_table_mgr::route_table_mgr()
 route_table_mgr::~route_table_mgr()
 {
     rt_mgr_logdbg("");
-
-    // clear all route_entrys created in the constructor
-    in_addr_route_entry_map_t::iterator iter;
-
-    while ((iter = m_rte_list_for_each_net_dev.begin()) != m_rte_list_for_each_net_dev.end()) {
-        delete (iter->second);
-        m_rte_list_for_each_net_dev.erase(iter);
-    }
 
     auto cache_itr = m_cache_tbl.begin();
     for (; cache_itr != m_cache_tbl.end(); cache_itr = m_cache_tbl.begin()) {
@@ -339,23 +328,6 @@ bool route_table_mgr::route_resolve(IN route_rule_table_key key, OUT route_resul
     ++m_stats.n_lookup_miss;
     /* prevent usage on false return */
     return false;
-}
-
-void route_table_mgr::update_rte_netdev(route_table_t &table)
-{
-    // Create route_entry for each netdev to receive port up/down events for net_dev_entry
-    for (const auto &val : table) {
-        const ip_address &src_addr = val.get_src_addr();
-        auto iter_rte = m_rte_list_for_each_net_dev.find(src_addr);
-        // If src_addr of interface exists in the map, no need to create another route_entry
-        if (iter_rte == m_rte_list_for_each_net_dev.end()) {
-            const ip_address &dst_ip = src_addr;
-            const ip_address &src_ip = ip_address::any_addr();
-            uint8_t tos = 0;
-            m_rte_list_for_each_net_dev[src_addr] =
-                create_new_entry(route_rule_table_key(dst_ip, src_ip, val.get_family(), tos), NULL);
-        }
-    }
 }
 
 void route_table_mgr::update_entry(INOUT route_entry *p_ent, bool b_register_to_net_dev /*= false*/)
