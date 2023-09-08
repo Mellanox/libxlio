@@ -86,7 +86,15 @@ using namespace std;
 map_udp_bounded_port_t g_map_udp_bounded_port;
 #endif
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+static int init_worker(int worker_id, int listen_fd);
+
 struct app_conf *g_p_app = NULL;
+#endif
+#if defined(DEFINED_NGINX)
+static int proc_nginx(void);
+#endif /* DEFINED_NGINX */
+#if defined(DEFINED_ENVOY)
+static int proc_envoy(int op, int fd);
 #endif /* DEFINED_ENVOY */
 
 struct os_api orig_os_api;
@@ -935,7 +943,7 @@ extern "C" EXPORT_SYMBOL int listen(int __fd, int backlog)
             handle_close(__fd, false, true);
         } else {
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-            if (g_p_app->type != APP_NONE) {
+            if (g_p_app && g_p_app->type != APP_NONE) {
                 p_socket_object->m_back_log = backlog;
             } else
 #endif
@@ -2651,49 +2659,10 @@ extern "C" EXPORT_SYMBOL int epoll_ctl(int __epfd, int __op, int __fd, struct ep
     } else {
 #if defined(DEFINED_ENVOY)
         if (g_p_app && g_p_app->type == APP_ENVOY) {
-            auto iter = g_p_app->map_listen_fd.find(__fd);
-            if (iter != g_p_app->map_listen_fd.end()) {
-                socket_fd_api *p_socket_object = NULL;
-                p_socket_object = fd_collection_get_sockfd(__fd);
-                if (iter->second == gettid()) {
-                    /* process listen sockets from main thread */
-                    if (p_socket_object) {
-                        rc = p_socket_object->listen(p_socket_object->m_back_log);
-                        if (rc < 0) {
-                            return rc;
-                        }
-                    }
-                    std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-                    g_p_app->map_listen_fd.erase(iter);
-                } else if (__op == EPOLL_CTL_ADD) {
-                    static int worker_id = 0;
-
-                    /* original listen socket should be on*/
-                    int sleep_count = 1000;
-                    while (!p_socket_object && !worker_id) {
-                        if (!sleep_count--) {
-                            return -1;
-                        }
-                        const struct timespec short_sleep = {0, 1000};
-                        nanosleep(&short_sleep, NULL);
-                    }
-                    std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-                    g_p_app->map_listen_fd[__fd] = gettid();
-                    g_p_app->map_thread_id[gettid()] = worker_id;
-                    rc = init_worker(worker_id, __fd);
-                    if (rc != 0) {
-                        srdr_logerr("Failed to initialize worker %d, (errno=%d %m)", worker_id,
-                                    errno);
-                        g_p_app->map_listen_fd.erase(__fd);
-                        g_p_app->map_thread_id.erase(gettid());
-                        return rc;
-                    }
-                    worker_id++;
-                } else if (__op == EPOLL_CTL_DEL) {
-                    std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-                    g_p_app->map_listen_fd.erase(__fd);
-                    g_p_app->map_thread_id.erase(gettid());
-                }
+            rc = proc_envoy(__op, __fd);
+            if (rc != 0) {
+                errno = EINVAL;
+                return -1;
             }
         }
 #endif /* DEFINED_ENVOY */
@@ -3032,19 +3001,9 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
              * Root user will be handled in setuid call.
              */
             if (geteuid() != 0) {
-                DO_GLOBAL_CTORS();
-                std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-
-                auto itr = g_p_app->map_listen_fd.begin();
-                while (itr != g_p_app->map_listen_fd.end()) {
-                    int listen_fd = itr->first;
-                    itr++;
-                    int rc = init_worker(g_p_app->get_worker_id(), listen_fd);
-                    if (rc != 0) {
-                        srdr_logerr("Failed to initialize worker %d, (errno=%d %m)",
-                                    g_p_app->get_worker_id(), errno);
-                        break;
-                    }
+                int rc = proc_nginx();
+                if (rc != 0) {
+                    errno = ENOMEM;
                 }
             }
         }
@@ -3254,21 +3213,7 @@ extern "C" EXPORT_SYMBOL int setuid(uid_t uid)
 
     // Do this only for root user, regular user will be handled in fork call.
     if (g_p_app && g_p_app->type == APP_NGINX && previous_uid == 0) {
-        DO_GLOBAL_CTORS();
-        std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-
-        auto itr = g_p_app->map_listen_fd.begin();
-        while (itr != g_p_app->map_listen_fd.end()) {
-            int listen_fd = itr->first;
-            itr++;
-            int rc = init_worker(g_p_app->get_worker_id(), listen_fd);
-            if (rc != 0) {
-                srdr_logerr("Failed to initialize worker %d, (errno=%d %m)",
-                            g_p_app->get_worker_id(), errno);
-                orig_rc = -1;
-                break;
-            }
-        }
+        orig_rc = proc_nginx();
     }
 
     return orig_rc;
@@ -3294,5 +3239,115 @@ extern "C" EXPORT_SYMBOL pid_t waitpid(pid_t pid, int *wstatus, int options)
     }
     return child_pid;
 }
+
+static int proc_nginx(void)
+{
+    int rc = 0;
+
+    DO_GLOBAL_CTORS();
+    std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+
+    auto itr = g_p_app->map_listen_fd.begin();
+    while (itr != g_p_app->map_listen_fd.end()) {
+        int listen_fd = itr->first;
+        itr++;
+        rc = init_worker(g_p_app->get_worker_id(), listen_fd);
+        if (rc != 0) {
+            srdr_logerr("Failed to initialize worker %d, (errno=%d %m)", g_p_app->get_worker_id(),
+                        errno);
+            break;
+        }
+    }
+
+    return rc;
+}
+
+#if defined(DEFINED_ENVOY)
+static int proc_envoy(int __op, int __fd)
+{
+    int rc = 0;
+
+    /* Prcess only sockets from map_listen_fd */
+    auto iter = g_p_app->map_listen_fd.find(__fd);
+    if (iter != g_p_app->map_listen_fd.end()) {
+        socket_fd_api *p_socket_object = NULL;
+        p_socket_object = fd_collection_get_sockfd(__fd);
+        if (iter->second == gettid()) {
+            /* process listen sockets from main thread and remove
+             * them from map_listen_fd
+             */
+            if (p_socket_object) {
+                rc = p_socket_object->listen(p_socket_object->m_back_log);
+                if (rc < 0) {
+                    return rc;
+                }
+            }
+            std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+            g_p_app->map_listen_fd.erase(iter);
+        } else if (__op == EPOLL_CTL_ADD) {
+            static int original_listen_count = INT_MAX;
+            static int total_worker_id = 0;
+            int worker_id = -1;
+
+            /* original listen sockets should be created first
+             * original_listen_count count sockets that should be
+             * processed until openning a door for others.
+             * timer should be enough to complete initialization of
+             * all sockets related worker 0.
+             */
+            int sleep_count = 1000;
+            while (!p_socket_object && (original_listen_count > 0)) {
+                if (!sleep_count--) {
+                    return -1;
+                }
+                const struct timespec short_sleep = {0, 1000};
+                nanosleep(&short_sleep, NULL);
+            }
+            std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+
+            /* Logic that assigns worker id for processed listener
+             * total_worker_id is unique for all threads
+             */
+            worker_id = g_p_app->get_worker_id();
+            if (worker_id < 0) {
+                worker_id = total_worker_id;
+                total_worker_id++;
+            }
+
+
+            /* This part should guarantee initialization of all listeners for worker 0.
+             * original_listen_count is initialized to number of them first.
+             */
+            if (worker_id == 0) {
+                if (original_listen_count == INT_MAX) {
+                    original_listen_count = 0;
+                    for (const auto &itr : g_p_app->map_dup_fd) {
+                        if (itr.first == itr.second) {
+                            original_listen_count++;
+                        }
+                    }
+                }
+                original_listen_count--;
+            }
+
+            g_p_app->map_listen_fd[__fd] = gettid();
+            g_p_app->map_thread_id[gettid()] = worker_id;
+            rc = init_worker(worker_id, __fd);
+            if (rc != 0) {
+                srdr_logerr("Failed to initialize worker %d, (errno=%d %m)", worker_id, errno);
+                g_p_app->map_listen_fd.erase(__fd);
+                g_p_app->map_thread_id.erase(gettid());
+                return rc;
+            }
+        } else if (__op == EPOLL_CTL_DEL) {
+            std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+            g_p_app->map_listen_fd.erase(__fd);
+            g_p_app->map_thread_id.erase(gettid());
+        }
+    }
+
+    return rc;
+}
+#endif /* DEFINED_ENVOY */
 
 #endif // DEFINED_NGINX
