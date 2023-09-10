@@ -46,7 +46,6 @@ header::header()
     : m_actual_hdr_addr(0)
     , m_transport_header_tx_offset(0)
     , m_is_vlan_enabled(false)
-    , m_transport_type(XLIO_TRANSPORT_UNKNOWN)
 {
     header::init();
 }
@@ -59,7 +58,6 @@ header::header(const header &h)
     m_aligned_l2_l3_len = h.m_aligned_l2_l3_len;
     m_transport_header_tx_offset = h.m_transport_header_tx_offset;
     m_is_vlan_enabled = h.m_is_vlan_enabled;
-    m_transport_type = h.m_transport_type;
     m_actual_hdr_addr = 0;
 }
 
@@ -270,13 +268,13 @@ header_ipv6::header_ipv6()
     : header()
 {
     header_ipv6::init();
-    update_actual_hdr_addr();
 }
 
 header_ipv6::header_ipv6(const header_ipv6 &h)
     : header(h)
 {
     m_header = h.m_header;
+    update_actual_hdr_addr();
 };
 
 void header_ipv6::configure_ip_header(uint8_t protocol, const ip_address &src,

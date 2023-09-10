@@ -154,7 +154,6 @@ public:
     uint16_t m_aligned_l2_l3_len;
     uint16_t m_transport_header_tx_offset;
     bool m_is_vlan_enabled;
-    transport_type_t m_transport_type;
 };
 
 class header_ipv4 : public header {
