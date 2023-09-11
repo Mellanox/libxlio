@@ -209,6 +209,8 @@ static int free_libxlio_resources()
     }
     g_zc_cache = NULL;
 
+    xlio_heap::finalize();
+
     if (s_cmd_nl) {
         delete s_cmd_nl;
     }
@@ -1030,6 +1032,8 @@ static void do_global_ctors_helper()
     if (g_is_forked_child == true) {
         g_is_forked_child = false;
     }
+
+    xlio_heap::initialize();
 
     /* Open communication with daemon */
     if (safe_mce_sys().service_enable) {

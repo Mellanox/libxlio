@@ -34,6 +34,8 @@
 
 #include <stdlib.h>
 
+#include <mutex>
+
 #include "vlogger/vlogger.h"
 #include "ib_ctx_handler_collection.h"
 #include "util/hugepage_mgr.h"
@@ -62,7 +64,7 @@ xlio_allocator::xlio_allocator(alloc_t alloc_func, free_t free_func)
     m_size = 0;
     m_memalloc = alloc_func;
     m_memfree = free_func;
-    if (m_memalloc && m_memfree) {
+    if (m_memalloc) {
         m_type = ALLOC_TYPE_EXTERNAL;
         __log_info_dbg("allocator uses external functions to allocate and free memory");
     }
@@ -77,6 +79,10 @@ xlio_allocator::~xlio_allocator()
 void *xlio_allocator::alloc(size_t size)
 {
     __log_info_dbg("Allocating %zu bytes", size);
+
+    if (m_data) {
+        return nullptr;
+    }
 
     switch (m_type) {
     case ALLOC_TYPE_PREFER_HUGE:
@@ -120,6 +126,10 @@ void *xlio_allocator::alloc(size_t size)
 void *xlio_allocator::alloc_aligned(size_t size, size_t align)
 {
     __log_info_dbg("Allocating %zu bytes aligned to %zu", size, align);
+
+    if (m_data) {
+        return nullptr;
+    }
 
     if (m_type == ALLOC_TYPE_HUGEPAGES || m_type == ALLOC_TYPE_PREFER_HUGE) {
         // We should check that hugepage provides requested alignment, however,
@@ -330,6 +340,12 @@ xlio_allocator_hw::xlio_allocator_hw()
 {
 }
 
+xlio_allocator_hw::xlio_allocator_hw(alloc_mode_t preferable_type)
+    : xlio_allocator(preferable_type)
+    , xlio_registrator()
+{
+}
+
 xlio_allocator_hw::xlio_allocator_hw(alloc_t alloc_func, free_t free_func)
     : xlio_allocator(alloc_func, free_func)
     , xlio_registrator()
@@ -362,4 +378,206 @@ void *xlio_allocator_hw::alloc_and_reg_mr(size_t size, ib_ctx_handler *p_ib_ctx_
 bool xlio_allocator_hw::register_memory(ib_ctx_handler *p_ib_ctx_h)
 {
     return m_data && xlio_registrator::register_memory(m_data, m_size, p_ib_ctx_h);
+}
+
+/*
+ * xlio_allocator_heap implementation
+ */
+
+struct heap_key {
+    alloc_t alloc_func;
+    free_t free_func;
+    bool hw;
+
+    bool operator==(const heap_key &key) const
+    {
+        return key.alloc_func == alloc_func && key.free_func == free_func && key.hw == hw;
+    }
+};
+
+namespace std {
+template <> class hash<heap_key> {
+public:
+    size_t operator()(const heap_key &key) const
+    {
+        return ((size_t)key.alloc_func ^ (size_t)key.free_func ^ key.hw);
+    }
+};
+} // namespace std
+
+#define XLIO_HEAP_METADATA_BLOCK (32U * 1024U * 1024U)
+
+static std::unordered_map<heap_key, xlio_heap *> s_heap_map;
+static lock_mutex s_heap_lock;
+static size_t s_pagesize;
+
+/*static*/
+xlio_heap *xlio_heap::get(alloc_t alloc_func, free_t free_func, bool hw)
+{
+    std::lock_guard<decltype(s_heap_lock)> lock(s_heap_lock);
+
+    if (!alloc_func) {
+        // Free is pointless without allocation function. Reset it for the key.
+        free_func = nullptr;
+    }
+
+    heap_key key = {.alloc_func = alloc_func, .free_func = free_func, .hw = hw};
+    auto item = s_heap_map.find(key);
+    xlio_heap *heap = (item == s_heap_map.end()) ? nullptr : item->second;
+
+    if (!heap) {
+        heap = new xlio_heap(alloc_func, free_func, hw);
+        s_heap_map[key] = heap;
+    }
+    return heap;
+}
+
+/*static*/
+void xlio_heap::initialize()
+{
+    // Cache pagesize to align allocation requests.
+    s_pagesize = (size_t)sysconf(_SC_PAGESIZE) ?: 4096U;
+    // Support re-initialization after fork().
+    s_heap_map.clear();
+}
+
+/*static*/
+void xlio_heap::finalize()
+{
+    std::lock_guard<decltype(s_heap_lock)> lock(s_heap_lock);
+
+    for (auto &item : s_heap_map) {
+        delete item.second;
+    }
+    s_heap_map.clear();
+}
+
+xlio_heap::xlio_heap(alloc_t alloc_func, free_t free_func, bool hw)
+    : m_latest_offset(0)
+    , m_b_hw(hw)
+    , m_p_alloc_func(alloc_func)
+    , m_p_free_func(free_func)
+{
+    if (!expand()) {
+        throw_xlio_exception("Couldn't allocate or register memory for XLIO heap.");
+    }
+}
+
+xlio_heap::~xlio_heap()
+{
+    for (auto &block : m_blocks) {
+        delete block;
+    }
+    m_blocks.clear();
+}
+
+bool xlio_heap::expand(size_t size /*=0*/)
+{
+    void *data;
+    xlio_allocator_hw *block;
+
+    size = size ?: (m_b_hw ? safe_mce_sys().memory_limit : XLIO_HEAP_METADATA_BLOCK);
+
+    if (!m_p_alloc_func && !m_b_hw) {
+        block = new xlio_allocator_hw(ALLOC_TYPE_PREFER_HUGE);
+    } else {
+        block = new xlio_allocator_hw(m_p_alloc_func, m_p_free_func);
+    }
+
+    data = block ? block->alloc(size) : nullptr;
+    if (m_b_hw && data) {
+        if (!block->register_memory(nullptr)) {
+            data = nullptr;
+        }
+    }
+    if (!data) {
+        goto error;
+    }
+
+    m_blocks.push_back(block);
+    m_latest_offset = 0;
+
+    return true;
+
+error:
+    if (block) {
+        delete block;
+    }
+    return false;
+}
+
+void *xlio_heap::alloc(size_t &size)
+{
+    std::lock_guard<decltype(m_lock)> lock(m_lock);
+
+    size_t actual_size = (size + s_pagesize - 1) & ~(s_pagesize - 1U);
+    void *data = nullptr;
+
+repeat:
+    if (actual_size + m_latest_offset <= m_blocks.back()->size()) {
+        data = (void *)((uintptr_t)m_blocks.back()->data() + m_latest_offset);
+        m_latest_offset += actual_size;
+    } else if (!m_b_hw) {
+        if (expand(std::max<size_t>(XLIO_HEAP_METADATA_BLOCK, actual_size))) {
+            goto repeat;
+        }
+    }
+
+    if (data) {
+        size = actual_size;
+    }
+    return data;
+}
+
+bool xlio_heap::register_memory(ib_ctx_handler *p_ib_ctx_h)
+{
+    std::lock_guard<decltype(m_lock)> lock(m_lock);
+
+    return m_b_hw && m_blocks.size() ? m_blocks.back()->register_memory(p_ib_ctx_h) : false;
+}
+
+uint32_t xlio_heap::find_lkey_by_ib_ctx(ib_ctx_handler *p_ib_ctx_h) const
+{
+    // Current implementation doesn't support runtime registrations, lock is not necessary.
+    return m_b_hw && m_blocks.size() ? m_blocks.back()->find_lkey_by_ib_ctx(p_ib_ctx_h)
+                                     : LKEY_ERROR;
+}
+
+xlio_allocator_heap::xlio_allocator_heap(alloc_t alloc_func, free_t free_func, bool hw)
+{
+    m_p_heap = xlio_heap::get(alloc_func, free_func, hw);
+
+    if (!m_p_heap) {
+        throw_xlio_exception("Couldn't create XLIO heap.");
+    }
+}
+
+xlio_allocator_heap::xlio_allocator_heap(bool hw)
+    : xlio_allocator_heap(nullptr, nullptr, hw)
+{
+}
+
+xlio_allocator_heap::~xlio_allocator_heap()
+{
+}
+
+void *xlio_allocator_heap::alloc(size_t &size)
+{
+    return m_p_heap->alloc(size);
+}
+
+void *xlio_allocator_heap::alloc_and_reg_mr(size_t &size, ib_ctx_handler *p_ib_ctx_h)
+{
+    NOT_IN_USE(p_ib_ctx_h);
+    return m_p_heap->is_hw() ? alloc(size) : nullptr;
+}
+
+bool xlio_allocator_heap::register_memory(ib_ctx_handler *p_ib_ctx_h)
+{
+    return m_p_heap->register_memory(p_ib_ctx_h);
+}
+
+uint32_t xlio_allocator_heap::find_lkey_by_ib_ctx(ib_ctx_handler *p_ib_ctx_h) const
+{
+    return m_p_heap->find_lkey_by_ib_ctx(p_ib_ctx_h);
 }
