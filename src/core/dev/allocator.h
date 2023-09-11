@@ -36,8 +36,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <vector>
 #include <unordered_map>
 
+#include "utils/lock_wrapper.h"
 #include "util/sys_vars.h" // alloc_mode_t, alloc_t, free_t
 
 // Forward declarations
@@ -60,6 +62,7 @@ public:
     void dealloc();
 
     inline size_t size() { return m_size; }
+    inline void *data() { return m_data; }
 
 private:
     void print_hugepages_warning(size_t requested_size);
@@ -95,12 +98,55 @@ private:
 class xlio_allocator_hw : public xlio_allocator, public xlio_registrator {
 public:
     xlio_allocator_hw();
+    xlio_allocator_hw(alloc_mode_t preferable_type);
     xlio_allocator_hw(alloc_t alloc_func, free_t free_func);
     virtual ~xlio_allocator_hw();
 
     void *alloc_and_reg_mr(size_t size, ib_ctx_handler *p_ib_ctx_h, uint64_t access);
     void *alloc_and_reg_mr(size_t size, ib_ctx_handler *p_ib_ctx_h);
     bool register_memory(ib_ctx_handler *p_ib_ctx_h);
+};
+
+class xlio_heap {
+public:
+    static xlio_heap *get(alloc_t alloc_func, free_t free_func, bool hw);
+    static void initialize();
+    static void finalize();
+
+    void *alloc(size_t &size);
+    bool register_memory(ib_ctx_handler *p_ib_ctx_h);
+    uint32_t find_lkey_by_ib_ctx(ib_ctx_handler *p_ib_ctx_h) const;
+
+    bool is_hw() const { return m_b_hw; }
+
+private:
+    xlio_heap(alloc_t alloc_func, free_t free_func, bool hw);
+    ~xlio_heap();
+    bool expand(size_t size = 0);
+
+    lock_mutex m_lock;
+    std::vector<xlio_allocator_hw *> m_blocks;
+    unsigned long m_latest_offset;
+
+    bool m_b_hw;
+    alloc_t m_p_alloc_func;
+    free_t m_p_free_func;
+};
+
+class xlio_allocator_heap {
+public:
+    xlio_allocator_heap(alloc_t alloc_func, free_t free_func, bool hw = false);
+    xlio_allocator_heap(bool hw = false);
+    ~xlio_allocator_heap();
+
+    void *alloc(size_t &size);
+    void *alloc_and_reg_mr(size_t &size, ib_ctx_handler *p_ib_ctx_h);
+    bool register_memory(ib_ctx_handler *p_ib_ctx_h);
+    uint32_t find_lkey_by_ib_ctx(ib_ctx_handler *p_ib_ctx_h) const;
+
+private:
+    xlio_heap *m_p_heap;
+    /* Currently we don't support free, so no need to track allocated blocks */
 };
 
 #endif /* _XLIO_DEV_ALLOCATOR_H_ */
