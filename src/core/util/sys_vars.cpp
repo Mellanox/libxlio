@@ -312,7 +312,7 @@ OPTION_FROM_TO_STR_IMPL
 
 namespace option_tcp_ctl_thread {
 static option_t<mode_t> options[] = {
-    {CTL_THREAD_DISABLE, "Disable", {"disable", NULL, NULL}},
+    {CTL_THREAD_DISABLE, "Disabled", {"disable", "disabled", NULL}},
     {CTL_THREAD_DELEGATE_TCP_TIMERS, "Delegated TCP timers", {"delegate", NULL, NULL}},
     {CTL_THREAD_WITH_WAKEUP, "With Wakeup", {"with_wakeup", NULL, NULL}},
     {CTL_THREAD_NO_WAKEUP, "No Wakeup", {"no_wakeup", NULL, NULL}}};
