@@ -403,7 +403,7 @@ static int init_worker(int worker_id, int listen_fd)
     if (PROTO_UDP == si->get_protocol()) {
         sockinfo_udp *udp_sock = dynamic_cast<sockinfo_udp *>(parent_sock_fd_api);
         if (udp_sock) {
-            std::unordered_map<uint16_t, uint16_t> udp_sockets_per_port;
+            static std::unordered_map<uint16_t, uint16_t> udp_sockets_per_port;
             int reuse_port;
             socklen_t optlen = sizeof(reuse_port);
             uint16_t port = ntohs(sa.get_in_port());
@@ -411,7 +411,6 @@ static int init_worker(int worker_id, int listen_fd)
                 (udp_sock->getsockopt(SOL_SOCKET, SO_REUSEPORT, &reuse_port, &optlen) < 0)) {
                 return -1;
             }
-
             /*
              * Specific NGINX implementation.
              *
@@ -438,6 +437,7 @@ static int init_worker(int worker_id, int listen_fd)
                     new_udp_sock->bind_no_os();
                 }
             }
+            /* This processes a case with multiple listen sockets with different ports */
             udp_sockets_per_port[port]++;
         }
     }
@@ -792,7 +792,6 @@ int socket_internal(int __domain, int __type, int __protocol, bool shadow, bool 
         get_orig_funcs();
     }
     BULLSEYE_EXCLUDE_BLOCK_END
-
 #if defined(DEFINED_NGINX)
     bool add_to_udp_pool = false;
     if (g_p_app && g_p_app->type == APP_NGINX && g_p_fd_collection && offload_sockets &&
@@ -3247,11 +3246,22 @@ static int proc_nginx(void)
     DO_GLOBAL_CTORS();
     std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
 
-    auto itr = g_p_app->map_listen_fd.begin();
-    while (itr != g_p_app->map_listen_fd.end()) {
-        int listen_fd = itr->first;
-        itr++;
-        rc = init_worker(g_p_app->get_worker_id(), listen_fd);
+    /* This place processes a configuration including listen sockets are UDP sockets
+     * in common way.
+     * For UDP case order of fd processing is important so one or multipile fds
+     * related worker 0 should be first.
+     * TCP listen sockets can be taken from map_listen_fd in any order.
+     * Enumerate all elements in fd_collection filtering by sockinfo objects.
+     */
+    fd_collection *p_fd_collection = (fd_collection *)g_p_app->context;
+    for (int fd = 0; fd < p_fd_collection->get_fd_map_size(); fd++) {
+        sockinfo *si;
+        socket_fd_api *sock_fd_api = p_fd_collection->get_sockfd(fd);
+        if (!sock_fd_api || !(si = dynamic_cast<sockinfo *>(sock_fd_api))) {
+            continue;
+        }
+        g_p_app->map_listen_fd[fd] = gettid();
+        rc = init_worker(g_p_app->get_worker_id(), fd);
         if (rc != 0) {
             srdr_logerr("Failed to initialize worker %d, (errno=%d %m)", g_p_app->get_worker_id(),
                         errno);
@@ -3313,7 +3323,6 @@ static int proc_envoy(int __op, int __fd)
                 worker_id = total_worker_id;
                 total_worker_id++;
             }
-
 
             /* This part should guarantee initialization of all listeners for worker 0.
              * original_listen_count is initialized to number of them first.
