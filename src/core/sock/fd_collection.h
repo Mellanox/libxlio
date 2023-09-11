@@ -101,7 +101,7 @@ public:
      * @param size epoll fd size (as passed to epoll_create).
      * @return 0 on success, -1 on failure.
      */
-    int addepfd(int epfd, int size);
+    int addepfd(int epfd_main, int epfd_os, int size);
 
     /**
      * Create cq_channel_info. Use get_cq_channel_info() to get it.

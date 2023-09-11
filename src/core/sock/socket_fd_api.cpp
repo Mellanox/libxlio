@@ -371,7 +371,7 @@ void socket_fd_api::notify_epoll_context_fd_is_offloaded()
 int socket_fd_api::get_epoll_context_fd()
 {
     if (m_econtext) {
-        return m_econtext->get_epoll_fd();
+        return m_econtext->get_epoll_fd_os();
     }
     return 0;
 }

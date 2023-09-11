@@ -2433,14 +2433,15 @@ extern "C" EXPORT_SYMBOL int __ppoll_chk(struct pollfd *__fds, nfds_t __nfds,
 }
 #endif
 
-static void xlio_epoll_create(int epfd, int size)
+static void xlio_epoll_create(int epfd_main, int epfd_os, int size)
 {
     if (g_p_fd_collection) {
         // Sanity check to remove any old sockinfo object using the same fd!!
-        handle_close(epfd, true);
+        handle_close(epfd_main, true);
+        handle_close(epfd_os, true);
 
         // insert epfd to fd_collection as epfd_info
-        g_p_fd_collection->addepfd(epfd, size);
+        g_p_fd_collection->addepfd(epfd_main, epfd_os, size);
     }
 }
 
@@ -2464,16 +2465,23 @@ extern "C" EXPORT_SYMBOL int epoll_create(int __size)
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    int epfd = orig_os_api.epoll_create(__size + 1); // +1 for the cq epfd
-    srdr_logdbg("ENTER: (size=%d) = %d", __size, epfd);
+    int epfd_main = orig_os_api.epoll_create(__size + 1); // +1 for the cq epfd
+    srdr_logdbg("ENTER: (size=%d) = %d", __size, epfd_main);
 
-    if (epfd <= 0) {
-        return epfd;
+    if (epfd_main <= 0) {
+        return epfd_main;
     }
 
-    xlio_epoll_create(epfd, 8);
+    int epfd_os = orig_os_api.epoll_create(__size + 1); // +1 for the cq epfd
+    srdr_logdbg("ENTER: (size=%d) = %d", __size, epfd_os);
 
-    return epfd;
+    if (epfd_os <= 0) {
+        return epfd_os;
+    }
+
+    xlio_epoll_create(epfd_main, epfd_os, 8);
+
+    return epfd_main;
 }
 
 extern "C" EXPORT_SYMBOL int epoll_create1(int __flags)
@@ -2486,16 +2494,21 @@ extern "C" EXPORT_SYMBOL int epoll_create1(int __flags)
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    int epfd = orig_os_api.epoll_create1(__flags);
-    srdr_logdbg("ENTER: (flags=%d) = %d", __flags, epfd);
-
-    if (epfd <= 0) {
-        return epfd;
+    int epfd_main = orig_os_api.epoll_create1(__flags);
+    if (epfd_main <= 0) {
+        return epfd_main;
     }
 
-    xlio_epoll_create(epfd, 8);
+    int epfd_os = orig_os_api.epoll_create1(__flags);
+    if (epfd_os <= 0) {
+        orig_os_api.close(epfd_main);
+        return epfd_os;
+    }
 
-    return epfd;
+    srdr_logdbg("ENTER: (flags=%d) = %d", __flags, epfd_main);
+    xlio_epoll_create(epfd_main, epfd_os, 8);
+
+    return epfd_main;
 }
 
 /* Manipulate an epoll instance "epfd". Returns 0 in case of success,

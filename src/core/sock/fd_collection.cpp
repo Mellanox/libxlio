@@ -405,35 +405,35 @@ int fd_collection::addpipe(int fdrd, int fdwr)
     return 0;
 }
 
-int fd_collection::addepfd(int epfd, int size)
+int fd_collection::addepfd(int epfd_main, int epfd_os, int size)
 {
-    fdcoll_logfunc("epfd=%d", epfd);
+    fdcoll_logfunc("epfd=%d", epfd_main);
 
-    if (!is_valid_fd(epfd)) {
+    if (!is_valid_fd(epfd_main) || !is_valid_fd(epfd_os)) {
         return -1;
     }
 
     lock();
 
     // Sanity check to remove any old sockinfo object using the same fd!!
-    epfd_info *p_fd_info = get_epfd(epfd);
+    epfd_info *p_fd_info = get_epfd(epfd_main);
     if (p_fd_info) {
-        fdcoll_logwarn("[fd=%d] Deleting old duplicate sockinfo object (%p)", epfd, p_fd_info);
+        fdcoll_logwarn("[fd=%d] Deleting old duplicate sockinfo object (%p)", epfd_main, p_fd_info);
         unlock();
-        handle_close(epfd, true);
+        handle_close(epfd_main, true);
         lock();
     }
 
     unlock();
-    p_fd_info = new epfd_info(epfd, size);
+    p_fd_info = new epfd_info(epfd_main, epfd_os, size);
     lock();
 
     BULLSEYE_EXCLUDE_BLOCK_START
     if (p_fd_info == NULL) {
-        fdcoll_logpanic("[fd=%d] Failed creating new sockinfo (%m)", epfd);
+        fdcoll_logpanic("[fd=%d] Failed creating new sockinfo (%m)", epfd_main);
     }
     BULLSEYE_EXCLUDE_BLOCK_END
-    m_p_epfd_map[epfd] = p_fd_info;
+    m_p_epfd_map[epfd_main] = p_fd_info;
     m_epfd_lst.push_back(p_fd_info);
 
     unlock();

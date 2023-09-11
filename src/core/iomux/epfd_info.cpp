@@ -45,18 +45,20 @@
 
 int epfd_info::remove_fd_from_epoll_os(int fd)
 {
-    int ret = orig_os_api.epoll_ctl(m_epfd, EPOLL_CTL_DEL, fd, NULL);
+    int ret = orig_os_api.epoll_ctl(m_epfd_os, EPOLL_CTL_DEL, fd, NULL);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (ret < 0) {
-        __log_dbg("failed to remove fd=%d from os epoll epfd=%d (errno=%d %m)", fd, m_epfd, errno);
+        __log_dbg("failed to remove fd=%d from os epoll epfd=%d (errno=%d %m)", fd, m_epfd_os,
+                  errno);
     }
     BULLSEYE_EXCLUDE_BLOCK_END
     return ret;
 }
 
-epfd_info::epfd_info(int epfd, int size)
+epfd_info::epfd_info(int epfd_main, int epfd_os, int size)
     : lock_mutex_recursive("epfd_info")
-    , m_epfd(epfd)
+    , m_epfd_main(epfd_main)
+    , m_epfd_os(epfd_os)
     , m_size(size)
     , m_ring_map_lock("epfd_ring_map_lock")
     , m_lock_poll_os(MULTILOCK_NON_RECURSIVE, "epfd_lock_poll_os")
@@ -81,19 +83,27 @@ epfd_info::epfd_info(int epfd, int size)
      * we do it in any case
      */
     m_local_stats.enabled = true;
-    m_local_stats.epfd = m_epfd;
+    m_local_stats.epfd = m_epfd_main;
 
     m_stats = &m_local_stats;
 
     m_log_invalid_events = NUM_LOG_INVALID_EVENTS;
 
-    xlio_stats_instance_create_epoll_block(m_epfd, &(m_stats->stats));
+    xlio_stats_instance_create_epoll_block(m_epfd_main, &(m_stats->stats));
 
     // Register this socket to read nonoffloaded data
-    g_p_event_handler_manager->update_epfd(m_epfd, EPOLL_CTL_ADD,
+    g_p_event_handler_manager->update_epfd(m_epfd_os, EPOLL_CTL_ADD,
                                            EPOLLIN | EPOLLPRI | EPOLLONESHOT);
 
-    wakeup_set_epoll_fd(m_epfd);
+    epoll_event evt = {0, {0}};
+    evt.events = EPOLLIN | EPOLLPRI | EPOLLONESHOT;
+    evt.data.u64 = 0; // zero all data
+    evt.data.fd = epfd_os;
+    orig_os_api.epoll_ctl(m_epfd_main, EPOLL_CTL_ADD, m_epfd_os, &evt);
+
+    // printf("IFTAH - new epfd - m_epfd_main=%d, m_epfd_os=%d\n", m_epfd_main, m_epfd_os);
+
+    wakeup_set_epoll_fd(m_epfd_main);
 }
 
 epfd_info::~epfd_info()
@@ -133,7 +143,8 @@ epfd_info::~epfd_info()
         BULLSEYE_EXCLUDE_BLOCK_END
     }
 
-    g_p_event_handler_manager->update_epfd(m_epfd, EPOLL_CTL_DEL,
+    orig_os_api.epoll_ctl(m_epfd_main, EPOLL_CTL_DEL, m_epfd_os, NULL);
+    g_p_event_handler_manager->update_epfd(m_epfd_os, EPOLL_CTL_DEL,
                                            EPOLLIN | EPOLLPRI | EPOLLONESHOT);
 
     unlock();
@@ -229,7 +240,7 @@ int epfd_info::add_fd(int fd, epoll_event *event)
             errno = EEXIST;
             __log_dbg(
                 "epoll_ctl: fd=%d is already registered with this epoll instance %d (errno=%d %m)",
-                fd, m_epfd, errno);
+                fd, m_epfd_os, errno);
             return -1;
         }
     } else {
@@ -237,10 +248,10 @@ int epfd_info::add_fd(int fd, epoll_event *event)
         evt.events = event->events;
         evt.data.u64 = 0; // zero all data
         evt.data.fd = fd;
-        ret = orig_os_api.epoll_ctl(m_epfd, EPOLL_CTL_ADD, fd, &evt);
+        ret = orig_os_api.epoll_ctl(m_epfd_os, EPOLL_CTL_ADD, fd, &evt);
         BULLSEYE_EXCLUDE_BLOCK_START
         if (ret < 0) {
-            __log_dbg("failed to add fd=%d to epoll epfd=%d (errno=%d %m)", fd, m_epfd, errno);
+            __log_dbg("failed to add fd=%d to epoll epfd=%d (errno=%d %m)", fd, m_epfd_os, errno);
             return ret;
         }
         BULLSEYE_EXCLUDE_BLOCK_END
@@ -269,16 +280,16 @@ int epfd_info::add_fd(int fd, epoll_event *event)
             case EEXIST:
                 __log_dbg("epoll_ctl: fd=%d is already registered with this epoll instance %d "
                           "(errno=%d %m)",
-                          fd, m_epfd, errno);
+                          fd, m_epfd_os, errno);
                 break;
             case ENOMEM:
                 __log_dbg("epoll_ctl: fd=%d is already registered with another epoll instance %d, "
                           "cannot register to epoll %d (errno=%d %m)",
-                          fd, temp_sock_fd_api->get_epoll_context_fd(), m_epfd, errno);
+                          fd, temp_sock_fd_api->get_epoll_context_fd(), m_epfd_os, errno);
                 break;
             default:
                 __log_dbg("epoll_ctl: failed to add fd=%d to epoll epfd=%d (errno=%d %m)", fd,
-                          m_epfd, errno);
+                          m_epfd_os, errno);
                 break;
             }
             return ret;
@@ -318,7 +329,7 @@ int epfd_info::add_fd(int fd, epoll_event *event)
         m_fd_non_offloaded_map[fd] = fd_rec;
     }
 
-    __log_func("fd %d added in epfd %d with events=%#x and data=%#x", fd, m_epfd, event->events,
+    __log_func("fd %d added in epfd %d with events=%#x and data=%#x", fd, m_epfd_os, event->events,
                event->data);
     return 0;
 }
@@ -341,13 +352,14 @@ void epfd_info::increase_ring_ref_count(ring *ring)
             evt.events = EPOLLIN | EPOLLPRI;
             int fd = ring_rx_fds_array[i];
             evt.data.u64 = (((uint64_t)CQ_FD_MARK << 32) | fd);
-            int ret = orig_os_api.epoll_ctl(m_epfd, EPOLL_CTL_ADD, fd, &evt);
+            int ret = orig_os_api.epoll_ctl(m_epfd_main, EPOLL_CTL_ADD, fd, &evt);
+
             BULLSEYE_EXCLUDE_BLOCK_START
             if (ret < 0) {
-                __log_dbg("failed to add cq fd=%d to epoll epfd=%d (errno=%d %m)", fd, m_epfd,
+                __log_dbg("failed to add cq fd=%d to epoll epfd=%d (errno=%d %m)", fd, m_epfd_main,
                           errno);
             } else {
-                __log_dbg("add cq fd=%d to epfd=%d", fd, m_epfd);
+                __log_dbg("add cq fd=%d to epfd=%d", fd, m_epfd_main);
             }
             BULLSEYE_EXCLUDE_BLOCK_END
         }
@@ -378,13 +390,13 @@ void epfd_info::decrease_ring_ref_count(ring *ring)
         int *ring_rx_fds_array = ring->get_rx_channel_fds(num_ring_rx_fds);
         for (size_t i = 0; i < num_ring_rx_fds; i++) {
             // delete cq fd from epfd
-            int ret = orig_os_api.epoll_ctl(m_epfd, EPOLL_CTL_DEL, ring_rx_fds_array[i], NULL);
+            int ret = orig_os_api.epoll_ctl(m_epfd_main, EPOLL_CTL_DEL, ring_rx_fds_array[i], NULL);
             BULLSEYE_EXCLUDE_BLOCK_START
             if (ret < 0) {
                 __log_dbg("failed to remove cq fd=%d from epfd=%d (errno=%d %m)",
-                          ring_rx_fds_array[i], m_epfd, errno);
+                          ring_rx_fds_array[i], m_epfd_main, errno);
             } else {
-                __log_dbg("remove cq fd=%d from epfd=%d", ring_rx_fds_array[i], m_epfd);
+                __log_dbg("remove cq fd=%d from epfd=%d", ring_rx_fds_array[i], m_epfd_main);
             }
             BULLSEYE_EXCLUDE_BLOCK_END
         }
@@ -417,7 +429,7 @@ int epfd_info::del_fd(int fd, bool passthrough)
     }
 
     if (temp_sock_fd_api && (fi->offloaded_index > 0)) {
-        assert(temp_sock_fd_api->get_epoll_context_fd() == m_epfd);
+        assert(temp_sock_fd_api->get_epoll_context_fd() == m_epfd_os);
 
         /* Firstly remove epoll context from socket
          * to avoid new events insertion into m_ready_fds queue
@@ -450,7 +462,7 @@ int epfd_info::del_fd(int fd, bool passthrough)
 
             socket_fd_api *last_socket =
                 fd_collection_get_sockfd(m_p_offloaded_fds[m_n_offloaded_fds - 1]);
-            if (last_socket && last_socket->get_epoll_context_fd() == m_epfd) {
+            if (last_socket && last_socket->get_epoll_context_fd() == m_epfd_os) {
                 last_socket->m_fd_rec.offloaded_index = fi->offloaded_index;
             } else {
                 __log_warn("Failed to update the index of offloaded fd: %d last_socket %p",
@@ -467,7 +479,7 @@ int epfd_info::del_fd(int fd, bool passthrough)
         }
     }
 
-    __log_func("fd %d removed from epfd %d", fd, m_epfd);
+    __log_func("fd %d removed from epfd %d", fd, m_epfd_os);
     return 0;
 }
 
@@ -503,10 +515,10 @@ int epfd_info::mod_fd(int fd, epoll_event *event)
         evt.events = event->events;
         evt.data.u64 = 0; // zero all data
         evt.data.fd = fd;
-        ret = orig_os_api.epoll_ctl(m_epfd, EPOLL_CTL_MOD, fd, &evt);
+        ret = orig_os_api.epoll_ctl(m_epfd_os, EPOLL_CTL_MOD, fd, &evt);
         BULLSEYE_EXCLUDE_BLOCK_START
         if (ret < 0) {
-            __log_err("failed to modify fd=%d in epoll epfd=%d (errno=%d %m)", fd, m_epfd, errno);
+            __log_err("failed to modify fd=%d in epoll epfd=%d (errno=%d %m)", fd, m_epfd_os, errno);
             return ret;
         }
         BULLSEYE_EXCLUDE_BLOCK_END
@@ -542,7 +554,7 @@ int epfd_info::mod_fd(int fd, epoll_event *event)
         }
     }
 
-    __log_func("fd %d modified in epfd %d with events=%#x and data=%#x", fd, m_epfd, event->events,
+    __log_func("fd %d modified in epfd %d with events=%#x and data=%#x", fd, m_epfd_os, event->events,
                event->data);
     return 0;
 }
@@ -553,7 +565,7 @@ epoll_fd_rec *epfd_info::get_fd_rec(int fd)
     socket_fd_api *temp_sock_fd_api = fd_collection_get_sockfd(fd);
     lock();
 
-    if (temp_sock_fd_api && temp_sock_fd_api->get_epoll_context_fd() == m_epfd) {
+    if (temp_sock_fd_api && temp_sock_fd_api->get_epoll_context_fd() == m_epfd_os) {
         fd_rec = &temp_sock_fd_api->m_fd_rec;
     } else {
         fd_info_map_t::iterator iter = m_fd_non_offloaded_map.find(fd);
@@ -752,12 +764,12 @@ int epfd_info::ring_wait_for_notification_and_process_element(uint64_t *p_poll_s
             }
             ret_total += ret;
         } else {
-            __log_dbg("failed to find channel fd. removing cq fd=%d from epfd=%d", fd, m_epfd);
+            __log_dbg("failed to find channel fd. removing cq fd=%d from epfd=%d", fd, m_epfd_main);
             BULLSEYE_EXCLUDE_BLOCK_START
-            if ((orig_os_api.epoll_ctl(m_epfd, EPOLL_CTL_DEL, fd, NULL)) &&
+            if ((orig_os_api.epoll_ctl(m_epfd_main, EPOLL_CTL_DEL, fd, NULL)) &&
                 (!(errno == ENOENT || errno == EBADF))) {
                 __log_err("failed to del cq channel fd=%d from os epfd=%d (errno=%d %m)", fd,
-                          m_epfd, errno);
+                          m_epfd_main, errno);
             }
             BULLSEYE_EXCLUDE_BLOCK_END
         }
@@ -792,7 +804,7 @@ void epfd_info::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
     num_ready_cq_fd = m_ready_cq_fd_q.size();
 
     // Epoll data
-    vlog_printf(log_level, "Fd number : %d\n", m_epfd);
+    vlog_printf(log_level, "Fd number : %d\n", m_epfd_main);
     vlog_printf(log_level, "Size : %d\n", m_size);
 
     vlog_printf(log_level, "Offloaded Fds : %d\n", m_n_offloaded_fds);
@@ -865,7 +877,13 @@ void epfd_info::register_to_internal_thread()
     m_b_os_data_available = false;
 
     // Reassign EPOLLIN event
-    g_p_event_handler_manager->update_epfd(m_epfd, EPOLL_CTL_MOD,
+    // epoll_event evt = {0, {0}};
+    // evt.events = EPOLLIN | EPOLLPRI | EPOLLONESHOT;
+    // evt.data.u64 = 0; // zero all data
+    // evt.data.fd = m_epfd_os;
+    // orig_os_api.epoll_ctl(m_epfd_main, EPOLL_CTL_MOD, m_epfd_os, &evt);
+
+    g_p_event_handler_manager->update_epfd(m_epfd_os, EPOLL_CTL_MOD,
                                            EPOLLIN | EPOLLPRI | EPOLLONESHOT);
 }
 

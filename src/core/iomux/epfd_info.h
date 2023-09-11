@@ -45,7 +45,7 @@ typedef std::deque<int> ready_cq_fd_q_t;
 
 class epfd_info : public lock_mutex_recursive, public cleanable_obj, public wakeup_pipe {
 public:
-    epfd_info(int epfd, int size);
+    epfd_info(int epfd_main, int epfd_os, int size);
     ~epfd_info();
 
     /**
@@ -120,7 +120,8 @@ public:
     list_node<epfd_info, epfd_info::epfd_info_node_offset> epfd_info_node;
 
 private:
-    const int m_epfd;
+    const int m_epfd_main;
+    const int m_epfd_os;
     int m_size;
     int *m_p_offloaded_fds;
     int m_n_offloaded_fds;
@@ -141,7 +142,8 @@ private:
     int mod_fd(int fd, epoll_event *event);
 
 public:
-    int get_epoll_fd() { return m_epfd; };
+    int get_epoll_fd_main() { return m_epfd_main; };
+    int get_epoll_fd_os() { return m_epfd_os; };
     int remove_fd_from_epoll_os(int fd);
     inline size_t get_fd_non_offloaded_size() { return m_fd_non_offloaded_map.size(); }
     inline size_t get_fd_offloaded_size() { return m_fd_offloaded_list.size(); }
