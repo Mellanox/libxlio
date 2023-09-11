@@ -86,11 +86,11 @@ Example:
  XLIO DETAILS: Ring On Device Memory TX       0                          [XLIO_RING_DEV_MEM_TX]
  XLIO DETAILS: TCP max syn rate               0 (no limit)               [XLIO_TCP_MAX_SYN_RATE]
  XLIO DETAILS: Zerocopy Mem Bufs              200000                     [XLIO_ZC_BUFS]
- XLIO DETAILS: Zerocopy Cache Threshold       10240                      [XLIO_ZC_CACHE_THRESHOLD]
+ XLIO DETAILS: Zerocopy Cache Threshold       10 GB                      [XLIO_ZC_CACHE_THRESHOLD]
  XLIO DETAILS: Tx Mem Segs TCP                1000000                    [XLIO_TX_SEGS_TCP]
  XLIO DETAILS: Tx Mem Bufs                    200000                     [XLIO_TX_BUFS]
  XLIO DETAILS: Tx Mem Buf size                0                          [XLIO_TX_BUF_SIZE]
- XLIO DETAILS: ZC TX size                     32768                      [XLIO_ZC_TX_SIZE]
+ XLIO DETAILS: ZC TX size                     32 KB                      [XLIO_ZC_TX_SIZE]
  XLIO DETAILS: Tx QP WRE                      32768                      [XLIO_TX_WRE]
  XLIO DETAILS: Tx QP WRE Batching             64                         [XLIO_TX_WRE_BATCHING]
  XLIO DETAILS: Tx Max QP INLINE               204                        [XLIO_TX_MAX_INLINE]
@@ -99,7 +99,7 @@ Example:
  XLIO DETAILS: Tx Prefetch Bytes              256                        [XLIO_TX_PREFETCH_BYTES]
  XLIO DETAILS: Tx Bufs Batch TCP              16                         [XLIO_TX_BUFS_BATCH_TCP]
  XLIO DETAILS: Tx Segs Batch TCP              64                         [XLIO_TX_SEGS_BATCH_TCP]
- XLIO DETAILS: TCP Send Buffer size           1000000                    [XLIO_TCP_SEND_BUFFER_SIZE]
+ XLIO DETAILS: TCP Send Buffer size           1 MB                       [XLIO_TCP_SEND_BUFFER_SIZE]
  XLIO DETAILS: Rx Mem Bufs                    200000                     [XLIO_RX_BUFS]
  XLIO DETAILS: Rx Mem Buf size                0                          [XLIO_RX_BUF_SIZE]
  XLIO DETAILS: Rx QP WRE                      16000                      [XLIO_RX_WRE]
@@ -137,7 +137,7 @@ Example:
  XLIO DETAILS: Offloaded Sockets              Enabled                    [XLIO_OFFLOADED_SOCKETS]
  XLIO DETAILS: Timer Resolution (msec)        10                         [XLIO_TIMER_RESOLUTION_MSEC]
  XLIO DETAILS: TCP Timer Resolution (msec)    100                        [XLIO_TCP_TIMER_RESOLUTION_MSEC]
- XLIO DETAILS: TCP control thread             0 (Disabled)               [XLIO_TCP_CTL_THREAD]
+ XLIO DETAILS: TCP control thread             Disabled                   [XLIO_TCP_CTL_THREAD]
  XLIO DETAILS: TCP timestamp option           0                          [XLIO_TCP_TIMESTAMP_OPTION]
  XLIO DETAILS: TCP nodelay                    0                          [XLIO_TCP_NODELAY]
  XLIO DETAILS: TCP quickack                   0                          [XLIO_TCP_QUICKACK]
@@ -150,7 +150,7 @@ Example:
  XLIO DETAILS: Internal Thread Arm CQ         Disabled                   [XLIO_INTERNAL_THREAD_ARM_CQ]
  XLIO DETAILS: Thread mode                    Multi spin lock            [XLIO_THREAD_MODE]
  XLIO DETAILS: Buffer batching mode           1 (Batch and reclaim buffers) [XLIO_BUFFER_BATCHING_MODE]
- XLIO DETAILS: Mem Allocate type              2 (Huge Pages)             [XLIO_MEM_ALLOC_TYPE]
+ XLIO DETAILS: Mem Allocation type            Huge pages                 [XLIO_MEM_ALLOC_TYPE]
  XLIO DETAILS: Num of UC ARPs                 3                          [XLIO_NEIGH_UC_ARP_QUATA]
  XLIO DETAILS: UC ARP delay (msec)            10000                      [XLIO_NEIGH_UC_ARP_DELAY_MSEC]
  XLIO DETAILS: Num of neigh restart retries   1                          [XLIO_NEIGH_NUM_ERR_RETRIES]
@@ -171,8 +171,8 @@ Example:
  XLIO DETAILS: TCP abort on close             Disabled                   [XLIO_TCP_ABORT_ON_CLOSE]
  XLIO DETAILS: Polling Rx on Tx TCP           Disabled                   [XLIO_RX_POLL_ON_TX_TCP]
  XLIO DETAILS: Trig dummy send getsockname()  Disabled                   [XLIO_TRIGGER_DUMMY_SEND_GETSOCKNAME]
- XLIO DETAILS: Skip CQ polling in rx          0 (Disabled)               [XLIO_SKIP_POLL_IN_RX]
- XLIO DETAILS: Lock Type                      0 (Spin)                   [XLIO_MULTILOCK]
+ XLIO DETAILS: Skip CQ polling in rx          Disabled                   [XLIO_SKIP_POLL_IN_RX]
+ XLIO DETAILS: Lock Type                      Spin                       [XLIO_MULTILOCK]
  XLIO INFO   : ---------------------------------------------------------------------------
 
 XLIO_TRACELEVEL
@@ -317,8 +317,8 @@ Number of global zerocopy data buffer elements allocation.
 Default value is 200000
 
 XLIO_ZC_CACHE_THRESHOLD
-Memory limit for zerocopy (mapping) cache in MB.
-Default value is 10240
+Memory limit for the mapping cache which is use by sendfile().
+Default value is 10GB
 
 XLIO_TX_SEGS_TCP
 Number of TCP LWIP segments allocation for each XLIO process.
@@ -1018,13 +1018,13 @@ Use value of 2 in order to disable the congestion algorithm.
 Default value is 0 (LWIP).
 
 XLIO_TCP_SEND_BUFFER_SIZE
-TCP send buffer size in bytes of LWIP.
-Default value is 1000000.
+TCP send buffer size of LWIP.
+Default value is 1MB.
 
 XLIO_ZC_TX_SIZE
 Determines the maximum segment size for zero copy buffers.
 Maximum value is 65535.
-Default value is 32768.
+Default value is 32KB.
 
 XLIO_TCP_MAX_SYN_RATE
 Limit the number of TCP SYN packets that XLIO will handle
