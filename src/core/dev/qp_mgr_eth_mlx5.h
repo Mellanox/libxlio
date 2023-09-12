@@ -144,6 +144,8 @@ protected:
     void put_tls_tis_in_cache(xlio_tis *tis);
     void ti_released(xlio_ti *ti);
 
+    virtual bool is_rq_empty() const override { return (m_mlx5_qp.rq.head == m_mlx5_qp.rq.tail); }
+
     inline bool is_sq_wqe_prop_valid(sq_wqe_prop *p, sq_wqe_prop *prev)
     {
         unsigned p_i = p - m_sq_wqe_idx_to_prop;
@@ -193,8 +195,6 @@ protected:
         NOT_IN_USE(is_tls);
         return NULL;
     }
-
-    virtual bool is_rq_empty() const { return (m_mlx5_qp.rq.head == m_mlx5_qp.rq.tail); }
 
 private:
 #endif /* DEFINED_UTLS */
