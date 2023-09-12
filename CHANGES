@@ -1,3 +1,20 @@
+Version 3.20.3-1:
+Date + Time 2023-09-12
+=============================================================
+Added:
+        - RM #3580058 64K page kernel support
+        - RM #3209984 Nginx proxy mode support
+        - RM #3491136 External vlan-tag socket option
+        - RM #3580073 option_size for size parameters
+        - RM #3486961 Profiling ability
+
+Fixed:
+        - RM #3591210 Wrong lwip seqno wrap around condition
+        - RM #3427021 Removed reg_mem generic warning
+        - RM #3592264 clang compilation
+        - RM #3433495 RX ring migration race
+        - RM #3286324 Stuck empty rx ring cleanup
+
 Version 3.20.2-1:
 Date + Time 2023-08-22
 =============================================================
