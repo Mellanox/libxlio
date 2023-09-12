@@ -194,6 +194,8 @@ protected:
         return NULL;
     }
 
+    virtual bool is_rq_empty() const { return (m_mlx5_qp.rq.head == m_mlx5_qp.rq.tail); }
+
 private:
 #endif /* DEFINED_UTLS */
     inline int fill_wqe_send(xlio_ibv_send_wr *pswr);

@@ -383,7 +383,8 @@ protected:
 
     virtual int send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
                              bool request_comp, xlio_tis *tis, unsigned credits);
-    virtual bool is_completion_need() { return !m_n_unsignaled_count; };
+    virtual bool is_completion_need() { return !m_n_unsignaled_count; }
+    virtual bool is_rq_empty() const { return false; }
 };
 
 class qp_mgr_eth : public qp_mgr {
