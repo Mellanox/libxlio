@@ -456,6 +456,7 @@ public:
     thread_mode_t thread_mode;
     buffer_batching_mode_t buffer_batching_mode;
     option_alloc_type::mode_t mem_alloc_type;
+    size_t memory_limit;
     uint8_t hugepage_log2;
     bool handle_fork;
     bool close_on_dup2;
@@ -656,6 +657,7 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_THREAD_MODE               "XLIO_THREAD_MODE"
 #define SYS_VAR_BUFFER_BATCHING_MODE      "XLIO_BUFFER_BATCHING_MODE"
 #define SYS_VAR_MEM_ALLOC_TYPE            "XLIO_MEM_ALLOC_TYPE"
+#define SYS_VAR_MEMORY_LIMIT              "XLIO_MEMORY_LIMIT"
 #define SYS_VAR_HUGEPAGE_LOG2             "XLIO_HUGEPAGE_LOG2"
 #define SYS_VAR_FORK                      "XLIO_FORK"
 #define SYS_VAR_BF                        "XLIO_BF"
@@ -828,6 +830,8 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_THREAD_MODE                    (THREAD_MODE_MULTI)
 #define MCE_DEFAULT_BUFFER_BATCHING_MODE           (BUFFER_BATCHING_WITH_RECLAIM)
 #define MCE_DEFAULT_MEM_ALLOC_TYPE                 (option_alloc_type::HUGE)
+#define MCE_DEFAULT_MEMORY_LIMIT                   (2LU * 1024 * 1024 * 1024)
+#define MCE_DEFAULT_MEMORY_LIMIT_LOW_THRESHOLD     (2LU * 1024 * 1024)
 #define MCE_DEFAULT_HUGEPAGE_LOG2                  (0)
 #define MCE_DEFAULT_FORK_SUPPORT                   (true)
 #define MCE_DEFAULT_BF_FLAG                        (true)

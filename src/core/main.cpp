@@ -772,6 +772,8 @@ void print_xlio_global_settings()
                       option_alloc_type::to_str(safe_mce_sys().mem_alloc_type),
                       option_alloc_type::to_str(MCE_DEFAULT_MEM_ALLOC_TYPE), SYS_VAR_MEM_ALLOC_TYPE,
                       option_alloc_type::to_str(safe_mce_sys().mem_alloc_type));
+    VLOG_PARAM_STRING("Memory limit", safe_mce_sys().memory_limit, MCE_DEFAULT_MEMORY_LIMIT,
+                      SYS_VAR_MEMORY_LIMIT, option_size::to_str(safe_mce_sys().memory_limit));
     VLOG_PARAM_NUMBER("Hugepage log2", safe_mce_sys().hugepage_log2, MCE_DEFAULT_HUGEPAGE_LOG2,
                       SYS_VAR_HUGEPAGE_LOG2);
 
