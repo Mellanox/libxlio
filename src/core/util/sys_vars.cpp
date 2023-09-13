@@ -830,6 +830,7 @@ void mce_sys_var::get_env_params()
     thread_mode = MCE_DEFAULT_THREAD_MODE;
     buffer_batching_mode = MCE_DEFAULT_BUFFER_BATCHING_MODE;
     mem_alloc_type = MCE_DEFAULT_MEM_ALLOC_TYPE;
+    memory_limit = MCE_DEFAULT_MEMORY_LIMIT;
     hugepage_log2 = MCE_DEFAULT_HUGEPAGE_LOG2;
     enable_socketxtreme = MCE_DEFAULT_SOCKETXTREME;
     enable_tso = MCE_DEFAULT_TSO;
@@ -938,6 +939,7 @@ void mce_sys_var::get_env_params()
 
     switch (mce_spec) {
     case MCE_SPEC_SOCKPERF_ULTRA_LATENCY:
+        memory_limit = 128LU * 1024 * 1024;
         tx_num_segs_tcp = 512; // MCE_DEFAULT_TX_NUM_SEGS_TCP (1000000)
         tx_num_bufs = 512; // MCE_DEFAULT_TX_NUM_BUFS (200000)
         tx_num_wr = 256; // MCE_DEFAULT_TX_NUM_WRE (3000)
@@ -1023,6 +1025,8 @@ void mce_sys_var::get_env_params()
 
 #ifdef DEFINED_NGINX
     case MCE_SPEC_NGINX:
+        memory_limit = app.workers_num > 16 ? 3072LU * 1024 * 1024 : 4096LU * 1024 * 1024;
+        memory_limit *= std::max(app.workers_num, 1);
         rx_bufs_batch = 8; // MCE_DEFAULT_RX_BUFS_BATCH (64), RX buffers batch size.
         tx_num_bufs =
             1000000; // MCE_DEFAULT_TX_NUM_BUFS (200000), Global TX data buffers allocated.
@@ -1074,6 +1078,7 @@ void mce_sys_var::get_env_params()
 
     case MCE_SPEC_NGINX_DPU:
         // The top part is different from NGINX SPEC
+        memory_limit = 1024LU * 1024 * 1024 * std::max(app.workers_num, 1);
         rx_poll_on_tx_tcp = false; // MCE_DEFAULT_RX_POLL_ON_TX_TCP(false), Do polling on RX queue
                                    // on TX operations, helpful to maintain TCP stack management.
 
@@ -1826,6 +1831,16 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_MEM_ALLOC_TYPE)) != NULL) {
         mem_alloc_type = option_alloc_type::from_str(env_ptr, MCE_DEFAULT_MEM_ALLOC_TYPE);
+    }
+    if ((env_ptr = getenv(SYS_VAR_MEMORY_LIMIT)) != NULL) {
+        memory_limit = option_size::from_str(env_ptr);
+        if (!memory_limit) {
+            memory_limit = MCE_DEFAULT_MEMORY_LIMIT;
+        }
+        if (memory_limit < MCE_DEFAULT_MEMORY_LIMIT_LOW_THRESHOLD) {
+            vlog_printf(VLOG_WARNING, "%s is too low (%s). This can lead to memory issues.",
+                        SYS_VAR_MEMORY_LIMIT, option_size::to_str(memory_limit));
+        }
     }
     if ((env_ptr = getenv(SYS_VAR_HUGEPAGE_LOG2)) != NULL) {
         unsigned val = (unsigned)atoi(env_ptr);
