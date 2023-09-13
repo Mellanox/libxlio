@@ -15,7 +15,8 @@ ln -s "${build_dir}/0/install" "${install_dir}"
 
 build_list="\
 debug:--enable-opt-log=no --enable-debug \
-no-nginx:--enable-nginx=no \
+nginx-off:--enable-nginx=no \
+envoy-on:--enable-nginx=yes \
 default: "
 
 
