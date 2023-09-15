@@ -67,6 +67,7 @@
 #include "event/command.h"
 
 #include "sock/sock-redirect.h"
+#include "sock/sock-app.h"
 #include "sock/fd_collection.h"
 #include "sock/sockinfo_tcp.h"
 #include "sock/sockinfo_udp.h"
@@ -1189,18 +1190,6 @@ static void do_global_ctors_helper()
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     NEW_CTOR(g_p_app, app_conf());
-    g_p_app->type = safe_mce_sys().app.type;
-    g_p_app->workers_num = safe_mce_sys().app.workers_num;
-    g_p_app->src_port_stride = safe_mce_sys().app.src_port_stride;
-    g_p_app->add_second_4t_rule = false;
-    // Round up to a power of 2 value. Assume the number doesn't exceed 32bit.
-    g_p_app->workers_pow2 = g_p_app->workers_num - 1;
-    g_p_app->workers_pow2 |= g_p_app->workers_pow2 >> 1;
-    g_p_app->workers_pow2 |= g_p_app->workers_pow2 >> 2;
-    g_p_app->workers_pow2 |= g_p_app->workers_pow2 >> 4;
-    g_p_app->workers_pow2 |= g_p_app->workers_pow2 >> 8;
-    g_p_app->workers_pow2 |= g_p_app->workers_pow2 >> 16;
-    g_p_app->workers_pow2++;
 #endif
 }
 

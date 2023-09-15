@@ -35,6 +35,7 @@
 #include "dev/qp_mgr.h"
 #include "dev/ring_simple.h"
 #include "sock/sock-redirect.h"
+#include "sock/sock-app.h"
 #include <cinttypes>
 
 #define MODULE_NAME "rfs"

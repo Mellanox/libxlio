@@ -151,6 +151,7 @@ libxlio_la_SOURCES := \
 	sock/pipeinfo.cpp \
 	sock/socket_fd_api.cpp \
 	sock/sock-redirect.cpp \
+	sock/sock-app.cpp \
 	sock/sockinfo_nvme.cpp \
 	sock/bind_no_port.cpp \
 	\
@@ -283,6 +284,7 @@ libxlio_la_SOURCES := \
 	sock/tcp_seg_pool.h \
 	sock/sock-redirect.h \
 	sock/sock-redirect-internal.h \
+	sock/sock-app.h \
 	sock/sockinfo_nvme.h \
 	sock/bind_no_port.h \
 	\

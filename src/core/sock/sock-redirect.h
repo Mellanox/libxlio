@@ -85,59 +85,6 @@
 #include <mutex>
 #include <set>
 
-#if defined(DEFINED_NGINX)
-typedef std::unordered_map<uint16_t, bool> map_udp_bounded_port_t;
-
-extern map_udp_bounded_port_t g_map_udp_bounded_port;
-#endif
-#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-struct app_conf {
-    app_type_t type;
-    lock_spin_recursive m_lock;
-    int workers_num;
-    int workers_pow2;
-    int src_port_stride;
-    bool add_second_4t_rule;
-    /* Map listen fd with thread(process) */
-    std::unordered_map<int, pid_t> map_listen_fd;
-    /* Associate thread(process) with unique identifier */
-    std::unordered_map<pid_t, int> map_thread_id;
-    /* Store duplicated fdwith related original fd */
-    std::unordered_map<int, int> map_dup_fd;
-    /* Collection of unused unique identifiers limited by workers_num */
-    std::set<int> unused_worker_id;
-    void *context;
-
-    app_conf()
-    {
-        this->type = APP_NONE;
-        m_lock = lock_spin_recursive("app_conf");
-        this->workers_num = 0;
-        this->workers_pow2 = 0;
-        this->src_port_stride = 2;
-        this->add_second_4t_rule = false;
-        this->map_listen_fd.clear();
-        this->map_thread_id.clear();
-        this->map_dup_fd.clear();
-        this->unused_worker_id.clear();
-        this->context = NULL;
-    }
-
-    ~app_conf() {}
-
-    inline int get_worker_id()
-    {
-        std::lock_guard<decltype(this->m_lock)> lock(this->m_lock);
-        auto itr = this->map_thread_id.find(gettid());
-        if (itr != this->map_thread_id.end()) {
-            return itr->second;
-        }
-        return -1;
-    }
-};
-extern struct app_conf *g_p_app;
-#endif
-
 struct mmsghdr;
 
 /**
@@ -244,6 +191,19 @@ struct os_api {
  *  variables to hold the function-pointers to original functions
  *-----------------------------------------------------------------------------
  */
+#define DO_GLOBAL_CTORS()                                                                          \
+    do {                                                                                           \
+        int __res = do_global_ctors();                                                             \
+        if (__res) {                                                                               \
+            vlog_printf(VLOG_ERROR, "%s " PRODUCT_NAME " failed to start errno: %s\n",             \
+                        __FUNCTION__, strerror(errno));                                            \
+            if (safe_mce_sys().exception_handling == xlio_exception_handling::MODE_EXIT) {         \
+                exit(-1);                                                                          \
+            }                                                                                      \
+            return -1;                                                                             \
+        }                                                                                          \
+    } while (0)
+
 extern os_api orig_os_api;
 
 extern void get_orig_funcs();
