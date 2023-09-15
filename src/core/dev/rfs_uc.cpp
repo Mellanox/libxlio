@@ -36,6 +36,7 @@
 #include "dev/ring_simple.h"
 #include "util/instrumentation.h"
 #include "sock/sock-redirect.h"
+#include "sock/sock-app.h"
 
 #define MODULE_NAME "rfs_uc"
 

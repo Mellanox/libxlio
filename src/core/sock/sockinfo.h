@@ -54,6 +54,7 @@
 #include "pkt_rcvr_sink.h"
 #include "pkt_sndr_source.h"
 #include "sock-redirect.h"
+#include "sock-app.h"
 
 #ifndef BASE_SOCKINFO_H
 #define BASE_SOCKINFO_H

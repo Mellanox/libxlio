@@ -33,6 +33,7 @@
 // sock-redirect-internal.h must be first
 #include "sock-redirect-internal.h"
 #include "sock-redirect.h"
+#include "sock-app.h"
 
 #include <sys/time.h>
 #include <dlfcn.h>
@@ -82,21 +83,6 @@ using namespace std;
 
 #define EP_MAX_EVENTS (int)((INT_MAX / sizeof(struct epoll_event)))
 
-#if defined(DEFINED_NGINX)
-map_udp_bounded_port_t g_map_udp_bounded_port;
-#endif
-#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-static int init_worker(int worker_id, int listen_fd);
-
-struct app_conf *g_p_app = NULL;
-#endif
-#if defined(DEFINED_NGINX)
-static int proc_nginx(void);
-#endif /* DEFINED_NGINX */
-#if defined(DEFINED_ENVOY)
-static int proc_envoy(int op, int fd);
-#endif /* DEFINED_ENVOY */
-
 struct os_api orig_os_api;
 struct sigaction g_act_prev;
 sighandler_t g_sighandler = NULL;
@@ -109,19 +95,6 @@ template <typename T> void assign_dlsym(T &ptr, const char *name)
 }
 
 #define FD_MAP_SIZE (g_p_fd_collection ? g_p_fd_collection->get_fd_map_size() : 1024)
-
-#define DO_GLOBAL_CTORS()                                                                          \
-    do {                                                                                           \
-        int __res = do_global_ctors();                                                             \
-        if (__res) {                                                                               \
-            vlog_printf(VLOG_ERROR, "%s " PRODUCT_NAME " failed to start errno: %s\n",             \
-                        __FUNCTION__, strerror(errno));                                            \
-            if (safe_mce_sys().exception_handling == xlio_exception_handling::MODE_EXIT) {         \
-                exit(-1);                                                                          \
-            }                                                                                      \
-            return -1;                                                                             \
-        }                                                                                          \
-    } while (0)
 
 #define GET_ORIG_FUNC(__name)                                                                      \
     if (!orig_os_api.__name) {                                                                     \
@@ -308,144 +281,6 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
 
     return to_close_now;
 }
-
-#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-
-static int init_worker(int worker_id, int listen_fd)
-{
-    srdr_logdbg("worker: %d fd: %d", worker_id, listen_fd);
-
-    int ret = 0;
-    socket_fd_api *child_sock_fd_api = nullptr;
-    int parent_fd = listen_fd;
-    fd_collection *p_fd_collection = (fd_collection *)g_p_app->context;
-
-    /* Find information about parent socket
-     * Envoy:
-     * - g_p_fd_collection has all actual fds
-     * - worker 0 has socket object in g_p_fd_collection (parent fd)
-     * - Other workers should find parent fd to create child socket objects
-     *   basing on parent socket objects.
-     * Nginx:
-     * - should use fd_collection from parent process stored at g_p_app->context
-     */
-    if (g_p_app->type == APP_ENVOY) {
-        p_fd_collection = g_p_fd_collection;
-        if (worker_id > 0) {
-            parent_fd = -1;
-            const auto itr = g_p_app->map_dup_fd.find(listen_fd);
-            if (itr != g_p_app->map_dup_fd.end()) {
-                parent_fd = itr->second;
-            }
-            if (parent_fd < 0) {
-                return -1;
-            }
-        } else {
-            ret = -1;
-            child_sock_fd_api = p_fd_collection->get_sockfd(listen_fd);
-            if (child_sock_fd_api) {
-                ret = child_sock_fd_api->listen(child_sock_fd_api->m_back_log);
-            }
-            return ret;
-        }
-    }
-
-    /* This part should be ignored by Envoy worker 0
-     * Envoy: parent_fd is fd of parent socket
-     * Nginx: parent_fd is equal to listen_fd
-     */
-    sockinfo *si;
-    socket_fd_api *parent_sock_fd_api = p_fd_collection->get_sockfd(parent_fd);
-    if (!parent_sock_fd_api || !(si = dynamic_cast<sockinfo *>(parent_sock_fd_api))) {
-        srdr_logerr("parent sockinfo is not found");
-        return -1;
-    }
-
-    int block_type = si->is_blocking() ? 0 : SOCK_NONBLOCK;
-    sock_addr sa;
-    socklen_t sa_len = sa.get_socklen();
-
-    parent_sock_fd_api->getsockname(sa.get_p_sa(), &sa_len);
-    if (PROTO_TCP == si->get_protocol()) {
-        srdr_logdbg("found listen socket %d", parent_sock_fd_api->get_fd());
-        g_p_fd_collection->addsocket(listen_fd, si->get_family(), SOCK_STREAM | block_type);
-        child_sock_fd_api = g_p_fd_collection->get_sockfd(listen_fd);
-        if (child_sock_fd_api) {
-            child_sock_fd_api->copy_sockopt_fork(parent_sock_fd_api);
-
-            ret = bind(listen_fd, sa.get_p_sa(), sa_len);
-            if (ret < 0) {
-                srdr_logerr("bind() error");
-            }
-
-            // is the socket really offloaded
-            ret = child_sock_fd_api->prepareListen();
-            if (ret < 0) {
-                srdr_logerr("prepareListen error");
-                child_sock_fd_api = nullptr;
-            } else if (ret > 0) { // Pass-through
-                handle_close(child_sock_fd_api->get_fd(), false, true);
-                child_sock_fd_api = nullptr;
-            } else {
-                srdr_logdbg("Prepare listen successfully offloaded");
-            }
-
-            if (child_sock_fd_api) {
-                ret = child_sock_fd_api->listen(child_sock_fd_api->m_back_log);
-                if (ret < 0) {
-                    srdr_logerr("Listen error");
-                } else {
-                    srdr_logdbg("Listen success");
-                }
-            }
-        }
-    }
-    if (PROTO_UDP == si->get_protocol()) {
-        sockinfo_udp *udp_sock = dynamic_cast<sockinfo_udp *>(parent_sock_fd_api);
-        if (udp_sock) {
-            static std::unordered_map<uint16_t, uint16_t> udp_sockets_per_port;
-            int reuse_port;
-            socklen_t optlen = sizeof(reuse_port);
-            uint16_t port = ntohs(sa.get_in_port());
-            if ((port == 0) ||
-                (udp_sock->getsockopt(SOL_SOCKET, SO_REUSEPORT, &reuse_port, &optlen) < 0)) {
-                return -1;
-            }
-            /*
-             * Specific NGINX implementation.
-             *
-             * In case of "reuseport" directive
-             * NGINX master process creates a UDP socket per worker process per port before it
-             * forks. Therefore, each worker process attaches a single UDP socket out of
-             * #worker_processes.
-             *
-             * Without "reuseport" directive, NGINX master process creates a single UDP socket
-             * before it forks. Therefore, all worker processes attach the UDP socket (single).
-             */
-            if ((reuse_port == 0) || (udp_sockets_per_port[port] == g_p_app->get_worker_id())) {
-                srdr_logdbg("worker %d is using fd=%d. bound to port=%d", g_p_app->get_worker_id(),
-                            listen_fd, port);
-                g_p_fd_collection->addsocket(listen_fd, si->get_family(), SOCK_DGRAM | block_type);
-                sockinfo_udp *new_udp_sock =
-                    dynamic_cast<sockinfo_udp *>(g_p_fd_collection->get_sockfd(listen_fd));
-                if (new_udp_sock) {
-                    new_udp_sock->copy_sockopt_fork(udp_sock);
-
-                    g_map_udp_bounded_port[port] = true;
-                    // in order to create new steering rules we call bind()
-                    // we skip os.bind since it always fails
-                    new_udp_sock->bind_no_os();
-                }
-            }
-            /* This processes a case with multiple listen sockets with different ports */
-            udp_sockets_per_port[port]++;
-        }
-    }
-
-    return 0;
-}
-
-#endif
 
 //-----------------------------------------------------------------------------
 // extended API functions
@@ -2658,7 +2493,7 @@ extern "C" EXPORT_SYMBOL int epoll_ctl(int __epfd, int __op, int __fd, struct ep
     } else {
 #if defined(DEFINED_ENVOY)
         if (g_p_app && g_p_app->type == APP_ENVOY) {
-            rc = proc_envoy(__op, __fd);
+            rc = g_p_app->proc_envoy(__op, __fd);
             if (rc != 0) {
                 errno = EINVAL;
                 return -1;
@@ -3000,7 +2835,7 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
              * Root user will be handled in setuid call.
              */
             if (geteuid() != 0) {
-                int rc = proc_nginx();
+                int rc = g_p_app->proc_nginx();
                 if (rc != 0) {
                     errno = ENOMEM;
                 }
@@ -3212,7 +3047,7 @@ extern "C" EXPORT_SYMBOL int setuid(uid_t uid)
 
     // Do this only for root user, regular user will be handled in fork call.
     if (g_p_app && g_p_app->type == APP_NGINX && previous_uid == 0) {
-        orig_rc = proc_nginx();
+        orig_rc = g_p_app->proc_nginx();
     }
 
     return orig_rc;
@@ -3238,125 +3073,5 @@ extern "C" EXPORT_SYMBOL pid_t waitpid(pid_t pid, int *wstatus, int options)
     }
     return child_pid;
 }
-
-static int proc_nginx(void)
-{
-    int rc = 0;
-
-    DO_GLOBAL_CTORS();
-    std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-
-    /* This place processes a configuration including listen sockets are UDP sockets
-     * in common way.
-     * For UDP case order of fd processing is important so one or multipile fds
-     * related worker 0 should be first.
-     * TCP listen sockets can be taken from map_listen_fd in any order.
-     * Enumerate all elements in fd_collection filtering by sockinfo objects.
-     */
-    fd_collection *p_fd_collection = (fd_collection *)g_p_app->context;
-    for (int fd = 0; fd < p_fd_collection->get_fd_map_size(); fd++) {
-        sockinfo *si;
-        socket_fd_api *sock_fd_api = p_fd_collection->get_sockfd(fd);
-        if (!sock_fd_api || !(si = dynamic_cast<sockinfo *>(sock_fd_api))) {
-            continue;
-        }
-        g_p_app->map_listen_fd[fd] = gettid();
-        rc = init_worker(g_p_app->get_worker_id(), fd);
-        if (rc != 0) {
-            srdr_logerr("Failed to initialize worker %d, (errno=%d %m)", g_p_app->get_worker_id(),
-                        errno);
-            break;
-        }
-    }
-
-    return rc;
-}
-
-#if defined(DEFINED_ENVOY)
-static int proc_envoy(int __op, int __fd)
-{
-    int rc = 0;
-
-    /* Prcess only sockets from map_listen_fd */
-    auto iter = g_p_app->map_listen_fd.find(__fd);
-    if (iter != g_p_app->map_listen_fd.end()) {
-        socket_fd_api *p_socket_object = NULL;
-        p_socket_object = fd_collection_get_sockfd(__fd);
-        if (iter->second == gettid()) {
-            /* process listen sockets from main thread and remove
-             * them from map_listen_fd
-             */
-            if (p_socket_object) {
-                rc = p_socket_object->listen(p_socket_object->m_back_log);
-                if (rc < 0) {
-                    return rc;
-                }
-            }
-            std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-            g_p_app->map_listen_fd.erase(iter);
-        } else if (__op == EPOLL_CTL_ADD) {
-            static int original_listen_count = INT_MAX;
-            static int total_worker_id = 0;
-            int worker_id = -1;
-
-            /* original listen sockets should be created first
-             * original_listen_count count sockets that should be
-             * processed until openning a door for others.
-             * timer should be enough to complete initialization of
-             * all sockets related worker 0.
-             */
-            int sleep_count = 1000;
-            while (!p_socket_object && (original_listen_count > 0)) {
-                if (!sleep_count--) {
-                    return -1;
-                }
-                const struct timespec short_sleep = {0, 1000};
-                nanosleep(&short_sleep, NULL);
-            }
-            std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-
-            /* Logic that assigns worker id for processed listener
-             * total_worker_id is unique for all threads
-             */
-            worker_id = g_p_app->get_worker_id();
-            if (worker_id < 0) {
-                worker_id = total_worker_id;
-                total_worker_id++;
-            }
-
-            /* This part should guarantee initialization of all listeners for worker 0.
-             * original_listen_count is initialized to number of them first.
-             */
-            if (worker_id == 0) {
-                if (original_listen_count == INT_MAX) {
-                    original_listen_count = 0;
-                    for (const auto &itr : g_p_app->map_dup_fd) {
-                        if (itr.first == itr.second) {
-                            original_listen_count++;
-                        }
-                    }
-                }
-                original_listen_count--;
-            }
-
-            g_p_app->map_listen_fd[__fd] = gettid();
-            g_p_app->map_thread_id[gettid()] = worker_id;
-            rc = init_worker(worker_id, __fd);
-            if (rc != 0) {
-                srdr_logerr("Failed to initialize worker %d, (errno=%d %m)", worker_id, errno);
-                g_p_app->map_listen_fd.erase(__fd);
-                g_p_app->map_thread_id.erase(gettid());
-                return rc;
-            }
-        } else if (__op == EPOLL_CTL_DEL) {
-            std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-            g_p_app->map_listen_fd.erase(__fd);
-            g_p_app->map_thread_id.erase(gettid());
-        }
-    }
-
-    return rc;
-}
-#endif /* DEFINED_ENVOY */
 
 #endif // DEFINED_NGINX

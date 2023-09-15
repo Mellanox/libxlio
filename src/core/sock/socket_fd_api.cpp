@@ -36,6 +36,7 @@
 #include <vlogger/vlogger.h>
 #include "utils/bullseye.h"
 #include "sock-redirect.h"
+#include "sock-app.h"
 
 #include "socket_fd_api.h"
 

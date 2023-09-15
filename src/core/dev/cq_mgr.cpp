@@ -42,6 +42,7 @@
 #include <util/valgrind.h>
 #include "util/instrumentation.h"
 #include <sock/sock-redirect.h>
+#include "sock/sock-app.h"
 #include "ib/base/verbs_extra.h"
 
 #include "buffer_pool.h"
