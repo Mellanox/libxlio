@@ -1429,6 +1429,7 @@ neigh_eth::neigh_eth(neigh_key key)
         // 	{curr state,            event,                  next state,             action func   }
 
         {ST_NOT_ACTIVE, EV_KICK_START, ST_INIT, NULL},
+        {ST_NOT_ACTIVE, EV_ARP_RESOLVED, ST_READY, NULL},
         {ST_ERROR, EV_KICK_START, ST_INIT, NULL},
         {ST_INIT, EV_ARP_RESOLVED, ST_READY, NULL},
         {ST_INIT, EV_START_RESOLUTION, ST_INIT_RESOLUTION, NULL},
