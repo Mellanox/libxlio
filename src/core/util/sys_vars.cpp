@@ -748,7 +748,6 @@ void mce_sys_var::get_env_params()
 
     zc_num_bufs = MCE_DEFAULT_ZC_NUM_BUFS;
     zc_cache_threshold = MCE_DEFAULT_ZC_CACHE_THRESHOLD;
-    tx_num_segs_tcp = MCE_DEFAULT_TX_NUM_SEGS_TCP;
     tx_num_bufs = MCE_DEFAULT_TX_NUM_BUFS;
     tx_buf_size = MCE_DEFAULT_TX_BUF_SIZE;
     zc_tx_size = MCE_DEFAULT_ZC_TX_SIZE;
@@ -940,7 +939,6 @@ void mce_sys_var::get_env_params()
     switch (mce_spec) {
     case MCE_SPEC_SOCKPERF_ULTRA_LATENCY:
         memory_limit = 128LU * 1024 * 1024;
-        tx_num_segs_tcp = 512; // MCE_DEFAULT_TX_NUM_SEGS_TCP (1000000)
         tx_num_bufs = 512; // MCE_DEFAULT_TX_NUM_BUFS (200000)
         tx_num_wr = 256; // MCE_DEFAULT_TX_NUM_WRE (3000)
         tx_num_wr_to_signal = 4; // MCE_DEFAULT_TX_NUM_WRE_TO_SIGNAL (64)
@@ -1030,8 +1028,6 @@ void mce_sys_var::get_env_params()
         rx_bufs_batch = 8; // MCE_DEFAULT_RX_BUFS_BATCH (64), RX buffers batch size.
         tx_num_bufs =
             1000000; // MCE_DEFAULT_TX_NUM_BUFS (200000), Global TX data buffers allocated.
-        tx_num_segs_tcp = 4000000; // MCE_DEFAULT_TX_NUM_SEGS_TCP (1000000), Number of TX TCP
-                                   // segments in the pool.
         tx_buf_size = 0; // MCE_DEFAULT_TX_BUF_SIZE (0), Size of single data buffer.
         zc_tx_size = 32768; // MCE_DEFAULT_ZC_TX_SIZE (32768), zero copy segment maximum size.
         progress_engine_interval_msec = 0; // MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC (10),
@@ -1086,8 +1082,6 @@ void mce_sys_var::get_env_params()
         tx_num_bufs = 87500; // MCE_DEFAULT_TX_NUM_BUFS (200000), Global TX data buffers allocated.
         tx_bufs_batch_tcp = 2; // MCE_DEFAULT_TX_BUFS_BATCH_TCP (16)
         tx_segs_batch_tcp = 4; // MCE_DEFAULT_TX_SEGS_BATCH_TCP (64)
-        tx_num_segs_tcp =
-            200000; // MCE_DEFAULT_TX_NUM_SEGS_TCP (1000000), Number of TX TCP segments in the pool.
         rx_bufs_batch = 8; // MCE_DEFAULT_RX_BUFS_BATCH (64), RX buffers batch size.
         tx_buf_size = 0; // MCE_DEFAULT_TX_BUF_SIZE (0), Size of single data buffer.
         zc_tx_size = 32768; // MCE_DEFAULT_ZC_TX_SIZE (32768), zero copy segment maximum size.
@@ -1267,10 +1261,6 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_ZC_CACHE_THRESHOLD)) != NULL) {
         zc_cache_threshold = option_size::from_str(env_ptr);
-    }
-
-    if ((env_ptr = getenv(SYS_VAR_TX_NUM_SEGS_TCP)) != NULL) {
-        tx_num_segs_tcp = (uint32_t)atoi(env_ptr);
     }
 
     if ((env_ptr = getenv(SYS_VAR_TX_NUM_BUFS)) != NULL) {

@@ -372,7 +372,6 @@ public:
 
     size_t zc_cache_threshold;
     uint32_t zc_num_bufs;
-    uint32_t tx_num_segs_tcp;
     uint32_t tx_num_bufs;
     uint32_t tx_buf_size;
     uint32_t zc_tx_size;
@@ -579,7 +578,6 @@ extern mce_sys_var &safe_mce_sys();
 
 #define SYS_VAR_ZC_NUM_BUFS           "XLIO_ZC_BUFS"
 #define SYS_VAR_ZC_CACHE_THRESHOLD    "XLIO_ZC_CACHE_THRESHOLD"
-#define SYS_VAR_TX_NUM_SEGS_TCP       "XLIO_TX_SEGS_TCP"
 #define SYS_VAR_TX_NUM_BUFS           "XLIO_TX_BUFS"
 #define SYS_VAR_TX_BUF_SIZE           "XLIO_TX_BUF_SIZE"
 #define SYS_VAR_ZC_TX_SIZE            "XLIO_ZC_TX_SIZE"
@@ -740,7 +738,6 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_ZC_TX_SIZE               (32768)
 #define MCE_DEFAULT_TCP_NODELAY_TRESHOLD     (0)
 #define MCE_DEFAULT_ZC_CACHE_THRESHOLD       (10LU * 1024 * 1024 * 1024) // 10GB
-#define MCE_DEFAULT_TX_NUM_SEGS_TCP          (1000000)
 #define MCE_DEFAULT_TX_NUM_BUFS              (200000)
 #define MCE_DEFAULT_TX_BUF_SIZE              (0)
 #define MCE_DEFAULT_TX_NUM_WRE               (32768)

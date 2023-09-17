@@ -36,32 +36,25 @@
 
 #define MODULE_NAME "tcp_seg_pool"
 
+enum {
+    TCP_SEG_POOL_COMPENSATION_LEVEL = 16384U,
+};
+
 extern global_stats_t g_global_stat_static;
 
 tcp_seg_pool *g_tcp_seg_pool = NULL;
 
-tcp_seg_pool::tcp_seg_pool(uint32_t size)
-    : m_allocator(ALLOC_TYPE_PREFER_HUGE)
+tcp_seg_pool::tcp_seg_pool()
+    : m_p_head(nullptr)
+    , m_allocator(false)
 {
-    tcp_seg *tcp_segs_array = (tcp_seg *)m_allocator.alloc(sizeof(tcp_seg) * size);
-    if (!tcp_segs_array) {
-        __log_dbg("TCP segments allocation failed");
-        throw_xlio_exception("TCP segments allocation failed");
-    }
-
-    // Allocator can allocate more memory than requested - utilize it.
-    size = m_allocator.size() / sizeof(tcp_seg);
-
-    memset(tcp_segs_array, 0, sizeof(tcp_seg) * size);
-    for (uint32_t i = 0; i < size - 1; i++) {
-        tcp_segs_array[i].next = &tcp_segs_array[i + 1];
-    }
-    m_p_head = &tcp_segs_array[0];
-    g_global_stat_static.n_tcp_seg_pool_size = size;
+    memset(&m_stats, 0, sizeof(m_stats));
+    expand();
 }
 
 tcp_seg_pool::~tcp_seg_pool()
 {
+    print_report();
 }
 
 tcp_seg *tcp_seg_pool::get_tcp_segs(uint32_t amount)
@@ -71,28 +64,34 @@ tcp_seg *tcp_seg_pool::get_tcp_segs(uint32_t amount)
 
 std::pair<tcp_seg *, tcp_seg *> tcp_seg_pool::get_tcp_seg_list(uint32_t amount)
 {
-    uint32_t orig_amount = amount;
+    uint32_t count;
     tcp_seg *head, *next, *prev;
     if (unlikely(amount <= 0)) {
         return std::make_pair(nullptr, nullptr);
     }
     lock();
+repeat:
+    count = amount;
     head = next = m_p_head;
     prev = NULL;
-    while (amount > 0 && next) {
+    while (count > 0 && next) {
         prev = next;
         next = next->next;
-        amount--;
+        count--;
     }
-    if (amount) {
+    if (count) {
         // run out of segments
+        if (expand()) {
+            goto repeat;
+        }
         g_global_stat_static.n_tcp_seg_pool_no_segs++;
         unlock();
         return std::make_pair(nullptr, nullptr);
     }
     prev->next = NULL;
     m_p_head = next;
-    g_global_stat_static.n_tcp_seg_pool_size -= orig_amount;
+    m_stats.allocations++;
+    g_global_stat_static.n_tcp_seg_pool_size -= amount;
     unlock();
 
     return std::make_pair(head, prev);
@@ -132,4 +131,38 @@ tcp_seg *tcp_seg_pool::split_tcp_segs(uint32_t count, tcp_seg *&tcp_seg_list, ui
     tcp_seg_list = last->next;
     last->next = nullptr;
     return head;
+}
+
+bool tcp_seg_pool::expand()
+{
+    size_t size = sizeof(tcp_seg) * TCP_SEG_POOL_COMPENSATION_LEVEL;
+    tcp_seg *tcp_segs_array = (tcp_seg *)m_allocator.alloc(size);
+
+    if (!tcp_segs_array) {
+        __log_dbg("TCP segments allocation failed");
+        return false;
+    }
+
+    // Allocator can allocate more memory than requested - utilize it.
+    size_t segs_nr = size / sizeof(tcp_seg);
+
+    if (segs_nr > 0) {
+        memset(tcp_segs_array, 0, size);
+        for (size_t i = 0; i < segs_nr - 1; i++) {
+            tcp_segs_array[i].next = &tcp_segs_array[i + 1];
+        }
+        tcp_segs_array[segs_nr - 1].next = m_p_head;
+        m_p_head = &tcp_segs_array[0];
+        m_stats.total_segs += segs_nr;
+        m_stats.expands++;
+        g_global_stat_static.n_tcp_seg_pool_size += segs_nr;
+    }
+    return true;
+}
+
+void tcp_seg_pool::print_report(vlog_levels_t log_level /*= VLOG_DEBUG*/)
+{
+    vlog_printf(log_level, "TCP segments pool statistics:\n");
+    vlog_printf(log_level, "  allocations=%u expands=%u total_segs=%u\n", m_stats.allocations,
+                m_stats.expands, m_stats.total_segs);
 }
