@@ -44,6 +44,11 @@
 // Forward declarations
 class ib_ctx_handler;
 
+enum buffer_pool_type {
+    BUFFER_POOL_RX = 1,
+    BUFFER_POOL_TX,
+};
+
 inline static void free_lwip_pbuf(struct pbuf_custom *pbuf_custom)
 {
     mem_buf_desc_t *p_desc = (mem_buf_desc_t *)pbuf_custom;
@@ -66,30 +71,13 @@ inline static void free_lwip_pbuf(struct pbuf_custom *pbuf_custom)
     pbuf_custom->pbuf.desc.attr = PBUF_DESC_NONE;
 }
 
-class buffer_pool_area {
-public:
-    buffer_pool_area(size_t buffer_nr);
-    ~buffer_pool_area();
-
-    static inline size_t node_offset(void) { return NODE_OFFSET(buffer_pool_area, m_node); }
-
-    void *m_area;
-    size_t m_n_buffers;
-
-private:
-    xlio_allocator m_allocator;
-    list_node<buffer_pool_area, buffer_pool_area::node_offset> m_node;
-};
-
-typedef xlio_list_t<buffer_pool_area, buffer_pool_area::node_offset> buffer_pool_area_list_t;
-
 /**
  * A buffer pool which internally sorts the buffers.
  */
 class buffer_pool {
 public:
-    buffer_pool(size_t buffer_count, size_t size, pbuf_free_custom_fn custom_free_function,
-                alloc_t alloc_func = NULL, free_t free_func = NULL);
+    buffer_pool(buffer_pool_type type, size_t buf_size, pbuf_free_custom_fn custom_free_function,
+                alloc_t alloc_func = nullptr, free_t free_func = nullptr);
     ~buffer_pool();
 
     void register_memory(ib_ctx_handler *p_ib_ctx_h);
@@ -129,40 +117,34 @@ public:
      */
     size_t get_free_count();
 
-    void set_RX_TX_for_stats(bool rx);
-
 private:
-    lock_spin m_lock;
-    // XXX-dummy buffer list head and count
-    // to be replaced with a bucket-sorted array
-
-    size_t m_size; /* pool size in bytes */
-    size_t m_n_buffers;
-    size_t m_n_buffers_created;
-    mem_buf_desc_t *m_p_head;
-
-    bpool_stats_t *m_p_bpool_stat;
-    bpool_stats_t m_bpool_stat_static;
-    xlio_allocator_hw m_allocator;
-    buffer_pool_area_list_t m_areas;
-    pbuf_free_custom_fn m_custom_free_function;
-
     /**
      * Add a buffer to the pool
      */
     inline void put_buffer_helper(mem_buf_desc_t *buff);
-    void expand(size_t count, void *data, size_t buf_size,
-                pbuf_free_custom_fn custom_free_function);
+    bool expand(size_t count);
 
     void buffersPanic();
     void put_buffers(descq_t *buffers, size_t count);
     inline void put_buffers(mem_buf_desc_t *buff_list);
     inline void put_buffers(mem_buf_desc_t **buff_vec, size_t count);
 
-    /**
-     * dtor
-     */
-    inline void free_bpool_resources();
+    lock_spin m_lock;
+
+    size_t m_buf_size;
+    size_t m_compensation_level;
+    size_t m_n_buffers;
+    size_t m_n_buffers_created;
+    mem_buf_desc_t *m_p_head;
+
+    // After an allocation failure, don't try to expand the pool anymore.
+    bool m_b_degraded;
+
+    bpool_stats_t *m_p_bpool_stat;
+    bpool_stats_t m_bpool_stat_static;
+    xlio_allocator_heap m_allocator_data;
+    xlio_allocator_heap m_allocator_metadata;
+    pbuf_free_custom_fn m_custom_free_function;
 };
 
 extern buffer_pool *g_buffer_pool_rx_ptr;
