@@ -40,7 +40,7 @@
 
 class tcp_seg_pool : lock_spin {
 public:
-    tcp_seg_pool(uint32_t size);
+    tcp_seg_pool();
     virtual ~tcp_seg_pool();
 
     std::pair<tcp_seg *, tcp_seg *> get_tcp_seg_list(uint32_t amount);
@@ -50,8 +50,17 @@ public:
     static tcp_seg *split_tcp_segs(uint32_t count, tcp_seg *&tcp_seg_list, uint32_t &total_count);
 
 private:
+    bool expand();
+    void print_report(vlog_levels_t log_level = VLOG_DEBUG);
+
     tcp_seg *m_p_head;
-    xlio_allocator m_allocator;
+    xlio_allocator_heap m_allocator;
+
+    struct {
+        unsigned total_segs;
+        unsigned allocations;
+        unsigned expands;
+    } m_stats;
 };
 
 extern tcp_seg_pool *g_tcp_seg_pool;

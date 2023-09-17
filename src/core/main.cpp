@@ -549,8 +549,6 @@ void print_xlio_global_settings()
     VLOG_PARAM_STRING("Zerocopy Cache Threshold", safe_mce_sys().zc_cache_threshold,
                       MCE_DEFAULT_ZC_CACHE_THRESHOLD, SYS_VAR_ZC_CACHE_THRESHOLD,
                       option_size::to_str(safe_mce_sys().zc_cache_threshold));
-    VLOG_PARAM_NUMBER("Tx Mem Segs TCP", safe_mce_sys().tx_num_segs_tcp,
-                      MCE_DEFAULT_TX_NUM_SEGS_TCP, SYS_VAR_TX_NUM_SEGS_TCP);
     VLOG_PARAM_NUMBER("Tx Mem Bufs", safe_mce_sys().tx_num_bufs, MCE_DEFAULT_TX_NUM_BUFS,
                       SYS_VAR_TX_NUM_BUFS);
     VLOG_PARAM_STRING("Tx Mem Buf size", safe_mce_sys().tx_buf_size, MCE_DEFAULT_TX_BUF_SIZE,
@@ -1136,7 +1134,7 @@ static void do_global_ctors_helper()
                               : NULL)));
     g_buffer_pool_zc->set_RX_TX_for_stats(false);
 
-    NEW_CTOR(g_tcp_seg_pool, tcp_seg_pool(safe_mce_sys().tx_num_segs_tcp));
+    NEW_CTOR(g_tcp_seg_pool, tcp_seg_pool());
 
     // For delegated TCP timers the global collection is not used.
     if (safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
