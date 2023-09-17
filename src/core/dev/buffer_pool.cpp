@@ -64,17 +64,6 @@ buffer_pool *g_buffer_pool_tx = NULL;
 // These buffer descriptors do not actually own a buffer.
 buffer_pool *g_buffer_pool_zc = NULL;
 
-buffer_pool_area::buffer_pool_area(size_t buffer_nr)
-    : m_allocator(ALLOC_TYPE_PREFER_HUGE)
-{
-    m_area = m_allocator.alloc(sizeof(mem_buf_desc_t) * buffer_nr);
-    m_n_buffers = buffer_nr;
-}
-
-buffer_pool_area::~buffer_pool_area()
-{
-}
-
 // inlining a function only help in case it come before using it...
 inline void buffer_pool::put_buffer_helper(mem_buf_desc_t *buff)
 {
@@ -101,39 +90,53 @@ inline void buffer_pool::put_buffer_helper(mem_buf_desc_t *buff)
     m_p_bpool_stat->n_buffer_pool_size++;
 }
 
-void buffer_pool::expand(size_t count, void *data, size_t buf_size,
-                         pbuf_free_custom_fn custom_free_function)
+bool buffer_pool::expand(size_t count)
 {
-    buffer_pool_area *area;
     mem_buf_desc_t *desc;
-    uint8_t *ptr_data;
-    uint8_t *ptr_desc;
+    size_t size = m_buf_size * count;
+    uint8_t *data_ptr = nullptr;
+    uint8_t *desc_ptr;
 
-    area = new buffer_pool_area(count);
-    assert(area != NULL);
-    assert(area->m_area != NULL);
-    m_areas.push_back(area);
+    __log_info_dbg("Expanding %s%s pool", m_buf_size ? "" : "zcopy ",
+                   m_p_bpool_stat->is_rx ? "Rx" : "Tx");
 
-    ptr_data = (uint8_t *)data;
-    ptr_desc = (uint8_t *)area->m_area;
-
-    for (size_t i = 0; i < count; ++i) {
-        pbuf_type type = (ptr_data == NULL && custom_free_function == free_tx_lwip_pbuf_custom)
-            ? PBUF_ZEROCOPY
-            : PBUF_RAM;
-        desc = new (ptr_desc) mem_buf_desc_t(ptr_data, buf_size, type, custom_free_function);
-        put_buffer_helper(desc);
-        ptr_desc += sizeof(mem_buf_desc_t);
-        if (ptr_data != NULL) {
-            ptr_data += buf_size;
+    if (size && m_buf_size) {
+        data_ptr = (uint8_t *)m_allocator_data.alloc(size);
+        if (!data_ptr) {
+            return false;
         }
+        // Allocator can allocate more than requested.
+        count = size / m_buf_size;
     }
 
+    size = count * sizeof(mem_buf_desc_t);
+    desc_ptr = (uint8_t *)m_allocator_metadata.alloc(size);
+    if (!desc_ptr) {
+        return false;
+    }
+    if (!data_ptr) {
+        // Utilize all allocated memory for zerocopy descriptors.
+        count = size / sizeof(mem_buf_desc_t);
+    }
+
+    for (size_t i = 0; i < count; ++i) {
+        pbuf_type type = (m_buf_size == 0 && m_custom_free_function == free_tx_lwip_pbuf_custom)
+            ? PBUF_ZEROCOPY
+            : PBUF_RAM;
+        desc = new (desc_ptr) mem_buf_desc_t(data_ptr, m_buf_size, type, m_custom_free_function);
+        put_buffer_helper(desc);
+        desc_ptr += sizeof(mem_buf_desc_t);
+        if (data_ptr) {
+            data_ptr += m_buf_size;
+        }
+    }
     m_n_buffers_created += count;
+    return true;
 }
 
-/** Free-callback function to free a 'struct pbuf_custom_ref', called by
- * pbuf_free. */
+/**
+ * Free-callback function to free a 'struct pbuf_custom_ref', called by pbuf_free.
+ */
 void buffer_pool::free_rx_lwip_pbuf_custom(struct pbuf *p_buff)
 {
     buffer_pool *pool = (p_buff->type == PBUF_ZEROCOPY) ? g_buffer_pool_zc : g_buffer_pool_rx_ptr;
@@ -146,86 +149,63 @@ void buffer_pool::free_tx_lwip_pbuf_custom(struct pbuf *p_buff)
     pool->put_buffers_thread_safe((mem_buf_desc_t *)p_buff);
 }
 
-buffer_pool::buffer_pool(size_t buffer_count, size_t buf_size,
+buffer_pool::buffer_pool(buffer_pool_type type, size_t buf_size,
                          pbuf_free_custom_fn custom_free_function, alloc_t alloc_func,
                          free_t free_func)
     : m_lock("buffer_pool")
+    , m_buf_size((buf_size + MCE_ALIGNMENT) & (~MCE_ALIGNMENT))
     , m_n_buffers(0)
     , m_n_buffers_created(0)
-    , m_p_head(NULL)
-    , m_allocator(alloc_func, free_func)
+    , m_p_head(nullptr)
+    , m_b_degraded(false)
+    , m_allocator_data(m_buf_size ? xlio_allocator_heap(alloc_func, free_func, true)
+                                  : xlio_allocator_heap(false))
+    , m_allocator_metadata(false)
+    , m_custom_free_function(custom_free_function)
 {
-    size_t sz_aligned_element = 0;
-    void *data_block;
+    size_t initial_pool_size;
 
-    __log_info_func("count = %d", buffer_count);
-
-    m_custom_free_function = custom_free_function;
     m_p_bpool_stat = &m_bpool_stat_static;
     memset(m_p_bpool_stat, 0, sizeof(*m_p_bpool_stat));
+    m_p_bpool_stat->is_rx = type == BUFFER_POOL_RX;
+    m_p_bpool_stat->is_tx = type == BUFFER_POOL_TX;
     xlio_stats_instance_create_bpool_block(m_p_bpool_stat);
 
-    if (buf_size == 0 || buffer_count == 0) {
-        m_size = 0;
+    if (type == BUFFER_POOL_RX) {
+        m_compensation_level =
+            buf_size ? safe_mce_sys().rx_num_wr : safe_mce_sys().strq_strides_compensation_level;
+        initial_pool_size = m_compensation_level * 2;
     } else {
-        sz_aligned_element = (buf_size + MCE_ALIGNMENT) & (~MCE_ALIGNMENT);
-        m_size = sz_aligned_element * buffer_count;
+        // Allow to create 1024 connections with a batch.
+        m_compensation_level = safe_mce_sys().tx_bufs_batch_tcp * 1024;
+        initial_pool_size = buf_size ? m_compensation_level : 0;
     }
 
-    // xlio_allocator will likely align data_block on the hugepage or the page size boundary.
-    data_block = m_size ? m_allocator.alloc_and_reg_mr(m_size, NULL) : NULL;
-    if (unlikely(m_size != 0 && !data_block)) {
-        throw_xlio_exception("Failed allocating or registering data buffers");
+    if (initial_pool_size) {
+        if (!expand(initial_pool_size)) {
+            throw_xlio_exception("Failed to allocate buffers");
+        }
     }
-    if (m_size) {
-        // xlio_allocator may allocate more memory than requested. Utilize it.
-        m_size = m_allocator.size();
-        buffer_count = m_size / sz_aligned_element;
-    }
-
-    if (buffer_count > 0) {
-        expand(buffer_count, data_block, sz_aligned_element, custom_free_function);
-    }
-
     print_val_tbl();
-
-    __log_info_func("done");
 }
 
 buffer_pool::~buffer_pool()
 {
-    free_bpool_resources();
-}
-
-void buffer_pool::free_bpool_resources()
-{
-    if (m_n_buffers == m_n_buffers_created) {
-        __log_info_func("count %lu, missing %lu", m_n_buffers, m_n_buffers_created - m_n_buffers);
-    } else {
-        __log_info_dbg("count %lu, missing %lu", m_n_buffers, m_n_buffers_created - m_n_buffers);
-    }
-
+    __log_info_dbg("count %lu, missing %lu", m_n_buffers, m_n_buffers_created - m_n_buffers);
     xlio_stats_instance_remove_bpool_block(m_p_bpool_stat);
-
-    while (!m_areas.empty()) {
-        buffer_pool_area *area;
-        area = m_areas.get_and_pop_front();
-        delete area;
-    }
-
-    __log_info_func("done");
 }
 
 void buffer_pool::register_memory(ib_ctx_handler *p_ib_ctx_h)
 {
-    if (!m_allocator.register_memory(p_ib_ctx_h)) {
+    if (!m_allocator_data.register_memory(p_ib_ctx_h)) {
         __log_info_err("Failed to register memory for p_ib_ctx_h=%p", p_ib_ctx_h);
     }
 }
 
 void buffer_pool::print_val_tbl()
 {
-    __log_info_dbg("pool %p size: %ld buffers: %lu", this, m_size, m_n_buffers);
+    __log_info_dbg("pool %p size: %zu buffers: %lu", this, m_buf_size * m_n_buffers_created,
+                   m_n_buffers);
 }
 
 bool buffer_pool::get_buffers_thread_safe(descq_t &pDeque, ring_slave *desc_owner, size_t count,
@@ -238,26 +218,20 @@ bool buffer_pool::get_buffers_thread_safe(descq_t &pDeque, ring_slave *desc_owne
     __log_info_funcall("requested %lu, present %lu, created %lu", count, m_n_buffers,
                        m_n_buffers_created);
 
+    if (unlikely(m_n_buffers < count) && !m_b_degraded) {
+        bool result = expand(std::max<size_t>(m_compensation_level, count));
+        m_b_degraded = !result;
+        m_p_bpool_stat->n_buffer_pool_expands += !!result;
+    }
     if (unlikely(m_n_buffers < count)) {
-        if (m_size == 0) {
-            __log_info_dbg("Expanding buffer_pool %p", this);
-            m_p_bpool_stat->n_buffer_pool_expands++;
-            expand(m_areas.front()->m_n_buffers, NULL, 0, m_custom_free_function);
-            if (m_n_buffers >= count) {
-                goto return_buffers;
-            }
-        }
-        VLOG_PRINTF_INFO_ONCE_THEN_ALWAYS(VLOG_DEBUG, VLOG_FUNC,
-                                          "ERROR! not enough buffers in the pool (requested: %lu, "
-                                          "have: %lu, created: %lu, Buffer pool type: %s)",
-                                          count, m_n_buffers, m_n_buffers_created,
-                                          m_p_bpool_stat->is_rx ? "Rx" : "Tx");
-
+        __log_info_dbg("ERROR! not enough buffers in the pool (requested: %zu, "
+                       "have: %zu, created: %zu, Buffer pool type: %s)",
+                       count, m_n_buffers, m_n_buffers_created,
+                       m_p_bpool_stat->is_rx ? "Rx" : "Tx");
         m_p_bpool_stat->n_buffer_pool_no_bufs++;
         return false;
     }
 
-return_buffers:
     // pop buffers from the list
     m_n_buffers -= count;
     m_p_bpool_stat->n_buffer_pool_size -= count;
@@ -281,7 +255,7 @@ return_buffers:
 uint32_t buffer_pool::find_lkey_by_ib_ctx_thread_safe(ib_ctx_handler *p_ib_ctx_h)
 {
     std::lock_guard<decltype(m_lock)> lock(m_lock);
-    return m_allocator.find_lkey_by_ib_ctx(p_ib_ctx_h);
+    return m_allocator_data.find_lkey_by_ib_ctx(p_ib_ctx_h);
 }
 
 #if _BullseyeCoverage
@@ -491,13 +465,4 @@ void buffer_pool::put_buffer_after_deref_thread_safe(mem_buf_desc_t *buff)
 size_t buffer_pool::get_free_count()
 {
     return m_n_buffers;
-}
-
-void buffer_pool::set_RX_TX_for_stats(bool rx)
-{
-    if (rx) {
-        m_p_bpool_stat->is_rx = true;
-    } else {
-        m_p_bpool_stat->is_tx = true;
-    }
 }

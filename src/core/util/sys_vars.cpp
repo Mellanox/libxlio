@@ -746,7 +746,6 @@ void mce_sys_var::get_env_params()
 
     tcp_max_syn_rate = MCE_DEFAULT_TCP_MAX_SYN_RATE;
 
-    zc_num_bufs = MCE_DEFAULT_ZC_NUM_BUFS;
     zc_cache_threshold = MCE_DEFAULT_ZC_CACHE_THRESHOLD;
     tx_num_bufs = MCE_DEFAULT_TX_NUM_BUFS;
     tx_buf_size = MCE_DEFAULT_TX_BUF_SIZE;
@@ -939,7 +938,6 @@ void mce_sys_var::get_env_params()
     switch (mce_spec) {
     case MCE_SPEC_SOCKPERF_ULTRA_LATENCY:
         memory_limit = 128LU * 1024 * 1024;
-        tx_num_bufs = 512; // MCE_DEFAULT_TX_NUM_BUFS (200000)
         tx_num_wr = 256; // MCE_DEFAULT_TX_NUM_WRE (3000)
         tx_num_wr_to_signal = 4; // MCE_DEFAULT_TX_NUM_WRE_TO_SIGNAL (64)
         tx_prefetch_bytes = MCE_DEFAULT_TX_PREFETCH_BYTES; //(256)
@@ -964,12 +962,10 @@ void mce_sys_var::get_env_params()
         strcpy(internal_thread_affinity_str, "0"); // MCE_DEFAULT_INTERNAL_THREAD_AFFINITY_STR;
 
         if (enable_striding_rq) {
-            rx_num_bufs = 16; // MCE_DEFAULT_RX_NUM_BUFS (64)
             strq_strides_num_bufs = 131072; // MCE_DEFAULT_STRQ_NUM_BUFS(262144)
             strq_stride_num_per_rwqe = 65536; // MCE_DEFAULT_STRQ_NUM_STRIDES(16384)
             strq_stride_size_bytes = 64; // MCE_DEFAULT_STRQ_STRIDE_SIZE_BYTES(512)
         } else {
-            rx_num_bufs = 1024; // MCE_DEFAULT_RX_NUM_BUFS (200000)
             rx_num_wr = 256; // MCE_DEFAULT_RX_NUM_WRE (16000)
             rx_num_wr_to_post_recv = 4; // MCE_DEFAULT_RX_NUM_WRE_TO_POST_RECV (64)
         }
@@ -1026,10 +1022,6 @@ void mce_sys_var::get_env_params()
         memory_limit = app.workers_num > 16 ? 3072LU * 1024 * 1024 : 4096LU * 1024 * 1024;
         memory_limit *= std::max(app.workers_num, 1);
         rx_bufs_batch = 8; // MCE_DEFAULT_RX_BUFS_BATCH (64), RX buffers batch size.
-        tx_num_bufs =
-            1000000; // MCE_DEFAULT_TX_NUM_BUFS (200000), Global TX data buffers allocated.
-        tx_buf_size = 0; // MCE_DEFAULT_TX_BUF_SIZE (0), Size of single data buffer.
-        zc_tx_size = 32768; // MCE_DEFAULT_ZC_TX_SIZE (32768), zero copy segment maximum size.
         progress_engine_interval_msec = 0; // MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC (10),
                                            // Disable internal thread CQ draining logic.
         cq_moderation_period_usec =
@@ -1064,7 +1056,6 @@ void mce_sys_var::get_env_params()
 
         if (enable_striding_rq) {
             rx_num_wr = 256; // MCE_DEFAULT_STRQ_NUM_WRE(8)
-            rx_num_bufs = 512; // MCE_DEFAULT_RX_NUM_BUFS (64)
             strq_stride_num_per_rwqe = 4096; // MCE_DEFAULT_STRQ_NUM_STRIDES(16384)
         } else {
             rx_num_wr = 32000; // MCE_DEFAULT_RX_NUM_WRE (16000), Amount of WREs in RX queue.
@@ -1078,13 +1069,9 @@ void mce_sys_var::get_env_params()
         rx_poll_on_tx_tcp = false; // MCE_DEFAULT_RX_POLL_ON_TX_TCP(false), Do polling on RX queue
                                    // on TX operations, helpful to maintain TCP stack management.
 
-        zc_num_bufs = 87500; // MCE_DEFAULT_ZC_NUM_BUFS (200000), Global ZC data buffers allocated.
-        tx_num_bufs = 87500; // MCE_DEFAULT_TX_NUM_BUFS (200000), Global TX data buffers allocated.
         tx_bufs_batch_tcp = 2; // MCE_DEFAULT_TX_BUFS_BATCH_TCP (16)
         tx_segs_batch_tcp = 4; // MCE_DEFAULT_TX_SEGS_BATCH_TCP (64)
         rx_bufs_batch = 8; // MCE_DEFAULT_RX_BUFS_BATCH (64), RX buffers batch size.
-        tx_buf_size = 0; // MCE_DEFAULT_TX_BUF_SIZE (0), Size of single data buffer.
-        zc_tx_size = 32768; // MCE_DEFAULT_ZC_TX_SIZE (32768), zero copy segment maximum size.
         progress_engine_interval_msec = 0; // MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC (10),
                                            // Disable internal thread CQ draining logic.
         cq_moderation_period_usec =
@@ -1117,11 +1104,8 @@ void mce_sys_var::get_env_params()
 
         if (enable_striding_rq) {
             rx_num_wr = 128; // MCE_DEFAULT_STRQ_NUM_WRE(8)
-            rx_num_bufs = 256; // MCE_DEFAULT_RX_NUM_BUFS (64)
             strq_stride_num_per_rwqe = 2048; // MCE_DEFAULT_STRQ_NUM_STRIDES(16384)
         } else {
-            rx_num_bufs =
-                87500; // MCE_DEFAULT_RX_NUM_BUFS (200000), Global RX data buffers allocated.
             rx_num_wr = 32000; // MCE_DEFAULT_RX_NUM_WRE (16000), Amount of WREs in RX queue.
         }
 
@@ -1137,7 +1121,6 @@ void mce_sys_var::get_env_params()
         tcp_nodelay = true;
 
         if (enable_striding_rq) {
-            rx_num_bufs = 512;
             qp_compensation_level = 8;
             strq_strides_compensation_level = 32768;
             enable_lro = option_3::ON;
@@ -1253,10 +1236,6 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_STRQ_STRIDES_COMPENSATION_LEVEL)) != NULL) {
         strq_strides_compensation_level = (uint32_t)atoi(env_ptr);
-    }
-
-    if ((env_ptr = getenv(SYS_VAR_ZC_NUM_BUFS)) != NULL) {
-        zc_num_bufs = (uint32_t)atoi(env_ptr);
     }
 
     if ((env_ptr = getenv(SYS_VAR_ZC_CACHE_THRESHOLD)) != NULL) {

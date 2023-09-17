@@ -544,8 +544,6 @@ void print_xlio_global_settings()
                           MCE_DEFAULT_TCP_MAX_SYN_RATE, SYS_VAR_TCP_MAX_SYN_RATE, "(no limit)");
     }
 
-    VLOG_PARAM_NUMBER("Zerocopy Mem Bufs", safe_mce_sys().zc_num_bufs, MCE_DEFAULT_ZC_NUM_BUFS,
-                      SYS_VAR_ZC_NUM_BUFS);
     VLOG_PARAM_STRING("Zerocopy Cache Threshold", safe_mce_sys().zc_cache_threshold,
                       MCE_DEFAULT_ZC_CACHE_THRESHOLD, SYS_VAR_ZC_CACHE_THRESHOLD,
                       option_size::to_str(safe_mce_sys().zc_cache_threshold));
@@ -1077,28 +1075,19 @@ static void do_global_ctors_helper()
         safe_mce_sys().rx_buf_size = 0;
     }
 
-    NEW_CTOR(g_buffer_pool_rx_rwqe,
-             buffer_pool(safe_mce_sys().rx_num_bufs, calc_rx_wqe_buff_size(),
-                         buffer_pool::free_rx_lwip_pbuf_custom,
-                         (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_RX
-                              ? safe_mce_sys().m_ioctl.user_alloc.memalloc
-                              : NULL),
-                         (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_RX
-                              ? safe_mce_sys().m_ioctl.user_alloc.memfree
-                              : NULL)));
-    g_buffer_pool_rx_rwqe->set_RX_TX_for_stats(true);
+    NEW_CTOR(
+        g_buffer_pool_rx_rwqe,
+        buffer_pool(BUFFER_POOL_RX, calc_rx_wqe_buff_size(), buffer_pool::free_rx_lwip_pbuf_custom,
+                    (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_RX
+                         ? safe_mce_sys().m_ioctl.user_alloc.memalloc
+                         : nullptr),
+                    (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_RX
+                         ? safe_mce_sys().m_ioctl.user_alloc.memfree
+                         : nullptr)));
 
     if (safe_mce_sys().enable_striding_rq) {
         NEW_CTOR(g_buffer_pool_rx_stride,
-                 buffer_pool(safe_mce_sys().strq_strides_compensation_level, 0,
-                             buffer_pool::free_rx_lwip_pbuf_custom,
-                             (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_RX_STRIDE
-                                  ? safe_mce_sys().m_ioctl.user_alloc.memalloc
-                                  : NULL),
-                             (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_RX_STRIDE
-                                  ? safe_mce_sys().m_ioctl.user_alloc.memfree
-                                  : NULL)));
-        g_buffer_pool_rx_stride->set_RX_TX_for_stats(true);
+                 buffer_pool(BUFFER_POOL_RX, 0, buffer_pool::free_rx_lwip_pbuf_custom));
         g_buffer_pool_rx_ptr = g_buffer_pool_rx_stride;
     } else {
         g_buffer_pool_rx_ptr = g_buffer_pool_rx_rwqe;
@@ -1110,7 +1099,7 @@ static void do_global_ctors_helper()
         safe_mce_sys().tx_buf_size = 0;
     }
     NEW_CTOR(g_buffer_pool_tx,
-             buffer_pool(safe_mce_sys().tx_num_bufs,
+             buffer_pool(BUFFER_POOL_TX,
                          TX_BUF_SIZE(safe_mce_sys().tx_buf_size
                                          ? safe_mce_sys().tx_buf_size
                                          : get_lwip_tcp_mss(g_p_net_device_table_mgr->get_max_mtu(),
@@ -1122,17 +1111,9 @@ static void do_global_ctors_helper()
                          (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_TX
                               ? safe_mce_sys().m_ioctl.user_alloc.memfree
                               : NULL)));
-    g_buffer_pool_tx->set_RX_TX_for_stats(false);
 
     NEW_CTOR(g_buffer_pool_zc,
-             buffer_pool(safe_mce_sys().zc_num_bufs, 0, buffer_pool::free_tx_lwip_pbuf_custom,
-                         (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_TX_ZC
-                              ? safe_mce_sys().m_ioctl.user_alloc.memalloc
-                              : NULL),
-                         (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_TX_ZC
-                              ? safe_mce_sys().m_ioctl.user_alloc.memfree
-                              : NULL)));
-    g_buffer_pool_zc->set_RX_TX_for_stats(false);
+             buffer_pool(BUFFER_POOL_TX, 0, buffer_pool::free_tx_lwip_pbuf_custom));
 
     NEW_CTOR(g_tcp_seg_pool, tcp_seg_pool());
 
