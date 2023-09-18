@@ -673,6 +673,31 @@ void mce_sys_var::read_strq_stride_size_bytes()
     strq_stride_size_bytes = static_cast<uint32_t>(stirde_size_bytes);
 }
 
+void mce_sys_var::update_multi_process_params()
+{
+#if defined(DEFINED_NGINX)
+    bool is_nginx = app.type == APP_NGINX;
+    bool is_nginx_master = is_nginx && (!g_p_app || g_p_app->get_worker_id() == -1);
+    if (is_nginx) {
+        // Memory limit is per application, so distribute it across processes.
+        memory_limit /= std::max<size_t>(app.workers_num, 1U);
+        if (is_nginx_master) {
+            // We don't want to waste memory on the master process which doesn't handle traffic.
+            // Set parameters to preallocate minimum resources.
+            mem_alloc_type = option_alloc_type::ANON;
+            memory_limit = 12 * 1024 * 1024;
+            tx_bufs_batch_tcp = 1;
+            tx_segs_batch_tcp = 1;
+            rx_num_wr = 1;
+            strq_strides_compensation_level = 32;
+            strq_stride_size_bytes = 512;
+            strq_stride_num_per_rwqe = 32;
+            tx_buf_size = 0;
+        }
+    }
+#endif /* DEFINED_NGINX */
+}
+
 void mce_sys_var::get_env_params()
 {
     int c = 0, len = 0;
