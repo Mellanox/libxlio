@@ -342,6 +342,9 @@ public:
 public:
     void get_env_params();
 
+    // Update parameters for multi-process applications
+    void update_multi_process_params();
+
     char *app_name;
     char app_id[MAX_APP_ID_LENGHT];
 

@@ -1025,6 +1025,10 @@ static void do_global_ctors_helper()
     set_env_params();
     prepare_fork();
 
+    // Adjust configuration before subsystems initialization. We do this here
+    // not to affect XLIO header output.
+    safe_mce_sys().update_multi_process_params();
+
     if (g_is_forked_child == true) {
         g_is_forked_child = false;
     }
@@ -1040,7 +1044,7 @@ static void do_global_ctors_helper()
         vlog_printf(VLOG_DEBUG, "Agent is disabled\n");
     }
 
-    // Create all global managment objects
+    // Create all global management objects
     NEW_CTOR(g_p_event_handler_manager, event_handler_manager());
 
     xlio_shmem_stats_open(&g_p_vlogger_level, &g_p_vlogger_details);
