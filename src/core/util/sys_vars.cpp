@@ -910,15 +910,31 @@ void mce_sys_var::get_env_params()
         mce_spec = (uint32_t)xlio_spec::from_str(env_ptr, MCE_SPEC_NONE);
     }
 
+    /*
+     * Check for specific application configuration first. We can make decisions
+     * based on number of workers or application type further.
+     */
 #if defined(DEFINED_NGINX)
     if ((env_ptr = getenv(SYS_VAR_NGINX_WORKERS_NUM)) != NULL) {
-        // In order to ease the usage of Nginx cases, we apply Nginx profile when
-        // user will choose to use Nginx workers environment variable.
-        if (atoi(env_ptr) > 0 && mce_spec == MCE_SPEC_NONE) {
-            mce_spec = MCE_SPEC_NGINX;
+        app.workers_num = (uint32_t)atoi(env_ptr);
+        if (app.workers_num > 0) {
+            app.type = APP_NGINX;
+            // In order to ease the usage of Nginx cases, we apply Nginx profile when
+            // user will choose to use Nginx workers environment variable.
+            if (mce_spec == MCE_SPEC_NONE) {
+                mce_spec = MCE_SPEC_NGINX;
+            }
         }
     }
 #endif // DEFINED_NGINX
+#if defined(DEFINED_ENVOY)
+    if ((env_ptr = getenv(SYS_VAR_ENVOY_WORKERS_NUM)) != NULL) {
+        app.workers_num = (uint32_t)atoi(env_ptr);
+        if (app.workers_num > 0) {
+            app.type = APP_ENVOY;
+        }
+    }
+#endif /* DEFINED_ENVOY */
 
     switch (mce_spec) {
     case MCE_SPEC_SOCKPERF_ULTRA_LATENCY:
@@ -1888,12 +1904,6 @@ void mce_sys_var::get_env_params()
     }
 
 #if defined(DEFINED_NGINX)
-    if ((env_ptr = getenv(SYS_VAR_NGINX_WORKERS_NUM)) != NULL) {
-        app.workers_num = (uint32_t)atoi(env_ptr);
-        if (app.workers_num > 0) {
-            app.type = APP_NGINX;
-        }
-    }
     if ((env_ptr = getenv(SYS_VAR_NGINX_UDP_POOL_SIZE)) != NULL) {
         nginx_udp_socket_pool_size = (uint32_t)atoi(env_ptr);
     }
@@ -1901,15 +1911,6 @@ void mce_sys_var::get_env_params()
         nginx_udp_socket_pool_rx_num_buffs_reuse = (uint32_t)atoi(env_ptr);
     }
 #endif // DEFINED_NGINX
-#if defined(DEFINED_ENVOY)
-    if ((env_ptr = getenv(SYS_VAR_ENVOY_WORKERS_NUM)) != NULL) {
-        app.type = APP_ENVOY;
-        app.workers_num = (uint32_t)atoi(env_ptr);
-        if (app.workers_num > 0) {
-            app.type = APP_ENVOY;
-        }
-    }
-#endif /* DEFINED_ENVOY */
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     if ((env_ptr = getenv(SYS_VAR_SRC_PORT_STRIDE)) != NULL) {
         app.src_port_stride = (uint32_t)atoi(env_ptr);
