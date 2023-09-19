@@ -80,9 +80,8 @@ int app_conf::proc_nginx(void)
      */
     fd_collection *p_fd_collection = (fd_collection *)g_p_app->context;
     for (int fd = 0; fd < p_fd_collection->get_fd_map_size(); fd++) {
-        sockinfo *si;
         socket_fd_api *sock_fd_api = p_fd_collection->get_sockfd(fd);
-        if (!sock_fd_api || !(si = dynamic_cast<sockinfo *>(sock_fd_api))) {
+        if (!sock_fd_api || !dynamic_cast<sockinfo *>(sock_fd_api)) {
             continue;
         }
         g_p_app->map_listen_fd[fd] = gettid();
@@ -106,8 +105,7 @@ int app_conf::proc_envoy(int __op, int __fd)
     /* Prcess only sockets from map_listen_fd */
     auto iter = g_p_app->map_listen_fd.find(__fd);
     if (iter != g_p_app->map_listen_fd.end()) {
-        socket_fd_api *p_socket_object = NULL;
-        p_socket_object = fd_collection_get_sockfd(__fd);
+        socket_fd_api *p_socket_object = fd_collection_get_sockfd(__fd);
         if (iter->second == gettid()) {
             /* process listen sockets from main thread and remove
              * them from map_listen_fd
