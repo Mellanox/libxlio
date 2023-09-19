@@ -36,10 +36,6 @@
 
 #define MODULE_NAME "tcp_seg_pool"
 
-enum {
-    TCP_SEG_POOL_COMPENSATION_LEVEL = 16384U,
-};
-
 extern global_stats_t g_global_stat_static;
 
 tcp_seg_pool *g_tcp_seg_pool = NULL;
@@ -135,7 +131,7 @@ tcp_seg *tcp_seg_pool::split_tcp_segs(uint32_t count, tcp_seg *&tcp_seg_list, ui
 
 bool tcp_seg_pool::expand()
 {
-    size_t size = sizeof(tcp_seg) * TCP_SEG_POOL_COMPENSATION_LEVEL;
+    size_t size = sizeof(tcp_seg) * safe_mce_sys().tx_segs_pool_batch_tcp;
     tcp_seg *tcp_segs_array = (tcp_seg *)m_allocator.alloc(size);
 
     if (!tcp_segs_array) {
