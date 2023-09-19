@@ -685,9 +685,11 @@ void mce_sys_var::update_multi_process_params()
             // We don't want to waste memory on the master process which doesn't handle traffic.
             // Set parameters to preallocate minimum resources.
             mem_alloc_type = option_alloc_type::ANON;
-            memory_limit = 12 * 1024 * 1024;
+            memory_limit = 12LU * 1024 * 1024;
+            heap_metadata_block = 2LU * 1024 * 1024;
             tx_bufs_batch_tcp = 1;
             tx_segs_batch_tcp = 1;
+            tx_segs_pool_batch_tcp = 256;
             rx_num_wr = 1;
             strq_strides_compensation_level = 32;
             strq_stride_size_bytes = 512;
@@ -786,6 +788,7 @@ void mce_sys_var::get_env_params()
     tx_bufs_batch_tcp = MCE_DEFAULT_TX_BUFS_BATCH_TCP;
     tx_segs_batch_tcp = MCE_DEFAULT_TX_SEGS_BATCH_TCP;
     tx_segs_ring_batch_tcp = MCE_DEFAULT_TX_SEGS_RING_BATCH_TCP;
+    tx_segs_pool_batch_tcp = MCE_DEFAULT_TX_SEGS_POOL_BATCH_TCP;
     rx_num_bufs = MCE_DEFAULT_RX_NUM_BUFS;
     rx_buf_size = MCE_DEFAULT_RX_BUF_SIZE;
     rx_bufs_batch = MCE_DEFAULT_RX_BUFS_BATCH;
@@ -854,6 +857,8 @@ void mce_sys_var::get_env_params()
     buffer_batching_mode = MCE_DEFAULT_BUFFER_BATCHING_MODE;
     mem_alloc_type = MCE_DEFAULT_MEM_ALLOC_TYPE;
     memory_limit = MCE_DEFAULT_MEMORY_LIMIT;
+    memory_limit_user = MCE_DEFAULT_MEMORY_LIMIT_USER;
+    heap_metadata_block = MCE_DEFAULT_HEAP_METADATA_BLOCK;
     hugepage_log2 = MCE_DEFAULT_HUGEPAGE_LOG2;
     enable_socketxtreme = MCE_DEFAULT_SOCKETXTREME;
     enable_tso = MCE_DEFAULT_TSO;
@@ -1325,24 +1330,19 @@ void mce_sys_var::get_env_params()
     }
 
     if ((env_ptr = getenv(SYS_VAR_TX_BUFS_BATCH_TCP)) != NULL) {
-        tx_bufs_batch_tcp = (uint32_t)atoi(env_ptr);
-        if (tx_bufs_batch_tcp < 1) {
-            tx_bufs_batch_tcp = 1;
-        }
+        tx_bufs_batch_tcp = (uint32_t)std::max<int32_t>(atoi(env_ptr), 1);
     }
 
     if ((env_ptr = getenv(SYS_VAR_TX_SEGS_BATCH_TCP)) != NULL) {
-        tx_segs_batch_tcp = (uint32_t)atoi(env_ptr);
-        if (tx_segs_batch_tcp < 1) {
-            tx_segs_batch_tcp = 1;
-        }
+        tx_segs_batch_tcp = (uint32_t)std::max<int32_t>(atoi(env_ptr), 1);
     }
 
     if ((env_ptr = getenv(SYS_VAR_TX_SEGS_RING_BATCH_TCP)) != NULL) {
-        tx_segs_ring_batch_tcp = (uint32_t)atoi(env_ptr);
-        if (tx_segs_ring_batch_tcp < 1) {
-            tx_segs_ring_batch_tcp = 1;
-        }
+        tx_segs_ring_batch_tcp = (uint32_t)std::max<int32_t>(atoi(env_ptr), 1);
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_TX_SEGS_POOL_BATCH_TCP)) != NULL) {
+        tx_segs_pool_batch_tcp = (uint32_t)std::max<int32_t>(atoi(env_ptr), 1);
     }
 
     if ((env_ptr = getenv(SYS_VAR_RING_ALLOCATION_LOGIC_TX)) != NULL) {
@@ -1831,10 +1831,7 @@ void mce_sys_var::get_env_params()
         mem_alloc_type = option_alloc_type::from_str(env_ptr, MCE_DEFAULT_MEM_ALLOC_TYPE);
     }
     if ((env_ptr = getenv(SYS_VAR_MEMORY_LIMIT)) != NULL) {
-        memory_limit = option_size::from_str(env_ptr);
-        if (!memory_limit) {
-            memory_limit = MCE_DEFAULT_MEMORY_LIMIT;
-        }
+        memory_limit = option_size::from_str(env_ptr) ?: MCE_DEFAULT_MEMORY_LIMIT;
         if (memory_limit < MCE_DEFAULT_MEMORY_LIMIT_LOW_THRESHOLD) {
             vlog_printf(VLOG_WARNING, "%s is too low (%s). This can lead to memory issues.",
                         SYS_VAR_MEMORY_LIMIT, option_size::to_str(memory_limit));
@@ -1874,6 +1871,12 @@ void mce_sys_var::get_env_params()
 #endif /* DEFINED_NGINX */
             memory_limit = std::max(memory_limit, memory_limit_est);
         }
+    }
+    if ((env_ptr = getenv(SYS_VAR_MEMORY_LIMIT_USER)) != NULL) {
+        memory_limit_user = option_size::from_str(env_ptr);
+    }
+    if ((env_ptr = getenv(SYS_VAR_HEAP_METADATA_BLOCK)) != NULL) {
+        heap_metadata_block = option_size::from_str(env_ptr) ?: MCE_DEFAULT_HEAP_METADATA_BLOCK;
     }
     if ((env_ptr = getenv(SYS_VAR_HUGEPAGE_LOG2)) != NULL) {
         unsigned val = (unsigned)atoi(env_ptr);

@@ -405,8 +405,6 @@ public:
 };
 } // namespace std
 
-#define XLIO_HEAP_METADATA_BLOCK (32U * 1024U * 1024U)
-
 static std::unordered_map<heap_key, xlio_heap *> s_heap_map;
 static lock_mutex s_heap_lock;
 static size_t s_pagesize;
@@ -476,7 +474,12 @@ bool xlio_heap::expand(size_t size /*=0*/)
     void *data;
     xlio_allocator_hw *block;
 
-    size = size ?: (m_b_hw ? safe_mce_sys().memory_limit : XLIO_HEAP_METADATA_BLOCK);
+    if (!size && m_b_hw) {
+        size = (m_p_alloc_func && safe_mce_sys().memory_limit_user)
+            ? safe_mce_sys().memory_limit_user
+            : safe_mce_sys().memory_limit;
+    }
+    size = size ?: safe_mce_sys().heap_metadata_block;
 
     if (!m_p_alloc_func && !m_b_hw) {
         block = new xlio_allocator_hw(ALLOC_TYPE_PREFER_HUGE);
@@ -518,7 +521,7 @@ repeat:
         data = (void *)((uintptr_t)m_blocks.back()->data() + m_latest_offset);
         m_latest_offset += actual_size;
     } else if (!m_b_hw) {
-        if (expand(std::max<size_t>(XLIO_HEAP_METADATA_BLOCK, actual_size))) {
+        if (expand(std::max(safe_mce_sys().heap_metadata_block, actual_size))) {
             goto repeat;
         }
     }
