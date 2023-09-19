@@ -893,8 +893,6 @@ void ring_simple::init_tx_buffers(uint32_t count)
 {
     request_more_tx_buffers(PBUF_RAM, count, m_tx_lkey);
     m_tx_num_bufs = m_tx_pool.size();
-    request_more_tx_buffers(PBUF_ZEROCOPY, count, 0);
-    m_zc_num_bufs = m_zc_pool.size();
 }
 
 void ring_simple::inc_cq_moderation_stats(size_t sz_data)
