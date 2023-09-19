@@ -1267,8 +1267,10 @@ void mce_sys_var::get_env_params()
         zc_cache_threshold = option_size::from_str(env_ptr);
     }
 
+    bool tx_num_bufs_set = false;
     if ((env_ptr = getenv(SYS_VAR_TX_NUM_BUFS)) != NULL) {
         tx_num_bufs = (uint32_t)atoi(env_ptr);
+        tx_num_bufs_set = true;
     }
 
     if ((env_ptr = getenv(SYS_VAR_TX_BUF_SIZE)) != NULL) {
@@ -1383,8 +1385,10 @@ void mce_sys_var::get_env_params()
         tcp_max_syn_rate = std::min(TCP_MAX_SYN_RATE_TOP_LIMIT, std::max(0, atoi(env_ptr)));
     }
 
+    bool rx_num_bufs_set = false;
     if ((env_ptr = getenv(SYS_VAR_RX_NUM_BUFS)) != NULL) {
         rx_num_bufs = (uint32_t)atoi(env_ptr);
+        rx_num_bufs_set = true;
     }
 
     if ((env_ptr = getenv(SYS_VAR_RX_BUF_SIZE)) != NULL) {
@@ -1834,6 +1838,41 @@ void mce_sys_var::get_env_params()
         if (memory_limit < MCE_DEFAULT_MEMORY_LIMIT_LOW_THRESHOLD) {
             vlog_printf(VLOG_WARNING, "%s is too low (%s). This can lead to memory issues.",
                         SYS_VAR_MEMORY_LIMIT, option_size::to_str(memory_limit));
+        }
+    } else {
+        /*
+         * This section is for backward compatibility with deprecated parameters
+         * XLIO_TX_BUFS and XLIO_RX_BUFS. These parameters will be removed with the future
+         * versions and only XLIO_MEMORY_LIMIT will affect memory allocation.
+         */
+        if (tx_num_bufs_set || rx_num_bufs_set || tx_buf_size != MCE_DEFAULT_TX_BUF_SIZE) {
+#if defined(DEFINED_NGINX)
+            // Adjust default buffers configuration for specific profiles
+            if (mce_spec == MCE_SPEC_NGINX) {
+                tx_num_bufs = tx_num_bufs_set ? tx_num_bufs : 1000000;
+                rx_num_bufs = (rx_num_bufs_set || !enable_striding_rq) ? rx_num_bufs : 512;
+            } else if (mce_spec == MCE_SPEC_NGINX_DPU) {
+                tx_num_bufs = tx_num_bufs_set ? tx_num_bufs : 90000;
+                if (enable_striding_rq) {
+                    rx_num_bufs = rx_num_bufs_set ? rx_num_bufs : 384;
+                } else {
+                    rx_num_bufs = rx_num_bufs_set ? rx_num_bufs : 96000;
+                }
+            }
+#endif /* DEFINED_NGINX */
+            // We don't have net_device manager yet, so we don't know MTU. Assume ~1500.
+            size_t memory_limit_est = std::max<size_t>(tx_buf_size + 100, 2048U) * tx_num_bufs;
+            if (enable_striding_rq) {
+                memory_limit_est += strq_stride_num_per_rwqe * strq_stride_size_bytes * rx_num_bufs;
+            } else {
+                memory_limit_est += std::max<size_t>(rx_buf_size + 100, 2048U) * rx_num_bufs;
+            }
+#if defined(DEFINED_NGINX)
+            if (app.type == APP_NGINX) {
+                memory_limit_est *= std::max<size_t>(app.workers_num, 1U);
+            }
+#endif /* DEFINED_NGINX */
+            memory_limit = std::max(memory_limit, memory_limit_est);
         }
     }
     if ((env_ptr = getenv(SYS_VAR_HUGEPAGE_LOG2)) != NULL) {
