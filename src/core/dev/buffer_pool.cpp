@@ -208,6 +208,41 @@ void buffer_pool::print_val_tbl()
                    m_n_buffers);
 }
 
+void buffer_pool::print_report(vlog_levels_t log_level /*=VLOG_DEBUG*/)
+{
+    char str1[64];
+    char str2[64];
+
+    vlog_printf(log_level, "Buffer pool %p (%s%s):\n", this, m_p_bpool_stat->is_rx ? "Rx" : "Tx",
+                m_buf_size ? "" : ", zcopy");
+    vlog_printf(log_level, "  Buffers: %zu created, %zu free\n", m_n_buffers_created, m_n_buffers);
+    vlog_printf(log_level, "  Memory consumption: %s (%s per buffer)\n",
+                option_size::to_str(m_buf_size * m_n_buffers_created, str1, sizeof(str1)),
+                option_size::to_str(m_buf_size, str2, sizeof(str2)));
+    vlog_printf(log_level, "  Requests: %u unsatisfied buffer requests\n",
+                m_p_bpool_stat->n_buffer_pool_no_bufs);
+}
+
+/* static */
+void buffer_pool::print_report_on_errors(vlog_levels_t log_level)
+{
+    std::vector<buffer_pool *> pools = {g_buffer_pool_rx_rwqe, g_buffer_pool_rx_stride,
+                                        g_buffer_pool_tx, g_buffer_pool_zc};
+    bool header_printed = false;
+
+    for (auto &pool : pools) {
+        if (pool->m_p_bpool_stat->n_buffer_pool_no_bufs) {
+            if (!header_printed) {
+                vlog_printf(log_level,
+                            "XLIO detected insufficient memory. Increasing XLIO_MEMORY_LIMIT can "
+                            "improve performance.\n");
+            }
+            header_printed = true;
+            pool->print_report(log_level);
+        }
+    }
+}
+
 bool buffer_pool::get_buffers_thread_safe(descq_t &pDeque, ring_slave *desc_owner, size_t count,
                                           uint32_t lkey)
 {
