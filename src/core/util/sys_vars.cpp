@@ -1085,7 +1085,7 @@ void mce_sys_var::get_env_params()
             true; // MCE_DEFAULT_TCP_3T_RULES(false), Use 3 tuple instead rules of 5 tuple rules.
 
         if (enable_striding_rq) {
-            rx_num_wr = 256; // MCE_DEFAULT_STRQ_NUM_WRE(8)
+            rx_num_wr = 128; // MCE_DEFAULT_STRQ_NUM_WRE(8)
             strq_stride_num_per_rwqe = 4096; // MCE_DEFAULT_STRQ_NUM_STRIDES(16384)
         } else {
             rx_num_wr = 32000; // MCE_DEFAULT_RX_NUM_WRE (16000), Amount of WREs in RX queue.
@@ -1848,6 +1848,10 @@ void mce_sys_var::get_env_params()
             if (mce_spec == MCE_SPEC_NGINX) {
                 tx_num_bufs = tx_num_bufs_set ? tx_num_bufs : 1000000;
                 rx_num_bufs = (rx_num_bufs_set || !enable_striding_rq) ? rx_num_bufs : 512;
+                if (strq_stride_num_per_rwqe * strq_stride_size_bytes < 2048 * 1024) {
+                    // Increase this value back to original if user reduces the buffer size.
+                    rx_num_wr = 256;
+                }
             } else if (mce_spec == MCE_SPEC_NGINX_DPU) {
                 tx_num_bufs = tx_num_bufs_set ? tx_num_bufs : 90000;
                 if (enable_striding_rq) {
