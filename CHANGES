@@ -1,3 +1,16 @@
+Version 3.20.4-1:
+Date + Time 2023-09-21
+=============================================================
+Added:
+        - RM #3602243 Recover neigh after link down/up
+        - RM #3395514 Improve process destroy flow
+        - RM #3414980 Add envoy support
+        - RM #3580073 Implement xlio_allocator_heap
+        - RM #3580084 Print report at exit on buffer errors
+
+Fixed:
+        - RM #3604029 Fix releasing ring flow
+
 Version 3.20.3-1:
 Date + Time 2023-09-12
 =============================================================
