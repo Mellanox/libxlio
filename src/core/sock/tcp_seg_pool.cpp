@@ -156,7 +156,7 @@ bool tcp_seg_pool::expand()
     return true;
 }
 
-void tcp_seg_pool::print_report(vlog_levels_t log_level /*= VLOG_DEBUG*/)
+void tcp_seg_pool::print_report(vlog_levels_t log_level /*=VLOG_DEBUG*/)
 {
     vlog_printf(log_level, "TCP segments pool statistics:\n");
     vlog_printf(log_level, "  allocations=%u expands=%u total_segs=%u\n", m_stats.allocations,
