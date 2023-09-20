@@ -210,9 +210,8 @@ size_t from_str(const char *str)
     return 0U;
 }
 
-const char *to_str(size_t size)
+const char *to_str(size_t size, char *s, size_t len)
 {
-    static char str[64];
     static const char *suffixes[] = {"", " KB", " MB", " GB", nullptr};
     int sfx_idx = 0;
 
@@ -220,9 +219,15 @@ const char *to_str(size_t size)
         ++sfx_idx;
         size /= 1024U;
     }
-    snprintf(str, sizeof(str), "%zu%s", size, suffixes[sfx_idx]);
+    snprintf(s, len, "%zu%s", size, suffixes[sfx_idx]);
 
-    return str;
+    return s;
+}
+
+const char *to_str(size_t size)
+{
+    static char str[64];
+    return to_str(size, str, sizeof(str));
 }
 } // namespace option_size
 
