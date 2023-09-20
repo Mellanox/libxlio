@@ -200,6 +200,7 @@ const char *to_str(xlio_spec_t level);
 namespace option_size {
 size_t from_str(const char *str);
 const char *to_str(size_t size);
+const char *to_str(size_t size, char *s, size_t len);
 } // namespace option_size
 
 namespace option_3 {
