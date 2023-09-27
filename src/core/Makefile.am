@@ -258,7 +258,6 @@ libxlio_la_SOURCES := \
 	proto/mapping.h \
 	proto/mem_buf_desc.h \
 	proto/neighbour.h \
-	proto/neighbour_observer.h \
 	proto/neighbour_table_mgr.h \
 	proto/netlink_socket_mgr.h \
 	proto/route_entry.h \

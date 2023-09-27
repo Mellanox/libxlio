@@ -70,7 +70,7 @@ struct xlio_send_attr {
     xlio_tis *tis;
 };
 
-class dst_entry : public cache_observer, public tostr, public neigh_observer {
+class dst_entry : public cache_observer, public tostr {
 
 public:
     dst_entry(const sock_addr &dst, uint16_t src_port, socket_data &sock_data,
@@ -98,8 +98,6 @@ public:
     int modify_ratelimit(struct xlio_rate_limit_t &rate_limit);
     bool update_ring_alloc_logic(int fd, lock_base &socket_lock,
                                  resource_allocation_key &ring_alloc_logic);
-
-    virtual transport_type_t get_obs_transport_type() const;
 
     void return_buffers_pool();
     int get_route_mtu();
@@ -207,6 +205,7 @@ protected:
     bool alloc_neigh_val(transport_type_t tranport);
     bool get_routing_addr_sel_src(ip_address &out_ip) const;
     void do_ring_migration_tx(lock_base &socket_lock, resource_allocation_key &old_key);
+    transport_type_t get_obs_transport_type() const;
     inline void set_tx_buff_list_pending(bool is_pending = true)
     {
         m_b_tx_mem_buf_desc_list_pending = is_pending;
