@@ -47,7 +47,6 @@
 #include "event/event_handler_ibverbs.h"
 #include "event/event_handler_rdma_cm.h"
 #include "dev/ib_ctx_handler.h"
-#include "proto/neighbour_observer.h"
 #include "proto/L2_address.h"
 #include "infra/cache_subject_observer.h"
 

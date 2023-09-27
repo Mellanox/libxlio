@@ -38,7 +38,6 @@
 #include "core/event/netlink_event.h"
 #include "core/proto/neighbour_table_mgr.h"
 
-#include "core/proto/neighbour_observer.h"
 #include "core/dev/net_device_table_mgr.h"
 
 #define MODULE_NAME "ntm:"
@@ -100,19 +99,11 @@ bool neigh_table_mgr::register_observer(
                                                                             cache_entry);
 }
 
-neigh_entry *neigh_table_mgr::create_new_entry(neigh_key neigh_key, const observer *new_observer)
+neigh_entry *neigh_table_mgr::create_new_entry(neigh_key neigh_key, const observer *obs)
 {
-    observer *tmp = const_cast<observer *>(new_observer);
-    const neigh_observer *dst = dynamic_cast<const neigh_observer *>(tmp);
+    NOT_IN_USE(obs);
 
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (dst == NULL) {
-        // TODO: Need to add handling of this case
-        neigh_mgr_logpanic("dynamic_casr failed, new_observer type is not neigh_observer");
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    transport_type_t transport = dst->get_obs_transport_type();
+    transport_type_t transport = neigh_key.get_net_device_val()->get_transport_type();
 
     if (transport == XLIO_TRANSPORT_ETH) {
         neigh_mgr_logdbg("Creating new neigh_eth");
