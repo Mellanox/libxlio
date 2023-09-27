@@ -1039,6 +1039,10 @@ static void do_global_ctors_helper()
 
     xlio_heap::initialize();
 
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+    NEW_CTOR(g_p_app, app_conf());
+#endif
+
     /* Open communication with daemon */
     if (safe_mce_sys().service_enable) {
         NEW_CTOR(g_p_agent, agent());
@@ -1180,10 +1184,6 @@ static void do_global_ctors_helper()
 #ifdef DEFINED_UTLS
     xlio_tls_api_setup();
 #endif /* DEFINED_UTLS */
-
-#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    NEW_CTOR(g_p_app, app_conf());
-#endif
 }
 
 int do_global_ctors()
