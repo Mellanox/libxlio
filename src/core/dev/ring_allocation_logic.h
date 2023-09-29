@@ -97,6 +97,7 @@ public:
             m_res_key.get_ring_alloc_logic() < RING_LOGIC_PER_OBJECT && m_ring_migration_ratio > 0;
     }
     uint64_t calc_res_key_by_logic();
+    inline ring_logic_t get_alloc_logic_type() { return m_res_key.get_ring_alloc_logic(); }
     inline void enable_migration(bool active) { m_active = active; }
     const std::string to_str() const;
 
