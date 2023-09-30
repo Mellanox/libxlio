@@ -1056,7 +1056,7 @@ void mce_sys_var::get_env_params()
 
 #ifdef DEFINED_NGINX
     case MCE_SPEC_NGINX:
-        memory_limit = app.workers_num > 16 ? 3072LU * 1024 * 1024 : 4096LU * 1024 * 1024;
+        memory_limit = (app.workers_num > 16 ? 3072LU : 4096LU) * 1024 * 1024;
         memory_limit *= std::max(app.workers_num, 1);
         rx_bufs_batch = 8; // MCE_DEFAULT_RX_BUFS_BATCH (64), RX buffers batch size.
         progress_engine_interval_msec = 0; // MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC (10),
@@ -1102,7 +1102,9 @@ void mce_sys_var::get_env_params()
 
     case MCE_SPEC_NGINX_DPU:
         // The top part is different from NGINX SPEC
-        memory_limit = 1024LU * 1024 * 1024 * std::max(app.workers_num, 1);
+        memory_limit = (app.workers_num == 16 ? 512LU : 1024LU) * 1024 * 1024;
+        memory_limit *= std::max(app.workers_num, 1);
+
         rx_poll_on_tx_tcp = false; // MCE_DEFAULT_RX_POLL_ON_TX_TCP(false), Do polling on RX queue
                                    // on TX operations, helpful to maintain TCP stack management.
 
