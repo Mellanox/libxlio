@@ -87,7 +87,6 @@ Example:
  XLIO DETAILS: TCP max syn rate               0 (no limit)               [XLIO_TCP_MAX_SYN_RATE]
  XLIO DETAILS: Zerocopy Mem Bufs              200000                     [XLIO_ZC_BUFS]
  XLIO DETAILS: Zerocopy Cache Threshold       10 GB                      [XLIO_ZC_CACHE_THRESHOLD]
- XLIO DETAILS: Tx Mem Segs TCP                1000000                    [XLIO_TX_SEGS_TCP]
  XLIO DETAILS: Tx Mem Bufs                    200000                     [XLIO_TX_BUFS]
  XLIO DETAILS: Tx Mem Buf size                0                          [XLIO_TX_BUF_SIZE]
  XLIO DETAILS: ZC TX size                     32 KB                      [XLIO_ZC_TX_SIZE]
@@ -151,6 +150,7 @@ Example:
  XLIO DETAILS: Thread mode                    Multi spin lock            [XLIO_THREAD_MODE]
  XLIO DETAILS: Buffer batching mode           1 (Batch and reclaim buffers) [XLIO_BUFFER_BATCHING_MODE]
  XLIO DETAILS: Mem Allocation type            Huge pages                 [XLIO_MEM_ALLOC_TYPE]
+ XLIO DETAILS: Memory limit                   2 GB                       [XLIO_MEMORY_LIMIT]
  XLIO DETAILS: Num of UC ARPs                 3                          [XLIO_NEIGH_UC_ARP_QUATA]
  XLIO DETAILS: UC ARP delay (msec)            10000                      [XLIO_NEIGH_UC_ARP_DELAY_MSEC]
  XLIO DETAILS: Num of neigh restart retries   1                          [XLIO_NEIGH_NUM_ERR_RETRIES]
@@ -319,10 +319,6 @@ Default value is 200000
 XLIO_ZC_CACHE_THRESHOLD
 Memory limit for the mapping cache which is use by sendfile().
 Default value is 10GB
-
-XLIO_TX_SEGS_TCP
-Number of TCP LWIP segments allocation for each XLIO process.
-Default value is 1000000
 
 XLIO_TX_BUFS
 Number of global Tx data buffer elements allocation.
@@ -951,6 +947,11 @@ accordingly:
         ANON     |        ANON
         HUGE     | ALL (PREFER_CONTIG for >32MB hugepage)
 Default value is 2 (Huge pages)
+
+XLIO_MEMORY_LIMIT
+Pre-allocated memory limit for buffers. Note that the limit doesn't include
+dynamic memory allocation and XLIO memory consumption can exceed the limit.
+Default value is 2GB
 
 The following XLIO neigh parameters are for advanced users or internal support only:
 
