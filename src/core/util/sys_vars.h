@@ -838,7 +838,6 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_MEM_ALLOC_TYPE                 (option_alloc_type::HUGE)
 #define MCE_DEFAULT_MEMORY_LIMIT                   (2LU * 1024 * 1024 * 1024)
 #define MCE_DEFAULT_MEMORY_LIMIT_USER              (0)
-#define MCE_DEFAULT_MEMORY_LIMIT_LOW_THRESHOLD     (2LU * 1024 * 1024)
 #define MCE_DEFAULT_HEAP_METADATA_BLOCK            (32LU * 1024 * 1024)
 #define MCE_DEFAULT_HUGEPAGE_LOG2                  (0)
 #define MCE_DEFAULT_FORK_SUPPORT                   (true)

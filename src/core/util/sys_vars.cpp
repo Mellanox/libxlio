@@ -1842,10 +1842,6 @@ void mce_sys_var::get_env_params()
     }
     if ((env_ptr = getenv(SYS_VAR_MEMORY_LIMIT)) != NULL) {
         memory_limit = option_size::from_str(env_ptr) ?: MCE_DEFAULT_MEMORY_LIMIT;
-        if (memory_limit < MCE_DEFAULT_MEMORY_LIMIT_LOW_THRESHOLD) {
-            vlog_printf(VLOG_WARNING, "%s is too low (%s). This can lead to memory issues.",
-                        SYS_VAR_MEMORY_LIMIT, option_size::to_str(memory_limit));
-        }
     } else {
         /*
          * This section is for backward compatibility with deprecated parameters

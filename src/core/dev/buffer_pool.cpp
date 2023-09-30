@@ -183,6 +183,10 @@ buffer_pool::buffer_pool(buffer_pool_type type, size_t buf_size,
 
     if (initial_pool_size) {
         if (!expand(initial_pool_size)) {
+            vlog_printf(
+                VLOG_WARNING,
+                "Insufficient memory to initialize %s%s buffer pool. Increase XLIO_MEMORY_LIMIT.\n",
+                m_buf_size ? "" : "zcopy ", type == BUFFER_POOL_RX ? "Rx" : "Tx");
             throw_xlio_exception("Failed to allocate buffers");
         }
     }
