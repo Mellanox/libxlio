@@ -232,17 +232,24 @@ void buffer_pool::print_report_on_errors(vlog_levels_t log_level)
 {
     std::vector<buffer_pool *> pools = {g_buffer_pool_rx_rwqe, g_buffer_pool_rx_stride,
                                         g_buffer_pool_tx, g_buffer_pool_zc};
-    bool header_printed = false;
+    bool do_print = false;
 
     for (auto &pool : pools) {
         if (pool->m_p_bpool_stat->n_buffer_pool_no_bufs) {
-            if (!header_printed) {
-                vlog_printf(log_level,
-                            "XLIO detected insufficient memory. Increasing XLIO_MEMORY_LIMIT can "
-                            "improve performance.\n");
+            do_print = true;
+            break;
+        }
+    }
+
+    if (do_print) {
+        vlog_printf(log_level,
+                    "XLIO detected insufficient memory. Increasing XLIO_MEMORY_LIMIT can improve "
+                    "performance.\n");
+        for (auto &pool : pools) {
+            // Print report for every non-zcopy buffer pool and zcopy pools with errors.
+            if (pool->m_buf_size || pool->m_p_bpool_stat->n_buffer_pool_no_bufs) {
+                pool->print_report(log_level);
             }
-            header_printed = true;
-            pool->print_report(log_level);
         }
     }
 }
