@@ -700,6 +700,7 @@ void mce_sys_var::update_multi_process_params()
             strq_stride_size_bytes = 512;
             strq_stride_num_per_rwqe = 32;
             tx_buf_size = 0;
+            rx_buf_size = 0;
         }
     }
 #endif /* DEFINED_NGINX */
