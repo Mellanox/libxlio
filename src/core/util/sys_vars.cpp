@@ -926,7 +926,6 @@ void mce_sys_var::get_env_params()
 
     enable_striding_rq =
         (enable_strq_env == option_strq::ON || enable_strq_env == option_strq::AUTO);
-    enable_dpcp_rq = (enable_striding_rq || (enable_strq_env == option_strq::REGULAR_RQ));
 
     if (enable_striding_rq) {
         rx_num_bufs = MCE_DEFAULT_STRQ_NUM_BUFS;

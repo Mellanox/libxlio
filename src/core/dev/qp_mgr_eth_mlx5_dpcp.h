@@ -37,9 +37,9 @@
 
 #include <mellanox/dpcp.h>
 #include <memory>
-#include "dev/qp_mgr_eth_mlx5.h"
+#include "dev/qp_mgr.h"
 
-class qp_mgr_eth_mlx5_dpcp : public qp_mgr_eth_mlx5 {
+class qp_mgr_eth_mlx5_dpcp : public qp_mgr {
 public:
     qp_mgr_eth_mlx5_dpcp(struct qp_mgr_desc *desc, uint32_t tx_num_wr, uint16_t vlan);
 
@@ -58,7 +58,7 @@ protected:
 
 private:
 #ifdef DEFINED_UTLS
-    // TODO: Move UTLS related code to this class and remove qp_mgr_eth_mlx5::create_tir()
+    // TODO: Move UTLS related code to this class and remove qp_mgr::create_tir()
     dpcp::tir *create_tir(bool is_tls = false) override;
 #else
     dpcp::tir *create_tir(bool is_tls = false);

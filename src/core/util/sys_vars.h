@@ -415,7 +415,6 @@ public:
     bool disable_flow_tag;
 
     bool enable_striding_rq;
-    bool enable_dpcp_rq;
     bool tcp_3t_rules;
     bool udp_3t_rules;
     bool eth_mc_l2_only_rules;

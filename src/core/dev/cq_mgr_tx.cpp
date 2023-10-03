@@ -34,7 +34,7 @@
 #include <util/valgrind.h>
 #include <sock/sock-redirect.h>
 #include "ring_simple.h"
-#include "qp_mgr_eth_mlx5.h"
+#include "qp_mgr.h"
 
 #define MODULE_NAME "cq_mgr_tx"
 
@@ -172,7 +172,7 @@ void cq_mgr_tx::add_qp_tx(qp_mgr *qp)
 {
     // Assume locked!
     cq_logdbg("qp_mgr=%p", qp);
-    m_qp = static_cast<qp_mgr_eth_mlx5 *>(qp);
+    m_qp = qp;
 
     if (0 != xlio_ib_mlx5_get_cq(m_p_ibv_cq, &m_mlx5_cq)) {
         cq_logpanic("xlio_ib_mlx5_get_cq failed (errno=%d %m)", errno);

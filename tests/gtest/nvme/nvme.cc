@@ -36,7 +36,7 @@
 #include <vector>
 #include "common/def.h"
 #include "common/base.h"
-#include "dev/qp_mgr_eth_mlx5.h"
+#include "dev/qp_mgr.h"
 #include "proto/nvme_parse_input_args.h"
 #include "tcp/tcp_base.h"
 #include "xlio_extra.h"

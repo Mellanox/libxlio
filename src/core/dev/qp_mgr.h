@@ -52,6 +52,10 @@
 #include "dev/cq_mgr_rx.h"
 #include "dev/cq_mgr_tx.h"
 #include "dev/rfs_rule.h"
+#include "util/sg_array.h"
+#include "dev/dm_mgr.h"
+#include <list>
+#include <vector>
 
 /* Forward declarations */
 struct xlio_tls_info;
@@ -135,6 +139,99 @@ public:
     void *m_callback_arg;
 };
 
+class xlio_tis : public xlio_ti {
+public:
+    xlio_tis(std::unique_ptr<dpcp::tis> _tis, xlio_ti::ti_type type)
+        : xlio_ti(type)
+        , m_dek()
+        , m_p_tis(std::move(_tis))
+        , m_tisn(0U)
+        , m_dek_id(0U)
+    {
+        dpcp::status ret = m_p_tis->get_tisn(m_tisn);
+        assert(ret == dpcp::DPCP_OK);
+        (void)ret;
+    }
+
+    ~xlio_tis() = default;
+
+    std::unique_ptr<dpcp::dek> release_dek()
+    {
+        assert(m_ref == 0);
+        m_released = false;
+        return std::move(m_dek);
+    }
+
+    uint32_t get_tisn() noexcept { return m_tisn; }
+
+    void assign_dek(std::unique_ptr<dpcp::dek> &&dek_ptr)
+    {
+        m_dek = std::move(dek_ptr);
+        m_dek_id = m_dek->get_key_id();
+    }
+
+    uint32_t get_dek_id() noexcept { return m_dek_id; }
+
+private:
+    std::unique_ptr<dpcp::dek> m_dek;
+    std::unique_ptr<dpcp::tis> m_p_tis;
+    uint32_t m_tisn;
+    uint32_t m_dek_id;
+};
+
+class xlio_tir : public xlio_ti {
+public:
+    xlio_tir(dpcp::tir *_tir, xlio_ti::ti_type type)
+        : xlio_ti(type)
+    {
+        m_p_tir.reset(_tir);
+        m_dek = NULL;
+        m_tirn = 0;
+        m_dek_id = 0;
+
+        /* Cache the tir number. Mustn't fail for a valid TIR object. */
+        m_tirn = m_p_tir->get_tirn();
+        assert(m_tirn != 0);
+    }
+
+    ~xlio_tir() = default;
+
+    std::unique_ptr<dpcp::dek> release_dek()
+    {
+        assert(m_ref == 0);
+        m_released = false;
+        return std::move(m_dek);
+    }
+
+    uint32_t get_tirn() { return m_tirn; }
+
+    void assign_dek(void *dek_ptr)
+    {
+        m_dek.reset(reinterpret_cast<dpcp::dek *>(dek_ptr));
+        m_dek_id = m_dek->get_key_id();
+    }
+
+    uint32_t get_dek_id() { return m_dek_id; }
+
+    std::unique_ptr<dpcp::tir> m_p_tir;
+
+private:
+    std::unique_ptr<dpcp::dek> m_dek;
+    uint32_t m_tirn;
+    uint32_t m_dek_id;
+};
+
+/* WQE properties description. */
+struct sq_wqe_prop {
+    /* A buffer held by the WQE. This is NULL for control WQEs. */
+    mem_buf_desc_t *buf;
+    /* Number of credits (usually number of WQEBBs). */
+    unsigned credits;
+    /* Transport interface (TIS/TIR) current WQE holds reference to. */
+    xlio_ti *ti;
+    struct sq_wqe_prop *next;
+};
+
 /**
  * @class qp_mgr
  *
@@ -159,7 +256,7 @@ class qp_mgr {
     friend class cq_mgr_tx;
 
 public:
-    qp_mgr(struct qp_mgr_desc *desc, const uint32_t tx_num_wr, uint16_t vlan);
+    qp_mgr(struct qp_mgr_desc *desc, const uint32_t tx_num_wr, uint16_t vlan, bool call_configure);
     virtual ~qp_mgr();
 
     virtual void up();
@@ -167,19 +264,20 @@ public:
 
     // Post for receive single mem_buf_desc
     virtual void post_recv_buffer(mem_buf_desc_t *p_mem_buf_desc);
+
     // Post for receive a list of mem_buf_desc
     void post_recv_buffers(descq_t *p_buffers, size_t count);
     int send(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio_tis *tis,
              unsigned credits);
 
-    inline uint32_t get_max_inline_data() const { return m_qp_cap.max_inline_data; }
-    inline uint32_t get_max_send_sge() const { return m_qp_cap.max_send_sge; }
+    inline uint32_t get_max_inline_data() const { return m_mlx5_qp.cap.max_inline_data; }
+    inline uint32_t get_max_send_sge() const { return m_mlx5_qp.cap.max_send_sge; }
     int get_port_num() const { return m_port_num; }
     uint16_t get_partiton() const { return m_vlan; };
-    struct ibv_qp *get_ibv_qp() const { return m_qp; };
-    class cq_mgr_tx *get_tx_cq_mgr() const { return m_p_cq_mgr_tx; }
-    class cq_mgr_rx *get_rx_cq_mgr() const { return m_p_cq_mgr_rx; }
-    virtual uint32_t get_rx_max_wr_num();
+    struct ibv_qp *get_ibv_qp() const { return m_mlx5_qp.qp; };
+    cq_mgr_tx *get_tx_cq_mgr() const { return m_p_cq_mgr_tx; }
+    cq_mgr_rx *get_rx_cq_mgr() const { return m_p_cq_mgr_rx; }
+    uint32_t get_rx_max_wr_num() { return m_rx_num_wr; }
     // This function can be replaced with a parameter during ring creation.
     // chain of calls may serve as cache warm for dummy send feature.
     inline bool get_hw_dummy_send_support() { return m_hw_dummy_send_support; }
@@ -189,96 +287,66 @@ public:
 
     void release_rx_buffers();
     void release_tx_buffers();
-    virtual void trigger_completion_for_all_sent_packets();
     uint32_t is_ratelimit_change(struct xlio_rate_limit_t &rate_limit);
     int modify_qp_ratelimit(struct xlio_rate_limit_t &rate_limit, uint32_t rl_changes);
-    virtual void dm_release_data(mem_buf_desc_t *buff) { NOT_IN_USE(buff); }
+    void dm_release_data(mem_buf_desc_t *buff) { m_dm_mgr.release_data(buff); }
 
     virtual rfs_rule *create_rfs_rule(xlio_ibv_flow_attr &attrs, xlio_tir *tir_ext);
 
 #ifdef DEFINED_UTLS
-    virtual xlio_tis *tls_context_setup_tx(const xlio_tls_info *info)
-    {
-        NOT_IN_USE(info);
-        return NULL;
-    }
-    virtual xlio_tir *tls_create_tir(bool cached)
-    {
-        NOT_IN_USE(cached);
-        return NULL;
-    }
-    virtual int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info,
-                                     uint32_t next_record_tcp_sn, xlio_comp_cb_t callback,
-                                     void *callback_arg)
-    {
-        NOT_IN_USE(tir);
-        NOT_IN_USE(info);
-        NOT_IN_USE(next_record_tcp_sn);
-        NOT_IN_USE(callback);
-        NOT_IN_USE(callback_arg);
-        return -1;
-    }
-    virtual void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static)
-    {
-        NOT_IN_USE(info);
-        NOT_IN_USE(tis);
-        NOT_IN_USE(skip_static);
-    }
-    virtual void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn)
-    {
-        NOT_IN_USE(tir);
-        NOT_IN_USE(info);
-        NOT_IN_USE(hw_resync_tcp_sn);
-    }
-    virtual void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey)
-    {
-        NOT_IN_USE(tir);
-        NOT_IN_USE(buf);
-        NOT_IN_USE(lkey);
-    }
-    virtual void tls_release_tis(xlio_tis *tis) { NOT_IN_USE(tis); }
-    virtual void tls_release_tir(xlio_tir *tir) { NOT_IN_USE(tir); }
-    virtual void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
-                                      bool first)
-    {
-        NOT_IN_USE(tis);
-        NOT_IN_USE(addr);
-        NOT_IN_USE(len);
-        NOT_IN_USE(lkey);
-        NOT_IN_USE(first);
-    }
+    xlio_tis *tls_context_setup_tx(const xlio_tls_info *info) override;
+    xlio_tir *tls_create_tir(bool cached) override;
+    int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t next_record_tcp_sn,
+                             xlio_comp_cb_t callback, void *callback_arg);
+    void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static) override;
+    void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn) override;
+    void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey) override;
+    void tls_release_tis(xlio_tis *tis) override;
+    void tls_release_tir(xlio_tir *tir) override;
+    void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first) override;
 #endif /* DEFINED_UTLS */
 
-    virtual std::unique_ptr<xlio_tis> create_tis(uint32_t) const { return nullptr; };
+#define DPCP_TIS_FLAGS     (dpcp::TIS_ATTR_TRANSPORT_DOMAIN | dpcp::TIS_ATTR_PD)
+#define DPCP_TIS_NVME_FLAG (dpcp::TIS_ATTR_NVMEOTCP)
+    std::unique_ptr<xlio_tis> create_tis(uint32_t flags) const;
+    void nvme_set_static_context(xlio_tis *tis, uint32_t config);
+    void nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno);
 
-    virtual void nvme_set_static_context(xlio_tis *tis, uint32_t config)
+    /* Get a memory inside a wqebb at a wqebb_num offset from the m_sq_wqe_hot and account for
+     * m_sq_wqe_counter wrap-around. Use offset_in_wqebb to for the internal address. Use the
+     * template parameter to cast the resulting address to the required pointer type */
+    template <typename T>
+    constexpr inline T wqebb_get(size_t wqebb_num, size_t offset_in_wqebb = 0U)
     {
-        NOT_IN_USE(tis);
-        NOT_IN_USE(config);
-    };
-    virtual void nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno)
-    {
-        NOT_IN_USE(tis);
-        NOT_IN_USE(tcp_seqno);
-    };
-    virtual void post_nop_fence(void) {}
-    virtual void post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first)
-    {
-        NOT_IN_USE(tis);
-        NOT_IN_USE(addr);
-        NOT_IN_USE(len);
-        NOT_IN_USE(lkey);
-        NOT_IN_USE(first);
+        return reinterpret_cast<T>(
+            reinterpret_cast<uintptr_t>(
+                &(*m_sq_wqes)[(m_sq_wqe_counter + wqebb_num) & (m_tx_num_wr - 1)]) +
+            offset_in_wqebb);
     }
 
-    virtual void reset_inflight_zc_buffers_ctx(void *ctx) { NOT_IN_USE(ctx); }
-    virtual bool credits_get(unsigned credits)
+    void post_nop_fence();
+    void post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first);
+
+#if defined(DEFINED_UTLS)
+    std::unique_ptr<dpcp::tls_dek> get_new_tls_dek(const void *key, uint32_t key_size_bytes);
+    std::unique_ptr<dpcp::tls_dek> get_tls_dek(const void *key, uint32_t key_size_bytes);
+    void put_tls_dek(std::unique_ptr<dpcp::tls_dek> &&dek_obj);
+#endif
+
+    void reset_inflight_zc_buffers_ctx(void *ctx);
+
+    void credits_return(unsigned credits) { m_sq_free_credits += credits; }
+
+    bool credits_get(unsigned credits)
     {
-        NOT_IN_USE(credits);
-        return true;
+        if (m_sq_free_credits >= credits) {
+            m_sq_free_credits -= credits;
+            return true;
+        }
+        return false;
     }
-    virtual void credits_return(unsigned credits) { NOT_IN_USE(credits); }
-    inline unsigned credits_calculate(xlio_ibv_send_wr *p_send_wqe)
+
+    unsigned credits_calculate(xlio_ibv_send_wr *p_send_wqe)
     {
         /* Credit is a logical value which is opaque for users. Only qp_mgr can interpret the
          * value and currently, one credit equals to one WQEBB in the SQ.
@@ -320,15 +388,14 @@ public:
     }
 
 protected:
-    struct ibv_qp *m_qp;
-    uint64_t *m_rq_wqe_idx_to_wrid;
+    xlio_ib_mlx5_qp_t m_mlx5_qp;
+    uint64_t *m_rq_wqe_idx_to_wrid = nullptr;
 
     ring_simple *m_p_ring;
     uint8_t m_port_num;
     ib_ctx_handler *m_p_ib_ctx_handler;
 
-    struct ibv_qp_cap m_qp_cap;
-    uint32_t m_max_qp_wr;
+    uint32_t m_max_qp_wr = 0U;
 
     cq_mgr_rx *m_p_cq_mgr_rx;
     cq_mgr_tx *m_p_cq_mgr_tx;
@@ -336,7 +403,7 @@ protected:
     uint32_t m_rx_num_wr;
     uint32_t m_tx_num_wr;
 
-    bool m_hw_dummy_send_support;
+    bool m_hw_dummy_send_support = false;
 
     uint32_t m_n_sysvar_rx_num_wr_to_post_recv;
     const uint32_t m_n_sysvar_tx_num_wr_to_signal;
@@ -345,127 +412,127 @@ protected:
     // recv_wr
     ibv_sge *m_ibv_rx_sg_array;
     ibv_recv_wr *m_ibv_rx_wr_array;
-    uint32_t m_curr_rx_wr;
-    uintptr_t m_last_posted_rx_wr_id; // Remember so in case we flush RQ we know to wait until this
-                                      // WR_ID is received
+    uint32_t m_curr_rx_wr = 0U;
+    uintptr_t m_last_posted_rx_wr_id = 0U; // Remember so in case we flush RQ we know to wait until
+                                           // this WR_ID is received
 
     // send wr
-    uint32_t m_n_unsignaled_count;
+    uint32_t m_n_unsignaled_count = 0U;
 
-    mem_buf_desc_t *m_p_prev_rx_desc_pushed;
+    mem_buf_desc_t *m_p_prev_rx_desc_pushed = nullptr;
 
-    // generating packet IDs
-    uint16_t m_n_ip_id_base;
-    uint16_t m_n_ip_id_offset;
     uint16_t m_vlan;
     struct xlio_rate_limit_t m_rate_limit;
 
     int configure(struct qp_mgr_desc *desc);
     int prepare_ibv_qp(xlio_ibv_qp_init_attr &qp_init_attr);
-    inline void set_unsignaled_count(void)
-    {
-        m_n_unsignaled_count = m_n_sysvar_tx_num_wr_to_signal - 1;
-    }
-    inline void dec_unsignaled_count(void)
+    void init_qp();
+    void init_device_memory();
+    bool init_rx_cq_mgr_prepare();
+    void post_recv_buffer_rq(mem_buf_desc_t *p_mem_buf_desc);
+
+    void set_unsignaled_count(void) { m_n_unsignaled_count = m_n_sysvar_tx_num_wr_to_signal - 1; }
+
+    void dec_unsignaled_count(void)
     {
         if (m_n_unsignaled_count > 0) {
             --m_n_unsignaled_count;
         }
     }
-    inline bool is_signal_requested_for_last_wqe()
+
+    bool is_signal_requested_for_last_wqe()
     {
         return m_n_unsignaled_count == m_n_sysvar_tx_num_wr_to_signal - 1;
     }
 
-    virtual cq_mgr_rx *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel) = 0;
-    virtual cq_mgr_tx *init_tx_cq_mgr(void) = 0;
+    virtual cq_mgr_rx *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel);
+    cq_mgr_tx *init_tx_cq_mgr();
 
-    virtual int send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
-                             bool request_comp, xlio_tis *tis, unsigned credits);
-    virtual bool is_completion_need() { return !m_n_unsignaled_count; }
-    virtual bool is_rq_empty() const { return false; }
-};
+    int send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, bool request_comp,
+                     xlio_tis *tis, unsigned credits);
 
-class xlio_tis : public xlio_ti {
-public:
-    xlio_tis(std::unique_ptr<dpcp::tis> _tis, xlio_ti::ti_type type)
-        : xlio_ti(type)
-        , m_dek()
-        , m_p_tis(std::move(_tis))
-        , m_tisn(0U)
-        , m_dek_id(0U)
+#if defined(DEFINED_UTLS)
+    dpcp::tir *xlio_tir_to_dpcp_tir(xlio_tir *tir);
+    virtual dpcp::tir *create_tir(bool is_tls = false)
     {
-        dpcp::status ret = m_p_tis->get_tisn(m_tisn);
-        assert(ret == dpcp::DPCP_OK);
-        (void)ret;
+        NOT_IN_USE(is_tls);
+        return NULL;
     }
-
-    ~xlio_tis() = default;
-
-    inline std::unique_ptr<dpcp::dek> release_dek()
-    {
-        assert(m_ref == 0);
-        m_released = false;
-        return std::move(m_dek);
-    }
-
-    inline uint32_t get_tisn(void) noexcept { return m_tisn; }
-
-    inline void assign_dek(std::unique_ptr<dpcp::dek> &&dek_ptr)
-    {
-        m_dek = std::move(dek_ptr);
-        m_dek_id = m_dek->get_key_id();
-    }
-
-    inline uint32_t get_dek_id(void) noexcept { return m_dek_id; }
+#endif /* DEFINED_UTLS */
 
 private:
-    std::unique_ptr<dpcp::dek> m_dek;
-    std::unique_ptr<dpcp::tis> m_p_tis;
-    uint32_t m_tisn;
-    uint32_t m_dek_id;
-};
-
-class xlio_tir : public xlio_ti {
-public:
-    xlio_tir(dpcp::tir *_tir, xlio_ti::ti_type type)
-        : xlio_ti(type)
+    void trigger_completion_for_all_sent_packets();
+    void update_next_wqe_hot();
+    void destroy_tis_cache();
+    void ti_released(xlio_ti *ti);
+    void put_tls_tir_in_cache(xlio_tir *tir);
+    void put_tls_tis_in_cache(xlio_tis *tis);
+    bool is_rq_empty() const override { return (m_mlx5_qp.rq.head == m_mlx5_qp.rq.tail); }
+    bool is_completion_need() const
     {
-        m_p_tir.reset(_tir);
-        m_dek = NULL;
-        m_tirn = 0;
-        m_dek_id = 0;
-
-        /* Cache the tir number. Mustn't fail for a valid TIR object. */
-        m_tirn = m_p_tir->get_tirn();
-        assert(m_tirn != 0);
+        return !m_n_unsignaled_count || (m_dm_enabled && m_dm_mgr.is_completion_need());
     }
 
-    ~xlio_tir() = default;
+#if defined(DEFINED_UTLS)
+    inline void tls_fill_static_params_wqe(struct mlx5_wqe_tls_static_params_seg *params,
+                                           const struct xlio_tls_info *info, uint32_t key_id,
+                                           uint32_t resync_tcp_sn);
+    inline void tls_post_static_params_wqe(xlio_ti *ti, const struct xlio_tls_info *info,
+                                           uint32_t tis_tir_number, uint32_t key_id,
+                                           uint32_t resync_tcp_sn, bool fence, bool is_tx);
+    inline void tls_fill_progress_params_wqe(struct mlx5_wqe_tls_progress_params_seg *params,
+                                             uint32_t tis_tir_number, uint32_t next_record_tcp_sn);
+    inline void tls_post_progress_params_wqe(xlio_ti *ti, uint32_t tis_tir_number,
+                                             uint32_t next_record_tcp_sn, bool fence, bool is_tx);
+    inline void tls_get_progress_params_wqe(xlio_ti *ti, uint32_t tirn, void *buf, uint32_t lkey);
+#endif /* DEFINED_UTLS */
 
-    inline std::unique_ptr<dpcp::dek> release_dek()
+    inline void store_current_wqe_prop(mem_buf_desc_t *wr_id, unsigned credits, xlio_ti *ti);
+    inline int fill_wqe(xlio_ibv_send_wr *p_send_wqe);
+    inline int fill_wqe_send(xlio_ibv_send_wr *pswr);
+    inline int fill_wqe_lso(xlio_ibv_send_wr *pswr);
+    inline int fill_inl_segment(sg_array &sga, uint8_t *cur_seg, uint8_t *data_addr,
+                                int max_inline_len, int inline_len);
+    inline void ring_doorbell(int db_method, int num_wqebb, int num_wqebb_top = 0,
+                              bool skip_comp = false);
+
+    bool is_sq_wqe_prop_valid(sq_wqe_prop *p, sq_wqe_prop *prev)
     {
-        assert(m_ref == 0);
-        m_released = false;
-        return std::move(m_dek);
+        unsigned p_i = p - m_sq_wqe_idx_to_prop;
+        unsigned prev_i = prev - m_sq_wqe_idx_to_prop;
+        return (p_i != m_sq_wqe_prop_last_signalled) &&
+            ((m_tx_num_wr + p_i - m_sq_wqe_prop_last_signalled) % m_tx_num_wr <
+             (m_tx_num_wr + prev_i - m_sq_wqe_prop_last_signalled) % m_tx_num_wr);
     }
 
-    inline uint32_t get_tirn(void) { return m_tirn; }
+    sq_wqe_prop *m_sq_wqe_idx_to_prop = nullptr;
+    sq_wqe_prop *m_sq_wqe_prop_last = nullptr;
+    unsigned m_sq_wqe_prop_last_signalled = 0U;
+    unsigned m_sq_free_credits = 0U;
+    uint64_t m_rq_wqe_counter = 0U;
 
-    inline void assign_dek(void *dek_ptr)
-    {
-        m_dek.reset(reinterpret_cast<dpcp::dek *>(dek_ptr));
-        m_dek_id = m_dek->get_key_id();
-    }
+    struct mlx5_eth_wqe (*m_sq_wqes)[] = nullptr;
+    struct mlx5_eth_wqe *m_sq_wqe_hot = nullptr;
+    uint8_t *m_sq_wqes_end = nullptr;
+    enum { MLX5_DB_METHOD_BF, MLX5_DB_METHOD_DB } m_db_method;
 
-    inline uint32_t get_dek_id(void) { return m_dek_id; }
+    int m_sq_wqe_hot_index = 0;
+    uint16_t m_sq_wqe_counter = 0U;
+    bool m_b_fence_needed = false;
+    bool m_dm_enabled = false;
+    dm_mgr m_dm_mgr;
 
-    std::unique_ptr<dpcp::tir> m_p_tir;
+    /*
+     * TIS cache. Protected by ring tx lock.
+     * TODO Move to ring.
+     */
+    std::vector<xlio_tis *> m_tls_tis_cache;
+    std::vector<xlio_tir *> m_tls_tir_cache;
 
-private:
-    std::unique_ptr<dpcp::dek> m_dek;
-    uint32_t m_tirn;
-    uint32_t m_dek_id;
+#if defined(DEFINED_UTLS)
+    std::list<std::unique_ptr<dpcp::tls_dek>> m_tls_dek_get_cache;
+    std::list<std::unique_ptr<dpcp::tls_dek>> m_tls_dek_put_cache;
+#endif
 };
 
 #endif

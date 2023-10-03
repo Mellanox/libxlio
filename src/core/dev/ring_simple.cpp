@@ -37,7 +37,6 @@
 #include "util/sg_array.h"
 #include "sock/fd_collection.h"
 #if defined(DEFINED_DIRECT_VERBS)
-#include "dev/qp_mgr_eth_mlx5.h"
 #include "dev/qp_mgr_eth_mlx5_dpcp.h"
 #endif
 
@@ -86,16 +85,6 @@ inline void ring_simple::send_status_handler(int ret, xlio_ibv_send_wr *p_send_w
         m_missing_buf_ref_count--;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
-}
-
-qp_mgr *ring_eth::create_qp_mgr(struct qp_mgr_desc *desc)
-{
-#if defined(DEFINED_DPCP)
-    if (safe_mce_sys().enable_dpcp_rq) {
-        return new qp_mgr_eth_mlx5_dpcp(desc, get_tx_num_wr(), m_partition);
-    }
-#endif
-    return new qp_mgr_eth_mlx5(desc, get_tx_num_wr(), m_partition);
 }
 
 ring_simple::ring_simple(int if_index, ring *parent, ring_type_t type, bool use_locks)
@@ -384,7 +373,7 @@ void ring_simple::create_resources()
     desc.ring = this;
     desc.slave = p_slave;
     desc.rx_comp_event_channel = m_p_rx_comp_event_channel;
-    m_p_qp_mgr = create_qp_mgr(&desc);
+    m_p_qp_mgr = new qp_mgr_eth_mlx5_dpcp(&desc, get_tx_num_wr(), m_partition);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (m_p_qp_mgr == NULL) {
         ring_logerr("Failed to allocate qp_mgr!");

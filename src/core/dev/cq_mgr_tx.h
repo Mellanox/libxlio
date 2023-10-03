@@ -36,7 +36,6 @@
 #include "dev/ib_ctx_handler.h"
 
 class qp_mgr;
-class qp_mgr_eth_mlx5;
 class ring_simple;
 
 class cq_mgr_tx {
@@ -92,7 +91,7 @@ private:
     ring_simple *m_p_ring;
     ib_ctx_handler *m_p_ib_ctx_handler;
     ibv_comp_channel *m_comp_event_channel;
-    qp_mgr_eth_mlx5 *m_qp = nullptr;
+    qp_mgr *m_qp = nullptr;
     struct ibv_cq *m_p_ibv_cq = nullptr;
     uint32_t m_cq_id_tx = 0U;
     uint32_t m_n_cq_poll_sn_tx = 0U;
