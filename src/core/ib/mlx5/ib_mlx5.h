@@ -65,15 +65,12 @@ extern "C" {
  */
 int xlio_ib_mlx5dv_init_obj(struct mlx5dv_obj *obj, uint64_t type);
 
-enum { XLIO_IB_MLX5_QP_FLAGS_USE_UNDERLAY = 0x01 };
-
 enum { XLIO_IB_MLX5_CQ_SET_CI = 0, XLIO_IB_MLX5_CQ_ARM_DB = 1 };
 
 /* Queue pair */
 typedef struct xlio_ib_mlx5_qp {
     struct ibv_qp *qp;
     uint32_t qpn;
-    uint32_t flags;
     struct ibv_qp_cap cap;
     struct {
         volatile uint32_t *dbrec;
@@ -482,7 +479,7 @@ enum {
 /*
  * Interfaces
  */
-int xlio_ib_mlx5_get_qp(struct ibv_qp *qp, xlio_ib_mlx5_qp_t *mlx5_qp, uint32_t flags = 0);
+int xlio_ib_mlx5_get_qp_tx(xlio_ib_mlx5_qp_t *mlx5_qp);
 int xlio_ib_mlx5_post_recv(xlio_ib_mlx5_qp_t *mlx5_qp, struct ibv_recv_wr *wr,
                            struct ibv_recv_wr **bad_wr);
 

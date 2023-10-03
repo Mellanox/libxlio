@@ -48,7 +48,6 @@
 #include "buffer_pool.h"
 #include "qp_mgr.h"
 #include "ring_simple.h"
-#include "qp_mgr_eth_mlx5.h"
 
 #define MODULE_NAME "cq_mgr_rx"
 
@@ -185,8 +184,7 @@ void cq_mgr_rx::statistics_print()
 
 void cq_mgr_rx::add_qp_rx(qp_mgr *qp)
 {
-    m_qp = static_cast<qp_mgr_eth_mlx5 *>(qp);
-
+    m_qp = qp;
     m_qp->m_rq_wqe_counter = 0; // In case of bonded qp, wqe_counter must be reset to zero
     m_rx_hot_buffer = NULL;
 
