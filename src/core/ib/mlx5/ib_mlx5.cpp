@@ -40,7 +40,7 @@
 #include "util/utils.h"
 #include "ib/mlx5/ib_mlx5.h"
 
-int xlio_ib_mlx5_get_qp(struct ibv_qp *qp, xlio_ib_mlx5_qp_t *mlx5_qp, uint32_t flags)
+int xlio_ib_mlx5_get_qp_tx(xlio_ib_mlx5_qp_t *mlx5_qp)
 {
     int ret = 0;
     struct mlx5dv_obj obj;
@@ -52,7 +52,7 @@ int xlio_ib_mlx5_get_qp(struct ibv_qp *qp, xlio_ib_mlx5_qp_t *mlx5_qp, uint32_t 
     memset(&obj, 0, sizeof(obj));
     memset(&dqp, 0, sizeof(dqp));
 
-    obj.qp.in = qp;
+    obj.qp.in = mlx5_qp->qp;
     obj.qp.out = &dqp;
 #if defined(DEFINED_DV_RAW_QP_HANDLES)
     dqp.comp_mask |= MLX5DV_QP_MASK_RAW_QP_HANDLES;
@@ -62,42 +62,28 @@ int xlio_ib_mlx5_get_qp(struct ibv_qp *qp, xlio_ib_mlx5_qp_t *mlx5_qp, uint32_t 
         goto out;
     }
 
-    memset(mlx5_qp, 0, sizeof(*mlx5_qp));
     VALGRIND_MAKE_MEM_DEFINED(&dqp, sizeof(dqp));
-    mlx5_qp->qp = qp;
-    mlx5_qp->qpn = qp->qp_num;
-    mlx5_qp->flags = flags;
+    mlx5_qp->qpn = mlx5_qp->qp->qp_num;
     mlx5_qp->sq.dbrec = &dqp.dbrec[MLX5_SND_DBR];
     mlx5_qp->sq.buf = dqp.sq.buf;
     mlx5_qp->sq.wqe_cnt = dqp.sq.wqe_cnt;
     mlx5_qp->sq.stride = dqp.sq.stride;
-    mlx5_qp->rq.dbrec = &dqp.dbrec[MLX5_RCV_DBR];
-    mlx5_qp->rq.buf = dqp.rq.buf;
-    mlx5_qp->rq.wqe_cnt = dqp.rq.wqe_cnt;
-    mlx5_qp->rq.stride = dqp.rq.stride;
-    mlx5_qp->rq.wqe_shift = ilog_2(dqp.rq.stride);
-    mlx5_qp->rq.head = 0;
-    mlx5_qp->rq.tail = 0;
     mlx5_qp->bf.reg = dqp.bf.reg;
     mlx5_qp->bf.size = dqp.bf.size;
     mlx5_qp->bf.offset = 0;
 #if defined(DEFINED_DV_RAW_QP_HANDLES)
-    mlx5_qp->tirn = dqp.tirn;
     mlx5_qp->tisn = dqp.tisn;
-    mlx5_qp->rqn = dqp.rqn;
     mlx5_qp->sqn = dqp.sqn;
 #endif /* DEFINED_DV_RAW_QP_HANDLES */
 
-    ret = ibv_query_qp(qp, &tmp_ibv_qp_attr, attr_mask, &tmp_ibv_qp_init_attr);
+    ret = ibv_query_qp(mlx5_qp->qp, &tmp_ibv_qp_attr, attr_mask, &tmp_ibv_qp_init_attr);
     if (ret != 0) {
         goto out;
     }
 
     VALGRIND_MAKE_MEM_DEFINED(&tmp_ibv_qp_attr, sizeof(tmp_ibv_qp_attr));
     mlx5_qp->cap.max_send_wr = tmp_ibv_qp_attr.cap.max_send_wr;
-    mlx5_qp->cap.max_recv_wr = tmp_ibv_qp_attr.cap.max_recv_wr;
     mlx5_qp->cap.max_send_sge = tmp_ibv_qp_attr.cap.max_send_sge;
-    mlx5_qp->cap.max_recv_sge = tmp_ibv_qp_attr.cap.max_recv_sge;
     mlx5_qp->cap.max_inline_data = tmp_ibv_qp_attr.cap.max_inline_data;
 
 out:
@@ -204,27 +190,10 @@ out:
     if (likely(nreq)) {
         mlx5_qp->rq.head += nreq;
 
-        /*
-         * Make sure that descriptors are written before
-         * doorbell record.
-         */
-        wmb();
+        wmb(); // Make sure that descriptors are written before doorbell record.
 
-        /*
-         * For Raw Packet QP, avoid updating the doorbell record
-         * as long as the QP isn't in RTR state, to avoid receiving
-         * packets in illegal states.
-         * This is only for Raw Packet QPs since they are represented
-         * differently in the hardware.
-         * For DPCP RQ, the RQ state is switched along with the QP-unused-rq,
-         * and in such case if RQ.State == RST, doorbells are not processed anyway
-         * and for RDY state without a TIR incomming messages never reach RQ (PRM 8.14.1).
-         */
-        if (likely(!((mlx5_qp->qp->qp_type == IBV_QPT_RAW_PACKET ||
-                      mlx5_qp->flags & XLIO_IB_MLX5_QP_FLAGS_USE_UNDERLAY) &&
-                     mlx5_qp->qp->state < IBV_QPS_RTR))) {
-            *mlx5_qp->rq.dbrec = htonl(mlx5_qp->rq.head & 0xffff);
-        }
+        // Buffers are posted only after the RQ is in ready state. OK to update doorbell.
+        *mlx5_qp->rq.dbrec = htonl(mlx5_qp->rq.head & 0xffff);
     }
 
     return err;
