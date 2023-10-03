@@ -51,8 +51,8 @@
 #define cq_logpanic   __log_info_panic
 #define cq_logfuncall __log_info_funcall
 
-cq_mgr_rx_regrq::cq_mgr_rx_regrq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
-                                 struct ibv_comp_channel *p_comp_event_channel)
+cq_mgr_rx_regrq::cq_mgr_rx_regrq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler,
+                                 uint32_t cq_size, struct ibv_comp_channel *p_comp_event_channel)
     : cq_mgr_rx(p_ring, p_ib_ctx_handler, cq_size, p_comp_event_channel)
 {
     cq_logfunc("");
@@ -65,10 +65,10 @@ uint32_t cq_mgr_rx_regrq::clean_cq()
     mem_buf_desc_t *buff;
 
     /* Sanity check for cq: initialization of tx and rx cq has difference:
-        * tx - is done in qp_mgr::configure()
-        * rx - is done in qp_mgr::up()
-        * as a result rx cq can be created but not initialized
-        */
+     * tx - is done in qp_mgr::configure()
+     * rx - is done in qp_mgr::up()
+     * as a result rx cq can be created but not initialized
+     */
     if (NULL == m_qp) {
         return 0;
     }
@@ -130,7 +130,8 @@ mem_buf_desc_t *cq_mgr_rx_regrq::poll(enum buff_status_e &status)
     return buff;
 }
 
-void cq_mgr_rx_regrq::cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc,
+void cq_mgr_rx_regrq::cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe,
+                                           mem_buf_desc_t *p_rx_wc_buf_desc,
                                            enum buff_status_e &status)
 {
     struct mlx5_err_cqe *ecqe;
