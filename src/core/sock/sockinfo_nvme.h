@@ -36,7 +36,7 @@
 #include <memory>
 #include <sys/uio.h>
 #include "sockinfo_ulp.h" /* sockinfo_tcp_ops */
-#include "dev/qp_mgr_eth_mlx5.h"
+#include "dev/qp_mgr.h"
 #include "proto/nvme_parse_input_args.h"
 #include "xlio_extra.h"
 #include "lwip/err.h" /* err_t */

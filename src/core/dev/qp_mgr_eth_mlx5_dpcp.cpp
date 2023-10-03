@@ -38,9 +38,17 @@
 
 #define MODULE_NAME "qp_mgr_eth_mlx5_dpcp"
 
+#define qp_logpanic   __log_info_panic
+#define qp_logerr     __log_info_err
+#define qp_logwarn    __log_info_warn
+#define qp_loginfo    __log_info_info
+#define qp_logdbg     __log_info_dbg
+#define qp_logfunc    __log_info_func
+#define qp_logfuncall __log_info_funcall
+
 qp_mgr_eth_mlx5_dpcp::qp_mgr_eth_mlx5_dpcp(struct qp_mgr_desc *desc, uint32_t tx_num_wr,
                                            uint16_t vlan)
-    : qp_mgr_eth_mlx5(desc, tx_num_wr, vlan, false)
+    : qp_mgr(desc, tx_num_wr, vlan, false)
 {
     if (configure(desc)) {
         throw_xlio_exception("Failed creating qp_mgr_eth_mlx5_dpcp");
@@ -57,10 +65,10 @@ bool qp_mgr_eth_mlx5_dpcp::configure_rq_dpcp()
               priv_xlio_transport_type_str(m_p_ring->get_transport_type()),
               m_p_ib_ctx_handler->get_ibname(), m_p_ib_ctx_handler->get_ibv_device(), m_port_num);
 
-    m_qp_cap.max_recv_wr = m_rx_num_wr;
+    m_mlx5_qp.cap.max_recv_wr = m_rx_num_wr;
 
-    qp_logdbg("Requested RQ parameters: wre: rx = %d sge: rx = %d", m_qp_cap.max_recv_wr,
-              m_qp_cap.max_recv_sge);
+    qp_logdbg("Requested RQ parameters: wre: rx = %d sge: rx = %d", m_mlx5_qp.cap.max_recv_wr,
+              m_mlx5_qp.cap.max_recv_sge);
 
     xlio_ib_mlx5_cq_t mlx5_cq;
     memset(&mlx5_cq, 0, sizeof(mlx5_cq));
@@ -70,14 +78,16 @@ bool qp_mgr_eth_mlx5_dpcp::configure_rq_dpcp()
               static_cast<unsigned int>(mlx5_cq.cq_num));
 
     if (safe_mce_sys().enable_striding_rq) {
-        m_qp_cap.max_recv_sge = 2U; // Striding-RQ needs a reserved segment.
+        m_mlx5_qp.cap.max_recv_sge = 2U; // Striding-RQ needs a reserved segment.
         _strq_wqe_reserved_seg = 1U;
 
         delete[] m_ibv_rx_sg_array;
-        m_ibv_rx_sg_array = new ibv_sge[m_n_sysvar_rx_num_wr_to_post_recv * m_qp_cap.max_recv_sge];
+        m_ibv_rx_sg_array =
+            new ibv_sge[m_n_sysvar_rx_num_wr_to_post_recv * m_mlx5_qp.cap.max_recv_sge];
         for (uint32_t wr_idx = 0; wr_idx < m_n_sysvar_rx_num_wr_to_post_recv; wr_idx++) {
-            m_ibv_rx_wr_array[wr_idx].sg_list = &m_ibv_rx_sg_array[wr_idx * m_qp_cap.max_recv_sge];
-            m_ibv_rx_wr_array[wr_idx].num_sge = m_qp_cap.max_recv_sge;
+            m_ibv_rx_wr_array[wr_idx].sg_list =
+                &m_ibv_rx_sg_array[wr_idx * m_mlx5_qp.cap.max_recv_sge];
+            m_ibv_rx_wr_array[wr_idx].num_sge = m_mlx5_qp.cap.max_recv_sge;
             memset(m_ibv_rx_wr_array[wr_idx].sg_list, 0, sizeof(ibv_sge));
             m_ibv_rx_wr_array[wr_idx].sg_list[0].length =
                 1U; // To bypass a check inside xlio_ib_mlx5_post_recv.
@@ -106,8 +116,8 @@ bool qp_mgr_eth_mlx5_dpcp::prepare_rq(uint32_t cqn)
     dpcp::rq_attr rqattrs;
     memset(&rqattrs, 0, sizeof(rqattrs));
     rqattrs.cqn = cqn;
-    rqattrs.wqe_num = m_qp_cap.max_recv_wr;
-    rqattrs.wqe_sz = m_qp_cap.max_recv_sge;
+    rqattrs.wqe_num = m_mlx5_qp.cap.max_recv_wr;
+    rqattrs.wqe_sz = m_mlx5_qp.cap.max_recv_sge;
 
     if (safe_mce_sys().hw_ts_conversion_mode == TS_CONVERSION_MODE_RTC) {
         qp_logdbg("Enabled RTC timestamp format for RQ");
@@ -123,7 +133,7 @@ bool qp_mgr_eth_mlx5_dpcp::prepare_rq(uint32_t cqn)
 
         // Striding-RQ WQE format is as of Shared-RQ (PRM, page 381, wq_type).
         // In this case the WQE minimum size is 2 * 16, and the first segment is reserved.
-        rqattrs.wqe_sz = m_qp_cap.max_recv_sge * 16U;
+        rqattrs.wqe_sz = m_mlx5_qp.cap.max_recv_sge * 16U;
 
         dpcp::striding_rq *new_rq_ptr = nullptr;
         rc = dpcp_adapter->create_striding_rq(rqattrs, new_rq_ptr);
@@ -139,7 +149,6 @@ bool qp_mgr_eth_mlx5_dpcp::prepare_rq(uint32_t cqn)
         return false;
     }
 
-    memset(&m_mlx5_qp, 0, sizeof(m_mlx5_qp));
     if (!store_rq_mlx5_params(*new_rq)) {
         qp_logerr(
             "Failed to retrieve initial DPCP RQ parameters, rc: %d, basic_rq: %p, cqn: %" PRIu32,
@@ -192,8 +201,6 @@ bool qp_mgr_eth_mlx5_dpcp::store_rq_mlx5_params(dpcp::basic_rq &new_rq)
     m_mlx5_qp.rq.wqe_shift = ilog_2(m_mlx5_qp.rq.stride);
     m_mlx5_qp.rq.head = 0;
     m_mlx5_qp.rq.tail = 0;
-    m_mlx5_qp.cap.max_recv_wr = m_qp_cap.max_recv_wr;
-    m_mlx5_qp.cap.max_recv_sge = m_qp_cap.max_recv_sge;
     m_mlx5_qp.tirn = 0U;
 
     return true;
@@ -201,10 +208,6 @@ bool qp_mgr_eth_mlx5_dpcp::store_rq_mlx5_params(dpcp::basic_rq &new_rq)
 
 void qp_mgr_eth_mlx5_dpcp::init_tir_rq()
 {
-    if (_rq && !store_rq_mlx5_params(*_rq)) {
-        qp_logpanic("Failed to retrieve DPCP RQ parameters (errno=%d %m)", errno);
-    }
-
     _tir.reset(create_tir());
     if (!_tir) {
         qp_logpanic("TIR creation for qp_mgr_eth_mlx5_dpcp failed (errno=%d %m)", errno);
@@ -213,7 +216,7 @@ void qp_mgr_eth_mlx5_dpcp::init_tir_rq()
 
 void qp_mgr_eth_mlx5_dpcp::up()
 {
-    qp_mgr_eth_mlx5::init_qp();
+    qp_mgr::init_qp();
     init_tir_rq();
     qp_mgr::up();
     init_device_memory();
@@ -223,7 +226,7 @@ void qp_mgr_eth_mlx5_dpcp::down()
 {
     _tir.reset(nullptr);
 
-    qp_mgr_eth_mlx5::down();
+    qp_mgr::down();
 }
 
 rfs_rule *qp_mgr_eth_mlx5_dpcp::create_rfs_rule(xlio_ibv_flow_attr &attrs, xlio_tir *tir_ext)
@@ -251,7 +254,7 @@ rfs_rule *qp_mgr_eth_mlx5_dpcp::create_rfs_rule(xlio_ibv_flow_attr &attrs, xlio_
 
 void qp_mgr_eth_mlx5_dpcp::modify_qp_to_ready_state()
 {
-    qp_mgr_eth_mlx5::modify_qp_to_ready_state();
+    qp_mgr::modify_qp_to_ready_state();
     modify_rq_to_ready_state();
 }
 
@@ -259,7 +262,7 @@ void qp_mgr_eth_mlx5_dpcp::modify_qp_to_error_state()
 {
     m_p_cq_mgr_rx->clean_cq();
 
-    qp_mgr_eth_mlx5::modify_qp_to_error_state();
+    qp_mgr::modify_qp_to_error_state();
 
     dpcp::status rc = _rq->modify_state(dpcp::RQ_ERR);
 
@@ -286,7 +289,7 @@ void qp_mgr_eth_mlx5_dpcp::modify_rq_to_ready_state()
 cq_mgr_rx *qp_mgr_eth_mlx5_dpcp::init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel)
 {
     if (unlikely(!safe_mce_sys().enable_striding_rq)) {
-        return qp_mgr_eth_mlx5::init_rx_cq_mgr(p_rx_comp_event_channel);
+        return qp_mgr::init_rx_cq_mgr(p_rx_comp_event_channel);
     }
 
     return (!init_rx_cq_mgr_prepare()
@@ -300,7 +303,7 @@ cq_mgr_rx *qp_mgr_eth_mlx5_dpcp::init_rx_cq_mgr(struct ibv_comp_channel *p_rx_co
 
 void qp_mgr_eth_mlx5_dpcp::post_recv_buffer(mem_buf_desc_t *p_mem_buf_desc)
 {
-    uint32_t index = (m_curr_rx_wr * m_qp_cap.max_recv_sge) + _strq_wqe_reserved_seg;
+    uint32_t index = (m_curr_rx_wr * m_mlx5_qp.cap.max_recv_sge) + _strq_wqe_reserved_seg;
     m_ibv_rx_sg_array[index].addr = (uintptr_t)p_mem_buf_desc->p_buffer;
     m_ibv_rx_sg_array[index].length = p_mem_buf_desc->sz_buffer;
     m_ibv_rx_sg_array[index].lkey = p_mem_buf_desc->lkey;

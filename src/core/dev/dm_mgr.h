@@ -52,7 +52,10 @@ public:
     bool copy_data(struct mlx5_wqe_data_seg *seg, uint8_t *src, uint32_t length,
                    mem_buf_desc_t *buff);
     void release_data(mem_buf_desc_t *buff);
-    inline bool is_completion_need() { return m_allocation - m_used < DM_COMPLETION_THRESHOLD; };
+    inline bool is_completion_need() const
+    {
+        return m_allocation - m_used < DM_COMPLETION_THRESHOLD;
+    };
 
 private:
     struct ibv_mr *m_p_dm_mr;
@@ -85,7 +88,7 @@ public:
         return false;
     };
     inline void release_data(mem_buf_desc_t *buff) { NOT_IN_USE(buff); };
-    inline bool is_completion_need() { return false; };
+    inline bool is_completion_need() const { return false; };
 };
 
 #endif /* DEFINED_IBV_DM */

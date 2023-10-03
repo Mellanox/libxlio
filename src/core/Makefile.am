@@ -67,7 +67,6 @@ libxlio_la_SOURCES := \
 	dev/cq_mgr_tx.cpp \
 	dev/dm_mgr.cpp \
 	dev/qp_mgr.cpp \
-	dev/qp_mgr_eth_mlx5.cpp \
 	dev/qp_mgr_eth_mlx5_dpcp.cpp \
 	dev/gro_mgr.cpp \
 	dev/rfs.cpp \
@@ -187,7 +186,6 @@ libxlio_la_SOURCES := \
 	dev/net_device_table_mgr.h \
 	dev/net_device_val.h \
 	dev/qp_mgr.h \
-	dev/qp_mgr_eth_mlx5.h \
 	dev/qp_mgr_eth_mlx5_dpcp.h \
 	dev/rfs.h \
 	dev/rfs_mc.h \

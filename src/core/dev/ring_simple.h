@@ -290,7 +290,6 @@ public:
     friend class cq_mgr_rx_regrq;
     friend class cq_mgr_rx_strq;
     friend class qp_mgr;
-    friend class qp_mgr_eth_mlx5;
     friend class qp_mgr_eth_mlx5_dpcp;
     friend class rfs;
     friend class rfs_uc;
@@ -299,7 +298,6 @@ public:
     friend class ring_bond;
 
 protected:
-    virtual qp_mgr *create_qp_mgr(struct qp_mgr_desc *desc) = 0;
     void create_resources();
     virtual void init_tx_buffers(uint32_t count);
     void inc_cq_moderation_stats(size_t sz_data) override;
@@ -310,8 +308,8 @@ protected:
     ib_ctx_handler *m_p_ib_ctx;
     qp_mgr *m_p_qp_mgr;
     struct cq_moderation_info m_cq_moderation_info;
-    cq_mgr_rx *m_p_cq_mgr_rx;
-    cq_mgr_tx *m_p_cq_mgr_tx;
+    cq_mgr_rx *m_p_cq_mgr_rx = nullptr;
+    cq_mgr_tx *m_p_cq_mgr_tx = nullptr;
     std::unordered_map<void *, uint32_t> m_user_lkey_map;
 
 private:
@@ -448,19 +446,11 @@ public:
         if (p_ndev) {
             m_partition = p_ndev->get_vlan();
 
-            /* Do resource initialization for
-             * ring_eth_direct, ring_eth_cb inside related
-             * constructors because
-             * they use own create_qp_mgr() methods
-             */
             if (call_create_res) {
                 create_resources();
             }
         }
     }
-
-protected:
-    qp_mgr *create_qp_mgr(struct qp_mgr_desc *desc) override;
 };
 
 #endif // RING_SIMPLE_H

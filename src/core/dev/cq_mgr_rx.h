@@ -57,7 +57,6 @@
 class net_device_mgr;
 class ring;
 class qp_mgr;
-class qp_mgr_eth_mlx5;
 class ring_simple;
 
 /* Get CQE opcode. */
@@ -179,7 +178,7 @@ protected:
     virtual void statistics_print();
 
     xlio_ib_mlx5_cq_t m_mlx5_cq;
-    qp_mgr_eth_mlx5 *m_qp = nullptr;
+    qp_mgr *m_qp = nullptr;
     mem_buf_desc_t *m_rx_hot_buffer = nullptr;
     struct ibv_cq *m_p_ibv_cq = nullptr;
     descq_t m_rx_queue;

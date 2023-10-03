@@ -37,7 +37,6 @@
 #include <util/valgrind.h>
 #include "cq_mgr_rx.inl"
 #include "qp_mgr.h"
-#include "qp_mgr_eth_mlx5.h"
 #include "ring_simple.h"
 
 #include <netinet/ip6.h>
