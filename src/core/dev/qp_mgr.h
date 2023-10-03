@@ -248,9 +248,9 @@ public:
         NOT_IN_USE(first);
     }
 #endif /* DEFINED_UTLS */
-#if defined(DEFINED_DPCP)
+
     virtual std::unique_ptr<xlio_tis> create_tis(uint32_t) const { return nullptr; };
-#endif /* defined(DEFINED_DPCP) */
+
     virtual void nvme_set_static_context(xlio_tis *tis, uint32_t config)
     {
         NOT_IN_USE(tis);
@@ -386,7 +386,6 @@ protected:
     virtual bool is_rq_empty() const { return false; }
 };
 
-#if defined(DEFINED_UTLS) || defined(DEFINED_DPCP)
 class xlio_tis : public xlio_ti {
 public:
     xlio_tis(std::unique_ptr<dpcp::tis> _tis, xlio_ti::ti_type type)
@@ -468,13 +467,5 @@ private:
     uint32_t m_tirn;
     uint32_t m_dek_id;
 };
-#else /* DEFINED_UTLS or DEFINED_DPCP */
-/* A stub classes to compile without uTLS support. */
-class xlio_tis : public xlio_ti {
-public:
-    inline uint32_t get_tisn(void) noexcept { return 0; }
-};
-class xlio_tir : public xlio_ti {
-};
-#endif /* DEFINED_UTLS or DEFINED_DPCP */
+
 #endif
