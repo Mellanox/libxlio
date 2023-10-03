@@ -894,13 +894,6 @@ void print_xlio_global_settings()
 
     vlog_printf(VLOG_INFO,
                 "---------------------------------------------------------------------------\n");
-
-#if !defined(DEFINED_DPCP)
-    if (safe_mce_sys().mce_spec == MCE_SPEC_NVME_BF2) {
-        vlog_printf(VLOG_INFO, "XLIO '%s' spec is used without enabled DPCP!\n",
-                    xlio_spec::to_str(MCE_SPEC_NVME_BF2));
-    }
-#endif
 }
 
 void prepare_fork()

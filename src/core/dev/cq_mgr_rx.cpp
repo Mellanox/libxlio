@@ -126,14 +126,13 @@ void cq_mgr_rx::configure(int cq_size)
     }
     BULLSEYE_EXCLUDE_BLOCK_END
     VALGRIND_MAKE_MEM_DEFINED(m_p_ibv_cq, sizeof(ibv_cq));
-    
+
     xlio_stats_instance_create_cq_block(m_p_cq_stat);
-    
-    m_b_is_rx_hw_csum_on =
-        xlio_is_rx_hw_csum_supported(m_p_ib_ctx_handler->get_ibv_device_attr());
+
+    m_b_is_rx_hw_csum_on = xlio_is_rx_hw_csum_supported(m_p_ib_ctx_handler->get_ibv_device_attr());
 
     cq_logdbg("RX CSUM support = %d", m_b_is_rx_hw_csum_on);
-    
+
     cq_logdbg("Created CQ as Rx with fd[%d] and of size %d elements (ibv_cq_hndl=%p)",
               get_channel_fd(), cq_size, m_p_ibv_cq);
 }
@@ -343,8 +342,7 @@ void cq_mgr_rx::return_extra_buffers()
     m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
 }
 
-mem_buf_desc_t *cq_mgr_rx::cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc,
-                                          enum buff_status_e status)
+mem_buf_desc_t *cq_mgr_rx::cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc, enum buff_status_e status)
 {
     /* Assume locked!!! */
     cq_logfuncall("");
@@ -435,7 +433,7 @@ void cq_mgr_rx::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
 
 // This method is called when ring release returns unposted buffers.
 void cq_mgr_rx::mem_buf_desc_return_to_owner(mem_buf_desc_t *p_mem_buf_desc,
-                                          void *pv_fd_ready_array /*=NULL*/)
+                                             void *pv_fd_ready_array /*=NULL*/)
 {
     cq_logfuncall("");
     NOT_IN_USE(pv_fd_ready_array);
@@ -506,7 +504,8 @@ int cq_mgr_rx::request_notification(uint64_t poll_sn)
     cq_logfuncall("");
 
     if ((m_n_global_sn_rx > 0 && poll_sn != m_n_global_sn_rx)) {
-        // The cq_mgr_rx's has receive packets pending processing (or got processed since cq_poll_sn)
+        // The cq_mgr_rx's has receive packets pending processing (or got processed since
+        // cq_poll_sn)
         cq_logfunc("miss matched poll sn (user=0x%lx, cq=0x%lx)", poll_sn, m_n_cq_poll_sn_rx);
         return 1;
     }
@@ -536,7 +535,7 @@ int cq_mgr_rx::request_notification(uint64_t poll_sn)
 }
 
 int cq_mgr_rx::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
-                                                      void *pv_fd_ready_array)
+                                                         void *pv_fd_ready_array)
 {
     int ret = -1;
 

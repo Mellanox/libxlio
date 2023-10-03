@@ -366,8 +366,8 @@ bool qp_mgr_eth_mlx5::init_rx_cq_mgr_prepare()
 cq_mgr_rx *qp_mgr_eth_mlx5::init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel)
 {
     return (!init_rx_cq_mgr_prepare() ? NULL
-                                      : new cq_mgr_rx_regrq(m_p_ring, m_p_ib_ctx_handler, m_rx_num_wr,
-                                                            p_rx_comp_event_channel));
+                                      : new cq_mgr_rx_regrq(m_p_ring, m_p_ib_ctx_handler,
+                                                            m_rx_num_wr, p_rx_comp_event_channel));
 }
 
 cq_mgr_tx *qp_mgr_eth_mlx5::init_tx_cq_mgr()
@@ -1201,7 +1201,6 @@ void qp_mgr_eth_mlx5::ti_released(xlio_ti *) {};
 void qp_mgr_eth_mlx5::destroy_tis_cache(void) {};
 #endif /* DEFINED_UTLS */
 
-#ifdef DEFINED_DPCP
 std::unique_ptr<xlio_tis> qp_mgr_eth_mlx5::create_tis(uint32_t flags) const
 {
     dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
@@ -1320,7 +1319,6 @@ void qp_mgr_eth_mlx5::nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqn
     ring_doorbell(MLX5_DB_METHOD_DB, MLX5E_NVMEOTCP_PROGRESS_PARAMS_WQEBBS);
     update_next_wqe_hot();
 }
-#endif /* DEFINED_DPCP */
 
 #if defined(DEFINED_UTLS)
 void qp_mgr_eth_mlx5::ti_released(xlio_ti *ti)

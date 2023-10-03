@@ -925,11 +925,9 @@ void mce_sys_var::get_env_params()
         progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
     }
 
-#if defined(DEFINED_DPCP)
     if ((env_ptr = getenv(SYS_VAR_STRQ)) != NULL) {
         enable_strq_env = option_strq::from_str(env_ptr, MCE_DEFAULT_STRQ);
     }
-#endif
 
     enable_striding_rq =
         (enable_strq_env == option_strq::ON || enable_strq_env == option_strq::AUTO);

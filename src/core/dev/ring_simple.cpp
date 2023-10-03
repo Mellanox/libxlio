@@ -664,7 +664,8 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
                     // Find the correct cq_mgr_tx from the CQ event,
                     // It might not be the active_cq object since we have a single TX CQ comp
                     // channel for all cq_mgr_tx's
-                    cq_mgr_tx *p_cq_mgr_tx = cq_mgr_tx::get_cq_mgr_from_cq_event(get_tx_comp_event_channel());
+                    cq_mgr_tx *p_cq_mgr_tx =
+                        cq_mgr_tx::get_cq_mgr_from_cq_event(get_tx_comp_event_channel());
                     if (p_cq_mgr_tx) {
 
                         // Allow additional CQ arming now
@@ -854,7 +855,8 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
                 // Find the correct cq_mgr_tx from the CQ event,
                 // It might not be the active_cq object since we have a single TX CQ comp
                 // channel for all cq_mgr_tx's
-                cq_mgr_tx *p_cq_mgr_tx = cq_mgr_tx::get_cq_mgr_from_cq_event(get_tx_comp_event_channel());
+                cq_mgr_tx *p_cq_mgr_tx =
+                    cq_mgr_tx::get_cq_mgr_from_cq_event(get_tx_comp_event_channel());
                 if (p_cq_mgr_tx) {
 
                     // Allow additional CQ arming now

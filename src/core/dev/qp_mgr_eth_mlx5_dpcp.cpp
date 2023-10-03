@@ -31,8 +31,6 @@
  */
 #include "qp_mgr_eth_mlx5_dpcp.h"
 
-#if defined(DEFINED_DPCP)
-
 #include <cinttypes>
 #include "ring_simple.h"
 #include "rfs_rule_dpcp.h"
@@ -344,5 +342,3 @@ dpcp::tir *qp_mgr_eth_mlx5_dpcp::create_tir(bool is_tls /*=false*/)
 
     return tir_obj;
 }
-
-#endif // defined(DEFINED_DPCP)

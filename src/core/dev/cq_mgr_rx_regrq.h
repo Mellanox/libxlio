@@ -38,13 +38,14 @@
 class cq_mgr_rx_regrq : public cq_mgr_rx {
 public:
     cq_mgr_rx_regrq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
-                struct ibv_comp_channel *p_comp_event_channel);
+                    struct ibv_comp_channel *p_comp_event_channel);
 
     virtual ~cq_mgr_rx_regrq() override;
 
     virtual int drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id = NULL) override;
     virtual mem_buf_desc_t *poll_and_process_socketxtreme() override;
-    virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array = NULL) override;
+    virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
+                                            void *pv_fd_ready_array = NULL) override;
 
     virtual uint32_t clean_cq() override;
 

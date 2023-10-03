@@ -762,12 +762,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_TX_SEGS_POOL_BATCH_TCP   (16384)
 #define MCE_DEFAULT_TX_NUM_SGE               (4)
 
-#if defined(DEFINED_DPCP)
-#define MCE_DEFAULT_STRQ (option_strq::ON)
-#else
-#define MCE_DEFAULT_STRQ (option_strq::OFF)
-#endif
-
+#define MCE_DEFAULT_STRQ                            (option_strq::ON)
 #define MCE_DEFAULT_STRQ_NUM_STRIDES                (16384)
 #define MCE_DEFAULT_STRQ_STRIDE_SIZE_BYTES          (512)
 #define MCE_DEFAULT_STRQ_NUM_BUFS                   (64)

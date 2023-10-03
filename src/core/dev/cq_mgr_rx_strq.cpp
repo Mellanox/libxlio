@@ -56,8 +56,7 @@
     } while (0)
 
 cq_mgr_rx_strq::cq_mgr_rx_strq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler,
-                               uint32_t cq_size, uint32_t stride_size_bytes,
-                               uint32_t strides_num,
+                               uint32_t cq_size, uint32_t stride_size_bytes, uint32_t strides_num,
                                struct ibv_comp_channel *p_comp_event_channel)
     : cq_mgr_rx(p_ring, p_ib_ctx_handler, cq_size, p_comp_event_channel)
     , _owner_ring(p_ring)

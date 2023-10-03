@@ -120,7 +120,8 @@ public:
      * @return >=0 number of wce processed
      *         < 0 error
      */
-    virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array = NULL) = 0;
+    virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
+                                            void *pv_fd_ready_array = NULL) = 0;
     virtual mem_buf_desc_t *poll_and_process_socketxtreme() { return nullptr; };
 
     /**
@@ -133,7 +134,8 @@ public:
 
     // CQ implements the Rx mem_buf_desc_owner.
     // These callbacks will be called for each Rx buffer that passed processed completion
-    // Rx completion handling at the cq_mgr_rx level is forwarding the packet to the ib_comm_mgr layer
+    // Rx completion handling at the cq_mgr_rx level is forwarding the packet to the ib_comm_mgr
+    // layer
     void mem_buf_desc_return_to_owner(mem_buf_desc_t *p_mem_buf_desc,
                                       void *pv_fd_ready_array = NULL);
 
@@ -160,7 +162,7 @@ protected:
     void compensate_qp_poll_failed();
     void lro_update_hdr(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc);
     inline void process_recv_buffer(mem_buf_desc_t *buff, void *pv_fd_ready_array = NULL);
-    
+
     inline void update_global_sn_rx(uint64_t &cq_poll_sn, uint32_t rettotal);
 
     inline struct xlio_mlx5_cqe *check_cqe(void);
