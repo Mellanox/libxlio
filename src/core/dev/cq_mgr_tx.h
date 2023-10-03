@@ -41,13 +41,13 @@ class ring_simple;
 
 class cq_mgr_tx {
 public:
-
     cq_mgr_tx(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int cq_size,
               ibv_comp_channel *p_comp_event_channel);
     ~cq_mgr_tx();
 
     // Helper gunction to extract the cq_mgr_tx from the CQ event,
-    // Since we have a single TX CQ comp channel for all cq_mgr_tx's, it might not be the active_cq object
+    // Since we have a single TX CQ comp channel for all cq_mgr_tx's, it might not be the active_cq
+    // object
     static cq_mgr_tx *get_cq_mgr_from_cq_event(struct ibv_comp_channel *p_cq_channel);
 
     ibv_cq *get_ibv_cq_hndl() { return m_p_ibv_cq; }
@@ -76,7 +76,6 @@ public:
     void reset_notification_armed() { m_b_notification_armed = false; }
 
 private:
-
     void log_cqe_error(struct xlio_mlx5_cqe *cqe);
     void handle_sq_wqe_prop(unsigned index);
     int clean_cq_poll_tx(xlio_ibv_wc *p_wce, int num_entries, uint64_t *p_cq_poll_sn);

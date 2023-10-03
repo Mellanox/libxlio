@@ -29,7 +29,7 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
- 
+
 #include "dev/cq_mgr_tx.h"
 #include <util/valgrind.h>
 #include <sock/sock-redirect.h>
@@ -50,7 +50,7 @@ atomic_t cq_mgr_tx::m_n_cq_id_counter_tx = ATOMIC_INIT(1);
 
 uint64_t cq_mgr_tx::m_n_global_sn_tx = 0U;
 
- cq_mgr_tx::cq_mgr_tx(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int cq_size,
+cq_mgr_tx::cq_mgr_tx(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int cq_size,
                      ibv_comp_channel *p_comp_event_channel)
     : m_p_ring(p_ring)
     , m_p_ib_ctx_handler(p_ib_ctx_handler)
@@ -108,7 +108,7 @@ int cq_mgr_tx::clean_cq_poll_tx(xlio_ibv_wc *p_wce, int num_entries, uint64_t *p
         // so we can't really do anything with them
         *p_cq_poll_sn = m_n_global_sn_tx;
         return 0;
-    } 
+    }
 
     if (unlikely(g_vlogger_level >= VLOG_FUNC_ALL)) {
         for (int i = 0; i < ret; i++) {
@@ -163,7 +163,7 @@ void cq_mgr_tx::configure(int cq_size)
     }
     BULLSEYE_EXCLUDE_BLOCK_END
     VALGRIND_MAKE_MEM_DEFINED(m_p_ibv_cq, sizeof(ibv_cq));
-    
+
     cq_logdbg("Created CQ as Tx with fd[%d] and of size %d elements (ibv_cq_hndl=%p)",
               get_channel_fd(), cq_size, m_p_ibv_cq);
 }
@@ -201,7 +201,8 @@ int cq_mgr_tx::request_notification(uint64_t poll_sn)
     cq_logfuncall("");
 
     if ((m_n_global_sn_tx > 0 && poll_sn != m_n_global_sn_tx)) {
-        // The cq_mgr_tx's has receive packets pending processing (or got processed since cq_poll_sn)
+        // The cq_mgr_tx's has receive packets pending processing (or got processed since
+        // cq_poll_sn)
         cq_logfunc("miss matched poll sn (user=0x%lx, cq=0x%lx)", poll_sn, m_n_cq_poll_sn_tx);
         return 1;
     }
@@ -240,7 +241,8 @@ cq_mgr_tx *cq_mgr_tx::get_cq_mgr_from_cq_event(struct ibv_comp_channel *p_cq_cha
     IF_VERBS_FAILURE(ibv_get_cq_event(p_cq_channel, &p_cq_hndl, &p_context))
     {
         vlog_printf(VLOG_INFO,
-                    MODULE_NAME ":%d: waiting on cq_mgr_tx event returned with error (errno=%d %m)\n",
+                    MODULE_NAME
+                    ":%d: waiting on cq_mgr_tx event returned with error (errno=%d %m)\n",
                     __LINE__, errno);
     }
     else
@@ -271,7 +273,7 @@ int cq_mgr_tx::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
 
         // All error opcodes have the most significant bit set.
         if (unlikely(cqe->op_own & 0x80) && is_error_opcode(cqe->op_own >> 4)) {
-            //m_p_cq_stat->n_tx_cqe_error++; Future counter
+            // m_p_cq_stat->n_tx_cqe_error++; Future counter
             log_cqe_error(cqe);
         }
 
