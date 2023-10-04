@@ -685,7 +685,7 @@ Default: 512
 XLIO_STRQ_STRIDES_NUM_BUFS
 The initial number of stride objects in the strides pool. Each received packet is represented by a stride object.
 Each stride object points to a portion of a buffer allocated for a receive WQE.
-When the pool runs out of stride objects it exapnds by another portion of this value.
+When the pool runs out of stride objects it expands by another portion of this value.
 Default: 262144
 
 XLIO_STRQ_STRIDES_COMPENSATION_LEVEL
@@ -1013,7 +1013,7 @@ Default value is 0 (following XLIO_MTU)
 XLIO_TCP_CC_ALGO
 TCP congestion control algorithm.
 The default algorithm coming with LWIP is a variation of Reno/New-Reno.
-The new Cubic algorithm was adapted from FreeBsd implementation.
+The new Cubic algorithm was adapted from FreeBSD implementation.
 Use value of 0 for LWIP algorithm.
 Use value of 1 for Cubic algorithm.
 Use value of 2 in order to disable the congestion algorithm.
@@ -1163,26 +1163,23 @@ users. Run as user root or grant CAP_NET_RAW privileges to your user
 
 * Huge pages out of resource:
 
-  XLIO WARNING: ***************************************************************
-  XLIO WARNING: * NO IMMEDIATE ACTION NEEDED!                                 *
-  XLIO WARNING: * Not enough hugepage resources for XLIO memory allocation.    *
-  XLIO WARNING: * XLIO will continue working with regular memory allocation.   *
-  XLIO INFO   : * Optional: 1. Switch to a different memory allocation type   *
-  XLIO_INFO   : * 	      (XLIO_MEM_ALLOC_TYPE= 0 or 1)		     *	
-  XLIO INFO   : *           2. Restart process after increasing the number of *
-  XLIO INFO   : *              hugepages resources in the system:             *
-  XLIO INFO   : * "cat /proc/meminfo |  grep -i HugePage"                     *
-  XLIO INFO   : * "echo 1000000000 > /proc/sys/kernel/shmmax"                 *
-  XLIO INFO   : * "echo 800 > /proc/sys/vm/nr_hugepages"                      *
-  XLIO WARNING: * Please refer to the memory allocation section in the XLIO's  *
-  XLIO WARNING: * User Manual for more information			     *
-  XLIO WARNING: ***************************************************************
+ XLIO WARNING: ************************************************************
+ XLIO WARNING: NO IMMEDIATE ACTION NEEDED!
+ XLIO WARNING: Not enough suitable hugepages to allocate 2097152 kB.
+ XLIO WARNING: Allocation will be done with regular pages.
+ XLIO WARNING: To avoid this message, either increase number of hugepages
+ XLIO WARNING: or switch to a different memory allocation type:
+ XLIO WARNING:   XLIO_MEM_ALLOC_TYPE=ANON
+ XLIO INFO   : Hugepages info:
+ XLIO INFO   :   1048576 kB : total=0 free=0
+ XLIO INFO   :   2048 kB : total=0 free=0
+ XLIO WARNING: ************************************************************
+
 This warning message means that you are using XLIO with hugepages memory allocation,
 but not enough huge pages resources are available in the system.
 If you want XLIO to take full advantage of the performance benefits of huge pages then
 you should restart the application after adding more hugepages resources in your
-system similar to the details in the warning message above or trying to free unused hupepages
-shared memory segments with the below script.
+system or trying to free unused hupepages shared memory segments with the below script.
 
 NOTE: Use 'ipcs -m' and 'ipcrm -m shmid' to check and clean unused shared memory segments.
 Below is a short script to help you release XLIO unused huge pages resources:
@@ -1190,6 +1187,7 @@ Below is a short script to help you release XLIO unused huge pages resources:
     do echo 'Clearing' $shmid; ipcrm -m $shmid;
     done;
 
+For more information, refer to the "HugeTLB Pages" documentation of the Linux kernel.
 
 * Not supported Bonding Configuration:
 
