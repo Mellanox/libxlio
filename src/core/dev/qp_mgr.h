@@ -256,14 +256,14 @@ class qp_mgr {
     friend class cq_mgr_tx;
 
 public:
-    qp_mgr(struct qp_mgr_desc *desc, const uint32_t tx_num_wr, uint16_t vlan, bool call_configure);
-    virtual ~qp_mgr();
+    qp_mgr(struct qp_mgr_desc *desc, const uint32_t tx_num_wr, uint16_t vlan);
+    ~qp_mgr();
 
-    virtual void up();
-    virtual void down();
+    void up();
+    void down();
 
     // Post for receive single mem_buf_desc
-    virtual void post_recv_buffer(mem_buf_desc_t *p_mem_buf_desc);
+    void post_recv_buffer(mem_buf_desc_t *p_mem_buf_desc);
 
     // Post for receive a list of mem_buf_desc
     void post_recv_buffers(descq_t *p_buffers, size_t count);
@@ -282,8 +282,8 @@ public:
     // chain of calls may serve as cache warm for dummy send feature.
     inline bool get_hw_dummy_send_support() { return m_hw_dummy_send_support; }
 
-    virtual void modify_qp_to_ready_state();
-    virtual void modify_qp_to_error_state();
+    void modify_qp_to_ready_state();
+    void modify_qp_to_error_state();
 
     void release_rx_buffers();
     void release_tx_buffers();
@@ -291,7 +291,7 @@ public:
     int modify_qp_ratelimit(struct xlio_rate_limit_t &rate_limit, uint32_t rl_changes);
     void dm_release_data(mem_buf_desc_t *buff) { m_dm_mgr.release_data(buff); }
 
-    virtual rfs_rule *create_rfs_rule(xlio_ibv_flow_attr &attrs, xlio_tir *tir_ext);
+    rfs_rule *create_rfs_rule(xlio_ibv_flow_attr &attrs, xlio_tir *tir_ext);
 
 #ifdef DEFINED_UTLS
     xlio_tis *tls_context_setup_tx(const xlio_tls_info *info) override;
@@ -445,20 +445,11 @@ protected:
         return m_n_unsignaled_count == m_n_sysvar_tx_num_wr_to_signal - 1;
     }
 
-    virtual cq_mgr_rx *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel);
+    cq_mgr_rx *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel);
     cq_mgr_tx *init_tx_cq_mgr();
 
     int send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, bool request_comp,
                      xlio_tis *tis, unsigned credits);
-
-#if defined(DEFINED_UTLS)
-    dpcp::tir *xlio_tir_to_dpcp_tir(xlio_tir *tir);
-    virtual dpcp::tir *create_tir(bool is_tls = false)
-    {
-        NOT_IN_USE(is_tls);
-        return NULL;
-    }
-#endif /* DEFINED_UTLS */
 
 private:
     void trigger_completion_for_all_sent_packets();
@@ -467,13 +458,22 @@ private:
     void ti_released(xlio_ti *ti);
     void put_tls_tir_in_cache(xlio_tir *tir);
     void put_tls_tis_in_cache(xlio_tis *tis);
-    bool is_rq_empty() const override { return (m_mlx5_qp.rq.head == m_mlx5_qp.rq.tail); }
+    void modify_rq_to_ready_state();
+    bool prepare_rq(uint32_t cqn);
+    bool configure_rq_dpcp();
+    bool store_rq_mlx5_params(dpcp::basic_rq &new_rq);
+    bool is_rq_empty() const { return (m_mlx5_qp.rq.head == m_mlx5_qp.rq.tail); }
     bool is_completion_need() const
     {
         return !m_n_unsignaled_count || (m_dm_enabled && m_dm_mgr.is_completion_need());
     }
 
+    dpcp::tir *create_tir(bool is_tls = false);
+
+    dpcp::tir *xlio_tir_to_dpcp_tir(xlio_tir *tir) { return tir->m_p_tir.get(); }
+
 #if defined(DEFINED_UTLS)
+
     inline void tls_fill_static_params_wqe(struct mlx5_wqe_tls_static_params_seg *params,
                                            const struct xlio_tls_info *info, uint32_t key_id,
                                            uint32_t resync_tcp_sn);
@@ -533,6 +533,10 @@ private:
     std::list<std::unique_ptr<dpcp::tls_dek>> m_tls_dek_get_cache;
     std::list<std::unique_ptr<dpcp::tls_dek>> m_tls_dek_put_cache;
 #endif
+
+    std::unique_ptr<dpcp::tir> _tir = {nullptr};
+    std::unique_ptr<dpcp::basic_rq> _rq = {nullptr};
+    uint32_t _strq_wqe_reserved_seg = 0U;
 };
 
 #endif

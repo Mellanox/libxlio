@@ -67,13 +67,11 @@ libxlio_la_SOURCES := \
 	dev/cq_mgr_tx.cpp \
 	dev/dm_mgr.cpp \
 	dev/qp_mgr.cpp \
-	dev/qp_mgr_eth_mlx5_dpcp.cpp \
 	dev/gro_mgr.cpp \
 	dev/rfs.cpp \
 	dev/rfs_uc.cpp \
 	dev/rfs_uc_tcp_gro.cpp \
 	dev/rfs_mc.cpp \
-	dev/rfs_rule_ibv.cpp \
 	dev/rfs_rule_dpcp.cpp \
 	dev/time_converter.cpp \
 	dev/time_converter_ptp.cpp \
@@ -186,13 +184,11 @@ libxlio_la_SOURCES := \
 	dev/net_device_table_mgr.h \
 	dev/net_device_val.h \
 	dev/qp_mgr.h \
-	dev/qp_mgr_eth_mlx5_dpcp.h \
 	dev/rfs.h \
 	dev/rfs_mc.h \
 	dev/rfs_uc.h \
 	dev/rfs_uc_tcp_gro.h \
 	dev/rfs_rule.h \
-	dev/rfs_rule_ibv.h \
 	dev/rfs_rule_dpcp.h \
 	dev/src_addr_selector.h \
 	dev/ring.h \
