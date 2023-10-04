@@ -36,9 +36,6 @@
 #include "util/valgrind.h"
 #include "util/sg_array.h"
 #include "sock/fd_collection.h"
-#if defined(DEFINED_DIRECT_VERBS)
-#include "dev/qp_mgr_eth_mlx5_dpcp.h"
-#endif
 
 #undef MODULE_NAME
 #define MODULE_NAME "ring_simple"
@@ -373,7 +370,7 @@ void ring_simple::create_resources()
     desc.ring = this;
     desc.slave = p_slave;
     desc.rx_comp_event_channel = m_p_rx_comp_event_channel;
-    m_p_qp_mgr = new qp_mgr_eth_mlx5_dpcp(&desc, get_tx_num_wr(), m_partition);
+    m_p_qp_mgr = new qp_mgr(&desc, get_tx_num_wr(), m_partition);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (m_p_qp_mgr == NULL) {
         ring_logerr("Failed to allocate qp_mgr!");
