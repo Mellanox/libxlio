@@ -501,6 +501,8 @@ void print_xlio_global_settings()
     VLOG_PARAM_STRING("SegFault Backtrace", safe_mce_sys().handle_segfault,
                       MCE_DEFAULT_HANDLE_SIGFAULT, SYS_VAR_HANDLE_SIGSEGV,
                       safe_mce_sys().handle_segfault ? "Enabled " : "Disabled");
+    VLOG_PARAM_STRING("Print a report", safe_mce_sys().print_report, MCE_DEFAULT_PRINT_REPORT,
+                      SYS_VAR_PRINT_REPORT, safe_mce_sys().print_report ? "Enabled " : "Disabled");
 
     VLOG_PARAM_NUMSTR("Ring allocation logic TX", safe_mce_sys().ring_allocation_logic_tx,
                       MCE_DEFAULT_RING_ALLOCATION_LOGIC_TX, SYS_VAR_RING_ALLOCATION_LOGIC_TX,
