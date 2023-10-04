@@ -78,6 +78,7 @@ Example:
  XLIO DETAILS: Polling CPU idle usage         Disabled                   [XLIO_CPU_USAGE_STATS]
  XLIO DETAILS: SigIntr Ctrl-C Handle          Enabled                    [XLIO_HANDLE_SIGINTR]
  XLIO DETAILS: SegFault Backtrace             Disabled                   [XLIO_HANDLE_SIGSEGV]
+ XLIO DETAILS: Print a report                 Disabled                   [XLIO_PRINT_REPORT]
  XLIO DETAILS: Ring allocation logic TX       0 (Ring per interface)     [XLIO_RING_ALLOCATION_LOGIC_TX]
  XLIO DETAILS: Ring allocation logic RX       0 (Ring per interface)     [XLIO_RING_ALLOCATION_LOGIC_RX]
  XLIO INFO   : Ring migration ratio TX        -1                         [XLIO_RING_MIGRATION_RATIO_TX]
@@ -1042,6 +1043,12 @@ Note that usage of Mutex might increase latency.
 0 - Spin
 1 - Mutex
 Default: 0 (Spin)
+
+XLIO_PRINT_REPORT
+Print a report in human readable format in case of runtime errors. The report is
+printed during termination phase. It can be missed if the process is killed with
+SIGKILL signal.
+Default: 0 (Disabled)
 
 XLIO Monitoring & Performance Counters
 =====================================
