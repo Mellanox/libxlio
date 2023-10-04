@@ -290,7 +290,6 @@ public:
     friend class cq_mgr_rx_regrq;
     friend class cq_mgr_rx_strq;
     friend class qp_mgr;
-    friend class qp_mgr_eth_mlx5_dpcp;
     friend class rfs;
     friend class rfs_uc;
     friend class rfs_uc_tcp_gro;
