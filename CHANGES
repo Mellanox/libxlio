@@ -1,3 +1,11 @@
+Version 3.20.5-1:
+Date + Time 2023-10-05
+=============================================================
+Fixed:
+        - RM #3611687 Initialization in case XLIO_NGINX_UDP_POOL_SIZE
+        - RM #3615483 Corruption during ring release
+        - RM #3580073 Fixes for XLIO_MEMORY_LIMIT
+
 Version 3.20.4-1:
 Date + Time 2023-09-21
 =============================================================
