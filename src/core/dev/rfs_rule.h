@@ -33,19 +33,16 @@
 #ifndef RFS_RULE_H
 #define RFS_RULE_H
 
-#include <vlogger/vlogger.h>
-
-#define rfs_logpanic   __log_info_panic
-#define rfs_logerr     __log_info_err
-#define rfs_logwarn    __log_info_warn
-#define rfs_loginfo    __log_info_info
-#define rfs_logdbg     __log_info_dbg
-#define rfs_logfunc    __log_info_func
-#define rfs_logfuncall __log_info_funcall
+#include <memory>
+#include "ib/base/verbs_extra.h"
+#include <mellanox/dpcp.h>
 
 class rfs_rule {
 public:
-    virtual ~rfs_rule() {}
+    bool create(const xlio_ibv_flow_attr &attrs, dpcp::tir &in_tir, dpcp::adapter &in_adapter);
+
+private:
+    std::unique_ptr<dpcp::flow_rule> _dpcp_flow;
 };
 
 #endif

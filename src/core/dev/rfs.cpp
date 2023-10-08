@@ -39,6 +39,14 @@
 
 #define MODULE_NAME "rfs"
 
+#define rfs_logpanic   __log_info_panic
+#define rfs_logerr     __log_info_err
+#define rfs_logwarn    __log_info_warn
+#define rfs_loginfo    __log_info_info
+#define rfs_logdbg     __log_info_dbg
+#define rfs_logfunc    __log_info_func
+#define rfs_logfuncall __log_info_funcall
+
 /**/
 /** inlining functions can only help if they are implemented before their usage **/
 /**/

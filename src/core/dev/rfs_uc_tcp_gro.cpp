@@ -39,6 +39,8 @@
 
 #define MODULE_NAME "rfs_uc_tcp_gro"
 
+#define rfs_logpanic __log_info_panic
+
 #define TCP_H_LEN_NO_OPTIONS 5
 #define TCP_H_LEN_TIMESTAMP  8
 

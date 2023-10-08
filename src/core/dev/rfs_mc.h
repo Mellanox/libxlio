@@ -35,8 +35,6 @@
 
 #include "dev/rfs.h"
 
-#define MODULE_NAME "rfs_mc"
-
 /**
  * @class rfs_mc
  *
@@ -83,8 +81,6 @@ void rfs_mc::prepare_flow_spec_by_ip(hw_queue_rx *hqrx_ptr, attach_flow_data_t *
     if (m_flow_tag_id) { // Will not attach flow_tag spec to rule for tag_id==0
         ibv_flow_spec_flow_tag_set(&(attach_flow_data_eth->ibv_flow_attr.flow_tag), m_flow_tag_id);
         attach_flow_data_eth->ibv_flow_attr.add_flow_tag_spec();
-        rfs_logdbg("Adding flow_tag spec to MC rule, num_of_specs: %d flow_tag_id: %d",
-                   attach_flow_data_eth->ibv_flow_attr.attr.num_of_specs, m_flow_tag_id);
     }
 }
 
