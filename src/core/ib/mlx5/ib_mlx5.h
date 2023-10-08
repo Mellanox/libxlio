@@ -79,22 +79,11 @@ typedef struct xlio_ib_mlx5_qp {
         uint32_t stride;
     } sq;
     struct {
-        volatile uint32_t *dbrec;
-        void *buf;
-        uint32_t wqe_cnt;
-        uint32_t stride;
-        uint32_t wqe_shift;
-        unsigned head;
-        unsigned tail;
-    } rq;
-    struct {
         void *reg;
         uint32_t size;
         uint32_t offset;
     } bf;
-    uint32_t tirn;
     uint32_t tisn;
-    uint32_t rqn;
     uint32_t sqn;
 } xlio_ib_mlx5_qp_t;
 

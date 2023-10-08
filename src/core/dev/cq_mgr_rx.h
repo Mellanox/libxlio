@@ -35,7 +35,6 @@
 
 #include "ib/base/verbs_extra.h"
 #include "utils/atomic.h"
-#include "dev/qp_mgr.h"
 #include "dev/ib_ctx_handler.h"
 #include "util/sys_vars.h"
 #include "util/xlio_stats.h"
@@ -56,7 +55,7 @@
 
 class net_device_mgr;
 class ring;
-class qp_mgr;
+class hw_queue_rx;
 class ring_simple;
 
 /* Get CQE opcode. */
@@ -138,8 +137,8 @@ public:
     void mem_buf_desc_return_to_owner(mem_buf_desc_t *p_mem_buf_desc,
                                       void *pv_fd_ready_array = NULL);
 
-    virtual void add_qp_rx(qp_mgr *qp);
-    virtual void del_qp_rx(qp_mgr *qp);
+    virtual void add_hqrx(hw_queue_rx *hqrx_ptr);
+    virtual void del_hqrx(hw_queue_rx *hqrx_ptr);
 
     virtual uint32_t clean_cq() = 0;
 
@@ -178,7 +177,7 @@ protected:
     virtual void statistics_print();
 
     xlio_ib_mlx5_cq_t m_mlx5_cq;
-    qp_mgr *m_qp = nullptr;
+    hw_queue_rx *m_hqrx_ptr = nullptr;
     mem_buf_desc_t *m_rx_hot_buffer = nullptr;
     struct ibv_cq *m_p_ibv_cq = nullptr;
     descq_t m_rx_queue;
