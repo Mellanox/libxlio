@@ -43,7 +43,7 @@
 
 #define RFS_SINKS_LIST_DEFAULT_LEN 32
 
-class qp_mgr;
+class hw_queue_rx;
 class pkt_rcvr_sink;
 
 /*
@@ -66,20 +66,20 @@ typedef struct ibv_flow_attr_eth {
 
 template <typename T> struct attach_flow_data_eth_ip_tcp_udp_t {
     rfs_rule *rfs_flow;
-    qp_mgr *p_qp_mgr;
+    hw_queue_rx *hqrx_ptr;
     struct ibv_flow_attr_eth_ip_tcp_udp : public ibv_flow_attr_eth {
         T ip;
         xlio_ibv_flow_spec_tcp_udp tcp_udp;
         xlio_ibv_flow_spec_action_tag flow_tag; // must be the last as struct can be used without it
 
-        ibv_flow_attr_eth_ip_tcp_udp(uint8_t port)
+        ibv_flow_attr_eth_ip_tcp_udp()
         {
             memset(this, 0, sizeof(*this));
             attr.size = sizeof(T) - sizeof(flow_tag);
             attr.num_of_specs = 3;
             attr.type = XLIO_IBV_FLOW_ATTR_NORMAL;
             attr.priority = 2; // almost highest priority, 1 is used for 5-tuple later
-            attr.port = port;
+            attr.port = 0;
         }
         inline void add_flow_tag_spec(void)
         {
@@ -87,10 +87,10 @@ template <typename T> struct attach_flow_data_eth_ip_tcp_udp_t {
             attr.size += sizeof(flow_tag);
         }
     } ibv_flow_attr;
-    attach_flow_data_eth_ip_tcp_udp_t(qp_mgr *qp_mgr)
+    attach_flow_data_eth_ip_tcp_udp_t(hw_queue_rx *hqrx)
         : rfs_flow(NULL)
-        , p_qp_mgr(qp_mgr)
-        , ibv_flow_attr(qp_mgr->get_port_num())
+        , hqrx_ptr(hqrx)
+        , ibv_flow_attr()
     {
     }
 };
@@ -102,7 +102,7 @@ typedef attach_flow_data_eth_ip_tcp_udp_t<xlio_ibv_flow_spec_ipv6>
 
 typedef struct attach_flow_data_t {
     rfs_rule *rfs_flow;
-    qp_mgr *p_qp_mgr;
+    hw_queue_rx *hqrx_ptr;
     xlio_ibv_flow_attr ibv_flow_attr;
 } attach_flow_data_t;
 

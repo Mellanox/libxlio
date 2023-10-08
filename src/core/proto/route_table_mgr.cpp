@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 
+#include <cinttypes>
 #include <algorithm>
 #include <stdio.h>
 #include <stdint.h>

@@ -86,21 +86,8 @@ inline void ring_simple::send_status_handler(int ret, xlio_ibv_send_wr *p_send_w
 
 ring_simple::ring_simple(int if_index, ring *parent, ring_type_t type, bool use_locks)
     : ring_slave(if_index, parent, type, use_locks)
-    , m_p_ib_ctx(NULL)
-    , m_p_qp_mgr(NULL)
-    , m_p_cq_mgr_rx(NULL)
-    , m_p_cq_mgr_tx(NULL)
     , m_lock_ring_tx_buf_wait("ring:lock_tx_buf_wait")
-    , m_tx_num_bufs(0)
-    , m_zc_num_bufs(0)
-    , m_tx_num_wr(0)
-    , m_missing_buf_ref_count(0)
-    , m_tx_lkey(0)
     , m_gro_mgr(safe_mce_sys().gro_streams_max, MAX_GRO_BUFS)
-    , m_up(false)
-    , m_p_rx_comp_event_channel(NULL)
-    , m_p_tx_comp_event_channel(NULL)
-    , m_p_l2_addr(NULL)
 {
     net_device_val *p_ndev = g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index());
     const slave_data_t *p_slave = p_ndev->get_slave(get_if_index());
@@ -149,12 +136,20 @@ ring_simple::~ring_simple()
     // Was done in order to allow iperf's FIN packet to be sent.
     usleep(25000);
 
-    if (m_p_qp_mgr) {
-        stop_active_qp_mgr();
+    if (m_hqtx) {
+        stop_active_queue_tx();
 
         // Release QP/CQ resources
-        delete m_p_qp_mgr;
-        m_p_qp_mgr = NULL;
+        delete m_hqtx;
+        m_hqtx = nullptr;
+    }
+
+    if (m_hqrx) {
+        stop_active_queue_rx();
+
+        // Release QP/CQ resources
+        delete m_hqrx;
+        m_hqrx = nullptr;
     }
 
     /* coverity[double_lock] TODO: RM#1049980 */
@@ -365,22 +360,22 @@ void ring_simple::create_resources()
         g_p_fd_collection->add_cq_channel_fd(m_p_tx_comp_event_channel->fd, this);
     }
 
-    struct qp_mgr_desc desc;
-    memset(&desc, 0, sizeof(desc));
-    desc.ring = this;
-    desc.slave = p_slave;
-    desc.rx_comp_event_channel = m_p_rx_comp_event_channel;
-    m_p_qp_mgr = new qp_mgr(&desc, get_tx_num_wr(), m_partition);
+    std::unique_ptr<hw_queue_tx> temp_hqtx(new hw_queue_tx(this, p_slave, get_tx_num_wr()));
+    std::unique_ptr<hw_queue_rx> temp_hqrx(
+        new hw_queue_rx(this, p_slave->p_ib_ctx, m_p_rx_comp_event_channel, m_vlan));
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (m_p_qp_mgr == NULL) {
-        ring_logerr("Failed to allocate qp_mgr!");
-        throw_xlio_exception("create qp failed");
+    if (!temp_hqtx || !temp_hqrx) {
+        ring_logerr("Failed to allocate hw_queue_tx/hw_queue_rx!");
+        throw_xlio_exception("Create hw_queue_tx/hw_queue_rx failed");
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
+    m_hqtx = temp_hqtx.release();
+    m_hqrx = temp_hqrx.release();
+
     // save pointers
-    m_p_cq_mgr_rx = m_p_qp_mgr->get_rx_cq_mgr();
-    m_p_cq_mgr_tx = m_p_qp_mgr->get_tx_cq_mgr();
+    m_p_cq_mgr_rx = m_hqrx->get_rx_cq_mgr();
+    m_p_cq_mgr_tx = m_hqtx->get_tx_cq_mgr();
 
     init_tx_buffers(RING_TX_BUFS_COMPENSATE);
 
@@ -394,7 +389,8 @@ void ring_simple::create_resources()
      * even if slave is not active
      */
     if (p_slave->active || (p_slave->lag_tx_port_affinity == 1)) {
-        start_active_qp_mgr();
+        start_active_queue_tx();
+        start_active_queue_rx();
     }
 
     ring_logdbg("new ring_simple() completed");
@@ -592,8 +588,8 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
         // Try to poll once in the hope that we get a few freed tx mem_buf_desc
         ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
         if (ret < 0) {
-            ring_logdbg("failed polling on cq_mgr_tx (qp_mgr=%p, cq_mgr_tx=%p) (ret=%d %m)",
-                        m_p_qp_mgr, m_p_cq_mgr_tx, ret);
+            ring_logdbg("failed polling on cq_mgr_tx (hqtx=%p, cq_mgr_tx=%p) (ret=%d %m)", m_hqtx,
+                        m_p_cq_mgr_tx, ret);
             /* coverity[double_unlock] TODO: RM#1049980 */
             m_lock_ring_tx.unlock();
             return NULL;
@@ -618,8 +614,8 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
                 ret = m_p_cq_mgr_tx->request_notification(poll_sn);
                 if (ret < 0) {
                     // this is most likely due to cq_poll_sn out of sync, need to poll_cq again
-                    ring_logdbg("failed arming cq_mgr_tx (qp_mgr=%p, cq_mgr_tx=%p) (errno=%d %m)",
-                                m_p_qp_mgr, m_p_cq_mgr_tx, errno);
+                    ring_logdbg("failed arming cq_mgr_tx (hqtx=%p, cq_mgr_tx=%p) (errno=%d %m)",
+                                m_hqtx, m_p_cq_mgr_tx, errno);
                 } else if (ret == 0) {
 
                     // prepare to block
@@ -660,9 +656,9 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
                         // Perform a non blocking event read, clear the fd channel
                         ret = p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
                         if (ret < 0) {
-                            ring_logdbg("failed handling cq_mgr_tx channel (qp_mgr=%p, "
+                            ring_logdbg("failed handling cq_mgr_tx channel (hqtx=%p, "
                                         "cq_mgr_tx=%p) (errno=%d %m)",
-                                        m_p_qp_mgr, m_p_cq_mgr_tx, errno);
+                                        m_hqtx, m_p_cq_mgr_tx, errno);
                             /* coverity[double_unlock] TODO: RM#1049980 */
                             m_lock_ring_tx.unlock();
                             m_lock_ring_tx_buf_wait.unlock();
@@ -726,11 +722,11 @@ inline int ring_simple::send_buffer(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_pac
                                     xlio_tis *tis)
 {
     int ret = 0;
-    unsigned credits = m_p_qp_mgr->credits_calculate(p_send_wqe);
+    unsigned credits = m_hqtx->credits_calculate(p_send_wqe);
 
-    if (likely(m_p_qp_mgr->credits_get(credits)) ||
+    if (likely(m_hqtx->credits_get(credits)) ||
         is_available_qp_wr(is_set(attr, XLIO_TX_PACKET_BLOCK), credits)) {
-        ret = m_p_qp_mgr->send(p_send_wqe, attr, tis, credits);
+        ret = m_hqtx->send(p_send_wqe, attr, tis, credits);
     } else {
         ring_logdbg("Silent packet drop, SQ is full!");
         ret = -1;
@@ -745,7 +741,7 @@ bool ring_simple::get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr 
     NOT_IN_USE(id);
     NOT_IN_USE(p_send_wqe);
 
-    return m_p_qp_mgr->get_hw_dummy_send_support();
+    return m_hqtx->get_hw_dummy_send_support();
 }
 
 void ring_simple::send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
@@ -789,12 +785,12 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
         // Try to poll once in the hope that we get space in SQ
         ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
         if (ret < 0) {
-            ring_logdbg("failed polling on cq_mgr_tx (qp_mgr=%p, cq_mgr_tx=%p) (ret=%d %m)",
-                        m_p_qp_mgr, m_p_cq_mgr_tx, ret);
+            ring_logdbg("failed polling on cq_mgr_tx (hqtx=%p, cq_mgr_tx=%p) (ret=%d %m)", m_hqtx,
+                        m_p_cq_mgr_tx, ret);
             /* coverity[missing_unlock] */
             return false;
         }
-        granted = m_p_qp_mgr->credits_get(credits);
+        granted = m_hqtx->credits_get(credits);
         if (granted) {
             break;
         }
@@ -813,8 +809,8 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
             ret = m_p_cq_mgr_tx->request_notification(poll_sn);
             if (ret < 0) {
                 // this is most likely due to cq_poll_sn out of sync, need to poll_cq again
-                ring_logdbg("failed arming cq_mgr_tx (qp_mgr=%p, cq_mgr_tx=%p) (errno=%d %m)",
-                            m_p_qp_mgr, m_p_cq_mgr_tx, errno);
+                ring_logdbg("failed arming cq_mgr_tx (hqtx=%p, cq_mgr_tx=%p) (errno=%d %m)", m_hqtx,
+                            m_p_cq_mgr_tx, errno);
             } else if (ret == 0) {
                 // prepare to block
                 // CQ is armed, block on the CQ's Tx event channel (fd)
@@ -851,9 +847,9 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
                     // Perform a non blocking event read, clear the fd channel
                     ret = p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
                     if (ret < 0) {
-                        ring_logdbg("failed handling cq_mgr_tx channel (qp_mgr=%p, "
+                        ring_logdbg("failed handling cq_mgr_tx channel (hqtx=%p "
                                     "cq_mgr_tx=%p) (errno=%d %m)",
-                                    m_p_qp_mgr, m_p_cq_mgr_tx, errno);
+                                    m_hqtx, m_p_cq_mgr_tx, errno);
                         /* coverity[double_unlock] TODO: RM#1049980 */
                         m_lock_ring_tx.unlock();
                         m_lock_ring_tx_buf_wait.unlock();
@@ -959,7 +955,7 @@ void ring_simple::return_tx_pool_to_global_pool()
 int ring_simple::put_tx_buffer_helper(mem_buf_desc_t *buff)
 {
     if (buff->tx.dev_mem_length) {
-        m_p_qp_mgr->dm_release_data(buff);
+        m_hqtx->dm_release_data(buff);
     }
 
     // Potential race, ref is protected here by ring_tx lock, and in dst_entry_tcp &
@@ -1094,37 +1090,56 @@ void ring_simple::adapt_cq_moderation()
     m_lock_ring_rx.unlock();
 }
 
-void ring_simple::start_active_qp_mgr()
+void ring_simple::start_active_queue_tx()
 {
-    m_lock_ring_rx.lock();
     m_lock_ring_tx.lock();
-    if (!m_up) {
+    if (!m_up_tx) {
         /* TODO: consider avoid using sleep */
         /* coverity[sleep] */
-        m_p_qp_mgr->up();
-        m_up = true;
+        m_hqtx->up();
+        m_up_tx = true;
     }
     m_lock_ring_tx.unlock();
+}
+
+void ring_simple::start_active_queue_rx()
+{
+    m_lock_ring_rx.lock();
+    if (!m_up_rx) {
+        /* TODO: consider avoid using sleep */
+        /* coverity[sleep] */
+        m_hqrx->up();
+        m_up_rx = true;
+    }
     m_lock_ring_rx.unlock();
 }
 
-void ring_simple::stop_active_qp_mgr()
+void ring_simple::stop_active_queue_tx()
 {
-    m_lock_ring_rx.lock();
     m_lock_ring_tx.lock();
-    if (m_up) {
-        m_up = false;
+    if (m_up_tx) {
+        m_up_tx = false;
         /* TODO: consider avoid using sleep */
         /* coverity[sleep] */
-        m_p_qp_mgr->down();
+        m_hqtx->down();
     }
     m_lock_ring_tx.unlock();
+}
+void ring_simple::stop_active_queue_rx()
+{
+    m_lock_ring_rx.lock();
+    if (m_up_rx) {
+        m_up_rx = false;
+        /* TODO: consider avoid using sleep */
+        /* coverity[sleep] */
+        m_hqrx->down();
+    }
     m_lock_ring_rx.unlock();
 }
 
 bool ring_simple::is_up()
 {
-    return m_up;
+    return m_up_tx && m_up_rx;
 }
 
 int ring_simple::modify_ratelimit(struct xlio_rate_limit_t &rate_limit)
@@ -1140,10 +1155,10 @@ int ring_simple::modify_ratelimit(struct xlio_rate_limit_t &rate_limit)
         return -1;
     }
 
-    uint32_t rl_changes = m_p_qp_mgr->is_ratelimit_change(rate_limit);
+    uint32_t rl_changes = m_hqtx->is_ratelimit_change(rate_limit);
 
-    if (m_up && rl_changes) {
-        return m_p_qp_mgr->modify_qp_ratelimit(rate_limit, rl_changes);
+    if (m_up_tx && rl_changes) {
+        return m_hqtx->modify_qp_ratelimit(rate_limit, rl_changes);
     }
 
     return 0;
@@ -1186,12 +1201,12 @@ uint32_t ring_simple::get_tx_user_lkey(void *addr, size_t length, void *p_mappin
 
 uint32_t ring_simple::get_max_inline_data()
 {
-    return m_p_qp_mgr->get_max_inline_data();
+    return m_hqtx->get_max_inline_data();
 }
 
 uint32_t ring_simple::get_max_send_sge(void)
 {
-    return m_p_qp_mgr->get_max_send_sge();
+    return m_hqtx->get_max_send_sge();
 }
 
 uint32_t ring_simple::get_max_payload_sz(void)

@@ -46,7 +46,7 @@
 #include "ib/base/verbs_extra.h"
 
 #include "buffer_pool.h"
-#include "qp_mgr.h"
+#include "hw_queue_rx.h"
 #include "ring_simple.h"
 
 #define MODULE_NAME "cq_mgr_rx"
@@ -121,6 +121,8 @@ void cq_mgr_rx::configure(int cq_size)
                                     comp_vector, &attr);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!m_p_ibv_cq) {
+        cq_logerr("Failed to create CQ, this: %p, ctx: %p size: %d compch: %p", this, context,
+                  cq_size - 1, m_comp_event_channel);
         throw_xlio_exception("ibv_create_cq failed");
     }
     BULLSEYE_EXCLUDE_BLOCK_END
@@ -182,10 +184,10 @@ void cq_mgr_rx::statistics_print()
     }
 }
 
-void cq_mgr_rx::add_qp_rx(qp_mgr *qp)
+void cq_mgr_rx::add_hqrx(hw_queue_rx *hqrx_ptr)
 {
-    m_qp = qp;
-    m_qp->m_rq_wqe_counter = 0; // In case of bonded qp, wqe_counter must be reset to zero
+    m_hqrx_ptr = hqrx_ptr;
+    m_hqrx_ptr->m_rq_wqe_counter = 0; // In case of bonded hqrx, wqe_counter must be reset to zero
     m_rx_hot_buffer = NULL;
 
     if (0 != xlio_ib_mlx5_get_cq(m_p_ibv_cq, &m_mlx5_cq)) {
@@ -193,7 +195,7 @@ void cq_mgr_rx::add_qp_rx(qp_mgr *qp)
     }
 
     VALGRIND_MAKE_MEM_DEFINED(&m_mlx5_cq, sizeof(m_mlx5_cq));
-    cq_logfunc("qp_mgr=%p m_mlx5_cq.dbrec=%p m_mlx5_cq.cq_buf=%p", m_qp, m_mlx5_cq.dbrec,
+    cq_logfunc("hqrx_ptr=%p m_mlx5_cq.dbrec=%p m_mlx5_cq.cq_buf=%p", hqrx_ptr, m_mlx5_cq.dbrec,
                m_mlx5_cq.cq_buf);
 
     descq_t temp_desc_list;
@@ -204,55 +206,55 @@ void cq_mgr_rx::add_qp_rx(qp_mgr *qp)
     /* return_extra_buffers(); */ // todo??
 
     // Initial fill of receiver work requests
-    uint32_t qp_rx_wr_num = qp->get_rx_max_wr_num();
-    cq_logdbg("Trying to push %d WRE to allocated qp (%p)", qp_rx_wr_num, qp);
-    while (qp_rx_wr_num) {
+    uint32_t hqrx_wr_num = hqrx_ptr->get_rx_max_wr_num();
+    cq_logdbg("Trying to push %d WRE to allocated hqrx (%p)", hqrx_wr_num, hqrx_ptr);
+    while (hqrx_wr_num) {
         uint32_t n_num_mem_bufs = m_n_sysvar_rx_num_wr_to_post_recv;
-        if (n_num_mem_bufs > qp_rx_wr_num) {
-            n_num_mem_bufs = qp_rx_wr_num;
+        if (n_num_mem_bufs > hqrx_wr_num) {
+            n_num_mem_bufs = hqrx_wr_num;
         }
         bool res = g_buffer_pool_rx_rwqe->get_buffers_thread_safe(temp_desc_list, m_p_ring,
                                                                   n_num_mem_bufs, m_rx_lkey);
         if (!res) {
             VLOG_PRINTF_INFO_ONCE_THEN_ALWAYS(
                 VLOG_WARNING, VLOG_DEBUG,
-                "WARNING Out of mem_buf_desc from Rx buffer pool for qp_mgr qp_mgr initialization "
-                "(qp=%p),\n"
+                "WARNING Out of mem_buf_desc from Rx buffer pool for hqrx initialization "
+                "(hqrx_ptr=%p),\n"
                 "\tThis might happen due to wrong setting of XLIO_RX_BUFS and XLIO_RX_WRE. Please "
                 "refer to README.txt for more info",
-                qp);
+                hqrx_ptr);
             break;
         }
 
-        qp->post_recv_buffers(&temp_desc_list, temp_desc_list.size());
+        hqrx_ptr->post_recv_buffers(&temp_desc_list, temp_desc_list.size());
         if (!temp_desc_list.empty()) {
-            cq_logdbg("qp post recv is already full (push=%d, planned=%d)",
-                      qp->get_rx_max_wr_num() - qp_rx_wr_num, qp->get_rx_max_wr_num());
+            cq_logdbg("hqrx_ptr post recv is already full (push=%d, planned=%d)",
+                      hqrx_ptr->get_rx_max_wr_num() - hqrx_wr_num, hqrx_ptr->get_rx_max_wr_num());
             g_buffer_pool_rx_rwqe->put_buffers_thread_safe(&temp_desc_list, temp_desc_list.size());
             break;
         }
-        qp_rx_wr_num -= n_num_mem_bufs;
+        hqrx_wr_num -= n_num_mem_bufs;
     }
 
-    cq_logdbg("Successfully post_recv qp with %d new Rx buffers (planned=%d)",
-              qp->get_rx_max_wr_num() - qp_rx_wr_num, qp->get_rx_max_wr_num());
+    cq_logdbg("Successfully post_recv hqrx with %d new Rx buffers (planned=%d)",
+              hqrx_ptr->get_rx_max_wr_num() - hqrx_wr_num, hqrx_ptr->get_rx_max_wr_num());
 
     m_debt = 0;
 }
 
-void cq_mgr_rx::del_qp_rx(qp_mgr *qp)
+void cq_mgr_rx::del_hqrx(hw_queue_rx *hqrx_ptr)
 {
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (m_qp != qp) {
-        cq_logdbg("wrong qp_mgr=%p != m_qp=%p", qp, m_qp);
+    if (m_hqrx_ptr != hqrx_ptr) {
+        cq_logdbg("wrong hqrx_ptr=%p != m_hqrx_ptr=%p", hqrx_ptr, m_hqrx_ptr);
         return;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
-    cq_logdbg("qp_mgr=%p", m_qp);
+    cq_logdbg("m_hqrx_ptr=%p", m_hqrx_ptr);
     return_extra_buffers();
 
     clean_cq();
-    m_qp = nullptr;
+    m_hqrx_ptr = nullptr;
     m_debt = 0;
 }
 
@@ -376,13 +378,13 @@ bool cq_mgr_rx::compensate_qp_poll_success(mem_buf_desc_t *buff_cur)
     // Compensate QP for all completions that we found
     if (m_rx_pool.size() || request_more_buffers()) {
         size_t buffers = std::min<size_t>(m_debt, m_rx_pool.size());
-        m_qp->post_recv_buffers(&m_rx_pool, buffers);
+        m_hqrx_ptr->post_recv_buffers(&m_rx_pool, buffers);
         m_debt -= buffers;
         m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
     } else if (m_b_sysvar_cq_keep_qp_full ||
-               m_debt + MCE_MAX_CQ_POLL_BATCH > (int)m_qp->m_rx_num_wr) {
+               m_debt + MCE_MAX_CQ_POLL_BATCH > (int)m_hqrx_ptr->m_rx_num_wr) {
         m_p_cq_stat->n_rx_pkt_drop++;
-        m_qp->post_recv_buffer(buff_cur);
+        m_hqrx_ptr->post_recv_buffer(buff_cur);
         --m_debt;
         return true;
     }
@@ -397,7 +399,7 @@ void cq_mgr_rx::compensate_qp_poll_failed()
     if (m_debt) {
         if (likely(m_rx_pool.size() || request_more_buffers())) {
             size_t buffers = std::min<size_t>(m_debt, m_rx_pool.size());
-            m_qp->post_recv_buffers(&m_rx_pool, buffers);
+            m_hqrx_ptr->post_recv_buffers(&m_rx_pool, buffers);
             m_debt -= buffers;
             m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
         }
@@ -515,7 +517,7 @@ int cq_mgr_rx::request_notification(uint64_t poll_sn)
         // Arm the CQ notification channel
         IF_VERBS_FAILURE(xlio_ib_mlx5_req_notify_cq(&m_mlx5_cq, 0))
         {
-            cq_logerr("Failure arming the qp_mgr notification channel (errno=%d %m)", errno);
+            cq_logerr("Failure arming the RX notification channel (errno=%d %m)", errno);
         }
         else
         {

@@ -39,7 +39,8 @@
 #include <unordered_map>
 
 #include "dev/gro_mgr.h"
-#include "dev/qp_mgr.h"
+#include "dev/hw_queue_tx.h"
+#include "dev/hw_queue_rx.h"
 #include "dev/net_device_table_mgr.h"
 
 struct cq_moderation_info {
@@ -85,8 +86,10 @@ public:
     inline int send_buffer(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
                            xlio_tis *tis);
     bool is_up() override;
-    void start_active_qp_mgr();
-    void stop_active_qp_mgr();
+    void start_active_queue_tx();
+    void start_active_queue_rx();
+    void stop_active_queue_tx();
+    void stop_active_queue_rx();
     mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
                                    int n_num_mem_bufs = 1) override;
     int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool b_accounting,
@@ -138,7 +141,7 @@ public:
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
 
-        xlio_tis *tis = m_p_qp_mgr->tls_context_setup_tx(info);
+        xlio_tis *tis = m_hqtx->tls_context_setup_tx(info);
         if (likely(tis != NULL)) {
             ++m_p_ring_stat->n_tx_tls_contexts;
         }
@@ -156,7 +159,7 @@ public:
          * Locking is required for TX ring with cached=true.
          */
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        return m_p_qp_mgr->tls_create_tir(cached);
+        return m_hqrx->tls_create_tir(cached);
     }
     int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t next_record_tcp_sn,
                              xlio_comp_cb_t callback, void *callback_arg) override
@@ -165,7 +168,7 @@ public:
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
 
         int rc =
-            m_p_qp_mgr->tls_context_setup_rx(tir, info, next_record_tcp_sn, callback, callback_arg);
+            m_hqtx->tls_context_setup_rx(tir, info, next_record_tcp_sn, callback, callback_arg);
         if (likely(rc == 0)) {
             ++m_p_ring_stat->n_rx_tls_contexts;
         }
@@ -179,7 +182,7 @@ public:
     void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_p_qp_mgr->tls_context_resync_tx(info, tis, skip_static);
+        m_hqtx->tls_context_resync_tx(info, tis, skip_static);
 
         uint64_t dummy_poll_sn = 0;
         m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
@@ -187,7 +190,7 @@ public:
     void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_p_qp_mgr->tls_resync_rx(tir, info, hw_resync_tcp_sn);
+        m_hqtx->tls_resync_rx(tir, info, hw_resync_tcp_sn);
     }
     void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey) override
     {
@@ -195,7 +198,7 @@ public:
         if (lkey == LKEY_TX_DEFAULT) {
             lkey = m_tx_lkey;
         }
-        m_p_qp_mgr->tls_get_progress_params_rx(tir, buf, lkey);
+        m_hqtx->tls_get_progress_params_rx(tir, buf, lkey);
         /* Do polling to speedup handling of the completion. */
         uint64_t dummy_poll_sn = 0;
         m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
@@ -203,13 +206,13 @@ public:
     void tls_release_tis(xlio_tis *tis) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_p_qp_mgr->tls_release_tis(tis);
+        m_hqtx->tls_release_tis(tis);
     }
     void tls_release_tir(xlio_tir *tir) override
     {
         /* TIR objects are protected with TX lock */
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_p_qp_mgr->tls_release_tir(tir);
+        m_hqrx->tls_release_tir(tir);
     }
     void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
                               bool first) override
@@ -218,14 +221,14 @@ public:
         if (lkey == LKEY_TX_DEFAULT) {
             lkey = m_tx_lkey;
         }
-        m_p_qp_mgr->tls_tx_post_dump_wqe(tis, addr, len, lkey, first);
+        m_hqtx->tls_tx_post_dump_wqe(tis, addr, len, lkey, first);
     }
 #endif /* DEFINED_UTLS */
 #ifdef DEFINED_DPCP
     std::unique_ptr<xlio_tis> create_tis(uint32_t flags) const override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        return m_p_qp_mgr->create_tis(flags);
+        return m_hqtx->create_tis(flags);
     }
     int get_supported_nvme_feature_mask() const override
     {
@@ -244,52 +247,53 @@ public:
     void nvme_set_static_context(xlio_tis *tis, uint32_t config) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_p_qp_mgr->nvme_set_static_context(tis, config);
+        m_hqtx->nvme_set_static_context(tis, config);
     }
 
     void nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_p_qp_mgr->nvme_set_progress_context(tis, tcp_seqno);
+        m_hqtx->nvme_set_progress_context(tis, tcp_seqno);
     }
 #endif /* DEFINED_DPCP */
 
     void post_nop_fence(void) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_p_qp_mgr->post_nop_fence();
+        m_hqtx->post_nop_fence();
     }
 
     void post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
                        bool is_first) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_p_qp_mgr->post_dump_wqe(tis, addr, len, lkey, is_first);
+        m_hqtx->post_dump_wqe(tis, addr, len, lkey, is_first);
     }
 
     void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         NOT_IN_USE(id);
-        m_p_qp_mgr->reset_inflight_zc_buffers_ctx(ctx);
+        m_hqtx->reset_inflight_zc_buffers_ctx(ctx);
     }
 
     bool credits_get(unsigned credits) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        return m_p_qp_mgr->credits_get(credits);
+        return m_hqtx->credits_get(credits);
     }
 
     void credits_return(unsigned credits) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_p_qp_mgr->credits_return(credits);
+        m_hqtx->credits_return(credits);
     }
 
     friend class cq_mgr_rx;
     friend class cq_mgr_rx_regrq;
     friend class cq_mgr_rx_strq;
-    friend class qp_mgr;
+    friend class hw_queue_tx;
+    friend class hw_queue_rx;
     friend class rfs;
     friend class rfs_uc;
     friend class rfs_uc_tcp_gro;
@@ -304,8 +308,9 @@ protected:
     inline uint32_t get_tx_num_wr() { return m_tx_num_wr; }
     inline uint32_t get_mtu() { return m_mtu; }
 
-    ib_ctx_handler *m_p_ib_ctx;
-    qp_mgr *m_p_qp_mgr;
+    ib_ctx_handler *m_p_ib_ctx = nullptr;
+    hw_queue_tx *m_hqtx = nullptr;
+    hw_queue_rx *m_hqrx = nullptr;
     struct cq_moderation_info m_cq_moderation_info;
     cq_mgr_rx *m_p_cq_mgr_rx = nullptr;
     cq_mgr_tx *m_p_cq_mgr_tx = nullptr;
@@ -375,17 +380,18 @@ private:
     };
 
     lock_mutex m_lock_ring_tx_buf_wait;
-    uint32_t m_tx_num_bufs;
-    uint32_t m_zc_num_bufs;
-    uint32_t m_tx_num_wr;
-    uint32_t m_missing_buf_ref_count;
-    uint32_t m_tx_lkey; // this is the registered memory lkey for a given specific device for the
-                        // buffer pool use
+    uint32_t m_tx_num_bufs = 0U;
+    uint32_t m_zc_num_bufs = 0U;
+    uint32_t m_tx_num_wr = 0U;
+    uint32_t m_missing_buf_ref_count = 0U;
+    uint32_t m_tx_lkey = 0U; // this is the registered memory lkey for a given specific device for
+                             // the buffer pool use
     gro_mgr m_gro_mgr;
-    bool m_up;
-    struct ibv_comp_channel *m_p_rx_comp_event_channel;
-    struct ibv_comp_channel *m_p_tx_comp_event_channel;
-    L2_address *m_p_l2_addr;
+    bool m_up_tx = false;
+    bool m_up_rx = false;
+    struct ibv_comp_channel *m_p_rx_comp_event_channel = nullptr;
+    struct ibv_comp_channel *m_p_tx_comp_event_channel = nullptr;
+    L2_address *m_p_l2_addr = nullptr;
     uint32_t m_mtu;
 
     struct {
@@ -443,7 +449,7 @@ public:
         net_device_val_eth *p_ndev = dynamic_cast<net_device_val_eth *>(
             g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index()));
         if (p_ndev) {
-            m_partition = p_ndev->get_vlan();
+            m_vlan = p_ndev->get_vlan();
 
             if (call_create_res) {
                 create_resources();

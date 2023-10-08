@@ -36,6 +36,8 @@
 #include "cq_mgr_rx.h"
 #include "ring_simple.h"
 #include "util/utils.h"
+#include <netinet/ip.h>
+#include <netinet/ip6.h>
 
 /**/
 /** inlining functions can only help if they are implemented before their usage **/

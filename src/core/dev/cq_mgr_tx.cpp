@@ -34,7 +34,7 @@
 #include <util/valgrind.h>
 #include <sock/sock-redirect.h>
 #include "ring_simple.h"
-#include "qp_mgr.h"
+#include "hw_queue_tx.h"
 
 #define MODULE_NAME "cq_mgr_tx"
 
@@ -168,30 +168,30 @@ void cq_mgr_tx::configure(int cq_size)
               get_channel_fd(), cq_size, m_p_ibv_cq);
 }
 
-void cq_mgr_tx::add_qp_tx(qp_mgr *qp)
+void cq_mgr_tx::add_qp_tx(hw_queue_tx *hqtx_ptr)
 {
     // Assume locked!
-    cq_logdbg("qp_mgr=%p", qp);
-    m_qp = qp;
+    cq_logdbg("hqtx_ptr=%p", hqtx_ptr);
+    m_hqtx_ptr = hqtx_ptr;
 
     if (0 != xlio_ib_mlx5_get_cq(m_p_ibv_cq, &m_mlx5_cq)) {
         cq_logpanic("xlio_ib_mlx5_get_cq failed (errno=%d %m)", errno);
     }
 
-    cq_logfunc("qp_mgr=%p m_mlx5_cq.dbrec=%p m_mlx5_cq.cq_buf=%p", m_qp, m_mlx5_cq.dbrec,
+    cq_logfunc("hqtx_ptr=%p m_mlx5_cq.dbrec=%p m_mlx5_cq.cq_buf=%p", m_hqtx_ptr, m_mlx5_cq.dbrec,
                m_mlx5_cq.cq_buf);
 }
 
-void cq_mgr_tx::del_qp_tx(qp_mgr *qp)
+void cq_mgr_tx::del_qp_tx(hw_queue_tx *hqtx_ptr)
 {
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (m_qp != qp) {
-        cq_logdbg("wrong qp_mgr=%p != m_qp=%p", qp, m_qp);
+    if (m_hqtx_ptr != hqtx_ptr) {
+        cq_logdbg("wrong hqtx_ptr=%p != m_hqtx_ptr=%p", hqtx_ptr, m_hqtx_ptr);
         return;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
-    cq_logdbg("qp_mgr=%p", m_qp);
-    m_qp = nullptr;
+    cq_logdbg("m_hqtx_ptr=%p", m_hqtx_ptr);
+    m_hqtx_ptr = nullptr;
 }
 
 int cq_mgr_tx::request_notification(uint64_t poll_sn)
@@ -214,7 +214,7 @@ int cq_mgr_tx::request_notification(uint64_t poll_sn)
         // Arm the CQ notification channel
         IF_VERBS_FAILURE(xlio_ib_mlx5_req_notify_cq(&m_mlx5_cq, 0))
         {
-            cq_logerr("Failure arming the qp_mgr notification channel (errno=%d %m)", errno);
+            cq_logerr("Failure arming the TX notification channel (errno=%d %m)", errno);
         }
         else
         {
@@ -269,7 +269,7 @@ int cq_mgr_tx::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
     xlio_mlx5_cqe *cqe = get_cqe_tx(num_polled_cqes);
 
     if (likely(cqe)) {
-        unsigned index = ntohs(cqe->wqe_counter) & (m_qp->m_tx_num_wr - 1);
+        unsigned index = ntohs(cqe->wqe_counter) & (m_hqtx_ptr->m_tx_num_wr - 1);
 
         // All error opcodes have the most significant bit set.
         if (unlikely(cqe->op_own & 0x80) && is_error_opcode(cqe->op_own >> 4)) {
@@ -289,7 +289,7 @@ void cq_mgr_tx::log_cqe_error(struct xlio_mlx5_cqe *cqe)
 {
     struct mlx5_err_cqe *ecqe = (struct mlx5_err_cqe *)cqe;
 
-    /* TODO We can also ask qp_mgr to log WQE fields from SQ. But at first, we need to remove
+    /* TODO We can also ask hw_queue_tx to log WQE fields from SQ. But at first, we need to remove
      * prefetch and memset of the next WQE there. Credit system will guarantee that we don't
      * reuse the WQE at this point.
      */
@@ -305,7 +305,7 @@ void cq_mgr_tx::log_cqe_error(struct xlio_mlx5_cqe *cqe)
 
 void cq_mgr_tx::handle_sq_wqe_prop(unsigned index)
 {
-    sq_wqe_prop *p = &m_qp->m_sq_wqe_idx_to_prop[index];
+    sq_wqe_prop *p = &m_hqtx_ptr->m_sq_wqe_idx_to_prop[index];
     sq_wqe_prop *prev;
     unsigned credits = 0;
 
@@ -334,16 +334,16 @@ void cq_mgr_tx::handle_sq_wqe_prop(unsigned index)
 
             ti->put();
             if (unlikely(ti->m_released && ti->m_ref == 0)) {
-                m_qp->ti_released(ti);
+                ti->ti_released();
             }
         }
         credits += p->credits;
 
         prev = p;
         p = p->next;
-    } while (p != NULL && m_qp->is_sq_wqe_prop_valid(p, prev));
+    } while (p != NULL && m_hqtx_ptr->is_sq_wqe_prop_valid(p, prev));
 
     m_p_ring->return_tx_pool_to_global_pool();
-    m_qp->credits_return(credits);
-    m_qp->m_sq_wqe_prop_last_signalled = index;
+    m_hqtx_ptr->credits_return(credits);
+    m_hqtx_ptr->m_sq_wqe_prop_last_signalled = index;
 }

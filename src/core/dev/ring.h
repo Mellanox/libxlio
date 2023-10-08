@@ -37,12 +37,14 @@
 #include "ib/base/verbs_extra.h"
 #include "proto/flow_tuple.h"
 #include "sock/socket_fd_api.h"
+#include "sock/tcp_seg_pool.h"
+#include "proto/L2_address.h"
+#include "dev/xlio_ti.h"
 
 /* Forward declarations */
 struct xlio_tls_info;
-class xlio_tis;
 class pkt_rcvr_sink;
-typedef void (*xlio_comp_cb_t)(void *); // Copied from qp_mgr.h
+class rfs_rule;
 
 #define ring_logpanic   __log_info_panic
 #define ring_logerr     __log_info_err
@@ -85,7 +87,6 @@ public:
 
     virtual void restart() = 0;
 
-    // Funcs taken from qp_mgr.h
     // Get/Release memory buffer descriptor with a linked data memory buffer
     virtual mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
                                            int n_num_mem_bufs = 1) = 0;

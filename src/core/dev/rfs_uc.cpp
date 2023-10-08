@@ -78,10 +78,10 @@ bool rfs_uc::prepare_flow_spec()
         bool is_ipv4 = (m_flow_tuple.get_family() == AF_INET);
         if (is_ipv4) {
             prepare_flow_spec_by_ip<attach_flow_data_eth_ipv4_tcp_udp_t>(
-                p_ring->m_p_qp_mgr, p_attach_flow_data, p_eth, p_tcp_udp);
+                p_ring->m_hqrx, p_attach_flow_data, p_eth, p_tcp_udp);
         } else {
             prepare_flow_spec_by_ip<attach_flow_data_eth_ipv6_tcp_udp_t>(
-                p_ring->m_p_qp_mgr, p_attach_flow_data, p_eth, p_tcp_udp);
+                p_ring->m_hqrx, p_attach_flow_data, p_eth, p_tcp_udp);
         }
 
         if (!p_attach_flow_data) {
@@ -89,7 +89,7 @@ bool rfs_uc::prepare_flow_spec()
         }
 
         ibv_flow_spec_eth_set(p_eth, p_ring->m_p_l2_addr->get_address(),
-                              htons(p_ring->m_p_qp_mgr->get_partiton()), is_ipv4);
+                              htons(p_ring->m_hqrx->get_vlan()), is_ipv4);
 
         break;
     }

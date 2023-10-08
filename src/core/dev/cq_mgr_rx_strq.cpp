@@ -36,7 +36,7 @@
 
 #include <util/valgrind.h>
 #include "cq_mgr_rx.inl"
-#include "qp_mgr.h"
+#include "hw_queue_rx.h"
 #include "ring_simple.h"
 #include <cinttypes>
 
@@ -128,11 +128,7 @@ uint32_t cq_mgr_rx_strq::clean_cq()
     uint32_t ret_total = 0;
     uint64_t cq_poll_sn = 0;
 
-    /* Sanity check for cq: initialization of tx and rx cq has difference:
-     * rx - is done in qp_mgr::up()
-     * as a result rx cq can be created but not initialized
-     */
-    if (NULL == m_qp) {
+    if (NULL == m_hqrx_ptr) { // Sanity check
         return 0;
     }
 
@@ -154,11 +150,11 @@ uint32_t cq_mgr_rx_strq::clean_cq()
 
 bool cq_mgr_rx_strq::set_current_hot_buffer()
 {
-    if (likely(m_qp->m_mlx5_qp.rq.tail != (m_qp->m_mlx5_qp.rq.head))) {
-        uint32_t index = m_qp->m_mlx5_qp.rq.tail & (m_qp->m_rx_num_wr - 1);
-        m_rx_hot_buffer = (mem_buf_desc_t *)m_qp->m_rq_wqe_idx_to_wrid[index];
+    if (likely(m_hqrx_ptr->m_rq_data.tail != (m_hqrx_ptr->m_rq_data.head))) {
+        uint32_t index = m_hqrx_ptr->m_rq_data.tail & (m_hqrx_ptr->m_rx_num_wr - 1);
+        m_rx_hot_buffer = (mem_buf_desc_t *)m_hqrx_ptr->m_rq_wqe_idx_to_wrid[index];
         m_rx_hot_buffer->set_ref_count(_strides_num);
-        m_qp->m_rq_wqe_idx_to_wrid[index] = 0;
+        m_hqrx_ptr->m_rq_wqe_idx_to_wrid[index] = 0;
         return true;
     }
 
@@ -212,7 +208,7 @@ mem_buf_desc_t *cq_mgr_rx_strq::poll(enum buff_status_e &status, mem_buf_desc_t 
         bool is_wqe_complete = strq_cqe_to_mem_buff_desc(cqe, status, is_filler);
 
         if (is_wqe_complete) {
-            ++m_qp->m_mlx5_qp.rq.tail;
+            ++m_hqrx_ptr->m_rq_data.tail;
             buff = m_rx_hot_buffer;
             m_rx_hot_buffer = NULL;
             if (likely(status == BS_OK)) {
@@ -542,12 +538,12 @@ int cq_mgr_rx_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv
     return ret_rx_processed;
 }
 
-void cq_mgr_rx_strq::add_qp_rx(qp_mgr *qp)
+void cq_mgr_rx_strq::add_hqrx(hw_queue_rx *hqrx)
 {
     cq_logfunc("");
     _hot_buffer_stride = nullptr;
     _current_wqe_consumed_bytes = 0U;
-    cq_mgr_rx::add_qp_rx(qp);
+    cq_mgr_rx::add_hqrx(hqrx);
 }
 
 void cq_mgr_rx_strq::statistics_print()
