@@ -73,7 +73,7 @@ libxlio_la_SOURCES := \
 	dev/rfs_uc.cpp \
 	dev/rfs_uc_tcp_gro.cpp \
 	dev/rfs_mc.cpp \
-	dev/rfs_rule_dpcp.cpp \
+	dev/rfs_rule.cpp \
 	dev/time_converter.cpp \
 	dev/time_converter_ptp.cpp \
 	dev/time_converter_rtc.cpp \
@@ -191,7 +191,6 @@ libxlio_la_SOURCES := \
 	dev/rfs_uc.h \
 	dev/rfs_uc_tcp_gro.h \
 	dev/rfs_rule.h \
-	dev/rfs_rule_dpcp.h \
 	dev/src_addr_selector.h \
 	dev/ring.h \
 	dev/ring_bond.h \

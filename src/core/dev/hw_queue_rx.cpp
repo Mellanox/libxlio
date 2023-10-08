@@ -36,7 +36,7 @@
 #include "dev/hw_queue_rx.h"
 #include "dev/buffer_pool.h"
 #include "dev/ring_simple.h"
-#include "dev/rfs_rule_dpcp.h"
+#include "dev/rfs_rule.h"
 #include "dev/cq_mgr_rx_regrq.h"
 #include "dev/cq_mgr_rx_strq.h"
 
@@ -280,7 +280,7 @@ rfs_rule *hw_queue_rx::create_rfs_rule(xlio_ibv_flow_attr &attrs, xlio_tir *tir_
         // TLS RX uses tir_ext.
         dpcp::tir *dpcp_tir = (tir_ext ? xlio_tir_to_dpcp_tir(tir_ext) : m_tir.get());
 
-        std::unique_ptr<rfs_rule_dpcp> new_rule(new rfs_rule_dpcp());
+        std::unique_ptr<rfs_rule> new_rule(new rfs_rule());
         if (dpcp_tir &&
             new_rule->create(attrs, *dpcp_tir, *m_p_ib_ctx_handler->get_dpcp_adapter())) {
             return new_rule.release();
