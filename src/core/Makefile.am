@@ -66,7 +66,8 @@ libxlio_la_SOURCES := \
 	dev/cq_mgr_rx_strq.cpp \
 	dev/cq_mgr_tx.cpp \
 	dev/dm_mgr.cpp \
-	dev/qp_mgr.cpp \
+	dev/hw_queue_tx.cpp \
+	dev/hw_queue_rx.cpp \
 	dev/gro_mgr.cpp \
 	dev/rfs.cpp \
 	dev/rfs_uc.cpp \
@@ -183,7 +184,8 @@ libxlio_la_SOURCES := \
 	dev/net_device_entry.h \
 	dev/net_device_table_mgr.h \
 	dev/net_device_val.h \
-	dev/qp_mgr.h \
+	dev/hw_queue_rx.h \
+	dev/hw_queue_tx.h \
 	dev/rfs.h \
 	dev/rfs_mc.h \
 	dev/rfs_uc.h \

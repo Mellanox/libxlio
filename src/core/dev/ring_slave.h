@@ -328,7 +328,7 @@ protected:
     descq_t m_zc_pool;
     transport_type_t m_transport_type; /* transport ETH/IB */
     std::unique_ptr<ring_stats_t> m_p_ring_stat;
-    uint16_t m_partition;
+    uint16_t m_vlan;
     bool m_flow_tag_enabled;
     const bool m_b_sysvar_eth_mc_l2_only_rules;
     const bool m_b_sysvar_mc_force_flowtag;

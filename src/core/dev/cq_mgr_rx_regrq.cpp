@@ -36,7 +36,7 @@
 
 #include <util/valgrind.h>
 #include "cq_mgr_rx.inl"
-#include "qp_mgr.h"
+#include "hw_queue_rx.h"
 #include "ring_simple.h"
 
 #include <netinet/ip6.h>
@@ -63,12 +63,7 @@ uint32_t cq_mgr_rx_regrq::clean_cq()
     uint64_t cq_poll_sn = 0;
     mem_buf_desc_t *buff;
 
-    /* Sanity check for cq: initialization of tx and rx cq has difference:
-     * tx - is done in qp_mgr::configure()
-     * rx - is done in qp_mgr::up()
-     * as a result rx cq can be created but not initialized
-     */
-    if (NULL == m_qp) {
+    if (NULL == m_hqrx_ptr) { // Sanity check
         return 0;
     }
 
@@ -94,10 +89,10 @@ mem_buf_desc_t *cq_mgr_rx_regrq::poll(enum buff_status_e &status)
     mem_buf_desc_t *buff = NULL;
 
     if (unlikely(NULL == m_rx_hot_buffer)) {
-        if (likely(m_qp->m_mlx5_qp.rq.tail != (m_qp->m_mlx5_qp.rq.head))) {
-            uint32_t index = m_qp->m_mlx5_qp.rq.tail & (m_qp->m_rx_num_wr - 1);
-            m_rx_hot_buffer = (mem_buf_desc_t *)m_qp->m_rq_wqe_idx_to_wrid[index];
-            m_qp->m_rq_wqe_idx_to_wrid[index] = 0;
+        if (likely(m_hqrx_ptr->m_rq_data.tail != (m_hqrx_ptr->m_rq_data.head))) {
+            uint32_t index = m_hqrx_ptr->m_rq_data.tail & (m_hqrx_ptr->m_rx_num_wr - 1);
+            m_rx_hot_buffer = (mem_buf_desc_t *)m_hqrx_ptr->m_rq_wqe_idx_to_wrid[index];
+            m_hqrx_ptr->m_rq_wqe_idx_to_wrid[index] = 0;
             prefetch((void *)m_rx_hot_buffer);
             prefetch((uint8_t *)m_mlx5_cq.cq_buf +
                      ((m_mlx5_cq.cq_ci & (m_mlx5_cq.cqe_count - 1)) << m_mlx5_cq.cqe_size_log));
@@ -114,7 +109,7 @@ mem_buf_desc_t *cq_mgr_rx_regrq::poll(enum buff_status_e &status)
         rmb();
         cqe_to_mem_buff_desc(cqe, m_rx_hot_buffer, status);
 
-        ++m_qp->m_mlx5_qp.rq.tail;
+        ++m_hqrx_ptr->m_rq_data.tail;
         *m_mlx5_cq.dbrec = htonl(m_mlx5_cq.cq_ci & 0xffffff);
 
         buff = m_rx_hot_buffer;
