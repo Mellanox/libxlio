@@ -32,7 +32,6 @@
 
 #include "utils/bullseye.h"
 #include "dev/rfs.h"
-#include "dev/qp_mgr.h"
 #include "dev/ring_simple.h"
 #include "sock/sock-redirect.h"
 #include "sock/sock-app.h"
@@ -355,7 +354,7 @@ rfs_rule *create_rule_T(xlio_tir *tir, const flow_tuple &flow_spec, attach_flow_
     }
     // The highest priority to override TCP rule
     flow_attr.attr.priority = 0;
-    return iter->p_qp_mgr->create_rfs_rule(flow_attr.attr, tir);
+    return iter->hqrx_ptr->create_rfs_rule(flow_attr.attr, tir);
 }
 
 rfs_rule *rfs::create_rule(xlio_tir *tir, const flow_tuple &flow_spec)
@@ -379,7 +378,7 @@ bool rfs::create_flow()
 {
     for (size_t i = 0; i < m_attach_flow_data_vector.size(); i++) {
         attach_flow_data_t *iter = m_attach_flow_data_vector[i];
-        iter->rfs_flow = iter->p_qp_mgr->create_rfs_rule(iter->ibv_flow_attr, NULL);
+        iter->rfs_flow = iter->hqrx_ptr->create_rfs_rule(iter->ibv_flow_attr, NULL);
         if (!iter->rfs_flow) {
             rfs_logerr("Create RFS flow failed, Tag: %" PRIu32 ", Flow: %s, Priority: %" PRIu16
                        ", errno: %d - %m",

@@ -61,7 +61,7 @@ ring_slave::ring_slave(int if_index, ring *parent, ring_type_t type, bool use_lo
     , m_lock_ring_rx(get_new_lock("ring_slave:lock_rx", use_locks))
     , m_lock_ring_tx(get_new_lock("ring_slave:lock_tx", use_locks))
     , m_p_ring_stat(new ring_stats_t)
-    , m_partition(0)
+    , m_vlan(0)
     , m_flow_tag_enabled(false)
     , m_b_sysvar_eth_mc_l2_only_rules(safe_mce_sys().eth_mc_l2_only_rules)
     , m_b_sysvar_mc_force_flowtag(safe_mce_sys().mc_force_flowtag)
@@ -721,9 +721,9 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
 
         // TODO: Remove this code when handling vlan in flow steering will be available. Change this
         // code if vlan stripping is performed.
-        if ((m_partition & VLAN_VID_MASK) != packet_vlan) {
+        if ((m_vlan & VLAN_VID_MASK) != packet_vlan) {
             ring_logfunc("Rx buffer dropped- Mismatched vlan. Packet vlan = %d, Local vlan = %d",
-                         packet_vlan, m_partition & VLAN_VID_MASK);
+                         packet_vlan, m_vlan & VLAN_VID_MASK);
             return false;
         }
 

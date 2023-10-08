@@ -35,7 +35,7 @@
 
 #include "dev/ib_ctx_handler.h"
 
-class qp_mgr;
+class hw_queue_tx;
 class ring_simple;
 
 class cq_mgr_tx {
@@ -53,8 +53,8 @@ public:
     int get_channel_fd() { return m_comp_event_channel->fd; }
 
     void configure(int cq_size);
-    void add_qp_tx(qp_mgr *qp);
-    void del_qp_tx(qp_mgr *qp);
+    void add_qp_tx(hw_queue_tx *hqtx_ptr);
+    void del_qp_tx(hw_queue_tx *hqtx_ptr);
 
     uint32_t clean_cq();
 
@@ -91,7 +91,7 @@ private:
     ring_simple *m_p_ring;
     ib_ctx_handler *m_p_ib_ctx_handler;
     ibv_comp_channel *m_comp_event_channel;
-    qp_mgr *m_qp = nullptr;
+    hw_queue_tx *m_hqtx_ptr = nullptr;
     struct ibv_cq *m_p_ibv_cq = nullptr;
     uint32_t m_cq_id_tx = 0U;
     uint32_t m_n_cq_poll_sn_tx = 0U;

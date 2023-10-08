@@ -56,17 +56,17 @@ protected:
     virtual bool prepare_flow_spec();
 
     template <typename T>
-    void prepare_flow_spec_by_ip(qp_mgr *qp_mgr, attach_flow_data_t *&p_attach_flow_data,
+    void prepare_flow_spec_by_ip(hw_queue_rx *hqrx_ptr, attach_flow_data_t *&p_attach_flow_data,
                                  xlio_ibv_flow_spec_eth *&p_eth,
                                  xlio_ibv_flow_spec_tcp_udp *&p_tcp_udp);
 };
 
 template <typename T>
-void rfs_uc::prepare_flow_spec_by_ip(qp_mgr *qp_mgr, attach_flow_data_t *&p_attach_flow_data,
+void rfs_uc::prepare_flow_spec_by_ip(hw_queue_rx *hqrx_ptr, attach_flow_data_t *&p_attach_flow_data,
                                      xlio_ibv_flow_spec_eth *&p_eth,
                                      xlio_ibv_flow_spec_tcp_udp *&p_tcp_udp)
 {
-    T *attach_flow_data_eth = new (std::nothrow) T(qp_mgr);
+    T *attach_flow_data_eth = new (std::nothrow) T(hqrx_ptr);
     if (!attach_flow_data_eth) {
         return;
     }
