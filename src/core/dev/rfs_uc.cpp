@@ -148,7 +148,7 @@ bool rfs_uc::prepare_flow_spec()
                 p_ring->get_transport_type(), p_attach_flow_data->ibv_flow_attr.num_of_specs,
                 m_flow_tag_id);
 
-    m_attach_flow_data_vector.push_back(p_attach_flow_data);
+    m_attach_flow_data = p_attach_flow_data;
     return true;
 }
 

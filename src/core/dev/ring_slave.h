@@ -233,7 +233,7 @@ inline bool operator==(flow_spec_4t_key_ipv6 const &key1, flow_spec_4t_key_ipv6 
 
 struct counter_and_ibv_flows {
     int counter;
-    std::vector<rfs_rule *> rfs_rule_vec;
+    rfs_rule *rfs_rule_holder;
 };
 
 typedef std::unordered_map<sock_addr, struct counter_and_ibv_flows> rule_filter_map_t;

@@ -106,8 +106,6 @@ typedef struct attach_flow_data_t {
     xlio_ibv_flow_attr ibv_flow_attr;
 } attach_flow_data_t;
 
-typedef std::vector<attach_flow_data_t *> attach_flow_data_vector_t;
-
 class rfs_rule_filter {
 public:
     rfs_rule_filter(rule_filter_map_t &map, const sock_addr &key, flow_tuple &flow_tuple)
@@ -159,7 +157,7 @@ protected:
     flow_tuple m_flow_tuple;
     ring_slave *m_p_ring;
     rfs_rule_filter *m_p_rule_filter;
-    attach_flow_data_vector_t m_attach_flow_data_vector;
+    attach_flow_data_t *m_attach_flow_data = nullptr;
     pkt_rcvr_sink **m_sinks_list;
     uint32_t m_n_sinks_list_entries; // Number of actual sinks in the array (we shrink the array if
                                      // a sink is removed)
