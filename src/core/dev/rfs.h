@@ -66,7 +66,6 @@ typedef struct ibv_flow_attr_eth {
 
 template <typename T> struct attach_flow_data_eth_ip_tcp_udp_t {
     rfs_rule *rfs_flow;
-    hw_queue_rx *hqrx_ptr;
     struct ibv_flow_attr_eth_ip_tcp_udp : public ibv_flow_attr_eth {
         T ip;
         xlio_ibv_flow_spec_tcp_udp tcp_udp;
@@ -87,9 +86,8 @@ template <typename T> struct attach_flow_data_eth_ip_tcp_udp_t {
             attr.size += sizeof(flow_tag);
         }
     } ibv_flow_attr;
-    attach_flow_data_eth_ip_tcp_udp_t(hw_queue_rx *hqrx)
+    attach_flow_data_eth_ip_tcp_udp_t()
         : rfs_flow(NULL)
-        , hqrx_ptr(hqrx)
         , ibv_flow_attr()
     {
     }
@@ -102,7 +100,6 @@ typedef attach_flow_data_eth_ip_tcp_udp_t<xlio_ibv_flow_spec_ipv6>
 
 typedef struct attach_flow_data_t {
     rfs_rule *rfs_flow;
-    hw_queue_rx *hqrx_ptr;
     xlio_ibv_flow_attr ibv_flow_attr;
 } attach_flow_data_t;
 
