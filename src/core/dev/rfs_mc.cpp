@@ -116,7 +116,7 @@ bool rfs_mc::prepare_flow_spec()
         BULLSEYE_EXCLUDE_BLOCK_END
     }
 
-    m_attach_flow_data_vector.push_back(p_attach_flow_data);
+    m_attach_flow_data = p_attach_flow_data;
     return true;
 }
 
