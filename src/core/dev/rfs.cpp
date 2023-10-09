@@ -333,8 +333,8 @@ bool rfs::detach_flow(pkt_rcvr_sink *sink)
 #ifdef DEFINED_UTLS
 
 template <typename T>
-rfs_rule *create_rule_T(xlio_tir *tir, const flow_tuple &flow_spec, attach_flow_data_t *iter,
-                        bool is5T)
+rfs_rule *create_rule_T(hw_queue_rx *hqrx, xlio_tir *tir, const flow_tuple &flow_spec,
+                        attach_flow_data_t *iter, bool is5T)
 {
     auto *p_attr =
         reinterpret_cast<typename T::ibv_flow_attr_eth_ip_tcp_udp *>(&iter->ibv_flow_attr);
@@ -354,19 +354,20 @@ rfs_rule *create_rule_T(xlio_tir *tir, const flow_tuple &flow_spec, attach_flow_
     }
     // The highest priority to override TCP rule
     flow_attr.attr.priority = 0;
-    return iter->hqrx_ptr->create_rfs_rule(flow_attr.attr, tir);
+    return hqrx->create_rfs_rule(flow_attr.attr, tir);
 }
 
 rfs_rule *rfs::create_rule(xlio_tir *tir, const flow_tuple &flow_spec)
 {
+    auto *hqrx = dynamic_cast<ring_simple *>(m_p_ring)->m_hqrx;
     if (m_attach_flow_data) {
         if (m_flow_tuple.get_family() == AF_INET) {
             return create_rule_T<attach_flow_data_eth_ipv4_tcp_udp_t>(
-                tir, flow_spec, m_attach_flow_data, m_flow_tuple.is_5_tuple());
+                hqrx, tir, flow_spec, m_attach_flow_data, m_flow_tuple.is_5_tuple());
         }
 
         return create_rule_T<attach_flow_data_eth_ipv6_tcp_udp_t>(
-            tir, flow_spec, m_attach_flow_data, m_flow_tuple.is_5_tuple());
+            hqrx, tir, flow_spec, m_attach_flow_data, m_flow_tuple.is_5_tuple());
     }
 
     return nullptr;
@@ -376,8 +377,8 @@ rfs_rule *rfs::create_rule(xlio_tir *tir, const flow_tuple &flow_spec)
 
 bool rfs::create_flow()
 {
-    m_attach_flow_data->rfs_flow =
-        m_attach_flow_data->hqrx_ptr->create_rfs_rule(m_attach_flow_data->ibv_flow_attr, NULL);
+    m_attach_flow_data->rfs_flow = dynamic_cast<ring_simple *>(m_p_ring)->m_hqrx->create_rfs_rule(
+        m_attach_flow_data->ibv_flow_attr, NULL);
     if (!m_attach_flow_data->rfs_flow) {
         rfs_logerr("Create RFS flow failed, Tag: %" PRIu32 ", Flow: %s, Priority: %" PRIu16
                    ", errno: %d - %m",
