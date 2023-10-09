@@ -85,11 +85,11 @@ bool rfs_uc::prepare_flow_spec()
     case XLIO_TRANSPORT_ETH: {
         bool is_ipv4 = (m_flow_tuple.get_family() == AF_INET);
         if (is_ipv4) {
-            prepare_flow_spec_by_ip<attach_flow_data_eth_ipv4_tcp_udp_t>(
-                p_ring->m_hqrx, p_attach_flow_data, p_eth, p_tcp_udp);
+            prepare_flow_spec_by_ip<attach_flow_data_eth_ipv4_tcp_udp_t>(p_attach_flow_data, p_eth,
+                                                                         p_tcp_udp);
         } else {
-            prepare_flow_spec_by_ip<attach_flow_data_eth_ipv6_tcp_udp_t>(
-                p_ring->m_hqrx, p_attach_flow_data, p_eth, p_tcp_udp);
+            prepare_flow_spec_by_ip<attach_flow_data_eth_ipv6_tcp_udp_t>(p_attach_flow_data, p_eth,
+                                                                         p_tcp_udp);
         }
 
         if (!p_attach_flow_data) {
