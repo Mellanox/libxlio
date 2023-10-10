@@ -256,5 +256,9 @@ const ip_data *src_addr_selector::ipv4_select_saddr(const net_device_val &dst_de
         }
     }
 
-    return (!ip_arr[0]->local_addr.is_anyaddr() ? ip_arr[0].get() : nullptr);
+    if (unlikely(ip_arr.size() == 0) || ip_arr[0]->local_addr.is_anyaddr()) {
+        return nullptr;
+    }
+
+    return ip_arr[0].get();
 }
