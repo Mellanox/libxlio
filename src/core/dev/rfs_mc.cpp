@@ -55,69 +55,33 @@ rfs_mc::rfs_mc(flow_tuple *flow_spec_5t, ring_slave *p_ring,
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    if (m_p_ring->is_simple() && !prepare_flow_spec()) {
-        throw_xlio_exception("IB multicast offload is not supported");
+    if (m_p_ring->is_simple()) {
+        prepare_flow_spec();
     }
 }
 
-bool rfs_mc::prepare_flow_spec()
+void rfs_mc::prepare_flow_spec()
 {
-    ring_simple *p_ring = dynamic_cast<ring_simple *>(m_p_ring);
+    const ip_address &dst_ip =
+        (safe_mce_sys().eth_mc_l2_only_rules ? ip_address::any_addr() : m_flow_tuple.get_dst_ip());
 
-    if (!p_ring) {
-        rfs_logpanic("Incompatible ring type");
+    prepare_flow_spec_eth_ip(dst_ip, ip_address::any_addr());
+
+    uint8_t dst_mac[6];
+    create_multicast_mac_from_ip(dst_mac, m_flow_tuple.get_dst_ip(), m_flow_tuple.get_family());
+
+    memset(&m_match_mask.dst_mac, 0xFF, sizeof(m_match_mask.dst_mac));
+    memcpy(&m_match_value.dst_mac, dst_mac, sizeof(dst_mac));
+
+    if (safe_mce_sys().eth_mc_l2_only_rules) {
+        m_match_mask.dst_port = m_match_value.dst_port = m_match_mask.src_port =
+            m_match_value.src_port = 0U;
+
+        m_match_mask.protocol = 0xFF;
+        m_match_value.protocol = IPPROTO_UDP;
+    } else {
+        prepare_flow_spec_tcp_udp();
     }
-
-    transport_type_t type = p_ring->get_transport_type();
-
-    /*
-     * todo note that ring is not locked here.
-     * we touch members that should not change during the ring life.
-     * the ring will not be deleted as we increased refcnt.
-     * if one of these assumptions change, we must lock.
-     */
-    attach_flow_data_t *p_attach_flow_data = nullptr;
-    xlio_ibv_flow_spec_eth *p_eth = nullptr;
-    xlio_ibv_flow_spec_tcp_udp *p_tcp_udp = nullptr;
-
-    switch (type) {
-    case XLIO_TRANSPORT_ETH: {
-        bool is_ipv4 = (m_flow_tuple.get_family() == AF_INET);
-        if (is_ipv4) {
-            prepare_flow_spec_by_ip<attach_flow_data_eth_ipv4_tcp_udp_t>(p_attach_flow_data, p_eth,
-                                                                         p_tcp_udp);
-        } else {
-            prepare_flow_spec_by_ip<attach_flow_data_eth_ipv6_tcp_udp_t>(p_attach_flow_data, p_eth,
-                                                                         p_tcp_udp);
-        }
-
-        if (!p_attach_flow_data) {
-            return false;
-        }
-
-        uint8_t dst_mac[6];
-        create_multicast_mac_from_ip(dst_mac, m_flow_tuple.get_dst_ip(), m_flow_tuple.get_family());
-        ibv_flow_spec_eth_set(p_eth, dst_mac, htons(p_ring->m_hqrx->get_vlan()), is_ipv4);
-
-        if (safe_mce_sys().eth_mc_l2_only_rules) {
-            ibv_flow_spec_tcp_udp_set(p_tcp_udp, 0, 0, 0);
-        } else {
-            ibv_flow_spec_tcp_udp_set(p_tcp_udp, (m_flow_tuple.get_protocol() == PROTO_TCP),
-                                      m_flow_tuple.get_dst_port(), m_flow_tuple.get_src_port());
-        }
-
-        break;
-    }
-        BULLSEYE_EXCLUDE_BLOCK_START
-    default:
-        rfs_logpanic("Incompatible transport type = %d", type);
-        return false;
-        break;
-        BULLSEYE_EXCLUDE_BLOCK_END
-    }
-
-    m_attach_flow_data = p_attach_flow_data;
-    return true;
 }
 
 bool rfs_mc::rx_dispatch_packet(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array)

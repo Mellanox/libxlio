@@ -48,40 +48,11 @@ public:
     rfs_uc(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *rule_filter = NULL,
            uint32_t flow_tag_id = 0);
 
-    virtual bool rx_dispatch_packet(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array);
+    virtual bool rx_dispatch_packet(mem_buf_desc_t *p_rx_wc_buf_desc,
+                                    void *pv_fd_ready_array) override;
 
 protected:
-    virtual bool prepare_flow_spec();
-
-    template <typename T>
-    void prepare_flow_spec_by_ip(attach_flow_data_t *&p_attach_flow_data,
-                                 xlio_ibv_flow_spec_eth *&p_eth,
-                                 xlio_ibv_flow_spec_tcp_udp *&p_tcp_udp);
+    virtual void prepare_flow_spec() override;
 };
-
-template <typename T>
-void rfs_uc::prepare_flow_spec_by_ip(attach_flow_data_t *&p_attach_flow_data,
-                                     xlio_ibv_flow_spec_eth *&p_eth,
-                                     xlio_ibv_flow_spec_tcp_udp *&p_tcp_udp)
-{
-    T *attach_flow_data_eth = new (std::nothrow) T();
-    if (!attach_flow_data_eth) {
-        return;
-    }
-
-    decltype(T::ibv_flow_attr_eth_ip_tcp_udp::ip) *p_ip = &(attach_flow_data_eth->ibv_flow_attr.ip);
-    p_eth = &(attach_flow_data_eth->ibv_flow_attr.eth);
-    p_tcp_udp = &(attach_flow_data_eth->ibv_flow_attr.tcp_udp);
-    p_attach_flow_data = reinterpret_cast<attach_flow_data_t *>(attach_flow_data_eth);
-
-    ibv_flow_spec_ip_set(p_ip, m_flow_tuple.get_dst_ip(), m_flow_tuple.get_src_ip());
-
-    if (m_flow_tag_id) { // Will not attach flow_tag spec to rule for tag_id==0
-        ibv_flow_spec_flow_tag_set(&(attach_flow_data_eth->ibv_flow_attr.flow_tag), m_flow_tag_id);
-        attach_flow_data_eth->ibv_flow_attr.add_flow_tag_spec();
-    }
-}
-
-#undef MODULE_NAME
 
 #endif /* RFS_UC_H */

@@ -274,7 +274,9 @@ void hw_queue_rx::modify_queue_to_error_state()
     }
 }
 
-rfs_rule *hw_queue_rx::create_rfs_rule(xlio_ibv_flow_attr &attrs, xlio_tir *tir_ext)
+rfs_rule *hw_queue_rx::create_rfs_rule(dpcp::match_params &match_value,
+                                       dpcp::match_params &match_mask, uint16_t priority,
+                                       uint32_t flow_tag, xlio_tir *tir_ext)
 {
     if (m_p_ib_ctx_handler && m_p_ib_ctx_handler->get_dpcp_adapter()) {
         // TLS RX uses tir_ext.
@@ -282,7 +284,8 @@ rfs_rule *hw_queue_rx::create_rfs_rule(xlio_ibv_flow_attr &attrs, xlio_tir *tir_
 
         std::unique_ptr<rfs_rule> new_rule(new rfs_rule());
         if (dpcp_tir &&
-            new_rule->create(attrs, *dpcp_tir, *m_p_ib_ctx_handler->get_dpcp_adapter())) {
+            new_rule->create(match_value, match_mask, *dpcp_tir, priority, flow_tag,
+                             *m_p_ib_ctx_handler->get_dpcp_adapter())) {
             return new_rule.release();
         }
     }
