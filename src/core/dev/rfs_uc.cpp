@@ -58,63 +58,25 @@ rfs_uc::rfs_uc(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *ru
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    if (m_p_ring->is_simple() && !prepare_flow_spec()) {
-        throw_xlio_exception("rfs_uc: Incompatible transport type");
+    if (m_p_ring->is_simple()) {
+        prepare_flow_spec();
     }
 }
 
-bool rfs_uc::prepare_flow_spec()
+void rfs_uc::prepare_flow_spec()
 {
-    ring_simple *p_ring = dynamic_cast<ring_simple *>(m_p_ring);
+    prepare_flow_spec_eth_ip(m_flow_tuple.get_dst_ip(), m_flow_tuple.get_src_ip());
+    prepare_flow_spec_tcp_udp();
 
-    if (!p_ring) {
-        rfs_logpanic("Incompatible ring type");
-    }
-
-    /*
-     * todo note that ring is not locked here.
-     * we touch members that should not change during the ring life.
-     * the ring will not be deleted as we increased refcnt.
-     * if one of these assumptions change, we must lock.
-     */
-    attach_flow_data_t *p_attach_flow_data = nullptr;
-    xlio_ibv_flow_spec_eth *p_eth = nullptr;
-    xlio_ibv_flow_spec_tcp_udp *p_tcp_udp = nullptr;
-
-    switch (p_ring->get_transport_type()) {
-    case XLIO_TRANSPORT_ETH: {
-        bool is_ipv4 = (m_flow_tuple.get_family() == AF_INET);
-        if (is_ipv4) {
-            prepare_flow_spec_by_ip<attach_flow_data_eth_ipv4_tcp_udp_t>(p_attach_flow_data, p_eth,
-                                                                         p_tcp_udp);
-        } else {
-            prepare_flow_spec_by_ip<attach_flow_data_eth_ipv6_tcp_udp_t>(p_attach_flow_data, p_eth,
-                                                                         p_tcp_udp);
-        }
-
-        if (!p_attach_flow_data) {
-            return false;
-        }
-
-        ibv_flow_spec_eth_set(p_eth, p_ring->m_p_l2_addr->get_address(),
-                              htons(p_ring->m_hqrx->get_vlan()), is_ipv4);
-
-        break;
-    }
-        BULLSEYE_EXCLUDE_BLOCK_START
-    default:
-        return false;
-        break;
-        BULLSEYE_EXCLUDE_BLOCK_END
-    }
-
-    ibv_flow_spec_tcp_udp_set(p_tcp_udp, (m_flow_tuple.get_protocol() == PROTO_TCP),
-                              m_flow_tuple.get_dst_port(), m_flow_tuple.get_src_port());
+    memset(&m_match_mask.dst_mac, 0xFF, sizeof(m_match_mask.dst_mac));
+    memcpy(&m_match_value.dst_mac,
+           dynamic_cast<ring_simple *>(m_p_ring)->m_p_l2_addr->get_address(),
+           sizeof(m_match_value.dst_mac));
 
     if (m_flow_tuple.get_src_port() || !m_flow_tuple.get_src_ip().is_anyaddr()) {
-        // set priority of 5-tuple to be higher than 3-tuple
-        // to make sure 5-tuple have higher priority on ConnectX-4
-        p_attach_flow_data->ibv_flow_attr.priority = 1;
+        // Set priority of 5-tuple to be higher than 3-tuple
+        // to make sure 5-tuple have higher priority.
+        m_priority = 1;
     }
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     else if (g_p_app->type != APP_NONE && g_p_app->get_worker_id() >= 0) {
@@ -131,25 +93,24 @@ bool rfs_uc::prepare_flow_spec()
             } else {
                 src_port = g_p_app->get_worker_id();
             }
-            p_tcp_udp->val.src_port = htons((uint16_t)src_port * g_p_app->src_port_stride);
-            p_tcp_udp->mask.src_port =
-                htons((uint16_t)((g_p_app->workers_pow2 * g_p_app->src_port_stride) - 2));
-            p_attach_flow_data->ibv_flow_attr.priority = 1;
-            rfs_logdbg("src_port_stride: %d workers_num %d \n", g_p_app->src_port_stride,
-                       g_p_app->workers_num);
+
+            m_match_mask.src_port = static_cast<uint16_t>(
+                (g_p_app->workers_pow2 * g_p_app->src_port_stride) - 2);
+            m_match_value.src_port =
+                static_cast<uint16_t>(src_port * g_p_app->src_port_stride);
+
+            m_priority = 1;
+            rfs_logdbg("src_port_stride: %d workers_num %d \n",
+                       g_p_app->src_port_stride, g_p_app->workers_num);
             rfs_logdbg("sp_tcp_udp->val.src_port: %d p_tcp_udp->mask.src_port %d \n",
-                       ntohs(p_tcp_udp->val.src_port), ntohs(p_tcp_udp->mask.src_port));
-            m_flow_tuple.set_src_port(p_tcp_udp->val.src_port);
+                       m_match_value.src_port, m_match_mask.src_port);
+
+            m_flow_tuple.set_src_port(m_match_value.src_port);
         }
     }
 #endif
 
-    rfs_logfunc("transport type: %d, num_of_specs: %d flow_tag_id: %d",
-                p_ring->get_transport_type(), p_attach_flow_data->ibv_flow_attr.num_of_specs,
-                m_flow_tag_id);
-
-    m_attach_flow_data = p_attach_flow_data;
-    return true;
+    rfs_logfunc("Transport type: %d, flow_tag_id: %d", p_ring->get_transport_type(), m_flow_tag_id);
 }
 
 bool rfs_uc::rx_dispatch_packet(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array)

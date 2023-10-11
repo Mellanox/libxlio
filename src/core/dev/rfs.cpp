@@ -76,13 +76,10 @@ inline void rfs::filter_keep_attached(rule_filter_map_t::iterator &filter_iter)
     }
 
     // save ibv_flow rule only for filter
-    if (m_attach_flow_data) {
-        filter_iter->second.rfs_rule_holder = m_attach_flow_data->rfs_flow;
-        rfs_logdbg("filter_keep_attached copying rfs_flow, Tag: %" PRIu32
-                   ", Flow: %s, Ptr: %p, Counter: %d",
-                   m_flow_tag_id, m_flow_tuple.to_str().c_str(), m_attach_flow_data->rfs_flow,
-                   filter_iter->second.counter);
-    }
+    filter_iter->second.rfs_rule_holder = m_rfs_flow;
+    rfs_logdbg(
+        "filter_keep_attached copying rfs_flow, Tag: %" PRIu32 ", Flow: %s, Ptr: %p, Counter: %d",
+        m_flow_tag_id, m_flow_tuple.to_str().c_str(), m_rfs_flow, filter_iter->second.counter);
 }
 
 inline void rfs::prepare_filter_detach(int &filter_counter, bool decrease_counter)
@@ -115,18 +112,14 @@ inline void rfs::prepare_filter_detach(int &filter_counter, bool decrease_counte
     }
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (m_attach_flow_data) {
-        if (m_attach_flow_data->rfs_flow &&
-            m_attach_flow_data->rfs_flow != filter_iter->second.rfs_rule_holder) {
-            rfs_logerr(
-                "our assumption that there should be only one rule for filter group is wrong");
-        } else if (filter_iter->second.rfs_rule_holder) {
-            m_attach_flow_data->rfs_flow = filter_iter->second.rfs_rule_holder;
-            rfs_logdbg("prepare_filter_detach copying rfs_flow, Tag: %" PRIu32
-                       ", Flow: %s, Ptr: %p, Counter: %d",
-                       m_flow_tag_id, m_flow_tuple.to_str().c_str(), m_attach_flow_data->rfs_flow,
-                       filter_iter->second.counter);
-        }
+    if (m_rfs_flow && m_rfs_flow != filter_iter->second.rfs_rule_holder) {
+        rfs_logerr("our assumption that there should be only one rule for filter group is wrong");
+    } else if (filter_iter->second.rfs_rule_holder) {
+        m_rfs_flow = filter_iter->second.rfs_rule_holder;
+        rfs_logdbg("prepare_filter_detach copying rfs_flow, Tag: %" PRIu32
+                   ", Flow: %s, Ptr: %p, Counter: %d",
+                   m_flow_tag_id, m_flow_tuple.to_str().c_str(), m_rfs_flow,
+                   filter_iter->second.counter);
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 }
@@ -141,6 +134,9 @@ rfs::rfs(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *rule_fil
     , m_flow_tag_id(flow_tag_id)
     , m_b_tmp_is_attached(false)
 {
+    memset(&m_match_value, 0, sizeof(m_match_value));
+    memset(&m_match_mask, 0, sizeof(m_match_mask));
+
     m_sinks_list = new pkt_rcvr_sink *[m_n_sinks_list_max_length];
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
@@ -182,16 +178,6 @@ rfs::~rfs()
         m_p_rule_filter = NULL;
     }
     delete[] m_sinks_list;
-
-    if (m_attach_flow_data) {
-        if (reinterpret_cast<ibv_flow_attr_eth *>(&m_attach_flow_data->ibv_flow_attr)
-                ->eth.val.ether_type == htons(ETH_P_IP)) {
-            delete reinterpret_cast<attach_flow_data_eth_ipv4_tcp_udp_t *>(m_attach_flow_data);
-        } else {
-            delete reinterpret_cast<attach_flow_data_eth_ipv6_tcp_udp_t *>(m_attach_flow_data);
-        }
-        m_attach_flow_data = nullptr;
-    }
 }
 
 bool rfs::add_sink(pkt_rcvr_sink *p_sink)
@@ -332,58 +318,46 @@ bool rfs::detach_flow(pkt_rcvr_sink *sink)
 
 #ifdef DEFINED_UTLS
 
-template <typename T>
-rfs_rule *create_rule_T(hw_queue_rx *hqrx, xlio_tir *tir, const flow_tuple &flow_spec,
-                        attach_flow_data_t *iter, bool is5T)
-{
-    auto *p_attr =
-        reinterpret_cast<typename T::ibv_flow_attr_eth_ip_tcp_udp *>(&iter->ibv_flow_attr);
-
-    if (unlikely(p_attr->eth.type != XLIO_IBV_FLOW_SPEC_ETH)) {
-        // We support only ETH rules for now
-        return NULL;
-    }
-
-    auto flow_attr(*p_attr);
-    if (!is5T) {
-        // For UTLS, We need the most specific 5T rule (in case the current rule is 3T).
-        ibv_flow_spec_set_single_ip(flow_attr.ip.val.src_ip, flow_attr.ip.mask.src_ip,
-                                    flow_spec.get_src_ip());
-        flow_attr.tcp_udp.val.src_port = flow_spec.get_src_port();
-        flow_attr.tcp_udp.mask.src_port = FS_MASK_ON_16;
-    }
-    // The highest priority to override TCP rule
-    flow_attr.attr.priority = 0;
-    return hqrx->create_rfs_rule(flow_attr.attr, tir);
-}
-
 rfs_rule *rfs::create_rule(xlio_tir *tir, const flow_tuple &flow_spec)
 {
     auto *hqrx = dynamic_cast<ring_simple *>(m_p_ring)->m_hqrx;
-    if (m_attach_flow_data) {
-        if (m_flow_tuple.get_family() == AF_INET) {
-            return create_rule_T<attach_flow_data_eth_ipv4_tcp_udp_t>(
-                hqrx, tir, flow_spec, m_attach_flow_data, m_flow_tuple.is_5_tuple());
+
+    dpcp::match_params match_value_tmp;
+    dpcp::match_params match_mask_tmp;
+    memcpy(&match_value_tmp, &m_match_value, sizeof(m_match_value));
+    memcpy(&match_mask_tmp, &m_match_mask, sizeof(m_match_mask));
+
+    if (!m_flow_tuple.is_5_tuple()) {
+        // For UTLS, We need the most specific 5T rule (in case the current rule is 3T).
+
+        if (match_value_tmp.ethertype == ETH_P_IP) {
+            match_mask_tmp.src.ipv4 = flow_spec.get_src_ip().is_anyaddr() ? 0U : 0xFFFFFFFFU;
+            match_value_tmp.src.ipv4 = ntohl(flow_spec.get_src_ip().get_in4_addr().s_addr);
+        } else {
+            memset(match_mask_tmp.src.ipv6, flow_spec.get_src_ip().is_anyaddr() ? 0U : 0xFFU,
+                   sizeof(match_mask_tmp.src.ipv6));
+            memcpy(match_value_tmp.src.ipv6, &flow_spec.get_src_ip().get_in6_addr(),
+                   sizeof(match_value_tmp.src.ipv6));
         }
 
-        return create_rule_T<attach_flow_data_eth_ipv6_tcp_udp_t>(
-            hqrx, tir, flow_spec, m_attach_flow_data, m_flow_tuple.is_5_tuple());
+        match_mask_tmp.src_port = 0xFFFFU;
+        match_value_tmp.src_port = ntohs(flow_spec.get_src_port());
     }
 
-    return nullptr;
+    // The highest priority to override TCP rule
+    return hqrx->create_rfs_rule(match_value_tmp, match_mask_tmp, 0, m_flow_tag_id, tir);
 }
 
 #endif /* DEFINED_UTLS */
 
 bool rfs::create_flow()
 {
-    m_attach_flow_data->rfs_flow = dynamic_cast<ring_simple *>(m_p_ring)->m_hqrx->create_rfs_rule(
-        m_attach_flow_data->ibv_flow_attr, NULL);
-    if (!m_attach_flow_data->rfs_flow) {
+    m_rfs_flow = dynamic_cast<ring_simple *>(m_p_ring)->m_hqrx->create_rfs_rule(
+        m_match_value, m_match_mask, m_priority, m_flow_tag_id, nullptr);
+    if (!m_rfs_flow) {
         rfs_logerr("Create RFS flow failed, Tag: %" PRIu32 ", Flow: %s, Priority: %" PRIu16
                    ", errno: %d - %m",
-                   m_flow_tag_id, m_flow_tuple.to_str().c_str(),
-                   m_attach_flow_data->ibv_flow_attr.priority, errno);
+                   m_flow_tag_id, m_flow_tuple.to_str().c_str(), m_priority, errno);
         return false;
     }
 
@@ -396,17 +370,14 @@ bool rfs::create_flow()
 
 bool rfs::destroy_flow()
 {
-    if (m_attach_flow_data) {
-        if (unlikely(!m_attach_flow_data->rfs_flow)) {
-            rfs_logdbg("Destroy RFS flow failed, RFS flow was not created. "
-                       "This is OK for MC same ip diff port scenario. Tag: %" PRIu32
-                       ", Flow: %s, Priority: %" PRIu16,
-                       m_flow_tag_id, m_flow_tuple.to_str().c_str(),
-                       m_attach_flow_data->ibv_flow_attr.priority);
-        } else {
-            delete m_attach_flow_data->rfs_flow;
-            m_attach_flow_data->rfs_flow = nullptr;
-        }
+    if (unlikely(!m_rfs_flow)) {
+        rfs_logdbg("Destroy RFS flow failed, RFS flow was not created. "
+                   "This is OK for MC same ip diff port scenario. Tag: %" PRIu32
+                   ", Flow: %s, Priority: %" PRIu16,
+                   m_flow_tag_id, m_flow_tuple.to_str().c_str(), m_priority);
+    } else {
+        delete m_rfs_flow;
+        m_rfs_flow = nullptr;
     }
 
     m_b_tmp_is_attached = false;
@@ -414,4 +385,49 @@ bool rfs::destroy_flow()
                m_flow_tuple.to_str().c_str());
 
     return true;
+}
+
+void rfs::prepare_flow_spec_eth_ip(const ip_address &dst_ip, const ip_address &src_ip)
+{
+    ring_simple *p_ring = dynamic_cast<ring_simple *>(m_p_ring);
+
+    if (!p_ring) {
+        rfs_logpanic("Incompatible ring type");
+    }
+
+    m_match_value.vlan_id = p_ring->m_hqrx->get_vlan() & VLAN_VID_MASK;
+    m_match_mask.vlan_id = (p_ring->m_hqrx->get_vlan() ? VLAN_VID_MASK : 0);
+
+    bool is_ipv4 = (m_flow_tuple.get_family() == AF_INET);
+    if (is_ipv4) {
+        m_match_mask.dst.ipv4 = dst_ip.is_anyaddr() ? 0U : 0xFFFFFFFFU;
+        m_match_value.dst.ipv4 = ntohl(dst_ip.get_in4_addr().s_addr);
+        m_match_mask.src.ipv4 = src_ip.is_anyaddr() ? 0U : 0xFFFFFFFFU;
+        m_match_value.src.ipv4 = ntohl(src_ip.get_in4_addr().s_addr);
+        m_match_mask.ip_version = 0xF;
+        m_match_value.ip_version = 4U;
+        m_match_mask.ethertype = 0xFFFFU;
+        m_match_value.ethertype = ETH_P_IP;
+    } else {
+        memset(m_match_mask.dst.ipv6, dst_ip.is_anyaddr() ? 0U : 0xFFU,
+               sizeof(m_match_mask.dst.ipv6));
+        memcpy(m_match_value.dst.ipv6, &dst_ip.get_in6_addr(), sizeof(m_match_value.dst.ipv6));
+        memset(m_match_mask.src.ipv6, src_ip.is_anyaddr() ? 0U : 0xFFU,
+               sizeof(m_match_mask.src.ipv6));
+        memcpy(m_match_value.src.ipv6, &src_ip.get_in6_addr(), sizeof(m_match_value.src.ipv6));
+        m_match_mask.ip_version = 0xF;
+        m_match_value.ip_version = 6U;
+        m_match_mask.ethertype = 0xFFFFU;
+        m_match_value.ethertype = ETH_P_IPV6;
+    }
+}
+
+void rfs::prepare_flow_spec_tcp_udp()
+{
+    m_match_mask.dst_port = (m_flow_tuple.get_dst_port() ? 0xFFFFU : 0U);
+    m_match_value.dst_port = ntohs(m_flow_tuple.get_dst_port());
+    m_match_mask.src_port = (m_flow_tuple.get_src_port() ? 0xFFFFU : 0U);
+    m_match_value.src_port = ntohs(m_flow_tuple.get_src_port());
+    m_match_mask.protocol = 0xFF;
+    m_match_value.protocol = (m_flow_tuple.get_protocol() == PROTO_TCP ? IPPROTO_TCP : IPPROTO_UDP);
 }

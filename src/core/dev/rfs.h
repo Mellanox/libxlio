@@ -34,7 +34,7 @@
 #define RFS_H
 
 #include <vector>
-
+#include <mellanox/dpcp.h>
 #include "ib/base/verbs_extra.h"
 #include "util/vtypes.h"
 #include "dev/ring_simple.h"
@@ -55,53 +55,6 @@ class pkt_rcvr_sink;
  * TLS rules must take over from TCP rules, but we want to keep the TCP rules in
  * shadow for socket reuse feature.
  */
-
-/* ETHERNET
- */
-
-typedef struct ibv_flow_attr_eth {
-    xlio_ibv_flow_attr attr;
-    xlio_ibv_flow_spec_eth eth;
-} ibv_flow_attr_eth;
-
-template <typename T> struct attach_flow_data_eth_ip_tcp_udp_t {
-    rfs_rule *rfs_flow;
-    struct ibv_flow_attr_eth_ip_tcp_udp : public ibv_flow_attr_eth {
-        T ip;
-        xlio_ibv_flow_spec_tcp_udp tcp_udp;
-        xlio_ibv_flow_spec_action_tag flow_tag; // must be the last as struct can be used without it
-
-        ibv_flow_attr_eth_ip_tcp_udp()
-        {
-            memset(this, 0, sizeof(*this));
-            attr.size = sizeof(T) - sizeof(flow_tag);
-            attr.num_of_specs = 3;
-            attr.type = XLIO_IBV_FLOW_ATTR_NORMAL;
-            attr.priority = 2; // almost highest priority, 1 is used for 5-tuple later
-            attr.port = 0;
-        }
-        inline void add_flow_tag_spec(void)
-        {
-            attr.num_of_specs++;
-            attr.size += sizeof(flow_tag);
-        }
-    } ibv_flow_attr;
-    attach_flow_data_eth_ip_tcp_udp_t()
-        : rfs_flow(NULL)
-        , ibv_flow_attr()
-    {
-    }
-};
-
-typedef attach_flow_data_eth_ip_tcp_udp_t<xlio_ibv_flow_spec_ipv4>
-    attach_flow_data_eth_ipv4_tcp_udp_t;
-typedef attach_flow_data_eth_ip_tcp_udp_t<xlio_ibv_flow_spec_ipv6>
-    attach_flow_data_eth_ipv6_tcp_udp_t;
-
-typedef struct attach_flow_data_t {
-    rfs_rule *rfs_flow;
-    xlio_ibv_flow_attr ibv_flow_attr;
-} attach_flow_data_t;
 
 class rfs_rule_filter {
 public:
@@ -154,19 +107,25 @@ protected:
     flow_tuple m_flow_tuple;
     ring_slave *m_p_ring;
     rfs_rule_filter *m_p_rule_filter;
-    attach_flow_data_t *m_attach_flow_data = nullptr;
+    rfs_rule *m_rfs_flow = nullptr;
     pkt_rcvr_sink **m_sinks_list;
     uint32_t m_n_sinks_list_entries; // Number of actual sinks in the array (we shrink the array if
                                      // a sink is removed)
     uint32_t m_n_sinks_list_max_length;
     uint32_t m_flow_tag_id; // Associated with this rule, set by attach_flow()
+    uint16_t m_priority = 2U; // Almost highest priority, 1 is used for 5-tuple later
     bool m_b_tmp_is_attached; // Only temporary, while ibcm calls attach_flow with no sinks...
+
+    dpcp::match_params m_match_value;
+    dpcp::match_params m_match_mask;
 
     bool create_flow(); // Attach flow to all queues
     bool destroy_flow(); // Detach flow from all queues
     bool add_sink(pkt_rcvr_sink *p_sink);
     bool del_sink(pkt_rcvr_sink *p_sink);
-    virtual bool prepare_flow_spec() = 0;
+    void prepare_flow_spec_eth_ip(const ip_address &dst_ip, const ip_address &src_ip);
+    void prepare_flow_spec_tcp_udp();
+    virtual void prepare_flow_spec() = 0;
 
 private:
     rfs(); // I don't want anyone to use the default constructor
