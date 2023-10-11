@@ -74,7 +74,8 @@ public:
     void modify_queue_to_error_state();
     void release_rx_buffers();
 
-    rfs_rule *create_rfs_rule(xlio_ibv_flow_attr &attrs, xlio_tir *tir_ext);
+    rfs_rule *create_rfs_rule(dpcp::match_params &match_value, dpcp::match_params &match_mask,
+                              uint16_t priority, uint32_t flow_tag, xlio_tir *tir_ext);
 
 #ifdef DEFINED_UTLS
     xlio_tir *tls_create_tir(bool cached);
