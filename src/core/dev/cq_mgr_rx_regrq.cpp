@@ -178,7 +178,7 @@ void cq_mgr_rx_regrq::cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe,
         p_rx_wc_buf_desc->rx.tls_decrypted = (cqe->pkt_info >> 3) & 0x3;
 #endif /* DEFINED_UTLS */
         p_rx_wc_buf_desc->rx.timestamps.hw_raw = ntohll(cqe->timestamp);
-        p_rx_wc_buf_desc->rx.flow_tag_id = xlio_get_flow_tag(cqe);
+        p_rx_wc_buf_desc->rx.flow_tag_id = ntohl((uint32_t)(cqe->sop_drop_qpn));
         p_rx_wc_buf_desc->rx.is_sw_csum_need =
             !(m_b_is_rx_hw_csum_on && (cqe->hds_ip_ext & MLX5_CQE_L4_OK) &&
               (cqe->hds_ip_ext & MLX5_CQE_L3_OK));

@@ -1645,9 +1645,8 @@ bool net_device_val::verify_qp_creation(const char *ifname, enum ibv_qp_type qp_
     if (qp) {
         success = true;
 
-        if (qp_type == IBV_QPT_RAW_PACKET &&
-            !priv_ibv_query_flow_tag_supported(qp, port_num, AF_INET) &&
-            !priv_ibv_query_flow_tag_supported(qp, port_num, AF_INET6)) {
+        // TODO: Add flow_tag capability check on dpcp::adapter
+        if (qp_type == IBV_QPT_RAW_PACKET) {
             p_ib_ctx->set_flow_tag_capability(true);
         }
         nd_logdbg("verified interface %s for flow tag capabilities : %s", ifname,

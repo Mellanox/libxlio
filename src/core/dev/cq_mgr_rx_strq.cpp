@@ -283,7 +283,7 @@ inline bool cq_mgr_rx_strq::strq_cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe,
         _current_wqe_consumed_bytes += _hot_buffer_stride->sz_buffer;
 
         _hot_buffer_stride->rx.timestamps.hw_raw = ntohll(cqe->timestamp);
-        _hot_buffer_stride->rx.flow_tag_id = xlio_get_flow_tag(cqe);
+        _hot_buffer_stride->rx.flow_tag_id = ntohl((uint32_t)(cqe->sop_drop_qpn));
         _hot_buffer_stride->rx.is_sw_csum_need =
             !(m_b_is_rx_hw_csum_on && (cqe->hds_ip_ext & MLX5_CQE_L4_OK) &&
               (cqe->hds_ip_ext & MLX5_CQE_L3_OK));
