@@ -309,6 +309,8 @@ TEST_F(udp_bind, bind_IP6_4_dual_stack_reuse_addr)
  */
 TEST_F(udp_bind, mapped_ipv4_bind_recv)
 {
+    SKIP_TRUE(!getenv("XLIO_SOCKETXTREME"), "Skip Socketxtreme");
+
     if (!test_mapped_ipv4()) {
         return;
     }
@@ -377,6 +379,8 @@ TEST_F(udp_bind, mapped_ipv4_bind_recv)
  */
 TEST_F(udp_bind, mapped_ipv4_bind_send)
 {
+    SKIP_TRUE(!getenv("XLIO_SOCKETXTREME"), "Skip Socketxtreme");
+
     if (!test_mapped_ipv4()) {
         return;
     }

@@ -412,12 +412,6 @@ protected:
     void remove_cqfd_from_sock_rx_epfd(ring *p_ring);
     int os_wait_sock_rx_epfd(epoll_event *ep_events, int maxevents);
     virtual bool try_un_offloading(); // un-offload the socket if possible
-    virtual inline void do_wakeup()
-    {
-        if (!is_socketxtreme()) {
-            wakeup_pipe::do_wakeup();
-        }
-    }
 
     bool is_shadow_socket_present() { return m_fd >= 0 && m_fd != m_rx_epfd; }
     inline bool is_socketxtreme() { return safe_mce_sys().enable_socketxtreme; }

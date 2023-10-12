@@ -5051,6 +5051,13 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
         return n;
     }
 
+    if (m_sysvar_tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+        // There are scenarios when rx_wait_helper is called in an infinte loop but exists before
+        // OS epoll_wait. Delegated TPC timers must be attempted in such case.
+        // This is a slow path. So calling chrono::now(), even with every iterantion, is OK here.
+        g_thread_local_event_handler.do_tasks();
+    }
+
     // if in blocking accept state skip poll phase and go to sleep directly
     if (!blocking || m_loops_timer.is_timeout()) {
         errno = EAGAIN;

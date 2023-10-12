@@ -43,7 +43,6 @@ class wakeup {
 public:
     wakeup(void);
     virtual ~wakeup() {};
-    virtual void do_wakeup() = 0;
     virtual bool is_wakeup_fd(int fd) = 0;
     virtual void remove_wakeup_fd() = 0;
     void going_to_sleep();
