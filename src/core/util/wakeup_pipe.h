@@ -43,7 +43,7 @@ class wakeup_pipe : public wakeup {
 public:
     wakeup_pipe(void);
     ~wakeup_pipe();
-    virtual void do_wakeup();
+    void do_wakeup();
     virtual inline bool is_wakeup_fd(int fd) { return fd == g_wakeup_pipes[0]; };
     virtual void remove_wakeup_fd();
 

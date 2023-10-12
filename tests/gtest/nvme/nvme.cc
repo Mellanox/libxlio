@@ -352,6 +352,7 @@ protected:
     vector<auto_close_socket> sockets;
     vector<mr> mrs;
     int client_fd;
+    bool nvme_supported = true;
     msghdr *msg;
     uint8_t *cmsg_buffer;
     vector<iovec> msghdr_iov {};
@@ -385,6 +386,7 @@ protected:
 
         /* ------------------NVME/TCP offset setup--------------------------- */
         rc = setsockopt(client_fd, IPPROTO_TCP, TCP_ULP, "nvme", 4);
+        nvme_supported = (rc == 0);
         ASSERT_EQ(0, rc) << "NVME is unsupported";
 
         uint32_t configure = XLIO_NVME_HDGST_ENABLE | XLIO_NVME_DDGST_ENABLE |
@@ -463,6 +465,11 @@ protected:
         client_socket_create();
         client_register_pdu_iov_memory(pdus);
         client_prepare_msghdr_with_pdu_per_iov(pdus.size());
+
+        if (!nvme_supported) {
+            close(client_fd);
+            return;
+        }
 
         auto rc = sendmsg(client_fd, msg, MSG_ZEROCOPY);
         ASSERT_EQ(total_test_iovec_size(pdus), rc) << strerror(errno);

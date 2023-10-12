@@ -183,7 +183,7 @@ public:
 
 protected:
     pthread_t m_event_handler_tid;
-    bool m_b_continue_running;
+    bool m_b_continue_running = false;
     int m_cq_epfd;
     int m_epfd;
 
