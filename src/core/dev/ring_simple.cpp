@@ -272,7 +272,6 @@ void ring_simple::create_resources()
     memset(&m_lro, 0, sizeof(m_lro));
     if ((safe_mce_sys().enable_lro == option_3::ON) ||
         ((safe_mce_sys().enable_lro == option_3::AUTO) && (1 == validate_lro(get_if_index())))) {
-#if defined(DEFINED_DPCP)
         dpcp::adapter_hca_capabilities caps;
 
         if (m_p_ib_ctx->get_dpcp_adapter() &&
@@ -298,7 +297,6 @@ void ring_simple::create_resources()
             m_lro.max_payload_sz =
                 std::min(actual_buf_size, XLIO_MLX5_PARAMS_LRO_PAYLOAD_SIZE) / 256U * 256U;
         }
-#endif /* DEFINED_DPCP */
     }
     ring_logdbg("ring attributes: m_lro = %d", m_lro.cap);
     ring_logdbg("ring attributes: m_lro:psh_flag = %d", m_lro.psh_flag);
