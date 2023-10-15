@@ -78,10 +78,9 @@ public:
     ibv_device *get_ibv_device() { return m_p_ibv_device; }
     inline char *get_ibname() { return (m_p_ibv_device ? m_p_ibv_device->name : (char *)""); }
     struct ibv_context *get_ibv_context() { return m_p_ibv_context; }
-#ifdef DEFINED_DPCP
     dpcp::adapter *set_dpcp_adapter();
     dpcp::adapter *get_dpcp_adapter() { return m_p_adapter; }
-#endif /* DEFINED_DPCP */
+    void check_capabilities();
     xlio_ibv_device_attr *get_ibv_device_attr()
     {
         return xlio_get_device_orig_attr(m_p_ibv_device_attr);
