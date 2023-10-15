@@ -51,7 +51,6 @@ matrix:
   axes:
     flags:
       - default
-      - dpcp
     arch:
       - x86_64
       - aarch64
