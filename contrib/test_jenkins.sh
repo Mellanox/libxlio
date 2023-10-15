@@ -103,13 +103,9 @@ do_check_env
 TARGET=${TARGET:=all}
 i=0
 if [ "$TARGET" == "all" -o "$TARGET" == "default" ]; then
-    target_list[$i]="default: --disable-nginx"
-    i=$((i+1))
-fi
-if [ "$TARGET" == "all" -o "$TARGET" == "dpcp" ]; then
     do_check_dpcp opt_value
     if [ ! -z "${opt_value}" ]; then
-        target_list[$i]="dpcp: --enable-nginx --with-dpcp=${opt_value}"
+        target_list[$i]="default: --enable-nginx --with-dpcp=${opt_value}"
         i=$((i+1))
     else
         echo "Requested dpcp support can not be executed"

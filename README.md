@@ -64,17 +64,6 @@ $ make -j
 $ make install
 ```
 
-### Building XLIO without dpcp
-
-```sh
-$ ./autogen.sh
-$ ./configure --prefix=/where/to/install
-$ make -j
-$ make install
-```
-
-Advanced HW features are not enabled for this build type.
-
 ### Usage Examples
 
 #### Sockperf

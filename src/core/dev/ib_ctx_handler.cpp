@@ -118,12 +118,11 @@ err:
         ibv_dealloc_pd(m_p_ibv_pd);
     }
 
-#ifdef DEFINED_DPCP
     if (m_p_adapter) {
         delete m_p_adapter;
         m_p_ibv_context = NULL;
     }
-#endif /* DEFINED_DPCP */
+
     if (m_p_ibv_context) {
         ibv_close_device(m_p_ibv_context);
         m_p_ibv_context = NULL;
@@ -159,12 +158,11 @@ ib_ctx_handler::~ib_ctx_handler()
     }
     delete m_p_ibv_device_attr;
 
-#ifdef DEFINED_DPCP
     if (m_p_adapter) {
         delete m_p_adapter;
         m_p_ibv_context = NULL;
     }
-#endif /* DEFINED_DPCP */
+
     if (m_p_ibv_context) {
         ibv_close_device(m_p_ibv_context);
         m_p_ibv_context = NULL;

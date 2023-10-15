@@ -224,7 +224,7 @@ public:
         m_hqtx->tls_tx_post_dump_wqe(tis, addr, len, lkey, first);
     }
 #endif /* DEFINED_UTLS */
-#ifdef DEFINED_DPCP
+
     std::unique_ptr<xlio_tis> create_tis(uint32_t flags) const override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
@@ -255,7 +255,6 @@ public:
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         m_hqtx->nvme_set_progress_context(tis, tcp_seqno);
     }
-#endif /* DEFINED_DPCP */
 
     void post_nop_fence(void) override
     {

@@ -40,10 +40,7 @@
 #include "dev/time_converter.h"
 #include "ib/base/verbs_extra.h"
 #include "utils/lock_wrapper.h"
-
-#ifdef DEFINED_DPCP
 #include <mellanox/dpcp.h>
-#endif /* DEFINED_DPCP */
 
 typedef std::unordered_map<uint32_t, struct ibv_mr *> mr_map_lkey_t;
 
@@ -115,9 +112,7 @@ private:
     void handle_event_device_fatal();
     ibv_device *m_p_ibv_device; // HCA handle
     struct ibv_context *m_p_ibv_context;
-#ifdef DEFINED_DPCP
     dpcp::adapter *m_p_adapter;
-#endif /* DEFINED_DPCP */
     xlio_ibv_device_attr_ex *m_p_ibv_device_attr;
     ibv_pd *m_p_ibv_pd;
     bool m_flow_tag_enabled;

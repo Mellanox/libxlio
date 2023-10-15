@@ -44,7 +44,6 @@
 
 using namespace std;
 
-#ifdef DEFINED_DPCP
 using test_iovec = vector<iovec>;
 
 static ssize_t total_test_iovec_size(test_iovec &pdus)
@@ -635,4 +634,3 @@ TEST_F(nvme_tx, send_multiple_pdus)
         server_process(pid, rx_iovs);
     }
 }
-#endif /* DEFINED_DPCP */
