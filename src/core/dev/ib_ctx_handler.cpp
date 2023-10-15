@@ -73,30 +73,10 @@ ib_ctx_handler::ib_ctx_handler(struct ib_ctx_handler_desc *desc)
     }
 
     m_p_ibv_context = NULL;
-#ifdef DEFINED_DPCP
     m_p_adapter = set_dpcp_adapter();
-    if (NULL == m_p_adapter)
-#endif /* DEFINED_DPCP */
-    {
-#if defined(DEFINED_ROCE_LAG)
-        struct mlx5dv_context_attr dv_attr;
-
-        memset(&dv_attr, 0, sizeof(dv_attr));
-        dv_attr.flags |= MLX5DV_CONTEXT_FLAGS_DEVX;
-        m_p_ibv_context = mlx5dv_open_device(m_p_ibv_device, &dv_attr);
-#endif /* DEFINED_ROCE_LAG */
-        if (m_p_ibv_context == NULL) {
-            m_p_ibv_context = ibv_open_device(m_p_ibv_device);
-        }
-        if (m_p_ibv_context == NULL) {
-            ibch_logpanic("m_p_ibv_context is invalid");
-        }
-        // Create pd for this device
-        m_p_ibv_pd = ibv_alloc_pd(m_p_ibv_context);
-        if (m_p_ibv_pd == NULL) {
-            ibch_logpanic("ibv device %p pd allocation failure (ibv context %p) (errno=%d %m)",
-                          m_p_ibv_device, m_p_ibv_context, errno);
-        }
+    if (!m_p_adapter) {
+        ibch_logpanic("ibv device %p adapter allocation failure (errno=%d %m)",
+                      m_p_ibv_device, errno);
     }
     VALGRIND_MAKE_MEM_DEFINED(m_p_ibv_pd, sizeof(struct ibv_pd));
 
@@ -235,8 +215,6 @@ void ib_ctx_handler::print_val()
     ibch_logdbg("%s", m_str);
 }
 
-#ifdef DEFINED_DPCP
-
 int parse_dpcp_version(const char *dpcp_ver)
 {
     static const std::string s_delimiter(".");
@@ -350,6 +328,7 @@ dpcp::adapter *ib_ctx_handler::set_dpcp_adapter()
                 m_p_adapter = adapter;
                 m_p_ibv_context = ctx;
                 m_p_ibv_pd = pd;
+                check_capabilities();
                 ibch_logdbg("dpcp adapter: %s is up", adapter->get_name().c_str());
             }
 
@@ -364,7 +343,15 @@ err:
 
     return m_p_adapter;
 }
-#endif /* DEFINED_DPCP */
+
+void ib_ctx_handler::check_capabilities() {
+    dpcp::adapter_hca_capabilities caps;
+    dpcp::status rc = m_p_adapter->get_hca_capabilities(caps);
+    if (rc == dpcp::DPCP_OK) {
+        set_flow_tag_capability(caps.flow_table_caps.receive.is_flow_action_tag_supported);
+        ibch_logerr("Flow Tag Support: %s", get_flow_tag_capability() ? "Yes" : "No");
+    }
+}
 
 void ib_ctx_handler::set_ctx_time_converter_status(ts_conversion_mode_t conversion_mode)
 {
