@@ -64,8 +64,8 @@ gtest_opt_ipv6="--addr=$(do_get_addrs 'inet6' ${opt2}) -r fdff:ffff:ffff:ffff:ff
 set +eE
 
 if [[ -z "${MANUAL_RUN}" ]]; then
-	${WORKSPACE}/configure --prefix=$install_dir
-	make -C tests/gtest
+	${WORKSPACE}/configure --prefix=$install_dir $jenkins_test_custom_configure
+	make $make_opt -C tests/gtest
 	rc=$(($rc+$?))
 fi
 
@@ -90,7 +90,7 @@ rc=$(($rc+$?))
 
 if [[ -z "${MANUAL_RUN}" ]]; then
 	make -C tests/gtest clean
-	make -C tests/gtest CPPFLAGS="-DEXTRA_API_ENABLED=1"
+	make $make_opt -C tests/gtest CPPFLAGS="-DEXTRA_API_ENABLED=1"
 	rc=$(($rc+$?))
 fi
 

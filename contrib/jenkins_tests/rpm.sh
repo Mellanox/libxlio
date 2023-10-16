@@ -48,7 +48,7 @@ if [ $opt_tarball -eq 1 ]; then
     if [ -n "$(automake --version | grep 'automake (GNU automake) 1.10.1')" ]; then
         test_exec='make $make_opt dist'
     else
-        test_exec='make $make_opt dist && make $make_opt distcheck'
+        test_exec='make $make_opt dist && DISTCHECK_CONFIGURE_FLAGS='"'"$jenkins_test_custom_configure"'"' make $make_opt distcheck'
     fi
 
     do_check_result "$test_exec" "$test_id" "tarball" "$rpm_tap" "${rpm_dir}/rpm-${test_id}"
@@ -73,9 +73,9 @@ fi
 
 if [ $opt_binrpm -eq 1 ]; then
     if [ $opt_rpm -eq 1 ]; then
-        test_exec="env RPM_BUILD_NCPUS=${NPROC} rpmbuild -bb $rpmmacros $rpmopts $rpmspec"
+        test_exec="env RPM_BUILD_NCPUS=${NPROC} rpmbuild -bb --define='configure_options $jenkins_test_custom_configure' $rpmmacros $rpmopts $rpmspec"
     else
-        test_exec="dpkg-buildpackage -us -uc -b"
+        test_exec="env configure_options=\"$jenkins_test_custom_configure\" dpkg-buildpackage -us -uc -b"
     fi
     do_check_result "$test_exec" "$test_id" "binrpm" "$rpm_tap" "${rpm_dir}/rpm-${test_id}"
     test_id=$((test_id+1))
