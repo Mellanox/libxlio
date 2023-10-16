@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2001-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,6 +33,7 @@
 #include "dev/cq_mgr_tx.h"
 #include <util/valgrind.h>
 #include <sock/sock-redirect.h>
+#include <sock/sock-app.h>
 #include "ring_simple.h"
 #include "hw_queue_tx.h"
 
@@ -146,13 +147,13 @@ void cq_mgr_tx::configure(int cq_size)
 
     struct ibv_context *context = m_p_ib_ctx_handler->get_ibv_context();
     int comp_vector = 0;
-#if defined(DEFINED_NGINX)
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     /*
-     * For NGINX scenario we may want to distribute CQs across multiple
-     * CPUs to improve CPS in case of multiple NGINX worker processes.
+     * For some scenario with forking usage we may want to distribute CQs across multiple
+     * CPUs to improve CPS in case of multiple processes.
      */
-    if (safe_mce_sys().nginx_distribute_cq_interrupts) {
-        comp_vector = g_worker_index % context->num_comp_vectors;
+    if (safe_mce_sys().app.distribute_cq_interrupts && g_p_app->get_worker_id() >= 0) {
+        comp_vector = g_p_app->get_worker_id() % context->num_comp_vectors;
     }
 #endif
     m_p_ibv_cq = xlio_ibv_create_cq(context, cq_size - 1, (void *)this, m_comp_event_channel,

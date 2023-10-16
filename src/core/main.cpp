@@ -807,12 +807,14 @@ void print_xlio_global_settings()
                       SYS_VAR_UTLS_RX, safe_mce_sys().enable_utls_rx ? "Enabled " : "Disabled");
     VLOG_PARAM_STRING("UTLS TX support", safe_mce_sys().enable_utls_tx, MCE_DEFAULT_UTLS_TX,
                       SYS_VAR_UTLS_TX, safe_mce_sys().enable_utls_tx ? "Enabled " : "Disabled");
-    VLOG_PARAM_NUMBER(
-        "UTLS high watermark DEK cache size", safe_mce_sys().utls_high_wmark_dek_cache_size,
-        MCE_DEFAULT_UTLS_HIGH_WMARK_DEK_CACHE_SIZE, SYS_VAR_UTLS_HIGH_WMARK_DEK_CACHE_SIZE);
-    VLOG_PARAM_NUMBER(
-        "UTLS low watermark DEK cache size", safe_mce_sys().utls_low_wmark_dek_cache_size,
-        MCE_DEFAULT_UTLS_LOW_WMARK_DEK_CACHE_SIZE, SYS_VAR_UTLS_LOW_WMARK_DEK_CACHE_SIZE);
+    VLOG_PARAM_NUMBER("UTLS high watermark DEK cache size",
+                      static_cast<uint32_t>(safe_mce_sys().utls_high_wmark_dek_cache_size),
+                      MCE_DEFAULT_UTLS_HIGH_WMARK_DEK_CACHE_SIZE,
+                      SYS_VAR_UTLS_HIGH_WMARK_DEK_CACHE_SIZE);
+    VLOG_PARAM_NUMBER("UTLS low watermark DEK cache size",
+                      static_cast<uint32_t>(safe_mce_sys().utls_low_wmark_dek_cache_size),
+                      MCE_DEFAULT_UTLS_LOW_WMARK_DEK_CACHE_SIZE,
+                      SYS_VAR_UTLS_LOW_WMARK_DEK_CACHE_SIZE);
 #endif /* DEFINED_UTLS */
 #if defined(DEFINED_NGINX)
     VLOG_PARAM_NUMBER("Number of Nginx workers",
