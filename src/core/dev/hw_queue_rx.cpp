@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2001-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -212,7 +212,7 @@ void hw_queue_rx::release_rx_buffers()
                  m_last_posted_rx_wr_id);
     uintptr_t last_polled_rx_wr_id = 0;
     while (m_p_cq_mgr_rx && last_polled_rx_wr_id != m_last_posted_rx_wr_id && errno != EIO &&
-           && !is_rq_empty() && !m_p_ib_ctx_handler->is_removed()) {
+           !is_rq_empty() && !m_p_ib_ctx_handler->is_removed()) {
 
         // Process the FLUSH'ed WQE's
         int ret = m_p_cq_mgr_rx->drain_and_proccess(&last_polled_rx_wr_id);

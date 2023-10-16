@@ -200,7 +200,7 @@ public:
         m_size = TLS_RECORD_HDR_LEN + TLS_RECORD_TAG_LEN;
         m_p_data = nullptr;
         tls_sock->get_record_buf(m_p_buf, m_p_data, zc_owner != nullptr);
-        if (likely(m_p_buf)) {
+        if (likely(m_p_buf) && likely(m_p_data)) {
             if (iv) {
                 m_size += TLS_RECORD_IV_LEN;
                 memcpy(&m_p_data[5], iv, TLS_RECORD_IV_LEN);
@@ -567,11 +567,6 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
     default:
         si_ulp_logdbg("Unsupported TLS cipher ID: %u.", base_info->cipher_type);
         errno = ENOPROTOOPT;
-        return -1;
-    }
-
-    if (unlikely(keylen > TLS_AES_GCM_KEY_MAX)) {
-        errno = EINVAL;
         return -1;
     }
 

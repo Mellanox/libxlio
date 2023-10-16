@@ -128,6 +128,7 @@ rfs::rfs(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *rule_fil
          uint32_t flow_tag_id /*=0*/)
     : m_flow_tuple(rule_filter ? rule_filter->m_flow_tuple : *flow_spec_5t)
     , m_p_ring(p_ring)
+    , m_p_ring_simple(dynamic_cast<ring_simple *>(p_ring))
     , m_p_rule_filter(rule_filter)
     , m_n_sinks_list_entries(0)
     , m_n_sinks_list_max_length(RFS_SINKS_LIST_DEFAULT_LEN)
@@ -320,7 +321,11 @@ bool rfs::detach_flow(pkt_rcvr_sink *sink)
 
 rfs_rule *rfs::create_rule(xlio_tir *tir, const flow_tuple &flow_spec)
 {
-    auto *hqrx = dynamic_cast<ring_simple *>(m_p_ring)->m_hqrx;
+    if (!m_p_ring_simple) {
+        rfs_logpanic("Incompatible ring type");
+    }
+
+    auto *hqrx = m_p_ring_simple->m_hqrx;
 
     dpcp::match_params match_value_tmp;
     dpcp::match_params match_mask_tmp;
@@ -352,8 +357,12 @@ rfs_rule *rfs::create_rule(xlio_tir *tir, const flow_tuple &flow_spec)
 
 bool rfs::create_flow()
 {
-    m_rfs_flow = dynamic_cast<ring_simple *>(m_p_ring)->m_hqrx->create_rfs_rule(
-        m_match_value, m_match_mask, m_priority, m_flow_tag_id, nullptr);
+    if (!m_p_ring_simple) {
+        rfs_logpanic("Incompatible ring type");
+    }
+
+    m_rfs_flow = m_p_ring_simple->m_hqrx->create_rfs_rule(m_match_value, m_match_mask, m_priority,
+                                                          m_flow_tag_id, nullptr);
     if (!m_rfs_flow) {
         rfs_logerr("Create RFS flow failed, Tag: %" PRIu32 ", Flow: %s, Priority: %" PRIu16
                    ", errno: %d - %m",
@@ -389,14 +398,12 @@ bool rfs::destroy_flow()
 
 void rfs::prepare_flow_spec_eth_ip(const ip_address &dst_ip, const ip_address &src_ip)
 {
-    ring_simple *p_ring = dynamic_cast<ring_simple *>(m_p_ring);
-
-    if (!p_ring) {
+    if (!m_p_ring_simple) {
         rfs_logpanic("Incompatible ring type");
     }
 
-    m_match_value.vlan_id = p_ring->m_hqrx->get_vlan() & VLAN_VID_MASK;
-    m_match_mask.vlan_id = (p_ring->m_hqrx->get_vlan() ? VLAN_VID_MASK : 0);
+    m_match_value.vlan_id = m_p_ring_simple->m_hqrx->get_vlan() & VLAN_VID_MASK;
+    m_match_mask.vlan_id = (m_p_ring_simple->m_hqrx->get_vlan() ? VLAN_VID_MASK : 0);
 
     bool is_ipv4 = (m_flow_tuple.get_family() == AF_INET);
     if (is_ipv4) {

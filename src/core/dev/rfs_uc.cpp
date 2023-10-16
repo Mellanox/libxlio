@@ -65,12 +65,15 @@ rfs_uc::rfs_uc(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *ru
 
 void rfs_uc::prepare_flow_spec()
 {
+    if (!m_p_ring_simple) {
+        rfs_logpanic("Incompatible ring type");
+    }
+
     prepare_flow_spec_eth_ip(m_flow_tuple.get_dst_ip(), m_flow_tuple.get_src_ip());
     prepare_flow_spec_tcp_udp();
 
     memset(&m_match_mask.dst_mac, 0xFF, sizeof(m_match_mask.dst_mac));
-    memcpy(&m_match_value.dst_mac,
-           dynamic_cast<ring_simple *>(m_p_ring)->m_p_l2_addr->get_address(),
+    memcpy(&m_match_value.dst_mac, m_p_ring_simple->m_p_l2_addr->get_address(),
            sizeof(m_match_value.dst_mac));
 
     if (m_flow_tuple.get_src_port() || !m_flow_tuple.get_src_ip().is_anyaddr()) {
@@ -94,14 +97,13 @@ void rfs_uc::prepare_flow_spec()
                 src_port = g_p_app->get_worker_id();
             }
 
-            m_match_mask.src_port = static_cast<uint16_t>(
-                (g_p_app->workers_pow2 * g_p_app->src_port_stride) - 2);
-            m_match_value.src_port =
-                static_cast<uint16_t>(src_port * g_p_app->src_port_stride);
+            m_match_mask.src_port =
+                static_cast<uint16_t>((g_p_app->workers_pow2 * g_p_app->src_port_stride) - 2);
+            m_match_value.src_port = static_cast<uint16_t>(src_port * g_p_app->src_port_stride);
 
             m_priority = 1;
-            rfs_logdbg("src_port_stride: %d workers_num %d \n",
-                       g_p_app->src_port_stride, g_p_app->workers_num);
+            rfs_logdbg("src_port_stride: %d workers_num %d \n", g_p_app->src_port_stride,
+                       g_p_app->workers_num);
             rfs_logdbg("sp_tcp_udp->val.src_port: %d p_tcp_udp->mask.src_port %d \n",
                        m_match_value.src_port, m_match_mask.src_port);
 
@@ -110,7 +112,8 @@ void rfs_uc::prepare_flow_spec()
     }
 #endif
 
-    rfs_logfunc("Transport type: %d, flow_tag_id: %d", p_ring->get_transport_type(), m_flow_tag_id);
+    rfs_logfunc("Transport type: %d, flow_tag_id: %d", m_p_ring_simple->get_transport_type(),
+                m_flow_tag_id);
 }
 
 bool rfs_uc::rx_dispatch_packet(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array)
