@@ -286,7 +286,6 @@ void cq_mgr_rx::lro_update_hdr(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_w
             (struct ip6_hdr *)(p_rx_wc_buf_desc->p_buffer + transport_header_len);
 
         assert(0x01 == ((cqe->l4_hdr_type_etc >> 2) & 0x3)); // IPv6 L3 header.
-        assert(ip_header_version(p_ip6_h) == IPV6);
         assert(p_ip6_h->ip6_nxt == IPPROTO_TCP);
         assert(ntohl(cqe->byte_cnt) >= transport_header_len + IPV6_HLEN);
 
