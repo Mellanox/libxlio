@@ -855,6 +855,8 @@ protected:
  */
 TEST_P(tcp_with_fifo, accepted_socket_inherits_the_setsockopt_param)
 {
+    SKIP_TRUE(!getenv("XLIO_TCP_CTL_THREAD"), "Skip non default XLIO_TCP_CTL_THREAD");
+
     int level, optname, value;
     std::tie(level, optname, value) = GetParam();
     pid_t pid = fork();

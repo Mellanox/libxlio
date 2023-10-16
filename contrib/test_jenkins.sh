@@ -100,9 +100,12 @@ do_check_env
 # set predefined configuration settings and extra options
 # that depend on environment
 #
+
 TARGET=${TARGET:=all}
 i=0
 if [ "$TARGET" == "all" -o "$TARGET" == "default" ]; then
+    export jenkins_target="default"
+    export prefix=${jenkins_test_custom_prefix}/${jenkins_target}
     do_check_dpcp opt_value
     if [ ! -z "${opt_value}" ]; then
         target_list[$i]="default: --enable-nginx --with-dpcp=${opt_value}"
@@ -126,9 +129,11 @@ for target_v in "${target_list[@]}"; do
     ret=0
     IFS=':' read target_name target_option <<< "$target_v"
 
+    export jenkins_target="${target_name}"
+    export prefix=${jenkins_test_custom_prefix}/${jenkins_target}
     export jenkins_test_artifacts="${WORKSPACE}/${prefix}/xlio-${BUILD_NUMBER}-${HOSTNAME}-${target_name}"
     export jenkins_test_custom_configure="${jenkins_test_custom_configure} ${target_option}"
-    export jenkins_target="${target_name}"
+
     set +x
     echo "======================================================"
     echo " Checking for [${jenkins_target}] target"

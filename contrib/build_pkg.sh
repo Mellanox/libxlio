@@ -31,6 +31,10 @@ while test "$1" != ""; do
             arg_rpm="${arg_deb/=/ }"
             opt_exports="$opt_exports :$arg_deb";
             opt_defines="$opt_defines --define='$arg_rpm'";
+            if [[ $arg_deb =~ ^configure_options[[:blank:]]*= ]]; then
+                shopt -s extglob
+                opt_conf_val="${arg_deb##configure_options*([[:blank:]])=}"
+            fi
             shift
             ;;
         *)
@@ -110,7 +114,7 @@ cd ${pkg_dir}
 
 if [ "$rc" -eq 0 ]; then
     echo ${pkg_label} "Running ./configure ..."
-    ${pkg_indir}/configure >> ${pkg_log} 2>&1
+    ${pkg_indir}/configure $opt_conf_val >> ${pkg_log} 2>&1
     rc=$((rc + $?))
 fi
 
