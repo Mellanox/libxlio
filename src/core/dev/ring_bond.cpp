@@ -292,13 +292,16 @@ void ring_bond::restart()
                     ring_logdbg("ring %d active", i);
                     if (slaves[j]->lag_tx_port_affinity != 1) {
                         tmp_ring->start_active_queue_tx();
+                        /* coverity[sleep] */
                         tmp_ring->start_active_queue_rx();
                     }
                     m_bond_rings[i]->m_active = true;
                 } else {
                     ring_logdbg("ring %d not active", i);
                     if (slaves[j]->lag_tx_port_affinity != 1) {
+                        /* coverity[sleep] */
                         tmp_ring->stop_active_queue_tx();
+                        /* coverity[sleep] */
                         tmp_ring->stop_active_queue_rx();
                     }
                     m_bond_rings[i]->m_active = false;

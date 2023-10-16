@@ -301,7 +301,7 @@ int hw_queue_tx::configure(const slave_data_t *slave)
         }
     }
 #endif /* DEFINED_ROCE_LAG */
-
+    NOT_IN_USE(slave);
     return 0;
 }
 
@@ -1053,7 +1053,8 @@ void hw_queue_tx::nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno)
 }
 
 #if defined(DEFINED_UTLS)
-std::unique_ptr<dpcp::tls_dek> hw_queue_tx::get_new_tls_dek(const void *key, uint32_t key_size_bytes)
+std::unique_ptr<dpcp::tls_dek> hw_queue_tx::get_new_tls_dek(const void *key,
+                                                            uint32_t key_size_bytes)
 {
     dpcp::tls_dek *_dek = nullptr;
     dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
