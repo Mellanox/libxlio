@@ -40,7 +40,7 @@ runs_on_dockers:
   - {name: 'rhel8.6-mofed-x86_64',  url: 'harbor.mellanox.com/hpcx/x86_64/rhel8.6/builder:mofed-5.6-0.4.5.0', category: 'base', arch: 'x86_64'}
 #  - {name: 'oracle8.6-mofed-x86_64',  url: 'harbor.mellanox.com/rivermax/base_oraclelinux8.6:mofed-5.9-0.3.4.0', category: 'base', arch: 'x86_64'}
 # tool
-  - {name: 'toolbox', url: 'harbor.mellanox.com/hpcx/x86_64/rhel8.3/builder:inbox', category: 'tool', arch: 'x86_64'}
+  - {name: 'toolbox', url: 'harbor.mellanox.com/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
   - {name: 'blackduck', url: 'harbor.mellanox.com/toolbox/ngci-centos:7.9.2009.2', category: 'tool', arch: 'x86_64'}
   - {name: 'header-check', url: 'harbor.mellanox.com/toolbox/header_check:0.0.14', category: 'tool', arch: 'x86_64', tag: '0.0.14'}
 
@@ -216,7 +216,7 @@ steps:
     containerSelector:
       - "{name: 'skip-container'}"
     agentSelector:
-      - "{nodeLabel: 'beni09', variant:2}"
+      - "{nodeLabel: 'beni09'}"
     run: |
       [ "x${do_cppcheck}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_cppcheck=${action} ./contrib/test_jenkins.sh
@@ -233,7 +233,7 @@ steps:
     containerSelector:
       - "{name: 'skip-container'}"
     agentSelector:
-      - "{nodeLabel: 'beni09', variant:2}"
+      - "{nodeLabel: 'beni09'}"
     run: |
       [ "x${do_csbuild}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_csbuild=${action} ./contrib/test_jenkins.sh
@@ -250,7 +250,7 @@ steps:
     containerSelector:
       - "{name: 'skip-container'}"
     agentSelector:
-      - "{nodeLabel: 'beni09', variant:2}"
+      - "{nodeLabel: 'beni09'}"
     run: |
       [ "x${do_tidy}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_tidy=${action} ./contrib/test_jenkins.sh
@@ -267,7 +267,7 @@ steps:
     containerSelector:
       - "{name: 'skip-container'}"
     agentSelector:
-      - "{nodeLabel: 'beni09', variant:2}"
+      - "{nodeLabel: 'beni09'}"
     run: |
       [ "x${do_test}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_run=${action} ./contrib/test_jenkins.sh
@@ -303,7 +303,7 @@ steps:
     containerSelector:
       - "{name: 'skip-container'}"
     agentSelector:
-      - "{nodeLabel: 'beni09', variant:2}"
+      - "{nodeLabel: 'beni09'}"
     run: |
       [ "x${do_valgrind}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_vg=${action} ./contrib/test_jenkins.sh

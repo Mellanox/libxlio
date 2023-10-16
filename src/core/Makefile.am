@@ -199,6 +199,7 @@ libxlio_la_SOURCES := \
 	dev/ring_tap.h \
 	dev/ring_allocation_logic.h \
 	dev/wqe_send_handler.h \
+	dev/xlio_ti.h \
 	\
 	event/command.h \
 	event/delta_timer.h \

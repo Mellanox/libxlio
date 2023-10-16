@@ -36,7 +36,6 @@
 #include <vector>
 #include "common/def.h"
 #include "common/base.h"
-#include "dev/hw_queue_tx.h"
 #include "proto/nvme_parse_input_args.h"
 #include "tcp/tcp_base.h"
 #include "xlio_extra.h"
@@ -352,8 +351,8 @@ protected:
     vector<mr> mrs;
     int client_fd;
     bool nvme_supported = true;
-    msghdr *msg;
-    uint8_t *cmsg_buffer;
+    msghdr *msg = nullptr;
+    uint8_t *cmsg_buffer = nullptr;
     vector<iovec> msghdr_iov {};
 
     void TearDown() override
@@ -367,6 +366,36 @@ protected:
             delete cmsg_buffer;
         }
         msghdr_iov.clear();
+    }
+
+    bool is_nvme_supported()
+    {
+        bool nvme_support = false;
+        int pid = fork();
+        if (0 != pid) {
+            int cfd = tcp_base::sock_create();
+            int rc = bind(cfd, (sockaddr *)&client_addr, sizeof(client_addr));
+            barrier_fork(pid, true);
+            rc |= connect(cfd, (sockaddr *)&server_addr, sizeof(server_addr));
+            rc |= setsockopt(cfd, IPPROTO_TCP, TCP_ULP, "nvme", 4);
+            nvme_support = (rc == 0);
+            close(cfd);
+            wait_fork(pid);
+        } else { // I am the child
+            int listen_fd = tcp_base::sock_create();
+            int reuse_on = 1;
+            int rc = setsockopt(listen_fd, SOL_SOCKET, SO_REUSEPORT, &reuse_on, sizeof(reuse_on));
+            rc |= bind(listen_fd, (sockaddr *)&server_addr, sizeof(server_addr));
+            rc |= listen(listen_fd, 5);
+            barrier_fork(pid, true);
+            int server_fd = accept(listen_fd, nullptr, nullptr);
+            peer_wait(server_fd);
+            close(server_fd);
+            close(listen_fd);
+            exit(testing::Test::HasFailure());
+        }
+
+        return nvme_support;
     }
 
     void client_socket_create()
@@ -520,6 +549,9 @@ protected:
 
 TEST_F(nvme_tx, send_single_pdu)
 {
+    SKIP_TRUE(is_nvme_supported(), "NVME offload not supported");
+    SKIP_TRUE(!getenv("XLIO_TCP_CTL_THREAD"), "Skip non default XLIO_TCP_CTL_THREAD");
+
     int pid = fork();
     uint32_t empty_ddgst;
 
@@ -541,6 +573,9 @@ TEST_F(nvme_tx, send_single_pdu)
 
 TEST_F(nvme_tx, send_multiple_pdus)
 {
+    SKIP_TRUE(is_nvme_supported(), "NVME offload not supported");
+    SKIP_TRUE(!getenv("XLIO_TCP_CTL_THREAD"), "Skip non default XLIO_TCP_CTL_THREAD");
+
     int pid = fork();
     uint32_t empty_ddgst;
 
