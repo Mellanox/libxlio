@@ -108,16 +108,16 @@ public:
     void dm_release_data(mem_buf_desc_t *buff) { m_dm_mgr.release_data(buff); }
 
 #ifdef DEFINED_UTLS
-    xlio_tis *tls_context_setup_tx(const xlio_tls_info *info) override;
-    xlio_tir *tls_create_tir(bool cached) override;
+    xlio_tis *tls_context_setup_tx(const xlio_tls_info *info);
+    xlio_tir *tls_create_tir(bool cached);
     int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t next_record_tcp_sn,
                              xlio_comp_cb_t callback, void *callback_arg);
-    void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static) override;
-    void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn) override;
-    void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey) override;
-    void tls_release_tis(xlio_tis *tis) override;
-    void tls_release_tir(xlio_tir *tir) override;
-    void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first) override;
+    void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static);
+    void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn);
+    void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey);
+    void tls_release_tis(xlio_tis *tis);
+    void tls_release_tir(xlio_tir *tir);
+    void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first);
 #endif /* DEFINED_UTLS */
 
 #define DPCP_TIS_FLAGS     (dpcp::TIS_ATTR_TRANSPORT_DOMAIN | dpcp::TIS_ATTR_PD)

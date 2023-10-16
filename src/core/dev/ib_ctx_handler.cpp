@@ -75,8 +75,8 @@ ib_ctx_handler::ib_ctx_handler(struct ib_ctx_handler_desc *desc)
     m_p_ibv_context = NULL;
     m_p_adapter = set_dpcp_adapter();
     if (!m_p_adapter) {
-        ibch_logpanic("ibv device %p adapter allocation failure (errno=%d %m)",
-                      m_p_ibv_device, errno);
+        ibch_logpanic("ibv device %p adapter allocation failure (errno=%d %m)", m_p_ibv_device,
+                      errno);
     }
     VALGRIND_MAKE_MEM_DEFINED(m_p_ibv_pd, sizeof(struct ibv_pd));
 
@@ -342,12 +342,13 @@ err:
     return m_p_adapter;
 }
 
-void ib_ctx_handler::check_capabilities() {
+void ib_ctx_handler::check_capabilities()
+{
     dpcp::adapter_hca_capabilities caps;
     dpcp::status rc = m_p_adapter->get_hca_capabilities(caps);
     if (rc == dpcp::DPCP_OK) {
         set_flow_tag_capability(caps.flow_table_caps.receive.is_flow_action_tag_supported);
-        ibch_logerr("Flow Tag Support: %s", get_flow_tag_capability() ? "Yes" : "No");
+        ibch_logdbg("Flow Tag Support: %s", get_flow_tag_capability() ? "Yes" : "No");
     }
 }
 

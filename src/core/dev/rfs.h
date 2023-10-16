@@ -106,6 +106,7 @@ public:
 protected:
     flow_tuple m_flow_tuple;
     ring_slave *m_p_ring;
+    ring_simple *m_p_ring_simple;
     rfs_rule_filter *m_p_rule_filter;
     rfs_rule *m_rfs_flow = nullptr;
     pkt_rcvr_sink **m_sinks_list;
