@@ -152,6 +152,7 @@ Example:
  XLIO DETAILS: Buffer batching mode           1 (Batch and reclaim buffers) [XLIO_BUFFER_BATCHING_MODE]
  XLIO DETAILS: Mem Allocation type            Huge pages                 [XLIO_MEM_ALLOC_TYPE]
  XLIO DETAILS: Memory limit                   2 GB                       [XLIO_MEMORY_LIMIT]
+ XLIO DETAILS: Memory limit (user allocator)  0                          [XLIO_MEMORY_LIMIT_USER]
  XLIO DETAILS: Num of UC ARPs                 3                          [XLIO_NEIGH_UC_ARP_QUATA]
  XLIO DETAILS: UC ARP delay (msec)            10000                      [XLIO_NEIGH_UC_ARP_DELAY_MSEC]
  XLIO DETAILS: Num of neigh restart retries   1                          [XLIO_NEIGH_NUM_ERR_RETRIES]
@@ -955,6 +956,12 @@ dynamic memory allocation and XLIO memory consumption can exceed the limit.
 Default value is 2GB
 
 The following XLIO neigh parameters are for advanced users or internal support only:
+
+XLIO_MEMORY_LIMIT_USER
+Memory limit for external user allocator. The user allocator can optionally be
+provided with XLIO extra API. Default value 0 makes XLIO use XLIO_MEMORY_LIMIT
+value for user allocations.
+Default value is 0
 
 XLIO_NEIGH_UC_ARP_QUATA
 XLIO will send UC ARP in case neigh state is NUD_STALE.
