@@ -1,3 +1,12 @@
+Version 3.20.6-1:
+Date + Time 2023-10-17
+=============================================================
+Fixed:
+        - RM #3600396 Handle empty IP list
+        - RM #3486961 Connection creation time improvement
+        - RM #3588192 Blocking API hanging with delegated TCP timers
+        - RM #3580073 Print XLIO_MEMORY_LIMIT_USER in the XLIO header
+
 Version 3.20.5-1:
 Date + Time 2023-10-05
 =============================================================
