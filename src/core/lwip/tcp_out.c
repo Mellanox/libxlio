@@ -413,9 +413,10 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
     }
     queuelen = pcb->snd_queuelen;
 
-    mss_local = tcp_xmit_size_goal(pcb, 1);
     if (is_zerocopy) {
         mss_local = lwip_zc_tx_size;
+    } else {
+        mss_local = tcp_xmit_size_goal(pcb, 1);
     }
 
     optflags |= (apiflags & TCP_WRITE_DUMMY) ? TF_SEG_OPTS_DUMMY_MSG : 0;
@@ -474,9 +475,10 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
 
         /* Usable space at the end of the last unsent segment */
         unsent_optlen = LWIP_TCP_OPT_LENGTH(pcb->last_unsent->flags);
-        if (!pcb->last_unsent->p || (pcb->last_unsent->p->type == type)) {
-            LWIP_ASSERT("mss_local is too small",
-                        mss_local >= pcb->last_unsent->len + unsent_optlen);
+        if ((pcb->last_unsent->p->type == type) &&
+            (mss_local > pcb->last_unsent->len + unsent_optlen) &&
+            (TCP_SEQ_GEQ(pcb->last_unsent->seqno, pcb->snd_nxt)) &&
+            (pcb->last_unsent->seqno + pcb->last_unsent->len == pcb->snd_lbb)) {
             space = mss_local - (pcb->last_unsent->len + unsent_optlen);
         } else {
             space = 0;
@@ -526,11 +528,6 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
             (tot_p < (int)pcb->tso.max_send_sge)) {
 
             u16_t seglen = space < len - pos ? space : len - pos;
-
-            /* Create a pbuf with a copy or reference to seglen bytes. We
-             * can use PBUF_RAW here since the data appears in the middle of
-             * a segment. A header will never be prepended. */
-            /* Data is copied */
             if ((concat_p = tcp_pbuf_prealloc(seglen, space, &oversize, pcb, type,
                                               TCP_WRITE_FLAG_MORE, 1, desc, NULL)) == NULL) {
                 LWIP_DEBUGF(
