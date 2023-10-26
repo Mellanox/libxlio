@@ -2913,17 +2913,18 @@ int sockinfo_tcp::listen(int backlog)
 
     int orig_backlog = backlog;
 
-    /* If listen() is called with a backlog argument value that is less than 0,
-     * the function behaves as if it had been called with a backlog argument value of 0.
-     * A backlog argument of 0 may allow the socket to accept connections,
-     * in which case the length of the listen queue may be set to an implementation-defined
-     * minimum value.
-     * Note:
-     *   backlog behaivour depends on m_sysvar_tcp_ctl_thread status
+    /* Linux manual doesn't describe negative backlog value, however, kernel implementation treats
+     * it as the maximum allowed backlog.
+     * A backlog argument of 0 may allow the socket to accept connections, in which case the length
+     * of the listen queue may be set to an implementation-defined minimum value.
+     * Note: backlog behavior depends on m_sysvar_tcp_ctl_thread status.
      */
-    if (backlog <= 0) {
-        si_tcp_logdbg("changing listen backlog=%d to the minimum=%d", backlog, 1);
+    if (backlog < 0) {
+        backlog = safe_mce_sys().sysctl_reader.get_listen_maxconn();
+        si_tcp_logdbg("changing listen backlog=%d to the maximum=%d", orig_backlog, backlog);
+    } else if (backlog == 0) {
         backlog = 1;
+        si_tcp_logdbg("changing listen backlog=%d to the minimum=%d", orig_backlog, backlog);
     } else {
         if (backlog >= 5 && backlog < 128) {
             backlog = 10 + 2 * backlog; // TODO: this place is not clear
@@ -2932,9 +2933,8 @@ int sockinfo_tcp::listen(int backlog)
          * then the backlog for that listener will be silently truncated to the somaxconn value.
          */
         if (backlog > safe_mce_sys().sysctl_reader.get_listen_maxconn()) {
-            si_tcp_logdbg("truncating listen backlog=%d to the maximun=%d", backlog,
-                          safe_mce_sys().sysctl_reader.get_listen_maxconn());
             backlog = safe_mce_sys().sysctl_reader.get_listen_maxconn();
+            si_tcp_logdbg("truncating listen backlog=%d to the maximun=%d", orig_backlog, backlog);
         }
     }
     lock_tcp_con();
