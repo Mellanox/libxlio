@@ -39,10 +39,6 @@
 
 #define MODULE_NAME "rfs_rule_dpcp"
 
-rfs_rule_dpcp::~rfs_rule_dpcp()
-{
-}
-
 bool rfs_rule_dpcp::create(const xlio_ibv_flow_attr &attrs, dpcp::tir &in_tir,
                            dpcp::adapter &in_adapter)
 {

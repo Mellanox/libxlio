@@ -47,7 +47,7 @@ using namespace std;
 
 class rfs_rule_dpcp : public rfs_rule {
 public:
-    virtual ~rfs_rule_dpcp();
+    virtual ~rfs_rule_dpcp() = default;
 
     bool create(const xlio_ibv_flow_attr &attrs, dpcp::tir &in_tir, dpcp::adapter &in_adapter);
 

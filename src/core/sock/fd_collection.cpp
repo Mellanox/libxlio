@@ -530,12 +530,12 @@ int fd_collection::del_sockfd(int fd, bool b_cleanup /*=false*/, bool is_for_udp
         // so we have to stages:
         // 1. Prepare to close: kikstarts TCP connection termination
         // 2. Socket deletion when TCP connection == CLOSED
-        if (p_sfd_api->prepare_to_close()) {
+        if (p_sfd_api->prepare_to_close() && !safe_mce_sys().deferred_close) {
             // the socket is already closable
             ret_val = del(fd, b_cleanup, m_p_sockfd_map);
         } else {
             lock();
-            // The socket is not ready for close.
+            // Handle the socket removal in the internal thread.
             // Delete it from fd_col and add it to pending_to_remove list.
             // This socket will be handled and destroyed now by fd_col.
             // This will be done from fd_col timer handler.
