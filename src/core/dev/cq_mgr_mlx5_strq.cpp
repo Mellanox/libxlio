@@ -577,7 +577,8 @@ void cq_mgr_mlx5_strq::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
                 if (unlikely(buff->lwip_pbuf.pbuf.desc.attr != PBUF_DESC_STRIDE)) {
                     __log_info_err("CQ STRQ reclaim_recv_buffer_helper with incompatible "
                                    "mem_buf_desc_t object");
-                    continue;
+                    // We cannot continue iterating over a broken buffer object.
+                    break;
                 }
 
                 mem_buf_desc_t *rwqe =
