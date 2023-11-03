@@ -426,9 +426,9 @@ extern "C" EXPORT_SYMBOL int listen(int __fd, int backlog)
          * Socket handling
          * Envoy uses the following procedure for creating sockets and assigning them to workers.
          *
-         * When a listener is created, a socket is pre-created for every worker on the main thread. This
-         * allows most errors to be caught early on in the listener creation process (e.g., bad socket
-         * option, unable to bind, etc.).
+         * When a listener is created, a socket is pre-created for every worker on the main thread.
+         * This allows most errors to be caught early on in the listener creation process (e.g., bad
+         * socket option, unable to bind, etc.).
          * - If using reuse_port, a unique socket is created for every worker.
          * - If not using reuse_port, a unique socket is created for worker 0, and then that socket
          * is duplicated for all other workers.
@@ -443,7 +443,7 @@ extern "C" EXPORT_SYMBOL int listen(int __fd, int backlog)
          * listen() call for duplicated fds are ignored.
          * Original listen socket is not ignored by listen() function.
          * - reuse_port(true) :
-         * No support
+         * dup() is not used. Unique socket is created for every worker.
          *
          * Store all duplicated fd in map_dup_fd with reference to original fd
          * Store all listen fd in map_listen_fd with tid
