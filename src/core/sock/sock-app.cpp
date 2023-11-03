@@ -180,7 +180,6 @@ int app_conf::proc_envoy(int __op, int __fd)
         } else if (__op == EPOLL_CTL_DEL) {
             std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
             g_p_app->map_listen_fd.erase(__fd);
-            g_p_app->map_thread_id.erase(gettid());
         }
     }
 
