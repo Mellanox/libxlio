@@ -192,11 +192,13 @@ public:
         m_flow_tag_id = FLOW_TAG_MASK;
         return false;
     }
+    inline bool get_reuseaddr(void) { return m_reuseaddr; }
+    inline bool get_reuseport(void) { return m_reuseport; }
     inline bool flow_tag_enabled(void) { return m_flow_tag_enabled; }
     inline int get_rx_epfd(void) { return m_rx_epfd; }
     inline bool is_blocking(void) { return m_b_blocking; }
 
-    virtual bool flow_in_reuse(void) { return false; };
+    bool flow_in_reuse(void) { return m_reuseaddr | m_reuseport; }
     virtual int *get_rings_fds(int &res_length);
     virtual int get_rings_num();
     virtual bool check_rings() { return m_p_rx_ring ? true : false; }
@@ -560,6 +562,8 @@ public:
     rfs *rfs_ptr = nullptr;
 
 protected:
+    bool m_reuseaddr; // to track setsockopt with SO_REUSEADDR
+    bool m_reuseport; // to track setsockopt with SO_REUSEPORT
     bool m_flow_tag_enabled; // for this socket
     bool m_b_blocking;
     bool m_b_pktinfo;
