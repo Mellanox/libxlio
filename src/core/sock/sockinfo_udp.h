@@ -106,10 +106,6 @@ public:
     int multicast_membership_setsockopt_ip6(int optname, const void *optval, socklen_t optlen);
     inline int fill_mreq_with_ix(void *mreq, int if_index, bool is_ipv6);
 
-    inline void set_reuseaddr(bool reuseaddr) { m_reuseaddr = reuseaddr; }
-    inline void set_reuseport(bool reuseport) { m_reuseport = reuseport; }
-    virtual bool flow_in_reuse(void) { return m_reuseaddr | m_reuseport; }
-
     /**
      * Sampling the OS immediately by matching the rx_skip_os counter
      * (m_rx_udp_poll_os_ratio_counter) to the limit (safe_mce_sys().rx_udp_poll_os_ratio)
@@ -304,8 +300,6 @@ private:
     const uint32_t m_n_sysvar_rx_cq_drain_rate_nsec;
     const uint32_t m_n_sysvar_rx_delta_tsc_between_cq_polls;
 
-    bool m_reuseaddr; // to track setsockopt with SO_REUSEADDR
-    bool m_reuseport; // to track setsockopt with SO_REUSEPORT
     bool m_sockopt_mapped; // setsockopt IPPROTO_UDP UDP_MAP_ADD
     bool m_is_connected; // to inspect for in_addr.src
     bool m_multicast; // true when socket set MC rule

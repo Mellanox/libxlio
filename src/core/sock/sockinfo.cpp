@@ -61,6 +61,8 @@
 
 sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     : socket_fd_api(fd)
+    , m_reuseaddr(false)
+    , m_reuseport(false)
     , m_flow_tag_enabled(false)
     , m_b_blocking(true)
     , m_b_pktinfo(false)
@@ -425,6 +427,19 @@ int sockinfo::setsockopt(int __level, int __optname, const void *__optval, sockl
                           "optval == NULL");
             }
             break;
+
+        case SO_REUSEADDR:
+            m_reuseaddr = *(bool *)__optval;
+            si_logdbg("SOL_SOCKET, %s=%s", setsockopt_so_opt_to_str(__optname),
+                          (*(bool *)__optval ? "true" : "false"));
+            break;
+
+        case SO_REUSEPORT:
+            m_reuseport = *(bool *)__optval;
+            si_logdbg("SOL_SOCKET, %s=%s", setsockopt_so_opt_to_str(__optname),
+                          (*(bool *)__optval ? "true" : "false"));
+            break;
+
         case SO_TIMESTAMP:
         case SO_TIMESTAMPNS:
             if (__optval) {

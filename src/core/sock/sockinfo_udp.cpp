@@ -390,8 +390,6 @@ sockinfo_udp::sockinfo_udp(int fd, int domain)
     , m_n_sysvar_rx_ready_byte_min_limit(safe_mce_sys().rx_ready_byte_min_limit)
     , m_n_sysvar_rx_cq_drain_rate_nsec(safe_mce_sys().rx_cq_drain_rate_nsec)
     , m_n_sysvar_rx_delta_tsc_between_cq_polls(safe_mce_sys().rx_delta_tsc_between_cq_polls)
-    , m_reuseaddr(false)
-    , m_reuseport(false)
     , m_sockopt_mapped(false)
     , m_is_connected(false)
     , m_multicast(false)
@@ -752,18 +750,6 @@ int sockinfo_udp::setsockopt(int __level, int __optname, __const void *__optval,
 
     case SOL_SOCKET: {
         switch (__optname) {
-
-        case SO_REUSEADDR:
-            set_reuseaddr(*(bool *)__optval);
-            si_udp_logdbg("SOL_SOCKET, %s=%s", setsockopt_so_opt_to_str(__optname),
-                          (*(bool *)__optval ? "true" : "false"));
-            break;
-
-        case SO_REUSEPORT:
-            set_reuseport(*(bool *)__optval);
-            si_udp_logdbg("SOL_SOCKET, %s=%s", setsockopt_so_opt_to_str(__optname),
-                          (*(bool *)__optval ? "true" : "false"));
-            break;
 
         case SO_BROADCAST:
             si_udp_logdbg("SOL_SOCKET, %s=%s", setsockopt_so_opt_to_str(__optname),
