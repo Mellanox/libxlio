@@ -1075,7 +1075,7 @@ retry_is_ready:
 
                 /* Set return values for nonblocking socket and finish processing */
                 if (!block_this_run) {
-                    // non blocking socket should return inorder not to tx_wait()
+                    // non blocking socket should return in order not to tx_wait()
                     if (total_tx > 0) {
                         m_tx_consecutive_eagain_count = 0;
                         goto done;
@@ -5052,9 +5052,9 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
     }
 
     if (m_sysvar_tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
-        // There are scenarios when rx_wait_helper is called in an infinte loop but exists before
-        // OS epoll_wait. Delegated TPC timers must be attempted in such case.
-        // This is a slow path. So calling chrono::now(), even with every iterantion, is OK here.
+        // There are scenarios when rx_wait_helper is called in an infinite loop but exits before
+        // OS epoll_wait. Delegated TCP timers must be attempted in such case.
+        // This is a slow path. So calling chrono::now(), even with every iteration, is OK here.
         g_thread_local_event_handler.do_tasks();
     }
 
