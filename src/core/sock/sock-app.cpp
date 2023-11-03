@@ -123,14 +123,9 @@ int app_conf::proc_envoy(int __op, int __fd)
             static int total_worker_id = 0;
             int worker_id = -1;
 
-            /* Check unsupported reuse port listener configuration setting */
-            sockinfo *si = static_cast<sockinfo *>(p_socket_object);
-            if (si && (si->get_reuseport() || g_p_app->map_dup_fd.empty())) {
-                app_logerr("Envoy 'enable_reuse_port = true' option is not supported");
-                return -1;
-            }
-
-            /* original listen sockets should be created first
+            /* This check is `enable_reuse_port = false` specific
+             *
+             * original listen sockets should be created first
              * original_listen_count count sockets that should be
              * processed until openning a door for others.
              * timer should be enough to complete initialization of
@@ -155,10 +150,13 @@ int app_conf::proc_envoy(int __op, int __fd)
                 total_worker_id++;
             }
 
-            /* This part should guarantee initialization of all listeners for worker 0.
+            /* This check is `enable_reuse_port = false` specific
+             *
+             * This part should guarantee initialization of all listeners for worker 0.
              * original_listen_count is initialized to number of them first.
              */
-            if (worker_id == 0) {
+            sockinfo *si = dynamic_cast<sockinfo *>(p_socket_object);
+            if (si && !si->get_reuseport() && worker_id == 0) {
                 if (original_listen_count == INT_MAX) {
                     original_listen_count = 0;
                     for (const auto &itr : g_p_app->map_dup_fd) {
@@ -192,6 +190,7 @@ int app_conf::proc_envoy(int __op, int __fd)
 
 static int init_worker(int worker_id, int listen_fd)
 {
+    NOT_IN_USE(worker_id);
     app_logdbg("worker: %d fd: %d", worker_id, listen_fd);
 
     int ret = 0;
@@ -200,17 +199,20 @@ static int init_worker(int worker_id, int listen_fd)
     fd_collection *p_fd_collection = (fd_collection *)g_p_app->context;
 
     /* Find information about parent socket
-     * Envoy:
+     * Envoy (enable_reuse_port = false):
      * - g_p_fd_collection has all actual fds
      * - worker 0 has socket object in g_p_fd_collection (parent fd)
      * - Other workers should find parent fd to create child socket objects
      *   basing on parent socket objects.
+     * Envoy (enable_reuse_port = true):
+     * - g_p_fd_collection has all actual fds
+     * - all workers have socket object in g_p_fd_collection (parent fd)
      * Nginx:
      * - should use fd_collection from parent process stored at g_p_app->context
      */
     if (g_p_app->type == APP_ENVOY) {
         p_fd_collection = g_p_fd_collection;
-        if (worker_id > 0) {
+        if (!p_fd_collection->get_sockfd(listen_fd)) {
             parent_fd = -1;
             const auto itr = g_p_app->map_dup_fd.find(listen_fd);
             if (itr != g_p_app->map_dup_fd.end()) {

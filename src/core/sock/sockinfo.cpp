@@ -429,15 +429,25 @@ int sockinfo::setsockopt(int __level, int __optname, const void *__optval, sockl
             break;
 
         case SO_REUSEADDR:
-            m_reuseaddr = *(bool *)__optval;
-            si_logdbg("SOL_SOCKET, %s=%s", setsockopt_so_opt_to_str(__optname),
-                          (*(bool *)__optval ? "true" : "false"));
+            if (__optval && __optlen == sizeof(int)) {
+                m_reuseaddr = *(int *)__optval;
+                si_logdbg("SOL_SOCKET, %s=%s", setsockopt_so_opt_to_str(__optname),
+                          (m_reuseaddr ? "true" : "false"));
+            } else {
+                errno = EINVAL;
+                ret = SOCKOPT_NO_XLIO_SUPPORT;
+            }
             break;
 
         case SO_REUSEPORT:
-            m_reuseport = *(bool *)__optval;
-            si_logdbg("SOL_SOCKET, %s=%s", setsockopt_so_opt_to_str(__optname),
-                          (*(bool *)__optval ? "true" : "false"));
+            if (__optval && __optlen == sizeof(int)) {
+                m_reuseport = *(bool *)__optval;
+                si_logdbg("SOL_SOCKET, %s=%s", setsockopt_so_opt_to_str(__optname),
+                          (m_reuseport ? "true" : "false"));
+            } else {
+                errno = EINVAL;
+                ret = SOCKOPT_NO_XLIO_SUPPORT;
+            }
             break;
 
         case SO_TIMESTAMP:
