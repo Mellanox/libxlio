@@ -123,6 +123,13 @@ int app_conf::proc_envoy(int __op, int __fd)
             static int total_worker_id = 0;
             int worker_id = -1;
 
+            /* Check unsupported reuse port listener configuration setting */
+            sockinfo *si = static_cast<sockinfo *>(p_socket_object);
+            if (si && (si->get_reuseport() || g_p_app->map_dup_fd.empty())) {
+                app_logerr("Envoy 'enable_reuse_port = true' option is not supported");
+                return -1;
+            }
+
             /* original listen sockets should be created first
              * original_listen_count count sockets that should be
              * processed until openning a door for others.
