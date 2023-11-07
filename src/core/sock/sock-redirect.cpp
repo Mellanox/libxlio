@@ -1220,21 +1220,6 @@ extern "C" EXPORT_SYMBOL ssize_t recvfrom(int __fd, void *__buf, size_t __nbytes
         BULLSEYE_EXCLUDE_BLOCK_END
         ret_val = orig_os_api.recvfrom(__fd, __buf, __nbytes, __flags, __from, __fromlen);
     }
-#ifdef RDTSC_MEASURE_RX_PROCCESS_BUFFER_TO_RECIVEFROM
-    RDTSC_TAKE_END(g_rdtsc_instr_info_arr[RDTSC_FLOW_PROCCESS_RX_BUFFER_TO_RECIVEFROM]);
-#endif // RDTSC_MEASURE_RX_PROCCESS_BUFFER_TO_RECIVEFROM
-
-#ifdef RDTSC_MEASURE_RX_LWIP_TO_RECEVEFROM
-    RDTSC_TAKE_END(g_rdtsc_instr_info_arr[RDTSC_FLOW_RX_LWIP_TO_RECEVEFROM]);
-#endif // RDTSC_MEASURE_RX_LWIP_TO_RECEVEFROM
-
-#ifdef RDTSC_MEASURE_RX_CQE_RECEIVEFROM
-    RDTSC_TAKE_END(g_rdtsc_instr_info_arr[RDTSC_FLOW_RX_CQE_TO_RECEIVEFROM]);
-#endif // RDTSC_MEASURE_RX_CQE_RECEIVEFROM
-
-#ifdef RDTSC_MEASURE_RECEIVEFROM_TO_SENDTO
-    RDTSC_TAKE_START(g_rdtsc_instr_info_arr[RDTSC_FLOW_RECEIVEFROM_TO_SENDTO]);
-#endif // RDTSC_MEASURE_RECEIVEFROM_TO_SENDTO
     return ret_val;
 }
 
@@ -1510,13 +1495,6 @@ extern "C" EXPORT_SYMBOL ssize_t sendto(int __fd, __const void *__buf, size_t __
 {
     PROFILE_FUNC
 
-#ifdef RDTSC_MEASURE_TX_SENDTO_TO_AFTER_POST_SEND
-    RDTSC_TAKE_START(g_rdtsc_instr_info_arr[RDTSC_FLOW_SENDTO_TO_AFTER_POST_SEND]);
-#endif // RDTSC_MEASURE_TX_SENDTO_TO_AFTER_POST_SEND
-
-#ifdef RDTSC_MEASURE_RECEIVEFROM_TO_SENDTO
-    RDTSC_TAKE_END(g_rdtsc_instr_info_arr[RDTSC_FLOW_RECEIVEFROM_TO_SENDTO]);
-#endif // RDTSC_MEASURE_TX_SENDTO_TO_AFTER_POST_SEND
     srdr_logfuncall_entry("fd=%d, nbytes=%d", __fd, __nbytes);
 
     socket_fd_api *p_socket_object = NULL;

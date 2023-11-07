@@ -116,14 +116,6 @@ mem_buf_desc_t *cq_mgr_mlx5::poll(enum buff_status_e &status)
 {
     mem_buf_desc_t *buff = NULL;
 
-#ifdef RDTSC_MEASURE_RX_XLIO_TCP_IDLE_POLL
-    RDTSC_TAKE_END(RDTSC_FLOW_RX_XLIO_TCP_IDLE_POLL);
-#endif // RDTSC_MEASURE_RX_TCP_IDLE_POLLL
-
-#if defined(RDTSC_MEASURE_RX_VERBS_READY_POLL) || defined(RDTSC_MEASURE_RX_VERBS_IDLE_POLL)
-    RDTSC_TAKE_START_RX_VERBS_POLL(RDTSC_FLOW_RX_VERBS_READY_POLL, RDTSC_FLOW_RX_VERBS_IDLE_POLL);
-#endif // RDTSC_MEASURE_RX_VERBS_READY_POLL || RDTSC_MEASURE_RX_VERBS_IDLE_POLL
-
     if (unlikely(NULL == m_rx_hot_buffer)) {
         if (likely(m_qp->m_mlx5_qp.rq.tail != (m_qp->m_mlx5_qp.rq.head))) {
             uint32_t index = m_qp->m_mlx5_qp.rq.tail & (m_qp_rec.qp->m_rx_num_wr - 1);
@@ -133,14 +125,6 @@ mem_buf_desc_t *cq_mgr_mlx5::poll(enum buff_status_e &status)
             prefetch((uint8_t *)m_mlx5_cq.cq_buf +
                      ((m_mlx5_cq.cq_ci & (m_mlx5_cq.cqe_count - 1)) << m_mlx5_cq.cqe_size_log));
         } else {
-#ifdef RDTSC_MEASURE_RX_VERBS_IDLE_POLL
-            RDTSC_TAKE_END(RDTSC_FLOW_RX_VERBS_IDLE_POLL);
-#endif
-
-#if defined(RDTSC_MEASURE_RX_XLIO_TCP_IDLE_POLL) || defined(RDTSC_MEASURE_RX_CQE_RECEIVEFROM)
-            RDTSC_TAKE_START_XLIO_IDLE_POLL_CQE_TO_RECVFROM(RDTSC_FLOW_RX_XLIO_TCP_IDLE_POLL,
-                                                            RDTSC_FLOW_RX_CQE_TO_RECEIVEFROM);
-#endif // RDTSC_MEASURE_RX_XLIO_TCP_IDLE_POLL || RDTSC_MEASURE_RX_CQE_RECEIVEFROM
             /* If rq_tail and rq_head are pointing to the same wqe,
              * the wq is empty and there is no cqe to be received */
             return NULL;
@@ -158,24 +142,7 @@ mem_buf_desc_t *cq_mgr_mlx5::poll(enum buff_status_e &status)
 
         buff = m_rx_hot_buffer;
         m_rx_hot_buffer = NULL;
-
-#ifdef RDTSC_MEASURE_RX_VERBS_READY_POLL
-        RDTSC_TAKE_END(RDTSC_FLOW_RX_VERBS_READY_POLL);
-#endif // RDTSC_MEASURE_RX_VERBS_READY_POLL
-
-#ifdef RDTSC_MEASURE_RX_READY_POLL_TO_LWIP
-        RDTSC_TAKE_START(RDTSC_FLOW_RX_READY_POLL_TO_LWIP);
-#endif
     } else {
-#ifdef RDTSC_MEASURE_RX_VERBS_IDLE_POLL
-        RDTSC_TAKE_END(RDTSC_FLOW_RX_VERBS_IDLE_POLL);
-#endif
-
-#if defined(RDTSC_MEASURE_RX_XLIO_TCP_IDLE_POLL) || defined(RDTSC_MEASURE_RX_CQE_RECEIVEFROM)
-        RDTSC_TAKE_START_XLIO_IDLE_POLL_CQE_TO_RECVFROM(RDTSC_FLOW_RX_XLIO_TCP_IDLE_POLL,
-                                                        RDTSC_FLOW_RX_CQE_TO_RECEIVEFROM);
-#endif // RDTSC_MEASURE_RX_XLIO_TCP_IDLE_POLL || RDTSC_MEASURE_RX_CQE_RECEIVEFROM
-
         prefetch((void *)m_rx_hot_buffer);
     }
 

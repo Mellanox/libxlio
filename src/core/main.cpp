@@ -949,17 +949,10 @@ extern "C" void sock_redirect_main(void)
     if (safe_mce_sys().handle_segfault) {
         register_handler_segv();
     }
-
-#ifdef RDTSC_MEASURE
-    init_rdtsc();
-#endif
 }
 
 extern "C" void sock_redirect_exit(void)
 {
-#ifdef RDTSC_MEASURE
-    print_rdtsc_summary();
-#endif
     vlog_printf(VLOG_DEBUG, "%s()\n", __FUNCTION__);
 
     if (g_init_global_ctors_done) {
