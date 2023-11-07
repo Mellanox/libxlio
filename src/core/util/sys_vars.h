@@ -494,8 +494,6 @@ public:
     uint32_t neigh_wait_till_send_arp_msec;
     uint32_t neigh_num_err_retries;
 
-    uint32_t xlio_time_measure_num_samples;
-    char xlio_time_measure_filename[PATH_MAX];
     sysctl_reader_t &sysctl_reader;
     // Workaround for #3440429: postpone close(2) to the socket destructor, so the sockfd is closed
     // after the rfs rule is destroyed. Otherwise, flow_tag or TCP port can be reused too early.
@@ -707,8 +705,6 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_NEIGH_UC_ARP_DELAY_MSEC "XLIO_NEIGH_UC_ARP_DELAY_MSEC"
 #define SYS_VAR_NEIGH_NUM_ERR_RETRIES   "XLIO_NEIGH_NUM_ERR_RETRIES"
 
-#define SYS_VAR_TIME_MEASURE_NUM_SAMPLES       "XLIO_TIME_MEASURE_NUM_SAMPLES"
-#define SYS_VAR_TIME_MEASURE_DUMP_FILE         "XLIO_TIME_MEASURE_DUMP_FILE"
 #define SYS_VAR_DEFERRED_CLOSE                 "XLIO_DEFERRED_CLOSE"
 #define SYS_VAR_TCP_ABORT_ON_CLOSE             "XLIO_TCP_ABORT_ON_CLOSE"
 #define SYS_VAR_RX_POLL_ON_TX_TCP              "XLIO_RX_POLL_ON_TX_TCP"
@@ -863,9 +859,6 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_NEIGH_UC_ARP_QUATA      3
 #define MCE_DEFAULT_NEIGH_UC_ARP_DELAY_MSEC 10000
 #define MCE_DEFAULT_NEIGH_NUM_ERR_RETRIES   1
-
-#define MCE_DEFAULT_TIME_MEASURE_NUM_SAMPLES (10000)
-#define MCE_DEFAULT_TIME_MEASURE_DUMP_FILE   "/tmp/xlio_inst.dump"
 
 #define MCE_MIN_NUM_SGE                     (1)
 #define MCE_MAX_NUM_SGE                     (32)

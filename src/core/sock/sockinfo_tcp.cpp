@@ -941,18 +941,10 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
      * inconsistencies in setting errno values
      */
     if (unlikely(m_sock_offload != TCP_SOCK_LWIP) || unlikely(!p_iov) || unlikely(0 == sz_iov)) {
-#ifdef XLIO_TIME_MEASURE
-        INC_GO_TO_OS_TX_COUNT;
-#endif
-
         ret = socket_fd_api::tx_os(tx_arg.opcode, p_iov, sz_iov, __flags, __dst, __dstlen);
         save_stats_tx_os(ret);
         return ret;
     }
-
-#ifdef XLIO_TIME_MEASURE
-    TAKE_T_TX_START;
-#endif
 
 retry_is_ready:
 
@@ -979,10 +971,6 @@ retry_is_ready:
             si_tcp_logdbg("TX on disconnected socket");
             errno = EPIPE;
         }
-
-#ifdef XLIO_TIME_MEASURE
-        INC_ERR_TX_COUNT;
-#endif
 
         return -1;
     }
@@ -1144,9 +1132,6 @@ retry_is_ready:
                     }
                     errno = EPIPE;
                     unlock_tcp_con();
-#ifdef XLIO_TIME_MEASURE
-                    INC_ERR_TX_COUNT;
-#endif
                     return -1;
                 }
                 if (unlikely(err != ERR_MEM)) {
@@ -1208,19 +1193,12 @@ done:
 
     unlock_tcp_con();
 
-#ifdef XLIO_TIME_MEASURE
-    TAKE_T_TX_END;
-#endif
     /* Restore errno on function entry in case success */
     errno = errno_tmp;
 
     return total_tx;
 
 err:
-#ifdef XLIO_TIME_MEASURE
-    INC_ERR_TX_COUNT;
-#endif
-
     // nothing send  nb mode or got some other error
     if (errno == EAGAIN) {
         m_p_socket_stats->counters.n_tx_eagain++;
@@ -2240,10 +2218,6 @@ int sockinfo_tcp::handle_rx_error(bool blocking)
         errno = EAGAIN;
     }
 
-#ifdef XLIO_TIME_MEASURE
-    INC_ERR_RX_COUNT;
-#endif
-
     if (errno == EAGAIN) {
         m_p_socket_stats->counters.n_rx_eagain++;
     } else {
@@ -2275,17 +2249,10 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
     si_tcp_logfuncall("");
     if (unlikely(m_sock_offload != TCP_SOCK_LWIP)) {
         int ret = 0;
-#ifdef XLIO_TIME_MEASURE
-        INC_GO_TO_OS_RX_COUNT;
-#endif
         ret = socket_fd_api::rx_os(call_type, p_iov, sz_iov, in_flags, __from, __fromlen, __msg);
         save_stats_rx_os(ret);
         return ret;
     }
-
-#ifdef XLIO_TIME_MEASURE
-    TAKE_T_RX_START;
-#endif
 
     /* In general, without any special flags, socket options, or ioctls being set,
      * a recv call on a blocking TCP socket will return any number of bytes less than
@@ -2400,10 +2367,6 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
 
     si_tcp_logfunc("rx completed, %d bytes sent", total_rx);
 
-#ifdef XLIO_TIME_MEASURE
-    if (0 < total_rx)
-        TAKE_T_RX_END;
-#endif
     /* Restore errno on function entry in case success */
     errno = errno_tmp;
 

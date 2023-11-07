@@ -154,18 +154,6 @@ dnl===
 dnl===-----------------------------------------------------------------------===
 show_section_title "Configure project"
 
-# Performance time points support
-#
-AC_MSG_CHECKING(
-    [for time measurement support])
-AC_ARG_ENABLE([time_measure],
-    AS_HELP_STRING([--enable-time-measure],
-        [turn on time measuring]),
-    [CPPFLAGS+=" -DXLIO_TIME_MEASURE";
-     AC_MSG_RESULT([yes])],
-    [AC_MSG_RESULT([no])]
-)
-
 # Valgrind support
 #
 AC_ARG_WITH([valgrind],

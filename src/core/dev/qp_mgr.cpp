@@ -593,19 +593,12 @@ int qp_mgr::send(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio
 
     qp_logfunc("VERBS send, unsignaled_count: %d", m_n_unsignaled_count);
 
-#ifdef XLIO_TIME_MEASURE
-    TAKE_T_TX_POST_SEND_START;
-#endif
-
 #ifdef RDTSC_MEASURE_TX_VERBS_POST_SEND
     RDTSC_TAKE_START(g_rdtsc_instr_info_arr[RDTSC_FLOW_TX_VERBS_POST_SEND]);
 #endif // RDTSC_MEASURE_TX_SENDTO_TO_AFTER_POST_SEND
 
     // TODO send_to_wire() and send() can return void after removing ibverbs support
     if (send_to_wire(p_send_wqe, attr, request_comp, tis, credits)) {
-#ifdef XLIO_TIME_MEASURE
-        INC_ERR_TX_COUNT;
-#endif
         return -1;
     }
 
@@ -616,10 +609,6 @@ int qp_mgr::send(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio
 #ifdef RDTSC_MEASURE_TX_SENDTO_TO_AFTER_POST_SEND
     RDTSC_TAKE_END(g_rdtsc_instr_info_arr[RDTSC_FLOW_SENDTO_TO_AFTER_POST_SEND]);
 #endif // RDTSC_MEASURE_TX_SENDTO_TO_AFTER_POST_SEND
-
-#ifdef XLIO_TIME_MEASURE
-    TAKE_T_TX_POST_SEND_END;
-#endif
 
     if (request_comp || is_signal_requested_for_last_wqe()) {
         uint64_t dummy_poll_sn = 0;

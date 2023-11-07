@@ -1741,9 +1741,6 @@ ssize_t sockinfo_udp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
         goto out;
     }
 
-#ifdef XLIO_TIME_MEASURE
-    TAKE_T_RX_START;
-#endif
     save_stats_threadid_rx();
 
     int rx_wait_ret;
@@ -1829,10 +1826,6 @@ os:
         goto out;
     }
 
-#ifdef XLIO_TIME_MEASURE
-    INC_GO_TO_OS_RX_COUNT;
-#endif
-
     in_flags &= ~MSG_XLIO_ZCOPY;
     ret = socket_fd_api::rx_os(call_type, p_iov, sz_iov, in_flags, __from, __fromlen, __msg);
     *p_flags = in_flags;
@@ -1852,14 +1845,8 @@ out:
     }
 
     if (ret < 0) {
-#ifdef XLIO_TIME_MEASURE
-        INC_ERR_RX_COUNT;
-#endif
         si_udp_logfunc("returning with: %d (errno=%d %m)", ret, errno);
     } else {
-#ifdef XLIO_TIME_MEASURE
-        TAKE_T_RX_END;
-#endif
         /* Restore errno on function entry in case success */
         errno = errno_tmp;
 
@@ -2068,9 +2055,6 @@ ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
         si_udp_logdbg("MSG_OOB not supported in UDP (tx-ing to os)");
         goto tx_packet_to_os;
     }
-#ifdef XLIO_TIME_MEASURE
-    TAKE_T_TX_START;
-#endif
     if (__dst != NULL) {
         sock_addr dst(__dst, __dstlen);
         if (!validate_and_convert_mapped_ipv4(dst)) {
@@ -2111,9 +2095,6 @@ ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
                     sock_addr addr;
                     addr.set_sa_family(m_family);
                     if (bind(addr.get_p_sa(), addr.get_socklen())) {
-#ifdef XLIO_TIME_MEASURE
-                        INC_ERR_TX_COUNT;
-#endif
                         errno = EAGAIN;
                         m_lock_snd.unlock();
                         return -1;
@@ -2197,9 +2178,6 @@ ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
 
         save_stats_tx_offload(ret, is_dummy);
 
-#ifdef XLIO_TIME_MEASURE
-        TAKE_T_TX_END;
-#endif
         m_lock_snd.unlock();
 
         /* Restore errno on function entry in case success */
@@ -2213,9 +2191,6 @@ ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
     }
 
 tx_packet_to_os:
-#ifdef XLIO_TIME_MEASURE
-    INC_GO_TO_OS_TX_COUNT;
-#endif
     // Calling OS transmit
     ret = socket_fd_api::tx_os(tx_arg.opcode, p_iov, sz_iov, __flags, __dst, __dstlen);
 

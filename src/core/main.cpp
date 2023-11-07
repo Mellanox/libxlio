@@ -887,14 +887,6 @@ void print_xlio_global_settings()
                       SYS_VAR_MULTILOCK,
                       (safe_mce_sys().multilock == MULTILOCK_SPIN ? "Spin " : "Mutex"));
 
-#ifdef XLIO_TIME_MEASURE
-    VLOG_PARAM_NUMBER("Time Measure Num Samples", safe_mce_sys().xlio_time_measure_num_samples,
-                      MCE_DEFAULT_TIME_MEASURE_NUM_SAMPLES, SYS_VAR_TIME_MEASURE_NUM_SAMPLES);
-    VLOG_STR_PARAM_STRING("Time Measure Dump File", safe_mce_sys().xlio_time_measure_filename,
-                          MCE_DEFAULT_TIME_MEASURE_DUMP_FILE, SYS_VAR_TIME_MEASURE_DUMP_FILE,
-                          safe_mce_sys().xlio_time_measure_filename);
-#endif
-
     vlog_printf(VLOG_INFO,
                 "---------------------------------------------------------------------------\n");
 
@@ -961,19 +953,12 @@ extern "C" void sock_redirect_main(void)
 #ifdef RDTSC_MEASURE
     init_rdtsc();
 #endif
-
-#ifdef XLIO_TIME_MEASURE
-    init_instrumentation();
-#endif
 }
 
 extern "C" void sock_redirect_exit(void)
 {
 #ifdef RDTSC_MEASURE
     print_rdtsc_summary();
-#endif
-#ifdef XLIO_TIME_MEASURE
-    finit_instrumentation(safe_mce_sys().xlio_time_measure_filename);
 #endif
     vlog_printf(VLOG_DEBUG, "%s()\n", __FUNCTION__);
 
