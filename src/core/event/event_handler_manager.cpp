@@ -237,7 +237,6 @@ void event_handler_manager::register_command_event(int fd, command *cmd)
 event_handler_manager::event_handler_manager(bool internal_thread_mode)
     : m_reg_action_q_lock("reg_action_q_lock")
     , m_b_sysvar_internal_thread_arm_cq_enabled(safe_mce_sys().internal_thread_arm_cq_enabled)
-    , m_n_sysvar_xlio_time_measure_num_samples(safe_mce_sys().xlio_time_measure_num_samples)
     , m_n_sysvar_timer_resolution_msec(safe_mce_sys().timer_resolution_msec)
 {
     evh_logfunc("");
@@ -953,11 +952,6 @@ void *event_handler_manager::thread_loop()
     poll_fd.events = POLLIN | POLLPRI;
     poll_fd.revents = 0;
     while (m_b_continue_running) {
-#ifdef XLIO_TIME_MEASURE
-        if (g_inst_cnt >= m_n_sysvar_xlio_time_measure_num_samples)
-            finit_instrumentation(safe_mce_sys().xlio_time_measure_filename);
-#endif
-
         // update timer and get timeout
         timeout_msec = m_timer.update_timeout();
         if (timeout_msec == 0) {

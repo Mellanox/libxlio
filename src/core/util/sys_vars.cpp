@@ -747,8 +747,6 @@ void mce_sys_var::get_env_params()
     app_name[len - 1] = '\0';
     fclose(fp);
 
-    memset(xlio_time_measure_filename, 0, sizeof(xlio_time_measure_filename));
-    strcpy(xlio_time_measure_filename, MCE_DEFAULT_TIME_MEASURE_DUMP_FILE);
     memset(log_filename, 0, sizeof(log_filename));
     memset(stats_filename, 0, sizeof(stats_filename));
     memset(stats_shmem_dirname, 0, sizeof(stats_shmem_dirname));
@@ -907,9 +905,6 @@ void mce_sys_var::get_env_params()
     tcp_send_buffer_size = MCE_DEFAULT_TCP_SEND_BUFFER_SIZE;
     skip_poll_in_rx = MCE_DEFAULT_SKIP_POLL_IN_RX;
     multilock = MCE_DEFAULT_MULTILOCK;
-#ifdef XLIO_TIME_MEASURE
-    xlio_time_measure_num_samples = MCE_DEFAULT_TIME_MEASURE_NUM_SAMPLES;
-#endif
 
     read_hv();
 
@@ -2030,23 +2025,6 @@ void mce_sys_var::get_env_params()
         }
         multilock = (multilock_t)temp;
     }
-
-#ifdef XLIO_TIME_MEASURE
-    if ((env_ptr = getenv(SYS_VAR_TIME_MEASURE_NUM_SAMPLES)) != NULL) {
-        xlio_time_measure_num_samples = (uint32_t)atoi(env_ptr);
-        if (xlio_time_measure_num_samples > INST_SIZE) {
-            vlog_printf(
-                VLOG_WARNING,
-                "The value of '%s' is bigger than %d. Time samples over %d will be dropped.\n",
-                SYS_VAR_TIME_MEASURE_NUM_SAMPLES, INST_SIZE, INST_SIZE);
-        }
-    }
-
-    if ((env_ptr = getenv(SYS_VAR_TIME_MEASURE_DUMP_FILE)) != NULL) {
-        read_env_variable_with_pid(xlio_time_measure_filename, sizeof(xlio_time_measure_filename),
-                                   env_ptr);
-    }
-#endif
 }
 
 void set_env_params()

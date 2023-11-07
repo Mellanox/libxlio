@@ -403,9 +403,6 @@ int cq_mgr::poll(xlio_ibv_wc *p_wce, int num_entries, uint64_t *p_cq_poll_sn)
         RDTSC_TAKE_START(g_rdtsc_instr_info_arr[RDTSC_FLOW_RX_CQE_TO_RECEIVEFROM]);
 #endif
         *p_cq_poll_sn = m_n_global_sn;
-#ifdef XLIO_TIME_MEASURE
-        INC_ERR_POLL_COUNT;
-#endif
         return 0;
     } else {
 #ifdef RDTSC_MEASURE_RX_VERBS_READY_POLL
@@ -416,10 +413,6 @@ int cq_mgr::poll(xlio_ibv_wc *p_wce, int num_entries, uint64_t *p_cq_poll_sn)
         RDTSC_TAKE_START(g_rdtsc_instr_info_arr[RDTSC_FLOW_RX_READY_POLL_TO_LWIP]);
 #endif
     }
-
-#ifdef XLIO_TIME_MEASURE
-    TAKE_POLL_CQ_IN;
-#endif
 
     if (unlikely(g_vlogger_level >= VLOG_FUNC_ALL)) {
         for (int i = 0; i < ret; i++) {

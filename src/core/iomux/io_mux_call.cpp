@@ -292,11 +292,6 @@ void io_mux_call::polling_loops()
         return;
     }
 
-#ifdef XLIO_TIME_MEASURE
-    TAKE_T_POLL_START;
-    ZERO_POLL_COUNT;
-#endif
-
     poll_counter = 0;
     finite_polling = m_n_sysvar_select_poll_num != -1;
     multiple_polling_loops = m_n_sysvar_select_poll_num != 0;
@@ -319,9 +314,6 @@ void io_mux_call::polling_loops()
     }
 
     do {
-#ifdef XLIO_TIME_MEASURE
-        INC_POLL_COUNT;
-#endif
         __log_funcall("2nd scenario loop %d", poll_counter);
         __log_funcall("poll_os_countdown=%d, select_poll_os_ratio=%d, check_timer_countdown=%d, "
                       "m_num_offloaded_rfds=%d,"
@@ -400,9 +392,6 @@ void io_mux_call::polling_loops()
         ++m_p_stats->n_iomux_poll_hit;
         __log_func("polling_loops found %d ready fds (rfds=%d, wfds=%d, efds=%d)",
                    m_n_all_ready_fds, m_n_ready_rfds, m_n_ready_wfds, m_n_ready_efds);
-#ifdef XLIO_TIME_MEASURE
-        TAKE_T_POLL_END;
-#endif
     } else {
         ++m_p_stats->n_iomux_poll_miss;
     }
