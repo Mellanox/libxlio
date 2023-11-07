@@ -205,11 +205,6 @@ PROF_IBPROF_SETUP()
 DPCP_CAPABILITY_SETUP()
 UTLS_CAPABILITY_SETUP()
 
-# Enable internal performance counters
-# Note: uncomment setup to activate this ability
-#
-#PROF_RDTSC_SETUP()
-
 # Thread locking control
 #
 AC_ARG_ENABLE([thread-lock],

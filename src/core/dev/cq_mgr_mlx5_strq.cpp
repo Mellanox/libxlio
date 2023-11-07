@@ -175,25 +175,8 @@ mem_buf_desc_t *cq_mgr_mlx5_strq::poll(enum buff_status_e &status, mem_buf_desc_
 {
     mem_buf_desc_t *buff = NULL;
 
-#ifdef RDTSC_MEASURE_RX_XLIO_TCP_IDLE_POLL
-    RDTSC_TAKE_END(RDTSC_FLOW_RX_XLIO_TCP_IDLE_POLL);
-#endif // RDTSC_MEASURE_RX_TCP_IDLE_POLLL
-
-#if defined(RDTSC_MEASURE_RX_VERBS_READY_POLL) || defined(RDTSC_MEASURE_RX_VERBS_IDLE_POLL)
-    RDTSC_TAKE_START_RX_VERBS_POLL(RDTSC_FLOW_RX_VERBS_READY_POLL, RDTSC_FLOW_RX_VERBS_IDLE_POLL);
-#endif // RDTSC_MEASURE_RX_VERBS_READY_POLL || RDTSC_MEASURE_RX_VERBS_IDLE_POLL
-
     if (unlikely(!m_rx_hot_buffer)) {
         if (!set_current_hot_buffer()) {
-#ifdef RDTSC_MEASURE_RX_VERBS_IDLE_POLL
-            RDTSC_TAKE_END(RDTSC_FLOW_RX_VERBS_IDLE_POLL);
-#endif
-
-#if defined(RDTSC_MEASURE_RX_XLIO_TCP_IDLE_POLL) || defined(RDTSC_MEASURE_RX_CQE_RECEIVEFROM)
-            RDTSC_TAKE_START_XLIO_IDLE_POLL_CQE_TO_RECVFROM(RDTSC_FLOW_RX_XLIO_TCP_IDLE_POLL,
-                                                            RDTSC_FLOW_RX_CQE_TO_RECEIVEFROM);
-#endif // RDTSC_MEASURE_RX_XLIO_TCP_IDLE_POLL || RDTSC_MEASURE_RX_CQE_RECEIVEFROM
-
             return NULL;
         }
     }
@@ -235,24 +218,7 @@ mem_buf_desc_t *cq_mgr_mlx5_strq::poll(enum buff_status_e &status, mem_buf_desc_
             reclaim_recv_buffer_helper(_hot_buffer_stride);
             _hot_buffer_stride = nullptr;
         }
-
-#ifdef RDTSC_MEASURE_RX_VERBS_READY_POLL
-        RDTSC_TAKE_END(RDTSC_FLOW_RX_VERBS_READY_POLL);
-#endif // RDTSC_MEASURE_RX_VERBS_READY_POLL
-
-#ifdef RDTSC_MEASURE_RX_READY_POLL_TO_LWIP
-        RDTSC_TAKE_START(RDTSC_FLOW_RX_READY_POLL_TO_LWIP);
-#endif
     } else {
-#ifdef RDTSC_MEASURE_RX_VERBS_IDLE_POLL
-        RDTSC_TAKE_END(RDTSC_FLOW_RX_VERBS_IDLE_POLL);
-#endif
-
-#if defined(RDTSC_MEASURE_RX_XLIO_TCP_IDLE_POLL) || defined(RDTSC_MEASURE_RX_CQE_RECEIVEFROM)
-        RDTSC_TAKE_START_XLIO_IDLE_POLL_CQE_TO_RECVFROM(RDTSC_FLOW_RX_XLIO_TCP_IDLE_POLL,
-                                                        RDTSC_FLOW_RX_CQE_TO_RECEIVEFROM);
-#endif // RDTSC_MEASURE_RX_XLIO_TCP_IDLE_POLL || RDTSC_MEASURE_RX_CQE_RECEIVEFROM
-
         prefetch((void *)_hot_buffer_stride);
     }
 

@@ -377,41 +377,12 @@ int cq_mgr::poll(xlio_ibv_wc *p_wce, int num_entries, uint64_t *p_cq_poll_sn)
     // Assume locked!!!
     cq_logfuncall("");
 
-#ifdef RDTSC_MEASURE_RX_VERBS_READY_POLL
-    RDTSC_TAKE_START(g_rdtsc_instr_info_arr[RDTSC_FLOW_RX_VERBS_READY_POLL]);
-#endif // RDTSC_MEASURE_RX_VERBS_READY_POLL
-
-#ifdef RDTSC_MEASURE_RX_VERBS_IDLE_POLL
-    RDTSC_TAKE_START(g_rdtsc_instr_info_arr[RDTSC_FLOW_RX_VERBS_IDLE_POLL]);
-#endif // RDTSC_MEASURE_RX_VERBS_IDLE_POLL
-
-#ifdef RDTSC_MEASURE_RX_XLIO_TCP_IDLE_POLL
-    RDTSC_TAKE_END(g_rdtsc_instr_info_arr[RDTSC_FLOW_RX_XLIO_TCP_IDLE_POLL]);
-#endif // RDTSC_MEASURE_RX_TCP_IDLE_POLLL
     int ret = xlio_ibv_poll_cq(m_p_ibv_cq, num_entries, p_wce);
     if (ret <= 0) {
-#ifdef RDTSC_MEASURE_RX_VERBS_IDLE_POLL
-        RDTSC_TAKE_END(g_rdtsc_instr_info_arr[RDTSC_FLOW_RX_VERBS_IDLE_POLL]);
-#endif
-
-#ifdef RDTSC_MEASURE_RX_XLIO_TCP_IDLE_POLL
-        RDTSC_TAKE_START(g_rdtsc_instr_info_arr[RDTSC_FLOW_RX_XLIO_TCP_IDLE_POLL]);
-#endif
         // Zero polled wce    OR    ibv_poll_cq() has driver specific errors
         // so we can't really do anything with them
-#ifdef RDTSC_MEASURE_RX_CQE_RECEIVEFROM
-        RDTSC_TAKE_START(g_rdtsc_instr_info_arr[RDTSC_FLOW_RX_CQE_TO_RECEIVEFROM]);
-#endif
         *p_cq_poll_sn = m_n_global_sn;
         return 0;
-    } else {
-#ifdef RDTSC_MEASURE_RX_VERBS_READY_POLL
-        RDTSC_TAKE_END(g_rdtsc_instr_info_arr[RDTSC_FLOW_RX_VERBS_READY_POLL]);
-#endif // RDTSC_MEASURE_RX_VERBS_READY_POLL
-
-#ifdef RDTSC_MEASURE_RX_READY_POLL_TO_LWIP
-        RDTSC_TAKE_START(g_rdtsc_instr_info_arr[RDTSC_FLOW_RX_READY_POLL_TO_LWIP]);
-#endif
     }
 
     if (unlikely(g_vlogger_level >= VLOG_FUNC_ALL)) {
