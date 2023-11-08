@@ -157,9 +157,7 @@ static lock_base *get_new_tcp_lock()
 inline void sockinfo_tcp::lwip_pbuf_init_custom(mem_buf_desc_t *p_desc)
 {
     /* Override default free function to return rx pbuf to the CQ cache */
-    static pbuf_free_custom_fn custom_free_function =
-        (is_socketxtreme() ? p_desc->lwip_pbuf.custom_free_function
-                           : sockinfo_tcp::tcp_rx_pbuf_free);
+    const pbuf_free_custom_fn custom_free_function = sockinfo_tcp::tcp_rx_pbuf_free;
 
     if (!p_desc->lwip_pbuf.pbuf.gro) {
         p_desc->lwip_pbuf.pbuf.flags = PBUF_FLAG_IS_CUSTOM;
