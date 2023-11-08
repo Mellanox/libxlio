@@ -556,27 +556,8 @@ rfs_rule *ring_slave::tls_rx_create_rule(const flow_tuple &flow_spec_5t, xlio_ti
 static inline bool check_rx_packet(sockinfo *si, mem_buf_desc_t *p_rx_wc_buf_desc,
                                    void *fd_ready_array)
 {
-    // Dispatching: Notify new packet to the FIRST registered receiver ONLY
-#ifdef RDTSC_MEASURE_RX_DISPATCH_PACKET
-    RDTSC_TAKE_START(g_rdtsc_instr_info_arr[RDTSC_FLOW_RX_DISPATCH_PACKET]);
-#endif // RDTSC_MEASURE_RX_DISPATCH_PACKET
-
     p_rx_wc_buf_desc->reset_ref_count();
-    p_rx_wc_buf_desc->inc_ref_count();
-
-    si->rx_input_cb(p_rx_wc_buf_desc, fd_ready_array);
-
-#ifdef RDTSC_MEASURE_RX_DISPATCH_PACKET
-    RDTSC_TAKE_END(g_rdtsc_instr_info_arr[RDTSC_FLOW_RX_DISPATCH_PACKET]);
-#endif // RDTSC_MEASURE_RX_DISPATCH_PACKET
-
-    // Check packet ref_count to see the last receiver is interested in this packet
-    if (p_rx_wc_buf_desc->dec_ref_count() > 1) {
-        // The sink will be responsible to return the buffer to CQ for reuse
-        return true;
-    }
-    // Reuse this data buffer & mem_buf_desc
-    return false;
+    return si->rx_input_cb(p_rx_wc_buf_desc, fd_ready_array);
 }
 
 // All CQ wce come here for some basic sanity checks and then are distributed to the correct ring
