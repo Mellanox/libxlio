@@ -563,13 +563,14 @@ int priv_read_file(const char *path, char *buf, size_t size,
 
 int read_file_to_int(const char *path, int default_value, vlog_levels_t log_level)
 {
-    char buf[25];
-    int rc = priv_safe_read_file(path, buf, sizeof buf, log_level);
-    if (rc < 0) {
+    int value = -1;
+    std::ifstream file_stream(path);
+    if (!file_stream || !(file_stream >> value)) {
         VLOG_PRINTF(log_level, "ERROR while getting int from from file %s, we'll use default %d",
                     path, default_value);
+        return default_value;
     }
-    return (rc < 0) ? default_value : atoi(buf);
+    return value;
 }
 
 int get_port_from_ifname(const char *ifname)
