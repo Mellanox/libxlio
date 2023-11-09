@@ -147,7 +147,6 @@ xlio_lwip::xlio_lwip()
         free_lwip_resources();
         throw_xlio_exception("LWIP: failed to register timer event");
     }
-    safe_mce_sys().sysctl_reader.get_tcp_keepalive_info(true);
 }
 
 xlio_lwip::~xlio_lwip()
