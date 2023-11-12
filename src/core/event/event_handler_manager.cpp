@@ -1053,7 +1053,8 @@ void *event_handler_manager::thread_loop()
             event_handler_map_t::iterator i = m_event_handler_map.find(fd);
             if (i == m_event_handler_map.end()) {
                 // No event handler - this is probably a poll_os event!
-                if (!g_p_fd_collection->set_immediate_os_sample(fd)) {
+                if (safe_mce_sys().os_events_in_internal_thread_epoll &&
+                    !g_p_fd_collection->set_immediate_os_sample(fd)) {
                     evh_logdbg("No event handler (fd=%d)", fd);
                 }
                 continue;

@@ -904,6 +904,9 @@ void print_xlio_global_settings()
                     xlio_spec::to_str(MCE_SPEC_NVME_BF2));
     }
 #endif
+
+    VLOG_PARAM_NUMBER("OS events in epoll", safe_mce_sys().os_events_in_internal_thread_epoll,
+                      MCE_OS_EVENTS_IN_EPOLL, SYS_VAR_OS_EVENTS_IN_EPOLL);
 }
 
 void prepare_fork()

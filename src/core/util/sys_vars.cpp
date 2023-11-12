@@ -880,6 +880,7 @@ void mce_sys_var::get_env_params()
     handle_bf = MCE_DEFAULT_BF_FLAG;
     close_on_dup2 = MCE_DEFAULT_CLOSE_ON_DUP2;
     mtu = MCE_DEFAULT_MTU;
+    os_events_in_internal_thread_epoll = MCE_OS_EVENTS_IN_EPOLL;
 #if defined(DEFINED_NGINX)
     nginx_udp_socket_pool_size = MCE_DEFAULT_NGINX_UDP_POOL_SIZE;
     nginx_udp_socket_pool_rx_num_buffs_reuse = MCE_DEFAULT_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE;
@@ -960,6 +961,7 @@ void mce_sys_var::get_env_params()
             if (mce_spec == MCE_SPEC_NONE) {
                 mce_spec = MCE_SPEC_NGINX;
             }
+            os_events_in_internal_thread_epoll = false;
         }
     }
 #endif // DEFINED_NGINX
@@ -1965,6 +1967,10 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_MTU)) != NULL) {
         mtu = (uint32_t)atoi(env_ptr);
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_OS_EVENTS_IN_EPOLL)) != NULL) {
+        os_events_in_internal_thread_epoll = atoi(env_ptr) ? true : false;
     }
 
 #if defined(DEFINED_NGINX)
