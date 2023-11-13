@@ -60,6 +60,7 @@ enum {
     PBUF_DESC_STRIDE,
     PBUF_DESC_TLS_RX,
     PBUF_DESC_NVME_TX,
+    PBUF_DESC_EXPRESS,
 };
 
 typedef struct {
