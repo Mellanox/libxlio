@@ -99,9 +99,8 @@ public:
         return 0;
     }
     void inc_cq_moderation_stats(size_t sz_data) { NOT_IN_USE(sz_data); }
-    virtual uint32_t get_tx_user_lkey(void *addr, size_t length, void *p_mapping = NULL)
+    virtual uint32_t get_tx_user_lkey(void *addr, size_t length)
     {
-        NOT_IN_USE(p_mapping);
         NOT_IN_USE(addr);
         NOT_IN_USE(length);
         return LKEY_ERROR;

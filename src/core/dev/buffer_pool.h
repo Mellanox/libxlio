@@ -57,10 +57,6 @@ inline static void free_lwip_pbuf(struct pbuf_custom *pbuf_custom)
         pbuf_custom->pbuf.desc.attr == PBUF_DESC_NVME_TX) {
         mem_desc *mdesc = (mem_desc *)pbuf_custom->pbuf.desc.mdesc;
         mdesc->put();
-    } else if ((pbuf_custom->pbuf.type == PBUF_ZEROCOPY) &&
-               (pbuf_custom->pbuf.desc.attr == PBUF_DESC_MAP)) {
-        mapping_t *mapping = (mapping_t *)pbuf_custom->pbuf.desc.map;
-        mapping->put();
     }
 
     if (p_desc->m_flags & mem_buf_desc_t::ZCOPY) {

@@ -1161,38 +1161,28 @@ int ring_simple::modify_ratelimit(struct xlio_rate_limit_t &rate_limit)
     return 0;
 }
 
-uint32_t ring_simple::get_tx_user_lkey(void *addr, size_t length, void *p_mapping /*=NULL*/)
+uint32_t ring_simple::get_tx_user_lkey(void *addr, size_t length)
 {
     uint32_t lkey;
 
     /*
-     * Current implementation supports 2 modes:
-     * 1. Per ring registration cache where addr is the key
-     * 2. Proxy query to an external mapping object
+     * Current implementation supports a ring registration cache where addr is the key.
      *
-     * The 1st mode is used for send zerocopy and the 2nd made is used for
-     * sendfile offload. These 2 modes are differentiated by p_mapping
-     * value. It is NULL in the 1st case.
+     * The mode is used for send zerocopy.
      *
-     * TODO In the 1st mode we don't support memory deregistration.
+     * TODO The mode doesnn't support memory deregistration.
      */
-    if (p_mapping == NULL) {
-        auto iter = m_user_lkey_map.find(addr);
-        if (iter != m_user_lkey_map.end()) {
-            lkey = iter->second;
-        } else {
-            lkey = m_p_ib_ctx->user_mem_reg(addr, length, XLIO_IBV_ACCESS_LOCAL_WRITE);
-            if (lkey == LKEY_ERROR) {
-                ring_logerr("Can't register user memory addr %p len %lx", addr, length);
-            } else {
-                m_user_lkey_map[addr] = lkey;
-            }
-        }
+    auto iter = m_user_lkey_map.find(addr);
+    if (iter != m_user_lkey_map.end()) {
+        lkey = iter->second;
     } else {
-        mapping_t *mapping = (mapping_t *)p_mapping;
-        lkey = mapping->get_lkey(NULL, m_p_ib_ctx, addr, length);
+        lkey = m_p_ib_ctx->user_mem_reg(addr, length, XLIO_IBV_ACCESS_LOCAL_WRITE);
+        if (lkey == LKEY_ERROR) {
+            ring_logerr("Can't register user memory addr %p len %lx", addr, length);
+        } else {
+            m_user_lkey_map[addr] = lkey;
+        }
     }
-
     return lkey;
 }
 
