@@ -176,6 +176,7 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb)
             in_data.inseg.seqno = in_data.seqno;
             in_data.inseg.flags = 0;
             in_data.inseg.tcp_flags = in_data.flags;
+            in_data.inseg.bufs = 0;
 
             in_data.recv_data = NULL;
             in_data.recv_flags = 0;
