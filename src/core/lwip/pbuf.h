@@ -55,7 +55,6 @@ enum {
     PBUF_DESC_NONE = 0,
     PBUF_DESC_MDESC,
     PBUF_DESC_FD,
-    PBUF_DESC_MAP,
     PBUF_DESC_MKEY,
     PBUF_DESC_STRIDE,
     PBUF_DESC_TLS_RX,
@@ -65,6 +64,7 @@ enum {
 
 typedef struct {
     int attr;
+    u32_t express_mkey;
     union {
         void *map;
         void *mdesc;
