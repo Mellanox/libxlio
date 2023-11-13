@@ -1134,7 +1134,11 @@ retry_is_ready:
                 }
             }
 
-            err = tcp_write(&m_pcb, tx_ptr, tx_size, apiflags, &tx_arg.priv);
+            if (apiflags & XLIO_TX_PACKET_ZEROCOPY) {
+                err = tcp_write_zc(&m_pcb, tx_ptr, tx_size, &tx_arg.priv);
+            } else {
+                err = tcp_write(&m_pcb, tx_ptr, tx_size, apiflags, &tx_arg.priv);
+            }
             if (unlikely(err != ERR_OK)) {
                 if (unlikely(err == ERR_CONN)) { // happens when remote drops during big write
                     si_tcp_logdbg("connection closed: tx'ed = %d", total_tx);
