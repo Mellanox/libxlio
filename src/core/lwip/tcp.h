@@ -333,7 +333,7 @@ struct tcp_pcb {
 
     u32_t acked;
 
-    u32_t snd_buf; /* Available buffer space for sending (in bytes). */
+    s32_t snd_buf; /* Available buffer space for sending (in bytes). */
     u32_t max_snd_buff;
 
     u32_t snd_sml_snt; /* maintain state for minshall's algorithm */
@@ -480,7 +480,7 @@ err_t tcp_shutdown(struct tcp_pcb *pcb, int shut_rx, int shut_tx);
 
 err_t tcp_write(struct tcp_pcb *pcb, const void *dataptr, u32_t len, u16_t apiflags,
                 pbuf_desc *desc);
-err_t tcp_write_zc(struct tcp_pcb *pcb, const void *arg, u32_t len, pbuf_desc *desc);
+err_t tcp_write_express(struct tcp_pcb *pcb, const void *arg, u32_t len, pbuf_desc *desc);
 
 #define TCP_PRIO_MIN    1
 #define TCP_PRIO_NORMAL 64
