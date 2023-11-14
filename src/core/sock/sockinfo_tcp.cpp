@@ -907,7 +907,7 @@ static inline bool cannot_do_requested_partial_write(const tcp_pcb &pcb,
 {
     return !BLOCK_THIS_RUN(is_blocking, tx_arg.attr.flags) &&
         (tx_arg.xlio_flags & TX_FLAG_NO_PARTIAL_WRITE) &&
-        unlikely(tcp_sndbuf(&pcb) < total_iov_len);
+        unlikely(tcp_sndbuf(&pcb) < static_cast<int32_t>(total_iov_len));
 }
 
 static inline bool tcp_wnd_unavalable(const tcp_pcb &pcb, size_t total_iov_len)
@@ -1135,7 +1135,7 @@ retry_is_ready:
             }
 
             if (apiflags & XLIO_TX_PACKET_ZEROCOPY) {
-                err = tcp_write_zc(&m_pcb, tx_ptr, tx_size, &tx_arg.priv);
+                err = tcp_write_express(&m_pcb, tx_ptr, tx_size, &tx_arg.priv);
             } else {
                 err = tcp_write(&m_pcb, tx_ptr, tx_size, apiflags, &tx_arg.priv);
             }
@@ -3961,7 +3961,7 @@ bool sockinfo_tcp::is_writeable()
         goto noblock;
     }
 
-    if (tcp_sndbuf(&m_pcb) > m_required_send_block) {
+    if (tcp_sndbuf(&m_pcb) > static_cast<int32_t>(m_required_send_block)) {
         goto noblock;
     }
 
@@ -4179,21 +4179,11 @@ void sockinfo_tcp::fit_rcv_wnd(bool force_fit)
 
 void sockinfo_tcp::fit_snd_bufs(unsigned int new_max_snd_buff)
 {
-    uint32_t sent_buffs_num = 0;
+    m_pcb.snd_buf += (new_max_snd_buff - m_pcb.max_snd_buff);
+    m_pcb.max_snd_buff = new_max_snd_buff;
 
-    sent_buffs_num = m_pcb.max_snd_buff - m_pcb.snd_buf;
-    if (sent_buffs_num <= new_max_snd_buff) {
-        m_pcb.max_snd_buff = new_max_snd_buff;
-        if (m_pcb.mss) {
-            m_pcb.max_unsent_len = (16 * (m_pcb.max_snd_buff) / m_pcb.mss);
-        } else {
-            m_pcb.max_unsent_len =
-                (16 * (m_pcb.max_snd_buff) / 536); /* should MSS be 0 use a const...very unlikely */
-        }
-        /* make sure max_unsent_len is not 0 */
-        m_pcb.max_unsent_len = std::max<u16_t>(m_pcb.max_unsent_len, 1U);
-        m_pcb.snd_buf = m_pcb.max_snd_buff - sent_buffs_num;
-    }
+    auto mss = m_pcb.mss ?: 536;
+    m_pcb.max_unsent_len = (mss - 1 + m_pcb.max_snd_buff * 16) / mss;
 }
 
 void sockinfo_tcp::fit_snd_bufs_to_nagle(bool disable_nagle)
@@ -5428,7 +5418,7 @@ void sockinfo_tcp::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
                 pcb.snd_wl1, pcb.snd_wl2);
 
     // Send buffer
-    vlog_printf(log_level, "Send buffer : snd_buf %u, max_snd_buff %u\n", pcb.snd_buf,
+    vlog_printf(log_level, "Send buffer : snd_buf %d, max_snd_buff %u\n", pcb.snd_buf,
                 pcb.max_snd_buff);
 
     // Retransmission

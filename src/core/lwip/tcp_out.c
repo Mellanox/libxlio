@@ -246,8 +246,8 @@ set_tcphdr:
  * @param pcb The TCP connection that willo enqueue the pbuf.
  * @param
  */
-static struct pbuf *tcp_pbuf_prealloc_zc(u16_t length, u16_t *oversize, struct tcp_pcb *pcb,
-                                         pbuf_type type, pbuf_desc *desc, struct pbuf *p_buff)
+static struct pbuf *tcp_pbuf_prealloc_express(u16_t length, u16_t *oversize, struct tcp_pcb *pcb,
+                                              pbuf_type type, pbuf_desc *desc, struct pbuf *p_buff)
 {
     struct pbuf *p;
 
@@ -329,9 +329,9 @@ static err_t tcp_write_checks(struct tcp_pcb *pcb, u32_t len)
     }
 
     /* fail on too much data */
-    if (len > pcb->snd_buf) {
+    if ((s32_t)len > pcb->snd_buf) {
         LWIP_DEBUGF(TCP_OUTPUT_DEBUG | 3,
-                    ("tcp_write: too much data (len=%" U32_F " > snd_buf=%" U32_F ")\n", len,
+                    ("tcp_write: too much data (len=%" U32_F " > snd_buf=%" S32_F ")\n", len,
                      pcb->snd_buf));
         pcb->flags |= TF_NAGLEMEMERR;
         return ERR_MEM;
@@ -766,7 +766,7 @@ memerr:
     return ERR_MEM;
 }
 
-err_t tcp_write_zc(struct tcp_pcb *pcb, const void *arg, u32_t len, pbuf_desc *desc)
+err_t tcp_write_express(struct tcp_pcb *pcb, const void *arg, u32_t len, pbuf_desc *desc)
 {
     struct pbuf *p;
     struct tcp_seg *seg = NULL, *prev_seg = NULL, *queue = NULL;
@@ -776,6 +776,10 @@ err_t tcp_write_zc(struct tcp_pcb *pcb, const void *arg, u32_t len, pbuf_desc *d
     const u16_t mss_local = lwip_zc_tx_size;
     u16_t seglen;
     u16_t queuelen = 0;
+
+    if (pcb->snd_buf < 0) {
+        goto memerr;
+    }
 
     if (len < pcb->mss) {
         const int byte_queued = pcb->snd_nxt - pcb->lastack;
@@ -813,8 +817,8 @@ err_t tcp_write_zc(struct tcp_pcb *pcb, const void *arg, u32_t len, pbuf_desc *d
             (pcb->last_unsent->bufs < pcb->tso.max_send_sge)) {
             seglen = space < len ? space : len;
 
-            if ((p = tcp_pbuf_prealloc_zc(seglen, &oversize, pcb, PBUF_ZEROCOPY, desc, NULL)) ==
-                NULL) {
+            if ((p = tcp_pbuf_prealloc_express(seglen, &oversize, pcb, PBUF_ZEROCOPY, desc,
+                                               NULL)) == NULL) {
                 goto memerr;
             }
             p->payload = (u8_t *)arg;
@@ -832,7 +836,8 @@ err_t tcp_write_zc(struct tcp_pcb *pcb, const void *arg, u32_t len, pbuf_desc *d
         u32_t left = len - pos;
         seglen = left > mss_local ? mss_local : left;
 
-        if ((p = tcp_pbuf_prealloc_zc(seglen, &oversize, pcb, PBUF_ZEROCOPY, desc, NULL)) == NULL) {
+        if ((p = tcp_pbuf_prealloc_express(seglen, &oversize, pcb, PBUF_ZEROCOPY, desc, NULL)) ==
+            NULL) {
             goto memerr;
         }
         p->payload = (u8_t *)arg + pos;
