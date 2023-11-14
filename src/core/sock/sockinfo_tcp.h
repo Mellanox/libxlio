@@ -186,7 +186,10 @@ public:
 
     inline struct tcp_pcb *get_pcb(void) { return &m_pcb; }
 
-    inline unsigned sndbuf_available(void) { return tcp_sndbuf(&m_pcb); }
+    inline unsigned sndbuf_available(void)
+    {
+        return static_cast<unsigned>(std::max(tcp_sndbuf(&m_pcb), 0));
+    }
 
     inline unsigned get_mss(void) { return m_pcb.mss; }
 

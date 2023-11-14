@@ -776,11 +776,11 @@ bool sockinfo_tcp::prepare_dst_to_send(bool is_accepted_socket /* = false */)
 
 unsigned sockinfo_tcp::tx_wait(int &err, bool blocking)
 {
-    unsigned sz = tcp_sndbuf(&m_pcb);
+    auto sz = sndbuf_available();
     int poll_count = 0;
     si_tcp_logfunc("sz = %d rx_count=%d", sz, m_n_rx_pkt_ready_list_count);
     err = 0;
-    while (is_rts() && (sz = tcp_sndbuf(&m_pcb)) == 0) {
+    while (is_rts() && (sz = sndbuf_available()) == 0) {
         err = rx_wait(poll_count, blocking);
         // AlexV:Avoid from going to sleep, for the blocked socket of course, since
         // progress engine may consume an arrived credit and it will not wakeup the
@@ -893,13 +893,13 @@ ssize_t sockinfo_tcp::tx(xlio_tx_call_attr_t &tx_arg)
     return m_ops->tx(tx_arg);
 }
 
-static inline bool cannot_do_requested_partial_write(const tcp_pcb &pcb,
+static inline bool cannot_do_requested_partial_write(size_t sndbuf_available,
                                                      const xlio_tx_call_attr_t &tx_arg,
                                                      bool is_blocking, size_t total_iov_len)
 {
     return !BLOCK_THIS_RUN(is_blocking, tx_arg.attr.flags) &&
         (tx_arg.xlio_flags & TX_FLAG_NO_PARTIAL_WRITE) &&
-        unlikely(tcp_sndbuf(&pcb) < total_iov_len);
+        unlikely(sndbuf_available < total_iov_len);
 }
 
 static inline bool tcp_wnd_unavalable(const tcp_pcb &pcb, size_t total_iov_len)
@@ -990,7 +990,7 @@ retry_is_ready:
     /* To force zcopy flow there are two possible ways
      * - send() MSG_ZEROCOPY flag should be passed by user application
      * and SO_ZEROCOPY activated
-     * - sendfile() MSG_SEROCOPY flag set internally with opcode TX_FILE
+     * - sendfile() MSG_ZEROCOPY flag set internally with opcode TX_FILE
      */
     if ((__flags & MSG_ZEROCOPY) && ((m_b_zc) || (tx_arg.opcode == TX_FILE))) {
         apiflags |= XLIO_TX_PACKET_ZEROCOPY;
@@ -1007,7 +1007,8 @@ retry_is_ready:
     lock_tcp_con();
 
     if (cannot_do_requested_dummy_send(m_pcb, tx_arg) ||
-        cannot_do_requested_partial_write(m_pcb, tx_arg, m_b_blocking, total_iov_len) ||
+        cannot_do_requested_partial_write(sndbuf_available(), tx_arg, m_b_blocking,
+                                          total_iov_len) ||
         tcp_wnd_unavalable(m_pcb, total_iov_len)) {
         unlock_tcp_con();
         errno = EAGAIN;
@@ -1034,7 +1035,7 @@ retry_is_ready:
         }
         unsigned pos = 0;
         while (pos < p_iov[i].iov_len) {
-            unsigned tx_size = tcp_sndbuf(&m_pcb);
+            auto tx_size = sndbuf_available();
 
             /* Process a case when space is not available at the sending socket
              * to hold the message to be transmitted
@@ -1081,9 +1082,7 @@ retry_is_ready:
                 tx_size = tx_wait(ret, true);
             }
 
-            if (tx_size > p_iov[i].iov_len - pos) {
-                tx_size = p_iov[i].iov_len - pos;
-            }
+            tx_size = std::min<size_t>(p_iov[i].iov_len - pos, tx_size);
             if (is_send_zerocopy) {
                 /*
                  * For send zerocopy we don't support pbufs which
@@ -1094,9 +1093,7 @@ retry_is_ready:
                  */
                 unsigned remainder =
                     ~m_user_huge_page_mask + 1 - ((uint64_t)tx_ptr & ~m_user_huge_page_mask);
-                if (tx_size > remainder) {
-                    tx_size = remainder;
-                }
+                tx_size = std::min(remainder, tx_size);
             }
         retry_write:
             if (unlikely(!is_rts())) {
@@ -1115,7 +1112,7 @@ retry_is_ready:
             }
 
             if (apiflags & XLIO_TX_PACKET_ZEROCOPY) {
-                err = tcp_write_zc(&m_pcb, tx_ptr, tx_size, &tx_arg.priv);
+                err = tcp_write_express(&m_pcb, tx_ptr, tx_size, &tx_arg.priv);
             } else {
                 err = tcp_write(&m_pcb, tx_ptr, tx_size, apiflags, &tx_arg.priv);
             }
@@ -3912,7 +3909,7 @@ bool sockinfo_tcp::is_writeable()
         goto noblock;
     }
 
-    if (tcp_sndbuf(&m_pcb) > m_required_send_block) {
+    if (sndbuf_available() > m_required_send_block) {
         goto noblock;
     }
 
@@ -3926,7 +3923,11 @@ noblock:
                    p_fd_array->fd_count++;
            }
     */
-    __log_funcall("--->>> tcp_sndbuf(&m_pcb)=%d", tcp_sndbuf(&m_pcb));
+<<<<<<< Updated upstream
+    __log_funcall("--->>> tcp_sndbuf(&m_pcb)=%d", sndbuf(&m_pcb));
+=======
+    __log_funcall("--->>> tcp_sndbuf(&m_pcb)=%d", sndbuf_available());
+>>>>>>> Stashed changes
     return true;
 }
 
@@ -4130,21 +4131,11 @@ void sockinfo_tcp::fit_rcv_wnd(bool force_fit)
 
 void sockinfo_tcp::fit_snd_bufs(unsigned int new_max_snd_buff)
 {
-    uint32_t sent_buffs_num = 0;
+    m_pcb.snd_buf += (new_max_snd_buff - m_pcb.max_snd_buff);
+    m_pcb.max_snd_buff = new_max_snd_buff;
 
-    sent_buffs_num = m_pcb.max_snd_buff - m_pcb.snd_buf;
-    if (sent_buffs_num <= new_max_snd_buff) {
-        m_pcb.max_snd_buff = new_max_snd_buff;
-        if (m_pcb.mss) {
-            m_pcb.max_unsent_len = (16 * (m_pcb.max_snd_buff) / m_pcb.mss);
-        } else {
-            m_pcb.max_unsent_len =
-                (16 * (m_pcb.max_snd_buff) / 536); /* should MSS be 0 use a const...very unlikely */
-        }
-        /* make sure max_unsent_len is not 0 */
-        m_pcb.max_unsent_len = std::max<u16_t>(m_pcb.max_unsent_len, 1U);
-        m_pcb.snd_buf = m_pcb.max_snd_buff - sent_buffs_num;
-    }
+    auto mss = m_pcb.mss ?: 536;
+    m_pcb.max_unsent_len = (mss - 1 + m_pcb.max_snd_buff * 16) / mss;
 }
 
 void sockinfo_tcp::fit_snd_bufs_to_nagle(bool disable_nagle)
@@ -5425,7 +5416,7 @@ void sockinfo_tcp::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
                 pcb.snd_wl1, pcb.snd_wl2);
 
     // Send buffer
-    vlog_printf(log_level, "Send buffer : snd_buf %u, max_snd_buff %u\n", pcb.snd_buf,
+    vlog_printf(log_level, "Send buffer : snd_buf %d, max_snd_buff %u\n", pcb.snd_buf,
                 pcb.max_snd_buff);
 
     // Retransmission
