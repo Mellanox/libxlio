@@ -50,6 +50,7 @@ runs_on_agents:
 matrix:
   axes:
     flags:
+      - all
       - default
       - dpcp
     arch:
