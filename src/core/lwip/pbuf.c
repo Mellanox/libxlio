@@ -162,16 +162,26 @@ u8_t pbuf_header(struct pbuf *p, s32_t header_size_increment)
         return 1;
     }
 
-    /* Check that we aren't going to move off the end of the pbuf */
-    if (header_size_increment < 0 && (-header_size_increment) > (s32_t)p->len) {
-        return 1;
-    }
+    if (header_size_increment >= 0) {
+        u32_t header_increment = (u32_t)header_size_increment;
+        /* set new payload pointer */
+        p->payload = (u8_t *)p->payload - header_increment;
+        /* modify pbuf length fields */
+        p->len += header_increment;
+        p->tot_len += header_increment;
+    } else {
+        u32_t header_decrement = (u32_t)(-header_size_increment);
+        /* Check that we aren't going to move off the end of the pbuf */
+        if (header_decrement > p->len) {
+            return 1;
+        }
 
-    /* set new payload pointer */
-    p->payload = (u8_t *)p->payload - header_size_increment;
-    /* modify pbuf length fields */
-    p->len += header_size_increment;
-    p->tot_len += header_size_increment;
+        /* set new payload pointer */
+        p->payload = (u8_t *)p->payload + header_decrement;
+        /* modify pbuf length fields */
+        p->len -= header_decrement;
+        p->tot_len -= header_decrement;
+    }
 
     LWIP_DEBUGF(PBUF_DEBUG | LWIP_DBG_TRACE,
                 ("pbuf_header: new %p (%" S32_F ")\n", (void *)p->payload, header_size_increment));
@@ -244,25 +254,6 @@ u8_t pbuf_free(struct pbuf *p)
         }
     }
     return count;
-}
-
-/**
- * Count number of pbufs in a chain
- *
- * @param p first pbuf of chain
- * @return the number of pbufs in a chain
- */
-
-u8_t pbuf_clen(struct pbuf *p)
-{
-    u8_t len;
-
-    len = 0;
-    while (p != NULL) {
-        ++len;
-        p = p->next;
-    }
-    return len;
 }
 
 /**

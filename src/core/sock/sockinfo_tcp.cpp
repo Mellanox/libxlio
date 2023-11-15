@@ -749,22 +749,17 @@ bool sockinfo_tcp::prepare_dst_to_send(bool is_accepted_socket /* = false */)
     bool ret_val = false;
 
     if (m_p_connected_dst_entry) {
-        if (is_accepted_socket) {
-            ret_val = m_p_connected_dst_entry->prepare_to_send(m_so_ratelimit, true, false);
-        } else {
-            ret_val = m_p_connected_dst_entry->prepare_to_send(m_so_ratelimit, false, true);
-        }
-
+        bool skip_rules = is_accepted_socket, is_connect = !is_accepted_socket;
+        ret_val = m_p_connected_dst_entry->prepare_to_send(m_so_ratelimit, skip_rules, is_connect);
         if (ret_val) {
             /* dst_entry has resolved tx ring,
              * so it is a time to provide TSO information to PCB
              */
-            m_pcb.tso.max_buf_sz =
-                std::min(safe_mce_sys().tx_buf_size,
-                         m_p_connected_dst_entry->get_ring()->get_max_payload_sz());
-            m_pcb.tso.max_payload_sz = m_p_connected_dst_entry->get_ring()->get_max_payload_sz();
-            m_pcb.tso.max_header_sz = m_p_connected_dst_entry->get_ring()->get_max_header_sz();
-            m_pcb.tso.max_send_sge = m_p_connected_dst_entry->get_ring()->get_max_send_sge();
+            auto *ring = m_p_connected_dst_entry->get_ring();
+            m_pcb.tso.max_buf_sz = std::min(safe_mce_sys().tx_buf_size, ring->get_max_payload_sz());
+            m_pcb.tso.max_payload_sz = ring->get_max_payload_sz();
+            m_pcb.tso.max_header_sz = ring->get_max_header_sz();
+            m_pcb.tso.max_send_sge = ring->get_max_send_sge();
             /* reserve one slot for network headers of zerocopy segments */
             m_pcb.max_send_sge = m_pcb.tso.max_send_sge - 1;
             safe_mce_sys().zc_tx_size =
@@ -776,9 +771,9 @@ bool sockinfo_tcp::prepare_dst_to_send(bool is_accepted_socket /* = false */)
 
 unsigned sockinfo_tcp::tx_wait(int &err, bool blocking)
 {
-    auto sz = sndbuf_available();
+    unsigned sz = sndbuf_available();
     int poll_count = 0;
-    si_tcp_logfunc("sz = %d rx_count=%d", sz, m_n_rx_pkt_ready_list_count);
+    si_tcp_logfunc("sz = %u rx_count=%d", sz, m_n_rx_pkt_ready_list_count);
     err = 0;
     while (is_rts() && (sz = sndbuf_available()) == 0) {
         err = rx_wait(poll_count, blocking);
@@ -981,43 +976,11 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
         }
         unsigned pos = 0;
         while (pos < p_iov[i].iov_len) {
-            auto tx_size = sndbuf_available();
+            unsigned tx_size = sndbuf_available();
 
-            /* Process a case when space is not available at the sending socket
-             * to hold the message to be transmitted
-             * Nonblocking socket:
-             *    - no data is buffered: return (-1) and EAGAIN
-             *    - some data is buffered: return number of bytes ready to be sent
-             */
             if (tx_size == 0) {
-                if (unlikely(!is_rts())) {
-                    si_tcp_logdbg("TX on disconnected socket");
-                    return tcp_tx_handle_errno_and_unlock(ECONNRESET);
-                }
-                // force out TCP data before going on wait()
-                tcp_output(&m_pcb);
-
-                // non blocking socket should return in order not to tx_wait()
-                if (total_tx > 0) {
-                    m_tx_consecutive_eagain_count = 0;
-                    return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp, is_dummy,
-                                                         is_send_zerocopy);
-                } else {
-                    m_tx_consecutive_eagain_count++;
-                    if (m_tx_consecutive_eagain_count >= TX_CONSECUTIVE_EAGAIN_THREASHOLD) {
-                        if (safe_mce_sys().tcp_ctl_thread ==
-                            option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
-                            // Slow path. We must attempt TCP timers here for applications that
-                            // do not check for EV_OUT.
-                            g_thread_local_event_handler.do_tasks();
-                        }
-                        // in case of zero sndbuf and non-blocking just try once polling CQ for
-                        // ACK
-                        rx_wait(poll_count, false);
-                        m_tx_consecutive_eagain_count = 0;
-                    }
-                    return tcp_tx_handle_errno_and_unlock(EAGAIN);
-                }
+                return tcp_tx_handle_sndbuf_unavailable(total_tx, is_dummy, is_send_zerocopy,
+                                                        errno_tmp);
             }
 
             tx_size = std::min<size_t>(p_iov[i].iov_len - pos, tx_size);
@@ -5339,7 +5302,7 @@ void sockinfo_tcp::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
     tcp_conn_state_e conn_state;
     u32_t last_unsent_seqno = 0, last_unacked_seqno = 0, first_unsent_seqno = 0,
           first_unacked_seqno = 0;
-    u16_t last_unsent_len = 0, last_unacked_len = 0, first_unsent_len = 0, first_unacked_len = 0;
+    u32_t last_unsent_len = 0, last_unacked_len = 0, first_unsent_len = 0, first_unacked_len = 0;
     int rcvbuff_max, rcvbuff_current, rcvbuff_non_tcp_recved, rx_pkt_ready_list_size,
         rx_ctl_packets_list_size, rx_ctl_reuse_list_size;
 
@@ -6114,7 +6077,7 @@ int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint
     default:
         return -1;
     };
-    mdesc.express_mkey = mkey;
+    mdesc.mkey = mkey;
     mdesc.opaque = opaque_op;
 
     int bytes_written = 0;
@@ -6124,7 +6087,8 @@ int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint
     for (unsigned i = 0; i < iov_len; ++i) {
         err = tcp_write_express(&m_pcb, iov[i].iov_base, iov[i].iov_len, &mdesc);
         if (err != ERR_OK) {
-            return -1;
+            /* The only error in tcp_write_express is a memory error */
+            return tcp_tx_handle_errno_and_unlock(ENOMEM);
         }
         bytes_written += iov[i].iov_len;
     }
@@ -6132,7 +6096,8 @@ int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint
     if (!(flags & XLIO_EXPRESS_MSG_MORE)) {
         err = tcp_output(&m_pcb);
         if (err != ERR_OK) {
-            return -1;
+            /* The error very likely to be recoverable */
+            si_tcp_logdbg("tcp_tx_express - tcp_output failed");
         }
     }
     unlock_tcp_con();
@@ -6228,4 +6193,44 @@ bool sockinfo_tcp::is_connected_and_ready_to_send()
         return false;
     }
     return true;
+}
+
+/* Process a case when space is not available at the sending socket
+ * to hold the message to be transmitted
+ * Nonblocking socket:
+ *    - no data is buffered: return (-1) and EAGAIN
+ *    - some data is buffered: return number of bytes ready to be sent
+ */
+ssize_t sockinfo_tcp::tcp_tx_handle_sndbuf_unavailable(ssize_t total_tx, bool is_dummy,
+                                                       bool is_send_zerocopy, int errno_to_restore)
+{
+    if (unlikely(!is_rts())) {
+        si_tcp_logdbg("TX on disconnected socket");
+        return tcp_tx_handle_errno_and_unlock(ECONNRESET);
+    }
+    // force out TCP data before going on wait()
+    tcp_output(&m_pcb);
+
+    // non blocking socket should return in order not to tx_wait()
+    if (total_tx > 0) {
+        m_tx_consecutive_eagain_count = 0;
+        return tcp_tx_handle_done_and_unlock(total_tx, errno_to_restore, is_dummy,
+                                             is_send_zerocopy);
+    } else {
+        m_tx_consecutive_eagain_count++;
+        if (m_tx_consecutive_eagain_count >= TX_CONSECUTIVE_EAGAIN_THREASHOLD) {
+            if (safe_mce_sys().tcp_ctl_thread ==
+                option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+                // Slow path. We must attempt TCP timers here for applications that
+                // do not check for EV_OUT.
+                g_thread_local_event_handler.do_tasks();
+            }
+            // in case of zero sndbuf and non-blocking just try once polling CQ for
+            // ACK
+            int poll_count = 0;
+            rx_wait(poll_count, false);
+            m_tx_consecutive_eagain_count = 0;
+        }
+        return tcp_tx_handle_errno_and_unlock(EAGAIN);
+    }
 }

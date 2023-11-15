@@ -1063,7 +1063,7 @@ void tcp_pcb_recycle(struct tcp_pcb *pcb)
     }
 }
 
-struct pbuf *tcp_tx_pbuf_alloc(struct tcp_pcb *pcb, u16_t length, pbuf_type type, pbuf_desc *desc,
+struct pbuf *tcp_tx_pbuf_alloc(struct tcp_pcb *pcb, u32_t length, pbuf_type type, pbuf_desc *desc,
                                struct pbuf *p_buff)
 {
     struct pbuf *p;

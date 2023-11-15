@@ -196,10 +196,10 @@ static struct tcp_seg *tcp_create_segment(struct tcp_pcb *pcb, struct pbuf *p, u
 
     seg->flags = optflags;
     seg->tcp_flags = flags;
-    seg->bufs = 0;
     seg->p = p;
     seg->len = p->tot_len - optlen;
     seg->seqno = seqno;
+    seg->bufs = 1;
 
     if (seg->flags & TF_SEG_OPTS_ZEROCOPY) {
         /* XXX Don't hardcode size/offset */
@@ -230,29 +230,25 @@ set_tcphdr:
 }
 
 /**
- * Allocate a PBUF_RAM pbuf, perhaps with oversize space at the end.
+ * Allocate a PBUF_RAM pbuf
  *
  * This function is like pbuf_alloc(layer, length, PBUF_RAM) except
  * there may be extra bytes available at the end.
  *
  * @param length size of the pbuf's payload.
- * @param oversize pointer to a u16_t that will receive the number of usable tail bytes.
- * @param pcb The TCP connection that willo enqueue the pbuf.
+ * @param pcb The TCP connection that will enqueue the pbuf.
  * @param
  */
-static struct pbuf *tcp_pbuf_prealloc_express(u16_t length, u16_t *oversize, struct tcp_pcb *pcb,
-                                              pbuf_type type, pbuf_desc *desc, struct pbuf *p_buff)
+static struct pbuf *tcp_pbuf_prealloc_express(u32_t length, struct tcp_pcb *pcb, pbuf_type type,
+                                              pbuf_desc *desc, struct pbuf *p_buff)
 {
     struct pbuf *p;
 
     p = tcp_tx_pbuf_alloc(pcb, 0, type, desc, p_buff);
-    if (p == NULL) {
-        return NULL;
+    if (p != NULL) {
+        LWIP_ASSERT("need unchained pbuf", p->next == NULL);
+        p->len = p->tot_len = length;
     }
-    LWIP_ASSERT("need unchained pbuf", p->next == NULL);
-    *oversize = p->len - length;
-    /* trim p->len to the currently used size */
-    p->len = p->tot_len = length;
     return p;
 }
 
@@ -270,12 +266,12 @@ static struct pbuf *tcp_pbuf_prealloc_express(u16_t length, u16_t *oversize, str
  * @param first_seg true when this pbuf will be used in the first enqueued segment.
  * @param
  */
-static struct pbuf *tcp_pbuf_prealloc(u16_t length, u16_t max_length, u16_t *oversize,
+static struct pbuf *tcp_pbuf_prealloc(u32_t length, u32_t max_length, u16_t *oversize,
                                       struct tcp_pcb *pcb, pbuf_type type, u8_t tcp_write_flag_more,
                                       u8_t first_seg, pbuf_desc *desc, struct pbuf *p_buff)
 {
     struct pbuf *p;
-    u16_t alloc = length;
+    u32_t alloc = length;
 
     if (length < max_length) {
         /* Should we allocate an oversized pbuf, or just the minimum
@@ -381,14 +377,17 @@ static inline u16_t tcp_xmit_size_goal(struct tcp_pcb *pcb, int use_max)
  * To prompt the system to send data now, call tcp_output() after
  * calling tcp_write().
  *
+ * The function will copy the data from arg to a new pbuf.
+ *
  * @param pcb Protocol control block for the TCP connection to enqueue data for.
  * @param arg Pointer to the data to be enqueued for sending.
  * @param len Data length in bytes
- * @param apiflags combination of following flags :
+ * @param apiflags combination of following flags:
  * - TCP_WRITE_FLAG_COPY (0x01) data will be copied into memory belonging to the stack
  * - TCP_WRITE_FLAG_MORE (0x02) for TCP connection, PSH flag will be set on last segment sent
  * - TCP_WRITE_DUMMY (0x10) indicates if the packet is a dummy packet
  * - TCP_WRITE_FILE (0x40) data should be taken from file
+ * @param desc Additional metadata that allows later to check the data mkey/lkey.
  * @return ERR_OK if enqueued, another err_t on error
  */
 err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags, pbuf_desc *desc)
@@ -404,9 +403,8 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
     u16_t oversize_used = 0;
 #endif /* TCP_OVERSIZE */
     err_t err;
-    u16_t mss_local = 0;
-    u16_t mss_local_minus_opts;
-    int tot_p = 0;
+    u32_t mss_local = 0;
+    u32_t mss_local_minus_opts;
     const int piov_max_size = 512;
     const int piov_max_len = 65536;
     struct iovec piov[piov_max_size];
@@ -473,7 +471,7 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
      */
 
     if (pcb->last_unsent != NULL) {
-        u16_t space;
+        u32_t space;
         /* Usable space at the end of the last unsent segment */
         u16_t unsent_optlen = LWIP_TCP_OPT_LENGTH(pcb->last_unsent->flags);
         if ((pcb->last_unsent->p->type == type) &&
@@ -488,7 +486,6 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
 #endif /* TCP_OVERSIZE */
         }
         seg = pcb->last_unsent;
-        tot_p = pbuf_clen(seg->p);
 
         /*
          * Phase 1: Copy data directly into an oversized pbuf.
@@ -526,9 +523,9 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
          * the end.
          */
         if (!is_file && (pos < len) && (space > 0) && (pcb->last_unsent->len > 0) &&
-            (tot_p < (int)pcb->tso.max_send_sge)) {
+            (pcb->last_unsent->bufs < pcb->tso.max_send_sge)) {
 
-            u16_t seglen = space < len - pos ? space : len - pos;
+            u32_t seglen = space < len - pos ? space : len - pos;
             if ((concat_p = tcp_pbuf_prealloc(seglen, space, &oversize, pcb, type,
                                               TCP_WRITE_FLAG_MORE, 1, desc, NULL)) == NULL) {
                 LWIP_DEBUGF(
@@ -543,7 +540,7 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
             memcpy(concat_p->payload, (u8_t *)arg + pos, seglen);
 
             pos += seglen;
-            queuelen += pbuf_clen(concat_p);
+            queuelen++;
         }
     } else {
 #if TCP_OVERSIZE
@@ -601,7 +598,7 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
             memcpy((char *)p->payload + optlen, (u8_t *)arg + pos, seglen);
         }
 
-        queuelen += pbuf_clen(p);
+        queuelen++;
 
         /* Now that there are more segments queued, we check again if the
          * length of the queue exceeds the configured maximum or
@@ -676,6 +673,7 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
                     (pcb->last_unsent != NULL));
         pbuf_cat(pcb->last_unsent->p, concat_p);
         pcb->last_unsent->len += concat_p->tot_len;
+        pcb->last_unsent->bufs++;
     }
 
     /*
@@ -727,15 +725,31 @@ memerr:
     return ERR_MEM;
 }
 
+/**
+ * Write data for sending (but does not send it immediately).
+ *
+ * It waits in the expectation of more data being sent soon (as
+ * it can send them more efficiently by combining them together).
+ * To prompt the system to send data now, call tcp_output() after
+ * calling tcp_write_express().
+ *
+ * The function will zero-copy the data into the payload, i.e. the data pointer, instead of the
+ * data, will be copied.
+ *
+ * @param pcb Protocol control block for the TCP connection to enqueue data for.
+ * @param arg Pointer to the data to be enqueued for sending.
+ * @param len Data length in bytes
+ * @param desc Additional metadata that allows later to check the data mkey/lkey.
+ * @return ERR_OK if enqueued, another err_t on error
+ */
 err_t tcp_write_express(struct tcp_pcb *pcb, const void *arg, u32_t len, pbuf_desc *desc)
 {
     struct pbuf *p;
     struct tcp_seg *seg = NULL, *prev_seg = NULL, *queue = NULL;
     u32_t pos = 0; /* position in 'arg' data */
     u8_t optflags = TF_SEG_OPTS_ZEROCOPY;
-    u16_t oversize = 0;
-    const u16_t mss_local = lwip_zc_tx_size;
-    u16_t seglen;
+    const u32_t mss_local = lwip_zc_tx_size;
+    u32_t seglen;
     u16_t queuelen = 0;
 
     if (len < pcb->mss) {
@@ -744,10 +758,7 @@ err_t tcp_write_express(struct tcp_pcb *pcb, const void *arg, u32_t len, pbuf_de
     }
 
     /*
-     * TCP segmentation is done in two phases with increasing complexity:
-     *
-     * 1. Chain a new pbuf to the end of pcb->unsent.
-     * 2. Create new segments.
+     * Chain a new pbuf to the end of pcb->unsent if there is enough space.
      *
      * We may run out of memory at any point. In that case we must
      * return ERR_MEM and not change anything in pcb. Therefore, all
@@ -755,49 +766,39 @@ err_t tcp_write_express(struct tcp_pcb *pcb, const void *arg, u32_t len, pbuf_de
      * of the function. Some pcb fields are maintained in local copies:
      *
      * queuelen = pcb->snd_queuelen
-     * oversize = pcb->unsent_oversize
      *
-     * These variables are set consistently by the phases:
-     *
+     * These variables are set consistently by the phases.
      * seg points to the last segment tampered with.
-     *
      * pos records progress as data is segmented.
      */
-
-    /* Find the tail of the unsent queue. */
-    if (pcb->unsent != NULL && (pcb->last_unsent->flags & TF_SEG_OPTS_ZEROCOPY)) {
-        u16_t space = mss_local - pcb->last_unsent->len;
+    if (pcb->unsent != NULL) {
         seg = pcb->last_unsent;
+        u32_t space = LWIP_MAX(mss_local, pcb->tso.max_payload_sz) - seg->len;
 
-        if (space > 0 && (space >= len || len > mss_local) &&
-            (pcb->last_unsent->bufs < pcb->tso.max_send_sge)) {
+        if (space > 0 && (seg->flags & TF_SEG_OPTS_ZEROCOPY) && seg->bufs < pcb->tso.max_send_sge) {
             seglen = space < len ? space : len;
 
-            if ((p = tcp_pbuf_prealloc_express(seglen, &oversize, pcb, PBUF_ZEROCOPY, desc,
-                                               NULL)) == NULL) {
+            if ((p = tcp_pbuf_prealloc_express(seglen, pcb, PBUF_ZEROCOPY, desc, NULL)) == NULL) {
                 goto memerr;
             }
             p->payload = (u8_t *)arg;
-            pbuf_cat(pcb->last_unsent->p, p);
-            pcb->last_unsent->len += p->tot_len;
-            pcb->last_unsent->bufs += 1U;
+            pbuf_cat(seg->p, p);
+            seg->len += p->tot_len;
+            seg->bufs++;
             pos += seglen;
-            queuelen += 1U;
+            queuelen++;
         }
-    } else {
-        pcb->last_unsent = NULL;
     }
 
     while (pos < len) {
         u32_t left = len - pos;
         seglen = left > mss_local ? mss_local : left;
 
-        if ((p = tcp_pbuf_prealloc_express(seglen, &oversize, pcb, PBUF_ZEROCOPY, desc, NULL)) ==
-            NULL) {
+        if ((p = tcp_pbuf_prealloc_express(seglen, pcb, PBUF_ZEROCOPY, desc, NULL)) == NULL) {
             goto memerr;
         }
         p->payload = (u8_t *)arg + pos;
-        queuelen += 1;
+        queuelen++;
 
         if ((seg = tcp_create_segment(pcb, p, 0, pcb->snd_lbb + pos, optflags)) == NULL) {
             tcp_tx_pbuf_free(pcb, p);
@@ -809,8 +810,8 @@ err_t tcp_write_express(struct tcp_pcb *pcb, const void *arg, u32_t len, pbuf_de
         } else {
             prev_seg->next = seg;
         }
-        prev_seg = seg;
 
+        prev_seg = seg;
         pos += seglen;
     }
 
@@ -957,7 +958,7 @@ err_t tcp_enqueue_flags(struct tcp_pcb *pcb, u8_t flags)
     }
 
     /* update number of segments on the queues */
-    pcb->snd_queuelen += pbuf_clen(seg->p);
+    pcb->snd_queuelen += seg->bufs;
     LWIP_DEBUGF(TCP_QLEN_DEBUG,
                 ("tcp_enqueue_flags: %" S16_F " (after enqueued)\n", pcb->snd_queuelen));
     if (pcb->snd_queuelen != 0) {
@@ -1057,7 +1058,7 @@ static void tcp_tso_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t wnd)
     u32_t max_payload_sz = LWIP_MIN(pcb->tso.max_payload_sz, (wnd - (seg->seqno - pcb->lastack)));
     u32_t tot_len = 0;
     u8_t flags = seg->flags;
-    int tot_p = 0;
+    u8_t tot_p = 0;
 
     /* Ignore retransmitted segments and special segments
      */
@@ -1075,8 +1076,8 @@ static void tcp_tso_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t wnd)
             goto err;
         }
 
-        tot_p += pbuf_clen(cur_seg->p);
-        if (tot_p > (int)pcb->max_send_sge) {
+        tot_p += cur_seg->bufs;
+        if (tot_p > pcb->max_send_sge) {
             goto err;
         }
 
@@ -1089,6 +1090,7 @@ static void tcp_tso_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t wnd)
             /* Update the original segment with current segment details */
             seg->next = cur_seg->next;
             seg->len += cur_seg->len;
+            seg->bufs += cur_seg->bufs;
 
             /* Update the first pbuf of current segment, unless this is a zerocopy segment */
             if (!(cur_seg->flags & TF_SEG_OPTS_ZEROCOPY)) {
@@ -1138,7 +1140,7 @@ static struct tcp_seg *tcp_split_one_segment(struct tcp_pcb *pcb, struct tcp_seg
     struct tcp_seg *result = NULL;
     struct pbuf *cur_p = NULL;
     int tcp_hlen_delta;
-    u16_t max_length = 0;
+    u32_t max_length = 0;
     u16_t oversize = 0;
     pbuf_type type = PBUF_RAM;
 
@@ -1456,12 +1458,14 @@ void tcp_split_rexmit(struct tcp_pcb *pcb, struct tcp_seg *seg)
         /* New segment update */
         new_seg->next = cur_seg->next;
         new_seg->flags = cur_seg->flags;
+        new_seg->bufs = cur_seg->bufs - 1;
 
         /* Original segment update */
         cur_seg->next = new_seg;
         cur_seg->len = cur_seg->p->len - tcp_hlen_delta - optlen;
         cur_seg->p->tot_len = cur_seg->p->len;
         cur_seg->p->next = NULL;
+        cur_seg->bufs = 1;
 
         if (pcb->last_unsent == cur_seg) {
             /* We have split the last unsent segment, update last_unsent */
@@ -1554,11 +1558,13 @@ void tcp_split_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t wnd)
             tcp_tx_pbuf_free(pcb, p);
             return;
         }
+        newseg->bufs = seg->bufs;
 
         /* Update original buffer */
         seg->p->next = NULL;
         seg->p->len = seg->p->len - lentoqueue;
         seg->p->tot_len = seg->p->len;
+        seg->bufs = 1;
 
         /* New segment update */
         newseg->next = seg->next;
@@ -1590,6 +1596,7 @@ void tcp_split_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t wnd)
         struct pbuf *pnewtail = seg->p;
         struct pbuf *ptmp = seg->p;
         u32_t headchainlen = seg->p->len;
+        oversize = 1; // count bufs in the left seg
 
         while ((headchainlen + pnewhead->len - (tcp_hlen_delta + optlen)) <= lentosend) {
             if (pnewtail->ref > 1) {
@@ -1599,6 +1606,7 @@ void tcp_split_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t wnd)
             headchainlen += pnewhead->len;
             pnewtail = pnewhead;
             pnewhead = pnewhead->next;
+            oversize++;
 
             if (NULL == pnewhead) {
                 LWIP_ASSERT("tcp_split_segment: We should not be here", 0);
@@ -1615,6 +1623,9 @@ void tcp_split_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t wnd)
                         ("tcp_split_segment: could not allocate memory for segment\n"));
             return;
         }
+
+        newseg->bufs = seg->bufs - oversize;
+        seg->bufs = oversize;
 
         /* Update new tail */
         pnewtail->next = NULL;
@@ -1861,7 +1872,7 @@ err_t tcp_output(struct tcp_pcb *pcb)
                 if (LWIP_IS_DUMMY_SEGMENT(seg)) {
                     pcb->snd_lbb -= seg->len;
                     pcb->snd_buf += seg->len;
-                    pcb->snd_queuelen -= pbuf_clen(seg->p);
+                    pcb->snd_queuelen -= seg->bufs;
                     tcp_tx_seg_free(pcb, seg);
                 } else {
                     /* unacked list is empty? */
@@ -1968,14 +1979,14 @@ static err_t tcp_output_segment(struct tcp_seg *seg, struct tcp_pcb *pcb)
     if (seg->flags & TF_SEG_OPTS_MSS) {
         /* coverity[result_independent_of_operands] */
         TCP_BUILD_MSS_OPTION(*opts, pcb->advtsd_mss);
-        opts += 1; // Move to the next line (meaning next 32 bit) as this option is 4 bytes long
+        opts++; // Move to the next line (meaning next 32 bit) as this option is 4 bytes long
     }
 
     /* If RCV_SCALE is set then prepare segment for window scaling option */
     if (seg->flags & TF_SEG_OPTS_WNDSCALE) {
         TCP_BUILD_WNDSCALE_OPTION(*opts, rcv_wnd_scale);
-        opts += 1; // Move to the next line (meaning next 32 bit) as this option is 3 bytes long +
-                   // we added 1 byte NOOP padding => total 4 bytes
+        opts++; // Move to the next line (meaning next 32 bit) as this option is 3 bytes long +
+                // we added 1 byte NOOP padding => total 4 bytes
     }
 
 #if LWIP_TCP_TIMESTAMPS
