@@ -401,6 +401,8 @@ private:
     ssize_t tcp_tx_handle_partial_send_and_unlock(ssize_t total_tx, int errno_to_report,
                                                   bool is_dummy, bool is_send_zerocopy,
                                                   int errno_to_restore);
+    ssize_t tcp_tx_handle_sndbuf_unavailable(ssize_t total_tx, bool is_dummy, bool is_send_zerocopy,
+                                             int errno_to_restore);
     ssize_t tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg);
     inline err_t handle_fin(struct tcp_pcb *pcb, err_t err);
     inline void handle_rx_lwip_cb_error(pbuf *p);

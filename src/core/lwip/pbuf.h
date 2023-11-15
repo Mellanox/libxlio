@@ -64,12 +64,11 @@ enum {
 
 typedef struct {
     int attr;
-    u32_t express_mkey;
+    u32_t mkey;
     union {
         void *map;
         void *mdesc;
         int fd;
-        u32_t mkey;
         void *opaque;
     };
 } pbuf_desc;
@@ -82,7 +81,7 @@ struct pbuf {
     void *payload;
 
     /** length of this buffer */
-    u16_t len;
+    u32_t len;
 
     u8_t gro;
 
@@ -129,7 +128,6 @@ void pbuf_realloc(struct pbuf *p, u32_t size);
 u8_t pbuf_header(struct pbuf *p, s32_t header_size);
 void pbuf_ref(struct pbuf *p);
 u8_t pbuf_free(struct pbuf *p);
-u8_t pbuf_clen(struct pbuf *p);
 void pbuf_cat(struct pbuf *head, struct pbuf *tail);
 
 void pbuf_split_64k(struct pbuf *p, struct pbuf **rest); // windows scale needs large pbuf
