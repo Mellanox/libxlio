@@ -57,7 +57,7 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb);
 
 /* Used within the TCP code only: */
 struct tcp_pcb *tcp_alloc(u8_t prio);
-struct pbuf *tcp_tx_pbuf_alloc(struct tcp_pcb *pcb, u16_t length, pbuf_type type, pbuf_desc *desc,
+struct pbuf *tcp_tx_pbuf_alloc(struct tcp_pcb *pcb, u32_t length, pbuf_type type, pbuf_desc *desc,
                                struct pbuf *p_buff);
 void tcp_tx_preallocted_buffers_free(struct tcp_pcb *pcb);
 void tcp_tx_pbuf_free(struct tcp_pcb *pcb, struct pbuf *pbuf);
@@ -296,7 +296,7 @@ struct tcp_seg {
 #define TF_SEG_OPTS_ZEROCOPY  (u8_t) TCP_WRITE_ZEROCOPY /* Use zerocopy send mode */
 
     u8_t tcp_flags; /* Cached TCP flags for outgoing segments */
-    u8_t bufs; /* To avoid pbuf_clen() */
+    u8_t bufs;
 
     /* L2+L3+TCP header for zerocopy segments, it must have enough room for options
        This should have enough space for L2 (ETH+vLAN), L3 (IPv4/6), L4 (TCP)

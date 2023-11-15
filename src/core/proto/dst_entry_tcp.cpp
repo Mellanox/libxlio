@@ -223,7 +223,7 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
             m_sge[i].length = p_tcp_iov[i].iovec.iov_len;
             if (is_zerocopy) {
                 if (PBUF_DESC_EXPRESS == p_tcp_iov[i].p_desc->lwip_pbuf.pbuf.desc.attr) {
-                    m_sge[i].lkey = p_tcp_iov[i].p_desc->lwip_pbuf.pbuf.desc.express_mkey;
+                    m_sge[i].lkey = p_tcp_iov[i].p_desc->lwip_pbuf.pbuf.desc.mkey;
                 } else if (PBUF_DESC_MKEY == p_tcp_iov[i].p_desc->lwip_pbuf.pbuf.desc.attr) {
                     /* PBUF_DESC_MKEY - value is provided by user */
                     m_sge[i].lkey = p_tcp_iov[i].p_desc->lwip_pbuf.pbuf.desc.mkey;
