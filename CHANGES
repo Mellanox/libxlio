@@ -1,3 +1,12 @@
+Version 3.20.8-1:
+Date + Time 2023-11-16
+=============================================================
+Added:
+        - RM #3672338 Add missed BlueField-3 to README.md
+
+Fixed:
+        - RM #3656233 Fix buffer double free in SocketXtreme TCP flow
+
 Version 3.20.7-1:
 Date + Time 2023-10-23
 =============================================================
