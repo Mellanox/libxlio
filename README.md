@@ -109,6 +109,7 @@ N - Number of Nginx workers.
 * NVIDIA ConnectX®-6
 * NVIDIA ConnectX®-7
 * NVIDIA BlueField®-2
+* NVIDIA BlueField®-3
 
 ## Licenses
 See [LICENSE](./LICENSE) file
