@@ -639,4 +639,13 @@ static inline struct xlio_api_t *xlio_get_api()
     }
     return api_ptr;
 }
+
+enum xlio_express_flags : uint32_t {
+    XLIO_EXPRESS_OP_TYPE_DESC,
+    XLIO_EXPRESS_OP_TYPE_FILE_ZEROCOPY,
+    XLIO_EXPRESS_OP_TYPE_MASK = 0x000fu,
+    XLIO_EXPRESS_MSG_MORE,
+    XLIO_EXPRESS_MSG_MASK = 0x00f0u,
+};
+
 #endif /* XLIO_EXTRA_H */
