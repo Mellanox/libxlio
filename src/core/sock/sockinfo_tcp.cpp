@@ -3923,11 +3923,7 @@ noblock:
                    p_fd_array->fd_count++;
            }
     */
-<<<<<<< Updated upstream
-    __log_funcall("--->>> tcp_sndbuf(&m_pcb)=%d", sndbuf(&m_pcb));
-=======
-    __log_funcall("--->>> tcp_sndbuf(&m_pcb)=%d", sndbuf_available());
->>>>>>> Stashed changes
+    __log_funcall("--->>> tcp_sndbuf(&m_pcb)=%ld", sndbuf_available());
     return true;
 }
 
@@ -6038,4 +6034,61 @@ inline bool sockinfo_tcp::handle_bind_no_port(int &bind_ret, in_port_t in_port,
     }
 
     return CONTINUE_WITH_BIND;
+}
+
+int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint32_t mkey,
+                                 xlio_express_flags flags, void *opaque_op)
+{
+    err_t err;
+    pbuf_desc mdesc;
+
+    switch (flags & XLIO_EXPRESS_OP_TYPE_MASK) {
+    case XLIO_EXPRESS_OP_TYPE_DESC:
+        mdesc.attr = PBUF_DESC_EXPRESS;
+        break;
+    case XLIO_EXPRESS_OP_TYPE_FILE_ZEROCOPY:
+        mdesc.attr = PBUF_DESC_MDESC;
+        /* Increase the refcount by 1 */
+        /* reinterpret_cast<mapping_t *>(opaque_op)->get(); */
+        break;
+    default:
+        return -1;
+    };
+    mdesc.express_mkey = mkey;
+    mdesc.opaque = nullptr;
+
+    int bytes_written = 0;
+
+    lock_tcp_con();
+    for (unsigned i = 0; i < iov_len - 1; ++i) {
+        err = tcp_write_express(&m_pcb, iov[i].iov_base, iov[i].iov_len, &mdesc);
+        if (err != ERR_OK) {
+            return -1;
+        }
+        bytes_written += iov[i].iov_len;
+    }
+
+    /* Assign opaque only to the last chunk. So, only the last pbuf will generate zerocopy
+     * completion. */
+    mdesc.opaque = opaque_op;
+    err = tcp_write_express(&m_pcb, iov[iov_len - 1].iov_base, iov[iov_len - 1].iov_len, &mdesc);
+    if (err != ERR_OK) {
+        return -1;
+    }
+
+    bytes_written += iov[iov_len - 1].iov_len;
+
+    if (!(flags & XLIO_EXPRESS_MSG_MORE)) {
+        err = tcp_output(&m_pcb);
+        if (err != ERR_OK) {
+            return -1;
+        }
+        /* if (!express_dirty) { */
+        /*     express_dirty = true; */
+        /*     express_dirty_sockets.push_back(this); */
+        /* } */
+    }
+    unlock_tcp_con();
+
+    return bytes_written;
 }

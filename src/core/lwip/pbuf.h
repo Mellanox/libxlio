@@ -70,6 +70,7 @@ typedef struct {
         void *mdesc;
         int fd;
         u32_t mkey;
+        void *opaque;
     };
 } pbuf_desc;
 

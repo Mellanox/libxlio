@@ -324,7 +324,6 @@ public:
     inline void unlock_tcp_con(void) { m_tcp_con_lock.unlock(); }
 
     inline void set_reguired_send_block(unsigned sz) { m_required_send_block = sz; }
-
     static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
     static err_t rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
                                          err_t err);
@@ -338,6 +337,9 @@ public:
         tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_recv_callback);
         return sockinfo::register_callback(callback, context);
     }
+
+    int tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint32_t mkey,
+                       xlio_express_flags flags, void *opaque_op);
 
 protected:
     virtual void lock_rx_q();
