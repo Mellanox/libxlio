@@ -2037,6 +2037,7 @@ void tcp_rexmit_rto(struct tcp_pcb *pcb)
     pcb->unsent = pcb->unacked;
     /* unacked queue is now empty */
     pcb->unacked = NULL;
+    pcb->last_unacked = NULL;
 
     /* increment number of retransmissions */
     ++pcb->nrtx;
