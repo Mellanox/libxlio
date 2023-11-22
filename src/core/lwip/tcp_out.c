@@ -2065,7 +2065,11 @@ void tcp_rexmit(struct tcp_pcb *pcb)
     /* Move the first unacked segment to the unsent queue */
     /* Keep the unsent queue sorted. */
     seg = pcb->unacked;
-    pcb->unacked = seg->next;
+
+    pcb->unacked = pcb->unacked->next;
+    if (NULL == pcb->unacked) {
+        pcb->last_unacked = NULL;
+    }
 
     cur_seg = &(pcb->unsent);
     while (*cur_seg && TCP_SEQ_LT((*cur_seg)->seqno, seg->seqno)) {
