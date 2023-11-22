@@ -1625,6 +1625,9 @@ err_t tcp_output(struct tcp_pcb *pcb)
         pcb->unacked->next = pcb->unsent;
         pcb->unsent = pcb->unacked;
         pcb->unacked = NULL;
+        if (NULL == pcb->last_unsent) {
+            pcb->last_unsent = pcb->last_unacked;
+        }
         pcb->last_unacked = NULL;
     }
     seg = pcb->unsent;
