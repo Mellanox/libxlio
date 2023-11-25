@@ -68,8 +68,7 @@ public:
     enum flags { TYPICAL = 0, CLONED = 0x01, ZCOPY = 0x02 };
 
 public:
-    mem_buf_desc_t(uint8_t *buffer, size_t size, pbuf_type type,
-                   pbuf_free_custom_fn custom_free_function)
+    mem_buf_desc_t(uint8_t *buffer, size_t size, pbuf_type type)
         : p_buffer(buffer)
         , m_flags(mem_buf_desc_t::TYPICAL)
         , lkey(0)
@@ -86,7 +85,6 @@ public:
         reset_ref_count();
 
         lwip_pbuf.pbuf.type = type;
-        lwip_pbuf.custom_free_function = custom_free_function;
     }
 
     // Copy constructor for the clone() method.

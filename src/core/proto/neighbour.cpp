@@ -679,8 +679,6 @@ bool neigh_entry::post_send_tcp(neigh_send_data *p_data)
     BULLSEYE_EXCLUDE_BLOCK_END
 
     p_mem_buf_desc->lwip_pbuf.pbuf.payload = (u8_t *)p_mem_buf_desc->p_buffer + h->m_total_hdr_len;
-    p_mem_buf_desc->lwip_pbuf.pbuf.type = PBUF_RAM;
-
     p_mem_buf_desc->p_next_desc = NULL;
 
     // copy L4 neigh buffer to tx buffer

@@ -91,7 +91,7 @@ void pbuf_realloc(struct pbuf *p, u32_t new_len)
     s32_t grow;
 
     LWIP_ASSERT("pbuf_realloc: p != NULL", p != NULL);
-    LWIP_ASSERT("pbuf_realloc: sane p->type", p->type == PBUF_RAM || p->type == PBUF_REF);
+    LWIP_ASSERT("pbuf_realloc: sane p->type", p->type == PBUF_RAM);
 
     /* desired length larger than current length? */
     if (new_len >= p->tot_len) {
@@ -142,8 +142,7 @@ void pbuf_realloc(struct pbuf *p, u32_t new_len)
  *
  * Adjusts the ->payload pointer so that space for a header
  * (dis)appears in the pbuf payload.
- * Only PBUF_RAM and PBUF_REF buffers are allowed. PBUF_REF buffers are used in
- * the RX path.
+ * Only PBUF_RAM buffers are allowed.
  *
  * The ->payload, ->tot_len and ->len fields are adjusted.
  *
@@ -159,7 +158,7 @@ u8_t pbuf_header(struct pbuf *p, s32_t header_size_increment)
 {
     LWIP_ASSERT("p != NULL", p != NULL);
 
-    if (p->type != PBUF_RAM && p->type != PBUF_REF) {
+    if (p->type != PBUF_RAM) {
         return 1;
     }
 
@@ -226,43 +225,24 @@ u8_t pbuf_free(struct pbuf *p)
     }
     LWIP_DEBUGF(PBUF_DEBUG | LWIP_DBG_TRACE, ("pbuf_free(%p)\n", (void *)p));
 
-    LWIP_ASSERT("pbuf_free: sane type",
-                p->type == PBUF_RAM || p->type == PBUF_REF || p->type == PBUF_ZEROCOPY);
+    LWIP_ASSERT("pbuf_free: sane type", p->type == PBUF_RAM || p->type == PBUF_ZEROCOPY);
 
     count = 0;
     /* de-allocate all consecutive pbufs from the head of the chain that
-     * obtain a zero reference count after decrementing*/
+     * obtain a zero reference count after decrementing */
     while (p != NULL) {
-        u16_t ref;
         /* all pbufs in a chain are referenced at least once */
         LWIP_ASSERT("pbuf_free: p->ref > 0", p->ref > 0);
-        /* decrease reference count (number of pointers to pbuf) */
-        ref = --(p->ref);
-        /* this pbuf is no longer referenced to? */
-        if (ref == 0) {
-            /* remember next pbuf in chain for next iteration */
+        if ((--p->ref) == 0) {
             q = p->next;
-            LWIP_DEBUGF(PBUF_DEBUG | LWIP_DBG_TRACE, ("pbuf_free: deallocating %p\n", (void *)p));
-            /* is this a custom pbuf? */
-            if ((p->flags & PBUF_FLAG_IS_CUSTOM) != 0) {
-                struct pbuf_custom *pc = (struct pbuf_custom *)p;
-                LWIP_ASSERT("pc->custom_free_function != NULL", pc->custom_free_function != NULL);
-                pc->custom_free_function(p);
-            }
+            external_tcp_rx_pbuf_free(p);
             count++;
-            /* proceed to next pbuf */
             p = q;
-            /* p->ref > 0, this pbuf is still referenced to */
-            /* (and so the remaining pbufs in chain as well) */
         } else {
-            LWIP_DEBUGF(PBUF_DEBUG | LWIP_DBG_TRACE,
-                        ("pbuf_free: %p has ref %" U16_F ", ending here.\n", (void *)p, ref));
             /* stop walking through the chain */
             p = NULL;
         }
     }
-
-    /* return number of de-allocated pbufs */
     return count;
 }
 

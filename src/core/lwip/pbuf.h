@@ -43,16 +43,12 @@ extern "C" {
 typedef enum {
     PBUF_NONE, /* impossible type to catch zeroed pbuf objects */
     PBUF_RAM, /* pbuf data is stored in RAM */
-    PBUF_REF, /* pbuf is an incoming buffer with custom free function */
     PBUF_STACK, /* pbuf is allocated on stack and mustn't be freed */
     PBUF_ZEROCOPY /* pbuf points to user's memory which mustn't be modified */
 } pbuf_type;
 
 /** indicates this packet's data should be immediately passed to the application */
 #define PBUF_FLAG_PUSH 0x01U
-/** indicates this is a custom pbuf: pbuf_free and pbuf_header handle such a
-    a pbuf differently */
-#define PBUF_FLAG_IS_CUSTOM 0x02U
 
 /** Private data depending on type */
 enum {
@@ -121,8 +117,7 @@ typedef void (*pbuf_free_custom_fn)(struct pbuf *p);
 struct pbuf_custom {
     /** The actual pbuf */
     struct pbuf pbuf;
-    /** This function is called when pbuf_free deallocates this pbuf(_custom) */
-    pbuf_free_custom_fn custom_free_function;
+    u64_t padding; /* TODO Remove and optimize mem_buf_desc alignment. */
 };
 
 /* Initializes the pbuf module. This call is empty for now, but may not be in future. */

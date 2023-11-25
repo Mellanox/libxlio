@@ -185,11 +185,9 @@ bool rfs_uc_tcp_gro::add_packet(mem_buf_desc_t *mem_buf_desc, void *payload_ptr,
 
     mem_buf_desc->reset_ref_count();
 
-    mem_buf_desc->lwip_pbuf.pbuf.flags = PBUF_FLAG_IS_CUSTOM;
     mem_buf_desc->lwip_pbuf.pbuf.len = mem_buf_desc->lwip_pbuf.pbuf.tot_len =
         mem_buf_desc->rx.sz_payload;
     mem_buf_desc->lwip_pbuf.pbuf.ref = 1;
-    mem_buf_desc->lwip_pbuf.pbuf.type = PBUF_REF;
     mem_buf_desc->lwip_pbuf.pbuf.next = NULL;
     mem_buf_desc->lwip_pbuf.pbuf.payload = payload_ptr;
 
@@ -234,11 +232,9 @@ void rfs_uc_tcp_gro::flush_gro_desc(void *pv_fd_ready_array)
 
         m_gro_desc.p_first->lwip_pbuf.pbuf.gro = 1;
 
-        m_gro_desc.p_first->lwip_pbuf.pbuf.flags = PBUF_FLAG_IS_CUSTOM;
         m_gro_desc.p_first->lwip_pbuf.pbuf.tot_len = m_gro_desc.p_first->lwip_pbuf.pbuf.len =
             (m_gro_desc.p_first->sz_data - m_gro_desc.p_first->rx.n_transport_header_len);
         m_gro_desc.p_first->lwip_pbuf.pbuf.ref = 1;
-        m_gro_desc.p_first->lwip_pbuf.pbuf.type = PBUF_REF;
         m_gro_desc.p_first->lwip_pbuf.pbuf.payload =
             (u8_t *)(m_gro_desc.p_first->p_buffer + m_gro_desc.p_first->rx.n_transport_header_len);
         m_gro_desc.p_first->rx.is_xlio_thr = m_gro_desc.p_last->rx.is_xlio_thr;
