@@ -120,10 +120,8 @@ bool buffer_pool::expand(size_t count)
     }
 
     for (size_t i = 0; i < count; ++i) {
-        pbuf_type type = (m_buf_size == 0 && m_custom_free_function == free_tx_lwip_pbuf_custom)
-            ? PBUF_ZEROCOPY
-            : PBUF_RAM;
-        desc = new (desc_ptr) mem_buf_desc_t(data_ptr, m_buf_size, type, m_custom_free_function);
+        pbuf_type type = (m_buf_size == 0 && m_p_bpool_stat->is_tx) ? PBUF_ZEROCOPY : PBUF_RAM;
+        desc = new (desc_ptr) mem_buf_desc_t(data_ptr, m_buf_size, type);
         put_buffer_helper(desc);
         desc_ptr += sizeof(mem_buf_desc_t);
         if (data_ptr) {
@@ -149,8 +147,7 @@ void buffer_pool::free_tx_lwip_pbuf_custom(struct pbuf *p_buff)
     pool->put_buffers_thread_safe((mem_buf_desc_t *)p_buff);
 }
 
-buffer_pool::buffer_pool(buffer_pool_type type, size_t buf_size,
-                         pbuf_free_custom_fn custom_free_function, alloc_t alloc_func,
+buffer_pool::buffer_pool(buffer_pool_type type, size_t buf_size, alloc_t alloc_func,
                          free_t free_func)
     : m_lock("buffer_pool")
     , m_buf_size((buf_size + MCE_ALIGNMENT) & (~MCE_ALIGNMENT))
@@ -161,7 +158,6 @@ buffer_pool::buffer_pool(buffer_pool_type type, size_t buf_size,
     , m_allocator_data(m_buf_size ? xlio_allocator_heap(alloc_func, free_func, true)
                                   : xlio_allocator_heap(false))
     , m_allocator_metadata(false)
-    , m_custom_free_function(custom_free_function)
 {
     size_t initial_pool_size;
 

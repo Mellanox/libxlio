@@ -76,8 +76,8 @@ inline static void free_lwip_pbuf(struct pbuf_custom *pbuf_custom)
  */
 class buffer_pool {
 public:
-    buffer_pool(buffer_pool_type type, size_t buf_size, pbuf_free_custom_fn custom_free_function,
-                alloc_t alloc_func = nullptr, free_t free_func = nullptr);
+    buffer_pool(buffer_pool_type type, size_t buf_size, alloc_t alloc_func = nullptr,
+                free_t free_func = nullptr);
     ~buffer_pool();
 
     void register_memory(ib_ctx_handler *p_ib_ctx_h);
@@ -146,7 +146,6 @@ private:
     bpool_stats_t m_bpool_stat_static;
     xlio_allocator_heap m_allocator_data;
     xlio_allocator_heap m_allocator_metadata;
-    pbuf_free_custom_fn m_custom_free_function;
 };
 
 extern buffer_pool *g_buffer_pool_rx_ptr;

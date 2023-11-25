@@ -52,6 +52,7 @@
 
 tcp_tx_pbuf_alloc_fn external_tcp_tx_pbuf_alloc;
 tcp_tx_pbuf_free_fn external_tcp_tx_pbuf_free;
+tcp_rx_pbuf_free_fn external_tcp_rx_pbuf_free;
 tcp_seg_alloc_fn external_tcp_seg_alloc;
 tcp_seg_free_fn external_tcp_seg_free;
 /* allow user to be notified upon tcp_state changes */
@@ -65,6 +66,11 @@ void register_tcp_tx_pbuf_alloc(tcp_tx_pbuf_alloc_fn fn)
 void register_tcp_tx_pbuf_free(tcp_tx_pbuf_free_fn fn)
 {
     external_tcp_tx_pbuf_free = fn;
+}
+
+void register_tcp_rx_pbuf_free(tcp_rx_pbuf_free_fn fn)
+{
+    external_tcp_rx_pbuf_free = fn;
 }
 
 void register_tcp_seg_alloc(tcp_seg_alloc_fn fn)

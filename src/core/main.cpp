@@ -1068,19 +1068,17 @@ static void do_global_ctors_helper()
         safe_mce_sys().rx_buf_size = 0;
     }
 
-    NEW_CTOR(
-        g_buffer_pool_rx_rwqe,
-        buffer_pool(BUFFER_POOL_RX, calc_rx_wqe_buff_size(), buffer_pool::free_rx_lwip_pbuf_custom,
-                    (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_RX
-                         ? safe_mce_sys().m_ioctl.user_alloc.memalloc
-                         : nullptr),
-                    (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_RX
-                         ? safe_mce_sys().m_ioctl.user_alloc.memfree
-                         : nullptr)));
+    NEW_CTOR(g_buffer_pool_rx_rwqe,
+             buffer_pool(BUFFER_POOL_RX, calc_rx_wqe_buff_size(),
+                         (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_RX
+                              ? safe_mce_sys().m_ioctl.user_alloc.memalloc
+                              : nullptr),
+                         (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_RX
+                              ? safe_mce_sys().m_ioctl.user_alloc.memfree
+                              : nullptr)));
 
     if (safe_mce_sys().enable_striding_rq) {
-        NEW_CTOR(g_buffer_pool_rx_stride,
-                 buffer_pool(BUFFER_POOL_RX, 0, buffer_pool::free_rx_lwip_pbuf_custom));
+        NEW_CTOR(g_buffer_pool_rx_stride, buffer_pool(BUFFER_POOL_RX, 0));
         g_buffer_pool_rx_ptr = g_buffer_pool_rx_stride;
     } else {
         g_buffer_pool_rx_ptr = g_buffer_pool_rx_rwqe;
@@ -1097,7 +1095,6 @@ static void do_global_ctors_helper()
                                          ? safe_mce_sys().tx_buf_size
                                          : get_lwip_tcp_mss(g_p_net_device_table_mgr->get_max_mtu(),
                                                             safe_mce_sys().lwip_mss)),
-                         buffer_pool::free_tx_lwip_pbuf_custom,
                          (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_TX
                               ? safe_mce_sys().m_ioctl.user_alloc.memalloc
                               : NULL),
@@ -1105,8 +1102,7 @@ static void do_global_ctors_helper()
                               ? safe_mce_sys().m_ioctl.user_alloc.memfree
                               : NULL)));
 
-    NEW_CTOR(g_buffer_pool_zc,
-             buffer_pool(BUFFER_POOL_TX, 0, buffer_pool::free_tx_lwip_pbuf_custom));
+    NEW_CTOR(g_buffer_pool_zc, buffer_pool(BUFFER_POOL_TX, 0));
 
     NEW_CTOR(g_tcp_seg_pool, tcp_seg_pool());
 
