@@ -62,6 +62,7 @@ epfd_info::epfd_info(int epfd, int size)
     , m_lock_poll_os(MULTILOCK_NON_RECURSIVE, "epfd_lock_poll_os")
     , m_sysvar_thread_mode(safe_mce_sys().thread_mode)
     , m_b_os_data_available(false)
+    , use_os_events_in_internal_thread_epoll(safe_mce_sys().os_events_in_internal_thread_epoll)
 {
     __log_funcall("");
     int max_sys_fd = get_sys_max_fd_num();
@@ -89,9 +90,11 @@ epfd_info::epfd_info(int epfd, int size)
 
     xlio_stats_instance_create_epoll_block(m_epfd, &(m_stats->stats));
 
-    // Register this socket to read nonoffloaded data
-    g_p_event_handler_manager->update_epfd(m_epfd, EPOLL_CTL_ADD,
-                                           EPOLLIN | EPOLLPRI | EPOLLONESHOT);
+    if (use_os_events_in_internal_thread_epoll) {
+        // Register this socket to read nonoffloaded data
+        g_p_event_handler_manager->update_epfd(m_epfd, EPOLL_CTL_ADD,
+                                               EPOLLIN | EPOLLPRI | EPOLLONESHOT);
+    }
 
     wakeup_set_epoll_fd(m_epfd);
 }
@@ -133,8 +136,10 @@ epfd_info::~epfd_info()
         BULLSEYE_EXCLUDE_BLOCK_END
     }
 
-    g_p_event_handler_manager->update_epfd(m_epfd, EPOLL_CTL_DEL,
-                                           EPOLLIN | EPOLLPRI | EPOLLONESHOT);
+    if (use_os_events_in_internal_thread_epoll) {
+        g_p_event_handler_manager->update_epfd(m_epfd, EPOLL_CTL_DEL,
+                                               EPOLLIN | EPOLLPRI | EPOLLONESHOT);
+    }
 
     unlock();
 
@@ -864,9 +869,11 @@ void epfd_info::register_to_internal_thread()
     std::lock_guard<decltype(m_lock_poll_os)> locker(m_lock_poll_os);
     m_b_os_data_available = false;
 
-    // Reassign EPOLLIN event
-    g_p_event_handler_manager->update_epfd(m_epfd, EPOLL_CTL_MOD,
-                                           EPOLLIN | EPOLLPRI | EPOLLONESHOT);
+    if (use_os_events_in_internal_thread_epoll) {
+        // Reassign EPOLLIN event
+        g_p_event_handler_manager->update_epfd(m_epfd, EPOLL_CTL_MOD,
+                                               EPOLLIN | EPOLLPRI | EPOLLONESHOT);
+    }
 }
 
 bool epfd_info::get_and_unset_os_data_available()
