@@ -73,43 +73,39 @@ poll_call::poll_call(int *off_rfds_buffer, offloaded_mode_t *off_modes_buffer, i
         fd = m_orig_fds[i].fd;
         socket_fd_api *temp_sock_fd_api = fd_collection_get_sockfd(fd);
         if (temp_sock_fd_api && (temp_sock_fd_api->get_type() == FD_TYPE_SOCKET)) {
-            offloaded_mode_t off_mode = OFF_NONE;
-            if (m_orig_fds[i].events & (POLLIN | POLLERR | POLLHUP)) {
-                off_mode = (offloaded_mode_t)(off_mode | OFF_READ);
-            }
+            // POLLERR and POLLHUP are always enabled implicitly and considered as READ by XLIO
+            offloaded_mode_t off_mode = OFF_READ;
             if (m_orig_fds[i].events & POLLOUT) {
                 off_mode = (offloaded_mode_t)(off_mode | OFF_WRITE);
             }
 
-            if (off_mode) {
-                __log_func("---> fd=%d IS SET for read or write!", fd);
-                m_lookup_buffer[m_num_all_offloaded_fds] = i;
-                m_p_all_offloaded_fds[m_num_all_offloaded_fds] = fd;
-                m_p_offloaded_modes[m_num_all_offloaded_fds] = off_mode;
-                ++m_num_all_offloaded_fds;
+            __log_func("---> fd=%d IS SET for read or write!", fd);
+            m_lookup_buffer[m_num_all_offloaded_fds] = i;
+            m_p_all_offloaded_fds[m_num_all_offloaded_fds] = fd;
+            m_p_offloaded_modes[m_num_all_offloaded_fds] = off_mode;
+            ++m_num_all_offloaded_fds;
 
-                // We will do copy only in case we have at least one offloaded socket
-                if (!m_fds) {
-                    m_fds = working_fds_arr;
-                    // m_fds will be working array and m_orig_fds is the pointer to user fds - we
-                    // cannot modify it
-                    memcpy(m_fds, m_orig_fds, m_nfds * sizeof(fds[0]));
-                }
+            // We will do copy only in case we have at least one offloaded socket
+            if (!m_fds) {
+                m_fds = working_fds_arr;
+                // m_fds will be working array and m_orig_fds is the pointer to user fds - we
+                // cannot modify it
+                memcpy(m_fds, m_orig_fds, m_nfds * sizeof(fds[0]));
+            }
 
-                if (temp_sock_fd_api->skip_os_select()) {
-                    __log_func("fd=%d must be skipped from os r poll()", fd);
-                    m_fds[i].fd = -1;
-                } else if (m_orig_fds[i].events & POLLIN) {
-                    if (temp_sock_fd_api->is_readable(NULL)) {
-                        io_mux_call::update_fd_array(&m_fd_ready_array, fd);
-                        m_n_ready_rfds++;
-                        m_n_all_ready_fds++;
-                    } else {
-                        // Instructing the socket to sample the OS immediately to prevent hitting
-                        // EAGAIN on recvfrom(), after iomux returned a shadow fd as ready (only for
-                        // non-blocking sockets)
-                        temp_sock_fd_api->set_immediate_os_sample();
-                    }
+            if (temp_sock_fd_api->skip_os_select()) {
+                __log_func("fd=%d must be skipped from os r poll()", fd);
+                m_fds[i].fd = -1;
+            } else if (m_orig_fds[i].events & POLLIN) {
+                if (temp_sock_fd_api->is_readable(NULL)) {
+                    io_mux_call::update_fd_array(&m_fd_ready_array, fd);
+                    m_n_ready_rfds++;
+                    m_n_all_ready_fds++;
+                } else {
+                    // Instructing the socket to sample the OS immediately to prevent hitting
+                    // EAGAIN on recvfrom(), after iomux returned a shadow fd as ready (only for
+                    // non-blocking sockets)
+                    temp_sock_fd_api->set_immediate_os_sample();
                 }
             }
         }
