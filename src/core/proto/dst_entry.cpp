@@ -60,7 +60,7 @@ dst_entry::dst_entry(const sock_addr &dst, uint16_t src_port, socket_data &sock_
     , m_so_bindtodevice_ip(in6addr_any)
     , m_route_src_ip(in6addr_any)
     , m_pkt_src_ip(in6addr_any)
-    , m_ring_alloc_logic_tx(sock_data.fd, ring_alloc_logic, this)
+    , m_ring_alloc_logic_tx(sock_data.fd, ring_alloc_logic)
     , m_p_tx_mem_buf_desc_list(NULL)
     , m_p_zc_mem_buf_desc_list(NULL)
     , m_b_tx_mem_buf_desc_list_pending(false)
@@ -833,7 +833,7 @@ bool dst_entry::update_ring_alloc_logic(int fd, lock_base &socket_lock,
 {
     resource_allocation_key old_key(*m_ring_alloc_logic_tx.get_key());
 
-    m_ring_alloc_logic_tx = ring_allocation_logic_tx(fd, ring_alloc_logic, this);
+    m_ring_alloc_logic_tx = ring_allocation_logic_tx(fd, ring_alloc_logic);
 
     if (*m_ring_alloc_logic_tx.get_key() != old_key) {
         std::lock_guard<decltype(m_tx_migration_lock)> locker(m_tx_migration_lock);
