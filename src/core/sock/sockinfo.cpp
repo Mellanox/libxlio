@@ -395,31 +395,6 @@ int sockinfo::setsockopt(int __level, int __optname, const void *__optval, sockl
                 errno = EINVAL;
             }
             break;
-        case SO_XLIO_RING_USER_MEMORY:
-            if (__optval) {
-                if (__optlen == sizeof(iovec)) {
-                    iovec *attr = (iovec *)__optval;
-                    m_ring_alloc_log_rx.set_memory_descriptor(*attr);
-                    m_ring_alloc_logic_rx =
-                        ring_allocation_logic_rx(get_fd(), m_ring_alloc_log_rx, this);
-                    if (m_p_rx_ring || m_rx_ring_map.size()) {
-                        si_logwarn("user asked to assign memory for "
-                                   "RX ring but ring already exists");
-                    }
-                    ret = SOCKOPT_INTERNAL_XLIO_SUPPORT;
-                } else {
-                    ret = SOCKOPT_NO_XLIO_SUPPORT;
-                    errno = EINVAL;
-                    si_logdbg("SOL_SOCKET, SO_XLIO_RING_USER_MEMORY - "
-                              "bad length expected %zu got %d",
-                              sizeof(iovec), __optlen);
-                }
-            } else {
-                ret = SOCKOPT_NO_XLIO_SUPPORT;
-                errno = EINVAL;
-                si_logdbg("SOL_SOCKET, SO_XLIO_RING_USER_MEMORY - NOT HANDLED, optval == NULL");
-            }
-            break;
         case SO_XLIO_FLOW_TAG:
             if (__optval) {
                 if (__optlen == sizeof(uint32_t)) {
