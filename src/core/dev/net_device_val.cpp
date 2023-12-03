@@ -72,30 +72,25 @@
 
 ring_alloc_logic_attr::ring_alloc_logic_attr()
     : m_ring_alloc_logic(RING_LOGIC_PER_INTERFACE)
-    , m_user_id_key(0)
     , m_use_locks(true)
+    , m_user_id_key(0)
 {
-    m_mem_desc.iov_base = NULL;
-    m_mem_desc.iov_len = 0;
     init();
 }
 
 ring_alloc_logic_attr::ring_alloc_logic_attr(ring_logic_t ring_logic, bool use_locks)
     : m_ring_alloc_logic(ring_logic)
-    , m_user_id_key(0)
     , m_use_locks(use_locks)
+    , m_user_id_key(0)
 {
-    m_mem_desc.iov_base = NULL;
-    m_mem_desc.iov_len = 0;
     init();
 }
 
 ring_alloc_logic_attr::ring_alloc_logic_attr(const ring_alloc_logic_attr &other)
     : m_hash(other.m_hash)
     , m_ring_alloc_logic(other.m_ring_alloc_logic)
-    , m_user_id_key(other.m_user_id_key)
-    , m_mem_desc(other.m_mem_desc)
     , m_use_locks(other.m_use_locks)
+    , m_user_id_key(other.m_user_id_key)
 {
 }
 
@@ -118,8 +113,6 @@ void ring_alloc_logic_attr::init()
 
     HASH_ITER(m_ring_alloc_logic, size_t);
     HASH_ITER(m_user_id_key, uint64_t);
-    HASH_ITER(m_mem_desc.iov_base, uintptr_t);
-    HASH_ITER(m_mem_desc.iov_len, size_t);
     HASH_ITER(m_use_locks, bool);
 
     m_hash = h;
@@ -130,14 +123,6 @@ void ring_alloc_logic_attr::set_ring_alloc_logic(ring_logic_t logic)
 {
     if (m_ring_alloc_logic != logic) {
         m_ring_alloc_logic = logic;
-        init();
-    }
-}
-
-void ring_alloc_logic_attr::set_memory_descriptor(iovec &mem_desc)
-{
-    if (m_mem_desc.iov_base != mem_desc.iov_base || m_mem_desc.iov_len != mem_desc.iov_len) {
-        m_mem_desc = mem_desc;
         init();
     }
 }
@@ -162,8 +147,7 @@ const std::string ring_alloc_logic_attr::to_str() const
 {
     std::stringstream ss;
 
-    ss << "allocation logic " << m_ring_alloc_logic << " key " << m_user_id_key << " user address "
-       << m_mem_desc.iov_base << " user length " << m_mem_desc.iov_len << " use locks "
+    ss << "allocation logic " << m_ring_alloc_logic << " key " << m_user_id_key << " use locks "
        << !!m_use_locks;
 
     return ss.str();
