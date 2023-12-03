@@ -113,7 +113,7 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
         m_fd_context = (void *)((uintptr_t)m_fd);
     }
 
-    m_ring_alloc_logic_rx = ring_allocation_logic_rx(get_fd(), m_ring_alloc_log_rx, this);
+    m_ring_alloc_logic_rx = ring_allocation_logic_rx(get_fd(), m_ring_alloc_log_rx);
 
     m_p_socket_stats = &m_socket_stats; // Save stats as local copy and allow state publisher to
                                         // copy from this location
@@ -180,7 +180,7 @@ void sockinfo::socket_stats_init(void)
     m_p_socket_stats->ring_alloc_logic_tx = m_ring_alloc_log_tx.get_ring_alloc_logic();
     m_p_socket_stats->ring_user_id_rx = m_ring_alloc_logic_rx.calc_res_key_by_logic();
     m_p_socket_stats->ring_user_id_tx =
-        ring_allocation_logic_tx(get_fd(), m_ring_alloc_log_tx, this).calc_res_key_by_logic();
+        ring_allocation_logic_tx(get_fd(), m_ring_alloc_log_tx).calc_res_key_by_logic();
     m_p_socket_stats->sa_family = m_family;
 }
 
@@ -276,7 +276,7 @@ int sockinfo::set_ring_attr(xlio_ring_alloc_logic_attr *attr)
         update_header_field(&du);
         m_p_socket_stats->ring_alloc_logic_tx = m_ring_alloc_log_tx.get_ring_alloc_logic();
         m_p_socket_stats->ring_user_id_tx =
-            ring_allocation_logic_tx(get_fd(), m_ring_alloc_log_tx, this).calc_res_key_by_logic();
+            ring_allocation_logic_tx(get_fd(), m_ring_alloc_log_tx).calc_res_key_by_logic();
     }
     if ((attr->comp_mask & XLIO_RING_ALLOC_MASK_RING_INGRESS) && attr->ingress) {
         ring_alloc_logic_attr old_key(*m_ring_alloc_logic_rx.get_key());
@@ -284,7 +284,7 @@ int sockinfo::set_ring_attr(xlio_ring_alloc_logic_attr *attr)
         if (set_ring_attr_helper(&m_ring_alloc_log_rx, attr)) {
             return SOCKOPT_NO_XLIO_SUPPORT;
         }
-        m_ring_alloc_logic_rx = ring_allocation_logic_rx(get_fd(), m_ring_alloc_log_rx, this);
+        m_ring_alloc_logic_rx = ring_allocation_logic_rx(get_fd(), m_ring_alloc_log_rx);
 
         if (m_rx_nd_map.size()) {
             std::lock_guard<decltype(m_rx_migration_lock)> locker(m_rx_migration_lock);
@@ -314,7 +314,7 @@ void sockinfo::set_ring_logic_rx(ring_alloc_logic_attr ral)
 {
     if (m_rx_ring_map.empty()) {
         m_ring_alloc_log_rx = ral;
-        m_ring_alloc_logic_rx = ring_allocation_logic_rx(get_fd(), m_ring_alloc_log_rx, this);
+        m_ring_alloc_logic_rx = ring_allocation_logic_rx(get_fd(), m_ring_alloc_log_rx);
         m_p_socket_stats->ring_alloc_logic_rx = m_ring_alloc_log_rx.get_ring_alloc_logic();
         m_p_socket_stats->ring_user_id_rx = m_ring_alloc_logic_rx.calc_res_key_by_logic();
     }
@@ -326,7 +326,7 @@ void sockinfo::set_ring_logic_tx(ring_alloc_logic_attr ral)
         m_ring_alloc_log_tx = ral;
         m_p_socket_stats->ring_alloc_logic_tx = m_ring_alloc_log_tx.get_ring_alloc_logic();
         m_p_socket_stats->ring_user_id_tx =
-            ring_allocation_logic_tx(get_fd(), m_ring_alloc_log_tx, this).calc_res_key_by_logic();
+            ring_allocation_logic_tx(get_fd(), m_ring_alloc_log_tx).calc_res_key_by_logic();
     }
 }
 
@@ -1162,7 +1162,7 @@ void sockinfo::do_rings_migration_rx(resource_allocation_key &old_key)
             if (rc < 0) {
                 si_logerr("Failed to release ring for allocation key %s", old_key.to_str().c_str());
                 new_key->set_user_id_key(old_calc_id);
-                m_ring_alloc_logic_rx.enable_migration(false);
+                m_ring_alloc_logic_rx.disable_migration();
                 si_logwarn("Migration is disabled due to failure");
             }
             lock_rx_q();
@@ -1175,7 +1175,7 @@ void sockinfo::do_rings_migration_rx(resource_allocation_key &old_key)
             si_logerr("Failed to reserve ring for allocation key %s on lip %s",
                       new_key->to_str().c_str(), ip_local.to_str().c_str());
             new_key->set_user_id_key(old_calc_id);
-            m_ring_alloc_logic_rx.enable_migration(false);
+            m_ring_alloc_logic_rx.disable_migration();
             si_logwarn("Migration is disabled due to failure");
             lock_rx_q();
             rx_nd_iter++;
@@ -1233,7 +1233,7 @@ void sockinfo::do_rings_migration_rx(resource_allocation_key &old_key)
             si_logerr("Failed to reserve ring for allocation key %s on lip %s",
                       new_key->to_str().c_str(), ip_local.to_str(m_family).c_str());
             new_key->set_user_id_key(old_calc_id);
-            m_ring_alloc_logic_rx.enable_migration(false);
+            m_ring_alloc_logic_rx.disable_migration();
             si_logwarn("Migration is disabled due to failure");
             lock_rx_q();
             rx_nd_iter++;
