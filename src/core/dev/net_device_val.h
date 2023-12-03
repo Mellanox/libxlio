@@ -60,21 +60,17 @@ public:
     ring_alloc_logic_attr(ring_logic_t ring_logic, bool use_locks);
     ring_alloc_logic_attr(const ring_alloc_logic_attr &other);
     void set_ring_alloc_logic(ring_logic_t logic);
-    void set_memory_descriptor(iovec &mem_desc);
     void set_user_id_key(uint64_t user_id_key);
     void set_use_locks(bool use_locks);
     const std::string to_str() const;
     inline ring_logic_t get_ring_alloc_logic() { return m_ring_alloc_logic; }
-    inline iovec *get_memory_descriptor() { return &m_mem_desc; }
     inline uint64_t get_user_id_key() { return m_user_id_key; }
     inline bool get_use_locks() { return m_use_locks; }
 
     bool operator==(const ring_alloc_logic_attr &other) const
     {
         return (m_ring_alloc_logic == other.m_ring_alloc_logic &&
-                m_user_id_key == other.m_user_id_key &&
-                m_mem_desc.iov_base == other.m_mem_desc.iov_base &&
-                m_mem_desc.iov_len == other.m_mem_desc.iov_len && m_use_locks == other.m_use_locks);
+                m_user_id_key == other.m_user_id_key && m_use_locks == other.m_use_locks);
     }
 
     bool operator!=(const ring_alloc_logic_attr &other) const { return !(*this == other); }
@@ -85,8 +81,6 @@ public:
             m_ring_alloc_logic = other.m_ring_alloc_logic;
             m_user_id_key = other.m_user_id_key;
             m_hash = other.m_hash;
-            m_mem_desc.iov_base = other.m_mem_desc.iov_base;
-            m_mem_desc.iov_len = other.m_mem_desc.iov_len;
             m_use_locks = other.m_use_locks;
         }
         return *this;
@@ -101,12 +95,11 @@ public:
 
 private:
     size_t m_hash;
-    /* ring allocation logic , per thread per fd ... */
+    /* Ring allocation logic: per thread, per interface, etc */
     ring_logic_t m_ring_alloc_logic;
-    /* either user_idx or key as defined in ring_logic_t */
-    uint64_t m_user_id_key;
-    iovec m_mem_desc;
     bool m_use_locks;
+    /* Either user_idx or key as defined in ring_logic_t */
+    uint64_t m_user_id_key;
     void init();
 };
 
