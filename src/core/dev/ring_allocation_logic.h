@@ -98,19 +98,13 @@ public:
     }
     uint64_t calc_res_key_by_logic();
     inline ring_logic_t get_alloc_logic_type() { return m_res_key.get_ring_alloc_logic(); }
-    inline void enable_migration(bool active) { m_active = active; }
-    const std::string to_str() const;
-
-protected:
-    const char *m_type;
-    const void *m_owner;
+    inline void disable_migration() { m_ring_migration_ratio = -1; }
 
 private:
     int m_ring_migration_ratio;
-    source_t m_source;
     int m_migration_try_count;
+    source_t m_source;
     uint64_t m_migration_candidate;
-    bool m_active;
     resource_allocation_key m_res_key;
 };
 
@@ -120,13 +114,10 @@ public:
         : ring_allocation_logic()
     {
     }
-    ring_allocation_logic_rx(source_t source, resource_allocation_key &ring_profile,
-                             const void *owner)
+    ring_allocation_logic_rx(source_t source, resource_allocation_key &ring_profile)
         : ring_allocation_logic(safe_mce_sys().ring_allocation_logic_rx,
                                 safe_mce_sys().ring_migration_ratio_rx, source, ring_profile)
     {
-        m_type = "Rx";
-        m_owner = owner;
     }
 };
 
@@ -136,13 +127,10 @@ public:
         : ring_allocation_logic()
     {
     }
-    ring_allocation_logic_tx(source_t source, resource_allocation_key &ring_profile,
-                             const void *owner)
+    ring_allocation_logic_tx(source_t source, resource_allocation_key &ring_profile)
         : ring_allocation_logic(safe_mce_sys().ring_allocation_logic_tx,
                                 safe_mce_sys().ring_migration_ratio_tx, source, ring_profile)
     {
-        m_type = "Tx";
-        m_owner = owner;
     }
 };
 

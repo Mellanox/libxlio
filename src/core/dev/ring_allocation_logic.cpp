@@ -34,11 +34,6 @@
 
 #define MODULE_NAME "ral"
 
-#undef MODULE_HDR_INFO
-#define MODULE_HDR_INFO MODULE_NAME "%s:%d:%s() "
-#undef __INFO__
-#define __INFO__ to_str().c_str()
-
 #define ral_logpanic   __log_info_panic
 #define ral_logerr     __log_info_err
 #define ral_logwarn    __log_info_warn
@@ -48,35 +43,27 @@
 #define ral_logfuncall __log_info_funcall
 
 ring_allocation_logic::ring_allocation_logic()
-    : m_owner(NULL)
-    , m_ring_migration_ratio(0)
-    , m_source(-1)
+    : m_ring_migration_ratio(-1)
     , m_migration_try_count(0)
+    , m_source(-1)
     , m_migration_candidate(0)
-    , m_active(true)
     , m_res_key()
 {
-    m_type = "";
 }
 
 ring_allocation_logic::ring_allocation_logic(ring_logic_t allocation_logic,
                                              int ring_migration_ratio, source_t source,
                                              resource_allocation_key &ring_profile)
-    : m_owner(NULL)
-    , m_ring_migration_ratio(ring_migration_ratio)
-    , m_source(source)
+    : m_ring_migration_ratio(ring_migration_ratio)
     , m_migration_try_count(ring_migration_ratio)
+    , m_source(source)
 {
-    m_type = "";
-
     if (ring_profile.get_ring_alloc_logic() == RING_LOGIC_PER_INTERFACE) {
         ring_profile.set_ring_alloc_logic(allocation_logic);
     }
     m_res_key = resource_allocation_key(ring_profile);
     m_migration_candidate = 0;
     m_res_key.set_user_id_key(calc_res_key_by_logic());
-
-    m_active = true;
 }
 
 /**
@@ -152,7 +139,8 @@ bool ring_allocation_logic::should_migrate_ring()
 {
     ral_logfuncall("currently accessed from thread=%lu, cpu=%d", pthread_self(), sched_getcpu());
 
-    if (false == m_active) {
+    if (m_ring_migration_ratio < 0) {
+        // Ring migration is disabled
         return false;
     }
 
@@ -175,10 +163,7 @@ bool ring_allocation_logic::should_migrate_ring()
     m_migration_try_count = 0;
 
     if (!m_migration_candidate) {
-        // save current used allocation key
-        // no need to save profile, and allocation logic
         uint64_t curr_id = m_res_key.get_user_id_key();
-        // calc new key
         uint64_t new_id = calc_res_key_by_logic();
         if (new_id == curr_id || g_n_internal_thread_id == curr_id) {
             return false;
@@ -192,15 +177,6 @@ bool ring_allocation_logic::should_migrate_ring()
     m_migration_candidate = 0;
 
     return true;
-}
-
-const std::string ring_allocation_logic::to_str() const
-{
-    std::stringstream ss;
-
-    ss << '[' << m_type << '=' << m_owner << ']';
-
-    return ss.str();
 }
 
 cpu_manager g_cpu_manager;
