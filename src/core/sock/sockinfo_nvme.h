@@ -69,6 +69,10 @@ public:
     bool handle_send_ret(ssize_t ret, struct tcp_seg *seg) override;
     err_t recv(struct pbuf *p) override;
 
+private:
+    int setsockopt_tx(const uint32_t &config);
+
+public:
     int m_nvme_feature_mask;
 
 private:
@@ -77,8 +81,6 @@ private:
     uint32_t m_expected_seqno;
     bool m_is_tx_offload;
     bool m_is_ddgs_on;
-
-    int setsockopt_tx(const uint32_t &config);
 };
 
 #endif /* _SOCKINFO_NVME_H */
