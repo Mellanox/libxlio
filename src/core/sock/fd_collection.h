@@ -198,7 +198,20 @@ public:
 private:
     template <typename cls> int del(int fd, bool b_cleanup, cls **map_type);
     template <typename cls> inline cls *get(int fd, cls **map_type);
+    inline bool is_valid_fd(int fd);
 
+    inline bool create_offloaded_sockets();
+
+    // Fd collection timer implementation
+    // This gives context to handle pending to remove fds.
+    // In case of TCP we recheck if TCP socket is closable and delete
+    // it if it does otherwise we run handle_timer of the socket to
+    // progress the TCP connection.
+    void handle_timer_expired(void *user_data);
+
+    void statistics_print_helper(int fd, vlog_levels_t log_level);
+
+private:
     int m_n_fd_map_size;
     socket_fd_api **m_p_sockfd_map;
     epfd_info **m_p_epfd_map;
@@ -214,19 +227,6 @@ private:
     // if (m_b_sysvar_offloaded_sockets is true) contain all threads that need not be offloaded.
     // else contain all threads that need to be offloaded.
     offload_thread_rule_t m_offload_thread_rule;
-
-    inline bool is_valid_fd(int fd);
-
-    inline bool create_offloaded_sockets();
-
-    // Fd collection timer implementation
-    // This gives context to handle pending to remove fds.
-    // In case of TCP we recheck if TCP socket is closable and delete
-    // it if it does otherwise we run handle_timer of the socket to
-    // progress the TCP connection.
-    void handle_timer_expired(void *user_data);
-
-    void statistics_print_helper(int fd, vlog_levels_t log_level);
 
 #if defined(DEFINED_NGINX)
     bool m_use_socket_pool;
