@@ -184,52 +184,6 @@ public:
 #endif
 
 private:
-    struct port_socket_t {
-
-        int port;
-        int fd;
-
-        bool operator==(const int &r_port) { return port == r_port; }
-    };
-
-    ip_addr m_mc_tx_src_ip;
-    bool m_b_mc_tx_loop;
-    uint8_t m_n_mc_ttl_hop_lim;
-
-    int32_t m_loops_to_go; // local param for polling loop on this socket
-    uint32_t
-        m_rx_udp_poll_os_ratio_counter; // Data member which sets how many offloaded polls on the cq
-                                        // we want to do before doing an OS poll, on this socket
-    bool m_sock_offload;
-
-    mc_pram_list_t m_pending_mreqs;
-    mc_memberships_map_t m_mc_memberships_map;
-    uint32_t m_mc_num_grp_with_src_filter;
-
-    lock_spin m_port_map_lock;
-    std::vector<struct port_socket_t> m_port_map;
-    unsigned m_port_map_index;
-
-    dst_entry_map_t m_dst_entry_map;
-    dst_entry *m_p_last_dst_entry;
-    sock_addr m_last_sock_addr;
-
-    chunk_list_t<mem_buf_desc_t *> m_rx_pkt_ready_list;
-
-    uint8_t m_tos;
-
-    const uint32_t m_n_sysvar_rx_poll_yield_loops;
-    const uint32_t m_n_sysvar_rx_udp_poll_os_ratio;
-    const uint32_t m_n_sysvar_rx_ready_byte_min_limit;
-    const uint32_t m_n_sysvar_rx_cq_drain_rate_nsec;
-    const uint32_t m_n_sysvar_rx_delta_tsc_between_cq_polls;
-
-    bool m_reuseaddr; // to track setsockopt with SO_REUSEADDR
-    bool m_reuseport; // to track setsockopt with SO_REUSEPORT
-    bool m_sockopt_mapped; // setsockopt IPPROTO_UDP UDP_MAP_ADD
-    bool m_is_connected; // to inspect for in_addr.src
-    bool m_multicast; // true when socket set MC rule
-
     bool packet_is_loopback(mem_buf_desc_t *p_desc);
     ssize_t check_payload_size(const iovec *p_iov, ssize_t sz_iov);
     int mc_change_membership_start_helper_ip4(const ip_address &mc_grp, int optname);
@@ -308,5 +262,52 @@ private:
     virtual size_t get_size_m_rx_pkt_ready_list();
     virtual void pop_front_m_rx_pkt_ready_list();
     virtual void push_back_m_rx_pkt_ready_list(mem_buf_desc_t *buff);
+
+private:
+    struct port_socket_t {
+
+        int port;
+        int fd;
+
+        bool operator==(const int &r_port) { return port == r_port; }
+    };
+
+    ip_addr m_mc_tx_src_ip;
+    bool m_b_mc_tx_loop;
+    uint8_t m_n_mc_ttl_hop_lim;
+
+    int32_t m_loops_to_go; // local param for polling loop on this socket
+    uint32_t
+        m_rx_udp_poll_os_ratio_counter; // Data member which sets how many offloaded polls on the cq
+                                        // we want to do before doing an OS poll, on this socket
+    bool m_sock_offload;
+
+    mc_pram_list_t m_pending_mreqs;
+    mc_memberships_map_t m_mc_memberships_map;
+    uint32_t m_mc_num_grp_with_src_filter;
+
+    lock_spin m_port_map_lock;
+    std::vector<struct port_socket_t> m_port_map;
+    unsigned m_port_map_index;
+
+    dst_entry_map_t m_dst_entry_map;
+    dst_entry *m_p_last_dst_entry;
+    sock_addr m_last_sock_addr;
+
+    chunk_list_t<mem_buf_desc_t *> m_rx_pkt_ready_list;
+
+    uint8_t m_tos;
+
+    const uint32_t m_n_sysvar_rx_poll_yield_loops;
+    const uint32_t m_n_sysvar_rx_udp_poll_os_ratio;
+    const uint32_t m_n_sysvar_rx_ready_byte_min_limit;
+    const uint32_t m_n_sysvar_rx_cq_drain_rate_nsec;
+    const uint32_t m_n_sysvar_rx_delta_tsc_between_cq_polls;
+
+    bool m_reuseaddr; // to track setsockopt with SO_REUSEADDR
+    bool m_reuseport; // to track setsockopt with SO_REUSEPORT
+    bool m_sockopt_mapped; // setsockopt IPPROTO_UDP UDP_MAP_ADD
+    bool m_is_connected; // to inspect for in_addr.src
+    bool m_multicast; // true when socket set MC rule
 };
 #endif
