@@ -125,6 +125,16 @@ protected:
     /* Fill m_recv_rings array */
     void popup_recv_rings();
 
+private:
+    void devide_buffers_helper(descq_t *rx_reuse, descq_t *buffer_per_ring);
+    int devide_buffers_helper(mem_buf_desc_t *p_mem_buf_desc_list,
+                              mem_buf_desc_t **buffer_per_ring);
+
+    bool is_socketxtreme(void) { return false; }
+    void put_ec(struct ring_ec *ec) { NOT_IN_USE(ec); }
+    void del_ec(struct ring_ec *ec) { NOT_IN_USE(ec); }
+
+protected:
     /* Array of all aggregated rings
      * Every ring can be Active or Backup
      */
@@ -152,14 +162,6 @@ protected:
     uint32_t m_max_send_sge;
 
 private:
-    void devide_buffers_helper(descq_t *rx_reuse, descq_t *buffer_per_ring);
-    int devide_buffers_helper(mem_buf_desc_t *p_mem_buf_desc_list,
-                              mem_buf_desc_t **buffer_per_ring);
-
-    bool is_socketxtreme(void) { return false; }
-    void put_ec(struct ring_ec *ec) { NOT_IN_USE(ec); }
-    void del_ec(struct ring_ec *ec) { NOT_IN_USE(ec); }
-
     net_device_val::bond_type m_type;
     net_device_val::bond_xmit_hash_policy m_xmit_hash_policy;
     lock_mutex_recursive m_lock_ring_rx;
