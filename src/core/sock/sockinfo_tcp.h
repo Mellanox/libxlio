@@ -279,7 +279,6 @@ public:
 
     virtual void update_socket_timestamps(timestamps_t *ts) { m_rx_timestamps = *ts; }
 
-    static const int CONNECT_DEFAULT_TIMEOUT_MS = 10000;
     virtual inline fd_type_t get_type() { return FD_TYPE_SOCKET; }
 
     void handle_timer_expired(void *user_data);
@@ -321,9 +320,21 @@ public:
     inline void lock_tcp_con(void) { m_tcp_con_lock.lock(); }
     inline void unlock_tcp_con(void) { m_tcp_con_lock.unlock(); }
 
-    list_node<sockinfo_tcp, sockinfo_tcp::accepted_conns_node_offset> accepted_conns_node;
-
     inline void set_reguired_send_block(unsigned sz) { m_required_send_block = sz; }
+
+    static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
+    static err_t rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
+                                         err_t err);
+    static err_t rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, struct pbuf *p,
+                                          err_t err);
+    static err_t rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
+    inline void rx_lwip_cb_socketxtreme_helper(pbuf *p);
+
+    virtual int register_callback(xlio_recv_callback_t callback, void *context)
+    {
+        tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_recv_callback);
+        return sockinfo::register_callback(callback, context);
+    }
 
 protected:
     virtual void lock_rx_q();
@@ -334,83 +345,6 @@ protected:
 private:
     int fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit);
     void get_tcp_info(struct tcp_info *ti);
-
-    sockinfo_tcp_ops *m_ops;
-    sockinfo_tcp_ops *m_ops_tcp;
-
-    // lwip specific things
-    struct tcp_pcb m_pcb;
-    socket_options_list_t m_socket_options_list;
-    timestamps_t m_rx_timestamps;
-    tcp_sock_offload_e m_sock_offload;
-    tcp_sock_state_e m_sock_state;
-    sockinfo_tcp *m_parent;
-    // received packet source (true if its from internal thread)
-    bool m_xlio_thr;
-    bool m_b_incoming;
-    bool m_b_attached;
-    /* connection state machine */
-    int m_conn_timeout;
-    /* SNDBUF acconting */
-    int m_sndbuff_max;
-    /* RCVBUF acconting */
-    int m_rcvbuff_max;
-    int m_rcvbuff_current;
-    int m_rcvbuff_non_tcp_recved;
-    tcp_conn_state_e m_conn_state;
-    fd_array_t *m_iomux_ready_fd_array;
-    struct linger m_linger;
-
-    /* local & peer addresses */
-    /*	struct sockaddr *m_addr_local;
-        socklen_t m_local_alen;
-        struct sockaddr *m_addr_peer;
-        socklen_t m_peer_alen;
-    */
-
-    // Relevant only for listen sockets: map connections in syn received state
-    // We need this map since for syn received connection no sockinfo is created yet!
-    syn_received_map_t m_syn_received;
-    uint32_t m_received_syn_num;
-
-    /* pending connections */
-    sock_list_t m_accepted_conns;
-
-    uint32_t m_ready_conn_cnt;
-    int m_backlog;
-
-    void *m_timer_handle;
-    multilock m_tcp_con_lock;
-
-    // used for reporting 'connected' on second non-blocking call to connect or
-    // second call to failed connect blocking socket.
-    bool report_connected;
-
-    int m_error_status;
-
-    const buffer_batching_mode_t m_sysvar_buffer_batching_mode;
-    const uint32_t m_sysvar_tx_segs_batch_tcp;
-    const option_tcp_ctl_thread::mode_t m_sysvar_tcp_ctl_thread;
-
-    struct tcp_seg *m_tcp_seg_list;
-    uint32_t m_tcp_seg_count;
-    uint32_t m_tcp_seg_in_use;
-
-    xlio_desc_list_t m_rx_pkt_ready_list;
-    xlio_desc_list_t m_rx_cb_dropped_list;
-
-    lock_spin_recursive m_rx_ctl_packets_list_lock;
-    tscval_t m_last_syn_tsc;
-    xlio_desc_list_t m_rx_ctl_packets_list;
-    peer_map_t m_rx_peer_packets;
-    xlio_desc_list_t m_rx_ctl_reuse_list;
-    ready_pcb_map_t m_ready_pcbs;
-    static const unsigned TX_CONSECUTIVE_EAGAIN_THREASHOLD = 10;
-    unsigned m_tx_consecutive_eagain_count;
-    bool m_sysvar_rx_poll_on_tx_tcp;
-    uint64_t m_user_huge_page_mask;
-    unsigned m_required_send_block;
-    uint16_t m_external_vlan_tag = 0U;
 
     inline void lwip_pbuf_init_custom(mem_buf_desc_t *p_desc);
 
@@ -456,22 +390,6 @@ private:
     // int rx_wait(int &poll_count, bool blocking = true);
     static err_t ack_recvd_lwip_cb(void *arg, struct tcp_pcb *tpcb, u16_t space);
 
-public:
-    static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
-    static err_t rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
-                                         err_t err);
-    static err_t rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, struct pbuf *p,
-                                          err_t err);
-    static err_t rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
-    inline void rx_lwip_cb_socketxtreme_helper(pbuf *p);
-
-    virtual int register_callback(xlio_recv_callback_t callback, void *context)
-    {
-        tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_recv_callback);
-        return sockinfo::register_callback(callback, context);
-    }
-
-private:
     inline err_t handle_fin(struct tcp_pcb *pcb, err_t err);
     inline void handle_rx_lwip_cb_error(pbuf *p);
     inline void rx_lwip_cb_error(pbuf *p);
@@ -564,10 +482,6 @@ private:
     virtual void pop_front_m_rx_pkt_ready_list();
     virtual void push_back_m_rx_pkt_ready_list(mem_buf_desc_t *buff);
 
-    // stats
-    uint64_t m_n_pbufs_rcvd;
-    uint64_t m_n_pbufs_freed;
-
     // lock_spin_recursive m_rx_cq_lck;
     /* pick all cqs that match given address */
     virtual int rx_verify_available_data();
@@ -591,6 +505,93 @@ private:
     void process_reuse_ctl_packets();
     void process_rx_ctl_packets();
     static void put_agent_msg(void *arg);
+
+public:
+    static const int CONNECT_DEFAULT_TIMEOUT_MS = 10000;
+
+    list_node<sockinfo_tcp, sockinfo_tcp::accepted_conns_node_offset> accepted_conns_node;
+
+private:
+    sockinfo_tcp_ops *m_ops;
+    sockinfo_tcp_ops *m_ops_tcp;
+
+    // lwip specific things
+    struct tcp_pcb m_pcb;
+    socket_options_list_t m_socket_options_list;
+    timestamps_t m_rx_timestamps;
+    tcp_sock_offload_e m_sock_offload;
+    tcp_sock_state_e m_sock_state;
+    sockinfo_tcp *m_parent;
+    // received packet source (true if its from internal thread)
+    bool m_xlio_thr;
+    bool m_b_incoming;
+    bool m_b_attached;
+    /* connection state machine */
+    int m_conn_timeout;
+    /* SNDBUF acconting */
+    int m_sndbuff_max;
+    /* RCVBUF acconting */
+    int m_rcvbuff_max;
+    int m_rcvbuff_current;
+    int m_rcvbuff_non_tcp_recved;
+    tcp_conn_state_e m_conn_state;
+    fd_array_t *m_iomux_ready_fd_array;
+    struct linger m_linger;
+
+    /* local & peer addresses */
+    /*	struct sockaddr *m_addr_local;
+        socklen_t m_local_alen;
+        struct sockaddr *m_addr_peer;
+        socklen_t m_peer_alen;
+    */
+
+    // Relevant only for listen sockets: map connections in syn received state
+    // We need this map since for syn received connection no sockinfo is created yet!
+    syn_received_map_t m_syn_received;
+    uint32_t m_received_syn_num;
+
+    /* pending connections */
+    sock_list_t m_accepted_conns;
+
+    uint32_t m_ready_conn_cnt;
+    int m_backlog;
+
+    void *m_timer_handle;
+    multilock m_tcp_con_lock;
+
+    // used for reporting 'connected' on second non-blocking call to connect or
+    // second call to failed connect blocking socket.
+    bool report_connected;
+
+    int m_error_status;
+
+    const buffer_batching_mode_t m_sysvar_buffer_batching_mode;
+    const uint32_t m_sysvar_tx_segs_batch_tcp;
+    const option_tcp_ctl_thread::mode_t m_sysvar_tcp_ctl_thread;
+
+    struct tcp_seg *m_tcp_seg_list;
+    uint32_t m_tcp_seg_count;
+    uint32_t m_tcp_seg_in_use;
+
+    xlio_desc_list_t m_rx_pkt_ready_list;
+    xlio_desc_list_t m_rx_cb_dropped_list;
+
+    lock_spin_recursive m_rx_ctl_packets_list_lock;
+    tscval_t m_last_syn_tsc;
+    xlio_desc_list_t m_rx_ctl_packets_list;
+    peer_map_t m_rx_peer_packets;
+    xlio_desc_list_t m_rx_ctl_reuse_list;
+    ready_pcb_map_t m_ready_pcbs;
+    static const unsigned TX_CONSECUTIVE_EAGAIN_THREASHOLD = 10;
+    unsigned m_tx_consecutive_eagain_count;
+    bool m_sysvar_rx_poll_on_tx_tcp;
+    uint64_t m_user_huge_page_mask;
+    unsigned m_required_send_block;
+    uint16_t m_external_vlan_tag = 0U;
+
+    // stats
+    uint64_t m_n_pbufs_rcvd;
+    uint64_t m_n_pbufs_freed;
 };
 typedef struct tcp_seg tcp_seg;
 
