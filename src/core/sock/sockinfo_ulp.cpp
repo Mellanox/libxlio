@@ -171,9 +171,10 @@ static inline uint8_t get_alert_level(uint8_t alert_type)
  * tls_record
  */
 
-enum {
+enum : size_t {
     TLS_RECORD_HDR_LEN = 5U,
     TLS_RECORD_IV_LEN = TLS_AES_GCM_IV_LEN,
+    TLS_13_RECORD_IV_LEN = 0U,
     TLS_RECORD_TAG_LEN = 16U,
     TLS_RECORD_NONCE_LEN = 12U, /* SALT + IV */
     /* TLS 1.2 record overhead. */
@@ -305,7 +306,8 @@ public:
             assert(iov_max >= 3);
             (void)iov_max;
             iov[0].iov_base = m_p_data;
-            iov[0].iov_len = TLS_RECORD_HDR_LEN + (is_tls13 ? 0 : TLS_RECORD_IV_LEN);
+            iov[0].iov_len =
+                TLS_RECORD_HDR_LEN + (is_tls13 ? TLS_13_RECORD_IV_LEN : TLS_RECORD_IV_LEN);
             iov[1].iov_base = m_p_zc_data;
             iov[1].iov_len = m_size - (is_tls13 ? TLS_13_RECORD_OVERHEAD : TLS_12_RECORD_OVERHEAD);
             iov[2].iov_base = m_p_data + iov[0].iov_len;
@@ -747,21 +749,16 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
         }
     }
 
+    uint8_t *iv = is_tx_tls13() ? nullptr : m_tls_info_tx.iv;
+    mem_desc *zc_owner = is_zerocopy ? reinterpret_cast<mem_desc *>(tx_arg.priv.mdesc) : nullptr;
     for (ssize_t i = 0; i < tx_arg.attr.sz_iov; ++i) {
         pos = 0;
         while (pos < p_iov[i].iov_len) {
             tls_record *rec;
             ssize_t ret2;
-            size_t sndbuf = m_p_sock->sndbuf_available();
-            size_t tosend = p_iov[i].iov_len - pos;
+            size_t tosend = std::min<size_t>(p_iov[i].iov_len - pos, TLS_RECORD_MAX);
 
-            /*
-             * XXX This approach can lead to issue with epoll()
-             * since such a socket will always be ready for write
-             */
-            if (!block_this_run && sndbuf < TLS_RECORD_SMALLEST &&
-                (sndbuf < m_tls_rec_overhead || (sndbuf - m_tls_rec_overhead) < tosend)) {
-                /* We don't want to create too small TLS records when we do partial write. */
+            if (m_p_sock->sndbuf_available() == 0U && !block_this_run) {
                 if (ret == 0) {
                     errno = EAGAIN;
                     ret = -1;
@@ -769,10 +766,8 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
                 goto done;
             }
 
-            rec = new tls_record(
-                this, m_p_sock->get_next_tcp_seqno(), m_next_recno_tx,
-                is_tx_tls13() ? nullptr : m_tls_info_tx.iv,
-                is_zerocopy ? reinterpret_cast<mem_desc *>(tx_arg.priv.mdesc) : nullptr);
+            rec =
+                new tls_record(this, m_p_sock->get_next_tcp_seqno(), m_next_recno_tx, iv, zc_owner);
             if (unlikely(!rec || !rec->m_p_buf)) {
                 if (ret == 0) {
                     errno = ENOMEM;
@@ -787,6 +782,14 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
                 }
                 goto done;
             }
+
+            tosend = rec->append_data((uint8_t *)p_iov[i].iov_base + pos, tosend, is_tx_tls13());
+            /* Set type after all data, because for TLS1.3 it is in the tail. */
+            rec->set_type(tls_type, is_tx_tls13());
+            rec->fill_iov(tls_arg.attr.iov, ARRAY_SIZE(tls_iov), is_tx_tls13());
+            tls_arg.priv.mdesc = reinterpret_cast<void *>(rec);
+            pos += tosend;
+
             ++m_next_recno_tx;
             /*
              * Prepare unique explicit_nonce for the next TLS1.2 record.
@@ -795,20 +798,15 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
             if (!is_tx_tls13()) {
                 ++m_tls_info_tx.iv64;
             }
-
-            if (!block_this_run) {
-                /* sndbuf overflow is not possible since we have a check above. */
-                tosend = std::min(tosend, sndbuf - m_tls_rec_overhead);
-            }
-            tosend = rec->append_data((uint8_t *)p_iov[i].iov_base + pos, tosend, is_tx_tls13());
-            /* Set type after all data, because for TLS1.3 it is in the tail. */
-            rec->set_type(tls_type, is_tx_tls13());
-            rec->fill_iov(tls_arg.attr.iov, ARRAY_SIZE(tls_iov), is_tx_tls13());
-            tls_arg.priv.mdesc = reinterpret_cast<void *>(rec);
-            pos += tosend;
-
         retry:
-            ret2 = m_p_sock->tcp_tx(tls_arg);
+            if (!block_this_run) {
+                ret2 = m_p_sock->tcp_tx_express(tls_arg.attr.iov, tls_arg.attr.sz_iov, 0,
+                                                XLIO_EXPRESS_OP_TYPE_FILE_ZEROCOPY,
+                                                reinterpret_cast<void *>(rec));
+
+            } else {
+                ret2 = m_p_sock->tcp_tx(tls_arg);
+            }
             if (block_this_run && (ret2 != (ssize_t)tls_arg.attr.iov[0].iov_len)) {
                 if ((ret2 >= 0) || (errno == EINTR && !g_b_exit)) {
                     ret2 = ret2 < 0 ? 0 : ret2;
@@ -894,7 +892,9 @@ int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_
 
                 if (is_zerocopy) {
                     hdrlen = std::min<uint32_t>(
-                        TLS_RECORD_HDR_LEN + (is_tx_tls13() ? 0 : TLS_RECORD_IV_LEN), totlen);
+                        TLS_RECORD_HDR_LEN +
+                            (is_tx_tls13() ? TLS_13_RECORD_IV_LEN : TLS_RECORD_IV_LEN),
+                        totlen);
                     taillen = TLS_RECORD_TAG_LEN + !!is_tx_tls13();
                     /* Determine the trailer portion to resend. */
                     taillen = std::max<uint32_t>(totlen + taillen, rec->m_size) - rec->m_size;
@@ -1338,7 +1338,8 @@ check_single_record:
     struct pbuf *pi;
     struct pbuf *pres = nullptr;
     struct pbuf *ptmp = nullptr;
-    uint32_t offset = m_rx_offset + TLS_RECORD_HDR_LEN + (is_rx_tls13() ? 0 : TLS_RECORD_IV_LEN);
+    uint32_t offset = m_rx_offset + TLS_RECORD_HDR_LEN +
+        (is_rx_tls13() ? TLS_13_RECORD_IV_LEN : TLS_RECORD_IV_LEN);
     uint32_t remain = m_rx_rec_len - m_tls_rec_overhead;
     unsigned bufs_nr = 0;
     unsigned decrypted_nr = 0;
