@@ -307,13 +307,6 @@ protected:
     inline uint32_t get_tx_num_wr() { return m_tx_num_wr; }
     inline uint32_t get_mtu() { return m_mtu; }
 
-    ib_ctx_handler *m_p_ib_ctx;
-    qp_mgr *m_p_qp_mgr;
-    struct cq_moderation_info m_cq_moderation_info;
-    cq_mgr *m_p_cq_mgr_rx;
-    cq_mgr *m_p_cq_mgr_tx;
-    std::unordered_map<void *, uint32_t> m_user_lkey_map;
-
 private:
     bool is_socketxtreme(void) override { return safe_mce_sys().enable_socketxtreme; }
 
@@ -344,19 +337,6 @@ private:
         m_socketxtreme.lock_ec_list.unlock();
         return ec;
     }
-
-    struct {
-        /* queue of event completion elements
-         * this queue is stored events related different sockinfo (sockets)
-         * In current implementation every sockinfo (socket) can have single event
-         * in this queue
-         */
-        struct list_head ec_list;
-
-        /* Thread-safety lock for get/put operations under the queue */
-        lock_spin lock_ec_list;
-    } m_socketxtreme;
-
     inline void send_status_handler(int ret, xlio_ibv_send_wr *p_send_wqe);
     inline mem_buf_desc_t *get_tx_buffers(pbuf_type type, uint32_t n_num_mem_bufs);
     inline int put_tx_buffer_helper(mem_buf_desc_t *buff);
@@ -376,6 +356,27 @@ private:
         }
         m_p_l2_addr = NULL;
     };
+
+protected:
+    ib_ctx_handler *m_p_ib_ctx;
+    qp_mgr *m_p_qp_mgr;
+    struct cq_moderation_info m_cq_moderation_info;
+    cq_mgr *m_p_cq_mgr_rx;
+    cq_mgr *m_p_cq_mgr_tx;
+    std::unordered_map<void *, uint32_t> m_user_lkey_map;
+
+private:
+    struct {
+        /* queue of event completion elements
+         * this queue is stored events related different sockinfo (sockets)
+         * In current implementation every sockinfo (socket) can have single event
+         * in this queue
+         */
+        struct list_head ec_list;
+
+        /* Thread-safety lock for get/put operations under the queue */
+        lock_spin lock_ec_list;
+    } m_socketxtreme;
 
     lock_mutex m_lock_ring_tx_buf_wait;
     uint32_t m_tx_num_bufs;
