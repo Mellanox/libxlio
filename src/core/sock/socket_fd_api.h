@@ -249,27 +249,21 @@ public:
     {
         return NODE_OFFSET(socket_fd_api, pendig_to_remove_node);
     }
-    list_node<socket_fd_api, socket_fd_api::pendig_to_remove_node_offset> pendig_to_remove_node;
 
     static inline size_t socket_fd_list_node_offset(void)
     {
         return NODE_OFFSET(socket_fd_api, socket_fd_list_node);
     }
-    list_node<socket_fd_api, socket_fd_api::socket_fd_list_node_offset> socket_fd_list_node;
 
     static inline size_t ep_ready_fd_node_offset(void)
     {
         return NODE_OFFSET(socket_fd_api, ep_ready_fd_node);
     }
-    list_node<socket_fd_api, socket_fd_api::ep_ready_fd_node_offset> ep_ready_fd_node;
-    uint32_t m_epoll_event_flags;
 
     static inline size_t ep_info_fd_node_offset(void)
     {
         return NODE_OFFSET(socket_fd_api, ep_info_fd_node);
     }
-    list_node<socket_fd_api, socket_fd_api::ep_info_fd_node_offset> ep_info_fd_node;
-    epoll_fd_rec m_fd_rec;
 
     virtual int get_rings_num() { return 0; }
     virtual bool check_rings() { return false; }
@@ -286,13 +280,22 @@ protected:
     bool notify_epoll_context_verify(epfd_info *epfd);
     void notify_epoll_context_fd_is_offloaded();
 
-    // identification information <socket fd>
-    int m_fd;
-    const uint32_t m_n_sysvar_select_poll_os_ratio;
-
     // Calling OS receive
     ssize_t rx_os(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, const int flags,
                   sockaddr *__from, socklen_t *__fromlen, struct msghdr *__msg);
+
+public:
+    list_node<socket_fd_api, socket_fd_api::pendig_to_remove_node_offset> pendig_to_remove_node;
+    list_node<socket_fd_api, socket_fd_api::socket_fd_list_node_offset> socket_fd_list_node;
+    list_node<socket_fd_api, socket_fd_api::ep_ready_fd_node_offset> ep_ready_fd_node;
+    uint32_t m_epoll_event_flags;
+    list_node<socket_fd_api, socket_fd_api::ep_info_fd_node_offset> ep_info_fd_node;
+    epoll_fd_rec m_fd_rec;
+
+protected:
+    // identification information <socket fd>
+    int m_fd;
+    const uint32_t m_n_sysvar_select_poll_os_ratio;
     epfd_info *m_econtext;
 
 public:
