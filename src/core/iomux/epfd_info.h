@@ -82,8 +82,6 @@ public:
      */
     void fd_closed(int fd, bool passthrough = false);
 
-    ep_ready_fd_list_t m_ready_fds;
-
     /**
      * @return Pointer to statistics block for this group
      */
@@ -117,6 +115,24 @@ public:
     {
         return NODE_OFFSET(epfd_info, epfd_info_node);
     }
+
+    int get_epoll_fd() { return m_epfd; };
+    int remove_fd_from_epoll_os(int fd);
+    inline size_t get_fd_non_offloaded_size() { return m_fd_non_offloaded_map.size(); }
+    inline size_t get_fd_offloaded_size() { return m_fd_offloaded_list.size(); }
+    void insert_epoll_event_cb(socket_fd_api *sock_fd, uint32_t event_flags);
+    void insert_epoll_event(socket_fd_api *sock_fd, uint32_t event_flags);
+    void remove_epoll_event(socket_fd_api *sock_fd, uint32_t event_flags);
+    void increase_ring_ref_count(ring *ring);
+    void decrease_ring_ref_count(ring *ring);
+
+private:
+    int add_fd(int fd, epoll_event *event);
+    int del_fd(int fd, bool passthrough = false);
+    int mod_fd(int fd, epoll_event *event);
+
+public:
+    ep_ready_fd_list_t m_ready_fds;
     list_node<epfd_info, epfd_info::epfd_info_node_offset> epfd_info_node;
 
 private:
@@ -135,21 +151,5 @@ private:
     epoll_stats_t *m_stats;
     int m_log_invalid_events;
     bool m_b_os_data_available; // true when non offloaded data is available
-
-    int add_fd(int fd, epoll_event *event);
-    int del_fd(int fd, bool passthrough = false);
-    int mod_fd(int fd, epoll_event *event);
-
-public:
-    int get_epoll_fd() { return m_epfd; };
-    int remove_fd_from_epoll_os(int fd);
-    inline size_t get_fd_non_offloaded_size() { return m_fd_non_offloaded_map.size(); }
-    inline size_t get_fd_offloaded_size() { return m_fd_offloaded_list.size(); }
-    void insert_epoll_event_cb(socket_fd_api *sock_fd, uint32_t event_flags);
-    void insert_epoll_event(socket_fd_api *sock_fd, uint32_t event_flags);
-    void remove_epoll_event(socket_fd_api *sock_fd, uint32_t event_flags);
-    void increase_ring_ref_count(ring *ring);
-    void decrease_ring_ref_count(ring *ring);
 };
-
 #endif /* _EPFD_INFO_H */
