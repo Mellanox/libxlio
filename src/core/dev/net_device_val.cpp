@@ -1023,7 +1023,7 @@ ring *net_device_val::reserve_ring(resource_allocation_key *key)
 
     if (m_h_ring_map.end() == ring_iter) {
         nd_logdbg("Creating new RING for %s", key->to_str().c_str());
-        // copy key since we keep pointer and socket can die so map will lose pointer
+        // Copy key since we keep pointer and socket can die so map will lose pointer
         resource_allocation_key *new_key = new resource_allocation_key(*key);
         the_ring = create_ring(new_key);
         if (!the_ring) {
@@ -1048,9 +1048,12 @@ ring *net_device_val::reserve_ring(resource_allocation_key *key)
             BULLSEYE_EXCLUDE_BLOCK_END
         }
 
+        if (key->get_ring_alloc_logic() == RING_LOGIC_ISOLATE) {
+            // Keep isolated rings until termination. Destructor will delete the ring.
+            ADD_RING_REF_CNT;
+        }
         g_p_net_device_table_mgr->global_ring_wakeup();
     }
-    // now we are sure the ring is in the map
 
     ADD_RING_REF_CNT;
     the_ring = GET_THE_RING(key);
