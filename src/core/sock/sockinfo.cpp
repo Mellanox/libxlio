@@ -103,7 +103,6 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     , m_is_ipv6only(safe_mce_sys().sysctl_reader.get_ipv6_bindv6only())
     , m_p_rings_fds(NULL)
 {
-    m_ring_alloc_logic_rx = ring_allocation_logic_rx(get_fd(), m_ring_alloc_log_rx, this);
     m_rx_epfd = orig_os_api.epoll_create(128);
     if (unlikely(m_rx_epfd == -1)) {
         throw_xlio_exception("create internal epoll");
@@ -113,6 +112,8 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
         m_fd = m_rx_epfd;
         m_fd_context = (void *)((uintptr_t)m_fd);
     }
+
+    m_ring_alloc_logic_rx = ring_allocation_logic_rx(get_fd(), m_ring_alloc_log_rx, this);
 
     m_p_socket_stats = &m_socket_stats; // Save stats as local copy and allow state publisher to
                                         // copy from this location
