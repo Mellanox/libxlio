@@ -84,6 +84,8 @@ protected:
     ring_allocation_logic(ring_logic_t ring_allocation_logic, int ring_migration_ratio,
                           source_t source, resource_allocation_key &ring_profile);
 
+    void debug_print_type(const char *type);
+
 public:
     /* careful, you'll lose the previous key !! */
     resource_allocation_key *create_new_key(const ip_address &addr, int suggested_cpu = NO_CPU);
@@ -101,6 +103,8 @@ public:
     inline ring_logic_t get_alloc_logic_type() { return m_res_key.get_ring_alloc_logic(); }
     inline void disable_migration() { m_ring_migration_ratio = -1; }
 
+    const std::string to_str() const;
+
 private:
     int m_ring_migration_ratio;
     int m_migration_try_count;
@@ -114,11 +118,13 @@ public:
     ring_allocation_logic_rx()
         : ring_allocation_logic()
     {
+        debug_print_type("Rx");
     }
     ring_allocation_logic_rx(source_t source, resource_allocation_key &ring_profile)
         : ring_allocation_logic(safe_mce_sys().ring_allocation_logic_rx,
                                 safe_mce_sys().ring_migration_ratio_rx, source, ring_profile)
     {
+        debug_print_type("Rx");
     }
 };
 
@@ -127,11 +133,13 @@ public:
     ring_allocation_logic_tx()
         : ring_allocation_logic()
     {
+        debug_print_type("Tx");
     }
     ring_allocation_logic_tx(source_t source, resource_allocation_key &ring_profile)
         : ring_allocation_logic(safe_mce_sys().ring_allocation_logic_tx,
                                 safe_mce_sys().ring_migration_ratio_tx, source, ring_profile)
     {
+        debug_print_type("Tx");
     }
 };
 

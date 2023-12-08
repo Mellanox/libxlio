@@ -34,6 +34,11 @@
 
 #define MODULE_NAME "ral"
 
+#undef MODULE_HDR_INFO
+#define MODULE_HDR_INFO MODULE_NAME "%s:%d:%s() "
+#undef __INFO__
+#define __INFO__ to_str().c_str()
+
 #define ral_logpanic   __log_info_panic
 #define ral_logerr     __log_info_err
 #define ral_logwarn    __log_info_warn
@@ -105,7 +110,7 @@ uint64_t ring_allocation_logic::calc_res_key_by_logic()
         break;
     default:
         // not suppose to get here
-        ral_logdbg("non-valid ring logic = %d", m_res_key.get_ring_alloc_logic());
+        ral_logdbg("Non-valid ring logic = %d", m_res_key.get_ring_alloc_logic());
         break;
         BULLSEYE_EXCLUDE_BLOCK_END
     }
@@ -137,7 +142,7 @@ resource_allocation_key *ring_allocation_logic::create_new_key(const ip_address 
  */
 bool ring_allocation_logic::should_migrate_ring()
 {
-    ral_logfuncall("currently accessed from thread=%lu, cpu=%d", pthread_self(), sched_getcpu());
+    ral_logfuncall("Currently accessed from thread=%lu, cpu=%d", pthread_self(), sched_getcpu());
 
     if (m_ring_migration_ratio < 0) {
         // Ring migration is disabled
@@ -172,11 +177,26 @@ bool ring_allocation_logic::should_migrate_ring()
         return false;
     }
 
-    ral_logdbg("migrating from ring of id=%s to ring of id=%lu", m_res_key.to_str().c_str(),
+    ral_logdbg("Migrating from ring of id=%s to ring of id=%lu", m_res_key.to_str().c_str(),
                m_migration_candidate);
     m_migration_candidate = 0;
 
     return true;
+}
+
+const std::string ring_allocation_logic::to_str() const
+{
+    std::stringstream ss;
+
+    ss << '[' << this << ']';
+
+    return ss.str();
+}
+
+void ring_allocation_logic::debug_print_type(const char *type)
+{
+    ral_logdbg("Type %s", type);
+    NOT_IN_USE(type); // Suppress --enable-opt-log=high warning
 }
 
 cpu_manager g_cpu_manager;
@@ -215,7 +235,7 @@ int cpu_manager::reserve_cpu_for_thread(pthread_t tid, int suggested_cpu /* = NO
     int avail_cpus = CPU_COUNT(&cpu_set);
     if (avail_cpus == 0) {
         unlock();
-        __log_err("no cpu available for tid=%lu", tid);
+        __log_err("No cpu available for tid=%lu", tid);
         return -1;
     }
 
@@ -240,7 +260,7 @@ int cpu_manager::reserve_cpu_for_thread(pthread_t tid, int suggested_cpu /* = NO
         }
         CPU_ZERO(&cpu_set);
         CPU_SET(cpu, &cpu_set);
-        __log_dbg("attach tid=%lu running on cpu=%d to cpu=%d", tid, sched_getcpu(), cpu);
+        __log_dbg("Attach tid=%lu running on cpu=%d to cpu=%d", tid, sched_getcpu(), cpu);
         ret = pthread_setaffinity_np(tid, sizeof(cpu_set_t), &cpu_set);
         if (ret) {
             unlock();
