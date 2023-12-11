@@ -784,7 +784,11 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
                     ret = -1;
                 }
                 if (rec) {
-                    rec->put();
+                    /* rec->put() is a right approach to destroy the record. However, clang-analyzer
+                     * generates a false positive memory leak warning. Call destructor explicitly to
+                     * suppress the warning.
+                     */
+                    delete rec;
                 }
                 goto done;
             }
