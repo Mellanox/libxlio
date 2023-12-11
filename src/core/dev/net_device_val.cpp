@@ -552,18 +552,17 @@ const std::string net_device_val::to_str_ex() const
 
 void net_device_val::print_val() const
 {
+#if (MAX_DEFINED_LOG_LEVEL >= DEFINED_VLOG_DEBUG)
     nd_logdbg("%s", to_str_ex().c_str());
 
     nd_logdbg("  IPv4 list: %s", (m_ipv4.empty() ? "empty " : ""));
     std::for_each(m_ipv4.begin(), m_ipv4.end(), [this](const std::unique_ptr<ip_data> &ip) {
-        NOT_IN_USE(ip); // Suppress --enable-opt-log=high warning
         nd_logdbg("    inet: %s/%d flags: 0x%X scope: 0x%x", ip->local_addr.to_str(AF_INET).c_str(),
                   ip->prefixlen, ip->flags, ip->scope);
     });
 
     nd_logdbg("  IPv6 list: %s", (m_ipv6.empty() ? "empty " : ""));
     std::for_each(m_ipv6.begin(), m_ipv6.end(), [this](const std::unique_ptr<ip_data> &ip) {
-        NOT_IN_USE(ip); // Suppress --enable-opt-log=high warning
         nd_logdbg("    inet6: %s/%d flags: 0x%X scope: 0x%x",
                   ip->local_addr.to_str(AF_INET6).c_str(), ip->prefixlen, ip->flags, ip->scope);
     });
@@ -582,10 +581,10 @@ void net_device_val::print_val() const
     nd_logdbg("  ring list: %s", (m_h_ring_map.empty() ? "empty " : ""));
     for (auto ring_iter = m_h_ring_map.begin(); ring_iter != m_h_ring_map.end(); ++ring_iter) {
         ring *cur_ring = ring_iter->second.first;
-        NOT_IN_USE(cur_ring); // Suppress --enable-opt-log=high warning
         nd_logdbg("    %d: %p: parent %p ref %d", cur_ring->get_if_index(), cur_ring,
                   cur_ring->get_parent(), ring_iter->second.second);
     }
+#endif /* MAX_DEFINED_LOG_LEVEL */
 }
 
 void net_device_val::set_slave_array()

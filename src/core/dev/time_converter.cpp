@@ -64,7 +64,8 @@ uint32_t time_converter::get_single_converter_status(struct ibv_context *ctx)
     memset(&device_attr, 0, sizeof(device_attr));
     device_attr.comp_mask = XLIO_IBV_DEVICE_ATTR_HCA_CORE_CLOCK;
 
-    if ((rval = xlio_ibv_query_device(ctx, &device_attr)) || !device_attr.hca_core_clock) {
+    rval = xlio_ibv_query_device(ctx, &device_attr);
+    if (rval || !device_attr.hca_core_clock) {
         ibchtc_logdbg(
             "time_converter::get_single_converter_status :Error in querying hca core clock "
             "(xlio_ibv_query_device() return value=%d ) (ibv context %p) (errno=%d %m)\n",
@@ -76,7 +77,8 @@ uint32_t time_converter::get_single_converter_status(struct ibv_context *ctx)
     xlio_ts_values queried_values;
     memset(&queried_values, 0, sizeof(queried_values));
     queried_values.comp_mask = XLIO_IBV_VALUES_MASK_RAW_CLOCK;
-    if ((rval = xlio_ibv_query_values(ctx, &queried_values)) || !xlio_get_ts_val(queried_values)) {
+    rval = xlio_ibv_query_values(ctx, &queried_values);
+    if (rval || !xlio_get_ts_val(queried_values)) {
         ibchtc_logdbg(
             "time_converter::get_single_converter_status :Error in querying hw clock, can't convert"
             " hw time to system time (xlio_ibv_query_values() return value=%d ) (ibv context %p) "

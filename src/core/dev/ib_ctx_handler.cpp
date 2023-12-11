@@ -281,8 +281,13 @@ dpcp::adapter *ib_ctx_handler::set_dpcp_adapter()
         goto err;
     }
 
+    /*
+     * get_adapter_info_lst() returns number of adapters in response to NULL or
+     * 0 arguments along with DPCP_ERR_OUT_OF_RANGE error. On success, the
+     * number of actual adapters is not set, so we need a separate call here.
+     */
     status = p_provider->get_adapter_info_lst(NULL, adapters_num);
-    if (0 == adapters_num) {
+    if (dpcp::DPCP_ERR_OUT_OF_RANGE != status || 0 == adapters_num) {
         ibch_logdbg("found no adapters status = %d", status);
         goto err;
     }

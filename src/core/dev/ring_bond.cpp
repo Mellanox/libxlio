@@ -166,7 +166,6 @@ void ring_bond::restart()
                 int fd = -1;
                 int rc = 0;
                 size_t i, j, k;
-                NOT_IN_USE(rc); // Suppress --enable-opt-log=high warning
 
                 if (slaves.empty()) {
                     ring_rx_fds_array =
@@ -261,6 +260,7 @@ void ring_bond::restart()
                         }
                     }
                 }
+                NOT_IN_USE(rc); // Suppress --enable-opt-log=high warning
             }
         }
     } else {
