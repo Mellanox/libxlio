@@ -288,13 +288,14 @@ static int match_ip_addr_and_port(transport_t my_transport, struct use_family_ru
     unsigned short port_first;
     unsigned short port_second;
     int match = 1;
-    char addr_buf_first[MAX_ADDR_STR_LEN];
-    const char *addr_str_first;
-    char addr_buf_second[MAX_ADDR_STR_LEN];
-    const char *addr_str_second;
-    char rule_str[512];
 
+#if (MAX_DEFINED_LOG_LEVEL >= DEFINED_VLOG_DEBUG)
     if (g_vlogger_level >= VLOG_DEBUG) {
+        char addr_buf_first[MAX_ADDR_STR_LEN];
+        const char *addr_str_first;
+        char addr_buf_second[MAX_ADDR_STR_LEN];
+        const char *addr_str_second;
+        char rule_str[512];
 
         get_rule_str(rule, rule_str, sizeof(rule_str));
 
@@ -332,6 +333,7 @@ static int match_ip_addr_and_port(transport_t my_transport, struct use_family_ru
             match_logdbg("MATCH: matching %s:%d to %s => ", addr_str_first, port_first, rule_str);
         }
     }
+#endif /* MAX_DEFINED_LOG_LEVEL */
 
     /* We currently only support IPv4 and IPv4 embedded in IPv6 */
     if (rule->first.match_by_port) {

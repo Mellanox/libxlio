@@ -202,6 +202,7 @@ int state_machine::process_sparse_table(sm_short_table_line_t *short_table,
 
     sm_logdbg("SM full table processing done. Allocated memory size of %d bytes",
               sm_table_entries_size);
+    (void)sm_table_entries_size; // Suppress --enable-opt-log=high warning
     return 0;
 }
 

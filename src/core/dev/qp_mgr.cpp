@@ -405,11 +405,12 @@ void qp_mgr::release_rx_buffers()
     }
     m_last_posted_rx_wr_id = 0; // Clear the posted WR_ID flag, we just clear the entire RQ
     qp_logdbg("draining completed with a total of %d wce's on rx cq_mgr", total_ret);
+    NOT_IN_USE(total_ret); // Suppress --enable-opt-log=high warning
 }
 
 void qp_mgr::release_tx_buffers()
 {
-    int ret = 0;
+    int ret;
     uint64_t poll_sn = 0;
     qp_logdbg("draining tx cq_mgr %p", m_p_cq_mgr_tx);
     while (m_p_cq_mgr_tx && m_qp &&
@@ -417,6 +418,7 @@ void qp_mgr::release_tx_buffers()
            (errno != EIO && !m_p_ib_ctx_handler->is_removed())) {
         qp_logdbg("draining completed on tx cq_mgr (%d wce)", ret);
     }
+    NOT_IN_USE(ret); // Suppress --enable-opt-log=high warning
 }
 
 void qp_mgr::trigger_completion_for_all_sent_packets()
