@@ -1387,23 +1387,23 @@ void net_device_val_eth::parse_prio_egress_map()
 
     nl_sock *socket = nl_socket_alloc();
     if (!socket) {
-        nd_logdbg("unable to allocate socket socket %s", strerror(errno));
+        nd_logdbg("unable to allocate a netlink socket");
         goto out;
     }
     nl_socket_set_local_port(socket, 0);
     ret = nl_connect(socket, NETLINK_ROUTE);
     if (ret < 0) {
-        nd_logdbg("unable to connect to libnl socket %d %s", ret, strerror(errno));
+        nd_logdbg("unable to connect to libnl socket %d (errno=%d)", ret, errno);
         goto out;
     }
     ret = rtnl_link_alloc_cache(socket, AF_UNSPEC, &cache);
-    if (!cache) {
-        nd_logdbg("unable to create libnl cache %d %s", ret, strerror(errno));
+    if (ret < 0 || !cache) {
+        nd_logdbg("unable to create libnl cache %d (errno=%d)", ret, errno);
         goto out;
     }
     link = rtnl_link_get_by_name(cache, get_ifname());
     if (!link) {
-        nd_logdbg("unable to get libnl link %d %s", ret, strerror(errno));
+        nd_logdbg("unable to find libnl link");
         goto out;
     }
     map = rtnl_link_vlan_get_egress_map(link, &len);
