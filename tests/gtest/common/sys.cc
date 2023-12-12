@@ -170,7 +170,7 @@ int sys_dev2addr(const char *dev, struct sockaddr *addr)
 
     ifr.ifr_addr.sa_family = AF_INET;
     ifr.ifr_name[sizeof(ifr.ifr_name) - 1] = 0;
-    strncpy(ifr.ifr_name, dev, sys_min(strlen(dev), sizeof(ifr.ifr_name) - 1));
+    strncpy(ifr.ifr_name, dev, sizeof(ifr.ifr_name) - 1);
 
     rc = ioctl(fd, SIOCGIFADDR, &ifr);
     if (rc >= 0 && addr) {
