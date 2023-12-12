@@ -47,6 +47,7 @@
 #include "tcp_base.h"
 
 #include "core/lwip/opt.h"
+#include "core/xlio_extra.h"
 
 #define HELLO_STR "hello"
 
@@ -239,6 +240,253 @@ TEST_F(tcp_sockopt, ti_2_tcp_congestion)
     if (rc == 0) {
         std::string cc_name(buf, strnlen(buf, len));
         EXPECT_EQ(std::string("reno"), cc_name);
+    }
+}
+
+/**
+ * @test tcp_sockopt.ti_1_getsockopt_tcp_info
+ * @brief
+ *    getsockopt(TCP_INFO).
+ * @details
+ */
+TEST_F(tcp_sockopt, ti_3_setsockopt_isolate)
+{
+    struct xlio_api_t *xlio_api = xlio_get_api();
+    pid_t pid;
+
+    SKIP_TRUE(xlio_api != NULL, "XLIO API not found. Run the test under XLIO.");
+    SKIP_TRUE(server_addr.addr.sa_family == AF_INET && client_addr.addr.sa_family == AF_INET,
+              "This test supports only IPv4");
+
+    auto test_client = [&]() {
+        char buf[64];
+        sockaddr_store_t addr;
+        sockaddr_store_t local_addr;
+        ssize_t len;
+        int sock;
+        int sock2;
+        int val = SO_XLIO_ISOLATE_SAFE;
+        int valdef = SO_XLIO_ISOLATE_DEFAULT;
+        int rc;
+
+        sock = tcp_base::sock_create();
+        ASSERT_LE(0, sock);
+        sock2 = tcp_base::sock_create();
+        ASSERT_LE(0, sock2);
+
+        rc = setsockopt(sock, SOL_SOCKET, SO_XLIO_ISOLATE, &val, sizeof(val));
+        ASSERT_EQ(0, rc);
+        rc = setsockopt(sock, SOL_SOCKET, SO_XLIO_ISOLATE, &valdef, sizeof(valdef));
+        ASSERT_EQ(-1, rc);
+        ASSERT_EQ(EINVAL, errno);
+
+        memcpy(&local_addr, &client_addr, sizeof(local_addr));
+        sys_set_port((struct sockaddr *)&local_addr, 0);
+        rc = bind(sock, (struct sockaddr *)&local_addr, sizeof(local_addr));
+        ASSERT_EQ(0, rc);
+        rc = bind(sock2, (struct sockaddr *)&local_addr, sizeof(local_addr));
+        ASSERT_EQ(0, rc);
+
+        memcpy(&addr, &server_addr, sizeof(addr));
+        sys_set_port((struct sockaddr *)&addr, 8080);
+        rc = connect(sock, (struct sockaddr *)&addr, sizeof(addr));
+        ASSERT_EQ(0, rc);
+
+        sys_set_port((struct sockaddr *)&addr, 8081);
+        rc = connect(sock2, (struct sockaddr *)&addr, sizeof(addr));
+        ASSERT_EQ(0, rc);
+
+        rc = setsockopt(sock2, SOL_SOCKET, SO_XLIO_ISOLATE, &val, sizeof(val));
+        ASSERT_EQ(-1, rc);
+        ASSERT_EQ(EINVAL, errno);
+
+        int xlio_ring_fds[3];
+        int xlio_ring_fds2[3];
+        rc = xlio_api->get_socket_rings_fds(sock, xlio_ring_fds, ARRAY_SIZE(xlio_ring_fds));
+        ASSERT_EQ(1, rc);
+        rc = xlio_api->get_socket_rings_fds(sock2, xlio_ring_fds2, ARRAY_SIZE(xlio_ring_fds2));
+        ASSERT_EQ(1, rc);
+        ASSERT_NE(xlio_ring_fds[0], xlio_ring_fds2[0]);
+
+        len = write(sock, HELLO_STR, sizeof(HELLO_STR));
+        ASSERT_LT(0, len);
+        EXPECT_EQ(static_cast<ssize_t>(sizeof(HELLO_STR)), len);
+
+        do {
+            len = read(sock, buf, sizeof(buf));
+        } while (len == -1 && errno == EINTR);
+        ASSERT_LT(0, len);
+        EXPECT_LE(static_cast<ssize_t>(sizeof(HELLO_STR)), len);
+        EXPECT_EQ(0, strncmp(HELLO_STR, buf, sizeof(HELLO_STR)));
+
+        usleep(100);
+
+        rc = close(sock);
+        ASSERT_EQ(0, rc);
+        rc = close(sock2);
+        ASSERT_EQ(0, rc);
+    };
+
+    auto test_server = [&]() {
+        char buf[64];
+        sockaddr_store_t addr;
+        sockaddr_store_t peer_addr;
+        socklen_t socklen;
+        ssize_t len;
+        int sock;
+        int sock2;
+        int sock3;
+        int sock_in;
+        int sock_in2;
+        int val = SO_XLIO_ISOLATE_SAFE;
+        int rc;
+
+        /*
+         * Socket create
+         */
+
+        sock = tcp_base::sock_create();
+        ASSERT_LE(0, sock);
+        sock2 = tcp_base::sock_create();
+        ASSERT_LE(0, sock2);
+        sock3 = tcp_base::sock_create();
+        ASSERT_LE(0, sock3);
+
+        rc = setsockopt(sock, SOL_SOCKET, SO_XLIO_ISOLATE, &val, sizeof(val));
+        ASSERT_EQ(0, rc);
+
+        /*
+         * Socket bind
+         */
+
+        memcpy(&addr, &server_addr, sizeof(addr));
+        sys_set_port((struct sockaddr *)&addr, 8080);
+        rc = bind(sock, (struct sockaddr *)&addr, sizeof(addr));
+        ASSERT_EQ(0, rc);
+
+        sys_set_port((struct sockaddr *)&addr, 8081);
+        rc = bind(sock2, (struct sockaddr *)&addr, sizeof(addr));
+        ASSERT_EQ(0, rc);
+
+        sys_set_port((struct sockaddr *)&addr, 8082);
+        rc = bind(sock3, (struct sockaddr *)&addr, sizeof(addr));
+        ASSERT_EQ(0, rc);
+
+        rc = setsockopt(sock2, SOL_SOCKET, SO_XLIO_ISOLATE, &val, sizeof(val));
+        ASSERT_EQ(0, rc);
+
+        /*
+         * Socket listen
+         */
+
+        rc = listen(sock, 5);
+        ASSERT_EQ(0, rc);
+
+        rc = listen(sock2, 5);
+        ASSERT_EQ(0, rc);
+
+        rc = listen(sock3, 5);
+        ASSERT_EQ(0, rc);
+
+        rc = setsockopt(sock3, SOL_SOCKET, SO_XLIO_ISOLATE, &val, sizeof(val));
+        ASSERT_EQ(-1, rc);
+        ASSERT_EQ(EINVAL, errno);
+
+        /*
+         * Check rings
+         */
+
+        int xlio_ring_fds[3];
+        int xlio_ring_fds2[3];
+        int xlio_ring_fds3[3];
+        rc = xlio_api->get_socket_rings_fds(sock, xlio_ring_fds, ARRAY_SIZE(xlio_ring_fds));
+        ASSERT_EQ(1, rc);
+        rc = xlio_api->get_socket_rings_fds(sock2, xlio_ring_fds2, ARRAY_SIZE(xlio_ring_fds2));
+        ASSERT_EQ(1, rc);
+        rc = xlio_api->get_socket_rings_fds(sock3, xlio_ring_fds3, ARRAY_SIZE(xlio_ring_fds3));
+        ASSERT_EQ(1, rc);
+        ASSERT_EQ(xlio_ring_fds[0], xlio_ring_fds2[0]);
+        ASSERT_NE(xlio_ring_fds[0], xlio_ring_fds3[0]);
+
+        // Notify client to proceed with connect()
+        barrier_fork(pid);
+
+        /*
+         * Socket accept
+         */
+
+        do {
+            socklen = sizeof(peer_addr);
+            sock_in = accept(sock, (struct sockaddr *)&peer_addr, &socklen);
+        } while (sock_in == -1 && errno == EINTR);
+        ASSERT_LE(0, sock_in);
+        log_trace("Accepted connection: fd=%d from %s\n", sock_in,
+                  sys_addr2str((struct sockaddr *)&peer_addr));
+
+        do {
+            socklen = sizeof(peer_addr);
+            sock_in2 = accept(sock2, (struct sockaddr *)&peer_addr, &socklen);
+        } while (sock_in2 == -1 && errno == EINTR);
+        ASSERT_LE(0, sock_in2);
+        log_trace("Accepted connection: fd=%d from %s\n", sock_in2,
+                  sys_addr2str((struct sockaddr *)&peer_addr));
+
+        rc = xlio_api->get_socket_rings_fds(sock_in, xlio_ring_fds2, ARRAY_SIZE(xlio_ring_fds2));
+        ASSERT_EQ(1, rc);
+        rc = xlio_api->get_socket_rings_fds(sock_in2, xlio_ring_fds3, ARRAY_SIZE(xlio_ring_fds3));
+        ASSERT_EQ(1, rc);
+        // Incoming TCP sockets inherit ring allocation logic from their parents
+        ASSERT_EQ(xlio_ring_fds[0], xlio_ring_fds2[0]);
+        ASSERT_EQ(xlio_ring_fds[0], xlio_ring_fds3[0]);
+
+        /*
+         * Socket read / write
+         */
+
+        len = write(sock_in, HELLO_STR, sizeof(HELLO_STR));
+        ASSERT_LT(0, len);
+        EXPECT_EQ(static_cast<ssize_t>(sizeof(HELLO_STR)), len);
+
+        do {
+            len = read(sock_in, buf, sizeof(buf));
+        } while (len == -1 && errno == EINTR);
+        ASSERT_LT(0, len);
+        EXPECT_LE(static_cast<ssize_t>(sizeof(HELLO_STR)), len);
+        EXPECT_EQ(0, strncmp(HELLO_STR, buf, sizeof(HELLO_STR)));
+
+        /*
+         * Socket close
+         */
+
+        usleep(100);
+
+        rc = close(sock_in);
+        ASSERT_EQ(0, rc);
+        rc = close(sock_in2);
+        ASSERT_EQ(0, rc);
+        rc = close(sock);
+        ASSERT_EQ(0, rc);
+        rc = close(sock2);
+        ASSERT_EQ(0, rc);
+        rc = close(sock3);
+        ASSERT_EQ(0, rc);
+    };
+
+    pid = fork();
+    if (0 == pid) { /* I am the child */
+        barrier_fork(pid);
+        test_client();
+        /* This exit is very important, otherwise the fork
+         * keeps running and may duplicate other tests.
+         */
+        exit(testing::Test::HasFailure());
+    } else { /* I am the parent */
+        test_server();
+        if (testing::Test::HasFailure()) {
+            usleep(500);
+            kill(pid, SIGTERM);
+        }
+        ASSERT_EQ(0, wait_fork(pid));
     }
 }
 
