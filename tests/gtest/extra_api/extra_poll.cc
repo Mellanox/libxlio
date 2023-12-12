@@ -53,6 +53,19 @@ protected:
     }
     void TearDown() { xlio_base::TearDown(); }
 
+    uint64_t timestamp_ms()
+    {
+        struct timespec ts;
+        int rc = clock_gettime(CLOCK_MONOTONIC, &ts);
+        return rc != 0 ? 0LU : ts.tv_sec * 1000LU + ts.tv_nsec / 1000000LU;
+    }
+    bool timestamp_ms_elapsed(uint64_t start_ts, uint64_t timeout)
+    {
+        struct timespec ts;
+        int rc = clock_gettime(CLOCK_MONOTONIC, &ts);
+        return rc != 0 ? false : (ts.tv_sec * 1000LU + ts.tv_nsec / 1000000LU - start_ts > timeout);
+    }
+
     tcp_base_sock m_tcp_base;
     udp_base_sock m_udp_base;
 };
@@ -349,6 +362,153 @@ TEST_F(socketxtreme_poll, ti_3)
 
         ASSERT_EQ(0, wait_fork(pid));
         sleep(1U); // XLIO timers to clean fd.
+    }
+}
+
+/**
+ * @test socketxtreme_poll.ti_4_socket_isolation
+ * @brief
+ *    Check TCP connection data receiving on isolated socket (SO_XLIO_ISOLATE_SAFE)
+ * @details
+ */
+TEST_F(socketxtreme_poll, ti_4_socket_isolation)
+{
+    int rc = EOK;
+    int fd;
+    int optval = SO_XLIO_ISOLATE_SAFE;
+    bool received_data = false;
+    char msg[] = "Hello";
+
+    int _xlio_ring_fd = -1;
+    int _xlio_peer_ring_fd = -1;
+    struct xlio_socketxtreme_completion_t xlio_comps;
+    int fd_peer = -1;
+    struct sockaddr peer_addr;
+
+    auto poll_single_ring = [&](int ring_fd) {
+        rc = xlio_api->socketxtreme_poll(ring_fd, &xlio_comps, 1, SOCKETXTREME_POLL_TX);
+        if (rc == 0) {
+            return;
+        }
+        if ((xlio_comps.events & EPOLLERR) || (xlio_comps.events & EPOLLHUP) ||
+            (xlio_comps.events & EPOLLRDHUP)) {
+            log_trace("Close connection: event: 0x%lx\n", xlio_comps.events);
+            rc = -1;
+            return;
+        }
+        if (xlio_comps.events & XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED) {
+            EXPECT_EQ(fd, (int)xlio_comps.listen_fd);
+            fd_peer = (int)xlio_comps.user_data;
+            memcpy(&peer_addr, &xlio_comps.src, sizeof(peer_addr));
+            log_trace("Accepted connection: fd: %d from %s\n", fd_peer,
+                      sys_addr2str((struct sockaddr *)&peer_addr));
+
+            rc = xlio_api->get_socket_rings_fds(fd_peer, &_xlio_peer_ring_fd, 1);
+            ASSERT_EQ(1, rc);
+            ASSERT_LE(0, _xlio_peer_ring_fd);
+
+            rc = send(fd_peer, (void *)msg, sizeof(msg), 0);
+            EXPECT_EQ(static_cast<int>(sizeof(msg)), rc);
+        }
+        if (xlio_comps.events & XLIO_SOCKETXTREME_PACKET) {
+            EXPECT_EQ(1U, xlio_comps.packet.num_bufs);
+            EXPECT_EQ(sizeof(msg), xlio_comps.packet.total_len);
+            EXPECT_TRUE(xlio_comps.packet.buff_lst->payload);
+            EXPECT_EQ(0,
+                      strncmp(msg, (const char *)xlio_comps.packet.buff_lst->payload,
+                              xlio_comps.packet.total_len));
+            log_trace("Received data: user_data: %p data: %s\n",
+                      (void *)((uintptr_t)xlio_comps.user_data),
+                      (char *)xlio_comps.packet.buff_lst->payload);
+            received_data = true;
+        }
+        rc = 0;
+    };
+
+    errno = EOK;
+
+    pid_t pid = fork();
+
+    if (0 == pid) { /* I am the child */
+        barrier_fork(pid);
+
+        fd = m_tcp_base.sock_create_fa(m_family);
+        ASSERT_LE(0, fd);
+
+        rc = setsockopt(fd, SOL_SOCKET, SO_XLIO_ISOLATE, &optval, sizeof(optval));
+        ASSERT_EQ(0, rc);
+
+        rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
+        ASSERT_EQ(0, rc);
+
+        rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        ASSERT_EQ(0, rc);
+
+        log_trace("Established connection: fd=%d to %s\n", fd,
+                  sys_addr2str((struct sockaddr *)&server_addr));
+
+        rc = send(fd, (void *)msg, sizeof(msg), 0);
+        EXPECT_EQ(static_cast<int>(sizeof(msg)), rc);
+
+        rc = sock_noblock(fd);
+        ASSERT_EQ(0, rc);
+
+        rc = xlio_api->get_socket_rings_fds(fd, &_xlio_ring_fd, 1);
+        ASSERT_EQ(1, rc);
+        ASSERT_LE(0, _xlio_ring_fd);
+
+        uint64_t ts = timestamp_ms();
+        ASSERT_NE(0LU, ts);
+        rc = 0;
+        while (rc == 0 && !received_data && !testing::Test::HasFailure()) {
+            poll_single_ring(_xlio_ring_fd);
+            if (timestamp_ms_elapsed(ts, 500UL)) {
+                log_trace("No data received by client within time limit\n");
+                break;
+            }
+        }
+
+        usleep(100);
+        close(fd);
+
+        EXPECT_EQ(true, received_data);
+
+        /* This exit is very important, otherwise the fork
+         * keeps running and may duplicate other tests.
+         */
+        exit(testing::Test::HasFailure());
+    } else { /* I am the parent */
+        fd = m_tcp_base.sock_create_fa_nb(m_family);
+        ASSERT_LE(0, fd);
+
+        rc = setsockopt(fd, SOL_SOCKET, SO_XLIO_ISOLATE, &optval, sizeof(optval));
+        ASSERT_EQ(0, rc);
+
+        rc = bind(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        CHECK_ERR_OK(rc);
+
+        rc = listen(fd, 5);
+        CHECK_ERR_OK(rc);
+
+        rc = xlio_api->get_socket_rings_fds(fd, &_xlio_ring_fd, 1);
+        ASSERT_EQ(1, rc);
+        ASSERT_LE(0, _xlio_ring_fd);
+
+        barrier_fork(pid);
+        rc = 0;
+
+        while (rc == 0 && !child_fork_exit() && !testing::Test::HasFailure()) {
+            poll_single_ring(_xlio_ring_fd);
+            if (_xlio_peer_ring_fd >= 0 && _xlio_peer_ring_fd != _xlio_ring_fd && rc == 0) {
+                poll_single_ring(_xlio_peer_ring_fd);
+            }
+        }
+
+        close(fd_peer);
+        close(fd);
+
+        EXPECT_EQ(true, received_data);
+        ASSERT_EQ(0, wait_fork(pid));
     }
 }
 
