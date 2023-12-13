@@ -45,29 +45,28 @@ AC_ARG_ENABLE([utls],
     [enable_utls=auto]
 )
 
-prj_cv_dpcp_1_1_3=0
+prj_cv_dpcp_1_1_44=0
 AS_IF([test "$prj_cv_dpcp" -ne 0],
     [
     AC_LANG_PUSH([C++])
     AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <mellanox/dpcp.h>]],
          [[dpcp::tis* _tis;
-           dpcp::dek* _dek;
-           int key_type = (int)dpcp::DEK_ATTR_TLS;
+           dpcp::tls_dek* _dek;
            int tis_bit = (int)dpcp::TIS_ATTR_TLS;
            (void)_tis; (void)_dek;
-           (void)key_type; (void)tis_bit;]])],
-         [prj_cv_dpcp_1_1_3=1])
+           (void)tis_bit;]])],
+         [prj_cv_dpcp_1_1_44=1])
     AC_LANG_POP()
     ])
 
-AS_IF([test "$prj_cv_dpcp_1_1_3" -eq 0],
+AS_IF([test "$prj_cv_dpcp_1_1_44" -eq 0],
     [
     AS_IF([test "x$enable_utls" == xauto],
         [enable_utls=no])
     AS_IF([test "x$enable_utls" == xyes],
         [
         AC_MSG_CHECKING([for utls support])
-        AC_MSG_ERROR([utls requires dpcp 1.1.3 or later, see --with-dpcp])
+        AC_MSG_ERROR([utls requires dpcp 1.1.44 or later, see --with-dpcp])
         ])
     ])
 

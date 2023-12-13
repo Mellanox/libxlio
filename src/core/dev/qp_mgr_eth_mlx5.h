@@ -114,9 +114,9 @@ public:
     void post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first) override;
 
 #if defined(DEFINED_UTLS)
-    std::unique_ptr<dpcp::dek> get_new_dek(const void *key, uint32_t key_size_bytes);
-    std::unique_ptr<dpcp::dek> get_dek(const void *key, uint32_t key_size_bytes);
-    void put_dek(std::unique_ptr<dpcp::dek> &&dek_obj);
+    std::unique_ptr<dpcp::tls_dek> get_new_tls_dek(const void *key, uint32_t key_size_bytes);
+    std::unique_ptr<dpcp::tls_dek> get_tls_dek(const void *key, uint32_t key_size_bytes);
+    void put_tls_dek(std::unique_ptr<dpcp::tls_dek> &&dek_obj);
 #endif
 
     void reset_inflight_zc_buffers_ctx(void *ctx) override;
@@ -225,8 +225,8 @@ private:
     std::vector<xlio_tir *> m_tls_tir_cache;
 
 #if defined(DEFINED_UTLS)
-    std::list<std::unique_ptr<dpcp::dek>> m_dek_get_cache;
-    std::list<std::unique_ptr<dpcp::dek>> m_dek_put_cache;
+    std::list<std::unique_ptr<dpcp::tls_dek>> m_tls_dek_get_cache;
+    std::list<std::unique_ptr<dpcp::tls_dek>> m_tls_dek_put_cache;
 #endif
 };
 #endif // defined(DEFINED_DIRECT_VERBS)
