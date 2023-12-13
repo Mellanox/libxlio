@@ -276,6 +276,8 @@ protected:
     void do_rings_migration_rx(resource_allocation_key &old_key);
     int set_ring_attr(xlio_ring_alloc_logic_attr *attr);
     int set_ring_attr_helper(ring_alloc_logic_attr *sock_attr, xlio_ring_alloc_logic_attr *attr);
+    void set_ring_logic_rx(ring_alloc_logic_attr ral);
+    void set_ring_logic_tx(ring_alloc_logic_attr ral);
 
     // Attach to all relevant rings for offloading receive flows - always used from slow path
     // According to bounded information we need to attach to all UC relevant flows
