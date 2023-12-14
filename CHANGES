@@ -1,3 +1,20 @@
+Version 3.21.1-1:
+Date + Time 2023-12-14
+=============================================================
+Added:
+        - RM #3698316 Remove legacy rdtsc/time instrumentation
+        - RM #3414980 Add envoy enable_reuse_port=true support
+        - RM #3664594 Full TCP keepalive support
+        - RM #3698403 Optimize SocketXtreme TCP RX buffers release
+        - RM #3698256 Add socket isolation extra API feature
+        - RM #3705189 Update DEK usage to dpcp 1.1.44 API
+
+Fixed:
+        - RM #3645103 Treat negative listen backlog as maximum allowed
+        - RM #3684889 Fix poll() for offloaded sockets with events=0
+        - RM #3183915 Fix clang-analyzer warnings
+        - RM #3574064 Allow TX segment split on ACK receive
+
 Version 3.20.8-1:
 Date + Time 2023-11-16
 =============================================================
