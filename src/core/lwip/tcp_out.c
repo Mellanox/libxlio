@@ -136,7 +136,7 @@ static struct pbuf *tcp_output_alloc_header(struct tcp_pcb *pcb, u16_t optlen, u
 err_t tcp_send_fin(struct tcp_pcb *pcb)
 {
     /* first, try to add the fin to the last unsent segment */
-    if (pcb->last_unsent != NULL) {
+    if (pcb->unsent != NULL) {
         if ((TCPH_FLAGS(pcb->last_unsent->tcphdr) & (TCP_SYN | TCP_FIN | TCP_RST)) == 0) {
             /* no SYN/FIN/RST flag in the header, we can add the FIN flag */
             TCPH_SET_FLAG(pcb->last_unsent->tcphdr, TCP_FIN);
