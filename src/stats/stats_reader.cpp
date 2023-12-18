@@ -29,6 +29,14 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+#include <chrono>
+#include <cinttypes>
+#include <iostream>
+#include <list>
+#include <sstream>
+#include <thread>
+#include <unordered_map>
+#include <vector>
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -53,20 +61,14 @@
 #include <sys/utsname.h>
 #include <sys/stat.h>
 
-#include <cinttypes>
-#include <iostream>
-#include <list>
-#include <vector>
-#include <unordered_map>
-
-#include "utils/rdtsc.h"
 #include "core/util/utils.h"
 #include "core/util/xlio_stats.h"
 #include "core/util/sys_vars.h"
 #include "stats/stats_data_reader.h"
-#include <sstream>
 
 using namespace std;
+using std::chrono::steady_clock;
+using namespace std::chrono_literals;
 
 typedef std::list<int> fd_list_t;
 
@@ -1402,7 +1404,6 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
     int num_act_inst = 0;
     int cycles = user_params.cycles ? user_params.cycles : -1;
     int printed_line_num = SCREEN_SIZE;
-    struct timespec start, end;
     bool proc_running = true;
     socket_instance_block_t *prev_instance_blocks;
     socket_instance_block_t *curr_instance_blocks;
@@ -1496,10 +1497,7 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
     while (!g_b_exit && proc_running && cycles) {
         --cycles;
 
-        if (gettime(&start)) {
-            log_system_err("gettime()");
-            goto out;
-        }
+        auto start = steady_clock::now();
 
         if (user_params.print_details_mode == e_deltas) {
             memcpy((void *)curr_instance_blocks, (void *)p_sh_mem->skt_inst_arr,
@@ -1584,15 +1582,12 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
             printf(CYCLES_SEPARATOR);
             printed_line_num++;
         }
-        if (gettime(&end)) {
-            log_system_err("gettime()");
-            goto out;
-        }
-        uint64_t delay_int_micro = SEC_TO_MICRO(user_params.interval);
-        uint64_t adjasted_delay = delay_int_micro - TIME_DIFF_in_MICRO(start, end);
+        auto end = steady_clock::now();
+        auto duration = std::chrono::seconds(user_params.interval);
+        auto adjasted_duration = duration - (end - start);
         if (!g_b_exit && proc_running) {
             if (cycles) {
-                usleep(adjasted_delay);
+                std::this_thread::sleep_for(adjasted_duration);
             }
             inc_read_counter(p_sh_mem);
         }
