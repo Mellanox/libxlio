@@ -938,7 +938,7 @@ extern "C" void sock_redirect_main(void)
     //	if (ret)
     //		vlog_printf(VLOG_ERROR, "%s() ERROR at atexit() (ret=%d %m)\n", __FUNCTION__, ret);
 
-    tv_clear(&g_last_zero_polling_time);
+    g_last_zero_polling_time = steady_clock::time_point();
 
     if (safe_mce_sys().handle_segfault) {
         register_handler_segv();

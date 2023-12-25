@@ -33,6 +33,7 @@
 #ifndef _IO_MUX_CALL_H
 #define _IO_MUX_CALL_H
 
+#include <chrono>
 #include <exception>
 #include <sys/time.h>
 
@@ -40,6 +41,8 @@
 #include <util/xlio_stats.h>
 #include <sock/socket_fd_api.h>
 #include <sock/sockinfo.h>
+
+using namespace std::chrono;
 
 // from sigset.h
 #ifndef sigandnset
@@ -57,7 +60,7 @@
 
 #define CHECK_INTERRUPT_RATIO 0
 
-extern timeval g_last_zero_polling_time; // the last time g_polling_time_usec was zeroed
+extern time_point<steady_clock> g_last_zero_polling_time;
 
 /**
  * @class mux_call
@@ -214,7 +217,7 @@ private:
      * Check if the polling CPU var needs to be zeroed
      * (internal for the statistics)
      */
-    inline void zero_polling_cpu(timeval current);
+    inline void zero_polling_cpu(const time_point<steady_clock> &current);
 
     /**
      * Go over fd_ready_array and set all fd's in it as ready.
