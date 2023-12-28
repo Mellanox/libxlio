@@ -135,14 +135,6 @@ void ring_alloc_logic_attr::set_user_id_key(uint64_t user_id_key)
     }
 }
 
-void ring_alloc_logic_attr::set_use_locks(bool use_locks)
-{
-    if (m_use_locks != use_locks) {
-        m_use_locks = use_locks;
-        init();
-    }
-}
-
 const std::string ring_alloc_logic_attr::to_str() const
 {
     std::stringstream ss;
@@ -1411,10 +1403,11 @@ ring *net_device_val_eth::create_ring(resource_allocation_key *key)
 
     try {
         switch (m_bond) {
-        case NO_BOND:
-            ring = new ring_eth(get_if_idx(), nullptr, RING_ETH, true,
-                                (key ? key->get_use_locks() : true));
-            break;
+        case NO_BOND: {
+            bool tx_only = (key && key->get_ring_alloc_logic() == RING_LOGIC_NEIGH);
+            bool use_locks = (!key || key->get_use_locks());
+            ring = new ring_eth(get_if_idx(), nullptr, tx_only, use_locks);
+        } break;
         case ACTIVE_BACKUP:
         case LAG_8023ad:
             ring = new ring_bond_eth(get_if_idx());

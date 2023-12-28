@@ -61,11 +61,10 @@ public:
     ring_alloc_logic_attr(const ring_alloc_logic_attr &other);
     void set_ring_alloc_logic(ring_logic_t logic);
     void set_user_id_key(uint64_t user_id_key);
-    void set_use_locks(bool use_locks);
     const std::string to_str() const;
-    inline ring_logic_t get_ring_alloc_logic() { return m_ring_alloc_logic; }
-    inline uint64_t get_user_id_key() { return m_user_id_key; }
-    inline bool get_use_locks() { return m_use_locks; }
+    inline ring_logic_t get_ring_alloc_logic() const { return m_ring_alloc_logic; }
+    inline uint64_t get_user_id_key() const { return m_user_id_key; }
+    inline bool get_use_locks() const { return m_use_locks; }
 
     bool operator==(const ring_alloc_logic_attr &other) const
     {
