@@ -709,7 +709,7 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
                                     pcb->remote_ip, pcb->is_ipv6);
 
                 ++pcb_remove;
-                err = ERR_ABRT;
+                err = ERR_TIMEOUT;
                 ++pcb_reset;
             }
 #if LWIP_TCP_KEEPALIVE
