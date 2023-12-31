@@ -395,6 +395,13 @@ private:
     // int rx_wait(int &poll_count, bool blocking = true);
     static err_t ack_recvd_lwip_cb(void *arg, struct tcp_pcb *tpcb, u16_t space);
 
+    ssize_t tcp_tx_handle_done_and_unlock(ssize_t total_tx, int errno_tmp, bool is_dummy,
+                                          bool is_send_zerocopy);
+    ssize_t tcp_tx_handle_errno_and_unlock(int error_number);
+    ssize_t tcp_tx_handle_partial_send_and_unlock(ssize_t total_tx, int errno_to_report,
+                                                  bool is_dummy, bool is_send_zerocopy,
+                                                  int errno_to_restore);
+    ssize_t tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg);
     inline err_t handle_fin(struct tcp_pcb *pcb, err_t err);
     inline void handle_rx_lwip_cb_error(pbuf *p);
     inline void rx_lwip_cb_error(pbuf *p);
@@ -510,6 +517,7 @@ private:
     void process_reuse_ctl_packets();
     void process_rx_ctl_packets();
     static void put_agent_msg(void *arg);
+    bool is_connected_and_ready_to_send();
 
 public:
     static const int CONNECT_DEFAULT_TIMEOUT_MS = 10000;

@@ -897,31 +897,185 @@ ssize_t sockinfo_tcp::tx(xlio_tx_call_attr_t &tx_arg)
 
 static inline bool cannot_do_requested_partial_write(size_t sndbuf_available,
                                                      const xlio_tx_call_attr_t &tx_arg,
-                                                     bool is_blocking, size_t total_iov_len)
+                                                     size_t total_iov_len)
 {
-    return !BLOCK_THIS_RUN(is_blocking, tx_arg.attr.flags) &&
-        (tx_arg.xlio_flags & TX_FLAG_NO_PARTIAL_WRITE) &&
+    return (tx_arg.xlio_flags & TX_FLAG_NO_PARTIAL_WRITE) &&
         unlikely(sndbuf_available < total_iov_len);
 }
 
-static inline bool tcp_wnd_unavalable(const tcp_pcb &pcb, size_t total_iov_len)
-{
 #ifdef DEFINED_TCP_TX_WND_AVAILABILITY
-    return !tcp_is_wnd_available(&pcb, total_iov_len);
+#define TCP_WND_UNAVALABLE(pcb, total_iov_len) !tcp_is_wnd_available(&pcb, total_iov_len)
 #else
-    NOT_IN_USE(pcb);
-    NOT_IN_USE(total_iov_len);
-    return false;
+#define TCP_WND_UNAVALABLE(pcb, total_iov_len) false
 #endif
+
+static inline bool is_invalid_iovec(const iovec *iov, size_t sz_iov)
+{
+    return iov == nullptr || sz_iov == 0;
 }
 
 ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
 {
     iovec *p_iov = tx_arg.attr.iov;
     size_t sz_iov = tx_arg.attr.sz_iov;
-    struct sockaddr *__dst = tx_arg.attr.addr;
-    socklen_t __dstlen = tx_arg.attr.len;
-    int __flags = tx_arg.attr.flags;
+    int flags = tx_arg.attr.flags;
+    int errno_tmp = errno;
+    int ret = 0;
+    int poll_count = 0;
+    err_t err;
+    void *tx_ptr = NULL;
+    struct xlio_pd_key *pd_key_array = NULL;
+
+    /* Let allow OS to process all invalid scenarios to avoid any
+     * inconsistencies in setting errno values
+     */
+    if (unlikely(m_sock_offload != TCP_SOCK_LWIP) || unlikely(is_invalid_iovec(p_iov, sz_iov))) {
+        struct sockaddr *dst = tx_arg.attr.addr;
+        socklen_t dstlen = tx_arg.attr.len;
+        ret = socket_fd_api::tx_os(tx_arg.opcode, p_iov, sz_iov, flags, dst, dstlen);
+        save_stats_tx_os(ret);
+        return ret;
+    }
+
+    if (unlikely(!is_connected_and_ready_to_send())) {
+        return -1;
+    }
+
+    si_tcp_logfunc("tx: iov=%p niovs=%d", p_iov, sz_iov);
+
+    if (m_sysvar_rx_poll_on_tx_tcp) {
+        rx_wait_helper(poll_count, false);
+    }
+
+    bool is_dummy = IS_DUMMY_PACKET(flags);
+    bool is_blocking = BLOCK_THIS_RUN(m_b_blocking, flags);
+    bool is_packet_zerocopy = (flags & MSG_ZEROCOPY) && ((m_b_zc) || (tx_arg.opcode == TX_FILE));
+    if (unlikely(is_dummy) || unlikely(!is_packet_zerocopy) || unlikely(is_blocking)) {
+        return tcp_tx_slow_path(tx_arg);
+    }
+
+    bool is_send_zerocopy = tx_arg.opcode != TX_FILE;
+    pd_key_array =
+        (tx_arg.priv.attr == PBUF_DESC_MKEY ? (struct xlio_pd_key *)tx_arg.priv.map : NULL);
+
+    si_tcp_logfunc("tx: iov=%p niovs=%zu", p_iov, sz_iov);
+
+    size_t total_iov_len =
+        std::accumulate(&p_iov[0], &p_iov[sz_iov], 0U,
+                        [](size_t sum, const iovec &curr) { return sum + curr.iov_len; });
+    lock_tcp_con();
+
+    if (cannot_do_requested_partial_write(sndbuf_available(), tx_arg, total_iov_len) ||
+        TCP_WND_UNAVALABLE(m_pcb, total_iov_len)) {
+        return tcp_tx_handle_errno_and_unlock(EAGAIN);
+    }
+
+    int total_tx = 0;
+    for (size_t i = 0; i < sz_iov; i++) {
+        si_tcp_logfunc("iov:%d base=%p len=%d", i, p_iov[i].iov_base, p_iov[i].iov_len);
+        if (unlikely(!p_iov[i].iov_base)) {
+            continue;
+        }
+
+        tx_ptr = p_iov[i].iov_base;
+        if ((tx_arg.priv.attr == PBUF_DESC_MKEY) && pd_key_array) {
+            tx_arg.priv.mkey = pd_key_array[i].mkey;
+        }
+        unsigned pos = 0;
+        while (pos < p_iov[i].iov_len) {
+            auto tx_size = sndbuf_available();
+
+            /* Process a case when space is not available at the sending socket
+             * to hold the message to be transmitted
+             * Nonblocking socket:
+             *    - no data is buffered: return (-1) and EAGAIN
+             *    - some data is buffered: return number of bytes ready to be sent
+             */
+            if (tx_size == 0) {
+                if (unlikely(!is_rts())) {
+                    si_tcp_logdbg("TX on disconnected socket");
+                    return tcp_tx_handle_errno_and_unlock(ECONNRESET);
+                }
+                // force out TCP data before going on wait()
+                tcp_output(&m_pcb);
+
+                // non blocking socket should return in order not to tx_wait()
+                if (total_tx > 0) {
+                    m_tx_consecutive_eagain_count = 0;
+                    return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp, is_dummy,
+                                                         is_send_zerocopy);
+                } else {
+                    m_tx_consecutive_eagain_count++;
+                    if (m_tx_consecutive_eagain_count >= TX_CONSECUTIVE_EAGAIN_THREASHOLD) {
+                        if (safe_mce_sys().tcp_ctl_thread ==
+                            option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+                            // Slow path. We must attempt TCP timers here for applications that
+                            // do not check for EV_OUT.
+                            g_thread_local_event_handler.do_tasks();
+                        }
+                        // in case of zero sndbuf and non-blocking just try once polling CQ for
+                        // ACK
+                        rx_wait(poll_count, false);
+                        m_tx_consecutive_eagain_count = 0;
+                    }
+                    return tcp_tx_handle_errno_and_unlock(EAGAIN);
+                }
+            }
+
+            tx_size = std::min<size_t>(p_iov[i].iov_len - pos, tx_size);
+            if (is_send_zerocopy) {
+                /*
+                 * For send zerocopy we don't support pbufs which
+                 * cross huge page boundaries. To avoid forming
+                 * such a pbuf, we have to adjust tx_size, so
+                 * tcp_write receives a buffer which doesn't cross
+                 * the boundary.
+                 */
+                unsigned remainder =
+                    ~m_user_huge_page_mask + 1 - ((uint64_t)tx_ptr & ~m_user_huge_page_mask);
+                tx_size = std::min(remainder, tx_size);
+            }
+
+            if (unlikely(!is_rts())) {
+                si_tcp_logdbg("TX on disconnected socket");
+                return tcp_tx_handle_errno_and_unlock(ECONNRESET);
+            }
+            if (unlikely(g_b_exit)) {
+                return tcp_tx_handle_partial_send_and_unlock(total_tx, EINTR, is_dummy,
+                                                             is_send_zerocopy, errno_tmp);
+            }
+
+            err = tcp_write_express(&m_pcb, tx_ptr, tx_size, &tx_arg.priv);
+            if (unlikely(err != ERR_OK)) {
+                if (unlikely(err == ERR_CONN)) { // happens when remote drops during big write
+                    si_tcp_logdbg("connection closed: tx'ed = %d", total_tx);
+                    shutdown(SHUT_WR);
+                    return tcp_tx_handle_partial_send_and_unlock(total_tx, EPIPE, is_dummy,
+                                                                 is_send_zerocopy, errno_tmp);
+                }
+                if (unlikely(err != ERR_MEM)) {
+                    // we should not get here...
+                    BULLSEYE_EXCLUDE_BLOCK_START
+                    si_tcp_logpanic("tcp_write return: %d", err);
+                    BULLSEYE_EXCLUDE_BLOCK_END
+                }
+                return tcp_tx_handle_partial_send_and_unlock(total_tx, EAGAIN, is_dummy,
+                                                             is_send_zerocopy, errno_tmp);
+            }
+            tx_ptr = (void *)((char *)tx_ptr + tx_size);
+            pos += tx_size;
+            total_tx += tx_size;
+        }
+    }
+
+    return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp, is_dummy, is_send_zerocopy);
+}
+
+ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
+{
+    iovec *p_iov = tx_arg.attr.iov;
+    size_t sz_iov = tx_arg.attr.sz_iov;
+    int flags = tx_arg.attr.flags;
     int errno_tmp = errno;
     int ret = 0;
     int poll_count = 0;
@@ -930,45 +1084,6 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
     bool is_send_zerocopy = false;
     void *tx_ptr = NULL;
     struct xlio_pd_key *pd_key_array = NULL;
-
-    /* Let allow OS to process all invalid scenarios to avoid any
-     * inconsistencies in setting errno values
-     */
-    if (unlikely(m_sock_offload != TCP_SOCK_LWIP) || unlikely(!p_iov) || unlikely(0 == sz_iov)) {
-        ret = socket_fd_api::tx_os(tx_arg.opcode, p_iov, sz_iov, __flags, __dst, __dstlen);
-        save_stats_tx_os(ret);
-        return ret;
-    }
-
-retry_is_ready:
-
-    if (unlikely(!is_rts())) {
-
-        if (m_conn_state == TCP_CONN_TIMEOUT) {
-            si_tcp_logdbg("TX timed out");
-            errno = ETIMEDOUT;
-        } else if (m_conn_state == TCP_CONN_CONNECTING) {
-            si_tcp_logdbg("TX while async-connect on socket go to poll");
-            rx_wait_helper(poll_count, false);
-            if (m_conn_state == TCP_CONN_CONNECTED) {
-                goto retry_is_ready;
-            }
-            si_tcp_logdbg("TX while async-connect on socket return EAGAIN");
-            errno = EAGAIN;
-        } else if (m_conn_state == TCP_CONN_RESETED) {
-            si_tcp_logdbg("TX on reseted socket");
-            errno = ECONNRESET;
-        } else if (m_conn_state == TCP_CONN_ERROR) {
-            si_tcp_logdbg("TX on connection failed socket");
-            errno = ECONNREFUSED;
-        } else {
-            si_tcp_logdbg("TX on disconnected socket");
-            errno = EPIPE;
-        }
-
-        return -1;
-    }
-    si_tcp_logfunc("tx: iov=%p niovs=%d", p_iov, sz_iov);
 
     if (m_sysvar_rx_poll_on_tx_tcp) {
         rx_wait_helper(poll_count, false);
@@ -984,7 +1099,7 @@ retry_is_ready:
         apiflags |= XLIO_TX_FILE;
     }
 
-    bool is_dummy = IS_DUMMY_PACKET(__flags);
+    bool is_dummy = IS_DUMMY_PACKET(flags);
     if (unlikely(is_dummy)) {
         apiflags |= XLIO_TX_PACKET_DUMMY;
     }
@@ -994,7 +1109,7 @@ retry_is_ready:
      * and SO_ZEROCOPY activated
      * - sendfile() MSG_ZEROCOPY flag set internally with opcode TX_FILE
      */
-    if ((__flags & MSG_ZEROCOPY) && ((m_b_zc) || (tx_arg.opcode == TX_FILE))) {
+    if ((flags & MSG_ZEROCOPY) && ((m_b_zc) || (tx_arg.opcode == TX_FILE))) {
         apiflags |= XLIO_TX_PACKET_ZEROCOPY;
         is_send_zerocopy = tx_arg.opcode != TX_FILE;
         pd_key_array =
@@ -1003,23 +1118,14 @@ retry_is_ready:
 
     si_tcp_logfunc("tx: iov=%p niovs=%zu", p_iov, sz_iov);
 
-    size_t total_iov_len =
-        std::accumulate(&p_iov[0], &p_iov[sz_iov], 0U,
-                        [](size_t sum, const iovec &curr) { return sum + curr.iov_len; });
     lock_tcp_con();
 
-    if (cannot_do_requested_dummy_send(m_pcb, tx_arg) ||
-        cannot_do_requested_partial_write(sndbuf_available(), tx_arg, m_b_blocking,
-                                          total_iov_len) ||
-        tcp_wnd_unavalable(m_pcb, total_iov_len)) {
-        unlock_tcp_con();
-        errno = EAGAIN;
-        return -1;
+    if (cannot_do_requested_dummy_send(m_pcb, tx_arg) || TCP_WND_UNAVALABLE(m_pcb, total_iov_len)) {
+        return tcp_tx_handle_errno_and_unlock(EAGAIN);
     }
 
     int total_tx = 0;
-    __off64_t file_offset = 0;
-    bool block_this_run = BLOCK_THIS_RUN(m_b_blocking, __flags);
+    off64_t file_offset = 0;
     for (size_t i = 0; i < sz_iov; i++) {
         si_tcp_logfunc("iov:%d base=%p len=%d", i, p_iov[i].iov_base, p_iov[i].iov_len);
         if (unlikely(!p_iov[i].iov_base)) {
@@ -1027,7 +1133,7 @@ retry_is_ready:
         }
 
         if ((tx_arg.opcode == TX_FILE) && !(apiflags & XLIO_TX_PACKET_ZEROCOPY)) {
-            file_offset = *(__off64_t *)p_iov[i].iov_base;
+            file_offset = *(off64_t *)p_iov[i].iov_base;
             tx_ptr = &file_offset;
         } else {
             tx_ptr = p_iov[i].iov_base;
@@ -1050,36 +1156,12 @@ retry_is_ready:
             if (tx_size == 0) {
                 if (unlikely(!is_rts())) {
                     si_tcp_logdbg("TX on disconnected socket");
-                    errno = ECONNRESET;
-                    goto err;
+                    return tcp_tx_handle_errno_and_unlock(ECONNRESET);
                 }
                 // force out TCP data before going on wait()
                 tcp_output(&m_pcb);
 
                 /* Set return values for nonblocking socket and finish processing */
-                if (!block_this_run) {
-                    // non blocking socket should return in order not to tx_wait()
-                    if (total_tx > 0) {
-                        m_tx_consecutive_eagain_count = 0;
-                        goto done;
-                    } else {
-                        m_tx_consecutive_eagain_count++;
-                        if (m_tx_consecutive_eagain_count >= TX_CONSECUTIVE_EAGAIN_THREASHOLD) {
-                            if (safe_mce_sys().tcp_ctl_thread ==
-                                option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
-                                // Slow path. We must attempt TCP timers here for applications that
-                                // do not check for EV_OUT.
-                                g_thread_local_event_handler.do_tasks();
-                            }
-                            // in case of zero sndbuf and non-blocking just try once polling CQ for
-                            // ACK
-                            rx_wait(poll_count, false);
-                            m_tx_consecutive_eagain_count = 0;
-                        }
-                        errno = EAGAIN;
-                        goto err;
-                    }
-                }
 
                 tx_size = tx_wait(ret, true);
             }
@@ -1097,63 +1179,46 @@ retry_is_ready:
                     ~m_user_huge_page_mask + 1 - ((uint64_t)tx_ptr & ~m_user_huge_page_mask);
                 tx_size = std::min(remainder, tx_size);
             }
-        retry_write:
-            if (unlikely(!is_rts())) {
-                si_tcp_logdbg("TX on disconnected socket");
-                errno = ECONNRESET;
-                goto err;
-            }
-            if (unlikely(g_b_exit)) {
-                if (total_tx > 0) {
-                    goto done;
+            do {
+                if (unlikely(!is_rts())) {
+                    si_tcp_logdbg("TX on disconnected socket");
+                    return tcp_tx_handle_errno_and_unlock(ECONNRESET);
+                }
+                if (unlikely(g_b_exit)) {
+                    return tcp_tx_handle_partial_send_and_unlock(total_tx, EINTR, is_dummy,
+                                                                 is_send_zerocopy, errno_tmp);
+                }
+
+                if (apiflags & XLIO_TX_PACKET_ZEROCOPY) {
+                    err = tcp_write_express(&m_pcb, tx_ptr, tx_size, &tx_arg.priv);
                 } else {
-                    errno = EINTR;
-                    si_tcp_logdbg("returning with: EINTR");
-                    goto err;
+                    err = tcp_write(&m_pcb, tx_ptr, tx_size, apiflags, &tx_arg.priv);
                 }
-            }
-
-            if (apiflags & XLIO_TX_PACKET_ZEROCOPY) {
-                err = tcp_write_express(&m_pcb, tx_ptr, tx_size, &tx_arg.priv);
-            } else {
-                err = tcp_write(&m_pcb, tx_ptr, tx_size, apiflags, &tx_arg.priv);
-            }
-            if (unlikely(err != ERR_OK)) {
-                if (unlikely(err == ERR_CONN)) { // happens when remote drops during big write
-                    si_tcp_logdbg("connection closed: tx'ed = %d", total_tx);
-                    shutdown(SHUT_WR);
-                    if (total_tx > 0) {
-                        goto done;
+                if (unlikely(err != ERR_OK)) {
+                    if (unlikely(err == ERR_CONN)) { // happens when remote drops during big write
+                        si_tcp_logdbg("connection closed: tx'ed = %d", total_tx);
+                        shutdown(SHUT_WR);
+                        return tcp_tx_handle_partial_send_and_unlock(total_tx, EPIPE, is_dummy,
+                                                                     is_send_zerocopy, errno_tmp);
                     }
-                    errno = EPIPE;
-                    unlock_tcp_con();
-                    return -1;
-                }
-                if (unlikely(err != ERR_MEM)) {
-                    // we should not get here...
-                    BULLSEYE_EXCLUDE_BLOCK_START
-                    si_tcp_logpanic("tcp_write return: %d", err);
-                    BULLSEYE_EXCLUDE_BLOCK_END
-                }
-                /* Set return values for nonblocking socket and finish processing */
-                if (!block_this_run) {
-                    if (total_tx > 0) {
-                        goto done;
-                    } else {
-                        errno = EAGAIN;
-                        goto err;
+                    if (unlikely(err != ERR_MEM)) {
+                        // we should not get here...
+                        BULLSEYE_EXCLUDE_BLOCK_START
+                        si_tcp_logpanic("tcp_write return: %d", err);
+                        BULLSEYE_EXCLUDE_BLOCK_END
                     }
+
+                    rx_wait(poll_count, true);
+
+                    // AlexV:Avoid from going to sleep, for the blocked socket of course, since
+                    // progress engine may consume an arrived credit and it will not wakeup the
+                    // transmit thread.
+                    poll_count = 0;
+
+                    continue;
                 }
-
-                rx_wait(poll_count, true);
-
-                // AlexV:Avoid from going to sleep, for the blocked socket of course, since
-                // progress engine may consume an arrived credit and it will not wakeup the
-                // transmit thread.
-                poll_count = 0;
-
-                goto retry_write;
-            }
+                break;
+            } while (true);
             if (tx_arg.opcode == TX_FILE && !(apiflags & XLIO_TX_PACKET_ZEROCOPY)) {
                 file_offset += tx_size;
             } else {
@@ -1163,45 +1228,8 @@ retry_is_ready:
             total_tx += tx_size;
         }
     }
-done:
-    tcp_output(&m_pcb); // force data out
 
-    if (unlikely(is_dummy)) {
-        m_p_socket_stats->counters.n_tx_dummy++;
-    } else if (total_tx) {
-        m_p_socket_stats->counters.n_tx_sent_byte_count += total_tx;
-        m_p_socket_stats->counters.n_tx_sent_pkt_count++;
-        m_p_socket_stats->n_tx_ready_byte_count += total_tx;
-    }
-
-    /* Each send call with MSG_ZEROCOPY that successfully sends
-     * data increments the counter.
-     * The counter is not incremented on failure or if called with length zero.
-     */
-    if (is_send_zerocopy && (total_tx > 0)) {
-        if (m_last_zcdesc->tx.zc.id != (uint32_t)atomic_read(&m_zckey)) {
-            si_tcp_logerr("Invalid tx zcopy operation");
-        } else {
-            atomic_fetch_and_inc(&m_zckey);
-        }
-    }
-
-    unlock_tcp_con();
-
-    /* Restore errno on function entry in case success */
-    errno = errno_tmp;
-
-    return total_tx;
-
-err:
-    // nothing send  nb mode or got some other error
-    if (errno == EAGAIN) {
-        m_p_socket_stats->counters.n_tx_eagain++;
-    } else {
-        m_p_socket_stats->counters.n_tx_errors++;
-    }
-    unlock_tcp_con();
-    return -1;
+    return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp, is_dummy, is_send_zerocopy);
 }
 
 /*
@@ -6041,8 +6069,42 @@ inline bool sockinfo_tcp::handle_bind_no_port(int &bind_ret, in_port_t in_port,
 int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint32_t mkey,
                                  xlio_express_flags flags, void *opaque_op)
 {
+    if (unlikely(!is_rts())) {
+        if (m_conn_state == TCP_CONN_TIMEOUT) {
+            si_tcp_logdbg("TX timed out");
+            errno = ETIMEDOUT;
+        } else if (m_conn_state == TCP_CONN_RESETED) {
+            si_tcp_logdbg("TX on reseted socket");
+            errno = ECONNRESET;
+        } else if (m_conn_state == TCP_CONN_ERROR) {
+            si_tcp_logdbg("TX on connection failed socket");
+            errno = ECONNREFUSED;
+        } else {
+            si_tcp_logdbg("TX on disconnected socket");
+            errno = EPIPE;
+        }
+        return -1;
+    }
+
     err_t err;
     pbuf_desc mdesc;
+
+    if (unlikely(!is_rts())) {
+        if (m_conn_state == TCP_CONN_TIMEOUT) {
+            si_tcp_logdbg("TX timed out");
+            errno = ETIMEDOUT;
+        } else if (m_conn_state == TCP_CONN_RESETED) {
+            si_tcp_logdbg("TX on reseted socket");
+            errno = ECONNRESET;
+        } else if (m_conn_state == TCP_CONN_ERROR) {
+            si_tcp_logdbg("TX on connection failed socket");
+            errno = ECONNREFUSED;
+        } else {
+            si_tcp_logdbg("TX on disconnected socket");
+            errno = EPIPE;
+        }
+        return -1;
+    }
 
     switch (flags & XLIO_EXPRESS_OP_TYPE_MASK) {
     case XLIO_EXPRESS_OP_TYPE_DESC:
@@ -6050,19 +6112,18 @@ int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint
         break;
     case XLIO_EXPRESS_OP_TYPE_FILE_ZEROCOPY:
         mdesc.attr = PBUF_DESC_MDESC;
-        /* Increase the refcount by 1 */
-        /* reinterpret_cast<mapping_t *>(opaque_op)->get(); */
         break;
     default:
         return -1;
     };
     mdesc.express_mkey = mkey;
-    mdesc.opaque = nullptr;
+    mdesc.opaque = opaque_op;
 
     int bytes_written = 0;
 
     lock_tcp_con();
-    for (unsigned i = 0; i < iov_len - 1; ++i) {
+
+    for (unsigned i = 0; i < iov_len; ++i) {
         err = tcp_write_express(&m_pcb, iov[i].iov_base, iov[i].iov_len, &mdesc);
         if (err != ERR_OK) {
             return -1;
@@ -6070,27 +6131,103 @@ int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint
         bytes_written += iov[i].iov_len;
     }
 
-    /* Assign opaque only to the last chunk. So, only the last pbuf will generate zerocopy
-     * completion. */
-    mdesc.opaque = opaque_op;
-    err = tcp_write_express(&m_pcb, iov[iov_len - 1].iov_base, iov[iov_len - 1].iov_len, &mdesc);
-    if (err != ERR_OK) {
-        return -1;
-    }
-
-    bytes_written += iov[iov_len - 1].iov_len;
-
     if (!(flags & XLIO_EXPRESS_MSG_MORE)) {
         err = tcp_output(&m_pcb);
         if (err != ERR_OK) {
             return -1;
         }
-        /* if (!express_dirty) { */
-        /*     express_dirty = true; */
-        /*     express_dirty_sockets.push_back(this); */
-        /* } */
     }
     unlock_tcp_con();
 
     return bytes_written;
+}
+
+ssize_t sockinfo_tcp::tcp_tx_handle_done_and_unlock(ssize_t total_tx, int errno_tmp, bool is_dummy,
+                                                    bool is_send_zerocopy)
+{
+    tcp_output(&m_pcb); // force data out
+
+    if (unlikely(is_dummy)) {
+        m_p_socket_stats->counters.n_tx_dummy++;
+    } else if (total_tx) {
+        m_p_socket_stats->counters.n_tx_sent_byte_count += total_tx;
+        m_p_socket_stats->counters.n_tx_sent_pkt_count++;
+        m_p_socket_stats->n_tx_ready_byte_count += total_tx;
+    }
+
+    /* Each send call with MSG_ZEROCOPY that successfully sends
+     * data increments the counter.
+     * The counter is not incremented on failure or if called with length zero.
+     */
+    if (is_send_zerocopy && (total_tx > 0)) {
+        if (m_last_zcdesc->tx.zc.id != (uint32_t)atomic_read(&m_zckey)) {
+            /* si_tcp_logerr("Invalid tx zcopy operation"); */
+        } else {
+            atomic_fetch_and_inc(&m_zckey);
+        }
+    }
+
+    unlock_tcp_con();
+
+    /* Restore errno on function entry in case success */
+    errno = errno_tmp;
+
+    return total_tx;
+}
+
+ssize_t sockinfo_tcp::tcp_tx_handle_errno_and_unlock(int error_number)
+{
+    errno = error_number;
+
+    // nothing send  nb mode or got some other error
+    if (errno == EAGAIN) {
+        m_p_socket_stats->counters.n_tx_eagain++;
+    } else {
+        m_p_socket_stats->counters.n_tx_errors++;
+    }
+    unlock_tcp_con();
+    return -1;
+}
+
+ssize_t sockinfo_tcp::tcp_tx_handle_partial_send_and_unlock(ssize_t total_tx, int errno_to_report,
+                                                            bool is_dummy, bool is_send_zerocopy,
+                                                            int errno_to_restore)
+{
+    if (total_tx > 0) {
+        return tcp_tx_handle_done_and_unlock(total_tx, errno_to_restore, is_dummy,
+                                             is_send_zerocopy);
+    }
+    si_tcp_logdbg("Returning with: %d", errno_to_report);
+    return tcp_tx_handle_errno_and_unlock(errno_to_report);
+}
+
+bool sockinfo_tcp::is_connected_and_ready_to_send()
+{
+    int poll_count = 0;
+    /* TODO should we add !g_b_exit here? */
+    while (unlikely(!is_rts())) {
+        if (m_conn_state == TCP_CONN_TIMEOUT) {
+            si_tcp_logdbg("TX timed out");
+            errno = ETIMEDOUT;
+        } else if (m_conn_state == TCP_CONN_CONNECTING) {
+            si_tcp_logdbg("TX while async-connect on socket go to poll");
+            rx_wait_helper(poll_count, false);
+            if (m_conn_state == TCP_CONN_CONNECTED) {
+                continue;
+            }
+            si_tcp_logdbg("TX while async-connect on socket return EAGAIN");
+            errno = EAGAIN;
+        } else if (m_conn_state == TCP_CONN_RESETED) {
+            si_tcp_logdbg("TX on reseted socket");
+            errno = ECONNRESET;
+        } else if (m_conn_state == TCP_CONN_ERROR) {
+            si_tcp_logdbg("TX on connection failed socket");
+            errno = ECONNREFUSED;
+        } else {
+            si_tcp_logdbg("TX on disconnected socket");
+            errno = EPIPE;
+        }
+        return false;
+    }
+    return true;
 }
