@@ -415,9 +415,8 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
     off_t offset = 0;
     off_t offset_next = 0;
 
-    bool is_zerocopy = !!(apiflags & TCP_WRITE_ZEROCOPY);
-    bool is_file = (apiflags & (TCP_WRITE_FILE | TCP_WRITE_ZEROCOPY)) == TCP_WRITE_FILE;
-    pbuf_type type = (apiflags & TCP_WRITE_ZEROCOPY) ? PBUF_ZEROCOPY : PBUF_RAM;
+    bool is_file = (apiflags & TCP_WRITE_FILE) == TCP_WRITE_FILE;
+    pbuf_type type = PBUF_RAM;
 
     int byte_queued = pcb->snd_nxt - pcb->lastack;
     if (len < pcb->mss && !(apiflags & TCP_WRITE_DUMMY)) {
@@ -435,14 +434,9 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
     }
     queuelen = pcb->snd_queuelen;
 
-    if (is_zerocopy) {
-        mss_local = lwip_zc_tx_size;
-    } else {
-        mss_local = tcp_xmit_size_goal(pcb, 1);
-    }
+    mss_local = tcp_xmit_size_goal(pcb, 1);
 
     optflags |= (apiflags & TCP_WRITE_DUMMY) ? TF_SEG_OPTS_DUMMY_MSG : 0;
-    optflags |= (apiflags & TCP_WRITE_ZEROCOPY) ? TF_SEG_OPTS_ZEROCOPY : 0;
 
 #if LWIP_TCP_TIMESTAMPS
     if (pcb->flags & TF_TIMESTAMP) {
@@ -452,10 +446,6 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
 
     optlen = LWIP_TCP_OPT_LENGTH(optflags);
     mss_local_minus_opts = mss_local - optlen;
-    if (is_zerocopy) {
-        /* TCP options will reside in seg->l2_l3_tcphdr_zc */
-        optlen = 0;
-    }
     if (is_file) {
         offset = offset_next = *(__off64_t *)arg;
     }
@@ -515,7 +505,7 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
 #endif /* TCP_OVERSIZE_DBGCHECK */
 
         if (pcb->unsent_oversize > 0) {
-            if (!(apiflags & (TCP_WRITE_FILE | TCP_WRITE_ZEROCOPY))) {
+            if (!(apiflags & TCP_WRITE_FILE)) {
                 oversize = pcb->unsent_oversize;
                 LWIP_ASSERT("inconsistent oversize vs. space", oversize_used <= space);
                 oversize_used = oversize < len ? oversize : len;
@@ -550,11 +540,7 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
 #if TCP_OVERSIZE_DBGCHECK
             pcb->last_unsent->oversize_left += oversize;
 #endif /* TCP_OVERSIZE_DBGCHECK */
-            if (is_zerocopy) {
-                concat_p->payload = (u8_t *)arg + pos;
-            } else {
-                memcpy(concat_p->payload, (u8_t *)arg + pos, seglen);
-            }
+            memcpy(concat_p->payload, (u8_t *)arg + pos, seglen);
 
             pos += seglen;
             queuelen += pbuf_clen(concat_p);
@@ -577,11 +563,6 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
         u16_t max_len = mss_local_minus_opts;
         u16_t seglen = left > max_len ? max_len : left;
 
-        /* create pbuf of the exact size needed now, to later avoid the p1 (oversize) flow */
-        if (is_zerocopy) {
-            max_len = seglen;
-        }
-
         /* If copy is set, memory should be allocated and data copied
          * into pbuf */
         if ((p = tcp_pbuf_prealloc(seglen + optlen, max_len, &oversize, pcb, type,
@@ -593,9 +574,7 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
         }
         LWIP_ASSERT("tcp_write: check that first pbuf can hold the complete seglen",
                     (p->len >= seglen));
-        if (is_zerocopy) {
-            p->payload = (u8_t *)arg + pos;
-        } else if (is_file) {
+        if (is_file) {
             piov[piov_cur_index].iov_base = (void *)((char *)p->payload + optlen);
             piov[piov_cur_index].iov_len = seglen;
 
@@ -758,10 +737,6 @@ err_t tcp_write_express(struct tcp_pcb *pcb, const void *arg, u32_t len, pbuf_de
     const u16_t mss_local = lwip_zc_tx_size;
     u16_t seglen;
     u16_t queuelen = 0;
-
-    if (pcb->snd_buf < 0) {
-        goto memerr;
-    }
 
     if (len < pcb->mss) {
         const int byte_queued = pcb->snd_nxt - pcb->lastack;
