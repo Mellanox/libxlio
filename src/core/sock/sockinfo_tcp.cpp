@@ -56,6 +56,7 @@
 #include "sockinfo_tcp.h"
 #include "tcp_seg_pool.h"
 #include "bind_no_port.h"
+#include "xlio.h"
 
 #define UNLOCK_RET(_ret)                                                                           \
     unlock_tcp_con();                                                                              \
@@ -1425,7 +1426,7 @@ void sockinfo_tcp::err_lwip_cb(void *pcb_container, err_t err)
             // terminating stage, in which case we don't expect to handle packets.
             // Calling close() under lock will prevent internal thread to delete the object before
             // we finish with the current processing.
-            close(delete_fd);
+            XLIO_CALL(close, delete_fd);
             return;
         }
     }
@@ -1925,7 +1926,7 @@ inline err_t sockinfo_tcp::handle_fin(struct tcp_pcb *pcb, err_t err)
             // terminating stage, in which case we don't expect to handle packets.
             // Calling close() under lock will prevent internal thread to delete the object before
             // we finish with the current processing.
-            close(delete_fd);
+            XLIO_CALL(close, delete_fd);
             return ERR_ABRT;
         }
     }
@@ -2696,7 +2697,7 @@ int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
 
     if (INPORT_ANY == in_port && (m_pcb.so_options & SOF_REUSEADDR)) {
         int reuse = 0;
-        ret = orig_os_api.setsockopt(m_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+        ret = SYSCALL(setsockopt, m_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
         BULLSEYE_EXCLUDE_BLOCK_START
         if (ret) {
             si_tcp_logerr("Failed to disable SO_REUSEADDR option (ret=%d %m), connection will be "
@@ -2706,9 +2707,9 @@ int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
             return ret;
         }
         BULLSEYE_EXCLUDE_BLOCK_END
-        ret = orig_os_api.bind(m_fd, __addr, __addrlen);
+        ret = SYSCALL(bind, m_fd, __addr, __addrlen);
         reuse = 1;
-        int rv = orig_os_api.setsockopt(m_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+        int rv = SYSCALL(setsockopt, m_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
         BULLSEYE_EXCLUDE_BLOCK_START
         if (rv) {
             si_tcp_logerr("Failed to enable SO_REUSEADDR option (ret=%d %m)", rv);
@@ -2720,7 +2721,7 @@ int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
         }
     } else {
         si_tcp_logdbg("OS bind to %s", sockaddr2str(__addr, __addrlen, true).c_str());
-        ret = orig_os_api.bind(m_fd, __addr, __addrlen);
+        ret = SYSCALL(bind, m_fd, __addr, __addrlen);
     }
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
@@ -2738,7 +2739,7 @@ int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
     socklen_t addr_len = sizeof(addr);
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (orig_os_api.getsockname(m_fd, addr.get_p_sa(), &addr_len)) {
+    if (SYSCALL(getsockname, m_fd, addr.get_p_sa(), &addr_len)) {
         si_tcp_logerr("get sockname failed");
         UNLOCK_RET(-1);
     }
@@ -2919,13 +2920,13 @@ int sockinfo_tcp::listen(int backlog)
     if (!success) {
         /* we will get here if attach_as_uc_receiver failed */
         passthrough_unlock("Fallback the connection to os");
-        return orig_os_api.listen(m_fd, orig_backlog);
+        return SYSCALL(listen, m_fd, orig_backlog);
     }
 
     // Calling to orig_listen() by default to monitor connection requests for not offloaded
     // sockets
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (orig_os_api.listen(m_fd, orig_backlog)) {
+    if (SYSCALL(listen, m_fd, orig_backlog)) {
         // NOTE: The attach_as_uc_receiver at this stage already created steering rules.
         // Packets may arrive into the queues and the application may theoreticaly
         // call accept() with success.
@@ -2939,7 +2940,7 @@ int sockinfo_tcp::listen(int backlog)
     epoll_event ev = {0, {0}};
     ev.events = EPOLLIN;
     ev.data.fd = m_fd;
-    int ret = orig_os_api.epoll_ctl(m_rx_epfd, EPOLL_CTL_ADD, ev.data.fd, &ev);
+    int ret = SYSCALL(epoll_ctl, m_rx_epfd, EPOLL_CTL_ADD, ev.data.fd, &ev);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (unlikely(ret)) {
         if (errno == EEXIST) {
@@ -2991,9 +2992,9 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
     if (m_sock_offload == TCP_SOCK_PASSTHROUGH) {
         si_tcp_logdbg("passthrough - go to OS accept()");
         if (__flags) {
-            return orig_os_api.accept4(m_fd, __addr, __addrlen, __flags);
+            return SYSCALL(accept4, m_fd, __addr, __addrlen, __flags);
         } else {
-            return orig_os_api.accept(m_fd, __addr, __addrlen);
+            return SYSCALL(accept, m_fd, __addr, __addrlen);
         }
     }
 
@@ -3026,20 +3027,20 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
         pollfd os_fd[1];
         os_fd[0].fd = m_fd;
         os_fd[0].events = POLLIN;
-        ret = orig_os_api.poll(os_fd, 1, 0); // Zero timeout - just poll and return quickly
+        ret = SYSCALL(poll, os_fd, 1, 0); // Zero timeout - just poll and return quickly
         if (unlikely(ret == -1)) {
             m_p_socket_stats->counters.n_rx_os_errors++;
-            si_tcp_logdbg("orig_os_api.poll returned with error (errno=%d %m)", errno);
+            si_tcp_logdbg("SYSCALL(poll) returned with error (errno=%d %m)", errno);
             unlock_tcp_con();
             return -1;
         }
         if (ret == 1) {
-            si_tcp_logdbg("orig_os_api.poll returned with packet");
+            si_tcp_logdbg("SYSCALL(poll) returned with packet");
             unlock_tcp_con();
             if (__flags) {
-                return orig_os_api.accept4(m_fd, __addr, __addrlen, __flags);
+                return SYSCALL(accept4, m_fd, __addr, __addrlen, __flags);
             } else {
-                return orig_os_api.accept(m_fd, __addr, __addrlen);
+                return SYSCALL(accept, m_fd, __addr, __addrlen);
             }
         }
 
@@ -3171,7 +3172,7 @@ sockinfo_tcp *sockinfo_tcp::accept_clone()
 
     if (!si) {
         si_tcp_logwarn("can not get accept socket from FD collection");
-        close(fd);
+        XLIO_CALL(close, fd);
         return 0;
     }
 
@@ -3774,10 +3775,10 @@ int sockinfo_tcp::wait_for_conn_ready_blocking()
 
 int sockinfo_tcp::os_epoll_wait(epoll_event *ep_events, int maxevents)
 {
-    return (likely(m_sysvar_tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS)
-                ? orig_os_api.epoll_wait(m_rx_epfd, ep_events, maxevents,
-                                         m_loops_timer.time_left_msec())
-                : os_epoll_wait_with_tcp_timers(ep_events, maxevents));
+    return (
+        likely(m_sysvar_tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS)
+            ? SYSCALL(epoll_wait, m_rx_epfd, ep_events, maxevents, m_loops_timer.time_left_msec())
+            : os_epoll_wait_with_tcp_timers(ep_events, maxevents));
 }
 
 int sockinfo_tcp::os_epoll_wait_with_tcp_timers(epoll_event *ep_events, int maxevents)
@@ -3790,7 +3791,7 @@ int sockinfo_tcp::os_epoll_wait_with_tcp_timers(epoll_event *ep_events, int maxe
                  ? sys_timer_resolution_msec
                  : std::min(m_loops_timer.time_left_msec(), sys_timer_resolution_msec));
 
-        rc = orig_os_api.epoll_wait(m_rx_epfd, ep_events, maxevents, next_timeout);
+        rc = SYSCALL(epoll_wait, m_rx_epfd, ep_events, maxevents, next_timeout);
 
         if (rc != 0 || m_loops_timer.time_left_msec() == 0) {
             break;
@@ -3952,7 +3953,7 @@ int sockinfo_tcp::shutdown(int __how)
     // if in os pathrough just redirect to os
     if (m_sock_offload == TCP_SOCK_PASSTHROUGH) {
         si_tcp_logdbg("passthrough - go to OS shutdown()");
-        return orig_os_api.shutdown(m_fd, __how);
+        return SYSCALL(shutdown, m_fd, __how);
     }
 
     lock_tcp_con();
@@ -4940,7 +4941,7 @@ int sockinfo_tcp::getsockopt(int __level, int __optname, void *__optval, socklen
         return -1;
     }
 
-    ret = orig_os_api.getsockopt(m_fd, __level, __optname, __optval, __optlen);
+    ret = SYSCALL(getsockopt, m_fd, __level, __optname, __optval, __optlen);
 
     BULLSEYE_EXCLUDE_BLOCK_START
     if (ret) {
@@ -4956,7 +4957,7 @@ int sockinfo_tcp::getsockname(sockaddr *__name, socklen_t *__namelen)
 
     if (m_sock_offload == TCP_SOCK_PASSTHROUGH) {
         si_tcp_logdbg("passthrough - go to OS getsockname");
-        return orig_os_api.getsockname(m_fd, __name, __namelen);
+        return SYSCALL(getsockname, m_fd, __name, __namelen);
     }
 
     // according to man address should be truncated if given struct is too small
@@ -4979,7 +4980,7 @@ int sockinfo_tcp::getpeername(sockaddr *__name, socklen_t *__namelen)
 
     if (m_sock_offload == TCP_SOCK_PASSTHROUGH) {
         si_tcp_logdbg("passthrough - go to OS getpeername");
-        return orig_os_api.getpeername(m_fd, __name, __namelen);
+        return SYSCALL(getpeername, m_fd, __name, __namelen);
     }
 
     if (m_conn_state < TCP_CONN_CONNECTED) {
@@ -6031,8 +6032,8 @@ inline bool sockinfo_tcp::handle_bind_no_port(int &bind_ret, in_port_t in_port,
         // first bind call with port 0, we set SO_REUSEPORT so we will be able to bind to a
         // specific port later when we reuse port
         int so_reuseport = 1;
-        if ((bind_ret = orig_os_api.setsockopt(m_fd, SOL_SOCKET, SO_REUSEPORT, &so_reuseport,
-                                               sizeof(so_reuseport)))) {
+        if ((bind_ret = SYSCALL(setsockopt, m_fd, SOL_SOCKET, SO_REUSEPORT, &so_reuseport,
+                                sizeof(so_reuseport)))) {
             return RETURN_FROM_BIND;
         }
         m_bound.set_sockaddr(__addr, __addrlen);

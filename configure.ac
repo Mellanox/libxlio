@@ -105,9 +105,22 @@ show_section_title "Configure build tools"
 : ${CFLAGS=""}
 : ${CXXFLAGS=""}
 
+m4_include([config/m4/linking_optimization.m4])
+
 # Find compiler, libtools, etc
 #
 LT_INIT([disable-static])
+
+# LT_INIT exposes the ability to configure --enable-static
+if test "x$enable_static" = "xyes"; then
+	AC_SUBST([XLIO_STATIC_BUILD], ["-DXLIO_STATIC_BUILD"])
+	if test "x$enable_shared" = "xyes"; then
+		AC_MSG_ERROR([Please add --disable-shared or --enable-shared=no])
+	fi
+else
+	AC_SUBST([XLIO_STATIC_BUILD], [""])
+fi
+
 AC_PROG_CC
 AC_PROG_CXX
 

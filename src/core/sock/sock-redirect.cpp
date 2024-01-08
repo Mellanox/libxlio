@@ -35,8 +35,12 @@
 #include "sock-redirect.h"
 #include "sock-extra.h"
 #include "sock-app.h"
+#include "xlio.h"
 
+#include <sys/sendfile.h>
 #include <sys/time.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <dlfcn.h>
 #include <iostream>
 #include <fcntl.h>
@@ -82,7 +86,6 @@ using namespace std;
 #define srdr_logfunc_exit __log_exit_func
 
 #define EP_MAX_EVENTS (int)((INT_MAX / sizeof(struct epoll_event)))
-
 struct os_api orig_os_api;
 struct sigaction g_act_prev;
 sighandler_t g_sighandler = NULL;
@@ -177,7 +180,6 @@ void get_orig_funcs()
     GET_ORIG_FUNC(creat);
     GET_ORIG_FUNC(dup);
     GET_ORIG_FUNC(dup2);
-    GET_ORIG_FUNC(clone);
     GET_ORIG_FUNC(fork);
     GET_ORIG_FUNC(vfork);
     GET_ORIG_FUNC(daemon);
@@ -279,15 +281,6 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
 //-----------------------------------------------------------------------------
 //  replacement functions
 //-----------------------------------------------------------------------------
-
-/* Create a new socket of type TYPE in domain DOMAIN, using
-   protocol PROTOCOL.  If PROTOCOL is zero, one is chosen automatically.
-   Returns a file descriptor for the new socket, or -1 for errors.  */
-extern "C" EXPORT_SYMBOL int socket(int __domain, int __type, int __protocol)
-{
-    return socket_internal(__domain, __type, __protocol, true, true);
-}
-
 /* Internal logic of socket() syscall implementation. It can be called from within XLIO, for
    example, to create a socket for an incoming TCP connection.  */
 int socket_internal(int __domain, int __type, int __protocol, bool shadow, bool check_offload)
@@ -301,11 +294,6 @@ int socket_internal(int __domain, int __type, int __protocol, bool shadow, bool 
     }
 
     PROFILE_BLOCK("socket")
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.socket) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
 #if defined(DEFINED_NGINX)
     bool add_to_udp_pool = false;
     if (g_p_app && g_p_app->type == APP_NGINX && g_p_fd_collection && offload_sockets &&
@@ -316,7 +304,7 @@ int socket_internal(int __domain, int __type, int __protocol, bool shadow, bool 
 
     fd = SOCKET_FAKE_FD;
     if (shadow || !offload_sockets || !g_p_fd_collection) {
-        fd = orig_os_api.socket(__domain, __type, __protocol);
+        fd = SYSCALL(socket, __domain, __type, __protocol);
         vlog_printf(VLOG_DEBUG, "ENTER: %s(domain=%s(%d), type=%s(%d), protocol=%d) = %d\n",
                     __func__, socket_get_domain_str(__domain), __domain,
                     socket_get_type_str(__type), __type, __protocol, fd);
@@ -344,1205 +332,52 @@ int socket_internal(int __domain, int __type, int __protocol, bool shadow, bool 
     return fd;
 }
 
-extern "C" EXPORT_SYMBOL int close(int __fd)
+int bind_internal(void *sock, const struct sockaddr *addr, socklen_t addrlen)
 {
-    PROFILE_FUNC
-
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.close) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    srdr_logdbg_entry("fd=%d", __fd);
-
-    bool toclose = handle_close(__fd);
-    int rc = toclose ? orig_os_api.close(__fd) : 0;
-
-    return rc;
-}
-
-extern "C" EXPORT_SYMBOL void __res_iclose(res_state statp, bool free_addr)
-{
-    PROFILE_FUNC
-
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.__res_iclose) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    /* Current implementation doesn't handle XLIO sockets without a shadow socket or from a socket
-       pool. If such a socket is present in the nssocks list, system __res_iclose() will close the
-       fd. This will break the socket functionality.
-       Assume that resolver doesn't use the above scenarios.  */
-
-    srdr_logdbg_entry("");
-    for (int ns = 0; ns < statp->_u._ext.nscount; ns++) {
-        int sock = statp->_u._ext.nssocks[ns];
-        if (sock != -1) {
-            handle_close(sock);
+    auto p_socket_object = reinterpret_cast<socket_fd_api *>(sock);
+    int ret = p_socket_object->bind(addr, addrlen);
+    if (p_socket_object->isPassthrough()) {
+        int fd = p_socket_object->get_fd();
+        handle_close(fd, false, true);
+        if (ret) {
+            ret = SYSCALL(bind, fd, addr, addrlen);
         }
-    }
-    orig_os_api.__res_iclose(statp, free_addr);
-}
-
-/* Shut down all or part of the connection open on socket FD.
-   HOW determines what to shut down:
-     SHUT_RD   = No more receptions;
-     SHUT_WR   = No more transmissions;
-     SHUT_RDWR = No more receptions or transmissions.
-   Returns 0 on success, -1 for errors.  */
-extern "C" EXPORT_SYMBOL int shutdown(int __fd, int __how)
-{
-    PROFILE_FUNC
-
-    srdr_logdbg_entry("fd=%d, how=%d", __fd, __how);
-
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        return p_socket_object->shutdown(__how);
-    }
-
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.shutdown) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    return orig_os_api.shutdown(__fd, __how);
-}
-
-extern "C" EXPORT_SYMBOL int listen(int __fd, int backlog)
-{
-    PROFILE_FUNC
-
-    srdr_logdbg_entry("fd=%d, backlog=%d", __fd, backlog);
-
-#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    if (g_p_app && g_p_app->type != APP_NONE) {
-        /* Envoy:
-         * Socket handling
-         * Envoy uses the following procedure for creating sockets and assigning them to workers.
-         *
-         * When a listener is created, a socket is pre-created for every worker on the main thread.
-         * This allows most errors to be caught early on in the listener creation process (e.g., bad
-         * socket option, unable to bind, etc.).
-         * - If using reuse_port, a unique socket is created for every worker.
-         * - If not using reuse_port, a unique socket is created for worker 0, and then that socket
-         * is duplicated for all other workers.
-         * a listener can close() its sockets when removed without concern for other listeners.
-         *
-         * Implementation:
-         * - reuse_port(false) :
-         * Envoy uses dup() call for listen socket on workers_N (N > 0)
-         * dup() call does not create socket object and does not store fd
-         * in fd_collection in current implementation
-         * so as a result duplicated fd is not returned by fd_collection_get_sockfd(__fd) and
-         * listen() call for duplicated fds are ignored.
-         * Original listen socket is not ignored by listen() function.
-         * - reuse_port(true) :
-         * dup() is not used. Unique socket is created for every worker.
-         *
-         * Store all duplicated fd in map_dup_fd with reference to original fd
-         * Store all listen fd in map_listen_fd with tid
-         * Identify correct listen fd during epoll_ctl(ADD) call by tid. It should be different.
-         * Set worker id in map_thread_id basing on tid
-         *
-         * Nginx:
-         * Nginx store all listen fd in map_listen_fd to proceed later in children processes
-         * after fork() call.
-         * Set worker id in map_thread_id basing on tid(pid). Nginx has single thread per process so
-         * tid and pid should be equal.
-         */
-        std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-        g_p_app->map_listen_fd[__fd] = gettid();
-    }
-#endif /* DEFINED_ENVOY */
-
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-
-    if (p_socket_object) {
-        // for verifying that the socket is really offloaded
-        int ret = p_socket_object->prepareListen();
-        if (ret < 0) {
-            return ret; // error
-        }
-        if (ret > 0) { // Passthrough
-            handle_close(__fd, false, true);
-        } else {
-#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-            if (g_p_app && g_p_app->type != APP_NONE) {
-                p_socket_object->m_back_log = backlog;
-            } else
-#endif
-            {
-                return p_socket_object->listen(backlog);
-            }
-        }
-    }
-
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.listen) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    srdr_logdbg("OS listen fd=%d, backlog=%d", __fd, backlog);
-    return orig_os_api.listen(__fd, backlog);
-}
-
-extern "C" EXPORT_SYMBOL int accept(int __fd, struct sockaddr *__addr, socklen_t *__addrlen)
-{
-    PROFILE_FUNC
-
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        return p_socket_object->accept(__addr, __addrlen);
-    }
-
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.accept) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    return orig_os_api.accept(__fd, __addr, __addrlen);
-}
-
-extern "C" EXPORT_SYMBOL int accept4(int __fd, struct sockaddr *__addr, socklen_t *__addrlen,
-                                     int __flags)
-{
-    PROFILE_FUNC
-
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        return p_socket_object->accept4(__addr, __addrlen, __flags);
-    }
-
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.accept4) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    return orig_os_api.accept4(__fd, __addr, __addrlen, __flags);
-}
-
-/* Give the socket FD the local address ADDR (which is LEN bytes long).  */
-extern "C" EXPORT_SYMBOL int bind(int __fd, const struct sockaddr *__addr, socklen_t __addrlen)
-{
-    int errno_tmp = errno;
-
-    PROFILE_FUNC
-
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.bind) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    char buf[256];
-    NOT_IN_USE(buf); /* to suppress warning in case MAX_DEFINED_LOG_LEVEL */
-    srdr_logdbg_entry("fd=%d, %s", __fd, sprintf_sockaddr(buf, 256, __addr, __addrlen));
-
-    int ret = 0;
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        ret = p_socket_object->bind(__addr, __addrlen);
-        if (p_socket_object->isPassthrough()) {
-            handle_close(__fd, false, true);
-            if (ret) {
-                ret = orig_os_api.bind(__fd, __addr, __addrlen);
-            }
-        }
-    } else {
-        ret = orig_os_api.bind(__fd, __addr, __addrlen);
-    }
-
-    if (ret >= 0) {
-        /* Restore errno on function entry in case success */
-        errno = errno_tmp;
-        srdr_logdbg_exit("returned with %d", ret);
-    } else {
-        srdr_logdbg_exit("failed (errno=%d %m)", errno);
-    }
-
-    return ret;
-}
-
-/* Open a connection on socket FD to peer at ADDR (which LEN bytes long).
-   For connectionless socket types, just set the default address to send to
-   and the only address from which to accept transmissions.
-   Return 0 on success, -1 for errors.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-extern "C" EXPORT_SYMBOL int connect(int __fd, const struct sockaddr *__to, socklen_t __tolen)
-{
-    int errno_tmp = errno;
-
-    PROFILE_FUNC
-
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.connect) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    char buf[256];
-    NOT_IN_USE(buf); /* to suppress warning in case MAX_DEFINED_LOG_LEVEL */
-    srdr_logdbg_entry("fd=%d, %s", __fd, sprintf_sockaddr(buf, 256, __to, __tolen));
-
-    int ret = 0;
-    socket_fd_api *p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object == nullptr) {
-        srdr_logdbg_exit("Unable to get sock_fd_api");
-        ret = orig_os_api.connect(__fd, __to, __tolen);
-    } else if (__to == nullptr ||
-               (get_sa_family(__to) != AF_INET && (get_sa_family(__to) != AF_INET6))) {
-        p_socket_object->setPassthrough();
-        ret = orig_os_api.connect(__fd, __to, __tolen);
-    } else {
-        ret = p_socket_object->connect(__to, __tolen);
-        if (p_socket_object->isPassthrough()) {
-            handle_close(__fd, false, true);
-            if (ret) {
-                ret = orig_os_api.connect(__fd, __to, __tolen);
-            }
-        }
-    }
-    if (ret >= 0) {
-        /* Restore errno on function entry in case success */
-        errno = errno_tmp;
-        srdr_logdbg_exit("returned with %d", ret);
-    } else {
-        srdr_logdbg_exit("failed (errno=%d %m)", errno);
-    }
-
-    return ret;
-}
-
-/* Set socket FD's option OPTNAME at protocol level LEVEL
-   to *OPTVAL (which is OPTLEN bytes long).
-   Returns 0 on success, -1 for errors.  */
-extern "C" EXPORT_SYMBOL int setsockopt(int __fd, int __level, int __optname,
-                                        __const void *__optval, socklen_t __optlen)
-{
-    srdr_logdbg_entry("fd=%d, level=%d, optname=%d", __fd, __level, __optname);
-
-    if (NULL == __optval) {
-        errno = EFAULT;
-        return -1;
-    }
-
-    PROFILE_FUNC
-
-    int ret = 0;
-    socket_fd_api *p_socket_object = NULL;
-
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        VERIFY_PASSTROUGH_CHANGED(
-            ret, p_socket_object->setsockopt(__level, __optname, __optval, __optlen));
-    } else {
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (!orig_os_api.setsockopt) {
-            get_orig_funcs();
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
-        ret = orig_os_api.setsockopt(__fd, __level, __optname, __optval, __optlen);
-    }
-
-    if (ret >= 0) {
-        srdr_logdbg_exit("returned with %d", ret);
-    } else {
-        srdr_logdbg_exit("failed (errno=%d %m)", errno);
     }
     return ret;
 }
 
-/* Get socket FD's option OPTNAME at protocol level LEVEL
-   to *OPTVAL (which is OPTLEN bytes long).
-   Returns 0 on success, -1 for errors.  */
-extern "C" EXPORT_SYMBOL int getsockopt(int __fd, int __level, int __optname, void *__optval,
-                                        socklen_t *__optlen)
+ssize_t sendmsg_internal(void *sock, __const struct msghdr *__msg, int __flags)
 {
-    PROFILE_FUNC
-
-    srdr_logdbg_entry("fd=%d, level=%d, optname=%d", __fd, __level, __optname);
-
-    if (__fd == -2 && __level == SOL_SOCKET && __optname == SO_XLIO_GET_API && __optlen &&
-        *__optlen >= sizeof(struct xlio_api_t *)) {
-        struct xlio_api_t *xlio_api = extra_api();
-
-        *((xlio_api_t **)__optval) = xlio_api;
-        *__optlen = sizeof(struct xlio_api_t *);
-        return 0;
-    }
-
-    int ret = 0;
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        VERIFY_PASSTROUGH_CHANGED(
-            ret, p_socket_object->getsockopt(__level, __optname, __optval, __optlen));
-    } else {
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (!orig_os_api.getsockopt) {
-            get_orig_funcs();
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
-        ret = orig_os_api.getsockopt(__fd, __level, __optname, __optval, __optlen);
-    }
-
-    if (ret >= 0) {
-        srdr_logdbg_exit("returned with %d", ret);
-    } else {
-        srdr_logdbg_exit("failed (errno=%d %m)", errno);
-    }
-    return ret;
-}
-
-/* Do the file control operation described by CMD on FD.
-   The remaining arguments are interpreted depending on CMD.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.
-   NOTE: XLIO throw will never occur during handling of any command.
-   XLIO will only throw in case XLIO doesn't know to handle a command and the
-   user requested explicitly that XLIO will throw an exception in such a case
-   by setting XLIO_EXCEPTION_HANDLING accordingly (see README.txt)
-   */
-extern "C" EXPORT_SYMBOL int fcntl(int __fd, int __cmd, ...)
-{
-    PROFILE_FUNC
-
-    srdr_logfunc_entry("fd=%d, cmd=%d", __fd, __cmd);
-
-    int res = -1;
-    va_list va;
-    va_start(va, __cmd);
-    unsigned long int arg = va_arg(va, unsigned long int);
-    va_end(va);
-
-    int ret = 0;
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        VERIFY_PASSTROUGH_CHANGED(res, p_socket_object->fcntl(__cmd, arg));
-    } else {
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (!orig_os_api.fcntl) {
-            get_orig_funcs();
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
-        res = orig_os_api.fcntl(__fd, __cmd, arg);
-    }
-
-    if (__cmd == F_DUPFD) {
-        handle_close(__fd);
-    }
-
-    if (ret >= 0) {
-        srdr_logfunc_exit("returned with %d", ret);
-    } else {
-        srdr_logfunc_exit("failed (errno=%d %m)", errno);
-    }
-    return res;
-}
-
-/* Do the file control operation described by CMD on FD.
-   The remaining arguments are interpreted depending on CMD.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.
-   NOTE: XLIO throw will never occur during handling of any command.
-   XLIO will only throw in case XLIO doesn't know to handle a command and the
-   user requested explicitly that XLIO will throw an exception in such a case
-   by setting XLIO_EXCEPTION_HANDLING accordingly (see README.txt)
-   */
-
-extern "C" EXPORT_SYMBOL int fcntl64(int __fd, int __cmd, ...)
-{
-    PROFILE_FUNC
-
-    srdr_logfunc_entry("fd=%d, cmd=%d", __fd, __cmd);
-
-    int res = -1;
-    va_list va;
-    va_start(va, __cmd);
-    unsigned long int arg = va_arg(va, unsigned long int);
-    va_end(va);
-
-    int ret = 0;
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.fcntl64) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-    if (p_socket_object && orig_os_api.fcntl64) {
-        VERIFY_PASSTROUGH_CHANGED(res, p_socket_object->fcntl64(__cmd, arg));
-    } else {
-        if (!orig_os_api.fcntl64) {
-            srdr_logfunc_exit("failed (errno=%d %m)", errno);
-            VLOG_PRINTF_ONCE_THEN_ALWAYS(VLOG_ERROR, VLOG_DEBUG,
-                                         "fcntl64 was not found during runtime. Set %s to "
-                                         "appripriate debug level to see datails. Ignoring...",
-                                         SYS_VAR_LOG_LEVEL);
-            errno = EOPNOTSUPP;
-            return -1;
-        } else {
-            res = orig_os_api.fcntl64(__fd, __cmd, arg);
-        }
-    }
-
-    if (__cmd == F_DUPFD) {
-        handle_close(__fd);
-    }
-
-    if (ret >= 0) {
-        srdr_logfunc_exit("returned with %d", ret);
-    } else {
-        srdr_logfunc_exit("failed (errno=%d %m)", errno);
-    }
-    return res;
-}
-
-/* Perform the I/O control operation specified by REQUEST on FD.
-   One argument may follow; its presence and type depend on REQUEST.
-   Return value depends on REQUEST.  Usually -1 indicates error. */
-extern "C" EXPORT_SYMBOL int ioctl(int __fd, unsigned long int __request, ...)
-{
-    PROFILE_FUNC
-
-    srdr_logfunc_entry("fd=%d, request=%d", __fd, __request);
-
-    int res = -1;
-    va_list va;
-    va_start(va, __request);
-    unsigned long int arg = va_arg(va, unsigned long int);
-    va_end(va);
-
-    int ret = 0;
-
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object && arg) {
-        VERIFY_PASSTROUGH_CHANGED(res, p_socket_object->ioctl(__request, arg));
-    } else {
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (!orig_os_api.ioctl) {
-            get_orig_funcs();
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
-        res = orig_os_api.ioctl(__fd, __request, arg);
-    }
-
-    if (ret >= 0) {
-        srdr_logfunc_exit("returned with %d", ret);
-    } else {
-        srdr_logfunc_exit("failed (errno=%d %m)", errno);
-    }
-    return res;
-}
-
-extern "C" EXPORT_SYMBOL int getsockname(int __fd, struct sockaddr *__name, socklen_t *__namelen)
-{
-    PROFILE_FUNC
-
-    srdr_logdbg_entry("fd=%d", __fd);
-
-    int ret = 0;
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        ret = p_socket_object->getsockname(__name, __namelen);
-
-        if (safe_mce_sys().trigger_dummy_send_getsockname) {
-            char buf[264] = {0};
-            struct iovec msg_iov = {&buf, sizeof(buf)};
-            struct msghdr msg = {NULL, 0, &msg_iov, 1, NULL, 0, 0};
-            int ret_send = sendmsg(__fd, &msg, XLIO_SND_FLAGS_DUMMY);
-            srdr_logdbg("Triggered dummy message for socket fd=%d (ret_send=%d)", __fd, ret_send);
-            NOT_IN_USE(ret_send);
-        }
-    } else {
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (!orig_os_api.getsockname) {
-            get_orig_funcs();
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
-        ret = orig_os_api.getsockname(__fd, __name, __namelen);
-    }
-
-    if (ret >= 0) {
-        srdr_logdbg_exit("returned with %d", ret);
-    } else {
-        srdr_logdbg_exit("failed (errno=%d %m)", errno);
-    }
-    return ret;
-}
-
-extern "C" EXPORT_SYMBOL int getpeername(int __fd, struct sockaddr *__name, socklen_t *__namelen)
-{
-    PROFILE_FUNC
-
-    srdr_logdbg_entry("fd=%d", __fd);
-
-    int ret = 0;
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        ret = p_socket_object->getpeername(__name, __namelen);
-    } else {
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (!orig_os_api.getpeername) {
-            get_orig_funcs();
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
-        ret = orig_os_api.getpeername(__fd, __name, __namelen);
-    }
-
-    if (ret >= 0) {
-        srdr_logdbg_exit("returned with %d", ret);
-    } else {
-        srdr_logdbg_exit("failed (errno=%d %m)", errno);
-    }
-    return ret;
-}
-
-/* Read NBYTES into BUF from FD.  Return the
-   number read, -1 for errors or 0 for EOF.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-extern "C" EXPORT_SYMBOL ssize_t read(int __fd, void *__buf, size_t __nbytes)
-{
-    PROFILE_FUNC
-
-    srdr_logfuncall_entry("fd=%d", __fd);
-
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        struct iovec piov[1];
-        piov[0].iov_base = __buf;
-        piov[0].iov_len = __nbytes;
-        int dummy_flags = 0;
-        return p_socket_object->rx(RX_READ, piov, 1, &dummy_flags);
-    }
-
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.read) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    return orig_os_api.read(__fd, __buf, __nbytes);
-}
-
-#if defined HAVE___READ_CHK
-/* Checks that the buffer is big enough to contain the number of bytes
- * the user requests to read. If the buffer is too small, aborts,
- * else read NBYTES into BUF from FD.  Return the
-   number read, -1 for errors or 0 for EOF.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-extern "C" EXPORT_SYMBOL ssize_t __read_chk(int __fd, void *__buf, size_t __nbytes, size_t __buflen)
-{
-    PROFILE_FUNC
-
-    srdr_logfuncall_entry("fd=%d", __fd);
-
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (__nbytes > __buflen) {
-            srdr_logpanic("buffer overflow detected");
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
-
-        struct iovec piov[1];
-        piov[0].iov_base = __buf;
-        piov[0].iov_len = __nbytes;
-        int dummy_flags = 0;
-        return p_socket_object->rx(RX_READ, piov, 1, &dummy_flags);
-    }
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.__read_chk) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    return orig_os_api.__read_chk(__fd, __buf, __nbytes, __buflen);
-}
-#endif
-
-/* Read COUNT blocks into VECTOR from FD.  Return the
-   number of bytes read, -1 for errors or 0 for EOF.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-
-extern "C" EXPORT_SYMBOL ssize_t readv(int __fd, const struct iovec *iov, int iovcnt)
-{
-    PROFILE_FUNC
-
-    srdr_logfuncall_entry("fd=%d", __fd);
-
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        struct iovec *piov = (struct iovec *)iov;
-        int dummy_flags = 0;
-        return p_socket_object->rx(RX_READV, piov, iovcnt, &dummy_flags);
-    }
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.readv) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    return orig_os_api.readv(__fd, iov, iovcnt);
-}
-
-/* Read N bytes into BUF from socket FD.
-   Returns the number read or -1 for errors.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-extern "C" EXPORT_SYMBOL ssize_t recv(int __fd, void *__buf, size_t __nbytes, int __flags)
-{
-    PROFILE_FUNC
-
-    srdr_logfuncall_entry("fd=%d", __fd);
-
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        struct iovec piov[1];
-        piov[0].iov_base = __buf;
-        piov[0].iov_len = __nbytes;
-        return p_socket_object->rx(RX_RECV, piov, 1, &__flags);
-    }
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.recv) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    return orig_os_api.recv(__fd, __buf, __nbytes, __flags);
-}
-
-#if defined HAVE___RECV_CHK
-/* Checks that the buffer is big enough to contain the number of bytes
-   the user requests to read. If the buffer is too small, aborts,
-   else read N bytes into BUF from socket FD.
-   Returns the number read or -1 for errors.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-extern "C" EXPORT_SYMBOL ssize_t __recv_chk(int __fd, void *__buf, size_t __nbytes, size_t __buflen,
-                                            int __flags)
-{
-    PROFILE_FUNC
-
-    srdr_logfuncall_entry("fd=%d", __fd);
-
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (__nbytes > __buflen) {
-            srdr_logpanic("buffer overflow detected");
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
-
-        struct iovec piov[1];
-        piov[0].iov_base = __buf;
-        piov[0].iov_len = __nbytes;
-        return p_socket_object->rx(RX_RECV, piov, 1, &__flags);
-    }
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.__recv_chk) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    return orig_os_api.__recv_chk(__fd, __buf, __nbytes, __buflen, __flags);
-}
-#endif
-
-/* Receive a message as described by MESSAGE from socket FD.
-   Returns the number of bytes read or -1 for errors.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-extern "C" EXPORT_SYMBOL ssize_t recvmsg(int __fd, struct msghdr *__msg, int __flags)
-{
-    PROFILE_FUNC
-
-    srdr_logfuncall_entry("fd=%d", __fd);
-
-    if (__msg == NULL) {
-        srdr_logdbg("NULL msghdr");
-        errno = EINVAL;
-        return -1;
-    }
-
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        __msg->msg_flags = 0;
-        return p_socket_object->rx(RX_RECVMSG, __msg->msg_iov, __msg->msg_iovlen, &__flags,
-                                   (__SOCKADDR_ARG)__msg->msg_name,
-                                   (socklen_t *)&__msg->msg_namelen, __msg);
-    }
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.recvmsg) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    return orig_os_api.recvmsg(__fd, __msg, __flags);
-}
-
-/* The following definitions are for kernels previous to 2.6.32 which dont support recvmmsg */
-#ifndef HAVE_STRUCT_MMSGHDR
-#ifndef __INTEL_COMPILER
-struct mmsghdr {
-    struct msghdr msg_hdr; // Message header
-    unsigned int msg_len; // Number of received bytes for header
-};
-#endif
-#endif
-
-#ifndef MSG_WAITFORONE
-#define MSG_WAITFORONE 0x10000 // recvmmsg(): block until 1+ packets avail
-#endif
-
-/* Receive multiple messages as described by MESSAGE from socket FD.
-   Returns the number of messages received or -1 for errors.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-extern "C" EXPORT_SYMBOL
-#ifdef RECVMMSG_WITH_CONST_TIMESPEC
-    int
-    recvmmsg(int __fd, struct mmsghdr *__mmsghdr, unsigned int __vlen, int __flags,
-             const struct timespec *__timeout)
-#else
-    int
-    recvmmsg(int __fd, struct mmsghdr *__mmsghdr, unsigned int __vlen, int __flags,
-             struct timespec *__timeout)
-#endif
-{
-    PROFILE_FUNC
-
-    int num_of_msg = 0;
-    struct timespec start_time = TIMESPEC_INITIALIZER, current_time = TIMESPEC_INITIALIZER,
-                    delta_time = TIMESPEC_INITIALIZER;
-
-    srdr_logfuncall_entry("fd=%d, mmsghdr length=%d flags=%x", __fd, __vlen, __flags);
-
-    if (__mmsghdr == NULL) {
-        srdr_logdbg("NULL mmsghdr");
-        errno = EINVAL;
-        return -1;
-    }
-
-    if (__timeout) {
-        gettime(&start_time);
-    }
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        int ret = 0;
-        for (unsigned int i = 0; i < __vlen; i++) {
-            int flags = __flags;
-            __mmsghdr[i].msg_hdr.msg_flags = 0;
-            ret = p_socket_object->rx(
-                RX_RECVMSG, __mmsghdr[i].msg_hdr.msg_iov, __mmsghdr[i].msg_hdr.msg_iovlen, &flags,
-                (__SOCKADDR_ARG)__mmsghdr[i].msg_hdr.msg_name,
-                (socklen_t *)&__mmsghdr[i].msg_hdr.msg_namelen, &__mmsghdr[i].msg_hdr);
-            if (ret < 0) {
-                break;
-            }
-            num_of_msg++;
-            __mmsghdr[i].msg_len = ret;
-            if ((i == 0) && (flags & MSG_WAITFORONE)) {
-                __flags |= MSG_DONTWAIT;
-            }
-            if (__timeout) {
-                gettime(&current_time);
-                ts_sub(&current_time, &start_time, &delta_time);
-                if (ts_cmp(&delta_time, __timeout, >)) {
-                    break;
-                }
+    auto p_socket_object = reinterpret_cast<socket_fd_api *>(sock);
+    xlio_tx_call_attr_t tx_arg;
+
+    tx_arg.opcode = TX_SENDMSG;
+    tx_arg.attr.iov = __msg->msg_iov;
+    tx_arg.attr.sz_iov = (ssize_t)__msg->msg_iovlen;
+    tx_arg.attr.flags = __flags;
+    tx_arg.attr.addr = (struct sockaddr *)(__CONST_SOCKADDR_ARG)__msg->msg_name;
+    tx_arg.attr.len = (socklen_t)__msg->msg_namelen;
+    tx_arg.attr.hdr = __msg;
+    tx_arg.priv.attr = PBUF_NONE;
+
+    if (0 < __msg->msg_controllen) {
+        struct cmsghdr *cmsg = CMSG_FIRSTHDR((struct msghdr *)__msg);
+        if ((cmsg->cmsg_level == SOL_SOCKET) &&
+            (cmsg->cmsg_type == SCM_XLIO_PD || cmsg->cmsg_type == SCM_XLIO_NVME_PD)) {
+            if ((tx_arg.attr.flags & MSG_ZEROCOPY) &&
+                (__msg->msg_iovlen ==
+                 ((cmsg->cmsg_len - CMSG_LEN(0)) / sizeof(struct xlio_pd_key)))) {
+                tx_arg.priv.attr =
+                    (cmsg->cmsg_type == SCM_XLIO_PD) ? PBUF_DESC_MKEY : PBUF_DESC_NVME_TX;
+                tx_arg.priv.map = (void *)CMSG_DATA(cmsg);
+            } else {
+                errno = EINVAL;
+                return -1;
             }
         }
-        if (num_of_msg || ret == 0) {
-            // todo save ret for so_error if ret != 0(see kernel)
-            return num_of_msg;
-        } else {
-            return ret;
-        }
-    }
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.recvmmsg) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    return orig_os_api.recvmmsg(__fd, __mmsghdr, __vlen, __flags, __timeout);
-}
-
-/* Read N bytes into BUF through socket FD.
-   If ADDR is not NULL, fill in *ADDR_LEN bytes of it with tha address of
-   the sender, and store the actual size of the address in *ADDR_LEN.
-   Returns the number of bytes read or -1 for errors.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-extern "C" EXPORT_SYMBOL ssize_t recvfrom(int __fd, void *__buf, size_t __nbytes, int __flags,
-                                          struct sockaddr *__from, socklen_t *__fromlen)
-{
-    ssize_t ret_val = 0;
-
-    PROFILE_FUNC
-
-    srdr_logfuncall_entry("fd=%d", __fd);
-
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        struct iovec piov[1];
-        piov[0].iov_base = __buf;
-        piov[0].iov_len = __nbytes;
-        ret_val = p_socket_object->rx(RX_RECVFROM, piov, 1, &__flags, __from, __fromlen);
-    } else {
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (!orig_os_api.recvfrom) {
-            get_orig_funcs();
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
-        ret_val = orig_os_api.recvfrom(__fd, __buf, __nbytes, __flags, __from, __fromlen);
-    }
-    return ret_val;
-}
-
-#if defined HAVE___RECVFROM_CHK
-/* Checks that the buffer is big enough to contain the number of bytes
-   the user requests to read. If the buffer is too small, aborts,
-   else read N bytes into BUF through socket FD.
-   If ADDR is not NULL, fill in *ADDR_LEN bytes of it with tha address of
-   the sender, and store the actual size of the address in *ADDR_LEN.
-   Returns the number of bytes read or -1 for errors.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-extern "C" EXPORT_SYMBOL ssize_t __recvfrom_chk(int __fd, void *__buf, size_t __nbytes,
-                                                size_t __buflen, int __flags,
-                                                struct sockaddr *__from, socklen_t *__fromlen)
-{
-    PROFILE_FUNC
-
-    srdr_logfuncall_entry("fd=%d", __fd);
-
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (__nbytes > __buflen) {
-            srdr_logpanic("buffer overflow detected");
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
-
-        struct iovec piov[1];
-        piov[0].iov_base = __buf;
-        piov[0].iov_len = __nbytes;
-        return p_socket_object->rx(RX_RECVFROM, piov, 1, &__flags, __from, __fromlen);
-    }
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.__recvfrom_chk) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    return orig_os_api.__recvfrom_chk(__fd, __buf, __nbytes, __buflen, __flags, __from, __fromlen);
-}
-#endif
-
-/* Write N bytes of BUF to FD.  Return the number written, or -1.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-extern "C" EXPORT_SYMBOL ssize_t write(int __fd, __const void *__buf, size_t __nbytes)
-{
-    PROFILE_FUNC
-
-    srdr_logfuncall_entry("fd=%d, nbytes=%d", __fd, __nbytes);
-
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        struct iovec piov[1] = {{(void *)__buf, __nbytes}};
-        xlio_tx_call_attr_t tx_arg;
-
-        tx_arg.opcode = TX_WRITE;
-        tx_arg.attr.iov = piov;
-        tx_arg.attr.sz_iov = 1;
-
-        return p_socket_object->tx(tx_arg);
-    }
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.write) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    return orig_os_api.write(__fd, __buf, __nbytes);
-}
-
-/* Write IOCNT blocks from IOVEC to FD.  Return the number written, or -1.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-extern "C" EXPORT_SYMBOL ssize_t writev(int __fd, const struct iovec *iov, int iovcnt)
-{
-    PROFILE_FUNC
-
-    srdr_logfuncall_entry("fd=%d, %d iov blocks", __fd, iovcnt);
-
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        xlio_tx_call_attr_t tx_arg;
-
-        tx_arg.opcode = TX_WRITEV;
-        tx_arg.attr.iov = (struct iovec *)iov;
-        tx_arg.attr.sz_iov = iovcnt;
-
-        return p_socket_object->tx(tx_arg);
-    }
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.writev) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    return orig_os_api.writev(__fd, iov, iovcnt);
-}
-
-/* Send N bytes of BUF to socket FD.  Returns the number sent or -1.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-extern "C" EXPORT_SYMBOL ssize_t send(int __fd, __const void *__buf, size_t __nbytes, int __flags)
-{
-    PROFILE_FUNC
-
-    srdr_logfuncall_entry("fd=%d, nbytes=%d", __fd, __nbytes);
-
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        struct iovec piov[1] = {{(void *)__buf, __nbytes}};
-        xlio_tx_call_attr_t tx_arg;
-
-        tx_arg.opcode = TX_SEND;
-        tx_arg.attr.iov = piov;
-        tx_arg.attr.sz_iov = 1;
-        tx_arg.attr.flags = __flags;
-
-        return p_socket_object->tx(tx_arg);
     }
 
-    // Ignore dummy messages for OS
-    if (unlikely(IS_DUMMY_PACKET(__flags))) {
-        errno = EINVAL;
-        return -1;
-    }
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.send) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    return orig_os_api.send(__fd, __buf, __nbytes, __flags);
-}
-
-/* Sends a message as described by MESSAGE to socket FD.
-   Returns the number of bytes read or -1 for errors.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-extern "C" EXPORT_SYMBOL ssize_t sendmsg(int __fd, __const struct msghdr *__msg, int __flags)
-{
-    PROFILE_FUNC
-
-    srdr_logfuncall_entry("fd=%d", __fd);
-
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        xlio_tx_call_attr_t tx_arg;
-
-        tx_arg.opcode = TX_SENDMSG;
-        tx_arg.attr.iov = __msg->msg_iov;
-        tx_arg.attr.sz_iov = (ssize_t)__msg->msg_iovlen;
-        tx_arg.attr.flags = __flags;
-        tx_arg.attr.addr = (struct sockaddr *)(__CONST_SOCKADDR_ARG)__msg->msg_name;
-        tx_arg.attr.len = (socklen_t)__msg->msg_namelen;
-        tx_arg.attr.hdr = __msg;
-        tx_arg.priv.attr = PBUF_NONE;
-
-        if (0 < __msg->msg_controllen) {
-            struct cmsghdr *cmsg = CMSG_FIRSTHDR((struct msghdr *)__msg);
-            if ((cmsg->cmsg_level == SOL_SOCKET) &&
-                (cmsg->cmsg_type == SCM_XLIO_PD || cmsg->cmsg_type == SCM_XLIO_NVME_PD)) {
-                if ((tx_arg.attr.flags & MSG_ZEROCOPY) &&
-                    (__msg->msg_iovlen ==
-                     ((cmsg->cmsg_len - CMSG_LEN(0)) / sizeof(struct xlio_pd_key)))) {
-                    tx_arg.priv.attr =
-                        (cmsg->cmsg_type == SCM_XLIO_PD) ? PBUF_DESC_MKEY : PBUF_DESC_NVME_TX;
-                    tx_arg.priv.map = (void *)CMSG_DATA(cmsg);
-                } else {
-                    errno = EINVAL;
-                    return -1;
-                }
-            }
-        }
-
-        return p_socket_object->tx(tx_arg);
-    }
-
-    // Ignore dummy messages for OS
-    if (unlikely(IS_DUMMY_PACKET(__flags))) {
-        errno = EINVAL;
-        return -1;
-    }
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.sendmsg) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    return orig_os_api.sendmsg(__fd, __msg, __flags);
-}
-
-/* Send multiple messages as described by MESSAGE from socket FD.
-   Returns the number of messages sent or -1 for errors.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-extern "C" EXPORT_SYMBOL int sendmmsg(int __fd, struct mmsghdr *__mmsghdr, unsigned int __vlen,
-                                      int __flags)
-{
-    int num_of_msg = 0;
-
-    PROFILE_FUNC
-
-    srdr_logfuncall_entry("fd=%d, mmsghdr length=%d flags=%x", __fd, __vlen, __flags);
-
-    if (__mmsghdr == NULL) {
-        srdr_logdbg("NULL mmsghdr");
-        errno = EINVAL;
-        return -1;
-    }
-
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        for (unsigned int i = 0; i < __vlen; i++) {
-            xlio_tx_call_attr_t tx_arg;
-
-            tx_arg.opcode = TX_SENDMSG;
-            tx_arg.attr.iov = __mmsghdr[i].msg_hdr.msg_iov;
-            tx_arg.attr.sz_iov = (ssize_t)__mmsghdr[i].msg_hdr.msg_iovlen;
-            tx_arg.attr.flags = __flags;
-            tx_arg.attr.addr = (struct sockaddr *)(__SOCKADDR_ARG)__mmsghdr[i].msg_hdr.msg_name;
-            tx_arg.attr.len = (socklen_t)__mmsghdr[i].msg_hdr.msg_namelen;
-            tx_arg.attr.hdr = &__mmsghdr[i].msg_hdr;
-
-            int ret = p_socket_object->tx(tx_arg);
-            if (ret < 0) {
-                if (num_of_msg) {
-                    return num_of_msg;
-                } else {
-                    return ret;
-                }
-            }
-            num_of_msg++;
-            __mmsghdr[i].msg_len = ret;
-        }
-        return num_of_msg;
-    }
-
-    // Ignore dummy messages for OS
-    if (unlikely(IS_DUMMY_PACKET(__flags))) {
-        errno = EINVAL;
-        return -1;
-    }
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.sendmmsg) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    return orig_os_api.sendmmsg(__fd, __mmsghdr, __vlen, __flags);
-}
-
-/* Send N bytes of BUF on socket FD to peer at address ADDR (which is
-   ADDR_LEN bytes long).  Returns the number sent, or -1 for errors.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-extern "C" EXPORT_SYMBOL ssize_t sendto(int __fd, __const void *__buf, size_t __nbytes, int __flags,
-                                        const struct sockaddr *__to, socklen_t __tolen)
-{
-    PROFILE_FUNC
-
-    srdr_logfuncall_entry("fd=%d, nbytes=%d", __fd, __nbytes);
-
-    socket_fd_api *p_socket_object = NULL;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        struct iovec piov[1] = {{(void *)__buf, __nbytes}};
-        xlio_tx_call_attr_t tx_arg;
-
-        tx_arg.opcode = TX_SENDTO;
-        tx_arg.attr.iov = piov;
-        tx_arg.attr.sz_iov = 1;
-        tx_arg.attr.flags = __flags;
-        tx_arg.attr.addr = (struct sockaddr *)__to;
-        tx_arg.attr.len = __tolen;
-
-        return p_socket_object->tx(tx_arg);
-    }
-
-    // Ignore dummy messages for OS
-    if (unlikely(IS_DUMMY_PACKET(__flags))) {
-        errno = EINVAL;
-        return -1;
-    }
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.sendto) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    return orig_os_api.sendto(__fd, __buf, __nbytes, __flags, __to, __tolen);
+    return p_socket_object->tx(tx_arg);
 }
 
 static ssize_t sendfile_helper(socket_fd_api *p_socket_object, int in_fd, __off64_t *offset,
@@ -1657,7 +492,7 @@ static ssize_t sendfile_helper(socket_fd_api *p_socket_object, int in_fd, __off6
         lock.l_pid = 0;
 
         /* try to use mmap() approach */
-        if (-1 != (fcntl(in_fd, F_SETLK, &lock))) {
+        if (-1 != (XLIO_CALL(fcntl, in_fd, F_SETLK, &lock))) {
             void *addr = NULL;
             addr = mmap64(NULL, pa_count, PROT_READ, MAP_SHARED | MAP_NORESERVE, in_fd, pa_offset);
             if (MAP_FAILED != addr) {
@@ -1680,7 +515,7 @@ static ssize_t sendfile_helper(socket_fd_api *p_socket_object, int in_fd, __off6
                 (void)munmap(addr, pa_count);
             }
             lock.l_type = F_UNLCK;
-            (void)fcntl(in_fd, F_SETLK, &lock);
+            (void)XLIO_CALL(fcntl, in_fd, F_SETLK, &lock);
         }
 
         /* fallback on read() approach */
@@ -1723,42 +558,6 @@ static ssize_t sendfile_helper(socket_fd_api *p_socket_object, int in_fd, __off6
     }
 
     return totSent;
-}
-
-extern "C" EXPORT_SYMBOL ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count)
-{
-    PROFILE_FUNC
-
-    srdr_logfuncall_entry("out_fd=%d, in_fd=%d, offset=%p, *offset=%zu, count=%d", out_fd, in_fd,
-                          offset, offset ? *offset : 0, count);
-
-    socket_fd_api *p_socket_object = fd_collection_get_sockfd(out_fd);
-    if (!p_socket_object) {
-        if (!orig_os_api.sendfile) {
-            get_orig_funcs();
-        }
-        return orig_os_api.sendfile(out_fd, in_fd, offset, count);
-    }
-
-    return sendfile_helper(p_socket_object, in_fd, offset, count);
-}
-
-extern "C" EXPORT_SYMBOL ssize_t sendfile64(int out_fd, int in_fd, __off64_t *offset, size_t count)
-{
-    PROFILE_FUNC
-
-    srdr_logfuncall_entry("out_fd=%d, in_fd=%d, offset=%p, *offset=%zu, count=%d", out_fd, in_fd,
-                          offset, offset ? *offset : 0, count);
-
-    socket_fd_api *p_socket_object = fd_collection_get_sockfd(out_fd);
-    if (!p_socket_object) {
-        if (!orig_os_api.sendfile64) {
-            get_orig_funcs();
-        }
-        return orig_os_api.sendfile64(out_fd, in_fd, offset, count);
-    }
-
-    return sendfile_helper(p_socket_object, in_fd, offset, count);
 }
 
 // Format a fd_set into a string for logging
@@ -1804,6 +603,32 @@ const char *dbg_sprintf_fdset(char *buf, int buflen, int __nfds, fd_set *__fds)
         buf[0] = '\0';
     }
     return buf;
+}
+
+/* Poll the file descriptors described by the NFDS structures starting at
+   FDS.  If TIMis nonzero and not -1, allow TIMmilliseconds for
+   an event to occur; if TIMis -1, block until an event occurs.
+   Returns the number of file descriptors with events, zero if timed out,
+   or -1 for errors.  */
+static int poll_helper(struct pollfd *__fds, nfds_t __nfds, int __timeout,
+                       const sigset_t *__sigmask = NULL)
+{
+    int off_rfd_buffer[__nfds];
+    io_mux_call::offloaded_mode_t off_modes_buffer[__nfds];
+    int lookup_buffer[__nfds];
+    pollfd working_fds_arr[__nfds + 1];
+
+    try {
+        poll_call pcall(off_rfd_buffer, off_modes_buffer, lookup_buffer, working_fds_arr, __fds,
+                        __nfds, __timeout, __sigmask);
+
+        int rc = pcall.call();
+        srdr_logfunc_exit("rc = %d", rc);
+        return rc;
+    } catch (io_mux_call::io_error &) {
+        srdr_logfunc_exit("io_mux_call::io_error (errno=%d %m)", errno);
+        return -1;
+    }
 }
 
 /* Check the first NFDS descriptors each in READFDS (if not NULL) for read
@@ -1854,184 +679,6 @@ static int select_helper(int __nfds, fd_set *__readfds, fd_set *__writefds, fd_s
     }
 }
 
-extern "C" EXPORT_SYMBOL int select(int __nfds, fd_set *__readfds, fd_set *__writefds,
-                                    fd_set *__exceptfds, struct timeval *__timeout)
-{
-    PROFILE_FUNC
-
-    if (!g_p_fd_collection) {
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (!orig_os_api.select) {
-            get_orig_funcs();
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
-        return orig_os_api.select(__nfds, __readfds, __writefds, __exceptfds, __timeout);
-    }
-
-    if (__timeout) {
-        srdr_logfunc_entry("nfds=%d, timeout=(%d sec, %d usec)", __nfds, __timeout->tv_sec,
-                           __timeout->tv_usec);
-    } else {
-        srdr_logfunc_entry("nfds=%d, timeout=(infinite)", __nfds);
-    }
-
-    return select_helper(__nfds, __readfds, __writefds, __exceptfds, __timeout);
-}
-
-extern "C" EXPORT_SYMBOL int pselect(int __nfds, fd_set *__readfds, fd_set *__writefds,
-                                     fd_set *__errorfds, const struct timespec *__timeout,
-                                     const sigset_t *__sigmask)
-{
-    PROFILE_FUNC
-
-    if (!g_p_fd_collection) {
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (!orig_os_api.pselect) {
-            get_orig_funcs();
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
-        return orig_os_api.pselect(__nfds, __readfds, __writefds, __errorfds, __timeout, __sigmask);
-    }
-
-    struct timeval select_time;
-    if (__timeout) {
-        srdr_logfunc_entry("nfds=%d, timeout=(%d sec, %d nsec)", __nfds, __timeout->tv_sec,
-                           __timeout->tv_nsec);
-        select_time.tv_sec = __timeout->tv_sec;
-        select_time.tv_usec = __timeout->tv_nsec / 1000;
-    } else {
-        srdr_logfunc_entry("nfds=%d, timeout=(infinite)", __nfds);
-    }
-
-    return select_helper(__nfds, __readfds, __writefds, __errorfds, __timeout ? &select_time : NULL,
-                         __sigmask);
-}
-
-/* Poll the file descriptors described by the NFDS structures starting at
-   FDS.  If TIMis nonzero and not -1, allow TIMmilliseconds for
-   an event to occur; if TIMis -1, block until an event occurs.
-   Returns the number of file descriptors with events, zero if timed out,
-   or -1 for errors.  */
-static int poll_helper(struct pollfd *__fds, nfds_t __nfds, int __timeout,
-                       const sigset_t *__sigmask = NULL)
-{
-    int off_rfd_buffer[__nfds];
-    io_mux_call::offloaded_mode_t off_modes_buffer[__nfds];
-    int lookup_buffer[__nfds];
-    pollfd working_fds_arr[__nfds + 1];
-
-    try {
-        poll_call pcall(off_rfd_buffer, off_modes_buffer, lookup_buffer, working_fds_arr, __fds,
-                        __nfds, __timeout, __sigmask);
-
-        int rc = pcall.call();
-        srdr_logfunc_exit("rc = %d", rc);
-        return rc;
-    } catch (io_mux_call::io_error &) {
-        srdr_logfunc_exit("io_mux_call::io_error (errno=%d %m)", errno);
-        return -1;
-    }
-}
-
-extern "C" EXPORT_SYMBOL int poll(struct pollfd *__fds, nfds_t __nfds, int __timeout)
-{
-    PROFILE_FUNC
-
-    if (!g_p_fd_collection) {
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (!orig_os_api.poll) {
-            get_orig_funcs();
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
-        return orig_os_api.poll(__fds, __nfds, __timeout);
-    }
-
-    srdr_logfunc_entry("nfds=%d, timeout=(%d milli-sec)", __nfds, __timeout);
-
-    return poll_helper(__fds, __nfds, __timeout);
-}
-
-#if defined HAVE___POLL_CHK
-extern "C" EXPORT_SYMBOL int __poll_chk(struct pollfd *__fds, nfds_t __nfds, int __timeout,
-                                        size_t __fdslen)
-{
-    PROFILE_FUNC
-
-    if (!g_p_fd_collection) {
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (!orig_os_api.__poll_chk) {
-            get_orig_funcs();
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
-        return orig_os_api.__poll_chk(__fds, __nfds, __timeout, __fdslen);
-    }
-
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (__fdslen / sizeof(*__fds) < __nfds) {
-        srdr_logpanic("buffer overflow detected");
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    srdr_logfunc_entry("nfds=%d, timeout=(%d milli-sec)", __nfds, __timeout);
-
-    return poll_helper(__fds, __nfds, __timeout);
-}
-#endif
-
-extern "C" EXPORT_SYMBOL int ppoll(struct pollfd *__fds, nfds_t __nfds,
-                                   const struct timespec *__timeout, const sigset_t *__sigmask)
-{
-    PROFILE_FUNC
-
-    if (!g_p_fd_collection) {
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (!orig_os_api.ppoll) {
-            get_orig_funcs();
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
-        return orig_os_api.ppoll(__fds, __nfds, __timeout, __sigmask);
-    }
-
-    int timeout =
-        (__timeout == NULL) ? -1 : (__timeout->tv_sec * 1000 + __timeout->tv_nsec / 1000000);
-
-    srdr_logfunc_entry("nfds=%d, timeout=(%d milli-sec)", __nfds, timeout);
-
-    return poll_helper(__fds, __nfds, timeout, __sigmask);
-}
-
-#if defined HAVE___PPOLL_CHK
-extern "C" EXPORT_SYMBOL int __ppoll_chk(struct pollfd *__fds, nfds_t __nfds,
-                                         const struct timespec *__timeout,
-                                         const sigset_t *__sigmask, size_t __fdslen)
-{
-    PROFILE_FUNC
-
-    if (!g_p_fd_collection) {
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (!orig_os_api.__ppoll_chk) {
-            get_orig_funcs();
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
-        return orig_os_api.__ppoll_chk(__fds, __nfds, __timeout, __sigmask, __fdslen);
-    }
-
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (__fdslen / sizeof(*__fds) < __nfds) {
-        srdr_logpanic("buffer overflow detected");
-    }
-
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    int timeout =
-        (__timeout == NULL) ? -1 : (__timeout->tv_sec * 1000 + __timeout->tv_nsec / 1000000);
-
-    srdr_logfunc_entry("nfds=%d, timeout=(%d milli-sec)", __nfds, timeout);
-
-    return poll_helper(__fds, __nfds, timeout, __sigmask);
-}
-#endif
-
 static void xlio_epoll_create(int epfd, int size)
 {
     if (g_p_fd_collection) {
@@ -2041,106 +688,6 @@ static void xlio_epoll_create(int epfd, int size)
         // insert epfd to fd_collection as epfd_info
         g_p_fd_collection->addepfd(epfd, size);
     }
-}
-
-/* Creates an epoll instance.  Returns fd for the new instance.
-   The "size" parameter is a hint specifying the number of file
-   descriptors to be associated with the new instance.  The fd
-   returned by epoll_create() should be closed with close().  */
-extern "C" EXPORT_SYMBOL int epoll_create(int __size)
-{
-    DO_GLOBAL_CTORS();
-
-    PROFILE_FUNC
-
-    if (__size <= 0) {
-        srdr_logdbg("invalid size (size=%d) - must be a positive integer", __size);
-        errno = EINVAL;
-        return -1;
-    }
-
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.epoll_create) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    int epfd = orig_os_api.epoll_create(__size + 1); // +1 for the cq epfd
-    srdr_logdbg("ENTER: (size=%d) = %d", __size, epfd);
-
-    if (epfd <= 0) {
-        return epfd;
-    }
-
-    xlio_epoll_create(epfd, 8);
-
-    return epfd;
-}
-
-extern "C" EXPORT_SYMBOL int epoll_create1(int __flags)
-{
-    DO_GLOBAL_CTORS();
-
-    PROFILE_FUNC
-
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.epoll_create1) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    int epfd = orig_os_api.epoll_create1(__flags);
-    srdr_logdbg("ENTER: (flags=%d) = %d", __flags, epfd);
-
-    if (epfd <= 0) {
-        return epfd;
-    }
-
-    xlio_epoll_create(epfd, 8);
-
-    return epfd;
-}
-
-/* Manipulate an epoll instance "epfd". Returns 0 in case of success,
-   -1 in case of error ("errno" variable will contain the specific
-   error code). The "op" parameter is one of the EPOLL_CTL_*
-   constants defined above. The "fd" parameter is the target of the
-   operation. The "event" parameter describes which events the caller
-   is interested in and any associated user data.  */
-extern "C" EXPORT_SYMBOL int epoll_ctl(int __epfd, int __op, int __fd, struct epoll_event *__event)
-{
-    PROFILE_FUNC
-
-    const static char *op_names[] = {"<null>", "ADD", "DEL", "MOD"};
-    NOT_IN_USE(op_names); /* to suppress warning in case MAX_DEFINED_LOG_LEVEL */
-    if (__event) {
-        srdr_logfunc_entry("epfd=%d, op=%s, fd=%d, events=%#x, data=%x", __epfd, op_names[__op],
-                           __fd, __event->events, __event->data.u64);
-    } else {
-        srdr_logfunc_entry("epfd=%d, op=%s, fd=%d, event=NULL", __epfd, op_names[__op], __fd);
-    }
-
-    int rc = -1;
-    epfd_info *epfd_info = fd_collection_get_epfd(__epfd);
-    if (!epfd_info) {
-        errno = EBADF;
-    } else {
-#if defined(DEFINED_ENVOY)
-        if (g_p_app && g_p_app->type == APP_ENVOY) {
-            rc = g_p_app->proc_envoy(__op, __fd);
-            if (rc != 0) {
-                errno = EINVAL;
-                return -1;
-            }
-        }
-#endif /* DEFINED_ENVOY */
-
-        // TODO handle race - if close() gets here..
-        rc = epfd_info->ctl(__op, __fd, __event);
-    }
-
-    srdr_logfunc_exit("rc = %d", rc);
-    return rc;
 }
 
 /* Wait for events on an epoll instance "epfd". Returns the number of
@@ -2185,8 +732,1347 @@ inline int epoll_wait_helper(int __epfd, struct epoll_event *__events, int __max
     }
 }
 
-extern "C" EXPORT_SYMBOL int epoll_wait(int __epfd, struct epoll_event *__events, int __maxevents,
-                                        int __timeout)
+static void handler_intr(int sig)
+{
+    switch (sig) {
+    case SIGINT:
+        g_b_exit = true;
+        srdr_logdbg("Catch Signal: SIGINT (%d)", sig);
+        break;
+    default:
+        srdr_logdbg("Catch Signal: %d", sig);
+        break;
+    }
+
+    if (g_act_prev.sa_handler) {
+        g_act_prev.sa_handler(sig);
+    }
+}
+
+static void handle_signal(int signum)
+{
+    srdr_logdbg_entry("Caught signal! signum=%d", signum);
+
+    if (signum == SIGINT) {
+        g_b_exit = true;
+    }
+
+    if (g_sighandler) {
+        g_sighandler(signum);
+    }
+}
+
+int sigaction_internal(int signum, const struct sigaction *act, struct sigaction *oldact)
+{
+    int ret = 0;
+
+    PROFILE_FUNC
+
+    if (safe_mce_sys().handle_sigintr) {
+        srdr_logdbg_entry("signum=%d, act=%p, oldact=%p", signum, act, oldact);
+
+        switch (signum) {
+        case SIGINT:
+            if (oldact && g_act_prev.sa_handler) {
+                *oldact = g_act_prev;
+            }
+            if (act) {
+                struct sigaction xlio_action;
+                xlio_action.sa_handler = handler_intr;
+                xlio_action.sa_flags = 0;
+                sigemptyset(&xlio_action.sa_mask);
+
+                ret = SYSCALL(sigaction, SIGINT, &xlio_action, NULL);
+
+                if (ret < 0) {
+                    srdr_logdbg("Failed to register SIGINT handler, calling to original sigaction "
+                                "handler");
+                    break;
+                }
+                srdr_logdbg("Registered SIGINT handler");
+                g_act_prev = *act;
+            }
+            if (ret >= 0) {
+                srdr_logdbg_exit("returned with %d", ret);
+            } else {
+                srdr_logdbg_exit("failed (errno=%d %m)", errno);
+            }
+
+            return ret;
+            break;
+        default:
+            break;
+        }
+    }
+    ret = SYSCALL(sigaction, signum, act, oldact);
+
+    if (safe_mce_sys().handle_sigintr) {
+        if (ret >= 0) {
+            srdr_logdbg_exit("returned with %d", ret);
+        } else {
+            srdr_logdbg_exit("failed (errno=%d %m)", errno);
+        }
+    }
+    return ret;
+}
+
+extern "C" {
+/* Create a new socket of type TYPE in domain DOMAIN, using
+   protocol PROTOCOL.  If PROTOCOL is zero, one is chosen automatically.
+   Returns a file descriptor for the new socket, or -1 for errors.  */
+EXPORT_SYMBOL int XLIO_SYMBOL(socket)(int __domain, int __type, int __protocol)
+{
+    return socket_internal(__domain, __type, __protocol, true, true);
+}
+
+EXPORT_SYMBOL int XLIO_SYMBOL(close)(int __fd)
+{
+    PROFILE_FUNC
+
+    srdr_logdbg_entry("fd=%d", __fd);
+
+    bool toclose = handle_close(__fd);
+    int rc = toclose ? SYSCALL(close, __fd) : 0;
+
+    return rc;
+}
+
+#ifdef XLIO_STATIC_BUILD
+extern void __res_iclose(res_state statp, bool free_addr);
+#endif
+
+EXPORT_SYMBOL void XLIO_SYMBOL(__res_iclose)(res_state statp, bool free_addr)
+{
+    PROFILE_FUNC
+
+    /* Current implementation doesn't handle XLIO sockets without a shadow socket or from a socket
+       pool. If such a socket is present in the nssocks list, system __res_iclose() will close the
+       fd. This will break the socket functionality.
+       Assume that resolver doesn't use the above scenarios.  */
+
+    srdr_logdbg_entry("");
+    for (int ns = 0; ns < statp->_u._ext.nscount; ns++) {
+        int sock = statp->_u._ext.nssocks[ns];
+        if (sock != -1) {
+            handle_close(sock);
+        }
+    }
+    SYSCALL(__res_iclose, statp, free_addr);
+}
+
+/* Shut down all or part of the connection open on socket FD.
+   HOW determines what to shut down:
+     SHUT_RD   = No more receptions;
+     SHUT_WR   = No more transmissions;
+     SHUT_RDWR = No more receptions or transmissions.
+   Returns 0 on success, -1 for errors.  */
+EXPORT_SYMBOL int XLIO_SYMBOL(shutdown)(int __fd, int __how)
+{
+    PROFILE_FUNC
+
+    srdr_logdbg_entry("fd=%d, how=%d", __fd, __how);
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        return p_socket_object->shutdown(__how);
+    }
+
+    return SYSCALL(shutdown, __fd, __how);
+}
+
+EXPORT_SYMBOL int XLIO_SYMBOL(listen)(int __fd, int backlog)
+{
+    PROFILE_FUNC
+
+    srdr_logdbg_entry("fd=%d, backlog=%d", __fd, backlog);
+
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+    if (g_p_app && g_p_app->type != APP_NONE) {
+        /* Envoy:
+         * Socket handling
+         * Envoy uses the following procedure for creating sockets and assigning them to workers.
+         *
+         * When a listener is created, a socket is pre-created for every worker on the main thread.
+         * This allows most errors to be caught early on in the listener creation process (e.g., bad
+         * socket option, unable to bind, etc.).
+         * - If using reuse_port, a unique socket is created for every worker.
+         * - If not using reuse_port, a unique socket is created for worker 0, and then that socket
+         * is duplicated for all other workers.
+         * a listener can close() its sockets when removed without concern for other listeners.
+         *
+         * Implementation:
+         * - reuse_port(false) :
+         * Envoy uses dup() call for listen socket on workers_N (N > 0)
+         * dup() call does not create socket object and does not store fd
+         * in fd_collection in current implementation
+         * so as a result duplicated fd is not returned by fd_collection_get_sockfd(__fd) and
+         * listen() call for duplicated fds are ignored.
+         * Original listen socket is not ignored by listen() function.
+         * - reuse_port(true) :
+         * dup() is not used. Unique socket is created for every worker.
+         *
+         * Store all duplicated fd in map_dup_fd with reference to original fd
+         * Store all listen fd in map_listen_fd with tid
+         * Identify correct listen fd during epoll_ctl(ADD) call by tid. It should be different.
+         * Set worker id in map_thread_id basing on tid
+         *
+         * Nginx:
+         * Nginx store all listen fd in map_listen_fd to proceed later in children processes
+         * after fork() call.
+         * Set worker id in map_thread_id basing on tid(pid). Nginx has single thread per process so
+         * tid and pid should be equal.
+         */
+        std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+        g_p_app->map_listen_fd[__fd] = gettid();
+    }
+#endif /* DEFINED_ENVOY */
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+
+    if (p_socket_object) {
+        // for verifying that the socket is really offloaded
+        int ret = p_socket_object->prepareListen();
+        if (ret < 0) {
+            return ret; // error
+        }
+        if (ret > 0) { // Passthrough
+            handle_close(__fd, false, true);
+        } else {
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+            if (g_p_app && g_p_app->type != APP_NONE) {
+                p_socket_object->m_back_log = backlog;
+            } else
+#endif
+            {
+                return p_socket_object->listen(backlog);
+            }
+        }
+    }
+
+    srdr_logdbg("OS listen fd=%d, backlog=%d", __fd, backlog);
+    return SYSCALL(listen, __fd, backlog);
+}
+
+EXPORT_SYMBOL int XLIO_SYMBOL(accept)(int __fd, struct sockaddr *__addr, socklen_t *__addrlen)
+{
+    PROFILE_FUNC
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        return p_socket_object->accept(__addr, __addrlen);
+    }
+
+    return SYSCALL(accept, __fd, __addr, __addrlen);
+}
+
+EXPORT_SYMBOL int XLIO_SYMBOL(accept4)(int __fd, struct sockaddr *__addr, socklen_t *__addrlen,
+                                       int __flags)
+{
+    PROFILE_FUNC
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        return p_socket_object->accept4(__addr, __addrlen, __flags);
+    }
+
+    return SYSCALL(accept4, __fd, __addr, __addrlen, __flags);
+}
+
+/* Give the socket FD the local address ADDR (which is LEN bytes long).  */
+EXPORT_SYMBOL int XLIO_SYMBOL(bind)(int __fd, const struct sockaddr *__addr, socklen_t __addrlen)
+{
+    int errno_tmp = errno;
+
+    PROFILE_FUNC
+
+    char buf[256];
+    NOT_IN_USE(buf); /* to suppress warning in case MAX_DEFINED_LOG_LEVEL */
+    srdr_logdbg_entry("fd=%d, %s", __fd, sprintf_sockaddr(buf, 256, __addr, __addrlen));
+
+    int ret = 0;
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        ret = bind_internal(p_socket_object, __addr, __addrlen);
+    } else {
+        ret = SYSCALL(bind, __fd, __addr, __addrlen);
+    }
+
+    if (ret >= 0) {
+        /* Restore errno on function entry in case success */
+        errno = errno_tmp;
+        srdr_logdbg_exit("returned with %d", ret);
+    } else {
+        srdr_logdbg_exit("failed (errno=%d %m)", errno);
+    }
+
+    return ret;
+}
+
+/* Open a connection on socket FD to peer at ADDR (which LEN bytes long).
+   For connectionless socket types, just set the default address to send to
+   and the only address from which to accept transmissions.
+   Return 0 on success, -1 for errors.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.  */
+EXPORT_SYMBOL int XLIO_SYMBOL(connect)(int __fd, const struct sockaddr *__to, socklen_t __tolen)
+{
+    int errno_tmp = errno;
+
+    PROFILE_FUNC
+
+    char buf[256];
+    NOT_IN_USE(buf); /* to suppress warning in case MAX_DEFINED_LOG_LEVEL */
+    srdr_logdbg_entry("fd=%d, %s", __fd, sprintf_sockaddr(buf, 256, __to, __tolen));
+
+    int ret = 0;
+    socket_fd_api *p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object == nullptr) {
+        srdr_logdbg_exit("Unable to get sock_fd_api");
+        ret = SYSCALL(connect, __fd, __to, __tolen);
+    } else if (__to == nullptr ||
+               (get_sa_family(__to) != AF_INET && (get_sa_family(__to) != AF_INET6))) {
+        p_socket_object->setPassthrough();
+        ret = SYSCALL(connect, __fd, __to, __tolen);
+    } else {
+        ret = p_socket_object->connect(__to, __tolen);
+        if (p_socket_object->isPassthrough()) {
+            handle_close(__fd, false, true);
+            if (ret) {
+                ret = SYSCALL(connect, __fd, __to, __tolen);
+            }
+        }
+    }
+    if (ret >= 0) {
+        /* Restore errno on function entry in case success */
+        errno = errno_tmp;
+        srdr_logdbg_exit("returned with %d", ret);
+    } else {
+        srdr_logdbg_exit("failed (errno=%d %m)", errno);
+    }
+
+    return ret;
+}
+
+/* Set socket FD's option OPTNAME at protocol level LEVEL
+   to *OPTVAL (which is OPTLEN bytes long).
+   Returns 0 on success, -1 for errors.  */
+EXPORT_SYMBOL int XLIO_SYMBOL(setsockopt)(int __fd, int __level, int __optname,
+                                          __const void *__optval, socklen_t __optlen)
+{
+    srdr_logdbg_entry("fd=%d, level=%d, optname=%d", __fd, __level, __optname);
+
+    if (NULL == __optval) {
+        errno = EFAULT;
+        return -1;
+    }
+
+    PROFILE_FUNC
+
+    int ret = 0;
+    socket_fd_api *p_socket_object = NULL;
+
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        VERIFY_PASSTROUGH_CHANGED(
+            ret, p_socket_object->setsockopt(__level, __optname, __optval, __optlen));
+    } else {
+        ret = SYSCALL(setsockopt, __fd, __level, __optname, __optval, __optlen);
+    }
+
+    if (ret >= 0) {
+        srdr_logdbg_exit("returned with %d", ret);
+    } else {
+        srdr_logdbg_exit("failed (errno=%d %m)", errno);
+    }
+    return ret;
+}
+
+/* Get socket FD's option OPTNAME at protocol level LEVEL
+   to *OPTVAL (which is OPTLEN bytes long).
+   Returns 0 on success, -1 for errors.  */
+EXPORT_SYMBOL int XLIO_SYMBOL(getsockopt)(int __fd, int __level, int __optname, void *__optval,
+                                          socklen_t *__optlen)
+{
+    PROFILE_FUNC
+
+    srdr_logdbg_entry("fd=%d, level=%d, optname=%d", __fd, __level, __optname);
+
+    if (__fd == -2 && __level == SOL_SOCKET && __optname == SO_XLIO_GET_API && __optlen &&
+        *__optlen >= sizeof(struct xlio_api_t *)) {
+        *((xlio_api_t **)__optval) = extra_api();
+        *__optlen = sizeof(struct xlio_api_t *);
+        return 0;
+    }
+
+    int ret = 0;
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        VERIFY_PASSTROUGH_CHANGED(
+            ret, p_socket_object->getsockopt(__level, __optname, __optval, __optlen));
+    } else {
+        ret = SYSCALL(getsockopt, __fd, __level, __optname, __optval, __optlen);
+    }
+
+    if (ret >= 0) {
+        srdr_logdbg_exit("returned with %d", ret);
+    } else {
+        srdr_logdbg_exit("failed (errno=%d %m)", errno);
+    }
+    return ret;
+}
+
+/* Do the file control operation described by CMD on FD.
+   The remaining arguments are interpreted depending on CMD.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.
+   NOTE: XLIO throw will never occur during handling of any command.
+   XLIO will only throw in case XLIO doesn't know to handle a command and the
+   user requested explicitly that XLIO will throw an exception in such a case
+   by setting XLIO_EXCEPTION_HANDLING accordingly (see README.txt)
+   */
+EXPORT_SYMBOL int XLIO_SYMBOL(fcntl)(int __fd, int __cmd, ...)
+{
+    PROFILE_FUNC
+
+    srdr_logfunc_entry("fd=%d, cmd=%d", __fd, __cmd);
+
+    int res = -1;
+    va_list va;
+    va_start(va, __cmd);
+    unsigned long int arg = va_arg(va, unsigned long int);
+    va_end(va);
+
+    int ret = 0;
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        VERIFY_PASSTROUGH_CHANGED(res, p_socket_object->fcntl(__cmd, arg));
+    } else {
+        res = SYSCALL(fcntl, __fd, __cmd, arg);
+    }
+
+    if (__cmd == F_DUPFD) {
+        handle_close(__fd);
+    }
+
+    if (ret >= 0) {
+        srdr_logfunc_exit("returned with %d", ret);
+    } else {
+        srdr_logfunc_exit("failed (errno=%d %m)", errno);
+    }
+    return res;
+}
+
+/* Do the file control operation described by CMD on FD.
+   The remaining arguments are interpreted depending on CMD.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.
+   NOTE: XLIO throw will never occur during handling of any command.
+   XLIO will only throw in case XLIO doesn't know to handle a command and the
+   user requested explicitly that XLIO will throw an exception in such a case
+   by setting XLIO_EXCEPTION_HANDLING accordingly (see README.txt)
+   */
+
+EXPORT_SYMBOL int XLIO_SYMBOL(fcntl64)(int __fd, int __cmd, ...)
+{
+    PROFILE_FUNC
+
+    srdr_logfunc_entry("fd=%d, cmd=%d", __fd, __cmd);
+
+    int res = -1;
+    va_list va;
+    va_start(va, __cmd);
+    unsigned long int arg = va_arg(va, unsigned long int);
+    va_end(va);
+
+    int ret = 0;
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object && VALID_SYSCALL(fcntl64)) {
+        VERIFY_PASSTROUGH_CHANGED(res, p_socket_object->fcntl64(__cmd, arg));
+    } else {
+        res = SYSCALL_ERRNO_UNSUPPORTED(fcntl64, __fd, __cmd, arg);
+    }
+
+    if (__cmd == F_DUPFD) {
+        handle_close(__fd);
+    }
+
+    if (ret >= 0) {
+        srdr_logfunc_exit("returned with %d", ret);
+    } else {
+        srdr_logfunc_exit("failed (errno=%d %m)", errno);
+    }
+    return res;
+}
+
+/* Perform the I/O control operation specified by REQUEST on FD.
+   One argument may follow; its presence and type depend on REQUEST.
+   Return value depends on REQUEST.  Usually -1 indicates error. */
+EXPORT_SYMBOL int XLIO_SYMBOL(ioctl)(int __fd, unsigned long int __request, ...)
+{
+    PROFILE_FUNC
+
+    srdr_logfunc_entry("fd=%d, request=%d", __fd, __request);
+
+    int res = -1;
+    va_list va;
+    va_start(va, __request);
+    unsigned long int arg = va_arg(va, unsigned long int);
+    va_end(va);
+
+    int ret = 0;
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object && arg) {
+        VERIFY_PASSTROUGH_CHANGED(res, p_socket_object->ioctl(__request, arg));
+    } else {
+        res = SYSCALL(ioctl, __fd, __request, arg);
+    }
+
+    if (ret >= 0) {
+        srdr_logfunc_exit("returned with %d", ret);
+    } else {
+        srdr_logfunc_exit("failed (errno=%d %m)", errno);
+    }
+    return res;
+}
+
+EXPORT_SYMBOL int XLIO_SYMBOL(getsockname)(int __fd, struct sockaddr *__name, socklen_t *__namelen)
+{
+    PROFILE_FUNC
+
+    srdr_logdbg_entry("fd=%d", __fd);
+
+    int ret = 0;
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        ret = p_socket_object->getsockname(__name, __namelen);
+
+        if (safe_mce_sys().trigger_dummy_send_getsockname) {
+            char buf[264] = {0};
+            struct iovec msg_iov = {&buf, sizeof(buf)};
+            struct msghdr msg = {NULL, 0, &msg_iov, 1, NULL, 0, 0};
+            int ret_send = sendmsg(__fd, &msg, XLIO_SND_FLAGS_DUMMY);
+            srdr_logdbg("Triggered dummy message for socket fd=%d (ret_send=%d)", __fd, ret_send);
+            NOT_IN_USE(ret_send);
+        }
+    } else {
+        ret = SYSCALL(getsockname, __fd, __name, __namelen);
+    }
+
+    if (ret >= 0) {
+        srdr_logdbg_exit("returned with %d", ret);
+    } else {
+        srdr_logdbg_exit("failed (errno=%d %m)", errno);
+    }
+    return ret;
+}
+
+EXPORT_SYMBOL int XLIO_SYMBOL(getpeername)(int __fd, struct sockaddr *__name, socklen_t *__namelen)
+{
+    PROFILE_FUNC
+
+    srdr_logdbg_entry("fd=%d", __fd);
+
+    int ret = 0;
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        ret = p_socket_object->getpeername(__name, __namelen);
+    } else {
+        ret = SYSCALL(getpeername, __fd, __name, __namelen);
+    }
+
+    if (ret >= 0) {
+        srdr_logdbg_exit("returned with %d", ret);
+    } else {
+        srdr_logdbg_exit("failed (errno=%d %m)", errno);
+    }
+    return ret;
+}
+
+/* Read NBYTES into BUF from FD.  Return the
+   number read, -1 for errors or 0 for EOF.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.  */
+EXPORT_SYMBOL ssize_t XLIO_SYMBOL(read)(int __fd, void *__buf, size_t __nbytes)
+{
+    PROFILE_FUNC
+
+    srdr_logfuncall_entry("fd=%d", __fd);
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        struct iovec piov[1];
+        piov[0].iov_base = __buf;
+        piov[0].iov_len = __nbytes;
+        int dummy_flags = 0;
+        return p_socket_object->rx(RX_READ, piov, 1, &dummy_flags);
+    }
+
+    return SYSCALL(read, __fd, __buf, __nbytes);
+}
+
+#if defined HAVE___READ_CHK
+/* Checks that the buffer is big enough to contain the number of bytes
+ * the user requests to read. If the buffer is too small, aborts,
+ * else read NBYTES into BUF from FD.  Return the
+   number read, -1 for errors or 0 for EOF.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.  */
+EXPORT_SYMBOL ssize_t XLIO_SYMBOL(__read_chk)(int __fd, void *__buf, size_t __nbytes,
+                                              size_t __buflen)
+{
+    PROFILE_FUNC
+
+    srdr_logfuncall_entry("fd=%d", __fd);
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        BULLSEYE_EXCLUDE_BLOCK_START
+        if (__nbytes > __buflen) {
+            srdr_logpanic("buffer overflow detected");
+        }
+        BULLSEYE_EXCLUDE_BLOCK_END
+
+        struct iovec piov[1];
+        piov[0].iov_base = __buf;
+        piov[0].iov_len = __nbytes;
+        int dummy_flags = 0;
+        return p_socket_object->rx(RX_READ, piov, 1, &dummy_flags);
+    }
+
+    return SYSCALL(__read_chk, __fd, __buf, __nbytes, __buflen);
+}
+#endif
+
+/* Read COUNT blocks into VECTOR from FD.  Return the
+   number of bytes read, -1 for errors or 0 for EOF.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.  */
+
+EXPORT_SYMBOL ssize_t XLIO_SYMBOL(readv)(int __fd, const struct iovec *iov, int iovcnt)
+{
+    PROFILE_FUNC
+
+    srdr_logfuncall_entry("fd=%d", __fd);
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        struct iovec *piov = (struct iovec *)iov;
+        int dummy_flags = 0;
+        return p_socket_object->rx(RX_READV, piov, iovcnt, &dummy_flags);
+    }
+
+    return SYSCALL(readv, __fd, iov, iovcnt);
+}
+
+/* Read N bytes into BUF from socket FD.
+   Returns the number read or -1 for errors.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.  */
+EXPORT_SYMBOL ssize_t XLIO_SYMBOL(recv)(int __fd, void *__buf, size_t __nbytes, int __flags)
+{
+    PROFILE_FUNC
+
+    srdr_logfuncall_entry("fd=%d", __fd);
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        struct iovec piov[1];
+        piov[0].iov_base = __buf;
+        piov[0].iov_len = __nbytes;
+        return p_socket_object->rx(RX_RECV, piov, 1, &__flags);
+    }
+
+    return SYSCALL(recv, __fd, __buf, __nbytes, __flags);
+}
+
+#if defined HAVE___RECV_CHK
+/* Checks that the buffer is big enough to contain the number of bytes
+   the user requests to read. If the buffer is too small, aborts,
+   else read N bytes into BUF from socket FD.
+   Returns the number read or -1 for errors.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.  */
+EXPORT_SYMBOL ssize_t XLIO_SYMBOL(__recv_chk)(int __fd, void *__buf, size_t __nbytes,
+                                              size_t __buflen, int __flags)
+{
+    PROFILE_FUNC
+
+    srdr_logfuncall_entry("fd=%d", __fd);
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        BULLSEYE_EXCLUDE_BLOCK_START
+        if (__nbytes > __buflen) {
+            srdr_logpanic("buffer overflow detected");
+        }
+        BULLSEYE_EXCLUDE_BLOCK_END
+
+        struct iovec piov[1];
+        piov[0].iov_base = __buf;
+        piov[0].iov_len = __nbytes;
+        return p_socket_object->rx(RX_RECV, piov, 1, &__flags);
+    }
+
+    return SYSCALL(__recv_chk, __fd, __buf, __nbytes, __buflen, __flags);
+}
+#endif
+
+/* Receive a message as described by MESSAGE from socket FD.
+   Returns the number of bytes read or -1 for errors.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.  */
+EXPORT_SYMBOL ssize_t XLIO_SYMBOL(recvmsg)(int __fd, struct msghdr *__msg, int __flags)
+{
+    PROFILE_FUNC
+
+    srdr_logfuncall_entry("fd=%d", __fd);
+
+    if (__msg == NULL) {
+        srdr_logdbg("NULL msghdr");
+        errno = EINVAL;
+        return -1;
+    }
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        __msg->msg_flags = 0;
+        return p_socket_object->rx(RX_RECVMSG, __msg->msg_iov, __msg->msg_iovlen, &__flags,
+                                   (__SOCKADDR_ARG)__msg->msg_name,
+                                   (socklen_t *)&__msg->msg_namelen, __msg);
+    }
+
+    return SYSCALL(recvmsg, __fd, __msg, __flags);
+}
+
+/* The following definitions are for kernels previous to 2.6.32 which dont support recvmmsg */
+#ifndef HAVE_STRUCT_MMSGHDR
+#ifndef __INTEL_COMPILER
+struct mmsghdr {
+    struct msghdr msg_hdr; // Message header
+    unsigned int msg_len; // Number of received bytes for header
+};
+#endif
+#endif
+
+#ifndef MSG_WAITFORONE
+#define MSG_WAITFORONE 0x10000 // recvmmsg(): block until 1+ packets avail
+#endif
+
+/* Receive multiple messages as described by MESSAGE from socket FD.
+   Returns the number of messages received or -1 for errors.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.  */
+
+#if defined(RECVMMSG_WITH_CONST_TIMESPEC) || defined(XLIO_STATIC_BUILD)
+EXPORT_SYMBOL int XLIO_SYMBOL(recvmmsg)(int __fd, struct mmsghdr *__mmsghdr, unsigned int __vlen,
+                                        int __flags, const struct timespec *__timeout)
+#else
+EXPORT_SYMBOL int XLIO_SYMBOL(recvmmsg)(int __fd, struct mmsghdr *__mmsghdr, unsigned int __vlen,
+                                        int __flags, struct timespec *__timeout)
+#endif
+{
+    PROFILE_FUNC
+
+    int num_of_msg = 0;
+    struct timespec start_time = TIMESPEC_INITIALIZER, current_time = TIMESPEC_INITIALIZER,
+                    delta_time = TIMESPEC_INITIALIZER;
+
+    srdr_logfuncall_entry("fd=%d, mmsghdr length=%d flags=%x", __fd, __vlen, __flags);
+
+    if (__mmsghdr == NULL) {
+        srdr_logdbg("NULL mmsghdr");
+        errno = EINVAL;
+        return -1;
+    }
+
+    if (__timeout) {
+        gettime(&start_time);
+    }
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        int ret = 0;
+        for (unsigned int i = 0; i < __vlen; i++) {
+            int flags = __flags;
+            __mmsghdr[i].msg_hdr.msg_flags = 0;
+            ret = p_socket_object->rx(
+                RX_RECVMSG, __mmsghdr[i].msg_hdr.msg_iov, __mmsghdr[i].msg_hdr.msg_iovlen, &flags,
+                (__SOCKADDR_ARG)__mmsghdr[i].msg_hdr.msg_name,
+                (socklen_t *)&__mmsghdr[i].msg_hdr.msg_namelen, &__mmsghdr[i].msg_hdr);
+            if (ret < 0) {
+                break;
+            }
+            num_of_msg++;
+            __mmsghdr[i].msg_len = ret;
+            if ((i == 0) && (flags & MSG_WAITFORONE)) {
+                __flags |= MSG_DONTWAIT;
+            }
+            if (__timeout) {
+                gettime(&current_time);
+                ts_sub(&current_time, &start_time, &delta_time);
+                if (ts_cmp(&delta_time, __timeout, >)) {
+                    break;
+                }
+            }
+        }
+        if (num_of_msg || ret == 0) {
+            // todo save ret for so_error if ret != 0(see kernel)
+            return num_of_msg;
+        } else {
+            return ret;
+        }
+    }
+
+    struct timespec timeout = TIMESPEC_INITIALIZER;
+    if (__timeout) {
+        memcpy(&timeout, __timeout, sizeof(timeout));
+    }
+    return SYSCALL(recvmmsg, __fd, __mmsghdr, __vlen, __flags, &timeout);
+}
+
+/* Read N bytes into BUF through socket FD.
+   If ADDR is not NULL, fill in *ADDR_LEN bytes of it with tha address of
+   the sender, and store the actual size of the address in *ADDR_LEN.
+   Returns the number of bytes read or -1 for errors.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.  */
+EXPORT_SYMBOL ssize_t XLIO_SYMBOL(recvfrom)(int __fd, void *__buf, size_t __nbytes, int __flags,
+                                            struct sockaddr *__from, socklen_t *__fromlen)
+{
+    ssize_t ret_val = 0;
+
+    PROFILE_FUNC
+
+    srdr_logfuncall_entry("fd=%d", __fd);
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        struct iovec piov[1];
+        piov[0].iov_base = __buf;
+        piov[0].iov_len = __nbytes;
+        ret_val = p_socket_object->rx(RX_RECVFROM, piov, 1, &__flags, __from, __fromlen);
+    } else {
+        ret_val = SYSCALL(recvfrom, __fd, __buf, __nbytes, __flags, __from, __fromlen);
+    }
+    return ret_val;
+}
+
+#if defined HAVE___RECVFROM_CHK
+/* Checks that the buffer is big enough to contain the number of bytes
+   the user requests to read. If the buffer is too small, aborts,
+   else read N bytes into BUF through socket FD.
+   If ADDR is not NULL, fill in *ADDR_LEN bytes of it with tha address of
+   the sender, and store the actual size of the address in *ADDR_LEN.
+   Returns the number of bytes read or -1 for errors.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.  */
+EXPORT_SYMBOL ssize_t XLIO_SYMBOL(__recvfrom_chk)(int __fd, void *__buf, size_t __nbytes,
+                                                  size_t __buflen, int __flags,
+                                                  struct sockaddr *__from, socklen_t *__fromlen)
+{
+    PROFILE_FUNC
+
+    srdr_logfuncall_entry("fd=%d", __fd);
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        BULLSEYE_EXCLUDE_BLOCK_START
+        if (__nbytes > __buflen) {
+            srdr_logpanic("buffer overflow detected");
+        }
+        BULLSEYE_EXCLUDE_BLOCK_END
+
+        struct iovec piov[1];
+        piov[0].iov_base = __buf;
+        piov[0].iov_len = __nbytes;
+        return p_socket_object->rx(RX_RECVFROM, piov, 1, &__flags, __from, __fromlen);
+    }
+
+    return SYSCALL(__recvfrom_chk, __fd, __buf, __nbytes, __buflen, __flags, __from, __fromlen);
+}
+#endif
+
+/* Write N bytes of BUF to FD.  Return the number written, or -1.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.  */
+EXPORT_SYMBOL ssize_t XLIO_SYMBOL(write)(int __fd, __const void *__buf, size_t __nbytes)
+{
+    PROFILE_FUNC
+
+    srdr_logfuncall_entry("fd=%d, nbytes=%d", __fd, __nbytes);
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        struct iovec piov[1] = {{(void *)__buf, __nbytes}};
+        xlio_tx_call_attr_t tx_arg;
+
+        tx_arg.opcode = TX_WRITE;
+        tx_arg.attr.iov = piov;
+        tx_arg.attr.sz_iov = 1;
+
+        return p_socket_object->tx(tx_arg);
+    }
+
+    return SYSCALL(write, __fd, __buf, __nbytes);
+}
+
+/* Write IOCNT blocks from IOVEC to FD.  Return the number written, or -1.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.  */
+EXPORT_SYMBOL ssize_t XLIO_SYMBOL(writev)(int __fd, const struct iovec *iov, int iovcnt)
+{
+    PROFILE_FUNC
+
+    srdr_logfuncall_entry("fd=%d, %d iov blocks", __fd, iovcnt);
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        xlio_tx_call_attr_t tx_arg;
+
+        tx_arg.opcode = TX_WRITEV;
+        tx_arg.attr.iov = (struct iovec *)iov;
+        tx_arg.attr.sz_iov = iovcnt;
+
+        return p_socket_object->tx(tx_arg);
+    }
+
+    return SYSCALL(writev, __fd, iov, iovcnt);
+}
+
+/* Send N bytes of BUF to socket FD.  Returns the number sent or -1.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.  */
+EXPORT_SYMBOL ssize_t XLIO_SYMBOL(send)(int __fd, __const void *__buf, size_t __nbytes, int __flags)
+{
+    PROFILE_FUNC
+
+    srdr_logfuncall_entry("fd=%d, nbytes=%d", __fd, __nbytes);
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        struct iovec piov[1] = {{(void *)__buf, __nbytes}};
+        xlio_tx_call_attr_t tx_arg;
+
+        tx_arg.opcode = TX_SEND;
+        tx_arg.attr.iov = piov;
+        tx_arg.attr.sz_iov = 1;
+        tx_arg.attr.flags = __flags;
+
+        return p_socket_object->tx(tx_arg);
+    }
+
+    // Ignore dummy messages for OS
+    if (unlikely(IS_DUMMY_PACKET(__flags))) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    return SYSCALL(send, __fd, __buf, __nbytes, __flags);
+}
+
+/* Sends a message as described by MESSAGE to socket FD.
+   Returns the number of bytes read or -1 for errors.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.  */
+EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendmsg)(int __fd, __const struct msghdr *__msg, int __flags)
+{
+    PROFILE_FUNC
+
+    srdr_logfuncall_entry("fd=%d", __fd);
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        return sendmsg_internal(p_socket_object, __msg, __flags);
+    }
+
+    // Ignore dummy messages for OS
+    if (unlikely(IS_DUMMY_PACKET(__flags))) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    return SYSCALL(sendmsg, __fd, __msg, __flags);
+}
+
+/* Send multiple messages as described by MESSAGE from socket FD.
+   Returns the number of messages sent or -1 for errors.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.  */
+EXPORT_SYMBOL int XLIO_SYMBOL(sendmmsg)(int __fd, struct mmsghdr *__mmsghdr, unsigned int __vlen,
+                                        int __flags)
+{
+    int num_of_msg = 0;
+
+    PROFILE_FUNC
+
+    srdr_logfuncall_entry("fd=%d, mmsghdr length=%d flags=%x", __fd, __vlen, __flags);
+
+    if (__mmsghdr == NULL) {
+        srdr_logdbg("NULL mmsghdr");
+        errno = EINVAL;
+        return -1;
+    }
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        for (unsigned int i = 0; i < __vlen; i++) {
+            xlio_tx_call_attr_t tx_arg;
+
+            tx_arg.opcode = TX_SENDMSG;
+            tx_arg.attr.iov = __mmsghdr[i].msg_hdr.msg_iov;
+            tx_arg.attr.sz_iov = (ssize_t)__mmsghdr[i].msg_hdr.msg_iovlen;
+            tx_arg.attr.flags = __flags;
+            tx_arg.attr.addr = (struct sockaddr *)(__SOCKADDR_ARG)__mmsghdr[i].msg_hdr.msg_name;
+            tx_arg.attr.len = (socklen_t)__mmsghdr[i].msg_hdr.msg_namelen;
+            tx_arg.attr.hdr = &__mmsghdr[i].msg_hdr;
+
+            int ret = p_socket_object->tx(tx_arg);
+            if (ret < 0) {
+                if (num_of_msg) {
+                    return num_of_msg;
+                } else {
+                    return ret;
+                }
+            }
+            num_of_msg++;
+            __mmsghdr[i].msg_len = ret;
+        }
+        return num_of_msg;
+    }
+
+    // Ignore dummy messages for OS
+    if (unlikely(IS_DUMMY_PACKET(__flags))) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    return SYSCALL(sendmmsg, __fd, __mmsghdr, __vlen, __flags);
+}
+
+/* Send N bytes of BUF on socket FD to peer at address ADDR (which is
+   ADDR_LEN bytes long).  Returns the number sent, or -1 for errors.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.  */
+EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendto)(int __fd, __const void *__buf, size_t __nbytes,
+                                          int __flags, const struct sockaddr *__to,
+                                          socklen_t __tolen)
+{
+    PROFILE_FUNC
+
+    srdr_logfuncall_entry("fd=%d, nbytes=%d", __fd, __nbytes);
+
+    socket_fd_api *p_socket_object = NULL;
+    p_socket_object = fd_collection_get_sockfd(__fd);
+    if (p_socket_object) {
+        struct iovec piov[1] = {{(void *)__buf, __nbytes}};
+        xlio_tx_call_attr_t tx_arg;
+
+        tx_arg.opcode = TX_SENDTO;
+        tx_arg.attr.iov = piov;
+        tx_arg.attr.sz_iov = 1;
+        tx_arg.attr.flags = __flags;
+        tx_arg.attr.addr = (struct sockaddr *)__to;
+        tx_arg.attr.len = __tolen;
+
+        return p_socket_object->tx(tx_arg);
+    }
+
+    // Ignore dummy messages for OS
+    if (unlikely(IS_DUMMY_PACKET(__flags))) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    return SYSCALL(sendto, __fd, __buf, __nbytes, __flags, __to, __tolen);
+}
+
+EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendfile)(int out_fd, int in_fd, off_t *offset, size_t count)
+{
+    PROFILE_FUNC
+
+    srdr_logfuncall_entry("out_fd=%d, in_fd=%d, offset=%p, *offset=%zu, count=%d", out_fd, in_fd,
+                          offset, offset ? *offset : 0, count);
+
+    socket_fd_api *p_socket_object = fd_collection_get_sockfd(out_fd);
+    if (!p_socket_object) {
+        return SYSCALL(sendfile, out_fd, in_fd, offset, count);
+    }
+
+    return sendfile_helper(p_socket_object, in_fd, offset, count);
+}
+
+EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendfile64)(int out_fd, int in_fd, __off64_t *offset,
+                                              size_t count)
+{
+    PROFILE_FUNC
+
+    srdr_logfuncall_entry("out_fd=%d, in_fd=%d, offset=%p, *offset=%zu, count=%d", out_fd, in_fd,
+                          offset, offset ? *offset : 0, count);
+
+    socket_fd_api *p_socket_object = fd_collection_get_sockfd(out_fd);
+    if (!p_socket_object) {
+        return SYSCALL(sendfile64, out_fd, in_fd, offset, count);
+    }
+
+    return sendfile_helper(p_socket_object, in_fd, offset, count);
+}
+
+EXPORT_SYMBOL int XLIO_SYMBOL(select)(int __nfds, fd_set *__readfds, fd_set *__writefds,
+                                      fd_set *__exceptfds, struct timeval *__timeout)
+{
+    PROFILE_FUNC
+
+    if (!g_p_fd_collection) {
+        return SYSCALL(select, __nfds, __readfds, __writefds, __exceptfds, __timeout);
+    }
+
+    if (__timeout) {
+        srdr_logfunc_entry("nfds=%d, timeout=(%d sec, %d usec)", __nfds, __timeout->tv_sec,
+                           __timeout->tv_usec);
+    } else {
+        srdr_logfunc_entry("nfds=%d, timeout=(infinite)", __nfds);
+    }
+
+    return select_helper(__nfds, __readfds, __writefds, __exceptfds, __timeout);
+}
+
+EXPORT_SYMBOL int XLIO_SYMBOL(pselect)(int __nfds, fd_set *__readfds, fd_set *__writefds,
+                                       fd_set *__errorfds, const struct timespec *__timeout,
+                                       const sigset_t *__sigmask)
+{
+    PROFILE_FUNC
+
+    if (!g_p_fd_collection) {
+        return SYSCALL(pselect, __nfds, __readfds, __writefds, __errorfds, __timeout, __sigmask);
+    }
+
+    struct timeval select_time;
+    if (__timeout) {
+        srdr_logfunc_entry("nfds=%d, timeout=(%d sec, %d nsec)", __nfds, __timeout->tv_sec,
+                           __timeout->tv_nsec);
+        select_time.tv_sec = __timeout->tv_sec;
+        select_time.tv_usec = __timeout->tv_nsec / 1000;
+    } else {
+        srdr_logfunc_entry("nfds=%d, timeout=(infinite)", __nfds);
+    }
+
+    return select_helper(__nfds, __readfds, __writefds, __errorfds, __timeout ? &select_time : NULL,
+                         __sigmask);
+}
+
+EXPORT_SYMBOL int XLIO_SYMBOL(poll)(struct pollfd *__fds, nfds_t __nfds, int __timeout)
+{
+    PROFILE_FUNC
+
+    if (!g_p_fd_collection) {
+        return SYSCALL(poll, __fds, __nfds, __timeout);
+    }
+
+    srdr_logfunc_entry("nfds=%d, timeout=(%d milli-sec)", __nfds, __timeout);
+
+    return poll_helper(__fds, __nfds, __timeout);
+}
+
+#if defined HAVE___POLL_CHK
+EXPORT_SYMBOL int XLIO_SYMBOL(__poll_chk)(struct pollfd *__fds, nfds_t __nfds, int __timeout,
+                                          size_t __fdslen)
+{
+    PROFILE_FUNC
+
+    if (!g_p_fd_collection) {
+        return SYSCALL(__poll_chk, __fds, __nfds, __timeout, __fdslen);
+    }
+
+    BULLSEYE_EXCLUDE_BLOCK_START
+    if (__fdslen / sizeof(*__fds) < __nfds) {
+        srdr_logpanic("buffer overflow detected");
+    }
+    BULLSEYE_EXCLUDE_BLOCK_END
+
+    srdr_logfunc_entry("nfds=%d, timeout=(%d milli-sec)", __nfds, __timeout);
+
+    return poll_helper(__fds, __nfds, __timeout);
+}
+#endif
+
+EXPORT_SYMBOL int XLIO_SYMBOL(ppoll)(struct pollfd *__fds, nfds_t __nfds,
+                                     const struct timespec *__timeout, const sigset_t *__sigmask)
+{
+    PROFILE_FUNC
+
+    if (!g_p_fd_collection) {
+        return SYSCALL(ppoll, __fds, __nfds, __timeout, __sigmask);
+    }
+
+    int timeout =
+        (__timeout == NULL) ? -1 : (__timeout->tv_sec * 1000 + __timeout->tv_nsec / 1000000);
+
+    srdr_logfunc_entry("nfds=%d, timeout=(%d milli-sec)", __nfds, timeout);
+
+    return poll_helper(__fds, __nfds, timeout, __sigmask);
+}
+
+#if defined HAVE___PPOLL_CHK
+EXPORT_SYMBOL int XLIO_SYMBOL(__ppoll_chk)(struct pollfd *__fds, nfds_t __nfds,
+                                           const struct timespec *__timeout,
+                                           const sigset_t *__sigmask, size_t __fdslen)
+{
+    PROFILE_FUNC
+
+    if (!g_p_fd_collection) {
+        return SYSCALL(__ppoll_chk, __fds, __nfds, __timeout, __sigmask, __fdslen);
+    }
+
+    BULLSEYE_EXCLUDE_BLOCK_START
+    if (__fdslen / sizeof(*__fds) < __nfds) {
+        srdr_logpanic("buffer overflow detected");
+    }
+
+    BULLSEYE_EXCLUDE_BLOCK_END
+
+    int timeout =
+        (__timeout == NULL) ? -1 : (__timeout->tv_sec * 1000 + __timeout->tv_nsec / 1000000);
+
+    srdr_logfunc_entry("nfds=%d, timeout=(%d milli-sec)", __nfds, timeout);
+
+    return poll_helper(__fds, __nfds, timeout, __sigmask);
+}
+#endif
+
+/* Creates an epoll instance.  Returns fd for the new instance.
+   The "size" parameter is a hint specifying the number of file
+   descriptors to be associated with the new instance.  The fd
+   returned by epoll_create() should be closed with close().  */
+EXPORT_SYMBOL int XLIO_SYMBOL(epoll_create)(int __size)
+{
+    DO_GLOBAL_CTORS();
+
+    PROFILE_FUNC
+
+    if (__size <= 0) {
+        srdr_logdbg("invalid size (size=%d) - must be a positive integer", __size);
+        errno = EINVAL;
+        return -1;
+    }
+
+    int epfd = SYSCALL(epoll_create, __size + 1); // +1 for the cq epfd
+    srdr_logdbg("ENTER: (size=%d) = %d", __size, epfd);
+
+    if (epfd <= 0) {
+        return epfd;
+    }
+
+    xlio_epoll_create(epfd, 8);
+
+    return epfd;
+}
+
+EXPORT_SYMBOL int XLIO_SYMBOL(epoll_create1)(int __flags)
+{
+    DO_GLOBAL_CTORS();
+
+    PROFILE_FUNC
+
+    int epfd = SYSCALL(epoll_create1, __flags);
+    srdr_logdbg("ENTER: (flags=%d) = %d", __flags, epfd);
+
+    if (epfd <= 0) {
+        return epfd;
+    }
+
+    xlio_epoll_create(epfd, 8);
+
+    return epfd;
+}
+
+/* Manipulate an epoll instance "epfd". Returns 0 in case of success,
+   -1 in case of error ("errno" variable will contain the specific
+   error code). The "op" parameter is one of the EPOLL_CTL_*
+   constants defined above. The "fd" parameter is the target of the
+   operation. The "event" parameter describes which events the caller
+   is interested in and any associated user data.  */
+EXPORT_SYMBOL int XLIO_SYMBOL(epoll_ctl)(int __epfd, int __op, int __fd,
+                                         struct epoll_event *__event)
+{
+    PROFILE_FUNC
+
+    const static char *op_names[] = {"<null>", "ADD", "DEL", "MOD"};
+    NOT_IN_USE(op_names); /* to suppress warning in case MAX_DEFINED_LOG_LEVEL */
+    if (__event) {
+        srdr_logfunc_entry("epfd=%d, op=%s, fd=%d, events=%#x, data=%x", __epfd, op_names[__op],
+                           __fd, __event->events, __event->data.u64);
+    } else {
+        srdr_logfunc_entry("epfd=%d, op=%s, fd=%d, event=NULL", __epfd, op_names[__op], __fd);
+    }
+
+    int rc = -1;
+    epfd_info *epfd_info = fd_collection_get_epfd(__epfd);
+    if (!epfd_info) {
+        errno = EBADF;
+    } else {
+#if defined(DEFINED_ENVOY)
+        if (g_p_app && g_p_app->type == APP_ENVOY) {
+            rc = g_p_app->proc_envoy(__op, __fd);
+            if (rc != 0) {
+                errno = EINVAL;
+                return -1;
+            }
+        }
+#endif /* DEFINED_ENVOY */
+
+        // TODO handle race - if close() gets here..
+        rc = epfd_info->ctl(__op, __fd, __event);
+    }
+
+    srdr_logfunc_exit("rc = %d", rc);
+    return rc;
+}
+
+EXPORT_SYMBOL int XLIO_SYMBOL(epoll_wait)(int __epfd, struct epoll_event *__events, int __maxevents,
+                                          int __timeout)
 {
     PROFILE_FUNC
 
@@ -2196,8 +2082,9 @@ extern "C" EXPORT_SYMBOL int epoll_wait(int __epfd, struct epoll_event *__events
     return epoll_wait_helper(__epfd, __events, __maxevents, __timeout);
 }
 
-extern "C" EXPORT_SYMBOL int epoll_pwait(int __epfd, struct epoll_event *__events, int __maxevents,
-                                         int __timeout, const sigset_t *__sigmask)
+EXPORT_SYMBOL int XLIO_SYMBOL(epoll_pwait)(int __epfd, struct epoll_event *__events,
+                                           int __maxevents, int __timeout,
+                                           const sigset_t *__sigmask)
 {
     PROFILE_FUNC
 
@@ -2211,17 +2098,11 @@ extern "C" EXPORT_SYMBOL int epoll_pwait(int __epfd, struct epoll_event *__event
    protocol PROTOCOL, which are connected to each other, and put file
    descriptors for them in FDS[0] and FDS[1].  If PROTOCOL is zero,
    one will be chosen automatically.  Returns 0 on success, -1 for errors.  */
-extern "C" EXPORT_SYMBOL int socketpair(int __domain, int __type, int __protocol, int __sv[2])
+EXPORT_SYMBOL int XLIO_SYMBOL(socketpair)(int __domain, int __type, int __protocol, int __sv[2])
 {
     PROFILE_FUNC
 
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.socketpair) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    int ret = orig_os_api.socketpair(__domain, __type, __protocol, __sv);
+    int ret = SYSCALL(socketpair, __domain, __type, __protocol, __sv);
 
     srdr_logdbg("(domain=%s(%d) type=%s(%d) protocol=%d, fd[%d,%d]) = %d",
                 socket_get_domain_str(__domain), __domain, socket_get_type_str(__type), __type,
@@ -2240,17 +2121,11 @@ extern "C" EXPORT_SYMBOL int socketpair(int __domain, int __type, int __protocol
    If successful, two file descriptors are stored in PIPEDES;
    bytes written on PIPEDES[1] can be read from PIPEDES[0].
    Returns 0 if successful, -1 if not.  */
-extern "C" EXPORT_SYMBOL int pipe(int __filedes[2])
+EXPORT_SYMBOL int XLIO_SYMBOL(pipe)(int __filedes[2])
 {
     PROFILE_FUNC
 
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.pipe) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    int ret = orig_os_api.pipe(__filedes);
+    int ret = SYSCALL(pipe, __filedes);
     srdr_logdbg("(fd[%d,%d]) = %d", __filedes[0], __filedes[1], ret);
 
     if (ret == 0 && g_p_fd_collection) {
@@ -2264,7 +2139,7 @@ extern "C" EXPORT_SYMBOL int pipe(int __filedes[2])
     return ret;
 }
 
-extern "C" EXPORT_SYMBOL int open(__const char *__file, int __oflag, ...)
+EXPORT_SYMBOL int XLIO_SYMBOL(open)(__const char *__file, int __oflag, ...)
 {
     va_list va;
     va_start(va, __oflag);
@@ -2272,13 +2147,7 @@ extern "C" EXPORT_SYMBOL int open(__const char *__file, int __oflag, ...)
 
     PROFILE_FUNC
 
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.open) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    int fd = orig_os_api.open(__file, __oflag, mode);
+    int fd = SYSCALL(open, __file, __oflag, mode);
     va_end(va);
 
     srdr_logdbg("(file=%s, flags=%#x, mode=%#x) = %d", __file, __oflag, mode, fd);
@@ -2289,17 +2158,11 @@ extern "C" EXPORT_SYMBOL int open(__const char *__file, int __oflag, ...)
     return fd;
 }
 
-extern "C" EXPORT_SYMBOL int creat(const char *__pathname, mode_t __mode)
+EXPORT_SYMBOL int XLIO_SYMBOL(creat)(const char *__pathname, mode_t __mode)
 {
     PROFILE_FUNC
 
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.creat) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    int fd = orig_os_api.creat(__pathname, __mode);
+    int fd = SYSCALL(creat, __pathname, __mode);
 
     srdr_logdbg("(pathname=%s, mode=%#x) = %d", __pathname, __mode, fd);
 
@@ -2310,17 +2173,11 @@ extern "C" EXPORT_SYMBOL int creat(const char *__pathname, mode_t __mode)
 }
 
 /* Duplicate FD, returning a new file descriptor on the same file.  */
-extern "C" EXPORT_SYMBOL int dup(int __fd)
+EXPORT_SYMBOL int XLIO_SYMBOL(dup)(int __fd)
 {
     PROFILE_FUNC
 
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.dup) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    int fid = orig_os_api.dup(__fd);
+    int fid = SYSCALL(dup, __fd);
 
     srdr_logdbg("(fd=%d) = %d", __fd, fid);
 
@@ -2337,7 +2194,7 @@ extern "C" EXPORT_SYMBOL int dup(int __fd)
 }
 
 /* Duplicate FD to FD2, closing FD2 and making it open on the same file.  */
-extern "C" EXPORT_SYMBOL int dup2(int __fd, int __fd2)
+EXPORT_SYMBOL int XLIO_SYMBOL(dup2)(int __fd, int __fd2)
 {
     PROFILE_FUNC
 
@@ -2346,13 +2203,7 @@ extern "C" EXPORT_SYMBOL int dup2(int __fd, int __fd2)
         handle_close(__fd2);
     }
 
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.dup2) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    int fid = orig_os_api.dup2(__fd, __fd2);
+    int fid = SYSCALL(dup2, __fd, __fd2);
 
     srdr_logdbg("(fd=%d, fd2=%d) = %d", __fd, __fd2, fid);
 
@@ -2362,28 +2213,11 @@ extern "C" EXPORT_SYMBOL int dup2(int __fd, int __fd2)
     return fid;
 }
 
-#ifdef _CHANGE_CLONE_PROTO_IN_SLES_10_
-extern "C" EXPORT_SYMBOL int clone(int (*__fn)(void *), void *__child_stack, int __flags,
-                                   void *__arg)
-{
-    PROFILE_FUNC
-
-    srdr_logfunc_entry("flags=%#x", __flags);
-
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.clone)
-        get_orig_funcs();
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    return orig_os_api.clone(__fn, __child_stack, __flags, __arg);
-}
-#endif
-
 /* Clone the calling process, creating an exact copy.
    Return -1 for errors, 0 to the new process,
    and the process ID of the new process to the old process.  */
 
-extern "C" EXPORT_SYMBOL pid_t fork(void)
+EXPORT_SYMBOL pid_t XLIO_SYMBOL(fork)(void)
 {
     PROFILE_FUNC
 
@@ -2398,12 +2232,6 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
         srdr_logdbg("ERROR: ibv_fork_init failed, the effect of an application calling fork() is "
                     "undefined!!");
     }
-
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.fork) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
 
 #if defined(DEFINED_NGINX)
     static int worker_index = -1;
@@ -2428,7 +2256,7 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
     }
 #endif
 
-    pid_t pid = orig_os_api.fork();
+    pid_t pid = SYSCALL(fork);
     if (pid == 0) {
 #if defined(DEFINED_NGINX)
         void *p_fd_collection_temp = g_p_fd_collection;
@@ -2491,17 +2319,17 @@ extern "C" EXPORT_SYMBOL pid_t fork(void)
 }
 
 /* Redirect vfork to fork  */
-extern "C" EXPORT_SYMBOL pid_t vfork(void)
+EXPORT_SYMBOL pid_t XLIO_SYMBOL(vfork)(void)
 {
     PROFILE_FUNC
 
-    return fork();
+    return XLIO_CALL(fork);
 }
 
 /* Put the program in the background, and dissociate from the controlling
    terminal.  If NOCHDIR is zero, do `chdir ("/")'.  If NOCLOSE is zero,
    redirects stdin, stdout, and stderr to /dev/null.  */
-extern "C" EXPORT_SYMBOL int daemon(int __nochdir, int __noclose)
+EXPORT_SYMBOL int XLIO_SYMBOL(daemon)(int __nochdir, int __noclose)
 {
     PROFILE_FUNC
 
@@ -2512,13 +2340,7 @@ extern "C" EXPORT_SYMBOL int daemon(int __nochdir, int __noclose)
         prepare_fork();
     }
 
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.daemon) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    int ret = orig_os_api.daemon(__nochdir, __noclose);
+    int ret = SYSCALL(daemon, __nochdir, __noclose);
     if (ret == 0) {
         g_is_forked_child = true;
         srdr_logdbg_exit("returned with %d", ret);
@@ -2547,104 +2369,15 @@ extern "C" EXPORT_SYMBOL int daemon(int __nochdir, int __noclose)
     return ret;
 }
 
-static void handler_intr(int sig)
+EXPORT_SYMBOL int XLIO_SYMBOL(sigaction)(int signum, const struct sigaction *act,
+                                         struct sigaction *oldact)
 {
-    switch (sig) {
-    case SIGINT:
-        g_b_exit = true;
-        srdr_logdbg("Catch Signal: SIGINT (%d)", sig);
-        break;
-    default:
-        srdr_logdbg("Catch Signal: %d", sig);
-        break;
-    }
-
-    if (g_act_prev.sa_handler) {
-        g_act_prev.sa_handler(sig);
-    }
+    return sigaction_internal(signum, act, oldact);
 }
 
-extern "C" EXPORT_SYMBOL int sigaction(int signum, const struct sigaction *act,
-                                       struct sigaction *oldact)
-{
-    int ret = 0;
-
-    PROFILE_FUNC
-
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.sigaction) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    if (safe_mce_sys().handle_sigintr) {
-        srdr_logdbg_entry("signum=%d, act=%p, oldact=%p", signum, act, oldact);
-
-        switch (signum) {
-        case SIGINT:
-            if (oldact && g_act_prev.sa_handler) {
-                *oldact = g_act_prev;
-            }
-            if (act) {
-                struct sigaction xlio_action;
-                xlio_action.sa_handler = handler_intr;
-                xlio_action.sa_flags = 0;
-                sigemptyset(&xlio_action.sa_mask);
-
-                ret = orig_os_api.sigaction(SIGINT, &xlio_action, NULL);
-
-                if (ret < 0) {
-                    srdr_logdbg("Failed to register SIGINT handler, calling to original sigaction "
-                                "handler");
-                    break;
-                }
-                srdr_logdbg("Registered SIGINT handler");
-                g_act_prev = *act;
-            }
-            if (ret >= 0) {
-                srdr_logdbg_exit("returned with %d", ret);
-            } else {
-                srdr_logdbg_exit("failed (errno=%d %m)", errno);
-            }
-
-            return ret;
-            break;
-        default:
-            break;
-        }
-    }
-    ret = orig_os_api.sigaction(signum, act, oldact);
-
-    if (safe_mce_sys().handle_sigintr) {
-        if (ret >= 0) {
-            srdr_logdbg_exit("returned with %d", ret);
-        } else {
-            srdr_logdbg_exit("failed (errno=%d %m)", errno);
-        }
-    }
-    return ret;
-}
-
-static void handle_signal(int signum)
-{
-    srdr_logdbg_entry("Caught signal! signum=%d", signum);
-
-    if (signum == SIGINT) {
-        g_b_exit = true;
-    }
-
-    if (g_sighandler) {
-        g_sighandler(signum);
-    }
-}
-
-extern "C" EXPORT_SYMBOL sighandler_t signal(int signum, sighandler_t handler)
+EXPORT_SYMBOL sighandler_t XLIO_SYMBOL(signal)(int signum, sighandler_t handler)
 {
     PROFILE_FUNC
-
-    if (!orig_os_api.signal) {
-        get_orig_funcs();
-    }
 
     if (safe_mce_sys().handle_sigintr) {
         srdr_logdbg_entry("signum=%d, handler=%p", signum, handler);
@@ -2653,28 +2386,22 @@ extern "C" EXPORT_SYMBOL sighandler_t signal(int signum, sighandler_t handler)
             // Only SIGINT is supported for now
             if (signum == SIGINT) {
                 g_sighandler = handler;
-                return orig_os_api.signal(SIGINT, &handle_signal);
+                return SYSCALL(signal, SIGINT, &handle_signal);
             }
         }
     }
 
-    return orig_os_api.signal(signum, handler);
+    return SYSCALL(signal, signum, handler);
 }
 
 #if defined(DEFINED_NGINX)
 
-extern "C" EXPORT_SYMBOL int setuid(uid_t uid)
+EXPORT_SYMBOL int XLIO_SYMBOL(setuid)(uid_t uid)
 {
     PROFILE_FUNC
 
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.setuid) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
     uid_t previous_uid = geteuid();
-    int orig_rc = orig_os_api.setuid(uid);
+    int orig_rc = SYSCALL(setuid, uid);
     if (orig_rc < 0) {
         srdr_logdbg_exit("failed (errno=%d %m)", errno);
     }
@@ -2687,11 +2414,11 @@ extern "C" EXPORT_SYMBOL int setuid(uid_t uid)
     return orig_rc;
 }
 
-extern "C" EXPORT_SYMBOL pid_t waitpid(pid_t pid, int *wstatus, int options)
+EXPORT_SYMBOL pid_t XLIO_SYMBOL(waitpid)(pid_t pid, int *wstatus, int options)
 {
     PROFILE_FUNC
 
-    pid_t child_pid = orig_os_api.waitpid(pid, wstatus, options);
+    pid_t child_pid = SYSCALL(waitpid, pid, wstatus, options);
     /* This segment is used as part of NGINX worker termination recovery mechanism. The mechanism
      * marks the worker PID slot as vacant with -1 later to reuse it in the fork system call.The
      * implicit assumptions here are that:
@@ -2705,7 +2432,8 @@ extern "C" EXPORT_SYMBOL pid_t waitpid(pid_t pid, int *wstatus, int options)
         g_p_app->unused_worker_id.insert(g_p_app->get_worker_id());
         g_p_app->map_thread_id.erase(getpid());
     }
+
     return child_pid;
 }
-
 #endif // DEFINED_NGINX
+}

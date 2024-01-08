@@ -360,7 +360,7 @@ void net_device_val::set_ip_array()
     static int _seq = 0;
 
     /* Set up the netlink socket */
-    fd = orig_os_api.socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+    fd = SYSCALL(socket, AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
     if (fd < 0) {
         nd_logerr("netlink socket() creation");
         return;
@@ -377,7 +377,7 @@ void net_device_val::set_ip_array()
     nl_req.addrmsg.ifa_index = m_if_idx;
 
     /* Send the netlink request */
-    rc = orig_os_api.send(fd, &nl_req, nl_req.hdr.nlmsg_len, 0);
+    rc = SYSCALL(send, fd, &nl_req, nl_req.hdr.nlmsg_len, 0);
     if (rc < 0) {
         nd_logerr("netlink send() operation");
         goto ret;
@@ -385,7 +385,7 @@ void net_device_val::set_ip_array()
 
     do {
         /* Receive the netlink reply */
-        rc = orig_os_api.recv(fd, nl_res, sizeof(nl_res), 0);
+        rc = SYSCALL(recv, fd, nl_res, sizeof(nl_res), 0);
         if (rc < 0) {
             nd_logerr("netlink recv() operation");
             goto ret;
@@ -442,7 +442,7 @@ void net_device_val::set_ip_array()
     } while (1);
 
 ret:
-    orig_os_api.close(fd);
+    SYSCALL(close, fd);
 
     print_ips();
 }
@@ -1038,8 +1038,8 @@ ring *net_device_val::reserve_ring(resource_allocation_key *key)
             int cq_ch_fd = ring_rx_fds_array[i];
             ev.data.fd = cq_ch_fd;
             BULLSEYE_EXCLUDE_BLOCK_START
-            if (unlikely(orig_os_api.epoll_ctl(g_p_net_device_table_mgr->global_ring_epfd_get(),
-                                               EPOLL_CTL_ADD, cq_ch_fd, &ev))) {
+            if (unlikely(SYSCALL(epoll_ctl, g_p_net_device_table_mgr->global_ring_epfd_get(),
+                                 EPOLL_CTL_ADD, cq_ch_fd, &ev))) {
                 nd_logerr(
                     "Failed to add RING notification fd to global_table_mgr_epfd (errno=%d %s)",
                     errno, strerror(errno));
@@ -1091,10 +1091,9 @@ int net_device_val::release_ring(resource_allocation_key *key)
             for (size_t i = 0; i < num_ring_rx_fds; i++) {
                 int cq_ch_fd = ring_rx_fds_array[i];
                 BULLSEYE_EXCLUDE_BLOCK_START
-                if (unlikely(
-                        (orig_os_api.epoll_ctl(g_p_net_device_table_mgr->global_ring_epfd_get(),
-                                               EPOLL_CTL_DEL, cq_ch_fd, NULL)) &&
-                        (!(errno == ENOENT || errno == EBADF)))) {
+                if (unlikely((SYSCALL(epoll_ctl, g_p_net_device_table_mgr->global_ring_epfd_get(),
+                                      EPOLL_CTL_DEL, cq_ch_fd, NULL)) &&
+                             (!(errno == ENOENT || errno == EBADF)))) {
                     nd_logerr("Failed to delete RING notification fd to global_table_mgr_epfd "
                               "(errno=%d %s)",
                               errno, strerror(errno));

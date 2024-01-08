@@ -32,6 +32,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <memory>
 #include <numeric>
 #include <vector>
 #include "common/def.h"

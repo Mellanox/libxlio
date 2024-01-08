@@ -213,7 +213,7 @@ int pipeinfo::fcntl(int __cmd, unsigned long int __arg)
         return ret_val;
     }
 
-    return orig_os_api.fcntl(m_fd, __cmd, __arg);
+    return SYSCALL(fcntl, m_fd, __cmd, __arg);
 }
 
 int pipeinfo::fcntl64(int __cmd, unsigned long int __arg)
@@ -225,7 +225,7 @@ int pipeinfo::fcntl64(int __cmd, unsigned long int __arg)
         return ret_val;
     }
 
-    return orig_os_api.fcntl64(m_fd, __cmd, __arg);
+    return SYSCALL(fcntl64, m_fd, __cmd, __arg);
 }
 
 int pipeinfo::ioctl(unsigned long int __request, unsigned long int __arg)
@@ -250,7 +250,7 @@ int pipeinfo::ioctl(unsigned long int __request, unsigned long int __arg)
         break;
     }
 
-    return orig_os_api.ioctl(m_fd, __request, __arg);
+    return SYSCALL(ioctl, m_fd, __request, __arg);
 }
 
 ssize_t pipeinfo::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
@@ -285,7 +285,7 @@ ssize_t pipeinfo::tx(xlio_tx_call_attr_t &tx_arg)
     m_lock_tx.lock();
     switch (tx_arg.opcode) {
     case TX_WRITE:
-        ret = orig_os_api.write(m_fd, p_iov[0].iov_base, p_iov[0].iov_len);
+        ret = SYSCALL(write, m_fd, p_iov[0].iov_base, p_iov[0].iov_len);
         break;
     case TX_SEND:
     case TX_SENDTO:
@@ -326,7 +326,10 @@ void pipeinfo::write_lbm_pipe_enhance()
 
     // Send the buffered data
     char buf[10] = "\0";
-    orig_os_api.write(m_fd, buf, 1);
+    auto result = SYSCALL(write, m_fd, buf, 1);
+    if (result == -1) {
+        pi_logdbg("write sycall failed");
+    }
 }
 
 void pipeinfo::statistics_print(vlog_levels_t log_level)

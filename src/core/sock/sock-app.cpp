@@ -35,6 +35,7 @@
 #endif
 
 #include <sock/socket_fd_api.h>
+#include <sock/sock-redirect.h>
 #include <sock/sockinfo_tcp.h>
 #include <sock/sockinfo_udp.h>
 #include <sock/fd_collection.h>
@@ -253,7 +254,7 @@ static int init_worker(int worker_id, int listen_fd)
         if (child_sock_fd_api) {
             child_sock_fd_api->copy_sockopt_fork(parent_sock_fd_api);
 
-            ret = bind(listen_fd, sa.get_p_sa(), sa_len);
+            ret = bind_internal(child_sock_fd_api, sa.get_p_sa(), sa_len);
             if (ret < 0) {
                 app_logerr("bind() error");
             }

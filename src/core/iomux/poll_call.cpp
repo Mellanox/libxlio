@@ -141,9 +141,9 @@ bool poll_call::wait_os(bool zero_timeout)
             to.tv_nsec = (m_timeout % 1000) * 1000000;
             pto = &to;
         }
-        m_n_all_ready_fds = orig_os_api.ppoll(m_fds, m_nfds, pto, m_sigmask);
+        m_n_all_ready_fds = SYSCALL(ppoll, m_fds, m_nfds, pto, m_sigmask);
     } else {
-        m_n_all_ready_fds = orig_os_api.poll(m_fds, m_nfds, zero_timeout ? 0 : m_timeout);
+        m_n_all_ready_fds = SYSCALL(poll, m_fds, m_nfds, zero_timeout ? 0 : m_timeout);
     }
     if (m_n_all_ready_fds < 0) {
         xlio_throw_object(io_mux_call::io_error);
@@ -175,9 +175,9 @@ bool poll_call::wait(const timeval &elapsed)
         to.tv_sec = m_timeout / 1000;
         to.tv_nsec = (m_timeout % 1000) * 1000000;
         pto = &to;
-        m_n_all_ready_fds = orig_os_api.ppoll(m_fds, m_nfds + 1, pto, m_sigmask);
+        m_n_all_ready_fds = SYSCALL(ppoll, m_fds, m_nfds + 1, pto, m_sigmask);
     } else {
-        m_n_all_ready_fds = orig_os_api.poll(m_fds, m_nfds + 1, timeout);
+        m_n_all_ready_fds = SYSCALL(poll, m_fds, m_nfds + 1, timeout);
     }
 
     if (m_n_all_ready_fds > 0 && m_fds[m_nfds].revents) {

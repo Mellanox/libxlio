@@ -626,7 +626,7 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
                     /* coverity[double_unlock] coverity[unlock] TODO: RM#1049980 */
                     m_lock_ring_tx.unlock();
 
-                    ret = orig_os_api.poll(&poll_fd, 1, 100);
+                    ret = SYSCALL(poll, &poll_fd, 1, 100);
                     if (ret == 0) {
                         m_lock_ring_tx_buf_wait.unlock();
                         /* coverity[double_lock] TODO: RM#1049980 */
@@ -820,7 +820,7 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
                 /* coverity[double_unlock] TODO: RM#1049980 */
                 m_lock_ring_tx.unlock();
 
-                ret = orig_os_api.poll(&poll_fd, 1, -1);
+                ret = SYSCALL(poll, &poll_fd, 1, -1);
                 if (ret <= 0) {
                     ring_logdbg("failed blocking on cq_mgr_tx (errno=%d %m)", errno);
                     m_lock_ring_tx_buf_wait.unlock();
