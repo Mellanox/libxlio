@@ -175,7 +175,7 @@ void ring_bond::restart()
                         epfd = g_p_net_device_table_mgr->global_ring_epfd_get();
                         if (epfd > 0) {
                             fd = ring_rx_fds_array[k];
-                            rc = orig_os_api.epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+                            rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_DEL, fd, NULL);
                             ring_logdbg("Remove fd=%d from epfd=%d rc=%d errno=%d", fd, epfd, rc,
                                         errno);
                         }
@@ -186,14 +186,14 @@ void ring_bond::restart()
                             epfd = si->get_rx_epfd();
                             if (epfd > 0) {
                                 fd = ring_rx_fds_array[k];
-                                rc = orig_os_api.epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+                                rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_DEL, fd, NULL);
                                 ring_logdbg("Remove fd=%d from epfd=%d rc=%d errno=%d", fd, epfd,
                                             rc, errno);
                             }
                             epfd = si->get_epoll_context_fd();
                             if (epfd > 0) {
                                 fd = ring_rx_fds_array[k];
-                                rc = orig_os_api.epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+                                rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_DEL, fd, NULL);
                                 ring_logdbg("Remove fd=%d from epfd=%d rc=%d errno=%d", fd, epfd,
                                             rc, errno);
                             }
@@ -223,7 +223,7 @@ void ring_bond::restart()
                                     fd = ring_rx_fds_array[k];
                                     ev.events = EPOLLIN;
                                     ev.data.fd = fd;
-                                    rc = orig_os_api.epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev);
+                                    rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_ADD, fd, &ev);
                                     ring_logdbg("Add fd=%d from epfd=%d rc=%d errno=%d", fd, epfd,
                                                 rc, errno);
                                 }
@@ -239,7 +239,7 @@ void ring_bond::restart()
                                         fd = ring_rx_fds_array[k];
                                         ev.events = EPOLLIN;
                                         ev.data.fd = fd;
-                                        rc = orig_os_api.epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev);
+                                        rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_ADD, fd, &ev);
                                         ring_logdbg("Add fd=%d from epfd=%d rc=%d errno=%d", fd,
                                                     epfd, rc, errno);
                                     }
@@ -250,7 +250,7 @@ void ring_bond::restart()
                                         fd = ring_rx_fds_array[k];
                                         ev.events = EPOLLIN | EPOLLPRI;
                                         ev.data.u64 = (((uint64_t)CQ_FD_MARK << 32) | fd);
-                                        rc = orig_os_api.epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev);
+                                        rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_ADD, fd, &ev);
                                         ring_logdbg("Add fd=%d from epfd=%d rc=%d errno=%d", fd,
                                                     epfd, rc, errno);
                                     }

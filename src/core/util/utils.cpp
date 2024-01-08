@@ -495,7 +495,7 @@ void set_fd_block_mode(int fd, bool b_block)
 {
     __log_dbg("fd[%d]: setting to %sblocking mode (%d)", fd, b_block ? "" : "non-", b_block);
 
-    int flags = orig_os_api.fcntl(fd, F_GETFL);
+    int flags = SYSCALL(fcntl, fd, F_GETFL);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (flags < 0) {
         __log_err("failed reading fd[%d] flag (rc=%d errno=%d %m)", fd, flags, errno);
@@ -509,7 +509,7 @@ void set_fd_block_mode(int fd, bool b_block)
         flags |= O_NONBLOCK;
     }
 
-    int ret = orig_os_api.fcntl(fd, F_SETFL, flags);
+    int ret = SYSCALL(fcntl, fd, F_SETFL, flags);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (ret < 0) {
         __log_err("failed changing fd[%d] to %sblocking mode (rc=%d errno=%d %s)", fd,
@@ -544,20 +544,20 @@ int priv_read_file(const char *path, char *buf, size_t size,
                    vlog_levels_t log_level /*= VLOG_ERROR*/)
 {
     int len = -1;
-    int fd = open(path, O_RDONLY);
+    int fd = SYSCALL(open, path, O_RDONLY);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (fd < 0) {
         VLOG_PRINTF(log_level, "ERROR while opening file %s (errno %d %m)", path, errno);
         return -1;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
-    len = read(fd, buf, size);
+    len = SYSCALL(read, fd, buf, size);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (len < 0) {
         VLOG_PRINTF(log_level, "ERROR while reading from file %s (errno %d %m)", path, errno);
     }
     BULLSEYE_EXCLUDE_BLOCK_END
-    close(fd);
+    SYSCALL(close, fd);
     return len;
 }
 
@@ -674,20 +674,20 @@ public:
             .tv_usec = 10,
         };
 
-        m_fd = orig_os_api.socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+        m_fd = SYSCALL(socket, AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
         if (m_fd < 0) {
             throw std::runtime_error("Open netlink socket failed");
         }
 
-        if (orig_os_api.setsockopt(m_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof tv)) {
-            close(m_fd);
+        if (SYSCALL(setsockopt, m_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof tv)) {
+            SYSCALL(close, m_fd);
             throw std::runtime_error("Setsockopt non-blocking failed");
         }
     }
 
     socket_context_manager(int fd) noexcept
         : m_fd(fd) {};
-    ~socket_context_manager() { close(m_fd); };
+    ~socket_context_manager() { SYSCALL(close, m_fd); };
 
     void send_getaddr_request(uint8_t family)
     {
@@ -709,7 +709,7 @@ public:
         iovec iov = {&msg_buf, msg_buf.nl.nlmsg_len};
         msghdr msg = {&sa, sizeof(sa), &iov, 1, nullptr, 0, 0};
 
-        if (orig_os_api.sendmsg(m_fd, &msg, 0) < 0) {
+        if (SYSCALL(sendmsg, m_fd, &msg, 0) < 0) {
             throw std::runtime_error("Send RTM_GETADDR request failed");
         }
     }
@@ -720,7 +720,7 @@ public:
         iovec iov = {&m_buf, m_buf.size()};
         msghdr msg = {&sa, sizeof(sa), &iov, 1, nullptr, 0, 0};
 
-        return orig_os_api.recvmsg(m_fd, &msg, 0);
+        return SYSCALL(recvmsg, m_fd, &msg, 0);
     }
 
     nlmsghdr *get_nlmsghdr() { return reinterpret_cast<nlmsghdr *>(&m_buf); }
@@ -837,7 +837,7 @@ uint16_t get_vlan_id_from_ifname(const char *ifname)
 {
     // find vlan id from interface name
     struct vlan_ioctl_args ifr;
-    int fd = orig_os_api.socket(AF_INET, SOCK_DGRAM, 0);
+    int fd = SYSCALL(socket, AF_INET, SOCK_DGRAM, 0);
 
     if (fd < 0) {
         __log_err("ERROR from socket() (errno=%d %m)", errno);
@@ -847,15 +847,15 @@ uint16_t get_vlan_id_from_ifname(const char *ifname)
     ifr.cmd = GET_VLAN_VID_CMD;
     strncpy(ifr.device1, ifname, sizeof(ifr.device1) - 1);
 
-    if (orig_os_api.ioctl(fd, SIOCGIFVLAN, &ifr) < 0) {
+    if (SYSCALL(ioctl, fd, SIOCGIFVLAN, &ifr) < 0) {
         __log_dbg(
             "Failure in ioctl(SIOCGIFVLAN, cmd=GET_VLAN_VID_CMD) for interface '%s' (errno=%d %m)",
             ifname, errno);
-        orig_os_api.close(fd);
+        SYSCALL(close, fd);
         return 0;
     }
 
-    orig_os_api.close(fd);
+    SYSCALL(close, fd);
 
     __log_dbg("found vlan id '%d' for interface '%s'", ifr.u.VID, ifname);
 
@@ -866,7 +866,7 @@ size_t get_vlan_base_name_from_ifname(const char *ifname, char *base_ifname, siz
 {
     // find vlan base name from interface name
     struct vlan_ioctl_args ifr;
-    int fd = orig_os_api.socket(AF_INET, SOCK_DGRAM, 0);
+    int fd = SYSCALL(socket, AF_INET, SOCK_DGRAM, 0);
     if (fd < 0) {
         __log_err("ERROR from socket() (errno=%d %m)", errno);
         return -1;
@@ -875,15 +875,15 @@ size_t get_vlan_base_name_from_ifname(const char *ifname, char *base_ifname, siz
     ifr.cmd = GET_VLAN_REALDEV_NAME_CMD;
     strncpy(ifr.device1, ifname, sizeof(ifr.device1) - 1);
 
-    if (orig_os_api.ioctl(fd, SIOCGIFVLAN, &ifr) < 0) {
+    if (SYSCALL(ioctl, fd, SIOCGIFVLAN, &ifr) < 0) {
         __log_dbg("Failure in ioctl(SIOCGIFVLAN, cmd=GET_VLAN_REALDEV_NAME_CMD) for interface '%s' "
                   "(errno=%d %m)",
                   ifname, errno);
-        orig_os_api.close(fd);
+        SYSCALL(close, fd);
         return 0;
     }
 
-    orig_os_api.close(fd);
+    SYSCALL(close, fd);
 
     size_t name_len = strlen(ifr.u.device2);
     if (base_ifname && name_len > 0) {
@@ -924,7 +924,7 @@ int run_and_retreive_system_command(const char *cmd_line, char *return_str, int 
     if (file) {
         int fd = fileno(file);
         if (fd > 0) {
-            int actual_len = read(fd, return_str, return_str_len - 1);
+            int actual_len = SYSCALL(read, fd, return_str, return_str_len - 1);
             if (actual_len > 0) {
                 return_str[actual_len] = '\0';
             } else {
@@ -1046,9 +1046,9 @@ bool get_bond_name(IN const char *ifname, OUT char *bond_name, IN int sz)
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         snprintf(upper_path, sizeof(upper_path), NETVSC_DEVICE_UPPER_FILE, base_ifname,
                  ifa->ifa_name);
-        int fd = open(upper_path, O_RDONLY);
+        int fd = SYSCALL(open, upper_path, O_RDONLY);
         if (fd >= 0) {
-            close(fd);
+            SYSCALL(close, fd);
             if (IFNAMSIZ <= sz) {
                 memcpy(bond_name, ifa->ifa_name, IFNAMSIZ);
             }
@@ -1109,9 +1109,9 @@ bool get_netvsc_slave(IN const char *ifname, OUT char *slave_name, OUT unsigned 
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         snprintf(netvsc_path, sizeof(netvsc_path), NETVSC_DEVICE_LOWER_FILE, base_ifname,
                  ifa->ifa_name);
-        int fd = open(netvsc_path, O_RDONLY);
+        int fd = SYSCALL(open, netvsc_path, O_RDONLY);
         if (fd >= 0) {
-            close(fd);
+            SYSCALL(close, fd);
             memcpy(slave_name, ifa->ifa_name, IFNAMSIZ);
             slave_flags = ifa->ifa_flags;
             __log_dbg("Found slave_name = %s, slave_flags = %u", slave_name, slave_flags);
@@ -1186,9 +1186,9 @@ bool check_device_exist(const char *ifname, const char *path)
 
     n = snprintf(device_path, sizeof(device_path), path, ifname);
     if (likely((0 < n) && (n < (int)sizeof(device_path)))) {
-        fd = orig_os_api.open(device_path, O_RDONLY);
+        fd = SYSCALL(open, device_path, O_RDONLY);
         if (fd >= 0) {
-            orig_os_api.close(fd);
+            SYSCALL(close, fd);
         }
         if (fd < 0 && errno == EMFILE) {
             __log_warn("There are no free fds in the system. This may cause unexpected behavior");
@@ -1212,9 +1212,9 @@ bool check_device_name_ib_name(const char *ifname, const char *ibname)
     n = snprintf(ib_path, sizeof(ib_path), "/sys/class/infiniband/%s/device/net/%s/ifindex", ibname,
                  str_ifname);
     if (likely((0 < n) && (n < (int)sizeof(ib_path)))) {
-        fd = open(ib_path, O_RDONLY);
+        fd = SYSCALL(open, ib_path, O_RDONLY);
         if (fd >= 0) {
-            close(fd);
+            SYSCALL(close, fd);
             return true;
         }
     }
@@ -1303,7 +1303,7 @@ int validate_tso(int if_index)
     struct ifreq req;
     struct ethtool_value eval;
 
-    fd = orig_os_api.socket(AF_INET, SOCK_DGRAM, 0);
+    fd = SYSCALL(socket, AF_INET, SOCK_DGRAM, 0);
     if (fd < 0) {
         __log_err("ERROR from socket() (errno=%d %m)", errno);
         return -1;
@@ -1313,13 +1313,13 @@ int validate_tso(int if_index)
     req.ifr_ifindex = if_index;
     if_indextoname(if_index, req.ifr_name);
     req.ifr_data = (char *)&eval;
-    ret = orig_os_api.ioctl(fd, SIOCETHTOOL, &req);
+    ret = SYSCALL(ioctl, fd, SIOCETHTOOL, &req);
     if (ret < 0) {
         __log_dbg("ioctl(SIOCETHTOOL) cmd=ETHTOOL_GTSO (errno=%d %m)", errno);
     } else {
         ret = eval.data;
     }
-    orig_os_api.close(fd);
+    SYSCALL(close, fd);
     return ret;
 #else
     NOT_IN_USE(if_index);
@@ -1335,7 +1335,7 @@ int validate_lro(int if_index)
     struct ifreq req;
     struct ethtool_value eval;
 
-    fd = orig_os_api.socket(AF_INET, SOCK_DGRAM, 0);
+    fd = SYSCALL(socket, AF_INET, SOCK_DGRAM, 0);
     if (fd < 0) {
         __log_err("ERROR from socket() (errno=%d %m)", errno);
         return -1;
@@ -1345,13 +1345,13 @@ int validate_lro(int if_index)
     req.ifr_ifindex = if_index;
     if_indextoname(if_index, req.ifr_name);
     req.ifr_data = (char *)&eval;
-    ret = orig_os_api.ioctl(fd, SIOCETHTOOL, &req);
+    ret = SYSCALL(ioctl, fd, SIOCETHTOOL, &req);
     if (ret < 0) {
         __log_dbg("ioctl(SIOCETHTOOL) cmd=ETHTOOL_GFLAGS (errno=%d %m)", errno);
     } else {
         ret = (eval.data & ETH_FLAG_LRO ? 1 : 0);
     }
-    orig_os_api.close(fd);
+    SYSCALL(close, fd);
     return ret;
 #else
     NOT_IN_USE(if_index);

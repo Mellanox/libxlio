@@ -146,7 +146,7 @@ int mapping_t::map(int fd)
 failed_unmap:
     (void)munmap(m_addr, m_size);
 failed_close_fd:
-    orig_os_api.close(m_fd);
+    SYSCALL(close, m_fd);
     m_addr = NULL;
     m_size = 0;
     m_fd = -1;
@@ -171,7 +171,7 @@ int mapping_t::unmap(void)
         map_logerr("munmap() errno=%d (%s)", errno, strerror(errno));
     }
     p_cache->memory_free(m_size);
-    orig_os_api.close(m_fd);
+    SYSCALL(close, m_fd);
     m_fd = -1;
     m_addr = NULL;
     m_size = 0;
@@ -230,7 +230,7 @@ int mapping_t::duplicate_fd(int fd, bool &rw)
         len = readlink(link, filename, sizeof(filename) - 1);
         if (len > 0) {
             filename[len] = '\0';
-            result = orig_os_api.open(filename, O_RDWR);
+            result = SYSCALL(open, filename, O_RDWR);
             if (result < 0) {
                 map_logdbg("open() errno=%d (%s)", errno, strerror(errno));
             } else {
@@ -248,11 +248,11 @@ int mapping_t::duplicate_fd(int fd, bool &rw)
 
     if (result < 0) {
         /* Fallback to dup(2). */
-        result = orig_os_api.dup(fd);
+        result = SYSCALL(dup, fd);
         if (result < 0) {
             map_logerr("dup() errno=%d (%s)", errno, strerror(errno));
         } else {
-            int flags = orig_os_api.fcntl(result, F_GETFL);
+            int flags = SYSCALL(fcntl, result, F_GETFL);
             rw = (flags > 0) && ((flags & O_RDWR) == O_RDWR);
         }
     }

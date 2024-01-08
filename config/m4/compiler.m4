@@ -71,107 +71,12 @@ AC_DEFUN([CHECK_COMPILER_ATTRIBUTE], [
 # Usage: CHECK_COMPILER_CXX([standard], [option], [definition])
 # Note:
 # - [definition] can be omitted if it is equal to attribute
-#
-AC_DEFUN([CHECK_COMPILER_CXX], [
-    case "$1" in
-        11)
-m4_define([_prj_cv_compiler_body_11], [[
-#ifndef __cplusplus
-#error This is not a C++ compiler
-#elif __cplusplus < 201103L
-#error This is not a C++11 compiler
-#else
-#include <iostream>
-int main(int argc, char** argv)
-{
-    (void)argc;
-    (void)argv;
-    /* decltype */
-    int a = 5;
-    decltype(a) b = a;
-    return (b - a);
-}
-#endif  // __cplusplus >= 201103L
-]])
-            ;;
-        14)
-m4_define([_prj_cv_compiler_body_14], [[
-#ifndef __cplusplus
-#error This is not a C++ compiler
-#elif __cplusplus < 201402L
-#error This is not a C++14 compiler
-#else
-#include <iostream>
-int main(int argc, char** argv)
-{
-    (void)argc;
-    (void)argv;
-    /* Binary integer literals */
-    constexpr auto i = 0b0000000000101010;
-    static_assert(i == 42, "wrong value");
-    return 0;
-}
-#endif  // __cplusplus >= 201402L
-]])
-            ;;
-        17)
-m4_define([_prj_cv_compiler_body_17], [[
-#ifndef __cplusplus
-#error This is not a C++ compiler
-#elif __cplusplus < 201703L
-#error This is not a C++17 compiler
-#else
-int main(int argc, char** argv)
-{
-    (void)argc;
-    (void)argv;
-    // Check constexpr lambda
-    auto identity = [](int n) constexpr { return n; };
-    static_assert(identity(123) == 123);
-    return 0;
-}
-#endif  // __cplusplus >= 201703L
-]])
-            ;;
-        *)
-            AC_MSG_ERROR([invalid first argument as [$1] to [$0]])
-            ;;
-    esac
-    case "$2" in
-        std)
-            prj_cv_option=-std=c++$1
-            ;;
-        gnu)
-            prj_cv_option=-std=gnu++$1
-            ;;
-        *)
-            AC_MSG_ERROR([invalid first argument as [$2] to [$0]])
-            ;;
-    esac
-
-    AC_CACHE_VAL(prj_cv_compiler_cxx_[$1], [
-        prj_cv_compiler_save_CXXFLAGS="$CXXFLAGS"
-        CXXFLAGS="$prj_cv_option $CXXFLAGS"
-
-        #
-        # Try to compile using the C++ compiler
-        #
-        AC_LANG_PUSH(C++)
-        AC_COMPILE_IFELSE([AC_LANG_SOURCE(_prj_cv_compiler_body_[$1])],
-                       [prj_cv_compiler_cxx_$1=yes],
-                       [prj_cv_compiler_cxx_$1=no])
-        AC_LANG_POP(C++)
-
-        CXXFLAGS="$prj_cv_compiler_save_CXXFLAGS"
-    ])
-    AC_MSG_CHECKING([for compiler c++ [$1]])
-    AC_MSG_RESULT([$prj_cv_compiler_cxx_$1])
-    AS_IF([test "x$prj_cv_compiler_cxx_[$1]" = "xyes"],
-        [CXXFLAGS="$prj_cv_option $CXXFLAGS"],
-        [AC_MSG_ERROR([A compiler with support for C++[$1] language features is required])]
-    )
-])
-
+saved_cxxflags="$CXXFLAGS"
+CXXFLAGS="-Werror -std=c++14"
+AC_MSG_CHECKING([whether CXX supports -std=c++14])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([])], [AC_MSG_RESULT([yes])],
+	[AC_MSG_ERROR([C++14 is unsupported])])
+CXXFLAGS="-std=c++14 $saved_cxxflags"
 
 ##########################
 # Configure compiler capabilities
@@ -256,6 +161,4 @@ else
     AC_MSG_CHECKING([for symbols visibility])
     AC_MSG_RESULT([yes])
 fi
-
-CHECK_COMPILER_CXX([14], [std], [])
 ])

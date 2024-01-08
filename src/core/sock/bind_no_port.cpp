@@ -52,7 +52,7 @@ int bind_no_port::set_src_port_in_db(int fd, in_port_t port, flow_tuple &tuple)
     if (INPORT_ANY == port) {
         sock_addr addr;
         socklen_t addr_len = sizeof(addr);
-        if ((ret = orig_os_api.getsockname(fd, addr.get_p_sa(), &addr_len))) {
+        if ((ret = SYSCALL(getsockname, fd, addr.get_p_sa(), &addr_len))) {
             return ret;
         }
         port = addr.get_in_port();
@@ -92,7 +92,7 @@ int bind_no_port::bind_and_set_port_map(const sock_addr &src, const sock_addr &d
     in_port_t chosen_port = choose_src_port(tuple);
     addr.set_in_port(chosen_port);
 
-    if ((ret = orig_os_api.bind(fd, addr.get_p_sa(), addr_len))) {
+    if ((ret = SYSCALL(bind, fd, addr.get_p_sa(), addr_len))) {
         return ret;
     }
 

@@ -33,6 +33,10 @@
 #ifndef SOCK_REDIRECT_H
 #define SOCK_REDIRECT_H
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 // if you need select with more than 1024 sockets - enable this
 #ifndef SELECT_BIG_SETSIZE
 #define SELECT_BIG_SETSIZE 0
@@ -84,6 +88,26 @@
 #include <vector>
 #include <mutex>
 #include <set>
+
+#ifdef XLIO_STATIC_BUILD
+#define XLIO_SYMBOL(_func)                    xlio_##_func
+#define SYSCALL(_func, ...)                   ::_func(__VA_ARGS__)
+#define XLIO_CALL(_func, ...)                 xlio_##_func(__VA_ARGS__)
+#define SYSCALL_ERRNO_UNSUPPORTED(_func, ...) SYSCALL(_func, __VA_ARGS__)
+#define VALID_SYSCALL(_func)                  (true)
+#else
+#define XLIO_SYMBOL(_func) _func
+#if defined(__GNUC__) && !defined(__clang__)
+#define VALID_SYSCALL(_func) (__builtin_addressof(orig_os_api._func) != nullptr)
+#else
+#define VALID_SYSCALL(_func) ((orig_os_api._func) != nullptr)
+#endif
+#define SYSCALL(_func, ...)                                                                        \
+    ((VALID_SYSCALL(_func) ? (void)0 : get_orig_funcs()), orig_os_api._func(__VA_ARGS__))
+#define SYSCALL_ERRNO_UNSUPPORTED(_func, ...)                                                      \
+    (VALID_SYSCALL(_func) ? orig_os_api._func(__VA_ARGS__) : ((errno = EOPNOTSUPP), -1))
+#define XLIO_CALL(_func, ...) _func(__VA_ARGS__)
+#endif /* XLIO_STATIC_BUILD */
 
 struct mmsghdr;
 
@@ -220,5 +244,11 @@ bool handle_close(int fd, bool cleanup = false, bool passthrough = false);
 // this is critical in case XLIO was loaded using dlopen and not using LD_PRELOAD
 // TODO: look for additional such functions/calls
 int socket_internal(int __domain, int __type, int __protocol, bool shadow, bool check_offload);
+
+// allow calling our sendmsg(...) implementation safely from within libxlio.so
+ssize_t sendmsg_internal(void *sock, __const struct msghdr *__msg, int __flags);
+
+// allow calling our bind(...) implementation safely from within libxlio.so
+int bind_internal(void *sock, const struct sockaddr *addr, socklen_t addrlen);
 
 #endif // SOCK_REDIRECT_H

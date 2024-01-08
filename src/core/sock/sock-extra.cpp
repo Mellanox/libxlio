@@ -83,12 +83,7 @@ extern "C" int xlio_recvfrom_zcopy(int __fd, void *__buf, size_t __nbytes, int *
         *__flags |= MSG_XLIO_ZCOPY;
         return p_socket_object->rx(RX_RECVFROM, piov, 1, __flags, __from, __fromlen);
     }
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!orig_os_api.recvfrom) {
-        get_orig_funcs();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-    return orig_os_api.recvfrom(__fd, __buf, __nbytes, *__flags, __from, __fromlen);
+    return SYSCALL(recvfrom, __fd, __buf, __nbytes, *__flags, __from, __fromlen);
 }
 
 extern "C" int xlio_recvfrom_zcopy_free_packets(int __fd, struct xlio_recvfrom_zcopy_packet_t *pkts,
@@ -315,7 +310,7 @@ static inline struct cmsghdr *__cmsg_nxthdr(void *__ctl, size_t __size, struct c
     return __ptr;
 }
 
-extern "C" int xlio_ioctl(void *cmsg_hdr, size_t cmsg_len)
+extern "C" int xlio_extra_ioctl(void *cmsg_hdr, size_t cmsg_len)
 {
     struct cmsghdr *cmsg = (struct cmsghdr *)cmsg_hdr;
 
@@ -386,7 +381,7 @@ struct xlio_api_t *extra_api(void)
             enable_socketxtreme ? xlio_socketxtreme_free_buff : dummy_xlio_socketxtreme_free_buff,
             XLIO_EXTRA_API_SOCKETXTREME_FREE_XLIO_BUFF);
         SET_EXTRA_API(dump_fd_stats, xlio_dump_fd_stats, XLIO_EXTRA_API_DUMP_FD_STATS);
-        SET_EXTRA_API(ioctl, xlio_ioctl, XLIO_EXTRA_API_IOCTL);
+        SET_EXTRA_API(ioctl, xlio_extra_ioctl, XLIO_EXTRA_API_IOCTL);
     }
 
     return xlio_api;

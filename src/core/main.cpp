@@ -77,6 +77,7 @@
 
 #include "util/instrumentation.h"
 #include "util/agent.h"
+#include "xlio.h"
 
 void check_netperf_flags();
 

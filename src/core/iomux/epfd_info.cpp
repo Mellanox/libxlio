@@ -45,7 +45,7 @@
 
 int epfd_info::remove_fd_from_epoll_os(int fd)
 {
-    int ret = orig_os_api.epoll_ctl(m_epfd, EPOLL_CTL_DEL, fd, NULL);
+    int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, fd, NULL);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (ret < 0) {
         __log_dbg("failed to remove fd=%d from os epoll epfd=%d (errno=%d %m)", fd, m_epfd, errno);
@@ -152,7 +152,7 @@ int epfd_info::ctl(int op, int fd, epoll_event *event)
     }
 
     // YossiE TODO make "event table" - and add index in that table instead
-    // of real event (in orig_os_api.epoll_ctl). must have this because fd's can
+    // of real event (in SYSCALL(epoll_ctl)). must have this because fd's can
     // be added after the cq.
     lock();
 
@@ -237,7 +237,7 @@ int epfd_info::add_fd(int fd, epoll_event *event)
         evt.events = event->events;
         evt.data.u64 = 0; // zero all data
         evt.data.fd = fd;
-        ret = orig_os_api.epoll_ctl(m_epfd, EPOLL_CTL_ADD, fd, &evt);
+        ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_ADD, fd, &evt);
         BULLSEYE_EXCLUDE_BLOCK_START
         if (ret < 0) {
             __log_dbg("failed to add fd=%d to epoll epfd=%d (errno=%d %m)", fd, m_epfd, errno);
@@ -341,7 +341,7 @@ void epfd_info::increase_ring_ref_count(ring *ring)
             evt.events = EPOLLIN | EPOLLPRI;
             int fd = ring_rx_fds_array[i];
             evt.data.u64 = (((uint64_t)CQ_FD_MARK << 32) | fd);
-            int ret = orig_os_api.epoll_ctl(m_epfd, EPOLL_CTL_ADD, fd, &evt);
+            int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_ADD, fd, &evt);
             BULLSEYE_EXCLUDE_BLOCK_START
             if (ret < 0) {
                 __log_dbg("failed to add cq fd=%d to epoll epfd=%d (errno=%d %m)", fd, m_epfd,
@@ -378,7 +378,7 @@ void epfd_info::decrease_ring_ref_count(ring *ring)
         int *ring_rx_fds_array = ring->get_rx_channel_fds(num_ring_rx_fds);
         for (size_t i = 0; i < num_ring_rx_fds; i++) {
             // delete cq fd from epfd
-            int ret = orig_os_api.epoll_ctl(m_epfd, EPOLL_CTL_DEL, ring_rx_fds_array[i], NULL);
+            int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, ring_rx_fds_array[i], NULL);
             BULLSEYE_EXCLUDE_BLOCK_START
             if (ret < 0) {
                 __log_dbg("failed to remove cq fd=%d from epfd=%d (errno=%d %m)",
@@ -503,7 +503,7 @@ int epfd_info::mod_fd(int fd, epoll_event *event)
         evt.events = event->events;
         evt.data.u64 = 0; // zero all data
         evt.data.fd = fd;
-        ret = orig_os_api.epoll_ctl(m_epfd, EPOLL_CTL_MOD, fd, &evt);
+        ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_MOD, fd, &evt);
         BULLSEYE_EXCLUDE_BLOCK_START
         if (ret < 0) {
             __log_err("failed to modify fd=%d in epoll epfd=%d (errno=%d %m)", fd, m_epfd, errno);
@@ -754,7 +754,7 @@ int epfd_info::ring_wait_for_notification_and_process_element(uint64_t *p_poll_s
         } else {
             __log_dbg("failed to find channel fd. removing cq fd=%d from epfd=%d", fd, m_epfd);
             BULLSEYE_EXCLUDE_BLOCK_START
-            if ((orig_os_api.epoll_ctl(m_epfd, EPOLL_CTL_DEL, fd, NULL)) &&
+            if ((SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, fd, NULL)) &&
                 (!(errno == ENOENT || errno == EBADF))) {
                 __log_err("failed to del cq channel fd=%d from os epfd=%d (errno=%d %m)", fd,
                           m_epfd, errno);
