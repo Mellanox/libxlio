@@ -200,10 +200,9 @@ bool epoll_wait_call::_wait(int timeout)
     }
 
     if (m_sigmask) {
-        ready_fds =
-            orig_os_api.epoll_pwait(m_epfd, m_p_ready_events, m_maxevents, timeout, m_sigmask);
+        ready_fds = SYSCALL(epoll_pwait, m_epfd, m_p_ready_events, m_maxevents, timeout, m_sigmask);
     } else {
-        ready_fds = orig_os_api.epoll_wait(m_epfd, m_p_ready_events, m_maxevents, timeout);
+        ready_fds = SYSCALL(epoll_wait, m_epfd, m_p_ready_events, m_maxevents, timeout);
     }
 
     if (timeout) {

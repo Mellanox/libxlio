@@ -219,9 +219,9 @@ bool select_call::wait_os(bool zero_timeout)
             pto_pselect = &to_pselect;
         }
         m_n_all_ready_fds =
-            orig_os_api.pselect(m_nfds, m_readfds, m_writefds, m_exceptfds, pto_pselect, m_sigmask);
+            SYSCALL(pselect, m_nfds, m_readfds, m_writefds, m_exceptfds, pto_pselect, m_sigmask);
     } else {
-        m_n_all_ready_fds = orig_os_api.select(m_nfds, m_readfds, m_writefds, m_exceptfds, pto);
+        m_n_all_ready_fds = SYSCALL(select, m_nfds, m_readfds, m_writefds, m_exceptfds, pto);
     }
     if (m_n_all_ready_fds < 0) {
         xlio_throw_object(io_mux_call::io_error);
@@ -283,10 +283,10 @@ bool select_call::wait(const timeval &elapsed)
             pto_pselect = &to_pselect;
         }
         m_n_all_ready_fds =
-            orig_os_api.pselect(m_nfds, m_readfds, m_writefds, m_exceptfds, pto_pselect, m_sigmask);
+            SYSCALL(pselect, m_nfds, m_readfds, m_writefds, m_exceptfds, pto_pselect, m_sigmask);
     } else {
         m_n_all_ready_fds =
-            orig_os_api.select(m_nfds_with_cq, m_readfds, m_writefds, m_exceptfds, pto);
+            SYSCALL(select, m_nfds_with_cq, m_readfds, m_writefds, m_exceptfds, pto);
     }
     __log_func("done select CQ+OS nfds=%d cqfd=%d pto=%p ready=%d!!!", m_nfds_with_cq, m_cqepfd,
                pto, m_n_all_ready_fds);

@@ -84,7 +84,7 @@ prj_cv_dpcp_save_LDFLAGS="$LDFLAGS"
 prj_cv_dpcp_save_LIBS="$LIBS"
 
 prj_cv_dpcp_CPPFLAGS="-I$with_dpcp/include"
-prj_cv_dpcp_LIBS="-ldpcp -lmlx5"
+prj_cv_dpcp_LIBS="-ldpcp -lmlx5 -libverbs -lgcov"
 prj_cv_dpcp_LDFLAGS="-L$with_dpcp/lib -Wl,--rpath,$with_dpcp/lib"
 if test -d "$with_dpcp/lib64"; then
     prj_cv_dpcp_LDFLAGS="-L$with_dpcp/lib64 -Wl,--rpath,$with_dpcp/lib64"

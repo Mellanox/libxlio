@@ -76,7 +76,7 @@ net_device_table_mgr::net_device_table_mgr()
 
     ndtm_logdbg("");
 
-    m_global_ring_epfd = orig_os_api.epoll_create(48);
+    m_global_ring_epfd = SYSCALL(epoll_create, 48);
 
     BULLSEYE_EXCLUDE_BLOCK_START
     if (m_global_ring_epfd == -1) {
@@ -85,12 +85,12 @@ net_device_table_mgr::net_device_table_mgr()
         throw_xlio_exception("epoll_create failed");
     }
 
-    if (orig_os_api.pipe(m_global_ring_pipe_fds)) {
+    if (SYSCALL(pipe, m_global_ring_pipe_fds)) {
         ndtm_logerr("pipe create failed. (errno=%d %m)", errno);
         free_ndtm_resources();
         throw_xlio_exception("pipe create failed");
     }
-    if (orig_os_api.write(m_global_ring_pipe_fds[1], "#", 1) != 1) {
+    if (SYSCALL(write, m_global_ring_pipe_fds[1], "#", 1) != 1) {
         ndtm_logerr("pipe write failed. (errno=%d %m)", errno);
         free_ndtm_resources();
         throw_xlio_exception("pipe write failed");
@@ -151,12 +151,12 @@ void net_device_table_mgr::free_ndtm_resources()
     m_lock.lock();
 
     if (m_global_ring_epfd > 0) {
-        orig_os_api.close(m_global_ring_epfd);
+        SYSCALL(close, m_global_ring_epfd);
         m_global_ring_epfd = 0;
     }
 
-    orig_os_api.close(m_global_ring_pipe_fds[1]);
-    orig_os_api.close(m_global_ring_pipe_fds[0]);
+    SYSCALL(close, m_global_ring_pipe_fds[1]);
+    SYSCALL(close, m_global_ring_pipe_fds[0]);
 
     net_device_map_index_t::iterator itr;
     while ((itr = m_net_device_map_index.begin()) != m_net_device_map_index.end()) {
@@ -191,7 +191,7 @@ void net_device_table_mgr::update_tbl()
     net_device_val *p_net_device_val;
 
     /* Set up the netlink socket */
-    fd = orig_os_api.socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+    fd = SYSCALL(socket, AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
     if (fd < 0) {
         ndtm_logerr("netlink socket() creation");
         return;
@@ -210,7 +210,7 @@ void net_device_table_mgr::update_tbl()
     nl_req.infomsg.ifi_change = 0xffffffff;
 
     /* Send the netlink request */
-    rc = orig_os_api.send(fd, &nl_req, nl_req.hdr.nlmsg_len, 0);
+    rc = SYSCALL(send, fd, &nl_req, nl_req.hdr.nlmsg_len, 0);
     if (rc < 0) {
         ndtm_logerr("netlink send() operation");
         goto ret;
@@ -220,7 +220,7 @@ void net_device_table_mgr::update_tbl()
 
     do {
         /* Receive the netlink reply */
-        rc = orig_os_api.recv(fd, nl_res, sizeof(nl_res), 0);
+        rc = SYSCALL(recv, fd, nl_res, sizeof(nl_res), 0);
         if (rc < 0) {
             ndtm_logerr("netlink recv() operation");
             goto ret;
@@ -296,7 +296,7 @@ ret:
     ndtm_logdbg("Check completed. Found %ld offload capable network interfaces",
                 m_net_device_map_index.size());
 
-    orig_os_api.close(fd);
+    SYSCALL(close, fd);
 }
 
 void net_device_table_mgr::print_val_tbl()
@@ -362,9 +362,9 @@ net_device_val *net_device_table_mgr::get_net_device_val(int if_index)
                                net_dev->get_ifname());
                 if (ret > 0 && (size_t)ret < sizeof(sys_path)) {
                     ret = errno; /* to suppress errno */
-                    int fd = open(sys_path, O_RDONLY);
+                    int fd = SYSCALL(open, sys_path, O_RDONLY);
                     if (fd >= 0) {
-                        close(fd);
+                        SYSCALL(close, fd);
                         goto out;
                     }
                     errno = ret;
@@ -479,7 +479,7 @@ int net_device_table_mgr::global_ring_wait_for_notification_and_process_element(
     int max_fd = 16;
     struct epoll_event events[max_fd];
 
-    int res = orig_os_api.epoll_wait(global_ring_epfd_get(), events, max_fd, 0);
+    int res = SYSCALL(epoll_wait, global_ring_epfd_get(), events, max_fd, 0);
     if (res > 0) {
         for (int event_idx = 0; event_idx < res; ++event_idx) {
             int fd = events[event_idx].data.fd; // This is the Rx cq channel fd
@@ -512,8 +512,8 @@ int net_device_table_mgr::global_ring_wait_for_notification_and_process_element(
             } else {
                 ndtm_logdbg("removing wakeup fd from epfd");
                 BULLSEYE_EXCLUDE_BLOCK_START
-                if ((orig_os_api.epoll_ctl(m_global_ring_epfd, EPOLL_CTL_DEL,
-                                           m_global_ring_pipe_fds[0], NULL)) &&
+                if ((SYSCALL(epoll_ctl, m_global_ring_epfd, EPOLL_CTL_DEL,
+                             m_global_ring_pipe_fds[0], NULL)) &&
                     (!(errno == ENOENT || errno == EBADF))) {
                     ndtm_logerr("failed to del pipe channel fd from internal epfd (errno=%d %m)",
                                 errno);
@@ -588,8 +588,7 @@ void net_device_table_mgr::global_ring_wakeup()
     ev.data.ptr = NULL;
     int errno_tmp = errno; // don't let wakeup affect errno, as this can fail with EEXIST
     BULLSEYE_EXCLUDE_BLOCK_START
-    if ((orig_os_api.epoll_ctl(m_global_ring_epfd, EPOLL_CTL_ADD, m_global_ring_pipe_fds[0],
-                               &ev)) &&
+    if ((SYSCALL(epoll_ctl, m_global_ring_epfd, EPOLL_CTL_ADD, m_global_ring_pipe_fds[0], &ev)) &&
         (errno != EEXIST)) {
         ndtm_logerr("failed to add pipe channel fd to internal epfd (errno=%d %m)", errno);
     }

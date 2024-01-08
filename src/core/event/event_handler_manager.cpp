@@ -37,7 +37,7 @@
 #include <core/dev/net_device_table_mgr.h>
 #include "core/dev/ring_allocation_logic.h"
 #include "core/sock/fd_collection.h"
-#include "core/sock/sock-redirect.h" // calling orig_os_api.epoll()
+#include "core/sock/sock-redirect.h" // calling SYSCALL(epoll)()
 #include "core/proto/route_table_mgr.h"
 #include "timer_handler.h"
 #include "event_handler_ibverbs.h"
@@ -249,7 +249,7 @@ event_handler_manager::event_handler_manager(bool internal_thread_mode)
         return;
     }
 
-    m_epfd = orig_os_api.epoll_create(INITIAL_EVENTS_NUM);
+    m_epfd = SYSCALL(epoll_create, INITIAL_EVENTS_NUM);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (m_epfd == -1) {
         evh_logdbg("epoll_create failed on ibv device collection (errno=%d %m)", errno);
@@ -399,7 +399,7 @@ void event_handler_manager::stop_thread()
     m_event_handler_tid = 0;
 
     // Close main epfd and signaling socket
-    orig_os_api.close(m_epfd);
+    SYSCALL(close, m_epfd);
     m_epfd = -1;
 }
 
@@ -414,7 +414,7 @@ void event_handler_manager::update_epfd(int fd, int operation, int events)
     ev.events = events;
     ev.data.fd = fd;
     BULLSEYE_EXCLUDE_BLOCK_START
-    if ((orig_os_api.epoll_ctl(m_epfd, operation, fd, &ev) < 0) &&
+    if ((SYSCALL(epoll_ctl, m_epfd, operation, fd, &ev) < 0) &&
         (!(errno == ENOENT || errno == EBADF))) {
         const char *operation_str[] = {"", "ADD", "DEL", "MOD"};
         evh_logerr("epoll_ctl(%d, %s, fd=%d) failed (errno=%d %m)", m_epfd,
@@ -525,7 +525,7 @@ void event_handler_manager::priv_prepare_ibverbs_async_event_queue(event_handler
     set_fd_block_mode(poll_fd.fd, false);
 
     // empty the async event queue
-    while (orig_os_api.poll(&poll_fd, 1, 0) > 0) {
+    while (SYSCALL(poll, &poll_fd, 1, 0) > 0) {
         process_ibverbs_event(i);
         cnt++;
     }
@@ -795,7 +795,7 @@ void event_handler_manager::query_for_ibverbs_event(int async_fd)
     }
 
     // Check for ready events
-    if (orig_os_api.poll(&poll_fd, 1, 0) <= 0) {
+    if (SYSCALL(poll, &poll_fd, 1, 0) <= 0) {
         return;
     }
 
@@ -968,7 +968,7 @@ void *event_handler_manager::thread_loop()
                 epoll_event evt = {0, {0}};
                 evt.events = EPOLLIN | EPOLLPRI;
                 evt.data.fd = m_cq_epfd;
-                orig_os_api.epoll_ctl(m_epfd, EPOLL_CTL_ADD, m_cq_epfd, &evt);
+                SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_ADD, m_cq_epfd, &evt);
             }
         }
 
@@ -989,13 +989,13 @@ void *event_handler_manager::thread_loop()
             }
         }
 
-        evh_logfuncall("calling orig_os_api.epoll with %d msec timeout", timeout_msec);
-        int ret = orig_os_api.epoll_wait(m_epfd, p_events, maxevents, timeout_msec);
+        evh_logfuncall("calling SYSCALL(epoll) with %d msec timeout", timeout_msec);
+        int ret = SYSCALL(epoll_wait, m_epfd, p_events, maxevents, timeout_msec);
         if (ret < 0) {
             evh_logfunc("epoll returned with error, errno=%d %m)", errno);
             continue;
         }
-        evh_logfuncall("orig_os_api.epoll found %d ready fds", ret);
+        evh_logfuncall("SYSCALL(epoll) found %d ready fds", ret);
 
         // check pipe
         for (int idx = 0; (idx < ret) && (m_b_continue_running); ++idx) {
@@ -1058,7 +1058,7 @@ void *event_handler_manager::thread_loop()
             case EV_RDMA_CM:
                 int result;
                 poll_fd.fd = fd;
-                result = orig_os_api.poll(&poll_fd, 1, 0);
+                result = SYSCALL(poll, &poll_fd, 1, 0);
                 if (result == 0) {
                     evh_logdbg("error in fd %d", fd);
                     break;

@@ -120,7 +120,7 @@ void ring_tap::tap_create(net_device_val *p_ndev)
     unsigned char hw_addr[ETH_ALEN];
 
     /* Open TAP device */
-    if ((m_tap_fd = orig_os_api.open("/dev/net/tun", O_RDWR)) < 0) {
+    if ((m_tap_fd = SYSCALL(open, "/dev/net/tun", O_RDWR)) < 0) {
         ring_logerr("FAILED to open tap %m");
         rc = -errno;
         goto error;
@@ -146,14 +146,14 @@ void ring_tap::tap_create(net_device_val *p_ndev)
 
     /* Setting TAP attributes */
     ifr.ifr_flags = IFF_TAP | IFF_NO_PI | IFF_ONE_QUEUE;
-    if ((rc = orig_os_api.ioctl(m_tap_fd, TUNSETIFF, (void *)&ifr)) < 0) {
+    if ((rc = SYSCALL(ioctl, m_tap_fd, TUNSETIFF, (void *)&ifr)) < 0) {
         ring_logerr("ioctl failed fd = %d, %d %m", m_tap_fd, rc);
         rc = -errno;
         goto error;
     }
 
     /* Set TAP fd nonblocking */
-    if ((rc = orig_os_api.fcntl(m_tap_fd, F_SETFL, O_NONBLOCK)) < 0) {
+    if ((rc = SYSCALL(fcntl, m_tap_fd, F_SETFL, O_NONBLOCK)) < 0) {
         ring_logerr("ioctl failed fd = %d, %d %m", m_tap_fd, rc);
         rc = -errno;
         goto error;
@@ -168,7 +168,7 @@ void ring_tap::tap_create(net_device_val *p_ndev)
     }
 
     /* Create socket */
-    if ((ioctl_sock = orig_os_api.socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+    if ((ioctl_sock = SYSCALL(socket, AF_INET, SOCK_DGRAM, 0)) < 0) {
         ring_logerr("FAILED to open socket");
         rc = -errno;
         goto error;
@@ -178,7 +178,7 @@ void ring_tap::tap_create(net_device_val *p_ndev)
     ifr.ifr_hwaddr.sa_family = AF_LOCAL;
     get_local_ll_addr(p_ndev->get_ifname_link(), hw_addr, ETH_ALEN, false);
     memcpy(ifr.ifr_hwaddr.sa_data, hw_addr, ETH_ALEN);
-    if ((rc = orig_os_api.ioctl(ioctl_sock, SIOCSIFHWADDR, &ifr)) < 0) {
+    if ((rc = SYSCALL(ioctl, ioctl_sock, SIOCSIFHWADDR, &ifr)) < 0) {
         ring_logerr("ioctl SIOCSIFHWADDR failed %d %m, %s", rc, tap_name);
         rc = -errno;
         goto error;
@@ -186,7 +186,7 @@ void ring_tap::tap_create(net_device_val *p_ndev)
 
     /* Set link UP */
     ifr.ifr_flags |= (IFF_UP | IFF_SLAVE);
-    if ((rc = orig_os_api.ioctl(ioctl_sock, SIOCSIFFLAGS, &ifr)) < 0) {
+    if ((rc = SYSCALL(ioctl, ioctl_sock, SIOCSIFFLAGS, &ifr)) < 0) {
         ring_logerr("ioctl SIOCGIFFLAGS failed %d %m, %s", rc, tap_name);
         rc = -errno;
         goto error;
@@ -203,7 +203,7 @@ void ring_tap::tap_create(net_device_val *p_ndev)
     /* Update if_index on ring class */
     set_if_index(tap_if_index);
 
-    orig_os_api.close(ioctl_sock);
+    SYSCALL(close, ioctl_sock);
 
     ring_logdbg("Tap device %d: %s [fd=%d] was created successfully", tap_if_index, ifr.ifr_name,
                 m_tap_fd);
@@ -214,11 +214,11 @@ error:
     ring_logerr("Tap device creation failed %d, %m", rc);
 
     if (ioctl_sock >= 0) {
-        orig_os_api.close(ioctl_sock);
+        SYSCALL(close, ioctl_sock);
     }
 
     if (m_tap_fd >= 0) {
-        orig_os_api.close(m_tap_fd);
+        SYSCALL(close, m_tap_fd);
     }
 
     m_tap_fd = -1;
@@ -227,7 +227,7 @@ error:
 void ring_tap::tap_destroy()
 {
     if (m_tap_fd >= 0) {
-        orig_os_api.close(m_tap_fd);
+        SYSCALL(close, m_tap_fd);
 
         m_tap_fd = -1;
     }
@@ -425,7 +425,7 @@ int ring_tap::process_element_rx(void *pv_fd_ready_array)
         std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
         if (m_rx_pool.size() || request_more_rx_buffers()) {
             mem_buf_desc_t *buff = m_rx_pool.get_and_pop_front();
-            ret = orig_os_api.read(m_tap_fd, buff->p_buffer, buff->sz_buffer);
+            ret = SYSCALL(read, m_tap_fd, buff->p_buffer, buff->sz_buffer);
             if (ret > 0) {
                 /* Data was read and processed successfully */
                 buff->sz_data = ret;
@@ -607,7 +607,7 @@ int ring_tap::send_buffer(xlio_ibv_send_wr *wr, xlio_wr_tx_packet_attr attr)
         iovec[i].iov_len = wr->sg_list[i].length;
     }
 
-    ret = orig_os_api.writev(m_tap_fd, iovec, wr->num_sge);
+    ret = SYSCALL(writev, m_tap_fd, iovec, wr->num_sge);
     if (ret < 0) {
         ring_logdbg("writev: tap_fd %d, errno: %d\n", m_tap_fd, errno);
     }

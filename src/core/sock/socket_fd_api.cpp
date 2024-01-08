@@ -70,7 +70,7 @@ socket_fd_api::~socket_fd_api()
 #endif
 
     if (toclose) {
-        orig_os_api.close(m_fd);
+        SYSCALL(close, m_fd);
     }
 }
 
@@ -81,7 +81,7 @@ void socket_fd_api::destructor_helper()
 int socket_fd_api::shutdown(int __how)
 {
     __log_info_func("");
-    int ret = orig_os_api.shutdown(m_fd, __how);
+    int ret = SYSCALL(shutdown, m_fd, __how);
     if (ret) {
         __log_info_dbg("shutdown failed (ret=%d %m)", ret);
     }
@@ -91,7 +91,7 @@ int socket_fd_api::shutdown(int __how)
 int socket_fd_api::bind(const sockaddr *__addr, socklen_t __addrlen)
 {
     __log_info_func("");
-    int ret = orig_os_api.bind(m_fd, __addr, __addrlen);
+    int ret = SYSCALL(bind, m_fd, __addr, __addrlen);
     if (ret) {
         __log_info_dbg("bind failed (ret=%d %m)", ret);
     }
@@ -101,7 +101,7 @@ int socket_fd_api::bind(const sockaddr *__addr, socklen_t __addrlen)
 int socket_fd_api::connect(const sockaddr *__to, socklen_t __tolen)
 {
     __log_info_func("");
-    int ret = orig_os_api.connect(m_fd, __to, __tolen);
+    int ret = SYSCALL(connect, m_fd, __to, __tolen);
     if (ret) {
         __log_info_dbg("connect failed (ret=%d %m)", ret);
     }
@@ -111,7 +111,7 @@ int socket_fd_api::connect(const sockaddr *__to, socklen_t __tolen)
 int socket_fd_api::accept(struct sockaddr *__addr, socklen_t *__addrlen)
 {
     __log_info_func("");
-    int ret = orig_os_api.accept(m_fd, __addr, __addrlen);
+    int ret = SYSCALL(accept, m_fd, __addr, __addrlen);
     if (ret < 0) {
         __log_info_dbg("accept failed (ret=%d %m)", ret);
     }
@@ -121,7 +121,7 @@ int socket_fd_api::accept(struct sockaddr *__addr, socklen_t *__addrlen)
 int socket_fd_api::accept4(struct sockaddr *__addr, socklen_t *__addrlen, int __flags)
 {
     __log_info_func("");
-    int ret = orig_os_api.accept4(m_fd, __addr, __addrlen, __flags);
+    int ret = SYSCALL(accept4, m_fd, __addr, __addrlen, __flags);
     if (ret < 0) {
         __log_info_dbg("accept4 failed (ret=%d %m)", ret);
     }
@@ -131,7 +131,7 @@ int socket_fd_api::accept4(struct sockaddr *__addr, socklen_t *__addrlen, int __
 int socket_fd_api::listen(int backlog)
 {
     __log_info_func("");
-    int ret = orig_os_api.listen(m_fd, backlog);
+    int ret = SYSCALL(listen, m_fd, backlog);
     if (ret < 0) {
         __log_info_dbg("listen failed (ret=%d %m)", ret);
     }
@@ -141,7 +141,7 @@ int socket_fd_api::listen(int backlog)
 int socket_fd_api::getsockname(sockaddr *__name, socklen_t *__namelen)
 {
     __log_info_func("");
-    int ret = orig_os_api.getsockname(m_fd, __name, __namelen);
+    int ret = SYSCALL(getsockname, m_fd, __name, __namelen);
     if (ret) {
         __log_info_dbg("getsockname failed (ret=%d %m)", ret);
     }
@@ -151,7 +151,7 @@ int socket_fd_api::getsockname(sockaddr *__name, socklen_t *__namelen)
 int socket_fd_api::getpeername(sockaddr *__name, socklen_t *__namelen)
 {
     __log_info_func("");
-    int ret = orig_os_api.getpeername(m_fd, __name, __namelen);
+    int ret = SYSCALL(getpeername, m_fd, __name, __namelen);
     if (ret) {
         __log_info_dbg("getpeername failed (ret=%d %m)", ret);
     }
@@ -162,7 +162,7 @@ int socket_fd_api::setsockopt(int __level, int __optname, __const void *__optval
                               socklen_t __optlen)
 {
     __log_info_func("");
-    int ret = orig_os_api.setsockopt(m_fd, __level, __optname, __optval, __optlen);
+    int ret = SYSCALL(setsockopt, m_fd, __level, __optname, __optval, __optlen);
     if (ret) {
         __log_info_dbg("setsockopt failed (ret=%d %m)", ret);
     }
@@ -172,7 +172,7 @@ int socket_fd_api::setsockopt(int __level, int __optname, __const void *__optval
 int socket_fd_api::getsockopt(int __level, int __optname, void *__optval, socklen_t *__optlen)
 {
     __log_info_func("");
-    int ret = orig_os_api.getsockopt(m_fd, __level, __optname, __optval, __optlen);
+    int ret = SYSCALL(getsockopt, m_fd, __level, __optname, __optval, __optlen);
     if (ret) {
         __log_info_dbg("getsockopt failed (ret=%d %m)", ret);
     }
@@ -232,24 +232,24 @@ ssize_t socket_fd_api::rx_os(const rx_call_t call_type, iovec *p_iov, ssize_t sz
     switch (call_type) {
     case RX_READ:
         __log_info_func("calling os receive with orig read");
-        return orig_os_api.read(m_fd, p_iov[0].iov_base, p_iov[0].iov_len);
+        return SYSCALL(read, m_fd, p_iov[0].iov_base, p_iov[0].iov_len);
 
     case RX_READV:
         __log_info_func("calling os receive with orig readv");
-        return orig_os_api.readv(m_fd, p_iov, sz_iov);
+        return SYSCALL(readv, m_fd, p_iov, sz_iov);
 
     case RX_RECV:
         __log_info_func("calling os receive with orig recv");
-        return orig_os_api.recv(m_fd, p_iov[0].iov_base, p_iov[0].iov_len, flags);
+        return SYSCALL(recv, m_fd, p_iov[0].iov_base, p_iov[0].iov_len, flags);
 
     case RX_RECVFROM:
         __log_info_func("calling os receive with orig recvfrom");
-        return orig_os_api.recvfrom(m_fd, p_iov[0].iov_base, p_iov[0].iov_len, flags, __from,
-                                    __fromlen);
+        return SYSCALL(recvfrom, m_fd, p_iov[0].iov_base, p_iov[0].iov_len, flags, __from,
+                       __fromlen);
 
     case RX_RECVMSG: {
         __log_info_func("calling os receive with orig recvmsg");
-        return orig_os_api.recvmsg(m_fd, __msg, flags);
+        return SYSCALL(recvmsg, m_fd, __msg, flags);
     }
     }
     return (ssize_t)-1;
@@ -269,20 +269,19 @@ ssize_t socket_fd_api::tx_os(const tx_call_t call_type, const iovec *p_iov, cons
     switch (call_type) {
     case TX_WRITE:
         __log_info_func("calling os transmit with orig write");
-        return orig_os_api.write(m_fd, p_iov[0].iov_base, p_iov[0].iov_len);
+        return SYSCALL(write, m_fd, p_iov[0].iov_base, p_iov[0].iov_len);
 
     case TX_WRITEV:
         __log_info_func("calling os transmit with orig writev");
-        return orig_os_api.writev(m_fd, p_iov, sz_iov);
+        return SYSCALL(writev, m_fd, p_iov, sz_iov);
 
     case TX_SEND:
         __log_info_func("calling os transmit with orig send");
-        return orig_os_api.send(m_fd, p_iov[0].iov_base, p_iov[0].iov_len, __flags);
+        return SYSCALL(send, m_fd, p_iov[0].iov_base, p_iov[0].iov_len, __flags);
 
     case TX_SENDTO:
         __log_info_func("calling os transmit with orig sendto");
-        return orig_os_api.sendto(m_fd, p_iov[0].iov_base, p_iov[0].iov_len, __flags, __to,
-                                  __tolen);
+        return SYSCALL(sendto, m_fd, p_iov[0].iov_base, p_iov[0].iov_len, __flags, __to, __tolen);
 
     case TX_SENDMSG: {
         msghdr __message;
@@ -293,7 +292,7 @@ ssize_t socket_fd_api::tx_os(const tx_call_t call_type, const iovec *p_iov, cons
         __message.msg_namelen = __tolen;
 
         __log_info_func("calling os transmit with orig sendmsg");
-        return orig_os_api.sendmsg(m_fd, &__message, __flags);
+        return SYSCALL(sendmsg, m_fd, &__message, __flags);
     }
     default:
         __log_info_func("calling undefined os call type!");

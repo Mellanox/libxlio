@@ -640,5 +640,4 @@ static inline struct xlio_api_t *xlio_get_api()
     }
     return api_ptr;
 }
-
 #endif /* XLIO_EXTRA_H */

@@ -101,10 +101,10 @@ inline int sockinfo_udp::poll_os()
     uint64_t pending_data = 0;
 
     m_rx_udp_poll_os_ratio_counter = 0;
-    ret = orig_os_api.ioctl(m_fd, FIONREAD, &pending_data);
+    ret = SYSCALL(ioctl, m_fd, FIONREAD, &pending_data);
     if (unlikely(ret == -1)) {
         m_p_socket_stats->counters.n_rx_os_errors++;
-        si_udp_logdbg("orig_os_api.ioctl returned with error in polling loop (errno=%d %m)", errno);
+        si_udp_logdbg("SYSCALL(ioctl) returned with error in polling loop (errno=%d %m)", errno);
         return -1;
     }
     if (pending_data > 0) {
@@ -409,7 +409,7 @@ sockinfo_udp::sockinfo_udp(int fd, int domain)
     socklen_t option_len = sizeof(n_so_rcvbuf_bytes);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (unlikely(
-            orig_os_api.getsockopt(m_fd, SOL_SOCKET, SO_RCVBUF, &n_so_rcvbuf_bytes, &option_len))) {
+            SYSCALL(getsockopt, m_fd, SOL_SOCKET, SO_RCVBUF, &n_so_rcvbuf_bytes, &option_len))) {
         si_udp_logdbg("Failure in getsockopt (errno=%d %m)", errno);
     }
     BULLSEYE_EXCLUDE_BLOCK_END
@@ -424,7 +424,7 @@ sockinfo_udp::sockinfo_udp(int fd, int domain)
     ev.data.fd = m_fd;
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (unlikely(orig_os_api.epoll_ctl(m_rx_epfd, EPOLL_CTL_ADD, ev.data.fd, &ev))) {
+    if (unlikely(SYSCALL(epoll_ctl, m_rx_epfd, EPOLL_CTL_ADD, ev.data.fd, &ev))) {
         si_udp_logpanic("failed to add user's fd to internal epfd errno=%d (%m)", errno);
     }
     BULLSEYE_EXCLUDE_BLOCK_END
@@ -454,7 +454,7 @@ sockinfo_udp::~sockinfo_udp()
     /* AlexR:
        We don't have to be nice and delete the fd. close() will do that any way.
        This save us the problem when closing in the clean-up case - if we get closed be the
-       nameserver socket 53. if (unlikely( orig_os_api.epoll_ctl(m_rx_epfd, EPOLL_CTL_DEL, m_fd,
+       nameserver socket 53. if (unlikely( SYSCALL(epoll_ctl, m_rx_epfd, EPOLL_CTL_DEL, m_fd,
        NULL))) { if (errno == ENOENT) si_logfunc("failed to del users fd from internal epfd -
        probably clean up case (errno=%d %m)", errno); else si_logerr("failed to del users fd from
        internal epfd (errno=%d %m)", errno);
@@ -517,7 +517,7 @@ int sockinfo_udp::bind(const struct sockaddr *__addr, socklen_t __addrlen)
 
     // We always call the orig_bind which will check sanity of the user socket api
     // and the OS will also allocate a specific port that we can also use
-    int ret = orig_os_api.bind(m_fd, __addr, __addrlen);
+    int ret = SYSCALL(bind, m_fd, __addr, __addrlen);
     if (ret) {
         si_udp_logdbg("orig bind failed (ret=%d %m)", ret);
         // TODO: Should we set errno again (maybe log write modified the orig.bind() errno)?
@@ -549,7 +549,7 @@ int sockinfo_udp::connect(const struct sockaddr *__to, socklen_t __tolen)
 
     // We always call the orig_connect which will check sanity of the user socket api
     // and the OS will also allocate a specific bound port that we can also use
-    int ret = orig_os_api.connect(m_fd, __to, __tolen);
+    int ret = SYSCALL(connect, m_fd, __to, __tolen);
     if (ret) {
         si_udp_logdbg("orig connect failed (ret=%d, errno=%d %m)", ret, errno);
         return ret;
@@ -657,7 +657,7 @@ int sockinfo_udp::getsockname(struct sockaddr *__name, socklen_t *__namelen)
         return -1;
     }
 
-    return orig_os_api.getsockname(m_fd, __name, __namelen);
+    return SYSCALL(getsockname, m_fd, __name, __namelen);
 }
 
 int sockinfo_udp::on_sockname_change(struct sockaddr *__name, socklen_t __namelen)
@@ -732,7 +732,7 @@ int sockinfo_udp::setsockopt(int __level, int __optname, __const void *__optval,
     si_udp_logfunc("level=%d, optname=%d", __level, __optname);
 
     if (unlikely(m_state == SOCKINFO_DESTROYING) || unlikely(g_b_exit)) {
-        return orig_os_api.setsockopt(m_fd, __level, __optname, __optval, __optlen);
+        return SYSCALL(setsockopt, m_fd, __level, __optname, __optval, __optlen);
     }
 
     std::lock_guard<decltype(m_lock_snd)> lock_tx(m_lock_snd);
@@ -1136,7 +1136,7 @@ int sockinfo_udp::setsockopt(int __level, int __optname, __const void *__optval,
             // offloaded, check if need to pend
             else if (m_bound.is_anyport()) {
                 // Delay attaching to this MC group until we have bound UDP port
-                ret = orig_os_api.setsockopt(m_fd, __level, __optname, __optval, __optlen);
+                ret = SYSCALL(setsockopt, m_fd, __level, __optname, __optval, __optlen);
                 if (ret) {
                     return ret;
                 }
@@ -1149,7 +1149,7 @@ int sockinfo_udp::setsockopt(int __level, int __optname, __const void *__optval,
             }
 
             if (goto_os) {
-                ret = orig_os_api.setsockopt(m_fd, __level, __optname, __optval, __optlen);
+                ret = SYSCALL(setsockopt, m_fd, __level, __optname, __optval, __optlen);
                 if (ret) {
                     return ret;
                 }
@@ -1463,7 +1463,7 @@ int sockinfo_udp::multicast_membership_setsockopt_ip6(int optname, const void *o
     // offloaded, check if need to pend
     else if (m_bound.is_anyport()) {
         // Delay attaching to this MC group until we have bound UDP port
-        ret = orig_os_api.setsockopt(m_fd, IPPROTO_IPV6, optname, optval, optlen);
+        ret = SYSCALL(setsockopt, m_fd, IPPROTO_IPV6, optname, optval, optlen);
         if (ret) {
             return ret;
         }
@@ -1477,7 +1477,7 @@ int sockinfo_udp::multicast_membership_setsockopt_ip6(int optname, const void *o
     }
 
     if (goto_os) {
-        ret = orig_os_api.setsockopt(m_fd, IPPROTO_IPV6, optname, optval, optlen);
+        ret = SYSCALL(setsockopt, m_fd, IPPROTO_IPV6, optname, optval, optlen);
         if (ret) {
             return ret;
         }
@@ -1593,7 +1593,7 @@ int sockinfo_udp::getsockopt(int __level, int __optname, void *__optval, socklen
 {
     si_udp_logfunc("level=%d, optname=%d", __level, __optname);
 
-    int ret = orig_os_api.getsockopt(m_fd, __level, __optname, __optval, __optlen);
+    int ret = SYSCALL(getsockopt, m_fd, __level, __optname, __optval, __optlen);
 
     if (unlikely(m_state == SOCKINFO_DESTROYING) || unlikely(g_b_exit)) {
         return ret;
@@ -2231,7 +2231,7 @@ int sockinfo_udp::rx_verify_available_data()
     } else if (ret == 1) {
         // Got 1, means we have a ready packet in OS
         uint64_t pending_data = 0;
-        ret = orig_os_api.ioctl(m_fd, FIONREAD, &pending_data);
+        ret = SYSCALL(ioctl, m_fd, FIONREAD, &pending_data);
         if (ret >= 0) {
             // This will cause the next non-blocked read to check the OS again.
             // We do this only after a successful read.
@@ -3058,7 +3058,7 @@ void sockinfo_udp::original_os_setsockopt_helper(const void *pram, int pram_size
 {
     si_udp_logdbg("calling orig_setsockopt(%s) for igmp support by OS",
                   setsockopt_ip_opt_to_str(optname));
-    if (orig_os_api.setsockopt(m_fd, level, optname, pram, pram_size)) {
+    if (SYSCALL(setsockopt, m_fd, level, optname, pram, pram_size)) {
         si_udp_logdbg("orig setsockopt(%s) failed (errno=%d %m)", setsockopt_ip_opt_to_str(optname),
                       errno);
     }

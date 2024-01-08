@@ -90,14 +90,14 @@ bool netlink_socket_mgr::query(const struct nlmsghdr *nl_msg, char *buf, int &le
     uint32_t nl_seq = nl_msg->nlmsg_seq;
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    if ((sockfd = orig_os_api.socket(PF_NETLINK, SOCK_DGRAM, NETLINK_ROUTE)) < 0) {
+    if ((sockfd = SYSCALL(socket, PF_NETLINK, SOCK_DGRAM, NETLINK_ROUTE)) < 0) {
         __log_err("NL socket creation failed, errno = %d", errno);
         return false;
     }
-    if (orig_os_api.fcntl(sockfd, F_SETFD, FD_CLOEXEC) != 0) {
+    if (SYSCALL(fcntl, sockfd, F_SETFD, FD_CLOEXEC) != 0) {
         __log_warn("Fail in fcntl, errno = %d", errno);
     }
-    if ((len = orig_os_api.send(sockfd, nl_msg, nl_msg->nlmsg_len, 0)) < 0) {
+    if ((len = SYSCALL(send, sockfd, nl_msg, nl_msg->nlmsg_len, 0)) < 0) {
         __log_err("Write to NL socket failed, errno = %d", errno);
     }
     if (len > 0 && (len = recv_info(sockfd, nl_pid, nl_seq, buf)) < 0) {
@@ -126,7 +126,7 @@ int netlink_socket_mgr::recv_info(int sockfd, uint32_t pid, uint32_t seq, char *
     do {
         // Receive response from the kernel
         BULLSEYE_EXCLUDE_BLOCK_START
-        if ((readLen = orig_os_api.recv(sockfd, buf_ptr, MSG_BUFF_SIZE - msgLen, 0)) < 0) {
+        if ((readLen = SYSCALL(recv, sockfd, buf_ptr, MSG_BUFF_SIZE - msgLen, 0)) < 0) {
             __log_err("NL socket read failed, errno = %d", errno);
             return -1;
         }

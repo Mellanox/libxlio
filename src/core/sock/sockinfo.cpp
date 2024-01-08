@@ -103,7 +103,7 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     , m_is_ipv6only(safe_mce_sys().sysctl_reader.get_ipv6_bindv6only())
     , m_p_rings_fds(NULL)
 {
-    m_rx_epfd = orig_os_api.epoll_create(128);
+    m_rx_epfd = SYSCALL(epoll_create, 128);
     if (unlikely(m_rx_epfd == -1)) {
         throw_xlio_exception("create internal epoll");
     }
@@ -147,8 +147,8 @@ sockinfo::~sockinfo()
 
     // Change to non-blocking socket so calling threads can exit
     m_b_blocking = false;
-    // This will wake up any blocked thread in rx() call to orig_os_api.epoll_wait()
-    orig_os_api.close(m_rx_epfd);
+    // This will wake up any blocked thread in rx() call to SYSCALL(epoll_wait, )
+    SYSCALL(close, m_rx_epfd);
 
     if (m_p_rings_fds) {
         delete[] m_p_rings_fds;
@@ -251,7 +251,7 @@ int sockinfo::fcntl(int __cmd, unsigned long int __arg)
     }
 
     si_logdbg("going to OS for fcntl cmd=%d, arg=%#lx", __cmd, __arg);
-    return orig_os_api.fcntl(m_fd, __cmd, __arg);
+    return SYSCALL(fcntl, m_fd, __cmd, __arg);
 }
 
 int sockinfo::fcntl64(int __cmd, unsigned long int __arg)
@@ -263,7 +263,7 @@ int sockinfo::fcntl64(int __cmd, unsigned long int __arg)
     }
 
     si_logdbg("going to OS for fcntl64 cmd=%d, arg=%#lx", __cmd, __arg);
-    return orig_os_api.fcntl64(m_fd, __cmd, __arg);
+    return SYSCALL(fcntl64, m_fd, __cmd, __arg);
 }
 
 int sockinfo::set_ring_attr(xlio_ring_alloc_logic_attr *attr)
@@ -376,7 +376,7 @@ int sockinfo::ioctl(unsigned long int __request, unsigned long int __arg)
     }
 
     si_logdbg("going to OS for ioctl request=%lu, flags=%#lx", __request, __arg);
-    return orig_os_api.ioctl(m_fd, __request, __arg);
+    return SYSCALL(ioctl, m_fd, __request, __arg);
 }
 
 int sockinfo::setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen)
@@ -1527,7 +1527,7 @@ int sockinfo::os_wait_sock_rx_epfd(epoll_event *ep_events, int maxevents)
     if (unlikely(m_rx_cq_wait_ctrl)) {
         add_cqfd_to_sock_rx_epfd(m_p_rx_ring);
         int ret =
-            orig_os_api.epoll_wait(m_rx_epfd, ep_events, maxevents, m_loops_timer.time_left_msec());
+            SYSCALL(epoll_wait, m_rx_epfd, ep_events, maxevents, m_loops_timer.time_left_msec());
         remove_cqfd_from_sock_rx_epfd(m_p_rx_ring);
         return ret;
     }
@@ -1537,7 +1537,7 @@ int sockinfo::os_wait_sock_rx_epfd(epoll_event *ep_events, int maxevents)
 
 int sockinfo::os_epoll_wait(epoll_event *ep_events, int maxevents)
 {
-    return orig_os_api.epoll_wait(m_rx_epfd, ep_events, maxevents, m_loops_timer.time_left_msec());
+    return SYSCALL(epoll_wait, m_rx_epfd, ep_events, maxevents, m_loops_timer.time_left_msec());
 }
 
 // Add this new CQ channel fd to the rx epfd handle (no need to wake up any sleeping thread about
@@ -1553,7 +1553,7 @@ void sockinfo::add_cqfd_to_sock_rx_epfd(ring *p_ring)
         ev.data.fd = ring_rx_fds_array[i];
 
         BULLSEYE_EXCLUDE_BLOCK_START
-        if (unlikely(orig_os_api.epoll_ctl(m_rx_epfd, EPOLL_CTL_ADD, ev.data.fd, &ev))) {
+        if (unlikely(SYSCALL(epoll_ctl, m_rx_epfd, EPOLL_CTL_ADD, ev.data.fd, &ev))) {
             si_logerr("failed to add cq channel fd to internal epfd errno=%d (%m)", errno);
         }
         BULLSEYE_EXCLUDE_BLOCK_END
@@ -1567,9 +1567,8 @@ void sockinfo::remove_cqfd_from_sock_rx_epfd(ring *base_ring)
 
     for (size_t i = 0; i < num_ring_rx_fds; i++) {
         BULLSEYE_EXCLUDE_BLOCK_START
-        if (unlikely(
-                (orig_os_api.epoll_ctl(m_rx_epfd, EPOLL_CTL_DEL, ring_rx_fds_array[i], NULL)) &&
-                (!(errno == ENOENT || errno == EBADF)))) {
+        if (unlikely((SYSCALL(epoll_ctl, m_rx_epfd, EPOLL_CTL_DEL, ring_rx_fds_array[i], NULL)) &&
+                     (!(errno == ENOENT || errno == EBADF)))) {
             si_logerr("failed to delete cq channel fd from internal epfd (errno=%d %s)", errno,
                       strerror(errno));
         }
@@ -2075,7 +2074,7 @@ int sockinfo::setsockopt_kernel(int __level, int __optname, const void *__optval
     }
 
     si_logdbg("going to OS for setsockopt level %d optname %d", __level, __optname);
-    int ret = orig_os_api.setsockopt(m_fd, __level, __optname, __optval, __optlen);
+    int ret = SYSCALL(setsockopt, m_fd, __level, __optname, __optval, __optlen);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (ret) {
         if (EPERM == errno && allow_privileged) {
