@@ -25,7 +25,6 @@ dist-hook:
 SUBDIRS = infra netlink
 
 EXTRA_DIST = \
-	dev/cq_mgr_rx.inl \
 	util/libxlio.conf
 
 sysconf_DATA = util/libxlio.conf
@@ -170,6 +169,7 @@ libxlio_la_SOURCES := \
 	dev/allocator.h \
 	dev/buffer_pool.h \
 	dev/cq_mgr_rx.h \
+	dev/cq_mgr_rx_inl.h \
 	dev/cq_mgr_rx_regrq.h \
 	dev/cq_mgr_rx_strq.h \
 	dev/cq_mgr_tx.h \

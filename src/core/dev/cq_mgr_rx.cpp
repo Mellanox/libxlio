@@ -31,7 +31,7 @@
  */
 
 #include "cq_mgr_rx.h"
-#include "cq_mgr_rx.inl"
+#include "cq_mgr_rx_inl.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <math.h>
