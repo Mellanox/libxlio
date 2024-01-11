@@ -649,9 +649,9 @@ void print_xlio_global_settings()
     VLOG_PARAM_STRING("Force Flowtag for MC", safe_mce_sys().mc_force_flowtag,
                       MCE_DEFAULT_MC_FORCE_FLOWTAG, SYS_VAR_MC_FORCE_FLOWTAG,
                       safe_mce_sys().mc_force_flowtag ? "Enabled " : "Disabled");
-    VLOG_STR_PARAM_STRING("Striding RQ", option_strq::to_str(safe_mce_sys().enable_strq_env),
-                          option_strq::to_str(MCE_DEFAULT_STRQ), SYS_VAR_STRQ,
-                          option_strq::to_str(safe_mce_sys().enable_strq_env));
+    VLOG_STR_PARAM_STRING("Striding RQ", option_3::to_str(safe_mce_sys().enable_strq_env),
+                          option_3::to_str(MCE_DEFAULT_STRQ), SYS_VAR_STRQ,
+                          option_3::to_str(safe_mce_sys().enable_strq_env));
     VLOG_PARAM_NUMBER("STRQ Strides per RWQE", safe_mce_sys().strq_stride_num_per_rwqe,
                       MCE_DEFAULT_STRQ_NUM_STRIDES, SYS_VAR_STRQ_NUM_STRIDES);
     VLOG_PARAM_NUMBER("STRQ Stride Size (Bytes)", safe_mce_sys().strq_stride_size_bytes,
