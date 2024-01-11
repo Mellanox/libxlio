@@ -250,11 +250,8 @@ inline struct xlio_mlx5_cqe *cq_mgr_rx::check_cqe(void)
         (struct xlio_mlx5_cqe *)(((uint8_t *)m_mlx5_cq.cq_buf) +
                                  ((m_mlx5_cq.cq_ci & (m_mlx5_cq.cqe_count - 1))
                                   << m_mlx5_cq.cqe_size_log));
-    /*
-     * CQE ownership is defined by Owner bit in the CQE.
-     * The value indicating SW ownership is flipped every
-     *  time CQ wraps around.
-     * */
+    // CQE ownership is defined by Owner bit in the CQE.
+    // The value indicating SW ownership is flipped every time CQ wraps around.
     if (likely((MLX5_CQE_OPCODE(cqe->op_own)) != MLX5_CQE_INVALID) &&
         !((MLX5_CQE_OWNER(cqe->op_own)) ^ !!(m_mlx5_cq.cq_ci & m_mlx5_cq.cqe_count))) {
         return cqe;

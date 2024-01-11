@@ -35,7 +35,7 @@
 #if defined(DEFINED_DIRECT_VERBS)
 
 #include <util/valgrind.h>
-#include "cq_mgr_rx.inl"
+#include "cq_mgr_rx_inl.h"
 #include "hw_queue_rx.h"
 #include "ring_simple.h"
 

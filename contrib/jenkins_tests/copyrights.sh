@@ -12,7 +12,7 @@ if [ ! -d "$WORKSPACE" ]; then
     exit 1
 fi
 
-cpp_files='        "extensions": [".c", ".cc", ".cpp", "c++", ".h", ".hpp", ".cs", ".inl", ".l", ".y"],'
+cpp_files='        "extensions": [".c", ".cc", ".cpp", "c++", ".h", ".hpp", ".cs", ".l", ".y"],'
 sed -i "s/.*\"extensions\": \[\"\.c\".*/$cpp_files/g" /opt/nvidia/ProjectConfig/header-types.json
 
 cat /opt/nvidia/ProjectConfig/header-types.json

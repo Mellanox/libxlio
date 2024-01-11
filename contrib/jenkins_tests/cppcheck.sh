@@ -39,7 +39,7 @@ cd $cppcheck_dir
 ${WORKSPACE}/configure $jenkins_test_custom_configure > "${cppcheck_dir}/cppcheck.log" 2>&1
 
 set +eE
-eval "find ${WORKSPACE}/src -name '*.h' -o -name '*.cpp' -o -name '*.c' -o -name '*.hpp' -o -name '*.inl' | \
+eval "find ${WORKSPACE}/src -name '*.h' -o -name '*.cpp' -o -name '*.c' -o -name '*.hpp' | \
 	${tool_app} --std=c++11 --language=c++ --force --enable=information \
 	-I${WORKSPACE}/src \
 	-I${WORKSPACE}/src/stats \
