@@ -208,11 +208,6 @@ typedef enum { AUTO_ON_OFF_DEF } mode_t;
 OPTIONS_FROM_TO_STR_DEF;
 } // namespace option_3
 
-namespace option_strq {
-typedef enum { AUTO_ON_OFF_DEF, REGULAR_RQ = 2 } mode_t;
-OPTIONS_FROM_TO_STR_DEF;
-} // namespace option_strq
-
 namespace option_tcp_ctl_thread {
 typedef enum {
     CTL_THREAD_DISABLE = 0,
@@ -476,7 +471,7 @@ public:
     bool enable_socketxtreme;
     option_3::mode_t enable_tso;
     option_3::mode_t enable_lro;
-    option_strq::mode_t enable_strq_env;
+    option_3::mode_t enable_strq_env;
 #ifdef DEFINED_UTLS
     bool enable_utls_rx;
     bool enable_utls_tx;
@@ -757,7 +752,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_TX_SEGS_POOL_BATCH_TCP   (16384)
 #define MCE_DEFAULT_TX_NUM_SGE               (4)
 
-#define MCE_DEFAULT_STRQ                            (option_strq::ON)
+#define MCE_DEFAULT_STRQ                            (option_3::ON)
 #define MCE_DEFAULT_STRQ_NUM_STRIDES                (16384)
 #define MCE_DEFAULT_STRQ_STRIDE_SIZE_BYTES          (512)
 #define MCE_DEFAULT_STRQ_NUM_BUFS                   (64)
