@@ -309,12 +309,6 @@ static option_t<mode_t> options[] = {AUTO_ON_OFF_IMPL};
 OPTION_FROM_TO_STR_IMPL
 } // namespace option_3
 
-namespace option_strq {
-static option_t<mode_t> options[] = {AUTO_ON_OFF_IMPL,
-                                     {REGULAR_RQ, "Regular RQ", {"regular_rq", NULL, NULL}}};
-OPTION_FROM_TO_STR_IMPL
-} // namespace option_strq
-
 namespace option_tcp_ctl_thread {
 static option_t<mode_t> options[] = {
     {CTL_THREAD_DISABLE, "Disabled", {"disable", "disabled", NULL}},
@@ -921,11 +915,11 @@ void mce_sys_var::get_env_params()
     }
 
     if ((env_ptr = getenv(SYS_VAR_STRQ)) != NULL) {
-        enable_strq_env = option_strq::from_str(env_ptr, MCE_DEFAULT_STRQ);
+        enable_strq_env = option_3::from_str(env_ptr, MCE_DEFAULT_STRQ);
     }
 
     enable_striding_rq =
-        (enable_strq_env == option_strq::ON || enable_strq_env == option_strq::AUTO);
+        (enable_strq_env == option_3::ON || enable_strq_env == option_3::AUTO);
 
     if (enable_striding_rq) {
         rx_num_bufs = MCE_DEFAULT_STRQ_NUM_BUFS;
