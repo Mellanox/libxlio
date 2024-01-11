@@ -918,8 +918,7 @@ void mce_sys_var::get_env_params()
         enable_strq_env = option_3::from_str(env_ptr, MCE_DEFAULT_STRQ);
     }
 
-    enable_striding_rq =
-        (enable_strq_env == option_3::ON || enable_strq_env == option_3::AUTO);
+    enable_striding_rq = (enable_strq_env == option_3::ON || enable_strq_env == option_3::AUTO);
 
     if (enable_striding_rq) {
         rx_num_bufs = MCE_DEFAULT_STRQ_NUM_BUFS;

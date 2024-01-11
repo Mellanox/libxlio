@@ -86,7 +86,7 @@ cq_mgr_rx::cq_mgr_rx(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int 
     , m_b_sysvar_cq_keep_qp_full(safe_mce_sys().cq_keep_qp_full)
 {
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (m_rx_lkey == 0) {
+    if (m_rx_lkey == LKEY_ERROR) {
         __log_info_panic("invalid lkey found %u", m_rx_lkey);
     }
     BULLSEYE_EXCLUDE_BLOCK_END

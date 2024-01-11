@@ -72,7 +72,6 @@ ib_ctx_handler::ib_ctx_handler(struct ib_ctx_handler_desc *desc)
         ibch_logpanic("m_p_ibv_device is invalid");
     }
 
-    m_p_ibv_context = NULL;
     m_p_adapter = set_dpcp_adapter();
     if (!m_p_adapter) {
         ibch_logpanic("ibv device %p adapter allocation failure (errno=%d %m)", m_p_ibv_device,
@@ -122,11 +121,6 @@ err:
         delete m_p_adapter;
         m_p_ibv_context = NULL;
     }
-
-    if (m_p_ibv_context) {
-        ibv_close_device(m_p_ibv_context);
-        m_p_ibv_context = NULL;
-    }
 }
 
 ib_ctx_handler::~ib_ctx_handler()
@@ -160,11 +154,6 @@ ib_ctx_handler::~ib_ctx_handler()
 
     if (m_p_adapter) {
         delete m_p_adapter;
-        m_p_ibv_context = NULL;
-    }
-
-    if (m_p_ibv_context) {
-        ibv_close_device(m_p_ibv_context);
         m_p_ibv_context = NULL;
     }
 
