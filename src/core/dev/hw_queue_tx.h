@@ -88,8 +88,8 @@ public:
     void up();
     void down();
 
-    int send(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio_tis *tis,
-             unsigned credits);
+    void send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio_tis *tis,
+                  unsigned credits);
 
     struct ibv_qp *get_ibv_qp() const { return m_mlx5_qp.qp; };
 
@@ -213,8 +213,8 @@ private:
     void destroy_tis_cache();
     void put_tls_tis_in_cache(xlio_tis *tis);
 
-    int send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, bool request_comp,
-                     xlio_tis *tis, unsigned credits);
+    void send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, bool request_comp,
+                      xlio_tis *tis, unsigned credits);
 
     void set_unsignaled_count(void) { m_n_unsignaled_count = m_n_sysvar_tx_num_wr_to_signal - 1; }
 

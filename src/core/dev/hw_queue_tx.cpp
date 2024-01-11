@@ -354,8 +354,8 @@ void hw_queue_tx::release_tx_buffers()
     NOT_IN_USE(ret); // Suppress --enable-opt-log=high warning
 }
 
-int hw_queue_tx::send(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio_tis *tis,
-                      unsigned credits)
+void hw_queue_tx::send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio_tis *tis,
+                           unsigned credits)
 {
     mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)p_send_wqe->wr_id;
     /* Control tx completions:
@@ -371,10 +371,7 @@ int hw_queue_tx::send(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
 
     hwqtx_logfunc("VERBS send, unsignaled_count: %d", m_n_unsignaled_count);
 
-    // TODO send_to_wire() and send() can return void after removing ibverbs support
-    if (send_to_wire(p_send_wqe, attr, request_comp, tis, credits)) {
-        return -1;
-    }
+    send_to_wire(p_send_wqe, attr, request_comp, tis, credits);
 
     if (request_comp || is_signal_requested_for_last_wqe()) {
         uint64_t dummy_poll_sn = 0;
@@ -386,8 +383,6 @@ int hw_queue_tx::send(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
         BULLSEYE_EXCLUDE_BLOCK_END
         hwqtx_logfunc("polling succeeded on cq_mgr_tx (%d wce)", ret);
     }
-
-    return 0;
 }
 
 void hw_queue_tx::modify_queue_to_ready_state()
@@ -888,8 +883,8 @@ void hw_queue_tx::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits, 
 
 //! Send one RAW packet by MLX5 BlueFlame
 //
-int hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
-                              bool request_comp, xlio_tis *tis, unsigned credits)
+void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
+                               bool request_comp, xlio_tis *tis, unsigned credits)
 {
     struct xlio_mlx5_wqe_ctrl_seg *ctrl = NULL;
     struct mlx5_wqe_eth_seg *eseg = NULL;
@@ -929,8 +924,6 @@ int hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_at
         "m_sq_wqe_hot: %p m_sq_wqe_hot_index: %d wqe_counter: %d new_hot_index: %d wr_id: %llx",
         m_sq_wqe_hot, m_sq_wqe_hot_index, m_sq_wqe_counter, (m_sq_wqe_counter & (m_tx_num_wr - 1)),
         p_send_wqe->wr_id);
-
-    return 0;
 }
 
 std::unique_ptr<xlio_tis> hw_queue_tx::create_tis(uint32_t flags)

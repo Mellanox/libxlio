@@ -724,7 +724,7 @@ inline int ring_simple::send_buffer(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_pac
 
     if (likely(m_hqtx->credits_get(credits)) ||
         is_available_qp_wr(is_set(attr, XLIO_TX_PACKET_BLOCK), credits)) {
-        ret = m_hqtx->send(p_send_wqe, attr, tis, credits);
+        m_hqtx->send_wqe(p_send_wqe, attr, tis, credits);
     } else {
         ring_logdbg("Silent packet drop, SQ is full!");
         ret = -1;

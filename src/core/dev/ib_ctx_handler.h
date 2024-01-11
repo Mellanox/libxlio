@@ -111,7 +111,7 @@ public:
 private:
     void handle_event_device_fatal();
     ibv_device *m_p_ibv_device; // HCA handle
-    struct ibv_context *m_p_ibv_context;
+    struct ibv_context *m_p_ibv_context = nullptr;
     dpcp::adapter *m_p_adapter;
     xlio_ibv_device_attr_ex *m_p_ibv_device_attr;
     ibv_pd *m_p_ibv_pd;
