@@ -25,7 +25,7 @@ for compiler in $compiler_list; do
     echo "======================================================"
     $cc --version
     echo
-    test_exec='${WORKSPACE}/configure --prefix=$compiler_dir-$cc CC=$cc CXX=$cxx $jenkins_test_custom_configure && make $make_opt all'
+    test_exec='${WORKSPACE}/configure --prefix=$compiler_dir-$cc CC=$cc CXX=$cxx --disable-lto $jenkins_test_custom_configure && make $make_opt all'
     do_check_result "$test_exec" "$test_id" "$test_name" "$compiler_tap" "${compiler_dir}/compiler-${test_id}"
     [ ! -z "$module" ] && module unload "$module"
     cd ${compiler_dir}
