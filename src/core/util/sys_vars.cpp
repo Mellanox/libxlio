@@ -691,8 +691,8 @@ void mce_sys_var::update_multi_process_params()
             tx_segs_pool_batch_tcp = 256;
             rx_num_wr = 1;
             strq_strides_compensation_level = 32;
-            strq_stride_size_bytes = 512;
-            strq_stride_num_per_rwqe = 32;
+            strq_stride_size_bytes = STRQ_MIN_STRIDE_SIZE_BYTES;
+            strq_stride_num_per_rwqe = STRQ_MIN_STRIDES_NUM;
             tx_buf_size = 0;
             rx_buf_size = 0;
         }
