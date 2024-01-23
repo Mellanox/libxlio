@@ -387,7 +387,7 @@ private:
     int wait_for_conn_ready_blocking();
     static err_t connect_lwip_cb(void *arg, struct tcp_pcb *tpcb, err_t err);
     // tx
-    unsigned tx_wait(int &err, bool blocking);
+    unsigned tx_wait(bool blocking);
     int os_epoll_wait_with_tcp_timers(epoll_event *ep_events, int maxevents);
     int handle_child_FIN(sockinfo_tcp *child_conn);
 
