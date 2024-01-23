@@ -296,7 +296,7 @@ struct tcp_seg {
 #define TF_SEG_OPTS_ZEROCOPY  (u8_t) TCP_WRITE_ZEROCOPY /* Use zerocopy send mode */
 
     u8_t tcp_flags; /* Cached TCP flags for outgoing segments */
-    u8_t bufs;
+    u8_t bufs; /* Number of buffers int the pbuf linked list */
 
     /* L2+L3+TCP header for zerocopy segments, it must have enough room for options
        This should have enough space for L2 (ETH+vLAN), L3 (IPv4/6), L4 (TCP)
