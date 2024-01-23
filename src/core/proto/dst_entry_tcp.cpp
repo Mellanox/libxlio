@@ -222,16 +222,18 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
             m_sge[i].addr = (uintptr_t)p_tcp_iov[i].iovec.iov_base;
             m_sge[i].length = p_tcp_iov[i].iovec.iov_len;
             if (is_zerocopy) {
-                if (PBUF_DESC_EXPRESS == p_tcp_iov[i].p_desc->lwip_pbuf.pbuf.desc.attr) {
-                    m_sge[i].lkey = p_tcp_iov[i].p_desc->lwip_pbuf.pbuf.desc.mkey;
-                } else if (PBUF_DESC_MKEY == p_tcp_iov[i].p_desc->lwip_pbuf.pbuf.desc.attr) {
+                auto *p_desc = p_tcp_iov[i].p_desc;
+                auto &pbuf_descriptor = p_desc->lwip_pbuf.pbuf.desc;
+                if (PBUF_DESC_EXPRESS == pbuf_descriptor.attr) {
+                    m_sge[i].lkey = pbuf_descriptor.mkey;
+                } else if (PBUF_DESC_MKEY == pbuf_descriptor.attr) {
                     /* PBUF_DESC_MKEY - value is provided by user */
-                    m_sge[i].lkey = p_tcp_iov[i].p_desc->lwip_pbuf.pbuf.desc.mkey;
-                } else if (PBUF_DESC_MDESC == p_tcp_iov[i].p_desc->lwip_pbuf.pbuf.desc.attr ||
-                           PBUF_DESC_NVME_TX == p_tcp_iov[i].p_desc->lwip_pbuf.pbuf.desc.attr) {
-                    mem_desc *mdesc = (mem_desc *)p_tcp_iov[i].p_desc->lwip_pbuf.pbuf.desc.mdesc;
-                    m_sge[i].lkey = mdesc->get_lkey(p_tcp_iov[i].p_desc, ib_ctx,
-                                                    (void *)m_sge[i].addr, m_sge[i].length);
+                    m_sge[i].lkey = pbuf_descriptor.mkey;
+                } else if (PBUF_DESC_MDESC == pbuf_descriptor.attr ||
+                           PBUF_DESC_NVME_TX == pbuf_descriptor.attr) {
+                    mem_desc *mdesc = (mem_desc *)pbuf_descriptor.mdesc;
+                    m_sge[i].lkey =
+                        mdesc->get_lkey(p_desc, ib_ctx, (void *)m_sge[i].addr, m_sge[i].length);
                     if (m_sge[i].lkey == LKEY_TX_DEFAULT) {
                         m_sge[i].lkey = m_p_ring->get_tx_lkey(m_id);
                     }
