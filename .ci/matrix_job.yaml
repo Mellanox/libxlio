@@ -14,6 +14,9 @@ kubernetes:
   limits: '{memory: 8Gi, cpu: 7000m}'
   requests: '{memory: 8Gi, cpu: 7000m}'
 
+credentials:
+  - {credentialsId: '925b0900-e273-4042-bc7c-facaefae0727', usernameVariable: 'XLIO_COV_USER', passwordVariable: 'XLIO_COV_PASSWORD'}
+
 volumes:
   - {mountPath: /hpc/local/bin, hostPath: /hpc/local/bin}
   - {mountPath: /hpc/local/oss, hostPath: /hpc/local/oss}
@@ -195,6 +198,7 @@ steps:
 
   - name: Coverity
     enable: ${do_coverity}
+    credentialsId: '925b0900-e273-4042-bc7c-facaefae0727'
     containerSelector:
       - "{name: 'toolbox', category: 'tool'}"
     agentSelector:
