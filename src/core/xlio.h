@@ -38,6 +38,8 @@
 
 #ifdef __cplusplus
 extern "C" {
+#endif
+
 int xlio_socket(int __domain, int __type, int __protocol);
 
 int xlio_close(int __fd);
@@ -139,6 +141,8 @@ int xlio_init(void);
 
 /* After finishing workling with XLIO interface call xlio_exit */
 int xlio_exit(void);
+
+#ifdef __cplusplus
 }
-#endif /* __cplusplus */
+#endif
 #endif /* XLIO_EXTRA_H */
