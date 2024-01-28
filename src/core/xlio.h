@@ -36,6 +36,7 @@
 #include <signal.h>
 #include <sys/poll.h>
 
+#ifdef __cplusplus
 extern "C" {
 int xlio_socket(int __domain, int __type, int __protocol);
 
@@ -139,4 +140,5 @@ int xlio_init(void);
 /* After finishing workling with XLIO interface call xlio_exit */
 int xlio_exit(void);
 }
+#endif /* __cplusplus */
 #endif /* XLIO_EXTRA_H */
