@@ -86,7 +86,6 @@ using namespace std;
 #define srdr_logfunc_exit __log_exit_func
 
 #define EP_MAX_EVENTS (int)((INT_MAX / sizeof(struct epoll_event)))
-struct os_api orig_os_api;
 struct sigaction g_act_prev;
 sighandler_t g_sighandler = NULL;
 class ring_simple;
@@ -99,6 +98,8 @@ template <typename T> void assign_dlsym(T &ptr, const char *name)
 
 #define FD_MAP_SIZE (g_p_fd_collection ? g_p_fd_collection->get_fd_map_size() : 1024)
 
+#ifndef XLIO_STATIC_BUILD
+struct os_api orig_os_api;
 #define GET_ORIG_FUNC(__name)                                                                      \
     if (!orig_os_api.__name) {                                                                     \
         dlerror();                                                                                 \
@@ -117,15 +118,6 @@ template <typename T> void assign_dlsym(T &ptr, const char *name)
             __log_dbg("dlsym found %p for '%s()'", orig_os_api.__name, #__name);                   \
         }                                                                                          \
     }
-
-#define VERIFY_PASSTROUGH_CHANGED(__ret, __func_and_params__)                                      \
-    do {                                                                                           \
-        bool passthrough = p_socket_object->isPassthrough();                                       \
-        __ret = __func_and_params__;                                                               \
-        if (!passthrough && p_socket_object->isPassthrough()) {                                    \
-            handle_close(__fd, false, true);                                                       \
-        }                                                                                          \
-    } while (0);
 
 void get_orig_funcs()
 {
@@ -190,6 +182,16 @@ void get_orig_funcs()
     GET_ORIG_FUNC(waitpid);
 #endif // DEFINED_NGINX
 }
+#endif /* XLIO_STATIC_BUILD */
+
+#define VERIFY_PASSTROUGH_CHANGED(__ret, __func_and_params__)                                      \
+    do {                                                                                           \
+        bool passthrough = p_socket_object->isPassthrough();                                       \
+        __ret = __func_and_params__;                                                               \
+        if (!passthrough && p_socket_object->isPassthrough()) {                                    \
+            handle_close(__fd, false, true);                                                       \
+        }                                                                                          \
+    } while (0);
 
 const char *socket_get_domain_str(int domain)
 {
