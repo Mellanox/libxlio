@@ -116,7 +116,7 @@ struct mmsghdr;
  *  variables to hold the function-pointers to original functions
  *-----------------------------------------------------------------------------
  */
-
+#ifndef XLIO_STATIC_BUILD
 struct os_api {
     int (*creat)(const char *__pathname, mode_t __mode);
     int (*open)(__const char *__file, int __oflag, ...);
@@ -207,8 +207,12 @@ struct os_api {
 #if defined(DEFINED_NGINX)
     int (*setuid)(uid_t uid);
     pid_t (*waitpid)(pid_t pid, int *wstatus, int options);
-#endif // DEFINED_NGINX
 };
+#endif /* XLIO_STATIC_BUILD */
+extern os_api orig_os_api;
+
+extern void get_orig_funcs();
+#endif // DEFINED_NGINX
 
 /**
  *-----------------------------------------------------------------------------
@@ -227,10 +231,6 @@ struct os_api {
             return -1;                                                                             \
         }                                                                                          \
     } while (0)
-
-extern os_api orig_os_api;
-
-extern void get_orig_funcs();
 
 extern iomux_stats_t *g_p_select_stats;
 extern iomux_stats_t *g_p_poll_stats;
