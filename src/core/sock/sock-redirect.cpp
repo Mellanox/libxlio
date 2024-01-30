@@ -1105,12 +1105,14 @@ EXPORT_SYMBOL int XLIO_SYMBOL(getsockopt)(int __fd, int __level, int __optname, 
 
     srdr_logdbg_entry("fd=%d, level=%d, optname=%d", __fd, __level, __optname);
 
+#ifndef XLIO_STATIC_BUILD
     if (__fd == -2 && __level == SOL_SOCKET && __optname == SO_XLIO_GET_API && __optlen &&
         *__optlen >= sizeof(struct xlio_api_t *)) {
         *((xlio_api_t **)__optval) = extra_api();
         *__optlen = sizeof(struct xlio_api_t *);
         return 0;
     }
+#endif /* XLIO_STATIC_BUILD */
 
     int ret = 0;
     socket_fd_api *p_socket_object = NULL;
