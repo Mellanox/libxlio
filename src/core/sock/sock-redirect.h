@@ -207,12 +207,12 @@ struct os_api {
 #if defined(DEFINED_NGINX)
     int (*setuid)(uid_t uid);
     pid_t (*waitpid)(pid_t pid, int *wstatus, int options);
+#endif // DEFINED_NGINX
 };
-#endif /* XLIO_STATIC_BUILD */
 extern os_api orig_os_api;
 
 extern void get_orig_funcs();
-#endif // DEFINED_NGINX
+#endif /* XLIO_STATIC_BUILD */
 
 /**
  *-----------------------------------------------------------------------------
