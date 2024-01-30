@@ -257,6 +257,25 @@ u8_t pbuf_free(struct pbuf *p)
 }
 
 /**
+ * Count number of pbufs in a chain
+ *
+ * @param p first pbuf of chain
+ * @return the number of pbufs in a chain
+ */
+
+u8_t pbuf_clen(struct pbuf *p)
+{
+    u8_t len;
+
+    len = 0;
+    while (p != NULL) {
+        ++len;
+        p = p->next;
+    }
+    return len;
+}
+
+/**
  * Increment the reference count of the pbuf.
  *
  * @param p pbuf to increase reference counter of
