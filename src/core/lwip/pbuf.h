@@ -128,6 +128,7 @@ void pbuf_realloc(struct pbuf *p, u32_t size);
 u8_t pbuf_header(struct pbuf *p, s32_t header_size);
 void pbuf_ref(struct pbuf *p);
 u8_t pbuf_free(struct pbuf *p);
+u8_t pbuf_clen(struct pbuf *p);
 void pbuf_cat(struct pbuf *head, struct pbuf *tail);
 
 void pbuf_split_64k(struct pbuf *p, struct pbuf **rest); // windows scale needs large pbuf
