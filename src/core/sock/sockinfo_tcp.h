@@ -588,10 +588,6 @@ private:
     uint64_t m_user_huge_page_mask;
     unsigned m_required_send_block;
     uint16_t m_external_vlan_tag = 0U;
-
-    // stats
-    uint64_t m_n_pbufs_rcvd;
-    uint64_t m_n_pbufs_freed;
 };
 typedef struct tcp_seg tcp_seg;
 
