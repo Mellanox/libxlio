@@ -37,15 +37,17 @@
 #include "config.h"
 #endif
 
+#include <chrono>
 #include <iostream>
 #include <fstream>
-#include <time.h>
 #include <stdarg.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdint.h>
 #include "utils/bullseye.h"
 #include "utils/rdtsc.h"
+
+using namespace std::chrono;
 
 #define TO_STR(a)       TOSTR_HELPER(a)
 #define TOSTR_HELPER(a) #a
@@ -337,7 +339,7 @@ extern vlog_levels_t g_vlogger_level;
 extern vlog_levels_t *g_p_vlogger_level;
 extern uint8_t g_vlogger_details;
 extern uint8_t *g_p_vlogger_details;
-extern uint32_t g_vlogger_usec_on_startup;
+extern time_point<steady_clock> g_vlogger_usec_on_startup;
 extern bool g_vlogger_log_in_colors;
 extern xlio_log_cb_t g_vlogger_cb;
 
@@ -359,20 +361,13 @@ void vlog_stop(void);
 
 static inline uint32_t vlog_get_usec_since_start()
 {
-    struct timespec ts_now;
+    auto now = steady_clock::now();
 
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (gettime(&ts_now)) {
-        printf("%s() gettime() Returned with Error (errno=%d %m)\n", __func__, errno);
-        return (uint32_t)-1;
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    if (!g_vlogger_usec_on_startup) {
-        g_vlogger_usec_on_startup = ts_to_usec(&ts_now);
+    if (g_vlogger_usec_on_startup.time_since_epoch() == steady_clock::duration::zero()) {
+        g_vlogger_usec_on_startup = now;
     }
 
-    return (ts_to_usec(&ts_now) - g_vlogger_usec_on_startup);
+    return duration_cast<microseconds>(now - g_vlogger_usec_on_startup).count();
 }
 
 #define VLOGGER_STR_SIZE 512

@@ -32,6 +32,7 @@
 
 #include "vlogger.h"
 
+#include <chrono>
 #include <sys/types.h>
 #include <sys/syscall.h>
 #include <execinfo.h>
@@ -48,6 +49,8 @@
 #define VLOG_DEFAULT_MODULE_NAME "XLIO"
 #define XLIO_LOG_CB_ENV_VAR      "XLIO_LOG_CB_FUNC_PTR"
 
+using namespace std::chrono;
+
 char g_vlogger_module_name[VLOG_MODULE_MAX_LEN] = VLOG_DEFAULT_MODULE_NAME;
 int g_vlogger_fd = -1;
 FILE *g_vlogger_file = NULL;
@@ -55,7 +58,7 @@ vlog_levels_t g_vlogger_level = VLOG_DEFAULT;
 vlog_levels_t *g_p_vlogger_level = NULL;
 uint8_t g_vlogger_details = 0;
 uint8_t *g_p_vlogger_details = NULL;
-uint32_t g_vlogger_usec_on_startup = 0;
+time_point<steady_clock> g_vlogger_usec_on_startup;
 bool g_vlogger_log_in_colors = MCE_DEFAULT_LOG_COLORS;
 xlio_log_cb_t g_vlogger_cb = NULL;
 
