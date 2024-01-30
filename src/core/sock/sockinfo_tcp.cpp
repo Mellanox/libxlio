@@ -337,8 +337,6 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     tcp_err(&m_pcb, sockinfo_tcp::err_lwip_cb);
     tcp_sent(&m_pcb, sockinfo_tcp::ack_recvd_lwip_cb);
 
-    m_n_pbufs_rcvd = m_n_pbufs_freed = 0;
-
     m_parent = NULL;
     m_iomux_ready_fd_array = NULL;
 
