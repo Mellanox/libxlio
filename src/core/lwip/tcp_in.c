@@ -176,7 +176,6 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb)
             in_data.inseg.seqno = in_data.seqno;
             in_data.inseg.flags = 0;
             in_data.inseg.tcp_flags = in_data.flags;
-            in_data.inseg.bufs = 0;
 
             in_data.recv_data = NULL;
             in_data.recv_flags = 0;
@@ -941,7 +940,6 @@ static u32_t tcp_shrink_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t 
                 ("tcp_shrink: count: %-5d unsent %s\n", count, _dump_seg(pcb->unsent)));
 #endif /* TCP_TSO_DEBUG */
 
-    seg->bufs -= count;
     return count;
 }
 
@@ -988,7 +986,6 @@ static u32_t tcp_shrink_zc_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32
     }
     seg->tcphdr->seqno = htonl(seg->seqno);
 
-    seg->bufs -= count;
     return count;
 }
 
@@ -1210,12 +1207,14 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
                 pcb->unacked = pcb->unacked->next;
                 LWIP_DEBUGF(TCP_QLEN_DEBUG,
                             ("tcp_receive: queuelen %" U32_F " ... ", (u32_t)pcb->snd_queuelen));
+                LWIP_ASSERT("pcb->snd_queuelen >= pbuf_clen(next->p)",
+                            (pcb->snd_queuelen >= pbuf_clen(next->p)));
                 /* Prevent ACK for FIN to generate a sent event */
                 if ((pcb->acked != 0) && ((next->tcp_flags & TCP_FIN) != 0)) {
                     pcb->acked--;
                 }
 
-                pcb->snd_queuelen -= next->bufs;
+                pcb->snd_queuelen -= pbuf_clen(next->p);
                 tcp_tx_seg_free(pcb, next);
                 LWIP_DEBUGF(TCP_QLEN_DEBUG,
                             ("%" U32_F " (after freeing unacked)\n", (u32_t)pcb->snd_queuelen));
@@ -1261,11 +1260,13 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
             pcb->unsent = pcb->unsent->next;
             LWIP_DEBUGF(TCP_QLEN_DEBUG,
                         ("tcp_receive: queuelen %" U32_F " ... ", (u32_t)pcb->snd_queuelen));
+            LWIP_ASSERT("pcb->snd_queuelen >= pbuf_clen(next->p)",
+                        (pcb->snd_queuelen >= pbuf_clen(next->p)));
             /* Prevent ACK for FIN to generate a sent event */
             if ((pcb->acked != 0) && ((next->tcp_flags & TCP_FIN) != 0)) {
                 pcb->acked--;
             }
-            pcb->snd_queuelen -= next->bufs;
+            pcb->snd_queuelen -= pbuf_clen(next->p);
             tcp_tx_seg_free(pcb, next);
             LWIP_DEBUGF(TCP_QLEN_DEBUG,
                         ("%" U16_F " (after freeing unsent)\n", (u32_t)pcb->snd_queuelen));
