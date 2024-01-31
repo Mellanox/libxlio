@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 
+#include <chrono>
 #include <stdlib.h>
 #include <vlogger/vlogger.h>
 #include "event/event_handler_manager.h"
@@ -50,6 +51,8 @@
 #define UPDATE_HW_TIMER_SECOND_ONESHOT_MS 200
 
 #define IB_CTX_TC_DEVIATION_THRESHOLD 10
+using namespace std::chrono;
+using namespace std::chrono_literals;
 
 time_converter_ib_ctx::time_converter_ib_ctx(struct ibv_context *ctx,
                                              ts_conversion_mode_t ctx_time_converter_mode,
@@ -108,34 +111,31 @@ uint64_t time_converter_ib_ctx::get_hca_core_clock()
 #ifdef DEFINED_IBV_CQ_TIMESTAMP
 bool time_converter_ib_ctx::sync_clocks(struct timespec *st, uint64_t *hw_clock)
 {
-    struct timespec st1, st2, diff, st_min = TIMESPEC_INITIALIZER;
+    time_point<steady_clock, nanoseconds> st1, st2;
+    nanoseconds interval, st_min, best_interval = 0ns;
     xlio_ts_values queried_values;
-    int64_t interval, best_interval = 0;
     uint64_t hw_clock_min = 0;
 
     memset(&queried_values, 0, sizeof(queried_values));
     queried_values.comp_mask = XLIO_IBV_VALUES_MASK_RAW_CLOCK;
     for (int i = 0; i < 10; i++) {
-        clock_gettime(CLOCK_REALTIME, &st1);
+        st1 = steady_clock::now();
         if (xlio_ibv_query_values(m_p_ibv_context, &queried_values) ||
             !xlio_get_ts_val(queried_values)) {
             return false;
         }
 
-        clock_gettime(CLOCK_REALTIME, &st2);
-        interval = (st2.tv_sec - st1.tv_sec) * NSEC_PER_SEC + (st2.tv_nsec - st1.tv_nsec);
+        st2 = steady_clock::now();
+        interval = duration_cast<nanoseconds>(st2 - st1);
 
-        if (!best_interval || interval < best_interval) {
+        if (best_interval == 0ns || interval < best_interval) {
             best_interval = interval;
             hw_clock_min = xlio_get_ts_val(queried_values);
-
-            interval /= 2;
-            diff.tv_sec = interval / NSEC_PER_SEC;
-            diff.tv_nsec = interval - (diff.tv_sec * NSEC_PER_SEC);
-            ts_add(&st1, &diff, &st_min);
+            st_min = st1.time_since_epoch() + (interval / 2);
         }
     }
-    *st = st_min;
+    auto st_min_sec = duration_cast<seconds>(st_min);
+    *st = timespec {st_min_sec.count(), duration_cast<nanoseconds>(st_min - st_min_sec).count()};
     *hw_clock = hw_clock_min;
     return true;
 }
