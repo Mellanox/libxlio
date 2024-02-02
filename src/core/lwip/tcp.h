@@ -359,7 +359,6 @@ struct tcp_pcb {
     struct tcp_seg *ooseq; /* Received out of sequence segments. */
 #endif /* TCP_QUEUE_OOSEQ */
 
-    struct pbuf *refused_data; /* Data previously received but not yet taken by upper layer */
     struct tcp_seg *seg_alloc; /* Available tcp_seg element for use */
     struct pbuf *pbuf_alloc; /* Available pbuf element for use */
 

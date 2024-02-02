@@ -151,7 +151,7 @@ static err_t tcp_close_shutdown(struct tcp_pcb *pcb, u8_t rst_on_unacked_data)
 
     if (rst_on_unacked_data &&
         ((get_tcp_state(pcb) == ESTABLISHED) || (get_tcp_state(pcb) == CLOSE_WAIT))) {
-        if ((pcb->refused_data != NULL) || (pcb->rcv_wnd != pcb->rcv_wnd_max)) {
+        if (pcb->rcv_wnd != pcb->rcv_wnd_max) {
             /* Not all data received by application, send RST to tell the remote
                side about this. */
             LWIP_ASSERT("pcb->flags & TF_RXCLOSED", pcb->flags & TF_RXCLOSED);
@@ -284,11 +284,6 @@ err_t tcp_shutdown(struct tcp_pcb *pcb, int shut_rx, int shut_tx)
         if (shut_tx) {
             /* shutting down the tx AND rx side is the same as closing for the raw API */
             return tcp_close_shutdown(pcb, 1);
-        }
-        /* ... and free buffered data */
-        if (pcb->refused_data != NULL) {
-            pbuf_free(pcb->refused_data);
-            pcb->refused_data = NULL;
         }
     }
     if (shut_tx) {
@@ -789,29 +784,14 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
 }
 
 /**
- * Is called every slow_tmr_interval and process data previously
- * "refused" by upper layer (application) and sends delayed ACKs.
- *
+ * Is called every slow_tmr_interval/2 and process data previously * and sends delayed ACKs.
  * Automatically called from tcp_tmr().
  */
 void tcp_fasttmr(struct tcp_pcb *pcb)
 {
     if (pcb != NULL && PCB_IN_ACTIVE_STATE(pcb)) {
-        /* If there is data which was previously "refused" by upper layer */
-        if (pcb->refused_data) {
-            err_t err;
-            LWIP_DEBUGF(TCP_INPUT_DEBUG, ("tcp_fasttmr: notify kept packet\n"));
-            TCP_EVENT_RECV(pcb, pcb->refused_data, ERR_OK, err);
-            if (err == ERR_OK) {
-                pcb->refused_data = NULL;
-            } else if (err == ERR_ABRT) {
-                /* if err == ERR_ABRT, 'pcb' is already deallocated */
-                pcb = NULL;
-            }
-        }
-
         /* send delayed ACKs */
-        if (pcb && (pcb->flags & TF_ACK_DELAY)) {
+        if (pcb->flags & TF_ACK_DELAY) {
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_fasttmr: delayed ACK\n"));
             tcp_ack_now(pcb);
             tcp_output(pcb);
@@ -1047,10 +1027,6 @@ void tcp_pcb_recycle(struct tcp_pcb *pcb)
         tcp_tx_pbuf_free(pcb, pcb->pbuf_alloc);
         pcb->pbuf_alloc = NULL;
     }
-    if (pcb->refused_data) {
-        pbuf_free(pcb->refused_data);
-        pcb->refused_data = NULL;
-    }
 }
 
 struct pbuf *tcp_tx_pbuf_alloc(struct tcp_pcb *pcb, u32_t length, pbuf_type type, pbuf_desc *desc,
@@ -1235,11 +1211,6 @@ void tcp_pcb_purge(struct tcp_pcb *pcb)
 
         LWIP_DEBUGF(TCP_DEBUG, ("tcp_pcb_purge\n"));
 
-        if (pcb->refused_data != NULL) {
-            LWIP_DEBUGF(TCP_DEBUG, ("tcp_pcb_purge: data left on ->refused_data\n"));
-            pbuf_free(pcb->refused_data);
-            pcb->refused_data = NULL;
-        }
         if (pcb->unsent != NULL) {
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_pcb_purge: not all data sent\n"));
         }
