@@ -180,21 +180,6 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb)
             in_data.recv_data = NULL;
             in_data.recv_flags = 0;
 
-            /* If there is data which was previously "refused" by upper layer */
-            if (pcb->refused_data) {
-                LWIP_DEBUGF(TCP_INPUT_DEBUG, ("tcp_input: notify kept packet\n"));
-                TCP_EVENT_RECV(pcb, pcb->refused_data, ERR_OK, err);
-                if (err == ERR_OK) {
-                    pcb->refused_data = NULL;
-                } else {
-                    /* if err == ERR_ABRT, 'pcb' is already deallocated */
-                    /* drop incoming packets, because pcb is "full" */
-                    LWIP_DEBUGF(TCP_INPUT_DEBUG,
-                                ("tcp_input: drop incoming packets, because pcb is \"full\"\n"));
-                    pbuf_free(p);
-                    return;
-                }
-            }
             pcb->is_in_input = 1;
             err = tcp_process(pcb, &in_data);
             /* A return value of ERR_ABRT means that tcp_abort() was called
@@ -241,10 +226,8 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb)
                         }
                         /* If the upper layer can't receive this data, store it */
                         if (err != ERR_OK) {
-                            pcb->refused_data = in_data.recv_data;
-                            LWIP_DEBUGF(
-                                TCP_INPUT_DEBUG,
-                                ("tcp_input: keep incoming packet, because pcb is \"full\"\n"));
+                            pcb->rcv_wnd += in_data.recv_data->tot_len;
+                            pbuf_free(in_data.recv_data);
                         }
                     }
 
@@ -265,11 +248,6 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb)
                     pcb->is_in_input = 0;
                     /* Try to send something out. */
                     tcp_output(pcb);
-#if TCP_INPUT_DEBUG
-#if TCP_DEBUG
-                    tcp_debug_print_state(get_tcp_state(pcb));
-#endif /* TCP_DEBUG */
-#endif /* TCP_INPUT_DEBUG */
                 }
             }
             /* Jump target if pcb has been aborted in a callback (by calling tcp_abort()).
@@ -278,7 +256,7 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb)
             pcb->is_in_input = 0;
             in_data.recv_data = NULL;
 
-            /* give up our reference to inseg.p */
+            /* tcp_receive() sets in_data.inseg.p to NULL in case of recv_data */
             if (in_data.inseg.p != NULL) {
                 pbuf_free(in_data.inseg.p);
                 in_data.inseg.p = NULL;
