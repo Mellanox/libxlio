@@ -131,8 +131,6 @@ u8_t pbuf_free(struct pbuf *p);
 u8_t pbuf_clen(struct pbuf *p);
 void pbuf_cat(struct pbuf *head, struct pbuf *tail);
 
-void pbuf_split_64k(struct pbuf *p, struct pbuf **rest); // windows scale needs large pbuf
-
 #ifdef __cplusplus
 }
 #endif
