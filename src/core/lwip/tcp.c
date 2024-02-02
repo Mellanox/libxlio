@@ -798,25 +798,15 @@ void tcp_fasttmr(struct tcp_pcb *pcb)
 {
     if (pcb != NULL && PCB_IN_ACTIVE_STATE(pcb)) {
         /* If there is data which was previously "refused" by upper layer */
-        while (pcb->refused_data !=
-               NULL) { // 'while' instead of 'if' because windows scale uses large pbuf
-            struct pbuf *rest;
-            /* Notify again application with data previously received. */
+        if (pcb->refused_data) {
             err_t err;
-            pbuf_split_64k(pcb->refused_data, &rest);
             LWIP_DEBUGF(TCP_INPUT_DEBUG, ("tcp_fasttmr: notify kept packet\n"));
             TCP_EVENT_RECV(pcb, pcb->refused_data, ERR_OK, err);
             if (err == ERR_OK) {
-                pcb->refused_data = rest;
-            } else {
-                if (rest) {
-                    pbuf_cat(pcb->refused_data, rest); /* undo splitting */
-                }
-                if (err == ERR_ABRT) {
-                    /* if err == ERR_ABRT, 'pcb' is already deallocated */
-                    pcb = NULL;
-                }
-                break;
+                pcb->refused_data = NULL;
+            } else if (err == ERR_ABRT) {
+                /* if err == ERR_ABRT, 'pcb' is already deallocated */
+                pcb = NULL;
             }
         }
 
