@@ -181,20 +181,12 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb)
             in_data.recv_flags = 0;
 
             /* If there is data which was previously "refused" by upper layer */
-            /* 'while' instead of 'if' because windows scale uses large pbuf */
-            while (pcb->refused_data != NULL) {
-                struct pbuf *rest;
-                pbuf_split_64k(pcb->refused_data, &rest);
-
-                /* Notify again application with data previously received. */
+            if (pcb->refused_data) {
                 LWIP_DEBUGF(TCP_INPUT_DEBUG, ("tcp_input: notify kept packet\n"));
                 TCP_EVENT_RECV(pcb, pcb->refused_data, ERR_OK, err);
                 if (err == ERR_OK) {
-                    pcb->refused_data = rest;
+                    pcb->refused_data = NULL;
                 } else {
-                    if (rest) {
-                        pbuf_cat(pcb->refused_data, rest); /* undo splitting */
-                    }
                     /* if err == ERR_ABRT, 'pcb' is already deallocated */
                     /* drop incoming packets, because pcb is "full" */
                     LWIP_DEBUGF(TCP_INPUT_DEBUG,
@@ -230,9 +222,7 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb)
                         }
                     }
 
-                    while (in_data.recv_data !=
-                           NULL) { // 'while' instead of 'if' because windows scale uses large pbuf
-                        struct pbuf *rest = NULL;
+                    if (in_data.recv_data) {
                         if (pcb->flags & TF_RXCLOSED) {
                             /* received data although already closed -> abort (send RST) to
                                            notify the remote host that not all data has been
@@ -241,30 +231,20 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb)
                             tcp_abort(pcb);
                             goto aborted;
                         }
-                        pbuf_split_64k(in_data.recv_data, &rest);
                         if (in_data.flags & TCP_PSH) {
                             in_data.recv_data->flags |= PBUF_FLAG_PUSH;
                         }
                         /* Notify application that data has been received. */
                         TCP_EVENT_RECV(pcb, in_data.recv_data, ERR_OK, err);
                         if (err == ERR_ABRT) {
-                            if (rest) {
-                                pbuf_cat(in_data.recv_data, rest); /* undo splitting */
-                            }
                             goto aborted;
                         }
                         /* If the upper layer can't receive this data, store it */
                         if (err != ERR_OK) {
-                            if (rest) {
-                                pbuf_cat(in_data.recv_data, rest); /* undo splitting */
-                            }
                             pcb->refused_data = in_data.recv_data;
                             LWIP_DEBUGF(
                                 TCP_INPUT_DEBUG,
                                 ("tcp_input: keep incoming packet, because pcb is \"full\"\n"));
-                            break;
-                        } else {
-                            in_data.recv_data = rest;
                         }
                     }
 
