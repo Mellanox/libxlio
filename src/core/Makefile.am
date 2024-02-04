@@ -100,6 +100,7 @@ libxlio_la_SOURCES := \
 	event/delta_timer.cpp \
 	event/event_handler_manager.cpp \
 	event/event_handler_manager_local.cpp \
+	event/poll_group.cpp \
 	event/vlogger_timer_handler.cpp \
 	event/netlink_event.cpp \
 	\
@@ -215,6 +216,7 @@ libxlio_la_SOURCES := \
 	event/event_handler_manager_local.h \
 	event/event_handler_rdma_cm.h \
 	event/netlink_event.h \
+	event/poll_group.h \
 	event/timer_handler.h \
 	event/timers_group.h \
 	event/vlogger_timer_handler.h \

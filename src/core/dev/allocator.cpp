@@ -40,8 +40,12 @@
 #include "ib_ctx_handler_collection.h"
 #include "util/hugepage_mgr.h"
 #include "util/vtypes.h"
+#include "xlio.h"
 
 #define MODULE_NAME "allocator"
+
+// See description at the xlio_memory_cb_t definition.
+xlio_memory_cb_t g_user_memory_cb = nullptr;
 
 xlio_allocator::xlio_allocator()
     : xlio_allocator(nullptr, nullptr)
@@ -286,7 +290,7 @@ bool xlio_registrator::register_memory(void *data, size_t size, ib_ctx_handler *
         return lkey != LKEY_ERROR;
     }
 
-    // Path for all ib contextes
+    // Path for all ib contexts
     ib_context_map_t *ib_ctx_map = g_p_ib_ctx_handler_collection->get_ib_cxt_list();
     if (likely(ib_ctx_map)) {
         for (const auto &ib_ctx_key_val : *ib_ctx_map) {
@@ -499,6 +503,10 @@ bool xlio_heap::expand(size_t size /*=0*/)
 
     m_blocks.push_back(block);
     m_latest_offset = 0;
+
+    if (m_b_hw && g_user_memory_cb) {
+        g_user_memory_cb(data, size, 0);
+    }
 
     return true;
 
