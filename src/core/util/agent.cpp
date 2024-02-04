@@ -60,6 +60,12 @@
 #define AGENT_DEFAULT_ALIVE (1) /* periodic time for alive check (in sec) */
 
 /* Force system call */
+#ifdef XLIO_STATIC_BUILD
+#define sys_call(_result, _func, ...)                                                              \
+    do {                                                                                           \
+        _result = ::_func(__VA_ARGS__);                                                            \
+    } while (0)
+#else /* XLIO_STATIC_BUILD */
 #define sys_call(_result, _func, ...)                                                              \
     do {                                                                                           \
         if (orig_os_api._func)                                                                     \
@@ -67,6 +73,7 @@
         else                                                                                       \
             _result = ::_func(__VA_ARGS__);                                                        \
     } while (0)
+#endif /* XLIO_STATIC_BUILD */
 
 /* Print user notification */
 #define output_fatal()                                                                             \
