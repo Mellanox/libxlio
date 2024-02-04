@@ -33,13 +33,15 @@
 #ifndef XLIO_H
 #define XLIO_H
 
-#include <signal.h>
-#include <sys/poll.h>
-#include <sys/stat.h>
-
 #include <fcntl.h>
 #include <poll.h>
 #include <sched.h>
+#include <signal.h>
+#include <stdint.h>
+#include <sys/epoll.h>
+#include <sys/stat.h>
+
+#include "xlio_extra.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -382,6 +384,225 @@ int xlio_socketxtreme_ref_buff(struct xlio_buff_t *buff);
  *                  EOPNOTSUPP - socketXtreme was not enabled during configuration time.
  */
 int xlio_socketxtreme_free_buff(struct xlio_buff_t *buff);
+
+/*
+ * XLIO Socket API
+ */
+
+typedef uintptr_t xlio_poll_group_t;
+typedef uintptr_t xlio_socket_t;
+typedef uint32_t xlio_key_t;
+
+struct xlio_buf {
+    uint64_t userdata;
+};
+
+/*
+ * XLIO initialization.
+ *
+ * xlio_init_ex() must be called before using any XLIO Socket API. This is heavy operation.
+ * xlio_init_ex() is not thread-safe operation, however, subsequent serialized calls exit
+ * successfully without any action.
+ *
+ * If set, memory_cb() notifies about memory blocks which zerocopy RX buffers can point to.
+ * Current implementation allocates a single memory block and does it within xlio_init_ex() context.
+ */
+
+/*
+ * Memory callback.
+ *
+ * XLIO calls the callback each time XLIO allocates a memory region which can be used for RX
+ * buffers. User can use this information to prepare the memory for some logic in the future.
+ * Zerocopy RX interface provides pointers to such memory.
+ *
+ * Current XLIO implementation does a single allocation for buffers.
+ */
+typedef void (*xlio_memory_cb_t)(void *addr, size_t len, size_t hugepage_size);
+
+struct xlio_init_attr {
+    unsigned flags;
+    xlio_memory_cb_t memory_cb;
+};
+
+int xlio_init_ex(const struct xlio_init_attr *attr);
+
+/*
+ * Socket callbacks.
+ */
+
+enum {
+    /* TCP connection established. */
+    XLIO_SOCKET_EVENT_ESTABLISHED = 1,
+    /* Socket terminated and no further events are possible. */
+    XLIO_SOCKET_EVENT_TERMINATED,
+    /* Passive close. */
+    XLIO_SOCKET_EVENT_CLOSED,
+    /* An error occurred, see the error code value. */
+    XLIO_SOCKET_EVENT_ERROR,
+};
+
+/*
+ * Socket event callback.
+ *
+ * May be called from xlio_poll_group_poll() context.
+ * In the callback context, send operation is allowed only for the ESTABLISHED event.
+ * Argument value holds the error code for the ERROR event and 0 for other events.
+ *
+ * List of possible error code values:
+ * ECONNABORTED - connection aborted by local side
+ * ECONNRESET - connection reset by remote side
+ * ECONNREFUSED - connection refused by remote side during TCP handshake
+ * ETIMEDOUT - connection timed out due to keepalive, user timeout option or TCP handshake timeout
+ */
+typedef void (*xlio_socket_event_cb_t)(xlio_socket_t, uintptr_t userdata_sq, int event, int value);
+
+/*
+ * Zerocopy completion event.
+ *
+ * May be called from the following contexts:
+ *  - xlio_poll_group_poll() - likely
+ *  - xlio_socket_send() - can happen only if data is flushed
+ *  - xlio_socket_flush() / xlio_poll_group_flush()
+ *  - xlio_socket_destroy()
+ *
+ * In the callback context, send operation is allowed unless the socket is under destruction.
+ */
+typedef void (*xlio_socket_comp_cb_t)(xlio_socket_t, uintptr_t userdata_sq, uintptr_t userdata_op);
+
+/*
+ * RX callback.
+ *
+ * Returns TCP payload upon arrival. Each call returns a single contiguous buffer. The buffer points
+ * to memory within a block which is provided by the memory_cb() notification.
+ *
+ * xlio_buf is a descriptor of the buffer which must be returned to XLIO. During user ownership,
+ * they may use the uninitialized field in the structure.
+ */
+typedef void (*xlio_socket_rx_cb_t)(xlio_socket_t, uintptr_t userdata_sq, void *data, size_t len,
+                                    struct xlio_buf *buf);
+
+/*
+ * XLIO polling groups.
+ *
+ * Event callbacks are registered per group. This allows to move control flow connections to
+ * a separate group and implement RX / completion logic differently.
+ *
+ * xlio_poll_group_poll() polls HW for events and executes TCP timers. Most of the callbacks are
+ * expected from the context of this call.
+ *
+ * Recommendations:
+ *  - Groups are expected to be long lived objects. Frequent creation/destruction has a penalty.
+ *  - Reduce the number of different network interfaces within a group to minimum. This will
+ *    optimize the HW objects utilization. However, maintaining extra groups can have an overhead.
+ */
+
+/* Sockets and rings will be protected with locks regardless of XLIO configuration. */
+#define XLIO_GROUP_FLAG_SAFE 0x1
+/* Group will keep dirty sockets to be flushed with xlio_poll_group_flush(). */
+#define XLIO_GROUP_FLAG_DIRTY 0x2
+
+struct xlio_poll_group_attr {
+    unsigned flags;
+
+    xlio_socket_event_cb_t socket_event_cb;
+    xlio_socket_comp_cb_t socket_comp_cb;
+    xlio_socket_rx_cb_t socket_rx_cb;
+};
+
+int xlio_poll_group_create(const struct xlio_poll_group_attr *attr, xlio_poll_group_t *group_out);
+int xlio_poll_group_destroy(xlio_poll_group_t group);
+void xlio_poll_group_poll(xlio_poll_group_t group);
+
+/*
+ * XLIO socket.
+ *
+ * XLIO socket is represented by xlio_socket_t instead of file descriptor. This is a TCP
+ * non-blocking socket abstraction.
+ *
+ * xlio_socket_destroy() triggers socket closing procedure. The process can be asynchronous
+ * and socket events may be expected until XLIO_SOCKET_EVENT_TERMINATED event arrives.
+ * Example of the possible events is zerocopy completions which can arrive from the
+ * xlio_socket_destroy() context or xlio_poll_group_poll() context.
+ *
+ * Limitations:
+ *  - Only outgoing connections are supported
+ *  - Bonding is not supported
+ */
+
+struct xlio_socket_attr {
+    unsigned flags;
+    int domain; /* AF_INET or AF_INET6 */
+    xlio_poll_group_t group;
+    uintptr_t userdata_sq;
+};
+
+/* Forward declaration. */
+struct ibv_pd;
+
+int xlio_socket_create(const struct xlio_socket_attr *attr, xlio_socket_t *sock_out);
+int xlio_socket_destroy(xlio_socket_t sock);
+int xlio_socket_setsockopt(xlio_socket_t sock, int level, int optname, const void *optval,
+                           socklen_t optlen);
+int xlio_socket_bind(xlio_socket_t sock, const struct sockaddr *addr, socklen_t addrlen);
+int xlio_socket_connect(xlio_socket_t sock, const struct sockaddr *to, socklen_t tolen);
+struct ibv_pd *xlio_socket_get_pd(xlio_socket_t sock);
+
+int xlio_socket_fd(xlio_socket_t sock);
+
+/*
+ * TX flow.
+ *
+ * Properties of the TX flow:
+ *  - Non-blocking
+ *  - No partial write support - accepts all data unless memory allocation error happens
+ *  - Each send call expects a complete or part of a single PDU or message. This is a requirement
+ *    in case of either crypto or CRC offload is enabled.
+ *  - User requests zerocopy completion callback with non-zero userdata_op value and controls
+ *    the logic of completions. For example, each completion can complete entire PDU object.
+ *  - Inline send operations don't trigger the completion callback.
+ *  - XLIO aggregates data on socket and pushes it to wire with the flush-like API or
+ *    XLIO_SOCKET_SEND_FLAG_FLUSH flag.
+ *
+ * **Current limitations**:
+ *  - Currently, data can be pushes to wire in the RX flow regardless of the flush logic.
+ *  - Avoid using xlio_socket_flush() for a XLIO_GROUP_FLAG_DIRTY group.
+ *  - For a XLIO_GROUP_FLAG_DIRTY group, usage of XLIO_SOCKET_SEND_FLAG_FLUSH is limited,
+ *    it's better to avoid using them both.
+ */
+
+/* Flush socket after queueing the data. */
+#define XLIO_SOCKET_SEND_FLAG_FLUSH 0x1
+/* Copy user data to the internal buffers instead of taking ownership. */
+#define XLIO_SOCKET_SEND_FLAG_INLINE 0x2
+
+struct xlio_socket_send_attr {
+    unsigned flags;
+    uint32_t mkey;
+    uintptr_t userdata_op;
+};
+
+/* Returns either 0 or -1. The errors, except of ENOMEM, are not recoverable. */
+int xlio_socket_send(xlio_socket_t sock, const void *data, size_t len,
+                     const struct xlio_socket_send_attr *attr);
+int xlio_socket_sendv(xlio_socket_t sock, const struct iovec *iov, unsigned iovcnt,
+                      const struct xlio_socket_send_attr *attr);
+void xlio_poll_group_flush(xlio_poll_group_t group);
+void xlio_socket_flush(xlio_socket_t sock);
+
+struct xlio_key_attr {
+    int unused;
+};
+
+/* All the alive socket keys are destroyed on socket destruction. */
+int xlio_key_create(xlio_socket_t sock, struct xlio_key_attr *attr, xlio_key_t *key_out);
+void xlio_key_destroy(xlio_socket_t sock, xlio_key_t key);
+
+/*
+ * RX flow.
+ */
+
+void xlio_socket_buf_free(xlio_socket_t sock, struct xlio_buf *buf);
+void xlio_poll_group_buf_free(xlio_poll_group_t group, struct xlio_buf *buf);
 
 #ifdef __cplusplus
 }

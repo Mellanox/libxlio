@@ -77,6 +77,7 @@ public:
         , sz_buffer(size)
         , sz_data(0)
         , p_desc_owner(nullptr)
+        , unused_padding(0)
     {
 
         memset(&lwip_pbuf, 0, sizeof(lwip_pbuf));
@@ -94,13 +95,41 @@ public:
         memcpy((void *)this, &ref, sizeof(mem_buf_desc_t));
     }
 
+    inline mem_buf_desc_t *clone()
+    {
+        mem_buf_desc_t *p_desc = new mem_buf_desc_t(*this);
+        INIT_LIST_HEAD(&p_desc->buffer_node.head);
+        p_desc->m_flags |= mem_buf_desc_t::CLONED;
+        return p_desc;
+    }
+
     // Destructor specifically for cloned buffers.
     ~mem_buf_desc_t() {}
 
-    /* This field must be first in this class
-     * It encapsulates pbuf structure from lwip
-     * and extra fields to proceed customer specific requirements
-     */
+    inline void clear_transport_data(void)
+    {
+        // rx field is the largest in the union, this clears tx as well.
+        memset((void *)&rx, 0, sizeof(rx));
+    }
+
+    inline int get_ref_count() const { return atomic_read(&n_ref_count); }
+    inline void reset_ref_count() { atomic_set(&n_ref_count, 0); }
+    inline void set_ref_count(int x) { atomic_set(&n_ref_count, x); }
+    inline int inc_ref_count() { return atomic_fetch_and_inc(&n_ref_count); }
+    inline int dec_ref_count() { return atomic_fetch_and_dec(&n_ref_count); }
+    inline int add_ref_count(int x) { return atomic_fetch_add_relaxed(x, &n_ref_count); }
+    inline unsigned int lwip_pbuf_get_ref_count() const { return lwip_pbuf.pbuf.ref; }
+    inline unsigned int lwip_pbuf_inc_ref_count() { return ++lwip_pbuf.pbuf.ref; }
+    inline unsigned int lwip_pbuf_dec_ref_count()
+    {
+        if (likely(lwip_pbuf.pbuf.ref)) {
+            --lwip_pbuf.pbuf.ref;
+        }
+        return lwip_pbuf.pbuf.ref;
+    }
+
+public:
+    /* This field must be first in this class. It encapsulates pbuf structure from lwip */
     struct pbuf_custom lwip_pbuf;
     uint8_t *p_buffer;
 
@@ -191,45 +220,8 @@ public:
 private:
     atomic_t n_ref_count; // number of interested receivers (sockinfo) [can be modified only in
                           // cq_mgr_rx context]
-
 public:
-    inline void clear_transport_data(void)
-    {
-        // rx field is the largest in the union, this clears tx as well.
-        memset((void *)&rx, 0, sizeof(rx));
-    }
-
-    inline mem_buf_desc_t *clone()
-    {
-        mem_buf_desc_t *p_desc = new mem_buf_desc_t(*this);
-        INIT_LIST_HEAD(&p_desc->buffer_node.head);
-        p_desc->m_flags |= mem_buf_desc_t::CLONED;
-        return p_desc;
-    }
-
-    inline int get_ref_count() const { return atomic_read(&n_ref_count); }
-
-    inline void reset_ref_count() { atomic_set(&n_ref_count, 0); }
-
-    inline void set_ref_count(int x) { atomic_set(&n_ref_count, x); }
-
-    inline int inc_ref_count() { return atomic_fetch_and_inc(&n_ref_count); }
-
-    inline int dec_ref_count() { return atomic_fetch_and_dec(&n_ref_count); }
-
-    inline int add_ref_count(int x) { return atomic_fetch_add_relaxed(x, &n_ref_count); }
-
-    inline unsigned int lwip_pbuf_inc_ref_count() { return ++lwip_pbuf.pbuf.ref; }
-
-    inline unsigned int lwip_pbuf_dec_ref_count()
-    {
-        if (likely(lwip_pbuf.pbuf.ref)) {
-            --lwip_pbuf.pbuf.ref;
-        }
-        return lwip_pbuf.pbuf.ref;
-    }
-
-    inline unsigned int lwip_pbuf_get_ref_count() const { return lwip_pbuf.pbuf.ref; }
+    uint64_t unused_padding; // Align the structure to the cache line boundary
 };
 
 typedef xlio_list_t<mem_buf_desc_t, mem_buf_desc_t::buffer_node_offset> descq_t;
