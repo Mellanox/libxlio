@@ -1277,7 +1277,9 @@ extern "C" int xlio_init(void)
 {
     PROFILE_FUNC
 
+#ifndef XLIO_STATIC_BUILD
     get_orig_funcs();
+#endif /* XLIO_STATIC_BUILD */
     safe_mce_sys();
 
     g_init_global_ctors_done = false;
