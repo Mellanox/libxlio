@@ -1331,7 +1331,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(read)(int __fd, void *__buf, size_t __nbytes)
     return SYSCALL(read, __fd, __buf, __nbytes);
 }
 
-#if defined HAVE___READ_CHK
+#if defined HAVE___READ_CHK && !defined(XLIO_STATIC_BUILD)
 /* Checks that the buffer is big enough to contain the number of bytes
  * the user requests to read. If the buffer is too small, aborts,
  * else read NBYTES into BUF from FD.  Return the
@@ -1412,7 +1412,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(recv)(int __fd, void *__buf, size_t __nbytes, 
     return SYSCALL(recv, __fd, __buf, __nbytes, __flags);
 }
 
-#if defined HAVE___RECV_CHK
+#if defined HAVE___RECV_CHK && !defined(XLIO_STATIC_BUILD)
 /* Checks that the buffer is big enough to contain the number of bytes
    the user requests to read. If the buffer is too small, aborts,
    else read N bytes into BUF from socket FD.
@@ -1591,7 +1591,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(recvfrom)(int __fd, void *__buf, size_t __nbyt
     return ret_val;
 }
 
-#if defined HAVE___RECVFROM_CHK
+#if defined HAVE___RECVFROM_CHK && !defined(XLIO_STATIC_BUILD)
 /* Checks that the buffer is big enough to contain the number of bytes
    the user requests to read. If the buffer is too small, aborts,
    else read N bytes into BUF through socket FD.
@@ -1920,7 +1920,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(poll)(struct pollfd *__fds, nfds_t __nfds, int __t
     return poll_helper(__fds, __nfds, __timeout);
 }
 
-#if defined HAVE___POLL_CHK
+#if defined HAVE___POLL_CHK && !defined(XLIO_STATIC_BUILD)
 EXPORT_SYMBOL int XLIO_SYMBOL(__poll_chk)(struct pollfd *__fds, nfds_t __nfds, int __timeout,
                                           size_t __fdslen)
 {
@@ -1959,7 +1959,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(ppoll)(struct pollfd *__fds, nfds_t __nfds,
     return poll_helper(__fds, __nfds, timeout, __sigmask);
 }
 
-#if defined HAVE___PPOLL_CHK
+#if defined HAVE___PPOLL_CHK && !defined(XLIO_STATIC_BUILD)
 EXPORT_SYMBOL int XLIO_SYMBOL(__ppoll_chk)(struct pollfd *__fds, nfds_t __nfds,
                                            const struct timespec *__timeout,
                                            const sigset_t *__sigmask, size_t __fdslen)

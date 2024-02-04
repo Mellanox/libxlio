@@ -21,7 +21,7 @@ build_list['static-on']="--enable-static --disable-shared"
 build_list['default']=""
 
 build_tap=${WORKSPACE}/${prefix}/build.tap
-echo "1..$(echo $build_list | tr " " "\n" | wc -l)" > $build_tap
+echo "1..${#build_list[@]}" > $build_tap
 
 test_id=0
 
@@ -32,7 +32,7 @@ for build_name in "${!build_list[@]}"; do
     test_exec='${WORKSPACE}/configure --prefix=${build_dir}/${test_id}/install $build_option $jenkins_test_custom_configure && make $make_opt install'
     do_check_result "$test_exec" "$test_id" "$build_name" "$build_tap" "${build_dir}/build-${test_id}"
     cd ${build_dir}
-    ((test_id++))
+    test_id=$((test_id+1))
 done
 
 
