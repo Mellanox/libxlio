@@ -62,6 +62,7 @@ inline static void free_lwip_pbuf(struct pbuf_custom *pbuf_custom)
     if (p_desc->m_flags & mem_buf_desc_t::ZCOPY) {
         p_desc->tx.zc.callback(p_desc);
     }
+    p_desc->m_flags = 0;
     pbuf_custom->pbuf.flags = 0;
     pbuf_custom->pbuf.ref = 0;
     pbuf_custom->pbuf.desc.attr = PBUF_DESC_NONE;

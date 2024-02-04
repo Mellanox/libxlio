@@ -31,6 +31,7 @@
  */
 
 #include "ring.h"
+#include "event/poll_group.h"
 #include "proto/route_table_mgr.h"
 #include "sock/tcp_seg_pool.h"
 
@@ -40,7 +41,8 @@
 #define MODULE_HDR MODULE_NAME "%d:%s() "
 
 ring::ring()
-    : m_p_n_rx_channel_fds(nullptr)
+    : m_p_group(nullptr)
+    , m_p_n_rx_channel_fds(nullptr)
     , m_parent(nullptr)
     , m_tcp_seg_list(nullptr)
     , m_tcp_seg_count(0U)
@@ -51,6 +53,9 @@ ring::ring()
 
 ring::~ring()
 {
+    if (m_p_group) {
+        m_p_group->del_ring(this);
+    }
     if (m_tcp_seg_list) {
         g_tcp_seg_pool->put_tcp_segs(m_tcp_seg_list);
     }

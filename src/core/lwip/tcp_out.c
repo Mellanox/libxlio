@@ -721,10 +721,11 @@ memerr:
  */
 err_t tcp_write_express(struct tcp_pcb *pcb, const struct iovec *iov, u32_t iovcnt, pbuf_desc *desc)
 {
-    struct pbuf *p;
+    struct pbuf *p = NULL;
     struct tcp_seg *seg = NULL;
     struct tcp_seg *queue = NULL;
     struct tcp_seg *last;
+    void *opaque = NULL;
     const u32_t seglen_max = tcp_tso(pcb) ? pcb->tso.max_payload_sz : pcb->mss;
     u32_t pos;
     u32_t seglen;
@@ -747,6 +748,23 @@ err_t tcp_write_express(struct tcp_pcb *pcb, const struct iovec *iov, u32_t iovc
         last = NULL;
     }
     last_seglen = last ? last->len : 0;
+
+    if (desc->attr == PBUF_DESC_EXPRESS) {
+        /*
+         * Keep opaque value only in the right most pbuf for each send operation.
+         *
+         * Express path needs to call the completion callback only after the send operation
+         * is completed and all the related buffers are not used by XLIO.
+         * Current implementation keeps the opaque in the last pbuf and calls the callback
+         * when the opaque is set.
+         * This implementation can call the callback while a buffer is still in SQ in a specific
+         * case of spurious retransmission. However, without HW offloads and user memory
+         * deregistration, the buffer in the SQ won't lead to a functional issue.
+         * This is a place for improvements.
+         */
+        opaque = desc->opaque;
+        desc->opaque = NULL;
+    }
 
     for (unsigned i = 0; i < iovcnt; ++i) {
         u8_t *data = (u8_t *)iov[i].iov_base;
@@ -821,6 +839,15 @@ err_t tcp_write_express(struct tcp_pcb *pcb, const struct iovec *iov, u32_t iovc
     }
     if (last) {
         pcb->last_unsent = last;
+    }
+
+    if (desc->attr == PBUF_DESC_EXPRESS) {
+        /* See description above. */
+        if (p) {
+            /* 'p' is the last allocated pbuf. */
+            p->desc.opaque = opaque;
+        }
+        desc->opaque = opaque;
     }
 
     /* Update the pcb state. */
@@ -1535,6 +1562,11 @@ void tcp_split_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t wnd)
                 ("tcp_split_segment: could not allocate memory for pbuf copy size %" U16_F "\n",
                  (lentoqueue + optlen)));
             return;
+        }
+
+        if (seg->p->desc.attr == PBUF_DESC_EXPRESS) {
+            /* Keep opaque value only in the right most pbuf for each send operation. */
+            seg->p->desc.opaque = NULL;
         }
 
         /* Copy the data from the original buffer */

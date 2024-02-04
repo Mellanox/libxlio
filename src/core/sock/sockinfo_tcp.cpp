@@ -47,6 +47,7 @@
 #include "util/agent.h"
 #include "event/event_handler_manager.h"
 #include "event/event_handler_manager_local.h"
+#include "event/poll_group.h"
 #include "proto/route_table_mgr.h"
 #include "proto/xlio_lwip.h"
 #include "proto/dst_entry_tcp.h"
@@ -133,18 +134,28 @@ static bool is_inherited_option(int __level, int __optname)
     return ret;
 }
 
-static event_handler_manager *get_event_mgr()
+event_handler_manager *sockinfo_tcp::get_event_mgr()
 {
-    return (safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS
-                ? g_p_event_handler_manager
-                : &g_event_handler_manager_local);
+    if (is_xlio_socket()) {
+        return m_p_group->get_event_handler();
+    } else if (safe_mce_sys().tcp_ctl_thread ==
+               option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+        return &g_event_handler_manager_local;
+    } else {
+        return g_p_event_handler_manager;
+    }
 }
 
-static tcp_timers_collection *get_tcp_timer_collection()
+tcp_timers_collection *sockinfo_tcp::get_tcp_timer_collection()
 {
-    return (safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS
-                ? g_tcp_timers_collection
-                : &g_thread_local_tcp_timers);
+    if (is_xlio_socket()) {
+        return m_p_group->get_tcp_timers();
+    } else if (safe_mce_sys().tcp_ctl_thread ==
+               option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+        return &g_thread_local_tcp_timers;
+    } else {
+        return g_tcp_timers_collection;
+    }
 }
 
 static lock_base *get_new_tcp_lock()
@@ -385,6 +396,127 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     si_tcp_logfunc("done");
 }
 
+void sockinfo_tcp::rx_add_ring_cb(ring *p_ring)
+{
+    if (m_p_group) {
+        m_p_group->add_ring(p_ring);
+    }
+    sockinfo::rx_add_ring_cb(p_ring);
+}
+
+void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
+{
+    m_xlio_socket_userdata = attr->userdata_sq;
+    m_p_group = reinterpret_cast<poll_group *>(attr->group);
+
+    bool current_locks = m_ring_alloc_log_rx.get_use_locks();
+
+    m_ring_alloc_log_rx.set_ring_alloc_logic(RING_LOGIC_PER_USER_ID);
+    m_ring_alloc_log_rx.set_user_id_key(reinterpret_cast<uint64_t>(m_p_group));
+    m_ring_alloc_log_rx.set_use_locks(current_locks ||
+                                      (m_p_group->get_flags() & XLIO_GROUP_FLAG_SAFE));
+    m_ring_alloc_logic_rx = ring_allocation_logic_rx(get_fd(), m_ring_alloc_log_rx);
+
+    m_ring_alloc_log_tx.set_ring_alloc_logic(RING_LOGIC_PER_USER_ID);
+    m_ring_alloc_log_tx.set_user_id_key(reinterpret_cast<uint64_t>(m_p_group));
+    m_ring_alloc_log_tx.set_use_locks(current_locks ||
+                                      (m_p_group->get_flags() & XLIO_GROUP_FLAG_SAFE));
+
+    if (!current_locks && (m_p_group->get_flags() & XLIO_GROUP_FLAG_SAFE)) {
+        m_tcp_con_lock = multilock::create_new_lock(MULTILOCK_RECURSIVE, "tcp_con");
+    }
+
+    tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_xlio_socket);
+    tcp_err(&m_pcb, sockinfo_tcp::err_lwip_cb_xlio_socket);
+    set_blocking(false);
+}
+
+void sockinfo_tcp::add_tx_ring_to_group()
+{
+    ring *rng = get_tx_ring();
+    if (m_p_group && rng) {
+        m_p_group->add_ring(rng);
+    }
+}
+
+void sockinfo_tcp::xlio_socket_event(int event, int value)
+{
+    if (is_xlio_socket()) {
+        /* poll_group::m_socket_event_cb must be always set. */
+        m_p_group->m_socket_event_cb(reinterpret_cast<xlio_socket_t>(this), m_xlio_socket_userdata,
+                                     event, value);
+    }
+}
+
+/*static*/
+err_t sockinfo_tcp::rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *pcb, struct pbuf *p,
+                                           err_t err)
+{
+    sockinfo_tcp *conn = (sockinfo_tcp *)arg;
+
+    NOT_IN_USE(pcb);
+    assert((uintptr_t)pcb->my_container == (uintptr_t)arg);
+
+    // if is FIN
+    if (unlikely(!p)) {
+        return conn->handle_fin(pcb, err);
+    }
+
+    if (unlikely(err != ERR_OK)) {
+        conn->handle_rx_lwip_cb_error(p);
+        return err;
+    }
+
+    tcp_recved(pcb, p->tot_len);
+
+    if (conn->m_p_group->m_socket_rx_cb) {
+        struct pbuf *ptmp = p;
+        while (ptmp) {
+            /* TODO Pass mem_buf_desc_t field intead of pbuf itself as xlio_buf */
+            conn->m_p_group->m_socket_rx_cb(reinterpret_cast<xlio_socket_t>(conn),
+                                            conn->m_xlio_socket_userdata, ptmp->payload, ptmp->len,
+                                            reinterpret_cast<struct xlio_buf *>(ptmp));
+            ptmp = ptmp->next;
+        }
+    }
+    pbuf_free(p);
+
+    // TODO Stats
+
+    return ERR_OK;
+}
+
+/*static*/
+void sockinfo_tcp::err_lwip_cb_xlio_socket(void *pcb_container, err_t err)
+{
+    sockinfo_tcp *conn = reinterpret_cast<sockinfo_tcp *>(pcb_container);
+
+    // TODO Reduce copy-paste
+    conn->m_conn_state = TCP_CONN_FAILED;
+    conn->m_error_status = ECONNABORTED;
+    if (err == ERR_TIMEOUT) {
+        conn->m_conn_state = TCP_CONN_TIMEOUT;
+        conn->m_error_status = ETIMEDOUT;
+    } else if (err == ERR_RST) {
+        if (conn->m_sock_state == TCP_SOCK_ASYNC_CONNECT) {
+            conn->m_conn_state = TCP_CONN_ERROR;
+            conn->m_error_status = ECONNREFUSED;
+        } else {
+            conn->m_conn_state = TCP_CONN_RESETED;
+            conn->m_error_status = ECONNRESET;
+        }
+    }
+
+    // Avoid binding twice in case of calling connect again after previous call failed.
+    if (conn->m_sock_state != TCP_SOCK_BOUND) { // TODO: maybe we need to exclude more states?
+        conn->m_sock_state = TCP_SOCK_INITED;
+    }
+
+    if (conn->m_state != SOCKINFO_CLOSING) {
+        conn->xlio_socket_event(XLIO_SOCKET_EVENT_ERROR, conn->m_error_status);
+    }
+}
+
 sockinfo_tcp::~sockinfo_tcp()
 {
     si_tcp_logfunc("");
@@ -455,6 +587,8 @@ sockinfo_tcp::~sockinfo_tcp()
         g_p_agent->unregister_cb((agent_cb_t)&sockinfo_tcp::put_agent_msg, (void *)this);
     }
     si_tcp_logdbg("sock closed");
+
+    xlio_socket_event(XLIO_SOCKET_EVENT_TERMINATED, 0);
 }
 
 void sockinfo_tcp::clean_obj()
@@ -741,7 +875,8 @@ bool sockinfo_tcp::prepare_dst_to_send(bool is_accepted_socket /* = false */)
     bool ret_val = false;
 
     if (m_p_connected_dst_entry) {
-        bool skip_rules = is_accepted_socket, is_connect = !is_accepted_socket;
+        bool skip_rules = is_accepted_socket;
+        bool is_connect = !is_accepted_socket;
         ret_val = m_p_connected_dst_entry->prepare_to_send(m_so_ratelimit, skip_rules, is_connect);
         if (ret_val) {
             /* dst_entry has resolved tx ring,
@@ -1365,6 +1500,9 @@ err_t sockinfo_tcp::ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void 
          * the main thread to mitigate ring lock contention.
          */
         p_si_tcp->reset_ops();
+    }
+    if (new_state == ESTABLISHED) {
+        p_si_tcp->xlio_socket_event(XLIO_SOCKET_EVENT_ESTABLISHED, 0);
     }
 
     /* Update daemon about actual state for offloaded connection */
@@ -4130,7 +4268,7 @@ void sockinfo_tcp::fit_snd_bufs(unsigned int new_max_snd_buff)
     m_pcb.snd_buf += ((int)new_max_snd_buff - m_pcb.max_snd_buff);
     m_pcb.max_snd_buff = new_max_snd_buff;
 
-    auto mss = m_pcb.mss ?: 536;
+    uint16_t mss = m_pcb.mss ?: 536;
     m_pcb.max_unsent_len = (mss - 1 + m_pcb.max_snd_buff * 16) / mss;
 }
 
@@ -5536,10 +5674,20 @@ struct pbuf *sockinfo_tcp::tcp_tx_pbuf_alloc(void *p_conn, pbuf_type type, pbuf_
 
     if (likely(p_dst)) {
         p_desc = p_dst->get_buffer(type, desc);
-        if (p_desc && (p_desc->lwip_pbuf.pbuf.type == PBUF_ZEROCOPY) &&
-            ((p_desc->lwip_pbuf.pbuf.desc.attr == PBUF_DESC_NONE) ||
-             (p_desc->lwip_pbuf.pbuf.desc.attr == PBUF_DESC_MKEY) ||
-             p_desc->lwip_pbuf.pbuf.desc.attr == PBUF_DESC_NVME_TX)) {
+    }
+    if (likely(p_desc) && p_desc->lwip_pbuf.pbuf.type == PBUF_ZEROCOPY) {
+        if (p_desc->lwip_pbuf.pbuf.desc.attr == PBUF_DESC_EXPRESS) {
+            p_desc->m_flags |= mem_buf_desc_t::ZCOPY;
+            p_desc->tx.zc.callback = tcp_express_zc_callback;
+            if (p_buff) {
+                mem_buf_desc_t *p_prev_desc = reinterpret_cast<mem_buf_desc_t *>(p_buff);
+                p_desc->tx.zc.ctx = p_prev_desc->tx.zc.ctx;
+            } else {
+                p_desc->tx.zc.ctx = reinterpret_cast<void *>(p_si_tcp);
+            }
+        } else if ((p_desc->lwip_pbuf.pbuf.desc.attr == PBUF_DESC_NONE) ||
+                   (p_desc->lwip_pbuf.pbuf.desc.attr == PBUF_DESC_MKEY) ||
+                   (p_desc->lwip_pbuf.pbuf.desc.attr == PBUF_DESC_NVME_TX)) {
             /* Prepare error queue fields for send zerocopy */
             if (p_buff) {
                 /* It is a special case that can happen as a result
@@ -5619,6 +5767,19 @@ mem_buf_desc_t *sockinfo_tcp::tcp_tx_zc_alloc(mem_buf_desc_t *p_desc)
     return p_desc;
 }
 
+/*static*/
+void sockinfo_tcp::tcp_express_zc_callback(mem_buf_desc_t *p_desc)
+{
+    sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(p_desc->tx.zc.ctx);
+    const uintptr_t opaque_op = reinterpret_cast<uintptr_t>(p_desc->lwip_pbuf.pbuf.desc.opaque);
+
+    if (opaque_op && si->m_p_group && si->m_p_group->m_socket_comp_cb) {
+        si->m_p_group->m_socket_comp_cb(reinterpret_cast<xlio_socket_t>(si),
+                                        si->m_xlio_socket_userdata, opaque_op);
+    }
+}
+
+/*static*/
 void sockinfo_tcp::tcp_tx_zc_callback(mem_buf_desc_t *p_desc)
 {
     sockinfo_tcp *sock = nullptr;
@@ -5804,6 +5965,18 @@ tcp_timers_collection::tcp_timers_collection(int period, int resolution)
 tcp_timers_collection::~tcp_timers_collection()
 {
     free_tta_resources();
+}
+
+event_handler_manager *tcp_timers_collection::get_event_mgr()
+{
+    if (m_p_group) {
+        return m_p_group->get_event_handler();
+    } else if (safe_mce_sys().tcp_ctl_thread ==
+               option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+        return &g_event_handler_manager_local;
+    } else {
+        return g_p_event_handler_manager;
+    }
 }
 
 void tcp_timers_collection::free_tta_resources()
@@ -6023,7 +6196,7 @@ inline bool sockinfo_tcp::handle_bind_no_port(int &bind_ret, in_port_t in_port,
 }
 
 int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint32_t mkey,
-                                 xlio_express_flags flags, void *opaque_op)
+                                 unsigned flags, void *opaque_op)
 {
     if (unlikely(!is_connected_and_ready_to_send())) {
         return -1;
@@ -6060,11 +6233,61 @@ int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint
     }
     if (!(flags & XLIO_EXPRESS_MSG_MORE)) {
         tcp_output(&m_pcb);
+        m_b_xlio_socket_dirty = false;
+    } else if (m_p_group && !m_b_xlio_socket_dirty) {
+        m_b_xlio_socket_dirty = true;
+        m_p_group->add_dirty_socket(this);
     }
 
     unlock_tcp_con();
 
     return bytes_written;
+}
+
+int sockinfo_tcp::tcp_tx_express_inline(const struct iovec *iov, unsigned iov_len, unsigned flags)
+{
+    if (unlikely(!is_connected_and_ready_to_send())) {
+        return -1;
+    }
+
+    pbuf_desc mdesc;
+    int bytes_written = 0;
+
+    memset(&mdesc, 0, sizeof(mdesc));
+    mdesc.attr = PBUF_DESC_NONE;
+
+    lock_tcp_con();
+
+    for (unsigned i = 0; i < iov_len; ++i) {
+        bytes_written += iov[i].iov_len;
+        err_t err = tcp_write(&m_pcb, iov[i].iov_base, iov[i].iov_len, 0, &mdesc);
+        if (unlikely(err != ERR_OK)) {
+            // XXX tcp_write() can return multiple errors.
+            // XXX tcp_write() can also fail due to queuelen limit, but this is unlikely.
+            m_conn_state = TCP_CONN_ERROR;
+            m_error_status = ENOMEM;
+            return tcp_tx_handle_errno_and_unlock(ENOMEM);
+        }
+    }
+    if (!(flags & XLIO_EXPRESS_MSG_MORE)) {
+        m_b_xlio_socket_dirty = false;
+        tcp_output(&m_pcb);
+    } else if (m_p_group && !m_b_xlio_socket_dirty) {
+        m_b_xlio_socket_dirty = true;
+        m_p_group->add_dirty_socket(this);
+    }
+
+    unlock_tcp_con();
+
+    return bytes_written;
+}
+
+void sockinfo_tcp::flush()
+{
+    lock_tcp_con();
+    m_b_xlio_socket_dirty = false;
+    tcp_output(&m_pcb);
+    unlock_tcp_con();
 }
 
 ssize_t sockinfo_tcp::tcp_tx_handle_done_and_unlock(ssize_t total_tx, int errno_tmp, bool is_dummy,

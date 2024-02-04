@@ -112,7 +112,7 @@ public:
     }
     inline void set_src_sel_prefs(uint8_t sel_flags) { m_src_sel_prefs = sel_flags; }
     inline ring *get_ring() { return m_p_ring; }
-    inline ib_ctx_handler *get_ctx() { return m_p_ring->get_ctx(m_id); }
+    inline ib_ctx_handler *get_ctx() { return m_p_ring ? m_p_ring->get_ctx(m_id) : nullptr; }
     inline sa_family_t get_sa_family() { return m_family; }
     uint8_t get_tos() const { return m_tos; }
     uint8_t get_ttl_hop_limit() const { return m_ttl_hop_limit; }

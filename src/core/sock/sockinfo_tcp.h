@@ -40,13 +40,16 @@
 #include "dev/cq_mgr_rx.h"
 #include "xlio_extra.h"
 
-// LWIP includes
 #include "lwip/opt.h"
 #include "lwip/tcp_impl.h"
 
 #include "sockinfo.h"
 #include "sockinfo_ulp.h"
 #include "sockinfo_nvme.h"
+
+/* Forward declarations */
+struct xlio_socket_attr;
+class poll_group;
 
 #define BLOCK_THIS_RUN(blocking, flags) (blocking && !(flags & MSG_DONTWAIT))
 
@@ -119,6 +122,51 @@ struct socket_option_t {
             free(optval);
         }
     }
+};
+
+class tcp_timers_collection : public timers_group, public cleanable_obj {
+public:
+    tcp_timers_collection(int period, int resolution);
+    ~tcp_timers_collection() override;
+
+    void clean_obj() override;
+
+    void handle_timer_expired(void *user_data) override;
+
+    void set_group(poll_group *group) { m_p_group = group; }
+    inline event_handler_manager *get_event_mgr();
+
+protected:
+    // add a new timer
+    void add_new_timer(timer_node_t *node, timer_handler *handler, void *user_data) override;
+
+    // remove timer from list and free it.
+    // called for stopping (unregistering) a timer
+    void remove_timer(timer_node_t *node) override;
+
+private:
+    void free_tta_resources();
+
+protected:
+    void *m_timer_handle;
+
+private:
+    timer_node_t **m_p_intervals;
+
+    int m_n_period;
+    int m_n_resolution;
+    int m_n_intervals_size;
+    int m_n_location;
+    int m_n_count;
+    int m_n_next_insert_bucket;
+
+    poll_group *m_p_group = nullptr;
+};
+
+class thread_local_tcp_timers : public tcp_timers_collection {
+public:
+    thread_local_tcp_timers();
+    ~thread_local_tcp_timers() override;
 };
 
 typedef std::deque<socket_option_t *> socket_options_list_t;
@@ -231,6 +279,7 @@ public:
     uint32_t get_next_tcp_seqno_rx() { return m_pcb.rcv_nxt; }
 
     mem_buf_desc_t *tcp_tx_zc_alloc(mem_buf_desc_t *p_desc);
+    static void tcp_express_zc_callback(mem_buf_desc_t *p_desc);
     static void tcp_tx_zc_callback(mem_buf_desc_t *p_desc);
     void tcp_tx_zc_handle(mem_buf_desc_t *p_desc);
 
@@ -305,10 +354,11 @@ public:
         return m_p_connected_dst_entry ? m_p_connected_dst_entry->get_ring() : nullptr;
     }
 
-    inline ring *get_rx_ring() { return m_p_rx_ring; }
+    void rx_add_ring_cb(ring *p_ring) override;
+    ring *get_rx_ring() { return m_p_rx_ring; }
     const flow_tuple_with_local_if &get_flow_tuple()
     {
-        /* XXX Dosn't handle empty map and a map with multiple elements. */
+        /* XXX Doesn't handle empty map and a map with multiple elements. */
         auto rx_flow_iter = m_rx_flow_map.begin();
         return rx_flow_iter->first;
     }
@@ -347,8 +397,17 @@ public:
         return sockinfo::register_callback(callback, context);
     }
 
-    int tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint32_t mkey,
-                       xlio_express_flags flags, void *opaque_op);
+    int tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint32_t mkey, unsigned flags,
+                       void *opaque_op);
+    int tcp_tx_express_inline(const struct iovec *iov, unsigned iov_len, unsigned flags);
+    void flush();
+
+    void set_xlio_socket(const struct xlio_socket_attr *attr);
+    void add_tx_ring_to_group();
+    bool is_xlio_socket() { return m_p_group != nullptr; }
+    void xlio_socket_event(int event, int value);
+    static err_t rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
+    static void err_lwip_cb_xlio_socket(void *pcb_container, err_t err);
 
 protected:
     void lock_rx_q() override;
@@ -529,6 +588,9 @@ private:
     static void put_agent_msg(void *arg);
     bool is_connected_and_ready_to_send();
 
+    inline event_handler_manager *get_event_mgr();
+    inline tcp_timers_collection *get_tcp_timer_collection();
+
 public:
     static const int CONNECT_DEFAULT_TIMEOUT_MS = 10000;
 
@@ -609,48 +671,16 @@ private:
     uint64_t m_user_huge_page_mask;
     unsigned m_required_send_block;
     uint16_t m_external_vlan_tag = 0U;
-};
-typedef struct tcp_seg tcp_seg;
 
-class tcp_timers_collection : public timers_group, public cleanable_obj {
-public:
-    tcp_timers_collection(int period, int resolution);
-    ~tcp_timers_collection() override;
-
-    void clean_obj() override;
-
-    void handle_timer_expired(void *user_data) override;
-
-protected:
-    // add a new timer
-    void add_new_timer(timer_node_t *node, timer_handler *handler, void *user_data) override;
-
-    // remove timer from list and free it.
-    // called for stopping (unregistering) a timer
-    void remove_timer(timer_node_t *node) override;
-
-    void *m_timer_handle;
-
-private:
-    timer_node_t **m_p_intervals;
-
-    int m_n_period;
-    int m_n_resolution;
-    int m_n_intervals_size;
-    int m_n_location;
-    int m_n_count;
-    int m_n_next_insert_bucket;
-
-    void free_tta_resources();
-};
-
-class thread_local_tcp_timers : public tcp_timers_collection {
-public:
-    thread_local_tcp_timers();
-    ~thread_local_tcp_timers() override;
+    /*
+     * Storage API
+     * TODO Move the fields to proper cold/hot sections in the final version.
+     */
+    bool m_b_xlio_socket_dirty = false;
+    uintptr_t m_xlio_socket_userdata = 0;
+    poll_group *m_p_group = nullptr;
 };
 
 extern tcp_timers_collection *g_tcp_timers_collection;
-extern thread_local thread_local_tcp_timers g_thread_local_tcp_timers;
 
 #endif

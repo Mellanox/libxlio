@@ -45,6 +45,7 @@
 struct xlio_tls_info;
 class pkt_rcvr_sink;
 class rfs_rule;
+class poll_group;
 
 #define ring_logpanic   __log_info_panic
 #define ring_logerr     __log_info_err
@@ -262,10 +263,14 @@ public:
     struct tcp_seg *get_tcp_segs(uint32_t num);
     void put_tcp_segs(struct tcp_seg *seg);
 
+    void set_group(poll_group *grp) { m_p_group = grp; }
+    poll_group *get_group() const { return m_p_group; }
+
 protected:
     inline void set_parent(ring *parent) { m_parent = (parent ? parent : this); }
     inline void set_if_index(int if_index) { m_if_index = if_index; }
 
+    poll_group *m_p_group;
     int *m_p_n_rx_channel_fds;
     ring *m_parent;
 
