@@ -84,7 +84,7 @@ void xlio_tls_api_setup(void);
 class sockinfo_tcp_ops_tls : public sockinfo_tcp_ops {
 public:
     sockinfo_tcp_ops_tls(sockinfo_tcp *sock);
-    ~sockinfo_tcp_ops_tls();
+    ~sockinfo_tcp_ops_tls() override;
 
     int setsockopt(int, int, const void *, socklen_t) override;
     ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;

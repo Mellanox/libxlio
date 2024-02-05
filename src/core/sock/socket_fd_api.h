@@ -144,7 +144,7 @@ typedef xlio_list_t<mem_buf_desc_t, mem_buf_desc_t::buffer_node_offset> xlio_des
 class socket_fd_api : public cleanable_obj {
 public:
     socket_fd_api(int fd);
-    virtual ~socket_fd_api();
+    ~socket_fd_api() override;
 
     virtual void setPassthrough() {}
     virtual bool isPassthrough() { return false; }

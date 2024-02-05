@@ -41,7 +41,7 @@
 class tcp_seg_pool : lock_spin {
 public:
     tcp_seg_pool();
-    virtual ~tcp_seg_pool();
+    ~tcp_seg_pool() override;
 
     std::pair<tcp_seg *, tcp_seg *> get_tcp_seg_list(uint32_t amount);
     tcp_seg *get_tcp_segs(uint32_t amount);

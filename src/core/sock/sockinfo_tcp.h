@@ -143,54 +143,54 @@ public:
     }
     typedef xlio_list_t<sockinfo_tcp, sockinfo_tcp::accepted_conns_node_offset> sock_list_t;
     sockinfo_tcp(int fd, int domain);
-    virtual ~sockinfo_tcp();
+    ~sockinfo_tcp() override;
 
-    virtual void clean_obj();
+    void clean_obj() override;
 
     void setPassthrough(bool _isPassthrough)
     {
         m_sock_offload = _isPassthrough ? TCP_SOCK_PASSTHROUGH : TCP_SOCK_LWIP;
         m_p_socket_stats->b_is_offloaded = !_isPassthrough;
     }
-    void setPassthrough() { setPassthrough(true); }
-    bool isPassthrough() { return m_sock_offload == TCP_SOCK_PASSTHROUGH; }
+    void setPassthrough() override { setPassthrough(true); }
+    bool isPassthrough() override { return m_sock_offload == TCP_SOCK_PASSTHROUGH; }
 
-    int prepareListen();
-    int shutdown(int __how);
+    int prepareListen() override;
+    int shutdown(int __how) override;
 
     // Not always we can close immediately TCP socket: we can do that only after the TCP connection
     // in closed. In this method we just kikstarting the TCP connection termination (empty the
     // unsent/unacked, senf FIN...) Return val: true is the socket is already closable and false
     // otherwise
-    virtual bool prepare_to_close(bool process_shutdown = false);
+    bool prepare_to_close(bool process_shutdown = false) override;
     void create_dst_entry();
     bool prepare_dst_to_send(bool is_accepted_socket = false);
 
-    virtual int fcntl(int __cmd, unsigned long int __arg);
-    virtual int fcntl64(int __cmd, unsigned long int __arg);
-    virtual int ioctl(unsigned long int __request, unsigned long int __arg);
-    virtual int setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen);
+    int fcntl(int __cmd, unsigned long int __arg) override;
+    int fcntl64(int __cmd, unsigned long int __arg) override;
+    int ioctl(unsigned long int __request, unsigned long int __arg) override;
+    int setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen) override;
     virtual int tcp_setsockopt(int __level, int __optname, const void *__optval,
                                socklen_t __optlen);
-    virtual int getsockopt(int __level, int __optname, void *__optval, socklen_t *__optlen);
+    int getsockopt(int __level, int __optname, void *__optval, socklen_t *__optlen) override;
     int getsockopt_offload(int __level, int __optname, void *__optval, socklen_t *__optlen);
-    virtual int connect(const sockaddr *, socklen_t);
-    virtual int bind(const sockaddr *__addr, socklen_t __addrlen);
-    virtual int listen(int backlog);
-    virtual int accept(struct sockaddr *__addr, socklen_t *__addrlen);
-    virtual int accept4(struct sockaddr *__addr, socklen_t *__addrlen, int __flags);
-    virtual int getsockname(sockaddr *__name, socklen_t *__namelen);
-    virtual int getpeername(sockaddr *__name, socklen_t *__namelen);
+    int connect(const sockaddr *, socklen_t) override;
+    int bind(const sockaddr *__addr, socklen_t __addrlen) override;
+    int listen(int backlog) override;
+    int accept(struct sockaddr *__addr, socklen_t *__addrlen) override;
+    int accept4(struct sockaddr *__addr, socklen_t *__addrlen, int __flags) override;
+    int getsockname(sockaddr *__name, socklen_t *__namelen) override;
+    int getpeername(sockaddr *__name, socklen_t *__namelen) override;
 
     inline bool handle_bind_no_port(int &bind_ret, in_port_t in_port, const sockaddr *__addr,
                                     socklen_t __addrlen);
     inline void non_tcp_recved(int rx_len);
-    virtual int recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
-                                            size_t count);
+    int recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
+                                    size_t count) override;
 
     void socketxtreme_recv_buffs_tcp(mem_buf_desc_t *desc, uint16_t len);
 
-    virtual void statistics_print(vlog_levels_t log_level = VLOG_DEBUG);
+    void statistics_print(vlog_levels_t log_level = VLOG_DEBUG) override;
 
     inline struct tcp_pcb *get_pcb(void) { return &m_pcb; }
 
@@ -201,18 +201,19 @@ public:
 
     inline unsigned get_mss(void) { return m_pcb.mss; }
 
-    ssize_t tx(xlio_tx_call_attr_t &tx_arg);
+    ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
     ssize_t tcp_tx(xlio_tx_call_attr_t &tx_arg);
     ssize_t rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
-               sockaddr *__from = NULL, socklen_t *__fromlen = NULL, struct msghdr *__msg = NULL);
+               sockaddr *__from = NULL, socklen_t *__fromlen = NULL,
+               struct msghdr *__msg = NULL) override;
     static err_t ip_output(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn, uint16_t flags);
     static err_t ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn,
                                    uint16_t flags);
     static void tcp_state_observer(void *pcb_container, enum tcp_state new_state);
     static uint16_t get_route_mtu(struct tcp_pcb *pcb);
 
-    virtual void update_header_field(data_updater *updater);
-    virtual bool rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void *pv_fd_ready_array);
+    void update_header_field(data_updater *updater) override;
+    bool rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void *pv_fd_ready_array) override;
     void abort_connection();
     void tcp_shutdown_rx(void);
 
@@ -233,10 +234,10 @@ public:
     static void tcp_tx_zc_callback(mem_buf_desc_t *p_desc);
     void tcp_tx_zc_handle(mem_buf_desc_t *p_desc);
 
-    bool inline is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = NULL);
-    bool inline is_writeable();
-    bool inline is_errorable(int *errors);
-    bool is_closable()
+    bool inline is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = NULL) override;
+    bool inline is_writeable() override;
+    bool inline is_errorable(int *errors) override;
+    bool is_closable() override
     {
         return get_tcp_state(&m_pcb) == CLOSED && m_syn_received.empty() &&
             m_accepted_conns.empty();
@@ -253,21 +254,21 @@ public:
     {
         return get_tcp_state(&m_pcb) == CLOSED && m_state == SOCKINFO_CLOSING;
     }
-    bool skip_os_select()
+    bool skip_os_select() override
     {
         // calling os select on offloaded TCP sockets makes no sense unless it's a listen socket
         // to make things worse, it returns that os fd is ready...
         return (m_sock_offload == TCP_SOCK_LWIP && !is_server() && m_conn_state != TCP_CONN_INIT);
     }
 
-    bool is_outgoing()
+    bool is_outgoing() override
     {
         const bool is_listen_socket = is_server() || get_tcp_state(&m_pcb) == LISTEN;
         // Excluding incoming and listen sockets we can determine outgoing sockets.
         return !m_b_incoming && !is_listen_socket;
     }
 
-    bool is_incoming() { return m_b_incoming; }
+    bool is_incoming() override { return m_b_incoming; }
 
     bool is_connected() { return m_sock_state == TCP_SOCK_CONNECTED_RDWR; }
 
@@ -288,11 +289,11 @@ public:
         return m_sock_state == TCP_SOCK_ACCEPT_READY || m_sock_state == TCP_SOCK_ACCEPT_SHUT;
     }
 
-    virtual void update_socket_timestamps(timestamps_t *ts) { m_rx_timestamps = *ts; }
+    void update_socket_timestamps(timestamps_t *ts) override { m_rx_timestamps = *ts; }
 
-    virtual inline fd_type_t get_type() { return FD_TYPE_SOCKET; }
+    inline fd_type_t get_type() override { return FD_TYPE_SOCKET; }
 
-    void handle_timer_expired(void *user_data);
+    void handle_timer_expired(void *user_data) override;
 
     inline ib_ctx_handler *get_ctx(void)
     {
@@ -340,7 +341,7 @@ public:
     static err_t rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
     inline void rx_lwip_cb_socketxtreme_helper(pbuf *p);
 
-    virtual int register_callback(xlio_recv_callback_t callback, void *context)
+    int register_callback(xlio_recv_callback_t callback, void *context) override
     {
         tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_recv_callback);
         return sockinfo::register_callback(callback, context);
@@ -350,10 +351,10 @@ public:
                        xlio_express_flags flags, void *opaque_op);
 
 protected:
-    virtual void lock_rx_q();
-    virtual void unlock_rx_q();
-    virtual bool try_un_offloading(); // un-offload the socket if possible
-    virtual int os_epoll_wait(epoll_event *ep_events, int maxevents);
+    void lock_rx_q() override;
+    void unlock_rx_q() override;
+    bool try_un_offloading() override; // un-offload the socket if possible
+    int os_epoll_wait(epoll_event *ep_events, int maxevents) override;
 
 private:
     int fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit);
@@ -430,7 +431,7 @@ private:
     /*
      * Supported only for UDP
      */
-    virtual void handle_ip_pktinfo(struct cmsg_state *) {};
+    void handle_ip_pktinfo(struct cmsg_state *) override {};
 
     int handle_rx_error(bool blocking);
 
@@ -451,9 +452,9 @@ private:
     inline void return_pending_rx_buffs();
     inline void return_pending_tx_buffs();
     inline void reuse_buffer(mem_buf_desc_t *buff);
-    virtual mem_buf_desc_t *get_next_desc(mem_buf_desc_t *p_desc);
-    virtual mem_buf_desc_t *get_next_desc_peek(mem_buf_desc_t *p_desc, int &rx_pkt_ready_list_idx);
-    virtual timestamps_t *get_socket_timestamps();
+    mem_buf_desc_t *get_next_desc(mem_buf_desc_t *p_desc) override;
+    mem_buf_desc_t *get_next_desc_peek(mem_buf_desc_t *p_desc, int &rx_pkt_ready_list_idx) override;
+    timestamps_t *get_socket_timestamps() override;
 
     inline void return_reuse_buffers_postponed()
     {
@@ -491,22 +492,22 @@ private:
         }
     }
 
-    virtual void post_deqeue(bool release_buff);
-    virtual int zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags);
+    void post_deqeue(bool release_buff) override;
+    int zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags) override;
 
     // Returns the connected pcb, with 5 tuple which matches the input arguments,
     // in state "SYN Received" or NULL if pcb wasn't found
     struct tcp_pcb *get_syn_received_pcb(const flow_tuple &key) const;
     struct tcp_pcb *get_syn_received_pcb(const sock_addr &src, const sock_addr &dst);
 
-    virtual mem_buf_desc_t *get_front_m_rx_pkt_ready_list();
-    virtual size_t get_size_m_rx_pkt_ready_list();
-    virtual void pop_front_m_rx_pkt_ready_list();
-    virtual void push_back_m_rx_pkt_ready_list(mem_buf_desc_t *buff);
+    mem_buf_desc_t *get_front_m_rx_pkt_ready_list() override;
+    size_t get_size_m_rx_pkt_ready_list() override;
+    void pop_front_m_rx_pkt_ready_list() override;
+    void push_back_m_rx_pkt_ready_list(mem_buf_desc_t *buff) override;
 
     // lock_spin_recursive m_rx_cq_lck;
     /* pick all cqs that match given address */
-    virtual int rx_verify_available_data();
+    int rx_verify_available_data() override;
     inline int rx_wait(int &poll_count, bool blocking);
     inline int rx_wait_lockless(int &poll_count, bool blocking);
     int rx_wait_helper(int &poll_count, bool blocking);
@@ -617,19 +618,19 @@ typedef struct tcp_seg tcp_seg;
 class tcp_timers_collection : public timers_group, public cleanable_obj {
 public:
     tcp_timers_collection(int period, int resolution);
-    virtual ~tcp_timers_collection();
+    ~tcp_timers_collection() override;
 
-    void clean_obj();
+    void clean_obj() override;
 
-    virtual void handle_timer_expired(void *user_data);
+    void handle_timer_expired(void *user_data) override;
 
 protected:
     // add a new timer
-    void add_new_timer(timer_node_t *node, timer_handler *handler, void *user_data);
+    void add_new_timer(timer_node_t *node, timer_handler *handler, void *user_data) override;
 
     // remove timer from list and free it.
     // called for stopping (unregistering) a timer
-    void remove_timer(timer_node_t *node);
+    void remove_timer(timer_node_t *node) override;
 
     void *m_timer_handle;
 
@@ -649,7 +650,7 @@ private:
 class thread_local_tcp_timers : public tcp_timers_collection {
 public:
     thread_local_tcp_timers();
-    ~thread_local_tcp_timers();
+    ~thread_local_tcp_timers() override;
 };
 
 extern tcp_timers_collection *g_tcp_timers_collection;
