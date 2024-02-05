@@ -87,19 +87,19 @@ typedef std::unordered_map<ip_address, std::unordered_map<ip_address, int>> mc_m
 class sockinfo_udp : public sockinfo {
 public:
     sockinfo_udp(int fd, int domain);
-    virtual ~sockinfo_udp();
+    ~sockinfo_udp() override;
 
-    void setPassthrough() { m_p_socket_stats->b_is_offloaded = m_sock_offload = false; }
-    bool isPassthrough() { return !m_sock_offload; }
+    void setPassthrough() override { m_p_socket_stats->b_is_offloaded = m_sock_offload = false; }
+    bool isPassthrough() override { return !m_sock_offload; }
 
     int prepare_to_connect(const sockaddr *__to, socklen_t __tolen);
 
     int bind_no_os();
-    int bind(const struct sockaddr *__addr, socklen_t __addrlen);
-    int connect(const struct sockaddr *__to, socklen_t __tolen);
-    virtual int getsockname(sockaddr *__name, socklen_t *__namelen);
-    int setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen);
-    int getsockopt(int __level, int __optname, void *__optval, socklen_t *__optlen);
+    int bind(const struct sockaddr *__addr, socklen_t __addrlen) override;
+    int connect(const struct sockaddr *__to, socklen_t __tolen) override;
+    int getsockname(sockaddr *__name, socklen_t *__namelen) override;
+    int setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen) override;
+    int getsockopt(int __level, int __optname, void *__optval, socklen_t *__optlen) override;
 
     int resolve_if_ip(const int if_index, const ip_address &ip, ip_address &resolved_ip);
     int fill_mc_structs_ip6(int optname, const void *optval, mc_pending_pram *mcpram);
@@ -110,17 +110,18 @@ public:
      * Sampling the OS immediately by matching the rx_skip_os counter
      * (m_rx_udp_poll_os_ratio_counter) to the limit (safe_mce_sys().rx_udp_poll_os_ratio)
      */
-    void set_immediate_os_sample();
+    void set_immediate_os_sample() override;
     /**
      * Reseting rx_skip_os counter to prevent sampling OS immediately
      */
-    void unset_immediate_os_sample();
+    void unset_immediate_os_sample() override;
     /**
      * Process a Rx request, we might have a ready packet, or we might block until
      * we have one (if sockinfo::m_b_blocking == true)
      */
     ssize_t rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
-               sockaddr *__from = NULL, socklen_t *__fromlen = NULL, struct msghdr *__msg = NULL);
+               sockaddr *__from = NULL, socklen_t *__fromlen = NULL,
+               struct msghdr *__msg = NULL) override;
     /**
      * Check that a call to this sockinfo rx() will not block
      * -> meaning, we got an offloaded ready rx datagram
@@ -128,7 +129,7 @@ public:
      *
      * While polling CQ, the fd_array is filled with a list of newly queued packets FD's
      */
-    bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = NULL);
+    bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = NULL) override;
     /**
      * Arm the event channel(s) assosiated with this sockinfo
      * Fill the fd_set (p_rxfds) with the correct fd channel values and the p_nfds with the (max_fd
@@ -141,14 +142,14 @@ public:
      * until the connection info is ready or a tx buffer is releast (if sockinfo::m_b_blocking ==
      * true)
      */
-    ssize_t tx(xlio_tx_call_attr_t &tx_arg);
+    ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
     /**
      * Check that a call to this sockinof rx() will not block
      * -> meaning, we got a ready rx packet
      */
-    void rx_add_ring_cb(ring *p_ring);
-    void rx_del_ring_cb(ring *p_ring);
-    virtual int rx_verify_available_data();
+    void rx_add_ring_cb(ring *p_ring) override;
+    void rx_del_ring_cb(ring *p_ring) override;
+    int rx_verify_available_data() override;
 
     /**
      *	This callback will handle ready rx packet notification,
@@ -158,25 +159,25 @@ public:
      *	incremented and method returns false.
      *	Normally it is single point from sockinfo to be called from ring level.
      */
-    bool rx_input_cb(mem_buf_desc_t *p_desc, void *pv_fd_ready_array);
+    bool rx_input_cb(mem_buf_desc_t *p_desc, void *pv_fd_ready_array) override;
 
     // This call will handle all rdma related events (bind->listen->connect_req->accept)
-    virtual void statistics_print(vlog_levels_t log_level = VLOG_DEBUG);
-    virtual int recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
-                                            size_t count);
-    virtual inline fd_type_t get_type() { return FD_TYPE_SOCKET; }
+    void statistics_print(vlog_levels_t log_level = VLOG_DEBUG) override;
+    int recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
+                                    size_t count) override;
+    inline fd_type_t get_type() override { return FD_TYPE_SOCKET; }
 
-    virtual bool prepare_to_close(bool process_shutdown = false);
-    virtual void update_header_field(data_updater *updater);
+    bool prepare_to_close(bool process_shutdown = false) override;
+    void update_header_field(data_updater *updater) override;
 
 #if defined(DEFINED_NGINX)
-    virtual void prepare_to_close_socket_pool(bool _push_pop);
-    virtual void set_params_for_socket_pool()
+    void prepare_to_close_socket_pool(bool _push_pop) override;
+    void set_params_for_socket_pool() override
     {
         m_is_for_socket_pool = true;
         set_m_n_sysvar_rx_num_buffs_reuse(safe_mce_sys().nginx_udp_socket_pool_rx_num_buffs_reuse);
     }
-    bool is_closable() { return !m_is_for_socket_pool; }
+    bool is_closable() override { return !m_is_for_socket_pool; }
 #endif
 
 private:
@@ -195,7 +196,7 @@ private:
     void handle_pending_mreq();
     void original_os_setsockopt_helper(const void *pram, int pram_size, int optname, int level);
     /* helper functions */
-    void set_blocking(bool is_blocked);
+    void set_blocking(bool is_blocked) override;
 
     void rx_ready_byte_count_limit_update(
         size_t n_rx_ready_bytes_limit); // Drop rx ready packets from head of queue
@@ -212,10 +213,10 @@ private:
     inline int poll_os();
 
     virtual inline void reuse_buffer(mem_buf_desc_t *buff);
-    virtual mem_buf_desc_t *get_next_desc(mem_buf_desc_t *p_desc);
-    virtual mem_buf_desc_t *get_next_desc_peek(mem_buf_desc_t *p_desc, int &rx_pkt_ready_list_idx);
-    virtual timestamps_t *get_socket_timestamps();
-    virtual void update_socket_timestamps(timestamps_t *) {};
+    mem_buf_desc_t *get_next_desc(mem_buf_desc_t *p_desc) override;
+    mem_buf_desc_t *get_next_desc_peek(mem_buf_desc_t *p_desc, int &rx_pkt_ready_list_idx) override;
+    timestamps_t *get_socket_timestamps() override;
+    void update_socket_timestamps(timestamps_t *) override {};
 
     inline void return_reuse_buffers_postponed()
     {
@@ -248,16 +249,16 @@ private:
     inline void update_ready(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array,
                              xlio_recv_callback_retval_t cb_ret);
 
-    virtual void post_deqeue(bool release_buff);
-    virtual int zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags);
-    virtual size_t handle_msg_trunc(size_t total_rx, size_t payload_size, int in_flags,
-                                    int *p_out_flags);
-    virtual void handle_ip_pktinfo(struct cmsg_state *cm_state);
+    void post_deqeue(bool release_buff) override;
+    int zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags) override;
+    size_t handle_msg_trunc(size_t total_rx, size_t payload_size, int in_flags,
+                            int *p_out_flags) override;
+    void handle_ip_pktinfo(struct cmsg_state *cm_state) override;
 
-    virtual mem_buf_desc_t *get_front_m_rx_pkt_ready_list();
-    virtual size_t get_size_m_rx_pkt_ready_list();
-    virtual void pop_front_m_rx_pkt_ready_list();
-    virtual void push_back_m_rx_pkt_ready_list(mem_buf_desc_t *buff);
+    mem_buf_desc_t *get_front_m_rx_pkt_ready_list() override;
+    size_t get_size_m_rx_pkt_ready_list() override;
+    void pop_front_m_rx_pkt_ready_list() override;
+    void push_back_m_rx_pkt_ready_list(mem_buf_desc_t *buff) override;
 
 private:
     struct port_socket_t {

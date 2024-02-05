@@ -161,7 +161,7 @@ class sockinfo : public socket_fd_api,
                  public wakeup_pipe {
 public:
     sockinfo(int fd, int domain, bool use_ring_locks);
-    virtual ~sockinfo();
+    ~sockinfo() override;
 
     enum sockinfo_state {
         SOCKINFO_UNDEFINED,
@@ -172,15 +172,15 @@ public:
     };
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    virtual void copy_sockopt_fork(const socket_fd_api *copy_from);
+    void copy_sockopt_fork(const socket_fd_api *copy_from) override;
 #endif
 #if defined(DEFINED_NGINX)
     void set_m_n_sysvar_rx_num_buffs_reuse(int val) { m_n_sysvar_rx_num_buffs_reuse = val; }
 #endif
 
-    virtual void consider_rings_migration_rx();
-    virtual int add_epoll_context(epfd_info *epfd);
-    virtual void remove_epoll_context(epfd_info *epfd);
+    void consider_rings_migration_rx() override;
+    int add_epoll_context(epfd_info *epfd) override;
+    void remove_epoll_context(epfd_info *epfd) override;
 
     inline bool set_flow_tag(uint32_t flow_tag_id)
     {
@@ -199,10 +199,10 @@ public:
     inline bool is_blocking(void) { return m_b_blocking; }
 
     bool flow_in_reuse(void) { return m_reuseaddr | m_reuseport; }
-    virtual int *get_rings_fds(int &res_length);
-    virtual int get_rings_num();
-    virtual bool check_rings() { return m_p_rx_ring ? true : false; }
-    virtual void statistics_print(vlog_levels_t log_level = VLOG_DEBUG);
+    int *get_rings_fds(int &res_length) override;
+    int get_rings_num() override;
+    bool check_rings() override { return m_p_rx_ring ? true : false; }
+    void statistics_print(vlog_levels_t log_level = VLOG_DEBUG) override;
     uint32_t get_flow_tag_val() { return m_flow_tag_id; }
     inline in_protocol_t get_protocol(void) { return m_protocol; }
 
@@ -237,13 +237,13 @@ protected:
     }
 
     virtual void set_blocking(bool is_blocked);
-    virtual int fcntl(int __cmd, unsigned long int __arg);
-    virtual int fcntl64(int __cmd, unsigned long int __arg);
-    virtual int ioctl(unsigned long int __request, unsigned long int __arg);
-    virtual int setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen);
+    int fcntl(int __cmd, unsigned long int __arg) override;
+    int fcntl64(int __cmd, unsigned long int __arg) override;
+    int ioctl(unsigned long int __request, unsigned long int __arg) override;
+    int setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen) override;
     int setsockopt_kernel(int __level, int __optname, const void *__optval, socklen_t __optlen,
                           int supported, bool allow_priv);
-    virtual int getsockopt(int __level, int __optname, void *__optval, socklen_t *__optlen);
+    int getsockopt(int __level, int __optname, void *__optval, socklen_t *__optlen) override;
 
     virtual mem_buf_desc_t *get_front_m_rx_pkt_ready_list() = 0;
     virtual size_t get_size_m_rx_pkt_ready_list() = 0;
@@ -264,7 +264,7 @@ protected:
     virtual void post_deqeue(bool release_buff) = 0;
     virtual int os_epoll_wait(epoll_event *ep_events, int maxevents);
     virtual int zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags) = 0;
-    virtual int register_callback(xlio_recv_callback_t callback, void *context);
+    int register_callback(xlio_recv_callback_t callback, void *context) override;
 
     virtual size_t handle_msg_trunc(size_t total_rx, size_t payload_size, int in_flags,
                                     int *p_out_flags);
@@ -288,14 +288,14 @@ protected:
                                    const struct sockaddr *sock_addr_second = NULL);
 
     // This callback will notify that socket is ready to receive and map the cq.
-    virtual void rx_add_ring_cb(ring *p_ring);
-    virtual void rx_del_ring_cb(ring *p_ring);
+    void rx_add_ring_cb(ring *p_ring) override;
+    void rx_del_ring_cb(ring *p_ring) override;
 
     virtual void lock_rx_q() { m_lock_rcv.lock(); }
     virtual void unlock_rx_q() { m_lock_rcv.unlock(); }
 
     void shutdown_rx();
-    void destructor_helper();
+    void destructor_helper() override;
     int modify_ratelimit(dst_entry *p_dst_entry, struct xlio_rate_limit_t &rate_limit);
 
     void move_descs(ring *p_ring, descq_t *toq, descq_t *fromq, bool own);
@@ -317,7 +317,7 @@ protected:
     int os_wait_sock_rx_epfd(epoll_event *ep_events, int maxevents);
     virtual bool try_un_offloading(); // un-offload the socket if possible
 
-    bool is_shadow_socket_present() { return m_fd >= 0 && m_fd != m_rx_epfd; }
+    bool is_shadow_socket_present() override { return m_fd >= 0 && m_fd != m_rx_epfd; }
     inline bool is_socketxtreme() { return safe_mce_sys().enable_socketxtreme; }
 
     inline void set_events_socketxtreme(uint64_t events)

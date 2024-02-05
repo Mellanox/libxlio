@@ -41,32 +41,32 @@
 class pipeinfo : public socket_fd_api, public timer_handler {
 public:
     pipeinfo(int fd);
-    ~pipeinfo();
+    ~pipeinfo() override;
 
-    virtual void clean_obj();
+    void clean_obj() override;
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    virtual void copy_sockopt_fork(const socket_fd_api *copy_from) { NOT_IN_USE(copy_from); }
+    void copy_sockopt_fork(const socket_fd_api *copy_from) override { NOT_IN_USE(copy_from); }
 #endif
 
-    int fcntl(int __cmd, unsigned long int __arg);
-    int fcntl64(int __cmd, unsigned long int __arg);
-    int ioctl(unsigned long int __request, unsigned long int __arg);
+    int fcntl(int __cmd, unsigned long int __arg) override;
+    int fcntl64(int __cmd, unsigned long int __arg) override;
+    int ioctl(unsigned long int __request, unsigned long int __arg) override;
 
     // Process a Rx request, we might have a ready packet, or we might block until
     // we have one (if sockinfo::m_b_blocking == true)
     ssize_t rx(const rx_call_t call_type, struct iovec *p_iov, ssize_t sz_iov, int *p_flags,
                struct sockaddr *__from = NULL, socklen_t *__fromlen = NULL,
-               struct msghdr *__msg = NULL);
+               struct msghdr *__msg = NULL) override;
 
     // Process a Tx request, handle all that is needed to send the packet, we might block
     // until the connection info is ready or a tx buffer is releast (if sockinfo::m_b_blocking ==
     // true)
-    ssize_t tx(xlio_tx_call_attr_t &tx_arg);
+    ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
 
-    void statistics_print(vlog_levels_t log_level = VLOG_DEBUG);
+    void statistics_print(vlog_levels_t log_level = VLOG_DEBUG) override;
 
-    virtual inline fd_type_t get_type() { return FD_TYPE_PIPE; }
+    inline fd_type_t get_type() override { return FD_TYPE_PIPE; }
 
 private:
     bool m_b_blocking;
@@ -87,7 +87,7 @@ private:
     int m_write_count_no_change_count;
     bool m_b_lbm_event_q_pipe_timer_on;
 
-    void handle_timer_expired(void *user_data);
+    void handle_timer_expired(void *user_data) override;
 
     void write_lbm_pipe_enhance();
 
