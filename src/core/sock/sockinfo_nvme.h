@@ -56,7 +56,7 @@ public:
         , m_is_ddgs_on(false)
     {
     }
-    ~sockinfo_tcp_ops_nvme()
+    ~sockinfo_tcp_ops_nvme() override
     {
         if (m_pdu_mdesc) {
             m_pdu_mdesc->put();

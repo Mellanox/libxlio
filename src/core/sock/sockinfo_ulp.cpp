@@ -222,7 +222,7 @@ public:
         m_p_zc_data = nullptr;
     }
 
-    ~tls_record()
+    ~tls_record() override
     {
         /*
          * Because of batching, buffers can be freed after their socket
@@ -236,9 +236,9 @@ public:
         }
     }
 
-    void get(void) { (void)atomic_fetch_and_inc(&m_ref); }
+    void get(void) override { (void)atomic_fetch_and_inc(&m_ref); }
 
-    void put(void)
+    void put(void) override
     {
         int ref = atomic_fetch_and_dec(&m_ref);
 
@@ -247,7 +247,8 @@ public:
         }
     }
 
-    uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, const void *addr, size_t len)
+    uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, const void *addr,
+                      size_t len) override
     {
         const uintptr_t uaddr = (uintptr_t)addr;
         const uintptr_t ubuf = (uintptr_t)m_p_buf->p_buffer;
