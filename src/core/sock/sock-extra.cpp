@@ -61,7 +61,7 @@
 extern "C" int xlio_register_recv_callback(int __fd, xlio_recv_callback_t __callback,
                                            void *__context)
 {
-    socket_fd_api *p_socket_object = NULL;
+    socket_fd_api *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object && !safe_mce_sys().enable_socketxtreme) {
         p_socket_object->register_callback(__callback, __context);
@@ -74,7 +74,7 @@ extern "C" int xlio_register_recv_callback(int __fd, xlio_recv_callback_t __call
 extern "C" int xlio_recvfrom_zcopy(int __fd, void *__buf, size_t __nbytes, int *__flags,
                                    struct sockaddr *__from, socklen_t *__fromlen)
 {
-    socket_fd_api *p_socket_object = NULL;
+    socket_fd_api *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         struct iovec piov[1];
@@ -89,7 +89,7 @@ extern "C" int xlio_recvfrom_zcopy(int __fd, void *__buf, size_t __nbytes, int *
 extern "C" int xlio_recvfrom_zcopy_free_packets(int __fd, struct xlio_recvfrom_zcopy_packet_t *pkts,
                                                 size_t count)
 {
-    socket_fd_api *p_socket_object = NULL;
+    socket_fd_api *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         return p_socket_object->recvfrom_zcopy_free_packets(pkts, count);
@@ -118,7 +118,7 @@ extern "C" int xlio_socketxtreme_poll(int fd, struct xlio_socketxtreme_completio
                                       unsigned int ncompletions, int flags)
 {
     int ret_val = -1;
-    cq_channel_info *cq_ch_info = NULL;
+    cq_channel_info *cq_ch_info = nullptr;
 
     cq_ch_info = g_p_fd_collection->get_cq_channel_fd(fd);
 
@@ -153,8 +153,8 @@ static int dummy_xlio_socketxtreme_free_packets(struct xlio_socketxtreme_packet_
 extern "C" int xlio_socketxtreme_free_packets(struct xlio_socketxtreme_packet_desc_t *packets,
                                               int num)
 {
-    mem_buf_desc_t *desc = NULL;
-    sockinfo_tcp *p_socket_object = NULL;
+    mem_buf_desc_t *desc = nullptr;
+    sockinfo_tcp *p_socket_object = nullptr;
 
     if (likely(packets)) {
         for (int i = 0; i < num; i++) {
@@ -198,7 +198,7 @@ static int dummy_xlio_socketxtreme_ref_buff(xlio_buff_t *buff)
 extern "C" int xlio_socketxtreme_ref_buff(xlio_buff_t *buff)
 {
     int ret_val = 0;
-    mem_buf_desc_t *desc = NULL;
+    mem_buf_desc_t *desc = nullptr;
 
     if (likely(buff)) {
         desc = (mem_buf_desc_t *)buff;
@@ -224,7 +224,7 @@ static int dummy_xlio_socketxtreme_free_buff(xlio_buff_t *buff)
 extern "C" int xlio_socketxtreme_free_buff(xlio_buff_t *buff)
 {
     int ret_val = 0;
-    mem_buf_desc_t *desc = NULL;
+    mem_buf_desc_t *desc = nullptr;
 
     if (likely(buff)) {
         desc = (mem_buf_desc_t *)buff;
@@ -239,7 +239,7 @@ extern "C" int xlio_socketxtreme_free_buff(xlio_buff_t *buff)
 
 extern "C" int xlio_get_socket_rings_num(int fd)
 {
-    socket_fd_api *p_socket_object = NULL;
+    socket_fd_api *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(fd);
     if (p_socket_object && p_socket_object->check_rings()) {
         return p_socket_object->get_rings_num();
@@ -250,7 +250,7 @@ extern "C" int xlio_get_socket_rings_num(int fd)
 
 extern "C" int xlio_get_socket_rings_fds(int fd, int *ring_fds, int ring_fds_sz)
 {
-    if (ring_fds_sz <= 0 || ring_fds == NULL) {
+    if (ring_fds_sz <= 0 || !ring_fds) {
         errno = EINVAL;
         return -1;
     }
@@ -304,7 +304,7 @@ static inline struct cmsghdr *__cmsg_nxthdr(void *__ctl, size_t __size, struct c
 
     __ptr = (struct cmsghdr *)(((unsigned char *)__cmsg) + CMSG_ALIGN(__cmsg->cmsg_len));
     if ((unsigned long)((char *)(__ptr + 1) - (char *)__ctl) > __size) {
-        return NULL;
+        return nullptr;
     }
 
     return __ptr;
@@ -344,9 +344,9 @@ extern "C" int xlio_extra_ioctl(void *cmsg_hdr, size_t cmsg_len)
 
 struct xlio_api_t *extra_api(void)
 {
-    static struct xlio_api_t *xlio_api = NULL;
+    static struct xlio_api_t *xlio_api = nullptr;
 
-    if (NULL == xlio_api) {
+    if (!xlio_api) {
         bool enable_socketxtreme = safe_mce_sys().enable_socketxtreme;
 
         xlio_api = new struct xlio_api_t();

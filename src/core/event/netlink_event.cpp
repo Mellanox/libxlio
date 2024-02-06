@@ -92,7 +92,7 @@ const std::string route_nl_event::to_str() const
 
 neigh_nl_event::neigh_nl_event(struct nlmsghdr *hdr, struct rtnl_neigh *neigh, void *notifier)
     : netlink_event(hdr, notifier)
-    , m_neigh_info(NULL)
+    , m_neigh_info(nullptr)
 {
     m_neigh_info = new netlink_neigh_info(neigh);
     if ((!hdr) && (neigh)) {
@@ -109,7 +109,7 @@ neigh_nl_event::~neigh_nl_event()
 
 route_nl_event::route_nl_event(struct nlmsghdr *hdr, struct rtnl_route *route, void *notifier)
     : netlink_event(hdr, notifier)
-    , m_route_info(NULL)
+    , m_route_info(nullptr)
 {
     m_route_info = new netlink_route_info(route);
 }

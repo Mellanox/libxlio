@@ -120,8 +120,8 @@ public:
      * we have one (if sockinfo::m_b_blocking == true)
      */
     ssize_t rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
-               sockaddr *__from = NULL, socklen_t *__fromlen = NULL,
-               struct msghdr *__msg = NULL) override;
+               sockaddr *__from = nullptr, socklen_t *__fromlen = nullptr,
+               struct msghdr *__msg = nullptr) override;
     /**
      * Check that a call to this sockinfo rx() will not block
      * -> meaning, we got an offloaded ready rx datagram
@@ -129,7 +129,7 @@ public:
      *
      * While polling CQ, the fd_array is filled with a list of newly queued packets FD's
      */
-    bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = NULL) override;
+    bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = nullptr) override;
     /**
      * Arm the event channel(s) assosiated with this sockinfo
      * Fill the fd_set (p_rxfds) with the correct fd channel values and the p_nfds with the (max_fd

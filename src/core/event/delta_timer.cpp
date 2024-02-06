@@ -56,16 +56,16 @@
 
 timer::timer()
 {
-    m_list_head = NULL;
+    m_list_head = nullptr;
     gettime(&m_ts_last);
 }
 
 timer::~timer()
 {
     timer_node_t *iter = m_list_head;
-    timer_node_t *to_free = NULL;
+    timer_node_t *to_free = nullptr;
     tmr_logfunc("");
-    m_list_head = NULL;
+    m_list_head = nullptr;
     // free all the list
     while (iter) {
         to_free = iter;
@@ -133,7 +133,7 @@ void timer::remove_timer(timer_node_t *node, timer_handler *handler)
     BULLSEYE_EXCLUDE_BLOCK_END
 
     // Invalidate node before freeing it
-    node->handler = NULL;
+    node->handler = nullptr;
     node->req_type = INVALID_TIMER;
 
     // Remove & Free node
@@ -145,7 +145,7 @@ void timer::remove_timer(timer_node_t *node, timer_handler *handler)
 void timer::remove_all_timers(timer_handler *handler)
 {
     timer_node_t *node = m_list_head;
-    timer_node_t *node_tmp = NULL;
+    timer_node_t *node_tmp = nullptr;
 
     // Look for handler in the list if node wasen't indicated
     while (node) {
@@ -160,12 +160,12 @@ void timer::remove_all_timers(timer_handler *handler)
             }
             BULLSEYE_EXCLUDE_BLOCK_END
             // Invalidate node before freeing it
-            node_tmp->handler = NULL;
+            node_tmp->handler = nullptr;
             node_tmp->req_type = INVALID_TIMER;
             remove_from_list(node_tmp);
             // Remove & Free node
             free(node_tmp);
-            node_tmp = NULL;
+            node_tmp = nullptr;
         } else {
             node = node->next;
         }
@@ -177,7 +177,7 @@ void timer::remove_all_timers(timer_handler *handler)
 int timer::update_timeout()
 {
     int ret = 0, delta_msec = 0;
-    timer_node_t *list_tmp = NULL;
+    timer_node_t *list_tmp = nullptr;
     struct timespec ts_now, ts_delta;
 
     ret = gettime(&ts_now);
@@ -248,7 +248,7 @@ void timer::process_registered_timers()
         case PERIODIC_TIMER:
             // re-insert
             remove_from_list(iter);
-            iter->prev = iter->next = NULL;
+            iter->prev = iter->next = nullptr;
             insert_to_list(iter);
             break;
 
@@ -308,8 +308,8 @@ void timer::insert_to_list(timer_node_t *new_node)
 
     if (!m_list_head) { // first node in the list
         new_node->delta_time_msec = new_node->orig_time_msec; // time from now
-        new_node->next = NULL;
-        new_node->prev = NULL;
+        new_node->next = nullptr;
+        new_node->prev = nullptr;
         m_list_head = new_node;
         tmr_logfuncall("insert first node to list (handler %p, timer %d, delta time %d)",
                        new_node->handler, new_node->orig_time_msec, new_node->delta_time_msec);
@@ -318,7 +318,7 @@ void timer::insert_to_list(timer_node_t *new_node)
     // else: need to find the correct place in the list
     tmp_delta = new_node->orig_time_msec;
     iter = m_list_head;
-    prev = NULL;
+    prev = nullptr;
 
     while (iter && tmp_delta >= iter->delta_time_msec) {
         tmp_delta = tmp_delta - iter->delta_time_msec;

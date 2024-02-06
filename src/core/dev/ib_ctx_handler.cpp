@@ -60,15 +60,15 @@ ib_ctx_handler::ib_ctx_handler(struct ib_ctx_handler_desc *desc)
     , m_on_device_memory(0)
     , m_removed(false)
     , m_lock_umr("spin_lock_umr")
-    , m_p_ctx_time_converter(NULL)
+    , m_p_ctx_time_converter(nullptr)
 {
-    if (NULL == desc) {
+    if (!desc) {
         ibch_logpanic("Invalid ib_ctx_handler");
     }
 
     m_p_ibv_device = desc->device;
 
-    if (m_p_ibv_device == NULL) {
+    if (!m_p_ibv_device) {
         ibch_logpanic("m_p_ibv_device is invalid");
     }
 
@@ -80,7 +80,7 @@ ib_ctx_handler::ib_ctx_handler(struct ib_ctx_handler_desc *desc)
     VALGRIND_MAKE_MEM_DEFINED(m_p_ibv_pd, sizeof(struct ibv_pd));
 
     m_p_ibv_device_attr = new xlio_ibv_device_attr_ex();
-    if (m_p_ibv_device_attr == NULL) {
+    if (!m_p_ibv_device_attr) {
         ibch_logpanic("ibv device %p attr allocation failure (ibv context %p) (errno=%d %m)",
                       m_p_ibv_device, m_p_ibv_context, errno);
     }
@@ -119,7 +119,7 @@ err:
 
     if (m_p_adapter) {
         delete m_p_adapter;
-        m_p_ibv_context = NULL;
+        m_p_ibv_context = nullptr;
     }
 }
 
@@ -144,7 +144,7 @@ ib_ctx_handler::~ib_ctx_handler()
         }
         ENDIF_VERBS_FAILURE;
         VALGRIND_MAKE_MEM_UNDEFINED(m_p_ibv_pd, sizeof(struct ibv_pd));
-        m_p_ibv_pd = NULL;
+        m_p_ibv_pd = nullptr;
     }
 
     if (m_p_ctx_time_converter) {
@@ -154,7 +154,7 @@ ib_ctx_handler::~ib_ctx_handler()
 
     if (m_p_adapter) {
         delete m_p_adapter;
-        m_p_ibv_context = NULL;
+        m_p_ibv_context = nullptr;
     }
 
     BULLSEYE_EXCLUDE_BLOCK_END
@@ -222,15 +222,15 @@ int parse_dpcp_version(const char *dpcp_ver)
 dpcp::adapter *ib_ctx_handler::set_dpcp_adapter()
 {
     dpcp::status status = dpcp::DPCP_ERR_NO_SUPPORT;
-    dpcp::provider *p_provider = NULL;
-    dpcp::adapter_info *dpcp_lst = NULL;
+    dpcp::provider *p_provider = nullptr;
+    dpcp::adapter_info *dpcp_lst = nullptr;
     size_t adapters_num = 0;
     size_t i = 0;
     int dpcp_ver = 0;
 
-    m_p_adapter = NULL;
+    m_p_adapter = nullptr;
     if (!m_p_ibv_device) {
-        return NULL;
+        return nullptr;
     }
 
     status = dpcp::provider::get_instance(p_provider);
@@ -251,7 +251,7 @@ dpcp::adapter *ib_ctx_handler::set_dpcp_adapter()
      * 0 arguments along with DPCP_ERR_OUT_OF_RANGE error. On success, the
      * number of actual adapters is not set, so we need a separate call here.
      */
-    status = p_provider->get_adapter_info_lst(NULL, adapters_num);
+    status = p_provider->get_adapter_info_lst(nullptr, adapters_num);
     if (dpcp::DPCP_ERR_OUT_OF_RANGE != status || 0 == adapters_num) {
         ibch_logdbg("found no adapters status = %d", status);
         goto err;
@@ -271,13 +271,13 @@ dpcp::adapter *ib_ctx_handler::set_dpcp_adapter()
 
     for (i = 0; i < adapters_num; i++) {
         if (dpcp_lst[i].name == m_p_ibv_device->name) {
-            dpcp::adapter *adapter = NULL;
+            dpcp::adapter *adapter = nullptr;
 
             status = p_provider->open_adapter(dpcp_lst[i].name, adapter);
             if ((dpcp::DPCP_OK == status) && (adapter)) {
                 int ret = 0;
-                struct ibv_context *ctx = NULL;
-                struct ibv_pd *pd = NULL;
+                struct ibv_context *ctx = nullptr;
+                struct ibv_pd *pd = nullptr;
                 mlx5dv_obj mlx5_obj;
 
                 ctx = (ibv_context *)adapter->get_ibv_context();
@@ -348,7 +348,7 @@ void ib_ctx_handler::check_capabilities()
 
 void ib_ctx_handler::set_ctx_time_converter_status(ts_conversion_mode_t conversion_mode)
 {
-    if (m_p_ctx_time_converter != NULL) {
+    if (m_p_ctx_time_converter) {
         /*
          * Don't override time_converter object. Current method may be
          * called more than once if multiple slaves point to the same
@@ -416,12 +416,12 @@ void ib_ctx_handler::set_ctx_time_converter_status(ts_conversion_mode_t conversi
 
 uint32_t ib_ctx_handler::mem_reg(void *addr, size_t length, uint64_t access)
 {
-    struct ibv_mr *mr = NULL;
+    struct ibv_mr *mr = nullptr;
     uint32_t lkey = LKEY_ERROR;
 
     mr = ibv_reg_mr(m_p_ibv_pd, addr, length, access);
     VALGRIND_MAKE_MEM_DEFINED(mr, sizeof(ibv_mr));
-    if (NULL == mr) {
+    if (!mr) {
         print_warning_rlimit_memlock(length, errno);
     } else {
         m_mr_map_lkey[mr->lkey] = mr;
@@ -460,7 +460,7 @@ struct ibv_mr *ib_ctx_handler::get_mem_reg(uint32_t lkey)
         return iter->second;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 uint32_t ib_ctx_handler::user_mem_reg(void *addr, size_t length, uint64_t access)
@@ -547,6 +547,6 @@ void ib_ctx_handler::handle_event_device_fatal()
     g_p_event_handler_manager->unregister_ibverbs_event(m_p_ibv_context->async_fd, this);
     if (m_p_ctx_time_converter) {
         m_p_ctx_time_converter->clean_obj();
-        m_p_ctx_time_converter = NULL;
+        m_p_ctx_time_converter = nullptr;
     }
 }

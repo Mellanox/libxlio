@@ -65,7 +65,7 @@ time_converter_ptp::time_converter_ptp(struct ibv_context *ctx)
     }
 
     m_timer_handle = g_p_event_handler_manager->register_timer_event(UPDATE_HW_TIMER_PTP_PERIOD_MS,
-                                                                     this, PERIODIC_TIMER, 0);
+                                                                     this, PERIODIC_TIMER, nullptr);
     m_converter_status = TS_CONVERSION_MODE_PTP;
 }
 

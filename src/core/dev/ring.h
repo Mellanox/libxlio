@@ -69,7 +69,7 @@ struct ring_ec {
     {
         INIT_LIST_HEAD(&list);
         memset(&completion, 0, sizeof(completion));
-        last_buff_lst = NULL;
+        last_buff_lst = nullptr;
     }
 };
 
@@ -115,9 +115,9 @@ public:
     virtual bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *) { return false; };
     virtual int drain_and_proccess() = 0;
     virtual int wait_for_notification_and_process_element(int cq_channel_fd, uint64_t *p_cq_poll_sn,
-                                                          void *pv_fd_ready_array = NULL) = 0;
+                                                          void *pv_fd_ready_array = nullptr) = 0;
     virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
-                                            void *pv_fd_ready_array = NULL) = 0;
+                                            void *pv_fd_ready_array = nullptr) = 0;
     virtual int poll_and_process_element_tx(uint64_t *p_cq_poll_sn) = 0;
     virtual void adapt_cq_moderation() = 0;
     virtual void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc) = 0;

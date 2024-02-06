@@ -38,7 +38,7 @@
 
 extern global_stats_t g_global_stat_static;
 
-tcp_seg_pool *g_tcp_seg_pool = NULL;
+tcp_seg_pool *g_tcp_seg_pool = nullptr;
 
 tcp_seg_pool::tcp_seg_pool()
     : m_p_head(nullptr)
@@ -69,7 +69,7 @@ std::pair<tcp_seg *, tcp_seg *> tcp_seg_pool::get_tcp_seg_list(uint32_t amount)
 repeat:
     count = amount;
     head = next = m_p_head;
-    prev = NULL;
+    prev = nullptr;
     while (count > 0 && next) {
         prev = next;
         next = next->next;
@@ -84,7 +84,7 @@ repeat:
         unlock();
         return std::make_pair(nullptr, nullptr);
     }
-    prev->next = NULL;
+    prev->next = nullptr;
     m_p_head = next;
     m_stats.allocations++;
     g_global_stat_static.n_tcp_seg_pool_size -= amount;

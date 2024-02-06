@@ -84,10 +84,10 @@ bool dst_entry_udp_mc::resolve_net_dev(bool is_connect)
 {
     NOT_IN_USE(is_connect);
     bool ret_val = false;
-    cache_entry_subject<int, net_device_val *> *net_dev_entry = NULL;
+    cache_entry_subject<int, net_device_val *> *net_dev_entry = nullptr;
 
     if (!m_mc_tx_src_ip.is_anyaddr() && !m_mc_tx_src_ip.is_mc(m_family)) {
-        if (m_p_net_dev_entry == NULL) {
+        if (!m_p_net_dev_entry) {
             net_device_val *mc_net_dev =
                 g_p_net_device_table_mgr->get_net_device_val(ip_addr(m_mc_tx_src_ip, m_family));
             if (mc_net_dev) {

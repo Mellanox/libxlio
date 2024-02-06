@@ -81,7 +81,7 @@
 
 #define INITIAL_EVENTS_NUM 64
 
-event_handler_manager *g_p_event_handler_manager = NULL;
+event_handler_manager *g_p_event_handler_manager = nullptr;
 
 pthread_t g_n_internal_thread_id = 0;
 
@@ -94,7 +94,7 @@ void *event_handler_manager::register_timer_event(int timeout_msec, timer_handle
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!handler || (req_type < 0 || req_type >= INVALID_TIMER)) {
         evh_logwarn("bad timer type (%d) or handler (%p)", req_type, handler);
-        return NULL;
+        return nullptr;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
@@ -290,7 +290,7 @@ void *event_handler_thread(void *_p_tgtObject)
         tasks_file += "/tasks";
         FILE *fp = fopen(tasks_file.c_str(), "w");
         BULLSEYE_EXCLUDE_BLOCK_START
-        if (fp == NULL) {
+        if (!fp) {
             evh_logpanic("Failed to open %s for writing", tasks_file.c_str());
         }
         if (fprintf(fp, "%d", gettid()) <= 0) {
@@ -389,7 +389,7 @@ void event_handler_manager::stop_thread()
 
         // Wait for thread exit
         if (m_event_handler_tid) {
-            pthread_join(m_event_handler_tid, 0);
+            pthread_join(m_event_handler_tid, nullptr);
             evh_logdbg("event handler thread stopped");
         } else {
             evh_logdbg("event handler thread not running");
@@ -404,7 +404,7 @@ void event_handler_manager::stop_thread()
 
 void event_handler_manager::update_epfd(int fd, int operation, int events)
 {
-    epoll_event ev = {0, {0}};
+    epoll_event ev = {0, {nullptr}};
 
     if (m_epfd < 0) {
         return;
@@ -760,7 +760,7 @@ void event_handler_manager::handle_registration_action(reg_action_t &reg_action)
     case UNREGISTER_TIMERS_AND_DELETE:
         priv_unregister_all_handler_timers(reg_action.info.timer);
         delete reg_action.info.timer.handler;
-        reg_action.info.timer.handler = NULL;
+        reg_action.info.timer.handler = nullptr;
         break;
         BULLSEYE_EXCLUDE_BLOCK_START
     default:
@@ -867,7 +867,7 @@ void event_handler_manager::process_rdma_cm_event(event_handler_map_t::iterator 
     // Read the notification event channel
     struct rdma_event_channel *cma_channel =
         (struct rdma_event_channel *)iter_fd->second.rdma_cm_ev.cma_channel;
-    struct rdma_cm_event *p_tmp_cm_event = NULL;
+    struct rdma_cm_event *p_tmp_cm_event = nullptr;
     struct rdma_cm_event cma_event;
 
     evh_logfunc_entry("cma_channel %p (fd = %d)", cma_channel, cma_channel->fd);
@@ -900,7 +900,7 @@ void event_handler_manager::process_rdma_cm_event(event_handler_map_t::iterator 
     }
 
     // Find registered event handler
-    if (cma_id != NULL) {
+    if (cma_id) {
         event_handler_rdma_cm_map_t::iterator iter_id =
             iter_fd->second.rdma_cm_ev.map_rdma_cm_id.find(cma_id);
         if (iter_id != iter_fd->second.rdma_cm_ev.map_rdma_cm_id.end()) {
@@ -958,7 +958,7 @@ void *event_handler_manager::thread_loop()
             g_p_net_device_table_mgr) {
             m_cq_epfd = g_p_net_device_table_mgr->global_ring_epfd_get();
             if (m_cq_epfd > 0) {
-                epoll_event evt = {0, {0}};
+                epoll_event evt = {0, {nullptr}};
                 evt.events = EPOLLIN | EPOLLPRI;
                 evt.data.fd = m_cq_epfd;
                 SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_ADD, m_cq_epfd, &evt);
@@ -970,12 +970,12 @@ void *event_handler_manager::thread_loop()
         if (m_b_sysvar_internal_thread_arm_cq_enabled && m_cq_epfd > 0 &&
             g_p_net_device_table_mgr) {
             g_p_net_device_table_mgr->global_ring_poll_and_process_element(&poll_sn_rx, &poll_sn_tx,
-                                                                           NULL);
+                                                                           nullptr);
             int ret =
                 g_p_net_device_table_mgr->global_ring_request_notification(poll_sn_rx, poll_sn_tx);
             if (ret > 0) {
-                g_p_net_device_table_mgr->global_ring_poll_and_process_element(&poll_sn_rx,
-                                                                               &poll_sn_tx, NULL);
+                g_p_net_device_table_mgr->global_ring_poll_and_process_element(
+                    &poll_sn_rx, &poll_sn_tx, nullptr);
             }
         }
 
@@ -999,7 +999,7 @@ void *event_handler_manager::thread_loop()
             if (m_b_sysvar_internal_thread_arm_cq_enabled && p_events[idx].data.fd == m_cq_epfd &&
                 g_p_net_device_table_mgr) {
                 g_p_net_device_table_mgr->global_ring_wait_for_notification_and_process_element(
-                    &poll_sn_rx, NULL);
+                    &poll_sn_rx, nullptr);
             } else if (is_wakeup_fd(p_events[idx].data.fd)) {
                 // a request for registration was sent
                 m_reg_action_q_lock.lock();
@@ -1093,5 +1093,5 @@ void *event_handler_manager::thread_loop()
 
     free(p_events);
 
-    return 0;
+    return nullptr;
 }

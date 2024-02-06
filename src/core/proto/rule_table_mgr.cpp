@@ -66,7 +66,7 @@
 
 #define DEFAULT_RULE_TABLE_SIZE 64
 
-rule_table_mgr *g_p_rule_table_mgr = NULL;
+rule_table_mgr *g_p_rule_table_mgr = nullptr;
 static inline bool is_matching_rule(const route_rule_table_key &key, const rule_val &val);
 
 rule_table_mgr::rule_table_mgr()

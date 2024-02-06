@@ -158,8 +158,8 @@ net_device_val::net_device_val(struct net_device_val_desc *desc)
 {
     bool valid = false;
     ib_ctx_handler *ib_ctx;
-    struct nlmsghdr *nl_msg = NULL;
-    struct ifinfomsg *nl_msgdata = NULL;
+    struct nlmsghdr *nl_msg = nullptr;
+    struct ifinfomsg *nl_msgdata = nullptr;
     int nl_attrlen;
     struct rtattr *nl_attr;
 
@@ -169,15 +169,15 @@ net_device_val::net_device_val(struct net_device_val_desc *desc)
     m_flags = 0;
     m_mtu = 0;
     m_state = INVALID;
-    m_p_L2_addr = NULL;
-    m_p_br_addr = NULL;
+    m_p_L2_addr = nullptr;
+    m_p_br_addr = nullptr;
     m_bond = NO_BOND;
     m_if_active = 0;
     m_bond_xmit_hash_policy = XHP_LAYER_2;
     m_bond_fail_over_mac = 0;
     m_transport_type = XLIO_TRANSPORT_UNKNOWN;
 
-    if (NULL == desc) {
+    if (!desc) {
         nd_logerr("Invalid net_device_val name=%s", "NA");
         m_state = INVALID;
         return;
@@ -316,12 +316,12 @@ net_device_val::~net_device_val()
     }
     if (m_p_br_addr) {
         delete m_p_br_addr;
-        m_p_br_addr = NULL;
+        m_p_br_addr = nullptr;
     }
 
     if (m_p_L2_addr) {
         delete m_p_L2_addr;
-        m_p_L2_addr = NULL;
+        m_p_L2_addr = nullptr;
     }
 
     slave_data_vector_t::iterator slave = m_slaves.begin();
@@ -578,7 +578,7 @@ void net_device_val::set_slave_array()
     nd_logdbg("");
 
     if (m_bond == NETVSC) {
-        slave_data_t *s = NULL;
+        slave_data_t *s = nullptr;
         unsigned int slave_flags = 0;
         if (get_netvsc_slave(get_ifname_link(), active_slave, slave_flags)) {
             if ((slave_flags & IFF_UP) && verify_qp_creation(active_slave, IBV_QPT_RAW_PACKET)) {
@@ -604,7 +604,7 @@ void net_device_val::set_slave_array()
 
                 slave_data_t *s = new slave_data_t(if_nametoindex(slave));
                 m_slaves.push_back(s);
-                slave = strtok(NULL, " ");
+                slave = strtok(nullptr, " ");
             }
         }
 
@@ -692,7 +692,7 @@ const slave_data_t *net_device_val::get_slave(int if_index)
             return cur_slave;
         }
     }
-    return NULL;
+    return nullptr;
 }
 
 void net_device_val::verify_bonding_mode()
@@ -710,7 +710,7 @@ void net_device_val::verify_bonding_mode()
     sprintf(bond_failover_mac_param_file, BONDING_FAILOVER_MAC_PARAM_FILE, get_ifname_link());
 
     if (priv_safe_read_file(bond_mode_param_file, bond_mode_file_content, FILENAME_MAX) > 0) {
-        char *bond_mode = NULL;
+        char *bond_mode = nullptr;
         bond_mode = strtok(bond_mode_file_content, " ");
         if (bond_mode) {
             if (!strcmp(bond_mode, "active-backup")) {
@@ -736,16 +736,16 @@ void net_device_val::verify_bonding_mode()
             get_ifname_link());
     if (priv_safe_try_read_file(bond_xmit_hash_policy_param_file,
                                 bond_xmit_hash_policy_file_content, FILENAME_MAX) > 0) {
-        char *bond_xhp = NULL;
-        char *saveptr = NULL;
+        char *bond_xhp = nullptr;
+        char *saveptr = nullptr;
 
         bond_xhp = strtok_r(bond_xmit_hash_policy_file_content, " ", &saveptr);
-        if (NULL == bond_xhp) {
+        if (!bond_xhp) {
             nd_logdbg("could not parse bond xmit hash policy, staying with default (L2)\n");
         } else {
-            bond_xhp = strtok_r(NULL, " ", &saveptr);
+            bond_xhp = strtok_r(nullptr, " ", &saveptr);
             if (bond_xhp) {
-                m_bond_xmit_hash_policy = (bond_xmit_hash_policy)strtol(bond_xhp, NULL, 10);
+                m_bond_xmit_hash_policy = (bond_xmit_hash_policy)strtol(bond_xhp, nullptr, 10);
                 if (m_bond_xmit_hash_policy < XHP_LAYER_2 ||
                     m_bond_xmit_hash_policy > XHP_ENCAP_3_4) {
                     vlog_printf(VLOG_WARNING,
@@ -933,9 +933,9 @@ bool net_device_val::update_active_slaves()
 
 void net_device_val::update_netvsc_slaves(int if_index, int if_flags)
 {
-    slave_data_t *s = NULL;
+    slave_data_t *s = nullptr;
     bool found = false;
-    ib_ctx_handler *ib_ctx = NULL, *up_ib_ctx = NULL;
+    ib_ctx_handler *ib_ctx = nullptr, *up_ib_ctx = nullptr;
     char if_name[IFNAMSIZ] = {0};
 
     m_lock.lock();
@@ -1001,7 +1001,7 @@ ring *net_device_val::reserve_ring(resource_allocation_key *key)
     nd_logfunc("");
     std::lock_guard<decltype(m_lock)> lock(m_lock);
     key = ring_key_redirection_reserve(key);
-    ring *the_ring = NULL;
+    ring *the_ring = nullptr;
     rings_hash_map_t::iterator ring_iter = m_h_ring_map.find(key);
 
     if (m_h_ring_map.end() == ring_iter) {
@@ -1010,11 +1010,11 @@ ring *net_device_val::reserve_ring(resource_allocation_key *key)
         resource_allocation_key *new_key = new resource_allocation_key(*key);
         the_ring = create_ring(new_key);
         if (!the_ring) {
-            return NULL;
+            return nullptr;
         }
         m_h_ring_map[new_key] = std::make_pair(the_ring, 0); // each ring is born with ref_count = 0
         ring_iter = m_h_ring_map.find(new_key);
-        epoll_event ev = {0, {0}};
+        epoll_event ev = {0, {nullptr}};
         size_t num_ring_rx_fds;
         int *ring_rx_fds_array = the_ring->get_rx_channel_fds(num_ring_rx_fds);
         ev.events = EPOLLIN;
@@ -1055,7 +1055,7 @@ int net_device_val::release_ring(resource_allocation_key *key)
 
     std::lock_guard<decltype(m_lock)> lock(m_lock);
     red_key = get_ring_key_redirection(key);
-    ring *the_ring = NULL;
+    ring *the_ring = nullptr;
     rings_hash_map_t::iterator ring_iter = m_h_ring_map.find(red_key);
 
     if (m_h_ring_map.end() != ring_iter) {
@@ -1076,7 +1076,7 @@ int net_device_val::release_ring(resource_allocation_key *key)
                 int cq_ch_fd = ring_rx_fds_array[i];
                 BULLSEYE_EXCLUDE_BLOCK_START
                 if (unlikely((SYSCALL(epoll_ctl, g_p_net_device_table_mgr->global_ring_epfd_get(),
-                                      EPOLL_CTL_DEL, cq_ch_fd, NULL)) &&
+                                      EPOLL_CTL_DEL, cq_ch_fd, nullptr)) &&
                              (!(errno == ENOENT || errno == EBADF)))) {
                     nd_logerr("Failed to delete RING notification fd to global_table_mgr_epfd "
                               "(errno=%d %s)",
@@ -1320,7 +1320,7 @@ void net_device_val_eth::configure()
     m_p_L2_addr = create_L2_address(get_ifname());
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (m_p_L2_addr == NULL) {
+    if (!m_p_L2_addr) {
         nd_logpanic("m_p_L2_addr allocation error");
     }
     BULLSEYE_EXCLUDE_BLOCK_END
@@ -1364,7 +1364,7 @@ uint32_t net_device_val::get_priority_by_tc_class(uint32_t tc_class)
 void net_device_val_eth::parse_prio_egress_map()
 {
     int len, ret;
-    nl_cache *cache = NULL;
+    nl_cache *cache = nullptr;
     rtnl_link *link;
     vlan_map *map;
 
@@ -1408,7 +1408,7 @@ out:
 
 ring *net_device_val_eth::create_ring(resource_allocation_key *key)
 {
-    ring *ring = NULL;
+    ring *ring = nullptr;
 
     try {
         switch (m_bond) {
@@ -1438,7 +1438,7 @@ L2_address *net_device_val_eth::create_L2_address(const char *ifname)
 {
     if (m_p_L2_addr) {
         delete m_p_L2_addr;
-        m_p_L2_addr = NULL;
+        m_p_L2_addr = nullptr;
     }
     unsigned char hw_addr[ETH_ALEN];
     get_local_ll_addr(ifname, hw_addr, ETH_ALEN, false);
@@ -1449,14 +1449,14 @@ void net_device_val_eth::create_br_address(const char *ifname)
 {
     if (m_p_br_addr) {
         delete m_p_br_addr;
-        m_p_br_addr = NULL;
+        m_p_br_addr = nullptr;
     }
     uint8_t hw_addr[ETH_ALEN];
     get_local_ll_addr(ifname, hw_addr, ETH_ALEN, true);
     m_p_br_addr = new ETH_addr(hw_addr);
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (m_p_br_addr == NULL) {
+    if (!m_p_br_addr) {
         nd_logpanic("m_p_br_addr allocation error");
     }
     BULLSEYE_EXCLUDE_BLOCK_END
@@ -1488,7 +1488,7 @@ bool net_device_val::verify_bond_or_eth_qp_creation()
     char *slave_name;
     char *save_ptr;
     slave_name = strtok_r(slaves, " ", &save_ptr);
-    while (slave_name != NULL) {
+    while (slave_name) {
         char *p = strchr(slave_name, '\n');
         if (p) {
             *p = '\0'; // Remove the tailing 'new line" char
@@ -1497,7 +1497,7 @@ bool net_device_val::verify_bond_or_eth_qp_creation()
             // check all slaves but print only once for bond
             bond_ok = false;
         }
-        slave_name = strtok_r(NULL, " ", &save_ptr);
+        slave_name = strtok_r(nullptr, " ", &save_ptr);
     }
     if (!bond_ok) {
         vlog_printf(VLOG_WARNING,
@@ -1555,9 +1555,9 @@ bool net_device_val::verify_qp_creation(const char *ifname, enum ibv_qp_type qp_
 {
     bool success = false;
     char bond_roce_lag_path[256] = {0};
-    struct ibv_cq *cq = NULL;
-    struct ibv_comp_channel *channel = NULL;
-    struct ibv_qp *qp = NULL;
+    struct ibv_cq *cq = nullptr;
+    struct ibv_comp_channel *channel = nullptr;
+    struct ibv_qp *qp = nullptr;
     struct ibv_context *context;
     int comp_vector = 0;
 

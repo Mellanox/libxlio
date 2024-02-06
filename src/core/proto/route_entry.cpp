@@ -53,8 +53,8 @@ route_entry::route_entry(route_rule_table_key rtk)
     , cache_observer()
     , m_b_offloaded_net_dev(false)
     , m_is_valid(false)
-    , m_p_net_dev_entry(NULL)
-    , m_p_net_dev_val(NULL)
+    , m_p_net_dev_entry(nullptr)
+    , m_p_net_dev_val(nullptr)
 {
     m_val = NULL;
     cache_entry_subject<route_rule_table_key, std::deque<rule_val *> *> *rr_entry = NULL;
@@ -67,7 +67,7 @@ route_entry::~route_entry()
     unregister_to_net_device();
     if (m_p_rr_entry) {
         g_p_rule_table_mgr->unregister_observer(get_key(), this);
-        m_p_rr_entry = NULL;
+        m_p_rr_entry = nullptr;
     }
 }
 
@@ -90,7 +90,7 @@ void route_entry::set_val(IN route_val *&val)
 
 void route_entry::register_to_net_device()
 {
-    cache_entry_subject<int, net_device_val *> *net_dev_entry = NULL;
+    cache_entry_subject<int, net_device_val *> *net_dev_entry = nullptr;
     if (g_p_net_device_table_mgr->register_observer(m_val->get_if_index(), this, &net_dev_entry)) {
         rt_entry_logdbg("route_entry [%p] is registered to an offloaded device", this);
         m_p_net_dev_entry = (net_device_entry *)net_dev_entry;
@@ -120,8 +120,8 @@ void route_entry::unregister_to_net_device()
         }
     }
 
-    m_p_net_dev_entry = NULL;
-    m_p_net_dev_val = NULL;
+    m_p_net_dev_entry = nullptr;
+    m_p_net_dev_val = nullptr;
 }
 
 void route_entry::notify_cb()
@@ -131,7 +131,7 @@ void route_entry::notify_cb()
     if (m_p_net_dev_entry->is_valid()) {
         m_p_net_dev_entry->get_val(m_p_net_dev_val);
     } else {
-        m_p_net_dev_val = NULL;
+        m_p_net_dev_val = nullptr;
     }
     notify_observers();
 }

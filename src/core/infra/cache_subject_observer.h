@@ -115,7 +115,7 @@ template <typename Key, typename Val> class cache_table_mgr : public tostr, publ
 public:
     cache_table_mgr(const char *lock_name = "lock(cache_table_mgr)")
         : m_lock(lock_name)
-        , m_timer_handle(NULL) {};
+        , m_timer_handle(nullptr) {};
     virtual ~cache_table_mgr();
 
     /* Returns pointer to the subject */
@@ -215,7 +215,7 @@ void cache_table_mgr<Key, Val>::start_garbage_collector(int timeout_msec)
 
     m_timer_handle =
         g_p_event_handler_manager->register_timer_event(timeout_msec, this, PERIODIC_TIMER, NULL);
-    if (m_timer_handle == NULL) {
+    if (!m_timer_handle) {
         __log_warn("Failed to start garbage_collector");
     }
 }
@@ -224,7 +224,7 @@ template <typename Key, typename Val> void cache_table_mgr<Key, Val>::stop_garba
 {
     if (m_timer_handle) {
         g_p_event_handler_manager->unregister_timer_event(this, m_timer_handle);
-        m_timer_handle = NULL;
+        m_timer_handle = nullptr;
     }
 }
 

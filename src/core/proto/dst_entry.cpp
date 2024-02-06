@@ -61,8 +61,8 @@ dst_entry::dst_entry(const sock_addr &dst, uint16_t src_port, socket_data &sock_
     , m_route_src_ip(in6addr_any)
     , m_pkt_src_ip(in6addr_any)
     , m_ring_alloc_logic_tx(sock_data.fd, ring_alloc_logic)
-    , m_p_tx_mem_buf_desc_list(NULL)
-    , m_p_zc_mem_buf_desc_list(NULL)
+    , m_p_tx_mem_buf_desc_list(nullptr)
+    , m_p_zc_mem_buf_desc_list(nullptr)
     , m_b_tx_mem_buf_desc_list_pending(false)
     , m_ttl_hop_limit(sock_data.ttl_hop_limit)
     , m_tos(sock_data.tos)
@@ -92,46 +92,46 @@ dst_entry::~dst_entry()
     if (m_p_rt_entry) {
         g_p_route_table_mgr->unregister_observer(
             route_rule_table_key(m_dst_ip, m_route_src_ip, m_family, m_tos), this);
-        m_p_rt_entry = NULL;
+        m_p_rt_entry = nullptr;
     }
 
     if (m_p_ring) {
         if (m_sge) {
             delete[] m_sge;
-            m_sge = NULL;
+            m_sge = nullptr;
         }
 
         if (m_p_tx_mem_buf_desc_list) {
             m_p_ring->mem_buf_tx_release(m_p_tx_mem_buf_desc_list, true);
-            m_p_tx_mem_buf_desc_list = NULL;
+            m_p_tx_mem_buf_desc_list = nullptr;
         }
         if (m_p_zc_mem_buf_desc_list) {
             m_p_ring->mem_buf_tx_release(m_p_zc_mem_buf_desc_list, true);
-            m_p_zc_mem_buf_desc_list = NULL;
+            m_p_zc_mem_buf_desc_list = nullptr;
         }
 
         m_p_net_dev_val->release_ring(m_ring_alloc_logic_tx.get_key());
-        m_p_ring = NULL;
+        m_p_ring = nullptr;
     }
 
     if (m_p_send_wqe_handler) {
         delete m_p_send_wqe_handler;
-        m_p_send_wqe_handler = NULL;
+        m_p_send_wqe_handler = nullptr;
     }
 
     if (m_p_neigh_val) {
         delete m_p_neigh_val;
-        m_p_neigh_val = NULL;
+        m_p_neigh_val = nullptr;
     }
 
     if (m_header) {
         delete m_header;
-        m_header = NULL;
+        m_header = nullptr;
     }
 
     if (m_header_neigh) {
         delete m_header_neigh;
-        m_header_neigh = NULL;
+        m_header_neigh = nullptr;
     }
 
     dst_logdbg("Done %s", to_str().c_str());
@@ -140,18 +140,18 @@ dst_entry::~dst_entry()
 void dst_entry::init_members()
 {
     set_state(false);
-    m_p_rt_val = NULL;
-    m_p_net_dev_val = NULL;
-    m_p_ring = NULL;
-    m_p_net_dev_entry = NULL;
-    m_p_neigh_entry = NULL;
-    m_p_neigh_val = NULL;
-    m_p_rt_entry = NULL;
+    m_p_rt_val = nullptr;
+    m_p_net_dev_val = nullptr;
+    m_p_ring = nullptr;
+    m_p_net_dev_entry = nullptr;
+    m_p_neigh_entry = nullptr;
+    m_p_neigh_val = nullptr;
+    m_p_rt_entry = nullptr;
     memset(&m_inline_send_wqe, 0, sizeof(m_inline_send_wqe));
     memset(&m_not_inline_send_wqe, 0, sizeof(m_not_inline_send_wqe));
     memset(&m_fragmented_send_wqe, 0, sizeof(m_not_inline_send_wqe));
-    m_p_send_wqe_handler = NULL;
-    m_sge = NULL;
+    m_p_send_wqe_handler = nullptr;
+    m_sge = nullptr;
     m_b_is_offloaded = true;
     m_b_is_initialized = false;
     m_max_inline = 0;
@@ -227,7 +227,7 @@ bool dst_entry::update_net_dev_val()
             }
             g_p_neigh_table_mgr->unregister_observer(
                 neigh_key(ip_addr(dst_addr, m_family), m_p_net_dev_val), this);
-            m_p_neigh_entry = NULL;
+            m_p_neigh_entry = nullptr;
         }
 
         // Change the net_device, clean old resources...
@@ -258,7 +258,7 @@ bool dst_entry::update_net_dev_val()
 bool dst_entry::update_rt_val()
 {
     bool ret_val = true;
-    route_val *p_rt_val = NULL;
+    route_val *p_rt_val = nullptr;
 
     if (m_p_rt_entry && m_p_rt_entry->get_val(p_rt_val)) {
         if (m_p_rt_val == p_rt_val) {
@@ -279,7 +279,7 @@ bool dst_entry::resolve_net_dev(bool is_connect)
 {
     bool ret_val = false;
 
-    cache_entry_subject<route_rule_table_key, route_val *> *p_ces = NULL;
+    cache_entry_subject<route_rule_table_key, route_val *> *p_ces = nullptr;
 
     if (m_dst_ip.is_anyaddr()) {
         dst_logdbg(PRODUCT_NAME " does not offload zero net IP address");
@@ -307,7 +307,7 @@ bool dst_entry::resolve_net_dev(bool is_connect)
             // set src addr by XLIO. We keep this logic for IPv4 only for backward compliancy.
             if (m_family == AF_INET && is_connect && m_route_src_ip.is_anyaddr()) {
                 dst_logfunc("Checking rt_entry src addr");
-                route_val *p_rt_val = NULL;
+                route_val *p_rt_val = nullptr;
                 if (m_p_rt_entry && m_p_rt_entry->get_val(p_rt_val) &&
                     !p_rt_val->get_src_addr().is_anyaddr()) {
                     g_p_route_table_mgr->unregister_observer(rtk, this);
@@ -346,11 +346,11 @@ bool dst_entry::resolve_neigh()
     if (m_p_rt_val && !m_p_rt_val->get_gw_addr().is_anyaddr() && !dst_addr.is_mc(m_family)) {
         dst_addr = m_p_rt_val->get_gw_addr();
     }
-    cache_entry_subject<neigh_key, neigh_val *> *p_ces = NULL;
+    cache_entry_subject<neigh_key, neigh_val *> *p_ces = nullptr;
     if (m_p_neigh_entry ||
         g_p_neigh_table_mgr->register_observer(
             neigh_key(ip_addr(dst_addr, m_family), m_p_net_dev_val), this, &p_ces)) {
-        if (m_p_neigh_entry == NULL) {
+        if (!m_p_neigh_entry) {
             m_p_neigh_entry = dynamic_cast<neigh_entry *>(p_ces);
         }
         if (m_p_neigh_entry) {
@@ -378,7 +378,7 @@ bool dst_entry::resolve_ring()
         if (m_p_ring) {
             if (m_sge) {
                 delete[] m_sge;
-                m_sge = NULL;
+                m_sge = nullptr;
             }
             m_sge = new (std::nothrow) struct ibv_sge[m_p_ring->get_max_send_sge()];
             if (!m_sge) {
@@ -400,15 +400,15 @@ bool dst_entry::release_ring()
         if (m_p_ring) {
             if (m_p_tx_mem_buf_desc_list) {
                 m_p_ring->mem_buf_tx_release(m_p_tx_mem_buf_desc_list, true);
-                m_p_tx_mem_buf_desc_list = NULL;
+                m_p_tx_mem_buf_desc_list = nullptr;
             }
             if (m_p_zc_mem_buf_desc_list) {
                 m_p_ring->mem_buf_tx_release(m_p_zc_mem_buf_desc_list, true);
-                m_p_zc_mem_buf_desc_list = NULL;
+                m_p_zc_mem_buf_desc_list = nullptr;
             }
             dst_logdbg("releasing a ring");
             m_p_net_dev_val->release_ring(m_ring_alloc_logic_tx.get_key());
-            m_p_ring = NULL;
+            m_p_ring = nullptr;
         }
         ret_val = true;
     }
@@ -455,7 +455,7 @@ bool dst_entry::conf_l2_hdr_and_snd_wqe_eth()
     // scratch
     if (m_p_send_wqe_handler) {
         delete m_p_send_wqe_handler;
-        m_p_send_wqe_handler = NULL;
+        m_p_send_wqe_handler = nullptr;
     }
 
     m_p_send_wqe_handler = new wqe_send_handler();
@@ -583,11 +583,11 @@ bool dst_entry::prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_
                                                  m_src_port, m_dst_port);
                     if (m_p_tx_mem_buf_desc_list) {
                         m_p_ring->mem_buf_tx_release(m_p_tx_mem_buf_desc_list, true);
-                        m_p_tx_mem_buf_desc_list = NULL;
+                        m_p_tx_mem_buf_desc_list = nullptr;
                     }
                     if (m_p_zc_mem_buf_desc_list) {
                         m_p_ring->mem_buf_tx_release(m_p_zc_mem_buf_desc_list, true);
-                        m_p_zc_mem_buf_desc_list = NULL;
+                        m_p_zc_mem_buf_desc_list = nullptr;
                     }
                     resolved = true;
                 }
@@ -680,7 +680,7 @@ void dst_entry::do_ring_migration_tx(lock_base &socket_lock, resource_allocation
     m_p_ring = new_ring;
     if (m_sge) {
         delete[] m_sge;
-        m_sge = NULL;
+        m_sge = nullptr;
     }
     m_sge = new (std::nothrow) struct ibv_sge[m_p_ring->get_max_send_sge()];
     if (!m_sge) {
@@ -691,9 +691,9 @@ void dst_entry::do_ring_migration_tx(lock_base &socket_lock, resource_allocation
                                       get_route_mtu() + (uint32_t)m_header->m_transport_header_len);
 
     mem_buf_desc_t *tmp_list = m_p_tx_mem_buf_desc_list;
-    m_p_tx_mem_buf_desc_list = NULL;
+    m_p_tx_mem_buf_desc_list = nullptr;
     mem_buf_desc_t *tmp_list_zc = m_p_zc_mem_buf_desc_list;
-    m_p_zc_mem_buf_desc_list = NULL;
+    m_p_zc_mem_buf_desc_list = nullptr;
 
     m_slow_path_lock.unlock();
     socket_lock.unlock();
@@ -770,7 +770,7 @@ bool dst_entry::alloc_neigh_val(transport_type_t tranport)
 
     if (m_p_neigh_val) {
         delete m_p_neigh_val;
-        m_p_neigh_val = NULL;
+        m_p_neigh_val = nullptr;
     }
 
     switch (tranport) {
@@ -789,25 +789,25 @@ void dst_entry::return_buffers_pool()
 {
     int count;
 
-    if (m_p_tx_mem_buf_desc_list == NULL && m_p_zc_mem_buf_desc_list == NULL) {
+    if (!m_p_tx_mem_buf_desc_list && !m_p_zc_mem_buf_desc_list) {
         return;
     }
 
     if (m_b_tx_mem_buf_desc_list_pending && m_p_ring) {
-        if (m_p_tx_mem_buf_desc_list != NULL) {
+        if (m_p_tx_mem_buf_desc_list) {
             count = m_p_ring->mem_buf_tx_release(m_p_tx_mem_buf_desc_list, true, true);
             if (count) {
-                m_p_tx_mem_buf_desc_list = NULL;
+                m_p_tx_mem_buf_desc_list = nullptr;
             }
         }
-        if (m_p_zc_mem_buf_desc_list != NULL) {
+        if (m_p_zc_mem_buf_desc_list) {
             count = m_p_ring->mem_buf_tx_release(m_p_zc_mem_buf_desc_list, true, true);
             if (count) {
-                m_p_zc_mem_buf_desc_list = NULL;
+                m_p_zc_mem_buf_desc_list = nullptr;
             }
         }
     }
-    set_tx_buff_list_pending(m_p_tx_mem_buf_desc_list != NULL || m_p_zc_mem_buf_desc_list != NULL);
+    set_tx_buff_list_pending(m_p_tx_mem_buf_desc_list || m_p_zc_mem_buf_desc_list);
 }
 
 int dst_entry::modify_ratelimit(struct xlio_rate_limit_t &rate_limit)

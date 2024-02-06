@@ -46,7 +46,7 @@
 epoll_wait_call::epoll_wait_call(epoll_event *extra_events_buffer,
                                  offloaded_mode_t *off_modes_buffer, int epfd, epoll_event *events,
                                  int maxevents, int timeout, const sigset_t *sigmask /* = NULL */)
-    : io_mux_call(NULL, off_modes_buffer, 0, sigmask)
+    : io_mux_call(nullptr, off_modes_buffer, 0, sigmask)
     , // TODO: rethink on these arguments
     m_epfd(epfd)
     , m_events(events)
@@ -111,7 +111,7 @@ int epoll_wait_call::get_current_events()
         }
 
         if (mutual_events & EPOLLIN) {
-            if (handle_epoll_event(p_socket_object->is_readable(NULL), EPOLLIN, p_socket_object,
+            if (handle_epoll_event(p_socket_object->is_readable(nullptr), EPOLLIN, p_socket_object,
                                    i)) {
                 ready_rfds++;
                 got_event = true;
@@ -384,7 +384,7 @@ bool epoll_wait_call::handle_os_countdown(int &poll_os_countdown)
     if (cq_ready) {
         // This will empty the cqepfd
         // (most likely in case of a wakeup and probably only under epoll_wait (Not select/poll))
-        ring_wait_for_notification_and_process_element(NULL);
+        ring_wait_for_notification_and_process_element(nullptr);
     }
     /* Before we exit with ready OS fd's we'll check the CQs once more and exit
      * below after calling check_all_offloaded_sockets();
@@ -404,7 +404,7 @@ bool epoll_wait_call::handle_os_countdown(int &poll_os_countdown)
 
 int epoll_wait_call::ring_poll_and_process_element()
 {
-    return m_epfd_info->ring_poll_and_process_element(&m_poll_sn_rx, &m_poll_sn_tx, NULL);
+    return m_epfd_info->ring_poll_and_process_element(&m_poll_sn_rx, &m_poll_sn_tx, nullptr);
 }
 
 int epoll_wait_call::ring_request_notification()

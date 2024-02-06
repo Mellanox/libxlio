@@ -279,8 +279,8 @@ size_t get_vlan_base_name_from_ifname(const char *ifname, char *base_ifname, siz
 size_t get_local_ll_addr(const char *ifname, unsigned char *addr, int addr_len, bool is_broadcast);
 
 /* Print warning while RoCE Lag is enabled */
-void print_roce_lag_warnings(const char *interface, char *disable_path = NULL,
-                             const char *port1 = NULL, const char *port2 = NULL);
+void print_roce_lag_warnings(const char *interface, char *disable_path = nullptr,
+                             const char *port1 = nullptr, const char *port2 = nullptr);
 
 /*Print a warning to the user when there was an error registering memory*/
 void print_warning_rlimit_memlock(size_t length, int error);
@@ -323,10 +323,10 @@ static inline int get_procname(int pid, char *proc, size_t size)
 {
     char app_full_name[PATH_MAX] = {0};
     char proccess_proc_dir[FILE_NAME_MAX_SIZE] = {0};
-    char *app_base_name = NULL;
+    char *app_base_name = nullptr;
     int n = -1;
 
-    if (NULL == proc) {
+    if (!proc) {
         return -1;
     }
 
@@ -351,7 +351,7 @@ static inline int get_procname(int pid, char *proc, size_t size)
 inline void create_multicast_mac_from_ip(unsigned char *mc_mac, const ip_address &addr,
                                          sa_family_t family)
 {
-    if (mc_mac == NULL) {
+    if (!mc_mac) {
         return;
     }
 

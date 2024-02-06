@@ -49,7 +49,7 @@ ring_bond::ring_bond(int if_index)
     , m_lock_ring_rx("ring_bond:lock_rx")
     , m_lock_ring_tx("ring_bond:lock_tx")
 {
-    net_device_val *p_ndev = NULL;
+    net_device_val *p_ndev = nullptr;
 
     /* Configure ring() fields */
     set_parent(this);
@@ -57,7 +57,7 @@ ring_bond::ring_bond(int if_index)
 
     /* Sanity check */
     p_ndev = g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index());
-    if (NULL == p_ndev) {
+    if (!p_ndev) {
         ring_logpanic("Invalid if_index = %d", if_index);
     }
 
@@ -89,14 +89,14 @@ ring_bond::~ring_bond()
 
     if (m_p_n_rx_channel_fds) {
         delete[] m_p_n_rx_channel_fds;
-        m_p_n_rx_channel_fds = NULL;
+        m_p_n_rx_channel_fds = nullptr;
     }
 }
 
 void ring_bond::print_val()
 {
     ring_logdbg("%d: %p: parent %p type %s", m_if_index, this,
-                ((uintptr_t)this == (uintptr_t)m_parent ? 0 : m_parent), "bond");
+                ((uintptr_t)this == (uintptr_t)m_parent ? nullptr : m_parent), "bond");
 }
 
 bool ring_bond::attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink, bool force_5t)
@@ -145,7 +145,7 @@ void ring_bond::restart()
 {
     net_device_val *p_ndev = g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index());
 
-    if (NULL == p_ndev) {
+    if (!p_ndev) {
         return;
     }
     const slave_data_vector_t &slaves = p_ndev->get_slave_array();
@@ -161,7 +161,7 @@ void ring_bond::restart()
             ring_tap *p_ring_tap = dynamic_cast<ring_tap *>(p_ring_bond_netvsc->m_tap_ring);
             if (p_ring_tap) {
                 size_t num_ring_rx_fds = 0;
-                int *ring_rx_fds_array = NULL;
+                int *ring_rx_fds_array = nullptr;
                 int epfd = -1;
                 int fd = -1;
                 int rc = 0;
@@ -175,7 +175,7 @@ void ring_bond::restart()
                         epfd = g_p_net_device_table_mgr->global_ring_epfd_get();
                         if (epfd > 0) {
                             fd = ring_rx_fds_array[k];
-                            rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_DEL, fd, NULL);
+                            rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_DEL, fd, nullptr);
                             ring_logdbg("Remove fd=%d from epfd=%d rc=%d errno=%d", fd, epfd, rc,
                                         errno);
                         }
@@ -204,8 +204,8 @@ void ring_bond::restart()
                     p_ring_tap->inc_vf_plugouts();
                     p_ring_bond_netvsc->slave_destroy(
                         p_ring_bond_netvsc->m_vf_ring->get_if_index());
-                    p_ring_bond_netvsc->m_vf_ring = NULL;
-                    p_ring_tap->set_vf_ring(NULL);
+                    p_ring_bond_netvsc->m_vf_ring = nullptr;
+                    p_ring_tap->set_vf_ring(nullptr);
                 } else {
                     for (i = 0; i < slaves.size(); i++) {
                         if (slaves[i]->if_index != p_ring_tap->get_if_index()) {
@@ -219,7 +219,7 @@ void ring_bond::restart()
                             for (k = 0; k < num_ring_rx_fds; k++) {
                                 epfd = g_p_net_device_table_mgr->global_ring_epfd_get();
                                 if (epfd > 0) {
-                                    epoll_event ev = {0, {0}};
+                                    epoll_event ev = {0, {nullptr}};
                                     fd = ring_rx_fds_array[k];
                                     ev.events = EPOLLIN;
                                     ev.data.fd = fd;
@@ -367,7 +367,7 @@ void ring_bond::adapt_cq_moderation()
 mem_buf_desc_t *ring_bond::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
                                           int n_num_mem_bufs /* default = 1 */)
 {
-    mem_buf_desc_t *ret = NULL;
+    mem_buf_desc_t *ret = nullptr;
 
     std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
     ret = m_xmit_rings[id]->mem_buf_tx_get(id, b_block, type, n_num_mem_bufs);
@@ -432,7 +432,7 @@ void ring_bond::send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe
     } else {
         ring_logfunc("active ring=%p, silent packet drop (%p), (HA event?)", m_xmit_rings[id],
                      p_mem_buf_desc);
-        p_mem_buf_desc->p_next_desc = NULL;
+        p_mem_buf_desc->p_next_desc = nullptr;
         if (likely(p_mem_buf_desc->p_desc_owner == m_bond_rings[id])) {
             m_bond_rings[id]->mem_buf_tx_release(p_mem_buf_desc, true);
         } else {
@@ -454,7 +454,7 @@ int ring_bond::send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
 
     ring_logfunc("active ring=%p, silent packet drop (%p), (HA event?)", m_xmit_rings[id],
                  p_mem_buf_desc);
-    p_mem_buf_desc->p_next_desc = NULL;
+    p_mem_buf_desc->p_next_desc = nullptr;
     /* no need to free the buffer here, as for lwip buffers we have 2 ref counts, */
     /* one for caller, and one for completion. for completion, we ref count in    */
     /* send_lwip_buffer(). Since we are not going in, the caller will free the    */
@@ -675,7 +675,7 @@ bool ring_bond::reclaim_recv_buffers(mem_buf_desc_t *)
 
 void ring_bond::update_cap(ring_slave *slave)
 {
-    if (NULL == slave) {
+    if (!slave) {
         m_max_inline_data = (uint32_t)(-1);
         m_max_send_sge = (uint32_t)(-1);
         return;
@@ -748,7 +748,7 @@ int ring_bond::devide_buffers_helper(mem_buf_desc_t *p_mem_buf_desc_list,
             }
         }
         temp = head->p_next_desc;
-        head->p_next_desc = NULL;
+        head->p_next_desc = nullptr;
         if (i == m_bond_rings.size()) {
             // handle no owner
             ring_logdbg("No matching ring %p to return buffer", current->p_desc_owner);
@@ -764,7 +764,7 @@ int ring_bond::devide_buffers_helper(mem_buf_desc_t *p_mem_buf_desc_list,
 
 void ring_bond::popup_xmit_rings()
 {
-    ring_slave *cur_slave = NULL;
+    ring_slave *cur_slave = nullptr;
     size_t i, j;
 
     m_xmit_rings.clear();
@@ -797,7 +797,7 @@ void ring_bond::popup_recv_rings()
     net_device_val *p_ndev = g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index());
 
     m_recv_rings.clear();
-    if (NULL == p_ndev) {
+    if (!p_ndev) {
         return;
     }
     const slave_data_vector_t &slaves = p_ndev->get_slave_array();
@@ -830,7 +830,7 @@ void ring_bond::update_rx_channel_fds()
 {
     if (m_p_n_rx_channel_fds) {
         delete[] m_p_n_rx_channel_fds;
-        m_p_n_rx_channel_fds = NULL;
+        m_p_n_rx_channel_fds = nullptr;
     }
     if (m_recv_rings.size() == 0) {
         return;
@@ -960,7 +960,7 @@ int ring_bond::socketxtreme_poll(struct xlio_socketxtreme_completion_t *, unsign
 
 void ring_bond::slave_destroy(int if_index)
 {
-    ring_slave *cur_slave = NULL;
+    ring_slave *cur_slave = nullptr;
     ring_slave_vector_t::iterator iter;
 
     for (iter = m_bond_rings.begin(); iter != m_bond_rings.end(); iter++) {
@@ -981,7 +981,7 @@ void ring_bond_eth::slave_create(int if_index)
     ring_slave *cur_slave;
 
     cur_slave = new ring_eth(if_index, this);
-    if (cur_slave == NULL) {
+    if (!cur_slave) {
         ring_logpanic("Error creating bond ring: memory allocation error");
     }
 
@@ -1000,11 +1000,11 @@ void ring_bond_eth::slave_create(int if_index)
 
 void ring_bond_netvsc::slave_create(int if_index)
 {
-    ring_slave *cur_slave = NULL;
-    net_device_val *p_ndev = NULL;
+    ring_slave *cur_slave = nullptr;
+    net_device_val *p_ndev = nullptr;
 
     p_ndev = g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index());
-    if (NULL == p_ndev) {
+    if (!p_ndev) {
         ring_logpanic("Error creating bond ring");
     }
 

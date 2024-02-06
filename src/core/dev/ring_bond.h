@@ -59,7 +59,8 @@ public:
         return m_p_n_rx_channel_fds;
     };
     virtual int request_notification(cq_type_t cq_type, uint64_t poll_sn);
-    virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array = NULL);
+    virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
+                                            void *pv_fd_ready_array = nullptr);
     virtual int poll_and_process_element_tx(uint64_t *p_cq_poll_sn);
     virtual void adapt_cq_moderation();
     virtual bool reclaim_recv_buffers(descq_t *rx_reuse);
@@ -67,7 +68,7 @@ public:
     virtual void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc);
     virtual int drain_and_proccess();
     virtual int wait_for_notification_and_process_element(int cq_channel_fd, uint64_t *p_cq_poll_sn,
-                                                          void *pv_fd_ready_array = NULL);
+                                                          void *pv_fd_ready_array = nullptr);
     virtual int get_num_resources() const { return m_bond_rings.size(); };
     virtual bool attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink, bool force_5t = false);
     virtual bool detach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink);
@@ -116,7 +117,7 @@ public:
     }
 
 protected:
-    void update_cap(ring_slave *slave = NULL);
+    void update_cap(ring_slave *slave = nullptr);
     void update_rx_channel_fds();
 
     /* Fill m_xmit_rings array */
@@ -196,8 +197,8 @@ public:
         net_device_val *p_ndev =
             g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index());
 
-        m_vf_ring = NULL;
-        m_tap_ring = NULL;
+        m_vf_ring = nullptr;
+        m_tap_ring = nullptr;
         if (p_ndev) {
             const slave_data_vector_t &slaves = p_ndev->get_slave_array();
             update_cap();

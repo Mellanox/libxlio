@@ -57,7 +57,7 @@ private:
         FILE *pfile = fopen(path, "r");
         int ans;
 
-        if (pfile == NULL) {
+        if (!pfile) {
             return -1;
         }
 

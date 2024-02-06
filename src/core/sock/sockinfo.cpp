@@ -77,9 +77,9 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     , m_lock_snd(MODULE_NAME "::m_lock_snd")
     , m_state(SOCKINFO_OPENED)
     , m_family(domain)
-    , m_p_connected_dst_entry(NULL)
+    , m_p_connected_dst_entry(nullptr)
     , m_so_bindtodevice_ip(ip_address::any_addr(), domain)
-    , m_p_rx_ring(0)
+    , m_p_rx_ring(nullptr)
     , m_rx_reuse_buf_pending(false)
     , m_rx_reuse_buf_postponed(false)
     , m_rx_ring_map_lock(MODULE_NAME "::m_rx_ring_map_lock")
@@ -91,8 +91,8 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     , m_ring_alloc_log_rx(safe_mce_sys().ring_allocation_logic_rx, use_ring_locks)
     , m_ring_alloc_log_tx(safe_mce_sys().ring_allocation_logic_tx, use_ring_locks)
     , m_pcp(0)
-    , m_rx_callback(NULL)
-    , m_rx_callback_context(NULL)
+    , m_rx_callback(nullptr)
+    , m_rx_callback_context(nullptr)
     , m_fd_context((void *)((uintptr_t)m_fd))
     , m_flow_tag_id(0)
     , m_rx_cq_wait_ctrl(safe_mce_sys().rx_cq_wait_ctrl)
@@ -101,7 +101,7 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
                              : safe_mce_sys().sysctl_reader.get_net_ipv6_hop_limit())
     , m_bind_no_port(false)
     , m_is_ipv6only(safe_mce_sys().sysctl_reader.get_ipv6_bindv6only())
-    , m_p_rings_fds(NULL)
+    , m_p_rings_fds(nullptr)
 {
     m_rx_epfd = SYSCALL(epoll_create, 128);
     if (unlikely(m_rx_epfd == -1)) {
@@ -124,7 +124,7 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     set_flow_tag(m_fd + 1);
 
     atomic_set(&m_zckey, 0);
-    m_last_zcdesc = NULL;
+    m_last_zcdesc = nullptr;
 
     m_socketxtreme.ec_cache.clear();
     struct ring_ec ec;
@@ -152,7 +152,7 @@ sockinfo::~sockinfo()
 
     if (m_p_rings_fds) {
         delete[] m_p_rings_fds;
-        m_p_rings_fds = NULL;
+        m_p_rings_fds = nullptr;
     }
 
     while (!m_error_queue.empty()) {
@@ -885,7 +885,7 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
     // Allocate resources on specific interface (create ring)
     net_device_resources_t *p_nd_resources =
         create_nd_resources(ip_addr(flow_key.get_local_if(), flow_key.get_family()));
-    if (NULL == p_nd_resources) {
+    if (!p_nd_resources) {
         // any error which occurred inside create_nd_resources() was already printed. No need to
         // reprint errors here
         return false;
@@ -996,7 +996,7 @@ bool sockinfo::detach_receiver(flow_tuple_with_local_if &flow_key)
 
 net_device_resources_t *sockinfo::create_nd_resources(const ip_addr &ip_local)
 {
-    net_device_resources_t *p_nd_resources = NULL;
+    net_device_resources_t *p_nd_resources = nullptr;
 
     // Check if we are already registered to net_device with the local ip as observers
     rx_net_device_map_t::iterator rx_nd_iter = m_rx_nd_map.find(ip_local);
@@ -1005,12 +1005,12 @@ net_device_resources_t *sockinfo::create_nd_resources(const ip_addr &ip_local)
         // Need to register as observer to net_device
         net_device_resources_t nd_resources;
         nd_resources.refcnt = 0;
-        nd_resources.p_nde = NULL;
-        nd_resources.p_ndv = NULL;
-        nd_resources.p_ring = NULL;
+        nd_resources.p_nde = nullptr;
+        nd_resources.p_ndv = nullptr;
+        nd_resources.p_ring = nullptr;
 
         BULLSEYE_EXCLUDE_BLOCK_START
-        cache_entry_subject<int, net_device_val *> *net_dev_entry = NULL;
+        cache_entry_subject<int, net_device_val *> *net_dev_entry = nullptr;
         net_device_val *net_dev = g_p_net_device_table_mgr->get_net_device_val(ip_local);
         if (!net_dev ||
             !g_p_net_device_table_mgr->register_observer(net_dev->get_if_idx(), &m_rx_nd_observer,
@@ -1077,12 +1077,12 @@ net_device_resources_t *sockinfo::create_nd_resources(const ip_addr &ip_local)
 
     return p_nd_resources;
 err:
-    return NULL;
+    return nullptr;
 }
 
 bool sockinfo::destroy_nd_resources(const ip_addr &ip_local)
 {
-    net_device_resources_t *p_nd_resources = NULL;
+    net_device_resources_t *p_nd_resources = nullptr;
     rx_net_device_map_t::iterator rx_nd_iter = m_rx_nd_map.find(ip_local);
 
     BULLSEYE_EXCLUDE_BLOCK_START
@@ -1207,7 +1207,7 @@ void sockinfo::do_rings_migration_rx(resource_allocation_key &old_key)
                     si_logerr("Failed to release ring for allocation key %s",
                               new_key->to_str().c_str());
                 }
-                new_ring = NULL;
+                new_ring = nullptr;
                 break;
             }
             lock_rx_q();
@@ -1519,7 +1519,7 @@ int sockinfo::os_epoll_wait(epoll_event *ep_events, int maxevents)
 // this new fd)
 void sockinfo::add_cqfd_to_sock_rx_epfd(ring *p_ring)
 {
-    epoll_event ev = {0, {0}};
+    epoll_event ev = {0, {nullptr}};
     ev.events = EPOLLIN;
     size_t num_ring_rx_fds;
     int *ring_rx_fds_array = p_ring->get_rx_channel_fds(num_ring_rx_fds);
@@ -1542,8 +1542,9 @@ void sockinfo::remove_cqfd_from_sock_rx_epfd(ring *base_ring)
 
     for (size_t i = 0; i < num_ring_rx_fds; i++) {
         BULLSEYE_EXCLUDE_BLOCK_START
-        if (unlikely((SYSCALL(epoll_ctl, m_rx_epfd, EPOLL_CTL_DEL, ring_rx_fds_array[i], NULL)) &&
-                     (!(errno == ENOENT || errno == EBADF)))) {
+        if (unlikely(
+                (SYSCALL(epoll_ctl, m_rx_epfd, EPOLL_CTL_DEL, ring_rx_fds_array[i], nullptr)) &&
+                (!(errno == ENOENT || errno == EBADF)))) {
             si_logerr("failed to delete cq channel fd from internal epfd (errno=%d %s)", errno,
                       strerror(errno));
         }
@@ -1673,7 +1674,7 @@ void sockinfo::rx_del_ring_cb(ring *p_ring)
                 if (m_rx_ring_map.size() == 1) {
                     m_p_rx_ring = m_rx_ring_map.begin()->first;
                 } else {
-                    m_p_rx_ring = NULL;
+                    m_p_rx_ring = nullptr;
                 }
 
                 move_descs(base_ring, &temp_rx_reuse, &m_rx_reuse_buff.rx_reuse, true);
@@ -1933,7 +1934,7 @@ void sockinfo::destructor_helper()
     if (m_p_connected_dst_entry) {
         delete m_p_connected_dst_entry;
     }
-    m_p_connected_dst_entry = NULL;
+    m_p_connected_dst_entry = nullptr;
 }
 
 int sockinfo::register_callback(xlio_recv_callback_t callback, void *context)
@@ -2148,7 +2149,7 @@ void sockinfo::handle_recv_timestamping(struct cmsg_state *cm_state)
 
 void sockinfo::handle_recv_errqueue(struct cmsg_state *cm_state)
 {
-    mem_buf_desc_t *buff = NULL;
+    mem_buf_desc_t *buff = nullptr;
 
     if (m_error_queue.empty()) {
         return;
@@ -2198,7 +2199,7 @@ void sockinfo::insert_cmsg(struct cmsg_state *cm_state, int level, int type, voi
         (struct cmsghdr *)((char *)cm_state->cmhdr + CMSG_ALIGN(cm_state->cmhdr->cmsg_len));
     if ((char *)(next + 1) >
         ((char *)cm_state->mhdr->msg_control + cm_state->mhdr->msg_controllen)) {
-        cm_state->cmhdr = NULL;
+        cm_state->cmhdr = nullptr;
     } else {
         cm_state->cmhdr = next;
     }

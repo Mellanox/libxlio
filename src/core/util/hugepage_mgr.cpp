@@ -95,7 +95,7 @@ void *hugepage_mgr::alloc_hugepages_helper(size_t &size, size_t hugepage)
         map_flags = (int)log2(hugepage) << MAP_HUGE_SHIFT;
     }
 
-    ptr = mmap(NULL, actual_size, PROT_READ | PROT_WRITE,
+    ptr = mmap(nullptr, actual_size, PROT_READ | PROT_WRITE,
                MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_HUGETLB | map_flags, -1, 0);
     if (ptr == MAP_FAILED) {
         ptr = nullptr;

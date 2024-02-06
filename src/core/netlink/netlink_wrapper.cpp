@@ -55,7 +55,7 @@
 #define nl_logdbg   __log_dbg
 #define nl_logfine  __log_fine
 
-netlink_wrapper *g_p_netlink_handler = NULL;
+netlink_wrapper *g_p_netlink_handler = nullptr;
 
 // structure to pass arguments on internal netlink callbacks handling
 typedef struct rcv_msg_arg {
@@ -167,7 +167,7 @@ void netlink_wrapper::neigh_cache_callback(nl_object *obj)
     nl_logdbg("notify on neigh event: %s", new_event.to_str().c_str());
     netlink_wrapper::notify_observers(&new_event, nlgrpNEIGH);
 
-    g_nl_rcv_arg.msghdr = NULL;
+    g_nl_rcv_arg.msghdr = nullptr;
     nl_logfine("<--- neigh_cache_callback");
 }
 
@@ -180,7 +180,7 @@ void netlink_wrapper::link_cache_callback(nl_object *obj)
     nl_logdbg("notify on link event: %s", new_event.to_str().c_str());
     netlink_wrapper::notify_observers(&new_event, nlgrpLINK);
 
-    g_nl_rcv_arg.msghdr = NULL;
+    g_nl_rcv_arg.msghdr = nullptr;
     nl_logfine("<--- link_cache_callback");
 }
 
@@ -202,21 +202,21 @@ void netlink_wrapper::route_cache_callback(nl_object *obj)
     } else {
         nl_logdbg("Received invalid route event");
     }
-    g_nl_rcv_arg.msghdr = NULL;
+    g_nl_rcv_arg.msghdr = nullptr;
     nl_logfine("<--- route_cache_callback");
 }
 
 netlink_wrapper::netlink_wrapper()
-    : m_socket_handle(NULL)
-    , m_mngr(NULL)
-    , m_cache_link(NULL)
-    , m_cache_neigh(NULL)
-    , m_cache_route(NULL)
+    : m_socket_handle(nullptr)
+    , m_mngr(nullptr)
+    , m_cache_link(nullptr)
+    , m_cache_neigh(nullptr)
+    , m_cache_route(nullptr)
 {
     nl_logfine("---> netlink_route_listener CTOR");
     g_nl_rcv_arg.subjects_map = &m_subjects_map;
     g_nl_rcv_arg.netlink = this;
-    g_nl_rcv_arg.msghdr = NULL;
+    g_nl_rcv_arg.msghdr = nullptr;
     nl_logfine("<--- netlink_route_listener CTOR");
 }
 
@@ -307,18 +307,18 @@ int netlink_wrapper::open_channel()
 
     nl_logdbg("netlink socket is open");
 
-    if (nl_cache_mngr_add_ext(m_mngr, "route/link", link_callback, NULL, &m_cache_link)) {
+    if (nl_cache_mngr_add_ext(m_mngr, "route/link", link_callback, nullptr, &m_cache_link)) {
         return -1;
     }
-    if (nl_cache_mngr_add_ext(m_mngr, "route/route", route_callback, NULL, &m_cache_route)) {
+    if (nl_cache_mngr_add_ext(m_mngr, "route/route", route_callback, nullptr, &m_cache_route)) {
         return -1;
     }
-    if (nl_cache_mngr_add_ext(m_mngr, "route/neigh", neigh_callback, NULL, &m_cache_neigh)) {
+    if (nl_cache_mngr_add_ext(m_mngr, "route/neigh", neigh_callback, nullptr, &m_cache_neigh)) {
         return -1;
     }
 
     // set custom callback for every message to update message
-    nl_socket_modify_cb(m_socket_handle, NL_CB_MSG_IN, NL_CB_CUSTOM, nl_msg_rcv_cb, NULL);
+    nl_socket_modify_cb(m_socket_handle, NL_CB_MSG_IN, NL_CB_CUSTOM, nl_msg_rcv_cb, nullptr);
 
     // set the socket non-blocking
     BULLSEYE_EXCLUDE_BLOCK_START
@@ -386,7 +386,7 @@ bool netlink_wrapper::register_event(e_netlink_event_type type, const observer *
 bool netlink_wrapper::unregister(e_netlink_event_type type, const observer *obs)
 {
     std::lock_guard<decltype(m_subj_map_lock)> lock(m_subj_map_lock);
-    if (obs == NULL) {
+    if (!obs) {
         return false;
     }
 
@@ -452,7 +452,7 @@ void netlink_wrapper::neigh_timer_expired()
 void netlink_wrapper::notify_neigh_cache_entries()
 {
     nl_logfine("--->netlink_wrapper::notify_cache_entries");
-    g_nl_rcv_arg.msghdr = NULL;
+    g_nl_rcv_arg.msghdr = nullptr;
     nl_object *obj = nl_cache_get_first(m_cache_neigh);
     while (obj) {
         nl_object_get(obj);
