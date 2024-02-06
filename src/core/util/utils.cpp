@@ -133,7 +133,7 @@ int get_base_interface_name(const char *if_name, char *base_ifname, size_t sz_ba
         }
         BULLSEYE_EXCLUDE_BLOCK_END
 
-        for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
             if (!strcmp(ifa->ifa_name, if_name)) {
                 continue;
             }
@@ -583,13 +583,13 @@ int get_port_from_ifname(const char *ifname)
     snprintf(dev_path, sizeof(dev_path), VERBS_DEVICE_PORT_PARAM_FILE, ifname);
     if (priv_safe_try_read_file(dev_path, num_buf, sizeof(num_buf)) > 0) {
         dev_port =
-            strtol(num_buf, NULL, 0); // base=0 means strtol() can parse hexadecimal and decimal
+            strtol(num_buf, nullptr, 0); // base=0 means strtol() can parse hexadecimal and decimal
         __log_dbg("dev_port file=%s dev_port str=%s dev_port val=%d", dev_path, num_buf, dev_port);
     }
     snprintf(dev_path, sizeof(dev_path), VERBS_DEVICE_ID_PARAM_FILE, ifname);
     if (priv_safe_try_read_file(dev_path, num_buf, sizeof(num_buf)) > 0) {
         dev_id =
-            strtol(num_buf, NULL, 0); // base=0 means strtol() can parse hexadecimal and decimal
+            strtol(num_buf, nullptr, 0); // base=0 means strtol() can parse hexadecimal and decimal
         __log_dbg("dev_id file= %s dev_id str=%s dev_id val=%d", dev_path, num_buf, dev_id);
     }
 
@@ -991,9 +991,9 @@ size_t get_local_ll_addr(IN const char *ifname, OUT unsigned char *addr, IN int 
 bool check_bond_device_exist(const char *ifname)
 {
     int ret = 0;
-    struct nl_cache *cache = NULL;
-    struct rtnl_link *link = NULL;
-    char *link_type = NULL;
+    struct nl_cache *cache = nullptr;
+    struct rtnl_link *link = nullptr;
+    char *link_type = nullptr;
 
     struct nl_sock *nl_socket = nl_socket_alloc();
     if (!nl_socket) {
@@ -1014,7 +1014,7 @@ bool check_bond_device_exist(const char *ifname)
     }
     link_type = rtnl_link_get_type(link);
     if (link_type && (strcmp(link_type, "bond") != 0)) {
-        link_type = NULL;
+        link_type = nullptr;
     }
 out:
     if (link) {
@@ -1043,7 +1043,7 @@ bool get_bond_name(IN const char *ifname, OUT char *bond_name, IN int sz)
         return ret;
     }
 
-    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+    for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
         snprintf(upper_path, sizeof(upper_path), NETVSC_DEVICE_UPPER_FILE, base_ifname,
                  ifa->ifa_name);
         int fd = SYSCALL(open, upper_path, O_RDONLY);
@@ -1106,7 +1106,7 @@ bool get_netvsc_slave(IN const char *ifname, OUT char *slave_name, OUT unsigned 
         return ret;
     }
 
-    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+    for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
         snprintf(netvsc_path, sizeof(netvsc_path), NETVSC_DEVICE_LOWER_FILE, base_ifname,
                  ifa->ifa_name);
         int fd = SYSCALL(open, netvsc_path, O_RDONLY);

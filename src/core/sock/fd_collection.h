@@ -327,7 +327,7 @@ inline socket_fd_api *fd_collection_get_sockfd(int fd)
     if (g_p_fd_collection) {
         return g_p_fd_collection->get_sockfd(fd);
     }
-    return NULL;
+    return nullptr;
 }
 
 inline epfd_info *fd_collection_get_epfd(int fd)
@@ -335,7 +335,7 @@ inline epfd_info *fd_collection_get_epfd(int fd)
     if (g_p_fd_collection) {
         return g_p_fd_collection->get_epfd(fd);
     }
-    return NULL;
+    return nullptr;
 }
 
 #endif

@@ -285,7 +285,7 @@ protected:
     // connected_ip is routed to
     bool attach_as_uc_receiver(role_t role, bool skip_rules = false);
     transport_t find_target_family(role_t role, const struct sockaddr *sock_addr_first,
-                                   const struct sockaddr *sock_addr_second = NULL);
+                                   const struct sockaddr *sock_addr_second = nullptr);
 
     // This callback will notify that socket is ready to receive and map the cq.
     void rx_add_ring_cb(ring *p_ring) override;
@@ -299,9 +299,9 @@ protected:
     int modify_ratelimit(dst_entry *p_dst_entry, struct xlio_rate_limit_t &rate_limit);
 
     void move_descs(ring *p_ring, descq_t *toq, descq_t *fromq, bool own);
-    void pop_descs_rx_ready(descq_t *cache, ring *p_ring = NULL);
+    void pop_descs_rx_ready(descq_t *cache, ring *p_ring = nullptr);
     void push_descs_rx_ready(descq_t *cache);
-    void reuse_descs(descq_t *reuseq, ring *p_ring = NULL);
+    void reuse_descs(descq_t *reuseq, ring *p_ring = nullptr);
     int set_sockopt_prio(__const void *__optval, socklen_t __optlen);
     bool ipv6_set_addr_sel_pref(int val);
     int ipv6_get_addr_sel_pref();

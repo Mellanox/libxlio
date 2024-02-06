@@ -200,7 +200,7 @@ public:
         m_record_number = record_number;
         m_size = TLS_RECORD_HDR_LEN + TLS_RECORD_TAG_LEN;
         m_p_data = nullptr;
-        tls_sock->get_record_buf(m_p_buf, m_p_data, zc_owner != nullptr);
+        tls_sock->get_record_buf(m_p_buf, m_p_data, zc_owner);
         if (likely(m_p_buf && m_p_data)) {
             if (iv) {
                 m_size += TLS_RECORD_IV_LEN;
@@ -884,7 +884,7 @@ int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_
                 uint64_t recno_be64 = htobe64(rec->m_record_number);
                 bool skip_static =
                     !memcmp(m_tls_info_tx.rec_seq, &recno_be64, TLS_AES_GCM_REC_SEQ_LEN);
-                bool is_zerocopy = rec->m_p_zc_owner != nullptr;
+                bool is_zerocopy = rec->m_p_zc_owner;
                 unsigned mss = m_p_sock->get_mss();
                 uint32_t totlen = seg->seqno - rec->m_seqno;
                 uint32_t lkey = LKEY_TX_DEFAULT;
@@ -1127,7 +1127,7 @@ int sockinfo_tcp_ops_tls::tls_rx_decrypt(struct pbuf *plist)
         copy_by_offset(&buf[TLS_AES_GCM_SALT_LEN], m_rx_offset + TLS_RECORD_HDR_LEN,
                        TLS_RECORD_IV_LEN);
     }
-    ret = g_tls_api->EVP_DecryptInit_ex(tls_ctx, (EVP_CIPHER *)m_p_evp_cipher, NULL,
+    ret = g_tls_api->EVP_DecryptInit_ex(tls_ctx, (EVP_CIPHER *)m_p_evp_cipher, nullptr,
                                         m_tls_info_rx.key, buf);
     if (unlikely(!ret)) {
         return TLS_DECRYPT_INTERNAL;
@@ -1146,20 +1146,20 @@ int sockinfo_tcp_ops_tls::tls_rx_decrypt(struct pbuf *plist)
         copy_by_offset(buf, m_rx_offset, 3);
         buf[3] = rec_len >> 8U;
         buf[4] = rec_len & 0xFFU;
-        ret = g_tls_api->EVP_DecryptUpdate(tls_ctx, NULL, &len, buf, 5);
+        ret = g_tls_api->EVP_DecryptUpdate(tls_ctx, nullptr, &len, buf, 5);
     } else {
         uint16_t rec_len = m_rx_rec_len - m_tls_rec_overhead;
         *((uint64_t *)buf) = htobe64(m_next_recno_rx);
         copy_by_offset(buf + 8, m_rx_offset, 3);
         buf[11] = rec_len >> 8U;
         buf[12] = rec_len & 0xFFU;
-        ret = g_tls_api->EVP_DecryptUpdate(tls_ctx, NULL, &len, buf, 13);
+        ret = g_tls_api->EVP_DecryptUpdate(tls_ctx, nullptr, &len, buf, 13);
     }
     if (unlikely(!ret)) {
         return TLS_DECRYPT_INTERNAL;
     }
 
-    for (p = plist; p != NULL; p = p->next) {
+    for (p = plist; p; p = p->next) {
         if (((mem_buf_desc_t *)p)->rx.tls_decrypted == TLS_RX_DECRYPTED) {
             /*
              * This is partially decrypted record, stop here
@@ -1210,7 +1210,7 @@ int sockinfo_tcp_ops_tls::tls_rx_encrypt(struct pbuf *plist)
         copy_by_offset(&buf[TLS_AES_GCM_SALT_LEN], m_rx_offset + TLS_RECORD_HDR_LEN,
                        TLS_RECORD_IV_LEN);
     }
-    ret = g_tls_api->EVP_EncryptInit_ex(tls_ctx, (EVP_CIPHER *)m_p_evp_cipher, NULL,
+    ret = g_tls_api->EVP_EncryptInit_ex(tls_ctx, (EVP_CIPHER *)m_p_evp_cipher, nullptr,
                                         m_tls_info_rx.key, buf);
     if (unlikely(!ret)) {
         return TLS_DECRYPT_INTERNAL;
@@ -1228,13 +1228,13 @@ int sockinfo_tcp_ops_tls::tls_rx_encrypt(struct pbuf *plist)
         copy_by_offset(buf, m_rx_offset, 3);
         buf[3] = rec_len >> 8U;
         buf[4] = rec_len & 0xFFU;
-        ret = g_tls_api->EVP_EncryptUpdate(tls_ctx, NULL, &len, buf, 5);
+        ret = g_tls_api->EVP_EncryptUpdate(tls_ctx, nullptr, &len, buf, 5);
     } else {
         *((uint64_t *)buf) = htobe64(m_next_recno_rx);
         copy_by_offset(buf + 8, m_rx_offset, 3);
         buf[11] = rec_len >> 8U;
         buf[12] = rec_len & 0xFFU;
-        ret = g_tls_api->EVP_EncryptUpdate(tls_ctx, NULL, &len, buf, 13);
+        ret = g_tls_api->EVP_EncryptUpdate(tls_ctx, nullptr, &len, buf, 13);
     }
     if (unlikely(!ret)) {
         return TLS_DECRYPT_INTERNAL;

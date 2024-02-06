@@ -71,7 +71,7 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
     void *p_pkt;
     void *p_ip_hdr;
     void *p_tcp_hdr;
-    tcp_iovec *p_tcp_iov = NULL;
+    tcp_iovec *p_tcp_iov = nullptr;
     xlio_ibv_send_wr *p_send_wqe;
     size_t hdr_alignment_diff = 0;
 
@@ -258,8 +258,8 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
         mem_buf_desc_t *p_mem_buf_desc;
         size_t total_packet_len = 0;
 
-        p_mem_buf_desc = get_buffer(PBUF_RAM, NULL, is_set(attr.flags, XLIO_TX_PACKET_BLOCK));
-        if (p_mem_buf_desc == NULL) {
+        p_mem_buf_desc = get_buffer(PBUF_RAM, nullptr, is_set(attr.flags, XLIO_TX_PACKET_BLOCK));
+        if (!p_mem_buf_desc) {
             ret = -1;
             goto out;
         }
@@ -300,7 +300,7 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
         send_ring_buffer(m_id, p_send_wqe, attr.flags);
     }
 
-    if (unlikely(m_p_tx_mem_buf_desc_list == NULL)) {
+    if (unlikely(!m_p_tx_mem_buf_desc_list)) {
         m_p_tx_mem_buf_desc_list = m_p_ring->mem_buf_tx_get(
             m_id, is_set(attr.flags, XLIO_TX_PACKET_BLOCK), PBUF_RAM, m_n_sysvar_tx_bufs_batch_tcp);
     }
@@ -385,24 +385,24 @@ mem_buf_desc_t *dst_entry_tcp::get_buffer(pbuf_type type, pbuf_desc *desc,
     p_desc_list = type == PBUF_ZEROCOPY ? &m_p_zc_mem_buf_desc_list : &m_p_tx_mem_buf_desc_list;
 
     // Get a bunch of tx buf descriptor and data buffers
-    if (unlikely(*p_desc_list == NULL)) {
+    if (unlikely(!*p_desc_list)) {
         *p_desc_list =
             m_p_ring->mem_buf_tx_get(m_id, b_blocked, type, m_n_sysvar_tx_bufs_batch_tcp);
     }
 
     mem_buf_desc_t *p_mem_buf_desc = *p_desc_list;
-    if (unlikely(p_mem_buf_desc == NULL)) {
+    if (unlikely(!p_mem_buf_desc)) {
         dst_tcp_logfunc("silent packet drop, no buffers!");
     } else {
         *p_desc_list = (*p_desc_list)->p_next_desc;
-        p_mem_buf_desc->p_next_desc = NULL;
+        p_mem_buf_desc->p_next_desc = nullptr;
         // for TX, set lwip payload to the data segment.
         // lwip will send it with payload pointing to the tcp header.
         if (p_mem_buf_desc->p_buffer) {
             p_mem_buf_desc->lwip_pbuf.pbuf.payload = (u8_t *)p_mem_buf_desc->p_buffer +
                 m_header->m_aligned_l2_l3_len + sizeof(struct tcphdr);
         } else {
-            p_mem_buf_desc->lwip_pbuf.pbuf.payload = NULL;
+            p_mem_buf_desc->lwip_pbuf.pbuf.payload = nullptr;
         }
 
         /* Initialize pbuf description */
@@ -430,7 +430,7 @@ void dst_entry_tcp::put_buffer(mem_buf_desc_t *p_desc)
 {
     // todo accumulate buffers?
 
-    if (unlikely(p_desc == NULL)) {
+    if (unlikely(!p_desc)) {
         return;
     }
 
@@ -446,7 +446,7 @@ void dst_entry_tcp::put_buffer(mem_buf_desc_t *p_desc)
         }
 
         if (p_desc->lwip_pbuf.pbuf.ref == 0) {
-            p_desc->p_next_desc = NULL;
+            p_desc->p_next_desc = nullptr;
             buffer_pool::free_tx_lwip_pbuf_custom(&p_desc->lwip_pbuf.pbuf);
         }
     }

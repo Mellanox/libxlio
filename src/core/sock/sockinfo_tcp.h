@@ -204,8 +204,8 @@ public:
     ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
     ssize_t tcp_tx(xlio_tx_call_attr_t &tx_arg);
     ssize_t rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
-               sockaddr *__from = NULL, socklen_t *__fromlen = NULL,
-               struct msghdr *__msg = NULL) override;
+               sockaddr *__from = nullptr, socklen_t *__fromlen = nullptr,
+               struct msghdr *__msg = nullptr) override;
     static err_t ip_output(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn, uint16_t flags);
     static err_t ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn,
                                    uint16_t flags);
@@ -234,7 +234,7 @@ public:
     static void tcp_tx_zc_callback(mem_buf_desc_t *p_desc);
     void tcp_tx_zc_handle(mem_buf_desc_t *p_desc);
 
-    bool inline is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = NULL) override;
+    bool inline is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = nullptr) override;
     bool inline is_writeable() override;
     bool inline is_errorable(int *errors) override;
     bool is_closable() override

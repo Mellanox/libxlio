@@ -177,10 +177,10 @@ public:
     virtual int ioctl(unsigned long int __request, unsigned long int __arg) = 0;
 
     virtual ssize_t rx(const rx_call_t call_type, iovec *iov, const ssize_t iovlen,
-                       int *p_flags = 0, sockaddr *__from = NULL, socklen_t *__fromlen = NULL,
-                       struct msghdr *__msg = NULL) = 0;
+                       int *p_flags = nullptr, sockaddr *__from = nullptr,
+                       socklen_t *__fromlen = nullptr, struct msghdr *__msg = nullptr) = 0;
 
-    virtual bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = NULL);
+    virtual bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = nullptr);
 
     virtual bool is_writeable();
 
@@ -270,7 +270,7 @@ public:
     virtual int *get_rings_fds(int &res_length)
     {
         res_length = 0;
-        return NULL;
+        return nullptr;
     }
 
 protected:

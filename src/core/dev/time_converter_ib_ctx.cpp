@@ -71,11 +71,11 @@ time_converter_ib_ctx::time_converter_ib_ctx(struct ibv_context *ctx,
                 m_converter_status = TS_CONVERSION_MODE_SYNC;
 
                 g_p_event_handler_manager->register_timer_event(UPDATE_HW_TIMER_FIRST_ONESHOT_MS,
-                                                                this, ONE_SHOT_TIMER, 0);
+                                                                this, ONE_SHOT_TIMER, nullptr);
                 g_p_event_handler_manager->register_timer_event(UPDATE_HW_TIMER_SECOND_ONESHOT_MS,
-                                                                this, ONE_SHOT_TIMER, 0);
+                                                                this, ONE_SHOT_TIMER, nullptr);
                 m_timer_handle = g_p_event_handler_manager->register_timer_event(
-                    UPDATE_HW_TIMER_PERIOD_MS, this, PERIODIC_TIMER, 0);
+                    UPDATE_HW_TIMER_PERIOD_MS, this, PERIODIC_TIMER, nullptr);
             }
         }
     }

@@ -51,8 +51,8 @@ void Demo_Observer::notify_cb()
 void Demo_Observer::register_to_subjects(Demo_Coll_Mgr1 *coll_for_subjects_1,
                                          Demo_Coll_Mgr2 *coll_for_subjects_2)
 {
-    Demo_Subject1 *s1 = NULL;
-    Demo_Subject2 *s2 = NULL;
+    Demo_Subject1 *s1 = nullptr;
+    Demo_Subject2 *s2 = nullptr;
     key_class<char> c('a');
     key_class<int> i(1);
     char ch = 'a';

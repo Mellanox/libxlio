@@ -55,7 +55,7 @@
 #define fdcoll_logdbg     __log_dbg
 #define fdcoll_logfunc    __log_func
 
-fd_collection *g_p_fd_collection = NULL;
+fd_collection *g_p_fd_collection = nullptr;
 
 fd_collection::fd_collection()
     : lock_mutex_recursive("fd_collection")
@@ -97,16 +97,16 @@ fd_collection::~fd_collection()
     m_n_fd_map_size = -1;
 
     delete[] m_p_sockfd_map;
-    m_p_sockfd_map = NULL;
+    m_p_sockfd_map = nullptr;
 
     delete[] m_p_epfd_map;
-    m_p_epfd_map = NULL;
+    m_p_epfd_map = nullptr;
 
     delete[] m_p_cq_channel_map;
-    m_p_cq_channel_map = NULL;
+    m_p_cq_channel_map = nullptr;
 
     delete[] m_p_tap_map;
-    m_p_tap_map = NULL;
+    m_p_tap_map = nullptr;
 
     m_epfd_lst.clear_without_cleanup();
     m_pending_to_remove_lst.clear_without_cleanup();
@@ -165,7 +165,7 @@ void fd_collection::clear()
                 }
             }
 
-            m_p_sockfd_map[fd] = NULL;
+            m_p_sockfd_map[fd] = nullptr;
             fdcoll_logdbg("destroyed fd=%d", fd);
         }
 
@@ -174,7 +174,7 @@ void fd_collection::clear()
             if (p_epfd) {
                 delete p_epfd;
             }
-            m_p_epfd_map[fd] = NULL;
+            m_p_epfd_map[fd] = nullptr;
             fdcoll_logdbg("destroyed epfd=%d", fd);
         }
 
@@ -183,12 +183,12 @@ void fd_collection::clear()
             if (p_cq_ch_info) {
                 delete p_cq_ch_info;
             }
-            m_p_cq_channel_map[fd] = NULL;
+            m_p_cq_channel_map[fd] = nullptr;
             fdcoll_logdbg("destroyed cq_channel_fd=%d", fd);
         }
 
         if (m_p_tap_map[fd]) {
-            m_p_tap_map[fd] = NULL;
+            m_p_tap_map[fd] = nullptr;
             fdcoll_logdbg("destroyed tapfd=%d", fd);
         }
     }
@@ -255,7 +255,7 @@ int fd_collection::addsocket(int fd, int domain, int type, bool check_offload /*
     lock();
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (p_sfd_api_obj == NULL) {
+    if (!p_sfd_api_obj) {
         fdcoll_logpanic("[fd=%d] Failed creating new sockinfo (%m)", fd);
     }
     BULLSEYE_EXCLUDE_BLOCK_END
@@ -384,10 +384,10 @@ int fd_collection::addpipe(int fdrd, int fdwr)
     lock();
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (p_fdrd_api_obj == NULL) {
+    if (!p_fdrd_api_obj) {
         fdcoll_logpanic("[fd=%d] Failed creating new pipeinfo (%m)", fdrd);
     }
-    if (p_fdwr_api_obj == NULL) {
+    if (!p_fdwr_api_obj) {
         fdcoll_logpanic("[fd=%d] Failed creating new pipeinfo (%m)", fdwr);
     }
     BULLSEYE_EXCLUDE_BLOCK_END
@@ -424,7 +424,7 @@ int fd_collection::addepfd(int epfd, int size)
     lock();
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (p_fd_info == NULL) {
+    if (!p_fd_info) {
         fdcoll_logpanic("[fd=%d] Failed creating new sockinfo (%m)", epfd);
     }
     BULLSEYE_EXCLUDE_BLOCK_END
@@ -495,9 +495,9 @@ int fd_collection::add_cq_channel_fd(int cq_ch_fd, ring *p_ring)
     BULLSEYE_EXCLUDE_BLOCK_START
     if (p_cq_ch_info) {
         fdcoll_logwarn("cq channel fd already exists in fd_collection");
-        m_p_cq_channel_map[cq_ch_fd] = NULL;
+        m_p_cq_channel_map[cq_ch_fd] = nullptr;
         delete p_cq_ch_info;
-        p_cq_ch_info = NULL;
+        p_cq_ch_info = nullptr;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
@@ -506,7 +506,7 @@ int fd_collection::add_cq_channel_fd(int cq_ch_fd, ring *p_ring)
     lock();
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (p_cq_ch_info == NULL) {
+    if (!p_cq_ch_info) {
         fdcoll_logpanic("[fd=%d] Failed creating new cq_channel_info (%m)", cq_ch_fd);
     }
     BULLSEYE_EXCLUDE_BLOCK_END
@@ -545,7 +545,7 @@ int fd_collection::del_sockfd(int fd, bool b_cleanup /*=false*/, bool is_for_udp
                 if (!is_for_udp_pool) {
                     ++g_global_stat_static.n_pending_sockets;
                 }
-                m_p_sockfd_map[fd] = NULL;
+                m_p_sockfd_map[fd] = nullptr;
                 m_pending_to_remove_lst.push_front(p_sfd_api);
             }
 
@@ -581,7 +581,7 @@ void fd_collection::del_tapfd(int fd)
     }
 
     lock();
-    m_p_tap_map[fd] = NULL;
+    m_p_tap_map[fd] = nullptr;
     unlock();
 }
 
@@ -648,7 +648,7 @@ bool fd_collection::pop_socket_pool(int &fd, bool &add_to_udp_pool, int type)
         // use fd from pool - will skip creation of new fd by os
         socket_fd_api *sockfd = m_socket_pool.top();
         fd = sockfd->get_fd();
-        if (m_p_sockfd_map[fd] == NULL) {
+        if (!m_p_sockfd_map[fd]) {
             m_p_sockfd_map[fd] = sockfd;
             m_pending_to_remove_lst.erase(sockfd);
         }

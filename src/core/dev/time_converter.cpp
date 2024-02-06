@@ -188,7 +188,7 @@ void time_converter::clean_obj()
     }
 
     set_cleaned();
-    m_timer_handle = NULL;
+    m_timer_handle = nullptr;
     if (g_p_event_handler_manager->is_running()) {
         g_p_event_handler_manager->unregister_timers_event_and_delete(this);
     } else {

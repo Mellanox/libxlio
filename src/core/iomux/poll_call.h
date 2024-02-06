@@ -54,7 +54,7 @@ public:
      */
     poll_call(int *off_rfds_buffer, offloaded_mode_t *off_modes_buffer, int *lookup_buffer,
               pollfd *working_fds_arr, pollfd *fds, nfds_t nfds, int timeout,
-              const sigset_t *__sigmask = NULL);
+              const sigset_t *__sigmask = nullptr);
 
     /// @override
     virtual void set_offloaded_rfd_ready(int fd_index);

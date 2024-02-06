@@ -127,7 +127,7 @@ public:
     mapping_cache(size_t threshold);
     ~mapping_cache();
 
-    mapping_t *get_mapping(int local_fd, void *p_ctx = NULL);
+    mapping_t *get_mapping(int local_fd, void *p_ctx = nullptr);
     void release_mapping(mapping_t *mapping);
     void handle_close(int local_fd);
 
@@ -137,7 +137,7 @@ public:
     struct mapping_cache_stats m_stats;
 
 private:
-    mapping_t *get_mapping_by_uid_unlocked(file_uid_t &uid, ib_ctx_handler *p_ib_ctx = NULL);
+    mapping_t *get_mapping_by_uid_unlocked(file_uid_t &uid, ib_ctx_handler *p_ib_ctx = nullptr);
     void evict_mapping_unlocked(mapping_t *mapping);
     bool cache_evict_unlocked(size_t toFree);
 

@@ -60,7 +60,7 @@ public:
     virtual ~subject() {};
     virtual bool register_observer(IN const observer *const new_observer);
     bool unregister_observer(IN const observer *const old_observer);
-    void notify_observers(event *ev = NULL);
+    void notify_observers(event *ev = nullptr);
 
 protected:
     lock_mutex_recursive m_lock;

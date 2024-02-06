@@ -54,7 +54,7 @@ poll_call::poll_call(int *off_rfds_buffer, offloaded_mode_t *off_modes_buffer, i
 {
     nfds_t i;
     int fd;
-    m_fds = NULL;
+    m_fds = nullptr;
 
     // create stats
     m_p_stats = &g_poll_stats;
@@ -97,7 +97,7 @@ poll_call::poll_call(int *off_rfds_buffer, offloaded_mode_t *off_modes_buffer, i
                 __log_func("fd=%d must be skipped from os r poll()", fd);
                 m_fds[i].fd = -1;
             } else if (m_orig_fds[i].events & POLLIN) {
-                if (temp_sock_fd_api->is_readable(NULL)) {
+                if (temp_sock_fd_api->is_readable(nullptr)) {
                     io_mux_call::update_fd_array(&m_fd_ready_array, fd);
                     m_n_ready_rfds++;
                     m_n_all_ready_fds++;
@@ -132,7 +132,7 @@ bool poll_call::wait_os(bool zero_timeout)
 {
     __log_func("calling os poll: %d", m_nfds);
     if (m_sigmask) {
-        struct timespec to, *pto = NULL;
+        struct timespec to, *pto = nullptr;
         if (zero_timeout) {
             to.tv_sec = to.tv_nsec = 0;
             pto = &to;
@@ -160,7 +160,7 @@ bool poll_call::wait(const timeval &elapsed)
 {
     // poll fds and cq
     int timeout;
-    struct timespec to, *pto = NULL;
+    struct timespec to, *pto = nullptr;
 
     if (m_timeout < 0) {
         timeout = m_timeout;

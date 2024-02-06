@@ -98,12 +98,12 @@ pipeinfo::pipeinfo(int fd)
     pi_logfunc("");
 
     m_b_closed = true;
-    m_timer_handle = NULL;
+    m_timer_handle = nullptr;
 
     m_b_blocking = true;
 
-    m_p_socket_stats = NULL; // mce_stats_instance_create_socket_block();
-    if (m_p_socket_stats == NULL) {
+    m_p_socket_stats = nullptr; // mce_stats_instance_create_socket_block();
+    if (!m_p_socket_stats) {
         // pi_logdbg("Got NULL from mce_stats_instance_create_socket_block, using local member");
         m_p_socket_stats = &m_socket_stats;
     }
@@ -140,7 +140,7 @@ pipeinfo::~pipeinfo()
 
     if (m_timer_handle) {
         g_p_event_handler_manager->unregister_timer_event(this, m_timer_handle);
-        m_timer_handle = NULL;
+        m_timer_handle = nullptr;
     }
 
     statistics_print();
@@ -159,7 +159,7 @@ void pipeinfo::clean_obj()
     }
 
     set_cleaned();
-    m_timer_handle = NULL;
+    m_timer_handle = nullptr;
     if (g_p_event_handler_manager->is_running()) {
         g_p_event_handler_manager->unregister_timers_event_and_delete(this);
     } else {
@@ -312,7 +312,7 @@ void pipeinfo::write_lbm_pipe_enhance()
         if (m_write_count_no_change_count >= 2 && m_b_lbm_event_q_pipe_timer_on) {
             if (m_timer_handle) {
                 g_p_event_handler_manager->unregister_timer_event(this, m_timer_handle);
-                m_timer_handle = NULL;
+                m_timer_handle = nullptr;
             }
             m_b_lbm_event_q_pipe_timer_on = false;
 

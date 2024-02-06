@@ -234,8 +234,8 @@ int cq_mgr_tx::request_notification(uint64_t poll_sn)
 
 cq_mgr_tx *cq_mgr_tx::get_cq_mgr_from_cq_event(struct ibv_comp_channel *p_cq_channel)
 {
-    cq_mgr_tx *p_cq_mgr = NULL;
-    struct ibv_cq *p_cq_hndl = NULL;
+    cq_mgr_tx *p_cq_mgr = nullptr;
+    struct ibv_cq *p_cq_hndl = nullptr;
     void *p_context; // deal with compiler warnings
 
     // read & ack the CQ event
@@ -342,7 +342,7 @@ void cq_mgr_tx::handle_sq_wqe_prop(unsigned index)
 
         prev = p;
         p = p->next;
-    } while (p != NULL && m_hqtx_ptr->is_sq_wqe_prop_valid(p, prev));
+    } while (p && m_hqtx_ptr->is_sq_wqe_prop_valid(p, prev));
 
     m_p_ring->return_tx_pool_to_global_pool();
     m_hqtx_ptr->credits_return(credits);

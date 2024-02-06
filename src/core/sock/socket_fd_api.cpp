@@ -50,7 +50,7 @@ socket_fd_api::socket_fd_api(int fd)
     : m_epoll_event_flags(0)
     , m_fd(fd)
     , m_n_sysvar_select_poll_os_ratio(safe_mce_sys().select_poll_os_ratio)
-    , m_econtext(NULL)
+    , m_econtext(nullptr)
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     , m_is_for_socket_pool(false)
     , m_back_log(0)
@@ -332,7 +332,7 @@ int socket_fd_api::add_epoll_context(epfd_info *epfd)
 void socket_fd_api::remove_epoll_context(epfd_info *epfd)
 {
     if (m_econtext == epfd) {
-        m_econtext = NULL;
+        m_econtext = nullptr;
     }
 }
 

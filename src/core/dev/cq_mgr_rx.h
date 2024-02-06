@@ -109,7 +109,7 @@ public:
      *             (on non-blocked channel) (some other thread beat you to it)
      */
     int wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
-                                                  void *pv_fd_ready_array = NULL);
+                                                  void *pv_fd_ready_array = nullptr);
 
     /**
      * This will poll n_num_poll time on the cq or stop early if it gets
@@ -119,7 +119,7 @@ public:
      *         < 0 error
      */
     virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
-                                            void *pv_fd_ready_array = NULL) = 0;
+                                            void *pv_fd_ready_array = nullptr) = 0;
     virtual mem_buf_desc_t *poll_and_process_socketxtreme() { return nullptr; };
 
     /**
@@ -128,14 +128,14 @@ public:
      * @return  >=0 number of wce processed
      *          < 0 error
      */
-    virtual int drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id = NULL) = 0;
+    virtual int drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id = nullptr) = 0;
 
     // CQ implements the Rx mem_buf_desc_owner.
     // These callbacks will be called for each Rx buffer that passed processed completion
     // Rx completion handling at the cq_mgr_rx level is forwarding the packet to the ib_comm_mgr
     // layer
     void mem_buf_desc_return_to_owner(mem_buf_desc_t *p_mem_buf_desc,
-                                      void *pv_fd_ready_array = NULL);
+                                      void *pv_fd_ready_array = nullptr);
 
     virtual void add_hqrx(hw_queue_rx *hqrx_ptr);
     virtual void del_hqrx(hw_queue_rx *hqrx_ptr);
@@ -159,7 +159,7 @@ protected:
      */
     void compensate_qp_poll_failed();
     void lro_update_hdr(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc);
-    inline void process_recv_buffer(mem_buf_desc_t *buff, void *pv_fd_ready_array = NULL);
+    inline void process_recv_buffer(mem_buf_desc_t *buff, void *pv_fd_ready_array = nullptr);
 
     inline void update_global_sn_rx(uint64_t &cq_poll_sn, uint32_t rettotal);
 
@@ -172,7 +172,7 @@ protected:
     // Returns true if the given buffer was used,
     // false if the given buffer was not used.
     bool compensate_qp_poll_success(mem_buf_desc_t *buff);
-    inline uint32_t process_recv_queue(void *pv_fd_ready_array = NULL);
+    inline uint32_t process_recv_queue(void *pv_fd_ready_array = nullptr);
 
     virtual void statistics_print();
 
@@ -257,7 +257,7 @@ inline struct xlio_mlx5_cqe *cq_mgr_rx::check_cqe(void)
         return cqe;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 #endif // CQ_MGR_H

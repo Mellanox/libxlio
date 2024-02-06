@@ -44,14 +44,15 @@ public:
     virtual bool is_up() { return (m_vf_ring || m_active); }
     virtual bool attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink, bool force_5t = false);
     virtual bool detach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink);
-    virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array = NULL);
+    virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
+                                            void *pv_fd_ready_array = nullptr);
     virtual int poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
     {
         NOT_IN_USE(p_cq_poll_sn);
         return 0;
     }
     virtual int wait_for_notification_and_process_element(int cq_channel_fd, uint64_t *p_cq_poll_sn,
-                                                          void *pv_fd_ready_array = NULL);
+                                                          void *pv_fd_ready_array = nullptr);
     virtual int drain_and_proccess();
     virtual bool reclaim_recv_buffers(descq_t *rx_reuse);
     virtual bool reclaim_recv_buffers(mem_buf_desc_t *buff);
@@ -109,7 +110,7 @@ public:
     ib_ctx_handler *get_ctx(ring_user_id_t id)
     {
         NOT_IN_USE(id);
-        return NULL;
+        return nullptr;
     }
     virtual uint32_t get_max_send_sge(void) { return 1; }
     virtual uint32_t get_max_payload_sz(void) { return 0; }

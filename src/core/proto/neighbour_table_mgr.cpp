@@ -50,7 +50,7 @@
 #define neigh_mgr_logfunc    __log_func
 #define neigh_mgr_logfuncall __log_funcall
 
-neigh_table_mgr *g_p_neigh_table_mgr = NULL;
+neigh_table_mgr *g_p_neigh_table_mgr = nullptr;
 
 #define DEFAULT_GARBAGE_COLLECTOR_TIME 100000
 
@@ -110,7 +110,7 @@ neigh_entry *neigh_table_mgr::create_new_entry(neigh_key neigh_key, const observ
         return (new neigh_eth(neigh_key));
     } else {
         neigh_mgr_logdbg("Cannot create new entry, transport type is UNKNOWN");
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -121,7 +121,7 @@ void neigh_table_mgr::notify_cb(event *ev)
 
     neigh_nl_event *nl_ev = dynamic_cast<neigh_nl_event *>(ev);
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (nl_ev == NULL) {
+    if (!nl_ev) {
         neigh_mgr_logdbg("Non neigh_nl_event type");
         return;
     }

@@ -128,7 +128,7 @@ uint32_t cq_mgr_rx_strq::clean_cq()
     uint32_t ret_total = 0;
     uint64_t cq_poll_sn = 0;
 
-    if (NULL == m_hqrx_ptr) { // Sanity check
+    if (!m_hqrx_ptr) { // Sanity check
         return 0;
     }
 
@@ -165,11 +165,11 @@ bool cq_mgr_rx_strq::set_current_hot_buffer()
 
 mem_buf_desc_t *cq_mgr_rx_strq::poll(enum buff_status_e &status, mem_buf_desc_t *&buff_stride)
 {
-    mem_buf_desc_t *buff = NULL;
+    mem_buf_desc_t *buff = nullptr;
 
     if (unlikely(!m_rx_hot_buffer)) {
         if (!set_current_hot_buffer()) {
-            return NULL;
+            return nullptr;
         }
     }
 
@@ -193,7 +193,7 @@ mem_buf_desc_t *cq_mgr_rx_strq::poll(enum buff_status_e &status, mem_buf_desc_t 
         if (is_wqe_complete) {
             ++m_hqrx_ptr->m_rq_data.tail;
             buff = m_rx_hot_buffer;
-            m_rx_hot_buffer = NULL;
+            m_rx_hot_buffer = nullptr;
             if (likely(status == BS_OK)) {
                 ++m_p_cq_stat->n_rx_consumed_rwqe_count;
             }

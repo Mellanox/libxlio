@@ -53,9 +53,9 @@
 #define dm_logfunc __log_info_func
 
 dm_mgr::dm_mgr()
-    : m_p_dm_mr(NULL)
-    , m_p_ibv_dm(NULL)
-    , m_p_ring_stat(NULL)
+    : m_p_dm_mr(nullptr)
+    , m_p_ibv_dm(nullptr)
+    , m_p_ring_stat(nullptr)
     , m_allocation(0)
     , m_used(0)
     , m_head(0) {};
@@ -106,7 +106,7 @@ bool dm_mgr::allocate_resources(ib_ctx_handler *ib_ctx, ring_stats_t *ring_stats
     m_p_dm_mr = xlio_ibv_reg_dm_mr(&mr_in);
     if (!m_p_dm_mr) {
         xlio_ibv_free_dm(m_p_ibv_dm);
-        m_p_ibv_dm = NULL;
+        m_p_ibv_dm = nullptr;
         dm_logerr("ibv_free_dm error - dm_mr registration failed, %d %m", errno);
         return false;
     }
@@ -132,7 +132,7 @@ void dm_mgr::release_resources()
         } else {
             dm_logdbg("ibv_dereg_mr success");
         }
-        m_p_dm_mr = NULL;
+        m_p_dm_mr = nullptr;
     }
 
     if (m_p_ibv_dm) {
@@ -141,10 +141,10 @@ void dm_mgr::release_resources()
         } else {
             dm_logdbg("ibv_free_dm success");
         }
-        m_p_ibv_dm = NULL;
+        m_p_ibv_dm = nullptr;
     }
 
-    m_p_ring_stat = NULL;
+    m_p_ring_stat = nullptr;
 
     dm_logdbg("Device memory release completed!");
 }

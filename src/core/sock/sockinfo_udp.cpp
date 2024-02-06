@@ -193,7 +193,7 @@ inline int sockinfo_udp::rx_wait(bool blocking)
             //(can happen if another thread was polling & processing the wce)
             // and update is_sleeping flag under the same lock to synchronize between
             // this code and wakeup mechanism.
-            if (is_readable(NULL)) {
+            if (is_readable(nullptr)) {
                 return 0;
             }
         }
@@ -246,7 +246,7 @@ inline int sockinfo_udp::rx_wait(bool blocking)
              * This is the classical case of wakeup, but we don't want to
              * waist time on removing wakeup fd, it will be done next time
              */
-            if (is_readable(NULL)) {
+            if (is_readable(nullptr)) {
                 return 0;
             }
 
@@ -383,7 +383,7 @@ sockinfo_udp::sockinfo_udp(int fd, int domain)
     , m_mc_num_grp_with_src_filter(0)
     , m_port_map_lock("sockinfo_udp::m_ports_map_lock")
     , m_port_map_index(0)
-    , m_p_last_dst_entry(NULL)
+    , m_p_last_dst_entry(nullptr)
     , m_tos(0)
     , m_n_sysvar_rx_poll_yield_loops(safe_mce_sys().rx_poll_yield_loops)
     , m_n_sysvar_rx_udp_poll_os_ratio(safe_mce_sys().rx_udp_poll_os_ratio)
@@ -416,7 +416,7 @@ sockinfo_udp::sockinfo_udp(int fd, int domain)
     si_udp_logdbg("Sockets RCVBUF = %d bytes", n_so_rcvbuf_bytes);
     rx_ready_byte_count_limit_update(n_so_rcvbuf_bytes);
 
-    epoll_event ev = {0, {0}};
+    epoll_event ev = {0, {nullptr}};
 
     ev.events = EPOLLIN;
 
@@ -609,7 +609,7 @@ int sockinfo_udp::connect(const struct sockaddr *__to, socklen_t __tolen)
     // Create the new dst_entry, delete if one already exists
     if (m_p_connected_dst_entry) {
         delete m_p_connected_dst_entry;
-        m_p_connected_dst_entry = NULL;
+        m_p_connected_dst_entry = nullptr;
     }
 
     if (dst_ipaddr.is_mc(m_family)) {
@@ -663,7 +663,7 @@ int sockinfo_udp::getsockname(struct sockaddr *__name, socklen_t *__namelen)
 int sockinfo_udp::on_sockname_change(struct sockaddr *__name, socklen_t __namelen)
 {
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (__name == NULL) {
+    if (!__name) {
         si_udp_logerr("invalid NULL __name");
         errno = EFAULT;
         return -1;
@@ -994,7 +994,7 @@ int sockinfo_udp::setsockopt(int __level, int __optname, __const void *__optval,
                 break;
             }
 
-            if (NULL == __optval) {
+            if (!__optval) {
                 si_udp_logdbg("IPPROTO_IP, %s; Bad optval! calling OS setsockopt()",
                               setsockopt_ip_opt_to_str(__optname));
                 break;
@@ -1412,7 +1412,7 @@ int sockinfo_udp::setsockopt(int __level, int __optname, __const void *__optval,
             return 0;
         } break;
         case IPV6_RECVPKTINFO:
-            m_b_pktinfo = __optval != nullptr && *(int *)__optval != 0;
+            m_b_pktinfo = __optval && *(int *)__optval != 0;
             break;
         }
         break; // case IPPROTO_IPV6
@@ -2041,7 +2041,7 @@ ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
         si_udp_logdbg("MSG_OOB not supported in UDP (tx-ing to os)");
         goto tx_packet_to_os;
     }
-    if (__dst != NULL) {
+    if (__dst) {
         sock_addr dst(__dst, __dstlen);
         if (!validate_and_convert_mapped_ipv4(dst)) {
             si_udp_logdbg("Mapped IPv4 on IPv6-Only socket");
@@ -2130,7 +2130,7 @@ ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
     }
 
     {
-        xlio_send_attr attr = {(xlio_wr_tx_packet_attr)0, 0, 0, 0};
+        xlio_send_attr attr = {(xlio_wr_tx_packet_attr)0, 0, 0, nullptr};
         bool b_blocking = m_b_blocking;
         if (unlikely(__flags & MSG_DONTWAIT)) {
             b_blocking = false;
@@ -3145,7 +3145,7 @@ timestamps_t *sockinfo_udp::get_socket_timestamps()
 {
     if (unlikely(m_rx_pkt_ready_list.empty())) {
         si_udp_logdbg("m_rx_pkt_ready_list empty");
-        return NULL;
+        return nullptr;
     }
     return &m_rx_pkt_ready_list.front()->rx.timestamps;
 }

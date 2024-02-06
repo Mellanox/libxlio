@@ -87,14 +87,14 @@ static int g_ip_frag_count_check = 0;
 #define PRINT_STATISTICS()
 #endif
 
-ip_frag_manager *g_p_ip_frag_manager = NULL;
+ip_frag_manager *g_p_ip_frag_manager = nullptr;
 
-ip_frag_hole_desc *hole_base = NULL;
-ip_frag_hole_desc *hole_free_list_head = NULL;
+ip_frag_hole_desc *hole_base = nullptr;
+ip_frag_hole_desc *hole_free_list_head = nullptr;
 int hole_free_list_count = 0;
 
-ip_frag_desc *desc_base = NULL;
-ip_frag_desc *desc_free_list_head = NULL;
+ip_frag_desc *desc_base = nullptr;
+ip_frag_desc *desc_free_list_head = nullptr;
 int desc_free_list_count = 0;
 
 ip_frag_manager::ip_frag_manager()
@@ -209,7 +209,7 @@ ip_frag_hole_desc *ip_frag_manager::alloc_hole_desc()
     struct ip_frag_hole_desc *ret;
     ret = hole_free_list_head;
     if (!ret) {
-        return NULL;
+        return nullptr;
     }
 
     // unlink from hole's free list
@@ -217,9 +217,9 @@ ip_frag_hole_desc *ip_frag_manager::alloc_hole_desc()
     hole_free_list_count--;
 
     // clear hole struct
-    ret->data_first = 0;
-    ret->data_last = 0;
-    ret->next = 0;
+    ret->data_first = nullptr;
+    ret->data_last = nullptr;
+    ret->next = nullptr;
     return ret;
 }
 
@@ -236,14 +236,14 @@ ip_frag_desc_t *ip_frag_manager::alloc_frag_desc()
     ip_frag_desc_t *ret;
     ret = desc_free_list_head;
     if (!ret) {
-        return NULL;
+        return nullptr;
     }
 
     // unlink from hole's free list
     desc_free_list_head = ret->next;
     --desc_free_list_count;
 
-    ret->next = 0;
+    ret->next = nullptr;
     return ret;
 }
 
@@ -276,13 +276,13 @@ void ip_frag_manager::destroy_frag_desc(ip_frag_desc_t *desc)
  */
 ip_frag_desc_t *ip_frag_manager::new_frag_desc(ip_frag_key_t &key)
 {
-    ip_frag_desc_t *desc = NULL;
-    struct ip_frag_hole_desc *hole = NULL;
+    ip_frag_desc_t *desc = nullptr;
+    struct ip_frag_hole_desc *hole = nullptr;
 
     hole = alloc_hole_desc();
     if (!hole) {
         frag_dbg("NULL hole");
-        return NULL;
+        return nullptr;
     }
     hole->first = IP_FRAG_NINF;
     hole->last = IP_FRAG_INF;
@@ -291,10 +291,10 @@ ip_frag_desc_t *ip_frag_manager::new_frag_desc(ip_frag_key_t &key)
     if (!desc) {
         frag_dbg("NULL desc");
         free_hole_desc(hole);
-        return NULL;
+        return nullptr;
     }
     desc->ttl = IP_FRAG_TTL;
-    desc->frag_list = 0;
+    desc->frag_list = nullptr;
     desc->hole_list = hole;
     desc->frag_counter = m_frag_counter;
 
@@ -382,7 +382,7 @@ int ip_frag_manager::add_frag(iphdr *hdr, mem_buf_desc_t *frag, mem_buf_desc_t *
             frag_dbg("> old fragmented packet");
         }
     }
-    if (desc == NULL) {
+    if (!desc) {
         MEMBUF_DEBUG_REF_DEC(frag);
         PRINT_STATISTICS();
         unlock();
@@ -393,7 +393,7 @@ int ip_frag_manager::add_frag(iphdr *hdr, mem_buf_desc_t *frag, mem_buf_desc_t *
 
     /* 8 step reassembly algorithm as described in RFC 815 */
     // step 1
-    phole_prev = 0;
+    phole_prev = nullptr;
     phole = desc->hole_list;
     while (phole) {
         // step 2 and step 3
@@ -501,7 +501,7 @@ int ip_frag_manager::add_frag(iphdr *hdr, mem_buf_desc_t *frag, mem_buf_desc_t *
     }
     frag_dbg("> need more packets");
 
-    *ret = NULL;
+    *ret = nullptr;
     PRINT_STATISTICS();
     unlock();
     return 0;

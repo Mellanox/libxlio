@@ -72,11 +72,11 @@ public:
         : p_buffer(buffer)
         , m_flags(mem_buf_desc_t::TYPICAL)
         , lkey(0)
-        , p_next_desc(0)
-        , p_prev_desc(0)
+        , p_next_desc(nullptr)
+        , p_prev_desc(nullptr)
         , sz_buffer(size)
         , sz_data(0)
-        , p_desc_owner(0)
+        , p_desc_owner(nullptr)
     {
 
         memset(&lwip_pbuf, 0, sizeof(lwip_pbuf));

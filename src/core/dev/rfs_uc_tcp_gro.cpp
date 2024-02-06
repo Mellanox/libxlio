@@ -190,11 +190,11 @@ bool rfs_uc_tcp_gro::add_packet(mem_buf_desc_t *mem_buf_desc, void *payload_ptr,
     mem_buf_desc->lwip_pbuf.pbuf.len = mem_buf_desc->lwip_pbuf.pbuf.tot_len =
         mem_buf_desc->rx.sz_payload;
     mem_buf_desc->lwip_pbuf.pbuf.ref = 1;
-    mem_buf_desc->lwip_pbuf.pbuf.next = NULL;
+    mem_buf_desc->lwip_pbuf.pbuf.next = nullptr;
     mem_buf_desc->lwip_pbuf.pbuf.payload = payload_ptr;
 
     m_gro_desc.p_last->lwip_pbuf.pbuf.next = &(mem_buf_desc->lwip_pbuf.pbuf);
-    m_gro_desc.p_last->p_next_desc = NULL;
+    m_gro_desc.p_last->p_next_desc = nullptr;
     mem_buf_desc->p_prev_desc = m_gro_desc.p_last;
     m_gro_desc.p_last = mem_buf_desc;
 

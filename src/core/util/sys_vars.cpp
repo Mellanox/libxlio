@@ -105,13 +105,13 @@ typedef struct {
     const char **input_names;
 } xlio_spec_names;
 
-static const char *names_none[] = {"none", NULL};
-static const char *spec_names_ulatency[] = {"ultra-latency", NULL};
-static const char *spec_names_latency[] = {"latency", NULL};
-static const char *spec_names_multi_ring[] = {"multi_ring_latency", NULL};
-static const char *spec_names_nginx[] = {"nginx", NULL};
-static const char *spec_names_nginx_dpu[] = {"nginx_dpu", NULL};
-static const char *spec_names_nvme_bf2[] = {"nvme_bf2", NULL};
+static const char *names_none[] = {"none", nullptr};
+static const char *spec_names_ulatency[] = {"ultra-latency", nullptr};
+static const char *spec_names_latency[] = {"latency", nullptr};
+static const char *spec_names_multi_ring[] = {"multi_ring_latency", nullptr};
+static const char *spec_names_nginx[] = {"nginx", nullptr};
+static const char *spec_names_nginx_dpu[] = {"nginx_dpu", nullptr};
+static const char *spec_names_nvme_bf2[] = {"nvme_bf2", nullptr};
 
 // must be by order because "to_str" relies on that!
 static const xlio_spec_names specs[] = {
@@ -277,7 +277,7 @@ const char *to_str(MODE option, const OPT (&options)[N])
         }
     }
 
-    return NULL;
+    return nullptr;
 }
 } // namespace option_x
 
@@ -368,14 +368,14 @@ int mce_sys_var::list_to_cpuset(char *cpulist, cpu_set_t *cpu_set)
              * Here we assume that if we get a second subtoken
              * then we must be processing a range.
              */
-            subtoken = strtok_r(NULL, dash, &dash_saveptr);
+            subtoken = strtok_r(nullptr, dash, &dash_saveptr);
             if (subtoken) {
                 errno = 0;
                 range_end = strtol(subtoken, &endptr, 10);
                 if ((!range_end && *endptr) || errno) {
                     return -1;
                 }
-                subtoken = NULL;
+                subtoken = nullptr;
             } else {
                 range_end = range_start;
             }
@@ -389,7 +389,7 @@ int mce_sys_var::list_to_cpuset(char *cpulist, cpu_set_t *cpu_set)
             }
         }
 
-        token = strtok_r(NULL, comma, &comma_saveptr);
+        token = strtok_r(nullptr, comma, &comma_saveptr);
     }
 
     return 0;
@@ -419,7 +419,7 @@ int mce_sys_var::hex_to_cpuset(char *start, cpu_set_t *cpu_set)
             return -1;
         }
 
-        digit = strtol(hexc, NULL, 16);
+        digit = strtol(hexc, nullptr, 16);
 
         /*
          * Each hex digit is 4 bits. For each bit set per
@@ -487,9 +487,9 @@ void mce_sys_var::read_env_variable_with_pid(char *mce_sys_name, size_t mce_sys_
                                              char *env_ptr)
 {
     int n = -1;
-    char *d_pos = NULL;
+    char *d_pos = nullptr;
 
-    if (NULL == env_ptr || NULL == mce_sys_name || mce_sys_max_size < 2) {
+    if (!env_ptr || !mce_sys_name || mce_sys_max_size < 2) {
         return;
     }
 
@@ -578,7 +578,7 @@ const char *mce_sys_var::cpuid_hv_vendor()
     static __thread char vendor[13] = {0};
 
     if (!cpuid_hv()) {
-        return NULL;
+        return nullptr;
     }
 #if defined(__x86_64__)
     uint32_t _ebx = 0, _ecx = 0, _edx = 0;
@@ -593,7 +593,7 @@ const char *mce_sys_var::cpuid_hv_vendor()
 
 void mce_sys_var::read_hv()
 {
-    const char *hyper_vendor_id = NULL;
+    const char *hyper_vendor_id = nullptr;
 
     hypervisor = mce_sys_var::HYPER_NONE;
     hyper_vendor_id = cpuid_hv_vendor();
@@ -704,7 +704,7 @@ void mce_sys_var::get_env_params()
 {
     int c = 0, len = 0;
     char *env_ptr;
-    FILE *fp = NULL;
+    FILE *fp = nullptr;
     int app_name_size = MAX_CMD_LINE;
     // Large buffer size to avoid need for realloc
 
@@ -905,7 +905,7 @@ void mce_sys_var::get_env_params()
     /* Configure enable_socketxtreme as first because
      * this mode has some special predefined parameter limitations
      */
-    if ((env_ptr = getenv(SYS_VAR_SOCKETXTREME)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_SOCKETXTREME))) {
         enable_socketxtreme = atoi(env_ptr) ? true : false;
     }
     if (enable_socketxtreme) {
@@ -914,7 +914,7 @@ void mce_sys_var::get_env_params()
         progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_STRQ)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_STRQ))) {
         enable_strq_env = option_3::from_str(env_ptr, MCE_DEFAULT_STRQ);
     }
 
@@ -927,7 +927,7 @@ void mce_sys_var::get_env_params()
         qp_compensation_level = MCE_DEFAULT_STRQ_COMPENSATION_LEVEL;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_SPEC)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_SPEC))) {
         mce_spec = (uint32_t)xlio_spec::from_str(env_ptr, MCE_SPEC_NONE);
     }
 
@@ -936,7 +936,7 @@ void mce_sys_var::get_env_params()
      * based on number of workers or application type further.
      */
 #if defined(DEFINED_NGINX)
-    if ((env_ptr = getenv(SYS_VAR_NGINX_WORKERS_NUM)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_NGINX_WORKERS_NUM))) {
         app.workers_num = (uint32_t)atoi(env_ptr);
         if (app.workers_num > 0) {
             app.type = APP_NGINX;
@@ -1185,31 +1185,31 @@ void mce_sys_var::get_env_params()
         break;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_PRINT_REPORT)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_PRINT_REPORT))) {
         print_report = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_LOG_FILENAME)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_LOG_FILENAME))) {
         read_env_variable_with_pid(log_filename, sizeof(log_filename), env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_STATS_FILENAME)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_STATS_FILENAME))) {
         read_env_variable_with_pid(stats_filename, sizeof(stats_filename), env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_STATS_SHMEM_DIRNAME)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_STATS_SHMEM_DIRNAME))) {
         read_env_variable_with_pid(stats_shmem_dirname, sizeof(stats_shmem_dirname), env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_CONF_FILENAME)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_CONF_FILENAME))) {
         read_env_variable_with_pid(conf_filename, sizeof(conf_filename), env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_SERVICE_DIR)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_SERVICE_DIR))) {
         read_env_variable_with_pid(service_notify_dir, sizeof(service_notify_dir), env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_SERVICE_ENABLE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_SERVICE_ENABLE))) {
         service_enable = atoi(env_ptr) ? true : false;
     }
     if (HYPER_MSHV == hypervisor && !service_enable) {
@@ -1218,7 +1218,7 @@ void mce_sys_var::get_env_params()
                     SYS_VAR_SERVICE_ENABLE);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_LOG_LEVEL)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_LOG_LEVEL))) {
         log_level = log_level::from_str(env_ptr, VLOG_DEFAULT);
     }
 
@@ -1226,27 +1226,27 @@ void mce_sys_var::get_env_params()
         log_details = 2;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_LOG_DETAILS)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_LOG_DETAILS))) {
         log_details = (uint32_t)atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_LOG_COLORS)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_LOG_COLORS))) {
         log_colors = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_APPLICATION_ID)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_APPLICATION_ID))) {
         read_env_variable_with_pid(app_id, sizeof(app_id), env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_HANDLE_SIGINTR)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_HANDLE_SIGINTR))) {
         handle_sigintr = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_HANDLE_SIGSEGV)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_HANDLE_SIGSEGV))) {
         handle_segfault = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_STATS_FD_NUM)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_STATS_FD_NUM))) {
         stats_fd_num_max = (uint32_t)atoi(env_ptr);
         if (stats_fd_num_max > MAX_STATS_FD_NUM) {
             vlog_printf(VLOG_WARNING, " Can only monitor maximum %d sockets in statistics \n",
@@ -1258,29 +1258,29 @@ void mce_sys_var::get_env_params()
     read_strq_strides_num();
     read_strq_stride_size_bytes();
 
-    if ((env_ptr = getenv(SYS_VAR_STRQ_STRIDES_NUM_BUFS)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_STRQ_STRIDES_NUM_BUFS))) {
         strq_strides_num_bufs = (uint32_t)atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_STRQ_STRIDES_COMPENSATION_LEVEL)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_STRQ_STRIDES_COMPENSATION_LEVEL))) {
         strq_strides_compensation_level = (uint32_t)atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_ZC_CACHE_THRESHOLD)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_ZC_CACHE_THRESHOLD))) {
         zc_cache_threshold = option_size::from_str(env_ptr);
     }
 
     bool tx_num_bufs_set = false;
-    if ((env_ptr = getenv(SYS_VAR_TX_NUM_BUFS)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TX_NUM_BUFS))) {
         tx_num_bufs = (uint32_t)atoi(env_ptr);
         tx_num_bufs_set = true;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TX_BUF_SIZE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TX_BUF_SIZE))) {
         tx_buf_size = (uint32_t)option_size::from_str(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_ZC_TX_SIZE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_ZC_TX_SIZE))) {
         zc_tx_size = (uint32_t)option_size::from_str(env_ptr);
         if (zc_tx_size > MCE_MAX_ZC_TX_SIZE) {
             vlog_printf(VLOG_WARNING,
@@ -1290,15 +1290,15 @@ void mce_sys_var::get_env_params()
         }
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TCP_NODELAY_TRESHOLD)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TCP_NODELAY_TRESHOLD))) {
         tcp_nodelay_treshold = (uint32_t)atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TX_NUM_WRE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TX_NUM_WRE))) {
         tx_num_wr = (uint32_t)atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TX_NUM_WRE_TO_SIGNAL)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TX_NUM_WRE_TO_SIGNAL))) {
         tx_num_wr_to_signal =
             std::min<uint32_t>(NUM_TX_WRE_TO_SIGNAL_MAX, std::max(1, atoi(env_ptr)));
     }
@@ -1306,7 +1306,7 @@ void mce_sys_var::get_env_params()
         tx_num_wr = tx_num_wr_to_signal * 2;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TX_MAX_INLINE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TX_MAX_INLINE))) {
         tx_max_inline = (uint32_t)atoi(env_ptr);
     }
     if (tx_max_inline > MAX_SUPPORTED_IB_INLINE_SIZE) {
@@ -1315,35 +1315,35 @@ void mce_sys_var::get_env_params()
         tx_max_inline = MAX_SUPPORTED_IB_INLINE_SIZE;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TX_MC_LOOPBACK)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TX_MC_LOOPBACK))) {
         tx_mc_loopback_default = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TX_NONBLOCKED_EAGAINS)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TX_NONBLOCKED_EAGAINS))) {
         tx_nonblocked_eagains = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TX_PREFETCH_BYTES)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TX_PREFETCH_BYTES))) {
         tx_prefetch_bytes = (uint32_t)atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TX_BUFS_BATCH_TCP)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TX_BUFS_BATCH_TCP))) {
         tx_bufs_batch_tcp = (uint32_t)std::max<int32_t>(atoi(env_ptr), 1);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TX_SEGS_BATCH_TCP)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TX_SEGS_BATCH_TCP))) {
         tx_segs_batch_tcp = (uint32_t)std::max<int32_t>(atoi(env_ptr), 1);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TX_SEGS_RING_BATCH_TCP)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TX_SEGS_RING_BATCH_TCP))) {
         tx_segs_ring_batch_tcp = (uint32_t)std::max<int32_t>(atoi(env_ptr), 1);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TX_SEGS_POOL_BATCH_TCP)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TX_SEGS_POOL_BATCH_TCP))) {
         tx_segs_pool_batch_tcp = (uint32_t)std::max<int32_t>(atoi(env_ptr), 1);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_RING_ALLOCATION_LOGIC_TX)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RING_ALLOCATION_LOGIC_TX))) {
         ring_allocation_logic_tx = (ring_logic_t)atoi(env_ptr);
         if (!is_ring_logic_valid(ring_allocation_logic_tx)) {
             vlog_printf(VLOG_WARNING, "%s = %d is not valid, setting logic to default = %d\n",
@@ -1353,7 +1353,7 @@ void mce_sys_var::get_env_params()
         }
     }
 
-    if ((env_ptr = getenv(SYS_VAR_RING_ALLOCATION_LOGIC_RX)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RING_ALLOCATION_LOGIC_RX))) {
         ring_allocation_logic_rx = (ring_logic_t)atoi(env_ptr);
         if (!is_ring_logic_valid(ring_allocation_logic_rx)) {
             vlog_printf(VLOG_WARNING, "%s = %d is not valid, setting logic to default = %d\n",
@@ -1363,41 +1363,41 @@ void mce_sys_var::get_env_params()
         }
     }
 
-    if ((env_ptr = getenv(SYS_VAR_RING_MIGRATION_RATIO_TX)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RING_MIGRATION_RATIO_TX))) {
         ring_migration_ratio_tx = atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_RING_MIGRATION_RATIO_RX)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RING_MIGRATION_RATIO_RX))) {
         ring_migration_ratio_rx = atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_RING_LIMIT_PER_INTERFACE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RING_LIMIT_PER_INTERFACE))) {
         ring_limit_per_interface = std::max(0, atoi(env_ptr));
     }
 
-    if ((env_ptr = getenv(SYS_VAR_RING_DEV_MEM_TX)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RING_DEV_MEM_TX))) {
         ring_dev_mem_tx = std::max(0, atoi(env_ptr));
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TCP_MAX_SYN_RATE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TCP_MAX_SYN_RATE))) {
         tcp_max_syn_rate = std::min(TCP_MAX_SYN_RATE_TOP_LIMIT, std::max(0, atoi(env_ptr)));
     }
 
     bool rx_num_bufs_set = false;
-    if ((env_ptr = getenv(SYS_VAR_RX_NUM_BUFS)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RX_NUM_BUFS))) {
         rx_num_bufs = (uint32_t)atoi(env_ptr);
         rx_num_bufs_set = true;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_RX_BUF_SIZE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RX_BUF_SIZE))) {
         rx_buf_size = (uint32_t)option_size::from_str(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_RX_NUM_WRE_TO_POST_RECV)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RX_NUM_WRE_TO_POST_RECV))) {
         rx_num_wr_to_post_recv = std::min(NUM_RX_WRE_TO_POST_RECV_MAX, std::max(1, atoi(env_ptr)));
     }
 
-    if ((env_ptr = getenv(SYS_VAR_RX_NUM_WRE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RX_NUM_WRE))) {
         rx_num_wr = (uint32_t)atoi(env_ptr);
     }
 
@@ -1415,7 +1415,7 @@ void mce_sys_var::get_env_params()
         rx_num_wr = rx_num_wr_to_post_recv * 2;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_RX_NUM_POLLS)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RX_NUM_POLLS))) {
         rx_poll_num = atoi(env_ptr);
     }
     if (rx_poll_num < MCE_MIN_RX_NUM_POLLS || rx_poll_num > MCE_MAX_RX_NUM_POLLS) {
@@ -1423,7 +1423,7 @@ void mce_sys_var::get_env_params()
                     MCE_MIN_RX_NUM_POLLS, MCE_MAX_RX_NUM_POLLS, rx_poll_num);
         rx_poll_num = MCE_DEFAULT_RX_NUM_POLLS;
     }
-    if ((env_ptr = getenv(SYS_VAR_RX_NUM_POLLS_INIT)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RX_NUM_POLLS_INIT))) {
         rx_poll_num_init = atoi(env_ptr);
     }
     if (rx_poll_num_init < MCE_MIN_RX_NUM_POLLS || rx_poll_num_init > MCE_MAX_RX_NUM_POLLS) {
@@ -1435,11 +1435,11 @@ void mce_sys_var::get_env_params()
         rx_poll_num = 1; // Force at least one good polling loop
     }
 
-    if ((env_ptr = getenv(SYS_VAR_RX_UDP_POLL_OS_RATIO)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RX_UDP_POLL_OS_RATIO))) {
         rx_udp_poll_os_ratio = (uint32_t)atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_HW_TS_CONVERSION_MODE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_HW_TS_CONVERSION_MODE))) {
         hw_ts_conversion_mode = (ts_conversion_mode_t)atoi(env_ptr);
         if ((uint32_t)hw_ts_conversion_mode >= TS_CONVERSION_MODE_LAST) {
             vlog_printf(
@@ -1452,32 +1452,32 @@ void mce_sys_var::get_env_params()
     }
 
     // The following 2 params were replaced by SYS_VAR_RX_UDP_POLL_OS_RATIO
-    if ((env_ptr = getenv(SYS_VAR_RX_POLL_OS_RATIO)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RX_POLL_OS_RATIO))) {
         rx_udp_poll_os_ratio = (uint32_t)atoi(env_ptr);
         vlog_printf(VLOG_WARNING,
                     "The parameter %s is no longer in use. Parameter %s was set to %d instead\n",
                     SYS_VAR_RX_POLL_OS_RATIO, SYS_VAR_RX_UDP_POLL_OS_RATIO, rx_udp_poll_os_ratio);
     }
-    if ((env_ptr = getenv(SYS_VAR_RX_SKIP_OS)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RX_SKIP_OS))) {
         rx_udp_poll_os_ratio = (uint32_t)atoi(env_ptr);
         vlog_printf(VLOG_WARNING,
                     "The parameter %s is no longer in use. Parameter %s was set to %d instead\n",
                     SYS_VAR_RX_SKIP_OS, SYS_VAR_RX_UDP_POLL_OS_RATIO, rx_udp_poll_os_ratio);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_RX_POLL_YIELD)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RX_POLL_YIELD))) {
         rx_poll_yield_loops = (uint32_t)atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_SELECT_CPU_USAGE_STATS)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_SELECT_CPU_USAGE_STATS))) {
         select_handle_cpu_usage_stats = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_RX_BYTE_MIN_LIMIT)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RX_BYTE_MIN_LIMIT))) {
         rx_ready_byte_min_limit = (uint32_t)atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_RX_PREFETCH_BYTES)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RX_PREFETCH_BYTES))) {
         rx_prefetch_bytes = (uint32_t)atoi(env_ptr);
     }
     if (rx_prefetch_bytes < MCE_MIN_RX_PREFETCH_BYTES ||
@@ -1487,7 +1487,7 @@ void mce_sys_var::get_env_params()
         rx_prefetch_bytes = MCE_DEFAULT_RX_PREFETCH_BYTES;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_RX_PREFETCH_BYTES_BEFORE_POLL)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RX_PREFETCH_BYTES_BEFORE_POLL))) {
         rx_prefetch_bytes_before_poll = (uint32_t)atoi(env_ptr);
     }
     if (rx_prefetch_bytes_before_poll != 0 &&
@@ -1500,34 +1500,34 @@ void mce_sys_var::get_env_params()
         rx_prefetch_bytes_before_poll = MCE_DEFAULT_RX_PREFETCH_BYTES_BEFORE_POLL;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_RX_CQ_DRAIN_RATE_NSEC)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RX_CQ_DRAIN_RATE_NSEC))) {
         rx_cq_drain_rate_nsec = atoi(env_ptr);
     }
     // Update the rx cq polling rate for draining logic
     tscval_t tsc_per_second = get_tsc_rate_per_second();
     rx_delta_tsc_between_cq_polls = tsc_per_second * rx_cq_drain_rate_nsec / NSEC_PER_SEC;
 
-    if ((env_ptr = getenv(SYS_VAR_GRO_STREAMS_MAX)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_GRO_STREAMS_MAX))) {
         gro_streams_max = std::max(atoi(env_ptr), 0);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TCP_3T_RULES)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TCP_3T_RULES))) {
         tcp_3t_rules = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_UDP_3T_RULES)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_UDP_3T_RULES))) {
         udp_3t_rules = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_ETH_MC_L2_ONLY_RULES)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_ETH_MC_L2_ONLY_RULES))) {
         eth_mc_l2_only_rules = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_DISABLE_FLOW_TAG)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_DISABLE_FLOW_TAG))) {
         disable_flow_tag = std::max(atoi(env_ptr), 0) ? true : false;
     }
     // mc_force_flowtag must be after disable_flow_tag
-    if ((env_ptr = getenv(SYS_VAR_MC_FORCE_FLOWTAG)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_MC_FORCE_FLOWTAG))) {
         mc_force_flowtag = atoi(env_ptr) ? true : false;
         if (disable_flow_tag) {
             vlog_printf(VLOG_WARNING, "%s and %s can't be set together. Disabling %s\n",
@@ -1537,7 +1537,7 @@ void mce_sys_var::get_env_params()
         }
     }
 
-    if ((env_ptr = getenv(SYS_VAR_SELECT_NUM_POLLS)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_SELECT_NUM_POLLS))) {
         select_poll_num = atoi(env_ptr);
     }
 
@@ -1547,7 +1547,7 @@ void mce_sys_var::get_env_params()
         select_poll_num = MCE_DEFAULT_SELECT_NUM_POLLS;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_SELECT_POLL_OS_FORCE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_SELECT_POLL_OS_FORCE))) {
         select_poll_os_force = (uint32_t)atoi(env_ptr);
     }
 
@@ -1556,11 +1556,11 @@ void mce_sys_var::get_env_params()
         select_skip_os_fd_check = 1;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_SELECT_POLL_OS_RATIO)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_SELECT_POLL_OS_RATIO))) {
         select_poll_os_ratio = (uint32_t)atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_SELECT_SKIP_OS)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_SELECT_SKIP_OS))) {
         select_skip_os_fd_check = (uint32_t)atoi(env_ptr);
     }
 
@@ -1568,10 +1568,10 @@ void mce_sys_var::get_env_params()
     if ((mce_spec != MCE_SPEC_NVME_BF2) && (rx_poll_num < 0 || select_poll_num < 0)) {
         cq_moderation_enable = false;
     }
-    if ((env_ptr = getenv(SYS_VAR_CQ_MODERATION_ENABLE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_CQ_MODERATION_ENABLE))) {
         cq_moderation_enable = atoi(env_ptr) ? true : false;
     }
-    if ((env_ptr = getenv(SYS_VAR_CQ_MODERATION_COUNT)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_CQ_MODERATION_COUNT))) {
         cq_moderation_count = (uint32_t)atoi(env_ptr);
     }
 
@@ -1581,11 +1581,11 @@ void mce_sys_var::get_env_params()
         cq_moderation_count = max_cq_moderation_count;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_CQ_MODERATION_PERIOD_USEC)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_CQ_MODERATION_PERIOD_USEC))) {
         cq_moderation_period_usec = (uint32_t)atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_CQ_AIM_MAX_COUNT)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_CQ_AIM_MAX_COUNT))) {
         cq_aim_max_count = (uint32_t)atoi(env_ptr);
     }
 
@@ -1595,11 +1595,11 @@ void mce_sys_var::get_env_params()
         cq_aim_max_count = max_cq_aim_max_count;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_CQ_AIM_MAX_PERIOD_USEC)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_CQ_AIM_MAX_PERIOD_USEC))) {
         cq_aim_max_period_usec = (uint32_t)atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_CQ_AIM_INTERVAL_MSEC)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_CQ_AIM_INTERVAL_MSEC))) {
         cq_aim_interval_msec = (uint32_t)atoi(env_ptr);
     }
 
@@ -1607,7 +1607,7 @@ void mce_sys_var::get_env_params()
         cq_aim_interval_msec = MCE_CQ_ADAPTIVE_MODERATION_DISABLED;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_CQ_AIM_INTERRUPTS_RATE_PER_SEC)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_CQ_AIM_INTERRUPTS_RATE_PER_SEC))) {
         cq_aim_interrupts_rate_per_sec = (uint32_t)atoi(env_ptr);
     }
 #else
@@ -1641,7 +1641,7 @@ void mce_sys_var::get_env_params()
     }
 #endif /* DEFINED_IBV_CQ_ATTR_MODERATE */
 
-    if ((env_ptr = getenv(SYS_VAR_CQ_POLL_BATCH_MAX)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_CQ_POLL_BATCH_MAX))) {
         cq_poll_batch_max = (uint32_t)atoi(env_ptr);
     }
     if (cq_poll_batch_max < MCE_MIN_CQ_POLL_BATCH || cq_poll_batch_max > MCE_MAX_CQ_POLL_BATCH) {
@@ -1650,7 +1650,7 @@ void mce_sys_var::get_env_params()
         cq_poll_batch_max = MCE_DEFAULT_CQ_POLL_BATCH;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_PROGRESS_ENGINE_INTERVAL)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_PROGRESS_ENGINE_INTERVAL))) {
         progress_engine_interval_msec = (uint32_t)atoi(env_ptr);
     }
     if (enable_socketxtreme && (progress_engine_interval_msec != MCE_CQ_DRAIN_INTERVAL_DISABLED)) {
@@ -1660,41 +1660,41 @@ void mce_sys_var::get_env_params()
                     SYS_VAR_SOCKETXTREME);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_PROGRESS_ENGINE_WCE_MAX)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_PROGRESS_ENGINE_WCE_MAX))) {
         progress_engine_wce_max = (uint32_t)atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_CQ_KEEP_QP_FULL)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_CQ_KEEP_QP_FULL))) {
         cq_keep_qp_full = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_QP_COMPENSATION_LEVEL)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_QP_COMPENSATION_LEVEL))) {
         qp_compensation_level = (uint32_t)atoi(env_ptr);
     }
     if (qp_compensation_level < rx_num_wr_to_post_recv) {
         qp_compensation_level = rx_num_wr_to_post_recv;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_USER_HUGE_PAGE_SIZE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_USER_HUGE_PAGE_SIZE))) {
         user_huge_page_size = option_size::from_str(env_ptr);
         if (user_huge_page_size == 0) {
             user_huge_page_size = g_hugepage_mgr.get_default_hugepage();
         }
     }
 
-    if ((env_ptr = getenv(SYS_VAR_OFFLOADED_SOCKETS)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_OFFLOADED_SOCKETS))) {
         offloaded_sockets = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TIMER_RESOLUTION_MSEC)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TIMER_RESOLUTION_MSEC))) {
         timer_resolution_msec = atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TCP_TIMER_RESOLUTION_MSEC)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TCP_TIMER_RESOLUTION_MSEC))) {
         tcp_timer_resolution_msec = atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TCP_CTL_THREAD)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TCP_CTL_THREAD))) {
         tcp_ctl_thread = option_tcp_ctl_thread::from_str(env_ptr, MCE_DEFAULT_TCP_CTL_THREAD);
         if (tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
             if (progress_engine_interval_msec != MCE_CQ_DRAIN_INTERVAL_DISABLED) {
@@ -1717,7 +1717,7 @@ void mce_sys_var::get_env_params()
         }
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TCP_TIMESTAMP_OPTION)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TCP_TIMESTAMP_OPTION))) {
         tcp_ts_opt = (tcp_ts_opt_t)atoi(env_ptr);
         if ((uint32_t)tcp_ts_opt >= TCP_TS_OPTION_LAST) {
             vlog_printf(VLOG_WARNING,
@@ -1729,30 +1729,30 @@ void mce_sys_var::get_env_params()
         }
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TCP_NODELAY)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TCP_NODELAY))) {
         tcp_nodelay = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TCP_QUICKACK)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TCP_QUICKACK))) {
         tcp_quickack = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TCP_PUSH_FLAG)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TCP_PUSH_FLAG))) {
         tcp_push_flag = atoi(env_ptr) ? true : false;
     }
 
     // TODO: this should be replaced by calling "exception_handling.init()" that will be called from
     // init()
-    if ((env_ptr = getenv(xlio_exception_handling::getSysVar())) != NULL) {
-        exception_handling = xlio_exception_handling(
-            strtol(env_ptr, NULL, 10)); // xlio_exception_handling is responsible for its invariant
+    if ((env_ptr = getenv(xlio_exception_handling::getSysVar()))) {
+        exception_handling = xlio_exception_handling(strtol(
+            env_ptr, nullptr, 10)); // xlio_exception_handling is responsible for its invariant
     }
 
-    if ((env_ptr = getenv(SYS_VAR_AVOID_SYS_CALLS_ON_TCP_FD)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_AVOID_SYS_CALLS_ON_TCP_FD))) {
         avoid_sys_calls_on_tcp_fd = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_ALLOW_PRIVILEGED_SOCK_OPT)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_ALLOW_PRIVILEGED_SOCK_OPT))) {
         allow_privileged_sock_opt = atoi(env_ptr) ? true : false;
     }
 
@@ -1765,16 +1765,16 @@ void mce_sys_var::get_env_params()
         tcp_timer_resolution_msec = timer_resolution_msec;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_INTERNAL_THREAD_ARM_CQ)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_INTERNAL_THREAD_ARM_CQ))) {
         internal_thread_arm_cq_enabled = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_INTERNAL_THREAD_CPUSET)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_INTERNAL_THREAD_CPUSET))) {
         snprintf(internal_thread_cpuset, FILENAME_MAX, "%s", env_ptr);
     }
 
     // handle internal thread affinity - default is CPU-0
-    if ((env_ptr = getenv(SYS_VAR_INTERNAL_THREAD_AFFINITY)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_INTERNAL_THREAD_AFFINITY))) {
         int n = snprintf(internal_thread_affinity_str, sizeof(internal_thread_affinity_str), "%s",
                          env_ptr);
         if (unlikely(((int)sizeof(internal_thread_affinity_str) < n) || (n < 0))) {
@@ -1787,18 +1787,18 @@ void mce_sys_var::get_env_params()
                     internal_thread_affinity_str);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_WAIT_AFTER_JOIN_MSEC)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_WAIT_AFTER_JOIN_MSEC))) {
         wait_after_join_msec = (uint32_t)atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_THREAD_MODE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_THREAD_MODE))) {
         thread_mode = (thread_mode_t)atoi(env_ptr);
         if (thread_mode < 0 || thread_mode >= THREAD_MODE_LAST) {
             thread_mode = MCE_DEFAULT_THREAD_MODE;
         }
     }
 
-    if ((env_ptr = getenv(SYS_VAR_BUFFER_BATCHING_MODE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_BUFFER_BATCHING_MODE))) {
         buffer_batching_mode = (buffer_batching_mode_t)atoi(env_ptr);
         if (buffer_batching_mode < 0 || buffer_batching_mode >= BUFFER_BATCHING_LAST) {
             buffer_batching_mode = MCE_DEFAULT_BUFFER_BATCHING_MODE;
@@ -1811,24 +1811,24 @@ void mce_sys_var::get_env_params()
         rx_bufs_batch = 1;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_NETLINK_TIMER_MSEC)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_NETLINK_TIMER_MSEC))) {
         timer_netlink_update_msec = (uint32_t)atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_NEIGH_NUM_ERR_RETRIES)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_NEIGH_NUM_ERR_RETRIES))) {
         neigh_num_err_retries = (uint32_t)atoi(env_ptr);
     }
-    if ((env_ptr = getenv(SYS_VAR_NEIGH_UC_ARP_DELAY_MSEC)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_NEIGH_UC_ARP_DELAY_MSEC))) {
         neigh_wait_till_send_arp_msec = (uint32_t)atoi(env_ptr);
     }
-    if ((env_ptr = getenv(SYS_VAR_NEIGH_UC_ARP_QUATA)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_NEIGH_UC_ARP_QUATA))) {
         neigh_uc_arp_quata = (uint32_t)atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_MEM_ALLOC_TYPE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_MEM_ALLOC_TYPE))) {
         mem_alloc_type = option_alloc_type::from_str(env_ptr, MCE_DEFAULT_MEM_ALLOC_TYPE);
     }
-    if ((env_ptr = getenv(SYS_VAR_MEMORY_LIMIT)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_MEMORY_LIMIT))) {
         memory_limit = option_size::from_str(env_ptr) ?: MCE_DEFAULT_MEMORY_LIMIT;
     } else {
         /*
@@ -1870,13 +1870,13 @@ void mce_sys_var::get_env_params()
             memory_limit = std::max(memory_limit, memory_limit_est);
         }
     }
-    if ((env_ptr = getenv(SYS_VAR_MEMORY_LIMIT_USER)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_MEMORY_LIMIT_USER))) {
         memory_limit_user = option_size::from_str(env_ptr);
     }
-    if ((env_ptr = getenv(SYS_VAR_HEAP_METADATA_BLOCK)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_HEAP_METADATA_BLOCK))) {
         heap_metadata_block = option_size::from_str(env_ptr) ?: MCE_DEFAULT_HEAP_METADATA_BLOCK;
     }
-    if ((env_ptr = getenv(SYS_VAR_HUGEPAGE_LOG2)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_HUGEPAGE_LOG2))) {
         unsigned val = (unsigned)atoi(env_ptr);
 
         // mmap() uses 6 bits for the hugepage size log2
@@ -1899,15 +1899,15 @@ void mce_sys_var::get_env_params()
         }
     }
 
-    if ((env_ptr = getenv(SYS_VAR_BF)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_BF))) {
         handle_bf = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_FORK)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_FORK))) {
         handle_fork = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TSO)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TSO))) {
         enable_tso = option_3::from_str(env_ptr, MCE_DEFAULT_TSO);
     }
 
@@ -1940,67 +1940,67 @@ void mce_sys_var::get_env_params()
     }
 #endif /* DEFINED_UTLS */
 
-    if ((env_ptr = getenv(SYS_VAR_LRO)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_LRO))) {
         enable_lro = option_3::from_str(env_ptr, MCE_DEFAULT_LRO);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_CLOSE_ON_DUP2)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_CLOSE_ON_DUP2))) {
         close_on_dup2 = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_MTU)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_MTU))) {
         mtu = (uint32_t)atoi(env_ptr);
     }
 
 #if defined(DEFINED_NGINX)
-    if ((env_ptr = getenv(SYS_VAR_NGINX_UDP_POOL_SIZE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_NGINX_UDP_POOL_SIZE))) {
         nginx_udp_socket_pool_size = (uint32_t)atoi(env_ptr);
     }
-    if ((env_ptr = getenv(SYS_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE))) {
         nginx_udp_socket_pool_rx_num_buffs_reuse = (uint32_t)atoi(env_ptr);
     }
 #endif // DEFINED_NGINX
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    if ((env_ptr = getenv(SYS_VAR_SRC_PORT_STRIDE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_SRC_PORT_STRIDE))) {
         app.src_port_stride = (uint32_t)atoi(env_ptr);
     }
-    if ((env_ptr = getenv(SYS_VAR_DISTRIBUTE_CQ)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_DISTRIBUTE_CQ))) {
         app.distribute_cq_interrupts = atoi(env_ptr) ? true : false;
     }
 #endif
-    if ((env_ptr = getenv(SYS_VAR_MSS)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_MSS))) {
         lwip_mss = (uint32_t)atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TCP_CC_ALGO)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TCP_CC_ALGO))) {
         lwip_cc_algo_mod = (uint32_t)atoi(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_DEFERRED_CLOSE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_DEFERRED_CLOSE))) {
         deferred_close = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TCP_ABORT_ON_CLOSE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TCP_ABORT_ON_CLOSE))) {
         tcp_abort_on_close = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_RX_POLL_ON_TX_TCP)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RX_POLL_ON_TX_TCP))) {
         rx_poll_on_tx_tcp = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_RX_CQ_WAIT_CTRL)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_RX_CQ_WAIT_CTRL))) {
         rx_cq_wait_ctrl = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TRIGGER_DUMMY_SEND_GETSOCKNAME)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TRIGGER_DUMMY_SEND_GETSOCKNAME))) {
         trigger_dummy_send_getsockname = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TCP_SEND_BUFFER_SIZE)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_TCP_SEND_BUFFER_SIZE))) {
         tcp_send_buffer_size = (uint32_t)option_size::from_str(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_SKIP_POLL_IN_RX)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_SKIP_POLL_IN_RX))) {
         int temp = atoi(env_ptr);
         if (temp < 0 || temp > SKIP_POLL_IN_RX_EPOLL_ONLY) {
             temp = 0;
@@ -2008,7 +2008,7 @@ void mce_sys_var::get_env_params()
         skip_poll_in_rx = (skip_poll_in_rx_t)temp;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_MULTILOCK)) != NULL) {
+    if ((env_ptr = getenv(SYS_VAR_MULTILOCK))) {
         int temp = atoi(env_ptr);
         if (temp < 0 || temp > MULTILOCK_MUTEX) {
             temp = 0;
@@ -2059,10 +2059,10 @@ void set_env_params()
     }
 
     // Don't override user defined values.
-    if (getenv("MLX_QP_ALLOC_TYPE") == nullptr) {
+    if (!getenv("MLX_QP_ALLOC_TYPE")) {
         setenv("MLX_QP_ALLOC_TYPE", ibv_alloc_type, 0);
     }
-    if (getenv("MLX_CQ_ALLOC_TYPE") == nullptr) {
+    if (!getenv("MLX_CQ_ALLOC_TYPE")) {
         setenv("MLX_CQ_ALLOC_TYPE", ibv_alloc_type, 0);
     }
 }

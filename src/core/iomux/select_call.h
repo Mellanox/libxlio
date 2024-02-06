@@ -52,7 +52,7 @@ public:
      */
     select_call(int *off_fds_buffer, offloaded_mode_t *off_modes_buffer, int nfds, fd_set *readfds,
                 fd_set *writefds, fd_set *exceptfds, timeval *timeout,
-                const sigset_t *__sigmask = NULL);
+                const sigset_t *__sigmask = nullptr);
 
     /// @override
     virtual void set_offloaded_rfd_ready(int fd_index);

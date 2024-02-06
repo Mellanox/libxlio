@@ -63,7 +63,7 @@ uint32_t cq_mgr_rx_regrq::clean_cq()
     uint64_t cq_poll_sn = 0;
     mem_buf_desc_t *buff;
 
-    if (NULL == m_hqrx_ptr) { // Sanity check
+    if (!m_hqrx_ptr) { // Sanity check
         return 0;
     }
 
@@ -86,9 +86,9 @@ cq_mgr_rx_regrq::~cq_mgr_rx_regrq()
 
 mem_buf_desc_t *cq_mgr_rx_regrq::poll(enum buff_status_e &status)
 {
-    mem_buf_desc_t *buff = NULL;
+    mem_buf_desc_t *buff = nullptr;
 
-    if (unlikely(NULL == m_rx_hot_buffer)) {
+    if (unlikely(!m_rx_hot_buffer)) {
         if (likely(m_hqrx_ptr->m_rq_data.tail != (m_hqrx_ptr->m_rq_data.head))) {
             uint32_t index = m_hqrx_ptr->m_rq_data.tail & (m_hqrx_ptr->m_rx_num_wr - 1);
             m_rx_hot_buffer = (mem_buf_desc_t *)m_hqrx_ptr->m_rq_wqe_idx_to_wrid[index];
@@ -99,7 +99,7 @@ mem_buf_desc_t *cq_mgr_rx_regrq::poll(enum buff_status_e &status)
         } else {
             /* If rq_tail and rq_head are pointing to the same wqe,
              * the wq is empty and there is no cqe to be received */
-            return NULL;
+            return nullptr;
         }
     }
     xlio_mlx5_cqe *cqe = check_cqe();
@@ -113,7 +113,7 @@ mem_buf_desc_t *cq_mgr_rx_regrq::poll(enum buff_status_e &status)
         *m_mlx5_cq.dbrec = htonl(m_mlx5_cq.cq_ci & 0xffffff);
 
         buff = m_rx_hot_buffer;
-        m_rx_hot_buffer = NULL;
+        m_rx_hot_buffer = nullptr;
     } else {
         prefetch((void *)m_rx_hot_buffer);
     }
@@ -261,10 +261,10 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
            (p_recycle_buffers_last_wr_id)) {
         buff_status_e status = BS_OK;
         mem_buf_desc_t *buff = poll(status);
-        if (NULL == buff) {
+        if (!buff) {
             update_global_sn_rx(cq_poll_sn, ret_total);
             m_b_was_drained = true;
-            m_p_ring->m_gro_mgr.flush_all(NULL);
+            m_p_ring->m_gro_mgr.flush_all(nullptr);
             return ret_total;
         }
 
@@ -305,7 +305,7 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
 
     update_global_sn_rx(cq_poll_sn, ret_total);
 
-    m_p_ring->m_gro_mgr.flush_all(NULL);
+    m_p_ring->m_gro_mgr.flush_all(nullptr);
 
     m_n_wce_counter = 0;
     m_b_was_drained = false;

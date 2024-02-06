@@ -50,7 +50,7 @@
 #define ibchc_logfunc    __log_info_func
 #define ibchc_logfuncall __log_info_funcall
 
-ib_ctx_handler_collection *g_p_ib_ctx_handler_collection = NULL;
+ib_ctx_handler_collection *g_p_ib_ctx_handler_collection = nullptr;
 
 void check_flow_steering_log_num_mgm_entry_size()
 {
@@ -66,7 +66,8 @@ void check_flow_steering_log_num_mgm_entry_size()
         vlog_printf(
             VLOG_DEBUG,
             "Flow steering option for mlx4 driver does not exist in current OFED version\n");
-    } else if (flow_steering_val[0] != '-' || (strtol(&flow_steering_val[1], NULL, 0) % 2) == 0) {
+    } else if (flow_steering_val[0] != '-' ||
+               (strtol(&flow_steering_val[1], nullptr, 0) % 2) == 0) {
         char module_info[3] = {0};
         if (!run_and_retreive_system_command("modinfo mlx4_core > /dev/null 2>&1 ; echo $?",
                                              module_info, sizeof(module_info)) &&
@@ -146,8 +147,8 @@ ib_ctx_handler_collection::~ib_ctx_handler_collection()
 
 void ib_ctx_handler_collection::update_tbl(const char *ifa_name)
 {
-    struct ibv_device **dev_list = NULL;
-    ib_ctx_handler *p_ib_ctx_handler = NULL;
+    struct ibv_device **dev_list = nullptr;
+    ib_ctx_handler *p_ib_ctx_handler = nullptr;
     int num_devices = 0;
     int i;
 
@@ -216,7 +217,7 @@ ib_ctx_handler *ib_ctx_handler_collection::get_ib_ctx(const char *ifa_name)
 
     if (check_netvsc_device_exist(ifa_name)) {
         if (!get_netvsc_slave(ifa_name, active_slave, slave_flags)) {
-            return NULL;
+            return nullptr;
         }
         ifa_name = (const char *)active_slave;
     } else if (check_bond_device_exist(ifa_name)) {
@@ -228,11 +229,11 @@ ib_ctx_handler *ib_ctx_handler_collection::get_ib_ctx(const char *ifa_name)
 
             /* active/active: return the first slave */
             if (!get_bond_slaves_name_list(ifa_name, slaves, sizeof(slaves))) {
-                return NULL;
+                return nullptr;
             }
             slave_name = strtok_r(slaves, " ", &save_ptr);
-            if (NULL == slave_name) {
-                return NULL;
+            if (!slave_name) {
+                return nullptr;
             }
             save_ptr = strchr(slave_name, '\n');
             if (save_ptr) {
@@ -248,7 +249,7 @@ ib_ctx_handler *ib_ctx_handler_collection::get_ib_ctx(const char *ifa_name)
         }
     }
 
-    return NULL;
+    return nullptr;
 }
 
 void ib_ctx_handler_collection::del_ib_ctx(ib_ctx_handler *ib_ctx)

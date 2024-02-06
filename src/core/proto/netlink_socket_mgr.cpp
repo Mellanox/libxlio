@@ -161,7 +161,7 @@ int netlink_socket_mgr::recv_info(int sockfd, uint32_t pid, uint32_t seq, char *
 // Update data in a table
 void netlink_socket_mgr::update_tbl(nl_data_t data_type)
 {
-    struct nlmsghdr *nl_msg = NULL;
+    struct nlmsghdr *nl_msg = nullptr;
     char *buf;
     int len = 0;
 

@@ -158,7 +158,7 @@ public:
     ~event_handler_manager();
 
     void *register_timer_event(int timeout_msec, timer_handler *handler, timer_req_type_t req_type,
-                               void *user_data, timers_group *group = NULL);
+                               void *user_data, timers_group *group = nullptr);
     void wakeup_timer_event(timer_handler *handler, void *node);
     void unregister_timer_event(timer_handler *handler, void *node);
     void unregister_timers_event_and_delete(timer_handler *handler);

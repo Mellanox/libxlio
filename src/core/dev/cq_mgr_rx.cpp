@@ -188,7 +188,7 @@ void cq_mgr_rx::add_hqrx(hw_queue_rx *hqrx_ptr)
 {
     m_hqrx_ptr = hqrx_ptr;
     m_hqrx_ptr->m_rq_wqe_counter = 0; // In case of bonded hqrx, wqe_counter must be reset to zero
-    m_rx_hot_buffer = NULL;
+    m_rx_hot_buffer = nullptr;
 
     if (0 != xlio_ib_mlx5_get_cq(m_p_ibv_cq, &m_mlx5_cq)) {
         cq_logpanic("xlio_ib_mlx5_get_cq failed (errno=%d %m)", errno);
@@ -349,17 +349,17 @@ mem_buf_desc_t *cq_mgr_rx::cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc, enum b
     /* we use context to verify that on reclaim rx buffer path we return the buffer to the right CQ
      */
     p_mem_buf_desc->rx.is_xlio_thr = false;
-    p_mem_buf_desc->rx.context = NULL;
+    p_mem_buf_desc->rx.context = nullptr;
 
     if (unlikely(status != BS_OK)) {
-        m_p_next_rx_desc_poll = NULL;
+        m_p_next_rx_desc_poll = nullptr;
         reclaim_recv_buffer_helper(p_mem_buf_desc);
-        return NULL;
+        return nullptr;
     }
 
     if (m_n_sysvar_rx_prefetch_bytes_before_poll) {
         m_p_next_rx_desc_poll = p_mem_buf_desc->p_prev_desc;
-        p_mem_buf_desc->p_prev_desc = NULL;
+        p_mem_buf_desc->p_prev_desc = nullptr;
     }
 
     VALGRIND_MAKE_MEM_DEFINED(p_mem_buf_desc->p_buffer, p_mem_buf_desc->sz_data);
@@ -409,15 +409,15 @@ void cq_mgr_rx::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
 {
     if (buff->dec_ref_count() <= 1 && (buff->lwip_pbuf.pbuf.ref-- <= 1)) {
         if (likely(buff->p_desc_owner == m_p_ring)) {
-            mem_buf_desc_t *temp = NULL;
+            mem_buf_desc_t *temp = nullptr;
             while (buff) {
                 VLIST_DEBUG_CQ_MGR_PRINT_ERROR_IS_MEMBER;
                 temp = buff;
                 assert(temp->lwip_pbuf.pbuf.type != PBUF_ZEROCOPY);
                 buff = temp->p_next_desc;
                 temp->clear_transport_data();
-                temp->p_next_desc = NULL;
-                temp->p_prev_desc = NULL;
+                temp->p_next_desc = nullptr;
+                temp->p_prev_desc = nullptr;
                 temp->reset_ref_count();
                 free_lwip_pbuf(&temp->lwip_pbuf);
                 m_rx_pool.push_back(temp);
@@ -443,7 +443,7 @@ bool cq_mgr_rx::reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst)
 {
     if (m_rx_buffs_rdy_for_free_head) {
         reclaim_recv_buffer_helper(m_rx_buffs_rdy_for_free_head);
-        m_rx_buffs_rdy_for_free_head = m_rx_buffs_rdy_for_free_tail = NULL;
+        m_rx_buffs_rdy_for_free_head = m_rx_buffs_rdy_for_free_tail = nullptr;
     }
     reclaim_recv_buffer_helper(rx_reuse_lst);
     return_extra_buffers();
@@ -475,7 +475,7 @@ int cq_mgr_rx::reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse)
             m_rx_buffs_rdy_for_free_tail->p_next_desc = rx_reuse;
             m_rx_buffs_rdy_for_free_tail = rx_reuse;
         }
-        m_rx_buffs_rdy_for_free_tail->p_next_desc = NULL;
+        m_rx_buffs_rdy_for_free_tail->p_next_desc = nullptr;
         /*if ((safe_mce_sys().thread_mode > THREAD_MODE_SINGLE)) {
             m_lock_ring_rx.lock();
         }*/
@@ -541,8 +541,8 @@ int cq_mgr_rx::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
     cq_logfunc("");
 
     if (m_b_notification_armed) {
-        cq_mgr_rx *p_cq_mgr_context = NULL;
-        struct ibv_cq *p_cq_hndl = NULL;
+        cq_mgr_rx *p_cq_mgr_context = nullptr;
+        struct ibv_cq *p_cq_hndl = nullptr;
         void *p; // deal with compiler warnings
 
         // Block on the cq_mgr_rx's notification event channel

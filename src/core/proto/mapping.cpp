@@ -56,7 +56,7 @@
 #define map_logdbg_exit  __log_exit_dbg
 #define map_logfunc_exit __log_exit_func
 
-mapping_cache *g_zc_cache = NULL;
+mapping_cache *g_zc_cache = nullptr;
 
 mapping_t::mapping_t(file_uid_t &uid, mapping_cache *cache, ib_ctx_handler *p_ib_ctx)
     : m_registrator()
@@ -64,7 +64,7 @@ mapping_t::mapping_t(file_uid_t &uid, mapping_cache *cache, ib_ctx_handler *p_ib
     m_state = MAPPING_STATE_UNMAPPED;
     m_fd = -1;
     m_uid = uid;
-    m_addr = NULL;
+    m_addr = nullptr;
     m_size = 0;
     m_ref = 0;
     m_owners = 0;
@@ -125,8 +125,8 @@ int mapping_t::map(int fd)
      * performance results. For now, use only MAP_PRIVATE mappings.
      */
     flags = /* rw ? MAP_SHARED :*/ MAP_PRIVATE;
-    m_addr =
-        mmap64(NULL, m_size, PROT_WRITE | PROT_READ, flags | MAP_NORESERVE | MAP_POPULATE, m_fd, 0);
+    m_addr = mmap64(nullptr, m_size, PROT_WRITE | PROT_READ, flags | MAP_NORESERVE | MAP_POPULATE,
+                    m_fd, 0);
     if (MAP_FAILED == m_addr) {
         map_logerr("mmap64() errno=%d (%s)", errno, strerror(errno));
         goto failed_close_fd;
@@ -147,7 +147,7 @@ failed_unmap:
     (void)munmap(m_addr, m_size);
 failed_close_fd:
     SYSCALL(close, m_fd);
-    m_addr = NULL;
+    m_addr = nullptr;
     m_size = 0;
     m_fd = -1;
 failed:
@@ -173,7 +173,7 @@ int mapping_t::unmap(void)
     p_cache->memory_free(m_size);
     SYSCALL(close, m_fd);
     m_fd = -1;
-    m_addr = NULL;
+    m_addr = nullptr;
     m_size = 0;
     m_state = MAPPING_STATE_UNMAPPED;
 
@@ -295,7 +295,7 @@ mapping_cache::~mapping_cache()
 
 mapping_t *mapping_cache::get_mapping(int local_fd, void *p_ctx)
 {
-    mapping_t *mapping = NULL;
+    mapping_t *mapping = nullptr;
     mapping_fd_map_iter_t iter;
     file_uid_t uid;
     struct stat st;
@@ -311,7 +311,7 @@ mapping_t *mapping_cache::get_mapping(int local_fd, void *p_ctx)
         }
     }
 
-    if (mapping == NULL) {
+    if (!mapping) {
         if (fstat(local_fd, &st) != 0) {
             map_logerr("fstat() errno=%d (%s)", errno, strerror(errno));
             goto quit;
@@ -324,7 +324,7 @@ mapping_t *mapping_cache::get_mapping(int local_fd, void *p_ctx)
     }
 
 quit:
-    if (mapping != NULL) {
+    if (mapping) {
         mapping->get();
 
         /* Mapping object may be unmapped, call mmap() in this case */
@@ -335,9 +335,9 @@ quit:
 
     unlock();
 
-    if (mapping != NULL && mapping->m_state == MAPPING_STATE_FAILED) {
+    if (mapping && mapping->m_state == MAPPING_STATE_FAILED) {
         mapping->put();
-        mapping = NULL;
+        mapping = nullptr;
     }
     return mapping;
 }
@@ -403,7 +403,7 @@ void mapping_cache::memory_free(size_t size)
 
 mapping_t *mapping_cache::get_mapping_by_uid_unlocked(file_uid_t &uid, ib_ctx_handler *p_ib_ctx)
 {
-    mapping_t *mapping = NULL;
+    mapping_t *mapping = nullptr;
     mapping_uid_map_iter_t iter;
 
     iter = m_cache_uid.find(uid);
@@ -414,9 +414,9 @@ mapping_t *mapping_cache::get_mapping_by_uid_unlocked(file_uid_t &uid, ib_ctx_ha
         }
     }
 
-    if (mapping == NULL) {
+    if (!mapping) {
         mapping = new (std::nothrow) mapping_t(uid, this, p_ib_ctx);
-        if (mapping != NULL) {
+        if (mapping) {
             m_cache_uid[uid] = mapping;
         }
     }

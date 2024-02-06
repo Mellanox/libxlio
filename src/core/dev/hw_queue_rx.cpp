@@ -229,7 +229,7 @@ void hw_queue_rx::release_rx_buffers()
 
         // Add short delay (500 usec) to allow for WQE's to be flushed to CQ every poll cycle
         const struct timespec short_sleep = {0, 500000}; // 500 usec
-        nanosleep(&short_sleep, NULL);
+        nanosleep(&short_sleep, nullptr);
     }
     m_last_posted_rx_wr_id = 0; // Clear the posted WR_ID flag, we just clear the entire RQ
     hwqrx_logdbg("draining completed with a total of %d wce's on cq_mgr_rx", total_ret);
@@ -324,8 +324,8 @@ void hw_queue_rx::post_recv_buffer_rq(mem_buf_desc_t *p_mem_buf_desc)
 
         m_last_posted_rx_wr_id = (uintptr_t)p_mem_buf_desc;
 
-        m_p_prev_rx_desc_pushed = NULL;
-        p_mem_buf_desc->p_prev_desc = NULL;
+        m_p_prev_rx_desc_pushed = nullptr;
+        p_mem_buf_desc->p_prev_desc = nullptr;
 
         m_curr_rx_wr = 0;
         struct ibv_recv_wr *bad_wr = nullptr;
@@ -415,8 +415,8 @@ out:
 bool hw_queue_rx::init_rx_cq_mgr_prepare()
 {
     m_rq_wqe_idx_to_wrid =
-        (uint64_t *)mmap(NULL, m_rx_num_wr * sizeof(*m_rq_wqe_idx_to_wrid), PROT_READ | PROT_WRITE,
-                         MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+        (uint64_t *)mmap(nullptr, m_rx_num_wr * sizeof(*m_rq_wqe_idx_to_wrid),
+                         PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     if (m_rq_wqe_idx_to_wrid == MAP_FAILED) {
         hwqrx_logerr("Failed allocating m_rq_wqe_idx_to_wrid (errno=%d %m)", errno);
         return false;
@@ -466,7 +466,7 @@ void hw_queue_rx::tls_release_tir(xlio_tir *tir)
 {
     /* TODO We don't have to lock ring to destroy DEK object (a garbage collector?). */
 
-    assert(tir != nullptr && tir->m_type == xlio_ti::ti_type::TLS_TIR);
+    assert(tir && tir->m_type == xlio_ti::ti_type::TLS_TIR);
     tir->m_released = true;
     tir->assign_callback(NULL, NULL);
     if (tir->m_ref == 0) {

@@ -85,8 +85,8 @@ static void free_dbl_lst(struct dbl_lst *dbl_lst)
         free(node);
         node = tmp;
     }
-    dbl_lst->head = NULL;
-    dbl_lst->tail = NULL;
+    dbl_lst->head = nullptr;
+    dbl_lst->tail = nullptr;
 }
 
 static void free_instance_content(struct instance *instance)
@@ -124,8 +124,8 @@ void __xlio_free_resources(void)
         free(node);
         node = tmp;
     }
-    __instance_list.head = NULL;
-    __instance_list.tail = NULL;
+    __instance_list.head = nullptr;
+    __instance_list.tail = nullptr;
 }
 
 void get_address_port_rule_str(char *addr_buf, char *ports_buf, struct address_port_rule *rule)
@@ -276,7 +276,7 @@ static inline int match_ipv4_addr(struct address_port_rule *rule, const struct s
 static int match_ip_addr_and_port(transport_t my_transport, struct use_family_rule *rule,
                                   const struct sockaddr *addr_in_first,
                                   const socklen_t addrlen_first,
-                                  const struct sockaddr *addr_in_second = NULL,
+                                  const struct sockaddr *addr_in_second = nullptr,
                                   const socklen_t addrlen_second = 0)
 {
     const struct sockaddr_in *sin_first = (const struct sockaddr_in *)addr_in_first;
@@ -308,7 +308,7 @@ static int match_ip_addr_and_port(transport_t my_transport, struct use_family_ru
                                        MAX_ADDR_STR_LEN);
             port_first = ntohs(sin_first->sin_port);
         }
-        if (addr_str_first == NULL) {
+        if (!addr_str_first) {
             addr_str_first = "INVALID_ADDR";
         }
 
@@ -322,7 +322,7 @@ static int match_ip_addr_and_port(transport_t my_transport, struct use_family_ru
                                             addr_buf_second, MAX_ADDR_STR_LEN);
                 port_second = ntohs(sin_second->sin_port);
             }
-            if (addr_str_second == NULL) {
+            if (!addr_str_second) {
                 addr_str_second = "INVALID_ADDR";
             }
 
@@ -350,7 +350,7 @@ static int match_ip_addr_and_port(transport_t my_transport, struct use_family_ru
     }
 
     if (match && rule->first.match_by_addr) {
-        if (__xlio_sockaddr_to_xlio(addr_in_first, addrlen_first, &tmp_sin_first, NULL) ||
+        if (__xlio_sockaddr_to_xlio(addr_in_first, addrlen_first, &tmp_sin_first, nullptr) ||
             match_ipv4_addr(&(rule->first), &tmp_sin_first)) {
             match_logdbg("NEGATIVE MATCH by address");
             match = 0;
@@ -372,7 +372,7 @@ static int match_ip_addr_and_port(transport_t my_transport, struct use_family_ru
         }
 
         if (match && rule->second.match_by_addr) {
-            if (__xlio_sockaddr_to_xlio(addr_in_second, addrlen_second, &tmp_sin_second, NULL) ||
+            if (__xlio_sockaddr_to_xlio(addr_in_second, addrlen_second, &tmp_sin_second, nullptr) ||
                 match_ipv4_addr(&(rule->second), &tmp_sin_second)) {
                 match_logdbg("NEGATIVE MATCH by address");
                 match = 0;
@@ -425,12 +425,12 @@ static transport_t get_family_by_first_matching_rule(transport_t my_transport,
                                                      struct dbl_lst rules_lst,
                                                      const struct sockaddr *sin_first,
                                                      const socklen_t addrlen_first,
-                                                     const struct sockaddr *sin_second = NULL,
+                                                     const struct sockaddr *sin_second = nullptr,
                                                      const socklen_t addrlen_second = 0)
 {
     struct dbl_lst_node *node;
 
-    for (node = rules_lst.head; node != NULL; node = node->next) {
+    for (node = rules_lst.head; node; node = node->next) {
         /* first rule wins */
         struct use_family_rule *rule = (struct use_family_rule *)node->data;
         if (rule) {
@@ -447,7 +447,7 @@ static transport_t get_family_by_first_matching_rule(transport_t my_transport,
 
 static transport_t get_family_by_instance_first_matching_rule(
     transport_t my_transport, role_t role, const char *app_id, const struct sockaddr *sin_first,
-    const socklen_t addrlen_first, const struct sockaddr *sin_second = NULL,
+    const socklen_t addrlen_first, const struct sockaddr *sin_second = nullptr,
     const socklen_t addrlen_second = 0)
 {
     transport_t target_family = TRANS_DEFAULT;
@@ -593,8 +593,7 @@ static transport_t match_by_all_rules_program(in_protocol_t my_protocol, struct 
     struct dbl_lst_node *node;
     struct use_family_rule *rule;
 
-    for (node = rules_lst.head; (node != NULL) && (target_family == TRANS_DEFAULT);
-         node = node->next) {
+    for (node = rules_lst.head; (node) && (target_family == TRANS_DEFAULT); node = node->next) {
         /*
          * to declare a dont care we either have a dont care address and port
          * or the previous non global rules use the same target family as the
@@ -771,7 +770,7 @@ int __xlio_sockaddr_to_xlio(const struct sockaddr *addr_in, socklen_t addrlen,
         addr_out->sin_port = sin6->sin6_port;
 
         if (inet_ntop(addr_out->sin_family, (void *)&(addr_out->sin_addr), buf, MAX_ADDR_STR_LEN) ==
-            NULL) {
+            nullptr) {
             match_logdbg("__xlio_sockaddr_to_xlio: Converted IPv4 address is illegal");
         } else {
             match_logdbg("__xlio_sockaddr_to_xlio: Converted IPv4 is:%s", buf);

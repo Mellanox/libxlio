@@ -40,8 +40,8 @@
 #define MODULE_HDR MODULE_NAME "%d:%s() "
 
 ring::ring()
-    : m_p_n_rx_channel_fds(NULL)
-    , m_parent(NULL)
+    : m_p_n_rx_channel_fds(nullptr)
+    , m_parent(nullptr)
     , m_tcp_seg_list(nullptr)
     , m_tcp_seg_count(0U)
 {
@@ -117,5 +117,5 @@ void ring::put_tcp_segs(tcp_seg *seg)
 void ring::print_val()
 {
     ring_logdbg("%d: %p: parent %p", m_if_index, this,
-                ((uintptr_t)this == (uintptr_t)m_parent ? 0 : m_parent));
+                ((uintptr_t)this == (uintptr_t)m_parent ? nullptr : m_parent));
 }

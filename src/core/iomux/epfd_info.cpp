@@ -45,7 +45,7 @@
 
 int epfd_info::remove_fd_from_epoll_os(int fd)
 {
-    int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, fd, NULL);
+    int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, fd, nullptr);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (ret < 0) {
         __log_dbg("failed to remove fd=%d from os epoll epfd=%d (errno=%d %m)", fd, m_epfd, errno);
@@ -146,7 +146,7 @@ int epfd_info::ctl(int op, int fd, epoll_event *event)
 {
     int ret;
     epoll_event event_dummy;
-    if (event == NULL) {
+    if (!event) {
         memset(&event_dummy, 0, sizeof(event_dummy));
         event = &event_dummy;
     }
@@ -201,7 +201,7 @@ int epfd_info::add_fd(int fd, epoll_event *event)
 {
     int ret;
     epoll_fd_rec fd_rec;
-    epoll_event evt = {0, {0}};
+    epoll_event evt = {0, {nullptr}};
 
     bool is_offloaded = false;
 
@@ -294,7 +294,7 @@ int epfd_info::add_fd(int fd, epoll_event *event)
         // if the socket is ready, add it to ready events
         uint32_t events = 0;
         int errors;
-        if ((event->events & EPOLLIN) && temp_sock_fd_api->is_readable(NULL, NULL)) {
+        if ((event->events & EPOLLIN) && temp_sock_fd_api->is_readable(nullptr, nullptr)) {
             events |= EPOLLIN;
         }
         if ((event->events & EPOLLOUT) && temp_sock_fd_api->is_writeable()) {
@@ -337,7 +337,7 @@ void epfd_info::increase_ring_ref_count(ring *ring)
         size_t num_ring_rx_fds;
         int *ring_rx_fds_array = ring->get_rx_channel_fds(num_ring_rx_fds);
         for (size_t i = 0; i < num_ring_rx_fds; i++) {
-            epoll_event evt = {0, {0}};
+            epoll_event evt = {0, {nullptr}};
             evt.events = EPOLLIN | EPOLLPRI;
             int fd = ring_rx_fds_array[i];
             evt.data.u64 = (((uint64_t)CQ_FD_MARK << 32) | fd);
@@ -378,7 +378,7 @@ void epfd_info::decrease_ring_ref_count(ring *ring)
         int *ring_rx_fds_array = ring->get_rx_channel_fds(num_ring_rx_fds);
         for (size_t i = 0; i < num_ring_rx_fds; i++) {
             // delete cq fd from epfd
-            int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, ring_rx_fds_array[i], NULL);
+            int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, ring_rx_fds_array[i], nullptr);
             BULLSEYE_EXCLUDE_BLOCK_START
             if (ret < 0) {
                 __log_dbg("failed to remove cq fd=%d from epfd=%d (errno=%d %m)",
@@ -521,7 +521,7 @@ int epfd_info::mod_fd(int fd, epoll_event *event)
     uint32_t events = 0;
     if (is_offloaded) {
         // if the socket is ready, add it to ready events
-        if ((event->events & EPOLLIN) && temp_sock_fd_api->is_readable(NULL, NULL)) {
+        if ((event->events & EPOLLIN) && temp_sock_fd_api->is_readable(nullptr, nullptr)) {
             events |= EPOLLIN;
         }
         if ((event->events & EPOLLOUT) && temp_sock_fd_api->is_writeable()) {
@@ -549,7 +549,7 @@ int epfd_info::mod_fd(int fd, epoll_event *event)
 
 epoll_fd_rec *epfd_info::get_fd_rec(int fd)
 {
-    epoll_fd_rec *fd_rec = NULL;
+    epoll_fd_rec *fd_rec = nullptr;
     socket_fd_api *temp_sock_fd_api = fd_collection_get_sockfd(fd);
     lock();
 
@@ -754,7 +754,7 @@ int epfd_info::ring_wait_for_notification_and_process_element(uint64_t *p_poll_s
         } else {
             __log_dbg("failed to find channel fd. removing cq fd=%d from epfd=%d", fd, m_epfd);
             BULLSEYE_EXCLUDE_BLOCK_START
-            if ((SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, fd, NULL)) &&
+            if ((SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, fd, nullptr)) &&
                 (!(errno == ENOENT || errno == EBADF))) {
                 __log_err("failed to del cq channel fd=%d from os epfd=%d (errno=%d %m)", fd,
                           m_epfd, errno);
