@@ -104,7 +104,8 @@ typedef struct xlio_tx_call_attr {
     unsigned xlio_flags;
     pbuf_desc priv;
 
-    ~xlio_tx_call_attr() {};
+    ~xlio_tx_call_attr() = default;
+
     void clear()
     {
         opcode = TX_UNDEF;

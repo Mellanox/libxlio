@@ -53,7 +53,7 @@ class sockinfo_tcp_ops {
 public:
     sockinfo_tcp_ops(sockinfo_tcp *sock)
         : m_p_sock(sock) {};
-    virtual ~sockinfo_tcp_ops() {}
+    virtual ~sockinfo_tcp_ops() = default;
 
     inline ring *get_tx_ring();
 

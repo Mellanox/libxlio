@@ -41,7 +41,7 @@ class cleanable_obj {
 public:
     cleanable_obj() { m_b_cleaned = false; };
 
-    virtual ~cleanable_obj() {};
+    virtual ~cleanable_obj() = default;
 
     /* This function should be used just for objects that
      * was allocated via new() (not by new[], nor by placement new, nor a local object on the stack,
