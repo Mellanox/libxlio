@@ -105,7 +105,7 @@ typedef struct xlio_tx_call_attr {
     pbuf_desc priv;
 
     ~xlio_tx_call_attr() {};
-    void clear(void)
+    void clear()
     {
         opcode = TX_UNDEF;
         memset(&attr, 0, sizeof(attr));
@@ -245,22 +245,22 @@ public:
     ssize_t tx_os(const tx_call_t call_type, const iovec *p_iov, const ssize_t sz_iov,
                   const int __flags, const sockaddr *__to, const socklen_t __tolen);
 
-    static inline size_t pendig_to_remove_node_offset(void)
+    static inline size_t pendig_to_remove_node_offset()
     {
         return NODE_OFFSET(socket_fd_api, pendig_to_remove_node);
     }
 
-    static inline size_t socket_fd_list_node_offset(void)
+    static inline size_t socket_fd_list_node_offset()
     {
         return NODE_OFFSET(socket_fd_api, socket_fd_list_node);
     }
 
-    static inline size_t ep_ready_fd_node_offset(void)
+    static inline size_t ep_ready_fd_node_offset()
     {
         return NODE_OFFSET(socket_fd_api, ep_ready_fd_node);
     }
 
-    static inline size_t ep_info_fd_node_offset(void)
+    static inline size_t ep_info_fd_node_offset()
     {
         return NODE_OFFSET(socket_fd_api, ep_info_fd_node);
     }

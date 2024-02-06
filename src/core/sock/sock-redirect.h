@@ -194,8 +194,8 @@ struct os_api {
                        const sigset_t *sigmask);
 
     int (*clone)(int (*__fn)(void *), void *__child_stack, int __flags, void *__arg);
-    pid_t (*fork)(void);
-    pid_t (*vfork)(void);
+    pid_t (*fork)();
+    pid_t (*vfork)();
     int (*daemon)(int __nochdir, int __noclose);
 
     int (*sigaction)(int signum, const struct sigaction *act, struct sigaction *oldact);

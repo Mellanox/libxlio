@@ -65,7 +65,7 @@ static int init_worker(int worker_id, int listen_fd);
 struct app_conf *g_p_app = nullptr;
 
 #if defined(DEFINED_NGINX)
-int app_conf::proc_nginx(void)
+int app_conf::proc_nginx()
 {
     int rc = 0;
 

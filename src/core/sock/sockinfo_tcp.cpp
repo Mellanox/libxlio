@@ -1785,7 +1785,7 @@ err_t sockinfo_tcp::ack_recvd_lwip_cb(void *arg, struct tcp_pcb *tpcb, u16_t ack
     return ERR_OK;
 }
 
-void sockinfo_tcp::tcp_shutdown_rx(void)
+void sockinfo_tcp::tcp_shutdown_rx()
 {
     /* Call this method under connection lock */
 
@@ -5837,7 +5837,7 @@ tcp_timers_collection::~tcp_timers_collection()
     free_tta_resources();
 }
 
-void tcp_timers_collection::free_tta_resources(void)
+void tcp_timers_collection::free_tta_resources()
 {
     if (m_n_count) {
         for (int i = 0; i < m_n_intervals_size; i++) {
