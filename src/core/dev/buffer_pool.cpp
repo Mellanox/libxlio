@@ -47,22 +47,22 @@
 // When Striding RQ is on, it points to g_buffer_pool_rx_stride since the upper layers work with
 // strides. When Striding RQ is off, it points to g_buffer_pool_rx_rwqe since the upper layers work
 // with RWQEs buffers themselves.
-buffer_pool *g_buffer_pool_rx_ptr = NULL;
+buffer_pool *g_buffer_pool_rx_ptr = nullptr;
 
 // This buffer-pool holds buffer descriptors which represent strides in strided RWQEs.
 // These buffers descriptos do not actually own a buffer.
 // Each such descriptor points into a portion of a buffer of a g_buffer_pool_rx_rwqe descriptor.
-buffer_pool *g_buffer_pool_rx_stride = NULL;
+buffer_pool *g_buffer_pool_rx_stride = nullptr;
 
 // This buffer-pool holds the actual buffers for receive WQEs.
-buffer_pool *g_buffer_pool_rx_rwqe = NULL;
+buffer_pool *g_buffer_pool_rx_rwqe = nullptr;
 
 // This buffer-pool holds the actual buffers for send WQEs.
-buffer_pool *g_buffer_pool_tx = NULL;
+buffer_pool *g_buffer_pool_tx = nullptr;
 
 // This buffer-pool holds buffer descriptors for zero copy TX.
 // These buffer descriptors do not actually own a buffer.
-buffer_pool *g_buffer_pool_zc = NULL;
+buffer_pool *g_buffer_pool_zc = nullptr;
 
 // inlining a function only help in case it come before using it...
 inline void buffer_pool::put_buffer_helper(mem_buf_desc_t *buff)
@@ -281,7 +281,7 @@ bool buffer_pool::get_buffers_thread_safe(descq_t &pDeque, ring_slave *desc_owne
         // Remove from list
         head = m_p_head;
         m_p_head = m_p_head->p_next_desc;
-        head->p_next_desc = NULL;
+        head->p_next_desc = nullptr;
 
         // Init
         head->lkey = lkey;

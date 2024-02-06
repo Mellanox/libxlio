@@ -103,7 +103,7 @@ int xlio_ib_mlx5_get_cq(struct ibv_cq *cq, xlio_ib_mlx5_cq_t *mlx5_cq)
      * from ERROR state to RESET so cq_ci or cq_sn should not be
      * updated
      */
-    if (mlx5_cq == NULL || mlx5_cq->cq == cq) {
+    if (!mlx5_cq || mlx5_cq->cq == cq) {
         return 0;
     }
 

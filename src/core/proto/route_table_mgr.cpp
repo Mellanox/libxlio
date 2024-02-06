@@ -71,7 +71,7 @@
 
 static inline route_val *find_route_val(route_table_t &table, const ip_address &dst,
                                         uint32_t table_id);
-route_table_mgr *g_p_route_table_mgr = NULL;
+route_table_mgr *g_p_route_table_mgr = nullptr;
 
 route_table_mgr::route_table_mgr()
     : netlink_socket_mgr()
@@ -218,7 +218,7 @@ void route_table_mgr::rt_mgr_update_source_ip(route_table_t &table)
             if (!val.get_gw_addr().is_anyaddr() && val.get_src_addr().is_anyaddr()) {
                 route_val *p_val_dst;
                 uint32_t table_id = val.get_table_id();
-                if ((p_val_dst = ::find_route_val(table, val.get_gw_addr(), table_id)) != nullptr) {
+                if ((p_val_dst = ::find_route_val(table, val.get_gw_addr(), table_id))) {
                     if (!p_val_dst->get_src_addr().is_anyaddr()) {
                         val.set_src_addr(p_val_dst->get_src_addr());
                     } else if (&val == p_val_dst) { // gateway of the entry lead to same entry
@@ -423,7 +423,7 @@ bool route_table_mgr::route_resolve(IN route_rule_table_key key, OUT route_resul
     const sa_family_t family = key.get_family();
 
     route_table_t &rt = family == AF_INET ? m_table_in4 : m_table_in6;
-    route_val *p_val = NULL;
+    route_val *p_val = nullptr;
 
     auto table_id_list = g_p_rule_table_mgr->rule_resolve(key);
 
@@ -477,12 +477,12 @@ void route_table_mgr::update_entry(INOUT route_entry *p_ent, bool b_register_to_
         rule_entry *p_rr_entry = p_ent->get_rule_entry();
         std::deque<rule_val *> *p_rr_val;
         if (p_rr_entry && p_rr_entry->get_val(p_rr_val)) {
-            route_val *p_val = NULL;
+            route_val *p_val = nullptr;
             const ip_address &peer_ip = p_ent->get_key().get_dst_ip();
             for (const auto &p_rule_val : *p_rr_val) {
                 uint32_t table_id = p_rule_val->get_table_id();
 
-                if ((p_val = ::find_route_val(rt, peer_ip, table_id)) != nullptr) {
+                if ((p_val = ::find_route_val(rt, peer_ip, table_id))) {
                     p_ent->set_val(p_val);
                     if (b_register_to_net_dev) {
                         // Check if broadcast IPv4 which is NOT supported

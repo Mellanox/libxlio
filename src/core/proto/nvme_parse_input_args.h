@@ -63,7 +63,7 @@ public:
         auto this_addr = reinterpret_cast<uint8_t *>(aligned_alloc(
             alignof(nvme_pdu_mdesc),
             num_segments * (sizeof(iovec) + sizeof(xlio_pd_key)) + sizeof(nvme_pdu_mdesc)));
-        if (this_addr == nullptr) {
+        if (!this_addr) {
             return nullptr;
         }
         auto container = std::unique_ptr<uint8_t[]>(this_addr);
@@ -135,7 +135,7 @@ public:
             : chunk(nullptr, 0U, LKEY_TX_DEFAULT) {};
         inline bool is_valid()
         {
-            return iov.iov_base != nullptr && iov.iov_len != 0U && mkey != LKEY_TX_DEFAULT;
+            return iov.iov_base && iov.iov_len != 0U && mkey != LKEY_TX_DEFAULT;
         }
     };
 

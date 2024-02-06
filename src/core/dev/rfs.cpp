@@ -147,7 +147,7 @@ rfs::rfs(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *rule_fil
 #endif
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (m_sinks_list == NULL) {
+    if (!m_sinks_list) {
         rfs_logpanic("sinks list allocation failed!");
     }
     BULLSEYE_EXCLUDE_BLOCK_END
@@ -176,7 +176,7 @@ rfs::~rfs()
 
     if (m_p_rule_filter) {
         delete m_p_rule_filter;
-        m_p_rule_filter = NULL;
+        m_p_rule_filter = nullptr;
     }
     delete[] m_sinks_list;
 }
@@ -208,7 +208,7 @@ bool rfs::add_sink(pkt_rcvr_sink *p_sink)
         pkt_rcvr_sink **tmp_sinks_list = new pkt_rcvr_sink *[tmp_sinks_list_length];
 
         BULLSEYE_EXCLUDE_BLOCK_START
-        if (tmp_sinks_list == NULL) {
+        if (!tmp_sinks_list) {
             rfs_logerr("sinks list allocation failed!");
             return false;
         }
@@ -242,7 +242,7 @@ bool rfs::del_sink(pkt_rcvr_sink *p_sink)
             for (/*continue i*/; i < (m_n_sinks_list_entries - 1); ++i) {
                 m_sinks_list[i] = m_sinks_list[i + 1];
             }
-            m_sinks_list[i] = NULL;
+            m_sinks_list[i] = nullptr;
 
             m_n_sinks_list_entries--;
             rfs_logdbg("Removed sink (%p), num of sinks is now: %d", p_sink,

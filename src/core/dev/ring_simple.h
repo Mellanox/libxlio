@@ -67,7 +67,7 @@ public:
 
     int request_notification(cq_type_t cq_type, uint64_t poll_sn) override;
     int poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
-                                    void *pv_fd_ready_array = NULL) override;
+                                    void *pv_fd_ready_array = nullptr) override;
     int poll_and_process_element_tx(uint64_t *p_cq_poll_sn) override;
     void adapt_cq_moderation() override;
     bool reclaim_recv_buffers(descq_t *rx_reuse) override;
@@ -79,10 +79,10 @@ public:
                           unsigned int ncompletions, int flags) override;
     int drain_and_proccess() override;
     int wait_for_notification_and_process_element(int cq_channel_fd, uint64_t *p_cq_poll_sn,
-                                                  void *pv_fd_ready_array = NULL) override;
+                                                  void *pv_fd_ready_array = nullptr) override;
     void mem_buf_desc_return_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc);
     void mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc,
-                                         void *pv_fd_ready_array = NULL);
+                                         void *pv_fd_ready_array = nullptr);
     inline int send_buffer(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
                            xlio_tis *tis);
     bool is_up() override;
@@ -235,7 +235,7 @@ public:
         dpcp::adapter_hca_capabilities caps {};
         auto adapter = m_p_ib_ctx->get_dpcp_adapter();
 
-        if (adapter == nullptr || (dpcp::DPCP_OK != adapter->get_hca_capabilities(caps)) ||
+        if (!adapter || (dpcp::DPCP_OK != adapter->get_hca_capabilities(caps)) ||
             !caps.nvmeotcp_caps.enabled) {
             return 0;
         }
@@ -327,7 +327,7 @@ private:
 
     inline ring_ec *get_ec(void)
     {
-        struct ring_ec *ec = NULL;
+        struct ring_ec *ec = nullptr;
 
         m_socketxtreme.lock_ec_list.lock();
         if (!list_empty(&m_socketxtreme.ec_list)) {
@@ -354,7 +354,7 @@ private:
         if (m_p_l2_addr) {
             delete m_p_l2_addr;
         }
-        m_p_l2_addr = NULL;
+        m_p_l2_addr = nullptr;
     };
 
 protected:
@@ -442,7 +442,7 @@ private:
 
 class ring_eth : public ring_simple {
 public:
-    ring_eth(int if_index, ring *parent = NULL, ring_type_t type = RING_ETH,
+    ring_eth(int if_index, ring *parent = nullptr, ring_type_t type = RING_ETH,
              bool call_create_res = true, bool use_locks = true)
         : ring_simple(if_index, parent, type, use_locks)
     {

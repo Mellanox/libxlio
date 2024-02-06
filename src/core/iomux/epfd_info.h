@@ -88,12 +88,12 @@ public:
     epoll_stats_t *stats();
 
     int ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *p_poll_sn_tx,
-                                      void *pv_fd_ready_array = NULL);
+                                      void *pv_fd_ready_array = nullptr);
 
     int ring_request_notification(uint64_t poll_sn_rx, uint64_t poll_sn_tx);
 
     int ring_wait_for_notification_and_process_element(uint64_t *p_poll_sn,
-                                                       void *pv_fd_ready_array = NULL);
+                                                       void *pv_fd_ready_array = nullptr);
 
     virtual void clean_obj();
 

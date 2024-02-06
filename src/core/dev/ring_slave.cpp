@@ -67,8 +67,8 @@ ring_slave::ring_slave(int if_index, ring *parent, ring_type_t type, bool use_lo
     , m_b_sysvar_mc_force_flowtag(safe_mce_sys().mc_force_flowtag)
     , m_type(type)
 {
-    net_device_val *p_ndev = NULL;
-    const slave_data_t *p_slave = NULL;
+    net_device_val *p_ndev = nullptr;
+    const slave_data_t *p_slave = nullptr;
 
     /* Configure ring() fields */
     set_parent(parent);
@@ -76,7 +76,7 @@ ring_slave::ring_slave(int if_index, ring *parent, ring_type_t type, bool use_lo
 
     /* Sanity check */
     p_ndev = g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index());
-    if (NULL == p_ndev) {
+    if (!p_ndev) {
         ring_logpanic("Invalid if_index = %d", if_index);
     }
 
@@ -122,7 +122,8 @@ ring_slave::~ring_slave()
 void ring_slave::print_val()
 {
     ring_logdbg("%d: %p: parent %p type %s", m_if_index, this,
-                ((uintptr_t)this == (uintptr_t)m_parent ? 0 : m_parent), ring_type_str[m_type]);
+                ((uintptr_t)this == (uintptr_t)m_parent ? nullptr : m_parent),
+                ring_type_str[m_type]);
 }
 
 void ring_slave::restart()
@@ -161,10 +162,10 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
                                                       bool force_5t)
 {
     rfs *p_rfs;
-    rfs *p_tmp_rfs = NULL;
+    rfs *p_tmp_rfs = nullptr;
     sockinfo *si = static_cast<sockinfo *>(sink);
 
-    if (si == NULL) {
+    if (!si) {
         return false;
     }
 
@@ -184,7 +185,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
                       flow_spec_5t.get_dst_port(), flow_spec_5t.get_src_port());
         sock_addr rule_key(flow_spec_5t.get_family(), &flow_spec_5t.get_dst_ip(),
                            flow_spec_5t.get_dst_port());
-        rfs_rule_filter *dst_port_filter = NULL;
+        rfs_rule_filter *dst_port_filter = nullptr;
         if (safe_mce_sys().udp_3t_rules) {
             auto dst_port_iter = m_ring.m_udp_uc_dst_port_attach_map.find(rule_key);
             if (dst_port_iter == m_ring.m_udp_uc_dst_port_attach_map.end()) {
@@ -220,7 +221,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
                 return false;
             }
             BULLSEYE_EXCLUDE_BLOCK_START
-            if (p_tmp_rfs == NULL) {
+            if (!p_tmp_rfs) {
                 ring_logerr("Failed to allocate rfs!");
                 return false;
             }
@@ -257,7 +258,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
         // It means that for every MC group, even if we have sockets with different ports - only one
         // rule in the HW. So the hash map below keeps track of the number of sockets per rule so we
         // know when to call ibv_attach and ibv_detach
-        rfs_rule_filter *l2_mc_ip_filter = NULL;
+        rfs_rule_filter *l2_mc_ip_filter = nullptr;
         if (m_ring.m_b_sysvar_eth_mc_l2_only_rules) {
             auto l2_mc_iter = m_ring.m_l2_mc_ip_attach_map.find(rule_key);
             // It means that this is the first time attach called with this MC ip
@@ -297,7 +298,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
                       flow_spec_5t.get_dst_port(), flow_spec_5t.get_src_port());
         sock_addr rule_key(flow_spec_5t.get_family(), &flow_spec_5t.get_dst_ip(),
                            flow_spec_5t.get_dst_port());
-        rfs_rule_filter *dst_port_filter = NULL;
+        rfs_rule_filter *dst_port_filter = nullptr;
         if (safe_mce_sys().tcp_3t_rules) {
             auto dst_port_iter = m_ring.m_tcp_dst_port_attach_map.find(rule_key);
             if (dst_port_iter == m_ring.m_tcp_dst_port_attach_map.end()) {
@@ -339,7 +340,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
                 return false;
             }
             BULLSEYE_EXCLUDE_BLOCK_START
-            if (p_tmp_rfs == NULL) {
+            if (!p_tmp_rfs) {
                 ring_logerr("Failed to allocate rfs!");
                 return false;
             }
@@ -398,7 +399,7 @@ bool ring_slave::attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink, bool
 template <typename KEY4T, typename KEY2T, typename HDR>
 bool steering_handler<KEY4T, KEY2T, HDR>::detach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink)
 {
-    rfs *p_rfs = NULL;
+    rfs *p_rfs = nullptr;
 
     ring_logdbg("flow: %s, with sink (%p)", flow_spec_5t.to_str().c_str(), sink);
 
@@ -592,14 +593,14 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
     if (likely(m_flow_tag_enabled && p_rx_wc_buf_desc->rx.flow_tag_id &&
                p_rx_wc_buf_desc->rx.flow_tag_id != FLOW_TAG_MASK &&
                !p_rx_wc_buf_desc->rx.is_sw_csum_need)) {
-        sockinfo *si = NULL;
+        sockinfo *si = nullptr;
         // trying to get sockinfo per flow_tag_id-1 as it was incremented at attach
         // to allow mapping sockfd=0
         assert(g_p_fd_collection);
         si = static_cast<sockinfo *>(
             g_p_fd_collection->get_sockfd(p_rx_wc_buf_desc->rx.flow_tag_id - 1));
 
-        if (likely((si != NULL) && si->flow_tag_enabled())) {
+        if (likely((si) && si->flow_tag_enabled())) {
             // will process packets with set flow_tag_id and enabled for the socket
             if (p_eth_h->h_proto == NET_ETH_P_8021Q) {
                 // Handle VLAN header as next protocol
@@ -706,7 +707,7 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
                      ETH_HW_ADDR_PRINT_ADDR(p_eth_h->h_source), htons(h_proto));
 
         // Handle VLAN header as next protocol
-        struct vlanhdr *p_vlan_hdr = NULL;
+        struct vlanhdr *p_vlan_hdr = nullptr;
         uint16_t packet_vlan = 0;
         if (h_proto == NET_ETH_P_8021Q) {
             p_vlan_hdr = (struct vlanhdr *)((uint8_t *)p_eth_h + ETH_HDR_LEN);
@@ -965,7 +966,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::rx_process_buffer_no_flow_id(
         p_rx_wc_buf_desc->rx.frag.iov_len = ip_tot_len - hdr_data.ip_hdr_len;
 
         // Add ip fragment packet to out fragment manager
-        mem_buf_desc_t *new_buf = NULL;
+        mem_buf_desc_t *new_buf = nullptr;
         int ret = -1;
         if (g_p_ip_frag_manager) {
             ret = g_p_ip_frag_manager->add_frag(p_ip_h, p_rx_wc_buf_desc, &new_buf);

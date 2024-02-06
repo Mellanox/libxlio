@@ -80,7 +80,7 @@ inline bool is_eth_tcp_frame(mem_buf_desc_t *buff)
     uint16_t h_proto = p_eth_h->h_proto;
 
     size_t transport_header_len = ETH_HDR_LEN;
-    struct vlanhdr *p_vlan_hdr = NULL;
+    struct vlanhdr *p_vlan_hdr = nullptr;
     if (h_proto == htons(ETH_P_8021Q)) {
         p_vlan_hdr = (struct vlanhdr *)((uint8_t *)p_eth_h + transport_header_len);
         transport_header_len = ETH_VLAN_HDR_LEN;

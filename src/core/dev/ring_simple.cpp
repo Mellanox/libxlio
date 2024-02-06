@@ -99,7 +99,7 @@ ring_simple::ring_simple(int if_index, ring *parent, ring_type_t type, bool use_
      */
     BULLSEYE_EXCLUDE_BLOCK_START
     m_p_ib_ctx = p_slave->p_ib_ctx;
-    if (m_p_ib_ctx == NULL) {
+    if (!m_p_ib_ctx) {
         ring_logpanic("m_p_ib_ctx = NULL. It can be related to wrong bonding configuration");
     }
 
@@ -198,7 +198,7 @@ ring_simple::~ring_simple()
         }
         ENDIF_VERBS_FAILURE;
         VALGRIND_MAKE_MEM_UNDEFINED(m_p_tx_comp_event_channel, sizeof(struct ibv_comp_channel));
-        m_p_tx_comp_event_channel = NULL;
+        m_p_tx_comp_event_channel = nullptr;
     }
 
     /* coverity[double_unlock] TODO: RM#1049980 */
@@ -208,7 +208,7 @@ ring_simple::~ring_simple()
     ring_logdbg("queue of event completion elements is %s",
                 (list_empty(&m_socketxtreme.ec_list) ? "empty" : "not empty"));
     while (!list_empty(&m_socketxtreme.ec_list)) {
-        struct ring_ec *ec = NULL;
+        struct ring_ec *ec = nullptr;
         ec = get_ec();
         if (ec) {
             del_ec(ec);
@@ -225,7 +225,7 @@ void ring_simple::create_resources()
 
     save_l2_address(p_slave->p_L2_addr);
     m_p_tx_comp_event_channel = ibv_create_comp_channel(m_p_ib_ctx->get_ibv_context());
-    if (m_p_tx_comp_event_channel == NULL) {
+    if (!m_p_tx_comp_event_channel) {
         VLOG_PRINTF_INFO_ONCE_THEN_ALWAYS(
             VLOG_ERROR, VLOG_DEBUG,
             "ibv_create_comp_channel for tx failed. m_p_tx_comp_event_channel = %p (errno=%d %m)",
@@ -335,7 +335,7 @@ void ring_simple::create_resources()
         m_p_ib_ctx->get_ibv_context()); // ODED TODO: Adjust the ibv_context to be the exact one in
                                         // case of different devices
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (m_p_rx_comp_event_channel == NULL) {
+    if (!m_p_rx_comp_event_channel) {
         VLOG_PRINTF_INFO_ONCE_THEN_ALWAYS(
             VLOG_ERROR, VLOG_DEBUG,
             "ibv_create_comp_channel for rx failed. p_rx_comp_event_channel = %p (errno=%d %m)",
@@ -461,11 +461,11 @@ int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_c
                     // completions than ncompletions, what is not optimal for performance.
                     // Not each packet results in a real completion but this check is good enough.
                     if (++pkts >= ncompletions) {
-                        m_gro_mgr.flush_all(NULL);
+                        m_gro_mgr.flush_all(nullptr);
                         pkts = 0U;
                     }
                 } else {
-                    m_gro_mgr.flush_all(NULL);
+                    m_gro_mgr.flush_all(nullptr);
                     do_poll = false;
                 }
             } else {
@@ -485,7 +485,7 @@ int ring_simple::wait_for_notification_and_process_element(int cq_channel_fd,
                                                            void *pv_fd_ready_array /*NULL*/)
 {
     int ret = -1;
-    if (m_p_cq_mgr_rx != NULL) {
+    if (m_p_cq_mgr_rx) {
         RING_TRY_LOCK_RUN_AND_UPDATE_RET(m_lock_ring_rx,
                                          m_p_cq_mgr_rx->wait_for_notification_and_process_element(
                                              p_cq_poll_sn, pv_fd_ready_array);
@@ -574,7 +574,7 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
 {
     NOT_IN_USE(id);
     int ret = 0;
-    mem_buf_desc_t *buff_list = NULL;
+    mem_buf_desc_t *buff_list = nullptr;
     uint64_t poll_sn = 0;
 
     ring_logfuncall("n_num_mem_bufs=%d", n_num_mem_bufs);
@@ -590,7 +590,7 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
                         m_p_cq_mgr_tx, ret);
             /* coverity[double_unlock] TODO: RM#1049980 */
             m_lock_ring_tx.unlock();
-            return NULL;
+            return nullptr;
         } else if (ret > 0) {
             ring_logfunc("polling succeeded on cq_mgr_tx (%d wce)", ret);
             buff_list = get_tx_buffers(type, n_num_mem_bufs);
@@ -636,7 +636,7 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
                     } else if (ret < 0) {
                         ring_logdbg("failed blocking on cq_mgr_tx (errno=%d %m)", errno);
                         m_lock_ring_tx_buf_wait.unlock();
-                        return NULL;
+                        return nullptr;
                     }
                     /* coverity[double_lock] TODO: RM#1049980 */
                     m_lock_ring_tx.lock();
@@ -660,7 +660,7 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
                             /* coverity[double_unlock] TODO: RM#1049980 */
                             m_lock_ring_tx.unlock();
                             m_lock_ring_tx_buf_wait.unlock();
-                            return NULL;
+                            return nullptr;
                         }
                         ring_logfunc("polling/blocking succeeded on cq_mgr_tx (we got %d wce)",
                                      ret);
@@ -676,7 +676,7 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
         } else {
             // get out on non blocked socket
             m_lock_ring_tx.unlock();
-            return NULL;
+            return nullptr;
         }
     }
 
@@ -711,7 +711,7 @@ int ring_simple::mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool b_
 
 void ring_simple::mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc)
 {
-    p_mem_buf_desc->p_next_desc = NULL;
+    p_mem_buf_desc->p_next_desc = nullptr;
     reclaim_recv_buffers(p_mem_buf_desc);
 }
 
@@ -754,7 +754,7 @@ void ring_simple::send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_w
     }
 
     std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-    int ret = send_buffer(p_send_wqe, attr, 0);
+    int ret = send_buffer(p_send_wqe, attr, nullptr);
     send_status_handler(ret, p_send_wqe);
 }
 
@@ -905,7 +905,7 @@ mem_buf_desc_t *ring_simple::get_tx_buffers(pbuf_type type, uint32_t n_num_mem_b
         }
 
         if (unlikely(pool.size() < n_num_mem_bufs)) {
-            return NULL;
+            return nullptr;
         }
     }
 
@@ -924,7 +924,7 @@ mem_buf_desc_t *ring_simple::get_tx_buffers(pbuf_type type, uint32_t n_num_mem_b
         next->lwip_pbuf.pbuf.type = type;
         n_num_mem_bufs--;
     }
-    next->p_next_desc = NULL;
+    next->p_next_desc = nullptr;
 
     return head;
 }

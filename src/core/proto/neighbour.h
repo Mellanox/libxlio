@@ -108,7 +108,7 @@ class neigh_val {
 public:
     neigh_val()
         : m_trans_type(XLIO_TRANSPORT_UNKNOWN)
-        , m_l2_address(NULL) {};
+        , m_l2_address(nullptr) {};
     virtual ~neigh_val() {};
 
     virtual void zero_all_members()
@@ -116,7 +116,7 @@ public:
         if (m_l2_address) {
             delete m_l2_address;
         }
-        m_l2_address = NULL;
+        m_l2_address = nullptr;
     };
     const L2_address *get_l2_address() const { return m_l2_address; };
 
@@ -275,8 +275,8 @@ protected:
     bool priv_is_reachable(int state) { return state & (NUD_REACHABLE | NUD_PERMANENT); }
     bool priv_is_failed(int state) { return state & (NUD_FAILED | NUD_INCOMPLETE); }
 
-    void event_handler(event_t event, void *p_event_info = NULL);
-    void priv_event_handler_no_locks(event_t event, void *p_event_info = NULL);
+    void event_handler(event_t event, void *p_event_info = nullptr);
+    void priv_event_handler_no_locks(event_t event, void *p_event_info = nullptr);
 
     virtual bool priv_handle_neigh_is_l2_changed(address_t) { return false; };
     void priv_handle_neigh_reachable_event();
@@ -291,7 +291,7 @@ protected:
     virtual bool prepare_to_send_packet(neigh_send_data *) { return true; };
     void handle_timer_expired(void *user_data) override;
 
-    virtual ring_user_id_t generate_ring_user_id(header *h = NULL)
+    virtual ring_user_id_t generate_ring_user_id(header *h = nullptr)
     {
         NOT_IN_USE(h);
         return m_p_ring->generate_id();
@@ -328,7 +328,7 @@ public:
     bool is_deletable() override;
 
 protected:
-    ring_user_id_t generate_ring_user_id(header *h = NULL) override;
+    ring_user_id_t generate_ring_user_id(header *h = nullptr) override;
 
 private:
     int build_mc_neigh_val();

@@ -35,6 +35,7 @@
 
 #include <signal.h>
 #include <sys/poll.h>
+#include <sys/stat.h>
 
 #include <fcntl.h>
 #include <poll.h>

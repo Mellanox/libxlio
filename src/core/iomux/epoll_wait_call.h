@@ -56,7 +56,7 @@ public:
      */
     epoll_wait_call(epoll_event *extra_events_buffer, offloaded_mode_t *off_modes_buffer, int epfd,
                     epoll_event *events, int maxevents, int timeout,
-                    const sigset_t *sigmask = NULL);
+                    const sigset_t *sigmask = nullptr);
     virtual ~epoll_wait_call();
 
     /// @override

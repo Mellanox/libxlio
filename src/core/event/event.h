@@ -40,7 +40,7 @@
 
 class event {
 public:
-    event(void *notifier = NULL)
+    event(void *notifier = nullptr)
         : m_notifier(notifier)
     {
     }

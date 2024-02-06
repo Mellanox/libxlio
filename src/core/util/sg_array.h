@@ -84,14 +84,14 @@ public:
                 uint8_t *old_p = (uint8_t *)m_sg[m_index].addr + m_pos;
                 m_pos += *get_len;
                 if (unlikely(m_pos < 0)) {
-                    return NULL;
+                    return nullptr;
                 }
                 return old_p;
             } else {
                 *get_len = m_current->length - m_pos;
 
                 if (unlikely(m_pos < 0)) {
-                    return NULL;
+                    return nullptr;
                 }
                 uint8_t *old_p = (uint8_t *)m_sg[m_index++].addr + m_pos;
                 // moving to next sge
@@ -99,13 +99,13 @@ public:
                 return old_p;
             }
         }
-        return NULL;
+        return nullptr;
     }
 
     inline int get_num_sge(void) { return m_sg ? m_num_sge : -1; }
     inline int length(void)
     {
-        if (unlikely(m_sg == NULL || m_num_sge == 0)) {
+        if (unlikely(!m_sg || m_num_sge == 0)) {
             return 0;
         }
         for (int i = 0; i < m_num_sge; i++) {

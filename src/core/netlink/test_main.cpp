@@ -115,7 +115,7 @@ void netlink_test()
 
     struct epoll_event *e = new struct epoll_event();
     e->data.fd = fd;
-    e->data.ptr = NULL;
+    e->data.ptr = nullptr;
     e->events = EPOLLIN | EPOLLET;
     epoll_ctl(epfd, EPOLL_CTL_ADD, fd, e);
 

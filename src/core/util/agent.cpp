@@ -91,7 +91,7 @@
         vlog_printf(_level, "*************************************************************\n");    \
     } while (0)
 
-agent *g_p_agent = NULL;
+agent *g_p_agent = nullptr;
 
 agent::agent()
     : m_state(AGENT_CLOSED)
@@ -100,7 +100,7 @@ agent::agent()
     , m_msg_num(AGENT_DEFAULT_MSG_NUM)
 {
     int rc = 0;
-    agent_msg_t *msg = NULL;
+    agent_msg_t *msg = nullptr;
     int i = 0;
 
     INIT_LIST_HEAD(&m_cb_queue);
@@ -114,7 +114,7 @@ agent::agent()
     while (i--) {
         /* coverity[overwrite_var] */
         msg = (agent_msg_t *)calloc(1, sizeof(*msg));
-        if (NULL == msg) {
+        if (!msg) {
             rc = -ENOMEM;
             __log_dbg("failed queue creation (rc = %d)", rc);
             goto err;
@@ -214,8 +214,8 @@ err:
 
 agent::~agent()
 {
-    agent_msg_t *msg = NULL;
-    agent_callback_t *cb = NULL;
+    agent_msg_t *msg = nullptr;
+    agent_callback_t *cb = nullptr;
 
     if (AGENT_CLOSED == m_state) {
         return;
@@ -260,14 +260,14 @@ agent::~agent()
 
 void agent::register_cb(agent_cb_t fn, void *arg)
 {
-    agent_callback_t *cb = NULL;
-    struct list_head *entry = NULL;
+    agent_callback_t *cb = nullptr;
+    struct list_head *entry = nullptr;
 
     if (AGENT_CLOSED == m_state) {
         return;
     }
 
-    if (NULL == fn) {
+    if (!fn) {
         return;
     }
 
@@ -294,8 +294,8 @@ void agent::register_cb(agent_cb_t fn, void *arg)
 
 void agent::unregister_cb(agent_cb_t fn, void *arg)
 {
-    agent_callback_t *cb = NULL;
-    struct list_head *entry = NULL;
+    agent_callback_t *cb = nullptr;
+    struct list_head *entry = nullptr;
 
     if (AGENT_CLOSED == m_state) {
         return;
@@ -318,7 +318,7 @@ void agent::unregister_cb(agent_cb_t fn, void *arg)
 
 int agent::put(const void *data, size_t length, intptr_t tag)
 {
-    agent_msg_t *msg = NULL;
+    agent_msg_t *msg = nullptr;
     int i = 0;
 
     if (AGENT_CLOSED == m_state) {
@@ -345,7 +345,7 @@ int agent::put(const void *data, size_t length, intptr_t tag)
             for (i = 0; i < AGENT_DEFAULT_MSG_GROW; i++) {
                 /* coverity[overwrite_var] */
                 msg = (agent_msg_t *)malloc(sizeof(*msg));
-                if (NULL == msg) {
+                if (!msg) {
                     break;
                 }
                 msg->length = 0;
@@ -377,7 +377,7 @@ int agent::put(const void *data, size_t length, intptr_t tag)
 
 void agent::progress(void)
 {
-    agent_msg_t *msg = NULL;
+    agent_msg_t *msg = nullptr;
     struct timeval tv_now = TIMEVAL_INITIALIZER;
     static struct timeval tv_inactive_elapsed = TIMEVAL_INITIALIZER;
     static struct timeval tv_alive_elapsed = TIMEVAL_INITIALIZER;
@@ -431,8 +431,8 @@ go:
 
 void agent::progress_cb(void)
 {
-    agent_callback_t *cb = NULL;
-    struct list_head *entry = NULL;
+    agent_callback_t *cb = nullptr;
+    struct list_head *entry = nullptr;
 
     m_cb_lock.lock();
     list_for_each(entry, &m_cb_queue)
@@ -455,7 +455,7 @@ int agent::send(agent_msg_t *msg)
         return -EBADF;
     }
 
-    if (NULL == msg) {
+    if (!msg) {
         return -EINVAL;
     }
 

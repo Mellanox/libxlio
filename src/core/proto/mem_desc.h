@@ -194,7 +194,7 @@ public:
             page = iter->second;
         } else {
             page = new zcopy_hugepage(page_addr, m_hugepage_size);
-            if (likely(page != NULL)) {
+            if (likely(page)) {
                 m_hugepage_map[page_addr] = page;
             }
         }

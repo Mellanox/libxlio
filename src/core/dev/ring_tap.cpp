@@ -45,7 +45,7 @@
 ring_tap::ring_tap(int if_index, ring *parent)
     : ring_slave(if_index, parent, RING_TAP, true)
     , m_tap_fd(-1)
-    , m_vf_ring(NULL)
+    , m_vf_ring(nullptr)
     , m_sysvar_qp_compensation_level(safe_mce_sys().qp_compensation_level)
     , m_tap_data_available(false)
 {
@@ -286,7 +286,7 @@ int ring_tap::wait_for_notification_and_process_element(int, uint64_t *, void *p
 
 int ring_tap::drain_and_proccess()
 {
-    return process_element_rx(NULL);
+    return process_element_rx(nullptr);
 }
 
 bool ring_tap::reclaim_recv_buffers(descq_t *rx_reuse)
@@ -309,14 +309,14 @@ bool ring_tap::reclaim_recv_buffers(descq_t *rx_reuse)
 bool ring_tap::reclaim_recv_buffers(mem_buf_desc_t *buff)
 {
     if (buff && (buff->dec_ref_count() <= 1)) {
-        mem_buf_desc_t *temp = NULL;
+        mem_buf_desc_t *temp = nullptr;
         while (buff) {
             if (buff->lwip_pbuf_dec_ref_count() <= 0) {
                 temp = buff;
                 buff = temp->p_next_desc;
                 temp->clear_transport_data();
-                temp->p_next_desc = NULL;
-                temp->p_prev_desc = NULL;
+                temp->p_next_desc = nullptr;
+                temp->p_prev_desc = nullptr;
                 temp->reset_ref_count();
                 free_lwip_pbuf(&temp->lwip_pbuf);
                 m_rx_pool.push_back(temp);
@@ -469,7 +469,7 @@ bool ring_tap::request_more_rx_buffers()
 mem_buf_desc_t *ring_tap::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
                                          int n_num_mem_bufs)
 {
-    mem_buf_desc_t *head = NULL;
+    mem_buf_desc_t *head = nullptr;
 
     NOT_IN_USE(id);
     NOT_IN_USE(b_block);
@@ -527,7 +527,7 @@ void ring_tap::mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_
         }
 
         if (p_mem_buf_desc->lwip_pbuf.pbuf.ref == 0) {
-            p_mem_buf_desc->p_next_desc = NULL;
+            p_mem_buf_desc->p_next_desc = nullptr;
             if (unlikely(p_mem_buf_desc->lwip_pbuf.pbuf.type == PBUF_ZEROCOPY)) {
                 g_buffer_pool_zc->put_buffers_thread_safe(p_mem_buf_desc);
                 return;
@@ -568,7 +568,7 @@ int ring_tap::mem_buf_tx_release(mem_buf_desc_t *buff_list, bool b_accounting, b
 
     while (buff_list) {
         next = buff_list->p_next_desc;
-        buff_list->p_next_desc = NULL;
+        buff_list->p_next_desc = nullptr;
 
         // potential race, ref is protected here by ring_tx lock, and in dst_entry_tcp &
         // sockinfo_tcp by tcp lock

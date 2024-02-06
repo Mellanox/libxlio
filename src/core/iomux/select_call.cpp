@@ -112,7 +112,7 @@ select_call::select_call(int *off_fds_buffer, offloaded_mode_t *off_modes_buffer
                     if (!psock->skip_os_select()) {
                         if (check_read) {
                             FD_SET(fd, &m_os_rfds);
-                            if (psock->is_readable(NULL)) {
+                            if (psock->is_readable(nullptr)) {
                                 io_mux_call::update_fd_array(&m_fd_ready_array, fd);
                                 m_n_ready_rfds++;
                                 m_n_all_ready_fds++;
@@ -181,8 +181,8 @@ void select_call::prepare_to_block()
 
 bool select_call::wait_os(bool zero_timeout)
 {
-    timeval to, *pto = NULL;
-    timespec to_pselect, *pto_pselect = NULL;
+    timeval to, *pto = nullptr;
+    timespec to_pselect, *pto_pselect = nullptr;
 
     /* Avner: I put it in comment, because this logic is wrong
 
@@ -234,8 +234,8 @@ bool select_call::wait_os(bool zero_timeout)
 
 bool select_call::wait(const timeval &elapsed)
 {
-    timeval timeout, *pto = NULL;
-    timespec to_pselect, *pto_pselect = NULL;
+    timeval timeout, *pto = nullptr;
+    timespec to_pselect, *pto_pselect = nullptr;
 
     BULLSEYE_EXCLUDE_BLOCK_START
     if (m_n_all_ready_fds > 0) {

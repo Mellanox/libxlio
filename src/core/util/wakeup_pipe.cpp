@@ -114,7 +114,7 @@ void wakeup_pipe::remove_wakeup_fd()
     }
     wkup_entry_dbg("");
     int tmp_errno = errno;
-    if (SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, g_wakeup_pipes[0], NULL)) {
+    if (SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, g_wakeup_pipes[0], nullptr)) {
         BULLSEYE_EXCLUDE_BLOCK_START
         if (errno == ENOENT) {
             wkup_logdbg("Failed to delete global pipe from internal epfd it was already deleted");

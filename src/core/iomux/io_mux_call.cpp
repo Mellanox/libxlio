@@ -179,7 +179,7 @@ io_mux_call::io_mux_call(int *off_fds_buffer, offloaded_mode_t *off_modes_buffer
     , m_cqepfd(-1)
     , m_poll_sn_rx(0)
     , m_poll_sn_tx(0)
-    , m_p_stats(NULL)
+    , m_p_stats(nullptr)
     , m_n_all_ready_fds(0)
     , m_n_ready_rfds(0)
     , m_n_ready_wfds(0)
@@ -260,7 +260,7 @@ bool io_mux_call::handle_os_countdown(int &poll_os_countdown)
             // This will empty the cqepfd
             // (most likely in case of a wakeup and probably only under epoll_wait (Not
             // select/poll))
-            ring_wait_for_notification_and_process_element(NULL);
+            ring_wait_for_notification_and_process_element(nullptr);
         }
         /* Before we exit with ready OS fd's we'll check the CQs once more and exit
          * below after calling check_all_offloaded_sockets();
@@ -551,7 +551,7 @@ int io_mux_call::ring_poll_and_process_element()
 {
     // TODO: (select, poll) this access all CQs, it is better to check only relevant ones
     return g_p_net_device_table_mgr->global_ring_poll_and_process_element(&m_poll_sn_rx,
-                                                                          &m_poll_sn_tx, NULL);
+                                                                          &m_poll_sn_tx, nullptr);
 }
 
 int io_mux_call::ring_request_notification()

@@ -61,7 +61,7 @@
 #define ndtm_logfunc    __log_info_func
 #define ndtm_logfuncall __log_info_funcall
 
-net_device_table_mgr *g_p_net_device_table_mgr = NULL;
+net_device_table_mgr *g_p_net_device_table_mgr = nullptr;
 
 enum net_device_table_mgr_timers { RING_PROGRESS_ENGINE_TIMER, RING_ADAPT_CQ_MODERATION_TIMER };
 
@@ -103,7 +103,7 @@ net_device_table_mgr::net_device_table_mgr()
     /* throw exception if there are no supported devices. */
     if (m_net_device_map_index.empty()) {
         int num_devices = 0;
-        struct ibv_device **dev_list = NULL;
+        struct ibv_device **dev_list = nullptr;
         dev_list = xlio_ibv_get_device_list(&num_devices);
         if (dev_list && num_devices == 0) {
             ibv_free_device_list(dev_list);
@@ -323,18 +323,18 @@ net_device_val *net_device_table_mgr::get_net_device_val(const ip_addr &if_addr)
         ndtm_logdbg("Found %s for addr: %s", net_dev->to_str().c_str(), if_addr.to_str().c_str());
         if (net_dev->get_state() == net_device_val::INVALID) {
             ndtm_logdbg("invalid net_device %s", net_dev->to_str().c_str());
-            return NULL;
+            return nullptr;
         }
         return iter->second;
     }
     ndtm_logdbg("Can't find net_device for addr: %s", if_addr.to_str().c_str());
-    return NULL;
+    return nullptr;
 }
 
 net_device_val *net_device_table_mgr::get_net_device_val(int if_index)
 {
     net_device_map_index_t::iterator iter;
-    net_device_val *net_dev = NULL;
+    net_device_val *net_dev = nullptr;
 
     std::lock_guard<decltype(m_lock)> lock(m_lock);
 
@@ -374,14 +374,14 @@ net_device_val *net_device_table_mgr::get_net_device_val(int if_index)
     }
 
     ndtm_logdbg("Can't find net_device for index: %d", if_index);
-    return NULL;
+    return nullptr;
 
 out:
 
     ndtm_logdbg("Found %s for index: %d", net_dev->to_str().c_str(), if_index);
     if (net_dev->get_state() == net_device_val::INVALID) {
         ndtm_logdbg("invalid net_device %s", net_dev->to_str().c_str());
-        return NULL;
+        return nullptr;
     }
     return net_dev;
 }
@@ -396,7 +396,7 @@ net_device_entry *net_device_table_mgr::create_new_entry(int if_index, const obs
     if (p_ndv) {
         return new net_device_entry(if_index, p_ndv);
     }
-    return NULL;
+    return nullptr;
 }
 
 void net_device_table_mgr::get_ip_list(local_ip_list_t &ip_list, sa_family_t family, int if_index)
@@ -514,7 +514,7 @@ int net_device_table_mgr::global_ring_wait_for_notification_and_process_element(
                 ndtm_logdbg("removing wakeup fd from epfd");
                 BULLSEYE_EXCLUDE_BLOCK_START
                 if ((SYSCALL(epoll_ctl, m_global_ring_epfd, EPOLL_CTL_DEL,
-                             m_global_ring_pipe_fds[0], NULL)) &&
+                             m_global_ring_pipe_fds[0], nullptr)) &&
                     (!(errno == ENOENT || errno == EBADF))) {
                     ndtm_logerr("failed to del pipe channel fd from internal epfd (errno=%d %m)",
                                 errno);
@@ -583,10 +583,10 @@ void net_device_table_mgr::handle_timer_expired(void *user_data)
 void net_device_table_mgr::global_ring_wakeup()
 {
     ndtm_logdbg("");
-    epoll_event ev = {0, {0}};
+    epoll_event ev = {0, {nullptr}};
 
     ev.events = EPOLLIN;
-    ev.data.ptr = NULL;
+    ev.data.ptr = nullptr;
     int errno_tmp = errno; // don't let wakeup affect errno, as this can fail with EEXIST
     BULLSEYE_EXCLUDE_BLOCK_START
     if ((SYSCALL(epoll_ctl, m_global_ring_epfd, EPOLL_CTL_ADD, m_global_ring_pipe_fds[0], &ev)) &&
@@ -617,7 +617,7 @@ void net_device_table_mgr::del_link_event(const netlink_link_info *info)
      * resources correctly.
      */
     if (info->flags & IFF_SLAVE) {
-        net_device_val *net_dev = NULL;
+        net_device_val *net_dev = nullptr;
         int if_index = info->ifindex;
 
         ndtm_logdbg("netlink event: if_index: %d state: %s", info->ifindex,
@@ -642,7 +642,7 @@ void net_device_table_mgr::new_link_event(const netlink_link_info *info)
      * DOWN state (see RTM_DELLINK).
      */
     if (info->flags & IFF_SLAVE) {
-        net_device_val *net_dev = NULL;
+        net_device_val *net_dev = nullptr;
         int if_index = info->ifindex;
 
         ndtm_logdbg("netlink event: if_index: %d state: %s", info->ifindex,

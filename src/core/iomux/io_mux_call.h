@@ -77,7 +77,7 @@ public:
      * @param fds_buffer Pointer to a buffer large enough to hold all fds.
      */
     io_mux_call(int *off_fds_buffer, offloaded_mode_t *off_modes_buffer, int num_fds = 0,
-                const sigset_t *sigmask = NULL); // = 0 is only temp
+                const sigset_t *sigmask = nullptr); // = 0 is only temp
     virtual ~io_mux_call() {};
 
     /**

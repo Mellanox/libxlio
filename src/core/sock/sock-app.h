@@ -78,7 +78,7 @@ struct app_conf {
         map_thread_id.clear();
         map_dup_fd.clear();
         unused_worker_id.clear();
-        context = NULL;
+        context = nullptr;
 
         setup();
     }

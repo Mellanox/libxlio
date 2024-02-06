@@ -176,7 +176,7 @@ bool dst_entry_udp::fast_send_fragmented_ipv6(mem_buf_desc_t *p_mem_buf_desc, co
                     n_ip_frag_offset, ntohl(packet_id));
 
         tmp = p_mem_buf_desc->p_next_desc;
-        p_mem_buf_desc->p_next_desc = NULL;
+        p_mem_buf_desc->p_next_desc = nullptr;
 
         // We don't check the return valuse of post send when we reach the HW we consider that we
         // completed our job
@@ -206,11 +206,11 @@ inline ssize_t dst_entry_udp::fast_send_not_fragmented(const iovec *p_iov, const
     bool b_blocked = is_set(attr, XLIO_TX_PACKET_BLOCK);
 
     // Get a bunch of tx buf descriptor and data buffers
-    if (unlikely(m_p_tx_mem_buf_desc_list == NULL)) {
+    if (unlikely(!m_p_tx_mem_buf_desc_list)) {
         m_p_tx_mem_buf_desc_list =
             m_p_ring->mem_buf_tx_get(m_id, b_blocked, PBUF_RAM, m_n_sysvar_tx_bufs_batch_udp);
 
-        if (unlikely(m_p_tx_mem_buf_desc_list == NULL)) {
+        if (unlikely(!m_p_tx_mem_buf_desc_list)) {
             if (b_blocked) {
                 dst_udp_logdbg("Error when blocking for next tx buffer (errno=%d %m)", errno);
             } else {
@@ -227,7 +227,7 @@ inline ssize_t dst_entry_udp::fast_send_not_fragmented(const iovec *p_iov, const
     // Disconnect the first buffer from the list
     p_mem_buf_desc = m_p_tx_mem_buf_desc_list;
     m_p_tx_mem_buf_desc_list = m_p_tx_mem_buf_desc_list->p_next_desc;
-    p_mem_buf_desc->p_next_desc = NULL;
+    p_mem_buf_desc->p_next_desc = nullptr;
 
     set_tx_buff_list_pending(false);
 
@@ -307,7 +307,7 @@ inline ssize_t dst_entry_udp::fast_send_not_fragmented(const iovec *p_iov, const
     send_ring_buffer(m_id, p_send_wqe, attr);
 
     // request tx buffers for the next packets
-    if (unlikely(m_p_tx_mem_buf_desc_list == NULL)) {
+    if (unlikely(!m_p_tx_mem_buf_desc_list)) {
         m_p_tx_mem_buf_desc_list =
             m_p_ring->mem_buf_tx_get(m_id, b_blocked, PBUF_RAM, m_n_sysvar_tx_bufs_batch_udp);
     }
@@ -405,7 +405,7 @@ inline bool dst_entry_udp::fast_send_fragmented_ipv4(mem_buf_desc_t *p_mem_buf_d
                         n_ip_frag_offset, ntohs(packet_id));
 
         tmp = p_mem_buf_desc->p_next_desc;
-        p_mem_buf_desc->p_next_desc = NULL;
+        p_mem_buf_desc->p_next_desc = nullptr;
 
         // We don't check the return valuse of post send when we reach the HW we consider that we
         // completed our job
@@ -444,7 +444,7 @@ ssize_t dst_entry_udp::fast_send_fragmented(const iovec *p_iov, const ssize_t sz
     mem_buf_desc_t *p_mem_buf_desc =
         m_p_ring->mem_buf_tx_get(m_id, b_blocked, PBUF_RAM, n_num_frags);
 
-    if (unlikely(p_mem_buf_desc == NULL)) {
+    if (unlikely(!p_mem_buf_desc)) {
         if (b_blocked) {
             dst_udp_logdbg("Error when blocking for next tx buffer (errno=%d %m)", errno);
         } else {

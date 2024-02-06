@@ -79,7 +79,7 @@ struct tls_context_counters_show {
 
     tls_context_counters_show &update(const sh_mem_t *mem)
     {
-        return (mem != nullptr) ? update(mem->ring_inst_arr) : *this;
+        return (mem) ? update(mem->ring_inst_arr) : *this;
     }
 
 #ifdef DEFINED_UTLS
@@ -120,7 +120,7 @@ struct global_counters_show {
 
     global_counters_show &update(const sh_mem_t *mem)
     {
-        return (mem != nullptr) ? update(mem->global_inst_arr) : *this;
+        return (mem) ? update(mem->global_inst_arr) : *this;
     }
 
     global_counters_show &update(const global_instance_block_t (&globals)[NUM_OF_SUPPORTED_GLOBALS])
@@ -234,7 +234,7 @@ struct ring_packet_aggregate {
 
     ring_packet_aggregate &update(const sh_mem_t *mem)
     {
-        return (mem != nullptr) ? update(mem->ring_inst_arr) : *this;
+        return (mem) ? update(mem->ring_inst_arr) : *this;
     }
 
     ring_packet_aggregate &update(const ring_instance_block_t (&rings)[NUM_OF_SUPPORTED_RINGS])
@@ -294,7 +294,7 @@ struct socket_listen_counter_aggregate {
 
     socket_listen_counter_aggregate &update(const sh_mem_t *mem)
     {
-        if (mem != nullptr) {
+        if (mem) {
             std::swap(curr, prev);
             curr = summarize_listen_counters(*mem);
         }

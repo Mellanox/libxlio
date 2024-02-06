@@ -478,16 +478,16 @@ void hw_queue_tx::init_queue()
      */
     m_mlx5_qp.cap.max_inline_data = OCTOWORD - 4 + 3 * WQEBB;
 
-    if (m_sq_wqe_idx_to_prop == NULL) {
+    if (!m_sq_wqe_idx_to_prop) {
         m_sq_wqe_idx_to_prop =
-            (sq_wqe_prop *)mmap(NULL, m_tx_num_wr * sizeof(*m_sq_wqe_idx_to_prop),
+            (sq_wqe_prop *)mmap(nullptr, m_tx_num_wr * sizeof(*m_sq_wqe_idx_to_prop),
                                 PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
         if (m_sq_wqe_idx_to_prop == MAP_FAILED) {
             hwqtx_logerr("Failed allocating m_sq_wqe_idx_to_prop (errno=%d %m)", errno);
             return;
         }
         m_sq_wqe_prop_last_signalled = m_tx_num_wr - 1;
-        m_sq_wqe_prop_last = NULL;
+        m_sq_wqe_prop_last = nullptr;
     }
 
     hwqtx_logfunc("m_tx_num_wr=%d max_inline_data: %d m_sq_wqe_idx_to_prop=%p", m_tx_num_wr,
@@ -607,7 +607,7 @@ inline int hw_queue_tx::fill_inl_segment(sg_array &sga, uint8_t *cur_seg, uint8_
                                          int max_inline_len, int inline_len)
 {
     int wqe_inline_size = 0;
-    while ((data_addr != NULL) && inline_len) {
+    while ((data_addr) && inline_len) {
         dbg_dump_wqe((uint32_t *)data_addr, inline_len);
         memcpy(cur_seg, data_addr, inline_len);
         wqe_inline_size += inline_len;
@@ -785,10 +785,10 @@ inline int hw_queue_tx::fill_wqe_send(xlio_ibv_send_wr *pswr)
 //! Filling wqe for LSO
 inline int hw_queue_tx::fill_wqe_lso(xlio_ibv_send_wr *pswr)
 {
-    struct mlx5_wqe_ctrl_seg *ctrl = NULL;
-    struct mlx5_wqe_eth_seg *eseg = NULL;
-    struct mlx5_wqe_data_seg *dpseg = NULL;
-    uint8_t *cur_seg = NULL;
+    struct mlx5_wqe_ctrl_seg *ctrl = nullptr;
+    struct mlx5_wqe_eth_seg *eseg = nullptr;
+    struct mlx5_wqe_data_seg *dpseg = nullptr;
+    uint8_t *cur_seg = nullptr;
     uint8_t *p_hdr = (uint8_t *)pswr->tso.hdr;
     int inl_hdr_size = pswr->tso.hdr_sz;
     int inl_hdr_copy_size = 0;
@@ -876,7 +876,7 @@ void hw_queue_tx::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits, 
         .next = m_sq_wqe_prop_last,
     };
     m_sq_wqe_prop_last = &m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index];
-    if (ti != NULL) {
+    if (ti) {
         ti->get();
     }
 }
@@ -886,8 +886,8 @@ void hw_queue_tx::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits, 
 void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
                                bool request_comp, xlio_tis *tis, unsigned credits)
 {
-    struct xlio_mlx5_wqe_ctrl_seg *ctrl = NULL;
-    struct mlx5_wqe_eth_seg *eseg = NULL;
+    struct xlio_mlx5_wqe_ctrl_seg *ctrl = nullptr;
+    struct mlx5_wqe_eth_seg *eseg = nullptr;
     uint32_t tisn = tis ? tis->get_tisn() : 0;
 
     ctrl = (struct xlio_mlx5_wqe_ctrl_seg *)m_sq_wqe_hot;
@@ -930,7 +930,7 @@ std::unique_ptr<xlio_tis> hw_queue_tx::create_tis(uint32_t flags)
 {
     dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
     bool is_tls = flags & dpcp::TIS_ATTR_TLS, is_nvme = flags & dpcp::TIS_ATTR_NVMEOTCP;
-    if (unlikely(adapter == nullptr || (is_tls && is_nvme))) {
+    if (unlikely(!adapter || (is_tls && is_nvme))) {
         return nullptr;
     }
 
@@ -1126,7 +1126,7 @@ std::unique_ptr<dpcp::tls_dek> hw_queue_tx::get_tls_dek(const void *key, uint32_
 
 void hw_queue_tx::put_tls_dek(std::unique_ptr<dpcp::tls_dek> &&tls_dek_obj)
 {
-    if (tls_dek_obj == nullptr) {
+    if (!tls_dek_obj) {
         return;
     }
     // We don't allow unlimited DEK cache to avoid system DEK starvation.
@@ -1141,7 +1141,7 @@ xlio_tis *hw_queue_tx::tls_context_setup_tx(const xlio_tls_info *info)
     std::unique_ptr<xlio_tis> tis;
     if (m_tls_tis_cache.empty()) {
         tis = create_tis(DPCP_TIS_FLAGS | dpcp::TIS_ATTR_TLS);
-        if (unlikely(tis == nullptr)) {
+        if (unlikely(!tis)) {
             return nullptr;
         }
     } else {
@@ -1435,7 +1435,7 @@ void hw_queue_tx::tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, 
 
 void hw_queue_tx::tls_release_tis(xlio_tis *tis)
 {
-    assert(tis != nullptr && tis->m_type == xlio_ti::ti_type::TLS_TIS);
+    assert(tis && tis->m_type == xlio_ti::ti_type::TLS_TIS);
     tis->m_released = true;
     if (tis->m_ref == 0) {
         put_tls_tis_in_cache(tis);
@@ -1445,7 +1445,7 @@ void hw_queue_tx::tls_release_tis(xlio_tis *tis)
 void hw_queue_tx::put_tls_tis_in_cache(xlio_tis *tis)
 {
     std::unique_ptr<dpcp::dek> dek = tis->release_dek();
-    assert(dynamic_cast<dpcp::tls_dek *>(dek.get()) != nullptr);
+    assert(dynamic_cast<dpcp::tls_dek *>(dek.get()));
 
     put_tls_dek(std::unique_ptr<dpcp::tls_dek>(dynamic_cast<dpcp::tls_dek *>(dek.release())));
     m_tls_tis_cache.push_back(tis);
@@ -1484,7 +1484,7 @@ void hw_queue_tx::post_nop_fence(void)
     cseg->qpn_ds = htobe32((m_mlx5_qp.qpn << MLX5_WQE_CTRL_QPN_SHIFT) | 0x01);
     cseg->fm_ce_se = MLX5_FENCE_MODE_INITIATOR_SMALL;
 
-    store_current_wqe_prop(nullptr, SQ_CREDITS_NOP, NULL);
+    store_current_wqe_prop(nullptr, SQ_CREDITS_NOP, nullptr);
 
     ring_doorbell(MLX5_DB_METHOD_DB, 1);
 
@@ -1558,10 +1558,10 @@ void hw_queue_tx::trigger_completion_for_all_sent_packets()
 
         memset(&send_wr, 0, sizeof(send_wr));
         send_wr.wr_id = (uintptr_t)p_mem_buf_desc;
-        send_wr.wr.ud.ah = NULL;
+        send_wr.wr.ud.ah = nullptr;
         send_wr.sg_list = sge;
         send_wr.num_sge = 1;
-        send_wr.next = NULL;
+        send_wr.next = nullptr;
         xlio_send_wr_opcode(send_wr) = XLIO_IBV_WR_SEND;
 
         unsigned credits = credits_calculate(&send_wr);

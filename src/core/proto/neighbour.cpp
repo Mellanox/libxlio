@@ -159,18 +159,18 @@ inline int neigh_eth::build_uc_neigh_val()
 
 neigh_entry::neigh_entry(neigh_key key, transport_type_t _type, bool is_init_resources)
     : cache_entry_subject<neigh_key, neigh_val *>(key)
-    , m_cma_id(NULL)
+    , m_cma_id(nullptr)
     , m_src_addr(in6addr_any)
     , m_rdma_port_space((enum rdma_port_space)0)
-    , m_state_machine(NULL)
+    , m_state_machine(nullptr)
     , m_type(UNKNOWN)
     , m_trans_type(_type)
     , m_state(false)
     , m_err_counter(0)
-    , m_timer_handle(NULL)
+    , m_timer_handle(nullptr)
     , m_arp_counter(0)
     , m_p_dev(key.get_net_device_val())
-    , m_p_ring(NULL)
+    , m_p_ring(nullptr)
     , m_is_loopback(false)
     , m_to_str(std::string(priv_xlio_transport_type_str(m_trans_type)) + ":" + get_key().to_str())
     , m_id(0)
@@ -183,7 +183,7 @@ neigh_entry::neigh_entry(neigh_key key, transport_type_t _type, bool is_init_res
     m_val = NULL;
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (m_p_dev == NULL) {
+    if (!m_p_dev) {
         neigh_logpanic("get_net_dev return NULL");
     }
 
@@ -225,7 +225,7 @@ neigh_entry::neigh_entry(neigh_key key, transport_type_t _type, bool is_init_res
 
     if (is_init_resources) {
         m_p_ring = m_p_dev->reserve_ring(m_ring_allocation_logic.get_key());
-        if (m_p_ring == NULL) {
+        if (!m_p_ring) {
             neigh_logpanic("reserve_ring return NULL");
         }
         m_id = m_p_ring->generate_id();
@@ -244,11 +244,11 @@ neigh_entry::~neigh_entry()
 
     if (m_state_machine) {
         delete m_state_machine;
-        m_state_machine = NULL;
+        m_state_machine = nullptr;
     }
     if (m_p_dev && m_p_ring) {
         m_p_dev->release_ring(m_ring_allocation_logic.get_key());
-        m_p_ring = NULL;
+        m_p_ring = nullptr;
     }
     if (m_val) {
         delete m_val;
@@ -261,7 +261,7 @@ neigh_entry::~neigh_entry()
 
 bool neigh_entry::is_deletable()
 {
-    if (m_state_machine == NULL) {
+    if (!m_state_machine) {
         return true;
     }
 
@@ -282,7 +282,7 @@ void neigh_entry::clean_obj()
 
     m_lock.lock();
     set_cleaned();
-    m_timer_handle = NULL;
+    m_timer_handle = nullptr;
     if (g_p_event_handler_manager->is_running()) {
         g_p_event_handler_manager->unregister_timers_event_and_delete(this);
         m_lock.unlock();
@@ -335,7 +335,7 @@ void neigh_entry::handle_timer_expired(void *ctx)
     neigh_logdbg("Timeout expired!");
 
     // Clear Timer Handler
-    m_timer_handle = NULL;
+    m_timer_handle = nullptr;
 
     m_sm_lock.lock();
     int sm_state = m_state_machine->get_curr_state();
@@ -447,7 +447,7 @@ bool neigh_entry::post_send_udp_ipv4(neigh_send_data *n_send_data)
     // Find number of ip fragments (-> packets, buffers, buffer descs...)
     neigh_logdbg("ENTER post_send_udp_ipv4");
     int n_num_frags = 1;
-    mem_buf_desc_t *p_mem_buf_desc, *tmp = NULL;
+    mem_buf_desc_t *p_mem_buf_desc, *tmp = nullptr;
     void *p_pkt;
     void *p_ip_hdr;
     void *p_udp_hdr;
@@ -475,7 +475,7 @@ bool neigh_entry::post_send_udp_ipv4(neigh_send_data *n_send_data)
     // Get all needed tx buf descriptor and data buffers
     p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, false, PBUF_RAM, n_num_frags);
 
-    if (unlikely(p_mem_buf_desc == NULL)) {
+    if (unlikely(!p_mem_buf_desc)) {
         neigh_logdbg("Packet dropped. not enough tx buffers");
         return false;
     }
@@ -553,7 +553,7 @@ bool neigh_entry::post_send_udp_ipv4(neigh_send_data *n_send_data)
         NOT_IN_USE(id); // Fix unused-but-set error when bebug logs are disabled
 
         tmp = p_mem_buf_desc->p_next_desc;
-        p_mem_buf_desc->p_next_desc = NULL;
+        p_mem_buf_desc->p_next_desc = nullptr;
 
         // We don't check the return value of post send when we reach the HW we consider that we
         // completed our job
@@ -582,7 +582,7 @@ bool neigh_entry::post_send_udp_ipv6_fragmented(neigh_send_data *n_send_data, si
         (sz_udp_payload + max_payload_size_per_packet - 1) / max_payload_size_per_packet;
 
     mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, false, PBUF_RAM, n_num_frags);
-    if (unlikely(p_mem_buf_desc == NULL)) {
+    if (unlikely(!p_mem_buf_desc)) {
         neigh_logdbg("Packet dropped. not enough tx buffers");
         return false;
     }
@@ -597,7 +597,7 @@ bool neigh_entry::post_send_udp_ipv6_not_fragmented(neigh_send_data *n_send_data
 {
     neigh_logdbg("ENTER post_send_udp_ipv6_not_fragmented");
     mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, false, PBUF_RAM);
-    if (unlikely(p_mem_buf_desc == NULL)) {
+    if (unlikely(!p_mem_buf_desc)) {
         neigh_logdbg("Packet dropped. not enough tx buffers");
         return false;
     }
@@ -672,14 +672,14 @@ bool neigh_entry::post_send_tcp(neigh_send_data *p_data)
     p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, false, PBUF_RAM, 1);
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (unlikely(p_mem_buf_desc == NULL)) {
+    if (unlikely(!p_mem_buf_desc)) {
         neigh_logdbg("Packet dropped. not enough tx buffers");
         return false;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
     p_mem_buf_desc->lwip_pbuf.pbuf.payload = (u8_t *)p_mem_buf_desc->p_buffer + h->m_total_hdr_len;
-    p_mem_buf_desc->p_next_desc = NULL;
+    p_mem_buf_desc->p_next_desc = nullptr;
 
     // copy L4 neigh buffer to tx buffer
     memcpy((void *)(p_mem_buf_desc->p_buffer + h->m_aligned_l2_l3_len), p_data->m_iov.iov_base,
@@ -753,7 +753,7 @@ bool neigh_entry::get_peer_info(neigh_val *p_val)
 {
     neigh_logfunc("calling neigh_entry get_peer_info. state = %d", m_state);
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (p_val == NULL) {
+    if (!p_val) {
         neigh_logdbg("p_val is NULL, return false");
         return false;
     }
@@ -814,7 +814,7 @@ void neigh_entry::handle_neigh_event(neigh_nl_event *nl_ev)
     case NUD_REACHABLE:
     case NUD_PERMANENT: {
         BULLSEYE_EXCLUDE_BLOCK_START
-        if (m_state_machine == NULL) {
+        if (!m_state_machine) {
             neigh_logerr("m_state_machine: not a valid case");
             break;
         }
@@ -844,7 +844,7 @@ void neigh_entry::handle_neigh_event(neigh_nl_event *nl_ev)
 
     case NUD_STALE: {
         BULLSEYE_EXCLUDE_BLOCK_START
-        if (m_state_machine == NULL) {
+        if (!m_state_machine) {
             neigh_logerr("m_state_machine: not a valid case");
             break;
         }
@@ -961,7 +961,7 @@ neigh_entry::event_t neigh_entry::rdma_event_mapping(struct rdma_cm_event *p_rdm
 {
     // General check of cma_id
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (m_cma_id != NULL && m_cma_id != p_rdma_cm_event->id) {
+    if (m_cma_id && m_cma_id != p_rdma_cm_event->id) {
         neigh_logerr("cma_id %p != event->cma_id %p", m_cma_id, p_rdma_cm_event->id);
         return EV_UNHANDLED;
     }
@@ -1165,7 +1165,7 @@ int neigh_entry::priv_enter_init_resolution()
     sock_addr src_sa(get_family(), &m_src_addr, 0);
 
     /* we had issues passing unicast src addr, let it find the correct one itself */
-    sockaddr *src_p_sa = get_dst_addr().is_mc() ? src_sa.get_p_sa() : NULL;
+    sockaddr *src_p_sa = get_dst_addr().is_mc() ? src_sa.get_p_sa() : nullptr;
 
     int timeout_ms = RESOLVE_TIMEOUT_MS;
     if (get_family() == AF_INET6 &&
@@ -1378,14 +1378,14 @@ void neigh_entry::priv_destroy_cma_id()
             neigh_logdbg("Failed in rdma_destroy_id (errno=%d %m)", errno);
         }
         ENDIF_RDMACM_FAILURE;
-        m_cma_id = NULL;
+        m_cma_id = nullptr;
     }
 }
 
 void *neigh_entry::priv_register_timer_event(int timeout_msec, timer_handler *handler,
                                              timer_req_type_t req_type, void *user_data)
 {
-    void *_timer_handler = NULL;
+    void *_timer_handler = nullptr;
     std::lock_guard<decltype(m_lock)> lock(m_lock);
     if (!is_cleaned()) {
         _timer_handler = g_p_event_handler_manager->register_timer_event(timeout_msec, handler,
@@ -1402,7 +1402,7 @@ void neigh_entry::priv_unregister_timer()
         // as ONESHOT timer free itself after it run.
         // TODO: unregister all timers? is there just one or more?
         // g_p_event_handler_manager->unregister_timer_event(this, m_timer_handle);
-        m_timer_handle = NULL;
+        m_timer_handle = nullptr;
     }
 }
 //============================================================== neigh_eth
@@ -1426,22 +1426,22 @@ neigh_eth::neigh_eth(neigh_key key)
     sm_short_table_line_t short_sm_table[] = {
         // 	{curr state,            event,                  next state,             action func   }
 
-        {ST_NOT_ACTIVE, EV_KICK_START, ST_INIT, NULL},
-        {ST_NOT_ACTIVE, EV_ARP_RESOLVED, ST_READY, NULL},
-        {ST_ERROR, EV_KICK_START, ST_INIT, NULL},
-        {ST_INIT, EV_ARP_RESOLVED, ST_READY, NULL},
-        {ST_INIT, EV_START_RESOLUTION, ST_INIT_RESOLUTION, NULL},
-        {ST_INIT_RESOLUTION, EV_RDMA_RESOLVE_FAILED, ST_SOLICIT_SEND, NULL},
-        {ST_INIT_RESOLUTION, EV_ADDR_RESOLVED, ST_ADDR_RESOLVED, NULL},
-        {ST_INIT_RESOLUTION, EV_ARP_RESOLVED, ST_READY, NULL},
-        {ST_ADDR_RESOLVED, EV_ARP_RESOLVED, ST_READY, NULL},
-        {ST_SOLICIT_SEND, EV_ARP_RESOLVED, ST_READY, NULL},
-        {ST_SOLICIT_SEND, EV_TIMEOUT_EXPIRED, ST_ERROR, NULL},
-        {ST_SOLICIT_SEND, EV_ERROR, ST_ERROR, NULL},
-        {ST_READY, EV_ERROR, ST_ERROR, NULL},
-        {ST_INIT, EV_ERROR, ST_ERROR, NULL},
-        {ST_INIT_RESOLUTION, EV_ERROR, ST_ERROR, NULL},
-        {ST_ERROR, EV_ERROR, ST_NOT_ACTIVE, NULL},
+        {ST_NOT_ACTIVE, EV_KICK_START, ST_INIT, nullptr},
+        {ST_NOT_ACTIVE, EV_ARP_RESOLVED, ST_READY, nullptr},
+        {ST_ERROR, EV_KICK_START, ST_INIT, nullptr},
+        {ST_INIT, EV_ARP_RESOLVED, ST_READY, nullptr},
+        {ST_INIT, EV_START_RESOLUTION, ST_INIT_RESOLUTION, nullptr},
+        {ST_INIT_RESOLUTION, EV_RDMA_RESOLVE_FAILED, ST_SOLICIT_SEND, nullptr},
+        {ST_INIT_RESOLUTION, EV_ADDR_RESOLVED, ST_ADDR_RESOLVED, nullptr},
+        {ST_INIT_RESOLUTION, EV_ARP_RESOLVED, ST_READY, nullptr},
+        {ST_ADDR_RESOLVED, EV_ARP_RESOLVED, ST_READY, nullptr},
+        {ST_SOLICIT_SEND, EV_ARP_RESOLVED, ST_READY, nullptr},
+        {ST_SOLICIT_SEND, EV_TIMEOUT_EXPIRED, ST_ERROR, nullptr},
+        {ST_SOLICIT_SEND, EV_ERROR, ST_ERROR, nullptr},
+        {ST_READY, EV_ERROR, ST_ERROR, nullptr},
+        {ST_INIT, EV_ERROR, ST_ERROR, nullptr},
+        {ST_INIT_RESOLUTION, EV_ERROR, ST_ERROR, nullptr},
+        {ST_ERROR, EV_ERROR, ST_NOT_ACTIVE, nullptr},
         // Entry functions
         {ST_INIT, SM_STATE_ENTRY, SM_NO_ST, neigh_entry::dofunc_enter_init},
         {ST_INIT_RESOLUTION, SM_STATE_ENTRY, SM_NO_ST, neigh_entry::dofunc_enter_init_resolution},
@@ -1459,13 +1459,13 @@ neigh_eth::neigh_eth(neigh_key key)
                                         EV_LAST, // max events
                                         short_sm_table, // short table
                                         general_st_entry, // default entry function
-                                        NULL, // default leave function
-                                        NULL, // default func
+                                        nullptr, // default leave function
+                                        nullptr, // default func
                                         print_event_info // debug function
     );
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (m_state_machine == NULL) {
+    if (!m_state_machine) {
         neigh_logpanic("Failed allocating state_machine");
     }
     BULLSEYE_EXCLUDE_BLOCK_END
@@ -1601,7 +1601,7 @@ bool neigh_eth::send_arp_request(bool is_broadcast)
 
     net_device_val_eth *netdevice_eth = dynamic_cast<net_device_val_eth *>(m_p_dev);
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (netdevice_eth == NULL) {
+    if (!netdevice_eth) {
         neigh_logdbg("Net dev is NULL not sending ARP");
         return false;
     }
@@ -1616,7 +1616,7 @@ bool neigh_eth::send_arp_request(bool is_broadcast)
 
     const unsigned char *peer_mac = dst->get_address();
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (src == NULL || dst == NULL) {
+    if (!src || !dst) {
         neigh_logdbg("src or dst is NULL not sending ARP");
         return false;
     }
@@ -1628,7 +1628,7 @@ bool neigh_eth::send_arp_request(bool is_broadcast)
                                  0, 0);
     mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, false, PBUF_RAM, 1);
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (unlikely(p_mem_buf_desc == NULL)) {
+    if (unlikely(!p_mem_buf_desc)) {
         neigh_logdbg("No free TX buffer, not sending ARP");
         return false;
     }
@@ -1655,7 +1655,7 @@ bool neigh_eth::send_arp_request(bool is_broadcast)
     m_sge.addr = (uintptr_t)(p_mem_buf_desc->p_buffer + (uint8_t)h.m_transport_header_tx_offset);
     m_sge.length = sizeof(eth_arp_hdr) + h.m_total_hdr_len;
     m_sge.lkey = p_mem_buf_desc->lkey;
-    p_mem_buf_desc->p_next_desc = NULL;
+    p_mem_buf_desc->p_next_desc = nullptr;
     m_send_wqe.wr_id = (uintptr_t)p_mem_buf_desc;
 
     m_p_ring->send_ring_buffer(m_id, &m_send_wqe, (xlio_wr_tx_packet_attr)0);
@@ -1671,7 +1671,7 @@ bool neigh_eth::send_neighbor_solicitation()
 
     net_device_val_eth *net_dev = dynamic_cast<net_device_val_eth *>(m_p_dev);
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (net_dev == nullptr) {
+    if (!net_dev) {
         neigh_logdbg("Net device is unavailable - not sending NS");
         return false;
     }
@@ -1679,7 +1679,7 @@ bool neigh_eth::send_neighbor_solicitation()
 
     const L2_address *src_mac = m_p_dev->get_l2_address();
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (src_mac == nullptr) {
+    if (!src_mac) {
         neigh_logdbg("Source MAC address is unavailable - not sending NS");
         return false;
     }
@@ -1715,7 +1715,7 @@ bool neigh_eth::send_neighbor_solicitation()
                                  htons(ETH_P_IPV6), m_src_addr, dst_snm, 0, 0);
     mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, false, PBUF_RAM, 1);
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (unlikely(p_mem_buf_desc == NULL)) {
+    if (unlikely(!p_mem_buf_desc)) {
         neigh_logdbg("No free TX buffer - not sending NS");
         return false;
     }
@@ -1787,7 +1787,7 @@ bool neigh_eth::send_neighbor_solicitation()
     m_sge.addr = reinterpret_cast<uintptr_t>(head);
     m_sge.length = static_cast<uintptr_t>(tail - head);
     m_sge.lkey = p_mem_buf_desc->lkey;
-    p_mem_buf_desc->p_next_desc = NULL;
+    p_mem_buf_desc->p_next_desc = nullptr;
     m_send_wqe.wr_id = (uintptr_t)p_mem_buf_desc;
     neigh_logdbg("NS request: base=%p addr=%p length=%" PRIu32, p_mem_buf_desc->p_buffer,
                  (void *)m_sge.addr, m_sge.length);

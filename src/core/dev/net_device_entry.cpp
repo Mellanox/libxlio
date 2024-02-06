@@ -51,7 +51,7 @@ net_device_entry::net_device_entry(int if_index, net_device_val *ndv)
     m_val = ndv;
     m_is_valid = false;
     m_cma_id_bind_trial_count = 0;
-    m_timer_handle = NULL;
+    m_timer_handle = nullptr;
     timer_count = -1;
     m_bond = net_device_val::NO_BOND;
 
@@ -78,7 +78,7 @@ net_device_entry::~net_device_entry()
 {
     if (m_timer_handle) {
         g_p_event_handler_manager->unregister_timer_event(this, m_timer_handle);
-        m_timer_handle = NULL;
+        m_timer_handle = nullptr;
     }
     net_device_val *p_ndv = dynamic_cast<net_device_val *>(m_val);
     if (p_ndv && p_ndv->get_is_bond() == net_device_val::LAG_8023ad) {

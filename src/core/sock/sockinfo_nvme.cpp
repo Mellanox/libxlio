@@ -92,8 +92,7 @@ ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
     auto aux_data = reinterpret_cast<xlio_pd_key *>(tx_arg.priv.map);
     auto msg = tx_arg.attr.hdr;
 
-    if (msg->msg_iov == nullptr || aux_data == nullptr || msg->msg_iovlen == 0U ||
-        aux_data[0].message_length == 0U) {
+    if (!msg->msg_iov || !aux_data || msg->msg_iovlen == 0U || aux_data[0].message_length == 0U) {
         si_nvme_logerr("Invalid msg_iov, msg_iovlen, or auxiliary data");
         errno = EINVAL;
         return -1;
@@ -136,7 +135,7 @@ ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
     /* Update tx_arg before sending to TCP */
     auto *desc = nvme_pdu_mdesc::create(num_iovecs, msg->msg_iov, aux_data,
                                         m_p_sock->get_next_tcp_seqno(), total_tx_length);
-    if (desc == nullptr) {
+    if (!desc) {
         si_nvme_logerr("Unable to allocate nvme_mdesc");
         errno = ENOMEM;
         return -1;
@@ -165,27 +164,27 @@ static inline bool request_credits_for_resync(ring *p_ring, size_t datalen, size
 
 int sockinfo_tcp_ops_nvme::postrouting(pbuf *p, tcp_seg *seg, xlio_send_attr &attr)
 {
-    if (!m_is_ddgs_on || p == nullptr || seg == nullptr || seg->len == 0U) {
+    if (!m_is_ddgs_on || !p || !seg || seg->len == 0U) {
         return ERR_OK;
     }
-    assert(m_p_tis != nullptr);
+    assert(m_p_tis);
 
     attr.tis = m_p_tis.get();
     if (likely(seg->seqno == m_expected_seqno)) {
         m_expected_seqno += seg->len;
         return ERR_OK;
     }
-    assert(p->next != nullptr);
+    assert(p->next);
     assert(p->next->desc.attr == PBUF_DESC_NVME_TX);
 
     ring *p_ring = m_p_sock->get_tx_ring();
-    if (p_ring == nullptr) {
+    if (!p_ring) {
         si_nvme_logerr("No ring");
         return ERR_RTE;
     }
 
     auto nvme_mdesc = dynamic_cast<nvme_pdu_mdesc *>(static_cast<mem_desc *>(p->next->desc.mdesc));
-    if (unlikely(nvme_mdesc == nullptr)) {
+    if (unlikely(!nvme_mdesc)) {
         si_nvme_logerr("NVME momory descriptor not found");
         return ERR_RTE;
     }
@@ -241,18 +240,18 @@ bool sockinfo_tcp_ops_nvme::handle_send_ret(ssize_t ret, tcp_seg *seg)
 
 err_t sockinfo_tcp_ops_nvme::recv(pbuf *p)
 {
-    return p != nullptr ? ERR_OK : ERR_ARG;
+    return p ? ERR_OK : ERR_ARG;
 }
 
 int sockinfo_tcp_ops_nvme::setsockopt_tx(const uint32_t &config)
 {
     ring *p_ring = m_p_sock->get_tx_ring();
-    if (p_ring == nullptr) {
+    if (!p_ring) {
         errno = ENOTSUP;
         return -1;
     }
     m_p_tis = p_ring->create_tis(DPCP_TIS_FLAGS | DPCP_TIS_NVME_FLAG);
-    if (m_p_tis == nullptr) {
+    if (!m_p_tis) {
         errno = ENOTSUP;
         return -1;
     }

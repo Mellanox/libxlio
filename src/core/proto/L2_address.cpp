@@ -56,7 +56,7 @@ void L2_address::set(address_t const address, addrlen_t const len)
         L2_panic("len = %lu", len);
     }
 
-    if (address == NULL) {
+    if (!address) {
         L2_panic("address == NULL");
     }
     BULLSEYE_EXCLUDE_BLOCK_END

@@ -106,7 +106,7 @@ bool g_b_exit = false;
 bool g_init_ibv_fork_done = false;
 bool g_is_forked_child = false;
 bool g_init_global_ctors_done = true;
-static command_netlink *s_cmd_nl = NULL;
+static command_netlink *s_cmd_nl = nullptr;
 #define MAX_VERSION_STR_LEN 128
 
 global_stats_t g_global_stat_static;
@@ -135,11 +135,11 @@ static int free_libxlio_resources()
     if (g_tcp_timers_collection) {
         g_tcp_timers_collection->clean_obj();
     }
-    g_tcp_timers_collection = NULL;
+    g_tcp_timers_collection = nullptr;
 
     // Block all sock-redicrt API calls into our offloading core
     fd_collection *g_p_fd_collection_temp = g_p_fd_collection;
-    g_p_fd_collection = NULL;
+    g_p_fd_collection = nullptr;
     if (g_p_fd_collection_temp) {
         delete g_p_fd_collection_temp;
     }
@@ -147,30 +147,30 @@ static int free_libxlio_resources()
     if (g_p_lwip) {
         delete g_p_lwip;
     }
-    g_p_lwip = NULL;
+    g_p_lwip = nullptr;
 
     if (g_p_route_table_mgr) {
         delete g_p_route_table_mgr;
     }
-    g_p_route_table_mgr = NULL;
+    g_p_route_table_mgr = nullptr;
 
     if (g_bind_no_port) {
         delete g_bind_no_port;
     }
-    g_bind_no_port = NULL;
+    g_bind_no_port = nullptr;
 
     if (g_p_rule_table_mgr) {
         delete g_p_rule_table_mgr;
     }
-    g_p_rule_table_mgr = NULL;
+    g_p_rule_table_mgr = nullptr;
 
     if (g_p_net_device_table_mgr) {
         delete g_p_net_device_table_mgr;
     }
-    g_p_net_device_table_mgr = NULL;
+    g_p_net_device_table_mgr = nullptr;
 
     ip_frag_manager *g_p_ip_frag_manager_temp = g_p_ip_frag_manager;
-    g_p_ip_frag_manager = NULL;
+    g_p_ip_frag_manager = nullptr;
     if (g_p_ip_frag_manager_temp) {
         delete g_p_ip_frag_manager_temp;
     }
@@ -178,12 +178,12 @@ static int free_libxlio_resources()
     if (g_p_neigh_table_mgr) {
         delete g_p_neigh_table_mgr;
     }
-    g_p_neigh_table_mgr = NULL;
+    g_p_neigh_table_mgr = nullptr;
 
     if (g_tcp_seg_pool) {
         delete g_tcp_seg_pool;
     }
-    g_tcp_seg_pool = NULL;
+    g_tcp_seg_pool = nullptr;
 
     if (safe_mce_sys().print_report) {
         buffer_pool::print_report_on_errors(VLOG_INFO);
@@ -192,64 +192,64 @@ static int free_libxlio_resources()
     if (g_buffer_pool_zc) {
         delete g_buffer_pool_zc;
     }
-    g_buffer_pool_zc = NULL;
+    g_buffer_pool_zc = nullptr;
 
     if (g_buffer_pool_tx) {
         delete g_buffer_pool_tx;
     }
-    g_buffer_pool_tx = NULL;
+    g_buffer_pool_tx = nullptr;
 
     if (g_buffer_pool_rx_stride) {
         delete g_buffer_pool_rx_stride;
     }
-    g_buffer_pool_rx_stride = NULL;
+    g_buffer_pool_rx_stride = nullptr;
 
     if (g_buffer_pool_rx_rwqe) {
         delete g_buffer_pool_rx_rwqe;
     }
-    g_buffer_pool_rx_rwqe = NULL;
+    g_buffer_pool_rx_rwqe = nullptr;
 
     if (g_zc_cache) {
         delete g_zc_cache;
     }
-    g_zc_cache = NULL;
+    g_zc_cache = nullptr;
 
     xlio_heap::finalize();
 
     if (s_cmd_nl) {
         delete s_cmd_nl;
     }
-    s_cmd_nl = NULL;
+    s_cmd_nl = nullptr;
 
     if (g_p_netlink_handler) {
         delete g_p_netlink_handler;
     }
-    g_p_netlink_handler = NULL;
+    g_p_netlink_handler = nullptr;
 
     if (g_p_ib_ctx_handler_collection) {
         delete g_p_ib_ctx_handler_collection;
     }
-    g_p_ib_ctx_handler_collection = NULL;
+    g_p_ib_ctx_handler_collection = nullptr;
 
     if (g_p_vlogger_timer_handler) {
         delete g_p_vlogger_timer_handler;
     }
-    g_p_vlogger_timer_handler = NULL;
+    g_p_vlogger_timer_handler = nullptr;
 
     if (g_p_event_handler_manager) {
         delete g_p_event_handler_manager;
     }
-    g_p_event_handler_manager = NULL;
+    g_p_event_handler_manager = nullptr;
 
     if (g_p_agent) {
         delete g_p_agent;
     }
-    g_p_agent = NULL;
+    g_p_agent = nullptr;
 
     if (safe_mce_sys().app_name) {
         free(safe_mce_sys().app_name);
     }
-    safe_mce_sys().app_name = NULL;
+    safe_mce_sys().app_name = nullptr;
 
     vlog_printf(VLOG_DEBUG, "Stopping logger module\n");
 
@@ -261,14 +261,14 @@ static int free_libxlio_resources()
         // cosmetics - remove when adding iomux block
         fprintf(g_stats_file, "======================================================\n");
         fclose(g_stats_file);
-        g_stats_file = NULL;
+        g_stats_file = nullptr;
     }
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     if (g_p_app) {
         delete g_p_app;
     }
-    g_p_app = NULL;
+    g_p_app = nullptr;
 #endif
 
     return 0;
@@ -431,7 +431,7 @@ int get_ofed_version_info(char *ofed_version_str, int len)
 void print_xlio_global_settings()
 {
     struct utsname sys_info;
-    time_t clock = time(NULL);
+    time_t clock = time(nullptr);
     char ofed_version_info[MAX_VERSION_STR_LEN];
 
     vlog_printf(VLOG_INFO,
@@ -929,7 +929,7 @@ void register_handler_segv()
     act.sa_handler = handle_segfault;
     act.sa_flags = 0;
     sigemptyset(&act.sa_mask);
-    sigaction(SIGSEGV, &act, NULL);
+    sigaction(SIGSEGV, &act, nullptr);
     vlog_printf(VLOG_INFO, "Registered a SIGSEGV handler\n");
 }
 
@@ -1093,10 +1093,10 @@ static void do_global_ctors_helper()
                                                             safe_mce_sys().lwip_mss)),
                          (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_TX
                               ? safe_mce_sys().m_ioctl.user_alloc.memalloc
-                              : NULL),
+                              : nullptr),
                          (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_TX
                               ? safe_mce_sys().m_ioctl.user_alloc.memfree
-                              : NULL)));
+                              : nullptr)));
 
     NEW_CTOR(g_buffer_pool_zc, buffer_pool(BUFFER_POOL_TX, 0));
 
@@ -1145,13 +1145,13 @@ static void do_global_ctors_helper()
 
         // Register netlink fd to the event_manager
         s_cmd_nl = new command_netlink(g_p_netlink_handler);
-        if (s_cmd_nl == NULL) {
+        if (!s_cmd_nl) {
             throw_xlio_exception("Failed allocating command_netlink\n");
         }
         BULLSEYE_EXCLUDE_BLOCK_END
         g_p_event_handler_manager->register_command_event(fd, s_cmd_nl);
         g_p_event_handler_manager->register_timer_event(safe_mce_sys().timer_netlink_update_msec,
-                                                        s_cmd_nl, PERIODIC_TIMER, NULL);
+                                                        s_cmd_nl, PERIODIC_TIMER, nullptr);
     }
 
 #ifdef DEFINED_UTLS
@@ -1178,29 +1178,29 @@ int do_global_ctors()
 
 void reset_globals()
 {
-    g_p_fd_collection = NULL;
-    g_p_ip_frag_manager = NULL;
-    g_zc_cache = NULL;
-    g_buffer_pool_rx_ptr = NULL;
-    g_buffer_pool_rx_stride = NULL;
-    g_buffer_pool_rx_rwqe = NULL;
-    g_buffer_pool_tx = NULL;
-    g_buffer_pool_zc = NULL;
-    g_tcp_seg_pool = NULL;
-    g_tcp_timers_collection = NULL;
-    g_p_vlogger_timer_handler = NULL;
-    g_p_event_handler_manager = NULL;
-    g_p_agent = NULL;
-    g_p_route_table_mgr = NULL;
-    g_bind_no_port = NULL;
-    g_p_rule_table_mgr = NULL;
-    g_stats_file = NULL;
-    g_p_net_device_table_mgr = NULL;
-    g_p_neigh_table_mgr = NULL;
-    g_p_lwip = NULL;
-    g_p_netlink_handler = NULL;
-    g_p_ib_ctx_handler_collection = NULL;
-    s_cmd_nl = NULL;
+    g_p_fd_collection = nullptr;
+    g_p_ip_frag_manager = nullptr;
+    g_zc_cache = nullptr;
+    g_buffer_pool_rx_ptr = nullptr;
+    g_buffer_pool_rx_stride = nullptr;
+    g_buffer_pool_rx_rwqe = nullptr;
+    g_buffer_pool_tx = nullptr;
+    g_buffer_pool_zc = nullptr;
+    g_tcp_seg_pool = nullptr;
+    g_tcp_timers_collection = nullptr;
+    g_p_vlogger_timer_handler = nullptr;
+    g_p_event_handler_manager = nullptr;
+    g_p_agent = nullptr;
+    g_p_route_table_mgr = nullptr;
+    g_bind_no_port = nullptr;
+    g_p_rule_table_mgr = nullptr;
+    g_stats_file = nullptr;
+    g_p_net_device_table_mgr = nullptr;
+    g_p_neigh_table_mgr = nullptr;
+    g_p_lwip = nullptr;
+    g_p_netlink_handler = nullptr;
+    g_p_ib_ctx_handler_collection = nullptr;
+    s_cmd_nl = nullptr;
     g_cpu_manager.reset();
 }
 
@@ -1222,9 +1222,9 @@ void check_netperf_flags()
     if (strcmp(command, "netserver")) {
         return;
     }
-    pch = strtok(NULL, " ");
+    pch = strtok(nullptr, " ");
 
-    while (pch != NULL) {
+    while (pch) {
         if (*pch == '-') {
             if (strchr(pch, 'D')) {
                 b_D_flag = true;
@@ -1236,7 +1236,7 @@ void check_netperf_flags()
         if (b_f_flag && b_D_flag) {
             break;
         }
-        pch = strtok(NULL, " ");
+        pch = strtok(nullptr, " ");
     }
     if (!b_D_flag || !b_f_flag) {
         vlog_printf(VLOG_WARNING, "Running netserver without flags: -D, -f can cause failure\n");
