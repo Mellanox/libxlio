@@ -35,6 +35,6 @@
 
 #include "xlio_extra.h"
 
-struct xlio_api_t *extra_api(void);
+struct xlio_api_t *extra_api();
 
 #endif /* _SOCK_EXTRA_H_ */

@@ -112,7 +112,7 @@ struct app_conf {
     }
 
 #if defined(DEFINED_NGINX)
-    int proc_nginx(void);
+    int proc_nginx();
 #endif /* DEFINED_NGINX */
 
 #if defined(DEFINED_ENVOY)

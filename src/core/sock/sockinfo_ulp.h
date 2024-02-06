@@ -55,7 +55,7 @@ public:
         : m_p_sock(sock) {};
     virtual ~sockinfo_tcp_ops() {}
 
-    inline ring *get_tx_ring(void);
+    inline ring *get_tx_ring();
 
     virtual int setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen);
     virtual ssize_t tx(xlio_tx_call_attr_t &tx_arg);
@@ -79,7 +79,7 @@ enum xlio_utls_mode {
     UTLS_MODE_RX = 1 << 1,
 };
 
-void xlio_tls_api_setup(void);
+void xlio_tls_api_setup();
 
 class sockinfo_tcp_ops_tls : public sockinfo_tcp_ops {
 public:
@@ -94,13 +94,13 @@ public:
     void get_record_buf(mem_buf_desc_t *&buf, uint8_t *&data, bool is_zerocopy);
 
 private:
-    inline bool is_tx_tls13(void) { return m_tls_info_tx.tls_version == TLS_1_3_VERSION; }
-    inline bool is_rx_tls13(void) { return m_tls_info_rx.tls_version == TLS_1_3_VERSION; }
+    inline bool is_tx_tls13() { return m_tls_info_tx.tls_version == TLS_1_3_VERSION; }
+    inline bool is_rx_tls13() { return m_tls_info_rx.tls_version == TLS_1_3_VERSION; }
 
     int send_alert(uint8_t alert_type);
     void terminate_session_fatal(uint8_t alert_type);
 
-    err_t tls_rx_consume_ready_packets(void);
+    err_t tls_rx_consume_ready_packets();
     err_t recv(struct pbuf *p) override;
     void copy_by_offset(uint8_t *dst, uint32_t offset, uint32_t len);
     uint16_t offset_to_host16(uint32_t offset);

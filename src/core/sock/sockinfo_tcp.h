@@ -137,7 +137,7 @@ enum inet_ecns {
 
 class sockinfo_tcp : public sockinfo, public timer_handler {
 public:
-    static inline size_t accepted_conns_node_offset(void)
+    static inline size_t accepted_conns_node_offset()
     {
         return NODE_OFFSET(sockinfo_tcp, accepted_conns_node);
     }
@@ -192,14 +192,14 @@ public:
 
     void statistics_print(vlog_levels_t log_level = VLOG_DEBUG) override;
 
-    inline struct tcp_pcb *get_pcb(void) { return &m_pcb; }
+    inline struct tcp_pcb *get_pcb() { return &m_pcb; }
 
-    inline unsigned sndbuf_available(void)
+    inline unsigned sndbuf_available()
     {
         return static_cast<unsigned>(std::max(tcp_sndbuf(&m_pcb), 0));
     }
 
-    inline unsigned get_mss(void) { return m_pcb.mss; }
+    inline unsigned get_mss() { return m_pcb.mss; }
 
     ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
     ssize_t tcp_tx(xlio_tx_call_attr_t &tx_arg);
@@ -215,7 +215,7 @@ public:
     void update_header_field(data_updater *updater) override;
     bool rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void *pv_fd_ready_array) override;
     void abort_connection();
-    void tcp_shutdown_rx(void);
+    void tcp_shutdown_rx();
 
     mem_buf_desc_t *tcp_tx_mem_buf_alloc(pbuf_type type);
     void tcp_rx_mem_buf_free(mem_buf_desc_t *p_desc);
@@ -227,8 +227,8 @@ public:
     static struct tcp_seg *tcp_seg_alloc_cached(void *p_conn);
     static void tcp_seg_free_direct(void *p_conn, struct tcp_seg *seg);
     static void tcp_seg_free_cached(void *p_conn, struct tcp_seg *seg);
-    uint32_t get_next_tcp_seqno(void) { return m_pcb.snd_lbb; }
-    uint32_t get_next_tcp_seqno_rx(void) { return m_pcb.rcv_nxt; }
+    uint32_t get_next_tcp_seqno() { return m_pcb.snd_lbb; }
+    uint32_t get_next_tcp_seqno_rx() { return m_pcb.rcv_nxt; }
 
     mem_buf_desc_t *tcp_tx_zc_alloc(mem_buf_desc_t *p_desc);
     static void tcp_tx_zc_callback(mem_buf_desc_t *p_desc);
@@ -242,7 +242,7 @@ public:
         return get_tcp_state(&m_pcb) == CLOSED && m_syn_received.empty() &&
             m_accepted_conns.empty();
     }
-    bool inline is_destroyable_lock(void)
+    bool inline is_destroyable_lock()
     {
         bool state;
         m_tcp_con_lock.lock();
@@ -250,7 +250,7 @@ public:
         m_tcp_con_lock.unlock();
         return state;
     }
-    bool inline is_destroyable_no_lock(void)
+    bool inline is_destroyable_no_lock()
     {
         return get_tcp_state(&m_pcb) == CLOSED && m_state == SOCKINFO_CLOSING;
     }
@@ -295,18 +295,18 @@ public:
 
     void handle_timer_expired(void *user_data) override;
 
-    inline ib_ctx_handler *get_ctx(void)
+    inline ib_ctx_handler *get_ctx()
     {
         return m_p_connected_dst_entry ? m_p_connected_dst_entry->get_ctx() : nullptr;
     }
 
-    inline ring *get_tx_ring(void) const noexcept
+    inline ring *get_tx_ring() const noexcept
     {
         return m_p_connected_dst_entry ? m_p_connected_dst_entry->get_ring() : nullptr;
     }
 
-    inline ring *get_rx_ring(void) { return m_p_rx_ring; }
-    const flow_tuple_with_local_if &get_flow_tuple(void)
+    inline ring *get_rx_ring() { return m_p_rx_ring; }
+    const flow_tuple_with_local_if &get_flow_tuple()
     {
         /* XXX Dosn't handle empty map and a map with multiple elements. */
         auto rx_flow_iter = m_rx_flow_map.begin();
@@ -314,7 +314,7 @@ public:
     }
 
     /* Proxy to support ULP. TODO Refactor. */
-    inline sockinfo_tcp_ops *get_ops(void) { return m_ops; }
+    inline sockinfo_tcp_ops *get_ops() { return m_ops; }
     inline void set_ops(sockinfo_tcp_ops *ops) noexcept
     {
         std::swap(ops, m_ops);
@@ -322,15 +322,15 @@ public:
             delete ops;
         }
     }
-    inline void reset_ops(void) noexcept { set_ops(m_ops_tcp); }
+    inline void reset_ops() noexcept { set_ops(m_ops_tcp); }
 
     bool is_utls_supported(int direction) const;
 
     int get_supported_nvme_feature_mask() const;
 
-    inline int trylock_tcp_con(void) { return m_tcp_con_lock.trylock(); }
-    inline void lock_tcp_con(void) { m_tcp_con_lock.lock(); }
-    inline void unlock_tcp_con(void) { m_tcp_con_lock.unlock(); }
+    inline int trylock_tcp_con() { return m_tcp_con_lock.trylock(); }
+    inline void lock_tcp_con() { m_tcp_con_lock.lock(); }
+    inline void unlock_tcp_con() { m_tcp_con_lock.unlock(); }
 
     inline void set_reguired_send_block(unsigned sz) { m_required_send_block = sz; }
     static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);

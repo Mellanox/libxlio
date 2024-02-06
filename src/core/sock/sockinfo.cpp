@@ -170,7 +170,7 @@ sockinfo::~sockinfo()
     m_socketxtreme.ec_cache.clear();
 }
 
-void sockinfo::socket_stats_init(void)
+void sockinfo::socket_stats_init()
 {
     m_p_socket_stats->reset();
     m_p_socket_stats->fd = m_fd;
