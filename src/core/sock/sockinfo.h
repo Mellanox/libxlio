@@ -207,7 +207,7 @@ public:
     inline in_protocol_t get_protocol(void) { return m_protocol; }
 
     bool validate_and_convert_mapped_ipv4(sock_addr &sock) const;
-    void socket_stats_init(void);
+    void socket_stats_init();
 
     void sock_pop_descs_rx_ready(descq_t *cache)
     {

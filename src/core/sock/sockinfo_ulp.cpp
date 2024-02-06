@@ -46,7 +46,7 @@
 #define si_ulp_logerr  __log_info_err
 
 /*inline*/
-ring *sockinfo_tcp_ops::get_tx_ring(void)
+ring *sockinfo_tcp_ops::get_tx_ring()
 {
     return m_p_sock->get_tx_ring();
 }
@@ -86,11 +86,11 @@ bool sockinfo_tcp_ops::handle_send_ret(ssize_t ret, struct tcp_seg *seg)
 #include <openssl/evp.h>
 
 struct xlio_tls_api {
-    EVP_CIPHER_CTX *(*EVP_CIPHER_CTX_new)(void);
+    EVP_CIPHER_CTX *(*EVP_CIPHER_CTX_new)();
     void (*EVP_CIPHER_CTX_free)(EVP_CIPHER_CTX *);
     int (*EVP_CIPHER_CTX_reset)(EVP_CIPHER_CTX *);
-    const EVP_CIPHER *(*EVP_aes_128_gcm)(void);
-    const EVP_CIPHER *(*EVP_aes_256_gcm)(void);
+    const EVP_CIPHER *(*EVP_aes_128_gcm)();
+    const EVP_CIPHER *(*EVP_aes_256_gcm)();
     int (*EVP_DecryptInit_ex)(EVP_CIPHER_CTX *, const EVP_CIPHER *, ENGINE *, const unsigned char *,
                               const unsigned char *);
     int (*EVP_DecryptUpdate)(EVP_CIPHER_CTX *, unsigned char *, int *, const unsigned char *, int);
@@ -116,7 +116,7 @@ template <typename T> static void dlsym_default(T &ptr, const char *name)
 
 #define XLIO_TLS_API_FIND(__name) dlsym_default(s_tls_api.__name, #__name);
 
-void xlio_tls_api_setup(void)
+void xlio_tls_api_setup()
 {
     XLIO_TLS_API_FIND(EVP_CIPHER_CTX_new);
     XLIO_TLS_API_FIND(EVP_CIPHER_CTX_free);
@@ -236,9 +236,9 @@ public:
         }
     }
 
-    void get(void) override { (void)atomic_fetch_and_inc(&m_ref); }
+    void get() override { (void)atomic_fetch_and_inc(&m_ref); }
 
-    void put(void) override
+    void put() override
     {
         int ref = atomic_fetch_and_dec(&m_ref);
 
@@ -275,7 +275,7 @@ public:
         return len;
     }
 
-    inline size_t avail_space(void)
+    inline size_t avail_space()
     {
         /* Don't produce records larger than 16KB according to the protocol. */
         size_t max_len = m_p_zc_owner ? (size_t)TLS_RECORD_MAX
@@ -320,7 +320,7 @@ public:
     }
 
 private:
-    inline void set_length(void)
+    inline void set_length()
     {
         uint16_t len = m_size - TLS_RECORD_HDR_LEN;
 
@@ -669,7 +669,7 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
     return 0;
 }
 
-err_t sockinfo_tcp_ops_tls::tls_rx_consume_ready_packets(void)
+err_t sockinfo_tcp_ops_tls::tls_rx_consume_ready_packets()
 {
     err_t ret = ERR_OK;
 

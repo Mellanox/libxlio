@@ -342,7 +342,7 @@ extern "C" int xlio_extra_ioctl(void *cmsg_hdr, size_t cmsg_len)
     return 0;
 }
 
-struct xlio_api_t *extra_api(void)
+struct xlio_api_t *extra_api()
 {
     static struct xlio_api_t *xlio_api = nullptr;
 
