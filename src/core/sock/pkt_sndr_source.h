@@ -41,7 +41,7 @@
  */
 class pkt_sndr_source {
 public:
-    virtual ~pkt_sndr_source() {};
+    virtual ~pkt_sndr_source() = default;
 };
 
 #endif

@@ -49,7 +49,7 @@ class ring;
  */
 class pkt_rcvr_sink {
 public:
-    virtual ~pkt_rcvr_sink() {};
+    virtual ~pkt_rcvr_sink() = default;
 
     // Callback from lower layer notifying new receive packets
     // Return: 'true' if object queuing this receive packet

@@ -83,7 +83,7 @@ struct app_conf {
         setup();
     }
 
-    ~app_conf() {}
+    ~app_conf() = default;
 
     void setup()
     {
