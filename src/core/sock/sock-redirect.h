@@ -96,12 +96,8 @@
 #define SYSCALL_ERRNO_UNSUPPORTED(_func, ...) SYSCALL(_func, __VA_ARGS__)
 #define VALID_SYSCALL(_func)                  (true)
 #else
-#define XLIO_SYMBOL(_func) _func
-#if defined(__GNUC__) && !defined(__clang__)
-#define VALID_SYSCALL(_func) (__builtin_addressof(orig_os_api._func) != nullptr)
-#else
+#define XLIO_SYMBOL(_func)   _func
 #define VALID_SYSCALL(_func) ((orig_os_api._func) != nullptr)
-#endif
 #define SYSCALL(_func, ...)                                                                        \
     ((VALID_SYSCALL(_func) ? (void)0 : get_orig_funcs()), orig_os_api._func(__VA_ARGS__))
 #define SYSCALL_ERRNO_UNSUPPORTED(_func, ...)                                                      \
