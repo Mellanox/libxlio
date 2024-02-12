@@ -49,7 +49,6 @@
 #include "proto/dst_entry_udp.h"
 
 #include "pkt_rcvr_sink.h"
-#include "pkt_sndr_source.h"
 #include "sock-redirect.h"
 #include "sockinfo.h"
 

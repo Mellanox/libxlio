@@ -52,7 +52,6 @@
 
 #include "socket_fd_api.h"
 #include "pkt_rcvr_sink.h"
-#include "pkt_sndr_source.h"
 #include "sock-redirect.h"
 #include "sock-app.h"
 
@@ -157,7 +156,6 @@ const uint8_t ip_tos2prio[16] = {0, 0, 0, 0, 2, 2, 2, 2, 6, 6, 6, 6, 4, 4, 4, 4}
 
 class sockinfo : public socket_fd_api,
                  public pkt_rcvr_sink,
-                 public pkt_sndr_source,
                  public wakeup_pipe {
 public:
     sockinfo(int fd, int domain, bool use_ring_locks);
