@@ -459,14 +459,13 @@ sockinfo_tcp::~sockinfo_tcp()
     si_tcp_logdbg("sock closed");
 }
 
-void sockinfo_tcp::clean_obj()
+void sockinfo_tcp::clean_socket_obj()
 {
-    if (is_cleaned()) {
+    if (!m_timer_handle) {
         return;
     }
 
     lock_tcp_con();
-    set_cleaned();
 
     event_handler_manager *p_event_mgr = get_event_mgr();
 
@@ -484,7 +483,7 @@ void sockinfo_tcp::clean_obj()
     if (p_event_mgr->is_running() && !delegated_timers_exit) {
         p_event_mgr->unregister_timers_event_and_delete(this);
     } else {
-        cleanable_obj::clean_obj();
+        delete this;
     }
 }
 
@@ -5887,11 +5886,11 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
          * in this loop.
          * So in case sockinfo object is destroyed other processing
          * of the same object mast be ingored.
-         * TODO Check on is_cleaned() is not safe completely.
+         * TODO Check on is_timer_registered() is not safe completely.
          */
         if (!p_sock->trylock_tcp_con()) {
             bool destroyable = false;
-            if (!p_sock->is_cleaned()) {
+            if (p_sock->is_timer_registered()) {
                 p_sock->handle_timer_expired(iter->user_data);
                 destroyable = p_sock->is_destroyable_no_lock();
             }
