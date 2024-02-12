@@ -38,7 +38,6 @@
 #include "sock-redirect.h"
 #include "socket_fd_api.h"
 #include "sockinfo_udp.h"
-#include "pipeinfo.h"
 #include "sockinfo_tcp.h"
 #include "iomux/epfd_info.h"
 
@@ -346,58 +345,6 @@ void fd_collection::statistics_print(int fd, vlog_levels_t log_level)
         }
     }
     vlog_printf(log_level, "==================================================\n");
-}
-
-int fd_collection::addpipe(int fdrd, int fdwr)
-{
-    fdcoll_logfunc("fdrd=%d, fdwr=%d", fdrd, fdwr);
-
-    if (!is_valid_fd(fdrd) || !is_valid_fd(fdwr)) {
-        return -1;
-    }
-
-    lock();
-
-    // Sanity check to remove any old objects using the same fd!!
-    socket_fd_api *p_fdrd_api_obj = get_sockfd(fdrd);
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (p_fdrd_api_obj) {
-        fdcoll_logwarn("[fd=%d] Deleting old duplicate object (%p)", fdrd, p_fdrd_api_obj);
-        unlock();
-        handle_close(fdrd, true);
-        lock();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-    socket_fd_api *p_fdwr_api_obj = get_sockfd(fdwr);
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (p_fdwr_api_obj) {
-        fdcoll_logwarn("[fd=%d] Deleting old duplicate object (%p)", fdwr, p_fdwr_api_obj);
-        unlock();
-        handle_close(fdwr, true);
-        lock();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    unlock();
-    p_fdrd_api_obj = new pipeinfo(fdrd);
-    p_fdwr_api_obj = new pipeinfo(fdwr);
-    lock();
-
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (p_fdrd_api_obj == NULL) {
-        fdcoll_logpanic("[fd=%d] Failed creating new pipeinfo (%m)", fdrd);
-    }
-    if (p_fdwr_api_obj == NULL) {
-        fdcoll_logpanic("[fd=%d] Failed creating new pipeinfo (%m)", fdwr);
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-
-    m_p_sockfd_map[fdrd] = p_fdrd_api_obj;
-    m_p_sockfd_map[fdwr] = p_fdwr_api_obj;
-
-    unlock();
-
-    return 0;
 }
 
 int fd_collection::addepfd(int epfd, int size)

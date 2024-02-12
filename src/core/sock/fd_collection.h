@@ -88,14 +88,6 @@ public:
     int addsocket(int fd, int domain, int type, bool check_offload = false);
 
     /**
-     * Create pipeinfo. Use get_sock() to get it.
-     * @param fdrd Read fd.
-     * @param fdwr Write fd.
-     * @return 0 on success, -1 on failure.
-     */
-    int addpipe(int fdrd, int fdwr);
-
-    /**
      * Create epfd_info. Use get_epfd() to get it.
      * @param epfd epoll fd.
      * @param size epoll fd size (as passed to epoll_create).
@@ -120,7 +112,7 @@ public:
     int addtapfd(int tapfd, ring_tap *p_ring);
 
     /**
-     * Remove pipeinfo/sockinfo.
+     * Remove sockinfo.
      */
     int del_sockfd(int fd, bool b_cleanup = false, bool is_for_udp_pool = false);
 
@@ -148,7 +140,7 @@ public:
     inline void reuse_sockfd(int fd, socket_fd_api *p_sfd_api_obj);
     inline void destroy_sockfd(socket_fd_api *p_sfd_api_obj);
     /**
-     * Get sock_fd_api (sockinfo or pipeinfo) by fd.
+     * Get sock_fd_api (sockinfo) by fd.
      */
     inline socket_fd_api *get_sockfd(int fd);
 
