@@ -130,6 +130,7 @@ void fd_collection::prepare_to_close()
     unlock();
 }
 
+// Called in destructor after Internal-Thread destroyed
 void fd_collection::clear()
 {
     int fd;
@@ -147,7 +148,7 @@ void fd_collection::clear()
      */
     while (!m_pending_to_remove_lst.empty()) {
         socket_fd_api *p_sfd_api = m_pending_to_remove_lst.get_and_pop_back();
-        p_sfd_api->clean_obj();
+        p_sfd_api->clean_socket_obj();
     }
 
     g_global_stat_static.n_pending_sockets = 0;
@@ -160,7 +161,7 @@ void fd_collection::clear()
                 socket_fd_api *p_sfd_api = get_sockfd(fd);
                 if (p_sfd_api) {
                     p_sfd_api->statistics_print();
-                    p_sfd_api->clean_obj();
+                    p_sfd_api->clean_socket_obj();
                 }
             }
 
@@ -464,7 +465,7 @@ int fd_collection::add_cq_channel_fd(int cq_ch_fd, ring *p_ring)
     return 0;
 }
 
-int fd_collection::del_sockfd(int fd, bool b_cleanup /*=false*/, bool is_for_udp_pool /*=false*/)
+int fd_collection::del_sockfd(int fd, bool is_for_udp_pool /*=false*/)
 {
     int ret_val = -1;
     socket_fd_api *p_sfd_api;
@@ -479,7 +480,9 @@ int fd_collection::del_sockfd(int fd, bool b_cleanup /*=false*/, bool is_for_udp
         // 2. Socket deletion when TCP connection == CLOSED
         if (p_sfd_api->prepare_to_close()) {
             // the socket is already closable
-            ret_val = del(fd, b_cleanup, m_p_sockfd_map);
+            // This may register the socket to be erased by internal thread,
+            // However, a timer may tick on this socket before it is deleted.
+            ret_val = del_socket(fd, m_p_sockfd_map);
         } else {
             lock();
             // The socket is not ready for close.
@@ -552,6 +555,28 @@ template <typename cls> int fd_collection::del(int fd, bool b_cleanup, cls **map
     if (!b_cleanup) {
         fdcoll_logdbg("[fd=%d] Could not find related object", fd);
     }
+    unlock();
+    return -1;
+}
+
+int fd_collection::del_socket(int fd, socket_fd_api **map_type)
+{
+    fdcoll_logfunc("fd=%d", fd);
+
+    if (!is_valid_fd(fd)) {
+        return -1;
+    }
+
+    lock();
+    socket_fd_api *p_obj = map_type[fd];
+    if (p_obj) {
+        map_type[fd] = nullptr;
+        unlock();
+        p_obj->clean_socket_obj();
+        return 0;
+    }
+
+    fdcoll_logdbg("[fd=%d] Could not find related object", fd);
     unlock();
     return -1;
 }

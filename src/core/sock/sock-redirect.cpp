@@ -240,7 +240,7 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
     bool to_close_now = true;
     bool is_for_udp_pool = false;
 
-    srdr_logfunc("Cleanup fd=%d", fd);
+    srdr_logfunc("Cleanup fd=%d cleanup=%d", fd, !!cleanup);
 
     if (g_zc_cache) {
         g_zc_cache->handle_close(fd);
@@ -258,7 +258,7 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
             // Save this value before pointer is destructed
             is_for_udp_pool = sockfd->m_is_for_socket_pool;
 #endif
-            g_p_fd_collection->del_sockfd(fd, cleanup, is_for_udp_pool);
+            g_p_fd_collection->del_sockfd(fd, is_for_udp_pool);
             if (safe_mce_sys().deferred_close) {
                 to_close_now = false;
             }
