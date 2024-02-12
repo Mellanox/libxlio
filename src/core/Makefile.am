@@ -275,7 +275,6 @@ libxlio_la_SOURCES := \
 	\
 	sock/cleanable_obj.h \
 	sock/fd_collection.h \
-	sock/pkt_rcvr_sink.h \
 	sock/socket_fd_api.h \
 	sock/sockinfo.h \
 	sock/sockinfo_tcp.h \

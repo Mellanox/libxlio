@@ -42,7 +42,7 @@ typedef std::vector<ring_slave *> ring_slave_vector_t;
 
 struct flow_sink_t {
     flow_tuple flow;
-    pkt_rcvr_sink *sink;
+    sockinfo *sink;
 };
 
 class ring_bond : public ring {
@@ -69,8 +69,8 @@ public:
     virtual int wait_for_notification_and_process_element(int cq_channel_fd, uint64_t *p_cq_poll_sn,
                                                           void *pv_fd_ready_array = NULL);
     virtual int get_num_resources() const { return m_bond_rings.size(); };
-    virtual bool attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink, bool force_5t = false);
-    virtual bool detach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink);
+    virtual bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t = false);
+    virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink);
     virtual void restart();
     virtual mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
                                            int n_num_mem_bufs = 1);

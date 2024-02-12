@@ -51,7 +51,6 @@
 #include "dev/ring_allocation_logic.h"
 
 #include "socket_fd_api.h"
-#include "pkt_rcvr_sink.h"
 #include "sock-redirect.h"
 #include "sock-app.h"
 
@@ -155,7 +154,6 @@ typedef std::unordered_map<ring *, ring_info_t *> rx_ring_map_t;
 const uint8_t ip_tos2prio[16] = {0, 0, 0, 0, 2, 2, 2, 2, 6, 6, 6, 6, 4, 4, 4, 4};
 
 class sockinfo : public socket_fd_api,
-                 public pkt_rcvr_sink,
                  public wakeup_pipe {
 public:
     sockinfo(int fd, int domain, bool use_ring_locks);
@@ -168,6 +166,12 @@ public:
         SOCKINFO_CLOSED,
         SOCKINFO_DESTROYING
     };
+
+    // Callback from lower layer notifying new receive packets
+    // Return: 'true' if object queuing this receive packet
+    //         'false' if not interested in this receive packet
+    virtual bool rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info,
+                             void *pv_fd_ready_array) = 0;
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     virtual void copy_sockopt_fork(const socket_fd_api *copy_from);

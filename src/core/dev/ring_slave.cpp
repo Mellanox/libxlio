@@ -157,7 +157,7 @@ void ring_slave::inc_tx_retransmissions_stats(ring_user_id_t)
 }
 
 template <typename KEY4T, typename KEY2T, typename HDR>
-bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink,
+bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink,
                                                       bool force_5t)
 {
     rfs *p_rfs;
@@ -386,7 +386,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
     return ret;
 }
 
-bool ring_slave::attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink, bool force_5t)
+bool ring_slave::attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t)
 {
     std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
 
@@ -396,7 +396,7 @@ bool ring_slave::attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink, bool
 }
 
 template <typename KEY4T, typename KEY2T, typename HDR>
-bool steering_handler<KEY4T, KEY2T, HDR>::detach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink)
+bool steering_handler<KEY4T, KEY2T, HDR>::detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink)
 {
     rfs *p_rfs = NULL;
 
@@ -520,7 +520,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::detach_flow(flow_tuple &flow_spec_5t, 
     return true;
 }
 
-bool ring_slave::detach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink)
+bool ring_slave::detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink)
 {
     std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
 

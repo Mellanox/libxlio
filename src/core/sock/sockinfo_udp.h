@@ -48,7 +48,6 @@
 #include "proto/mem_buf_desc.h"
 #include "proto/dst_entry_udp.h"
 
-#include "pkt_rcvr_sink.h"
 #include "sock-redirect.h"
 #include "sockinfo.h"
 
