@@ -138,7 +138,7 @@ rfs::rfs(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *rule_fil
     memset(&m_match_value, 0, sizeof(m_match_value));
     memset(&m_match_mask, 0, sizeof(m_match_mask));
 
-    m_sinks_list = new pkt_rcvr_sink *[m_n_sinks_list_max_length];
+    m_sinks_list = new sockinfo *[m_n_sinks_list_max_length];
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     if (g_p_app->type != APP_NONE && g_p_app->get_worker_id() >= 0) {
@@ -152,7 +152,7 @@ rfs::rfs(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *rule_fil
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    memset(m_sinks_list, 0, sizeof(pkt_rcvr_sink *) * m_n_sinks_list_max_length);
+    memset(m_sinks_list, 0, sizeof(sockinfo *) * m_n_sinks_list_max_length);
 }
 
 rfs::~rfs()
@@ -181,7 +181,7 @@ rfs::~rfs()
     delete[] m_sinks_list;
 }
 
-bool rfs::add_sink(pkt_rcvr_sink *p_sink)
+bool rfs::add_sink(sockinfo *p_sink)
 {
     uint32_t i;
 
@@ -205,7 +205,7 @@ bool rfs::add_sink(pkt_rcvr_sink *p_sink)
     if (m_n_sinks_list_entries == m_n_sinks_list_max_length) { // Sinks list array is full
         // Reallocate a new array with double size
         uint32_t tmp_sinks_list_length = 2 * m_n_sinks_list_max_length;
-        pkt_rcvr_sink **tmp_sinks_list = new pkt_rcvr_sink *[tmp_sinks_list_length];
+        sockinfo **tmp_sinks_list = new sockinfo *[tmp_sinks_list_length];
 
         BULLSEYE_EXCLUDE_BLOCK_START
         if (!tmp_sinks_list) {
@@ -214,7 +214,7 @@ bool rfs::add_sink(pkt_rcvr_sink *p_sink)
         }
         BULLSEYE_EXCLUDE_BLOCK_END
 
-        memcpy(tmp_sinks_list, m_sinks_list, sizeof(pkt_rcvr_sink *) * m_n_sinks_list_max_length);
+        memcpy(tmp_sinks_list, m_sinks_list, sizeof(sockinfo *) * m_n_sinks_list_max_length);
         delete[] m_sinks_list;
         m_sinks_list = tmp_sinks_list;
         m_n_sinks_list_max_length = tmp_sinks_list_length;
@@ -227,7 +227,7 @@ bool rfs::add_sink(pkt_rcvr_sink *p_sink)
     return true;
 }
 
-bool rfs::del_sink(pkt_rcvr_sink *p_sink)
+bool rfs::del_sink(sockinfo *p_sink)
 {
     uint32_t i;
 
@@ -258,7 +258,7 @@ bool rfs::del_sink(pkt_rcvr_sink *p_sink)
     return false;
 }
 
-bool rfs::attach_flow(pkt_rcvr_sink *sink)
+bool rfs::attach_flow(sockinfo *sink)
 {
     bool ret;
     int filter_counter = 1;
@@ -294,7 +294,7 @@ bool rfs::attach_flow(pkt_rcvr_sink *sink)
     return ret;
 }
 
-bool rfs::detach_flow(pkt_rcvr_sink *sink)
+bool rfs::detach_flow(sockinfo *sink)
 {
     bool ret = false;
     int filter_counter = 0;

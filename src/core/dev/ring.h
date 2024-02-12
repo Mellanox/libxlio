@@ -43,7 +43,7 @@
 
 /* Forward declarations */
 struct xlio_tls_info;
-class pkt_rcvr_sink;
+class sockinfo;
 class rfs_rule;
 class poll_group;
 
@@ -82,9 +82,8 @@ public:
 
     virtual void print_val();
 
-    virtual bool attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink,
-                             bool force_5t = false) = 0;
-    virtual bool detach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink) = 0;
+    virtual bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t = false) = 0;
+    virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink) = 0;
 
     virtual void restart() = 0;
 
