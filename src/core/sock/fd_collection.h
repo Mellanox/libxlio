@@ -114,7 +114,7 @@ public:
     /**
      * Remove sockinfo.
      */
-    int del_sockfd(int fd, bool b_cleanup = false, bool is_for_udp_pool = false);
+    int del_sockfd(int fd, bool is_for_udp_pool = false);
 
     /**
      * Remove epfd_info.
@@ -190,6 +190,7 @@ public:
 private:
     template <typename cls> int del(int fd, bool b_cleanup, cls **map_type);
     template <typename cls> inline cls *get(int fd, cls **map_type);
+    int del_socket(int fd, socket_fd_api **map_type);
     inline bool is_valid_fd(int fd);
 
     inline bool create_offloaded_sockets();
@@ -283,7 +284,7 @@ inline void fd_collection::destroy_sockfd(socket_fd_api *p_sfd_api_obj)
     lock();
     --g_global_stat_static.n_pending_sockets;
     m_pending_to_remove_lst.erase(p_sfd_api_obj);
-    p_sfd_api_obj->clean_obj();
+    p_sfd_api_obj->clean_socket_obj();
     unlock();
 }
 
