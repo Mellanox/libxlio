@@ -151,7 +151,6 @@ libxlio_la_SOURCES := \
 	sock/sockinfo_tcp.cpp \
 	sock/tcp_seg_pool.cpp \
 	sock/fd_collection.cpp \
-	sock/pipeinfo.cpp \
 	sock/socket_fd_api.cpp \
 	sock/sock-redirect.cpp \
 	sock/sock-app.cpp \
@@ -276,7 +275,6 @@ libxlio_la_SOURCES := \
 	\
 	sock/cleanable_obj.h \
 	sock/fd_collection.h \
-	sock/pipeinfo.h \
 	sock/pkt_rcvr_sink.h \
 	sock/pkt_sndr_source.h \
 	sock/socket_fd_api.h \
