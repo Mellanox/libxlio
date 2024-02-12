@@ -1,3 +1,18 @@
+Version 3.30.0-1:
+Date + Time 2024-02-12
+=============================================================
+Added:
+        - RM #3724170 Static compilation with LTO and PGO support
+        - RM #3668182 productize LwIP express data path
+        - RM #3664594 Backport TCP_KEEPALIVE from VMA
+        - RM #3514044 XLIO DPCP Only - Remove legacy code and legacy flows
+
+Fixed:
+        - RM #3771283 Fix function pointer check
+        - RM #3690535 Remove leftover after Multi Packet RQ removal
+        - RM #3678579 Fix last_unacked and last_unsent
+        - RM #3704820 XLIO error when enabling UDP listen socket
+
 Version 3.21.2-1:
 Date + Time 2024-01-11
 =============================================================
