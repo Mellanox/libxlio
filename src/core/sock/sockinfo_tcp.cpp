@@ -590,15 +590,15 @@ sockinfo_tcp::~sockinfo_tcp()
     xlio_socket_event(XLIO_SOCKET_EVENT_TERMINATED, 0);
 }
 
-void sockinfo_tcp::clean_obj()
+void sockinfo_tcp::clean_socket_obj()
 {
+    lock_tcp_con();
+
     if (is_cleaned()) {
         return;
     }
 
-    lock_tcp_con();
-    set_cleaned();
-
+    m_is_cleaned = true;
     event_handler_manager *p_event_mgr = get_event_mgr();
 
     bool delegated_timers_exit = g_b_exit &&
@@ -615,7 +615,7 @@ void sockinfo_tcp::clean_obj()
     if (p_event_mgr->is_running() && !delegated_timers_exit) {
         p_event_mgr->unregister_timers_event_and_delete(this);
     } else {
-        cleanable_obj::clean_obj();
+        delete this;
     }
 }
 
