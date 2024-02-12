@@ -44,7 +44,7 @@
 #define RFS_SINKS_LIST_DEFAULT_LEN 32
 
 class hw_queue_rx;
-class pkt_rcvr_sink;
+class sockinfo;
 
 /*
  * Priority description:
@@ -85,15 +85,15 @@ public:
 
     /**
      * Register/Unregister a sink with this rfs object
-     * Get notifications about incoming packets using the pkt_rcvr_sink callback api
+     * Get notifications about incoming packets using the sockinfo callback api
      * The rfs will call ibv_attach on the QP once when at least one receiver sink is registered
      * An ibv_detach is called when the last receiver sink is deleted from the registered list
      *
      */
-    bool attach_flow(pkt_rcvr_sink *sink); // Add a sink. If this is the first sink --> map the sink
-                                           // and attach flow to QP
-    bool detach_flow(pkt_rcvr_sink *sink); // Delete a sink. If this is the last sink --> delete it
-                                           // and detach flow from QP
+    bool attach_flow(sockinfo *sink); // Add a sink. If this is the first sink --> map the sink
+                                      // and attach flow to QP
+    bool detach_flow(sockinfo *sink); // Delete a sink. If this is the last sink --> delete it
+                                      // and detach flow from QP
 #ifdef DEFINED_UTLS
     rfs_rule *create_rule(xlio_tir *tir,
                           const flow_tuple &flow_spec); // Create a duplicate rule which points to
@@ -109,7 +109,7 @@ protected:
     ring_simple *m_p_ring_simple;
     rfs_rule_filter *m_p_rule_filter;
     rfs_rule *m_rfs_flow = nullptr;
-    pkt_rcvr_sink **m_sinks_list;
+    sockinfo **m_sinks_list;
     uint32_t m_n_sinks_list_entries; // Number of actual sinks in the array (we shrink the array if
                                      // a sink is removed)
     uint32_t m_n_sinks_list_max_length;
@@ -122,8 +122,8 @@ protected:
 
     bool create_flow(); // Attach flow to all queues
     bool destroy_flow(); // Detach flow from all queues
-    bool add_sink(pkt_rcvr_sink *p_sink);
-    bool del_sink(pkt_rcvr_sink *p_sink);
+    bool add_sink(sockinfo *p_sink);
+    bool del_sink(sockinfo *p_sink);
     void prepare_flow_spec_eth_ip(const ip_address &dst_ip, const ip_address &src_ip);
     void prepare_flow_spec_tcp_udp();
     virtual void prepare_flow_spec() = 0;

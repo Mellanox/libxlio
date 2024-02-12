@@ -51,7 +51,6 @@
 #include "dev/ring_allocation_logic.h"
 
 #include "socket_fd_api.h"
-#include "pkt_rcvr_sink.h"
 #include "sock-redirect.h"
 #include "sock-app.h"
 
@@ -154,7 +153,7 @@ typedef std::unordered_map<ring *, ring_info_t *> rx_ring_map_t;
 // see route.c in Linux kernel
 const uint8_t ip_tos2prio[16] = {0, 0, 0, 0, 2, 2, 2, 2, 6, 6, 6, 6, 4, 4, 4, 4};
 
-class sockinfo : public socket_fd_api, public pkt_rcvr_sink, public wakeup_pipe {
+class sockinfo : public socket_fd_api, public wakeup_pipe {
 public:
     sockinfo(int fd, int domain, bool use_ring_locks);
     ~sockinfo() override;
@@ -166,6 +165,12 @@ public:
         SOCKINFO_CLOSED,
         SOCKINFO_DESTROYING
     };
+
+    // Callback from lower layer notifying new receive packets
+    // Return: 'true' if object queuing this receive packet
+    //         'false' if not interested in this receive packet
+    virtual bool rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info,
+                             void *pv_fd_ready_array) = 0;
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     void copy_sockopt_fork(const socket_fd_api *copy_from) override;
@@ -283,8 +288,8 @@ protected:
                                    const struct sockaddr *sock_addr_second = nullptr);
 
     // This callback will notify that socket is ready to receive and map the cq.
-    void rx_add_ring_cb(ring *p_ring) override;
-    void rx_del_ring_cb(ring *p_ring) override;
+    virtual void rx_add_ring_cb(ring *p_ring);
+    virtual void rx_del_ring_cb(ring *p_ring);
 
     virtual void lock_rx_q() { m_lock_rcv.lock(); }
     virtual void unlock_rx_q() { m_lock_rcv.unlock(); }

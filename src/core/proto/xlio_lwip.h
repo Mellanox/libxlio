@@ -35,7 +35,6 @@
 
 #include "core/event/timer_handler.h"
 #include "core/proto/mem_buf_desc.h"
-#include "core/sock/pkt_rcvr_sink.h"
 #include "core/lwip/tcp.h"
 
 typedef enum xlio_wr_tx_packet_attr {
