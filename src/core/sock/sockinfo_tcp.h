@@ -124,42 +124,41 @@ struct socket_option_t {
     }
 };
 
-class tcp_timers_collection : public timers_group, public cleanable_obj {
+class tcp_timers_collection : public timer_handler, public cleanable_obj {
 public:
-    tcp_timers_collection(int period, int resolution);
+    tcp_timers_collection();
+    tcp_timers_collection(int intervals);
     ~tcp_timers_collection() override;
 
     void clean_obj() override;
 
     void handle_timer_expired(void *user_data) override;
 
+    void register_wakeup_event();
+
+    void add_new_timer(sockinfo_tcp *sock);
+
+    void remove_timer(sockinfo_tcp *sock);
+
     void set_group(poll_group *group) { m_p_group = group; }
     inline event_handler_manager *get_event_mgr();
-
-protected:
-    // add a new timer
-    void add_new_timer(timer_node_t *node, timer_handler *handler, void *user_data) override;
-
-    // remove timer from list and free it.
-    // called for stopping (unregistering) a timer
-    void remove_timer(timer_node_t *node) override;
 
 private:
     void free_tta_resources();
 
 protected:
-    void *m_timer_handle;
+    void *m_timer_handle = nullptr;
 
 private:
-    timer_node_t **m_p_intervals;
 
-    int m_n_period;
-    int m_n_resolution;
+    typedef std::list<sockinfo_tcp *> sock_list;
+    typedef typename sock_list::iterator sock_list_itr;
+    std::vector<sock_list> m_p_intervals;
+    std::unordered_map<sockinfo_tcp *, std::tuple<uint32_t, sock_list_itr>> m_sock_remove_map;
     int m_n_intervals_size;
-    int m_n_location;
-    int m_n_count;
-    int m_n_next_insert_bucket;
-
+    int m_n_location = 0;
+    int m_n_count = 0;
+    int m_n_next_insert_bucket = 0;
     poll_group *m_p_group = nullptr;
 };
 
@@ -168,6 +167,8 @@ public:
     thread_local_tcp_timers();
     ~thread_local_tcp_timers() override;
 };
+
+extern tcp_timers_collection *g_tcp_timers_collection;
 
 typedef std::deque<socket_option_t *> socket_options_list_t;
 typedef std::map<tcp_pcb *, int> ready_pcb_map_t;
@@ -183,7 +184,7 @@ enum inet_ecns {
     INET_ECN_MASK = 3,
 };
 
-class sockinfo_tcp : public sockinfo, public timer_handler {
+class sockinfo_tcp : public sockinfo {
 public:
     static inline size_t accepted_conns_node_offset()
     {
@@ -342,7 +343,7 @@ public:
 
     inline fd_type_t get_type() override { return FD_TYPE_SOCKET; }
 
-    void handle_timer_expired(void *user_data) override;
+    void handle_timer_expired();
 
     inline ib_ctx_handler *get_ctx()
     {
@@ -382,6 +383,7 @@ public:
     inline void lock_tcp_con() { m_tcp_con_lock.lock(); }
     inline void unlock_tcp_con() { m_tcp_con_lock.unlock(); }
     inline void set_reguired_send_block(unsigned sz) { m_required_send_block = sz; }
+    tcp_timers_collection *get_tcp_timer_collection();
     bool is_cleaned() const { return m_is_cleaned; }
     static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
     static err_t rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
@@ -589,7 +591,6 @@ private:
     bool is_connected_and_ready_to_send();
 
     inline event_handler_manager *get_event_mgr();
-    inline tcp_timers_collection *get_tcp_timer_collection();
 
 public:
     static const int CONNECT_DEFAULT_TIMEOUT_MS = 10000;
@@ -639,7 +640,6 @@ private:
     uint32_t m_ready_conn_cnt;
     int m_backlog;
 
-    void *m_timer_handle;
     multilock m_tcp_con_lock;
 
     // used for reporting 'connected' on second non-blocking call to connect or
@@ -671,7 +671,6 @@ private:
     uint64_t m_user_huge_page_mask;
     unsigned m_required_send_block;
     uint16_t m_external_vlan_tag = 0U;
-
     /*
      * Storage API
      * TODO Move the fields to proper cold/hot sections in the final version.
@@ -680,7 +679,5 @@ private:
     uintptr_t m_xlio_socket_userdata = 0;
     poll_group *m_p_group = nullptr;
 };
-
-extern tcp_timers_collection *g_tcp_timers_collection;
 
 #endif

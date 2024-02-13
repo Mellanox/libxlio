@@ -216,7 +216,6 @@ libxlio_la_SOURCES := \
 	event/netlink_event.h \
 	event/poll_group.h \
 	event/timer_handler.h \
-	event/timers_group.h \
 	event/vlogger_timer_handler.h \
 	\
 	ib/base/verbs_extra.h \

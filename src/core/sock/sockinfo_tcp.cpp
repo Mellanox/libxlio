@@ -289,7 +289,6 @@ static inline bool use_socket_ring_locks()
 
 sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     : sockinfo(fd, domain, use_socket_ring_locks())
-    , m_timer_handle(nullptr)
     , m_tcp_con_lock(get_new_tcp_lock())
     , m_sysvar_buffer_batching_mode(safe_mce_sys().buffer_batching_mode)
     , m_sysvar_tx_segs_batch_tcp(safe_mce_sys().tx_segs_batch_tcp)
@@ -597,23 +596,16 @@ void sockinfo_tcp::clean_socket_obj()
     if (is_cleaned()) {
         return;
     }
-
     m_is_cleaned = true;
-    event_handler_manager *p_event_mgr = get_event_mgr();
 
+    unlock_tcp_con();
+
+    event_handler_manager *p_event_mgr = get_event_mgr();
     bool delegated_timers_exit = g_b_exit &&
         (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS);
 
-    /* Remove group timers from g_tcp_timers_collection */
-    if (p_event_mgr->is_running() && m_timer_handle && !delegated_timers_exit) {
-        p_event_mgr->unregister_timer_event(this, m_timer_handle);
-    }
-
-    m_timer_handle = nullptr;
-    unlock_tcp_con();
-
     if (p_event_mgr->is_running() && !delegated_timers_exit) {
-        p_event_mgr->unregister_timers_event_and_delete(this);
+        p_event_mgr->unregister_socket_timer_and_delete(this);
     } else {
         delete this;
     }
@@ -1829,9 +1821,8 @@ void sockinfo_tcp::process_rx_ctl_packets()
 }
 
 // Execute TCP timers of this connection
-void sockinfo_tcp::handle_timer_expired(void *user_data)
+void sockinfo_tcp::handle_timer_expired()
 {
-    NOT_IN_USE(user_data);
     si_tcp_logfunc("");
 
     if (tcp_ctl_thread_on(m_sysvar_tcp_ctl_thread)) {
@@ -2509,18 +2500,10 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
 
 void sockinfo_tcp::register_timer()
 {
-    if (!m_timer_handle) {
-        si_tcp_logdbg("Registering TCP socket timer: socket: %p, thread-col: %p, global-col: %p",
-                      this, get_tcp_timer_collection(), g_tcp_timers_collection);
+    si_tcp_logdbg("Registering TCP socket timer: socket: %p, thread-col: %p, global-col: %p", this,
+                  get_tcp_timer_collection(), g_tcp_timers_collection);
 
-        /* user_data is the socket itself for a fast cast in the timer_expired(). */
-        m_timer_handle = get_event_mgr()->register_timer_event(
-            safe_mce_sys().tcp_timer_resolution_msec, this, PERIODIC_TIMER,
-            reinterpret_cast<void *>(this), get_tcp_timer_collection());
-    } else {
-        si_tcp_logdbg("register_timer was called more than once. Something might be wrong, or "
-                      "connect was called twice.");
-    }
+    get_event_mgr()->register_socket_timer_event(this);
 }
 
 void sockinfo_tcp::queue_rx_ctl_packet(struct tcp_pcb *pcb, mem_buf_desc_t *p_desc)
@@ -2540,7 +2523,7 @@ void sockinfo_tcp::queue_rx_ctl_packet(struct tcp_pcb *pcb, mem_buf_desc_t *p_de
     }
 
     if (m_sysvar_tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_WITH_WAKEUP) {
-        g_p_event_handler_manager->wakeup_timer_event(this, m_timer_handle);
+        get_tcp_timer_collection()->register_wakeup_event();
     }
 
     return;
@@ -3095,8 +3078,7 @@ int sockinfo_tcp::listen(int backlog)
     BULLSEYE_EXCLUDE_BLOCK_END
 
     if (tcp_ctl_thread_on(m_sysvar_tcp_ctl_thread)) {
-        m_timer_handle = g_p_event_handler_manager->register_timer_event(
-            safe_mce_sys().timer_resolution_msec, this, PERIODIC_TIMER, 0, NULL);
+        g_p_event_handler_manager->register_socket_timer_event(this);
     }
 
     unlock_tcp_con();
@@ -3224,7 +3206,7 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
 
     if (m_sysvar_tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_WITH_WAKEUP &&
         !m_rx_peer_packets.empty()) {
-        g_p_event_handler_manager->wakeup_timer_event(this, m_timer_handle);
+        get_tcp_timer_collection()->register_wakeup_event();
     }
 
     unlock_tcp_con();
@@ -5939,25 +5921,16 @@ void sockinfo_tcp::put_tcp_seg_cached(struct tcp_seg *seg)
     }
 }
 
-tcp_timers_collection::tcp_timers_collection(int period, int resolution)
+tcp_timers_collection::tcp_timers_collection()
+    : tcp_timers_collection(safe_mce_sys().tcp_timer_resolution_msec /
+                            safe_mce_sys().timer_resolution_msec)
 {
-    m_n_period = period;
-    m_n_resolution = resolution;
-    m_n_intervals_size = period / resolution;
-    m_timer_handle = nullptr;
-    m_p_intervals = new timer_node_t *[m_n_intervals_size];
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!m_p_intervals) {
-        __log_dbg("failed to allocate memory");
-        free_tta_resources();
-        throw_xlio_exception("failed to allocate memory");
-    }
+}
 
-    BULLSEYE_EXCLUDE_BLOCK_END
-    memset(m_p_intervals, 0, sizeof(timer_node_t *) * m_n_intervals_size);
-    m_n_location = 0;
-    m_n_next_insert_bucket = 0;
-    m_n_count = 0;
+tcp_timers_collection::tcp_timers_collection(int intervals)
+{
+    m_n_intervals_size = intervals;
+    m_p_intervals.resize(m_n_intervals_size);
 }
 
 tcp_timers_collection::~tcp_timers_collection()
@@ -5979,19 +5952,15 @@ event_handler_manager *tcp_timers_collection::get_event_mgr()
 
 void tcp_timers_collection::free_tta_resources()
 {
-    if (m_n_count) {
-        for (int i = 0; i < m_n_intervals_size; i++) {
-            if (m_p_intervals[i]) {
-                remove_timer(m_p_intervals[i]);
-            }
-        }
-
-        if (m_n_count) {
-            __log_dbg("not all TCP timers have been removed, count=%d", m_n_count);
+    for (auto &bucket : m_p_intervals) {
+        while (!bucket.empty()) {
+            remove_timer(bucket.front());
         }
     }
 
-    delete[] m_p_intervals;
+    if (m_n_count) {
+        __log_dbg("Not all TCP socket timers have been removed, count=%d", m_n_count);
+    }
 }
 
 void tcp_timers_collection::clean_obj()
@@ -6014,14 +5983,10 @@ void tcp_timers_collection::clean_obj()
 void tcp_timers_collection::handle_timer_expired(void *user_data)
 {
     NOT_IN_USE(user_data);
-    timer_node_t *iter = m_p_intervals[m_n_location];
-    sockinfo_tcp *p_sock;
-
+    sock_list &bucket = m_p_intervals[m_n_location];
     m_n_location = (m_n_location + 1) % m_n_intervals_size;
 
-    while (iter) {
-        p_sock = reinterpret_cast<sockinfo_tcp *>(iter->user_data);
-
+    for (sockinfo_tcp *p_sock : bucket) {
         /* It is not guaranteed that the same sockinfo object is met once
          * in this loop.
          * So in case sockinfo object is destroyed other processing
@@ -6031,7 +5996,7 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
         if (!p_sock->trylock_tcp_con()) {
             bool destroyable = false;
             if (!p_sock->is_cleaned()) {
-                p_sock->handle_timer_expired(iter->user_data);
+                p_sock->handle_timer_expired();
                 destroyable = p_sock->is_destroyable_no_lock();
             }
             p_sock->unlock_tcp_con();
@@ -6039,7 +6004,6 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
                 g_p_fd_collection->destroy_sockfd(p_sock);
             }
         }
-        iter = iter->next;
     }
 
     /* Processing all messages for the daemon */
@@ -6048,69 +6012,51 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
     }
 }
 
-void tcp_timers_collection::add_new_timer(timer_node_t *node, timer_handler *handler,
-                                          void *user_data)
+void tcp_timers_collection::add_new_timer(sockinfo_tcp *sock)
 {
-    node->handler = handler;
-    node->user_data = user_data;
-    node->group = this;
-    node->next = nullptr;
-    node->prev = nullptr;
-    if (m_p_intervals[m_n_next_insert_bucket]) {
-        m_p_intervals[m_n_next_insert_bucket]->prev = node;
-        node->next = m_p_intervals[m_n_next_insert_bucket];
-    }
-    m_p_intervals[m_n_next_insert_bucket] = node;
-    m_n_next_insert_bucket = (m_n_next_insert_bucket + 1) % m_n_intervals_size;
-
-    if (m_n_count == 0) {
-        m_timer_handle =
-            get_event_mgr()->register_timer_event(m_n_resolution, this, PERIODIC_TIMER, nullptr);
-    }
-    m_n_count++;
-
-    __log_dbg("new TCP timer handler [%p] was added", handler);
-}
-
-void tcp_timers_collection::remove_timer(timer_node_t *node)
-{
-    if (!node) {
+    if (!sock) {
+        __log_warn("Trying to add timer for null TCP socket %p", sock);
         return;
     }
 
-    node->group = nullptr;
+    sock_list &bucket = m_p_intervals[m_n_next_insert_bucket];
+    bucket.emplace_back(sock);
+    m_sock_remove_map.emplace(sock, std::make_tuple(m_n_next_insert_bucket, --(bucket.end())));
+    m_n_next_insert_bucket = (m_n_next_insert_bucket + 1) % m_n_intervals_size;
 
-    if (node->prev) {
-        node->prev->next = node->next;
-    } else {
-        for (int i = 0; i < m_n_intervals_size; i++) {
-            if (m_p_intervals[i] == node) {
-                m_p_intervals[i] = node->next;
-                break;
+    if (0 == m_n_count++) {
+        m_timer_handle = get_event_mgr()->register_timer_event(safe_mce_sys().timer_resolution_msec,
+                                                               this, PERIODIC_TIMER, nullptr);
+    }
+
+    __log_dbg("New TCP socket [%p] timer was added", sock);
+}
+
+void tcp_timers_collection::remove_timer(sockinfo_tcp *sock)
+{
+    auto node = m_sock_remove_map.find(sock);
+    if (node != m_sock_remove_map.end()) {
+        m_p_intervals[std::get<0>(node->second)].erase(std::get<1>(node->second));
+        m_sock_remove_map.erase(node);
+
+        if (!(--m_n_count)) {
+            if (m_timer_handle) {
+                get_event_mgr()->unregister_timer_event(this, m_timer_handle);
+                m_timer_handle = nullptr;
             }
         }
+
+        __log_dbg("TCP socket [%p] timer was removed", sock);
     }
+}
 
-    if (node->next) {
-        node->next->prev = node->prev;
-    }
-
-    m_n_count--;
-    if (m_n_count == 0) {
-        if (m_timer_handle) {
-            get_event_mgr()->unregister_timer_event(this, m_timer_handle);
-            m_timer_handle = nullptr;
-        }
-    }
-
-    __log_dbg("TCP timer handler [%p] was removed", node->handler);
-
-    free(node);
+void tcp_timers_collection::register_wakeup_event()
+{
+    g_p_event_handler_manager->wakeup_timer_event(this, m_timer_handle);
 }
 
 thread_local_tcp_timers::thread_local_tcp_timers()
-    : tcp_timers_collection(safe_mce_sys().tcp_timer_resolution_msec,
-                            safe_mce_sys().tcp_timer_resolution_msec)
+    : tcp_timers_collection(1)
 {
 }
 
