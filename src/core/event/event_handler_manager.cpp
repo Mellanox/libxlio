@@ -42,7 +42,7 @@
 #include "timer_handler.h"
 #include "event_handler_ibverbs.h"
 #include "event_handler_rdma_cm.h"
-
+#include "core/sock/sockinfo_tcp.h"
 #include "core/util/instrumentation.h"
 
 #define MODULE_NAME "evh:"
@@ -86,8 +86,7 @@ event_handler_manager *g_p_event_handler_manager = nullptr;
 pthread_t g_n_internal_thread_id = 0;
 
 void *event_handler_manager::register_timer_event(int timeout_msec, timer_handler *handler,
-                                                  timer_req_type_t req_type, void *user_data,
-                                                  timers_group *group /* = NULL */)
+                                                  timer_req_type_t req_type, void *user_data)
 {
     evh_logdbg("timer handler '%p' registered %s timer for %d msec (user data: %p)", handler,
                timer_req_type_str(req_type), timeout_msec, user_data);
@@ -115,12 +114,21 @@ void *event_handler_manager::register_timer_event(int timeout_msec, timer_handle
     reg_action.type = REGISTER_TIMER;
     reg_action.info.timer.handler = handler;
     reg_action.info.timer.user_data = user_data;
-    reg_action.info.timer.group = group;
     reg_action.info.timer.node = node;
     reg_action.info.timer.timeout_msec = timeout_msec;
     reg_action.info.timer.req_type = req_type;
     post_new_reg_action(reg_action);
     return node;
+}
+
+void event_handler_manager::register_socket_timer_event(sockinfo_tcp *sock_tcp)
+{
+    evh_logdbg("Registering TCP socket timer: %p", sock_tcp);
+    reg_action_t reg_action;
+    memset(&reg_action, 0, sizeof(reg_action));
+    reg_action.type = REGISTER_TCP_SOCKET_TIMER;
+    reg_action.info.timer.user_data = sock_tcp;
+    post_new_reg_action(reg_action);
 }
 
 void event_handler_manager::wakeup_timer_event(timer_handler *handler, void *node)
@@ -138,7 +146,6 @@ void event_handler_manager::wakeup_timer_event(timer_handler *handler, void *nod
     reg_action.info.timer.handler = handler;
     reg_action.info.timer.node = node;
     post_new_reg_action(reg_action);
-    return;
 }
 
 void event_handler_manager::unregister_timer_event(timer_handler *handler, void *node)
@@ -172,6 +179,16 @@ void event_handler_manager::unregister_timers_event_and_delete(timer_handler *ha
     memset(&reg_action, 0, sizeof(reg_action));
     reg_action.type = UNREGISTER_TIMERS_AND_DELETE;
     reg_action.info.timer.handler = handler;
+    post_new_reg_action(reg_action);
+}
+
+void event_handler_manager::unregister_socket_timer_and_delete(sockinfo_tcp *sock_tcp)
+{
+    evh_logdbg("Unregistering TCP socket timer: %p", sock_tcp);
+    reg_action_t reg_action;
+    memset(&reg_action, 0, sizeof(reg_action));
+    reg_action.type = UNREGISTER_TCP_SOCKET_TIMER_AND_DELETE;
+    reg_action.info.timer.user_data = sock_tcp;
     post_new_reg_action(reg_action);
 }
 
@@ -425,6 +442,10 @@ void event_handler_manager::update_epfd(int fd, int operation, int events)
 const char *event_handler_manager::reg_action_str(event_action_type_e reg_action_type)
 {
     switch (reg_action_type) {
+    case REGISTER_TCP_SOCKET_TIMER:
+        return "REGISTER_TCP_SOCKET_TIMER";
+    case UNREGISTER_TCP_SOCKET_TIMER_AND_DELETE:
+        return "UNREGISTER_TCP_SOCKET_TIMER_AND_DELETE";
     case REGISTER_TIMER:
         return "REGISTER_TIMER";
     case UNREGISTER_TIMER:
@@ -475,30 +496,18 @@ void event_handler_manager::post_new_reg_action(reg_action_t &reg_action)
 
 void event_handler_manager::priv_register_timer_handler(timer_reg_info_t &info)
 {
-    if (info.group) {
-        info.group->add_new_timer((timer_node_t *)info.node, info.handler, info.user_data);
-    } else {
-        m_timer.add_new_timer(info.timeout_msec, (timer_node_t *)info.node, info.handler,
-                              info.user_data, info.req_type);
-    }
+    m_timer.add_new_timer(info.timeout_msec, (timer_node_t *)info.node, info.handler,
+                          info.user_data, info.req_type);
 }
 
 void event_handler_manager::priv_wakeup_timer_handler(timer_reg_info_t &info)
 {
-    timer_node_t *node = (timer_node_t *)info.node;
-    if (node && !node->group) {
-        m_timer.wakeup_timer(node);
-    }
+    m_timer.wakeup_timer((timer_node_t *)info.node);
 }
 
 void event_handler_manager::priv_unregister_timer_handler(timer_reg_info_t &info)
 {
-    timer_node_t *node = (timer_node_t *)info.node;
-    if (node && node->group) {
-        node->group->remove_timer((timer_node_t *)info.node);
-    } else {
-        m_timer.remove_timer(node, info.handler);
-    }
+    m_timer.remove_timer((timer_node_t *)info.node, info.handler);
 }
 
 void event_handler_manager::priv_unregister_all_handler_timers(timer_reg_info_t &info)
@@ -729,7 +738,17 @@ void event_handler_manager::handle_registration_action(reg_action_t &reg_action)
     }
 
     evh_logfunc("event action %d", reg_action.type);
+    sockinfo_tcp *sock;
     switch (reg_action.type) {
+    case REGISTER_TCP_SOCKET_TIMER:
+        sock = reinterpret_cast<sockinfo_tcp *>(reg_action.info.timer.user_data);
+        sock->get_tcp_timer_collection()->add_new_timer(sock);
+        break;
+    case UNREGISTER_TCP_SOCKET_TIMER_AND_DELETE:
+        sock = reinterpret_cast<sockinfo_tcp *>(reg_action.info.timer.user_data);
+        sock->get_tcp_timer_collection()->remove_timer(sock);
+        delete sock;
+        break;
     case REGISTER_TIMER:
         priv_register_timer_handler(reg_action.info.timer);
         break;
