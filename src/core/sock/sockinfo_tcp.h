@@ -127,7 +127,7 @@ enum inet_ecns {
     INET_ECN_MASK = 3,
 };
 
-class sockinfo_tcp : public sockinfo, public timer_handler {
+class sockinfo_tcp : public sockinfo {
 public:
     static inline size_t accepted_conns_node_offset(void)
     {
@@ -284,7 +284,7 @@ public:
 
     virtual inline fd_type_t get_type() { return FD_TYPE_SOCKET; }
 
-    void handle_timer_expired(void *user_data);
+    void handle_timer_expired();
 
     inline ib_ctx_handler *get_ctx(void)
     {
@@ -322,7 +322,6 @@ public:
     inline int trylock_tcp_con(void) { return m_tcp_con_lock.trylock(); }
     inline void lock_tcp_con(void) { m_tcp_con_lock.lock(); }
     inline void unlock_tcp_con(void) { m_tcp_con_lock.unlock(); }
-    inline bool is_timer_registered() const { return (m_timer_handle != nullptr); }
     inline void set_reguired_send_block(unsigned sz) { m_required_send_block = sz; }
     static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
     static err_t rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
@@ -571,7 +570,6 @@ private:
     uint32_t m_ready_conn_cnt;
     int m_backlog;
 
-    void *m_timer_handle;
     multilock m_tcp_con_lock;
 
     // used for reporting 'connected' on second non-blocking call to connect or
@@ -606,36 +604,37 @@ private:
 };
 typedef struct tcp_seg tcp_seg;
 
-class tcp_timers_collection : public timers_group, public cleanable_obj {
+class tcp_timers_collection : public timer_handler, public cleanable_obj {
 public:
-    tcp_timers_collection(int period, int resolution);
+    tcp_timers_collection();
+    tcp_timers_collection(int intervals);
     virtual ~tcp_timers_collection();
 
-    void clean_obj();
+    virtual void clean_obj() override;
 
-    virtual void handle_timer_expired(void *user_data);
+    virtual void handle_timer_expired(void *user_data) override;
+
+    void register_wakeup_event();
+
+    void add_new_timer(sockinfo_tcp *sock);
+
+    void remove_timer(sockinfo_tcp *sock);
 
 protected:
-    // add a new timer
-    void add_new_timer(timer_node_t *node, timer_handler *handler, void *user_data);
 
-    // remove timer from list and free it.
-    // called for stopping (unregistering) a timer
-    void remove_timer(timer_node_t *node);
-
-    void *m_timer_handle;
+    void *m_timer_handle = nullptr;
 
 private:
-    timer_node_t **m_p_intervals;
-
-    int m_n_period;
-    int m_n_resolution;
-    int m_n_intervals_size;
-    int m_n_location;
-    int m_n_count;
-    int m_n_next_insert_bucket;
-
     void free_tta_resources();
+
+    typedef std::list<sockinfo_tcp *> sock_list;
+    typedef typename sock_list::iterator sock_list_itr;
+    std::vector<sock_list> m_p_intervals;
+    std::unordered_map<sockinfo_tcp *, std::tuple<uint32_t, sock_list_itr>> m_sock_remove_map;
+    int m_n_intervals_size;
+    int m_n_location = 0;
+    int m_n_count = 0;
+    int m_n_next_insert_bucket = 0;
 };
 
 class thread_local_tcp_timers : public tcp_timers_collection {
@@ -645,6 +644,5 @@ public:
 };
 
 extern tcp_timers_collection *g_tcp_timers_collection;
-extern thread_local thread_local_tcp_timers g_thread_local_tcp_timers;
-
+extern tcp_timers_collection *get_tcp_timer_collection();
 #endif

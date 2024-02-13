@@ -215,7 +215,6 @@ libxlio_la_SOURCES := \
 	event/event_handler_rdma_cm.h \
 	event/netlink_event.h \
 	event/timer_handler.h \
-	event/timers_group.h \
 	event/vlogger_timer_handler.h \
 	\
 	ib/base/verbs_extra.h \
