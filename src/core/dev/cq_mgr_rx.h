@@ -86,7 +86,7 @@ public:
     void configure(int cq_size);
 
     ibv_cq *get_ibv_cq_hndl() { return m_p_ibv_cq; }
-    int get_channel_fd() { return m_comp_event_channel->fd; }
+    int get_channel_fd() { return m_comp_event_channel ? m_comp_event_channel->fd : 0; }
 
     /**
      * Arm the managed CQ's notification channel
