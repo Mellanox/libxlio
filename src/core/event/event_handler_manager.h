@@ -42,17 +42,19 @@
 #include "core/infra/subject_observer.h"
 #include "core/event/command.h"
 #include "core/event/delta_timer.h"
-#include "core/event/timers_group.h"
 #include "core/util/xlio_stats.h"
 
 class timer_handler;
 class event_handler_ibverbs;
 class event_handler_rdma_cm;
+class sockinfo_tcp;
 
 typedef std::map<void * /*event_handler_id*/, event_handler_rdma_cm * /*p_event_handler*/>
     event_handler_rdma_cm_map_t;
 
 typedef enum {
+    REGISTER_TCP_SOCKET_TIMER,
+    UNREGISTER_TCP_SOCKET_TIMER_AND_DELETE,
     REGISTER_TIMER,
     WAKEUP_TIMER, /* NOT AVAILABLE FOR GROUPED TIMERS */
     UNREGISTER_TIMER,
@@ -94,7 +96,6 @@ struct timer_reg_info_t {
     void *node;
     unsigned int timeout_msec;
     void *user_data;
-    timers_group *group;
     timer_req_type_t req_type;
 };
 
@@ -158,10 +159,13 @@ public:
     ~event_handler_manager();
 
     void *register_timer_event(int timeout_msec, timer_handler *handler, timer_req_type_t req_type,
-                               void *user_data, timers_group *group = nullptr);
+                               void *user_data);
     void wakeup_timer_event(timer_handler *handler, void *node);
     void unregister_timer_event(timer_handler *handler, void *node);
     void unregister_timers_event_and_delete(timer_handler *handler);
+
+    void register_socket_timer_event(sockinfo_tcp *sock_tcp);
+    void unregister_socket_timer_and_delete(sockinfo_tcp *sock_tcp);
 
     void register_ibverbs_event(int fd, event_handler_ibverbs *handler, void *channel,
                                 void *user_data);

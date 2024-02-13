@@ -59,8 +59,7 @@ poll_group::poll_group(const struct xlio_poll_group_attr *attr)
     m_rings.reserve(2);
 
     m_event_handler = std::make_unique<event_handler_manager_local>();
-    m_tcp_timers = std::make_unique<tcp_timers_collection>(
-        safe_mce_sys().tcp_timer_resolution_msec, safe_mce_sys().tcp_timer_resolution_msec);
+    m_tcp_timers = std::make_unique<tcp_timers_collection>(1U);
     m_tcp_timers->set_group(this);
 }
 
