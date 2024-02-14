@@ -106,7 +106,7 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     if (unlikely(m_rx_epfd == -1)) {
         throw_xlio_exception("create internal epoll");
     }
-    wakeup_set_epoll_fd(m_rx_epfd);
+    m_sock_wakeup_pipe.wakeup_set_epoll_fd(m_rx_epfd);
     if (m_fd == SOCKET_FAKE_FD) {
         m_fd = m_rx_epfd;
         m_fd_context = (void *)((uintptr_t)m_fd);
@@ -1587,8 +1587,8 @@ void sockinfo::rx_add_ring_cb(ring *p_ring)
             add_cqfd_to_sock_rx_epfd(p_ring);
         }
 
-        do_wakeup(); // A ready wce can be pending due to the drain logic (cq channel will not wake
-                     // up by itself)
+        // A ready wce can be pending due to the drain logic (cq channel will not wake up by itself)
+        m_sock_wakeup_pipe.do_wakeup();
     } else {
         // Increase ref count on cq_mgr_rx object
         rx_ring_iter->second->refcnt++;
