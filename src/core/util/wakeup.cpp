@@ -49,21 +49,21 @@
 #undef MODULE_HDR_INFO
 #define MODULE_HDR_INFO MODULE_NAME "[epfd=%d]:%d:%s() "
 #undef __INFO__
-#define __INFO__ m_epfd
+#define __INFO__ m_wakeup_epfd
 
 wakeup::wakeup()
 {
-    m_epfd = 0;
+    m_wakeup_epfd = 0;
     m_is_sleeping = 0;
     memset(&m_ev, 0, sizeof(m_ev));
 }
 void wakeup::going_to_sleep()
 {
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (likely(m_epfd)) {
+    if (likely(m_wakeup_epfd)) {
         m_is_sleeping++;
     } else {
-        wkup_logerr(" m_epfd is not initialized - cannot use wakeup mechanism\n");
+        wkup_logerr(" m_wakeup_epfd is not initialized - cannot use wakeup mechanism\n");
         m_is_sleeping = 0;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
@@ -71,5 +71,5 @@ void wakeup::going_to_sleep()
 
 void wakeup::wakeup_set_epoll_fd(int epfd)
 {
-    m_epfd = epfd;
+    m_wakeup_epfd = epfd;
 }
