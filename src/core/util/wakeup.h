@@ -48,15 +48,11 @@ public:
     void going_to_sleep();
     void return_from_sleep() { --m_is_sleeping; };
     void wakeup_clear() { m_is_sleeping = 0; }
+    void wakeup_set_epoll_fd(int epfd);
 
 protected:
-    virtual void wakeup_set_epoll_fd(int epfd);
     int m_is_sleeping;
-
-    // lock_spin_recursive m_wakeup_lock; This lock is not needed for now. Maybe we will need it for
-    // epoll.
-
-    int m_epfd;
+    int m_wakeup_epfd;
     struct epoll_event m_ev;
 };
 
