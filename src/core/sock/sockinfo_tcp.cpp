@@ -400,7 +400,7 @@ sockinfo_tcp::~sockinfo_tcp()
         prepare_to_close(true);
     }
 
-    do_wakeup();
+    m_sock_wakeup_pipe.do_wakeup();
 
     if (m_ops_tcp != m_ops) {
         delete m_ops_tcp;
@@ -625,7 +625,7 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
     m_state = SOCKINFO_CLOSING;
     NOTIFY_ON_EVENTS(this, EPOLLHUP);
 
-    do_wakeup();
+    m_sock_wakeup_pipe.do_wakeup();
 
     if (m_econtext) {
         m_econtext->fd_closed(m_fd);
@@ -1480,7 +1480,7 @@ void sockinfo_tcp::err_lwip_cb(void *pcb_container, err_t err)
         conn->m_sock_state = TCP_SOCK_INITED;
     }
 
-    conn->do_wakeup();
+    conn->m_sock_wakeup_pipe.do_wakeup();
 }
 
 bool sockinfo_tcp::process_peer_ctl_packets(xlio_desc_list_t &peer_packets)
@@ -1780,7 +1780,7 @@ void sockinfo_tcp::tcp_shutdown_rx(void)
      * null in such case and as a result update_fd_array() call means nothing
      */
     io_mux_call::update_fd_array(m_iomux_ready_fd_array, m_fd);
-    do_wakeup();
+    m_sock_wakeup_pipe.do_wakeup();
 
     tcp_shutdown(&m_pcb, 1, 0);
 
@@ -1830,7 +1830,7 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
     io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
 
     // OLG: Now we should wakeup all threads that are sleeping on this socket.
-    conn->do_wakeup();
+    conn->m_sock_wakeup_pipe.do_wakeup();
 
     /*
      * RCVBUFF Accounting: tcp_recved here(stream into the 'internal' buffer) only if the user
@@ -1939,7 +1939,7 @@ inline void sockinfo_tcp::handle_rx_lwip_cb_error(pbuf *p)
     // notify io_mux
     NOTIFY_ON_EVENTS(this, EPOLLERR);
 
-    do_wakeup();
+    m_sock_wakeup_pipe.do_wakeup();
     vlog_printf(VLOG_ERROR, "%s:%d %s\n", __func__, __LINE__, "recv error!!!");
     pbuf_free(p);
     m_sock_state = TCP_SOCK_INITED;
@@ -2049,7 +2049,7 @@ err_t sockinfo_tcp::rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *pcb, stru
 
     conn->rx_lwip_cb_socketxtreme_helper(p);
     io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
-    conn->do_wakeup();
+    conn->m_sock_wakeup_pipe.do_wakeup();
     /*
      * RCVBUFF Accounting: tcp_recved here(stream into the 'internal' buffer) only if the user
      * buffer is not 'filled'
@@ -2140,7 +2140,7 @@ err_t sockinfo_tcp::rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, str
 
         if (callback_retval != XLIO_PACKET_HOLD) {
             // OLG: Now we should wakeup all threads that are sleeping on this socket.
-            conn->do_wakeup();
+            conn->m_sock_wakeup_pipe.do_wakeup();
         } else {
             conn->m_p_socket_stats->n_rx_zcopy_pkt_count++;
         }
@@ -3361,7 +3361,7 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     conn->m_p_socket_stats->listen_counters.n_conn_backlog++;
 
     // OLG: Now we should wakeup all threads that are sleeping on this socket.
-    conn->do_wakeup();
+    conn->m_sock_wakeup_pipe.do_wakeup();
     // Now we should register the child socket to TCP timer
 
     conn->unlock_tcp_con();
@@ -3516,7 +3516,7 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     tcp_err(&new_sock->m_pcb, sockinfo_tcp::err_lwip_cb);
     tcp_sent(&new_sock->m_pcb, sockinfo_tcp::ack_recvd_lwip_cb);
     new_sock->m_pcb.syn_tw_handled_cb = nullptr;
-    new_sock->wakeup_clear();
+    new_sock->m_sock_wakeup_pipe.wakeup_clear();
     if (tcp_ctl_thread_on(new_sock->m_sysvar_tcp_ctl_thread)) {
         tcp_ip_output(&new_sock->m_pcb, sockinfo_tcp::ip_output_syn_ack);
     }
@@ -3698,7 +3698,7 @@ err_t sockinfo_tcp::connect_lwip_cb(void *arg, struct tcp_pcb *tpcb, err_t err)
 
     NOTIFY_ON_EVENTS(conn, EPOLLOUT);
     // OLG: Now we should wakeup all threads that are sleeping on this socket.
-    conn->do_wakeup();
+    conn->m_sock_wakeup_pipe.do_wakeup();
 
     conn->m_p_socket_stats->set_connected_ip(conn->m_connected);
     conn->m_p_socket_stats->connected_port = conn->m_connected.get_in_port();
@@ -4013,7 +4013,7 @@ int sockinfo_tcp::shutdown(int __how)
         }
     }
 
-    do_wakeup();
+    m_sock_wakeup_pipe.do_wakeup();
 
     if (err == ERR_OK) {
         unlock_tcp_con();
@@ -5089,7 +5089,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
 
     lock_tcp_con();
     if (!m_n_rx_pkt_ready_list_count && !m_ready_conn_cnt) {
-        going_to_sleep();
+        m_sock_wakeup_pipe.going_to_sleep();
         unlock_tcp_con();
     } else {
         unlock_tcp_con();
@@ -5099,7 +5099,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
     ret = os_wait_sock_rx_epfd(rx_epfd_events, SI_RX_EPFD_EVENT_MAX);
 
     lock_tcp_con();
-    return_from_sleep();
+    m_sock_wakeup_pipe.return_from_sleep();
     unlock_tcp_con();
 
     if (ret <= 0) {
@@ -5113,9 +5113,9 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
 
     for (int event_idx = 0; event_idx < ret; event_idx++) {
         int fd = rx_epfd_events[event_idx].data.fd;
-        if (is_wakeup_fd(fd)) { // wakeup event
+        if (m_sock_wakeup_pipe.is_wakeup_fd(fd)) { // wakeup event
             lock_tcp_con();
-            remove_wakeup_fd();
+            m_sock_wakeup_pipe.remove_wakeup_fd();
             unlock_tcp_con();
             continue;
         }
@@ -5705,7 +5705,7 @@ void sockinfo_tcp::tcp_tx_zc_handle(mem_buf_desc_t *p_desc)
 
     /* Signal events on socket */
     NOTIFY_ON_EVENTS(sock, EPOLLERR);
-    sock->do_wakeup();
+    sock->m_sock_wakeup_pipe.do_wakeup();
 }
 
 struct tcp_seg *sockinfo_tcp::tcp_seg_alloc_direct(void *p_conn)

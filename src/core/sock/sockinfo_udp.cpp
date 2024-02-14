@@ -204,7 +204,7 @@ inline int sockinfo_udp::rx_wait(bool blocking)
         /* coverity[double_lock] TODO: RM#1049980 */
         m_lock_rcv.lock();
         if (!m_n_rx_pkt_ready_list_count) {
-            going_to_sleep();
+            m_sock_wakeup_pipe.going_to_sleep();
             /* coverity[double_unlock] TODO: RM#1049980 */
             m_lock_rcv.unlock();
         } else {
@@ -216,7 +216,7 @@ inline int sockinfo_udp::rx_wait(bool blocking)
 
         /* coverity[double_lock] TODO: RM#1049980 */
         m_lock_rcv.lock();
-        return_from_sleep();
+        m_sock_wakeup_pipe.return_from_sleep();
         /* coverity[double_unlock] TODO: RM#1049980 */
         m_lock_rcv.unlock();
 
@@ -253,10 +253,10 @@ inline int sockinfo_udp::rx_wait(bool blocking)
             // Run through all ready fd's
             for (int event_idx = 0; event_idx < ret; ++event_idx) {
                 int fd = rx_epfd_events[event_idx].data.fd;
-                if (is_wakeup_fd(fd)) {
+                if (m_sock_wakeup_pipe.is_wakeup_fd(fd)) {
                     /* coverity[double_lock] TODO: RM#1049980 */
                     m_lock_rcv.lock();
-                    remove_wakeup_fd();
+                    m_sock_wakeup_pipe.remove_wakeup_fd();
                     /* coverity[double_unlock] TODO: RM#1049980 */
                     m_lock_rcv.unlock();
                     continue;
@@ -461,7 +461,7 @@ sockinfo_udp::~sockinfo_udp()
         }
     */
     m_lock_rcv.lock();
-    do_wakeup();
+    m_sock_wakeup_pipe.do_wakeup();
 
     destructor_helper();
 
@@ -2336,7 +2336,7 @@ inline void sockinfo_udp::update_ready(mem_buf_desc_t *p_desc, void *pv_fd_ready
         m_p_socket_stats->counters.n_rx_ready_byte_max =
             std::max((uint32_t)m_p_socket_stats->n_rx_ready_byte_count,
                      m_p_socket_stats->counters.n_rx_ready_byte_max);
-        do_wakeup();
+        m_sock_wakeup_pipe.do_wakeup();
         m_lock_rcv.unlock();
     } else {
         m_p_socket_stats->n_rx_zcopy_pkt_count++;
@@ -3233,7 +3233,7 @@ void sockinfo_udp::push_back_m_rx_pkt_ready_list(mem_buf_desc_t *buff)
 bool sockinfo_udp::prepare_to_close(bool process_shutdown)
 {
     m_lock_rcv.lock();
-    do_wakeup();
+    m_sock_wakeup_pipe.do_wakeup();
 
     if (m_econtext) {
         m_econtext->fd_closed(m_fd);

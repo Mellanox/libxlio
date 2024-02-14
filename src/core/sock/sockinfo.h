@@ -153,8 +153,7 @@ typedef std::unordered_map<ring *, ring_info_t *> rx_ring_map_t;
 // see route.c in Linux kernel
 const uint8_t ip_tos2prio[16] = {0, 0, 0, 0, 2, 2, 2, 2, 6, 6, 6, 6, 4, 4, 4, 4};
 
-class sockinfo : public socket_fd_api,
-                 public wakeup_pipe {
+class sockinfo : public socket_fd_api {
 public:
     sockinfo(int fd, int domain, bool use_ring_locks);
     virtual ~sockinfo();
@@ -587,6 +586,7 @@ protected:
     sa_family_t m_family;
     sock_addr m_bound;
     sock_addr m_connected;
+    wakeup_pipe m_sock_wakeup_pipe;
     dst_entry *m_p_connected_dst_entry;
     ip_addr m_so_bindtodevice_ip;
 
