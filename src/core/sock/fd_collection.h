@@ -41,11 +41,11 @@
 #include "event/event_handler_manager.h"
 #include "event/timer_handler.h"
 #include "sock/cleanable_obj.h"
-#include "sock/socket_fd_api.h"
+#include "sock/sockinfo.h"
 #include "iomux/epfd_info.h"
 #include "utils/lock_wrapper.h"
 
-typedef xlio_list_t<socket_fd_api, socket_fd_api::pendig_to_remove_node_offset> sock_fd_api_list_t;
+typedef xlio_list_t<sockinfo, sockinfo::pendig_to_remove_node_offset> sock_fd_api_list_t;
 typedef xlio_list_t<epfd_info, epfd_info::epfd_info_node_offset> epfd_info_list_t;
 
 typedef std::unordered_map<pthread_t, int> offload_thread_rule_t;
@@ -137,12 +137,12 @@ public:
      */
     inline bool set_immediate_os_sample(int fd);
 
-    inline void reuse_sockfd(int fd, socket_fd_api *p_sfd_api_obj);
-    inline void destroy_sockfd(socket_fd_api *p_sfd_api_obj);
+    inline void reuse_sockfd(int fd, sockinfo *p_sfd_api_obj);
+    inline void destroy_sockfd(sockinfo *p_sfd_api_obj);
     /**
      * Get sock_fd_api (sockinfo) by fd.
      */
-    inline socket_fd_api *get_sockfd(int fd);
+    inline sockinfo *get_sockfd(int fd);
 
     /**
      * Get epfd_info by fd.
@@ -184,13 +184,13 @@ public:
 
 #if defined(DEFINED_NGINX)
     bool pop_socket_pool(int &fd, bool &add_to_udp_pool, int type);
-    void push_socket_pool(socket_fd_api *sockfd);
+    void push_socket_pool(sockinfo *sockfd);
     void handle_socket_pool(int fd);
 #endif
 private:
     template <typename cls> int del(int fd, bool b_cleanup, cls **map_type);
     template <typename cls> inline cls *get(int fd, cls **map_type);
-    int del_socket(int fd, socket_fd_api **map_type);
+    int del_socket(int fd, sockinfo **map_type);
     inline bool is_valid_fd(int fd);
 
     inline bool create_offloaded_sockets();
@@ -206,7 +206,7 @@ private:
 
 private:
     int m_n_fd_map_size;
-    socket_fd_api **m_p_sockfd_map;
+    sockinfo **m_p_sockfd_map;
     epfd_info **m_p_epfd_map;
     cq_channel_info **m_p_cq_channel_map;
     ring_tap **m_p_tap_map;
@@ -223,7 +223,7 @@ private:
 
 #if defined(DEFINED_NGINX)
     bool m_use_socket_pool;
-    std::stack<socket_fd_api *> m_socket_pool;
+    std::stack<sockinfo *> m_socket_pool;
     int m_socket_pool_size;
     int m_socket_pool_counter;
 #endif
@@ -270,7 +270,7 @@ inline bool fd_collection::set_immediate_os_sample(int fd)
     return false;
 }
 
-inline void fd_collection::reuse_sockfd(int fd, socket_fd_api *p_sfd_api_obj)
+inline void fd_collection::reuse_sockfd(int fd, sockinfo *p_sfd_api_obj)
 {
     lock();
     m_pending_to_remove_lst.erase(p_sfd_api_obj);
@@ -279,7 +279,7 @@ inline void fd_collection::reuse_sockfd(int fd, socket_fd_api *p_sfd_api_obj)
     unlock();
 }
 
-inline void fd_collection::destroy_sockfd(socket_fd_api *p_sfd_api_obj)
+inline void fd_collection::destroy_sockfd(sockinfo *p_sfd_api_obj)
 {
     lock();
     --g_global_stat_static.n_pending_sockets;
@@ -288,7 +288,7 @@ inline void fd_collection::destroy_sockfd(socket_fd_api *p_sfd_api_obj)
     unlock();
 }
 
-inline socket_fd_api *fd_collection::get_sockfd(int fd)
+inline sockinfo *fd_collection::get_sockfd(int fd)
 {
     return get(fd, m_p_sockfd_map);
 }
@@ -315,7 +315,7 @@ inline int fd_collection::get_fd_map_size()
 
 extern fd_collection *g_p_fd_collection;
 
-inline socket_fd_api *fd_collection_get_sockfd(int fd)
+inline sockinfo *fd_collection_get_sockfd(int fd)
 {
     if (g_p_fd_collection) {
         return g_p_fd_collection->get_sockfd(fd);

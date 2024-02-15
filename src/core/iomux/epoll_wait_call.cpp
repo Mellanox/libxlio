@@ -36,7 +36,7 @@
 
 #include <util/vtypes.h>
 #include <sock/sock-redirect.h>
-#include <sock/socket_fd_api.h>
+#include <sock/sockinfo.h>
 #include <sock/fd_collection.h>
 
 #include "epfd_info.h"
@@ -85,11 +85,11 @@ int epoll_wait_call::get_current_events()
         return m_n_all_ready_fds;
     }
 
-    xlio_list_t<socket_fd_api, socket_fd_api::socket_fd_list_node_offset> socket_fd_list;
+    xlio_list_t<sockinfo, sockinfo::socket_fd_list_node_offset> socket_fd_list;
     lock();
     int i, ready_rfds = 0, ready_wfds = 0;
     i = m_n_all_ready_fds;
-    socket_fd_api *p_socket_object;
+    sockinfo *p_socket_object;
     ep_ready_fd_list_t::iterator iter = m_epfd_info->m_ready_fds.begin();
     while (iter != m_epfd_info->m_ready_fds.end() && i < m_maxevents) {
         p_socket_object = *iter;
@@ -165,7 +165,7 @@ int epoll_wait_call::get_current_events()
      * see RM task 212058
      */
     while (!socket_fd_list.empty()) {
-        socket_fd_api *sockfd = socket_fd_list.get_and_pop_front();
+        sockinfo *sockfd = socket_fd_list.get_and_pop_front();
         sockfd->consider_rings_migration_rx();
     }
 
@@ -235,7 +235,7 @@ bool epoll_wait_call::_wait(int timeout)
         }
 
         if (m_p_ready_events[i].events & EPOLLIN) {
-            socket_fd_api *temp_sock_fd_api = fd_collection_get_sockfd(fd);
+            sockinfo *temp_sock_fd_api = fd_collection_get_sockfd(fd);
             if (temp_sock_fd_api) {
                 // Instructing the socket to sample the OS immediately to prevent hitting EAGAIN on
                 // recvfrom(), after iomux returned a shadow fd as ready (only for non-blocking
@@ -343,8 +343,8 @@ bool epoll_wait_call::immidiate_return(int &poll_os_countdown)
     return false;
 }
 
-bool epoll_wait_call::handle_epoll_event(bool is_ready, uint32_t events,
-                                         socket_fd_api *socket_object, int index)
+bool epoll_wait_call::handle_epoll_event(bool is_ready, uint32_t events, sockinfo *socket_object,
+                                         int index)
 {
     if (is_ready) {
         epoll_fd_rec &fd_rec = socket_object->m_fd_rec;

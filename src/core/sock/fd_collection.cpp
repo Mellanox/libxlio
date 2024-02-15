@@ -36,7 +36,7 @@
 #include "util/libxlio.h"
 #include "fd_collection.h"
 #include "sock-redirect.h"
-#include "socket_fd_api.h"
+#include "sockinfo.h"
 #include "sockinfo_udp.h"
 #include "sockinfo_tcp.h"
 #include "iomux/epfd_info.h"
@@ -75,8 +75,8 @@ fd_collection::fd_collection()
     }
     fdcoll_logdbg("using open files max limit of %d file descriptors", m_n_fd_map_size);
 
-    m_p_sockfd_map = new socket_fd_api *[m_n_fd_map_size];
-    memset(m_p_sockfd_map, 0, m_n_fd_map_size * sizeof(socket_fd_api *));
+    m_p_sockfd_map = new sockinfo *[m_n_fd_map_size];
+    memset(m_p_sockfd_map, 0, m_n_fd_map_size * sizeof(sockinfo *));
 
     m_p_epfd_map = new epfd_info *[m_n_fd_map_size];
     memset(m_p_epfd_map, 0, m_n_fd_map_size * sizeof(epfd_info *));
@@ -120,7 +120,7 @@ void fd_collection::prepare_to_close()
     for (int fd = 0; fd < m_n_fd_map_size; ++fd) {
         if (m_p_sockfd_map[fd]) {
             if (!g_is_forked_child) {
-                socket_fd_api *p_sfd_api = get_sockfd(fd);
+                sockinfo *p_sfd_api = get_sockfd(fd);
                 if (p_sfd_api) {
                     p_sfd_api->prepare_to_close(true);
                 }
@@ -147,7 +147,7 @@ void fd_collection::clear()
      * these sockets can not be deleted through the it.
      */
     while (!m_pending_to_remove_lst.empty()) {
-        socket_fd_api *p_sfd_api = m_pending_to_remove_lst.get_and_pop_back();
+        sockinfo *p_sfd_api = m_pending_to_remove_lst.get_and_pop_back();
         p_sfd_api->clean_socket_obj();
     }
 
@@ -158,7 +158,7 @@ void fd_collection::clear()
     for (fd = 0; fd < m_n_fd_map_size; ++fd) {
         if (m_p_sockfd_map[fd]) {
             if (!g_is_forked_child) {
-                socket_fd_api *p_sfd_api = get_sockfd(fd);
+                sockinfo *p_sfd_api = get_sockfd(fd);
                 if (p_sfd_api) {
                     p_sfd_api->statistics_print();
                     p_sfd_api->clean_socket_obj();
@@ -203,7 +203,7 @@ int fd_collection::addsocket(int fd, int domain, int type, bool check_offload /*
     const int SOCK_TYPE_MASK = 0xf;
     int sock_type = type & SOCK_TYPE_MASK;
     int sock_flags = type & ~SOCK_TYPE_MASK;
-    socket_fd_api *p_sfd_api_obj;
+    sockinfo *p_sfd_api_obj;
 
     fdcoll_logfunc("fd=%d domain=%d type=%d", fd, domain, type);
 
@@ -311,7 +311,7 @@ void fd_collection::offloading_rule_change_thread(bool offloaded, pthread_t tid)
 
 void fd_collection::statistics_print_helper(int fd, vlog_levels_t log_level)
 {
-    socket_fd_api *socket_fd;
+    sockinfo *socket_fd;
     epfd_info *epoll_fd;
 
     if ((socket_fd = get_sockfd(fd))) {
@@ -428,7 +428,7 @@ int fd_collection::add_cq_channel_fd(int cq_ch_fd, ring *p_ring)
     BULLSEYE_EXCLUDE_BLOCK_END
 
     // Sanity check to remove any old objects using the same fd!!
-    socket_fd_api *p_cq_ch_fd_api_obj = get_sockfd(cq_ch_fd);
+    sockinfo *p_cq_ch_fd_api_obj = get_sockfd(cq_ch_fd);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (p_cq_ch_fd_api_obj) {
         fdcoll_logwarn("[fd=%d] Deleting old duplicate object (%p)", cq_ch_fd, p_cq_ch_fd_api_obj);
@@ -468,7 +468,7 @@ int fd_collection::add_cq_channel_fd(int cq_ch_fd, ring *p_ring)
 int fd_collection::del_sockfd(int fd, bool is_for_udp_pool /*=false*/)
 {
     int ret_val = -1;
-    socket_fd_api *p_sfd_api;
+    sockinfo *p_sfd_api;
 
     p_sfd_api = get_sockfd(fd);
 
@@ -559,7 +559,7 @@ template <typename cls> int fd_collection::del(int fd, bool b_cleanup, cls **map
     return -1;
 }
 
-int fd_collection::del_socket(int fd, socket_fd_api **map_type)
+int fd_collection::del_socket(int fd, sockinfo **map_type)
 {
     fdcoll_logfunc("fd=%d", fd);
 
@@ -568,7 +568,7 @@ int fd_collection::del_socket(int fd, socket_fd_api **map_type)
     }
 
     lock();
-    socket_fd_api *p_obj = map_type[fd];
+    sockinfo *p_obj = map_type[fd];
     if (p_obj) {
         map_type[fd] = nullptr;
         unlock();
@@ -595,7 +595,7 @@ void fd_collection::remove_from_all_epfds(int fd, bool passthrough)
 }
 
 #if defined(DEFINED_NGINX)
-void fd_collection::push_socket_pool(socket_fd_api *sockfd)
+void fd_collection::push_socket_pool(sockinfo *sockfd)
 {
     lock();
     sockfd->prepare_to_close_socket_pool(true);
@@ -618,7 +618,7 @@ bool fd_collection::pop_socket_pool(int &fd, bool &add_to_udp_pool, int type)
     lock();
     if (!m_socket_pool.empty()) {
         // use fd from pool - will skip creation of new fd by os
-        socket_fd_api *sockfd = m_socket_pool.top();
+        sockinfo *sockfd = m_socket_pool.top();
         fd = sockfd->get_fd();
         if (!m_p_sockfd_map[fd]) {
             m_p_sockfd_map[fd] = sockfd;
@@ -649,7 +649,7 @@ void fd_collection::handle_socket_pool(int fd)
         return;
     }
 
-    socket_fd_api *sockfd = get_sockfd(fd);
+    sockinfo *sockfd = get_sockfd(fd);
     if (sockfd) {
         ++m_socket_pool_counter;
         sockfd->set_params_for_socket_pool();

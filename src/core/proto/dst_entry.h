@@ -55,6 +55,7 @@
 
 /* Forward declarations */
 class xlio_tis;
+class sockinfo;
 
 struct socket_data {
     int fd;
@@ -85,7 +86,7 @@ public:
     virtual ssize_t fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr) = 0;
     virtual ssize_t slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr,
                               struct xlio_rate_limit_t &rate_limit, int flags = 0,
-                              socket_fd_api *sock = nullptr, tx_call_t call_type = TX_UNDEF) = 0;
+                              sockinfo *sock = nullptr, tx_call_t call_type = TX_UNDEF) = 0;
 
     bool try_migrate_ring_tx(lock_base &socket_lock);
 
