@@ -250,7 +250,7 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
         // Remove fd from all existing epoll sets
         g_p_fd_collection->remove_from_all_epfds(fd, passthrough);
 
-        socket_fd_api *sockfd = fd_collection_get_sockfd(fd);
+        sockinfo *sockfd = fd_collection_get_sockfd(fd);
         if (sockfd) {
             // Don't call close(2) for objects without a shadow socket (TCP incoming sockets).
             to_close_now = !passthrough && sockfd->is_shadow_socket_present();
@@ -336,7 +336,7 @@ int socket_internal(int __domain, int __type, int __protocol, bool shadow, bool 
 
 int bind_internal(void *sock, const struct sockaddr *addr, socklen_t addrlen)
 {
-    auto p_socket_object = reinterpret_cast<socket_fd_api *>(sock);
+    auto p_socket_object = reinterpret_cast<sockinfo *>(sock);
     int ret = p_socket_object->bind(addr, addrlen);
     if (p_socket_object->isPassthrough()) {
         int fd = p_socket_object->get_fd();
@@ -350,7 +350,7 @@ int bind_internal(void *sock, const struct sockaddr *addr, socklen_t addrlen)
 
 ssize_t sendmsg_internal(void *sock, __const struct msghdr *__msg, int __flags)
 {
-    auto p_socket_object = reinterpret_cast<socket_fd_api *>(sock);
+    auto p_socket_object = reinterpret_cast<sockinfo *>(sock);
     xlio_tx_call_attr_t tx_arg;
 
     tx_arg.opcode = TX_SENDMSG;
@@ -382,7 +382,7 @@ ssize_t sendmsg_internal(void *sock, __const struct msghdr *__msg, int __flags)
     return p_socket_object->tx(tx_arg);
 }
 
-static ssize_t sendfile_helper(socket_fd_api *p_socket_object, int in_fd, __off64_t *offset,
+static ssize_t sendfile_helper(sockinfo *p_socket_object, int in_fd, __off64_t *offset,
                                size_t count)
 {
     ssize_t totSent = 0;
@@ -875,7 +875,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(shutdown)(int __fd, int __how)
 
     srdr_logdbg_entry("fd=%d, how=%d", __fd, __how);
 
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         return p_socket_object->shutdown(__how);
@@ -931,7 +931,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(listen)(int __fd, int backlog)
     }
 #endif /* DEFINED_ENVOY */
 
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
 
     if (p_socket_object) {
@@ -962,7 +962,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(accept)(int __fd, struct sockaddr *__addr, socklen
 {
     PROFILE_FUNC
 
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         return p_socket_object->accept(__addr, __addrlen);
@@ -976,7 +976,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(accept4)(int __fd, struct sockaddr *__addr, sockle
 {
     PROFILE_FUNC
 
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         return p_socket_object->accept4(__addr, __addrlen, __flags);
@@ -997,7 +997,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(bind)(int __fd, const struct sockaddr *__addr, soc
     srdr_logdbg_entry("fd=%d, %s", __fd, sprintf_sockaddr(buf, 256, __addr, __addrlen));
 
     int ret = 0;
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         ret = bind_internal(p_socket_object, __addr, __addrlen);
@@ -1034,7 +1034,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(connect)(int __fd, const struct sockaddr *__to, so
     srdr_logdbg_entry("fd=%d, %s", __fd, sprintf_sockaddr(buf, 256, __to, __tolen));
 
     int ret = 0;
-    socket_fd_api *p_socket_object = fd_collection_get_sockfd(__fd);
+    sockinfo *p_socket_object = fd_collection_get_sockfd(__fd);
     if (!p_socket_object) {
         srdr_logdbg_exit("Unable to get sock_fd_api");
         ret = SYSCALL(connect, __fd, __to, __tolen);
@@ -1077,7 +1077,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(setsockopt)(int __fd, int __level, int __optname,
     PROFILE_FUNC
 
     int ret = 0;
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
 
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
@@ -1115,7 +1115,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(getsockopt)(int __fd, int __level, int __optname, 
 #endif /* XLIO_STATIC_BUILD */
 
     int ret = 0;
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         VERIFY_PASSTROUGH_CHANGED(
@@ -1155,7 +1155,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(fcntl)(int __fd, int __cmd, ...)
     va_end(va);
 
     int ret = 0;
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         VERIFY_PASSTROUGH_CHANGED(res, p_socket_object->fcntl(__cmd, arg));
@@ -1199,7 +1199,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(fcntl64)(int __fd, int __cmd, ...)
     va_end(va);
 
     int ret = 0;
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object && VALID_SYSCALL(fcntl64)) {
         VERIFY_PASSTROUGH_CHANGED(res, p_socket_object->fcntl64(__cmd, arg));
@@ -1236,7 +1236,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(ioctl)(int __fd, unsigned long int __request, ...)
 
     int ret = 0;
 
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object && arg) {
         VERIFY_PASSTROUGH_CHANGED(res, p_socket_object->ioctl(__request, arg));
@@ -1259,7 +1259,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(getsockname)(int __fd, struct sockaddr *__name, so
     srdr_logdbg_entry("fd=%d", __fd);
 
     int ret = 0;
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         ret = p_socket_object->getsockname(__name, __namelen);
@@ -1291,7 +1291,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(getpeername)(int __fd, struct sockaddr *__name, so
     srdr_logdbg_entry("fd=%d", __fd);
 
     int ret = 0;
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         ret = p_socket_object->getpeername(__name, __namelen);
@@ -1318,7 +1318,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(read)(int __fd, void *__buf, size_t __nbytes)
 
     srdr_logfuncall_entry("fd=%d", __fd);
 
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         struct iovec piov[1];
@@ -1346,7 +1346,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(__read_chk)(int __fd, void *__buf, size_t __nb
 
     srdr_logfuncall_entry("fd=%d", __fd);
 
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         BULLSEYE_EXCLUDE_BLOCK_START
@@ -1378,7 +1378,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(readv)(int __fd, const struct iovec *iov, int 
 
     srdr_logfuncall_entry("fd=%d", __fd);
 
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         struct iovec *piov = (struct iovec *)iov;
@@ -1400,7 +1400,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(recv)(int __fd, void *__buf, size_t __nbytes, 
 
     srdr_logfuncall_entry("fd=%d", __fd);
 
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         struct iovec piov[1];
@@ -1427,7 +1427,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(__recv_chk)(int __fd, void *__buf, size_t __nb
 
     srdr_logfuncall_entry("fd=%d", __fd);
 
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         BULLSEYE_EXCLUDE_BLOCK_START
@@ -1463,7 +1463,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(recvmsg)(int __fd, struct msghdr *__msg, int _
         return -1;
     }
 
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         __msg->msg_flags = 0;
@@ -1520,7 +1520,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(recvmmsg)(int __fd, struct mmsghdr *__mmsghdr, uns
     if (__timeout) {
         gettime(&start_time);
     }
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         int ret = 0;
@@ -1578,7 +1578,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(recvfrom)(int __fd, void *__buf, size_t __nbyt
 
     srdr_logfuncall_entry("fd=%d", __fd);
 
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         struct iovec piov[1];
@@ -1609,7 +1609,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(__recvfrom_chk)(int __fd, void *__buf, size_t 
 
     srdr_logfuncall_entry("fd=%d", __fd);
 
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         BULLSEYE_EXCLUDE_BLOCK_START
@@ -1638,7 +1638,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(write)(int __fd, __const void *__buf, size_t _
 
     srdr_logfuncall_entry("fd=%d, nbytes=%d", __fd, __nbytes);
 
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         struct iovec piov[1] = {{(void *)__buf, __nbytes}};
@@ -1664,7 +1664,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(writev)(int __fd, const struct iovec *iov, int
 
     srdr_logfuncall_entry("fd=%d, %d iov blocks", __fd, iovcnt);
 
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         xlio_tx_call_attr_t tx_arg;
@@ -1689,7 +1689,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(send)(int __fd, __const void *__buf, size_t __
 
     srdr_logfuncall_entry("fd=%d, nbytes=%d", __fd, __nbytes);
 
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         struct iovec piov[1] = {{(void *)__buf, __nbytes}};
@@ -1723,7 +1723,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendmsg)(int __fd, __const struct msghdr *__ms
 
     srdr_logfuncall_entry("fd=%d", __fd);
 
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         return sendmsg_internal(p_socket_object, __msg, __flags);
@@ -1758,7 +1758,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(sendmmsg)(int __fd, struct mmsghdr *__mmsghdr, uns
         return -1;
     }
 
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         for (unsigned int i = 0; i < __vlen; i++) {
@@ -1808,7 +1808,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendto)(int __fd, __const void *__buf, size_t 
 
     srdr_logfuncall_entry("fd=%d, nbytes=%d", __fd, __nbytes);
 
-    socket_fd_api *p_socket_object = nullptr;
+    sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         struct iovec piov[1] = {{(void *)__buf, __nbytes}};
@@ -1840,7 +1840,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendfile)(int out_fd, int in_fd, off_t *offset
     srdr_logfuncall_entry("out_fd=%d, in_fd=%d, offset=%p, *offset=%zu, count=%d", out_fd, in_fd,
                           offset, offset ? *offset : 0, count);
 
-    socket_fd_api *p_socket_object = fd_collection_get_sockfd(out_fd);
+    sockinfo *p_socket_object = fd_collection_get_sockfd(out_fd);
     if (!p_socket_object) {
         return SYSCALL(sendfile, out_fd, in_fd, offset, count);
     }
@@ -1856,7 +1856,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendfile64)(int out_fd, int in_fd, __off64_t *
     srdr_logfuncall_entry("out_fd=%d, in_fd=%d, offset=%p, *offset=%zu, count=%d", out_fd, in_fd,
                           offset, offset ? *offset : 0, count);
 
-    socket_fd_api *p_socket_object = fd_collection_get_sockfd(out_fd);
+    sockinfo *p_socket_object = fd_collection_get_sockfd(out_fd);
     if (!p_socket_object) {
         return SYSCALL(sendfile64, out_fd, in_fd, offset, count);
     }
@@ -2289,7 +2289,7 @@ EXPORT_SYMBOL pid_t XLIO_SYMBOL(fork)(void)
         if (g_p_app && g_p_app->type == APP_NGINX) {
             g_p_app->map_thread_id[gettid()] = worker_index;
             /* Child process needs information about
-             * listen socket_fd_api objects, so pass this using parent`s g_p_fd_collection.
+             * listen sockinfo objects, so pass this using parent`s g_p_fd_collection.
              * It is possible as far as parent`s g_p_fd_collection is not deleted
              * by reset_globals()
              */

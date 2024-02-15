@@ -34,7 +34,7 @@
 #include "config.h"
 #endif
 
-#include <sock/socket_fd_api.h>
+#include <sock/sockinfo.h>
 #include <sock/sock-redirect.h>
 #include <sock/sockinfo_tcp.h>
 #include <sock/sockinfo_udp.h>
@@ -81,7 +81,7 @@ int app_conf::proc_nginx()
      */
     fd_collection *p_fd_collection = (fd_collection *)g_p_app->context;
     for (int fd = 0; fd < p_fd_collection->get_fd_map_size(); fd++) {
-        socket_fd_api *sock_fd_api = p_fd_collection->get_sockfd(fd);
+        sockinfo *sock_fd_api = p_fd_collection->get_sockfd(fd);
         if (!sock_fd_api || !dynamic_cast<sockinfo *>(sock_fd_api)) {
             continue;
         }
@@ -106,7 +106,7 @@ int app_conf::proc_envoy(int __op, int __fd)
     /* Prcess only sockets from map_listen_fd */
     auto iter = g_p_app->map_listen_fd.find(__fd);
     if (iter != g_p_app->map_listen_fd.end()) {
-        socket_fd_api *p_socket_object = fd_collection_get_sockfd(__fd);
+        sockinfo *p_socket_object = fd_collection_get_sockfd(__fd);
         if (iter->second == gettid()) {
             /* process listen sockets from main thread and remove
              * them from map_listen_fd
@@ -194,7 +194,7 @@ static int init_worker(int worker_id, int listen_fd)
     app_logdbg("worker: %d fd: %d", worker_id, listen_fd);
 
     int ret = 0;
-    socket_fd_api *child_sock_fd_api = nullptr;
+    sockinfo *child_sock_fd_api = nullptr;
     int parent_fd = listen_fd;
     fd_collection *p_fd_collection = (fd_collection *)g_p_app->context;
 
@@ -236,7 +236,7 @@ static int init_worker(int worker_id, int listen_fd)
      * Nginx: parent_fd is equal to listen_fd
      */
     sockinfo *si;
-    socket_fd_api *parent_sock_fd_api = p_fd_collection->get_sockfd(parent_fd);
+    sockinfo *parent_sock_fd_api = p_fd_collection->get_sockfd(parent_fd);
     if (!parent_sock_fd_api || !(si = dynamic_cast<sockinfo *>(parent_sock_fd_api))) {
         app_logerr("parent sockinfo is not found");
         return -1;

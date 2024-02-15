@@ -277,7 +277,6 @@ public:
     }
 
 protected:
-    void notify_epoll_context(uint32_t events);
     void notify_epoll_context_add_ring(ring *ring);
     void notify_epoll_context_remove_ring(ring *ring);
     bool notify_epoll_context_verify(epfd_info *epfd);

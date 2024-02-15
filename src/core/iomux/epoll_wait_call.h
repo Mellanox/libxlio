@@ -100,8 +100,7 @@ public:
 
     int get_current_events();
 
-    bool handle_epoll_event(bool is_ready, uint32_t events, socket_fd_api *socket_object,
-                            int index);
+    bool handle_epoll_event(bool is_ready, uint32_t events, sockinfo *socket_object, int index);
 
 protected:
     virtual int ring_poll_and_process_element();

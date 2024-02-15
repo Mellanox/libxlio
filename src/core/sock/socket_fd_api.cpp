@@ -336,13 +336,6 @@ void socket_fd_api::remove_epoll_context(epfd_info *epfd)
     }
 }
 
-void socket_fd_api::notify_epoll_context(uint32_t events)
-{
-    if (m_econtext) {
-        m_econtext->insert_epoll_event_cb(this, events);
-    }
-}
-
 void socket_fd_api::notify_epoll_context_add_ring(ring *ring)
 {
     if (m_econtext) {

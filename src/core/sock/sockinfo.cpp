@@ -2219,3 +2219,10 @@ void sockinfo::handle_cmsg(struct msghdr *msg, int flags)
 
     cm_state.mhdr->msg_controllen = cm_state.cmsg_bytes_consumed;
 }
+
+void sockinfo::insert_epoll_event(uint64_t events)
+{
+    if (m_econtext) {
+        m_econtext->insert_epoll_event_cb(this, static_cast<uint32_t>(events));
+    }
+}
