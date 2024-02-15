@@ -40,7 +40,6 @@
 
 #include "vlogger/vlogger.h"
 #include "utils/lock_wrapper.h"
-#include "core/sock/socket_fd_api.h"
 #include "core/proto/route_entry.h"
 #include "core/proto/route_val.h"
 #include "core/proto/neighbour_table_mgr.h"
@@ -56,6 +55,16 @@
 /* Forward declarations */
 class xlio_tis;
 class sockinfo;
+
+typedef enum {
+    TX_WRITE = 13,
+    TX_WRITEV,
+    TX_SEND,
+    TX_SENDTO,
+    TX_SENDMSG,
+    TX_FILE,
+    TX_UNDEF
+} tx_call_t;
 
 struct socket_data {
     int fd;
