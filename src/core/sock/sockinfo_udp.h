@@ -95,7 +95,22 @@ public:
     int bind_no_os();
     int bind(const struct sockaddr *__addr, socklen_t __addrlen) override;
     int connect(const struct sockaddr *__to, socklen_t __tolen) override;
+    void clean_socket_obj() override { delete this; }
+    bool is_writeable() override { return true; };
+    bool is_errorable(int *errors) override
+    {
+        NOT_IN_USE(errors);
+        return false;
+    }
+    bool is_outgoing() override { return false; }
+    bool is_incoming() override { return false; }
+    int shutdown(int __how) override;
+    int prepareListen() override { return 0; }
+    int listen(int backlog) override;
+    int accept(struct sockaddr *__addr, socklen_t *__addrlen) override;
+    int accept4(struct sockaddr *__addr, socklen_t *__addrlen, int __flags) override;
     int getsockname(sockaddr *__name, socklen_t *__namelen) override;
+    int getpeername(sockaddr *__name, socklen_t *__namelen) override;
     int setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen) override;
     int getsockopt(int __level, int __optname, void *__optval, socklen_t *__optlen) override;
 
@@ -176,7 +191,18 @@ public:
         set_m_n_sysvar_rx_num_buffs_reuse(safe_mce_sys().nginx_udp_socket_pool_rx_num_buffs_reuse);
     }
     bool is_closable() override { return !m_is_for_socket_pool; }
+#else
+    bool is_closable() override { return true; }
 #endif
+
+    int register_callback(xlio_recv_callback_t callback, void *context) override
+    {
+        return register_callback_ctx(callback, context);
+    }
+
+protected:
+    void lock_rx_q() override { m_lock_rcv.lock(); }
+    void unlock_rx_q() override { m_lock_rcv.unlock(); }
 
 private:
     bool packet_is_loopback(mem_buf_desc_t *p_desc);

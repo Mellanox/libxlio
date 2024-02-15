@@ -35,7 +35,7 @@
 
 #include "utils/lock_wrapper.h"
 #include "proto/mem_buf_desc.h"
-#include "sock/socket_fd_api.h"
+#include "sock/sockinfo.h"
 #include "dev/buffer_pool.h"
 #include "dev/cq_mgr_rx.h"
 #include "xlio_extra.h"
@@ -230,6 +230,8 @@ public:
     int accept4(struct sockaddr *__addr, socklen_t *__addrlen, int __flags) override;
     int getsockname(sockaddr *__name, socklen_t *__namelen) override;
     int getpeername(sockaddr *__name, socklen_t *__namelen) override;
+    void set_immediate_os_sample() override {};
+    void unset_immediate_os_sample() override {};
 
     inline bool handle_bind_no_port(int &bind_ret, in_port_t in_port, const sockaddr *__addr,
                                     socklen_t __addrlen);
@@ -284,9 +286,9 @@ public:
     static void tcp_tx_zc_callback(mem_buf_desc_t *p_desc);
     void tcp_tx_zc_handle(mem_buf_desc_t *p_desc);
 
-    bool inline is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = nullptr) override;
-    bool inline is_writeable() override;
-    bool inline is_errorable(int *errors) override;
+    bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = NULL) override;
+    bool is_writeable() override;
+    bool is_errorable(int *errors) override;
     bool is_closable() override
     {
         return get_tcp_state(&m_pcb) == CLOSED && m_syn_received.empty() &&
@@ -396,7 +398,7 @@ public:
     int register_callback(xlio_recv_callback_t callback, void *context) override
     {
         tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_recv_callback);
-        return sockinfo::register_callback(callback, context);
+        return register_callback_ctx(callback, context);
     }
 
     int tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint32_t mkey, unsigned flags,
@@ -416,6 +418,9 @@ protected:
     void unlock_rx_q() override;
     bool try_un_offloading() override; // un-offload the socket if possible
     int os_epoll_wait(epoll_event *ep_events, int maxevents) override;
+
+    size_t handle_msg_trunc(size_t total_rx, size_t payload_size, int in_flags,
+                            int *p_out_flags) override;
 
 private:
     int fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit);

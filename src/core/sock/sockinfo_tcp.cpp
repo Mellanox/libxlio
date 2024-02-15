@@ -1049,7 +1049,7 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
     if (unlikely(m_sock_offload != TCP_SOCK_LWIP) || unlikely(is_invalid_iovec(p_iov, sz_iov))) {
         struct sockaddr *dst = tx_arg.attr.addr;
         socklen_t dstlen = tx_arg.attr.len;
-        ret = socket_fd_api::tx_os(tx_arg.opcode, p_iov, sz_iov, flags, dst, dstlen);
+        ret = tx_os(tx_arg.opcode, p_iov, sz_iov, flags, dst, dstlen);
         save_stats_tx_os(ret);
         return ret;
     }
@@ -2374,7 +2374,7 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
     si_tcp_logfuncall("");
     if (unlikely(m_sock_offload != TCP_SOCK_LWIP)) {
         int ret = 0;
-        ret = socket_fd_api::rx_os(call_type, p_iov, sz_iov, in_flags, __from, __fromlen, __msg);
+        ret = rx_os(call_type, p_iov, sz_iov, in_flags, __from, __fromlen, __msg);
         save_stats_rx_os(ret);
         return ret;
     }
@@ -2718,8 +2718,8 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
             TRANS_XLIO) {
         passthrough_unlock("non offloaded socket --> connect only via OS");
         return -1;
-    } else {
-        notify_epoll_context_fd_is_offloaded(); // remove fd from os epoll
+    } else if (m_econtext) {
+        m_econtext->remove_fd_from_epoll_os(m_fd); // remove fd from os epoll
     }
 
     if (bound_any_addr) {
@@ -6349,4 +6349,13 @@ ssize_t sockinfo_tcp::tcp_tx_handle_sndbuf_unavailable(ssize_t total_tx, bool is
         }
         return tcp_tx_handle_errno_and_unlock(EAGAIN);
     }
+}
+
+size_t sockinfo_tcp::handle_msg_trunc(size_t total_rx, size_t payload_size, int in_flags,
+                                      int *p_out_flags)
+{
+    NOT_IN_USE(payload_size);
+    NOT_IN_USE(in_flags);
+    *p_out_flags &= ~MSG_TRUNC; // don't handle msg_trunc
+    return total_rx;
 }
