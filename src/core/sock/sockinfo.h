@@ -33,11 +33,14 @@
 #include <unordered_map>
 #include <deque>
 #include <ifaddrs.h>
-
+#include <sys/socket.h>
 #include "config.h"
+#include "xlio_extra.h"
+#include "dev/cq_mgr_rx.h"
+#include "dev/buffer_pool.h"
+#include "sock/cleanable_obj.h"
 #include "vlogger/vlogger.h"
 #include "utils/lock_wrapper.h"
-#include "xlio_extra.h"
 #include "util/data_updater.h"
 #include "util/sock_addr.h"
 #include "util/xlio_stats.h"
@@ -49,8 +52,6 @@
 #include "dev/net_device_table_mgr.h"
 #include "dev/ring_simple.h"
 #include "dev/ring_allocation_logic.h"
-
-#include "socket_fd_api.h"
 #include "sock-redirect.h"
 #include "sock-app.h"
 
@@ -60,6 +61,19 @@
 #define SI_RX_EPFD_EVENT_MAX   16
 #define BYTE_TO_KB(byte_value) ((byte_value) / 125)
 #define KB_TO_BYTE(kbit_value) ((kbit_value)*125)
+#define FD_ARRAY_MAX 24
+
+#ifndef SOCK_NONBLOCK
+#define SOCK_NONBLOCK 04000
+#endif
+#ifndef SOCK_CLOEXEC
+#define SOCK_CLOEXEC 02000000
+#endif
+#ifndef SO_MAX_PACING_RATE
+#define SO_MAX_PACING_RATE 47
+#endif
+
+#define IS_DUMMY_PACKET(flags) (flags & XLIO_SND_FLAGS_DUMMY)
 
 #if DEFINED_MISSING_NET_TSTAMP
 enum {
@@ -104,6 +118,17 @@ enum {
 #define MSG_ZEROCOPY 0x4000000
 #endif
 
+typedef enum { RX_READ = 23, RX_READV, RX_RECV, RX_RECVFROM, RX_RECVMSG } rx_call_t;
+
+enum {
+    TX_FLAG_NO_PARTIAL_WRITE = 1 << 0,
+};
+
+enum fd_type_t {
+    FD_TYPE_SOCKET = 0,
+    FD_TYPE_PIPE,
+};
+
 struct cmsg_state {
     struct msghdr *mhdr;
     struct cmsghdr *cmhdr;
@@ -123,6 +148,21 @@ struct buff_info_t {
     descq_t rx_reuse;
 };
 
+struct epoll_fd_rec {
+    uint32_t events;
+    epoll_data epdata;
+    int offloaded_index; // offloaded fd index + 1
+
+    epoll_fd_rec() { reset(); }
+
+    void reset()
+    {
+        this->events = 0;
+        memset(&this->epdata, 0, sizeof(this->epdata));
+        this->offloaded_index = 0;
+    }
+};
+
 typedef struct {
     net_device_entry *p_nde;
     net_device_val *p_ndv;
@@ -130,7 +170,47 @@ typedef struct {
     int refcnt;
 } net_device_resources_t;
 
+typedef struct {
+    // coverity[member_decl]
+    int fd_list[FD_ARRAY_MAX]; // Note: An FD might appear twice in the list,
+    //  the user of this array will need to handle it correctly
+    int fd_max;
+    int fd_count;
+} fd_array_t;
+
+/* This structure describes the send operation attributes
+ * Used attributes can be of different types TX_FILE, TX_WRITE, TX_WRITEV, TX_SEND, TX_SENDTO,
+ * TX_SENDMSG
+ */
+typedef struct xlio_tx_call_attr {
+    tx_call_t opcode;
+    struct _attr {
+        struct iovec *iov;
+        ssize_t sz_iov;
+        int flags;
+        struct sockaddr *addr;
+        socklen_t len;
+        const struct msghdr *hdr;
+    } attr;
+
+    unsigned xlio_flags;
+    pbuf_desc priv;
+
+    ~xlio_tx_call_attr() {};
+    void clear(void)
+    {
+        opcode = TX_UNDEF;
+        memset(&attr, 0, sizeof(attr));
+        memset(&priv, 0, sizeof(priv));
+        priv.attr = PBUF_DESC_NONE;
+        xlio_flags = 0;
+    }
+
+    xlio_tx_call_attr() { clear(); }
+} xlio_tx_call_attr_t;
+
 typedef std::unordered_map<ip_addr, net_device_resources_t> rx_net_device_map_t;
+typedef xlio_list_t<mem_buf_desc_t, mem_buf_desc_t::buffer_node_offset> xlio_desc_list_t;
 
 /*
  * Sockinfo setsockopt() return values
@@ -153,7 +233,9 @@ typedef std::unordered_map<ring *, ring_info_t *> rx_ring_map_t;
 // see route.c in Linux kernel
 const uint8_t ip_tos2prio[16] = {0, 0, 0, 0, 2, 2, 2, 2, 6, 6, 6, 6, 4, 4, 4, 4};
 
-class sockinfo : public socket_fd_api {
+class epfd_info;
+
+class sockinfo {
 public:
     sockinfo(int fd, int domain, bool use_ring_locks);
     virtual ~sockinfo();
@@ -166,22 +248,101 @@ public:
         SOCKINFO_DESTROYING
     };
 
+    static inline size_t pendig_to_remove_node_offset(void)
+    {
+        return NODE_OFFSET(sockinfo, pendig_to_remove_node);
+    }
+
+    static inline size_t socket_fd_list_node_offset(void)
+    {
+        return NODE_OFFSET(sockinfo, socket_fd_list_node);
+    }
+
+    static inline size_t ep_ready_fd_node_offset(void)
+    {
+        return NODE_OFFSET(sockinfo, ep_ready_fd_node);
+    }
+
+    static inline size_t ep_info_fd_node_offset(void)
+    {
+        return NODE_OFFSET(sockinfo, ep_info_fd_node);
+    }
+
     // Callback from lower layer notifying new receive packets
     // Return: 'true' if object queuing this receive packet
     //         'false' if not interested in this receive packet
     virtual bool rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info,
                              void *pv_fd_ready_array) = 0;
 
+    int get_fd() const { return m_fd; };
+    virtual void clean_socket_obj() = 0;
+    virtual void setPassthrough()  = 0;
+    virtual bool isPassthrough() = 0;
+    virtual int prepareListen() = 0;
+    void destructor_helper();
+    virtual int shutdown(int __how) = 0;
+    virtual int listen(int backlog) = 0;
+    virtual int accept(struct sockaddr *__addr, socklen_t *__addrlen) = 0;
+    virtual int accept4(struct sockaddr *__addr, socklen_t *__addrlen, int __flags) = 0;
+    virtual int bind(const sockaddr *__addr, socklen_t __addrlen) = 0;
+    virtual int connect(const sockaddr *__to, socklen_t __tolen) = 0;
+    virtual int getsockname(sockaddr *__name, socklen_t *__namelen) = 0;
+    virtual int getpeername(sockaddr *__name, socklen_t *__namelen) = 0;
+    virtual int setsockopt(int __level, int __optname, __const void *__optval, socklen_t __optlen) = 0;
+    virtual int getsockopt(int __level, int __optname, void *__optval, socklen_t *__optlen) = 0;
+    virtual bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = NULL) = 0;
+    virtual bool is_writeable() = 0;
+    virtual bool is_errorable(int *errors) = 0;
+    virtual bool is_outgoing() = 0;
+    virtual bool is_incoming() = 0;
+    virtual bool is_closable() = 0;
+    virtual ssize_t tx(xlio_tx_call_attr_t &tx_arg) = 0;
+    virtual void statistics_print(vlog_levels_t log_level = VLOG_DEBUG) = 0;
+    virtual int register_callback(xlio_recv_callback_t callback, void *context) = 0;
+    int register_callback_ctx(xlio_recv_callback_t callback, void *context);
+    void consider_rings_migration_rx();
+    int add_epoll_context(epfd_info *epfd);
+    void remove_epoll_context(epfd_info *epfd);
+    int get_rings_num();
+    virtual int fcntl(int __cmd, unsigned long int __arg);
+    virtual int fcntl64(int __cmd, unsigned long int __arg);
+    virtual int ioctl(unsigned long int __request, unsigned long int __arg);
+    virtual fd_type_t get_type() = 0;
+
+    virtual ssize_t rx(const rx_call_t call_type, iovec *iov, const ssize_t iovlen,
+                       int *p_flags = 0, sockaddr *__from = NULL, socklen_t *__fromlen = NULL,
+                       struct msghdr *__msg = NULL) = 0;
+
+    virtual int recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
+                                            size_t count) = 0;
+
+    // Instructing the socket to immediately sample/un-sample the OS in receive flow
+    virtual void set_immediate_os_sample() = 0;
+    virtual void unset_immediate_os_sample() = 0;
+
+    // In some cases we need the socket can't be deleted immidiatly
+    //(for example STREAME sockets)
+    // This prepares the socket for termination and return true if the
+    // Return val: true is the socket is already closable and false otherwise
+    virtual bool prepare_to_close(bool process_shutdown = false) = 0;
+
+    // true if fd must be skipped from OS select()
+    // If m_n_sysvar_select_poll_os_ratio == 0, it means that user configured XLIO not to poll os
+    // (i.e. TRUE...)
+    virtual bool skip_os_select() { return (!m_n_sysvar_select_poll_os_ratio); };
+
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    virtual void copy_sockopt_fork(const socket_fd_api *copy_from);
-#endif
+    // This socket options copy is currently implemented for nginx and for very specific options.
+    // This copy is called as part of fork() flow of nginx specifically.
+    // If a generic fork() is implemented, this copy should be reimplemented in a more generic way,
+    // see is_inherited_option mechanism of sockinfo_tcp for an example.
+    void copy_sockopt_fork(const sockinfo *copy_from);
 #if defined(DEFINED_NGINX)
+    virtual void prepare_to_close_socket_pool(bool _push_pop) { NOT_IN_USE(_push_pop); }
+    void set_params_for_socket_pool();
     void set_m_n_sysvar_rx_num_buffs_reuse(int val) { m_n_sysvar_rx_num_buffs_reuse = val; }
 #endif
-
-    virtual void consider_rings_migration_rx();
-    virtual int add_epoll_context(epfd_info *epfd);
-    virtual void remove_epoll_context(epfd_info *epfd);
+#endif
 
     inline bool set_flow_tag(uint32_t flow_tag_id)
     {
@@ -200,10 +361,8 @@ public:
     inline bool is_blocking(void) { return m_b_blocking; }
 
     bool flow_in_reuse(void) { return m_reuseaddr | m_reuseport; }
-    virtual int *get_rings_fds(int &res_length);
-    virtual int get_rings_num();
-    virtual bool check_rings() { return m_p_rx_ring ? true : false; }
-    virtual void statistics_print(vlog_levels_t log_level = VLOG_DEBUG);
+    int *get_rings_fds(int &res_length);
+    bool check_rings() { return m_p_rx_ring ? true : false; }
     uint32_t get_flow_tag_val() { return m_flow_tag_id; }
     inline in_protocol_t get_protocol(void) { return m_protocol; }
 
@@ -230,27 +389,29 @@ public:
     }
 
     sa_family_t get_family() { return m_family; }
+    bool is_shadow_socket_present() { return m_fd >= 0 && m_fd != m_rx_epfd; }
+    int get_epoll_context_fd();
+
+    // Calling OS transmit
+    ssize_t tx_os(const tx_call_t call_type, const iovec *p_iov, const ssize_t sz_iov,
+                  const int __flags, const sockaddr *__to, const socklen_t __tolen);
 
 protected:
     inline void set_rx_reuse_pending(bool is_pending = true)
     {
         m_rx_reuse_buf_pending = is_pending;
     }
-
-    virtual void set_blocking(bool is_blocked);
-    virtual int fcntl(int __cmd, unsigned long int __arg);
-    virtual int fcntl64(int __cmd, unsigned long int __arg);
-    virtual int ioctl(unsigned long int __request, unsigned long int __arg);
-    virtual int setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen);
+ 
     int setsockopt_kernel(int __level, int __optname, const void *__optval, socklen_t __optlen,
                           int supported, bool allow_priv);
-    virtual int getsockopt(int __level, int __optname, void *__optval, socklen_t *__optlen);
 
+    virtual void set_blocking(bool is_blocked);
     virtual mem_buf_desc_t *get_front_m_rx_pkt_ready_list() = 0;
     virtual size_t get_size_m_rx_pkt_ready_list() = 0;
     virtual void pop_front_m_rx_pkt_ready_list() = 0;
     virtual void push_back_m_rx_pkt_ready_list(mem_buf_desc_t *buff) = 0;
 
+    void notify_epoll_context(uint32_t events);
     void save_stats_rx_os(int bytes);
     void save_stats_tx_os(int bytes);
     void save_stats_rx_offload(int nbytes);
@@ -265,10 +426,16 @@ protected:
     virtual void post_deqeue(bool release_buff) = 0;
     virtual int os_epoll_wait(epoll_event *ep_events, int maxevents);
     virtual int zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags) = 0;
-    virtual int register_callback(xlio_recv_callback_t callback, void *context);
-
+    virtual void handle_ip_pktinfo(struct cmsg_state *cm_state) = 0;
+    virtual void lock_rx_q() = 0;
+    virtual void unlock_rx_q() = 0;
+    virtual bool try_un_offloading(); // un-offload the socket if possible
     virtual size_t handle_msg_trunc(size_t total_rx, size_t payload_size, int in_flags,
-                                    int *p_out_flags);
+                                    int *p_out_flags) = 0;
+
+    // This callback will notify that socket is ready to receive and map the cq.
+    virtual void rx_add_ring_cb(ring *p_ring);
+    virtual void rx_del_ring_cb(ring *p_ring);
 
     bool attach_receiver(flow_tuple_with_local_if &flow_key);
     bool detach_receiver(flow_tuple_with_local_if &flow_key);
@@ -288,15 +455,7 @@ protected:
     transport_t find_target_family(role_t role, const struct sockaddr *sock_addr_first,
                                    const struct sockaddr *sock_addr_second = NULL);
 
-    // This callback will notify that socket is ready to receive and map the cq.
-    virtual void rx_add_ring_cb(ring *p_ring);
-    virtual void rx_del_ring_cb(ring *p_ring);
-
-    virtual void lock_rx_q() { m_lock_rcv.lock(); }
-    virtual void unlock_rx_q() { m_lock_rcv.unlock(); }
-
     void shutdown_rx();
-    void destructor_helper();
     int modify_ratelimit(dst_entry *p_dst_entry, struct xlio_rate_limit_t &rate_limit);
 
     void move_descs(ring *p_ring, descq_t *toq, descq_t *fromq, bool own);
@@ -306,8 +465,6 @@ protected:
     int set_sockopt_prio(__const void *__optval, socklen_t __optlen);
     bool ipv6_set_addr_sel_pref(int val);
     int ipv6_get_addr_sel_pref();
-
-    virtual void handle_ip_pktinfo(struct cmsg_state *cm_state) = 0;
     inline void handle_recv_timestamping(struct cmsg_state *cm_state);
     inline void handle_recv_errqueue(struct cmsg_state *cm_state);
     void insert_cmsg(struct cmsg_state *cm_state, int level, int type, void *data, int len);
@@ -316,10 +473,12 @@ protected:
     void add_cqfd_to_sock_rx_epfd(ring *p_ring);
     void remove_cqfd_from_sock_rx_epfd(ring *p_ring);
     int os_wait_sock_rx_epfd(epoll_event *ep_events, int maxevents);
-    virtual bool try_un_offloading(); // un-offload the socket if possible
-
-    bool is_shadow_socket_present() { return m_fd >= 0 && m_fd != m_rx_epfd; }
     inline bool is_socketxtreme() { return safe_mce_sys().enable_socketxtreme; }
+    void insert_epoll_event(uint64_t events);
+    
+    // Calling OS receive
+    ssize_t rx_os(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, const int flags,
+                  sockaddr *__from, socklen_t *__fromlen, struct msghdr *__msg);
 
     inline void set_events_socketxtreme(uint64_t events)
     {
@@ -345,7 +504,7 @@ protected:
             m_socketxtreme.ec->completion.events |= events;
         }
     }
-
+    
     inline void set_events(uint64_t events)
     {
         /* Collect all events if rx ring is enabled */
@@ -353,7 +512,7 @@ protected:
             set_events_socketxtreme(events);
         }
 
-        socket_fd_api::notify_epoll_context((uint32_t)events);
+        insert_epoll_event(events);
     }
 
     inline void save_strq_stats(uint32_t packet_strides)
@@ -564,7 +723,22 @@ public:
 
     rfs *rfs_ptr = nullptr;
 
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+    bool m_is_for_socket_pool = false; // true when this fd will be used for socket pool on close
+    int m_back_log = 0;
+#endif
+
+    list_node<sockinfo, sockinfo::pendig_to_remove_node_offset> pendig_to_remove_node;
+    list_node<sockinfo, sockinfo::socket_fd_list_node_offset> socket_fd_list_node;
+    list_node<sockinfo, sockinfo::ep_ready_fd_node_offset> ep_ready_fd_node;
+    uint32_t m_epoll_event_flags;
+    list_node<sockinfo, sockinfo::ep_info_fd_node_offset> ep_info_fd_node;
+    epoll_fd_rec m_fd_rec;
+
 protected:
+    int m_fd; // identification information <socket fd>
+    const uint32_t m_n_sysvar_select_poll_os_ratio;
+    epfd_info *m_econtext;
     bool m_reuseaddr; // to track setsockopt with SO_REUSEADDR
     bool m_reuseport; // to track setsockopt with SO_REUSEPORT
     bool m_flow_tag_enabled; // for this socket

@@ -35,11 +35,12 @@
 
 #include <memory>
 #include "ib/base/verbs_extra.h"
-#include "proto/flow_tuple.h"
-#include "sock/socket_fd_api.h"
-#include "sock/tcp_seg_pool.h"
-#include "proto/L2_address.h"
+#include "dev/buffer_pool.h"
 #include "dev/xlio_ti.h"
+#include "sock/tcp_seg_pool.h"
+#include "proto/flow_tuple.h"
+#include "proto/xlio_lwip.h"
+#include "proto/L2_address.h"
 
 /* Forward declarations */
 struct xlio_tls_info;

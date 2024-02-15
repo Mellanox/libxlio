@@ -100,7 +100,7 @@ public:
 
     int get_current_events();
 
-    bool handle_epoll_event(bool is_ready, uint32_t events, socket_fd_api *socket_object,
+    bool handle_epoll_event(bool is_ready, uint32_t events, sockinfo *socket_object,
                             int index);
 
 protected:

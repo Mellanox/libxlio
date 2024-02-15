@@ -60,7 +60,10 @@
 #define si_logfuncall __log_info_funcall
 
 sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
-    : socket_fd_api(fd)
+    : m_epoll_event_flags(0)
+    , m_fd(fd)
+    , m_n_sysvar_select_poll_os_ratio(safe_mce_sys().select_poll_os_ratio)
+    , m_econtext(NULL)
     , m_reuseaddr(false)
     , m_reuseport(false)
     , m_flow_tag_enabled(false)
@@ -168,6 +171,19 @@ sockinfo::~sockinfo()
     xlio_stats_instance_remove_socket_block(m_p_socket_stats);
 
     m_socketxtreme.ec_cache.clear();
+
+    bool toclose = safe_mce_sys().deferred_close && m_fd >= 0;
+
+#if defined(DEFINED_NGINX)
+    if (g_p_app->type == APP_NGINX) {
+        // Sockets from a socket pool are not closed during close(), so do it now.
+        toclose = toclose || (m_is_for_socket_pool && m_fd >= 0);
+    }
+#endif
+
+    if (toclose) {
+        SYSCALL(close, m_fd);
+    }
 }
 
 void sockinfo::socket_stats_init(void)
@@ -264,6 +280,18 @@ int sockinfo::fcntl64(int __cmd, unsigned long int __arg)
 
     si_logdbg("going to OS for fcntl64 cmd=%d, arg=%#lx", __cmd, __arg);
     return SYSCALL(fcntl64, m_fd, __cmd, __arg);
+}
+
+int sockinfo::get_epoll_context_fd()
+{ 
+    return (m_econtext ? m_econtext->get_epoll_fd() : 0);
+}
+
+void sockinfo::insert_epoll_event(uint64_t events)
+{
+    if (m_econtext) {
+        m_econtext->insert_epoll_event_cb(this, static_cast<uint32_t>(events));
+    }
 }
 
 int sockinfo::set_ring_attr(xlio_ring_alloc_logic_attr *attr)
@@ -779,7 +807,7 @@ int sockinfo::getsockopt(int __level, int __optname, void *__optval, socklen_t *
 }
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-void sockinfo::copy_sockopt_fork(const socket_fd_api *copy_from)
+void sockinfo::copy_sockopt_fork(const sockinfo *copy_from)
 {
     const sockinfo *skinfo = dynamic_cast<const sockinfo *>(copy_from);
     if (skinfo) {
@@ -807,7 +835,7 @@ int sockinfo::get_sock_by_L3_L4(in_protocol_t protocol, const ip_address &ip, in
     assert(g_p_fd_collection);
     int map_size = g_p_fd_collection->get_fd_map_size();
     for (int i = 0; i < map_size; i++) {
-        socket_fd_api *p_sock_i = g_p_fd_collection->get_sockfd(i);
+        sockinfo *p_sock_i = g_p_fd_collection->get_sockfd(i);
         if (!p_sock_i || p_sock_i->get_type() != FD_TYPE_SOCKET) {
             continue;
         }
@@ -853,15 +881,6 @@ void sockinfo::save_stats_tx_os(int bytes)
     } else {
         m_p_socket_stats->counters.n_tx_os_errors++;
     }
-}
-
-size_t sockinfo::handle_msg_trunc(size_t total_rx, size_t payload_size, int in_flags,
-                                  int *p_out_flags)
-{
-    NOT_IN_USE(payload_size);
-    NOT_IN_USE(in_flags);
-    *p_out_flags &= ~MSG_TRUNC; // don't handle msg_trunc
-    return total_rx;
 }
 
 bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
@@ -1309,7 +1328,15 @@ int sockinfo::add_epoll_context(epfd_info *epfd)
     m_rx_ring_map_lock.lock();
     lock_rx_q();
 
-    ret = socket_fd_api::add_epoll_context(epfd);
+    if (!m_econtext) {
+        // This socket is not registered to any epfd
+        m_econtext = epfd;
+    } else {
+        // Currently XLIO does not support more then 1 epfd listed
+        errno = (m_econtext == epfd) ? EEXIST : ENOMEM;
+        ret = -1;
+    }
+
     if (ret < 0) {
         goto unlock_locks;
     }
@@ -1320,7 +1347,9 @@ int sockinfo::add_epoll_context(epfd_info *epfd)
 
     sock_ring_map_iter = m_rx_ring_map.begin();
     while (sock_ring_map_iter != m_rx_ring_map.end()) {
-        notify_epoll_context_add_ring(sock_ring_map_iter->first);
+        if (m_econtext) {
+            m_econtext->increase_ring_ref_count(sock_ring_map_iter->first);
+        }
         sock_ring_map_iter++;
     }
 
@@ -1337,7 +1366,7 @@ void sockinfo::remove_epoll_context(epfd_info *epfd)
     m_rx_ring_map_lock.lock();
     lock_rx_q();
 
-    if (!notify_epoll_context_verify(epfd)) {
+    if (m_econtext != epfd) {
         unlock_rx_q();
         m_rx_ring_map_lock.unlock();
         return;
@@ -1345,11 +1374,16 @@ void sockinfo::remove_epoll_context(epfd_info *epfd)
 
     rx_ring_map_t::const_iterator sock_ring_map_iter = m_rx_ring_map.begin();
     while (sock_ring_map_iter != m_rx_ring_map.end()) {
-        notify_epoll_context_remove_ring(sock_ring_map_iter->first);
+        if (m_econtext) {
+            m_econtext->decrease_ring_ref_count(sock_ring_map_iter->first);
+        }
         sock_ring_map_iter++;
     }
 
-    socket_fd_api::remove_epoll_context(epfd);
+    if (m_econtext == epfd) {
+        m_econtext = NULL;
+    }
+
     if (safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_EPOLL_ONLY) {
         m_skip_cq_poll_in_rx = false;
     }
@@ -1376,7 +1410,14 @@ void sockinfo::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
 
     bool b_any_activity = false;
 
-    socket_fd_api::statistics_print(log_level);
+    int epoll_fd = get_epoll_context_fd();
+
+    // Socket data
+    vlog_printf(log_level, "Fd number : %d\n", m_fd);
+    if (epoll_fd) {
+        vlog_printf(log_level, "Socket epoll Fd : %d\n", epoll_fd);
+        vlog_printf(log_level, "Socket epoll flags : 0x%x\n", m_fd_rec.events);
+    }
 
     vlog_printf(log_level, "Bind info : %s\n", m_bound.to_str_ip_port(true).c_str());
     vlog_printf(log_level, "Connection info : %s\n", m_connected.to_str_ip_port(true).c_str());
@@ -1607,7 +1648,9 @@ void sockinfo::rx_add_ring_cb(ring *p_ring)
         // first in order. possible race between removal of fd from epoll (epoll_ctl del, or epoll
         // close) and here. need to add a third-side lock (fd_collection?) to sync between epoll and
         // socket.
-        notify_epoll_context_add_ring(p_ring);
+        if (m_econtext) {
+            m_econtext->increase_ring_ref_count(p_ring);
+        }
     }
 
     lock_rx_q();
@@ -1693,7 +1736,9 @@ void sockinfo::rx_del_ring_cb(ring *p_ring)
         // first in order. possible race between removal of fd from epoll (epoll_ctl del, or epoll
         // close) and here. need to add a third-side lock (fd_collection?) to sync between epoll and
         // socket.
-        notify_epoll_context_remove_ring(base_ring);
+        if (m_econtext) {
+            m_econtext->decrease_ring_ref_count(base_ring);
+        }
     }
 
     // no need for m_lock_rcv since temp_rx_reuse is on the stack
@@ -1936,7 +1981,7 @@ void sockinfo::destructor_helper()
     m_p_connected_dst_entry = NULL;
 }
 
-int sockinfo::register_callback(xlio_recv_callback_t callback, void *context)
+int sockinfo::register_callback_ctx(xlio_recv_callback_t callback, void *context)
 {
     m_rx_callback = callback;
     m_rx_callback_context = context;
@@ -2223,4 +2268,81 @@ void sockinfo::handle_cmsg(struct msghdr *msg, int flags)
     }
 
     cm_state.mhdr->msg_controllen = cm_state.cmsg_bytes_consumed;
+}
+
+ssize_t sockinfo::rx_os(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov,
+                        const int flags, sockaddr *__from, socklen_t *__fromlen,
+                        struct msghdr *__msg)
+{
+    errno = 0;
+    switch (call_type) {
+    case RX_READ:
+        __log_info_func("calling os receive with orig read");
+        return SYSCALL(read, m_fd, p_iov[0].iov_base, p_iov[0].iov_len);
+
+    case RX_READV:
+        __log_info_func("calling os receive with orig readv");
+        return SYSCALL(readv, m_fd, p_iov, sz_iov);
+
+    case RX_RECV:
+        __log_info_func("calling os receive with orig recv");
+        return SYSCALL(recv, m_fd, p_iov[0].iov_base, p_iov[0].iov_len, flags);
+
+    case RX_RECVFROM:
+        __log_info_func("calling os receive with orig recvfrom");
+        return SYSCALL(recvfrom, m_fd, p_iov[0].iov_base, p_iov[0].iov_len, flags, __from,
+                       __fromlen);
+
+    case RX_RECVMSG: {
+        __log_info_func("calling os receive with orig recvmsg");
+        return SYSCALL(recvmsg, m_fd, __msg, flags);
+    }
+    }
+    return (ssize_t)-1;
+}
+
+ssize_t sockinfo::tx_os(const tx_call_t call_type, const iovec *p_iov, const ssize_t sz_iov,
+                        const int __flags, const sockaddr *__to, const socklen_t __tolen)
+{
+    errno = 0;
+
+    // Ignore dummy messages for OS
+    if (unlikely(IS_DUMMY_PACKET(__flags))) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    switch (call_type) {
+    case TX_WRITE:
+        __log_info_func("calling os transmit with orig write");
+        return SYSCALL(write, m_fd, p_iov[0].iov_base, p_iov[0].iov_len);
+
+    case TX_WRITEV:
+        __log_info_func("calling os transmit with orig writev");
+        return SYSCALL(writev, m_fd, p_iov, sz_iov);
+
+    case TX_SEND:
+        __log_info_func("calling os transmit with orig send");
+        return SYSCALL(send, m_fd, p_iov[0].iov_base, p_iov[0].iov_len, __flags);
+
+    case TX_SENDTO:
+        __log_info_func("calling os transmit with orig sendto");
+        return SYSCALL(sendto, m_fd, p_iov[0].iov_base, p_iov[0].iov_len, __flags, __to, __tolen);
+
+    case TX_SENDMSG: {
+        msghdr __message;
+        memset(&__message, 0, sizeof(__message));
+        __message.msg_iov = (iovec *)p_iov;
+        __message.msg_iovlen = sz_iov;
+        __message.msg_name = (void *)__to;
+        __message.msg_namelen = __tolen;
+
+        __log_info_func("calling os transmit with orig sendmsg");
+        return SYSCALL(sendmsg, m_fd, &__message, __flags);
+    }
+    default:
+        __log_info_func("calling undefined os call type!");
+        break;
+    }
+    return (ssize_t)-1;
 }

@@ -95,7 +95,18 @@ public:
     int bind_no_os();
     int bind(const struct sockaddr *__addr, socklen_t __addrlen);
     int connect(const struct sockaddr *__to, socklen_t __tolen);
+    virtual void clean_socket_obj() { delete this; }
+    virtual bool is_writeable() { return true; };
+    virtual bool is_errorable(int *errors) { NOT_IN_USE(errors); return false; }
+    virtual bool is_outgoing() { return false; }
+    virtual bool is_incoming() { return false; }
+    virtual int shutdown(int __how);
+    virtual int prepareListen() { return 0; }
+    virtual int listen(int backlog) { NOT_IN_USE(backlog); return 0; }
+    virtual int accept(struct sockaddr *__addr, socklen_t *__addrlen);
+    virtual int accept4(struct sockaddr *__addr, socklen_t *__addrlen, int __flags);
     virtual int getsockname(sockaddr *__name, socklen_t *__namelen);
+    virtual int getpeername(sockaddr *__name, socklen_t *__namelen);
     int setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen);
     int getsockopt(int __level, int __optname, void *__optval, socklen_t *__optlen);
 
@@ -174,9 +185,20 @@ public:
         m_is_for_socket_pool = true;
         set_m_n_sysvar_rx_num_buffs_reuse(safe_mce_sys().nginx_udp_socket_pool_rx_num_buffs_reuse);
     }
-    bool is_closable() { return !m_is_for_socket_pool; }
+    virtual bool is_closable() { return !m_is_for_socket_pool; }
+#else
+    virtual bool is_closable() { return true; }
 #endif
 
+    virtual int register_callback(xlio_recv_callback_t callback, void *context)
+    {
+        return register_callback_ctx(callback, context);
+    }
+
+protected:
+    virtual void lock_rx_q() { m_lock_rcv.lock(); }
+    virtual void unlock_rx_q() { m_lock_rcv.unlock(); }
+    
 private:
     bool packet_is_loopback(mem_buf_desc_t *p_desc);
     ssize_t check_payload_size(const iovec *p_iov, ssize_t sz_iov);

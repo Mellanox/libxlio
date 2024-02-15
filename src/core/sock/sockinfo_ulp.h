@@ -33,7 +33,7 @@
 #ifndef _SOCKINFO_ULP_H
 #define _SOCKINFO_ULP_H
 
-#include "socket_fd_api.h" /* xlio_tx_call_attr_t */
+#include "sockinfo.h" /* xlio_tx_call_attr_t */
 #include "proto/dst_entry.h" /* xlio_send_attr */
 #include "proto/tls.h" /* xlio_tls_info */
 #include "lwip/err.h" /* err_t */

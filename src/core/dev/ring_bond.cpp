@@ -245,7 +245,7 @@ void ring_bond::restart()
                                     }
                                     epfd = si->get_epoll_context_fd();
                                     if (epfd > 0) {
-#define CQ_FD_MARK 0xabcd /* see socket_fd_api */
+#define CQ_FD_MARK 0xabcd /* see sockinfo */
                                         epoll_event ev = {0, {0}};
                                         fd = ring_rx_fds_array[k];
                                         ev.events = EPOLLIN | EPOLLPRI;

@@ -35,7 +35,7 @@
 
 #include "utils/lock_wrapper.h"
 #include "proto/mem_buf_desc.h"
-#include "sock/socket_fd_api.h"
+#include "sock/sockinfo.h"
 #include "dev/buffer_pool.h"
 #include "dev/cq_mgr_rx.h"
 #include "xlio_extra.h"
@@ -173,6 +173,8 @@ public:
     virtual int accept4(struct sockaddr *__addr, socklen_t *__addrlen, int __flags);
     virtual int getsockname(sockaddr *__name, socklen_t *__namelen);
     virtual int getpeername(sockaddr *__name, socklen_t *__namelen);
+    virtual void set_immediate_os_sample() {};
+    virtual void unset_immediate_os_sample() {};
 
     inline bool handle_bind_no_port(int &bind_ret, in_port_t in_port, const sockaddr *__addr,
                                     socklen_t __addrlen);
@@ -225,9 +227,9 @@ public:
     static void tcp_tx_zc_callback(mem_buf_desc_t *p_desc);
     void tcp_tx_zc_handle(mem_buf_desc_t *p_desc);
 
-    bool inline is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = NULL);
-    bool inline is_writeable();
-    bool inline is_errorable(int *errors);
+    bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = NULL);
+    bool is_writeable();
+    bool is_errorable(int *errors);
     bool is_closable()
     {
         return get_tcp_state(&m_pcb) == CLOSED && m_syn_received.empty() &&
@@ -334,7 +336,7 @@ public:
     virtual int register_callback(xlio_recv_callback_t callback, void *context)
     {
         tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_recv_callback);
-        return sockinfo::register_callback(callback, context);
+        return register_callback_ctx(callback, context);
     }
 
     int tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint32_t mkey,
@@ -345,6 +347,9 @@ protected:
     virtual void unlock_rx_q();
     virtual bool try_un_offloading(); // un-offload the socket if possible
     virtual int os_epoll_wait(epoll_event *ep_events, int maxevents);
+
+    virtual size_t handle_msg_trunc(size_t total_rx, size_t payload_size, int in_flags,
+                                    int *p_out_flags);
 
 private:
     int fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit);

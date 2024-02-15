@@ -92,7 +92,7 @@ inline void io_mux_call::check_offloaded_wsockets()
 
         if (m_p_offloaded_modes[offloaded_index] & OFF_WRITE) {
             int fd = m_p_all_offloaded_fds[offloaded_index];
-            socket_fd_api *p_socket_object = fd_collection_get_sockfd(fd);
+            sockinfo *p_socket_object = fd_collection_get_sockfd(fd);
             if (!p_socket_object) {
                 // If we can't find this previously mapped offloaded socket
                 // then it was probably closed. We need to get out with error code
@@ -113,7 +113,7 @@ inline void io_mux_call::check_offloaded_esockets()
     for (int offloaded_index = 0; offloaded_index < *m_p_num_all_offloaded_fds; ++offloaded_index) {
         if (m_p_offloaded_modes[offloaded_index] & OFF_RDWR) {
             int fd = m_p_all_offloaded_fds[offloaded_index];
-            socket_fd_api *p_socket_object = fd_collection_get_sockfd(fd);
+            sockinfo *p_socket_object = fd_collection_get_sockfd(fd);
             if (!p_socket_object) {
                 // If we can't find this previously mapped offloaded socket
                 // then it was probably closed. We need to get out with error code
@@ -204,7 +204,7 @@ void io_mux_call::check_offloaded_rsockets()
 {
     int fd, offloaded_index, num_all_offloaded_fds;
     fd_array_t fd_ready_array;
-    socket_fd_api *p_socket_object;
+    sockinfo *p_socket_object;
 
     fd_ready_array.fd_max = FD_ARRAY_MAX;
 

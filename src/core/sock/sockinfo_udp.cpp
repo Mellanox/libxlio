@@ -648,6 +648,31 @@ int sockinfo_udp::connect(const struct sockaddr *__to, socklen_t __tolen)
     return 0;
 }
 
+int sockinfo_udp::shutdown(int __how)
+{
+    si_udp_logfunc("");
+    int ret = SYSCALL(shutdown, m_fd, __how);
+    if (ret) {
+        si_udp_logdbg("shutdown failed (ret=%d %m)", ret);
+    }
+    return ret;
+}
+
+int sockinfo_udp::accept(struct sockaddr *__addr, socklen_t *__addrlen)
+{
+    NOT_IN_USE(__addr);
+    NOT_IN_USE(__addrlen);
+    return 0;
+}
+
+int sockinfo_udp::accept4(struct sockaddr *__addr, socklen_t *__addrlen, int __flags)
+{
+    NOT_IN_USE(__addr);
+    NOT_IN_USE(__addrlen);
+    NOT_IN_USE(__flags);
+    return 0;
+}
+
 int sockinfo_udp::getsockname(struct sockaddr *__name, socklen_t *__namelen)
 {
     si_udp_logdbg("");
@@ -658,6 +683,16 @@ int sockinfo_udp::getsockname(struct sockaddr *__name, socklen_t *__namelen)
     }
 
     return SYSCALL(getsockname, m_fd, __name, __namelen);
+}
+
+int sockinfo_udp::getpeername(sockaddr *__name, socklen_t *__namelen)
+{
+    si_udp_logfunc("");
+    int ret = SYSCALL(getpeername, m_fd, __name, __namelen);
+    if (ret) {
+        si_udp_logdbg("getpeername failed (ret=%d %m)", ret);
+    }
+    return ret;
 }
 
 int sockinfo_udp::on_sockname_change(struct sockaddr *__name, socklen_t __namelen)
@@ -1813,7 +1848,7 @@ os:
     }
 
     in_flags &= ~MSG_XLIO_ZCOPY;
-    ret = socket_fd_api::rx_os(call_type, p_iov, sz_iov, in_flags, __from, __fromlen, __msg);
+    ret = rx_os(call_type, p_iov, sz_iov, in_flags, __from, __fromlen, __msg);
     *p_flags = in_flags;
     save_stats_rx_os(ret);
     if (ret > 0) {
@@ -2178,7 +2213,7 @@ ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
 
 tx_packet_to_os:
     // Calling OS transmit
-    ret = socket_fd_api::tx_os(tx_arg.opcode, p_iov, sz_iov, __flags, __dst, __dstlen);
+    ret = tx_os(tx_arg.opcode, p_iov, sz_iov, __flags, __dst, __dstlen);
 
 tx_packet_to_os_stats:
     save_stats_tx_os(ret);
@@ -2479,7 +2514,7 @@ bool sockinfo_udp::rx_input_cb(mem_buf_desc_t *p_desc, void *pv_fd_ready_array)
             m_port_map_index =
                 ((m_port_map_index + 1) >= m_port_map.size() ? 0 : (m_port_map_index + 1));
             int new_port = m_port_map[m_port_map_index].port;
-            socket_fd_api *sock_api =
+            sockinfo *sock_api =
                 g_p_fd_collection->get_sockfd(m_port_map[m_port_map_index].fd);
             if (!sock_api || sock_api->get_type() != FD_TYPE_SOCKET) {
                 m_port_map.erase(std::remove(m_port_map.begin(), m_port_map.end(),

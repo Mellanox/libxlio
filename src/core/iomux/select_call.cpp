@@ -61,7 +61,6 @@ select_call::select_call(int *off_fds_buffer, offloaded_mode_t *off_modes_buffer
     , m_b_run_prepare_to_poll(false)
 {
     int fd;
-    // socket_fd_api* temp_sock_fd_api = NULL;
 
     if (m_nfds > FD_SETSIZE) {
         errno = ENOMEM;
@@ -91,7 +90,7 @@ select_call::select_call(int *off_fds_buffer, offloaded_mode_t *off_modes_buffer
             bool check_read = offloaded_read && FD_ISSET(fd, m_readfds);
             bool check_write = offloaded_write && FD_ISSET(fd, m_writefds);
 
-            socket_fd_api *psock = fd_collection_get_sockfd(fd);
+            sockinfo *psock = fd_collection_get_sockfd(fd);
 
             if (psock && psock->get_type() == FD_TYPE_SOCKET) {
 

@@ -43,7 +43,7 @@ public:
 
     ssize_t fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr);
     ssize_t slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr,
-                      struct xlio_rate_limit_t &rate_limit, int flags = 0, socket_fd_api *sock = 0,
+                      struct xlio_rate_limit_t &rate_limit, int flags = 0, sockinfo *sock = 0,
                       tx_call_t call_type = TX_UNDEF);
     static bool fast_send_fragmented_ipv6(mem_buf_desc_t *p_mem_buf_desc, const iovec *p_iov,
                                           const ssize_t sz_iov, xlio_wr_tx_packet_attr attr,

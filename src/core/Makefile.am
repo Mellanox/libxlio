@@ -151,7 +151,6 @@ libxlio_la_SOURCES := \
 	sock/sockinfo_tcp.cpp \
 	sock/tcp_seg_pool.cpp \
 	sock/fd_collection.cpp \
-	sock/socket_fd_api.cpp \
 	sock/sock-redirect.cpp \
 	sock/sock-app.cpp \
 	sock/sock-extra.cpp \
@@ -274,7 +273,6 @@ libxlio_la_SOURCES := \
 	\
 	sock/cleanable_obj.h \
 	sock/fd_collection.h \
-	sock/socket_fd_api.h \
 	sock/sockinfo.h \
 	sock/sockinfo_tcp.h \
 	sock/sockinfo_udp.h \
