@@ -972,13 +972,17 @@ void *event_handler_manager::thread_loop()
             }
         }
 
-        uint64_t poll_sn = 0;
+        uint64_t poll_sn_rx = 0;
+        uint64_t poll_sn_tx = 0;
         if (m_b_sysvar_internal_thread_arm_cq_enabled && m_cq_epfd > 0 &&
             g_p_net_device_table_mgr) {
-            g_p_net_device_table_mgr->global_ring_poll_and_process_element(&poll_sn, NULL);
-            int ret = g_p_net_device_table_mgr->global_ring_request_notification(poll_sn);
+            g_p_net_device_table_mgr->global_ring_poll_and_process_element(&poll_sn_rx, &poll_sn_tx,
+                                                                           NULL);
+            int ret =
+                g_p_net_device_table_mgr->global_ring_request_notification(poll_sn_rx, poll_sn_tx);
             if (ret > 0) {
-                g_p_net_device_table_mgr->global_ring_poll_and_process_element(&poll_sn, NULL);
+                g_p_net_device_table_mgr->global_ring_poll_and_process_element(&poll_sn_rx,
+                                                                               &poll_sn_tx, NULL);
             }
         }
 
@@ -1002,7 +1006,7 @@ void *event_handler_manager::thread_loop()
             if (m_b_sysvar_internal_thread_arm_cq_enabled && p_events[idx].data.fd == m_cq_epfd &&
                 g_p_net_device_table_mgr) {
                 g_p_net_device_table_mgr->global_ring_wait_for_notification_and_process_element(
-                    &poll_sn, NULL);
+                    &poll_sn_rx, NULL);
             } else if (is_wakeup_fd(p_events[idx].data.fd)) {
                 // a request for registration was sent
                 m_reg_action_q_lock.lock();
