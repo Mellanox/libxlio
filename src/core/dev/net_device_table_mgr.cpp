@@ -420,7 +420,8 @@ void net_device_table_mgr::get_ip_list(local_ip_list_t &ip_list, sa_family_t fam
     m_lock.unlock();
 }
 
-int net_device_table_mgr::global_ring_poll_and_process_element(uint64_t *p_poll_sn,
+int net_device_table_mgr::global_ring_poll_and_process_element(uint64_t *p_poll_sn_rx,
+                                                               uint64_t *p_poll_sn_tx,
                                                                void *pv_fd_ready_array /*= NULL*/)
 {
     ndtm_logfunc("");
@@ -429,8 +430,8 @@ int net_device_table_mgr::global_ring_poll_and_process_element(uint64_t *p_poll_
     net_device_map_index_t::iterator net_dev_iter;
     for (net_dev_iter = m_net_device_map_index.begin();
          net_dev_iter != m_net_device_map_index.end(); net_dev_iter++) {
-        int ret = net_dev_iter->second->global_ring_poll_and_process_element(p_poll_sn,
-                                                                             pv_fd_ready_array);
+        int ret = net_dev_iter->second->global_ring_poll_and_process_element(
+            p_poll_sn_rx, p_poll_sn_tx, pv_fd_ready_array);
         if (ret < 0) {
             ndtm_logdbg("Error in net_device_val[%p]->poll_and_process_element() (errno=%d %m)",
                         net_dev_iter->second, errno);
@@ -446,14 +447,14 @@ int net_device_table_mgr::global_ring_poll_and_process_element(uint64_t *p_poll_
     return ret_total;
 }
 
-int net_device_table_mgr::global_ring_request_notification(uint64_t poll_sn)
+int net_device_table_mgr::global_ring_request_notification(uint64_t poll_sn_rx, uint64_t poll_sn_tx)
 {
     ndtm_logfunc("");
     int ret_total = 0;
     net_device_map_index_t::iterator net_dev_iter;
     for (net_dev_iter = m_net_device_map_index.begin();
          m_net_device_map_index.end() != net_dev_iter; net_dev_iter++) {
-        int ret = net_dev_iter->second->global_ring_request_notification(poll_sn);
+        int ret = net_dev_iter->second->global_ring_request_notification(poll_sn_rx, poll_sn_tx);
         BULLSEYE_EXCLUDE_BLOCK_START
         if (ret < 0) {
             ndtm_logerr("Error in net_device_val[%p]->request_notification() (errno=%d %m)",

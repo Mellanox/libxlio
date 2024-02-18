@@ -264,7 +264,8 @@ protected:
     int m_cqepfd;
 
     /// poll sn
-    uint64_t m_poll_sn;
+    uint64_t m_poll_sn_rx;
+    uint64_t m_poll_sn_tx;
 
     /// xlio statistics. each implementation must initialize this.
     iomux_func_stats_t *m_p_stats;

@@ -74,7 +74,8 @@ public:
      * channel. If race condition case occures then that CQ is polled and processed (and the CQ
      * notification is armed) Returns >=0 the total number of wce processed < 0 on error
      */
-    int global_ring_poll_and_process_element(uint64_t *p_poll_sn, void *pv_fd_ready_array = NULL);
+    int global_ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *p_poll_sn_tx,
+                                             void *pv_fd_ready_array = NULL);
 
     /**
      * This will poll one time on the ALL the managed CQ's
@@ -85,7 +86,7 @@ public:
     int global_ring_wait_for_notification_and_process_element(uint64_t *p_poll_sn,
                                                               void *pv_fd_ready_array = NULL);
 
-    int global_ring_request_notification(uint64_t poll_sn);
+    int global_ring_request_notification(uint64_t poll_sn_rx, uint64_t poll_sn_tx);
 
     /**
      * This will poll one time on the ALL the managed CQ's
