@@ -89,6 +89,14 @@ enum tcp_conn_state_e {
     TCP_CONN_RESETED
 };
 
+enum xlio_express_flags : uint32_t {
+    XLIO_EXPRESS_OP_TYPE_DESC,
+    XLIO_EXPRESS_OP_TYPE_FILE_ZEROCOPY,
+    XLIO_EXPRESS_OP_TYPE_MASK = 0x000fu,
+    XLIO_EXPRESS_MSG_MORE,
+    XLIO_EXPRESS_MSG_MASK = 0x00f0u,
+};
+
 struct socket_option_t {
     const int level;
     const int optname;
