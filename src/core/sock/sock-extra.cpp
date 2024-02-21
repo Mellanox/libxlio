@@ -38,7 +38,7 @@
 #include <util/libxlio.h>
 #include <vlogger/vlogger.h>
 #include <dev/buffer_pool.h>
-#include <event/thread_local_event_handler.h>
+#include <event/event_handler_manager_local.h>
 #include <sock/socket_fd_api.h>
 #include <sock/sockinfo_tcp.h>
 #include <sock/sockinfo_udp.h>
@@ -123,7 +123,7 @@ extern "C" int xlio_socketxtreme_poll(int fd, struct xlio_socketxtreme_completio
     cq_ch_info = g_p_fd_collection->get_cq_channel_fd(fd);
 
     if (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
-        g_thread_local_event_handler.do_tasks();
+        g_event_handler_manager_local.do_tasks();
     }
 
     if (likely(cq_ch_info)) {
@@ -259,7 +259,7 @@ extern "C" int xlio_get_socket_rings_fds(int fd, int *ring_fds, int ring_fds_sz)
     if (p_socket_object && p_socket_object->check_rings()) {
         int rings_num = 0;
         int *p_rings_fds = p_socket_object->get_rings_fds(rings_num);
-        int num_rings_to_copy = min(ring_fds_sz, rings_num);
+        int num_rings_to_copy = std::min(ring_fds_sz, rings_num);
         std::copy(&p_rings_fds[0], &p_rings_fds[num_rings_to_copy], ring_fds);
         return num_rings_to_copy;
     }

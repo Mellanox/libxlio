@@ -30,37 +30,28 @@
  * SOFTWARE.
  */
 
-#include "thread_local_event_handler.h"
-#include "util/sys_vars.h"
+#ifndef THREAD_LOCAL_EVENT_HANDLER_H
+#define THREAD_LOCAL_EVENT_HANDLER_H
 
-thread_local thread_local_event_handler g_thread_local_event_handler;
+#include <chrono>
 
-thread_local_event_handler::thread_local_event_handler()
-    : event_handler_manager(false)
-{
-}
+#include "event_handler_manager.h"
 
-void thread_local_event_handler::post_new_reg_action(reg_action_t &reg_action)
-{
-    // For thread local event handler registration can be immediate.
-    handle_registration_action(reg_action);
-}
+class event_handler_manager_local : public event_handler_manager {
+public:
+    event_handler_manager_local();
 
-void thread_local_event_handler::do_tasks()
-{
-    auto curr_time = chrono::steady_clock::now();
-    if (likely(
-            safe_mce_sys().tcp_timer_resolution_msec >
-            chrono::duration_cast<std::chrono::milliseconds>(curr_time - _last_run_time).count())) {
-        return;
-    }
+    void do_tasks();
 
-    _last_run_time = curr_time;
+protected:
+    virtual void post_new_reg_action(reg_action_t &reg_action) override;
 
-    do_tasks_for_thread_local();
-}
+private:
+    void do_tasks_for_thread_local();
 
-void thread_local_event_handler::do_tasks_for_thread_local()
-{
-    m_timer.process_registered_timers_uncond();
-}
+    std::chrono::steady_clock::time_point _last_run_time;
+};
+
+extern thread_local event_handler_manager_local g_event_handler_manager_local;
+
+#endif
