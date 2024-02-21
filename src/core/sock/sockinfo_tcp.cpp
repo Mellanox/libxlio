@@ -46,11 +46,11 @@
 #include "util/list.h"
 #include "util/agent.h"
 #include "event/event_handler_manager.h"
+#include "event/event_handler_manager_local.h"
 #include "proto/route_table_mgr.h"
 #include "proto/xlio_lwip.h"
 #include "proto/dst_entry_tcp.h"
 #include "iomux/io_mux_call.h"
-#include "event/thread_local_event_handler.h"
 #include "sock-redirect.h"
 #include "fd_collection.h"
 #include "sockinfo_tcp.h"
@@ -137,7 +137,7 @@ static event_handler_manager *get_event_mgr()
 {
     return (safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS
                 ? g_p_event_handler_manager
-                : &g_thread_local_event_handler);
+                : &g_event_handler_manager_local);
 }
 
 static tcp_timers_collection *get_tcp_timer_collection()
@@ -3819,7 +3819,7 @@ int sockinfo_tcp::os_epoll_wait_with_tcp_timers(epoll_event *ep_events, int maxe
         // epol_wait timeout
         // We must run here TCP timers because we are in a mode when TCP timers are
         // handled by the context threads instead of the internal thread.
-        g_thread_local_event_handler.do_tasks();
+        g_event_handler_manager_local.do_tasks();
     } while (1);
 
     return rc;
@@ -5060,7 +5060,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
         // There are scenarios when rx_wait_helper is called in an infinite loop but exits before
         // OS epoll_wait. Delegated TCP timers must be attempted in such case.
         // This is a slow path. So calling chrono::now(), even with every iteration, is OK here.
-        g_thread_local_event_handler.do_tasks();
+        g_event_handler_manager_local.do_tasks();
     }
 
     // if in blocking accept state skip poll phase and go to sleep directly
@@ -6216,7 +6216,7 @@ ssize_t sockinfo_tcp::tcp_tx_handle_sndbuf_unavailable(ssize_t total_tx, bool is
                 option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
                 // Slow path. We must attempt TCP timers here for applications that
                 // do not check for EV_OUT.
-                g_thread_local_event_handler.do_tasks();
+                g_event_handler_manager_local.do_tasks();
             }
             // in case of zero sndbuf and non-blocking just try once polling CQ for
             // ACK

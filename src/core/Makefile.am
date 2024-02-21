@@ -99,7 +99,7 @@ libxlio_la_SOURCES := \
 	\
 	event/delta_timer.cpp \
 	event/event_handler_manager.cpp \
-	event/thread_local_event_handler.cpp \
+	event/event_handler_manager_local.cpp \
 	event/vlogger_timer_handler.cpp \
 	event/netlink_event.cpp \
 	\
@@ -212,7 +212,7 @@ libxlio_la_SOURCES := \
 	event/event.h \
 	event/event_handler_ibverbs.h \
 	event/event_handler_manager.h \
-	event/thread_local_event_handler.h \
+	event/event_handler_manager_local.h \
 	event/event_handler_rdma_cm.h \
 	event/netlink_event.h \
 	event/timer_handler.h \
