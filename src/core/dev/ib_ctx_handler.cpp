@@ -257,7 +257,7 @@ dpcp::adapter *ib_ctx_handler::set_dpcp_adapter()
         goto err;
     }
 
-    dpcp_lst = new (std::nothrow) dpcp::adapter_info[adapters_num];
+    dpcp_lst = new (std::nothrow) dpcp::adapter_info[static_cast<unsigned>(adapters_num)];
     if (!dpcp_lst) {
         ibch_logerr("failed allocating memory for devices");
         goto err;
