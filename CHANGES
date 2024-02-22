@@ -1,3 +1,9 @@
+Version 3.30.1-1:
+Date + Time 2024-02-22
+=============================================================
+Fixed:
+        - RM #3786434 C++ or C23 feature in xlio_extra.h breaks compilation of some C programs
+
 Version 3.30.0-1:
 Date + Time 2024-02-12
 =============================================================
