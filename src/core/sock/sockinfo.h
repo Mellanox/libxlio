@@ -199,9 +199,8 @@ public:
     inline bool is_blocking(void) { return m_b_blocking; }
 
     bool flow_in_reuse(void) { return m_reuseaddr | m_reuseport; }
-    int *get_rings_fds(int &res_length) override;
+    int get_rings_fds(int *ring_fds, int ring_fds_sz) override;
     int get_rings_num() override;
-    bool check_rings() override { return m_p_rx_ring ? true : false; }
     void statistics_print(vlog_levels_t log_level = VLOG_DEBUG) override;
     uint32_t get_flow_tag_val() { return m_flow_tag_id; }
     inline in_protocol_t get_protocol(void) { return m_protocol; }
@@ -647,7 +646,6 @@ protected:
     uint8_t m_n_uc_ttl_hop_lim;
     bool m_bind_no_port;
     bool m_is_ipv6only;
-    int *m_p_rings_fds;
 };
 
 #endif /* BASE_SOCKINFO_H */
