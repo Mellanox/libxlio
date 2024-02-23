@@ -528,14 +528,14 @@ bool sockinfo_tcp::prepare_listen_to_close()
 
 bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
 {
-    bool do_abort = safe_mce_sys().tcp_abort_on_close;
-    bool state;
+    si_tcp_logdbg("");
 
     lock_tcp_con();
 
-    si_tcp_logdbg("");
-
+    bool do_abort = safe_mce_sys().tcp_abort_on_close || m_n_rx_pkt_ready_list_count;
     bool is_listen_socket = is_server() || get_tcp_state(&m_pcb) == LISTEN;
+
+    m_state = SOCKINFO_CLOSING;
 
     /*
      * consider process_shutdown:
@@ -548,9 +548,6 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
     if ((is_listen_socket && !process_shutdown) || m_sock_state == TCP_SOCK_CONNECTED_RD ||
         m_sock_state == TCP_SOCK_CONNECTED_WR || m_sock_state == TCP_SOCK_CONNECTED_RDWR) {
         m_sock_state = TCP_SOCK_BOUND;
-    }
-    if (!is_listen_socket && (do_abort || m_n_rx_pkt_ready_list_count)) {
-        abort_connection();
     }
 
     m_rx_ready_byte_count += m_rx_pkt_ready_offset;
@@ -615,7 +612,7 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
      * termination sequence
      * If process_shutdown is set as True do abort() with setting tcp state as CLOSED
      */
-    if (get_tcp_state(&m_pcb) != LISTEN &&
+    if (!is_listen_socket &&
         (do_abort || process_shutdown || (m_linger.l_onoff && !m_linger.l_linger))) {
         abort_connection();
     } else {
@@ -630,25 +627,22 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
         } else {
             tcp_recv(&m_pcb, sockinfo_tcp::rx_drop_lwip_cb);
             tcp_sent(&m_pcb, nullptr);
-        }
-
-        // todo should we do this each time we get into prepare_to_close ?
-        if (get_tcp_state(&m_pcb) != LISTEN) {
-            handle_socket_linger();
+            if (m_linger.l_onoff && m_linger.l_linger) {
+                // TODO Should we do this each time we get into prepare_to_close?
+                handle_socket_linger();
+            }
         }
     }
 
-    m_state = SOCKINFO_CLOSING;
     NOTIFY_ON_EVENTS(this, EPOLLHUP);
-
     do_wakeup();
 
     if (m_econtext) {
         m_econtext->fd_closed(m_fd);
     }
 
-    state = is_closable();
-    if (state) {
+    bool is_closable_state = is_closable();
+    if (is_closable_state) {
         m_state = SOCKINFO_CLOSED;
         reset_ops();
     } else if (!is_listen_socket) {
@@ -663,7 +657,7 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
 
     unlock_tcp_con();
 
-    return state;
+    return is_closable_state;
 }
 
 void sockinfo_tcp::handle_socket_linger()
