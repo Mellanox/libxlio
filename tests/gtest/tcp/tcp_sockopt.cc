@@ -258,6 +258,25 @@ TEST_F(tcp_sockopt, ti_3_setsockopt_isolate)
     SKIP_TRUE(server_addr.addr.sa_family == AF_INET && client_addr.addr.sa_family == AF_INET,
               "This test supports only IPv4");
 
+    auto compare_rings_ne = [&](int *arr1, int arr1_nr, int *arr2, int arr2_nr) {
+        // Whether arr1 and arr2 don't overlap (contain different rings)
+        for (int i = 0; i < arr1_nr; ++i) {
+            for (int j = 0; j < arr2_nr; ++j) {
+                ASSERT_NE(arr1[i], arr2[j]);
+            }
+        }
+    };
+    auto compare_rings_contains = [&](int *arr1, int arr1_nr, int *arr2, int arr2_nr) {
+        // Whether arr1 contains all arr2
+        for (int i = 0; i < arr2_nr; ++i) {
+            bool contains = false;
+            for (int j = 0; j < arr1_nr; ++j) {
+                contains = contains || (arr2[i] == arr1[j]);
+            }
+            ASSERT_TRUE(contains);
+        }
+    };
+
     auto test_client = [&]() {
         char buf[64];
         sockaddr_store_t addr;
@@ -300,13 +319,20 @@ TEST_F(tcp_sockopt, ti_3_setsockopt_isolate)
         ASSERT_EQ(-1, rc);
         ASSERT_EQ(EINVAL, errno);
 
-        int xlio_ring_fds[3];
-        int xlio_ring_fds2[3];
-        rc = xlio_api->get_socket_rings_fds(sock, xlio_ring_fds, ARRAY_SIZE(xlio_ring_fds));
-        ASSERT_EQ(1, rc);
-        rc = xlio_api->get_socket_rings_fds(sock2, xlio_ring_fds2, ARRAY_SIZE(xlio_ring_fds2));
-        ASSERT_EQ(1, rc);
-        ASSERT_NE(xlio_ring_fds[0], xlio_ring_fds2[0]);
+        int ring_fds[3];
+        int ring_fds2[3];
+        int ring_fds_nr;
+        int ring_fds2_nr;
+        rc = xlio_api->get_socket_rings_num(sock);
+        ASSERT_LT(0, rc);
+        ASSERT_GE((int)ARRAY_SIZE(ring_fds), rc);
+        rc = xlio_api->get_socket_rings_num(sock2);
+        ASSERT_LT(0, rc);
+        ASSERT_GE((int)ARRAY_SIZE(ring_fds2), rc);
+        ring_fds_nr = xlio_api->get_socket_rings_fds(sock, ring_fds, ARRAY_SIZE(ring_fds));
+        ring_fds2_nr = xlio_api->get_socket_rings_fds(sock2, ring_fds2, ARRAY_SIZE(ring_fds2));
+        compare_rings_ne(ring_fds, ring_fds_nr, ring_fds2, ring_fds2_nr);
+        ASSERT_TRUE(!testing::Test::HasFailure());
 
         len = write(sock, HELLO_STR, sizeof(HELLO_STR));
         ASSERT_LT(0, len);
@@ -393,20 +419,23 @@ TEST_F(tcp_sockopt, ti_3_setsockopt_isolate)
         ASSERT_EQ(EINVAL, errno);
 
         /*
-         * Check rings
+         * Check rings for listen sockets
          */
 
-        int xlio_ring_fds[3];
-        int xlio_ring_fds2[3];
-        int xlio_ring_fds3[3];
-        rc = xlio_api->get_socket_rings_fds(sock, xlio_ring_fds, ARRAY_SIZE(xlio_ring_fds));
-        ASSERT_EQ(1, rc);
-        rc = xlio_api->get_socket_rings_fds(sock2, xlio_ring_fds2, ARRAY_SIZE(xlio_ring_fds2));
-        ASSERT_EQ(1, rc);
-        rc = xlio_api->get_socket_rings_fds(sock3, xlio_ring_fds3, ARRAY_SIZE(xlio_ring_fds3));
-        ASSERT_EQ(1, rc);
-        ASSERT_EQ(xlio_ring_fds[0], xlio_ring_fds2[0]);
-        ASSERT_NE(xlio_ring_fds[0], xlio_ring_fds3[0]);
+        int ring_fds[3];
+        int ring_fds2[3];
+        int ring_fds3[3];
+        int ring_fds_nr;
+        int ring_fds2_nr;
+        int ring_fds3_nr;
+        ring_fds_nr = xlio_api->get_socket_rings_fds(sock, ring_fds, ARRAY_SIZE(ring_fds));
+        ASSERT_EQ(1, ring_fds_nr);
+        ring_fds2_nr = xlio_api->get_socket_rings_fds(sock2, ring_fds2, ARRAY_SIZE(ring_fds2));
+        ASSERT_EQ(1, ring_fds2_nr);
+        ring_fds3_nr = xlio_api->get_socket_rings_fds(sock3, ring_fds3, ARRAY_SIZE(ring_fds3));
+        ASSERT_EQ(1, ring_fds3_nr);
+        ASSERT_EQ(ring_fds[0], ring_fds2[0]);
+        ASSERT_NE(ring_fds[0], ring_fds3[0]);
 
         // Notify client to proceed with connect()
         barrier_fork(pid);
@@ -431,13 +460,20 @@ TEST_F(tcp_sockopt, ti_3_setsockopt_isolate)
         log_trace("Accepted connection: fd=%d from %s\n", sock_in2,
                   sys_addr2str((struct sockaddr *)&peer_addr));
 
-        rc = xlio_api->get_socket_rings_fds(sock_in, xlio_ring_fds2, ARRAY_SIZE(xlio_ring_fds2));
-        ASSERT_EQ(1, rc);
-        rc = xlio_api->get_socket_rings_fds(sock_in2, xlio_ring_fds3, ARRAY_SIZE(xlio_ring_fds3));
-        ASSERT_EQ(1, rc);
+        rc = xlio_api->get_socket_rings_num(sock_in);
+        ASSERT_LT(0, rc);
+        ASSERT_GE((int)ARRAY_SIZE(ring_fds2), rc);
+        rc = xlio_api->get_socket_rings_num(sock_in2);
+        ASSERT_LT(0, rc);
+        ASSERT_GE((int)ARRAY_SIZE(ring_fds3), rc);
+
+        ring_fds2_nr = xlio_api->get_socket_rings_fds(sock_in, ring_fds2, ARRAY_SIZE(ring_fds2));
+        ring_fds3_nr = xlio_api->get_socket_rings_fds(sock_in2, ring_fds3, ARRAY_SIZE(ring_fds3));
         // Incoming TCP sockets inherit ring allocation logic from their parents
-        ASSERT_EQ(xlio_ring_fds[0], xlio_ring_fds2[0]);
-        ASSERT_EQ(xlio_ring_fds[0], xlio_ring_fds3[0]);
+        compare_rings_contains(ring_fds2, ring_fds2_nr, ring_fds, ring_fds_nr);
+        ASSERT_TRUE(!testing::Test::HasFailure());
+        compare_rings_contains(ring_fds3, ring_fds3_nr, ring_fds, ring_fds_nr);
+        ASSERT_TRUE(!testing::Test::HasFailure());
 
         /*
          * Socket read / write

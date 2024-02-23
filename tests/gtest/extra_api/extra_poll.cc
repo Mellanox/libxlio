@@ -379,48 +379,55 @@ TEST_F(socketxtreme_poll, ti_4_socket_isolation)
     bool received_data = false;
     char msg[] = "Hello";
 
-    int _xlio_ring_fd = -1;
-    int _xlio_peer_ring_fd = -1;
+    int ring_fd[3] = {-1, -1, -1};
+    int peer_ring_fd[3] = {-1, -1, -1};
+    int ring_fd_nr;
+    int peer_ring_fd_nr = 0;
     struct xlio_socketxtreme_completion_t xlio_comps;
     int fd_peer = -1;
     struct sockaddr peer_addr;
 
-    auto poll_single_ring = [&](int ring_fd) {
-        rc = xlio_api->socketxtreme_poll(ring_fd, &xlio_comps, 1, SOCKETXTREME_POLL_TX);
-        if (rc == 0) {
-            return;
-        }
-        if ((xlio_comps.events & EPOLLERR) || (xlio_comps.events & EPOLLHUP) ||
-            (xlio_comps.events & EPOLLRDHUP)) {
-            log_trace("Close connection: event: 0x%lx\n", xlio_comps.events);
-            rc = -1;
-            return;
-        }
-        if (xlio_comps.events & XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED) {
-            EXPECT_EQ(fd, (int)xlio_comps.listen_fd);
-            fd_peer = (int)xlio_comps.user_data;
-            memcpy(&peer_addr, &xlio_comps.src, sizeof(peer_addr));
-            log_trace("Accepted connection: fd: %d from %s\n", fd_peer,
-                      sys_addr2str((struct sockaddr *)&peer_addr));
+    auto poll_rings = [&](int *rings, int rings_nr) {
+        for (int i = 0; i < rings_nr; ++i) {
+            rc = xlio_api->socketxtreme_poll(rings[i], &xlio_comps, 1, SOCKETXTREME_POLL_TX);
+            if (rc == 0) {
+                continue;
+            }
+            if ((xlio_comps.events & EPOLLERR) || (xlio_comps.events & EPOLLHUP) ||
+                (xlio_comps.events & EPOLLRDHUP)) {
+                log_trace("Close connection: event: 0x%lx\n", xlio_comps.events);
+                rc = -1;
+                return;
+            }
+            if (xlio_comps.events & XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED) {
+                EXPECT_EQ(fd, (int)xlio_comps.listen_fd);
+                fd_peer = (int)xlio_comps.user_data;
+                memcpy(&peer_addr, &xlio_comps.src, sizeof(peer_addr));
+                log_trace("Accepted connection: fd: %d from %s\n", fd_peer,
+                          sys_addr2str((struct sockaddr *)&peer_addr));
 
-            rc = xlio_api->get_socket_rings_fds(fd_peer, &_xlio_peer_ring_fd, 1);
-            ASSERT_EQ(1, rc);
-            ASSERT_LE(0, _xlio_peer_ring_fd);
+                rc = xlio_api->get_socket_rings_num(fd);
+                ASSERT_GE((int)ARRAY_SIZE(peer_ring_fd), rc);
 
-            rc = send(fd_peer, (void *)msg, sizeof(msg), 0);
-            EXPECT_EQ(static_cast<int>(sizeof(msg)), rc);
-        }
-        if (xlio_comps.events & XLIO_SOCKETXTREME_PACKET) {
-            EXPECT_EQ(1U, xlio_comps.packet.num_bufs);
-            EXPECT_EQ(sizeof(msg), xlio_comps.packet.total_len);
-            EXPECT_TRUE(xlio_comps.packet.buff_lst->payload);
-            EXPECT_EQ(0,
-                      strncmp(msg, (const char *)xlio_comps.packet.buff_lst->payload,
-                              xlio_comps.packet.total_len));
-            log_trace("Received data: user_data: %p data: %s\n",
-                      (void *)((uintptr_t)xlio_comps.user_data),
-                      (char *)xlio_comps.packet.buff_lst->payload);
-            received_data = true;
+                peer_ring_fd_nr =
+                    xlio_api->get_socket_rings_fds(fd_peer, peer_ring_fd, ARRAY_SIZE(peer_ring_fd));
+                ASSERT_LT(0, peer_ring_fd_nr);
+
+                rc = send(fd_peer, (void *)msg, sizeof(msg), 0);
+                EXPECT_EQ(static_cast<int>(sizeof(msg)), rc);
+            }
+            if (xlio_comps.events & XLIO_SOCKETXTREME_PACKET) {
+                EXPECT_EQ(1U, xlio_comps.packet.num_bufs);
+                EXPECT_EQ(sizeof(msg), xlio_comps.packet.total_len);
+                EXPECT_TRUE(xlio_comps.packet.buff_lst->payload);
+                EXPECT_EQ(0,
+                          strncmp(msg, (const char *)xlio_comps.packet.buff_lst->payload,
+                                  xlio_comps.packet.total_len));
+                log_trace("Received data: user_data: %p data: %s\n",
+                          (void *)((uintptr_t)xlio_comps.user_data),
+                          (char *)xlio_comps.packet.buff_lst->payload);
+                received_data = true;
+            }
         }
         rc = 0;
     };
@@ -453,15 +460,17 @@ TEST_F(socketxtreme_poll, ti_4_socket_isolation)
         rc = sock_noblock(fd);
         ASSERT_EQ(0, rc);
 
-        rc = xlio_api->get_socket_rings_fds(fd, &_xlio_ring_fd, 1);
-        ASSERT_EQ(1, rc);
-        ASSERT_LE(0, _xlio_ring_fd);
+        rc = xlio_api->get_socket_rings_num(fd);
+        ASSERT_GE((int)ARRAY_SIZE(ring_fd), rc);
+
+        ring_fd_nr = xlio_api->get_socket_rings_fds(fd, ring_fd, ARRAY_SIZE(ring_fd));
+        ASSERT_LT(0, ring_fd_nr);
 
         uint64_t ts = timestamp_ms();
         ASSERT_NE(0LU, ts);
         rc = 0;
         while (rc == 0 && !received_data && !testing::Test::HasFailure()) {
-            poll_single_ring(_xlio_ring_fd);
+            poll_rings(ring_fd, ring_fd_nr);
             if (timestamp_ms_elapsed(ts, 500UL)) {
                 log_trace("No data received by client within time limit\n");
                 break;
@@ -490,17 +499,19 @@ TEST_F(socketxtreme_poll, ti_4_socket_isolation)
         rc = listen(fd, 5);
         CHECK_ERR_OK(rc);
 
-        rc = xlio_api->get_socket_rings_fds(fd, &_xlio_ring_fd, 1);
-        ASSERT_EQ(1, rc);
-        ASSERT_LE(0, _xlio_ring_fd);
+        rc = xlio_api->get_socket_rings_num(fd);
+        ASSERT_GE((int)ARRAY_SIZE(ring_fd), rc);
+
+        ring_fd_nr = xlio_api->get_socket_rings_fds(fd, ring_fd, ARRAY_SIZE(ring_fd));
+        ASSERT_LT(0, ring_fd_nr);
 
         barrier_fork(pid);
         rc = 0;
 
         while (rc == 0 && !child_fork_exit() && !testing::Test::HasFailure()) {
-            poll_single_ring(_xlio_ring_fd);
-            if (_xlio_peer_ring_fd >= 0 && _xlio_peer_ring_fd != _xlio_ring_fd && rc == 0) {
-                poll_single_ring(_xlio_peer_ring_fd);
+            poll_rings(ring_fd, ring_fd_nr);
+            if (peer_ring_fd_nr > 0 && rc == 0 && !testing::Test::HasFailure()) {
+                poll_rings(peer_ring_fd, peer_ring_fd_nr);
             }
         }
 
