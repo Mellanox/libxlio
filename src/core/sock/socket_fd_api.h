@@ -267,11 +267,11 @@ public:
     }
 
     virtual int get_rings_num() { return 0; }
-    virtual bool check_rings() { return false; }
-    virtual int *get_rings_fds(int &res_length)
+    virtual int get_rings_fds(int *ring_fds, int ring_fds_sz)
     {
-        res_length = 0;
-        return nullptr;
+        NOT_IN_USE(ring_fds);
+        NOT_IN_USE(ring_fds_sz);
+        return 0;
     }
 
 protected:

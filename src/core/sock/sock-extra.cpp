@@ -239,13 +239,8 @@ extern "C" int xlio_socketxtreme_free_buff(xlio_buff_t *buff)
 
 extern "C" int xlio_get_socket_rings_num(int fd)
 {
-    socket_fd_api *p_socket_object = nullptr;
-    p_socket_object = fd_collection_get_sockfd(fd);
-    if (p_socket_object && p_socket_object->check_rings()) {
-        return p_socket_object->get_rings_num();
-    }
-
-    return 0;
+    socket_fd_api *p_socket_object = fd_collection_get_sockfd(fd);
+    return p_socket_object ? p_socket_object->get_rings_num() : 0;
 }
 
 extern "C" int xlio_get_socket_rings_fds(int fd, int *ring_fds, int ring_fds_sz)
@@ -256,15 +251,7 @@ extern "C" int xlio_get_socket_rings_fds(int fd, int *ring_fds, int ring_fds_sz)
     }
 
     socket_fd_api *p_socket_object = fd_collection_get_sockfd(fd);
-    if (p_socket_object && p_socket_object->check_rings()) {
-        int rings_num = 0;
-        int *p_rings_fds = p_socket_object->get_rings_fds(rings_num);
-        int num_rings_to_copy = std::min(ring_fds_sz, rings_num);
-        std::copy(&p_rings_fds[0], &p_rings_fds[num_rings_to_copy], ring_fds);
-        return num_rings_to_copy;
-    }
-
-    return 0;
+    return p_socket_object ? p_socket_object->get_rings_fds(ring_fds, ring_fds_sz) : 0;
 }
 
 extern "C" int xlio_add_conf_rule(const char *config_line)

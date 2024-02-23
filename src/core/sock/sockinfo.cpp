@@ -101,7 +101,6 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
                              : safe_mce_sys().sysctl_reader.get_net_ipv6_hop_limit())
     , m_bind_no_port(false)
     , m_is_ipv6only(safe_mce_sys().sysctl_reader.get_ipv6_bindv6only())
-    , m_p_rings_fds(nullptr)
 {
     m_rx_epfd = SYSCALL(epoll_create, 128);
     if (unlikely(m_rx_epfd == -1)) {
@@ -149,11 +148,6 @@ sockinfo::~sockinfo()
     m_b_blocking = false;
     // This will wake up any blocked thread in rx() call to SYSCALL(epoll_wait, )
     SYSCALL(close, m_rx_epfd);
-
-    if (m_p_rings_fds) {
-        delete[] m_p_rings_fds;
-        m_p_rings_fds = nullptr;
-    }
 
     while (!m_error_queue.empty()) {
         mem_buf_desc_t *buff = m_error_queue.get_and_pop_front();
@@ -1969,53 +1963,53 @@ int sockinfo::modify_ratelimit(dst_entry *p_dst_entry, struct xlio_rate_limit_t 
 
 int sockinfo::get_rings_num()
 {
-    int count = 0;
+    size_t count = 0;
     size_t num_rx_channel_fds;
-    if (is_socketxtreme()) {
-        /* socketXtreme mode support just single ring */
-        return 1;
+
+    ring *tx_ring = m_p_connected_dst_entry ? m_p_connected_dst_entry->get_ring() : nullptr;
+    if (tx_ring) {
+        (void)tx_ring->get_rx_channel_fds(count);
     }
 
-    rx_ring_map_t::iterator it = m_rx_ring_map.begin();
-    for (; it != m_rx_ring_map.end(); ++it) {
-        (void)it->first->get_rx_channel_fds(num_rx_channel_fds);
-        count += (int)num_rx_channel_fds;
+    for (auto pair : m_rx_ring_map) {
+        if (tx_ring == pair.first) {
+            continue;
+        }
+        (void)pair.first->get_rx_channel_fds(num_rx_channel_fds);
+        count += num_rx_channel_fds;
     }
-    return count;
+    return static_cast<int>(count);
 }
 
-int *sockinfo::get_rings_fds(int &res_length)
+int sockinfo::get_rings_fds(int *ring_fds, int ring_fds_sz)
 {
-    res_length = 0;
-    int index = 0;
     size_t num_rx_channel_fds;
+    int *channel_fds;
+    int index = 0;
 
-    if (is_socketxtreme()) {
-        /* socketXtreme mode support just single ring */
-        res_length = 1;
-        return m_p_rx_ring->get_rx_channel_fds(num_rx_channel_fds);
-    }
-
-    res_length = get_rings_num();
-    if (m_p_rings_fds) {
-        return m_p_rings_fds;
-    }
-    m_p_rings_fds = new int[res_length];
-
-    rx_ring_map_t::iterator it = m_rx_ring_map.begin();
-    for (; it != m_rx_ring_map.end(); ++it) {
-        int *p_n_rx_channel_fds = it->first->get_rx_channel_fds(num_rx_channel_fds);
-        for (size_t j = 0; j < num_rx_channel_fds; ++j) {
-            int fd = p_n_rx_channel_fds[j];
-            if (fd != -1) {
-                m_p_rings_fds[index] = fd;
-                ++index;
-            } else {
-                si_logdbg("got ring with fd -1");
-            }
+    /*
+     * We return RX channels for the TX ring to make it consistent and comparable with the RX
+     * rings. The channels are used only as indirect pointers to the rings, therefore, this
+     * doesn't introduce any functionality issues.
+     */
+    ring *tx_ring = m_p_connected_dst_entry ? m_p_connected_dst_entry->get_ring() : nullptr;
+    if (tx_ring) {
+        channel_fds = tx_ring->get_rx_channel_fds(num_rx_channel_fds);
+        for (size_t i = 0; i < num_rx_channel_fds && index < ring_fds_sz; ++i) {
+            ring_fds[index++] = channel_fds[i];
         }
     }
-    return m_p_rings_fds;
+
+    for (auto pair : m_rx_ring_map) {
+        if (tx_ring == pair.first) {
+            continue;
+        }
+        channel_fds = pair.first->get_rx_channel_fds(num_rx_channel_fds);
+        for (size_t i = 0; i < num_rx_channel_fds && index < ring_fds_sz; ++i) {
+            ring_fds[index++] = channel_fds[i];
+        }
+    }
+    return index;
 }
 
 int sockinfo::setsockopt_kernel(int __level, int __optname, const void *__optval,
