@@ -150,7 +150,6 @@ protected:
     void *m_timer_handle = nullptr;
 
 private:
-
     typedef std::list<sockinfo_tcp *> sock_list;
     typedef typename sock_list::iterator sock_list_itr;
     std::vector<sock_list> m_p_intervals;
