@@ -344,16 +344,7 @@ public:
 #endif
 #endif
 
-    inline bool set_flow_tag(uint32_t flow_tag_id)
-    {
-        if (flow_tag_id && (flow_tag_id != FLOW_TAG_MASK)) {
-            m_flow_tag_id = flow_tag_id;
-            m_flow_tag_enabled = true;
-            return true;
-        }
-        m_flow_tag_id = FLOW_TAG_MASK;
-        return false;
-    }
+    inline bool set_flow_tag(uint32_t flow_tag_id);
     inline bool get_reuseaddr(void) { return m_reuseaddr; }
     inline bool get_reuseport(void) { return m_reuseport; }
     inline bool flow_tag_enabled(void) { return m_flow_tag_enabled; }
@@ -369,24 +360,7 @@ public:
     bool validate_and_convert_mapped_ipv4(sock_addr &sock) const;
     void socket_stats_init(void);
 
-    void sock_pop_descs_rx_ready(descq_t *cache)
-    {
-        lock_rx_q();
-        mem_buf_desc_t *temp;
-        const size_t size = get_size_m_rx_pkt_ready_list();
-
-        for (size_t i = 0; i < size; i++) {
-            temp = get_front_m_rx_pkt_ready_list();
-            pop_front_m_rx_pkt_ready_list();
-            cache->push_back(temp);
-        }
-        m_n_rx_pkt_ready_list_count = 0;
-        m_rx_ready_byte_count = 0;
-        m_p_socket_stats->n_rx_ready_pkt_count = 0;
-        m_p_socket_stats->n_rx_ready_byte_count = 0;
-
-        unlock_rx_q();
-    }
+    inline void sock_pop_descs_rx_ready(descq_t *cache);
 
     sa_family_t get_family() { return m_family; }
     bool is_shadow_socket_present() { return m_fd >= 0 && m_fd != m_rx_epfd; }
@@ -397,10 +371,7 @@ public:
                   const int __flags, const sockaddr *__to, const socklen_t __tolen);
 
 protected:
-    inline void set_rx_reuse_pending(bool is_pending = true)
-    {
-        m_rx_reuse_buf_pending = is_pending;
-    }
+    inline void set_rx_reuse_pending(bool is_pending = true);
  
     int setsockopt_kernel(int __level, int __optname, const void *__optval, socklen_t __optlen,
                           int supported, bool allow_priv);
@@ -480,230 +451,20 @@ protected:
     ssize_t rx_os(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, const int flags,
                   sockaddr *__from, socklen_t *__fromlen, struct msghdr *__msg);
 
-    inline void set_events_socketxtreme(uint64_t events)
-    {
-        m_socketxtreme.ec->completion.user_data = (uint64_t)m_fd_context;
-        if (!m_socketxtreme.ec->completion.events) {
-            m_socketxtreme.ec->completion.events |= events;
-            m_p_rx_ring->put_ec(m_socketxtreme.ec);
-
-            m_socketxtreme.ec = NULL;
-            for (auto &ec : m_socketxtreme.ec_cache) {
-                if (0 == ec.completion.events) {
-                    m_socketxtreme.ec = &ec;
-                    break;
-                }
-            }
-            if (NULL == m_socketxtreme.ec) {
-                struct ring_ec ec;
-                ec.clear();
-                m_socketxtreme.ec_cache.push_back(ec);
-                m_socketxtreme.ec = &m_socketxtreme.ec_cache.back();
-            }
-        } else {
-            m_socketxtreme.ec->completion.events |= events;
-        }
-    }
-    
-    inline void set_events(uint64_t events)
-    {
-        /* Collect all events if rx ring is enabled */
-        if (is_socketxtreme() && m_state == SOCKINFO_OPENED) {
-            set_events_socketxtreme(events);
-        }
-
-        insert_epoll_event(events);
-    }
-
-    inline void save_strq_stats(uint32_t packet_strides)
-    {
-        m_socket_stats.strq_counters.n_strq_total_strides += static_cast<uint64_t>(packet_strides);
-        m_socket_stats.strq_counters.n_strq_max_strides_per_packet =
-            std::max(m_socket_stats.strq_counters.n_strq_max_strides_per_packet, packet_strides);
-    }
+    inline void set_events_socketxtreme(uint64_t events);
+    inline void set_events(uint64_t events);
+    inline void save_strq_stats(uint32_t packet_strides);
 
     inline int dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, socklen_t *__fromlen,
-                              int in_flags, int *p_out_flags)
-    {
-        mem_buf_desc_t *pdesc;
-        int total_rx = 0;
-        uint32_t nbytes, pos;
-        bool relase_buff = true;
+                              int in_flags, int *p_out_flags);
+    
+    inline void reuse_buffer(mem_buf_desc_t *buff);
+    
+    static const char *setsockopt_so_opt_to_str(int opt);
+    
+    int get_sock_by_L3_L4(in_protocol_t protocol, const ip_address &ip, in_port_t port); 
+    int handle_exception_flow();
 
-        bool is_peek = in_flags & MSG_PEEK;
-        int rx_pkt_ready_list_idx = 1;
-        int rx_pkt_ready_offset = m_rx_pkt_ready_offset;
-
-        pdesc = get_front_m_rx_pkt_ready_list();
-        void *iov_base = (uint8_t *)pdesc->rx.frag.iov_base + m_rx_pkt_ready_offset;
-        size_t bytes_left = pdesc->rx.frag.iov_len - m_rx_pkt_ready_offset;
-        size_t payload_size = pdesc->rx.sz_payload;
-
-        if (__from && __fromlen) {
-            pdesc->rx.src.get_sa_by_family(__from, *__fromlen, m_family);
-        }
-
-        if (in_flags & MSG_XLIO_ZCOPY) {
-            relase_buff = false;
-            total_rx = zero_copy_rx(p_iov, pdesc, p_out_flags);
-            if (unlikely(total_rx < 0)) {
-                return -1;
-            }
-            m_rx_pkt_ready_offset = 0;
-        } else {
-#ifdef DEFINED_UTLS
-            uint8_t tls_type = pdesc->rx.tls_type;
-#endif /* DEFINED_UTLS */
-            for (int i = 0; i < sz_iov && pdesc; i++) {
-                pos = 0;
-                while (pos < p_iov[i].iov_len && pdesc) {
-#ifdef DEFINED_UTLS
-                    if (unlikely(pdesc->rx.tls_type != tls_type)) {
-                        break;
-                    }
-#endif /* DEFINED_UTLS */
-                    nbytes = p_iov[i].iov_len - pos;
-                    if (nbytes > bytes_left) {
-                        nbytes = bytes_left;
-                    }
-                    memcpy((char *)(p_iov[i].iov_base) + pos, iov_base, nbytes);
-                    pos += nbytes;
-                    total_rx += nbytes;
-                    m_rx_pkt_ready_offset += nbytes;
-                    bytes_left -= nbytes;
-                    iov_base = (uint8_t *)iov_base + nbytes;
-                    if (m_b_rcvtstamp || m_n_tsing_flags) {
-                        update_socket_timestamps(&pdesc->rx.timestamps);
-                    }
-                    if (bytes_left <= 0) {
-                        if (unlikely(is_peek)) {
-                            pdesc = get_next_desc_peek(pdesc, rx_pkt_ready_list_idx);
-                        } else {
-                            pdesc = get_next_desc(pdesc);
-                        }
-                        m_rx_pkt_ready_offset = 0;
-                        if (pdesc) {
-                            iov_base = pdesc->rx.frag.iov_base;
-                            bytes_left = pdesc->rx.frag.iov_len;
-                        }
-                    }
-                }
-            }
-        }
-
-        if (unlikely(is_peek)) {
-            m_rx_pkt_ready_offset =
-                rx_pkt_ready_offset; // if MSG_PEEK is on, m_rx_pkt_ready_offset must be zero-ed
-            // save_stats_rx_offload(total_rx); //TODO??
-        } else {
-            m_rx_ready_byte_count -= total_rx;
-            m_p_socket_stats->n_rx_ready_byte_count -= total_rx;
-            post_deqeue(relase_buff);
-            save_stats_rx_offload(total_rx);
-        }
-
-        total_rx = handle_msg_trunc(total_rx, payload_size, in_flags, p_out_flags);
-
-        return total_rx;
-    }
-
-    inline void reuse_buffer(mem_buf_desc_t *buff)
-    {
-        set_rx_reuse_pending(false);
-        ring *p_ring = buff->p_desc_owner->get_parent();
-        rx_ring_map_t::iterator iter = m_rx_ring_map.find(p_ring);
-        if (likely(iter != m_rx_ring_map.end())) {
-            if (safe_mce_sys().buffer_batching_mode == BUFFER_BATCHING_NONE) {
-                if (!p_ring->reclaim_recv_buffers(buff)) {
-                    g_buffer_pool_rx_ptr->put_buffer_after_deref_thread_safe(buff);
-                }
-                return;
-            }
-
-            descq_t *rx_reuse = &iter->second->rx_reuse_info.rx_reuse;
-            int &n_buff_num = iter->second->rx_reuse_info.n_buff_num;
-            rx_reuse->push_back(buff);
-            n_buff_num += buff->rx.n_frags;
-            if (n_buff_num < m_n_sysvar_rx_num_buffs_reuse) {
-                return;
-            }
-            if (n_buff_num >= 2 * m_n_sysvar_rx_num_buffs_reuse) {
-                if (p_ring->reclaim_recv_buffers(rx_reuse)) {
-                    n_buff_num = 0;
-                } else {
-                    g_buffer_pool_rx_ptr->put_buffers_after_deref_thread_safe(rx_reuse);
-                    n_buff_num = 0;
-                }
-                m_rx_reuse_buf_postponed = false;
-            } else {
-                m_rx_reuse_buf_postponed = true;
-            }
-        } else {
-            // Retuned buffer to global pool when owner can't be found
-            // In case ring was deleted while buffers where still queued
-            vlog_printf(VLOG_DEBUG, "Buffer owner not found\n");
-            // Awareness: these are best efforts: decRef without lock in case no CQ
-            g_buffer_pool_rx_ptr->put_buffer_after_deref_thread_safe(buff);
-        }
-    }
-
-    static const char *setsockopt_so_opt_to_str(int opt)
-    {
-        switch (opt) {
-        case SO_REUSEADDR:
-            return "SO_REUSEADDR";
-        case SO_REUSEPORT:
-            return "SO_REUSEPORT";
-        case SO_BROADCAST:
-            return "SO_BROADCAST";
-        case SO_RCVBUF:
-            return "SO_RCVBUF";
-        case SO_SNDBUF:
-            return "SO_SNDBUF";
-        case SO_TIMESTAMP:
-            return "SO_TIMESTAMP";
-        case SO_TIMESTAMPNS:
-            return "SO_TIMESTAMPNS";
-        case SO_BINDTODEVICE:
-            return "SO_BINDTODEVICE";
-        case SO_ZEROCOPY:
-            return "SO_ZEROCOPY";
-        case SO_XLIO_RING_ALLOC_LOGIC:
-            return "SO_XLIO_RING_ALLOC_LOGIC";
-        case SO_MAX_PACING_RATE:
-            return "SO_MAX_PACING_RATE";
-        case SO_XLIO_FLOW_TAG:
-            return "SO_XLIO_FLOW_TAG";
-        case SO_XLIO_SHUTDOWN_RX:
-            return "SO_XLIO_SHUTDOWN_RX";
-        case IPV6_V6ONLY:
-            return "IPV6_V6ONLY";
-        case IPV6_ADDR_PREFERENCES:
-            return "IPV6_ADDR_PREFERENCES";
-        default:
-            break;
-        }
-        return "UNKNOWN SO opt";
-    }
-
-    int get_sock_by_L3_L4(in_protocol_t protocol, const ip_address &ip, in_port_t port);
-
-    //////////////////////////////////////////////////////////////////
-    int handle_exception_flow()
-    {
-        if (safe_mce_sys().exception_handling.is_suit_un_offloading()) {
-            try_un_offloading();
-        }
-        if (safe_mce_sys().exception_handling == xlio_exception_handling::MODE_RETURN_ERROR) {
-            errno = EINVAL;
-            return -1;
-        }
-        if (safe_mce_sys().exception_handling == xlio_exception_handling::MODE_ABORT) {
-            return -2;
-        }
-        return 0;
-    }
-    //////////////////////////////////////////////////////////////////
 private:
     int fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit);
     bool attach_as_uc_receiver_anyip(sa_family_t family, role_t role, bool skip_rules);
@@ -825,5 +586,207 @@ protected:
     bool m_is_ipv6only;
     int *m_p_rings_fds;
 };
+
+void sockinfo::set_rx_reuse_pending(bool is_pending)
+{
+    m_rx_reuse_buf_pending = is_pending;
+}
+
+bool sockinfo::set_flow_tag(uint32_t flow_tag_id)
+{
+    if (flow_tag_id && (flow_tag_id != FLOW_TAG_MASK)) {
+        m_flow_tag_id = flow_tag_id;
+        m_flow_tag_enabled = true;
+        return true;
+    }
+    m_flow_tag_id = FLOW_TAG_MASK;
+    return false;
+}
+
+void sockinfo::sock_pop_descs_rx_ready(descq_t *cache)
+{
+    lock_rx_q();
+    mem_buf_desc_t *temp;
+    const size_t size = get_size_m_rx_pkt_ready_list();
+
+    for (size_t i = 0; i < size; i++) {
+        temp = get_front_m_rx_pkt_ready_list();
+        pop_front_m_rx_pkt_ready_list();
+        cache->push_back(temp);
+    }
+    m_n_rx_pkt_ready_list_count = 0;
+    m_rx_ready_byte_count = 0;
+    m_p_socket_stats->n_rx_ready_pkt_count = 0;
+    m_p_socket_stats->n_rx_ready_byte_count = 0;
+
+    unlock_rx_q();
+}
+
+void sockinfo::set_events_socketxtreme(uint64_t events)
+{
+    m_socketxtreme.ec->completion.user_data = (uint64_t)m_fd_context;
+    if (!m_socketxtreme.ec->completion.events) {
+        m_socketxtreme.ec->completion.events |= events;
+        m_p_rx_ring->put_ec(m_socketxtreme.ec);
+
+        m_socketxtreme.ec = NULL;
+        for (auto &ec : m_socketxtreme.ec_cache) {
+            if (0 == ec.completion.events) {
+                m_socketxtreme.ec = &ec;
+                break;
+            }
+        }
+        if (NULL == m_socketxtreme.ec) {
+            struct ring_ec ec;
+            ec.clear();
+            m_socketxtreme.ec_cache.push_back(ec);
+            m_socketxtreme.ec = &m_socketxtreme.ec_cache.back();
+        }
+    } else {
+        m_socketxtreme.ec->completion.events |= events;
+    }
+}
+    
+void sockinfo::set_events(uint64_t events)
+{
+    /* Collect all events if rx ring is enabled */
+    if (is_socketxtreme() && m_state == SOCKINFO_OPENED) {
+        set_events_socketxtreme(events);
+    }
+
+    insert_epoll_event(events);
+}
+
+void sockinfo::save_strq_stats(uint32_t packet_strides)
+{
+    m_socket_stats.strq_counters.n_strq_total_strides += static_cast<uint64_t>(packet_strides);
+    m_socket_stats.strq_counters.n_strq_max_strides_per_packet =
+        std::max(m_socket_stats.strq_counters.n_strq_max_strides_per_packet, packet_strides);
+}
+
+int sockinfo::dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, socklen_t *__fromlen,
+                                int in_flags, int *p_out_flags)
+{
+    mem_buf_desc_t *pdesc;
+    int total_rx = 0;
+    uint32_t nbytes, pos;
+    bool relase_buff = true;
+
+    bool is_peek = in_flags & MSG_PEEK;
+    int rx_pkt_ready_list_idx = 1;
+    int rx_pkt_ready_offset = m_rx_pkt_ready_offset;
+
+    pdesc = get_front_m_rx_pkt_ready_list();
+    void *iov_base = (uint8_t *)pdesc->rx.frag.iov_base + m_rx_pkt_ready_offset;
+    size_t bytes_left = pdesc->rx.frag.iov_len - m_rx_pkt_ready_offset;
+    size_t payload_size = pdesc->rx.sz_payload;
+
+    if (__from && __fromlen) {
+        pdesc->rx.src.get_sa_by_family(__from, *__fromlen, m_family);
+    }
+
+    if (in_flags & MSG_XLIO_ZCOPY) {
+        relase_buff = false;
+        total_rx = zero_copy_rx(p_iov, pdesc, p_out_flags);
+        if (unlikely(total_rx < 0)) {
+            return -1;
+        }
+        m_rx_pkt_ready_offset = 0;
+    } else {
+#ifdef DEFINED_UTLS
+        uint8_t tls_type = pdesc->rx.tls_type;
+#endif /* DEFINED_UTLS */
+        for (int i = 0; i < sz_iov && pdesc; i++) {
+            pos = 0;
+            while (pos < p_iov[i].iov_len && pdesc) {
+#ifdef DEFINED_UTLS
+                if (unlikely(pdesc->rx.tls_type != tls_type)) {
+                    break;
+                }
+#endif /* DEFINED_UTLS */
+                nbytes = p_iov[i].iov_len - pos;
+                if (nbytes > bytes_left) {
+                    nbytes = bytes_left;
+                }
+                memcpy((char *)(p_iov[i].iov_base) + pos, iov_base, nbytes);
+                pos += nbytes;
+                total_rx += nbytes;
+                m_rx_pkt_ready_offset += nbytes;
+                bytes_left -= nbytes;
+                iov_base = (uint8_t *)iov_base + nbytes;
+                if (m_b_rcvtstamp || m_n_tsing_flags) {
+                    update_socket_timestamps(&pdesc->rx.timestamps);
+                }
+                if (bytes_left <= 0) {
+                    if (unlikely(is_peek)) {
+                        pdesc = get_next_desc_peek(pdesc, rx_pkt_ready_list_idx);
+                    } else {
+                        pdesc = get_next_desc(pdesc);
+                    }
+                    m_rx_pkt_ready_offset = 0;
+                    if (pdesc) {
+                        iov_base = pdesc->rx.frag.iov_base;
+                        bytes_left = pdesc->rx.frag.iov_len;
+                    }
+                }
+            }
+        }
+    }
+
+    if (unlikely(is_peek)) {
+        m_rx_pkt_ready_offset =
+            rx_pkt_ready_offset; // if MSG_PEEK is on, m_rx_pkt_ready_offset must be zero-ed
+        // save_stats_rx_offload(total_rx); //TODO??
+    } else {
+        m_rx_ready_byte_count -= total_rx;
+        m_p_socket_stats->n_rx_ready_byte_count -= total_rx;
+        post_deqeue(relase_buff);
+        save_stats_rx_offload(total_rx);
+    }
+
+    total_rx = handle_msg_trunc(total_rx, payload_size, in_flags, p_out_flags);
+
+    return total_rx;
+}
+
+void sockinfo::reuse_buffer(mem_buf_desc_t *buff)
+{
+    set_rx_reuse_pending(false);
+    ring *p_ring = buff->p_desc_owner->get_parent();
+    rx_ring_map_t::iterator iter = m_rx_ring_map.find(p_ring);
+    if (likely(iter != m_rx_ring_map.end())) {
+        if (safe_mce_sys().buffer_batching_mode == BUFFER_BATCHING_NONE) {
+            if (!p_ring->reclaim_recv_buffers(buff)) {
+                g_buffer_pool_rx_ptr->put_buffer_after_deref_thread_safe(buff);
+            }
+            return;
+        }
+
+        descq_t *rx_reuse = &iter->second->rx_reuse_info.rx_reuse;
+        int &n_buff_num = iter->second->rx_reuse_info.n_buff_num;
+        rx_reuse->push_back(buff);
+        n_buff_num += buff->rx.n_frags;
+        if (n_buff_num < m_n_sysvar_rx_num_buffs_reuse) {
+            return;
+        }
+        if (n_buff_num >= 2 * m_n_sysvar_rx_num_buffs_reuse) {
+            if (p_ring->reclaim_recv_buffers(rx_reuse)) {
+                n_buff_num = 0;
+            } else {
+                g_buffer_pool_rx_ptr->put_buffers_after_deref_thread_safe(rx_reuse);
+                n_buff_num = 0;
+            }
+            m_rx_reuse_buf_postponed = false;
+        } else {
+            m_rx_reuse_buf_postponed = true;
+        }
+    } else {
+        // Retuned buffer to global pool when owner can't be found
+        // In case ring was deleted while buffers where still queued
+        vlog_printf(VLOG_DEBUG, "Buffer owner not found\n");
+        // Awareness: these are best efforts: decRef without lock in case no CQ
+        g_buffer_pool_rx_ptr->put_buffer_after_deref_thread_safe(buff);
+    }
+}
 
 #endif /* BASE_SOCKINFO_H */
