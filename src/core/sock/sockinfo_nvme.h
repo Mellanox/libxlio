@@ -41,7 +41,6 @@
 #include "xlio_extra.h"
 #include "lwip/err.h" /* err_t */
 
-typedef struct xlio_tx_call_attr xlio_tx_call_attr_t;
 struct xlio_send_attr;
 
 class sockinfo_tcp_ops_nvme : public sockinfo_tcp_ops {

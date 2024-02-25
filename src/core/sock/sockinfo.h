@@ -67,28 +67,13 @@
 #ifndef SOCK_NONBLOCK
 #define SOCK_NONBLOCK 04000
 #endif
+
 #ifndef SOCK_CLOEXEC
 #define SOCK_CLOEXEC 02000000
 #endif
+
 #ifndef SO_MAX_PACING_RATE
 #define SO_MAX_PACING_RATE 47
-#endif
-
-#define IS_DUMMY_PACKET(flags) (flags & XLIO_SND_FLAGS_DUMMY)
-
-#if DEFINED_MISSING_NET_TSTAMP
-enum {
-    SOF_TIMESTAMPING_TX_HARDWARE = (1 << 0),
-    SOF_TIMESTAMPING_TX_SOFTWARE = (1 << 1),
-    SOF_TIMESTAMPING_RX_HARDWARE = (1 << 2),
-    SOF_TIMESTAMPING_RX_SOFTWARE = (1 << 3),
-    SOF_TIMESTAMPING_SOFTWARE = (1 << 4),
-    SOF_TIMESTAMPING_SYS_HARDWARE = (1 << 5),
-    SOF_TIMESTAMPING_RAW_HARDWARE = (1 << 6),
-    SOF_TIMESTAMPING_MASK = (SOF_TIMESTAMPING_RAW_HARDWARE - 1) | SOF_TIMESTAMPING_RAW_HARDWARE
-};
-#else
-#include <linux/net_tstamp.h>
 #endif
 
 #ifndef SO_TIMESTAMPNS
@@ -119,6 +104,34 @@ enum {
 #define MSG_ZEROCOPY 0x4000000
 #endif
 
+#define IS_DUMMY_PACKET(flags)            (flags & XLIO_SND_FLAGS_DUMMY)
+#define NOTIFY_ON_EVENTS(context, events) context->set_events(events)
+
+// Sockinfo setsockopt() return values
+// Internal socket option, should not pass request to OS.
+#define SOCKOPT_INTERNAL_XLIO_SUPPORT 0
+// Socket option was found but not supported, error should be returned to user.
+#define SOCKOPT_NO_XLIO_SUPPORT -1
+// Should pass to TCP/UDP level or OS.
+#define SOCKOPT_PASS_TO_OS 1
+// Pass the option also to the OS.
+#define SOCKOPT_HANDLE_BY_OS -2
+
+#if DEFINED_MISSING_NET_TSTAMP
+enum {
+    SOF_TIMESTAMPING_TX_HARDWARE = (1 << 0),
+    SOF_TIMESTAMPING_TX_SOFTWARE = (1 << 1),
+    SOF_TIMESTAMPING_RX_HARDWARE = (1 << 2),
+    SOF_TIMESTAMPING_RX_SOFTWARE = (1 << 3),
+    SOF_TIMESTAMPING_SOFTWARE = (1 << 4),
+    SOF_TIMESTAMPING_SYS_HARDWARE = (1 << 5),
+    SOF_TIMESTAMPING_RAW_HARDWARE = (1 << 6),
+    SOF_TIMESTAMPING_MASK = (SOF_TIMESTAMPING_RAW_HARDWARE - 1) | SOF_TIMESTAMPING_RAW_HARDWARE
+};
+#else
+#include <linux/net_tstamp.h>
+#endif
+
 typedef enum { RX_READ = 23, RX_READV, RX_RECV, RX_RECVFROM, RX_RECVMSG } rx_call_t;
 
 enum {
@@ -135,8 +148,6 @@ struct cmsg_state {
     struct cmsghdr *cmhdr;
     size_t cmsg_bytes_consumed;
 };
-
-#define NOTIFY_ON_EVENTS(context, events) context->set_events(events)
 
 struct buff_info_t {
     buff_info_t()
@@ -164,26 +175,30 @@ struct epoll_fd_rec {
     }
 };
 
-typedef struct {
+struct net_device_resources_t {
     net_device_entry *p_nde;
     net_device_val *p_ndv;
     ring *p_ring;
     int refcnt;
-} net_device_resources_t;
+};
 
-typedef struct {
+struct fd_array_t {
     // coverity[member_decl]
     int fd_list[FD_ARRAY_MAX]; // Note: An FD might appear twice in the list,
     //  the user of this array will need to handle it correctly
     int fd_max;
     int fd_count;
-} fd_array_t;
+};
 
-/* This structure describes the send operation attributes
- * Used attributes can be of different types TX_FILE, TX_WRITE, TX_WRITEV, TX_SEND, TX_SENDTO,
- * TX_SENDMSG
- */
-typedef struct xlio_tx_call_attr {
+struct ring_info_t {
+    int refcnt;
+    buff_info_t rx_reuse_info;
+};
+
+// This structure describes the send operation attributes
+// Used attributes can be of different types TX_FILE, TX_WRITE, TX_WRITEV, TX_SEND, TX_SENDTO,
+// TX_SENDMSG
+struct xlio_tx_call_attr_t {
     tx_call_t opcode;
     struct _attr {
         struct iovec *iov;
@@ -197,7 +212,7 @@ typedef struct xlio_tx_call_attr {
     unsigned xlio_flags;
     pbuf_desc priv;
 
-    ~xlio_tx_call_attr() {};
+    ~xlio_tx_call_attr_t() {};
     void clear(void)
     {
         opcode = TX_UNDEF;
@@ -207,28 +222,12 @@ typedef struct xlio_tx_call_attr {
         xlio_flags = 0;
     }
 
-    xlio_tx_call_attr() { clear(); }
-} xlio_tx_call_attr_t;
+    xlio_tx_call_attr_t() { clear(); }
+};
 
 typedef std::unordered_map<ip_addr, net_device_resources_t> rx_net_device_map_t;
 typedef xlio_list_t<mem_buf_desc_t, mem_buf_desc_t::buffer_node_offset> xlio_desc_list_t;
-
-/*
- * Sockinfo setsockopt() return values
- */
-#define SOCKOPT_INTERNAL_XLIO_SUPPORT 0 // Internal socket option, should not pass request to OS.
-#define SOCKOPT_NO_XLIO_SUPPORT                                                                    \
-    -1 // Socket option was found but not supported, error should be returned to user.
-#define SOCKOPT_PASS_TO_OS   1 // Should pass to TCP/UDP level or OS.
-#define SOCKOPT_HANDLE_BY_OS -2 // Pass the option also to the OS.
-
 typedef std::unordered_map<flow_tuple_with_local_if, ring *> rx_flow_map_t;
-
-typedef struct {
-    int refcnt;
-    buff_info_t rx_reuse_info;
-} ring_info_t;
-
 typedef std::unordered_map<ring *, ring_info_t *> rx_ring_map_t;
 
 // see route.c in Linux kernel
@@ -238,9 +237,6 @@ class epfd_info;
 
 class sockinfo {
 public:
-    sockinfo(int fd, int domain, bool use_ring_locks);
-    virtual ~sockinfo();
-
     enum sockinfo_state {
         SOCKINFO_UNDEFINED,
         SOCKINFO_OPENED,
@@ -269,18 +265,23 @@ public:
         return NODE_OFFSET(sockinfo, ep_info_fd_node);
     }
 
+    sockinfo(int fd, int domain, bool use_ring_locks);
+    virtual ~sockinfo();
+
     // Callback from lower layer notifying new receive packets
     // Return: 'true' if object queuing this receive packet
     //         'false' if not interested in this receive packet
     virtual bool rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info,
                              void *pv_fd_ready_array) = 0;
 
-    int get_fd() const { return m_fd; };
+    virtual ssize_t tx(xlio_tx_call_attr_t &tx_arg) = 0;
+    virtual bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = nullptr) = 0;
+    virtual bool is_writeable() = 0;
+    virtual bool is_errorable(int *errors) = 0;
     virtual void clean_socket_obj() = 0;
     virtual void setPassthrough() = 0;
     virtual bool isPassthrough() = 0;
     virtual int prepareListen() = 0;
-    void destructor_helper();
     virtual int shutdown(int __how) = 0;
     virtual int listen(int backlog) = 0;
     virtual int accept(struct sockaddr *__addr, socklen_t *__addrlen) = 0;
@@ -292,27 +293,19 @@ public:
     virtual int setsockopt(int __level, int __optname, __const void *__optval,
                            socklen_t __optlen) = 0;
     virtual int getsockopt(int __level, int __optname, void *__optval, socklen_t *__optlen) = 0;
-    virtual bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = NULL) = 0;
-    virtual bool is_writeable() = 0;
-    virtual bool is_errorable(int *errors) = 0;
     virtual bool is_outgoing() = 0;
     virtual bool is_incoming() = 0;
     virtual bool is_closable() = 0;
-    virtual ssize_t tx(xlio_tx_call_attr_t &tx_arg) = 0;
     virtual void statistics_print(vlog_levels_t log_level = VLOG_DEBUG) = 0;
     virtual int register_callback(xlio_recv_callback_t callback, void *context) = 0;
-    int register_callback_ctx(xlio_recv_callback_t callback, void *context);
-    void consider_rings_migration_rx();
-    int add_epoll_context(epfd_info *epfd);
-    void remove_epoll_context(epfd_info *epfd);
     virtual int fcntl(int __cmd, unsigned long int __arg);
     virtual int fcntl64(int __cmd, unsigned long int __arg);
     virtual int ioctl(unsigned long int __request, unsigned long int __arg);
     virtual fd_type_t get_type() = 0;
 
     virtual ssize_t rx(const rx_call_t call_type, iovec *iov, const ssize_t iovlen,
-                       int *p_flags = 0, sockaddr *__from = NULL, socklen_t *__fromlen = NULL,
-                       struct msghdr *__msg = NULL) = 0;
+                       int *p_flags = 0, sockaddr *__from = nullptr, socklen_t *__fromlen = nullptr,
+                       struct msghdr *__msg = nullptr) = 0;
 
     virtual int recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
                                             size_t count) = 0;
@@ -332,6 +325,35 @@ public:
     // (i.e. TRUE...)
     virtual bool skip_os_select() { return (!m_n_sysvar_select_poll_os_ratio); };
 
+    inline bool set_flow_tag(uint32_t flow_tag_id);
+    inline void sock_pop_descs_rx_ready(descq_t *cache);
+
+    int get_fd() const { return m_fd; };
+    sa_family_t get_family() { return m_family; }
+    bool get_reuseaddr(void) { return m_reuseaddr; }
+    bool get_reuseport(void) { return m_reuseport; }
+    bool flow_tag_enabled(void) { return m_flow_tag_enabled; }
+    int get_rx_epfd(void) { return m_rx_epfd; }
+    bool is_blocking(void) { return m_b_blocking; }
+    bool flow_in_reuse(void) { return m_reuseaddr | m_reuseport; }
+    bool is_shadow_socket_present() { return m_fd >= 0 && m_fd != m_rx_epfd; }
+    uint32_t get_flow_tag_val() { return m_flow_tag_id; }
+    in_protocol_t get_protocol(void) { return m_protocol; }
+    void destructor_helper();
+    int get_rings_fds(int *ring_fds, int ring_fds_sz);
+    int get_rings_num();
+    bool validate_and_convert_mapped_ipv4(sock_addr &sock) const;
+    void socket_stats_init();
+    int register_callback_ctx(xlio_recv_callback_t callback, void *context);
+    void consider_rings_migration_rx();
+    int add_epoll_context(epfd_info *epfd);
+    void remove_epoll_context(epfd_info *epfd);
+    int get_epoll_context_fd();
+
+    // Calling OS transmit
+    ssize_t tx_os(const tx_call_t call_type, const iovec *p_iov, const ssize_t sz_iov,
+                  const int __flags, const sockaddr *__to, const socklen_t __tolen);
+
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     // This socket options copy is currently implemented for nginx and for very specific options.
     // This copy is called as part of fork() flow of nginx specifically.
@@ -344,49 +366,16 @@ public:
     void set_m_n_sysvar_rx_num_buffs_reuse(int val) { m_n_sysvar_rx_num_buffs_reuse = val; }
 #endif
 #endif
-
-    inline bool set_flow_tag(uint32_t flow_tag_id);
-    inline bool get_reuseaddr(void) { return m_reuseaddr; }
-    inline bool get_reuseport(void) { return m_reuseport; }
-    inline bool flow_tag_enabled(void) { return m_flow_tag_enabled; }
-    inline int get_rx_epfd(void) { return m_rx_epfd; }
-    inline bool is_blocking(void) { return m_b_blocking; }
-
-    bool flow_in_reuse(void) { return m_reuseaddr | m_reuseport; }
-    int get_rings_fds(int *ring_fds, int ring_fds_sz);
-    int get_rings_num();
-    uint32_t get_flow_tag_val() { return m_flow_tag_id; }
-    inline in_protocol_t get_protocol(void) { return m_protocol; }
-    bool validate_and_convert_mapped_ipv4(sock_addr &sock) const;
-    void socket_stats_init();
-
-    inline void sock_pop_descs_rx_ready(descq_t *cache);
-
-    sa_family_t get_family() { return m_family; }
-    bool is_shadow_socket_present() { return m_fd >= 0 && m_fd != m_rx_epfd; }
-    int get_epoll_context_fd();
-
-    // Calling OS transmit
-    ssize_t tx_os(const tx_call_t call_type, const iovec *p_iov, const ssize_t sz_iov,
-                  const int __flags, const sockaddr *__to, const socklen_t __tolen);
-
 protected:
-    inline void set_rx_reuse_pending(bool is_pending = true);
+    static const char *setsockopt_so_opt_to_str(int opt);
 
-    int setsockopt_kernel(int __level, int __optname, const void *__optval, socklen_t __optlen,
-                          int supported, bool allow_priv);
-
+    virtual void lock_rx_q() = 0;
+    virtual void unlock_rx_q() = 0;
     virtual void set_blocking(bool is_blocked);
     virtual mem_buf_desc_t *get_front_m_rx_pkt_ready_list() = 0;
     virtual size_t get_size_m_rx_pkt_ready_list() = 0;
     virtual void pop_front_m_rx_pkt_ready_list() = 0;
     virtual void push_back_m_rx_pkt_ready_list(mem_buf_desc_t *buff) = 0;
-
-    void notify_epoll_context(uint32_t events);
-    void save_stats_rx_os(int bytes);
-    void save_stats_tx_os(int bytes);
-    void save_stats_rx_offload(int nbytes);
-
     virtual int rx_verify_available_data() = 0;
     virtual void update_header_field(data_updater *updater) = 0;
     virtual mem_buf_desc_t *get_next_desc(mem_buf_desc_t *p_desc) = 0;
@@ -398,9 +387,8 @@ protected:
     virtual int os_epoll_wait(epoll_event *ep_events, int maxevents);
     virtual int zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags) = 0;
     virtual void handle_ip_pktinfo(struct cmsg_state *cm_state) = 0;
-    virtual void lock_rx_q() = 0;
-    virtual void unlock_rx_q() = 0;
     virtual bool try_un_offloading(); // un-offload the socket if possible
+
     virtual size_t handle_msg_trunc(size_t total_rx, size_t payload_size, int in_flags,
                                     int *p_out_flags) = 0;
 
@@ -408,6 +396,21 @@ protected:
     virtual void rx_add_ring_cb(ring *p_ring);
     virtual void rx_del_ring_cb(ring *p_ring);
 
+    inline void set_rx_reuse_pending(bool is_pending = true);
+    inline void reuse_buffer(mem_buf_desc_t *buff);
+    inline void set_events_socketxtreme(uint64_t events);
+    inline void set_events(uint64_t events);
+    inline void save_strq_stats(uint32_t packet_strides);
+
+    inline int dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, socklen_t *__fromlen,
+                              int in_flags, int *p_out_flags);
+
+    bool is_socketxtreme() { return safe_mce_sys().enable_socketxtreme; }
+    int get_sock_by_L3_L4(in_protocol_t protocol, const ip_address &ip, in_port_t port);
+    void notify_epoll_context(uint32_t events);
+    void save_stats_rx_os(int bytes);
+    void save_stats_tx_os(int bytes);
+    void save_stats_rx_offload(int nbytes);
     bool attach_receiver(flow_tuple_with_local_if &flow_key);
     bool detach_receiver(flow_tuple_with_local_if &flow_key);
     net_device_resources_t *create_nd_resources(const ip_addr &ip_local);
@@ -417,18 +420,8 @@ protected:
     int set_ring_attr_helper(ring_alloc_logic_attr *sock_attr, xlio_ring_alloc_logic_attr *attr);
     void set_ring_logic_rx(ring_alloc_logic_attr ral);
     void set_ring_logic_tx(ring_alloc_logic_attr ral);
-
-    // Attach to all relevant rings for offloading receive flows - always used from slow path
-    // According to bounded information we need to attach to all UC relevant flows
-    // If local_ip is ANY then we need to attach to all offloaded interfaces OR to the one our
-    // connected_ip is routed to
-    bool attach_as_uc_receiver(role_t role, bool skip_rules = false);
-    transport_t find_target_family(role_t role, const struct sockaddr *sock_addr_first,
-                                   const struct sockaddr *sock_addr_second = nullptr);
-
     void shutdown_rx();
     int modify_ratelimit(dst_entry *p_dst_entry, struct xlio_rate_limit_t &rate_limit);
-
     void move_descs(ring *p_ring, descq_t *toq, descq_t *fromq, bool own);
     void pop_descs_rx_ready(descq_t *cache, ring *p_ring = nullptr);
     void push_descs_rx_ready(descq_t *cache);
@@ -444,26 +437,24 @@ protected:
     void add_cqfd_to_sock_rx_epfd(ring *p_ring);
     void remove_cqfd_from_sock_rx_epfd(ring *p_ring);
     int os_wait_sock_rx_epfd(epoll_event *ep_events, int maxevents);
-    inline bool is_socketxtreme() { return safe_mce_sys().enable_socketxtreme; }
     void insert_epoll_event(uint64_t events);
+    int handle_exception_flow();
+
+    // Attach to all relevant rings for offloading receive flows - always used from slow path
+    // According to bounded information we need to attach to all UC relevant flows
+    // If local_ip is ANY then we need to attach to all offloaded interfaces OR to the one our
+    // connected_ip is routed to
+    bool attach_as_uc_receiver(role_t role, bool skip_rules = false);
 
     // Calling OS receive
     ssize_t rx_os(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, const int flags,
                   sockaddr *__from, socklen_t *__fromlen, struct msghdr *__msg);
 
-    inline void set_events_socketxtreme(uint64_t events);
-    inline void set_events(uint64_t events);
-    inline void save_strq_stats(uint32_t packet_strides);
+    int setsockopt_kernel(int __level, int __optname, const void *__optval, socklen_t __optlen,
+                          int supported, bool allow_priv);
 
-    inline int dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, socklen_t *__fromlen,
-                              int in_flags, int *p_out_flags);
-
-    inline void reuse_buffer(mem_buf_desc_t *buff);
-
-    static const char *setsockopt_so_opt_to_str(int opt);
-
-    int get_sock_by_L3_L4(in_protocol_t protocol, const ip_address &ip, in_port_t port);
-    int handle_exception_flow();
+    transport_t find_target_family(role_t role, const struct sockaddr *sock_addr_first,
+                                   const struct sockaddr *sock_addr_second = nullptr);
 
 private:
     int fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit);
@@ -628,14 +619,14 @@ void sockinfo::set_events_socketxtreme(uint64_t events)
         m_socketxtreme.ec->completion.events |= events;
         m_p_rx_ring->put_ec(m_socketxtreme.ec);
 
-        m_socketxtreme.ec = NULL;
+        m_socketxtreme.ec = nullptr;
         for (auto &ec : m_socketxtreme.ec_cache) {
             if (0 == ec.completion.events) {
                 m_socketxtreme.ec = &ec;
                 break;
             }
         }
-        if (NULL == m_socketxtreme.ec) {
+        if (!m_socketxtreme.ec) {
             struct ring_ec ec;
             ec.clear();
             m_socketxtreme.ec_cache.push_back(ec);
