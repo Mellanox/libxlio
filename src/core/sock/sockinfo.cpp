@@ -59,6 +59,45 @@
 #define si_logfunc    __log_info_func
 #define si_logfuncall __log_info_funcall
 
+const char *sockinfo::setsockopt_so_opt_to_str(int opt)
+{
+    switch (opt) {
+    case SO_REUSEADDR:
+        return "SO_REUSEADDR";
+    case SO_REUSEPORT:
+        return "SO_REUSEPORT";
+    case SO_BROADCAST:
+        return "SO_BROADCAST";
+    case SO_RCVBUF:
+        return "SO_RCVBUF";
+    case SO_SNDBUF:
+        return "SO_SNDBUF";
+    case SO_TIMESTAMP:
+        return "SO_TIMESTAMP";
+    case SO_TIMESTAMPNS:
+        return "SO_TIMESTAMPNS";
+    case SO_BINDTODEVICE:
+        return "SO_BINDTODEVICE";
+    case SO_ZEROCOPY:
+        return "SO_ZEROCOPY";
+    case SO_XLIO_RING_ALLOC_LOGIC:
+        return "SO_XLIO_RING_ALLOC_LOGIC";
+    case SO_MAX_PACING_RATE:
+        return "SO_MAX_PACING_RATE";
+    case SO_XLIO_FLOW_TAG:
+        return "SO_XLIO_FLOW_TAG";
+    case SO_XLIO_SHUTDOWN_RX:
+        return "SO_XLIO_SHUTDOWN_RX";
+    case IPV6_V6ONLY:
+        return "IPV6_V6ONLY";
+    case IPV6_ADDR_PREFERENCES:
+        return "IPV6_ADDR_PREFERENCES";
+    default:
+        break;
+    }
+    return "UNKNOWN SO opt";
+}
+
 sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     : m_epoll_event_flags(0)
     , m_fd(fd)
@@ -2339,4 +2378,19 @@ ssize_t sockinfo::tx_os(const tx_call_t call_type, const iovec *p_iov, const ssi
         break;
     }
     return (ssize_t)-1;
+}
+
+int sockinfo::handle_exception_flow()
+{
+    if (safe_mce_sys().exception_handling.is_suit_un_offloading()) {
+        try_un_offloading();
+    }
+    if (safe_mce_sys().exception_handling == xlio_exception_handling::MODE_RETURN_ERROR) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (safe_mce_sys().exception_handling == xlio_exception_handling::MODE_ABORT) {
+        return -2;
+    }
+    return 0;
 }
