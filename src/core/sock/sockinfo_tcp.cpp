@@ -1886,7 +1886,9 @@ err_t sockinfo_tcp::ack_recvd_lwip_cb(void *arg, struct tcp_pcb *tpcb, u16_t ack
 
     ASSERT_LOCKED(conn->m_tcp_con_lock);
 
-    conn->m_p_socket_stats->n_tx_ready_byte_count -= ack;
+    if (unlikely(conn->has_stats())) {
+        conn->m_p_socket_stats->n_tx_ready_byte_count -= ack;
+    }
 
     if (conn->sndbuf_available() >= conn->m_required_send_block) {
         NOTIFY_ON_EVENTS(conn, EPOLLOUT);
@@ -1950,7 +1952,6 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
     }
 
     conn->rx_lwip_process_chained_pbufs(p);
-
     conn->save_packet_info_in_ready_list(p);
 
     // notify io_mux
@@ -2082,12 +2083,16 @@ inline void sockinfo_tcp::rx_lwip_process_chained_pbufs(pbuf *p)
     m_connected.get_sa(reinterpret_cast<sockaddr *>(&p_first_desc->rx.src),
                        static_cast<socklen_t>(sizeof(p_first_desc->rx.src)));
 
-    // We go over the p_first_desc again, so decrement what we did in rx_input_cb.
-    m_socket_stats.strq_counters.n_strq_total_strides -=
-        static_cast<uint64_t>(p_first_desc->rx.strides_num);
-    m_socket_stats.counters.n_rx_data_pkts++;
-    // Assume that all chained buffers are GRO packets
-    m_socket_stats.counters.n_gro += !!p->next;
+    if (unlikely(has_stats())) {
+        m_p_socket_stats->counters.n_rx_bytes += p->tot_len;
+
+        // We go over the p_first_desc again, so decrement what we did in rx_input_cb.
+        m_p_socket_stats->strq_counters.n_strq_total_strides -=
+            static_cast<uint64_t>(p_first_desc->rx.strides_num);
+        m_p_socket_stats->counters.n_rx_data_pkts++;
+        // Assume that all chained buffers are GRO packets
+        m_p_socket_stats->counters.n_gro += !!p->next;
+    }
 
     // To avoid reset ref count for first mem_buf_desc, save it and set after the while
     int head_ref = p_first_desc->get_ref_count();
@@ -2110,7 +2115,12 @@ inline void sockinfo_tcp::rx_lwip_process_chained_pbufs(pbuf *p)
         p_curr_desc->p_next_desc = reinterpret_cast<mem_buf_desc_t *>(p->next);
         process_timestamps(p_curr_desc);
     }
+
     p_first_desc->set_ref_count(head_ref);
+
+    if (unlikely(has_stats())) {
+        m_p_socket_stats->counters.n_rx_frags += p_first_desc->rx.n_frags;
+    }
 }
 
 inline void sockinfo_tcp::save_packet_info_in_ready_list(pbuf *p)
@@ -2118,16 +2128,15 @@ inline void sockinfo_tcp::save_packet_info_in_ready_list(pbuf *p)
     m_rx_pkt_ready_list.push_back(reinterpret_cast<mem_buf_desc_t *>(p));
     m_n_rx_pkt_ready_list_count++;
     m_rx_ready_byte_count += p->tot_len;
-    m_p_socket_stats->counters.n_rx_bytes += p->tot_len;
-    m_p_socket_stats->n_rx_ready_byte_count += p->tot_len;
-    m_p_socket_stats->n_rx_ready_pkt_count++;
-    m_socket_stats.counters.n_rx_frags += reinterpret_cast<mem_buf_desc_t *>(p)->rx.n_frags;
-    m_p_socket_stats->counters.n_rx_ready_pkt_max =
-        std::max((uint32_t)m_p_socket_stats->n_rx_ready_pkt_count,
-                 m_p_socket_stats->counters.n_rx_ready_pkt_max);
-    m_p_socket_stats->counters.n_rx_ready_byte_max =
-        std::max((uint32_t)m_p_socket_stats->n_rx_ready_byte_count,
-                 m_p_socket_stats->counters.n_rx_ready_byte_max);
+
+    if (unlikely(has_stats())) {
+        m_p_socket_stats->n_rx_ready_byte_count += p->tot_len;
+        m_p_socket_stats->n_rx_ready_pkt_count++;
+        m_p_socket_stats->counters.n_rx_ready_pkt_max = std::max(
+            (uint32_t)m_n_rx_pkt_ready_list_count, m_p_socket_stats->counters.n_rx_ready_pkt_max);
+        m_p_socket_stats->counters.n_rx_ready_byte_max = std::max(
+            (uint32_t)m_rx_ready_byte_count, m_p_socket_stats->counters.n_rx_ready_byte_max);
+    }
 }
 
 inline void sockinfo_tcp::rx_lwip_shrink_rcv_wnd(size_t pbuf_tot_len, int bytes_received)
@@ -2170,12 +2179,10 @@ err_t sockinfo_tcp::rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *pcb, stru
         conn->handle_rx_lwip_cb_error(p);
         return err;
     }
+
     conn->rx_lwip_process_chained_pbufs(p);
-
-    conn->m_p_socket_stats->counters.n_rx_bytes += p->tot_len;
-    conn->m_socket_stats.counters.n_rx_frags += reinterpret_cast<mem_buf_desc_t *>(p)->rx.n_frags;
-
     conn->rx_lwip_cb_socketxtreme_helper(p);
+
     io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
     conn->m_sock_wakeup_pipe.do_wakeup();
     /*
@@ -2214,10 +2221,8 @@ err_t sockinfo_tcp::rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, str
         conn->handle_rx_lwip_cb_error(p);
         return err;
     }
-    conn->rx_lwip_process_chained_pbufs(p);
 
-    conn->m_p_socket_stats->counters.n_rx_bytes += p->tot_len;
-    conn->m_socket_stats.counters.n_rx_frags += reinterpret_cast<mem_buf_desc_t *>(p)->rx.n_frags;
+    conn->rx_lwip_process_chained_pbufs(p);
 
     xlio_recv_callback_retval_t callback_retval = XLIO_PACKET_RECV;
 
@@ -2231,8 +2236,8 @@ err_t sockinfo_tcp::rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, str
         pkt_info.packet_id = (void *)p_first_desc;
         pkt_info.src = p_first_desc->rx.src.get_p_sa();
         pkt_info.dst = p_first_desc->rx.dst.get_p_sa();
-        pkt_info.socket_ready_queue_pkt_count = conn->m_p_socket_stats->n_rx_ready_pkt_count;
-        pkt_info.socket_ready_queue_byte_count = conn->m_p_socket_stats->n_rx_ready_byte_count;
+        pkt_info.socket_ready_queue_pkt_count = conn->m_n_rx_pkt_ready_list_count;
+        pkt_info.socket_ready_queue_byte_count = conn->m_rx_ready_byte_count;
 
         if (conn->m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE) {
             pkt_info.hw_timestamp = p_first_desc->rx.timestamps.hw;
@@ -2537,7 +2542,7 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
     lock_tcp_con();
 
     save_strq_stats(p_rx_pkt_mem_buf_desc_info->rx.strides_num);
-    m_socket_stats.counters.n_rx_packets++;
+
     m_iomux_ready_fd_array = (fd_array_t *)pv_fd_ready_array;
 
     if (unlikely(get_tcp_state(&m_pcb) == LISTEN)) {
@@ -4757,9 +4762,11 @@ void sockinfo_tcp::get_tcp_info(struct tcp_info *ti)
     ti->tcpi_snd_mss = m_pcb.mss;
     ti->tcpi_retransmits = m_pcb.nrtx;
     // ti->tcpi_retrans - we don't keep it and calculation would be O(N).
-    ti->tcpi_total_retrans = m_p_socket_stats->counters.n_tx_retransmits;
     ti->tcpi_snd_cwnd = m_pcb.cwnd / m_pcb.mss;
     ti->tcpi_snd_ssthresh = m_pcb.ssthresh / m_pcb.mss;
+
+    // This will be incorrect if sockets number is bigger than safe_mce_sys().stats_fd_num_max.
+    ti->tcpi_total_retrans = m_p_socket_stats->counters.n_tx_retransmits;
 
     // Currently we miss per segment statistics and most of congestion control fields.
 }
@@ -5254,7 +5261,9 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
 mem_buf_desc_t *sockinfo_tcp::get_next_desc(mem_buf_desc_t *p_desc)
 {
     m_rx_pkt_ready_list.pop_front();
-    m_p_socket_stats->n_rx_ready_pkt_count--;
+    if (unlikely(has_stats())) {
+        m_p_socket_stats->n_rx_ready_pkt_count--;
+    }
 
     m_n_rx_pkt_ready_list_count--;
     if (p_desc->p_next_desc) {
@@ -5268,10 +5277,12 @@ mem_buf_desc_t *sockinfo_tcp::get_next_desc(mem_buf_desc_t *p_desc)
         p_desc->inc_ref_count();
         m_rx_pkt_ready_list.push_front(p_desc);
         m_n_rx_pkt_ready_list_count++;
-        m_p_socket_stats->n_rx_ready_pkt_count++;
         prev->lwip_pbuf.next = nullptr;
         prev->p_next_desc = nullptr;
         prev->rx.n_frags = 1;
+        if (unlikely(has_stats())) {
+            m_p_socket_stats->n_rx_ready_pkt_count++;
+        }
         reuse_buffer(prev);
     } else {
         reuse_buffer(p_desc);
@@ -6239,12 +6250,14 @@ ssize_t sockinfo_tcp::tcp_tx_handle_done_and_unlock(ssize_t total_tx, int errno_
 {
     tcp_output(&m_pcb); // force data out
 
-    if (unlikely(is_dummy)) {
-        m_p_socket_stats->counters.n_tx_dummy++;
-    } else if (total_tx) {
-        m_p_socket_stats->counters.n_tx_sent_byte_count += total_tx;
-        m_p_socket_stats->counters.n_tx_sent_pkt_count++;
-        m_p_socket_stats->n_tx_ready_byte_count += total_tx;
+    if (unlikely(has_stats())) {
+        if (unlikely(is_dummy)) {
+            m_p_socket_stats->counters.n_tx_dummy++;
+        } else if (total_tx) {
+            m_p_socket_stats->counters.n_tx_sent_byte_count += total_tx;
+            m_p_socket_stats->counters.n_tx_sent_pkt_count++;
+            m_p_socket_stats->n_tx_ready_byte_count += total_tx;
+        }
     }
 
     /* Each send call with MSG_ZEROCOPY that successfully sends

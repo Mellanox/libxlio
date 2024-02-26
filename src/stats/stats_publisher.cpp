@@ -181,7 +181,7 @@ void xlio_shmem_stats_open(vlog_levels_t **p_p_xlio_log_level, uint8_t **p_p_xli
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    shmem_size = SHMEM_STATS_SIZE(safe_mce_sys().stats_fd_num_max);
+    shmem_size = SHMEM_STATS_SIZE(safe_mce_sys().stats_fd_num_monitor);
     buf = malloc(shmem_size);
     if (buf == NULL) {
         goto shmem_error;
@@ -266,11 +266,11 @@ success:
     write_version_details_to_shmem(&g_sh_mem->ver_info);
     memcpy(g_sh_mem->stats_protocol_ver, STATS_PROTOCOL_VER,
            std::min(sizeof(g_sh_mem->stats_protocol_ver), sizeof(STATS_PROTOCOL_VER)));
-    g_sh_mem->max_skt_inst_num = safe_mce_sys().stats_fd_num_max;
+    g_sh_mem->max_skt_inst_num = safe_mce_sys().stats_fd_num_monitor;
     g_sh_mem->reader_counter = 0;
     __log_dbg("file '%s' fd %d shared memory at %p with %d max blocks",
               g_sh_mem_info.filename_sh_stats, g_sh_mem_info.fd_sh_stats, g_sh_mem_info.p_sh_stats,
-              safe_mce_sys().stats_fd_num_max);
+              safe_mce_sys().stats_fd_num_monitor);
 
     // Update the shmem initial log values
     g_sh_mem->log_level = **p_p_xlio_log_level;
@@ -306,11 +306,11 @@ void xlio_shmem_stats_close()
     if (g_sh_mem_info.p_sh_stats && g_sh_mem_info.p_sh_stats != MAP_FAILED) {
         __log_dbg("file '%s' fd %d shared memory at %p with %d max blocks",
                   g_sh_mem_info.filename_sh_stats, g_sh_mem_info.fd_sh_stats,
-                  g_sh_mem_info.p_sh_stats, safe_mce_sys().stats_fd_num_max);
+                  g_sh_mem_info.p_sh_stats, safe_mce_sys().stats_fd_num_monitor);
 
         BULLSEYE_EXCLUDE_BLOCK_START
-        if (munmap(g_sh_mem_info.p_sh_stats, SHMEM_STATS_SIZE(safe_mce_sys().stats_fd_num_max)) !=
-            0) {
+        if (munmap(g_sh_mem_info.p_sh_stats,
+                   SHMEM_STATS_SIZE(safe_mce_sys().stats_fd_num_monitor)) != 0) {
             vlog_printf(VLOG_ERROR,
                         "%s: file [%s] fd [%d] error while unmap shared memory at [%p]\n", __func__,
                         g_sh_mem_info.filename_sh_stats, g_sh_mem_info.fd_sh_stats,
@@ -351,7 +351,7 @@ void xlio_stats_instance_create_socket_block(socket_stats_t *local_stats_addr)
             goto out;
         }
     }
-    if (g_sh_mem->max_skt_inst_num + 1 < safe_mce_sys().stats_fd_num_max) {
+    if (g_sh_mem->max_skt_inst_num + 1 < safe_mce_sys().stats_fd_num_monitor) {
         // allocate next sh_mem block
         p_skt_stats = &g_sh_mem->skt_inst_arr[g_sh_mem->max_skt_inst_num].skt_stats;
         g_sh_mem->skt_inst_arr[g_sh_mem->max_skt_inst_num].b_enabled = true;
@@ -360,8 +360,10 @@ void xlio_stats_instance_create_socket_block(socket_stats_t *local_stats_addr)
     } else {
         if (!printed_sock_limit_info) {
             printed_sock_limit_info = true;
-            vlog_printf(VLOG_INFO, "Statistics can monitor up to %d sockets - increase %s\n",
-                        safe_mce_sys().stats_fd_num_max, SYS_VAR_STATS_FD_NUM);
+            if (safe_mce_sys().stats_fd_num_monitor < MAX_STATS_FD_NUM) {
+                vlog_printf(VLOG_INFO, "Statistics can monitor up to %d sockets - increase %s\n",
+                            safe_mce_sys().stats_fd_num_monitor, SYS_VAR_STATS_FD_NUM);
+            }
         }
         goto out;
     }
@@ -418,6 +420,10 @@ void xlio_stats_mc_group_add(const ip_address &mc_grp, socket_stats_t *p_socket_
     int empty_entry = -1;
     int index_to_insert = -1;
 
+    if (!p_socket_stats) {
+        return;
+    }
+
     g_lock_mc_info.lock();
     for (int grp_idx = 0; grp_idx < g_sh_mem->mc_info.max_grp_num && index_to_insert == -1;
          grp_idx++) {
@@ -451,6 +457,10 @@ void xlio_stats_mc_group_add(const ip_address &mc_grp, socket_stats_t *p_socket_
 
 void xlio_stats_mc_group_remove(const ip_address &mc_grp, socket_stats_t *p_socket_stats)
 {
+    if (!p_socket_stats) {
+        return;
+    }
+
     g_lock_mc_info.lock();
     for (int grp_idx = 0; grp_idx < g_sh_mem->mc_info.max_grp_num; grp_idx++) {
         if (g_sh_mem->mc_info.mc_grp_tbl[grp_idx].sock_num &&

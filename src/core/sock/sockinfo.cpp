@@ -156,10 +156,8 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
 
     m_ring_alloc_logic_rx = ring_allocation_logic_rx(get_fd(), m_ring_alloc_log_rx);
 
-    m_p_socket_stats = &m_socket_stats; // Save stats as local copy and allow state publisher to
-                                        // copy from this location
     socket_stats_init();
-    xlio_stats_instance_create_socket_block(m_p_socket_stats);
+
     m_rx_reuse_buff.n_buff_num = 0;
     memset(&m_so_ratelimit, 0, sizeof(xlio_rate_limit_t));
     set_flow_tag(m_fd + 1);
@@ -201,7 +199,10 @@ sockinfo::~sockinfo()
         }
     }
 
-    xlio_stats_instance_remove_socket_block(m_p_socket_stats);
+    if (m_has_stats) {
+        xlio_stats_instance_remove_socket_block(m_p_socket_stats);
+        sock_stats::instance().return_stats_obj(m_p_socket_stats);
+    }
 
     m_socketxtreme.ec_cache.clear();
 
@@ -221,6 +222,18 @@ sockinfo::~sockinfo()
 
 void sockinfo::socket_stats_init()
 {
+    if (!m_p_socket_stats) { // This check is for listen sockets.
+        m_p_socket_stats = sock_stats::instance().get_stats_obj();
+        if (!m_p_socket_stats) {
+            m_p_socket_stats = &sock_stats::t_dummy_stats;
+            return;
+        }
+
+        // Save stats as local copy and allow state publisher to copy from this location
+        xlio_stats_instance_create_socket_block(m_p_socket_stats);
+    }
+
+    m_has_stats = true;
     m_p_socket_stats->reset();
     m_p_socket_stats->fd = m_fd;
     m_p_socket_stats->inode = fd2inode(m_fd);
@@ -883,7 +896,7 @@ int sockinfo::get_sock_by_L3_L4(in_protocol_t protocol, const ip_address &ip, in
 
 void sockinfo::save_stats_rx_offload(int nbytes)
 {
-    if (nbytes < 0) {
+    if (unlikely(has_stats()) && nbytes < 0) {
         if (errno == EAGAIN) {
             m_p_socket_stats->counters.n_rx_eagain++;
         } else {
@@ -1467,6 +1480,10 @@ void sockinfo::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
                     m_p_connected_dst_entry->is_offloaded() ? "true" : "false");
     }
 
+    if (!has_stats()) {
+        return;
+    }
+
     if (m_p_socket_stats->ring_alloc_logic_rx == RING_LOGIC_PER_USER_ID) {
         vlog_printf(log_level, "RX Ring User ID : %lu\n", m_p_socket_stats->ring_user_id_rx);
     }
@@ -1525,10 +1542,9 @@ void sockinfo::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
                     (float)(m_p_socket_stats->counters.n_rx_ready_byte_drop * 100) /
                     (float)m_p_socket_stats->counters.n_rx_packets;
             }
-            vlog_printf(log_level, "Rx byte : max %d / dropped %d (%2.2f%%) / limit %d\n",
+            vlog_printf(log_level, "Rx byte : max %d / dropped %d (%2.2f%%)\n",
                         m_p_socket_stats->counters.n_rx_ready_byte_max,
-                        m_p_socket_stats->counters.n_rx_ready_byte_drop, rx_drop_percentage,
-                        m_p_socket_stats->n_rx_ready_byte_limit);
+                        m_p_socket_stats->counters.n_rx_ready_byte_drop, rx_drop_percentage);
 
             if (m_p_socket_stats->n_rx_ready_pkt_count) {
                 rx_drop_percentage = (float)(m_p_socket_stats->counters.n_rx_ready_pkt_drop * 100) /

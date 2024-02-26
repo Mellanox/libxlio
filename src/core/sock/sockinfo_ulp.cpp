@@ -680,7 +680,7 @@ err_t sockinfo_tcp_ops_tls::tls_rx_consume_ready_packets()
      * receive encrypted TLS records with header and TAG after successful
      * setsockopt() call.
      */
-    if (m_p_sock->m_p_socket_stats->n_rx_ready_pkt_count != 0) {
+    if (m_p_sock->get_rx_pkt_ready_list_count() > 0) {
         descq_t descs_rx_ready;
 
         m_p_sock->sock_pop_descs_rx_ready(&descs_rx_ready);
@@ -857,8 +857,10 @@ done:
     /* Statistics */
     if (ret > 0) {
         errno = errno_save;
-        m_p_sock->m_p_socket_stats->tls_counters.n_tls_tx_records += m_next_recno_tx - last_recno;
-        m_p_sock->m_p_socket_stats->tls_counters.n_tls_tx_bytes += ret;
+        if (unlikely(m_p_sock->has_stats())) {
+            m_p_sock->m_p_socket_stats->tls_counters.n_tls_tx_records += m_next_recno_tx - last_recno;
+            m_p_sock->m_p_socket_stats->tls_counters.n_tls_tx_bytes += ret;
+        }
     }
     return ret;
 }
@@ -1441,8 +1443,10 @@ check_single_record:
         }
 
         /* Statistics */
-        m_p_sock->m_p_socket_stats->tls_counters.n_tls_rx_records_enc += !!(decrypted_nr == 0);
-        m_p_sock->m_p_socket_stats->tls_counters.n_tls_rx_records_partial += !!(decrypted_nr != 0);
+        if (unlikely(m_p_sock->has_stats())) {
+            m_p_sock->m_p_socket_stats->tls_counters.n_tls_rx_records_enc += !!(decrypted_nr == 0);
+            m_p_sock->m_p_socket_stats->tls_counters.n_tls_rx_records_partial += !!(decrypted_nr != 0);
+        }
     }
 
     /* Handle decryption failures. */
@@ -1474,10 +1478,12 @@ check_single_record:
     }
 
     /* Statistics */
-    m_p_sock->m_p_socket_stats->tls_counters.n_tls_rx_records += 1U;
-    m_p_sock->m_p_socket_stats->tls_counters.n_tls_rx_bytes += likely(pres) ? pres->tot_len : 0;
-    /* Adjust TCP counters with received TLS header/trailer. */
-    m_p_sock->m_p_socket_stats->counters.n_rx_bytes += m_tls_rec_overhead;
+    if (unlikely(m_p_sock->has_stats())) {
+        m_p_sock->m_p_socket_stats->tls_counters.n_tls_rx_records += 1U;
+        m_p_sock->m_p_socket_stats->tls_counters.n_tls_rx_bytes += likely(pres) ? pres->tot_len : 0;
+        /* Adjust TCP counters with received TLS header/trailer. */
+        m_p_sock->m_p_socket_stats->counters.n_rx_bytes += m_tls_rec_overhead;
+    }
 
     ++m_next_recno_rx;
 

@@ -65,7 +65,7 @@
 #include "proto/neighbour_table_mgr.h"
 #include "netlink/netlink_wrapper.h"
 #include "event/command.h"
-
+#include "sock/sock_stats.h"
 #include "sock/sock-redirect.h"
 #include "sock/sock-app.h"
 #include "sock/fd_collection.h"
@@ -1035,6 +1035,8 @@ static void do_global_ctors_helper()
     xlio_shmem_stats_open(&g_p_vlogger_level, &g_p_vlogger_details);
     *g_p_vlogger_level = g_vlogger_level;
     *g_p_vlogger_details = g_vlogger_details;
+
+    sock_stats::instance().init_sock_stats(safe_mce_sys().stats_fd_num_max);
 
     g_global_stat_static.init();
     xlio_stats_instance_create_global_block(&g_global_stat_static);

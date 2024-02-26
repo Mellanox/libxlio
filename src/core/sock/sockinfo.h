@@ -55,6 +55,7 @@
 #include "dev/ring_allocation_logic.h"
 #include "sock-redirect.h"
 #include "sock-app.h"
+#include "sock_stats.h"
 
 #ifndef BASE_SOCKINFO_H
 #define BASE_SOCKINFO_H
@@ -328,6 +329,8 @@ public:
     inline bool set_flow_tag(uint32_t flow_tag_id);
     inline void sock_pop_descs_rx_ready(descq_t *cache);
 
+    bool has_stats() const { return m_has_stats; }
+    bool get_rx_pkt_ready_list_count() const { return m_n_rx_pkt_ready_list_count; }
     int get_fd() const { return m_fd; };
     sa_family_t get_family() { return m_family; }
     bool get_reuseaddr(void) { return m_reuseaddr; }
@@ -343,7 +346,6 @@ public:
     int get_rings_fds(int *ring_fds, int ring_fds_sz);
     int get_rings_num();
     bool validate_and_convert_mapped_ipv4(sock_addr &sock) const;
-    void socket_stats_init();
     int register_callback_ctx(xlio_recv_callback_t callback, void *context);
     void consider_rings_migration_rx();
     int add_epoll_context(epfd_info *epfd);
@@ -411,6 +413,7 @@ protected:
     void save_stats_rx_os(int bytes);
     void save_stats_tx_os(int bytes);
     void save_stats_rx_offload(int nbytes);
+    void socket_stats_init();
     bool attach_receiver(flow_tuple_with_local_if &flow_key);
     bool detach_receiver(flow_tuple_with_local_if &flow_key);
     net_device_resources_t *create_nd_resources(const ip_addr &ip_local);
@@ -461,7 +464,7 @@ private:
     bool attach_as_uc_receiver_anyip(sa_family_t family, role_t role, bool skip_rules);
 
 public:
-    socket_stats_t *m_p_socket_stats;
+    socket_stats_t *m_p_socket_stats = nullptr;
     /* Last memory descriptor with zcopy operation method */
     mem_buf_desc_t *m_last_zcdesc;
     struct {
@@ -488,9 +491,11 @@ public:
     epoll_fd_rec m_fd_rec;
 
 protected:
+
     int m_fd; // identification information <socket fd>
     const uint32_t m_n_sysvar_select_poll_os_ratio;
     epfd_info *m_econtext;
+    bool m_has_stats = false;
     bool m_reuseaddr; // to track setsockopt with SO_REUSEADDR
     bool m_reuseport; // to track setsockopt with SO_REUSEPORT
     bool m_flow_tag_enabled; // for this socket
@@ -515,8 +520,6 @@ protected:
     wakeup_pipe m_sock_wakeup_pipe;
     dst_entry *m_p_connected_dst_entry;
     ip_addr m_so_bindtodevice_ip;
-
-    socket_stats_t m_socket_stats;
 
     int m_rx_epfd;
     cache_observer m_rx_nd_observer;
@@ -649,9 +652,12 @@ void sockinfo::set_events(uint64_t events)
 
 void sockinfo::save_strq_stats(uint32_t packet_strides)
 {
-    m_socket_stats.strq_counters.n_strq_total_strides += static_cast<uint64_t>(packet_strides);
-    m_socket_stats.strq_counters.n_strq_max_strides_per_packet =
-        std::max(m_socket_stats.strq_counters.n_strq_max_strides_per_packet, packet_strides);
+    if (unlikely(has_stats())) {
+        m_p_socket_stats->counters.n_rx_packets++;
+        m_p_socket_stats->strq_counters.n_strq_total_strides += static_cast<uint64_t>(packet_strides);
+        m_p_socket_stats->strq_counters.n_strq_max_strides_per_packet =
+            std::max(m_p_socket_stats->strq_counters.n_strq_max_strides_per_packet, packet_strides);
+    }
 }
 
 int sockinfo::dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, socklen_t *__fromlen,
@@ -728,8 +734,10 @@ int sockinfo::dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, soc
             rx_pkt_ready_offset; // if MSG_PEEK is on, m_rx_pkt_ready_offset must be zero-ed
         // save_stats_rx_offload(total_rx); //TODO??
     } else {
+        if (unlikely(has_stats())) {
+            m_p_socket_stats->n_rx_ready_byte_count -= total_rx;
+        }
         m_rx_ready_byte_count -= total_rx;
-        m_p_socket_stats->n_rx_ready_byte_count -= total_rx;
         post_deqeue(relase_buff);
         save_stats_rx_offload(total_rx);
     }
