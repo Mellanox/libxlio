@@ -81,6 +81,12 @@ rfs_uc_tcp_gro::rfs_uc_tcp_gro(flow_tuple *flow_spec_5t, ring_slave *p_ring,
     memset(&m_gro_desc, 0, sizeof(m_gro_desc));
 }
 
+bool rfs_uc_tcp_gro::rx_dispatch_packet_to_socket(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array)
+{
+    p_rx_wc_buf_desc->reset_ref_count();
+    return static_cast<sockinfo_tcp *>(m_sinks_list[0])->sockinfo_tcp::rx_input_cb(p_rx_wc_buf_desc, pv_fd_ready_array);
+}
+
 bool rfs_uc_tcp_gro::rx_dispatch_packet(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info,
                                         void *pv_fd_ready_array /* = NULL */)
 {
@@ -161,7 +167,7 @@ out:
     cq_stats.n_rx_gro_frags += 1;
     cq_stats.n_rx_gro_bytes += p_rx_pkt_mem_buf_desc_info->lwip_pbuf.pbuf.tot_len;
 
-    return rfs_uc::rx_dispatch_packet(p_rx_pkt_mem_buf_desc_info, pv_fd_ready_array);
+    return rx_dispatch_packet_to_socket(p_rx_pkt_mem_buf_desc_info, pv_fd_ready_array);
 }
 
 bool rfs_uc_tcp_gro::add_packet(mem_buf_desc_t *mem_buf_desc, void *payload_ptr, tcphdr *p_tcp_h)
@@ -261,7 +267,7 @@ void rfs_uc_tcp_gro::flush_gro_desc(void *pv_fd_ready_array)
     cq_stats.n_rx_gro_frags += m_gro_desc.buf_count;
     cq_stats.n_rx_gro_bytes += m_gro_desc.p_first->lwip_pbuf.pbuf.tot_len;
 
-    if (!rfs_uc::rx_dispatch_packet(m_gro_desc.p_first, pv_fd_ready_array)) {
+    if (!rx_dispatch_packet_to_socket(m_gro_desc.p_first, pv_fd_ready_array)) {
         m_p_ring_simple->reclaim_recv_buffers_no_lock(m_gro_desc.p_first);
     }
 
@@ -303,7 +309,7 @@ bool rfs_uc_tcp_gro::tcp_check(mem_buf_desc_t *mem_buf_desc, tcphdr *p_tcp_h)
 
     // Set pbc once here since in constructor we don't have sockinfo yet
     if (unlikely(!m_pcb)) {
-        sockinfo_tcp *sock = dynamic_cast<sockinfo_tcp *>(m_sinks_list[0]);
+        sockinfo_tcp *sock = static_cast<sockinfo_tcp *>(m_sinks_list[0]);
         if (unlikely(!sock)) {
             __log_err("sockinfo_tcp is null, can't check for already received packets");
             return true;

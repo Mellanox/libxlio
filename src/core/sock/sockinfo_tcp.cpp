@@ -1298,9 +1298,9 @@ send_iov:
 
     rc = p_si_tcp->m_ops->handle_send_ret(ret, seg);
 
-    if (p_dst->try_migrate_ring_tx(p_si_tcp->m_tcp_con_lock.get_lock_base())) {
-        p_si_tcp->m_p_socket_stats->counters.n_tx_migrations++;
-    }
+    //if (p_dst->try_migrate_ring_tx(p_si_tcp->m_tcp_con_lock.get_lock_base())) {
+    //    p_si_tcp->m_p_socket_stats->counters.n_tx_migrations++;
+    //}
 
     if (rc && is_set(attr.flags, XLIO_TX_PACKET_REXMIT)) {
         p_si_tcp->m_p_socket_stats->counters.n_tx_retransmits++;
@@ -1864,8 +1864,9 @@ static inline void _rx_lwip_cb_socketxtreme_helper(pbuf *p,
         completion->packet.num_bufs = current_desc->rx.n_frags;
 
         assert(reinterpret_cast<mem_buf_desc_t *>(p)->rx.n_frags > 0);
-        current_desc->rx.src.get_sa(reinterpret_cast<sockaddr *>(&completion->src),
-                                    sizeof(completion->src));
+
+        //current_desc->rx.src.get_sa(reinterpret_cast<sockaddr *>(&completion->src),
+        //                            sizeof(completion->src));
         if (use_hw_timestamp) {
             completion->packet.hw_timestamp = current_desc->rx.timestamps.hw;
         }
@@ -1892,7 +1893,7 @@ static inline void _rx_lwip_cb_socketxtreme_helper(pbuf *p,
 inline void sockinfo_tcp::rx_lwip_cb_socketxtreme_helper(pbuf *p)
 {
     auto notify = [this]() { NOTIFY_ON_EVENTS(this, XLIO_SOCKETXTREME_PACKET); };
-    bool use_hw_timestamp = (m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE);
+    bool use_hw_timestamp = false;//(m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE);
 
     assert(p);
     _rx_lwip_cb_socketxtreme_helper(p, &m_socketxtreme.ec->completion,
@@ -1950,8 +1951,8 @@ inline void sockinfo_tcp::rx_lwip_process_chained_pbufs(pbuf *p)
     p_first_desc->rx.sz_payload = p->tot_len;
     p_first_desc->rx.n_frags = 0;
 
-    m_connected.get_sa(reinterpret_cast<sockaddr *>(&p_first_desc->rx.src),
-                       static_cast<socklen_t>(sizeof(p_first_desc->rx.src)));
+    //m_connected.get_sa(reinterpret_cast<sockaddr *>(&p_first_desc->rx.src),
+    //                   static_cast<socklen_t>(sizeof(p_first_desc->rx.src)));
 
     if (unlikely(has_stats())) {
         m_p_socket_stats->counters.n_rx_bytes += p->tot_len;
@@ -1984,7 +1985,7 @@ inline void sockinfo_tcp::rx_lwip_process_chained_pbufs(pbuf *p)
         p_curr_desc->rx.frag.iov_base = p->payload;
         p_curr_desc->rx.frag.iov_len = p->len;
         p_curr_desc->p_next_desc = reinterpret_cast<mem_buf_desc_t *>(p->next);
-        process_timestamps(p_curr_desc);
+        //process_timestamps(p_curr_desc);
     }
     p_first_desc->set_ref_count(head_ref);
 }
@@ -2052,7 +2053,7 @@ err_t sockinfo_tcp::rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *pcb, stru
     conn->rx_lwip_cb_socketxtreme_helper(p);
 
     io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
-    conn->m_sock_wakeup_pipe.do_wakeup();
+    //conn->m_sock_wakeup_pipe.do_wakeup();
     /*
      * RCVBUFF Accounting: tcp_recved here(stream into the 'internal' buffer) only if the user
      * buffer is not 'filled'
@@ -5708,7 +5709,7 @@ void sockinfo_tcp::tcp_tx_zc_handle(mem_buf_desc_t *p_desc)
 
     /* Signal events on socket */
     NOTIFY_ON_EVENTS(sock, EPOLLERR);
-    sock->m_sock_wakeup_pipe.do_wakeup();
+    //sock->m_sock_wakeup_pipe.do_wakeup();
 }
 
 struct tcp_seg *sockinfo_tcp::tcp_seg_alloc_direct(void *p_conn)

@@ -463,6 +463,8 @@ private:
     bool attach_as_uc_receiver_anyip(sa_family_t family, role_t role, bool skip_rules);
 
 public:
+    rfs *rfs_ptr = nullptr;
+
     socket_stats_t *m_p_socket_stats = nullptr;
     /* Last memory descriptor with zcopy operation method */
     mem_buf_desc_t *m_last_zcdesc;
@@ -474,8 +476,6 @@ public:
         std::deque<struct ring_ec> ec_cache;
         struct ring_ec *ec;
     } m_socketxtreme;
-
-    rfs *rfs_ptr = nullptr;
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     bool m_is_for_socket_pool = false; // true when this fd will be used for socket pool on close

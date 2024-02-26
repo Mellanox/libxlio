@@ -665,6 +665,10 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
                              p_tcp_h->fin ? "F" : "", ntohl(p_tcp_h->seq), ntohl(p_tcp_h->ack_seq),
                              ntohs(p_tcp_h->window), p_rx_wc_buf_desc->rx.sz_payload);
 
+                if (likely(safe_mce_sys().gro_streams_max > 0U)) {
+                    return static_cast<rfs_uc_tcp_gro *>(si->rfs_ptr)->rfs_uc_tcp_gro::rx_dispatch_packet(p_rx_wc_buf_desc, pv_fd_ready_array);
+                }
+
                 return si->rfs_ptr->rx_dispatch_packet(p_rx_wc_buf_desc, pv_fd_ready_array);
             }
 

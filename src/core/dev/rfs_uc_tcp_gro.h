@@ -75,6 +75,7 @@ public:
     void flush(void *pv_fd_ready_array);
 
 private:
+    inline bool rx_dispatch_packet_to_socket(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array);
     inline void flush_gro_desc(void *pv_fd_ready_array);
     inline bool add_packet(mem_buf_desc_t *mem_buf_desc, void *payload_ptr, tcphdr *p_tcp_h);
     inline void init_gro_desc(mem_buf_desc_t *mem_buf_desc, uint16_t ip_tot_len_pkt,
