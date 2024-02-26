@@ -145,6 +145,7 @@ libxlio_la_SOURCES := \
 	proto/header.cpp \
 	proto/arp.cpp \
 	\
+	sock/sock_stats.cpp \
 	sock/sockinfo.cpp \
 	sock/sockinfo_udp.cpp \
 	sock/sockinfo_ulp.cpp \
@@ -273,6 +274,7 @@ libxlio_la_SOURCES := \
 	\
 	sock/cleanable_obj.h \
 	sock/fd_collection.h \
+	sock/sock_stats.h \
 	sock/sockinfo.h \
 	sock/sockinfo_tcp.h \
 	sock/sockinfo_udp.h \

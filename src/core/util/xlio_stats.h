@@ -225,17 +225,29 @@ typedef struct socket_listen_counters {
     }
 } socket_listen_counters_t;
 
-typedef struct socket_stats_t {
+struct socket_stats_t {
+    union {
+        uint64_t n_tx_ready_byte_count;
+        socket_stats_t* _next_stat;
+    };
+    socket_counters_t counters;
+    socket_strq_counters_t strq_counters;
+    socket_listen_counters_t listen_counters;
+
+#ifdef DEFINED_UTLS
+    socket_tls_counters_t tls_counters;
+    uint16_t tls_version;
+    uint16_t tls_cipher;
+    bool tls_tx_offload;
+    bool tls_rx_offload;
+#endif /* DEFINED_UTLS */
+
+    std::bitset<MC_TABLE_SIZE> mc_grp_map;
     int fd;
     uint32_t inode;
     uint32_t tcp_state; // enum tcp_state
-    uint8_t socket_type; // SOCK_STREAM, SOCK_DGRAM, ...
-    bool padding1;
+    uint32_t n_rx_zcopy_pkt_count;
     sa_family_t sa_family;
-    bool b_is_offloaded;
-    bool b_blocking;
-    bool b_mc_loop;
-    bool padding2;
     in_port_t bound_port;
     in_port_t connected_port;
     ip_address bound_if;
@@ -244,25 +256,15 @@ typedef struct socket_stats_t {
     pid_t threadid_last_rx;
     pid_t threadid_last_tx;
     uint32_t n_rx_ready_pkt_count;
-    uint32_t n_rx_ready_byte_limit;
     uint64_t n_rx_ready_byte_count;
-    uint64_t n_tx_ready_byte_count;
-    uint32_t n_rx_zcopy_pkt_count;
-    socket_counters_t counters;
-#ifdef DEFINED_UTLS
-    bool tls_tx_offload;
-    bool tls_rx_offload;
-    uint16_t tls_version;
-    uint16_t tls_cipher;
-    socket_tls_counters_t tls_counters;
-#endif /* DEFINED_UTLS */
-    socket_strq_counters_t strq_counters;
-    socket_listen_counters_t listen_counters;
-    std::bitset<MC_TABLE_SIZE> mc_grp_map;
     ring_logic_t ring_alloc_logic_rx;
     ring_logic_t ring_alloc_logic_tx;
     uint64_t ring_user_id_rx;
     uint64_t ring_user_id_tx;
+    uint8_t socket_type; // SOCK_STREAM, SOCK_DGRAM, ...
+    bool b_is_offloaded;
+    bool b_blocking;
+    bool b_mc_loop;
 
     void reset()
     {
@@ -274,8 +276,8 @@ typedef struct socket_stats_t {
         bound_if = connected_ip = mc_tx_if = ip_address(in6addr_any);
         bound_port = connected_port = (in_port_t)0;
         threadid_last_rx = threadid_last_tx = pid_t(0);
-        n_rx_ready_pkt_count = n_rx_ready_byte_count = n_rx_ready_byte_limit =
-            n_rx_zcopy_pkt_count = n_tx_ready_byte_count = 0;
+        n_rx_ready_pkt_count = n_rx_ready_byte_count = n_rx_zcopy_pkt_count =
+            n_tx_ready_byte_count = 0;
         memset(&counters, 0, sizeof(counters));
 #ifdef DEFINED_UTLS
         tls_tx_offload = tls_rx_offload = false;
@@ -287,7 +289,6 @@ typedef struct socket_stats_t {
         mc_grp_map.reset();
         ring_user_id_rx = ring_user_id_tx = 0;
         ring_alloc_logic_rx = ring_alloc_logic_tx = RING_LOGIC_PER_INTERFACE;
-        padding1 = padding2 = 0;
     };
 
     void set_bound_if(sock_addr &sock)
@@ -315,7 +316,7 @@ typedef struct socket_stats_t {
     {
         reset();
     };
-} socket_stats_t;
+};
 
 typedef struct {
     bool b_enabled;

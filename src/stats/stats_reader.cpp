@@ -252,7 +252,6 @@ void update_delta_stat(socket_stats_t *p_curr_stat, socket_stats_t *p_prev_stat)
         (p_curr_stat->counters.n_rx_poll_hit - p_prev_stat->counters.n_rx_poll_hit) / delay;
     p_prev_stat->n_rx_ready_byte_count = p_curr_stat->n_rx_ready_byte_count;
     p_prev_stat->n_tx_ready_byte_count = p_curr_stat->n_tx_ready_byte_count;
-    p_prev_stat->n_rx_ready_byte_limit = p_curr_stat->n_rx_ready_byte_limit;
     p_prev_stat->counters.n_rx_ready_byte_max = p_curr_stat->counters.n_rx_ready_byte_max;
     p_prev_stat->counters.n_rx_ready_byte_drop =
         (p_curr_stat->counters.n_rx_ready_byte_drop - p_prev_stat->counters.n_rx_ready_byte_drop) /

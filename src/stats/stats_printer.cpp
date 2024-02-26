@@ -206,10 +206,9 @@ void print_full_stats(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, 
         b_any_activiy = true;
     }
     if (p_si_stats->counters.n_rx_data_pkts || p_si_stats->n_rx_ready_pkt_count) {
-        fprintf(filename, "Rx byte: cur %lu / max %u / dropped%s %u / limit %u\n",
+        fprintf(filename, "Rx byte: cur %lu / max %u / dropped%s %u\n",
                 p_si_stats->n_rx_ready_byte_count, p_si_stats->counters.n_rx_ready_byte_max,
-                post_fix, p_si_stats->counters.n_rx_ready_byte_drop,
-                p_si_stats->n_rx_ready_byte_limit);
+                post_fix, p_si_stats->counters.n_rx_ready_byte_drop);
         fprintf(filename, "Rx pkt : cur %u / max %u / dropped%s %u\n",
                 p_si_stats->n_rx_ready_pkt_count, p_si_stats->counters.n_rx_ready_pkt_max, post_fix,
                 p_si_stats->counters.n_rx_ready_pkt_drop);

@@ -54,6 +54,7 @@
 #include "dev/ring_allocation_logic.h"
 #include "sock-redirect.h"
 #include "sock-app.h"
+#include "sock_stats.h"
 
 #ifndef BASE_SOCKINFO_H
 #define BASE_SOCKINFO_H
@@ -342,7 +343,6 @@ public:
     void destructor_helper();
     int *get_rings_fds(int &res_length);
     bool validate_and_convert_mapped_ipv4(sock_addr &sock) const;
-    void socket_stats_init(void);
     int register_callback_ctx(xlio_recv_callback_t callback, void *context);
     void consider_rings_migration_rx();
     int add_epoll_context(epfd_info *epfd);
@@ -406,12 +406,14 @@ protected:
     inline int dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, socklen_t *__fromlen,
                               int in_flags, int *p_out_flags);
 
+    bool has_stats() const { return m_has_stats; }
     bool is_socketxtreme() { return safe_mce_sys().enable_socketxtreme; }
     int get_sock_by_L3_L4(in_protocol_t protocol, const ip_address &ip, in_port_t port);
     void notify_epoll_context(uint32_t events);
     void save_stats_rx_os(int bytes);
     void save_stats_tx_os(int bytes);
     void save_stats_rx_offload(int nbytes);
+    void socket_stats_init();
     bool attach_receiver(flow_tuple_with_local_if &flow_key);
     bool detach_receiver(flow_tuple_with_local_if &flow_key);
     net_device_resources_t *create_nd_resources(const ip_addr &ip_local);
@@ -462,7 +464,7 @@ private:
     bool attach_as_uc_receiver_anyip(sa_family_t family, role_t role, bool skip_rules);
 
 public:
-    socket_stats_t *m_p_socket_stats;
+    socket_stats_t *m_p_socket_stats = nullptr;
     /* Last memory descriptor with zcopy operation method */
     mem_buf_desc_t *m_last_zcdesc;
     struct {
@@ -489,9 +491,22 @@ public:
     epoll_fd_rec m_fd_rec;
 
 protected:
+
+    void *m_fd_context; // Context data stored with socket
+
+    /* TX zcopy counter
+     * The notification itself for tx zcopy operation is a simple scalar value.
+     * Each socket maintains an internal unsigned 32-bit counter.
+     * Each send call with MSG_ZEROCOPY that successfully sends data increments
+     * the counter. The counter is not incremented on failure or if called with
+     * length zero.
+     * The counter counts system call invocations, not bytes.
+     * It wraps after UINT_MAX calls.
+     */
+    atomic_t m_zckey;
+
     int m_fd; // identification information <socket fd>
-    const uint32_t m_n_sysvar_select_poll_os_ratio;
-    epfd_info *m_econtext;
+    bool m_has_stats = false;
     bool m_reuseaddr; // to track setsockopt with SO_REUSEADDR
     bool m_reuseport; // to track setsockopt with SO_REUSEPORT
     bool m_flow_tag_enabled; // for this socket
@@ -509,6 +524,8 @@ protected:
     lock_mutex m_lock_snd;
     lock_mutex m_rx_migration_lock;
 
+    const uint32_t m_n_sysvar_select_poll_os_ratio;
+    epfd_info *m_econtext;
     sockinfo_state m_state; // socket current state
     sa_family_t m_family;
     sock_addr m_bound;
@@ -516,8 +533,6 @@ protected:
     wakeup_pipe m_sock_wakeup_pipe;
     dst_entry *m_p_connected_dst_entry;
     ip_addr m_so_bindtodevice_ip;
-
-    socket_stats_t m_socket_stats;
 
     int m_rx_epfd;
     cache_observer m_rx_nd_observer;
@@ -555,22 +570,10 @@ protected:
     descq_t m_error_queue;
     lock_spin m_error_queue_lock;
 
-    /* TX zcopy counter
-     * The notification itself for tx zcopy operation is a simple scalar value.
-     * Each socket maintains an internal unsigned 32-bit counter.
-     * Each send call with MSG_ZEROCOPY that successfully sends data increments
-     * the counter. The counter is not incremented on failure or if called with
-     * length zero.
-     * The counter counts system call invocations, not bytes.
-     * It wraps after UINT_MAX calls.
-     */
-    atomic_t m_zckey;
-
     // Callback function pointer to support VMA extra API (xlio_extra.h)
     xlio_recv_callback_t m_rx_callback;
     void *m_rx_callback_context; // user context
     struct xlio_rate_limit_t m_so_ratelimit;
-    void *m_fd_context; // Context data stored with socket
     uint32_t m_flow_tag_id; // Flow Tag for this socket
     bool m_rx_cq_wait_ctrl;
     uint8_t m_n_uc_ttl_hop_lim;
@@ -651,9 +654,12 @@ void sockinfo::set_events(uint64_t events)
 
 void sockinfo::save_strq_stats(uint32_t packet_strides)
 {
-    m_socket_stats.strq_counters.n_strq_total_strides += static_cast<uint64_t>(packet_strides);
-    m_socket_stats.strq_counters.n_strq_max_strides_per_packet =
-        std::max(m_socket_stats.strq_counters.n_strq_max_strides_per_packet, packet_strides);
+    if (unlikely(has_stats())) {
+        m_p_socket_stats->counters.n_rx_packets++;
+        m_p_socket_stats->strq_counters.n_strq_total_strides += static_cast<uint64_t>(packet_strides);
+        m_p_socket_stats->strq_counters.n_strq_max_strides_per_packet =
+            std::max(m_p_socket_stats->strq_counters.n_strq_max_strides_per_packet, packet_strides);
+    }
 }
 
 int sockinfo::dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, socklen_t *__fromlen,

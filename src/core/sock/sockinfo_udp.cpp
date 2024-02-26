@@ -439,7 +439,7 @@ sockinfo_udp::~sockinfo_udp()
 
     // Remove all RX ready queue buffers (Push into reuse queue per ring)
     si_udp_logdbg("Releasing %d ready rx packets (total of %lu bytes)", m_n_rx_pkt_ready_list_count,
-                  m_p_socket_stats->n_rx_ready_byte_count);
+                  m_rx_ready_byte_count);
     rx_ready_byte_count_limit_update(0);
 
     // Clear the dst_entry map
@@ -1650,9 +1650,9 @@ int sockinfo_udp::getsockopt(int __level, int __optname, void *__optval, socklen
             uint32_t n_so_rcvbuf_bytes = *(int *)__optval;
             si_udp_logdbg("SOL_SOCKET, SO_RCVBUF=%d", n_so_rcvbuf_bytes);
 
-            if (m_p_socket_stats->n_rx_ready_byte_count > n_so_rcvbuf_bytes) {
+            if (m_rx_ready_byte_count > n_so_rcvbuf_bytes) {
                 si_udp_logdbg("Releasing at least %lu bytes from ready rx packets queue",
-                              m_p_socket_stats->n_rx_ready_byte_count - n_so_rcvbuf_bytes);
+                              m_rx_ready_byte_count - n_so_rcvbuf_bytes);
             }
 
             rx_ready_byte_count_limit_update(n_so_rcvbuf_bytes);
@@ -1704,14 +1704,14 @@ int sockinfo_udp::getsockopt(int __level, int __optname, void *__optval, socklen
 void sockinfo_udp::rx_ready_byte_count_limit_update(size_t n_rx_ready_bytes_limit_new)
 {
     si_udp_logfunc("new limit: %d Bytes (old: %d Bytes, min value %d Bytes)",
-                   n_rx_ready_bytes_limit_new, m_p_socket_stats->n_rx_ready_byte_limit,
+                   n_rx_ready_bytes_limit_new, m_rx_ready_byte_limit,
                    m_n_sysvar_rx_ready_byte_min_limit);
     if (n_rx_ready_bytes_limit_new > 0 &&
         n_rx_ready_bytes_limit_new < m_n_sysvar_rx_ready_byte_min_limit) {
         n_rx_ready_bytes_limit_new = m_n_sysvar_rx_ready_byte_min_limit;
     }
-    m_p_socket_stats->n_rx_ready_byte_limit = n_rx_ready_bytes_limit_new;
-    drop_rx_ready_byte_count(m_p_socket_stats->n_rx_ready_byte_limit);
+    m_rx_ready_byte_limit = n_rx_ready_bytes_limit_new;
+    drop_rx_ready_byte_count(n_rx_ready_bytes_limit_new);
 
     return;
 }
@@ -1722,7 +1722,7 @@ void sockinfo_udp::drop_rx_ready_byte_count(size_t n_rx_bytes_limit)
     m_lock_rcv.lock();
     while (m_n_rx_pkt_ready_list_count) {
         mem_buf_desc_t *p_rx_pkt_desc = m_rx_pkt_ready_list.front();
-        if (m_p_socket_stats->n_rx_ready_byte_count > n_rx_bytes_limit ||
+        if (m_rx_ready_byte_count > n_rx_bytes_limit ||
             p_rx_pkt_desc->rx.sz_payload == 0U) {
             m_rx_pkt_ready_list.pop_front();
             m_n_rx_pkt_ready_list_count--;
@@ -1939,7 +1939,7 @@ bool sockinfo_udp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_ready_array
 
         if (m_n_sysvar_rx_cq_drain_rate_nsec == MCE_RX_CQ_DRAIN_RATE_DISABLED) {
             si_udp_logfunc("=> true (ready count = %d packets / %d bytes)",
-                           m_n_rx_pkt_ready_list_count, m_p_socket_stats->n_rx_ready_byte_count);
+                           m_n_rx_pkt_ready_list_count, m_rx_ready_byte_count);
             return true;
         } else {
             tscval_t tsc_now = TSCVAL_INITIALIZER;
@@ -1947,7 +1947,7 @@ bool sockinfo_udp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_ready_array
             if (tsc_now - g_si_tscv_last_poll < m_n_sysvar_rx_delta_tsc_between_cq_polls) {
                 si_udp_logfunc("=> true (ready count = %d packets / %d bytes)",
                                m_n_rx_pkt_ready_list_count,
-                               m_p_socket_stats->n_rx_ready_byte_count);
+                               m_rx_ready_byte_count);
                 return true;
             }
 
@@ -1983,7 +1983,7 @@ bool sockinfo_udp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_ready_array
                     // Get out of the CQ polling loop
                     si_udp_logfunc("=> polled true (ready count = %d packets / %d bytes)",
                                    m_n_rx_pkt_ready_list_count,
-                                   m_p_socket_stats->n_rx_ready_byte_count);
+                                   m_rx_ready_byte_count);
                     m_rx_ring_map_lock.unlock();
                     return true;
                 }
@@ -1998,13 +1998,13 @@ bool sockinfo_udp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_ready_array
     // m_n_rx_pkt_ready_list_count
     if (m_n_rx_pkt_ready_list_count) {
         si_udp_logfunc("=> true (ready count = %d packets / %d bytes)", m_n_rx_pkt_ready_list_count,
-                       m_p_socket_stats->n_rx_ready_byte_count);
+                       m_rx_ready_byte_count);
         return true;
     }
 
     // Not ready packets in ready queue, return false
     si_udp_logfuncall("=> false (ready count = %d packets / %d bytes)", m_n_rx_pkt_ready_list_count,
-                      m_p_socket_stats->n_rx_ready_byte_count);
+                      m_rx_ready_byte_count);
     return false;
 }
 
@@ -2293,8 +2293,8 @@ inline xlio_recv_callback_retval_t sockinfo_udp::inspect_by_user_cb(mem_buf_desc
     pkt_info.packet_id = (void *)p_desc;
     pkt_info.src = p_desc->rx.src.get_p_sa();
     pkt_info.dst = p_desc->rx.dst.get_p_sa();
-    pkt_info.socket_ready_queue_pkt_count = m_p_socket_stats->n_rx_ready_pkt_count;
-    pkt_info.socket_ready_queue_byte_count = m_p_socket_stats->n_rx_ready_byte_count;
+    pkt_info.socket_ready_queue_pkt_count = m_n_rx_pkt_ready_list_count;
+    pkt_info.socket_ready_queue_byte_count = m_rx_ready_byte_count;
 
     if (m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE) {
         pkt_info.hw_timestamp = p_desc->rx.timestamps.hw;
@@ -2363,13 +2363,13 @@ inline void sockinfo_udp::update_ready(mem_buf_desc_t *p_desc, void *pv_fd_ready
         m_rx_pkt_ready_list.push_back(p_desc);
         m_n_rx_pkt_ready_list_count++;
         m_rx_ready_byte_count += p_desc->rx.sz_payload;
-        m_p_socket_stats->n_rx_ready_pkt_count++;
         m_p_socket_stats->n_rx_ready_byte_count += p_desc->rx.sz_payload;
+        m_p_socket_stats->n_rx_ready_pkt_count++;
         m_p_socket_stats->counters.n_rx_ready_pkt_max =
-            std::max((uint32_t)m_p_socket_stats->n_rx_ready_pkt_count,
+            std::max((uint32_t)m_n_rx_pkt_ready_list_count,
                      m_p_socket_stats->counters.n_rx_ready_pkt_max);
         m_p_socket_stats->counters.n_rx_ready_byte_max =
-            std::max((uint32_t)m_p_socket_stats->n_rx_ready_byte_count,
+            std::max((uint32_t)m_rx_ready_byte_count,
                      m_p_socket_stats->counters.n_rx_ready_byte_max);
         m_sock_wakeup_pipe.do_wakeup();
         m_lock_rcv.unlock();
@@ -2387,7 +2387,7 @@ inline void sockinfo_udp::update_ready(mem_buf_desc_t *p_desc, void *pv_fd_ready
     io_mux_call::update_fd_array((fd_array_t *)pv_fd_ready_array, m_fd);
 
     si_udp_logfunc("rx ready count = %d packets / %d bytes", m_n_rx_pkt_ready_list_count,
-                   m_p_socket_stats->n_rx_ready_byte_count);
+                   m_rx_ready_byte_count);
 }
 
 bool sockinfo_udp::packet_is_loopback(mem_buf_desc_t *p_desc)
@@ -2408,10 +2408,9 @@ bool sockinfo_udp::rx_input_cb(mem_buf_desc_t *p_desc, void *pv_fd_ready_array)
     }
 
     /* Check if sockinfo rx byte SO_RCVBUF reached - then disregard this packet */
-    if (unlikely(m_p_socket_stats->n_rx_ready_byte_count >=
-                 m_p_socket_stats->n_rx_ready_byte_limit)) {
+    if (unlikely(m_rx_ready_byte_count >= m_rx_ready_byte_limit)) {
         si_udp_logfunc("rx packet discarded - socket limit reached (%d bytes)",
-                       m_p_socket_stats->n_rx_ready_byte_limit);
+                       m_rx_ready_byte_limit);
         m_p_socket_stats->counters.n_rx_ready_byte_drop += p_desc->rx.sz_payload;
         m_p_socket_stats->counters.n_rx_ready_pkt_drop++;
         return false;
@@ -2816,7 +2815,7 @@ int sockinfo_udp::mc_change_membership_ip4(const mc_pending_pram *p_mc_pram)
             // we will get RX from OS
             return -1;
         }
-        xlio_stats_mc_group_add(mc_grp, m_p_socket_stats);
+        xlio_stats_mc_group_add(mc_grp, has_stats() ? m_p_socket_stats : nullptr);
         original_os_setsockopt_helper(&mreq_src, pram_size, p_mc_pram->optname, IPPROTO_IP);
         m_multicast = true;
         break;
@@ -2828,7 +2827,7 @@ int sockinfo_udp::mc_change_membership_ip4(const mc_pending_pram *p_mc_pram)
             // we will get RX from OS
             return -1;
         }
-        xlio_stats_mc_group_add(mc_grp, m_p_socket_stats);
+        xlio_stats_mc_group_add(mc_grp, has_stats() ? m_p_socket_stats : nullptr);
         pram_size = sizeof(ip_mreq_source);
         original_os_setsockopt_helper(&mreq_src, pram_size, p_mc_pram->optname, IPPROTO_IP);
         m_multicast = true;
@@ -2841,7 +2840,7 @@ int sockinfo_udp::mc_change_membership_ip4(const mc_pending_pram *p_mc_pram)
         if (!detach_receiver(flow_key)) {
             return -1;
         }
-        xlio_stats_mc_group_remove(mc_grp, m_p_socket_stats);
+        xlio_stats_mc_group_remove(mc_grp, has_stats() ? m_p_socket_stats : nullptr);
         m_multicast = false;
         break;
     }
@@ -2854,7 +2853,7 @@ int sockinfo_udp::mc_change_membership_ip4(const mc_pending_pram *p_mc_pram)
             if (!detach_receiver(flow_key)) {
                 return -1;
             }
-            xlio_stats_mc_group_remove(mc_grp, m_p_socket_stats);
+            xlio_stats_mc_group_remove(mc_grp, has_stats() ? m_p_socket_stats : nullptr);
             m_multicast = false; // get out from MC group
         }
         break;
@@ -3056,7 +3055,7 @@ int sockinfo_udp::mc_change_membership_ip6(const mc_pending_pram *p_mc_pram)
             // we will get RX from OS
             return -1;
         }
-        xlio_stats_mc_group_add(mc_grp, m_p_socket_stats);
+        xlio_stats_mc_group_add(mc_grp, has_stats() ? m_p_socket_stats : nullptr);
         original_os_setsockopt_helper(&p_mc_pram->req, p_mc_pram->pram_size, p_mc_pram->optname,
                                       IPPROTO_IPV6);
     } break;
@@ -3073,7 +3072,7 @@ int sockinfo_udp::mc_change_membership_ip6(const mc_pending_pram *p_mc_pram)
             if (!detach_receiver(flow_key)) {
                 return -1;
             }
-            xlio_stats_mc_group_remove(mc_grp, m_p_socket_stats);
+            xlio_stats_mc_group_remove(mc_grp, has_stats() ? m_p_socket_stats : nullptr);
         }
         break;
     }

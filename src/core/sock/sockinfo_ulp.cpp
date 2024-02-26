@@ -679,7 +679,7 @@ err_t sockinfo_tcp_ops_tls::tls_rx_consume_ready_packets(void)
      * receive encrypted TLS records with header and TAG after successful
      * setsockopt() call.
      */
-    if (m_p_sock->m_p_socket_stats->n_rx_ready_pkt_count != 0) {
+    if (m_p_sock->m_n_rx_pkt_ready_list_count > 0) {
         descq_t descs_rx_ready;
 
         m_p_sock->sock_pop_descs_rx_ready(&descs_rx_ready);

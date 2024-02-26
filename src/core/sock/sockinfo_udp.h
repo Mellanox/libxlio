@@ -288,6 +288,7 @@ private:
         bool operator==(const int &r_port) { return port == r_port; }
     };
 
+    uint32_t m_rx_ready_byte_limit;
     ip_addr m_mc_tx_src_ip;
     bool m_b_mc_tx_loop;
     uint8_t m_n_mc_ttl_hop_lim;

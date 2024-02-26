@@ -418,6 +418,10 @@ void xlio_stats_mc_group_add(const ip_address &mc_grp, socket_stats_t *p_socket_
     int empty_entry = -1;
     int index_to_insert = -1;
 
+    if (!p_socket_stats) {
+        return;
+    }
+
     g_lock_mc_info.lock();
     for (int grp_idx = 0; grp_idx < g_sh_mem->mc_info.max_grp_num && index_to_insert == -1;
          grp_idx++) {
@@ -451,6 +455,10 @@ void xlio_stats_mc_group_add(const ip_address &mc_grp, socket_stats_t *p_socket_
 
 void xlio_stats_mc_group_remove(const ip_address &mc_grp, socket_stats_t *p_socket_stats)
 {
+    if (!p_socket_stats) {
+        return;
+    }
+
     g_lock_mc_info.lock();
     for (int grp_idx = 0; grp_idx < g_sh_mem->mc_info.max_grp_num; grp_idx++) {
         if (g_sh_mem->mc_info.mc_grp_tbl[grp_idx].sock_num &&
