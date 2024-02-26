@@ -99,51 +99,24 @@ const char *sockinfo::setsockopt_so_opt_to_str(int opt)
 }
 
 sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
-    : m_epoll_event_flags(0)
-    , m_fd_context((void *)((uintptr_t)m_fd))
+    : m_fd_context((void *)((uintptr_t)fd))
     , m_fd(fd)
-    , m_reuseaddr(false)
-    , m_reuseport(false)
-    , m_flow_tag_enabled(false)
-    , m_b_blocking(true)
-    , m_b_pktinfo(false)
-    , m_b_rcvtstamp(false)
-    , m_b_rcvtstampns(false)
-    , m_b_zc(false)
     , m_skip_cq_poll_in_rx(safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_ENABLE)
-    , m_n_tsing_flags(0)
-    , m_protocol(PROTO_UNDEFINED)
-    , m_src_sel_flags(0U)
-    , m_lock_rcv(MULTILOCK_RECURSIVE, MODULE_NAME "::m_lock_rcv")
-    , m_lock_snd(MODULE_NAME "::m_lock_snd")
-    , m_n_sysvar_select_poll_os_ratio(safe_mce_sys().select_poll_os_ratio)
-    , m_econtext(NULL)
-    , m_state(SOCKINFO_OPENED)
-    , m_family(domain)
-    , m_p_connected_dst_entry(NULL)
-    , m_so_bindtodevice_ip(ip_address::any_addr(), domain)
-    , m_p_rx_ring(0)
-    , m_rx_reuse_buf_pending(false)
-    , m_rx_reuse_buf_postponed(false)
-    , m_rx_ring_map_lock(MODULE_NAME "::m_rx_ring_map_lock")
-    , m_n_rx_pkt_ready_list_count(0)
-    , m_rx_pkt_ready_offset(0)
-    , m_rx_ready_byte_count(0)
-    , m_n_sysvar_rx_num_buffs_reuse(safe_mce_sys().rx_bufs_batch)
-    , m_n_sysvar_rx_poll_num(safe_mce_sys().rx_poll_num)
-    , m_ring_alloc_log_rx(safe_mce_sys().ring_allocation_logic_rx, use_ring_locks)
-    , m_ring_alloc_log_tx(safe_mce_sys().ring_allocation_logic_tx, use_ring_locks)
-    , m_pcp(0)
-    , m_rx_callback(NULL)
-    , m_rx_callback_context(NULL)
-    , m_flow_tag_id(0)
     , m_rx_cq_wait_ctrl(safe_mce_sys().rx_cq_wait_ctrl)
+    , m_is_ipv6only(safe_mce_sys().sysctl_reader.get_ipv6_bindv6only())
+    , m_family(domain)
     , m_n_uc_ttl_hop_lim(m_family == AF_INET
                              ? safe_mce_sys().sysctl_reader.get_net_ipv4_ttl()
                              : safe_mce_sys().sysctl_reader.get_net_ipv6_hop_limit())
-    , m_bind_no_port(false)
-    , m_is_ipv6only(safe_mce_sys().sysctl_reader.get_ipv6_bindv6only())
-    , m_p_rings_fds(NULL)
+    , m_lock_rcv(MULTILOCK_RECURSIVE, MODULE_NAME "::m_lock_rcv")
+    , m_lock_snd(MODULE_NAME "::m_lock_snd")
+    , m_so_bindtodevice_ip(ip_address::any_addr(), domain)
+    , m_rx_ring_map_lock(MODULE_NAME "::m_rx_ring_map_lock")
+    , m_ring_alloc_log_rx(safe_mce_sys().ring_allocation_logic_rx, use_ring_locks)
+    , m_ring_alloc_log_tx(safe_mce_sys().ring_allocation_logic_tx, use_ring_locks)
+    , m_n_sysvar_select_poll_os_ratio(safe_mce_sys().select_poll_os_ratio)
+    , m_n_sysvar_rx_num_buffs_reuse(safe_mce_sys().rx_bufs_batch)
+    , m_n_sysvar_rx_poll_num(safe_mce_sys().rx_poll_num)
 {
     m_rx_epfd = SYSCALL(epoll_create, 128);
     if (unlikely(m_rx_epfd == -1)) {
@@ -164,13 +137,12 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     set_flow_tag(m_fd + 1);
 
     atomic_set(&m_zckey, 0);
-    m_last_zcdesc = NULL;
 
-    m_socketxtreme.ec_cache.clear();
+    m_socketxtreme_ec_cache.clear();
     struct ring_ec ec;
     ec.clear();
-    m_socketxtreme.ec_cache.push_back(ec);
-    m_socketxtreme.ec = &m_socketxtreme.ec_cache.back();
+    m_socketxtreme_ec_cache.push_back(ec);
+    m_socketxtreme_ec = &m_socketxtreme_ec_cache.back();
 
     m_connected.set_sa_family(m_family);
     m_bound.set_sa_family(m_family);
@@ -210,7 +182,7 @@ sockinfo::~sockinfo()
         sock_stats::get_sock_stats()->return_stats_obj(m_p_socket_stats);
     }
 
-    m_socketxtreme.ec_cache.clear();
+    m_socketxtreme_ec_cache.clear();
 
     bool toclose = safe_mce_sys().deferred_close && m_fd >= 0;
 
@@ -1763,7 +1735,7 @@ void sockinfo::rx_del_ring_cb(ring *p_ring)
                 /* Ring should not have completion events related closed socket
                  * in wait list
                  */
-                for (auto &ec : m_socketxtreme.ec_cache) {
+                for (auto &ec : m_socketxtreme_ec_cache) {
                     if (0 != ec.completion.events) {
                         m_p_rx_ring->del_ec(&ec);
                     }
@@ -2414,5 +2386,6 @@ int sockinfo::handle_exception_flow()
     if (safe_mce_sys().exception_handling == xlio_exception_handling::MODE_ABORT) {
         return -2;
     }
+
     return 0;
 }

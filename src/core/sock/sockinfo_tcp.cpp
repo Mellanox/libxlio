@@ -1896,9 +1896,9 @@ inline void sockinfo_tcp::rx_lwip_cb_socketxtreme_helper(pbuf *p)
     bool use_hw_timestamp = false;//(m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE);
 
     assert(p);
-    _rx_lwip_cb_socketxtreme_helper(p, &m_socketxtreme.ec->completion,
-                                    m_socketxtreme.ec->last_buff_lst, use_hw_timestamp, notify);
-    save_stats_rx_offload(m_socketxtreme.ec->completion.packet.total_len);
+    _rx_lwip_cb_socketxtreme_helper(p, &m_socketxtreme_ec->completion,
+                                    m_socketxtreme_ec->last_buff_lst, use_hw_timestamp, notify);
+    save_stats_rx_offload(m_socketxtreme_ec->completion.packet.total_len);
 }
 
 inline err_t sockinfo_tcp::handle_fin(struct tcp_pcb *pcb, err_t err)
@@ -3224,7 +3224,7 @@ void sockinfo_tcp::accept_connection_socketxtreme(sockinfo_tcp *parent, sockinfo
     child->m_p_socket_stats->set_bound_if(child->m_bound);
     child->m_p_socket_stats->bound_port = child->m_bound.get_in_port();
 
-    xlio_socketxtreme_completion_t &parent_compl = parent->m_socketxtreme.ec->completion;
+    xlio_socketxtreme_completion_t &parent_compl = parent->m_socketxtreme_ec->completion;
 
     child->m_connected.get_sa(reinterpret_cast<sockaddr *>(&parent_compl.src),
                               static_cast<socklen_t>(sizeof(parent_compl.src)));
@@ -3234,8 +3234,8 @@ void sockinfo_tcp::accept_connection_socketxtreme(sockinfo_tcp *parent, sockinfo
      */
     if (likely(child->m_parent)) {
 
-        child->m_socketxtreme.ec->completion.src = parent->m_socketxtreme.ec->completion.src;
-        child->m_socketxtreme.ec->completion.listen_fd = child->m_parent->get_fd();
+        child->m_socketxtreme_ec->completion.src = parent->m_socketxtreme_ec->completion.src;
+        child->m_socketxtreme_ec->completion.listen_fd = child->m_parent->get_fd();
         NOTIFY_ON_EVENTS(child, XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED);
     } else {
         vlog_printf(VLOG_ERROR,

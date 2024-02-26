@@ -2325,7 +2325,7 @@ inline void sockinfo_udp::rx_udp_cb_socketxtreme_helper(mem_buf_desc_t *p_desc)
     // xlio_socketxtreme_completion_t is IPv4 only.
     assert(p_desc->rx.src.get_sa_family() == AF_INET);
 
-    completion = &m_socketxtreme.ec->completion;
+    completion = &m_socketxtreme_ec->completion;
 
     completion->packet.num_bufs = p_desc->rx.n_frags;
     completion->packet.total_len = 0;
