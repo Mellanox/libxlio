@@ -332,7 +332,6 @@ public:
     sa_family_t get_family() { return m_family; }  
     bool get_reuseaddr(void) { return m_reuseaddr; }
     bool get_reuseport(void) { return m_reuseport; }
-    bool flow_tag_enabled(void) { return m_flow_tag_enabled; }
     int get_rx_epfd(void) { return m_rx_epfd; }
     bool is_blocking(void) { return m_b_blocking; }
     bool flow_in_reuse(void) { return m_reuseaddr | m_reuseport; }
