@@ -359,6 +359,7 @@ public:
     bool handle_sigintr;
     bool handle_segfault;
     uint32_t stats_fd_num_max;
+    uint32_t stats_fd_num_monitor;
 
     ring_logic_t ring_allocation_logic_tx;
     ring_logic_t ring_allocation_logic_rx;
@@ -723,7 +724,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_APP_ID                   ("XLIO_DEFAULT_APPLICATION_ID")
 #define MCE_DEFAULT_HANDLE_SIGINTR           (true)
 #define MCE_DEFAULT_HANDLE_SIGFAULT          (false)
-#define MCE_DEFAULT_STATS_FD_NUM             100
+#define MCE_DEFAULT_STATS_FD_NUM             0
 #define MCE_DEFAULT_RING_ALLOCATION_LOGIC_TX (RING_LOGIC_PER_INTERFACE)
 #define MCE_DEFAULT_RING_ALLOCATION_LOGIC_RX (RING_LOGIC_PER_INTERFACE)
 #define MCE_DEFAULT_RING_MIGRATION_RATIO_TX  (-1)
@@ -913,7 +914,7 @@ extern mce_sys_var &safe_mce_sys();
 #define NETVSC_DEVICE_UPPER_FILE "/sys/class/net/%s/upper_%s/ifindex"
 #define NETVSC_ID                "{f8615163-df3e-46c5-913f-f2d2f965ed0e}\n"
 
-#define MAX_STATS_FD_NUM   1024
+#define MAX_STATS_FD_NUM   1024U
 #define MAX_WINDOW_SCALING 14
 
 #define STRQ_MIN_STRIDES_NUM       512
