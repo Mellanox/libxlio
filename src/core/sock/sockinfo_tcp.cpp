@@ -340,8 +340,6 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     m_parent = nullptr;
     m_iomux_ready_fd_array = nullptr;
 
-    /* SNDBUF accounting */
-    m_sndbuff_max = 0;
     /* RCVBUF accounting */
     m_rcvbuff_max = safe_mce_sys().sysctl_reader.get_tcp_rmem()->default_value;
 
@@ -3324,7 +3322,6 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
         tcp_nagle_disabled(&new_sock->m_pcb)) {
         conn_nagle_disabled ? tcp_nagle_disable(&new_sock->m_pcb)
                             : tcp_nagle_enable(&new_sock->m_pcb);
-        new_sock->fit_snd_bufs_to_nagle(conn_nagle_disabled);
     }
 
     if (new_sock->m_conn_state == TCP_CONN_INIT) {
@@ -4138,24 +4135,12 @@ void sockinfo_tcp::fit_rcv_wnd(bool force_fit)
 
 void sockinfo_tcp::fit_snd_bufs(unsigned int new_max_snd_buff)
 {
-    m_pcb.snd_buf += (new_max_snd_buff - m_pcb.max_snd_buff);
+    // snd_buf can become negative
+    m_pcb.snd_buf += ((int)new_max_snd_buff - m_pcb.max_snd_buff);
     m_pcb.max_snd_buff = new_max_snd_buff;
 
     auto mss = m_pcb.mss ?: 536;
     m_pcb.max_unsent_len = (mss - 1 + m_pcb.max_snd_buff * 16) / mss;
-}
-
-void sockinfo_tcp::fit_snd_bufs_to_nagle(bool disable_nagle)
-{
-    if (m_sndbuff_max) {
-        return;
-    }
-
-    if (disable_nagle) {
-        fit_snd_bufs(TCP_SND_BUF_NO_NAGLE);
-    } else {
-        fit_snd_bufs(TCP_SND_BUF);
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4248,7 +4233,6 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             } else {
                 tcp_nagle_enable(&m_pcb);
             }
-            fit_snd_bufs_to_nagle(val);
             unlock_tcp_con();
             si_tcp_logdbg("(TCP_NODELAY) nagle: %d", val);
             break;
@@ -4423,10 +4407,10 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             lock_tcp_con();
             // OS allocates double the size of memory requested by the application - not sure we
             // need it.
-            m_sndbuff_max = std::max(2 * m_pcb.mss, 2 * val);
-            fit_snd_bufs(m_sndbuff_max);
+            val = std::max(2 * m_pcb.mss, 2 * val);
+            fit_snd_bufs(val);
             unlock_tcp_con();
-            si_tcp_logdbg("setsockopt SO_SNDBUF: %d", m_sndbuff_max);
+            si_tcp_logdbg("setsockopt SO_SNDBUF: requested %d, set %d", *(int *)__optval, val);
             break;
         case SO_LINGER:
             if (__optlen < sizeof(struct linger)) {
@@ -4823,8 +4807,8 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
             break;
         case SO_SNDBUF:
             if (*__optlen >= sizeof(int)) {
-                *(int *)__optval = m_sndbuff_max;
-                si_tcp_logdbg("(SO_SNDBUF) sndbuf=%d", m_sndbuff_max);
+                *(int *)__optval = m_pcb.max_snd_buff;
+                si_tcp_logdbg("(SO_SNDBUF) sndbuf=%d", *(int *)__optval);
                 ret = 0;
             } else {
                 errno = EINVAL;
