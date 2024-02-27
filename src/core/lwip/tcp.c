@@ -907,9 +907,9 @@ void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
 
     memset(pcb, 0, sizeof(*pcb));
     pcb->my_container = container;
-    pcb->max_snd_buff = TCP_SND_BUF;
     pcb->is_last_seg_dropped = false;
     pcb->prio = prio;
+    pcb->max_snd_buff = lwip_tcp_snd_buf;
     pcb->snd_buf = pcb->max_snd_buff;
     pcb->snd_queuelen = 0;
     pcb->snd_scale = 0;
@@ -984,7 +984,7 @@ void tcp_pcb_recycle(struct tcp_pcb *pcb)
     u32_t iss;
 
     pcb->flags = 0;
-    pcb->max_snd_buff = TCP_SND_BUF;
+    pcb->max_snd_buff = lwip_tcp_snd_buf;
     pcb->snd_buf = pcb->max_snd_buff;
     pcb->user_timeout_ms = 0;
     pcb->ticks_since_data_sent = -1;

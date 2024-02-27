@@ -91,12 +91,6 @@
 #define CONST_TCP_MSS 1460
 #define LWIP_TCP_MSS  (lwip_tcp_mss)
 
-/**
- * TCP_SND_BUF: TCP sender buffer space (bytes).
- */
-#define TCP_SND_BUF          (lwip_tcp_snd_buf)
-#define TCP_SND_BUF_NO_NAGLE 256000
-
 /* Misc */
 
 // replace lwip byte swapping to optimized one
