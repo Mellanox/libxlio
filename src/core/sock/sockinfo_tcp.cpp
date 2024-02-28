@@ -146,14 +146,6 @@ static tcp_timers_collection *get_tcp_timer_collection()
                 : &g_thread_local_tcp_timers);
 }
 
-static lock_base *get_new_tcp_lock()
-{
-    return (
-        safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS
-            ? static_cast<lock_base *>(multilock::create_new_lock(MULTILOCK_RECURSIVE, "tcp_con"))
-            : static_cast<lock_base *>(new lock_dummy));
-}
-
 inline void sockinfo_tcp::lwip_pbuf_init_custom(mem_buf_desc_t *p_desc)
 {
     if (!p_desc->lwip_pbuf.pbuf.gro) {
@@ -278,14 +270,13 @@ static inline bool use_socket_ring_locks()
 
 sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     : sockinfo(fd, domain, use_socket_ring_locks())
+    , m_user_huge_page_mask(~((uint64_t)safe_mce_sys().user_huge_page_size - 1))
+    , m_sysvar_rx_poll_on_tx_tcp(safe_mce_sys().rx_poll_on_tx_tcp)
     , m_timer_handle(NULL)
-    , m_tcp_con_lock(get_new_tcp_lock())
     , m_sysvar_buffer_batching_mode(safe_mce_sys().buffer_batching_mode)
     , m_sysvar_tx_segs_batch_tcp(safe_mce_sys().tx_segs_batch_tcp)
     , m_sysvar_tcp_ctl_thread(safe_mce_sys().tcp_ctl_thread)
     , m_tcp_seg_list(nullptr)
-    , m_sysvar_rx_poll_on_tx_tcp(safe_mce_sys().rx_poll_on_tx_tcp)
-    , m_user_huge_page_mask(~((uint64_t)safe_mce_sys().user_huge_page_size - 1))
     , m_required_send_block(1U)
 {
     si_tcp_logfuncall("");
@@ -1296,7 +1287,7 @@ send_iov:
 
     rc = p_si_tcp->m_ops->handle_send_ret(ret, seg);
 
-    if (p_dst->try_migrate_ring_tx(p_si_tcp->m_tcp_con_lock.get_lock_base())) {
+    if (p_dst->try_migrate_ring_tx(p_si_tcp->m_tcp_con_lock)) {
         p_si_tcp->m_p_socket_stats->counters.n_tx_migrations++;
     }
 
@@ -4593,7 +4584,6 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                     if (safe_mce_sys().tcp_ctl_thread ==
                             option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS &&
                         !ring_isolated) {
-                        m_tcp_con_lock = multilock::create_new_lock(MULTILOCK_RECURSIVE, "tcp_con");
                     }
                     set_ring_logic_rx(ring_alloc_logic_attr(RING_LOGIC_ISOLATE, true));
                     set_ring_logic_tx(ring_alloc_logic_attr(RING_LOGIC_ISOLATE, true));

@@ -551,7 +551,6 @@ private:
 public:
     socket_stats_t *m_p_socket_stats;
     /* Last memory descriptor with zcopy operation method */
-    mem_buf_desc_t *m_last_zcdesc;
     struct {
         /* Use std::deque in current design as far as it allows pushing
          * elements on either end without moving around any other element
@@ -560,6 +559,8 @@ public:
         std::deque<struct ring_ec> ec_cache;
         struct ring_ec *ec;
     } m_socketxtreme;
+    void *m_fd_context; // Context data stored with socket
+    mem_buf_desc_t *m_last_zcdesc;
 
     rfs *rfs_ptr = nullptr;
 
@@ -595,11 +596,13 @@ protected:
     rx_net_device_map_t m_rx_nd_map;
     rx_flow_map_t m_rx_flow_map;
     // we either listen on ALL system cqs or bound to the specific cq
-    ring *m_p_rx_ring; // used in TCP/UDP
-    buff_info_t m_rx_reuse_buff; // used in TCP instead of m_rx_ring_map
     bool m_rx_reuse_buf_pending; // used to periodically return buffers, even if threshold was not
                                  // reached
     bool m_rx_reuse_buf_postponed; // used to mark threshold was reached, but free was not done yet
+    ring *m_p_rx_ring; // used in TCP/UDP
+    buff_info_t m_rx_reuse_buff; // used in TCP instead of m_rx_ring_map
+    int m_n_sysvar_rx_num_buffs_reuse;
+    int m_n_rx_pkt_ready_list_count;
     rx_ring_map_t m_rx_ring_map; // CQ map
     lock_mutex_recursive m_rx_ring_map_lock;
     ring_allocation_logic_rx m_ring_alloc_logic_rx;
@@ -610,11 +613,9 @@ protected:
      * list of pending ready packet on the Rx,
      * each element is a pointer to the ib_conn_mgr that holds this ready rx datagram
      */
-    int m_n_rx_pkt_ready_list_count;
     size_t m_rx_pkt_ready_offset;
     size_t m_rx_ready_byte_count;
 
-    int m_n_sysvar_rx_num_buffs_reuse;
     const int32_t m_n_sysvar_rx_poll_num;
     ring_alloc_logic_attr m_ring_alloc_log_rx;
     ring_alloc_logic_attr m_ring_alloc_log_tx;
@@ -641,7 +642,6 @@ protected:
     xlio_recv_callback_t m_rx_callback;
     void *m_rx_callback_context; // user context
     struct xlio_rate_limit_t m_so_ratelimit;
-    void *m_fd_context; // Context data stored with socket
     uint32_t m_flow_tag_id; // Flow Tag for this socket
     bool m_rx_cq_wait_ctrl;
     uint8_t m_n_uc_ttl_hop_lim;

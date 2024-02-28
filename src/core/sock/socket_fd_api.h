@@ -92,16 +92,17 @@ enum {
  */
 typedef struct xlio_tx_call_attr {
     tx_call_t opcode;
+    unsigned xlio_flags;
+
     struct _attr {
         struct iovec *iov;
         ssize_t sz_iov;
         int flags;
-        struct sockaddr *addr;
         socklen_t len;
+        struct sockaddr *addr;
         const struct msghdr *hdr;
     } attr;
 
-    unsigned xlio_flags;
     pbuf_desc priv;
 
     ~xlio_tx_call_attr() {};

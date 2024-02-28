@@ -512,6 +512,16 @@ public:
     list_node<sockinfo_tcp, sockinfo_tcp::accepted_conns_node_offset> accepted_conns_node;
 
 private:
+    lock_dummy m_tcp_con_lock;
+    tcp_sock_offload_e m_sock_offload;
+    tcp_sock_state_e m_sock_state;
+    uint64_t m_user_huge_page_mask;
+    bool m_sysvar_rx_poll_on_tx_tcp;
+    bool m_xlio_thr;
+    bool m_b_incoming;
+    bool m_b_attached;
+
+
     sockinfo_tcp_ops *m_ops;
     sockinfo_tcp_ops *m_ops_tcp;
 
@@ -519,13 +529,8 @@ private:
     struct tcp_pcb m_pcb;
     socket_options_list_t m_socket_options_list;
     timestamps_t m_rx_timestamps;
-    tcp_sock_offload_e m_sock_offload;
-    tcp_sock_state_e m_sock_state;
     sockinfo_tcp *m_parent;
     // received packet source (true if its from internal thread)
-    bool m_xlio_thr;
-    bool m_b_incoming;
-    bool m_b_attached;
     /* connection state machine */
     int m_conn_timeout;
     /* SNDBUF acconting */
@@ -557,7 +562,6 @@ private:
     int m_backlog;
 
     void *m_timer_handle;
-    multilock m_tcp_con_lock;
 
     // used for reporting 'connected' on second non-blocking call to connect or
     // second call to failed connect blocking socket.
@@ -584,8 +588,6 @@ private:
     ready_pcb_map_t m_ready_pcbs;
     static const unsigned TX_CONSECUTIVE_EAGAIN_THREASHOLD = 10;
     unsigned m_tx_consecutive_eagain_count;
-    bool m_sysvar_rx_poll_on_tx_tcp;
-    uint64_t m_user_huge_page_mask;
     unsigned m_required_send_block;
     uint16_t m_external_vlan_tag = 0U;
 
