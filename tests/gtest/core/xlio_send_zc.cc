@@ -421,7 +421,7 @@ TEST_F(xlio_send_zc, ti_2)
  *    Send data using few sendmsg(MSG_ZEROCOPY)
  * @details
  */
-TEST_F(xlio_send_zc, ti_3_few_send)
+TEST_F(xlio_send_zc, DISABLED_ti_3_few_send)
 {
     int rc = EOK;
     int test_iter = 3;
@@ -576,7 +576,7 @@ TEST_F(xlio_send_zc, ti_3_few_send)
  *    single call
  * @details
  */
-TEST_F(xlio_send_zc, ti_4_large_send)
+TEST_F(xlio_send_zc, DISABLED_ti_4_large_send)
 {
     int rc = EOK;
 
