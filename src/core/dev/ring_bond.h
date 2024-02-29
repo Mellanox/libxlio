@@ -130,10 +130,6 @@ private:
     int devide_buffers_helper(mem_buf_desc_t *p_mem_buf_desc_list,
                               mem_buf_desc_t **buffer_per_ring);
 
-    bool is_socketxtreme(void) { return false; }
-    void put_ec(struct ring_ec *ec) { NOT_IN_USE(ec); }
-    void del_ec(struct ring_ec *ec) { NOT_IN_USE(ec); }
-
 protected:
     /* Array of all aggregated rings
      * Every ring can be Active or Backup

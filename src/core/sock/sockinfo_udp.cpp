@@ -2320,13 +2320,10 @@ inline xlio_recv_callback_retval_t sockinfo_udp::inspect_by_user_cb(mem_buf_desc
  */
 inline void sockinfo_udp::rx_udp_cb_socketxtreme_helper(mem_buf_desc_t *p_desc)
 {
-    struct xlio_socketxtreme_completion_t *completion;
-
     // xlio_socketxtreme_completion_t is IPv4 only.
     assert(p_desc->rx.src.get_sa_family() == AF_INET);
 
-    completion = &m_socketxtreme_ec->completion;
-
+    xlio_socketxtreme_completion_t *completion = set_events_socketxtreme(XLIO_SOCKETXTREME_PACKET, false);
     completion->packet.num_bufs = p_desc->rx.n_frags;
     completion->packet.total_len = 0;
     p_desc->rx.src.get_sa(reinterpret_cast<struct sockaddr *>(&completion->src),
@@ -2344,9 +2341,9 @@ inline void sockinfo_udp::rx_udp_cb_socketxtreme_helper(mem_buf_desc_t *p_desc)
         completion->packet.buff_lst->len = p_desc->rx.frag.iov_len;
     }
 
-    NOTIFY_ON_EVENTS(this, XLIO_SOCKETXTREME_PACKET);
-
     save_stats_rx_offload(completion->packet.total_len);
+
+    m_p_rx_ring->ec_end_transaction();
 }
 
 /**
@@ -2543,7 +2540,7 @@ bool sockinfo_udp::rx_input_cb(mem_buf_desc_t *p_desc, void *pv_fd_ready_array)
     p_desc->inc_ref_count();
     save_strq_stats(p_desc->rx.strides_num);
 
-    if (is_socketxtreme()) {
+    if (safe_mce_sys().enable_socketxtreme) {
         rx_udp_cb_socketxtreme_helper(p_desc);
     } else {
         update_ready(p_desc, pv_fd_ready_array, cb_ret);
@@ -3269,7 +3266,7 @@ bool sockinfo_udp::prepare_to_close(bool process_shutdown)
     m_lock_rcv.lock();
     m_sock_wakeup_pipe.do_wakeup();
 
-    if (m_econtext) {
+    if (has_epoll_context()) {
         m_econtext->fd_closed(m_fd);
     }
 

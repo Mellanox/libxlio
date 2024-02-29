@@ -39,6 +39,7 @@
 extern global_stats_t g_global_stat_static;
 
 tcp_seg_pool *g_tcp_seg_pool = NULL;
+ec_sockxtreme_pool *g_ec_pool = NULL;
 
 tcp_seg_pool::tcp_seg_pool()
     : m_p_head(nullptr)
@@ -161,4 +162,129 @@ void tcp_seg_pool::print_report(vlog_levels_t log_level /*=VLOG_DEBUG*/)
     vlog_printf(log_level, "TCP segments pool statistics:\n");
     vlog_printf(log_level, "  allocations=%u expands=%u total_segs=%u\n", m_stats.allocations,
                 m_stats.expands, m_stats.total_segs);
+}
+
+
+
+ec_sockxtreme_pool::ec_sockxtreme_pool()
+    : m_p_head(nullptr)
+    , m_allocator(false)
+{
+    memset(&m_stats, 0, sizeof(m_stats));
+    expand();
+}
+
+ec_sockxtreme_pool::~ec_sockxtreme_pool()
+{
+    print_report();
+}
+
+ring_ec *ec_sockxtreme_pool::get_ecs(uint32_t amount)
+{
+    return get_ec_list(amount).first;
+}
+
+std::pair<ring_ec *, ring_ec *> ec_sockxtreme_pool::get_ec_list(uint32_t amount)
+{
+    uint32_t count;
+    ring_ec *head, *next, *prev;
+    if (unlikely(amount <= 0)) {
+        return std::make_pair(nullptr, nullptr);
+    }
+    lock();
+repeat:
+    count = amount;
+    head = next = m_p_head;
+    prev = NULL;
+    while (count > 0 && next) {
+        prev = next;
+        next = next->next_ec;
+        count--;
+    }
+    if (count) {
+        // run out of segments
+        if (expand()) {
+            goto repeat;
+        }
+        //g_global_stat_static.n_tcp_seg_pool_no_segs++;
+        unlock();
+        return std::make_pair(nullptr, nullptr);
+    }
+    prev->next_ec = NULL;
+    m_p_head = next;
+    m_stats.allocations++;
+    //g_global_stat_static.n_tcp_seg_pool_size -= amount;
+    unlock();
+
+    return std::make_pair(head, prev);
+}
+
+void ec_sockxtreme_pool::put_ecs(ring_ec *ec_list)
+{
+    ring_ec *next = ec_list;
+    if (unlikely(!ec_list)) {
+        return;
+    }
+
+    int i;
+    for (i = 1; next->next_ec; i++) {
+        next = next->next_ec;
+    }
+
+    lock();
+    next->next_ec = m_p_head;
+    m_p_head = ec_list;
+    //g_global_stat_static.n_tcp_seg_pool_size += i;
+    unlock();
+}
+
+// Splitting seg list such that first 'count' segs are returned and 'tcp_seg_list'
+// is updated to point to the remaining segs.
+// The length of tcp_seg_list is assumed to be at least 'count' long.
+ring_ec *ec_sockxtreme_pool::split_ecs(uint32_t count, ring_ec *&ec_list, uint32_t &total_count)
+{
+    struct ring_ec *head = ec_list;
+    struct ring_ec *last = head;
+    total_count -= count;
+    while (count-- > 1U) {
+        last = last->next_ec;
+    }
+
+    ec_list = last->next_ec;
+    last->next_ec = nullptr;
+    return head;
+}
+
+bool ec_sockxtreme_pool::expand()
+{
+    size_t size = sizeof(ring_ec) * 512;
+    ring_ec *ec_array = (ring_ec *)m_allocator.alloc(size);
+
+    if (!ec_array) {
+        __log_dbg("EC allocation failed");
+        return false;
+    }
+
+    // Allocator can allocate more memory than requested - utilize it.
+    size_t ec_nr = size / sizeof(ring_ec);
+
+    if (ec_nr > 0) {
+        memset(ec_array, 0, size);
+        for (size_t i = 0; i < ec_nr - 1; i++) {
+            ec_array[i].next_ec = &ec_array[i + 1];
+        }
+        ec_array[ec_nr - 1].next_ec = m_p_head;
+        m_p_head = &ec_array[0];
+        m_stats.total_ecs += ec_nr;
+        m_stats.expands++;
+        //g_global_stat_static.n_tcp_seg_pool_size += ec_nr;
+    }
+    return true;
+}
+
+void ec_sockxtreme_pool::print_report(vlog_levels_t log_level /*=VLOG_DEBUG*/)
+{
+    vlog_printf(log_level, "EC pool statistics:\n");
+    vlog_printf(log_level, "  allocations=%u expands=%u total_ecs=%u\n", m_stats.allocations,
+                m_stats.expands, m_stats.total_ecs);
 }

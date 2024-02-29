@@ -138,12 +138,6 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
 
     atomic_set(&m_zckey, 0);
 
-    m_socketxtreme_ec_cache.clear();
-    struct ring_ec ec;
-    ec.clear();
-    m_socketxtreme_ec_cache.push_back(ec);
-    m_socketxtreme_ec = &m_socketxtreme_ec_cache.back();
-
     m_connected.set_sa_family(m_family);
     m_bound.set_sa_family(m_family);
 }
@@ -181,8 +175,6 @@ sockinfo::~sockinfo()
         xlio_stats_instance_remove_socket_block(m_p_socket_stats);
         sock_stats::get_sock_stats()->return_stats_obj(m_p_socket_stats);
     }
-
-    m_socketxtreme_ec_cache.clear();
 
     bool toclose = safe_mce_sys().deferred_close && m_fd >= 0;
 
@@ -222,6 +214,39 @@ void sockinfo::socket_stats_init()
     m_p_socket_stats->ring_user_id_tx =
         ring_allocation_logic_tx(get_fd(), m_ring_alloc_log_tx).calc_res_key_by_logic();
     m_p_socket_stats->sa_family = m_family;
+}
+
+ring_ec* sockinfo::pop_next_ec()
+{
+    if (likely(m_socketxtreme_ec_first)) {
+        ring_ec* temp = m_socketxtreme_ec_first;
+        m_socketxtreme_ec_first = m_socketxtreme_ec_first->next_ec;
+        if (likely(!m_socketxtreme_ec_first)) { // We likely to have a single ec most of the time.
+            m_socketxtreme_ec = nullptr;
+        }
+
+        return temp;
+    }
+
+    return nullptr;
+}
+
+ring_ec* sockinfo::clear_ecs()
+{
+    ring_ec* temp = m_socketxtreme_ec_first;
+    m_socketxtreme_ec_first = m_socketxtreme_ec = nullptr;
+    return temp;
+}
+
+void sockinfo::add_ec(ring_ec *ec)
+{
+    memset(&ec->completion, 0, sizeof(ec->completion));
+    if (likely(!m_socketxtreme_ec)) {
+        m_socketxtreme_ec = m_socketxtreme_ec_first = ec;
+    } else {
+        m_socketxtreme_ec->next_ec = ec;
+        m_socketxtreme_ec = ec;
+    }
 }
 
 void sockinfo::set_blocking(bool is_blocked)
@@ -308,12 +333,12 @@ int sockinfo::fcntl64(int __cmd, unsigned long int __arg)
 
 int sockinfo::get_epoll_context_fd()
 { 
-    return (m_econtext ? m_econtext->get_epoll_fd() : 0);
+    return (has_epoll_context() ? m_econtext->get_epoll_fd() : 0);
 }
 
 void sockinfo::insert_epoll_event(uint64_t events)
 {
-    if (m_econtext) {
+    if (has_epoll_context()) {
         m_econtext->insert_epoll_event_cb(this, static_cast<uint32_t>(events));
     }
 }
@@ -1352,7 +1377,7 @@ int sockinfo::add_epoll_context(epfd_info *epfd)
     m_rx_ring_map_lock.lock();
     lock_rx_q();
 
-    if (!m_econtext) {
+    if (!m_econtext && !safe_mce_sys().enable_socketxtreme) {
         // This socket is not registered to any epfd
         m_econtext = epfd;
     } else {
@@ -1371,7 +1396,7 @@ int sockinfo::add_epoll_context(epfd_info *epfd)
 
     sock_ring_map_iter = m_rx_ring_map.begin();
     while (sock_ring_map_iter != m_rx_ring_map.end()) {
-        if (m_econtext) {
+        if (has_epoll_context()) {
             m_econtext->increase_ring_ref_count(sock_ring_map_iter->first);
         }
         sock_ring_map_iter++;
@@ -1390,7 +1415,7 @@ void sockinfo::remove_epoll_context(epfd_info *epfd)
     m_rx_ring_map_lock.lock();
     lock_rx_q();
 
-    if (m_econtext != epfd) {
+    if (!has_epoll_context() || m_econtext != epfd) {
         unlock_rx_q();
         m_rx_ring_map_lock.unlock();
         return;
@@ -1398,9 +1423,7 @@ void sockinfo::remove_epoll_context(epfd_info *epfd)
 
     rx_ring_map_t::const_iterator sock_ring_map_iter = m_rx_ring_map.begin();
     while (sock_ring_map_iter != m_rx_ring_map.end()) {
-        if (m_econtext) {
-            m_econtext->decrease_ring_ref_count(sock_ring_map_iter->first);
-        }
+        m_econtext->decrease_ring_ref_count(sock_ring_map_iter->first);
         sock_ring_map_iter++;
     }
 
@@ -1675,7 +1698,7 @@ void sockinfo::rx_add_ring_cb(ring *p_ring)
         // first in order. possible race between removal of fd from epoll (epoll_ctl del, or epoll
         // close) and here. need to add a third-side lock (fd_collection?) to sync between epoll and
         // socket.
-        if (m_econtext) {
+        if (has_epoll_context()) {
             m_econtext->increase_ring_ref_count(p_ring);
         }
     }
@@ -1735,11 +1758,8 @@ void sockinfo::rx_del_ring_cb(ring *p_ring)
                 /* Ring should not have completion events related closed socket
                  * in wait list
                  */
-                for (auto &ec : m_socketxtreme_ec_cache) {
-                    if (0 != ec.completion.events) {
-                        m_p_rx_ring->del_ec(&ec);
-                    }
-                }
+                m_p_rx_ring->ec_clear_sock(this);
+
                 if (m_rx_ring_map.size() == 1) {
                     m_p_rx_ring = m_rx_ring_map.begin()->first;
                 } else {
@@ -1763,7 +1783,7 @@ void sockinfo::rx_del_ring_cb(ring *p_ring)
         // first in order. possible race between removal of fd from epoll (epoll_ctl del, or epoll
         // close) and here. need to add a third-side lock (fd_collection?) to sync between epoll and
         // socket.
-        if (m_econtext) {
+        if (has_epoll_context()) {
             m_econtext->decrease_ring_ref_count(base_ring);
         }
     }
@@ -2042,7 +2062,7 @@ int sockinfo::get_rings_num()
 {
     int count = 0;
     size_t num_rx_channel_fds;
-    if (is_socketxtreme()) {
+    if (safe_mce_sys().enable_socketxtreme) {
         /* socketXtreme mode support just single ring */
         return 1;
     }
@@ -2061,7 +2081,7 @@ int *sockinfo::get_rings_fds(int &res_length)
     int index = 0;
     size_t num_rx_channel_fds;
 
-    if (is_socketxtreme()) {
+    if (safe_mce_sys().enable_socketxtreme) {
         /* socketXtreme mode support just single ring */
         res_length = 1;
         return m_p_rx_ring->get_rx_channel_fds(num_rx_channel_fds);

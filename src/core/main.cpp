@@ -185,6 +185,11 @@ static int free_libxlio_resources()
     }
     g_tcp_seg_pool = NULL;
 
+    if (g_ec_pool) {
+        delete g_ec_pool;
+    }
+    g_ec_pool = NULL;
+
     if (safe_mce_sys().print_report) {
         buffer_pool::print_report_on_errors(VLOG_INFO);
     }
@@ -1103,7 +1108,8 @@ static void do_global_ctors_helper()
     NEW_CTOR(g_buffer_pool_zc, buffer_pool(BUFFER_POOL_TX, 0));
 
     NEW_CTOR(g_tcp_seg_pool, tcp_seg_pool());
-
+    NEW_CTOR(g_ec_pool, ec_sockxtreme_pool());
+    
     // For delegated TCP timers the global collection is not used.
     if (safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
         NEW_CTOR(g_tcp_timers_collection, tcp_timers_collection());
@@ -1187,6 +1193,7 @@ void reset_globals()
     g_buffer_pool_tx = NULL;
     g_buffer_pool_zc = NULL;
     g_tcp_seg_pool = NULL;
+    g_ec_pool = NULL;
     g_tcp_timers_collection = NULL;
     g_p_vlogger_timer_handler = NULL;
     g_p_event_handler_manager = NULL;

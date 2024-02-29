@@ -536,6 +536,7 @@ private:
 
     // lwip specific things
     struct tcp_pcb m_pcb;
+    fd_array_t *m_iomux_ready_fd_array;
     socket_options_list_t m_socket_options_list;
     timestamps_t m_rx_timestamps;
     tcp_sock_offload_e m_sock_offload;
@@ -554,7 +555,6 @@ private:
     int m_rcvbuff_current;
     int m_rcvbuff_non_tcp_recved;
     tcp_conn_state_e m_conn_state;
-    fd_array_t *m_iomux_ready_fd_array;
     struct linger m_linger;
 
     /* local & peer addresses */

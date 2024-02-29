@@ -308,35 +308,7 @@ protected:
     inline uint32_t get_mtu() { return m_mtu; }
 
 private:
-    bool is_socketxtreme(void) override { return safe_mce_sys().enable_socketxtreme; }
-
-    void put_ec(struct ring_ec *ec) override
-    {
-        m_socketxtreme.lock_ec_list.lock();
-        list_add_tail(&ec->list, &m_socketxtreme.ec_list);
-        m_socketxtreme.lock_ec_list.unlock();
-    }
-
-    void del_ec(struct ring_ec *ec) override
-    {
-        m_socketxtreme.lock_ec_list.lock();
-        list_del_init(&ec->list);
-        ec->clear();
-        m_socketxtreme.lock_ec_list.unlock();
-    }
-
-    inline ring_ec *get_ec(void)
-    {
-        struct ring_ec *ec = NULL;
-
-        m_socketxtreme.lock_ec_list.lock();
-        if (!list_empty(&m_socketxtreme.ec_list)) {
-            ec = list_entry(m_socketxtreme.ec_list.next, struct ring_ec, list);
-            list_del_init(&ec->list);
-        }
-        m_socketxtreme.lock_ec_list.unlock();
-        return ec;
-    }
+    
     inline void send_status_handler(int ret, xlio_ibv_send_wr *p_send_wqe);
     inline mem_buf_desc_t *get_tx_buffers(pbuf_type type, uint32_t n_num_mem_bufs);
     inline int put_tx_buffer_helper(mem_buf_desc_t *buff);
@@ -367,17 +339,6 @@ protected:
     std::unordered_map<void *, uint32_t> m_user_lkey_map;
 
 private:
-    struct {
-        /* queue of event completion elements
-         * this queue is stored events related different sockinfo (sockets)
-         * In current implementation every sockinfo (socket) can have single event
-         * in this queue
-         */
-        struct list_head ec_list;
-
-        /* Thread-safety lock for get/put operations under the queue */
-        lock_spin lock_ec_list;
-    } m_socketxtreme;
 
     lock_mutex m_lock_ring_tx_buf_wait;
     uint32_t m_tx_num_bufs = 0U;

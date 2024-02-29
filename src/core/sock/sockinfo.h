@@ -328,6 +328,15 @@ public:
     inline bool set_flow_tag(uint32_t flow_tag_id);
     inline void sock_pop_descs_rx_ready(descq_t *cache);
 
+    ring_ec* pop_next_ec();
+    ring_ec* clear_ecs();
+    void add_ec(ring_ec *ec);
+    ring_ec* get_last_ec() { return m_socketxtreme_ec; }
+    bool has_next_ec() { return (m_socketxtreme_ec_first != nullptr); }
+    sockinfo *get_next_in_ring_list() { return m_next_in_ring_list; }
+    void set_next_in_ring_list(sockinfo * sock) { m_next_in_ring_list = sock; }
+    bool has_epoll_context() { return (!safe_mce_sys().enable_socketxtreme && m_econtext); }
+
     int get_fd() const { return m_fd; };
     sa_family_t get_family() { return m_family; }  
     bool get_reuseaddr(void) { return m_reuseaddr; }
@@ -398,7 +407,7 @@ protected:
 
     inline void set_rx_reuse_pending(bool is_pending = true);
     inline void reuse_buffer(mem_buf_desc_t *buff);
-    inline void set_events_socketxtreme(uint64_t events);
+    inline xlio_socketxtreme_completion_t *set_events_socketxtreme(uint64_t events, bool full_transaction);
     inline void set_events(uint64_t events);
     inline void save_strq_stats(uint32_t packet_strides);
 
@@ -406,7 +415,6 @@ protected:
                               int in_flags, int *p_out_flags);
 
     bool has_stats() const { return m_has_stats; }
-    bool is_socketxtreme() { return safe_mce_sys().enable_socketxtreme; }
     int get_sock_by_L3_L4(in_protocol_t protocol, const ip_address &ip, in_port_t port);
     void notify_epoll_context(uint32_t events);
     void save_stats_rx_os(int bytes);
@@ -470,6 +478,13 @@ public:
 
 protected:
 
+    ring_ec *m_socketxtreme_ec_first = nullptr;
+    ring_ec *m_socketxtreme_ec = nullptr;
+    union { // App uses either epoll or socketxtreme_poll
+        sockinfo *m_next_in_ring_list = nullptr;
+        epfd_info *m_econtext;
+    };
+
     void *m_fd_context; // Context data stored with socket
     ring *m_p_rx_ring = nullptr; // used in TCP/UDP
     dst_entry *m_p_connected_dst_entry = nullptr;
@@ -500,14 +515,6 @@ protected:
     uint8_t m_n_tsing_flags = 0U;
 
 public:
-
-    /* Use std::deque in current design as far as it allows pushing
-        * elements on either end without moving around any other element
-        * but trade this for slightly worse iteration speeds.
-        */
-    struct ring_ec *m_socketxtreme_ec;
-    std::deque<struct ring_ec> m_socketxtreme_ec_cache;
-
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     bool m_is_for_socket_pool = false; // true when this fd will be used for socket pool on close
     int m_back_log = 0;
@@ -547,7 +554,6 @@ protected:
     int m_n_rx_pkt_ready_list_count = 0;
     int m_rx_epfd;
 
-    epfd_info *m_econtext = nullptr;
     multilock m_lock_rcv;
     lock_mutex m_lock_snd;
     lock_mutex m_rx_migration_lock;
@@ -613,36 +619,28 @@ void sockinfo::sock_pop_descs_rx_ready(descq_t *cache)
     unlock_rx_q();
 }
 
-void sockinfo::set_events_socketxtreme(uint64_t events)
+xlio_socketxtreme_completion_t *sockinfo::set_events_socketxtreme(uint64_t events, bool full_transaction)
 {
-    m_socketxtreme_ec->completion.user_data = (uint64_t)m_fd_context;
-    if (!m_socketxtreme_ec->completion.events) {
-        m_socketxtreme_ec->completion.events |= events;
-        m_p_rx_ring->put_ec(m_socketxtreme_ec);
+    bool always_new = ((events & (XLIO_SOCKETXTREME_PACKET | XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED)) != 0U);
+    xlio_socketxtreme_completion_t &completion = m_p_rx_ring->ec_start_transaction(this, always_new);
+    completion.user_data = (uint64_t)m_fd_context;
+    completion.events |= events;
 
-        m_socketxtreme_ec = NULL;
-        for (auto &ec : m_socketxtreme_ec_cache) {
-            if (0 == ec.completion.events) {
-                m_socketxtreme_ec = &ec;
-                break;
-            }
-        }
-        if (NULL == m_socketxtreme_ec) {
-            struct ring_ec ec;
-            ec.clear();
-            m_socketxtreme_ec_cache.push_back(ec);
-            m_socketxtreme_ec = &m_socketxtreme_ec_cache.back();
-        }
-    } else {
-        m_socketxtreme_ec->completion.events |= events;
+    if (full_transaction) {
+        m_p_rx_ring->ec_end_transaction();
+        return nullptr;
     }
+
+    return &completion;
 }
     
 void sockinfo::set_events(uint64_t events)
 {
     /* Collect all events if rx ring is enabled */
-    if (is_socketxtreme() && m_state == SOCKINFO_OPENED) {
-        set_events_socketxtreme(events);
+    if (safe_mce_sys().enable_socketxtreme) {
+        if (m_state == SOCKINFO_OPENED) {
+            set_events_socketxtreme(events, true);
+        }
     } else {
         insert_epoll_event(events);
     }
