@@ -201,16 +201,17 @@ struct ring_info_t {
 // TX_SENDMSG
 struct xlio_tx_call_attr_t {
     tx_call_t opcode;
+    unsigned xlio_flags;
+
     struct _attr {
         struct iovec *iov;
         ssize_t sz_iov;
         int flags;
-        struct sockaddr *addr;
         socklen_t len;
+        struct sockaddr *addr;
         const struct msghdr *hdr;
     } attr;
 
-    unsigned xlio_flags;
     pbuf_desc priv;
 
     ~xlio_tx_call_attr_t() {};
@@ -325,6 +326,16 @@ public:
     inline bool set_flow_tag(uint32_t flow_tag_id);
     inline void sock_pop_descs_rx_ready(descq_t *cache);
 
+    // Socketxtreme related.
+    ring_ec *pop_next_ec();
+    ring_ec *clear_ecs();
+    void add_ec(ring_ec *ec);
+    ring_ec *get_last_ec() { return m_socketxtreme_ec_last; }
+    bool has_next_ec() { return (m_socketxtreme_ec_first != nullptr); }
+    sockinfo *get_ec_ring_list_next() { return m_socketxtreme_ring_list_next; }
+    void set_ec_ring_list_next(sockinfo *sock) { m_socketxtreme_ring_list_next = sock; }
+
+    bool has_epoll_context() { return (!safe_mce_sys().enable_socketxtreme && m_econtext); }
     bool has_stats() const { return m_has_stats; }
     bool get_rx_pkt_ready_list_count() const { return m_n_rx_pkt_ready_list_count; }
     int get_fd() const { return m_fd; };
@@ -398,14 +409,14 @@ protected:
 
     inline void set_rx_reuse_pending(bool is_pending = true);
     inline void reuse_buffer(mem_buf_desc_t *buff);
-    inline void set_events_socketxtreme(uint64_t events);
+    inline xlio_socketxtreme_completion_t *set_events_socketxtreme(uint64_t events,
+                                                                   bool full_transaction);
     inline void set_events(uint64_t events);
     inline void save_strq_stats(uint32_t packet_strides);
 
     inline int dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, socklen_t *__fromlen,
                               int in_flags, int *p_out_flags);
 
-    bool is_socketxtreme() { return safe_mce_sys().enable_socketxtreme; }
     int get_sock_by_L3_L4(in_protocol_t protocol, const ip_address &ip, in_port_t port);
     void notify_epoll_context(uint32_t events);
     void save_stats_rx_os(int bytes);
@@ -462,18 +473,31 @@ private:
     bool attach_as_uc_receiver_anyip(sa_family_t family, role_t role, bool skip_rules);
 
 protected:
-    /* Last memory descriptor with zcopy operation method */
     dst_entry *m_p_connected_dst_entry = nullptr;
-    ring *m_p_rx_ring = nullptr; // used in TCP/UDP
-    epfd_info *m_econtext = nullptr;
-    socket_stats_t *m_p_socket_stats = nullptr;
-    mem_buf_desc_t *m_last_zcdesc = nullptr;
     sockinfo_state m_state = SOCKINFO_OPENED; // socket current state
     uint8_t m_n_tsing_flags = 0U;
     bool m_has_stats = false;
     bool m_b_rcvtstamp = false;
     bool m_b_zc = false;
     bool m_b_blocking = true;
+    bool m_b_rcvtstampns = false;
+    rfs *m_rfs_ptr = nullptr;
+    ring *m_p_rx_ring = nullptr; // used in TCP/UDP
+    ring_ec *m_socketxtreme_ec_first = nullptr;
+    ring_ec *m_socketxtreme_ec_last = nullptr;
+    sockinfo *m_socketxtreme_ring_list_next = nullptr;
+
+    // End of first cache line
+
+    void *m_fd_context; // Context data stored with socket
+    mem_buf_desc_t *m_last_zcdesc = nullptr;
+    socket_stats_t *m_p_socket_stats = nullptr;
+
+    /* Socket error queue that keeps local errors and internal data required
+     * to provide notification ability.
+     */
+    descq_t m_error_queue;
+    lock_spin_simple m_error_queue_lock;
 
     /* TX zcopy counter
      * The notification itself for tx zcopy operation is a simple scalar value.
@@ -486,29 +510,14 @@ protected:
      */
     atomic_t m_zckey;
 
-    lock_spin_simple m_error_queue_lock;
+    // End of second cache line
 
-    // End of first cache line
-
-    /* Socket error queue that keeps local errors and internal data required
-     * to provide notification ability.
-     */
-    descq_t m_error_queue;
-    void *m_fd_context; // Context data stored with socket
-
-    rfs *m_rfs_ptr = nullptr;
-    struct {
-        /* Use std::deque in current design as far as it allows pushing
-         * elements on either end without moving around any other element
-         * but trade this for slightly worse iteration speeds.
-         */
-        struct ring_ec *ec;
-        std::deque<struct ring_ec> ec_cache;
-    } m_socketxtreme;
-
+    epfd_info *m_econtext = nullptr;
     wakeup_pipe m_sock_wakeup_pipe;
+    int m_rx_epfd;
+    in_protocol_t m_protocol = PROTO_UNDEFINED;
+    sa_family_t m_family;
 
-    // End of fourth cache line
 public:
     list_node<sockinfo, sockinfo::socket_fd_list_node_offset> socket_fd_list_node;
     list_node<sockinfo, sockinfo::ep_ready_fd_node_offset> ep_ready_fd_node;
@@ -519,7 +528,6 @@ public:
 
 protected:
     int m_fd; // identification information <socket fd>
-    int m_rx_epfd;
     /**
      * list of pending ready packet on the Rx,
      * each element is a pointer to the ib_conn_mgr that holds this ready rx datagram
@@ -537,15 +545,12 @@ protected:
     bool m_reuseaddr = false; // to track setsockopt with SO_REUSEADDR
     bool m_reuseport = false; // to track setsockopt with SO_REUSEPORT
     bool m_b_pktinfo = false;
-    bool m_b_rcvtstampns = false;
+    bool m_bind_no_port = false;
+    bool m_is_ipv6only;
 
     multilock m_lock_rcv;
     lock_mutex m_lock_snd;
     lock_mutex m_rx_migration_lock;
-
-    uint32_t m_flow_tag_id = 0U; // Flow Tag for this socket
-    in_protocol_t m_protocol = PROTO_UNDEFINED;
-    sa_family_t m_family;
     sock_addr m_bound;
     sock_addr m_connected;
     ip_addr m_so_bindtodevice_ip;
@@ -563,15 +568,14 @@ protected:
     void *m_rx_callback_context = nullptr; // user context
     struct xlio_rate_limit_t m_so_ratelimit;
     uint32_t m_pcp = 0U;
+    uint32_t m_flow_tag_id = 0U; // Flow Tag for this socket
     uint8_t m_n_uc_ttl_hop_lim;
     uint8_t m_src_sel_flags = 0U;
-    bool m_bind_no_port = false;
-    bool m_is_ipv6only;
 
 public:
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    int m_back_log = 0;
     bool m_is_for_socket_pool = false; // true when this fd will be used for socket pool on close
+    int m_back_log = 0;
 #endif
 };
 
@@ -609,39 +613,34 @@ void sockinfo::sock_pop_descs_rx_ready(descq_t *cache)
     unlock_rx_q();
 }
 
-void sockinfo::set_events_socketxtreme(uint64_t events)
+xlio_socketxtreme_completion_t *sockinfo::set_events_socketxtreme(uint64_t events,
+                                                                  bool full_transaction)
 {
-    m_socketxtreme.ec->completion.user_data = (uint64_t)m_fd_context;
-    if (!m_socketxtreme.ec->completion.events) {
-        m_socketxtreme.ec->completion.events |= events;
-        m_p_rx_ring->put_ec(m_socketxtreme.ec);
+    bool always_new =
+        ((events & (XLIO_SOCKETXTREME_PACKET | XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED)) != 0U);
+    xlio_socketxtreme_completion_t &completion =
+        m_p_rx_ring->socketxtreme_start_ec_operation(this, always_new);
+    completion.user_data = (uint64_t)m_fd_context;
+    completion.events |= events;
 
-        m_socketxtreme.ec = nullptr;
-        for (auto &ec : m_socketxtreme.ec_cache) {
-            if (0 == ec.completion.events) {
-                m_socketxtreme.ec = &ec;
-                break;
-            }
-        }
-        if (!m_socketxtreme.ec) {
-            struct ring_ec ec;
-            ec.clear();
-            m_socketxtreme.ec_cache.push_back(ec);
-            m_socketxtreme.ec = &m_socketxtreme.ec_cache.back();
-        }
-    } else {
-        m_socketxtreme.ec->completion.events |= events;
+    if (full_transaction) {
+        m_p_rx_ring->socketxtreme_end_ec_operation();
+        return nullptr;
     }
+
+    return &completion;
 }
 
 void sockinfo::set_events(uint64_t events)
 {
     /* Collect all events if rx ring is enabled */
-    if (is_socketxtreme() && m_state == SOCKINFO_OPENED) {
-        set_events_socketxtreme(events);
+    if (safe_mce_sys().enable_socketxtreme) {
+        if (m_state == SOCKINFO_OPENED) {
+            set_events_socketxtreme(events, true);
+        }
+    } else {
+        insert_epoll_event(events);
     }
-
-    insert_epoll_event(events);
 }
 
 void sockinfo::save_strq_stats(uint32_t packet_strides)

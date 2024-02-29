@@ -62,22 +62,17 @@ typedef enum { CQT_RX, CQT_TX } cq_type_t;
 
 typedef size_t ring_user_id_t;
 
-/* Ring event completion */
+// Socketxtreme completion
 struct ring_ec {
-    struct list_head list;
     struct xlio_socketxtreme_completion_t completion;
-    struct xlio_buff_t *last_buff_lst;
-
-    inline void clear()
-    {
-        INIT_LIST_HEAD(&list);
-        memset(&completion, 0, sizeof(completion));
-        last_buff_lst = nullptr;
-    }
+    ring_ec *next;
 };
 
 typedef cached_obj_pool<tcp_seg> tcp_seg_pool;
+typedef cached_obj_pool<ring_ec> socketxtreme_ec_pool;
+
 extern tcp_seg_pool *g_tcp_seg_pool;
+extern socketxtreme_ec_pool *g_socketxtreme_ec_pool;
 
 class ring {
 public:
@@ -150,10 +145,6 @@ public:
 
     virtual int socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_completions,
                                   unsigned int ncompletions, int flags) = 0;
-
-    virtual bool is_socketxtreme(void) = 0;
-    virtual void put_ec(struct ring_ec *ec) = 0;
-    virtual void del_ec(struct ring_ec *ec) = 0;
 
     inline int get_if_index() { return m_if_index; }
 
@@ -270,19 +261,41 @@ public:
     void set_group(poll_group *grp) { m_p_group = grp; }
     poll_group *get_group() const { return m_p_group; }
 
+    ring_ec *socketxtreme_get_ecs(uint32_t num);
+    void socketxtreme_put_ecs(struct ring_ec *ec);
+
+    void socketxtreme_ec_clear_sock(sockinfo *sock);
+    void socketxtreme_ec_sock_list_add(sockinfo *sock);
+    bool socketxtreme_ec_pop_completion(xlio_socketxtreme_completion_t *completion);
+    void socketxtreme_end_ec_operation();
+    xlio_socketxtreme_completion_t &socketxtreme_start_ec_operation(sockinfo *sock,
+                                                                    bool always_new);
+
 protected:
     inline void set_parent(ring *parent) { m_parent = (parent ? parent : this); }
     inline void set_if_index(int if_index) { m_if_index = if_index; }
 
-    poll_group *m_p_group;
-    int *m_p_n_rx_channel_fds;
-    ring *m_parent;
+    poll_group *m_p_group = nullptr;
+    int *m_p_n_rx_channel_fds = nullptr;
+    ring *m_parent = nullptr;
 
-    struct tcp_seg *m_tcp_seg_list;
-    uint32_t m_tcp_seg_count;
+    struct tcp_seg *m_tcp_seg_list = nullptr;
+    ring_ec *m_socketxtreme_ec_list = nullptr;
+    uint32_t m_tcp_seg_count = 0U;
+    uint32_t m_socketxtreme_ec_count = 0U;
     lock_spin_recursive m_tcp_seg_lock;
+    lock_spin_recursive m_ec_lock;
 
-    int m_if_index; /* Interface index */
+    struct {
+        // Queue of ready sockets. Each socket can be added only once to this queue.
+        sockinfo *ec_sock_list_start = nullptr;
+        sockinfo *ec_sock_list_end = nullptr;
+
+        // Thread-safety lock for get/put operations under the queue.
+        lock_spin lock_ec_list;
+    } m_socketxtreme;
+
+    int m_if_index = 0; /* Interface index */
 };
 
 #endif /* RING_H */
