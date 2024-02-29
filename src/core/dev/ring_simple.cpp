@@ -118,8 +118,6 @@ ring_simple::ring_simple(int if_index, ring *parent, ring_type_t type, bool use_
     memset(&m_tls, 0, sizeof(m_tls));
 #endif /* DEFINED_UTLS */
     memset(&m_lro, 0, sizeof(m_lro));
-
-    INIT_LIST_HEAD(&m_socketxtreme.ec_list);
 }
 
 ring_simple::~ring_simple()
@@ -204,16 +202,6 @@ ring_simple::~ring_simple()
     /* coverity[double_unlock] TODO: RM#1049980 */
     m_lock_ring_tx.unlock();
     m_lock_ring_rx.unlock();
-
-    ring_logdbg("queue of event completion elements is %s",
-                (list_empty(&m_socketxtreme.ec_list) ? "empty" : "not empty"));
-    while (!list_empty(&m_socketxtreme.ec_list)) {
-        struct ring_ec *ec = nullptr;
-        ec = get_ec();
-        if (ec) {
-            del_ec(ec);
-        }
-    }
 
     ring_logdbg("delete ring_simple() completed");
 }
@@ -435,7 +423,7 @@ int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_c
     bool do_poll = true;
 
     if (likely(xlio_completions) && ncompletions) {
-        if ((flags & SOCKETXTREME_POLL_TX) && list_empty(&m_socketxtreme.ec_list)) {
+        if ((flags & SOCKETXTREME_POLL_TX) && !m_socketxtreme.ec_sock_list_start) {
             uint64_t poll_sn = 0;
             const std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
             m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
@@ -443,11 +431,8 @@ int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_c
 
         const std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
         while (!g_b_exit && (i < (int)ncompletions)) {
-            if (!list_empty(&m_socketxtreme.ec_list)) {
-                ring_ec *ec = get_ec();
-                if (ec) {
-                    memcpy(xlio_completions, &ec->completion, sizeof(ec->completion));
-                    ec->clear();
+            if (m_socketxtreme.ec_sock_list_start) {
+                if (socketxtreme_ec_pop_completion(xlio_completions)) {
                     xlio_completions++;
                     i++;
                 }
