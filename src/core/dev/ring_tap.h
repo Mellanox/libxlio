@@ -136,10 +136,6 @@ private:
     void tap_create(net_device_val *p_ndev);
     void tap_destroy();
 
-    bool is_socketxtreme(void) { return false; }
-    void put_ec(struct ring_ec *ec) { NOT_IN_USE(ec); }
-    void del_ec(struct ring_ec *ec) { NOT_IN_USE(ec); }
-
     /* These fields are NETVSC mode specific */
     int m_tap_fd; /* file descriptor of tap device */
     ring_slave *m_vf_ring;

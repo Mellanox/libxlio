@@ -338,7 +338,7 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     si_tcp_logdbg("new pcb %p pcb state %d", &m_pcb, get_tcp_state(&m_pcb));
     tcp_arg(&m_pcb, this);
     tcp_ip_output(&m_pcb, sockinfo_tcp::ip_output);
-    if (is_socketxtreme()) {
+    if (safe_mce_sys().enable_socketxtreme) {
         tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_socketxtreme);
     } else {
         tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb);
@@ -760,7 +760,7 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
     NOTIFY_ON_EVENTS(this, EPOLLHUP);
     m_sock_wakeup_pipe.do_wakeup();
 
-    if (m_econtext) {
+    if (has_epoll_context()) {
         m_econtext->fd_closed(m_fd);
     }
 
@@ -798,7 +798,7 @@ void sockinfo_tcp::handle_socket_linger()
         /* SOCKETXTREME WA: Don't call rx_wait() in order not to miss events in socketxtreme_poll()
          * flow. TBD: find proper solution! rx_wait(poll_cnt, false);
          * */
-        if (!is_socketxtreme()) {
+        if (!safe_mce_sys().enable_socketxtreme) {
             rx_wait(poll_cnt, false);
         }
         tcp_output(&m_pcb);
@@ -1979,54 +1979,28 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
     return ERR_OK;
 }
 
-static inline void _rx_lwip_cb_socketxtreme_helper(pbuf *p,
-                                                   xlio_socketxtreme_completion_t *completion,
-                                                   xlio_buff_t *&buff_list_tail,
-                                                   bool use_hw_timestamp,
-                                                   std::function<void(void)> notify)
-{
-    mem_buf_desc_t *current_desc = reinterpret_cast<mem_buf_desc_t *>(p);
-
-    if (!buff_list_tail) {
-        // New completion
-        completion->packet.buff_lst = reinterpret_cast<xlio_buff_t *>(p);
-        completion->packet.total_len = p->tot_len;
-        completion->packet.num_bufs = current_desc->rx.n_frags;
-
-        assert(reinterpret_cast<mem_buf_desc_t *>(p)->rx.n_frags > 0);
-
-        if (use_hw_timestamp) {
-            completion->packet.hw_timestamp = current_desc->rx.timestamps.hw;
-        }
-        notify();
-    } else {
-        // Update existing completion
-        xlio_buff_t *&buff_list_head = completion->packet.buff_lst;
-        completion->packet.total_len += p->tot_len;
-        completion->packet.num_bufs += current_desc->rx.n_frags;
-
-        auto membuff_list_tail = reinterpret_cast<mem_buf_desc_t *>(buff_list_tail);
-        while (membuff_list_tail->p_next_desc) {
-            membuff_list_tail = membuff_list_tail->p_next_desc;
-        }
-        membuff_list_tail->p_next_desc = current_desc;
-        reinterpret_cast<mem_buf_desc_t *>(buff_list_head)->rx.n_frags =
-            completion->packet.num_bufs;
-        pbuf_cat(reinterpret_cast<pbuf *>(buff_list_head), p);
-        current_desc->rx.n_frags = 0;
-    }
-    buff_list_tail = reinterpret_cast<xlio_buff_t *>(p);
-}
-
 inline void sockinfo_tcp::rx_lwip_cb_socketxtreme_helper(pbuf *p)
 {
-    auto notify = [this]() { NOTIFY_ON_EVENTS(this, XLIO_SOCKETXTREME_PACKET); };
-    bool use_hw_timestamp = (m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE);
+    xlio_socketxtreme_completion_t *completion =
+        set_events_socketxtreme(XLIO_SOCKETXTREME_PACKET, false);
 
+    mem_buf_desc_t *current_desc = reinterpret_cast<mem_buf_desc_t *>(p);
+
+    // Is IPv4 only.
     assert(p);
-    _rx_lwip_cb_socketxtreme_helper(p, &m_socketxtreme.ec->completion,
-                                    m_socketxtreme.ec->last_buff_lst, use_hw_timestamp, notify);
-    save_stats_rx_offload(m_socketxtreme.ec->completion.packet.total_len);
+    assert(current_desc->rx.src.get_sa_family() == AF_INET);
+    assert(current_desc->rx.n_frags > 0);
+
+    completion->packet.buff_lst = reinterpret_cast<xlio_buff_t *>(p);
+    completion->packet.total_len = p->tot_len;
+    completion->packet.num_bufs = current_desc->rx.n_frags;
+
+    if (m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE) {
+        completion->packet.hw_timestamp = current_desc->rx.timestamps.hw;
+    }
+
+    m_p_rx_ring->socketxtreme_end_ec_operation();
+    save_stats_rx_offload(p->tot_len);
 }
 
 inline err_t sockinfo_tcp::handle_fin(struct tcp_pcb *pcb, err_t err)
@@ -2726,7 +2700,7 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
             TRANS_XLIO) {
         passthrough_unlock("non offloaded socket --> connect only via OS");
         return -1;
-    } else if (m_econtext) {
+    } else if (has_epoll_context()) {
         m_econtext->remove_fd_from_epoll_os(m_fd); // remove fd from os epoll
     }
 
@@ -3358,19 +3332,17 @@ void sockinfo_tcp::accept_connection_socketxtreme(sockinfo_tcp *parent, sockinfo
     child->m_p_socket_stats->set_bound_if(child->m_bound);
     child->m_p_socket_stats->bound_port = child->m_bound.get_in_port();
 
-    xlio_socketxtreme_completion_t &parent_compl = parent->m_socketxtreme.ec->completion;
-
-    child->m_connected.get_sa(reinterpret_cast<sockaddr *>(&parent_compl.src),
-                              static_cast<socklen_t>(sizeof(parent_compl.src)));
-
     /* Update xlio_completion with
      * XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED related data
      */
     if (likely(child->m_parent)) {
+        xlio_socketxtreme_completion_t &completion =
+            *(child->set_events_socketxtreme(XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED, false));
+        completion.listen_fd = child->m_parent->get_fd();
 
-        child->m_socketxtreme.ec->completion.src = parent->m_socketxtreme.ec->completion.src;
-        child->m_socketxtreme.ec->completion.listen_fd = child->m_parent->get_fd();
-        NOTIFY_ON_EVENTS(child, XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED);
+        child->m_connected.get_sa(reinterpret_cast<sockaddr *>(&completion.src),
+                                  static_cast<socklen_t>(sizeof(completion.src)));
+        child->m_p_rx_ring->socketxtreme_end_ec_operation();
     } else {
         vlog_printf(VLOG_ERROR,
                     "XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED: can't find listen socket for new "
@@ -3417,7 +3389,7 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     tcp_ip_output(&(new_sock->m_pcb), sockinfo_tcp::ip_output);
     tcp_arg(&(new_sock->m_pcb), new_sock);
 
-    if (new_sock->is_socketxtreme()) {
+    if (safe_mce_sys().enable_socketxtreme) {
         tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb_socketxtreme);
     } else {
         tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb);
@@ -3486,7 +3458,7 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     // todo check that listen socket was not closed by now ? (is_server())
     conn->m_ready_pcbs.erase(&new_sock->m_pcb);
 
-    if (conn->is_socketxtreme()) {
+    if (safe_mce_sys().enable_socketxtreme) {
         accept_connection_socketxtreme(conn, new_sock);
     } else {
         conn->m_accepted_conns.push_back(new_sock);
@@ -3643,7 +3615,7 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     new_sock->m_conn_state = TCP_CONN_INIT;
     new_sock->m_parent = listen_sock;
 
-    if (new_sock->is_socketxtreme()) {
+    if (safe_mce_sys().enable_socketxtreme) {
         tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb_socketxtreme);
     } else {
         tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb);

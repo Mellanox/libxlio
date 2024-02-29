@@ -33,6 +33,7 @@
 #include "ring.h"
 #include "event/poll_group.h"
 #include "proto/route_table_mgr.h"
+#include "sock/sockinfo.h"
 
 #undef MODULE_NAME
 #define MODULE_NAME "ring"
@@ -40,15 +41,10 @@
 #define MODULE_HDR MODULE_NAME "%d:%s() "
 
 tcp_seg_pool *g_tcp_seg_pool = nullptr;
+socketxtreme_ec_pool *g_socketxtreme_ec_pool = nullptr;
 
 ring::ring()
-    : m_p_group(nullptr)
-    , m_p_n_rx_channel_fds(nullptr)
-    , m_parent(nullptr)
-    , m_tcp_seg_list(nullptr)
-    , m_tcp_seg_count(0U)
 {
-    m_if_index = 0;
     print_val();
 }
 
@@ -59,6 +55,10 @@ ring::~ring()
     }
     if (m_tcp_seg_list) {
         g_tcp_seg_pool->put_objs(m_tcp_seg_list);
+    }
+
+    if (m_socketxtreme_ec_list) {
+        g_socketxtreme_ec_pool->put_objs(m_socketxtreme_ec_list);
     }
 }
 
@@ -103,6 +103,15 @@ tcp_seg *ring::get_tcp_segs(uint32_t num)
                         safe_mce_sys().tx_segs_ring_batch_tcp);
 }
 
+// Assumed num > 0.
+ring_ec *ring::socketxtreme_get_ecs(uint32_t num)
+{
+    std::lock_guard<decltype(m_ec_lock)> lock(m_ec_lock);
+
+    return get_obj_list(g_socketxtreme_ec_pool, num, m_socketxtreme_ec_list,
+                        m_socketxtreme_ec_count, 256U);
+}
+
 template <typename T>
 static inline void put_obj_list(cached_obj_pool<T> *obj_pool, T *&obj_list_to, T *&obj_list_from,
                                 uint32_t &obj_count, uint32_t return_treshold)
@@ -132,6 +141,112 @@ void ring::put_tcp_segs(tcp_seg *seg)
     std::lock_guard<decltype(m_tcp_seg_lock)> lock(m_tcp_seg_lock);
 
     put_obj_list(g_tcp_seg_pool, m_tcp_seg_list, seg, m_tcp_seg_count, return_treshold);
+}
+
+// Assumed ec is not nullptr
+void ring::socketxtreme_put_ecs(ring_ec *ec)
+{
+    static const uint32_t return_treshold = 256 * 2U;
+
+    std::lock_guard<decltype(m_ec_lock)> lock(m_ec_lock);
+
+    put_obj_list(g_socketxtreme_ec_pool, m_socketxtreme_ec_list, ec, m_socketxtreme_ec_count,
+                 return_treshold);
+}
+
+void ring::socketxtreme_ec_sock_list_add(sockinfo *sock)
+{
+    sock->set_ec_ring_list_next(nullptr);
+    if (likely(m_socketxtreme.ec_sock_list_end)) {
+        m_socketxtreme.ec_sock_list_end->set_ec_ring_list_next(sock);
+        m_socketxtreme.ec_sock_list_end = sock;
+    } else {
+        m_socketxtreme.ec_sock_list_end = m_socketxtreme.ec_sock_list_start = sock;
+    }
+}
+
+xlio_socketxtreme_completion_t &ring::socketxtreme_start_ec_operation(sockinfo *sock,
+                                                                      bool always_new)
+{
+    m_socketxtreme.lock_ec_list.lock();
+    if (likely(!sock->get_last_ec())) {
+        socketxtreme_ec_sock_list_add(sock);
+        always_new = true;
+    }
+
+    if (always_new) {
+        sock->add_ec(socketxtreme_get_ecs(1U));
+    }
+
+    return sock->get_last_ec()->completion;
+}
+
+void ring::socketxtreme_end_ec_operation()
+{
+    m_socketxtreme.lock_ec_list.unlock();
+}
+
+bool ring::socketxtreme_ec_pop_completion(xlio_socketxtreme_completion_t *completion)
+{
+    struct ring_ec *ec = nullptr;
+
+    m_socketxtreme.lock_ec_list.lock();
+    if (m_socketxtreme.ec_sock_list_start) {
+        ec = m_socketxtreme.ec_sock_list_start->pop_next_ec();
+
+        ring_logfunc(
+            "tid: %d completion %p: events:%lu, ud:%lu, b:%p, %p\n", gettid(), ec,
+            ec->completion.events, ec->completion.user_data, ec->completion.packet.buff_lst,
+            ec->completion.packet.buff_lst ? ec->completion.packet.buff_lst->next : nullptr);
+
+        memcpy(completion, &ec->completion, sizeof(ec->completion));
+        ec->next = nullptr;
+        socketxtreme_put_ecs(ec);
+        if (!m_socketxtreme.ec_sock_list_start
+                 ->has_next_ec()) { // Last ec of the socket was popped.
+            // Remove socket from ready list.
+            sockinfo *temp = m_socketxtreme.ec_sock_list_start;
+            m_socketxtreme.ec_sock_list_start = temp->get_ec_ring_list_next();
+            if (!m_socketxtreme.ec_sock_list_start) {
+                m_socketxtreme.ec_sock_list_end = nullptr;
+            }
+            temp->set_ec_ring_list_next(nullptr);
+        }
+    }
+    m_socketxtreme.lock_ec_list.unlock();
+    return (ec != nullptr);
+}
+
+void ring::socketxtreme_ec_clear_sock(sockinfo *sock)
+{
+    m_socketxtreme.lock_ec_list.lock();
+
+    ring_ec *ecs = sock->clear_ecs();
+    if (ecs) {
+        socketxtreme_put_ecs(ecs);
+        sockinfo *temp = m_socketxtreme.ec_sock_list_start;
+        sockinfo *prev = nullptr;
+        while (temp && temp != sock) {
+            prev = temp;
+            temp = temp->get_ec_ring_list_next();
+        }
+
+        if (prev) {
+            prev->set_ec_ring_list_next(sock->get_ec_ring_list_next());
+        }
+
+        if (sock == m_socketxtreme.ec_sock_list_start) {
+            m_socketxtreme.ec_sock_list_start = sock->get_ec_ring_list_next();
+        }
+
+        if (sock == m_socketxtreme.ec_sock_list_end) {
+            m_socketxtreme.ec_sock_list_end = prev;
+        }
+
+        sock->set_ec_ring_list_next(nullptr);
+    }
+
+    m_socketxtreme.lock_ec_list.unlock();
 }
 
 void ring::print_val()

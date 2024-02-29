@@ -168,7 +168,7 @@ template <typename T> bool cached_obj_pool<T>::expand()
     size_t size = sizeof(T) * m_alloc_batch;
     T *objs_array = (T *)m_allocator.alloc(size);
     if (!objs_array) {
-        vlog_printf(VLOG_DEBUG, "Cached pool failed to allocate objects (%s)", m_pool_name);
+        vlog_printf(VLOG_DEBUG, "Cached pool failed to allocate objects (%s)\n", m_pool_name);
         return false;
     }
 

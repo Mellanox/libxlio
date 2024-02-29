@@ -86,8 +86,6 @@ TEST_F(socketxtreme_poll, ti_1)
     int pid = fork();
 
     if (0 == pid) { /* I am the child */
-        struct epoll_event event;
-
         barrier_fork(pid);
 
         fd = m_tcp_base.sock_create_fa_nb(m_family);
@@ -100,11 +98,31 @@ TEST_F(socketxtreme_poll, ti_1)
         ASSERT_EQ(EINPROGRESS, errno);
         ASSERT_EQ((-1), rc);
 
-        event.events = EPOLLOUT | EPOLLIN;
-        event.data.fd = fd;
-        rc = test_base::event_wait(&event);
-        EXPECT_LT(0, rc);
-        EXPECT_EQ((uint32_t)(EPOLLOUT), event.events);
+        // Wait for connect to complete.
+        struct xlio_socketxtreme_completion_t xlio_comps;
+        int xlio_ring_fd[2] = {-1, -1};
+        rc = xlio_api->get_socket_rings_fds(fd, xlio_ring_fd, 2);
+        ASSERT_LE(1, rc);
+
+        rc = 0;
+        while (rc == 0) {
+            if (xlio_ring_fd[0] > 0) {
+                rc = xlio_api->socketxtreme_poll(xlio_ring_fd[0], &xlio_comps, 1, 0);
+                ASSERT_LE(0, rc);
+                if (rc > 0) {
+                    ASSERT_LT(0U, (xlio_comps.events & EPOLLOUT));
+                    break;
+                }
+            }
+
+            if (xlio_ring_fd[1] > 0) {
+                rc = xlio_api->socketxtreme_poll(xlio_ring_fd[1], &xlio_comps, 1, 0);
+                ASSERT_LE(0, rc);
+                if (rc > 0) {
+                    ASSERT_LT(0U, (xlio_comps.events & EPOLLOUT));
+                }
+            }
+        }
 
         log_trace("Established connection: fd=%d to %s\n", fd,
                   sys_addr2str((struct sockaddr *)&server_addr));
