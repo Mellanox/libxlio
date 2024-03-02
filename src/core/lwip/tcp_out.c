@@ -346,9 +346,9 @@ static err_t tcp_write_checks(struct tcp_pcb *pcb, u32_t len)
     return ERR_OK;
 }
 
-static inline u16_t tcp_xmit_size_goal(struct tcp_pcb *pcb, int use_max)
+static inline u32_t tcp_xmit_size_goal(struct tcp_pcb *pcb, int use_max)
 {
-    u16_t size = pcb->mss;
+    u32_t size = pcb->mss;
 
 #if LWIP_TCP_TIMESTAMPS
     if ((pcb->flags & TF_TIMESTAMP)) {
@@ -556,8 +556,8 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
     while (pos < len) {
         struct pbuf *p;
         u32_t left = len - pos;
-        u16_t max_len = mss_local_minus_opts;
-        u16_t seglen = left > max_len ? max_len : left;
+        u32_t max_len = mss_local_minus_opts;
+        u32_t seglen = left > max_len ? max_len : left;
 
         /* If copy is set, memory should be allocated and data copied
          * into pbuf */
@@ -1300,8 +1300,8 @@ __attribute__((unused)) static struct tcp_seg *tcp_rexmit_segment(struct tcp_pcb
     struct tcp_seg *new_seg = NULL;
     struct pbuf *cur_p = NULL;
     int tcp_hlen_delta;
-    u16_t mss_local = 0;
-    u16_t mss_local_minus_opts;
+    u32_t mss_local = 0;
+    u32_t mss_local_minus_opts;
     u8_t optflags = 0;
     u8_t optlen = 0;
     u32_t seqno = 0;
@@ -1522,8 +1522,8 @@ void tcp_split_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t wnd)
     u16_t oversize = 0;
     u8_t optlen = 0;
     u8_t optflags = 0;
-    u16_t mss_local = 0;
-    u16_t max_length;
+    u32_t mss_local = 0;
+    u32_t max_length;
     pbuf_type type = PBUF_RAM;
     int is_zerocopy = 0;
 
@@ -1980,7 +1980,6 @@ static err_t tcp_output_segment(struct tcp_seg *seg, struct tcp_pcb *pcb)
     /* zc_buf is only used to pass pointer to TCP header to ip_output(). */
     struct pbuf zc_pbuf;
     struct pbuf *p;
-    u16_t len;
     u32_t *opts;
 
     /* The TCP header has already been constructed, but the ackno and
@@ -2070,7 +2069,7 @@ static err_t tcp_output_segment(struct tcp_seg *seg, struct tcp_pcb *pcb)
         p->next = seg->p;
         p->len = p->tot_len = LWIP_TCP_HDRLEN(seg->tcphdr);
     } else {
-        len = (u16_t)((u8_t *)seg->tcphdr - (u8_t *)seg->p->payload);
+        u32_t len = (u32_t)((u8_t *)seg->tcphdr - (u8_t *)seg->p->payload);
 
         seg->p->len -= len;
         seg->p->tot_len -= len;
@@ -2342,8 +2341,8 @@ void tcp_zero_window_probe(struct tcp_pcb *pcb)
     struct tcp_seg *seg;
     u16_t len;
     u8_t is_fin;
-    u32_t snd_nxt;
     u8_t optlen = 0;
+    u32_t snd_nxt;
     u32_t *opts;
 
     LWIP_DEBUGF_IP_ADDR(TCP_DEBUG, "tcp_zero_window_probe: sending ZERO WINDOW probe to ",
