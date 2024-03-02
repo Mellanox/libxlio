@@ -6127,18 +6127,12 @@ ssize_t sockinfo_tcp::tcp_tx_handle_partial_send_and_unlock(ssize_t total_tx, in
 
 bool sockinfo_tcp::is_connected_and_ready_to_send()
 {
-    int poll_count = 0;
     /* TODO should we add !g_b_exit here? */
-    while (unlikely(!is_rts())) {
+    if (unlikely(!is_rts())) {
         if (m_conn_state == TCP_CONN_TIMEOUT) {
             si_tcp_logdbg("TX timed out");
             errno = ETIMEDOUT;
         } else if (m_conn_state == TCP_CONN_CONNECTING) {
-            si_tcp_logdbg("TX while async-connect on socket go to poll");
-            rx_wait_helper(poll_count, false);
-            if (m_conn_state == TCP_CONN_CONNECTED) {
-                continue;
-            }
             si_tcp_logdbg("TX while async-connect on socket return EAGAIN");
             errno = EAGAIN;
         } else if (m_conn_state == TCP_CONN_RESETED) {
