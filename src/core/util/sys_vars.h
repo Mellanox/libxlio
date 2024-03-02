@@ -371,7 +371,6 @@ public:
     size_t zc_cache_threshold;
     uint32_t tx_num_bufs;
     uint32_t tx_buf_size;
-    uint32_t zc_tx_size;
     uint32_t tcp_nodelay_treshold;
     uint32_t tx_num_wr;
     uint32_t tx_num_wr_to_signal;
@@ -577,7 +576,6 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_ZC_CACHE_THRESHOLD    "XLIO_ZC_CACHE_THRESHOLD"
 #define SYS_VAR_TX_NUM_BUFS           "XLIO_TX_BUFS"
 #define SYS_VAR_TX_BUF_SIZE           "XLIO_TX_BUF_SIZE"
-#define SYS_VAR_ZC_TX_SIZE            "XLIO_ZC_TX_SIZE"
 #define SYS_VAR_TCP_NODELAY_TRESHOLD  "XLIO_TCP_NODELAY_TRESHOLD"
 #define SYS_VAR_TX_NUM_WRE            "XLIO_TX_WRE"
 #define SYS_VAR_TX_NUM_WRE_TO_SIGNAL  "XLIO_TX_WRE_BATCHING"
@@ -733,7 +731,6 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_RING_LIMIT_PER_INTERFACE (0)
 #define MCE_DEFAULT_RING_DEV_MEM_TX          (0)
 #define MCE_DEFAULT_TCP_MAX_SYN_RATE         (0)
-#define MCE_DEFAULT_ZC_TX_SIZE               (32768)
 #define MCE_DEFAULT_TCP_NODELAY_TRESHOLD     (0)
 #define MCE_DEFAULT_ZC_CACHE_THRESHOLD       (10LU * 1024 * 1024 * 1024) // 10GB
 #define MCE_DEFAULT_TX_NUM_BUFS              (200000)
@@ -855,7 +852,6 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_MAX_RX_NUM_POLLS                (100000000)
 #define MCE_MIN_RX_PREFETCH_BYTES           (32) /* Just enough for headers (IPoIB+IP+UDP)*/
 #define MCE_MAX_RX_PREFETCH_BYTES           (2044)
-#define MCE_MAX_ZC_TX_SIZE                  (65535)
 #define MCE_RX_CQ_DRAIN_RATE_DISABLED       (0)
 #define MCE_CQ_DRAIN_INTERVAL_DISABLED      (0)
 #define MCE_CQ_ADAPTIVE_MODERATION_DISABLED (0)

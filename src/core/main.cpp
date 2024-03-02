@@ -558,8 +558,6 @@ void print_xlio_global_settings()
                       SYS_VAR_TX_NUM_BUFS);
     VLOG_PARAM_STRING("Tx Mem Buf size", safe_mce_sys().tx_buf_size, MCE_DEFAULT_TX_BUF_SIZE,
                       SYS_VAR_TX_BUF_SIZE, option_size::to_str(safe_mce_sys().tx_buf_size));
-    VLOG_PARAM_STRING("ZC TX size", safe_mce_sys().zc_tx_size, MCE_DEFAULT_ZC_TX_SIZE,
-                      SYS_VAR_ZC_TX_SIZE, option_size::to_str(safe_mce_sys().zc_tx_size));
     VLOG_PARAM_NUMBER("Tx QP WRE", safe_mce_sys().tx_num_wr, MCE_DEFAULT_TX_NUM_WRE,
                       SYS_VAR_TX_NUM_WRE);
     VLOG_PARAM_NUMBER("Tx QP WRE Batching", safe_mce_sys().tx_num_wr_to_signal,
