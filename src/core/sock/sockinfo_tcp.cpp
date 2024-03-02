@@ -1010,20 +1010,10 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
                                                              is_non_file_zerocopy, errno_tmp);
             }
 
-            err = tcp_write_express(&m_pcb, tx_ptr, tx_size, &tx_arg.priv);
+            const struct iovec iov = {.iov_base = tx_ptr, .iov_len = tx_size};
+            err = tcp_write_express(&m_pcb, &iov, 1, &tx_arg.priv);
             if (unlikely(err != ERR_OK)) {
-                if (unlikely(err == ERR_CONN)) { // happens when remote drops during big write
-                    si_tcp_logdbg("connection closed: tx'ed = %d", total_tx);
-                    shutdown(SHUT_WR);
-                    return tcp_tx_handle_partial_send_and_unlock(total_tx, EPIPE, is_dummy,
-                                                                 is_non_file_zerocopy, errno_tmp);
-                }
-                if (unlikely(err != ERR_MEM)) {
-                    // we should not get here...
-                    BULLSEYE_EXCLUDE_BLOCK_START
-                    si_tcp_logpanic("tcp_write return: %d", err);
-                    BULLSEYE_EXCLUDE_BLOCK_END
-                }
+                // tcp_write_express() can return only ERR_MEM error.
                 return tcp_tx_handle_partial_send_and_unlock(total_tx, EAGAIN, is_dummy,
                                                              is_non_file_zerocopy, errno_tmp);
             }
@@ -1161,9 +1151,13 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
                                                                  is_send_zerocopy, errno_tmp);
                 }
 
-                err_t err = (apiflags & XLIO_TX_PACKET_ZEROCOPY)
-                    ? tcp_write_express(&m_pcb, tx_ptr, tx_size, &tx_arg.priv)
-                    : tcp_write(&m_pcb, tx_ptr, tx_size, apiflags, &tx_arg.priv);
+                err_t err;
+                if (apiflags & XLIO_TX_PACKET_ZEROCOPY) {
+                    const struct iovec iov = {.iov_base = tx_ptr, .iov_len = tx_size};
+                    err = tcp_write_express(&m_pcb, &iov, 1, &tx_arg.priv);
+                } else {
+                    err = tcp_write(&m_pcb, tx_ptr, tx_size, apiflags, &tx_arg.priv);
+                }
                 if (unlikely(err != ERR_OK)) {
                     if (unlikely(err == ERR_CONN)) { // happens when remote drops during big write
                         si_tcp_logdbg("connection closed: tx'ed = %d", total_tx);
@@ -6050,30 +6044,23 @@ int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint
     mdesc.opaque = opaque_op;
 
     int bytes_written = 0;
-
-    lock_tcp_con();
-
-    err_t err;
     for (unsigned i = 0; i < iov_len; ++i) {
-        err = tcp_write_express(&m_pcb, iov[i].iov_base, iov[i].iov_len, &mdesc);
-        if (err != ERR_OK) {
-            /* The only error in tcp_write_express is a memory error
-             * In this version we don't implement any error recovery or avoidance
-             * mechanism and an error at this stage is irrecoverable.
-             * The considered alternatives are:
-             *  - Setting the socket an error state (this is the one we chose here)
-             *  - Rolling back any written buffers, i.e. recovering
-             *  - Reserving the pbuf(s)/tcp_seg(s) before calling for tcp_write_express */
-            m_conn_state = TCP_CONN_ERROR;
-            m_error_status = ENOMEM;
-            return tcp_tx_handle_errno_and_unlock(ENOMEM);
-        }
         bytes_written += iov[i].iov_len;
     }
 
+    lock_tcp_con();
+
+    err_t err = tcp_write_express(&m_pcb, iov, iov_len, &mdesc);
+    if (unlikely(err != ERR_OK)) {
+        // The only error in tcp_write_express() is a memory error.
+        m_conn_state = TCP_CONN_ERROR;
+        m_error_status = ENOMEM;
+        return tcp_tx_handle_errno_and_unlock(ENOMEM);
+    }
     if (!(flags & XLIO_EXPRESS_MSG_MORE)) {
         tcp_output(&m_pcb);
     }
+
     unlock_tcp_con();
 
     return bytes_written;
