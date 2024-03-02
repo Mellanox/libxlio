@@ -418,8 +418,6 @@ struct tcp_pcb {
         /* Maximum number of SGE */
         u32_t max_send_sge;
     } tso;
-
-    u32_t max_send_sge;
 };
 
 typedef u16_t (*ip_route_mtu_fn)(struct tcp_pcb *pcb);
