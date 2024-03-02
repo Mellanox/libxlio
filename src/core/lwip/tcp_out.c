@@ -726,121 +726,158 @@ memerr:
 /**
  * Write data for sending (but does not send it immediately).
  *
- * It waits in the expectation of more data being sent soon (as
- * it can send them more efficiently by combining them together).
- * To prompt the system to send data now, call tcp_output() after
- * calling tcp_write_express().
- *
  * The function will zero-copy the data into the payload, i.e. the data pointer, instead of the
- * data, will be copied.
+ * data, will be set.
  *
  * @param pcb Protocol control block for the TCP connection to enqueue data for.
- * @param arg Pointer to the data to be enqueued for sending.
- * @param len Data length in bytes
+ * @param iov Vector of the data buffers to be enqueued for sending.
+ * @param iovcnt Number of the iov elements.
  * @param desc Additional metadata that allows later to check the data mkey/lkey.
  * @return ERR_OK if enqueued, another err_t on error
  */
-err_t tcp_write_express(struct tcp_pcb *pcb, const void *arg, u32_t len, pbuf_desc *desc)
+err_t tcp_write_express(struct tcp_pcb *pcb, const struct iovec *iov, u32_t iovcnt, pbuf_desc *desc)
 {
     struct pbuf *p;
-    struct tcp_seg *seg = NULL, *prev_seg = NULL, *queue = NULL;
-    u32_t pos = 0; /* position in 'arg' data */
-    u8_t optflags = TF_SEG_OPTS_ZEROCOPY;
-    const u32_t mss_local = tcp_tso(pcb) ? pcb->tso.max_payload_sz : pcb->mss;
+    struct tcp_seg *seg = NULL;
+    struct tcp_seg *queue = NULL;
+    struct tcp_seg *last;
+    const u32_t seglen_max = tcp_tso(pcb) ? pcb->tso.max_payload_sz : pcb->mss;
+    u32_t pos;
     u32_t seglen;
+    u32_t last_seglen;
+    u32_t total_len = 0;
     u16_t queuelen = 0;
-
-    if (len < pcb->mss) {
-        const int byte_queued = pcb->snd_nxt - pcb->lastack;
-        pcb->snd_sml_add = (pcb->unacked ? pcb->unacked->len : 0) + byte_queued;
-    }
+    u8_t optflags = TF_SEG_OPTS_ZEROCOPY;
 
     /*
-     * Chain a new pbuf to the end of pcb->unsent if there is enough space.
-     *
-     * We may run out of memory at any point. In that case we must
-     * return ERR_MEM and not change anything in pcb. Therefore, all
-     * changes are recorded in local variables and committed at the end
-     * of the function. Some pcb fields are maintained in local copies:
-     *
-     * queuelen = pcb->snd_queuelen
-     *
-     * These variables are set consistently by the phases.
-     * seg points to the last segment tampered with.
-     * pos records progress as data is segmented.
+     * We may run out of memory at any point. In that case we must return ERR_MEM and not change
+     * anything in pcb. Therefore, all changes are recorded in local variables and committed at
+     * the end of the function. Some pcb fields are maintained in local copies.
      */
-    if (pcb->unsent != NULL) {
-        seg = pcb->last_unsent;
-        u32_t space = LWIP_MAX(mss_local, pcb->tso.max_payload_sz) - seg->len;
 
-        if (space > 0 && (seg->flags & TF_SEG_OPTS_ZEROCOPY) &&
-            pbuf_clen(seg->p) < pcb->tso.max_send_sge) {
-            seglen = space < len ? space : len;
+    last = pcb->last_unsent;
+    const bool can_merge =
+        last && (last->flags & TF_SEG_OPTS_ZEROCOPY) && TCP_SEQ_GEQ(last->seqno, pcb->snd_nxt);
+    if (!can_merge) {
+        /* We cannot append data to a segment of different type or a retransmitted segment. */
+        last = NULL;
+    }
+    last_seglen = last ? last->len : 0;
 
-            if ((p = tcp_pbuf_prealloc_express(seglen, pcb, PBUF_ZEROCOPY, desc, NULL)) == NULL) {
+    for (unsigned i = 0; i < iovcnt; ++i) {
+        u8_t *data = (u8_t *)iov[i].iov_base;
+        const u32_t len = iov[i].iov_len;
+        pos = 0;
+
+        /* Chain a new pbuf to the last segment if there is enough space. */
+        if (last) {
+            seg = last;
+            const u32_t space = seglen_max - seg->len;
+
+            if (space > 0 && pbuf_clen(seg->p) < pcb->tso.max_send_sge) {
+                seglen = space < len ? space : len;
+
+                p = tcp_pbuf_prealloc_express(seglen, pcb, PBUF_ZEROCOPY, desc, NULL);
+                if (!p) {
+                    goto memerr;
+                }
+                p->payload = data;
+                pbuf_cat(seg->p, p);
+                seg->len += p->tot_len;
+                pos += seglen;
+                queuelen++;
+            }
+        }
+
+        while (pos < len) {
+            u32_t left = len - pos;
+            seglen = left > seglen_max ? seglen_max : left;
+
+            p = tcp_pbuf_prealloc_express(seglen, pcb, PBUF_ZEROCOPY, desc, NULL);
+            if (!p) {
                 goto memerr;
             }
-            p->payload = (u8_t *)arg;
-            pbuf_cat(seg->p, p);
-            seg->len += p->tot_len;
+            p->payload = data + pos;
+
+            seg = tcp_create_segment(pcb, p, 0, pcb->snd_lbb + total_len + pos, optflags);
+            if (!seg) {
+                tcp_tx_pbuf_free(pcb, p);
+                goto memerr;
+            }
+
+            if (!queue) {
+                queue = seg;
+            }
+            if (last) {
+                last->next = seg;
+            }
+            last = seg;
+
             pos += seglen;
             queuelen++;
         }
+
+        total_len += len;
     }
-
-    while (pos < len) {
-        u32_t left = len - pos;
-        seglen = left > mss_local ? mss_local : left;
-
-        if ((p = tcp_pbuf_prealloc_express(seglen, pcb, PBUF_ZEROCOPY, desc, NULL)) == NULL) {
-            goto memerr;
-        }
-        p->payload = (u8_t *)arg + pos;
-        queuelen++;
-
-        if ((seg = tcp_create_segment(pcb, p, 0, pcb->snd_lbb + pos, optflags)) == NULL) {
-            tcp_tx_pbuf_free(pcb, p);
-            goto memerr;
-        }
-
-        if (queue == NULL) {
-            queue = seg;
-        } else {
-            prev_seg->next = seg;
-        }
-
-        prev_seg = seg;
-        pos += seglen;
-    }
-
-#if TCP_OVERSIZE
-    pcb->unsent_oversize = 0;
-#endif /* TCP_OVERSIZE */
-
-    if (pcb->last_unsent == NULL) {
-        pcb->unsent = queue;
-    } else {
-        pcb->last_unsent->next = queue;
-    }
-    pcb->last_unsent = seg;
-
-    /*
-     * Finally update the pcb state.
-     */
-    pcb->snd_lbb += len;
-    pcb->snd_buf -= len;
-    pcb->snd_queuelen += queuelen;
 
     /* Set the PSH flag in the last segment that we enqueued. */
     if (enable_push_flag && seg != NULL && seg->tcphdr != NULL) {
         TCPH_SET_FLAG(seg->tcphdr, TCP_PSH);
     }
 
+#if TCP_OVERSIZE
+    pcb->unsent_oversize = 0;
+#endif /* TCP_OVERSIZE */
+
+    if (!pcb->last_unsent) {
+        pcb->unsent = queue;
+    } else {
+        /* The next field is either NULL or equals to queue, so we can overwrite. */
+        pcb->last_unsent->next = queue;
+    }
+    if (last) {
+        pcb->last_unsent = last;
+    }
+
+    /* Update the pcb state. */
+    pcb->snd_lbb += total_len;
+    pcb->snd_buf -= total_len;
+    pcb->snd_queuelen += queuelen;
+
+    /* TODO Move Minshall's logic to tcp_output(). */
+    if (total_len < pcb->mss) {
+        const u32_t byte_queued = pcb->snd_nxt - pcb->lastack;
+        pcb->snd_sml_add = (pcb->unacked ? pcb->unacked->len : 0) + byte_queued;
+    }
+
     return ERR_OK;
+
 memerr:
+    /* Error path - restore unsent queue. */
     pcb->flags |= TF_NAGLEMEMERR;
     if (queue != NULL) {
         tcp_tx_segs_free(pcb, queue);
+    }
+    if (pcb->last_unsent && last_seglen > 0) {
+        pcb->last_unsent->next = NULL;
+        p = pcb->last_unsent->p;
+        while (last_seglen > 0) {
+            last_seglen -= p->len;
+            p = p->next;
+        }
+        if (p) {
+            pcb->last_unsent->len -= p->tot_len;
+            struct pbuf *ptmp = pcb->last_unsent->p;
+            while (ptmp) {
+                ptmp->tot_len -= p->tot_len;
+                if (ptmp->next == p) {
+                    ptmp->next = NULL;
+                }
+                ptmp = ptmp->next;
+            }
+            assert(pcb->last_unsent->len == last_seglen);
+            assert(pcb->last_unsent->p->tot_len == last_seglen);
+        }
     }
     return ERR_MEM;
 }
