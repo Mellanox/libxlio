@@ -746,7 +746,7 @@ err_t tcp_write_express(struct tcp_pcb *pcb, const void *arg, u32_t len, pbuf_de
     struct tcp_seg *seg = NULL, *prev_seg = NULL, *queue = NULL;
     u32_t pos = 0; /* position in 'arg' data */
     u8_t optflags = TF_SEG_OPTS_ZEROCOPY;
-    const u32_t mss_local = lwip_zc_tx_size;
+    const u32_t mss_local = tcp_tso(pcb) ? pcb->tso.max_payload_sz : pcb->mss;
     u32_t seglen;
     u16_t queuelen = 0;
 
