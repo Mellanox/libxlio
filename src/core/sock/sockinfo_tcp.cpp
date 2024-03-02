@@ -946,7 +946,7 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
 
     bool is_non_file_zerocopy = tx_arg.opcode != TX_FILE;
     pd_key_array =
-        (tx_arg.priv.attr == PBUF_DESC_MKEY ? (struct xlio_pd_key *)tx_arg.priv.map : nullptr);
+        (tx_arg.priv.attr == PBUF_DESC_MKEY ? (struct xlio_pd_key *)tx_arg.priv.opaque : nullptr);
 
     si_tcp_logfunc("tx: iov=%p niovs=%zu", p_iov, sz_iov);
 
@@ -1070,7 +1070,8 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
         apiflags |= XLIO_TX_PACKET_ZEROCOPY;
         is_send_zerocopy = tx_arg.opcode != TX_FILE;
         pd_key_array =
-            (tx_arg.priv.attr == PBUF_DESC_MKEY ? (struct xlio_pd_key *)tx_arg.priv.map : nullptr);
+            (tx_arg.priv.attr == PBUF_DESC_MKEY ? (struct xlio_pd_key *)tx_arg.priv.opaque
+                                                : nullptr);
     }
 
     si_tcp_logfunc("tx: iov=%p niovs=%zu", p_iov, sz_iov);

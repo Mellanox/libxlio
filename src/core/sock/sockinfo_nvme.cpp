@@ -89,7 +89,7 @@ ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
         errno = EINVAL;
         return -1;
     }
-    auto aux_data = reinterpret_cast<xlio_pd_key *>(tx_arg.priv.map);
+    auto aux_data = reinterpret_cast<xlio_pd_key *>(tx_arg.priv.opaque);
     auto msg = tx_arg.attr.hdr;
 
     if (!msg->msg_iov || !aux_data || msg->msg_iovlen == 0U || aux_data[0].message_length == 0U) {
