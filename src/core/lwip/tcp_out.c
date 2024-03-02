@@ -317,19 +317,8 @@ static err_t tcp_write_checks(struct tcp_pcb *pcb, u32_t len)
         return ERR_OK;
     }
 
-    /* fail on too much data */
-    if ((s32_t)len > pcb->snd_buf) {
-        LWIP_DEBUGF(TCP_OUTPUT_DEBUG | 3,
-                    ("tcp_write: too much data (len=%" U32_F " > snd_buf=%" S32_F ")\n", len,
-                     pcb->snd_buf));
-        pcb->flags |= TF_NAGLEMEMERR;
-        return ERR_MEM;
-    }
-    LWIP_DEBUGF(TCP_QLEN_DEBUG, ("tcp_write: queuelen: %" U32_F "\n", (u32_t)pcb->snd_queuelen));
-
     /* If total number of pbufs on the unsent/unacked queues exceeds the
      * configured maximum, return an error */
-    /* check for configured max queuelen and possible overflow */
     if ((pcb->snd_queuelen >= pcb->max_unsent_len) ||
         (pcb->snd_queuelen > TCP_SNDQUEUELEN_OVERFLOW)) {
         LWIP_DEBUGF(TCP_OUTPUT_DEBUG | 3,
@@ -337,11 +326,6 @@ static err_t tcp_write_checks(struct tcp_pcb *pcb, u32_t len)
                      pcb->max_unsent_len));
         pcb->flags |= TF_NAGLEMEMERR;
         return ERR_MEM;
-    }
-    if (pcb->snd_queuelen != 0) {
-    } else {
-        LWIP_ASSERT("tcp_write: no pbufs on queue => both queues empty",
-                    pcb->unacked == NULL && pcb->unsent == NULL);
     }
     return ERR_OK;
 }
@@ -940,22 +924,11 @@ err_t tcp_enqueue_flags(struct tcp_pcb *pcb, u8_t flags)
 #endif /* LWIP_TCP_TIMESTAMPS */
     optlen = LWIP_TCP_OPT_LENGTH(optflags);
 
-    /* tcp_enqueue_flags is always called with either SYN or FIN in flags.
-     * We need one available snd_buf byte to do that.
-     * This means we can't send FIN while snd_buf==0. A better fix would be to
-     * not include SYN and FIN sequence numbers in the snd_buf count. */
-
-    /*if (pcb->snd_buf == 0) {
-      LWIP_DEBUGF(TCP_OUTPUT_DEBUG | 3, ("tcp_enqueue_flags: no send buffer available\n"));
-      return ERR_MEM;
-    }*/ //to consider snd_buf for syn or fin, unmarked sections with SND_BUF_FOR_SYN_FIN
-
     /* Allocate pbuf with room for TCP header + options */
     if ((p = tcp_tx_pbuf_alloc(pcb, optlen, PBUF_RAM, NULL, NULL)) == NULL) {
         pcb->flags |= TF_NAGLEMEMERR;
         return ERR_MEM;
     }
-    LWIP_ASSERT("tcp_enqueue_flags: check that first pbuf can hold optlen", (p->len >= optlen));
 
     /* Allocate memory for tcp_seg, and fill in fields. */
     if ((seg = tcp_create_segment(pcb, p, flags, pcb->snd_lbb, optflags)) == NULL) {
@@ -963,7 +936,6 @@ err_t tcp_enqueue_flags(struct tcp_pcb *pcb, u8_t flags)
         tcp_tx_pbuf_free(pcb, p);
         return ERR_MEM;
     }
-    LWIP_ASSERT("tcp_enqueue_flags: invalid segment length", seg->len == 0);
 
     LWIP_DEBUGF(
         TCP_OUTPUT_DEBUG | LWIP_DBG_TRACE,
@@ -983,10 +955,10 @@ err_t tcp_enqueue_flags(struct tcp_pcb *pcb, u8_t flags)
 #endif /* TCP_OVERSIZE */
 
     /* SYN and FIN bump the sequence number */
-    if ((flags & TCP_SYN) || (flags & TCP_FIN)) {
+    if (flags & (TCP_SYN | TCP_FIN)) {
         pcb->snd_lbb++;
         /* optlen does not influence snd_buf */
-        // pcb->snd_buf--; SND_BUF_FOR_SYN_FIN
+        pcb->snd_buf--;
     }
     if (flags & TCP_FIN) {
         pcb->flags |= TF_FIN;
@@ -996,10 +968,6 @@ err_t tcp_enqueue_flags(struct tcp_pcb *pcb, u8_t flags)
     pcb->snd_queuelen += pbuf_clen(seg->p);
     LWIP_DEBUGF(TCP_QLEN_DEBUG,
                 ("tcp_enqueue_flags: %" S16_F " (after enqueued)\n", pcb->snd_queuelen));
-    if (pcb->snd_queuelen != 0) {
-        LWIP_ASSERT("tcp_enqueue_flags: invalid queue length",
-                    pcb->unacked != NULL || pcb->unsent != NULL);
-    }
 
     return ERR_OK;
 }
