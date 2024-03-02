@@ -752,8 +752,6 @@ bool sockinfo_tcp::prepare_dst_to_send(bool is_accepted_socket /* = false */)
             m_pcb.tso.max_payload_sz = ring->get_max_payload_sz();
             m_pcb.tso.max_header_sz = ring->get_max_header_sz();
             m_pcb.tso.max_send_sge = ring->get_max_send_sge();
-            /* reserve one slot for network headers of zerocopy segments */
-            m_pcb.max_send_sge = m_pcb.tso.max_send_sge - 1;
         }
     }
     return ret_val;

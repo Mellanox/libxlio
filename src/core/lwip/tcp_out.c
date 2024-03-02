@@ -1075,7 +1075,7 @@ static void tcp_tso_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t wnd)
         }
 
         tot_p += pbuf_clen(cur_seg->p);
-        if (tot_p > pcb->max_send_sge) {
+        if (tot_p > pcb->tso.max_send_sge) {
             goto err;
         }
 
