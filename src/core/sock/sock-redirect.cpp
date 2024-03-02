@@ -371,7 +371,7 @@ ssize_t sendmsg_internal(void *sock, __const struct msghdr *__msg, int __flags)
                  ((cmsg->cmsg_len - CMSG_LEN(0)) / sizeof(struct xlio_pd_key)))) {
                 tx_arg.priv.attr =
                     (cmsg->cmsg_type == SCM_XLIO_PD) ? PBUF_DESC_MKEY : PBUF_DESC_NVME_TX;
-                tx_arg.priv.map = (void *)CMSG_DATA(cmsg);
+                tx_arg.priv.opaque = (void *)CMSG_DATA(cmsg);
             } else {
                 errno = EINVAL;
                 return -1;
@@ -448,7 +448,7 @@ static ssize_t sendfile_helper(socket_fd_api *p_socket_object, int in_fd, __off6
         tx_arg.attr.sz_iov = 1;
         tx_arg.attr.flags = MSG_ZEROCOPY;
         tx_arg.priv.attr = PBUF_DESC_MDESC;
-        tx_arg.priv.map = (void *)mapping;
+        tx_arg.priv.mdesc = (void *)mapping;
         totSent = p_socket_object->tx(tx_arg);
 
         mapping->put();
