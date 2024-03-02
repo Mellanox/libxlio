@@ -66,9 +66,8 @@ typedef struct {
     int attr;
     u32_t mkey;
     union {
-        void *map;
-        void *mdesc;
         int fd;
+        void *mdesc;
         void *opaque;
     };
 } pbuf_desc;
