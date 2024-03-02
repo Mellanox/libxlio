@@ -102,7 +102,6 @@ xlio_lwip::xlio_lwip()
 
     lwip_tcp_mss = get_lwip_tcp_mss(safe_mce_sys().mtu, safe_mce_sys().lwip_mss);
     lwip_tcp_snd_buf = safe_mce_sys().tcp_send_buffer_size;
-    lwip_zc_tx_size = safe_mce_sys().zc_tx_size;
     lwip_tcp_nodelay_treshold = safe_mce_sys().tcp_nodelay_treshold;
     BULLSEYE_EXCLUDE_BLOCK_END
 

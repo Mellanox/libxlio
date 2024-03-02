@@ -50,7 +50,6 @@ void register_sys_now(sys_now_fn fn);
 
 extern u16_t lwip_tcp_mss;
 extern u32_t lwip_tcp_snd_buf;
-extern u32_t lwip_zc_tx_size;
 extern u32_t lwip_tcp_nodelay_treshold;
 
 struct tcp_seg;
