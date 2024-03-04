@@ -133,6 +133,11 @@ enum {
 #include <linux/net_tstamp.h>
 #endif
 
+#define SOCK_DP_FLAG_HAS_STATS 1U
+#define SOCK_DP_FLAG_ZC        2U
+#define SOCK_DP_FLAG_BLOCKING  4U
+#define SOCK_DP_FLAG_RCVTSTAMP 8U
+
 typedef enum { RX_READ = 23, RX_READV, RX_RECV, RX_RECVFROM, RX_RECVMSG } rx_call_t;
 
 enum {
@@ -238,7 +243,7 @@ class epfd_info;
 
 class sockinfo {
 public:
-    enum sockinfo_state {
+    enum sockinfo_state : uint16_t {
         SOCKINFO_UNDEFINED,
         SOCKINFO_OPENED,
         SOCKINFO_CLOSING,
@@ -336,13 +341,14 @@ public:
     sockinfo *get_next_in_ring_list() { return m_next_in_ring_list; }
     void set_next_in_ring_list(sockinfo * sock) { m_next_in_ring_list = sock; }
     bool has_epoll_context() { return (!safe_mce_sys().enable_socketxtreme && m_econtext); }
-
+    rfs *get_rfs_ptr() const { return m_rfs_ptr; };
+    void set_rfs_ptr(rfs *new_rfs) { m_rfs_ptr = new_rfs; };
     int get_fd() const { return m_fd; };
     sa_family_t get_family() { return m_family; }  
+    socket_stats_t *get_sock_stats() const { return m_p_socket_stats; }
     bool get_reuseaddr(void) { return m_reuseaddr; }
     bool get_reuseport(void) { return m_reuseport; }
     int get_rx_epfd(void) { return m_rx_epfd; }
-    bool is_blocking(void) { return m_b_blocking; }
     bool flow_in_reuse(void) { return m_reuseaddr | m_reuseport; }
     bool check_rings() { return m_p_rx_ring ? true : false; }
     bool is_shadow_socket_present() { return m_fd >= 0 && m_fd != m_rx_epfd; }
@@ -405,6 +411,7 @@ protected:
     virtual void rx_add_ring_cb(ring *p_ring);
     virtual void rx_del_ring_cb(ring *p_ring);
 
+    inline void set_dp_flag(bool val, uint8_t dpflag);
     inline void set_rx_reuse_pending(bool is_pending = true);
     inline void reuse_buffer(mem_buf_desc_t *buff);
     inline xlio_socketxtreme_completion_t *set_events_socketxtreme(uint64_t events, bool full_transaction);
@@ -414,7 +421,14 @@ protected:
     inline int dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, socklen_t *__fromlen,
                               int in_flags, int *p_out_flags);
 
-    bool has_stats() const { return m_has_stats; }
+    bool has_stats() const { return (m_datapath_flags & SOCK_DP_FLAG_HAS_STATS) != 0U; }
+    void set_has_stats() { set_dp_flag(true, SOCK_DP_FLAG_HAS_STATS); }
+    bool is_zc() const { return (m_datapath_flags & SOCK_DP_FLAG_ZC) != 0U; }
+    void set_is_zc(bool val) { set_dp_flag(val, SOCK_DP_FLAG_ZC); }
+    bool is_rcvtstamp() const { return (m_datapath_flags & SOCK_DP_FLAG_RCVTSTAMP) != 0U; }
+    void set_is_rcvtstamp(bool val) { set_dp_flag(val, SOCK_DP_FLAG_RCVTSTAMP); }
+    bool is_blocking() const { return (m_datapath_flags & SOCK_DP_FLAG_BLOCKING) != 0U; }
+    void set_is_blocking(bool val) { set_dp_flag(val, SOCK_DP_FLAG_BLOCKING); }
     int get_sock_by_L3_L4(in_protocol_t protocol, const ip_address &ip, in_port_t port);
     void notify_epoll_context(uint32_t events);
     void save_stats_rx_os(int bytes);
@@ -470,24 +484,31 @@ private:
     int fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit);
     bool attach_as_uc_receiver_anyip(sa_family_t family, role_t role, bool skip_rules);
 
-public:
-    rfs *rfs_ptr = nullptr;
-    socket_stats_t *m_p_socket_stats = nullptr;
-    /* Last memory descriptor with zcopy operation method */
-    mem_buf_desc_t *m_last_zcdesc = nullptr;
-
 protected:
 
+// First 64 bytes (Including vptr) - Socketxtreme DP cache prioritized
+    rfs *m_rfs_ptr = nullptr;
+    ring *m_p_rx_ring = nullptr; // used in TCP/UDP
+    void *m_fd_context; // Context data stored with socket
     ring_ec *m_socketxtreme_ec_first = nullptr;
     ring_ec *m_socketxtreme_ec = nullptr;
     union { // App uses either epoll or socketxtreme_poll
         sockinfo *m_next_in_ring_list = nullptr;
         epfd_info *m_econtext;
     };
+    
+    int m_fd; // Identification information <socket fd>
+    sockinfo_state m_state = SOCKINFO_OPENED; // Socket current state, 2 bytes
+    uint8_t m_n_tsing_flags = 0U;
+    uint8_t m_datapath_flags = 0U;
 
-    void *m_fd_context; // Context data stored with socket
-    ring *m_p_rx_ring = nullptr; // used in TCP/UDP
+// Second 64 bytes
     dst_entry *m_p_connected_dst_entry = nullptr;
+
+    /* Last memory descriptor with zcopy operation method */
+    mem_buf_desc_t *m_last_zcdesc = nullptr;
+
+    socket_stats_t *m_p_socket_stats = nullptr;
 
     /* TX zcopy counter
      * The notification itself for tx zcopy operation is a simple scalar value.
@@ -500,26 +521,15 @@ protected:
      */
     atomic_t m_zckey;
 
-    sockinfo_state m_state = SOCKINFO_OPENED; // socket current state
+    lock_spin_simple m_error_queue_lock; // 4 bytes
 
     /* Socket error queue that keeps local errors and internal data required
      * to provide notification ability.
      */
-    descq_t m_error_queue;
-    lock_spin m_error_queue_lock;
-
-    int m_fd; // identification information <socket fd>
-    bool m_has_stats = false;
-    bool m_b_zc = false;
-    bool m_b_rcvtstamp = false;
-    uint8_t m_n_tsing_flags = 0U;
+    descq_t m_error_queue; // 32 bytes
 
 public:
-#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    bool m_is_for_socket_pool = false; // true when this fd will be used for socket pool on close
-    int m_back_log = 0;
-#endif
-
+// Third 64 bytes and other
     list_node<sockinfo, sockinfo::pendig_to_remove_node_offset> pendig_to_remove_node;
     list_node<sockinfo, sockinfo::socket_fd_list_node_offset> socket_fd_list_node;
     list_node<sockinfo, sockinfo::ep_ready_fd_node_offset> ep_ready_fd_node;
@@ -527,24 +537,28 @@ public:
     epoll_fd_rec m_fd_rec;
     uint32_t m_epoll_event_flags = 0;
 
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+    int m_back_log = 0;
+    bool m_is_for_socket_pool = false; // true when this fd will be used for socket pool on close
+#endif
+
 protected:
 
+    uint8_t m_src_sel_flags = 0U;
+    uint8_t m_n_uc_ttl_hop_lim;
     bool m_skip_cq_poll_in_rx;
     bool m_rx_reuse_buf_pending = false; // used to periodically return buffers, even if threshold was not reached
     bool m_rx_reuse_buf_postponed = false; // used to mark threshold was reached, but free was not done yet
     bool m_reuseaddr = false; // to track setsockopt with SO_REUSEADDR
     bool m_reuseport = false; // to track setsockopt with SO_REUSEPORT
-    bool m_b_blocking = true;
     bool m_b_pktinfo = false;
     bool m_b_rcvtstampns = false;
     bool m_rx_cq_wait_ctrl;
     bool m_bind_no_port = false;
     bool m_is_ipv6only;
-    uint8_t m_src_sel_flags = 0U;
     in_protocol_t m_protocol = PROTO_UNDEFINED;
     sa_family_t m_family;
-    uint8_t m_n_uc_ttl_hop_lim;
-
+    
     /**
      * list of pending ready packet on the Rx,
      * each element is a pointer to the ib_conn_mgr that holds this ready rx datagram
@@ -588,6 +602,12 @@ protected:
 void sockinfo::set_rx_reuse_pending(bool is_pending)
 {
     m_rx_reuse_buf_pending = is_pending;
+}
+
+void sockinfo::set_dp_flag(bool val, uint8_t dpflag) {
+    m_datapath_flags = val
+        ? m_datapath_flags | dpflag
+        : m_datapath_flags & ~dpflag;
 }
 
 bool sockinfo::set_flow_tag(uint32_t flow_tag_id)
@@ -706,7 +726,7 @@ int sockinfo::dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, soc
                 m_rx_pkt_ready_offset += nbytes;
                 bytes_left -= nbytes;
                 iov_base = (uint8_t *)iov_base + nbytes;
-                if (m_b_rcvtstamp || m_n_tsing_flags) {
+                if (is_rcvtstamp() || m_n_tsing_flags) {
                     update_socket_timestamps(&pdesc->rx.timestamps);
                 }
                 if (bytes_left <= 0) {

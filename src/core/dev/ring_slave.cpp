@@ -346,7 +346,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
             BULLSEYE_EXCLUDE_BLOCK_END
 
             p_rfs = p_tmp_rfs;
-            si->rfs_ptr = p_rfs;
+            si->set_rfs_ptr(p_rfs);
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
             if (g_p_app->type == APP_NONE || !g_p_app->add_second_4t_rule)
 #endif
@@ -666,10 +666,10 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
                              ntohs(p_tcp_h->window), p_rx_wc_buf_desc->rx.sz_payload);
 
                 if (likely(safe_mce_sys().gro_streams_max > 0U)) {
-                    return static_cast<rfs_uc_tcp_gro *>(si->rfs_ptr)->rfs_uc_tcp_gro::rx_dispatch_packet(p_rx_wc_buf_desc, pv_fd_ready_array);
+                    return static_cast<rfs_uc_tcp_gro *>(si->get_rfs_ptr())->rfs_uc_tcp_gro::rx_dispatch_packet(p_rx_wc_buf_desc, pv_fd_ready_array);
                 }
 
-                return si->rfs_ptr->rx_dispatch_packet(p_rx_wc_buf_desc, pv_fd_ready_array);
+                return si->get_rfs_ptr()->rx_dispatch_packet(p_rx_wc_buf_desc, pv_fd_ready_array);
             }
 
             if (likely(protocol == IPPROTO_UDP)) {

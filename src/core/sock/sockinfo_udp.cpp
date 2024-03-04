@@ -1813,7 +1813,7 @@ wait:
      * Wait for RX to become ready.
      */
     si_udp_logfunc("rx_wait: %d", m_fd);
-    rx_wait_ret = rx_wait(m_b_blocking && !(in_flags & MSG_DONTWAIT));
+    rx_wait_ret = rx_wait(is_blocking() && !(in_flags & MSG_DONTWAIT));
 
     m_lock_rcv.lock();
 
@@ -2166,7 +2166,7 @@ ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
 
     {
         xlio_send_attr attr = {(xlio_wr_tx_packet_attr)0, 0, 0, 0};
-        bool b_blocking = m_b_blocking;
+        bool b_blocking = is_blocking();
         if (unlikely(__flags & MSG_DONTWAIT)) {
             b_blocking = false;
         }
@@ -2557,7 +2557,7 @@ void sockinfo_udp::rx_add_ring_cb(ring *p_ring)
     m_rx_udp_poll_os_ratio_counter = m_n_sysvar_rx_udp_poll_os_ratio;
 
     // Now that we got at least 1 CQ attached start polling the CQs
-    if (m_b_blocking) {
+    if (is_blocking()) {
         m_loops_to_go = m_n_sysvar_rx_poll_num;
     } else {
         m_loops_to_go = 1; // Force single CQ poll in case of non-blocking socket
@@ -2572,7 +2572,7 @@ void sockinfo_udp::rx_del_ring_cb(ring *p_ring)
 
     // If no more CQ's are attached on this socket, return CQ polling loops ot init state
     if (m_rx_ring_map.size() <= 0) {
-        if (m_b_blocking) {
+        if (is_blocking()) {
             m_loops_to_go = safe_mce_sys().rx_poll_num_init;
         } else {
             m_loops_to_go = 1;
@@ -2584,7 +2584,7 @@ void sockinfo_udp::set_blocking(bool is_blocked)
 {
     sockinfo::set_blocking(is_blocked);
 
-    if (m_b_blocking) {
+    if (is_blocking()) {
         // Set the high CQ polling RX_POLL value
         // depending on where we have mapped offloaded MC gorups
         if (m_rx_ring_map.size() > 0) {
@@ -3103,8 +3103,8 @@ void sockinfo_udp::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
     vlog_printf(log_level, "Rx ready list size : %zu\n", m_rx_pkt_ready_list.size());
 
     vlog_printf(
-        log_level, "Socket timestamp : m_b_rcvtstamp %s, m_b_rcvtstampns %s, m_n_tsing_flags %u\n",
-        m_b_rcvtstamp ? "true" : "false", m_b_rcvtstampns ? "true" : "false", m_n_tsing_flags);
+        log_level, "Socket timestamp : is_rcvtstamp %s, m_b_rcvtstampns %s, m_n_tsing_flags %u\n",
+        is_rcvtstamp() ? "true" : "false", m_b_rcvtstampns ? "true" : "false", m_n_tsing_flags);
 }
 
 void sockinfo_udp::save_stats_threadid_rx()

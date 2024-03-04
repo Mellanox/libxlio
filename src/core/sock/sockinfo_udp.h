@@ -126,7 +126,7 @@ public:
     void unset_immediate_os_sample();
     /**
      * Process a Rx request, we might have a ready packet, or we might block until
-     * we have one (if sockinfo::m_b_blocking == true)
+     * we have one (if sockinfo::is_blocking() == true)
      */
     ssize_t rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
                sockaddr *__from = NULL, socklen_t *__fromlen = NULL, struct msghdr *__msg = NULL);
@@ -147,7 +147,7 @@ public:
     int rx_request_notification(uint64_t poll_sn);
     /**
      * Process a Tx request, handle all that is needed to send the packet, we might block
-     * until the connection info is ready or a tx buffer is releast (if sockinfo::m_b_blocking ==
+     * until the connection info is ready or a tx buffer is releast (if sockinfo::is_blocking() ==
      * true)
      */
     ssize_t tx(xlio_tx_call_attr_t &tx_arg);

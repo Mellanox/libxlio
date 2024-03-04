@@ -586,7 +586,7 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
 
     return_reuse_buffers_postponed();
 
-    if (m_b_zc && m_p_connected_dst_entry) {
+    if (is_zc() && m_p_connected_dst_entry) {
         m_p_connected_dst_entry->reset_inflight_zc_buffers_ctx(this);
     }
 
@@ -657,7 +657,7 @@ void sockinfo_tcp::handle_socket_linger()
     int poll_cnt = 0;
 
     linger_time_usec =
-        (!m_linger.l_onoff /*|| !m_b_blocking */) ? 0 : m_linger.l_linger * USEC_PER_SEC;
+        !m_linger.l_onoff ? 0 : m_linger.l_linger * USEC_PER_SEC;
     si_tcp_logdbg("Going to linger for max time of %lu usec", linger_time_usec);
     memset(&elapsed, 0, sizeof(elapsed));
     gettime(&start);
@@ -674,7 +674,7 @@ void sockinfo_tcp::handle_socket_linger()
     }
 
     if (m_linger.l_onoff && (m_pcb.unsent || m_pcb.unacked)) {
-        if (m_linger.l_linger > 0 /*&& m_b_blocking*/) {
+        if (m_linger.l_linger > 0) {
             errno = ERR_WOULDBLOCK;
         }
     }
@@ -934,9 +934,9 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
     }
 
     bool is_dummy = IS_DUMMY_PACKET(flags);
-    bool is_blocking = BLOCK_THIS_RUN(m_b_blocking, flags);
-    bool is_packet_zerocopy = (flags & MSG_ZEROCOPY) && ((m_b_zc) || (tx_arg.opcode == TX_FILE));
-    if (unlikely(is_dummy) || unlikely(!is_packet_zerocopy) || unlikely(is_blocking)) {
+    bool is_blocking_sock = BLOCK_THIS_RUN(is_blocking(), flags);
+    bool is_packet_zerocopy = (flags & MSG_ZEROCOPY) && (is_zc() || (tx_arg.opcode == TX_FILE));
+    if (unlikely(is_dummy) || unlikely(!is_packet_zerocopy) || unlikely(is_blocking_sock)) {
         return tcp_tx_slow_path(tx_arg);
     }
 
@@ -1072,7 +1072,7 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
      * and SO_ZEROCOPY activated
      * - sendfile() MSG_ZEROCOPY flag set internally with opcode TX_FILE
      */
-    if ((flags & MSG_ZEROCOPY) && ((m_b_zc) || (tx_arg.opcode == TX_FILE))) {
+    if ((flags & MSG_ZEROCOPY) && (is_zc() || (tx_arg.opcode == TX_FILE))) {
         apiflags |= XLIO_TX_PACKET_ZEROCOPY;
         is_send_zerocopy = tx_arg.opcode != TX_FILE;
         pd_key_array =
@@ -1089,7 +1089,7 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
 
     int total_tx = 0;
     off64_t file_offset = 0;
-    bool block_this_run = BLOCK_THIS_RUN(m_b_blocking, flags);
+    bool block_this_run = BLOCK_THIS_RUN(is_blocking(), flags);
     for (size_t i = 0; i < sz_iov; i++) {
         si_tcp_logfunc("iov:%d base=%p len=%d", i, p_iov[i].iov_base, p_iov[i].iov_len);
         if (unlikely(!p_iov[i].iov_base)) {
@@ -1859,7 +1859,7 @@ static inline void _rx_lwip_cb_socketxtreme_helper(pbuf *p,
     completion->packet.total_len = p->tot_len;
     completion->packet.num_bufs = current_desc->rx.n_frags;
 
-    assert(reinterpret_cast<mem_buf_desc_t *>(p)->rx.n_frags > 0);
+    assert(reinterpret_cast<mem_busf_desc_t *>(p)->rx.n_frags > 0);
 
     //current_desc->rx.src.get_sa(reinterpret_cast<sockaddr *>(&completion->src),
     //                            sizeof(completion->src));
@@ -1870,8 +1870,7 @@ static inline void _rx_lwip_cb_socketxtreme_helper(pbuf *p,
 
 inline void sockinfo_tcp::rx_lwip_cb_socketxtreme_helper(pbuf *p)
 {
-    //auto notify = [this]() { NOTIFY_ON_EVENTS(this, XLIO_SOCKETXTREME_PACKET); };
-    bool use_hw_timestamp = false;//(m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE);
+    bool use_hw_timestamp = (m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE);
 
     assert(p);
     xlio_socketxtreme_completion_t *completion = set_events_socketxtreme(XLIO_SOCKETXTREME_PACKET, false);
@@ -1964,7 +1963,7 @@ inline void sockinfo_tcp::rx_lwip_process_chained_pbufs(pbuf *p)
         p_curr_desc->rx.frag.iov_base = p->payload;
         p_curr_desc->rx.frag.iov_len = p->len;
         p_curr_desc->p_next_desc = reinterpret_cast<mem_buf_desc_t *>(p->next);
-        //process_timestamps(p_curr_desc);
+        process_timestamps(p_curr_desc);
     }
     p_first_desc->set_ref_count(head_ref);
 }
@@ -2220,7 +2219,7 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
     size_t total_iov_sz = 0;
     int out_flags = 0;
     int in_flags = *p_flags;
-    bool block_this_run = BLOCK_THIS_RUN(m_b_blocking, in_flags);
+    bool block_this_run = BLOCK_THIS_RUN(is_blocking(), in_flags);
 
     m_loops_timer.start();
 
@@ -2505,7 +2504,7 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
         case TCP_SOCK_CONNECTED_RD:
         case TCP_SOCK_CONNECTED_WR:
         case TCP_SOCK_CONNECTED_RDWR:
-            if (report_connected && !m_b_blocking) {
+            if (report_connected && !is_blocking()) {
                 report_connected = false;
                 unlock_tcp_con();
                 return 0;
@@ -2610,7 +2609,7 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
     // rexmits.
     register_timer();
 
-    if (!m_b_blocking) {
+    if (!is_blocking()) {
         errno = EINPROGRESS;
         m_error_status = EINPROGRESS;
         m_sock_state = TCP_SOCK_ASYNC_CONNECT;
@@ -3019,7 +3018,7 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
             }
         }
 
-        if (rx_wait(poll_count, m_b_blocking) < 0) {
+        if (rx_wait(poll_count, is_blocking()) < 0) {
             si_tcp_logdbg("interrupted accept");
             unlock_tcp_con();
             return -1;
@@ -3468,7 +3467,7 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
      */
     new_sock->reset_ops();
 
-    new_sock->m_b_blocking = true;
+    new_sock->set_is_blocking(true);
 
     /* Dump statistics of the previous incarnation of the socket. */
     print_full_stats(new_sock->m_p_socket_stats, NULL, safe_mce_sys().stats_file);
@@ -3477,7 +3476,7 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     /* Reset zerocopy state */
     atomic_set(&new_sock->m_zckey, 0);
     new_sock->m_last_zcdesc = NULL;
-    new_sock->m_b_zc = false;
+    new_sock->set_is_zc(false);
 
     new_sock->m_state = SOCKINFO_OPENED;
     new_sock->m_sock_state = TCP_SOCK_INITED;
@@ -4014,7 +4013,7 @@ int sockinfo_tcp::fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit)
     case F_GETFL: /* Get file status flags. */
         si_tcp_logdbg("cmd=F_GETFL");
         bexit = true;
-        return O_NONBLOCK * !m_b_blocking;
+        return O_NONBLOCK * !is_blocking();
     default:
         break;
     }
@@ -4517,11 +4516,11 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
         case SO_ZEROCOPY:
             if (__optval) {
                 lock_tcp_con();
-                m_b_zc = *(bool *)__optval;
+                set_is_zc(*(bool *)__optval);
                 unlock_tcp_con();
             }
             pass_to_os_always = true;
-            si_tcp_logdbg("(SO_ZEROCOPY) m_b_zc: %d", m_b_zc);
+            si_tcp_logdbg("(SO_ZEROCOPY) is_zc: %d", is_zc());
             break;
         case SO_XLIO_EXT_VLAN_TAG:
             if (__optlen == sizeof(int)) {
@@ -4821,8 +4820,8 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
             break;
         case SO_ZEROCOPY:
             if (*__optlen >= sizeof(int)) {
-                *(int *)__optval = m_b_zc;
-                si_tcp_logdbg("(SO_ZEROCOPY) m_b_zc: %d", m_b_zc);
+                *(int *)__optval = is_zc();
+                si_tcp_logdbg("(SO_ZEROCOPY) is_zc: %d", is_zc());
                 ret = 0;
             } else {
                 errno = EINVAL;

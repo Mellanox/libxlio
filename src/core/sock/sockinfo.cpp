@@ -105,9 +105,6 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     , m_rx_cq_wait_ctrl(safe_mce_sys().rx_cq_wait_ctrl)
     , m_is_ipv6only(safe_mce_sys().sysctl_reader.get_ipv6_bindv6only())
     , m_family(domain)
-    , m_n_uc_ttl_hop_lim(m_family == AF_INET
-                             ? safe_mce_sys().sysctl_reader.get_net_ipv4_ttl()
-                             : safe_mce_sys().sysctl_reader.get_net_ipv6_hop_limit())
     , m_lock_rcv(MULTILOCK_RECURSIVE, MODULE_NAME "::m_lock_rcv")
     , m_lock_snd(MODULE_NAME "::m_lock_snd")
     , m_so_bindtodevice_ip(ip_address::any_addr(), domain)
@@ -118,6 +115,12 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     , m_n_sysvar_rx_num_buffs_reuse(safe_mce_sys().rx_bufs_batch)
     , m_n_sysvar_rx_poll_num(safe_mce_sys().rx_poll_num)
 {
+    set_is_blocking(true);
+
+    m_n_uc_ttl_hop_lim = (m_family == AF_INET
+        ? safe_mce_sys().sysctl_reader.get_net_ipv4_ttl()
+        : safe_mce_sys().sysctl_reader.get_net_ipv6_hop_limit());
+
     m_rx_epfd = SYSCALL(epoll_create, 128);
     if (unlikely(m_rx_epfd == -1)) {
         throw_xlio_exception("create internal epoll");
@@ -152,7 +155,8 @@ sockinfo::~sockinfo()
     }
 
     // Change to non-blocking socket so calling threads can exit
-    m_b_blocking = false;
+    set_is_blocking(false);
+
     // This will wake up any blocked thread in rx() call to SYSCALL(epoll_wait, )
     SYSCALL(close, m_rx_epfd);
 
@@ -171,7 +175,7 @@ sockinfo::~sockinfo()
         }
     }
 
-    if (m_has_stats) {
+    if (has_stats()) {
         xlio_stats_instance_remove_socket_block(m_p_socket_stats);
         sock_stats::get_sock_stats()->return_stats_obj(m_p_socket_stats);
     }
@@ -203,11 +207,11 @@ void sockinfo::socket_stats_init()
         xlio_stats_instance_create_socket_block(m_p_socket_stats);
     }
 
-    m_has_stats = true;
+    set_has_stats();
     m_p_socket_stats->reset();
     m_p_socket_stats->fd = m_fd;
     m_p_socket_stats->inode = fd2inode(m_fd);
-    m_p_socket_stats->b_blocking = m_b_blocking;
+    m_p_socket_stats->b_blocking = is_blocking();
     m_p_socket_stats->ring_alloc_logic_rx = m_ring_alloc_log_rx.get_ring_alloc_logic();
     m_p_socket_stats->ring_alloc_logic_tx = m_ring_alloc_log_tx.get_ring_alloc_logic();
     m_p_socket_stats->ring_user_id_rx = m_ring_alloc_logic_rx.calc_res_key_by_logic();
@@ -252,8 +256,8 @@ void sockinfo::add_ec(ring_ec *ec)
 void sockinfo::set_blocking(bool is_blocked)
 {
     si_logdbg("set socket to %s mode", is_blocked ? "blocked" : "non-blocking");
-    m_b_blocking = is_blocked;
-    m_p_socket_stats->b_blocking = m_b_blocking;
+    set_is_blocking(is_blocked);
+    m_p_socket_stats->b_blocking = is_blocking();
 }
 
 int sockinfo::fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit)
@@ -270,7 +274,7 @@ int sockinfo::fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit)
         break;
     case F_GETFL: // Get file status flags.
         si_logfunc("cmd=F_GETFL, arg=%#x", __arg);
-        rc = O_NONBLOCK * !m_b_blocking;
+        rc = O_NONBLOCK * !is_blocking();
         break;
 
     case F_GETFD: // Get file descriptor flags.
@@ -526,12 +530,12 @@ int sockinfo::setsockopt(int __level, int __optname, const void *__optval, sockl
         case SO_TIMESTAMP:
         case SO_TIMESTAMPNS:
             if (__optval) {
-                m_b_rcvtstamp = *(bool *)__optval;
+                set_is_rcvtstamp(*(bool *)__optval);
                 if (__optname == SO_TIMESTAMPNS) {
-                    m_b_rcvtstampns = m_b_rcvtstamp;
+                    m_b_rcvtstampns = is_rcvtstamp();
                 }
                 si_logdbg("SOL_SOCKET, %s=%s", setsockopt_so_opt_to_str(__optname),
-                          (m_b_rcvtstamp ? "true" : "false"));
+                          (is_rcvtstamp() ? "true" : "false"));
             } else {
                 si_logdbg("SOL_SOCKET, %s=\"???\" - NOT HANDLED, optval == NULL",
                           setsockopt_so_opt_to_str(__optname));
@@ -1470,7 +1474,7 @@ void sockinfo::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
     vlog_printf(log_level, "Connection info : %s\n", m_connected.to_str_ip_port(true).c_str());
     vlog_printf(log_level, "Protocol : %s\n", in_protocol_str[m_protocol]);
     vlog_printf(log_level, "Is closed : %s\n", m_state_str[m_state]);
-    vlog_printf(log_level, "Is blocking : %s\n", m_b_blocking ? "true" : "false");
+    vlog_printf(log_level, "Is blocking : %s\n", is_blocking() ? "true" : "false");
     vlog_printf(log_level, "Rx reuse buffer pending : %s\n",
                 m_rx_reuse_buf_pending ? "true" : "false");
     vlog_printf(log_level, "Rx reuse buffer postponed : %s\n",
@@ -2180,7 +2184,7 @@ int sockinfo::set_sockopt_prio(__const void *__optval, socklen_t __optlen)
 void sockinfo::process_timestamps(mem_buf_desc_t *p_desc)
 {
     // keep the sw_timestamp the same to all sockets
-    if ((m_b_rcvtstamp ||
+    if ((is_rcvtstamp() ||
          (m_n_tsing_flags & (SOF_TIMESTAMPING_RX_SOFTWARE | SOF_TIMESTAMPING_SOFTWARE))) &&
         !p_desc->rx.timestamps.sw.tv_sec) {
         clock_gettime(CLOCK_REALTIME, &(p_desc->rx.timestamps.sw));
@@ -2213,7 +2217,7 @@ void sockinfo::handle_recv_timestamping(struct cmsg_state *cm_state)
     // This matches the kernel behavior.
     if (m_b_rcvtstampns) {
         insert_cmsg(cm_state, SOL_SOCKET, SO_TIMESTAMPNS, packet_systime, sizeof(*packet_systime));
-    } else if (m_b_rcvtstamp) {
+    } else if (is_rcvtstamp()) {
         struct timeval tv;
         tv.tv_sec = packet_systime->tv_sec;
         tv.tv_usec = packet_systime->tv_nsec / 1000;
@@ -2307,7 +2311,7 @@ void sockinfo::handle_cmsg(struct msghdr *msg, int flags)
     if (m_b_pktinfo) {
         handle_ip_pktinfo(&cm_state);
     }
-    if (m_b_rcvtstamp || m_n_tsing_flags) {
+    if (is_rcvtstamp() || m_n_tsing_flags) {
         handle_recv_timestamping(&cm_state);
     }
     if (flags & MSG_ERRQUEUE) {
