@@ -159,7 +159,7 @@ out:
     cq_stats_t &cq_stats = *m_p_ring_simple->m_p_cq_mgr_rx->m_p_cq_stat;
     cq_stats.n_rx_gro_packets++;
     cq_stats.n_rx_gro_frags += 1;
-    cq_stats.n_rx_gro_bytes += p_rx_pkt_mem_buf_desc_info->lwip_pbuf.pbuf.tot_len;
+    cq_stats.n_rx_gro_bytes += p_rx_pkt_mem_buf_desc_info->lwip_pbuf.tot_len;
 
     return rfs_uc::rx_dispatch_packet(p_rx_pkt_mem_buf_desc_info, pv_fd_ready_array);
 }
@@ -187,13 +187,12 @@ bool rfs_uc_tcp_gro::add_packet(mem_buf_desc_t *mem_buf_desc, void *payload_ptr,
 
     mem_buf_desc->reset_ref_count();
 
-    mem_buf_desc->lwip_pbuf.pbuf.len = mem_buf_desc->lwip_pbuf.pbuf.tot_len =
-        mem_buf_desc->rx.sz_payload;
-    mem_buf_desc->lwip_pbuf.pbuf.ref = 1;
-    mem_buf_desc->lwip_pbuf.pbuf.next = nullptr;
-    mem_buf_desc->lwip_pbuf.pbuf.payload = payload_ptr;
+    mem_buf_desc->lwip_pbuf.len = mem_buf_desc->lwip_pbuf.tot_len = mem_buf_desc->rx.sz_payload;
+    mem_buf_desc->lwip_pbuf.ref = 1;
+    mem_buf_desc->lwip_pbuf.next = nullptr;
+    mem_buf_desc->lwip_pbuf.payload = payload_ptr;
 
-    m_gro_desc.p_last->lwip_pbuf.pbuf.next = &(mem_buf_desc->lwip_pbuf.pbuf);
+    m_gro_desc.p_last->lwip_pbuf.next = &mem_buf_desc->lwip_pbuf;
     m_gro_desc.p_last->p_next_desc = nullptr;
     mem_buf_desc->p_prev_desc = m_gro_desc.p_last;
     m_gro_desc.p_last = mem_buf_desc;
@@ -232,18 +231,18 @@ void rfs_uc_tcp_gro::flush_gro_desc(void *pv_fd_ready_array)
             p_tcp_ts_h->popts[2] = m_gro_desc.tsecr;
         }
 
-        m_gro_desc.p_first->lwip_pbuf.pbuf.gro = 1;
+        m_gro_desc.p_first->lwip_pbuf.gro = 1;
 
-        m_gro_desc.p_first->lwip_pbuf.pbuf.tot_len = m_gro_desc.p_first->lwip_pbuf.pbuf.len =
+        m_gro_desc.p_first->lwip_pbuf.tot_len = m_gro_desc.p_first->lwip_pbuf.len =
             (m_gro_desc.p_first->sz_data - m_gro_desc.p_first->rx.n_transport_header_len);
-        m_gro_desc.p_first->lwip_pbuf.pbuf.ref = 1;
-        m_gro_desc.p_first->lwip_pbuf.pbuf.payload =
+        m_gro_desc.p_first->lwip_pbuf.ref = 1;
+        m_gro_desc.p_first->lwip_pbuf.payload =
             (u8_t *)(m_gro_desc.p_first->p_buffer + m_gro_desc.p_first->rx.n_transport_header_len);
         m_gro_desc.p_first->rx.is_xlio_thr = m_gro_desc.p_last->rx.is_xlio_thr;
 
         for (mem_buf_desc_t *p_desc = m_gro_desc.p_last; p_desc != m_gro_desc.p_first;
              p_desc = p_desc->p_prev_desc) {
-            p_desc->p_prev_desc->lwip_pbuf.pbuf.tot_len += p_desc->lwip_pbuf.pbuf.tot_len;
+            p_desc->p_prev_desc->lwip_pbuf.tot_len += p_desc->lwip_pbuf.tot_len;
         }
     }
 
@@ -259,7 +258,7 @@ void rfs_uc_tcp_gro::flush_gro_desc(void *pv_fd_ready_array)
     cq_stats_t &cq_stats = *m_p_ring_simple->m_p_cq_mgr_rx->m_p_cq_stat;
     cq_stats.n_rx_gro_packets++;
     cq_stats.n_rx_gro_frags += m_gro_desc.buf_count;
-    cq_stats.n_rx_gro_bytes += m_gro_desc.p_first->lwip_pbuf.pbuf.tot_len;
+    cq_stats.n_rx_gro_bytes += m_gro_desc.p_first->lwip_pbuf.tot_len;
 
     if (!rfs_uc::rx_dispatch_packet(m_gro_desc.p_first, pv_fd_ready_array)) {
         m_p_ring_simple->reclaim_recv_buffers_no_lock(m_gro_desc.p_first);

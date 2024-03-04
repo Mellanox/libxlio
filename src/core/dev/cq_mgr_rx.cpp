@@ -407,13 +407,13 @@ void cq_mgr_rx::compensate_qp_poll_failed()
 
 void cq_mgr_rx::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
 {
-    if (buff->dec_ref_count() <= 1 && (buff->lwip_pbuf.pbuf.ref-- <= 1)) {
+    if (buff->dec_ref_count() <= 1 && (buff->lwip_pbuf.ref-- <= 1)) {
         if (likely(buff->p_desc_owner == m_p_ring)) {
             mem_buf_desc_t *temp = nullptr;
             while (buff) {
                 VLIST_DEBUG_CQ_MGR_PRINT_ERROR_IS_MEMBER;
                 temp = buff;
-                assert(temp->lwip_pbuf.pbuf.type != PBUF_ZEROCOPY);
+                assert(temp->lwip_pbuf.type != PBUF_ZEROCOPY);
                 buff = temp->p_next_desc;
                 temp->clear_transport_data();
                 temp->p_next_desc = nullptr;

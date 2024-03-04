@@ -237,8 +237,8 @@ inline bool cq_mgr_rx_strq::strq_cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe,
     case MLX5_CQE_RESP_SEND_INV: {
         status = BS_OK;
         _hot_buffer_stride->rx.strides_num = ((host_byte_cnt >> 16) & 0x00003FFF);
-        _hot_buffer_stride->lwip_pbuf.pbuf.desc.attr = PBUF_DESC_STRIDE;
-        _hot_buffer_stride->lwip_pbuf.pbuf.desc.mdesc = m_rx_hot_buffer;
+        _hot_buffer_stride->lwip_pbuf.desc.attr = PBUF_DESC_STRIDE;
+        _hot_buffer_stride->lwip_pbuf.desc.mdesc = m_rx_hot_buffer;
 
         is_filler = (host_byte_cnt >> 31 != 0U ? true : false);
         _hot_buffer_stride->sz_data =
@@ -274,8 +274,8 @@ inline bool cq_mgr_rx_strq::strq_cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe,
     case MLX5_CQE_RESP_ERR:
     default: {
         _hot_buffer_stride->rx.strides_num = ((host_byte_cnt >> 16) & 0x00003FFF);
-        _hot_buffer_stride->lwip_pbuf.pbuf.desc.attr = PBUF_DESC_STRIDE;
-        _hot_buffer_stride->lwip_pbuf.pbuf.desc.mdesc = m_rx_hot_buffer;
+        _hot_buffer_stride->lwip_pbuf.desc.attr = PBUF_DESC_STRIDE;
+        _hot_buffer_stride->lwip_pbuf.desc.mdesc = m_rx_hot_buffer;
         is_filler = true;
         _current_wqe_consumed_bytes = _wqe_buff_size_bytes;
         _hot_buffer_stride->sz_data = 0U;
@@ -526,11 +526,11 @@ void cq_mgr_rx_strq::statistics_print()
 
 void cq_mgr_rx_strq::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
 {
-    if (buff->dec_ref_count() <= 1 && (buff->lwip_pbuf.pbuf.ref-- <= 1)) {
+    if (buff->dec_ref_count() <= 1 && (buff->lwip_pbuf.ref-- <= 1)) {
         if (likely(buff->p_desc_owner == m_p_ring)) {
             mem_buf_desc_t *temp = nullptr;
             while (buff) {
-                if (unlikely(buff->lwip_pbuf.pbuf.desc.attr != PBUF_DESC_STRIDE)) {
+                if (unlikely(buff->lwip_pbuf.desc.attr != PBUF_DESC_STRIDE)) {
                     __log_info_err("CQ STRQ reclaim_recv_buffer_helper with incompatible "
                                    "mem_buf_desc_t object");
                     // We cannot continue iterating over a broken buffer object.
@@ -538,7 +538,7 @@ void cq_mgr_rx_strq::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
                 }
 
                 mem_buf_desc_t *rwqe =
-                    reinterpret_cast<mem_buf_desc_t *>(buff->lwip_pbuf.pbuf.desc.mdesc);
+                    reinterpret_cast<mem_buf_desc_t *>(buff->lwip_pbuf.desc.mdesc);
                 if (buff->rx.strides_num == rwqe->add_ref_count(-buff->rx.strides_num)) {
                     // Is last stride.
                     cq_mgr_rx::reclaim_recv_buffer_helper(rwqe);
@@ -546,7 +546,7 @@ void cq_mgr_rx_strq::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
 
                 VLIST_DEBUG_CQ_MGR_PRINT_ERROR_IS_MEMBER;
                 temp = buff;
-                assert(temp->lwip_pbuf.pbuf.type != PBUF_ZEROCOPY);
+                assert(temp->lwip_pbuf.type != PBUF_ZEROCOPY);
                 buff = temp->p_next_desc;
                 temp->clear_transport_data();
                 temp->p_next_desc = nullptr;

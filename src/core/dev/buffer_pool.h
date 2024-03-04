@@ -49,13 +49,12 @@ enum buffer_pool_type {
     BUFFER_POOL_TX,
 };
 
-inline static void free_lwip_pbuf(struct pbuf_custom *pbuf_custom)
+inline static void free_lwip_pbuf(struct pbuf *lwip_pbuf)
 {
-    mem_buf_desc_t *p_desc = (mem_buf_desc_t *)pbuf_custom;
+    mem_buf_desc_t *p_desc = reinterpret_cast<mem_buf_desc_t *>(lwip_pbuf);
 
-    if (pbuf_custom->pbuf.desc.attr == PBUF_DESC_MDESC ||
-        pbuf_custom->pbuf.desc.attr == PBUF_DESC_NVME_TX) {
-        mem_desc *mdesc = (mem_desc *)pbuf_custom->pbuf.desc.mdesc;
+    if (lwip_pbuf->desc.attr == PBUF_DESC_MDESC || lwip_pbuf->desc.attr == PBUF_DESC_NVME_TX) {
+        mem_desc *mdesc = reinterpret_cast<mem_desc *>(lwip_pbuf->desc.mdesc);
         mdesc->put();
     }
 
@@ -63,9 +62,9 @@ inline static void free_lwip_pbuf(struct pbuf_custom *pbuf_custom)
         p_desc->tx.zc.callback(p_desc);
     }
     p_desc->m_flags = 0;
-    pbuf_custom->pbuf.flags = 0;
-    pbuf_custom->pbuf.ref = 0;
-    pbuf_custom->pbuf.desc.attr = PBUF_DESC_NONE;
+    lwip_pbuf->flags = 0;
+    lwip_pbuf->ref = 0;
+    lwip_pbuf->desc.attr = PBUF_DESC_NONE;
 }
 
 /**

@@ -678,7 +678,7 @@ bool neigh_entry::post_send_tcp(neigh_send_data *p_data)
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    p_mem_buf_desc->lwip_pbuf.pbuf.payload = (u8_t *)p_mem_buf_desc->p_buffer + h->m_total_hdr_len;
+    p_mem_buf_desc->lwip_pbuf.payload = (u8_t *)p_mem_buf_desc->p_buffer + h->m_total_hdr_len;
     p_mem_buf_desc->p_next_desc = nullptr;
 
     // copy L4 neigh buffer to tx buffer
@@ -712,9 +712,9 @@ bool neigh_entry::post_send_tcp(neigh_send_data *p_data)
         neigh_logerr("p_buffer - addr=%d, m_total_hdr_len=%u, p_buffer=%p, type=%d, len=%d, "
                      "tot_len=%d, payload=%p, hdr_alignment_diff=%zd\n",
                      (int)(p_mem_buf_desc->p_buffer - (uint8_t *)m_sge.addr), h->m_total_hdr_len,
-                     p_mem_buf_desc->p_buffer, p_mem_buf_desc->lwip_pbuf.pbuf.type,
-                     p_mem_buf_desc->lwip_pbuf.pbuf.len, p_mem_buf_desc->lwip_pbuf.pbuf.tot_len,
-                     p_mem_buf_desc->lwip_pbuf.pbuf.payload, hdr_alignment_diff);
+                     p_mem_buf_desc->p_buffer, p_mem_buf_desc->lwip_pbuf.type,
+                     p_mem_buf_desc->lwip_pbuf.len, p_mem_buf_desc->lwip_pbuf.tot_len,
+                     p_mem_buf_desc->lwip_pbuf.payload, hdr_alignment_diff);
     }
 
     m_send_wqe.wr_id = (uintptr_t)p_mem_buf_desc;
