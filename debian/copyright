@@ -51,8 +51,6 @@ License: GPLv2 and 2BSD
 
 Files: src/core/lwip/def.h
  src/core/lwip/err.h
- src/core/lwip/init.c
- src/core/lwip/init.h
  src/core/lwip/ip_addr.h
  src/core/lwip/opt.h
  src/core/lwip/pbuf.c
