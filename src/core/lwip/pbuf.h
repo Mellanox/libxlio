@@ -110,15 +110,6 @@ struct pbuf {
     pbuf_desc desc;
 };
 
-/** Prototype for a function to free a custom pbuf */
-typedef void (*pbuf_free_custom_fn)(struct pbuf *p);
-
-/** A custom pbuf: like a pbuf, but following a function pointer to free it. */
-struct pbuf_custom {
-    /** The actual pbuf */
-    struct pbuf pbuf;
-};
-
 void pbuf_realloc(struct pbuf *p, u32_t size);
 u8_t pbuf_header(struct pbuf *p, s32_t header_size);
 void pbuf_ref(struct pbuf *p);

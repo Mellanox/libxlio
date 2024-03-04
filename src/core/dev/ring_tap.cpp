@@ -489,14 +489,14 @@ mem_buf_desc_t *ring_tap::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_t
     }
 
     head = m_tx_pool.get_and_pop_back();
-    head->lwip_pbuf.pbuf.ref = 1;
+    head->lwip_pbuf.ref = 1;
     n_num_mem_bufs--;
 
     mem_buf_desc_t *next = head;
     while (n_num_mem_bufs) {
         next->p_next_desc = m_tx_pool.get_and_pop_back();
         next = next->p_next_desc;
-        next->lwip_pbuf.pbuf.ref = 1;
+        next->lwip_pbuf.ref = 1;
         n_num_mem_bufs--;
     }
 
@@ -520,15 +520,15 @@ void ring_tap::mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_
     if (likely(p_mem_buf_desc)) {
         // potential race, ref is protected here by ring_tx lock, and in dst_entry_tcp &
         // sockinfo_tcp by tcp lock
-        if (likely(p_mem_buf_desc->lwip_pbuf.pbuf.ref)) {
-            p_mem_buf_desc->lwip_pbuf.pbuf.ref--;
+        if (likely(p_mem_buf_desc->lwip_pbuf.ref)) {
+            p_mem_buf_desc->lwip_pbuf.ref--;
         } else {
             ring_logerr("ref count of %p is already zero, double free??", p_mem_buf_desc);
         }
 
-        if (p_mem_buf_desc->lwip_pbuf.pbuf.ref == 0) {
+        if (p_mem_buf_desc->lwip_pbuf.ref == 0) {
             p_mem_buf_desc->p_next_desc = nullptr;
-            if (unlikely(p_mem_buf_desc->lwip_pbuf.pbuf.type == PBUF_ZEROCOPY)) {
+            if (unlikely(p_mem_buf_desc->lwip_pbuf.type == PBUF_ZEROCOPY)) {
                 g_buffer_pool_zc->put_buffers_thread_safe(p_mem_buf_desc);
                 return;
             }
@@ -547,8 +547,7 @@ void ring_tap::mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_de
     }
 
     m_lock_ring_tx.lock();
-    p_mem_buf_desc->lwip_pbuf.pbuf.ref -=
-        std::min<unsigned>(p_mem_buf_desc->lwip_pbuf.pbuf.ref, ref - 1);
+    p_mem_buf_desc->lwip_pbuf.ref -= std::min<unsigned>(p_mem_buf_desc->lwip_pbuf.ref, ref - 1);
     m_lock_ring_tx.unlock();
     mem_buf_desc_return_single_to_owner_tx(p_mem_buf_desc);
 }
@@ -572,13 +571,13 @@ int ring_tap::mem_buf_tx_release(mem_buf_desc_t *buff_list, bool b_accounting, b
 
         // potential race, ref is protected here by ring_tx lock, and in dst_entry_tcp &
         // sockinfo_tcp by tcp lock
-        if (likely(buff_list->lwip_pbuf.pbuf.ref)) {
-            buff_list->lwip_pbuf.pbuf.ref--;
+        if (likely(buff_list->lwip_pbuf.ref)) {
+            buff_list->lwip_pbuf.ref--;
         } else {
             ring_logerr("ref count of %p is already zero, double free??", buff_list);
         }
 
-        if (buff_list->lwip_pbuf.pbuf.ref == 0) {
+        if (buff_list->lwip_pbuf.ref == 0) {
             free_lwip_pbuf(&buff_list->lwip_pbuf);
             m_tx_pool.push_back(buff_list);
             freed++;
