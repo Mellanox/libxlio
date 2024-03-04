@@ -40,8 +40,6 @@
 extern "C" {
 #endif
 
-#define tcp_init() /* Compatibility define, no init needed. */
-
 /* Functions for interfacing with TCP: */
 #if defined(__GNUC__) && (((__GNUC__ == 4) && (__GNUC_MINOR__ >= 4)) || (__GNUC__ > 4))
 #pragma GCC visibility push(hidden)

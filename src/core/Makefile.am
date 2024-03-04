@@ -122,7 +122,6 @@ libxlio_la_SOURCES := \
 	lwip/cc_lwip.c \
 	lwip/cc_cubic.c \
 	lwip/cc_none.c \
-	lwip/init.c \
 	\
 	proto/ip_frag.cpp \
 	proto/flow_tuple.cpp \
@@ -238,7 +237,6 @@ libxlio_la_SOURCES := \
 	lwip/cc.h \
 	lwip/def.h \
 	lwip/err.h \
-	lwip/init.h \
 	lwip/ip_addr.h \
 	lwip/opt.h \
 	lwip/pbuf.h \

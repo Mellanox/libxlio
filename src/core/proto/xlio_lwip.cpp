@@ -35,7 +35,6 @@
 
 #include "core/event/event_handler_manager.h"
 #include "core/sock/sockinfo_tcp.h"
-#include "core/lwip/init.h"
 #include "core/lwip/tcp_impl.h"
 #include "xlio_lwip.h"
 
@@ -118,10 +117,6 @@ xlio_lwip::xlio_lwip()
         rcv_wnd_scale = 0;
     }
 
-    // Bring up LWIP
-    lwip_init();
-    lwip_logdbg("LWIP subsystem initialized");
-
     // In case of batching is not requested we fetch tcp_seg from the ring directly.
     // This creates hot segments, CPU cache wise.
     if (safe_mce_sys().tx_segs_batch_tcp == 1U) {
@@ -147,6 +142,7 @@ xlio_lwip::xlio_lwip()
         free_lwip_resources();
         throw_xlio_exception("LWIP: failed to register timer event");
     }
+    lwip_logdbg("LWIP subsystem initialized");
 }
 
 xlio_lwip::~xlio_lwip()
