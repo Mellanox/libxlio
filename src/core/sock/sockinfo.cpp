@@ -101,6 +101,7 @@ const char *sockinfo::setsockopt_so_opt_to_str(int opt)
 sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     : m_fd_context((void *)((uintptr_t)fd))
     , m_fd(fd)
+    , m_rx_num_buffs_reuse(safe_mce_sys().rx_bufs_batch)
     , m_skip_cq_poll_in_rx(safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_ENABLE)
     , m_rx_cq_wait_ctrl(safe_mce_sys().rx_cq_wait_ctrl)
     , m_is_ipv6only(safe_mce_sys().sysctl_reader.get_ipv6_bindv6only())
@@ -111,9 +112,6 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     , m_rx_ring_map_lock(MODULE_NAME "::m_rx_ring_map_lock")
     , m_ring_alloc_log_rx(safe_mce_sys().ring_allocation_logic_rx, use_ring_locks)
     , m_ring_alloc_log_tx(safe_mce_sys().ring_allocation_logic_tx, use_ring_locks)
-    , m_n_sysvar_select_poll_os_ratio(safe_mce_sys().select_poll_os_ratio)
-    , m_n_sysvar_rx_num_buffs_reuse(safe_mce_sys().rx_bufs_batch)
-    , m_n_sysvar_rx_poll_num(safe_mce_sys().rx_poll_num)
 {
     set_is_blocking(true);
 

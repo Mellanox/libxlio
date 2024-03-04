@@ -168,9 +168,9 @@ struct buff_info_t {
 
 struct epoll_fd_rec {
     uint32_t events;
-    epoll_data epdata;
     int offloaded_index; // offloaded fd index + 1
-
+    epoll_data epdata;
+    
     epoll_fd_rec() { reset(); }
 
     void reset()
@@ -326,9 +326,9 @@ public:
     virtual bool prepare_to_close(bool process_shutdown = false) = 0;
 
     // true if fd must be skipped from OS select()
-    // If m_n_sysvar_select_poll_os_ratio == 0, it means that user configured XLIO not to poll os
+    // If safe_mce_sys().select_poll_os_ratio == 0, it means that user configured XLIO not to poll os
     // (i.e. TRUE...)
-    virtual bool skip_os_select() { return (!m_n_sysvar_select_poll_os_ratio); };
+    virtual bool skip_os_select() { return (!safe_mce_sys().select_poll_os_ratio); };
 
     inline bool set_flow_tag(uint32_t flow_tag_id);
     inline void sock_pop_descs_rx_ready(descq_t *cache);
@@ -377,7 +377,7 @@ public:
 #if defined(DEFINED_NGINX)
     virtual void prepare_to_close_socket_pool(bool _push_pop) { NOT_IN_USE(_push_pop); }
     void set_params_for_socket_pool();
-    void set_m_n_sysvar_rx_num_buffs_reuse(int val) { m_n_sysvar_rx_num_buffs_reuse = val; }
+    void set_rx_num_buffs_reuse(int val) { m_rx_num_buffs_reuse = val; }
 #endif
 #endif
 protected:
@@ -536,6 +536,7 @@ public:
     list_node<sockinfo, sockinfo::ep_info_fd_node_offset> ep_info_fd_node;
     epoll_fd_rec m_fd_rec;
     uint32_t m_epoll_event_flags = 0;
+    int m_rx_num_buffs_reuse;
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     int m_back_log = 0;
@@ -556,6 +557,7 @@ protected:
     bool m_rx_cq_wait_ctrl;
     bool m_bind_no_port = false;
     bool m_is_ipv6only;
+
     in_protocol_t m_protocol = PROTO_UNDEFINED;
     sa_family_t m_family;
     
@@ -593,10 +595,6 @@ protected:
     int *m_p_rings_fds = nullptr;
     uint32_t m_flow_tag_id = 0; // Flow Tag for this socket
     uint32_t m_pcp = 0U;
-
-    const uint32_t m_n_sysvar_select_poll_os_ratio;
-    int m_n_sysvar_rx_num_buffs_reuse;
-    const int32_t m_n_sysvar_rx_poll_num;
 };
 
 void sockinfo::set_rx_reuse_pending(bool is_pending)
@@ -778,10 +776,10 @@ void sockinfo::reuse_buffer(mem_buf_desc_t *buff)
         int &n_buff_num = iter->second->rx_reuse_info.n_buff_num;
         rx_reuse->push_back(buff);
         n_buff_num += buff->rx.n_frags;
-        if (n_buff_num < m_n_sysvar_rx_num_buffs_reuse) {
+        if (n_buff_num < m_rx_num_buffs_reuse) {
             return;
         }
-        if (n_buff_num >= 2 * m_n_sysvar_rx_num_buffs_reuse) {
+        if (n_buff_num >= 2 * m_rx_num_buffs_reuse) {
             if (p_ring->reclaim_recv_buffers(rx_reuse)) {
                 n_buff_num = 0;
             } else {

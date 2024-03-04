@@ -252,10 +252,10 @@ inline void sockinfo_tcp::reuse_buffer(mem_buf_desc_t *buff)
     if (likely(m_p_rx_ring)) {
         m_rx_reuse_buff.n_buff_num += buff->rx.n_frags;
         m_rx_reuse_buff.rx_reuse.push_back(buff);
-        if (m_rx_reuse_buff.n_buff_num < m_n_sysvar_rx_num_buffs_reuse) {
+        if (m_rx_reuse_buff.n_buff_num < m_rx_num_buffs_reuse) {
             return;
         }
-        if (m_rx_reuse_buff.n_buff_num >= 2 * m_n_sysvar_rx_num_buffs_reuse) {
+        if (m_rx_reuse_buff.n_buff_num >= 2 * m_rx_num_buffs_reuse) {
             if (m_p_rx_ring->reclaim_recv_buffers(&m_rx_reuse_buff.rx_reuse)) {
                 m_rx_reuse_buff.n_buff_num = 0;
             } else {
@@ -2957,7 +2957,7 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
 {
     sockinfo_tcp *ns;
     // todo do one CQ poll and go to sleep even if infinite polling was set
-    int poll_count = m_n_sysvar_rx_poll_num; // do one poll and go to sleep (if blocking)
+    int poll_count = safe_mce_sys().rx_poll_num; // do one poll and go to sleep (if blocking)
     int ret;
 
     si_tcp_logfuncall("");
@@ -5022,7 +5022,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
         return -1;
     }
 
-    if (poll_count < m_n_sysvar_rx_poll_num || m_n_sysvar_rx_poll_num == -1) {
+    if (poll_count < safe_mce_sys().rx_poll_num || safe_mce_sys().rx_poll_num == -1) {
         return 0;
     }
 
