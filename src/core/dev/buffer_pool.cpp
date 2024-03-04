@@ -74,15 +74,15 @@ inline void buffer_pool::put_buffer_helper(mem_buf_desc_t *buff)
     }
 #endif
 
-    if (buff->lwip_pbuf.pbuf.desc.attr == PBUF_DESC_STRIDE) {
-        mem_buf_desc_t *rwqe = reinterpret_cast<mem_buf_desc_t *>(buff->lwip_pbuf.pbuf.desc.mdesc);
+    if (buff->lwip_pbuf.desc.attr == PBUF_DESC_STRIDE) {
+        mem_buf_desc_t *rwqe = reinterpret_cast<mem_buf_desc_t *>(buff->lwip_pbuf.desc.mdesc);
         if (buff->rx.strides_num == rwqe->add_ref_count(-buff->rx.strides_num)) { // Is last stride.
             g_buffer_pool_rx_rwqe->put_buffers_thread_safe(rwqe);
         }
     }
 
     buff->p_next_desc = m_p_head;
-    assert(buff->lwip_pbuf.pbuf.type != PBUF_ZEROCOPY || this == g_buffer_pool_zc ||
+    assert(buff->lwip_pbuf.type != PBUF_ZEROCOPY || this == g_buffer_pool_zc ||
            g_buffer_pool_zc == NULL);
     free_lwip_pbuf(&buff->lwip_pbuf);
     m_p_head = buff;
@@ -490,7 +490,7 @@ void buffer_pool::put_buffers_after_deref_thread_safe(descq_t *pDeque)
     std::lock_guard<decltype(m_lock)> lock(m_lock);
     while (!pDeque->empty()) {
         mem_buf_desc_t *list = pDeque->get_and_pop_front();
-        if (list->dec_ref_count() <= 1 && (list->lwip_pbuf.pbuf.ref-- <= 1)) {
+        if (list->dec_ref_count() <= 1 && (list->lwip_pbuf.ref-- <= 1)) {
             put_buffers(list);
         }
     }
@@ -498,7 +498,7 @@ void buffer_pool::put_buffers_after_deref_thread_safe(descq_t *pDeque)
 
 void buffer_pool::put_buffer_after_deref_thread_safe(mem_buf_desc_t *buff)
 {
-    if (buff->dec_ref_count() <= 1 && (buff->lwip_pbuf.pbuf.ref-- <= 1)) {
+    if (buff->dec_ref_count() <= 1 && (buff->lwip_pbuf.ref-- <= 1)) {
         std::lock_guard<decltype(m_lock)> lock(m_lock);
         put_buffers(buff);
     }

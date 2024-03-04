@@ -95,8 +95,8 @@ public:
                                    bool trylock = false) = 0;
     virtual void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc)
     {
-        buffer_pool::free_rx_lwip_pbuf_custom(&p_mem_buf_desc->lwip_pbuf.pbuf);
-    };
+        buffer_pool::free_rx_lwip_pbuf_custom(&p_mem_buf_desc->lwip_pbuf);
+    }
     virtual void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
                                   xlio_wr_tx_packet_attr attr) = 0;
     virtual int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
@@ -107,13 +107,13 @@ public:
     {
         length = 1;
         return m_p_n_rx_channel_fds;
-    };
-    virtual int get_tx_channel_fd() const { return -1; };
+    }
+    virtual int get_tx_channel_fd() const { return -1; }
     virtual bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe) = 0;
     virtual int request_notification(cq_type_t cq_type, uint64_t poll_sn) = 0;
     virtual bool reclaim_recv_buffers(descq_t *rx_reuse) = 0;
     virtual bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst) = 0;
-    virtual bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *) { return false; };
+    virtual bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *) { return false; }
     virtual int drain_and_proccess() = 0;
     virtual int wait_for_notification_and_process_element(int cq_channel_fd, uint64_t *p_cq_poll_sn,
                                                           void *pv_fd_ready_array = nullptr) = 0;
@@ -128,8 +128,8 @@ public:
     virtual void inc_tx_retransmissions_stats(ring_user_id_t id) = 0;
     virtual bool is_member(ring_slave *rng) = 0;
     virtual bool is_active_member(ring_slave *rng, ring_user_id_t id) = 0;
-    ring *get_parent() { return m_parent; };
-    ring_user_id_t generate_id() { return 0; };
+    ring *get_parent() { return m_parent; }
+    ring_user_id_t generate_id() { return 0; }
     virtual ring_user_id_t generate_id(const address_t src_mac, const address_t dst_mac,
                                        uint16_t eth_proto, uint16_t encap_proto,
                                        const ip_address &src_ip, const ip_address &dst_ip,
@@ -222,12 +222,12 @@ public:
     {
         NOT_IN_USE(tis);
         NOT_IN_USE(config);
-    };
+    }
     virtual void nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno)
     {
         NOT_IN_USE(tis);
         NOT_IN_USE(tcp_seqno);
-    };
+    }
 
     enum {
         NVME_CRC_TX = 1 << 0,

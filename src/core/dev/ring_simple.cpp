@@ -551,8 +551,7 @@ void ring_simple::mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf
 
     std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
 
-    p_mem_buf_desc->lwip_pbuf.pbuf.ref -=
-        std::min<unsigned>(p_mem_buf_desc->lwip_pbuf.pbuf.ref, ref - 1);
+    p_mem_buf_desc->lwip_pbuf.ref -= std::min<unsigned>(p_mem_buf_desc->lwip_pbuf.ref, ref - 1);
     put_tx_single_buffer(p_mem_buf_desc);
 }
 
@@ -910,18 +909,18 @@ mem_buf_desc_t *ring_simple::get_tx_buffers(pbuf_type type, uint32_t n_num_mem_b
     }
 
     head = pool.get_and_pop_back();
-    head->lwip_pbuf.pbuf.ref = 1;
-    assert(head->lwip_pbuf.pbuf.type == type);
-    head->lwip_pbuf.pbuf.type = type;
+    head->lwip_pbuf.ref = 1;
+    assert(head->lwip_pbuf.type == type);
+    head->lwip_pbuf.type = type;
     n_num_mem_bufs--;
 
     mem_buf_desc_t *next = head;
     while (n_num_mem_bufs) {
         next->p_next_desc = pool.get_and_pop_back();
         next = next->p_next_desc;
-        next->lwip_pbuf.pbuf.ref = 1;
-        assert(head->lwip_pbuf.pbuf.type == type);
-        next->lwip_pbuf.pbuf.type = type;
+        next->lwip_pbuf.ref = 1;
+        assert(head->lwip_pbuf.type == type);
+        next->lwip_pbuf.type = type;
         n_num_mem_bufs--;
     }
     next->p_next_desc = nullptr;
@@ -958,14 +957,14 @@ int ring_simple::put_tx_buffer_helper(mem_buf_desc_t *buff)
 
     // Potential race, ref is protected here by ring_tx lock, and in dst_entry_tcp &
     // sockinfo_tcp by tcp lock
-    if (likely(buff->lwip_pbuf.pbuf.ref)) {
-        buff->lwip_pbuf.pbuf.ref--;
+    if (likely(buff->lwip_pbuf.ref)) {
+        buff->lwip_pbuf.ref--;
     } else {
         ring_logerr("ref count of %p is already zero, double free??", buff);
     }
 
-    if (buff->lwip_pbuf.pbuf.ref == 0) {
-        descq_t &pool = buff->lwip_pbuf.pbuf.type == PBUF_ZEROCOPY ? m_zc_pool : m_tx_pool;
+    if (buff->lwip_pbuf.ref == 0) {
+        descq_t &pool = buff->lwip_pbuf.type == PBUF_ZEROCOPY ? m_zc_pool : m_tx_pool;
         buff->p_next_desc = nullptr;
         free_lwip_pbuf(&buff->lwip_pbuf);
         pool.push_back(buff);

@@ -406,7 +406,7 @@ void ring_bond::mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc)
         }
     }
     if (i == m_bond_rings.size()) {
-        buffer_pool::free_rx_lwip_pbuf_custom(&p_mem_buf_desc->lwip_pbuf.pbuf);
+        buffer_pool::free_rx_lwip_pbuf_custom(&p_mem_buf_desc->lwip_pbuf);
     }
 }
 

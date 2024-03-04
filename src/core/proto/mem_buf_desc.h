@@ -79,13 +79,12 @@ public:
         , p_desc_owner(nullptr)
         , unused_padding(0)
     {
-
         memset(&lwip_pbuf, 0, sizeof(lwip_pbuf));
         clear_transport_data();
         memset(&ee, 0, sizeof(ee));
         reset_ref_count();
 
-        lwip_pbuf.pbuf.type = type;
+        lwip_pbuf.type = type;
     }
 
     // Copy constructor for the clone() method.
@@ -118,19 +117,19 @@ public:
     inline int inc_ref_count() { return atomic_fetch_and_inc(&n_ref_count); }
     inline int dec_ref_count() { return atomic_fetch_and_dec(&n_ref_count); }
     inline int add_ref_count(int x) { return atomic_fetch_add_relaxed(x, &n_ref_count); }
-    inline unsigned int lwip_pbuf_get_ref_count() const { return lwip_pbuf.pbuf.ref; }
-    inline unsigned int lwip_pbuf_inc_ref_count() { return ++lwip_pbuf.pbuf.ref; }
+    inline unsigned int lwip_pbuf_get_ref_count() const { return lwip_pbuf.ref; }
+    inline unsigned int lwip_pbuf_inc_ref_count() { return ++lwip_pbuf.ref; }
     inline unsigned int lwip_pbuf_dec_ref_count()
     {
-        if (likely(lwip_pbuf.pbuf.ref)) {
-            --lwip_pbuf.pbuf.ref;
+        if (likely(lwip_pbuf.ref)) {
+            --lwip_pbuf.ref;
         }
-        return lwip_pbuf.pbuf.ref;
+        return lwip_pbuf.ref;
     }
 
 public:
     /* This field must be first in this class. It encapsulates pbuf structure from lwip */
-    struct pbuf_custom lwip_pbuf;
+    struct pbuf lwip_pbuf;
     uint8_t *p_buffer;
 
     static inline size_t buffer_node_offset(void)

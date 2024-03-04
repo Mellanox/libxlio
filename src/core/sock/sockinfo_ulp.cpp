@@ -419,9 +419,9 @@ sockinfo_tcp_ops_tls::~sockinfo_tcp_ops_tls()
              * users. Note, we are under TCP connection lock here.
              */
             mem_buf_desc_t *pdesc = m_rx_bufs.front();
-            if (pdesc->lwip_pbuf.pbuf.ref > 1) {
+            if (pdesc->lwip_pbuf.ref > 1) {
                 m_rx_bufs.pop_front();
-                pbuf_free(&pdesc->lwip_pbuf.pbuf);
+                pbuf_free(&pdesc->lwip_pbuf);
             }
             while (!m_rx_bufs.empty()) {
                 pdesc = m_rx_bufs.get_and_pop_front();
@@ -452,7 +452,7 @@ void sockinfo_tcp_ops_tls::get_record_buf(mem_buf_desc_t *&buf, uint8_t *&data, 
         m_zc_stor = m_p_sock->tcp_tx_mem_buf_alloc(PBUF_RAM);
         m_zc_stor_offset = 0;
         if (likely(m_zc_stor)) {
-            m_zc_stor->lwip_pbuf.pbuf.ref += m_zc_stor->sz_buffer / TLS_ZC_BLOCK;
+            m_zc_stor->lwip_pbuf.ref += m_zc_stor->sz_buffer / TLS_ZC_BLOCK;
         }
     }
     buf = m_zc_stor;
@@ -688,7 +688,7 @@ err_t sockinfo_tcp_ops_tls::tls_rx_consume_ready_packets()
             mem_buf_desc_t *temp;
             temp = descs_rx_ready.front();
             descs_rx_ready.pop_front();
-            ret = recv(&temp->lwip_pbuf.pbuf);
+            ret = recv(&temp->lwip_pbuf);
             if (unlikely(ERR_OK != ret)) {
                 break;
             }
@@ -1051,18 +1051,18 @@ void sockinfo_tcp_ops_tls::copy_by_offset(uint8_t *dst, uint32_t offset, uint32_
     mem_buf_desc_t *pdesc = *iter;
 
     /* Skip leading buffers */
-    if (unlikely(pdesc->lwip_pbuf.pbuf.len <= offset)) {
-        while (pdesc && pdesc->lwip_pbuf.pbuf.len <= offset) {
-            offset -= pdesc->lwip_pbuf.pbuf.len;
+    if (unlikely(pdesc->lwip_pbuf.len <= offset)) {
+        while (pdesc && pdesc->lwip_pbuf.len <= offset) {
+            offset -= pdesc->lwip_pbuf.len;
             pdesc = *(++iter);
         }
     }
 
     /* Copy */
     while (likely(pdesc) && len > 0) {
-        uint32_t buflen = std::min<uint32_t>(pdesc->lwip_pbuf.pbuf.len - offset, len);
+        uint32_t buflen = std::min<uint32_t>(pdesc->lwip_pbuf.len - offset, len);
 
-        memcpy(dst, (uint8_t *)pdesc->lwip_pbuf.pbuf.payload + offset, buflen);
+        memcpy(dst, (uint8_t *)pdesc->lwip_pbuf.payload + offset, buflen);
         len -= buflen;
         dst += buflen;
         offset = 0;
@@ -1079,24 +1079,24 @@ uint16_t sockinfo_tcp_ops_tls::offset_to_host16(uint32_t offset)
     uint16_t res = 0;
 
     /* Skip leading buffers */
-    if (unlikely(pdesc->lwip_pbuf.pbuf.len <= offset)) {
-        while (pdesc && pdesc->lwip_pbuf.pbuf.len <= offset) {
-            offset -= pdesc->lwip_pbuf.pbuf.len;
+    if (unlikely(pdesc->lwip_pbuf.len <= offset)) {
+        while (pdesc && pdesc->lwip_pbuf.len <= offset) {
+            offset -= pdesc->lwip_pbuf.len;
             pdesc = *(++iter);
         }
     }
 
     if (likely(pdesc)) {
-        res = (uint16_t)((uint8_t *)pdesc->lwip_pbuf.pbuf.payload)[offset] << 8U;
+        res = (uint16_t)((uint8_t *)pdesc->lwip_pbuf.payload)[offset] << 8U;
         ++offset;
-        if (unlikely(offset >= pdesc->lwip_pbuf.pbuf.len)) {
+        if (unlikely(offset >= pdesc->lwip_pbuf.len)) {
             offset = 0;
             pdesc = *(++iter);
             if (unlikely(!pdesc)) {
                 return 0;
             }
         }
-        res |= (uint16_t)((uint8_t *)pdesc->lwip_pbuf.pbuf.payload)[offset];
+        res |= (uint16_t)((uint8_t *)pdesc->lwip_pbuf.payload)[offset];
     }
     return res;
 }
@@ -1289,11 +1289,11 @@ err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
         m_p_tx_ring->credits_get(SQ_CREDITS_TLS_RX_GET_PSV)) {
         /* If we fail to request credits we will retry resync flow with the next incoming packet. */
         m_rx_psv_buf = m_p_sock->tcp_tx_mem_buf_alloc(PBUF_RAM);
-        m_rx_psv_buf->lwip_pbuf.pbuf.payload =
+        m_rx_psv_buf->lwip_pbuf.payload =
             (void *)(((uintptr_t)m_rx_psv_buf->p_buffer + 63U) >> 6U << 6U);
-        uint8_t *payload = (uint8_t *)m_rx_psv_buf->lwip_pbuf.pbuf.payload;
+        uint8_t *payload = (uint8_t *)m_rx_psv_buf->lwip_pbuf.payload;
         if (likely(m_rx_psv_buf->sz_buffer >= (size_t)(payload - m_rx_psv_buf->p_buffer + 64))) {
-            memset(m_rx_psv_buf->lwip_pbuf.pbuf.payload, 0, 64);
+            memset(m_rx_psv_buf->lwip_pbuf.payload, 0, 64);
             m_rx_resync_recno = m_next_recno_rx;
             m_p_tx_ring->tls_get_progress_params_rx(m_p_tir, payload, LKEY_TX_DEFAULT);
             ++m_p_sock->m_p_socket_stats->tls_counters.n_tls_rx_resync;
@@ -1348,7 +1348,7 @@ check_single_record:
     uint8_t tls_decrypted = 0;
 
     mem_buf_desc_t *pdesc = *iter;
-    tls_type = ((uint8_t *)pdesc->lwip_pbuf.pbuf.payload)[m_rx_offset];
+    tls_type = ((uint8_t *)pdesc->lwip_pbuf.payload)[m_rx_offset];
     if (is_rx_tls13()) {
         /* TLS 1.3 sends record type as the last byte of the payload. */
         ++remain;
@@ -1363,7 +1363,7 @@ check_single_record:
             break;
         }
 
-        pi = &pdesc->lwip_pbuf.pbuf;
+        pi = &pdesc->lwip_pbuf;
         if (pi->len <= offset) {
             offset -= pi->len;
             goto next_buffer;
@@ -1500,18 +1500,18 @@ check_single_record:
             break;
         }
         pdesc = m_rx_bufs.front();
-        if (pdesc->lwip_pbuf.pbuf.len > (m_rx_rec_len + m_rx_offset)) {
+        if (pdesc->lwip_pbuf.len > (m_rx_rec_len + m_rx_offset)) {
             break;
         }
         m_rx_bufs.pop_front();
-        m_rx_rec_len -= pdesc->lwip_pbuf.pbuf.len - m_rx_offset;
-        m_rx_rec_rcvd -= pdesc->lwip_pbuf.pbuf.len - m_rx_offset;
+        m_rx_rec_len -= pdesc->lwip_pbuf.len - m_rx_offset;
+        m_rx_rec_rcvd -= pdesc->lwip_pbuf.len - m_rx_offset;
         m_rx_offset = 0;
         /*
          * pbuf_free() is slow when it actually frees a buffer, however,
          * we expect to only reduce ref counter with this call.
          */
-        pbuf_free(&pdesc->lwip_pbuf.pbuf);
+        pbuf_free(&pdesc->lwip_pbuf);
     }
     m_rx_offset += m_rx_rec_len;
     m_rx_rec_rcvd -= m_rx_rec_len;
@@ -1556,7 +1556,7 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
     if (utls->m_rx_psv_buf) {
         /* Resync flow, GET_PSV is completed. */
         struct xlio_tls_progress_params *params =
-            (struct xlio_tls_progress_params *)utls->m_rx_psv_buf->lwip_pbuf.pbuf.payload;
+            (struct xlio_tls_progress_params *)utls->m_rx_psv_buf->lwip_pbuf.payload;
         uint32_t resync_seqno = be32toh(params->hw_resync_tcp_sn);
         int tracker = params->state >> 6U;
         int auth = (params->state >> 4U) & 0x3U;
