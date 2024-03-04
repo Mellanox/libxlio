@@ -111,20 +111,6 @@ static inline int atomic_fetch_and_add_relaxed(int x, volatile int *ptr)
 }
 
 /**
- * Read RDTSC register
- */
-static inline void gettimeoftsc(unsigned long long *p_tscval)
-{
-    uint32_t upper_32, lower_32;
-
-    // ReaD Time Stamp Counter (RDTCS)
-    __asm__ __volatile__("rdtsc" : "=a"(lower_32), "=d"(upper_32));
-
-    // Copy to user
-    *p_tscval = (((unsigned long long)upper_32) << 32) | lower_32;
-}
-
-/**
  * Cache Line Prefetch - Arch specific!
  */
 #ifndef L1_CACHE_BYTES
