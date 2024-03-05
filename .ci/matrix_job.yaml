@@ -4,13 +4,14 @@ job: LIBXLIO
 step_allow_single_selector: false
 
 registry_host: harbor.mellanox.com
-registry_auth: swx-storage
+registry_auth: 1daaea28-800e-425f-a91f-3bd3e9136eea
+registry_path: /swx-infra/media
 
 kubernetes:
   privileged: false
   cloud: swx-k8s-spray
   nodeSelector: 'beta.kubernetes.io/os=linux'
-
+  namespace: xlio-ci
   limits: '{memory: 8Gi, cpu: 7000m}'
   requests: '{memory: 8Gi, cpu: 7000m}'
 
@@ -32,9 +33,6 @@ volumes:
   # User profile for release
   - {mountPath: /var/home/swx-jenkins, hostPath: /labhome/swx-jenkins}
 
-env:
-  build_dockers: false
-
 runs_on_dockers:
 # mofed
   - {name: 'ub20.04-mofed-x86_64', url: 'harbor.mellanox.com/swx-infra/x86_64/ubuntu20.04/builder:mofed-5.2-2.2.0.0', category: 'base', arch: 'x86_64'}
@@ -46,6 +44,15 @@ runs_on_dockers:
   - {name: 'toolbox', url: 'harbor.mellanox.com/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
   - {name: 'blackduck', url: 'harbor.mellanox.com/toolbox/ngci-centos:7.9.2009.2', category: 'tool', arch: 'x86_64'}
   - {name: 'header-check', url: 'harbor.mellanox.com/toolbox/header_check:0.0.14', category: 'tool', arch: 'x86_64', tag: '0.0.14'}
+# static tests
+  - {file: '.ci/dockerfiles/Dockerfile.rhel8.6',
+     arch: 'x86_64',
+     name: 'xlio_static.cppcheck',
+     uri: '$arch/$name',
+     tag: '20240703',
+     build_args: '--no-cache',
+     category: 'tool'
+     }
 
 runs_on_agents:
   - {nodeLabel: 'beni09', category: 'base'}
@@ -218,9 +225,9 @@ steps:
   - name: Cppcheck
     enable: ${do_cppcheck}
     containerSelector:
-      - "{name: 'skip-container'}"
+      - "{name: 'xlio_static.cppcheck', category: 'tool', variant: 1}"
     agentSelector:
-      - "{nodeLabel: 'beni09'}"
+      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_cppcheck}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_cppcheck=${action} ./contrib/test_jenkins.sh

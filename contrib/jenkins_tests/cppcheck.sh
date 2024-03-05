@@ -7,26 +7,10 @@ echo "Checking for cppcheck ..."
 tool_app=cppcheck
 
 # This unit requires cppcheck so check for existence
-if [ $(command -v ${tool_app} >/dev/null 2>&1 || echo $?) ]; then
-    set +e
-    eval "timeout -s SIGKILL 20s https://github.com/danmar/cppcheck.git cppcheck " > /dev/null 2>&1
-    if [ $? -eq 0 ]; then
-        eval "cd cppcheck && checkout 2.1 " > /dev/null 2>&1
-        if [ $? -eq 0 ]; then
-            eval "make $make_opt FILESDIR=$PWD HAVE_RULES=yes " > /dev/null 2>&1
-            if [ $? -eq 0 ]; then
-                tool_app=$PWD/cppcheck
-            fi
-        fi
-        cd ..
-    fi
-    set -e
-
     if [ $(command -v ${tool_app} >/dev/null 2>&1 || echo $?) ]; then
         echo "[SKIP] cppcheck tool does not exist"
         exit 1
     fi
-fi
 
 echo $(${tool_app} --version)
 
