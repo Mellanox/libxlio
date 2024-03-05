@@ -588,7 +588,7 @@ protected:
     ring_alloc_logic_attr m_ring_alloc_log_rx;
     ring_alloc_logic_attr m_ring_alloc_log_tx;
 
-    // Callback function pointer to support VMA extra API (xlio_extra.h)
+    // Callback function pointer to support XLIO extra API (xlio_extra.h)
     xlio_recv_callback_t m_rx_callback = nullptr;
     struct xlio_rate_limit_t m_so_ratelimit;
     void *m_rx_callback_context = nullptr; // user context
@@ -692,7 +692,14 @@ int sockinfo::dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, soc
     size_t payload_size = pdesc->rx.sz_payload;
 
     if (__from && __fromlen) {
-        pdesc->rx.src.get_sa_by_family(__from, *__fromlen, m_family);
+        if (m_connected.is_anyport()) {
+            // For UDP non-connected fetch from packet.
+            pdesc->rx.src.get_sa_by_family(__from, *__fromlen, m_family);
+        } else {
+            // For TCP/UDP connected 5T fetch from m_connected.
+            // For TCP we avoid filling packet with src for performance.
+            m_connected.get_sa(__from, *__fromlen);
+        }
     }
 
     if (in_flags & MSG_XLIO_ZCOPY) {

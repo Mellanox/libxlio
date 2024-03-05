@@ -643,10 +643,6 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
             if (likely(protocol == IPPROTO_TCP)) {
                 struct tcphdr *p_tcp_h = (struct tcphdr *)((uint8_t *)p_ip_h + ip_hdr_len);
 
-                // Update the L3 and L4 info
-                p_rx_wc_buf_desc->rx.src.set_ip_port(family, saddr, p_tcp_h->source);
-                p_rx_wc_buf_desc->rx.dst.set_ip_port(family, daddr, p_tcp_h->dest);
-
                 // Update packet descriptor with datagram base address and length
                 p_rx_wc_buf_desc->rx.frag.iov_base = (uint8_t *)p_tcp_h + sizeof(struct tcphdr);
                 p_rx_wc_buf_desc->rx.frag.iov_len = ip_payload_len - sizeof(struct tcphdr);
@@ -665,7 +661,7 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
                              p_tcp_h->fin ? "F" : "", ntohl(p_tcp_h->seq), ntohl(p_tcp_h->ack_seq),
                              ntohs(p_tcp_h->window), p_rx_wc_buf_desc->rx.sz_payload);
 
-                if (likely(safe_mce_sys().gro_streams_max > 0U)) {
+                if (likely((safe_mce_sys().gro_streams_max > 0U) && is_simple())) {
                     return static_cast<rfs_uc_tcp_gro *>(si->get_rfs_ptr())->rfs_uc_tcp_gro::rx_dispatch_packet(p_rx_wc_buf_desc, pv_fd_ready_array);
                 }
 
@@ -1077,6 +1073,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::rx_process_buffer_no_flow_id(
         p_rx_wc_buf_desc->rx.frag.iov_len = payload_len - sizeof(struct tcphdr);
 
         // Update the L3/L4 info
+        // We can avoid setting this for non-listen sockets.
         p_rx_wc_buf_desc->rx.src.set_ip_port(hdr_get_family(p_ip_h), hdr_get_saddr(p_ip_h),
                                              p_tcp_h->source);
         p_rx_wc_buf_desc->rx.dst.set_ip_port(hdr_get_family(p_ip_h), hdr_get_daddr(p_ip_h),
