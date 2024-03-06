@@ -202,6 +202,7 @@ inline ssize_t dst_entry_udp::fast_send_not_fragmented(const iovec *p_iov, const
                                                        ssize_t sz_data_payload)
 {
     mem_buf_desc_t *p_mem_buf_desc;
+    xlio_ibv_send_wr *p_send_wqe;
     bool b_blocked = is_set(attr, XLIO_TX_PACKET_BLOCK);
 
     // Get a bunch of tx buf descriptor and data buffers
@@ -234,7 +235,7 @@ inline ssize_t dst_entry_udp::fast_send_not_fragmented(const iovec *p_iov, const
     // Skip inlining in case of L4 SW checksum because headers and data are not contiguous in memory
     if (sz_iov == 1 && ((sz_data_payload + m_header->m_total_hdr_len) < m_max_inline) &&
         !is_set(attr, XLIO_TX_SW_L4_CSUM)) {
-        m_p_send_wqe = &m_inline_send_wqe;
+        p_send_wqe = &m_inline_send_wqe;
 
         m_header->get_udp_hdr()->len = htons((uint16_t)sz_udp_payload);
         m_header->set_ip_len(m_header->m_ip_header_len + sz_udp_payload);
@@ -248,7 +249,7 @@ inline ssize_t dst_entry_udp::fast_send_not_fragmented(const iovec *p_iov, const
         m_sge[1].addr = (uintptr_t)p_iov[0].iov_base;
         m_sge[1].lkey = m_p_ring->get_tx_lkey(m_id);
     } else {
-        m_p_send_wqe = &m_not_inline_send_wqe;
+        p_send_wqe = &m_not_inline_send_wqe;
 
         void *p_pkt = p_mem_buf_desc->p_buffer;
         void *p_ip_hdr;
@@ -302,8 +303,8 @@ inline ssize_t dst_entry_udp::fast_send_not_fragmented(const iovec *p_iov, const
         BULLSEYE_EXCLUDE_BLOCK_END
     }
 
-    m_p_send_wqe->wr_id = reinterpret_cast<uintptr_t>(p_mem_buf_desc);
-    send_ring_buffer(m_id, m_p_send_wqe, attr);
+    p_send_wqe->wr_id = reinterpret_cast<uintptr_t>(p_mem_buf_desc);
+    send_ring_buffer(m_id, p_send_wqe, attr);
 
     // request tx buffers for the next packets
     if (unlikely(m_p_tx_mem_buf_desc_list == NULL)) {
@@ -324,7 +325,7 @@ inline bool dst_entry_udp::fast_send_fragmented_ipv4(mem_buf_desc_t *p_mem_buf_d
     void *p_ip_hdr;
     void *p_udp_hdr;
     mem_buf_desc_t *tmp;
-    m_p_send_wqe = &m_fragmented_send_wqe;
+    xlio_ibv_send_wr *p_send_wqe = &m_fragmented_send_wqe;
     uint16_t packet_id = gen_packet_id_ip4();
 
     // Int for counting offset inside the ip datagram payload
@@ -397,7 +398,7 @@ inline bool dst_entry_udp::fast_send_fragmented_ipv4(mem_buf_desc_t *p_mem_buf_d
             (uintptr_t)(p_mem_buf_desc->p_buffer + (uint8_t)m_header->m_transport_header_tx_offset);
         m_sge[1].length = sz_user_data_to_copy + hdr_len;
         m_sge[1].lkey = m_p_ring->get_tx_lkey(m_id);
-        m_p_send_wqe->wr_id = (uintptr_t)p_mem_buf_desc;
+        p_send_wqe->wr_id = (uintptr_t)p_mem_buf_desc;
 
         dst_udp_logfunc("packet_sz=%d, payload_sz=%d, ip_offset=%d id=%d",
                         m_sge[1].length - m_header->m_transport_header_len, sz_user_data_to_copy,
@@ -408,7 +409,7 @@ inline bool dst_entry_udp::fast_send_fragmented_ipv4(mem_buf_desc_t *p_mem_buf_d
 
         // We don't check the return valuse of post send when we reach the HW we consider that we
         // completed our job
-        send_ring_buffer(m_id, m_p_send_wqe, attr);
+        send_ring_buffer(m_id, p_send_wqe, attr);
 
         p_mem_buf_desc = tmp;
 
