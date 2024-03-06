@@ -538,7 +538,7 @@ void event_handler_manager::priv_register_ibverbs_events(ibverbs_reg_info_t &inf
     event_handler_map_t::iterator i;
     i = m_event_handler_map.find(info.fd);
     if (i == m_event_handler_map.end()) {
-        event_data_t v;
+        event_data_t v = {};
 
         v.type = EV_IBVERBS;
         v.ibverbs_ev.fd = info.fd;
@@ -626,7 +626,7 @@ void event_handler_manager::priv_register_rdma_cm_events(rdma_cm_reg_info_t &inf
     event_handler_map_t::iterator iter_fd = m_event_handler_map.find(info.fd);
     if (iter_fd == m_event_handler_map.end()) {
         evh_logdbg("Adding new channel (fd %d, id %p, handler %p)", info.fd, info.id, info.handler);
-        event_data_t map_value;
+        event_data_t map_value = {};
 
         map_value.type = EV_RDMA_CM;
         map_value.rdma_cm_ev.n_ref_count = 1;
@@ -703,7 +703,7 @@ void event_handler_manager::priv_register_command_events(command_reg_info_t &inf
     event_handler_map_t::iterator iter_fd = m_event_handler_map.find(info.fd);
     if (iter_fd == m_event_handler_map.end()) {
         evh_logdbg("Adding new channel (fd %d)", info.fd);
-        event_data_t map_value;
+        event_data_t map_value = {};
 
         map_value.type = EV_COMMAND;
         map_value.command_ev.cmd = info.cmd;
