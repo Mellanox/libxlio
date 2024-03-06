@@ -329,8 +329,7 @@ void hw_queue_rx::post_recv_buffer_rq(mem_buf_desc_t *p_mem_buf_desc)
 
         m_curr_rx_wr = 0;
         struct ibv_recv_wr *bad_wr = nullptr;
-        IF_VERBS_FAILURE(xlio_raw_post_recv(&bad_wr))
-        {
+        if (xlio_raw_post_recv(&bad_wr) < 0) {
             uint32_t n_pos_bad_rx_wr =
                 ((uint8_t *)bad_wr - (uint8_t *)m_ibv_rx_wr_array) / sizeof(struct ibv_recv_wr);
             hwqrx_logerr("failed posting list (errno=%d %s)", errno, strerror(errno));
@@ -345,10 +344,9 @@ void hw_queue_rx::post_recv_buffer_rq(mem_buf_desc_t *p_mem_buf_desc)
             if (n_pos_bad_rx_wr != (m_n_sysvar_rx_num_wr_to_post_recv - 1)) {
                 m_ibv_rx_wr_array[n_pos_bad_rx_wr].next = &m_ibv_rx_wr_array[n_pos_bad_rx_wr + 1];
             }
-            throw;
+            throw_xlio_exception("Failed to post a WQE to RQ");
         }
-        ENDIF_VERBS_FAILURE;
-        hwqrx_logfunc("Successful ibv_post_recv");
+        hwqrx_logfunc("Successful buffer post to RQ");
     } else {
         m_curr_rx_wr++;
     }
@@ -366,14 +364,14 @@ int hw_queue_rx::xlio_raw_post_recv(struct ibv_recv_wr **bad_wr)
     for (; wr; ++nreq, wr = wr->next) {
         if (unlikely((int)m_rq_data.head - (int)m_rq_data.tail + nreq >= (int)m_rx_num_wr)) {
             errno = ENOMEM;
-            err = -errno;
+            err = -1;
             *bad_wr = wr;
             goto out;
         }
 
         if (unlikely(wr->num_sge > (int)m_rx_sge)) {
             errno = EINVAL;
-            err = -errno;
+            err = -1;
             *bad_wr = wr;
             goto out;
         }
