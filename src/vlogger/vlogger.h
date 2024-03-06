@@ -107,7 +107,7 @@
 #define __log_panic(log_fmt, log_args...)                                                          \
     do {                                                                                           \
         VLOG_PRINTF(VLOG_PANIC, log_fmt, ##log_args);                                              \
-        throw;                                                                                     \
+        std::terminate();                                                                          \
     } while (0)
 #define __log_err(log_fmt, log_args...)                                                            \
     do {                                                                                           \
@@ -165,7 +165,7 @@
 #define __log_info_panic(log_fmt, log_args...)                                                     \
     do {                                                                                           \
         VLOG_PRINTF_INFO(VLOG_PANIC, log_fmt, ##log_args);                                         \
-        throw;                                                                                     \
+        std::terminate();                                                                          \
     } while (0)
 #define __log_info_err(log_fmt, log_args...)                                                       \
     do {                                                                                           \

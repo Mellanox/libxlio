@@ -38,23 +38,17 @@
 #include "core/event/event_handler_manager.h"
 #include "mem_buf_desc.h"
 
+#undef MODULE_NAME
+#define MODULE_NAME "ip_frag"
+
 //#define IP_FRAG_DEBUG 1
 
 #ifdef IP_FRAG_DEBUG
-#define frag_dbg(fmt, args...)                                                                     \
-    vlog_printf(VLOG_WARNING, "%s:%d : " fmt "\n", __FUNCTION__, __LINE__, ##args)
+#define frag_dbg __log_info_dbg
 #else
 #define frag_dbg(fmt, args...)
 #endif
-
-#define frag_err(fmt, args...)                                                                     \
-    vlog_printf(VLOG_ERROR, "%s:%d : " fmt "\n", __FUNCTION__, __LINE__, ##args)
-
-#define frag_panic(fmt, args...)                                                                   \
-    do {                                                                                           \
-        vlog_printf(VLOG_PANIC, "%s:%d : " fmt "\n", __FUNCTION__, __LINE__, ##args);              \
-        throw;                                                                                     \
-    } while (0)
+#define frag_panic __log_info_panic
 
 #ifdef IP_FRAG_DEBUG
 static int debug_drop_every_n_pkt = 0; // 0 - Disabled, 1/N is the number of packet dropped
