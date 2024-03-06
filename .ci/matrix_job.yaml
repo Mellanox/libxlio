@@ -53,6 +53,14 @@ runs_on_dockers:
      build_args: '--no-cache',
      category: 'tool'
      }
+  - {file: '.ci/dockerfiles/Dockerfile.rhel8.6',
+     arch: 'x86_64',
+     name: 'xlio_static.csbuild',
+     uri: '$arch/$name',
+     tag: '20240703',
+     build_args: '--no-cache',
+     category: 'tool'
+     }
 
 runs_on_agents:
   - {nodeLabel: 'beni09', category: 'base'}
@@ -242,9 +250,9 @@ steps:
   - name: Csbuild
     enable: ${do_csbuild}
     containerSelector:
-      - "{name: 'skip-container'}"
+      - "{name: 'xlio_static.csbuild', category: 'tool', variant: 1}"
     agentSelector:
-      - "{nodeLabel: 'beni09'}"
+      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_csbuild}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_csbuild=${action} ./contrib/test_jenkins.sh
