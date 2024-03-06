@@ -13,6 +13,8 @@ source $(dirname $0)/globals.sh
 
 echo "Checking for tidy ..."
 
+git config --global --add safe.directory $WORKSPACE
+
 cd $WORKSPACE
 
 rm -rf $tidy_dir
