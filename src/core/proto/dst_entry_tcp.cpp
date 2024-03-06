@@ -72,6 +72,7 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
     void *p_ip_hdr;
     void *p_tcp_hdr;
     tcp_iovec *p_tcp_iov = NULL;
+    xlio_ibv_send_wr *p_send_wqe;
     size_t hdr_alignment_diff = 0;
 
     bool is_zerocopy = is_set(attr.flags, XLIO_TX_PACKET_ZEROCOPY);
@@ -151,7 +152,7 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
         tcp_hdr_len = (static_cast<tcphdr *>(p_tcp_hdr))->doff * 4;
 
         if (!is_zerocopy && (total_packet_len < m_max_inline) && (1 == sz_iov)) {
-            m_p_send_wqe = &m_inline_send_wqe;
+            p_send_wqe = &m_inline_send_wqe;
             p_tcp_iov[0].iovec.iov_base = (uint8_t *)p_pkt + hdr_alignment_diff;
             p_tcp_iov[0].iovec.iov_len = total_packet_len;
         } else if (is_set(attr.flags, (xlio_wr_tx_packet_attr)(XLIO_TX_PACKET_TSO))) {
@@ -165,13 +166,13 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
                 send_wqe_h.enable_tso(send_wqe, (void *)((uint8_t *)p_pkt + hdr_alignment_diff),
                                       m_header->m_total_hdr_len + tcp_hdr_len, 0);
             }
-            m_p_send_wqe = &send_wqe;
+            p_send_wqe = &send_wqe;
             if (!is_zerocopy) {
                 p_tcp_iov[0].iovec.iov_base = (uint8_t *)p_tcp_hdr + tcp_hdr_len;
                 p_tcp_iov[0].iovec.iov_len -= tcp_hdr_len;
             }
         } else {
-            m_p_send_wqe = &m_not_inline_send_wqe;
+            p_send_wqe = &m_not_inline_send_wqe;
             p_tcp_iov[0].iovec.iov_base = (uint8_t *)p_pkt + hdr_alignment_diff;
             p_tcp_iov[0].iovec.iov_len = total_packet_len;
         }
@@ -211,7 +212,7 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
         p_tcp_iov[0].p_desc->tx.p_tcp_h = static_cast<tcphdr *>(p_tcp_hdr);
 
         /* set wr_id as a pointer to memory descriptor */
-        m_p_send_wqe->wr_id = (uintptr_t)p_tcp_iov[0].p_desc;
+        p_send_wqe->wr_id = (uintptr_t)p_tcp_iov[0].p_desc;
 
         /* Update scatter gather element list
          * ref counter is incremented (above) for the first memory descriptor only because it is
@@ -252,7 +253,7 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
             }
         }
 
-        ret = send_lwip_buffer(m_id, m_p_send_wqe, attr.flags, attr.tis);
+        ret = send_lwip_buffer(m_id, p_send_wqe, attr.flags, attr.tis);
     } else { // We don'nt support inline in this case, since we believe that this a very rare case
         mem_buf_desc_t *p_mem_buf_desc;
         size_t total_packet_len = 0;
@@ -293,10 +294,10 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
         p_mem_buf_desc->tx.p_ip_h = p_ip_hdr;
         p_mem_buf_desc->tx.p_tcp_h = static_cast<tcphdr *>(p_tcp_hdr);
 
-        m_p_send_wqe = &m_not_inline_send_wqe;
-        m_p_send_wqe->wr_id = (uintptr_t)p_mem_buf_desc;
+        p_send_wqe = &m_not_inline_send_wqe;
+        p_send_wqe->wr_id = (uintptr_t)p_mem_buf_desc;
 
-        send_ring_buffer(m_id, m_p_send_wqe, attr.flags);
+        send_ring_buffer(m_id, p_send_wqe, attr.flags);
     }
 
     if (unlikely(m_p_tx_mem_buf_desc_list == NULL)) {

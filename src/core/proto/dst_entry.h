@@ -167,7 +167,6 @@ protected:
     uint8_t m_pcp;
     bool m_b_is_initialized;
 
-    xlio_ibv_send_wr *m_p_send_wqe;
     uint32_t m_max_inline;
     ring_user_id_t m_id;
     uint16_t m_max_ip_payload_size;

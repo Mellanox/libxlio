@@ -154,7 +154,6 @@ void dst_entry::init_members()
     m_sge = NULL;
     m_b_is_offloaded = true;
     m_b_is_initialized = false;
-    m_p_send_wqe = NULL;
     m_max_inline = 0;
     m_max_ip_payload_size = 0;
     m_max_udp_payload_size = 0;
