@@ -61,6 +61,14 @@ runs_on_dockers:
      build_args: '--no-cache',
      category: 'tool'
      }
+  - {file: '.ci/dockerfiles/Dockerfile.rhel8.6',
+     arch: 'x86_64',
+     name: 'xlio_static.tidy',
+     uri: '$arch/$name',
+     tag: '20240703',
+     build_args: '--no-cache',
+     category: 'tool'
+     }
 
 runs_on_agents:
   - {nodeLabel: 'beni09', category: 'base'}
@@ -267,9 +275,9 @@ steps:
   - name: Tidy
     enable: ${do_tidy}
     containerSelector:
-      - "{name: 'skip-container'}"
+      - "{name: 'xlio_static.tidy', category: 'tool', variant: 1}"
     agentSelector:
-      - "{nodeLabel: 'beni09'}"
+      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_tidy}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_tidy=${action} ./contrib/test_jenkins.sh
