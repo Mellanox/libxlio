@@ -58,9 +58,9 @@ static int g_ip_frag_count_check = 0;
 #define MEMBUF_DEBUG_REF_INC(__p_desc__)                                                           \
     {                                                                                              \
         g_ip_frag_count_check++;                                                                   \
-        if (__p_desc__->n_ref_count != 0)                                                          \
+        if (__p_desc__->inc_ref_count() != 0) {                                                    \
             frag_panic("REF_INC: p=%p\n", __p_desc__);                                             \
-        __p_desc__->n_ref_count++;                                                                 \
+        }                                                                                          \
     }
 #define MEMBUF_DEBUG_REF_DEC(__p_desc__)                                                           \
     {                                                                                              \
@@ -73,9 +73,9 @@ static int g_ip_frag_count_check = 0;
 #define MEMBUF_DEBUG_REF_DEC_1(__p_desc__)                                                         \
     {                                                                                              \
         g_ip_frag_count_check--;                                                                   \
-        __p_desc__->n_ref_count--;                                                                 \
-        if (__p_desc__->n_ref_count != 0)                                                          \
+        if (__p_desc__->dec_ref_count() != 1) {                                                    \
             frag_panic("REF_DEC: p=%p\n", __p_desc__);                                             \
+        }                                                                                          \
     }
 #define PRINT_STATISTICS()                                                                         \
     {                                                                                              \
