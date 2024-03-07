@@ -81,7 +81,8 @@
  */
 
 #include "cc_cubic.h"
-#include "errno.h"
+
+#include <errno.h>
 #include <string.h>
 
 #if TCP_CC_ALGO_MOD
