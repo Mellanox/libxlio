@@ -30,12 +30,13 @@
  * SOFTWARE.
  */
 
+#include <errno.h>
+#include <stdio.h>
+#include <sys/epoll.h>
+
 #include "core/infra/subject_observer.h"
 #include "netlink_wrapper.h"
 #include "neigh_info.h"
-#include <stdio.h>
-#include "errno.h"
-#include <sys/epoll.h>
 #include "vlogger/vlogger.h"
 #include "core/event/netlink_event.h"
 
