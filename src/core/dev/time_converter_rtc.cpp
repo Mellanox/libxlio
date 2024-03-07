@@ -58,7 +58,7 @@ void time_converter_rtc::handle_timer_expired(void *)
 void time_converter_rtc::convert_hw_time_to_system_time(uint64_t hwtime, struct timespec *systime)
 {
     hwtime &= 0x7FFFFFFFFFFFFFFF;
-    systime->tv_nsec = (uint32_t)(hwtime & ~(0x3 << 30));
+    systime->tv_nsec = (uint32_t)(hwtime & ~(0x3UL << 30));
     systime->tv_sec = (uint32_t)(hwtime >> 32);
 
     ibchtc_logfine("hwtime: 	%09ld", hwtime);
