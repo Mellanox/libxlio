@@ -3471,7 +3471,6 @@ err_t sockinfo_tcp::clone_conn_cb(void *arg, struct tcp_pcb **newpcb)
     new_sock = conn->accept_clone();
 
     if (new_sock) {
-        /* cppcheck-suppress autoVariables */
         *newpcb = (struct tcp_pcb *)(&new_sock->m_pcb);
         new_sock->m_pcb.my_container = (void *)new_sock;
         /* XXX We have to search for correct listen socket every time,

@@ -1214,7 +1214,6 @@ void print_mc_group_fds(mc_group_fds_t *mc_group_fds, int array_size)
     printf("------------------------------\n");
     for (int i = 0; i < array_size; i++) {
         char mcg_str[256];
-        /* cppcheck-suppress wrongPrintfScanfArgNum */
         sprintf(mcg_str, "[%s]", mc_group_fds[i].mc_grp.to_str().c_str());
         printf("%-22s", mcg_str);
         for (const auto &fd : mc_group_fds[i].fd_list) {
