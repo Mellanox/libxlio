@@ -106,7 +106,6 @@ void print_full_stats(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, 
     if (p_si_stats->socket_type == SOCK_DGRAM) {
         fprintf(filename, ", MC Loop %s", p_si_stats->b_mc_loop ? "Enabled " : "Disabled");
         if (!p_si_stats->mc_tx_if.is_anyaddr()) {
-            /* cppcheck-suppress wrongPrintfScanfArgNum */
             fprintf(filename, ", MC IF = [%s]",
                     p_si_stats->mc_tx_if.to_str(p_si_stats->sa_family).c_str());
         }
@@ -117,13 +116,11 @@ void print_full_stats(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, 
     // Bounded + Connected information
     //
     if (!p_si_stats->bound_if.is_anyaddr() || p_si_stats->bound_port) {
-        /* cppcheck-suppress wrongPrintfScanfArgNum */
         fprintf(filename, "- Local Address   = [%s:%d]\n",
                 p_si_stats->bound_if.to_str(p_si_stats->sa_family).c_str(),
                 ntohs(p_si_stats->bound_port));
     }
     if (!p_si_stats->connected_ip.is_anyaddr() || p_si_stats->connected_port) {
-        /* cppcheck-suppress wrongPrintfScanfArgNum */
         fprintf(filename, "- Foreign Address = [%s:%d]\n",
                 p_si_stats->connected_ip.to_str(p_si_stats->sa_family).c_str(),
                 ntohs(p_si_stats->connected_port));
@@ -131,7 +128,6 @@ void print_full_stats(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, 
     if (p_mc_grp_info) {
         for (int grp_idx = 0; grp_idx < p_mc_grp_info->max_grp_num; grp_idx++) {
             if (p_si_stats->mc_grp_map.test(grp_idx)) {
-                /* cppcheck-suppress wrongPrintfScanfArgNum */
                 fprintf(filename, "- Member of = [%s]\n",
                         p_mc_grp_info->mc_grp_tbl[grp_idx].mc_grp.to_str().c_str());
             }
@@ -345,7 +341,6 @@ void print_netstat_like(socket_stats_t *p_si_stats, mc_grp_info_t *, FILE *file,
     //
     int len = 0;
     if (!p_si_stats->bound_if.is_anyaddr() || p_si_stats->bound_port) {
-        /* cppcheck-suppress wrongPrintfScanfArgNum */
         len = fprintf(file, "%s:%-5d", p_si_stats->bound_if.to_str(p_si_stats->sa_family).c_str(),
                       ntohs(p_si_stats->bound_port));
 
@@ -360,7 +355,6 @@ void print_netstat_like(socket_stats_t *p_si_stats, mc_grp_info_t *, FILE *file,
     fprintf(file, " ");
 
     if (!p_si_stats->connected_ip.is_anyaddr() || p_si_stats->connected_port) {
-        /* cppcheck-suppress wrongPrintfScanfArgNum */
         len =
             fprintf(file, "%s:%-5d", p_si_stats->connected_ip.to_str(p_si_stats->sa_family).c_str(),
                     ntohs(p_si_stats->connected_port));
