@@ -206,7 +206,7 @@ void cq_mgr_rx::add_hqrx(hw_queue_rx *hqrx_ptr)
     /* return_extra_buffers(); */ // todo??
 
     // Initial fill of receiver work requests
-    uint32_t hqrx_wr_num = hqrx_ptr->get_rx_max_wr_num();
+    uint32_t hqrx_wr_num = (!hqrx_ptr->is_dummy_rq() ? hqrx_ptr->get_rx_max_wr_num() : 0);
     cq_logdbg("Trying to push %d WRE to allocated hqrx (%p)", hqrx_wr_num, hqrx_ptr);
     while (hqrx_wr_num) {
         uint32_t n_num_mem_bufs = m_n_sysvar_rx_num_wr_to_post_recv;

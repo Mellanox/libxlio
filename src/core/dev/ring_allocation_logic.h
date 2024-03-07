@@ -49,24 +49,15 @@ class source_t {
 public:
     int m_fd;
     ip_address m_ip;
-    const void *m_object;
 
     source_t(int fd)
         : m_fd(fd)
         , m_ip(ip_address::any_addr())
-        , m_object(nullptr)
     {
     }
     source_t(const ip_address &ip)
         : m_fd(-1)
         , m_ip(ip)
-        , m_object(nullptr)
-    {
-    }
-    source_t(const void *object)
-        : m_fd(-1)
-        , m_ip(ip_address::any_addr())
-        , m_object(object)
     {
     }
 };
@@ -97,7 +88,7 @@ public:
     {
         return m_ring_migration_ratio > 0 &&
             m_res_key.get_ring_alloc_logic() >= RING_LOGIC_PER_THREAD &&
-            m_res_key.get_ring_alloc_logic() < RING_LOGIC_PER_OBJECT;
+            m_res_key.get_ring_alloc_logic() < RING_LOGIC_NEIGH;
     }
     uint64_t calc_res_key_by_logic();
     inline ring_logic_t get_alloc_logic_type() { return m_res_key.get_ring_alloc_logic(); }

@@ -54,13 +54,14 @@
 #define ALIGN_WR_DOWN(_num_wr_) (std::max(32, ((_num_wr_) & ~(0xf))))
 
 hw_queue_rx::hw_queue_rx(ring_simple *ring, ib_ctx_handler *ib_ctx,
-                         ibv_comp_channel *rx_comp_event_channel, uint16_t vlan)
+                         ibv_comp_channel *rx_comp_event_channel, uint16_t vlan, bool dummy)
     : m_p_ring(ring)
     , m_p_ib_ctx_handler(ib_ctx)
     , m_n_sysvar_rx_num_wr_to_post_recv(safe_mce_sys().rx_num_wr_to_post_recv)
     , m_rx_num_wr(align32pow2(safe_mce_sys().rx_num_wr))
     , m_n_sysvar_rx_prefetch_bytes_before_poll(safe_mce_sys().rx_prefetch_bytes_before_poll)
     , m_vlan(vlan)
+    , m_dummy(dummy)
 {
     hwqrx_logfunc("");
 

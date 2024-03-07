@@ -442,18 +442,14 @@ private:
 
 class ring_eth : public ring_simple {
 public:
-    ring_eth(int if_index, ring *parent = NULL, ring_type_t type = RING_ETH,
-             bool call_create_res = true, bool use_locks = true)
-        : ring_simple(if_index, parent, type, use_locks)
+    ring_eth(int if_index, ring *parent = nullptr, bool tx_only = false, bool use_locks = true)
+        : ring_simple(if_index, parent, (tx_only ? RING_ETH_TX : RING_ETH), use_locks)
     {
         net_device_val_eth *p_ndev = dynamic_cast<net_device_val_eth *>(
             g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index()));
         if (p_ndev) {
             m_vlan = p_ndev->get_vlan();
-
-            if (call_create_res) {
-                create_resources();
-            }
+            create_resources();
         }
     }
 };

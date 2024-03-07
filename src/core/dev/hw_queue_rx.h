@@ -53,7 +53,7 @@ class hw_queue_rx : public xlio_ti_owner {
 
 public:
     hw_queue_rx(ring_simple *ring, ib_ctx_handler *ib_ctx, ibv_comp_channel *rx_comp_event_channel,
-                uint16_t vlan);
+                uint16_t vlan, bool dummy);
     virtual ~hw_queue_rx();
 
     virtual void ti_released(xlio_ti *ti) override;
@@ -70,6 +70,7 @@ public:
     cq_mgr_rx *get_rx_cq_mgr() const { return m_p_cq_mgr_rx; }
     uint32_t get_rx_max_wr_num() const { return m_rx_num_wr; }
     uint16_t get_vlan() const { return m_vlan; };
+    bool is_dummy_rq() const { return m_dummy; }
     void modify_queue_to_ready_state();
     void modify_queue_to_error_state();
     void release_rx_buffers();
@@ -128,6 +129,7 @@ private:
     uint32_t m_rx_sge = MCE_DEFAULT_RX_NUM_SGE;
     const uint32_t m_n_sysvar_rx_prefetch_bytes_before_poll;
     uint16_t m_vlan;
+    bool m_dummy; // Avoid posting WQEs to hw_queue_rx of a TX only ring.
 };
 
 #endif // HW_QUEUE_RX_H

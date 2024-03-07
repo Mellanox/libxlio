@@ -358,9 +358,11 @@ void ring_simple::create_resources()
         g_p_fd_collection->add_cq_channel_fd(m_p_tx_comp_event_channel->fd, this);
     }
 
+    // Currently we create hw_queue_rx also for TX-only ring as a dummy hw_queue_rx.
+    bool dummy_rq = (get_type() == RING_ETH_TX);
     std::unique_ptr<hw_queue_tx> temp_hqtx(new hw_queue_tx(this, p_slave, get_tx_num_wr()));
     std::unique_ptr<hw_queue_rx> temp_hqrx(
-        new hw_queue_rx(this, p_slave->p_ib_ctx, m_p_rx_comp_event_channel, m_vlan));
+        new hw_queue_rx(this, p_slave->p_ib_ctx, m_p_rx_comp_event_channel, m_vlan, dummy_rq));
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!temp_hqtx || !temp_hqrx) {
         ring_logerr("Failed to allocate hw_queue_tx/hw_queue_rx!");
