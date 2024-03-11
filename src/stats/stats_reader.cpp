@@ -133,25 +133,6 @@ typedef enum { e_K = 1024, e_M = 1048576 } units_t;
 #define SEC_TO_MICRO(n)         ((n)*1000000)
 #define TIME_DIFF_in_MICRO(start, end)                                                             \
     (SEC_TO_MICRO((end).tv_sec - (start).tv_sec) + (NANO_TO_MICRO((end).tv_nsec - (start).tv_nsec)))
-// printf formating when IP is in network byte ordering (for LITTLE_ENDIAN)
-#define NETWORK_IP_PRINTQUAD_LITTLE_ENDIAN(ip)                                                     \
-    (uint8_t)((ip)&0xff), (uint8_t)(((ip) >> 8) & 0xff), (uint8_t)(((ip) >> 16) & 0xff),           \
-        (uint8_t)(((ip) >> 24) & 0xff)
-
-// printf formating when IP is in host byte ordering (for LITTLE_ENDIAN)
-#define HOST_IP_PRINTQUAD_LITTLE_ENDIAN(ip)                                                        \
-    (uint8_t)(((ip) >> 24) & 0xff), (uint8_t)(((ip) >> 16) & 0xff), (uint8_t)(((ip) >> 8) & 0xff), \
-        (uint8_t)((ip)&0xff)
-
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-/* The host byte order is the same as network byte order, so these functions are all just identity.
- */
-#define NIPQUAD(ip) NETWORK_IP_PRINTQUAD_LITTLE_ENDIAN(ip)
-#else
-#if __BYTE_ORDER == __BIG_ENDIAN
-#define NIPQUAD(ip) HOST_IP_PRINTQUAD_LITTLE_ENDIAN(ip)
-#endif
-#endif
 
 bool g_b_exit = false;
 struct sigaction g_sigact;
@@ -1242,8 +1223,6 @@ void show_mc_group_stats(mc_grp_info_t *p_mc_grp_info, socket_instance_block_t *
             socket_stats_t *p_si_stats = &p_instance[i].skt_stats;
             for (int grp_idx = 0; grp_idx < p_mc_grp_info->max_grp_num; grp_idx++) {
                 if (p_si_stats->mc_grp_map.test(grp_idx)) {
-                    // printf("fd %d Member of = [%d.%d.%d.%d]\n",p_si_stats->fd,
-                    // NIPQUAD(p_si_stats->mc_grp[grp_idx]));
                     add_fd_to_array(p_si_stats->fd, p_mc_grp_info->mc_grp_tbl[grp_idx].mc_grp,
                                     mc_group_fds, &array_size);
                 }
