@@ -603,7 +603,7 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
             return -1;
         }
         m_is_tls_tx = true;
-        m_p_sock->m_p_socket_stats->tls_tx_offload = true;
+        m_p_sock->get_sock_stats()->tls_tx_offload = true;
     } else {
         m_p_cipher_ctx = (void *)g_tls_api->EVP_CIPHER_CTX_new();
         if (unlikely(!m_p_cipher_ctx)) {
@@ -656,12 +656,12 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
         }
 
         tcp_recv(m_p_sock->get_pcb(), sockinfo_tcp_ops_tls::rx_lwip_cb);
-        m_p_sock->m_p_socket_stats->tls_rx_offload = true;
+        m_p_sock->get_sock_stats()->tls_rx_offload = true;
         m_p_sock->unlock_tcp_con();
     }
 
-    m_p_sock->m_p_socket_stats->tls_version = base_info->version;
-    m_p_sock->m_p_socket_stats->tls_cipher = base_info->cipher_type;
+    m_p_sock->get_sock_stats()->tls_version = base_info->version;
+    m_p_sock->get_sock_stats()->tls_cipher = base_info->cipher_type;
 
     si_ulp_logdbg("TLS%s %s offload is configured, keylen=%u",
                   base_info->version == TLS_1_2_VERSION ? "1.2" : "1.3",
@@ -858,8 +858,9 @@ done:
     if (ret > 0) {
         errno = errno_save;
         if (unlikely(m_p_sock->has_stats())) {
-            m_p_sock->m_p_socket_stats->tls_counters.n_tls_tx_records += m_next_recno_tx - last_recno;
-            m_p_sock->m_p_socket_stats->tls_counters.n_tls_tx_bytes += ret;
+            m_p_sock->get_sock_stats()->tls_counters.n_tls_tx_records +=
+                m_next_recno_tx - last_recno;
+            m_p_sock->get_sock_stats()->tls_counters.n_tls_tx_bytes += ret;
         }
     }
     return ret;
@@ -975,8 +976,8 @@ int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_
                 m_expected_seqno = seg->seqno;
 
                 /* Statistics */
-                ++m_p_sock->m_p_socket_stats->tls_counters.n_tls_tx_resync;
-                m_p_sock->m_p_socket_stats->tls_counters.n_tls_tx_resync_replay +=
+                ++m_p_sock->get_sock_stats()->tls_counters.n_tls_tx_resync;
+                m_p_sock->get_sock_stats()->tls_counters.n_tls_tx_resync_replay +=
                     (seg->seqno != rec->m_seqno);
             }
             m_expected_seqno += seg->len;
@@ -1298,7 +1299,7 @@ err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
             memset(m_rx_psv_buf->lwip_pbuf.payload, 0, 64);
             m_rx_resync_recno = m_next_recno_rx;
             m_p_tx_ring->tls_get_progress_params_rx(m_p_tir, payload, LKEY_TX_DEFAULT);
-            ++m_p_sock->m_p_socket_stats->tls_counters.n_tls_rx_resync;
+            ++m_p_sock->get_sock_stats()->tls_counters.n_tls_rx_resync;
         }
     }
 
@@ -1444,8 +1445,9 @@ check_single_record:
 
         /* Statistics */
         if (unlikely(m_p_sock->has_stats())) {
-            m_p_sock->m_p_socket_stats->tls_counters.n_tls_rx_records_enc += !!(decrypted_nr == 0);
-            m_p_sock->m_p_socket_stats->tls_counters.n_tls_rx_records_partial += !!(decrypted_nr != 0);
+            m_p_sock->get_sock_stats()->tls_counters.n_tls_rx_records_enc += !!(decrypted_nr == 0);
+            m_p_sock->get_sock_stats()->tls_counters.n_tls_rx_records_partial +=
+                !!(decrypted_nr != 0);
         }
     }
 
@@ -1479,10 +1481,10 @@ check_single_record:
 
     /* Statistics */
     if (unlikely(m_p_sock->has_stats())) {
-        m_p_sock->m_p_socket_stats->tls_counters.n_tls_rx_records += 1U;
-        m_p_sock->m_p_socket_stats->tls_counters.n_tls_rx_bytes += likely(pres) ? pres->tot_len : 0;
+        m_p_sock->get_sock_stats()->tls_counters.n_tls_rx_records += 1U;
+        m_p_sock->get_sock_stats()->tls_counters.n_tls_rx_bytes += likely(pres) ? pres->tot_len : 0;
         /* Adjust TCP counters with received TLS header/trailer. */
-        m_p_sock->m_p_socket_stats->counters.n_rx_bytes += m_tls_rec_overhead;
+        m_p_sock->get_sock_stats()->counters.n_rx_bytes += m_tls_rec_overhead;
     }
 
     ++m_next_recno_rx;

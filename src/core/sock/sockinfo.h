@@ -238,7 +238,7 @@ class epfd_info;
 
 class sockinfo {
 public:
-    enum sockinfo_state {
+    enum sockinfo_state : uint16_t {
         SOCKINFO_UNDEFINED,
         SOCKINFO_OPENED,
         SOCKINFO_CLOSING,
@@ -342,6 +342,9 @@ public:
     bool is_shadow_socket_present() { return m_fd >= 0 && m_fd != m_rx_epfd; }
     uint32_t get_flow_tag_val() { return m_flow_tag_id; }
     in_protocol_t get_protocol(void) { return m_protocol; }
+    socket_stats_t *get_sock_stats() const { return m_p_socket_stats; }
+    rfs *get_rfs_ptr() const { return m_rfs_ptr; }
+    void set_rfs_ptr(rfs *r) { m_rfs_ptr = r; }
     void destructor_helper();
     int get_rings_fds(int *ring_fds, int ring_fds_sz);
     int get_rings_num();
@@ -463,99 +466,20 @@ private:
     int fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit);
     bool attach_as_uc_receiver_anyip(sa_family_t family, role_t role, bool skip_rules);
 
-public:
-    socket_stats_t *m_p_socket_stats = nullptr;
-    /* Last memory descriptor with zcopy operation method */
-    mem_buf_desc_t *m_last_zcdesc;
-    struct {
-        /* Use std::deque in current design as far as it allows pushing
-         * elements on either end without moving around any other element
-         * but trade this for slightly worse iteration speeds.
-         */
-        std::deque<struct ring_ec> ec_cache;
-        struct ring_ec *ec;
-    } m_socketxtreme;
-
-    rfs *rfs_ptr = nullptr;
-
-#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    bool m_is_for_socket_pool = false; // true when this fd will be used for socket pool on close
-    int m_back_log = 0;
-#endif
-
-    list_node<sockinfo, sockinfo::pendig_to_remove_node_offset> pendig_to_remove_node;
-    list_node<sockinfo, sockinfo::socket_fd_list_node_offset> socket_fd_list_node;
-    list_node<sockinfo, sockinfo::ep_ready_fd_node_offset> ep_ready_fd_node;
-    uint32_t m_epoll_event_flags;
-    list_node<sockinfo, sockinfo::ep_info_fd_node_offset> ep_info_fd_node;
-    epoll_fd_rec m_fd_rec;
-
 protected:
-
-    int m_fd; // identification information <socket fd>
-    const uint32_t m_n_sysvar_select_poll_os_ratio;
-    epfd_info *m_econtext;
+    /* Last memory descriptor with zcopy operation method */
+    dst_entry *m_p_connected_dst_entry = nullptr;
+    ring *m_p_rx_ring = nullptr; // used in TCP/UDP
+    epfd_info *m_econtext = nullptr;
+    socket_stats_t *m_p_socket_stats = nullptr;
+    mem_buf_desc_t *m_last_zcdesc = nullptr;
+    sockinfo_state m_state = SOCKINFO_OPENED; // socket current state
+    uint8_t m_n_tsing_flags = 0U;
     bool m_has_stats = false;
-    bool m_reuseaddr; // to track setsockopt with SO_REUSEADDR
-    bool m_reuseport; // to track setsockopt with SO_REUSEPORT
-    bool m_flow_tag_enabled; // for this socket
-    bool m_b_blocking;
-    bool m_b_pktinfo;
-    bool m_b_rcvtstamp;
-    bool m_b_rcvtstampns;
-    bool m_b_zc;
-    bool m_skip_cq_poll_in_rx;
-    uint8_t m_n_tsing_flags;
-    in_protocol_t m_protocol;
-    uint8_t m_src_sel_flags;
-
-    multilock m_lock_rcv;
-    lock_mutex m_lock_snd;
-    lock_mutex m_rx_migration_lock;
-
-    sockinfo_state m_state; // socket current state
-    sa_family_t m_family;
-    sock_addr m_bound;
-    sock_addr m_connected;
-    wakeup_pipe m_sock_wakeup_pipe;
-    dst_entry *m_p_connected_dst_entry;
-    ip_addr m_so_bindtodevice_ip;
-
-    int m_rx_epfd;
-    cache_observer m_rx_nd_observer;
-    rx_net_device_map_t m_rx_nd_map;
-    rx_flow_map_t m_rx_flow_map;
-    // we either listen on ALL system cqs or bound to the specific cq
-    ring *m_p_rx_ring; // used in TCP/UDP
-    buff_info_t m_rx_reuse_buff; // used in TCP instead of m_rx_ring_map
-    bool m_rx_reuse_buf_pending; // used to periodically return buffers, even if threshold was not
-                                 // reached
-    bool m_rx_reuse_buf_postponed; // used to mark threshold was reached, but free was not done yet
-    rx_ring_map_t m_rx_ring_map; // CQ map
-    lock_mutex_recursive m_rx_ring_map_lock;
-    ring_allocation_logic_rx m_ring_alloc_logic_rx;
-
-    loops_timer m_loops_timer;
-
-    /**
-     * list of pending ready packet on the Rx,
-     * each element is a pointer to the ib_conn_mgr that holds this ready rx datagram
-     */
-    int m_n_rx_pkt_ready_list_count;
-    size_t m_rx_pkt_ready_offset;
-    size_t m_rx_ready_byte_count;
-
-    int m_n_sysvar_rx_num_buffs_reuse;
-    const int32_t m_n_sysvar_rx_poll_num;
-    ring_alloc_logic_attr m_ring_alloc_log_rx;
-    ring_alloc_logic_attr m_ring_alloc_log_tx;
-    uint32_t m_pcp;
-
-    /* Socket error queue that keeps local errors and internal data required
-     * to provide notification ability.
-     */
-    descq_t m_error_queue;
-    lock_spin m_error_queue_lock;
+    bool m_flow_tag_enabled = false; // for this socket
+    bool m_b_rcvtstamp = false;
+    bool m_b_zc = false;
+    bool m_b_blocking = true;
 
     /* TX zcopy counter
      * The notification itself for tx zcopy operation is a simple scalar value.
@@ -568,16 +492,97 @@ protected:
      */
     atomic_t m_zckey;
 
-    // Callback function pointer to support VMA extra API (xlio_extra.h)
-    xlio_recv_callback_t m_rx_callback;
-    void *m_rx_callback_context; // user context
-    struct xlio_rate_limit_t m_so_ratelimit;
+    int m_fd; // identification information <socket fd>
+
+    // End of first cache line
+
+    /* Socket error queue that keeps local errors and internal data required
+     * to provide notification ability.
+     */
+    descq_t m_error_queue;
+    lock_spin m_error_queue_lock;
     void *m_fd_context; // Context data stored with socket
-    uint32_t m_flow_tag_id; // Flow Tag for this socket
+
+    // End of second cache line
+
+    wakeup_pipe m_sock_wakeup_pipe;
+    rfs *m_rfs_ptr = nullptr;
+    struct {
+        /* Use std::deque in current design as far as it allows pushing
+         * elements on either end without moving around any other element
+         * but trade this for slightly worse iteration speeds.
+         */
+        struct ring_ec *ec;
+        std::deque<struct ring_ec> ec_cache;
+    } m_socketxtreme;
+
+    // End of fourth cache line
+public:
+    list_node<sockinfo, sockinfo::socket_fd_list_node_offset> socket_fd_list_node;
+    list_node<sockinfo, sockinfo::ep_ready_fd_node_offset> ep_ready_fd_node;
+    list_node<sockinfo, sockinfo::ep_info_fd_node_offset> ep_info_fd_node;
+    list_node<sockinfo, sockinfo::pendig_to_remove_node_offset> pendig_to_remove_node;
+    epoll_fd_rec m_fd_rec;
+    uint32_t m_epoll_event_flags = 0U;
+
+protected:
+    int m_rx_epfd;
+    /**
+     * list of pending ready packet on the Rx,
+     * each element is a pointer to the ib_conn_mgr that holds this ready rx datagram
+     */
+    size_t m_rx_pkt_ready_offset = 0U;
+    size_t m_rx_ready_byte_count = 0U;
+    buff_info_t m_rx_reuse_buff; // used in TCP instead of m_rx_ring_map
+    int m_n_rx_pkt_ready_list_count = 0;
+    int m_n_sysvar_rx_num_buffs_reuse;
+    const int32_t m_n_sysvar_rx_poll_num;
+    const uint32_t m_n_sysvar_select_poll_os_ratio;
+    // used to periodically return buffers, even if threshold was not reached
+    bool m_rx_reuse_buf_pending = false;
+    // used to mark threshold was reached, but free was not done yet
+    bool m_rx_reuse_buf_postponed = false;
     bool m_rx_cq_wait_ctrl;
+    bool m_skip_cq_poll_in_rx;
+    bool m_reuseaddr = false; // to track setsockopt with SO_REUSEADDR
+    bool m_reuseport = false; // to track setsockopt with SO_REUSEPORT
+    bool m_b_pktinfo = false;
+    bool m_b_rcvtstampns = false;
+
+    multilock m_lock_rcv;
+    lock_mutex m_lock_snd;
+    lock_mutex m_rx_migration_lock;
+
+    uint32_t m_flow_tag_id = 0U; // Flow Tag for this socket
+    in_protocol_t m_protocol = PROTO_UNDEFINED;
+    sa_family_t m_family;
+    sock_addr m_bound;
+    sock_addr m_connected;
+    ip_addr m_so_bindtodevice_ip;
+    cache_observer m_rx_nd_observer;
+    rx_net_device_map_t m_rx_nd_map;
+    rx_flow_map_t m_rx_flow_map;
+    rx_ring_map_t m_rx_ring_map; // CQ map
+    lock_mutex_recursive m_rx_ring_map_lock;
+    ring_allocation_logic_rx m_ring_alloc_logic_rx;
+    loops_timer m_loops_timer;
+    ring_alloc_logic_attr m_ring_alloc_log_rx;
+    ring_alloc_logic_attr m_ring_alloc_log_tx;
+    // Callback function pointer to support VMA extra API (xlio_extra.h)
+    xlio_recv_callback_t m_rx_callback = nullptr;
+    void *m_rx_callback_context = nullptr; // user context
+    struct xlio_rate_limit_t m_so_ratelimit;
+    uint32_t m_pcp = 0U;
     uint8_t m_n_uc_ttl_hop_lim;
-    bool m_bind_no_port;
+    uint8_t m_src_sel_flags = 0U;
+    bool m_bind_no_port = false;
     bool m_is_ipv6only;
+
+public:
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+    int m_back_log = 0;
+    bool m_is_for_socket_pool = false; // true when this fd will be used for socket pool on close
+#endif
 };
 
 void sockinfo::set_rx_reuse_pending(bool is_pending)
@@ -654,7 +659,8 @@ void sockinfo::save_strq_stats(uint32_t packet_strides)
 {
     if (unlikely(has_stats())) {
         m_p_socket_stats->counters.n_rx_packets++;
-        m_p_socket_stats->strq_counters.n_strq_total_strides += static_cast<uint64_t>(packet_strides);
+        m_p_socket_stats->strq_counters.n_strq_total_strides +=
+            static_cast<uint64_t>(packet_strides);
         m_p_socket_stats->strq_counters.n_strq_max_strides_per_packet =
             std::max(m_p_socket_stats->strq_counters.n_strq_max_strides_per_packet, packet_strides);
     }
