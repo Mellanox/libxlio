@@ -48,8 +48,6 @@
 #include "proto/mem_buf_desc.h"
 #include "proto/dst_entry_udp.h"
 
-#include "pkt_rcvr_sink.h"
-#include "pkt_sndr_source.h"
 #include "sock-redirect.h"
 #include "sockinfo.h"
 
@@ -97,7 +95,18 @@ public:
     int bind_no_os();
     int bind(const struct sockaddr *__addr, socklen_t __addrlen);
     int connect(const struct sockaddr *__to, socklen_t __tolen);
+    virtual void clean_socket_obj() { delete this; }
+    virtual bool is_writeable() { return true; };
+    virtual bool is_errorable(int *errors) { NOT_IN_USE(errors); return false; }
+    virtual bool is_outgoing() { return false; }
+    virtual bool is_incoming() { return false; }
+    virtual int shutdown(int __how);
+    virtual int prepareListen() { return 0; }
+    virtual int listen(int backlog) { NOT_IN_USE(backlog); return 0; }
+    virtual int accept(struct sockaddr *__addr, socklen_t *__addrlen);
+    virtual int accept4(struct sockaddr *__addr, socklen_t *__addrlen, int __flags);
     virtual int getsockname(sockaddr *__name, socklen_t *__namelen);
+    virtual int getpeername(sockaddr *__name, socklen_t *__namelen);
     int setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen);
     int getsockopt(int __level, int __optname, void *__optval, socklen_t *__optlen);
 
@@ -117,7 +126,7 @@ public:
     void unset_immediate_os_sample();
     /**
      * Process a Rx request, we might have a ready packet, or we might block until
-     * we have one (if sockinfo::m_b_blocking == true)
+     * we have one (if sockinfo::is_blocking() == true)
      */
     ssize_t rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
                sockaddr *__from = NULL, socklen_t *__fromlen = NULL, struct msghdr *__msg = NULL);
@@ -138,7 +147,7 @@ public:
     int rx_request_notification(uint64_t poll_sn);
     /**
      * Process a Tx request, handle all that is needed to send the packet, we might block
-     * until the connection info is ready or a tx buffer is releast (if sockinfo::m_b_blocking ==
+     * until the connection info is ready or a tx buffer is releast (if sockinfo::is_blocking() ==
      * true)
      */
     ssize_t tx(xlio_tx_call_attr_t &tx_arg);
@@ -174,11 +183,22 @@ public:
     virtual void set_params_for_socket_pool()
     {
         m_is_for_socket_pool = true;
-        set_m_n_sysvar_rx_num_buffs_reuse(safe_mce_sys().nginx_udp_socket_pool_rx_num_buffs_reuse);
+        set_rx_num_buffs_reuse(safe_mce_sys().nginx_udp_socket_pool_rx_num_buffs_reuse);
     }
-    bool is_closable() { return !m_is_for_socket_pool; }
+    virtual bool is_closable() { return !m_is_for_socket_pool; }
+#else
+    virtual bool is_closable() { return true; }
 #endif
 
+    virtual int register_callback(xlio_recv_callback_t callback, void *context)
+    {
+        return register_callback_ctx(callback, context);
+    }
+
+protected:
+    virtual void lock_rx_q() { m_lock_rcv.lock(); }
+    virtual void unlock_rx_q() { m_lock_rcv.unlock(); }
+    
 private:
     bool packet_is_loopback(mem_buf_desc_t *p_desc);
     ssize_t check_payload_size(const iovec *p_iov, ssize_t sz_iov);
@@ -232,7 +252,7 @@ private:
         while (iter != m_rx_ring_map.end()) {
             descq_t *rx_reuse = &iter->second->rx_reuse_info.rx_reuse;
             int &n_buff_num = iter->second->rx_reuse_info.n_buff_num;
-            if (n_buff_num >= m_n_sysvar_rx_num_buffs_reuse) {
+            if (n_buff_num >= m_rx_num_buffs_reuse) {
                 if (iter->first->reclaim_recv_buffers(rx_reuse)) {
                     n_buff_num = 0;
                 } else {
@@ -268,6 +288,7 @@ private:
         bool operator==(const int &r_port) { return port == r_port; }
     };
 
+    uint32_t m_rx_ready_byte_limit;
     ip_addr m_mc_tx_src_ip;
     bool m_b_mc_tx_loop;
     uint8_t m_n_mc_ttl_hop_lim;

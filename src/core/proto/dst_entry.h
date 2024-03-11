@@ -40,7 +40,6 @@
 
 #include "vlogger/vlogger.h"
 #include "utils/lock_wrapper.h"
-#include "core/sock/socket_fd_api.h"
 #include "core/proto/route_entry.h"
 #include "core/proto/route_val.h"
 #include "core/proto/neighbour_table_mgr.h"
@@ -55,6 +54,17 @@
 
 /* Forward declarations */
 class xlio_tis;
+class sockinfo;
+
+typedef enum {
+    TX_WRITE = 13,
+    TX_WRITEV,
+    TX_SEND,
+    TX_SENDTO,
+    TX_SENDMSG,
+    TX_FILE,
+    TX_UNDEF
+} tx_call_t;
 
 struct socket_data {
     int fd;
@@ -85,7 +95,7 @@ public:
     virtual ssize_t fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr) = 0;
     virtual ssize_t slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr,
                               struct xlio_rate_limit_t &rate_limit, int flags = 0,
-                              socket_fd_api *sock = 0, tx_call_t call_type = TX_UNDEF) = 0;
+                              sockinfo *sock = 0, tx_call_t call_type = TX_UNDEF) = 0;
 
     bool try_migrate_ring_tx(lock_base &socket_lock);
 

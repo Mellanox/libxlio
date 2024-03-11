@@ -49,7 +49,7 @@
 #include "vlogger/vlogger.h"
 #include "core/util/vtypes.h"
 #include "core/util/utils.h"
-#include "core/sock/socket_fd_api.h"
+#include "core/sock/sockinfo.h"
 #include "core/sock/sock-redirect.h"
 #include "core/dev/net_device_table_mgr.h"
 #include "core/util/ip_address.h"

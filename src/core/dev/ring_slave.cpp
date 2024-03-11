@@ -157,7 +157,7 @@ void ring_slave::inc_tx_retransmissions_stats(ring_user_id_t)
 }
 
 template <typename KEY4T, typename KEY2T, typename HDR>
-bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink,
+bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink,
                                                       bool force_5t)
 {
     rfs *p_rfs;
@@ -346,7 +346,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
             BULLSEYE_EXCLUDE_BLOCK_END
 
             p_rfs = p_tmp_rfs;
-            si->rfs_ptr = p_rfs;
+            si->set_rfs_ptr(p_rfs);
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
             if (g_p_app->type == APP_NONE || !g_p_app->add_second_4t_rule)
 #endif
@@ -386,7 +386,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
     return ret;
 }
 
-bool ring_slave::attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink, bool force_5t)
+bool ring_slave::attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t)
 {
     std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
 
@@ -396,7 +396,7 @@ bool ring_slave::attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink, bool
 }
 
 template <typename KEY4T, typename KEY2T, typename HDR>
-bool steering_handler<KEY4T, KEY2T, HDR>::detach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink)
+bool steering_handler<KEY4T, KEY2T, HDR>::detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink)
 {
     rfs *p_rfs = NULL;
 
@@ -520,7 +520,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::detach_flow(flow_tuple &flow_spec_5t, 
     return true;
 }
 
-bool ring_slave::detach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink)
+bool ring_slave::detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink)
 {
     std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
 
@@ -599,7 +599,7 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
         si = static_cast<sockinfo *>(
             g_p_fd_collection->get_sockfd(p_rx_wc_buf_desc->rx.flow_tag_id - 1));
 
-        if (likely((si != NULL) && si->flow_tag_enabled())) {
+        if (likely((si != NULL))) {
             // will process packets with set flow_tag_id and enabled for the socket
             if (p_eth_h->h_proto == NET_ETH_P_8021Q) {
                 // Handle VLAN header as next protocol
@@ -643,10 +643,6 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
             if (likely(protocol == IPPROTO_TCP)) {
                 struct tcphdr *p_tcp_h = (struct tcphdr *)((uint8_t *)p_ip_h + ip_hdr_len);
 
-                // Update the L3 and L4 info
-                p_rx_wc_buf_desc->rx.src.set_ip_port(family, saddr, p_tcp_h->source);
-                p_rx_wc_buf_desc->rx.dst.set_ip_port(family, daddr, p_tcp_h->dest);
-
                 // Update packet descriptor with datagram base address and length
                 p_rx_wc_buf_desc->rx.frag.iov_base = (uint8_t *)p_tcp_h + sizeof(struct tcphdr);
                 p_rx_wc_buf_desc->rx.frag.iov_len = ip_payload_len - sizeof(struct tcphdr);
@@ -665,7 +661,11 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
                              p_tcp_h->fin ? "F" : "", ntohl(p_tcp_h->seq), ntohl(p_tcp_h->ack_seq),
                              ntohs(p_tcp_h->window), p_rx_wc_buf_desc->rx.sz_payload);
 
-                return si->rfs_ptr->rx_dispatch_packet(p_rx_wc_buf_desc, pv_fd_ready_array);
+                if (likely((safe_mce_sys().gro_streams_max > 0U) && is_simple())) {
+                    return static_cast<rfs_uc_tcp_gro *>(si->get_rfs_ptr())->rfs_uc_tcp_gro::rx_dispatch_packet(p_rx_wc_buf_desc, pv_fd_ready_array);
+                }
+
+                return si->get_rfs_ptr()->rx_dispatch_packet(p_rx_wc_buf_desc, pv_fd_ready_array);
             }
 
             if (likely(protocol == IPPROTO_UDP)) {
@@ -1073,6 +1073,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::rx_process_buffer_no_flow_id(
         p_rx_wc_buf_desc->rx.frag.iov_len = payload_len - sizeof(struct tcphdr);
 
         // Update the L3/L4 info
+        // We can avoid setting this for non-listen sockets.
         p_rx_wc_buf_desc->rx.src.set_ip_port(hdr_get_family(p_ip_h), hdr_get_saddr(p_ip_h),
                                              p_tcp_h->source);
         p_rx_wc_buf_desc->rx.dst.set_ip_port(hdr_get_family(p_ip_h), hdr_get_daddr(p_ip_h),

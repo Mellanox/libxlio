@@ -99,7 +99,7 @@ epfd_info::epfd_info(int epfd, int size)
 epfd_info::~epfd_info()
 {
     __log_funcall("");
-    socket_fd_api *sock_fd;
+    sockinfo *sock_fd;
 
     // Meny: going over all handled fds and removing epoll context.
 
@@ -207,7 +207,7 @@ int epfd_info::add_fd(int fd, epoll_event *event)
 
     __log_funcall("fd=%d", fd);
 
-    socket_fd_api *temp_sock_fd_api = fd_collection_get_sockfd(fd);
+    sockinfo *temp_sock_fd_api = fd_collection_get_sockfd(fd);
     if (temp_sock_fd_api && temp_sock_fd_api->get_type() == FD_TYPE_SOCKET) {
         is_offloaded = true;
     }
@@ -403,7 +403,7 @@ int epfd_info::del_fd(int fd, bool passthrough)
     __log_funcall("fd=%d", fd);
 
     epoll_fd_rec *fi;
-    socket_fd_api *temp_sock_fd_api = fd_collection_get_sockfd(fd);
+    sockinfo *temp_sock_fd_api = fd_collection_get_sockfd(fd);
     if (temp_sock_fd_api && temp_sock_fd_api->skip_os_select()) {
         __log_dbg("fd=%d must be skipped from os epoll()", fd);
     } else if (!passthrough) {
@@ -448,7 +448,7 @@ int epfd_info::del_fd(int fd, bool passthrough)
             // remove fd and replace by last fd
             m_p_offloaded_fds[fi->offloaded_index - 1] = m_p_offloaded_fds[m_n_offloaded_fds - 1];
 
-            socket_fd_api *last_socket =
+            sockinfo *last_socket =
                 fd_collection_get_sockfd(m_p_offloaded_fds[m_n_offloaded_fds - 1]);
             if (last_socket && last_socket->get_epoll_context_fd() == m_epfd) {
                 last_socket->m_fd_rec.offloaded_index = fi->offloaded_index;
@@ -485,7 +485,7 @@ int epfd_info::mod_fd(int fd, epoll_event *event)
         return -1;
     }
 
-    socket_fd_api *temp_sock_fd_api = fd_collection_get_sockfd(fd);
+    sockinfo *temp_sock_fd_api = fd_collection_get_sockfd(fd);
     // check if fd is offloaded that new event mask is OK
     if (temp_sock_fd_api && temp_sock_fd_api->m_fd_rec.offloaded_index > 0) {
         if (m_log_invalid_events && (event->events & ~SUPPORTED_EPOLL_EVENTS)) {
@@ -550,7 +550,7 @@ int epfd_info::mod_fd(int fd, epoll_event *event)
 epoll_fd_rec *epfd_info::get_fd_rec(int fd)
 {
     epoll_fd_rec *fd_rec = NULL;
-    socket_fd_api *temp_sock_fd_api = fd_collection_get_sockfd(fd);
+    sockinfo *temp_sock_fd_api = fd_collection_get_sockfd(fd);
     lock();
 
     if (temp_sock_fd_api && temp_sock_fd_api->get_epoll_context_fd() == m_epfd) {
@@ -575,7 +575,7 @@ void epfd_info::fd_closed(int fd, bool passthrough)
     unlock();
 }
 
-void epfd_info::insert_epoll_event_cb(socket_fd_api *sock_fd, uint32_t event_flags)
+void epfd_info::insert_epoll_event_cb(sockinfo *sock_fd, uint32_t event_flags)
 {
     lock();
     // EPOLLHUP | EPOLLERR are reported without user request
@@ -585,7 +585,7 @@ void epfd_info::insert_epoll_event_cb(socket_fd_api *sock_fd, uint32_t event_fla
     unlock();
 }
 
-void epfd_info::insert_epoll_event(socket_fd_api *sock_fd, uint32_t event_flags)
+void epfd_info::insert_epoll_event(sockinfo *sock_fd, uint32_t event_flags)
 {
     // assumed lock
     if (sock_fd->ep_ready_fd_node.is_list_member()) {
@@ -598,7 +598,7 @@ void epfd_info::insert_epoll_event(socket_fd_api *sock_fd, uint32_t event_flags)
     do_wakeup();
 }
 
-void epfd_info::remove_epoll_event(socket_fd_api *sock_fd, uint32_t event_flags)
+void epfd_info::remove_epoll_event(sockinfo *sock_fd, uint32_t event_flags)
 {
     sock_fd->m_epoll_event_flags &= ~event_flags;
     if (sock_fd->m_epoll_event_flags == 0) {

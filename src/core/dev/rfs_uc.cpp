@@ -37,6 +37,7 @@
 #include "util/instrumentation.h"
 #include "sock/sock-redirect.h"
 #include "sock/sock-app.h"
+#include "sock/sockinfo.h"
 
 #define MODULE_NAME "rfs_uc"
 

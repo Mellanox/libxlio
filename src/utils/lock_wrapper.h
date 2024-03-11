@@ -228,6 +228,42 @@ protected:
  * pthread spinlock
  */
 /* coverity[missing_move_assignment] */
+class lock_spin_simple {
+public:
+    lock_spin_simple()
+    {
+        pthread_spin_init(&m_lock, 0);
+    };
+    ~lock_spin_simple() { pthread_spin_destroy(&m_lock); };
+    inline int lock()
+    {
+        DEFINED_NO_THREAD_LOCK_RETURN_0
+        return pthread_spin_lock(&m_lock);
+    };
+    inline int trylock()
+    {
+        DEFINED_NO_THREAD_LOCK_RETURN_0
+        return pthread_spin_trylock(&m_lock);
+    };
+    inline int unlock()
+    {
+        DEFINED_NO_THREAD_LOCK_RETURN_0
+        return pthread_spin_unlock(&m_lock);
+    };
+    inline int is_locked_by_me()
+    {
+        assert(!"lock_spin_simple::is_locked_by_me is unsupported");
+        return 0; // Unsupported
+    }
+
+protected:
+    pthread_spinlock_t m_lock;
+};
+
+/**
+ * pthread spinlock
+ */
+/* coverity[missing_move_assignment] */
 class lock_spin_recursive : public lock_spin {
 public:
     lock_spin_recursive(const char *name = "lock_spin_recursive")

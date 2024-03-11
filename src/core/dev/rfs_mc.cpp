@@ -34,6 +34,7 @@
 #include "util/utils.h"
 #include "dev/rfs_mc.h"
 #include "dev/ring_simple.h"
+#include "sock/sockinfo.h"
 
 #define MODULE_NAME "rfs_mc"
 

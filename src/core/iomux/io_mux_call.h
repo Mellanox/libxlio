@@ -38,7 +38,7 @@
 
 #include <util/vtypes.h>
 #include <util/xlio_stats.h>
-#include <sock/socket_fd_api.h>
+#include <sock/sockinfo.h>
 #include <sock/sockinfo.h>
 
 // from sigset.h

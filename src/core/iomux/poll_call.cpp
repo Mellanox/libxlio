@@ -34,7 +34,7 @@
 
 #include <vlogger/vlogger.h>
 #include <util/vtypes.h>
-#include <sock/socket_fd_api.h>
+#include <sock/sockinfo.h>
 #include <sock/sock-redirect.h>
 #include <sock/fd_collection.h>
 #include <dev/net_device_table_mgr.h>
@@ -71,7 +71,7 @@ poll_call::poll_call(int *off_rfds_buffer, offloaded_mode_t *off_modes_buffer, i
         }
 
         fd = m_orig_fds[i].fd;
-        socket_fd_api *temp_sock_fd_api = fd_collection_get_sockfd(fd);
+        sockinfo *temp_sock_fd_api = fd_collection_get_sockfd(fd);
         if (temp_sock_fd_api && (temp_sock_fd_api->get_type() == FD_TYPE_SOCKET)) {
             // POLLERR and POLLHUP are always enabled implicitly and considered as READ by XLIO
             offloaded_mode_t off_mode = OFF_READ;

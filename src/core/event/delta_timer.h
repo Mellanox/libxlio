@@ -39,7 +39,6 @@
 #define INFINITE_TIMEOUT (-1)
 
 class timer_handler;
-class timers_group;
 
 enum timer_req_type_t {
     // reregister itself every after timer expires. (the client doesn't need to reregister)
@@ -65,7 +64,6 @@ struct timer_node_t {
     /* link to the context registered */
     timer_handler *handler;
     void *user_data;
-    timers_group *group;
     timer_req_type_t req_type;
     struct timer_node_t *next;
     struct timer_node_t *prev;

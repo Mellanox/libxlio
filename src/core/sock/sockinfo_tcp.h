@@ -35,7 +35,7 @@
 
 #include "utils/lock_wrapper.h"
 #include "proto/mem_buf_desc.h"
-#include "sock/socket_fd_api.h"
+#include "sock/sockinfo.h"
 #include "dev/buffer_pool.h"
 #include "dev/cq_mgr_rx.h"
 #include "xlio_extra.h"
@@ -135,7 +135,7 @@ enum inet_ecns {
     INET_ECN_MASK = 3,
 };
 
-class sockinfo_tcp : public sockinfo, public timer_handler {
+class sockinfo_tcp : public sockinfo {
 public:
     static inline size_t accepted_conns_node_offset(void)
     {
@@ -145,7 +145,7 @@ public:
     sockinfo_tcp(int fd, int domain);
     virtual ~sockinfo_tcp();
 
-    virtual void clean_obj();
+    virtual void clean_socket_obj();
 
     void setPassthrough(bool _isPassthrough)
     {
@@ -181,6 +181,8 @@ public:
     virtual int accept4(struct sockaddr *__addr, socklen_t *__addrlen, int __flags);
     virtual int getsockname(sockaddr *__name, socklen_t *__namelen);
     virtual int getpeername(sockaddr *__name, socklen_t *__namelen);
+    virtual void set_immediate_os_sample() {};
+    virtual void unset_immediate_os_sample() {};
 
     inline bool handle_bind_no_port(int &bind_ret, in_port_t in_port, const sockaddr *__addr,
                                     socklen_t __addrlen);
@@ -233,9 +235,9 @@ public:
     static void tcp_tx_zc_callback(mem_buf_desc_t *p_desc);
     void tcp_tx_zc_handle(mem_buf_desc_t *p_desc);
 
-    bool inline is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = NULL);
-    bool inline is_writeable();
-    bool inline is_errorable(int *errors);
+    bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = NULL);
+    bool is_writeable();
+    bool is_errorable(int *errors);
     bool is_closable()
     {
         return get_tcp_state(&m_pcb) == CLOSED && m_syn_received.empty() &&
@@ -292,7 +294,7 @@ public:
 
     virtual inline fd_type_t get_type() { return FD_TYPE_SOCKET; }
 
-    void handle_timer_expired(void *user_data);
+    void handle_timer_expired();
 
     inline ib_ctx_handler *get_ctx(void)
     {
@@ -330,7 +332,6 @@ public:
     inline int trylock_tcp_con(void) { return m_tcp_con_lock.trylock(); }
     inline void lock_tcp_con(void) { m_tcp_con_lock.lock(); }
     inline void unlock_tcp_con(void) { m_tcp_con_lock.unlock(); }
-
     inline void set_reguired_send_block(unsigned sz) { m_required_send_block = sz; }
     static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
     static err_t rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
@@ -343,7 +344,7 @@ public:
     virtual int register_callback(xlio_recv_callback_t callback, void *context)
     {
         tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_recv_callback);
-        return sockinfo::register_callback(callback, context);
+        return register_callback_ctx(callback, context);
     }
 
     int tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint32_t mkey,
@@ -354,6 +355,9 @@ protected:
     virtual void unlock_rx_q();
     virtual bool try_un_offloading(); // un-offload the socket if possible
     virtual int os_epoll_wait(epoll_event *ep_events, int maxevents);
+
+    virtual size_t handle_msg_trunc(size_t total_rx, size_t payload_size, int in_flags,
+                                    int *p_out_flags);
 
 private:
     int fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit);
@@ -467,7 +471,7 @@ private:
         m_rx_reuse_buf_postponed = false;
 
         if (m_p_rx_ring) {
-            if (m_rx_reuse_buff.n_buff_num >= m_n_sysvar_rx_num_buffs_reuse) {
+            if (m_rx_reuse_buff.n_buff_num >= m_rx_num_buffs_reuse) {
                 if (m_p_rx_ring->reclaim_recv_buffers(&m_rx_reuse_buff.rx_reuse)) {
                     m_rx_reuse_buff.n_buff_num = 0;
                 } else {
@@ -479,7 +483,7 @@ private:
             while (iter != m_rx_ring_map.end()) {
                 descq_t *rx_reuse = &iter->second->rx_reuse_info.rx_reuse;
                 int &n_buff_num = iter->second->rx_reuse_info.n_buff_num;
-                if (n_buff_num >= m_n_sysvar_rx_num_buffs_reuse) {
+                if (n_buff_num >= m_rx_num_buffs_reuse) {
                     if (iter->first->reclaim_recv_buffers(rx_reuse)) {
                         n_buff_num = 0;
                     } else {
@@ -540,6 +544,7 @@ private:
 
     // lwip specific things
     struct tcp_pcb m_pcb;
+    fd_array_t *m_iomux_ready_fd_array;
     socket_options_list_t m_socket_options_list;
     timestamps_t m_rx_timestamps;
     tcp_sock_offload_e m_sock_offload;
@@ -558,7 +563,6 @@ private:
     int m_rcvbuff_current;
     int m_rcvbuff_non_tcp_recved;
     tcp_conn_state_e m_conn_state;
-    fd_array_t *m_iomux_ready_fd_array;
     struct linger m_linger;
 
     /* local & peer addresses */
@@ -579,7 +583,6 @@ private:
     uint32_t m_ready_conn_cnt;
     int m_backlog;
 
-    void *m_timer_handle;
     multilock m_tcp_con_lock;
 
     // used for reporting 'connected' on second non-blocking call to connect or
@@ -614,36 +617,37 @@ private:
 };
 typedef struct tcp_seg tcp_seg;
 
-class tcp_timers_collection : public timers_group, public cleanable_obj {
+class tcp_timers_collection : public timer_handler, public cleanable_obj {
 public:
-    tcp_timers_collection(int period, int resolution);
+    tcp_timers_collection();
+    tcp_timers_collection(int intervals);
     virtual ~tcp_timers_collection();
 
-    void clean_obj();
+    virtual void clean_obj() override;
 
-    virtual void handle_timer_expired(void *user_data);
+    virtual void handle_timer_expired(void *user_data) override;
+
+    void register_wakeup_event();
+
+    void add_new_timer(sockinfo_tcp *sock);
+
+    void remove_timer(sockinfo_tcp *sock);
 
 protected:
-    // add a new timer
-    void add_new_timer(timer_node_t *node, timer_handler *handler, void *user_data);
 
-    // remove timer from list and free it.
-    // called for stopping (unregistering) a timer
-    void remove_timer(timer_node_t *node);
-
-    void *m_timer_handle;
+    void *m_timer_handle = nullptr;
 
 private:
-    timer_node_t **m_p_intervals;
-
-    int m_n_period;
-    int m_n_resolution;
-    int m_n_intervals_size;
-    int m_n_location;
-    int m_n_count;
-    int m_n_next_insert_bucket;
-
     void free_tta_resources();
+
+    typedef std::list<sockinfo_tcp *> sock_list;
+    typedef typename sock_list::iterator sock_list_itr;
+    std::vector<sock_list> m_p_intervals;
+    std::unordered_map<sockinfo_tcp *, std::tuple<uint32_t, sock_list_itr>> m_sock_remove_map;
+    int m_n_intervals_size;
+    int m_n_location = 0;
+    int m_n_count = 0;
+    int m_n_next_insert_bucket = 0;
 };
 
 class thread_local_tcp_timers : public tcp_timers_collection {
@@ -653,6 +657,5 @@ public:
 };
 
 extern tcp_timers_collection *g_tcp_timers_collection;
-extern thread_local thread_local_tcp_timers g_thread_local_tcp_timers;
-
+extern tcp_timers_collection *get_tcp_timer_collection();
 #endif

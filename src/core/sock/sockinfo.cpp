@@ -59,55 +59,71 @@
 #define si_logfunc    __log_info_func
 #define si_logfuncall __log_info_funcall
 
+const char *sockinfo::setsockopt_so_opt_to_str(int opt)
+{
+    switch (opt) {
+    case SO_REUSEADDR:
+        return "SO_REUSEADDR";
+    case SO_REUSEPORT:
+        return "SO_REUSEPORT";
+    case SO_BROADCAST:
+        return "SO_BROADCAST";
+    case SO_RCVBUF:
+        return "SO_RCVBUF";
+    case SO_SNDBUF:
+        return "SO_SNDBUF";
+    case SO_TIMESTAMP:
+        return "SO_TIMESTAMP";
+    case SO_TIMESTAMPNS:
+        return "SO_TIMESTAMPNS";
+    case SO_BINDTODEVICE:
+        return "SO_BINDTODEVICE";
+    case SO_ZEROCOPY:
+        return "SO_ZEROCOPY";
+    case SO_XLIO_RING_ALLOC_LOGIC:
+        return "SO_XLIO_RING_ALLOC_LOGIC";
+    case SO_MAX_PACING_RATE:
+        return "SO_MAX_PACING_RATE";
+    case SO_XLIO_FLOW_TAG:
+        return "SO_XLIO_FLOW_TAG";
+    case SO_XLIO_SHUTDOWN_RX:
+        return "SO_XLIO_SHUTDOWN_RX";
+    case IPV6_V6ONLY:
+        return "IPV6_V6ONLY";
+    case IPV6_ADDR_PREFERENCES:
+        return "IPV6_ADDR_PREFERENCES";
+    default:
+        break;
+    }
+    return "UNKNOWN SO opt";
+}
+
 sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
-    : socket_fd_api(fd)
-    , m_reuseaddr(false)
-    , m_reuseport(false)
-    , m_flow_tag_enabled(false)
-    , m_b_blocking(true)
-    , m_b_pktinfo(false)
-    , m_b_rcvtstamp(false)
-    , m_b_rcvtstampns(false)
-    , m_b_zc(false)
+    : m_fd_context((void *)((uintptr_t)fd))
+    , m_fd(fd)
+    , m_rx_num_buffs_reuse(safe_mce_sys().rx_bufs_batch)
     , m_skip_cq_poll_in_rx(safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_ENABLE)
-    , m_n_tsing_flags(0)
-    , m_protocol(PROTO_UNDEFINED)
-    , m_src_sel_flags(0U)
+    , m_rx_cq_wait_ctrl(safe_mce_sys().rx_cq_wait_ctrl)
+    , m_is_ipv6only(safe_mce_sys().sysctl_reader.get_ipv6_bindv6only())
+    , m_family(domain)
     , m_lock_rcv(MULTILOCK_RECURSIVE, MODULE_NAME "::m_lock_rcv")
     , m_lock_snd(MODULE_NAME "::m_lock_snd")
-    , m_state(SOCKINFO_OPENED)
-    , m_family(domain)
-    , m_p_connected_dst_entry(NULL)
     , m_so_bindtodevice_ip(ip_address::any_addr(), domain)
-    , m_p_rx_ring(0)
-    , m_rx_reuse_buf_pending(false)
-    , m_rx_reuse_buf_postponed(false)
     , m_rx_ring_map_lock(MODULE_NAME "::m_rx_ring_map_lock")
-    , m_n_rx_pkt_ready_list_count(0)
-    , m_rx_pkt_ready_offset(0)
-    , m_rx_ready_byte_count(0)
-    , m_n_sysvar_rx_num_buffs_reuse(safe_mce_sys().rx_bufs_batch)
-    , m_n_sysvar_rx_poll_num(safe_mce_sys().rx_poll_num)
     , m_ring_alloc_log_rx(safe_mce_sys().ring_allocation_logic_rx, use_ring_locks)
     , m_ring_alloc_log_tx(safe_mce_sys().ring_allocation_logic_tx, use_ring_locks)
-    , m_pcp(0)
-    , m_rx_callback(NULL)
-    , m_rx_callback_context(NULL)
-    , m_fd_context((void *)((uintptr_t)m_fd))
-    , m_flow_tag_id(0)
-    , m_rx_cq_wait_ctrl(safe_mce_sys().rx_cq_wait_ctrl)
-    , m_n_uc_ttl_hop_lim(m_family == AF_INET
-                             ? safe_mce_sys().sysctl_reader.get_net_ipv4_ttl()
-                             : safe_mce_sys().sysctl_reader.get_net_ipv6_hop_limit())
-    , m_bind_no_port(false)
-    , m_is_ipv6only(safe_mce_sys().sysctl_reader.get_ipv6_bindv6only())
-    , m_p_rings_fds(NULL)
 {
+    set_is_blocking(true);
+
+    m_n_uc_ttl_hop_lim = (m_family == AF_INET
+        ? safe_mce_sys().sysctl_reader.get_net_ipv4_ttl()
+        : safe_mce_sys().sysctl_reader.get_net_ipv6_hop_limit());
+
     m_rx_epfd = SYSCALL(epoll_create, 128);
     if (unlikely(m_rx_epfd == -1)) {
         throw_xlio_exception("create internal epoll");
     }
-    wakeup_set_epoll_fd(m_rx_epfd);
+    m_sock_wakeup_pipe.wakeup_set_epoll_fd(m_rx_epfd);
     if (m_fd == SOCKET_FAKE_FD) {
         m_fd = m_rx_epfd;
         m_fd_context = (void *)((uintptr_t)m_fd);
@@ -115,22 +131,13 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
 
     m_ring_alloc_logic_rx = ring_allocation_logic_rx(get_fd(), m_ring_alloc_log_rx);
 
-    m_p_socket_stats = &m_socket_stats; // Save stats as local copy and allow state publisher to
-                                        // copy from this location
     socket_stats_init();
-    xlio_stats_instance_create_socket_block(m_p_socket_stats);
+
     m_rx_reuse_buff.n_buff_num = 0;
     memset(&m_so_ratelimit, 0, sizeof(xlio_rate_limit_t));
     set_flow_tag(m_fd + 1);
 
     atomic_set(&m_zckey, 0);
-    m_last_zcdesc = NULL;
-
-    m_socketxtreme.ec_cache.clear();
-    struct ring_ec ec;
-    ec.clear();
-    m_socketxtreme.ec_cache.push_back(ec);
-    m_socketxtreme.ec = &m_socketxtreme.ec_cache.back();
 
     m_connected.set_sa_family(m_family);
     m_bound.set_sa_family(m_family);
@@ -146,7 +153,8 @@ sockinfo::~sockinfo()
     }
 
     // Change to non-blocking socket so calling threads can exit
-    m_b_blocking = false;
+    set_is_blocking(false);
+
     // This will wake up any blocked thread in rx() call to SYSCALL(epoll_wait, )
     SYSCALL(close, m_rx_epfd);
 
@@ -165,17 +173,43 @@ sockinfo::~sockinfo()
         }
     }
 
-    xlio_stats_instance_remove_socket_block(m_p_socket_stats);
+    if (has_stats()) {
+        xlio_stats_instance_remove_socket_block(m_p_socket_stats);
+        sock_stats::get_sock_stats()->return_stats_obj(m_p_socket_stats);
+    }
 
-    m_socketxtreme.ec_cache.clear();
+    bool toclose = safe_mce_sys().deferred_close && m_fd >= 0;
+
+#if defined(DEFINED_NGINX)
+    if (g_p_app->type == APP_NGINX) {
+        // Sockets from a socket pool are not closed during close(), so do it now.
+        toclose = toclose || (m_is_for_socket_pool && m_fd >= 0);
+    }
+#endif
+
+    if (toclose) {
+        SYSCALL(close, m_fd);
+    }
 }
 
-void sockinfo::socket_stats_init(void)
+void sockinfo::socket_stats_init()
 {
+    if (!m_p_socket_stats) { // This check is for listen sockets.
+        m_p_socket_stats = sock_stats::get_sock_stats()->get_stats_obj();
+        if (!m_p_socket_stats) {
+            m_p_socket_stats = &sock_stats::tl_dummy_stats;
+            return;
+        }
+
+        // Save stats as local copy and allow state publisher to copy from this location
+        xlio_stats_instance_create_socket_block(m_p_socket_stats);
+    }
+
+    set_has_stats();
     m_p_socket_stats->reset();
     m_p_socket_stats->fd = m_fd;
     m_p_socket_stats->inode = fd2inode(m_fd);
-    m_p_socket_stats->b_blocking = m_b_blocking;
+    m_p_socket_stats->b_blocking = is_blocking();
     m_p_socket_stats->ring_alloc_logic_rx = m_ring_alloc_log_rx.get_ring_alloc_logic();
     m_p_socket_stats->ring_alloc_logic_tx = m_ring_alloc_log_tx.get_ring_alloc_logic();
     m_p_socket_stats->ring_user_id_rx = m_ring_alloc_logic_rx.calc_res_key_by_logic();
@@ -184,11 +218,44 @@ void sockinfo::socket_stats_init(void)
     m_p_socket_stats->sa_family = m_family;
 }
 
+ring_ec* sockinfo::pop_next_ec()
+{
+    if (likely(m_socketxtreme_ec_first)) {
+        ring_ec* temp = m_socketxtreme_ec_first;
+        m_socketxtreme_ec_first = m_socketxtreme_ec_first->next_ec;
+        if (likely(!m_socketxtreme_ec_first)) { // We likely to have a single ec most of the time.
+            m_socketxtreme_ec = nullptr;
+        }
+
+        return temp;
+    }
+
+    return nullptr;
+}
+
+ring_ec* sockinfo::clear_ecs()
+{
+    ring_ec* temp = m_socketxtreme_ec_first;
+    m_socketxtreme_ec_first = m_socketxtreme_ec = nullptr;
+    return temp;
+}
+
+void sockinfo::add_ec(ring_ec *ec)
+{
+    memset(&ec->completion, 0, sizeof(ec->completion));
+    if (likely(!m_socketxtreme_ec)) {
+        m_socketxtreme_ec = m_socketxtreme_ec_first = ec;
+    } else {
+        m_socketxtreme_ec->next_ec = ec;
+        m_socketxtreme_ec = ec;
+    }
+}
+
 void sockinfo::set_blocking(bool is_blocked)
 {
     si_logdbg("set socket to %s mode", is_blocked ? "blocked" : "non-blocking");
-    m_b_blocking = is_blocked;
-    m_p_socket_stats->b_blocking = m_b_blocking;
+    set_is_blocking(is_blocked);
+    m_p_socket_stats->b_blocking = is_blocking();
 }
 
 int sockinfo::fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit)
@@ -205,7 +272,7 @@ int sockinfo::fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit)
         break;
     case F_GETFL: // Get file status flags.
         si_logfunc("cmd=F_GETFL, arg=%#x", __arg);
-        rc = O_NONBLOCK * !m_b_blocking;
+        rc = O_NONBLOCK * !is_blocking();
         break;
 
     case F_GETFD: // Get file descriptor flags.
@@ -264,6 +331,18 @@ int sockinfo::fcntl64(int __cmd, unsigned long int __arg)
 
     si_logdbg("going to OS for fcntl64 cmd=%d, arg=%#lx", __cmd, __arg);
     return SYSCALL(fcntl64, m_fd, __cmd, __arg);
+}
+
+int sockinfo::get_epoll_context_fd()
+{ 
+    return (has_epoll_context() ? m_econtext->get_epoll_fd() : 0);
+}
+
+void sockinfo::insert_epoll_event(uint64_t events)
+{
+    if (has_epoll_context()) {
+        m_econtext->insert_epoll_event_cb(this, static_cast<uint32_t>(events));
+    }
 }
 
 int sockinfo::set_ring_attr(xlio_ring_alloc_logic_attr *attr)
@@ -449,12 +528,12 @@ int sockinfo::setsockopt(int __level, int __optname, const void *__optval, sockl
         case SO_TIMESTAMP:
         case SO_TIMESTAMPNS:
             if (__optval) {
-                m_b_rcvtstamp = *(bool *)__optval;
+                set_is_rcvtstamp(*(bool *)__optval);
                 if (__optname == SO_TIMESTAMPNS) {
-                    m_b_rcvtstampns = m_b_rcvtstamp;
+                    m_b_rcvtstampns = is_rcvtstamp();
                 }
                 si_logdbg("SOL_SOCKET, %s=%s", setsockopt_so_opt_to_str(__optname),
-                          (m_b_rcvtstamp ? "true" : "false"));
+                          (is_rcvtstamp() ? "true" : "false"));
             } else {
                 si_logdbg("SOL_SOCKET, %s=\"???\" - NOT HANDLED, optval == NULL",
                           setsockopt_so_opt_to_str(__optname));
@@ -779,7 +858,7 @@ int sockinfo::getsockopt(int __level, int __optname, void *__optval, socklen_t *
 }
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-void sockinfo::copy_sockopt_fork(const socket_fd_api *copy_from)
+void sockinfo::copy_sockopt_fork(const sockinfo *copy_from)
 {
     const sockinfo *skinfo = dynamic_cast<const sockinfo *>(copy_from);
     if (skinfo) {
@@ -807,7 +886,7 @@ int sockinfo::get_sock_by_L3_L4(in_protocol_t protocol, const ip_address &ip, in
     assert(g_p_fd_collection);
     int map_size = g_p_fd_collection->get_fd_map_size();
     for (int i = 0; i < map_size; i++) {
-        socket_fd_api *p_sock_i = g_p_fd_collection->get_sockfd(i);
+        sockinfo *p_sock_i = g_p_fd_collection->get_sockfd(i);
         if (!p_sock_i || p_sock_i->get_type() != FD_TYPE_SOCKET) {
             continue;
         }
@@ -822,7 +901,7 @@ int sockinfo::get_sock_by_L3_L4(in_protocol_t protocol, const ip_address &ip, in
 
 void sockinfo::save_stats_rx_offload(int nbytes)
 {
-    if (nbytes < 0) {
+    if (unlikely(has_stats()) && nbytes < 0) {
         if (errno == EAGAIN) {
             m_p_socket_stats->counters.n_rx_eagain++;
         } else {
@@ -853,15 +932,6 @@ void sockinfo::save_stats_tx_os(int bytes)
     } else {
         m_p_socket_stats->counters.n_tx_os_errors++;
     }
-}
-
-size_t sockinfo::handle_msg_trunc(size_t total_rx, size_t payload_size, int in_flags,
-                                  int *p_out_flags)
-{
-    NOT_IN_USE(payload_size);
-    NOT_IN_USE(in_flags);
-    *p_out_flags &= ~MSG_TRUNC; // don't handle msg_trunc
-    return total_rx;
 }
 
 bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
@@ -1309,7 +1379,15 @@ int sockinfo::add_epoll_context(epfd_info *epfd)
     m_rx_ring_map_lock.lock();
     lock_rx_q();
 
-    ret = socket_fd_api::add_epoll_context(epfd);
+    if (!m_econtext && !safe_mce_sys().enable_socketxtreme) {
+        // This socket is not registered to any epfd
+        m_econtext = epfd;
+    } else {
+        // Currently XLIO does not support more then 1 epfd listed
+        errno = (m_econtext == epfd) ? EEXIST : ENOMEM;
+        ret = -1;
+    }
+
     if (ret < 0) {
         goto unlock_locks;
     }
@@ -1320,7 +1398,9 @@ int sockinfo::add_epoll_context(epfd_info *epfd)
 
     sock_ring_map_iter = m_rx_ring_map.begin();
     while (sock_ring_map_iter != m_rx_ring_map.end()) {
-        notify_epoll_context_add_ring(sock_ring_map_iter->first);
+        if (has_epoll_context()) {
+            m_econtext->increase_ring_ref_count(sock_ring_map_iter->first);
+        }
         sock_ring_map_iter++;
     }
 
@@ -1337,7 +1417,7 @@ void sockinfo::remove_epoll_context(epfd_info *epfd)
     m_rx_ring_map_lock.lock();
     lock_rx_q();
 
-    if (!notify_epoll_context_verify(epfd)) {
+    if (!has_epoll_context() || m_econtext != epfd) {
         unlock_rx_q();
         m_rx_ring_map_lock.unlock();
         return;
@@ -1345,11 +1425,14 @@ void sockinfo::remove_epoll_context(epfd_info *epfd)
 
     rx_ring_map_t::const_iterator sock_ring_map_iter = m_rx_ring_map.begin();
     while (sock_ring_map_iter != m_rx_ring_map.end()) {
-        notify_epoll_context_remove_ring(sock_ring_map_iter->first);
+        m_econtext->decrease_ring_ref_count(sock_ring_map_iter->first);
         sock_ring_map_iter++;
     }
 
-    socket_fd_api::remove_epoll_context(epfd);
+    if (m_econtext == epfd) {
+        m_econtext = NULL;
+    }
+
     if (safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_EPOLL_ONLY) {
         m_skip_cq_poll_in_rx = false;
     }
@@ -1376,13 +1459,20 @@ void sockinfo::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
 
     bool b_any_activity = false;
 
-    socket_fd_api::statistics_print(log_level);
+    int epoll_fd = get_epoll_context_fd();
+
+    // Socket data
+    vlog_printf(log_level, "Fd number : %d\n", m_fd);
+    if (epoll_fd) {
+        vlog_printf(log_level, "Socket epoll Fd : %d\n", epoll_fd);
+        vlog_printf(log_level, "Socket epoll flags : 0x%x\n", m_fd_rec.events);
+    }
 
     vlog_printf(log_level, "Bind info : %s\n", m_bound.to_str_ip_port(true).c_str());
     vlog_printf(log_level, "Connection info : %s\n", m_connected.to_str_ip_port(true).c_str());
     vlog_printf(log_level, "Protocol : %s\n", in_protocol_str[m_protocol]);
     vlog_printf(log_level, "Is closed : %s\n", m_state_str[m_state]);
-    vlog_printf(log_level, "Is blocking : %s\n", m_b_blocking ? "true" : "false");
+    vlog_printf(log_level, "Is blocking : %s\n", is_blocking() ? "true" : "false");
     vlog_printf(log_level, "Rx reuse buffer pending : %s\n",
                 m_rx_reuse_buf_pending ? "true" : "false");
     vlog_printf(log_level, "Rx reuse buffer postponed : %s\n",
@@ -1391,6 +1481,10 @@ void sockinfo::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
     if (m_p_connected_dst_entry) {
         vlog_printf(log_level, "Is offloaded : %s\n",
                     m_p_connected_dst_entry->is_offloaded() ? "true" : "false");
+    }
+
+    if (!has_stats()) {
+        return;
     }
 
     if (m_p_socket_stats->ring_alloc_logic_rx == RING_LOGIC_PER_USER_ID) {
@@ -1451,10 +1545,9 @@ void sockinfo::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
                     (float)(m_p_socket_stats->counters.n_rx_ready_byte_drop * 100) /
                     (float)m_p_socket_stats->counters.n_rx_packets;
             }
-            vlog_printf(log_level, "Rx byte : max %d / dropped %d (%2.2f%%) / limit %d\n",
+            vlog_printf(log_level, "Rx byte : max %d / dropped %d (%2.2f%%)\n",
                         m_p_socket_stats->counters.n_rx_ready_byte_max,
-                        m_p_socket_stats->counters.n_rx_ready_byte_drop, rx_drop_percentage,
-                        m_p_socket_stats->n_rx_ready_byte_limit);
+                        m_p_socket_stats->counters.n_rx_ready_byte_drop, rx_drop_percentage);
 
             if (m_p_socket_stats->n_rx_ready_pkt_count) {
                 rx_drop_percentage = (float)(m_p_socket_stats->counters.n_rx_ready_pkt_drop * 100) /
@@ -1592,8 +1685,8 @@ void sockinfo::rx_add_ring_cb(ring *p_ring)
             add_cqfd_to_sock_rx_epfd(p_ring);
         }
 
-        do_wakeup(); // A ready wce can be pending due to the drain logic (cq channel will not wake
-                     // up by itself)
+        // A ready wce can be pending due to the drain logic (cq channel will not wake up by itself)
+        m_sock_wakeup_pipe.do_wakeup();
     } else {
         // Increase ref count on cq_mgr_rx object
         rx_ring_iter->second->refcnt++;
@@ -1607,7 +1700,9 @@ void sockinfo::rx_add_ring_cb(ring *p_ring)
         // first in order. possible race between removal of fd from epoll (epoll_ctl del, or epoll
         // close) and here. need to add a third-side lock (fd_collection?) to sync between epoll and
         // socket.
-        notify_epoll_context_add_ring(p_ring);
+        if (has_epoll_context()) {
+            m_econtext->increase_ring_ref_count(p_ring);
+        }
     }
 
     lock_rx_q();
@@ -1665,11 +1760,8 @@ void sockinfo::rx_del_ring_cb(ring *p_ring)
                 /* Ring should not have completion events related closed socket
                  * in wait list
                  */
-                for (auto &ec : m_socketxtreme.ec_cache) {
-                    if (0 != ec.completion.events) {
-                        m_p_rx_ring->del_ec(&ec);
-                    }
-                }
+                m_p_rx_ring->ec_clear_sock(this);
+
                 if (m_rx_ring_map.size() == 1) {
                     m_p_rx_ring = m_rx_ring_map.begin()->first;
                 } else {
@@ -1693,7 +1785,9 @@ void sockinfo::rx_del_ring_cb(ring *p_ring)
         // first in order. possible race between removal of fd from epoll (epoll_ctl del, or epoll
         // close) and here. need to add a third-side lock (fd_collection?) to sync between epoll and
         // socket.
-        notify_epoll_context_remove_ring(base_ring);
+        if (has_epoll_context()) {
+            m_econtext->decrease_ring_ref_count(base_ring);
+        }
     }
 
     // no need for m_lock_rcv since temp_rx_reuse is on the stack
@@ -1936,7 +2030,7 @@ void sockinfo::destructor_helper()
     m_p_connected_dst_entry = NULL;
 }
 
-int sockinfo::register_callback(xlio_recv_callback_t callback, void *context)
+int sockinfo::register_callback_ctx(xlio_recv_callback_t callback, void *context)
 {
     m_rx_callback = callback;
     m_rx_callback_context = context;
@@ -1970,7 +2064,7 @@ int sockinfo::get_rings_num()
 {
     int count = 0;
     size_t num_rx_channel_fds;
-    if (is_socketxtreme()) {
+    if (safe_mce_sys().enable_socketxtreme) {
         /* socketXtreme mode support just single ring */
         return 1;
     }
@@ -1989,7 +2083,7 @@ int *sockinfo::get_rings_fds(int &res_length)
     int index = 0;
     size_t num_rx_channel_fds;
 
-    if (is_socketxtreme()) {
+    if (safe_mce_sys().enable_socketxtreme) {
         /* socketXtreme mode support just single ring */
         res_length = 1;
         return m_p_rx_ring->get_rx_channel_fds(num_rx_channel_fds);
@@ -2088,7 +2182,7 @@ int sockinfo::set_sockopt_prio(__const void *__optval, socklen_t __optlen)
 void sockinfo::process_timestamps(mem_buf_desc_t *p_desc)
 {
     // keep the sw_timestamp the same to all sockets
-    if ((m_b_rcvtstamp ||
+    if ((is_rcvtstamp() ||
          (m_n_tsing_flags & (SOF_TIMESTAMPING_RX_SOFTWARE | SOF_TIMESTAMPING_SOFTWARE))) &&
         !p_desc->rx.timestamps.sw.tv_sec) {
         clock_gettime(CLOCK_REALTIME, &(p_desc->rx.timestamps.sw));
@@ -2121,7 +2215,7 @@ void sockinfo::handle_recv_timestamping(struct cmsg_state *cm_state)
     // This matches the kernel behavior.
     if (m_b_rcvtstampns) {
         insert_cmsg(cm_state, SOL_SOCKET, SO_TIMESTAMPNS, packet_systime, sizeof(*packet_systime));
-    } else if (m_b_rcvtstamp) {
+    } else if (is_rcvtstamp()) {
         struct timeval tv;
         tv.tv_sec = packet_systime->tv_sec;
         tv.tv_usec = packet_systime->tv_nsec / 1000;
@@ -2215,7 +2309,7 @@ void sockinfo::handle_cmsg(struct msghdr *msg, int flags)
     if (m_b_pktinfo) {
         handle_ip_pktinfo(&cm_state);
     }
-    if (m_b_rcvtstamp || m_n_tsing_flags) {
+    if (is_rcvtstamp() || m_n_tsing_flags) {
         handle_recv_timestamping(&cm_state);
     }
     if (flags & MSG_ERRQUEUE) {
@@ -2223,4 +2317,97 @@ void sockinfo::handle_cmsg(struct msghdr *msg, int flags)
     }
 
     cm_state.mhdr->msg_controllen = cm_state.cmsg_bytes_consumed;
+}
+
+ssize_t sockinfo::rx_os(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov,
+                        const int flags, sockaddr *__from, socklen_t *__fromlen,
+                        struct msghdr *__msg)
+{
+    errno = 0;
+    switch (call_type) {
+    case RX_READ:
+        __log_info_func("calling os receive with orig read");
+        return SYSCALL(read, m_fd, p_iov[0].iov_base, p_iov[0].iov_len);
+
+    case RX_READV:
+        __log_info_func("calling os receive with orig readv");
+        return SYSCALL(readv, m_fd, p_iov, sz_iov);
+
+    case RX_RECV:
+        __log_info_func("calling os receive with orig recv");
+        return SYSCALL(recv, m_fd, p_iov[0].iov_base, p_iov[0].iov_len, flags);
+
+    case RX_RECVFROM:
+        __log_info_func("calling os receive with orig recvfrom");
+        return SYSCALL(recvfrom, m_fd, p_iov[0].iov_base, p_iov[0].iov_len, flags, __from,
+                       __fromlen);
+
+    case RX_RECVMSG: {
+        __log_info_func("calling os receive with orig recvmsg");
+        return SYSCALL(recvmsg, m_fd, __msg, flags);
+    }
+    }
+    return (ssize_t)-1;
+}
+
+ssize_t sockinfo::tx_os(const tx_call_t call_type, const iovec *p_iov, const ssize_t sz_iov,
+                        const int __flags, const sockaddr *__to, const socklen_t __tolen)
+{
+    errno = 0;
+
+    // Ignore dummy messages for OS
+    if (unlikely(IS_DUMMY_PACKET(__flags))) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    switch (call_type) {
+    case TX_WRITE:
+        __log_info_func("calling os transmit with orig write");
+        return SYSCALL(write, m_fd, p_iov[0].iov_base, p_iov[0].iov_len);
+
+    case TX_WRITEV:
+        __log_info_func("calling os transmit with orig writev");
+        return SYSCALL(writev, m_fd, p_iov, sz_iov);
+
+    case TX_SEND:
+        __log_info_func("calling os transmit with orig send");
+        return SYSCALL(send, m_fd, p_iov[0].iov_base, p_iov[0].iov_len, __flags);
+
+    case TX_SENDTO:
+        __log_info_func("calling os transmit with orig sendto");
+        return SYSCALL(sendto, m_fd, p_iov[0].iov_base, p_iov[0].iov_len, __flags, __to, __tolen);
+
+    case TX_SENDMSG: {
+        msghdr __message;
+        memset(&__message, 0, sizeof(__message));
+        __message.msg_iov = (iovec *)p_iov;
+        __message.msg_iovlen = sz_iov;
+        __message.msg_name = (void *)__to;
+        __message.msg_namelen = __tolen;
+
+        __log_info_func("calling os transmit with orig sendmsg");
+        return SYSCALL(sendmsg, m_fd, &__message, __flags);
+    }
+    default:
+        __log_info_func("calling undefined os call type!");
+        break;
+    }
+    return (ssize_t)-1;
+}
+
+int sockinfo::handle_exception_flow()
+{
+    if (safe_mce_sys().exception_handling.is_suit_un_offloading()) {
+        try_un_offloading();
+    }
+    if (safe_mce_sys().exception_handling == xlio_exception_handling::MODE_RETURN_ERROR) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (safe_mce_sys().exception_handling == xlio_exception_handling::MODE_ABORT) {
+        return -2;
+    }
+
+    return 0;
 }

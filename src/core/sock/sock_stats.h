@@ -30,18 +30,36 @@
  * SOFTWARE.
  */
 
-#ifndef PKT_SNDR_SOURCE_H
-#define PKT_SNDR_SOURCE_H
+#ifndef SOCK_STATS_H
+#define SOCK_STATS_H
 
-/**
- * @class pkt_sndr_source
- * An object must implement pkt_sndr_source to register with ib_conn_mgr_base
- * When no packet transmitters (or receivers) are registered the objects will be
- * deleted.
- */
-class pkt_sndr_source {
+#include <vector>
+#include <bitset>
+#include <mutex>
+#include <memory>
+#include "util/ip_address.h"
+#include "util/xlio_stats.h"
+
+class sock_stats
+{
 public:
-    virtual ~pkt_sndr_source() {};
+
+    static sock_stats* get_sock_stats();
+    static thread_local socket_stats_t tl_dummy_stats;
+
+    void init_sock_stats(size_t max_stats);
+    socket_stats_t* get_stats_obj();
+    void return_stats_obj(socket_stats_t* stats);
+
+private:
+
+    static std::unique_ptr<sock_stats> s_sock_stats;
+
+    sock_stats() {}
+    
+    std::mutex _stats_lock;
+    socket_stats_t* _socket_stats_first = nullptr;
+    std::vector<socket_stats_t> _socket_stats_vec;    
 };
 
 #endif

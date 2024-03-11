@@ -35,15 +35,16 @@
 
 #include <memory>
 #include "ib/base/verbs_extra.h"
-#include "proto/flow_tuple.h"
-#include "sock/socket_fd_api.h"
-#include "sock/tcp_seg_pool.h"
-#include "proto/L2_address.h"
+#include "dev/buffer_pool.h"
 #include "dev/xlio_ti.h"
+#include "sock/tcp_seg_pool.h"
+#include "proto/flow_tuple.h"
+#include "proto/xlio_lwip.h"
+#include "proto/L2_address.h"
 
 /* Forward declarations */
 struct xlio_tls_info;
-class pkt_rcvr_sink;
+class sockinfo;
 class rfs_rule;
 
 #define ring_logpanic   __log_info_panic
@@ -59,20 +60,6 @@ typedef enum { CQT_RX, CQT_TX } cq_type_t;
 
 typedef size_t ring_user_id_t;
 
-/* Ring event completion */
-struct ring_ec {
-    struct list_head list;
-    struct xlio_socketxtreme_completion_t completion;
-    struct xlio_buff_t *last_buff_lst;
-
-    inline void clear()
-    {
-        INIT_LIST_HEAD(&list);
-        memset(&completion, 0, sizeof(completion));
-        last_buff_lst = NULL;
-    }
-};
-
 class ring {
 public:
     ring();
@@ -81,9 +68,9 @@ public:
 
     virtual void print_val();
 
-    virtual bool attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink,
+    virtual bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink,
                              bool force_5t = false) = 0;
-    virtual bool detach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink) = 0;
+    virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink) = 0;
 
     virtual void restart() = 0;
 
@@ -145,10 +132,6 @@ public:
 
     virtual int socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_completions,
                                   unsigned int ncompletions, int flags) = 0;
-
-    virtual bool is_socketxtreme(void) = 0;
-    virtual void put_ec(struct ring_ec *ec) = 0;
-    virtual void del_ec(struct ring_ec *ec) = 0;
 
     inline int get_if_index() { return m_if_index; }
 
@@ -262,18 +245,38 @@ public:
     struct tcp_seg *get_tcp_segs(uint32_t num);
     void put_tcp_segs(struct tcp_seg *seg);
 
+    ring_ec *get_ecs(uint32_t num);
+    void put_ecs(struct ring_ec *ec);
+
+    void ec_clear_sock(sockinfo *sock);
+    void ec_sock_list_add(sockinfo *sock);
+    bool ec_pop_completion(xlio_socketxtreme_completion_t *completion);
+    void ec_end_transaction();
+    xlio_socketxtreme_completion_t &ec_start_transaction(sockinfo *sock, bool always_new);
+
 protected:
     inline void set_parent(ring *parent) { m_parent = (parent ? parent : this); }
     inline void set_if_index(int if_index) { m_if_index = if_index; }
 
-    int *m_p_n_rx_channel_fds;
-    ring *m_parent;
-
-    struct tcp_seg *m_tcp_seg_list;
-    uint32_t m_tcp_seg_count;
+    struct tcp_seg *m_tcp_seg_list = nullptr;
+    ring_ec *m_ec_list = nullptr;
+    uint32_t m_tcp_seg_count = 0U;
+    uint32_t m_ec_count = 0U;
     lock_spin_recursive m_tcp_seg_lock;
+    lock_spin_recursive m_ec_lock;
 
-    int m_if_index; /* Interface index */
+    struct {
+        // Queue of ready sockets. Each socket can be added only once to this queue.
+        sockinfo *ec_sock_list_start = nullptr;
+        sockinfo *ec_sock_list_end = nullptr;
+
+        // Thread-safety lock for get/put operations under the queue.
+        lock_spin lock_ec_list;
+    } m_socketxtreme;
+
+    int *m_p_n_rx_channel_fds = nullptr;
+    ring *m_parent = nullptr;
+    int m_if_index = 0; /* Interface index */
 };
 
 #endif /* RING_H */

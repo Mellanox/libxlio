@@ -49,7 +49,7 @@
 #undef MODULE_HDR_INFO
 #define MODULE_HDR_INFO MODULE_NAME "[epfd=%d]:%d:%s() "
 #undef __INFO__
-#define __INFO__       m_epfd
+#define __INFO__       m_wakeup_epfd
 #define UNINIT_PIPE_FD (-1)
 
 int wakeup_pipe::g_wakeup_pipes[2] = {UNINIT_PIPE_FD, UNINIT_PIPE_FD};
@@ -96,7 +96,7 @@ void wakeup_pipe::do_wakeup()
 
     int errno_tmp = errno; // don't let wakeup affect errno, as this can fail with EEXIST
     BULLSEYE_EXCLUDE_BLOCK_START
-    if ((SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_ADD, g_wakeup_pipes[0], &m_ev)) &&
+    if ((SYSCALL(epoll_ctl, m_wakeup_epfd, EPOLL_CTL_ADD, g_wakeup_pipes[0], &m_ev)) &&
         (errno != EEXIST)) {
         wkup_logerr("Failed to add wakeup fd to internal epfd (errno=%d %m)", errno);
     }
@@ -114,7 +114,7 @@ void wakeup_pipe::remove_wakeup_fd()
     }
     wkup_entry_dbg("");
     int tmp_errno = errno;
-    if (SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, g_wakeup_pipes[0], NULL)) {
+    if (SYSCALL(epoll_ctl, m_wakeup_epfd, EPOLL_CTL_DEL, g_wakeup_pipes[0], NULL)) {
         BULLSEYE_EXCLUDE_BLOCK_START
         if (errno == ENOENT) {
             wkup_logdbg("Failed to delete global pipe from internal epfd it was already deleted");

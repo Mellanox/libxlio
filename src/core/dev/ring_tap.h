@@ -42,8 +42,8 @@ public:
     virtual ~ring_tap();
 
     virtual bool is_up() { return (m_vf_ring || m_active); }
-    virtual bool attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink, bool force_5t = false);
-    virtual bool detach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink);
+    virtual bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t = false);
+    virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink);
     virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array = NULL);
     virtual int poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
     {
@@ -135,10 +135,6 @@ private:
     void send_status_handler(int ret, xlio_ibv_send_wr *p_send_wqe);
     void tap_create(net_device_val *p_ndev);
     void tap_destroy();
-
-    bool is_socketxtreme(void) { return false; }
-    void put_ec(struct ring_ec *ec) { NOT_IN_USE(ec); }
-    void del_ec(struct ring_ec *ec) { NOT_IN_USE(ec); }
 
     /* These fields are NETVSC mode specific */
     int m_tap_fd; /* file descriptor of tap device */

@@ -37,8 +37,8 @@
 #include <sock/cleanable_obj.h>
 #include <sock/sockinfo.h>
 
-typedef xlio_list_t<socket_fd_api, socket_fd_api::ep_ready_fd_node_offset> ep_ready_fd_list_t;
-typedef xlio_list_t<socket_fd_api, socket_fd_api::ep_info_fd_node_offset> fd_info_list_t;
+typedef xlio_list_t<sockinfo, sockinfo::ep_ready_fd_node_offset> ep_ready_fd_list_t;
+typedef xlio_list_t<sockinfo, sockinfo::ep_info_fd_node_offset> fd_info_list_t;
 typedef std::unordered_map<int, epoll_fd_rec> fd_info_map_t;
 typedef std::unordered_map<ring *, int /*ref count*/> ring_map_t;
 typedef std::deque<int> ready_cq_fd_q_t;
@@ -121,9 +121,9 @@ public:
     int remove_fd_from_epoll_os(int fd);
     inline size_t get_fd_non_offloaded_size() { return m_fd_non_offloaded_map.size(); }
     inline size_t get_fd_offloaded_size() { return m_fd_offloaded_list.size(); }
-    void insert_epoll_event_cb(socket_fd_api *sock_fd, uint32_t event_flags);
-    void insert_epoll_event(socket_fd_api *sock_fd, uint32_t event_flags);
-    void remove_epoll_event(socket_fd_api *sock_fd, uint32_t event_flags);
+    void insert_epoll_event_cb(sockinfo *sock_fd, uint32_t event_flags);
+    void insert_epoll_event(sockinfo *sock_fd, uint32_t event_flags);
+    void remove_epoll_event(sockinfo *sock_fd, uint32_t event_flags);
     void increase_ring_ref_count(ring *ring);
     void decrease_ring_ref_count(ring *ring);
 

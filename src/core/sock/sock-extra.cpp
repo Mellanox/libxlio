@@ -39,7 +39,7 @@
 #include <vlogger/vlogger.h>
 #include <dev/buffer_pool.h>
 #include <event/thread_local_event_handler.h>
-#include <sock/socket_fd_api.h>
+#include <sock/sockinfo.h>
 #include <sock/sockinfo_tcp.h>
 #include <sock/sockinfo_udp.h>
 #include <sock/fd_collection.h>
@@ -61,7 +61,7 @@
 extern "C" int xlio_register_recv_callback(int __fd, xlio_recv_callback_t __callback,
                                            void *__context)
 {
-    socket_fd_api *p_socket_object = NULL;
+    sockinfo *p_socket_object = NULL;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object && !safe_mce_sys().enable_socketxtreme) {
         p_socket_object->register_callback(__callback, __context);
@@ -74,7 +74,7 @@ extern "C" int xlio_register_recv_callback(int __fd, xlio_recv_callback_t __call
 extern "C" int xlio_recvfrom_zcopy(int __fd, void *__buf, size_t __nbytes, int *__flags,
                                    struct sockaddr *__from, socklen_t *__fromlen)
 {
-    socket_fd_api *p_socket_object = NULL;
+    sockinfo *p_socket_object = NULL;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         struct iovec piov[1];
@@ -89,7 +89,7 @@ extern "C" int xlio_recvfrom_zcopy(int __fd, void *__buf, size_t __nbytes, int *
 extern "C" int xlio_recvfrom_zcopy_free_packets(int __fd, struct xlio_recvfrom_zcopy_packet_t *pkts,
                                                 size_t count)
 {
-    socket_fd_api *p_socket_object = NULL;
+    sockinfo *p_socket_object = NULL;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         return p_socket_object->recvfrom_zcopy_free_packets(pkts, count);
@@ -239,7 +239,7 @@ extern "C" int xlio_socketxtreme_free_buff(xlio_buff_t *buff)
 
 extern "C" int xlio_get_socket_rings_num(int fd)
 {
-    socket_fd_api *p_socket_object = NULL;
+    sockinfo *p_socket_object = NULL;
     p_socket_object = fd_collection_get_sockfd(fd);
     if (p_socket_object && p_socket_object->check_rings()) {
         return p_socket_object->get_rings_num();
@@ -255,7 +255,7 @@ extern "C" int xlio_get_socket_rings_fds(int fd, int *ring_fds, int ring_fds_sz)
         return -1;
     }
 
-    socket_fd_api *p_socket_object = fd_collection_get_sockfd(fd);
+    sockinfo *p_socket_object = fd_collection_get_sockfd(fd);
     if (p_socket_object && p_socket_object->check_rings()) {
         int rings_num = 0;
         int *p_rings_fds = p_socket_object->get_rings_fds(rings_num);

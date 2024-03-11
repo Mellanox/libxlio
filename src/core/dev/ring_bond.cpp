@@ -99,7 +99,7 @@ void ring_bond::print_val()
                 ((uintptr_t)this == (uintptr_t)m_parent ? 0 : m_parent), "bond");
 }
 
-bool ring_bond::attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink, bool force_5t)
+bool ring_bond::attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t)
 {
     bool ret = true;
     struct flow_sink_t value = {flow_spec_5t, sink};
@@ -117,7 +117,7 @@ bool ring_bond::attach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink, bool 
     return ret;
 }
 
-bool ring_bond::detach_flow(flow_tuple &flow_spec_5t, pkt_rcvr_sink *sink)
+bool ring_bond::detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink)
 {
     bool ret = true;
     struct flow_sink_t value = {flow_spec_5t, sink};
@@ -245,7 +245,7 @@ void ring_bond::restart()
                                     }
                                     epfd = si->get_epoll_context_fd();
                                     if (epfd > 0) {
-#define CQ_FD_MARK 0xabcd /* see socket_fd_api */
+#define CQ_FD_MARK 0xabcd /* see sockinfo */
                                         epoll_event ev = {0, {0}};
                                         fd = ring_rx_fds_array[k];
                                         ev.events = EPOLLIN | EPOLLPRI;

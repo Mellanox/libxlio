@@ -65,7 +65,7 @@
 #include "proto/neighbour_table_mgr.h"
 #include "netlink/netlink_wrapper.h"
 #include "event/command.h"
-
+#include "sock/sock_stats.h"
 #include "sock/sock-redirect.h"
 #include "sock/sock-app.h"
 #include "sock/fd_collection.h"
@@ -184,6 +184,11 @@ static int free_libxlio_resources()
         delete g_tcp_seg_pool;
     }
     g_tcp_seg_pool = NULL;
+
+    if (g_ec_pool) {
+        delete g_ec_pool;
+    }
+    g_ec_pool = NULL;
 
     if (safe_mce_sys().print_report) {
         buffer_pool::print_report_on_errors(VLOG_INFO);
@@ -1038,6 +1043,8 @@ static void do_global_ctors_helper()
     *g_p_vlogger_level = g_vlogger_level;
     *g_p_vlogger_details = g_vlogger_details;
 
+    sock_stats::get_sock_stats()->init_sock_stats(safe_mce_sys().stats_fd_num_max);
+
     g_global_stat_static.init();
     xlio_stats_instance_create_global_block(&g_global_stat_static);
 
@@ -1101,12 +1108,11 @@ static void do_global_ctors_helper()
     NEW_CTOR(g_buffer_pool_zc, buffer_pool(BUFFER_POOL_TX, 0));
 
     NEW_CTOR(g_tcp_seg_pool, tcp_seg_pool());
-
+    NEW_CTOR(g_ec_pool, ec_sockxtreme_pool());
+    
     // For delegated TCP timers the global collection is not used.
     if (safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
-        NEW_CTOR(g_tcp_timers_collection,
-                 tcp_timers_collection(safe_mce_sys().tcp_timer_resolution_msec,
-                                       safe_mce_sys().timer_resolution_msec));
+        NEW_CTOR(g_tcp_timers_collection, tcp_timers_collection());
     }
 
     NEW_CTOR(g_p_vlogger_timer_handler, vlogger_timer_handler());
@@ -1187,6 +1193,7 @@ void reset_globals()
     g_buffer_pool_tx = NULL;
     g_buffer_pool_zc = NULL;
     g_tcp_seg_pool = NULL;
+    g_ec_pool = NULL;
     g_tcp_timers_collection = NULL;
     g_p_vlogger_timer_handler = NULL;
     g_p_event_handler_manager = NULL;

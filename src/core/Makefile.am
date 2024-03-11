@@ -145,14 +145,13 @@ libxlio_la_SOURCES := \
 	proto/header.cpp \
 	proto/arp.cpp \
 	\
+	sock/sock_stats.cpp \
 	sock/sockinfo.cpp \
 	sock/sockinfo_udp.cpp \
 	sock/sockinfo_ulp.cpp \
 	sock/sockinfo_tcp.cpp \
 	sock/tcp_seg_pool.cpp \
 	sock/fd_collection.cpp \
-	sock/pipeinfo.cpp \
-	sock/socket_fd_api.cpp \
 	sock/sock-redirect.cpp \
 	sock/sock-app.cpp \
 	sock/sock-extra.cpp \
@@ -216,7 +215,6 @@ libxlio_la_SOURCES := \
 	event/event_handler_rdma_cm.h \
 	event/netlink_event.h \
 	event/timer_handler.h \
-	event/timers_group.h \
 	event/vlogger_timer_handler.h \
 	\
 	ib/base/verbs_extra.h \
@@ -276,10 +274,7 @@ libxlio_la_SOURCES := \
 	\
 	sock/cleanable_obj.h \
 	sock/fd_collection.h \
-	sock/pipeinfo.h \
-	sock/pkt_rcvr_sink.h \
-	sock/pkt_sndr_source.h \
-	sock/socket_fd_api.h \
+	sock/sock_stats.h \
 	sock/sockinfo.h \
 	sock/sockinfo_tcp.h \
 	sock/sockinfo_udp.h \

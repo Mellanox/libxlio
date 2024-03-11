@@ -1,3 +1,4 @@
+
 /*
  * Copyright (c) 2001-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
@@ -30,32 +31,51 @@
  * SOFTWARE.
  */
 
-#ifndef TIMERS_GROUP_H
-#define TIMERS_GROUP_H
+#include "sock_stats.h"
 
-/*
- * This is an API for batching timers into groups.
- * Instead of registering each timer separately into the internal thread, the group is registered
- * once, and the timers are registered to the group. The registration to the group is still done
- * through the internal thread. The group must be deleted through the internal thread (must
- * implement clean_obj interface). Registering to group must be used with register_timer_event() and
- * unregister_timer_event() only.
- */
-class timers_group : public timer_handler {
-public:
-    virtual ~timers_group() {};
-    // execute all the timers registered to the group
-    // according to the internal group logic.
-    virtual void handle_timer_expired(void *user_data) = 0;
+std::unique_ptr<sock_stats> sock_stats::s_sock_stats;
+thread_local socket_stats_t sock_stats::tl_dummy_stats;
 
-protected:
-    friend class event_handler_manager;
-    // add a new timer
-    virtual void add_new_timer(timer_node_t *node, timer_handler *handler, void *user_data) = 0;
+sock_stats* sock_stats::get_sock_stats()
+{
+    if (unlikely(!s_sock_stats)) {
+        s_sock_stats.reset(new sock_stats());
+    }
 
-    // remove timer from list and free it.
-    // called for stopping (unregistering) a timer
-    virtual void remove_timer(timer_node_t *node) = 0;
-};
+    return s_sock_stats.get();
+}
 
-#endif
+socket_stats_t* sock_stats::get_stats_obj()
+{
+    if (!_socket_stats_first)
+        return nullptr;
+
+    std::lock_guard<decltype(_stats_lock)> lock(_stats_lock);
+    auto *stat = _socket_stats_first;
+    _socket_stats_first = _socket_stats_first->_next_stat;
+    return stat;
+}
+
+void sock_stats::return_stats_obj(socket_stats_t* stats)
+{
+    std::lock_guard<decltype(_stats_lock)> lock(_stats_lock);
+    stats->_next_stat = _socket_stats_first;
+    _socket_stats_first = stats;
+}
+
+void sock_stats::init_sock_stats(size_t max_stats)
+{
+    if (max_stats == 0U) {
+        return;
+    }
+
+    std::lock_guard<decltype(_stats_lock)> lock(_stats_lock);
+
+    _socket_stats_vec.resize(max_stats);
+    for (size_t idx = 1; idx < _socket_stats_vec.size(); ++idx) {
+        _socket_stats_vec[idx - 1U]._next_stat = &_socket_stats_vec[idx];
+    }
+
+    _socket_stats_vec[_socket_stats_vec.size() - 1U]._next_stat = nullptr;
+    _socket_stats_first = &_socket_stats_vec[0];
+}

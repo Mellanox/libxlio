@@ -33,6 +33,7 @@
 #include "utils/bullseye.h"
 #include "core/util/utils.h"
 #include "dst_entry_udp.h"
+#include "sock/sockinfo.h"
 
 #define MODULE_NAME "dst_udp"
 
@@ -497,7 +498,7 @@ ssize_t dst_entry_udp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
 
 ssize_t dst_entry_udp::slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr,
                                  struct xlio_rate_limit_t &rate_limit, int flags /*= 0*/,
-                                 socket_fd_api *sock /*= 0*/, tx_call_t call_type /*= 0*/)
+                                 sockinfo *sock /*= 0*/, tx_call_t call_type /*= 0*/)
 {
     ssize_t ret_val = 0;
 
