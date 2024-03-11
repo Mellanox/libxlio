@@ -38,8 +38,7 @@
 #include "udp_base.h"
 #include "src/core/util/sock_addr.h"
 
-class udp_connect : public udp_base {
-};
+class udp_connect : public udp_base {};
 
 /**
  * @test udp_connect.ti_1

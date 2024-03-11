@@ -148,7 +148,10 @@ bool cq_mgr_tx::request_notification()
             cq_logerr("Failure arming the TX notification channel (errno=%d %m)", errno);
             return false;
         }
-        else { m_b_notification_armed = true; }
+        else
+        {
+            m_b_notification_armed = true;
+        }
         ENDIF_VERBS_FAILURE;
     }
 
