@@ -93,27 +93,18 @@
 
 /* Misc */
 
-// replace lwip byte swapping to optimized one
-#include <byteswap.h>
-
-#define LWIP_PLATFORM_BYTESWAP 1
-#define LWIP_PLATFORM_HTONS(x) bswap_16(x)
-#define LWIP_PLATFORM_HTONL(x) bswap_32(x)
-
-// enable LWIP DEBUG here
-#if 1
-//#define PBUF_DEBUG				LWIP_DBG_ON
-//#define TCP_DEBUG 				LWIP_DBG_ON
-//#define TCP_INPUT_DEBUG			LWIP_DBG_ON
-//#define TCP_FR_DEBUG				LWIP_DBG_ON
-//#define TCP_RTO_DEBUG 			LWIP_DBG_ON
-//#define TCP_CWND_DEBUG			LWIP_DBG_ON
-//#define TCP_WND_DEBUG 			LWIP_DBG_ON
-//#define TCP_OUTPUT_DEBUG			LWIP_DBG_ON
-//#define TCP_RST_DEBUG 			LWIP_DBG_ON
-//#define TCP_QLEN_DEBUG			LWIP_DBG_ON
-//#define TCP_TSO_DEBUG				LWIP_DBG_ON
-#endif
+// Enable LWIP DEBUG here
+//#define PBUF_DEBUG       LWIP_DBG_ON
+//#define TCP_DEBUG        LWIP_DBG_ON
+//#define TCP_INPUT_DEBUG  LWIP_DBG_ON
+//#define TCP_FR_DEBUG     LWIP_DBG_ON
+//#define TCP_RTO_DEBUG    LWIP_DBG_ON
+//#define TCP_CWND_DEBUG   LWIP_DBG_ON
+//#define TCP_WND_DEBUG    LWIP_DBG_ON
+//#define TCP_OUTPUT_DEBUG LWIP_DBG_ON
+//#define TCP_RST_DEBUG    LWIP_DBG_ON
+//#define TCP_QLEN_DEBUG   LWIP_DBG_ON
+//#define TCP_TSO_DEBUG    LWIP_DBG_ON
 
 /*
    ---------------------------------
@@ -221,10 +212,10 @@
 #define LWIP_TCP_KEEPALIVE 0
 #endif
 
-/* Define platform endianness */
-#ifndef BYTE_ORDER
-#define BYTE_ORDER LITTLE_ENDIAN
-#endif /* BYTE_ORDER */
+/* Platform endianness */
+#if !defined(__BYTE_ORDER__) || !defined(__ORDER_LITTLE_ENDIAN__) || !defined(__ORDER_BIG_ENDIAN__)
+#error "__BYTE_ORDER__ or __ORDER_..._ENDIAN__ is not defined"
+#endif /* __BYTE_ORDER__ */
 
 /* Define generic types used in lwIP */
 typedef uint8_t u8_t;

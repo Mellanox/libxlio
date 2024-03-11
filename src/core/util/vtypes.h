@@ -41,6 +41,7 @@
 
 #include "utils/types.h"
 #include "utils/bullseye.h"
+
 #ifndef IN
 #define IN
 #endif
@@ -53,7 +54,11 @@
 #define INOUT
 #endif
 
-#if __BYTE_ORDER == __LITTLE_ENDIAN
+#if !defined(__BYTE_ORDER__) || !defined(__ORDER_LITTLE_ENDIAN__) || !defined(__ORDER_BIG_ENDIAN__)
+#error "__BYTE_ORDER__ or __ORDER_..._ENDIAN__ is not defined"
+#endif
+
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 static inline uint64_t htonll(uint64_t x)
 {
     return bswap_64(x);
@@ -62,7 +67,7 @@ static inline uint64_t ntohll(uint64_t x)
 {
     return bswap_64(x);
 }
-#elif __BYTE_ORDER == __BIG_ENDIAN
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 static inline uint64_t htonll(uint64_t x)
 {
     return x;
@@ -72,7 +77,7 @@ static inline uint64_t ntohll(uint64_t x)
     return x;
 }
 #else
-#error __BYTE_ORDER is neither __LITTLE_ENDIAN nor __BIG_ENDIAN
+#error __BYTE_ORDER__ is neither __ORDER_LITTLE_ENDIAN__ nor __ORDER_BIG_ENDIAN__
 #endif
 
 #define likely(x)   __builtin_expect(!!(x), 1)
@@ -96,7 +101,7 @@ static inline uint64_t ntohll(uint64_t x)
     (uint8_t)(((ip) >> 24) & 0xff), (uint8_t)(((ip) >> 16) & 0xff), (uint8_t)(((ip) >> 8) & 0xff), \
         (uint8_t)((ip)&0xff)
 
-#if __BYTE_ORDER == __LITTLE_ENDIAN
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 
 /* The host byte order is the same as network byte order, so these functions are all just identity.
  */
@@ -104,13 +109,11 @@ static inline uint64_t ntohll(uint64_t x)
 #define NIPQUAD(ip) NETWORK_IP_PRINTQUAD_LITTLE_ENDIAN(ip)
 #define HIPQUAD(ip) HOST_IP_PRINTQUAD_LITTLE_ENDIAN(ip)
 
-#else
-#if __BYTE_ORDER == __BIG_ENDIAN
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 
 #define NIPQUAD(ip) HOST_IP_PRINTQUAD_LITTLE_ENDIAN(ip)
 #define HIPQUAD(ip) NETWORK_IP_PRINTQUAD_LITTLE_ENDIAN(ip)
 
-#endif
 #endif
 
 #define ETH_HW_ADDR_PRINT_FMT "%02x:%02x:%02x:%02x:%02x:%02x"

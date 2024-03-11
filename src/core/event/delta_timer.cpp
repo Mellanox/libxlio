@@ -48,7 +48,7 @@
 #define tmr_loginfo  __log_info
 #define tmr_logdbg   __log_dbg
 #define tmr_logfunc  __log_func
-//#define tmr_logfuncall	__log_funcall
+//#define tmr_logfuncall __log_funcall
 #define tmr_logfuncall(fmt, ...)
 
 #define IS_NODE_INVALID(_node_)                                                                    \

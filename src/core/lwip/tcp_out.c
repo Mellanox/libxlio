@@ -2406,7 +2406,7 @@ void tcp_zero_window_probe(struct tcp_pcb *pcb)
     }
 
     /* The byte may be acknowledged without the window being opened. */
-    snd_nxt = lwip_ntohl(seg->tcphdr->seqno) + 1;
+    snd_nxt = ntohl(seg->tcphdr->seqno) + 1;
     if (TCP_SEQ_LT(pcb->snd_nxt, snd_nxt)) {
         pcb->snd_nxt = snd_nxt;
     }
