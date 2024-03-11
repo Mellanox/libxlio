@@ -50,9 +50,6 @@
 #define hwqtx_logfunc    __log_info_func
 #define hwqtx_logfuncall __log_info_funcall
 
-//#define ALIGN_WR_UP(_num_wr_)  (max(32, ((_num_wr_ + 0xf) & ~(0xf))))
-#define ALIGN_WR_DOWN(_num_wr_) (max(32, ((_num_wr_) & ~(0xf))))
-
 #if !defined(MLX5_ETH_INLINE_HEADER_SIZE)
 #define MLX5_ETH_INLINE_HEADER_SIZE 18
 #endif
@@ -60,7 +57,7 @@
 #define OCTOWORD 16
 #define WQEBB    64
 
-//#define DBG_DUMP_WQE	1
+//#define DBG_DUMP_WQE 1
 
 #ifdef DBG_DUMP_WQE
 #define dbg_dump_wqe(_addr, _size)                                                                 \
