@@ -83,7 +83,7 @@ neigh_send_data::neigh_send_data(neigh_send_data &&snd_data)
 neigh_send_data::~neigh_send_data()
 {
     if (m_iov.iov_base) {
-        delete[]((uint8_t *)m_iov.iov_base);
+        delete[] ((uint8_t *)m_iov.iov_base);
     }
 
     if (m_header) {

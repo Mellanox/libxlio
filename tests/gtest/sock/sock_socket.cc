@@ -37,8 +37,7 @@
 
 #include "sock_base.h"
 
-class sock_socket : public sock_base {
-};
+class sock_socket : public sock_base {};
 
 /**
  * @test sock_socket.ti_1

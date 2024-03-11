@@ -37,8 +37,7 @@
 
 #include "udp_base.h"
 
-class udp_socket : public udp_base {
-};
+class udp_socket : public udp_base {};
 
 /**
  * @test udp_socket.ti_1_ipv4
