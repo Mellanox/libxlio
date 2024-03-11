@@ -157,8 +157,9 @@ int main(int argc, char *argv[])
     g_vlogger_level = 3;
     if (argv && argc > 1) {
         int tracelevel = atoi(argv[1]);
-        if (tracelevel > 0 && tracelevel <= 5)
+        if (tracelevel > 0 && tracelevel <= 5) {
             g_vlogger_level = tracelevel;
+        }
     }
     netlink_test();
     return 0;

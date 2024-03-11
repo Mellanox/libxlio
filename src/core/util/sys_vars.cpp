@@ -290,12 +290,18 @@ const char *to_str(MODE option, const OPT (&options)[N])
     {                                                                                              \
         return option_x::from_int(option, def_value, options);                                     \
     }                                                                                              \
-    const char *to_str(mode_t option) { return option_x::to_str(option, options); }
+    const char *to_str(mode_t option)                                                              \
+    {                                                                                              \
+        return option_x::to_str(option, options);                                                  \
+    }
 
 #define AUTO_ON_OFF_IMPL                                                                           \
     {AUTO, "Auto", {"auto", NULL, NULL}}, {ON, "Enabled", {"on", "enabled", NULL}},                \
     {                                                                                              \
-        OFF, "Disabled", { "off", "disabled", NULL }                                               \
+        OFF, "Disabled",                                                                           \
+        {                                                                                          \
+            "off", "disabled", NULL                                                                \
+        }                                                                                          \
     }
 
 template <typename MODE> struct option_t {
