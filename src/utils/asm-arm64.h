@@ -100,8 +100,9 @@ static inline void prefetch_range(void *addr, size_t len)
 {
     char *cp = (char *)addr;
     char *end = (char *)addr + len;
-    for (; cp < end; cp += L1_CACHE_BYTES)
+    for (; cp < end; cp += L1_CACHE_BYTES) {
         prefetch(cp);
+    }
 }
 
 #endif

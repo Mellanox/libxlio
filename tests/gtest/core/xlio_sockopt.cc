@@ -40,8 +40,7 @@
 
 #if defined(EXTRA_API_ENABLED) && (EXTRA_API_ENABLED == 1)
 
-class xlio_sockopt : public xlio_base {
-};
+class xlio_sockopt : public xlio_base {};
 
 /**
  * @test xlio_sockopt.ti_1
