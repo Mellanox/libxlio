@@ -29,6 +29,7 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+#include <chrono>
 
 #include "common/def.h"
 #include "common/log.h"
@@ -40,6 +41,8 @@
 #include "udp/udp_base.h"
 #include "core/xlio_base.h"
 
+using std::chrono::steady_clock;
+using namespace std::chrono_literals;
 #if defined(EXTRA_API_ENABLED) && (EXTRA_API_ENABLED == 1)
 
 class socketxtreme_poll : public xlio_base {
@@ -52,19 +55,6 @@ protected:
         SKIP_TRUE(m_family == PF_INET, "sockextreme API supports IPv4 only");
     }
     void TearDown() { xlio_base::TearDown(); }
-
-    uint64_t timestamp_ms()
-    {
-        struct timespec ts;
-        int rc = clock_gettime(CLOCK_MONOTONIC, &ts);
-        return rc != 0 ? 0LU : ts.tv_sec * 1000LU + ts.tv_nsec / 1000000LU;
-    }
-    bool timestamp_ms_elapsed(uint64_t start_ts, uint64_t timeout)
-    {
-        struct timespec ts;
-        int rc = clock_gettime(CLOCK_MONOTONIC, &ts);
-        return rc != 0 ? false : (ts.tv_sec * 1000LU + ts.tv_nsec / 1000000LU - start_ts > timeout);
-    }
 
     tcp_base_sock m_tcp_base;
     udp_base_sock m_udp_base;
@@ -466,12 +456,11 @@ TEST_F(socketxtreme_poll, ti_4_socket_isolation)
         ring_fd_nr = xlio_api->get_socket_rings_fds(fd, ring_fd, ARRAY_SIZE(ring_fd));
         ASSERT_LT(0, ring_fd_nr);
 
-        uint64_t ts = timestamp_ms();
-        ASSERT_NE(0LU, ts);
+        auto start = steady_clock::now();
         rc = 0;
         while (rc == 0 && !received_data && !testing::Test::HasFailure()) {
             poll_rings(ring_fd, ring_fd_nr);
-            if (timestamp_ms_elapsed(ts, 500UL)) {
+            if (start - steady_clock::now() > 500ms) {
                 log_trace("No data received by client within time limit\n");
                 break;
             }

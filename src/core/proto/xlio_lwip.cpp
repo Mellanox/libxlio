@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 
+#include <chrono>
 #include "utils/rdtsc.h"
 #include "vlogger/vlogger.h"
 
@@ -37,6 +38,8 @@
 #include "core/sock/sockinfo_tcp.h"
 #include "core/lwip/tcp_impl.h"
 #include "xlio_lwip.h"
+
+using namespace std::chrono;
 
 // debugging macros
 #define MODULE_NAME "lwip"
@@ -58,10 +61,9 @@ u32_t rcv_wnd_scale = 0;
 
 u32_t xlio_lwip::sys_now(void)
 {
-    struct timespec now;
+    auto now = steady_clock::now().time_since_epoch();
 
-    gettimefromtsc(&now);
-    return now.tv_sec * 1000 + now.tv_nsec / 1000000;
+    return duration_cast<milliseconds>(now).count() & 0xFFFFFFFF;
 }
 
 u8_t xlio_lwip::read_tcp_timestamp_option(void)

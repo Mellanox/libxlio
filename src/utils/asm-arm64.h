@@ -76,13 +76,6 @@ static inline int atomic_fetch_and_add_relaxed(int i, volatile int *ptr)
 /**
  * Read RDTSC register
  */
-static inline void gettimeoftsc(unsigned long long *p_tscval)
-{
-    // Read Time Stamp Counter
-    asm volatile("isb" : : : "memory");
-    asm volatile("mrs %0, cntvct_el0" : "=r"((unsigned long long)*p_tscval));
-}
-
 /**
  * Cache Line Prefetch - Arch specific!
  */
@@ -100,8 +93,9 @@ static inline void prefetch_range(void *addr, size_t len)
 {
     char *cp = (char *)addr;
     char *end = (char *)addr + len;
-    for (; cp < end; cp += L1_CACHE_BYTES)
+    for (; cp < end; cp += L1_CACHE_BYTES) {
         prefetch(cp);
+    }
 }
 
 #endif

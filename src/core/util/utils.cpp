@@ -55,6 +55,7 @@
 #include <netlink/msg.h>
 
 #include <array>
+#include <chrono>
 #include <iostream>
 #include <limits>
 
@@ -1360,18 +1361,18 @@ int validate_lro(int if_index)
 }
 
 loops_timer::loops_timer()
+    : m_start()
+    , m_elapsed(0ms)
+    , m_current()
+    , m_interval_it(2048)
+    , m_timer_countdown(0)
+    , m_timeout_msec(-1)
 {
-    m_timeout_msec = -1;
-    m_timer_countdown = 0;
-    m_interval_it = 2048;
-    ts_clear(&m_start);
-    ts_clear(&m_elapsed);
-    ts_clear(&m_current);
 }
 
 void loops_timer::start()
 {
-    ts_clear(&m_start);
+    m_start = steady_clock::time_point();
     // set to 1 so the first loop is fast and only after it m_start will be initialized
     m_timer_countdown = 1;
 }
@@ -1382,16 +1383,13 @@ int loops_timer::time_left_msec()
         return -1;
     }
 
-    if (!ts_isset(&m_start)) {
-        gettime(&m_start);
+    auto current = steady_clock::now();
+    if (m_start.time_since_epoch() == steady_clock::duration::zero()) {
+        m_start = current;
     }
-    timespec current;
-    gettime(&current);
-    ts_sub(&current, &m_start, &m_elapsed);
+    m_elapsed = duration_cast<milliseconds>(current - m_start);
 
-    // cover the case of left<0
-    return (m_timeout_msec - ts_to_msec(&m_elapsed)) > 0 ? m_timeout_msec - ts_to_msec(&m_elapsed)
-                                                         : 0;
+    return std::max<int>(0, m_timeout_msec - m_elapsed.count());
 }
 
 ///////////////////////////////////////////

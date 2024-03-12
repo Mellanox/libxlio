@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 
+#include <chrono>
 #include <functional>
 #include <numeric>
 #include <stdio.h>
@@ -40,7 +41,6 @@
 #include "utils/bullseye.h"
 #include "vlogger/vlogger.h"
 #include "utils/lock_wrapper.h"
-#include "utils/rdtsc.h"
 #include "util/libxlio.h"
 #include "util/instrumentation.h"
 #include "util/list.h"
@@ -58,6 +58,9 @@
 #include "tcp_seg_pool.h"
 #include "bind_no_port.h"
 #include "xlio.h"
+
+using namespace std::chrono;
+using namespace std::chrono_literals;
 
 #define UNLOCK_RET(_ret)                                                                           \
     unlock_tcp_con();                                                                              \
@@ -793,16 +796,15 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
 
 void sockinfo_tcp::handle_socket_linger()
 {
-    timeval start, current, elapsed;
-    long int linger_time_usec;
+    auto elapsed = 0us;
     int poll_cnt = 0;
+    auto linger_time = seconds((!m_linger.l_onoff) ? 0 : m_linger.l_linger);
+    si_tcp_logdbg("Going to linger for max time of %ld usec",
+                  duration_cast<microseconds>(linger_time).count());
 
-    linger_time_usec =
-        (!m_linger.l_onoff /*|| !m_b_blocking */) ? 0 : m_linger.l_linger * USEC_PER_SEC;
-    si_tcp_logdbg("Going to linger for max time of %lu usec", linger_time_usec);
-    memset(&elapsed, 0, sizeof(elapsed));
-    gettime(&start);
-    while ((tv_to_usec(&elapsed) <= linger_time_usec) && (m_pcb.unsent || m_pcb.unacked)) {
+    auto start = steady_clock::now();
+
+    while (elapsed <= linger_time && (m_pcb.unsent || m_pcb.unacked)) {
         /* SOCKETXTREME WA: Don't call rx_wait() in order not to miss events in socketxtreme_poll()
          * flow. TBD: find proper solution! rx_wait(poll_cnt, false);
          * */
@@ -810,8 +812,7 @@ void sockinfo_tcp::handle_socket_linger()
             rx_wait(poll_cnt, false);
         }
         tcp_output(&m_pcb);
-        gettime(&current);
-        tv_sub(&current, &start, &elapsed);
+        elapsed = duration_cast<microseconds>(steady_clock::now() - start);
     }
 
     if (m_linger.l_onoff && (m_pcb.unsent || m_pcb.unacked)) {

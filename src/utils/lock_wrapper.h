@@ -32,7 +32,7 @@
 
 #ifndef LOCK_WRAPPER_H
 #define LOCK_WRAPPER_H
-
+#include <chrono>
 #include <pthread.h>
 #include <execinfo.h>
 #include <string.h>
@@ -45,6 +45,9 @@
 #include <memory>
 #include <vlogger/vlogger.h>
 #include <core/util/sys_vars.h>
+
+using namespace std::chrono;
+using namespace std::chrono_literals;
 
 // todo disable assert
 #define ASSERT_LOCKED(lock)     assert((lock).is_locked_by_me())
@@ -70,7 +73,7 @@
 #define LOCK_BASE_LOCK            lock_base::lock();
 #define LOCK_BASE_TRYLOCK         lock_base::trylock();
 #define LOCK_BASE_UNLOCK          lock_base::unlock();
-#define LOCK_BASE_START_LOCK_WAIT tscval_t timeval = start_lock_wait();
+#define LOCK_BASE_START_LOCK_WAIT auto timeval = start_lock_wait();
 #define LOCK_BASE_END_LOCK_WAIT   end_lock_wait(timeval);
 #endif
 
@@ -108,13 +111,12 @@ private:
 class lock_base {
 public:
     lock_base(const char *name)
+        : m_lock_name(name)
+        , m_lock_count(0)
+        , m_lock_wait_time()
+        , m_prev_print_time()
     {
-        m_lock_count = 0;
-        m_lock_wait_time = 0;
-        m_lock_name = name;
-        m_prev_print_time = 0;
-        m_print_interval = get_tsc_rate_per_second() * 5;
-    };
+    }
 
     virtual ~lock_base()
     {
@@ -150,33 +152,23 @@ private:
 
     const char *m_lock_name;
     int m_lock_count;
-    tscval_t m_lock_wait_time;
-    tscval_t m_prev_print_time;
-    tscval_t m_print_interval;
+    microseconds m_lock_wait_time;
+    time_point<steady_clock> m_prev_print_time;
 
 protected:
-    tscval_t start_lock_wait()
-    {
-        tscval_t t;
-        gettimeoftsc(&t);
-        return t;
-    }
+    time_point<steady_clock> start_lock_wait() { return steady_clock::now(); }
 
-    void end_lock_wait(tscval_t start_time)
+    void end_lock_wait(time_point<steady_clock> &start_time)
     {
-        tscval_t t;
-        gettimeoftsc(&t);
-        m_lock_wait_time += (t - start_time);
-        if (t - m_prev_print_time > m_print_interval) {
+        auto t = steady_clock::now();
+        m_lock_wait_time += duration_cast<microseconds>(t - start_time);
+        if (t - m_prev_print_time > 5s) {
             print_stats();
             m_prev_print_time = t;
         }
     }
 
-    double avg_lock_wait()
-    {
-        return (m_lock_wait_time / static_cast<double>(get_tsc_rate_per_second())) / m_lock_count;
-    }
+    double avg_lock_wait() { return static_cast<double>(m_lock_wait_time.count()) / m_lock_count; }
 };
 #endif // NO_LOCK_STATS
 

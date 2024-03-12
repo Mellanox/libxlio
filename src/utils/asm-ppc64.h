@@ -82,14 +82,6 @@ static inline int atomic_fetch_and_add_relaxed(int i, volatile int *ptr)
 }
 
 /**
- * Read RDTSC register
- */
-static inline void gettimeoftsc(unsigned long long *p_tscval)
-{
-    asm volatile("mftb %0" : "=r"(*p_tscval) :);
-}
-
-/**
  * Cache Line Prefetch - Arch specific!
  */
 #ifndef L1_CACHE_BYTES

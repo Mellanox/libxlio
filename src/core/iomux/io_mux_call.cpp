@@ -47,7 +47,7 @@
 #endif
 
 uint64_t g_polling_time_usec = 0; // polling time in the last second in usec
-timeval g_last_zero_polling_time; // the last time g_polling_time_usec was zeroed
+time_point<steady_clock> g_last_zero_polling_time; // the last time g_polling_time_usec was zeroed
 int g_n_last_checked_index = 0; // save the last fd index we checked in check_offloaded_rsockets()
 
 #define MODULE_NAME "io_mux_call:"
@@ -146,14 +146,9 @@ inline bool io_mux_call::check_all_offloaded_sockets()
     return m_n_all_ready_fds;
 }
 
-inline void io_mux_call::zero_polling_cpu(timeval current)
+inline void io_mux_call::zero_polling_cpu(const time_point<steady_clock> &current)
 {
-    timeval delta;
-    int delta_time; // in usec
-
-    // check if it's time to zero g_polling_time_usec
-    tv_sub(&current, &g_last_zero_polling_time, &delta);
-    delta_time = tv_to_usec(&delta);
+    auto delta_time = duration_cast<microseconds>(current - g_last_zero_polling_time).count();
 
     if (delta_time >= USEC_PER_SEC) {
         m_p_stats->n_iomux_polling_time = (g_polling_time_usec * 100) / delta_time;
@@ -286,8 +281,7 @@ void io_mux_call::polling_loops()
     int check_timer_countdown = 1; // Poll once before checking the time
     int poll_os_countdown = 0;
     bool multiple_polling_loops, finite_polling;
-    timeval before_polling_timer = TIMEVAL_INITIALIZER, after_polling_timer = TIMEVAL_INITIALIZER,
-            delta;
+    time_point<steady_clock> before_polling_timer, after_polling_timer;
 
     if (immidiate_return(poll_os_countdown)) {
         return;
@@ -304,13 +298,13 @@ void io_mux_call::polling_loops()
     __if_dbg("2nd scenario start");
 
     if (m_b_sysvar_select_handle_cpu_usage_stats) {
+        before_polling_timer = steady_clock::now();
         // handle polling cpu statistics
-        if (!tv_isset(&g_last_zero_polling_time)) {
+        if (g_last_zero_polling_time.time_since_epoch() == steady_clock::duration::zero()) {
             // after first loop - set
-            gettime(&g_last_zero_polling_time);
+            g_last_zero_polling_time = before_polling_timer;
         }
 
-        gettime(&before_polling_timer);
         zero_polling_cpu(before_polling_timer);
     }
 
@@ -380,11 +374,12 @@ void io_mux_call::polling_loops()
 
     if (m_b_sysvar_select_handle_cpu_usage_stats) {
         // handle polling cpu statistics
-        gettime(&after_polling_timer);
+        after_polling_timer = steady_clock::now();
 
         // calc accumulated polling time
-        tv_sub(&after_polling_timer, &before_polling_timer, &delta);
-        g_polling_time_usec += tv_to_usec(&delta);
+        auto delta =
+            duration_cast<microseconds>(after_polling_timer - before_polling_timer).count();
+        g_polling_time_usec += delta;
 
         zero_polling_cpu(after_polling_timer);
     }

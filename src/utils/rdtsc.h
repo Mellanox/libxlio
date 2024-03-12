@@ -34,12 +34,15 @@
 #define RDTSC_H
 
 #include <algorithm>
+#include <chrono>
 #include <time.h>
 #include <stdio.h>
 
 #include "asm.h"
 #include "clock.h"
 
+using namespace std::chrono;
+using namespace std::chrono_literals;
 /**
  * RDTSC extensions
  */
@@ -52,7 +55,7 @@ typedef unsigned long long tscval_t;
  * Provide the std::max and std::min values, which might be the case if core are running at power
  *control states Return true on success, false on any failure
  **/
-static bool get_cpu_hz(double &hz_min, double &hz_max)
+static inline bool get_cpu_hz(double &hz_min, double &hz_max)
 {
     FILE *f;
     char buf[256];
@@ -104,60 +107,32 @@ static bool get_cpu_hz(double &hz_min, double &hz_max)
  */
 static inline tscval_t get_tsc_rate_per_second()
 {
-    static tscval_t tsc_per_second = TSCVAL_INITIALIZER;
-    if (!tsc_per_second) {
-        double hz_min = -1, hz_max = -1;
-        if (get_cpu_hz(hz_min, hz_max)) {
-            tsc_per_second = (tscval_t)hz_max;
-        } else {
-            // failure calibrating TSC to CPU speed
-            tsc_per_second = 2 * 1e6; // assume 2 MHz CPU speed
-        }
-    }
-    return tsc_per_second;
+    return duration_cast<nanoseconds>(1s).count();
 }
 
-/**
- * 'gettimeofday()' based on RDTSC
- * Re-sync with system clock no more then once a second
- */
-inline int gettimefromtsc(struct timespec *ts)
+/* This is a refacored funcion using chrono instead of readin RDTSC */
+static inline void gettimeoftsc(unsigned long long *p_tscval)
 {
-    static tscval_t tsc_start = TSCVAL_INITIALIZER;
-    static struct timespec ts_start = TIMESPEC_INITIALIZER;
-
-    struct timespec ts_delta = TIMESPEC_INITIALIZER;
-    tscval_t tsc_now, tsc_delta;
-    uint64_t nsec_delta = 0;
-
-    if (!ts_isset(&ts_start)) {
-        clock_gettime(CLOCK_MONOTONIC, &ts_start);
-        gettimeoftsc(&tsc_start);
-    }
-    gettimeoftsc(&tsc_now);
-    tsc_delta = tsc_now - tsc_start;
-    nsec_delta = tsc_delta * NSEC_PER_SEC / get_tsc_rate_per_second();
-
-    ts_delta.tv_sec = nsec_delta / NSEC_PER_SEC;
-    ts_delta.tv_nsec = nsec_delta - ts_delta.tv_sec * NSEC_PER_SEC;
-    ts_add(&ts_start, &ts_delta, ts);
-
-    // Once a second re-sync our start time with real time-of-day
-    if (tsc_delta > get_tsc_rate_per_second()) {
-        ts_clear(&ts_start);
-    }
-
-    return 0;
+    auto now_since_epoch = steady_clock::now().time_since_epoch();
+    *p_tscval = duration_cast<nanoseconds>(now_since_epoch).count();
 }
 
 static inline int gettime(struct timespec *ts)
 {
-    return gettimefromtsc(ts);
+    auto now = steady_clock::now().time_since_epoch();
+    auto now_seconds = duration_cast<seconds>(now);
+    ts->tv_sec = now_seconds.count();
+    ts->tv_nsec = duration_cast<nanoseconds>(now - now_seconds).count();
+    return 0;
 }
 
 static inline int gettime(struct timeval *tv)
 {
-    return gettimeofday(tv, NULL);
+    auto now = steady_clock::now().time_since_epoch();
+    auto now_seconds = duration_cast<seconds>(now);
+    tv->tv_sec = now_seconds.count();
+    tv->tv_usec = duration_cast<microseconds>(now - now_seconds).count();
+    return 0;
 }
 
 #endif // RDTSC_H

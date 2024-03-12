@@ -34,6 +34,7 @@
 #include "config.h"
 #endif
 
+#include <chrono>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -58,6 +59,8 @@
 #define AGENT_DEFAULT_INACTIVE                                                                     \
     (10) /* periodic time for establishment connection attempts (in sec) */
 #define AGENT_DEFAULT_ALIVE (1) /* periodic time for alive check (in sec) */
+
+using namespace std::chrono;
 
 /* Force system call */
 #ifdef XLIO_STATIC_BUILD
@@ -377,24 +380,20 @@ int agent::put(const void *data, size_t length, intptr_t tag)
 
 void agent::progress(void)
 {
-    agent_msg_t *msg = nullptr;
-    struct timeval tv_now = TIMEVAL_INITIALIZER;
-    static struct timeval tv_inactive_elapsed = TIMEVAL_INITIALIZER;
-    static struct timeval tv_alive_elapsed = TIMEVAL_INITIALIZER;
+    agent_msg_t *msg = NULL;
+    auto now = steady_clock::now();
+    static auto inactive_elapsed = steady_clock::now();
+    static auto alive_elapsed = steady_clock::now();
 
     if (AGENT_CLOSED == m_state) {
         return;
     }
 
-    gettime(&tv_now);
-
     /* Attempt to establish connection with daemon */
     if (AGENT_INACTIVE == m_state) {
         /* Attempt can be done less often than progress in active state */
-        /* cppcheck-suppress syntaxError */
-        if (tv_cmp(&tv_inactive_elapsed, &tv_now, <)) {
-            tv_inactive_elapsed = tv_now;
-            tv_inactive_elapsed.tv_sec += AGENT_DEFAULT_INACTIVE;
+        if (inactive_elapsed < now) {
+            inactive_elapsed = now + seconds(AGENT_DEFAULT_INACTIVE);
             if (0 <= send_msg_init()) {
                 progress_cb();
                 goto go;
@@ -406,12 +405,11 @@ void agent::progress(void)
 go:
     /* Check connection with daemon during active state */
     if (list_empty(&m_wait_queue)) {
-        if (tv_cmp(&tv_alive_elapsed, &tv_now, <)) {
+        if (alive_elapsed < now) {
             check_link();
         }
     } else {
-        tv_alive_elapsed = tv_now;
-        tv_alive_elapsed.tv_sec += AGENT_DEFAULT_ALIVE;
+        alive_elapsed = now + seconds(AGENT_DEFAULT_INACTIVE);
 
         /* Process all messages that are in wait queue */
         m_msg_lock.lock();
@@ -628,7 +626,6 @@ int agent::create_agent_socket(void)
 {
     int rc = 0;
     int optval = 1;
-    struct timeval opttv;
     struct sockaddr_un sock_addr;
 
     /* Create UNIX UDP socket to receive data from XLIO processes */
@@ -657,6 +654,7 @@ int agent::create_agent_socket(void)
     /* Sets the timeout value as 3 sec that specifies the maximum amount of time
      * an input function waits until it completes.
      */
+    struct timeval opttv;
     opttv.tv_sec = 3;
     opttv.tv_usec = 0;
     sys_call(rc, setsockopt, m_sock_fd, SOL_SOCKET, SO_RCVTIMEO, (const void *)&opttv,

@@ -42,6 +42,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <dlfcn.h>
+#include <chrono>
 #include <iostream>
 #include <fcntl.h>
 
@@ -67,6 +68,7 @@
 #include "util/instrumentation.h"
 
 using namespace std;
+using namespace std::chrono;
 
 #define MODULE_NAME "srdr:"
 
@@ -1506,8 +1508,6 @@ EXPORT_SYMBOL int XLIO_SYMBOL(recvmmsg)(int __fd, struct mmsghdr *__mmsghdr, uns
     PROFILE_FUNC
 
     int num_of_msg = 0;
-    struct timespec start_time = TIMESPEC_INITIALIZER, current_time = TIMESPEC_INITIALIZER,
-                    delta_time = TIMESPEC_INITIALIZER;
 
     srdr_logfuncall_entry("fd=%d, mmsghdr length=%d flags=%x", __fd, __vlen, __flags);
 
@@ -1517,10 +1517,8 @@ EXPORT_SYMBOL int XLIO_SYMBOL(recvmmsg)(int __fd, struct mmsghdr *__mmsghdr, uns
         return -1;
     }
 
-    if (__timeout) {
-        gettime(&start_time);
-    }
-    socket_fd_api *p_socket_object = nullptr;
+    auto start_time = steady_clock::now();
+    socket_fd_api *p_socket_object = NULL;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         int ret = 0;
@@ -1540,9 +1538,8 @@ EXPORT_SYMBOL int XLIO_SYMBOL(recvmmsg)(int __fd, struct mmsghdr *__mmsghdr, uns
                 __flags |= MSG_DONTWAIT;
             }
             if (__timeout) {
-                gettime(&current_time);
-                ts_sub(&current_time, &start_time, &delta_time);
-                if (ts_cmp(&delta_time, __timeout, >)) {
+                auto timeout = seconds(__timeout->tv_sec) + nanoseconds(__timeout->tv_nsec);
+                if (steady_clock::now() - start_time > timeout) {
                     break;
                 }
             }

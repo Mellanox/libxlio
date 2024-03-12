@@ -2086,7 +2086,7 @@ void sockinfo::process_timestamps(mem_buf_desc_t *p_desc)
     if ((m_b_rcvtstamp ||
          (m_n_tsing_flags & (SOF_TIMESTAMPING_RX_SOFTWARE | SOF_TIMESTAMPING_SOFTWARE))) &&
         !p_desc->rx.timestamps.sw.tv_sec) {
-        clock_gettime(CLOCK_REALTIME, &(p_desc->rx.timestamps.sw));
+        gettime(&(p_desc->rx.timestamps.sw));
     }
 
     // convert hw timestamp to system time

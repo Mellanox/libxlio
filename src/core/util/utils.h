@@ -33,6 +33,7 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include <chrono>
 #include <time.h>
 #include <string>
 #include <string.h>
@@ -44,6 +45,8 @@
 #include "vlogger/vlogger.h"
 #include "core/proto/mem_buf_desc.h"
 #include "core/util/xlio_stats.h"
+
+using namespace std::chrono;
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
@@ -454,27 +457,26 @@ public:
         // init counter
         m_timer_countdown = m_interval_it;
 
-        if (!ts_isset(&m_start)) {
-            gettime(&m_start);
+        if (m_start.time_since_epoch() == steady_clock::duration::zero()) {
+            m_start = steady_clock::now();
         }
         // update timer
-        gettime(&m_current);
-        ts_sub(&m_current, &m_start, &m_elapsed);
-        vlog_printf(VLOG_FUNC_ALL, "update loops_timer (elapsed time=%ld sec %ld usec\n",
-                    ts_to_sec(&m_elapsed), ts_to_usec(&m_elapsed));
+        m_current = steady_clock::now();
+        m_elapsed = duration_cast<milliseconds>(m_current - m_start);
+
+        auto elapsed_seconds = duration_cast<seconds>(m_elapsed);
+        vlog_printf(VLOG_FUNC_ALL, "update loops_timer (elapsed time=%ld sec %ld msec\n",
+                    elapsed_seconds.count(),
+                    duration_cast<milliseconds>(m_elapsed - elapsed_seconds).count());
 
         // test for timeout
-        if (m_timeout_msec <= ts_to_msec(&m_elapsed)) {
-            return true;
-        }
-
-        return false;
+        return m_timeout_msec <= m_elapsed.count();
     }
 
 private:
-    timespec m_start;
-    timespec m_elapsed;
-    timespec m_current;
+    time_point<steady_clock> m_start;
+    milliseconds m_elapsed;
+    time_point<steady_clock> m_current;
     int m_interval_it;
     int m_timer_countdown;
     int m_timeout_msec;
