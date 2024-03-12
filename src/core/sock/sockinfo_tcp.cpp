@@ -1045,9 +1045,6 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
         return ret;
     }
 
-    if (unlikely(!is_connected_and_ready_to_send())) {
-        return -1;
-    }
     si_tcp_logfunc("tx: iov=%p niovs=%d", p_iov, sz_iov);
 
     if (m_sysvar_rx_poll_on_tx_tcp) {
@@ -1072,6 +1069,9 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
                         [](size_t sum, const iovec &curr) { return sum + curr.iov_len; });
     lock_tcp_con();
 
+    if (unlikely(!is_connected_and_ready_to_send())) {
+        return tcp_tx_handle_errno_and_unlock(errno);
+    }
     if (TCP_WND_UNAVALABLE(m_pcb, total_iov_len)) {
         return tcp_tx_handle_errno_and_unlock(EAGAIN);
     }
@@ -1092,13 +1092,8 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
             unsigned tx_size = sndbuf_available();
 
             if (tx_size == 0) {
-                if (unlikely(!is_rts())) {
-                    si_tcp_logdbg("TX on disconnected socket");
-                    return tcp_tx_handle_errno_and_unlock(ECONNRESET);
-                }
                 // force out TCP data before going on wait()
                 tcp_output(&m_pcb);
-
                 return tcp_tx_handle_sndbuf_unavailable(total_tx, is_dummy, is_non_file_zerocopy,
                                                         errno_tmp);
             }
@@ -1125,15 +1120,6 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
                 unsigned remainder =
                     ~m_user_huge_page_mask + 1 - ((uint64_t)tx_ptr & ~m_user_huge_page_mask);
                 tx_size = std::min(remainder, tx_size);
-            }
-
-            if (unlikely(!is_rts())) {
-                si_tcp_logdbg("TX on disconnected socket");
-                return tcp_tx_handle_errno_and_unlock(ECONNRESET);
-            }
-            if (unlikely(g_b_exit)) {
-                return tcp_tx_handle_partial_send_and_unlock(total_tx, EINTR, is_dummy,
-                                                             is_non_file_zerocopy, errno_tmp);
             }
 
             const struct iovec iov = {.iov_base = tx_ptr, .iov_len = tx_size};
@@ -1204,6 +1190,9 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
 
     lock_tcp_con();
 
+    if (unlikely(!is_connected_and_ready_to_send())) {
+        return tcp_tx_handle_errno_and_unlock(errno);
+    }
     if (cannot_do_requested_dummy_send(m_pcb, tx_arg)) {
         return tcp_tx_handle_errno_and_unlock(EAGAIN);
     }
@@ -1239,10 +1228,6 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
              *    - block until space is available
              */
             if (tx_size == 0) {
-                if (unlikely(!is_rts())) {
-                    si_tcp_logdbg("TX on disconnected socket");
-                    return tcp_tx_handle_errno_and_unlock(ECONNRESET);
-                }
                 // force out TCP data before going on wait()
                 tcp_output(&m_pcb);
 
@@ -1252,7 +1237,16 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
                                                             errno_tmp);
                 }
 
+                if (unlikely(g_b_exit)) {
+                    return tcp_tx_handle_partial_send_and_unlock(total_tx, EINTR, is_dummy,
+                                                                 is_send_zerocopy, errno_tmp);
+                }
+
                 tx_size = tx_wait(block_this_run);
+                if (unlikely(!is_rts())) {
+                    si_tcp_logdbg("TX on disconnected socket");
+                    return tcp_tx_handle_errno_and_unlock(ECONNRESET);
+                }
             }
 
             tx_size = std::min<size_t>(p_iov[i].iov_len - pos, tx_size);
@@ -1269,15 +1263,6 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
                 tx_size = std::min(remainder, tx_size);
             }
             do {
-                if (unlikely(!is_rts())) {
-                    si_tcp_logdbg("TX on disconnected socket");
-                    return tcp_tx_handle_errno_and_unlock(ECONNRESET);
-                }
-                if (unlikely(g_b_exit)) {
-                    return tcp_tx_handle_partial_send_and_unlock(total_tx, EINTR, is_dummy,
-                                                                 is_send_zerocopy, errno_tmp);
-                }
-
                 err_t err;
                 if (apiflags & XLIO_TX_PACKET_ZEROCOPY) {
                     const struct iovec iov = {.iov_base = tx_ptr, .iov_len = tx_size};
@@ -1308,7 +1293,16 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
                         }
                     }
 
+                    if (unlikely(g_b_exit)) {
+                        return tcp_tx_handle_partial_send_and_unlock(total_tx, EINTR, is_dummy,
+                                                                     is_send_zerocopy, errno_tmp);
+                    }
+
                     rx_wait(poll_count, true);
+                    if (unlikely(!is_rts())) {
+                        si_tcp_logdbg("TX on disconnected socket");
+                        return tcp_tx_handle_errno_and_unlock(ECONNRESET);
+                    }
 
                     // AlexV:Avoid from going to sleep, for the blocked socket of course, since
                     // progress engine may consume an arrived credit and it will not wakeup the
@@ -6141,10 +6135,6 @@ inline bool sockinfo_tcp::handle_bind_no_port(int &bind_ret, in_port_t in_port,
 int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint32_t mkey,
                                  unsigned flags, void *opaque_op)
 {
-    if (unlikely(!is_connected_and_ready_to_send())) {
-        return -1;
-    }
-
     pbuf_desc mdesc;
 
     switch (flags & XLIO_EXPRESS_OP_TYPE_MASK) {
@@ -6166,6 +6156,10 @@ int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint
     }
 
     lock_tcp_con();
+
+    if (unlikely(!is_connected_and_ready_to_send())) {
+        return tcp_tx_handle_errno_and_unlock(errno);
+    }
 
     err_t err = tcp_write_express(&m_pcb, iov, iov_len, &mdesc);
     if (unlikely(err != ERR_OK)) {
@@ -6189,10 +6183,6 @@ int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint
 
 int sockinfo_tcp::tcp_tx_express_inline(const struct iovec *iov, unsigned iov_len, unsigned flags)
 {
-    if (unlikely(!is_connected_and_ready_to_send())) {
-        return -1;
-    }
-
     pbuf_desc mdesc;
     int bytes_written = 0;
 
@@ -6200,6 +6190,10 @@ int sockinfo_tcp::tcp_tx_express_inline(const struct iovec *iov, unsigned iov_le
     mdesc.attr = PBUF_DESC_NONE;
 
     lock_tcp_con();
+
+    if (unlikely(!is_connected_and_ready_to_send())) {
+        return tcp_tx_handle_errno_and_unlock(errno);
+    }
 
     for (unsigned i = 0; i < iov_len; ++i) {
         bytes_written += iov[i].iov_len;
@@ -6296,7 +6290,6 @@ ssize_t sockinfo_tcp::tcp_tx_handle_partial_send_and_unlock(ssize_t total_tx, in
 
 bool sockinfo_tcp::is_connected_and_ready_to_send()
 {
-    /* TODO should we add !g_b_exit here? */
     if (unlikely(!is_rts())) {
         if (m_conn_state == TCP_CONN_TIMEOUT) {
             si_tcp_logdbg("TX timed out");
