@@ -858,7 +858,7 @@ void mce_sys_var::get_env_params()
     memory_limit = MCE_DEFAULT_MEMORY_LIMIT;
     memory_limit_user = MCE_DEFAULT_MEMORY_LIMIT_USER;
     heap_metadata_block = MCE_DEFAULT_HEAP_METADATA_BLOCK;
-    hugepage_log2 = MCE_DEFAULT_HUGEPAGE_LOG2;
+    hugepage_size = MCE_DEFAULT_HUGEPAGE_SIZE;
     enable_socketxtreme = MCE_DEFAULT_SOCKETXTREME;
     enable_tso = MCE_DEFAULT_TSO;
 #ifdef DEFINED_UTLS
@@ -1866,26 +1866,17 @@ void mce_sys_var::get_env_params()
     if ((env_ptr = getenv(SYS_VAR_HEAP_METADATA_BLOCK))) {
         heap_metadata_block = option_size::from_str(env_ptr) ?: MCE_DEFAULT_HEAP_METADATA_BLOCK;
     }
-    if ((env_ptr = getenv(SYS_VAR_HUGEPAGE_LOG2))) {
-        unsigned val = (unsigned)atoi(env_ptr);
-
-        // mmap() uses 6 bits for the hugepage size log2
-        if (val < 64U) {
-            hugepage_log2 = val;
-        } else {
-            hugepage_log2 = MCE_DEFAULT_HUGEPAGE_LOG2;
-            vlog_printf(VLOG_WARNING, "%s parameter can be in range [0, 63], but set to %u\n",
-                        SYS_VAR_HUGEPAGE_LOG2, val);
+    if ((env_ptr = getenv(SYS_VAR_HUGEPAGE_SIZE))) {
+        hugepage_size = option_size::from_str(env_ptr);
+        if (hugepage_size & (hugepage_size - 1)) {
+            vlog_printf(VLOG_WARNING, "%s must be a power of 2. Fallback to default value (%s)\n",
+                        SYS_VAR_HUGEPAGE_SIZE, option_size::to_str(MCE_DEFAULT_HUGEPAGE_SIZE));
+            hugepage_size = MCE_DEFAULT_HUGEPAGE_SIZE;
         }
-        if (hugepage_log2 != 0 && !g_hugepage_mgr.is_hugepage_supported(1LU << hugepage_log2)) {
-            vlog_printf(VLOG_WARNING,
-                        "Requested hugepage %zu kB is not supported. "
-                        "XLIO will autodetect optimal hugepage.",
-                        (1LU << hugepage_log2) / 1024LU);
-            /* Value 0 means default autodetection behavior. Don't set MCE_DEFAULT_HUGEPAGE_LOG2
-             * here, because it can be defined to an unsupported specific value.
-             */
-            hugepage_log2 = 0;
+        if (hugepage_size > MCE_MAX_HUGEPAGE_SIZE) {
+            vlog_printf(VLOG_WARNING, "%s exceeds maximum possible hugepage size (%s)\n",
+                        SYS_VAR_HUGEPAGE_SIZE, option_size::to_str(MCE_MAX_HUGEPAGE_SIZE));
+            hugepage_size = MCE_DEFAULT_HUGEPAGE_SIZE;
         }
     }
 

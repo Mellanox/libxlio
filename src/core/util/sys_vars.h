@@ -454,7 +454,7 @@ public:
     size_t memory_limit;
     size_t memory_limit_user;
     size_t heap_metadata_block;
-    uint8_t hugepage_log2;
+    size_t hugepage_size;
     bool handle_fork;
     bool close_on_dup2;
     uint32_t mtu; /* effective MTU. If mtu==0 then auto calculate the MTU */
@@ -655,7 +655,7 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_MEMORY_LIMIT              "XLIO_MEMORY_LIMIT"
 #define SYS_VAR_MEMORY_LIMIT_USER         "XLIO_MEMORY_LIMIT_USER"
 #define SYS_VAR_HEAP_METADATA_BLOCK       "XLIO_HEAP_METADATA_BLOCK"
-#define SYS_VAR_HUGEPAGE_LOG2             "XLIO_HUGEPAGE_LOG2"
+#define SYS_VAR_HUGEPAGE_SIZE             "XLIO_HUGEPAGE_SIZE"
 #define SYS_VAR_FORK                      "XLIO_FORK"
 #define SYS_VAR_BF                        "XLIO_BF"
 #define SYS_VAR_CLOSE_ON_DUP2             "XLIO_CLOSE_ON_DUP2"
@@ -822,7 +822,8 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_MEMORY_LIMIT                   (2LU * 1024 * 1024 * 1024)
 #define MCE_DEFAULT_MEMORY_LIMIT_USER              (0)
 #define MCE_DEFAULT_HEAP_METADATA_BLOCK            (32LU * 1024 * 1024)
-#define MCE_DEFAULT_HUGEPAGE_LOG2                  (0)
+#define MCE_DEFAULT_HUGEPAGE_SIZE                  (0)
+#define MCE_MAX_HUGEPAGE_SIZE                      (1ULL << 63ULL)
 #define MCE_DEFAULT_FORK_SUPPORT                   (true)
 #define MCE_DEFAULT_BF_FLAG                        (true)
 #define MCE_DEFAULT_CLOSE_ON_DUP2                  (true)

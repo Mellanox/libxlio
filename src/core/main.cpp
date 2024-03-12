@@ -780,8 +780,8 @@ void print_xlio_global_settings()
     VLOG_PARAM_STRING("Memory limit (user allocator)", safe_mce_sys().memory_limit_user,
                       MCE_DEFAULT_MEMORY_LIMIT_USER, SYS_VAR_MEMORY_LIMIT_USER,
                       option_size::to_str(safe_mce_sys().memory_limit_user));
-    VLOG_PARAM_NUMBER("Hugepage log2", safe_mce_sys().hugepage_log2, MCE_DEFAULT_HUGEPAGE_LOG2,
-                      SYS_VAR_HUGEPAGE_LOG2);
+    VLOG_PARAM_STRING("Hugepage size", safe_mce_sys().hugepage_size, MCE_DEFAULT_HUGEPAGE_SIZE,
+                      SYS_VAR_HUGEPAGE_SIZE, option_size::to_str(safe_mce_sys().hugepage_size));
 
     VLOG_PARAM_NUMBER("Num of UC ARPs", safe_mce_sys().neigh_uc_arp_quata,
                       MCE_DEFAULT_NEIGH_UC_ARP_QUATA, SYS_VAR_NEIGH_UC_ARP_QUATA);
