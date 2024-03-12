@@ -296,7 +296,6 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     , m_tcp_seg_list(nullptr)
     , m_sysvar_rx_poll_on_tx_tcp(safe_mce_sys().rx_poll_on_tx_tcp)
     , m_user_huge_page_mask(~((uint64_t)safe_mce_sys().user_huge_page_size - 1))
-    , m_required_send_block(1U)
 {
     si_tcp_logfuncall("");
 
@@ -1002,14 +1001,6 @@ ssize_t sockinfo_tcp::tx(xlio_tx_call_attr_t &tx_arg)
     return m_ops->tx(tx_arg);
 }
 
-static inline bool cannot_do_requested_partial_write(size_t sndbuf_available,
-                                                     const xlio_tx_call_attr_t &tx_arg,
-                                                     size_t total_iov_len)
-{
-    return (tx_arg.xlio_flags & TX_FLAG_NO_PARTIAL_WRITE) &&
-        unlikely(sndbuf_available < total_iov_len);
-}
-
 #ifdef DEFINED_TCP_TX_WND_AVAILABILITY
 #define TCP_WND_UNAVALABLE(pcb, total_iov_len) !tcp_is_wnd_available(&pcb, total_iov_len)
 #else
@@ -1081,8 +1072,7 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
                         [](size_t sum, const iovec &curr) { return sum + curr.iov_len; });
     lock_tcp_con();
 
-    if (cannot_do_requested_partial_write(sndbuf_available(), tx_arg, total_iov_len) ||
-        TCP_WND_UNAVALABLE(m_pcb, total_iov_len)) {
+    if (TCP_WND_UNAVALABLE(m_pcb, total_iov_len)) {
         return tcp_tx_handle_errno_and_unlock(EAGAIN);
     }
 
@@ -1111,6 +1101,16 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
 
                 return tcp_tx_handle_sndbuf_unavailable(total_tx, is_dummy, is_non_file_zerocopy,
                                                         errno_tmp);
+            }
+            if (tx_arg.xlio_flags & TX_FLAG_NO_PARTIAL_WRITE) {
+                /*
+                 * With TX_FLAG_NO_PARTIAL_WRITE we can queue a single send operation beyond the
+                 * TCP send buffer. However, avoid 32-bit snd_buf overflow.
+                 */
+                if (unlikely(total_iov_len > UINT32_MAX)) {
+                    return tcp_tx_handle_errno_and_unlock(E2BIG);
+                }
+                tx_size = total_iov_len;
             }
 
             tx_size = std::min<size_t>(p_iov[i].iov_len - pos, tx_size);
@@ -1893,7 +1893,7 @@ err_t sockinfo_tcp::ack_recvd_lwip_cb(void *arg, struct tcp_pcb *tpcb, u16_t ack
         conn->m_p_socket_stats->n_tx_ready_byte_count -= ack;
     }
 
-    if (conn->sndbuf_available() >= conn->m_required_send_block) {
+    if (conn->sndbuf_available()) {
         NOTIFY_ON_EVENTS(conn, EPOLLOUT);
     }
     vlog_func_exit();
@@ -4009,11 +4009,10 @@ bool sockinfo_tcp::is_writeable()
         goto noblock;
     }
 
-    if (sndbuf_available() > m_required_send_block) {
+    if (sndbuf_available()) {
         goto noblock;
     }
 
-    // g_p_lwip->do_timers(); //TODO: consider!
     return false;
 
 noblock:
