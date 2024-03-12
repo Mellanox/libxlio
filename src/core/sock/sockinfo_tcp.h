@@ -394,7 +394,6 @@ public:
     inline int trylock_tcp_con() { return m_tcp_con_lock.trylock(); }
     inline void lock_tcp_con() { m_tcp_con_lock.lock(); }
     inline void unlock_tcp_con() { m_tcp_con_lock.unlock(); }
-    inline void set_reguired_send_block(unsigned sz) { m_required_send_block = sz; }
     tcp_timers_collection *get_tcp_timer_collection();
     bool is_cleaned() const { return m_is_cleaned; }
     static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
@@ -686,7 +685,6 @@ private:
     unsigned m_tx_consecutive_eagain_count;
     bool m_sysvar_rx_poll_on_tx_tcp;
     uint64_t m_user_huge_page_mask;
-    unsigned m_required_send_block;
     uint16_t m_external_vlan_tag = 0U;
     /*
      * Storage API
