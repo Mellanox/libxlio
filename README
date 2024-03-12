@@ -153,6 +153,7 @@ Example:
  XLIO DETAILS: Mem Allocation type            Huge pages                 [XLIO_MEM_ALLOC_TYPE]
  XLIO DETAILS: Memory limit                   2 GB                       [XLIO_MEMORY_LIMIT]
  XLIO DETAILS: Memory limit (user allocator)  0                          [XLIO_MEMORY_LIMIT_USER]
+ XLIO DETAILS: Hugepage size                  0                          [XLIO_HUGEPAGE_SIZE]
  XLIO DETAILS: Num of UC ARPs                 3                          [XLIO_NEIGH_UC_ARP_QUATA]
  XLIO DETAILS: UC ARP delay (msec)            10000                      [XLIO_NEIGH_UC_ARP_DELAY_MSEC]
  XLIO DETAILS: Num of neigh restart retries   1                          [XLIO_NEIGH_NUM_ERR_RETRIES]
@@ -961,6 +962,12 @@ XLIO_MEMORY_LIMIT_USER
 Memory limit for external user allocator. The user allocator can optionally be
 provided with XLIO extra API. Default value 0 makes XLIO use XLIO_MEMORY_LIMIT
 value for user allocations.
+Default value is 0
+
+XLIO_HUGEPAGE_SIZE
+Force specific hugepage size for XLIO internal memory allocations. Value 0 allows
+to use any supported and available hugepages. The size may be specified with
+suffixes such as KB, MB, GB.
 Default value is 0
 
 XLIO_NEIGH_UC_ARP_QUATA

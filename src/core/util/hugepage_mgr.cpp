@@ -55,6 +55,18 @@ hugepage_mgr::hugepage_mgr()
     memset(&m_stats, 0, sizeof(m_stats));
     m_default_hugepage = read_meminfo("Hugepagesize:");
     update();
+
+    /* Check hugepage size if requested by user explicitly. */
+    if (safe_mce_sys().hugepage_size != 0 && !is_hugepage_supported(safe_mce_sys().hugepage_size)) {
+        vlog_printf(VLOG_WARNING,
+                    "Requested hugepage %s is not supported by the system. "
+                    "XLIO will autodetect optimal hugepage.\n",
+                    option_size::to_str(safe_mce_sys().hugepage_size));
+        /* Value 0 means default autodetection behavior. Don't set MCE_DEFAULT_HUGEPAGE_SIZE
+         * here, because it can be defined to an unsupported specific value.
+         */
+        safe_mce_sys().hugepage_size = 0;
+    }
 }
 
 void hugepage_mgr::update()
@@ -115,12 +127,12 @@ void *hugepage_mgr::alloc_hugepages(size_t &size)
     void *ptr = nullptr;
     std::vector<size_t> hugepages;
 
-    if (safe_mce_sys().hugepage_log2 == 0) {
+    if (safe_mce_sys().hugepage_size == 0) {
         get_supported_hugepages(hugepages);
         std::sort(hugepages.begin(), hugepages.end(), std::greater<size_t>());
     } else {
         // User requested specific hugepage size - don't check other types.
-        hugepages.push_back(1LU << safe_mce_sys().hugepage_log2);
+        hugepages.push_back(safe_mce_sys().hugepage_size);
     }
 
     for (auto iter = hugepages.begin(); !ptr && iter != hugepages.end(); ++iter) {
@@ -173,10 +185,9 @@ void hugepage_mgr::print_report(bool short_report /*=false*/)
 
     get_supported_hugepages(hugepages);
     vlog_printf(VLOG_INFO, "Hugepages info:\n");
-    if (safe_mce_sys().hugepage_log2) {
-        vlog_printf(VLOG_INFO, "  User forced to use %lu kB hugepages (%s=%u).\n",
-                    (1LU << safe_mce_sys().hugepage_log2) / 1024U, SYS_VAR_HUGEPAGE_LOG2,
-                    safe_mce_sys().hugepage_log2);
+    if (safe_mce_sys().hugepage_size) {
+        vlog_printf(VLOG_INFO, "  User forced to use %lu kB hugepages.\n",
+                    (safe_mce_sys().hugepage_size) / 1024U);
     }
     for (size_t hugepage : hugepages) {
         vlog_printf(VLOG_INFO, "  %zu kB : total=%u free=%u\n", hugepage / 1024U,
