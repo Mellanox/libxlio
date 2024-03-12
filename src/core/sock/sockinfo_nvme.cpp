@@ -105,10 +105,6 @@ ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
     /* The new request points at a new PDU */
     while (num_iovecs < msg->msg_iovlen && sndbuf_len > total_tx_length) {
         size_t data_len = aux_data[num_iovecs].message_length;
-        /* Check if there is enough place in sndbuf for the current PDU */
-        if (sndbuf_len < total_tx_length + data_len) {
-            break;
-        }
         total_tx_length += data_len;
 
         /* Iterate the PDU iovecs */
@@ -123,14 +119,10 @@ ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
             return -1;
         }
     }
-    if (num_iovecs == 0U || total_tx_length == 0U) {
-        si_nvme_logerr("Found %zu iovecs with length %zu to fit in sndbuff %u", num_iovecs,
-                       total_tx_length, sndbuf_len);
-        m_p_sock->set_reguired_send_block(aux_data[num_iovecs].message_length);
-        errno = ENOBUFS;
+    if (total_tx_length == 0U) {
+        errno = EAGAIN;
         return -1;
     }
-    m_p_sock->set_reguired_send_block(1U);
 
     /* Update tx_arg before sending to TCP */
     auto *desc = nvme_pdu_mdesc::create(num_iovecs, msg->msg_iov, aux_data,
@@ -145,6 +137,7 @@ ssize_t sockinfo_tcp_ops_nvme::tx(xlio_tx_call_attr_t &tx_arg)
     tx_arg.priv.mdesc = reinterpret_cast<void *>(desc);
     tx_arg.attr.iov = desc->m_iov;
     tx_arg.attr.sz_iov = static_cast<ssize_t>(desc->m_num_segments);
+    tx_arg.xlio_flags = TX_FLAG_NO_PARTIAL_WRITE;
 
     ssize_t ret = m_p_sock->tcp_tx(tx_arg);
     if (ret < static_cast<ssize_t>(total_tx_length)) {
