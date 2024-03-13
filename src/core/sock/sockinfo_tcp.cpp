@@ -1423,11 +1423,13 @@ send_iov:
 
     rc = p_si_tcp->m_ops->handle_send_ret(ret, seg);
 
-    if (p_dst->try_migrate_ring_tx(p_si_tcp->m_tcp_con_lock.get_lock_base())) {
-        p_si_tcp->m_p_socket_stats->counters.n_tx_migrations++;
+    if (unlikely(safe_mce_sys().ring_migration_ratio_tx > 0)) { // Condition for cache optimization
+        if (p_dst->try_migrate_ring_tx(p_si_tcp->m_tcp_con_lock.get_lock_base())) {
+            p_si_tcp->m_p_socket_stats->counters.n_tx_migrations++;
+        }
     }
 
-    if (rc && is_set(attr.flags, XLIO_TX_PACKET_REXMIT)) {
+    if (unlikely(is_set(attr.flags, XLIO_TX_PACKET_REXMIT) && rc)) {
         p_si_tcp->m_p_socket_stats->counters.n_tx_retransmits++;
     }
 
