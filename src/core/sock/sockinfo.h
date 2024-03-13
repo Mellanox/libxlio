@@ -499,7 +499,6 @@ protected:
 
     // End of second cache line
 
-    wakeup_pipe m_sock_wakeup_pipe;
     rfs *m_rfs_ptr = nullptr;
     struct {
         /* Use std::deque in current design as far as it allows pushing
@@ -509,6 +508,8 @@ protected:
         struct ring_ec *ec;
         std::deque<struct ring_ec> ec_cache;
     } m_socketxtreme;
+
+    wakeup_pipe m_sock_wakeup_pipe;
 
     // End of fourth cache line
 public:
