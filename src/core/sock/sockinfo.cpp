@@ -84,8 +84,6 @@ const char *sockinfo::setsockopt_so_opt_to_str(int opt)
         return "SO_XLIO_RING_ALLOC_LOGIC";
     case SO_MAX_PACING_RATE:
         return "SO_MAX_PACING_RATE";
-    case SO_XLIO_FLOW_TAG:
-        return "SO_XLIO_FLOW_TAG";
     case SO_XLIO_SHUTDOWN_RX:
         return "SO_XLIO_SHUTDOWN_RX";
     case IPV6_V6ONLY:
@@ -442,34 +440,6 @@ int sockinfo::setsockopt(int __level, int __optname, const void *__optval, sockl
                 errno = EINVAL;
             }
             break;
-        case SO_XLIO_FLOW_TAG:
-            if (__optval) {
-                if (__optlen == sizeof(uint32_t)) {
-                    if (set_flow_tag(*(uint32_t *)__optval)) {
-                        si_logdbg("SO_XLIO_FLOW_TAG, set "
-                                  "socket fd: %d to flow id: %d",
-                                  m_fd, m_flow_tag_id);
-                        // not supported in OS
-                        ret = SOCKOPT_INTERNAL_XLIO_SUPPORT;
-                    } else {
-                        ret = SOCKOPT_NO_XLIO_SUPPORT;
-                        errno = EINVAL;
-                    }
-                } else {
-                    ret = SOCKOPT_NO_XLIO_SUPPORT;
-                    errno = EINVAL;
-                    si_logdbg("SO_XLIO_FLOW_TAG, bad length "
-                              "expected %zu got %d",
-                              sizeof(uint32_t), __optlen);
-                    break;
-                }
-            } else {
-                ret = SOCKOPT_NO_XLIO_SUPPORT;
-                errno = EINVAL;
-                si_logdbg("SO_XLIO_FLOW_TAG - NOT HANDLED, "
-                          "optval == NULL");
-            }
-            break;
 
         case SO_REUSEADDR:
             if (__optval && __optlen == sizeof(int)) {
@@ -751,14 +721,6 @@ int sockinfo::getsockopt(int __level, int __optname, void *__optval, socklen_t *
         case SO_XLIO_USER_DATA:
             if (*__optlen == sizeof(m_fd_context)) {
                 *(void **)__optval = m_fd_context;
-                ret = 0;
-            } else {
-                errno = EINVAL;
-            }
-            break;
-        case SO_XLIO_FLOW_TAG:
-            if (*__optlen >= sizeof(uint32_t)) {
-                *(uint32_t *)__optval = m_flow_tag_id;
                 ret = 0;
             } else {
                 errno = EINVAL;
