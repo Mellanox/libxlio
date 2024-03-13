@@ -2192,7 +2192,7 @@ err_t sockinfo_tcp::rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *pcb, stru
     conn->rx_lwip_cb_socketxtreme_helper(p);
 
     io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
-    conn->m_sock_wakeup_pipe.do_wakeup();
+
     /*
      * RCVBUFF Accounting: tcp_recved here(stream into the 'internal' buffer) only if the user
      * buffer is not 'filled'
@@ -5859,7 +5859,12 @@ void sockinfo_tcp::tcp_tx_zc_handle(mem_buf_desc_t *p_desc)
 
     /* Signal events on socket */
     NOTIFY_ON_EVENTS(sock, EPOLLERR);
-    sock->m_sock_wakeup_pipe.do_wakeup();
+
+    // Avoid cache access unnecessarily.
+    // Non-blocking sockets are waked-up as part of mux handling.
+    if (unlikely(is_blocking())) {
+        sock->m_sock_wakeup_pipe.do_wakeup();
+    }
 }
 
 struct tcp_seg *sockinfo_tcp::tcp_seg_alloc_direct(void *p_conn)
