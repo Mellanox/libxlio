@@ -335,7 +335,6 @@ public:
     sa_family_t get_family() { return m_family; }
     bool get_reuseaddr(void) { return m_reuseaddr; }
     bool get_reuseport(void) { return m_reuseport; }
-    bool flow_tag_enabled(void) { return m_flow_tag_enabled; }
     int get_rx_epfd(void) { return m_rx_epfd; }
     bool is_blocking(void) { return m_b_blocking; }
     bool flow_in_reuse(void) { return m_reuseaddr | m_reuseport; }
@@ -476,7 +475,6 @@ protected:
     sockinfo_state m_state = SOCKINFO_OPENED; // socket current state
     uint8_t m_n_tsing_flags = 0U;
     bool m_has_stats = false;
-    bool m_flow_tag_enabled = false; // for this socket
     bool m_b_rcvtstamp = false;
     bool m_b_zc = false;
     bool m_b_blocking = true;
@@ -594,7 +592,6 @@ bool sockinfo::set_flow_tag(uint32_t flow_tag_id)
 {
     if (flow_tag_id && (flow_tag_id != FLOW_TAG_MASK)) {
         m_flow_tag_id = flow_tag_id;
-        m_flow_tag_enabled = true;
         return true;
     }
     m_flow_tag_id = FLOW_TAG_MASK;

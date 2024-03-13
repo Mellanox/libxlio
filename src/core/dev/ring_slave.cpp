@@ -600,7 +600,7 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
         si = static_cast<sockinfo *>(
             g_p_fd_collection->get_sockfd(p_rx_wc_buf_desc->rx.flow_tag_id - 1));
 
-        if (likely((si) && si->flow_tag_enabled())) {
+        if (likely(si)) {
             // will process packets with set flow_tag_id and enabled for the socket
             if (p_eth_h->h_proto == NET_ETH_P_8021Q) {
                 // Handle VLAN header as next protocol
