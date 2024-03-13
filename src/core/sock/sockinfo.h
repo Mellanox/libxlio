@@ -320,11 +320,7 @@ public:
     // This prepares the socket for termination and return true if the
     // Return val: true is the socket is already closable and false otherwise
     virtual bool prepare_to_close(bool process_shutdown = false) = 0;
-
-    // true if fd must be skipped from OS select()
-    // If m_n_sysvar_select_poll_os_ratio == 0, it means that user configured XLIO not to poll os
-    // (i.e. TRUE...)
-    virtual bool skip_os_select() { return (!m_n_sysvar_select_poll_os_ratio); };
+    virtual bool skip_os_select(); // true if fd must be skipped from OS select()
 
     inline bool set_flow_tag(uint32_t flow_tag_id);
     inline void sock_pop_descs_rx_ready(descq_t *cache);
@@ -367,7 +363,7 @@ public:
 #if defined(DEFINED_NGINX)
     virtual void prepare_to_close_socket_pool(bool _push_pop) { NOT_IN_USE(_push_pop); }
     virtual void set_params_for_socket_pool() {};
-    void set_m_n_sysvar_rx_num_buffs_reuse(int val) { m_n_sysvar_rx_num_buffs_reuse = val; }
+    void set_rx_num_buffs_reuse(int val) { m_rx_num_buffs_reuse = val; }
 #endif
 #endif
 protected:
@@ -533,14 +529,11 @@ protected:
     size_t m_rx_ready_byte_count = 0U;
     buff_info_t m_rx_reuse_buff; // used in TCP instead of m_rx_ring_map
     int m_n_rx_pkt_ready_list_count = 0;
-    int m_n_sysvar_rx_num_buffs_reuse;
-    const int32_t m_n_sysvar_rx_poll_num;
-    const uint32_t m_n_sysvar_select_poll_os_ratio;
+    int m_rx_num_buffs_reuse;
     // used to periodically return buffers, even if threshold was not reached
     bool m_rx_reuse_buf_pending = false;
     // used to mark threshold was reached, but free was not done yet
     bool m_rx_reuse_buf_postponed = false;
-    bool m_rx_cq_wait_ctrl;
     bool m_skip_cq_poll_in_rx;
     bool m_reuseaddr = false; // to track setsockopt with SO_REUSEADDR
     bool m_reuseport = false; // to track setsockopt with SO_REUSEPORT
@@ -767,10 +760,10 @@ void sockinfo::reuse_buffer(mem_buf_desc_t *buff)
         int &n_buff_num = iter->second->rx_reuse_info.n_buff_num;
         rx_reuse->push_back(buff);
         n_buff_num += buff->rx.n_frags;
-        if (n_buff_num < m_n_sysvar_rx_num_buffs_reuse) {
+        if (n_buff_num < m_rx_num_buffs_reuse) {
             return;
         }
-        if (n_buff_num >= 2 * m_n_sysvar_rx_num_buffs_reuse) {
+        if (n_buff_num >= 2 * m_rx_num_buffs_reuse) {
             if (p_ring->reclaim_recv_buffers(rx_reuse)) {
                 n_buff_num = 0;
             } else {
