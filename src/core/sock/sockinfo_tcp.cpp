@@ -2113,7 +2113,15 @@ inline void sockinfo_tcp::rx_lwip_process_chained_pbufs(pbuf *p)
         p_curr_desc->rx.frag.iov_base = p->payload;
         p_curr_desc->rx.frag.iov_len = p->len;
         p_curr_desc->p_next_desc = reinterpret_cast<mem_buf_desc_t *>(p->next);
-        process_timestamps(p_curr_desc);
+    }
+
+    // To avoid redundant checking for every packet a seperate loop runs
+    // only in case timestamps are needed.
+    if (m_b_rcvtstamp || m_n_tsing_flags) {
+        for (auto *p_curr_desc = p_first_desc; p_curr_desc;
+             p_curr_desc = p_curr_desc->p_next_desc) {
+            process_timestamps(p_curr_desc);
+        }
     }
 
     p_first_desc->set_ref_count(head_ref);
