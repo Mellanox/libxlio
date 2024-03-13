@@ -2191,8 +2191,6 @@ err_t sockinfo_tcp::rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *pcb, stru
     conn->rx_lwip_process_chained_pbufs(p);
     conn->rx_lwip_cb_socketxtreme_helper(p);
 
-    io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
-
     /*
      * RCVBUFF Accounting: tcp_recved here(stream into the 'internal' buffer) only if the user
      * buffer is not 'filled'
