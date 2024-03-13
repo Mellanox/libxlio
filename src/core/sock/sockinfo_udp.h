@@ -188,7 +188,7 @@ public:
     void set_params_for_socket_pool() override
     {
         m_is_for_socket_pool = true;
-        set_m_n_sysvar_rx_num_buffs_reuse(safe_mce_sys().nginx_udp_socket_pool_rx_num_buffs_reuse);
+        set_rx_num_buffs_reuse(safe_mce_sys().nginx_udp_socket_pool_rx_num_buffs_reuse);
     }
     bool is_closable() override { return !m_is_for_socket_pool; }
 #else
@@ -257,7 +257,7 @@ private:
         while (iter != m_rx_ring_map.end()) {
             descq_t *rx_reuse = &iter->second->rx_reuse_info.rx_reuse;
             int &n_buff_num = iter->second->rx_reuse_info.n_buff_num;
-            if (n_buff_num >= m_n_sysvar_rx_num_buffs_reuse) {
+            if (n_buff_num >= m_rx_num_buffs_reuse) {
                 if (iter->first->reclaim_recv_buffers(rx_reuse)) {
                     n_buff_num = 0;
                 } else {

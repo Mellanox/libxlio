@@ -533,7 +533,7 @@ private:
         m_rx_reuse_buf_postponed = false;
 
         if (m_p_rx_ring) {
-            if (m_rx_reuse_buff.n_buff_num >= m_n_sysvar_rx_num_buffs_reuse) {
+            if (m_rx_reuse_buff.n_buff_num >= m_rx_num_buffs_reuse) {
                 if (m_p_rx_ring->reclaim_recv_buffers(&m_rx_reuse_buff.rx_reuse)) {
                     m_rx_reuse_buff.n_buff_num = 0;
                 } else {
@@ -545,7 +545,7 @@ private:
             while (iter != m_rx_ring_map.end()) {
                 descq_t *rx_reuse = &iter->second->rx_reuse_info.rx_reuse;
                 int &n_buff_num = iter->second->rx_reuse_info.n_buff_num;
-                if (n_buff_num >= m_n_sysvar_rx_num_buffs_reuse) {
+                if (n_buff_num >= m_rx_num_buffs_reuse) {
                     if (iter->first->reclaim_recv_buffers(rx_reuse)) {
                         n_buff_num = 0;
                     } else {

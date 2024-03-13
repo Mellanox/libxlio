@@ -99,10 +99,7 @@ const char *sockinfo::setsockopt_so_opt_to_str(int opt)
 sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     : m_fd(fd)
     , m_fd_context((void *)((uintptr_t)m_fd))
-    , m_n_sysvar_rx_num_buffs_reuse(safe_mce_sys().rx_bufs_batch)
-    , m_n_sysvar_rx_poll_num(safe_mce_sys().rx_poll_num)
-    , m_n_sysvar_select_poll_os_ratio(safe_mce_sys().select_poll_os_ratio)
-    , m_rx_cq_wait_ctrl(safe_mce_sys().rx_cq_wait_ctrl)
+    , m_rx_num_buffs_reuse(safe_mce_sys().rx_bufs_batch)
     , m_skip_cq_poll_in_rx(safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_ENABLE)
     , m_lock_rcv(MULTILOCK_RECURSIVE, MODULE_NAME "::m_lock_rcv")
     , m_lock_snd(MODULE_NAME "::m_lock_snd")
@@ -1524,7 +1521,7 @@ void sockinfo::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
 // Sleep on different CQs and OS listen socket
 int sockinfo::os_wait_sock_rx_epfd(epoll_event *ep_events, int maxevents)
 {
-    if (unlikely(m_rx_cq_wait_ctrl)) {
+    if (unlikely(safe_mce_sys().rx_cq_wait_ctrl)) {
         add_cqfd_to_sock_rx_epfd(m_p_rx_ring);
         int ret =
             SYSCALL(epoll_wait, m_rx_epfd, ep_events, maxevents, m_loops_timer.time_left_msec());
@@ -1611,10 +1608,10 @@ void sockinfo::rx_add_ring_cb(ring *p_ring)
         // each event on the cq-fd. This causes high latency and increased CPU usage by the Kernel
         // which leads to decreased performance. For example, for 350K connections and a single
         // ring. there will be 350K epfds watching a single cq-fd. When this cq-fd has an event, the
-        // Kernel loops through all the 350K epfds. By setting m_rx_cq_wait_ctrl=true, we add the
-        // cq-fd only to the epfds of the sockets that are going to sleep inside
+        // Kernel loops through all the 350K epfds. By setting safe_mce_sys().rx_cq_wait_ctrl=true,
+        // we add the cq-fd only to the epfds of the sockets that are going to sleep inside
         // sockinfo_tcp::rx_wait_helper/sockinfo_udp::rx_wait.
-        if (!m_rx_cq_wait_ctrl) {
+        if (!safe_mce_sys().rx_cq_wait_ctrl) {
             add_cqfd_to_sock_rx_epfd(p_ring);
         }
 
@@ -1680,7 +1677,7 @@ void sockinfo::rx_del_ring_cb(ring *p_ring)
                     p_ring_info->rx_reuse_info.rx_reuse.size());
             }
 
-            if (!m_rx_cq_wait_ctrl) {
+            if (!safe_mce_sys().rx_cq_wait_ctrl) {
                 remove_cqfd_from_sock_rx_epfd(base_ring);
             }
 
@@ -2344,4 +2341,11 @@ int sockinfo::handle_exception_flow()
         return -2;
     }
     return 0;
+}
+
+bool sockinfo::skip_os_select()
+{
+    // If safe_mce_sys().select_poll_os_ratio == 0, it means that user configured XLIO not to poll
+    // os (i.e. TRUE...)
+    return (!safe_mce_sys().select_poll_os_ratio);
 }

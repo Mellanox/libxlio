@@ -150,7 +150,7 @@ inline int sockinfo_udp::rx_wait(bool blocking)
         }
 
         loops++;
-        if (!blocking || m_n_sysvar_rx_poll_num != -1) {
+        if (!blocking || safe_mce_sys().rx_poll_num != -1) {
             loops_to_go--;
         }
         if (m_loops_timer.is_timeout()) {
@@ -2571,7 +2571,7 @@ void sockinfo_udp::rx_add_ring_cb(ring *p_ring)
 
     // Now that we got at least 1 CQ attached start polling the CQs
     if (m_b_blocking) {
-        m_loops_to_go = m_n_sysvar_rx_poll_num;
+        m_loops_to_go = safe_mce_sys().rx_poll_num;
     } else {
         m_loops_to_go = 1; // Force single CQ poll in case of non-blocking socket
     }
@@ -2601,7 +2601,7 @@ void sockinfo_udp::set_blocking(bool is_blocked)
         // Set the high CQ polling RX_POLL value
         // depending on where we have mapped offloaded MC gorups
         if (m_rx_ring_map.size() > 0) {
-            m_loops_to_go = m_n_sysvar_rx_poll_num;
+            m_loops_to_go = safe_mce_sys().rx_poll_num;
         } else {
             m_loops_to_go = safe_mce_sys().rx_poll_num_init;
         }
