@@ -50,7 +50,6 @@
 #define SO_XLIO_GET_API          2800
 #define SO_XLIO_USER_DATA        2801
 #define SO_XLIO_RING_ALLOC_LOGIC 2810
-#define SO_XLIO_FLOW_TAG         2820
 #define SO_XLIO_SHUTDOWN_RX      2821
 #define SO_XLIO_PD               2822
 #define SCM_XLIO_PD              SO_XLIO_PD
