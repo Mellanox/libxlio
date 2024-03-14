@@ -42,7 +42,7 @@
 #include "types.h"
 #include "utils/bullseye.h"
 #include "utils/rdtsc.h"
-#include <memory>
+#include <functional>
 #include <vlogger/vlogger.h>
 #include <core/util/sys_vars.h>
 
@@ -83,6 +83,7 @@ public:
     lock_base(const char *_lock_name = NULL)
         : m_lock_name(_lock_name) {};
     virtual ~lock_base() {};
+    virtual void delete_obj() { delete this; }
     virtual int lock() = 0;
     virtual int trylock() = 0;
     virtual int unlock() = 0;
@@ -458,21 +459,27 @@ public:
     {
     }
 
-    inline int lock() { return 0; }
-    inline int trylock() { return 0; }
-    inline int unlock() { return 0; }
-    inline int is_locked_by_me() { return 1; }
+    void delete_obj() override {}
+    int lock() override { return 0; }
+    int trylock() override { return 0; }
+    int unlock() override { return 0; }
+    int is_locked_by_me() override { return 1; }
 };
+
+static inline void lock_deleter_func(lock_base *lock)
+{
+    lock->delete_obj();
+}
 
 class multilock {
 public:
     multilock(lock_base *_lock)
-        : m_lock(_lock)
+        : m_lock(_lock, lock_deleter_func)
     {
     }
 
     multilock(multilock_recursive_t _recursive, const char *_str)
-        : m_lock(create_new_lock(_recursive, _str))
+        : m_lock(create_new_lock(_recursive, _str), lock_deleter_func)
     {
     }
 
@@ -504,7 +511,8 @@ public:
     inline const char *to_str() { return m_lock->to_str(); }
 
 private:
-    std::unique_ptr<lock_base> m_lock;
+    typedef std::function<void(lock_base *)> lock_deleter;
+    std::unique_ptr<lock_base, lock_deleter> m_lock;
 };
 
 #endif // LOCK_WRAPPER_H
