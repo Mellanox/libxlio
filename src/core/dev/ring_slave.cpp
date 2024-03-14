@@ -47,11 +47,13 @@
 // AF_INET address 0.0.0.0:0, used for 3T flow spec keys.
 static const sock_addr s_sock_addrany;
 
+static thread_local lock_dummy t_lock_dummy_ring;
+
 static lock_base *get_new_lock(const char *name, bool real_lock)
 {
     return (real_lock
                 ? static_cast<lock_base *>(multilock::create_new_lock(MULTILOCK_RECURSIVE, name))
-                : static_cast<lock_base *>(new lock_dummy()));
+                : static_cast<lock_base *>(&t_lock_dummy_ring));
 }
 
 ring_slave::ring_slave(int if_index, ring *parent, ring_type_t type, bool use_locks)

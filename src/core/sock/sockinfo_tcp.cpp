@@ -84,6 +84,7 @@ extern global_stats_t g_global_stat_static;
 tcp_timers_collection *g_tcp_timers_collection = nullptr;
 thread_local thread_local_tcp_timers g_thread_local_tcp_timers;
 bind_no_port *g_bind_no_port = nullptr;
+static thread_local lock_dummy t_lock_dummy_socket;
 
 /*
  * The following socket options are inherited by a connected TCP socket from the listening socket:
@@ -163,7 +164,7 @@ static lock_base *get_new_tcp_lock()
     return (
         safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS
             ? static_cast<lock_base *>(multilock::create_new_lock(MULTILOCK_RECURSIVE, "tcp_con"))
-            : static_cast<lock_base *>(new lock_dummy));
+            : static_cast<lock_base *>(&t_lock_dummy_socket));
 }
 
 inline void sockinfo_tcp::lwip_pbuf_init_custom(mem_buf_desc_t *p_desc)
