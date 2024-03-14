@@ -646,10 +646,6 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
             if (likely(protocol == IPPROTO_TCP)) {
                 struct tcphdr *p_tcp_h = (struct tcphdr *)((uint8_t *)p_ip_h + ip_hdr_len);
 
-                // Update the L3 and L4 info
-                p_rx_wc_buf_desc->rx.src.set_ip_port(family, saddr, p_tcp_h->source);
-                p_rx_wc_buf_desc->rx.dst.set_ip_port(family, daddr, p_tcp_h->dest);
-
                 // Update packet descriptor with datagram base address and length
                 p_rx_wc_buf_desc->rx.frag.iov_base = (uint8_t *)p_tcp_h + sizeof(struct tcphdr);
                 p_rx_wc_buf_desc->rx.frag.iov_len = ip_payload_len - sizeof(struct tcphdr);
