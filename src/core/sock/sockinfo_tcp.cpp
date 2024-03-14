@@ -1626,6 +1626,7 @@ bool sockinfo_tcp::process_peer_ctl_packets(xlio_desc_list_t &peer_packets)
             return false;
         }
 
+        // Listen socket is 3T and so rx.src/dst are set as part of rx_process_buffer_no_flow_id.
         struct tcp_pcb *pcb = get_syn_received_pcb(desc->rx.src, desc->rx.dst);
 
         // 2.1.2 get the pcb and sockinfo
@@ -1987,9 +1988,6 @@ static inline void _rx_lwip_cb_socketxtreme_helper(pbuf *p,
 {
     mem_buf_desc_t *current_desc = reinterpret_cast<mem_buf_desc_t *>(p);
 
-    // Is IPv4 only.
-    assert(current_desc->rx.src.get_sa_family() == AF_INET);
-
     if (!buff_list_tail) {
         // New completion
         completion->packet.buff_lst = reinterpret_cast<xlio_buff_t *>(p);
@@ -1997,8 +1995,7 @@ static inline void _rx_lwip_cb_socketxtreme_helper(pbuf *p,
         completion->packet.num_bufs = current_desc->rx.n_frags;
 
         assert(reinterpret_cast<mem_buf_desc_t *>(p)->rx.n_frags > 0);
-        current_desc->rx.src.get_sa(reinterpret_cast<sockaddr *>(&completion->src),
-                                    sizeof(completion->src));
+
         if (use_hw_timestamp) {
             completion->packet.hw_timestamp = current_desc->rx.timestamps.hw;
         }
@@ -2082,9 +2079,6 @@ inline void sockinfo_tcp::rx_lwip_process_chained_pbufs(pbuf *p)
     mem_buf_desc_t *p_first_desc = reinterpret_cast<mem_buf_desc_t *>(p);
     p_first_desc->rx.sz_payload = p->tot_len;
     p_first_desc->rx.n_frags = 0;
-
-    m_connected.get_sa(reinterpret_cast<sockaddr *>(&p_first_desc->rx.src),
-                       static_cast<socklen_t>(sizeof(p_first_desc->rx.src)));
 
     if (unlikely(has_stats())) {
         m_p_socket_stats->counters.n_rx_bytes += p->tot_len;
@@ -2243,8 +2237,8 @@ err_t sockinfo_tcp::rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, str
 
         pkt_info.struct_sz = sizeof(pkt_info);
         pkt_info.packet_id = (void *)p_first_desc;
-        pkt_info.src = p_first_desc->rx.src.get_p_sa();
-        pkt_info.dst = p_first_desc->rx.dst.get_p_sa();
+        pkt_info.src = conn->m_connected.get_p_sa();
+        pkt_info.dst = conn->m_bound.get_p_sa();
         pkt_info.socket_ready_queue_pkt_count = conn->m_n_rx_pkt_ready_list_count;
         pkt_info.socket_ready_queue_byte_count = conn->m_rx_ready_byte_count;
 
@@ -2555,6 +2549,7 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
     m_iomux_ready_fd_array = (fd_array_t *)pv_fd_ready_array;
 
     if (unlikely(get_tcp_state(&m_pcb) == LISTEN)) {
+        // Listen socket is always 3T and so rx.src/dst are set as part of no-flow-id path.
         pcb = get_syn_received_pcb(p_rx_pkt_mem_buf_desc_info->rx.src,
                                    p_rx_pkt_mem_buf_desc_info->rx.dst);
         bool established_backlog_full = false;
@@ -5282,7 +5277,6 @@ mem_buf_desc_t *sockinfo_tcp::get_next_desc(mem_buf_desc_t *p_desc)
         p_desc->rx.sz_payload = p_desc->lwip_pbuf.tot_len =
             prev->lwip_pbuf.tot_len - prev->lwip_pbuf.len;
         p_desc->rx.n_frags = --prev->rx.n_frags;
-        p_desc->rx.src = prev->rx.src;
         p_desc->inc_ref_count();
         m_rx_pkt_ready_list.push_front(p_desc);
         m_n_rx_pkt_ready_list_count++;
@@ -5387,7 +5381,6 @@ int sockinfo_tcp::zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags
 
             p_desc_iter->rx.n_frags = p_desc_head->rx.n_frags - p_pkts->sz_iov;
             p_desc_head->rx.n_frags = p_pkts->sz_iov;
-            p_desc_iter->rx.src = prev->rx.src;
             p_desc_iter->inc_ref_count();
 
             prev->lwip_pbuf.next = nullptr;
