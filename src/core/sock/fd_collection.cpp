@@ -583,11 +583,9 @@ int fd_collection::del_socket(int fd, sockinfo **map_type)
 
 void fd_collection::remove_from_all_epfds(int fd, bool passthrough)
 {
-    epfd_info_list_t::iterator itr;
-
     lock();
-    for (itr = m_epfd_lst.begin(); itr != m_epfd_lst.end(); itr++) {
-        itr->fd_closed(fd, passthrough);
+    for (epfd_info *ep = m_epfd_lst.front(); ep; ep = m_epfd_lst.next(ep)) {
+        ep->fd_closed(fd, passthrough);
     }
     unlock();
 
