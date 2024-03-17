@@ -41,10 +41,11 @@
 
 /* Forward declarations */
 struct xlio_poll_group_attr;
-class ring;
 class event_handler_manager_local;
-class tcp_timers_collection;
+class ring;
+class ring_alloc_logic_attr;
 class sockinfo_tcp;
+class tcp_timers_collection;
 
 class poll_group {
 public:
@@ -57,8 +58,7 @@ public:
     void add_dirty_socket(sockinfo_tcp *si);
     void flush();
 
-    void add_ring(ring *);
-    void del_ring(ring *);
+    void add_ring(ring *rng, ring_alloc_logic_attr *attr);
 
     void add_socket(sockinfo_tcp *si);
     void close_socket(sockinfo_tcp *si, bool force = false);
