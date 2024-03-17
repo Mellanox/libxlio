@@ -1050,14 +1050,13 @@ void sockinfo_tcp_ops_tls::terminate_session_fatal(uint8_t alert_type)
 
 void sockinfo_tcp_ops_tls::copy_by_offset(uint8_t *dst, uint32_t offset, uint32_t len)
 {
-    auto iter = m_rx_bufs.begin();
-    mem_buf_desc_t *pdesc = *iter;
+    mem_buf_desc_t *pdesc = m_rx_bufs.front();
 
     /* Skip leading buffers */
     if (unlikely(pdesc->lwip_pbuf.len <= offset)) {
         while (pdesc && pdesc->lwip_pbuf.len <= offset) {
             offset -= pdesc->lwip_pbuf.len;
-            pdesc = *(++iter);
+            pdesc = m_rx_bufs.next(pdesc);
         }
     }
 
@@ -1070,22 +1069,21 @@ void sockinfo_tcp_ops_tls::copy_by_offset(uint8_t *dst, uint32_t offset, uint32_
         dst += buflen;
         offset = 0;
 
-        pdesc = *(++iter);
+        pdesc = m_rx_bufs.next(pdesc);
     }
 }
 
 /* More efficient method to get 16bit value in the buffer list. */
 uint16_t sockinfo_tcp_ops_tls::offset_to_host16(uint32_t offset)
 {
-    auto iter = m_rx_bufs.begin();
-    mem_buf_desc_t *pdesc = *iter;
+    mem_buf_desc_t *pdesc = m_rx_bufs.front();
     uint16_t res = 0;
 
     /* Skip leading buffers */
     if (unlikely(pdesc->lwip_pbuf.len <= offset)) {
         while (pdesc && pdesc->lwip_pbuf.len <= offset) {
             offset -= pdesc->lwip_pbuf.len;
-            pdesc = *(++iter);
+            pdesc = m_rx_bufs.next(pdesc);
         }
     }
 
@@ -1094,7 +1092,7 @@ uint16_t sockinfo_tcp_ops_tls::offset_to_host16(uint32_t offset)
         ++offset;
         if (unlikely(offset >= pdesc->lwip_pbuf.len)) {
             offset = 0;
-            pdesc = *(++iter);
+            pdesc = m_rx_bufs.next(pdesc);
             if (unlikely(!pdesc)) {
                 return 0;
             }
@@ -1338,7 +1336,6 @@ check_single_record:
 
     /* The first record is complete - push the payload to application. */
 
-    auto iter = m_rx_bufs.begin();
     struct pbuf *pi;
     struct pbuf *pres = nullptr;
     struct pbuf *ptmp = nullptr;
@@ -1350,7 +1347,7 @@ check_single_record:
     uint8_t tls_type;
     uint8_t tls_decrypted = 0;
 
-    mem_buf_desc_t *pdesc = *iter;
+    mem_buf_desc_t *pdesc = m_rx_bufs.front();
     tls_type = ((uint8_t *)pdesc->lwip_pbuf.payload)[m_rx_offset];
     if (is_rx_tls13()) {
         /* TLS 1.3 sends record type as the last byte of the payload. */
@@ -1403,7 +1400,7 @@ check_single_record:
         offset = 0;
 
     next_buffer:
-        pdesc = *(++iter);
+        pdesc = m_rx_bufs.next(pdesc);
     }
 
     int ret = 0;

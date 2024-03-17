@@ -1838,10 +1838,8 @@ int sockinfo_tcp::handle_child_FIN(sockinfo_tcp *child_conn)
 {
     lock_tcp_con();
 
-    sock_list_t::iterator conns_iter;
-    for (conns_iter = m_accepted_conns.begin(); conns_iter != m_accepted_conns.end();
-         conns_iter++) {
-        if (*(conns_iter) == child_conn) {
+    for (sockinfo_tcp *conn = m_accepted_conns.front(); conn; conn = m_accepted_conns.next(conn)) {
+        if (conn == child_conn) {
             unlock_tcp_con();
             return 0; // don't close conn, it can be accepted
         }
