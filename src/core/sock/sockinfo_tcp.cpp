@@ -55,7 +55,6 @@
 #include "sock-redirect.h"
 #include "fd_collection.h"
 #include "sockinfo_tcp.h"
-#include "tcp_seg_pool.h"
 #include "bind_no_port.h"
 #include "xlio.h"
 
@@ -555,7 +554,7 @@ sockinfo_tcp::~sockinfo_tcp()
         si_tcp_logwarn("still %d tcp segs in use!", m_tcp_seg_in_use);
     }
     if (m_tcp_seg_list) {
-        g_tcp_seg_pool->put_tcp_segs(m_tcp_seg_list);
+        g_tcp_seg_pool->put_objs(m_tcp_seg_list);
     }
 
     while (!m_socket_options_list.empty()) {
@@ -5889,12 +5888,12 @@ void sockinfo_tcp::tcp_seg_free_cached(void *p_conn, struct tcp_seg *seg)
 
 void sockinfo_tcp::return_tcp_segs(struct tcp_seg *seg)
 {
-    (likely(m_p_rx_ring)) ? m_p_rx_ring->put_tcp_segs(seg) : g_tcp_seg_pool->put_tcp_segs(seg);
+    (likely(m_p_rx_ring)) ? m_p_rx_ring->put_tcp_segs(seg) : g_tcp_seg_pool->put_objs(seg);
 }
 
 struct tcp_seg *sockinfo_tcp::get_tcp_seg_direct()
 {
-    return likely(m_p_rx_ring) ? m_p_rx_ring->get_tcp_segs(1U) : g_tcp_seg_pool->get_tcp_segs(1U);
+    return likely(m_p_rx_ring) ? m_p_rx_ring->get_tcp_segs(1U) : g_tcp_seg_pool->get_objs(1U);
 }
 
 struct tcp_seg *sockinfo_tcp::get_tcp_seg_cached()
@@ -5902,7 +5901,7 @@ struct tcp_seg *sockinfo_tcp::get_tcp_seg_cached()
     if (!m_tcp_seg_list) {
         m_tcp_seg_list = (likely(m_p_rx_ring))
             ? m_p_rx_ring->get_tcp_segs(m_sysvar_tx_segs_batch_tcp)
-            : g_tcp_seg_pool->get_tcp_segs(m_sysvar_tx_segs_batch_tcp);
+            : g_tcp_seg_pool->get_objs(m_sysvar_tx_segs_batch_tcp);
 
         if (unlikely(!m_tcp_seg_list)) {
             return nullptr;
@@ -5936,7 +5935,7 @@ void sockinfo_tcp::put_tcp_seg_cached(struct tcp_seg *seg)
     --m_tcp_seg_in_use;
     if (m_tcp_seg_count > 2U * m_sysvar_tx_segs_batch_tcp &&
         m_tcp_seg_in_use < m_tcp_seg_count / 2U) {
-        return_tcp_segs(tcp_seg_pool::split_tcp_segs((m_tcp_seg_count - m_tcp_seg_in_use) / 2U,
+        return_tcp_segs(tcp_seg_pool::split_obj_list((m_tcp_seg_count - m_tcp_seg_in_use) / 2U,
                                                      m_tcp_seg_list, m_tcp_seg_count));
     }
 }
