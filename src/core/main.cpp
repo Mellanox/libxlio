@@ -52,6 +52,7 @@
 #include "util/xlio_stats.h"
 #include "util/utils.h"
 #include "event/event_handler_manager.h"
+#include "event/poll_group.h"
 #include "event/vlogger_timer_handler.h"
 #include "dev/buffer_pool.h"
 #include "dev/ib_ctx_handler_collection.h"
@@ -144,6 +145,8 @@ static int free_libxlio_resources()
     if (g_p_fd_collection_temp) {
         delete g_p_fd_collection_temp;
     }
+
+    poll_group::destroy_all_groups();
 
     if (g_p_lwip) {
         delete g_p_lwip;
