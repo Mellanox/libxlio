@@ -258,9 +258,6 @@ public:
     struct tcp_seg *get_tcp_segs(uint32_t num);
     void put_tcp_segs(struct tcp_seg *seg);
 
-    void set_group(poll_group *grp) { m_p_group = grp; }
-    poll_group *get_group() const { return m_p_group; }
-
     ring_ec *socketxtreme_get_ecs(uint32_t num);
     void socketxtreme_put_ecs(struct ring_ec *ec);
 
@@ -275,7 +272,6 @@ protected:
     inline void set_parent(ring *parent) { m_parent = (parent ? parent : this); }
     inline void set_if_index(int if_index) { m_if_index = if_index; }
 
-    poll_group *m_p_group = nullptr;
     int *m_p_n_rx_channel_fds = nullptr;
     ring *m_parent = nullptr;
 

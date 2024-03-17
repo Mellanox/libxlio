@@ -93,6 +93,8 @@ poll_group::~poll_group()
         }
     }
 
+    // TODO Release the rings. Current implementation destroys the rings in the library destructor.
+
     grp_logdbg("Polling group %p destroyed", this);
 }
 
@@ -134,27 +136,26 @@ void poll_group::flush()
     // TODO Ring doorbell and request TX completion.
 }
 
-void poll_group::add_ring(ring *rng)
+void poll_group::add_ring(ring *rng, ring_alloc_logic_attr *attr)
 {
     if (std::find(m_rings.begin(), m_rings.end(), rng) == std::end(m_rings)) {
         grp_logdbg("New ring %p in group %p", rng, this);
-        if (rng->get_group()) {
-            grp_logwarn("Ring belongs to a group %p (current group %p)", rng->get_group(), this);
-        }
-        rng->set_group(this);
         m_rings.push_back(rng);
-        // TODO Increase ref count for the ring and keep it until the group is destroyed.
-        // In this way we don't have to implement del_ring() and there won't be a race between
-        // socket destruction and xlio_group_buf_free().
-    }
-}
 
-void poll_group::del_ring(ring *rng)
-{
-    auto iter = std::find(m_rings.begin(), m_rings.end(), rng);
-    if (iter != std::end(m_rings)) {
-        grp_logdbg("Removed ring %p from group %p", rng, this);
-        m_rings.erase(iter);
+        /*
+         * Take reference to the ring. This avoids a race between socket destruction and buffer
+         * return to the group. Socket destruction can lead to the ring destruction. But user
+         * may return a buffer outside of the socket lifecycle.
+         * This also avoids extra ring destruction in a scenario when application closes all
+         * the sockets multiple times in runtime.
+         */
+        net_device_val *nd = g_p_net_device_table_mgr->get_net_device_val(rng->get_if_index());
+        if (nd) {
+            ring *reserved = nd->reserve_ring(attr);
+            if (reserved != rng) {
+                grp_logerr("Cannot reserve ring %p (reserved=%p)", rng, reserved);
+            }
+        }
     }
 }
 
