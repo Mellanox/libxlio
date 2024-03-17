@@ -36,6 +36,7 @@
 #include <memory>
 #include <vector>
 
+#include "sock/fd_collection.h"
 #include "xlio.h"
 
 /* Forward declarations */
@@ -59,6 +60,9 @@ public:
     void add_ring(ring *);
     void del_ring(ring *);
 
+    void add_socket(sockinfo_tcp *si);
+    void close_socket(sockinfo_tcp *si, bool force = false);
+
     unsigned get_flags() const { return m_group_flags; }
     event_handler_manager_local *get_event_handler() const { return m_event_handler.get(); }
     tcp_timers_collection *get_tcp_timers() const { return m_tcp_timers.get(); }
@@ -73,9 +77,10 @@ private:
     std::unique_ptr<event_handler_manager_local> m_event_handler;
     std::unique_ptr<tcp_timers_collection> m_tcp_timers;
 
+    unsigned m_group_flags;
     std::vector<sockinfo_tcp *> m_dirty_sockets;
 
-    unsigned m_group_flags;
+    sock_fd_api_list_t m_sockets_list;
 };
 
 #endif /* XLIO_GROUP_H */

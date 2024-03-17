@@ -86,6 +86,13 @@ poll_group::~poll_group()
     }
     s_poll_groups_lock.unlock();
 
+    while (!m_sockets_list.empty()) {
+        sockinfo_tcp *si = dynamic_cast<sockinfo_tcp *>(m_sockets_list.front());
+        if (likely(si)) {
+            close_socket(si, true);
+        }
+    }
+
     grp_logdbg("Polling group %p destroyed", this);
 }
 
@@ -149,4 +156,20 @@ void poll_group::del_ring(ring *rng)
         grp_logdbg("Removed ring %p from group %p", rng, this);
         m_rings.erase(iter);
     }
+}
+
+void poll_group::add_socket(sockinfo_tcp *si)
+{
+    m_sockets_list.push_back(si);
+}
+
+void poll_group::close_socket(sockinfo_tcp *si, bool force /*=false*/)
+{
+    m_sockets_list.erase(si);
+
+    bool closed = si->prepare_to_close(force);
+    if (closed) {
+        si->clean_socket_obj();
+    }
+    // TODO If not closed, the socket will be destroyed after the last completion notification.
 }
