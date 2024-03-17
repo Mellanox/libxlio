@@ -45,7 +45,7 @@
 #include "iomux/epfd_info.h"
 #include "utils/lock_wrapper.h"
 
-typedef xlio_list_t<sockinfo, sockinfo::pendig_to_remove_node_offset> sock_fd_api_list_t;
+typedef xlio_list_t<sockinfo, sockinfo::pending_to_remove_node_offset> sock_fd_api_list_t;
 typedef xlio_list_t<epfd_info, epfd_info::epfd_info_node_offset> epfd_info_list_t;
 
 typedef std::unordered_map<pthread_t, int> offload_thread_rule_t;
