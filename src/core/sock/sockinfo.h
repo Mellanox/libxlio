@@ -486,7 +486,7 @@ protected:
      */
     atomic_t m_zckey;
 
-    int m_fd; // identification information <socket fd>
+    lock_spin_simple m_error_queue_lock;
 
     // End of first cache line
 
@@ -494,10 +494,7 @@ protected:
      * to provide notification ability.
      */
     descq_t m_error_queue;
-    lock_spin m_error_queue_lock;
     void *m_fd_context; // Context data stored with socket
-
-    // End of second cache line
 
     rfs *m_rfs_ptr = nullptr;
     struct {
@@ -521,6 +518,7 @@ public:
     uint32_t m_epoll_event_flags = 0U;
 
 protected:
+    int m_fd; // identification information <socket fd>
     int m_rx_epfd;
     /**
      * list of pending ready packet on the Rx,
