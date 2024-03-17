@@ -150,7 +150,6 @@ libxlio_la_SOURCES := \
 	sock/sockinfo_udp.cpp \
 	sock/sockinfo_ulp.cpp \
 	sock/sockinfo_tcp.cpp \
-	sock/tcp_seg_pool.cpp \
 	sock/fd_collection.cpp \
 	sock/sock-redirect.cpp \
 	sock/sock-app.cpp \
@@ -279,7 +278,6 @@ libxlio_la_SOURCES := \
 	sock/sockinfo_tcp.h \
 	sock/sockinfo_udp.h \
 	sock/sockinfo_ulp.h \
-	sock/tcp_seg_pool.h \
 	sock/sock-redirect.h \
 	sock/sock-redirect-internal.h \
 	sock/sock-app.h \
@@ -293,6 +291,7 @@ libxlio_la_SOURCES := \
 	util/instrumentation.h \
 	util/libxlio.h \
 	util/list.h \
+	util/cached_obj_pool.h \
 	util/sg_array.h \
 	util/ip_address.h \
 	util/sock_addr.h \

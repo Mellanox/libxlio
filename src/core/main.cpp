@@ -71,7 +71,6 @@
 #include "sock/fd_collection.h"
 #include "sock/sockinfo_tcp.h"
 #include "sock/sockinfo_udp.h"
-#include "sock/tcp_seg_pool.h"
 #include "sock/bind_no_port.h"
 #include "iomux/io_mux_call.h"
 
@@ -1100,7 +1099,10 @@ static void do_global_ctors_helper()
 
     NEW_CTOR(g_buffer_pool_zc, buffer_pool(BUFFER_POOL_TX, 0));
 
-    NEW_CTOR(g_tcp_seg_pool, tcp_seg_pool());
+    NEW_CTOR(g_tcp_seg_pool,
+             tcp_seg_pool("TCP segments", safe_mce_sys().tx_segs_pool_batch_tcp,
+                          g_global_stat_static.n_tcp_seg_pool_size,
+                          g_global_stat_static.n_tcp_seg_pool_no_segs));
 
     // For delegated TCP timers the global collection is not used.
     if (safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
