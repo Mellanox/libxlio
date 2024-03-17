@@ -49,6 +49,7 @@ class poll_group {
 public:
     poll_group(const struct xlio_poll_group_attr *attr);
     ~poll_group();
+    static void destroy_all_groups();
 
     void poll();
 

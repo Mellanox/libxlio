@@ -45,6 +45,14 @@
 #define grp_loginfo  __log_info
 #define grp_logdbg   __log_dbg
 
+/*
+ * Collection of the groups to destroy leftovers in the library destructor.
+ * Groups are likely pre-initialized in a small number (up to the number of CPU cores)
+ * and destroyed at exit. Therefore, a simple collection data structure is enough.
+ */
+static std::vector<poll_group *> s_poll_groups;
+static lock_spin s_poll_groups_lock;
+
 poll_group::poll_group(const struct xlio_poll_group_attr *attr)
     : m_socket_event_cb(attr->socket_event_cb)
     , m_socket_comp_cb(attr->socket_comp_cb)
@@ -61,10 +69,35 @@ poll_group::poll_group(const struct xlio_poll_group_attr *attr)
     m_event_handler = std::make_unique<event_handler_manager_local>();
     m_tcp_timers = std::make_unique<tcp_timers_collection>(1U);
     m_tcp_timers->set_group(this);
+
+    s_poll_groups_lock.lock();
+    s_poll_groups.push_back(this);
+    s_poll_groups_lock.unlock();
+
+    grp_logdbg("Polling group %p created", this);
 }
 
 poll_group::~poll_group()
 {
+    s_poll_groups_lock.lock();
+    auto iter = std::find(s_poll_groups.begin(), s_poll_groups.end(), this);
+    if (iter != std::end(s_poll_groups)) {
+        s_poll_groups.erase(iter);
+    }
+    s_poll_groups_lock.unlock();
+
+    grp_logdbg("Polling group %p destroyed", this);
+}
+
+/*static*/
+void poll_group::destroy_all_groups()
+{
+    s_poll_groups_lock.lock();
+    std::vector<poll_group *> groups(std::move(s_poll_groups));
+    s_poll_groups_lock.unlock();
+    for (poll_group *grp : groups) {
+        delete grp;
+    }
 }
 
 void poll_group::poll()
