@@ -97,8 +97,8 @@ const char *sockinfo::setsockopt_so_opt_to_str(int opt)
 }
 
 sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
-    : m_fd(fd)
-    , m_fd_context((void *)((uintptr_t)m_fd))
+    : m_fd_context((void *)((uintptr_t)m_fd))
+    , m_fd(fd)
     , m_rx_num_buffs_reuse(safe_mce_sys().rx_bufs_batch)
     , m_skip_cq_poll_in_rx(safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_ENABLE)
     , m_lock_rcv(MULTILOCK_RECURSIVE, MODULE_NAME "::m_lock_rcv")
