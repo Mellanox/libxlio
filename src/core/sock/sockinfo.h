@@ -247,9 +247,9 @@ public:
         SOCKINFO_DESTROYING
     };
 
-    static inline size_t pendig_to_remove_node_offset(void)
+    static inline size_t pending_to_remove_node_offset(void)
     {
-        return NODE_OFFSET(sockinfo, pendig_to_remove_node);
+        return NODE_OFFSET(sockinfo, pending_to_remove_node);
     }
 
     static inline size_t socket_fd_list_node_offset(void)
@@ -522,7 +522,7 @@ public:
     list_node<sockinfo, sockinfo::socket_fd_list_node_offset> socket_fd_list_node;
     list_node<sockinfo, sockinfo::ep_ready_fd_node_offset> ep_ready_fd_node;
     list_node<sockinfo, sockinfo::ep_info_fd_node_offset> ep_info_fd_node;
-    list_node<sockinfo, sockinfo::pendig_to_remove_node_offset> pendig_to_remove_node;
+    list_node<sockinfo, sockinfo::pending_to_remove_node_offset> pending_to_remove_node;
     epoll_fd_rec m_fd_rec;
     uint32_t m_epoll_event_flags = 0U;
 
