@@ -65,7 +65,6 @@ template <class T, size_t offset(void)> class list_node {
 public:
     /* head must be the first field! */
     struct list_head head;
-    T *obj_ptr;
 
 #if VLIST_DEBUG
     xlio_list_t<T, offset> *parent;
@@ -75,12 +74,13 @@ public:
 #endif
 
     list_node()
-        : obj_ptr(NULL)
     {
         this->head.next = &this->head;
         this->head.prev = &this->head;
         VLIST_DEBUG_SET_PARENT(this, NULL);
     }
+
+    T *obj_ptr() { return reinterpret_cast<T *>(reinterpret_cast<uintptr_t>(this) - offset()); }
 
     /* is_list_member - check if the node is already a member in a list. */
     bool is_list_member()
@@ -89,105 +89,8 @@ public:
     }
 };
 
-template <typename T, size_t offset(void)>
-/* coverity[missing_move_assignment] */
-class list_iterator_t {
-public:
-    using iterator_category = std::random_access_iterator_tag;
-    using value_type = T;
-    using difference_type = std::ptrdiff_t;
-    using pointer = T *;
-    using reference = T &;
-
-    list_iterator_t(T *ptr = NULL)
-        : m_ptr(ptr)
-    {
-    }
-
-    list_iterator_t(const list_iterator_t<T, offset> &iter)
-        : m_ptr(iter.m_ptr)
-    {
-    }
-
-    ~list_iterator_t() {}
-
-    list_iterator_t<T, offset> &operator=(T *ptr)
-    {
-        m_ptr = ptr;
-        return (*this);
-    }
-
-    list_iterator_t<T, offset> &operator=(const list_iterator_t<T, offset> &iter)
-    {
-        m_ptr = iter.m_ptr;
-        return (*this);
-    }
-
-    operator bool() const { return m_ptr ? true : false; }
-
-    bool operator==(const list_iterator_t<T, offset> &iter) const
-    {
-        return m_ptr == iter.getConstPtr();
-    }
-
-    bool operator!=(const list_iterator_t<T, offset> &iter) const
-    {
-        return m_ptr != iter.getConstPtr();
-    }
-
-    list_iterator_t<T, offset> operator++(int)
-    {
-        list_iterator_t<T, offset> iter(*this);
-        increment_ptr();
-        return iter;
-    }
-
-    list_iterator_t<T, offset> &operator++()
-    {
-        increment_ptr();
-        return *this;
-    }
-
-    list_iterator_t<T, offset> operator--(int)
-    {
-        list_iterator_t<T, offset> iter(*this);
-        decrement_ptr();
-        return iter;
-    }
-
-    list_iterator_t<T, offset> &operator--()
-    {
-        decrement_ptr();
-        return *this;
-    }
-
-    T *operator*() { return m_ptr; }
-
-    const T *operator*() const { return m_ptr; }
-
-    T *operator->() { return m_ptr; }
-
-    T *getPtr() const { return m_ptr; }
-
-    const T *getConstPtr() const { return m_ptr; }
-
-private:
-    T *m_ptr;
-
-    inline void increment_ptr()
-    {
-        m_ptr = ((list_node<T, offset> *)GET_NODE(m_ptr, T, offset)->head.next)->obj_ptr;
-    }
-
-    inline void decrement_ptr()
-    {
-        m_ptr = ((list_node<T, offset> *)GET_NODE(m_ptr, T, offset)->head.prev)->obj_ptr;
-    }
-};
-
 template <class T, size_t offset(void)> class xlio_list_t {
 public:
-    typedef list_iterator_t<T, offset> iterator;
     xlio_list_t() { init_list(); }
 
     void set_id(const char *format, ...)
@@ -241,7 +144,7 @@ public:
         if (unlikely(empty())) {
             return NULL;
         }
-        return ((list_node<T, offset> *)m_list.head.next)->obj_ptr;
+        return ((list_node<T, offset> *)m_list.head.next)->obj_ptr();
     }
 
     inline T *back() const
@@ -249,15 +152,19 @@ public:
         if (unlikely(empty())) {
             return NULL;
         }
-/* clang analyzer reports:
- * Use of memory after it is freed
- * This issue comes from ~chunk_list_t()
- * Root cause is unknown.
- * TODO: Fix based on root cause instead of supressing
- */
-#ifndef __clang_analyzer__
-        return ((list_node<T, offset> *)m_list.head.prev)->obj_ptr;
-#endif
+        return ((list_node<T, offset> *)m_list.head.prev)->obj_ptr();
+    }
+
+    inline T *next(T *obj) const
+    {
+        list_node<T, offset> *node = (list_node<T, offset> *)GET_NODE(obj, T, offset)->head.next;
+        return node == &m_list ? NULL : node->obj_ptr();
+    }
+
+    inline T *prev(T *obj) const
+    {
+        list_node<T, offset> *node = (list_node<T, offset> *)GET_NODE(obj, T, offset)->head.prev;
+        return node == &m_list ? NULL : node->obj_ptr();
     }
 
     inline void pop_front() { erase(front()); }
@@ -314,7 +221,6 @@ public:
         }
 
         VLIST_DEBUG_SET_PARENT(node_obj, this);
-        node_obj->obj_ptr = obj;
         list_add_tail(&node_obj->head, &m_list.head);
         m_size++;
     }
@@ -332,7 +238,6 @@ public:
         }
 
         VLIST_DEBUG_SET_PARENT(node_obj, this);
-        node_obj->obj_ptr = obj;
         list_add(&node_obj->head, &m_list.head);
         m_size++;
     }
@@ -346,7 +251,7 @@ public:
             for (size_t i = 0; i < index; i++) {
                 ans = ans->next;
             }
-            return ((list_node<T, offset> *)ans)->obj_ptr;
+            return ((list_node<T, offset> *)ans)->obj_ptr();
         }
     }
 
@@ -375,8 +280,8 @@ public:
      * type. Sizes may differ.
      *
      * After the call to this member function, the elements in this container are those which were
-     * in x before the call, and the elements of x are those which were in this. All iterators,
-     * references and pointers remain valid for the swapped objects.
+     * in x before the call, and the elements of x are those which were in this. All references and
+     * pointers remain valid for the swapped objects.
      */
     void swap(xlio_list_t<T, offset> &x)
     {
@@ -385,10 +290,6 @@ public:
         x.move_to_empty(*this);
         temp_list.move_to_empty(x);
     }
-
-    list_iterator_t<T, offset> begin() { return list_iterator_t<T, offset>(front()); }
-
-    list_iterator_t<T, offset> end() { return list_iterator_t<T, offset>(NULL); }
 
 #if VLIST_DEBUG
     char *list_id() { return (char *)&id; }
