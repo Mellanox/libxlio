@@ -405,9 +405,6 @@ extern "C" int xlio_init_ex(const struct xlio_init_attr *attr)
     if (!getenv(SYS_VAR_PROGRESS_ENGINE_INTERVAL)) {
         setenv(SYS_VAR_PROGRESS_ENGINE_INTERVAL, "0", 1);
     }
-    if (!getenv(SYS_VAR_TCP_ABORT_ON_CLOSE)) {
-        setenv(SYS_VAR_TCP_ABORT_ON_CLOSE, "1", 1);
-    }
 
     xlio_init();
 
@@ -470,18 +467,20 @@ extern "C" int xlio_socket_create(const struct xlio_socket_attr *attr, xlio_sock
         return -1;
     }
 
-    int sockfd = socket_internal(attr->domain, SOCK_STREAM, 0, true, false);
-    if (sockfd < 0) {
+    int fd = SYSCALL(socket, attr->domain, SOCK_STREAM, 0);
+    if (fd < 0) {
         return -1;
     }
 
-    sockinfo_tcp *si = dynamic_cast<sockinfo_tcp *>(g_p_fd_collection->get_sockfd(sockfd));
+    sockinfo_tcp *si = new sockinfo_tcp(fd, attr->domain);
     if (!si) {
-        errno = EBADF;
+        errno = ENOMEM;
         return -1;
     }
-
     si->set_xlio_socket(attr);
+
+    poll_group *grp = reinterpret_cast<poll_group *>(attr->group);
+    grp->add_socket(si);
 
     *sock_out = reinterpret_cast<xlio_socket_t>(si);
     return 0;
@@ -490,8 +489,15 @@ extern "C" int xlio_socket_create(const struct xlio_socket_attr *attr, xlio_sock
 extern "C" int xlio_socket_destroy(xlio_socket_t sock)
 {
     sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
+    poll_group *grp = si->get_poll_group();
 
-    return XLIO_CALL(close, si->get_fd());
+    if (likely(grp)) {
+        // We always force TCP reset not to handle FIN handshake and TIME-WAIT state.
+        grp->close_socket(si, true);
+    } else {
+        return XLIO_CALL(close, si->get_fd());
+    }
+    return 0;
 }
 
 extern "C" int xlio_socket_setsockopt(xlio_socket_t sock, int level, int optname,
