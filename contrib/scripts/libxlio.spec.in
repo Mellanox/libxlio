@@ -178,6 +178,7 @@ fi
 %files devel
 %dir %{_includedir}/mellanox
 %{_includedir}/mellanox/xlio_extra.h
+%{_includedir}/mellanox/xlio_types.h
 %{_includedir}/mellanox/xlio.h
 %if %{use_rel} > 0
 %{_libdir}/%{name}-debug.so
