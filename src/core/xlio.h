@@ -391,7 +391,6 @@ int xlio_socketxtreme_free_buff(struct xlio_buff_t *buff);
 
 typedef uintptr_t xlio_poll_group_t;
 typedef uintptr_t xlio_socket_t;
-typedef uint32_t xlio_key_t;
 
 struct xlio_buf {
     uint64_t userdata;
@@ -588,14 +587,6 @@ int xlio_socket_sendv(xlio_socket_t sock, const struct iovec *iov, unsigned iovc
                       const struct xlio_socket_send_attr *attr);
 void xlio_poll_group_flush(xlio_poll_group_t group);
 void xlio_socket_flush(xlio_socket_t sock);
-
-struct xlio_key_attr {
-    int unused;
-};
-
-/* All the alive socket keys are destroyed on socket destruction. */
-int xlio_key_create(xlio_socket_t sock, struct xlio_key_attr *attr, xlio_key_t *key_out);
-void xlio_key_destroy(xlio_socket_t sock, xlio_key_t key);
 
 /*
  * RX flow.
