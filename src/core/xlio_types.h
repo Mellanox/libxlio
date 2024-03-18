@@ -359,7 +359,11 @@ struct xlio_buf {
  * buffers. User can use this information to prepare the memory for some logic in the future.
  * Zerocopy RX interface provides pointers to such memory.
  *
- * Current XLIO implementation does a single allocation for buffers.
+ * Argument hugepage_size provides the page size if XLIO uses hugepages for the allocation.
+ * If hugepage_size is not zero, the both addr and len are aligned to the page size boundary.
+ * There is no alignment guarantee for regular pages and hugepage_size is zero in this case.
+ * In case of external user allocator, XLIO reports hugepage_size zero regardless of the underlying
+ * pages properties.
  */
 typedef void (*xlio_memory_cb_t)(void *addr, size_t len, size_t hugepage_size);
 
@@ -420,6 +424,10 @@ typedef void (*xlio_socket_rx_cb_t)(xlio_socket_t, uintptr_t userdata_sq, void *
 struct xlio_init_attr {
     unsigned flags;
     xlio_memory_cb_t memory_cb;
+
+    /* Optional external user allocator for XLIO buffers. */
+    void *(*memory_alloc)(size_t);
+    void (*memory_free)(void *);
 };
 
 /* Sockets and rings will be protected with locks regardless of XLIO configuration. */

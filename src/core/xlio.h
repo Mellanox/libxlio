@@ -399,8 +399,10 @@ int xlio_socketxtreme_free_buff(struct xlio_buff_t *buff);
  * xlio_init_ex() is not thread-safe operation, however, subsequent serialized calls exit
  * successfully without any action.
  *
- * If set, memory_cb() notifies about memory blocks which zerocopy RX buffers can point to.
- * Current implementation allocates a single memory block and does it within xlio_init_ex() context.
+ * If set, xlio_init_attr::memory_cb() notifies about memory blocks which are allocated to
+ * buffers. Each zerocopy RX buffer resides within one such memory block.
+ * If set, XLIO uses external allocator xlio_init_attr::memory_alloc() instead of the internal.
+ * Current implementation allocates a single memory block and does it in xlio_init_ex() context.
  */
 int xlio_init_ex(const struct xlio_init_attr *attr);
 
