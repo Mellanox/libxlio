@@ -42,6 +42,9 @@
 /** Magic value for xlio_get_api (NVDAXLIO) */
 #define XLIO_MAGIC_NUMBER (0x4f494c584144564eULL)
 
+/* Forward declaration. */
+struct ibv_pd;
+
 /**
  * XLIO Extended Socket API
  */
@@ -60,6 +63,7 @@ enum {
     XLIO_EXTRA_API_SOCKETXTREME_FREE_XLIO_BUFF = (1 << 10),
     XLIO_EXTRA_API_DUMP_FD_STATS = (1 << 11),
     XLIO_EXTRA_API_IOCTL = (1 << 12),
+    XLIO_EXTRA_API_XLIO_SOCKET = (1 << 13),
 };
 
 struct __attribute__((packed)) xlio_api_t {
@@ -312,6 +316,30 @@ struct __attribute__((packed)) xlio_api_t {
      *                  EOPNOTSUPP - socketXtreme was not enabled during configuration time.
      */
     int (*socketxtreme_free_buff)(struct xlio_buff_t *buff);
+
+    /**
+     * XLIO Socket API.
+     */
+    int (*xlio_init_ex)(const struct xlio_init_attr *attr);
+    int (*xlio_poll_group_create)(const struct xlio_poll_group_attr *attr,
+                                  xlio_poll_group_t *group_out);
+    int (*xlio_poll_group_destroy)(xlio_poll_group_t group);
+    void (*xlio_poll_group_poll)(xlio_poll_group_t group);
+    int (*xlio_socket_create)(const struct xlio_socket_attr *attr, xlio_socket_t *sock_out);
+    int (*xlio_socket_destroy)(xlio_socket_t sock);
+    int (*xlio_socket_setsockopt)(xlio_socket_t sock, int level, int optname, const void *optval,
+                                  socklen_t optlen);
+    int (*xlio_socket_bind)(xlio_socket_t sock, const struct sockaddr *addr, socklen_t addrlen);
+    int (*xlio_socket_connect)(xlio_socket_t sock, const struct sockaddr *to, socklen_t tolen);
+    struct ibv_pd *(*xlio_socket_get_pd)(xlio_socket_t sock);
+    int (*xlio_socket_send)(xlio_socket_t sock, const void *data, size_t len,
+                            const struct xlio_socket_send_attr *attr);
+    int (*xlio_socket_sendv)(xlio_socket_t sock, const struct iovec *iov, unsigned iovcnt,
+                             const struct xlio_socket_send_attr *attr);
+    void (*xlio_poll_group_flush)(xlio_poll_group_t group);
+    void (*xlio_socket_flush)(xlio_socket_t sock);
+    void (*xlio_socket_buf_free)(xlio_socket_t sock, struct xlio_buf *buf);
+    void (*xlio_poll_group_buf_free)(xlio_poll_group_t group, struct xlio_buf *buf);
 };
 
 /**

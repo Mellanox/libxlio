@@ -371,6 +371,25 @@ struct xlio_api_t *extra_api()
             XLIO_EXTRA_API_SOCKETXTREME_FREE_XLIO_BUFF);
         SET_EXTRA_API(dump_fd_stats, xlio_dump_fd_stats, XLIO_EXTRA_API_DUMP_FD_STATS);
         SET_EXTRA_API(ioctl, xlio_extra_ioctl, XLIO_EXTRA_API_IOCTL);
+
+        // XLIO Socket API.
+        SET_EXTRA_API(xlio_init_ex, xlio_init_ex, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_poll_group_create, xlio_poll_group_create, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_poll_group_destroy, xlio_poll_group_destroy, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_poll_group_poll, xlio_poll_group_poll, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_socket_create, xlio_socket_create, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_socket_destroy, xlio_socket_destroy, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_socket_setsockopt, xlio_socket_setsockopt, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_socket_bind, xlio_socket_bind, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_socket_connect, xlio_socket_connect, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_socket_get_pd, xlio_socket_get_pd, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_socket_send, xlio_socket_send, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_socket_sendv, xlio_socket_sendv, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_poll_group_flush, xlio_poll_group_flush, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_socket_flush, xlio_socket_flush, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_socket_buf_free, xlio_socket_buf_free, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_poll_group_buf_free, xlio_poll_group_buf_free,
+                      XLIO_EXTRA_API_XLIO_SOCKET);
     }
 
     return xlio_api;
@@ -382,7 +401,7 @@ struct xlio_api_t *extra_api()
 
 extern "C" int xlio_init_ex(const struct xlio_init_attr *attr)
 {
-    // Set XLIO socket API specific parameter unless user sets them explicitly
+    // Set XLIO Socket API specific parameters unless user sets them explicitly
     if (!getenv(SYS_VAR_PROGRESS_ENGINE_INTERVAL)) {
         setenv(SYS_VAR_PROGRESS_ENGINE_INTERVAL, "0", 1);
     }
