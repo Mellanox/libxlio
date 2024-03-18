@@ -1,3 +1,4 @@
 usr/include/mellanox/xlio_extra.h
+usr/include/mellanox/xlio_types.h
 usr/include/mellanox/xlio.h
 libxlio-debug.so usr/lib
