@@ -390,10 +390,19 @@ extern "C" int xlio_init_ex(const struct xlio_init_attr *attr)
         setenv(SYS_VAR_TCP_ABORT_ON_CLOSE, "1", 1);
     }
 
+    xlio_init();
+
     extern xlio_memory_cb_t g_user_memory_cb;
     g_user_memory_cb = attr->memory_cb;
 
-    xlio_init();
+    if (attr->memory_alloc) {
+        safe_mce_sys().m_ioctl.user_alloc.flags = IOCTL_USER_ALLOC_TX | IOCTL_USER_ALLOC_RX;
+        safe_mce_sys().m_ioctl.user_alloc.memalloc = attr->memory_alloc;
+        safe_mce_sys().m_ioctl.user_alloc.memfree = attr->memory_free;
+        safe_mce_sys().memory_limit_user =
+            std::max(safe_mce_sys().memory_limit_user, safe_mce_sys().memory_limit);
+    }
+
     DO_GLOBAL_CTORS();
 
     return 0;
