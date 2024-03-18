@@ -490,7 +490,7 @@ void buffer_pool::put_buffers_after_deref_thread_safe(descq_t *pDeque)
     std::lock_guard<decltype(m_lock)> lock(m_lock);
     while (!pDeque->empty()) {
         mem_buf_desc_t *list = pDeque->get_and_pop_front();
-        if (list->dec_ref_count() <= 1 && (list->lwip_pbuf.ref-- <= 1)) {
+        if (likely(list) && list->dec_ref_count() <= 1 && (list->lwip_pbuf.ref-- <= 1)) {
             put_buffers(list);
         }
     }
