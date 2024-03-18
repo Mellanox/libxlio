@@ -29,8 +29,10 @@ EXTRA_DIST = \
 
 sysconf_DATA = util/libxlio.conf
 otherincludedir = $(includedir)/mellanox
-otherinclude_HEADERS = xlio_extra.h \
-		       xlio.h
+otherinclude_HEADERS = \
+	xlio.h \
+	xlio_extra.h \
+	xlio_types.h
 
 install-exec-hook:
 	rm -f $(DESTDIR)$(libdir)/libxlio.la
@@ -312,7 +314,9 @@ libxlio_la_SOURCES := \
 	\
 	config_parser.h \
 	main.h \
-	xlio_extra.h
+	xlio.h \
+	xlio_extra.h \
+	xlio_types.h
 
 libxlio_la_DEPENDENCIES = \
 	$(top_builddir)/src/vlogger/libvlogger.la \
