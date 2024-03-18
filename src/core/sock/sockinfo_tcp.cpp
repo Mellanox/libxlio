@@ -3477,10 +3477,12 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
 
             while (!temp_list.empty()) {
                 mem_buf_desc_t *desc = temp_list.get_and_pop_front();
-                desc->inc_ref_count();
-                L3_level_tcp_input((pbuf *)desc, &new_sock->m_pcb);
-                if (desc->dec_ref_count() <= 1) { // todo reuse needed?
-                    new_sock->m_rx_ctl_reuse_list.push_back(desc);
+                if (likely(desc)) {
+                    desc->inc_ref_count();
+                    L3_level_tcp_input((pbuf *)desc, &new_sock->m_pcb);
+                    if (desc->dec_ref_count() <= 1) { // todo reuse needed?
+                        new_sock->m_rx_ctl_reuse_list.push_back(desc);
+                    }
                 }
             }
         }

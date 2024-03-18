@@ -84,7 +84,10 @@ cq_mgr_rx_strq::~cq_mgr_rx_strq()
         cq_logdbg("Clearing %zu stride objects)", m_rx_queue.size());
 
         while (!m_rx_queue.empty()) {
-            reclaim_recv_buffer_helper(m_rx_queue.get_and_pop_front());
+            mem_buf_desc_t *buff = m_rx_queue.get_and_pop_front();
+            if (likely(buff)) {
+                reclaim_recv_buffer_helper(buff);
+            }
         }
 
         m_p_cq_stat->n_rx_sw_queue_len = m_rx_queue.size();
