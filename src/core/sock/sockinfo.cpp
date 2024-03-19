@@ -190,18 +190,18 @@ sockinfo::~sockinfo()
 
 void sockinfo::socket_stats_init()
 {
-    if (!m_p_socket_stats) { // This check is for listen sockets.
+    if (!m_has_stats) { // This check is for listen sockets.
         m_p_socket_stats = sock_stats::instance().get_stats_obj();
         if (!m_p_socket_stats) {
             m_p_socket_stats = &sock_stats::t_dummy_stats;
             return;
         }
 
+        m_has_stats = true;
         // Save stats as local copy and allow state publisher to copy from this location
         xlio_stats_instance_create_socket_block(m_p_socket_stats);
     }
 
-    m_has_stats = true;
     m_p_socket_stats->reset();
     m_p_socket_stats->fd = m_fd;
     m_p_socket_stats->inode = fd2inode(m_fd);
