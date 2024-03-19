@@ -6039,6 +6039,11 @@ void tcp_timers_collection::add_new_timer(sockinfo_tcp *sock)
         return;
     }
 
+    // A reused time-wait socket wil try to add a timer although it is already registered.
+    if (m_sock_remove_map.find(sock) != m_sock_remove_map.end()) {
+        return;
+    }
+
     sock_list &bucket = m_p_intervals[m_n_next_insert_bucket];
     bucket.emplace_back(sock);
     m_sock_remove_map.emplace(sock, std::make_tuple(m_n_next_insert_bucket, --(bucket.end())));
@@ -6067,6 +6072,10 @@ void tcp_timers_collection::remove_timer(sockinfo_tcp *sock)
         }
 
         __log_dbg("TCP socket [%p] timer was removed", sock);
+    } else {
+        // Listen sockets are not added to timers.
+        // As part of socket general unregister and destroy they will get here and will no be found.
+        __log_dbg("TCP socket [%p] timer was not found (listen socket)", sock);
     }
 }
 
