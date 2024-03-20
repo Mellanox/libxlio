@@ -1,3 +1,14 @@
+Version 3.30.3-1:
+Date + Time 2024-03-20
+=============================================================
+Added:
+        - RM #3788369 New Storage API
+        - RM #3777348 Improve sockinfo cache utilization
+
+Fixed:
+        - RM #3829626 Nginx http CPS tests report XLIO ERROR
+        - RM #3808935 SNAP4 static build error
+
 Version 3.30.2-1:
 Date + Time 2024-03-11
 =============================================================
