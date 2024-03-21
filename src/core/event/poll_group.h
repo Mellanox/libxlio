@@ -81,6 +81,7 @@ private:
     std::vector<sockinfo_tcp *> m_dirty_sockets;
 
     sock_fd_api_list_t m_sockets_list;
+    std::vector<std::pair<std::unique_ptr<ring_alloc_logic_attr>, net_device_val *>> m_rings_ref;
 };
 
 #endif /* XLIO_GROUP_H */
