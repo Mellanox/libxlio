@@ -33,6 +33,8 @@
 #include "config.h"
 #include "poll_group.h"
 
+#include "dev/net_device_table_mgr.h"
+#include "dev/net_device_val.h"
 #include "dev/ring.h"
 #include "event/event_handler_manager_local.h"
 #include "sock/sockinfo_tcp.h"
@@ -93,7 +95,11 @@ poll_group::~poll_group()
         }
     }
 
-    // TODO Release the rings. Current implementation destroys the rings in the library destructor.
+    // Release references to the rings that we take in add_ring()
+    for (auto &item : m_rings_ref) {
+        item.second->release_ring(item.first.get());
+    }
+    m_rings_ref.clear();
 
     grp_logdbg("Polling group %p destroyed", this);
 }
@@ -154,6 +160,12 @@ void poll_group::add_ring(ring *rng, ring_alloc_logic_attr *attr)
             ring *reserved = nd->reserve_ring(attr);
             if (reserved != rng) {
                 grp_logerr("Cannot reserve ring %p (reserved=%p)", rng, reserved);
+                if (reserved) {
+                    nd->release_ring(attr);
+                }
+            } else {
+                m_rings_ref.push_back(
+                    std::make_pair(std::make_unique<ring_alloc_logic_attr>(*attr), nd));
             }
         }
     }
