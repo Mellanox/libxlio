@@ -476,8 +476,9 @@ err_t sockinfo_tcp::rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *pcb, struc
                                             reinterpret_cast<struct xlio_buf *>(ptmp));
             ptmp = ptmp->next;
         }
+    } else {
+        pbuf_free(p);
     }
-    pbuf_free(p);
 
     // TODO Stats
 
