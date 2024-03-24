@@ -549,7 +549,11 @@ static void xlio_buf_free(struct xlio_buf *buf)
     mem_buf_desc_t *desc = reinterpret_cast<mem_buf_desc_t *>(buf);
     ring_slave *rng = desc->p_desc_owner;
 
-    (void)rng->reclaim_recv_single_buffer(desc);
+    desc->p_next_desc = nullptr;
+    bool ret = rng->reclaim_recv_buffers(desc);
+    if (unlikely(!ret)) {
+        g_buffer_pool_rx_ptr->put_buffer_after_deref_thread_safe(desc);
+    }
 }
 
 extern "C" void xlio_socket_buf_free(xlio_socket_t sock, struct xlio_buf *buf)
