@@ -523,7 +523,7 @@ extern "C" int xlio_socket_connect(xlio_socket_t sock, const struct sockaddr *to
     sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
     int errno_save = errno;
 
-    int rc = XLIO_CALL(connect, si->get_fd(), to, tolen);
+    int rc = si->connect(to, tolen);
     rc = (rc == -1 && (errno == EINPROGRESS || errno == EAGAIN)) ? 0 : rc;
     if (rc == 0) {
         si->add_tx_ring_to_group();
