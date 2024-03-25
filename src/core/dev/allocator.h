@@ -61,8 +61,9 @@ public:
 
     void dealloc();
 
-    inline size_t size() { return m_size; }
-    inline void *data() { return m_data; }
+    size_t size() { return m_size; }
+    size_t page_size() { return m_page_size; }
+    void *data() { return m_data; }
 
 private:
     void print_hugepages_warning(size_t requested_size);
@@ -71,6 +72,7 @@ protected:
     alloc_mode_t m_type;
     void *m_data;
     size_t m_size;
+    size_t m_page_size;
 
 private:
     alloc_t m_memalloc;
