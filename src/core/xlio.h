@@ -488,12 +488,6 @@ void xlio_socket_flush(xlio_socket_t sock);
 void xlio_socket_buf_free(xlio_socket_t sock, struct xlio_buf *buf);
 void xlio_poll_group_buf_free(xlio_poll_group_t group, struct xlio_buf *buf);
 
-/*
- * Experimental level API.
- */
-
-int xlio_socket_fd(xlio_socket_t sock);
-
 #ifdef __cplusplus
 }
 #endif
