@@ -86,15 +86,14 @@ int epoll_wait_call::get_current_events()
     }
 
     xlio_list_t<sockinfo, sockinfo::socket_fd_list_node_offset> socket_fd_list;
-    lock();
-    int i, ready_rfds = 0, ready_wfds = 0;
-    i = m_n_all_ready_fds;
-    sockinfo *p_socket_object;
-    ep_ready_fd_list_t::iterator iter = m_epfd_info->m_ready_fds.begin();
-    while (iter != m_epfd_info->m_ready_fds.end() && i < m_maxevents) {
-        p_socket_object = *iter;
-        ++iter;
 
+    lock();
+
+    int i = m_n_all_ready_fds;
+    int ready_rfds = 0;
+    int ready_wfds = 0;
+    sockinfo *p_socket_object = m_epfd_info->m_ready_fds.front();
+    while (p_socket_object && i < m_maxevents) {
         m_events[i].events = 0; // initialize
 
         bool got_event = false;
@@ -147,6 +146,8 @@ int epoll_wait_call::get_current_events()
             socket_fd_list.push_back(p_socket_object);
             ++i;
         }
+
+        p_socket_object = m_epfd_info->m_ready_fds.next(p_socket_object);
     }
 
     m_n_ready_rfds += ready_rfds;
