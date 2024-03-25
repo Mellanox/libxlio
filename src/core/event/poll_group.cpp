@@ -182,7 +182,15 @@ void poll_group::close_socket(sockinfo_tcp *si, bool force /*=false*/)
 
     bool closed = si->prepare_to_close(force);
     if (closed) {
+        /*
+         * Current implementation forces TCP reset, so the socket is expected to be closable.
+         * Do a polling iteration to increase the chance that all the relevant WQEs are completed
+         * and XLIO emitted all the TX completion before the XLIO_SOCKET_EVENT_TERMINATED event.
+         *
+         * TODO Implement more reliable mechanism of deferred socket destruction if there are
+         * not completed TX operations.
+         */
+        poll();
         si->clean_socket_obj();
     }
-    // TODO If not closed, the socket will be destroyed after the last completion notification.
 }
