@@ -66,7 +66,7 @@ public:
     size_t get_default_hugepage() { return m_default_hugepage; }
     bool is_hugepage_supported(size_t hugepage);
 
-    void *alloc_hugepages(size_t &size);
+    void *alloc_hugepages(size_t &size, size_t &hugepage_size);
     void dealloc_hugepages(void *ptr, size_t size);
 
     void print_report(bool short_report = false);
