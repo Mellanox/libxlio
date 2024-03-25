@@ -507,15 +507,25 @@ extern "C" int xlio_socket_setsockopt(xlio_socket_t sock, int level, int optname
                                       const void *optval, socklen_t optlen)
 {
     sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
+    int errno_save = errno;
 
-    return XLIO_CALL(setsockopt, si->get_fd(), level, optname, optval, optlen);
+    int rc = si->setsockopt(level, optname, optval, optlen);
+    if (rc == 0) {
+        errno = errno_save;
+    }
+    return rc;
 }
 
 extern "C" int xlio_socket_bind(xlio_socket_t sock, const struct sockaddr *addr, socklen_t addrlen)
 {
     sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
+    int errno_save = errno;
 
-    return XLIO_CALL(bind, si->get_fd(), addr, addrlen);
+    int rc = si->bind(addr, addrlen);
+    if (rc == 0) {
+        errno = errno_save;
+    }
+    return rc;
 }
 
 extern "C" int xlio_socket_connect(xlio_socket_t sock, const struct sockaddr *to, socklen_t tolen)
@@ -538,12 +548,6 @@ extern "C" struct ibv_pd *xlio_socket_get_pd(xlio_socket_t sock)
     ib_ctx_handler *ctx = si->get_ctx();
 
     return ctx ? ctx->get_ibv_pd() : nullptr;
-}
-
-extern "C" int xlio_socket_fd(xlio_socket_t sock)
-{
-    sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
-    return si->get_fd();
 }
 
 static void xlio_buf_free(struct xlio_buf *buf)

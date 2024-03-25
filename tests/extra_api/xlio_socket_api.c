@@ -233,38 +233,7 @@ static void test_multi_groups(const char *ip)
     rc = xlio_socket_connect(sock3, (struct sockaddr *)&addr, sizeof(addr));
     assert(rc == 0);
 
-    int fd1_1 = xlio_socket_fd(sock1_1);
-    int fd1_2 = xlio_socket_fd(sock1_2);
-    int fd2 = xlio_socket_fd(sock2);
-    int fd3 = xlio_socket_fd(sock3);
-    assert(fd1_1 >= 0);
-    assert(fd1_2 >= 0);
-    assert(fd2 >= 0);
-    assert(fd3 >= 0);
-
-    assert(xlio_get_socket_rings_num(fd1_1) == 1);
-    assert(xlio_get_socket_rings_num(fd1_2) == 1);
-    assert(xlio_get_socket_rings_num(fd2) == 1);
-    assert(xlio_get_socket_rings_num(fd3) == 1);
-
-    int ring1_1;
-    int ring1_2;
-    int ring2;
-    int ring3;
-
-    rc = xlio_get_socket_rings_fds(fd1_1, &ring1_1, 1);
-    assert(rc == 1);
-    rc = xlio_get_socket_rings_fds(fd1_2, &ring1_2, 1);
-    assert(rc == 1);
-    rc = xlio_get_socket_rings_fds(fd2, &ring2, 1);
-    assert(rc == 1);
-    rc = xlio_get_socket_rings_fds(fd3, &ring3, 1);
-    assert(rc == 1);
-
-    assert(ring1_1 == ring1_2);
-    assert(ring1_1 != ring2);
-    assert(ring1_1 != ring3);
-    assert(ring2 != ring3);
+    /* TODO There is no API to check expected internal ring distribution. */
 
     /* Wait for ERROR events (ECONREFUSED). */
     while (g_test_events < 4) {
