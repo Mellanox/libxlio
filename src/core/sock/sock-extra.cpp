@@ -406,6 +406,9 @@ extern "C" int xlio_init_ex(const struct xlio_init_attr *attr)
         setenv(SYS_VAR_PROGRESS_ENGINE_INTERVAL, "0", 1);
     }
 
+    // Read the updated parameters. A global object could trigger the reading earlier.
+    safe_mce_sys().get_env_params();
+
     xlio_init();
 
     extern xlio_memory_cb_t g_user_memory_cb;
