@@ -38,8 +38,7 @@
 #include "src/core/util/sock_addr.h"
 #include "udp_base.h"
 
-class udp_recv : public udp_base {
-};
+class udp_recv : public udp_base {};
 
 /**
  * @test udp_recv.mapped_ipv4_recv

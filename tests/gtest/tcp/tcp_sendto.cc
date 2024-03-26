@@ -37,8 +37,7 @@
 
 #include "tcp_base.h"
 
-class tcp_sendto : public tcp_base {
-};
+class tcp_sendto : public tcp_base {};
 
 /**
  * @test tcp_sendto.ti_1
