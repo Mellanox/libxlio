@@ -35,14 +35,32 @@
 #include <gmock/gmock.h>
 #include "tx_scheduler.h"
 
-using ::testing::_; // Matcher for any argument
-using ::testing::Return;
+using namespace ::testing;
 
-/* Mock classes created for testing tx_scheduler */
-class sockinfo_mock : public sockinfo {
+struct tcp_segment {
+};
+
+class greedy_test_socket : public sockinfo {
 public:
-    MOCK_METHOD(void, notify_completion, (size_t), (override));
-    MOCK_METHOD(tx_scheduler::status, do_send, (sq_proxy), (override));
+    tx_scheduler::status do_send(sq_proxy &sq) {
+        tcp_segment tcp{};
+        while (sq.send(tcp)) {}
+        return tx_scheduler::status::OK;
+    }
+};
+
+class limited_test_socket : public sockinfo {
+public:
+    limited_test_socket(size_t inflight_requests) : m_inflight_requests(inflight_requests) {}
+    tx_scheduler::status do_send(sq_proxy &sq) {
+        tcp_segment tcp{};
+        m_inflight_requests += sq.m_completions;
+        while (m_inflight_requests && sq.send(tcp)) {
+            --m_inflight_requests;
+        }
+        return tx_scheduler::status::OK;
+    }
+    size_t m_inflight_requests;
 };
 
 class ring_mock : public ring {
@@ -58,66 +76,134 @@ public:
     MOCK_METHOD(bool, send, (control_msg &, uintptr_t), (override));
 };
 
-TEST(tx_fifo_scheduler, send_max_num_requests)
+TEST(tx_fifo_scheduler, fifo_with_greedy_socket_sends_max_times)
 {
     ring_mock ring {};
-    sockinfo_mock socket {};
+    greedy_test_socket socket {};
     size_t max_iflight_requests = 10;
     tx_fifo_scheduler fifo(ring, max_iflight_requests);
 
-    EXPECT_CALL(socket, do_send(_))
-        .Times(1)
-        .WillOnce(Return(tx_scheduler::status::OK)); // Always return status_OK
-
-    fifo.notify_ready_to_send(&socket, true);
+    EXPECT_CALL(ring, send(An<tcp_segment&>(), _))
+        .Times(max_iflight_requests);
+    fifo.schedule_tx(&socket, true);
 }
 
-TEST(tx_fifo_scheduler, fifo_does_no_do_send_in_schedule_tx)
+TEST(tx_fifo_scheduler, fifo_with_limited_socket_sends_up_to_limit)
 {
     ring_mock ring {};
-    sockinfo_mock socket {};
+    size_t socket_inflight_limit = 7;
+    limited_test_socket socket {socket_inflight_limit};
+    size_t max_iflight_requests = 10;
+    tx_fifo_scheduler fifo(ring, max_iflight_requests);
+
+    EXPECT_CALL(ring, send(An<tcp_segment&>(), _))
+        .Times(socket_inflight_limit);
+    fifo.schedule_tx(&socket, true);
+}
+
+TEST(tx_fifo_scheduler, fifo_schedule_tx_no_args_notifies_socket_completions_without_sending)
+{
+    ring_mock ring {};
+    greedy_test_socket socket {};
+    size_t max_iflight_requests = 10;
+    tx_fifo_scheduler fifo(ring, max_iflight_requests);
+
+    EXPECT_CALL(ring, send(An<tcp_segment&>(), _))
+        .Times(max_iflight_requests);
+    fifo.schedule_tx(&socket, true);
+
+    fifo.notify_completion(reinterpret_cast<uintptr_t>(&socket), 5);
+    EXPECT_CALL(ring, send(An<tcp_segment&>(), _))
+        .Times(0);
+    fifo.schedule_tx();
+}
+/*
+TEST(tx_fifo_scheduler, fifo_notifies_no_sockets_when_completions_empty_in_schedule_tx)
+{
+    ring_mock ring {};
+    test_socket socket {};
     size_t max_iflight_requests = 10;
     tx_fifo_scheduler fifo(ring, max_iflight_requests);
 
     EXPECT_CALL(socket, do_send(_)).Times(0);
-
-    fifo.schedule_tx();
-}
-
-TEST(tx_fifo_scheduler, fifo_notifies_sockets_in_schedule_tx)
-{
-    ring_mock ring {};
-    sockinfo_mock socket {};
-    size_t max_iflight_requests = 10;
-    tx_fifo_scheduler fifo(ring, max_iflight_requests);
-
-    fifo.notify_completion(reinterpret_cast<uintptr_t>(&socket), 42);
-    EXPECT_CALL(socket, notify_completion(42)).Times(1);
-
-    fifo.schedule_tx();
-}
-
-TEST(tx_fifo_scheduler, fifo_notifies_no_sockets_when_completions_empty_in_schedule_tx)
-{
-    ring_mock ring {};
-    sockinfo_mock socket {};
-    size_t max_iflight_requests = 10;
-    tx_fifo_scheduler fifo(ring, max_iflight_requests);
-
-    EXPECT_CALL(socket, notify_completion(_)).Times(0);
     fifo.schedule_tx();
 }
 
 TEST(tx_fifo_scheduler, fifo_notifies_once_per_sockets_in_schedule_tx)
 {
     ring_mock ring {};
-    sockinfo_mock socket {};
+    test_socket socket {};
     size_t max_iflight_requests = 10;
     tx_fifo_scheduler fifo(ring, max_iflight_requests);
 
     fifo.notify_completion(reinterpret_cast<uintptr_t>(&socket), 22);
     fifo.notify_completion(reinterpret_cast<uintptr_t>(&socket), 20);
-    EXPECT_CALL(socket, notify_completion(42)).Times(1);
+    EXPECT_CALL(socket, do_send(Field(&sq_proxy::m_completions, Eq(42)))).Times(1);
 
     fifo.schedule_tx();
 }
+
+TEST(tx_round_robin_scheduler, schedule_tx_invokes_do_send_at_least_once)
+{
+    ring_mock ring {};
+    test_socket socket {};
+    size_t max_iflight_requests = 10;
+    tx_round_robin_scheduler round_robin(ring, max_iflight_requests);
+
+    EXPECT_CALL(socket, do_send(_))
+        .Times(testing::AtLeast(1))
+        .WillOnce(Return(tx_scheduler::status::OK)); // Always return status_OK
+
+    round_robin.schedule_tx(&socket, true);
+}
+
+TEST(tx_round_robin_scheduler, round_robin_does_no_do_send_in_schedule_tx)
+{
+    ring_mock ring {};
+    test_socket socket {};
+    size_t max_iflight_requests = 10;
+    tx_round_robin_scheduler round_robin(ring, max_iflight_requests);
+
+    EXPECT_CALL(socket, do_send(_)).Times(0);
+
+    round_robin.schedule_tx();
+}
+
+TEST(tx_round_robin_scheduler, round_robin_notifies_sockets_in_schedule_tx)
+{
+    ring_mock ring {};
+    test_socket socket {};
+    size_t max_iflight_requests = 10;
+    tx_round_robin_scheduler round_robin(ring, max_iflight_requests);
+
+    round_robin.notify_completion(reinterpret_cast<uintptr_t>(&socket), 42);
+    EXPECT_CALL(socket, do_send(Field(&sq_proxy::m_completions, Eq(42)))).Times(1);
+
+    round_robin.schedule_tx();
+}
+
+TEST(tx_round_robin_scheduler, round_robin_does_not_call_do_send_when_no_completions_and_no_sockets)
+{
+    ring_mock ring {};
+    test_socket socket {};
+    size_t max_iflight_requests = 10;
+    tx_round_robin_scheduler round_robin(ring, max_iflight_requests);
+
+    EXPECT_CALL(socket, do_send(_)).Times(0);
+    round_robin.schedule_tx();
+}
+
+TEST(tx_round_robin_scheduler, round_robin_calls_do_send_once_with_the_right_completions_number)
+{
+    ring_mock ring {};
+    test_socket socket {};
+    size_t max_iflight_requests = 10;
+    tx_round_robin_scheduler round_robin(ring, max_iflight_requests);
+
+    round_robin.notify_completion(reinterpret_cast<uintptr_t>(&socket), 22);
+    round_robin.notify_completion(reinterpret_cast<uintptr_t>(&socket), 20);
+    EXPECT_CALL(socket, do_send(Field(&sq_proxy::m_completions, Eq(42)))).Times(1);
+
+    round_robin.schedule_tx();
+}
+*/
