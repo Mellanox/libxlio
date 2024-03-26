@@ -30,40 +30,172 @@
  * SOFTWARE.
  */
 
-#include <mutex>
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 #include "tx_scheduler.h"
+#include "ring_tx_scheduler_interface.h"
+#include "sockinfo_tx_scheduler_interface.h"
 
 using namespace ::testing;
+
+#include <map>
+#include <iostream>
+
+class tx_fifo_scheduler final : public tx_scheduler {
+public:
+    tx_fifo_scheduler(ring_tx_scheduler_interface &r, size_t max_requests)
+        : tx_scheduler(r, max_requests)
+    {
+    }
+
+    ~tx_fifo_scheduler() override = default;
+
+    void schedule_tx(sockinfo_tx_scheduler_interface *sock, bool) override
+    {
+        sq_proxy proxy {*this, m_max_requests - m_num_requests, reinterpret_cast<uintptr_t>(sock),
+                        m_completions[sock]};
+        sock->do_send(proxy);
+        m_completions.erase(sock);
+    }
+
+    void schedule_tx() override
+    {
+        /* Schedule on sufficiently empty send queue - scheduling moderation */
+        if (m_num_requests == 0 || double(m_max_requests) / m_num_requests >= 2.0f) {
+            for (auto sock_with_completions : m_completions) {
+                sockinfo_tx_scheduler_interface *sock = sock_with_completions.first;
+                sq_proxy proxy {*this, 0, reinterpret_cast<uintptr_t>(sock),
+                                sock_with_completions.second};
+                sock->do_send(proxy);
+            }
+            m_completions.clear();
+        }
+    }
+
+    void notify_completion(uintptr_t metadata, size_t num_completions = 1) override
+    {
+        sockinfo_tx_scheduler_interface *socket =
+            reinterpret_cast<sockinfo_tx_scheduler_interface *>(metadata);
+        m_completions[socket] += num_completions;
+        m_num_requests -= num_completions;
+    }
+
+private:
+    std::map<sockinfo_tx_scheduler_interface *, size_t> m_completions;
+};
+
+/* ----------------------------------------------------- */
+#include <deque>
+
+class tx_round_robin_scheduler final : public tx_scheduler {
+public:
+    tx_round_robin_scheduler(ring_tx_scheduler_interface &r, size_t max_requests)
+        : tx_scheduler(r, max_requests)
+    {
+    }
+
+    ~tx_round_robin_scheduler() override {}
+
+    /* is_first should be true in two cases:
+     *     1. The first time the socket is ready to send.
+     *     2. The first time, since the socket returned NO_MORE_MESSAGES from do_send.
+     */
+    void schedule_tx(sockinfo_tx_scheduler_interface *sock, bool is_first) override
+    {
+        if (is_first) {
+            m_queue.push_back(sock);
+        }
+
+        /* Schedule on sufficiently empty send queue - scheduling moderation */
+        if (!m_num_requests || double(m_max_requests) / m_num_requests >= 2.0f) {
+            schedule_tx();
+        }
+    }
+
+    void schedule_tx() override
+    {
+        size_t num_messages = fair_num_requests();
+        size_t num_sockets = m_queue.size();
+
+        while (num_sockets && m_max_requests - m_num_requests >= num_messages) {
+            sockinfo_tx_scheduler_interface *sock = m_queue.front();
+            m_queue.pop_front();
+            num_sockets--;
+
+            send_status status = single_socket_send(sock, num_messages);
+            if (status == send_status::OK) {
+                m_queue.push_back(sock);
+            }
+        }
+    }
+
+    void notify_completion(uintptr_t metadata, size_t num_completions = 1) override
+    {
+        sockinfo_tx_scheduler_interface *socket =
+            reinterpret_cast<sockinfo_tx_scheduler_interface *>(metadata);
+        m_completions[socket] += num_completions;
+        m_num_requests -= num_completions;
+    }
+
+private:
+    send_status single_socket_send(sockinfo_tx_scheduler_interface *sock, size_t requests)
+    {
+        sq_proxy proxy {*this, requests, reinterpret_cast<uintptr_t>(sock), m_completions[sock]};
+        m_completions.erase(sock);
+        return sock->do_send(proxy);
+    }
+
+    /*
+     * In the round robin implementation, we allocated the same number of requests per sender.
+     * If the available requests exceed the number of senders, each sender may receive more than one
+     * opportunity to send.
+     * If the number of senders exceed the available requests, each sender should receive at least
+     * one opportunity to send.
+     */
+    size_t fair_num_requests()
+    {
+        /* If the queue is empty, make the denominator 1 to eliminate the divide-by-zero error */
+        return std::max(1UL, (m_max_requests - m_num_requests) / (std::max(1UL, m_queue.size())));
+    }
+
+private:
+    std::deque<sockinfo_tx_scheduler_interface *> m_queue;
+    std::map<sockinfo_tx_scheduler_interface *, size_t> m_completions;
+};
 
 struct tcp_segment {
 };
 
-class greedy_test_socket : public sockinfo {
+class greedy_test_socket : public sockinfo_tx_scheduler_interface {
 public:
-    tx_scheduler::status do_send(sq_proxy &sq) {
-        tcp_segment tcp{};
-        while (sq.send(tcp)) {}
-        return tx_scheduler::status::OK;
+    send_status do_send(sq_proxy &sq)
+    {
+        tcp_segment tcp {};
+        while (sq.send(tcp)) {
+        }
+        return send_status::OK;
     }
 };
 
-class limited_test_socket : public sockinfo {
+class limited_test_socket : public sockinfo_tx_scheduler_interface {
 public:
-    limited_test_socket(size_t inflight_requests) : m_inflight_requests(inflight_requests) {}
-    tx_scheduler::status do_send(sq_proxy &sq) {
-        tcp_segment tcp{};
+    limited_test_socket(size_t inflight_requests)
+        : m_inflight_requests(inflight_requests)
+    {
+    }
+    send_status do_send(sq_proxy &sq)
+    {
+        tcp_segment tcp {};
         m_inflight_requests += sq.m_completions;
         while (m_inflight_requests && sq.send(tcp)) {
             --m_inflight_requests;
         }
-        return tx_scheduler::status::OK;
+        return send_status::OK;
     }
     size_t m_inflight_requests;
 };
 
-class ring_mock : public ring {
+class ring_mock : public ring_tx_scheduler_interface {
 public:
     ring_mock() = default;
     ~ring_mock() override = default;
@@ -83,8 +215,7 @@ TEST(tx_fifo_scheduler, fifo_with_greedy_socket_sends_max_times)
     size_t max_iflight_requests = 10;
     tx_fifo_scheduler fifo(ring, max_iflight_requests);
 
-    EXPECT_CALL(ring, send(An<tcp_segment&>(), _))
-        .Times(max_iflight_requests);
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), _)).Times(max_iflight_requests);
     fifo.schedule_tx(&socket, true);
 }
 
@@ -96,8 +227,7 @@ TEST(tx_fifo_scheduler, fifo_with_limited_socket_sends_up_to_limit)
     size_t max_iflight_requests = 10;
     tx_fifo_scheduler fifo(ring, max_iflight_requests);
 
-    EXPECT_CALL(ring, send(An<tcp_segment&>(), _))
-        .Times(socket_inflight_limit);
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), _)).Times(socket_inflight_limit);
     fifo.schedule_tx(&socket, true);
 }
 
@@ -108,13 +238,11 @@ TEST(tx_fifo_scheduler, fifo_schedule_tx_no_args_notifies_socket_completions_wit
     size_t max_iflight_requests = 10;
     tx_fifo_scheduler fifo(ring, max_iflight_requests);
 
-    EXPECT_CALL(ring, send(An<tcp_segment&>(), _))
-        .Times(max_iflight_requests);
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), _)).Times(max_iflight_requests);
     fifo.schedule_tx(&socket, true);
 
     fifo.notify_completion(reinterpret_cast<uintptr_t>(&socket), 5);
-    EXPECT_CALL(ring, send(An<tcp_segment&>(), _))
-        .Times(0);
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), _)).Times(0);
     fifo.schedule_tx();
 }
 /*
@@ -152,7 +280,7 @@ TEST(tx_round_robin_scheduler, schedule_tx_invokes_do_send_at_least_once)
 
     EXPECT_CALL(socket, do_send(_))
         .Times(testing::AtLeast(1))
-        .WillOnce(Return(tx_scheduler::status::OK)); // Always return status_OK
+        .WillOnce(Return(send_status::OK)); // Always return status_OK
 
     round_robin.schedule_tx(&socket, true);
 }

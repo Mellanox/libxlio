@@ -311,6 +311,11 @@ libxlio_la_SOURCES := \
 	util/agent_def.h \
 	util/data_updater.h \
 	\
+	fairness/tx_scheduler.cpp \
+	fairness/tx_scheduler.h \
+	fairness/ring_tx_scheduler_interface.h \
+	fairness/sockinfo_tx_scheduler_interface.h \
+	\
 	config_parser.h \
 	main.h \
 	xlio.h \

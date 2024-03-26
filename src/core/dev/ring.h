@@ -37,6 +37,7 @@
 #include "ib/base/verbs_extra.h"
 #include "dev/buffer_pool.h"
 #include "dev/xlio_ti.h"
+#include "fairness/ring_tx_scheduler_interface.h"
 #include "proto/flow_tuple.h"
 #include "proto/xlio_lwip.h"
 #include "proto/L2_address.h"
@@ -74,7 +75,7 @@ typedef cached_obj_pool<ring_ec> socketxtreme_ec_pool;
 extern tcp_seg_pool *g_tcp_seg_pool;
 extern socketxtreme_ec_pool *g_socketxtreme_ec_pool;
 
-class ring {
+class ring : public ring_tx_scheduler_interface {
 public:
     ring();
 
@@ -267,6 +268,10 @@ public:
     void socketxtreme_end_ec_operation();
     xlio_socketxtreme_completion_t &socketxtreme_start_ec_operation(sockinfo *sock,
                                                                     bool always_new);
+    void notify_complete(uintptr_t) override {};
+    bool send(tcp_segment &, uintptr_t) override { return true; }
+    bool send(udp_datagram &, uintptr_t) override { return true; }
+    bool send(control_msg &, uintptr_t) override { return true; }
 
 protected:
     inline void set_parent(ring *parent) { m_parent = (parent ? parent : this); }
