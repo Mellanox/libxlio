@@ -29,22 +29,22 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#include <cstddef>
+#ifndef _RING_TX_SCHEDULER_INTERFACE_H_
+#define _RING_TX_SCHEDULER_INTERFACE_H_
+
 #include <cstdint>
-#include "tx_scheduler.h"
-#include "ring_tx_scheduler_interface.h"
+class tcp_segment;
+class udp_datagram;
+class control_msg;
 
-tx_scheduler::tx_scheduler(ring_tx_scheduler_interface &r, size_t max_requests)
-    : m_ring(r)
-    , m_max_requests(max_requests)
-    , m_num_requests(0UL)
-{
-}
+class ring_tx_scheduler_interface {
+public:
+    virtual ~ring_tx_scheduler_interface() = default;
 
-sq_proxy::sq_proxy(tx_scheduler &sched, size_t num_messages, uintptr_t metadata, size_t completions)
-    : m_scheduler(sched)
-    , m_num_messages(num_messages)
-    , m_metadata(metadata)
-    , m_completions(completions)
-{
-}
+    virtual void notify_complete(uintptr_t) = 0;
+    virtual bool send(tcp_segment &, uintptr_t) = 0;
+    virtual bool send(udp_datagram &, uintptr_t) = 0;
+    virtual bool send(control_msg &, uintptr_t) = 0;
+};
+
+#endif // _RING_TX_SCHEDULER_INTERFACE_H_

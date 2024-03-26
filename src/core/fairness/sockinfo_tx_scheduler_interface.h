@@ -29,22 +29,20 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#include <cstddef>
-#include <cstdint>
+#ifndef _SOCKINFO_TX_SCHEDULER_INTERFACE_H_
+#define _SOCKINFO_TX_SCHEDULER_INTERFACE_H_
+
 #include "tx_scheduler.h"
-#include "ring_tx_scheduler_interface.h"
 
-tx_scheduler::tx_scheduler(ring_tx_scheduler_interface &r, size_t max_requests)
-    : m_ring(r)
-    , m_max_requests(max_requests)
-    , m_num_requests(0UL)
-{
-}
+enum class send_status { OK, NO_MORE_MESSAGES };
+class sq_proxy;
 
-sq_proxy::sq_proxy(tx_scheduler &sched, size_t num_messages, uintptr_t metadata, size_t completions)
-    : m_scheduler(sched)
-    , m_num_messages(num_messages)
-    , m_metadata(metadata)
-    , m_completions(completions)
-{
-}
+class sockinfo_tx_scheduler_interface {
+public:
+    sockinfo_tx_scheduler_interface() = default;
+    virtual ~sockinfo_tx_scheduler_interface() = default;
+
+    virtual send_status do_send(sq_proxy &sq) = 0;
+};
+
+#endif // _SOCKINFO_TX_SCHEDULER_INTERFACE_H_

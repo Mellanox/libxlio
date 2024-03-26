@@ -16,8 +16,8 @@ enable_testing()
 
 # Add your source files
 set(SOURCE_FILES
-	tx_scheduler.cpp
 	tx_scheduler_test.cpp
+	tx_scheduler.cpp
 )
 
 # Create an executable for your project
