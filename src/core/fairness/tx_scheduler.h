@@ -56,11 +56,11 @@ public:
     {
     }
 
-    ~tx_scheduler() = default;
+    virtual ~tx_scheduler() = default;
 
-    virtual void notify_ready_to_send(sockinfo *, bool = true) = 0;
-    virtual void notify_completion(uintptr_t, size_t = 1) = 0;
+    virtual void schedule_tx(sockinfo *, bool = true) = 0;
     virtual void schedule_tx() = 0;
+    virtual void notify_completion(uintptr_t, size_t = 1) = 0;
 
     enum status { OK, NO_MORE_MESSAGES, ERROR };
 
@@ -82,12 +82,14 @@ protected:
 
 class sq_proxy final {
 public:
-    sq_proxy(tx_scheduler &sched, size_t num_messages, uintptr_t metadata)
+    sq_proxy(tx_scheduler &sched, size_t num_messages, uintptr_t metadata, size_t completions=0)
         : m_scheduler(sched)
         , m_num_messages(num_messages)
         , m_metadata(metadata)
+        , m_completions(completions)
     {
     }
+
     ~sq_proxy() = default;
 
     template <class Msg> inline bool send(Msg &msg)
@@ -99,6 +101,8 @@ public:
         return false;
     }
 
+public:
+    size_t m_completions;
 private:
     tx_scheduler &m_scheduler;
     size_t m_num_messages;
@@ -110,11 +114,12 @@ public:
     sockinfo() = default;
     virtual ~sockinfo() = default;
 
-    virtual void notify_completion(size_t num_completions = 1) = 0;
-    virtual tx_scheduler::status do_send(sq_proxy sq) = 0;
+    virtual tx_scheduler::status do_send(sq_proxy &sq) = 0;
 };
 
 #include <map>
+#include <iostream>
+
 class tx_fifo_scheduler final : public tx_scheduler {
 public:
     tx_fifo_scheduler(ring &r, size_t max_requests)
@@ -122,33 +127,111 @@ public:
     {
     }
 
-    ~tx_fifo_scheduler() = default;
+    ~tx_fifo_scheduler() override = default;
 
-    void notify_ready_to_send(sockinfo *sock, bool) override
+    void schedule_tx(sockinfo *sock, bool) override
     {
-        sock->do_send({*this, m_max_requests - m_num_requests, reinterpret_cast<uintptr_t>(sock)});
+        sq_proxy proxy{*this, m_max_requests - m_num_requests, reinterpret_cast<uintptr_t>(sock), m_completions[sock]};
+        sock->do_send(proxy);
+        m_completions.erase(sock);
+    }
+
+    void schedule_tx() override {
+        /* Schedule on sufficiently empty send queue - scheduling moderation */
+        if (m_num_requests == 0 || double(m_max_requests) / m_num_requests >= 2.0f) {
+            for (auto sock_with_completions : m_completions) {
+                sockinfo *sock = sock_with_completions.first;
+                sq_proxy proxy{*this, 0, reinterpret_cast<uintptr_t>(sock), sock_with_completions.second};
+                sock->do_send(proxy);
+            }
+            m_completions.clear();
+        }
     }
 
     void notify_completion(uintptr_t metadata, size_t num_completions = 1) override
     {
         sockinfo *socket = reinterpret_cast<sockinfo *>(metadata);
-        m_notifications[socket] += num_completions;
-    }
-
-    void schedule_tx() override
-    {
-        /* The sockets are not allowed to destruct before all notifications received */
-        for (auto tx_notify : m_notifications) {
-            tx_notify.first->notify_completion(tx_notify.second);
-        }
-        m_notifications.clear();
+        m_completions[socket] += num_completions;
+        m_num_requests -= num_completions;
     }
 
 private:
-    std::map<sockinfo *, size_t> m_notifications;
-    ring *m_ring;
-    size_t m_max_requests;
-    size_t m_num_requests;
+    std::map<sockinfo *, size_t> m_completions;
 };
 
+/* ----------------------------------------------------- */
+#include <deque>
+
+class tx_round_robin_scheduler final : public tx_scheduler {
+public:
+    tx_round_robin_scheduler(ring &r, size_t max_requests)
+        : tx_scheduler(r, max_requests)
+    {
+    }
+
+    ~tx_round_robin_scheduler() override { }
+
+    /* is_first should be true in two cases:
+     *     1. The first time the socket is ready to send.
+     *     2. The first time, since the socket returned NO_MORE_MESSAGES from do_send.
+     */
+    void schedule_tx(sockinfo *sock, bool is_first) override
+    {
+        if (is_first) {
+            m_queue.push_back(sock);
+        }
+
+        /* Schedule on sufficiently empty send queue - scheduling moderation */
+        if (!m_num_requests || double(m_max_requests) / m_num_requests >= 2.0f) {
+            schedule_tx();
+        }
+    }
+
+    void schedule_tx() override {
+        size_t num_messages = fair_num_requests();
+        size_t num_sockets = m_queue.size();
+
+        while (num_sockets && m_max_requests - m_num_requests >= num_messages) {
+            sockinfo *sock = m_queue.front();
+            m_queue.pop_front();
+            num_sockets--;
+
+            tx_scheduler::status status = single_socket_send(sock, num_messages);
+            if (status == tx_scheduler::status::OK) {
+                m_queue.push_back(sock);
+            }
+        }
+    }
+
+    void notify_completion(uintptr_t metadata, size_t num_completions = 1) override
+    {
+        sockinfo *socket = reinterpret_cast<sockinfo *>(metadata);
+        m_completions[socket] += num_completions;
+        m_num_requests -= num_completions;
+    }
+
+private:
+
+    tx_scheduler::status single_socket_send(sockinfo *sock, size_t requests) {
+        sq_proxy proxy{*this, requests, reinterpret_cast<uintptr_t>(sock), m_completions[sock]};
+        m_completions.erase(sock);
+        return sock->do_send(proxy);
+    }
+
+    /*
+    * In the round robin implementation, we allocated the same number of requests per sender.
+    * If the available requests exceed the number of senders, each sender may receive more than one
+    * opportunity to send.
+    * If the number of senders exceed the available requests, each sender should receive at least
+    * one opportunity to send.
+    */
+    size_t fair_num_requests() {
+        /* If the queue is empty, make the denominator 1 to eliminate the divide-by-zero error */
+        return std::max(1UL, (m_max_requests - m_num_requests) / (std::max(1UL, m_queue.size())));
+    }
+
+private:
+    std::deque<sockinfo *> m_queue;
+    std::map<sockinfo *, size_t> m_completions;
+};
 #endif // _TX_SCHEDULER_H_
