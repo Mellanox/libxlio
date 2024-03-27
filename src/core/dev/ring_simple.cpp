@@ -90,6 +90,13 @@ ring_simple::ring_simple(int if_index, ring *parent, ring_type_t type, bool use_
     , m_gro_mgr(safe_mce_sys().gro_streams_max, MAX_GRO_BUFS)
 {
     net_device_val *p_ndev = g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index());
+    BULLSEYE_EXCLUDE_BLOCK_START
+    if (!p_ndev) {
+        // Coverity warning suppression
+        throw_xlio_exception("Cannot find netdev for a ring");
+    }
+    BULLSEYE_EXCLUDE_BLOCK_END
+
     const slave_data_t *p_slave = p_ndev->get_slave(get_if_index());
 
     ring_logdbg("new ring_simple()");
@@ -209,10 +216,18 @@ ring_simple::~ring_simple()
 void ring_simple::create_resources()
 {
     net_device_val *p_ndev = g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index());
+    BULLSEYE_EXCLUDE_BLOCK_START
+    if (!p_ndev) {
+        // Coverity warning suppression
+        throw_xlio_exception("Cannot find netdev for a ring");
+    }
+    BULLSEYE_EXCLUDE_BLOCK_END
+
     const slave_data_t *p_slave = p_ndev->get_slave(get_if_index());
 
     save_l2_address(p_slave->p_L2_addr);
     m_p_tx_comp_event_channel = ibv_create_comp_channel(m_p_ib_ctx->get_ibv_context());
+    BULLSEYE_EXCLUDE_BLOCK_START
     if (!m_p_tx_comp_event_channel) {
         VLOG_PRINTF_INFO_ONCE_THEN_ALWAYS(
             VLOG_ERROR, VLOG_DEBUG,
@@ -319,9 +334,7 @@ void ring_simple::create_resources()
 #endif
     ring_logdbg("ring attributes: m_flow_tag_enabled = %d", m_flow_tag_enabled);
 
-    m_p_rx_comp_event_channel = ibv_create_comp_channel(
-        m_p_ib_ctx->get_ibv_context()); // ODED TODO: Adjust the ibv_context to be the exact one in
-                                        // case of different devices
+    m_p_rx_comp_event_channel = ibv_create_comp_channel(m_p_ib_ctx->get_ibv_context());
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!m_p_rx_comp_event_channel) {
         VLOG_PRINTF_INFO_ONCE_THEN_ALWAYS(

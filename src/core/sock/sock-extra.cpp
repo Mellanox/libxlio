@@ -405,9 +405,9 @@ extern "C" int xlio_init_ex(const struct xlio_init_attr *attr)
     if (!getenv(SYS_VAR_PROGRESS_ENGINE_INTERVAL)) {
         setenv(SYS_VAR_PROGRESS_ENGINE_INTERVAL, "0", 1);
     }
-    if (!getenv(SYS_VAR_TCP_ABORT_ON_CLOSE)) {
-        setenv(SYS_VAR_TCP_ABORT_ON_CLOSE, "1", 1);
-    }
+
+    // Read the updated parameters. A global object could trigger the reading earlier.
+    safe_mce_sys().get_env_params();
 
     xlio_init();
 
@@ -470,18 +470,20 @@ extern "C" int xlio_socket_create(const struct xlio_socket_attr *attr, xlio_sock
         return -1;
     }
 
-    int sockfd = socket_internal(attr->domain, SOCK_STREAM, 0, true, false);
-    if (sockfd < 0) {
+    int fd = SYSCALL(socket, attr->domain, SOCK_STREAM, 0);
+    if (fd < 0) {
         return -1;
     }
 
-    sockinfo_tcp *si = dynamic_cast<sockinfo_tcp *>(g_p_fd_collection->get_sockfd(sockfd));
+    sockinfo_tcp *si = new sockinfo_tcp(fd, attr->domain);
     if (!si) {
-        errno = EBADF;
+        errno = ENOMEM;
         return -1;
     }
-
     si->set_xlio_socket(attr);
+
+    poll_group *grp = reinterpret_cast<poll_group *>(attr->group);
+    grp->add_socket(si);
 
     *sock_out = reinterpret_cast<xlio_socket_t>(si);
     return 0;
@@ -490,23 +492,40 @@ extern "C" int xlio_socket_create(const struct xlio_socket_attr *attr, xlio_sock
 extern "C" int xlio_socket_destroy(xlio_socket_t sock)
 {
     sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
+    poll_group *grp = si->get_poll_group();
 
-    return XLIO_CALL(close, si->get_fd());
+    if (likely(grp)) {
+        // We always force TCP reset not to handle FIN handshake and TIME-WAIT state.
+        grp->close_socket(si, true);
+    } else {
+        return XLIO_CALL(close, si->get_fd());
+    }
+    return 0;
 }
 
 extern "C" int xlio_socket_setsockopt(xlio_socket_t sock, int level, int optname,
                                       const void *optval, socklen_t optlen)
 {
     sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
+    int errno_save = errno;
 
-    return XLIO_CALL(setsockopt, si->get_fd(), level, optname, optval, optlen);
+    int rc = si->setsockopt(level, optname, optval, optlen);
+    if (rc == 0) {
+        errno = errno_save;
+    }
+    return rc;
 }
 
 extern "C" int xlio_socket_bind(xlio_socket_t sock, const struct sockaddr *addr, socklen_t addrlen)
 {
     sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
+    int errno_save = errno;
 
-    return XLIO_CALL(bind, si->get_fd(), addr, addrlen);
+    int rc = si->bind(addr, addrlen);
+    if (rc == 0) {
+        errno = errno_save;
+    }
+    return rc;
 }
 
 extern "C" int xlio_socket_connect(xlio_socket_t sock, const struct sockaddr *to, socklen_t tolen)
@@ -514,7 +533,7 @@ extern "C" int xlio_socket_connect(xlio_socket_t sock, const struct sockaddr *to
     sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
     int errno_save = errno;
 
-    int rc = XLIO_CALL(connect, si->get_fd(), to, tolen);
+    int rc = si->connect(to, tolen);
     rc = (rc == -1 && (errno == EINPROGRESS || errno == EAGAIN)) ? 0 : rc;
     if (rc == 0) {
         si->add_tx_ring_to_group();
@@ -531,19 +550,17 @@ extern "C" struct ibv_pd *xlio_socket_get_pd(xlio_socket_t sock)
     return ctx ? ctx->get_ibv_pd() : nullptr;
 }
 
-extern "C" int xlio_socket_fd(xlio_socket_t sock)
-{
-    sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
-    return si->get_fd();
-}
-
 static void xlio_buf_free(struct xlio_buf *buf)
 {
     // TODO Use mem_buf_desc_t field as xlio_buf
     mem_buf_desc_t *desc = reinterpret_cast<mem_buf_desc_t *>(buf);
     ring_slave *rng = desc->p_desc_owner;
 
-    (void)rng->reclaim_recv_single_buffer(desc);
+    desc->p_next_desc = nullptr;
+    bool ret = rng->reclaim_recv_buffers(desc);
+    if (unlikely(!ret)) {
+        g_buffer_pool_rx_ptr->put_buffer_after_deref_thread_safe(desc);
+    }
 }
 
 extern "C" void xlio_socket_buf_free(xlio_socket_t sock, struct xlio_buf *buf)

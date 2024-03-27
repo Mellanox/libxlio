@@ -66,6 +66,7 @@ xlio_allocator::xlio_allocator(alloc_t alloc_func, free_t free_func)
     m_type = static_cast<alloc_mode_t>(safe_mce_sys().mem_alloc_type);
     m_data = nullptr;
     m_size = 0;
+    m_page_size = 0;
     m_memalloc = alloc_func;
     m_memfree = free_func;
     if (m_memalloc) {
@@ -155,7 +156,7 @@ void *xlio_allocator::alloc_huge(size_t size)
     __log_info_dbg("Allocating %zu bytes in huge tlb using mmap", size);
 
     size_t actual_size = size;
-    m_data = g_hugepage_mgr.alloc_hugepages(actual_size);
+    m_data = g_hugepage_mgr.alloc_hugepages(actual_size, m_page_size);
     if (!m_data && g_hugepage_mgr.get_default_hugepage() && m_type == ALLOC_TYPE_HUGEPAGES) {
         // Print a warning message on allocation error if hugepages are supported
         // and this is not a fallback from a different allocation method.
@@ -505,7 +506,7 @@ bool xlio_heap::expand(size_t size /*=0*/)
     m_latest_offset = 0;
 
     if (m_b_hw && g_user_memory_cb) {
-        g_user_memory_cb(data, size, 0);
+        g_user_memory_cb(data, size, block->page_size());
     }
 
     return true;

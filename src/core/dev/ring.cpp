@@ -50,9 +50,6 @@ ring::ring()
 
 ring::~ring()
 {
-    if (m_p_group) {
-        m_p_group->del_ring(this);
-    }
     if (m_tcp_seg_list) {
         g_tcp_seg_pool->put_objs(m_tcp_seg_list);
     }

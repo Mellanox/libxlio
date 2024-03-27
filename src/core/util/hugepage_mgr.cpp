@@ -118,7 +118,7 @@ void *hugepage_mgr::alloc_hugepages_helper(size_t &size, size_t hugepage)
     return ptr;
 }
 
-void *hugepage_mgr::alloc_hugepages(size_t &size)
+void *hugepage_mgr::alloc_hugepages(size_t &size, size_t &hugepage_size)
 {
     std::lock_guard<decltype(m_lock)> lock(m_lock);
 
@@ -149,6 +149,7 @@ void *hugepage_mgr::alloc_hugepages(size_t &size)
     }
     if (ptr) {
         size = actual_size;
+        hugepage_size = hugepage;
     }
 
     // Statistics

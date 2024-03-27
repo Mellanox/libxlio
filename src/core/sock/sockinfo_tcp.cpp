@@ -397,7 +397,7 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
 void sockinfo_tcp::rx_add_ring_cb(ring *p_ring)
 {
     if (m_p_group) {
-        m_p_group->add_ring(p_ring);
+        m_p_group->add_ring(p_ring, &m_ring_alloc_log_rx);
     }
     sockinfo::rx_add_ring_cb(p_ring);
 }
@@ -433,7 +433,7 @@ void sockinfo_tcp::add_tx_ring_to_group()
 {
     ring *rng = get_tx_ring();
     if (m_p_group && rng) {
-        m_p_group->add_ring(rng);
+        m_p_group->add_ring(rng, &m_ring_alloc_log_tx);
     }
 }
 
@@ -476,8 +476,9 @@ err_t sockinfo_tcp::rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *pcb, struc
                                             reinterpret_cast<struct xlio_buf *>(ptmp));
             ptmp = ptmp->next;
         }
+    } else {
+        pbuf_free(p);
     }
-    pbuf_free(p);
 
     // TODO Stats
 

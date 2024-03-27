@@ -408,6 +408,7 @@ public:
     void set_xlio_socket(const struct xlio_socket_attr *attr);
     void add_tx_ring_to_group();
     bool is_xlio_socket() { return m_p_group != nullptr; }
+    poll_group *get_poll_group() { return m_p_group; }
     void xlio_socket_event(int event, int value);
     static err_t rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
     static void err_lwip_cb_xlio_socket(void *pcb_container, err_t err);
