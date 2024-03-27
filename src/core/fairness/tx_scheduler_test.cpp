@@ -33,56 +33,11 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 #include "tx_scheduler.h"
-#include "ring_tx_scheduler_interface.h"
-#include "sockinfo_tx_scheduler_interface.h"
+#include "tx_fifo_scheduler.h"
 
 using namespace ::testing;
 
 #include <map>
-#include <iostream>
-
-class tx_fifo_scheduler final : public tx_scheduler {
-public:
-    tx_fifo_scheduler(ring_tx_scheduler_interface &r, size_t max_requests)
-        : tx_scheduler(r, max_requests)
-    {
-    }
-
-    ~tx_fifo_scheduler() override = default;
-
-    void schedule_tx(sockinfo_tx_scheduler_interface *sock, bool) override
-    {
-        sq_proxy proxy {*this, m_max_requests - m_num_requests, reinterpret_cast<uintptr_t>(sock),
-                        m_completions[sock]};
-        sock->do_send(proxy);
-        m_completions.erase(sock);
-    }
-
-    void schedule_tx() override
-    {
-        /* Schedule on sufficiently empty send queue - scheduling moderation */
-        if (m_num_requests == 0 || double(m_max_requests) / m_num_requests >= 2.0f) {
-            for (auto sock_with_completions : m_completions) {
-                sockinfo_tx_scheduler_interface *sock = sock_with_completions.first;
-                sq_proxy proxy {*this, 0, reinterpret_cast<uintptr_t>(sock),
-                                sock_with_completions.second};
-                sock->do_send(proxy);
-            }
-            m_completions.clear();
-        }
-    }
-
-    void notify_completion(uintptr_t metadata, size_t num_completions = 1) override
-    {
-        sockinfo_tx_scheduler_interface *socket =
-            reinterpret_cast<sockinfo_tx_scheduler_interface *>(metadata);
-        m_completions[socket] += num_completions;
-        m_num_requests -= num_completions;
-    }
-
-private:
-    std::map<sockinfo_tx_scheduler_interface *, size_t> m_completions;
-};
 
 /* ----------------------------------------------------- */
 #include <deque>

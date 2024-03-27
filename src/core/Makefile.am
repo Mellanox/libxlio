@@ -313,6 +313,8 @@ libxlio_la_SOURCES := \
 	\
 	fairness/tx_scheduler.cpp \
 	fairness/tx_scheduler.h \
+	fairness/tx_fifo_scheduler.cpp \
+	fairness/tx_fifo_scheduler.h \
 	fairness/ring_tx_scheduler_interface.h \
 	fairness/sockinfo_tx_scheduler_interface.h \
 	\
