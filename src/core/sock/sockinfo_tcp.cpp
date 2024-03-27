@@ -5977,7 +5977,13 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
     sock_list &bucket = m_p_intervals[m_n_location];
     m_n_location = (m_n_location + 1) % m_n_intervals_size;
 
-    for (sockinfo_tcp *p_sock : bucket) {
+    auto iter = bucket.begin();
+    while (iter != bucket.end()) {
+        sockinfo_tcp *p_sock = *iter;
+        // Must inc iter first bacause handle_timer_expired can erase
+        // the socket that the iter points to, with delegated timers.
+        iter++;
+
         /* It is not guaranteed that the same sockinfo object is met once
          * in this loop.
          * So in case sockinfo object is destroyed other processing
