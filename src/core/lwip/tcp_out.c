@@ -1813,7 +1813,8 @@ err_t tcp_output(struct tcp_pcb *pcb)
         }
 
         /* Split the segment in case of a small window */
-        if ((NULL == pcb->unacked) && (wnd) && ((seg->len + seg->seqno - pcb->lastack) > wnd)) {
+        if (wnd && ((NULL == pcb->unacked) || (wnd >= pcb->mss)) &&
+            ((seg->len + seg->seqno - pcb->lastack) > wnd)) {
             LWIP_ASSERT("tcp_output: no window for dummy packet", !LWIP_IS_DUMMY_SEGMENT(seg));
             tcp_split_segment(pcb, seg, wnd);
         }
