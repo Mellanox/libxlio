@@ -38,6 +38,7 @@
 #include "xlio_extra.h"
 #include "dev/cq_mgr_rx.h"
 #include "dev/buffer_pool.h"
+#include "fairness/sockinfo_tx_scheduler_interface.h"
 #include "sock/cleanable_obj.h"
 #include "vlogger/vlogger.h"
 #include "utils/lock_wrapper.h"
@@ -237,7 +238,7 @@ const uint8_t ip_tos2prio[16] = {0, 0, 0, 0, 2, 2, 2, 2, 6, 6, 6, 6, 4, 4, 4, 4}
 
 class epfd_info;
 
-class sockinfo {
+class sockinfo : public sockinfo_tx_scheduler_interface {
 public:
     enum sockinfo_state : uint16_t {
         SOCKINFO_UNDEFINED,
@@ -467,6 +468,8 @@ protected:
 
     transport_t find_target_family(role_t role, const struct sockaddr *sock_addr_first,
                                    const struct sockaddr *sock_addr_second = nullptr);
+
+    send_status do_send(sq_proxy &) override { return send_status::OK; }
 
 private:
     int fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit);
