@@ -18,6 +18,7 @@ enable_testing()
 set(SOURCE_FILES
 	tx_scheduler_test.cpp
 	tx_scheduler.cpp
+	tx_fifo_scheduler.cpp
 )
 
 # Create an executable for your project
