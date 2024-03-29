@@ -216,37 +216,30 @@ void buffer_pool::print_report(vlog_levels_t log_level /*=VLOG_DEBUG*/)
     vlog_printf(log_level, "Buffer pool %p (%s%s):\n", this, m_p_bpool_stat->is_rx ? "Rx" : "Tx",
                 m_buf_size ? "" : ", zcopy");
     vlog_printf(log_level, "  Buffers: %zu created, %zu free\n", m_n_buffers_created, m_n_buffers);
-    vlog_printf(log_level, "  Memory consumption: %s (%s per buffer)\n",
+    vlog_printf(log_level, "  Memory consumption: %s (%s per buffer), expanded %u times\n",
                 option_size::to_str(m_buf_size * m_n_buffers_created, str1, sizeof(str1)),
-                option_size::to_str(m_buf_size, str2, sizeof(str2)));
+                option_size::to_str(m_buf_size, str2, sizeof(str2)),
+                m_p_bpool_stat->n_buffer_pool_expands);
     vlog_printf(log_level, "  Requests: %u unsatisfied buffer requests\n",
                 m_p_bpool_stat->n_buffer_pool_no_bufs);
 }
 
 /* static */
-void buffer_pool::print_report_on_errors(vlog_levels_t log_level)
+void buffer_pool::print_full_report(vlog_levels_t log_level)
 {
     std::vector<buffer_pool *> pools = {g_buffer_pool_rx_rwqe, g_buffer_pool_rx_stride,
                                         g_buffer_pool_tx, g_buffer_pool_zc};
-    bool do_print = false;
+    bool is_error = false;
 
     for (auto &pool : pools) {
-        if (pool->m_p_bpool_stat->n_buffer_pool_no_bufs) {
-            do_print = true;
-            break;
-        }
+        is_error = is_error || pool->m_p_bpool_stat->n_buffer_pool_no_bufs;
+        pool->print_report(log_level);
     }
 
-    if (do_print) {
+    if (is_error) {
         vlog_printf(log_level,
                     "XLIO detected insufficient memory. Increasing XLIO_MEMORY_LIMIT can improve "
                     "performance.\n");
-        for (auto &pool : pools) {
-            // Print report for every non-zcopy buffer pool and zcopy pools with errors.
-            if (pool->m_buf_size || pool->m_p_bpool_stat->n_buffer_pool_no_bufs) {
-                pool->print_report(log_level);
-            }
-        }
     }
 }
 
