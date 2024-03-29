@@ -79,7 +79,7 @@ public:
     void register_memory();
     void print_val_tbl();
     void print_report(vlog_levels_t log_level = VLOG_DEBUG);
-    static void print_report_on_errors(vlog_levels_t log_level);
+    static void print_full_report(vlog_levels_t log_level);
 
     uint32_t find_lkey_by_ib_ctx_thread_safe(ib_ctx_handler *p_ib_ctx_h);
     doca_mmap *get_doca_mmap() const { return m_allocator_data.get_doca_mmap(); }
