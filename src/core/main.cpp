@@ -206,7 +206,7 @@ static int free_libxlio_resources()
     g_tcp_seg_pool = nullptr;
 
     if (safe_mce_sys().print_report) {
-        buffer_pool::print_report_on_errors(VLOG_INFO);
+        buffer_pool::print_full_report(VLOG_INFO);
     }
 
     if (g_buffer_pool_zc) {
