@@ -80,8 +80,6 @@ typedef struct xlio_ib_mlx5_qp {
     } sq;
     struct {
         void *reg;
-        uint32_t size;
-        uint32_t offset;
     } bf;
     uint32_t tisn;
     uint32_t sqn;

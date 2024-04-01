@@ -140,11 +140,6 @@ hw_queue_tx::hw_queue_tx(ring_simple *ring, const slave_data_t *slave, const uin
     // Check device capabilities for dummy send support
     m_hw_dummy_send_support = xlio_is_nop_supported(m_p_ib_ctx_handler->get_ibv_device_attr());
 
-    m_db_method =
-        (is_bf((slave->p_ib_ctx)->get_ibv_context()) ? MLX5_DB_METHOD_BF : MLX5_DB_METHOD_DB);
-
-    hwqtx_logdbg("m_db_method=%d", m_db_method);
-
     if (configure(slave)) {
         throw_xlio_exception("Failed to configure");
     }
@@ -498,9 +493,9 @@ void hw_queue_tx::init_queue()
     m_sq_wqe_hot->eseg.cs_flags = XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM;
 
     hwqtx_logfunc("%p allocated for %d QPs sq_wqes:%p sq_wqes_end: %p and configured %d WRs "
-                  "BlueFlame: %p buf_size: %d offset: %d",
+                  "BlueFlame: %p",
                   m_mlx5_qp.qp, m_mlx5_qp.qpn, m_sq_wqes, m_sq_wqes_end, m_tx_num_wr,
-                  m_mlx5_qp.bf.reg, m_mlx5_qp.bf.size, m_mlx5_qp.bf.offset);
+                  m_mlx5_qp.bf.reg);
 }
 
 void hw_queue_tx::init_device_memory()
@@ -508,18 +503,10 @@ void hw_queue_tx::init_device_memory()
     /* This limitation is done because of a observation
      * that dm_copy takes a lot of time on VMs w/o BF (RM:1542628)
      */
-    if (m_p_ib_ctx_handler->get_on_device_memory_size() > 0) {
-        if (m_db_method == MLX5_DB_METHOD_BF) {
-            m_dm_enabled =
-                m_dm_mgr.allocate_resources(m_p_ib_ctx_handler, m_p_ring->m_p_ring_stat.get());
-
-        } else {
-#if defined(DEFINED_IBV_DM)
-            VLOG_PRINTF_ONCE_THEN_DEBUG(
-                VLOG_WARNING,
-                "Device Memory functionality is not used on devices w/o Blue Flame support\n");
-#endif /* DEFINED_IBV_DM */
-        }
+    if (m_p_ib_ctx_handler->get_on_device_memory_size() > 0 &&
+        is_bf(m_p_ib_ctx_handler->get_ibv_context())) {
+        m_dm_enabled =
+            m_dm_mgr.allocate_resources(m_p_ib_ctx_handler, m_p_ring->m_p_ring_stat.get());
     }
 }
 
@@ -543,10 +530,9 @@ cq_mgr_tx *hw_queue_tx::init_tx_cq_mgr()
                          m_p_ring->get_tx_comp_event_channel());
 }
 
-inline void hw_queue_tx::ring_doorbell(int db_method, int num_wqebb, int num_wqebb_top,
-                                       bool skip_comp /*=false*/)
+inline void hw_queue_tx::ring_doorbell(int num_wqebb, bool skip_comp /*=false*/)
 {
-    uint64_t *dst = (uint64_t *)((uint8_t *)m_mlx5_qp.bf.reg + m_mlx5_qp.bf.offset);
+    uint64_t *dst = (uint64_t *)m_mlx5_qp.bf.reg;
     uint64_t *src = reinterpret_cast<uint64_t *>(m_sq_wqe_hot);
     struct xlio_mlx5_wqe_ctrl_seg *ctrl = reinterpret_cast<struct xlio_mlx5_wqe_ctrl_seg *>(src);
 
@@ -566,7 +552,7 @@ inline void hw_queue_tx::ring_doorbell(int db_method, int num_wqebb, int num_wqe
         m_b_fence_needed = false;
     }
 
-    m_sq_wqe_counter = (m_sq_wqe_counter + num_wqebb + num_wqebb_top) & 0xFFFF;
+    m_sq_wqe_counter = (m_sq_wqe_counter + num_wqebb) & 0xFFFF;
 
     // Make sure that descriptors are written before
     // updating doorbell record and ringing the doorbell
@@ -575,29 +561,13 @@ inline void hw_queue_tx::ring_doorbell(int db_method, int num_wqebb, int num_wqe
 
     // This wc_wmb ensures ordering between DB record and BF copy
     wc_wmb();
-    if (likely(db_method == MLX5_DB_METHOD_BF)) {
-        /* Copying src to BlueFlame register buffer by Write Combining cnt WQEBBs
-         * Avoid using memcpy() to copy to BlueFlame page, since memcpy()
-         * implementations may use move-string-buffer assembler instructions,
-         * which do not guarantee order of copying.
-         */
-        while (num_wqebb--) {
-            COPY_64B_NT(dst, src);
-        }
-        src = (uint64_t *)m_sq_wqes;
-        while (num_wqebb_top--) {
-            COPY_64B_NT(dst, src);
-        }
-    } else {
-        *dst = *src;
-    }
+    *dst = *src;
 
     /* Use wc_wmb() to ensure write combining buffers are flushed out
      * of the running CPU.
      * sfence instruction affects only the WC buffers of the CPU that executes it
      */
     wc_wmb();
-    m_mlx5_qp.bf.offset ^= m_mlx5_qp.bf.size;
 }
 
 inline int hw_queue_tx::fill_inl_segment(sg_array &sga, uint8_t *cur_seg, uint8_t *data_addr,
@@ -670,7 +640,7 @@ inline int hw_queue_tx::fill_wqe(xlio_ibv_send_wr *pswr)
             rest_space = align_to_WQEBB_up(wqe_size) / 4;
             hwqtx_logfunc("data_len: %d inline_len: %d wqe_size: %d wqebbs: %d",
                           data_len - inline_len, inline_len, wqe_size, rest_space);
-            ring_doorbell(m_db_method, rest_space);
+            ring_doorbell(rest_space);
             return rest_space;
         } else {
             // wrap around case, first filling till the end of m_sq_wqes
@@ -715,7 +685,7 @@ inline int hw_queue_tx::fill_wqe(xlio_ibv_send_wr *pswr)
             dbg_dump_wqe((uint32_t *)m_sq_wqe_hot, rest_space * 4 * 16);
             dbg_dump_wqe((uint32_t *)m_sq_wqes, max_inline_len * 4 * 16);
 
-            ring_doorbell(m_db_method, rest_space, max_inline_len);
+            ring_doorbell(rest_space + max_inline_len);
             return rest_space + max_inline_len;
         }
     } else {
@@ -773,8 +743,7 @@ inline int hw_queue_tx::fill_wqe_send(xlio_ibv_send_wr *pswr)
 
     m_sq_wqe_hot->ctrl.data[1] = htonl((m_mlx5_qp.qpn << 8) | wqe_size);
     int wqebbs = align_to_WQEBB_up(wqe_size) / 4;
-    /* TODO FIXME Split into top and bottom parts */
-    ring_doorbell(m_db_method, wqebbs);
+    ring_doorbell(wqebbs);
 
     return wqebbs;
 }
@@ -825,7 +794,6 @@ inline int hw_queue_tx::fill_wqe_lso(xlio_ibv_send_wr *pswr)
         max_inline_len = align_to_octoword_up(inl_hdr_copy_size);
         cur_seg = (uint8_t *)m_sq_wqes + max_inline_len;
         wqe_size += rest / OCTOWORD;
-        inl_hdr_copy_size = align_to_WQEBB_up(wqe_size) / 4;
     }
     wqe_size += max_inline_len / OCTOWORD;
     hwqtx_logfunc("TSO: num_sge: %d max_inline_len: %d inl_hdr_size: %d rest: %d", pswr->num_sge,
@@ -835,7 +803,6 @@ inline int hw_queue_tx::fill_wqe_lso(xlio_ibv_send_wr *pswr)
     for (i = 0; i < pswr->num_sge; i++) {
         if (unlikely((uintptr_t)dpseg >= (uintptr_t)m_sq_wqes_end)) {
             dpseg = (struct mlx5_wqe_data_seg *)m_sq_wqes;
-            inl_hdr_copy_size = align_to_WQEBB_up(wqe_size) / 4;
         }
         dpseg->addr = htonll((uint64_t)pswr->sg_list[i].addr);
         dpseg->lkey = htonl(pswr->sg_list[i].lkey);
@@ -847,21 +814,11 @@ inline int hw_queue_tx::fill_wqe_lso(xlio_ibv_send_wr *pswr)
         dpseg++;
         wqe_size += sizeof(struct mlx5_wqe_data_seg) / OCTOWORD;
     }
-    inl_hdr_size = align_to_WQEBB_up(wqe_size) / 4;
     m_sq_wqe_hot->ctrl.data[1] = htonl((m_mlx5_qp.qpn << 8) | wqe_size);
 
-    // sending by BlueFlame or DoorBell covering wrap around
-    // TODO Make a single doorbell call
-    if (likely(inl_hdr_size <= 4)) {
-        if (likely(inl_hdr_copy_size == 0)) {
-            ring_doorbell(MLX5_DB_METHOD_DB, inl_hdr_size);
-        } else {
-            ring_doorbell(MLX5_DB_METHOD_DB, inl_hdr_copy_size, inl_hdr_size - inl_hdr_copy_size);
-        }
-    } else {
-        ring_doorbell(MLX5_DB_METHOD_DB, inl_hdr_size);
-    }
-    return align_to_WQEBB_up(wqe_size) / 4;
+    int wqebbs = align_to_WQEBB_up(wqe_size) / 4;
+    ring_doorbell(wqebbs);
+    return wqebbs;
 }
 
 void hw_queue_tx::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits, xlio_ti *ti)
@@ -878,8 +835,7 @@ void hw_queue_tx::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits, 
     }
 }
 
-//! Send one RAW packet by MLX5 BlueFlame
-//
+//! Send one RAW packet
 void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
                                bool request_comp, xlio_tis *tis, unsigned credits)
 {
@@ -1028,7 +984,7 @@ void hw_queue_tx::nvme_set_static_context(xlio_tis *tis, uint32_t config)
     auto *params = wqebb_get<mlx5_wqe_transport_static_params_seg *>(2U);
     nvme_fill_static_params_transport_params(params, config);
     store_current_wqe_prop(nullptr, SQ_CREDITS_UMR, tis);
-    ring_doorbell(MLX5_DB_METHOD_DB, MLX5E_TRANSPORT_SET_STATIC_PARAMS_WQEBBS);
+    ring_doorbell(MLX5E_TRANSPORT_SET_STATIC_PARAMS_WQEBBS);
     update_next_wqe_hot();
 }
 
@@ -1038,7 +994,7 @@ void hw_queue_tx::nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno)
     nvme_fill_progress_wqe(wqe, m_sq_wqe_counter, m_mlx5_qp.qpn, tis->get_tisn(), tcp_seqno,
                            MLX5_FENCE_MODE_INITIATOR_SMALL);
     store_current_wqe_prop(nullptr, SQ_CREDITS_SET_PSV, tis);
-    ring_doorbell(MLX5_DB_METHOD_DB, MLX5E_NVMEOTCP_PROGRESS_PARAMS_WQEBBS);
+    ring_doorbell(MLX5E_NVMEOTCP_PROGRESS_PARAMS_WQEBBS);
     update_next_wqe_hot();
 }
 
@@ -1311,8 +1267,6 @@ inline void hw_queue_tx::tls_post_static_params_wqe(xlio_ti *ti, const struct xl
     ucseg->flags = MLX5_UMR_INLINE;
     ucseg->bsf_octowords = htobe16(DEVX_ST_SZ_BYTES(tls_static_params) / 16);
 
-    int num_wqebbs = TLS_SET_STATIC_PARAMS_WQEBBS;
-    int num_wqebbs_top = 0;
     int sq_wqebbs_room_left =
         (static_cast<int>(m_sq_wqes_end - reinterpret_cast<uint8_t *>(cseg)) / MLX5_SEND_WQE_BB);
 
@@ -1324,14 +1278,10 @@ inline void hw_queue_tx::tls_post_static_params_wqe(xlio_ti *ti, const struct xl
 
     if (unlikely(sq_wqebbs_room_left == 2)) { // Case 2: Change tspseg pointer:
         tspseg = reinterpret_cast<struct mlx5_wqe_tls_static_params_seg *>(m_sq_wqes);
-        num_wqebbs = 2;
-        num_wqebbs_top = 1;
     } else if (unlikely(sq_wqebbs_room_left == 1)) { // Case 3: Change mkcseg and tspseg pointers:
         mkcseg = reinterpret_cast<struct mlx5_mkey_seg *>(m_sq_wqes);
         tspseg = reinterpret_cast<struct mlx5_wqe_tls_static_params_seg *>(
             reinterpret_cast<uint8_t *>(m_sq_wqes) + sizeof(*mkcseg));
-        num_wqebbs = 1;
-        num_wqebbs_top = 2;
     }
 
     memset(mkcseg, 0, sizeof(*mkcseg));
@@ -1340,7 +1290,7 @@ inline void hw_queue_tx::tls_post_static_params_wqe(xlio_ti *ti, const struct xl
     tls_fill_static_params_wqe(tspseg, info, key_id, resync_tcp_sn);
     store_current_wqe_prop(nullptr, SQ_CREDITS_UMR, ti);
 
-    ring_doorbell(MLX5_DB_METHOD_DB, num_wqebbs, num_wqebbs_top, true);
+    ring_doorbell(TLS_SET_STATIC_PARAMS_WQEBBS, true);
     dbg_dump_wqe((uint32_t *)m_sq_wqe_hot, sizeof(mlx5_set_tls_static_params_wqe));
 
     update_next_wqe_hot();
@@ -1364,8 +1314,6 @@ inline void hw_queue_tx::tls_post_progress_params_wqe(xlio_ti *ti, uint32_t tis_
                                                       uint32_t next_record_tcp_sn, bool fence,
                                                       bool is_tx)
 {
-    uint16_t num_wqebbs = TLS_SET_PROGRESS_PARAMS_WQEBBS;
-
     struct mlx5_set_tls_progress_params_wqe *wqe =
         reinterpret_cast<struct mlx5_set_tls_progress_params_wqe *>(m_sq_wqe_hot);
     struct xlio_mlx5_wqe_ctrl_seg *cseg = &wqe->ctrl.ctrl;
@@ -1386,7 +1334,7 @@ inline void hw_queue_tx::tls_post_progress_params_wqe(xlio_ti *ti, uint32_t tis_
     tls_fill_progress_params_wqe(&wqe->params, tis_tir_number, next_record_tcp_sn);
     store_current_wqe_prop(nullptr, SQ_CREDITS_SET_PSV, ti);
 
-    ring_doorbell(MLX5_DB_METHOD_DB, num_wqebbs);
+    ring_doorbell(TLS_SET_PROGRESS_PARAMS_WQEBBS);
     dbg_dump_wqe((uint32_t *)m_sq_wqe_hot, sizeof(mlx5_set_tls_progress_params_wqe));
 
     update_next_wqe_hot();
@@ -1395,8 +1343,6 @@ inline void hw_queue_tx::tls_post_progress_params_wqe(xlio_ti *ti, uint32_t tis_
 inline void hw_queue_tx::tls_get_progress_params_wqe(xlio_ti *ti, uint32_t tirn, void *buf,
                                                      uint32_t lkey)
 {
-    uint16_t num_wqebbs = TLS_GET_PROGRESS_WQEBBS;
-
     struct mlx5_get_tls_progress_params_wqe *wqe =
         reinterpret_cast<struct mlx5_get_tls_progress_params_wqe *>(m_sq_wqe_hot);
     struct xlio_mlx5_wqe_ctrl_seg *cseg = &wqe->ctrl.ctrl;
@@ -1419,7 +1365,7 @@ inline void hw_queue_tx::tls_get_progress_params_wqe(xlio_ti *ti, uint32_t tirn,
 
     store_current_wqe_prop(nullptr, SQ_CREDITS_GET_PSV, ti);
 
-    ring_doorbell(MLX5_DB_METHOD_DB, num_wqebbs);
+    ring_doorbell(TLS_GET_PROGRESS_WQEBBS);
 
     update_next_wqe_hot();
 }
@@ -1483,7 +1429,7 @@ void hw_queue_tx::post_nop_fence(void)
 
     store_current_wqe_prop(nullptr, SQ_CREDITS_NOP, nullptr);
 
-    ring_doorbell(MLX5_DB_METHOD_DB, 1);
+    ring_doorbell(1);
 
     update_next_wqe_hot();
 }
@@ -1495,7 +1441,6 @@ void hw_queue_tx::post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_
     struct xlio_mlx5_wqe_ctrl_seg *cseg = &wqe->ctrl.ctrl;
     struct mlx5_wqe_data_seg *dseg = &wqe->data;
     uint32_t tisn = tis ? tis->get_tisn() : 0;
-    uint16_t num_wqebbs = XLIO_DUMP_WQEBBS;
     uint16_t ds_cnt = sizeof(*wqe) / MLX5_SEND_WQE_DS;
 
     memset(wqe, 0, sizeof(*wqe));
@@ -1511,7 +1456,7 @@ void hw_queue_tx::post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_
 
     store_current_wqe_prop(nullptr, SQ_CREDITS_DUMP, tis);
 
-    ring_doorbell(MLX5_DB_METHOD_DB, num_wqebbs, 0, true);
+    ring_doorbell(XLIO_DUMP_WQEBBS, true);
 
     update_next_wqe_hot();
 }
