@@ -129,6 +129,7 @@ bool buffer_pool::expand(size_t count)
         }
     }
     m_n_buffers_created += count;
+    m_p_bpool_stat->n_buffer_pool_created = m_n_buffers_created;
     return true;
 }
 
