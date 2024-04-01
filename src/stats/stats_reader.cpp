@@ -656,6 +656,8 @@ void print_bpool_stats(bpool_instance_block_t *p_bpool_inst_arr)
                 printf("\tBUFFER_POOL=[%u]\n", i);
             }
             printf(FORMAT_STATS_32bit, "Size:", p_bpool_stats->n_buffer_pool_size);
+            printf(FORMAT_STATS_32bit, "Buffers in use:",
+                   p_bpool_stats->n_buffer_pool_created - p_bpool_stats->n_buffer_pool_size);
             printf(FORMAT_STATS_32bit, "No buffers error:", p_bpool_stats->n_buffer_pool_no_bufs);
             if (p_bpool_stats->n_buffer_pool_expands) {
                 printf(FORMAT_STATS_32bit, "Expands:", p_bpool_stats->n_buffer_pool_expands);

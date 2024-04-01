@@ -408,6 +408,7 @@ typedef struct {
     uint32_t n_buffer_pool_size;
     uint32_t n_buffer_pool_no_bufs;
     uint32_t n_buffer_pool_expands;
+    uint32_t n_buffer_pool_created;
 } bpool_stats_t;
 
 typedef struct {
