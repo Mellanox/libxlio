@@ -48,10 +48,6 @@ public:
     void schedule_tx(sockinfo_tx_scheduler_interface *sock, bool) override;
     void schedule_tx() override;
     void notify_completion(uintptr_t metadata, size_t num_completions = 1) override;
-
-private:
-    void noify_all_completions();
-    std::unordered_map<sockinfo_tx_scheduler_interface *, size_t> m_completions;
 };
 
 #endif // _TX_FIFO_SCHEDULER_H_

@@ -70,7 +70,7 @@ protected:
 
 class sq_proxy final {
 public:
-    sq_proxy(tx_scheduler &sched, size_t num_messages, uintptr_t metadata, size_t completions = 0);
+    sq_proxy(tx_scheduler &sched, size_t num_messages, uintptr_t metadata);
     ~sq_proxy() = default;
 
     template <class Msg> bool send(Msg &msg)
@@ -86,8 +86,5 @@ private:
     tx_scheduler &m_scheduler;
     size_t m_num_messages;
     uintptr_t m_metadata;
-
-public:
-    size_t m_completions;
 };
 #endif // _TX_SCHEDULER_H_

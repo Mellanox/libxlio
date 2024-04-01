@@ -41,10 +41,9 @@ tx_scheduler::tx_scheduler(ring_tx_scheduler_interface &r, size_t max_requests)
 {
 }
 
-sq_proxy::sq_proxy(tx_scheduler &sched, size_t num_messages, uintptr_t metadata, size_t completions)
+sq_proxy::sq_proxy(tx_scheduler &sched, size_t num_messages, uintptr_t metadata)
     : m_scheduler(sched)
     , m_num_messages(num_messages)
     , m_metadata(metadata)
-    , m_completions(completions)
 {
 }

@@ -88,15 +88,14 @@ public:
     {
         sockinfo_tx_scheduler_interface *socket =
             reinterpret_cast<sockinfo_tx_scheduler_interface *>(metadata);
-        m_completions[socket] += num_completions;
+        socket->notify_completions(num_completions);
         m_num_requests -= num_completions;
     }
 
 private:
     send_status single_socket_send(sockinfo_tx_scheduler_interface *sock, size_t requests)
     {
-        sq_proxy proxy {*this, requests, reinterpret_cast<uintptr_t>(sock), m_completions[sock]};
-        m_completions.erase(sock);
+        sq_proxy proxy {*this, requests, reinterpret_cast<uintptr_t>(sock)};
         return sock->do_send(proxy);
     }
 
@@ -115,7 +114,6 @@ private:
 
 private:
     std::deque<sockinfo_tx_scheduler_interface *> m_queue;
-    std::map<sockinfo_tx_scheduler_interface *, size_t> m_completions;
 };
 
 struct tcp_segment {
@@ -130,6 +128,8 @@ public:
         }
         return send_status::OK;
     }
+
+    void notify_completions(size_t) {}
 };
 
 class limited_test_socket : public sockinfo_tx_scheduler_interface {
@@ -141,12 +141,16 @@ public:
     send_status do_send(sq_proxy &sq)
     {
         tcp_segment tcp {};
-        m_inflight_requests += sq.m_completions;
         while (m_inflight_requests && sq.send(tcp)) {
             --m_inflight_requests;
         }
         return send_status::OK;
     }
+
+    void notify_completions(size_t completions) {
+        m_inflight_requests += completions;
+    }
+
     size_t m_inflight_requests;
 };
 
