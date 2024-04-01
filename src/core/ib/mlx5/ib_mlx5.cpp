@@ -69,8 +69,6 @@ int xlio_ib_mlx5_get_qp_tx(xlio_ib_mlx5_qp_t *mlx5_qp)
     mlx5_qp->sq.wqe_cnt = dqp.sq.wqe_cnt;
     mlx5_qp->sq.stride = dqp.sq.stride;
     mlx5_qp->bf.reg = dqp.bf.reg;
-    mlx5_qp->bf.size = dqp.bf.size;
-    mlx5_qp->bf.offset = 0;
 #if defined(DEFINED_DV_RAW_QP_HANDLES)
     mlx5_qp->tisn = dqp.tisn;
     mlx5_qp->sqn = dqp.sqn;

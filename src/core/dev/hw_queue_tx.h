@@ -264,8 +264,7 @@ private:
     inline int fill_wqe_lso(xlio_ibv_send_wr *pswr);
     inline int fill_inl_segment(sg_array &sga, uint8_t *cur_seg, uint8_t *data_addr,
                                 int max_inline_len, int inline_len);
-    inline void ring_doorbell(int db_method, int num_wqebb, int num_wqebb_top = 0,
-                              bool skip_comp = false);
+    inline void ring_doorbell(int num_wqebb, bool skip_comp = false);
 
     struct xlio_rate_limit_t m_rate_limit;
     xlio_ib_mlx5_qp_t m_mlx5_qp;
@@ -279,7 +278,6 @@ private:
     struct mlx5_eth_wqe (*m_sq_wqes)[] = nullptr;
     struct mlx5_eth_wqe *m_sq_wqe_hot = nullptr;
     uint8_t *m_sq_wqes_end = nullptr;
-    enum { MLX5_DB_METHOD_BF, MLX5_DB_METHOD_DB } m_db_method;
 
     const uint32_t m_n_sysvar_tx_num_wr_to_signal;
     uint32_t m_tx_num_wr;
