@@ -2482,10 +2482,15 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
 
 void sockinfo_tcp::register_timer()
 {
-    si_tcp_logdbg("Registering TCP socket timer: socket: %p, thread-col: %p, global-col: %p", this,
-                  get_tcp_timer_collection(), g_tcp_timers_collection);
+    // A reused time-wait socket wil try to add a timer although it is already registered.
+    // We should avoid calling register_socket_timer_event unnecessarily because it introduces
+    // internal-thread locks contention.
+    if (!is_timer_registered()) {
+        si_tcp_logdbg("Registering TCP socket timer: socket: %p, thread-col: %p, global-col: %p",
+                      this, get_tcp_timer_collection(), g_tcp_timers_collection);
 
-    get_event_mgr()->register_socket_timer_event(this);
+        get_event_mgr()->register_socket_timer_event(this);
+    }
 }
 
 void sockinfo_tcp::queue_rx_ctl_packet(struct tcp_pcb *pcb, mem_buf_desc_t *p_desc)
@@ -6017,8 +6022,8 @@ void tcp_timers_collection::add_new_timer(sockinfo_tcp *sock)
         return;
     }
 
-    // A reused time-wait socket wil try to add a timer although it is already registered.
-    if (m_sock_remove_map.find(sock) != m_sock_remove_map.end()) {
+    if (sock->is_timer_registered()) {
+        __log_warn("Trying to add timer twice for TCP socket %p", sock);
         return;
     }
 
@@ -6026,6 +6031,7 @@ void tcp_timers_collection::add_new_timer(sockinfo_tcp *sock)
     bucket.emplace_back(sock);
     m_sock_remove_map.emplace(sock, std::make_tuple(m_n_next_insert_bucket, --(bucket.end())));
     m_n_next_insert_bucket = (m_n_next_insert_bucket + 1) % m_n_intervals_size;
+    sock->set_timer_registered(true);
 
     if (0 == m_n_count++) {
         m_timer_handle = get_event_mgr()->register_timer_event(safe_mce_sys().timer_resolution_msec,
@@ -6041,6 +6047,7 @@ void tcp_timers_collection::remove_timer(sockinfo_tcp *sock)
     if (node != m_sock_remove_map.end()) {
         m_p_intervals[std::get<0>(node->second)].erase(std::get<1>(node->second));
         m_sock_remove_map.erase(node);
+        sock->set_timer_registered(false);
 
         if (!(--m_n_count)) {
             if (m_timer_handle) {

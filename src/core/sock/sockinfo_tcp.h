@@ -320,6 +320,8 @@ public:
     }
 
     bool is_incoming() override { return m_b_incoming; }
+    bool is_timer_registered() const { return m_timer_registered; }
+    void set_timer_registered(bool v) { m_timer_registered = v; }
 
     bool is_connected() { return m_sock_state == TCP_SOCK_CONNECTED_RDWR; }
 
@@ -618,6 +620,7 @@ private:
     bool m_xlio_thr;
     bool m_b_incoming;
     bool m_b_attached;
+    bool m_timer_registered = false;
     /* connection state machine */
     int m_conn_timeout;
     /* RCVBUF acconting */
