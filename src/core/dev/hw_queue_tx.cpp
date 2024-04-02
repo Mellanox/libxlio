@@ -600,7 +600,7 @@ inline int hw_queue_tx::fill_wqe(xlio_ibv_send_wr *pswr)
     int max_inline_len = get_max_inline_data();
 
     // assume packet is full inline
-    if (likely(data_len <= max_inline_len && xlio_send_wr_opcode(*pswr) == XLIO_IBV_WR_SEND)) {
+    if (data_len <= max_inline_len && xlio_send_wr_opcode(*pswr) == XLIO_IBV_WR_SEND) {
         uint8_t *data_addr = sga.get_data(&inline_len); // data for inlining in ETH header
         data_len -= inline_len;
         hwqtx_logfunc(
