@@ -261,6 +261,11 @@ void ring_simple::create_resources()
             const xlio_ibv_tso_caps *caps =
                 &xlio_get_tso_caps(m_p_ib_ctx->get_ibv_device_attr_ex());
             if (ibv_is_qpt_supported(caps->supported_qpts, IBV_QPT_RAW_PACKET)) {
+                if (caps->max_tso && (caps->max_tso > MCE_DEFAULT_MAX_TSO_SIZE)) {
+                    ring_logwarn("max_tso cap (=%u) is higher than default TSO size (=%u). "
+                                 "Increase XLIO_MAX_TSO_SIZE to get full TSO potential.",
+                                 caps->max_tso, MCE_DEFAULT_MAX_TSO_SIZE);
+                }
                 m_tso.max_payload_sz = caps->max_tso;
                 /* ETH(14) + IP(20) + TCP(20) + TCP OPTIONS(40) */
                 m_tso.max_header_sz = 94;
