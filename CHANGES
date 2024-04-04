@@ -1,3 +1,11 @@
+Version 3.30.4-1:
+Date + Time 2024-04-04
+=============================================================
+Fixed:
+        - RM #3792798 Do code cleanup for new storage API
+        - RM #3829626 Nginx http CPS tests report error
+        - RM #3818038 I/O errors during FIO
+
 Version 3.30.3-1:
 Date + Time 2024-03-20
 =============================================================
