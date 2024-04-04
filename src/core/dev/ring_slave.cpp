@@ -586,7 +586,7 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
         return false;
     }
 
-    inc_cq_moderation_stats(sz_data);
+    inc_cq_moderation_stats();
 
     m_p_ring_stat->n_rx_byte_count += sz_data;
     ++m_p_ring_stat->n_rx_pkt_count;
