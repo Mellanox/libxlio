@@ -837,6 +837,7 @@ void mce_sys_var::get_env_params()
     progress_engine_wce_max = MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX;
     cq_keep_qp_full = MCE_DEFAULT_CQ_KEEP_QP_FULL;
     qp_compensation_level = MCE_DEFAULT_QP_COMPENSATION_LEVEL;
+    max_tso_sz = MCE_DEFAULT_MAX_TSO_SIZE;
     user_huge_page_size = MCE_DEFAULT_USER_HUGE_PAGE_SIZE;
     internal_thread_arm_cq_enabled = MCE_DEFAULT_INTERNAL_THREAD_ARM_CQ_ENABLED;
 
@@ -1890,6 +1891,10 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_TSO))) {
         enable_tso = option_3::from_str(env_ptr, MCE_DEFAULT_TSO);
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_MAX_TSO_SIZE))) {
+        max_tso_sz = option_size::from_str(env_ptr);
     }
 
     if ((enable_tso != option_3::OFF) && (ring_migration_ratio_tx != -1)) {
