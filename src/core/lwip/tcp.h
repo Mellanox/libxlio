@@ -54,6 +54,7 @@ extern u32_t lwip_tcp_nodelay_treshold;
 
 struct tcp_seg;
 typedef err_t (*ip_output_fn)(struct pbuf *p, struct tcp_seg *seg, void *p_conn, u16_t flags);
+typedef void (*enqueue_nodata_segment_fn)(struct pbuf *pi, void *v_p_pcb);
 
 typedef struct pbuf *(*tcp_tx_pbuf_alloc_fn)(void *p_conn, pbuf_type type, pbuf_desc *desc,
                                              struct pbuf *p_buff);
@@ -253,6 +254,8 @@ struct tcp_pcb {
     void *my_container;
     /* Function to be called when sending data. */
     ip_output_fn ip_output;
+    /* Function to be called to enque no data segments */
+    enqueue_nodata_segment_fn enqueue_nodata_segment;
     /* the accept callback for listen- and normal pcbs */
     tcp_accept_fn accept;
     /* ports are in host byte order */
@@ -433,6 +436,7 @@ void tcp_pcb_recycle(struct tcp_pcb *pcb);
 
 void tcp_arg(struct tcp_pcb *pcb, void *arg);
 void tcp_ip_output(struct tcp_pcb *pcb, ip_output_fn ip_output);
+void tcp_set_enqueue_nodata_segment(struct tcp_pcb *pcb, enqueue_nodata_segment_fn cb);
 void tcp_accept(struct tcp_pcb *pcb, tcp_accept_fn accept);
 void tcp_syn_handled(struct tcp_pcb *pcb, tcp_syn_handled_fn syn_handled);
 void tcp_clone_conn(struct tcp_pcb *pcb, tcp_clone_conn_fn clone_conn);
@@ -484,6 +488,7 @@ err_t tcp_write_express(struct tcp_pcb *pcb, const struct iovec *iov, u32_t iovc
 #define TCP_PRIO_MAX    127
 
 err_t tcp_output(struct tcp_pcb *pcb);
+struct tcp_seg *tcp_peek_unsent(struct tcp_pcb *pcb);
 
 s32_t tcp_is_wnd_available(struct tcp_pcb *pcb, u32_t data_len);
 
@@ -496,6 +501,10 @@ s32_t tcp_is_wnd_available(struct tcp_pcb *pcb, u32_t data_len);
     external_tcp_state_observer((pcb)->my_container, (pcb)->private_state = state)
 
 void tcp_set_keepalive(struct tcp_pcb *pcb, u32_t idle, u32_t intvl, u32_t cnt);
+
+void tcp_check_empty_ack(struct tcp_pcb *pcb);
+struct pbuf *tcp_peek_unsent_segment(struct tcp_pcb *pcb, u16_t *flags);
+void tcp_pop_unsent_segment(struct tcp_pcb *pcb);
 
 #ifdef __cplusplus
 }

@@ -55,9 +55,9 @@ public:
     template <class Msg> bool send(Msg &msg, uintptr_t metadata)
     {
         if (m_num_requests < m_max_requests) {
-            m_num_requests++;
-            m_ring.send(msg, metadata);
-            return true;
+            size_t used_requests = m_ring.send(msg, metadata);
+            m_num_requests += used_requests;
+            return bool(used_requests);
         }
         return false;
     }

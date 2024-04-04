@@ -73,12 +73,7 @@ struct socket_data {
     uint32_t pcp;
 };
 
-struct xlio_send_attr {
-    xlio_wr_tx_packet_attr flags;
-    uint16_t mss;
-    size_t length;
-    xlio_tis *tis;
-};
+class sockinfo_tx_scheduler_interface;
 
 class dst_entry : public cache_observer, public tostr {
 
@@ -131,6 +126,7 @@ public:
     {
         m_p_ring->reset_inflight_zc_buffers_ctx(m_id, ctx);
     }
+    inline ring_user_id_t get_m_id() const { return m_id; }
 
     inline bool is_the_same_ifname(const std::string &ifname)
     {
@@ -141,6 +137,8 @@ public:
     {
         return is_the_same_ifname(ifname);
     }
+
+    virtual void notify_ready_to_send(sockinfo_tx_scheduler_interface *, bool) {}
 
 protected:
     ip_address m_dst_ip;

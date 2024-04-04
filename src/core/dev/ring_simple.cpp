@@ -33,9 +33,11 @@
 #include <mutex>
 #include "ring_simple.h"
 
+#include "proto/dst_entry_tcp.h"
 #include "util/valgrind.h"
 #include "util/sg_array.h"
 #include "sock/fd_collection.h"
+#include "fairness/tx_fifo_scheduler.h" // TODO depend on tx_scheduler only
 
 #undef MODULE_NAME
 #define MODULE_NAME "ring_simple"
@@ -252,6 +254,12 @@ void ring_simple::create_resources()
         m_tx_num_wr = max_qp_wr;
     }
     ring_logdbg("ring attributes: m_tx_num_wr = %d", m_tx_num_wr);
+
+    m_tx_scheduler = std::make_unique<tx_fifo_scheduler>(*this, m_tx_num_wr);
+
+    if (!m_tx_scheduler) {
+        throw_xlio_exception("create tx_scheduler failed");
+    }
 
     /* Detect TSO capabilities */
     memset(&m_tso, 0, sizeof(m_tso));
@@ -747,17 +755,13 @@ bool ring_simple::get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr 
 void ring_simple::send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
                                    xlio_wr_tx_packet_attr attr)
 {
-    NOT_IN_USE(id);
-
     if (attr & XLIO_TX_SW_L4_CSUM) {
         compute_tx_checksum((mem_buf_desc_t *)(p_send_wqe->wr_id), attr & XLIO_TX_PACKET_L3_CSUM,
                             attr & XLIO_TX_PACKET_L4_CSUM);
         attr = (xlio_wr_tx_packet_attr)(attr & ~(XLIO_TX_PACKET_L4_CSUM));
     }
 
-    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-    int ret = send_buffer(p_send_wqe, attr, nullptr);
-    send_status_handler(ret, p_send_wqe);
+    send_lwip_buffer(id, p_send_wqe, attr, nullptr);
 }
 
 int ring_simple::send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
@@ -1206,4 +1210,38 @@ uint16_t ring_simple::get_max_header_sz(void)
 bool ring_simple::is_tso(void)
 {
     return (m_tso.max_payload_sz && m_tso.max_header_sz);
+}
+
+void ring_simple::notify_complete(uintptr_t metadata)
+{
+    m_tx_scheduler->notify_completion(metadata);
+}
+
+size_t ring_simple::send(tcp_segment &segment, uintptr_t metadata)
+{
+    xlio_ibv_send_wr wr;
+    segment.m_dst_entry->fill_wqe(segment.m_iovec, segment.m_sz_iovec, segment.m_attr, this, &wr);
+
+    unsigned credits = m_hqtx->credits_calculate(&wr);
+
+    if (m_hqtx->credits_get(credits)) {
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        m_hqtx->send_wqe(&wr, segment.m_attr.flags,  segment.m_attr.tis, credits, metadata);
+        return credits;
+    }
+    return 0;
+}
+
+size_t ring_simple::send(udp_datagram &datagram, uintptr_t metadata)
+{
+    NOT_IN_USE(datagram);
+    NOT_IN_USE(metadata);
+    throw_xlio_exception("Send udp_datagram not implemented");
+}
+
+size_t ring_simple::send(control_msg &message, uintptr_t metadata)
+{
+    NOT_IN_USE(message);
+    NOT_IN_USE(metadata);
+    throw_xlio_exception("Send tcp_segment not implemented");
 }

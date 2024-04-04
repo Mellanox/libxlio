@@ -42,9 +42,9 @@ public:
     virtual ~ring_tx_scheduler_interface() = default;
 
     virtual void notify_complete(uintptr_t) = 0;
-    virtual bool send(tcp_segment &, uintptr_t) = 0;
-    virtual bool send(udp_datagram &, uintptr_t) = 0;
-    virtual bool send(control_msg &, uintptr_t) = 0;
+    virtual size_t send(tcp_segment &, uintptr_t) = 0;
+    virtual size_t send(udp_datagram &, uintptr_t) = 0;
+    virtual size_t send(control_msg &, uintptr_t) = 0;
 };
 
 #endif // _RING_TX_SCHEDULER_INTERFACE_H_

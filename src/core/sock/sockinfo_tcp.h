@@ -33,6 +33,7 @@
 #ifndef TCP_SOCKINFO_H
 #define TCP_SOCKINFO_H
 
+#include <atomic>
 #include "utils/lock_wrapper.h"
 #include "proto/mem_buf_desc.h"
 #include "sock/sockinfo.h"
@@ -43,6 +44,7 @@
 #include "lwip/opt.h"
 #include "lwip/tcp_impl.h"
 
+#include <deque>
 #include "sockinfo.h"
 #include "sockinfo_ulp.h"
 #include "sockinfo_nvme.h"
@@ -258,6 +260,7 @@ public:
                sockaddr *__from = nullptr, socklen_t *__fromlen = nullptr,
                struct msghdr *__msg = nullptr) override;
     static err_t ip_output(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn, uint16_t flags);
+    static void enqueue_nodata_segment(struct pbuf *p, void *v_p_conn);
     static err_t ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn,
                                    uint16_t flags);
     static void tcp_state_observer(void *pcb_container, enum tcp_state new_state);
@@ -423,6 +426,10 @@ public:
     void xlio_socket_event(int event, int value);
     static err_t rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
     static void err_lwip_cb_xlio_socket(void *pcb_container, err_t err);
+
+    send_status do_send(sq_proxy &) override;
+    void notify_completions(size_t) override;
+    void notify_ready_to_send();
 
 protected:
     void lock_rx_q() override;
@@ -608,6 +615,11 @@ private:
 
     inline event_handler_manager *get_event_mgr();
 
+    bool peek_tcp_segment(tcp_segment &segment);
+    void pop_tcp_segment();
+    size_t fill_regular_tcp_iovec(pbuf *p, tcp_iovec* tcpiovec, size_t &count);
+    size_t fill_zerocopy_tcp_iovec(pbuf *p, tcp_iovec* tcpiovec, size_t &count);
+
 public:
     static const int CONNECT_DEFAULT_TIMEOUT_MS = 10000;
 
@@ -688,6 +700,7 @@ private:
     uint64_t m_user_huge_page_mask;
     unsigned m_required_send_block;
     uint16_t m_external_vlan_tag = 0U;
+    bool m_b_has_notified_ready_to_send = false;
     /*
      * Storage API
      * TODO Move the fields to proper cold/hot sections in the final version.
@@ -695,6 +708,8 @@ private:
     bool m_b_xlio_socket_dirty = false;
     uintptr_t m_xlio_socket_userdata = 0;
     poll_group *m_p_group = nullptr;
+    std::deque<pbuf *> m_enqueued_tcp_segments;
+    std::atomic_int64_t m_num_incomplete_messages;
 };
 
 #endif

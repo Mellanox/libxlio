@@ -38,6 +38,7 @@
 #include "dev/buffer_pool.h"
 #include "dev/xlio_ti.h"
 #include "fairness/ring_tx_scheduler_interface.h"
+#include "fairness/tx_scheduler.h"
 #include "proto/flow_tuple.h"
 #include "proto/xlio_lwip.h"
 #include "proto/L2_address.h"
@@ -49,6 +50,7 @@ struct xlio_tls_info;
 class sockinfo;
 class rfs_rule;
 class poll_group;
+class sockinfo_tx_scheduler_interface;
 
 #define ring_logpanic   __log_info_panic
 #define ring_logerr     __log_info_err
@@ -268,10 +270,18 @@ public:
     void socketxtreme_end_ec_operation();
     xlio_socketxtreme_completion_t &socketxtreme_start_ec_operation(sockinfo *sock,
                                                                     bool always_new);
+
+    void schedule_tx(sockinfo_tx_scheduler_interface *s, bool is_first) {
+        assert(m_tx_scheduler); /* TX scheduler must be set not null by a derived class */
+        if (is_first) {
+            m_tx_scheduler->schedule_tx(s, is_first);
+        }
+    }
+
     void notify_complete(uintptr_t) override {};
-    bool send(tcp_segment &, uintptr_t) override { return true; }
-    bool send(udp_datagram &, uintptr_t) override { return true; }
-    bool send(control_msg &, uintptr_t) override { return true; }
+    size_t send(tcp_segment &, uintptr_t) override { return true; }
+    size_t send(udp_datagram &, uintptr_t) override { return true; }
+    size_t send(control_msg &, uintptr_t) override { return true; }
 
 protected:
     inline void set_parent(ring *parent) { m_parent = (parent ? parent : this); }
@@ -297,6 +307,23 @@ protected:
     } m_socketxtreme;
 
     int m_if_index = 0; /* Interface index */
+    std::unique_ptr<tx_scheduler> m_tx_scheduler;
 };
+
+struct xlio_send_attr {
+    xlio_wr_tx_packet_attr flags;
+    uint16_t mss;
+    size_t length;
+    xlio_tis *tis;
+};
+
+struct dst_entry;
+/* Structure for TCP scatter/gather I/O.  */
+typedef struct tcp_iovec {
+    struct iovec iovec;
+    mem_buf_desc_t *p_desc;
+    void *tcphdr;
+    dst_entry *m_dst_entry;
+} tcp_iovec;
 
 #endif /* RING_H */

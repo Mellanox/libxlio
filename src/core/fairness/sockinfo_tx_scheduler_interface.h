@@ -43,6 +43,7 @@ public:
     virtual ~sockinfo_tx_scheduler_interface() = default;
 
     virtual send_status do_send(sq_proxy &sq) = 0;
+    virtual void notify_completions(size_t completions = 1) = 0;
 };
 
 #endif // _SOCKINFO_TX_SCHEDULER_INTERFACE_H_

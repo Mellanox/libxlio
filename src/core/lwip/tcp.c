@@ -1163,6 +1163,18 @@ void tcp_ip_output(struct tcp_pcb *pcb, ip_output_fn ip_output)
 }
 
 /**
+ * Used for setting the callback function to handle the common nodata send operations such as:
+ * rst, empty ack, keepalive, etc.
+ *
+ * @param pcb tcp_pcb to set the callback
+ * @param cb callback function
+ */
+void tcp_set_enqueue_nodata_segment(struct tcp_pcb *pcb, enqueue_nodata_segment_fn cb)
+{
+    pcb->enqueue_nodata_segment = cb;
+}
+
+/**
  * Used for specifying the function that should be called when a
  * SYN was received.
  *

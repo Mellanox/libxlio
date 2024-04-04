@@ -35,13 +35,6 @@
 
 #include "core/proto/dst_entry.h"
 
-/* Structure for TCP scatter/gather I/O.  */
-typedef struct tcp_iovec {
-    struct iovec iovec;
-    mem_buf_desc_t *p_desc;
-    void *tcphdr;
-} tcp_iovec;
-
 class dst_entry_tcp : public dst_entry {
 public:
     dst_entry_tcp(const sock_addr &dst, uint16_t src_port, socket_data &data,
@@ -58,6 +51,10 @@ public:
     mem_buf_desc_t *get_buffer(pbuf_type type, pbuf_desc *desc, bool b_blocked = false);
     void put_buffer(mem_buf_desc_t *p_desc);
     void put_zc_buffer(mem_buf_desc_t *p_desc);
+
+    void notify_ready_to_send(sockinfo_tx_scheduler_interface *, bool);
+    void fill_wqe(tcp_iovec *p_tcp_iov, size_t sz_iov, xlio_send_attr &attr, ring *p_ring,
+                  xlio_ibv_send_wr *wqe);
 
 protected:
     transport_t get_transport(const sock_addr &to);

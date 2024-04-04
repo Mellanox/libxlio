@@ -460,3 +460,230 @@ void dst_entry_tcp::put_zc_buffer(mem_buf_desc_t *p_desc)
         p_desc->lwip_pbuf.ref--;
     }
 }
+
+void dst_entry_tcp::notify_ready_to_send(sockinfo_tx_scheduler_interface *socket, bool is_first)
+{
+    m_p_ring->schedule_tx(socket, is_first);
+}
+
+void dst_entry_tcp::fill_wqe(tcp_iovec *p_tcp_iov, size_t sz_iov, xlio_send_attr &attr, ring *p_ring, xlio_ibv_send_wr *wqe)
+{
+    void *p_pkt;
+    void *p_ip_hdr;
+    void *p_tcp_hdr;
+    size_t hdr_alignment_diff = 0;
+
+    bool is_zerocopy = is_set(attr.flags, XLIO_TX_PACKET_ZEROCOPY);
+
+    /* The header is aligned for fast copy but we need to maintain this diff
+     * in order to get the real header pointer easily
+     */
+    hdr_alignment_diff = m_header->m_aligned_l2_l3_len - m_header->m_total_hdr_len;
+
+    /* Suppress flags that should not be used anymore
+     * to avoid conflicts with XLIO_TX_PACKET_L3_CSUM and XLIO_TX_PACKET_L4_CSUM
+     */
+    attr.flags = (xlio_wr_tx_packet_attr)(attr.flags & ~(XLIO_TX_PACKET_ZEROCOPY | XLIO_TX_FILE));
+
+    /* ZC uses multiple IOVs, only the mlx5 TSO path supports that */
+    /* for small (< mss) ZC sends, must turn off CX5.SXP.disable_lso_on_only_packets
+     * BF  --> mcra /dev/mst/mt41682_pciconf0 0x31500.3:1 0
+     * CX5 --> mcra /dev/mst/mt4121_pciconf0 0x31500.3:1 0
+     * When set, single packet LSO WQEs are not treated as LSO. This prevents wrong handling of
+     * packets with padding by SW */
+    if (is_zerocopy) {
+        attr.flags = (xlio_wr_tx_packet_attr)(attr.flags | XLIO_TX_PACKET_TSO);
+    }
+
+    attr.flags =
+        (xlio_wr_tx_packet_attr)(attr.flags | XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM);
+
+    /* Supported scenarios:
+     * 1. Standard:
+     *    Use lwip memory buffer (zero copy) in case iov consists of single buffer with single TCP
+     * packet.
+     * 2. Large send offload:
+     *    Use lwip sequence of memory buffers (zero copy) in case attribute is set as TSO and no
+     * retransmission. Size of iov can be one or more.
+     * 3. Simple:
+     *    Use intermediate buffers for data send
+     */
+    if (likely(p_ring->is_active_member(p_tcp_iov->p_desc->p_desc_owner, m_id) &&
+               (is_set(attr.flags, (xlio_wr_tx_packet_attr)(XLIO_TX_PACKET_TSO)) ||
+                (sz_iov == 1 &&
+                 !is_set(attr.flags, (xlio_wr_tx_packet_attr)(XLIO_TX_PACKET_REXMIT)))))) {
+        size_t total_packet_len = 0;
+        size_t tcp_hdr_len;
+        void *masked_addr;
+
+        /* iov_base is a pointer to TCP header and data
+         * so p_pkt should point to L2
+         */
+        if (is_zerocopy) {
+            p_pkt = (void *)((uint8_t *)p_tcp_iov[0].tcphdr - m_header->m_aligned_l2_l3_len);
+        } else {
+            p_pkt =
+                (void *)((uint8_t *)p_tcp_iov[0].iovec.iov_base - m_header->m_aligned_l2_l3_len);
+        }
+
+        /* attr.length is payload size and L4 header size
+         * m_total_hdr_len is a size of L2/L3 header
+         */
+        total_packet_len = attr.length + m_header->m_total_hdr_len;
+
+        /* copy just L2/L3 headers to p_pkt */
+        m_header->copy_l2_ip_hdr(p_pkt);
+
+        uint16_t payload_length_ipv4 = total_packet_len - m_header->m_transport_header_len;
+        if (get_sa_family() == AF_INET6) {
+            fill_hdrs<tx_ipv6_hdr_template_t>(p_pkt, p_ip_hdr, p_tcp_hdr);
+            set_ipv6_len(p_ip_hdr, htons(payload_length_ipv4 - IPV6_HLEN));
+        } else {
+            fill_hdrs<tx_ipv4_hdr_template_t>(p_pkt, p_ip_hdr, p_tcp_hdr);
+            set_ipv4_len(p_ip_hdr, htons(payload_length_ipv4));
+        }
+
+        tcp_hdr_len = (static_cast<tcphdr *>(p_tcp_hdr))->doff * 4;
+
+        if (!is_zerocopy && (total_packet_len < m_max_inline) && (1 == sz_iov)) {
+            p_tcp_iov[0].iovec.iov_base = (uint8_t *)p_pkt + hdr_alignment_diff;
+            p_tcp_iov[0].iovec.iov_len = total_packet_len;
+        } else if (is_set(attr.flags, (xlio_wr_tx_packet_attr)(XLIO_TX_PACKET_TSO))) {
+            /* update send work request. do not expect noninlined scenario */
+            wqe_send_handler().init_not_inline_wqe(*wqe, m_sge, sz_iov);
+            if (attr.mss < (attr.length - tcp_hdr_len)) {
+                wqe_send_handler().enable_tso(*wqe, (void *)((uint8_t *)p_pkt + hdr_alignment_diff),
+                                      m_header->m_total_hdr_len + tcp_hdr_len,
+                                      attr.mss - (tcp_hdr_len - TCP_HLEN));
+            } else {
+               wqe_send_handler().enable_tso(*wqe, (void *)((uint8_t *)p_pkt + hdr_alignment_diff),
+                                      m_header->m_total_hdr_len + tcp_hdr_len, 0);
+            }
+            if (!is_zerocopy) {
+                p_tcp_iov[0].iovec.iov_base = (uint8_t *)p_tcp_hdr + tcp_hdr_len;
+                p_tcp_iov[0].iovec.iov_len -= tcp_hdr_len;
+            }
+        } else {
+            p_tcp_iov[0].iovec.iov_base = (uint8_t *)p_pkt + hdr_alignment_diff;
+            p_tcp_iov[0].iovec.iov_len = total_packet_len;
+        }
+
+        if (unlikely(p_tcp_iov[0].p_desc->lwip_pbuf.ref > 1)) {
+            /*
+             * First buffer in the vector is used for reference counting.
+             * The reference is released after completion depending on
+             * batching mode.
+             * There is situation, when a buffer resides in the list for
+             * batching completion and the same buffer is queued for
+             * retransmission. In this case, sending the buffer leads to
+             * the list corruption because the buffer is re-inserted.
+             *
+             * As workaround, allocate new fake buffer which will be
+             * assigned to wr_id and used for reference counting. This
+             * buffer is allocated with ref == 1, so we must not increase
+             * it. When completion happens, ref becomes 0 and the fake
+             * buffer is released.
+             *
+             * We don't change data, only pointer to buffer descriptor.
+             */
+            pbuf_type type = (pbuf_type)p_tcp_iov[0].p_desc->lwip_pbuf.type;
+            mem_buf_desc_t *p_mem_buf_desc =
+                get_buffer(type, &(p_tcp_iov[0].p_desc->lwip_pbuf.desc),
+                           is_set(attr.flags, XLIO_TX_PACKET_BLOCK));
+            assert(p_mem_buf_desc);
+            p_tcp_iov[0].p_desc = p_mem_buf_desc;
+        } else {
+            p_tcp_iov[0].p_desc->lwip_pbuf.ref++;
+        }
+
+        /* save pointers to ip and tcp headers for software checksum calculation */
+        p_tcp_iov[0].p_desc->tx.p_ip_h = p_ip_hdr;
+        p_tcp_iov[0].p_desc->tx.p_tcp_h = static_cast<tcphdr *>(p_tcp_hdr);
+
+        /* set wr_id as a pointer to memory descriptor */
+        wqe->wr_id = (uintptr_t)p_tcp_iov[0].p_desc;
+
+        /* Update scatter gather element list
+         * ref counter is incremented (above) for the first memory descriptor only because it is
+         * needed for processing send wr completion (tx batching mode)
+         */
+        ib_ctx_handler *ib_ctx = p_ring->get_ctx(m_id);
+        for (size_t i = 0; i < sz_iov; ++i) {
+            m_sge[i].addr = (uintptr_t)p_tcp_iov[i].iovec.iov_base;
+            m_sge[i].length = p_tcp_iov[i].iovec.iov_len;
+            if (is_zerocopy) {
+                auto *p_desc = p_tcp_iov[i].p_desc;
+                auto &pbuf_descriptor = p_desc->lwip_pbuf.desc;
+                if (PBUF_DESC_EXPRESS == pbuf_descriptor.attr) {
+                    m_sge[i].lkey = pbuf_descriptor.mkey;
+                } else if (PBUF_DESC_MKEY == pbuf_descriptor.attr) {
+                    /* PBUF_DESC_MKEY - value is provided by user */
+                    m_sge[i].lkey = pbuf_descriptor.mkey;
+                } else if (PBUF_DESC_MDESC == pbuf_descriptor.attr ||
+                           PBUF_DESC_NVME_TX == pbuf_descriptor.attr) {
+                    mem_desc *mdesc = (mem_desc *)pbuf_descriptor.mdesc;
+                    m_sge[i].lkey =
+                        mdesc->get_lkey(p_desc, ib_ctx, (void *)m_sge[i].addr, m_sge[i].length);
+                    if (m_sge[i].lkey == LKEY_TX_DEFAULT) {
+                        m_sge[i].lkey = p_ring->get_tx_lkey(m_id);
+                    }
+                } else {
+                    /* Do not check desc.attr for specific type because
+                     * PBUF_DESC_FD - is not possible for XLIO_TX_PACKET_ZEROCOPY
+                     * PBUF_DESC_NONE - map should be initialized to NULL in
+                     * dst_entry_tcp::get_buffer() object
+                     */
+                    masked_addr = (void *)((uint64_t)m_sge[i].addr & m_user_huge_page_mask);
+                    m_sge[i].lkey =
+                        p_ring->get_tx_user_lkey(masked_addr, m_n_sysvar_user_huge_page_size);
+                }
+            } else {
+                m_sge[i].lkey = (i == 0 ? p_ring->get_tx_lkey(m_id) : m_sge[0].lkey);
+            }
+        }
+
+    } else { // We don'nt support inline in this case, since we believe that this a very rare case
+        mem_buf_desc_t *p_mem_buf_desc;
+        size_t total_packet_len = 0;
+
+        p_mem_buf_desc = get_buffer(PBUF_RAM, nullptr, is_set(attr.flags, XLIO_TX_PACKET_BLOCK));
+        assert(p_mem_buf_desc);
+        m_header->copy_l2_ip_hdr(static_cast<void *>(p_mem_buf_desc->p_buffer));
+
+        // Actually this is not the real packet len we will subtract the alignment diff at the end
+        // of the copy
+        total_packet_len = m_header->m_aligned_l2_l3_len;
+
+        for (size_t i = 0; i < sz_iov; ++i) {
+            memcpy(p_mem_buf_desc->p_buffer + total_packet_len, p_tcp_iov[i].iovec.iov_base,
+                   p_tcp_iov[i].iovec.iov_len);
+            total_packet_len += p_tcp_iov[i].iovec.iov_len;
+        }
+
+        m_sge[0].addr = (uintptr_t)(p_mem_buf_desc->p_buffer + hdr_alignment_diff);
+        m_sge[0].length = total_packet_len - hdr_alignment_diff;
+        m_sge[0].lkey = p_ring->get_tx_lkey(m_id);
+
+        p_pkt = static_cast<void *>(p_mem_buf_desc->p_buffer);
+
+        uint16_t payload_length_ipv4 = m_sge[0].length - m_header->m_transport_header_len;
+        if (get_sa_family() == AF_INET6) {
+            fill_hdrs<tx_ipv6_hdr_template_t>(p_pkt, p_ip_hdr, p_tcp_hdr);
+            set_ipv6_len(p_ip_hdr, htons(payload_length_ipv4 - IPV6_HLEN));
+        } else {
+            fill_hdrs<tx_ipv4_hdr_template_t>(p_pkt, p_ip_hdr, p_tcp_hdr);
+            set_ipv4_len(p_ip_hdr, htons(payload_length_ipv4));
+        }
+
+        p_mem_buf_desc->tx.p_ip_h = p_ip_hdr;
+        p_mem_buf_desc->tx.p_tcp_h = static_cast<tcphdr *>(p_tcp_hdr);
+
+        wqe->wr_id = (uintptr_t)p_mem_buf_desc;
+
+    }
+
+    if (unlikely(!m_p_tx_mem_buf_desc_list)) {
+        m_p_tx_mem_buf_desc_list = p_ring->mem_buf_tx_get(
+            m_id, is_set(attr.flags, XLIO_TX_PACKET_BLOCK), PBUF_RAM, m_n_sysvar_tx_bufs_batch_tcp);
+    }
+}

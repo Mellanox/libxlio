@@ -469,7 +469,9 @@ protected:
     transport_t find_target_family(role_t role, const struct sockaddr *sock_addr_first,
                                    const struct sockaddr *sock_addr_second = nullptr);
 
+    /* FIXME  TODO replace with TCP/UDP implementations */
     send_status do_send(sq_proxy &) override { return send_status::OK; }
+    void notify_completions(size_t) override {}
 
 private:
     int fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit);

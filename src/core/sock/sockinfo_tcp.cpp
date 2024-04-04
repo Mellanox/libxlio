@@ -338,6 +338,7 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     si_tcp_logdbg("new pcb %p pcb state %d", &m_pcb, get_tcp_state(&m_pcb));
     tcp_arg(&m_pcb, this);
     tcp_ip_output(&m_pcb, sockinfo_tcp::ip_output);
+    tcp_set_enqueue_nodata_segment(&m_pcb, sockinfo_tcp::enqueue_nodata_segment);
     if (safe_mce_sys().enable_socketxtreme) {
         tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_socketxtreme);
     } else {
@@ -1352,95 +1353,11 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
  *   TCP header for segments with 0 payload.
  * - The TCP/IP headers will be inlined into WQE.
  */
-err_t sockinfo_tcp::ip_output(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn, uint16_t flags)
+err_t sockinfo_tcp::ip_output(struct pbuf *, struct tcp_seg *, void *v_p_conn, uint16_t)
 {
     sockinfo_tcp *p_si_tcp = (sockinfo_tcp *)(((struct tcp_pcb *)v_p_conn)->my_container);
-    dst_entry *p_dst = p_si_tcp->m_p_connected_dst_entry;
-    int max_count = p_si_tcp->m_pcb.tso.max_send_sge;
-    tcp_iovec lwip_iovec[max_count];
-    xlio_send_attr attr = {(xlio_wr_tx_packet_attr)flags, p_si_tcp->m_pcb.mss, 0, nullptr};
-    int count = 0;
-    void *cur_end;
-
-    int rc = p_si_tcp->m_ops->postrouting(p, seg, attr);
-    if (rc != 0) {
-        return rc;
-    }
-
-    if (flags & TCP_WRITE_ZEROCOPY) {
-        goto zc_fill_iov;
-    }
-
-    /* maximum number of sge can not exceed this value */
-    while (p && (count < max_count)) {
-        lwip_iovec[count].iovec.iov_base = p->payload;
-        lwip_iovec[count].iovec.iov_len = p->len;
-        lwip_iovec[count].p_desc = (mem_buf_desc_t *)p;
-        attr.length += p->len;
-        p = p->next;
-        count++;
-    }
-    goto send_iov;
-
-zc_fill_iov:
-    /* For zerocopy, 1st pbuf contains pointer to TCP header */
-    assert(p->type == PBUF_STACK);
-    lwip_iovec[0].tcphdr = p->payload;
-    attr.length += p->len;
-    p = p->next;
-    lwip_iovec[0].iovec.iov_base = p->payload;
-    lwip_iovec[0].iovec.iov_len = p->len;
-    lwip_iovec[0].p_desc = (mem_buf_desc_t *)p;
-    attr.length += p->len;
-    p = p->next;
-    /*
-     * Compact sequential memory buffers.
-     * Assume here that ZC buffer doesn't cross huge-pages -> ZC lkey scheme works.
-     */
-    while (p && (count < max_count)) {
-        cur_end =
-            (void *)((uint64_t)lwip_iovec[count].iovec.iov_base + lwip_iovec[count].iovec.iov_len);
-        if ((p->desc.attr == PBUF_DESC_NONE) && (cur_end == p->payload) &&
-            ((uintptr_t)((uint64_t)lwip_iovec[count].iovec.iov_base &
-                         p_si_tcp->m_user_huge_page_mask) ==
-             (uintptr_t)((uint64_t)p->payload & p_si_tcp->m_user_huge_page_mask))) {
-            lwip_iovec[count].iovec.iov_len += p->len;
-        } else {
-            count++;
-            lwip_iovec[count].iovec.iov_base = p->payload;
-            lwip_iovec[count].iovec.iov_len = p->len;
-            lwip_iovec[count].p_desc = (mem_buf_desc_t *)p;
-        }
-        attr.length += p->len;
-        p = p->next;
-    }
-    count++;
-
-send_iov:
-    /* Sanity check */
-    if (unlikely(p)) {
-        vlog_printf(VLOG_ERROR, "Number of buffers in request exceed  %d, so silently dropped.\n",
-                    max_count);
-        return ERR_OK;
-    }
-
-    ssize_t ret = likely((p_dst->is_valid()))
-        ? p_dst->fast_send((struct iovec *)lwip_iovec, count, attr)
-        : p_dst->slow_send((struct iovec *)lwip_iovec, count, attr, p_si_tcp->m_so_ratelimit);
-
-    rc = p_si_tcp->m_ops->handle_send_ret(ret, seg);
-
-    if (unlikely(safe_mce_sys().ring_migration_ratio_tx > 0)) { // Condition for cache optimization
-        if (p_dst->try_migrate_ring_tx(p_si_tcp->m_tcp_con_lock.get_lock_base())) {
-            p_si_tcp->m_p_socket_stats->counters.n_tx_migrations++;
-        }
-    }
-
-    if (unlikely(is_set(attr.flags, XLIO_TX_PACKET_REXMIT) && rc)) {
-        p_si_tcp->m_p_socket_stats->counters.n_tx_retransmits++;
-    }
-
-    return (ret >= 0 ? ERR_OK : ERR_WOULDBLOCK);
+    p_si_tcp->notify_ready_to_send();
+     return ERR_OK;
 }
 
 err_t sockinfo_tcp::ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn,
@@ -3315,6 +3232,7 @@ sockinfo_tcp *sockinfo_tcp::accept_clone()
 
     if (tcp_ctl_thread_on(m_sysvar_tcp_ctl_thread)) {
         tcp_ip_output(&si->m_pcb, sockinfo_tcp::ip_output_syn_ack);
+        tcp_set_enqueue_nodata_segment(&si->m_pcb, sockinfo_tcp::enqueue_nodata_segment);
     }
 
     return si;
@@ -3400,6 +3318,7 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     }
 
     tcp_ip_output(&(new_sock->m_pcb), sockinfo_tcp::ip_output);
+    tcp_set_enqueue_nodata_segment(&(new_sock->m_pcb), sockinfo_tcp::enqueue_nodata_segment);
     tcp_arg(&(new_sock->m_pcb), new_sock);
 
     if (safe_mce_sys().enable_socketxtreme) {
@@ -3639,6 +3558,7 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
 
     tcp_err(&new_sock->m_pcb, sockinfo_tcp::err_lwip_cb);
     tcp_sent(&new_sock->m_pcb, sockinfo_tcp::ack_recvd_lwip_cb);
+    tcp_set_enqueue_nodata_segment(&new_sock->m_pcb, sockinfo_tcp::enqueue_nodata_segment);
     new_sock->m_pcb.syn_tw_handled_cb = nullptr;
     new_sock->m_sock_wakeup_pipe.wakeup_clear();
     if (tcp_ctl_thread_on(new_sock->m_sysvar_tcp_ctl_thread)) {
@@ -6387,4 +6307,180 @@ size_t sockinfo_tcp::handle_msg_trunc(size_t total_rx, size_t payload_size, int 
     NOT_IN_USE(in_flags);
     *p_out_flags &= ~MSG_TRUNC; // don't handle msg_trunc
     return total_rx;
+}
+
+send_status sockinfo_tcp::do_send(sq_proxy &sq)
+{
+    control_msg *msg = nullptr;
+    bool tcp_segment_found = false;
+
+    printf("%s:%d\n", __func__, __LINE__);
+    lock_tcp_con();
+    while (true) {
+        /*msg = peek_control_msg();
+        if (msg) {
+            bool send_status = sq.send(msg);
+            if (send_status) {
+                pop_control_msg();
+            } else {
+                break;
+            }
+            continue;
+        }
+        */
+
+        size_t max_count = m_pcb.tso.max_send_sge;
+        tcp_iovec lwip_iovec[max_count];
+        tcp_segment segment;
+        segment.m_iovec = lwip_iovec;
+        segment.m_sz_iovec = max_count;
+        /* This should be a safe cast and a dynamic_cast is not needed */
+        segment.m_dst_entry = reinterpret_cast<dst_entry_tcp*>(m_p_connected_dst_entry);
+
+        tcp_segment_found = peek_tcp_segment(segment);
+        if (tcp_segment_found) {
+            bool send_status = sq.send(segment);
+            if (send_status) {
+                tcp_pop_unsent_segment(&m_pcb);
+                m_num_incomplete_messages.fetch_add(1, std::memory_order_relaxed);
+            } else {
+                break;
+            }
+        }
+    }
+
+    if (!msg && !tcp_segment_found) {
+        m_b_has_notified_ready_to_send = false;
+        unlock_tcp_con();
+        return send_status::NO_MORE_MESSAGES;
+    } else {
+        m_b_has_notified_ready_to_send = true;
+        unlock_tcp_con();
+        return send_status::OK;
+    }
+}
+
+void sockinfo_tcp::notify_completions(size_t num_completions)
+{
+    auto completions = static_cast<int64_t>(num_completions);
+    auto value_before = m_num_incomplete_messages.fetch_sub(completions, std::memory_order_relaxed);
+    assert(value_before >= completions);
+}
+
+void sockinfo_tcp::notify_ready_to_send()
+{
+    m_b_has_notified_ready_to_send = true;
+    unlock_tcp_con();
+    m_p_connected_dst_entry->notify_ready_to_send(this, m_b_has_notified_ready_to_send);
+    lock_tcp_con();
+}
+
+void sockinfo_tcp::enqueue_nodata_segment(struct pbuf *p, void *v_p_conn)
+{
+    sockinfo_tcp *p_si_tcp = (sockinfo_tcp *)(((struct tcp_pcb *)v_p_conn)->my_container);
+    p_si_tcp->m_enqueued_tcp_segments.push_back(p);
+}
+
+/* @return 0 means failure */
+size_t sockinfo_tcp::fill_regular_tcp_iovec(pbuf *p, tcp_iovec* tcpiovec, size_t &count)
+{
+    size_t max_count = count;
+    size_t length = 0U;
+
+    tcpiovec[0].tcphdr = p->payload;
+
+    /* maximum number of sge can not exceed this value */
+    for (count = 0; p && count < max_count; count++, p = p->next) {
+        tcpiovec[count].iovec.iov_base = p->payload;
+        tcpiovec[count].iovec.iov_len = p->len;
+        tcpiovec[count].p_desc = (mem_buf_desc_t *)p;
+        length += p->len;
+    }
+    count += (length > 0);
+    return length;
+}
+
+/* @return 0 means failure */
+size_t sockinfo_tcp::fill_zerocopy_tcp_iovec(pbuf *p, tcp_iovec* tcpiovec, size_t &count)
+{
+    size_t max_count = count;
+    size_t length = 0U;
+
+    assert(p->type == PBUF_STACK);
+    tcpiovec[0].tcphdr = p->payload;
+    length += p->len;
+    p = p->next;
+    tcpiovec[0].iovec.iov_base = p->payload;
+    tcpiovec[0].iovec.iov_len = p->len;
+    tcpiovec[0].p_desc = (mem_buf_desc_t *)p;
+    length += p->len;
+    p = p->next;
+
+    /*
+     * Compact sequential memory buffers.
+     * Assume here that ZC buffer doesn't cross huge-pages -> ZC lkey scheme works.
+     */
+    while (p && (count < max_count)) {
+        void *cur_end =
+            (void *)((uint64_t)tcpiovec[count].iovec.iov_base + tcpiovec[count].iovec.iov_len);
+        if ((p->desc.attr == PBUF_DESC_NONE) && (cur_end == p->payload) &&
+            ((uintptr_t)((uint64_t)tcpiovec[count].iovec.iov_base &
+                         m_user_huge_page_mask) ==
+             (uintptr_t)((uint64_t)p->payload & m_user_huge_page_mask))) {
+            tcpiovec[count].iovec.iov_len += p->len;
+        } else {
+            count++;
+            tcpiovec[count].iovec.iov_base = p->payload;
+            tcpiovec[count].iovec.iov_len = p->len;
+            tcpiovec[count].p_desc = (mem_buf_desc_t *)p;
+        }
+        length += p->len;
+        p = p->next;
+    }
+
+    count += (length > 0);
+    return length;
+}
+
+bool sockinfo_tcp::peek_tcp_segment(tcp_segment &segment)
+{
+    if (m_enqueued_tcp_segments.empty())
+    {
+        tcp_check_empty_ack(&m_pcb);
+    }
+
+    segment.m_attr.mss = m_pcb.mss;
+
+    if (!m_enqueued_tcp_segments.empty())
+    {
+        pbuf *p = m_enqueued_tcp_segments.front();
+        segment.m_attr.flags = xlio_wr_tx_packet_attr(0);
+        segment.m_attr.length = fill_regular_tcp_iovec(p, segment.m_iovec, segment.m_sz_iovec);
+        segment.m_attr.tis = nullptr; /* TIS unneeded */
+        return true;
+    }
+
+    uint16_t flags = 0;
+    pbuf *p = tcp_peek_unsent_segment(&m_pcb, &flags);
+    if (p) {
+        segment.m_attr.flags = xlio_wr_tx_packet_attr(flags);
+        segment.m_attr.length = (segment.m_attr.flags & TCP_WRITE_ZEROCOPY) 
+            ? fill_zerocopy_tcp_iovec(p, segment.m_iovec, segment.m_sz_iovec)
+            : fill_regular_tcp_iovec(p, segment.m_iovec, segment.m_sz_iovec);
+        segment.m_attr.tis = nullptr; /* TIS TODO temporary needed for TLS */
+        return true;
+    }
+    return false;
+}
+
+void sockinfo_tcp::pop_tcp_segment()
+{
+    if (!m_enqueued_tcp_segments.empty())
+    {
+        m_enqueued_tcp_segments.pop_front();
+        return;
+    }
+
+    tcp_pop_unsent_segment(&m_pcb);
+    return;
 }

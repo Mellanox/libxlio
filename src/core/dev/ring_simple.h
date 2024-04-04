@@ -35,6 +35,7 @@
 
 #include "ring_slave.h"
 
+#include <memory>
 #include <mutex>
 #include <unordered_map>
 
@@ -42,6 +43,7 @@
 #include "dev/hw_queue_tx.h"
 #include "dev/hw_queue_rx.h"
 #include "dev/net_device_table_mgr.h"
+#include "fairness/tx_scheduler.h"
 
 struct cq_moderation_info {
     uint32_t period;
@@ -286,6 +288,11 @@ public:
         m_hqtx->credits_return(credits);
     }
 
+    void notify_complete(uintptr_t) override;
+    size_t send(tcp_segment &, uintptr_t) override;
+    size_t send(udp_datagram &, uintptr_t) override;
+    size_t send(control_msg &, uintptr_t) override;
+
     friend class cq_mgr_rx;
     friend class cq_mgr_rx_regrq;
     friend class cq_mgr_rx_strq;
@@ -413,6 +420,17 @@ public:
             }
         }
     }
+};
+
+struct pbuf;
+struct tcp_hdr;
+class dst_entry_tcp;
+
+struct tcp_segment {
+    tcp_iovec *m_iovec;
+    dst_entry_tcp *m_dst_entry;
+    size_t m_sz_iovec;
+    xlio_send_attr m_attr;
 };
 
 #endif // RING_SIMPLE_H

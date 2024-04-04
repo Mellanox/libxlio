@@ -43,7 +43,7 @@ wqe_send_handler::~wqe_send_handler()
 void wqe_send_handler::init_inline_wqe(xlio_ibv_send_wr &wqe_to_init, struct ibv_sge *sge_list,
                                        uint32_t num_sge)
 {
-    init_not_inline_wqe(wqe_to_init, sge_list, num_sge);
+    init_wqe(wqe_to_init, sge_list, num_sge);
     enable_inline(wqe_to_init);
 }
 

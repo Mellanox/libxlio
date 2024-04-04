@@ -347,7 +347,7 @@ void hw_queue_tx::release_tx_buffers()
 }
 
 void hw_queue_tx::send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio_tis *tis,
-                           unsigned credits)
+                           unsigned credits, uintptr_t metadata)
 {
     mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)p_send_wqe->wr_id;
     /* Control tx completions:
@@ -363,7 +363,7 @@ void hw_queue_tx::send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr 
 
     hwqtx_logfunc("VERBS send, unsignaled_count: %d", m_n_unsignaled_count);
 
-    send_to_wire(p_send_wqe, attr, request_comp, tis, credits);
+    send_to_wire(p_send_wqe, attr, request_comp, tis, credits, metadata);
 
     if (request_comp || is_signal_requested_for_last_wqe()) {
         uint64_t dummy_poll_sn = 0;
@@ -821,12 +821,13 @@ inline int hw_queue_tx::fill_wqe_lso(xlio_ibv_send_wr *pswr)
     return wqebbs;
 }
 
-void hw_queue_tx::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits, xlio_ti *ti)
+void hw_queue_tx::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits, xlio_ti *ti, uintptr_t metadata)
 {
     m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index] = sq_wqe_prop {
         .buf = buf,
         .credits = credits,
         .ti = ti,
+        .metadata = metadata,
         .next = m_sq_wqe_prop_last,
     };
     m_sq_wqe_prop_last = &m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index];
@@ -837,7 +838,7 @@ void hw_queue_tx::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits, 
 
 //! Send one RAW packet
 void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
-                               bool request_comp, xlio_tis *tis, unsigned credits)
+                               bool request_comp, xlio_tis *tis, unsigned credits, uintptr_t metadata)
 {
     struct xlio_mlx5_wqe_ctrl_seg *ctrl = nullptr;
     struct mlx5_wqe_eth_seg *eseg = nullptr;
@@ -864,7 +865,7 @@ void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_a
     eseg->cs_flags = (uint8_t)(attr & (XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM) & 0xff);
 
     /* Store buffer descriptor */
-    store_current_wqe_prop(reinterpret_cast<mem_buf_desc_t *>(p_send_wqe->wr_id), credits, tis);
+    store_current_wqe_prop(reinterpret_cast<mem_buf_desc_t *>(p_send_wqe->wr_id), credits, tis, metadata);
 
     /* Complete WQE */
     int wqebbs = fill_wqe(p_send_wqe);
