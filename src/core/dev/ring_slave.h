@@ -290,7 +290,7 @@ public:
     virtual void inc_tx_retransmissions_stats(ring_user_id_t id);
     bool rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array);
     virtual int reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse) = 0;
-    virtual void inc_cq_moderation_stats(size_t sz_data) = 0;
+    virtual void inc_cq_moderation_stats() = 0;
 
     virtual bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t = false);
     virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink);
