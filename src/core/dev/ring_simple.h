@@ -47,9 +47,7 @@ struct cq_moderation_info {
     uint32_t period;
     uint32_t count;
     uint64_t packets;
-    uint64_t bytes;
     uint64_t prev_packets;
-    uint64_t prev_bytes;
     uint32_t missed_rounds;
 };
 
@@ -302,7 +300,7 @@ public:
 protected:
     void create_resources();
     virtual void init_tx_buffers(uint32_t count);
-    void inc_cq_moderation_stats(size_t sz_data) override;
+    void inc_cq_moderation_stats() override;
     inline void set_tx_num_wr(uint32_t num_wr) { m_tx_num_wr = num_wr; }
     inline uint32_t get_tx_num_wr() { return m_tx_num_wr; }
     inline uint32_t get_mtu() { return m_mtu; }

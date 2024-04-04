@@ -874,9 +874,8 @@ void ring_simple::init_tx_buffers(uint32_t count)
     m_tx_num_bufs = m_tx_pool.size();
 }
 
-void ring_simple::inc_cq_moderation_stats(size_t sz_data)
+void ring_simple::inc_cq_moderation_stats()
 {
-    m_cq_moderation_info.bytes += sz_data;
     ++m_cq_moderation_info.packets;
 }
 
@@ -1039,15 +1038,13 @@ void ring_simple::adapt_cq_moderation()
     uint32_t missed_rounds = m_cq_moderation_info.missed_rounds;
 
     // todo collect bytes and packets from all rings ??
-    int64_t interval_bytes = m_cq_moderation_info.bytes - m_cq_moderation_info.prev_bytes;
     int64_t interval_packets = m_cq_moderation_info.packets - m_cq_moderation_info.prev_packets;
 
-    m_cq_moderation_info.prev_bytes = m_cq_moderation_info.bytes;
     m_cq_moderation_info.prev_packets = m_cq_moderation_info.packets;
     m_cq_moderation_info.missed_rounds = 0;
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (interval_bytes < 0 || interval_packets < 0) {
+    if (interval_packets < 0) {
         // rare wrap-around of 64 bit, just ignore
         m_lock_ring_rx.unlock();
         return;
@@ -1062,7 +1059,6 @@ void ring_simple::adapt_cq_moderation()
         return;
     }
 
-    uint32_t avg_packet_size = interval_bytes / interval_packets;
     uint32_t avg_packet_rate =
         (interval_packets * 1000) / (safe_mce_sys().cq_aim_interval_msec * (1 + missed_rounds));
 
@@ -1073,14 +1069,7 @@ void ring_simple::adapt_cq_moderation()
         safe_mce_sys().cq_aim_max_period_usec,
         ((1000000UL / ir_rate) - (1000000UL / std::max(avg_packet_rate, ir_rate))));
 
-    if (avg_packet_size < 1024 && avg_packet_rate < 450000) {
-        modify_cq_moderation(0, 0); // latency mode
-        // todo latency for big messages is not good
-        // the rate is affected by the moderation and the moderation by the rate..
-        // so each cycle change from 0 to max, and max to 0, ..
-    } else {
-        modify_cq_moderation(period, count); // throughput mode
-    }
+    modify_cq_moderation(period, count);
 
     m_lock_ring_rx.unlock();
 }

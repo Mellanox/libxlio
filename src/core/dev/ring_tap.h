@@ -98,7 +98,7 @@ public:
         NOT_IN_USE(rate_limit);
         return 0;
     }
-    void inc_cq_moderation_stats(size_t sz_data) { NOT_IN_USE(sz_data); }
+    void inc_cq_moderation_stats() {}
     virtual uint32_t get_tx_user_lkey(void *addr, size_t length)
     {
         NOT_IN_USE(addr);

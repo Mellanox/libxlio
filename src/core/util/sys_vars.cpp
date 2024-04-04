@@ -1046,12 +1046,6 @@ void mce_sys_var::get_env_params()
         rx_bufs_batch = 8; // MCE_DEFAULT_RX_BUFS_BATCH (64), RX buffers batch size.
         progress_engine_interval_msec = 0; // MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC (10),
                                            // Disable internal thread CQ draining logic.
-        cq_moderation_period_usec =
-            1024; // MCE_DEFAULT_CQ_MODERATION_PERIOD_USEC (50), CQ moderation threshold in time.
-        cq_moderation_count =
-            1024; // MCE_DEFAULT_CQ_MODERATION_COUNT(48), CQ moderation threshold in WCEs.
-        cq_aim_interval_msec =
-            0; // MCE_DEFAULT_CQ_AIM_INTERVAL_MSEC (250), Disable adaptive CQ moderation.
         cq_poll_batch_max =
             128; // MCE_DEFAULT_CQ_POLL_BATCH (16), Maximum CQEs to poll in one batch.
         thread_mode = THREAD_MODE_SINGLE; // MCE_DEFAULT_THREAD_MODE (THREAD_MODE_MULTI), Single
@@ -1098,12 +1092,7 @@ void mce_sys_var::get_env_params()
         rx_bufs_batch = 8; // MCE_DEFAULT_RX_BUFS_BATCH (64), RX buffers batch size.
         progress_engine_interval_msec = 0; // MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC (10),
                                            // Disable internal thread CQ draining logic.
-        cq_moderation_period_usec =
-            1024; // MCE_DEFAULT_CQ_MODERATION_PERIOD_USEC (50), CQ moderation threshold in time.
-        cq_moderation_count =
-            1024; // MCE_DEFAULT_CQ_MODERATION_COUNT(48), CQ moderation threshold in WCEs.
-        cq_aim_interval_msec =
-            0; // MCE_DEFAULT_CQ_AIM_INTERVAL_MSEC (250), Disable adaptive CQ moderation.
+
         cq_poll_batch_max =
             128; // MCE_DEFAULT_CQ_POLL_BATCH (16), Maximum CQEs to poll in one batch.
         thread_mode = THREAD_MODE_SINGLE; // MCE_DEFAULT_THREAD_MODE (THREAD_MODE_MULTI), Single
