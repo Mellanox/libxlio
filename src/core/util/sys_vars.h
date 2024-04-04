@@ -434,6 +434,7 @@ public:
     uint32_t progress_engine_wce_max;
     bool cq_keep_qp_full;
     uint32_t qp_compensation_level;
+    uint32_t max_tso_sz;
     size_t user_huge_page_size;
 
     bool offloaded_sockets;
@@ -637,6 +638,7 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_PROGRESS_ENGINE_WCE_MAX   "XLIO_PROGRESS_ENGINE_WCE_MAX"
 #define SYS_VAR_CQ_KEEP_QP_FULL           "XLIO_CQ_KEEP_QP_FULL"
 #define SYS_VAR_QP_COMPENSATION_LEVEL     "XLIO_QP_COMPENSATION_LEVEL"
+#define SYS_VAR_MAX_TSO_SIZE              "XLIO_MAX_TSO_SIZE"
 #define SYS_VAR_USER_HUGE_PAGE_SIZE       "XLIO_USER_HUGE_PAGE_SIZE"
 #define SYS_VAR_OFFLOADED_SOCKETS         "XLIO_OFFLOADED_SOCKETS"
 #define SYS_VAR_TIMER_RESOLUTION_MSEC     "XLIO_TIMER_RESOLUTION_MSEC"
@@ -861,6 +863,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_MAX_CQ_POLL_BATCH               (128)
 #define MCE_DEFAULT_SOCKETXTREME            (false)
 #define MCE_DEFAULT_TSO                     (option_3::AUTO)
+#define MCE_DEFAULT_MAX_TSO_SIZE            (256 * 1024)
 #ifdef DEFINED_UTLS
 #define MCE_DEFAULT_UTLS_RX                        (false)
 #define MCE_DEFAULT_UTLS_TX                        (true)

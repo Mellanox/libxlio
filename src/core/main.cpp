@@ -805,6 +805,8 @@ void print_xlio_global_settings()
     VLOG_STR_PARAM_STRING("TSO support", option_3::to_str(safe_mce_sys().enable_tso),
                           option_3::to_str(MCE_DEFAULT_TSO), SYS_VAR_TSO,
                           option_3::to_str(safe_mce_sys().enable_tso));
+    VLOG_PARAM_STRING("TSO max size", safe_mce_sys().max_tso_sz, MCE_DEFAULT_MAX_TSO_SIZE,
+                      SYS_VAR_MAX_TSO_SIZE, option_size::to_str(safe_mce_sys().max_tso_sz));
     VLOG_STR_PARAM_STRING("LRO support", option_3::to_str(safe_mce_sys().enable_lro),
                           option_3::to_str(MCE_DEFAULT_LRO), SYS_VAR_LRO,
                           option_3::to_str(safe_mce_sys().enable_lro));

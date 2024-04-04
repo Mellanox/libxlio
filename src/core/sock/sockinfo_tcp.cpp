@@ -875,8 +875,9 @@ bool sockinfo_tcp::prepare_dst_to_send(bool is_accepted_socket /* = false */)
              * so it is a time to provide TSO information to PCB
              */
             auto *ring = m_p_connected_dst_entry->get_ring();
-            m_pcb.tso.max_buf_sz = std::min(safe_mce_sys().tx_buf_size, ring->get_max_payload_sz());
-            m_pcb.tso.max_payload_sz = ring->get_max_payload_sz();
+            uint32_t max_tso_sz = std::min(ring->get_max_payload_sz(), safe_mce_sys().max_tso_sz);
+            m_pcb.tso.max_buf_sz = std::min(safe_mce_sys().tx_buf_size, max_tso_sz);
+            m_pcb.tso.max_payload_sz = max_tso_sz;
             m_pcb.tso.max_header_sz = ring->get_max_header_sz();
             m_pcb.tso.max_send_sge = ring->get_max_send_sge();
         }
