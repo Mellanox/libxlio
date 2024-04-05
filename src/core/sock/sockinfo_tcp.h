@@ -367,6 +367,14 @@ public:
         return rx_flow_iter->first;
     }
 
+    void rx_poll_on_tx_if_needed()
+    {
+        if (m_sysvar_rx_poll_on_tx_tcp) {
+            int poll_count = 0;
+            rx_wait_helper(poll_count, false);
+        }
+    }
+
     /* Proxy to support ULP. TODO Refactor. */
     inline sockinfo_tcp_ops *get_ops() { return m_ops; }
     inline void set_ops(sockinfo_tcp_ops *ops) noexcept
