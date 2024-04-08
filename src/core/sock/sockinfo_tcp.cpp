@@ -546,10 +546,7 @@ sockinfo_tcp::~sockinfo_tcp()
         g_bind_no_port->release_port(m_bound, m_connected);
     }
 
-    destructor_helper();
-
-    // Release preallocated buffers
-    tcp_tx_preallocted_buffers_free(&m_pcb);
+    destructor_helper_tcp();
 
     if (m_tcp_seg_in_use) {
         si_tcp_logwarn("still %d tcp segs in use!", m_tcp_seg_in_use);
@@ -588,6 +585,14 @@ sockinfo_tcp::~sockinfo_tcp()
     si_tcp_logdbg("sock closed");
 
     xlio_socket_event(XLIO_SOCKET_EVENT_TERMINATED, 0);
+}
+
+void sockinfo_tcp::destructor_helper_tcp()
+{
+    // Release preallocated buffers
+    tcp_tx_preallocted_buffers_free(&m_pcb);
+
+    destructor_helper();
 }
 
 void sockinfo_tcp::clean_socket_obj()
@@ -2733,7 +2738,7 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
                     ntohs(m_connected.get_in_port()), m_pcb.is_ipv6, sockinfo_tcp::connect_lwip_cb);
     if (err != ERR_OK) {
         // todo consider setPassthrough and go to OS
-        destructor_helper();
+        destructor_helper_tcp();
         m_conn_state = TCP_CONN_FAILED;
         errno = ECONNREFUSED;
         si_tcp_logerr("bad connect, err=%d", err);
@@ -2771,7 +2776,7 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
         int keep_errno = errno;
         tcp_close(&m_pcb);
 
-        destructor_helper();
+        destructor_helper_tcp();
         unlock_tcp_con();
         si_tcp_logdbg("Blocking connect error, m_sock_state=%d", static_cast<int>(m_sock_state));
 
@@ -3060,7 +3065,7 @@ int sockinfo_tcp::listen(int backlog)
             si_tcp_logdbg("failed to add user's fd to internal epfd errno=%d (%m)", errno);
         } else {
             si_tcp_logerr("failed to add user's fd to internal epfd errno=%d (%m)", errno);
-            destructor_helper();
+            destructor_helper_tcp();
             passthrough_unlock("Fallback the connection to os");
             return 0;
         }

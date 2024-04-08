@@ -877,6 +877,7 @@ void ring_simple::init_tx_buffers(uint32_t count)
 {
     request_more_tx_buffers(PBUF_RAM, count, m_tx_lkey);
     m_tx_num_bufs = m_tx_pool.size();
+    m_p_ring_stat->simple.n_tx_num_bufs = m_tx_num_bufs;
 }
 
 void ring_simple::inc_cq_moderation_stats(size_t sz_data)
@@ -901,8 +902,10 @@ mem_buf_desc_t *ring_simple::get_tx_buffers(pbuf_type type, uint32_t n_num_mem_b
              */
             if (type == PBUF_ZEROCOPY) {
                 m_zc_num_bufs += count;
+                m_p_ring_stat->simple.n_zc_num_bufs = m_zc_num_bufs;
             } else {
                 m_tx_num_bufs += count;
+                m_p_ring_stat->simple.n_tx_num_bufs = m_tx_num_bufs;
             }
         }
 
@@ -937,12 +940,14 @@ void ring_simple::return_to_global_pool()
                  m_tx_num_bufs >= RING_TX_BUFS_COMPENSATE * 2)) {
         int return_bufs = m_tx_pool.size() / 2;
         m_tx_num_bufs -= return_bufs;
+        m_p_ring_stat->simple.n_tx_num_bufs = m_tx_num_bufs;
         g_buffer_pool_tx->put_buffers_thread_safe(&m_tx_pool, return_bufs);
     }
     if (unlikely(m_zc_pool.size() > (m_zc_num_bufs / 2) &&
                  m_zc_num_bufs >= RING_TX_BUFS_COMPENSATE * 2)) {
         int return_bufs = m_zc_pool.size() / 2;
         m_zc_num_bufs -= return_bufs;
+        m_p_ring_stat->simple.n_zc_num_bufs = m_zc_num_bufs;
         g_buffer_pool_zc->put_buffers_thread_safe(&m_zc_pool, return_bufs);
     }
 }

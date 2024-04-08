@@ -358,6 +358,12 @@ void update_delta_ring_stat(ring_stats_t *p_curr_ring_stats, ring_stats_t *p_pre
             (p_curr_ring_stats->simple.n_tx_dropped_wqes -
              p_prev_ring_stats->simple.n_tx_dropped_wqes) /
             delay;
+        p_prev_ring_stats->simple.n_tx_num_bufs =
+            (p_curr_ring_stats->simple.n_tx_num_bufs - p_prev_ring_stats->simple.n_tx_num_bufs) /
+            delay;
+        p_prev_ring_stats->simple.n_zc_num_bufs =
+            (p_curr_ring_stats->simple.n_zc_num_bufs - p_prev_ring_stats->simple.n_zc_num_bufs) /
+            delay;
 #ifdef DEFINED_UTLS
         p_prev_ring_stats->n_tx_tls_contexts =
             (p_curr_ring_stats->n_tx_tls_contexts - p_prev_ring_stats->n_tx_tls_contexts) / delay;
@@ -548,6 +554,11 @@ void print_ring_stats(ring_instance_block_t *p_ring_inst_arr)
                            p_ring_stats->simple.n_tx_dev_mem_pkt_count,
                            p_ring_stats->simple.n_tx_dev_mem_oob, post_fix);
                 }
+
+                printf(FORMAT_STATS_32bit,
+                       "TX buffers inflight:", p_ring_stats->simple.n_tx_num_bufs);
+                printf(FORMAT_STATS_32bit,
+                       "TX ZC buffers inflight:", p_ring_stats->simple.n_zc_num_bufs);
             }
         }
     }
@@ -1789,6 +1800,8 @@ void zero_ring_stats(ring_stats_t *p_ring_stats)
         p_ring_stats->simple.n_tx_dev_mem_byte_count = 0;
         p_ring_stats->simple.n_tx_dev_mem_pkt_count = 0;
         p_ring_stats->simple.n_tx_dev_mem_oob = 0;
+        p_ring_stats->simple.n_tx_num_bufs = 0;
+        p_ring_stats->simple.n_zc_num_bufs = 0;
     }
 }
 
