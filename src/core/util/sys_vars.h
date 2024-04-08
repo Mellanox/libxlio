@@ -858,7 +858,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_CQ_DRAIN_INTERVAL_DISABLED      (0)
 #define MCE_CQ_ADAPTIVE_MODERATION_DISABLED (0)
 #define MCE_MIN_CQ_POLL_BATCH               (1)
-#define MCE_MAX_CQ_POLL_BATCH               (128)
+#define MCE_MAX_CQ_POLL_BATCH               (32768)
 #define MCE_DEFAULT_SOCKETXTREME            (false)
 #define MCE_DEFAULT_TSO                     (option_3::AUTO)
 #ifdef DEFINED_UTLS
