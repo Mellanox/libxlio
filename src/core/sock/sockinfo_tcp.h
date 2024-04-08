@@ -212,6 +212,7 @@ public:
     // otherwise
     bool prepare_to_close(bool process_shutdown = false) override;
     void create_dst_entry();
+    void destructor_helper_tcp();
     bool prepare_dst_to_send(bool is_accepted_socket = false);
 
     int fcntl(int __cmd, unsigned long int __arg) override;
