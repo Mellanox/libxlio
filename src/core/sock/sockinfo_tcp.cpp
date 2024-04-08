@@ -2489,6 +2489,7 @@ void sockinfo_tcp::register_timer()
         si_tcp_logdbg("Registering TCP socket timer: socket: %p, thread-col: %p, global-col: %p",
                       this, get_tcp_timer_collection(), g_tcp_timers_collection);
 
+        set_timer_registered(true);
         get_event_mgr()->register_socket_timer_event(this);
     }
 }
@@ -6022,17 +6023,20 @@ void tcp_timers_collection::add_new_timer(sockinfo_tcp *sock)
         return;
     }
 
-    if (sock->is_timer_registered()) {
+    sock_list &bucket = m_p_intervals[m_n_next_insert_bucket];
+    bucket.emplace_back(sock);
+    auto rc =
+        m_sock_remove_map.emplace(sock, std::make_tuple(m_n_next_insert_bucket, --(bucket.end())));
+
+    // If the socket already exists in m_sock_remove_map, emplace returns false in rc.second
+    // Mainly for sanity check, we dont expect it.
+    if (unlikely(!rc.second)) {
         __log_warn("Trying to add timer twice for TCP socket %p", sock);
+        bucket.pop_back();
         return;
     }
 
-    sock_list &bucket = m_p_intervals[m_n_next_insert_bucket];
-    bucket.emplace_back(sock);
-    m_sock_remove_map.emplace(sock, std::make_tuple(m_n_next_insert_bucket, --(bucket.end())));
     m_n_next_insert_bucket = (m_n_next_insert_bucket + 1) % m_n_intervals_size;
-    sock->set_timer_registered(true);
-
     if (0 == m_n_count++) {
         m_timer_handle = get_event_mgr()->register_timer_event(safe_mce_sys().timer_resolution_msec,
                                                                this, PERIODIC_TIMER, nullptr);
