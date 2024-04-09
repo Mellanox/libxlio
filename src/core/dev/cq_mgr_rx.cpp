@@ -380,8 +380,7 @@ bool cq_mgr_rx::compensate_qp_poll_success(mem_buf_desc_t *buff_cur)
         m_hqrx_ptr->post_recv_buffers(&m_rx_pool, buffers);
         m_debt -= buffers;
         m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
-    } else if (m_b_sysvar_cq_keep_qp_full ||
-               m_debt + MCE_MAX_CQ_POLL_BATCH > (int)m_hqrx_ptr->m_rx_num_wr) {
+    } else if (m_b_sysvar_cq_keep_qp_full || m_debt >= (int)m_hqrx_ptr->m_rx_num_wr) {
         m_p_cq_stat->n_rx_pkt_drop++;
         m_hqrx_ptr->post_recv_buffer(buff_cur);
         --m_debt;
