@@ -1,3 +1,11 @@
+Version 3.30.5-1:
+Date + Time 2024-0-09
+=============================================================
+Fixed:
+        - RM #3795997 OCI degradation IO operations with 8k conn, block size of 256k
+        - RM #3855390 http CPS test with IPv6 is reporting XLIO warning
+        - RM #3788164 Nginx Degradation 10MB with a low number of workers.
+
 Version 3.30.4-1:
 Date + Time 2024-04-04
 =============================================================
