@@ -32,6 +32,7 @@
 #ifndef _TX_SCHEDULER_H_
 #define _TX_SCHEDULER_H_
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 
@@ -52,14 +53,15 @@ public:
     virtual void schedule_tx() = 0;
     virtual void notify_completion(uintptr_t, size_t = 1) = 0;
 
-    template <class Msg> bool send(Msg &msg, uintptr_t metadata)
+    template <class Msg> size_t send(Msg &msg, uintptr_t metadata)
     {
         if (m_num_requests < m_max_requests) {
             size_t used_requests = m_ring.send(msg, metadata);
+            printf("%s:%d [%s] tx_scheduler %p num_req %zu max_requests %zu used %zu\n", __FILE__, __LINE__, __func__, this, m_num_requests, m_max_requests, used_requests);
             m_num_requests += used_requests;
-            return bool(used_requests);
+            return used_requests;
         }
-        return false;
+        return 0;
     }
 
 protected:
@@ -76,8 +78,12 @@ public:
     template <class Msg> bool send(Msg &msg)
     {
         if (m_num_messages) {
-            m_num_messages--;
-            return m_scheduler.send(msg, m_metadata);
+            size_t used_requests = m_scheduler.send(msg, m_metadata);
+            if (used_requests == 0U) {
+                return false;
+            }
+            m_num_messages -= std::min(used_requests, m_num_messages);
+            return true;
         }
         return false;
     }

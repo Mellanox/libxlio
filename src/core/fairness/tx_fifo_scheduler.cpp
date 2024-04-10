@@ -29,6 +29,7 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+#include <algorithm>
 #include "tx_fifo_scheduler.h"
 
 tx_fifo_scheduler::tx_fifo_scheduler(ring_tx_scheduler_interface &r, size_t max_requests)
@@ -56,5 +57,5 @@ void tx_fifo_scheduler::notify_completion(uintptr_t metadata, size_t num_complet
     if (socket) {
         socket->notify_completions(num_completions);
     }
-    m_num_requests -= num_completions;
+    m_num_requests -= std::min(m_num_requests, num_completions);
 }

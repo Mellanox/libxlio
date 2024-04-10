@@ -458,6 +458,7 @@ void hw_queue_tx::init_queue()
 
     // We use the min between CQ size and the QP size (that might be increases by ibv creation).
     m_sq_free_credits = std::min(m_tx_num_wr, old_wr_val);
+    printf("%s:%d [%s] hwq %p m_tx_num_wr %u old_wr_val %u\n", __FILE__, __LINE__, __func__, this, m_tx_num_wr, old_wr_val);
 
     /* Maximum BF inlining consists of:
      * - CTRL:
@@ -869,7 +870,8 @@ void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_a
 
     /* Complete WQE */
     int wqebbs = fill_wqe(p_send_wqe);
-    assert(wqebbs > 0 && (unsigned)wqebbs <= credits);
+    assert(wqebbs > 0);
+    assert((unsigned)wqebbs <= credits);
     NOT_IN_USE(wqebbs);
 
     update_next_wqe_hot();

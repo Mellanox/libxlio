@@ -124,6 +124,10 @@ public:
     inline void set_tap_data_available() { m_tap_data_available = true; }
     inline void set_vf_ring(ring_slave *p_ring) { m_vf_ring = p_ring; }
     inline void inc_vf_plugouts() { m_p_ring_stat->tap.n_vf_plugouts++; }
+    void notify_complete(uintptr_t) override {};
+    size_t send(tcp_segment &, uintptr_t) override { return true; }
+    size_t send(udp_datagram &, uintptr_t) override { return true; }
+    size_t send(control_msg &, uintptr_t) override { return true; }
 
 private:
     inline void return_to_global_pool();

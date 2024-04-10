@@ -34,89 +34,11 @@
 #include <gmock/gmock.h>
 #include "tx_scheduler.h"
 #include "tx_fifo_scheduler.h"
+#include "tx_round_robin_scheduler.h"
 
 using namespace ::testing;
 
-#include <map>
-
-/* ----------------------------------------------------- */
-#include <deque>
-
-class tx_round_robin_scheduler final : public tx_scheduler {
-public:
-    tx_round_robin_scheduler(ring_tx_scheduler_interface &r, size_t max_requests)
-        : tx_scheduler(r, max_requests)
-    {
-    }
-
-    ~tx_round_robin_scheduler() override {}
-
-    /* is_first should be true in two cases:
-     *     1. The first time the socket is ready to send.
-     *     2. The first time, since the socket returned NO_MORE_MESSAGES from do_send.
-     */
-    void schedule_tx(sockinfo_tx_scheduler_interface *sock, bool is_first) override
-    {
-        if (is_first) {
-            m_queue.push_back(sock);
-        }
-
-        /* Schedule on sufficiently empty send queue - scheduling moderation */
-        if (!m_num_requests || double(m_max_requests) / m_num_requests >= 2.0f) {
-            schedule_tx();
-        }
-    }
-
-    void schedule_tx() override
-    {
-        size_t num_messages = fair_num_requests();
-        size_t num_sockets = m_queue.size();
-
-        while (num_sockets && m_max_requests - m_num_requests >= num_messages) {
-            sockinfo_tx_scheduler_interface *sock = m_queue.front();
-            m_queue.pop_front();
-            num_sockets--;
-
-            send_status status = single_socket_send(sock, num_messages);
-            if (status == send_status::OK) {
-                m_queue.push_back(sock);
-            }
-        }
-    }
-
-    void notify_completion(uintptr_t metadata, size_t num_completions = 1) override
-    {
-        auto socket = reinterpret_cast<sockinfo_tx_scheduler_interface *>(metadata);
-        socket->notify_completions(num_completions);
-        m_num_requests -= num_completions;
-    }
-
-private:
-    send_status single_socket_send(sockinfo_tx_scheduler_interface *sock, size_t requests)
-    {
-        sq_proxy proxy {*this, requests, reinterpret_cast<uintptr_t>(sock)};
-        return sock->do_send(proxy);
-    }
-
-    /*
-     * In the round robin implementation, we allocated the same number of requests per sender.
-     * If the available requests exceed the number of senders, each sender may receive more than one
-     * opportunity to send.
-     * If the number of senders exceed the available requests, each sender should receive at least
-     * one opportunity to send.
-     */
-    size_t fair_num_requests()
-    {
-        /* If the queue is empty, make the denominator 1 to eliminate the divide-by-zero error */
-        return std::max(1UL, (m_max_requests - m_num_requests) / (std::max(1UL, m_queue.size())));
-    }
-
-private:
-    std::deque<sockinfo_tx_scheduler_interface *> m_queue;
-};
-
-struct tcp_segment {
-};
+struct tcp_segment { };
 
 class greedy_test_socket : public sockinfo_tx_scheduler_interface {
 public:
@@ -128,7 +50,7 @@ public:
         return send_status::OK;
     }
 
-    void notify_completions(size_t) {}
+    void notify_completions(size_t) { }
 };
 
 class limited_test_socket : public sockinfo_tx_scheduler_interface {
@@ -146,9 +68,7 @@ public:
         return send_status::OK;
     }
 
-    void notify_completions(size_t completions) {
-        m_inflight_requests += completions;
-    }
+    void notify_completions(size_t completions) { m_inflight_requests += completions; }
 
     size_t m_inflight_requests;
 };
@@ -161,23 +81,56 @@ public:
     MOCK_METHOD(void, notify_complete, (uintptr_t), (override));
 
     // Mock the send methods
-    MOCK_METHOD(bool, send, (tcp_segment &, uintptr_t), (override));
-    MOCK_METHOD(bool, send, (udp_datagram &, uintptr_t), (override));
-    MOCK_METHOD(bool, send, (control_msg &, uintptr_t), (override));
+    MOCK_METHOD(size_t, send, (tcp_segment &, uintptr_t), (override));
+    MOCK_METHOD(size_t, send, (udp_datagram &, uintptr_t), (override));
+    MOCK_METHOD(size_t, send, (control_msg &, uintptr_t), (override));
 };
 
-TEST(tx_fifo_scheduler, fifo_with_greedy_socket_sends_max_times)
+TEST(tx_fifo_scheduler, greedy_socket_sends_max_times_when_consuming_one_credit)
 {
     ring_mock ring {};
     greedy_test_socket socket {};
     size_t max_iflight_requests = 10;
     tx_fifo_scheduler fifo(ring, max_iflight_requests);
 
-    EXPECT_CALL(ring, send(An<tcp_segment &>(), _)).Times(max_iflight_requests);
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), _))
+        .Times(max_iflight_requests)
+        .WillRepeatedly(Return(1U));
     fifo.schedule_tx(&socket, true);
 }
 
-TEST(tx_fifo_scheduler, fifo_with_limited_socket_sends_up_to_limit)
+TEST(tx_fifo_scheduler, greedy_socket_sends_half_of_max_times_when_consuming_two_credits)
+{
+    ring_mock ring {};
+    greedy_test_socket socket {};
+    size_t max_iflight_requests = 10;
+    tx_fifo_scheduler fifo(ring, max_iflight_requests);
+
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), _))
+        .Times(max_iflight_requests / 2)
+        .WillRepeatedly(Return(2U));
+    fifo.schedule_tx(&socket, true);
+}
+
+TEST(tx_fifo_scheduler, greedy_socket_limits_the_socket_until_credits_are_returned)
+{
+    ring_mock ring {};
+    greedy_test_socket socket {};
+    size_t max_iflight_requests = 10;
+    tx_fifo_scheduler fifo(ring, max_iflight_requests);
+
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), _))
+        .Times(2)
+        .WillOnce(Return(9U))
+        .WillOnce(Return(0U));
+    fifo.schedule_tx(&socket, true);
+
+    fifo.notify_completion(reinterpret_cast<uintptr_t>(&socket), 6);
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), _)).Times(1).WillOnce(Return(7U));
+    fifo.schedule_tx(&socket, true);
+}
+
+TEST(tx_fifo_scheduler, limited_socket_sends_up_to_limit)
 {
     ring_mock ring {};
     size_t socket_inflight_limit = 7;
@@ -185,25 +138,125 @@ TEST(tx_fifo_scheduler, fifo_with_limited_socket_sends_up_to_limit)
     size_t max_iflight_requests = 10;
     tx_fifo_scheduler fifo(ring, max_iflight_requests);
 
-    EXPECT_CALL(ring, send(An<tcp_segment &>(), _)).Times(socket_inflight_limit);
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), _))
+        .Times(socket_inflight_limit)
+        .WillRepeatedly(Return(1U));
     fifo.schedule_tx(&socket, true);
 }
 
-TEST(tx_fifo_scheduler, fifo_schedule_tx_no_args_notifies_socket_completions_without_sending)
+TEST(tx_fifo_scheduler, limited_socket_limits_the_socket_until_credits_are_returned)
 {
     ring_mock ring {};
-    greedy_test_socket socket {};
+    size_t socket_inflight_limit = 2;
+    limited_test_socket socket {socket_inflight_limit};
     size_t max_iflight_requests = 10;
     tx_fifo_scheduler fifo(ring, max_iflight_requests);
 
-    EXPECT_CALL(ring, send(An<tcp_segment &>(), _)).Times(max_iflight_requests);
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), _))
+        .Times(2)
+        .WillOnce(Return(3U))
+        .WillOnce(Return(4U));
     fifo.schedule_tx(&socket, true);
 
-    fifo.notify_completion(reinterpret_cast<uintptr_t>(&socket), 5);
-    EXPECT_CALL(ring, send(An<tcp_segment &>(), _)).Times(0);
-    fifo.schedule_tx();
+    fifo.notify_completion(reinterpret_cast<uintptr_t>(&socket), 1);
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), _))
+        .Times(1)
+        .WillOnce(Return(1U));
+    fifo.schedule_tx(&socket, false);
+}
+
+TEST(tx_round_robin_scheduler, limited_socket_sends_up_to_limit)
+{
+    ring_mock ring {};
+    size_t socket_inflight_limit = 7;
+    limited_test_socket socket {socket_inflight_limit};
+    size_t max_iflight_requests = 10;
+    tx_round_robin_scheduler rr(ring, max_iflight_requests);
+
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), _))
+        .Times(socket_inflight_limit)
+        .WillRepeatedly(Return(1U));
+    rr.schedule_tx(&socket, true);
+}
+
+TEST(tx_round_robin_scheduler, limited_sockets_get_all_the_credits_required)
+{
+    ring_mock ring {};
+    size_t socket_inflight_limit = 2;
+    limited_test_socket socket1 {socket_inflight_limit}, socket2 {socket_inflight_limit};
+    size_t max_iflight_requests = 10;
+    tx_round_robin_scheduler rr(ring, max_iflight_requests);
+
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), _))
+        .Times(socket_inflight_limit * 2/* For both of the sockets */)
+        .WillRepeatedly(Return(1U));
+    rr.schedule_tx(&socket1, true);
+    rr.schedule_tx(&socket2, true);
+}
+
+TEST(tx_round_robin_scheduler, num_limited_sockets_equals_available_credits_provide_one_tx_oppurtunity_per_socket)
+{
+    ring_mock ring {};
+    size_t socket_inflight_limit = 10;
+    limited_test_socket socket1 {socket_inflight_limit}, socket2 {socket_inflight_limit};
+    size_t max_iflight_requests = 2;
+    tx_round_robin_scheduler rr(ring, max_iflight_requests);
+
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), _))
+        .Times(max_iflight_requests)
+        .WillRepeatedly(Return(1U));
+    rr.schedule_tx(&socket1, true);
+
+    rr.notify_completion(reinterpret_cast<uintptr_t>(&socket1), max_iflight_requests);
+
+    /* Setup complete all "requests" are complete" */
+
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), reinterpret_cast<uintptr_t>(&socket2)))
+        .Times(1)
+        .WillRepeatedly(Return(1U));
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), reinterpret_cast<uintptr_t>(&socket1)))
+        .Times(1)
+        .WillRepeatedly(Return(1U));
+    rr.schedule_tx(&socket2, true);
 }
 /*
+TEST(tx_round_robin_scheduler, num_limited_sockets_greater_than_available_credits_provide_one_tx_oppurtunity_per_socket)
+{
+    ring_mock ring {};
+    size_t socket_inflight_limit = 10;
+    limited_test_socket socket1 {socket_inflight_limit}, socket2 {socket_inflight_limit}, socket3 {socket_inflight_limit};
+    size_t max_iflight_requests = 2;
+    tx_round_robin_scheduler rr(ring, max_iflight_requests);
+
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), _))
+        .Times(max_iflight_requests)
+        .WillRepeatedly(Return(1U));
+    rr.schedule_tx(&socket1, true);
+
+    rr.notify_completion(reinterpret_cast<uintptr_t>(&socket1), max_iflight_requests);
+
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), reinterpret_cast<uintptr_t>(&socket1)))
+        .Times(1)
+        .WillRepeatedly(Return(1U));
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), reinterpret_cast<uintptr_t>(&socket2)))
+        .Times(1)
+        .WillRepeatedly(Return(1U));
+    rr.schedule_tx(&socket2, true);
+
+    rr.notify_completion(reinterpret_cast<uintptr_t>(&socket1), 1);
+    rr.notify_completion(reinterpret_cast<uintptr_t>(&socket2), 1);
+
+    // Setup complete all "requests" are complete"
+
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), reinterpret_cast<uintptr_t>(&socket3)))
+        .Times(1)
+        .WillRepeatedly(Return(1U));
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), reinterpret_cast<uintptr_t>(&socket2)))
+        .Times(1)
+        .WillRepeatedly(Return(1U));
+    rr.schedule_tx(&socket3, true);
+}
+
 TEST(tx_fifo_scheduler, fifo_notifies_no_sockets_when_completions_empty_in_schedule_tx)
 {
     ring_mock ring {};

@@ -54,7 +54,7 @@ public:
 
     void notify_ready_to_send(sockinfo_tx_scheduler_interface *, bool);
     void fill_wqe(tcp_iovec *p_tcp_iov, size_t sz_iov, xlio_send_attr &attr, ring *p_ring,
-                  xlio_ibv_send_wr *wqe);
+                  xlio_ibv_send_wr &wqe);
 
 protected:
     transport_t get_transport(const sock_addr &to);

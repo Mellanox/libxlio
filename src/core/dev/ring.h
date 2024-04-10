@@ -273,15 +273,8 @@ public:
 
     void schedule_tx(sockinfo_tx_scheduler_interface *s, bool is_first) {
         assert(m_tx_scheduler); /* TX scheduler must be set not null by a derived class */
-        if (is_first) {
-            m_tx_scheduler->schedule_tx(s, is_first);
-        }
+        m_tx_scheduler->schedule_tx(s, is_first);
     }
-
-    void notify_complete(uintptr_t) override {};
-    size_t send(tcp_segment &, uintptr_t) override { return true; }
-    size_t send(udp_datagram &, uintptr_t) override { return true; }
-    size_t send(control_msg &, uintptr_t) override { return true; }
 
 protected:
     inline void set_parent(ring *parent) { m_parent = (parent ? parent : this); }

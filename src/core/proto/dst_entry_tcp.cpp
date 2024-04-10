@@ -466,7 +466,7 @@ void dst_entry_tcp::notify_ready_to_send(sockinfo_tx_scheduler_interface *socket
     m_p_ring->schedule_tx(socket, is_first);
 }
 
-void dst_entry_tcp::fill_wqe(tcp_iovec *p_tcp_iov, size_t sz_iov, xlio_send_attr &attr, ring *p_ring, xlio_ibv_send_wr *wqe)
+void dst_entry_tcp::fill_wqe(tcp_iovec *p_tcp_iov, size_t sz_iov, xlio_send_attr &attr, ring *p_ring, xlio_ibv_send_wr &wqe)
 {
     void *p_pkt;
     void *p_ip_hdr;
@@ -498,6 +498,7 @@ void dst_entry_tcp::fill_wqe(tcp_iovec *p_tcp_iov, size_t sz_iov, xlio_send_attr
     attr.flags =
         (xlio_wr_tx_packet_attr)(attr.flags | XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM);
 
+    auto sge = wqe.sg_list;
     /* Supported scenarios:
      * 1. Standard:
      *    Use lwip memory buffer (zero copy) in case iov consists of single buffer with single TCP
@@ -546,17 +547,17 @@ void dst_entry_tcp::fill_wqe(tcp_iovec *p_tcp_iov, size_t sz_iov, xlio_send_attr
         tcp_hdr_len = (static_cast<tcphdr *>(p_tcp_hdr))->doff * 4;
 
         if (!is_zerocopy && (total_packet_len < m_max_inline) && (1 == sz_iov)) {
+            wqe_send_handler().enable_inline(wqe);
             p_tcp_iov[0].iovec.iov_base = (uint8_t *)p_pkt + hdr_alignment_diff;
             p_tcp_iov[0].iovec.iov_len = total_packet_len;
         } else if (is_set(attr.flags, (xlio_wr_tx_packet_attr)(XLIO_TX_PACKET_TSO))) {
             /* update send work request. do not expect noninlined scenario */
-            wqe_send_handler().init_not_inline_wqe(*wqe, m_sge, sz_iov);
             if (attr.mss < (attr.length - tcp_hdr_len)) {
-                wqe_send_handler().enable_tso(*wqe, (void *)((uint8_t *)p_pkt + hdr_alignment_diff),
+                wqe_send_handler().enable_tso(wqe, (void *)((uint8_t *)p_pkt + hdr_alignment_diff),
                                       m_header->m_total_hdr_len + tcp_hdr_len,
                                       attr.mss - (tcp_hdr_len - TCP_HLEN));
             } else {
-               wqe_send_handler().enable_tso(*wqe, (void *)((uint8_t *)p_pkt + hdr_alignment_diff),
+               wqe_send_handler().enable_tso(wqe, (void *)((uint8_t *)p_pkt + hdr_alignment_diff),
                                       m_header->m_total_hdr_len + tcp_hdr_len, 0);
             }
             if (!is_zerocopy) {
@@ -601,7 +602,7 @@ void dst_entry_tcp::fill_wqe(tcp_iovec *p_tcp_iov, size_t sz_iov, xlio_send_attr
         p_tcp_iov[0].p_desc->tx.p_tcp_h = static_cast<tcphdr *>(p_tcp_hdr);
 
         /* set wr_id as a pointer to memory descriptor */
-        wqe->wr_id = (uintptr_t)p_tcp_iov[0].p_desc;
+        wqe.wr_id = (uintptr_t)p_tcp_iov[0].p_desc;
 
         /* Update scatter gather element list
          * ref counter is incremented (above) for the first memory descriptor only because it is
@@ -609,23 +610,23 @@ void dst_entry_tcp::fill_wqe(tcp_iovec *p_tcp_iov, size_t sz_iov, xlio_send_attr
          */
         ib_ctx_handler *ib_ctx = p_ring->get_ctx(m_id);
         for (size_t i = 0; i < sz_iov; ++i) {
-            m_sge[i].addr = (uintptr_t)p_tcp_iov[i].iovec.iov_base;
-            m_sge[i].length = p_tcp_iov[i].iovec.iov_len;
+            sge[i].addr = (uintptr_t)p_tcp_iov[i].iovec.iov_base;
+            sge[i].length = p_tcp_iov[i].iovec.iov_len;
             if (is_zerocopy) {
                 auto *p_desc = p_tcp_iov[i].p_desc;
                 auto &pbuf_descriptor = p_desc->lwip_pbuf.desc;
                 if (PBUF_DESC_EXPRESS == pbuf_descriptor.attr) {
-                    m_sge[i].lkey = pbuf_descriptor.mkey;
+                    sge[i].lkey = pbuf_descriptor.mkey;
                 } else if (PBUF_DESC_MKEY == pbuf_descriptor.attr) {
                     /* PBUF_DESC_MKEY - value is provided by user */
-                    m_sge[i].lkey = pbuf_descriptor.mkey;
+                    sge[i].lkey = pbuf_descriptor.mkey;
                 } else if (PBUF_DESC_MDESC == pbuf_descriptor.attr ||
                            PBUF_DESC_NVME_TX == pbuf_descriptor.attr) {
                     mem_desc *mdesc = (mem_desc *)pbuf_descriptor.mdesc;
-                    m_sge[i].lkey =
-                        mdesc->get_lkey(p_desc, ib_ctx, (void *)m_sge[i].addr, m_sge[i].length);
-                    if (m_sge[i].lkey == LKEY_TX_DEFAULT) {
-                        m_sge[i].lkey = p_ring->get_tx_lkey(m_id);
+                    sge[i].lkey =
+                        mdesc->get_lkey(p_desc, ib_ctx, (void *)sge[i].addr, sge[i].length);
+                    if (sge[i].lkey == LKEY_TX_DEFAULT) {
+                        sge[i].lkey = p_ring->get_tx_lkey(m_id);
                     }
                 } else {
                     /* Do not check desc.attr for specific type because
@@ -633,14 +634,16 @@ void dst_entry_tcp::fill_wqe(tcp_iovec *p_tcp_iov, size_t sz_iov, xlio_send_attr
                      * PBUF_DESC_NONE - map should be initialized to NULL in
                      * dst_entry_tcp::get_buffer() object
                      */
-                    masked_addr = (void *)((uint64_t)m_sge[i].addr & m_user_huge_page_mask);
-                    m_sge[i].lkey =
+                    masked_addr = (void *)((uint64_t)sge[i].addr & m_user_huge_page_mask);
+                    sge[i].lkey =
                         p_ring->get_tx_user_lkey(masked_addr, m_n_sysvar_user_huge_page_size);
                 }
             } else {
-                m_sge[i].lkey = (i == 0 ? p_ring->get_tx_lkey(m_id) : m_sge[0].lkey);
+                sge[i].lkey = (i == 0 ? p_ring->get_tx_lkey(m_id) : sge[0].lkey);
             }
         }
+
+        wqe.num_sge = sz_iov;
 
     } else { // We don'nt support inline in this case, since we believe that this a very rare case
         mem_buf_desc_t *p_mem_buf_desc;
@@ -660,13 +663,13 @@ void dst_entry_tcp::fill_wqe(tcp_iovec *p_tcp_iov, size_t sz_iov, xlio_send_attr
             total_packet_len += p_tcp_iov[i].iovec.iov_len;
         }
 
-        m_sge[0].addr = (uintptr_t)(p_mem_buf_desc->p_buffer + hdr_alignment_diff);
-        m_sge[0].length = total_packet_len - hdr_alignment_diff;
-        m_sge[0].lkey = p_ring->get_tx_lkey(m_id);
+        sge[0].addr = (uintptr_t)(p_mem_buf_desc->p_buffer + hdr_alignment_diff);
+        sge[0].length = total_packet_len - hdr_alignment_diff;
+        sge[0].lkey = p_ring->get_tx_lkey(m_id);
 
         p_pkt = static_cast<void *>(p_mem_buf_desc->p_buffer);
 
-        uint16_t payload_length_ipv4 = m_sge[0].length - m_header->m_transport_header_len;
+        uint16_t payload_length_ipv4 = sge[0].length - m_header->m_transport_header_len;
         if (get_sa_family() == AF_INET6) {
             fill_hdrs<tx_ipv6_hdr_template_t>(p_pkt, p_ip_hdr, p_tcp_hdr);
             set_ipv6_len(p_ip_hdr, htons(payload_length_ipv4 - IPV6_HLEN));
@@ -678,7 +681,9 @@ void dst_entry_tcp::fill_wqe(tcp_iovec *p_tcp_iov, size_t sz_iov, xlio_send_attr
         p_mem_buf_desc->tx.p_ip_h = p_ip_hdr;
         p_mem_buf_desc->tx.p_tcp_h = static_cast<tcphdr *>(p_tcp_hdr);
 
-        wqe->wr_id = (uintptr_t)p_mem_buf_desc;
+        wqe.wr_id = (uintptr_t)p_mem_buf_desc;
+
+        wqe.num_sge = 1;
 
     }
 

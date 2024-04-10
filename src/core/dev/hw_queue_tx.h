@@ -151,6 +151,7 @@ public:
     void reset_inflight_zc_buffers_ctx(void *ctx);
 
     void credits_return(unsigned credits) { m_sq_free_credits += credits; }
+    unsigned credits_check() { return m_sq_free_credits; }
 
     bool credits_get(unsigned credits)
     {

@@ -32,7 +32,6 @@
 
 #include <functional>
 #include <numeric>
-#include <stdio.h>
 #include <sys/time.h>
 #include <netinet/tcp.h>
 #include "util/if.h"
@@ -297,6 +296,7 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     , m_sysvar_rx_poll_on_tx_tcp(safe_mce_sys().rx_poll_on_tx_tcp)
     , m_user_huge_page_mask(~((uint64_t)safe_mce_sys().user_huge_page_size - 1))
     , m_required_send_block(1U)
+    , m_num_incomplete_messages(0)
 {
     si_tcp_logfuncall("");
 
@@ -531,6 +531,10 @@ sockinfo_tcp::~sockinfo_tcp()
         prepare_to_close(true);
     }
 
+    auto incomplete_iops = m_num_incomplete_messages.load(std::memory_order_relaxed);
+    if (incomplete_iops != 0) {
+        *reinterpret_cast<int *>(0) = 42;
+    }
     m_sock_wakeup_pipe.do_wakeup();
 
     if (m_ops_tcp != m_ops) {
@@ -601,6 +605,10 @@ void sockinfo_tcp::clean_socket_obj()
     lock_tcp_con();
 
     if (is_cleaned()) {
+        return;
+    }
+    auto incomplete_iops = m_num_incomplete_messages.load(std::memory_order_relaxed);
+    if (incomplete_iops != 0) {
         return;
     }
     m_is_cleaned = true;
@@ -6314,14 +6322,15 @@ send_status sockinfo_tcp::do_send(sq_proxy &sq)
     control_msg *msg = nullptr;
     bool tcp_segment_found = false;
 
-    printf("%s:%d\n", __func__, __LINE__);
     lock_tcp_con();
+
     while (true) {
         /*msg = peek_control_msg();
         if (msg) {
             bool send_status = sq.send(msg);
             if (send_status) {
                 pop_control_msg();
+                num_sent_msgs++;
             } else {
                 break;
             }
@@ -6339,40 +6348,36 @@ send_status sockinfo_tcp::do_send(sq_proxy &sq)
 
         tcp_segment_found = peek_tcp_segment(segment);
         if (tcp_segment_found) {
+            m_num_incomplete_messages.fetch_add(1, std::memory_order_relaxed);
             bool send_status = sq.send(segment);
             if (send_status) {
-                tcp_pop_unsent_segment(&m_pcb);
-                m_num_incomplete_messages.fetch_add(1, std::memory_order_relaxed);
-            } else {
-                break;
+                pop_tcp_segment();
+                continue;
             }
+            /* In case the send was unsuccessful */
+            m_num_incomplete_messages.fetch_sub(1, std::memory_order_relaxed);
         }
+        break;
     }
 
-    if (!msg && !tcp_segment_found) {
-        m_b_has_notified_ready_to_send = false;
-        unlock_tcp_con();
-        return send_status::NO_MORE_MESSAGES;
-    } else {
-        m_b_has_notified_ready_to_send = true;
-        unlock_tcp_con();
-        return send_status::OK;
-    }
+    m_b_has_notified_ready_to_send = (msg || tcp_segment_found);
+    unlock_tcp_con();
+    return (m_b_has_notified_ready_to_send) ? send_status::OK : send_status::NO_MORE_MESSAGES;
 }
 
 void sockinfo_tcp::notify_completions(size_t num_completions)
 {
     auto completions = static_cast<int64_t>(num_completions);
-    auto value_before = m_num_incomplete_messages.fetch_sub(completions, std::memory_order_relaxed);
-    assert(value_before >= completions);
+    m_num_incomplete_messages.fetch_sub(completions, std::memory_order_relaxed);
 }
 
 void sockinfo_tcp::notify_ready_to_send()
 {
-    m_b_has_notified_ready_to_send = true;
+    bool is_first = !m_b_has_notified_ready_to_send;
     unlock_tcp_con();
-    m_p_connected_dst_entry->notify_ready_to_send(this, m_b_has_notified_ready_to_send);
+    m_p_connected_dst_entry->notify_ready_to_send(this, is_first);
     lock_tcp_con();
+    m_b_has_notified_ready_to_send = true;
 }
 
 void sockinfo_tcp::enqueue_nodata_segment(struct pbuf *p, void *v_p_conn)
@@ -6396,7 +6401,6 @@ size_t sockinfo_tcp::fill_regular_tcp_iovec(pbuf *p, tcp_iovec* tcpiovec, size_t
         tcpiovec[count].p_desc = (mem_buf_desc_t *)p;
         length += p->len;
     }
-    count += (length > 0);
     return length;
 }
 
@@ -6438,7 +6442,6 @@ size_t sockinfo_tcp::fill_zerocopy_tcp_iovec(pbuf *p, tcp_iovec* tcpiovec, size_
         p = p->next;
     }
 
-    count += (length > 0);
     return length;
 }
 
@@ -6458,6 +6461,10 @@ bool sockinfo_tcp::peek_tcp_segment(tcp_segment &segment)
         segment.m_attr.length = fill_regular_tcp_iovec(p, segment.m_iovec, segment.m_sz_iovec);
         segment.m_attr.tis = nullptr; /* TIS unneeded */
         return true;
+    }
+
+    if (m_state != SOCKINFO_OPENED) {
+        return false;
     }
 
     uint16_t flags = 0;

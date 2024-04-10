@@ -215,6 +215,7 @@ int cq_mgr_tx::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
         }
 
         handle_sq_wqe_prop(index);
+        m_p_ring->notify_complete(0);
         ret = 1;
     }
     update_global_sn_tx(*p_cq_poll_sn, num_polled_cqes);
@@ -263,6 +264,10 @@ void cq_mgr_tx::handle_sq_wqe_prop(unsigned index)
         if (p->buf) {
             m_p_ring->mem_buf_desc_return_single_locked(p->buf);
         }
+        if (p->metadata) {
+            m_p_ring->notify_complete(p->metadata);
+        }
+
         if (p->ti) {
             xlio_ti *ti = p->ti;
             if (ti->m_callback) {

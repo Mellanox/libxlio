@@ -116,6 +116,10 @@ public:
         m_xmit_rings[id]->reset_inflight_zc_buffers_ctx(id, ctx);
     }
 
+    void notify_complete(uintptr_t) override {};
+    size_t send(tcp_segment &, uintptr_t) override { return true; }
+    size_t send(udp_datagram &, uintptr_t) override { return true; }
+    size_t send(control_msg &, uintptr_t) override { return true; }
 protected:
     void update_cap(ring_slave *slave = nullptr);
     void update_rx_channel_fds();

@@ -29,25 +29,47 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#ifndef _TX_FIFO_SCHEDULER_H_
-#define _TX_FIFO_SCHEDULER_H_
+#ifndef _TX_ROUND_ROBIN_SCHEDULER_H_
+#define _TX_ROUND_ROBIN_SCHEDULER_H_
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <unordered_map>
 
 #include "tx_scheduler.h"
 #include "ring_tx_scheduler_interface.h"
 #include "sockinfo_tx_scheduler_interface.h"
 
-class tx_fifo_scheduler final : public tx_scheduler {
+class tx_round_robin_scheduler final : public tx_scheduler {
 public:
-    tx_fifo_scheduler(ring_tx_scheduler_interface &r, size_t max_requests);
-    ~tx_fifo_scheduler() override;
+    tx_round_robin_scheduler(ring_tx_scheduler_interface &r, size_t max_requests);
+    ~tx_round_robin_scheduler() override = default;
 
-    void schedule_tx(sockinfo_tx_scheduler_interface *sock, bool) override;
-    void schedule_tx() override;
+    /* is_first should be true in two cases:
+     *     1. The first time the socket is ready to send.
+     *     2. The first time, since the socket returned NO_MORE_MESSAGES from do_send.
+     */
+    void schedule_tx(sockinfo_tx_scheduler_interface *sock, bool is_first) override;
+
+    void schedule_tx() override; 
+
     void notify_completion(uintptr_t metadata, size_t num_completions = 1) override;
+
+private:
+    send_status single_socket_send(sockinfo_tx_scheduler_interface *sock, size_t requests);
+    
+    /*
+     * In the round robin implementation, we allocated the same number of requests per sender.
+     * If the available requests exceed the number of senders, each sender may receive more than one
+     * opportunity to send.
+     * If the number of senders exceed the available requests, each sender should receive at least
+     * one opportunity to send.
+     */
+    size_t fair_num_requests();
+
+private:
+    std::deque<sockinfo_tx_scheduler_interface *> m_queue;
 };
 
-#endif // _TX_FIFO_SCHEDULER_H_
+#endif // _TX_ROUND_ROBIN_SCHEDULER_H_

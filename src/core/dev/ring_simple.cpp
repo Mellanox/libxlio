@@ -38,6 +38,7 @@
 #include "util/sg_array.h"
 #include "sock/fd_collection.h"
 #include "fairness/tx_fifo_scheduler.h" // TODO depend on tx_scheduler only
+#include "fairness/tx_round_robin_scheduler.h" // TODO depend on tx_scheduler only
 
 #undef MODULE_NAME
 #define MODULE_NAME "ring_simple"
@@ -255,7 +256,11 @@ void ring_simple::create_resources()
     }
     ring_logdbg("ring attributes: m_tx_num_wr = %d", m_tx_num_wr);
 
-    m_tx_scheduler = std::make_unique<tx_fifo_scheduler>(*this, m_tx_num_wr);
+#if 1
+    m_tx_scheduler = std::make_unique<tx_fifo_scheduler>(*this, max_qp_wr);
+#else
+    m_tx_scheduler = std::make_unique<tx_round_robin_scheduler>(*this, max_qp_wr);
+#endif /* Fix  TODO*/
 
     if (!m_tx_scheduler) {
         throw_xlio_exception("create tx_scheduler failed");
@@ -1214,15 +1219,25 @@ bool ring_simple::is_tso(void)
 
 void ring_simple::notify_complete(uintptr_t metadata)
 {
-    m_tx_scheduler->notify_completion(metadata);
+    m_tx_scheduler->notify_completion(metadata, 1);
+    m_tx_scheduler->schedule_tx();
 }
 
 size_t ring_simple::send(tcp_segment &segment, uintptr_t metadata)
 {
-    xlio_ibv_send_wr wr;
-    segment.m_dst_entry->fill_wqe(segment.m_iovec, segment.m_sz_iovec, segment.m_attr, this, &wr);
+    if (m_hqtx->credits_check() < 16) {
+        return 0;
+    }
 
+    xlio_ibv_send_wr wr;
+    ibv_sge sge[32U];
+    assert(m_hqtx->get_max_send_sge() <= 32U);
+    wqe_send_handler().init_wqe(wr, sge, 32U);
+
+    segment.m_dst_entry->fill_wqe(segment.m_iovec, segment.m_sz_iovec, segment.m_attr, this, wr);
     unsigned credits = m_hqtx->credits_calculate(&wr);
+    assert(credits > 0);
+    assert(credits <= 16);
 
     if (m_hqtx->credits_get(credits)) {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);

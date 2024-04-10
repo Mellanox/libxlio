@@ -2150,14 +2150,12 @@ struct pbuf *tcp_peek_unsent_segment(struct tcp_pcb *pcb, u16_t *flags)
              ntohl(seg->tcphdr->seqno), pcb->lastack));
     }
 #endif /* TCP_CWND_DEBUG */
-#if TCP_TSO_DEBUG
-    if (seg) {
-        LWIP_DEBUGF(TCP_TSO_DEBUG | LWIP_DBG_TRACE,
-                    ("tcp_output: wnd: %-5d unsent %s\n", wnd, _dump_seg(pcb->unsent)));
-    }
-#endif /* TCP_TSO_DEBUG */
 
     if (seg) {
+#if TCP_TSO_DEBUG
+        LWIP_DEBUGF(TCP_TSO_DEBUG | LWIP_DBG_TRACE,
+                    ("tcp_output: wnd: %-5d unsent %s\n", wnd, _dump_seg(pcb->unsent)));
+#endif /* TCP_TSO_DEBUG */
         /* TSO segment can be in unsent queue only in case of retransmission.
          * Clear TSO flag, tcp_split_segment() and tcp_tso_segment() will handle
          * all scenarios further.

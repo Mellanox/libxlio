@@ -294,8 +294,10 @@ public:
     bool is_errorable(int *errors) override;
     bool is_closable() override
     {
+        auto incomplete_iops = m_num_incomplete_messages.load(std::memory_order_relaxed);
+
         return get_tcp_state(&m_pcb) == CLOSED && m_syn_received.empty() &&
-            m_accepted_conns.empty();
+            m_accepted_conns.empty() && incomplete_iops == 0;
     }
     bool inline is_destroyable_lock()
     {
