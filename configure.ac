@@ -85,6 +85,7 @@ m4_include([config/m4/func.m4])
 m4_include([config/m4/opt.m4])
 m4_include([config/m4/verbs.m4])
 m4_include([config/m4/dpcp.m4])
+m4_include([config/m4/doca.m4])
 m4_include([config/m4/nl.m4])
 m4_include([config/m4/prof.m4])
 m4_include([config/m4/compiler.m4])
@@ -217,6 +218,7 @@ OPT_CAPABILITY_SETUP()
 PROF_IBPROF_SETUP()
 DPCP_CAPABILITY_SETUP()
 UTLS_CAPABILITY_SETUP()
+DOCA_CAPABILITY_SETUP()
 
 # Thread locking control
 #
