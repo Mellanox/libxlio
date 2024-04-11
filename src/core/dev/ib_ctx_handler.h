@@ -60,12 +60,8 @@ struct pacing_caps_t {
 //
 class ib_ctx_handler : public event_handler_ibverbs {
 public:
-    struct ib_ctx_handler_desc {
-        struct ibv_device *device;
-    };
-
 public:
-    ib_ctx_handler(struct ib_ctx_handler_desc *desc);
+    ib_ctx_handler(doca_devinfo *devinfo, ibv_device *ibvdevice);
     virtual ~ib_ctx_handler();
 
     /*
@@ -74,6 +70,7 @@ public:
      * */
     ibv_pd *get_ibv_pd() { return m_p_ibv_pd; }
     ibv_device *get_ibv_device() { return m_p_ibv_device; }
+    doca_dev *get_doca_device() const { return m_doca_dev; }
     inline char *get_ibname() { return (m_p_ibv_device ? m_p_ibv_device->name : (char *)""); }
     struct ibv_context *get_ibv_context() { return m_p_ibv_context; }
     dpcp::adapter *set_dpcp_adapter();
@@ -114,6 +111,7 @@ private:
     ibv_device *m_p_ibv_device; // HCA handle
     struct ibv_context *m_p_ibv_context = nullptr;
     dpcp::adapter *m_p_adapter;
+    doca_dev *m_doca_dev;
     xlio_ibv_device_attr_ex *m_p_ibv_device_attr;
     ibv_pd *m_p_ibv_pd;
     bool m_flow_tag_enabled;

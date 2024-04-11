@@ -50,73 +50,11 @@
 #define ibchc_logfunc    __log_info_func
 #define ibchc_logfuncall __log_info_funcall
 
+#define PRINT_DOCA_ERROR(err, log_fmt, log_args...)                                                \
+    ibchc_logerr("DOCA error: %s, %s. " log_fmt, doca_error_get_name(err),                         \
+                 doca_error_get_descr(err), ##log_args)
+
 ib_ctx_handler_collection *g_p_ib_ctx_handler_collection = nullptr;
-
-void check_flow_steering_log_num_mgm_entry_size()
-{
-    static bool checked_mlx4_steering = false;
-    if (checked_mlx4_steering) {
-        return;
-    }
-
-    checked_mlx4_steering = true;
-    char flow_steering_val[4] = {0};
-    if (priv_safe_try_read_file((const char *)FLOW_STEERING_MGM_ENTRY_SIZE_PARAM_FILE,
-                                flow_steering_val, sizeof(flow_steering_val)) == -1) {
-        vlog_printf(
-            VLOG_DEBUG,
-            "Flow steering option for mlx4 driver does not exist in current OFED version\n");
-    } else if (flow_steering_val[0] != '-' ||
-               (strtol(&flow_steering_val[1], nullptr, 0) % 2) == 0) {
-        char module_info[3] = {0};
-        if (!run_and_retreive_system_command("modinfo mlx4_core > /dev/null 2>&1 ; echo $?",
-                                             module_info, sizeof(module_info)) &&
-            (strlen(module_info) > 0)) {
-            if (module_info[0] == '0') {
-                vlog_printf(VLOG_WARNING,
-                            "**********************************************************************"
-                            "*****************\n");
-                vlog_printf(VLOG_WARNING,
-                            "* " PRODUCT_NAME " will not operate properly while flow steering "
-                            "option is disabled                *\n");
-                vlog_printf(VLOG_WARNING,
-                            "* In order to enable flow steering please restart your " PRODUCT_NAME
-                            " applications after running *\n");
-                vlog_printf(VLOG_WARNING,
-                            "* the following:                                                      "
-                            "                *\n");
-                vlog_printf(VLOG_WARNING,
-                            "* For your information the following steps will restart your network "
-                            "interface        *\n");
-                vlog_printf(VLOG_WARNING,
-                            "* 1. \"echo options mlx4_core log_num_mgm_entry_size=-1 > "
-                            "/etc/modprobe.d/mlnx.conf\"   *\n");
-                vlog_printf(VLOG_WARNING,
-                            "* 2. Restart openibd or rdma service depending on your system "
-                            "configuration           *\n");
-                vlog_printf(VLOG_WARNING,
-                            "* Read more about the Flow Steering support in the " PRODUCT_NAME
-                            "'s User Manual                  *\n");
-                vlog_printf(VLOG_WARNING,
-                            "**********************************************************************"
-                            "*****************\n");
-            } else {
-                vlog_printf(VLOG_DEBUG,
-                            "**********************************************************************"
-                            "*****************\n");
-                vlog_printf(VLOG_DEBUG,
-                            "* " PRODUCT_NAME " will not operate properly while flow steering "
-                            "option is disabled                *\n");
-                vlog_printf(VLOG_DEBUG,
-                            "* Read more about the Flow Steering support in the " PRODUCT_NAME
-                            "'s User Manual                  *\n");
-                vlog_printf(VLOG_DEBUG,
-                            "**********************************************************************"
-                            "*****************\n");
-            }
-        }
-    }
-}
 
 ib_ctx_handler_collection::ib_ctx_handler_collection()
 {
@@ -147,14 +85,19 @@ ib_ctx_handler_collection::~ib_ctx_handler_collection()
 
 void ib_ctx_handler_collection::update_tbl(const char *ifa_name)
 {
-    struct ibv_device **dev_list = nullptr;
-    ib_ctx_handler *p_ib_ctx_handler = nullptr;
-    int num_devices = 0;
-    int i;
-
     ibchc_logdbg("Checking for offload capable IB devices...");
 
-    dev_list = xlio_ibv_get_device_list(&num_devices);
+    doca_devinfo **dev_list_doca;
+    uint32_t num_devices_doca = 0U;
+    doca_error_t err = doca_devinfo_create_list(&dev_list_doca, &num_devices_doca);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERROR(err, "doca_devinfo_create_list");
+        return;
+    }
+
+    // ------ Remove when DOCA fully implemented ------
+    int num_devices = 0;
+    struct ibv_device **dev_list = xlio_ibv_get_device_list(&num_devices);
 
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!dev_list) {
@@ -170,26 +113,54 @@ void ib_ctx_handler_collection::update_tbl(const char *ifa_name)
     }
 
     BULLSEYE_EXCLUDE_BLOCK_END
+    // -------------------------------------------------
 
-    for (i = 0; i < num_devices; i++) {
-        struct ib_ctx_handler::ib_ctx_handler_desc desc = {dev_list[i]};
+    char doca_ifname_name[DOCA_DEVINFO_IFACE_NAME_SIZE] = {0};
+    char doca_ibdev_name[DOCA_DEVINFO_IFACE_NAME_SIZE] = {0};
 
-        /* 2. Skip existing devices (compare by name) */
-        if (ifa_name && !check_device_name_ib_name(ifa_name, dev_list[i]->name)) {
+    for (uint32_t devidx = 0; devidx < num_devices_doca; devidx++) {
+        doca_error_t err_iface = doca_devinfo_get_iface_name(
+            dev_list_doca[devidx], doca_ifname_name, sizeof(doca_ifname_name));
+        doca_error_t err_ibdev = doca_devinfo_get_ibdev_name(dev_list_doca[devidx], doca_ibdev_name,
+                                                             sizeof(doca_ibdev_name));
+        if (DOCA_IS_ERROR(err_iface) || DOCA_IS_ERROR(err_ibdev)) {
+            PRINT_DOCA_ERROR(err_iface, "doca_devinfo_get_iface_name");
+            PRINT_DOCA_ERROR(err_ibdev, "doca_devinfo_get_ibdev_name");
             continue;
         }
 
-        if (ib_ctx_handler::is_mlx4(dev_list[i]->name)) {
-            // Check if mlx4 steering creation is supported.
-            check_flow_steering_log_num_mgm_entry_size();
+        ibchc_logerr("DOCA dev: %s -> %s", doca_ifname_name, doca_ibdev_name);
+
+        // Skip existing devices (compare by name)
+        if (ifa_name && 0 == strncmp(ifa_name, doca_ifname_name, DOCA_DEVINFO_IFACE_NAME_SIZE)) {
+            continue;
         }
 
-        /* 3. Add new ib devices */
-        p_ib_ctx_handler = new ib_ctx_handler(&desc);
+        // ------ Remove when DOCA fully implemented ------
+        int ibidx = 0;
+        for (; ibidx < num_devices; ++ibidx) {
+            if (0 ==
+                strncmp(dev_list[ibidx]->name, doca_ibdev_name, DOCA_DEVINFO_IFACE_NAME_SIZE)) {
+                break;
+            }
+        }
+
+        if (ibidx == num_devices) {
+            ibchc_logerr("IBV device not found for DOCA dev %s", doca_ibdev_name);
+            continue;
+        }
+        // -------------------------------------------------
+
+        // Add new ib devices
+        ib_ctx_handler *p_ib_ctx_handler =
+            new ib_ctx_handler(dev_list_doca[devidx], dev_list[ibidx]);
         if (!p_ib_ctx_handler) {
-            ibchc_logerr("failed allocating new ib_ctx_handler (errno=%d %m)", errno);
+            ibchc_logerr("Failed allocating new ib_ctx_handler (errno=%d %m)", errno);
             continue;
         }
+
+        ibchc_logerr("Found device DOCA: %s,%s -> IBV: %s", doca_ifname_name, doca_ibdev_name,
+                     dev_list[ibidx]->name);
         m_ib_ctx_map[p_ib_ctx_handler->get_ibv_device()] = p_ib_ctx_handler;
     }
 
@@ -197,6 +168,11 @@ void ib_ctx_handler_collection::update_tbl(const char *ifa_name)
 
     if (dev_list) {
         ibv_free_device_list(dev_list);
+    }
+
+    err = doca_devinfo_destroy_list(dev_list_doca);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERROR(err, "doca_devinfo_destroy_list");
     }
 }
 
