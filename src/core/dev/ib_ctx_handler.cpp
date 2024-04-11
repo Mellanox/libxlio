@@ -55,7 +55,7 @@
 #define ibch_logfunc    __log_info_func
 #define ibch_logfuncall __log_info_funcall
 
-ib_ctx_handler::ib_ctx_handler(doca_devinfo *devinfo, ibv_device *ibvdevice)
+ib_ctx_handler::ib_ctx_handler(doca_devinfo *devinfo, const char *ibname, ibv_device *ibvdevice)
     : m_flow_tag_enabled(false)
     , m_on_device_memory(0)
     , m_removed(false)
@@ -70,17 +70,22 @@ ib_ctx_handler::ib_ctx_handler(doca_devinfo *devinfo, ibv_device *ibvdevice)
         ibch_logpanic("Nullptr ibv_device in ib_ctx_handler");
     }
 
-    m_p_ibv_device = ibvdevice;
-
-    if (!m_p_ibv_device) {
-        ibch_logpanic("m_p_ibv_device is invalid");
+    m_ibname = ibname;
+    doca_error_t err = doca_dev_open(devinfo, &m_doca_dev);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(ibch_logpanic, err, "doca_dev_open devinfo: %p,%s", devinfo,
+                       m_ibname.c_str());
     }
+
+    m_p_ibv_device = ibvdevice;
 
     m_p_adapter = set_dpcp_adapter();
     if (!m_p_adapter) {
         ibch_logpanic("ibv device %p adapter allocation failure (errno=%d %m)", m_p_ibv_device,
                       errno);
     }
+
+    ibch_logdbg("Device opened doca_dev: %p", m_doca_dev);
 
     VALGRIND_MAKE_MEM_DEFINED(m_p_ibv_pd, sizeof(struct ibv_pd));
 
@@ -163,48 +168,53 @@ ib_ctx_handler::~ib_ctx_handler()
     }
 
     BULLSEYE_EXCLUDE_BLOCK_END
-}
 
-void ib_ctx_handler::set_str()
-{
-    char str_x[512] = {0};
-
-    m_str[0] = '\0';
-
-    str_x[0] = '\0';
-    sprintf(str_x, " %s:", get_ibname());
-    strcat(m_str, str_x);
-
-    str_x[0] = '\0';
-    sprintf(str_x, " port(s): %d", get_ibv_device_attr()->phys_port_cnt);
-    strcat(m_str, str_x);
-
-    str_x[0] = '\0';
-    sprintf(str_x, " vendor: %d", get_ibv_device_attr()->vendor_part_id);
-    strcat(m_str, str_x);
-
-    str_x[0] = '\0';
-    sprintf(str_x, " fw: %s", get_ibv_device_attr()->fw_ver);
-    strcat(m_str, str_x);
-
-    str_x[0] = '\0';
-    sprintf(str_x, " max_qp_wr: %d", get_ibv_device_attr()->max_qp_wr);
-    strcat(m_str, str_x);
-
-    str_x[0] = '\0';
-    sprintf(str_x, " on_device_memory: %zu", m_on_device_memory);
-    strcat(m_str, str_x);
-
-    str_x[0] = '\0';
-    sprintf(str_x, " packet_pacing_caps: min rate %u, max rate %u", m_pacing_caps.rate_limit_min,
-            m_pacing_caps.rate_limit_max);
-    strcat(m_str, str_x);
+    if (m_doca_dev) {
+        doca_error_t err = doca_dev_close(m_doca_dev);
+        if (DOCA_IS_ERROR(err)) {
+            PRINT_DOCA_ERR(ibch_logpanic, err, "doca_dev_close dev: %p,%s", m_doca_dev,
+                           m_ibname.c_str());
+        }
+    }
 }
 
 void ib_ctx_handler::print_val()
 {
-    set_str();
-    ibch_logdbg("%s", m_str);
+    char str_x[512] = {0};
+    char temp_str[255];
+
+    temp_str[0] = '\0';
+
+    str_x[0] = '\0';
+    sprintf(str_x, " %s:", get_ibname().c_str());
+    strcat(temp_str, str_x);
+
+    str_x[0] = '\0';
+    sprintf(str_x, " port(s): %d", get_ibv_device_attr()->phys_port_cnt);
+    strcat(temp_str, str_x);
+
+    str_x[0] = '\0';
+    sprintf(str_x, " vendor: %d", get_ibv_device_attr()->vendor_part_id);
+    strcat(temp_str, str_x);
+
+    str_x[0] = '\0';
+    sprintf(str_x, " fw: %s", get_ibv_device_attr()->fw_ver);
+    strcat(temp_str, str_x);
+
+    str_x[0] = '\0';
+    sprintf(str_x, " max_qp_wr: %d", get_ibv_device_attr()->max_qp_wr);
+    strcat(temp_str, str_x);
+
+    str_x[0] = '\0';
+    sprintf(str_x, " on_device_memory: %zu", m_on_device_memory);
+    strcat(temp_str, str_x);
+
+    str_x[0] = '\0';
+    sprintf(str_x, " packet_pacing_caps: min rate %u, max rate %u", m_pacing_caps.rate_limit_min,
+            m_pacing_caps.rate_limit_max);
+    strcat(temp_str, str_x);
+
+    ibch_logdbg("%s", temp_str);
 }
 
 int parse_dpcp_version(const char *dpcp_ver)
@@ -432,8 +442,8 @@ uint32_t ib_ctx_handler::mem_reg(void *addr, size_t length, uint64_t access)
         m_mr_map_lkey[mr->lkey] = mr;
         lkey = mr->lkey;
 
-        ibch_logdbg("dev:%s (%p) addr=%p length=%lu pd=%p", get_ibname(), m_p_ibv_device, addr,
-                    length, m_p_ibv_pd);
+        ibch_logdbg("dev:%s (%p) addr=%p length=%lu pd=%p", get_ibname().c_str(), m_p_ibv_device,
+                    addr, length, m_p_ibv_pd);
     }
 
     return lkey;
@@ -444,8 +454,8 @@ void ib_ctx_handler::mem_dereg(uint32_t lkey)
     auto iter = m_mr_map_lkey.find(lkey);
     if (iter != m_mr_map_lkey.end()) {
         struct ibv_mr *mr = iter->second;
-        ibch_logdbg("dev:%s (%p) addr=%p length=%lu pd=%p", get_ibname(), m_p_ibv_device, mr->addr,
-                    mr->length, m_p_ibv_pd);
+        ibch_logdbg("dev:%s (%p) addr=%p length=%lu pd=%p", get_ibname().c_str(), m_p_ibv_device,
+                    mr->addr, mr->length, m_p_ibv_pd);
         IF_VERBS_FAILURE_EX(ibv_dereg_mr(mr), EIO)
         {
             ibch_logdbg("failed de-registering a memory region "
