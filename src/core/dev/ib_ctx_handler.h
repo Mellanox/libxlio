@@ -61,7 +61,7 @@ struct pacing_caps_t {
 class ib_ctx_handler : public event_handler_ibverbs {
 public:
 public:
-    ib_ctx_handler(doca_devinfo *devinfo, ibv_device *ibvdevice);
+    ib_ctx_handler(doca_devinfo *devinfo, const char *ibname, ibv_device *ibvdevice);
     virtual ~ib_ctx_handler();
 
     /*
@@ -71,7 +71,7 @@ public:
     ibv_pd *get_ibv_pd() { return m_p_ibv_pd; }
     ibv_device *get_ibv_device() { return m_p_ibv_device; }
     doca_dev *get_doca_device() const { return m_doca_dev; }
-    inline char *get_ibname() { return (m_p_ibv_device ? m_p_ibv_device->name : (char *)""); }
+    const std::string &get_ibname() const { return m_ibname; }
     struct ibv_context *get_ibv_context() { return m_p_ibv_context; }
     dpcp::adapter *set_dpcp_adapter();
     dpcp::adapter *get_dpcp_adapter() { return m_p_adapter; }
@@ -94,11 +94,10 @@ public:
     bool is_packet_pacing_supported(uint32_t rate = 1);
     size_t get_on_device_memory_size() { return m_on_device_memory; }
     bool is_active(int port_num);
-    bool is_mlx4() { return is_mlx4(get_ibname()); }
+    bool is_mlx4() { return is_mlx4(get_ibname().c_str()); }
     static bool is_mlx4(const char *dev) { return strncmp(dev, "mlx4", 4) == 0; }
     virtual void handle_event_ibverbs_cb(void *ev_data, void *ctx);
 
-    void set_str();
     void print_val();
 
     inline void convert_hw_time_to_system_time(uint64_t hwtime, struct timespec *systime)
@@ -111,7 +110,7 @@ private:
     ibv_device *m_p_ibv_device; // HCA handle
     struct ibv_context *m_p_ibv_context = nullptr;
     dpcp::adapter *m_p_adapter;
-    doca_dev *m_doca_dev;
+    doca_dev *m_doca_dev = nullptr;
     xlio_ibv_device_attr_ex *m_p_ibv_device_attr;
     ibv_pd *m_p_ibv_pd;
     bool m_flow_tag_enabled;
@@ -122,8 +121,7 @@ private:
     time_converter *m_p_ctx_time_converter;
     mr_map_lkey_t m_mr_map_lkey;
     std::unordered_map<void *, uint32_t> m_user_mem_lkey_map;
-
-    char m_str[255];
+    std::string m_ibname;
 };
 
 #endif

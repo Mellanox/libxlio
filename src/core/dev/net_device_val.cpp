@@ -288,7 +288,7 @@ net_device_val::net_device_val(struct net_device_val_desc *desc)
 
     nd_logdbg("Use interface '%s'", get_ifname());
     if (ib_ctx) {
-        nd_logdbg("%s ==> %s port %d (%s)", get_ifname(), ib_ctx->get_ibname(),
+        nd_logdbg("%s ==> %s port %d (%s)", get_ifname(), ib_ctx->get_ibname().c_str(),
                   get_port_from_ifname(get_ifname_link()),
                   (ib_ctx->is_active(get_port_from_ifname(get_ifname_link())) ? "Up" : "Down"));
     } else {
@@ -559,7 +559,7 @@ void net_device_val::print_val() const
         if_indextoname(m_slaves[i]->if_index, if_name);
         nd_logdbg("    %d: %s: %s active: %d ib: %s", m_slaves[i]->if_index, if_name,
                   m_slaves[i]->p_L2_addr->to_str().c_str(), m_slaves[i]->active,
-                  (m_slaves[i]->p_ib_ctx ? m_slaves[i]->p_ib_ctx->get_ibname() : "n/a"));
+                  (m_slaves[i]->p_ib_ctx ? m_slaves[i]->p_ib_ctx->get_ibname().c_str() : "n/a"));
     }
 
     nd_logdbg("  ring list: %s", (m_h_ring_map.empty() ? "empty " : ""));
@@ -669,7 +669,7 @@ void net_device_val::set_slave_array()
         }
 
         /* Initialization for RoCE LAG device */
-        if (m_bond != NO_BOND && strstr(m_slaves[i]->p_ib_ctx->get_ibname(), "bond")) {
+        if (m_bond != NO_BOND && strstr(m_slaves[i]->p_ib_ctx->get_ibname().c_str(), "bond")) {
             m_slaves[i]->port_num = get_port_from_ifname(get_ifname_link());
             m_slaves[i]->lag_tx_port_affinity = i + 1;
         }
@@ -1587,7 +1587,7 @@ bool net_device_val::verify_qp_creation(const char *ifname, enum ibv_qp_type qp_
             if (check_bond_roce_lag_exist(bond_roce_lag_path, sizeof(bond_roce_lag_path), ifname)) {
                 print_roce_lag_warnings(get_ifname_link(), bond_roce_lag_path);
             } else if ((p_ib_ctx = g_p_ib_ctx_handler_collection->get_ib_ctx(get_ifname_link())) &&
-                       strstr(p_ib_ctx->get_ibname(), "bond")) {
+                       strstr(p_ib_ctx->get_ibname().c_str(), "bond")) {
                 print_roce_lag_warnings(get_ifname_link());
             }
         }

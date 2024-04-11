@@ -280,6 +280,10 @@
     } while (0)
 #endif /* MAX_DEFINED_LOG_LEVEL */
 
+#define PRINT_DOCA_ERR(logger, err, log_fmt, log_args...)                                          \
+    logger("DOCA error: %s, %s. " log_fmt, doca_error_get_name(err), doca_error_get_descr(err),    \
+           ##log_args)
+
 // deprecated functions - only exist for Backward Compatibility.  Please avoid using them!
 #define __log_func(...)          __log_fine(__VA_ARGS__)
 #define __log_funcall(...)       __log_finer(__VA_ARGS__)
