@@ -55,18 +55,22 @@
 #define ibch_logfunc    __log_info_func
 #define ibch_logfuncall __log_info_funcall
 
-ib_ctx_handler::ib_ctx_handler(struct ib_ctx_handler_desc *desc)
+ib_ctx_handler::ib_ctx_handler(doca_devinfo *devinfo, ibv_device *ibvdevice)
     : m_flow_tag_enabled(false)
     , m_on_device_memory(0)
     , m_removed(false)
     , m_lock_umr("spin_lock_umr")
     , m_p_ctx_time_converter(nullptr)
 {
-    if (!desc) {
-        ibch_logpanic("Invalid ib_ctx_handler");
+    if (!devinfo) {
+        ibch_logpanic("Nullptr devinfo in ib_ctx_handler");
     }
 
-    m_p_ibv_device = desc->device;
+    if (!ibvdevice) {
+        ibch_logpanic("Nullptr ibv_device in ib_ctx_handler");
+    }
+
+    m_p_ibv_device = ibvdevice;
 
     if (!m_p_ibv_device) {
         ibch_logpanic("m_p_ibv_device is invalid");
@@ -77,6 +81,7 @@ ib_ctx_handler::ib_ctx_handler(struct ib_ctx_handler_desc *desc)
         ibch_logpanic("ibv device %p adapter allocation failure (errno=%d %m)", m_p_ibv_device,
                       errno);
     }
+
     VALGRIND_MAKE_MEM_DEFINED(m_p_ibv_pd, sizeof(struct ibv_pd));
 
     m_p_ibv_device_attr = new xlio_ibv_device_attr_ex();
