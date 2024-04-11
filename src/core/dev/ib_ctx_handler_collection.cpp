@@ -50,10 +50,6 @@
 #define ibchc_logfunc    __log_info_func
 #define ibchc_logfuncall __log_info_funcall
 
-#define PRINT_DOCA_ERROR(err, log_fmt, log_args...)                                                \
-    ibchc_logerr("DOCA error: %s, %s. " log_fmt, doca_error_get_name(err),                         \
-                 doca_error_get_descr(err), ##log_args)
-
 ib_ctx_handler_collection *g_p_ib_ctx_handler_collection = nullptr;
 
 ib_ctx_handler_collection::ib_ctx_handler_collection()
@@ -91,7 +87,7 @@ void ib_ctx_handler_collection::update_tbl(const char *ifa_name)
     uint32_t num_devices_doca = 0U;
     doca_error_t err = doca_devinfo_create_list(&dev_list_doca, &num_devices_doca);
     if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERROR(err, "doca_devinfo_create_list");
+        PRINT_DOCA_ERR(ibchc_logerr, err, "doca_devinfo_create_list");
         return;
     }
 
@@ -124,12 +120,12 @@ void ib_ctx_handler_collection::update_tbl(const char *ifa_name)
         doca_error_t err_ibdev = doca_devinfo_get_ibdev_name(dev_list_doca[devidx], doca_ibdev_name,
                                                              sizeof(doca_ibdev_name));
         if (DOCA_IS_ERROR(err_iface) || DOCA_IS_ERROR(err_ibdev)) {
-            PRINT_DOCA_ERROR(err_iface, "doca_devinfo_get_iface_name");
-            PRINT_DOCA_ERROR(err_ibdev, "doca_devinfo_get_ibdev_name");
+            PRINT_DOCA_ERR(ibchc_logerr, err_iface, "doca_devinfo_get_iface_name");
+            PRINT_DOCA_ERR(ibchc_logerr, err_ibdev, "doca_devinfo_get_ibdev_name");
             continue;
         }
 
-        ibchc_logerr("DOCA dev: %s -> %s", doca_ifname_name, doca_ibdev_name);
+        ibchc_logdbg("DOCA dev found: ifname: %s -> ibname: %s", doca_ifname_name, doca_ibdev_name);
 
         // Skip existing devices (compare by name)
         if (ifa_name && 0 == strncmp(ifa_name, doca_ifname_name, DOCA_DEVINFO_IFACE_NAME_SIZE)) {
@@ -153,13 +149,13 @@ void ib_ctx_handler_collection::update_tbl(const char *ifa_name)
 
         // Add new ib devices
         ib_ctx_handler *p_ib_ctx_handler =
-            new ib_ctx_handler(dev_list_doca[devidx], dev_list[ibidx]);
+            new ib_ctx_handler(dev_list_doca[devidx], doca_ibdev_name, dev_list[ibidx]);
         if (!p_ib_ctx_handler) {
             ibchc_logerr("Failed allocating new ib_ctx_handler (errno=%d %m)", errno);
             continue;
         }
 
-        ibchc_logerr("Found device DOCA: %s,%s -> IBV: %s", doca_ifname_name, doca_ibdev_name,
+        ibchc_logdbg("DOCA dev initialized: %s,%s -> IBV: %s", doca_ifname_name, doca_ibdev_name,
                      dev_list[ibidx]->name);
         m_ib_ctx_map[p_ib_ctx_handler->get_ibv_device()] = p_ib_ctx_handler;
     }
@@ -172,7 +168,7 @@ void ib_ctx_handler_collection::update_tbl(const char *ifa_name)
 
     err = doca_devinfo_destroy_list(dev_list_doca);
     if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERROR(err, "doca_devinfo_destroy_list");
+        PRINT_DOCA_ERR(ibchc_logerr, err, "doca_devinfo_destroy_list");
     }
 }
 
@@ -220,7 +216,7 @@ ib_ctx_handler *ib_ctx_handler_collection::get_ib_ctx(const char *ifa_name)
     }
 
     for (ib_ctx_iter = m_ib_ctx_map.begin(); ib_ctx_iter != m_ib_ctx_map.end(); ib_ctx_iter++) {
-        if (check_device_name_ib_name(ifa_name, ib_ctx_iter->second->get_ibname())) {
+        if (check_device_name_ib_name(ifa_name, ib_ctx_iter->second->get_ibname().c_str())) {
             return ib_ctx_iter->second;
         }
     }
