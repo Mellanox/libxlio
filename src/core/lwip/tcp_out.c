@@ -2091,7 +2091,7 @@ void tcp_check_empty_ack(struct tcp_pcb *pcb)
         }
         pcb->last_unacked = NULL;
     }
-    
+
     struct tcp_seg *seg = pcb->unsent;
     // Prepend an empty ack if the segment is a dummy segment
     if (seg && LWIP_IS_DUMMY_SEGMENT(seg) && (pcb->flags & (TF_ACK_DELAY | TF_ACK_NOW))) {
@@ -2249,13 +2249,15 @@ struct pbuf *tcp_peek_unsent_segment(struct tcp_pcb *pcb, u16_t *flags)
             if (seg->flags & TF_SEG_OPTS_MSS) {
                 /* coverity[result_independent_of_operands] */
                 TCP_BUILD_MSS_OPTION(*opts, pcb->advtsd_mss);
-                opts++; // Move to the next line (meaning next 32 bit) as this option is 4 bytes long
+                opts++; // Move to the next line (meaning next 32 bit) as this option is 4 bytes
+                        // long
             }
 
             /* If RCV_SCALE is set then prepare segment for window scaling option */
             if (seg->flags & TF_SEG_OPTS_WNDSCALE) {
                 TCP_BUILD_WNDSCALE_OPTION(*opts, rcv_wnd_scale);
-                opts++; // Move to the next line (meaning next 32 bit) as this option is 3 bytes long +
+                opts++; // Move to the next line (meaning next 32 bit) as this option is 3 bytes
+                        // long +
                 // we added 1 byte NOOP padding => total 4 bytes
             }
 
@@ -2266,7 +2268,8 @@ struct pbuf *tcp_peek_unsent_segment(struct tcp_pcb *pcb, u16_t *flags)
 
             if (seg->flags & TF_SEG_OPTS_TS) {
                 tcp_build_timestamp_option(pcb, opts);
-                /* opts += 3; */ /* Note: suppress warning 'opts' is never read */ // Move to the next line
+                /* opts += 3; */ /* Note: suppress warning 'opts' is never read */ // Move to the
+                                                                                   // next line
                 // (meaning next 32 bit)
                 // as this option is 10
                 // bytes long, 12 with
@@ -2295,12 +2298,13 @@ struct pbuf *tcp_peek_unsent_segment(struct tcp_pcb *pcb, u16_t *flags)
                     pcb->rttest = tcp_ticks;
                     pcb->rtseq = seg->seqno;
 
-                    LWIP_DEBUGF(TCP_RTO_DEBUG, ("%s: rtseq %" U32_F "\n",__FUNCTION__,  pcb->rtseq));
+                    LWIP_DEBUGF(TCP_RTO_DEBUG,
+                                ("%s: rtseq %" U32_F "\n", __FUNCTION__, pcb->rtseq));
                 }
             }
             LWIP_DEBUGF(TCP_OUTPUT_DEBUG,
                         ("%s: %" U32_F ":%" U32_F "\n", __FUNCTION__, htonl(seg->tcphdr->seqno),
-                        htonl(seg->tcphdr->seqno) + seg->len));
+                         htonl(seg->tcphdr->seqno) + seg->len));
 
             seg->tcphdr->chksum = 0;
 
@@ -2328,7 +2332,6 @@ struct pbuf *tcp_peek_unsent_segment(struct tcp_pcb *pcb, u16_t *flags)
             *flags |= seg->flags & TF_SEG_OPTS_ZEROCOPY;
 
             return p;
-
         }
     }
     return NULL;
@@ -2368,12 +2371,12 @@ void tcp_pop_unsent_segment(struct tcp_pcb *pcb)
                 /* unacked list is not empty? */
             } else {
                 /* In the case of fast retransmit, the packet should not go to the tail
-                         * of the unacked queue, but rather somewhere before it. We need to check
-                         * for this case. -STJ Jul 27, 2004 */
-                struct tcp_seg * useg = pcb->last_unacked;
+                 * of the unacked queue, but rather somewhere before it. We need to check
+                 * for this case. -STJ Jul 27, 2004 */
+                struct tcp_seg *useg = pcb->last_unacked;
                 if (TCP_SEQ_LT(seg->seqno, useg->seqno)) {
                     /* add segment to before tail of unacked list, keeping the list sorted
-                             */
+                     */
                     struct tcp_seg **cur_seg = &(pcb->unacked);
                     while (*cur_seg && TCP_SEQ_LT((*cur_seg)->seqno, seg->seqno)) {
                         cur_seg = &((*cur_seg)->next);

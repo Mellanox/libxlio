@@ -52,13 +52,11 @@ public:
      */
     void schedule_tx(sockinfo_tx_scheduler_interface *sock, bool is_first) override;
 
-    void schedule_tx() override; 
-
-    void notify_completion(uintptr_t metadata, size_t num_completions = 1) override;
+    void schedule_tx() override;
 
 private:
     send_status single_socket_send(sockinfo_tx_scheduler_interface *sock, size_t requests);
-    
+
     /*
      * In the round robin implementation, we allocated the same number of requests per sender.
      * If the available requests exceed the number of senders, each sender may receive more than one

@@ -47,7 +47,6 @@ public:
 
     void schedule_tx(sockinfo_tx_scheduler_interface *sock, bool) override;
     void schedule_tx() override;
-    void notify_completion(uintptr_t metadata, size_t num_completions = 1) override;
 };
 
 #endif // _TX_FIFO_SCHEDULER_H_

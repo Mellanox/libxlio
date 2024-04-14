@@ -37,8 +37,17 @@
 tx_scheduler::tx_scheduler(ring_tx_scheduler_interface &r, size_t max_requests)
     : m_ring(r)
     , m_max_requests(max_requests)
-    , m_num_requests(0UL)
+    , m_ring_full(false)
 {
+}
+
+void tx_scheduler::notify_completion(uintptr_t metadata, size_t num_completions)
+{
+    auto socket = reinterpret_cast<sockinfo_tx_scheduler_interface *>(metadata);
+    if (socket) {
+        socket->notify_completions(num_completions);
+    }
+    m_ring_full = false;
 }
 
 sq_proxy::sq_proxy(tx_scheduler &sched, size_t num_messages, uintptr_t metadata)

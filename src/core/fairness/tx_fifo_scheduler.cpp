@@ -47,15 +47,6 @@ void tx_fifo_scheduler::schedule_tx()
 
 void tx_fifo_scheduler::schedule_tx(sockinfo_tx_scheduler_interface *sock, bool)
 {
-    sq_proxy proxy {*this, m_max_requests - m_num_requests, reinterpret_cast<uintptr_t>(sock)};
+    sq_proxy proxy {*this, m_max_requests, reinterpret_cast<uintptr_t>(sock)};
     sock->do_send(proxy);
-}
-
-void tx_fifo_scheduler::notify_completion(uintptr_t metadata, size_t num_completions)
-{
-    auto socket = reinterpret_cast<sockinfo_tx_scheduler_interface *>(metadata);
-    if (socket) {
-        socket->notify_completions(num_completions);
-    }
-    m_num_requests -= std::min(m_num_requests, num_completions);
 }

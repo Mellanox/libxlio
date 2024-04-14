@@ -90,7 +90,7 @@ public:
     void down();
 
     void send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio_tis *tis,
-                  unsigned credits, uintptr_t metadata=0);
+                  unsigned credits, uintptr_t metadata = 0);
 
     struct ibv_qp *get_ibv_qp() const { return m_mlx5_qp.qp; };
 
@@ -216,7 +216,7 @@ private:
     void put_tls_tis_in_cache(xlio_tis *tis);
 
     void send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, bool request_comp,
-                      xlio_tis *tis, unsigned credits, uintptr_t metadata=0);
+                      xlio_tis *tis, unsigned credits, uintptr_t metadata = 0);
 
     void set_unsignaled_count(void) { m_n_unsignaled_count = m_n_sysvar_tx_num_wr_to_signal - 1; }
 
@@ -260,7 +260,8 @@ private:
     inline void tls_get_progress_params_wqe(xlio_ti *ti, uint32_t tirn, void *buf, uint32_t lkey);
 #endif /* DEFINED_UTLS */
 
-    inline void store_current_wqe_prop(mem_buf_desc_t *wr_id, unsigned credits, xlio_ti *ti, uintptr_t metadata=0);
+    inline void store_current_wqe_prop(mem_buf_desc_t *wr_id, unsigned credits, xlio_ti *ti,
+                                       uintptr_t metadata = 0);
     inline int fill_wqe(xlio_ibv_send_wr *p_send_wqe);
     inline int fill_wqe_send(xlio_ibv_send_wr *pswr);
     inline int fill_wqe_lso(xlio_ibv_send_wr *pswr);

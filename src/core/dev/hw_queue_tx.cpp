@@ -458,7 +458,6 @@ void hw_queue_tx::init_queue()
 
     // We use the min between CQ size and the QP size (that might be increases by ibv creation).
     m_sq_free_credits = std::min(m_tx_num_wr, old_wr_val);
-    printf("%s:%d [%s] hwq %p m_tx_num_wr %u old_wr_val %u\n", __FILE__, __LINE__, __func__, this, m_tx_num_wr, old_wr_val);
 
     /* Maximum BF inlining consists of:
      * - CTRL:
@@ -822,7 +821,8 @@ inline int hw_queue_tx::fill_wqe_lso(xlio_ibv_send_wr *pswr)
     return wqebbs;
 }
 
-void hw_queue_tx::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits, xlio_ti *ti, uintptr_t metadata)
+void hw_queue_tx::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits, xlio_ti *ti,
+                                         uintptr_t metadata)
 {
     m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index] = sq_wqe_prop {
         .buf = buf,
@@ -839,7 +839,8 @@ void hw_queue_tx::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits, 
 
 //! Send one RAW packet
 void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
-                               bool request_comp, xlio_tis *tis, unsigned credits, uintptr_t metadata)
+                               bool request_comp, xlio_tis *tis, unsigned credits,
+                               uintptr_t metadata)
 {
     struct xlio_mlx5_wqe_ctrl_seg *ctrl = nullptr;
     struct mlx5_wqe_eth_seg *eseg = nullptr;
@@ -866,7 +867,8 @@ void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_a
     eseg->cs_flags = (uint8_t)(attr & (XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM) & 0xff);
 
     /* Store buffer descriptor */
-    store_current_wqe_prop(reinterpret_cast<mem_buf_desc_t *>(p_send_wqe->wr_id), credits, tis, metadata);
+    store_current_wqe_prop(reinterpret_cast<mem_buf_desc_t *>(p_send_wqe->wr_id), credits, tis,
+                           metadata);
 
     /* Complete WQE */
     int wqebbs = fill_wqe(p_send_wqe);

@@ -38,7 +38,7 @@
 
 using namespace ::testing;
 
-struct tcp_segment { };
+struct tcp_segment {};
 
 class greedy_test_socket : public sockinfo_tx_scheduler_interface {
 public:
@@ -50,7 +50,7 @@ public:
         return send_status::OK;
     }
 
-    void notify_completions(size_t) { }
+    void notify_completions(size_t) {}
 };
 
 class limited_test_socket : public sockinfo_tx_scheduler_interface {
@@ -159,9 +159,7 @@ TEST(tx_fifo_scheduler, limited_socket_limits_the_socket_until_credits_are_retur
     fifo.schedule_tx(&socket, true);
 
     fifo.notify_completion(reinterpret_cast<uintptr_t>(&socket), 1);
-    EXPECT_CALL(ring, send(An<tcp_segment &>(), _))
-        .Times(1)
-        .WillOnce(Return(1U));
+    EXPECT_CALL(ring, send(An<tcp_segment &>(), _)).Times(1).WillOnce(Return(1U));
     fifo.schedule_tx(&socket, false);
 }
 
@@ -188,13 +186,14 @@ TEST(tx_round_robin_scheduler, limited_sockets_get_all_the_credits_required)
     tx_round_robin_scheduler rr(ring, max_iflight_requests);
 
     EXPECT_CALL(ring, send(An<tcp_segment &>(), _))
-        .Times(socket_inflight_limit * 2/* For both of the sockets */)
+        .Times(socket_inflight_limit * 2 /* For both of the sockets */)
         .WillRepeatedly(Return(1U));
     rr.schedule_tx(&socket1, true);
     rr.schedule_tx(&socket2, true);
 }
 
-TEST(tx_round_robin_scheduler, num_limited_sockets_equals_available_credits_provide_one_tx_oppurtunity_per_socket)
+TEST(tx_round_robin_scheduler,
+     num_limited_sockets_equals_available_credits_provide_one_tx_oppurtunity_per_socket)
 {
     ring_mock ring {};
     size_t socket_inflight_limit = 10;
@@ -220,13 +219,14 @@ TEST(tx_round_robin_scheduler, num_limited_sockets_equals_available_credits_prov
     rr.schedule_tx(&socket2, true);
 }
 /*
-TEST(tx_round_robin_scheduler, num_limited_sockets_greater_than_available_credits_provide_one_tx_oppurtunity_per_socket)
+TEST(tx_round_robin_scheduler,
+num_limited_sockets_greater_than_available_credits_provide_one_tx_oppurtunity_per_socket)
 {
     ring_mock ring {};
     size_t socket_inflight_limit = 10;
-    limited_test_socket socket1 {socket_inflight_limit}, socket2 {socket_inflight_limit}, socket3 {socket_inflight_limit};
-    size_t max_iflight_requests = 2;
-    tx_round_robin_scheduler rr(ring, max_iflight_requests);
+    limited_test_socket socket1 {socket_inflight_limit}, socket2 {socket_inflight_limit}, socket3
+{socket_inflight_limit}; size_t max_iflight_requests = 2; tx_round_robin_scheduler rr(ring,
+max_iflight_requests);
 
     EXPECT_CALL(ring, send(An<tcp_segment &>(), _))
         .Times(max_iflight_requests)

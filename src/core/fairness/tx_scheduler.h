@@ -51,23 +51,19 @@ public:
 
     virtual void schedule_tx(sockinfo_tx_scheduler_interface *, bool = true) = 0;
     virtual void schedule_tx() = 0;
-    virtual void notify_completion(uintptr_t, size_t = 1) = 0;
+    void notify_completion(uintptr_t, size_t = 1);
 
     template <class Msg> size_t send(Msg &msg, uintptr_t metadata)
     {
-        if (m_num_requests < m_max_requests) {
-            size_t used_requests = m_ring.send(msg, metadata);
-            printf("%s:%d [%s] tx_scheduler %p num_req %zu max_requests %zu used %zu\n", __FILE__, __LINE__, __func__, this, m_num_requests, m_max_requests, used_requests);
-            m_num_requests += used_requests;
-            return used_requests;
-        }
-        return 0;
+        size_t used_requests = m_ring.send(msg, metadata);
+        m_ring_full = used_requests == 0;
+        return used_requests;
     }
 
 protected:
     ring_tx_scheduler_interface &m_ring;
     size_t m_max_requests;
-    size_t m_num_requests;
+    bool m_ring_full;
 };
 
 class sq_proxy final {
@@ -82,7 +78,7 @@ public:
             if (used_requests == 0U) {
                 return false;
             }
-            m_num_messages -= std::min(used_requests, m_num_messages);
+            m_num_messages--;
             return true;
         }
         return false;

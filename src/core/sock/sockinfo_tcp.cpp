@@ -533,8 +533,9 @@ sockinfo_tcp::~sockinfo_tcp()
 
     auto incomplete_iops = m_num_incomplete_messages.load(std::memory_order_relaxed);
     if (incomplete_iops != 0) {
-        *reinterpret_cast<int *>(0) = 42;
+        si_tcp_logerr("still %ld incomplete_iops!", incomplete_iops);
     }
+
     m_sock_wakeup_pipe.do_wakeup();
 
     if (m_ops_tcp != m_ops) {
@@ -1365,7 +1366,7 @@ err_t sockinfo_tcp::ip_output(struct pbuf *, struct tcp_seg *, void *v_p_conn, u
 {
     sockinfo_tcp *p_si_tcp = (sockinfo_tcp *)(((struct tcp_pcb *)v_p_conn)->my_container);
     p_si_tcp->notify_ready_to_send();
-     return ERR_OK;
+    return ERR_OK;
 }
 
 err_t sockinfo_tcp::ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn,
@@ -6344,7 +6345,7 @@ send_status sockinfo_tcp::do_send(sq_proxy &sq)
         segment.m_iovec = lwip_iovec;
         segment.m_sz_iovec = max_count;
         /* This should be a safe cast and a dynamic_cast is not needed */
-        segment.m_dst_entry = reinterpret_cast<dst_entry_tcp*>(m_p_connected_dst_entry);
+        segment.m_dst_entry = reinterpret_cast<dst_entry_tcp *>(m_p_connected_dst_entry);
 
         tcp_segment_found = peek_tcp_segment(segment);
         if (tcp_segment_found) {
@@ -6361,6 +6362,8 @@ send_status sockinfo_tcp::do_send(sq_proxy &sq)
     }
 
     m_b_has_notified_ready_to_send = (msg || tcp_segment_found);
+    // printf("%s:%d [%s] sock %p m_b_has_notified_ready_to_send [%s]\n", __FILE__, __LINE__,
+    // __func__, this, m_b_has_notified_ready_to_send ? "true" : "false");
     unlock_tcp_con();
     return (m_b_has_notified_ready_to_send) ? send_status::OK : send_status::NO_MORE_MESSAGES;
 }
@@ -6373,11 +6376,25 @@ void sockinfo_tcp::notify_completions(size_t num_completions)
 
 void sockinfo_tcp::notify_ready_to_send()
 {
+    if (m_enqueued_tcp_segments.empty()) {
+        tcp_check_empty_ack(&m_pcb);
+    }
+
+    if (m_enqueued_tcp_segments.empty()) {
+        uint16_t flags = 0;
+        pbuf *p = tcp_peek_unsent_segment(&m_pcb, &flags);
+        if (!p) {
+            return; /* Nothing to send */
+        }
+    }
+
     bool is_first = !m_b_has_notified_ready_to_send;
+    // printf("%s:%d [%s] sock %p is_first [%s]\n", __FILE__, __LINE__, __func__, this, is_first ?
+    // "true" : "false");
+    m_b_has_notified_ready_to_send = true;
     unlock_tcp_con();
     m_p_connected_dst_entry->notify_ready_to_send(this, is_first);
     lock_tcp_con();
-    m_b_has_notified_ready_to_send = true;
 }
 
 void sockinfo_tcp::enqueue_nodata_segment(struct pbuf *p, void *v_p_conn)
@@ -6387,7 +6404,7 @@ void sockinfo_tcp::enqueue_nodata_segment(struct pbuf *p, void *v_p_conn)
 }
 
 /* @return 0 means failure */
-size_t sockinfo_tcp::fill_regular_tcp_iovec(pbuf *p, tcp_iovec* tcpiovec, size_t &count)
+size_t sockinfo_tcp::fill_regular_tcp_iovec(pbuf *p, tcp_iovec *tcpiovec, size_t &count)
 {
     size_t max_count = count;
     size_t length = 0U;
@@ -6405,7 +6422,7 @@ size_t sockinfo_tcp::fill_regular_tcp_iovec(pbuf *p, tcp_iovec* tcpiovec, size_t
 }
 
 /* @return 0 means failure */
-size_t sockinfo_tcp::fill_zerocopy_tcp_iovec(pbuf *p, tcp_iovec* tcpiovec, size_t &count)
+size_t sockinfo_tcp::fill_zerocopy_tcp_iovec(pbuf *p, tcp_iovec *tcpiovec, size_t &count)
 {
     size_t max_count = count;
     size_t length = 0U;
@@ -6428,8 +6445,7 @@ size_t sockinfo_tcp::fill_zerocopy_tcp_iovec(pbuf *p, tcp_iovec* tcpiovec, size_
         void *cur_end =
             (void *)((uint64_t)tcpiovec[count].iovec.iov_base + tcpiovec[count].iovec.iov_len);
         if ((p->desc.attr == PBUF_DESC_NONE) && (cur_end == p->payload) &&
-            ((uintptr_t)((uint64_t)tcpiovec[count].iovec.iov_base &
-                         m_user_huge_page_mask) ==
+            ((uintptr_t)((uint64_t)tcpiovec[count].iovec.iov_base & m_user_huge_page_mask) ==
              (uintptr_t)((uint64_t)p->payload & m_user_huge_page_mask))) {
             tcpiovec[count].iovec.iov_len += p->len;
         } else {
@@ -6447,15 +6463,13 @@ size_t sockinfo_tcp::fill_zerocopy_tcp_iovec(pbuf *p, tcp_iovec* tcpiovec, size_
 
 bool sockinfo_tcp::peek_tcp_segment(tcp_segment &segment)
 {
-    if (m_enqueued_tcp_segments.empty())
-    {
+    if (m_enqueued_tcp_segments.empty()) {
         tcp_check_empty_ack(&m_pcb);
     }
 
     segment.m_attr.mss = m_pcb.mss;
 
-    if (!m_enqueued_tcp_segments.empty())
-    {
+    if (!m_enqueued_tcp_segments.empty()) {
         pbuf *p = m_enqueued_tcp_segments.front();
         segment.m_attr.flags = xlio_wr_tx_packet_attr(0);
         segment.m_attr.length = fill_regular_tcp_iovec(p, segment.m_iovec, segment.m_sz_iovec);
@@ -6471,7 +6485,7 @@ bool sockinfo_tcp::peek_tcp_segment(tcp_segment &segment)
     pbuf *p = tcp_peek_unsent_segment(&m_pcb, &flags);
     if (p) {
         segment.m_attr.flags = xlio_wr_tx_packet_attr(flags);
-        segment.m_attr.length = (segment.m_attr.flags & TCP_WRITE_ZEROCOPY) 
+        segment.m_attr.length = (segment.m_attr.flags & TCP_WRITE_ZEROCOPY)
             ? fill_zerocopy_tcp_iovec(p, segment.m_iovec, segment.m_sz_iovec)
             : fill_regular_tcp_iovec(p, segment.m_iovec, segment.m_sz_iovec);
         segment.m_attr.tis = nullptr; /* TIS TODO temporary needed for TLS */
@@ -6482,8 +6496,7 @@ bool sockinfo_tcp::peek_tcp_segment(tcp_segment &segment)
 
 void sockinfo_tcp::pop_tcp_segment()
 {
-    if (!m_enqueued_tcp_segments.empty())
-    {
+    if (!m_enqueued_tcp_segments.empty()) {
         m_enqueued_tcp_segments.pop_front();
         return;
     }

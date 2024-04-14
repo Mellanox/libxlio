@@ -256,7 +256,7 @@ void ring_simple::create_resources()
     }
     ring_logdbg("ring attributes: m_tx_num_wr = %d", m_tx_num_wr);
 
-#if 1
+#if 0
     m_tx_scheduler = std::make_unique<tx_fifo_scheduler>(*this, max_qp_wr);
 #else
     m_tx_scheduler = std::make_unique<tx_round_robin_scheduler>(*this, max_qp_wr);
@@ -1241,7 +1241,7 @@ size_t ring_simple::send(tcp_segment &segment, uintptr_t metadata)
 
     if (m_hqtx->credits_get(credits)) {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_hqtx->send_wqe(&wr, segment.m_attr.flags,  segment.m_attr.tis, credits, metadata);
+        m_hqtx->send_wqe(&wr, segment.m_attr.flags, segment.m_attr.tis, credits, metadata);
         return credits;
     }
     return 0;

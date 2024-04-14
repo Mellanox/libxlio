@@ -42,7 +42,7 @@ void tx_round_robin_scheduler::schedule_tx()
     size_t num_messages = fair_num_requests();
     size_t num_sockets = m_queue.size();
 
-    while (num_sockets && m_max_requests - m_num_requests >= num_messages) {
+    while (num_sockets && !m_ring_full) {
         sockinfo_tx_scheduler_interface *sock = m_queue.front();
         m_queue.pop_front();
         num_sockets--;
@@ -56,33 +56,33 @@ void tx_round_robin_scheduler::schedule_tx()
 
 #include <algorithm>
 #include <cassert>
+#include <stdio.h>
 void tx_round_robin_scheduler::schedule_tx(sockinfo_tx_scheduler_interface *sock, bool is_first)
 {
     if (is_first) {
         assert(std::find(m_queue.cbegin(), m_queue.cend(), sock) == m_queue.cend());
         m_queue.push_back(sock);
     }
+    // printf("%s:%d [%s] tx_round_robin_scheduler sock %p size queue %zu is_first [%s]\n",
+    // __FILE__, __LINE__, __func__, sock, m_queue.size(), is_first ? "true" : "false");
 
-    assert(std::find(m_queue.cbegin(), m_queue.cend(), sock) != m_queue.cend());
+    // assert(std::find(m_queue.cbegin(), m_queue.cend(), sock) != m_queue.cend());
 
     schedule_tx();
-}
-
-void tx_round_robin_scheduler::notify_completion(uintptr_t metadata, size_t num_completions)
-{
-    auto socket = reinterpret_cast<sockinfo_tx_scheduler_interface *>(metadata);
-    if (socket) {
-        socket->notify_completions(num_completions);
-    }
-    m_num_requests -= num_completions;
 }
 
 send_status tx_round_robin_scheduler::single_socket_send(sockinfo_tx_scheduler_interface *sock,
                                                          size_t requests)
 {
     sq_proxy proxy {*this, requests, reinterpret_cast<uintptr_t>(sock)};
+    auto status = sock->do_send(proxy);
 
-    return sock->do_send(proxy);
+    // printf("%s:%d [%s] tx_round_robin_scheduler sock %p size queue %zu status [%s]\n", __FILE__,
+    // __LINE__, __func__, sock, m_queue.size(),  send_status::OK == status ? "OK" :
+    // "NO_MORE_MESSAGES");
+
+    return status;
+    // return sock->do_send(proxy);
 }
 
 /*
@@ -95,5 +95,5 @@ send_status tx_round_robin_scheduler::single_socket_send(sockinfo_tx_scheduler_i
 size_t tx_round_robin_scheduler::fair_num_requests()
 {
     /* If the queue is empty, make the denominator 1 to eliminate the divide-by-zero error */
-    return std::max(1UL, (m_max_requests - m_num_requests) / (std::max(1UL, m_queue.size())));
+    return std::max(1UL, m_max_requests / (std::max(1UL, m_queue.size())));
 }

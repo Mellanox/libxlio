@@ -466,7 +466,8 @@ void dst_entry_tcp::notify_ready_to_send(sockinfo_tx_scheduler_interface *socket
     m_p_ring->schedule_tx(socket, is_first);
 }
 
-void dst_entry_tcp::fill_wqe(tcp_iovec *p_tcp_iov, size_t sz_iov, xlio_send_attr &attr, ring *p_ring, xlio_ibv_send_wr &wqe)
+void dst_entry_tcp::fill_wqe(tcp_iovec *p_tcp_iov, size_t sz_iov, xlio_send_attr &attr,
+                             ring *p_ring, xlio_ibv_send_wr &wqe)
 {
     void *p_pkt;
     void *p_ip_hdr;
@@ -554,11 +555,11 @@ void dst_entry_tcp::fill_wqe(tcp_iovec *p_tcp_iov, size_t sz_iov, xlio_send_attr
             /* update send work request. do not expect noninlined scenario */
             if (attr.mss < (attr.length - tcp_hdr_len)) {
                 wqe_send_handler().enable_tso(wqe, (void *)((uint8_t *)p_pkt + hdr_alignment_diff),
-                                      m_header->m_total_hdr_len + tcp_hdr_len,
-                                      attr.mss - (tcp_hdr_len - TCP_HLEN));
+                                              m_header->m_total_hdr_len + tcp_hdr_len,
+                                              attr.mss - (tcp_hdr_len - TCP_HLEN));
             } else {
-               wqe_send_handler().enable_tso(wqe, (void *)((uint8_t *)p_pkt + hdr_alignment_diff),
-                                      m_header->m_total_hdr_len + tcp_hdr_len, 0);
+                wqe_send_handler().enable_tso(wqe, (void *)((uint8_t *)p_pkt + hdr_alignment_diff),
+                                              m_header->m_total_hdr_len + tcp_hdr_len, 0);
             }
             if (!is_zerocopy) {
                 p_tcp_iov[0].iovec.iov_base = (uint8_t *)p_tcp_hdr + tcp_hdr_len;
@@ -684,7 +685,6 @@ void dst_entry_tcp::fill_wqe(tcp_iovec *p_tcp_iov, size_t sz_iov, xlio_send_attr
         wqe.wr_id = (uintptr_t)p_mem_buf_desc;
 
         wqe.num_sge = 1;
-
     }
 
     if (unlikely(!m_p_tx_mem_buf_desc_list)) {

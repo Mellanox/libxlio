@@ -619,8 +619,8 @@ private:
 
     bool peek_tcp_segment(tcp_segment &segment);
     void pop_tcp_segment();
-    size_t fill_regular_tcp_iovec(pbuf *p, tcp_iovec* tcpiovec, size_t &count);
-    size_t fill_zerocopy_tcp_iovec(pbuf *p, tcp_iovec* tcpiovec, size_t &count);
+    size_t fill_regular_tcp_iovec(pbuf *p, tcp_iovec *tcpiovec, size_t &count);
+    size_t fill_zerocopy_tcp_iovec(pbuf *p, tcp_iovec *tcpiovec, size_t &count);
 
 public:
     static const int CONNECT_DEFAULT_TIMEOUT_MS = 10000;
