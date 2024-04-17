@@ -115,6 +115,7 @@ protected:
  */
 TEST_F(tcp_sendfile, ti_1_basic)
 {
+    usleep(200000);
     int rc = EOK;
     void *file_ptr = NULL;
 
@@ -212,6 +213,7 @@ TEST_F(tcp_sendfile, ti_1_basic)
  */
 TEST_F(tcp_sendfile, ti_2_vary_size)
 {
+    usleep(200000);
     int rc = EOK;
     struct {
         int chunk_size;

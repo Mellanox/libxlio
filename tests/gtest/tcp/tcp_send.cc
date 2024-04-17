@@ -48,6 +48,7 @@ class tcp_send : public tcp_base {
  */
 TEST_F(tcp_send, ti_1)
 {
+    usleep(200000);
     int rc = EOK;
     int fd;
     char buf[] = "hello";
@@ -73,6 +74,7 @@ TEST_F(tcp_send, ti_1)
  */
 TEST_F(tcp_send, ti_2)
 {
+    usleep(200000);
     int rc = EOK;
     int fd;
     char buf[] = "hello";
@@ -101,6 +103,7 @@ TEST_F(tcp_send, ti_2)
  */
 TEST_F(tcp_send, null_iov_elements)
 {
+    usleep(200000);
     std::string buff1("abcd");
     std::string buff2("efgh");
     std::string buff3("ijkl");

@@ -104,6 +104,7 @@ protected:
  */
 TEST_F(tcp_tls, DISABLED_ti_1)
 {
+    usleep(200000);
     int rc = EOK;
 
     fd = tcp_base::sock_create();
@@ -137,6 +138,7 @@ TEST_F(tcp_tls, DISABLED_ti_1)
  */
 TEST_F(tcp_tls, DISABLED_ti_2)
 {
+    usleep(200000);
     int rc = EOK;
     char test_msg[] = "Hello test";
 
@@ -223,6 +225,7 @@ TEST_F(tcp_tls, DISABLED_ti_2)
  */
 TEST_F(tcp_tls, DISABLED_ti_3_12_gcm_send_small)
 {
+    usleep(200000);
     int rc = EOK;
     char test_msg[] = "Hello test";
     struct tls12_crypto_info_aes_gcm_128 crypto_info;
@@ -320,6 +323,7 @@ TEST_F(tcp_tls, DISABLED_ti_3_12_gcm_send_small)
  */
 TEST_F(tcp_tls, DISABLED_ti_4_12_gcm_send_max)
 {
+    usleep(200000);
     int rc = EOK;
     char test_msg[TLS_PAYLOAD_MAX_LEN] = "Maximum TLS record";
     struct tls12_crypto_info_aes_gcm_128 crypto_info;
@@ -417,6 +421,7 @@ TEST_F(tcp_tls, DISABLED_ti_4_12_gcm_send_max)
  */
 TEST_F(tcp_tls, DISABLED_ti_5_12_gcm_send_more)
 {
+    usleep(200000);
     int rc = EOK;
     char test_msg[] = "Test check";
     struct tls12_crypto_info_aes_gcm_128 crypto_info;
@@ -517,6 +522,7 @@ TEST_F(tcp_tls, DISABLED_ti_5_12_gcm_send_more)
  */
 TEST_F(tcp_tls, DISABLED_ti_6_12_gcm_sendfile)
 {
+    usleep(200000);
     int rc = EOK;
     struct tls12_crypto_info_aes_gcm_128 crypto_info;
     int test_file_size = 0x10000;
@@ -625,6 +631,7 @@ TEST_F(tcp_tls, DISABLED_ti_6_12_gcm_sendfile)
  */
 TEST_F(tcp_tls, DISABLED_ti_7_12_gcm_sendfile_chunk)
 {
+    usleep(200000);
     int rc = EOK;
     struct tls12_crypto_info_aes_gcm_128 crypto_info;
     struct {
@@ -749,6 +756,7 @@ TEST_F(tcp_tls, DISABLED_ti_7_12_gcm_sendfile_chunk)
  */
 TEST_F(tcp_tls, DISABLED_ti_8_12_gcm_sendmsg)
 {
+    usleep(200000);
     int rc = EOK;
     char test_msg[] = "Hello test";
     struct tls12_crypto_info_aes_gcm_128 crypto_info;
@@ -869,6 +877,7 @@ TEST_F(tcp_tls, DISABLED_ti_8_12_gcm_sendmsg)
  */
 TEST_F(tcp_tls, DISABLED_ti_9_12_gcm_send_bidirect)
 {
+    usleep(200000);
     int rc = EOK;
     char test_msg[] = "Hello test";
     struct tls12_crypto_info_aes_gcm_128 crypto_info;
@@ -984,6 +993,7 @@ TEST_F(tcp_tls, DISABLED_ti_9_12_gcm_send_bidirect)
  */
 TEST_F(tcp_tls, DISABLED_ti_10_12_gcm_control_msg)
 {
+    usleep(200000);
     int rc = EOK;
     char test_msg[] = "Hello test";
     struct tls12_crypto_info_aes_gcm_128 crypto_info;

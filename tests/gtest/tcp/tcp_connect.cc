@@ -50,6 +50,7 @@ class tcp_connect : public tcp_base {
  */
 TEST_F(tcp_connect, DISABLED_ti_1)
 {
+    usleep(200000);
     int rc = EOK;
     int fd;
     int i;
@@ -79,6 +80,7 @@ TEST_F(tcp_connect, DISABLED_ti_1)
  */
 TEST_F(tcp_connect, DISABLED_ti_2)
 {
+    usleep(200000);
     int rc = EOK;
     int fd;
     int i;
@@ -113,6 +115,7 @@ TEST_F(tcp_connect, DISABLED_ti_2)
  */
 TEST_F(tcp_connect, DISABLED_ti_3)
 {
+    usleep(200000);
     int rc = EOK;
     int fd;
     int i;
@@ -144,6 +147,7 @@ TEST_F(tcp_connect, ti_4_rto_racing)
 {
     SKIP_TRUE(!getenv("XLIO_SOCKETXTREME"), "Skip Socketxtreme");
 
+    usleep(200000);
     int pid = fork();
 
     if (0 == pid) { /* I am the child */
@@ -239,6 +243,7 @@ TEST_F(tcp_connect, ti_4_rto_racing)
 TEST_F(tcp_connect, ti_5_multi_connect)
 {
     SKIP_TRUE(!getenv("XLIO_SOCKETXTREME"), "Skip Socketxtreme");
+    usleep(200000);
 
     int fd = tcp_base::sock_create();
     ASSERT_LE(0, fd);
@@ -348,6 +353,7 @@ TEST_F(tcp_connect, mapped_ipv4_connect)
     }
 
     auto check_connect = [this](bool withbind) {
+        usleep(200000);
         int pid = fork();
         if (0 == pid) { // Child
             barrier_fork(pid);
@@ -473,6 +479,7 @@ TEST_F(tcp_connect, mapped_ipv4_connect_v6only)
 TEST_F(tcp_connect, ti_6_incoming_conn)
 {
     SKIP_TRUE(!getenv("XLIO_SOCKETXTREME"), "Skip Socketxtreme");
+    usleep(200000);
 
     int rc = EOK;
     int pid = fork();

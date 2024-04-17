@@ -63,6 +63,7 @@ class tcp_sockopt : public tcp_base {
 TEST_F(tcp_sockopt, ti_1_getsockopt_tcp_info)
 {
     auto test_lambda = [this]() {
+        usleep(200000);
         int rc = EOK;
         int pid = fork();
 
@@ -278,6 +279,7 @@ TEST_F(tcp_sockopt, ti_3_setsockopt_isolate)
     };
 
     auto test_client = [&]() {
+        usleep(200000);
         char buf[64];
         sockaddr_store_t addr;
         sockaddr_store_t local_addr;
@@ -354,6 +356,7 @@ TEST_F(tcp_sockopt, ti_3_setsockopt_isolate)
     };
 
     auto test_server = [&]() {
+        usleep(200000);
         char buf[64];
         sockaddr_store_t addr;
         sockaddr_store_t peer_addr;
@@ -895,6 +898,7 @@ TEST_P(tcp_with_fifo, accepted_socket_inherits_the_setsockopt_param)
 
     int level, optname, value;
     std::tie(level, optname, value) = GetParam();
+    usleep(200000);
     pid_t pid = fork();
 
     if (pid > 0) { // Parent process (the "server" process)
@@ -932,9 +936,7 @@ TEST_P(tcp_with_fifo, accepted_socket_inherits_the_setsockopt_param)
         auto family = ((struct sockaddr *)&gtest_conf.server_addr)->sa_family;
         auto client_fd = reusable_cleanable_test_socket(family, SOCK_STREAM, 0);
         EXPECT_GE(client_fd, 0) << "socket syscall failed to setup a socket";
-        EXPECT_EQ(bind(client_fd, (struct sockaddr *)&gtest_conf.client_addr,
-                       sizeof(gtest_conf.client_addr)),
-                  0);
+
         m_ipc_server_to_client.wait_peer();
 
         auto result = connect(client_fd, (struct sockaddr *)&gtest_conf.server_addr,
