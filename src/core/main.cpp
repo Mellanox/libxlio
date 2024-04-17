@@ -262,6 +262,8 @@ static int free_libxlio_resources()
 
     vlog_printf(VLOG_DEBUG, "Stopping logger module\n");
 
+    sock_stats::destroy_instance();
+
     sock_redirect_exit();
 
     vlog_stop();
@@ -1047,7 +1049,7 @@ static void do_global_ctors_helper()
     *g_p_vlogger_level = g_vlogger_level;
     *g_p_vlogger_details = g_vlogger_details;
 
-    sock_stats::instance().init_sock_stats(safe_mce_sys().stats_fd_num_max);
+    sock_stats::init_instance(safe_mce_sys().stats_fd_num_max);
 
     g_global_stat_static.init();
     xlio_stats_instance_create_global_block(&g_global_stat_static);
