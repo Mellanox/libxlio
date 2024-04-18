@@ -34,6 +34,7 @@
 #define HW_QUEUE_RX_H
 
 #include <vector>
+#include <doca_eth_rxq.h>
 #include "dev/xlio_ti.h"
 #include "dev/ib_ctx_handler.h"
 #include "dev/rfs_rule.h"
@@ -83,9 +84,9 @@ public:
 #endif /* DEFINED_UTLS */
 
 private:
+    static void destory_doca_rxq(doca_eth_rxq *rxq);
     cq_mgr_rx *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel);
 
-    bool init_rx_cq_mgr_prepare();
     void post_recv_buffer_rq(mem_buf_desc_t *p_mem_buf_desc);
     void put_tls_tir_in_cache(xlio_tir *tir);
     bool prepare_rq(uint32_t cqn);
@@ -109,8 +110,10 @@ private:
     } m_rq_data;
 
     std::vector<xlio_tir *> m_tls_tir_cache;
-    std::unique_ptr<dpcp::tir> m_tir = {nullptr};
-    std::unique_ptr<dpcp::basic_rq> m_rq = {nullptr};
+    std::unique_ptr<dpcp::tir> m_tir {nullptr};
+    std::unique_ptr<dpcp::basic_rq> m_rq {nullptr};
+    std::unique_ptr<doca_eth_rxq, decltype(&destory_doca_rxq)> m_doca_rxq {nullptr,
+                                                                           destory_doca_rxq};
     ring_simple *m_p_ring;
     cq_mgr_rx *m_p_cq_mgr_rx = nullptr;
     ib_ctx_handler *m_p_ib_ctx_handler;
