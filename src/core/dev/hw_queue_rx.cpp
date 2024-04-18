@@ -53,6 +53,10 @@
 
 #define ALIGN_WR_DOWN(_num_wr_) (std::max(32, ((_num_wr_) & ~(0xf))))
 
+// Required for DOCA ethernet library
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 hw_queue_rx::hw_queue_rx(ring_simple *ring, ib_ctx_handler *ib_ctx,
                          ibv_comp_channel *rx_comp_event_channel, uint16_t vlan)
     : m_p_ring(ring)
@@ -74,6 +78,7 @@ hw_queue_rx::~hw_queue_rx()
     hwqrx_logfunc("");
 
     m_rq.reset(nullptr); // Must be destroyed before RX CQ.
+    m_doca_rxq.reset(nullptr); // Must be destroyed before RX PE.
 
     if (m_rq_wqe_idx_to_wrid) {
         if (0 != munmap(m_rq_wqe_idx_to_wrid, m_rx_num_wr * sizeof(*m_rq_wqe_idx_to_wrid))) {
@@ -97,15 +102,6 @@ hw_queue_rx::~hw_queue_rx()
 
 bool hw_queue_rx::configure_rq(ibv_comp_channel *rx_comp_event_channel)
 {
-    // Check device capabilities for max QP work requests
-    /*uint32_t max_qp_wr = ALIGN_WR_DOWN(m_p_ib_ctx_handler->get_ibv_device_attr()->max_qp_wr - 1);
-    if (m_rx_num_wr > max_qp_wr) {
-        hwqrx_logwarn("Allocating only %d Rx work requests while user "
-                      "requested %s=%d for RX on <%p>",
-                      max_qp_wr, SYS_VAR_RX_NUM_WRE, m_rx_num_wr, m_p_ib_ctx_handler);
-        m_rx_num_wr = max_qp_wr;
-    }*/
-
     // Create associated cq_mgr_tx
     BULLSEYE_EXCLUDE_BLOCK_START
     m_p_cq_mgr_rx = init_rx_cq_mgr(rx_comp_event_channel);
@@ -123,12 +119,6 @@ bool hw_queue_rx::configure_rq(ibv_comp_channel *rx_comp_event_channel)
     xlio_ib_mlx5_cq_t mlx5_cq;
     memset(&mlx5_cq, 0, sizeof(mlx5_cq));
     xlio_ib_mlx5_get_cq(m_p_cq_mgr_rx->get_ibv_cq_hndl(), &mlx5_cq);
-
-    hwqrx_logdbg(
-        "Creating RQ of transport type '%s' on ibv device '%s' [%p], cq: %p(%u), wre: %d, sge: %d",
-        priv_xlio_transport_type_str(m_p_ring->get_transport_type()),
-        m_p_ib_ctx_handler->get_ibname(), m_p_ib_ctx_handler->get_ibv_device(), m_p_cq_mgr_rx,
-        mlx5_cq.cq_num, m_rx_num_wr, m_rx_sge);
 
     if (safe_mce_sys().enable_striding_rq) {
         m_rx_sge = 2U; // Striding-RQ needs a reserved segment.
@@ -412,25 +402,8 @@ out:
     return err;
 }
 
-bool hw_queue_rx::init_rx_cq_mgr_prepare()
-{
-    m_rq_wqe_idx_to_wrid =
-        (uint64_t *)mmap(nullptr, m_rx_num_wr * sizeof(*m_rq_wqe_idx_to_wrid),
-                         PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-    if (m_rq_wqe_idx_to_wrid == MAP_FAILED) {
-        hwqrx_logerr("Failed allocating m_rq_wqe_idx_to_wrid (errno=%d %m)", errno);
-        return false;
-    }
-
-    return true;
-}
-
 cq_mgr_rx *hw_queue_rx::init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel)
 {
-    if (!init_rx_cq_mgr_prepare()) {
-        return nullptr;
-    }
-
     if (safe_mce_sys().enable_striding_rq) {
         return new cq_mgr_rx_strq(m_p_ring, m_p_ib_ctx_handler,
                                   safe_mce_sys().strq_stride_num_per_rwqe * m_rx_num_wr,
@@ -532,9 +505,62 @@ dpcp::tir *hw_queue_rx::create_tir(bool is_tls /*=false*/)
     return tir_obj;
 }
 
+void hw_queue_rx::destory_doca_rxq(doca_eth_rxq *rxq)
+{
+    doca_error_t err = doca_eth_rxq_destroy(rxq);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(__log_err, err, "doca_eth_rxq_destroy");
+    }
+}
+
 bool hw_queue_rx::prepare_rq(uint32_t cqn)
 {
     hwqrx_logdbg("");
+
+    doca_dev *dev = m_p_ib_ctx_handler->get_doca_device();
+    doca_devinfo *devinfo = doca_dev_as_devinfo(dev);
+
+    doca_error_t type_supported = doca_eth_rxq_cap_is_type_supported(
+        devinfo, DOCA_ETH_RXQ_TYPE_REGULAR, DOCA_ETH_RXQ_DATA_PATH_TYPE_CPU);
+
+    uint32_t max_burst_size = 0U;
+    uint32_t max_packet_size = 0U;
+    doca_error_t err1 = doca_eth_rxq_cap_get_max_burst_size(devinfo, &max_burst_size);
+    doca_error_t err2 = doca_eth_rxq_cap_get_max_packet_size(devinfo, &max_packet_size);
+
+    if (DOCA_IS_ERROR(type_supported) || DOCA_IS_ERROR(err1) || DOCA_IS_ERROR(err2)) {
+        PRINT_DOCA_ERR(hwqrx_logerr, type_supported, "doca_eth_rxq_cap_is_type_supported");
+        PRINT_DOCA_ERR(hwqrx_logerr, err1, "doca_eth_rxq_cap_get_max_burst_size");
+        PRINT_DOCA_ERR(hwqrx_logerr, err2, "doca_eth_rxq_cap_get_max_packet_size");
+        return false;
+    }
+
+    hwqrx_loginfo("RXQ caps MaxBurstSize %u, MaxPacketSize %u, Dev:%s", max_burst_size,
+                  max_packet_size, m_p_ib_ctx_handler->get_ibname().c_str());
+
+    if (m_rx_num_wr > max_burst_size) {
+        hwqrx_logwarn("Decreasing MaxBurstSize %u to capability %u.", m_rx_num_wr, max_burst_size);
+        m_rx_num_wr = max_burst_size;
+    }
+
+    hwqrx_logdbg(
+        "Creating DOCA RXQ MaxBurstSize: %u, CapMaxBurstSize: %u, MaxPacketSize: %u, Dev:%s",
+        m_rx_num_wr, max_burst_size, max_packet_size, m_p_ib_ctx_handler->get_ibname().c_str());
+
+    doca_eth_rxq *rxq = nullptr;
+    doca_error_t err = doca_eth_rxq_create(dev, m_rx_num_wr, max_packet_size, &rxq);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqrx_logerr, err, "doca_eth_rxq_create");
+        return false;
+    }
+
+    m_doca_rxq.reset(rxq);
+
+    err = doca_eth_rxq_set_type(m_doca_rxq.get(), DOCA_ETH_RXQ_TYPE_REGULAR);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqrx_logerr, err, "doca_eth_rxq_get_type_supported");
+        return false;
+    }
 
     dpcp::adapter *dpcp_adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
     if (!dpcp_adapter) {
@@ -588,6 +614,14 @@ bool hw_queue_rx::prepare_rq(uint32_t cqn)
 
     m_rq = std::move(new_rq);
 
+    m_rq_wqe_idx_to_wrid =
+        (uint64_t *)mmap(nullptr, m_rx_num_wr * sizeof(*m_rq_wqe_idx_to_wrid),
+                         PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    if (m_rq_wqe_idx_to_wrid == MAP_FAILED) {
+        hwqrx_logerr("Failed allocating m_rq_wqe_idx_to_wrid (errno=%d %m)", errno);
+        return false;
+    }
+
     // At this stage there is no TIR associated with the RQ, So it mimics QP INIT state.
     // At RDY state without a TIR, Work Requests can be submitted to the RQ.
     modify_queue_to_ready_state();
@@ -635,3 +669,5 @@ bool hw_queue_rx::store_rq_mlx5_params(dpcp::basic_rq &new_rq)
 
     return true;
 }
+
+#pragma GCC diagnostic pop
