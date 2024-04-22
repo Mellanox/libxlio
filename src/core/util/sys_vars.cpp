@@ -1990,6 +1990,15 @@ void mce_sys_var::get_env_params()
         }
         multilock = (multilock_t)temp;
     }
+
+    std::vector<const char *> deprecated_params = {SYS_VAR_TX_NUM_BUFS, SYS_VAR_RX_NUM_BUFS};
+    for (const char *param : deprecated_params) {
+        env_ptr = getenv(param);
+        if (env_ptr) {
+            vlog_printf(VLOG_WARNING,
+                        "%s is deprecated and will be removed in the future versions\n", param);
+        }
+    }
 }
 
 void set_env_params()
