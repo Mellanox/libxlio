@@ -55,7 +55,7 @@
 #endif
 
 #if !defined(__BYTE_ORDER__) || !defined(__ORDER_LITTLE_ENDIAN__) || !defined(__ORDER_BIG_ENDIAN__)
-#error "__BYTE_ORDER__ or __ORDER_..._ENDIAN__ is not defined"
+#warning "__BYTE_ORDER__ or __ORDER_..._ENDIAN__ is not defined"
 #endif
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
