@@ -1495,9 +1495,6 @@ err_t sockinfo_tcp::ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void 
          */
         p_si_tcp->reset_ops();
     }
-    if (new_state == ESTABLISHED) {
-        p_si_tcp->xlio_socket_event(XLIO_SOCKET_EVENT_ESTABLISHED, 0);
-    }
 
     /* Update daemon about actual state for offloaded connection */
     if (g_p_agent && likely(p_si_tcp->m_sock_offload == TCP_SOCK_LWIP)) {
@@ -3783,6 +3780,7 @@ void sockinfo_tcp::set_sock_options(sockinfo_tcp *new_sock)
 err_t sockinfo_tcp::connect_lwip_cb(void *arg, struct tcp_pcb *tpcb, err_t err)
 {
     sockinfo_tcp *conn = (sockinfo_tcp *)arg;
+    bool is_connected = false;
     NOT_IN_USE(tpcb);
 
     __log_dbg("connect cb: arg=%p, pcp=%p err=%d", arg, tpcb, err);
@@ -3807,6 +3805,7 @@ err_t sockinfo_tcp::connect_lwip_cb(void *arg, struct tcp_pcb *tpcb, err_t err)
             conn->m_rcvbuff_max = 2 * conn->m_pcb.mss;
         }
         conn->fit_rcv_wnd(false);
+        is_connected = true;
     } else {
         conn->m_error_status = ECONNREFUSED;
         conn->m_conn_state = TCP_CONN_FAILED;
@@ -3821,6 +3820,9 @@ err_t sockinfo_tcp::connect_lwip_cb(void *arg, struct tcp_pcb *tpcb, err_t err)
 
     conn->unlock_tcp_con();
 
+    if (is_connected) {
+        conn->xlio_socket_event(XLIO_SOCKET_EVENT_ESTABLISHED, 0);
+    }
     return ERR_OK;
 }
 
