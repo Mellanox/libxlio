@@ -820,8 +820,6 @@ void print_xlio_global_settings()
     VLOG_STR_PARAM_STRING("LRO support", option_3::to_str(safe_mce_sys().enable_lro),
                           option_3::to_str(MCE_DEFAULT_LRO), SYS_VAR_LRO,
                           option_3::to_str(safe_mce_sys().enable_lro));
-    VLOG_PARAM_STRING("BF (Blue Flame)", safe_mce_sys().handle_bf, MCE_DEFAULT_BF_FLAG, SYS_VAR_BF,
-                      safe_mce_sys().handle_bf ? "Enabled " : "Disabled");
 #ifdef DEFINED_UTLS
     VLOG_PARAM_STRING("UTLS RX support", safe_mce_sys().enable_utls_rx, MCE_DEFAULT_UTLS_RX,
                       SYS_VAR_UTLS_RX, safe_mce_sys().enable_utls_rx ? "Enabled " : "Disabled");
