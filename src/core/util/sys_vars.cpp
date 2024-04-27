@@ -876,7 +876,6 @@ void mce_sys_var::get_env_params()
 #endif /* DEFINED_UTLS */
     enable_lro = MCE_DEFAULT_LRO;
     handle_fork = MCE_DEFAULT_FORK_SUPPORT;
-    handle_bf = MCE_DEFAULT_BF_FLAG;
     close_on_dup2 = MCE_DEFAULT_CLOSE_ON_DUP2;
     mtu = MCE_DEFAULT_MTU;
 #if defined(DEFINED_NGINX)
@@ -1880,10 +1879,6 @@ void mce_sys_var::get_env_params()
         }
     }
 
-    if ((env_ptr = getenv(SYS_VAR_BF))) {
-        handle_bf = atoi(env_ptr) ? true : false;
-    }
-
     if ((env_ptr = getenv(SYS_VAR_FORK))) {
         handle_fork = atoi(env_ptr) ? true : false;
     }
@@ -2024,14 +2019,6 @@ void set_env_params()
      */
     setenv("MLX5_DEVICE_FATAL_CLEANUP", "1", 1);
     setenv("RDMAV_ALLOW_DISASSOC_DESTROY", "1", 1);
-
-    if (safe_mce_sys().handle_bf) {
-        setenv("MLX5_POST_SEND_PREFER_BF", "1", 1);
-    } else {
-        /* todo - these seem not to work if inline is on, since libmlx is doing (inl || bf) when
-         * deciding to bf*/
-        setenv("MLX5_POST_SEND_PREFER_BF", "0", 1);
-    }
 
     const char *ibv_alloc_type = "PREFER_CONTIG";
 

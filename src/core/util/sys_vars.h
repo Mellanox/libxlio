@@ -465,7 +465,6 @@ public:
     char internal_thread_affinity_str[FILENAME_MAX];
     cpu_set_t internal_thread_affinity;
     bool internal_thread_arm_cq_enabled;
-    bool handle_bf;
     skip_poll_in_rx_t skip_poll_in_rx;
     multilock_t multilock;
 
@@ -661,7 +660,6 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_HEAP_METADATA_BLOCK       "XLIO_HEAP_METADATA_BLOCK"
 #define SYS_VAR_HUGEPAGE_SIZE             "XLIO_HUGEPAGE_SIZE"
 #define SYS_VAR_FORK                      "XLIO_FORK"
-#define SYS_VAR_BF                        "XLIO_BF"
 #define SYS_VAR_CLOSE_ON_DUP2             "XLIO_CLOSE_ON_DUP2"
 #define SYS_VAR_MTU                       "XLIO_MTU"
 #if defined(DEFINED_NGINX)
@@ -829,7 +827,6 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_HUGEPAGE_SIZE                  (0)
 #define MCE_MAX_HUGEPAGE_SIZE                      (1ULL << 63ULL)
 #define MCE_DEFAULT_FORK_SUPPORT                   (true)
-#define MCE_DEFAULT_BF_FLAG                        (true)
 #define MCE_DEFAULT_CLOSE_ON_DUP2                  (true)
 #define MCE_DEFAULT_MTU                            (0)
 #if defined(DEFINED_NGINX)
