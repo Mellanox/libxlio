@@ -161,7 +161,6 @@ Example:
  XLIO DETAILS: UTLS RX support                Disabled                   [XLIO_UTLS_RX]
  XLIO DETAILS: UTLS TX support                Enabled                    [XLIO_UTLS_TX]
  XLIO DETAILS: LRO support                    auto                       [XLIO_LRO]
- XLIO DETAILS: BF (Blue Flame)                Enabled                    [XLIO_BF]
  XLIO DETAILS: Src port stirde                2                          [XLIO_SRC_PORT_STRIDE]
  XLIO DETAILS: Size of UDP socket pool        0                          [XLIO_NGINX_UDP_POOL_SIZE]
  XLIO DETAILS: Number of Nginx workers        0                          [XLIO_NGINX_WORKERS_NUM]
@@ -977,10 +976,6 @@ This parameter indicates number of msec to wait between every UC ARP.
 XLIO_NEIGH_NUM_ERR_RETRIES
 This number indicates number of retries to restart neigh state machine in case neigh got ERROR event.
 Default value is 1
-
-XLIO_BF
-This flag enables / disables BF (Blue Flame) usage of the ConnectX
-Default value is 1 (Enabled)
 
 XLIO_FORK
 Control whether XLIO should support fork. Setting this flag on will cause XLIO to
