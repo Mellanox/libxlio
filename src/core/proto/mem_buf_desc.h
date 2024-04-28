@@ -216,10 +216,8 @@ public:
     // Rx: cq_mgr_rx owns the mem_buf_desc and the associated data buffer
     ring_slave *p_desc_owner;
 
-private:
     atomic_t n_ref_count; // number of interested receivers (sockinfo) [can be modified only in
                           // cq_mgr_rx context]
-public:
     uint64_t unused_padding; // Align the structure to the cache line boundary
 };
 
