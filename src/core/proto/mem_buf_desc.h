@@ -34,6 +34,7 @@
 #define MEM_BUF_DESC_H
 
 #include <linux/errqueue.h>
+#include <cstddef>
 
 #include "utils/atomic.h"
 #include "core/util/sock_addr.h"
@@ -44,6 +45,7 @@
 class ring_slave;
 struct iphdr;
 struct ip6_hdr;
+struct xlio_buf;
 
 struct timestamps_t {
     struct timespec sw;
@@ -125,6 +127,22 @@ public:
             --lwip_pbuf.ref;
         }
         return lwip_pbuf.ref;
+    }
+
+    /*
+     * Reuse field 'ee' as 'userdata' within xlio_buf. This can be any field of sufficient size
+     * which is unused in RX buffers.
+     * This is used for XLIO Socket API.
+     */
+    struct xlio_buf *to_xlio_buf() { return reinterpret_cast<struct xlio_buf *>(&ee); }
+    static struct xlio_buf *to_xlio_buf(struct pbuf *p)
+    {
+        return reinterpret_cast<mem_buf_desc_t *>(p)->to_xlio_buf();
+    }
+    static mem_buf_desc_t *from_xlio_buf(struct xlio_buf *buf)
+    {
+        return reinterpret_cast<mem_buf_desc_t *>(reinterpret_cast<char *>(buf) -
+                                                  offsetof(mem_buf_desc_t, ee));
     }
 
 public:

@@ -469,10 +469,9 @@ err_t sockinfo_tcp::rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *pcb, struc
     if (conn->m_p_group->m_socket_rx_cb) {
         struct pbuf *ptmp = p;
         while (ptmp) {
-            /* TODO Pass mem_buf_desc_t field intead of pbuf itself as xlio_buf */
             conn->m_p_group->m_socket_rx_cb(reinterpret_cast<xlio_socket_t>(conn),
                                             conn->m_xlio_socket_userdata, ptmp->payload, ptmp->len,
-                                            reinterpret_cast<struct xlio_buf *>(ptmp));
+                                            mem_buf_desc_t::to_xlio_buf(ptmp));
             ptmp = ptmp->next;
         }
     } else {
