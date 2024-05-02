@@ -1,3 +1,15 @@
+Version 3.31.0-1:
+Date + Time 2024-05-01
+=============================================================
+Added:
+        - RM #3832212 Print a deprecation warning for XLIO_TX/RX_BUFS
+
+Fixed:
+        - RM #3857909 Missed interrupts when high RX traffic rate stops
+        - RM #3598943 higher CPU util then kernel with Nginx with high payloads
+        - RM #3854806 Tx buffer pool leak with sockperf scenarios enabling zcopy
+        - RM #3858121 Issues with XLIO stats functionality
+
 Version 3.30.5-1:
 Date + Time 2024-0-09
 =============================================================
