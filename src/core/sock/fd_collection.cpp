@@ -148,7 +148,9 @@ void fd_collection::clear()
      */
     while (!m_pending_to_remove_lst.empty()) {
         sockinfo *p_sfd_api = m_pending_to_remove_lst.get_and_pop_back();
-        p_sfd_api->clean_socket_obj();
+        if (p_sfd_api) {
+            p_sfd_api->clean_socket_obj();
+        }
     }
 
     g_global_stat_static.n_pending_sockets = 0;

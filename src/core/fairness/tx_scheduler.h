@@ -57,10 +57,13 @@ public:
     {
         size_t used_requests = m_ring.send(msg, metadata);
         m_ring_full = used_requests == 0;
+        track_used_requests(used_requests, metadata);
         return used_requests;
     }
 
 protected:
+    virtual void track_used_requests(size_t, uintptr_t) { return; }
+
     ring_tx_scheduler_interface &m_ring;
     size_t m_max_requests;
     bool m_ring_full;

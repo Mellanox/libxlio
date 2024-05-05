@@ -6325,6 +6325,11 @@ send_status sockinfo_tcp::do_send(sq_proxy &sq)
 
     lock_tcp_con();
 
+    if (is_closable()) {
+        m_b_has_notified_ready_to_send = false;
+        unlock_tcp_con();
+        return send_status::NO_MORE_MESSAGES;
+    }
     while (true) {
         /*msg = peek_control_msg();
         if (msg) {

@@ -297,19 +297,19 @@ public:
         auto incomplete_iops = m_num_incomplete_messages.load(std::memory_order_relaxed);
 
         return get_tcp_state(&m_pcb) == CLOSED && m_syn_received.empty() &&
-            m_accepted_conns.empty() && incomplete_iops == 0;
+            m_accepted_conns.empty() && incomplete_iops == 0 && !m_b_has_notified_ready_to_send;
     }
     bool inline is_destroyable_lock()
     {
         bool state;
         m_tcp_con_lock.lock();
-        state = get_tcp_state(&m_pcb) == CLOSED && m_state == SOCKINFO_CLOSING;
+        state = is_closable() && m_state == SOCKINFO_CLOSING;
         m_tcp_con_lock.unlock();
         return state;
     }
     bool inline is_destroyable_no_lock()
     {
-        return get_tcp_state(&m_pcb) == CLOSED && m_state == SOCKINFO_CLOSING;
+        return is_closable() && m_state == SOCKINFO_CLOSING;
     }
     bool skip_os_select() override
     {

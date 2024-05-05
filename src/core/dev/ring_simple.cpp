@@ -1219,6 +1219,7 @@ bool ring_simple::is_tso(void)
 
 void ring_simple::notify_complete(uintptr_t metadata)
 {
+    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
     m_tx_scheduler->notify_completion(metadata, 1);
     m_tx_scheduler->schedule_tx();
 }

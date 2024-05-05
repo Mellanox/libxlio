@@ -215,7 +215,6 @@ int cq_mgr_tx::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
         }
 
         handle_sq_wqe_prop(index);
-        m_p_ring->notify_complete(0);
         ret = 1;
     }
     update_global_sn_tx(*p_cq_poll_sn, num_polled_cqes);

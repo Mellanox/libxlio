@@ -34,12 +34,16 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <chrono>
 #include <deque>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "tx_scheduler.h"
 #include "ring_tx_scheduler_interface.h"
 #include "sockinfo_tx_scheduler_interface.h"
+
+using namespace std::chrono;
 
 class tx_round_robin_scheduler final : public tx_scheduler {
 public:
@@ -67,7 +71,14 @@ private:
     size_t fair_num_requests();
 
 private:
+    size_t m_used_requests;
+    time_point<steady_clock> m_last_scheduled;
     std::deque<sockinfo_tx_scheduler_interface *> m_queue;
+    std::unordered_map<sockinfo_tx_scheduler_interface *, uint32_t> m_socket_counters;
+    std::unordered_set<sockinfo_tx_scheduler_interface *> m_unique_sockets;
+
+protected:
+    void track_used_requests(size_t, uintptr_t) override;
 };
 
 #endif // _TX_ROUND_ROBIN_SCHEDULER_H_

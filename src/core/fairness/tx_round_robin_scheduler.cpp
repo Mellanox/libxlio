@@ -34,21 +34,48 @@
 tx_round_robin_scheduler::tx_round_robin_scheduler(ring_tx_scheduler_interface &r,
                                                    size_t max_requests)
     : tx_scheduler(r, max_requests)
+    , m_used_requests(0U)
+    , m_last_scheduled()
 {
 }
 
+#include <stdio.h>
+using namespace std::chrono_literals;
 void tx_round_robin_scheduler::schedule_tx()
 {
     size_t num_messages = fair_num_requests();
     size_t num_sockets = m_queue.size();
 
-    while (num_sockets && !m_ring_full) {
+    size_t how_much_sockets_sent = 0;
+    auto now = steady_clock::now();
+
+    if (now - m_last_scheduled < 50us) {
+        return;
+    }
+    m_last_scheduled = now;
+
+    while (num_sockets && !m_queue.empty() && !m_ring_full) {
         sockinfo_tx_scheduler_interface *sock = m_queue.front();
         m_queue.pop_front();
         num_sockets--;
+        if (!sock) {
+            continue;
+        }
 
-        send_status status = single_socket_send(sock, num_messages);
-        if (status == send_status::OK) {
+        if (m_socket_counters[sock] < num_messages) {
+            //if (single_socket_send(sock, num_messages - m_socket_counters[sock]) ==
+            if (single_socket_send(sock, 1) ==
+                send_status::OK) {
+                m_queue.push_back(sock);
+                //printf("%s:%d [%s] size queue %zu [%u] <= [%zu]\n", __FILE__, __LINE__, __func__, m_queue.size(), m_socket_counters[sock], num_messages);
+            } else {
+                m_unique_sockets.erase(sock);
+                //printf("%s:%d [%s] size queue %zu [%u] <= [%zu]\n", __FILE__, __LINE__, __func__, m_queue.size(), m_socket_counters[sock], num_messages);
+            }
+            how_much_sockets_sent++;
+        } else {
+            //printf("%s:%d [%s] size queue %zu [%u] <= [%zu]\n", __FILE__, __LINE__, __func__, m_queue.size(), m_socket_counters[sock], num_messages);
+            m_socket_counters[sock] /= 2; /* Increase the chances socket will be able to send next time */
             m_queue.push_back(sock);
         }
     }
@@ -56,15 +83,18 @@ void tx_round_robin_scheduler::schedule_tx()
 
 #include <algorithm>
 #include <cassert>
-#include <stdio.h>
-void tx_round_robin_scheduler::schedule_tx(sockinfo_tx_scheduler_interface *sock, bool is_first)
+void tx_round_robin_scheduler::schedule_tx(sockinfo_tx_scheduler_interface *sock, bool)
 {
-    if (is_first) {
-        assert(std::find(m_queue.cbegin(), m_queue.cend(), sock) == m_queue.cend());
+    if (m_unique_sockets.count(sock) == 0) {
+        m_unique_sockets.insert(sock);
         m_queue.push_back(sock);
+ //       size_t num_messages = m_used_requests / (m_socket_counters.size() + 1U);
+ //       if (m_socket_counters[sock] >= num_messages ||
+ //           single_socket_send(sock, 15U) == send_status::OK) {
+ //           m_unique_sockets.insert(sock);
+ //           m_queue.push_back(sock);
+ //       }
     }
-    // printf("%s:%d [%s] tx_round_robin_scheduler sock %p size queue %zu is_first [%s]\n",
-    // __FILE__, __LINE__, __func__, sock, m_queue.size(), is_first ? "true" : "false");
 
     // assert(std::find(m_queue.cbegin(), m_queue.cend(), sock) != m_queue.cend());
 
@@ -95,5 +125,18 @@ send_status tx_round_robin_scheduler::single_socket_send(sockinfo_tx_scheduler_i
 size_t tx_round_robin_scheduler::fair_num_requests()
 {
     /* If the queue is empty, make the denominator 1 to eliminate the divide-by-zero error */
-    return std::max(1UL, m_max_requests / (std::max(1UL, m_queue.size())));
+    return (2 * m_used_requests / (1UL + m_socket_counters.size())) ? : (1UL + m_max_requests / (1UL + m_socket_counters.size()));
+}
+
+void tx_round_robin_scheduler::track_used_requests(size_t used_requests, uintptr_t metadata)
+{
+    auto sock = reinterpret_cast<sockinfo_tx_scheduler_interface *>(metadata);
+    if (m_used_requests > m_max_requests * 10) {
+        m_used_requests = 0;
+        m_socket_counters.clear();
+    }
+    //  printf("%s:%d [%s] sock %p size queue %zu sock ctr [%u] used_requests [%lu]\n", __FILE__,
+    //         __LINE__, __func__, sock, m_queue.size(), m_socket_counters[sock], m_used_requests);
+    m_used_requests += used_requests;
+    m_socket_counters[sock] += used_requests;
 }
