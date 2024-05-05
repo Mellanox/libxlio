@@ -271,11 +271,7 @@ public:
     xlio_socketxtreme_completion_t &socketxtreme_start_ec_operation(sockinfo *sock,
                                                                     bool always_new);
 
-    void schedule_tx(sockinfo_tx_scheduler_interface *s, bool is_first)
-    {
-        assert(m_tx_scheduler); /* TX scheduler must be set not null by a derived class */
-        m_tx_scheduler->schedule_tx(s, is_first);
-    }
+    void schedule_tx(sockinfo_tx_scheduler_interface *, bool) override {}
 
 protected:
     inline void set_parent(ring *parent) { m_parent = (parent ? parent : this); }
@@ -301,7 +297,6 @@ protected:
     } m_socketxtreme;
 
     int m_if_index = 0; /* Interface index */
-    std::unique_ptr<tx_scheduler> m_tx_scheduler;
 };
 
 struct xlio_send_attr {

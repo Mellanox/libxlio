@@ -1240,7 +1240,6 @@ size_t ring_simple::send(tcp_segment &segment, uintptr_t metadata)
     assert(credits <= 16);
 
     if (m_hqtx->credits_get(credits)) {
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         m_hqtx->send_wqe(&wr, segment.m_attr.flags, segment.m_attr.tis, credits, metadata);
         return credits;
     }
@@ -1259,4 +1258,11 @@ size_t ring_simple::send(control_msg &message, uintptr_t metadata)
     NOT_IN_USE(message);
     NOT_IN_USE(metadata);
     throw_xlio_exception("Send tcp_segment not implemented");
+}
+
+void ring_simple::schedule_tx(sockinfo_tx_scheduler_interface *s, bool is_first)
+{
+    assert(m_tx_scheduler); /* TX scheduler must be set not null by a derived class */
+    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+    m_tx_scheduler->schedule_tx(s, is_first);
 }

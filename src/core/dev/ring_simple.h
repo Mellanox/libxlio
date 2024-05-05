@@ -292,6 +292,7 @@ public:
     size_t send(tcp_segment &, uintptr_t) override;
     size_t send(udp_datagram &, uintptr_t) override;
     size_t send(control_msg &, uintptr_t) override;
+    void schedule_tx(sockinfo_tx_scheduler_interface *, bool) override;
 
     friend class cq_mgr_rx;
     friend class cq_mgr_rx_regrq;
@@ -402,6 +403,7 @@ private:
          */
         uint32_t max_payload_sz;
     } m_lro;
+    std::unique_ptr<tx_scheduler> m_tx_scheduler;
 };
 
 class ring_eth : public ring_simple {

@@ -36,6 +36,7 @@
 class tcp_segment;
 class udp_datagram;
 class control_msg;
+class sockinfo_tx_scheduler_interface;
 
 class ring_tx_scheduler_interface {
 public:
@@ -45,6 +46,7 @@ public:
     virtual size_t send(tcp_segment &, uintptr_t) = 0;
     virtual size_t send(udp_datagram &, uintptr_t) = 0;
     virtual size_t send(control_msg &, uintptr_t) = 0;
+    virtual void schedule_tx(sockinfo_tx_scheduler_interface *, bool) = 0;
 };
 
 #endif // _RING_TX_SCHEDULER_INTERFACE_H_
