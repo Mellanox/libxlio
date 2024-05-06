@@ -247,6 +247,7 @@ protected:
     const char *reg_action_str(event_action_type_e reg_action_type);
     virtual void post_new_reg_action(reg_action_t &reg_action);
     void handle_registration_action(reg_action_t &reg_action);
+    void handle_registered_actions();
     void process_ibverbs_event(event_handler_map_t::iterator &i);
     void process_rdma_cm_event(event_handler_map_t::iterator &i);
     int start_thread();

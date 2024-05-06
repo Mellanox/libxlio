@@ -37,10 +37,12 @@
 #include "ib/base/verbs_extra.h"
 #include <mellanox/dpcp.h>
 
+class ib_ctx_handler;
+
 class rfs_rule {
 public:
     bool create(dpcp::match_params &match_value, dpcp::match_params &match_mask, dpcp::tir &in_tir,
-                uint16_t priority, uint32_t flow_tag, dpcp::adapter &in_adapter);
+                uint16_t priority, uint32_t flow_tag, ib_ctx_handler &in_dev);
 
 private:
     std::unique_ptr<dpcp::flow_rule> _dpcp_flow;

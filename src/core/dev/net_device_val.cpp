@@ -1275,6 +1275,15 @@ void net_device_val::ring_adapt_cq_moderation()
     }
 }
 
+void net_device_val::ring_clear_all_rfs()
+{
+    nd_logfuncall();
+    std::lock_guard<decltype(m_lock)> lock(m_lock);
+    for (auto &itr : m_h_ring_map) {
+        itr.second.first->flow_del_all_rfs_safe();
+    }
+}
+
 void net_device_val::register_to_ibverbs_events(event_handler_ibverbs *handler)
 {
     for (size_t i = 0; i < m_slaves.size(); i++) {

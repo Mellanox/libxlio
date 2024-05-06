@@ -79,6 +79,14 @@ ib_ctx_handler_collection::~ib_ctx_handler_collection()
     ibchc_logdbg("Done");
 }
 
+void ib_ctx_handler_collection::stop_all_doca_flow_ports()
+{
+    ibchc_logdbg("");
+    for (auto &itr : m_ib_ctx_map) {
+        itr.second->stop_doca_flow_port();
+    }
+}
+
 void ib_ctx_handler_collection::update_tbl(const char *ifa_name)
 {
     ibchc_logdbg("Checking for offload capable IB devices...");

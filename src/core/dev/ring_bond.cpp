@@ -364,6 +364,14 @@ void ring_bond::adapt_cq_moderation()
     m_lock_ring_rx.unlock();
 }
 
+void ring_bond::flow_del_all_rfs_safe()
+{
+    std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
+    for (auto &itr : m_bond_rings) {
+        itr->flow_del_all_rfs_safe();
+    }
+}
+
 mem_buf_desc_t *ring_bond::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
                                           int n_num_mem_bufs /* default = 1 */)
 {

@@ -924,6 +924,25 @@ void event_handler_manager::process_rdma_cm_event(event_handler_map_t::iterator 
                priv_rdma_cm_event_type_str(cma_event.event), cma_event.event);
 }
 
+void event_handler_manager::handle_registered_actions()
+{
+    m_reg_action_q_lock.lock();
+    reg_action_q_t *temp = m_p_reg_action_q_to_push_to;
+    m_p_reg_action_q_to_push_to = m_p_reg_action_q_to_pop_from;
+    m_p_reg_action_q_to_pop_from = temp;
+    return_from_sleep();
+    remove_wakeup_fd();
+    going_to_sleep();
+    m_reg_action_q_lock.unlock();
+
+    reg_action_t reg_action;
+    while (!m_p_reg_action_q_to_pop_from->empty()) {
+        reg_action = m_p_reg_action_q_to_pop_from->front();
+        m_p_reg_action_q_to_pop_from->pop_front();
+        handle_registration_action(reg_action);
+    }
+}
+
 /*
 The main loop actions:
     1) update timeout + handle registers that theire timeout expiered
@@ -1005,22 +1024,8 @@ void *event_handler_manager::thread_loop()
                 g_p_net_device_table_mgr->global_ring_wait_for_notification_and_process_element(
                     &poll_sn_rx, nullptr);
             } else if (is_wakeup_fd(p_events[idx].data.fd)) {
-                // a request for registration was sent
-                m_reg_action_q_lock.lock();
-                reg_action_q_t *temp = m_p_reg_action_q_to_push_to;
-                m_p_reg_action_q_to_push_to = m_p_reg_action_q_to_pop_from;
-                m_p_reg_action_q_to_pop_from = temp;
-                return_from_sleep();
-                remove_wakeup_fd();
-                going_to_sleep();
-                m_reg_action_q_lock.unlock();
-
-                reg_action_t reg_action;
-                while (!m_p_reg_action_q_to_pop_from->empty()) {
-                    reg_action = m_p_reg_action_q_to_pop_from->front();
-                    m_p_reg_action_q_to_pop_from->pop_front();
-                    handle_registration_action(reg_action);
-                }
+                // A request for registration was sent
+                handle_registered_actions();
             }
         }
 
@@ -1092,8 +1097,10 @@ void *event_handler_manager::thread_loop()
             p_events = p_events_new;
             BULLSEYE_EXCLUDE_BLOCK_END
         }
+    }
 
-    } // while (m_b_continue_running)
+    // Handle UNREGISTER_TIMERS_AND_DELETE remaining actions
+    handle_registered_actions();
 
     free(p_events);
 

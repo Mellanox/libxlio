@@ -254,6 +254,7 @@ public:
         return false;
     }
     virtual void credits_return(unsigned credits) { NOT_IN_USE(credits); }
+    virtual void flow_del_all_rfs_safe() = 0;
 
     struct tcp_seg *get_tcp_segs(uint32_t num);
     void put_tcp_segs(struct tcp_seg *seg);
