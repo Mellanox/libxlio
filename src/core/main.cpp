@@ -79,6 +79,12 @@
 #include "util/agent.h"
 #include "xlio.h"
 
+// Required for DOCA Flow library
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#pragma GCC diagnostic ignored "-Wshadow"
+#include <doca_flow.h>
+
 void check_netperf_flags();
 
 // Start of xlio_version_str - used in "$ strings libxlio.so | grep XLIO_VERSION"
@@ -1006,6 +1012,57 @@ static size_t calc_rx_wqe_buff_size()
     return buff_size;
 }
 
+/*
+ * Initalize DOCA Flow with the flags: VNF/Hardware Steering/Isolated
+ *
+ * @return: DOCA_SUCCESS on success and DOCA_ERROR otherwise
+ */
+static doca_error_t init_doca_flow()
+{
+    doca_error_t result, tmp_result;
+    struct doca_flow_cfg *rxq_flow_cfg;
+
+#if defined(DEFINED_NGINX)
+    // Skip DOCA Flow initialization for Nginx master process.
+    // It is unnecessary and DOCA/DPDK do not support fork().
+    if (g_p_app && g_p_app->type == APP_NGINX && (g_p_app->get_worker_id() == -1)) {
+        return DOCA_SUCCESS;
+    }
+#endif
+
+    result = doca_flow_cfg_create(&rxq_flow_cfg);
+    if (result != DOCA_SUCCESS) {
+        VPRINT_DOCA_ERR(VLOG_ERROR, result, "doca_flow_cfg_create\n");
+        goto destroy_cfg;
+    }
+    result = doca_flow_cfg_set_pipe_queues(rxq_flow_cfg, 1);
+    if (result != DOCA_SUCCESS) {
+        VPRINT_DOCA_ERR(VLOG_ERROR, result, "doca_flow_cfg_set_pipe_queues\n");
+        goto destroy_cfg;
+    }
+    result = doca_flow_cfg_set_mode_args(rxq_flow_cfg, "vnf,hws,isolated,use_doca_eth");
+    if (result != DOCA_SUCCESS) {
+        VPRINT_DOCA_ERR(VLOG_ERROR, result, "doca_flow_cfg_set_mode_args\n");
+        goto destroy_cfg;
+    }
+
+    // TODO: Causes Nginx huge performance degradation and high SoftIRQ.
+    // result = doca_flow_init(rxq_flow_cfg);
+    // if (result != DOCA_SUCCESS) {
+    //    VPRINT_DOCA_ERR(VLOG_ERROR, result, "doca_flow_init\n");
+    //    goto destroy_cfg;
+    //}
+
+destroy_cfg:
+    tmp_result = doca_flow_cfg_destroy(rxq_flow_cfg);
+    if (tmp_result != DOCA_SUCCESS) {
+        VPRINT_DOCA_ERR(VLOG_ERROR, result, "doca_flow_cfg_destroy");
+        DOCA_ERROR_PROPAGATE(result, tmp_result);
+    }
+
+    return result;
+}
+
 static void do_global_ctors_helper()
 {
     static lock_spin_recursive g_globals_lock;
@@ -1170,6 +1227,11 @@ static void do_global_ctors_helper()
         g_p_event_handler_manager->register_command_event(fd, s_cmd_nl);
         g_p_event_handler_manager->register_timer_event(safe_mce_sys().timer_netlink_update_msec,
                                                         s_cmd_nl, PERIODIC_TIMER, nullptr);
+    }
+
+    doca_error_t doca_rc = init_doca_flow();
+    if (DOCA_IS_ERROR(doca_rc)) {
+        throw_xlio_exception("Failed to initialize DOCA Flow\n");
     }
 
 #ifdef DEFINED_UTLS
@@ -1344,3 +1406,5 @@ extern "C" EXPORT_SYMBOL int xlio_exit(void)
 
     return rc;
 }
+
+#pragma GCC diagnostic pop

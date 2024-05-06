@@ -44,6 +44,7 @@
 #include "dev/time_converter_rtc.h"
 #include "util/valgrind.h"
 #include "event/event_handler_manager.h"
+#include "sock/sock-app.h"
 
 #define MODULE_NAME "ibch"
 
@@ -71,11 +72,8 @@ ib_ctx_handler::ib_ctx_handler(doca_devinfo *devinfo, const char *ibname, ibv_de
     }
 
     m_ibname = ibname;
-    doca_error_t err = doca_dev_open(devinfo, &m_doca_dev);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(ibch_logpanic, err, "doca_dev_open devinfo: %p,%s", devinfo,
-                       m_ibname.c_str());
-    }
+
+    open_doca_dev(devinfo);
 
     m_p_ibv_device = ibvdevice;
 
@@ -175,6 +173,21 @@ ib_ctx_handler::~ib_ctx_handler()
             PRINT_DOCA_ERR(ibch_logpanic, err, "doca_dev_close dev: %p,%s", m_doca_dev,
                            m_ibname.c_str());
         }
+    }
+}
+
+void ib_ctx_handler::open_doca_dev(doca_devinfo *devinfo)
+{
+#ifdef DEFINED_NGINX
+    if (g_p_app && g_p_app->type == APP_NGINX && (g_p_app->get_worker_id() == -1)) {
+        return;
+    }
+#endif
+
+    doca_error_t err = doca_dev_open(devinfo, &m_doca_dev);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(ibch_logpanic, err, "doca_dev_open devinfo: %p,%s", devinfo,
+                       m_ibname.c_str());
     }
 }
 
