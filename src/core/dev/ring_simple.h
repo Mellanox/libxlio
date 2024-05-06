@@ -333,6 +333,8 @@ private:
         }
         m_p_l2_addr = nullptr;
     };
+    inline unsigned send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio_tis *tis,
+                             uintptr_t metadata);
 
 protected:
     ib_ctx_handler *m_p_ib_ctx;

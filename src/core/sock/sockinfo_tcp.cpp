@@ -6502,6 +6502,8 @@ bool sockinfo_tcp::peek_tcp_segment(tcp_segment &segment)
 void sockinfo_tcp::pop_tcp_segment()
 {
     if (!m_enqueued_tcp_segments.empty()) {
+        pbuf *p = m_enqueued_tcp_segments.front();
+        tcp_tx_pbuf_free(&m_pcb, p);
         m_enqueued_tcp_segments.pop_front();
         return;
     }

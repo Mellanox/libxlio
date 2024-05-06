@@ -1224,6 +1224,7 @@ void ring_simple::notify_complete(uintptr_t metadata)
     m_tx_scheduler->schedule_tx();
 }
 
+/* The scheduler is locked with m_lock_ring_tx, so when the send is called it is already locked */
 size_t ring_simple::send(tcp_segment &segment, uintptr_t metadata)
 {
     if (m_hqtx->credits_check() < 16) {
@@ -1236,15 +1237,7 @@ size_t ring_simple::send(tcp_segment &segment, uintptr_t metadata)
     wqe_send_handler().init_wqe(wr, sge, 32U);
 
     segment.m_dst_entry->fill_wqe(segment.m_iovec, segment.m_sz_iovec, segment.m_attr, this, wr);
-    unsigned credits = m_hqtx->credits_calculate(&wr);
-    assert(credits > 0);
-    assert(credits <= 16);
-
-    if (m_hqtx->credits_get(credits)) {
-        m_hqtx->send_wqe(&wr, segment.m_attr.flags, segment.m_attr.tis, credits, metadata);
-        return credits;
-    }
-    return 0;
+    return send_wqe(&wr, segment.m_attr.flags, segment.m_attr.tis, metadata);
 }
 
 size_t ring_simple::send(udp_datagram &datagram, uintptr_t metadata)
@@ -1263,7 +1256,32 @@ size_t ring_simple::send(control_msg &message, uintptr_t metadata)
 
 void ring_simple::schedule_tx(sockinfo_tx_scheduler_interface *s, bool is_first)
 {
-    assert(m_tx_scheduler); /* TX scheduler must be set not null by a derived class */
     std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+    assert(m_tx_scheduler); /* TX scheduler must be set not null by a derived class */
     m_tx_scheduler->schedule_tx(s, is_first);
+}
+
+inline unsigned ring_simple::send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
+                                    xlio_tis *tis, uintptr_t metadata)
+{
+    /* In send_ring_buffer we didn't have tis */
+    if ((attr & XLIO_TX_SW_L4_CSUM) && !tis) {
+        compute_tx_checksum((mem_buf_desc_t *)(p_send_wqe->wr_id), attr & XLIO_TX_PACKET_L3_CSUM,
+                            attr & XLIO_TX_PACKET_L4_CSUM);
+        attr = (xlio_wr_tx_packet_attr)(attr & ~(XLIO_TX_PACKET_L4_CSUM));
+    }
+
+    unsigned credits = m_hqtx->credits_calculate(p_send_wqe);
+    if (likely(m_hqtx->credits_get(credits)) ||
+        is_available_qp_wr(is_set(attr, XLIO_TX_PACKET_BLOCK), credits)) {
+        m_hqtx->send_wqe(p_send_wqe, attr, tis, credits, metadata);
+        send_status_handler(0, p_send_wqe);
+        return credits;
+    } else {
+        ring_logdbg("Silent packet drop, SQ is full!");
+        reinterpret_cast<mem_buf_desc_t *>(p_send_wqe->wr_id)->p_next_desc = nullptr;
+        ++m_p_ring_stat->simple.n_tx_dropped_wqes;
+        send_status_handler(-1, p_send_wqe);
+        return 0;
+    }
 }
