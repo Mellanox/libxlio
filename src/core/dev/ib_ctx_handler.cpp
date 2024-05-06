@@ -180,17 +180,25 @@ ib_ctx_handler::~ib_ctx_handler()
     }
 }
 
-doca_flow_port *ib_ctx_handler::get_doca_flow_port()
+doca_flow_pipe *ib_ctx_handler::get_doca_root_pipe()
 {
     if (unlikely(!m_doca_port)) {
         doca_error_t err = start_doca_flow_port();
         if (DOCA_IS_ERROR(err)) {
             PRINT_DOCA_ERR(ibch_logerr, err, "start_doca_flow_port dev: %p,%s", m_doca_dev,
                            m_ibname.c_str());
+            return nullptr;
+        }
+
+        err = create_doca_root_pipe();
+        if (DOCA_IS_ERROR(err)) {
+            PRINT_DOCA_ERR(ibch_logerr, err, "create_doca_root_pipe dev/pipe: %p,%s", m_doca_dev,
+                           m_ibname.c_str());
+            return nullptr;
         }
     }
 
-    return m_doca_port;
+    return m_doca_root_pipe;
 }
 
 doca_error_t ib_ctx_handler::start_doca_flow_port()
@@ -218,7 +226,7 @@ doca_error_t ib_ctx_handler::start_doca_flow_port()
         goto destroy_port_cfg;
     }
 
-    ibch_logdbg("DOCA Flow Port initialized dev/port: %p,%s,%p", m_doca_dev, m_ibname.c_str(),
+    ibch_logdbg("DOCA Flow Port initialized. dev/port: %p,%s,%p", m_doca_dev, m_ibname.c_str(),
                 m_doca_port);
 
 destroy_port_cfg:
@@ -234,6 +242,11 @@ destroy_port_cfg:
 
 void ib_ctx_handler::stop_doca_flow_port()
 {
+    if (m_doca_root_pipe) {
+        doca_flow_pipe_destroy(m_doca_root_pipe);
+        m_doca_root_pipe = nullptr;
+    }
+
     if (m_doca_port) {
         doca_error_t err = doca_flow_port_stop(m_doca_port);
         m_doca_port = nullptr;
@@ -243,6 +256,73 @@ void ib_ctx_handler::stop_doca_flow_port()
         }
         ibch_logdbg("DOCA port stopped %s", m_ibname.c_str());
     }
+}
+
+doca_error_t ib_ctx_handler::create_doca_root_pipe()
+{
+    doca_flow_pipe_cfg *pipe_cfg = nullptr;
+
+    doca_error_t tmp_rc;
+    doca_error_t rc = doca_flow_pipe_cfg_create(&pipe_cfg, m_doca_port);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(ibch_logerr, rc, "doca_flow_port_stop port/dev: %p,%s", m_doca_port,
+                       m_ibname.c_str());
+        return rc;
+    }
+
+    std::string pipe_name = "ROOT_PIPE-";
+    pipe_name += m_ibname;
+
+    rc = doca_flow_pipe_cfg_set_name(pipe_cfg, pipe_name.c_str());
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(ibch_logerr, rc, "doca_flow_pipe_cfg_set_name port/dev: %p,%s", m_doca_port,
+                       m_ibname.c_str());
+        goto destroy_pipe_cfg;
+    }
+
+    rc = doca_flow_pipe_cfg_set_type(pipe_cfg, DOCA_FLOW_PIPE_CONTROL);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(ibch_logerr, rc, "doca_flow_pipe_cfg_set_type port/dev: %p,%s", m_doca_port,
+                       m_ibname.c_str());
+        goto destroy_pipe_cfg;
+    }
+
+    rc = doca_flow_pipe_cfg_set_is_root(pipe_cfg, true);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(ibch_logerr, rc, "doca_flow_pipe_cfg_set_is_root port/dev: %p,%s",
+                       m_doca_port, m_ibname.c_str());
+        goto destroy_pipe_cfg;
+    }
+
+    doca_flow_match match_mask;
+    memset(&match_mask, 0, sizeof(match_mask));
+
+    rc = doca_flow_pipe_cfg_set_match(pipe_cfg, nullptr, &match_mask);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(ibch_logerr, rc, "doca_flow_pipe_cfg_set_match port/dev: %p,%s", m_doca_port,
+                       m_ibname.c_str());
+        goto destroy_pipe_cfg;
+    }
+
+    rc = doca_flow_pipe_create(pipe_cfg, nullptr, nullptr, &m_doca_root_pipe);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(ibch_logerr, rc, "doca_flow_pipe_create port/dev: %p,%s", m_doca_port,
+                       m_ibname.c_str());
+        goto destroy_pipe_cfg;
+    }
+
+    ibch_logdbg("DOCA Flow Root Pipe created. dev/port/pipe: %s,%p,%p", m_ibname.c_str(),
+                m_doca_port, m_doca_root_pipe);
+
+destroy_pipe_cfg:
+    tmp_rc = doca_flow_pipe_cfg_destroy(pipe_cfg);
+    if (DOCA_IS_ERROR(tmp_rc)) {
+        PRINT_DOCA_ERR(ibch_logerr, tmp_rc, "doca_flow_pipe_cfg_destroy port/dev: %p,%s",
+                       m_doca_port, m_ibname.c_str());
+        DOCA_ERROR_PROPAGATE(rc, tmp_rc);
+    }
+
+    return rc;
 }
 
 void ib_ctx_handler::print_val()
