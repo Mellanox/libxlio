@@ -49,8 +49,8 @@ bool rfs_rule::create(dpcp::match_params &match_value, dpcp::match_params &match
                       dpcp::tir &in_tir, uint16_t priority, uint32_t flow_tag,
                       ib_ctx_handler &in_dev)
 {
-    doca_flow_port *flow_port = in_dev.get_doca_flow_port();
-    if (!flow_port) {
+    doca_flow_pipe *root_pipe = in_dev.get_doca_root_pipe();
+    if (!root_pipe) {
         return false;
     }
 
