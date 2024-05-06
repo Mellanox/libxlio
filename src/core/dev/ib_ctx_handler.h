@@ -106,6 +106,7 @@ public:
     }
 
 private:
+    void open_doca_dev(doca_devinfo *devinfo);
     void handle_event_device_fatal();
     ibv_device *m_p_ibv_device; // HCA handle
     struct ibv_context *m_p_ibv_context = nullptr;

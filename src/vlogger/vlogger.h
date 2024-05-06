@@ -284,6 +284,10 @@
     logger("DOCA error: %s, %s. " log_fmt, doca_error_get_name(err), doca_error_get_descr(err),    \
            ##log_args)
 
+#define VPRINT_DOCA_ERR(level, err, log_fmt, log_args...)                                          \
+    vlog_printf(level, "DOCA error: %s, %s. " log_fmt, doca_error_get_name(err),                   \
+                doca_error_get_descr(err), ##log_args)
+
 // deprecated functions - only exist for Backward Compatibility.  Please avoid using them!
 #define __log_func(...)          __log_fine(__VA_ARGS__)
 #define __log_funcall(...)       __log_finer(__VA_ARGS__)
