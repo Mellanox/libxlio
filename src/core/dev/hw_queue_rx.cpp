@@ -519,25 +519,19 @@ bool hw_queue_rx::prepare_rq(uint32_t cqn)
 
     doca_dev *dev = m_p_ib_ctx_handler->get_doca_device();
     doca_devinfo *devinfo = doca_dev_as_devinfo(dev);
-    uint8_t type_supported = 0U;
 
-    doca_error_t err = doca_eth_rxq_get_type_supported(
-        devinfo, DOCA_ETH_RXQ_TYPE_REGULAR, DOCA_ETH_RXQ_DATA_PATH_TYPE_CPU, &type_supported);
+    doca_error_t type_supported = doca_eth_rxq_cap_is_type_supported(
+        devinfo, DOCA_ETH_RXQ_TYPE_REGULAR, DOCA_ETH_RXQ_DATA_PATH_TYPE_CPU);
 
     uint32_t max_burst_size = 0U;
-    uint16_t max_packet_size = 0U;
-    doca_error_t err1 = doca_eth_rxq_get_max_burst_size_supported(devinfo, &max_burst_size);
-    doca_error_t err2 = doca_eth_rxq_get_max_packet_size_supported(devinfo, &max_packet_size);
+    uint32_t max_packet_size = 0U;
+    doca_error_t err1 = doca_eth_rxq_cap_get_max_burst_size(devinfo, &max_burst_size);
+    doca_error_t err2 = doca_eth_rxq_cap_get_max_packet_size(devinfo, &max_packet_size);
 
-    if (DOCA_IS_ERROR(err) || DOCA_IS_ERROR(err1) || DOCA_IS_ERROR(err2)) {
-        PRINT_DOCA_ERR(hwqrx_logerr, err, "doca_eth_rxq_get_type_supported");
-        PRINT_DOCA_ERR(hwqrx_logerr, err1, "doca_eth_rxq_get_max_burst_size_supported");
-        PRINT_DOCA_ERR(hwqrx_logerr, err2, "doca_eth_rxq_get_max_packet_size_supported");
-        return false;
-    }
-
-    if (type_supported == 0) {
-        hwqrx_logerr("DOCA RXQ CPU-path REGULAR-type is not supported");
+    if (DOCA_IS_ERROR(type_supported) || DOCA_IS_ERROR(err1) || DOCA_IS_ERROR(err2)) {
+        PRINT_DOCA_ERR(hwqrx_logerr, type_supported, "doca_eth_rxq_cap_is_type_supported");
+        PRINT_DOCA_ERR(hwqrx_logerr, err1, "doca_eth_rxq_cap_get_max_burst_size");
+        PRINT_DOCA_ERR(hwqrx_logerr, err2, "doca_eth_rxq_cap_get_max_packet_size");
         return false;
     }
 
@@ -551,7 +545,7 @@ bool hw_queue_rx::prepare_rq(uint32_t cqn)
         m_rx_num_wr, max_burst_size, max_packet_size, m_p_ib_ctx_handler->get_ibname().c_str());
 
     doca_eth_rxq *rxq = nullptr;
-    err = doca_eth_rxq_create(dev, m_rx_num_wr, max_packet_size, &rxq);
+    doca_error_t err = doca_eth_rxq_create(dev, m_rx_num_wr, max_packet_size, &rxq);
     if (DOCA_IS_ERROR(err)) {
         PRINT_DOCA_ERR(hwqrx_logerr, err, "doca_eth_rxq_create");
         return false;

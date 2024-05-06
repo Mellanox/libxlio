@@ -41,13 +41,13 @@ AC_DEFUN([DOCA_CAPABILITY_SETUP],
 
 get_version_number_raw_doca()
 {
-    doca_cv_token=`grep DOCA_VER_STRING "${with_doca}/include/doca_version.h" | sed -n 's/^.*\([[0-9]]\+\.[[0-9]]\+\.[[0-9]]\+\).*$/\1/p' `
+    doca_cv_token=`grep DOCA_VERSION_STRING "${with_doca}/include/doca_version.h" | sed -n 's/^.*\([[0-9]]\+\.[[0-9]]\+\.[[0-9]]\+\).*$/\1/p' `
     echo $doca_cv_token
 }
 
 get_version_number_doca()
 {
-    doca_cv_token=`grep DOCA_VER_STRING "${with_doca}/include/doca_version.h" | sed -n 's/^.*\([[0-9]]\+\.[[0-9]]\+\.[[0-9]]\+\).*$/\1/p' `
+    doca_cv_token=`grep DOCA_VERSION_STRING "${with_doca}/include/doca_version.h" | sed -n 's/^.*\([[0-9]]\+\.[[0-9]]\+\.[[0-9]]\+\).*$/\1/p' `
 
     if egrep '^[[0-9]]+\.[[0-9]]+\.[[0-9]]+' <<<"$doca_cv_token" >/dev/null 2>&1 ; then
         # It has the correct syntax.
@@ -62,7 +62,7 @@ get_version_number_doca()
 
 get_min_supported_version_doca()
 {
-    echo 20500
+    echo 20800
 }
 
 AC_ARG_WITH([doca],
