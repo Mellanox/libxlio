@@ -81,9 +81,9 @@
 
 // Required for DOCA Flow library
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #pragma GCC diagnostic ignored "-Wshadow"
 #include <doca_flow.h>
+#pragma GCC diagnostic pop
 
 void check_netperf_flags();
 
@@ -147,6 +147,22 @@ static int free_libxlio_resources()
         g_tcp_timers_collection->clean_obj();
     }
     g_tcp_timers_collection = nullptr;
+
+    if (g_p_fd_collection) {
+        g_p_fd_collection->clear_sockets();
+    }
+
+    if (g_p_net_device_table_mgr) {
+        g_p_net_device_table_mgr->global_ring_clear_all_rfs();
+    }
+
+    if (g_p_ib_ctx_handler_collection) {
+        g_p_ib_ctx_handler_collection->stop_all_doca_flow_ports();
+    }
+
+    doca_flow_destroy();
+
+    vlog_printf(VLOG_DEBUG, "doca_flow_destroy\n");
 
     // Block all sock-redicrt API calls into our offloading core
     fd_collection *g_p_fd_collection_temp = g_p_fd_collection;
@@ -1123,6 +1139,11 @@ static void do_global_ctors_helper()
     g_global_stat_static.init();
     xlio_stats_instance_create_global_block(&g_global_stat_static);
 
+    doca_error_t doca_rc = init_doca_flow();
+    if (DOCA_IS_ERROR(doca_rc)) {
+        throw_xlio_exception("Failed to initialize DOCA Flow\n");
+    }
+
     // Create new netlink listener
     NEW_CTOR(g_p_netlink_handler, netlink_wrapper());
 
@@ -1238,11 +1259,6 @@ static void do_global_ctors_helper()
         g_p_event_handler_manager->register_command_event(fd, s_cmd_nl);
         g_p_event_handler_manager->register_timer_event(safe_mce_sys().timer_netlink_update_msec,
                                                         s_cmd_nl, PERIODIC_TIMER, nullptr);
-    }
-
-    doca_error_t doca_rc = init_doca_flow();
-    if (DOCA_IS_ERROR(doca_rc)) {
-        throw_xlio_exception("Failed to initialize DOCA Flow\n");
     }
 
 #ifdef DEFINED_UTLS
@@ -1417,5 +1433,3 @@ extern "C" EXPORT_SYMBOL int xlio_exit(void)
 
     return rc;
 }
-
-#pragma GCC diagnostic pop

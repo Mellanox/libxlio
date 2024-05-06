@@ -53,10 +53,6 @@
 
 #define ALIGN_WR_DOWN(_num_wr_) (std::max(32, ((_num_wr_) & ~(0xf))))
 
-// Required for DOCA ethernet library
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-
 hw_queue_rx::hw_queue_rx(ring_simple *ring, ib_ctx_handler *ib_ctx,
                          ibv_comp_channel *rx_comp_event_channel, uint16_t vlan)
     : m_p_ring(ring)
@@ -275,7 +271,7 @@ rfs_rule *hw_queue_rx::create_rfs_rule(dpcp::match_params &match_value,
         std::unique_ptr<rfs_rule> new_rule(new rfs_rule());
         if (dpcp_tir &&
             new_rule->create(match_value, match_mask, *dpcp_tir, priority, flow_tag,
-                             *m_p_ib_ctx_handler->get_dpcp_adapter())) {
+                             *m_p_ib_ctx_handler)) {
             return new_rule.release();
         }
     }
@@ -669,5 +665,3 @@ bool hw_queue_rx::store_rq_mlx5_params(dpcp::basic_rq &new_rq)
 
     return true;
 }
-
-#pragma GCC diagnostic pop

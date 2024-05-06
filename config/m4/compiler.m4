@@ -96,7 +96,7 @@ case $CC in
                 -Wno-free-nonheap-object "
         CXXFLAGS="$CXXFLAGS -Wshadow -Wall -Wextra -Werror -Wundef \
                 -ffunction-sections -fdata-sections -Wsequence-point -pipe -Winit-self -Wmissing-include-dirs \
-                -Wno-free-nonheap-object "
+                -Wno-free-nonheap-object -Wno-deprecated-declarations"
         ;;
     icc*|icpc*)
         AC_MSG_RESULT([icc])
@@ -106,7 +106,7 @@ case $CC in
     clang*|clang++*)
         AC_MSG_RESULT([clang])
         CFLAGS="$CFLAGS -Wall -Werror -Wno-self-assign"
-        CXXFLAGS="$CXXFLAGS -Wall -Werror"
+        CXXFLAGS="$CXXFLAGS -Wall -Werror -Wno-deprecated-declarations"
         # workaround for clang w/o -Wnon-c-typedef-for-linkage
         CXXFLAGS="$CXXFLAGS -Wno-unknown-warning-option -Wno-non-c-typedef-for-linkage"
         ;;

@@ -1139,6 +1139,12 @@ void ring_slave::flow_del_all_rfs()
     m_steering_ipv6.flow_del_all_rfs();
 }
 
+void ring_slave::flow_del_all_rfs_safe()
+{
+    std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
+    flow_del_all_rfs();
+}
+
 bool ring_slave::request_more_tx_buffers(pbuf_type type, uint32_t count, uint32_t lkey)
 {
     bool res;

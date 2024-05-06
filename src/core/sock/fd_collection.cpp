@@ -130,17 +130,10 @@ void fd_collection::prepare_to_close()
     unlock();
 }
 
-// Called in destructor after Internal-Thread destroyed
-void fd_collection::clear()
+// Clearing all sockets, before terminating DOCA flow ensures, that all rings are removed and all
+// DOCA ETH resources are cleared before DOCA flow termination.
+void fd_collection::clear_sockets()
 {
-    int fd;
-
-    fdcoll_logfunc("");
-
-    if (!m_p_sockfd_map) {
-        return;
-    }
-
     lock();
 
     /* internal thread should be already dead and
@@ -153,9 +146,7 @@ void fd_collection::clear()
 
     g_global_stat_static.n_pending_sockets = 0;
 
-    /* Clean up all left overs sockinfo
-     */
-    for (fd = 0; fd < m_n_fd_map_size; ++fd) {
+    for (int fd = 0; fd < m_n_fd_map_size; ++fd) {
         if (m_p_sockfd_map[fd]) {
             if (!g_is_forked_child) {
                 sockinfo *p_sfd_api = get_sockfd(fd);
@@ -168,7 +159,21 @@ void fd_collection::clear()
             m_p_sockfd_map[fd] = nullptr;
             fdcoll_logdbg("destroyed fd=%d", fd);
         }
+    }
 
+    unlock();
+}
+
+// Called in destructor after Internal-Thread destroyed
+// Clean up all left overs. Sockets are cleared in clear_sockets which is called before the
+// termination of DOCA flow and fd_collection destructor.
+void fd_collection::clear()
+{
+    fdcoll_logfunc("");
+
+    lock();
+
+    for (int fd = 0; fd < m_n_fd_map_size; ++fd) {
         if (m_p_epfd_map[fd]) {
             epfd_info *p_epfd = get_epfd(fd);
             if (p_epfd) {

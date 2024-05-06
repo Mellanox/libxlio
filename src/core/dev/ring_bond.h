@@ -110,6 +110,7 @@ public:
                           unsigned int ncompletions, int flags);
     virtual void slave_create(int if_index) = 0;
     virtual void slave_destroy(int if_index);
+    virtual void flow_del_all_rfs_safe();
 
     void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)
     {

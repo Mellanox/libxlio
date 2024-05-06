@@ -31,7 +31,7 @@
  */
 
 #include "dev/rfs_rule.h"
-
+#include "dev/ib_ctx_handler.h"
 #include <cinttypes>
 #include "dev/rfs.h"
 
@@ -47,8 +47,15 @@
 
 bool rfs_rule::create(dpcp::match_params &match_value, dpcp::match_params &match_mask,
                       dpcp::tir &in_tir, uint16_t priority, uint32_t flow_tag,
-                      dpcp::adapter &in_adapter)
+                      ib_ctx_handler &in_dev)
 {
+    doca_flow_port *flow_port = in_dev.get_doca_flow_port();
+    if (!flow_port) {
+        return false;
+    }
+
+    dpcp::adapter &in_adapter = *in_dev.get_dpcp_adapter();
+
     rfs_logdbg("Creating flow dpcp_adpater::create_flow_rule(), priority %" PRIu16
                ", flow_tag: %" PRIu32,
                priority, flow_tag);
