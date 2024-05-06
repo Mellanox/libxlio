@@ -304,6 +304,8 @@ public:
     transport_type_t get_transport_type() const { return m_transport_type; }
     inline ring_type_t get_type() const { return m_type; }
 
+    virtual void flow_del_all_rfs_safe();
+
     bool m_active; /* State indicator */
 
 protected:
