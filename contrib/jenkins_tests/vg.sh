@@ -32,6 +32,7 @@ if [ ! -z "$(do_get_ip 'eth')" ]; then
 fi
 test_list="tcp:--tcp udp:"
 test_lib=${vg_dir}/install/lib/${prj_lib}
+test_lib_env="XLIO_MEM_ALLOC_TYPE=ANON XLIO_MEMORY_LIMIT=256MB XLIO_TX_WRE=2000 XLIO_RX_WRE=2000 XLIO_STRQ=off"
 test_app=sockperf
 test_app_path=${test_dir}/sockperf/install/bin/sockperf
 vg_tool=/bin/valgrind
@@ -77,7 +78,7 @@ for test_link in $test_ip_list; do
 			--fullpath-after=${WORKSPACE} --gen-suppressions=all \
 			--suppressions=${WORKSPACE}/contrib/valgrind/valgrind_xlio.supp \
 			"
-		eval "${sudo_cmd} $timeout_exe env LD_PRELOAD=$test_lib \
+		eval "${sudo_cmd} $timeout_exe env $test_lib_env LD_PRELOAD=$test_lib \
 			${vg_tool} --log-file=${vg_dir}/${test_name}-valgrind-sr.log $vg_args \
 			$test_app_path sr ${test_opt} -i ${test_ip} 2>&1 | tee ${vg_dir}/${test_name}-output-sr.log &"
 
@@ -92,9 +93,9 @@ for test_link in $test_ip_list; do
 			sleep 2
 		done
 
-		eval "${sudo_cmd} $timeout_exe_short env LD_PRELOAD=$test_lib \
+		eval "${sudo_cmd} $timeout_exe_short env $test_lib_env LD_PRELOAD=$test_lib \
 			${vg_tool} --log-file=${vg_dir}/${test_name}-valgrind-cl.log $vg_args \
-			$test_app_path pp ${test_opt} -i ${test_ip} -t 15 | tee ${vg_dir}/${test_name}-output-cl.log"
+			$test_app_path pp ${test_opt} -i ${test_ip} -t 10 | tee ${vg_dir}/${test_name}-output-cl.log"
 
 		if [ `ps -ef | grep $test_app | wc -l` -gt 1 ];
 		then
