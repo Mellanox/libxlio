@@ -281,6 +281,76 @@ do_version_check()
     }'
 }
 
+do_compile_doca()
+{
+    echo ""
+    echo "===== DOCA checkout & compilation starts ====="
+    echo ""
+    doca_version="2.7"
+    doca_sdk="$WORKSPACE/$prefix/doca-sdk"
+    doca_repo="ssh://git-nbu.nvidia.com:12023/doca/doca"
+    doca_build="$WORKSPACE/$prefix/doca"
+    doca_branch="doca_$doca_version"
+
+    if [[ -d "$doca_sdk" ]]; then
+        echo "Directory $doca_sdk exists. Updating..."
+        git config --global --add safe.directory "$doca_sdk"
+        pushd "$doca_sdk" || exit 1
+        git fetch origin "$doca_branch"
+        git checkout "$doca_branch"
+        git merge origin/"$doca_branch"
+    else
+        echo "Directory $doca_sdk does not exist. Cloning..."
+        mkdir -p "$doca_sdk"
+        if [[ -f /.dockerenv ]]; then
+            chown -R swx-jenkins "$doca_sdk"
+            sudo -u swx-jenkins git clone -b "$doca_branch" "$doca_repo" "$doca_sdk"
+            chown -R root "$doca_sdk"
+        else
+            git clone -b "$doca_branch" "$doca_repo" "$doca_sdk"
+        fi
+        pushd "$doca_sdk" || exit 1
+    fi
+
+    if [[ -f /.dockerenv ]]; then
+        SUDO=""
+    else
+        SUDO="sudo"
+    fi
+
+    if ! $SUDO devtools/scripts/prepare_for_dev.sh --host --local; then
+        echo "Cannot prepare for dev..."
+        exit 1
+    fi
+
+    # shellcheck source=/dev/null
+    if ! ($SUDO source devtools/public/set_env_variables.sh --deb); then
+        echo "Cannot set up ENV..."
+        exit 1
+    fi
+
+    $SUDO mkdir -p "$doca_build"
+
+    if ! $SUDO meson "$doca_build"; then
+        echo "Cannot prepare the project for compilation..."
+        exit 1
+    fi
+
+    if $SUDO ninja -C "$doca_build" $make_opt; then
+        eval "$1=$doca_build"
+        mkdir -p "$doca_build"/include
+        cp "$doca_sdk"/libs/doca_common/version/doca_version.h "$doca_build"/include/
+        echo ""
+        echo "===== DOCA compilation complete ====="
+        echo ""
+    else
+        echo "Compilation error..."
+        exit 1
+    fi
+
+    popd
+}
+
 do_check_dpcp()
 {
     local ret=0

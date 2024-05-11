@@ -39,6 +39,10 @@
             default: true
             description: "This verifies different configuration using gcc compiler."
         - bool:
+            name: "do_compile_doca"
+            default: false
+            description: "Compiles DOCA SDK for futher tests with XLIO."
+        - bool:
             name: "do_compiler"
             default: true
             description: "Check ability to be built under icc, clang."
