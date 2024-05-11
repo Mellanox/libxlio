@@ -4,7 +4,7 @@ job: LIBXLIO
 step_allow_single_selector: false
 
 registry_host: harbor.mellanox.com
-registry_auth: 65eb3652-9da0-4f39-8a4c-f61972fb65a1
+registry_auth: 1daaea28-800e-425f-a91f-3bd3e9136eea
 registry_path: /swx-infra/media
 
 kubernetes:
@@ -125,6 +125,8 @@ matrix:
 
 env:
   jenkins_opt_artifacts: 'none'
+  COMPILE_DOCA: true
+  COMPILE_DPCP: true
 
 steps:
   - name: Setup
@@ -144,7 +146,7 @@ steps:
 
   - name: Copyrights
     enable: ${do_copyrights}
-    run: env WORKSPACE=$PWD ./contrib/jenkins_tests/copyrights.sh
+    run: env WORKSPACE=$PWD COMPILE_DOCA=false COMPILE_DPCP=false ./contrib/jenkins_tests/copyrights.sh
     containerSelector:
       - "{name: 'header-check', category: 'tool', variant: 1}"
     agentSelector:
@@ -265,7 +267,7 @@ steps:
       - "{name: 'static', category: 'tool'}"
     run: |
       [ "x${do_tidy}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_tidy=${action} ./contrib/test_jenkins.sh
+      env WORKSPACE=$PWD TARGET=${flags} COMPILE_DOCA=false COMPILE_DPCP=false jenkins_test_tidy=${action} ./contrib/test_jenkins.sh
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -280,7 +282,7 @@ steps:
       - "{name: 'static', category: 'tool'}"
     run: |
       [ "x${do_cppcheck}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_cppcheck=${action} ./contrib/test_jenkins.sh
+      env WORKSPACE=$PWD TARGET=${flags} COMPILE_DOCA=false COMPILE_DPCP=false jenkins_test_cppcheck=${action} ./contrib/test_jenkins.sh
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -293,7 +295,7 @@ steps:
       - "{name: 'static', category: 'tool'}"
     run: |
       [ "x${do_csbuild}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_csbuild=${action} ./contrib/test_jenkins.sh
+      env WORKSPACE=$PWD TARGET=${flags} COMPILE_DOCA=false COMPILE_DPCP=false jenkins_test_csbuild=${action} ./contrib/test_jenkins.sh
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
