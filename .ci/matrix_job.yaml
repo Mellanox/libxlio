@@ -291,7 +291,7 @@ steps:
       - "{name: 'static', category: 'tool'}"
     run: |
       [ "x${do_cppcheck}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_cppcheck=${action} ./contrib/test_jenkins.sh
+      env WORKSPACE=$PWD TARGET=${flags} COMPILE_DOCA=false COMPILE_DPCP=false jenkins_test_cppcheck=${action} ./contrib/test_jenkins.sh
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
