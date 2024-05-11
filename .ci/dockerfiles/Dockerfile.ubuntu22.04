@@ -1,28 +1,68 @@
-ARG ARCH=x86_64
-FROM harbor.mellanox.com/hpcx/$ARCH/ubuntu22.04/builder:mofed-5.7-0.1.9.0 AS build
-# ARG _UID=6213
-# ARG _GID=101
-# ARG _LOGIN=swx-jenkins
-# ARG _HOME=/var/home/$_LOGIN
+FROM harbor.mellanox.com/swx-infra/media/base_ubuntu_22.04 AS build
 
-# RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
-#     echo "root ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
-#     mkdir -p ${_HOME} && \
-#     groupadd -f -g "$_GID" "$_LOGIN" && \
-#     useradd -u "$_UID" -g "$_GID" -s /bin/bash -m -d ${_HOME} "${_LOGIN}" && \
-#     chown -R ${_LOGIN} ${_HOME} && \
-#     mkdir /build && chown -R ${_LOGIN} /build
+ARG _UID=6213
+ARG _GID=101
+ARG _LOGIN=swx-jenkins
+ARG _HOME=/var/home/$_LOGIN
 
-# ENTRYPOINT [ "/bin/bash", "--login", "--rcfile", "/etc/bashrc", "-c" ]
+ARG HTTP_NFS_ENDPOINT="http://nbu-nfs.mellanox.com"
+ARG DOCA_REPO_BUILD="/auto/sw/release/doca/doca-repo-x86/doca-repo-2.6.0/last_stable"
+ARG OS_NAME="ubuntu2204"
+
+RUN ARCH=$(uname -m) && \
+    echo "Platform is $ARCH"; \
+    if [ "$ARCH" = "x86_64" ]; then \
+        ARCH="amd64"; \
+        DOCA_ARCH="x86_64"; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        ARCH="arm64"; \
+        DOCA_ARCH="arm64-sbsa"; \
+    else \
+        echo "Unsupported architecture: $ARCH"; \
+        exit 1; \
+    fi && \
+    echo "Architecture is $ARCH" && \
+    apt-get update && \
+    apt-get install -y \
+    sudo wget clang-15 \
+    automake dh-make \
+    g++ make vim python3-pip curl \
+    git libglib2.0-dev \
+&& echo >> /etc/apt/sources.list.d/doca.list \
+&& echo deb [signed-by=/etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub] https://doca-repo-prod.nvidia.com/internal/repo/doca/2.7.0/ubuntu22.04/$DOCA_ARCH/latest ./ >> /etc/apt/sources.list.d/doca.list \
+&& curl https://doca-repo-prod.nvidia.com/internal/repo/doca/2.7.0/ubuntu22.04/$DOCA_ARCH/latest//GPG-KEY-Mellanox.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub \
+&& apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get -qq update \
+&& mkdir -p /lib/modules \
+&& apt-get -qq install -y --allow-downgrades ibacm ibacm infiniband-diags libibumad \
+    libibverbs-dev libibverbs1 libibverbs-dev librdmacm-dev flex \
+    librdmacm1 mlnx-ethtool mlnx-iproute2 mlnx-tools mstflint \
+    ofed-scripts rdma-core collectx-clxapi collectx-clxapidev \
+    python3-protobuf libgrpc-dev mlnx-dpdk-dev mlnx-dpdk \
+    ninja-build meson libjson-c-dev libjsoncpp-dev libzip-dev libgtest-dev \
+    build-essential 
+
+RUN pip3 install -U pip --no-cache-dir \
+    && pip3 install argparse --no-cache-dir
+
+RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
+    echo "root ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
+    mkdir -p ${_HOME} && \
+    groupadd -f -g "$_GID" "$_LOGIN" && \
+    useradd -u "$_UID" -g "$_GID" -s /bin/bash -m -d ${_HOME} "${_LOGIN}" && \
+    chown -R ${_LOGIN} ${_HOME} && \
+    mkdir /build && chown -R ${_LOGIN} /build
 
 FROM build AS tests
 RUN apt-get update && \
     apt-get install -y \
-    net-tools unzip iproute2 wget \
+    net-tools unzip iproute2 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 FROM tests AS vg
-RUN apt-get update && \
+RUN sudo su - && \
+    apt-get update && \
     apt-get install -y \
     valgrind \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -47,8 +87,11 @@ FROM tests AS gtest
 
 FROM build AS static
 # for tidy tests
-RUN pip3 install compiledb --no-cache-dir
-RUN apt-get update && \
+RUN sudo su - && \
+    pip3 install compiledb --no-cache-dir
+RUN sudo su - && \
+    apt-get update && \
     apt-get install -y \
     cppcheck clang-tools clang-tidy \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+    
