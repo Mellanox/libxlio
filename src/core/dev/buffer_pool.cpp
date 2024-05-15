@@ -277,7 +277,7 @@ bool buffer_pool::get_buffers_thread_safe(descq_t &pDeque, ring_slave *desc_owne
     // pop buffers from the list
     m_n_buffers -= count;
     m_p_bpool_stat->n_buffer_pool_size -= count;
-    while (count-- > 0) {
+    while (count-- > 0 && m_p_head /* This shouldn't be necessary but it is */) {
         // Remove from list
         head = m_p_head;
         m_p_head = m_p_head->p_next_desc;

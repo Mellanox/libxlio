@@ -1219,7 +1219,6 @@ bool ring_simple::is_tso(void)
 
 void ring_simple::notify_complete(uintptr_t metadata)
 {
-    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
     m_tx_scheduler->notify_completion(metadata, 1);
     m_tx_scheduler->schedule_tx();
 }
@@ -1272,8 +1271,7 @@ inline unsigned ring_simple::send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_p
     }
 
     unsigned credits = m_hqtx->credits_calculate(p_send_wqe);
-    if (likely(m_hqtx->credits_get(credits)) ||
-        is_available_qp_wr(is_set(attr, XLIO_TX_PACKET_BLOCK), credits)) {
+    if (likely(m_hqtx->credits_get(credits))) {
         m_hqtx->send_wqe(p_send_wqe, attr, tis, credits, metadata);
         send_status_handler(0, p_send_wqe);
         return credits;

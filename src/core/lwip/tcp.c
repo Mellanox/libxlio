@@ -971,7 +971,6 @@ void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
     pcb->is_in_input = 0;
     pcb->enable_ts_opt = enable_ts_option;
     pcb->seg_alloc = NULL;
-    pcb->pbuf_alloc = NULL;
 }
 
 /**
@@ -1022,10 +1021,6 @@ void tcp_pcb_recycle(struct tcp_pcb *pcb)
         tcp_tx_seg_free(pcb, pcb->seg_alloc);
         pcb->seg_alloc = NULL;
     }
-    if (pcb->pbuf_alloc) {
-        tcp_tx_pbuf_free(pcb, pcb->pbuf_alloc);
-        pcb->pbuf_alloc = NULL;
-    }
 }
 
 struct pbuf *tcp_tx_pbuf_alloc(struct tcp_pcb *pcb, u32_t length, pbuf_type type, pbuf_desc *desc,
@@ -1033,25 +1028,17 @@ struct pbuf *tcp_tx_pbuf_alloc(struct tcp_pcb *pcb, u32_t length, pbuf_type type
 {
     struct pbuf *p;
 
-    if (!pcb->pbuf_alloc || pcb->pbuf_alloc->type != type) {
-
-        // pbuf_alloc is not valid, we should allocate a new pbuf.
-        p = external_tcp_tx_pbuf_alloc(pcb, type, desc, p_buff);
-        if (!p) {
-            return NULL;
-        }
-
-        p->next = NULL;
-        p->type = type;
-        /* set reference count */
-        p->ref = 1;
-        /* set flags */
-        p->flags = 0;
-    } else {
-        // pbuf_alloc is valid, we dont need to allocate a new pbuf element.
-        p = pcb->pbuf_alloc;
-        pcb->pbuf_alloc = NULL;
+    p = external_tcp_tx_pbuf_alloc(pcb, type, desc, p_buff);
+    if (!p) {
+        return NULL;
     }
+
+    p->next = NULL;
+    p->type = type;
+    /* set reference count */
+    p->ref = 1;
+    /* set flags */
+    p->flags = 0;
 
     /* Set up internal structure of the pbuf. */
     p->len = p->tot_len = length;
@@ -1065,11 +1052,6 @@ void tcp_tx_preallocted_buffers_free(struct tcp_pcb *pcb)
     if (pcb->seg_alloc) {
         tcp_tx_seg_free(pcb, pcb->seg_alloc);
         pcb->seg_alloc = NULL;
-    }
-
-    if (pcb->pbuf_alloc) {
-        tcp_tx_pbuf_free(pcb, pcb->pbuf_alloc);
-        pcb->pbuf_alloc = NULL;
     }
 }
 

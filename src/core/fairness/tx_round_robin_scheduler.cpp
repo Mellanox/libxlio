@@ -43,40 +43,18 @@ tx_round_robin_scheduler::tx_round_robin_scheduler(ring_tx_scheduler_interface &
 using namespace std::chrono_literals;
 void tx_round_robin_scheduler::schedule_tx()
 {
-    size_t num_messages = fair_num_requests();
-    size_t num_sockets = m_queue.size();
-
-    size_t how_much_sockets_sent = 0;
-    auto now = steady_clock::now();
-
-    if (now - m_last_scheduled < 50us) {
-        return;
-    }
-    m_last_scheduled = now;
-
-    while (num_sockets && !m_queue.empty() && !m_ring_full) {
+    while (!m_queue.empty() && !m_ring_full) {
         sockinfo_tx_scheduler_interface *sock = m_queue.front();
         m_queue.pop_front();
-        num_sockets--;
         if (!sock) {
             continue;
         }
 
-        if (m_socket_counters[sock] < num_messages) {
-            //if (single_socket_send(sock, num_messages - m_socket_counters[sock]) ==
-            if (single_socket_send(sock, 1) ==
-                send_status::OK) {
-                m_queue.push_back(sock);
-                //printf("%s:%d [%s] size queue %zu [%u] <= [%zu]\n", __FILE__, __LINE__, __func__, m_queue.size(), m_socket_counters[sock], num_messages);
-            } else {
-                m_unique_sockets.erase(sock);
-                //printf("%s:%d [%s] size queue %zu [%u] <= [%zu]\n", __FILE__, __LINE__, __func__, m_queue.size(), m_socket_counters[sock], num_messages);
-            }
-            how_much_sockets_sent++;
-        } else {
-            //printf("%s:%d [%s] size queue %zu [%u] <= [%zu]\n", __FILE__, __LINE__, __func__, m_queue.size(), m_socket_counters[sock], num_messages);
-            m_socket_counters[sock] /= 2; /* Increase the chances socket will be able to send next time */
+        if (single_socket_send(sock, 1) == send_status::OK) {
             m_queue.push_back(sock);
+        } else {
+            m_unique_sockets.erase(sock);
+            //printf("%s:%d [%s] size queue %zu [%u] <= [%zu]\n", __FILE__, __LINE__, __func__, m_queue.size(), m_socket_counters[sock], num_messages);
         }
     }
 }
@@ -125,7 +103,7 @@ send_status tx_round_robin_scheduler::single_socket_send(sockinfo_tx_scheduler_i
 size_t tx_round_robin_scheduler::fair_num_requests()
 {
     /* If the queue is empty, make the denominator 1 to eliminate the divide-by-zero error */
-    return (2 * m_used_requests / (1UL + m_socket_counters.size())) ? : (1UL + m_max_requests / (1UL + m_socket_counters.size()));
+    return (1UL + m_max_requests / (1UL + m_socket_counters.size())) ? : 1U;
 }
 
 void tx_round_robin_scheduler::track_used_requests(size_t used_requests, uintptr_t metadata)
