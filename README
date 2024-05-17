@@ -159,7 +159,7 @@ Example:
  XLIO DETAILS: Num of neigh restart retries   1                          [XLIO_NEIGH_NUM_ERR_RETRIES]
  XLIO DETAILS: SocketXtreme mode              Disabled                   [XLIO_SOCKETXTREME]
  XLIO DETAILS: TSO support                    auto                       [XLIO_TSO]
- XLIO DETAILS: UTLS RX support                Enabled                    [XLIO_UTLS_RX]
+ XLIO DETAILS: UTLS RX support                Disabled                   [XLIO_UTLS_RX]
  XLIO DETAILS: UTLS TX support                Enabled                    [XLIO_UTLS_TX]
  XLIO DETAILS: LRO support                    auto                       [XLIO_LRO]
  XLIO DETAILS: BF (Blue Flame)                Enabled                    [XLIO_BF]
@@ -508,7 +508,7 @@ XLIO_UTLS_RX
 UTLS provides TLS data path acceleration. This is achieved by offloading Linux
 kTLS API. Refer to your TLS library documentation for kTLS support information.
 When this parameter is enabled, XLIO offloads TLS RX path if possible.
-Default value is 1 (Enable)
+Default value is 0 (Disabled)
 
 XLIO_UTLS_TX
 When this parameter is enabled, XLIO offloads TLS TX path through kTLS API if
