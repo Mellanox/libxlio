@@ -513,7 +513,7 @@ Default value is 0 (Disabled)
 XLIO_UTLS_TX
 When this parameter is enabled, XLIO offloads TLS TX path through kTLS API if
 possible. See XLIO_UTLS_RX for details.
-Default value is 1 (Enable)
+Default value is 1 (Enabled)
 
 XLIO_LRO
 Large receive offload (LRO) is a technique for increasing inbound throughput of
@@ -584,7 +584,7 @@ When an application is running with multiple threads, on a limited number of
 cores, there is a need for each thread polling inside the XLIO (read, readv,
 recv & recvfrom) to yield the CPU to other polling thread so not to starve
 them from processing incoming packets.
-Default value is 0 (Disable)
+Default value is 0 (Disabled)
 
 XLIO_RX_PREFETCH_BYTES
 Size of receive buffer to prefetch into cache while processing ingress packets.
@@ -612,25 +612,25 @@ rate is controls in nano-second resolution to prevent CPU consumption because
 of over CQ polling. This will enable a more 'real time' monitoring of the
 sockets ready packet queue.
 Recommended value is 100-5000 (nsec)
-Default value is 0 (Disable)
+Default value is 0 (Disabled)
 
 XLIO_TCP_ABORT_ON_CLOSE
 This parameter controls how XLIO performs socket close operation. If enabled,
 XLIO sends RST segment and discards TCP state for the socket. Notice, in this
 scenario pending data segments may be unsent.
 If disabled, XLIO sends pending data segments and then FIN segment.
-Default: 0 (Disable)
+Default: 0 (Disabled)
 
 XLIO_RX_POLL_ON_TX_TCP
 This parameter enables/disables TCP RX polling during TCP TX operation for faster
 TCP ACK reception.
-Default: 0 (Disable)
+Default: 0 (Disabled)
 
 XLIO_TRIGGER_DUMMY_SEND_GETSOCKNAME
 This parameter triggers dummy packet send from getsockname(), this
 will warm up the caches.
 For more information regarding dummy send, see XLIO user manual document.
-Default: 0 (Disable)
+Default: 0 (Disabled)
 
 XLIO_SKIP_POLL_IN_RX
 Allow TCP socket to skip CQ polling in rx socket call.
@@ -650,7 +650,7 @@ rules. This can improve performance for a server with listen socket which
 accepts many connections.
 Outgoing TCP connections that are established with connect() syscall aren't
 affected by this option.
-Default: 0 (Disable)
+Default: 0 (Disabled)
 
 XLIO_UDP_3T_RULES
 This parameter can be relevant in case application uses connected udp sockets.
@@ -658,7 +658,7 @@ This parameter can be relevant in case application uses connected udp sockets.
 5 tuple flow steering rule when it is disabled.
 Enabling this option can reduce hardware flow steering resources.
 But when it is disabled application might see benefits in latency and cycles per packet.
-Default: 1 (Enable)
+Default: 1 (Enabled)
 
 XLIO_ETH_MC_L2_ONLY_RULES
 Use only L2 rules for Ethernet Multicast.
