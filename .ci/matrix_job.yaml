@@ -39,7 +39,9 @@ runs_on_dockers:
   - {name: 'ub20.04-mofed-aarch64', url: 'harbor.mellanox.com/swx-infra/aarch64/ubuntu20.04/builder:mofed-5.2-1.0.4.0', category: 'base', arch: 'aarch64'}
   - {name: 'ub22.04-mofed-x86_64', url: 'harbor.mellanox.com/hpcx/x86_64/ubuntu22.04/builder:mofed-5.7-0.1.1.0', category: 'base', arch: 'x86_64'}
   - {name: 'rhel8.6-mofed-x86_64',  url: 'harbor.mellanox.com/hpcx/x86_64/rhel8.6/builder:mofed-5.6-0.4.5.0', category: 'base', arch: 'x86_64'}
-#  - {name: 'oracle8.6-mofed-x86_64',  url: 'harbor.mellanox.com/rivermax/base_oraclelinux8.6:mofed-5.9-0.3.4.0', category: 'base', arch: 'x86_64'}
+  - {name: 'ub24.04-mofed-x86_64', url: 'harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:mofed-24.04-0.6.6.0', category: 'base', arch: 'x86_64'}
+  - {name: 'ub24.04-mofed-aarch64', url: 'harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:mofed-24.04-0.6.6.0', category: 'base', arch: 'aarch64'}
+  #  - {name: 'oracle8.6-mofed-x86_64',  url: 'harbor.mellanox.com/rivermax/base_oraclelinux8.6:mofed-5.9-0.3.4.0', category: 'base', arch: 'x86_64'}
 # tool
   - {name: 'toolbox', url: 'harbor.mellanox.com/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
   - {name: 'blackduck', url: 'harbor.mellanox.com/toolbox/ngci-centos:7.9.2009.2', category: 'tool', arch: 'x86_64'}
