@@ -44,6 +44,7 @@
 #include "dev/time_converter_rtc.h"
 #include "util/valgrind.h"
 #include "event/event_handler_manager.h"
+#include "sock/sock-app.h"
 
 #define MODULE_NAME "ibch"
 
@@ -71,11 +72,8 @@ ib_ctx_handler::ib_ctx_handler(doca_devinfo *devinfo, const char *ibname, ibv_de
     }
 
     m_ibname = ibname;
-    doca_error_t err = doca_dev_open(devinfo, &m_doca_dev);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(ibch_logpanic, err, "doca_dev_open devinfo: %p,%s", devinfo,
-                       m_ibname.c_str());
-    }
+
+    open_doca_dev(devinfo);
 
     m_p_ibv_device = ibvdevice;
 
@@ -174,13 +172,28 @@ ib_ctx_handler::~ib_ctx_handler()
     if (m_doca_dev) {
         doca_error_t err = doca_dev_close(m_doca_dev);
         if (DOCA_IS_ERROR(err)) {
-            PRINT_DOCA_ERR(ibch_logerr, err, "doca_dev_close dev: %p,%s", m_doca_dev,
-                           m_ibname.c_str());
+            PRINT_DOCA_ERR(ibch_logerr, err, "doca_dev_close dev: %p,%s. PID: %d", m_doca_dev,
+                           m_ibname.c_str(), static_cast<int>(getpid()));
         }
     }
 }
 
-doca_flow_pipe *ib_ctx_handler::get_doca_root_pipe()
+void ib_ctx_handler::open_doca_dev(doca_devinfo *devinfo)
+{
+#ifdef DEFINED_NGINX
+    if (g_p_app && g_p_app->type == APP_NGINX && (g_p_app->get_worker_id() == -1)) {
+        return;
+    }
+#endif
+
+    doca_error_t err = doca_dev_open(devinfo, &m_doca_dev);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(ibch_logpanic, err, "doca_dev_open devinfo: %p,%s", devinfo,
+                       m_ibname.c_str());
+    }
+}
+
+doca_flow_port *ib_ctx_handler::get_doca_flow_port()
 {
     if (unlikely(!m_doca_port)) {
         doca_error_t err = start_doca_flow_port();
@@ -189,8 +202,19 @@ doca_flow_pipe *ib_ctx_handler::get_doca_root_pipe()
                            m_ibname.c_str());
             return nullptr;
         }
+    }
 
-        err = create_doca_root_pipe();
+    return m_doca_port;
+}
+
+doca_flow_pipe *ib_ctx_handler::get_doca_root_pipe()
+{
+    if (!get_doca_flow_port()) {
+        return nullptr;
+    }
+
+    if (!m_doca_root_pipe) {
+        doca_error_t err = create_doca_root_pipe();
         if (DOCA_IS_ERROR(err)) {
             PRINT_DOCA_ERR(ibch_logerr, err, "create_doca_root_pipe dev/pipe: %p,%s", m_doca_dev,
                            m_ibname.c_str());

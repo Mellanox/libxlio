@@ -43,6 +43,7 @@
 #include "util/sg_array.h"
 
 class ring_simple;
+class doca_flow_match;
 
 // @class hw_queue_rx
 // Object to manages the SQ operations. This object is used for Rx.
@@ -73,9 +74,12 @@ public:
     uint16_t get_vlan() const { return m_vlan; };
     void modify_queue_to_ready_state();
     void modify_queue_to_error_state();
+    void start_doca_rxq();
+    void stop_doca_rxq();
     void release_rx_buffers();
 
-    rfs_rule *create_rfs_rule(dpcp::match_params &match_value, dpcp::match_params &match_mask,
+    rfs_rule *create_rfs_rule(doca_flow_match &match_val, doca_flow_match &match_msk,
+                              dpcp::match_params &match_value, dpcp::match_params &match_mask,
                               uint16_t priority, uint32_t flow_tag, xlio_tir *tir_ext);
 
 #ifdef DEFINED_UTLS
@@ -85,11 +89,15 @@ public:
 
 private:
     static void destory_doca_rxq(doca_eth_rxq *rxq);
+
+    static void rx_task_error_cb(doca_eth_rxq_task_recv *task_recv, doca_data task_user_data,
+                                 doca_data ctx_user_data);
+
     cq_mgr_rx *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel);
 
     void post_recv_buffer_rq(mem_buf_desc_t *p_mem_buf_desc);
     void put_tls_tir_in_cache(xlio_tir *tir);
-    bool prepare_rq(uint32_t cqn);
+    bool prepare_rq(uint32_t cqn, doca_pe *pe);
     bool configure_rq(ibv_comp_channel *rx_comp_event_channel);
     bool store_rq_mlx5_params(dpcp::basic_rq &new_rq);
     int xlio_raw_post_recv(struct ibv_recv_wr **bad_wr);
@@ -114,6 +122,8 @@ private:
     std::unique_ptr<dpcp::basic_rq> m_rq {nullptr};
     std::unique_ptr<doca_eth_rxq, decltype(&destory_doca_rxq)> m_doca_rxq {nullptr,
                                                                            destory_doca_rxq};
+
+    doca_ctx *m_doca_ctx_rxq = nullptr;
     ring_simple *m_p_ring;
     cq_mgr_rx *m_p_cq_mgr_rx = nullptr;
     ib_ctx_handler *m_p_ib_ctx_handler;
@@ -131,6 +141,7 @@ private:
     uint32_t m_rx_sge = MCE_DEFAULT_RX_NUM_SGE;
     const uint32_t m_n_sysvar_rx_prefetch_bytes_before_poll;
     uint16_t m_vlan;
+    uint16_t m_doca_rx_queue_id = 0U;
 };
 
 #endif // HW_QUEUE_RX_H

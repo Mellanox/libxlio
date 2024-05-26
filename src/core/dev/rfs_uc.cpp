@@ -73,6 +73,9 @@ void rfs_uc::prepare_flow_spec()
     prepare_flow_spec_eth_ip(m_flow_tuple.get_dst_ip(), m_flow_tuple.get_src_ip());
     prepare_flow_spec_tcp_udp();
 
+    memset(&m_doca_match_mask.outer.eth.dst_mac, 0xFF, sizeof(m_doca_match_mask.outer.eth.dst_mac));
+    memcpy(&m_doca_match_value.outer.eth.dst_mac, m_p_ring_simple->m_p_l2_addr->get_address(),
+           sizeof(m_doca_match_value.outer.eth.dst_mac));
     memset(&m_match_mask.dst_mac, 0xFF, sizeof(m_match_mask.dst_mac));
     memcpy(&m_match_value.dst_mac, m_p_ring_simple->m_p_l2_addr->get_address(),
            sizeof(m_match_value.dst_mac));
@@ -98,6 +101,10 @@ void rfs_uc::prepare_flow_spec()
                 src_port = g_p_app->get_worker_id();
             }
 
+            m_doca_match_mask.outer.transport.src_port = htons(
+                static_cast<uint16_t>((g_p_app->workers_pow2 * g_p_app->src_port_stride) - 2));
+            m_doca_match_value.outer.transport.src_port =
+                htons(static_cast<uint16_t>(src_port * g_p_app->src_port_stride));
             m_match_mask.src_port =
                 static_cast<uint16_t>((g_p_app->workers_pow2 * g_p_app->src_port_stride) - 2);
             m_match_value.src_port = static_cast<uint16_t>(src_port * g_p_app->src_port_stride);

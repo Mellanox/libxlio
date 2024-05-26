@@ -2005,6 +2005,14 @@ void mce_sys_var::get_env_params()
 
 void set_env_params()
 {
+#if defined(DEFINED_NGINX)
+    // We must not call setenv for Nginx master process.
+    // It changes the 'environ' pointer that Nginx stores in master and uses in workers.
+    if (getenv(SYS_VAR_NGINX_WORKERS_NUM) && !g_p_app) {
+        return;
+    }
+#endif
+
     // Need to call setenv() only after getenv() is done, because /bin/sh has
     // a custom setenv() which overrides original environment.
 

@@ -1031,6 +1031,16 @@ static doca_error_t init_doca_flow()
     doca_error_t result, tmp_result;
     struct doca_flow_cfg *rxq_flow_cfg;
 
+#if defined(DEFINED_NGINX)
+    // Skip DOCA Flow initialization for Nginx master process.
+    // It is unnecessary and DOCA/DPDK do not support fork().
+    if (g_p_app && g_p_app->type == APP_NGINX && (g_p_app->get_worker_id() == -1)) {
+        return DOCA_SUCCESS;
+    }
+#endif
+
+    vlog_printf(VLOG_DEBUG, "Initializing DOCA Flow\n");
+
     result = doca_flow_cfg_create(&rxq_flow_cfg);
     if (result != DOCA_SUCCESS) {
         VPRINT_DOCA_ERR(VLOG_ERROR, result, "doca_flow_cfg_create\n");
@@ -1074,7 +1084,9 @@ static void do_global_ctors_helper()
     PROFILE_BLOCK("xlio_ctors")
 
     g_init_global_ctors_done = true;
+
     set_env_params();
+
     prepare_fork();
 
     // Adjust configuration before subsystems initialization. We do this here

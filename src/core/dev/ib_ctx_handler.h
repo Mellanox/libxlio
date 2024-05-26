@@ -77,6 +77,7 @@ public:
     ibv_pd *get_ibv_pd() { return m_p_ibv_pd; }
     ibv_device *get_ibv_device() { return m_p_ibv_device; }
     doca_dev *get_doca_device() const { return m_doca_dev; }
+    doca_flow_port *get_doca_flow_port();
     doca_flow_pipe *get_doca_root_pipe();
     const std::string &get_ibname() const { return m_ibname; }
     struct ibv_context *get_ibv_context() { return m_p_ibv_context; }
@@ -114,6 +115,7 @@ public:
     }
 
 private:
+    void open_doca_dev(doca_devinfo *devinfo);
     void handle_event_device_fatal();
     doca_error_t start_doca_flow_port();
     doca_error_t create_doca_root_pipe();
