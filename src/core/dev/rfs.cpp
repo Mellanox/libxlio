@@ -135,6 +135,8 @@ rfs::rfs(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *rule_fil
     , m_flow_tag_id(flow_tag_id)
     , m_b_tmp_is_attached(false)
 {
+    memset(&m_doca_match_value, 0, sizeof(m_doca_match_value));
+    memset(&m_doca_match_mask, 0, sizeof(m_doca_match_mask));
     memset(&m_match_value, 0, sizeof(m_match_value));
     memset(&m_match_mask, 0, sizeof(m_match_mask));
 
@@ -327,13 +329,19 @@ rfs_rule *rfs::create_rule(xlio_tir *tir, const flow_tuple &flow_spec)
 
     auto *hqrx = m_p_ring_simple->m_hqrx;
 
+    doca_flow_match match_value_doca_tmp;
+    doca_flow_match match_mask_doca_tmp;
     dpcp::match_params match_value_tmp;
     dpcp::match_params match_mask_tmp;
+    memcpy(&match_value_doca_tmp, &m_doca_match_value, sizeof(m_doca_match_value));
+    memcpy(&match_mask_doca_tmp, &m_doca_match_mask, sizeof(m_doca_match_mask));
     memcpy(&match_value_tmp, &m_match_value, sizeof(m_match_value));
     memcpy(&match_mask_tmp, &m_match_mask, sizeof(m_match_mask));
 
     if (!m_flow_tuple.is_5_tuple()) {
         // For UTLS, We need the most specific 5T rule (in case the current rule is 3T).
+
+        // TODO: Add support for TLS-RX
 
         if (match_value_tmp.ethertype == ETH_P_IP) {
             match_mask_tmp.src.ipv4 = flow_spec.get_src_ip().is_anyaddr() ? 0U : 0xFFFFFFFFU;
@@ -350,7 +358,8 @@ rfs_rule *rfs::create_rule(xlio_tir *tir, const flow_tuple &flow_spec)
     }
 
     // The highest priority to override TCP rule
-    return hqrx->create_rfs_rule(match_value_tmp, match_mask_tmp, 0, m_flow_tag_id, tir);
+    return hqrx->create_rfs_rule(match_value_doca_tmp, match_mask_doca_tmp, match_value_tmp,
+                                 match_mask_tmp, 0, m_flow_tag_id, tir);
 }
 
 #endif /* DEFINED_UTLS */
@@ -361,8 +370,10 @@ bool rfs::create_flow()
         rfs_logpanic("Incompatible ring type");
     }
 
-    m_rfs_flow = m_p_ring_simple->m_hqrx->create_rfs_rule(m_match_value, m_match_mask, m_priority,
+    m_rfs_flow = m_p_ring_simple->m_hqrx->create_rfs_rule(m_doca_match_value, m_doca_match_mask,
+                                                          m_match_value, m_match_mask, m_priority,
                                                           m_flow_tag_id, nullptr);
+
     if (!m_rfs_flow) {
         rfs_logerr("Create RFS flow failed, Tag: %" PRIu32 ", Flow: %s, Priority: %" PRIu16
                    ", errno: %d - %m",
@@ -402,28 +413,61 @@ void rfs::prepare_flow_spec_eth_ip(const ip_address &dst_ip, const ip_address &s
         rfs_logpanic("Incompatible ring type");
     }
 
-    m_match_value.vlan_id = m_p_ring_simple->m_hqrx->get_vlan() & VLAN_VID_MASK;
-    m_match_mask.vlan_id = (m_p_ring_simple->m_hqrx->get_vlan() ? VLAN_VID_MASK : 0);
+    uint16_t vlan_tag = m_p_ring_simple->m_hqrx->get_vlan();
+    if (vlan_tag) {
+        m_doca_match_value.outer.eth_vlan[0].tci = htons(vlan_tag & VLAN_VID_MASK);
+        m_doca_match_mask.outer.eth_vlan[0].tci = htons(vlan_tag ? VLAN_VID_MASK : 0);
+        m_doca_match_value.outer.l2_valid_headers = DOCA_FLOW_L2_VALID_HEADER_VLAN_0;
+        m_doca_match_mask.outer.l2_valid_headers = DOCA_FLOW_L2_VALID_HEADER_VLAN_0;
+    }
+    m_match_value.vlan_id = vlan_tag & VLAN_VID_MASK;
+    m_match_mask.vlan_id = (vlan_tag ? VLAN_VID_MASK : 0);
 
     bool is_ipv4 = (m_flow_tuple.get_family() == AF_INET);
     if (is_ipv4) {
+        m_doca_match_mask.outer.ip4.dst_ip = dst_ip.is_anyaddr() ? 0U : 0xFFFFFFFFU;
+        m_doca_match_value.outer.ip4.dst_ip = dst_ip.get_in4_addr().s_addr;
         m_match_mask.dst.ipv4 = dst_ip.is_anyaddr() ? 0U : 0xFFFFFFFFU;
         m_match_value.dst.ipv4 = ntohl(dst_ip.get_in4_addr().s_addr);
+
+        m_doca_match_mask.outer.ip4.src_ip = src_ip.is_anyaddr() ? 0U : 0xFFFFFFFFU;
+        m_doca_match_value.outer.ip4.src_ip = src_ip.get_in4_addr().s_addr;
         m_match_mask.src.ipv4 = src_ip.is_anyaddr() ? 0U : 0xFFFFFFFFU;
         m_match_value.src.ipv4 = ntohl(src_ip.get_in4_addr().s_addr);
+
+        memset(&m_doca_match_mask.outer.l3_type, 0xFF, sizeof(m_doca_match_mask.outer.l3_type));
+        m_doca_match_value.outer.l3_type = DOCA_FLOW_L3_TYPE_IP4;
         m_match_mask.ip_version = 0xF;
         m_match_value.ip_version = 4U;
+
+        m_doca_match_mask.outer.eth.type = 0xFFFFU;
+        m_doca_match_value.outer.eth.type = htons(ETH_P_IP);
         m_match_mask.ethertype = 0xFFFFU;
         m_match_value.ethertype = ETH_P_IP;
     } else {
+        memset(m_doca_match_mask.outer.ip6.dst_ip, dst_ip.is_anyaddr() ? 0U : 0xFFU,
+               sizeof(m_doca_match_mask.outer.ip6.dst_ip));
+        memcpy(m_doca_match_value.outer.ip6.dst_ip, &dst_ip.get_in6_addr(),
+               sizeof(m_doca_match_value.outer.ip6.dst_ip));
         memset(m_match_mask.dst.ipv6, dst_ip.is_anyaddr() ? 0U : 0xFFU,
                sizeof(m_match_mask.dst.ipv6));
         memcpy(m_match_value.dst.ipv6, &dst_ip.get_in6_addr(), sizeof(m_match_value.dst.ipv6));
+
+        memset(m_doca_match_mask.outer.ip6.src_ip, src_ip.is_anyaddr() ? 0U : 0xFFU,
+               sizeof(m_doca_match_mask.outer.ip6.src_ip));
+        memcpy(m_doca_match_value.outer.ip6.src_ip, &src_ip.get_in6_addr(),
+               sizeof(m_doca_match_value.outer.ip6.src_ip));
         memset(m_match_mask.src.ipv6, src_ip.is_anyaddr() ? 0U : 0xFFU,
                sizeof(m_match_mask.src.ipv6));
         memcpy(m_match_value.src.ipv6, &src_ip.get_in6_addr(), sizeof(m_match_value.src.ipv6));
+
+        memset(&m_doca_match_mask.outer.l3_type, 0xFF, sizeof(m_doca_match_mask.outer.l3_type));
+        m_doca_match_value.outer.l3_type = DOCA_FLOW_L3_TYPE_IP6;
         m_match_mask.ip_version = 0xF;
         m_match_value.ip_version = 6U;
+
+        m_doca_match_mask.outer.eth.type = 0xFFFFU;
+        m_doca_match_value.outer.eth.type = htons(ETH_P_IPV6);
         m_match_mask.ethertype = 0xFFFFU;
         m_match_value.ethertype = ETH_P_IPV6;
     }
@@ -431,10 +475,20 @@ void rfs::prepare_flow_spec_eth_ip(const ip_address &dst_ip, const ip_address &s
 
 void rfs::prepare_flow_spec_tcp_udp()
 {
+    m_doca_match_mask.outer.transport.dst_port = (m_flow_tuple.get_dst_port() ? 0xFFFFU : 0U);
+    m_doca_match_value.outer.transport.dst_port = m_flow_tuple.get_dst_port();
     m_match_mask.dst_port = (m_flow_tuple.get_dst_port() ? 0xFFFFU : 0U);
     m_match_value.dst_port = ntohs(m_flow_tuple.get_dst_port());
+
+    m_doca_match_mask.outer.transport.src_port = (m_flow_tuple.get_src_port() ? 0xFFFFU : 0U);
+    m_doca_match_value.outer.transport.src_port = m_flow_tuple.get_src_port();
     m_match_mask.src_port = (m_flow_tuple.get_src_port() ? 0xFFFFU : 0U);
     m_match_value.src_port = ntohs(m_flow_tuple.get_src_port());
+
+    memset(&m_doca_match_mask.outer.l4_type_ext, 0xFF, sizeof(m_doca_match_mask.outer.l4_type_ext));
+    m_doca_match_value.outer.l4_type_ext =
+        (m_flow_tuple.get_protocol() == PROTO_TCP ? DOCA_FLOW_L4_TYPE_EXT_TCP
+                                                  : DOCA_FLOW_L4_TYPE_EXT_UDP);
     m_match_mask.protocol = 0xFF;
     m_match_value.protocol = (m_flow_tuple.get_protocol() == PROTO_TCP ? IPPROTO_TCP : IPPROTO_UDP);
 }

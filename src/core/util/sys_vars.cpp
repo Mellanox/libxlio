@@ -2014,6 +2014,7 @@ void set_env_params()
         return;
     }
 #endif
+
     // Need to call setenv() only after getenv() is done, because /bin/sh has
     // a custom setenv() which overrides original environment.
 

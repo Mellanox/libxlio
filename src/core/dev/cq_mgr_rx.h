@@ -41,6 +41,11 @@
 #include "proto/mem_buf_desc.h"
 #include "proto/xlio_lwip.h"
 #include "xlio_extra.h"
+#include <doca_pe.h>
+#include <doca_eth_rxq_cpu_data_path.h>
+#include <doca_buf_inventory.h>
+#include <doca_mmap.h>
+#include <doca_buf.h>
 
 #if VLIST_DEBUG
 #define VLIST_DEBUG_CQ_MGR_PRINT_ERROR_IS_MEMBER                                                   \
@@ -71,6 +76,11 @@ class cq_mgr_rx {
     friend class rfs_uc_tcp_gro; // need for stats
 
 public:
+    doca_buf_inventory *temp_doca_inventory = nullptr;
+    doca_mmap *temp_doca_mmap = nullptr;
+    doca_buf *temp_doca_bufs[32];
+    doca_eth_rxq_task_recv *temp_doca_tasks[32];
+
     enum buff_status_e {
         BS_OK,
         BS_CQE_RESP_WR_IMM_NOT_SUPPORTED,
@@ -87,7 +97,7 @@ public:
 
     ibv_cq *get_ibv_cq_hndl() { return m_p_ibv_cq; }
     int get_channel_fd() { return m_comp_event_channel ? m_comp_event_channel->fd : 0; }
-
+    doca_pe *get_doca_pe() const { return m_doca_pe; }
     /**
      * Arm the managed CQ's notification channel
      * Calling this more then once without get_event() will return without
@@ -176,6 +186,7 @@ protected:
 
     virtual void statistics_print();
 
+    doca_pe *m_doca_pe = nullptr;
     xlio_ib_mlx5_cq_t m_mlx5_cq;
     hw_queue_rx *m_hqrx_ptr = nullptr;
     mem_buf_desc_t *m_rx_hot_buffer = nullptr;

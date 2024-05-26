@@ -754,7 +754,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_TX_SEGS_POOL_BATCH_TCP   (16384)
 #define MCE_DEFAULT_TX_NUM_SGE               (4)
 
-#define MCE_DEFAULT_STRQ                            (option_3::ON)
+#define MCE_DEFAULT_STRQ                            (option_3::OFF)
 #define MCE_DEFAULT_STRQ_NUM_STRIDES                (16384)
 #define MCE_DEFAULT_STRQ_STRIDE_SIZE_BYTES          (512)
 #define MCE_DEFAULT_STRQ_NUM_BUFS                   (64)
@@ -801,7 +801,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_CQ_AIM_MAX_PERIOD_USEC         (1000)
 #define MCE_DEFAULT_CQ_AIM_INTERVAL_MSEC           (1000)
 #define MCE_DEFAULT_CQ_AIM_INTERRUPTS_RATE_PER_SEC (1000)
-#define MCE_DEFAULT_CQ_POLL_BATCH                  (16)
+#define MCE_DEFAULT_CQ_POLL_BATCH                  (128)
 #define MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC  (10)
 #define MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX        (10000)
 #define MCE_DEFAULT_CQ_KEEP_QP_FULL                (true)
