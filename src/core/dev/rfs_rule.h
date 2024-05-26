@@ -37,15 +37,25 @@
 #include "ib/base/verbs_extra.h"
 #include <mellanox/dpcp.h>
 
+// Required for DOCA Flow library
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshadow"
+#include <doca_flow.h>
+#pragma GCC diagnostic pop
+
 class ib_ctx_handler;
 
 class rfs_rule {
 public:
-    bool create(dpcp::match_params &match_value, dpcp::match_params &match_mask, dpcp::tir &in_tir,
+    ~rfs_rule();
+
+    bool create(doca_flow_match &match_val, doca_flow_match &match_msk, uint16_t rx_queue_id,
+                dpcp::match_params &match_value, dpcp::match_params &match_mask, dpcp::tir &in_tir,
                 uint16_t priority, uint32_t flow_tag, ib_ctx_handler &in_dev);
 
 private:
     std::unique_ptr<dpcp::flow_rule> _dpcp_flow;
+    doca_flow_pipe_entry *m_doca_flow_entry = nullptr;
 };
 
 #endif

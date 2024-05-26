@@ -1048,6 +1048,8 @@ static doca_error_t init_doca_flow()
     }
 #endif
 
+    vlog_printf(VLOG_DEBUG, "Initializing DOCA Flow\n");
+
     result = doca_flow_cfg_create(&rxq_flow_cfg);
     if (result != DOCA_SUCCESS) {
         VPRINT_DOCA_ERR(VLOG_ERROR, result, "doca_flow_cfg_create\n");
@@ -1101,7 +1103,9 @@ static void do_global_ctors_helper()
     PROFILE_BLOCK("xlio_ctors")
 
     g_init_global_ctors_done = true;
+
     set_env_params();
+
     prepare_fork();
 
     // Adjust configuration before subsystems initialization. We do this here

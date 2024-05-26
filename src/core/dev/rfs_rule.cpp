@@ -45,7 +45,18 @@
 #define rfs_logfunc    __log_info_func
 #define rfs_logfuncall __log_info_funcall
 
-bool rfs_rule::create(dpcp::match_params &match_value, dpcp::match_params &match_mask,
+rfs_rule::~rfs_rule()
+{
+    if (m_doca_flow_entry) {
+        doca_error_t rc = doca_flow_pipe_rm_entry(0, 0U, m_doca_flow_entry);
+        if (DOCA_IS_ERROR(rc)) {
+            PRINT_DOCA_ERR(rfs_logerr, rc, "doca_flow_pipe_rm_entry entry: %p", m_doca_flow_entry);
+        }
+    }
+}
+
+bool rfs_rule::create(doca_flow_match &match_val, doca_flow_match &match_msk, uint16_t rx_queue_id,
+                      dpcp::match_params &match_value, dpcp::match_params &match_mask,
                       dpcp::tir &in_tir, uint16_t priority, uint32_t flow_tag,
                       ib_ctx_handler &in_dev)
 {
@@ -87,6 +98,41 @@ bool rfs_rule::create(dpcp::match_params &match_value, dpcp::match_params &match
                *reinterpret_cast<uint64_t *>(match_value.dst.ipv6 + 8),
                *reinterpret_cast<uint64_t *>(match_value.dst.ipv6),
                *reinterpret_cast<uint64_t *>(match_value.dst_mac));
+
+    if (0) { // TEMP: Switch to 1 to enable DOCA Flow
+        NOT_IN_USE(match_val);
+        NOT_IN_USE(match_msk);
+        NOT_IN_USE(rx_queue_id);
+        doca_flow_fwd all_fwd;
+        memset(&all_fwd, 0, sizeof(all_fwd));
+        all_fwd.type = DOCA_FLOW_FWD_RSS;
+        all_fwd.num_of_queues = 1;
+        all_fwd.rss_queues = &rx_queue_id;
+        all_fwd.rss_outer_flags =
+            (match_value.ip_version = 4U ? DOCA_FLOW_RSS_IPV4 : DOCA_FLOW_RSS_IPV6);
+        all_fwd.rss_outer_flags |=
+            (match_value.protocol == IPPROTO_TCP ? DOCA_FLOW_RSS_TCP : DOCA_FLOW_RSS_UDP);
+
+        doca_error_t rc = doca_flow_pipe_control_add_entry(
+            0, priority, root_pipe, &match_val, &match_msk, nullptr, nullptr, nullptr, nullptr,
+            nullptr, &all_fwd, nullptr, &m_doca_flow_entry);
+        if (DOCA_IS_ERROR(rc)) {
+            PRINT_DOCA_ERR(rfs_logerr, rc, "doca_flow_pipe_control_add_entry root_pipe: %p",
+                           root_pipe);
+            return false;
+        }
+
+        rc = doca_flow_entries_process(in_dev.get_doca_flow_port(), 0, 60000U, 2U);
+        if (DOCA_IS_ERROR(rc)) {
+            PRINT_DOCA_ERR(rfs_logerr, rc, "doca_flow_pipe_control_add_entry port/root_pipe: %p,%p",
+                           in_dev.get_doca_flow_port(), root_pipe);
+            return false;
+        }
+
+        rfs_logdbg("DOCA Flow Entry added (%p)", m_doca_flow_entry);
+
+        return true; // [Temp] SKIP DPCP Rule.
+    }
 
     dpcp::flow_rule *new_rule = nullptr;
     dpcp::status status_out = in_adapter.create_flow_rule(priority, match_mask, new_rule);

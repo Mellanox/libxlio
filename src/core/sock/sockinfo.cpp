@@ -1848,6 +1848,7 @@ bool sockinfo::attach_as_uc_receiver(role_t role, bool skip_rules /* = false */)
         return true;
     }
 #endif
+
     sock_addr addr(m_bound);
     ip_addr if_addr(m_bound.get_ip_addr(), m_bound.get_sa_family());
     bool ret = true;
