@@ -50,14 +50,6 @@
 #define ASSERT_LOCKED(lock)     assert((lock).is_locked_by_me())
 #define ASSERT_NOT_LOCKED(lock) assert(!(lock).is_locked_by_me())
 
-#ifdef DEFINED_NO_THREAD_LOCK
-#define DEFINED_NO_THREAD_LOCK_RETURN_0 return 0;
-#define DEFINED_NO_THREAD_LOCK_RETURN_1 return 1;
-#else
-#define DEFINED_NO_THREAD_LOCK_RETURN_0
-#define DEFINED_NO_THREAD_LOCK_RETURN_1
-#endif
-
 #define NO_LOCK_STATS
 
 #ifdef NO_LOCK_STATS
@@ -124,21 +116,21 @@ public:
         }
     };
 
-    virtual inline int lock()
+    virtual int lock()
     {
         m_lock_count++;
         return 0;
     };
 
-    virtual inline int trylock()
+    virtual int trylock()
     {
         m_lock_count++;
         return 0;
     }
 
-    virtual inline int unlock() { return 0; };
+    virtual int unlock() { return 0; };
 
-    virtual inline int is_locked_by_me() { return 0; }
+    virtual int is_locked_by_me() { return 0; }
 
     const char *to_str() { return m_lock_name; }
 
@@ -193,29 +185,26 @@ public:
         pthread_spin_init(&m_lock, 0);
     };
     ~lock_spin() { pthread_spin_destroy(&m_lock); };
-    inline int lock()
+    int lock()
     {
-        DEFINED_NO_THREAD_LOCK_RETURN_0
         LOCK_BASE_START_LOCK_WAIT
         int ret = pthread_spin_lock(&m_lock);
         LOCK_BASE_LOCK
         LOCK_BASE_END_LOCK_WAIT
         return ret;
     };
-    inline int trylock()
+    int trylock()
     {
-        DEFINED_NO_THREAD_LOCK_RETURN_0
         int ret = pthread_spin_trylock(&m_lock);
         LOCK_BASE_TRYLOCK
         return ret;
     };
-    inline int unlock()
+    int unlock()
     {
-        DEFINED_NO_THREAD_LOCK_RETURN_0
         LOCK_BASE_UNLOCK
         return pthread_spin_unlock(&m_lock);
     };
-    inline int is_locked_by_me()
+    int is_locked_by_me()
     {
         assert(!"lock_spin::is_locked_by_me is unsupported");
         return 0; // Unsupported
@@ -233,22 +222,10 @@ class lock_spin_simple {
 public:
     lock_spin_simple() { pthread_spin_init(&m_lock, 0); };
     ~lock_spin_simple() { pthread_spin_destroy(&m_lock); };
-    inline int lock()
-    {
-        DEFINED_NO_THREAD_LOCK_RETURN_0
-        return pthread_spin_lock(&m_lock);
-    };
-    inline int trylock()
-    {
-        DEFINED_NO_THREAD_LOCK_RETURN_0
-        return pthread_spin_trylock(&m_lock);
-    };
-    inline int unlock()
-    {
-        DEFINED_NO_THREAD_LOCK_RETURN_0
-        return pthread_spin_unlock(&m_lock);
-    };
-    inline int is_locked_by_me()
+    int lock() { return pthread_spin_lock(&m_lock); };
+    int trylock() { return pthread_spin_trylock(&m_lock); };
+    int unlock() { return pthread_spin_unlock(&m_lock); };
+    int is_locked_by_me()
     {
         assert(!"lock_spin_simple::is_locked_by_me is unsupported");
         return 0; // Unsupported
@@ -272,9 +249,9 @@ public:
         m_owner = m_invalid_owner;
     };
     ~lock_spin_recursive() {};
-    inline int lock()
+
+    int lock()
     {
-        DEFINED_NO_THREAD_LOCK_RETURN_0
         pthread_t self = pthread_self();
         /* coverity[use_same_locks_for_read_and_modify:FALSE] */
         if (m_owner == self) {
@@ -290,9 +267,8 @@ public:
         LOCK_BASE_END_LOCK_WAIT
         return ret;
     };
-    inline int trylock()
+    int trylock()
     {
-        DEFINED_NO_THREAD_LOCK_RETURN_0
         pthread_t self = pthread_self();
         if (m_owner == self) {
             ++m_lock_count;
@@ -305,18 +281,16 @@ public:
         }
         return ret;
     };
-    inline int unlock()
+    int unlock()
     {
-        DEFINED_NO_THREAD_LOCK_RETURN_0
         if (--m_lock_count == 0) {
             m_owner = m_invalid_owner;
             return lock_spin::unlock();
         }
         return 0;
     };
-    inline int is_locked_by_me()
+    int is_locked_by_me()
     {
-        DEFINED_NO_THREAD_LOCK_RETURN_1
         pthread_t self = pthread_self();
         return ((m_owner == self && m_lock_count) ? m_lock_count : 0);
     };
@@ -341,29 +315,26 @@ public:
         pthread_mutex_init(&m_lock, &mtx_attr);
     };
     ~lock_mutex() { pthread_mutex_destroy(&m_lock); };
-    inline int lock()
+    int lock()
     {
-        DEFINED_NO_THREAD_LOCK_RETURN_0
         LOCK_BASE_START_LOCK_WAIT
         int ret = pthread_mutex_lock(&m_lock);
         LOCK_BASE_LOCK
         LOCK_BASE_END_LOCK_WAIT
         return ret;
     };
-    inline int trylock()
+    int trylock()
     {
-        DEFINED_NO_THREAD_LOCK_RETURN_0
         int ret = pthread_mutex_trylock(&m_lock);
         LOCK_BASE_TRYLOCK
         return ret;
     };
-    inline int unlock()
+    int unlock()
     {
-        DEFINED_NO_THREAD_LOCK_RETURN_0
         LOCK_BASE_UNLOCK
         return pthread_mutex_unlock(&m_lock);
     };
-    inline int is_locked_by_me()
+    int is_locked_by_me()
     {
         assert(!"lock_mutex::is_locked_by_me is unsupported");
         return 0; // Unsupported
@@ -386,9 +357,9 @@ public:
         m_owner = m_invalid_owner;
     };
     ~lock_mutex_recursive() {};
-    inline int lock()
+
+    int lock()
     {
-        DEFINED_NO_THREAD_LOCK_RETURN_0
         pthread_t self = pthread_self();
         /* coverity[use_same_locks_for_read_and_modify:FALSE] */
         if (m_owner == self) {
@@ -404,9 +375,8 @@ public:
         LOCK_BASE_END_LOCK_WAIT
         return ret;
     };
-    inline int trylock()
+    int trylock()
     {
-        DEFINED_NO_THREAD_LOCK_RETURN_0
         pthread_t self = pthread_self();
         if (m_owner == self) {
             ++m_lock_count;
@@ -419,18 +389,16 @@ public:
         }
         return ret;
     };
-    inline int unlock()
+    int unlock()
     {
-        DEFINED_NO_THREAD_LOCK_RETURN_0
         if (--m_lock_count == 0) {
             m_owner = m_invalid_owner;
             return lock_mutex::unlock();
         }
         return 0;
     };
-    inline int is_locked_by_me()
+    int is_locked_by_me()
     {
-        DEFINED_NO_THREAD_LOCK_RETURN_1
         pthread_t self = pthread_self();
         return ((m_owner == self && m_lock_count) ? m_lock_count : 0);
     };
@@ -465,21 +433,9 @@ public:
         pthread_rwlock_init(&m_lock, &rw_attr);
     };
     ~lock_rw() { pthread_rwlock_destroy(&m_lock); };
-    inline int lock_rd()
-    {
-        DEFINED_NO_THREAD_LOCK_RETURN_0
-        return pthread_rwlock_rdlock(&m_lock);
-    };
-    inline int lock_wr()
-    {
-        DEFINED_NO_THREAD_LOCK_RETURN_0
-        return pthread_rwlock_wrlock(&m_lock);
-    };
-    inline int unlock()
-    {
-        DEFINED_NO_THREAD_LOCK_RETURN_0
-        return pthread_rwlock_unlock(&m_lock);
-    };
+    int lock_rd() { return pthread_rwlock_rdlock(&m_lock); };
+    int lock_wr() { return pthread_rwlock_wrlock(&m_lock); };
+    int unlock() { return pthread_rwlock_unlock(&m_lock); };
 
 protected:
     pthread_rwlock_t m_lock;
