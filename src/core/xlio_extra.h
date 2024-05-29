@@ -57,10 +57,6 @@ enum {
     XLIO_EXTRA_API_THREAD_OFFLOAD = (1 << 4),
     XLIO_EXTRA_API_GET_SOCKET_RINGS_NUM = (1 << 5),
     XLIO_EXTRA_API_GET_SOCKET_RINGS_FDS = (1 << 6),
-    XLIO_EXTRA_API_SOCKETXTREME_POLL = (1 << 7),
-    XLIO_EXTRA_API_SOCKETXTREME_FREE_PACKETS = (1 << 8),
-    XLIO_EXTRA_API_SOCKETXTREME_REF_XLIO_BUFF = (1 << 9),
-    XLIO_EXTRA_API_SOCKETXTREME_FREE_XLIO_BUFF = (1 << 10),
     XLIO_EXTRA_API_DUMP_FD_STATS = (1 << 11),
     XLIO_EXTRA_API_IOCTL = (1 << 12),
     XLIO_EXTRA_API_XLIO_SOCKET = (1 << 13),
@@ -176,8 +172,6 @@ struct __attribute__((packed)) xlio_api_t {
      * @param fd to dump, 0 for all open fds.
      * @param log_level dumping level corresponding vlog_levels_t enum (vlogger.h).
      * @return 0 on success, or error code on failure.
-     *
-     * errno is set to: EOPNOTSUPP - Function is not supported when socketXtreme is enabled.
      */
     int (*dump_fd_stats)(int fd, int log_level);
 
@@ -209,113 +203,6 @@ struct __attribute__((packed)) xlio_api_t {
      * errno is set to: EINVAL - not offloaded socket
      */
     int (*register_recv_callback)(int s, xlio_recv_callback_t callback, void *context);
-
-    /**
-     * socketxtreme_poll() polls for completions
-     *
-     * @param fd File descriptor.
-     * @param completions Array of completions.
-     * @param ncompletions Maximum number of completion to return.
-     * @param flags Flags.
-     *              SOCKETXTREME_POLL_TX - poll tx completions
-     * @return On success, return the number of ready completions.
-     * 	   On error, -1 is returned, and TBD:errno is set?.
-     *
-     * This function polls the `fd` for completions and returns maximum `ncompletions` ready
-     * completions via `completions` array.
-     * The `fd` can represent a ring, socket or epoll file descriptor.
-     *
-     * Completions are indicated for incoming packets and/or for other events.
-     * If XLIO_SOCKETXTREME_PACKET flag is enabled in xlio_socketxtreme_completion_t.events field
-     * the completion points to incoming packet descriptor that can be accesses
-     * via xlio_socketxtreme_completion_t.packet field.
-     * Packet descriptor points to library specific buffers that contain data scattered
-     * by HW, so the data is deliver to application with zero copy.
-     * Notice: after application finished using the returned packets
-     * and their buffers it must free them using socketxtreme_free_packets(),
-     * socketxtreme_free_buff() functions.
-     *
-     * If XLIO_SOCKETXTREME_PACKET flag is disabled xlio_socketxtreme_completion_t.packet field is
-     * reserved.
-     *
-     * In addition to packet arrival event (indicated by XLIO_SOCKETXTREME_PACKET flag)
-     * The library also reports XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED event and standard
-     * epoll events via xlio_socketxtreme_completion_t.events field.
-     * XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED event is reported when new connection is
-     * accepted by the server.
-     * When working with socketxtreme_poll() new connections are accepted
-     * automatically and accept(listen_socket) must not be called.
-     * XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED event is reported for the new
-     * connected/child socket (xlio_socketxtreme_completion_t.user_data refers to child socket)
-     * and EPOLLIN event is not generated for the listen socket.
-     * For events other than packet arrival and new connection acceptance
-     * xlio_socketxtreme_completion_t.events bitmask composed using standard epoll API
-     * events types.
-     * Notice: the same completion can report multiple events, for example
-     * XLIO_SOCKETXTREME_PACKET flag can be enabled together with EPOLLOUT event,
-     * etc...
-     *
-     * * errno is set to: EOPNOTSUPP - socketXtreme was not enabled during configuration time.
-     */
-    int (*socketxtreme_poll)(int fd, struct xlio_socketxtreme_completion_t *completions,
-                             unsigned int ncompletions, int flags);
-
-    /**
-     * Frees packets received by socketxtreme_poll().
-     *
-     * @param packets Packets to free.
-     * @param num Number of packets in `packets` array
-     * @return 0 on success, -1 on failure
-     *
-     * For each packet in `packet` array this function:
-     * - Updates receive queue size and the advertised TCP
-     *   window size, if needed, for the socket that received
-     *   the packet.
-     * - Frees the library specific buffer list that is associated with the packet.
-     *   Notice: for each buffer in buffer list the library decreases buffer's
-     *   reference count and only buffers with reference count zero are deallocated.
-     *   Notice:
-     *   - Application can increase buffer reference count,
-     *     in order to hold the buffer even after socketxtreme_free_packets()
-     *     was called for the buffer, using socketxtreme_ref_buff().
-     *   - Application is responsible to free buffers, that
-     *     couldn't be deallocated during socketxtreme_free_packets() due to
-     *     non zero reference count, using socketxtreme_free_buff() function.
-     *
-     * errno is set to: EINVAL - NULL pointer is provided.
-     *                  EOPNOTSUPP - socketXtreme was not enabled during configuration time.
-     */
-    int (*socketxtreme_free_packets)(struct xlio_socketxtreme_packet_desc_t *packets, int num);
-
-    /* This function increments the reference count of the buffer.
-     * This function should be used in order to hold the buffer
-     * even after socketxtreme_free_packets() call.
-     * When buffer is not needed any more it should be freed via
-     * socketxtreme_free_buff().
-     *
-     * @param buff Buffer to update.
-     * @return On success, return buffer's reference count after the change
-     * 	   On errors -1 is returned
-     *
-     * errno is set to: EINVAL - NULL pointer is provided.
-     *                  EOPNOTSUPP - socketXtreme was not enabled during configuration time.
-     */
-    int (*socketxtreme_ref_buff)(struct xlio_buff_t *buff);
-
-    /* This function decrements the buff reference count.
-     * When buff's reference count reaches zero, the buff is
-     * deallocated.
-     *
-     * @param buff Buffer to free.
-     * @return On success, return buffer's reference count after the change
-     * 	   On error -1 is returned
-     *
-     * Notice: return value zero means that buffer was deallocated.
-     *
-     * errno is set to: EINVAL - NULL pointer is provided.
-     *                  EOPNOTSUPP - socketXtreme was not enabled during configuration time.
-     */
-    int (*socketxtreme_free_buff)(struct xlio_buff_t *buff);
 
     /**
      * XLIO Socket API.
