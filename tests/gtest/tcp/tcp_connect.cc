@@ -142,8 +142,6 @@ TEST_F(tcp_connect, DISABLED_ti_3)
  */
 TEST_F(tcp_connect, ti_4_rto_racing)
 {
-    SKIP_TRUE(!getenv("XLIO_SOCKETXTREME"), "Skip Socketxtreme");
-
     int pid = fork();
 
     if (0 == pid) { /* I am the child */
@@ -238,8 +236,6 @@ TEST_F(tcp_connect, ti_4_rto_racing)
  */
 TEST_F(tcp_connect, ti_5_multi_connect)
 {
-    SKIP_TRUE(!getenv("XLIO_SOCKETXTREME"), "Skip Socketxtreme");
-
     int fd = tcp_base::sock_create();
     ASSERT_LE(0, fd);
 
@@ -341,8 +337,6 @@ TEST_F(tcp_connect, ti_5_multi_connect)
  */
 TEST_F(tcp_connect, mapped_ipv4_connect)
 {
-    SKIP_TRUE(!getenv("XLIO_SOCKETXTREME"), "Skip Socketxtreme");
-
     if (!test_mapped_ipv4()) {
         return;
     }
@@ -472,8 +466,6 @@ TEST_F(tcp_connect, mapped_ipv4_connect_v6only)
  */
 TEST_F(tcp_connect, ti_6_incoming_conn)
 {
-    SKIP_TRUE(!getenv("XLIO_SOCKETXTREME"), "Skip Socketxtreme");
-
     int rc = EOK;
     int pid = fork();
 
@@ -553,13 +545,9 @@ TEST_F(tcp_connect, ti_6_incoming_conn)
  * @details
  *    This test should pass the following combination
  *    1. Default
- *    2. XLIO_SOCKETXTREME=1
- *    3. XLIO_TCP_CTL_THREAD=delegate
- *    4. XLIO_RX_POLL=-1
- *    5. XLIO_SOCKETXTREME=1 XLIO_RX_POLL=-1
- *    6. XLIO_SOCKETXTREME=1 XLIO_TCP_CTL_THREAD=delegate
- *    7. XLIO_SOCKETXTREME=1 XLIO_TCP_CTL_THREAD=delegate XLIO_RX_POLL=-1
- *    8. XLIO_TCP_CTL_THREAD=delegate XLIO_RX_POLL=-1
+ *    2. XLIO_TCP_CTL_THREAD=delegate
+ *    3. XLIO_RX_POLL=-1
+ *    4. XLIO_TCP_CTL_THREAD=delegate XLIO_RX_POLL=-1
  */
 TEST_F(tcp_connect, ti_with_tcp_user_timeout)
 {

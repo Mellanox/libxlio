@@ -39,8 +39,7 @@
  *
  * usage:
  * epoll: sudo server_tcp.out 1.1.3.15:17000
- * socketxtreme: sudo env LD_PRELOAD=libxlio.so server_tcp.out 1.1.3.15:17000
- */
+  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -185,9 +184,6 @@ int main(int argc, char *argv[])
         int count;
         char msg[1024];
     } conns;
-#if defined(XLIO_API) && (XLIO_API == 1)
-    struct xlio_socketxtreme_completion_t *xlio_comps;
-#endif /* XLIO_API */
     int flag;
     struct sockaddr_in addr;
     struct sockaddr in_addr;
@@ -275,24 +271,10 @@ int main(int argc, char *argv[])
         int n = 0;
 
         /* Step:4 Get events */
-#if defined(XLIO_API) && (XLIO_API == 1)
-        while (0 == n) {
-            n = _xlio_api->socketxtreme_poll(_xlio_ring_fd, xlio_comps, max_events, 0);
-        }
-#else
         n = epoll_wait(efd, events, max_events, 0);
-#endif /* XLIO_API */
         for (j = 0; j < n; j++) {
-
-#if defined(XLIO_API) && (XLIO_API == 1)
-            event = xlio_comps[j].events;
-            event |= (event & XLIO_SOCKETXTREME_PACKET ? EPOLLIN : 0);
-            fd = (event & XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED ? xlio_comps[j].listen_fd
-                                                                    : xlio_comps[j].user_data);
-#else
             event = events[j].events;
             fd = events[j].data.fd;
-#endif /* XLIO_API */
 
             if ((event & EPOLLERR) || (event & EPOLLHUP) || (event & EPOLLRDHUP)) {
                 printf("epoll error\n");
@@ -342,18 +324,7 @@ int main(int argc, char *argv[])
 
             /* Step:6 Process data */
             if (event & EPOLLIN) {
-#if defined(XLIO_API) && (XLIO_API == 1)
-                printf("xlio_comps[j].packet.num_bufs equal to %d \n",
-                       xlio_comps[j].packet.num_bufs);
-                assert(1 == xlio_comps[j].packet.num_bufs);
-                assert(sizeof(conns.msg) > xlio_comps[j].packet.total_len);
-                memcpy(conns.msg, xlio_comps[j].packet.buff_lst->payload,
-                       xlio_comps[j].packet.total_len);
-                ret = xlio_comps[j].packet.total_len;
-                _xlio_api->socketxtreme_free_packets(&xlio_comps[j].packet, 1);
-#else
                 ret = recv(fd, conns.msg, sizeof(conns.msg), 0);
-#endif /* XLIO_API */
                 if (ret < 0) {
                     exit(EXIT_FAILURE);
                 }

@@ -129,7 +129,6 @@ public:
      */
     virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
                                             void *pv_fd_ready_array = nullptr) = 0;
-    virtual mem_buf_desc_t *poll_and_process_socketxtreme() { return nullptr; };
 
     /**
      * This will check if the cq was drained, and if it wasn't it will drain it.
@@ -154,7 +153,6 @@ public:
     bool reclaim_recv_buffers(descq_t *rx_reuse);
     bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst);
     bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst);
-    int reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse);
 
     void get_cq_event(int count = 1) { xlio_ib_mlx5_get_cq_event(&m_mlx5_cq, count); };
 
@@ -209,13 +207,6 @@ protected:
     ib_ctx_handler *m_p_ib_ctx_handler;
     const uint32_t m_n_sysvar_rx_num_wr_to_post_recv;
     descq_t m_rx_pool;
-
-    /* This fields are needed to track internal memory buffers
-     * represented as struct xlio_buff_t
-     * from user application by special XLIO extended API
-     */
-    mem_buf_desc_t *m_rx_buffs_rdy_for_free_head = nullptr;
-    mem_buf_desc_t *m_rx_buffs_rdy_for_free_tail = nullptr;
 
 private:
     struct ibv_comp_channel *m_comp_event_channel;

@@ -111,8 +111,6 @@ static command_netlink *s_cmd_nl = nullptr;
 #define MAX_VERSION_STR_LEN 128
 
 global_stats_t g_global_stat_static;
-static uint32_t g_ec_pool_size = 0U;
-static uint32_t g_ec_pool_no_objs = 0U;
 
 static int free_libxlio_resources()
 {
@@ -206,11 +204,6 @@ static int free_libxlio_resources()
         delete g_tcp_seg_pool;
     }
     g_tcp_seg_pool = nullptr;
-
-    if (g_socketxtreme_ec_pool) {
-        delete g_socketxtreme_ec_pool;
-    }
-    g_socketxtreme_ec_pool = NULL;
 
     if (safe_mce_sys().print_report) {
         buffer_pool::print_report_on_errors(VLOG_INFO);
@@ -819,9 +812,6 @@ void print_xlio_global_settings()
     VLOG_PARAM_NUMBER("Num of neigh restart retries", safe_mce_sys().neigh_num_err_retries,
                       MCE_DEFAULT_NEIGH_NUM_ERR_RETRIES, SYS_VAR_NEIGH_NUM_ERR_RETRIES);
 
-    VLOG_PARAM_STRING("SocketXtreme mode", safe_mce_sys().enable_socketxtreme,
-                      MCE_DEFAULT_SOCKETXTREME, SYS_VAR_SOCKETXTREME,
-                      safe_mce_sys().enable_socketxtreme ? "Enabled " : "Disabled");
     VLOG_STR_PARAM_STRING("TSO support", option_3::to_str(safe_mce_sys().enable_tso),
                           option_3::to_str(MCE_DEFAULT_TSO), SYS_VAR_TSO,
                           option_3::to_str(safe_mce_sys().enable_tso));
@@ -1207,9 +1197,6 @@ static void do_global_ctors_helper()
                           g_global_stat_static.n_tcp_seg_pool_size,
                           g_global_stat_static.n_tcp_seg_pool_no_segs));
 
-    NEW_CTOR(g_socketxtreme_ec_pool,
-             socketxtreme_ec_pool("Socketxtreme ec", 512, g_ec_pool_size, g_ec_pool_no_objs));
-
     // For delegated TCP timers the global collection is not used.
     if (safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
         NEW_CTOR(g_tcp_timers_collection, tcp_timers_collection());
@@ -1293,7 +1280,6 @@ void reset_globals()
     g_buffer_pool_tx = nullptr;
     g_buffer_pool_zc = nullptr;
     g_tcp_seg_pool = nullptr;
-    g_socketxtreme_ec_pool = NULL;
     g_tcp_timers_collection = nullptr;
     g_p_vlogger_timer_handler = nullptr;
     g_p_event_handler_manager = nullptr;

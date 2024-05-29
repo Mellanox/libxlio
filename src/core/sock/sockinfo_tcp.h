@@ -239,8 +239,6 @@ public:
     int recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
                                     size_t count) override;
 
-    void socketxtreme_recv_buffs_tcp(mem_buf_desc_t *desc, uint16_t len);
-
     void statistics_print(vlog_levels_t log_level = VLOG_DEBUG) override;
 
     inline struct tcp_pcb *get_pcb() { return &m_pcb; }
@@ -397,12 +395,9 @@ public:
     tcp_timers_collection *get_tcp_timer_collection();
     bool is_cleaned() const { return m_is_cleaned; }
     static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
-    static err_t rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
-                                         err_t err);
     static err_t rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, struct pbuf *p,
                                           err_t err);
     static err_t rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
-    inline void rx_lwip_cb_socketxtreme_helper(pbuf *p);
 
     int register_callback(xlio_recv_callback_t callback, void *context) override
     {
@@ -444,9 +439,6 @@ private:
 
     // Builds rfs key
     static void create_flow_tuple_key_from_pcb(flow_tuple &key, struct tcp_pcb *pcb);
-
-    // auto accept function
-    static void accept_connection_socketxtreme(sockinfo_tcp *parent, sockinfo_tcp *child);
 
     // accept cb func
     static err_t accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t err);
