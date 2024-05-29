@@ -507,7 +507,6 @@ dpcp::tir *hw_queue_rx::create_tir(bool is_tls /*=false*/)
 
 void hw_queue_rx::destory_doca_rxq(doca_eth_rxq *rxq)
 {
-    NOT_IN_USE(rxq);
     doca_error_t err = doca_eth_rxq_destroy(rxq);
     if (DOCA_IS_ERROR(err)) {
         PRINT_DOCA_ERR(__log_err, err, "doca_eth_rxq_destroy");
