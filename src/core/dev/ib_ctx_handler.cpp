@@ -194,7 +194,7 @@ void ib_ctx_handler::open_doca_dev(doca_devinfo *devinfo)
 void ib_ctx_handler::print_val()
 {
     char str_x[512] = {0};
-    char temp_str[255];
+    char temp_str[512];
 
     temp_str[0] = '\0';
 
