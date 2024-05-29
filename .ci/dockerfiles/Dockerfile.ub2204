@@ -39,10 +39,8 @@ RUN apt-get update && \
         iproute2 gdb \
         curl \
         libcap-dev \
+        librdmacm-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-RUN mkdir -p /opt/mellanox/rivermax && \
-    curl -o /opt/mellanox/rivermax/rivermax.lic https://urm.nvidia.com/artifactory/sw-rivermax-generic-local/license/rivermax.lic
 
 RUN pip3 install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --upgrade pip && \
     pip3 install wheel && \
@@ -56,9 +54,6 @@ RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL\nroot ALL=(ALL) NOPASSWD: ALL" >> /e
     useradd -u "$_UID" -g "$_GID" -s /bin/bash -m -d ${_HOME} "$_LOGIN" && \
     usermod -aG sudo $_LOGIN && \
     chown -R ${_LOGIN} ${_HOME}
-
-# W/A for libvma installation issue under docker environment
-RUN touch /etc/init.d/vma && chmod +x /etc/init.d/vma
 
 ENV MODULEPATH /hpc/local/etc/modulefiles
 SHELL ["/bin/bash"]
