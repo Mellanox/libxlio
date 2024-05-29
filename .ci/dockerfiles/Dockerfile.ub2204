@@ -1,0 +1,67 @@
+FROM ubuntu:22.04
+ARG _UID=6213
+ARG _GID=101
+ARG _LOGIN=swx-jenkins
+ARG _HOME=/var/home/$_LOGIN
+ARG http_proxy=http://10.210.9.1:3128/
+ARG https_proxy=http://10.210.9.1:3128/
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+    apt-get install -y \
+        sudo \
+        automake \
+        default-jdk \
+        dh-make \
+        g++ \
+        git \
+        libcap2 \
+        libnuma-dev \
+        libtool \
+        make \
+        maven \
+        udev \
+        wget \
+        vim \
+        cpio \
+        net-tools \
+        iputils-ping \
+        environment-modules \
+        libibverbs-dev \
+        libfile-fcntllock-perl \
+        chrpath flex gfortran graphviz dpatch libgfortran5 tcl bison tk swig \
+        libnl-route-3-dev libnl-3-dev kmod python3 lsof pciutils ethtool libmnl0 pkg-config \
+        lsb-release \
+        python3-pip \
+        libavahi-compat-libdnssd-dev \
+        doxygen graphviz \
+        iproute2 gdb \
+        curl \
+        libcap-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /opt/mellanox/rivermax && \
+    curl -o /opt/mellanox/rivermax/rivermax.lic https://urm.nvidia.com/artifactory/sw-rivermax-generic-local/license/rivermax.lic
+
+RUN pip3 install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --upgrade pip && \
+    pip3 install wheel && \
+    pip3 install cmake conan~=2.0.5
+
+RUN echo "Host *\n\tHostkeyAlgorithms +ssh-rsa\n\tPubkeyAcceptedAlgorithms +ssh-rsa" >> /etc/ssh/ssh_config
+
+RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL\nroot ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
+    mkdir -p $_HOME && \
+    groupadd -f -g "$_GID" "$_LOGIN" && \
+    useradd -u "$_UID" -g "$_GID" -s /bin/bash -m -d ${_HOME} "$_LOGIN" && \
+    usermod -aG sudo $_LOGIN && \
+    chown -R ${_LOGIN} ${_HOME}
+
+# W/A for libvma installation issue under docker environment
+RUN touch /etc/init.d/vma && chmod +x /etc/init.d/vma
+
+ENV MODULEPATH /hpc/local/etc/modulefiles
+SHELL ["/bin/bash"]
+
+USER "$_LOGIN"
+ENTRYPOINT [ "/bin/bash", "--login", "--rcfile", "/etc/bashrc", "-c" ]

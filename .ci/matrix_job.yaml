@@ -11,7 +11,7 @@ kubernetes:
   privileged: false
   cloud: swx-k8s-spray
   nodeSelector: 'beta.kubernetes.io/os=linux'
-  namespace: xlio-ci
+  namespace: 'xlio-ci'
   limits: '{memory: 8Gi, cpu: 7000m}'
   requests: '{memory: 8Gi, cpu: 7000m}'
 
@@ -69,7 +69,47 @@ runs_on_dockers:
      uri: '$arch/$name',
      tag: '20240703',
      build_args: '--no-cache',
-     category: 'tool'
+     category: 'tool',
+     }
+  - {file: '.ci/dockerfiles/Dockerfile.ub2204',
+     arch: 'x86_64',
+     name: 'xlio_tests.gtests',
+     uri: '$arch/$name',
+     tag: '20242905',
+     build_args: '--no-cache',
+     category: 'tool',
+     annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p2' }],
+     limits: '{memory: 8Gi, cpu: 8000m, mellanox.com/sriov_cx6dx_p2: 1}',
+     requests: '{memory: 8Gi, cpu: 8000m, mellanox.com/sriov_cx6dx_p2: 1}',
+     caps_add: '[ IPC_LOCK, SYS_RESOURCE ]',
+     runAsUser: '0',
+     runAsGroup: '0'
+     }
+  - {file: '.ci/dockerfiles/Dockerfile.ub2204',
+     arch: 'x86_64',
+     name: 'xlio_tests.test',
+     uri: '$arch/$name',
+     tag: '20242905',
+     build_args: '--no-cache',
+     category: 'tool',
+     annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p2' }],
+     limits: '{memory: 8Gi, cpu: 8000m, mellanox.com/sriov_cx6dx_p2: 1}',
+     requests: '{memory: 8Gi, cpu: 8000m, mellanox.com/sriov_cx6dx_p2: 1}',
+     runAsUser: '0',
+     runAsGroup: '0'
+     }
+  - {file: '.ci/dockerfiles/Dockerfile.ub2204',
+     arch: 'x86_64',
+     name: 'xlio_tests.valgrind',
+     uri: '$arch/$name',
+     tag: '20242905',
+     build_args: '--no-cache',
+     category: 'tool',
+     annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p2' }],
+     limits: '{memory: 8Gi, cpu: 8000m, mellanox.com/sriov_cx6dx_p2: 1}',
+     requests: '{memory: 8Gi, cpu: 8000m, mellanox.com/sriov_cx6dx_p2: 1}',
+     runAsUser: '0',
+     runAsGroup: '0'
      }
 
 runs_on_agents:
@@ -294,9 +334,9 @@ steps:
   - name: Test
     enable: ${do_test}
     containerSelector:
-      - "{name: 'skip-container'}"
+      - "{name: 'xlio_tests.test', category:'tool'}"
     agentSelector:
-      - "{nodeLabel: 'beni09'}"
+      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_test}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_run=${action} ./contrib/test_jenkins.sh
@@ -311,9 +351,9 @@ steps:
   - name: Gtest
     enable: ${do_gtest}
     containerSelector:
-      - "{name: 'skip-container'}"
+      - "{name: 'xlio_tests.gtests', category:'tool'}"
     agentSelector:
-      - "{nodeLabel: 'beni09'}"
+      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_gtest}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_gtest=${action} ./contrib/test_jenkins.sh
@@ -330,9 +370,9 @@ steps:
   - name: Valgrind
     enable: ${do_valgrind}
     containerSelector:
-      - "{name: 'skip-container'}"
+      - "{name: 'xlio_tests.valgrind', category:'tool'}"
     agentSelector:
-      - "{nodeLabel: 'beni09'}"
+      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_valgrind}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_vg=${action} ./contrib/test_jenkins.sh
