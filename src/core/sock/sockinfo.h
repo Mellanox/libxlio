@@ -299,7 +299,6 @@ public:
     virtual bool is_incoming() = 0;
     virtual bool is_closable() = 0;
     virtual void statistics_print(vlog_levels_t log_level = VLOG_DEBUG) = 0;
-    virtual int register_callback(xlio_recv_callback_t callback, void *context) = 0;
     virtual int fcntl(int __cmd, unsigned long int __arg);
     virtual int fcntl64(int __cmd, unsigned long int __arg);
     virtual int ioctl(unsigned long int __request, unsigned long int __arg);
@@ -340,13 +339,14 @@ public:
     uint32_t get_flow_tag_val() { return m_flow_tag_id; }
     in_protocol_t get_protocol(void) { return m_protocol; }
     socket_stats_t *get_sock_stats() const { return m_p_socket_stats; }
+    uint32_t get_epoll_event_flags() const { return m_epoll_event_flags; }
+    void set_epoll_event_flags(uint32_t v) { m_epoll_event_flags = v; }
     rfs *get_rfs_ptr() const { return m_rfs_ptr; }
     void set_rfs_ptr(rfs *r) { m_rfs_ptr = r; }
     void destructor_helper();
     int get_rings_fds(int *ring_fds, int ring_fds_sz);
     int get_rings_num();
     bool validate_and_convert_mapped_ipv4(sock_addr &sock) const;
-    int register_callback_ctx(xlio_recv_callback_t callback, void *context);
     void consider_rings_migration_rx();
     int add_epoll_context(epfd_info *epfd);
     void remove_epoll_context(epfd_info *epfd);
@@ -469,12 +469,21 @@ protected:
     bool m_b_zc = false;
     bool m_b_blocking = true;
     bool m_b_rcvtstampns = false;
+    // used to periodically return buffers, even if threshold was not reached
+    bool m_rx_reuse_buf_pending = false;
+    // used to mark threshold was reached, but free was not done yet
+    bool m_rx_reuse_buf_postponed = false;
+    bool m_skip_cq_poll_in_rx;
+    bool m_reuseaddr = false; // to track setsockopt with SO_REUSEADDR
+    bool m_reuseport = false; // to track setsockopt with SO_REUSEPORT
+    bool m_b_pktinfo = false;
+    bool m_bind_no_port = false;
+    bool m_is_ipv6only;
     rfs *m_rfs_ptr = nullptr;
     ring *m_p_rx_ring = nullptr; // used in TCP/UDP
     epfd_info *m_econtext = nullptr;
-    // Callback function pointer to support XLIO extra API (xlio_extra.h)
-    xlio_recv_callback_t m_rx_callback = nullptr;
-    void *m_rx_callback_context = nullptr; // user context
+    uint32_t m_epoll_event_flags = 0U;
+    int m_rx_num_buffs_reuse;
 
     // End of first cache line
 
@@ -504,11 +513,7 @@ protected:
 
     // End of second cache line
 
-    wakeup_pipe m_sock_wakeup_pipe;
-    int m_rx_epfd;
-
 public:
-    uint32_t m_epoll_event_flags = 0U;
     epoll_fd_rec m_fd_rec;
     list_node<sockinfo, sockinfo::pending_to_remove_node_offset> pending_to_remove_node;
     list_node<sockinfo, sockinfo::socket_fd_list_node_offset> socket_fd_list_node;
@@ -516,6 +521,7 @@ public:
     list_node<sockinfo, sockinfo::ep_info_fd_node_offset> ep_info_fd_node;
 
 protected:
+    wakeup_pipe m_sock_wakeup_pipe;
     /**
      * list of pending ready packet on the Rx,
      * each element is a pointer to the ib_conn_mgr that holds this ready rx datagram
@@ -524,17 +530,7 @@ protected:
     size_t m_rx_ready_byte_count = 0U;
     buff_info_t m_rx_reuse_buff; // used in TCP instead of m_rx_ring_map
     int m_n_rx_pkt_ready_list_count = 0;
-    int m_rx_num_buffs_reuse;
-    // used to periodically return buffers, even if threshold was not reached
-    bool m_rx_reuse_buf_pending = false;
-    // used to mark threshold was reached, but free was not done yet
-    bool m_rx_reuse_buf_postponed = false;
-    bool m_skip_cq_poll_in_rx;
-    bool m_reuseaddr = false; // to track setsockopt with SO_REUSEADDR
-    bool m_reuseport = false; // to track setsockopt with SO_REUSEPORT
-    bool m_b_pktinfo = false;
-    bool m_bind_no_port = false;
-    bool m_is_ipv6only;
+    int m_rx_epfd;
 
     multilock m_lock_rcv; // For UDP
     lock_mutex m_lock_snd; // For UDP

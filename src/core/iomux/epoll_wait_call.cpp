@@ -101,7 +101,7 @@ int epoll_wait_call::get_current_events()
 
         // epoll_wait will always wait for EPOLLERR and EPOLLHUP.
         uint32_t mutual_events =
-            si->m_epoll_event_flags & (si->m_fd_rec.events | EPOLLERR | EPOLLHUP);
+            si->get_epoll_event_flags() & (si->m_fd_rec.events | EPOLLERR | EPOLLHUP);
 
         // EPOLLHUP & EPOLLOUT are mutually exclusive. See poll man pages. Epoll adapts the poll
         // behavior.

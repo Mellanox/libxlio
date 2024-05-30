@@ -265,18 +265,6 @@ int xlio_dump_fd_stats(int fd, int log_level);
  */
 int xlio_extra_ioctl(void *cmsg_hdr, size_t cmsg_len);
 
-/**
- * Register a received packet notification callback.
- *
- * @param s Socket file descriptor.
- * @param callback Callback function.
- * @param context user contex for callback function.
- * @return 0 - success, -1 - error
- *
- * errno is set to: EINVAL - not offloaded socket
- */
-int xlio_register_recv_callback(int s, xlio_recv_callback_t callback, void *context);
-
 /*
  * XLIO Socket API
  *

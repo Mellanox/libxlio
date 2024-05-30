@@ -555,7 +555,7 @@ rfs_rule *ring_slave::tls_rx_create_rule(const flow_tuple &flow_spec_5t, xlio_ti
 }
 #endif /* DEFINED_UTLS */
 
-// calling sockinfo callback with RFS bypass
+// calling sockinfo with RFS bypass
 static inline bool check_rx_packet(sockinfo *si, mem_buf_desc_t *p_rx_wc_buf_desc,
                                    void *fd_ready_array)
 {

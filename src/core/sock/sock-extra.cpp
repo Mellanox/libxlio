@@ -60,19 +60,6 @@
 // extended API functions
 //-----------------------------------------------------------------------------
 
-extern "C" int xlio_register_recv_callback(int __fd, xlio_recv_callback_t __callback,
-                                           void *__context)
-{
-    sockinfo *p_socket_object = nullptr;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        p_socket_object->register_callback(__callback, __context);
-        return 0;
-    }
-    errno = EINVAL;
-    return -1;
-}
-
 extern "C" int xlio_recvfrom_zcopy(int __fd, void *__buf, size_t __nbytes, int *__flags,
                                    struct sockaddr *__from, socklen_t *__fromlen)
 {
@@ -203,8 +190,6 @@ struct xlio_api_t *extra_api()
         memset(xlio_api, 0, sizeof(struct xlio_api_t));
         xlio_api->magic = XLIO_MAGIC_NUMBER;
         xlio_api->cap_mask = 0;
-        SET_EXTRA_API(register_recv_callback, xlio_register_recv_callback,
-                      XLIO_EXTRA_API_REGISTER_RECV_CALLBACK);
         SET_EXTRA_API(recvfrom_zcopy, xlio_recvfrom_zcopy, XLIO_EXTRA_API_RECVFROM_ZCOPY);
         SET_EXTRA_API(recvfrom_zcopy_free_packets, xlio_recvfrom_zcopy_free_packets,
                       XLIO_EXTRA_API_RECVFROM_ZCOPY_FREE_PACKETS);
