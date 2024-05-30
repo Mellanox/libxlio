@@ -85,8 +85,7 @@ public:
     virtual ~rfs();
 
     /**
-     * Register/Unregister a sink with this rfs object
-     * Get notifications about incoming packets using the sockinfo callback api
+     * Register/Unregister a sink with this rfs object.
      * The rfs will call ibv_attach on the QP once when at least one receiver sink is registered
      * An ibv_detach is called when the last receiver sink is deleted from the registered list
      *

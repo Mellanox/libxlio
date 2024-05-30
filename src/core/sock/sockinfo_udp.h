@@ -194,11 +194,6 @@ public:
     bool is_closable() override { return true; }
 #endif
 
-    int register_callback(xlio_recv_callback_t callback, void *context) override
-    {
-        return register_callback_ctx(callback, context);
-    }
-
 protected:
     void lock_rx_q() override { m_lock_rcv.lock(); }
     void unlock_rx_q() override { m_lock_rcv.unlock(); }
@@ -267,9 +262,7 @@ private:
         }
     }
 
-    inline xlio_recv_callback_retval_t inspect_by_user_cb(mem_buf_desc_t *p_desc);
-    inline void update_ready(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array,
-                             xlio_recv_callback_retval_t cb_ret);
+    void update_ready(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array);
 
     void post_deqeue(bool release_buff) override;
     int zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags) override;

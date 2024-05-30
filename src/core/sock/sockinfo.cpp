@@ -97,11 +97,11 @@ const char *sockinfo::setsockopt_so_opt_to_str(int opt)
 }
 
 sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
-    : m_fd(fd)
-    , m_family(domain)
-    , m_rx_num_buffs_reuse(safe_mce_sys().rx_bufs_batch)
-    , m_skip_cq_poll_in_rx(safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_ENABLE)
+    : m_skip_cq_poll_in_rx(safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_ENABLE)
     , m_is_ipv6only(safe_mce_sys().sysctl_reader.get_ipv6_bindv6only())
+    , m_rx_num_buffs_reuse(safe_mce_sys().rx_bufs_batch)
+    , m_fd(fd)
+    , m_family(domain)
     , m_lock_rcv(MULTILOCK_RECURSIVE, MODULE_NAME "::m_lock_rcv")
     , m_lock_snd(MODULE_NAME "::m_lock_snd")
     , m_so_bindtodevice_ip(ip_address::any_addr(), domain)
@@ -1932,13 +1932,6 @@ void sockinfo::destructor_helper()
         delete m_p_connected_dst_entry;
     }
     m_p_connected_dst_entry = nullptr;
-}
-
-int sockinfo::register_callback_ctx(xlio_recv_callback_t callback, void *context)
-{
-    m_rx_callback = callback;
-    m_rx_callback_context = context;
-    return 0;
 }
 
 int sockinfo::modify_ratelimit(dst_entry *p_dst_entry, struct xlio_rate_limit_t &rate_limit)

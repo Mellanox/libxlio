@@ -50,7 +50,6 @@ struct ibv_pd;
  */
 
 enum {
-    XLIO_EXTRA_API_REGISTER_RECV_CALLBACK = (1 << 0),
     XLIO_EXTRA_API_RECVFROM_ZCOPY = (1 << 1),
     XLIO_EXTRA_API_RECVFROM_ZCOPY_FREE_PACKETS = (1 << 2),
     XLIO_EXTRA_API_ADD_CONF_RULE = (1 << 3),
@@ -191,18 +190,6 @@ struct __attribute__((packed)) xlio_api_t {
      * @return -1 on failure and 0 on success
      */
     int (*ioctl)(void *cmsg_hdr, size_t cmsg_len);
-
-    /**
-     * Register a received packet notification callback.
-     *
-     * @param s Socket file descriptor.
-     * @param callback Callback function.
-     * @param context user contex for callback function.
-     * @return 0 - success, -1 - error
-     *
-     * errno is set to: EINVAL - not offloaded socket
-     */
-    int (*register_recv_callback)(int s, xlio_recv_callback_t callback, void *context);
 
     /**
      * XLIO Socket API.
