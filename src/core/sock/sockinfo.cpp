@@ -1840,6 +1840,13 @@ bool sockinfo::validate_and_convert_mapped_ipv4(sock_addr &sock) const
 
 bool sockinfo::attach_as_uc_receiver(role_t role, bool skip_rules /* = false */)
 {
+#if defined(DEFINED_NGINX)
+    // Skip attaching rules for Nginx master process.
+    // It is unnecessary and DOCA/DPDK do not support fork().
+    if (g_p_app && g_p_app->type == APP_NGINX && (g_p_app->get_worker_id() == -1)) {
+        return true;
+    }
+#endif
     sock_addr addr(m_bound);
     ip_addr if_addr(m_bound.get_ip_addr(), m_bound.get_sa_family());
     bool ret = true;
