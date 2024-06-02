@@ -175,9 +175,7 @@ public:
 
     // This call will handle all rdma related events (bind->listen->connect_req->accept)
     void statistics_print(vlog_levels_t log_level = VLOG_DEBUG) override;
-    int recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
-                                    size_t count) override;
-    inline fd_type_t get_type() override { return FD_TYPE_SOCKET; }
+    fd_type_t get_type() override { return FD_TYPE_SOCKET; }
 
     bool prepare_to_close(bool process_shutdown = false) override;
     void update_header_field(data_updater *updater) override;
@@ -264,8 +262,7 @@ private:
 
     void update_ready(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array);
 
-    void post_deqeue(bool release_buff) override;
-    int zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags) override;
+    void post_deqeue() override;
     size_t handle_msg_trunc(size_t total_rx, size_t payload_size, int in_flags,
                             int *p_out_flags) override;
     void handle_ip_pktinfo(struct cmsg_state *cm_state) override;

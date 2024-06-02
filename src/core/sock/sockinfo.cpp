@@ -1957,57 +1957,6 @@ int sockinfo::modify_ratelimit(dst_entry *p_dst_entry, struct xlio_rate_limit_t 
     return -1;
 }
 
-int sockinfo::get_rings_num()
-{
-    size_t count = 0;
-    size_t num_rx_channel_fds;
-
-    ring *tx_ring = m_p_connected_dst_entry ? m_p_connected_dst_entry->get_ring() : nullptr;
-    if (tx_ring) {
-        (void)tx_ring->get_rx_channel_fds(count);
-    }
-
-    for (auto pair : m_rx_ring_map) {
-        if (tx_ring == pair.first) {
-            continue;
-        }
-        (void)pair.first->get_rx_channel_fds(num_rx_channel_fds);
-        count += num_rx_channel_fds;
-    }
-    return static_cast<int>(count);
-}
-
-int sockinfo::get_rings_fds(int *ring_fds, int ring_fds_sz)
-{
-    size_t num_rx_channel_fds;
-    int *channel_fds;
-    int index = 0;
-
-    /*
-     * We return RX channels for the TX ring to make it consistent and comparable with the RX
-     * rings. The channels are used only as indirect pointers to the rings, therefore, this
-     * doesn't introduce any functionality issues.
-     */
-    ring *tx_ring = m_p_connected_dst_entry ? m_p_connected_dst_entry->get_ring() : nullptr;
-    if (tx_ring) {
-        channel_fds = tx_ring->get_rx_channel_fds(num_rx_channel_fds);
-        for (size_t i = 0; i < num_rx_channel_fds && index < ring_fds_sz; ++i) {
-            ring_fds[index++] = channel_fds[i];
-        }
-    }
-
-    for (auto pair : m_rx_ring_map) {
-        if (tx_ring == pair.first) {
-            continue;
-        }
-        channel_fds = pair.first->get_rx_channel_fds(num_rx_channel_fds);
-        for (size_t i = 0; i < num_rx_channel_fds && index < ring_fds_sz; ++i) {
-            ring_fds[index++] = channel_fds[i];
-        }
-    }
-    return index;
-}
-
 int sockinfo::setsockopt_kernel(int __level, int __optname, const void *__optval,
                                 socklen_t __optlen, int supported, bool allow_privileged)
 {

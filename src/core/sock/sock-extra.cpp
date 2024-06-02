@@ -60,51 +60,6 @@
 // extended API functions
 //-----------------------------------------------------------------------------
 
-extern "C" int xlio_recvfrom_zcopy(int __fd, void *__buf, size_t __nbytes, int *__flags,
-                                   struct sockaddr *__from, socklen_t *__fromlen)
-{
-    sockinfo *p_socket_object = nullptr;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        struct iovec piov[1];
-        piov[0].iov_base = __buf;
-        piov[0].iov_len = __nbytes;
-        *__flags |= MSG_XLIO_ZCOPY;
-        return p_socket_object->rx(RX_RECVFROM, piov, 1, __flags, __from, __fromlen);
-    }
-    return SYSCALL(recvfrom, __fd, __buf, __nbytes, *__flags, __from, __fromlen);
-}
-
-extern "C" int xlio_recvfrom_zcopy_free_packets(int __fd, struct xlio_recvfrom_zcopy_packet_t *pkts,
-                                                size_t count)
-{
-    sockinfo *p_socket_object = nullptr;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        return p_socket_object->recvfrom_zcopy_free_packets(pkts, count);
-    }
-
-    errno = EINVAL;
-    return -1;
-}
-
-extern "C" int xlio_get_socket_rings_num(int fd)
-{
-    sockinfo *p_socket_object = fd_collection_get_sockfd(fd);
-    return p_socket_object ? p_socket_object->get_rings_num() : 0;
-}
-
-extern "C" int xlio_get_socket_rings_fds(int fd, int *ring_fds, int ring_fds_sz)
-{
-    if (ring_fds_sz <= 0 || !ring_fds) {
-        errno = EINVAL;
-        return -1;
-    }
-
-    sockinfo *p_socket_object = fd_collection_get_sockfd(fd);
-    return p_socket_object ? p_socket_object->get_rings_fds(ring_fds, ring_fds_sz) : 0;
-}
-
 extern "C" int xlio_add_conf_rule(const char *config_line)
 {
     int ret = __xlio_parse_config_line(config_line);
@@ -190,15 +145,9 @@ struct xlio_api_t *extra_api()
         memset(xlio_api, 0, sizeof(struct xlio_api_t));
         xlio_api->magic = XLIO_MAGIC_NUMBER;
         xlio_api->cap_mask = 0;
-        SET_EXTRA_API(recvfrom_zcopy, xlio_recvfrom_zcopy, XLIO_EXTRA_API_RECVFROM_ZCOPY);
-        SET_EXTRA_API(recvfrom_zcopy_free_packets, xlio_recvfrom_zcopy_free_packets,
-                      XLIO_EXTRA_API_RECVFROM_ZCOPY_FREE_PACKETS);
+
         SET_EXTRA_API(add_conf_rule, xlio_add_conf_rule, XLIO_EXTRA_API_ADD_CONF_RULE);
         SET_EXTRA_API(thread_offload, xlio_thread_offload, XLIO_EXTRA_API_THREAD_OFFLOAD);
-        SET_EXTRA_API(get_socket_rings_num, xlio_get_socket_rings_num,
-                      XLIO_EXTRA_API_GET_SOCKET_RINGS_NUM);
-        SET_EXTRA_API(get_socket_rings_fds, xlio_get_socket_rings_fds,
-                      XLIO_EXTRA_API_GET_SOCKET_RINGS_FDS);
         SET_EXTRA_API(dump_fd_stats, xlio_dump_fd_stats, XLIO_EXTRA_API_DUMP_FD_STATS);
         SET_EXTRA_API(ioctl, xlio_extra_ioctl, XLIO_EXTRA_API_IOCTL);
 
