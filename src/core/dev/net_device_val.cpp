@@ -931,6 +931,7 @@ bool net_device_val::update_active_slaves()
     return 0;
 }
 
+// IFTAH - azure related...
 void net_device_val::update_netvsc_slaves(int if_index, int if_flags)
 {
     slave_data_t *s = nullptr;

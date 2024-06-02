@@ -42,6 +42,8 @@
 #include "utils/lock_wrapper.h"
 #include "util/sys_vars.h" // alloc_mode_t, alloc_t, free_t
 
+#include <doca_mmap.h>
+
 // Forward declarations
 class ib_ctx_handler;
 
@@ -84,17 +86,19 @@ public:
     xlio_registrator();
     virtual ~xlio_registrator();
 
-    bool register_memory(void *data, size_t size, ib_ctx_handler *p_ib_ctx_h, uint64_t access);
     bool register_memory(void *data, size_t size, ib_ctx_handler *p_ib_ctx_h);
+    void register_memory_all_ctx(void *data, size_t size, void *ib_ctx_map_temp);
     void deregister_memory();
 
     uint32_t find_lkey_by_ib_ctx(ib_ctx_handler *p_ib_ctx_h) const;
+    uint32_t get_lkey() const { return m_lkey; };
+    doca_mmap *get_doca_mmap() { return m_doca_mmap; };
 
 private:
-    uint32_t register_memory_single(void *data, size_t size, ib_ctx_handler *p_ib_ctx_h,
-                                    uint64_t access);
-
-    std::unordered_map<ib_ctx_handler *, uint32_t> m_lkey_map_ib_ctx;
+    uint32_t register_memory_single(void *data, size_t size, ib_ctx_handler *p_ib_ctx_h);
+    uint32_t m_lkey;
+    doca_mmap *m_doca_mmap = nullptr;
+    bool registered = false;
 };
 
 class xlio_allocator_hw : public xlio_allocator, public xlio_registrator {
@@ -104,7 +108,6 @@ public:
     xlio_allocator_hw(alloc_t alloc_func, free_t free_func);
     virtual ~xlio_allocator_hw();
 
-    void *alloc_and_reg_mr(size_t size, ib_ctx_handler *p_ib_ctx_h, uint64_t access);
     void *alloc_and_reg_mr(size_t size, ib_ctx_handler *p_ib_ctx_h);
     bool register_memory(ib_ctx_handler *p_ib_ctx_h);
 };

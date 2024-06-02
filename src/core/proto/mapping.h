@@ -93,6 +93,8 @@ public:
 
     static inline size_t mapping_node_offset(void) { return NODE_OFFSET(mapping_t, m_node); }
 
+    doca_mmap *get_doca_mmap() { return m_registrator.get_doca_mmap(); };
+
 private:
     int duplicate_fd(int fd, bool &rw);
 

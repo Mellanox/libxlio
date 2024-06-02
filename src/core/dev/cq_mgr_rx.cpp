@@ -49,6 +49,9 @@
 #include "hw_queue_rx.h"
 #include "ring_simple.h"
 
+#include <doca_types.h>
+#include "doca_log.h"
+
 #define MODULE_NAME "cq_mgr_rx"
 
 #define cq_logpanic   __log_info_panic

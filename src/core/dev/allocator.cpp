@@ -41,6 +41,12 @@
 #include "util/hugepage_mgr.h"
 #include "util/vtypes.h"
 #include "xlio.h"
+#include <doca_rdma_bridge.h>
+#include <doca_buf_inventory.h>
+#include <doca_mmap.h>
+#include <doca_buf.h>
+#include "doca_log.h"
+#include "sock/sock-app.h"
 
 #define MODULE_NAME "allocator"
 
@@ -253,7 +259,7 @@ xlio_registrator::~xlio_registrator()
 }
 
 uint32_t xlio_registrator::register_memory_single(void *data, size_t size,
-                                                  ib_ctx_handler *p_ib_ctx_h, uint64_t access)
+                                                  ib_ctx_handler *p_ib_ctx_h)
 {
     uint32_t lkey;
 
@@ -263,80 +269,222 @@ uint32_t xlio_registrator::register_memory_single(void *data, size_t size,
         return LKEY_ERROR;
     }
 
-    lkey = p_ib_ctx_h->mem_reg(data, size, access);
-    if (lkey == LKEY_ERROR) {
-        __log_info_warn("Failure during memory registration on dev %s addr=%p size=%zu",
-                        p_ib_ctx_h->get_ibname().c_str(), data, size);
-        __log_info_warn("This might happen due to low MTT entries. "
-                        "Please refer to README for more info");
-        return LKEY_ERROR;
+    if (registered) {
+        __log_info_warn("Already registered");
+        return 0;
     }
 
-    m_lkey_map_ib_ctx[p_ib_ctx_h] = lkey;
-    errno = 0; // ibv_reg_mr() set errno=12 despite successful returning
-    __log_info_dbg("Registered memory on dev %s addr=%p size=%zu", p_ib_ctx_h->get_ibname().c_str(),
-                   data, size);
+    if (m_doca_mmap) {
+        __log_info_warn("m_doca_mmap exists");
+        return 0;
+    }
+
+#ifdef DEFINED_NGINX
+    if (g_p_app && g_p_app->type == APP_NGINX && (g_p_app->get_worker_id() == -1)) {
+        lkey = p_ib_ctx_h->mem_reg(data, size, XLIO_IBV_ACCESS_LOCAL_WRITE);
+        if (lkey == LKEY_ERROR) {
+            __log_info_warn("Failure during memory registration on dev %s addr=%p size=%zu",
+                            p_ib_ctx_h->get_ibname().c_str(), data, size);
+            __log_info_warn("This might happen due to low MTT entries. "
+                            "Please refer to README for more info");
+            return LKEY_ERROR;
+        }
+
+        m_lkey = lkey;
+        __log_info_dbg("Registered memory on dev %s addr=%p size=%zu",
+                       p_ib_ctx_h->get_ibname().c_str(), data, size);
+        return lkey;
+    }
+#endif
+
+    doca_error_t rc = doca_mmap_create(&m_doca_mmap);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_create");
+    }
+
+    rc = doca_mmap_set_max_num_devices(m_doca_mmap, 1U);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_set_max_num_devices");
+    }
+
+    struct doca_dev *new_dev {nullptr};
+    auto new_pd = p_ib_ctx_h->get_ibv_pd();
+    rc = doca_rdma_bridge_open_dev_from_pd(new_pd, &new_dev);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_rdma_bridge_open_dev_from_pd");
+    }
+    rc = doca_mmap_add_dev(m_doca_mmap, new_dev);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_add_dev");
+    }
+
+    rc = doca_mmap_set_memrange(m_doca_mmap, data, size);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_set_memrange");
+    }
+
+    rc = doca_mmap_start(m_doca_mmap);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_start");
+    }
+
+    doca_buf_inventory *temp_doca_inventory = nullptr;
+    rc = doca_buf_inventory_create(32U, &temp_doca_inventory);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_buf_inventory_create");
+    }
+
+    rc = doca_buf_inventory_start(temp_doca_inventory);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_buf_inventory_start");
+    }
+
+    doca_buf *temp_doca_bufs = nullptr;
+    rc = doca_buf_inventory_buf_get_by_addr(temp_doca_inventory, m_doca_mmap, (uint8_t *)data, 1024,
+                                            &temp_doca_bufs);
+
+    doca_rdma_bridge_get_buf_mkey(temp_doca_bufs, new_dev, &lkey);
+
+    doca_buf_dec_refcount(temp_doca_bufs, nullptr);
+    doca_buf_inventory_destroy(temp_doca_inventory);
+
+    registered = true;
+    m_lkey = lkey;
 
     return lkey;
 }
 
-bool xlio_registrator::register_memory(void *data, size_t size, ib_ctx_handler *p_ib_ctx_h,
-                                       uint64_t access)
+void xlio_registrator::register_memory_all_ctx(void *data, size_t size, void *ib_ctx_map_temp)
+{
+    // struct doca_log_backend *stdout_logger = nullptr;
+    // doca_log_backend_create_with_file_sdk(stdout, &stdout_logger);
+    // doca_log_backend_set_sdk_level(stdout_logger, DOCA_LOG_LEVEL_INFO);
+
+    uint32_t lkey;
+    doca_error_t rc = doca_mmap_create(&m_doca_mmap);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_create");
+    }
+
+    rc = doca_mmap_set_max_num_devices(m_doca_mmap, 2U);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_set_max_num_devices");
+    }
+
+    struct doca_dev *new_dev {nullptr};
+    const char *dev_str = "mlx5_2"; // IFTAH - must use the correct device
+    ib_context_map_t *ib_ctx_map = reinterpret_cast<ib_context_map_t *>(ib_ctx_map_temp);
+    for (const auto &ib_ctx_key_val : *ib_ctx_map) {
+        ib_ctx_handler *p_ib_ctx_h = ib_ctx_key_val.second;
+        if (strcmp(dev_str, p_ib_ctx_h->get_ibname().c_str()))
+            continue;
+        auto new_pd = p_ib_ctx_h->get_ibv_pd();
+        rc = doca_rdma_bridge_open_dev_from_pd(new_pd, &new_dev);
+        if (DOCA_IS_ERROR(rc)) {
+            PRINT_DOCA_ERR(__log_info_err, rc, "doca_rdma_bridge_open_dev_from_pd");
+        }
+        rc = doca_mmap_add_dev(m_doca_mmap, new_dev);
+        if (DOCA_IS_ERROR(rc)) {
+            PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_add_dev");
+        }
+    }
+
+    rc = doca_mmap_set_memrange(m_doca_mmap, data, size);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_set_memrange");
+    }
+
+    rc = doca_mmap_start(m_doca_mmap);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_start");
+    }
+
+    doca_buf_inventory *temp_doca_inventory = nullptr;
+    rc = doca_buf_inventory_create(32U, &temp_doca_inventory);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_buf_inventory_create");
+    }
+
+    rc = doca_buf_inventory_start(temp_doca_inventory);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_buf_inventory_start");
+    }
+
+    doca_buf *temp_doca_bufs = nullptr;
+    rc = doca_buf_inventory_buf_get_by_addr(temp_doca_inventory, m_doca_mmap, (uint8_t *)data, 1024,
+                                            &temp_doca_bufs);
+
+    doca_rdma_bridge_get_buf_mkey(temp_doca_bufs, new_dev, &lkey);
+
+    doca_buf_dec_refcount(temp_doca_bufs, nullptr);
+    doca_buf_inventory_destroy(temp_doca_inventory);
+
+    m_lkey = lkey;
+    registered = true;
+
+    return;
+}
+
+bool xlio_registrator::register_memory(void *data, size_t size, ib_ctx_handler *p_ib_ctx_h)
 {
     uint32_t lkey;
 
     if (p_ib_ctx_h) {
         // Specific ib context path
-        lkey = register_memory_single(data, size, p_ib_ctx_h, access);
+        lkey = register_memory_single(data, size, p_ib_ctx_h);
         return lkey != LKEY_ERROR;
     }
 
     // Path for all ib contexts
     ib_context_map_t *ib_ctx_map = g_p_ib_ctx_handler_collection->get_ib_cxt_list();
     if (likely(ib_ctx_map)) {
-        for (const auto &ib_ctx_key_val : *ib_ctx_map) {
-            p_ib_ctx_h = ib_ctx_key_val.second;
-            lkey = register_memory_single(data, size, p_ib_ctx_h, access);
+        register_memory_all_ctx(data, size, ib_ctx_map);
+        // for (const auto &ib_ctx_key_val : *ib_ctx_map) {
+        //     p_ib_ctx_h = ib_ctx_key_val.second;
+        //     lkey = register_memory_single(data, size, p_ib_ctx_h, access);
 
-            if (lkey == LKEY_ERROR) {
-                deregister_memory();
-                return false;
-            }
-        }
+        //     if (lkey == LKEY_ERROR) {
+        //         deregister_memory();
+        //         return false;
+        //     }
+        // }
     }
     return true;
 }
 
-bool xlio_registrator::register_memory(void *data, size_t size, ib_ctx_handler *p_ib_ctx_h)
-{
-    return register_memory(data, size, p_ib_ctx_h, XLIO_IBV_ACCESS_LOCAL_WRITE);
-}
-
 void xlio_registrator::deregister_memory()
 {
-    ib_ctx_handler *p_ib_ctx_h;
-    ib_context_map_t *ib_ctx_map;
-    uint32_t lkey;
-
-    ib_ctx_map = g_p_ib_ctx_handler_collection->get_ib_cxt_list();
-    if (ib_ctx_map) {
-        for (const auto &ib_ctx_key_val : *ib_ctx_map) {
-            p_ib_ctx_h = ib_ctx_key_val.second;
-            lkey = find_lkey_by_ib_ctx(p_ib_ctx_h);
-            if (lkey != LKEY_ERROR) {
-                p_ib_ctx_h->mem_dereg(lkey);
-                m_lkey_map_ib_ctx.erase(p_ib_ctx_h);
+#ifdef DEFINED_NGINX
+    if (g_p_app && g_p_app->type == APP_NGINX && (g_p_app->get_worker_id() == -1)) {
+        ib_ctx_handler *p_ib_ctx_h;
+        ib_context_map_t *ib_ctx_map = g_p_ib_ctx_handler_collection->get_ib_cxt_list();
+        if (ib_ctx_map) {
+            for (const auto &ib_ctx_key_val : *ib_ctx_map) {
+                p_ib_ctx_h = ib_ctx_key_val.second;
+                p_ib_ctx_h->mem_dereg(m_lkey);
+                m_lkey = 0;
+                registered = false;
             }
         }
+        return;
     }
-    m_lkey_map_ib_ctx.clear();
+#endif
+
+    doca_error_t rc = doca_mmap_stop(m_doca_mmap);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_stop");
+    }
+
+    rc = doca_mmap_destroy(m_doca_mmap);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_destroy");
+    }
 }
 
 uint32_t xlio_registrator::find_lkey_by_ib_ctx(ib_ctx_handler *p_ib_ctx_h) const
 {
-    auto iter = m_lkey_map_ib_ctx.find(p_ib_ctx_h);
-
-    return (iter != m_lkey_map_ib_ctx.end()) ? iter->second : LKEY_ERROR;
+    NOT_IN_USE(p_ib_ctx_h);
+    return registered ? m_lkey : LKEY_ERROR;
 }
 
 xlio_allocator_hw::xlio_allocator_hw()
@@ -362,22 +510,17 @@ xlio_allocator_hw::~xlio_allocator_hw()
 {
 }
 
-void *xlio_allocator_hw::alloc_and_reg_mr(size_t size, ib_ctx_handler *p_ib_ctx_h, uint64_t access)
+void *xlio_allocator_hw::alloc_and_reg_mr(size_t size, ib_ctx_handler *p_ib_ctx_h)
 {
     m_data = alloc(size);
     if (!m_data) {
         return nullptr;
     }
 
-    if (!xlio_registrator::register_memory(m_data, m_size, p_ib_ctx_h, access)) {
+    if (!xlio_registrator::register_memory(m_data, m_size, p_ib_ctx_h)) {
         dealloc();
     }
     return m_data;
-}
-
-void *xlio_allocator_hw::alloc_and_reg_mr(size_t size, ib_ctx_handler *p_ib_ctx_h)
-{
-    return alloc_and_reg_mr(size, p_ib_ctx_h, XLIO_IBV_ACCESS_LOCAL_WRITE);
 }
 
 bool xlio_allocator_hw::register_memory(ib_ctx_handler *p_ib_ctx_h)
