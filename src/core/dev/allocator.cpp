@@ -41,6 +41,7 @@
 #include "util/hugepage_mgr.h"
 #include "util/vtypes.h"
 #include "xlio.h"
+#include <doca_mmap.h>
 
 #define MODULE_NAME "allocator"
 
@@ -252,91 +253,96 @@ xlio_registrator::~xlio_registrator()
     deregister_memory();
 }
 
-uint32_t xlio_registrator::register_memory_single(void *data, size_t size,
-                                                  ib_ctx_handler *p_ib_ctx_h, uint64_t access)
+bool xlio_registrator::register_memory(void *data, size_t size)
 {
-    uint32_t lkey;
-
-    assert(p_ib_ctx_h);
-
-    if (unlikely(!data)) {
-        return LKEY_ERROR;
+    if (m_p_doca_mmap) {
+        __log_info_err("Memory already registered, doca_mmap already exists=%p",
+                       (void *)m_p_doca_mmap);
+        return false;
     }
 
-    lkey = p_ib_ctx_h->mem_reg(data, size, access);
-    if (lkey == LKEY_ERROR) {
-        __log_info_warn("Failure during memory registration on dev %s addr=%p size=%zu",
-                        p_ib_ctx_h->get_ibname().c_str(), data, size);
-        __log_info_warn("This might happen due to low MTT entries. "
-                        "Please refer to README for more info");
-        return LKEY_ERROR;
+    struct doca_dev *new_dev {nullptr};
+
+    doca_error_t rc = doca_mmap_create(&m_p_doca_mmap);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_create");
+        return false;
     }
 
-    m_lkey_map_ib_ctx[p_ib_ctx_h] = lkey;
-    errno = 0; // ibv_reg_mr() set errno=12 despite successful returning
-    __log_info_dbg("Registered memory on dev %s addr=%p size=%zu", p_ib_ctx_h->get_ibname().c_str(),
-                   data, size);
-
-    return lkey;
-}
-
-bool xlio_registrator::register_memory(void *data, size_t size, ib_ctx_handler *p_ib_ctx_h,
-                                       uint64_t access)
-{
-    uint32_t lkey;
-
-    if (p_ib_ctx_h) {
-        // Specific ib context path
-        lkey = register_memory_single(data, size, p_ib_ctx_h, access);
-        return lkey != LKEY_ERROR;
-    }
-
-    // Path for all ib contexts
     ib_context_map_t *ib_ctx_map = g_p_ib_ctx_handler_collection->get_ib_cxt_list();
-    if (likely(ib_ctx_map)) {
-        for (const auto &ib_ctx_key_val : *ib_ctx_map) {
-            p_ib_ctx_h = ib_ctx_key_val.second;
-            lkey = register_memory_single(data, size, p_ib_ctx_h, access);
+    uint32_t num_of_devices = ib_ctx_map->size();
+    rc = doca_mmap_set_max_num_devices(m_p_doca_mmap, num_of_devices);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_set_max_num_devices");
+        return false;
+    }
 
-            if (lkey == LKEY_ERROR) {
-                deregister_memory();
+    for (const auto &ib_ctx_key_val : *ib_ctx_map) {
+        ib_ctx_handler *p_ib_ctx_h = ib_ctx_key_val.second;
+        // keep ibv mem_reg to allow doca integration with working traffic
+        uint32_t lkey = p_ib_ctx_h->mem_reg(data, size, XLIO_IBV_ACCESS_LOCAL_WRITE);
+        m_lkey_map_ib_ctx[p_ib_ctx_h] = lkey;
+
+        if ((new_dev = p_ib_ctx_h->get_doca_device())) {
+            rc = doca_mmap_add_dev(m_p_doca_mmap, new_dev);
+            if (DOCA_IS_ERROR(rc)) {
+                PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_add_dev");
                 return false;
             }
         }
     }
-    return true;
-}
 
-bool xlio_registrator::register_memory(void *data, size_t size, ib_ctx_handler *p_ib_ctx_h)
-{
-    return register_memory(data, size, p_ib_ctx_h, XLIO_IBV_ACCESS_LOCAL_WRITE);
+    rc = doca_mmap_set_memrange(m_p_doca_mmap, data, size);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_set_memrange");
+        return false;
+    }
+
+    rc = doca_mmap_start(m_p_doca_mmap);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_start");
+        return false;
+    }
+
+    return true;
 }
 
 void xlio_registrator::deregister_memory()
 {
-    ib_ctx_handler *p_ib_ctx_h;
-    ib_context_map_t *ib_ctx_map;
     uint32_t lkey;
+    ib_ctx_handler *p_ib_ctx_h;
 
-    ib_ctx_map = g_p_ib_ctx_handler_collection->get_ib_cxt_list();
-    if (ib_ctx_map) {
-        for (const auto &ib_ctx_key_val : *ib_ctx_map) {
-            p_ib_ctx_h = ib_ctx_key_val.second;
-            lkey = find_lkey_by_ib_ctx(p_ib_ctx_h);
-            if (lkey != LKEY_ERROR) {
-                p_ib_ctx_h->mem_dereg(lkey);
-                m_lkey_map_ib_ctx.erase(p_ib_ctx_h);
-            }
+    for (const auto &ib_ctx_key_val : m_lkey_map_ib_ctx) {
+        p_ib_ctx_h = ib_ctx_key_val.first;
+        lkey = find_lkey_by_ib_ctx(p_ib_ctx_h);
+        if (lkey != LKEY_ERROR) {
+            p_ib_ctx_h->mem_dereg(lkey);
         }
     }
+
     m_lkey_map_ib_ctx.clear();
+
+    if (!m_p_doca_mmap) {
+        return;
+    }
+
+    doca_error_t rc = doca_mmap_stop(m_p_doca_mmap);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_stop");
+    }
+
+    rc = doca_mmap_destroy(m_p_doca_mmap);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_destroy");
+    }
+    m_p_doca_mmap = nullptr;
 }
 
 uint32_t xlio_registrator::find_lkey_by_ib_ctx(ib_ctx_handler *p_ib_ctx_h) const
 {
     auto iter = m_lkey_map_ib_ctx.find(p_ib_ctx_h);
-
-    return (iter != m_lkey_map_ib_ctx.end()) ? iter->second : LKEY_ERROR;
+    uint32_t ret = (iter != m_lkey_map_ib_ctx.end()) ? iter->second : LKEY_ERROR;
+    return ret;
 }
 
 xlio_allocator_hw::xlio_allocator_hw()
@@ -362,27 +368,9 @@ xlio_allocator_hw::~xlio_allocator_hw()
 {
 }
 
-void *xlio_allocator_hw::alloc_and_reg_mr(size_t size, ib_ctx_handler *p_ib_ctx_h, uint64_t access)
+bool xlio_allocator_hw::register_memory()
 {
-    m_data = alloc(size);
-    if (!m_data) {
-        return nullptr;
-    }
-
-    if (!xlio_registrator::register_memory(m_data, m_size, p_ib_ctx_h, access)) {
-        dealloc();
-    }
-    return m_data;
-}
-
-void *xlio_allocator_hw::alloc_and_reg_mr(size_t size, ib_ctx_handler *p_ib_ctx_h)
-{
-    return alloc_and_reg_mr(size, p_ib_ctx_h, XLIO_IBV_ACCESS_LOCAL_WRITE);
-}
-
-bool xlio_allocator_hw::register_memory(ib_ctx_handler *p_ib_ctx_h)
-{
-    return m_data && xlio_registrator::register_memory(m_data, m_size, p_ib_ctx_h);
+    return m_data && xlio_registrator::register_memory(m_data, m_size);
 }
 
 /*
@@ -494,7 +482,7 @@ bool xlio_heap::expand(size_t size /*=0*/)
 
     data = block ? block->alloc(size) : nullptr;
     if (m_b_hw && data) {
-        if (!block->register_memory(nullptr)) {
+        if (!block->register_memory()) {
             data = nullptr;
         }
     }
@@ -541,11 +529,11 @@ repeat:
     return data;
 }
 
-bool xlio_heap::register_memory(ib_ctx_handler *p_ib_ctx_h)
+bool xlio_heap::register_memory()
 {
     std::lock_guard<decltype(m_lock)> lock(m_lock);
 
-    return m_b_hw && m_blocks.size() ? m_blocks.back()->register_memory(p_ib_ctx_h) : false;
+    return m_b_hw && m_blocks.size() ? m_blocks.back()->register_memory() : false;
 }
 
 uint32_t xlio_heap::find_lkey_by_ib_ctx(ib_ctx_handler *p_ib_ctx_h) const
@@ -553,6 +541,11 @@ uint32_t xlio_heap::find_lkey_by_ib_ctx(ib_ctx_handler *p_ib_ctx_h) const
     // Current implementation doesn't support runtime registrations, lock is not necessary.
     return m_b_hw && m_blocks.size() ? m_blocks.back()->find_lkey_by_ib_ctx(p_ib_ctx_h)
                                      : LKEY_ERROR;
+}
+
+doca_mmap *xlio_heap::get_doca_mmap() const
+{
+    return (m_b_hw && m_blocks.size()) ? m_blocks.back()->get_doca_mmap() : nullptr;
 }
 
 xlio_allocator_heap::xlio_allocator_heap(alloc_t alloc_func, free_t free_func, bool hw)
@@ -578,15 +571,9 @@ void *xlio_allocator_heap::alloc(size_t &size)
     return m_p_heap->alloc(size);
 }
 
-void *xlio_allocator_heap::alloc_and_reg_mr(size_t &size, ib_ctx_handler *p_ib_ctx_h)
+bool xlio_allocator_heap::register_memory()
 {
-    NOT_IN_USE(p_ib_ctx_h);
-    return m_p_heap->is_hw() ? alloc(size) : nullptr;
-}
-
-bool xlio_allocator_heap::register_memory(ib_ctx_handler *p_ib_ctx_h)
-{
-    return m_p_heap->register_memory(p_ib_ctx_h);
+    return m_p_heap->register_memory();
 }
 
 uint32_t xlio_allocator_heap::find_lkey_by_ib_ctx(ib_ctx_handler *p_ib_ctx_h) const

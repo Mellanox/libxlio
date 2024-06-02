@@ -87,6 +87,7 @@ inline void ring_simple::send_status_handler(int ret, xlio_ibv_send_wr *p_send_w
 ring_simple::ring_simple(int if_index, ring *parent, ring_type_t type, bool use_locks)
     : ring_slave(if_index, parent, type, use_locks)
     , m_lock_ring_tx_buf_wait("ring:lock_tx_buf_wait")
+    , m_p_doca_mmap(g_buffer_pool_tx->get_doca_mmap())
     , m_gro_mgr(safe_mce_sys().gro_streams_max, MAX_GRO_BUFS)
 {
     net_device_val *p_ndev = g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index());

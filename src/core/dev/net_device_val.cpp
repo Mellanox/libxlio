@@ -932,6 +932,7 @@ bool net_device_val::update_active_slaves()
     return 0;
 }
 
+// TODO: azure related, see comment below
 void net_device_val::update_netvsc_slaves(int if_index, int if_flags)
 {
     slave_data_t *s = nullptr;
@@ -955,8 +956,15 @@ void net_device_val::update_netvsc_slaves(int if_index, int if_flags)
 
             up_ib_ctx->set_ctx_time_converter_status(
                 g_p_net_device_table_mgr->get_ctx_time_conversion_mode());
-            g_buffer_pool_rx_rwqe->register_memory(s->p_ib_ctx);
-            g_buffer_pool_tx->register_memory(s->p_ib_ctx);
+
+            // TODO commented out because other than this specific flow - we shouldn't use
+            // specific ib_ctx. So remove ctx argument from register_memory api. This specific flow
+            // will be removed later
+
+            // g_buffer_pool_rx_rwqe->register_memory(s->p_ib_ctx);
+            // g_buffer_pool_tx->register_memory(s->p_ib_ctx);
+            g_buffer_pool_rx_rwqe->register_memory();
+            g_buffer_pool_tx->register_memory();
             found = true;
         }
     } else {

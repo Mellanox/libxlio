@@ -349,6 +349,7 @@ private:
     uint32_t m_missing_buf_ref_count = 0U;
     uint32_t m_tx_lkey = 0U; // this is the registered memory lkey for a given specific device for
                              // the buffer pool use
+    doca_mmap *m_p_doca_mmap;
     gro_mgr m_gro_mgr;
     bool m_up_tx = false;
     bool m_up_rx = false;
