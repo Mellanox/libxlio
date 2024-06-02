@@ -8,11 +8,6 @@ if [ $(test -d ${install_dir} >/dev/null 2>&1 || echo $?) ]; then
 	exit 1
 fi
 
-if [ $(command -v ibdev2netdev >/dev/null 2>&1 || echo $?) ]; then
-	echo "[SKIP] ibdev2netdev tool does not exist"
-	exit 0
-fi
-
 cd $WORKSPACE
 
 rm -rf $test_dir
@@ -55,7 +50,7 @@ if [ ! -z "${test_remote_ip}" ] ; then
 	[ -z "${NODE_NAME}" ] && NODE_NAME=${HOSTNAME}
 	sperf_exec_dir="/tmp/sockperf_exec_${NODE_NAME}"
 	rmt_user=root
- 
+
 	rmt_os=$(${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} ". /etc/os-release ; echo \${NAME,,} | awk '{print \$1}'")
 	[ ! -z "${test_remote_rebuild}" ] && rmt_os="rebuld"
 	local_os=$(. /etc/os-release ; echo ${NAME,,} | awk '{print $1}')
@@ -68,7 +63,7 @@ if [ ! -z "${test_remote_ip}" ] ; then
 			${sudo_cmd} scp -q ${test_app} ${rmt_user}@${test_remote_ip}:${sperf_exec_dir}
 			${sudo_cmd} scp -q ${test_lib} ${rmt_user}@${test_remote_ip}:${sperf_exec_dir}
 			eval "pid=$(${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} pidof ${prj_service})"
-			if [ ! -z "${pid}" ] ;  then 
+			if [ ! -z "${pid}" ] ;  then
 				echo "${prj_service} pid=${pid}"
 				eval "${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} kill -9 ${pid}"
 			fi
@@ -93,15 +88,16 @@ if [ ! -z "${test_remote_ip}" ] ; then
 		fi
 	fi
 else
-	if [ ! -z $(do_get_ip 'ib') ]; then
-		test_ip_list="${test_ip_list} ib:$(do_get_ip 'ib')"
+	# Get IPv4/6 addresses for net1 interface which is a VF of MLNX NIC
+	test_ip_list="eth_ip4:$(ip -f inet addr show net1 | awk '/inet / {print $2}' | cut -d/ -f1)"
+	# test_ip_list="${test_ip_list} eth_ip6:$(ip -f inet6 addr show net1 | awk '/inet6 / {print $2}' | cut -d/ -f1)"
+	if [ -z "$test_ip_list" ]; then
+		echo "ERROR: Cannot get IPv4/6 address of net1 interface!"
+		exit 1
 	fi
-	if [ ! -z $(do_get_ip 'eth') ]; then
-		test_ip_list="${test_ip_list} eth_ip4:$(do_get_ip 'eth')"
-	fi
-	if [ ! -z $(do_get_ip 'inet6') ]; then
-		test_ip_list="${test_ip_list} eth_ip6:$(do_get_ip 'inet6')"
-	fi
+
+	# start the ssh server as verifyer.pl requiers
+	/etc/init.d/ssh start
 fi
 
 nerrors=0
@@ -116,7 +112,7 @@ for test_link in $test_ip_list; do
 			if [ ! -z "${test_remote_ip}" ] ; then
 
 				eval "pid=$(${sudo_cmd} pidof ${prj_service})"
-				[ ! -z "${pid}" ] && eval "${sudo_cmd} kill -9 ${pid}" 
+				[ ! -z "${pid}" ] && eval "${sudo_cmd} kill -9 ${pid}"
 				eval "${sudo_cmd} ${install_dir}/sbin/${prj_service} --console -v5 & "
 
 				echo "BUILD_NUMBER=${BUILD_NUMBER}"
@@ -135,9 +131,9 @@ for test_link in $test_ip_list; do
 						-s "${test_remote_ip}" -p "${test_remote_port}" -l "${test_dir}/${test_name}.log" \
 						-e "XLIO_TX_BUFS=20000"
 			else
-				${sudo_cmd} $timeout_exe $PWD/tests/verifier/verifier.pl -a ${test_app} -x " --load-vma=$test_lib " \
+				${sudo_cmd} $timeout_exe $PWD/tests/verifier/verifier.pl -a ${test_app} -x " --debug " \
 					-t ${test}:tc[1-9]$ -s ${test_ip} -l ${test_dir}/${test_name}.log \
-					-e " XLIO_TX_BUFS=20000 " \
+					-e " LD_PRELOAD=$test_lib " \
 					--progress=0
 			fi
 
