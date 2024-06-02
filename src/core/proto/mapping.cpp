@@ -132,7 +132,7 @@ int mapping_t::map(int fd)
         goto failed_close_fd;
     }
 
-    result = m_registrator.register_memory(m_addr, m_size, m_ib_ctx);
+    result = m_registrator.register_memory(m_addr, m_size);
     if (!result) {
         map_logerr("Failed to register mmapped memory");
         goto failed_unmap;
