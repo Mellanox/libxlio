@@ -21,14 +21,24 @@ rc=$?
 
 
 test_ip_list=""
-#if [ ! -z $(do_get_ip 'ib') ]; then
-#	test_ip_list="${test_ip_list} ib:$(do_get_ip 'ib')"
-#fi
-if [ ! -z "$(do_get_ip 'eth')" ]; then
-	test_ip_list="${test_ip_list} eth_ip4:$(do_get_ip 'eth')"
-fi
-if [ ! -z "$(do_get_ip 'eth')" ]; then
-	test_ip_list="${test_ip_list} eth_ip6:$(do_get_ip 'inet6')"
+# check if we run in jenkins env
+if [[ $BUILD_NUMBER -le 0 ]]; then
+	#if [ ! -z $(do_get_ip 'ib') ]; then
+	#	test_ip_list="${test_ip_list} ib:$(do_get_ip 'ib')"
+	#fi
+	if [ ! -z "$(do_get_ip 'eth')" ]; then
+		test_ip_list="${test_ip_list} eth_ip4:$(do_get_ip 'eth')"
+	fi
+	if [ ! -z "$(do_get_ip 'eth')" ]; then
+		test_ip_list="${test_ip_list} eth_ip6:$(do_get_ip 'inet6')"
+	fi
+else
+	test_ip_list="eth_ip4:$(ip -f inet addr show net1 | awk '/inet / {print $2}' | cut -d/ -f1)"
+	# test_ip_list="${test_ip_list} eth_ip6:$(ip -f inet6 addr show net1 | awk '/inet6 / {print $2}' | cut -d/ -f1)"
+	if [ -z "$test_ip_list" ]; then
+		echo "ERROR: Cannot get IPv4 address of net1 interface!"
+		exit 1
+	fi
 fi
 test_list="tcp:--tcp udp:"
 test_lib=${vg_dir}/install/lib/${prj_lib}
