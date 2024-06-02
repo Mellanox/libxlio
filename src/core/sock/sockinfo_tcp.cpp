@@ -1915,8 +1915,6 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
 {
 
     sockinfo_tcp *conn = (sockinfo_tcp *)arg;
-    uint32_t bytes_to_tcp_recved;
-    int rcv_buffer_space;
 
     NOT_IN_USE(pcb);
     assert((uintptr_t)pcb->my_container == (uintptr_t)arg);
@@ -1949,12 +1947,11 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
      * RCVBUFF Accounting: tcp_recved here(stream into the 'internal' buffer) only if the user
      * buffer is not 'filled'
      */
-    rcv_buffer_space = std::max(
+    int rcv_buffer_space = std::max(
         0, conn->m_rcvbuff_max - conn->m_rcvbuff_current - (int)conn->m_pcb.rcv_wnd_max_desired);
-    bytes_to_tcp_recved = std::min(rcv_buffer_space, (int)p->tot_len);
-    conn->m_rcvbuff_current += p->tot_len;
 
-    conn->rx_lwip_shrink_rcv_wnd(p->tot_len, bytes_to_tcp_recved);
+    conn->m_rcvbuff_current += p->tot_len;
+    conn->rx_lwip_shrink_rcv_wnd(p->tot_len, std::min(rcv_buffer_space, (int)p->tot_len));
 
     vlog_func_exit();
     return ERR_OK;
@@ -2162,7 +2159,6 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
     int errno_tmp = errno;
     int total_rx = 0;
     int poll_count = 0;
-    int bytes_to_tcp_recved;
     size_t total_iov_sz = 0;
     int out_flags = 0;
     int in_flags = *p_flags;
@@ -2277,12 +2273,12 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
      * - do that. The packet might not be 'acked' (tcp_recved)
      *
      */
-    if (!(in_flags & (MSG_PEEK | MSG_XLIO_ZCOPY))) {
+    if (!(in_flags & MSG_PEEK)) {
         m_rcvbuff_current -= total_rx;
 
         // data that was not tcp_recved should do it now.
         if (m_rcvbuff_non_tcp_recved > 0) {
-            bytes_to_tcp_recved = std::min(m_rcvbuff_non_tcp_recved, total_rx);
+            int bytes_to_tcp_recved = std::min(m_rcvbuff_non_tcp_recved, total_rx);
             tcp_recved(&m_pcb, bytes_to_tcp_recved);
             m_rcvbuff_non_tcp_recved -= bytes_to_tcp_recved;
         }
@@ -5043,93 +5039,6 @@ timestamps_t *sockinfo_tcp::get_socket_timestamps()
     return &m_rx_timestamps;
 }
 
-void sockinfo_tcp::post_deqeue(bool release_buff)
-{
-    NOT_IN_USE(release_buff);
-}
-
-int sockinfo_tcp::zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags)
-{
-    NOT_IN_USE(p_flags);
-    int total_rx = 0, offset = 0;
-    int len = (int)p_iov[0].iov_len - sizeof(xlio_recvfrom_zcopy_packets_t) -
-        sizeof(xlio_recvfrom_zcopy_packet_t) - sizeof(iovec);
-    mem_buf_desc_t *p_desc_iter;
-    mem_buf_desc_t *prev;
-
-    // Make sure there is enough room for the header
-    if (len < 0) {
-        errno = ENOBUFS;
-        return -1;
-    }
-
-    pdesc->rx.frag.iov_base = (uint8_t *)pdesc->rx.frag.iov_base + m_rx_pkt_ready_offset;
-    pdesc->rx.frag.iov_len -= m_rx_pkt_ready_offset;
-    p_desc_iter = pdesc;
-    prev = pdesc;
-
-    // Copy iov pointers to user buffer
-    xlio_recvfrom_zcopy_packets_t *p_packets = (xlio_recvfrom_zcopy_packets_t *)p_iov[0].iov_base;
-    p_packets->n_packet_num = 0;
-
-    offset += sizeof(p_packets->n_packet_num); // skip n_packet_num size
-
-    while (len >= 0 && m_n_rx_pkt_ready_list_count) {
-        xlio_recvfrom_zcopy_packet_t *p_pkts =
-            (xlio_recvfrom_zcopy_packet_t *)((char *)p_packets + offset);
-        p_packets->n_packet_num++;
-        p_pkts->packet_id = (void *)p_desc_iter;
-        p_pkts->sz_iov = 0;
-        while (len >= 0 && p_desc_iter) {
-
-            p_pkts->iov[p_pkts->sz_iov++] = p_desc_iter->rx.frag;
-            total_rx += p_desc_iter->rx.frag.iov_len;
-
-            prev = p_desc_iter;
-            p_desc_iter = p_desc_iter->p_next_desc;
-            len -= sizeof(iovec);
-            offset += sizeof(iovec);
-        }
-
-        m_rx_pkt_ready_list.pop_front();
-        m_p_socket_stats->n_rx_zcopy_pkt_count++;
-
-        if (len < 0 && p_desc_iter) {
-            // Update length of right side of chain after split - push to pkt_ready_list
-            p_desc_iter->rx.sz_payload = p_desc_iter->lwip_pbuf.tot_len =
-                prev->lwip_pbuf.tot_len - prev->lwip_pbuf.len;
-
-            // Update length of left side of chain after split - return to app
-            mem_buf_desc_t *p_desc_head = reinterpret_cast<mem_buf_desc_t *>(p_pkts->packet_id);
-            // XXX TODO: subsequent buffers are not updated
-            p_desc_head->lwip_pbuf.tot_len = p_desc_head->rx.sz_payload -=
-                p_desc_iter->rx.sz_payload;
-
-            p_desc_iter->rx.n_frags = p_desc_head->rx.n_frags - p_pkts->sz_iov;
-            p_desc_head->rx.n_frags = p_pkts->sz_iov;
-            p_desc_iter->inc_ref_count();
-
-            prev->lwip_pbuf.next = nullptr;
-            prev->p_next_desc = nullptr;
-
-            m_rx_pkt_ready_list.push_front(p_desc_iter);
-            break;
-        }
-
-        m_n_rx_pkt_ready_list_count--;
-        m_p_socket_stats->n_rx_ready_pkt_count--;
-
-        if (m_n_rx_pkt_ready_list_count) {
-            p_desc_iter = m_rx_pkt_ready_list.front();
-        }
-
-        len -= sizeof(xlio_recvfrom_zcopy_packet_t);
-        offset += sizeof(xlio_recvfrom_zcopy_packet_t);
-    }
-
-    return total_rx;
-}
-
 void sockinfo_tcp::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
 {
     const char *const tcp_sock_state_str[] = {
@@ -5305,56 +5214,6 @@ void sockinfo_tcp::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
                     pcb.ts_recent);
     }
 #endif
-}
-
-inline void sockinfo_tcp::non_tcp_recved(int rx_len)
-{
-    m_rcvbuff_current -= rx_len;
-    // data that was not tcp_recved should do it now.
-    if (m_rcvbuff_non_tcp_recved > 0) {
-        int bytes_to_tcp_recved = std::min(m_rcvbuff_non_tcp_recved, rx_len);
-        tcp_recved(&m_pcb, bytes_to_tcp_recved);
-        m_rcvbuff_non_tcp_recved -= bytes_to_tcp_recved;
-    }
-}
-
-int sockinfo_tcp::recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
-                                              size_t count)
-{
-    int ret = 0;
-    unsigned int index = 0;
-    int total_rx = 0, offset = 0;
-    mem_buf_desc_t *buff;
-    char *buf = (char *)pkts;
-
-    lock_tcp_con();
-    for (index = 0; index < count; index++) {
-        xlio_recvfrom_zcopy_packet_t *p_pkts = (xlio_recvfrom_zcopy_packet_t *)(buf + offset);
-        buff = (mem_buf_desc_t *)p_pkts->packet_id;
-
-        if (m_p_rx_ring && !m_p_rx_ring->is_member(buff->p_desc_owner)) {
-            errno = ENOENT;
-            ret = -1;
-            break;
-        } else if (m_rx_ring_map.find(buff->p_desc_owner->get_parent()) == m_rx_ring_map.end()) {
-            errno = ENOENT;
-            ret = -1;
-            break;
-        }
-
-        total_rx += buff->rx.sz_payload;
-        reuse_buffer(buff);
-        m_p_socket_stats->n_rx_zcopy_pkt_count--;
-
-        offset += p_pkts->sz_iov * sizeof(iovec) + sizeof(xlio_recvfrom_zcopy_packet_t);
-    }
-
-    if (total_rx > 0) {
-        non_tcp_recved(total_rx);
-    }
-
-    unlock_tcp_con();
-    return ret;
 }
 
 mem_buf_desc_t *sockinfo_tcp::tcp_tx_mem_buf_alloc(pbuf_type type)

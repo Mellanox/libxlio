@@ -40,12 +40,6 @@
 #include <sys/time.h>
 
 /*
- * Flags for recvfrom_zcopy()
- */
-#define MSG_XLIO_ZCOPY_FORCE 0x01000000 // don't fallback to bcopy
-#define MSG_XLIO_ZCOPY       0x00040000 // return: zero copy was done
-
-/*
  * Options for setsockopt()/getsockopt()
  */
 #define SO_XLIO_GET_API          2800
@@ -129,25 +123,6 @@ enum {
     XLIO_NVME_HDGST_OFFLOAD = 1U << 28,
     XLIO_NVME_PDA_MASK = ((1U << 4) - 1U),
     XLIO_NVME_DDGST_MASK = (XLIO_NVME_DDGST_ENABLE | XLIO_NVME_DDGST_OFFLOAD),
-};
-
-/**
- * Represents one packet
- * Used in receive zero-copy extended API.
- */
-struct __attribute__((packed)) xlio_recvfrom_zcopy_packet_t {
-    void *packet_id; // packet identifier
-    size_t sz_iov; // number of fragments
-    struct iovec iov[]; // fragments size+data
-};
-
-/**
- * Represents received packets
- * Used in receive zero-copy extended API.
- */
-struct __attribute__((packed)) xlio_recvfrom_zcopy_packets_t {
-    size_t n_packet_num; // number of received packets
-    struct xlio_recvfrom_zcopy_packet_t pkts[]; // array of received packets
 };
 
 struct xlio_rate_limit_t {
