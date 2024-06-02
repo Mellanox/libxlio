@@ -11,9 +11,9 @@ kubernetes:
   privileged: false
   cloud: swx-k8s-spray
   nodeSelector: 'beta.kubernetes.io/os=linux'
-  namespace: xlio-ci
-  limits: '{memory: 8Gi, cpu: 7000m}'
-  requests: '{memory: 8Gi, cpu: 7000m}'
+  namespace: 'xlio-ci'
+  limits: '{memory: 10Gi, cpu: 10000m}'
+  requests: '{memory: 10Gi, cpu: 10000m}'
 
 credentials:
   - {credentialsId: '925b0900-e273-4042-bc7c-facaefae0727', usernameVariable: 'XLIO_COV_USER', passwordVariable: 'XLIO_COV_PASSWORD'}
@@ -34,44 +34,101 @@ volumes:
   - {mountPath: /var/home/swx-jenkins, hostPath: /labhome/swx-jenkins}
 
 runs_on_dockers:
-# mofed
-  - {name: 'ub20.04-mofed-x86_64', url: 'harbor.mellanox.com/swx-infra/x86_64/ubuntu20.04/builder:mofed-5.2-2.2.0.0', category: 'base', arch: 'x86_64'}
-  - {name: 'ub20.04-mofed-aarch64', url: 'harbor.mellanox.com/swx-infra/aarch64/ubuntu20.04/builder:mofed-5.2-1.0.4.0', category: 'base', arch: 'aarch64'}
-  - {name: 'ub22.04-mofed-x86_64', url: 'harbor.mellanox.com/hpcx/x86_64/ubuntu22.04/builder:mofed-5.7-0.1.1.0', category: 'base', arch: 'x86_64'}
-  - {name: 'rhel8.6-mofed-x86_64',  url: 'harbor.mellanox.com/hpcx/x86_64/rhel8.6/builder:mofed-5.6-0.4.5.0', category: 'base', arch: 'x86_64'}
-#  - {name: 'oracle8.6-mofed-x86_64',  url: 'harbor.mellanox.com/rivermax/base_oraclelinux8.6:mofed-5.9-0.3.4.0', category: 'base', arch: 'x86_64'}
+# build
+  - {file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
+     arch: 'x86_64',
+     limits: '{memory: 10Gi, cpu: 10000m}',
+     requests: '{memory: 10Gi, cpu: 10000m}',
+     name: 'ubuntu22.04-x86_64',
+     uri: 'xlio/$name',
+     tag: '20240805',
+     build_args: '--no-cache',
+     category: 'base'
+    }
+  - {file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
+     arch: 'aarch64',
+     limits: '{memory: 10Gi, cpu: 10000m}',
+     requests: '{memory: 10Gi, cpu: 10000m}',
+     name: 'ubuntu22.04-aarch64',
+     uri: 'xlio/$name',
+     tag: '20240805',
+     build_args: '--no-cache --build-arg ARCH=aarch64 --build-arg REPO_ARCH=arm64',
+     category: 'base'
+    }
+# test
+  - {file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
+     arch: 'x86_64',
+     name: 'ubuntu22.04-test',
+     uri: 'xlio/$name',
+     tag: '20242905',
+     build_args: '--no-cache',
+     category: 'tool',
+     annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p1' }],
+     limits: '{memory: 8Gi, cpu: 8000m, mellanox.com/sriov_cx6dx_p1: 1}',
+     requests: '{memory: 8Gi, cpu: 8000m, mellanox.com/sriov_cx6dx_p1: 1}',
+     caps_add: '[ IPC_LOCK, SYS_RESOURCE ]',
+     runAsUser: '0',
+     runAsGroup: '0',
+     namespace: 'xlio-ci'
+    }
+  # - {file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
+  #    arch: 'x86_64',
+  #    name: 'ubuntu22.04-gtest',
+  #    uri: 'xlio/$arch/$name',
+  #    tag: '20242905',
+  #    build_args: '--no-cache',
+  #    category: 'tests',
+  #    annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p2' }],
+  #    limits: '{memory: 8Gi, cpu: 8000m, mellanox.com/sriov_cx6dx_p2: 1}',
+  #    requests: '{memory: 8Gi, cpu: 8000m, mellanox.com/sriov_cx6dx_p2: 1}',
+  #    runAsUser: '0',
+  #    runAsGroup: '0'
+  #   }
+  # - {file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
+  #    arch: 'x86_64',
+  #    name: 'ubuntu22.04-vg',
+  #    uri: 'xlio/$arch/$name',
+  #    tag: '20242905',
+  #    build_args: '--no-cache',
+  #    category: 'tests',
+  #    annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p2' }],
+  #    limits: '{memory: 8Gi, cpu: 8000m, mellanox.com/sriov_cx6dx_p2: 1}',
+  #    requests: '{memory: 8Gi, cpu: 8000m, mellanox.com/sriov_cx6dx_p2: 1}',
+  #    runAsUser: '0',
+  #    runAsGroup: '0'
+  #   }
 # tool
-  - {name: 'toolbox', url: 'harbor.mellanox.com/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
-  - {name: 'blackduck', url: 'harbor.mellanox.com/toolbox/ngci-centos:7.9.2009.2', category: 'tool', arch: 'x86_64'}
-  - {name: 'header-check', url: 'harbor.mellanox.com/toolbox/header_check:0.0.14', category: 'tool', arch: 'x86_64', tag: '0.0.14'}
+  # - {name: 'toolbox', url: 'harbor.mellanox.com/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
+  # - {name: 'blackduck', url: 'harbor.mellanox.com/toolbox/ngci-centos:7.9.2009.2', category: 'tool', arch: 'x86_64'}
+  # - {name: 'header-check', url: 'harbor.mellanox.com/toolbox/header_check:0.0.14', category: 'tool', arch: 'x86_64', tag: '0.0.14'}
 # static tests
-  - {file: '.ci/dockerfiles/Dockerfile.rhel8.6',
-     arch: 'x86_64',
-     name: 'xlio_static.cppcheck',
-     uri: '$arch/$name',
-     tag: '20240703',
-     build_args: '--no-cache',
-     category: 'tool'
-     }
-  - {file: '.ci/dockerfiles/Dockerfile.rhel8.6',
-     arch: 'x86_64',
-     name: 'xlio_static.csbuild',
-     uri: '$arch/$name',
-     tag: '20240703',
-     build_args: '--no-cache',
-     category: 'tool'
-     }
-  - {file: '.ci/dockerfiles/Dockerfile.rhel8.6',
-     arch: 'x86_64',
-     name: 'xlio_static.tidy',
-     uri: '$arch/$name',
-     tag: '20240703',
-     build_args: '--no-cache',
-     category: 'tool'
-     }
+  # - {file: '.ci/dockerfiles/Dockerfile.rhel8.6',
+  #    arch: 'x86_64',
+  #    name: 'xlio_static.cppcheck',
+  #    uri: '$arch/$name',
+  #    tag: '20240703',
+  #    build_args: '--no-cache',
+  #    category: 'tool'
+  #   }
+  # - {file: '.ci/dockerfiles/Dockerfile.rhel8.6',
+  #    arch: 'x86_64',
+  #    name: 'xlio_static.csbuild',
+  #    uri: '$arch/$name',
+  #    tag: '20240703',
+  #    build_args: '--no-cache',
+  #    category: 'tool'
+  #    }
+  # - {file: '.ci/dockerfiles/Dockerfile.rhel8.6',
+  #    arch: 'x86_64',
+  #    name: 'xlio_static.tidy',
+  #    uri: '$arch/$name',
+  #    tag: '20240703',
+  #    build_args: '--no-cache',
+  #    category: 'tool'
+  #    }
 
-runs_on_agents:
-  - {nodeLabel: 'beni09', category: 'base'}
+# runs_on_agents:
+#   - {nodeLabel: 'beni09', category: 'base'}
 
 matrix:
   axes:
@@ -121,7 +178,7 @@ steps:
     containerSelector:
       - "{category: 'base'}"
     agentSelector:
-      - "{category: 'base'}"
+      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_build}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_build=${action} ./contrib/test_jenkins.sh
@@ -138,7 +195,7 @@ steps:
     containerSelector:
       - "{category: 'base', variant:1}"
     agentSelector:
-      - "{category: 'base', variant:1}"
+      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_service}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_tool=${action} ./contrib/test_jenkins.sh
@@ -292,9 +349,9 @@ steps:
   - name: Test
     enable: ${do_test}
     containerSelector:
-      - "{name: 'skip-container'}"
+      - "{name: '.*-test', category: 'tool', variant: 1}"
     agentSelector:
-      - "{nodeLabel: 'beni09'}"
+      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_test}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_run=${action} ./contrib/test_jenkins.sh
@@ -309,9 +366,9 @@ steps:
   - name: Gtest
     enable: ${do_gtest}
     containerSelector:
-      - "{name: 'skip-container'}"
+      - "{name: '.*-gtest', category: 'tool', variant: 1}"
     agentSelector:
-      - "{nodeLabel: 'beni09'}"
+      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_gtest}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_gtest=${action} ./contrib/test_jenkins.sh
@@ -328,9 +385,9 @@ steps:
   - name: Valgrind
     enable: ${do_valgrind}
     containerSelector:
-      - "{name: 'skip-container'}"
+      - "{name: '.*-vg', category: 'tool', variant: 1}"
     agentSelector:
-      - "{nodeLabel: 'beni09'}"
+      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_valgrind}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_vg=${action} ./contrib/test_jenkins.sh

@@ -344,6 +344,74 @@ do_check_dpcp()
     fi
 }
 
+do_compile_doca()
+{
+    echo ""
+    echo "===== DOCA checkout & compilation starts ====="
+    echo ""
+    doca_version="2.7"
+    doca_path="$WORKSPACE/$prefix/doca-sdk"
+    doca_repo="ssh://git-nbu.nvidia.com:12023/doca/doca"
+    doca_dir="$WORKSPACE/$prefix/doca"
+    doca_branch="doca_$doca_version"
+
+    if [[ -d "$doca_path" ]]; then
+        echo "Directory $doca_path exists. Updating..."
+        git config --global --add safe.directory "$doca_path"
+        pushd "$doca_path" || exit 1
+        git fetch origin "$doca_branch"
+        git checkout "$doca_branch"
+        git merge origin/"$doca_branch"
+    else
+        echo "Directory $doca_path does not exist. Cloning..."
+        mkdir -p "$doca_path"
+        if [[ -f /.dockerenv ]]; then
+            chown -R swx-jenkins "$doca_path"
+            sudo -u swx-jenkins git clone -b "$doca_branch" "$doca_repo" "$doca_path"
+            chown -R root "$doca_path"
+        else
+            git clone -b "$doca_branch" "$doca_repo" "$doca_path"
+        fi
+        pushd "$doca_path" || exit 1
+    fi
+
+    if [[ -f /.dockerenv ]]; then
+        SUDO=""
+    else
+        SUDO="sudo"
+    fi
+
+    if ! $SUDO devtools/scripts/prepare_for_dev.sh --host --local; then
+        echo "Cannot prepare for dev..."
+        exit 1
+    fi
+
+    # shellcheck source=/dev/null
+    if ! ($SUDO source devtools/public/set_env_variables.sh --deb); then
+        echo "Cannot set up ENV..."
+        exit 1
+    fi
+
+    $SUDO mkdir -p "$doca_dir"
+
+    if ! $SUDO meson "$doca_dir"; then
+        echo "Cannot prepare the project for compilation..."
+        exit 1
+    fi
+
+    if $SUDO ninja -C "$doca_dir" $make_opt; then
+        eval "$1=$doca_dir"
+        echo ""
+        echo "===== DOCA compilation complete ====="
+        echo ""
+    else
+        echo "Compilation error..."
+        exit 1
+    fi
+
+    popd
+}
+
 #######################################################
 #
 main "$@"

@@ -1,0 +1,45 @@
+ARG ARCH=x86_64
+FROM harbor.mellanox.com/hpcx/$ARCH/ubuntu22.04/core:latest
+ARG _UID=6213
+ARG _GID=101
+ARG _LOGIN=swx-jenkins
+ARG _HOME=/var/home/$_LOGIN
+ARG HTTP_NFS_ENDPOINT="http://nbu-nfs.mellanox.com"
+ARG DOCA_REPO_BUILD="/auto/sw/release/doca/doca-repo-x86/doca-repo-2.6.0/last_stable"
+ARG OS_NAME="ubuntu2204"
+ARG REPO_ARCH="amd64"
+
+RUN apt-get update && \
+    apt-get install -y \
+    sudo wget lynx \
+    automake dh-make \
+    g++ make vim python3-pip curl \
+    git libglib2.0-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN DOCA_REPO_LINK=$(lynx -dump -listonly ${HTTP_NFS_ENDPOINT}/${DOCA_REPO_BUILD} | awk '{ print $2 }' | grep doca-host | grep -iE ".rpm$|.deb$" | grep -iE "$OS_NAME.*$REPO_ARCH" || true) \
+    && wget -q --no-check-certificate -O doca-repo.deb $DOCA_REPO_LINK \
+    && apt-get -qq install -y ./doca-repo.deb \
+    && apt-get -qq update \
+    && mkdir -p /lib/modules \
+    && apt-get -qq install -y --allow-downgrades ibacm ibacm infiniband-diags libibumad \
+    libibverbs-dev libibverbs1 libibverbs-dev librdmacm-dev flex \
+    librdmacm1 mlnx-ethtool mlnx-iproute2 mlnx-tools mstflint \
+    ofed-scripts rdma-core collectx-clxapi collectx-clxapidev \
+    python3-protobuf libgrpc-dev mlnx-dpdk-dev mlnx-dpdk \
+    ninja-build meson libjson-c-dev libjsoncpp-dev libzip-dev libgtest-dev \
+    build-essential
+
+RUN pip3 install -U pip --no-cache-dir \
+    && pip3 install argparse --no-cache-dir
+
+RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
+    echo "root ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
+    mkdir -p ${_HOME} && \
+    groupadd -f -g "$_GID" "$_LOGIN" && \
+    useradd -u "$_UID" -g "$_GID" -s /bin/bash -m -d ${_HOME} "${_LOGIN}" && \
+    chown -R ${_LOGIN} ${_HOME} && \
+    mkdir /build && chown -R ${_LOGIN} /build
+
+USER "$_LOGIN"
+ENTRYPOINT [ "/bin/bash", "--login", "--rcfile", "/etc/bashrc", "-c" ]
