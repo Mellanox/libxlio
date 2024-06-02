@@ -1,0 +1,54 @@
+ARG ARCH=x86_64
+FROM harbor.mellanox.com/hpcx/$ARCH/ubuntu22.04/builder:mofed-5.7-0.1.9.0 AS build
+# ARG _UID=6213
+# ARG _GID=101
+# ARG _LOGIN=swx-jenkins
+# ARG _HOME=/var/home/$_LOGIN
+
+# RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
+#     echo "root ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
+#     mkdir -p ${_HOME} && \
+#     groupadd -f -g "$_GID" "$_LOGIN" && \
+#     useradd -u "$_UID" -g "$_GID" -s /bin/bash -m -d ${_HOME} "${_LOGIN}" && \
+#     chown -R ${_LOGIN} ${_HOME} && \
+#     mkdir /build && chown -R ${_LOGIN} /build
+
+# ENTRYPOINT [ "/bin/bash", "--login", "--rcfile", "/etc/bashrc", "-c" ]
+
+FROM build AS tests
+RUN apt-get update && \
+    apt-get install -y \
+    net-tools unzip iproute2 wget \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+FROM tests AS vg
+RUN apt-get update && \
+    apt-get install -y \
+    valgrind \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+FROM tests AS test
+RUN apt-get update && \
+    apt-get install -y \
+    openssh-server psmisc \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# setup ssh server and passwordless login for root for tests flows (verifyer.pl)
+RUN mkdir -p /var/run/sshd ~/.ssh && \
+    rm -rf ~/.ssh/id_rsa* && ssh-keygen -t rsa -N '' -f ~/.ssh/id_rsa && \
+    cat ~/.ssh/id_rsa.pub > ~/.ssh/authorized_keys && \
+    sed -i 's|#PermitRootLogin.*|PermitRootLogin without-password|g' /etc/ssh/sshd_config && \
+    sed -i 's|#PasswordAuthentication.*|PasswordAuthentication no|g' /etc/ssh/sshd_config && \
+    echo "Host *" >> ~/.ssh/config && \
+    echo "   StrictHostKeyChecking no" >> ~/.ssh/config && \
+    echo "   UserKnownHostsFile /dev/null" >> ~/.ssh/config && \
+    echo "   LogLevel ERROR" >> ~/.ssh/config
+
+FROM tests AS gtest
+
+FROM build AS static
+# for tidy tests
+RUN pip3 install compiledb --no-cache-dir
+RUN apt-get update && \
+    apt-get install -y \
+    cppcheck clang-tools clang-tidy \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
