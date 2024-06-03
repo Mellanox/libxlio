@@ -276,6 +276,7 @@ bool buffer_pool::get_buffers_thread_safe(descq_t &pDeque, ring_slave *desc_owne
         head = m_p_head;
         m_p_head = m_p_head->p_next_desc;
         head->p_next_desc = nullptr;
+        head->p_prev_desc = nullptr;
 
         // Init
         head->lkey = lkey;

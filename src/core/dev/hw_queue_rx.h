@@ -35,6 +35,11 @@
 
 #include <vector>
 #include <doca_eth_rxq.h>
+#include <doca_pe.h>
+#include <doca_buf_inventory.h>
+#include <doca_mmap.h>
+#include <doca_ctx.h>
+#include <doca_eth_rxq_cpu_data_path.h>
 #include "dev/xlio_ti.h"
 #include "dev/ib_ctx_handler.h"
 #include "dev/rfs_rule.h"
@@ -63,6 +68,13 @@ public:
     void up();
     void down();
 
+    bool poll_and_process_rx();
+    void reclaim_rx_buffer_chain(mem_buf_desc_t *buff_chain);
+    void reclaim_rx_buffer_chain_queue(descq_t *buff_list);
+    bool request_notification();
+    void clear_notification_and_process_element();
+    doca_notification_handle_t get_notification_handle() const { return m_notification_handle; }
+
     // Post for receive single mem_buf_desc
     void post_recv_buffer(mem_buf_desc_t *p_mem_buf_desc);
 
@@ -74,8 +86,6 @@ public:
     uint16_t get_vlan() const { return m_vlan; };
     void modify_queue_to_ready_state();
     void modify_queue_to_error_state();
-    void start_doca_rxq();
-    void stop_doca_rxq();
     void release_rx_buffers();
 
     rfs_rule *create_rfs_rule(doca_flow_match &match_val, doca_flow_match &match_msk,
@@ -89,15 +99,33 @@ public:
 
 private:
     static void destory_doca_rxq(doca_eth_rxq *rxq);
+    static void destory_doca_inventory(doca_buf_inventory *inv);
+    static void destory_doca_pe(doca_pe *pe);
+
+    static void rx_task_completion_cb(doca_eth_rxq_task_recv *task_recv, doca_data task_user_data,
+                                      doca_data ctx_user_data);
 
     static void rx_task_error_cb(doca_eth_rxq_task_recv *task_recv, doca_data task_user_data,
                                  doca_data ctx_user_data);
+
+    bool prepare_doca_rxq();
+    void submit_rxq_tasks();
+    bool submit_rxq_task();
+    bool fill_buffers_from_global_pool();
+    void return_doca_buf(doca_buf *buf);
+    void start_doca_rxq();
+    void stop_doca_rxq();
+    void return_doca_task(doca_eth_rxq_task_recv *task_recv);
+    void reclaim_rx_buffer_chain_loop(mem_buf_desc_t *buff);
+    void post_reclaim_fill();
+    void return_extra_buffers();
+    void process_recv_buffer(mem_buf_desc_t *p_mem_buf_desc);
 
     cq_mgr_rx *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel);
 
     void post_recv_buffer_rq(mem_buf_desc_t *p_mem_buf_desc);
     void put_tls_tir_in_cache(xlio_tir *tir);
-    bool prepare_rq(uint32_t cqn, doca_pe *pe);
+    bool prepare_rq(uint32_t cqn);
     bool configure_rq(ibv_comp_channel *rx_comp_event_channel);
     bool store_rq_mlx5_params(dpcp::basic_rq &new_rq);
     int xlio_raw_post_recv(struct ibv_recv_wr **bad_wr);
@@ -120,11 +148,26 @@ private:
     std::vector<xlio_tir *> m_tls_tir_cache;
     std::unique_ptr<dpcp::tir> m_tir {nullptr};
     std::unique_ptr<dpcp::basic_rq> m_rq {nullptr};
+
     std::unique_ptr<doca_eth_rxq, decltype(&destory_doca_rxq)> m_doca_rxq {nullptr,
                                                                            destory_doca_rxq};
+    std::unique_ptr<doca_buf_inventory, decltype(&destory_doca_inventory)> m_doca_inventory {
+        nullptr, destory_doca_inventory};
+    std::unique_ptr<doca_pe, decltype(&destory_doca_pe)> m_doca_pe {nullptr, destory_doca_pe};
 
+    doca_mmap *m_doca_mmap = nullptr;
     doca_ctx *m_doca_ctx_rxq = nullptr;
+    descq_t m_rx_pool;
+    mem_buf_desc_t *m_polled_buf = nullptr;
+    uint32_t m_rxq_task_debt = 0U;
+    uint32_t m_rxq_burst_size = 0U;
+    uint32_t m_rx_buff_pool_treshold_max = 0U;
+    uint32_t m_rx_buff_pool_treshold_min = 0U;
+    uint32_t m_rx_debt_submit_treshold = 0U;
+    doca_notification_handle_t m_notification_handle;
     ring_simple *m_p_ring;
+    bool m_notification_armed = false;
+
     cq_mgr_rx *m_p_cq_mgr_rx = nullptr;
     ib_ctx_handler *m_p_ib_ctx_handler;
     ibv_sge *m_ibv_rx_sg_array;
