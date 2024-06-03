@@ -79,7 +79,7 @@ public:
         , sz_buffer(size)
         , sz_data(0)
         , p_desc_owner(nullptr)
-        , unused_padding(0)
+        , unused_padding {0}
     {
         memset(&lwip_pbuf, 0, sizeof(lwip_pbuf));
         clear_transport_data();
@@ -236,7 +236,7 @@ public:
 
     atomic_t n_ref_count; // number of interested receivers (sockinfo) [can be modified only in
                           // cq_mgr_rx context]
-    uint64_t unused_padding; // Align the structure to the cache line boundary
+    uint64_t unused_padding[2]; // Align the structure to the cache line boundary
 };
 
 typedef xlio_list_t<mem_buf_desc_t, mem_buf_desc_t::buffer_node_offset> descq_t;
