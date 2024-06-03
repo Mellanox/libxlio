@@ -166,7 +166,7 @@ ring_simple::~ring_simple()
 
     // Delete the rx channel fd from the global fd collection
     if (g_p_fd_collection) {
-        if (m_p_rx_comp_event_channel) {
+        if (!safe_mce_sys().doca_rx && m_p_rx_comp_event_channel) {
             g_p_fd_collection->del_cq_channel_fd(m_p_rx_comp_event_channel->fd, true);
         }
         if (m_p_tx_comp_event_channel) {
@@ -174,7 +174,7 @@ ring_simple::~ring_simple()
         }
     }
 
-    if (m_p_rx_comp_event_channel) {
+    if (!safe_mce_sys().doca_rx && m_p_rx_comp_event_channel) {
         IF_VERBS_FAILURE(ibv_destroy_comp_channel(m_p_rx_comp_event_channel))
         {
             ring_logdbg("destroy comp channel failed (errno=%d %m)", errno);
@@ -356,14 +356,6 @@ void ring_simple::create_resources()
     }
     BULLSEYE_EXCLUDE_BLOCK_END
     VALGRIND_MAKE_MEM_DEFINED(m_p_rx_comp_event_channel, sizeof(struct ibv_comp_channel));
-    m_p_n_rx_channel_fds = new int[1];
-    m_p_n_rx_channel_fds[0] = m_p_rx_comp_event_channel->fd;
-    // Add the rx channel fd to the global fd collection
-    if (g_p_fd_collection) {
-        // Create new cq_channel info in the global fd collection
-        g_p_fd_collection->add_cq_channel_fd(m_p_n_rx_channel_fds[0], this);
-        g_p_fd_collection->add_cq_channel_fd(m_p_tx_comp_event_channel->fd, this);
-    }
 
     std::unique_ptr<hw_queue_tx> temp_hqtx(new hw_queue_tx(this, p_slave, get_tx_num_wr()));
     std::unique_ptr<hw_queue_rx> temp_hqrx(
@@ -377,6 +369,20 @@ void ring_simple::create_resources()
 
     m_hqtx = temp_hqtx.release();
     m_hqrx = temp_hqrx.release();
+
+    m_p_n_rx_channel_fds = new int[1];
+    if (!safe_mce_sys().doca_rx) {
+        m_p_n_rx_channel_fds[0] = m_p_rx_comp_event_channel->fd;
+    } else {
+        m_p_n_rx_channel_fds[0] = m_hqrx->get_notification_handle();
+    }
+
+    // Add the rx channel fd to the global fd collection
+    if (g_p_fd_collection) {
+        // Create new cq_channel info in the global fd collection
+        g_p_fd_collection->add_cq_channel_fd(m_p_n_rx_channel_fds[0], this);
+        g_p_fd_collection->add_cq_channel_fd(m_p_tx_comp_event_channel->fd, this);
+    }
 
     // save pointers
     m_p_cq_mgr_rx = m_hqrx->get_rx_cq_mgr();
@@ -403,29 +409,57 @@ void ring_simple::create_resources()
 
 int ring_simple::request_notification(cq_type_t cq_type, uint64_t poll_sn)
 {
-    int ret = 1;
+    if (!safe_mce_sys().doca_rx) {
+        int ret = 1;
+        if (likely(CQT_RX == cq_type)) {
+            m_lock_ring_rx.lock();
+            ret = m_p_cq_mgr_rx->request_notification(poll_sn);
+            ++m_p_ring_stat->simple.n_rx_interrupt_requests;
+            m_lock_ring_rx.unlock();
+        } else {
+            m_lock_ring_tx.lock();
+            ret = m_p_cq_mgr_tx->request_notification(poll_sn);
+            m_lock_ring_tx.unlock();
+        }
+        return ret;
+    }
+
+    bool ret = false;
     if (likely(CQT_RX == cq_type)) {
         m_lock_ring_rx.lock();
-        ret = m_p_cq_mgr_rx->request_notification(poll_sn);
+        ret = m_hqrx->request_notification();
         ++m_p_ring_stat->simple.n_rx_interrupt_requests;
         m_lock_ring_rx.unlock();
     } else {
         m_lock_ring_tx.lock();
-        ret = m_p_cq_mgr_tx->request_notification(poll_sn);
+        ret = (m_p_cq_mgr_tx->request_notification(poll_sn) >= 0);
         m_lock_ring_tx.unlock();
     }
 
-    return ret;
+    return (ret ? 0 : -1);
+}
+
+void ring_simple::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
+                                                            void *pv_fd_ready_array /*NULL*/)
+{
+    m_lock_ring_rx.lock();
+    if (!safe_mce_sys().doca_rx) {
+        m_p_cq_mgr_rx->wait_for_notification_and_process_element(p_cq_poll_sn, pv_fd_ready_array)
+    } else {
+        m_hqrx->clear_notification_and_process_element();
+    }
+    ++m_p_ring_stat->simple.n_rx_interrupt_received;
+    m_lock_ring_rx.unlock();
 }
 
 bool ring_simple::poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
                                               void *pv_fd_ready_array /*NULL*/)
 {
-    bool ret = false; // CQ was not drained.
-    if (!m_lock_ring_rx.trylock()) {
-        ret = m_p_cq_mgr_rx->poll_and_process_element_rx(p_cq_poll_sn, pv_fd_ready_array);
-        m_lock_ring_rx.unlock();
-    }
+    m_lock_ring_rx.lock();
+    bool ret = (!safe_mce_sys().doca_rx
+        ? m_p_cq_mgr_rx->poll_and_process_element_rx(p_cq_poll_sn, pv_fd_ready_array)
+        : m_hqrx->poll_and_process_rx());
+    m_lock_ring_rx.unlock();
     return ret;
 }
 
@@ -437,33 +471,52 @@ int ring_simple::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
     return ret;
 }
 
-void ring_simple::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
-                                                            void *pv_fd_ready_array /*NULL*/)
-{
-    m_lock_ring_rx.lock();
-    m_p_cq_mgr_rx->wait_for_notification_and_process_element(p_cq_poll_sn, pv_fd_ready_array);
-    ++m_p_ring_stat->simple.n_rx_interrupt_received;
-    m_lock_ring_rx.unlock();
-}
-
 bool ring_simple::reclaim_recv_buffers(descq_t *rx_reuse)
 {
-    bool ret = false;
-    RING_TRY_LOCK_RUN_AND_UPDATE_RET(m_lock_ring_rx, m_p_cq_mgr_rx->reclaim_recv_buffers(rx_reuse));
-    return ret;
+    if (!safe_mce_sys().doca_rx) {
+        bool ret = false;
+        RING_TRY_LOCK_RUN_AND_UPDATE_RET(m_lock_ring_rx,
+                                         m_p_cq_mgr_rx->reclaim_recv_buffers(rx_reuse));
+        return ret;
+    }
+
+    if (likely(!m_lock_ring_rx.trylock())) {
+        m_hqrx->reclaim_rx_buffer_chain_queue(rx_reuse);
+        m_lock_ring_rx.unlock();
+        return true;
+    }
+
+    errno = EAGAIN;
+    return false;
 }
 
 bool ring_simple::reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst)
 {
-    bool ret = false;
-    RING_TRY_LOCK_RUN_AND_UPDATE_RET(m_lock_ring_rx,
-                                     m_p_cq_mgr_rx->reclaim_recv_buffers(rx_reuse_lst));
-    return ret;
+    if (!safe_mce_sys().doca_rx) {
+        bool ret = false;
+        RING_TRY_LOCK_RUN_AND_UPDATE_RET(m_lock_ring_rx,
+                                         m_p_cq_mgr_rx->reclaim_recv_buffers(rx_reuse_lst));
+        return ret;
+    }
+
+    if (likely(!m_lock_ring_rx.trylock())) {
+        m_hqrx->reclaim_rx_buffer_chain(rx_reuse_lst);
+        m_lock_ring_rx.unlock();
+        return true;
+    }
+
+    errno = EAGAIN;
+    return false;
 }
 
 bool ring_simple::reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst)
 {
-    return m_p_cq_mgr_rx->reclaim_recv_buffers_no_lock(rx_reuse_lst);
+    if (!safe_mce_sys().doca_rx) {
+        return m_p_cq_mgr_rx->reclaim_recv_buffers_no_lock(rx_reuse_lst);
+    }
+
+    m_hqrx->reclaim_rx_buffer_chain(rx_reuse_lst);
+    return true;
 }
 
 void ring_simple::mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc,

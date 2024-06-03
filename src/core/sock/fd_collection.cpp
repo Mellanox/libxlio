@@ -422,15 +422,8 @@ int fd_collection::add_cq_channel_fd(int cq_ch_fd, ring *p_ring)
 
     lock();
 
-    epfd_info *p_fd_info = get_epfd(cq_ch_fd);
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (p_fd_info) {
-        fdcoll_logwarn("[fd=%d] Deleting old duplicate sockinfo object (%p)", cq_ch_fd, p_fd_info);
-        unlock();
-        handle_close(cq_ch_fd, true);
-        lock();
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
+    // DOCA notification_handle is an epfd created by DOCA and because we override epoll_create
+    // this fd will always be inside offloaded epfd_collection.
 
     // Sanity check to remove any old objects using the same fd!!
     sockinfo *p_cq_ch_fd_api_obj = get_sockfd(cq_ch_fd);
