@@ -513,7 +513,7 @@ int sockinfo_udp::bind_no_os()
 
 int sockinfo_udp::bind(const struct sockaddr *__addr, socklen_t __addrlen)
 {
-    si_udp_logfunc("");
+    si_udp_logdbg("");
 
     // We always call the orig_bind which will check sanity of the user socket api
     // and the OS will also allocate a specific port that we can also use

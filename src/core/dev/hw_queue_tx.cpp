@@ -187,7 +187,7 @@ int hw_queue_tx::configure(const slave_data_t *slave)
 {
     hwqtx_logdbg("Creating QP of transport type '%s' on ibv device '%s' [%p] on port %d",
                  priv_xlio_transport_type_str(m_p_ring->get_transport_type()),
-                 m_p_ib_ctx_handler->get_ibname(), m_p_ib_ctx_handler->get_ibv_device(),
+                 m_p_ib_ctx_handler->get_ibname().c_str(), m_p_ib_ctx_handler->get_ibv_device(),
                  m_port_num);
     hwqtx_logdbg("HW Dummy send support for QP = %d", m_hw_dummy_send_support);
 

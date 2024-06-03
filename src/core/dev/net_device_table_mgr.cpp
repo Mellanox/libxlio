@@ -565,6 +565,14 @@ void net_device_table_mgr::global_ring_adapt_cq_moderation()
     }
 }
 
+void net_device_table_mgr::global_ring_clear_all_rfs()
+{
+    ndtm_logfuncall("");
+    for (auto &itr : m_net_device_map_index) {
+        itr.second->ring_clear_all_rfs();
+    }
+}
+
 void net_device_table_mgr::handle_timer_expired(void *user_data)
 {
     int timer_type = (uint64_t)user_data;

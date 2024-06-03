@@ -3028,9 +3028,7 @@ int sockinfo_tcp::listen(int backlog)
     tcp_clone_conn(&m_pcb, sockinfo_tcp::clone_conn_cb);
     tcp_accepted_pcb(&m_pcb, sockinfo_tcp::accepted_pcb_cb);
 
-    bool success = attach_as_uc_receiver(ROLE_TCP_SERVER);
-
-    if (!success) {
+    if (!attach_as_uc_receiver(ROLE_TCP_SERVER)) {
         /* we will get here if attach_as_uc_receiver failed */
         passthrough_unlock("Fallback the connection to os");
         return SYSCALL(listen, m_fd, orig_backlog);

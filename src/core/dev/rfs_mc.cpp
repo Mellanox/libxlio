@@ -71,13 +71,22 @@ void rfs_mc::prepare_flow_spec()
     uint8_t dst_mac[6];
     create_multicast_mac_from_ip(dst_mac, m_flow_tuple.get_dst_ip(), m_flow_tuple.get_family());
 
+    memset(&m_doca_match_mask.outer.eth.dst_mac, 0xFF, sizeof(m_doca_match_mask.outer.eth.dst_mac));
+    memcpy(&m_doca_match_value.outer.eth.dst_mac, dst_mac,
+           sizeof(m_doca_match_value.outer.eth.dst_mac));
     memset(&m_match_mask.dst_mac, 0xFF, sizeof(m_match_mask.dst_mac));
     memcpy(&m_match_value.dst_mac, dst_mac, sizeof(dst_mac));
 
     if (safe_mce_sys().eth_mc_l2_only_rules) {
+        m_doca_match_mask.outer.transport.dst_port = m_doca_match_value.outer.transport.dst_port =
+            m_doca_match_mask.outer.transport.src_port =
+                m_doca_match_value.outer.transport.src_port = 0U;
         m_match_mask.dst_port = m_match_value.dst_port = m_match_mask.src_port =
             m_match_value.src_port = 0U;
 
+        memset(&m_doca_match_mask.outer.l4_type_ext, 0xFF,
+               sizeof(m_doca_match_mask.outer.l4_type_ext));
+        m_doca_match_value.outer.l4_type_ext = DOCA_FLOW_L4_TYPE_EXT_UDP;
         m_match_mask.protocol = 0xFF;
         m_match_value.protocol = IPPROTO_UDP;
     } else {

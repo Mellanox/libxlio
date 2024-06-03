@@ -44,6 +44,7 @@
 #include "dev/time_converter_rtc.h"
 #include "util/valgrind.h"
 #include "event/event_handler_manager.h"
+#include "sock/sock-app.h"
 
 #define MODULE_NAME "ibch"
 
@@ -55,28 +56,35 @@
 #define ibch_logfunc    __log_info_func
 #define ibch_logfuncall __log_info_funcall
 
-ib_ctx_handler::ib_ctx_handler(struct ib_ctx_handler_desc *desc)
+ib_ctx_handler::ib_ctx_handler(doca_devinfo *devinfo, const char *ibname, ibv_device *ibvdevice)
     : m_flow_tag_enabled(false)
     , m_on_device_memory(0)
     , m_removed(false)
     , m_lock_umr("spin_lock_umr")
     , m_p_ctx_time_converter(nullptr)
 {
-    if (!desc) {
-        ibch_logpanic("Invalid ib_ctx_handler");
+    if (!devinfo) {
+        ibch_logpanic("Nullptr devinfo in ib_ctx_handler");
     }
 
-    m_p_ibv_device = desc->device;
-
-    if (!m_p_ibv_device) {
-        ibch_logpanic("m_p_ibv_device is invalid");
+    if (!ibvdevice) {
+        ibch_logpanic("Nullptr ibv_device in ib_ctx_handler");
     }
+
+    m_ibname = ibname;
+
+    open_doca_dev(devinfo);
+
+    m_p_ibv_device = ibvdevice;
 
     m_p_adapter = set_dpcp_adapter();
     if (!m_p_adapter) {
         ibch_logpanic("ibv device %p adapter allocation failure (errno=%d %m)", m_p_ibv_device,
                       errno);
     }
+
+    ibch_logdbg("Device opened doca_dev: %p", m_doca_dev);
+
     VALGRIND_MAKE_MEM_DEFINED(m_p_ibv_pd, sizeof(struct ibv_pd));
 
     m_p_ibv_device_attr = new xlio_ibv_device_attr_ex();
@@ -158,48 +166,226 @@ ib_ctx_handler::~ib_ctx_handler()
     }
 
     BULLSEYE_EXCLUDE_BLOCK_END
+
+    stop_doca_flow_port();
+
+    if (m_doca_dev) {
+        doca_error_t err = doca_dev_close(m_doca_dev);
+        if (DOCA_IS_ERROR(err)) {
+            PRINT_DOCA_ERR(ibch_logerr, err, "doca_dev_close dev: %p,%s. PID: %d", m_doca_dev,
+                           m_ibname.c_str(), static_cast<int>(getpid()));
+        }
+    }
 }
 
-void ib_ctx_handler::set_str()
+void ib_ctx_handler::open_doca_dev(doca_devinfo *devinfo)
 {
-    char str_x[512] = {0};
+#ifdef DEFINED_NGINX
+    if (g_p_app && g_p_app->type == APP_NGINX && (g_p_app->get_worker_id() == -1)) {
+        return;
+    }
+#endif
 
-    m_str[0] = '\0';
+    doca_error_t err = doca_dev_open(devinfo, &m_doca_dev);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(ibch_logpanic, err, "doca_dev_open devinfo: %p,%s", devinfo,
+                       m_ibname.c_str());
+    }
+}
 
-    str_x[0] = '\0';
-    sprintf(str_x, " %s:", get_ibname());
-    strcat(m_str, str_x);
+doca_flow_port *ib_ctx_handler::get_doca_flow_port()
+{
+    if (unlikely(!m_doca_port)) {
+        doca_error_t err = start_doca_flow_port();
+        if (DOCA_IS_ERROR(err)) {
+            PRINT_DOCA_ERR(ibch_logerr, err, "start_doca_flow_port dev: %p,%s", m_doca_dev,
+                           m_ibname.c_str());
+            return nullptr;
+        }
+    }
 
-    str_x[0] = '\0';
-    sprintf(str_x, " port(s): %d", get_ibv_device_attr()->phys_port_cnt);
-    strcat(m_str, str_x);
+    return m_doca_port;
+}
 
-    str_x[0] = '\0';
-    sprintf(str_x, " vendor: %d", get_ibv_device_attr()->vendor_part_id);
-    strcat(m_str, str_x);
+doca_flow_pipe *ib_ctx_handler::get_doca_root_pipe()
+{
+    if (!get_doca_flow_port()) {
+        return nullptr;
+    }
 
-    str_x[0] = '\0';
-    sprintf(str_x, " fw: %s", get_ibv_device_attr()->fw_ver);
-    strcat(m_str, str_x);
+    if (!m_doca_root_pipe) {
+        doca_error_t err = create_doca_root_pipe();
+        if (DOCA_IS_ERROR(err)) {
+            PRINT_DOCA_ERR(ibch_logerr, err, "create_doca_root_pipe dev/pipe: %p,%s", m_doca_dev,
+                           m_ibname.c_str());
+            return nullptr;
+        }
+    }
 
-    str_x[0] = '\0';
-    sprintf(str_x, " max_qp_wr: %d", get_ibv_device_attr()->max_qp_wr);
-    strcat(m_str, str_x);
+    return m_doca_root_pipe;
+}
 
-    str_x[0] = '\0';
-    sprintf(str_x, " on_device_memory: %zu", m_on_device_memory);
-    strcat(m_str, str_x);
+doca_error_t ib_ctx_handler::start_doca_flow_port()
+{
+    doca_error_t tmp_result;
+    struct doca_flow_port_cfg *port_cfg = nullptr;
 
-    str_x[0] = '\0';
-    sprintf(str_x, " packet_pacing_caps: min rate %u, max rate %u", m_pacing_caps.rate_limit_min,
-            m_pacing_caps.rate_limit_max);
-    strcat(m_str, str_x);
+    doca_error_t err = doca_flow_port_cfg_create(&port_cfg);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(ibch_logerr, err, "doca_flow_port_cfg_create");
+        goto destroy_port_cfg;
+    }
+
+    err = doca_flow_port_cfg_set_dev(port_cfg, m_doca_dev);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(ibch_logerr, err, "doca_flow_port_cfg_set_dev dev/portcfg: %p,%s,%p",
+                       m_doca_dev, m_ibname.c_str(), port_cfg);
+        goto destroy_port_cfg;
+    }
+
+    err = doca_flow_port_start(port_cfg, &m_doca_port);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(ibch_logerr, err, "doca_flow_port_start dev/portcfg: %p,%s,%p", m_doca_dev,
+                       m_ibname.c_str(), port_cfg);
+        goto destroy_port_cfg;
+    }
+
+    ibch_logdbg("DOCA Flow Port initialized. dev/port: %p,%s,%p", m_doca_dev, m_ibname.c_str(),
+                m_doca_port);
+
+destroy_port_cfg:
+    tmp_result = doca_flow_port_cfg_destroy(port_cfg);
+    if (DOCA_IS_ERROR(tmp_result)) {
+        PRINT_DOCA_ERR(ibch_logerr, err, "doca_flow_port_start dev/port: %p,%s,%p", m_doca_dev,
+                       m_ibname.c_str(), m_doca_port);
+        DOCA_ERROR_PROPAGATE(err, tmp_result);
+    }
+
+    return err;
+}
+
+void ib_ctx_handler::stop_doca_flow_port()
+{
+    if (m_doca_root_pipe) {
+        doca_flow_pipe_destroy(m_doca_root_pipe);
+        m_doca_root_pipe = nullptr;
+    }
+
+    if (m_doca_port) {
+        doca_error_t err = doca_flow_port_stop(m_doca_port);
+        m_doca_port = nullptr;
+        if (DOCA_IS_ERROR(err)) {
+            PRINT_DOCA_ERR(ibch_logerr, err, "doca_flow_port_stop port: %p,%s", m_doca_port,
+                           m_ibname.c_str());
+        }
+        ibch_logdbg("DOCA port stopped %s", m_ibname.c_str());
+    }
+}
+
+doca_error_t ib_ctx_handler::create_doca_root_pipe()
+{
+    doca_flow_pipe_cfg *pipe_cfg = nullptr;
+
+    doca_error_t tmp_rc;
+    doca_error_t rc = doca_flow_pipe_cfg_create(&pipe_cfg, m_doca_port);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(ibch_logerr, rc, "doca_flow_port_stop port/dev: %p,%s", m_doca_port,
+                       m_ibname.c_str());
+        return rc;
+    }
+
+    std::string pipe_name = "ROOT_PIPE-";
+    pipe_name += m_ibname;
+
+    rc = doca_flow_pipe_cfg_set_name(pipe_cfg, pipe_name.c_str());
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(ibch_logerr, rc, "doca_flow_pipe_cfg_set_name port/dev: %p,%s", m_doca_port,
+                       m_ibname.c_str());
+        goto destroy_pipe_cfg;
+    }
+
+    rc = doca_flow_pipe_cfg_set_type(pipe_cfg, DOCA_FLOW_PIPE_CONTROL);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(ibch_logerr, rc, "doca_flow_pipe_cfg_set_type port/dev: %p,%s", m_doca_port,
+                       m_ibname.c_str());
+        goto destroy_pipe_cfg;
+    }
+
+    rc = doca_flow_pipe_cfg_set_is_root(pipe_cfg, true);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(ibch_logerr, rc, "doca_flow_pipe_cfg_set_is_root port/dev: %p,%s",
+                       m_doca_port, m_ibname.c_str());
+        goto destroy_pipe_cfg;
+    }
+
+    doca_flow_match match_mask;
+    memset(&match_mask, 0, sizeof(match_mask));
+
+    rc = doca_flow_pipe_cfg_set_match(pipe_cfg, nullptr, &match_mask);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(ibch_logerr, rc, "doca_flow_pipe_cfg_set_match port/dev: %p,%s", m_doca_port,
+                       m_ibname.c_str());
+        goto destroy_pipe_cfg;
+    }
+
+    rc = doca_flow_pipe_create(pipe_cfg, nullptr, nullptr, &m_doca_root_pipe);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(ibch_logerr, rc, "doca_flow_pipe_create port/dev: %p,%s", m_doca_port,
+                       m_ibname.c_str());
+        goto destroy_pipe_cfg;
+    }
+
+    ibch_logdbg("DOCA Flow Root Pipe created. dev/port/pipe: %s,%p,%p", m_ibname.c_str(),
+                m_doca_port, m_doca_root_pipe);
+
+destroy_pipe_cfg:
+    tmp_rc = doca_flow_pipe_cfg_destroy(pipe_cfg);
+    if (DOCA_IS_ERROR(tmp_rc)) {
+        PRINT_DOCA_ERR(ibch_logerr, tmp_rc, "doca_flow_pipe_cfg_destroy port/dev: %p,%s",
+                       m_doca_port, m_ibname.c_str());
+        DOCA_ERROR_PROPAGATE(rc, tmp_rc);
+    }
+
+    return rc;
 }
 
 void ib_ctx_handler::print_val()
 {
-    set_str();
-    ibch_logdbg("%s", m_str);
+    char str_x[512] = {0};
+    char temp_str[255];
+
+    temp_str[0] = '\0';
+
+    str_x[0] = '\0';
+    sprintf(str_x, " %s:", get_ibname().c_str());
+    strcat(temp_str, str_x);
+
+    str_x[0] = '\0';
+    sprintf(str_x, " port(s): %d", get_ibv_device_attr()->phys_port_cnt);
+    strcat(temp_str, str_x);
+
+    str_x[0] = '\0';
+    sprintf(str_x, " vendor: %d", get_ibv_device_attr()->vendor_part_id);
+    strcat(temp_str, str_x);
+
+    str_x[0] = '\0';
+    sprintf(str_x, " fw: %s", get_ibv_device_attr()->fw_ver);
+    strcat(temp_str, str_x);
+
+    str_x[0] = '\0';
+    sprintf(str_x, " max_qp_wr: %d", get_ibv_device_attr()->max_qp_wr);
+    strcat(temp_str, str_x);
+
+    str_x[0] = '\0';
+    sprintf(str_x, " on_device_memory: %zu", m_on_device_memory);
+    strcat(temp_str, str_x);
+
+    str_x[0] = '\0';
+    sprintf(str_x, " packet_pacing_caps: min rate %u, max rate %u", m_pacing_caps.rate_limit_min,
+            m_pacing_caps.rate_limit_max);
+    strcat(temp_str, str_x);
+
+    ibch_logdbg("%s", temp_str);
 }
 
 int parse_dpcp_version(const char *dpcp_ver)
@@ -427,8 +613,8 @@ uint32_t ib_ctx_handler::mem_reg(void *addr, size_t length, uint64_t access)
         m_mr_map_lkey[mr->lkey] = mr;
         lkey = mr->lkey;
 
-        ibch_logdbg("dev:%s (%p) addr=%p length=%lu pd=%p", get_ibname(), m_p_ibv_device, addr,
-                    length, m_p_ibv_pd);
+        ibch_logdbg("dev:%s (%p) addr=%p length=%lu pd=%p", get_ibname().c_str(), m_p_ibv_device,
+                    addr, length, m_p_ibv_pd);
     }
 
     return lkey;
@@ -439,8 +625,8 @@ void ib_ctx_handler::mem_dereg(uint32_t lkey)
     auto iter = m_mr_map_lkey.find(lkey);
     if (iter != m_mr_map_lkey.end()) {
         struct ibv_mr *mr = iter->second;
-        ibch_logdbg("dev:%s (%p) addr=%p length=%lu pd=%p", get_ibname(), m_p_ibv_device, mr->addr,
-                    mr->length, m_p_ibv_pd);
+        ibch_logdbg("dev:%s (%p) addr=%p length=%lu pd=%p", get_ibname().c_str(), m_p_ibv_device,
+                    mr->addr, mr->length, m_p_ibv_pd);
         IF_VERBS_FAILURE_EX(ibv_dereg_mr(mr), EIO)
         {
             ibch_logdbg("failed de-registering a memory region "

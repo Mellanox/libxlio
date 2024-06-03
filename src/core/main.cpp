@@ -79,6 +79,12 @@
 #include "util/agent.h"
 #include "xlio.h"
 
+// Required for DOCA Flow library
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshadow"
+#include <doca_flow.h>
+#pragma GCC diagnostic pop
+
 void check_netperf_flags();
 
 // Start of xlio_version_str - used in "$ strings libxlio.so | grep XLIO_VERSION"
@@ -138,6 +144,18 @@ static int free_libxlio_resources()
         g_tcp_timers_collection->clean_obj();
     }
     g_tcp_timers_collection = nullptr;
+
+    if (g_p_net_device_table_mgr) {
+        g_p_net_device_table_mgr->global_ring_clear_all_rfs();
+    }
+
+    if (g_p_ib_ctx_handler_collection) {
+        g_p_ib_ctx_handler_collection->stop_all_doca_flow_ports();
+    }
+
+    doca_flow_destroy();
+
+    vlog_printf(VLOG_DEBUG, "doca_flow_destroy\n");
 
     // Block all sock-redicrt API calls into our offloading core
     fd_collection *g_p_fd_collection_temp = g_p_fd_collection;
@@ -1003,6 +1021,69 @@ static size_t calc_rx_wqe_buff_size()
     return buff_size;
 }
 
+/*
+ * Initalize DOCA Flow with the flags: VNF/Hardware Steering/Isolated
+ *
+ * @return: DOCA_SUCCESS on success and DOCA_ERROR otherwise
+ */
+static doca_error_t init_doca_flow()
+{
+    doca_error_t result, tmp_result;
+    struct doca_flow_cfg *rxq_flow_cfg;
+    cpu_set_t mask;
+    pid_t pid;
+
+#if defined(DEFINED_NGINX)
+    // Skip DOCA Flow initialization for Nginx master process.
+    // It is unnecessary and DOCA/DPDK do not support fork().
+    if (g_p_app && g_p_app->type == APP_NGINX && (g_p_app->get_worker_id() == -1)) {
+        return DOCA_SUCCESS;
+    }
+#endif
+
+    vlog_printf(VLOG_DEBUG, "Initializing DOCA Flow\n");
+
+    result = doca_flow_cfg_create(&rxq_flow_cfg);
+    if (result != DOCA_SUCCESS) {
+        VPRINT_DOCA_ERR(VLOG_ERROR, result, "doca_flow_cfg_create\n");
+        goto destroy_cfg;
+    }
+    result = doca_flow_cfg_set_pipe_queues(rxq_flow_cfg, 1);
+    if (result != DOCA_SUCCESS) {
+        VPRINT_DOCA_ERR(VLOG_ERROR, result, "doca_flow_cfg_set_pipe_queues\n");
+        goto destroy_cfg;
+    }
+    result = doca_flow_cfg_set_mode_args(rxq_flow_cfg, "vnf,hws,isolated,use_doca_eth");
+    if (result != DOCA_SUCCESS) {
+        VPRINT_DOCA_ERR(VLOG_ERROR, result, "doca_flow_cfg_set_mode_args\n");
+        goto destroy_cfg;
+    }
+
+    // Inside doca_flow_init DPDK changes CPU affinity.
+    // This WA restores affinity after doca_flow_init.
+    pid = getpid();
+    sched_getaffinity(pid, sizeof(cpu_set_t), &mask);
+
+    result = doca_flow_init(rxq_flow_cfg);
+    if (result != DOCA_SUCCESS) {
+        VPRINT_DOCA_ERR(VLOG_ERROR, result, "doca_flow_init\n");
+        goto destroy_cfg;
+    }
+
+    sleep(1); // Let DPDK organize itself.
+
+    sched_setaffinity(pid, sizeof(cpu_set_t), &mask);
+
+destroy_cfg:
+    tmp_result = doca_flow_cfg_destroy(rxq_flow_cfg);
+    if (tmp_result != DOCA_SUCCESS) {
+        VPRINT_DOCA_ERR(VLOG_ERROR, result, "doca_flow_cfg_destroy");
+        DOCA_ERROR_PROPAGATE(result, tmp_result);
+    }
+
+    return result;
+}
+
 static void do_global_ctors_helper()
 {
     static lock_spin_recursive g_globals_lock;
@@ -1014,7 +1095,9 @@ static void do_global_ctors_helper()
     PROFILE_BLOCK("xlio_ctors")
 
     g_init_global_ctors_done = true;
+
     set_env_params();
+
     prepare_fork();
 
     // Adjust configuration before subsystems initialization. We do this here
@@ -1051,6 +1134,11 @@ static void do_global_ctors_helper()
 
     g_global_stat_static.init();
     xlio_stats_instance_create_global_block(&g_global_stat_static);
+
+    doca_error_t doca_rc = init_doca_flow();
+    if (DOCA_IS_ERROR(doca_rc)) {
+        throw_xlio_exception("Failed to initialize DOCA Flow\n");
+    }
 
     // Create new netlink listener
     NEW_CTOR(g_p_netlink_handler, netlink_wrapper());

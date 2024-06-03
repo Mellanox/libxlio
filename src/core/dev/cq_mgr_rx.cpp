@@ -136,6 +136,14 @@ void cq_mgr_rx::configure(int cq_size)
 
     cq_logdbg("Created CQ as Rx with fd[%d] and of size %d elements (ibv_cq_hndl=%p)",
               get_channel_fd(), cq_size, m_p_ibv_cq);
+
+    doca_error_t rc = doca_pe_create(&m_doca_pe);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(cq_logerr, rc, "doca_pe_create");
+        throw_xlio_exception("doca_pe_create failed");
+    }
+
+    cq_logdbg("Created DOCA PE %p", m_doca_pe);
 }
 
 cq_mgr_rx::~cq_mgr_rx()
@@ -170,6 +178,13 @@ cq_mgr_rx::~cq_mgr_rx()
     xlio_stats_instance_remove_cq_block(m_p_cq_stat);
 
     cq_logdbg("Destroying Rx CQ done");
+
+    if (m_doca_pe) {
+        doca_error_t rc = doca_pe_destroy(m_doca_pe);
+        if (DOCA_IS_ERROR(rc)) {
+            PRINT_DOCA_ERR(cq_logerr, rc, "doca_pe_destroy PE:%p", m_doca_pe);
+        }
+    }
 }
 
 void cq_mgr_rx::statistics_print()
@@ -240,6 +255,65 @@ void cq_mgr_rx::add_hqrx(hw_queue_rx *hqrx_ptr)
               hqrx_ptr->get_rx_max_wr_num() - hqrx_wr_num, hqrx_ptr->get_rx_max_wr_num());
 
     m_debt = 0;
+
+    doca_error_t rc = doca_mmap_create(&temp_doca_mmap);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(cq_logerr, rc, "doca_mmap_create");
+    }
+
+    rc = doca_mmap_set_max_num_devices(temp_doca_mmap, 1U);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(cq_logerr, rc, "doca_mmap_set_max_num_devices");
+    }
+
+    rc = doca_mmap_add_dev(temp_doca_mmap, m_p_ib_ctx_handler->get_doca_device());
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(cq_logerr, rc, "doca_mmap_add_dev");
+    }
+
+    size_t alloc_size = 32 * 16384;
+    xlio_allocator_heap temp_heap(false);
+    void *memptr = temp_heap.alloc(alloc_size);
+
+    rc = doca_mmap_set_memrange(temp_doca_mmap, memptr, 32 * 16384);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(cq_logerr, rc, "doca_mmap_set_memrange");
+    }
+
+    rc = doca_mmap_start(temp_doca_mmap);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(cq_logerr, rc, "doca_mmap_start");
+    }
+
+    rc = doca_buf_inventory_create(32U, &temp_doca_inventory);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(cq_logerr, rc, "doca_buf_inventory_create");
+    }
+
+    rc = doca_buf_inventory_start(temp_doca_inventory);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(cq_logerr, rc, "doca_buf_inventory_start");
+    }
+
+    for (int i = 0; i < 32; ++i) {
+        rc = doca_buf_inventory_buf_get_by_addr(temp_doca_inventory, temp_doca_mmap,
+                                                (uint8_t *)memptr + (i * 16384), 16384,
+                                                temp_doca_bufs + i);
+        if (DOCA_IS_ERROR(rc)) {
+            PRINT_DOCA_ERR(cq_logerr, rc, "doca_buf_inventory_buf_get_by_data");
+        }
+
+        rc = doca_eth_rxq_task_recv_allocate_init(m_hqrx_ptr->m_doca_rxq.get(), {.ptr = nullptr},
+                                                  temp_doca_bufs[i], temp_doca_tasks + i);
+        if (DOCA_IS_ERROR(rc)) {
+            PRINT_DOCA_ERR(cq_logerr, rc, "doca_eth_rxq_task_recv_allocate_init");
+        }
+
+        rc = doca_task_submit(doca_eth_rxq_task_recv_as_doca_task(temp_doca_tasks[i]));
+        if (DOCA_IS_ERROR(rc)) {
+            PRINT_DOCA_ERR(cq_logerr, rc, "doca_eth_rxq_task_recv_as_doca_task");
+        }
+    }
 }
 
 void cq_mgr_rx::del_hqrx(hw_queue_rx *hqrx_ptr)
