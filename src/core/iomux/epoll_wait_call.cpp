@@ -92,26 +92,25 @@ int epoll_wait_call::get_current_events()
     int i = m_n_all_ready_fds;
     int ready_rfds = 0;
     int ready_wfds = 0;
-    sockinfo *p_socket_object = m_epfd_info->m_ready_fds.front();
-    while (p_socket_object && i < m_maxevents) {
-        m_events[i].events = 0; // initialize
-
+    sockinfo *si = m_epfd_info->m_ready_fds.front();
+    while (si && i < m_maxevents) {
+        sockinfo *si_next = m_epfd_info->m_ready_fds.next(si);
         bool got_event = false;
 
-        // epoll_wait will always wait for EPOLLERR and EPOLLHUP; it is not necessary to set it in
-        // events.
-        uint32_t mutual_events = p_socket_object->m_epoll_event_flags &
-            (p_socket_object->m_fd_rec.events | EPOLLERR | EPOLLHUP);
+        m_events[i].events = 0;
 
-        // EPOLLHUP & EPOLLOUT are mutually exclusive. see poll man pages. epoll adapt poll
+        // epoll_wait will always wait for EPOLLERR and EPOLLHUP.
+        uint32_t mutual_events =
+            si->m_epoll_event_flags & (si->m_fd_rec.events | EPOLLERR | EPOLLHUP);
+
+        // EPOLLHUP & EPOLLOUT are mutually exclusive. See poll man pages. Epoll adapts the poll
         // behavior.
         if ((mutual_events & EPOLLHUP) && (mutual_events & EPOLLOUT)) {
             mutual_events &= ~EPOLLOUT;
         }
 
         if (mutual_events & EPOLLIN) {
-            if (handle_epoll_event(p_socket_object->is_readable(nullptr), EPOLLIN, p_socket_object,
-                                   i)) {
+            if (handle_epoll_event(si->is_readable(nullptr), EPOLLIN, si, i)) {
                 ready_rfds++;
                 got_event = true;
             }
@@ -119,35 +118,33 @@ int epoll_wait_call::get_current_events()
         }
 
         if (mutual_events & EPOLLOUT) {
-            if (handle_epoll_event(p_socket_object->is_writeable(), EPOLLOUT, p_socket_object, i)) {
+            if (handle_epoll_event(si->is_writeable(), EPOLLOUT, si, i)) {
                 ready_wfds++;
                 got_event = true;
             }
             mutual_events &= ~EPOLLOUT;
         }
 
-        // handle zcopy notification mechanism
+        // Handle zcopy notification mechanism
         if (mutual_events & EPOLLERR) {
             int unused;
-            if (handle_epoll_event(p_socket_object->is_errorable(&unused), EPOLLERR,
-                                   p_socket_object, i)) {
+            if (handle_epoll_event(si->is_errorable(&unused), EPOLLERR, si, i)) {
                 got_event = true;
             }
             mutual_events &= ~EPOLLERR;
         }
 
         if (mutual_events) {
-            if (handle_epoll_event(true, mutual_events, p_socket_object, i)) {
+            if (handle_epoll_event(true, mutual_events, si, i)) {
                 got_event = true;
             }
         }
 
         if (got_event) {
-            socket_fd_list.push_back(p_socket_object);
+            socket_fd_list.push_back(si);
             ++i;
         }
-
-        p_socket_object = m_epfd_info->m_ready_fds.next(p_socket_object);
+        si = si_next;
     }
 
     m_n_ready_rfds += ready_rfds;
@@ -157,17 +154,17 @@ int epoll_wait_call::get_current_events()
     unlock();
 
     /*
-     * for checking ring migration rx we need a socket context.
-     * in epoll we separate the rings from the sockets, so only here we access the sockets.
-     * therefore, it is most convenient to check it here.
-     * we need to move the ring migration to the epfd, going over the registered sockets,
+     * For checking ring migration rx we need a socket context.
+     * In epoll we separate the rings from the sockets, so only here we access the sockets.
+     * Therefore, it is most convenient to check it here.
+     * We need to move the ring migration to the epfd, going over the registered sockets,
      * when polling the rings was not fruitful.
-     * this  will be more similar to the behavior of select/poll.
-     * see RM task 212058
+     * This  will be more similar to the behavior of select/poll.
+     * See RM task 212058
      */
     while (!socket_fd_list.empty()) {
-        sockinfo *sockfd = socket_fd_list.get_and_pop_front();
-        sockfd->consider_rings_migration_rx();
+        si = socket_fd_list.get_and_pop_front();
+        si->consider_rings_migration_rx();
     }
 
     return (i);
