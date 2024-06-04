@@ -39,8 +39,7 @@
  *
  * usage:
  * epoll: sudo server_tcp.out 1.1.3.15:17000
- * socketxtreme: sudo env LD_PRELOAD=libxlio.so server_tcp.out 1.1.3.15:17000
- */
+  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -63,10 +62,6 @@
 #include <signal.h>
 #include <sys/epoll.h>
 
-#if defined(XLIO_API) && (XLIO_API == 1)
-#include <mellanox/xlio_extra.h>
-#endif /* XLIO_API */
-
 /* Bind to device */
 #if !defined(XLIO_DEV)
 #define IB_DEV "ens3f1"
@@ -83,11 +78,6 @@
 #define FD_NUM 10
 
 #define EXIT_FAILURE 1
-
-#if defined(XLIO_API) && (XLIO_API == 1)
-static struct xlio_api_t *_xlio_api = NULL;
-static int _xlio_ring_fd = -1;
-#endif /* XLIO_API */
 
 static volatile int _done = 0;
 
@@ -185,9 +175,6 @@ int main(int argc, char *argv[])
         int count;
         char msg[1024];
     } conns;
-#if defined(XLIO_API) && (XLIO_API == 1)
-    struct xlio_socketxtreme_completion_t *xlio_comps;
-#endif /* XLIO_API */
     int flag;
     struct sockaddr_in addr;
     struct sockaddr in_addr;
@@ -205,30 +192,17 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    /* Step:1 Initialize Extra API */
-#if defined(XLIO_API) && (XLIO_API == 1)
-    _xlio_api = xlio_get_api();
-    if (_xlio_api == NULL) {
-        printf("Extra API not found\n");
-    }
-#endif /* XLIO_API */
-
     max_events = FD_NUM + sizeof(sfd) / sizeof(sfd[0]);
 
     conns.count = 0;
     conns.fds = calloc(max_events, sizeof(*conns.fds));
     assert(conns.fds);
 
-#if defined(XLIO_API) && (XLIO_API == 1)
-    xlio_comps = calloc(max_events, sizeof(*xlio_comps));
-    assert(xlio_comps);
-#else
     efd = epoll_create1(0);
     assert(efd >= 0);
 
     events = calloc(max_events, sizeof(*events));
     assert(events);
-#endif /* XLIO_API */
 
     printf("Launching <receiver> mode...\n");
 
@@ -254,13 +228,6 @@ int main(int argc, char *argv[])
         max_sfd++;
     }
 
-    /* Step:3 Need to get ring or set listen socket */
-#if defined(XLIO_API) && (XLIO_API == 1)
-    if (_xlio_ring_fd < 0) {
-        _xlio_api->get_socket_rings_fds(sfd[0], &_xlio_ring_fd, 1);
-        assert((-1) != _xlio_ring_fd);
-    }
-#else
     for (i = 0; i < max_sfd; i++) {
         ev.events = EPOLLIN;
         ev.data.fd = sfd[i];
@@ -269,30 +236,15 @@ int main(int argc, char *argv[])
             exit(EXIT_FAILURE);
         }
     }
-#endif /* XLIO_API */
 
     while (!_done) {
         int n = 0;
 
         /* Step:4 Get events */
-#if defined(XLIO_API) && (XLIO_API == 1)
-        while (0 == n) {
-            n = _xlio_api->socketxtreme_poll(_xlio_ring_fd, xlio_comps, max_events, 0);
-        }
-#else
         n = epoll_wait(efd, events, max_events, 0);
-#endif /* XLIO_API */
         for (j = 0; j < n; j++) {
-
-#if defined(XLIO_API) && (XLIO_API == 1)
-            event = xlio_comps[j].events;
-            event |= (event & XLIO_SOCKETXTREME_PACKET ? EPOLLIN : 0);
-            fd = (event & XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED ? xlio_comps[j].listen_fd
-                                                                    : xlio_comps[j].user_data);
-#else
             event = events[j].events;
             fd = events[j].data.fd;
-#endif /* XLIO_API */
 
             if ((event & EPOLLERR) || (event & EPOLLHUP) || (event & EPOLLRDHUP)) {
                 printf("epoll error\n");
@@ -306,10 +258,6 @@ int main(int argc, char *argv[])
             }
             if (i < max_sfd) {
                 in_len = sizeof(in_addr);
-#if defined(XLIO_API) && (XLIO_API == 1)
-                fd = xlio_comps[j].user_data;
-                memcpy(&in_addr, &xlio_comps[j].src, in_len);
-#else
                 fd = accept(fd, &in_addr, &in_len);
                 if (fd < 0) {
                     printf("Accept failed: %s", strerror(errno));
@@ -321,7 +269,6 @@ int main(int argc, char *argv[])
                     printf("epoll_ctl() failed: %s", strerror(errno));
                     exit(EXIT_FAILURE);
                 }
-#endif /* XLIO_API */
 
                 conns.fds[conns.count] = fd;
                 conns.count++;
@@ -342,18 +289,7 @@ int main(int argc, char *argv[])
 
             /* Step:6 Process data */
             if (event & EPOLLIN) {
-#if defined(XLIO_API) && (XLIO_API == 1)
-                printf("xlio_comps[j].packet.num_bufs equal to %d \n",
-                       xlio_comps[j].packet.num_bufs);
-                assert(1 == xlio_comps[j].packet.num_bufs);
-                assert(sizeof(conns.msg) > xlio_comps[j].packet.total_len);
-                memcpy(conns.msg, xlio_comps[j].packet.buff_lst->payload,
-                       xlio_comps[j].packet.total_len);
-                ret = xlio_comps[j].packet.total_len;
-                _xlio_api->socketxtreme_free_packets(&xlio_comps[j].packet, 1);
-#else
                 ret = recv(fd, conns.msg, sizeof(conns.msg), 0);
-#endif /* XLIO_API */
                 if (ret < 0) {
                     exit(EXIT_FAILURE);
                 }
@@ -377,10 +313,7 @@ err:
 
     for (i = 0; i < conns.count; i++) {
         if (conns.fds[i] > 0) {
-#if defined(XLIO_API) && (XLIO_API == 1)
-#else
             epoll_ctl(efd, EPOLL_CTL_DEL, conns.fds[i], NULL);
-#endif /* XLIO_API */
             close(conns.fds[i]);
         }
     }
@@ -388,15 +321,9 @@ err:
         free(conns.fds);
     }
 
-#if defined(XLIO_API) && (XLIO_API == 1)
-    if (xlio_comps) {
-        free(xlio_comps);
-    }
-#else
     if (events) {
         free(events);
     }
-#endif /* XLIO_API */
 
     close(efd);
 

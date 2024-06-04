@@ -34,11 +34,30 @@
 #include "sock_stats.h"
 
 thread_local socket_stats_t sock_stats::t_dummy_stats;
+sock_stats *sock_stats::s_instance = nullptr;
 
+void sock_stats::init_instance(size_t max_stats)
+{
+    if (!s_instance) {
+        s_instance = new sock_stats();
+        if (max_stats) {
+            s_instance->init_sock_stats(max_stats);
+        }
+    }
+}
+
+void sock_stats::destroy_instance()
+{
+    if (s_instance) {
+        delete s_instance;
+        s_instance = nullptr;
+    }
+}
+
+// Calling init_instance() before instance() is a hard requirement.
 sock_stats &sock_stats::instance()
 {
-    static sock_stats the_instance;
-    return the_instance;
+    return *s_instance;
 }
 
 socket_stats_t *sock_stats::get_stats_obj()
@@ -63,10 +82,6 @@ void sock_stats::return_stats_obj(socket_stats_t *stats)
 
 void sock_stats::init_sock_stats(size_t max_stats)
 {
-    if (max_stats == 0U) {
-        return;
-    }
-
     std::lock_guard<decltype(_stats_lock)> lock(_stats_lock);
 
     _socket_stats_vec.resize(max_stats);

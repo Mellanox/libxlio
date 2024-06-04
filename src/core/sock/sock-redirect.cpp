@@ -684,7 +684,7 @@ static int select_helper(int __nfds, fd_set *__readfds, fd_set *__writefds, fd_s
 
 static void xlio_epoll_create(int epfd, int size)
 {
-    if (g_p_fd_collection) {
+    if (g_p_fd_collection && !g_b_exit) {
         // Sanity check to remove any old sockinfo object using the same fd!!
         handle_close(epfd, true);
 
@@ -2050,6 +2050,10 @@ EXPORT_SYMBOL int XLIO_SYMBOL(epoll_ctl)(int __epfd, int __op, int __fd,
         srdr_logfunc_entry("epfd=%d, op=%s, fd=%d, event=NULL", __epfd, op_names[__op], __fd);
     }
 
+    if (unlikely(g_b_exit)) {
+        return SYSCALL(epoll_ctl, __epfd, __op, __fd, __event);
+    }
+
     int rc = -1;
     epfd_info *epfd_info = fd_collection_get_epfd(__epfd);
     if (!epfd_info) {
@@ -2081,6 +2085,10 @@ EXPORT_SYMBOL int XLIO_SYMBOL(epoll_wait)(int __epfd, struct epoll_event *__even
     srdr_logfunc_entry("epfd=%d, maxevents=%d, timeout=(%d milli-sec)", __epfd, __maxevents,
                        __timeout);
 
+    if (unlikely(g_b_exit)) {
+        return SYSCALL(epoll_wait, __epfd, __events, __maxevents, __timeout);
+    }
+
     return epoll_wait_helper(__epfd, __events, __maxevents, __timeout);
 }
 
@@ -2092,6 +2100,10 @@ EXPORT_SYMBOL int XLIO_SYMBOL(epoll_pwait)(int __epfd, struct epoll_event *__eve
 
     srdr_logfunc_entry("epfd=%d, maxevents=%d, timeout=(%d milli-sec)", __epfd, __maxevents,
                        __timeout);
+
+    if (unlikely(g_b_exit)) {
+        return SYSCALL(epoll_pwait, __epfd, __events, __maxevents, __timeout, __sigmask);
+    }
 
     return epoll_wait_helper(__epfd, __events, __maxevents, __timeout, __sigmask);
 }

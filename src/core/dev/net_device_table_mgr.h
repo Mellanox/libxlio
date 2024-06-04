@@ -98,6 +98,8 @@ public:
 
     void global_ring_adapt_cq_moderation();
 
+    void global_ring_clear_all_rfs();
+
     void global_ring_wakeup();
 
     int global_ring_epfd_get();

@@ -42,6 +42,13 @@
 #include "utils/lock_wrapper.h"
 #include <mellanox/dpcp.h>
 
+// Required for DOCA Flow library
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshadow"
+#include <doca_dev.h>
+#include <doca_flow.h>
+#pragma GCC diagnostic pop
+
 typedef std::unordered_map<uint32_t, struct ibv_mr *> mr_map_lkey_t;
 
 struct pacing_caps_t {
@@ -59,12 +66,8 @@ struct pacing_caps_t {
 //
 class ib_ctx_handler : public event_handler_ibverbs {
 public:
-    struct ib_ctx_handler_desc {
-        struct ibv_device *device;
-    };
-
 public:
-    ib_ctx_handler(struct ib_ctx_handler_desc *desc);
+    ib_ctx_handler(doca_devinfo *devinfo, const char *ibname, ibv_device *ibvdevice);
     virtual ~ib_ctx_handler();
 
     /*
@@ -73,11 +76,15 @@ public:
      * */
     ibv_pd *get_ibv_pd() { return m_p_ibv_pd; }
     ibv_device *get_ibv_device() { return m_p_ibv_device; }
-    inline char *get_ibname() { return (m_p_ibv_device ? m_p_ibv_device->name : (char *)""); }
+    doca_dev *get_doca_device() const { return m_doca_dev; }
+    doca_flow_port *get_doca_flow_port();
+    doca_flow_pipe *get_doca_root_pipe();
+    const std::string &get_ibname() const { return m_ibname; }
     struct ibv_context *get_ibv_context() { return m_p_ibv_context; }
     dpcp::adapter *set_dpcp_adapter();
     dpcp::adapter *get_dpcp_adapter() { return m_p_adapter; }
     void check_capabilities();
+    void stop_doca_flow_port();
     xlio_ibv_device_attr *get_ibv_device_attr()
     {
         return xlio_get_device_orig_attr(m_p_ibv_device_attr);
@@ -96,11 +103,10 @@ public:
     bool is_packet_pacing_supported(uint32_t rate = 1);
     size_t get_on_device_memory_size() { return m_on_device_memory; }
     bool is_active(int port_num);
-    bool is_mlx4() { return is_mlx4(get_ibname()); }
+    bool is_mlx4() { return is_mlx4(get_ibname().c_str()); }
     static bool is_mlx4(const char *dev) { return strncmp(dev, "mlx4", 4) == 0; }
     virtual void handle_event_ibverbs_cb(void *ev_data, void *ctx);
 
-    void set_str();
     void print_val();
 
     inline void convert_hw_time_to_system_time(uint64_t hwtime, struct timespec *systime)
@@ -109,10 +115,17 @@ public:
     }
 
 private:
+    void open_doca_dev(doca_devinfo *devinfo);
     void handle_event_device_fatal();
+    doca_error_t start_doca_flow_port();
+    doca_error_t create_doca_root_pipe();
+
     ibv_device *m_p_ibv_device; // HCA handle
     struct ibv_context *m_p_ibv_context = nullptr;
     dpcp::adapter *m_p_adapter;
+    doca_dev *m_doca_dev = nullptr;
+    doca_flow_port *m_doca_port = nullptr;
+    doca_flow_pipe *m_doca_root_pipe = nullptr;
     xlio_ibv_device_attr_ex *m_p_ibv_device_attr;
     ibv_pd *m_p_ibv_pd;
     bool m_flow_tag_enabled;
@@ -123,8 +136,7 @@ private:
     time_converter *m_p_ctx_time_converter;
     mr_map_lkey_t m_mr_map_lkey;
     std::unordered_map<void *, uint32_t> m_user_mem_lkey_map;
-
-    char m_str[255];
+    std::string m_ibname;
 };
 
 #endif

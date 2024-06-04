@@ -41,6 +41,12 @@
 #include "proto/mem_buf_desc.h"
 #include "proto/flow_tuple.h"
 
+// Required for DOCA Flow library
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshadow"
+#include <doca_flow.h>
+#pragma GCC diagnostic pop
+
 #define RFS_SINKS_LIST_DEFAULT_LEN 32
 
 class hw_queue_rx;
@@ -84,8 +90,7 @@ public:
     virtual ~rfs();
 
     /**
-     * Register/Unregister a sink with this rfs object
-     * Get notifications about incoming packets using the sockinfo callback api
+     * Register/Unregister a sink with this rfs object.
      * The rfs will call ibv_attach on the QP once when at least one receiver sink is registered
      * An ibv_detach is called when the last receiver sink is deleted from the registered list
      *
@@ -117,6 +122,8 @@ protected:
     uint16_t m_priority = 2U; // Almost highest priority, 1 is used for 5-tuple later
     bool m_b_tmp_is_attached; // Only temporary, while ibcm calls attach_flow with no sinks...
 
+    doca_flow_match m_doca_match_value;
+    doca_flow_match m_doca_match_mask;
     dpcp::match_params m_match_value;
     dpcp::match_params m_match_mask;
 

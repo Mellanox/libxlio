@@ -39,6 +39,8 @@
 #include "dev/rfs_rule.h"
 #include "dev/cq_mgr_rx_regrq.h"
 #include "dev/cq_mgr_rx_strq.h"
+#include <doca_ctx.h>
+#include <doca_eth_rxq_cpu_data_path.h>
 
 #undef MODULE_NAME
 #define MODULE_NAME "hw_queue_rx"
@@ -74,6 +76,7 @@ hw_queue_rx::~hw_queue_rx()
     hwqrx_logfunc("");
 
     m_rq.reset(nullptr); // Must be destroyed before RX CQ.
+    m_doca_rxq.reset(nullptr); // Must be destroyed before RX PE.
 
     if (m_rq_wqe_idx_to_wrid) {
         if (0 != munmap(m_rq_wqe_idx_to_wrid, m_rx_num_wr * sizeof(*m_rq_wqe_idx_to_wrid))) {
@@ -97,15 +100,6 @@ hw_queue_rx::~hw_queue_rx()
 
 bool hw_queue_rx::configure_rq(ibv_comp_channel *rx_comp_event_channel)
 {
-    // Check device capabilities for max QP work requests
-    /*uint32_t max_qp_wr = ALIGN_WR_DOWN(m_p_ib_ctx_handler->get_ibv_device_attr()->max_qp_wr - 1);
-    if (m_rx_num_wr > max_qp_wr) {
-        hwqrx_logwarn("Allocating only %d Rx work requests while user "
-                      "requested %s=%d for RX on <%p>",
-                      max_qp_wr, SYS_VAR_RX_NUM_WRE, m_rx_num_wr, m_p_ib_ctx_handler);
-        m_rx_num_wr = max_qp_wr;
-    }*/
-
     // Create associated cq_mgr_tx
     BULLSEYE_EXCLUDE_BLOCK_START
     m_p_cq_mgr_rx = init_rx_cq_mgr(rx_comp_event_channel);
@@ -123,12 +117,6 @@ bool hw_queue_rx::configure_rq(ibv_comp_channel *rx_comp_event_channel)
     xlio_ib_mlx5_cq_t mlx5_cq;
     memset(&mlx5_cq, 0, sizeof(mlx5_cq));
     xlio_ib_mlx5_get_cq(m_p_cq_mgr_rx->get_ibv_cq_hndl(), &mlx5_cq);
-
-    hwqrx_logdbg(
-        "Creating RQ of transport type '%s' on ibv device '%s' [%p], cq: %p(%u), wre: %d, sge: %d",
-        priv_xlio_transport_type_str(m_p_ring->get_transport_type()),
-        m_p_ib_ctx_handler->get_ibname(), m_p_ib_ctx_handler->get_ibv_device(), m_p_cq_mgr_rx,
-        mlx5_cq.cq_num, m_rx_num_wr, m_rx_sge);
 
     if (safe_mce_sys().enable_striding_rq) {
         m_rx_sge = 2U; // Striding-RQ needs a reserved segment.
@@ -155,7 +143,7 @@ bool hw_queue_rx::configure_rq(ibv_comp_channel *rx_comp_event_channel)
     }
 
     // Create the QP
-    if (!prepare_rq(mlx5_cq.cq_num)) {
+    if (!prepare_rq(mlx5_cq.cq_num, m_p_cq_mgr_rx->get_doca_pe())) {
         return false;
     }
 
@@ -172,6 +160,7 @@ void hw_queue_rx::up()
     release_rx_buffers(); // We might have old flushed cqe's in our CQ still from previous HA event
 
     modify_queue_to_ready_state();
+    start_doca_rxq();
 
     m_p_cq_mgr_rx->add_hqrx(this);
 }
@@ -181,6 +170,8 @@ void hw_queue_rx::down()
     m_tir.reset(nullptr);
 
     modify_queue_to_error_state();
+
+    stop_doca_rxq();
 
     // let the QP drain all wqe's to flushed cqe's now that we moved
     // it to error state and post_sent final trigger for completion
@@ -245,6 +236,62 @@ void hw_queue_rx::post_recv_buffers(descq_t *p_buffers, size_t count)
     }
 }
 
+/*void hw_queue_rx::callback_rxq_state_changed(
+    const union doca_data user_data, struct doca_ctx *ctx,
+    enum doca_ctx_states prev_state,  enum doca_ctx_states next_state)
+{
+    hw_queue_rx *hw_rxq = reinterpret_cast<hw_queue_rx *>(user_data.ptr);
+    if (DOCA_CTX_STATE_IDLE == next_state) {
+        hw_rxq-
+    }
+}*/
+
+void hw_queue_rx::start_doca_rxq()
+{
+    hwqrx_logdbg("Starting DOCA RXQ: %p", m_doca_rxq.get());
+
+    if (!m_p_ib_ctx_handler->get_doca_flow_port()) {
+        hwqrx_logerr("modify_queue_to_ready_state unable to get DOCA flow port, RXQ: %p", this);
+    }
+
+    doca_error_t err = doca_ctx_start(m_doca_ctx_rxq);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqrx_logerr, err, "doca_ctx_start(RXQ). RXQ:%p", m_doca_rxq.get());
+    }
+
+    hwqrx_loginfo("DOCA RXQ started, ctx: %p", m_doca_ctx_rxq);
+
+    err = doca_eth_rxq_get_flow_queue_id(m_doca_rxq.get(), &m_doca_rx_queue_id);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqrx_logerr, err, "doca_eth_rxq_get_flow_queue_id. RXQ:%p",
+                       m_doca_rxq.get());
+    }
+}
+
+void hw_queue_rx::stop_doca_rxq()
+{
+    hwqrx_logdbg("Stopping DOCA RXQ: %p", m_doca_rxq.get());
+
+    doca_error_t err = doca_ctx_stop(m_doca_ctx_rxq);
+    if (DOCA_ERROR_IN_PROGRESS == err) {
+        doca_ctx_states ctx_state = DOCA_CTX_STATE_STOPPING; // Just to enter the while loop.
+        doca_pe *pe = m_p_cq_mgr_rx->get_doca_pe();
+        while (DOCA_CTX_STATE_IDLE != ctx_state) {
+            if (!doca_pe_progress(pe)) {
+                err = doca_ctx_get_state(m_doca_ctx_rxq, &ctx_state);
+                if (err != DOCA_SUCCESS) {
+                    PRINT_DOCA_ERR(hwqrx_logerr, err,
+                                   "Error flushing DOCA RXQ (doca_ctx_get_state). RXQ:%p",
+                                   m_doca_rxq.get());
+                    break;
+                }
+            }
+        }
+    } else if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqrx_logerr, err, "doca_ctx_stop(RXQ). RXQ:%p", m_doca_rxq.get());
+    }
+}
+
 void hw_queue_rx::modify_queue_to_ready_state()
 {
     hwqrx_logdbg("");
@@ -274,18 +321,20 @@ void hw_queue_rx::modify_queue_to_error_state()
     }
 }
 
-rfs_rule *hw_queue_rx::create_rfs_rule(dpcp::match_params &match_value,
+rfs_rule *hw_queue_rx::create_rfs_rule(doca_flow_match &match_val, doca_flow_match &match_msk,
+                                       dpcp::match_params &match_value,
                                        dpcp::match_params &match_mask, uint16_t priority,
                                        uint32_t flow_tag, xlio_tir *tir_ext)
 {
     if (m_p_ib_ctx_handler && m_p_ib_ctx_handler->get_dpcp_adapter()) {
         // TLS RX uses tir_ext.
         dpcp::tir *dpcp_tir = (tir_ext ? xlio_tir_to_dpcp_tir(tir_ext) : m_tir.get());
+        uint16_t rxq_id = m_doca_rx_queue_id; // TODO: Add Support for TLS-RX.
 
         std::unique_ptr<rfs_rule> new_rule(new rfs_rule());
-        if (dpcp_tir &&
-            new_rule->create(match_value, match_mask, *dpcp_tir, priority, flow_tag,
-                             *m_p_ib_ctx_handler->get_dpcp_adapter())) {
+        if (dpcp_tir && m_doca_rx_queue_id &&
+            new_rule->create(match_val, match_msk, rxq_id, match_value, match_mask, *dpcp_tir,
+                             priority, flow_tag, *m_p_ib_ctx_handler)) {
             return new_rule.release();
         }
     }
@@ -412,25 +461,8 @@ out:
     return err;
 }
 
-bool hw_queue_rx::init_rx_cq_mgr_prepare()
-{
-    m_rq_wqe_idx_to_wrid =
-        (uint64_t *)mmap(nullptr, m_rx_num_wr * sizeof(*m_rq_wqe_idx_to_wrid),
-                         PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-    if (m_rq_wqe_idx_to_wrid == MAP_FAILED) {
-        hwqrx_logerr("Failed allocating m_rq_wqe_idx_to_wrid (errno=%d %m)", errno);
-        return false;
-    }
-
-    return true;
-}
-
 cq_mgr_rx *hw_queue_rx::init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel)
 {
-    if (!init_rx_cq_mgr_prepare()) {
-        return nullptr;
-    }
-
     if (safe_mce_sys().enable_striding_rq) {
         return new cq_mgr_rx_strq(m_p_ring, m_p_ib_ctx_handler,
                                   safe_mce_sys().strq_stride_num_per_rwqe * m_rx_num_wr,
@@ -532,9 +564,139 @@ dpcp::tir *hw_queue_rx::create_tir(bool is_tls /*=false*/)
     return tir_obj;
 }
 
-bool hw_queue_rx::prepare_rq(uint32_t cqn)
+void hw_queue_rx::destory_doca_rxq(doca_eth_rxq *rxq)
+{
+    NOT_IN_USE(rxq);
+    doca_error_t err = doca_eth_rxq_destroy(rxq);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(__log_err, err, "doca_eth_rxq_destroy");
+    }
+}
+
+void task_completion_cb(doca_eth_rxq_task_recv *task_recv, doca_data task_user_data,
+                        doca_data ctx_user_data)
+{
+    NOT_IN_USE(task_user_data);
+    NOT_IN_USE(ctx_user_data);
+
+    doca_buf *buf = nullptr;
+    doca_error_t rc_state = doca_eth_rxq_task_recv_get_pkt(task_recv, &buf);
+    if (likely(rc_state == DOCA_SUCCESS)) {
+        rc_state = doca_buf_dec_refcount(buf, nullptr);
+        if (unlikely(rc_state != DOCA_SUCCESS)) {
+            PRINT_DOCA_ERR(__log_err, rc_state, "Unable to decrement doca_buf refcount");
+        }
+    } else {
+        PRINT_DOCA_ERR(__log_err, rc_state, "RX Task without doca_buf");
+    }
+
+    doca_task_free(doca_eth_rxq_task_recv_as_doca_task(task_recv));
+
+    vlog_printf(VLOG_INFO, "PACKET RECEIVED pid: %d\n", (int)getpid());
+}
+
+void hw_queue_rx::rx_task_error_cb(doca_eth_rxq_task_recv *task_recv, doca_data task_user_data,
+                                   doca_data ctx_user_data)
+{
+    NOT_IN_USE(task_user_data);
+    NOT_IN_USE(ctx_user_data);
+
+    hw_queue_rx *hw_rx = reinterpret_cast<hw_queue_rx *>(ctx_user_data.ptr);
+    doca_ctx_states ctx_state = DOCA_CTX_STATE_STOPPING;
+    doca_error_t rc_state = doca_ctx_get_state(hw_rx->m_doca_ctx_rxq, &ctx_state);
+    ctx_state = ((ctx_state != DOCA_CTX_STATE_IDLE) ? ctx_state : DOCA_CTX_STATE_STOPPING);
+    if (rc_state != DOCA_SUCCESS || ctx_state != DOCA_CTX_STATE_STOPPING) {
+        PRINT_DOCA_ERR(__log_err,
+                       doca_task_get_status(doca_eth_rxq_task_recv_as_doca_task(task_recv)),
+                       "RX Task Error");
+    }
+
+    __log_func("rx_task_error_cb, task_recv: %p, rc_state: %d, ctx_state: %d", task_recv, rc_state,
+               ctx_state);
+
+    doca_buf *buf = nullptr;
+    rc_state = doca_eth_rxq_task_recv_get_pkt(task_recv, &buf);
+    if (likely(rc_state == DOCA_SUCCESS)) {
+        rc_state = doca_buf_dec_refcount(buf, nullptr);
+        if (unlikely(rc_state != DOCA_SUCCESS)) {
+            PRINT_DOCA_ERR(__log_err, rc_state, "Unable to decrement doca_buf refcount");
+        }
+    } else {
+        PRINT_DOCA_ERR(__log_err, rc_state, "RX Task without doca_buf");
+    }
+
+    doca_task_free(doca_eth_rxq_task_recv_as_doca_task(task_recv));
+}
+
+bool hw_queue_rx::prepare_rq(uint32_t cqn, doca_pe *pe)
 {
     hwqrx_logdbg("");
+
+    doca_dev *dev = m_p_ib_ctx_handler->get_doca_device();
+    doca_devinfo *devinfo = doca_dev_as_devinfo(dev);
+
+    doca_error_t type_supported = doca_eth_rxq_cap_is_type_supported(
+        devinfo, DOCA_ETH_RXQ_TYPE_REGULAR, DOCA_ETH_RXQ_DATA_PATH_TYPE_CPU);
+
+    uint32_t max_burst_size = 0U;
+    uint32_t max_packet_size = 0U;
+    doca_error_t err1 = doca_eth_rxq_cap_get_max_burst_size(devinfo, &max_burst_size);
+    doca_error_t err2 = doca_eth_rxq_cap_get_max_packet_size(devinfo, &max_packet_size);
+
+    if (DOCA_IS_ERROR(type_supported) || DOCA_IS_ERROR(err1) || DOCA_IS_ERROR(err2)) {
+        PRINT_DOCA_ERR(hwqrx_logerr, type_supported, "doca_eth_rxq_cap_is_type_supported");
+        PRINT_DOCA_ERR(hwqrx_logerr, err1, "doca_eth_rxq_cap_get_max_burst_size");
+        PRINT_DOCA_ERR(hwqrx_logerr, err2, "doca_eth_rxq_cap_get_max_packet_size");
+        return false;
+    }
+
+    hwqrx_loginfo("RXQ caps MaxBurstSize %u, MaxPacketSize %u, Dev:%s", max_burst_size,
+                  max_packet_size, m_p_ib_ctx_handler->get_ibname().c_str());
+
+    if (m_rx_num_wr > max_burst_size) {
+        hwqrx_logwarn("Decreasing BurstSize %u to capability %u.", m_rx_num_wr, max_burst_size);
+        m_rx_num_wr = max_burst_size;
+    }
+
+    hwqrx_loginfo("Creating DOCA RXQ MaxBurstSize: %u, MaxPacketSize: %u, Dev:%s", m_rx_num_wr,
+                  max_packet_size, m_p_ib_ctx_handler->get_ibname().c_str());
+
+    doca_eth_rxq *rxq = nullptr;
+    doca_error_t err = doca_eth_rxq_create(dev, m_rx_num_wr, max_packet_size, &rxq);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqrx_logerr, err, "doca_eth_rxq_create");
+        return false;
+    }
+
+    m_doca_rxq.reset(rxq);
+    m_doca_ctx_rxq = doca_eth_rxq_as_doca_ctx(rxq);
+
+    err = doca_ctx_set_user_data(m_doca_ctx_rxq, {.ptr = this});
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqrx_logerr, err, "doca_ctx_set_user_data ctx/hw_queue_rx: %p,%p",
+                       m_doca_ctx_rxq, this);
+        return false;
+    }
+
+    err = doca_eth_rxq_set_type(m_doca_rxq.get(), DOCA_ETH_RXQ_TYPE_REGULAR);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqrx_logerr, err, "doca_eth_rxq_get_type_supported");
+        return false;
+    }
+
+    err = doca_eth_rxq_task_recv_set_conf(m_doca_rxq.get(), task_completion_cb, rx_task_error_cb,
+                                          safe_mce_sys().cq_poll_batch_max);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqrx_logerr, err, "doca_eth_rxq_task_recv_set_conf rxq: %p max-tasks: %u",
+                       m_doca_rxq.get(), safe_mce_sys().cq_poll_batch_max);
+        return false;
+    }
+
+    err = doca_pe_connect_ctx(pe, m_doca_ctx_rxq);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqrx_logerr, err, "doca_pe_connect_ctx pe/ctx: %p,%p", pe, m_doca_ctx_rxq);
+        return false;
+    }
 
     dpcp::adapter *dpcp_adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
     if (!dpcp_adapter) {
@@ -587,6 +749,14 @@ bool hw_queue_rx::prepare_rq(uint32_t cqn)
     }
 
     m_rq = std::move(new_rq);
+
+    m_rq_wqe_idx_to_wrid =
+        (uint64_t *)mmap(nullptr, m_rx_num_wr * sizeof(*m_rq_wqe_idx_to_wrid),
+                         PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    if (m_rq_wqe_idx_to_wrid == MAP_FAILED) {
+        hwqrx_logerr("Failed allocating m_rq_wqe_idx_to_wrid (errno=%d %m)", errno);
+        return false;
+    }
 
     // At this stage there is no TIR associated with the RQ, So it mimics QP INIT state.
     // At RDY state without a TIR, Work Requests can be submitted to the RQ.

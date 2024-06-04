@@ -247,7 +247,6 @@ struct socket_stats_t {
     int fd;
     uint32_t inode;
     uint32_t tcp_state; // enum tcp_state
-    uint32_t n_rx_zcopy_pkt_count;
     pid_t threadid_last_rx;
     pid_t threadid_last_tx;
     uint64_t ring_user_id_rx;
@@ -277,8 +276,7 @@ struct socket_stats_t {
         bound_if = connected_ip = mc_tx_if = ip_address(in6addr_any);
         bound_port = connected_port = (in_port_t)0;
         threadid_last_rx = threadid_last_tx = pid_t(0);
-        n_rx_ready_pkt_count = n_rx_ready_byte_count = n_rx_zcopy_pkt_count =
-            n_tx_ready_byte_count = 0;
+        n_rx_ready_pkt_count = n_rx_ready_byte_count = n_tx_ready_byte_count = 0;
         memset(&counters, 0, sizeof(counters));
 #ifdef DEFINED_UTLS
         tls_tx_offload = tls_rx_offload = false;
@@ -382,6 +380,8 @@ typedef struct {
             uint64_t n_tx_dev_mem_byte_count;
             uint64_t n_tx_dev_mem_oob;
             uint32_t n_tx_dev_mem_allocated;
+            uint32_t n_tx_num_bufs;
+            uint32_t n_zc_num_bufs;
         } simple;
         struct {
             char s_tap_name[IFNAMSIZ];

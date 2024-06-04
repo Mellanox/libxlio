@@ -266,7 +266,7 @@ uint32_t xlio_registrator::register_memory_single(void *data, size_t size,
     lkey = p_ib_ctx_h->mem_reg(data, size, access);
     if (lkey == LKEY_ERROR) {
         __log_info_warn("Failure during memory registration on dev %s addr=%p size=%zu",
-                        p_ib_ctx_h->get_ibname(), data, size);
+                        p_ib_ctx_h->get_ibname().c_str(), data, size);
         __log_info_warn("This might happen due to low MTT entries. "
                         "Please refer to README for more info");
         return LKEY_ERROR;
@@ -274,8 +274,8 @@ uint32_t xlio_registrator::register_memory_single(void *data, size_t size,
 
     m_lkey_map_ib_ctx[p_ib_ctx_h] = lkey;
     errno = 0; // ibv_reg_mr() set errno=12 despite successful returning
-    __log_info_dbg("Registered memory on dev %s addr=%p size=%zu", p_ib_ctx_h->get_ibname(), data,
-                   size);
+    __log_info_dbg("Registered memory on dev %s addr=%p size=%zu", p_ib_ctx_h->get_ibname().c_str(),
+                   data, size);
 
     return lkey;
 }

@@ -42,16 +42,20 @@
 
 class sock_stats {
 public:
+    static void init_instance(size_t max_stats);
+    static void destroy_instance();
     static sock_stats &instance();
-    static thread_local socket_stats_t t_dummy_stats;
 
-    void init_sock_stats(size_t max_stats);
     socket_stats_t *get_stats_obj();
     void return_stats_obj(socket_stats_t *stats);
 
+    static thread_local socket_stats_t t_dummy_stats;
+
 private:
     sock_stats() {}
+    void init_sock_stats(size_t max_stats);
 
+    static sock_stats *s_instance;
     std::mutex _stats_lock;
     socket_stats_t *_socket_stats_list = nullptr;
     std::vector<socket_stats_t> _socket_stats_vec;

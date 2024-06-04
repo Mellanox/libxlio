@@ -59,12 +59,6 @@
 #include <arpa/inet.h>		/* internet address manipulation*/
 #include <netinet/in.h>		/* internet address manipulation*/
 
-
-#define USING_EXTRA_API
-#ifdef  USING_EXTRA_API
-#include <src/core/xlio_extra.h>
-#endif
-
 int prepare_socket(struct sockaddr_in* p_addr);
 
 #define MIN_PAYLOAD_SIZE        	2
@@ -186,11 +180,6 @@ int *pid_arr = NULL;
 fd_set readfds;
 unsigned char *msgbuf = NULL;
 
-#ifdef  USING_EXTRA_API
-unsigned char* pkt_buf = NULL;
-struct xlio_recvfrom_zcopy_packets_t* pkts = NULL;
-#endif
-
 int max_buff_size = 0;
 int xlio_dgram_desc_size = 0;
 unsigned char *pattern = NULL;
@@ -280,10 +269,6 @@ packet_rtt_data *rtt_data = NULL;
 unsigned long long * packet_counter_arr = NULL;
 int min_msg_size = MIN_PAYLOAD_SIZE;
 int max_msg_size = MIN_PAYLOAD_SIZE;
-
-#ifdef  USING_EXTRA_API
-struct xlio_api_t *xlio_api;
-#endif
 
 #define max(x,y)	({typeof(x) _x = (x); typeof(y) _y = (y); (void)(&_x == &_y); _x > _y ? _x : _y; })
 #define min(x,y)	({typeof(x) _x = (x); typeof(y) _y = (y); (void)(&_x == &_y); _x < _y ? _x : _y; })
@@ -380,12 +365,6 @@ void cleanup()
 		free(msgbuf);
 		msgbuf = NULL;
 	}
-#ifdef USING_EXTRA_API
-	if (pkt_buf) {
-		free(pkt_buf);
-		pkt_buf = NULL;
-	}
-#endif
 	if (pattern) {
 		free(pattern);
 		pattern = NULL;
@@ -712,30 +691,7 @@ static inline int check_data_integrity(unsigned char *pattern_buf, size_t buf_si
 		printf("%s\n", rcvd_buf);
 		to_print = 0;
 	}*/
-#ifdef USING_EXTRA_API
-	if (pkts && pkts->n_packet_num > 0) {
-		size_t i, pos, len;
-		struct xlio_recvfrom_zcopy_packet_t *pkt;
 
-		pkt = &pkts->pkts[0];
-		((char*)pkt->iov[0].iov_base)[1] = CLIENT_MASK; /*match to client so data_integrity will pass*/
-
-		pos = 0;
-		for (i = 0; i < pkt->sz_iov; ++i) {
-			len = pkt->iov[i].iov_len;
-			
-			if (buf_size < pos + len ||
-			    memcmp((char*)pkt->iov[i].iov_base, 
-			           (char*)pattern_buf + pos, len)) {
-				return 0;
-			}
-			pos += len;
-		}
-		return pos == buf_size;
-	} else {
-		printf("pkts is NULL\n");
-	}
-#endif
 	msgbuf[1] = CLIENT_MASK; /*match to client so data_integrity will pass*/
 	return !memcmp((char*)msgbuf,(char*)pattern_buf, buf_size);
 
@@ -1020,49 +976,10 @@ void prepare_network(int fd_min, int fd_max, int fd_num,fd_set *p_s_readfds,stru
 
 static inline int msg_recvfrom(int fd, struct sockaddr_in *recvfrom_addr)
 {
-	int ret = 0;
 	socklen_t size = sizeof(struct sockaddr);
 
 	//log_msg("Calling recvfrom with FD %d", fd);
-
-#ifdef  USING_EXTRA_API
-
-	if (user_params.is_xliozcopyread && xlio_api) {
-		int flags = 0;
-
-		// Free previously received zero copied datagram
-		if (pkts) {
-			xlio_api->recvfrom_zcopy_free_packets(fd, pkts->pkts, pkts->n_packet_num);
-			pkts = NULL;
-		}
-
-		// Receive the next datagram with zero copy API
-		ret = xlio_api->recvfrom_zcopy(fd, pkt_buf, max_buff_size,
-		                                  &flags, (struct sockaddr*)recvfrom_addr, &size);
-		if (ret >= 2) {
-			if (flags & MSG_XLIO_ZCOPY) {
-				// zcopy
-				struct xlio_recvfrom_zcopy_packet_t *pkt;
-				
-				pkts = (struct xlio_recvfrom_zcopy_packets_t*)pkt_buf;
-				pkt = &pkts->pkts[0];
-				// copy signature
-				msgbuf[0] = ((uint8_t*)pkt->iov[0].iov_base)[0];
-				msgbuf[1] = ((uint8_t*)pkt->iov[0].iov_base)[1];
-			}
-			else {
-				// copy signature
-				msgbuf[0] = pkt_buf[0];
-				msgbuf[1] = pkt_buf[1];
-			}
-
-		}
-	}
-	else
-#endif
-	{
-		ret = recvfrom(fd, msgbuf, user_params.msg_size, 0, (struct sockaddr*)recvfrom_addr, &size);
-	}
+	int ret = recvfrom(fd, msgbuf, user_params.msg_size, 0, (struct sockaddr*)recvfrom_addr, &size);
 
 	if (ret < 2 && errno != EAGAIN && errno != EINTR) {
 		log_err("recvfrom() Failed receiving on fd[%d]", fd);
@@ -2255,21 +2172,6 @@ int main(int argc, char *argv[])
 		log_msg("Running as daemon");
 	}
 
-	if (user_params.is_xliorxfiltercb || user_params.is_xliozcopyread) {
-#ifdef  USING_EXTRA_API
-		// Get extended API
-		xlio_api = xlio_get_api();
-		if (xlio_api == NULL)
-			log_err("Extra API not found - working with default socket APIs");
-		else
-			log_msg("Extra API found - using XLIO's receive zero copy and packet filter APIs");
-
-		xlio_dgram_desc_size = sizeof(struct xlio_recvfrom_zcopy_packets_t) + sizeof(struct xlio_recvfrom_zcopy_packet_t) + sizeof(struct iovec) * 16;
-#else
-		log_msg("This udp_lat version is not compiled with extra API");
-#endif
-	}
-
 	if (user_params.b_client_calc_details == true) {
 		make_empty_spikes_list();
 		prepare_to_info_mode();
@@ -2319,12 +2221,6 @@ int main(int argc, char *argv[])
 		max_buff_size = max_msg_size + 1;
 	}
 	
-#ifdef  USING_EXTRA_API
-	if (user_params.is_xliozcopyread && xlio_api){
-		   pkt_buf = malloc(max_buff_size);
-	}
-#endif
-
 	msgbuf = malloc(max_buff_size);
 	msgbuf[0] = '$';
 

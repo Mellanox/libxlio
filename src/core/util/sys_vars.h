@@ -469,7 +469,6 @@ public:
     skip_poll_in_rx_t skip_poll_in_rx;
     multilock_t multilock;
 
-    bool enable_socketxtreme;
     option_3::mode_t enable_tso;
     option_3::mode_t enable_lro;
     option_3::mode_t enable_strq_env;
@@ -679,8 +678,7 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_TCP_CC_ALGO      "XLIO_TCP_CC_ALGO"
 #define SYS_VAR_SPEC             "XLIO_SPEC"
 
-#define SYS_VAR_SOCKETXTREME "XLIO_SOCKETXTREME"
-#define SYS_VAR_TSO          "XLIO_TSO"
+#define SYS_VAR_TSO "XLIO_TSO"
 #ifdef DEFINED_UTLS
 #define SYS_VAR_UTLS_RX                        "XLIO_UTLS_RX"
 #define SYS_VAR_UTLS_TX                        "XLIO_UTLS_TX"
@@ -752,7 +750,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_TX_SEGS_POOL_BATCH_TCP   (16384)
 #define MCE_DEFAULT_TX_NUM_SGE               (4)
 
-#define MCE_DEFAULT_STRQ                            (option_3::ON)
+#define MCE_DEFAULT_STRQ                            (option_3::OFF)
 #define MCE_DEFAULT_STRQ_NUM_STRIDES                (16384)
 #define MCE_DEFAULT_STRQ_STRIDE_SIZE_BYTES          (512)
 #define MCE_DEFAULT_STRQ_NUM_BUFS                   (64)
@@ -795,11 +793,11 @@ extern mce_sys_var &safe_mce_sys();
 #endif
 #define MCE_DEFAULT_CQ_MODERATION_COUNT            (48)
 #define MCE_DEFAULT_CQ_MODERATION_PERIOD_USEC      (50)
-#define MCE_DEFAULT_CQ_AIM_MAX_COUNT               (560)
-#define MCE_DEFAULT_CQ_AIM_MAX_PERIOD_USEC         (250)
-#define MCE_DEFAULT_CQ_AIM_INTERVAL_MSEC           (250)
-#define MCE_DEFAULT_CQ_AIM_INTERRUPTS_RATE_PER_SEC (5000)
-#define MCE_DEFAULT_CQ_POLL_BATCH                  (16)
+#define MCE_DEFAULT_CQ_AIM_MAX_COUNT               (500)
+#define MCE_DEFAULT_CQ_AIM_MAX_PERIOD_USEC         (1000)
+#define MCE_DEFAULT_CQ_AIM_INTERVAL_MSEC           (1000)
+#define MCE_DEFAULT_CQ_AIM_INTERRUPTS_RATE_PER_SEC (1000)
+#define MCE_DEFAULT_CQ_POLL_BATCH                  (128)
 #define MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC  (10)
 #define MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX        (10000)
 #define MCE_DEFAULT_CQ_KEEP_QP_FULL                (true)
@@ -860,8 +858,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_CQ_DRAIN_INTERVAL_DISABLED      (0)
 #define MCE_CQ_ADAPTIVE_MODERATION_DISABLED (0)
 #define MCE_MIN_CQ_POLL_BATCH               (1)
-#define MCE_MAX_CQ_POLL_BATCH               (128)
-#define MCE_DEFAULT_SOCKETXTREME            (false)
+#define MCE_MAX_CQ_POLL_BATCH               (32768)
 #define MCE_DEFAULT_TSO                     (option_3::AUTO)
 #define MCE_DEFAULT_MAX_TSO_SIZE            (256 * 1024)
 #ifdef DEFINED_UTLS

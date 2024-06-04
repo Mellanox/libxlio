@@ -136,15 +136,19 @@ void cq_mgr_rx::configure(int cq_size)
 
     cq_logdbg("Created CQ as Rx with fd[%d] and of size %d elements (ibv_cq_hndl=%p)",
               get_channel_fd(), cq_size, m_p_ibv_cq);
+
+    doca_error_t rc = doca_pe_create(&m_doca_pe);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(cq_logerr, rc, "doca_pe_create");
+        throw_xlio_exception("doca_pe_create failed");
+    }
+
+    cq_logdbg("Created DOCA PE %p", m_doca_pe);
 }
 
 cq_mgr_rx::~cq_mgr_rx()
 {
     cq_logdbg("Destroying Rx CQ");
-
-    if (m_rx_buffs_rdy_for_free_head) {
-        reclaim_recv_buffers(m_rx_buffs_rdy_for_free_head);
-    }
 
     m_b_was_drained = true;
     if (m_rx_queue.size() + m_rx_pool.size()) {
@@ -170,6 +174,13 @@ cq_mgr_rx::~cq_mgr_rx()
     xlio_stats_instance_remove_cq_block(m_p_cq_stat);
 
     cq_logdbg("Destroying Rx CQ done");
+
+    if (m_doca_pe) {
+        doca_error_t rc = doca_pe_destroy(m_doca_pe);
+        if (DOCA_IS_ERROR(rc)) {
+            PRINT_DOCA_ERR(cq_logerr, rc, "doca_pe_destroy PE:%p", m_doca_pe);
+        }
+    }
 }
 
 void cq_mgr_rx::statistics_print()
@@ -240,6 +251,65 @@ void cq_mgr_rx::add_hqrx(hw_queue_rx *hqrx_ptr)
               hqrx_ptr->get_rx_max_wr_num() - hqrx_wr_num, hqrx_ptr->get_rx_max_wr_num());
 
     m_debt = 0;
+
+    doca_error_t rc = doca_mmap_create(&temp_doca_mmap);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(cq_logerr, rc, "doca_mmap_create");
+    }
+
+    rc = doca_mmap_set_max_num_devices(temp_doca_mmap, 1U);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(cq_logerr, rc, "doca_mmap_set_max_num_devices");
+    }
+
+    rc = doca_mmap_add_dev(temp_doca_mmap, m_p_ib_ctx_handler->get_doca_device());
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(cq_logerr, rc, "doca_mmap_add_dev");
+    }
+
+    size_t alloc_size = 32 * 16384;
+    xlio_allocator_heap temp_heap(false);
+    void *memptr = temp_heap.alloc(alloc_size);
+
+    rc = doca_mmap_set_memrange(temp_doca_mmap, memptr, 32 * 16384);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(cq_logerr, rc, "doca_mmap_set_memrange");
+    }
+
+    rc = doca_mmap_start(temp_doca_mmap);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(cq_logerr, rc, "doca_mmap_start");
+    }
+
+    rc = doca_buf_inventory_create(32U, &temp_doca_inventory);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(cq_logerr, rc, "doca_buf_inventory_create");
+    }
+
+    rc = doca_buf_inventory_start(temp_doca_inventory);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(cq_logerr, rc, "doca_buf_inventory_start");
+    }
+
+    for (int i = 0; i < 32; ++i) {
+        rc = doca_buf_inventory_buf_get_by_addr(temp_doca_inventory, temp_doca_mmap,
+                                                (uint8_t *)memptr + (i * 16384), 16384,
+                                                temp_doca_bufs + i);
+        if (DOCA_IS_ERROR(rc)) {
+            PRINT_DOCA_ERR(cq_logerr, rc, "doca_buf_inventory_buf_get_by_data");
+        }
+
+        rc = doca_eth_rxq_task_recv_allocate_init(m_hqrx_ptr->m_doca_rxq.get(), {.ptr = nullptr},
+                                                  temp_doca_bufs[i], temp_doca_tasks + i);
+        if (DOCA_IS_ERROR(rc)) {
+            PRINT_DOCA_ERR(cq_logerr, rc, "doca_eth_rxq_task_recv_allocate_init");
+        }
+
+        rc = doca_task_submit(doca_eth_rxq_task_recv_as_doca_task(temp_doca_tasks[i]));
+        if (DOCA_IS_ERROR(rc)) {
+            PRINT_DOCA_ERR(cq_logerr, rc, "doca_eth_rxq_task_recv_as_doca_task");
+        }
+    }
 }
 
 void cq_mgr_rx::del_hqrx(hw_queue_rx *hqrx_ptr)
@@ -346,11 +416,6 @@ mem_buf_desc_t *cq_mgr_rx::cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc, enum b
     /* Assume locked!!! */
     cq_logfuncall("");
 
-    /* we use context to verify that on reclaim rx buffer path we return the buffer to the right CQ
-     */
-    p_mem_buf_desc->rx.is_xlio_thr = false;
-    p_mem_buf_desc->rx.context = nullptr;
-
     if (unlikely(status != BS_OK)) {
         m_p_next_rx_desc_poll = nullptr;
         reclaim_recv_buffer_helper(p_mem_buf_desc);
@@ -380,8 +445,7 @@ bool cq_mgr_rx::compensate_qp_poll_success(mem_buf_desc_t *buff_cur)
         m_hqrx_ptr->post_recv_buffers(&m_rx_pool, buffers);
         m_debt -= buffers;
         m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
-    } else if (m_b_sysvar_cq_keep_qp_full ||
-               m_debt + MCE_MAX_CQ_POLL_BATCH > (int)m_hqrx_ptr->m_rx_num_wr) {
+    } else if (m_b_sysvar_cq_keep_qp_full || m_debt >= (int)m_hqrx_ptr->m_rx_num_wr) {
         m_p_cq_stat->n_rx_pkt_drop++;
         m_hqrx_ptr->post_recv_buffer(buff_cur);
         --m_debt;
@@ -441,10 +505,6 @@ void cq_mgr_rx::mem_buf_desc_return_to_owner(mem_buf_desc_t *p_mem_buf_desc,
 
 bool cq_mgr_rx::reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst)
 {
-    if (m_rx_buffs_rdy_for_free_head) {
-        reclaim_recv_buffer_helper(m_rx_buffs_rdy_for_free_head);
-        m_rx_buffs_rdy_for_free_head = m_rx_buffs_rdy_for_free_tail = nullptr;
-    }
     reclaim_recv_buffer_helper(rx_reuse_lst);
     return_extra_buffers();
 
@@ -458,29 +518,6 @@ bool cq_mgr_rx::reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst)
         return true;
     }
     return false;
-}
-
-int cq_mgr_rx::reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse)
-{
-    int ret_val = 0;
-
-    ret_val = rx_reuse->lwip_pbuf_dec_ref_count();
-    if ((ret_val == 0) && (rx_reuse->get_ref_count() <= 0)) {
-        /*if ((safe_mce_sys().thread_mode > THREAD_MODE_SINGLE)) {
-         m_lock_ring_rx.lock();
-        }*/
-        if (!m_rx_buffs_rdy_for_free_head) {
-            m_rx_buffs_rdy_for_free_head = m_rx_buffs_rdy_for_free_tail = rx_reuse;
-        } else {
-            m_rx_buffs_rdy_for_free_tail->p_next_desc = rx_reuse;
-            m_rx_buffs_rdy_for_free_tail = rx_reuse;
-        }
-        m_rx_buffs_rdy_for_free_tail->p_next_desc = nullptr;
-        /*if ((safe_mce_sys().thread_mode > THREAD_MODE_SINGLE)) {
-            m_lock_ring_rx.lock();
-        }*/
-    }
-    return ret_val;
 }
 
 bool cq_mgr_rx::reclaim_recv_buffers(descq_t *rx_reuse)

@@ -245,6 +245,7 @@ public:
     int global_ring_request_notification(uint64_t poll_sn_rx, uint64_t poll_sn_tx);
     int ring_drain_and_proccess();
     void ring_adapt_cq_moderation();
+    void ring_clear_all_rfs();
     L2_address *get_l2_address() { return m_p_L2_addr; };
     L2_address *get_br_address() { return m_p_br_addr; };
     inline bond_type get_is_bond() { return m_bond; }
