@@ -257,36 +257,9 @@ void cq_mgr_rx::add_hqrx(hw_queue_rx *hqrx_ptr)
 
     m_debt = 0;
 
-    /*doca_error_t rc = doca_mmap_create(&temp_doca_mmap);
-    if (DOCA_IS_ERROR(rc)) {
-        PRINT_DOCA_ERR(cq_logerr, rc, "doca_mmap_create");
-    }
-
-    rc = doca_mmap_set_max_num_devices(temp_doca_mmap, 1U);
-    if (DOCA_IS_ERROR(rc)) {
-        PRINT_DOCA_ERR(cq_logerr, rc, "doca_mmap_set_max_num_devices");
-    }
-
-    rc = doca_mmap_add_dev(temp_doca_mmap, m_p_ib_ctx_handler->get_doca_device());
-    if (DOCA_IS_ERROR(rc)) {
-        PRINT_DOCA_ERR(cq_logerr, rc, "doca_mmap_add_dev");
-    }
-
-    size_t alloc_size = 32 * 16384;
-    xlio_allocator_heap temp_heap(false);
-    void *memptr = temp_heap.alloc(alloc_size);
-
-    rc = doca_mmap_set_memrange(temp_doca_mmap, memptr, 32 * 16384);
-    if (DOCA_IS_ERROR(rc)) {
-        PRINT_DOCA_ERR(cq_logerr, rc, "doca_mmap_set_memrange");
-    }
-
-    rc = doca_mmap_start(temp_doca_mmap);
-    if (DOCA_IS_ERROR(rc)) {
-        PRINT_DOCA_ERR(cq_logerr, rc, "doca_mmap_start");
-    }
-
-    rc = doca_buf_inventory_create(32U, &temp_doca_inventory);
+    /*
+    g_buffer_pool_rx_rwqe->get_buffers_thread_safe(temp_desc_list, m_p_ring, 32, m_rx_lkey);
+    doca_error_t rc = doca_buf_inventory_create(32U, &temp_doca_inventory);
     if (DOCA_IS_ERROR(rc)) {
         PRINT_DOCA_ERR(cq_logerr, rc, "doca_buf_inventory_create");
     }
@@ -297,8 +270,9 @@ void cq_mgr_rx::add_hqrx(hw_queue_rx *hqrx_ptr)
     }
 
     for (int i = 0; i < 32; ++i) {
-        rc = doca_buf_inventory_buf_get_by_addr(temp_doca_inventory, temp_doca_mmap,
-                                                (uint8_t *)memptr + (i * 16384), 16384,
+        mem_buf_desc_t *mem_buf = temp_desc_list.get_and_pop_front();
+        rc = doca_buf_inventory_buf_get_by_addr(temp_doca_inventory, m_p_doca_mmap,
+                                                mem_buf->p_buffer, mem_buf->sz_buffer,
                                                 temp_doca_bufs + i);
         if (DOCA_IS_ERROR(rc)) {
             PRINT_DOCA_ERR(cq_logerr, rc, "doca_buf_inventory_buf_get_by_data");

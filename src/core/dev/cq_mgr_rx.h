@@ -77,7 +77,6 @@ class cq_mgr_rx {
 
 public:
     doca_buf_inventory *temp_doca_inventory = nullptr;
-    doca_mmap *temp_doca_mmap = nullptr;
     doca_buf *temp_doca_bufs[32];
     doca_eth_rxq_task_recv *temp_doca_tasks[32];
 
