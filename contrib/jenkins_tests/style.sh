@@ -17,6 +17,12 @@ if [ $(command -v $test_app >/dev/null 2>&1 || echo $?) ]; then
     exit 1
 fi
 
+# Report system / software versions
+echo 'System information:'
+cat /etc/os-release
+echo 'clang-format version:'
+$test_app --version
+
 style_tap=${WORKSPACE}/${prefix}/style_test.tap
 rm -rf $style_tap
 ln -sf $WORKSPACE/contrib/jenkins_tests/style.conf $WORKSPACE/.clang-format
