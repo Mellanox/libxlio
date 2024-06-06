@@ -1042,6 +1042,8 @@ void mce_sys_var::get_env_params()
 
 #ifdef DEFINED_NGINX
     case MCE_SPEC_NGINX:
+        ring_allocation_logic_tx = RING_LOGIC_PER_INTERFACE;
+        ring_allocation_logic_rx = RING_LOGIC_PER_INTERFACE;
         memory_limit = (app.workers_num > 16 ? 3072LU : 4096LU) * 1024 * 1024;
         memory_limit *= std::max(app.workers_num, 1);
         rx_bufs_batch = 8; // MCE_DEFAULT_RX_BUFS_BATCH (64), RX buffers batch size.
@@ -1081,6 +1083,8 @@ void mce_sys_var::get_env_params()
         break;
 
     case MCE_SPEC_NGINX_DPU:
+        ring_allocation_logic_tx = RING_LOGIC_PER_INTERFACE;
+        ring_allocation_logic_rx = RING_LOGIC_PER_INTERFACE;
         // The top part is different from NGINX SPEC
         memory_limit = (app.workers_num == 16 ? 512LU : 1024LU) * 1024 * 1024;
         memory_limit *= std::max(app.workers_num, 1);
