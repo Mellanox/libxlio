@@ -81,8 +81,8 @@ public:
 class ring_allocation_logic {
 protected:
     ring_allocation_logic();
-    ring_allocation_logic(ring_logic_t ring_allocation_logic, int ring_migration_ratio,
-                          source_t source, resource_allocation_key &ring_profile);
+    ring_allocation_logic(int ring_migration_ratio, source_t source,
+                          const resource_allocation_key &ring_profile);
 
     void debug_print_type(const char *type);
 
@@ -121,8 +121,7 @@ public:
         debug_print_type("Rx");
     }
     ring_allocation_logic_rx(source_t source, resource_allocation_key &ring_profile)
-        : ring_allocation_logic(safe_mce_sys().ring_allocation_logic_rx,
-                                safe_mce_sys().ring_migration_ratio_rx, source, ring_profile)
+        : ring_allocation_logic(safe_mce_sys().ring_migration_ratio_rx, source, ring_profile)
     {
         debug_print_type("Rx");
     }
@@ -136,8 +135,7 @@ public:
         debug_print_type("Tx");
     }
     ring_allocation_logic_tx(source_t source, resource_allocation_key &ring_profile)
-        : ring_allocation_logic(safe_mce_sys().ring_allocation_logic_tx,
-                                safe_mce_sys().ring_migration_ratio_tx, source, ring_profile)
+        : ring_allocation_logic(safe_mce_sys().ring_migration_ratio_tx, source, ring_profile)
     {
         debug_print_type("Tx");
     }
