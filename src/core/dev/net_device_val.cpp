@@ -70,8 +70,9 @@
 #define nd_logfunc    __log_info_func
 #define nd_logfuncall __log_info_funcall
 
+// The value given in this constructor is later always overriden
 ring_alloc_logic_attr::ring_alloc_logic_attr()
-    : m_ring_alloc_logic(RING_LOGIC_PER_INTERFACE)
+    : m_ring_alloc_logic(RING_LOGIC_PER_THREAD)
     , m_use_locks(true)
     , m_user_id_key(0)
 {
