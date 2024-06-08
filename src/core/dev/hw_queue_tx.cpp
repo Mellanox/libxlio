@@ -587,11 +587,8 @@ inline int hw_queue_tx::fill_inl_segment(sg_array &sga, uint8_t *cur_seg, uint8_
     return wqe_inline_size;
 }
 
-//! Fill WQE dynamically, based on amount of free WQEBB in SQ
-inline int hw_queue_tx::fill_wqe(xlio_ibv_send_wr *pswr)
+inline int hw_queue_tx::fill_wqe_inline(xlio_ibv_send_wr *pswr)
 {
-    // control segment is mostly filled by preset after previous packet
-    // we always inline ETH header
     sg_array sga(pswr->sg_list, pswr->num_sge);
     uint8_t *cur_seg = (uint8_t *)m_sq_wqe_hot + sizeof(struct mlx5_wqe_ctrl_seg);
     int inline_len = MLX5_ETH_INLINE_HEADER_SIZE;
@@ -599,111 +596,109 @@ inline int hw_queue_tx::fill_wqe(xlio_ibv_send_wr *pswr)
     int wqe_size = sizeof(struct mlx5_wqe_ctrl_seg) / OCTOWORD;
     int max_inline_len = get_max_inline_data();
 
-    // assume packet is full inline
-    if (data_len <= max_inline_len && xlio_send_wr_opcode(*pswr) == XLIO_IBV_WR_SEND) {
-        uint8_t *data_addr = sga.get_data(&inline_len); // data for inlining in ETH header
+    uint8_t *data_addr = sga.get_data(&inline_len); // data for inlining in ETH header
+    data_len -= inline_len;
+    hwqtx_logfunc(
+        "wqe_hot:%p num_sge: %d data_addr: %p data_len: %d max_inline_len: %d inline_len: %d",
+        m_sq_wqe_hot, pswr->num_sge, data_addr, data_len, max_inline_len, inline_len);
+
+    // Fill Ethernet segment with header inline, static data
+    // were populated in preset after previous packet send
+    memcpy(cur_seg + offsetof(struct mlx5_wqe_eth_seg, inline_hdr_start), data_addr,
+           MLX5_ETH_INLINE_HEADER_SIZE);
+    cur_seg += sizeof(struct mlx5_wqe_eth_seg);
+    wqe_size += sizeof(struct mlx5_wqe_eth_seg) / OCTOWORD;
+
+    max_inline_len = data_len;
+    // Filling inline data segment
+    // size of BlueFlame buffer is 4*WQEBBs, 3*OCTOWORDS of the first
+    // was allocated for control and ethernet segment so we have 3*WQEBB+16-4
+    int rest_space = std::min((int)(m_sq_wqes_end - cur_seg - 4), (3 * WQEBB + OCTOWORD - 4));
+    // Filling till the end of inline WQE segment or
+    // to end of WQEs
+    if (likely(max_inline_len <= rest_space)) {
+        inline_len = max_inline_len;
+        hwqtx_logfunc("data_addr:%p cur_seg: %p rest_space: %d inline_len: %d wqe_size: %d",
+                      data_addr, cur_seg, rest_space, inline_len, wqe_size);
+        // bypass inline size and fill inline data segment
+        data_addr = sga.get_data(&inline_len);
+        inline_len = fill_inl_segment(sga, cur_seg + 4, data_addr, max_inline_len, inline_len);
+
+        // store inline data size and mark the data as inlined
+        *(uint32_t *)((uint8_t *)m_sq_wqe_hot + sizeof(struct mlx5_wqe_ctrl_seg) +
+                      sizeof(struct mlx5_wqe_eth_seg)) = htonl(0x80000000 | inline_len);
+        rest_space = align_to_octoword_up(inline_len + 4); // align to OCTOWORDs
+        wqe_size += rest_space / OCTOWORD;
+        // assert((data_len-inline_len)==0);
+        // configuring control
+        m_sq_wqe_hot->ctrl.data[1] = htonl((m_mlx5_qp.qpn << 8) | wqe_size);
+        rest_space = align_to_WQEBB_up(wqe_size) / 4;
+        hwqtx_logfunc("data_len: %d inline_len: %d wqe_size: %d wqebbs: %d", data_len - inline_len,
+                      inline_len, wqe_size, rest_space);
+        ring_doorbell(rest_space);
+        return rest_space;
+    } else {
+        // wrap around case, first filling till the end of m_sq_wqes
+        int wrap_up_size = max_inline_len - rest_space;
+        inline_len = rest_space;
+        hwqtx_logfunc("WRAP_UP_SIZE: %d data_addr:%p cur_seg: %p rest_space: %d inline_len: %d "
+                      "wqe_size: %d",
+                      wrap_up_size, data_addr, cur_seg, rest_space, inline_len, wqe_size);
+
+        data_addr = sga.get_data(&inline_len);
+        inline_len = fill_inl_segment(sga, cur_seg + 4, data_addr, rest_space, inline_len);
         data_len -= inline_len;
-        hwqtx_logfunc(
-            "wqe_hot:%p num_sge: %d data_addr: %p data_len: %d max_inline_len: %d inline_len: %d",
-            m_sq_wqe_hot, pswr->num_sge, data_addr, data_len, max_inline_len, inline_len);
+        rest_space = align_to_octoword_up(inline_len + 4);
+        wqe_size += rest_space / OCTOWORD;
+        rest_space = align_to_WQEBB_up(rest_space / OCTOWORD) / 4; // size of 1st chunk at the end
 
-        // Fill Ethernet segment with header inline, static data
-        // were populated in preset after previous packet send
-        memcpy(cur_seg + offsetof(struct mlx5_wqe_eth_seg, inline_hdr_start), data_addr,
-               MLX5_ETH_INLINE_HEADER_SIZE);
-        cur_seg += sizeof(struct mlx5_wqe_eth_seg);
-        wqe_size += sizeof(struct mlx5_wqe_eth_seg) / OCTOWORD;
+        hwqtx_logfunc("END chunk data_addr: %p data_len: %d inline_len: %d wqe_size: %d wqebbs: %d",
+                      data_addr, data_len, inline_len, wqe_size, rest_space);
+        // Wrap around
+        //
+        cur_seg = (uint8_t *)m_sq_wqes;
+        data_addr = sga.get_data(&wrap_up_size);
 
-        max_inline_len = data_len;
-        // Filling inline data segment
-        // size of BlueFlame buffer is 4*WQEBBs, 3*OCTOWORDS of the first
-        // was allocated for control and ethernet segment so we have 3*WQEBB+16-4
-        int rest_space = std::min((int)(m_sq_wqes_end - cur_seg - 4), (3 * WQEBB + OCTOWORD - 4));
-        // Filling till the end of inline WQE segment or
-        // to end of WQEs
-        if (likely(max_inline_len <= rest_space)) {
-            inline_len = max_inline_len;
-            hwqtx_logfunc("data_addr:%p cur_seg: %p rest_space: %d inline_len: %d wqe_size: %d",
-                          data_addr, cur_seg, rest_space, inline_len, wqe_size);
-            // bypass inline size and fill inline data segment
-            data_addr = sga.get_data(&inline_len);
-            inline_len = fill_inl_segment(sga, cur_seg + 4, data_addr, max_inline_len, inline_len);
+        wrap_up_size = fill_inl_segment(sga, cur_seg, data_addr, data_len, wrap_up_size);
+        inline_len += wrap_up_size;
+        max_inline_len = align_to_octoword_up(wrap_up_size);
+        wqe_size += max_inline_len / OCTOWORD;
+        max_inline_len = align_to_WQEBB_up(max_inline_len / OCTOWORD) / 4;
+        // store inline data size
+        *(uint32_t *)((uint8_t *)m_sq_wqe_hot + sizeof(struct mlx5_wqe_ctrl_seg) +
+                      sizeof(struct mlx5_wqe_eth_seg)) = htonl(0x80000000 | inline_len);
+        hwqtx_logfunc("BEGIN_CHUNK data_addr: %p data_len: %d wqe_size: %d inline_len: %d "
+                      "end_wqebbs: %d wqebbs: %d",
+                      data_addr, data_len - wrap_up_size, wqe_size, inline_len + wrap_up_size,
+                      rest_space, max_inline_len);
+        // assert((data_len-wrap_up_size)==0);
+        // configuring control
+        m_sq_wqe_hot->ctrl.data[1] = htonl((m_mlx5_qp.qpn << 8) | wqe_size);
 
-            // store inline data size and mark the data as inlined
-            *(uint32_t *)((uint8_t *)m_sq_wqe_hot + sizeof(struct mlx5_wqe_ctrl_seg) +
-                          sizeof(struct mlx5_wqe_eth_seg)) = htonl(0x80000000 | inline_len);
-            rest_space = align_to_octoword_up(inline_len + 4); // align to OCTOWORDs
-            wqe_size += rest_space / OCTOWORD;
-            // assert((data_len-inline_len)==0);
-            // configuring control
-            m_sq_wqe_hot->ctrl.data[1] = htonl((m_mlx5_qp.qpn << 8) | wqe_size);
-            rest_space = align_to_WQEBB_up(wqe_size) / 4;
-            hwqtx_logfunc("data_len: %d inline_len: %d wqe_size: %d wqebbs: %d",
-                          data_len - inline_len, inline_len, wqe_size, rest_space);
-            ring_doorbell(rest_space);
-            return rest_space;
-        } else {
-            // wrap around case, first filling till the end of m_sq_wqes
-            int wrap_up_size = max_inline_len - rest_space;
-            inline_len = rest_space;
-            hwqtx_logfunc("WRAP_UP_SIZE: %d data_addr:%p cur_seg: %p rest_space: %d inline_len: %d "
-                          "wqe_size: %d",
-                          wrap_up_size, data_addr, cur_seg, rest_space, inline_len, wqe_size);
+        dbg_dump_wqe((uint32_t *)m_sq_wqe_hot, rest_space * 4 * 16);
+        dbg_dump_wqe((uint32_t *)m_sq_wqes, max_inline_len * 4 * 16);
 
-            data_addr = sga.get_data(&inline_len);
-            inline_len = fill_inl_segment(sga, cur_seg + 4, data_addr, rest_space, inline_len);
-            data_len -= inline_len;
-            rest_space = align_to_octoword_up(inline_len + 4);
-            wqe_size += rest_space / OCTOWORD;
-            rest_space =
-                align_to_WQEBB_up(rest_space / OCTOWORD) / 4; // size of 1st chunk at the end
+        ring_doorbell(rest_space + max_inline_len);
+        return rest_space + max_inline_len;
+    }
+}
 
-            hwqtx_logfunc(
-                "END chunk data_addr: %p data_len: %d inline_len: %d wqe_size: %d wqebbs: %d",
-                data_addr, data_len, inline_len, wqe_size, rest_space);
-            // Wrap around
-            //
-            cur_seg = (uint8_t *)m_sq_wqes;
-            data_addr = sga.get_data(&wrap_up_size);
-
-            wrap_up_size = fill_inl_segment(sga, cur_seg, data_addr, data_len, wrap_up_size);
-            inline_len += wrap_up_size;
-            max_inline_len = align_to_octoword_up(wrap_up_size);
-            wqe_size += max_inline_len / OCTOWORD;
-            max_inline_len = align_to_WQEBB_up(max_inline_len / OCTOWORD) / 4;
-            // store inline data size
-            *(uint32_t *)((uint8_t *)m_sq_wqe_hot + sizeof(struct mlx5_wqe_ctrl_seg) +
-                          sizeof(struct mlx5_wqe_eth_seg)) = htonl(0x80000000 | inline_len);
-            hwqtx_logfunc("BEGIN_CHUNK data_addr: %p data_len: %d wqe_size: %d inline_len: %d "
-                          "end_wqebbs: %d wqebbs: %d",
-                          data_addr, data_len - wrap_up_size, wqe_size, inline_len + wrap_up_size,
-                          rest_space, max_inline_len);
-            // assert((data_len-wrap_up_size)==0);
-            // configuring control
-            m_sq_wqe_hot->ctrl.data[1] = htonl((m_mlx5_qp.qpn << 8) | wqe_size);
-
-            dbg_dump_wqe((uint32_t *)m_sq_wqe_hot, rest_space * 4 * 16);
-            dbg_dump_wqe((uint32_t *)m_sq_wqes, max_inline_len * 4 * 16);
-
-            ring_doorbell(rest_space + max_inline_len);
-            return rest_space + max_inline_len;
-        }
+//! Fill WQE dynamically, based on amount of free WQEBB in SQ
+inline int hw_queue_tx::fill_wqe(xlio_ibv_send_wr *pswr)
+{
+    if (pswr->num_sge == 1 && pswr->sg_list[0].length <= get_max_inline_data() &&
+        xlio_send_wr_opcode(*pswr) == XLIO_IBV_WR_SEND) {
+        // Packet is fully inline
+        return fill_wqe_inline(pswr);
     } else {
         if (xlio_send_wr_opcode(*pswr) == XLIO_IBV_WR_SEND) {
-            /* data is bigger than max to inline we inlined only ETH header + uint from IP (18
-             * bytes) the rest will be in data pointer segment adding data seg with pointer if there
-             * still data to transfer
-             */
-            wqe_size = fill_wqe_send(pswr);
-            return wqe_size;
+            // Data is bigger than max to inline
+            return fill_wqe_send(pswr);
         } else {
-            /* Support XLIO_IBV_WR_SEND_TSO operation
-             */
-            wqe_size = fill_wqe_lso(pswr);
-            return wqe_size;
+            // Support XLIO_IBV_WR_SEND_TSO operation
+            return fill_wqe_lso(pswr);
         }
     }
-    return 1;
 }
 
 inline int hw_queue_tx::fill_wqe_send(xlio_ibv_send_wr *pswr)

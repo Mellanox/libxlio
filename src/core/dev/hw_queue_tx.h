@@ -260,6 +260,7 @@ private:
 
     inline void store_current_wqe_prop(mem_buf_desc_t *wr_id, unsigned credits, xlio_ti *ti);
     inline int fill_wqe(xlio_ibv_send_wr *p_send_wqe);
+    inline int fill_wqe_inline(xlio_ibv_send_wr *pswr);
     inline int fill_wqe_send(xlio_ibv_send_wr *pswr);
     inline int fill_wqe_lso(xlio_ibv_send_wr *pswr);
     inline int fill_inl_segment(sg_array &sga, uint8_t *cur_seg, uint8_t *data_addr,
