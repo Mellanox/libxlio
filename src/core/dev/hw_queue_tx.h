@@ -230,7 +230,7 @@ private:
     void put_tls_tis_in_cache(xlio_tis *tis);
 
     void send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, bool request_comp,
-                      xlio_tis *tis, unsigned credits);
+                      bool skip_db, xlio_tis *tis, unsigned credits);
 
     void set_unsignaled_count(void) { m_n_unsignaled_count = m_n_sysvar_tx_num_wr_to_signal - 1; }
 
@@ -281,7 +281,7 @@ private:
     inline int fill_wqe_lso(xlio_ibv_send_wr *pswr);
     inline int fill_inl_segment(sg_array &sga, uint8_t *cur_seg, uint8_t *data_addr,
                                 int max_inline_len, int inline_len);
-    inline void ring_doorbell(int num_wqebb, bool skip_comp = false);
+    inline void ring_doorbell(int num_wqebb, bool skip_comp = false, bool skip_db = false);
 
     struct xlio_rate_limit_t m_rate_limit;
     xlio_ib_mlx5_qp_t m_mlx5_qp;

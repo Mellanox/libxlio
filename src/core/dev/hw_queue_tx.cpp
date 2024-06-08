@@ -356,10 +356,11 @@ void hw_queue_tx::send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr 
      *   signal for such work requests.
      */
     bool request_comp = (p_mem_buf_desc->m_flags & mem_buf_desc_t::URGENT);
+    bool skip_db = !request_comp && (p_mem_buf_desc->lwip_pbuf.desc.attr == PBUF_DESC_EXPRESS);
 
     hwqtx_logfunc("VERBS send, unsignaled_count: %d", m_n_unsignaled_count);
 
-    send_to_wire(p_send_wqe, attr, request_comp, tis, credits);
+    send_to_wire(p_send_wqe, attr, request_comp, skip_db, tis, credits);
 
     if (request_comp || is_signal_requested_for_last_wqe()) {
         uint64_t dummy_poll_sn = 0;
@@ -511,7 +512,8 @@ cq_mgr_tx *hw_queue_tx::init_tx_cq_mgr()
                          m_p_ring->get_tx_comp_event_channel());
 }
 
-inline void hw_queue_tx::ring_doorbell(int num_wqebb, bool skip_comp /*=false*/)
+inline void hw_queue_tx::ring_doorbell(int num_wqebb, bool skip_comp /*=false*/,
+                                       bool skip_db /*=false*/)
 {
     uint64_t *dst = (uint64_t *)m_mlx5_qp.bf.reg;
     uint64_t *src = reinterpret_cast<uint64_t *>(m_sq_wqe_last);
@@ -520,7 +522,8 @@ inline void hw_queue_tx::ring_doorbell(int num_wqebb, bool skip_comp /*=false*/)
     /* TODO Refactor m_n_unsignedled_count, is_completion_need(), set_unsignaled_count():
      * Some logic is hidden inside the methods and in one branch the field is changed directly.
      */
-    if (!skip_comp && is_completion_need()) {
+    if (is_completion_need() && !skip_comp) {
+        skip_db = false; // Follow the TX completion batching scheme
         ctrl->fm_ce_se |= MLX5_WQE_CTRL_CQ_UPDATE;
     }
     if (ctrl->fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE) {
@@ -535,20 +538,23 @@ inline void hw_queue_tx::ring_doorbell(int num_wqebb, bool skip_comp /*=false*/)
 
     m_sq_wqe_counter = (m_sq_wqe_counter + num_wqebb) & 0xFFFF;
 
-    // Make sure that descriptors are written before
-    // updating doorbell record and ringing the doorbell
-    wmb();
-    *m_mlx5_qp.sq.dbrec = htonl(m_sq_wqe_counter);
+    m_b_db_needed = skip_db;
+    if (!skip_db) {
+        /* Make sure that descriptors are written before updating doorbell record and
+         * ringing the doorbell.
+         */
+        wmb();
+        *m_mlx5_qp.sq.dbrec = htonl(m_sq_wqe_counter);
 
-    // This wc_wmb ensures ordering between DB record and BF copy
-    wc_wmb();
-    *dst = *src;
+        // This wc_wmb ensures ordering between DB record and BF copy.
+        wc_wmb();
+        *dst = *src;
 
-    /* Use wc_wmb() to ensure write combining buffers are flushed out
-     * of the running CPU.
-     * sfence instruction affects only the WC buffers of the CPU that executes it
-     */
-    wc_wmb();
+        /* Use wc_wmb() to ensure write combining buffers are flushed out of the running CPU.
+         * sfence instruction affects only the WC buffers of the CPU that executes it.
+         */
+        wc_wmb();
+    }
 }
 
 inline int hw_queue_tx::fill_inl_segment(sg_array &sga, uint8_t *cur_seg, uint8_t *data_addr,
@@ -619,7 +625,6 @@ inline int hw_queue_tx::fill_wqe_inline(xlio_ibv_send_wr *pswr)
         rest_space = align_to_WQEBB_up(wqe_size) / 4;
         hwqtx_logfunc("data_len: %d inline_len: %d wqe_size: %d wqebbs: %d", data_len - inline_len,
                       inline_len, wqe_size, rest_space);
-        ring_doorbell(rest_space);
         return rest_space;
     } else {
         // wrap around case, first filling till the end of m_sq_wqes
@@ -662,7 +667,6 @@ inline int hw_queue_tx::fill_wqe_inline(xlio_ibv_send_wr *pswr)
         dbg_dump_wqe((uint32_t *)m_sq_wqe_last, rest_space * 4 * 16);
         dbg_dump_wqe((uint32_t *)m_sq_wqes, max_inline_len * 4 * 16);
 
-        ring_doorbell(rest_space + max_inline_len);
         return rest_space + max_inline_len;
     }
 }
@@ -721,7 +725,6 @@ inline int hw_queue_tx::fill_wqe_send(xlio_ibv_send_wr *pswr)
 
     m_sq_wqe_last->ctrl.data[1] = htonl((m_mlx5_qp.qpn << 8) | wqe_size);
     int wqebbs = align_to_WQEBB_up(wqe_size) / 4;
-    ring_doorbell(wqebbs);
 
     return wqebbs;
 }
@@ -794,9 +797,7 @@ inline int hw_queue_tx::fill_wqe_lso(xlio_ibv_send_wr *pswr)
     }
     m_sq_wqe_last->ctrl.data[1] = htonl((m_mlx5_qp.qpn << 8) | wqe_size);
 
-    int wqebbs = align_to_WQEBB_up(wqe_size) / 4;
-    ring_doorbell(wqebbs);
-    return wqebbs;
+    return align_to_WQEBB_up(wqe_size) / 4;
 }
 
 void hw_queue_tx::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits, xlio_ti *ti)
@@ -815,7 +816,7 @@ void hw_queue_tx::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits, 
 
 //! Send one RAW packet
 void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
-                               bool request_comp, xlio_tis *tis, unsigned credits)
+                               bool request_comp, bool skip_db, xlio_tis *tis, unsigned credits)
 {
     struct xlio_mlx5_wqe_ctrl_seg *ctrl;
     struct mlx5_wqe_eth_seg *eseg;
@@ -850,7 +851,7 @@ void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_a
     /* Complete WQE */
     int wqebbs = fill_wqe(p_send_wqe);
     assert(wqebbs > 0 && (unsigned)wqebbs <= credits);
-    NOT_IN_USE(wqebbs);
+    ring_doorbell(wqebbs, false, skip_db);
 
     hwqtx_logfunc(
         "m_sq_wqe_last: %p m_sq_wqe_last_index: %d wqe_counter: %d new_last_index: %d wr_id: %llx",
@@ -1497,7 +1498,7 @@ void hw_queue_tx::trigger_completion_for_all_sent_packets()
 
         send_to_wire(&send_wr,
                      (xlio_wr_tx_packet_attr)(XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM),
-                     true, nullptr, credits);
+                     true, false, nullptr, credits);
     }
 }
 
