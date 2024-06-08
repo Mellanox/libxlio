@@ -91,6 +91,22 @@ public:
     void send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio_tis *tis,
                   unsigned credits);
 
+    void ring_delayed_doorbell()
+    {
+        if (m_b_db_needed) {
+            struct xlio_mlx5_wqe_ctrl_seg *ctrl = &m_sq_wqe_last->ctrl.ctrl;
+            ctrl->fm_ce_se |= MLX5_WQE_CTRL_CQ_UPDATE;
+            m_b_db_needed = false;
+            set_unsignaled_count();
+
+            wmb();
+            *m_mlx5_qp.sq.dbrec = htonl(m_sq_wqe_counter);
+            wc_wmb();
+            *(uint64_t *)m_mlx5_qp.bf.reg = *(uint64_t *)m_sq_wqe_last;
+            wc_wmb();
+        }
+    }
+
     struct ibv_qp *get_ibv_qp() const { return m_mlx5_qp.qp; };
 
     // This function can be replaced with a parameter during ring creation.
@@ -289,6 +305,7 @@ private:
     uint16_t m_sq_wqe_counter = 0U;
     uint8_t m_port_num;
     bool m_b_fence_needed = false;
+    bool m_b_db_needed = false;
     bool m_dm_enabled = false;
     bool m_hw_dummy_send_support = false;
     dm_mgr m_dm_mgr;

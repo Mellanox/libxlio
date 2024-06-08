@@ -607,5 +607,5 @@ extern "C" void xlio_poll_group_flush(xlio_poll_group_t group)
 extern "C" void xlio_socket_flush(xlio_socket_t sock)
 {
     sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
-    si->flush();
+    si->flush(true);
 }

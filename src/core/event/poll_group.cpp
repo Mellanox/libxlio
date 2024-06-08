@@ -139,7 +139,9 @@ void poll_group::flush()
         si->flush();
     }
     m_dirty_sockets.clear();
-    // TODO Ring doorbell and request TX completion.
+    for (ring *rng : m_rings) {
+        rng->ring_delayed_doorbell();
+    }
 }
 
 void poll_group::add_ring(ring *rng, ring_alloc_logic_attr *attr)

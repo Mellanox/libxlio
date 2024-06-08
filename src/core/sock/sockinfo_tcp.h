@@ -413,7 +413,7 @@ public:
     int tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint32_t mkey, unsigned flags,
                        void *opaque_op);
     int tcp_tx_express_inline(const struct iovec *iov, unsigned iov_len, unsigned flags);
-    void flush();
+    void flush(bool force_db = false);
 
     void set_xlio_socket(const struct xlio_socket_attr *attr);
     void add_tx_ring_to_group();

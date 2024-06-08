@@ -5651,7 +5651,6 @@ struct pbuf *sockinfo_tcp::tcp_tx_pbuf_alloc(void *p_conn, pbuf_type type, pbuf_
     }
     if (likely(p_desc) && p_desc->lwip_pbuf.type == PBUF_ZEROCOPY) {
         if (p_desc->lwip_pbuf.desc.attr == PBUF_DESC_EXPRESS) {
-            p_desc->m_flags |= mem_buf_desc_t::URGENT;
             p_desc->m_flags |= mem_buf_desc_t::CALLBACK;
             p_desc->tx.zc.callback = tcp_express_zc_callback;
             if (p_buff) {
@@ -6247,11 +6246,18 @@ int sockinfo_tcp::tcp_tx_express_inline(const struct iovec *iov, unsigned iov_le
     return bytes_written;
 }
 
-void sockinfo_tcp::flush()
+void sockinfo_tcp::flush(bool force_db /*=false*/)
 {
     lock_tcp_con();
     m_b_xlio_socket_dirty = false;
     tcp_output(&m_pcb);
+
+    if (force_db) {
+        ring *tx_ring = get_tx_ring();
+        if (likely(tx_ring)) {
+            tx_ring->ring_delayed_doorbell();
+        }
+    }
     unlock_tcp_con();
 }
 

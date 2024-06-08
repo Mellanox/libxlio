@@ -98,6 +98,13 @@ public:
                           xlio_wr_tx_packet_attr attr) override;
     int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
                          xlio_wr_tx_packet_attr attr, xlio_tis *tis) override;
+
+    void ring_delayed_doorbell() override
+    {
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        m_hqtx->ring_delayed_doorbell();
+    }
+
     void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc) override;
     void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc,
                                               unsigned ref) override;
