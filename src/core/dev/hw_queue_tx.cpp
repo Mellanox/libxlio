@@ -351,15 +351,11 @@ void hw_queue_tx::send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr 
 {
     mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)p_send_wqe->wr_id;
     /* Control tx completions:
-     * - XLIO_TX_WRE_BATCHING - The number of Tx Work Request Elements used
-     *   until a completion signal is requested.
-     * - ZCOPY packets should notify application as soon as possible to
+     * - URGENT packets should notify application as soon as possible to
      *   confirm one that user buffers are free to reuse. So force completion
      *   signal for such work requests.
-     * - First call of send() should do completion. It means that
-     *   m_n_unsignaled_count must be zero for this time.
      */
-    bool request_comp = (p_mem_buf_desc->m_flags & mem_buf_desc_t::ZCOPY);
+    bool request_comp = (p_mem_buf_desc->m_flags & mem_buf_desc_t::URGENT);
 
     hwqtx_logfunc("VERBS send, unsignaled_count: %d", m_n_unsignaled_count);
 

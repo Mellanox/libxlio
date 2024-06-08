@@ -58,7 +58,7 @@ inline static void free_lwip_pbuf(struct pbuf *lwip_pbuf)
         mdesc->put();
     }
 
-    if (p_desc->m_flags & mem_buf_desc_t::ZCOPY) {
+    if (p_desc->m_flags & mem_buf_desc_t::CALLBACK) {
         p_desc->tx.zc.callback(p_desc);
     }
     p_desc->m_flags = 0;

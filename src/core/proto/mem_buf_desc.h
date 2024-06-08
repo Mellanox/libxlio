@@ -65,7 +65,7 @@ struct timestamps_t {
  */
 class mem_buf_desc_t {
 public:
-    enum flags { TYPICAL = 0, CLONED = 0x01, ZCOPY = 0x02 };
+    enum flags { TYPICAL = 0, CLONED = 0x01, URGENT = 0x02, CALLBACK = 0x04 };
 
 public:
     mem_buf_desc_t(uint8_t *buffer, size_t size, pbuf_type type)
