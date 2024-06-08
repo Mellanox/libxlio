@@ -209,7 +209,7 @@ private:
     void init_queue();
     void init_device_memory();
     void trigger_completion_for_all_sent_packets();
-    void update_next_wqe_hot();
+    void update_wqe_last();
     void destroy_tis_cache();
     void put_tls_tis_in_cache(xlio_tis *tis);
 
@@ -277,7 +277,7 @@ private:
     sq_wqe_prop *m_sq_wqe_prop_last = nullptr;
 
     struct mlx5_eth_wqe (*m_sq_wqes)[] = nullptr;
-    struct mlx5_eth_wqe *m_sq_wqe_hot = nullptr;
+    struct mlx5_eth_wqe *m_sq_wqe_last = nullptr;
     uint8_t *m_sq_wqes_end = nullptr;
 
     const uint32_t m_n_sysvar_tx_num_wr_to_signal;
@@ -285,7 +285,7 @@ private:
     unsigned m_sq_wqe_prop_last_signalled = 0U;
     unsigned m_sq_free_credits = 0U;
     uint32_t m_n_unsignaled_count = 0U;
-    int m_sq_wqe_hot_index = 0;
+    int m_sq_wqe_last_index = 0;
     uint16_t m_sq_wqe_counter = 0U;
     uint8_t m_port_num;
     bool m_b_fence_needed = false;
