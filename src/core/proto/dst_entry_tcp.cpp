@@ -406,15 +406,16 @@ mem_buf_desc_t *dst_entry_tcp::get_buffer(pbuf_type type, pbuf_desc *desc,
         }
 
         /* Initialize pbuf description */
-        memset(&p_mem_buf_desc->lwip_pbuf.desc, 0, sizeof(p_mem_buf_desc->lwip_pbuf.desc));
-        p_mem_buf_desc->lwip_pbuf.desc.attr = PBUF_DESC_NONE;
-        if (desc) {
+        if (likely(desc)) {
             memcpy(&p_mem_buf_desc->lwip_pbuf.desc, desc, sizeof(p_mem_buf_desc->lwip_pbuf.desc));
             if (p_mem_buf_desc->lwip_pbuf.desc.attr == PBUF_DESC_MDESC ||
                 p_mem_buf_desc->lwip_pbuf.desc.attr == PBUF_DESC_NVME_TX) {
                 mem_desc *mdesc = (mem_desc *)p_mem_buf_desc->lwip_pbuf.desc.mdesc;
                 mdesc->get();
             }
+        } else {
+            memset(&p_mem_buf_desc->lwip_pbuf.desc, 0, sizeof(p_mem_buf_desc->lwip_pbuf.desc));
+            p_mem_buf_desc->lwip_pbuf.desc.attr = PBUF_DESC_NONE;
         }
     }
 
