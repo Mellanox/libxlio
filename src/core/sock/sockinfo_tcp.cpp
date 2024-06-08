@@ -6218,7 +6218,7 @@ int sockinfo_tcp::tcp_tx_express_inline(const struct iovec *iov, unsigned iov_le
     int bytes_written = 0;
 
     memset(&mdesc, 0, sizeof(mdesc));
-    mdesc.attr = PBUF_DESC_NONE;
+    mdesc.attr = PBUF_DESC_EXPRESS;
 
     lock_tcp_con();
 
@@ -6234,6 +6234,12 @@ int sockinfo_tcp::tcp_tx_express_inline(const struct iovec *iov, unsigned iov_le
         }
     }
     if (!(flags & XLIO_EXPRESS_MSG_MORE)) {
+        /* Force doorbell and TX completion for the last TCP segment. Group level flush is not
+         * mandatory if user uses send level flush.
+         */
+        mem_buf_desc_t *p_desc = reinterpret_cast<mem_buf_desc_t *>(m_pcb.last_unsent->p);
+        p_desc->m_flags |= mem_buf_desc_t::URGENT;
+
         m_b_xlio_socket_dirty = false;
         tcp_output(&m_pcb);
     } else if (m_p_group && !m_b_xlio_socket_dirty) {
