@@ -390,11 +390,6 @@ void ring_simple::create_resources()
 
     init_tx_buffers(RING_TX_BUFS_COMPENSATE);
 
-    if (safe_mce_sys().cq_moderation_enable) {
-        modify_cq_moderation(safe_mce_sys().cq_moderation_period_usec,
-                             safe_mce_sys().cq_moderation_count);
-    }
-
     /* For RoCE LAG device income data is processed by single ring only
      * Consider using ring related slave with lag_tx_port_affinity = 1
      * even if slave is not active
@@ -402,6 +397,11 @@ void ring_simple::create_resources()
     if (p_slave->active || (p_slave->lag_tx_port_affinity == 1)) {
         start_active_queue_tx();
         start_active_queue_rx();
+    }
+
+    if (safe_mce_sys().cq_moderation_enable) {
+        modify_cq_moderation(safe_mce_sys().cq_moderation_period_usec,
+                             safe_mce_sys().cq_moderation_count);
     }
 
     ring_logdbg("new ring_simple() completed");
@@ -1029,7 +1029,11 @@ void ring_simple::modify_cq_moderation(uint32_t period, uint32_t count)
     m_p_ring_stat->simple.n_rx_cq_moderation_count = count;
 
     // todo all cqs or just active? what about HA?
-    priv_ibv_modify_cq_moderation(m_p_cq_mgr_rx->get_ibv_cq_hndl(), period, count);
+    if (!safe_mce_sys().doca_flow) {
+        priv_ibv_modify_cq_moderation(m_p_cq_mgr_rx->get_ibv_cq_hndl(), period, count);
+    } else if (m_hqrx) {
+        m_hqrx->modify_moderation(static_cast<uint16_t>(period), static_cast<uint16_t>(count));
+    }
 }
 
 void ring_simple::adapt_cq_moderation()

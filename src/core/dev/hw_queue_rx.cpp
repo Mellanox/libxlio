@@ -560,6 +560,15 @@ void hw_queue_rx::clear_notification_and_process_element()
     poll_and_process_rx();
 }
 
+void hw_queue_rx::modify_moderation(uint16_t period_usec, uint16_t comp_count)
+{
+    doca_error_t rc =
+        doca_eth_rxq_set_notification_moderation(m_doca_rxq.get(), period_usec, comp_count);
+    if (unlikely(DOCA_IS_ERROR(rc))) {
+        PRINT_DOCA_ERR(hwqrx_logerr, rc, "doca_eth_rxq_set_notification_moderation");
+    }
+}
+
 // DPCP Implementation ---------------------------------------------------
 
 bool hw_queue_rx::configure_rq(ibv_comp_channel *rx_comp_event_channel)
