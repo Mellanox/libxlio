@@ -74,6 +74,7 @@ ib_ctx_handler::ib_ctx_handler(doca_devinfo *devinfo, const char *ibname, ibv_de
     m_ibname = ibname;
 
     open_doca_dev(devinfo);
+    check_doca_dev_caps(devinfo);
 
     m_p_ibv_device = ibvdevice;
 
@@ -190,6 +191,19 @@ void ib_ctx_handler::open_doca_dev(doca_devinfo *devinfo)
     if (DOCA_IS_ERROR(err)) {
         PRINT_DOCA_ERR(ibch_logpanic, err, "doca_dev_open devinfo: %p,%s", devinfo,
                        m_ibname.c_str());
+    }
+}
+
+void ib_ctx_handler::check_doca_dev_caps(doca_devinfo *devinfo)
+{
+    uint8_t temprc = 0U;
+    doca_error_t err = doca_pe_is_set_notification_affinity_supported(devinfo, &temprc);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(ibch_logerr, err,
+                       "doca_pe_is_set_notification_affinity_supported devinfo: %p,%s", devinfo,
+                       m_ibname.c_str());
+    } else {
+        m_notification_affinity_cap = (temprc != 0);
     }
 }
 

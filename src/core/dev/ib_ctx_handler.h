@@ -43,6 +43,7 @@
 #include <mellanox/dpcp.h>
 #include <doca_dev.h>
 #include <doca_flow.h>
+#include <doca_pe.h>
 
 typedef std::unordered_map<uint32_t, struct ibv_mr *> mr_map_lkey_t;
 
@@ -99,6 +100,7 @@ public:
     size_t get_on_device_memory_size() { return m_on_device_memory; }
     bool is_active(int port_num);
     bool is_mlx4() { return is_mlx4(get_ibname().c_str()); }
+    bool is_notification_affinity_supported() const { return m_notification_affinity_cap; }
     static bool is_mlx4(const char *dev) { return strncmp(dev, "mlx4", 4) == 0; }
     virtual void handle_event_ibverbs_cb(void *ev_data, void *ctx);
 
@@ -111,6 +113,7 @@ public:
 
 private:
     void open_doca_dev(doca_devinfo *devinfo);
+    void check_doca_dev_caps(doca_devinfo *devinfo);
     void handle_event_device_fatal();
     doca_error_t start_doca_flow_port();
     doca_error_t create_doca_root_pipe();
@@ -127,6 +130,7 @@ private:
     pacing_caps_t m_pacing_caps;
     size_t m_on_device_memory;
     bool m_removed;
+    bool m_notification_affinity_cap = false;
     lock_spin m_lock_umr;
     time_converter *m_p_ctx_time_converter;
     mr_map_lkey_t m_mr_map_lkey;
