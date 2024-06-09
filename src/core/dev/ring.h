@@ -101,13 +101,12 @@ public:
     }
     virtual int get_tx_channel_fd() const { return -1; }
     virtual bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe) = 0;
-    virtual int request_notification(cq_type_t cq_type, uint64_t poll_sn) = 0;
+    virtual bool request_notification(cq_type_t cq_type) = 0;
     virtual bool reclaim_recv_buffers(descq_t *rx_reuse) = 0;
     virtual bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst) = 0;
     virtual bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *) { return false; }
     virtual int drain_and_proccess() = 0;
-    virtual void wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
-                                                           void *pv_fd_ready_array = nullptr) = 0;
+    virtual void clear_rx_notification() = 0;
     virtual bool poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
                                              void *pv_fd_ready_array = nullptr) = 0;
     virtual int poll_and_process_element_tx(uint64_t *p_cq_poll_sn) = 0;

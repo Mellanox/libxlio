@@ -458,45 +458,27 @@ bool cq_mgr_rx::reclaim_recv_buffers(descq_t *rx_reuse)
     return true;
 }
 
-int cq_mgr_rx::request_notification(uint64_t poll_sn)
+bool cq_mgr_rx::request_notification()
 {
-    int ret = -1;
-
     cq_logfuncall("");
 
-    if ((m_n_global_sn_rx > 0 && poll_sn != m_n_global_sn_rx)) {
-        // The cq_mgr_rx's has receive packets pending processing (or got processed since
-        // cq_poll_sn)
-        cq_logfunc("miss matched poll sn (user=0x%lx, cq=0x%lx)", poll_sn, m_n_cq_poll_sn_rx);
-        return 1;
-    }
-
     if (m_b_notification_armed == false) {
-
         cq_logfunc("arming cq_mgr_rx notification channel");
 
         // Arm the CQ notification channel
         IF_VERBS_FAILURE(xlio_ib_mlx5_req_notify_cq(&m_mlx5_cq, 0))
         {
             cq_logerr("Failure arming the RX notification channel (errno=%d %m)", errno);
+            return false;
         }
-        else
-        {
-            ret = 0;
-            m_b_notification_armed = true;
-        }
+        else { m_b_notification_armed = true; }
         ENDIF_VERBS_FAILURE;
-    } else {
-        // cq_mgr_rx notification channel already armed
-        ret = 0;
     }
 
-    cq_logfuncall("returning with %d", ret);
-    return ret;
+    return true;
 }
 
-void cq_mgr_rx::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
-                                                          void *pv_fd_ready_array)
+void cq_mgr_rx::wait_for_notification()
 {
     cq_logfunc("");
 
@@ -525,10 +507,9 @@ void cq_mgr_rx::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn
 
             // Clear flag
             m_b_notification_armed = false;
-
-            // Now try processing the ready element
-            poll_and_process_element_rx(p_cq_poll_sn, pv_fd_ready_array);
         }
         ENDIF_VERBS_FAILURE;
+    } else {
+        cq_logwarn("notification channel is not armed");
     }
 }

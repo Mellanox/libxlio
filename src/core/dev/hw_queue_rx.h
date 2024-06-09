@@ -72,7 +72,7 @@ public:
     void reclaim_rx_buffer_chain(mem_buf_desc_t *buff_chain);
     void reclaim_rx_buffer_chain_queue(descq_t *buff_list);
     bool request_notification();
-    void clear_notification_and_process_element();
+    void clear_notification();
     doca_notification_handle_t get_notification_handle() const { return m_notification_handle; }
 
     // Post for receive single mem_buf_desc

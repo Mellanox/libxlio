@@ -145,11 +145,8 @@ public:
     bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = nullptr) override;
     /**
      * Arm the event channel(s) assosiated with this sockinfo
-     * Fill the fd_set (p_rxfds) with the correct fd channel values and the p_nfds with the (max_fd
-     * + 1) Fill the p_cq_mgr_fd_map with the pointer to the cq_mgr_rx asosiated with the fd Return
-     * count of channels (fds) that where mapped
      */
-    int rx_request_notification(uint64_t poll_sn);
+    void rx_request_notification();
     /**
      * Process a Tx request, handle all that is needed to send the packet, we might block
      * until the connection info is ready or a tx buffer is releast (if sockinfo::m_b_blocking ==

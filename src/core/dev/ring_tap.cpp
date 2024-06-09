@@ -279,11 +279,6 @@ bool ring_tap::poll_and_process_element_rx(uint64_t *, void *pv_fd_ready_array)
     return (process_element_rx(pv_fd_ready_array) == 0);
 }
 
-void ring_tap::wait_for_notification_and_process_element(uint64_t *, void *pv_fd_ready_array)
-{
-    process_element_rx(pv_fd_ready_array);
-}
-
 int ring_tap::drain_and_proccess()
 {
     return process_element_rx(nullptr);

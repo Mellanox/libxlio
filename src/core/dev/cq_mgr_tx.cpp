@@ -131,41 +131,24 @@ void cq_mgr_tx::del_qp_tx(hw_queue_tx *hqtx_ptr)
     m_hqtx_ptr = nullptr;
 }
 
-int cq_mgr_tx::request_notification(uint64_t poll_sn)
+bool cq_mgr_tx::request_notification()
 {
-    int ret = -1;
-
     cq_logfuncall("");
 
-    if ((m_n_global_sn_tx > 0 && poll_sn != m_n_global_sn_tx)) {
-        // The cq_mgr_tx's has receive packets pending processing (or got processed since
-        // cq_poll_sn)
-        cq_logfunc("miss matched poll sn (user=0x%lx, cq=0x%lx)", poll_sn, m_n_cq_poll_sn_tx);
-        return 1;
-    }
-
     if (m_b_notification_armed == false) {
-
         cq_logfunc("arming cq_mgr_tx notification channel");
 
         // Arm the CQ notification channel
         IF_VERBS_FAILURE(xlio_ib_mlx5_req_notify_cq(&m_mlx5_cq, 0))
         {
             cq_logerr("Failure arming the TX notification channel (errno=%d %m)", errno);
+            return false;
         }
-        else
-        {
-            ret = 0;
-            m_b_notification_armed = true;
-        }
+        else { m_b_notification_armed = true; }
         ENDIF_VERBS_FAILURE;
-    } else {
-        // cq_mgr_tx notification channel already armed
-        ret = 0;
     }
 
-    cq_logfuncall("returning with %d", ret);
-    return ret;
+    return true;
 }
 
 cq_mgr_tx *cq_mgr_tx::get_cq_mgr_from_cq_event(struct ibv_comp_channel *p_cq_channel)

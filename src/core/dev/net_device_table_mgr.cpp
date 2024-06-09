@@ -435,24 +435,22 @@ bool net_device_table_mgr::global_ring_poll_and_process_element(uint64_t *p_poll
     return all_drained;
 }
 
-int net_device_table_mgr::global_ring_request_notification(uint64_t poll_sn_rx, uint64_t poll_sn_tx)
+bool net_device_table_mgr::global_ring_request_notification()
 {
     ndtm_logfunc("");
-    int ret_total = 0;
     net_device_map_index_t::iterator net_dev_iter;
     for (net_dev_iter = m_net_device_map_index.begin();
          m_net_device_map_index.end() != net_dev_iter; net_dev_iter++) {
-        int ret = net_dev_iter->second->global_ring_request_notification(poll_sn_rx, poll_sn_tx);
         BULLSEYE_EXCLUDE_BLOCK_START
-        if (ret < 0) {
+        if (!net_dev_iter->second->global_ring_request_notification()) {
             ndtm_logerr("Error in net_device_val[%p]->request_notification() (errno=%d %m)",
                         net_dev_iter->second, errno);
-            return ret;
+            return false;
         }
         BULLSEYE_EXCLUDE_BLOCK_END
-        ret_total += ret;
     }
-    return ret_total;
+
+    return true;
 }
 
 int net_device_table_mgr::global_ring_epfd_get()
@@ -460,8 +458,7 @@ int net_device_table_mgr::global_ring_epfd_get()
     return m_global_ring_epfd;
 }
 
-void net_device_table_mgr::global_ring_wait_for_notification_and_process_element(
-    uint64_t *p_poll_sn, void *pv_fd_ready_array /*=NULL*/)
+void net_device_table_mgr::global_ring_clear_rx_notification()
 {
     ndtm_logfunc("");
     int max_fd = 16;
@@ -474,12 +471,10 @@ void net_device_table_mgr::global_ring_wait_for_notification_and_process_element
             assert(g_p_fd_collection);
             cq_channel_info *p_cq_ch_info = g_p_fd_collection->get_cq_channel_fd(fd);
             if (p_cq_ch_info) {
-                ring *p_ready_ring = p_cq_ch_info->get_ring();
                 // Handle the CQ notification channel
-                p_ready_ring->wait_for_notification_and_process_element(p_poll_sn,
-                                                                        pv_fd_ready_array);
+                p_cq_ch_info->get_ring()->clear_rx_notification();
             } else {
-                ndtm_logdbg("removing wakeup fd from epfd");
+                ndtm_logdbg("Removing wakeup fd from epfd");
                 BULLSEYE_EXCLUDE_BLOCK_START
                 if ((SYSCALL(epoll_ctl, m_global_ring_epfd, EPOLL_CTL_DEL,
                              m_global_ring_pipe_fds[0], nullptr)) &&

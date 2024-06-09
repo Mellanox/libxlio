@@ -627,7 +627,7 @@ bool epfd_info::ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *
     return all_drained;
 }
 
-int epfd_info::ring_request_notification(uint64_t poll_sn_rx, uint64_t poll_sn_tx)
+bool epfd_info::ring_request_notification()
 {
     __log_func("");
     int ret_total = 0;
@@ -639,67 +639,43 @@ int epfd_info::ring_request_notification(uint64_t poll_sn_rx, uint64_t poll_sn_t
     m_ring_map_lock.lock();
 
     for (ring_map_t::iterator iter = m_ring_map.begin(); iter != m_ring_map.end(); iter++) {
-        int ret = iter->first->request_notification(CQT_RX, poll_sn_rx);
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (ret < 0) {
-            __log_err("Error RX ring[%p]->request_notification() (errno=%d %m)", iter->first,
-                      errno);
+        if (!iter->first->request_notification(CQT_RX)) {
+            __log_err("Error RX ring[%p]->request_notification()", iter->first);
             m_ring_map_lock.unlock();
-            return ret;
+            return false;
         }
-        BULLSEYE_EXCLUDE_BLOCK_END
-        __log_func("ring[%p] RX Returned with: %d (sn=%d)", iter->first, ret, poll_sn_rx);
-        ret_total += ret;
 
-        ret = iter->first->request_notification(CQT_TX, poll_sn_tx);
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (ret < 0) {
-            __log_err("Error TX ring[%p]->request_notification() (errno=%d %m)", iter->first,
-                      errno);
+        if (!iter->first->request_notification(CQT_TX)) {
+            __log_err("Error TX ring[%p]->request_notification()", iter->first);
             m_ring_map_lock.unlock();
-            return ret;
+            return false;
         }
-        BULLSEYE_EXCLUDE_BLOCK_END
-        __log_func("ring[%p] TX Returned with: %d (sn=%d)", iter->first, ret, poll_sn_tx);
-        ret_total += ret;
     }
 
     m_ring_map_lock.unlock();
 
-    return ret_total;
+    return true;
 }
 
-void epfd_info::ring_wait_for_notification_and_process_element(uint64_t *p_poll_sn,
-                                                               void *pv_fd_ready_array /* = NULL*/)
+void epfd_info::ring_clear_rx_notification()
 {
     __log_func("");
-    while (!m_ready_cq_fd_q.empty()) {
+    lock();
 
-        lock();
-        if (m_ready_cq_fd_q.empty()) {
-            unlock();
-            break;
-        }
+    while (!m_ready_cq_fd_q.empty()) {
         int fd = m_ready_cq_fd_q.back();
         m_ready_cq_fd_q.pop_back();
-        unlock();
         assert(g_p_fd_collection);
         cq_channel_info *p_cq_ch_info = g_p_fd_collection->get_cq_channel_fd(fd);
         if (p_cq_ch_info) {
-            ring *p_ready_ring = p_cq_ch_info->get_ring();
             // Handle the CQ notification channel
-            p_ready_ring->wait_for_notification_and_process_element(p_poll_sn, pv_fd_ready_array);
+            p_cq_ch_info->get_ring()->clear_rx_notification();
         } else {
-            __log_dbg("failed to find channel fd. removing cq fd=%d from epfd=%d", fd, m_epfd);
-            BULLSEYE_EXCLUDE_BLOCK_START
-            if ((SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, fd, nullptr)) &&
-                (!(errno == ENOENT || errno == EBADF))) {
-                __log_err("failed to del cq channel fd=%d from os epfd=%d (errno=%d %m)", fd,
-                          m_epfd, errno);
-            }
-            BULLSEYE_EXCLUDE_BLOCK_END
+            __log_warn("Failed to find channel fd. removing cq fd=%d from epfd=%d", fd, m_epfd);
         }
     }
+
+    unlock();
 }
 
 void epfd_info::clean_obj()

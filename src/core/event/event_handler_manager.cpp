@@ -994,12 +994,7 @@ void *event_handler_manager::thread_loop()
             g_p_net_device_table_mgr) {
             g_p_net_device_table_mgr->global_ring_poll_and_process_element(&poll_sn_rx, &poll_sn_tx,
                                                                            nullptr);
-            int ret =
-                g_p_net_device_table_mgr->global_ring_request_notification(poll_sn_rx, poll_sn_tx);
-            if (ret > 0) {
-                g_p_net_device_table_mgr->global_ring_poll_and_process_element(
-                    &poll_sn_rx, &poll_sn_tx, nullptr);
-            }
+            g_p_net_device_table_mgr->global_ring_request_notification();
         }
 
         // Make sure we sleep for a minimum of X milli seconds
@@ -1021,8 +1016,7 @@ void *event_handler_manager::thread_loop()
         for (int idx = 0; (idx < ret) && (m_b_continue_running); ++idx) {
             if (m_b_sysvar_internal_thread_arm_cq_enabled && p_events[idx].data.fd == m_cq_epfd &&
                 g_p_net_device_table_mgr) {
-                g_p_net_device_table_mgr->global_ring_wait_for_notification_and_process_element(
-                    &poll_sn_rx, nullptr);
+                g_p_net_device_table_mgr->global_ring_clear_rx_notification();
             } else if (is_wakeup_fd(p_events[idx].data.fd)) {
                 // A request for registration was sent
                 handle_registered_actions();

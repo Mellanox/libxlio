@@ -100,11 +100,10 @@ public:
     bool handle_epoll_event(bool is_ready, uint32_t events, sockinfo *socket_object, int index);
 
 protected:
+
     virtual bool ring_poll_and_process_element();
-
-    virtual int ring_request_notification();
-
-    virtual void ring_wait_for_notification_and_process_element(void *pv_fd_ready_array);
+    virtual bool ring_request_notification();
+    virtual void ring_clear_rx_notification();
 
 private:
     bool _wait(int timeout);

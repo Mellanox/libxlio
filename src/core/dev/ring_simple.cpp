@@ -407,60 +407,38 @@ void ring_simple::create_resources()
     ring_logdbg("new ring_simple() completed");
 }
 
-int ring_simple::request_notification(cq_type_t cq_type, uint64_t poll_sn)
+bool ring_simple::request_notification(cq_type_t cq_type)
 {
-    if (!safe_mce_sys().doca_rx) {
-        int ret = 1;
-        if (likely(CQT_RX == cq_type)) {
-            m_lock_ring_rx.lock();
-            ret = m_p_cq_mgr_rx->request_notification(poll_sn);
-            ++m_p_ring_stat->simple.n_rx_interrupt_requests;
-            m_lock_ring_rx.unlock();
-        } else {
-            m_lock_ring_tx.lock();
-            ret = m_p_cq_mgr_tx->request_notification(poll_sn);
-            m_lock_ring_tx.unlock();
-        }
-        return ret;
-    }
-
-    bool ret = false;
     if (likely(CQT_RX == cq_type)) {
-        m_lock_ring_rx.lock();
-        ret = m_hqrx->request_notification();
+        std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
         ++m_p_ring_stat->simple.n_rx_interrupt_requests;
-        m_lock_ring_rx.unlock();
-    } else {
-        m_lock_ring_tx.lock();
-        ret = (m_p_cq_mgr_tx->request_notification(poll_sn) >= 0);
-        m_lock_ring_tx.unlock();
+        return (!safe_mce_sys().doca_rx
+            ? m_p_cq_mgr_rx->request_notification()
+            : m_hqrx->request_notification());
     }
 
-    return (ret ? 0 : -1);
+    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+    return m_p_cq_mgr_tx->request_notification();
 }
 
-void ring_simple::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
-                                                            void *pv_fd_ready_array /*NULL*/)
+void ring_simple::clear_rx_notification()
 {
-    m_lock_ring_rx.lock();
-    if (!safe_mce_sys().doca_rx) {
-        m_p_cq_mgr_rx->wait_for_notification_and_process_element(p_cq_poll_sn, pv_fd_ready_array)
-    } else {
-        m_hqrx->clear_notification_and_process_element();
-    }
+    std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
     ++m_p_ring_stat->simple.n_rx_interrupt_received;
-    m_lock_ring_rx.unlock();
+    if (!safe_mce_sys().doca_rx) {
+        m_p_cq_mgr_rx->wait_for_notification();
+    } else {
+        m_hqrx->clear_notification();
+    }
 }
 
 bool ring_simple::poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
                                               void *pv_fd_ready_array /*NULL*/)
 {
-    m_lock_ring_rx.lock();
-    bool ret = (!safe_mce_sys().doca_rx
+    std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
+    return (!safe_mce_sys().doca_rx
         ? m_p_cq_mgr_rx->poll_and_process_element_rx(p_cq_poll_sn, pv_fd_ready_array)
         : m_hqrx->poll_and_process_rx());
-    m_lock_ring_rx.unlock();
-    return ret;
 }
 
 int ring_simple::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
@@ -605,7 +583,7 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
             buff_list = get_tx_buffers(type, n_num_mem_bufs);
             if (!buff_list) {
                 // Arm the CQ event channel for next Tx buffer release (tx cqe)
-                ret = m_p_cq_mgr_tx->request_notification(poll_sn);
+                ret = m_p_cq_mgr_tx->request_notification();
                 if (ret < 0) {
                     // this is most likely due to cq_poll_sn out of sync, need to poll_cq again
                     ring_logdbg("failed arming cq_mgr_tx (hqtx=%p, cq_mgr_tx=%p) (errno=%d %m)",
@@ -800,7 +778,7 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
             m_lock_ring_tx.lock();
 
             // TODO Resolve race window between previous polling and request_notification
-            ret = m_p_cq_mgr_tx->request_notification(poll_sn);
+            ret = m_p_cq_mgr_tx->request_notification();
             if (ret < 0) {
                 // this is most likely due to cq_poll_sn out of sync, need to poll_cq again
                 ring_logdbg("failed arming cq_mgr_tx (hqtx=%p, cq_mgr_tx=%p) (errno=%d %m)", m_hqtx,
@@ -1029,7 +1007,7 @@ void ring_simple::modify_cq_moderation(uint32_t period, uint32_t count)
     m_p_ring_stat->simple.n_rx_cq_moderation_count = count;
 
     // todo all cqs or just active? what about HA?
-    if (!safe_mce_sys().doca_flow) {
+    if (!safe_mce_sys().doca_rx) {
         priv_ibv_modify_cq_moderation(m_p_cq_mgr_rx->get_ibv_cq_hndl(), period, count);
     } else if (m_hqrx) {
         m_hqrx->modify_moderation(static_cast<uint16_t>(period), static_cast<uint16_t>(count));
@@ -1084,49 +1062,45 @@ void ring_simple::adapt_cq_moderation()
 
 void ring_simple::start_active_queue_tx()
 {
-    m_lock_ring_tx.lock();
+    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
     if (!m_up_tx) {
         /* TODO: consider avoid using sleep */
         /* coverity[sleep] */
         m_hqtx->up();
         m_up_tx = true;
     }
-    m_lock_ring_tx.unlock();
 }
 
 void ring_simple::start_active_queue_rx()
 {
-    m_lock_ring_rx.lock();
+    std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
     if (!m_up_rx) {
         /* TODO: consider avoid using sleep */
         /* coverity[sleep] */
         m_hqrx->up();
         m_up_rx = true;
     }
-    m_lock_ring_rx.unlock();
 }
 
 void ring_simple::stop_active_queue_tx()
 {
-    m_lock_ring_tx.lock();
+    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
     if (m_up_tx) {
         m_up_tx = false;
         /* TODO: consider avoid using sleep */
         /* coverity[sleep] */
         m_hqtx->down();
     }
-    m_lock_ring_tx.unlock();
 }
 void ring_simple::stop_active_queue_rx()
 {
-    m_lock_ring_rx.lock();
+    std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
     if (m_up_rx) {
         m_up_rx = false;
         /* TODO: consider avoid using sleep */
         /* coverity[sleep] */
         m_hqrx->down();
     }
-    m_lock_ring_rx.unlock();
 }
 
 bool ring_simple::is_up()
