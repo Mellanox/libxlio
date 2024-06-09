@@ -132,6 +132,9 @@ public:
      */
     void del_tapfd(int fd);
 
+    void set_socket(int fd, sockinfo *si) { m_p_sockfd_map[fd] = si; }
+    void clear_socket(int fd) { m_p_sockfd_map[fd] = nullptr; }
+
     /**
      * Call set_immediate_os_sample of the input fd.
      */
