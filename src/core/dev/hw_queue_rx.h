@@ -87,6 +87,7 @@ public:
     void modify_queue_to_ready_state();
     void modify_queue_to_error_state();
     void release_rx_buffers();
+    void modify_moderation(uint16_t period_usec, uint16_t comp_count);
 
     rfs_rule *create_rfs_rule(doca_flow_match &match_val, doca_flow_match &match_msk,
                               dpcp::match_params &match_value, dpcp::match_params &match_mask,
