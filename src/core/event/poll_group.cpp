@@ -174,10 +174,13 @@ void poll_group::add_ring(ring *rng, ring_alloc_logic_attr *attr)
 void poll_group::add_socket(sockinfo_tcp *si)
 {
     m_sockets_list.push_back(si);
+    // For the flow_tag fast path support.
+    g_p_fd_collection->set_socket(si->get_fd(), si);
 }
 
 void poll_group::close_socket(sockinfo_tcp *si, bool force /*=false*/)
 {
+    g_p_fd_collection->clear_socket(si->get_fd());
     m_sockets_list.erase(si);
 
     bool closed = si->prepare_to_close(force);
