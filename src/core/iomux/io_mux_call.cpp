@@ -258,7 +258,7 @@ bool io_mux_call::handle_os_countdown(int &poll_os_countdown)
             // This will empty the cqepfd
             // (most likely in case of a wakeup and probably only under epoll_wait (Not
             // select/poll))
-            ring_wait_for_notification_and_process_element(nullptr);
+            ring_clear_rx_notification();
         }
         /* Before we exit with ready OS fd's we'll check the CQs once more and exit
          * below after calling check_all_offloaded_sockets();
@@ -267,9 +267,8 @@ bool io_mux_call::handle_os_countdown(int &poll_os_countdown)
          * will delete ready offloaded fds.
          */
         if (m_n_all_ready_fds) {
-            m_p_stats->n_iomux_os_rx_ready +=
-                m_n_all_ready_fds; // TODO: fix it - we only know all counter, not read counter
-            check_all_offloaded_sockets();
+            // TODO: fix it - we only know all counter, not read counter
+            m_p_stats->n_iomux_os_rx_ready += m_n_all_ready_fds;
             return true;
         }
         poll_os_countdown = safe_mce_sys().select_poll_os_ratio - 1;
@@ -388,9 +387,6 @@ void io_mux_call::polling_loops()
 
 void io_mux_call::blocking_loops()
 {
-    fd_array_t fd_ready_array;
-    fd_ready_array.fd_max = FD_ARRAY_MAX;
-
     prepare_to_block();
 
     /*
@@ -403,31 +399,19 @@ void io_mux_call::blocking_loops()
             xlio_throw_object(io_mux_call::io_error);
         }
 
-        int ret = ring_request_notification();
-        __log_func("arming cq with poll_sn=%lx ret=%d", m_poll_sn_rx, ret);
-        if (ret < 0) {
+        __log_func("arming cq with poll_sn=%lx", m_poll_sn_rx);
+        if (!ring_request_notification()) {
             xlio_throw_object(io_mux_call::io_error);
-        } else if (ret > 0) {
-            // Arm failed - process pending wce
-            fd_ready_array.fd_count = 0;
-            check_all_offloaded_sockets();
-        } else /* ret == 0 */ {
+        } else {
             timer_update();
 
-            // This poll attempt is necessary to resolve a race where CQE arrrives
-            // between we checked the CQ is empty but before we requested notification.
-            if (!check_all_offloaded_sockets() || m_n_all_ready_fds) {
-                continue;
-            }
-
+            // arming was successful - block on cq
             __log_func("going to sleep (elapsed time: %d sec, %d usec)", m_elapsed.tv_sec,
                        m_elapsed.tv_usec);
 
             if (wait(m_elapsed)) {
-                fd_ready_array.fd_count = 0;
-                ring_wait_for_notification_and_process_element(&fd_ready_array);
-                // TCP sockets can be accept ready!
                 __log_func("before check_all_offloaded_sockets");
+                ring_clear_rx_notification();
                 check_all_offloaded_sockets();
             } else if (!m_n_all_ready_fds && !is_timeout(m_elapsed)) {
                 __log_func("woke up by wake up mechanism, check current events");
@@ -525,15 +509,14 @@ bool io_mux_call::ring_poll_and_process_element()
                                                                           &m_poll_sn_tx, nullptr);
 }
 
-int io_mux_call::ring_request_notification()
+bool io_mux_call::ring_request_notification()
 {
-    return g_p_net_device_table_mgr->global_ring_request_notification(m_poll_sn_rx, m_poll_sn_tx);
+    return g_p_net_device_table_mgr->global_ring_request_notification();
 }
 
-void io_mux_call::ring_wait_for_notification_and_process_element(void *pv_fd_ready_array)
+void io_mux_call::ring_clear_rx_notification()
 {
-    g_p_net_device_table_mgr->global_ring_wait_for_notification_and_process_element(
-        &m_poll_sn_rx, pv_fd_ready_array);
+    g_p_net_device_table_mgr->global_ring_clear_rx_notification();
 }
 
 bool io_mux_call::is_sig_pending()

@@ -51,8 +51,7 @@ public:
         NOT_IN_USE(p_cq_poll_sn);
         return 0;
     }
-    virtual void wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
-                                                           void *pv_fd_ready_array = nullptr);
+    virtual void clear_rx_notification() {};
     virtual int drain_and_proccess();
     virtual bool reclaim_recv_buffers(descq_t *rx_reuse);
     virtual bool reclaim_recv_buffers(mem_buf_desc_t *buff);
@@ -72,10 +71,9 @@ public:
         NOT_IN_USE(p_send_wqe);
         return false;
     }
-    virtual int request_notification(cq_type_t cq_type, uint64_t poll_sn)
+    virtual bool request_notification(cq_type_t cq_type)
     {
         NOT_IN_USE(cq_type);
-        NOT_IN_USE(poll_sn);
         return 0;
     }
     virtual void adapt_cq_moderation() {}

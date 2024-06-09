@@ -60,13 +60,9 @@ public:
      * Arm the managed CQ's notification channel
      * Calling this more then once without get_event() will return without
      * doing anything (arm flag is changed to true on first call).
-     * This call will also check if a wce was processes between the
-     * last poll and this arm request - if true it will not arm the CQ
-     * @return ==0 cq is armed
-     *         ==1 cq not armed (cq poll_sn out of sync)
-     *         < 0 on error
+     * @return False if error occured.
      */
-    int request_notification(uint64_t poll_sn);
+    bool request_notification();
 
     int poll_and_process_element_tx(uint64_t *p_cq_poll_sn);
 

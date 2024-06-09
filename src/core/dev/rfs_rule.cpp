@@ -99,7 +99,7 @@ bool rfs_rule::create(doca_flow_match &match_val, doca_flow_match &match_msk, ui
                *reinterpret_cast<uint64_t *>(match_value.dst.ipv6),
                *reinterpret_cast<uint64_t *>(match_value.dst_mac));
 
-    if (safe_mce_sys().doca_flow) { // Temporary check
+    if (safe_mce_sys().doca_rx) { // Temporary check
         NOT_IN_USE(match_val);
         NOT_IN_USE(match_msk);
         NOT_IN_USE(rx_queue_id);
