@@ -119,6 +119,9 @@ static int free_libxlio_resources()
 
     g_b_exit = true;
 
+    // Destroy polling groups before fd_collection to clear XLIO sockets from the fd_collection
+    poll_group::destroy_all_groups();
+
     // Triggers connection close, relevant for TCP which may need some time to terminate the
     // connection. and for any socket that may wait from another thread
     if (g_p_fd_collection) {
@@ -145,8 +148,6 @@ static int free_libxlio_resources()
     if (g_p_fd_collection_temp) {
         delete g_p_fd_collection_temp;
     }
-
-    poll_group::destroy_all_groups();
 
     if (g_p_lwip) {
         delete g_p_lwip;
