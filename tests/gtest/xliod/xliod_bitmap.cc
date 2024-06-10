@@ -40,7 +40,8 @@
 
 #include "tools/daemon/bitmap.h"
 
-class xliod_bitmap : public ::testing::Test {};
+class xliod_bitmap : public ::testing::Test {
+};
 
 TEST_F(xliod_bitmap, ti_1)
 {

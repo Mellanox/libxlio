@@ -38,7 +38,8 @@
 #include "src/core/util/sock_addr.h"
 #include "tcp_base.h"
 
-class tcp_accept : public tcp_base {};
+class tcp_accept : public tcp_base {
+};
 
 /**
  * @test tcp_accept.mapped_ipv4_accept

@@ -37,7 +37,8 @@
 #include "common/cmn.h"
 #include "udp_base.h"
 
-class udp_sendto : public udp_base {};
+class udp_sendto : public udp_base {
+};
 
 /**
  * @test udp_sendto.ti_1

@@ -85,9 +85,8 @@ void Demo_Observer::update_subject_1(demo_subject_1_key_t key, demo_subject_1_va
     if (s1) {
         s1->update_val(value); // expected output: notification msg
         s1->notify_observers();
-    } else {
+    } else
         printf("subject corresponding to key wasn't found\n");
-    }
 }
 
 void Demo_Observer::get_subject_1(demo_subject_1_key_t key)
@@ -98,9 +97,8 @@ void Demo_Observer::get_subject_1(demo_subject_1_key_t key)
     if (s1) {
         s1->get_val(val_s1);
         printf("subject1: key = %c, val = %d\n", key, val_s1);
-    } else {
+    } else
         printf("subject corresponding to key wasn't found\n");
-    }
 }
 
 void Demo_Observer::update_subject_2(demo_subject_2_key_t key, demo_subject_2_value_t value)
@@ -110,9 +108,8 @@ void Demo_Observer::update_subject_2(demo_subject_2_key_t key, demo_subject_2_va
     if (s2) {
         s2->update_val(value); // expected output: notification msg
         s2->notify_observers();
-    } else {
+    } else
         printf("subject corresponding to key wasn't found\n");
-    }
 }
 
 void Demo_Observer::get_subject_2(demo_subject_2_key_t key)
@@ -123,9 +120,8 @@ void Demo_Observer::get_subject_2(demo_subject_2_key_t key)
     if (s2) {
         s2->get_val(val_s2);
         printf("subject2: key = %d, val = %d\n", key, val_s2);
-    } else {
+    } else
         printf("subject corresponding to key wasn't found\n");
-    }
 }
 
 bool Demo_Observer::start_test(Demo_Coll_Mgr1 *coll_for_subjects_1,

@@ -51,7 +51,8 @@
 
 #define HELLO_STR "hello"
 
-class tcp_sockopt : public tcp_base {};
+class tcp_sockopt : public tcp_base {
+};
 
 /**
  * @test tcp_sockopt.ti_1_getsockopt_tcp_info

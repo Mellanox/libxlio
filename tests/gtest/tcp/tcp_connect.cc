@@ -39,7 +39,8 @@
 #include <algorithm>
 #include "tcp_base.h"
 
-class tcp_connect : public tcp_base {};
+class tcp_connect : public tcp_base {
+};
 
 /**
  * @test tcp_connect.ti_1

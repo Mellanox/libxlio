@@ -37,7 +37,8 @@
 
 #include "tcp_base.h"
 
-class tcp_rfs : public tcp_base {};
+class tcp_rfs : public tcp_base {
+};
 
 /**
  * @test tcp_rfs.single_rule_send

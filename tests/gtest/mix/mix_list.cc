@@ -45,7 +45,8 @@ struct element {
     int value;
 };
 
-class mix_list : public mix_base {};
+class mix_list : public mix_base {
+};
 
 TEST_F(mix_list, ti_1)
 {

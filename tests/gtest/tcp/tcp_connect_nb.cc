@@ -37,7 +37,8 @@
 
 #include "tcp_base.h"
 
-class tcp_connect_nb : public tcp_base {};
+class tcp_connect_nb : public tcp_base {
+};
 
 /**
  * @test tcp_connect_nb.ti_1

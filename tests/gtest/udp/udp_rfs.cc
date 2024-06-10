@@ -37,7 +37,8 @@
 
 #include "udp_base.h"
 
-class udp_rfs : public udp_base {};
+class udp_rfs : public udp_base {
+};
 
 /**
  * @test udp_rfs.single_rule_send
