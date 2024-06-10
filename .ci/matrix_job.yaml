@@ -190,7 +190,7 @@ steps:
   - name: Style
     enable: ${do_style}
     containerSelector:
-      - "{name: 'xlio_static.tidy', category: 'tool', variant: 1}"
+      - "{name: 'toolbox', category: 'tool'}"
     agentSelector:
       - "{nodeLabel: 'skip-agent'}"
     run: |
