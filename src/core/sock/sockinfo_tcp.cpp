@@ -468,7 +468,22 @@ err_t sockinfo_tcp::rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *pcb, struc
 
     if (conn->m_p_group->m_socket_rx_cb) {
         struct pbuf *ptmp = p;
+
+        if (unlikely(conn->has_stats())) {
+            conn->m_p_socket_stats->counters.n_rx_bytes += p->tot_len;
+            conn->m_p_socket_stats->counters.n_rx_data_pkts++;
+            // Assume that all chained buffers are GRO packets.
+            conn->m_p_socket_stats->counters.n_gro += !!p->next;
+        }
+
         while (ptmp) {
+            if (unlikely(conn->has_stats())) {
+                conn->m_p_socket_stats->counters.n_rx_frags++;
+                // The 1st pbuf in the chain is already handled in the rx_input_cb().
+                if (ptmp != p) {
+                    conn->save_strq_stats(reinterpret_cast<mem_buf_desc_t *>(ptmp)->rx.strides_num);
+                }
+            }
             conn->m_p_group->m_socket_rx_cb(reinterpret_cast<xlio_socket_t>(conn),
                                             conn->m_xlio_socket_userdata, ptmp->payload, ptmp->len,
                                             mem_buf_desc_t::to_xlio_buf(ptmp));
@@ -477,8 +492,6 @@ err_t sockinfo_tcp::rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *pcb, struc
     } else {
         pbuf_free(p);
     }
-
-    // TODO Stats
 
     return ERR_OK;
 }
