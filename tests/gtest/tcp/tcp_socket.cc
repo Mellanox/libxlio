@@ -36,8 +36,7 @@
 #include "common/base.h"
 #include "tcp_base.h"
 
-class tcp_socket : public tcp_base {
-};
+class tcp_socket : public tcp_base {};
 
 /**
  * @test tcp_socket.ti_1_ipv4

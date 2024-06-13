@@ -89,8 +89,9 @@ private:
             data = (T *)calloc(CHUNK_LIST_CONTAINER_SIZE, sizeof(T));
             if (!data || !(cont = new container(data))) {
                 // Memory allocation error
-                if (data)
+                if (data) {
                     free(data);
+                }
                 clist_logerr("Failed to allocate memory");
                 goto out;
             }
@@ -154,8 +155,9 @@ public:
     inline T front() const
     {
         // Check if the list is empty.
-        if (unlikely(empty()))
+        if (unlikely(empty())) {
             return NULL;
+        }
         return m_used_containers.front()->m_p_buffer[m_front];
     }
 

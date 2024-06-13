@@ -45,8 +45,7 @@ struct element {
     int value;
 };
 
-class xliod_hash : public ::testing::Test {
-};
+class xliod_hash : public ::testing::Test {};
 
 TEST_F(xliod_hash, ti_1)
 {

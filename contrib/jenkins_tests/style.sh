@@ -4,8 +4,6 @@ source $(dirname $0)/globals.sh
 
 echo "Checking for codying style ..."
 
-do_module "dev/clang-9.0.1"
-
 cd $WORKSPACE
 
 rm -rf $style_dir
@@ -18,6 +16,12 @@ if [ $(command -v $test_app >/dev/null 2>&1 || echo $?) ]; then
     echo can not find $test_app
     exit 1
 fi
+
+# Report system / software versions
+echo 'System information:'
+cat /etc/os-release
+echo 'clang-format version:'
+$test_app --version
 
 style_tap=${WORKSPACE}/${prefix}/style_test.tap
 rm -rf $style_tap
@@ -65,8 +69,6 @@ else
     rm -rf ${style_tap}.backup
 fi
 rc=$(($rc+$nerrors))
-
-module unload "dev/clang-9.0.1"
 
 do_archive "${style_dir}/*.diff"
 
