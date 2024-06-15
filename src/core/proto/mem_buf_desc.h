@@ -77,7 +77,6 @@ public:
         , sz_buffer(size)
         , sz_data(0)
         , p_desc_owner(nullptr)
-        , unused_padding(0)
     {
         memset(&lwip_pbuf, 0, sizeof(lwip_pbuf));
         clear_transport_data();
@@ -118,7 +117,6 @@ public:
     inline int dec_ref_count() { return atomic_fetch_and_dec(&n_ref_count); }
     inline int add_ref_count(int x) { return atomic_fetch_add_relaxed(x, &n_ref_count); }
     inline unsigned int lwip_pbuf_get_ref_count() const { return lwip_pbuf.ref; }
-    inline unsigned int lwip_pbuf_inc_ref_count() { return ++lwip_pbuf.ref; }
     inline unsigned int lwip_pbuf_dec_ref_count()
     {
         if (likely(lwip_pbuf.ref)) {
@@ -147,7 +145,6 @@ public:
             size_t sz_payload; // This is the total amount of data of the packet, if
                                // (sz_payload>sz_data) means fragmented packet.
             timestamps_t timestamps;
-            void *context;
 
             union {
                 struct {
@@ -166,8 +163,6 @@ public:
             size_t n_transport_header_len;
             uint32_t flow_tag_id; // Flow Tag ID of this received packet
             int8_t n_frags; // number of fragments
-            bool is_xlio_thr; // specify whether packet drained from XLIO internal thread or from
-                              // user app thread
             bool is_sw_csum_need; // specify if software checksum is need for this packet
 #ifdef DEFINED_UTLS
             uint8_t tls_decrypted;
@@ -220,7 +215,7 @@ private:
     atomic_t n_ref_count; // number of interested receivers (sockinfo) [can be modified only in
                           // cq_mgr_rx context]
 public:
-    uint64_t unused_padding; // Align the structure to the cache line boundary
+    uint64_t unused_padding[2]; // Align the structure to the cache line boundary
 };
 
 typedef xlio_list_t<mem_buf_desc_t, mem_buf_desc_t::buffer_node_offset> descq_t;

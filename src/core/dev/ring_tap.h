@@ -55,11 +55,6 @@ public:
     virtual int drain_and_proccess();
     virtual bool reclaim_recv_buffers(descq_t *rx_reuse);
     virtual bool reclaim_recv_buffers(mem_buf_desc_t *buff);
-    virtual int reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse)
-    {
-        NOT_IN_USE(rx_reuse);
-        return -1;
-    }
     virtual void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
                                   xlio_wr_tx_packet_attr attr);
     virtual int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
@@ -84,21 +79,12 @@ public:
     }
     virtual void adapt_cq_moderation() {}
 
-    virtual int socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_completions,
-                                  unsigned int ncompletions, int flags)
-    {
-        NOT_IN_USE(xlio_completions);
-        NOT_IN_USE(ncompletions);
-        NOT_IN_USE(flags);
-        return 0;
-    }
-
     virtual int modify_ratelimit(struct xlio_rate_limit_t &rate_limit)
     {
         NOT_IN_USE(rate_limit);
         return 0;
     }
-    void inc_cq_moderation_stats(size_t sz_data) { NOT_IN_USE(sz_data); }
+    void inc_cq_moderation_stats() {}
     virtual uint32_t get_tx_user_lkey(void *addr, size_t length)
     {
         NOT_IN_USE(addr);

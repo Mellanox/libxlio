@@ -87,6 +87,7 @@ inline void ring_simple::send_status_handler(int ret, xlio_ibv_send_wr *p_send_w
 ring_simple::ring_simple(int if_index, ring *parent, ring_type_t type, bool use_locks)
     : ring_slave(if_index, parent, type, use_locks)
     , m_lock_ring_tx_buf_wait("ring:lock_tx_buf_wait")
+    , m_p_doca_mmap(g_buffer_pool_tx->get_doca_mmap())
     , m_gro_mgr(safe_mce_sys().gro_streams_max, MAX_GRO_BUFS)
 {
     net_device_val *p_ndev = g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index());
@@ -433,56 +434,6 @@ int ring_simple::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
     return ret;
 }
 
-int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_completions,
-                                   unsigned int ncompletions, int flags)
-{
-    int i = 0;
-    unsigned int pkts = 0U;
-    bool do_poll = true;
-
-    if (likely(xlio_completions) && ncompletions) {
-        if ((flags & SOCKETXTREME_POLL_TX) && !m_socketxtreme.ec_sock_list_start) {
-            uint64_t poll_sn = 0;
-            const std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-            m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
-        }
-
-        const std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
-        while (!g_b_exit && (i < (int)ncompletions)) {
-            if (m_socketxtreme.ec_sock_list_start) {
-                if (socketxtreme_ec_pop_completion(xlio_completions)) {
-                    xlio_completions++;
-                    i++;
-                }
-            } else if (likely(do_poll)) {
-                mem_buf_desc_t *desc = m_p_cq_mgr_rx->poll_and_process_socketxtreme();
-                if (likely(desc)) {
-                    rx_process_buffer(desc, NULL);
-
-                    // To avoid too many unflushed GRO sessions, We flush GRO and continue polling.
-                    // Otherwise this loop may continue for too long and result in way more
-                    // completions than ncompletions, what is not optimal for performance.
-                    // Not each packet results in a real completion but this check is good enough.
-                    if (++pkts >= ncompletions) {
-                        m_gro_mgr.flush_all(nullptr);
-                        pkts = 0U;
-                    }
-                } else {
-                    m_gro_mgr.flush_all(nullptr);
-                    do_poll = false;
-                }
-            } else {
-                break;
-            }
-        }
-    } else {
-        i = -1;
-        errno = EINVAL;
-    }
-
-    return i;
-}
-
 int ring_simple::wait_for_notification_and_process_element(int cq_channel_fd,
                                                            uint64_t *p_cq_poll_sn,
                                                            void *pv_fd_ready_array /*NULL*/)
@@ -518,11 +469,6 @@ bool ring_simple::reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst)
 bool ring_simple::reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst)
 {
     return m_p_cq_mgr_rx->reclaim_recv_buffers_no_lock(rx_reuse_lst);
-}
-
-int ring_simple::reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse)
-{
-    return m_p_cq_mgr_rx->reclaim_recv_single_buffer(rx_reuse);
 }
 
 void ring_simple::mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc,
@@ -877,11 +823,11 @@ void ring_simple::init_tx_buffers(uint32_t count)
 {
     request_more_tx_buffers(PBUF_RAM, count, m_tx_lkey);
     m_tx_num_bufs = m_tx_pool.size();
+    m_p_ring_stat->simple.n_tx_num_bufs = m_tx_num_bufs;
 }
 
-void ring_simple::inc_cq_moderation_stats(size_t sz_data)
+void ring_simple::inc_cq_moderation_stats()
 {
-    m_cq_moderation_info.bytes += sz_data;
     ++m_cq_moderation_info.packets;
 }
 
@@ -901,8 +847,10 @@ mem_buf_desc_t *ring_simple::get_tx_buffers(pbuf_type type, uint32_t n_num_mem_b
              */
             if (type == PBUF_ZEROCOPY) {
                 m_zc_num_bufs += count;
+                m_p_ring_stat->simple.n_zc_num_bufs = m_zc_num_bufs;
             } else {
                 m_tx_num_bufs += count;
+                m_p_ring_stat->simple.n_tx_num_bufs = m_tx_num_bufs;
             }
         }
 
@@ -937,12 +885,14 @@ void ring_simple::return_to_global_pool()
                  m_tx_num_bufs >= RING_TX_BUFS_COMPENSATE * 2)) {
         int return_bufs = m_tx_pool.size() / 2;
         m_tx_num_bufs -= return_bufs;
+        m_p_ring_stat->simple.n_tx_num_bufs = m_tx_num_bufs;
         g_buffer_pool_tx->put_buffers_thread_safe(&m_tx_pool, return_bufs);
     }
     if (unlikely(m_zc_pool.size() > (m_zc_num_bufs / 2) &&
                  m_zc_num_bufs >= RING_TX_BUFS_COMPENSATE * 2)) {
         int return_bufs = m_zc_pool.size() / 2;
         m_zc_num_bufs -= return_bufs;
+        m_p_ring_stat->simple.n_zc_num_bufs = m_zc_num_bufs;
         g_buffer_pool_zc->put_buffers_thread_safe(&m_zc_pool, return_bufs);
     }
 }
@@ -1044,15 +994,13 @@ void ring_simple::adapt_cq_moderation()
     uint32_t missed_rounds = m_cq_moderation_info.missed_rounds;
 
     // todo collect bytes and packets from all rings ??
-    int64_t interval_bytes = m_cq_moderation_info.bytes - m_cq_moderation_info.prev_bytes;
     int64_t interval_packets = m_cq_moderation_info.packets - m_cq_moderation_info.prev_packets;
 
-    m_cq_moderation_info.prev_bytes = m_cq_moderation_info.bytes;
     m_cq_moderation_info.prev_packets = m_cq_moderation_info.packets;
     m_cq_moderation_info.missed_rounds = 0;
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (interval_bytes < 0 || interval_packets < 0) {
+    if (interval_packets < 0) {
         // rare wrap-around of 64 bit, just ignore
         m_lock_ring_rx.unlock();
         return;
@@ -1067,7 +1015,6 @@ void ring_simple::adapt_cq_moderation()
         return;
     }
 
-    uint32_t avg_packet_size = interval_bytes / interval_packets;
     uint32_t avg_packet_rate =
         (interval_packets * 1000) / (safe_mce_sys().cq_aim_interval_msec * (1 + missed_rounds));
 
@@ -1078,14 +1025,7 @@ void ring_simple::adapt_cq_moderation()
         safe_mce_sys().cq_aim_max_period_usec,
         ((1000000UL / ir_rate) - (1000000UL / std::max(avg_packet_rate, ir_rate))));
 
-    if (avg_packet_size < 1024 && avg_packet_rate < 450000) {
-        modify_cq_moderation(0, 0); // latency mode
-        // todo latency for big messages is not good
-        // the rate is affected by the moderation and the moderation by the rate..
-        // so each cycle change from 0 to max, and max to 0, ..
-    } else {
-        modify_cq_moderation(period, count); // throughput mode
-    }
+    modify_cq_moderation(period, count);
 
     m_lock_ring_rx.unlock();
 }

@@ -56,8 +56,6 @@ public:
     void add_qp_tx(hw_queue_tx *hqtx_ptr);
     void del_qp_tx(hw_queue_tx *hqtx_ptr);
 
-    uint32_t clean_cq();
-
     /**
      * Arm the managed CQ's notification channel
      * Calling this more then once without get_event() will return without
@@ -77,7 +75,6 @@ public:
 private:
     void log_cqe_error(struct xlio_mlx5_cqe *cqe);
     void handle_sq_wqe_prop(unsigned index);
-    int clean_cq_poll_tx(xlio_ibv_wc *p_wce, int num_entries, uint64_t *p_cq_poll_sn);
 
     void get_cq_event(int count = 1) { xlio_ib_mlx5_get_cq_event(&m_mlx5_cq, count); };
 

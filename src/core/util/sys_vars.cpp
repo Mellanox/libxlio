@@ -860,7 +860,6 @@ void mce_sys_var::get_env_params()
     memory_limit_user = MCE_DEFAULT_MEMORY_LIMIT_USER;
     heap_metadata_block = MCE_DEFAULT_HEAP_METADATA_BLOCK;
     hugepage_size = MCE_DEFAULT_HUGEPAGE_SIZE;
-    enable_socketxtreme = MCE_DEFAULT_SOCKETXTREME;
     enable_tso = MCE_DEFAULT_TSO;
 #ifdef DEFINED_UTLS
     enable_utls_rx = MCE_DEFAULT_UTLS_RX;
@@ -902,18 +901,6 @@ void mce_sys_var::get_env_params()
     multilock = MCE_DEFAULT_MULTILOCK;
 
     read_hv();
-
-    /* Configure enable_socketxtreme as first because
-     * this mode has some special predefined parameter limitations
-     */
-    if ((env_ptr = getenv(SYS_VAR_SOCKETXTREME))) {
-        enable_socketxtreme = atoi(env_ptr) ? true : false;
-    }
-    if (enable_socketxtreme) {
-        /* Set following parameters as default for SocketXtreme mode */
-        gro_streams_max = 0;
-        progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
-    }
 
     if ((env_ptr = getenv(SYS_VAR_STRQ))) {
         enable_strq_env = option_3::from_str(env_ptr, MCE_DEFAULT_STRQ);
@@ -1047,12 +1034,6 @@ void mce_sys_var::get_env_params()
         rx_bufs_batch = 8; // MCE_DEFAULT_RX_BUFS_BATCH (64), RX buffers batch size.
         progress_engine_interval_msec = 0; // MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC (10),
                                            // Disable internal thread CQ draining logic.
-        cq_moderation_period_usec =
-            1024; // MCE_DEFAULT_CQ_MODERATION_PERIOD_USEC (50), CQ moderation threshold in time.
-        cq_moderation_count =
-            1024; // MCE_DEFAULT_CQ_MODERATION_COUNT(48), CQ moderation threshold in WCEs.
-        cq_aim_interval_msec =
-            0; // MCE_DEFAULT_CQ_AIM_INTERVAL_MSEC (250), Disable adaptive CQ moderation.
         cq_poll_batch_max =
             128; // MCE_DEFAULT_CQ_POLL_BATCH (16), Maximum CQEs to poll in one batch.
         thread_mode = THREAD_MODE_SINGLE; // MCE_DEFAULT_THREAD_MODE (THREAD_MODE_MULTI), Single
@@ -1099,12 +1080,7 @@ void mce_sys_var::get_env_params()
         rx_bufs_batch = 8; // MCE_DEFAULT_RX_BUFS_BATCH (64), RX buffers batch size.
         progress_engine_interval_msec = 0; // MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC (10),
                                            // Disable internal thread CQ draining logic.
-        cq_moderation_period_usec =
-            1024; // MCE_DEFAULT_CQ_MODERATION_PERIOD_USEC (50), CQ moderation threshold in time.
-        cq_moderation_count =
-            1024; // MCE_DEFAULT_CQ_MODERATION_COUNT(48), CQ moderation threshold in WCEs.
-        cq_aim_interval_msec =
-            0; // MCE_DEFAULT_CQ_AIM_INTERVAL_MSEC (250), Disable adaptive CQ moderation.
+
         cq_poll_batch_max =
             128; // MCE_DEFAULT_CQ_POLL_BATCH (16), Maximum CQEs to poll in one batch.
         thread_mode = THREAD_MODE_SINGLE; // MCE_DEFAULT_THREAD_MODE (THREAD_MODE_MULTI), Single
@@ -1644,12 +1620,6 @@ void mce_sys_var::get_env_params()
     if ((env_ptr = getenv(SYS_VAR_PROGRESS_ENGINE_INTERVAL))) {
         progress_engine_interval_msec = (uint32_t)atoi(env_ptr);
     }
-    if (enable_socketxtreme && (progress_engine_interval_msec != MCE_CQ_DRAIN_INTERVAL_DISABLED)) {
-        progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
-        vlog_printf(VLOG_DEBUG, "%s parameter is forced to %d in case %s is enabled\n",
-                    SYS_VAR_PROGRESS_ENGINE_INTERVAL, progress_engine_interval_msec,
-                    SYS_VAR_SOCKETXTREME);
-    }
 
     if ((env_ptr = getenv(SYS_VAR_PROGRESS_ENGINE_WCE_MAX))) {
         progress_engine_wce_max = (uint32_t)atoi(env_ptr);
@@ -2001,10 +1971,27 @@ void mce_sys_var::get_env_params()
         }
         multilock = (multilock_t)temp;
     }
+
+    std::vector<const char *> deprecated_params = {SYS_VAR_TX_NUM_BUFS, SYS_VAR_RX_NUM_BUFS};
+    for (const char *param : deprecated_params) {
+        env_ptr = getenv(param);
+        if (env_ptr) {
+            vlog_printf(VLOG_WARNING,
+                        "%s is deprecated and will be removed in the future versions\n", param);
+        }
+    }
 }
 
 void set_env_params()
 {
+#if defined(DEFINED_NGINX)
+    // We must not call setenv for Nginx master process.
+    // It changes the 'environ' pointer that Nginx stores in master and uses in workers.
+    if (getenv(SYS_VAR_NGINX_WORKERS_NUM) && !g_p_app) {
+        return;
+    }
+#endif
+
     // Need to call setenv() only after getenv() is done, because /bin/sh has
     // a custom setenv() which overrides original environment.
 

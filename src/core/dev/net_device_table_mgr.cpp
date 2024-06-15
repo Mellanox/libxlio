@@ -124,7 +124,6 @@ net_device_table_mgr::net_device_table_mgr()
     g_p_netlink_handler->register_event(nlgrpLINK, this);
     ndtm_logdbg("Registered to g_p_netlink_handler");
 
-#ifndef DEFINED_NO_THREAD_LOCK
     if (safe_mce_sys().progress_engine_interval_msec != MCE_CQ_DRAIN_INTERVAL_DISABLED &&
         safe_mce_sys().progress_engine_wce_max != 0) {
         ndtm_logdbg("registering timer for ring draining with %d msec intervales",
@@ -141,7 +140,6 @@ net_device_table_mgr::net_device_table_mgr()
                                                         PERIODIC_TIMER,
                                                         (void *)RING_ADAPT_CQ_MODERATION_TIMER);
     }
-#endif // DEFINED_NO_THREAD_LOCK
 
     ndtm_logdbg("Done");
 }
@@ -562,6 +560,14 @@ void net_device_table_mgr::global_ring_adapt_cq_moderation()
     for (net_dev_iter = m_net_device_map_index.begin();
          m_net_device_map_index.end() != net_dev_iter; net_dev_iter++) {
         net_dev_iter->second->ring_adapt_cq_moderation();
+    }
+}
+
+void net_device_table_mgr::global_ring_clear_all_rfs()
+{
+    ndtm_logfuncall("");
+    for (auto &itr : m_net_device_map_index) {
+        itr.second->ring_clear_all_rfs();
     }
 }
 

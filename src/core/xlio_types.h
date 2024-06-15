@@ -40,16 +40,9 @@
 #include <sys/time.h>
 
 /*
- * Flags for recvfrom_zcopy()
- */
-#define MSG_XLIO_ZCOPY_FORCE 0x01000000 // don't fallback to bcopy
-#define MSG_XLIO_ZCOPY       0x00040000 // return: zero copy was done
-
-/*
  * Options for setsockopt()/getsockopt()
  */
 #define SO_XLIO_GET_API          2800
-#define SO_XLIO_USER_DATA        2801
 #define SO_XLIO_RING_ALLOC_LOGIC 2810
 #define SO_XLIO_SHUTDOWN_RX      2821
 #define SO_XLIO_PD               2822
@@ -84,21 +77,6 @@ enum { CMSG_XLIO_IOCTL_USER_ALLOC = 2900 };
  * Flags for Dummy send API
  */
 #define XLIO_SND_FLAGS_DUMMY MSG_SYN // equals to 0x400
-
-/*
- * Return values for the receive packet notify callback function
- */
-typedef enum {
-    XLIO_PACKET_DROP, /* The library will drop the received packet and recycle
-                        the buffer if no other socket needs it */
-
-    XLIO_PACKET_RECV, /* The library will queue the received packet on this socket ready queue.
-                        The application will read it with the usual recv socket APIs */
-
-    XLIO_PACKET_HOLD /* Application will handle the queuing of the received packet. The application
-                       must return the descriptor to the library using the free packet function
-           But not in the context of XLIO's callback itself. */
-} xlio_recv_callback_retval_t;
 
 /**
  * @brief Pass this structure as an argument into getsockopt() with @ref SO_XLIO_PD
@@ -145,114 +123,6 @@ enum {
     XLIO_NVME_HDGST_OFFLOAD = 1U << 28,
     XLIO_NVME_PDA_MASK = ((1U << 4) - 1U),
     XLIO_NVME_DDGST_MASK = (XLIO_NVME_DDGST_ENABLE | XLIO_NVME_DDGST_OFFLOAD),
-};
-
-/************ SocketXtreme API types definition start***************/
-
-enum {
-    SOCKETXTREME_POLL_TX = (1 << 15),
-};
-
-enum {
-    XLIO_SOCKETXTREME_PACKET = (1ULL << 32), /* New packet is available */
-    XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED =
-        (1ULL << 33) /* New connection is auto accepted by server */
-};
-
-/*
- * Represents specific buffer
- * Used in SocketXtreme extended API.
- */
-struct xlio_buff_t {
-    struct xlio_buff_t *next; /* next buffer (for last buffer next == NULL) */
-    void *payload; /* pointer to data */
-    uint16_t len; /* data length */
-};
-
-/**
- * Represents one specific packet
- * Used in SocketXtreme extended API.
- */
-struct xlio_socketxtreme_packet_desc_t {
-    size_t num_bufs; /* number of packet's buffers */
-    uint16_t total_len; /* total data length */
-    struct xlio_buff_t *buff_lst; /* list of packet's buffers */
-    struct timespec hw_timestamp; /* packet hw_timestamp */
-};
-
-/*
- * Represents specific completion form.
- * Used in SocketXtreme extended API.
- */
-struct xlio_socketxtreme_completion_t {
-    /* Packet is valid in case XLIO_SOCKETXTREME_PACKET event is set
-     */
-    struct xlio_socketxtreme_packet_desc_t packet;
-    /* Set of events
-     */
-    uint64_t events;
-    /* User provided data.
-     * By default this field has FD of the socket
-     * User is able to change the content using setsockopt()
-     * with level argument SOL_SOCKET and opname as SO_XLIO_USER_DATA
-     */
-    uint64_t user_data;
-    /* Source address (in network byte order) set for:
-     * XLIO_SOCKETXTREME_PACKET and XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED events
-     */
-    struct sockaddr_in src;
-    /* Connected socket's parent/listen socket fd number.
-     * Valid in case XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED event is set.
-     */
-    int listen_fd;
-};
-
-/************ SocketXtreme API types definition end ***************/
-
-/**
- * Represents one packet
- * Used in receive zero-copy extended API.
- */
-struct __attribute__((packed)) xlio_recvfrom_zcopy_packet_t {
-    void *packet_id; // packet identifier
-    size_t sz_iov; // number of fragments
-    struct iovec iov[]; // fragments size+data
-};
-
-/**
- * Represents received packets
- * Used in receive zero-copy extended API.
- */
-struct __attribute__((packed)) xlio_recvfrom_zcopy_packets_t {
-    size_t n_packet_num; // number of received packets
-    struct xlio_recvfrom_zcopy_packet_t pkts[]; // array of received packets
-};
-
-/*
- * Structure holding additional information on the packet and socket
- * Note: Check structure size value for future library changes
- */
-struct __attribute__((packed)) xlio_info_t {
-    size_t
-        struct_sz; /* Compare this value with sizeof(xlio_info_t) to check version compatability */
-    void *packet_id; /* Handle to received packet buffer to be return if zero copy logic is used */
-
-    /* Packet addressing information (in network byte order) */
-    const struct sockaddr *src;
-    const struct sockaddr *dst;
-
-    /* Packet information */
-    size_t payload_sz;
-
-    /* Socket's information */
-    uint32_t socket_ready_queue_pkt_count; /* Current count of packets waiting to be read from the
-                                              socket */
-    uint32_t socket_ready_queue_byte_count; /* Current count of bytes waiting to be read from the
-                                               socket */
-
-    /* Packet timestamping information */
-    struct timespec hw_timestamp;
-    struct timespec sw_timestamp;
 };
 
 struct xlio_rate_limit_t {
@@ -302,40 +172,6 @@ struct xlio_ring_alloc_logic_attr {
     uint32_t engress : 1;
     uint32_t reserved : 30;
 };
-
-/**
- *
- * Notification callback for incoming packet on socket
- * @param fd Socket's file descriptor which this packet refers to
- * @param iov iovector structure array point holding the packet
- *            received data buffer pointers and size of each buffer
- * @param iov_sz Size of iov array
- * @param xlio_info Additional information on the packet and socket
- * @param context User-defined value provided during callback
- *                registration for each socket
- *
- *   This callback function should be registered by the library calling
- * register_recv_callback() in the extended API. It can be unregistered by
- * setting a NULL function pointer. The library will call the callback to notify
- * of new incoming packets after the IP & UDP header processing and before
- * they are queued in the socket's receive queue.
- *   Context of the callback will always be from one of the user's application
- * threads when calling the following socket APIs: select, poll, epoll, recv,
- * recvfrom, recvmsg, read, readv.
- *
- * Notes:
- * - The application can call all of the Socket APIs control and send from
- *   within the callback context.
- * - Packet loss might occur depending on the applications behavior in the
- *   callback context.
- * - Parameters `iov' and `xlio_info' are only valid until callback context
- *   is returned to the library. User should copy these structures for later use
- *   if working with zero copy logic.
- */
-typedef xlio_recv_callback_retval_t (*xlio_recv_callback_t)(int fd, size_t sz_iov,
-                                                            struct iovec iov[],
-                                                            struct xlio_info_t *xlio_info,
-                                                            void *context);
 
 /*
  * XLIO Socket API main objects

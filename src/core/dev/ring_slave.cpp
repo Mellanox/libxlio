@@ -555,7 +555,7 @@ rfs_rule *ring_slave::tls_rx_create_rule(const flow_tuple &flow_spec_5t, xlio_ti
 }
 #endif /* DEFINED_UTLS */
 
-// calling sockinfo callback with RFS bypass
+// calling sockinfo with RFS bypass
 static inline bool check_rx_packet(sockinfo *si, mem_buf_desc_t *p_rx_wc_buf_desc,
                                    void *fd_ready_array)
 {
@@ -586,7 +586,7 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
         return false;
     }
 
-    inc_cq_moderation_stats(sz_data);
+    inc_cq_moderation_stats();
 
     m_p_ring_stat->n_rx_byte_count += sz_data;
     ++m_p_ring_stat->n_rx_pkt_count;
@@ -1137,6 +1137,12 @@ void ring_slave::flow_del_all_rfs()
 {
     m_steering_ipv4.flow_del_all_rfs();
     m_steering_ipv6.flow_del_all_rfs();
+}
+
+void ring_slave::flow_del_all_rfs_safe()
+{
+    std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
+    flow_del_all_rfs();
 }
 
 bool ring_slave::request_more_tx_buffers(pbuf_type type, uint32_t count, uint32_t lkey)

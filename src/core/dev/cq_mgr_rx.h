@@ -41,6 +41,11 @@
 #include "proto/mem_buf_desc.h"
 #include "proto/xlio_lwip.h"
 #include "xlio_extra.h"
+#include <doca_pe.h>
+#include <doca_eth_rxq_cpu_data_path.h>
+#include <doca_buf_inventory.h>
+#include <doca_mmap.h>
+#include <doca_buf.h>
 
 #if VLIST_DEBUG
 #define VLIST_DEBUG_CQ_MGR_PRINT_ERROR_IS_MEMBER                                                   \
@@ -71,6 +76,10 @@ class cq_mgr_rx {
     friend class rfs_uc_tcp_gro; // need for stats
 
 public:
+    doca_buf_inventory *temp_doca_inventory = nullptr;
+    doca_buf *temp_doca_bufs[32];
+    doca_eth_rxq_task_recv *temp_doca_tasks[32];
+
     enum buff_status_e {
         BS_OK,
         BS_CQE_RESP_WR_IMM_NOT_SUPPORTED,
@@ -87,7 +96,7 @@ public:
 
     ibv_cq *get_ibv_cq_hndl() { return m_p_ibv_cq; }
     int get_channel_fd() { return m_comp_event_channel ? m_comp_event_channel->fd : 0; }
-
+    doca_pe *get_doca_pe() const { return m_doca_pe; }
     /**
      * Arm the managed CQ's notification channel
      * Calling this more then once without get_event() will return without
@@ -120,7 +129,6 @@ public:
      */
     virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
                                             void *pv_fd_ready_array = nullptr) = 0;
-    virtual mem_buf_desc_t *poll_and_process_socketxtreme() { return nullptr; };
 
     /**
      * This will check if the cq was drained, and if it wasn't it will drain it.
@@ -145,7 +153,6 @@ public:
     bool reclaim_recv_buffers(descq_t *rx_reuse);
     bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst);
     bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst);
-    int reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse);
 
     void get_cq_event(int count = 1) { xlio_ib_mlx5_get_cq_event(&m_mlx5_cq, count); };
 
@@ -176,6 +183,7 @@ protected:
 
     virtual void statistics_print();
 
+    doca_pe *m_doca_pe = nullptr;
     xlio_ib_mlx5_cq_t m_mlx5_cq;
     hw_queue_rx *m_hqrx_ptr = nullptr;
     mem_buf_desc_t *m_rx_hot_buffer = nullptr;
@@ -200,18 +208,12 @@ protected:
     const uint32_t m_n_sysvar_rx_num_wr_to_post_recv;
     descq_t m_rx_pool;
 
-    /* This fields are needed to track internal memory buffers
-     * represented as struct xlio_buff_t
-     * from user application by special XLIO extended API
-     */
-    mem_buf_desc_t *m_rx_buffs_rdy_for_free_head = nullptr;
-    mem_buf_desc_t *m_rx_buffs_rdy_for_free_tail = nullptr;
-
 private:
     struct ibv_comp_channel *m_comp_event_channel;
     bool m_b_notification_armed = false;
     const uint32_t m_n_sysvar_qp_compensation_level;
     const uint32_t m_rx_lkey;
+    doca_mmap *m_p_doca_mmap;
     const bool m_b_sysvar_cq_keep_qp_full;
     cq_stats_t m_cq_stat_static;
     static atomic_t m_n_cq_id_counter_rx;

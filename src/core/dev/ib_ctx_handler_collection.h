@@ -45,6 +45,7 @@ public:
     ib_ctx_handler_collection();
     ~ib_ctx_handler_collection();
 
+    void stop_all_doca_flow_ports();
     void update_tbl(const char *ifa_name = nullptr);
     void print_val_tbl();
 

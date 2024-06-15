@@ -195,10 +195,10 @@ buffer_pool::~buffer_pool()
     xlio_stats_instance_remove_bpool_block(m_p_bpool_stat);
 }
 
-void buffer_pool::register_memory(ib_ctx_handler *p_ib_ctx_h)
+void buffer_pool::register_memory()
 {
-    if (!m_allocator_data.register_memory(p_ib_ctx_h)) {
-        __log_info_err("Failed to register memory for p_ib_ctx_h=%p", p_ib_ctx_h);
+    if (!m_allocator_data.register_memory()) {
+        __log_info_err("Failed to register memory");
     }
 }
 
