@@ -1,3 +1,13 @@
+Version 3.31.1-1:
+Date + Time 2024-06-18
+=============================================================
+Added:
+        - RM #3947680 Improve performance of StorageAPI
+        - RM #3947690 Improve stability of storage API:wq
+
+Fixed:
+        - RM #3933912 high CPU usage impacting the connections establishment
+
 Version 3.31.0-1:
 Date + Time 2024-05-01
 =============================================================
