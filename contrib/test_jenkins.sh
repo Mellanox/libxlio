@@ -106,12 +106,16 @@ i=0
 if [ "$TARGET" == "all" -o "$TARGET" == "default" ]; then
     export jenkins_target="default"
     export prefix=${jenkins_test_custom_prefix}/${jenkins_target}
-    do_check_dpcp opt_value
+    if [ COMPILE_DPCP ]; 
+		then do_check_dpcp opt_value
+	fi
     if [ ! -z "${opt_value}" ]; then
         target_list[$i]="default: --enable-nginx --with-dpcp=${opt_value}"
-        if do_compile_doca doca_path; then
-            target_list[$i]="${target_list} --with-doca=${doca_path}"
-        fi
+		if [ COMPILE_DOCA ]; then
+			if do_compile_doca doca_path; then
+				target_list[$i]="${target_list} --with-doca=${doca_path}"
+			fi
+		fi
         i=$((i+1))
     else
         echo "Requested dpcp support can not be executed"

@@ -141,6 +141,8 @@ matrix:
 
 env:
   jenkins_opt_artifacts: 'none'
+  COMPILE_DOCA: true
+  COMPILE_DPCP: true
 
 steps:
   - name: Setup
@@ -160,7 +162,7 @@ steps:
 
   - name: Copyrights
     enable: ${do_copyrights}
-    run: env WORKSPACE=$PWD ./contrib/jenkins_tests/copyrights.sh
+    run: env WORKSPACE=$PWD COMPILE_DOCA=false COMPILE_DPCP=false ./contrib/jenkins_tests/copyrights.sh
     containerSelector:
       - "{name: 'header-check', category: 'tool', variant: 1}"
     agentSelector:
@@ -285,7 +287,7 @@ steps:
       - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_coverity}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_cov=${action} ./contrib/test_jenkins.sh
+      env COMPILE_DOCA=false COMPILE_DPCP=false WORKSPACE=$PWD TARGET=${flags} jenkins_test_cov=${action} ./contrib/test_jenkins.sh
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -354,7 +356,7 @@ steps:
       - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_test}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_run=${action} ./contrib/test_jenkins.sh
+      env COMPILE_DOCA=false COMPILE_DPCP=false WORKSPACE=$PWD TARGET=${flags} jenkins_test_run=${action} ./contrib/test_jenkins.sh
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
