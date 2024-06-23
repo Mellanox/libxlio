@@ -350,29 +350,29 @@ do_compile_doca()
     echo "===== DOCA checkout & compilation starts ====="
     echo ""
     doca_version="2.7"
-    doca_path="$WORKSPACE/$prefix/doca-sdk"
+    doca_sdk="$WORKSPACE/$prefix/doca-sdk"
     doca_repo="ssh://git-nbu.nvidia.com:12023/doca/doca"
-    doca_dir="$WORKSPACE/$prefix/doca"
+    doca_build="$WORKSPACE/$prefix/doca"
     doca_branch="doca_$doca_version"
 
-    if [[ -d "$doca_path" ]]; then
-        echo "Directory $doca_path exists. Updating..."
-        git config --global --add safe.directory "$doca_path"
-        pushd "$doca_path" || exit 1
+    if [[ -d "$doca_sdk" ]]; then
+        echo "Directory $doca_sdk exists. Updating..."
+        git config --global --add safe.directory "$doca_sdk"
+        pushd "$doca_sdk" || exit 1
         git fetch origin "$doca_branch"
         git checkout "$doca_branch"
         git merge origin/"$doca_branch"
     else
-        echo "Directory $doca_path does not exist. Cloning..."
-        mkdir -p "$doca_path"
+        echo "Directory $doca_sdk does not exist. Cloning..."
+        mkdir -p "$doca_sdk"
         if [[ -f /.dockerenv ]]; then
-            chown -R swx-jenkins "$doca_path"
-            sudo -u swx-jenkins git clone -b "$doca_branch" "$doca_repo" "$doca_path"
-            chown -R root "$doca_path"
+            chown -R swx-jenkins "$doca_sdk"
+            sudo -u swx-jenkins git clone -b "$doca_branch" "$doca_repo" "$doca_sdk"
+            chown -R root "$doca_sdk"
         else
-            git clone -b "$doca_branch" "$doca_repo" "$doca_path"
+            git clone -b "$doca_branch" "$doca_repo" "$doca_sdk"
         fi
-        pushd "$doca_path" || exit 1
+        pushd "$doca_sdk" || exit 1
     fi
 
     if [[ -f /.dockerenv ]]; then
@@ -392,15 +392,17 @@ do_compile_doca()
         exit 1
     fi
 
-    $SUDO mkdir -p "$doca_dir"
+    $SUDO mkdir -p "$doca_build"
 
-    if ! $SUDO meson "$doca_dir"; then
+    if ! $SUDO meson "$doca_build"; then
         echo "Cannot prepare the project for compilation..."
         exit 1
     fi
 
-    if $SUDO ninja -C "$doca_dir" $make_opt; then
-        eval "$1=$doca_dir"
+    if $SUDO ninja -C "$doca_build" $make_opt; then
+        eval "$1=$doca_build"
+        mkdir -p "$doca_build"/include
+        cp "$doca_sdk"/libs/doca_common/version/doca_version.h "$doca_build"/include/
         echo ""
         echo "===== DOCA compilation complete ====="
         echo ""
