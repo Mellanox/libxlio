@@ -192,10 +192,10 @@ inline int priv_safe_try_read_file(const char *path, char *buf, size_t size)
 
 /**
  * Read content of file detailed in 'path' (usually a sysfs file)
- * upon failure print error
+ * upon failure print warning
  * @return int value (atoi) of the file content, or 'default_value' upon failure
  */
-int read_file_to_int(const char *path, int default_value, vlog_levels_t log_level = VLOG_ERROR);
+int read_file_to_int(const char *path, int default_value, vlog_levels_t log_level = VLOG_WARNING);
 
 /**
  * Get port number from interface name
