@@ -4,7 +4,7 @@ job: LIBXLIO
 step_allow_single_selector: false
 
 registry_host: harbor.mellanox.com
-registry_auth: 1daaea28-800e-425f-a91f-3bd3e9136eea
+registry_auth: 65eb3652-9da0-4f39-8a4c-f61972fb65a1
 registry_path: /swx-infra/media
 
 kubernetes:
@@ -132,8 +132,6 @@ steps:
       ./.ci/artifacts.sh
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
-    archiveTap-onfail: |
-      jenkins/**/*.tap
 
   - name: Service
     enable: ${do_service}
@@ -149,8 +147,6 @@ steps:
       ./.ci/artifacts.sh
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
-    archiveTap-onfail: |
-      jenkins/**/*.tap
 
   - name: Package
     enable: ${do_package}
@@ -166,8 +162,6 @@ steps:
       ./.ci/artifacts.sh
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
-    archiveTap-onfail: |
-      jenkins/**/*.tap
 
   - name: Release
     enable: ${do_release}
@@ -201,8 +195,6 @@ steps:
       ./.ci/artifacts.sh
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
-    archiveTap-onfail: |
-      jenkins/**/*.tap
 
   - name: Compiler
     enable: ${do_compiler}
@@ -218,8 +210,6 @@ steps:
       ./.ci/artifacts.sh
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
-    archiveTap-onfail: |
-      jenkins/**/*.tap
 
   - name: Coverity
     enable: ${do_coverity}
@@ -237,8 +227,6 @@ steps:
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz,
       jenkins/**/output/errors/**/*.html
-    archiveTap-onfail: |
-      jenkins/**/*.tap
 
   - name: Cppcheck
     enable: ${do_cppcheck}
@@ -254,8 +242,6 @@ steps:
       ./.ci/artifacts.sh
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
-    archiveTap-onfail: |
-      jenkins/**/*.tap
 
   - name: Csbuild
     enable: ${do_csbuild}
@@ -271,8 +257,6 @@ steps:
       ./.ci/artifacts.sh
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
-    archiveTap-onfail: |
-      jenkins/**/*.tap
 
   - name: Tidy
     enable: ${do_tidy}
@@ -288,8 +272,6 @@ steps:
       ./.ci/artifacts.sh
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
-    archiveTap-onfail: |
-      jenkins/**/*.tap
 
   - name: Test
     enable: ${do_test}
@@ -305,8 +287,6 @@ steps:
       ./.ci/artifacts.sh
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
-    archiveTap-onfail: |
-      jenkins/**/*.tap
 
   - name: Gtest
     enable: ${do_gtest}
@@ -322,8 +302,6 @@ steps:
       ./.ci/artifacts.sh
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
-    archiveTap-onfail: |
-      jenkins/**/*.tap
     archiveJunit-onfail: |
       jenkins/**/*.xml
 
@@ -342,8 +320,6 @@ steps:
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz,
       jenkins/**/vg/*valgrind*.log
-    archiveTap-onfail: |
-      jenkins/**/*.tap
 
   - name: Commit
     enable: ${do_commit}
@@ -359,8 +335,6 @@ steps:
       ./.ci/artifacts.sh
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
-    archiveTap-onfail: |
-      jenkins/**/*.tap
 
   - name: Artifacts
     enable: ${do_artifact}
@@ -369,8 +343,6 @@ steps:
     parallel: false
     archiveArtifacts: |
       jenkins/**/arch-*.tar.gz
-    archiveTap: |
-      jenkins/**/*.tap
     archiveJunit: |
       jenkins/**/*.xml
 
