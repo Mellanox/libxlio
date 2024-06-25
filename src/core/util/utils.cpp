@@ -547,27 +547,28 @@ int priv_read_file(const char *path, char *buf, size_t size,
     int fd = SYSCALL(open, path, O_RDONLY);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (fd < 0) {
-        VLOG_PRINTF(log_level, "ERROR while opening file %s (errno %d %m)", path, errno);
+        VLOG_PRINTF(log_level, "Couldn't open file %s (errno %d %m)", path, errno);
         return -1;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
     len = SYSCALL(read, fd, buf, size);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (len < 0) {
-        VLOG_PRINTF(log_level, "ERROR while reading from file %s (errno %d %m)", path, errno);
+        VLOG_PRINTF(log_level, "Couldn't read file %s (errno %d %m)", path, errno);
     }
     BULLSEYE_EXCLUDE_BLOCK_END
     SYSCALL(close, fd);
     return len;
 }
 
-int read_file_to_int(const char *path, int default_value, vlog_levels_t log_level)
+int read_file_to_int(const char *path, int default_value, vlog_levels_t log_level /*VLOG_WARNING*/)
 {
     int value = -1;
     std::ifstream file_stream(path);
     if (!file_stream || !(file_stream >> value)) {
-        VLOG_PRINTF(log_level, "ERROR while getting int from from file %s, we'll use default %d",
-                    path, default_value);
+        VLOG_PRINTF(log_level,
+                    "Couldn't read an integer from file %s (errno %d %m), we'll use default %d",
+                    path, errno, default_value);
         return default_value;
     }
     return value;
