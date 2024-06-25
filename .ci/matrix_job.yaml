@@ -55,7 +55,15 @@ runs_on_dockers:
       category: 'base'
     }
 # tool
-  - {name: 'toolbox', url: 'harbor.mellanox.com/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
+  - {
+     file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
+     arch: 'x86_64',
+     name: 'toolbox',
+     uri: 'xlio/$arch/ubuntu22.04/$name',
+     tag: '20240805',
+     build_args: '--no-cache --target build',
+     category: 'tool'
+    }
   - {name: 'blackduck', url: 'harbor.mellanox.com/toolbox/ngci-centos:7.9.2009.2', category: 'tool', arch: 'x86_64'}
   - {name: 'header-check', url: 'harbor.mellanox.com/toolbox/header_check:0.0.14', category: 'tool', arch: 'x86_64', tag: '0.0.14'}
 # static tests
@@ -164,7 +172,7 @@ steps:
     enable: ${do_build}
     run: |
       [ "x${do_build}" == "xtrue" ] && action=yes || action=no
-      echo "COMPILE_DOCA=$COMPILE_DOCA COMPILE_DPCP=$COMPILE_DPCP"
+      echo "COMPILE_DOCA=$COMPILE_DOCA \n COMPILE_DPCP=$COMPILE_DPCP"
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_build=${action} ./contrib/test_jenkins.sh
     parallel: false
     onfail: |
@@ -230,7 +238,7 @@ steps:
       - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_style}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_style=${action} ./contrib/test_jenkins.sh
+      env WORKSPACE=$PWD TARGET=${flags} COMPILE_DOCA=false jenkins_test_style=${action} ./contrib/test_jenkins.sh
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -265,7 +273,7 @@ steps:
       - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_coverity}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} COMPILE_DOCA=false COMPILE_DPCP=false jenkins_test_cov=${action} ./contrib/test_jenkins.sh
+      env WORKSPACE=$PWD TARGET=${flags} COMPILE_DOCA=false jenkins_test_cov=${action} ./contrib/test_jenkins.sh
     parallel: false
     onfail: |
       ./.ci/artifacts.sh

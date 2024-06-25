@@ -286,11 +286,20 @@ do_compile_doca()
     echo ""
     echo "===== DOCA checkout & compilation starts ====="
     echo ""
-    doca_version="2.7"
+    doca_version="2.8.0000-1"
     doca_sdk="$WORKSPACE/$prefix/doca-sdk"
     doca_repo="ssh://git-nbu.nvidia.com:12023/doca/doca"
     doca_build="$WORKSPACE/$prefix/doca"
-    doca_branch="doca_$doca_version"
+    doca_install="/opt/mellanox/doca"
+    doca_branch="$doca_version"
+
+    if [[ -d $doca_install && -f $doca_install/include/doca_version.h ]]; then
+        echo ""
+        echo "===== DOCA is already compiled and installed ====="
+        echo ""
+        eval "$1=$doca_install"
+        return
+    fi
 
     if [[ -d "$doca_sdk" ]]; then
         echo "Directory $doca_sdk exists. Updating..."
@@ -304,13 +313,16 @@ do_compile_doca()
         mkdir -p "$doca_sdk"
         if [[ -f /.dockerenv ]]; then
             chown -R swx-jenkins "$doca_sdk"
-            sudo -u swx-jenkins git clone -b "$doca_branch" "$doca_repo" "$doca_sdk"
+            sudo -u swx-jenkins git clone --depth 1 -b "$doca_branch" "$doca_repo" "$doca_sdk"
             chown -R root "$doca_sdk"
         else
             git clone -b "$doca_branch" "$doca_repo" "$doca_sdk"
         fi
         pushd "$doca_sdk" || exit 1
     fi
+
+    wget https://github.com/Mellanox/libxlio/files/15446734/0001-TEMP-Enable-Multiprocess-DPDK.patch
+    git apply 0001-TEMP-Enable-Multiprocess-DPDK.patch
 
     if [[ -f /.dockerenv ]]; then
         SUDO=""
@@ -337,9 +349,11 @@ do_compile_doca()
     fi
 
     if $SUDO ninja -C "$doca_build" $make_opt; then
-        eval "$1=$doca_build"
-        mkdir -p "$doca_build"/include
-        cp "$doca_sdk"/libs/doca_common/version/doca_version.h "$doca_build"/include/
+        if $SUDO ninja -C "$doca_build" install; then
+            eval "$1=$doca_install"
+        fi
+        $SUDO echo $doca_install/lib/x86_64-linux-gnu > /etc/ld.so.conf.d/doca.conf 
+        $SUDO ldconfig
         echo ""
         echo "===== DOCA compilation complete ====="
         echo ""
