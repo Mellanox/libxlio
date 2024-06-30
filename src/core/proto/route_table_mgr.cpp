@@ -87,9 +87,6 @@ route_table_mgr::route_table_mgr()
     // Read Route table from kernel and save it in local variable.
     update_tbl(ROUTE_DATA_TYPE);
 
-    update_rte_netdev(m_table_in4);
-    update_rte_netdev(m_table_in6);
-
     // Print table
     print_tbl();
 
@@ -106,11 +103,6 @@ route_table_mgr::~route_table_mgr()
 
     // clear all route_entrys created in the constructor
     in_addr_route_entry_map_t::iterator iter;
-
-    while ((iter = m_rte_list_for_each_net_dev.begin()) != m_rte_list_for_each_net_dev.end()) {
-        delete (iter->second);
-        m_rte_list_for_each_net_dev.erase(iter);
-    }
 
     auto cache_itr = m_cache_tbl.begin();
     for (; cache_itr != m_cache_tbl.end(); cache_itr = m_cache_tbl.begin()) {
@@ -159,115 +151,6 @@ void route_table_mgr::update_tbl(nl_data_t data_type)
     std::lock_guard<decltype(m_lock)> lock(m_lock);
 
     netlink_socket_mgr::update_tbl(data_type);
-
-    rt_mgr_update_source_ip(m_table_in4);
-
-    return;
-}
-
-void route_table_mgr::rt_mgr_update_source_ip(route_table_t &table)
-{
-    // for route entries which still have no src ip and no gw
-    for (route_val &val : table) {
-        if (!val.get_src_addr().is_anyaddr() || !val.get_gw_addr().is_anyaddr()) {
-            continue;
-        }
-
-        // try to get src ip from net_dev list of the interface
-        int longest_prefix = -1;
-        ip_address correct_src;
-        local_ip_list_t lip_list;
-        g_p_net_device_table_mgr->get_ip_list(lip_list, val.get_family(), val.get_if_index());
-        if (!lip_list.empty()) {
-            for (auto lip_iter = lip_list.begin(); lip_list.end() != lip_iter; ++lip_iter) {
-                const ip_data &ip = *lip_iter;
-                if (val.get_dst_addr().is_equal_with_prefix(ip.local_addr, ip.prefixlen,
-                                                            val.get_family())) {
-                    // found a match in routing table
-                    if (ip.prefixlen > longest_prefix) {
-                        longest_prefix = ip.prefixlen; // this is the longest prefix match
-                        correct_src = ip.local_addr;
-                    }
-                }
-            }
-            if (longest_prefix > -1) {
-                val.set_src_addr(correct_src);
-                continue;
-            }
-        }
-
-        // if still no src ip, get it from ioctl
-        ip_addr src_addr {0};
-        const char *if_name = val.get_if_name();
-        if (!get_ip_addr_from_ifname(if_name, src_addr, val.get_family())) {
-            assert(src_addr.get_family() == val.get_family());
-            val.set_src_addr(src_addr);
-        } else {
-            // Failed mapping if_name to IP address
-            rt_mgr_logwarn("could not figure out source ip for rtv = %s", val.to_str().c_str());
-        }
-    }
-
-    // for route entries with gateway, do recursive search for src ip
-    int num_unresolved_src = table.size();
-    int prev_num_unresolved_src = 0;
-    do {
-        prev_num_unresolved_src = num_unresolved_src;
-        num_unresolved_src = 0;
-        for (route_val &val : table) {
-            if (!val.get_gw_addr().is_anyaddr() && val.get_src_addr().is_anyaddr()) {
-                route_val *p_val_dst;
-                uint32_t table_id = val.get_table_id();
-                if ((p_val_dst = ::find_route_val(table, val.get_gw_addr(), table_id))) {
-                    if (!p_val_dst->get_src_addr().is_anyaddr()) {
-                        val.set_src_addr(p_val_dst->get_src_addr());
-                    } else if (&val == p_val_dst) { // gateway of the entry lead to same entry
-                        local_ip_list_t lip_offloaded_list;
-                        g_p_net_device_table_mgr->get_ip_list(lip_offloaded_list, val.get_family(),
-                                                              val.get_if_index());
-                        for (auto lip_iter = lip_offloaded_list.begin();
-                             lip_offloaded_list.end() != lip_iter; ++lip_iter) {
-                            const ip_data &ip = *lip_iter;
-                            if (val.get_gw_addr() == ip.local_addr) {
-                                val.set_gw(ip_address::any_addr());
-                                val.set_src_addr(ip.local_addr);
-                                break;
-                            }
-                        }
-                    }
-                    // gateway and source are equal, no need of gw.
-                    if (val.get_src_addr() == val.get_gw_addr()) {
-                        val.set_gw(ip_address::any_addr());
-                    }
-                }
-                if (val.get_src_addr().is_anyaddr()) {
-                    num_unresolved_src++;
-                }
-            }
-        }
-    } while (num_unresolved_src && prev_num_unresolved_src > num_unresolved_src);
-
-    // for route entries which still have no src ip
-    for (auto iter = table.begin(); iter != table.end(); ++iter) {
-        route_val &val = *iter;
-        if (!val.get_src_addr().is_anyaddr()) {
-            continue;
-        }
-        if (!val.get_gw_addr().is_anyaddr()) {
-            rt_mgr_logdbg("could not figure out source ip for gw address. rtv = %s",
-                          val.to_str().c_str());
-        }
-        // if still no src ip, get it from ioctl
-        ip_addr src_addr {0};
-        const char *if_name = val.get_if_name();
-        if (!get_ip_addr_from_ifname(if_name, src_addr, val.get_family())) {
-            assert(src_addr.get_family() == val.get_family());
-            val.set_src_addr(src_addr);
-        } else {
-            // Failed mapping if_name to IP address
-            rt_mgr_logdbg("could not figure out source ip for rtv = %s", val.to_str().c_str());
-        }
-    }
 }
 
 void route_table_mgr::parse_entry(struct nlmsghdr *nl_header)
@@ -324,7 +207,6 @@ void route_table_mgr::parse_attr(struct rtattr *rt_attribute, route_val &val)
     case RTA_SRC:
     case RTA_PREFSRC:
         val.set_src_addr(ip_address((void *)RTA_DATA(rt_attribute), val.get_family()));
-        val.set_cfg_src_addr(ip_address((void *)RTA_DATA(rt_attribute), val.get_family()));
         break;
     case RTA_TABLE:
         val.set_table_id(*(uint32_t *)RTA_DATA(rt_attribute));
@@ -432,12 +314,14 @@ bool route_table_mgr::route_resolve(IN route_rule_table_key key, OUT route_resul
     for (const auto &table_id : table_id_list) {
         p_val = ::find_route_val(rt, dst_addr, table_id);
         if (p_val) {
-            res = *p_val;
+            res.mtu = p_val->get_mtu();
+            res.if_index = p_val->get_if_index();
 
             rt_mgr_logdbg("dst ip '%s' resolved to if_index: %d, src-addr: %s, gw-addr: %s, "
                           "route-mtu: %" PRIu32,
                           dst_addr.to_str(family).c_str(), res.if_index,
-                          res.src.to_str(family).c_str(), res.gw.to_str(family).c_str(), res.mtu);
+                          p_val->get_src_addr().to_str(family).c_str(),
+                          p_val->get_gw_addr().to_str(family).c_str(), res.mtu);
             ++m_stats.n_lookup_hit;
             return true;
         }
@@ -446,23 +330,6 @@ bool route_table_mgr::route_resolve(IN route_rule_table_key key, OUT route_resul
     ++m_stats.n_lookup_miss;
     /* prevent usage on false return */
     return false;
-}
-
-void route_table_mgr::update_rte_netdev(route_table_t &table)
-{
-    // Create route_entry for each netdev to receive port up/down events for net_dev_entry
-    for (const auto &val : table) {
-        const ip_address &src_addr = val.get_src_addr();
-        auto iter_rte = m_rte_list_for_each_net_dev.find(src_addr);
-        // If src_addr of interface exists in the map, no need to create another route_entry
-        if (iter_rte == m_rte_list_for_each_net_dev.end()) {
-            const ip_address &dst_ip = src_addr;
-            const ip_address &src_ip = ip_address::any_addr();
-            uint8_t tos = 0;
-            m_rte_list_for_each_net_dev[src_addr] =
-                create_new_entry(route_rule_table_key(dst_ip, src_ip, val.get_family(), tos), NULL);
-        }
-    }
 }
 
 void route_table_mgr::update_entry(INOUT route_entry *p_ent, bool b_register_to_net_dev /*= false*/)
@@ -530,7 +397,6 @@ void route_table_mgr::new_route_event(const route_val &netlink_route_val)
     val.set_dst_addr(netlink_route_val.get_dst_addr());
     val.set_dst_pref_len(netlink_route_val.get_dst_pref_len());
     val.set_src_addr(netlink_route_val.get_src_addr());
-    val.set_cfg_src_addr(netlink_route_val.get_cfg_src_addr());
     val.set_gw(netlink_route_val.get_gw_addr());
     val.set_family(netlink_route_val.get_family());
     val.set_protocol(netlink_route_val.get_protocol());

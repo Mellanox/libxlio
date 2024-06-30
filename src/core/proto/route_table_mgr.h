@@ -49,25 +49,8 @@ typedef std::unordered_map<ip_address, route_entry *> in_addr_route_entry_map_t;
 typedef std::vector<route_val> route_table_t;
 
 struct route_result {
-    ip_address src;
-    ip_address gw;
     uint32_t mtu;
     int if_index;
-
-    route_result()
-        : src(in6addr_any)
-        , gw(in6addr_any)
-        , mtu(0)
-        , if_index(0)
-    {
-    }
-    route_result(route_val &rv)
-        : src(rv.get_src_addr())
-        , gw(rv.get_gw_addr())
-        , mtu(rv.get_mtu())
-        , if_index(rv.get_if_index())
-    {
-    }
 };
 
 typedef struct {
@@ -102,17 +85,11 @@ private:
     void parse_attr(struct rtattr *rt_attribute, route_val &val);
     void print_tbl();
 
-    // Creates m_rte_list_for_each_net_dev
-    void update_rte_netdev(route_table_t &table);
     void update_entry(INOUT route_entry *p_ent, bool b_register_to_net_dev = false);
-
-    void rt_mgr_update_source_ip(route_table_t &table);
 
     void new_route_event(const route_val &netlink_route_val);
     void del_route_event(const route_val &netlink_route_val);
 
-    // Holds route_entry for each netdev, to receive events in case there are no other route_entries
-    in_addr_route_entry_map_t m_rte_list_for_each_net_dev;
     // IPv4 routing infromation
     route_table_t m_table_in4;
     // IPv6 routing information

@@ -883,9 +883,7 @@ bool sockinfo_tcp::prepare_dst_to_send(bool is_accepted_socket /* = false */)
     bool ret_val = false;
 
     if (m_p_connected_dst_entry) {
-        bool skip_rules = is_accepted_socket;
-        bool is_connect = !is_accepted_socket;
-        ret_val = m_p_connected_dst_entry->prepare_to_send(m_so_ratelimit, skip_rules, is_connect);
+        ret_val = m_p_connected_dst_entry->prepare_to_send(m_so_ratelimit, is_accepted_socket);
         if (ret_val) {
             /* dst_entry has resolved tx ring,
              * so it is a time to provide TSO information to PCB
@@ -1527,17 +1525,18 @@ uint16_t sockinfo_tcp::get_route_mtu(struct tcp_pcb *pcb)
     auto rule_key =
         route_rule_table_key(reinterpret_cast<ip_address &>(pcb->local_ip),
                              reinterpret_cast<ip_address &>(pcb->remote_ip), family, pcb->tos);
-    g_p_route_table_mgr->route_resolve(rule_key, res);
+    if (g_p_route_table_mgr->route_resolve(rule_key, res)) {
+        if (res.mtu) {
+            vlog_printf(VLOG_DEBUG, "Using route mtu %u\n", res.mtu);
+            return res.mtu;
+        }
 
-    if (res.mtu) {
-        vlog_printf(VLOG_DEBUG, "Using route mtu %u\n", res.mtu);
-        return res.mtu;
+        net_device_val *ndv = g_p_net_device_table_mgr->get_net_device_val(res.if_index);
+        if (ndv && ndv->get_mtu() > 0) {
+            return ndv->get_mtu();
+        }
     }
 
-    net_device_val *ndv = g_p_net_device_table_mgr->get_net_device_val(res.if_index);
-    if (ndv && ndv->get_mtu() > 0) {
-        return ndv->get_mtu();
-    }
     vlog_printf(VLOG_DEBUG, "Could not find device, mtu 0 is used\n");
     return 0;
 }
