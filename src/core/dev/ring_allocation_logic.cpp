@@ -63,9 +63,7 @@ ring_allocation_logic::ring_allocation_logic(ring_logic_t allocation_logic,
     , m_migration_try_count(ring_migration_ratio)
     , m_source(source)
 {
-    if (ring_profile.get_ring_alloc_logic() == RING_LOGIC_PER_INTERFACE) {
-        ring_profile.set_ring_alloc_logic(allocation_logic);
-    }
+    ring_profile.set_ring_alloc_logic(allocation_logic);
     m_res_key = resource_allocation_key(ring_profile);
     m_migration_candidate = 0;
     m_res_key.set_user_id_key(calc_res_key_by_logic());
