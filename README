@@ -1059,9 +1059,9 @@ Note that usage of Mutex might increase latency.
 Default: 0 (Spin)
 
 XLIO_PRINT_REPORT
-Print a report in human readable format in case of runtime errors. The report is
-printed during termination phase. It can be missed if the process is killed with
-SIGKILL signal.
+Print a human readable report of resources usage at exit. The report is printed
+during termination phase. Therefore, It can be missed if the process is killed
+with the SIGKILL signal.
 Default: 0 (Disabled)
 
 XLIO Monitoring & Performance Counters
