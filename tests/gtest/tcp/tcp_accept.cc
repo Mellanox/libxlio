@@ -55,6 +55,7 @@ TEST_F(tcp_accept, mapped_ipv4_accept)
     }
 
     auto check_accpet = [this](bool api4) {
+        usleep(200000);
         int pid = fork();
 
         if (0 == pid) { // Child

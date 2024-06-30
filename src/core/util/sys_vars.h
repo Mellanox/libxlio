@@ -872,7 +872,7 @@ extern mce_sys_var &safe_mce_sys();
 #endif /* DEFINED_UTLS */
 
 #define MCE_DEFAULT_LRO                            (option_3::AUTO)
-#define MCE_DEFAULT_DEFERRED_CLOSE                 (false)
+#define MCE_DEFAULT_DEFERRED_CLOSE                 (true)
 #define MCE_DEFAULT_TCP_ABORT_ON_CLOSE             (false)
 #define MCE_DEFAULT_RX_POLL_ON_TX_TCP              (false)
 #define MCE_DEFAULT_TRIGGER_DUMMY_SEND_GETSOCKNAME (false)

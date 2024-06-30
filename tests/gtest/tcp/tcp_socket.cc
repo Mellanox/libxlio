@@ -64,6 +64,7 @@ TEST_F(tcp_socket, ti_1_ip_socket)
  */
 TEST_F(tcp_socket, ti_2_ipv6only_listen_all)
 {
+    usleep(200000);
     // Test only for IPv4 to IPv6 mode.
     if (server_addr.addr.sa_family != AF_INET6 || client_addr.addr.sa_family != AF_INET) {
         return;

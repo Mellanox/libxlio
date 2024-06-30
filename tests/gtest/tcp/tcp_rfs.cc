@@ -52,6 +52,8 @@ TEST_F(tcp_rfs, single_rule_send)
     int fd;
     char buf[] = "hello";
 
+    usleep(200000);
+
     int pid = fork();
 
     if (0 == pid) { /* I am the child */
