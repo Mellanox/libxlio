@@ -153,7 +153,10 @@ int priv_ibv_modify_qp_to_err(struct ibv_qp *qp)
     memset(&qp_attr, 0, sizeof(qp_attr));
     qp_attr.qp_state = IBV_QPS_ERR;
     BULLSEYE_EXCLUDE_BLOCK_START
-    IF_VERBS_FAILURE_EX(xlio_ibv_modify_qp(qp, &qp_attr, IBV_QP_STATE), EIO) { return -1; }
+    IF_VERBS_FAILURE_EX(xlio_ibv_modify_qp(qp, &qp_attr, IBV_QP_STATE), EIO)
+    {
+        return -1;
+    }
     ENDIF_VERBS_FAILURE;
     BULLSEYE_EXCLUDE_BLOCK_END
 
@@ -166,7 +169,10 @@ int priv_ibv_modify_qp_to_reset(struct ibv_qp *qp)
     memset(&qp_attr, 0, sizeof(qp_attr));
     qp_attr.qp_state = IBV_QPS_RESET;
     BULLSEYE_EXCLUDE_BLOCK_START
-    IF_VERBS_FAILURE(xlio_ibv_modify_qp(qp, &qp_attr, IBV_QP_STATE)) { return -1; }
+    IF_VERBS_FAILURE(xlio_ibv_modify_qp(qp, &qp_attr, IBV_QP_STATE))
+    {
+        return -1;
+    }
     ENDIF_VERBS_FAILURE;
     BULLSEYE_EXCLUDE_BLOCK_END
     return 0;
@@ -213,14 +219,20 @@ int priv_ibv_modify_qp_from_init_to_rts(struct ibv_qp *qp)
     memset(&qp_attr, 0, sizeof(qp_attr));
     qp_attr.qp_state = IBV_QPS_RTR;
     BULLSEYE_EXCLUDE_BLOCK_START
-    IF_VERBS_FAILURE(xlio_ibv_modify_qp(qp, &qp_attr, qp_attr_mask)) { return -2; }
+    IF_VERBS_FAILURE(xlio_ibv_modify_qp(qp, &qp_attr, qp_attr_mask))
+    {
+        return -2;
+    }
     ENDIF_VERBS_FAILURE;
     BULLSEYE_EXCLUDE_BLOCK_END
 
     qp_attr.qp_state = IBV_QPS_RTS;
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    IF_VERBS_FAILURE(xlio_ibv_modify_qp(qp, &qp_attr, qp_attr_mask)) { return -3; }
+    IF_VERBS_FAILURE(xlio_ibv_modify_qp(qp, &qp_attr, qp_attr_mask))
+    {
+        return -3;
+    }
     ENDIF_VERBS_FAILURE;
     BULLSEYE_EXCLUDE_BLOCK_END
 
@@ -233,7 +245,10 @@ int priv_ibv_query_qp_state(struct ibv_qp *qp)
     struct ibv_qp_attr qp_attr;
     struct ibv_qp_init_attr qp_init_attr;
     BULLSEYE_EXCLUDE_BLOCK_START
-    IF_VERBS_FAILURE(ibv_query_qp(qp, &qp_attr, IBV_QP_STATE, &qp_init_attr)) { return -1; }
+    IF_VERBS_FAILURE(ibv_query_qp(qp, &qp_attr, IBV_QP_STATE, &qp_init_attr))
+    {
+        return -1;
+    }
     ENDIF_VERBS_FAILURE;
     BULLSEYE_EXCLUDE_BLOCK_END
     VALGRIND_MAKE_MEM_DEFINED(&qp_attr, sizeof(qp_attr));

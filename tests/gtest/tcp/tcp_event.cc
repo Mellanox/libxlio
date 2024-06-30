@@ -37,8 +37,7 @@
 #include "common/cmn.h"
 #include "tcp_base.h"
 
-class tcp_event : public tcp_base {
-};
+class tcp_event : public tcp_base {};
 
 TEST_F(tcp_event, DISABLED_ti_1)
 {

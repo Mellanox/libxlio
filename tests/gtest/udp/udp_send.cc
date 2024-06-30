@@ -40,8 +40,7 @@
 #include "udp_base.h"
 #include "src/core/util/sock_addr.h"
 
-class udp_send : public udp_base {
-};
+class udp_send : public udp_base {};
 
 /**
  * @test udp_send.ti_1
