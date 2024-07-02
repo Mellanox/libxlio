@@ -119,7 +119,6 @@ Example:
  XLIO DETAILS: ETH MC L2 only rules           Disabled                   [XLIO_ETH_MC_L2_ONLY_RULES]
  XLIO DETAILS: Force Flowtag for MC           Disabled                   [XLIO_MC_FORCE_FLOWTAG]
  XLIO DETAILS: Select Poll (usec)             100000                     [XLIO_SELECT_POLL]
- XLIO DETAILS: Select Poll OS Force           Disabled                   [XLIO_SELECT_POLL_OS_FORCE]
  XLIO DETAILS: Select Poll OS Ratio           10                         [XLIO_SELECT_POLL_OS_RATIO]
  XLIO DETAILS: Select Skip OS                 4                          [XLIO_SELECT_SKIP_OS]
  XLIO DETAILS: CQ Drain Interval (msec)       10                         [XLIO_PROGRESS_ENGINE_INTERVAL]
@@ -702,20 +701,6 @@ Value range is -1, 0 to 100,000,000
 Where value of -1 is used for infinite polling
 Where value of 0 is used for no polling (interrupt driven)
 Default value is 100000
-
-XLIO_SELECT_POLL_OS_FORCE
-This flag forces to poll the OS file descriptors while user thread calls
-select(), poll() or epoll_wait() even when no offloaded sockets are mapped.
-Enabling this flag causes XLIO to set XLIO_SELECT_POLL_OS_RATIO and
-XLIO_SELECT_SKIP_OS to 1. This will result in XLIO_SELECT_POLL number of
-times XLIO will poll the OS file descriptors, along side with offloaded
-sockets, if such sockets exists.
-Note that setting XLIO_SELECT_SKIP_OS and XLIO_SELECT_POLL_OS_RATIO
-directly will override the values these parameters gets while
-XLIO_SELECT_POLL_OS_FORCE is enabled.
-Enable with 1
-Disable with 0
-Default value is 0
 
 XLIO_SELECT_POLL_OS_RATIO
 This will enable polling of the OS file descriptors while user thread calls

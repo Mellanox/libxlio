@@ -684,9 +684,6 @@ void print_xlio_global_settings()
         MCE_DEFAULT_STRQ_STRIDES_COMPENSATION_LEVEL, SYS_VAR_STRQ_STRIDES_COMPENSATION_LEVEL);
     VLOG_PARAM_NUMBER("Select Poll (usec)", safe_mce_sys().select_poll_num,
                       MCE_DEFAULT_SELECT_NUM_POLLS, SYS_VAR_SELECT_NUM_POLLS);
-    VLOG_PARAM_STRING("Select Poll OS Force", safe_mce_sys().select_poll_os_force,
-                      MCE_DEFAULT_SELECT_POLL_OS_FORCE, SYS_VAR_SELECT_POLL_OS_FORCE,
-                      safe_mce_sys().select_poll_os_force ? "Enabled " : "Disabled");
 
     if (safe_mce_sys().select_poll_os_ratio) {
         VLOG_PARAM_NUMBER("Select Poll OS Ratio", safe_mce_sys().select_poll_os_ratio,
