@@ -83,8 +83,8 @@ if test -d "$with_doca/lib/aarch64-linux-gnu"; then
     prj_cv_doca_LDFLAGS_arch="aarch64-linux-gnu"
 fi
 
-if test -d "$with_doca/lib/x64-linux-gnu"; then
-    prj_cv_doca_LDFLAGS_arch="x64-linux-gnu"
+if test -d "$with_doca/lib/x86_64-linux-gnu"; then
+    prj_cv_doca_LDFLAGS_arch="x86_64-linux-gnu"
 fi
 
 FUNC_CHECK_WITHDIR([doca], [$with_doca], [include/doca_version.h])
