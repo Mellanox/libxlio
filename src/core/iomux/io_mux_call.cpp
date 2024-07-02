@@ -87,9 +87,6 @@ inline void io_mux_call::check_rfd_ready_array(fd_array_t *fd_ready_array)
 inline void io_mux_call::check_offloaded_wsockets()
 {
     for (int offloaded_index = 0; offloaded_index < *m_p_num_all_offloaded_fds; ++offloaded_index) {
-
-        //		int fd = m_p_offloaded_wfds[offloaded_index];
-
         if (m_p_offloaded_modes[offloaded_index] & OFF_WRITE) {
             int fd = m_p_all_offloaded_fds[offloaded_index];
             sockinfo *p_socket_object = fd_collection_get_sockfd(fd);
@@ -244,7 +241,6 @@ void io_mux_call::check_offloaded_rsockets()
         }
     }
     g_n_last_checked_index = offloaded_index;
-    // return false;
 }
 
 bool io_mux_call::handle_os_countdown(int &poll_os_countdown)
@@ -427,8 +423,7 @@ int io_mux_call::call()
 
     __log_funcall("");
 
-    if (!safe_mce_sys().select_poll_os_force // TODO: evaluate/consider this logic
-        && (*m_p_num_all_offloaded_fds == 0)) {
+    if (0 == *m_p_num_all_offloaded_fds) {
         // 1st scenario
         timer_update();
         wait_os(false);
@@ -477,7 +472,6 @@ done:
 // override in epoll
 bool io_mux_call::immidiate_return(int &poll_os_countdown)
 {
-
     prepare_to_poll();
 
     if (m_n_all_ready_fds) {
