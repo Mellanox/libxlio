@@ -699,7 +699,7 @@ inline int hw_queue_tx::fill_wqe(xlio_ibv_send_wr *pswr)
         } else {
             /* Support XLIO_IBV_WR_SEND_TSO operation
              */
-            wqe_size = fill_wqe_lso(pswr);
+            wqe_size = fill_wqe_lso(pswr, data_len);
             return wqe_size;
         }
     }
@@ -749,7 +749,7 @@ inline int hw_queue_tx::fill_wqe_send(xlio_ibv_send_wr *pswr)
 }
 
 //! Filling wqe for LSO
-inline int hw_queue_tx::fill_wqe_lso(xlio_ibv_send_wr *pswr)
+inline int hw_queue_tx::fill_wqe_lso(xlio_ibv_send_wr *pswr, int data_len)
 {
     struct mlx5_wqe_ctrl_seg *ctrl = nullptr;
     struct mlx5_wqe_eth_seg *eseg = nullptr;
@@ -770,6 +770,8 @@ inline int hw_queue_tx::fill_wqe_lso(xlio_ibv_send_wr *pswr)
     if (0 == pswr->tso.mss) {
         ctrl->opmod_idx_opcode =
             htonl(((m_sq_wqe_counter & 0xffff) << 8) | (get_mlx5_opcode(XLIO_IBV_WR_SEND) & 0xff));
+    } else {
+        m_p_ring->update_tso_stats(static_cast<uint64_t>(data_len));
     }
 
     eseg = (struct mlx5_wqe_eth_seg *)((uint8_t *)m_sq_wqe_hot + sizeof(*ctrl));

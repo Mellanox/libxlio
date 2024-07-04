@@ -379,6 +379,14 @@ void update_delta_ring_stat(ring_stats_t *p_curr_ring_stats, ring_stats_t *p_pre
             p_prev_ring_stats->tap.n_vf_plugouts =
                 (p_curr_ring_stats->tap.n_vf_plugouts - p_prev_ring_stats->tap.n_vf_plugouts);
         } else {
+            p_prev_ring_stats->simple.n_tx_tso_pkt_count =
+                (p_curr_ring_stats->simple.n_tx_tso_pkt_count -
+                 p_prev_ring_stats->simple.n_tx_tso_pkt_count) /
+                delay;
+            p_prev_ring_stats->simple.n_tx_tso_byte_count =
+                (p_curr_ring_stats->simple.n_tx_tso_byte_count -
+                 p_prev_ring_stats->simple.n_tx_tso_byte_count) /
+                delay;
             p_prev_ring_stats->simple.n_rx_interrupt_received =
                 (p_curr_ring_stats->simple.n_rx_interrupt_received -
                  p_prev_ring_stats->simple.n_rx_interrupt_received) /
@@ -534,6 +542,12 @@ void print_ring_stats(ring_instance_block_t *p_ring_inst_arr)
                 printf(FORMAT_STATS_32bit, "Tap fd:", p_ring_stats->tap.n_tap_fd);
                 printf(FORMAT_RING_TAP_NAME, "Tap Device:", p_ring_stats->tap.s_tap_name);
             } else {
+                if (p_ring_stats->simple.n_tx_tso_pkt_count ||
+                    p_ring_stats->simple.n_tx_tso_byte_count) {
+                    printf(FORMAT_RING_PACKETS, "TSO Offload:",
+                           p_ring_stats->simple.n_tx_tso_byte_count / BYTES_TRAFFIC_UNIT,
+                           p_ring_stats->simple.n_tx_tso_pkt_count, post_fix);
+                }
                 if (p_ring_stats->simple.n_rx_interrupt_requests ||
                     p_ring_stats->simple.n_rx_interrupt_received) {
                     printf(FORMAT_RING_INTERRUPT,
@@ -1794,6 +1808,8 @@ void zero_ring_stats(ring_stats_t *p_ring_stats)
     if (p_ring_stats->n_type == RING_TAP) {
         p_ring_stats->tap.n_vf_plugouts = 0;
     } else {
+        p_ring_stats->simple.n_tx_tso_pkt_count = 0;
+        p_ring_stats->simple.n_tx_tso_byte_count = 0;
         p_ring_stats->simple.n_rx_interrupt_received = 0;
         p_ring_stats->simple.n_rx_interrupt_requests = 0;
         p_ring_stats->simple.n_tx_dropped_wqes = 0;
