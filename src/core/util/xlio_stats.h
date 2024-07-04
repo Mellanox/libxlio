@@ -373,6 +373,8 @@ typedef struct {
     ring_type_t n_type;
     union {
         struct {
+            uint64_t n_tx_tso_pkt_count;
+            uint64_t n_tx_tso_byte_count;
             uint64_t n_rx_interrupt_requests;
             uint64_t n_rx_interrupt_received;
             uint32_t n_rx_cq_moderation_count;
