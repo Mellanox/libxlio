@@ -791,12 +791,9 @@ static u32_t tcp_shrink_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t 
     u8_t optflags = 0;
     u8_t optlen;
 
+    assert(seg != NULL);
+    assert(seg->p != NULL);
     assert(!(seg->flags & TF_SEG_OPTS_ZEROCOPY));
-
-    if ((NULL == seg) || (NULL == seg->p) ||
-        !(TCP_SEQ_GT(ackno, seg->seqno) && TCP_SEQ_LT(ackno, seg->seqno + TCP_SEGLEN(seg)))) {
-        return count;
-    }
 
 #if LWIP_TCP_TIMESTAMPS
     if ((pcb->flags & TF_TIMESTAMP)) {
@@ -920,10 +917,6 @@ static u32_t tcp_shrink_zc_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32
     assert(seg->p != NULL);
     assert(seg->flags & TF_SEG_OPTS_ZEROCOPY);
 
-    if (!(TCP_SEQ_GT(ackno, seg->seqno) && TCP_SEQ_LT(ackno, seg->seqno + TCP_SEGLEN(seg)))) {
-        return 0;
-    }
-
     while (TCP_SEQ_GEQ(ackno, seg->seqno + seg->p->len)) {
         p = seg->p;
         seg->len -= p->len;
@@ -945,6 +938,32 @@ static u32_t tcp_shrink_zc_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32
     seg->tcphdr->seqno = htonl(seg->seqno);
 
     return count;
+}
+
+static void ack_partial_or_whole_segment(struct tcp_pcb *pcb, u32_t ackno, struct tcp_seg **seg)
+{
+    struct tcp_seg *whole_seg_to_ack;
+    while ((*seg) != NULL && TCP_SEQ_GT(ackno, (*seg)->seqno)) {
+        if (TCP_SEQ_LT(ackno, (*seg)->seqno + TCP_SEGLEN((*seg)))) {
+            // Ack partial TCP segment
+            u32_t removed = (*seg)->flags & TF_SEG_OPTS_ZEROCOPY
+                ? tcp_shrink_zc_segment(pcb, (*seg), ackno)
+                : tcp_shrink_segment(pcb, (*seg), ackno);
+            pcb->snd_queuelen -= removed;
+            break;
+        }
+
+        whole_seg_to_ack = (*seg);
+        (*seg) = (*seg)->next;
+
+        /* Prevent ACK for FIN to generate a sent event */
+        if ((pcb->acked != 0) && ((whole_seg_to_ack->tcp_flags & TCP_FIN) != 0)) {
+            pcb->acked--;
+        }
+
+        pcb->snd_queuelen -= pbuf_clen(whole_seg_to_ack->p);
+        tcp_tx_seg_free(pcb, whole_seg_to_ack);
+    }
 }
 
 /**
@@ -1096,8 +1115,8 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
             /* Reset the retransmission time-out. */
             pcb->rto = (pcb->sa >> 3) + pcb->sv;
 
-            /* Update the send buffer space. Diff between the two can never exceed 64K? */
-            pcb->acked = (u32_t)(in_data->ackno - pcb->lastack);
+            /* Update the send buffer space.*/
+            pcb->acked = in_data->ackno - pcb->lastack;
 
             pcb->snd_buf += pcb->acked;
 
@@ -1105,8 +1124,7 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
             pcb->dupacks = 0;
             pcb->lastack = in_data->ackno;
 
-            /* Update the congestion control variables (cwnd and
-               ssthresh). */
+            /* Update the congestion control variables (cwnd and ssthresh). */
             if (get_tcp_state(pcb) >= ESTABLISHED) {
 #if TCP_CC_ALGO_MOD
                 cc_ack_received(pcb, CC_ACK);
@@ -1135,48 +1153,7 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
                      ? ntohl(pcb->unacked->tcphdr->seqno) + TCP_SEGLEN(pcb->unacked)
                      : 0));
 
-            /* Remove segment from the unacknowledged list if the incoming
-               ACK acknowlegdes them. */
-            while (pcb->unacked != NULL) {
-
-                /* The purpose of this processing is to avoid to send again
-                 * data from TSO segment that is partially acknowledged.
-                 * This TSO segment was not released in tcp_receive() because
-                 * input data processing releases whole acknowledged segment only.
-                 */
-                if (pcb->unacked->flags & TF_SEG_OPTS_TSO) {
-                    u32_t removed;
-                    removed = pcb->unacked->flags & TF_SEG_OPTS_ZEROCOPY
-                        ? tcp_shrink_zc_segment(pcb, pcb->unacked, in_data->ackno)
-                        : tcp_shrink_segment(pcb, pcb->unacked, in_data->ackno);
-                    pcb->snd_queuelen -= removed;
-                }
-
-                if (!(TCP_SEQ_LEQ(pcb->unacked->seqno + TCP_SEGLEN(pcb->unacked),
-                                  in_data->ackno))) {
-                    break;
-                }
-                LWIP_DEBUGF(TCP_INPUT_DEBUG,
-                            ("tcp_receive: removing %" U32_F ":%" U32_F " from pcb->unacked\n",
-                             ntohl(pcb->unacked->tcphdr->seqno),
-                             ntohl(pcb->unacked->tcphdr->seqno) + TCP_SEGLEN(pcb->unacked)));
-
-                next = pcb->unacked;
-                pcb->unacked = pcb->unacked->next;
-                LWIP_DEBUGF(TCP_QLEN_DEBUG,
-                            ("tcp_receive: queuelen %" U32_F " ... ", (u32_t)pcb->snd_queuelen));
-                LWIP_ASSERT("pcb->snd_queuelen >= pbuf_clen(next->p)",
-                            (pcb->snd_queuelen >= pbuf_clen(next->p)));
-                /* Prevent ACK for FIN to generate a sent event */
-                if ((pcb->acked != 0) && ((next->tcp_flags & TCP_FIN) != 0)) {
-                    pcb->acked--;
-                }
-
-                pcb->snd_queuelen -= pbuf_clen(next->p);
-                tcp_tx_seg_free(pcb, next);
-                LWIP_DEBUGF(TCP_QLEN_DEBUG,
-                            ("%" U32_F " (after freeing unacked)\n", (u32_t)pcb->snd_queuelen));
-            }
+            ack_partial_or_whole_segment(pcb, in_data->ackno, &(pcb->unacked));
 
             /* If there's nothing left to acknowledge, stop the retransmit
                timer, otherwise reset it to start again */
@@ -1205,34 +1182,8 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
            rationale is that lwIP puts all outstanding segments on the
            ->unsent list after a retransmission, so these segments may
            in fact have been sent once. */
-        while (pcb->unsent != NULL &&
-               TCP_SEQ_BETWEEN(in_data->ackno,
-                               ntohl(pcb->unsent->tcphdr->seqno) + TCP_SEGLEN(pcb->unsent),
-                               pcb->snd_nxt)) {
-            LWIP_DEBUGF(TCP_INPUT_DEBUG,
-                        ("tcp_receive: removing %" U32_F ":%" U32_F " from pcb->unsent\n",
-                         ntohl(pcb->unsent->tcphdr->seqno),
-                         ntohl(pcb->unsent->tcphdr->seqno) + TCP_SEGLEN(pcb->unsent)));
+        ack_partial_or_whole_segment(pcb, in_data->ackno, &(pcb->unsent));
 
-            next = pcb->unsent;
-            pcb->unsent = pcb->unsent->next;
-            LWIP_DEBUGF(TCP_QLEN_DEBUG,
-                        ("tcp_receive: queuelen %" U32_F " ... ", (u32_t)pcb->snd_queuelen));
-            LWIP_ASSERT("pcb->snd_queuelen >= pbuf_clen(next->p)",
-                        (pcb->snd_queuelen >= pbuf_clen(next->p)));
-            /* Prevent ACK for FIN to generate a sent event */
-            if ((pcb->acked != 0) && ((next->tcp_flags & TCP_FIN) != 0)) {
-                pcb->acked--;
-            }
-            pcb->snd_queuelen -= pbuf_clen(next->p);
-            tcp_tx_seg_free(pcb, next);
-            LWIP_DEBUGF(TCP_QLEN_DEBUG,
-                        ("%" U16_F " (after freeing unsent)\n", (u32_t)pcb->snd_queuelen));
-            if (pcb->snd_queuelen != 0) {
-                LWIP_ASSERT("tcp_receive: valid queue length",
-                            pcb->unacked != NULL || pcb->unsent != NULL);
-            }
-        }
         if (pcb->unsent == NULL) {
             /* We have sent all pending segments, reflect it in last_unsent */
             pcb->last_unsent = NULL;

@@ -339,7 +339,7 @@ struct tcp_pcb {
     u32_t snd_sml_snt; /* maintain state for minshall's algorithm */
     u32_t snd_sml_add; /* maintain state for minshall's algorithm */
 
-    u32_t snd_queuelen; /* Available buffer space for sending (in tcp_segs). */
+    u32_t snd_queuelen; /* Available buffer space for sending (in pbufs). */
     u32_t snd_queuelen_max;
 
     /* These are ordered by sequence number: */
