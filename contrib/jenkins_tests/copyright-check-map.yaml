@@ -28,6 +28,7 @@ general:
         - ".*\\.cmake"
         - ".*\\.png"
         - ".*\\.conf"
+        - "tests/nginx/constant_reply_module/config"
         #
         # Auto generated files
         #
