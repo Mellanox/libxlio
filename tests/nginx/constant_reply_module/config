@@ -1,0 +1,13 @@
+ngx_addon_name=ngx_http_constant_reply_module
+
+if test -n "$ngx_module_link"; then
+  ngx_module_type=HTTP
+  ngx_module_name=ngx_http_constant_reply_module
+  ngx_module_libs=-lstdc++
+  ngx_module_srcs="$ngx_addon_dir/ngx_http_constant_reply_module.cpp"
+  . auto/module
+else
+  CORE_LIBS="$CORE_LIBS -lstdc++"
+	HTTP_MODULES="$HTTP_MODULES ngx_http_constant_reply_module"
+	NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/ngx_http_constant_reply_module.cpp"
+fi
