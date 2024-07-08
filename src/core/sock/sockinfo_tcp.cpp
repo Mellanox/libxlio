@@ -1548,10 +1548,10 @@ uint16_t sockinfo_tcp::get_route_mtu(struct tcp_pcb *pcb)
 
 void sockinfo_tcp::err_lwip_cb(void *pcb_container, err_t err)
 {
-
     if (!pcb_container) {
         return;
     }
+
     sockinfo_tcp *conn = (sockinfo_tcp *)pcb_container;
     __log_dbg("[fd=%d] sock=%p lwip_pcb=%p err=%d", conn->m_fd, conn, &(conn->m_pcb), err);
 
@@ -1560,20 +1560,10 @@ void sockinfo_tcp::err_lwip_cb(void *pcb_container, err_t err)
         return;
     }
 
+    // We got RST/error/timeout before the handshake is complete
     if (conn->m_parent) {
-        // In case we got RST or abandon() before we accepted the connection
-        conn->unlock_tcp_con();
-        int delete_fd = conn->m_parent->handle_child_FIN(conn);
-        conn->lock_tcp_con();
-
-        if (delete_fd) {
-            // Object destruction is expected to happen in internal thread. Unless XLIO is in late
-            // terminating stage, in which case we don't expect to handle packets.
-            // Calling close() under lock will prevent internal thread to delete the object before
-            // we finish with the current processing.
-            XLIO_CALL(close, delete_fd);
-            return;
-        }
+        conn->m_parent->handle_incoming_handshake_failure(conn);
+        return;
     }
 
     /*
@@ -1854,40 +1844,44 @@ void sockinfo_tcp::abort_connection()
     tcp_abort(&(m_pcb));
 }
 
-int sockinfo_tcp::handle_child_FIN(sockinfo_tcp *child_conn)
+void sockinfo_tcp::handle_incoming_handshake_failure(sockinfo_tcp *child_conn)
 {
-    lock_tcp_con();
+    child_conn->unlock_tcp_con();
 
-    for (sockinfo_tcp *conn = m_accepted_conns.front(); conn; conn = m_accepted_conns.next(conn)) {
-        if (conn == child_conn) {
-            unlock_tcp_con();
-            return 0; // don't close conn, it can be accepted
-        }
-    }
+    lock_tcp_con(); // Lock the listen parent socket
 
     if (m_ready_pcbs.find(&child_conn->m_pcb) != m_ready_pcbs.end()) {
         m_ready_pcbs.erase(&child_conn->m_pcb);
     }
 
     // remove the connection from m_syn_received and close it by caller
-    class flow_tuple key;
+    flow_tuple key;
     sockinfo_tcp::create_flow_tuple_key_from_pcb(key, &(child_conn->m_pcb));
     if (!m_syn_received.erase(key)) {
-        si_tcp_logfunc("Can't find the established pcb in syn received list");
-    } else {
-        si_tcp_logdbg("received FIN before accept() was called");
-        m_received_syn_num--;
-        m_p_socket_stats->listen_counters.n_rx_fin++;
-        m_p_socket_stats->listen_counters.n_conn_dropped++;
-        child_conn->m_parent = nullptr;
-        unlock_tcp_con();
-        child_conn->lock_tcp_con();
-        child_conn->abort_connection();
-        child_conn->unlock_tcp_con();
-        return (child_conn->get_fd());
+        si_tcp_logerr("Unable to find the established pcb in syn received list");
     }
-    unlock_tcp_con();
-    return 0;
+
+    si_tcp_logfunc("Received-RST/internal-error/timeout in SYN_RCVD state");
+    m_received_syn_num--;
+    m_p_socket_stats->listen_counters.n_rx_fin++;
+    m_p_socket_stats->listen_counters.n_conn_dropped++;
+    child_conn->m_parent = nullptr;
+    unlock_tcp_con(); // Unlock the listen parent socket
+
+    child_conn->lock_tcp_con();
+
+    if (safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+        // Object destruction is expected to happen in internal thread. Unless XLIO is in late
+        // terminating stage, in which case we don't expect to handle packets.
+        // Calling close() under lock will prevent internal thread to delete the object before
+        // we finish with the current processing.
+        XLIO_CALL(close, child_conn->get_fd());
+    } else {
+        // With delegate mode calling close() will destroy the socket object and cause access after
+        // free in the subsequent flows. Instead, we add the socket for postponed close that will be
+        // as part of the delegate timer.
+        g_event_handler_manager_local.add_close_postponed_socket(child_conn);
+    }
 }
 
 err_t sockinfo_tcp::ack_recvd_lwip_cb(void *arg, struct tcp_pcb *tpcb, u16_t ack)
@@ -2015,7 +2009,7 @@ inline void sockinfo_tcp::rx_lwip_cb_socketxtreme_helper(pbuf *p)
     save_stats_rx_offload(p->tot_len);
 }
 
-inline err_t sockinfo_tcp::handle_fin(struct tcp_pcb *pcb, err_t err)
+err_t sockinfo_tcp::handle_fin(struct tcp_pcb *pcb, err_t err)
 {
     if (is_server()) {
         vlog_printf(VLOG_ERROR, "listen socket should not receive FIN\n");
@@ -2027,28 +2021,10 @@ inline err_t sockinfo_tcp::handle_fin(struct tcp_pcb *pcb, err_t err)
     __log_dbg("[fd=%d] null pbuf sock(%p %p) err=%d", m_fd, &(m_pcb), pcb, err);
     tcp_shutdown_rx();
 
-    if (m_parent) {
-        // in case we got FIN before we accepted the connection
-        /* TODO need to add some refcount inside parent in case parent and child are closed
-         * together*/
-        unlock_tcp_con();
-        int delete_fd = m_parent->handle_child_FIN(this);
-        lock_tcp_con();
-
-        if (delete_fd) {
-            // Object destruction is expected to happen in internal thread. Unless XLIO is in late
-            // terminating stage, in which case we don't expect to handle packets.
-            // Calling close() under lock will prevent internal thread to delete the object before
-            // we finish with the current processing.
-            XLIO_CALL(close, delete_fd);
-            return ERR_ABRT;
-        }
-    }
-
     return ERR_OK;
 }
 
-inline void sockinfo_tcp::handle_rx_lwip_cb_error(pbuf *p)
+void sockinfo_tcp::handle_rx_lwip_cb_error(pbuf *p)
 {
     // notify io_mux
     NOTIFY_ON_EVENTS(this, EPOLLERR);
@@ -3192,7 +3168,6 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
 
     m_ready_conn_cnt--;
     m_p_socket_stats->listen_counters.n_conn_backlog--;
-    tcp_accepted(m_sock);
 
     class flow_tuple key;
     sockinfo_tcp::create_flow_tuple_key_from_pcb(key, &(ns->m_pcb));
@@ -3330,8 +3305,6 @@ sockinfo_tcp *sockinfo_tcp::accept_clone()
 // Must be taken under parent's tcp connection lock
 void sockinfo_tcp::accept_connection_socketxtreme(sockinfo_tcp *parent, sockinfo_tcp *child)
 {
-    tcp_accepted(parent->m_sock);
-
     class flow_tuple key;
     sockinfo_tcp::create_flow_tuple_key_from_pcb(key, &(child->m_pcb));
 
@@ -3352,23 +3325,13 @@ void sockinfo_tcp::accept_connection_socketxtreme(sockinfo_tcp *parent, sockinfo
     child->m_p_socket_stats->set_bound_if(child->m_bound);
     child->m_p_socket_stats->bound_port = child->m_bound.get_in_port();
 
-    /* Update xlio_completion with
-     * XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED related data
-     */
-    if (likely(child->m_parent)) {
-        xlio_socketxtreme_completion_t &completion =
-            *(child->set_events_socketxtreme(XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED, false));
-        completion.listen_fd = child->m_parent->get_fd();
+    xlio_socketxtreme_completion_t &completion =
+        *(child->set_events_socketxtreme(XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED, false));
+    completion.listen_fd = parent->get_fd();
 
-        child->m_connected.get_sa(reinterpret_cast<sockaddr *>(&completion.src),
-                                  static_cast<socklen_t>(sizeof(completion.src)));
-        child->m_p_rx_ring->socketxtreme_end_ec_operation();
-    } else {
-        vlog_printf(VLOG_ERROR,
-                    "XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED: can't find listen socket for new "
-                    "connected socket with [fd=%d]\n",
-                    child->get_fd());
-    }
+    child->m_connected.get_sa(reinterpret_cast<sockaddr *>(&completion.src),
+                              static_cast<socklen_t>(sizeof(completion.src)));
+    child->m_p_rx_ring->socketxtreme_end_ec_operation();
 
     child->unlock_tcp_con();
     parent->lock_tcp_con();
@@ -3471,6 +3434,11 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
         new_sock->m_xlio_thr = false;
     }
 
+    // Set this before moving socket to m_accepted_conns.
+    // In case of err_lwip_cb we will not handle new_sock as
+    // half open but treat it the same as error on accept ready socket.
+    new_sock->m_parent = nullptr;
+
     new_sock->unlock_tcp_con();
 
     conn->lock_tcp_con();
@@ -3489,14 +3457,11 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     conn->m_p_socket_stats->listen_counters.n_conn_established++;
     conn->m_p_socket_stats->listen_counters.n_conn_backlog++;
 
-    // OLG: Now we should wakeup all threads that are sleeping on this socket.
+    // Now we should wakeup all threads that are sleeping on this socket.
     conn->m_sock_wakeup_pipe.do_wakeup();
     // Now we should register the child socket to TCP timer
 
     conn->unlock_tcp_con();
-
-    /* Do this after auto_accept_connection() call */
-    new_sock->m_parent = nullptr;
 
     new_sock->lock_tcp_con();
 
