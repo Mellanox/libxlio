@@ -190,8 +190,8 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb)
                        end. We then call the error callback to inform the
                        application that the connection is dead before we
                        deallocate the PCB. */
-                    TCP_EVENT_ERR(pcb->errf, pcb->my_container, ERR_RST);
                     tcp_pcb_remove(pcb);
+                    TCP_EVENT_ERR(pcb->errf, pcb->my_container, ERR_RST);
                 } else if (in_data.recv_flags & TF_CLOSED) {
                     /* The connection has been closed and we will deallocate the
                        PCB. */
@@ -670,6 +670,7 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
             /* Looks like another copy of the SYN - retransmit our SYN-ACK */
             tcp_rexmit(pcb);
         }
+        // Currently received packets with only FIN bit in SYN_RCVD state are ignored.
         break;
     case CLOSE_WAIT:
         /* FALLTHROUGH */

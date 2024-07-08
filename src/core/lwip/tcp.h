@@ -443,10 +443,6 @@ void tcp_err(struct tcp_pcb *pcb, tcp_err_fn err);
 
 #define tcp_tso(pcb) ((pcb)->tso.max_payload_sz)
 
-#define tcp_accepted(pcb)                                                                          \
-    LWIP_ASSERT("get_tcp_state(pcb) == LISTEN (called for wrong pcb?)",                            \
-                get_tcp_state(pcb) == LISTEN)
-
 void tcp_recved(struct tcp_pcb *pcb, u32_t len);
 err_t tcp_bind(struct tcp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port, bool is_ipv6);
 err_t tcp_connect(struct tcp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port, bool is_ipv6,

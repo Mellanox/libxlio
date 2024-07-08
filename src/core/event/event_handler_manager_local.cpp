@@ -32,6 +32,7 @@
 
 #include "event_handler_manager_local.h"
 #include "util/sys_vars.h"
+#include "xlio.h"
 
 using namespace std::chrono;
 
@@ -52,11 +53,11 @@ void event_handler_manager_local::do_tasks()
 {
     auto curr_time = steady_clock::now();
     if (likely(safe_mce_sys().tcp_timer_resolution_msec >
-               duration_cast<milliseconds>(curr_time - _last_run_time).count())) {
+               duration_cast<milliseconds>(curr_time - m_last_run_time).count())) {
         return;
     }
 
-    _last_run_time = curr_time;
+    m_last_run_time = curr_time;
 
     do_tasks_for_thread_local();
 }
@@ -64,4 +65,13 @@ void event_handler_manager_local::do_tasks()
 void event_handler_manager_local::do_tasks_for_thread_local()
 {
     m_timer.process_registered_timers_uncond();
+
+    while (!m_close_postponed_sockets.empty()) {
+        XLIO_CALL(close, m_close_postponed_sockets.get_and_pop_front()->get_fd());
+    }
+}
+
+void event_handler_manager_local::add_close_postponed_socket(sockinfo *sock)
+{
+    m_close_postponed_sockets.push_front(sock);
 }
