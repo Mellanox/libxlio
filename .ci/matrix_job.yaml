@@ -54,7 +54,15 @@ runs_on_dockers:
       category: 'base'
     }
 # tool
-  - {name: 'toolbox', url: 'harbor.mellanox.com/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
+  - {
+     file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
+     arch: 'x86_64',
+     name: 'toolbox',
+     uri: 'xlio/$arch/ubuntu22.04/$name',
+     tag: '20240805',
+     build_args: '--no-cache --target toolbox',
+     category: 'tool'
+    }
   - {name: 'blackduck', url: 'harbor.mellanox.com/toolbox/ngci-centos:7.9.2009.2', category: 'tool', arch: 'x86_64'}
   - {name: 'header-check', url: 'harbor.mellanox.com/toolbox/header_check:0.0.14', category: 'tool', arch: 'x86_64', tag: '0.0.14'}
 # static tests
