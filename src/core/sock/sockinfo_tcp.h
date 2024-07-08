@@ -458,7 +458,7 @@ private:
     // tx
     unsigned tx_wait(bool blocking);
     int os_epoll_wait_with_tcp_timers(epoll_event *ep_events, int maxevents);
-    int handle_child_FIN(sockinfo_tcp *child_conn);
+    void handle_incoming_handshake_failure(sockinfo_tcp *child_conn);
 
     // rx
     // int rx_wait(int &poll_count, bool blocking = true);
@@ -473,9 +473,9 @@ private:
     ssize_t tcp_tx_handle_sndbuf_unavailable(ssize_t total_tx, bool is_dummy, bool is_send_zerocopy,
                                              int errno_to_restore);
     ssize_t tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg);
-    inline err_t handle_fin(struct tcp_pcb *pcb, err_t err);
-    inline void handle_rx_lwip_cb_error(pbuf *p);
-    inline void rx_lwip_cb_error(pbuf *p);
+    err_t handle_fin(struct tcp_pcb *pcb, err_t err);
+    void handle_rx_lwip_cb_error(pbuf *p);
+    void rx_lwip_cb_error(pbuf *p);
     inline void rx_lwip_process_chained_pbufs(pbuf *p);
     inline void rx_lwip_shrink_rcv_wnd(size_t pbuf_tot_len, int nbytes);
     inline void save_packet_info_in_ready_list(pbuf *p);
