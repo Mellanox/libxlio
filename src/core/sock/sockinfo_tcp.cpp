@@ -292,7 +292,6 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     , m_tcp_con_lock(get_new_tcp_lock())
     , m_sysvar_buffer_batching_mode(safe_mce_sys().buffer_batching_mode)
     , m_sysvar_tx_segs_batch_tcp(safe_mce_sys().tx_segs_batch_tcp)
-    , m_sysvar_tcp_ctl_thread(safe_mce_sys().tcp_ctl_thread)
     , m_tcp_seg_list(nullptr)
     , m_sysvar_rx_poll_on_tx_tcp(safe_mce_sys().rx_poll_on_tx_tcp)
     , m_user_huge_page_mask(~((uint64_t)safe_mce_sys().user_huge_page_size - 1))
@@ -1705,7 +1704,7 @@ void sockinfo_tcp::process_my_ctl_packets()
     while (!temp_list.empty()) {
         mem_buf_desc_t *desc = temp_list.get_and_pop_front();
 
-        static const unsigned int MAX_SYN_RCVD = tcp_ctl_thread_on(m_sysvar_tcp_ctl_thread)
+        static const unsigned int MAX_SYN_RCVD = tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)
             ? safe_mce_sys().sysctl_reader.get_tcp_max_syn_backlog()
             : 0;
         // NOTE: currently, in case tcp_ctl_thread is disabled, only established backlog is
@@ -1831,7 +1830,7 @@ void sockinfo_tcp::handle_timer_expired()
 {
     si_tcp_logfunc("");
 
-    if (tcp_ctl_thread_on(m_sysvar_tcp_ctl_thread)) {
+    if (tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)) {
         process_rx_ctl_packets();
     }
 
@@ -2496,7 +2495,7 @@ void sockinfo_tcp::queue_rx_ctl_packet(struct tcp_pcb *pcb, mem_buf_desc_t *p_de
         m_ready_pcbs[pcb] = 1;
     }
 
-    if (m_sysvar_tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_WITH_WAKEUP) {
+    if (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_WITH_WAKEUP) {
         get_tcp_timer_collection()->register_wakeup_event();
     }
 
@@ -2524,7 +2523,8 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
 
             /// respect TCP listen backlog - See redmine issue #565962
             /// distinguish between backlog of established sockets vs. backlog of syn-rcvd
-            static const unsigned int MAX_SYN_RCVD = tcp_ctl_thread_on(m_sysvar_tcp_ctl_thread)
+            static const unsigned int MAX_SYN_RCVD =
+                tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)
                 ? safe_mce_sys().sysctl_reader.get_tcp_max_syn_backlog()
                 : 0;
             // NOTE: currently, in case tcp_ctl_thread is disabled, only established backlog is
@@ -2552,7 +2552,7 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
         }
 
         // 2nd check only worth when MAX_SYN_RCVD>0 for non tcp_ctl_thread
-        if (tcp_ctl_thread_on(m_sysvar_tcp_ctl_thread) || established_backlog_full) {
+        if (tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread) || established_backlog_full) {
             queue_rx_ctl_packet(
                 pcb, p_rx_pkt_mem_buf_desc_info); // TODO: need to trigger queue pulling from
                                                   // accept in case no tcp_ctl_thread
@@ -2958,7 +2958,7 @@ int sockinfo_tcp::listen(int backlog)
      * it as the maximum allowed backlog.
      * A backlog argument of 0 may allow the socket to accept connections, in which case the length
      * of the listen queue may be set to an implementation-defined minimum value.
-     * Note: backlog behavior depends on m_sysvar_tcp_ctl_thread status.
+     * Note: backlog behavior depends on safe_mce_sys().tcp_ctl_thread status.
      */
     if (backlog < 0) {
         backlog = safe_mce_sys().sysctl_reader.get_listen_maxconn();
@@ -3053,7 +3053,7 @@ int sockinfo_tcp::listen(int backlog)
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    if (tcp_ctl_thread_on(m_sysvar_tcp_ctl_thread)) {
+    if (tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)) {
         g_p_event_handler_manager->register_socket_timer_event(this);
     }
 
@@ -3177,7 +3177,7 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
         __log_dbg("Can't find the established pcb in syn received list");
     }
 
-    if (m_sysvar_tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_WITH_WAKEUP &&
+    if (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_WITH_WAKEUP &&
         !m_rx_peer_packets.empty()) {
         get_tcp_timer_collection()->register_wakeup_event();
     }
@@ -3291,7 +3291,7 @@ sockinfo_tcp *sockinfo_tcp::accept_clone()
         si->set_ring_logic_tx(m_ring_alloc_log_tx);
     }
 
-    if (tcp_ctl_thread_on(m_sysvar_tcp_ctl_thread)) {
+    if (tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)) {
         tcp_ip_output(&si->m_pcb, sockinfo_tcp::ip_output_syn_ack);
     }
 
@@ -3403,7 +3403,7 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
         new_sock->m_b_attached = true;
     }
 
-    if (tcp_ctl_thread_on(new_sock->m_sysvar_tcp_ctl_thread)) {
+    if (tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)) {
         new_sock->m_xlio_thr = true;
 
         // Before handling packets from flow steering the child should process everything it got
@@ -3607,7 +3607,7 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     tcp_sent(&new_sock->m_pcb, sockinfo_tcp::ack_recvd_lwip_cb);
     new_sock->m_pcb.syn_tw_handled_cb = nullptr;
     new_sock->m_sock_wakeup_pipe.wakeup_clear();
-    if (tcp_ctl_thread_on(new_sock->m_sysvar_tcp_ctl_thread)) {
+    if (tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)) {
         tcp_ip_output(&new_sock->m_pcb, sockinfo_tcp::ip_output_syn_ack);
     }
 
@@ -3862,7 +3862,8 @@ int sockinfo_tcp::wait_for_conn_ready_blocking()
 int sockinfo_tcp::os_epoll_wait(epoll_event *ep_events, int maxevents)
 {
     return (
-        likely(m_sysvar_tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS)
+        likely(safe_mce_sys().tcp_ctl_thread !=
+               option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS)
             ? SYSCALL(epoll_wait, m_rx_epfd, ep_events, maxevents, m_loops_timer.time_left_msec())
             : os_epoll_wait_with_tcp_timers(ep_events, maxevents));
 }
@@ -5114,7 +5115,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
     bool is_timeout = m_loops_timer.is_timeout(); // We do this under lock.
     unlock_tcp_con(); // Must happen before g_event_handler_manager_local.do_tasks();
 
-    if (m_sysvar_tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+    if (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
         // There are scenarios when rx_wait_helper is called in an infinite loop but exits before
         // OS epoll_wait. Delegated TCP timers must be attempted in such case.
         // This is a slow path. So calling chrono::now(), even with every iteration, is OK here.
