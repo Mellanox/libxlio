@@ -441,6 +441,7 @@ int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_c
     bool do_poll = true;
 
     if (likely(xlio_completions) && ncompletions) {
+        // coverity[missing_lock:FALSE] /*Turn off coverity missing_lock check*/
         if ((flags & SOCKETXTREME_POLL_TX) && !m_socketxtreme.ec_sock_list_start) {
             uint64_t poll_sn = 0;
             const std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);

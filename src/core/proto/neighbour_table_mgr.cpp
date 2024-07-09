@@ -144,6 +144,7 @@ void neigh_table_mgr::notify_cb(event *ev)
 
     // find all neigh entries with an appropriate peer_ip and net_device
     if (p_ndev) {
+        // coverity[copy_constructor_call:FALSE] /*Turn off check COPY_INSTEAD_OF_MOVE*/
         neigh_entry *p_ne = dynamic_cast<neigh_entry *>(get_entry(neigh_key(addr, p_ndev)));
         if (p_ne) {
             // Call the relevant neigh_entry to handle the event
