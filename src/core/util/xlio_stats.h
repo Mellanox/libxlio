@@ -507,7 +507,9 @@ typedef struct sh_mem_t {
         global_inst_arr->init();
         mc_info.max_grp_num = 0;
         for (uint32_t i = 0; i < MC_TABLE_SIZE; i++) {
+            // coverity[missing_lock:FALSE] /*Turn off coverity missing_lock check*/
             mc_info.mc_grp_tbl[i].mc_grp = {ip_address::any_addr(), 0};
+            // coverity[missing_lock:FALSE]
             mc_info.mc_grp_tbl[i].sock_num = 0;
         }
         memset(&iomux, 0, sizeof(iomux));
