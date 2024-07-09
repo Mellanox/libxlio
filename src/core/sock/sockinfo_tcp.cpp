@@ -350,7 +350,6 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
 
     m_rcvbuff_current = 0;
     m_rcvbuff_non_tcp_recved = 0;
-    m_received_syn_num = 0;
 
     m_ready_conn_cnt = 0;
     m_backlog = INT_MAX;
@@ -652,7 +651,6 @@ bool sockinfo_tcp::prepare_listen_to_close()
         syn_received_map_t::iterator syn_received_itr_erase = syn_received_itr;
         syn_received_itr++;
         m_syn_received.erase(syn_received_itr_erase);
-        m_received_syn_num--;
         new_sock->lock_tcp_con();
         new_sock->m_parent = NULL;
         new_sock->abort_connection();
@@ -1870,7 +1868,6 @@ void sockinfo_tcp::handle_incoming_handshake_failure(sockinfo_tcp *child_conn)
     }
 
     si_tcp_logfunc("Received-RST/internal-error/timeout in SYN_RCVD state");
-    m_received_syn_num--;
     m_p_socket_stats->listen_counters.n_rx_fin++;
     m_p_socket_stats->listen_counters.n_conn_dropped++;
     child_conn->m_parent = nullptr;
@@ -3001,8 +2998,6 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
     if (!m_syn_received.erase(key)) {
         // Should we worry about that?
         __log_dbg("Can't find the established pcb in syn received list");
-    } else {
-        m_received_syn_num--;
     }
 
     if (m_sysvar_tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_WITH_WAKEUP &&
@@ -3400,7 +3395,6 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     create_flow_tuple_key_from_pcb(key, newpcb);
     listen_sock->m_syn_received[key] = newpcb;
 
-    listen_sock->m_received_syn_num++;
     listen_sock->m_p_socket_stats->listen_counters.n_rx_syn_tw++;
     listen_sock->m_tcp_con_lock.unlock();
     assert(g_p_fd_collection);
@@ -3465,8 +3459,6 @@ err_t sockinfo_tcp::syn_received_lwip_cb(void *arg, struct tcp_pcb *newpcb)
     create_flow_tuple_key_from_pcb(key, newpcb);
 
     listen_sock->m_syn_received[key] = newpcb;
-
-    listen_sock->m_received_syn_num++;
 
     return ERR_OK;
 }
