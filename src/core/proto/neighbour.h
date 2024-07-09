@@ -56,7 +56,7 @@
 class neigh_key {
 public:
     neigh_key(ip_addr addr, net_device_val *p_ndvl)
-        : m_ip_addrs(addr)
+        : m_ip_addrs(std::move(addr))
         , m_p_net_dev_val(p_ndvl) {};
     virtual ~neigh_key() {};
 

@@ -65,7 +65,7 @@ flow_tuple::flow_tuple(const flow_tuple &ft)
 
 flow_tuple::flow_tuple(flow_tuple &&ft)
 {
-    *this = ft;
+    *this = std::move(ft);
 }
 
 flow_tuple &flow_tuple::operator=(const flow_tuple &ft)
