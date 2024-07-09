@@ -2399,6 +2399,7 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
      * error notification without data processing
      */
     if (__msg && __msg->msg_control && (in_flags & MSG_ERRQUEUE)) {
+        // coverity[MISSING_LOCK:FALSE] /*Turn off coverity check for missing lock*/
         if (m_error_queue.empty()) {
             errno = EAGAIN;
             unlock_tcp_con();
@@ -2873,6 +2874,7 @@ int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
         UNLOCK_RET(-1);
     }
     m_pcb.is_ipv6 = (addr.get_sa_family() == AF_INET6);
+    // coverity[copy_assignment_call:FALSE] /*Turn off coverity check for COPY_INSTEAD_OF_MOVE*/
     m_bound = addr;
 
     if (!m_bound.is_anyaddr() &&
@@ -4047,7 +4049,6 @@ noblock:
     __log_funcall("--->>> tcp_sndbuf(&m_pcb)=%ld", sndbuf_available());
     return true;
 }
-
 bool sockinfo_tcp::is_errorable(int *errors)
 {
     *errors = 0;
@@ -4056,7 +4057,7 @@ bool sockinfo_tcp::is_errorable(int *errors)
         m_conn_state == TCP_CONN_RESETED || m_conn_state == TCP_CONN_FAILED) {
         *errors |= POLLHUP;
     }
-
+    // coverity[MISSING_LOCK:FALSE] /*Turn off coverity check for missing lock*/
     if ((m_conn_state == TCP_CONN_ERROR) || (!m_error_queue.empty())) {
         *errors |= POLLERR;
     }
@@ -4564,6 +4565,7 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                 ret = -1;
                 break;
             } else {
+                // coverity[copy_assignment_call:FALSE] /*Turn off coverity COPY_INSTEAD_OF_MOVE*/
                 m_so_bindtodevice_ip = addr;
 
                 si_tcp_logdbg("SOL_SOCKET, %s='%s' (%s)", setsockopt_so_opt_to_str(__optname),
