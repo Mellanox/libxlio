@@ -251,6 +251,7 @@ size_t hugepage_mgr::read_meminfo(const char *tag)
         }
         infile.close();
     }
+    // coverity[return_overflow:FALSE] /*Turn off coverity check for overflow*/
     return val;
 }
 

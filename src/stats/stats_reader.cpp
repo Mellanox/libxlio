@@ -486,6 +486,7 @@ void print_ring_stats(ring_instance_block_t *p_ring_inst_arr)
     }
 
     for (int i = 0; i < NUM_OF_SUPPORTED_RINGS; i++) {
+        // coverity[missing_lock:FALSE] /* Turn off coverity missing_lock check*/
         if (p_ring_inst_arr[i].b_enabled) {
             p_ring_stats = &p_ring_inst_arr[i].ring_stats;
             printf("======================================================\n");
@@ -575,6 +576,7 @@ void print_cq_stats(cq_instance_block_t *p_cq_inst_arr)
     }
 
     for (int i = 0; i < NUM_OF_SUPPORTED_CQS; i++) {
+        // coverity[missing_lock:FALSE] /* Turn off coverity missing_lock check*/
         if (p_cq_inst_arr[i].b_enabled) {
             p_cq_stats = &p_cq_inst_arr[i].cq_stats;
             printf("======================================================\n");
@@ -628,6 +630,7 @@ void print_bpool_stats(bpool_instance_block_t *p_bpool_inst_arr)
     }
 
     for (int i = 0; i < NUM_OF_SUPPORTED_BPOOLS; i++) {
+        // coverity[missing_lock:FALSE] /* Turn off coverity missing_lock check*/
         if (p_bpool_inst_arr && p_bpool_inst_arr[i].b_enabled) {
             p_bpool_stats = &p_bpool_inst_arr[i].bpool_stats;
             printf("======================================================\n");
@@ -1191,6 +1194,7 @@ void add_fd_to_array(int fd, ip_addr mc_grp, mc_group_fds_t *mc_group_fds, int *
     }
     // the mc_group wasnt found
     // Add this mc group to the array
+    // coverity[copy_assignment_call] /* Turn off coverity warning for COPY_INSTEAD_OF_MOVE */
     mc_group_fds[i].mc_grp = mc_grp;
     int fd1 = fd;
     mc_group_fds[i].fd_list.push_back(fd1);
@@ -1231,6 +1235,7 @@ void show_mc_group_stats(mc_grp_info_t *p_mc_grp_info, socket_instance_block_t *
         size_t fd = (size_t)p_instance[i].skt_stats.fd;
         if (p_instance[i].b_enabled && g_fd_mask[fd]) {
             socket_stats_t *p_si_stats = &p_instance[i].skt_stats;
+            // coverity[missing_lock] /* Turn off coverity missing_lock check*/
             for (int grp_idx = 0; grp_idx < p_mc_grp_info->max_grp_num; grp_idx++) {
                 if (p_si_stats->mc_grp_map.test(grp_idx)) {
                     add_fd_to_array(p_si_stats->fd, p_mc_grp_info->mc_grp_tbl[grp_idx].mc_grp,

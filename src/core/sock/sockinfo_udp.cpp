@@ -847,6 +847,7 @@ int sockinfo_udp::setsockopt(int __level, int __optname, __const void *__optval,
                 } else if (!get_ip_addr_from_ifname((char *)__optval, addr, m_family) ||
                            (m_family == AF_INET6 && !m_is_ipv6only &&
                             !get_ip_addr_from_ifname((char *)__optval, addr, AF_INET))) {
+                    // coverity[copy_assignment_call:FALSE] /*Turn off check COPY_INSTEAD_OF_MOVE*/
                     m_so_bindtodevice_ip = addr;
                 } else {
                     si_udp_logdbg("SOL_SOCKET, %s=\"???\" - NOT HANDLED, cannot find if_name",
@@ -1331,6 +1332,7 @@ int sockinfo_udp::setsockopt(int __level, int __optname, __const void *__optval,
             } else {
                 ip_addr src_addr {0};
                 if (get_ip_addr_from_ifindex(if_ix, src_addr, AF_INET6) == 0) {
+                    // coverity[copy_assignment_call:FALSE] /*Turn off check COPY_INSTEAD_OF_MOVE*/
                     m_mc_tx_src_ip = src_addr;
                 } else {
                     si_udp_logdbg("IPPROTO_IPV6, setsockopt(%s) will be passed to OS for "
@@ -1554,6 +1556,7 @@ int sockinfo_udp::resolve_if_ip(const int if_index, const ip_address &ip, ip_add
         } else {
             ip_addr src_addr {0};
             if (get_ip_addr_from_ifindex(if_index, src_addr, m_family) == 0) {
+                // coverity[copy_assignment_call:FALSE] /*Turn off check COPY_INSTEAD_OF_MOVE*/
                 resolved_ip = src_addr;
             } else {
                 si_udp_logdbg("Can't find interface IP of interface index %d", if_index);
@@ -2117,6 +2120,7 @@ ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
                 // Fast path
                 // We found our target dst_entry object
                 m_p_last_dst_entry = p_dst_entry = dst_entry_iter->second;
+                // coverity[copy_assignment_call:FALSE] /*Turn off check COPY_INSTEAD_OF_MOVE*/
                 m_last_sock_addr = dst;
             } else {
                 // Slow path
@@ -2530,6 +2534,7 @@ bool sockinfo_udp::rx_input_cb(mem_buf_desc_t *p_desc, void *pv_fd_ready_array)
                 m_port_map.erase(std::remove(m_port_map.begin(), m_port_map.end(),
                                              m_port_map[m_port_map_index].port));
                 if (m_port_map_index) {
+                    // coverity[underflow:FALSE] /*Turn off coverity check for underflow*/
                     m_port_map_index--;
                 }
                 m_port_map_lock.unlock();
