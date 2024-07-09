@@ -104,7 +104,7 @@ public:
 
     ip_address(const ip_address &addr) { *this = addr; }
 
-    ip_address(ip_address &&addr) { *this = addr; }
+    ip_address(ip_address &&addr) { *this = std::move(addr); }
 
     const std::string to_str(sa_family_t family) const
     {
@@ -315,7 +315,7 @@ public:
     }
 
     ip_addr(ip_addr &&addr)
-        : ip_address(std::forward<ip_address>(addr))
+        : ip_address(addr)
         , m_family(addr.m_family)
     {
     }

@@ -60,7 +60,7 @@ ring_allocation_logic::ring_allocation_logic(int ring_migration_ratio, source_t 
                                              const resource_allocation_key &ring_profile)
     : m_ring_migration_ratio(ring_migration_ratio)
     , m_migration_try_count(ring_migration_ratio)
-    , m_source(source)
+    , m_source(std::move(source))
 {
     m_res_key = resource_allocation_key(ring_profile);
     m_migration_candidate = 0;
