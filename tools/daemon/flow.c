@@ -96,7 +96,7 @@ static inline void get_htid(struct flow_ctx *ctx, int prio, int *ht_krn, int *ht
 static inline void free_htid(struct flow_ctx *ctx, int ht_id);
 static inline void add_pending_list(pid_t pid, struct flow_ctx *ctx, int if_index, int ht_id,
                                     int prio, int *rc);
-static inline void free_pending_list(pid_t pid, struct flow_ctx *ctx, int if_index, short proto);
+static inline void free_pending_list(pid_t pid, struct flow_ctx *ctx, int if_index, uint16_t proto);
 static inline int get_prio(struct store_flow *value);
 static inline int get_bkt(struct store_flow *value);
 static inline int get_protocol(struct store_flow *value);
@@ -137,7 +137,7 @@ int add_flow(struct store_pid *pid_value, struct store_flow *value)
     int id = HANDLE_ID(value->handle);
     int ht_internal = KERNEL_HT;
     struct flow_ctx *ctx = NULL;
-    short proto = (value->flow.dst.family == AF_INET ? ETH_P_IP : ETH_P_IPV6);
+    uint16_t proto = (value->flow.dst.family == AF_INET ? ETH_P_IP : ETH_P_IPV6);
 
     /* Egress rules should be created for new tap device
      */
@@ -353,7 +353,7 @@ int add_flow(struct store_pid *pid_value, struct store_flow *value)
     free_pending_list(pid, ctx, value->if_id, proto);
 
 err:
-
+    // coverity[overflow_const:FALSE] /*Turn off coverity check for overflow*/
     value->handle = HANDLE_SET(ht, bkt, id);
     log_debug("[%d] add flow filter: %x:%x:%x rc=%d\n", pid, ht, bkt, id, rc);
 
@@ -376,7 +376,7 @@ int del_flow(struct store_pid *pid_value, struct store_flow *value)
     int ht_internal = KERNEL_HT;
     struct flow_ctx *ctx = NULL;
     int found = 0;
-    short proto = (value->flow.dst.family == AF_INET ? ETH_P_IP : ETH_P_IPV6);
+    uint16_t proto = (value->flow.dst.family == AF_INET ? ETH_P_IP : ETH_P_IPV6);
 
     errno = 0;
 
@@ -654,7 +654,7 @@ static inline void get_htid(struct flow_ctx *ctx, int prio, int *ht_krn, int *ht
     }
 }
 
-static inline void free_pending_list(pid_t pid, struct flow_ctx *ctx, int if_index, short proto)
+static inline void free_pending_list(pid_t pid, struct flow_ctx *ctx, int if_index, uint16_t proto)
 {
     struct htid_node_t *cur_element = NULL;
     struct list_head *cur_entry = NULL, *tmp_entry = NULL;

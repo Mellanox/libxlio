@@ -98,7 +98,8 @@ void tc_destroy(tc_t tc)
     }
 }
 
-void tc_req(tc_t tc, int ifindex, short proto, uint16_t type, uint16_t flags, struct tc_qdisc qdisc)
+void tc_req(tc_t tc, int ifindex, uint16_t proto, uint16_t type, uint16_t flags,
+            struct tc_qdisc qdisc)
 {
     memset(&tc->req, 0, sizeof(tc->req));
 
@@ -214,7 +215,7 @@ err:
     return rc;
 }
 
-int tc_add_filter_divisor(tc_t tc, int ifindex, int prio, int ht, short proto)
+int tc_add_filter_divisor(tc_t tc, int ifindex, int prio, int ht, uint16_t proto)
 {
     int rc = 0;
 
@@ -271,7 +272,7 @@ err:
 int tc_add_filter_link(tc_t tc, int ifindex, int prio, int ht, int id, struct sockaddr_store *ip)
 {
     int rc = 0;
-    short proto = (ip->family == AF_INET ? ETH_P_IP : ETH_P_IPV6);
+    uint16_t proto = (ip->family == AF_INET ? ETH_P_IP : ETH_P_IPV6);
 
     log_debug("add link filter using if_id: %d\n", ifindex);
 
@@ -350,7 +351,7 @@ err:
     return rc;
 }
 
-int tc_add_filter_tap2dev(tc_t tc, int ifindex, int prio, int id, short proto,
+int tc_add_filter_tap2dev(tc_t tc, int ifindex, int prio, int id, uint16_t proto,
                           struct sockaddr_store *ip, int ifindex_to)
 {
     int rc = 0;
@@ -490,7 +491,7 @@ int tc_add_filter_dev2tap(tc_t tc, int ifindex, int prio, int ht, int bkt, int i
                           int ifindex_to)
 {
     int rc = 0;
-    short proto = (dst_ip->family == AF_INET ? ETH_P_IP : ETH_P_IPV6);
+    uint16_t proto = (dst_ip->family == AF_INET ? ETH_P_IP : ETH_P_IPV6);
     uint16_t dst_port =
         (dst_ip->family == AF_INET ? dst_ip->addr4.sin_port : dst_ip->addr6.sin6_port);
     uint16_t src_port =
@@ -646,7 +647,7 @@ err:
     return rc;
 }
 
-int tc_del_filter(tc_t tc, int ifindex, int prio, int ht, int bkt, int id, short proto)
+int tc_del_filter(tc_t tc, int ifindex, int prio, int ht, int bkt, int id, uint16_t proto)
 {
     int rc = 0;
 

@@ -101,7 +101,7 @@ void tc_destroy(tc_t tc);
  * @return
  *     @a none
  */
-void tc_req(tc_t tc, int ifindex, short proto, uint16_t type, uint16_t flags,
+void tc_req(tc_t tc, int ifindex, uint16_t proto, uint16_t type, uint16_t flags,
             struct tc_qdisc qdisc);
 
 /**
@@ -147,7 +147,7 @@ int tc_del_qdisc(tc_t tc, int ifindex);
  * @return
  *   0 on success, -1 otherwise with errno set.
  */
-int tc_add_filter_divisor(tc_t tc, int ifindex, int prio, int ht, short proto);
+int tc_add_filter_divisor(tc_t tc, int ifindex, int prio, int ht, uint16_t proto);
 
 /**
  * Add filter link as a TC request.
@@ -192,7 +192,7 @@ int tc_add_filter_link(tc_t tc, int ifindex, int prio, int ht, int id, struct so
  * @return
  *   0 on success, -1 otherwise with errno set.
  */
-int tc_add_filter_tap2dev(tc_t tc, int ifindex, int prio, int id, short proto,
+int tc_add_filter_tap2dev(tc_t tc, int ifindex, int prio, int id, uint16_t proto,
                           struct sockaddr_store *ip, int ifindex_to);
 
 /**
@@ -246,6 +246,6 @@ int tc_add_filter_dev2tap(tc_t tc, int ifindex, int prio, int ht, int bkt, int i
  * @return
  *   0 on success, -1 otherwise with errno set.
  */
-int tc_del_filter(tc_t tc, int ifindex, int prio, int ht, int bkt, int id, short proto);
+int tc_del_filter(tc_t tc, int ifindex, int prio, int ht, int bkt, int id, uint16_t proto);
 
 #endif /* TOOLS_DAEMON_TC_H_ */
