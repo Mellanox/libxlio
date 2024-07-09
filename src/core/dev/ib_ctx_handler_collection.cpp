@@ -120,8 +120,8 @@ void ib_ctx_handler_collection::update_tbl(const char *ifa_name)
         doca_error_t err_ibdev = doca_devinfo_get_ibdev_name(dev_list_doca[devidx], doca_ibdev_name,
                                                              sizeof(doca_ibdev_name));
         if (DOCA_IS_ERROR(err_iface) || DOCA_IS_ERROR(err_ibdev)) {
-            PRINT_DOCA_ERR(ibchc_logwarn, err_iface, "doca_devinfo_get_iface_name");
-            PRINT_DOCA_ERR(ibchc_logwarn, err_ibdev, "doca_devinfo_get_ibdev_name");
+            PRINT_DOCA_WARN(ibchc_logwarn, "doca_devinfo_get_iface_name returns %d", err_iface);
+            PRINT_DOCA_WARN(ibchc_logwarn, "doca_devinfo_get_ibdev_name returns %d", err_ibdev);
             continue;
         }
 
