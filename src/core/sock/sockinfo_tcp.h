@@ -647,7 +647,6 @@ private:
 
     const buffer_batching_mode_t m_sysvar_buffer_batching_mode;
     const uint32_t m_sysvar_tx_segs_batch_tcp;
-    const option_tcp_ctl_thread::mode_t m_sysvar_tcp_ctl_thread;
 
     struct tcp_seg *m_tcp_seg_list;
     uint32_t m_tcp_seg_count;
