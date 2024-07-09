@@ -168,6 +168,7 @@ void timer::remove_all_timers(timer_handler *handler)
             remove_from_list(node_tmp);
             // Remove & Free node
             free(node_tmp);
+            // coverity[assigned_pointer:FALSE] /* Turn off coverity check,intended assign*/
             node_tmp = nullptr;
         } else {
             node = node->next;

@@ -86,6 +86,7 @@ struct tls_context_counters_show {
     tls_context_counters_show &update(const ring_instance_block_t (&rings)[NUM_OF_SUPPORTED_RINGS])
     {
         auto count_if_enabled = [](tls_contxts_num &val, const ring_instance_block_t &ring_stat) {
+            // coverity[missing_lock:FALSE] /* Turn off coverity missing_lock check*/
             if (ring_stat.b_enabled) {
                 val.tx += ring_stat.ring_stats.n_tx_tls_contexts;
                 val.rx += ring_stat.ring_stats.n_rx_tls_contexts;
@@ -240,6 +241,7 @@ struct ring_packet_aggregate {
     ring_packet_aggregate &update(const ring_instance_block_t (&rings)[NUM_OF_SUPPORTED_RINGS])
     {
         auto count_if_enabled = [](pkt_cnt &val, const ring_instance_block_t &ring_stat) {
+            // coverity[missing_lock:FALSE] /* Turn off coverity missing_lock check*/
             if (ring_stat.b_enabled) {
                 val.tx += ring_stat.ring_stats.n_tx_pkt_count;
                 val.rx += ring_stat.ring_stats.n_rx_pkt_count;

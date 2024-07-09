@@ -445,6 +445,7 @@ int fd_collection::add_cq_channel_fd(int cq_ch_fd, ring *p_ring)
         fdcoll_logwarn("cq channel fd already exists in fd_collection");
         m_p_cq_channel_map[cq_ch_fd] = nullptr;
         delete p_cq_ch_info;
+        // coverity[assigned_pointer] /* Turn off coverity check, intended assign*/
         p_cq_ch_info = nullptr;
     }
     BULLSEYE_EXCLUDE_BLOCK_END

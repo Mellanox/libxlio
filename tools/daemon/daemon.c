@@ -417,7 +417,7 @@ ssize_t sys_sendto(int sockfd, const void *buf, size_t len, int flags,
         data += n;
         nb += n;
     } while (!(flags & MSG_DONTWAIT) && (len > 0));
-
+    // coverity[return_overflow:FALSE] /*Turn off coverity check for overflow*/
     return nb;
 }
 
