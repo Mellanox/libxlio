@@ -69,6 +69,31 @@ public:
         , m_object(object)
     {
     }
+    source_t(const source_t &other)
+        : m_fd(other.m_fd)
+        , m_ip(other.m_ip)
+        , m_object(other.m_object)
+    {
+    }
+    source_t &operator=(const source_t &other)
+    {
+        if (this == &other) {
+            return *this;
+        }
+        m_fd = other.m_fd;
+        m_ip = other.m_ip;
+        m_object = other.m_object;
+
+        return *this;
+    }
+    source_t(source_t &&other) noexcept
+        : m_fd(std::move(other.m_fd))
+        , m_ip(std::move(other.m_ip))
+        , m_object(std::move(other.m_object))
+    {
+        other.m_fd = -1;
+        other.m_object = nullptr;
+    }
 };
 
 /**
@@ -121,7 +146,8 @@ public:
         debug_print_type("Rx");
     }
     ring_allocation_logic_rx(source_t source, resource_allocation_key &ring_profile)
-        : ring_allocation_logic(safe_mce_sys().ring_migration_ratio_rx, source, ring_profile)
+        : ring_allocation_logic(safe_mce_sys().ring_migration_ratio_rx, std::move(source),
+                                ring_profile)
     {
         debug_print_type("Rx");
     }
@@ -135,7 +161,8 @@ public:
         debug_print_type("Tx");
     }
     ring_allocation_logic_tx(source_t source, resource_allocation_key &ring_profile)
-        : ring_allocation_logic(safe_mce_sys().ring_migration_ratio_tx, source, ring_profile)
+        : ring_allocation_logic(safe_mce_sys().ring_migration_ratio_tx, std::move(source),
+                                ring_profile)
     {
         debug_print_type("Tx");
     }
