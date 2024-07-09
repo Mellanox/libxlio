@@ -630,7 +630,6 @@ private:
     // Relevant only for listen sockets: map connections in syn received state
     // We need this map since for syn received connection no sockinfo is created yet!
     syn_received_map_t m_syn_received;
-    uint32_t m_received_syn_num;
 
     /* pending connections */
     sock_list_t m_accepted_conns;
