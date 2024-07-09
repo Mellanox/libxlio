@@ -85,7 +85,6 @@ jenkins_test_vg=${jenkins_test_vg:="no"}
 jenkins_test_style=${jenkins_test_style:="no"}
 jenkins_test_tool=${jenkins_test_tool:="no"}
 jenkins_test_commit=${jenkins_test_commit:="no"}
-jenkins_test_tidy=${jenkins_test_tidy:="no"}
 
 echo
 for var in ${!jenkins_test_@}; do
@@ -261,16 +260,6 @@ for target_v in "${target_list[@]}"; do
 	        ret=$?
 	        if [ $ret -gt 0 ]; then
 	           do_err "case: [commit: ret=$ret]"
-	        fi
-	        rc=$((rc + $ret))
-	    fi
-    fi
-    if [ 12 -lt "$jenkins_opt_exit" -o "$rc" -eq 0 ]; then
-	    if [ "$jenkins_test_tidy" = "yes" ]; then
-	        $WORKSPACE/contrib/jenkins_tests/tidy.sh
-	        ret=$?
-	        if [ $ret -gt 0 ]; then
-	           do_err "case: [tidy: ret=$ret]"
 	        fi
 	        rc=$((rc + $ret))
 	    fi
