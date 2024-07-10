@@ -359,13 +359,14 @@ void hw_queue_tx::send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr 
      * - First call of send() should do completion. It means that
      *   m_n_unsignaled_count must be zero for this time.
      */
-    bool request_comp = (p_mem_buf_desc->m_flags & mem_buf_desc_t::ZCOPY);
+    const bool request_comp = (p_mem_buf_desc->m_flags & mem_buf_desc_t::ZCOPY);
+    const bool skip_tx_poll = (attr & XLIO_TX_SKIP_POLL);
 
     hwqtx_logfunc("VERBS send, unsignaled_count: %d", m_n_unsignaled_count);
 
     send_to_wire(p_send_wqe, attr, request_comp, tis, credits);
 
-    if (request_comp || is_signal_requested_for_last_wqe()) {
+    if (!skip_tx_poll && is_signal_requested_for_last_wqe()) {
         uint64_t dummy_poll_sn = 0;
         int ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
         BULLSEYE_EXCLUDE_BLOCK_START
