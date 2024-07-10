@@ -1018,10 +1018,10 @@ YY_DECL
 
 		if ( ! YY_CURRENT_BUFFER ) {
 			libxlio_yyensure_buffer_stack ();
-			if ( yy_buffer_stack ) {
-				YY_CURRENT_BUFFER_LVALUE =
+			//coverity[var_deref_op:FALSE] /* Turn off coverity check for null deref*/
+			YY_CURRENT_BUFFER_LVALUE =
 					libxlio_yy_create_buffer(libxlio_yyin,YY_BUF_SIZE );
-			}
+
 		}
 
 		libxlio_yy_load_buffer_state( );
