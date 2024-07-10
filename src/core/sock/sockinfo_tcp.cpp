@@ -5664,7 +5664,7 @@ struct pbuf *sockinfo_tcp::tcp_tx_pbuf_alloc(void *p_conn, pbuf_type type, pbuf_
     }
     if (likely(p_desc) && p_desc->lwip_pbuf.type == PBUF_ZEROCOPY) {
         if (p_desc->lwip_pbuf.desc.attr == PBUF_DESC_EXPRESS) {
-            p_desc->m_flags |= mem_buf_desc_t::ZCOPY;
+            p_desc->m_flags |= mem_buf_desc_t::CALLBACK;
             p_desc->tx.zc.callback = tcp_express_zc_callback;
             if (p_buff) {
                 mem_buf_desc_t *p_prev_desc = reinterpret_cast<mem_buf_desc_t *>(p_buff);
@@ -5681,7 +5681,8 @@ struct pbuf *sockinfo_tcp::tcp_tx_pbuf_alloc(void *p_conn, pbuf_type type, pbuf_
                  * of split operation of existing zc buffer
                  */
                 mem_buf_desc_t *p_prev_desc = (mem_buf_desc_t *)p_buff;
-                p_desc->m_flags |= mem_buf_desc_t::ZCOPY;
+                p_desc->m_flags |= mem_buf_desc_t::URGENT;
+                p_desc->m_flags |= mem_buf_desc_t::CALLBACK;
                 p_desc->tx.zc.id = p_prev_desc->tx.zc.id;
                 p_desc->tx.zc.count = p_prev_desc->tx.zc.count;
                 p_desc->tx.zc.len = p_desc->lwip_pbuf.len;
@@ -5737,7 +5738,8 @@ void sockinfo_tcp::tcp_tx_pbuf_free(void *p_conn, struct pbuf *p_buff)
 
 mem_buf_desc_t *sockinfo_tcp::tcp_tx_zc_alloc(mem_buf_desc_t *p_desc)
 {
-    p_desc->m_flags |= mem_buf_desc_t::ZCOPY;
+    p_desc->m_flags |= mem_buf_desc_t::URGENT;
+    p_desc->m_flags |= mem_buf_desc_t::CALLBACK;
     p_desc->tx.zc.id = atomic_read(&m_zckey);
     p_desc->tx.zc.count = 1;
     p_desc->tx.zc.len = p_desc->lwip_pbuf.len;
@@ -5789,7 +5791,6 @@ void sockinfo_tcp::tcp_tx_zc_callback(mem_buf_desc_t *p_desc)
 
 cleanup:
     /* Clean up */
-    p_desc->m_flags &= ~mem_buf_desc_t::ZCOPY;
     memset(&p_desc->tx.zc, 0, sizeof(p_desc->tx.zc));
     if (sock && p_desc == sock->m_last_zcdesc) {
         sock->m_last_zcdesc = nullptr;
@@ -6226,7 +6227,7 @@ int sockinfo_tcp::tcp_tx_express_inline(const struct iovec *iov, unsigned iov_le
     int bytes_written = 0;
 
     memset(&mdesc, 0, sizeof(mdesc));
-    mdesc.attr = PBUF_DESC_NONE;
+    mdesc.attr = PBUF_DESC_EXPRESS;
 
     lock_tcp_con();
 
@@ -6246,6 +6247,12 @@ int sockinfo_tcp::tcp_tx_express_inline(const struct iovec *iov, unsigned iov_le
         }
     }
     if (!(flags & XLIO_EXPRESS_MSG_MORE)) {
+        /* Force doorbell and TX completion for the last TCP segment. Group level flush is not
+         * mandatory if user uses send level flush.
+         */
+        mem_buf_desc_t *p_desc = reinterpret_cast<mem_buf_desc_t *>(m_pcb.last_unsent->p);
+        p_desc->m_flags |= mem_buf_desc_t::URGENT;
+
         m_b_xlio_socket_dirty = false;
         tcp_output(&m_pcb);
     } else if (m_p_group && !m_b_xlio_socket_dirty) {
@@ -6258,11 +6265,18 @@ int sockinfo_tcp::tcp_tx_express_inline(const struct iovec *iov, unsigned iov_le
     return bytes_written;
 }
 
-void sockinfo_tcp::flush()
+void sockinfo_tcp::flush(bool force_db /*=false*/)
 {
     lock_tcp_con();
     m_b_xlio_socket_dirty = false;
     tcp_output(&m_pcb);
+
+    if (force_db) {
+        ring *tx_ring = get_tx_ring();
+        if (likely(tx_ring)) {
+            tx_ring->ring_delayed_doorbell();
+        }
+    }
     unlock_tcp_con();
 }
 

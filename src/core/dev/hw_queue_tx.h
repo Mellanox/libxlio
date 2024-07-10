@@ -91,6 +91,22 @@ public:
     void send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio_tis *tis,
                   unsigned credits);
 
+    void ring_delayed_doorbell()
+    {
+        if (m_b_db_needed) {
+            struct xlio_mlx5_wqe_ctrl_seg *ctrl = &m_sq_wqe_last->ctrl.ctrl;
+            ctrl->fm_ce_se |= MLX5_WQE_CTRL_CQ_UPDATE;
+            m_b_db_needed = false;
+            set_unsignaled_count();
+
+            wmb();
+            *m_mlx5_qp.sq.dbrec = htonl(m_sq_wqe_counter);
+            wc_wmb();
+            *(uint64_t *)m_mlx5_qp.bf.reg = *(uint64_t *)m_sq_wqe_last;
+            wc_wmb();
+        }
+    }
+
     struct ibv_qp *get_ibv_qp() const { return m_mlx5_qp.qp; };
 
     // This function can be replaced with a parameter during ring creation.
@@ -209,12 +225,12 @@ private:
     void init_queue();
     void init_device_memory();
     void trigger_completion_for_all_sent_packets();
-    void update_next_wqe_hot();
+    void update_wqe_last();
     void destroy_tis_cache();
     void put_tls_tis_in_cache(xlio_tis *tis);
 
     void send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, bool request_comp,
-                      xlio_tis *tis, unsigned credits);
+                      bool skip_db, xlio_tis *tis, unsigned credits);
 
     void set_unsignaled_count(void) { m_n_unsignaled_count = m_n_sysvar_tx_num_wr_to_signal - 1; }
 
@@ -260,11 +276,12 @@ private:
 
     inline void store_current_wqe_prop(mem_buf_desc_t *wr_id, unsigned credits, xlio_ti *ti);
     inline int fill_wqe(xlio_ibv_send_wr *p_send_wqe);
+    inline int fill_wqe_inline(xlio_ibv_send_wr *pswr);
     inline int fill_wqe_send(xlio_ibv_send_wr *pswr);
     inline int fill_wqe_lso(xlio_ibv_send_wr *pswr);
     inline int fill_inl_segment(sg_array &sga, uint8_t *cur_seg, uint8_t *data_addr,
                                 int max_inline_len, int inline_len);
-    inline void ring_doorbell(int num_wqebb, bool skip_comp = false);
+    inline void ring_doorbell(int num_wqebb, bool skip_comp = false, bool skip_db = false);
 
     struct xlio_rate_limit_t m_rate_limit;
     xlio_ib_mlx5_qp_t m_mlx5_qp;
@@ -276,7 +293,7 @@ private:
     sq_wqe_prop *m_sq_wqe_prop_last = nullptr;
 
     struct mlx5_eth_wqe (*m_sq_wqes)[] = nullptr;
-    struct mlx5_eth_wqe *m_sq_wqe_hot = nullptr;
+    struct mlx5_eth_wqe *m_sq_wqe_last = nullptr;
     uint8_t *m_sq_wqes_end = nullptr;
 
     const uint32_t m_n_sysvar_tx_num_wr_to_signal;
@@ -284,10 +301,11 @@ private:
     unsigned m_sq_wqe_prop_last_signalled = 0U;
     unsigned m_sq_free_credits = 0U;
     uint32_t m_n_unsignaled_count = 0U;
-    int m_sq_wqe_hot_index = 0;
+    int m_sq_wqe_last_index = 0;
     uint16_t m_sq_wqe_counter = 0U;
     uint8_t m_port_num;
     bool m_b_fence_needed = false;
+    bool m_b_db_needed = false;
     bool m_dm_enabled = false;
     bool m_hw_dummy_send_support = false;
     dm_mgr m_dm_mgr;
