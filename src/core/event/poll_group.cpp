@@ -183,6 +183,11 @@ void poll_group::close_socket(sockinfo_tcp *si, bool force /*=false*/)
     g_p_fd_collection->clear_socket(si->get_fd());
     m_sockets_list.erase(si);
 
+    auto iter = std::find(m_dirty_sockets.begin(), m_dirty_sockets.end(), si);
+    if (iter != std::end(m_dirty_sockets)) {
+        m_dirty_sockets.erase(iter);
+    }
+
     bool closed = si->prepare_to_close(force);
     if (closed) {
         /*
