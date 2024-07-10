@@ -72,6 +72,8 @@ typedef enum xlio_wr_tx_packet_attr {
     XLIO_TX_PACKET_BLOCK = (1 << 8),
     /* Force SW checksum */
     XLIO_TX_SW_L4_CSUM = (1 << 9),
+    /* Skip TX polling */
+    XLIO_TX_SKIP_POLL = (1 << 10),
 } xlio_wr_tx_packet_attr;
 
 static inline bool is_set(xlio_wr_tx_packet_attr state_, xlio_wr_tx_packet_attr tx_mode_)

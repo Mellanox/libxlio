@@ -1364,7 +1364,9 @@ err_t sockinfo_tcp::ip_output(struct pbuf *p, struct tcp_seg *seg, void *v_p_con
     dst_entry *p_dst = p_si_tcp->m_p_connected_dst_entry;
     int max_count = p_si_tcp->m_pcb.tso.max_send_sge;
     tcp_iovec lwip_iovec[max_count];
-    xlio_send_attr attr = {(xlio_wr_tx_packet_attr)flags, p_si_tcp->m_pcb.mss, 0, nullptr};
+    xlio_send_attr attr = {
+        (xlio_wr_tx_packet_attr)(flags | (!!p_si_tcp->is_xlio_socket() * XLIO_TX_SKIP_POLL)),
+        p_si_tcp->m_pcb.mss, 0, nullptr};
     int count = 0;
     void *cur_end;
 
