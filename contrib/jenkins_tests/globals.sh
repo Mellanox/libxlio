@@ -42,6 +42,16 @@ fi
 trap "on_exit" INT TERM ILL KILL FPE SEGV ALRM
 }
 
+function mount_hugetlbfs()
+{
+    if [[ -f /.dockerenv && ! $(grep -q hugetlbfs /proc/mounts) ]]; then
+        mkdir -p /mnt/huge 
+        mount -t hugetlbfs nodev /mnt/huge
+        grep hugetlbfs /proc/mounts
+        echo $?
+    fi
+}
+
 function on_exit()
 {
     rc=$((rc + $?))
@@ -320,6 +330,10 @@ do_compile_doca()
         fi
         pushd "$doca_sdk" || exit 1
     fi
+
+    # Patch from Alex Grissik, solving the "Multiprocess is not supported" in DOCA (DPDK)
+    wget https://github.com/Mellanox/libxlio/files/15446734/0001-TEMP-Enable-Multiprocess-DPDK.patch
+    git apply 0001-TEMP-Enable-Multiprocess-DPDK.patch
 
     if [[ -f /.dockerenv ]]; then
         SUDO=""

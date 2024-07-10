@@ -4,6 +4,9 @@ source $(dirname $0)/globals.sh
 
 echo "Checking for gtest ..."
 
+# check available 2MB hugepages for Gtest on xlio_doca: HPCINFRA-1968
+echo "Number of 2MB hugepages available: "$(cat /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages)
+
 # Retrieve server/client addresses for the test.
 # $1 - [ib|eth|inet6] to select link type or empty to select the first found
 #

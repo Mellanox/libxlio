@@ -216,6 +216,7 @@ for target_v in "${target_list[@]}"; do
     fi
     if [ 6 -lt "$jenkins_opt_exit" -o "$rc" -eq 0 ]; then
 	    if [ "$jenkins_test_run" = "yes" ]; then
+	        mount_hugetlbfs
 	        $WORKSPACE/contrib/jenkins_tests/test.sh
 	        ret=$?
 	        if [ $ret -gt 0 ]; then
@@ -226,6 +227,7 @@ for target_v in "${target_list[@]}"; do
     fi
     if [ 7 -lt "$jenkins_opt_exit" -o "$rc" -eq 0 ]; then
 	    if [ "$jenkins_test_gtest" = "yes" ]; then
+	        mount_hugetlbfs
 	        $WORKSPACE/contrib/jenkins_tests/gtest.sh
 	        ret=$?
 	        if [ $ret -gt 0 ]; then
@@ -236,6 +238,7 @@ for target_v in "${target_list[@]}"; do
     fi
     if [ 8 -lt "$jenkins_opt_exit" -o "$rc" -eq 0 ]; then
 	    if [ "$jenkins_test_vg" = "yes" ]; then
+	        mount_hugetlbfs
 	        $WORKSPACE/contrib/jenkins_tests/vg.sh
 	        ret=$?
 	        if [ $ret -gt 0 ]; then
