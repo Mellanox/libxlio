@@ -337,6 +337,7 @@ protected:
 
 private:
     ring_type_t m_type; /* ring type */
+    uint8_t padding[8]; // make class size up to a whole cache line
 };
 
 #endif /* RING_SLAVE_H_ */
