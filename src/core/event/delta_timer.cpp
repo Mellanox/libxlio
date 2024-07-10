@@ -57,7 +57,10 @@
 timer::timer()
 {
     m_list_head = nullptr;
-    gettime(&m_ts_last);
+    int ret = gettime(&m_ts_last);
+    if (ret) {
+        tmr_logerr("gettime() returned with value %d and error (errno %d %m)", ret, errno);
+    }
 }
 
 timer::~timer()
