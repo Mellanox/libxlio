@@ -286,7 +286,9 @@ void vlog_stop(void)
 
     // Close output stream
     if (g_vlogger_file && g_vlogger_file != stderr) {
-        fclose(g_vlogger_file);
+        FILE *closing_file = g_vlogger_file;
+        g_vlogger_file = nullptr;
+        fclose(closing_file);
     }
 
     // fix for using LD_PRELOAD with LBM. Unset the pointer given by the parent process, so a child
