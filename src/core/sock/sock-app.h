@@ -43,9 +43,10 @@
 #include <set>
 
 #if defined(DEFINED_NGINX)
-typedef std::unordered_map<uint16_t, bool> map_udp_bounded_port_t;
+// uint32_t stands for sa_family on the 16 MSB bits, and port number on 16 LSB.
+typedef std::unordered_map<uint32_t, bool> map_udp_reuse_port_t;
 
-extern map_udp_bounded_port_t g_map_udp_bounded_port;
+extern map_udp_reuse_port_t g_map_udp_resue_port;
 #endif
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
