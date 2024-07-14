@@ -100,6 +100,7 @@ void header::set_mac_to_eth_header(const L2_address &src, const L2_address &dst)
     if (m_is_vlan_enabled) {
         vlan_eth_hdr_template_t *p_vlan_eth_hdr = &get_l2_hdr()->vlan_eth_hdr;
         set_mac_to_eth_header(src, dst, p_vlan_eth_hdr->m_eth_hdr);
+        m_transport_header_len += sizeof(p_vlan_eth_hdr->m_vlan_hdr);
     } else {
         eth_hdr_template_t *p_eth_hdr = &get_l2_hdr()->eth_hdr;
         set_mac_to_eth_header(src, dst, p_eth_hdr->m_eth_hdr);
