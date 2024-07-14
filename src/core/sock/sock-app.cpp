@@ -57,7 +57,7 @@ using namespace std;
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
 
 #if defined(DEFINED_NGINX)
-map_udp_bounded_port_t g_map_udp_bounded_port;
+map_udp_reuse_port_t g_map_udp_resue_port;
 #endif
 
 static int init_worker(int worker_id, int listen_fd);
@@ -284,7 +284,7 @@ static int init_worker(int worker_id, int listen_fd)
     if (PROTO_UDP == si->get_protocol()) {
         sockinfo_udp *udp_sock = dynamic_cast<sockinfo_udp *>(parent_sock_fd_api);
         if (udp_sock) {
-            static std::unordered_map<uint16_t, uint16_t> udp_sockets_per_port;
+            static std::unordered_map<uint32_t, uint16_t> udp_sockets_per_port;
             int reuse_port;
             socklen_t optlen = sizeof(reuse_port);
             uint16_t port = ntohs(sa.get_in_port());
@@ -292,6 +292,7 @@ static int init_worker(int worker_id, int listen_fd)
                 (udp_sock->getsockopt(SOL_SOCKET, SO_REUSEPORT, &reuse_port, &optlen) < 0)) {
                 return -1;
             }
+
             /*
              * Specific NGINX implementation.
              *
@@ -303,16 +304,20 @@ static int init_worker(int worker_id, int listen_fd)
              * Without "reuseport" directive, NGINX master process creates a single UDP socket
              * before it forks. Therefore, all worker processes attach the UDP socket (single).
              */
-            if ((reuse_port == 0) || (udp_sockets_per_port[port] == g_p_app->get_worker_id())) {
-                app_logdbg("worker %d is using fd=%d. bound to port=%d", g_p_app->get_worker_id(),
-                           listen_fd, port);
+            sa_family_t family = udp_sock->get_family();
+            uint32_t family_port = ((uint32_t)family << 16) | port;
+
+            if ((reuse_port == 0) ||
+                (udp_sockets_per_port[family_port] == g_p_app->get_worker_id())) {
+                app_logdbg("worker %d is using fd=%d. family=%d bound to port=%d",
+                           g_p_app->get_worker_id(), listen_fd, family, port);
                 g_p_fd_collection->addsocket(listen_fd, si->get_family(), SOCK_DGRAM | block_type);
                 sockinfo_udp *new_udp_sock =
                     dynamic_cast<sockinfo_udp *>(g_p_fd_collection->get_sockfd(listen_fd));
                 if (new_udp_sock) {
                     new_udp_sock->copy_sockopt_fork(udp_sock);
 #if defined(DEFINED_NGINX)
-                    g_map_udp_bounded_port[port] = true;
+                    g_map_udp_resue_port[family_port] = true;
 #endif
                     // in order to create new steering rules we call bind()
                     // we skip os.bind since it always fails
@@ -320,7 +325,7 @@ static int init_worker(int worker_id, int listen_fd)
                 }
             }
             /* This processes a case with multiple listen sockets with different ports */
-            udp_sockets_per_port[port]++;
+            udp_sockets_per_port[family_port]++;
         }
     }
 
