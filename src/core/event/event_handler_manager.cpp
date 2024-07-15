@@ -258,7 +258,8 @@ event_handler_manager::event_handler_manager(bool internal_thread_mode)
 {
     evh_logfunc("");
 
-    m_cq_epfd = m_epfd = 0;
+    m_cq_epfd = 0;
+    m_epfd = -1;
     m_event_handler_tid = 0;
 
     if (!internal_thread_mode) {
@@ -415,7 +416,9 @@ void event_handler_manager::stop_thread()
     m_event_handler_tid = 0;
 
     // Close main epfd and signaling socket
-    SYSCALL(close, m_epfd);
+    if (m_epfd >= 0) {
+        SYSCALL(close, m_epfd);
+    }
     m_epfd = -1;
 }
 
