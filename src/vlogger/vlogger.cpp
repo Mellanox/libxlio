@@ -356,7 +356,7 @@ void vlog_output(vlog_levels_t log_level, const char *fmt, ...)
         fprintf(g_vlogger_file, "%s", buf);
         fflush(g_vlogger_file);
     } else {
-        printf("%s", buf);
+        fprintf(stderr, "%s", buf);
     }
 }
 
