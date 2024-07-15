@@ -1,9 +1,28 @@
+Version 3.31.2-1:
+Date + Time 2024-07-15
+=============================================================
+Added:
+        - RM #3925885 Adjusting XLIO default allocation logic
+        - RM #3807308 Add Ring TSO statistics
+
+Fixed:
+        - RM #3958757 Change error message to warning when reading FS files
+        - RM #3848340 HPCINFRA-1734 Coverity: upgrade to v2023.12
+        - RM #3964910 Align ring size to cache line
+        - RM #3976537 Avoid TX polling in XLIO Socket flush
+        - RM #3976537 Remove leftover closed socket from the dirty list
+        - RM #3949975 Fix -Wtemplate-id-cdtor in xlio_list
+        - RM #3777769 Fix No traffic with VLAN tagged packets
+        - RM #3981627 Print early logs to stderr
+        - RM #3784248 Nginx UDP reuseport for IPv6
+        - RM #3976544 Don't close epfd for event_handler_manager_local
+
 Version 3.31.1-1:
 Date + Time 2024-06-18
 =============================================================
 Added:
         - RM #3947680 Improve performance of StorageAPI
-        - RM #3947690 Improve stability of storage API:wq
+        - RM #3947690 Improve stability of storage API
 
 Fixed:
         - RM #3933912 high CPU usage impacting the connections establishment
