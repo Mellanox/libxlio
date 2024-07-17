@@ -164,14 +164,6 @@ steps:
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
 
-  - name: Release
-    enable: ${do_release}
-    containerSelector:
-      - "{name: 'rhel8.3-mofed-x86_64', category: 'base', variant: 1}"
-    agentSelector:
-      - "{nodeLabel: 'skip-agent'}"
-    run: |
-      env WORKSPACE=$PWD .ci/do_release.sh ${release_folder}
   - name: Antivirus
     enable: ${do_antivirus}
     containerSelector:
