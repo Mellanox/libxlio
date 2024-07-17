@@ -216,29 +216,56 @@ bool sys_gateway(struct sockaddr *addr, sa_family_t family)
     return found;
 }
 
+// Converts address to sockaddr structure. On an error, addr->sa_family is AF_UNSPEC.
 void sys_str2addr(const char *buf, struct sockaddr *addr, bool port)
 {
+    char src[128];
+    char *p;
+    void *dst;
+    int af;
+    int rc;
+
+    addr->sa_family = AF_UNSPEC;
+
     if (!buf) {
         return;
     }
-
-    if (!strchr(buf, ':')) {
-        inet_pton(AF_INET, buf, &((struct sockaddr_in *)addr)->sin_addr);
-        addr->sa_family = AF_INET;
-    } else {
-        struct sockaddr_in6 *addr6 = reinterpret_cast<struct sockaddr_in6 *>(addr);
-        inet_pton(AF_INET6, buf, &(addr6->sin6_addr));
-        addr->sa_family = AF_INET6;
-        addr6->sin6_flowinfo = 0;
-        addr6->sin6_scope_id = 0;
+    if (strlen(buf) >= sizeof(src)) {
+        log_trace("Address '%s' is too long\n", buf);
     }
 
+    snprintf(src, sizeof(src), "%s", buf);
+
+    p = strchr(src, '[');
+    if (p) {
+        // Separate IP address from port.
+        *p = '\0';
+        ++p;
+    }
+
+    if (!strchr(src, ':')) {
+        dst = &((struct sockaddr_in *)addr)->sin_addr;
+        af = AF_INET;
+    } else {
+        struct sockaddr_in6 *addr6 = reinterpret_cast<struct sockaddr_in6 *>(addr);
+        dst = &(addr6->sin6_addr);
+        addr6->sin6_flowinfo = 0;
+        addr6->sin6_scope_id = 0;
+        af = AF_INET6;
+    }
+
+    rc = inet_pton(af, src, dst);
+    if (rc != 1) {
+        log_trace("Failed to convert '%s' to IP (af=%d rc=%d errno=%d)\n", buf, af, rc, errno);
+        return;
+    }
+    addr->sa_family = af;
+
     if (port) {
-        const char *p = strchr(buf, '[');
-        /* Scan port number */
-        if (p && strlen(p) > 1) {
+        if (p) {
             unsigned int port_value;
-            if (sscanf(p, "[%u]", &port_value) == 1 && port_value <= 65535) {
+            // Opening '[' is removed above.
+            if (sscanf(p, "%u]", &port_value) == 1 && port_value <= 65535) {
                 sys_set_port(addr, port_value);
             }
         }
