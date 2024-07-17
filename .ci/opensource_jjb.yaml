@@ -44,14 +44,6 @@
             default: true
             description: "Check tar, source and binary packages."
         - bool:
-            name: "do_release"
-            default: false
-            description: "Publish package to release folder"
-        - string:
-            name: "release_folder"
-            default: "/auto/sw/release/sw_acceleration/xlio"
-            description: "Path to release folder"
-        - bool:
             name: "do_antivirus"
             default: false
             description: "Run Antivirus."
