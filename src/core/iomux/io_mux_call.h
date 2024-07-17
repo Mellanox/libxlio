@@ -246,7 +246,7 @@ protected:
 
     virtual int ring_wait_for_notification_and_process_element(void *pv_fd_ready_array);
 
-    virtual bool handle_os_countdown(int &poll_os_countdown);
+    bool handle_os_countdown(int &poll_os_countdown);
 
     /// Pointer to an array of all offloaded fd's
     int *m_p_all_offloaded_fds;

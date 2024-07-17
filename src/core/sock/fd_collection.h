@@ -252,19 +252,12 @@ template <typename cls> inline cls *fd_collection::get(int fd, cls **map_type)
 
 inline bool fd_collection::set_immediate_os_sample(int fd)
 {
-    epfd_info *epfd_fd;
     ring_tap *p_ring;
 
     lock();
 
     if ((p_ring = get_tapfd(fd))) {
         p_ring->set_tap_data_available();
-        unlock();
-        return true;
-    }
-
-    if ((epfd_fd = get_epfd(fd))) {
-        epfd_fd->set_os_data_available();
         unlock();
         return true;
     }
