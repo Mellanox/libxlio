@@ -1070,6 +1070,9 @@ void mce_sys_var::get_env_params()
             0; // MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX (10000), Don't drain WCEs.
         select_poll_num = 0; // MCE_DEFAULT_SELECT_NUM_POLLS (100000),  Don't poll the hardware on
                              // RX (before sleeping in epoll/select, etc).
+        // Poll OS every some epoll_waits in case epoll_waits do not sleep.
+        select_skip_os_fd_check = 1000;
+
         tcp_3t_rules =
             true; // MCE_DEFAULT_TCP_3T_RULES(false), Use 3 tuple instead rules of 5 tuple rules.
 
@@ -1117,6 +1120,9 @@ void mce_sys_var::get_env_params()
             0; // MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX (10000), Don't drain WCEs.
         select_poll_num = 0; // MCE_DEFAULT_SELECT_NUM_POLLS (100000),  Don't poll the hardware on
                              // RX (before sleeping in epoll/select, etc).
+        // Poll OS every some epoll_waits in case epoll_waits do not sleep.
+        select_skip_os_fd_check = 1000;
+
         tcp_3t_rules =
             true; // MCE_DEFAULT_TCP_3T_RULES(false), Use 3 tuple instead rules of 5 tuple rules.
 
