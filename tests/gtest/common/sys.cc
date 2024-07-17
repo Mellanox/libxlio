@@ -204,7 +204,7 @@ bool sys_gateway(struct sockaddr *addr, sa_family_t family)
             line[len - 1] = 0;
         }
         sys_str2addr(line, &temp_addr.addr, false);
-        found = (addr->sa_family == family);
+        found = (temp_addr.addr.sa_family == family);
         if (found) {
             sys_str2addr(line, addr, false);
             log_trace("%s found gateway ip: %s\n", line, sys_addr2str(addr));
