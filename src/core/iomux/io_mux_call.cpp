@@ -255,7 +255,7 @@ bool io_mux_call::handle_os_countdown(int &poll_os_countdown)
      * Poll OS when count down reaches zero. This honors CQ-OS ratio.
      * This also handles the 0 ratio case - do not poll OS at all.
      */
-    if (poll_os_countdown-- == 0 && m_n_sysvar_select_poll_os_ratio > 0) {
+    if (poll_os_countdown-- <= 0 && m_n_sysvar_select_poll_os_ratio > 0) {
         if (wait_os(true)) {
             // This will empty the cqepfd
             // (most likely in case of a wakeup and probably only under epoll_wait (Not
