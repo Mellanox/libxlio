@@ -132,7 +132,6 @@ private:
     fd_info_list_t m_fd_offloaded_list;
     ring_map_t m_ring_map;
     lock_mutex_recursive m_ring_map_lock;
-    const thread_mode_t m_sysvar_thread_mode;
     ready_cq_fd_q_t m_ready_cq_fd_q;
     epoll_stats_t m_local_stats;
     epoll_stats_t *m_stats;

@@ -59,7 +59,6 @@ epfd_info::epfd_info(int epfd, int size)
     , m_epfd(epfd)
     , m_size(size)
     , m_ring_map_lock("epfd_ring_map_lock")
-    , m_sysvar_thread_mode(safe_mce_sys().thread_mode)
 {
     __log_funcall("");
     int max_sys_fd = get_sys_max_fd_num();
@@ -648,7 +647,7 @@ int epfd_info::ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *p
 
     m_ring_map_lock.unlock();
 
-    if (m_sysvar_thread_mode == THREAD_MODE_PLENTY && ret_total == 0 && errno == EAGAIN) {
+    if (safe_mce_sys().thread_mode == THREAD_MODE_PLENTY && ret_total == 0 && errno == EAGAIN) {
         sched_yield();
     }
 
