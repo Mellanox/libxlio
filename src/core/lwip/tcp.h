@@ -46,8 +46,6 @@ extern "C" {
 typedef u32_t (*sys_now_fn)(void);
 void register_sys_now(sys_now_fn fn);
 
-#define LWIP_MEM_ALIGN_SIZE(size) (((size) + MEM_ALIGNMENT - 1) & ~(MEM_ALIGNMENT - 1))
-
 extern u16_t lwip_tcp_mss;
 extern u32_t lwip_tcp_snd_buf;
 extern u32_t lwip_tcp_nodelay_treshold;
@@ -230,7 +228,6 @@ extern tcp_state_observer_fn external_tcp_state_observer;
         if ((pcb)->max_unsent_len != TCP_SNDQUEUELEN_OVERFLOW) {                                   \
             (pcb)->max_unsent_len = (16 * ((pcb)->max_snd_buff) / ((pcb)->mss));                   \
         }                                                                                          \
-        (pcb)->tcp_oversize_val = (pcb)->mss;                                                      \
     } while (0)
 
 /* the TCP protocol control block */
@@ -345,11 +342,10 @@ struct tcp_pcb {
 #define TCP_SNDQUEUELEN_OVERFLOW (0xffffffU - 3)
     u32_t snd_queuelen; /* Available buffer space for sending (in tcp_segs). */
     u32_t max_tcp_snd_queuelen;
+    u32_t max_unsent_len;
 
     /* Extra bytes available at the end of the last pbuf in unsent. */
     u16_t unsent_oversize;
-    u16_t tcp_oversize_val;
-    u32_t max_unsent_len;
 
     /* These are ordered by sequence number: */
     struct tcp_seg *unsent; /* Unsent (queued) segments. */
@@ -468,13 +464,11 @@ err_t tcp_close(struct tcp_pcb *pcb);
 err_t tcp_shutdown(struct tcp_pcb *pcb, int shut_rx, int shut_tx);
 
 /* Flags for "apiflags" parameter in tcp_write */
-#define TCP_WRITE_FLAG_COPY 0x01
-#define TCP_WRITE_FLAG_MORE 0x02
-#define TCP_WRITE_REXMIT    0x08
-#define TCP_WRITE_DUMMY     0x10
-#define TCP_WRITE_TSO       0x20
-#define TCP_WRITE_FILE      0x40
-#define TCP_WRITE_ZEROCOPY  0x80
+#define TCP_WRITE_REXMIT   0x08
+#define TCP_WRITE_DUMMY    0x10
+#define TCP_WRITE_TSO      0x20
+#define TCP_WRITE_FILE     0x40
+#define TCP_WRITE_ZEROCOPY 0x80
 
 err_t tcp_write(struct tcp_pcb *pcb, const void *dataptr, u32_t len, u16_t apiflags,
                 pbuf_desc *desc);

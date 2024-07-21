@@ -46,18 +46,6 @@
 #endif
 
 /*
-   ------------------------------------
-   ---------- Memory options ----------
-   ------------------------------------
-*/
-/**
- * MEM_ALIGNMENT: should be set to the alignment of the CPU
- *    4 byte alignment -> #define MEM_ALIGNMENT 4
- *    2 byte alignment -> #define MEM_ALIGNMENT 2
- */
-#define MEM_ALIGNMENT 4
-
-/*
    ---------------------------------
    ---------- TCP options ----------
    ---------------------------------
