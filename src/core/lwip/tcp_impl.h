@@ -263,13 +263,6 @@ PACK_STRUCT_END
             (errf)((arg), (err));                                                                  \
     } while (0)
 
-/** Enabled extra-check for TCP_OVERSIZE if LWIP_DEBUG is enabled */
-#if TCP_OVERSIZE && defined(LWIP_DEBUG)
-#define TCP_OVERSIZE_DBGCHECK 1
-#else
-#define TCP_OVERSIZE_DBGCHECK 0
-#endif
-
 /* This structure represents a TCP segment on the unsent, unacked and ooseq queues */
 struct tcp_seg {
     struct tcp_seg *next; /* used when putting segments on a queue */
@@ -279,11 +272,6 @@ struct tcp_seg {
     u32_t seqno;
     u32_t len; /* the TCP length of this segment should allow >64K size */
 
-#if TCP_OVERSIZE_DBGCHECK
-    u16_t oversize_left; /* Extra bytes available at the end of the last
-                            pbuf in unsent (used for asserting vs.
-                            tcp_pcb.unsent_oversized only) */
-#endif /* TCP_OVERSIZE_DBGCHECK */
     u8_t flags;
 #define TF_SEG_OPTS_MSS       (u8_t)0x01U /* Include MSS option. */
 #define TF_SEG_OPTS_TS        (u8_t)0x02U /* Include timestamp option. */
