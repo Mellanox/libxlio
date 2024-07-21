@@ -723,7 +723,13 @@ bool neigh_entry::post_send_tcp(neigh_send_data *p_data)
     p_mem_buf_desc->tx.p_ip_h = p_ip_hdr;
     p_mem_buf_desc->tx.p_tcp_h = reinterpret_cast<tcphdr *>(p_tcp_hdr);
 
-    m_p_ring->send_ring_buffer(m_id, &m_send_wqe, attr);
+    if (!safe_mce_sys().doca_tx) {
+        m_p_ring->send_ring_buffer(m_id, &m_send_wqe, attr);
+    } else {
+        m_p_ring->send_doca_single(reinterpret_cast<void *>(m_sge.addr), m_sge.length,
+                                   p_mem_buf_desc);
+    }
+
 #ifndef __COVERITY__
     struct tcphdr *p_tcp_h = reinterpret_cast<tcphdr *>(p_tcp_hdr);
     NOT_IN_USE(p_tcp_h); /* to supress warning in case MAX_DEFINED_LOG_LEVEL */
@@ -1658,7 +1664,12 @@ bool neigh_eth::send_arp_request(bool is_broadcast)
     p_mem_buf_desc->p_next_desc = nullptr;
     m_send_wqe.wr_id = (uintptr_t)p_mem_buf_desc;
 
-    m_p_ring->send_ring_buffer(m_id, &m_send_wqe, (xlio_wr_tx_packet_attr)0);
+    if (!safe_mce_sys().doca_tx) {
+        m_p_ring->send_ring_buffer(m_id, &m_send_wqe, (xlio_wr_tx_packet_attr)0);
+    } else {
+        m_p_ring->send_doca_single(reinterpret_cast<void *>(m_sge.addr), m_sge.length,
+                                   p_mem_buf_desc);
+    }
 
     neigh_logdbg("ARP Sent");
     return true;
@@ -1792,7 +1803,12 @@ bool neigh_eth::send_neighbor_solicitation()
     neigh_logdbg("NS request: base=%p addr=%p length=%" PRIu32, p_mem_buf_desc->p_buffer,
                  (void *)m_sge.addr, m_sge.length);
 
-    m_p_ring->send_ring_buffer(m_id, &m_send_wqe, (xlio_wr_tx_packet_attr)0);
+    if (!safe_mce_sys().doca_tx) {
+        m_p_ring->send_ring_buffer(m_id, &m_send_wqe, (xlio_wr_tx_packet_attr)0);
+    } else {
+        m_p_ring->send_doca_single(reinterpret_cast<void *>(m_sge.addr), m_sge.length,
+                                   p_mem_buf_desc);
+    }
 
     neigh_logdbg("Neighbor solicitation has been sent");
     return true;

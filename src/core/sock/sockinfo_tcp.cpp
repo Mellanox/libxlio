@@ -335,7 +335,8 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
 
     si_tcp_logdbg("new pcb %p pcb state %d", &m_pcb, get_tcp_state(&m_pcb));
     tcp_arg(&m_pcb, this);
-    tcp_ip_output(&m_pcb, sockinfo_tcp::ip_output);
+    tcp_ip_output(&m_pcb,
+                  safe_mce_sys().doca_tx ? sockinfo_tcp::ip_output_doca : sockinfo_tcp::ip_output);
     tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb);
     tcp_err(&m_pcb, sockinfo_tcp::err_lwip_cb);
     tcp_sent(&m_pcb, sockinfo_tcp::ack_recvd_lwip_cb);
@@ -1328,6 +1329,23 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
     }
 
     return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp, is_dummy, is_send_zerocopy);
+}
+
+err_t sockinfo_tcp::ip_output_doca(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn,
+                                   uint16_t flags)
+{
+    NOT_IN_USE(seg);
+    struct tcp_pcb *pcb = reinterpret_cast<struct tcp_pcb *>(v_p_conn);
+    sockinfo_tcp *p_si_tcp = reinterpret_cast<sockinfo_tcp *>(pcb->my_container);
+    dst_entry_tcp *p_dst = reinterpret_cast<dst_entry_tcp *>(p_si_tcp->m_p_connected_dst_entry);
+
+    uint32_t ret = 0;
+    if (likely(p_dst->is_valid())) {
+        ret = p_dst->send_doca(p, flags);
+    } else {
+        ret = p_dst->doca_slow_path(p, flags, p_si_tcp->m_so_ratelimit);
+    }
+    return (ret > 0 ? ERR_OK : ERR_WOULDBLOCK);
 }
 
 /*
@@ -3149,7 +3167,8 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
         return ERR_RST;
     }
 
-    tcp_ip_output(&(new_sock->m_pcb), sockinfo_tcp::ip_output);
+    tcp_ip_output(&(new_sock->m_pcb),
+                  safe_mce_sys().doca_tx ? sockinfo_tcp::ip_output_doca : sockinfo_tcp::ip_output);
     tcp_arg(&(new_sock->m_pcb), new_sock);
     tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb);
     tcp_err(&(new_sock->m_pcb), sockinfo_tcp::err_lwip_cb);

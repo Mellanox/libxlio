@@ -48,6 +48,8 @@ public:
                   resource_allocation_key &ring_alloc_logic);
     virtual ~dst_entry_tcp();
 
+    uint32_t doca_slow_path(struct pbuf *p, uint16_t flags, struct xlio_rate_limit_t &rate_limit);
+    uint32_t send_doca(struct pbuf *p, uint16_t flags);
     ssize_t fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr);
     ssize_t slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr,
                       struct xlio_rate_limit_t &rate_limit, int flags = 0, sockinfo *sock = nullptr,

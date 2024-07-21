@@ -180,6 +180,10 @@ int cq_mgr_tx::poll_and_process_element_tx()
 {
     cq_logfuncall("");
 
+    if (safe_mce_sys().doca_tx) {
+        return m_hqtx_ptr->poll_and_process_doca_tx();
+    }
+
     static auto is_error_opcode = [&](uint8_t opcode) {
         return opcode == MLX5_CQE_REQ_ERR || opcode == MLX5_CQE_RESP_ERR;
     };
