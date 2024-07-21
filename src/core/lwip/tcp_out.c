@@ -179,9 +179,6 @@ static struct tcp_seg *tcp_create_segment(struct tcp_pcb *pcb, struct pbuf *p, u
         }
 
         seg->next = NULL;
-#if TCP_OVERSIZE_DBGCHECK
-        seg->oversize_left = 0;
-#endif /* TCP_OVERSIZE_DBGCHECK */
     } else {
         // seg_alloc is valid, we dont need to allocate a new segment element.
         seg = pcb->seg_alloc;
@@ -381,10 +378,8 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
     u32_t queuelen;
     u8_t optlen = 0;
     u8_t optflags = 0;
-#if TCP_OVERSIZE
     u16_t oversize = 0;
     u16_t oversize_used = 0;
-#endif /* TCP_OVERSIZE */
     err_t err;
     u32_t mss_local = 0;
     u32_t mss_local_minus_opts;
@@ -464,9 +459,7 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
             space = mss_local - (pcb->last_unsent->len + unsent_optlen);
         } else {
             space = 0;
-#if TCP_OVERSIZE
             pcb->unsent_oversize = 0;
-#endif /* TCP_OVERSIZE */
         }
         seg = pcb->last_unsent;
 
@@ -477,13 +470,6 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
          * variable. The actual copying is done at the bottom of the
          * function.
          */
-#if TCP_OVERSIZE
-#if TCP_OVERSIZE_DBGCHECK
-        /* check that pcb->unsent_oversize matches last_unsent->unsent_oversize */
-        LWIP_ASSERT("unsent_oversize mismatch (pcb vs. last_unsent)",
-                    pcb->unsent_oversize == pcb->last_unsent->oversize_left);
-#endif /* TCP_OVERSIZE_DBGCHECK */
-
         if (pcb->unsent_oversize > 0) {
             if (!(apiflags & TCP_WRITE_FILE)) {
                 oversize = pcb->unsent_oversize;
@@ -496,7 +482,6 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
         }
         /* now we are either finished or oversize is zero */
         LWIP_ASSERT("inconsistend oversize vs. len", (oversize == 0) || (pos == len));
-#endif /* TCP_OVERSIZE */
 
         /*
          * Phase 2: Chain a new pbuf to the end of pcb->unsent.
@@ -517,18 +502,13 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
                      seglen));
                 goto memerr;
             }
-#if TCP_OVERSIZE_DBGCHECK
-            pcb->last_unsent->oversize_left += oversize;
-#endif /* TCP_OVERSIZE_DBGCHECK */
             memcpy(concat_p->payload, (u8_t *)arg + pos, seglen);
 
             pos += seglen;
             queuelen++; /* There is only one pbuf in the list */
         }
     } else {
-#if TCP_OVERSIZE
         LWIP_ASSERT("unsent_oversize mismatch (pcb->unsent is NULL)", pcb->unsent_oversize == 0);
-#endif /* TCP_OVERSIZE */
     }
 
     /*
@@ -598,9 +578,6 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
             tcp_tx_pbuf_free(pcb, p);
             goto memerr;
         }
-#if TCP_OVERSIZE_DBGCHECK
-        seg->oversize_left = oversize;
-#endif /* TCP_OVERSIZE_DBGCHECK */
 
         /* first segment of to-be-queued data? */
         if (queue == NULL) {
@@ -629,7 +606,6 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
      * Phase 1: If data has been added to the preallocated tail of
      * last_unsent, we update the length fields of the pbuf chain.
      */
-#if TCP_OVERSIZE
     if (oversize_used > 0) {
         struct pbuf *p;
         /* Bump tot_len of whole chain, len of tail */
@@ -641,12 +617,8 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
             }
         }
         pcb->last_unsent->len += oversize_used;
-#if TCP_OVERSIZE_DBGCHECK
-        pcb->last_unsent->oversize_left -= oversize_used;
-#endif /* TCP_OVERSIZE_DBGCHECK */
     }
     pcb->unsent_oversize = oversize;
-#endif /* TCP_OVERSIZE */
 
     /*
      * Phase 2: concat_p can be concatenated onto pcb->last_unsent->p
@@ -827,9 +799,7 @@ err_t tcp_write_express(struct tcp_pcb *pcb, const struct iovec *iov, u32_t iovc
         TCPH_SET_FLAG(seg->tcphdr, TCP_PSH);
     }
 
-#if TCP_OVERSIZE
     pcb->unsent_oversize = 0;
-#endif /* TCP_OVERSIZE */
 
     if (!pcb->last_unsent) {
         pcb->unsent = queue;
@@ -976,10 +946,8 @@ err_t tcp_enqueue_flags(struct tcp_pcb *pcb, u8_t flags)
         pcb->last_unsent->next = seg;
     }
     pcb->last_unsent = seg;
-#if TCP_OVERSIZE
     /* The new unsent tail has no space */
     pcb->unsent_oversize = 0;
-#endif /* TCP_OVERSIZE */
 
     /* SYN and FIN bump the sequence number */
     if (flags & (TCP_SYN | TCP_FIN)) {
@@ -1271,9 +1239,7 @@ out:
     if (pcb->last_unsent == seg) {
         /* We have split the last unsent segment, update last_unsent */
         pcb->last_unsent = cur_seg;
-#if TCP_OVERSIZE
         pcb->unsent_oversize = result ? oversize : 0;
-#endif /* TCP_OVERSIZE */
     }
     tcp_seg_move_flags(seg, cur_seg, TCP_FIN | TCP_RST);
     return result;
@@ -1397,9 +1363,7 @@ __attribute__((unused)) static struct tcp_seg *tcp_rexmit_segment(struct tcp_pcb
         if (pcb->last_unsent == cur_seg) {
             /* We have split the last unsent segment, update last_unsent */
             pcb->last_unsent = new_seg;
-#if TCP_OVERSIZE
             pcb->unsent_oversize = 0;
-#endif /* TCP_OVERSIZE */
         }
 
         tcp_seg_move_flags(cur_seg, new_seg, TCP_FIN | TCP_RST);
@@ -1497,9 +1461,7 @@ void tcp_split_rexmit(struct tcp_pcb *pcb, struct tcp_seg *seg)
         if (pcb->last_unsent == cur_seg) {
             /* We have split the last unsent segment, update last_unsent */
             pcb->last_unsent = new_seg;
-#if TCP_OVERSIZE
             pcb->unsent_oversize = 0;
-#endif /* TCP_OVERSIZE */
         }
 
         tcp_seg_move_flags(cur_seg, new_seg, TCP_FIN | TCP_RST);
@@ -1615,9 +1577,7 @@ void tcp_split_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t wnd)
         if (pcb->last_unsent == seg) {
             /* We have split the last unsent segment, update last_unsent */
             pcb->last_unsent = newseg;
-#if TCP_OVERSIZE
             pcb->unsent_oversize = oversize;
-#endif /* TCP_OVERSIZE */
         }
     } else if (seg->p->next) {
         /* Segment with more than one pbuffer and seg->p->len <= lentosend
@@ -1675,9 +1635,7 @@ void tcp_split_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t wnd)
         /* Update last unsent segment */
         if (pcb->last_unsent == seg) {
             pcb->last_unsent = newseg;
-#if TCP_OVERSIZE
             pcb->unsent_oversize = 0;
-#endif /* TCP_OVERSIZE */
         }
     } else {
         LWIP_ASSERT("tcp_split_segment: We should not be here [else]", 0);
@@ -1870,10 +1828,6 @@ err_t tcp_output(struct tcp_pcb *pcb)
                 pcb->flags &= ~(TF_ACK_DELAY | TF_ACK_NOW);
             }
 
-#if TCP_OVERSIZE_DBGCHECK
-            seg->oversize_left = 0;
-#endif /* TCP_OVERSIZE_DBGCHECK */
-
             rc = tcp_output_segment(seg, pcb);
             if (rc != ERR_OK && pcb->unacked) {
                 /* Transmission failed, skip moving the segment to unacked, so we
@@ -1943,9 +1897,7 @@ err_t tcp_output(struct tcp_pcb *pcb)
     if (pcb->unsent == NULL) {
         /* We have sent all pending segments, reset last_unsent */
         pcb->last_unsent = NULL;
-#if TCP_OVERSIZE
         pcb->unsent_oversize = 0;
-#endif /* TCP_OVERSIZE */
     }
 
     /* Send empty ACK if TF_ACK_NOW was set and no data was sent. */
@@ -2162,9 +2114,6 @@ void tcp_rexmit_rto(struct tcp_pcb *pcb)
     } else {
         /* If there are no unsent segments, update last_unsent to the last unacked */
         pcb->last_unsent = pcb->last_unacked;
-#if TCP_OVERSIZE && TCP_OVERSIZE_DBGCHECK
-        pcb->unsent_oversize = pcb->last_unacked->oversize_left;
-#endif /* TCP_OVERSIZE && TCP_OVERSIZE_DBGCHECK*/
     }
     /* unsent queue is the concatenated queue (of unacked, unsent) */
     pcb->unsent = pcb->unacked;
@@ -2216,9 +2165,7 @@ void tcp_rexmit(struct tcp_pcb *pcb)
     if (seg->next == NULL) {
         /* The retransmitted segment is the last in the unsent queue, update last_unsent */
         pcb->last_unsent = seg;
-#if TCP_OVERSIZE
         pcb->unsent_oversize = 0;
-#endif /* TCP_OVERSIZE */
     }
 
     ++pcb->nrtx;
