@@ -1699,6 +1699,7 @@ void sockinfo_tcp::process_my_ctl_packets()
     m_rx_ctl_packets_list_lock.unlock();
 
     if (m_backlog == INT_MAX) { // this is a child - no need to demux packets
+        /* coverity[sleep] */
         process_peer_ctl_packets(temp_list);
 
         if (!temp_list.empty()) {
@@ -1745,6 +1746,7 @@ void sockinfo_tcp::process_my_ctl_packets()
     peer_map_t::iterator itr = m_rx_peer_packets.begin();
     while (itr != m_rx_peer_packets.end()) {
         xlio_desc_list_t &peer_packets = itr->second;
+        /* coverity[sleep] */
         if (!process_peer_ctl_packets(peer_packets)) {
             return;
         }
@@ -1789,6 +1791,7 @@ void sockinfo_tcp::process_children_ctl_packets()
             mem_buf_desc_t *desc = sock->m_rx_ctl_packets_list.get_and_pop_front();
             sock->m_rx_ctl_packets_list_lock.unlock();
             desc->inc_ref_count();
+            /* coverity[sleep] */
             L3_level_tcp_input((pbuf *)desc, &sock->m_pcb);
             if (desc->dec_ref_count() <= 1) { // todo reuse needed?
                 sock->m_rx_ctl_reuse_list.push_back(desc);
