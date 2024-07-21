@@ -213,10 +213,7 @@ public:
                 1U;
         }
     }
-    doca_notification_handle_t get_notification_handle() const
-    {
-        return m_notification_handle;
-    }
+    doca_notification_handle_t get_notification_handle() const { return m_notification_handle; }
 
     uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *user_data);
     uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, bool is_zerocopy);
@@ -291,7 +288,6 @@ private:
     inline void ring_doorbell(int num_wqebb, bool skip_comp = false);
 
     struct xlio_rate_limit_t m_rate_limit;
-    doca_notification_handle_t m_notification_handle;
     xlio_ib_mlx5_qp_t m_mlx5_qp;
     ring_simple *m_p_ring;
     cq_mgr_tx *m_p_cq_mgr_tx;
@@ -322,8 +318,6 @@ private:
     // TIS cache. Protected by ring tx lock. TODO Move to ring.
     std::vector<xlio_tis *> m_tls_tis_cache;
 
-    doca_lso_metadata *doca_lso_metadata_head;
-
 #if defined(DEFINED_UTLS)
     std::list<std::unique_ptr<dpcp::tls_dek>> m_tls_dek_get_cache;
     std::list<std::unique_ptr<dpcp::tls_dek>> m_tls_dek_put_cache;
@@ -341,7 +335,8 @@ private:
     std::unique_ptr<doca_pe, decltype(&destory_doca_pe)> m_doca_pe {nullptr, destory_doca_pe};
     doca_mmap *m_doca_mmap = nullptr;
     doca_ctx *m_doca_ctx_txq = nullptr;
-    descq_t m_polled;
+    doca_notification_handle_t m_notification_handle;
+    doca_lso_metadata *m_p_doca_lso_metadata_list = nullptr;
 
     static void tx_task_completion_cb(doca_eth_txq_task_send *task_send, doca_data task_user_data,
                                       doca_data ctx_user_data);

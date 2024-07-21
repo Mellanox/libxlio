@@ -417,7 +417,8 @@ bool ring_simple::request_notification(cq_type_t cq_type)
     }
 
     std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-    return m_p_cq_mgr_tx->request_notification();
+    return (!safe_mce_sys().doca_tx ? m_p_cq_mgr_tx->request_notification()
+                                    : m_hqtx->request_notification());
 }
 
 void ring_simple::clear_rx_notification()
@@ -585,7 +586,11 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
             buff_list = get_tx_buffers(type, n_num_mem_bufs);
             if (!buff_list) {
                 // Arm the CQ event channel for next Tx buffer release (tx cqe)
-                ret = m_p_cq_mgr_tx->request_notification();
+                if (!safe_mce_sys().doca_tx) {
+                    ret = m_p_cq_mgr_tx->request_notification();
+                } else {
+                    ret = m_hqtx->request_notification();
+                }
                 if (ret < 0) {
                     // this is most likely due to cq_poll_sn out of sync, need to poll_cq again
                     ring_logdbg("failed arming cq_mgr_tx (hqtx=%p, cq_mgr_tx=%p) (errno=%d %m)",
@@ -625,7 +630,11 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
                     if (p_cq_mgr_tx) {
 
                         // Allow additional CQ arming now
-                        p_cq_mgr_tx->reset_notification_armed();
+                        if (safe_mce_sys().doca_tx) {
+                            m_hqtx->clear_notification();
+                        } else {
+                            p_cq_mgr_tx->reset_notification_armed();
+                        }
 
                         // Perform a non blocking event read, clear the fd channel
                         ret = p_cq_mgr_tx->poll_and_process_element_tx();
@@ -831,7 +840,11 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
                 if (p_cq_mgr_tx) {
 
                     // Allow additional CQ arming now
-                    p_cq_mgr_tx->reset_notification_armed();
+                    if (safe_mce_sys().doca_tx) {
+                        m_hqtx->clear_notification();
+                    } else {
+                        p_cq_mgr_tx->reset_notification_armed();
+                    }
 
                     // Perform a non blocking event read, clear the fd channel
                     ret = p_cq_mgr_tx->poll_and_process_element_tx();
