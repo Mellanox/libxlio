@@ -924,7 +924,6 @@ void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
 
     u16_t snd_mss = pcb->advtsd_mss = tcp_initial_mss(pcb);
     UPDATE_PCB_BY_MSS(pcb, snd_mss);
-    pcb->max_unsent_len = pcb->max_tcp_snd_queuelen;
     pcb->user_timeout_ms = 0;
     pcb->ticks_since_data_sent = -1;
     pcb->rto = 3000 / slow_tmr_interval;
