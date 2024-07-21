@@ -880,8 +880,9 @@ extern mce_sys_var &safe_mce_sys();
  * This block consists of auxiliary constants
  */
 #define RX_BUF_SIZE(mtu) (mtu)
-#define TX_BUF_SIZE(mtu)                                                                           \
-    ((mtu) + 92) // Tx buffers are larger in Ethernet (they include L2 for RAW QP)
+// Add room for the L2-L4 headers
+#define TX_BUF_SIZE(mtu) ((mtu) + 92)
+
 #define NUM_TX_WRE_TO_SIGNAL_MAX            64
 #define NUM_RX_WRE_TO_POST_RECV_MAX         1024
 #define MAX_MLX5_CQ_SIZE_ITEMS              4194304
