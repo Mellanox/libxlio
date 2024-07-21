@@ -346,11 +346,9 @@ struct tcp_pcb {
     u32_t snd_queuelen; /* Available buffer space for sending (in tcp_segs). */
     u32_t max_tcp_snd_queuelen;
 
-#if TCP_OVERSIZE
     /* Extra bytes available at the end of the last pbuf in unsent. */
     u16_t unsent_oversize;
     u16_t tcp_oversize_val;
-#endif /* TCP_OVERSIZE */
     u32_t max_unsent_len;
 
     /* These are ordered by sequence number: */
