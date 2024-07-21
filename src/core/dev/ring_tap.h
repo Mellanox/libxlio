@@ -104,6 +104,20 @@ public:
     inline void set_tap_data_available() { m_tap_data_available = true; }
     inline void set_vf_ring(ring_slave *p_ring) { m_vf_ring = p_ring; }
     inline void inc_vf_plugouts() { m_p_ring_stat->tap.n_vf_plugouts++; }
+    uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *buff)
+    {
+        NOT_IN_USE(ptr);
+        NOT_IN_USE(len);
+        NOT_IN_USE(buff);
+        return -1;
+    }
+    uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, bool is_zerocopy)
+    {
+        NOT_IN_USE(h);
+        NOT_IN_USE(p);
+        NOT_IN_USE(is_zerocopy);
+        return -1;
+    }
 
 private:
     inline void return_to_global_pool();

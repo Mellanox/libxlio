@@ -465,6 +465,7 @@ public:
     cpu_set_t internal_thread_affinity;
     bool internal_thread_arm_cq_enabled;
     bool doca_rx;
+    bool doca_tx;
     skip_poll_in_rx_t skip_poll_in_rx;
     multilock_t multilock;
 

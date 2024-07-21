@@ -107,6 +107,20 @@ public:
     virtual void slave_create(int if_index) = 0;
     virtual void slave_destroy(int if_index);
     virtual void flow_del_all_rfs_safe();
+    uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *buff)
+    {
+        NOT_IN_USE(ptr);
+        NOT_IN_USE(len);
+        NOT_IN_USE(buff);
+        return -1;
+    }
+    uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, bool is_zerocopy)
+    {
+        NOT_IN_USE(h);
+        NOT_IN_USE(p);
+        NOT_IN_USE(is_zerocopy);
+        return -1;
+    }
 
     void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)
     {

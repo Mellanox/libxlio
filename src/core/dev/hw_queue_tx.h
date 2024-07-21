@@ -42,6 +42,12 @@
 #include "proto/mem_buf_desc.h"
 #include "proto/xlio_lwip.h"
 #include "util/sg_array.h"
+#include <doca_eth_txq.h>
+#include <doca_pe.h>
+#include <doca_buf_inventory.h>
+#include <doca_mmap.h>
+#include <doca_ctx.h>
+#include <doca_eth_txq_cpu_data_path.h>
 
 #ifndef MAX_SUPPORTED_IB_INLINE_SIZE
 #define MAX_SUPPORTED_IB_INLINE_SIZE 884
@@ -71,6 +77,15 @@ struct sq_wqe_prop {
     /* Transport interface (TIS/TIR) current WQE holds reference to. */
     xlio_ti *ti;
     struct sq_wqe_prop *next;
+};
+
+/* DOCA LSO user data */
+struct doca_lso_metadata {
+    struct doca_gather_list headers;
+    union {
+        mem_buf_desc_t *buff;
+        doca_lso_metadata *next;
+    };
 };
 
 // @class hw_queue_tx
@@ -109,14 +124,12 @@ public:
 
 #ifdef DEFINED_UTLS
     xlio_tis *tls_context_setup_tx(const xlio_tls_info *info);
-    xlio_tir *tls_create_tir(bool cached);
     int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t next_record_tcp_sn,
                              xlio_comp_cb_t callback, void *callback_arg);
     void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static);
     void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn);
     void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey);
     void tls_release_tis(xlio_tis *tis);
-    void tls_release_tir(xlio_tir *tir);
     void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first);
 #endif /* DEFINED_UTLS */
 
@@ -200,6 +213,17 @@ public:
                 1U;
         }
     }
+    doca_notification_handle_t get_notification_handle() const
+    {
+        return m_notification_handle;
+    }
+
+    uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *user_data);
+    uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, bool is_zerocopy);
+    int poll_and_process_doca_tx();
+    bool request_notification();
+    void clear_notification();
+    void put_lso_metadata(doca_lso_metadata *lso_metadata);
 
 private:
     cq_mgr_tx *init_tx_cq_mgr();
@@ -267,6 +291,7 @@ private:
     inline void ring_doorbell(int num_wqebb, bool skip_comp = false);
 
     struct xlio_rate_limit_t m_rate_limit;
+    doca_notification_handle_t m_notification_handle;
     xlio_ib_mlx5_qp_t m_mlx5_qp;
     ring_simple *m_p_ring;
     cq_mgr_tx *m_p_cq_mgr_tx;
@@ -290,15 +315,53 @@ private:
     bool m_b_fence_needed = false;
     bool m_dm_enabled = false;
     bool m_hw_dummy_send_support = false;
+    bool m_notification_armed = false;
+    uint8_t m_doca_max_sge = 0U;
     dm_mgr m_dm_mgr;
 
     // TIS cache. Protected by ring tx lock. TODO Move to ring.
     std::vector<xlio_tis *> m_tls_tis_cache;
 
+    doca_lso_metadata *doca_lso_metadata_head;
+
 #if defined(DEFINED_UTLS)
     std::list<std::unique_ptr<dpcp::tls_dek>> m_tls_dek_get_cache;
     std::list<std::unique_ptr<dpcp::tls_dek>> m_tls_dek_put_cache;
 #endif
+
+    static void destory_doca_txq(doca_eth_txq *txq);
+    static void destory_doca_inventory(doca_buf_inventory *inv);
+    static void destory_doca_pe(doca_pe *pe);
+    bool prepare_doca_txq();
+
+    std::unique_ptr<doca_eth_txq, decltype(&destory_doca_txq)> m_doca_txq {nullptr,
+                                                                           destory_doca_txq};
+    std::unique_ptr<doca_buf_inventory, decltype(&destory_doca_inventory)> m_doca_inventory {
+        nullptr, destory_doca_inventory};
+    std::unique_ptr<doca_pe, decltype(&destory_doca_pe)> m_doca_pe {nullptr, destory_doca_pe};
+    doca_mmap *m_doca_mmap = nullptr;
+    doca_ctx *m_doca_ctx_txq = nullptr;
+    descq_t m_polled;
+
+    static void tx_task_completion_cb(doca_eth_txq_task_send *task_send, doca_data task_user_data,
+                                      doca_data ctx_user_data);
+    static void tx_task_error_cb(doca_eth_txq_task_send *task_send, doca_data task_user_data,
+                                 doca_data ctx_user_data);
+    static void tx_task_lso_completion_cb(doca_eth_txq_task_lso_send *task_send,
+                                          doca_data task_user_data, doca_data ctx_user_data);
+    static void tx_task_lso_error_cb(doca_eth_txq_task_lso_send *task_send,
+                                     doca_data task_user_data, doca_data ctx_user_data);
+    void return_doca_task(doca_eth_txq_task_send *task_send);
+    void return_doca_lso_task(doca_eth_txq_task_lso_send *lso_task);
+    void return_doca_buf(doca_buf *buf);
+    bool expand_doca_inventory();
+    bool expand_doca_task_pool(bool is_lso);
+    void handle_completion(mem_buf_desc_t *mem_buf);
+    void start_doca_txq();
+    void stop_doca_txq();
+    bool check_doca_caps(doca_devinfo *devinfo, uint32_t &max_burst_size, uint32_t &max_send_sge);
+    void init_doca_lso_metadata(int size);
+    doca_lso_metadata *get_lso_metadata();
 };
 
 #endif // HW_QUEUE_TX_H
