@@ -253,6 +253,8 @@ public:
                sockaddr *__from = nullptr, socklen_t *__fromlen = nullptr,
                struct msghdr *__msg = nullptr) override;
     static err_t ip_output(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn, uint16_t flags);
+    static err_t ip_output_doca(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn,
+                                uint16_t flags);
     static err_t ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn,
                                    uint16_t flags);
     static void tcp_state_observer(void *pcb_container, enum tcp_state new_state);

@@ -441,8 +441,15 @@ bool ring_simple::poll_and_process_element_rx(void *pv_fd_ready_array /*NULL*/)
 int ring_simple::poll_and_process_element_tx()
 {
     int ret = 0;
-    RING_TRY_LOCK_RUN_AND_UPDATE_RET(m_lock_ring_tx, m_p_cq_mgr_tx->poll_and_process_element_tx());
-    return ret;
+
+    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+    if (safe_mce_sys().doca_tx) {
+        ret = m_hqtx->poll_and_process_doca_tx();
+    } else {
+        ret = m_p_cq_mgr_tx->poll_and_process_element_tx();
+    }
+
+    return ret ? 1 : 0;
 }
 
 bool ring_simple::reclaim_recv_buffers(descq_t *rx_reuse)

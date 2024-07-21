@@ -65,6 +65,47 @@ transport_t dst_entry_tcp::get_transport(const sock_addr &to)
     return TRANS_XLIO;
 }
 
+uint32_t dst_entry_tcp::send_doca(struct pbuf *p, uint16_t flags)
+{
+    bool is_zerocopy = !!(flags & XLIO_TX_PACKET_ZEROCOPY);
+    bool is_tso = !!(flags & XLIO_TX_PACKET_TSO);
+    void *p_ip_hdr = nullptr;
+    void *p_tcp_hdr = nullptr;
+
+    struct pbuf *payload_pbuf = is_zerocopy ? p->next : p;
+    if (unlikely(payload_pbuf->ref > 1)) {
+        dst_tcp_logwarn(
+            "There is no such list in DOCA implementation. Need to test if this scenario works");
+    }
+    payload_pbuf->ref++;
+
+    uint32_t total_packet_len =
+        payload_pbuf->tot_len + m_header->m_total_hdr_len + (is_zerocopy ? p->len : 0);
+    void *p_pkt = (void *)((uint8_t *)p->payload - m_header->m_aligned_l2_l3_len);
+    m_header->copy_l2_ip_hdr(p_pkt);
+    uint16_t payload_length_ipv4 = total_packet_len - m_header->m_transport_header_len;
+    if (get_sa_family() == AF_INET6) {
+        fill_hdrs<tx_ipv6_hdr_template_t>(p_pkt, p_ip_hdr, p_tcp_hdr);
+        set_ipv6_len(p_ip_hdr, htons(payload_length_ipv4 - IPV6_HLEN));
+    } else {
+        fill_hdrs<tx_ipv4_hdr_template_t>(p_pkt, p_ip_hdr, p_tcp_hdr);
+        set_ipv4_len(p_ip_hdr, htons(payload_length_ipv4));
+    }
+
+    // ZC or TSO are possible only with DOCA LSO send
+    if (is_zerocopy || is_tso) {
+        size_t tcp_hdr_len = (static_cast<tcphdr *>(p_tcp_hdr))->doff << 2;
+        struct iovec h = {(void *)((uint8_t *)p->payload - m_header->m_total_hdr_len),
+                          m_header->m_total_hdr_len + tcp_hdr_len};
+        return m_p_ring->send_doca_lso(h, payload_pbuf, is_zerocopy);
+    }
+
+    // Regular send - single packet with a single pbuf
+    void *ptr = (void *)((uint8_t *)payload_pbuf->payload - m_header->m_total_hdr_len);
+    mem_buf_desc_t *user_data = reinterpret_cast<mem_buf_desc_t *>(p);
+    return m_p_ring->send_doca_single(ptr, total_packet_len, user_data);
+}
+
 ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr)
 {
     int ret = 0;
@@ -310,6 +351,30 @@ out:
         m_p_ring->inc_tx_retransmissions_stats(m_id);
     }
 
+    return ret;
+}
+
+uint32_t dst_entry_tcp::doca_slow_path(struct pbuf *p, uint16_t flags,
+                                       struct xlio_rate_limit_t &rate_limit)
+{
+    uint32_t ret = 0;
+
+    m_slow_path_lock.lock();
+    prepare_to_send(rate_limit, true);
+    if (m_b_is_offloaded) {
+        if (is_valid()) {
+            ret = send_doca(p, flags);
+        } else {
+            bool is_tso_or_zerocopy = !!(flags & (XLIO_TX_PACKET_ZEROCOPY | XLIO_TX_PACKET_TSO));
+            if (is_tso_or_zerocopy) {
+                dst_tcp_logwarn("TSO/ZC send when dst_entry is not valid");
+            }
+
+            iovec iov = {p, p->len};
+            ret = pass_buff_to_neigh(&iov, 1);
+        }
+    }
+    m_slow_path_lock.unlock();
     return ret;
 }
 
