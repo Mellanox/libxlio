@@ -737,6 +737,22 @@ int ring_simple::send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wq
     return ret;
 }
 
+uint32_t ring_simple::send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *buff)
+{
+    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+    uint32_t ret = m_hqtx->send_doca_single(ptr, len, buff);
+    m_hqtx->poll_and_process_doca_tx();
+    return ret;
+}
+
+uint32_t ring_simple::send_doca_lso(struct iovec &h, struct pbuf *p, bool is_zerocopy)
+{
+    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+    uint32_t ret = m_hqtx->send_doca_lso(h, p, is_zerocopy);
+    m_hqtx->poll_and_process_doca_tx();
+    return ret;
+}
+
 /*
  * called under m_lock_ring_tx lock
  */

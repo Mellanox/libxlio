@@ -869,6 +869,7 @@ void mce_sys_var::get_env_params()
     enable_lro = MCE_DEFAULT_LRO;
     handle_fork = MCE_DEFAULT_FORK_SUPPORT;
     doca_rx = false;
+    doca_tx = false;
     close_on_dup2 = MCE_DEFAULT_CLOSE_ON_DUP2;
     mtu = MCE_DEFAULT_MTU;
 #if defined(DEFINED_NGINX)
@@ -1837,6 +1838,10 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv("XLIO_DOCA_RX"))) {
         doca_rx = atoi(env_ptr) ? true : false;
+    }
+
+    if ((env_ptr = getenv("XLIO_DOCA_TX"))) {
+        doca_tx = atoi(env_ptr) ? true : false;
     }
 
     if ((env_ptr = getenv(SYS_VAR_FORK))) {

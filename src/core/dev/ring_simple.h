@@ -91,6 +91,8 @@ public:
                           xlio_wr_tx_packet_attr attr) override;
     int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
                          xlio_wr_tx_packet_attr attr, xlio_tis *tis) override;
+    uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *buff) override;
+    uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, bool is_zerocopy) override;
     void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc) override;
     void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc,
                                               unsigned ref) override;
