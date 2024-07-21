@@ -135,6 +135,10 @@ bool cq_mgr_tx::request_notification()
 {
     cq_logfuncall("");
 
+    if (safe_mce_sys().doca_tx) {
+        return m_hqtx_ptr->request_notification();
+    }
+
     if (m_b_notification_armed == false) {
         cq_logfunc("arming cq_mgr_tx notification channel");
 
