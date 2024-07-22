@@ -3999,10 +3999,7 @@ void sockinfo_tcp::fit_snd_bufs(unsigned int new_max_snd_buff)
     m_pcb.snd_buf += ((int)new_max_snd_buff - m_pcb.max_snd_buff);
     m_pcb.max_snd_buff = new_max_snd_buff;
 
-    if (!is_xlio_socket()) {
-        uint32_t mss = m_pcb.mss ?: 536U;
-        m_pcb.snd_queuelen_max = (mss - 1 + m_pcb.max_snd_buff * 16) / mss;
-    }
+    UPDATE_PCB_BY_MSS(&m_pcb, m_pcb.mss);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
