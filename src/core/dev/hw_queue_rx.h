@@ -43,7 +43,7 @@
 #include "util/sg_array.h"
 
 class ring_simple;
-class doca_flow_match;
+struct doca_flow_match;
 
 // @class hw_queue_rx
 // Object to manages the SQ operations. This object is used for Rx.

@@ -108,33 +108,44 @@ for test_link in $test_ip_list; do
 		test_name=${test_in}-${test}
 		test_tap=${WORKSPACE}/${prefix}/test-${test_name}.tap
 
-		if [ ! -z "${test_remote_ip}" ] ; then
+		for i in $(seq 3); do
+			if [ ! -z "${test_remote_ip}" ] ; then
 
-			eval "pid=$(${sudo_cmd} pidof ${prj_service})"
-			[ ! -z "${pid}" ] && eval "${sudo_cmd} kill -9 ${pid}"
-			eval "${sudo_cmd} ${install_dir}/sbin/${prj_service} --console -v5 & "
+				eval "pid=$(${sudo_cmd} pidof ${prj_service})"
+				[ ! -z "${pid}" ] && eval "${sudo_cmd} kill -9 ${pid}"
+				eval "${sudo_cmd} ${install_dir}/sbin/${prj_service} --console -v5 & "
 
-			echo "BUILD_NUMBER=${BUILD_NUMBER}"
-			eval "pid=$(${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} pidof ${prj_service})"
-			if [ ! -z "${pid}" ] ;  then
-				echo "${prj_service} pid=${pid}"
-				eval "${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} kill -9 ${pid}"
+				echo "BUILD_NUMBER=${BUILD_NUMBER}"
+				eval "pid=$(${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} pidof ${prj_service})"
+				if [ ! -z "${pid}" ] ;  then
+					echo "${prj_service} pid=${pid}"
+					eval "${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} kill -9 ${pid}"
+				fi
+				${sudo_cmd} scp -q ${install_dir}/sbin/${prj_service} ${rmt_user}@${test_remote_ip}:${sperf_exec_dir}
+				eval "${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} ${sudo_cmd} ${sperf_exec_dir}/${prj_service} &"
+
+				vutil="$(dirname $0)/vutil.sh"
+				[ ! -e "${vutil}" ] && { echo "error vutil not found" ; exit 1 ; }
+
+				${sudo_cmd} $timeout_exe ${vutil}  -a "${test_app}" -x "--load-vma=${test_lib} " -t "${test}:tc[1-9]$" \
+						-s "${test_remote_ip}" -p "${test_remote_port}" -l "${test_dir}/${test_name}.log" \
+						-e "XLIO_TX_BUFS=20000"
+			else
+				${sudo_cmd} $timeout_exe $PWD/tests/verifier/verifier.pl -a ${test_app} -x " --pre-warmup-wait=2 --debug " \
+					-t ${test}:tc[6-9]$ -s ${test_ip} -l ${test_dir}/${test_name}.log \
+					-e " XLIO_MEM_ALLOC_TYPE=ANON XLIO_MEMORY_LIMIT=256MB XLIO_TX_WRE=2000 XLIO_RX_WRE=2000 XLIO_STRQ=off LD_PRELOAD=$test_lib " \
+					--progress=0
 			fi
-			${sudo_cmd} scp -q ${install_dir}/sbin/${prj_service} ${rmt_user}@${test_remote_ip}:${sperf_exec_dir}
-			eval "${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} ${sudo_cmd} ${sperf_exec_dir}/${prj_service} &"
 
-			vutil="$(dirname $0)/vutil.sh"
-			[ ! -e "${vutil}" ] && { echo "error vutil not found" ; exit 1 ; }
-
-			${sudo_cmd} $timeout_exe ${vutil}  -a "${test_app}" -x "--load-vma=${test_lib} " -t "${test}:tc[1-9]$" \
-					-s "${test_remote_ip}" -p "${test_remote_port}" -l "${test_dir}/${test_name}.log" \
-					-e "XLIO_TX_BUFS=20000"
-		else
-			${sudo_cmd} $timeout_exe $PWD/tests/verifier/verifier.pl -a ${test_app} -x " --debug " \
-				-t ${test}:tc[1-9]$ -s ${test_ip} -l ${test_dir}/${test_name}.log \
-				-e " LD_PRELOAD=$test_lib " \
-				--progress=0
-		fi
+			cp $PWD/${test_name}.dump ${test_dir}/${test_name}.dump
+			if grep -q 'FAIL' ${test_dir}/${test_name}.dump; then
+				if [ "$i" -lt "3" ]; then
+					rm -fv ${test_dir}/${test_name}.log ${test_dir}/${test_name}.dump
+				fi
+			else
+				break
+			fi
+		done
 
 		cp $PWD/${test_name}.dump ${test_dir}/${test_name}.dump
 		

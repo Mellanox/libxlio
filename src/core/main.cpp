@@ -78,12 +78,7 @@
 #include "util/instrumentation.h"
 #include "util/agent.h"
 #include "xlio.h"
-
-// Required for DOCA Flow library
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wshadow"
 #include <doca_flow.h>
-#pragma GCC diagnostic pop
 
 void check_netperf_flags();
 

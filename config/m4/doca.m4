@@ -56,7 +56,7 @@ get_version_number_doca()
 
         # DOCA vesrion string parts may have leading zeros such as 2.8.0038
         # A string such as '0038' cannot be used as a number.
-        echo "$((${v[[0]]} * 10000 + ${v[[1]]} * 100 + $(expr ${v[[2]]} + 0)))"
+        echo "$((${v[[0]]} * 1000000 + ${v[[1]]} * 10000 + $(expr ${v[[2]]} + 0)))"
     else
         echo 0
     fi
@@ -64,7 +64,7 @@ get_version_number_doca()
 
 get_min_supported_version_doca()
 {
-    echo 20800
+    echo 2080070
 }
 
 AC_ARG_WITH([doca],

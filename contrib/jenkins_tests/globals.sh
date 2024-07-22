@@ -296,7 +296,7 @@ do_compile_doca()
     echo ""
     echo "===== DOCA checkout & compilation starts ====="
     echo ""
-    doca_version="2.8.0000-1"
+    doca_version="2.8.0070-1"
     doca_sdk="$WORKSPACE/$prefix/doca-sdk"
     doca_repo="ssh://git-nbu.nvidia.com:12023/doca/doca"
     doca_build="$WORKSPACE/$prefix/doca"
@@ -341,20 +341,19 @@ do_compile_doca()
         SUDO="sudo"
     fi
 
-    if ! $SUDO devtools/scripts/prepare_for_dev.sh --host --local; then
-        echo "Cannot prepare for dev..."
-        exit 1
-    fi
+    #if ! $SUDO devtools/scripts/prepare_for_dev.sh --host --local; then
+    #    echo "Cannot prepare for dev..."
+    #    exit 1
+    #fi
 
     # shellcheck source=/dev/null
-    if ! ($SUDO source devtools/public/set_env_variables.sh --deb); then
-        echo "Cannot set up ENV..."
-        exit 1
-    fi
+    #if ! ($SUDO source devtools/public/set_env_variables.sh --deb); then
+    #    echo "Cannot set up ENV..."
+    #fi
 
     $SUDO mkdir -p "$doca_build"
 
-    if ! $SUDO meson "$doca_build"; then
+    if ! $SUDO meson -Dsetup_doca_env=false "$doca_build"; then
         echo "Cannot prepare the project for compilation..."
         exit 1
     fi
