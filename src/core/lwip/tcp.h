@@ -220,11 +220,13 @@ extern tcp_state_observer_fn external_tcp_state_observer;
 #define SND_WND_SCALE(pcb, wnd) ((u32_t)(wnd) << (pcb)->snd_scale)
 #define TCPWND_MIN16(x)         ((u16_t)LWIP_MIN((x), 0xFFFF))
 
+#define TCP_SNDQUEUELEN_OVERFLOW (0xffffffU)
 #define UPDATE_PCB_BY_MSS(pcb, snd_mss)                                                            \
     do {                                                                                           \
         (pcb)->mss = (snd_mss);                                                                    \
         if ((pcb)->snd_queuelen_max != TCP_SNDQUEUELEN_OVERFLOW) {                                 \
-            (pcb)->snd_queuelen_max = (16 * ((pcb)->max_snd_buff) / ((pcb)->mss));                 \
+            (pcb)->snd_queuelen_max =                                                              \
+                LWIP_MIN(16 * (pcb)->max_snd_buff / (pcb)->mss, TCP_SNDQUEUELEN_OVERFLOW - 1);     \
         }                                                                                          \
     } while (0)
 
@@ -337,7 +339,6 @@ struct tcp_pcb {
     u32_t snd_sml_snt; /* maintain state for minshall's algorithm */
     u32_t snd_sml_add; /* maintain state for minshall's algorithm */
 
-#define TCP_SNDQUEUELEN_OVERFLOW (0xffffffU - 3)
     u32_t snd_queuelen; /* Available buffer space for sending (in tcp_segs). */
     u32_t snd_queuelen_max;
 
