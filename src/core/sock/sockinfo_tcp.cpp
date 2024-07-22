@@ -423,7 +423,7 @@ void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
     set_blocking(false);
 
     // Allow the queue to grow for non-zerocopy send operations.
-    m_pcb.max_unsent_len = TCP_SNDQUEUELEN_OVERFLOW;
+    m_pcb.snd_queuelen_max = TCP_SNDQUEUELEN_OVERFLOW;
 }
 
 void sockinfo_tcp::add_tx_ring_to_group()
@@ -4001,7 +4001,7 @@ void sockinfo_tcp::fit_snd_bufs(unsigned int new_max_snd_buff)
 
     if (!is_xlio_socket()) {
         uint32_t mss = m_pcb.mss ?: 536U;
-        m_pcb.max_unsent_len = (mss - 1 + m_pcb.max_snd_buff * 16) / mss;
+        m_pcb.snd_queuelen_max = (mss - 1 + m_pcb.max_snd_buff * 16) / mss;
     }
 }
 
