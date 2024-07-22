@@ -281,11 +281,9 @@ static err_t tcp_write_checks(struct tcp_pcb *pcb, u32_t len)
 
     /* If total number of pbufs on the unsent/unacked queues exceeds the
      * configured maximum, return an error */
-    if ((pcb->snd_queuelen >= pcb->snd_queuelen_max) ||
-        (pcb->snd_queuelen > TCP_SNDQUEUELEN_OVERFLOW)) {
+    if (pcb->snd_queuelen >= pcb->snd_queuelen_max) {
         LWIP_DEBUGF(TCP_OUTPUT_DEBUG | 3,
-                    ("tcp_write: too long queue %" U32_F " (max %" U32_F ")\n", pcb->snd_queuelen,
-                     pcb->snd_queuelen_max));
+                    ("tcp_write: queue exceeds %" U32_F "\n", pcb->snd_queuelen_max));
         pcb->flags |= TF_NAGLEMEMERR;
         return ERR_MEM;
     }
@@ -485,6 +483,12 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
         u32_t left = len - pos;
         u32_t seglen = LWIP_MIN(left, mss_local_minus_opts);
 
+        if (queuelen >= pcb->snd_queuelen_max) {
+            LWIP_DEBUGF(TCP_OUTPUT_DEBUG | 2,
+                        ("tcp_write: queue exceeds %" U32_F "\n", pcb->snd_queuelen_max));
+            goto memerr;
+        }
+
         p = tcp_pbuf_prealloc(seglen + optlen, mss_local, &oversize, pcb, type, desc, NULL);
         if (!p) {
             LWIP_DEBUGF(
@@ -492,8 +496,6 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
                 ("tcp_write : could not allocate memory for pbuf copy size %" U16_F "\n", seglen));
             goto memerr;
         }
-        LWIP_ASSERT("tcp_write: check that first pbuf can hold the complete seglen",
-                    (p->len >= seglen));
         if (is_file) {
             piov[piov_cur_index].iov_base = (void *)((char *)p->payload + optlen);
             piov[piov_cur_index].iov_len = seglen;
@@ -522,17 +524,6 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
         }
 
         queuelen++; /* There is only one pbuf in the list */
-
-        /* Now that there are more segments queued, we check again if the
-         * length of the queue exceeds the configured maximum or
-         * overflows. */
-        if ((queuelen > pcb->snd_queuelen_max) || (queuelen > TCP_SNDQUEUELEN_OVERFLOW)) {
-            LWIP_DEBUGF(TCP_OUTPUT_DEBUG | 2,
-                        ("tcp_write: queue too long %" U32_F " (%" U32_F ")\n", queuelen,
-                         pcb->snd_queuelen_max));
-            tcp_tx_pbuf_free(pcb, p);
-            goto memerr;
-        }
 
         if ((seg = tcp_create_segment(pcb, p, 0, pcb->snd_lbb + pos, optflags)) == NULL) {
             tcp_tx_pbuf_free(pcb, p);
@@ -847,14 +838,10 @@ err_t tcp_enqueue_flags(struct tcp_pcb *pcb, u8_t flags)
         "tcp_enqueue_flags: need either TCP_SYN or TCP_FIN in flags (programmer violates API)",
         (flags & (TCP_SYN | TCP_FIN)) != 0);
 
-    /* check for configured max queuelen and possible overflow (FIN flag should always come
-     * through!)*/
-    if (((pcb->snd_queuelen >= pcb->snd_queuelen_max) ||
-         (pcb->snd_queuelen > TCP_SNDQUEUELEN_OVERFLOW)) &&
-        ((flags & TCP_FIN) == 0)) {
+    // Check for max queuelen (FIN flag should always come through).
+    if ((pcb->snd_queuelen >= pcb->snd_queuelen_max) && ((flags & TCP_FIN) == 0)) {
         LWIP_DEBUGF(TCP_OUTPUT_DEBUG | 3,
-                    ("tcp_enqueue_flags: too long queue %" U16_F " (max %" U16_F ")\n",
-                     pcb->snd_queuelen, pcb->snd_queuelen_max));
+                    ("tcp_enqueue_flags: queue exceeds %" U32_F "\n", pcb->snd_queuelen_max));
         pcb->flags |= TF_NAGLEMEMERR;
         return ERR_MEM;
     }
