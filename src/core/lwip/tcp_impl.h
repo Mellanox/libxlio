@@ -90,7 +90,7 @@ void set_tmr_resolution(u32_t v);
       ((tpcb)->flags & TF_INFR) ||                                                                 \
       (((tpcb)->unsent != NULL) &&                                                                 \
        (((tpcb)->unsent->next != NULL) || ((tpcb)->unsent->len >= (tpcb)->mss))) ||                \
-      ((tcp_sndbuf(tpcb) <= 0) || (tcp_sndqueuelen(tpcb) >= (tpcb)->max_unsent_len)))              \
+      ((tcp_sndbuf(tpcb) <= 0) || (tcp_sndqueuelen(tpcb) >= (tpcb)->snd_queuelen_max)))            \
          ? 1                                                                                       \
          : 0)
 #define tcp_output_nagle(tpcb) (tcp_do_output_nagle(tpcb) ? tcp_output(tpcb) : ERR_OK)
