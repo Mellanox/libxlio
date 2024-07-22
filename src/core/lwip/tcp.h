@@ -223,8 +223,8 @@ extern tcp_state_observer_fn external_tcp_state_observer;
 #define UPDATE_PCB_BY_MSS(pcb, snd_mss)                                                            \
     do {                                                                                           \
         (pcb)->mss = (snd_mss);                                                                    \
-        if ((pcb)->max_unsent_len != TCP_SNDQUEUELEN_OVERFLOW) {                                   \
-            (pcb)->max_unsent_len = (16 * ((pcb)->max_snd_buff) / ((pcb)->mss));                   \
+        if ((pcb)->snd_queuelen_max != TCP_SNDQUEUELEN_OVERFLOW) {                                 \
+            (pcb)->snd_queuelen_max = (16 * ((pcb)->max_snd_buff) / ((pcb)->mss));                 \
         }                                                                                          \
     } while (0)
 
@@ -339,7 +339,7 @@ struct tcp_pcb {
 
 #define TCP_SNDQUEUELEN_OVERFLOW (0xffffffU - 3)
     u32_t snd_queuelen; /* Available buffer space for sending (in tcp_segs). */
-    u32_t max_unsent_len;
+    u32_t snd_queuelen_max;
 
     /* Extra bytes available at the end of the last pbuf in unsent. */
     u16_t unsent_oversize;
