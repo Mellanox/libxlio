@@ -281,11 +281,11 @@ static err_t tcp_write_checks(struct tcp_pcb *pcb, u32_t len)
 
     /* If total number of pbufs on the unsent/unacked queues exceeds the
      * configured maximum, return an error */
-    if ((pcb->snd_queuelen >= pcb->max_unsent_len) ||
+    if ((pcb->snd_queuelen >= pcb->snd_queuelen_max) ||
         (pcb->snd_queuelen > TCP_SNDQUEUELEN_OVERFLOW)) {
         LWIP_DEBUGF(TCP_OUTPUT_DEBUG | 3,
                     ("tcp_write: too long queue %" U32_F " (max %" U32_F ")\n", pcb->snd_queuelen,
-                     pcb->max_unsent_len));
+                     pcb->snd_queuelen_max));
         pcb->flags |= TF_NAGLEMEMERR;
         return ERR_MEM;
     }
@@ -526,10 +526,10 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
         /* Now that there are more segments queued, we check again if the
          * length of the queue exceeds the configured maximum or
          * overflows. */
-        if ((queuelen > pcb->max_unsent_len) || (queuelen > TCP_SNDQUEUELEN_OVERFLOW)) {
+        if ((queuelen > pcb->snd_queuelen_max) || (queuelen > TCP_SNDQUEUELEN_OVERFLOW)) {
             LWIP_DEBUGF(TCP_OUTPUT_DEBUG | 2,
                         ("tcp_write: queue too long %" U32_F " (%" U32_F ")\n", queuelen,
-                         pcb->max_unsent_len));
+                         pcb->snd_queuelen_max));
             tcp_tx_pbuf_free(pcb, p);
             goto memerr;
         }
@@ -849,12 +849,12 @@ err_t tcp_enqueue_flags(struct tcp_pcb *pcb, u8_t flags)
 
     /* check for configured max queuelen and possible overflow (FIN flag should always come
      * through!)*/
-    if (((pcb->snd_queuelen >= pcb->max_unsent_len) ||
+    if (((pcb->snd_queuelen >= pcb->snd_queuelen_max) ||
          (pcb->snd_queuelen > TCP_SNDQUEUELEN_OVERFLOW)) &&
         ((flags & TCP_FIN) == 0)) {
         LWIP_DEBUGF(TCP_OUTPUT_DEBUG | 3,
                     ("tcp_enqueue_flags: too long queue %" U16_F " (max %" U16_F ")\n",
-                     pcb->snd_queuelen, pcb->max_unsent_len));
+                     pcb->snd_queuelen, pcb->snd_queuelen_max));
         pcb->flags |= TF_NAGLEMEMERR;
         return ERR_MEM;
     }
