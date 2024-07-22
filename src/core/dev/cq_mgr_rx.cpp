@@ -256,7 +256,7 @@ void cq_mgr_rx::add_hqrx(hw_queue_rx *hqrx_ptr)
 
     m_debt = 0;
 
-    doca_error_t rc = doca_mmap_create(&temp_doca_mmap);
+    /*doca_error_t rc = doca_mmap_create(&temp_doca_mmap);
     if (DOCA_IS_ERROR(rc)) {
         PRINT_DOCA_ERR(cq_logerr, rc, "doca_mmap_create");
     }
@@ -303,8 +303,8 @@ void cq_mgr_rx::add_hqrx(hw_queue_rx *hqrx_ptr)
             PRINT_DOCA_ERR(cq_logerr, rc, "doca_buf_inventory_buf_get_by_data");
         }
 
-        rc = doca_eth_rxq_task_recv_allocate_init(m_hqrx_ptr->m_doca_rxq.get(), {.ptr = nullptr},
-                                                  temp_doca_bufs[i], temp_doca_tasks + i);
+        rc = doca_eth_rxq_task_recv_allocate_init(m_hqrx_ptr->m_doca_rxq.get(), temp_doca_bufs[i],
+                                                  {.ptr = nullptr}, temp_doca_tasks + i);
         if (DOCA_IS_ERROR(rc)) {
             PRINT_DOCA_ERR(cq_logerr, rc, "doca_eth_rxq_task_recv_allocate_init");
         }
@@ -313,7 +313,7 @@ void cq_mgr_rx::add_hqrx(hw_queue_rx *hqrx_ptr)
         if (DOCA_IS_ERROR(rc)) {
             PRINT_DOCA_ERR(cq_logerr, rc, "doca_eth_rxq_task_recv_as_doca_task");
         }
-    }
+    }*/
 }
 
 void cq_mgr_rx::del_hqrx(hw_queue_rx *hqrx_ptr)

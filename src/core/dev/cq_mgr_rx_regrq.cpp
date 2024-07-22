@@ -345,10 +345,10 @@ int cq_mgr_rx_regrq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *p
     /* Assume locked!!! */
     cq_logfuncall("");
 
-    //uint8_t rc = doca_pe_progress(m_doca_pe);
-    //if (rc) {
-    //    cq_loginfo("doca_pe_progress PROGRESS");
-    //}
+    // uint8_t rc = doca_pe_progress(m_doca_pe);
+    // if (rc) {
+    //     cq_loginfo("doca_pe_progress PROGRESS");
+    // }
 
     uint32_t ret_rx_processed = process_recv_queue(pv_fd_ready_array);
     if (unlikely(ret_rx_processed >= m_n_sysvar_cq_poll_batch_max)) {

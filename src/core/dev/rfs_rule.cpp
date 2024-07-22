@@ -48,7 +48,7 @@
 rfs_rule::~rfs_rule()
 {
     if (m_doca_flow_entry) {
-        doca_error_t rc = doca_flow_pipe_rm_entry(0, 0U, m_doca_flow_entry);
+        doca_error_t rc = doca_flow_pipe_remove_entry(0, 0U, m_doca_flow_entry);
         if (DOCA_IS_ERROR(rc)) {
             PRINT_DOCA_ERR(rfs_logerr, rc, "doca_flow_pipe_rm_entry entry: %p", m_doca_flow_entry);
         }

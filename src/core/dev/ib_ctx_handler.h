@@ -41,13 +41,8 @@
 #include "ib/base/verbs_extra.h"
 #include "utils/lock_wrapper.h"
 #include <mellanox/dpcp.h>
-
-// Required for DOCA Flow library
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wshadow"
 #include <doca_dev.h>
 #include <doca_flow.h>
-#pragma GCC diagnostic pop
 
 typedef std::unordered_map<uint32_t, struct ibv_mr *> mr_map_lkey_t;
 

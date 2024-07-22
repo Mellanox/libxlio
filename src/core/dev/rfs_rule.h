@@ -36,12 +36,7 @@
 #include <memory>
 #include "ib/base/verbs_extra.h"
 #include <mellanox/dpcp.h>
-
-// Required for DOCA Flow library
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wshadow"
 #include <doca_flow.h>
-#pragma GCC diagnostic pop
 
 class ib_ctx_handler;
 

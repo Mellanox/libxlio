@@ -40,12 +40,7 @@
 #include "dev/ring_simple.h"
 #include "proto/mem_buf_desc.h"
 #include "proto/flow_tuple.h"
-
-// Required for DOCA Flow library
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wshadow"
 #include <doca_flow.h>
-#pragma GCC diagnostic pop
 
 #define RFS_SINKS_LIST_DEFAULT_LEN 32
 
