@@ -357,7 +357,7 @@ steps:
     run: NGCIBlackDuckScan
     args:
       projectName: "libxlio"
-      projectVersion: "0.1.0"
+      projectVersion: "${sha1}"
       projectSrcPath: "src"
       attachArtifact: true
       reportName: "BlackDuck report"
