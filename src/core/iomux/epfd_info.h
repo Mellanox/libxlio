@@ -111,6 +111,7 @@ public:
     void remove_epoll_event(sockinfo *sock_fd, uint32_t event_flags);
     void increase_ring_ref_count(ring *ring);
     void decrease_ring_ref_count(ring *ring);
+    void clear_cq_events() { m_ready_cq_fd_q.clear(); }
 
 private:
     int add_fd(int fd, epoll_event *event);

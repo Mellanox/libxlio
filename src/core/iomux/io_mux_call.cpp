@@ -251,10 +251,8 @@ bool io_mux_call::handle_os_countdown(int &poll_os_countdown)
      */
     if (poll_os_countdown-- <= 0 && safe_mce_sys().select_poll_os_ratio > 0) {
         if (wait_os(true)) {
-            // This will empty the cqepfd
-            // (most likely in case of a wakeup and probably only under epoll_wait (Not
-            // select/poll))
-            ring_clear_rx_notification();
+            // DOCA WA: Unclearable manual triggered events generate false PE events.
+            clear_false_cq_events();
         }
         /* Before we exit with ready OS fd's we'll check the CQs once more and exit
          * below after calling check_all_offloaded_sockets();
