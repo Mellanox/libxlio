@@ -372,3 +372,8 @@ void epoll_wait_call::ring_clear_rx_notification()
 {
     m_epfd_info->ring_clear_rx_notification();
 }
+
+void epoll_wait_call::clear_false_cq_events()
+{
+    m_epfd_info->clear_cq_events();
+}

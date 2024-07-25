@@ -237,6 +237,7 @@ protected:
     virtual bool ring_poll_and_process_element();
     virtual bool ring_request_notification();
     virtual void ring_clear_rx_notification();
+    virtual void clear_false_cq_events() {}
 
     bool handle_os_countdown(int &poll_os_countdown);
 
