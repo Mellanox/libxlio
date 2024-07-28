@@ -205,6 +205,11 @@ static int free_libxlio_resources()
     }
     g_tcp_seg_pool = nullptr;
 
+    if (g_lso_metadata_pool) {
+        delete g_lso_metadata_pool;
+    }
+    g_lso_metadata_pool = nullptr;
+
     if (safe_mce_sys().print_report) {
         buffer_pool::print_full_report(VLOG_INFO);
     }
@@ -603,6 +608,8 @@ void print_xlio_global_settings()
     VLOG_PARAM_STRING("TCP Send Buffer size", safe_mce_sys().tcp_send_buffer_size,
                       MCE_DEFAULT_TCP_SEND_BUFFER_SIZE, SYS_VAR_TCP_SEND_BUFFER_SIZE,
                       option_size::to_str(safe_mce_sys().tcp_send_buffer_size));
+    VLOG_PARAM_NUMBER("LSO Metadata Batch Size", safe_mce_sys().lso_pool_batch,
+                      MCE_DEFAULT_LSO_POOL_BATCH, SYS_VAR_LSO_POOL_BATCH);
     VLOG_PARAM_NUMBER(
         "Rx Mem Bufs", safe_mce_sys().rx_num_bufs,
         (safe_mce_sys().enable_striding_rq ? MCE_DEFAULT_STRQ_NUM_BUFS : MCE_DEFAULT_RX_NUM_BUFS),
@@ -1194,6 +1201,11 @@ static void do_global_ctors_helper()
                           g_global_stat_static.n_tcp_seg_pool_size,
                           g_global_stat_static.n_tcp_seg_pool_no_segs));
 
+    NEW_CTOR(g_lso_metadata_pool,
+             lso_metadata_pool("LSO metadata objects", safe_mce_sys().lso_pool_batch,
+                               g_global_stat_static.n_lso_metadata_pool_size,
+                               g_global_stat_static.n_lso_metadata_pool_no_segs));
+
     // For delegated TCP timers the global collection is not used.
     if (safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
         NEW_CTOR(g_tcp_timers_collection, tcp_timers_collection());
@@ -1277,6 +1289,7 @@ void reset_globals()
     g_buffer_pool_tx = nullptr;
     g_buffer_pool_zc = nullptr;
     g_tcp_seg_pool = nullptr;
+    g_lso_metadata_pool = nullptr;
     g_tcp_timers_collection = nullptr;
     g_p_vlogger_timer_handler = nullptr;
     g_p_event_handler_manager = nullptr;

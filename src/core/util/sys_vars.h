@@ -512,6 +512,7 @@ public:
     uint32_t tcp_send_buffer_size;
     uint32_t tx_segs_ring_batch_tcp;
     uint32_t tx_segs_pool_batch_tcp;
+    uint32_t lso_pool_batch;
     FILE *stats_file;
     /* This field should be used to store and use data for XLIO_EXTRA_API_IOCTL */
     struct {
@@ -616,6 +617,7 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_MC_FORCE_FLOWTAG              "XLIO_MC_FORCE_FLOWTAG"
 #define SYS_VAR_TX_SEGS_RING_BATCH_TCP        "XLIO_TX_SEGS_RING_BATCH_TCP"
 #define SYS_VAR_TX_SEGS_POOL_BATCH_TCP        "XLIO_TX_SEGS_POOL_BATCH_TCP"
+#define SYS_VAR_LSO_POOL_BATCH                "XLIO_LSO_POOL_BATCH"
 
 #define SYS_VAR_SELECT_CPU_USAGE_STATS "XLIO_CPU_USAGE_STATS"
 #define SYS_VAR_SELECT_NUM_POLLS       "XLIO_SELECT_POLL"
@@ -745,6 +747,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_TX_SEGS_BATCH_TCP        (64)
 #define MCE_DEFAULT_TX_SEGS_RING_BATCH_TCP   (1024)
 #define MCE_DEFAULT_TX_SEGS_POOL_BATCH_TCP   (16384)
+#define MCE_DEFAULT_LSO_POOL_BATCH           (256)
 #define MCE_DEFAULT_TX_NUM_SGE               (4)
 
 #define MCE_DEFAULT_STRQ                            (option_3::OFF)

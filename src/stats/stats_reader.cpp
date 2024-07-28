@@ -469,6 +469,12 @@ void update_delta_global_stat(global_stats_t *p_curr_global_stats,
             (p_curr_global_stats->n_tcp_seg_pool_no_segs -
              p_prev_global_stats->n_tcp_seg_pool_no_segs) /
             delay;
+        p_prev_global_stats->n_lso_metadata_pool_size =
+            p_curr_global_stats->n_lso_metadata_pool_size;
+        p_prev_global_stats->n_lso_metadata_pool_no_segs =
+            (p_curr_global_stats->n_lso_metadata_pool_no_segs -
+             p_prev_global_stats->n_lso_metadata_pool_no_segs) /
+            delay;
         p_prev_global_stats->n_pending_sockets =
             (p_curr_global_stats->n_pending_sockets - p_prev_global_stats->n_pending_sockets) /
             delay;
@@ -683,6 +689,11 @@ void print_global_stats(global_instance_block_t *p_global_inst_arr)
             printf(FORMAT_STATS_32bit, "Size:", p_global_stats->n_tcp_seg_pool_size);
             printf(FORMAT_STATS_32bit,
                    "No segments error:", p_global_stats->n_tcp_seg_pool_no_segs);
+            printf("======================================================\n");
+            printf("\tLSO_METADATA_POOL\n");
+            printf(FORMAT_STATS_32bit, "Size:", p_global_stats->n_lso_metadata_pool_size);
+            printf(FORMAT_STATS_32bit,
+                   "No segments error:", p_global_stats->n_lso_metadata_pool_no_segs);
             printf("======================================================\n");
             printf("\tGLOBAL\n");
             printf(FORMAT_STATS_s_32bit, "Pending sockets:", p_global_stats->n_pending_sockets);

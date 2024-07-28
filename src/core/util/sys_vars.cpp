@@ -689,6 +689,7 @@ void mce_sys_var::update_multi_process_params()
             tx_bufs_batch_tcp = 1;
             tx_segs_batch_tcp = 1;
             tx_segs_pool_batch_tcp = 256;
+            lso_pool_batch = 0;
             rx_num_wr = 1;
             strq_strides_compensation_level = 32;
             strq_stride_size_bytes = STRQ_MIN_STRIDE_SIZE_BYTES;
@@ -788,6 +789,7 @@ void mce_sys_var::get_env_params()
     tx_segs_batch_tcp = MCE_DEFAULT_TX_SEGS_BATCH_TCP;
     tx_segs_ring_batch_tcp = MCE_DEFAULT_TX_SEGS_RING_BATCH_TCP;
     tx_segs_pool_batch_tcp = MCE_DEFAULT_TX_SEGS_POOL_BATCH_TCP;
+    lso_pool_batch = MCE_DEFAULT_LSO_POOL_BATCH;
     rx_num_bufs = MCE_DEFAULT_RX_NUM_BUFS;
     rx_buf_size = MCE_DEFAULT_RX_BUF_SIZE;
     rx_bufs_batch = MCE_DEFAULT_RX_BUFS_BATCH;
@@ -1316,6 +1318,10 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_TX_SEGS_POOL_BATCH_TCP))) {
         tx_segs_pool_batch_tcp = (uint32_t)std::max<int32_t>(atoi(env_ptr), 1);
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_LSO_POOL_BATCH))) {
+        lso_pool_batch = (uint32_t)std::max<int32_t>(atoi(env_ptr), 1);
     }
 
     if ((env_ptr = getenv(SYS_VAR_RING_ALLOCATION_LOGIC_TX))) {
