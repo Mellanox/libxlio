@@ -59,14 +59,13 @@
 #define MLX5_ETH_INLINE_HEADER_SIZE 18
 #endif
 
-#define OCTOWORD 16
-#define WQEBB    64
-#define DOCA_EXPAND_BATCH_SIZE              (1024)
-#define DOCA_MAX_LSO_HEADER                 (64)
-#define DOCA_INITIAL_LSO_METADATA_LIST_SIZE (32768)
-#define DOCA_CHECKSUM_HW_L3_ENABLE          (1)
-#define DOCA_CHECKSUM_HW_L4_ENABLE          (1)
-#define DOCA_MAX_SGE_WITHOUT_TSO            (1)
+#define OCTOWORD                   16
+#define WQEBB                      64
+#define DOCA_EXPAND_BATCH_SIZE     (1024)
+#define DOCA_MAX_LSO_HEADER        (64)
+#define DOCA_CHECKSUM_HW_L3_ENABLE (1)
+#define DOCA_CHECKSUM_HW_L4_ENABLE (1)
+#define DOCA_MAX_SGE_WITHOUT_TSO   (1)
 
 //#define DBG_DUMP_WQE 1
 
@@ -83,6 +82,8 @@
 #else
 #define dbg_dump_wqe(_addr, _size)
 #endif
+
+lso_metadata_pool *g_lso_metadata_pool = nullptr;
 
 static inline uint64_t align_to_octoword_up(uint64_t val)
 {
@@ -198,6 +199,10 @@ hw_queue_tx::~hw_queue_tx()
         m_p_cq_mgr_rx_unused = nullptr;
     }
 
+    if (m_p_doca_lso_metadata_list) {
+        g_lso_metadata_pool->put_objs(m_p_doca_lso_metadata_list);
+    }
+
     hwqtx_logdbg("Destructor hw_queue_tx end");
 }
 
@@ -275,11 +280,6 @@ bool hw_queue_tx::prepare_doca_txq()
         PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_set_max_send_buf_list_len");
         return false;
     }
-
-    /*  LSO task will take at least 2 wqebbs, and max sq size is 32K.
-        This leaves XLIO with 2x the amount of WQEs that can be populated to HW.
-        The rest 16K tasks can be posted to DOCA SWQ. */
-    init_doca_lso_metadata(DOCA_INITIAL_LSO_METADATA_LIST_SIZE);
 
     /*  Issues with mss configuration per txq:
         1. LSO will not work if remote side decided to reduce MSS.
@@ -434,15 +434,6 @@ void hw_queue_tx::stop_doca_txq()
     } else if (DOCA_IS_ERROR(err)) {
         PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_ctx_stop(TXQ). TXQ:%p", m_doca_txq.get());
     }
-}
-
-void hw_queue_tx::init_doca_lso_metadata(int size)
-{
-    doca_lso_metadata_head = new doca_lso_metadata[size];
-    for (int i = 0; i < size - 1; ++i) {
-        doca_lso_metadata_head[i].next = &doca_lso_metadata_head[i + 1];
-    }
-    doca_lso_metadata_head[size - 1].headers.next = nullptr;
 }
 
 int hw_queue_tx::configure(const slave_data_t *slave)
@@ -2004,20 +1995,21 @@ bool hw_queue_tx::expand_doca_task_pool(bool is_lso)
 
 doca_lso_metadata *hw_queue_tx::get_lso_metadata()
 {
-    doca_lso_metadata *ret = nullptr;
-    if (likely(doca_lso_metadata_head)) {
-        ret = doca_lso_metadata_head;
-        doca_lso_metadata_head = doca_lso_metadata_head->next;
-    } else {
-        // Expand
+    if (unlikely(!m_p_doca_lso_metadata_list)) {
+        m_p_doca_lso_metadata_list = g_lso_metadata_pool->get_objs(safe_mce_sys().lso_pool_batch);
+        if (unlikely(!m_p_doca_lso_metadata_list)) {
+            return nullptr;
+        }
     }
+    doca_lso_metadata *ret = m_p_doca_lso_metadata_list;
+    m_p_doca_lso_metadata_list = m_p_doca_lso_metadata_list->next;
     return ret;
 }
 
 void hw_queue_tx::put_lso_metadata(doca_lso_metadata *lso_metadata)
 {
-    lso_metadata->next = doca_lso_metadata_head;
-    doca_lso_metadata_head = lso_metadata;
+    lso_metadata->next = m_p_doca_lso_metadata_list;
+    m_p_doca_lso_metadata_list = lso_metadata;
 }
 
 bool hw_queue_tx::request_notification()
@@ -2093,6 +2085,13 @@ uint32_t hw_queue_tx::send_doca_lso(struct iovec &h, struct pbuf *p, bool is_zer
 {
     struct doca_eth_txq_task_lso_send *task = nullptr;
     doca_buf *tx_doca_buf = nullptr;
+
+    doca_lso_metadata *lso_metadata = get_lso_metadata();
+    if (!lso_metadata) {
+        hwqtx_logwarn("Couldn't get LSO metadata object.");
+        return 0;
+    }
+
     struct doca_mmap *mmap = (PBUF_DESC_MDESC == p->desc.attr)
         ? reinterpret_cast<mapping_t *>(p->desc.mdesc)->get_doca_mmap()
         : m_doca_mmap;
@@ -2116,7 +2115,7 @@ get_first_buf:
     }
 
     uint32_t len_sent = h.iov_len + first_pkt_len + (p->next ? p->next->tot_len : 0);
-    doca_lso_metadata *lso_metadata = get_lso_metadata();
+
     lso_metadata->headers.addr = h.iov_base;
     lso_metadata->headers.len = h.iov_len;
     lso_metadata->headers.next = nullptr;

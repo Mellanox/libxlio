@@ -48,10 +48,23 @@
 #include <doca_mmap.h>
 #include <doca_ctx.h>
 #include <doca_eth_txq_cpu_data_path.h>
+#include "util/cached_obj_pool.h"
 
 #ifndef MAX_SUPPORTED_IB_INLINE_SIZE
 #define MAX_SUPPORTED_IB_INLINE_SIZE 884
 #endif
+
+/* DOCA LSO user data */
+struct doca_lso_metadata {
+    struct doca_gather_list headers;
+    union {
+        mem_buf_desc_t *buff;
+        doca_lso_metadata *next;
+    };
+};
+
+typedef cached_obj_pool<doca_lso_metadata> lso_metadata_pool;
+extern lso_metadata_pool *g_lso_metadata_pool;
 
 struct slave_data_t;
 struct xlio_tls_info;
@@ -77,15 +90,6 @@ struct sq_wqe_prop {
     /* Transport interface (TIS/TIR) current WQE holds reference to. */
     xlio_ti *ti;
     struct sq_wqe_prop *next;
-};
-
-/* DOCA LSO user data */
-struct doca_lso_metadata {
-    struct doca_gather_list headers;
-    union {
-        mem_buf_desc_t *buff;
-        doca_lso_metadata *next;
-    };
 };
 
 // @class hw_queue_tx
@@ -355,7 +359,6 @@ private:
     void start_doca_txq();
     void stop_doca_txq();
     bool check_doca_caps(doca_devinfo *devinfo, uint32_t &max_burst_size, uint32_t &max_send_sge);
-    void init_doca_lso_metadata(int size);
     doca_lso_metadata *get_lso_metadata();
 };
 

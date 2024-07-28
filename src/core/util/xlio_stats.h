@@ -418,6 +418,8 @@ typedef struct {
 typedef struct {
     uint32_t n_tcp_seg_pool_size;
     uint32_t n_tcp_seg_pool_no_segs;
+    uint32_t n_lso_metadata_pool_size;
+    uint32_t n_lso_metadata_pool_no_segs;
     int n_pending_sockets;
     std::atomic<int> socket_tcp_destructor_counter;
     std::atomic<int> socket_udp_destructor_counter;
@@ -425,6 +427,8 @@ typedef struct {
     {
         n_tcp_seg_pool_size = 0;
         n_tcp_seg_pool_no_segs = 0;
+        n_lso_metadata_pool_size = 0;
+        n_lso_metadata_pool_no_segs = 0;
         n_pending_sockets = 0;
         socket_tcp_destructor_counter = 0;
         socket_udp_destructor_counter = 0;

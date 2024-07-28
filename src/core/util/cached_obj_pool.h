@@ -82,7 +82,7 @@ cached_obj_pool<T>::cached_obj_pool(const char *pool_name, size_t alloc_batch,
 template <typename T> cached_obj_pool<T>::~cached_obj_pool()
 {
     vlog_printf(VLOG_DEBUG, "%s pool statistics:\n", m_pool_name);
-    vlog_printf(VLOG_DEBUG, "  allocations=%u expands=%u total_segs=%u\n", m_stats.allocations,
+    vlog_printf(VLOG_DEBUG, "  allocations=%u expands=%u total_objs=%u\n", m_stats.allocations,
                 m_stats.expands, m_stats.total_objs);
 }
 
