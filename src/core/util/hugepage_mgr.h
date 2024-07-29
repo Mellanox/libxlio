@@ -88,6 +88,7 @@ private:
 
     bool is_hugepage_optimal(size_t hugepage, size_t size);
     bool is_hugepage_acceptable(size_t hugepage, size_t size);
+    bool check_resident_pages(void *ptr, size_t size, size_t page_size);
     void *alloc_hugepages_helper(size_t &size, size_t hugepage);
 
     // Returns unused bytes in the tail hugepage because of alignment.
