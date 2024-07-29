@@ -96,6 +96,33 @@ bool hugepage_mgr::is_hugepage_acceptable(size_t hugepage, size_t size)
         hugepage_metric(hugepage, size) <= HUGEPAGE_METRIC_ACCEPTABLE;
 }
 
+bool hugepage_mgr::check_resident_pages(void *ptr, size_t size, size_t page_size)
+{
+    const size_t pages_nr = size / page_size;
+    size_t resident_nr = 0;
+    char *page_ptr = reinterpret_cast<char *>(ptr);
+
+    /* Checking a single page per hugepage in a loop is more efficient than a single mincore()
+     * syscall for the entire range. A single syscall would also require an array allocation
+     * which can grow to tens of MB for the preallocated memory region.
+     */
+    for (size_t i = 0; i < pages_nr; ++i) {
+        unsigned char vec;
+        int rc = mincore(page_ptr, 1, &vec);
+        if (rc < 0) {
+            __log_info_dbg("mincore() failed to verify hugepages (errno=%d)", errno);
+            return false;
+        }
+        resident_nr += (vec & 1U);
+        page_ptr += page_size;
+    }
+    if (resident_nr != pages_nr) {
+        __log_info_dbg("Not all hugepages are resident (allocated=%zu resident=%zu)", pages_nr,
+                       resident_nr);
+    }
+    return resident_nr == pages_nr;
+}
+
 void *hugepage_mgr::alloc_hugepages_helper(size_t &size, size_t hugepage)
 {
     size_t hugepage_mask = hugepage - 1;
@@ -113,9 +140,26 @@ void *hugepage_mgr::alloc_hugepages_helper(size_t &size, size_t hugepage)
                MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_HUGETLB | map_flags, -1, 0);
     if (ptr == MAP_FAILED) {
         ptr = nullptr;
-        __log_info_dbg("mmap failed (errno=%d), skipping hugepage %zu kB", errno, hugepage / 1024U);
+        __log_info_dbg("mmap failed (errno=%d)", errno);
     } else {
+        /* Check whether all the pages are resident. Allocation beyond the cgroup limit can be
+         * successful and lead to a SIGBUS on an access. For example, the limit can be configured
+         * for a container.
+         */
+        if (!check_resident_pages(ptr, actual_size, hugepage)) {
+            int rc = munmap(ptr, actual_size);
+            if (rc < 0) {
+                __log_info_dbg("munmap failed (errno=%d)", errno);
+            }
+            ptr = nullptr;
+        }
+    }
+    if (ptr) {
+        // Success.
         size = actual_size;
+    } else {
+        // Failure.
+        __log_info_dbg("Skipping hugepage %zu kB", hugepage / 1024U);
     }
     return ptr;
 }
