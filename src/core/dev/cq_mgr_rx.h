@@ -104,9 +104,7 @@ public:
      * Block on the CQ's notification channel for the next event and process
      * it before exiting.
      *
-     * @return >=0 number of processed wce
-     *         < 0 error or if channel not armed or channel would block
-     *             (on non-blocked channel) (some other thread beat you to it)
+     * @return >=0 number of processed wce. < 0 error.
      */
     int wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
                                                   void *pv_fd_ready_array = nullptr);
