@@ -404,12 +404,14 @@ int ring_simple::request_notification(cq_type_t cq_type, uint64_t poll_sn)
 {
     int ret = 1;
     if (likely(CQT_RX == cq_type)) {
-        RING_TRY_LOCK_RUN_AND_UPDATE_RET(m_lock_ring_rx,
-                                         m_p_cq_mgr_rx->request_notification(poll_sn);
-                                         ++m_p_ring_stat->simple.n_rx_interrupt_requests);
+        m_lock_ring_rx.lock();
+        ret = m_p_cq_mgr_rx->request_notification(poll_sn);
+        ++m_p_ring_stat->simple.n_rx_interrupt_requests;
+        m_lock_ring_rx.unlock();
     } else {
-        RING_TRY_LOCK_RUN_AND_UPDATE_RET(m_lock_ring_tx,
-                                         m_p_cq_mgr_tx->request_notification(poll_sn));
+        m_lock_ring_tx.lock();
+        ret = m_p_cq_mgr_tx->request_notification(poll_sn);
+        m_lock_ring_tx.unlock();
     }
 
     return ret;
@@ -490,10 +492,11 @@ int ring_simple::wait_for_notification_and_process_element(int cq_channel_fd,
 {
     int ret = -1;
     if (m_p_cq_mgr_rx) {
-        RING_TRY_LOCK_RUN_AND_UPDATE_RET(m_lock_ring_rx,
-                                         m_p_cq_mgr_rx->wait_for_notification_and_process_element(
-                                             p_cq_poll_sn, pv_fd_ready_array);
-                                         ++m_p_ring_stat->simple.n_rx_interrupt_received);
+        m_lock_ring_rx.lock();
+        ret = m_p_cq_mgr_rx->wait_for_notification_and_process_element(p_cq_poll_sn,
+                                                                       pv_fd_ready_array);
+        ++m_p_ring_stat->simple.n_rx_interrupt_received;
+        m_lock_ring_rx.unlock();
     } else {
         ring_logerr("Can't find rx_cq for the rx_comp_event_channel_fd (= %d)", cq_channel_fd);
     }
