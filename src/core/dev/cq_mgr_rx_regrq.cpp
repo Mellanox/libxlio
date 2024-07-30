@@ -239,8 +239,8 @@ int cq_mgr_rx_regrq::drain_and_proccess_helper(mem_buf_desc_t *buff, buff_status
 
 int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id /*=NULL*/)
 {
-    cq_logfuncall("cq was %s drained. %d processed wce since last check. %d wce in m_rx_queue",
-                  (m_b_was_drained ? "" : "not "), m_n_wce_counter, m_rx_queue.size());
+    cq_logfuncall("cq processed %d wce since last check. %d wce in m_rx_queue", m_n_wce_counter,
+                  m_rx_queue.size());
 
     /* CQ polling loop until max wce limit is reached for this interval or CQ is drained */
     uint32_t ret_total = 0;
@@ -257,13 +257,12 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
      *   Not null argument indicates one.
      */
 
-    while (((m_n_sysvar_progress_engine_wce_max > m_n_wce_counter) && (!m_b_was_drained)) ||
+    while ((m_n_sysvar_progress_engine_wce_max > m_n_wce_counter) ||
            (p_recycle_buffers_last_wr_id)) {
         buff_status_e status = BS_OK;
         mem_buf_desc_t *buff = poll(status);
         if (!buff) {
             update_global_sn_rx(cq_poll_sn, ret_total);
-            m_b_was_drained = true;
             m_p_ring->m_gro_mgr.flush_all(nullptr);
             return ret_total;
         }
@@ -308,7 +307,6 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
     m_p_ring->m_gro_mgr.flush_all(nullptr);
 
     m_n_wce_counter = 0;
-    m_b_was_drained = false;
 
     // Update cq statistics
     m_p_cq_stat->n_rx_sw_queue_len = m_rx_queue.size();
@@ -373,7 +371,6 @@ int cq_mgr_rx_regrq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *p
                 }
             }
         } else {
-            m_b_was_drained = true;
             break;
         }
     }
