@@ -76,8 +76,8 @@ public:
     int socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_completions,
                           unsigned int ncompletions, int flags) override;
     int drain_and_proccess() override;
-    int wait_for_notification_and_process_element(int cq_channel_fd, uint64_t *p_cq_poll_sn,
-                                                  void *pv_fd_ready_array = nullptr) override;
+    void wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
+                                                   void *pv_fd_ready_array = nullptr) override;
     void mem_buf_desc_return_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc);
     void mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc,
                                          void *pv_fd_ready_array = nullptr);
