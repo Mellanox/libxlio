@@ -50,8 +50,8 @@ public:
         NOT_IN_USE(p_cq_poll_sn);
         return 0;
     }
-    virtual int wait_for_notification_and_process_element(int cq_channel_fd, uint64_t *p_cq_poll_sn,
-                                                          void *pv_fd_ready_array = nullptr);
+    virtual void wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
+                                                           void *pv_fd_ready_array = nullptr);
     virtual int drain_and_proccess();
     virtual bool reclaim_recv_buffers(descq_t *rx_reuse);
     virtual bool reclaim_recv_buffers(mem_buf_desc_t *buff);

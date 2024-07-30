@@ -67,8 +67,8 @@ public:
     virtual bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst);
     virtual void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc);
     virtual int drain_and_proccess();
-    virtual int wait_for_notification_and_process_element(int cq_channel_fd, uint64_t *p_cq_poll_sn,
-                                                          void *pv_fd_ready_array = nullptr);
+    virtual void wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
+                                                           void *pv_fd_ready_array = nullptr);
     virtual int get_num_resources() const { return m_bond_rings.size(); };
     virtual bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t = false);
     virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink);

@@ -568,29 +568,19 @@ int ring_bond::drain_and_proccess()
     }
 }
 
-int ring_bond::wait_for_notification_and_process_element(int cq_channel_fd, uint64_t *p_cq_poll_sn,
-                                                         void *pv_fd_ready_array /*NULL*/)
+void ring_bond::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
+                                                          void *pv_fd_ready_array /*NULL*/)
 {
     m_lock_ring_rx.lock();
 
-    int temp = 0;
-    int ret = 0;
-
     for (uint32_t i = 0; i < m_recv_rings.size(); i++) {
         if (m_recv_rings[i]->is_up()) {
-            temp = m_recv_rings[i]->wait_for_notification_and_process_element(
-                cq_channel_fd, p_cq_poll_sn, pv_fd_ready_array);
-            if (temp > 0) {
-                ret += temp;
-            }
+            m_recv_rings[i]->wait_for_notification_and_process_element(p_cq_poll_sn,
+                                                                       pv_fd_ready_array);
         }
     }
+
     m_lock_ring_rx.unlock();
-    if (ret > 0) {
-        return ret;
-    } else {
-        return temp;
-    }
 }
 
 int ring_bond::request_notification(cq_type_t cq_type, uint64_t poll_sn)

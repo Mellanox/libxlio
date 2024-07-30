@@ -554,9 +554,9 @@ int io_mux_call::ring_request_notification()
     return g_p_net_device_table_mgr->global_ring_request_notification(m_poll_sn_rx, m_poll_sn_tx);
 }
 
-int io_mux_call::ring_wait_for_notification_and_process_element(void *pv_fd_ready_array)
+void io_mux_call::ring_wait_for_notification_and_process_element(void *pv_fd_ready_array)
 {
-    return g_p_net_device_table_mgr->global_ring_wait_for_notification_and_process_element(
+    g_p_net_device_table_mgr->global_ring_wait_for_notification_and_process_element(
         &m_poll_sn_rx, pv_fd_ready_array);
 }
 

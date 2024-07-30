@@ -545,27 +545,24 @@ int cq_mgr_rx::request_notification(uint64_t poll_sn)
     return ret;
 }
 
-int cq_mgr_rx::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
-                                                         void *pv_fd_ready_array)
+void cq_mgr_rx::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
+                                                          void *pv_fd_ready_array)
 {
-    int ret = -1;
-
     cq_logfunc("");
 
     if (m_b_notification_armed) {
-        cq_mgr_rx *p_cq_mgr_context = nullptr;
         struct ibv_cq *p_cq_hndl = nullptr;
-        void *p; // deal with compiler warnings
+        void *p = nullptr; // deal with compiler warnings
 
         // Block on the cq_mgr_rx's notification event channel
         IF_VERBS_FAILURE(ibv_get_cq_event(m_comp_event_channel, &p_cq_hndl, &p))
         {
-            cq_logfunc("waiting on cq_mgr_rx event returned with error (errno=%d %m)", errno);
+            cq_logwarn("waiting on cq_mgr_rx event returned with error (errno=%d %m)", errno);
         }
         else
         {
             get_cq_event();
-            p_cq_mgr_context = (cq_mgr_rx *)p;
+            cq_mgr_rx *p_cq_mgr_context = (cq_mgr_rx *)p;
             if (p_cq_mgr_context != this) {
                 cq_logerr("mismatch with cq_mgr_rx returned from new event (event->cq_mgr_rx->%p)",
                           p_cq_mgr_context);
@@ -580,13 +577,8 @@ int cq_mgr_rx::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
             m_b_notification_armed = false;
 
             // Now try processing the ready element
-            ret = poll_and_process_element_rx(p_cq_poll_sn, pv_fd_ready_array);
+            poll_and_process_element_rx(p_cq_poll_sn, pv_fd_ready_array);
         }
         ENDIF_VERBS_FAILURE;
-    } else {
-        cq_logfunc("notification channel is not armed");
-        errno = EAGAIN;
     }
-
-    return ret;
 }

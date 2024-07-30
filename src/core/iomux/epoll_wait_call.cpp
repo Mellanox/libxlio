@@ -368,8 +368,7 @@ int epoll_wait_call::ring_request_notification()
     return m_epfd_info->ring_request_notification(m_poll_sn_rx, m_poll_sn_tx);
 }
 
-int epoll_wait_call::ring_wait_for_notification_and_process_element(void *pv_fd_ready_array)
+void epoll_wait_call::ring_wait_for_notification_and_process_element(void *pv_fd_ready_array)
 {
-    return m_epfd_info->ring_wait_for_notification_and_process_element(&m_poll_sn_rx,
-                                                                       pv_fd_ready_array);
+    m_epfd_info->ring_wait_for_notification_and_process_element(&m_poll_sn_rx, pv_fd_ready_array);
 }

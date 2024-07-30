@@ -238,7 +238,7 @@ protected:
 
     virtual int ring_request_notification();
 
-    virtual int ring_wait_for_notification_and_process_element(void *pv_fd_ready_array);
+    virtual void ring_wait_for_notification_and_process_element(void *pv_fd_ready_array);
 
     bool handle_os_countdown(int &poll_os_countdown);
 

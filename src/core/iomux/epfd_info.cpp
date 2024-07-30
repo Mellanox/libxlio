@@ -700,12 +700,10 @@ int epfd_info::ring_request_notification(uint64_t poll_sn_rx, uint64_t poll_sn_t
     return ret_total;
 }
 
-int epfd_info::ring_wait_for_notification_and_process_element(uint64_t *p_poll_sn,
-                                                              void *pv_fd_ready_array /* = NULL*/)
+void epfd_info::ring_wait_for_notification_and_process_element(uint64_t *p_poll_sn,
+                                                               void *pv_fd_ready_array /* = NULL*/)
 {
     __log_func("");
-    int ret_total = 0;
-
     while (!m_ready_cq_fd_q.empty()) {
 
         lock();
@@ -721,24 +719,7 @@ int epfd_info::ring_wait_for_notification_and_process_element(uint64_t *p_poll_s
         if (p_cq_ch_info) {
             ring *p_ready_ring = p_cq_ch_info->get_ring();
             // Handle the CQ notification channel
-            int ret = p_ready_ring->wait_for_notification_and_process_element(fd, p_poll_sn,
-                                                                              pv_fd_ready_array);
-            if (ret < 0) {
-                if (errno == EAGAIN) {
-                    __log_dbg("Error in ring->wait_for_notification_and_process_element() of %p "
-                              "(errno=%d %m)",
-                              p_ready_ring, errno);
-                } else {
-                    __log_err("Error in ring->wait_for_notification_and_process_element() of %p "
-                              "(errno=%d %m)",
-                              p_ready_ring, errno);
-                }
-                continue;
-            }
-            if (ret > 0) {
-                __log_func("ring[%p] Returned with: %d (sn=%d)", p_ready_ring, ret, *p_poll_sn);
-            }
-            ret_total += ret;
+            p_ready_ring->wait_for_notification_and_process_element(p_poll_sn, pv_fd_ready_array);
         } else {
             __log_dbg("failed to find channel fd. removing cq fd=%d from epfd=%d", fd, m_epfd);
             BULLSEYE_EXCLUDE_BLOCK_START
@@ -750,13 +731,6 @@ int epfd_info::ring_wait_for_notification_and_process_element(uint64_t *p_poll_s
             BULLSEYE_EXCLUDE_BLOCK_END
         }
     }
-
-    if (ret_total) {
-        __log_func("ret_total=%d", ret_total);
-    } else {
-        __log_funcall("ret_total=%d", ret_total);
-    }
-    return ret_total;
 }
 
 void epfd_info::clean_obj()
