@@ -182,7 +182,6 @@ protected:
     uint32_t m_n_cq_poll_sn_rx = 0U;
     ring_simple *m_p_ring;
     uint32_t m_n_wce_counter = 0U;
-    bool m_b_was_drained = false;
     bool m_b_is_rx_hw_csum_on = false;
     int m_debt = 0;
     const uint32_t m_n_sysvar_cq_poll_batch_max;
