@@ -52,10 +52,6 @@ protected:
     mem_buf_desc_t *poll(enum buff_status_e &status);
     inline void cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc,
                                      enum buff_status_e &status);
-
-private:
-    int drain_and_proccess_helper(mem_buf_desc_t *buff, buff_status_e status,
-                                  uintptr_t *p_recycle_buffers_last_wr_id);
 };
 
 #endif // CQ_MGR_MLX5_H

@@ -340,7 +340,6 @@ int cq_mgr_rx_strq::drain_and_proccess_helper(mem_buf_desc_t *buff, mem_buf_desc
 
     // Handle a stride. It can be that we have got a Filler CQE, in this case buff is null.
     if (buff) {
-        ++m_n_wce_counter; // Actually strides count.
         ++ret_total;
         if (process_strq_cq_element_rx(buff, status)) {
             if (p_recycle_buffers_last_wr_id) {
@@ -368,8 +367,7 @@ int cq_mgr_rx_strq::drain_and_proccess_helper(mem_buf_desc_t *buff, mem_buf_desc
 
 int cq_mgr_rx_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id)
 {
-    cq_logfuncall("cq processed %d wce since last check. %d wce in m_rx_queue", m_n_wce_counter,
-                  m_rx_queue.size());
+    cq_logfuncall("cq contains %d wce in m_rx_queue", m_rx_queue.size());
 
     // CQ polling loop until max wce limit is reached for this interval or CQ is drained
     uint32_t ret_total = 0;
@@ -383,7 +381,7 @@ int cq_mgr_rx_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id)
     //   QP down logic to release rx buffers should force polling to do this.
     //   Not null argument indicates one.
 
-    while ((m_n_sysvar_progress_engine_wce_max > m_n_wce_counter) || p_recycle_buffers_last_wr_id) {
+    while ((m_n_sysvar_progress_engine_wce_max > ret_total) || p_recycle_buffers_last_wr_id) {
         buff_status_e status = BS_OK;
         mem_buf_desc_t *buff = nullptr;
         mem_buf_desc_t *buff_wqe = poll(status, buff);
@@ -400,7 +398,6 @@ int cq_mgr_rx_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id)
     update_global_sn_rx(cq_poll_sn, ret_total);
 
     m_p_ring->m_gro_mgr.flush_all(nullptr);
-    m_n_wce_counter = 0; // Actually strides count.
 
     // Update cq statistics
     m_p_cq_stat->n_rx_sw_queue_len = m_rx_queue.size();
@@ -470,7 +467,6 @@ int cq_mgr_rx_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv
     update_global_sn_rx(*p_cq_poll_sn, ret);
 
     if (likely(ret > 0)) {
-        m_n_wce_counter += ret; // Actually strides count.
         m_p_ring->m_gro_mgr.flush_all(pv_fd_ready_array);
     } else {
         compensate_qp_poll_failed();
