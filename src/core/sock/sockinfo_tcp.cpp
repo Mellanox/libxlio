@@ -5258,7 +5258,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
         if (p_cq_ch_info) {
             ring *p_ring = p_cq_ch_info->get_ring();
             if (p_ring) {
-                p_ring->wait_for_notification_and_process_element(fd, &poll_sn);
+                p_ring->wait_for_notification_and_process_element(&poll_sn);
             }
         }
     }
