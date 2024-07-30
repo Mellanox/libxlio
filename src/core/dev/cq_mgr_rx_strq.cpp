@@ -427,15 +427,13 @@ mem_buf_desc_t *cq_mgr_rx_strq::process_strq_cq_element_rx(mem_buf_desc_t *p_mem
     return p_mem_buf_desc;
 }
 
-int cq_mgr_rx_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array)
+bool cq_mgr_rx_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array)
 {
-    /* Assume locked!!! */
     cq_logfuncall("");
 
-    uint32_t ret_rx_processed = process_recv_queue(pv_fd_ready_array);
-    if (unlikely(ret_rx_processed >= m_n_sysvar_cq_poll_batch_max)) {
+    if (unlikely(m_n_sysvar_cq_poll_batch_max <= process_recv_queue(pv_fd_ready_array))) {
         m_p_ring->m_gro_mgr.flush_all(pv_fd_ready_array);
-        return ret_rx_processed;
+        return false; // CQ was not drained.
     }
 
     if (m_n_sysvar_rx_prefetch_bytes_before_poll && m_rx_hot_buffer) {
@@ -444,8 +442,8 @@ int cq_mgr_rx_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv
     }
 
     buff_status_e status = BS_OK;
-    uint32_t ret = 0;
-    while (ret < m_n_sysvar_cq_poll_batch_max) {
+    uint32_t rx_polled = 0;
+    while (rx_polled < m_n_sysvar_cq_poll_batch_max) {
         mem_buf_desc_t *buff = nullptr;
         mem_buf_desc_t *buff_wqe = poll(status, buff);
 
@@ -454,9 +452,8 @@ int cq_mgr_rx_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv
         }
 
         if (buff) {
-            ++ret;
+            ++rx_polled;
             if (cqe_process_rx(buff, status)) {
-                ++ret_rx_processed;
                 process_recv_buffer(buff, pv_fd_ready_array);
             }
         } else if (!buff_wqe) {
@@ -464,15 +461,15 @@ int cq_mgr_rx_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv
         }
     }
 
-    update_global_sn_rx(*p_cq_poll_sn, ret);
+    update_global_sn_rx(*p_cq_poll_sn, rx_polled);
 
-    if (likely(ret > 0)) {
+    if (likely(rx_polled > 0)) {
         m_p_ring->m_gro_mgr.flush_all(pv_fd_ready_array);
     } else {
         compensate_qp_poll_failed();
     }
 
-    return ret_rx_processed;
+    return (rx_polled < m_n_sysvar_cq_poll_batch_max);
 }
 
 void cq_mgr_rx_strq::add_hqrx(hw_queue_rx *hqrx)

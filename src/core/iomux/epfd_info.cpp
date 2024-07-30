@@ -601,61 +601,30 @@ epoll_stats_t *epfd_info::stats()
     return m_stats;
 }
 
-int epfd_info::ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *p_poll_sn_tx,
-                                             void *pv_fd_ready_array /* = NULL*/)
+bool epfd_info::ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *p_poll_sn_tx,
+                                              void *pv_fd_ready_array /* = NULL*/)
 {
     __log_func("");
 
-    int ret_total = 0;
-
     if (m_ring_map.empty()) {
-        return ret_total;
+        return true;
     }
 
     m_ring_map_lock.lock();
 
+    bool all_drained = true;
     for (ring_map_t::iterator iter = m_ring_map.begin(); iter != m_ring_map.end(); iter++) {
-        int ret = iter->first->poll_and_process_element_rx(p_poll_sn_rx, pv_fd_ready_array);
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (ret < 0 && errno != EAGAIN) {
-            __log_err("Error in RX ring->poll_and_process_element() of %p (errno=%d %m)",
-                      iter->first, errno);
-            m_ring_map_lock.unlock();
-            return ret;
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
-        if (ret > 0) {
-            __log_func("ring[%p] RX Returned with: %d (sn=%d)", iter->first, ret, *p_poll_sn_rx);
-            ret_total += ret;
-        }
-
-        ret = iter->first->poll_and_process_element_tx(p_poll_sn_tx);
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (ret < 0 && errno != EAGAIN) {
-            __log_err("Error in TX ring->poll_and_process_element() of %p (errno=%d %m)",
-                      iter->first, errno);
-            m_ring_map_lock.unlock();
-            return ret;
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
-        if (ret > 0) {
-            __log_func("ring[%p] TX Returned with: %d (sn=%d)", iter->first, ret, *p_poll_sn_tx);
-            ret_total += ret;
-        }
+        all_drained &= iter->first->poll_and_process_element_rx(p_poll_sn_rx, pv_fd_ready_array);
+        all_drained &= (iter->first->poll_and_process_element_tx(p_poll_sn_tx) >= 0);
     }
 
     m_ring_map_lock.unlock();
 
-    if (safe_mce_sys().thread_mode == THREAD_MODE_PLENTY && ret_total == 0 && errno == EAGAIN) {
+    if (safe_mce_sys().thread_mode == THREAD_MODE_PLENTY && !all_drained) {
         sched_yield();
     }
 
-    if (ret_total) {
-        __log_func("ret_total=%d", ret_total);
-    } else {
-        __log_funcall("ret_total=%d", ret_total);
-    }
-    return ret_total;
+    return all_drained;
 }
 
 int epfd_info::ring_request_notification(uint64_t poll_sn_rx, uint64_t poll_sn_tx)

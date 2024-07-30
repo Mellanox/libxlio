@@ -100,7 +100,7 @@ public:
     bool handle_epoll_event(bool is_ready, uint32_t events, sockinfo *socket_object, int index);
 
 protected:
-    virtual int ring_poll_and_process_element();
+    virtual bool ring_poll_and_process_element();
 
     virtual int ring_request_notification();
 

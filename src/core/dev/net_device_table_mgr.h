@@ -69,13 +69,11 @@ public:
     void get_ip_list(local_ip_list_t &iplist, sa_family_t family, int if_index = 0);
 
     /**
-     * Arm ALL the managed CQ's notification channel
-     * This call will also check for race condition by polling each CQ after arming the notification
-     * channel. If race condition case occures then that CQ is polled and processed (and the CQ
-     * notification is armed) Returns >=0 the total number of wce processed < 0 on error
+     * Polling RX and TX of all ring on all devices.
+     * @return >0 All CQs were drained. ==0 All CQs were drained.
      */
-    int global_ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *p_poll_sn_tx,
-                                             void *pv_fd_ready_array = nullptr);
+    bool global_ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *p_poll_sn_tx,
+                                              void *pv_fd_ready_array = nullptr);
 
     /**
      * This will poll one time on the ALL the managed CQ's

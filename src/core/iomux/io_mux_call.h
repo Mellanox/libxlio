@@ -187,7 +187,7 @@ private:
     /**
      * Go over offloaded fd's and check if their sockinfo is ready.
      * If ready, calls set_offloaded_rfd_ready() & set_offloaded_wfd_ready() on that fd.
-     * @return Whether an fd is ready.
+     * @return If all attached CQs were darined.
      */
     virtual bool check_all_offloaded_sockets();
     inline void check_offloaded_rsockets();
@@ -234,7 +234,7 @@ private:
 
 public:
 protected:
-    virtual int ring_poll_and_process_element();
+    virtual bool ring_poll_and_process_element();
 
     virtual int ring_request_notification();
 

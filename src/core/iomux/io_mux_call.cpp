@@ -134,16 +134,19 @@ inline bool io_mux_call::check_all_offloaded_sockets()
 {
     check_offloaded_rsockets();
 
+    // If m_n_ready_rfds is not empty and so m_n_all_ready_fds,
+    // we will exit the polling_loop/blocking_loop anyway.
+    bool all_drained = true;
     if (!m_n_ready_rfds) {
         // check cq for acks
-        ring_poll_and_process_element();
+        all_drained = ring_poll_and_process_element();
         check_offloaded_wsockets();
         check_offloaded_esockets();
     }
 
     __log_func("m_n_all_ready_fds=%d, m_n_ready_rfds=%d, m_n_ready_wfds=%d, m_n_ready_efds=%d",
                m_n_all_ready_fds, m_n_ready_rfds, m_n_ready_wfds, m_n_ready_efds);
-    return m_n_all_ready_fds;
+    return all_drained;
 }
 
 inline void io_mux_call::zero_polling_cpu(timeval current)
@@ -277,20 +280,19 @@ bool io_mux_call::handle_os_countdown(int &poll_os_countdown)
 
 void io_mux_call::polling_loops()
 {
-    int poll_counter;
-    int check_timer_countdown = 1; // Poll once before checking the time
     int poll_os_countdown = 0;
-    bool multiple_polling_loops, finite_polling;
-    timeval before_polling_timer = TIMEVAL_INITIALIZER, after_polling_timer = TIMEVAL_INITIALIZER,
-            delta;
-
     if (immidiate_return(poll_os_countdown)) {
         return;
     }
 
-    poll_counter = 0;
-    finite_polling = safe_mce_sys().select_poll_num != -1;
-    multiple_polling_loops = safe_mce_sys().select_poll_num != 0;
+    timeval before_polling_timer = TIMEVAL_INITIALIZER;
+    timeval after_polling_timer = TIMEVAL_INITIALIZER;
+    timeval delta;
+    int check_timer_countdown = 1; // Poll once before checking the time
+    int check_timer_countdown_step = MAX(*m_p_num_all_offloaded_fds, 1U);
+    int check_timer_countdown_init = (safe_mce_sys().select_poll_num == 0 ? 1 : 512);
+    bool all_drained = false;
+    bool finite_polling = (safe_mce_sys().select_poll_num != -1);
 
     timeval poll_duration;
     tv_clear(&poll_duration);
@@ -310,26 +312,21 @@ void io_mux_call::polling_loops()
     }
 
     do {
-        __log_funcall("2nd scenario loop %d", poll_counter);
-        __log_funcall("poll_os_countdown=%d, select_poll_os_ratio=%d, check_timer_countdown=%d, "
-                      "m_num_offloaded_rfds=%d,"
-                      "  m_n_all_ready_fds=%d, m_n_ready_rfds=%d, m_n_ready_wfds=%d, "
-                      "m_n_ready_efds=%d, multiple_polling_loops=%d",
-                      poll_os_countdown, safe_mce_sys().select_poll_os_ratio, check_timer_countdown,
-                      *m_p_num_all_offloaded_fds, m_n_all_ready_fds, m_n_ready_rfds, m_n_ready_wfds,
-                      m_n_ready_efds, multiple_polling_loops);
+        __log_funcall("poll_os_countdown=%d, check_timer_countdown=%d, m_num_offloaded_rfds=%d, "
+                      "m_n_all_ready_fds=%d, m_n_ready_rfds=%d, m_n_ready_wfds=%d, "
+                      "m_n_ready_efds=%d",
+                      poll_os_countdown, check_timer_countdown, *m_p_num_all_offloaded_fds,
+                      m_n_all_ready_fds, m_n_ready_rfds, m_n_ready_wfds, m_n_ready_efds);
 
         if (handle_os_countdown(poll_os_countdown)) {
             // Break if non-offloaded data was found.
             break;
         }
 
-        /*
-         * Poll offloaded sockets.
-         * If this is successful we must exit - wait_os() might mess the results.
-         */
-        //__log_func("before check_all_offloaded_sockets");
-        if (check_all_offloaded_sockets()) {
+        // Poll offloaded sockets.
+        // If this is successful we must exit - wait_os() might mess the results.
+        all_drained = check_all_offloaded_sockets();
+        if (m_n_all_ready_fds) { // We have events.
             break;
         }
 
@@ -340,38 +337,32 @@ void io_mux_call::polling_loops()
         if (check_timer_countdown <= 1) {
             timer_update();
             if (is_timeout(m_elapsed)) {
-                __if_dbg("2nd scenario timeout (loop %d, elapsed %d)", poll_counter,
-                         m_elapsed.tv_usec);
-                __if_dbg("timeout (loop %d, elapsed %d)", poll_counter, m_elapsed.tv_usec);
+                __if_dbg("2nd scenario timeout (elapsed %d)", m_elapsed.tv_usec);
                 break;
             }
 
+            // If polled_cqes != 0 it means there can be more CQEs in the CQ and we should not go
+            // to sleep.
             /* cppcheck-suppress syntaxError */
-            if (finite_polling && (tv_cmp(&poll_duration, &m_elapsed, <=))) {
-                __if_dbg("2nd scenario reached max poll duration (loop %d, elapsed %d)",
-                         poll_counter, m_elapsed.tv_usec);
-                __if_dbg("timeout reached max poll duration (loop %d, elapsed %d)", poll_counter,
-                         m_elapsed.tv_usec);
+            if (all_drained && finite_polling && (tv_cmp(&poll_duration, &m_elapsed, <=))) {
+                __if_dbg("2nd scenario reached max poll duration (elapsed %d)", m_elapsed.tv_usec);
                 break;
             }
 
-            // Check the timer each 512 offloaded fd's checked
-            check_timer_countdown = 512;
+            // Check the timer each X offloaded fds checked
+            check_timer_countdown = check_timer_countdown_init;
 
-            __if_dbg("2nd scenario timer update (loop %d, elapsed %d)", poll_counter,
-                     m_elapsed.tv_usec);
+            __if_dbg("2nd scenario timer update (elapsed %d)", m_elapsed.tv_usec);
         }
 
         // update timer check with referance to number of offlaoded sockets in loop
-        check_timer_countdown -= *m_p_num_all_offloaded_fds;
-        // check_timer_countdown -= m_num_offloaded_wfds; //TODO: consider the appropriate factor
-        poll_counter++;
+        check_timer_countdown -= check_timer_countdown_step;
 
         if (g_b_exit || is_sig_pending()) {
             errno = EINTR;
             xlio_throw_object(io_mux_call::io_error);
         }
-    } while (m_n_all_ready_fds == 0 && multiple_polling_loops);
+    } while (!m_n_all_ready_fds);
 
     if (safe_mce_sys().select_handle_cpu_usage_stats) {
         // handle polling cpu statistics
@@ -392,15 +383,11 @@ void io_mux_call::polling_loops()
         ++m_p_stats->n_iomux_poll_miss;
     }
 
-    __if_dbg("2nd scenario exit (loop %d, elapsed %d)", poll_counter, m_elapsed.tv_usec);
-    NOT_IN_USE(poll_counter);
+    __if_dbg("2nd scenario exit (elapsed %d)", m_elapsed.tv_usec);
 }
 
 void io_mux_call::blocking_loops()
 {
-    int ret;
-    bool cq_ready = false;
-    bool woke_up_non_valid = false;
     fd_array_t fd_ready_array;
     fd_ready_array.fd_max = FD_ARRAY_MAX;
 
@@ -416,49 +403,38 @@ void io_mux_call::blocking_loops()
             xlio_throw_object(io_mux_call::io_error);
         }
 
-        woke_up_non_valid = false;
-
-        ret = ring_request_notification();
+        int ret = ring_request_notification();
         __log_func("arming cq with poll_sn=%lx ret=%d", m_poll_sn_rx, ret);
         if (ret < 0) {
             xlio_throw_object(io_mux_call::io_error);
         } else if (ret > 0) {
-            // arm failed - process pending wce
-            cq_ready = true;
+            // Arm failed - process pending wce
             fd_ready_array.fd_count = 0;
             check_all_offloaded_sockets();
         } else /* ret == 0 */ {
-
             timer_update();
 
-            // arming was successful - block on cq
-            __log_func("going to sleep (elapsed time: %d sec, %d usec)", m_elapsed.tv_sec,
-                       m_elapsed.tv_usec);
-            if (check_all_offloaded_sockets()) {
+            // This poll attempt is necessary to resolve a race where CQE arrrives
+            // between we checked the CQ is empty but before we requested notification.
+            if (!check_all_offloaded_sockets() || m_n_all_ready_fds) {
                 continue;
             }
 
-            cq_ready = wait(m_elapsed);
-            __log_func("wait() returned %d, m_n_all_ready_fds=%d", cq_ready, m_n_all_ready_fds);
-            if (cq_ready) {
+            __log_func("going to sleep (elapsed time: %d sec, %d usec)", m_elapsed.tv_sec,
+                       m_elapsed.tv_usec);
+
+            if (wait(m_elapsed)) {
                 fd_ready_array.fd_count = 0;
                 ring_wait_for_notification_and_process_element(&fd_ready_array);
-                // tcp sockets can be accept ready!
+                // TCP sockets can be accept ready!
                 __log_func("before check_all_offloaded_sockets");
                 check_all_offloaded_sockets();
-                // This hurts epoll and doesn't seem to make a different for the rest
-                // check_rfd_ready_array(&fd_ready_array);
             } else if (!m_n_all_ready_fds && !is_timeout(m_elapsed)) {
                 __log_func("woke up by wake up mechanism, check current events");
                 check_all_offloaded_sockets();
-                if (!m_n_all_ready_fds) {
-                    woke_up_non_valid = true;
-                    __log_func("woke up by wake up mechanism but the events are no longer valid");
-                }
             }
         }
-    } while (!m_n_all_ready_fds && (woke_up_non_valid || cq_ready) &&
-             !is_timeout(m_elapsed)); // TODO: consider sum r + w
+    } while (!m_n_all_ready_fds && !is_timeout(m_elapsed));
 }
 
 int io_mux_call::call()
@@ -542,7 +518,7 @@ bool io_mux_call::immidiate_return(int &poll_os_countdown)
     return false;
 }
 
-int io_mux_call::ring_poll_and_process_element()
+bool io_mux_call::ring_poll_and_process_element()
 {
     // TODO: (select, poll) this access all CQs, it is better to check only relevant ones
     return g_p_net_device_table_mgr->global_ring_poll_and_process_element(&m_poll_sn_rx,

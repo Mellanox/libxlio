@@ -1967,19 +1967,17 @@ bool sockinfo_udp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_ready_array
 
             ring *p_ring = rx_ring_iter->first;
             while (1) {
-                int ret = p_ring->poll_and_process_element_rx(p_poll_sn, p_fd_ready_array);
+                // We need here a lock() version of poll_and_process_element_rx.
+                bool was_drained = p_ring->poll_and_process_element_rx(p_poll_sn, p_fd_ready_array);
 
-                if (ret <= 0) {
-                    break; // Get out of the CQ polling while loop (no wce or error case)
-                }
-
-                /* else (ret > 0) - at least one processed wce */
                 if (m_n_rx_pkt_ready_list_count) {
                     // Get out of the CQ polling loop
                     si_udp_logfunc("=> polled true (ready count = %d packets / %d bytes)",
                                    m_n_rx_pkt_ready_list_count, m_rx_ready_byte_count);
                     m_rx_ring_map_lock.unlock();
                     return true;
+                } else if (was_drained) {
+                    break;
                 }
             }
         }

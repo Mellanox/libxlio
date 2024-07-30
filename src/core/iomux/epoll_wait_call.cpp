@@ -327,12 +327,12 @@ void epoll_wait_call::unlock()
 bool epoll_wait_call::check_all_offloaded_sockets()
 {
     // check cq for acks
-    ring_poll_and_process_element();
+    bool all_drained = ring_poll_and_process_element();
     m_n_all_ready_fds = get_current_events();
 
-    __log_func("m_n_all_ready_fds=%d, m_n_ready_rfds=%d, m_n_ready_wfds=%d", m_n_all_ready_fds,
-               m_n_ready_rfds, m_n_ready_wfds);
-    return m_n_all_ready_fds;
+    __log_func("m_n_all_ready_fds=%d, m_n_ready_rfds=%d, m_n_ready_wfds=%d, all_drained=%d",
+               m_n_all_ready_fds, m_n_ready_rfds, m_n_ready_wfds, !!all_drained);
+    return all_drained;
 }
 
 bool epoll_wait_call::handle_epoll_event(bool is_ready, uint32_t events, sockinfo *socket_object,
@@ -358,7 +358,7 @@ bool epoll_wait_call::handle_epoll_event(bool is_ready, uint32_t events, sockinf
     }
 }
 
-int epoll_wait_call::ring_poll_and_process_element()
+bool epoll_wait_call::ring_poll_and_process_element()
 {
     return m_epfd_info->ring_poll_and_process_element(&m_poll_sn_rx, &m_poll_sn_tx, nullptr);
 }
