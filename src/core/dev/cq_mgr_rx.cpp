@@ -151,7 +151,6 @@ cq_mgr_rx::~cq_mgr_rx()
 {
     cq_logdbg("Destroying Rx CQ");
 
-    m_b_was_drained = true;
     if (m_rx_queue.size() + m_rx_pool.size()) {
         cq_logdbg("Returning %lu buffers to global Rx pool (ready queue %lu, free pool %lu))",
                   m_rx_queue.size() + m_rx_pool.size(), m_rx_queue.size(), m_rx_pool.size());
