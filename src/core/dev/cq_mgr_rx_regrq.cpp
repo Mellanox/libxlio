@@ -203,44 +203,9 @@ void cq_mgr_rx_regrq::cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe,
     }
 }
 
-int cq_mgr_rx_regrq::drain_and_proccess_helper(mem_buf_desc_t *buff, buff_status_e status,
-                                               uintptr_t *p_recycle_buffers_last_wr_id)
-{
-    ++m_n_wce_counter;
-    if (cqe_process_rx(buff, status)) {
-        if (p_recycle_buffers_last_wr_id) {
-            m_p_cq_stat->n_rx_pkt_drop++;
-            reclaim_recv_buffer_helper(buff);
-        } else {
-            bool procces_now = is_eth_tcp_frame(buff);
-
-            if (procces_now) { // We process immediately all non udp/ip traffic..
-                if ((++m_debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
-                    !compensate_qp_poll_success(buff)) {
-                    process_recv_buffer(buff, nullptr);
-                }
-            } else { // udp/ip traffic we just put in the cq's rx queue
-                m_rx_queue.push_back(buff);
-                mem_buf_desc_t *buff_cur = m_rx_queue.get_and_pop_front();
-                if ((++m_debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
-                    !compensate_qp_poll_success(buff_cur)) {
-                    m_rx_queue.push_front(buff_cur);
-                }
-            }
-        }
-    }
-
-    if (p_recycle_buffers_last_wr_id) {
-        *p_recycle_buffers_last_wr_id = (uintptr_t)buff;
-    }
-
-    return 1;
-}
-
 int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id /*=NULL*/)
 {
-    cq_logfuncall("cq processed %d wce since last check. %d wce in m_rx_queue", m_n_wce_counter,
-                  m_rx_queue.size());
+    cq_logfuncall("cq contains %d wce in m_rx_queue", m_rx_queue.size());
 
     /* CQ polling loop until max wce limit is reached for this interval or CQ is drained */
     uint32_t ret_total = 0;
@@ -255,8 +220,7 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
      *   Not null argument indicates one.
      */
 
-    while ((m_n_sysvar_progress_engine_wce_max > m_n_wce_counter) ||
-           (p_recycle_buffers_last_wr_id)) {
+    while ((m_n_sysvar_progress_engine_wce_max > ret_total) || p_recycle_buffers_last_wr_id) {
         buff_status_e status = BS_OK;
         mem_buf_desc_t *buff = poll(status);
         if (!buff) {
@@ -264,8 +228,6 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
             m_p_ring->m_gro_mgr.flush_all(nullptr);
             return ret_total;
         }
-
-        ++m_n_wce_counter;
 
         if (cqe_process_rx(buff, status)) {
             if (p_recycle_buffers_last_wr_id) {
@@ -302,8 +264,6 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
     update_global_sn_rx(cq_poll_sn, ret_total);
 
     m_p_ring->m_gro_mgr.flush_all(nullptr);
-
-    m_n_wce_counter = 0;
 
     // Update cq statistics
     m_p_cq_stat->n_rx_sw_queue_len = m_rx_queue.size();
@@ -360,7 +320,6 @@ int cq_mgr_rx_regrq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *p
 
     if (likely(ret > 0)) {
         ret_rx_processed += ret;
-        m_n_wce_counter += ret;
         m_p_ring->m_gro_mgr.flush_all(pv_fd_ready_array);
     } else {
         compensate_qp_poll_failed();
