@@ -420,31 +420,21 @@ void net_device_table_mgr::get_ip_list(local_ip_list_t &ip_list, sa_family_t fam
     m_lock.unlock();
 }
 
-int net_device_table_mgr::global_ring_poll_and_process_element(uint64_t *p_poll_sn_rx,
-                                                               uint64_t *p_poll_sn_tx,
-                                                               void *pv_fd_ready_array /*= NULL*/)
+bool net_device_table_mgr::global_ring_poll_and_process_element(uint64_t *p_poll_sn_rx,
+                                                                uint64_t *p_poll_sn_tx,
+                                                                void *pv_fd_ready_array /*= NULL*/)
 {
     ndtm_logfunc("");
-    int ret_total = 0;
+    bool all_drained = true;
 
     net_device_map_index_t::iterator net_dev_iter;
     for (net_dev_iter = m_net_device_map_index.begin();
          net_dev_iter != m_net_device_map_index.end(); net_dev_iter++) {
-        int ret = net_dev_iter->second->global_ring_poll_and_process_element(
+        all_drained &= net_dev_iter->second->global_ring_poll_and_process_element(
             p_poll_sn_rx, p_poll_sn_tx, pv_fd_ready_array);
-        if (ret < 0) {
-            ndtm_logdbg("Error in net_device_val[%p]->poll_and_process_element() (errno=%d %m)",
-                        net_dev_iter->second, errno);
-            return ret;
-        }
-        ret_total += ret;
     }
-    if (ret_total) {
-        ndtm_logfunc("ret_total=%d", ret_total);
-    } else {
-        ndtm_logfuncall("ret_total=%d", ret_total);
-    }
-    return ret_total;
+
+    return all_drained;
 }
 
 int net_device_table_mgr::global_ring_request_notification(uint64_t poll_sn_rx, uint64_t poll_sn_tx)

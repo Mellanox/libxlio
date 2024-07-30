@@ -730,9 +730,8 @@ Disable with 0
 Default value is 10
 
 XLIO_SELECT_SKIP_OS
-For select() or poll() this will force XLIO
-to check the non offloaded fd even though an offloaded socket has ready
-packets found while polling.
+For select() or poll() this will force XLIO to check the non offloaded fd even
+though an offloaded socket has ready packets found while polling.
 Default value is 4
 
 XLIO_PROGRESS_ENGINE_INTERVAL
