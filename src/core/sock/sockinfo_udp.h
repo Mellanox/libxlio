@@ -120,12 +120,12 @@ public:
     inline int fill_mreq_with_ix(void *mreq, int if_index, bool is_ipv6);
 
     /**
-     * Sampling the OS immediately by matching the rx_skip_os counter
-     * (m_rx_udp_poll_os_ratio_counter) to the limit (safe_mce_sys().rx_udp_poll_os_ratio)
+     * Sampling the OS immediately by matching the m_rx_udp_poll_os_ratio_counter
+     * to the limit (safe_mce_sys().rx_udp_poll_os_ratio)
      */
     void set_immediate_os_sample() override;
     /**
-     * Reseting rx_skip_os counter to prevent sampling OS immediately
+     * Reseting m_rx_udp_poll_os_ratio_counter counter to prevent sampling OS immediately
      */
     void unset_immediate_os_sample() override;
     /**

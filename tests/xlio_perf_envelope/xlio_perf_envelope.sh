@@ -53,8 +53,6 @@ XLIO_LIB=${XLIO_PATH:-libxlio.so}
 #xlio default values
 #---------------------------------------------------
 DEFAULT_XLIO_IGMP_ENABLE=1
-DEFAULT_XLIO_RX_POLL_OS_RATIO=10
-DEFAULT_XLIO_RX_SKIP_OS=100
 DEFAULT_XLIO_SELECT_POLL=0
 DEFAULT_XLIO_RX_BUFS=200000
 DEFAULT_XLIO_THREAD_MODE=1
@@ -66,8 +64,6 @@ DEFAULT_XLIO_HUGETLB=1
 #initial xlio values in test  
 #---------------------------------------------------
 XLIO_IGMP_ENABLE=0
-XLIO_RX_POLL_OS_RATIO=$DEFAULT_XLIO_RX_POLL_OS_RATIO
-XLIO_RX_SKIP_OS=$DEFAULT_XLIO_RX_SKIP_OS
 XLIO_RX_BUFS=$DEFAULT_XLIO_RX_BUFS
 XLIO_RX_WRE=$DEFAULT_XLIO_RX_WRE
 XLIO_SELECT_POLL=$DEFAULT_XLIO_SELECT_POLL
@@ -80,7 +76,6 @@ XLIO_HUGETLB=$DEFAULT_XLIO_HUGETLB
 XLIO_SELECT_POLL_MAX_VAL=1000000		
 XLIO_RX_BUFS_MAX_VAL=200000
 XLIO_IOMUX_RX_WRE=$DEFAULT_XLIO_RX_WRE				#3200
-XLIO_IOMUX_RX_SKIP_OS=$DEFAULT_XLIO_RX_SKIP_OS			#1000
 XLIO_IOMUX_SELECT_SKIP_OS=$DEFAULT_XLIO_SELECT_SKIP_OS		#500
 XLIO_IOMUX_HUGETLB=$DEFAULT_XLIO_HUGETLB				#1
 MAX_UDP_LAT_MSG_SIZE=65000
@@ -318,7 +313,6 @@ function run_udp_lat_using_select_epoll_poll_with_full_polling_xlio_only
 	if [[ "$OVER_XLIO" = yes ]]; then
 		local xlio_select_poll_old=$XLIO_SELECT_POLL
 		local xlio_select_skip_os_old=$XLIO_SELECT_SKIP_OS
-		local xlio_rx_skip_os_old=$XLIO_RX_SKIP_OS
 		local xlio_rx_wre_old=$XLIO_RX_WRE
                 local xlio_hugetlb_old=$XLIO_HUGETLB
 		
@@ -326,14 +320,14 @@ function run_udp_lat_using_select_epoll_poll_with_full_polling_xlio_only
 		save_coalesce_params
 		update_coalesce_4_udp_lat
 		append_tmp_file_and_delete "$TMP_DIR/$log_file.prep" "$log_file"
-		change_command_prefix XLIO_SELECT_POLL=$XLIO_SELECT_POLL_MAX_VAL XLIO_SELECT_SKIP_OS=$XLIO_IOMUX_SELECT_SKIP_OS XLIO_RX_WRE=$XLIO_IOMUX_RX_WRE XLIO_HUGETLB=$XLIO_IOMUX_HUGETLB XLIO_RX_SKIP_OS=$XLIO_IOMUX_RX_SKIP_OS
+		change_command_prefix XLIO_SELECT_POLL=$XLIO_SELECT_POLL_MAX_VAL XLIO_SELECT_SKIP_OS=$XLIO_IOMUX_SELECT_SKIP_OS XLIO_RX_WRE=$XLIO_IOMUX_RX_WRE XLIO_HUGETLB=$XLIO_IOMUX_HUGETLB
 		xlio_select_poll_info="With XLIO_SELECT_POLL=$XLIO_SELECT_POLL_MAX_VAL"
 		print_message "===============>UDP_LAT Using Select/Poll/Epoll<==============" "$log_file"
 		print_message "|----------------------------------|" "$log_file"
 		print_message "|XLIO_SELECT_POLL=$XLIO_SELECT_POLL_MAX_VAL" "$log_file"
 		print_message "|----------------------------------|" "$log_file"
 		run_udp_lat_using_select_epoll_poll_helper "$xlio_select_poll_info"
-		change_command_prefix XLIO_SELECT_POLL=$xlio_select_poll_old XLIO_SELECT_SKIP_OS=$xlio_select_skip_os_old XLIO_RX_WRE=$xlio_rx_wre_old XLIO_HUGETLB=$xlio_hugetlb_old XLIO_RX_SKIP_OS=$xlio_rx_skip_os_old
+		change_command_prefix XLIO_SELECT_POLL=$xlio_select_poll_old XLIO_SELECT_SKIP_OS=$xlio_select_skip_os_old XLIO_RX_WRE=$xlio_rx_wre_old XLIO_HUGETLB=$xlio_hugetlb_old
 		recreate_coalesce_params 
 		tests_finish	
 	fi
@@ -685,10 +679,6 @@ function update_command_prefix
 		if [[ $XLIO_SELECT_POLL -ne $DEFAULT_XLIO_SELECT_POLL ]] ; then
 			PREFIX="$PREFIX XLIO_SELECT_POLL=$XLIO_SELECT_POLL "	
 		fi
-
-		if [[ $XLIO_RX_SKIP_OS -ne $DEFAULT_XLIO_RX_SKIP_OS ]] ; then
-                        PREFIX="$PREFIX XLIO_RX_SKIP_OS=$XLIO_RX_SKIP_OS "
-                fi
 		
 		if [[ $XLIO_RX_BUFS -ne $DEFAULT_XLIO_RX_BUFS ]] ; then
 			PREFIX="$PREFIX XLIO_RX_BUFS=$XLIO_RX_BUFS "	
