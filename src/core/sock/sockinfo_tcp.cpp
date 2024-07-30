@@ -3663,8 +3663,6 @@ int sockinfo_tcp::os_epoll_wait_with_tcp_timers(epoll_event *ep_events, int maxe
 
 bool sockinfo_tcp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array)
 {
-    int ret;
-
     if (is_server()) {
         bool state;
         // tcp_si_logwarn("select on accept()");
@@ -3706,8 +3704,8 @@ bool sockinfo_tcp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array)
     while (!g_b_exit && is_rtr()) {
         if (likely(m_p_rx_ring)) {
             // likely scenario: rx socket bound to specific cq
-            ret = m_p_rx_ring->poll_and_process_element_rx(p_poll_sn, p_fd_array);
-            if (m_n_rx_pkt_ready_list_count || ret <= 0) {
+            bool drained = m_p_rx_ring->poll_and_process_element_rx(p_poll_sn, p_fd_array);
+            if (m_n_rx_pkt_ready_list_count || drained) {
                 break;
             }
         } else if (!m_rx_ring_map.empty()) {
@@ -3719,8 +3717,8 @@ bool sockinfo_tcp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array)
                 }
                 ring *p_ring = rx_ring_iter->first;
                 // g_p_lwip->do_timers();
-                ret = p_ring->poll_and_process_element_rx(p_poll_sn, p_fd_array);
-                if (m_n_rx_pkt_ready_list_count || ret <= 0) {
+                bool drained = p_ring->poll_and_process_element_rx(p_poll_sn, p_fd_array);
+                if (m_n_rx_pkt_ready_list_count || drained) {
                     break;
                 }
             }
@@ -4842,24 +4840,26 @@ int sockinfo_tcp::getpeername(sockaddr *__name, socklen_t *__namelen)
 int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
 {
     int ret;
-    int n;
     uint64_t poll_sn = 0;
     rx_ring_map_t::iterator rx_ring_iter;
     epoll_event rx_epfd_events[SI_RX_EPFD_EVENT_MAX];
 
     // poll for completion
     __log_info_func("");
-
     poll_count++;
-    n = 0;
     // if in listen state go directly to wait part
 
     consider_rings_migration_rx();
 
     // There's only one CQ
     m_rx_ring_map_lock.lock();
+
+    // We need to consider what to do in case poll_and_process_element_rx fails on try_lock.
+    // It can be too expansive for the application to get nothing just because of lock contention.
+    // In this case it will be better to have a lock() version of poll_and_process_element_rx.
+    // And then we should continue polling untill we have ready packets or we drained the CQ.
     if (likely(m_p_rx_ring)) {
-        n = m_p_rx_ring->poll_and_process_element_rx(&poll_sn);
+        m_p_rx_ring->poll_and_process_element_rx(&poll_sn);
     } else { // There's more than one CQ, go over each one
         for (rx_ring_iter = m_rx_ring_map.begin(); rx_ring_iter != m_rx_ring_map.end();
              rx_ring_iter++) {
@@ -4867,20 +4867,24 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
                 __log_err("Attempt to poll illegal cq");
                 continue;
             }
-            ring *p_ring = rx_ring_iter->first;
-            // g_p_lwip->do_timers();
-            n += p_ring->poll_and_process_element_rx(&poll_sn);
+
+            rx_ring_iter->first->poll_and_process_element_rx(&poll_sn);
         }
     }
     m_rx_ring_map_lock.unlock();
-    if (likely(n > 0)) { // got completions from CQ
-        __log_entry_funcall("got %d elements sn=%llu", n, (unsigned long long)poll_sn);
+    lock_tcp_con(); // We must take a lock before checking m_n_rx_pkt_ready_list_count
 
-        if (m_n_rx_pkt_ready_list_count) {
-            m_p_socket_stats->counters.n_rx_poll_hit++;
-        }
-        return n;
+    if (likely(m_n_rx_pkt_ready_list_count)) { // got completions from CQ
+        __log_entry_funcall("Ready %d packets. sn=%llu", m_n_rx_pkt_ready_list_count,
+                            (unsigned long long)poll_sn);
+        m_p_socket_stats->counters.n_rx_poll_hit++;
+        unlock_tcp_con();
+        return 1;
     }
+
+    m_p_socket_stats->counters.n_rx_poll_miss++;
+    bool is_timeout = m_loops_timer.is_timeout(); // We do this under lock.
+    unlock_tcp_con(); // Must happen before g_event_handler_manager_local.do_tasks();
 
     if (m_sysvar_tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
         // There are scenarios when rx_wait_helper is called in an infinite loop but exits before
@@ -4890,7 +4894,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
     }
 
     // if in blocking accept state skip poll phase and go to sleep directly
-    if (!blocking || m_loops_timer.is_timeout()) {
+    if (!blocking || is_timeout) {
         errno = EAGAIN;
         return -1;
     }
@@ -4899,7 +4903,6 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
         return 0;
     }
 
-    m_p_socket_stats->counters.n_rx_poll_miss++;
     // if we polling too much - go to sleep
     si_tcp_logfuncall("%d: too many polls without data blocking=%d", m_fd, blocking);
     if (g_b_exit) {

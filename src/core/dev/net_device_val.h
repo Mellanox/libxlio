@@ -240,8 +240,8 @@ public:
     transport_type_t get_transport_type() const { return m_transport_type; }
     bool update_active_backup_slaves();
 
-    int global_ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *p_poll_sn_tx,
-                                             void *pv_fd_ready_array = NULL);
+    bool global_ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *p_poll_sn_tx,
+                                              void *pv_fd_ready_array = NULL);
     int global_ring_request_notification(uint64_t poll_sn_rx, uint64_t poll_sn_tx);
     int ring_drain_and_proccess();
     void ring_adapt_cq_moderation();
