@@ -108,14 +108,11 @@ public:
                                                    void *pv_fd_ready_array = nullptr);
 
     /**
-     * This will poll n_num_poll time on the cq or stop early if it gets
-     * a wce (work completion element). If a wce was found 'processing' will
-     * occur.
-     * @return >=0 number of wce processed
-     *         < 0 error
+     * Poll RX CQ. Each CQE processed directly.
+     * @return True if CQ was drained.
      */
-    virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
-                                            void *pv_fd_ready_array = nullptr) = 0;
+    virtual bool poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
+                                             void *pv_fd_ready_array = nullptr) = 0;
     virtual mem_buf_desc_t *poll_and_process_socketxtreme() { return nullptr; };
 
     /**

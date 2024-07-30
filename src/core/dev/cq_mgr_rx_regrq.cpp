@@ -296,15 +296,13 @@ mem_buf_desc_t *cq_mgr_rx_regrq::poll_and_process_socketxtreme()
     return nullptr;
 }
 
-int cq_mgr_rx_regrq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array)
+bool cq_mgr_rx_regrq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array)
 {
-    /* Assume locked!!! */
     cq_logfuncall("");
 
-    uint32_t ret_rx_processed = process_recv_queue(pv_fd_ready_array);
-    if (unlikely(ret_rx_processed >= m_n_sysvar_cq_poll_batch_max)) {
+    if (unlikely(m_n_sysvar_cq_poll_batch_max <= process_recv_queue(pv_fd_ready_array))) {
         m_p_ring->m_gro_mgr.flush_all(pv_fd_ready_array);
-        return ret_rx_processed;
+        return false; // CQ was not drained.
     }
 
     if (m_p_next_rx_desc_poll) {
@@ -313,11 +311,11 @@ int cq_mgr_rx_regrq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *p
     }
 
     buff_status_e status = BS_OK;
-    uint32_t ret = 0;
-    while (ret < m_n_sysvar_cq_poll_batch_max) {
+    uint32_t rx_polled = 0;
+    while (rx_polled < m_n_sysvar_cq_poll_batch_max) {
         mem_buf_desc_t *buff = poll(status);
         if (buff) {
-            ++ret;
+            ++rx_polled;
             if (cqe_process_rx(buff, status)) {
                 if ((++m_debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
                     !compensate_qp_poll_success(buff)) {
@@ -334,16 +332,15 @@ int cq_mgr_rx_regrq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *p
         }
     }
 
-    update_global_sn_rx(*p_cq_poll_sn, ret);
+    update_global_sn_rx(*p_cq_poll_sn, rx_polled);
 
-    if (likely(ret > 0)) {
-        ret_rx_processed += ret;
+    if (likely(rx_polled > 0)) {
         m_p_ring->m_gro_mgr.flush_all(pv_fd_ready_array);
     } else {
         compensate_qp_poll_failed();
     }
 
-    return ret_rx_processed;
+    return (rx_polled < m_n_sysvar_cq_poll_batch_max);
 }
 
 #endif /* DEFINED_DIRECT_VERBS */
