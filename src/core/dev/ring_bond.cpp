@@ -563,10 +563,7 @@ int ring_bond::drain_and_proccess()
 int ring_bond::wait_for_notification_and_process_element(int cq_channel_fd, uint64_t *p_cq_poll_sn,
                                                          void *pv_fd_ready_array /*NULL*/)
 {
-    if (m_lock_ring_rx.trylock()) {
-        errno = EAGAIN;
-        return -1;
-    }
+    m_lock_ring_rx.lock();
 
     int temp = 0;
     int ret = 0;
@@ -590,23 +587,13 @@ int ring_bond::wait_for_notification_and_process_element(int cq_channel_fd, uint
 
 int ring_bond::request_notification(cq_type_t cq_type, uint64_t poll_sn)
 {
-    ring_slave_vector_t *bond_rings;
     int ret = 0;
     int temp;
+    lock_mutex_recursive &ring_lock = (CQT_RX == cq_type ? m_lock_ring_rx : m_lock_ring_tx);
 
-    if (likely(CQT_RX == cq_type)) {
-        if (m_lock_ring_rx.trylock()) {
-            errno = EAGAIN;
-            return 1;
-        }
-    } else {
-        if (m_lock_ring_tx.trylock()) {
-            errno = EAGAIN;
-            return 1;
-        }
-    }
+    ring_lock.lock();
 
-    bond_rings = (cq_type == CQT_RX ? &m_recv_rings : &m_xmit_rings);
+    ring_slave_vector_t *bond_rings = (cq_type == CQT_RX ? &m_recv_rings : &m_xmit_rings);
     for (uint32_t i = 0; i < (*bond_rings).size(); i++) {
         if ((*bond_rings)[i]->is_up()) {
             temp = (*bond_rings)[i]->request_notification(cq_type, poll_sn);
@@ -618,11 +605,9 @@ int ring_bond::request_notification(cq_type_t cq_type, uint64_t poll_sn)
             }
         }
     }
-    if (likely(CQT_RX == cq_type)) {
-        m_lock_ring_rx.unlock();
-    } else {
-        m_lock_ring_tx.unlock();
-    }
+
+    ring_lock.unlock();
+
     return ret;
 }
 
