@@ -436,22 +436,13 @@ int ring_simple::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
     return ret;
 }
 
-int ring_simple::wait_for_notification_and_process_element(int cq_channel_fd,
-                                                           uint64_t *p_cq_poll_sn,
-                                                           void *pv_fd_ready_array /*NULL*/)
+void ring_simple::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
+                                                            void *pv_fd_ready_array /*NULL*/)
 {
-    int ret = -1;
-    if (m_p_cq_mgr_rx) {
-        m_lock_ring_rx.lock();
-        ret = m_p_cq_mgr_rx->wait_for_notification_and_process_element(p_cq_poll_sn,
-                                                                       pv_fd_ready_array);
-        ++m_p_ring_stat->simple.n_rx_interrupt_received;
-        m_lock_ring_rx.unlock();
-    } else {
-        ring_logerr("Can't find rx_cq for the rx_comp_event_channel_fd (= %d)", cq_channel_fd);
-    }
-
-    return ret;
+    m_lock_ring_rx.lock();
+    m_p_cq_mgr_rx->wait_for_notification_and_process_element(p_cq_poll_sn, pv_fd_ready_array);
+    ++m_p_ring_stat->simple.n_rx_interrupt_received;
+    m_lock_ring_rx.unlock();
 }
 
 bool ring_simple::reclaim_recv_buffers(descq_t *rx_reuse)

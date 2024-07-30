@@ -470,11 +470,10 @@ int net_device_table_mgr::global_ring_epfd_get()
     return m_global_ring_epfd;
 }
 
-int net_device_table_mgr::global_ring_wait_for_notification_and_process_element(
+void net_device_table_mgr::global_ring_wait_for_notification_and_process_element(
     uint64_t *p_poll_sn, void *pv_fd_ready_array /*=NULL*/)
 {
     ndtm_logfunc("");
-    int ret_total = 0;
     int max_fd = 16;
     struct epoll_event events[max_fd];
 
@@ -487,27 +486,8 @@ int net_device_table_mgr::global_ring_wait_for_notification_and_process_element(
             if (p_cq_ch_info) {
                 ring *p_ready_ring = p_cq_ch_info->get_ring();
                 // Handle the CQ notification channel
-                int ret = p_ready_ring->wait_for_notification_and_process_element(
-                    fd, p_poll_sn, pv_fd_ready_array);
-                if (ret < 0) {
-                    if (errno == EAGAIN) {
-                        ndtm_logdbg(
-                            "Error in ring[%d]->wait_for_notification_and_process_element() of %p "
-                            "(errno=%d %m)",
-                            event_idx, p_ready_ring, errno);
-                    } else {
-                        ndtm_logerr(
-                            "Error in ring[%d]->wait_for_notification_and_process_element() of %p "
-                            "(errno=%d %m)",
-                            event_idx, p_ready_ring, errno);
-                    }
-                    continue;
-                }
-                if (ret > 0) {
-                    ndtm_logfunc("ring[%p] Returned with: %d (sn=%d)", p_ready_ring, ret,
-                                 *p_poll_sn);
-                }
-                ret_total += ret;
+                p_ready_ring->wait_for_notification_and_process_element(p_poll_sn,
+                                                                        pv_fd_ready_array);
             } else {
                 ndtm_logdbg("removing wakeup fd from epfd");
                 BULLSEYE_EXCLUDE_BLOCK_START
@@ -521,12 +501,6 @@ int net_device_table_mgr::global_ring_wait_for_notification_and_process_element(
             }
         }
     }
-    if (ret_total) {
-        ndtm_logfunc("ret_total=%d", ret_total);
-    } else {
-        ndtm_logfuncall("ret_total=%d", ret_total);
-    }
-    return ret_total;
 }
 
 int net_device_table_mgr::global_ring_drain_and_procces()

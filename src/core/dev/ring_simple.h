@@ -73,8 +73,8 @@ public:
     bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst) override; // No locks
     void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc) override;
     int drain_and_proccess() override;
-    int wait_for_notification_and_process_element(int cq_channel_fd, uint64_t *p_cq_poll_sn,
-                                                  void *pv_fd_ready_array = nullptr) override;
+    void wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
+                                                   void *pv_fd_ready_array = nullptr) override;
     void mem_buf_desc_return_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc);
     void mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc,
                                          void *pv_fd_ready_array = nullptr);

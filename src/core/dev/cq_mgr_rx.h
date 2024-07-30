@@ -112,11 +112,9 @@ public:
     /**
      * Block on the CQ's notification channel for the next event and process
      * it before exiting.
-     *
-     * @return >=0 number of processed wce. < 0 error.
      */
-    int wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
-                                                  void *pv_fd_ready_array = nullptr);
+    void wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
+                                                   void *pv_fd_ready_array = nullptr);
 
     /**
      * This will poll n_num_poll time on the cq or stop early if it gets

@@ -80,11 +80,9 @@ public:
     /**
      * This will poll one time on the ALL the managed CQ's
      * If a wce was found 'processing' will occur.
-     * Returns: >=0 the total number of wce processed
-     *          < 0 error
      */
-    int global_ring_wait_for_notification_and_process_element(uint64_t *p_poll_sn,
-                                                              void *pv_fd_ready_array = nullptr);
+    void global_ring_wait_for_notification_and_process_element(uint64_t *p_poll_sn,
+                                                               void *pv_fd_ready_array = nullptr);
 
     int global_ring_request_notification(uint64_t poll_sn_rx, uint64_t poll_sn_tx);
 
