@@ -628,7 +628,7 @@ int epfd_info::ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *p
             __log_func("ring[%p] RX Returned with: %d (sn=%d)", iter->first, ret, *p_poll_sn_rx);
             ret_total += ret;
         }
-#if defined(DEFINED_FORCE_TX_POLLING)
+
         ret = iter->first->poll_and_process_element_tx(p_poll_sn_tx);
         BULLSEYE_EXCLUDE_BLOCK_START
         if (ret < 0 && errno != EAGAIN) {
@@ -642,7 +642,6 @@ int epfd_info::ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *p
             __log_func("ring[%p] TX Returned with: %d (sn=%d)", iter->first, ret, *p_poll_sn_tx);
             ret_total += ret;
         }
-#endif /* DEFINED_FORCE_TX_POLLING */
     }
 
     m_ring_map_lock.unlock();
@@ -682,7 +681,7 @@ int epfd_info::ring_request_notification(uint64_t poll_sn_rx, uint64_t poll_sn_t
         BULLSEYE_EXCLUDE_BLOCK_END
         __log_func("ring[%p] RX Returned with: %d (sn=%d)", iter->first, ret, poll_sn_rx);
         ret_total += ret;
-#if defined(DEFINED_FORCE_TX_POLLING)
+
         ret = iter->first->request_notification(CQT_TX, poll_sn_tx);
         BULLSEYE_EXCLUDE_BLOCK_START
         if (ret < 0) {
@@ -694,7 +693,6 @@ int epfd_info::ring_request_notification(uint64_t poll_sn_rx, uint64_t poll_sn_t
         BULLSEYE_EXCLUDE_BLOCK_END
         __log_func("ring[%p] TX Returned with: %d (sn=%d)", iter->first, ret, poll_sn_tx);
         ret_total += ret;
-#endif /* DEFINED_FORCE_TX_POLLING */
     }
 
     m_ring_map_lock.unlock();
