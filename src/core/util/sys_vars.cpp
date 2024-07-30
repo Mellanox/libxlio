@@ -1428,20 +1428,6 @@ void mce_sys_var::get_env_params()
         }
     }
 
-    // The following 2 params were replaced by SYS_VAR_RX_UDP_POLL_OS_RATIO
-    if ((env_ptr = getenv(SYS_VAR_RX_POLL_OS_RATIO))) {
-        rx_udp_poll_os_ratio = (uint32_t)atoi(env_ptr);
-        vlog_printf(VLOG_WARNING,
-                    "The parameter %s is no longer in use. Parameter %s was set to %d instead\n",
-                    SYS_VAR_RX_POLL_OS_RATIO, SYS_VAR_RX_UDP_POLL_OS_RATIO, rx_udp_poll_os_ratio);
-    }
-    if ((env_ptr = getenv(SYS_VAR_RX_SKIP_OS))) {
-        rx_udp_poll_os_ratio = (uint32_t)atoi(env_ptr);
-        vlog_printf(VLOG_WARNING,
-                    "The parameter %s is no longer in use. Parameter %s was set to %d instead\n",
-                    SYS_VAR_RX_SKIP_OS, SYS_VAR_RX_UDP_POLL_OS_RATIO, rx_udp_poll_os_ratio);
-    }
-
     if ((env_ptr = getenv(SYS_VAR_RX_POLL_YIELD))) {
         rx_poll_yield_loops = (uint32_t)atoi(env_ptr);
     }
