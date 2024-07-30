@@ -293,18 +293,6 @@ inline int sockinfo_udp::rx_wait(bool blocking)
 
     } // while (blocking)
 
-    /*	ODEDS: No need for that as we always check if OS polling is needed in the first while loop
-        // If not blocking and we did not find any ready datagrams in our
-        // offloaded sockinfo then try the OS receive
-        // But try to skip this to reduce OS calls by user param
-        if (!blocking && unlikely(m_state != SOCKINFO_DESTROYING)) {
-            m_n_num_skip_os_read++;
-            if (m_n_num_skip_os_read >= m_rx_skip_os_fd_check) {
-                m_n_num_skip_os_read = 0;
-                return 1;
-            }
-        }
-    */
     errno = EAGAIN;
     si_udp_logfunc("returning with: EAGAIN");
     return -1;
