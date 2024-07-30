@@ -479,32 +479,26 @@ bool ring_bond::get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p
     return false;
 }
 
-int ring_bond::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array /*NULL*/)
+bool ring_bond::poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
+                                            void *pv_fd_ready_array /*NULL*/)
 {
     if (m_lock_ring_rx.trylock()) {
-        errno = EAGAIN;
-        return 0;
+        return false;
     }
 
-    int temp = 0;
-    int ret = 0;
+    bool all_drained = true;
 
     for (uint32_t i = 0; i < m_recv_rings.size(); i++) {
         if (m_recv_rings[i]->is_up()) {
             // TODO consider returning immediately after finding something, continue next time from
             // next ring
-            temp = m_recv_rings[i]->poll_and_process_element_rx(p_cq_poll_sn, pv_fd_ready_array);
-            if (temp > 0) {
-                ret += temp;
-            }
+            all_drained &=
+                m_recv_rings[i]->poll_and_process_element_rx(p_cq_poll_sn, pv_fd_ready_array);
         }
     }
     m_lock_ring_rx.unlock();
-    if (ret > 0) {
-        return ret;
-    } else {
-        return temp;
-    }
+
+    return all_drained;
 }
 
 int ring_bond::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
