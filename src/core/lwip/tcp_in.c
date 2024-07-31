@@ -1236,7 +1236,6 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
         if (pcb->unsent == NULL) {
             /* We have sent all pending segments, reflect it in last_unsent */
             pcb->last_unsent = NULL;
-            pcb->unsent_oversize = 0;
         }
         /* End of ACK for new data processing. */
 
