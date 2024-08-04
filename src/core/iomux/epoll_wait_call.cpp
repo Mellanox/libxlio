@@ -110,7 +110,7 @@ int epoll_wait_call::get_current_events()
         }
 
         if (mutual_events & EPOLLIN) {
-            if (handle_epoll_event(si->is_readable(nullptr), EPOLLIN, si, i)) {
+            if (handle_epoll_event(si->is_readable(true), EPOLLIN, si, i)) {
                 ready_rfds++;
                 got_event = true;
             }
@@ -360,7 +360,7 @@ bool epoll_wait_call::handle_epoll_event(bool is_ready, uint32_t events, sockinf
 
 bool epoll_wait_call::ring_poll_and_process_element()
 {
-    return m_epfd_info->ring_poll_and_process_element(&m_poll_sn_rx, &m_poll_sn_tx, nullptr);
+    return m_epfd_info->ring_poll_and_process_element(nullptr);
 }
 
 bool epoll_wait_call::ring_request_notification()

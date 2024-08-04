@@ -118,10 +118,8 @@ void poll_group::destroy_all_groups()
 void poll_group::poll()
 {
     for (ring *rng : m_rings) {
-        uint64_t sn;
-        rng->poll_and_process_element_tx(&sn);
-        sn = 0;
-        rng->poll_and_process_element_rx(&sn);
+        rng->poll_and_process_element_tx();
+        rng->poll_and_process_element_rx();
     }
     m_event_handler->do_tasks();
 }

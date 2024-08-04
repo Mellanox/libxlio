@@ -1182,17 +1182,15 @@ void net_device_val::ring_key_redirection_release(resource_allocation_key *key)
     }
 }
 
-bool net_device_val::global_ring_poll_and_process_element(uint64_t *p_poll_sn_rx,
-                                                          uint64_t *p_poll_sn_tx,
-                                                          void *pv_fd_ready_array /*=NULL*/)
+bool net_device_val::global_ring_poll_and_process_element(void *pv_fd_ready_array /*=NULL*/)
 {
     nd_logfuncall("");
     bool all_drained = true;
     std::lock_guard<decltype(m_lock)> lock(m_lock);
     rings_hash_map_t::iterator ring_iter;
     for (ring_iter = m_h_ring_map.begin(); ring_iter != m_h_ring_map.end(); ring_iter++) {
-        all_drained &= THE_RING->poll_and_process_element_rx(p_poll_sn_rx, pv_fd_ready_array);
-        all_drained &= (THE_RING->poll_and_process_element_tx(p_poll_sn_tx) >= 0);
+        all_drained &= THE_RING->poll_and_process_element_rx(pv_fd_ready_array);
+        all_drained &= (THE_RING->poll_and_process_element_tx() >= 0);
     }
     return all_drained;
 }

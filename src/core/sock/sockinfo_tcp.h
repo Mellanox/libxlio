@@ -281,7 +281,7 @@ public:
     static void tcp_tx_zc_callback(mem_buf_desc_t *p_desc);
     void tcp_tx_zc_handle(mem_buf_desc_t *p_desc);
 
-    bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = NULL) override;
+    bool is_readable(bool check_only, fd_array_t *p_fd_array = NULL) override;
     bool is_writeable() override;
     bool is_errorable(int *errors) override;
     bool is_closable() override

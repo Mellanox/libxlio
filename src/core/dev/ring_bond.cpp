@@ -483,8 +483,7 @@ bool ring_bond::get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p
     return false;
 }
 
-bool ring_bond::poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
-                                            void *pv_fd_ready_array /*NULL*/)
+bool ring_bond::poll_and_process_element_rx(void *pv_fd_ready_array /*NULL*/)
 {
     if (m_lock_ring_rx.trylock()) {
         return false;
@@ -496,8 +495,7 @@ bool ring_bond::poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
         if (m_recv_rings[i]->is_up()) {
             // TODO consider returning immediately after finding something, continue next time from
             // next ring
-            all_drained &=
-                m_recv_rings[i]->poll_and_process_element_rx(p_cq_poll_sn, pv_fd_ready_array);
+            all_drained &= m_recv_rings[i]->poll_and_process_element_rx(pv_fd_ready_array);
         }
     }
     m_lock_ring_rx.unlock();
@@ -505,7 +503,7 @@ bool ring_bond::poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
     return all_drained;
 }
 
-int ring_bond::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
+int ring_bond::poll_and_process_element_tx()
 {
     if (m_lock_ring_tx.trylock()) {
         errno = EAGAIN;
@@ -516,7 +514,7 @@ int ring_bond::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
     int ret = 0;
     for (uint32_t i = 0; i < m_bond_rings.size(); i++) {
         if (m_bond_rings[i]->is_up()) {
-            temp = m_bond_rings[i]->poll_and_process_element_tx(p_cq_poll_sn);
+            temp = m_bond_rings[i]->poll_and_process_element_tx();
             if (temp > 0) {
                 ret += temp;
             }

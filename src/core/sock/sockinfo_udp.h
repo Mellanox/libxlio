@@ -142,7 +142,7 @@ public:
      *
      * While polling CQ, the fd_array is filled with a list of newly queued packets FD's
      */
-    bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = nullptr) override;
+    bool is_readable(bool check_only, fd_array_t *p_fd_array = nullptr) override;
     /**
      * Arm the event channel(s) assosiated with this sockinfo
      */

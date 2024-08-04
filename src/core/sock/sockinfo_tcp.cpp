@@ -3661,7 +3661,7 @@ int sockinfo_tcp::os_epoll_wait_with_tcp_timers(epoll_event *ep_events, int maxe
     return rc;
 }
 
-bool sockinfo_tcp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array)
+bool sockinfo_tcp::is_readable(bool check_only, fd_array_t *p_fd_array)
 {
     if (is_server()) {
         bool state;
@@ -3694,7 +3694,7 @@ bool sockinfo_tcp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array)
         return true;
     }
 
-    if (!p_poll_sn) {
+    if (check_only) {
         return false;
     }
 
@@ -3704,7 +3704,7 @@ bool sockinfo_tcp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array)
     while (!g_b_exit && is_rtr()) {
         if (likely(m_p_rx_ring)) {
             // likely scenario: rx socket bound to specific cq
-            bool drained = m_p_rx_ring->poll_and_process_element_rx(p_poll_sn, p_fd_array);
+            bool drained = m_p_rx_ring->poll_and_process_element_rx(p_fd_array);
             if (m_n_rx_pkt_ready_list_count || drained) {
                 break;
             }
@@ -3717,7 +3717,7 @@ bool sockinfo_tcp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array)
                 }
                 ring *p_ring = rx_ring_iter->first;
                 // g_p_lwip->do_timers();
-                bool drained = p_ring->poll_and_process_element_rx(p_poll_sn, p_fd_array);
+                bool drained = p_ring->poll_and_process_element_rx(p_fd_array);
                 if (m_n_rx_pkt_ready_list_count || drained) {
                     break;
                 }
@@ -4839,7 +4839,6 @@ int sockinfo_tcp::getpeername(sockaddr *__name, socklen_t *__namelen)
 
 int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
 {
-    uint64_t poll_sn = 0;
     rx_ring_map_t::iterator rx_ring_iter;
     epoll_event rx_epfd_events[SI_RX_EPFD_EVENT_MAX];
 
@@ -4858,7 +4857,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
     // In this case it will be better to have a lock() version of poll_and_process_element_rx.
     // And then we should continue polling untill we have ready packets or we drained the CQ.
     if (likely(m_p_rx_ring)) {
-        m_p_rx_ring->poll_and_process_element_rx(&poll_sn);
+        m_p_rx_ring->poll_and_process_element_rx();
     } else { // There's more than one CQ, go over each one
         for (rx_ring_iter = m_rx_ring_map.begin(); rx_ring_iter != m_rx_ring_map.end();
              rx_ring_iter++) {
@@ -4867,15 +4866,14 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
                 continue;
             }
 
-            rx_ring_iter->first->poll_and_process_element_rx(&poll_sn);
+            rx_ring_iter->first->poll_and_process_element_rx();
         }
     }
     m_rx_ring_map_lock.unlock();
     lock_tcp_con(); // We must take a lock before checking m_n_rx_pkt_ready_list_count
 
     if (likely(m_n_rx_pkt_ready_list_count)) { // got completions from CQ
-        __log_entry_funcall("Ready %d packets. sn=%llu", m_n_rx_pkt_ready_list_count,
-                            (unsigned long long)poll_sn);
+        __log_entry_funcall("Ready %d packets.", m_n_rx_pkt_ready_list_count);
         m_p_socket_stats->counters.n_rx_poll_hit++;
         unlock_tcp_con();
         return 1;
@@ -4983,7 +4981,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
             ring *p_ring = p_cq_ch_info->get_ring();
             if (p_ring) {
                 p_ring->clear_rx_notification();
-                p_ring->poll_and_process_element_rx(&poll_sn);
+                p_ring->poll_and_process_element_rx();
             }
         }
     }

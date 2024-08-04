@@ -87,8 +87,7 @@ public:
      */
     epoll_stats_t *stats();
 
-    bool ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *p_poll_sn_tx,
-                                       void *pv_fd_ready_array = nullptr);
+    bool ring_poll_and_process_element(void *pv_fd_ready_array = nullptr);
 
     bool ring_request_notification();
     void ring_clear_rx_notification();

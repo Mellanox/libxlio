@@ -68,12 +68,9 @@ public:
     // return list of the table_mgr managed ips by family
     void get_ip_list(local_ip_list_t &iplist, sa_family_t family, int if_index = 0);
 
-    /**
-     * Polling RX and TX of all ring on all devices.
-     * @return >0 All CQs were drained. ==0 All CQs were drained.
-     */
-    bool global_ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *p_poll_sn_tx,
-                                              void *pv_fd_ready_array = nullptr);
+    // Polling RX and TX of all ring on all devices.
+    // @return True if all CQs were drained.
+    bool global_ring_poll_and_process_element(void *pv_fd_ready_array = nullptr);
 
     void global_ring_clear_rx_notification();
     bool global_ring_request_notification();

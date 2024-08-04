@@ -106,8 +106,7 @@ public:
      * Poll RX CQ. Each CQE processed directly.
      * @return True if CQ was drained.
      */
-    virtual bool poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
-                                             void *pv_fd_ready_array = nullptr) = 0;
+    virtual bool poll_and_process_element_rx(void *pv_fd_ready_array = nullptr) = 0;
 
     /**
      * This will check if the cq was drained, and if it wasn't it will drain it.
@@ -136,13 +135,6 @@ public:
     void get_cq_event(int count = 1) { xlio_ib_mlx5_get_cq_event(&m_mlx5_cq, count); };
 
 protected:
-    /**
-     * Poll the CQ that is managed by this object
-     * @p_wce pointer to array where to save the wce in
-     * @num_entries Size of the p_wce (max number of wce to poll at once)
-     * @p_cq_poll_sn global unique wce id that maps last wce polled
-     * @return Number of successfully polled wce
-     */
     void compensate_qp_poll_failed();
     void lro_update_hdr(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc);
     inline void process_recv_buffer(mem_buf_desc_t *buff, void *pv_fd_ready_array = nullptr);

@@ -412,9 +412,8 @@ bool ring_simple::request_notification(cq_type_t cq_type)
     if (likely(CQT_RX == cq_type)) {
         std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
         ++m_p_ring_stat->simple.n_rx_interrupt_requests;
-        return (!safe_mce_sys().doca_rx
-            ? m_p_cq_mgr_rx->request_notification()
-            : m_hqrx->request_notification());
+        return (!safe_mce_sys().doca_rx ? m_p_cq_mgr_rx->request_notification()
+                                        : m_hqrx->request_notification());
     }
 
     std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
@@ -432,20 +431,17 @@ void ring_simple::clear_rx_notification()
     }
 }
 
-bool ring_simple::poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
-                                              void *pv_fd_ready_array /*NULL*/)
+bool ring_simple::poll_and_process_element_rx(void *pv_fd_ready_array /*NULL*/)
 {
     std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
-    return (!safe_mce_sys().doca_rx
-        ? m_p_cq_mgr_rx->poll_and_process_element_rx(p_cq_poll_sn, pv_fd_ready_array)
-        : m_hqrx->poll_and_process_rx());
+    return (!safe_mce_sys().doca_rx ? m_p_cq_mgr_rx->poll_and_process_element_rx(pv_fd_ready_array)
+                                    : m_hqrx->poll_and_process_rx());
 }
 
-int ring_simple::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
+int ring_simple::poll_and_process_element_tx()
 {
     int ret = 0;
-    RING_TRY_LOCK_RUN_AND_UPDATE_RET(m_lock_ring_tx,
-                                     m_p_cq_mgr_tx->poll_and_process_element_tx(p_cq_poll_sn));
+    RING_TRY_LOCK_RUN_AND_UPDATE_RET(m_lock_ring_tx, m_p_cq_mgr_tx->poll_and_process_element_tx());
     return ret;
 }
 
@@ -549,7 +545,6 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
     NOT_IN_USE(id);
     int ret = 0;
     mem_buf_desc_t *buff_list = nullptr;
-    uint64_t poll_sn = 0;
 
     ring_logfuncall("n_num_mem_bufs=%d", n_num_mem_bufs);
 
@@ -558,7 +553,7 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
     while (!buff_list) {
 
         // Try to poll once in the hope that we get a few freed tx mem_buf_desc
-        ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
+        ret = m_p_cq_mgr_tx->poll_and_process_element_tx();
         if (ret < 0) {
             ring_logdbg("failed polling on cq_mgr_tx (hqtx=%p, cq_mgr_tx=%p) (ret=%d %m)", m_hqtx,
                         m_p_cq_mgr_tx, ret);
@@ -626,7 +621,7 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
                         p_cq_mgr_tx->reset_notification_armed();
 
                         // Perform a non blocking event read, clear the fd channel
-                        ret = p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
+                        ret = p_cq_mgr_tx->poll_and_process_element_tx();
                         if (ret < 0) {
                             ring_logdbg("failed handling cq_mgr_tx channel (hqtx=%p, "
                                         "cq_mgr_tx=%p) (errno=%d %m)",
@@ -749,13 +744,12 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
 {
     bool granted;
     int ret;
-    uint64_t poll_sn = 0;
 
     // TODO credits_get() does TX polling. Call current method only for bocking mode?
 
     do {
         // Try to poll once in the hope that we get space in SQ
-        ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
+        ret = m_p_cq_mgr_tx->poll_and_process_element_tx();
         if (ret < 0) {
             ring_logdbg("failed polling on cq_mgr_tx (hqtx=%p, cq_mgr_tx=%p) (ret=%d %m)", m_hqtx,
                         m_p_cq_mgr_tx, ret);
@@ -817,7 +811,7 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
                     p_cq_mgr_tx->reset_notification_armed();
 
                     // Perform a non blocking event read, clear the fd channel
-                    ret = p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
+                    ret = p_cq_mgr_tx->poll_and_process_element_tx();
                     if (ret < 0) {
                         ring_logdbg("failed handling cq_mgr_tx channel (hqtx=%p "
                                     "cq_mgr_tx=%p) (errno=%d %m)",
