@@ -277,7 +277,7 @@ public:
                              void *pv_fd_ready_array) = 0;
 
     virtual ssize_t tx(xlio_tx_call_attr_t &tx_arg) = 0;
-    virtual bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = nullptr) = 0;
+    virtual bool is_readable(bool check_only, fd_array_t *p_fd_array = nullptr) = 0;
     virtual bool is_writeable() = 0;
     virtual bool is_errorable(int *errors) = 0;
     virtual void clean_socket_obj() = 0;

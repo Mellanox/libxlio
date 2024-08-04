@@ -172,8 +172,6 @@ io_mux_call::io_mux_call(int *off_fds_buffer, offloaded_mode_t *off_modes_buffer
     , m_p_offloaded_modes(off_modes_buffer)
     , m_num_all_offloaded_fds(0)
     , m_cqepfd(-1)
-    , m_poll_sn_rx(0)
-    , m_poll_sn_tx(0)
     , m_p_stats(nullptr)
     , m_n_all_ready_fds(0)
     , m_n_ready_rfds(0)
@@ -225,7 +223,7 @@ void io_mux_call::check_offloaded_rsockets()
             fd_ready_array.fd_count = 0;
 
             // Poll the socket object
-            if (p_socket_object->is_readable(&m_poll_sn_rx, &fd_ready_array)) {
+            if (p_socket_object->is_readable(false, &fd_ready_array)) {
                 set_offloaded_rfd_ready(offloaded_index);
                 // We have offloaded traffic. Don't sample the OS immediately
                 p_socket_object->unset_immediate_os_sample();
@@ -251,7 +249,7 @@ bool io_mux_call::handle_os_countdown(int &poll_os_countdown)
      */
     if (poll_os_countdown-- <= 0 && safe_mce_sys().select_poll_os_ratio > 0) {
         if (wait_os(true)) {
-            // DOCA WA: Unclearable manual triggered events generate false PE events.
+            // TODO: [DOCA WA] Unclearable manual triggered events generate false PE events.
             clear_false_cq_events();
         }
         /* Before we exit with ready OS fd's we'll check the CQs once more and exit
@@ -393,7 +391,7 @@ void io_mux_call::blocking_loops()
             xlio_throw_object(io_mux_call::io_error);
         }
 
-        __log_func("arming cq with poll_sn=%lx", m_poll_sn_rx);
+        __log_func("Arming PE");
         if (!ring_request_notification()) {
             xlio_throw_object(io_mux_call::io_error);
         } else {
@@ -497,8 +495,7 @@ bool io_mux_call::immidiate_return(int &poll_os_countdown)
 bool io_mux_call::ring_poll_and_process_element()
 {
     // TODO: (select, poll) this access all CQs, it is better to check only relevant ones
-    return g_p_net_device_table_mgr->global_ring_poll_and_process_element(&m_poll_sn_rx,
-                                                                          &m_poll_sn_tx, nullptr);
+    return g_p_net_device_table_mgr->global_ring_poll_and_process_element(nullptr);
 }
 
 bool io_mux_call::ring_request_notification()

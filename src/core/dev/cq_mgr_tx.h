@@ -64,7 +64,7 @@ public:
      */
     bool request_notification();
 
-    int poll_and_process_element_tx(uint64_t *p_cq_poll_sn);
+    int poll_and_process_element_tx();
 
     void reset_notification_armed() { m_b_notification_armed = false; }
 

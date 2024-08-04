@@ -97,7 +97,7 @@ poll_call::poll_call(int *off_rfds_buffer, offloaded_mode_t *off_modes_buffer, i
                 __log_func("fd=%d must be skipped from os r poll()", fd);
                 m_fds[i].fd = -1;
             } else if (m_orig_fds[i].events & POLLIN) {
-                if (temp_sock_fd_api->is_readable(nullptr)) {
+                if (temp_sock_fd_api->is_readable(true)) {
                     io_mux_call::update_fd_array(&m_fd_ready_array, fd);
                     m_n_ready_rfds++;
                     m_n_all_ready_fds++;

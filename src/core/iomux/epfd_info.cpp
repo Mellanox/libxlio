@@ -284,7 +284,7 @@ int epfd_info::add_fd(int fd, epoll_event *event)
         // if the socket is ready, add it to ready events
         uint32_t events = 0;
         int errors;
-        if ((event->events & EPOLLIN) && temp_sock_fd_api->is_readable(nullptr, nullptr)) {
+        if ((event->events & EPOLLIN) && temp_sock_fd_api->is_readable(true)) {
             events |= EPOLLIN;
         }
         if ((event->events & EPOLLOUT) && temp_sock_fd_api->is_writeable()) {
@@ -511,7 +511,7 @@ int epfd_info::mod_fd(int fd, epoll_event *event)
     uint32_t events = 0;
     if (is_offloaded) {
         // if the socket is ready, add it to ready events
-        if ((event->events & EPOLLIN) && temp_sock_fd_api->is_readable(nullptr, nullptr)) {
+        if ((event->events & EPOLLIN) && temp_sock_fd_api->is_readable(true)) {
             events |= EPOLLIN;
         }
         if ((event->events & EPOLLOUT) && temp_sock_fd_api->is_writeable()) {
@@ -601,8 +601,7 @@ epoll_stats_t *epfd_info::stats()
     return m_stats;
 }
 
-bool epfd_info::ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *p_poll_sn_tx,
-                                              void *pv_fd_ready_array /* = NULL*/)
+bool epfd_info::ring_poll_and_process_element(void *pv_fd_ready_array /* = NULL*/)
 {
     __log_func("");
 
@@ -614,8 +613,8 @@ bool epfd_info::ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *
 
     bool all_drained = true;
     for (ring_map_t::iterator iter = m_ring_map.begin(); iter != m_ring_map.end(); iter++) {
-        all_drained &= iter->first->poll_and_process_element_rx(p_poll_sn_rx, pv_fd_ready_array);
-        all_drained &= (iter->first->poll_and_process_element_tx(p_poll_sn_tx) >= 0);
+        all_drained &= iter->first->poll_and_process_element_rx(pv_fd_ready_array);
+        all_drained &= (iter->first->poll_and_process_element_tx() >= 0);
     }
 
     m_ring_map_lock.unlock();

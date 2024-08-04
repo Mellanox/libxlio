@@ -64,9 +64,8 @@ public:
     virtual ~ring_simple();
 
     bool request_notification(cq_type_t cq_type) override;
-    bool poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
-                                     void *pv_fd_ready_array = nullptr) override;
-    int poll_and_process_element_tx(uint64_t *p_cq_poll_sn) override;
+    bool poll_and_process_element_rx(void *pv_fd_ready_array = nullptr) override;
+    int poll_and_process_element_tx() override;
     void adapt_cq_moderation() override;
     bool reclaim_recv_buffers(descq_t *rx_reuse) override;
     bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst) override;
@@ -147,8 +146,7 @@ public:
         }
 
         /* Do polling to speedup handling of the completion. */
-        uint64_t dummy_poll_sn = 0;
-        m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
+        m_p_cq_mgr_tx->poll_and_process_element_tx();
 
         return tis;
     }
@@ -174,8 +172,7 @@ public:
         }
 
         /* Do polling to speedup handling of the completion. */
-        uint64_t dummy_poll_sn = 0;
-        m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
+        m_p_cq_mgr_tx->poll_and_process_element_tx();
 
         return rc;
     }
@@ -183,9 +180,7 @@ public:
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         m_hqtx->tls_context_resync_tx(info, tis, skip_static);
-
-        uint64_t dummy_poll_sn = 0;
-        m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
+        m_p_cq_mgr_tx->poll_and_process_element_tx();
     }
     void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn) override
     {
@@ -200,8 +195,7 @@ public:
         }
         m_hqtx->tls_get_progress_params_rx(tir, buf, lkey);
         /* Do polling to speedup handling of the completion. */
-        uint64_t dummy_poll_sn = 0;
-        m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
+        m_p_cq_mgr_tx->poll_and_process_element_tx();
     }
     void tls_release_tis(xlio_tis *tis) override
     {

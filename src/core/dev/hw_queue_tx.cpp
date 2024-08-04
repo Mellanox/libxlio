@@ -336,10 +336,9 @@ void hw_queue_tx::down()
 void hw_queue_tx::release_tx_buffers()
 {
     int ret;
-    uint64_t poll_sn = 0;
     hwqtx_logdbg("draining cq_mgr_tx %p", m_p_cq_mgr_tx);
     while (m_p_cq_mgr_tx && m_mlx5_qp.qp &&
-           ((ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn)) > 0) &&
+           ((ret = m_p_cq_mgr_tx->poll_and_process_element_tx()) > 0) &&
            (errno != EIO && !m_p_ib_ctx_handler->is_removed())) {
         hwqtx_logdbg("draining completed on cq_mgr_tx (%d wce)", ret);
     }
@@ -367,8 +366,7 @@ void hw_queue_tx::send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr 
     send_to_wire(p_send_wqe, attr, request_comp, tis, credits);
 
     if (!skip_tx_poll && is_signal_requested_for_last_wqe()) {
-        uint64_t dummy_poll_sn = 0;
-        int ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
+        int ret = m_p_cq_mgr_tx->poll_and_process_element_tx();
         BULLSEYE_EXCLUDE_BLOCK_START
         if (ret < 0) {
             hwqtx_logerr("error from cq_mgr_tx->process_next_element (ret=%d %m)", ret);

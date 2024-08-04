@@ -233,7 +233,6 @@ private:
     int m_check_sig_pending_ratio;
 
 protected:
-
     virtual bool ring_poll_and_process_element();
     virtual bool ring_request_notification();
     virtual void ring_clear_rx_notification();
@@ -255,10 +254,6 @@ protected:
     //--
     /// CQ epoll file descriptor (wrapper)
     int m_cqepfd;
-
-    /// poll sn
-    uint64_t m_poll_sn_rx;
-    uint64_t m_poll_sn_tx;
 
     /// xlio statistics. each implementation must initialize this.
     iomux_func_stats_t *m_p_stats;

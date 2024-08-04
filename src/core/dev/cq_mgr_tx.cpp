@@ -176,7 +176,7 @@ cq_mgr_tx *cq_mgr_tx::get_cq_mgr_from_cq_event(struct ibv_comp_channel *p_cq_cha
     return p_cq_mgr;
 }
 
-int cq_mgr_tx::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
+int cq_mgr_tx::poll_and_process_element_tx()
 {
     cq_logfuncall("");
 
@@ -200,7 +200,6 @@ int cq_mgr_tx::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
         handle_sq_wqe_prop(index);
         ret = 1;
     }
-    update_global_sn_tx(*p_cq_poll_sn, num_polled_cqes);
 
     return ret;
 }

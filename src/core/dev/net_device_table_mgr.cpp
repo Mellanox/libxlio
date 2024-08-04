@@ -418,9 +418,7 @@ void net_device_table_mgr::get_ip_list(local_ip_list_t &ip_list, sa_family_t fam
     m_lock.unlock();
 }
 
-bool net_device_table_mgr::global_ring_poll_and_process_element(uint64_t *p_poll_sn_rx,
-                                                                uint64_t *p_poll_sn_tx,
-                                                                void *pv_fd_ready_array /*= NULL*/)
+bool net_device_table_mgr::global_ring_poll_and_process_element(void *pv_fd_ready_array /*= NULL*/)
 {
     ndtm_logfunc("");
     bool all_drained = true;
@@ -428,8 +426,8 @@ bool net_device_table_mgr::global_ring_poll_and_process_element(uint64_t *p_poll
     net_device_map_index_t::iterator net_dev_iter;
     for (net_dev_iter = m_net_device_map_index.begin();
          net_dev_iter != m_net_device_map_index.end(); net_dev_iter++) {
-        all_drained &= net_dev_iter->second->global_ring_poll_and_process_element(
-            p_poll_sn_rx, p_poll_sn_tx, pv_fd_ready_array);
+        all_drained &=
+            net_dev_iter->second->global_ring_poll_and_process_element(pv_fd_ready_array);
     }
 
     return all_drained;

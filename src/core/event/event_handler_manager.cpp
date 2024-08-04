@@ -988,12 +988,9 @@ void *event_handler_manager::thread_loop()
             }
         }
 
-        uint64_t poll_sn_rx = 0;
-        uint64_t poll_sn_tx = 0;
         if (m_b_sysvar_internal_thread_arm_cq_enabled && m_cq_epfd > 0 &&
             g_p_net_device_table_mgr) {
-            g_p_net_device_table_mgr->global_ring_poll_and_process_element(&poll_sn_rx, &poll_sn_tx,
-                                                                           nullptr);
+            g_p_net_device_table_mgr->global_ring_poll_and_process_element(nullptr);
             g_p_net_device_table_mgr->global_ring_request_notification();
         }
 

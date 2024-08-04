@@ -274,7 +274,7 @@ bool ring_tap::detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink)
     return ret;
 }
 
-bool ring_tap::poll_and_process_element_rx(uint64_t *, void *pv_fd_ready_array)
+bool ring_tap::poll_and_process_element_rx(void *pv_fd_ready_array)
 {
     return (process_element_rx(pv_fd_ready_array) == 0);
 }
