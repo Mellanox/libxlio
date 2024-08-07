@@ -1,3 +1,15 @@
+Version 3.940.0-1:
+Date + Time 2024-08-07
+=============================================================
+Added:
+        - RM #3623390 DOCA initialization
+        - RM #3623390 DOCA RX Steeing
+        - RM #3923728 Add doca_mmap memory registration
+        - RM #3898148 Remove Socketxtreme API
+        - RM #3898158 Remove Callback API
+        - RM #3898156 Remove RX Zero Copy API
+        - RM #3898040 DOCA RX data path with hw_queue_rx
+
 Version 3.31.2-1:
 Date + Time 2024-07-15
 =============================================================
