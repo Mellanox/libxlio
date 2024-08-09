@@ -1,4 +1,4 @@
-FROM harbor.mellanox.com/swx-infra/media/ubuntu_22.04:mofed-5.7-0.1.9.0 AS style
+FROM harbor.mellanox.com/hpcx/x86_64/ubuntu22.04/base AS style
 RUN apt-get update \
  && apt-get install -y clang-15 clang-format-15 \
  && update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-15 100 \
