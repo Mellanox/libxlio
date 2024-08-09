@@ -22,6 +22,7 @@ ${WORKSPACE}/configure --prefix=${rpm_dir}/install $jenkins_test_custom_configur
 
 if [ -x /usr/bin/dpkg-buildpackage ]; then
     echo "Build on debian"
+    apt install -y debhelper ## To avoid "dpkg-checkbuilddeps: error: Unmet build dependencies: debhelper (>= 7)" on Ubuntu24.x
     opt_rpm=0
 else
     echo "Build rpms"
