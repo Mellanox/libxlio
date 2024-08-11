@@ -140,6 +140,7 @@ TEST_F(tcp_event, DISABLED_ti_4)
 #if 0
 static void _proc_server(void *ptr)
 {
+    usleep(200000);
 	int rc = EOK;
 	int fd;
 	int fd_peer;
@@ -174,6 +175,7 @@ static void _proc_server(void *ptr)
 
 static void _proc_client(void *ptr)
 {
+    usleep(200000);
 	int rc = EOK;
 	int fd;
 	struct epoll_event event;

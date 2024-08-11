@@ -47,6 +47,7 @@ class tcp_sendto : public tcp_base {};
  */
 TEST_F(tcp_sendto, ti_1)
 {
+    usleep(200000);
     int rc = EOK;
     int fd;
     char buf[] = "hello";
@@ -76,6 +77,7 @@ TEST_F(tcp_sendto, ti_1)
  */
 TEST_F(tcp_sendto, ti_2)
 {
+    usleep(200000);
     int rc = EOK;
     int fd;
     char buf[] = "hello";

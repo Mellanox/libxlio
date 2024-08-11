@@ -253,15 +253,13 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
         sockinfo *sockfd = fd_collection_get_sockfd(fd);
         if (sockfd) {
             // Don't call close(2) for objects without a shadow socket (TCP incoming sockets).
-            to_close_now = !passthrough && sockfd->is_shadow_socket_present();
+            to_close_now = !safe_mce_sys().deferred_close && !passthrough &&
+                sockfd->is_shadow_socket_present();
 #if defined(DEFINED_NGINX)
             // Save this value before pointer is destructed
             is_for_udp_pool = sockfd->m_is_for_socket_pool;
 #endif
             g_p_fd_collection->del_sockfd(fd, is_for_udp_pool);
-            if (safe_mce_sys().deferred_close) {
-                to_close_now = false;
-            }
         }
         if (fd_collection_get_epfd(fd)) {
             g_p_fd_collection->del_epfd(fd, cleanup);

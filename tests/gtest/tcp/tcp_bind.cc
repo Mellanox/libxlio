@@ -116,6 +116,7 @@ private:
  */
 TEST_F(tcp_bind, ti_1)
 {
+    usleep(200000);
     int rc = EOK;
     int fd;
 
@@ -138,6 +139,7 @@ TEST_F(tcp_bind, ti_1)
  */
 TEST_F(tcp_bind, ti_2)
 {
+    usleep(200000);
     int rc = EOK;
     int fd;
 
@@ -162,6 +164,7 @@ TEST_F(tcp_bind, ti_2)
  */
 TEST_F(tcp_bind, ti_3)
 {
+    usleep(200000);
     int rc = EOK;
     int fd;
     sockaddr_store_t addr1;
@@ -195,6 +198,7 @@ TEST_F(tcp_bind, ti_3)
  */
 TEST_F(tcp_bind, ti_4)
 {
+    usleep(200000);
     int rc = EOK;
     int fd;
     int fd2;
@@ -230,6 +234,7 @@ TEST_F(tcp_bind, ti_4)
  */
 TEST_F(tcp_bind, ti_5)
 {
+    usleep(200000);
     int fd = tcp_base::sock_create();
     ASSERT_LE(0, fd);
 
@@ -258,6 +263,7 @@ TEST_F(tcp_bind, ti_5)
  */
 TEST_F(tcp_bind, bind_IP4_6_dual_stack_no_reuse_addr)
 {
+    usleep(200000);
     ASSERT_TRUE(create_ipv4_ipv6_sockets(false));
     ASSERT_TRUE(set_ipv6only(false));
 
@@ -279,6 +285,7 @@ TEST_F(tcp_bind, bind_IP4_6_dual_stack_no_reuse_addr)
  */
 TEST_F(tcp_bind, bind_IP6_4_dual_stack_no_reuse_addr)
 {
+    usleep(200000);
     ASSERT_TRUE(create_ipv4_ipv6_sockets(false));
     ASSERT_TRUE(set_ipv6only(false));
 
@@ -302,6 +309,7 @@ TEST_F(tcp_bind, bind_IP6_4_dual_stack_no_reuse_addr)
  */
 TEST_F(tcp_bind, bind_IP4_6_dual_stack_reuse_addr)
 {
+    usleep(200000);
     ASSERT_TRUE(create_ipv4_ipv6_sockets(true));
     ASSERT_TRUE(set_ipv6only(false));
 
@@ -311,6 +319,7 @@ TEST_F(tcp_bind, bind_IP4_6_dual_stack_reuse_addr)
     EXPECT_NE(0, listen6());
     EXPECT_EQ(EADDRINUSE, errno);
     ASSERT_TRUE(recreate_ipv6_socket(true));
+    usleep(200000);
     ASSERT_TRUE(set_ipv6only(true));
     EXPECT_EQ(0, bind_all6());
     EXPECT_EQ(0, listen6());
@@ -327,6 +336,7 @@ TEST_F(tcp_bind, bind_IP4_6_dual_stack_reuse_addr)
  */
 TEST_F(tcp_bind, bind_IP6_4_dual_stack_reuse_addr)
 {
+    usleep(200000);
     ASSERT_TRUE(create_ipv4_ipv6_sockets(true));
     ASSERT_TRUE(set_ipv6only(false));
 
@@ -336,6 +346,7 @@ TEST_F(tcp_bind, bind_IP6_4_dual_stack_reuse_addr)
     EXPECT_NE(0, listen4());
     EXPECT_EQ(EADDRINUSE, errno);
     ASSERT_TRUE(recreate_ipv6_socket(true));
+    usleep(200000);
     ASSERT_TRUE(set_ipv6only(true));
     EXPECT_EQ(0, bind_all6());
     EXPECT_EQ(0, listen6());
@@ -353,6 +364,7 @@ TEST_F(tcp_bind, bind_IP6_4_dual_stack_reuse_addr)
  */
 TEST_F(tcp_bind, bind_IP4_6_dual_stack_reuse_addr_listen)
 {
+    usleep(200000);
     ASSERT_TRUE(create_ipv4_ipv6_sockets(true));
     ASSERT_TRUE(set_ipv6only(false));
 
@@ -361,6 +373,7 @@ TEST_F(tcp_bind, bind_IP4_6_dual_stack_reuse_addr_listen)
     EXPECT_NE(0, bind_all6());
     EXPECT_EQ(EADDRINUSE, errno);
     ASSERT_TRUE(recreate_ipv6_socket(true));
+    usleep(200000);
     ASSERT_TRUE(set_ipv6only(true));
     EXPECT_EQ(0, bind_all6());
     EXPECT_EQ(0, listen6());
@@ -377,6 +390,7 @@ TEST_F(tcp_bind, bind_IP4_6_dual_stack_reuse_addr_listen)
  */
 TEST_F(tcp_bind, bind_IP6_4_dual_stack_reuse_addr_listen)
 {
+    usleep(200000);
     ASSERT_TRUE(create_ipv4_ipv6_sockets(true));
     ASSERT_TRUE(set_ipv6only(false));
 
@@ -385,6 +399,7 @@ TEST_F(tcp_bind, bind_IP6_4_dual_stack_reuse_addr_listen)
     EXPECT_NE(0, bind_all4());
     EXPECT_EQ(EADDRINUSE, errno);
     ASSERT_TRUE(recreate_ipv6_socket(true));
+    usleep(200000);
     ASSERT_TRUE(set_ipv6only(true));
     EXPECT_EQ(0, bind_all6());
     EXPECT_EQ(0, listen6());
@@ -409,6 +424,7 @@ TEST_F(tcp_bind, mapped_ipv4_bind)
     }
 
     auto check_bind = [this](bool bindtodevice) {
+        usleep(200000);
         int pid = fork();
         if (0 == pid) { // Child
             barrier_fork(pid);
@@ -504,6 +520,7 @@ TEST_F(tcp_bind, mapped_ipv4_bind)
  */
 TEST_F(tcp_bind, mapped_ipv4_bind_v6only)
 {
+    usleep(200000);
     if (!test_mapped_ipv4()) {
         return;
     }
