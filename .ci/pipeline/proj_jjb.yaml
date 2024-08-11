@@ -1,7 +1,7 @@
 - job-template:
     name: "{jjb_proj}"
     project-type: pipeline
-    folder: libxlio
+    folder: "{jjb_folder}"
     properties:
         - github:
              url: "https://github.com/Mellanox/libxlio"
@@ -17,7 +17,7 @@
     parameters:
         - string:
             name: "sha1"
-            default: master
+            default: "{jjb_branch}"
             description: "Commit to be checked, set by PR"
         - bool:
             name: "build_dockers"
@@ -25,7 +25,7 @@
             description: "Rebuild docker containers. Check this box if .ci/DockerFile* was changed"
         - string:
             name: "conf_file"
-            default: ".ci/matrix_job.yaml"
+            default: ".ci/pipeline/matrix_job.yaml"
             description: "Regex to select job config file. Do not change it"
         - string:
             name: "DEBUG"
@@ -107,7 +107,7 @@
         - github-pull-request:
             cron: 'H/5 * * * *'
             trigger-phrase: '.*\bbot:retest\b.*'
-            status-context: "xlio-base"
+            status-context: "{jjb_proj}"
             success-status: "[PASS]"
             failure-status: "[FAIL]"
             error-status:   "[FAIL]"
@@ -128,12 +128,74 @@
                 refspec: "+refs/pull/*:refs/remotes/origin/pr/*"
                 browser: githubweb
                 browser-url: "{jjb_git}"
-        script-path: ".ci/Jenkinsfile"
+        script-path: "{jjb_jenkinsfile}"
+
+- job-template:
+    name: "{jjb_proj}-release"
+    project-type: pipeline
+    folder: "{jjb_folder}"
+    properties:
+        - github:
+             url: "https://github.com/Mellanox/libxlio"
+        - build-discarder:
+            days-to-keep: 120
+            num-to-keep: 20
+        - inject:
+            keep-system-variables: true
+            properties-content: |
+              jjb_proj={jjb_proj}
+    description: Do NOT edit this job through the Web GUI !
+    concurrent: false
+    parameters:
+        - string:
+            name: "release_tag"
+            default: ""
+            description: "Tag to release"
+        - string:
+            name: sha1
+            default: 'tags/$release_tag'
+            description: 'commit to use, defaults to the commit tag provided under release_tag'
+        - string:
+            name: "revision"
+            default: "1"
+            description: "Release revision"
+        - string:
+            name: "release_folder"
+            default: "/auto/sw/release/sw_acceleration/xlio"
+            description: "Folder to release packages into"
+        - bool:
+            name: "do_release"
+            default: true
+            description: "Release build packges into the release folder, set to false for debugging"
+        - string:
+            name: "notification_email"
+            default: "a9b23b5c.NVIDIA.onmicrosoft.com@amer.teams.ms"
+            description: "Email to send report to upon success/failure"
+        - string:
+            name: "conf_file"
+            default: ".ci/pipeline/release_matrix_job.yaml"
+            description: "job config file. Do not change it"
+    pipeline-scm:
+        scm:
+            - git:
+                url: "{jjb_git}"
+                credentials-id: 'b7d08ca7-378c-45d6-ac4b-3f30bdf49168'
+                branches: ['$sha1']
+                shallow-clone: true
+                depth: 2
+                refspec: "+refs/pull/*:refs/remotes/origin/pr/*"
+                browser: githubweb
+                browser-url: "{jjb_git}"
+        script-path: "{jjb_jenkinsfile}"        
 - project:
-    name: LibXLIO-opensource
+    name: LibXLIO
     jjb_email: 'nwolfer@nvidia.com'
-    jjb_proj: 'LibXLIO-opensource'
+    jjb_proj: 'LibXLIO'
     jjb_git: 'git@github.com:Mellanox/libxlio.git'
     jjb_owner: 'Nir Wolfer'
+    jjb_jenkinsfile: '.ci/pipeline/Jenkinsfile'
+    jjb_folder: 'libxlio'
+    jjb_branch: 'vNext'
     jobs:
         - "{jjb_proj}"
+        - "{jjb_proj}-release"
