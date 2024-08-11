@@ -73,7 +73,6 @@ if [ "${do_release}" = true ] ; then
 
     cd "${release_folder}"
     sudo -E -u swx-jenkins ln -s "$DST_DIR/${pkg_name}" "${pkg_name}"
-    sudo -E -u swx-jenkins echo "${pkg_name}" | sudo -E -u swx-jenkins tee "${DST_DIR}"/../latest.txt
     echo "Release found at $DST_DIR"
 else
      echo "do_release is set to false, skipping package release."
