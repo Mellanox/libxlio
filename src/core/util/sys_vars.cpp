@@ -1034,83 +1034,35 @@ void mce_sys_var::get_env_params()
 
 #ifdef DEFINED_NGINX
     case MCE_SPEC_NGINX:
-        ring_allocation_logic_tx = RING_LOGIC_PER_INTERFACE;
-        ring_allocation_logic_rx = RING_LOGIC_PER_INTERFACE;
-        memory_limit = (app.workers_num > 16 ? 3072LU : 4096LU) * 1024 * 1024;
-        memory_limit *= std::max(app.workers_num, 1);
-        rx_bufs_batch = 8; // MCE_DEFAULT_RX_BUFS_BATCH (64), RX buffers batch size.
-        progress_engine_interval_msec = 0; // MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC (10),
-                                           // Disable internal thread CQ draining logic.
-        cq_poll_batch_max =
-            128; // MCE_DEFAULT_CQ_POLL_BATCH (16), Maximum CQEs to poll in one batch.
-        thread_mode = THREAD_MODE_SINGLE; // MCE_DEFAULT_THREAD_MODE (THREAD_MODE_MULTI), Single
-                                          // threaded mode to reduce locking.
-        rx_poll_on_tx_tcp = true; // MCE_DEFAULT_RX_POLL_ON_TX_TCP(false), Do polling on RX queue on
-                                  // TX operations, helpful to maintain TCP stack management.
-        enable_tso =
-            option_3::ON; // MCE_DEFAULT_TSO(option_3::AUTO), Enable TCP Segmentation Offload(=TSO).
-        timer_resolution_msec = 256; // MCE_DEFAULT_TIMER_RESOLUTION_MSEC (10), Internal thread
-                                     // timer resolution, reduce CPU utilization of internal thread.
-        tcp_timer_resolution_msec =
-            256; // MCE_DEFAULT_TCP_TIMER_RESOLUTION_MSEC (10), TCP logical timer resolution, reduce
-                 // CPU utilization of internal thread.
-        tcp_send_buffer_size =
-            2 * 1024 * 1024; // MCE_DEFAULT_TCP_SEND_BUFFER_SIZE (1 MB), LWIP TCP send buffer size.
-        tcp_push_flag = false; // MCE_DEFAULT_TCP_PUSH_FLAG (true), When false, we don't set PSH
-                               // flag in outgoing TCP segments.
-        progress_engine_wce_max =
-            0; // MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX (10000), Don't drain WCEs.
-        select_poll_num = 0; // MCE_DEFAULT_SELECT_NUM_POLLS (100000),  Don't poll the hardware on
-                             // RX (before sleeping in epoll/select, etc).
-        // Poll OS every some epoll_waits in case epoll_waits do not sleep.
-        select_skip_os_fd_check = 1000;
-
-        tcp_3t_rules =
-            true; // MCE_DEFAULT_TCP_3T_RULES(false), Use 3 tuple instead rules of 5 tuple rules.
-
-        break;
-
+        // Fallthrough
     case MCE_SPEC_NGINX_DPU:
         ring_allocation_logic_tx = RING_LOGIC_PER_INTERFACE;
         ring_allocation_logic_rx = RING_LOGIC_PER_INTERFACE;
-        // The top part is different from NGINX SPEC
-        memory_limit = (app.workers_num == 16 ? 512LU : 1024LU) * 1024 * 1024;
-        memory_limit *= std::max(app.workers_num, 1);
+        progress_engine_interval_msec = 0; // Disable internal thread CQ draining logic.
+        cq_poll_batch_max = 128; // Maximum CQEs to poll in one batch.
+        enable_tso = option_3::ON; // Enable TCP Segmentation Offload(=TSO).
+        timer_resolution_msec = 32; // Reduce CPU utilization of internal thread.
+        tcp_timer_resolution_msec = 256; // Reduce CPU utilization of internal thread.
+        tcp_send_buffer_size = 2 * 1024 * 1024; // LWIP TCP send buffer size.
+        tcp_push_flag = false; // When false, we don't set PSH flag in outgoing TCP segments.
+        select_poll_num = 0; // Poll CQ only once before going to sleep.
+        select_skip_os_fd_check = 1000; // Poll OS every X epoll_waits if we do not sleep.
+        tcp_3t_rules = true; // Use 3 tuple instead rules of 5 tuple rules.
+        app.distribute_cq_interrupts = true;
+        rx_cq_wait_ctrl = true;
 
-        rx_poll_on_tx_tcp = false; // MCE_DEFAULT_RX_POLL_ON_TX_TCP(false), Do polling on RX queue
-                                   // on TX operations, helpful to maintain TCP stack management.
+        if (mce_spec == MCE_SPEC_NGINX) {
+            memory_limit = (app.workers_num > 16 ? 3072LU : 4096LU) * 1024 * 1024;
+            memory_limit *= std::max(app.workers_num, 1);
+            rx_bufs_batch = 8; // RX buffers batch size.
 
-        tx_bufs_batch_tcp = 2; // MCE_DEFAULT_TX_BUFS_BATCH_TCP (16)
-        tx_segs_batch_tcp = 4; // MCE_DEFAULT_TX_SEGS_BATCH_TCP (64)
-        rx_bufs_batch = 8; // MCE_DEFAULT_RX_BUFS_BATCH (64), RX buffers batch size.
-        progress_engine_interval_msec = 0; // MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC (10),
-                                           // Disable internal thread CQ draining logic.
-
-        cq_poll_batch_max =
-            128; // MCE_DEFAULT_CQ_POLL_BATCH (16), Maximum CQEs to poll in one batch.
-        thread_mode = THREAD_MODE_SINGLE; // MCE_DEFAULT_THREAD_MODE (THREAD_MODE_MULTI), Single
-                                          // threaded mode to reduce locking.
-        enable_tso =
-            option_3::ON; // MCE_DEFAULT_TSO(true), Enable TCP Segmentation Offload(=TSO) mechanism.
-        timer_resolution_msec = 32; // MCE_DEFAULT_TIMER_RESOLUTION_MSEC (10), Internal thread timer
-                                    // resolution, reduce CPU utilization of internal thread.
-        tcp_timer_resolution_msec =
-            256; // MCE_DEFAULT_TCP_TIMER_RESOLUTION_MSEC (10), TCP logical timer resolution, reduce
-                 // CPU utilization of internal thread.
-        tcp_send_buffer_size =
-            2 * 1024 * 1024; // MCE_DEFAULT_TCP_SEND_BUFFER_SIZE (1 MB), LWIP TCP send buffer size.
-        tcp_push_flag = false; // MCE_DEFAULT_TCP_PUSH_FLAG (true), When false, we don't set PSH
-                               // flag in outgoing TCP segments.
-        progress_engine_wce_max =
-            0; // MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX (10000), Don't drain WCEs.
-        select_poll_num = 0; // MCE_DEFAULT_SELECT_NUM_POLLS (100000),  Don't poll the hardware on
-                             // RX (before sleeping in epoll/select, etc).
-        // Poll OS every some epoll_waits in case epoll_waits do not sleep.
-        select_skip_os_fd_check = 1000;
-
-        tcp_3t_rules =
-            true; // MCE_DEFAULT_TCP_3T_RULES(false), Use 3 tuple instead rules of 5 tuple rules.
-
+            // Do polling on RX queue on TX operations, helpful to maintain TCP stack management.
+            rx_poll_on_tx_tcp = true;
+        } else if (mce_spec == MCE_SPEC_NGINX_DPU) {
+            memory_limit = (app.workers_num == 16 ? 512LU : 1024LU) * 1024 * 1024;
+            memory_limit *= std::max(app.workers_num, 1);
+            buffer_batching_mode = BUFFER_BATCHING_NONE;
+        }
         break;
 #endif // DEFINED_NGINX
     case MCE_SPEC_NONE:
