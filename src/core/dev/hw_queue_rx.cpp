@@ -97,15 +97,6 @@ hw_queue_rx::~hw_queue_rx()
 
 bool hw_queue_rx::configure_rq(ibv_comp_channel *rx_comp_event_channel)
 {
-    // Check device capabilities for max QP work requests
-    /*uint32_t max_qp_wr = ALIGN_WR_DOWN(m_p_ib_ctx_handler->get_ibv_device_attr()->max_qp_wr - 1);
-    if (m_rx_num_wr > max_qp_wr) {
-        hwqrx_logwarn("Allocating only %d Rx work requests while user "
-                      "requested %s=%d for RX on <%p>",
-                      max_qp_wr, SYS_VAR_RX_NUM_WRE, m_rx_num_wr, m_p_ib_ctx_handler);
-        m_rx_num_wr = max_qp_wr;
-    }*/
-
     // Create associated cq_mgr_tx
     BULLSEYE_EXCLUDE_BLOCK_START
     m_p_cq_mgr_rx = init_rx_cq_mgr(rx_comp_event_channel);
