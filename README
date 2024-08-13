@@ -88,7 +88,6 @@ Example:
  XLIO DETAILS: TCP max syn rate               0 (no limit)               [XLIO_TCP_MAX_SYN_RATE]
  XLIO DETAILS: Zerocopy Mem Bufs              200000                     [XLIO_ZC_BUFS]
  XLIO DETAILS: Zerocopy Cache Threshold       10 GB                      [XLIO_ZC_CACHE_THRESHOLD]
- XLIO DETAILS: Tx Mem Bufs                    200000                     [XLIO_TX_BUFS]
  XLIO DETAILS: Tx Mem Buf size                0                          [XLIO_TX_BUF_SIZE]
  XLIO DETAILS: ZC TX size                     32 KB                      [XLIO_ZC_TX_SIZE]
  XLIO DETAILS: Tx QP WRE                      32768                      [XLIO_TX_WRE]
@@ -100,7 +99,6 @@ Example:
  XLIO DETAILS: Tx Bufs Batch TCP              16                         [XLIO_TX_BUFS_BATCH_TCP]
  XLIO DETAILS: Tx Segs Batch TCP              64                         [XLIO_TX_SEGS_BATCH_TCP]
  XLIO DETAILS: TCP Send Buffer size           1 MB                       [XLIO_TCP_SEND_BUFFER_SIZE]
- XLIO DETAILS: Rx Mem Bufs                    200000                     [XLIO_RX_BUFS]
  XLIO DETAILS: Rx Mem Buf size                0                          [XLIO_RX_BUF_SIZE]
  XLIO DETAILS: Rx QP WRE                      16000                      [XLIO_RX_WRE]
  XLIO DETAILS: Rx QP WRE Batching             1024                       [XLIO_RX_WRE_BATCHING]
@@ -320,10 +318,6 @@ XLIO_ZC_CACHE_THRESHOLD
 Memory limit for the mapping cache which is use by sendfile().
 Default value is 10GB
 
-XLIO_TX_BUFS
-Number of global Tx data buffer elements allocation.
-Default value is 200000
-
 XLIO_TX_BUF_SIZE
 Size of Tx data buffer elements allocation.
 Can not be less then MTU (Maximum Transfer Unit) and greater than 0xFF00.
@@ -427,8 +421,6 @@ Limit the number of rings that can be allocated per interface.
 For example, in ring allocation per socket logic, if the number of sockets using
 the same interface is larger than the limit, then several sockets will be sharing the
 same ring.
-[Note:XLIO_RX_BUFS might need to be adjusted in order to have enough buffers for all
-rings in the system. Each ring consume XLIO_RX_WRE buffers.]
 Use a value of 0 for unlimited number of rings.
 Default value is 0 (no limit)
 
@@ -440,11 +432,6 @@ for each TX ring.
 The total size of the On Device Memory is limited to 256k for a single port HCA and to
 128k for dual port HCA.
 Default value is 0
-
-XLIO_RX_BUFS
-Number Rx data buffer elements allocation for the processes. These data buffers
-may be used by all QPs on all HCAs
-Default value is 200000
 
 XLIO_RX_BUF_SIZE
 Size of Rx data buffer elements allocation.

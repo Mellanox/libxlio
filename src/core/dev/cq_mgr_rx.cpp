@@ -214,10 +214,7 @@ void cq_mgr_rx::add_hqrx(hw_queue_rx *hqrx_ptr)
         if (!res) {
             VLOG_PRINTF_INFO_ONCE_THEN_ALWAYS(
                 VLOG_WARNING, VLOG_DEBUG,
-                "WARNING Out of mem_buf_desc from Rx buffer pool for hqrx initialization "
-                "(hqrx_ptr=%p),\n"
-                "\tThis might happen due to wrong setting of XLIO_RX_BUFS and XLIO_RX_WRE. Please "
-                "refer to README.txt for more info",
+                "Out of mem_buf_desc in global RX buffer pool for hqrx initialization (hqrx=%p)",
                 hqrx_ptr);
             break;
         }
