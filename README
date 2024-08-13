@@ -763,7 +763,7 @@ Default value is 1 (Enabled)
 XLIO_QP_COMPENSATION_LEVEL
 Number of spare receive buffer CQ holds to allow for filling up QP while full
 receive buffers are being processes inside XLIO.
-Default value is 256 buffers
+Default value is XLIO_RX_WRE / 2
 
 XLIO_USER_HUGE_PAGE_SIZE
 Size of huge pages used by user application for buffers provided as part

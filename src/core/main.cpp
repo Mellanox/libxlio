@@ -743,11 +743,8 @@ void print_xlio_global_settings()
                       safe_mce_sys().cq_keep_qp_full ? "Enabled" : "Disabled");
     if (!safe_mce_sys().doca_rx) {
         VLOG_PARAM_NUMBER("QP Compensation Level", safe_mce_sys().qp_compensation_level,
-                          (safe_mce_sys().enable_striding_rq ? MCE_DEFAULT_STRQ_COMPENSATION_LEVEL
-                                                             : MCE_DEFAULT_QP_COMPENSATION_LEVEL),
-                          SYS_VAR_QP_COMPENSATION_LEVEL);
+                          safe_mce_sys().rx_num_wr / 2U, SYS_VAR_QP_COMPENSATION_LEVEL);
     }
-
     VLOG_PARAM_STRING("Offloaded Sockets", safe_mce_sys().offloaded_sockets,
                       MCE_DEFAULT_OFFLOADED_SOCKETS, SYS_VAR_OFFLOADED_SOCKETS,
                       safe_mce_sys().offloaded_sockets ? "Enabled" : "Disabled");
