@@ -695,7 +695,6 @@ void mce_sys_var::update_multi_process_params()
             tx_segs_pool_batch_tcp = 256;
             rx_num_wr = 1;
             strq_strides_compensation_level = 32;
-            strq_stride_size_bytes = STRQ_MIN_STRIDE_SIZE_BYTES;
             strq_stride_num_per_rwqe = STRQ_MIN_STRIDES_NUM;
             tx_buf_size = 0;
             rx_buf_size = 0;
@@ -982,10 +981,9 @@ void mce_sys_var::get_env_params()
         strcpy(internal_thread_affinity_str, "0"); // MCE_DEFAULT_INTERNAL_THREAD_AFFINITY_STR;
 
         if (enable_striding_rq) {
-            strq_stride_num_per_rwqe = 65536; // MCE_DEFAULT_STRQ_NUM_STRIDES(16384)
-            strq_stride_size_bytes = 64; // MCE_DEFAULT_STRQ_STRIDE_SIZE_BYTES(512)
+            rx_num_wr = 4U;
         } else {
-            rx_num_wr = 256; // MCE_DEFAULT_RX_NUM_WRE (16000)
+            rx_num_wr = 256;
             rx_num_wr_to_post_recv = 4; // MCE_DEFAULT_RX_NUM_WRE_TO_POST_RECV (64)
         }
         break;
@@ -1014,10 +1012,9 @@ void mce_sys_var::get_env_params()
         ring_dev_mem_tx = 16384; // MCE_DEFAULT_RING_DEV_MEM_TX (0)
 
         if (enable_striding_rq) {
-            strq_stride_num_per_rwqe = 32768; // MCE_DEFAULT_STRQ_NUM_STRIDES(16384)
-            strq_stride_size_bytes = 64; // MCE_DEFAULT_STRQ_STRIDE_SIZE_BYTES(512)
+            rx_num_wr = 4U;
         } else {
-            rx_num_wr = 256; // MCE_DEFAULT_RX_NUM_WRE (16000)
+            rx_num_wr = 256;
             rx_num_wr_to_post_recv = 4; // MCE_DEFAULT_RX_NUM_WRE_TO_POST_RECV (64)
         }
 
@@ -1071,13 +1068,6 @@ void mce_sys_var::get_env_params()
         tcp_3t_rules =
             true; // MCE_DEFAULT_TCP_3T_RULES(false), Use 3 tuple instead rules of 5 tuple rules.
 
-        if (enable_striding_rq) {
-            rx_num_wr = 128; // MCE_DEFAULT_STRQ_NUM_WRE(8)
-            strq_stride_num_per_rwqe = 4096; // MCE_DEFAULT_STRQ_NUM_STRIDES(16384)
-        } else {
-            rx_num_wr = 32000; // MCE_DEFAULT_RX_NUM_WRE (16000), Amount of WREs in RX queue.
-        }
-
         break;
 
     case MCE_SPEC_NGINX_DPU:
@@ -1120,13 +1110,6 @@ void mce_sys_var::get_env_params()
 
         tcp_3t_rules =
             true; // MCE_DEFAULT_TCP_3T_RULES(false), Use 3 tuple instead rules of 5 tuple rules.
-
-        if (enable_striding_rq) {
-            rx_num_wr = 128; // MCE_DEFAULT_STRQ_NUM_WRE(8)
-            strq_stride_num_per_rwqe = 2048; // MCE_DEFAULT_STRQ_NUM_STRIDES(16384)
-        } else {
-            rx_num_wr = 32000; // MCE_DEFAULT_RX_NUM_WRE (16000), Amount of WREs in RX queue.
-        }
 
         break;
 #endif // DEFINED_NGINX

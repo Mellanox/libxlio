@@ -441,8 +441,8 @@ Can not be less then MTU (Maximum Transfer Unit) and greater than 0xFF00.
 Default value is calculated basing on maximum MTU.
 
 XLIO_RX_WRE
-Number of Work Request Elements allocated in all receive QP's.
-Default value is 16000
+Number of Work Request Elements allocated in all RQs.
+Default value is 128 for XLIO_STRQ=1 (default) or 32768 for XLIO_STRQ=0.
 
 XLIO_RX_WRE_BATCHING
 Number of Work Request Elements and RX buffers to batch before recycling.
@@ -662,15 +662,15 @@ Default: on (Enabled)
 
 XLIO_STRQ_NUM_STRIDES
 The number of strides in each receive WQE. Must be power of two and in range [512 - 65536]
-Default: 16384
+Default: 2048
 
 XLIO_STRQ_STRIDE_SIZE_BYTES
 The size, in bytes, of each stride in a receive WQE. Must be power of two and in range [64 - 8192]
-Default: 512
+Default: 64
 
 XLIO_STRQ_STRIDES_COMPENSATION_LEVEL
 Number of spare stride objects a CQ holds to allow faster allocation of a stride object when a packet arrives.
-Default: 16384
+Default: 32768
 
 XLIO_SELECT_POLL
 The duration in micro-seconds (usec) in which to poll the hardware on Rx path before
