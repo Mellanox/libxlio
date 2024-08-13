@@ -839,7 +839,6 @@ void mce_sys_var::get_env_params()
     progress_engine_interval_msec = MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC;
     progress_engine_wce_max = MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX;
     cq_keep_qp_full = MCE_DEFAULT_CQ_KEEP_QP_FULL;
-    qp_compensation_level = MCE_DEFAULT_QP_COMPENSATION_LEVEL;
     max_tso_sz = MCE_DEFAULT_MAX_TSO_SIZE;
     user_huge_page_size = MCE_DEFAULT_USER_HUGE_PAGE_SIZE;
     internal_thread_arm_cq_enabled = MCE_DEFAULT_INTERNAL_THREAD_ARM_CQ_ENABLED;
@@ -926,7 +925,6 @@ void mce_sys_var::get_env_params()
     if (enable_striding_rq) {
         rx_num_wr = MCE_DEFAULT_STRQ_NUM_WRE;
         rx_num_wr_to_post_recv = MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV;
-        qp_compensation_level = MCE_DEFAULT_STRQ_COMPENSATION_LEVEL;
     }
 
     if ((env_ptr = getenv(SYS_VAR_SPEC))) {
@@ -1144,7 +1142,6 @@ void mce_sys_var::get_env_params()
         tcp_nodelay = true;
 
         if (enable_striding_rq) {
-            qp_compensation_level = 8;
             strq_strides_compensation_level = 32768;
             enable_lro = option_3::ON;
             rx_num_wr = 16;
@@ -1626,6 +1623,7 @@ void mce_sys_var::get_env_params()
         cq_keep_qp_full = atoi(env_ptr) ? true : false;
     }
 
+    qp_compensation_level = rx_num_wr / 2U;
     if ((env_ptr = getenv(SYS_VAR_QP_COMPENSATION_LEVEL))) {
         qp_compensation_level = (uint32_t)atoi(env_ptr);
     }
