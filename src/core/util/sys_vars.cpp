@@ -812,7 +812,6 @@ void mce_sys_var::get_env_params()
     enable_strq_env = MCE_DEFAULT_STRQ;
     strq_stride_num_per_rwqe = MCE_DEFAULT_STRQ_NUM_STRIDES;
     strq_stride_size_bytes = MCE_DEFAULT_STRQ_STRIDE_SIZE_BYTES;
-    strq_strides_num_bufs = MCE_DEFAULT_STRQ_STRIDES_NUM_BUFS;
     strq_strides_compensation_level = MCE_DEFAULT_STRQ_STRIDES_COMPENSATION_LEVEL;
 
     gro_streams_max = MCE_DEFAULT_GRO_STREAMS_MAX;
@@ -987,7 +986,6 @@ void mce_sys_var::get_env_params()
         strcpy(internal_thread_affinity_str, "0"); // MCE_DEFAULT_INTERNAL_THREAD_AFFINITY_STR;
 
         if (enable_striding_rq) {
-            strq_strides_num_bufs = 131072; // MCE_DEFAULT_STRQ_NUM_BUFS(262144)
             strq_stride_num_per_rwqe = 65536; // MCE_DEFAULT_STRQ_NUM_STRIDES(16384)
             strq_stride_size_bytes = 64; // MCE_DEFAULT_STRQ_STRIDE_SIZE_BYTES(512)
         } else {
@@ -1020,7 +1018,6 @@ void mce_sys_var::get_env_params()
         ring_dev_mem_tx = 16384; // MCE_DEFAULT_RING_DEV_MEM_TX (0)
 
         if (enable_striding_rq) {
-            strq_strides_num_bufs = 131072; // MCE_DEFAULT_STRQ_NUM_BUFS(262144)
             strq_stride_num_per_rwqe = 32768; // MCE_DEFAULT_STRQ_NUM_STRIDES(16384)
             strq_stride_size_bytes = 64; // MCE_DEFAULT_STRQ_STRIDE_SIZE_BYTES(512)
         } else {
@@ -1155,7 +1152,6 @@ void mce_sys_var::get_env_params()
 
             // Derived from Latency profile but changed.
             strq_stride_num_per_rwqe = 8192;
-            strq_strides_num_bufs = 131072;
             strq_stride_size_bytes = 64;
         }
 
@@ -1259,10 +1255,6 @@ void mce_sys_var::get_env_params()
 
     read_strq_strides_num();
     read_strq_stride_size_bytes();
-
-    if ((env_ptr = getenv(SYS_VAR_STRQ_STRIDES_NUM_BUFS))) {
-        strq_strides_num_bufs = (uint32_t)atoi(env_ptr);
-    }
 
     if ((env_ptr = getenv(SYS_VAR_STRQ_STRIDES_COMPENSATION_LEVEL))) {
         strq_strides_compensation_level = (uint32_t)atoi(env_ptr);
