@@ -23,7 +23,7 @@ RUN ARCH=$(uname -m) && \
     echo "Architecture is $ARCH" && \
     apt-get update && \
     apt-get install -y \
-    sudo wget clang-15 \
+    sudo wget \
     automake dh-make \
     g++ make vim python3-pip curl \
     git libglib2.0-dev \
@@ -70,10 +70,12 @@ RUN apt-get update \
  && apt install -y software-properties-common \
  && add-apt-repository ppa:ubuntu-toolchain-r/test -y \
  && apt update \
+ && apt install -y clang-15 clang-format-15 \
  && apt install -y gcc-9 g++-9 clang-14 \
  && apt install -y gcc-9-multilib g++-9-multilib \
  && apt install -y gcc-10 g++-10 \
  && apt install -y gcc-10-multilib g++-10-multilib \
+ && update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-15 100 \
  && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-15 100 \
                     --slave /usr/bin/clang++ clang++ /usr/bin/clang++-15 \
  && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-14 90 \
