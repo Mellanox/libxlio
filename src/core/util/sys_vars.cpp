@@ -112,7 +112,6 @@ static const char *spec_names_latency[] = {"latency", nullptr};
 static const char *spec_names_multi_ring[] = {"multi_ring_latency", nullptr};
 static const char *spec_names_nginx[] = {"nginx", nullptr};
 static const char *spec_names_nginx_dpu[] = {"nginx_dpu", nullptr};
-static const char *spec_names_nvme_bf2[] = {"nvme_bf2", nullptr};
 
 // must be by order because "to_str" relies on that!
 static const xlio_spec_names specs[] = {
@@ -121,8 +120,7 @@ static const xlio_spec_names specs[] = {
     {MCE_SPEC_SOCKPERF_LATENCY, "Latency", (const char **)spec_names_latency},
     {MCE_SPEC_LL_MULTI_RING, "Multi Ring Latency Profile", (const char **)spec_names_multi_ring},
     {MCE_SPEC_NGINX, "Nginx Profile", (const char **)spec_names_nginx},
-    {MCE_SPEC_NGINX_DPU, "Nginx Profile for DPU", (const char **)spec_names_nginx_dpu},
-    {MCE_SPEC_NVME_BF2, "NVMEoTCP BF2 Profile", (const char **)spec_names_nvme_bf2}};
+    {MCE_SPEC_NGINX_DPU, "Nginx Profile for DPU", (const char **)spec_names_nginx_dpu}};
 
 // convert str to _spec_t; upon error - returns the given 'def_value'
 xlio_spec_t from_str(const char *str, xlio_spec_t def_value)
@@ -1122,48 +1120,6 @@ void mce_sys_var::get_env_params()
 
         break;
 #endif // DEFINED_NGINX
-    case MCE_SPEC_NVME_BF2:
-        ring_allocation_logic_tx = RING_LOGIC_PER_CORE;
-        ring_allocation_logic_rx = RING_LOGIC_PER_CORE;
-        handle_fork = false;
-        cq_aim_interval_msec = 0;
-        cq_aim_max_count = 256;
-        select_skip_os_fd_check = 1;
-        tcp_nodelay = true;
-
-        if (enable_striding_rq) {
-            strq_strides_compensation_level = 32768;
-            enable_lro = option_3::ON;
-            rx_num_wr = 16;
-            rx_num_wr_to_post_recv = 2;
-
-            // Derived from Latency profile but changed.
-            strq_stride_num_per_rwqe = 8192;
-            strq_stride_size_bytes = 64;
-        }
-
-        // Derived from Latency
-        tx_bufs_batch_udp = 1;
-        tx_bufs_batch_tcp = 1;
-        rx_bufs_batch = 4;
-        strcpy(internal_thread_affinity_str, "0");
-        gro_streams_max = 0;
-        rx_poll_num = -1;
-        rx_prefetch_bytes_before_poll = 256;
-        ring_dev_mem_tx = 16384;
-        avoid_sys_calls_on_tcp_fd = true;
-        select_poll_num = -1;
-        select_poll_os_ratio = 1;
-
-        // Derived from Latency but changed.
-        thread_mode = THREAD_MODE_PLENTY;
-        tx_num_wr = 16;
-        tx_num_wr_to_signal = 2;
-        enable_tso = option_3::ON;
-        cq_keep_qp_full = true;
-        progress_engine_interval_msec = 0;
-
-        break;
     case MCE_SPEC_NONE:
     default:
         break;
@@ -1504,7 +1460,7 @@ void mce_sys_var::get_env_params()
     }
 
 #ifdef DEFINED_IBV_CQ_ATTR_MODERATE
-    if ((mce_spec != MCE_SPEC_NVME_BF2) && (rx_poll_num < 0 || select_poll_num < 0)) {
+    if (rx_poll_num < 0 || select_poll_num < 0) {
         cq_moderation_enable = false;
     }
     if ((env_ptr = getenv(SYS_VAR_CQ_MODERATION_ENABLE))) {
