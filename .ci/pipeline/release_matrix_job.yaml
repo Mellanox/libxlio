@@ -1,7 +1,7 @@
 ---
-job: LIBXLIO-release
-# step_allow_single_selector: false
-registry_host: harbor.mellanox.com
+job: LibXLIO-release
+
+registry_host: harbor-pdc.nvidia.com
 registry_auth: 1daaea28-800e-425f-a91f-3bd3e9136eea
 registry_path: /swx-infra/media/xlio
 
@@ -57,7 +57,7 @@ pipeline_stop:
           to: "${notification_email}",
           subject: "Release build ended for LibXLIO - ${release_tag}",
           body: """
-            <p><b>tag:</b> ${release_tag}</p>
+            <p><b>Tag:</b> ${release_tag}</p>
             <p><b>Build url:</b> <a href=${currentBuild.absoluteUrl}>link</a></p>
             <p><b>Status:</b> ${currentBuild.currentResult}</p>"""
       }
