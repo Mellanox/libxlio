@@ -125,7 +125,7 @@ private:
     uint32_t m_strq_wqe_reserved_seg = 0U;
     uint32_t m_n_sysvar_rx_num_wr_to_post_recv;
     uint32_t m_rx_num_wr;
-    uint32_t m_rx_sge = MCE_DEFAULT_RX_NUM_SGE;
+    uint32_t m_rx_sge = 1U;
     const uint32_t m_n_sysvar_rx_prefetch_bytes_before_poll;
     uint16_t m_vlan;
 };
