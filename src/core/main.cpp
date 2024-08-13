@@ -679,8 +679,6 @@ void print_xlio_global_settings()
                       MCE_DEFAULT_STRQ_NUM_STRIDES, SYS_VAR_STRQ_NUM_STRIDES);
     VLOG_PARAM_NUMBER("STRQ Stride Size (Bytes)", safe_mce_sys().strq_stride_size_bytes,
                       MCE_DEFAULT_STRQ_STRIDE_SIZE_BYTES, SYS_VAR_STRQ_STRIDE_SIZE_BYTES);
-    VLOG_PARAM_NUMBER("STRQ Initial Strides Per Ring", safe_mce_sys().strq_strides_num_bufs,
-                      MCE_DEFAULT_STRQ_STRIDES_NUM_BUFS, SYS_VAR_STRQ_STRIDES_NUM_BUFS);
     VLOG_PARAM_NUMBER(
         "STRQ Strides Compensation Level", safe_mce_sys().strq_strides_compensation_level,
         MCE_DEFAULT_STRQ_STRIDES_COMPENSATION_LEVEL, SYS_VAR_STRQ_STRIDES_COMPENSATION_LEVEL);

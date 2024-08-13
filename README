@@ -666,12 +666,6 @@ XLIO_STRQ_STRIDE_SIZE_BYTES
 The size, in bytes, of each stride in a receive WQE. Must be power of two and in range [64 - 8192]
 Default: 512
 
-XLIO_STRQ_STRIDES_NUM_BUFS
-The initial number of stride objects in the strides pool. Each received packet is represented by a stride object.
-Each stride object points to a portion of a buffer allocated for a receive WQE.
-When the pool runs out of stride objects it expands by another portion of this value.
-Default: 262144
-
 XLIO_STRQ_STRIDES_COMPENSATION_LEVEL
 Number of spare stride objects a CQ holds to allow faster allocation of a stride object when a packet arrives.
 Default: 16384
