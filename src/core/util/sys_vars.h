@@ -371,7 +371,6 @@ public:
     int tcp_max_syn_rate;
 
     size_t zc_cache_threshold;
-    uint32_t tx_num_bufs;
     uint32_t tx_buf_size;
     uint32_t tcp_nodelay_treshold;
     uint32_t tx_num_wr;
@@ -384,7 +383,6 @@ public:
     uint32_t tx_bufs_batch_tcp;
     uint32_t tx_segs_batch_tcp;
 
-    uint32_t rx_num_bufs;
     uint32_t rx_buf_size;
     uint32_t rx_bufs_batch;
     uint32_t rx_num_wr;
@@ -579,7 +577,6 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_RING_DEV_MEM_TX          "XLIO_RING_DEV_MEM_TX"
 
 #define SYS_VAR_ZC_CACHE_THRESHOLD    "XLIO_ZC_CACHE_THRESHOLD"
-#define SYS_VAR_TX_NUM_BUFS           "XLIO_TX_BUFS"
 #define SYS_VAR_TX_BUF_SIZE           "XLIO_TX_BUF_SIZE"
 #define SYS_VAR_TCP_NODELAY_TRESHOLD  "XLIO_TCP_NODELAY_TRESHOLD"
 #define SYS_VAR_TX_NUM_WRE            "XLIO_TX_WRE"
@@ -597,7 +594,6 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_STRQ_STRIDES_NUM_BUFS           "XLIO_STRQ_STRIDES_NUM_BUFS"
 #define SYS_VAR_STRQ_STRIDES_COMPENSATION_LEVEL "XLIO_STRQ_STRIDES_COMPENSATION_LEVEL"
 
-#define SYS_VAR_RX_NUM_BUFS                   "XLIO_RX_BUFS"
 #define SYS_VAR_RX_BUF_SIZE                   "XLIO_RX_BUF_SIZE"
 #define SYS_VAR_RX_NUM_WRE                    "XLIO_RX_WRE"
 #define SYS_VAR_RX_NUM_WRE_TO_POST_RECV       "XLIO_RX_WRE_BATCHING"
@@ -734,7 +730,6 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_TCP_MAX_SYN_RATE         (0)
 #define MCE_DEFAULT_TCP_NODELAY_TRESHOLD     (0)
 #define MCE_DEFAULT_ZC_CACHE_THRESHOLD       (10LU * 1024 * 1024 * 1024) // 10GB
-#define MCE_DEFAULT_TX_NUM_BUFS              (200000)
 #define MCE_DEFAULT_TX_BUF_SIZE              (0)
 #define MCE_DEFAULT_TX_NUM_WRE               (32768)
 #define MCE_DEFAULT_TX_NUM_WRE_TO_SIGNAL     (64)
@@ -754,14 +749,12 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_STRQ                            (option_3::OFF)
 #define MCE_DEFAULT_STRQ_NUM_STRIDES                (16384)
 #define MCE_DEFAULT_STRQ_STRIDE_SIZE_BYTES          (512)
-#define MCE_DEFAULT_STRQ_NUM_BUFS                   (64)
 #define MCE_DEFAULT_STRQ_NUM_WRE                    (8)
 #define MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV       (1)
 #define MCE_DEFAULT_STRQ_COMPENSATION_LEVEL         (1)
 #define MCE_DEFAULT_STRQ_STRIDES_NUM_BUFS           (262144)
 #define MCE_DEFAULT_STRQ_STRIDES_COMPENSATION_LEVEL (16384)
 
-#define MCE_DEFAULT_RX_NUM_BUFS                   (200000)
 #define MCE_DEFAULT_RX_BUF_SIZE                   (0)
 #define MCE_DEFAULT_RX_BUFS_BATCH                 (64)
 #define MCE_DEFAULT_RX_NUM_WRE                    (16000)

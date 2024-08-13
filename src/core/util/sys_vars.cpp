@@ -782,7 +782,6 @@ void mce_sys_var::get_env_params()
     tcp_max_syn_rate = MCE_DEFAULT_TCP_MAX_SYN_RATE;
 
     zc_cache_threshold = MCE_DEFAULT_ZC_CACHE_THRESHOLD;
-    tx_num_bufs = MCE_DEFAULT_TX_NUM_BUFS;
     tx_buf_size = MCE_DEFAULT_TX_BUF_SIZE;
     tcp_nodelay_treshold = MCE_DEFAULT_TCP_NODELAY_TRESHOLD;
     tx_num_wr = MCE_DEFAULT_TX_NUM_WRE;
@@ -797,7 +796,6 @@ void mce_sys_var::get_env_params()
     tx_segs_ring_batch_tcp = MCE_DEFAULT_TX_SEGS_RING_BATCH_TCP;
     tx_segs_pool_batch_tcp = MCE_DEFAULT_TX_SEGS_POOL_BATCH_TCP;
     lso_pool_batch = MCE_DEFAULT_LSO_POOL_BATCH;
-    rx_num_bufs = MCE_DEFAULT_RX_NUM_BUFS;
     rx_buf_size = MCE_DEFAULT_RX_BUF_SIZE;
     rx_bufs_batch = MCE_DEFAULT_RX_BUFS_BATCH;
     rx_num_wr = MCE_DEFAULT_RX_NUM_WRE;
@@ -918,7 +916,6 @@ void mce_sys_var::get_env_params()
     enable_striding_rq = (enable_strq_env == option_3::ON || enable_strq_env == option_3::AUTO);
 
     if (enable_striding_rq) {
-        rx_num_bufs = MCE_DEFAULT_STRQ_NUM_BUFS;
         rx_num_wr = MCE_DEFAULT_STRQ_NUM_WRE;
         rx_num_wr_to_post_recv = MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV;
         qp_compensation_level = MCE_DEFAULT_STRQ_COMPENSATION_LEVEL;
@@ -1264,12 +1261,6 @@ void mce_sys_var::get_env_params()
         zc_cache_threshold = option_size::from_str(env_ptr);
     }
 
-    bool tx_num_bufs_set = false;
-    if ((env_ptr = getenv(SYS_VAR_TX_NUM_BUFS))) {
-        tx_num_bufs = (uint32_t)atoi(env_ptr);
-        tx_num_bufs_set = true;
-    }
-
     if ((env_ptr = getenv(SYS_VAR_TX_BUF_SIZE))) {
         tx_buf_size = (uint32_t)option_size::from_str(env_ptr);
     }
@@ -1369,12 +1360,6 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_TCP_MAX_SYN_RATE))) {
         tcp_max_syn_rate = std::min(TCP_MAX_SYN_RATE_TOP_LIMIT, std::max(0, atoi(env_ptr)));
-    }
-
-    bool rx_num_bufs_set = false;
-    if ((env_ptr = getenv(SYS_VAR_RX_NUM_BUFS))) {
-        rx_num_bufs = (uint32_t)atoi(env_ptr);
-        rx_num_bufs_set = true;
     }
 
     if ((env_ptr = getenv(SYS_VAR_RX_BUF_SIZE))) {
@@ -1789,45 +1774,6 @@ void mce_sys_var::get_env_params()
     }
     if ((env_ptr = getenv(SYS_VAR_MEMORY_LIMIT))) {
         memory_limit = option_size::from_str(env_ptr) ?: MCE_DEFAULT_MEMORY_LIMIT;
-    } else {
-        /*
-         * This section is for backward compatibility with deprecated parameters
-         * XLIO_TX_BUFS and XLIO_RX_BUFS. These parameters will be removed with the future
-         * versions and only XLIO_MEMORY_LIMIT will affect memory allocation.
-         */
-        if (tx_num_bufs_set || rx_num_bufs_set || tx_buf_size != MCE_DEFAULT_TX_BUF_SIZE) {
-#if defined(DEFINED_NGINX)
-            // Adjust default buffers configuration for specific profiles
-            if (mce_spec == MCE_SPEC_NGINX) {
-                tx_num_bufs = tx_num_bufs_set ? tx_num_bufs : 1000000;
-                rx_num_bufs = (rx_num_bufs_set || !enable_striding_rq) ? rx_num_bufs : 512;
-                if (strq_stride_num_per_rwqe * strq_stride_size_bytes < 2048 * 1024) {
-                    // Increase this value back to original if user reduces the buffer size.
-                    rx_num_wr = 256;
-                }
-            } else if (mce_spec == MCE_SPEC_NGINX_DPU) {
-                tx_num_bufs = tx_num_bufs_set ? tx_num_bufs : 90000;
-                if (enable_striding_rq) {
-                    rx_num_bufs = rx_num_bufs_set ? rx_num_bufs : 384;
-                } else {
-                    rx_num_bufs = rx_num_bufs_set ? rx_num_bufs : 96000;
-                }
-            }
-#endif /* DEFINED_NGINX */
-            // We don't have net_device manager yet, so we don't know MTU. Assume ~1500.
-            size_t memory_limit_est = std::max<size_t>(tx_buf_size + 100, 2048U) * tx_num_bufs;
-            if (enable_striding_rq) {
-                memory_limit_est += strq_stride_num_per_rwqe * strq_stride_size_bytes * rx_num_bufs;
-            } else {
-                memory_limit_est += std::max<size_t>(rx_buf_size + 100, 2048U) * rx_num_bufs;
-            }
-#if defined(DEFINED_NGINX)
-            if (app.type == APP_NGINX) {
-                memory_limit_est *= std::max<size_t>(app.workers_num, 1U);
-            }
-#endif /* DEFINED_NGINX */
-            memory_limit = std::max(memory_limit, memory_limit_est);
-        }
     }
     if ((env_ptr = getenv(SYS_VAR_MEMORY_LIMIT_USER))) {
         memory_limit_user = option_size::from_str(env_ptr);
@@ -1972,15 +1918,6 @@ void mce_sys_var::get_env_params()
             temp = 0;
         }
         multilock = (multilock_t)temp;
-    }
-
-    std::vector<const char *> deprecated_params = {SYS_VAR_TX_NUM_BUFS, SYS_VAR_RX_NUM_BUFS};
-    for (const char *param : deprecated_params) {
-        env_ptr = getenv(param);
-        if (env_ptr) {
-            vlog_printf(VLOG_WARNING,
-                        "%s is deprecated and will be removed in the future versions\n", param);
-        }
     }
 }
 
