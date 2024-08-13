@@ -4,13 +4,23 @@ source $(dirname $0)/globals.sh
 
 echo "Checking for codying style ..."
 
-do_module "dev/clang-9.0.1"
-
 cd $WORKSPACE
 
 rm -rf $style_dir
 mkdir -p $style_dir
 cd $style_dir
+
+echo "Check the clang/clang-format version:"
+echo "clang: $(clang --version |grep -i version)"
+echo "clang-format: $(clang-format --version |grep -i version)"
+
+clang_version=$(clang --version | grep -oP '(?<=version )\d+' | head -1)
+clang_allowed_versoins="15 16"
+
+if [[ ! "$clang_allowed_versoins" =~ "$clang_version" ]]; then
+    echo "Wrong clang-version: $clang_version"
+    exit 1
+fi 
 
 test_app="clang-format"
 
@@ -65,8 +75,6 @@ else
     rm -rf ${style_tap}.backup
 fi
 rc=$(($rc+$nerrors))
-
-module unload "dev/clang-9.0.1"
 
 do_archive "${style_dir}/*.diff"
 
