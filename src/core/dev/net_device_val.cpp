@@ -1547,7 +1547,7 @@ bool net_device_val::verify_qp_creation(const char *ifname, enum ibv_qp_type qp_
     qp_init_attr.cap.max_recv_wr = MCE_DEFAULT_RX_NUM_WRE;
     qp_init_attr.cap.max_inline_data = MCE_DEFAULT_TX_MAX_INLINE;
     qp_init_attr.cap.max_send_sge = MCE_DEFAULT_TX_NUM_SGE;
-    qp_init_attr.cap.max_recv_sge = MCE_DEFAULT_RX_NUM_SGE;
+    qp_init_attr.cap.max_recv_sge = 1U;
     qp_init_attr.sq_sig_all = 0;
     qp_init_attr.qp_type = qp_type;
 
