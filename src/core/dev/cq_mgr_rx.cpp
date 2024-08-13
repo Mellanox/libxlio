@@ -461,9 +461,6 @@ int cq_mgr_rx::reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse)
 
     ret_val = rx_reuse->lwip_pbuf_dec_ref_count();
     if ((ret_val == 0) && (rx_reuse->get_ref_count() <= 0)) {
-        /*if ((safe_mce_sys().thread_mode > THREAD_MODE_SINGLE)) {
-         m_lock_ring_rx.lock();
-        }*/
         if (!m_rx_buffs_rdy_for_free_head) {
             m_rx_buffs_rdy_for_free_head = m_rx_buffs_rdy_for_free_tail = rx_reuse;
         } else {
@@ -471,9 +468,6 @@ int cq_mgr_rx::reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse)
             m_rx_buffs_rdy_for_free_tail = rx_reuse;
         }
         m_rx_buffs_rdy_for_free_tail->p_next_desc = nullptr;
-        /*if ((safe_mce_sys().thread_mode > THREAD_MODE_SINGLE)) {
-            m_lock_ring_rx.lock();
-        }*/
     }
     return ret_val;
 }
