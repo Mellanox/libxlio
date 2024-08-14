@@ -364,23 +364,6 @@ void check_locked_mem()
     }
 }
 
-const char *thread_mode_str(thread_mode_t thread_mode)
-{
-    switch (thread_mode) {
-    case THREAD_MODE_SINGLE:
-        return "Single";
-    case THREAD_MODE_MULTI:
-        return "Multi spin lock";
-    case THREAD_MODE_MUTEX:
-        return "Multi mutex lock";
-    case THREAD_MODE_PLENTY:
-        return "Multi more threads than cores";
-    default:
-        break;
-    }
-    return "";
-}
-
 const char *buffer_batching_mode_str(buffer_batching_mode_t buffer_batching_mode)
 {
     switch (buffer_batching_mode) {
@@ -768,8 +751,6 @@ void print_xlio_global_settings()
     VLOG_PARAM_STRING("Internal Thread Arm CQ", safe_mce_sys().internal_thread_arm_cq_enabled,
                       MCE_DEFAULT_INTERNAL_THREAD_ARM_CQ_ENABLED, SYS_VAR_INTERNAL_THREAD_ARM_CQ,
                       safe_mce_sys().internal_thread_arm_cq_enabled ? "Enabled " : "Disabled");
-    VLOG_PARAM_STRING("Thread mode", safe_mce_sys().thread_mode, MCE_DEFAULT_THREAD_MODE,
-                      SYS_VAR_THREAD_MODE, thread_mode_str(safe_mce_sys().thread_mode));
     VLOG_PARAM_NUMSTR("Buffer batching mode", safe_mce_sys().buffer_batching_mode,
                       MCE_DEFAULT_BUFFER_BATCHING_MODE, SYS_VAR_BUFFER_BATCHING_MODE,
                       buffer_batching_mode_str(safe_mce_sys().buffer_batching_mode));

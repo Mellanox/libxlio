@@ -111,14 +111,6 @@ static inline const char *ring_logic_str(ring_logic_t logic)
 }
 
 typedef enum {
-    THREAD_MODE_SINGLE = 0,
-    THREAD_MODE_MULTI,
-    THREAD_MODE_MUTEX,
-    THREAD_MODE_PLENTY,
-    THREAD_MODE_LAST
-} thread_mode_t;
-
-typedef enum {
     BUFFER_BATCHING_NONE = 0,
     BUFFER_BATCHING_WITH_RECLAIM,
     BUFFER_BATCHING_NO_RECLAIM,
@@ -445,7 +437,6 @@ public:
     bool avoid_sys_calls_on_tcp_fd;
     bool allow_privileged_sock_opt;
     uint32_t wait_after_join_msec;
-    thread_mode_t thread_mode;
     buffer_batching_mode_t buffer_batching_mode;
     option_alloc_type::mode_t mem_alloc_type;
     size_t memory_limit;
@@ -642,7 +633,6 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_AVOID_SYS_CALLS_ON_TCP_FD "XLIO_AVOID_SYS_CALLS_ON_TCP_FD"
 #define SYS_VAR_ALLOW_PRIVILEGED_SOCK_OPT "XLIO_ALLOW_PRIVILEGED_SOCK_OPT"
 #define SYS_VAR_WAIT_AFTER_JOIN_MSEC      "XLIO_WAIT_AFTER_JOIN_MSEC"
-#define SYS_VAR_THREAD_MODE               "XLIO_THREAD_MODE"
 #define SYS_VAR_BUFFER_BATCHING_MODE      "XLIO_BUFFER_BATCHING_MODE"
 #define SYS_VAR_MEM_ALLOC_TYPE            "XLIO_MEM_ALLOC_TYPE"
 #define SYS_VAR_MEMORY_LIMIT              "XLIO_MEMORY_LIMIT"
@@ -801,7 +791,6 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_AVOID_SYS_CALLS_ON_TCP_FD      (false)
 #define MCE_DEFAULT_ALLOW_PRIVILEGED_SOCK_OPT      (true)
 #define MCE_DEFAULT_WAIT_AFTER_JOIN_MSEC           (0)
-#define MCE_DEFAULT_THREAD_MODE                    (THREAD_MODE_MULTI)
 #define MCE_DEFAULT_BUFFER_BATCHING_MODE           (BUFFER_BATCHING_WITH_RECLAIM)
 #define MCE_DEFAULT_MEM_ALLOC_TYPE                 (option_alloc_type::HUGE)
 #define MCE_DEFAULT_MEMORY_LIMIT                   (2LU * 1024 * 1024 * 1024)
