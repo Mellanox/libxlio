@@ -618,10 +618,6 @@ bool epfd_info::ring_poll_and_process_element(void *pv_fd_ready_array /* = NULL*
 
     m_ring_map_lock.unlock();
 
-    if (safe_mce_sys().thread_mode == THREAD_MODE_PLENTY && !all_drained) {
-        sched_yield();
-    }
-
     return all_drained;
 }
 

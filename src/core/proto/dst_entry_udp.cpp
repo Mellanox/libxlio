@@ -51,7 +51,6 @@ dst_entry_udp::dst_entry_udp(const sock_addr &dst, uint16_t src_port, socket_dat
     : dst_entry(dst, src_port, sock_data, ring_alloc_logic)
     , m_n_sysvar_tx_bufs_batch_udp(safe_mce_sys().tx_bufs_batch_udp)
     , m_b_sysvar_tx_nonblocked_eagains(safe_mce_sys().tx_nonblocked_eagains)
-    , m_sysvar_thread_mode(safe_mce_sys().thread_mode)
     , m_n_sysvar_tx_prefetch_bytes(safe_mce_sys().tx_prefetch_bytes)
 {
     dst_udp_logdbg("%s", to_str().c_str());
