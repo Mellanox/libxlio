@@ -262,9 +262,9 @@ nginx_dpu
     Optimized for nginx running inside NVIDIA DPU.
     Example: XLIO_SPEC=nginx_dpu XLIO_NGINX_WORKERS_NUM=<N>
 
-nvme_bf2
-    Optimized for SPDK solution over NVIDIA DPU BF2
-    Example: XLIO_SPEC=nvme_bf2
+nvme_bf3
+    Optimized for SPDK solution over NVIDIA DPU BF3
+    Example: XLIO_SPEC=nvme_bf3
 
 XLIO_STATS_FILE
 Redirect socket statistics to a specific user defined file.
@@ -405,7 +405,7 @@ The logic options are:
 20 - Ring per thread (using the id of the thread in which the socket was created)
 30 - Ring per core (using cpu id)
 31 - Ring per core - attach threads : attach each thread to a cpu core
-Default value is 0
+Default value is 20
 
 XLIO_RING_MIGRATION_RATIO_TX
 XLIO_RING_MIGRATION_RATIO_RX
