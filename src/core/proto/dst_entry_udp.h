@@ -67,21 +67,9 @@ protected:
     size_t m_n_tx_ip_id;
 
 private:
-    inline uint16_t gen_packet_id_ip4()
-    {
-        uint16_t packet_id = (m_sysvar_thread_mode > THREAD_MODE_SINGLE)
-            ? atomic_fetch_and_inc(&m_a_tx_ip_id)
-            : m_n_tx_ip_id++;
-        return htons(packet_id);
-    }
+    inline uint16_t gen_packet_id_ip4() { return htons(atomic_fetch_and_inc(&m_a_tx_ip_id)); }
 
-    inline uint32_t gen_packet_id_ip6()
-    {
-        uint32_t packet_id = (m_sysvar_thread_mode > THREAD_MODE_SINGLE)
-            ? atomic_fetch_and_inc(&m_a_tx_ip_id)
-            : m_n_tx_ip_id++;
-        return htonl(packet_id);
-    }
+    inline uint32_t gen_packet_id_ip6() { return htonl(atomic_fetch_and_inc(&m_a_tx_ip_id)); }
     inline ssize_t fast_send_not_fragmented(const iovec *p_iov, const ssize_t sz_iov,
                                             xlio_wr_tx_packet_attr attr, size_t sz_udp_payload,
                                             ssize_t sz_data_payload);
@@ -97,7 +85,6 @@ private:
 
     const uint32_t m_n_sysvar_tx_bufs_batch_udp;
     const bool m_b_sysvar_tx_nonblocked_eagains;
-    const thread_mode_t m_sysvar_thread_mode;
     const uint32_t m_n_sysvar_tx_prefetch_bytes;
 };
 

@@ -854,7 +854,6 @@ void mce_sys_var::get_env_params()
     avoid_sys_calls_on_tcp_fd = MCE_DEFAULT_AVOID_SYS_CALLS_ON_TCP_FD;
     allow_privileged_sock_opt = MCE_DEFAULT_ALLOW_PRIVILEGED_SOCK_OPT;
     wait_after_join_msec = MCE_DEFAULT_WAIT_AFTER_JOIN_MSEC;
-    thread_mode = MCE_DEFAULT_THREAD_MODE;
     buffer_batching_mode = MCE_DEFAULT_BUFFER_BATCHING_MODE;
     mem_alloc_type = MCE_DEFAULT_MEM_ALLOC_TYPE;
     memory_limit = MCE_DEFAULT_MEMORY_LIMIT;
@@ -966,7 +965,6 @@ void mce_sys_var::get_env_params()
         gro_streams_max = 0;
         progress_engine_interval_msec = 0;
         cq_keep_qp_full = false;
-        thread_mode = THREAD_MODE_SINGLE;
         tcp_nodelay = true;
         ring_dev_mem_tx = 16384;
         strcpy(internal_thread_affinity_str, "0");
@@ -993,7 +991,6 @@ void mce_sys_var::get_env_params()
         avoid_sys_calls_on_tcp_fd = true;
         gro_streams_max = 0;
         cq_keep_qp_full = false;
-        thread_mode = THREAD_MODE_SINGLE;
         strcpy(internal_thread_affinity_str, "0");
         progress_engine_interval_msec = 100;
         select_poll_os_ratio = 100;
@@ -1624,13 +1621,6 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_WAIT_AFTER_JOIN_MSEC))) {
         wait_after_join_msec = (uint32_t)atoi(env_ptr);
-    }
-
-    if ((env_ptr = getenv(SYS_VAR_THREAD_MODE))) {
-        thread_mode = (thread_mode_t)atoi(env_ptr);
-        if (thread_mode < 0 || thread_mode >= THREAD_MODE_LAST) {
-            thread_mode = MCE_DEFAULT_THREAD_MODE;
-        }
     }
 
     if ((env_ptr = getenv(SYS_VAR_BUFFER_BATCHING_MODE))) {
