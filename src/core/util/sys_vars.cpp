@@ -112,6 +112,7 @@ static const char *spec_names_latency[] = {"latency", nullptr};
 static const char *spec_names_multi_ring[] = {"multi_ring_latency", nullptr};
 static const char *spec_names_nginx[] = {"nginx", nullptr};
 static const char *spec_names_nginx_dpu[] = {"nginx_dpu", nullptr};
+static const char *spec_names_nvme_bf3[] = {"nvme_bf3", nullptr};
 
 // must be by order because "to_str" relies on that!
 static const xlio_spec_names specs[] = {
@@ -120,7 +121,8 @@ static const xlio_spec_names specs[] = {
     {MCE_SPEC_SOCKPERF_LATENCY, "Latency", (const char **)spec_names_latency},
     {MCE_SPEC_LL_MULTI_RING, "Multi Ring Latency Profile", (const char **)spec_names_multi_ring},
     {MCE_SPEC_NGINX, "Nginx Profile", (const char **)spec_names_nginx},
-    {MCE_SPEC_NGINX_DPU, "Nginx Profile for DPU", (const char **)spec_names_nginx_dpu}};
+    {MCE_SPEC_NGINX_DPU, "Nginx Profile for DPU", (const char **)spec_names_nginx_dpu},
+    {MCE_SPEC_NVME_BF3, "NVMEoTCP Profile for BF3", (const char **)spec_names_nvme_bf3}};
 
 // convert str to _spec_t; upon error - returns the given 'def_value'
 xlio_spec_t from_str(const char *str, xlio_spec_t def_value)
@@ -1055,6 +1057,29 @@ void mce_sys_var::get_env_params()
         }
         break;
 #endif // DEFINED_NGINX
+    case MCE_SPEC_NVME_BF3:
+        strq_stride_num_per_rwqe = 8192U;
+        enable_lro = option_3::ON;
+        handle_fork = false;
+        strcpy(internal_thread_affinity_str, "0x01");
+        gro_streams_max = 0;
+        tx_num_wr_to_signal = 128U;
+        tx_num_wr = 1024U;
+        rx_num_wr = 32U;
+        enable_tso = option_3::ON;
+        rx_prefetch_bytes_before_poll = 256U;
+        ring_dev_mem_tx = 1024;
+        cq_keep_qp_full = false;
+        cq_aim_interval_msec = MCE_CQ_ADAPTIVE_MODERATION_DISABLED;
+        progress_engine_interval_msec = 0U;
+        tcp_abort_on_close = true;
+        memory_limit = 256U * 1024U * 1024U;
+        memory_limit_user = 2U * 1024U * 1024U * 1024U;
+
+        tx_bufs_batch_udp = 1;
+        tx_bufs_batch_tcp = 1;
+        rx_bufs_batch = 4;
+        tcp_nodelay = true;
     case MCE_SPEC_NONE:
     default:
         break;
