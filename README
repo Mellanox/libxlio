@@ -250,10 +250,6 @@ ultra-latency
     Optimized for use cases that are keen on latency even more. This mode uses singe threaded model, avoid OS polling and progress engine.
     Example: XLIO_SPEC=ultra-latency
 
-multi_ring_latency
-    Optimized for use cases that are keen on latency where two applications communicate using send-only and receive-only TCP sockets
-    Example: XLIO_SPEC=multi_ring_latency
-
 nginx
     Optimized for nginx. This profile must be used to offload nginx. This profile is turned indirectly by setting:
     XLIO_NGINX_WORKERS_NUM=<N> where N is the number of nginx workers.
