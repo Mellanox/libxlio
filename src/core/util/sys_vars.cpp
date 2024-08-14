@@ -959,79 +959,76 @@ void mce_sys_var::get_env_params()
     switch (mce_spec) {
     case MCE_SPEC_SOCKPERF_ULTRA_LATENCY:
         memory_limit = 128LU * 1024 * 1024;
-        tx_num_wr = 256; // MCE_DEFAULT_TX_NUM_WRE (3000)
-        tx_num_wr_to_signal = 4; // MCE_DEFAULT_TX_NUM_WRE_TO_SIGNAL (64)
-        tx_prefetch_bytes = MCE_DEFAULT_TX_PREFETCH_BYTES; //(256)
-        tx_bufs_batch_udp = 1; // MCE_DEFAULT_TX_BUFS_BATCH_UDP (8)
-        tx_bufs_batch_tcp = 1; // MCE_DEFAULT_TX_BUFS_BATCH_TCP;
-        rx_bufs_batch = 4; // MCE_DEFAULT_RX_BUFS_BATCH (64)
-        rx_poll_num = -1; // MCE_DEFAULT_RX_NUM_POLLS
-        enable_tso = option_3::OFF; // MCE_DEFAULT_TSO (option_3::AUTO)
-        rx_udp_poll_os_ratio = 0; // MCE_DEFAULT_RX_UDP_POLL_OS_RATIO
-        rx_prefetch_bytes = MCE_DEFAULT_RX_PREFETCH_BYTES; //(256)
-        rx_prefetch_bytes_before_poll = 256; // MCE_DEFAULT_RX_PREFETCH_BYTES_BEFORE_POLL 0
+        tx_num_wr = 256;
+        tx_num_wr_to_signal = 4;
+        tx_prefetch_bytes = MCE_DEFAULT_TX_PREFETCH_BYTES;
+        tx_bufs_batch_udp = 1;
+        tx_bufs_batch_tcp = 1;
+        rx_bufs_batch = 4;
+        rx_poll_num = -1;
+        enable_tso = option_3::OFF;
+        rx_udp_poll_os_ratio = 0;
+        rx_prefetch_bytes = MCE_DEFAULT_RX_PREFETCH_BYTES;
+        rx_prefetch_bytes_before_poll = 256;
         select_poll_num = -1;
         select_poll_os_ratio = 0;
         select_skip_os_fd_check = 0;
-        avoid_sys_calls_on_tcp_fd = true; // MCE_DEFAULT_AVOID_SYS_CALLS_ON_TCP_FD (false)
-        gro_streams_max = 0; // MCE_DEFAULT_GRO_STREAMS_MAX (32)
+        avoid_sys_calls_on_tcp_fd = true;
+        gro_streams_max = 0;
         progress_engine_interval_msec = 0;
-        cq_keep_qp_full = false; // MCE_DEFAULT_CQ_KEEP_QP_FULL(true)
+        cq_keep_qp_full = false;
         thread_mode = THREAD_MODE_SINGLE;
-        tcp_nodelay = true; // MCE_DEFAULT_TCP_NODELAY (false)
-        ring_dev_mem_tx = 16384; // MCE_DEFAULT_RING_DEV_MEM_TX (0)
-        strcpy(internal_thread_affinity_str, "0"); // MCE_DEFAULT_INTERNAL_THREAD_AFFINITY_STR;
+        tcp_nodelay = true;
+        ring_dev_mem_tx = 16384;
+        strcpy(internal_thread_affinity_str, "0");
 
         if (enable_striding_rq) {
             rx_num_wr = 4U;
         } else {
             rx_num_wr = 256;
-            rx_num_wr_to_post_recv = 4; // MCE_DEFAULT_RX_NUM_WRE_TO_POST_RECV (64)
+            rx_num_wr_to_post_recv = 4;
         }
         break;
 
     case MCE_SPEC_SOCKPERF_LATENCY:
-        tx_num_wr = 256; // MCE_DEFAULT_TX_NUM_WRE (3000)
-        tx_num_wr_to_signal = 4; // MCE_DEFAULT_TX_NUM_WRE_TO_SIGNAL(64)
-        tx_bufs_batch_udp = 1; // MCE_DEFAULT_TX_BUFS_BATCH_UDP (8)
-        tx_bufs_batch_tcp = 1; // MCE_DEFAULT_TX_BUFS_BATCH_TCP (16)
-        rx_bufs_batch = 4; // MCE_DEFAULT_RX_BUFS_BATCH (64)
+        tx_num_wr = 256;
+        tx_num_wr_to_signal = 4;
+        tx_bufs_batch_udp = 1;
+        tx_bufs_batch_tcp = 1;
+        rx_bufs_batch = 4;
 
-        rx_poll_num = -1; // MCE_DEFAULT_RX_NUM_POLLS (100000)
-        enable_tso = option_3::OFF; // MCE_DEFAULT_TSO (option_3::AUTO)
-        rx_prefetch_bytes_before_poll = 256; // MCE_DEFAULT_RX_PREFETCH_BYTES_BEFORE_POLL (0)
-        select_poll_num = -1; // MCE_DEFAULT_SELECT_NUM_POLLS (100000)
-        avoid_sys_calls_on_tcp_fd = true; // MCE_DEFAULT_AVOID_SYS_CALLS_ON_TCP_FD (false)
-        gro_streams_max = 0; // MCE_DEFAULT_GRO_STREAMS_MAX (32)
-        cq_keep_qp_full = false; // MCE_DEFAULT_CQ_KEEP_QP_FULL (true)
-        thread_mode = THREAD_MODE_SINGLE; // MCE_DEFAULT_THREAD_MODE (THREAD_MODE_MULTI)
-        strcpy(internal_thread_affinity_str, "0"); // MCE_DEFAULT_INTERNAL_THREAD_AFFINITY_STR
-                                                   // ("-1")
-        progress_engine_interval_msec = 100; // MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC (10)
-        select_poll_os_ratio = 100; // MCE_DEFAULT_SELECT_POLL_OS_RATIO (10)
-        select_poll_os_force = 1; // MCE_DEFAULT_SELECT_POLL_OS_FORCE (0)
-        tcp_nodelay = true; // MCE_DEFAULT_TCP_NODELAY (falst)
-        ring_dev_mem_tx = 16384; // MCE_DEFAULT_RING_DEV_MEM_TX (0)
+        rx_poll_num = -1;
+        enable_tso = option_3::OFF;
+        rx_prefetch_bytes_before_poll = 256;
+        select_poll_num = -1;
+        avoid_sys_calls_on_tcp_fd = true;
+        gro_streams_max = 0;
+        cq_keep_qp_full = false;
+        thread_mode = THREAD_MODE_SINGLE;
+        strcpy(internal_thread_affinity_str, "0");
+        progress_engine_interval_msec = 100;
+        select_poll_os_ratio = 100;
+        select_poll_os_force = 1;
+        tcp_nodelay = true;
+        ring_dev_mem_tx = 16384;
 
         if (enable_striding_rq) {
             rx_num_wr = 4U;
         } else {
             rx_num_wr = 256;
-            rx_num_wr_to_post_recv = 4; // MCE_DEFAULT_RX_NUM_WRE_TO_POST_RECV (64)
+            rx_num_wr_to_post_recv = 4;
         }
 
         break;
     case MCE_SPEC_LL_MULTI_RING:
-        select_poll_num = -1; // MCE_DEFAULT_SELECT_NUM_POLLS (100000)
-        rx_poll_num = -1; // MCE_DEFAULT_RX_NUM_POLLS(100000)
-        ring_allocation_logic_tx =
-            RING_LOGIC_PER_THREAD; // MCE_DEFAULT_RING_ALLOCATION_LOGIC_TX(RING_LOGIC_PER_INTERFACE)
-        ring_allocation_logic_rx =
-            RING_LOGIC_PER_THREAD; // MCE_DEFAULT_RING_ALLOCATION_LOGIC_RX(RING_LOGIC_PER_INTERFACE)
-        select_poll_os_ratio = 0; // MCE_DEFAULT_SELECT_POLL_OS_RATIO(10)
-        select_skip_os_fd_check = 0; // MCE_DEFAULT_SELECT_SKIP_OS(4)
-        rx_poll_on_tx_tcp = true; // MCE_DEFAULT_RX_POLL_ON_TX_TCP (false)
-        trigger_dummy_send_getsockname = true; // MCE_DEFAULT_TRIGGER_DUMMY_SEND_GETSOCKNAME (false)
+        select_poll_num = -1;
+        rx_poll_num = -1;
+        ring_allocation_logic_tx = RING_LOGIC_PER_THREAD;
+        ring_allocation_logic_rx = RING_LOGIC_PER_THREAD;
+        select_poll_os_ratio = 0;
+        select_skip_os_fd_check = 0;
+        rx_poll_on_tx_tcp = true;
+        trigger_dummy_send_getsockname = true;
         break;
 
 #ifdef DEFINED_NGINX
