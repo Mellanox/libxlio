@@ -109,7 +109,6 @@ typedef struct {
 static const char *names_none[] = {"none", nullptr};
 static const char *spec_names_ulatency[] = {"ultra-latency", nullptr};
 static const char *spec_names_latency[] = {"latency", nullptr};
-static const char *spec_names_multi_ring[] = {"multi_ring_latency", nullptr};
 static const char *spec_names_nginx[] = {"nginx", nullptr};
 static const char *spec_names_nginx_dpu[] = {"nginx_dpu", nullptr};
 static const char *spec_names_nvme_bf3[] = {"nvme_bf3", nullptr};
@@ -119,7 +118,6 @@ static const xlio_spec_names specs[] = {
     {MCE_SPEC_NONE, "NONE", (const char **)names_none},
     {MCE_SPEC_SOCKPERF_ULTRA_LATENCY, "Ultra Latency", (const char **)spec_names_ulatency},
     {MCE_SPEC_SOCKPERF_LATENCY, "Latency", (const char **)spec_names_latency},
-    {MCE_SPEC_LL_MULTI_RING, "Multi Ring Latency Profile", (const char **)spec_names_multi_ring},
     {MCE_SPEC_NGINX, "Nginx Profile", (const char **)spec_names_nginx},
     {MCE_SPEC_NGINX_DPU, "Nginx Profile for DPU", (const char **)spec_names_nginx_dpu},
     {MCE_SPEC_NVME_BF3, "NVMEoTCP Profile for BF3", (const char **)spec_names_nvme_bf3}};
@@ -1009,16 +1007,6 @@ void mce_sys_var::get_env_params()
             rx_num_wr_to_post_recv = 4;
         }
 
-        break;
-    case MCE_SPEC_LL_MULTI_RING:
-        select_poll_num = -1;
-        rx_poll_num = -1;
-        ring_allocation_logic_tx = RING_LOGIC_PER_THREAD;
-        ring_allocation_logic_rx = RING_LOGIC_PER_THREAD;
-        select_poll_os_ratio = 0;
-        select_skip_os_fd_check = 0;
-        rx_poll_on_tx_tcp = true;
-        trigger_dummy_send_getsockname = true;
         break;
 
 #ifdef DEFINED_NGINX
