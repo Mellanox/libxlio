@@ -411,6 +411,82 @@ void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
     m_pcb.snd_queuelen_max = TCP_SNDQUEUELEN_OVERFLOW;
 }
 
+int sockinfo_tcp::update_xlio_socket(unsigned flags, uintptr_t userdata_sq)
+{
+    NOT_IN_USE(flags); // Currently unused.
+    m_xlio_socket_userdata = userdata_sq;
+
+    return 0;
+}
+
+int sockinfo_tcp::detach_xlio_group()
+{
+    // TODO check that socket is connected and has all the objects (to attach them unconditionally
+    // later)
+    // TODO replace lwip callbacks with drops
+
+    remove_timer();
+
+    // Unregister this receiver from all the rings
+    for (auto rx_flow_iter = m_rx_flow_map.begin(); rx_flow_iter != m_rx_flow_map.end();
+         rx_flow_iter = m_rx_flow_map.begin()) {
+        flow_tuple_with_local_if flow = rx_flow_iter->first;
+        bool result = detach_receiver(flow);
+        if (!result) {
+            si_tcp_logwarn("Detach receiver failed, migration may be spoiled");
+        }
+    }
+    // TODO SO_BINDTODEVICE support
+
+    delete m_p_connected_dst_entry;
+    m_p_connected_dst_entry = nullptr;
+
+    m_p_group->remove_socket(this);
+    m_p_group = nullptr;
+
+    return 0;
+}
+
+int sockinfo_tcp::attach_xlio_group(poll_group *group)
+{
+    struct xlio_socket_attr attr = {
+        .flags = 0, /* unused */
+        .domain = (int)m_family,
+        .group = reinterpret_cast<xlio_poll_group_t>(group),
+        .userdata_sq = m_xlio_socket_userdata,
+    };
+
+    // TODO check that socket is detached
+    // TODO reinitialize lwip callbacks
+
+    set_xlio_socket(&attr);
+    group->add_socket(this);
+
+    create_dst_entry();
+    if (!m_p_connected_dst_entry) {
+        si_tcp_logwarn("Couldn't create dst_enrty, migration failed");
+        errno = ENOMEM;
+        return -1;
+    }
+    bool result = prepare_dst_to_send(is_incoming());
+    if (!result) {
+        si_tcp_logwarn("Couldn't attach TX, migration failed");
+        errno = ENOTCONN;
+        return -1;
+    }
+
+    result = attach_as_uc_receiver(role_t(NULL), true);
+    if (!result) {
+        si_tcp_logwarn("Couldn't attach RX, migration failed");
+        errno = ECONNABORTED;
+        return -1;
+    }
+
+    register_timer();
+
+    return 0;
+}
+
 void sockinfo_tcp::add_tx_ring_to_group()
 {
     ring *rng = get_tx_ring();
@@ -2472,15 +2548,27 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
 
 void sockinfo_tcp::register_timer()
 {
-    // A reused time-wait socket wil try to add a timer although it is already registered.
-    // We should avoid calling register_socket_timer_event unnecessarily because it introduces
-    // internal-thread locks contention.
+    /* A reused time-wait socket will try to add a timer although it is already registered.
+     * We should avoid calling register_socket_timer_event unnecessarily because it introduces
+     * internal-thread locks contention.
+     */
     if (!is_timer_registered()) {
-        si_tcp_logdbg("Registering TCP socket timer: socket: %p, thread-col: %p, global-col: %p",
+        si_tcp_logdbg("Registering TCP socket timer: socket: %p, timer-col: %p, global-col: %p",
                       this, get_tcp_timer_collection(), g_tcp_timers_collection);
 
         set_timer_registered(true);
         get_event_mgr()->register_socket_timer_event(this);
+    }
+}
+
+void sockinfo_tcp::remove_timer()
+{
+    if (is_timer_registered()) {
+        si_tcp_logdbg("Removing TCP socket timer: socket: %p, timer-col: %p, global-col: %p", this,
+                      get_tcp_timer_collection(), g_tcp_timers_collection);
+
+        set_timer_registered(false);
+        get_event_mgr()->unregister_socket_timer_event(this);
     }
 }
 
@@ -2750,7 +2838,7 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
     int rc = wait_for_conn_ready_blocking();
     // Handle ret from blocking connect
     if (rc < 0) {
-        // Interuppted wait for blocking socket currently considered as failure.
+        // Interrupted wait for blocking socket currently considered as failure.
         if (errno == EINTR || errno == EAGAIN) {
             m_conn_state = TCP_CONN_FAILED;
         }
@@ -3263,19 +3351,35 @@ sockinfo_tcp *sockinfo_tcp::accept_clone()
     // Clone is always called first when a SYN packet received by a listen socket.
     IF_STATS(m_p_socket_stats->listen_counters.n_rx_syn++);
 
-    // Create the socket object. We skip shadow sockets for incoming connections.
-    fd = socket_internal(m_family, SOCK_STREAM, 0, false, false);
-    if (fd < 0) {
-        IF_STATS(m_p_socket_stats->listen_counters.n_conn_dropped++);
-        return nullptr;
-    }
+    if (is_xlio_socket()) {
+        struct xlio_socket_attr attr = {
+            .flags = 0, /* unused */
+            .domain = (int)m_family,
+            .group = reinterpret_cast<xlio_poll_group_t>(m_p_group),
+            .userdata_sq = 0,
+        };
+        xlio_socket_t sock;
+        int rc = xlio_socket_create(&attr, &sock);
+        if (rc != 0) {
+            si_tcp_logdbg("Couldn't create XLIO socket (errno=%d)", errno);
+            IF_STATS(m_p_socket_stats->listen_counters.n_conn_dropped++);
+            return nullptr;
+        }
+        si = reinterpret_cast<sockinfo_tcp *>(sock);
+    } else {
+        // Create the socket object. We skip shadow sockets for incoming connections.
+        fd = socket_internal(m_family, SOCK_STREAM, 0, false, false);
+        if (fd < 0) {
+            IF_STATS(m_p_socket_stats->listen_counters.n_conn_dropped++);
+            return nullptr;
+        }
 
-    si = dynamic_cast<sockinfo_tcp *>(fd_collection_get_sockfd(fd));
-
-    if (!si) {
-        si_tcp_logwarn("can not get accept socket from FD collection");
-        XLIO_CALL(close, fd);
-        return nullptr;
+        si = dynamic_cast<sockinfo_tcp *>(fd_collection_get_sockfd(fd));
+        if (!si) {
+            si_tcp_logwarn("Can not get accept socket from FD collection");
+            XLIO_CALL(close, fd);
+            return nullptr;
+        }
     }
 
     // This method is called from a flow which assumes that the socket is locked
@@ -3375,13 +3479,19 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     tcp_ip_output(&(new_sock->m_pcb), sockinfo_tcp::ip_output);
     tcp_arg(&(new_sock->m_pcb), new_sock);
 
-    if (safe_mce_sys().enable_socketxtreme) {
+    if (new_sock->is_xlio_socket()) {
+        tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb_xlio_socket);
+    } else if (safe_mce_sys().enable_socketxtreme) {
         tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb_socketxtreme);
     } else {
         tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb);
     }
 
-    tcp_err(&(new_sock->m_pcb), sockinfo_tcp::err_lwip_cb);
+    if (new_sock->is_xlio_socket()) {
+        tcp_err(&new_sock->m_pcb, sockinfo_tcp::err_lwip_cb_xlio_socket);
+    } else {
+        tcp_err(&new_sock->m_pcb, sockinfo_tcp::err_lwip_cb);
+    }
 
     ASSERT_LOCKED(new_sock->m_tcp_con_lock);
 
@@ -3449,7 +3559,11 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     // todo check that listen socket was not closed by now ? (is_server())
     conn->m_ready_pcbs.erase(&new_sock->m_pcb);
 
-    if (safe_mce_sys().enable_socketxtreme) {
+    if (conn->is_xlio_socket()) {
+        conn->m_p_group->m_socket_accept_cb(reinterpret_cast<xlio_socket_t>(new_sock),
+                                            reinterpret_cast<xlio_socket_t>(conn),
+                                            conn->m_xlio_socket_userdata);
+    } else if (safe_mce_sys().enable_socketxtreme) {
         accept_connection_socketxtreme(conn, new_sock);
     } else {
         conn->m_accepted_conns.push_back(new_sock);
@@ -3655,34 +3769,32 @@ err_t sockinfo_tcp::syn_received_lwip_cb(void *arg, struct tcp_pcb *newpcb)
 
     ASSERT_LOCKED(listen_sock->m_tcp_con_lock);
 
-    /* Inherite properties from the parent */
+    // Inherit properties from the parent.
     new_sock->set_conn_properties_from_pcb();
 
     new_sock->m_rcvbuff_max = std::max(listen_sock->m_rcvbuff_max, 2 * new_sock->m_pcb.mss);
     new_sock->fit_rcv_wnd(true);
 
-    // Socket socket options
     listen_sock->set_sock_options(new_sock);
 
     listen_sock->m_tcp_con_lock.unlock();
 
     new_sock->create_dst_entry();
-    bool is_new_offloaded = new_sock->m_p_connected_dst_entry &&
-        new_sock->prepare_dst_to_send(
-            true); // pass true for passive socket to skip the transport rules checking
+    // Pass true for passive socket to skip the transport rules checking.
+    bool is_new_offloaded =
+        new_sock->m_p_connected_dst_entry && new_sock->prepare_dst_to_send(true);
 
-    /* this can happen if there is no route back to the syn sender.
-     * so we just need to ignore it.
-     * we set the state to close so we won't try to send fin when we don't
-     * have route. */
+    /* This can happen if there is no route back to the syn sender. So we just need to ignore it.
+     * We set the state to close so we won't try to send fin when we don't have route.
+     */
     if (!is_new_offloaded) {
         new_sock->setPassthrough();
         set_tcp_state(&new_sock->m_pcb, CLOSED);
 
-        // This method is called from a flow (tcp_listen_input, L3_level_tcp_input) which
-        // priorly called clone_conn_cb which creates a locked new socket. Before we call to
-        // close() we need to unlock the socket, so close() can perform as a regular close()
-        // call.
+        /* This method is called from a flow (tcp_listen_input, L3_level_tcp_input) which priorly
+         * called clone_conn_cb which creates a locked new socket. Before we call to close() we
+         * need to unlock the socket, so close() can perform as a regular close() call.
+         */
         new_sock->unlock_tcp_con();
 
         close(new_sock->get_fd());

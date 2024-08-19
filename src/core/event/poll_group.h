@@ -37,6 +37,7 @@ public:
     void add_ring(ring *rng, ring_alloc_logic_attr *attr);
 
     void add_socket(sockinfo_tcp *si);
+    void remove_socket(sockinfo_tcp *si);
     void close_socket(sockinfo_tcp *si, bool force = false);
 
     unsigned get_flags() const { return m_group_flags; }
@@ -47,6 +48,7 @@ public:
     xlio_socket_event_cb_t m_socket_event_cb;
     xlio_socket_comp_cb_t m_socket_comp_cb;
     xlio_socket_rx_cb_t m_socket_rx_cb;
+    xlio_socket_accept_cb_t m_socket_accept_cb;
 
 private:
     std::vector<ring *> m_rings;

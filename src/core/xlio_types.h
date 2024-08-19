@@ -391,6 +391,9 @@ typedef void (*xlio_socket_comp_cb_t)(xlio_socket_t, uintptr_t userdata_sq, uint
 typedef void (*xlio_socket_rx_cb_t)(xlio_socket_t, uintptr_t userdata_sq, void *data, size_t len,
                                     struct xlio_buf *buf);
 
+typedef void (*xlio_socket_accept_cb_t)(xlio_socket_t sock, xlio_socket_t parent,
+                                        uintptr_t parent_userdata_sq);
+
 /*
  * XLIO Socket API attribute structures
  */
@@ -415,6 +418,7 @@ struct xlio_poll_group_attr {
     xlio_socket_event_cb_t socket_event_cb;
     xlio_socket_comp_cb_t socket_comp_cb;
     xlio_socket_rx_cb_t socket_rx_cb;
+    xlio_socket_accept_cb_t socket_accept_cb;
 };
 
 struct xlio_socket_attr {

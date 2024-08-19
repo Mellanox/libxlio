@@ -28,6 +28,7 @@ typedef std::map<void * /*event_handler_id*/, event_handler_rdma_cm * /*p_event_
 
 typedef enum {
     REGISTER_TCP_SOCKET_TIMER,
+    UNREGISTER_TCP_SOCKET_TIMER,
     UNREGISTER_TCP_SOCKET_TIMER_AND_DELETE,
     REGISTER_TIMER,
     WAKEUP_TIMER, /* NOT AVAILABLE FOR GROUPED TIMERS */
@@ -167,6 +168,7 @@ public:
     void unregister_timers_event_and_delete(timer_handler *handler);
 
     void register_socket_timer_event(sockinfo_tcp *sock_tcp);
+    void unregister_socket_timer_event(sockinfo_tcp *sock_tcp);
     void unregister_socket_timer_and_delete(sockinfo_tcp *sock_tcp);
 
     void register_ibverbs_event(int fd, event_handler_ibverbs *handler, void *channel,
