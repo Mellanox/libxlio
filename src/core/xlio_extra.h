@@ -113,11 +113,16 @@ struct __attribute__((packed)) xlio_api_t {
     void (*xlio_poll_group_poll)(xlio_poll_group_t group);
     int (*xlio_socket_create)(const struct xlio_socket_attr *attr, xlio_socket_t *sock_out);
     int (*xlio_socket_destroy)(xlio_socket_t sock);
+    int (*xlio_socket_update)(xlio_socket_t sock, unsigned flags, uintptr_t userdata_sq);
     int (*xlio_socket_setsockopt)(xlio_socket_t sock, int level, int optname, const void *optval,
                                   socklen_t optlen);
+    int (*xlio_socket_getpeername)(xlio_socket_t sock, struct sockaddr *addr, socklen_t *addrlen);
     int (*xlio_socket_bind)(xlio_socket_t sock, const struct sockaddr *addr, socklen_t addrlen);
     int (*xlio_socket_connect)(xlio_socket_t sock, const struct sockaddr *to, socklen_t tolen);
+    int (*xlio_socket_listen)(xlio_socket_t sock);
     struct ibv_pd *(*xlio_socket_get_pd)(xlio_socket_t sock);
+    int (*xlio_socket_detach_group)(xlio_socket_t sock);
+    int (*xlio_socket_attach_group)(xlio_socket_t sock, xlio_poll_group_t group);
     int (*xlio_socket_send)(xlio_socket_t sock, const void *data, size_t len,
                             const struct xlio_socket_send_attr *attr);
     int (*xlio_socket_sendv)(xlio_socket_t sock, const struct iovec *iov, unsigned iovcnt,
