@@ -50,8 +50,6 @@ public:
     socket_stats_t *get_stats_obj();
     void return_stats_obj(socket_stats_t *stats);
 
-    static thread_local socket_stats_t t_dummy_stats;
-
 private:
     sock_stats() {}
     void init_sock_stats(size_t max_stats);
