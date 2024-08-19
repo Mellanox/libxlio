@@ -981,9 +981,7 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
     // Registered as receiver successfully
     si_logdbg("Attached %s to ring %p", flow_key.to_str().c_str(), p_nd_resources->p_ring);
 
-    /* Verify 5 tuple over 3 tuple
-     * and replace flow rule with the strongest
-     */
+    // Verify 5 tuple over 3 tuple and replace flow rule with the strongest
     if (flow_key.is_5_tuple()) {
         // Check and remove lesser 3 tuple
         flow_tuple_with_local_if flow_key_3t(
