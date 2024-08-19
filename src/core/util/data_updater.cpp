@@ -89,7 +89,9 @@ ring_alloc_logic_updater::ring_alloc_logic_updater(int fd, lock_base &socket_loc
 bool ring_alloc_logic_updater::update_field(dst_entry &dst)
 {
     if (dst.update_ring_alloc_logic(m_fd, m_socket_lock, m_key)) {
-        m_sock_stats->counters.n_tx_migrations++;
+        if (m_sock_stats) {
+            m_sock_stats->counters.n_tx_migrations++;
+        }
     }
 
     return true;

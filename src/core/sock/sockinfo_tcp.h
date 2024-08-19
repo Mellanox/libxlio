@@ -198,7 +198,7 @@ public:
     void setPassthrough(bool _isPassthrough)
     {
         m_sock_offload = _isPassthrough ? TCP_SOCK_PASSTHROUGH : TCP_SOCK_LWIP;
-        m_p_socket_stats->b_is_offloaded = !_isPassthrough;
+        IF_STATS(m_p_socket_stats->b_is_offloaded = !_isPassthrough);
     }
     void setPassthrough() override { setPassthrough(true); }
     bool isPassthrough() override { return m_sock_offload == TCP_SOCK_PASSTHROUGH; }
