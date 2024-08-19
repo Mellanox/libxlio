@@ -103,12 +103,12 @@ inline int sockinfo_udp::poll_os()
     m_rx_udp_poll_os_ratio_counter = 0;
     ret = SYSCALL(ioctl, m_fd, FIONREAD, &pending_data);
     if (unlikely(ret == -1)) {
-        m_p_socket_stats->counters.n_rx_os_errors++;
+        IF_STATS(m_p_socket_stats->counters.n_rx_os_errors++);
         si_udp_logdbg("SYSCALL(ioctl) returned with error in polling loop (errno=%d %m)", errno);
         return -1;
     }
     if (pending_data > 0) {
-        m_p_socket_stats->counters.n_rx_poll_os_hit++;
+        IF_STATS(m_p_socket_stats->counters.n_rx_poll_os_hit++);
         return 1;
     }
     return 0;
@@ -145,7 +145,7 @@ inline int sockinfo_udp::rx_wait(bool blocking)
         // Poll cq for offloaded ready packets ...
         m_rx_udp_poll_os_ratio_counter++;
         if (is_readable(&poll_sn)) {
-            m_p_socket_stats->counters.n_rx_poll_hit++;
+            IF_STATS(m_p_socket_stats->counters.n_rx_poll_hit++);
             return 0;
         }
 
@@ -168,7 +168,8 @@ inline int sockinfo_udp::rx_wait(bool blocking)
             return -1;
         }
     } // End polling loop
-    m_p_socket_stats->counters.n_rx_poll_miss++;
+
+    IF_STATS(m_p_socket_stats->counters.n_rx_poll_miss++);
 
     while (blocking) {
         if (unlikely(m_state == SOCKINFO_DESTROYING)) {
@@ -234,7 +235,7 @@ inline int sockinfo_udp::rx_wait(bool blocking)
                               strerror(errno));
             }
 
-            m_p_socket_stats->counters.n_rx_os_errors++;
+            IF_STATS(m_p_socket_stats->counters.n_rx_os_errors++);
             return -1;
         }
 
@@ -386,12 +387,14 @@ sockinfo_udp::sockinfo_udp(int fd, int domain)
     assert(is_shadow_socket_present());
 
     m_protocol = PROTO_UDP;
-    m_p_socket_stats->socket_type = SOCK_DGRAM;
-    m_p_socket_stats->b_is_offloaded = m_sock_offload;
+    if (m_p_socket_stats) {
+        m_p_socket_stats->socket_type = SOCK_DGRAM;
+        m_p_socket_stats->b_is_offloaded = m_sock_offload;
 
-    // Update MC related stats (default values)
-    m_p_socket_stats->mc_tx_if = m_mc_tx_src_ip;
-    m_p_socket_stats->b_mc_loop = m_b_mc_tx_loop;
+        // Update MC related stats (default values)
+        m_p_socket_stats->mc_tx_if = m_mc_tx_src_ip;
+        m_p_socket_stats->b_mc_loop = m_b_mc_tx_loop;
+    }
 
     int n_so_rcvbuf_bytes = 0;
     socklen_t option_len = sizeof(n_so_rcvbuf_bytes);
@@ -566,8 +569,10 @@ int sockinfo_udp::connect(const struct sockaddr *__to, socklen_t __tolen)
 
     m_connected = connect_to;
 
-    m_p_socket_stats->set_connected_ip(connect_to);
-    m_p_socket_stats->connected_port = dst_port;
+    if (m_p_socket_stats) {
+        m_p_socket_stats->set_connected_ip(connect_to);
+        m_p_socket_stats->connected_port = dst_port;
+    }
 
     // Connect can change the OS bound address,
     // lets check it and update our bound ip & port
@@ -617,9 +622,13 @@ int sockinfo_udp::connect(const struct sockaddr *__to, socklen_t __tolen)
         si_udp_logerr("Failed to create dst_entry(dst:%s, src_port:%d)",
                       connect_to.to_str_ip_port(true).c_str(), ntohs(src_port));
         m_connected = sock_addr();
+
         // Special assignment - it should have been done by m_p_socket_stats->set_connected_ip()
-        m_p_socket_stats->connected_ip = ip_address(in6addr_any);
-        m_p_socket_stats->connected_port = INPORT_ANY;
+        if (m_p_socket_stats) {
+            m_p_socket_stats->connected_ip = ip_address(in6addr_any);
+            m_p_socket_stats->connected_port = INPORT_ANY;
+        }
+
         m_is_connected = false; // will skip inspection for SRC
         return 0;
     }
@@ -722,7 +731,7 @@ int sockinfo_udp::on_sockname_change(struct sockaddr *__name, socklen_t __namele
     if (m_bound.get_in_port() != bindname.get_in_port()) {
         si_udp_logdbg("bound port defined (%s -> %d)", m_bound.to_str_port().c_str(),
                       ntohs(bindname.get_in_port()));
-        m_p_socket_stats->bound_port = bindname.get_in_port();
+        IF_STATS(m_p_socket_stats->bound_port = bindname.get_in_port());
         is_bound_modified = true;
     }
 
@@ -730,7 +739,7 @@ int sockinfo_udp::on_sockname_change(struct sockaddr *__name, socklen_t __namele
     if (m_bound.get_ip_addr() != bindname.get_ip_addr()) {
         si_udp_logdbg("bound if changed (%s -> %s)", m_bound.to_str_ip_port().c_str(),
                       bindname.to_str_ip_port().c_str());
-        m_p_socket_stats->set_bound_if(bindname);
+        IF_STATS(m_p_socket_stats->set_bound_if(bindname));
     }
 
     m_bound = bindname;
@@ -984,7 +993,7 @@ int sockinfo_udp::setsockopt(int __level, int __optname, __const void *__optval,
 
             si_udp_logdbg("IPPROTO_IP, %s=%s", setsockopt_ip_opt_to_str(__optname),
                           m_mc_tx_src_ip.to_str().c_str());
-            m_p_socket_stats->mc_tx_if = m_mc_tx_src_ip;
+            IF_STATS(m_p_socket_stats->mc_tx_if = m_mc_tx_src_ip);
         } break;
 
         case IP_MULTICAST_TTL: {
@@ -1014,7 +1023,7 @@ int sockinfo_udp::setsockopt(int __level, int __optname, __const void *__optval,
             if (__optval) {
                 bool b_mc_loop = *(bool *)__optval;
                 m_b_mc_tx_loop = b_mc_loop ? true : false;
-                m_p_socket_stats->b_mc_loop = m_b_mc_tx_loop;
+                IF_STATS(m_p_socket_stats->b_mc_loop = m_b_mc_tx_loop);
                 si_udp_logdbg("IPPROTO_IP, %s=%s", setsockopt_ip_opt_to_str(__optname),
                               (m_b_mc_tx_loop ? "true" : "false"));
             } else {
@@ -1322,13 +1331,13 @@ int sockinfo_udp::setsockopt(int __level, int __optname, __const void *__optval,
 
             si_udp_logdbg("IPPROTO_IPV6, %s=%s", setsockopt_ip_opt_to_str(__optname),
                           m_mc_tx_src_ip.to_str().c_str());
-            m_p_socket_stats->mc_tx_if = m_mc_tx_src_ip;
+            IF_STATS(m_p_socket_stats->mc_tx_if = m_mc_tx_src_ip);
         } break;
 
         case IPV6_MULTICAST_LOOP: {
             if (__optval) {
                 m_b_mc_tx_loop = *(bool *)__optval;
-                m_p_socket_stats->b_mc_loop = m_b_mc_tx_loop;
+                IF_STATS(m_p_socket_stats->b_mc_loop = m_b_mc_tx_loop);
                 si_udp_logdbg("IPV6_MULTICAST_LOOP, %s=%s", setsockopt_ip_opt_to_str(__optname),
                               (m_b_mc_tx_loop ? "true" : "false"));
             } else {
@@ -1721,8 +1730,10 @@ void sockinfo_udp::drop_rx_ready_byte_count(size_t n_rx_bytes_limit)
             m_rx_pkt_ready_list.pop_front();
             m_n_rx_pkt_ready_list_count--;
             m_rx_ready_byte_count -= p_rx_pkt_desc->rx.sz_payload;
-            m_p_socket_stats->n_rx_ready_pkt_count--;
-            m_p_socket_stats->n_rx_ready_byte_count -= p_rx_pkt_desc->rx.sz_payload;
+            if (m_p_socket_stats) {
+                m_p_socket_stats->n_rx_ready_pkt_count--;
+                m_p_socket_stats->n_rx_ready_byte_count -= p_rx_pkt_desc->rx.sz_payload;
+            }
 
             reuse_buffer(p_rx_pkt_desc);
             return_reuse_buffers_postponed();
@@ -2173,7 +2184,7 @@ ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
         // Condition for cache optimization
         if (unlikely(safe_mce_sys().ring_migration_ratio_tx > 0)) {
             if (unlikely(p_dst_entry->try_migrate_ring_tx(m_lock_snd))) {
-                m_p_socket_stats->counters.n_tx_migrations++;
+                IF_STATS(m_p_socket_stats->counters.n_tx_migrations++);
             }
         }
 
@@ -2351,7 +2362,7 @@ inline void sockinfo_udp::update_ready(mem_buf_desc_t *p_desc, void *pv_fd_ready
         m_rx_pkt_ready_list.push_back(p_desc);
         m_n_rx_pkt_ready_list_count++;
         m_rx_ready_byte_count += p_desc->rx.sz_payload;
-        if (unlikely(has_stats())) {
+        if (unlikely(m_p_socket_stats)) {
             m_p_socket_stats->n_rx_ready_byte_count += p_desc->rx.sz_payload;
             m_p_socket_stats->n_rx_ready_pkt_count++;
             m_p_socket_stats->counters.n_rx_ready_pkt_max =
@@ -2363,7 +2374,7 @@ inline void sockinfo_udp::update_ready(mem_buf_desc_t *p_desc, void *pv_fd_ready
         m_sock_wakeup_pipe.do_wakeup();
         m_lock_rcv.unlock();
     } else {
-        m_p_socket_stats->n_rx_zcopy_pkt_count++;
+        IF_STATS(m_p_socket_stats->n_rx_zcopy_pkt_count++);
     }
 
     NOTIFY_ON_EVENTS(this, EPOLLIN);
@@ -2398,8 +2409,10 @@ bool sockinfo_udp::rx_input_cb(mem_buf_desc_t *p_desc, void *pv_fd_ready_array)
     if (unlikely(m_rx_ready_byte_count >= m_rx_ready_byte_limit)) {
         si_udp_logfunc("rx packet discarded - socket limit reached (%d bytes)",
                        m_rx_ready_byte_limit);
-        m_p_socket_stats->counters.n_rx_ready_byte_drop += p_desc->rx.sz_payload;
-        m_p_socket_stats->counters.n_rx_ready_pkt_drop++;
+        if (m_p_socket_stats) {
+            m_p_socket_stats->counters.n_rx_ready_byte_drop += p_desc->rx.sz_payload;
+            m_p_socket_stats->counters.n_rx_ready_pkt_drop++;
+        }
         return false;
     }
 
@@ -2793,7 +2806,7 @@ int sockinfo_udp::mc_change_membership_ip4(const mc_pending_pram *p_mc_pram)
             // we will get RX from OS
             return -1;
         }
-        xlio_stats_mc_group_add(mc_grp, has_stats() ? m_p_socket_stats : nullptr);
+        xlio_stats_mc_group_add(mc_grp, m_p_socket_stats ?: nullptr);
         original_os_setsockopt_helper(&mreq_src, pram_size, p_mc_pram->optname, IPPROTO_IP);
         m_multicast = true;
         break;
@@ -2805,7 +2818,7 @@ int sockinfo_udp::mc_change_membership_ip4(const mc_pending_pram *p_mc_pram)
             // we will get RX from OS
             return -1;
         }
-        xlio_stats_mc_group_add(mc_grp, has_stats() ? m_p_socket_stats : nullptr);
+        xlio_stats_mc_group_add(mc_grp, m_p_socket_stats ?: nullptr);
         pram_size = sizeof(ip_mreq_source);
         original_os_setsockopt_helper(&mreq_src, pram_size, p_mc_pram->optname, IPPROTO_IP);
         m_multicast = true;
@@ -2818,7 +2831,7 @@ int sockinfo_udp::mc_change_membership_ip4(const mc_pending_pram *p_mc_pram)
         if (!detach_receiver(flow_key)) {
             return -1;
         }
-        xlio_stats_mc_group_remove(mc_grp, has_stats() ? m_p_socket_stats : nullptr);
+        xlio_stats_mc_group_remove(mc_grp, m_p_socket_stats ?: nullptr);
         m_multicast = false;
         break;
     }
@@ -2831,7 +2844,7 @@ int sockinfo_udp::mc_change_membership_ip4(const mc_pending_pram *p_mc_pram)
             if (!detach_receiver(flow_key)) {
                 return -1;
             }
-            xlio_stats_mc_group_remove(mc_grp, has_stats() ? m_p_socket_stats : nullptr);
+            xlio_stats_mc_group_remove(mc_grp, m_p_socket_stats ?: nullptr);
             m_multicast = false; // get out from MC group
         }
         break;
@@ -3033,7 +3046,7 @@ int sockinfo_udp::mc_change_membership_ip6(const mc_pending_pram *p_mc_pram)
             // we will get RX from OS
             return -1;
         }
-        xlio_stats_mc_group_add(mc_grp, has_stats() ? m_p_socket_stats : nullptr);
+        xlio_stats_mc_group_add(mc_grp, m_p_socket_stats ?: nullptr);
         original_os_setsockopt_helper(&p_mc_pram->req, p_mc_pram->pram_size, p_mc_pram->optname,
                                       IPPROTO_IPV6);
     } break;
@@ -3050,7 +3063,7 @@ int sockinfo_udp::mc_change_membership_ip6(const mc_pending_pram *p_mc_pram)
             if (!detach_receiver(flow_key)) {
                 return -1;
             }
-            xlio_stats_mc_group_remove(mc_grp, has_stats() ? m_p_socket_stats : nullptr);
+            xlio_stats_mc_group_remove(mc_grp, m_p_socket_stats ?: nullptr);
         }
         break;
     }
@@ -3092,7 +3105,7 @@ void sockinfo_udp::save_stats_threadid_rx()
 {
     // Save Thread Id for statistics module
     if (g_vlogger_level >= VLOG_DEBUG) {
-        m_p_socket_stats->threadid_last_rx = gettid();
+        IF_STATS(m_p_socket_stats->threadid_last_rx = gettid());
     }
 }
 
@@ -3100,13 +3113,13 @@ void sockinfo_udp::save_stats_threadid_tx()
 {
     // Save Thread Id for statistics module
     if (g_vlogger_level >= VLOG_DEBUG) {
-        m_p_socket_stats->threadid_last_tx = gettid();
+        IF_STATS(m_p_socket_stats->threadid_last_tx = gettid());
     }
 }
 
 void sockinfo_udp::save_stats_tx_offload(int bytes, bool is_dummy)
 {
-    if (unlikely(has_stats())) {
+    if (unlikely(m_p_socket_stats)) {
         if (unlikely(is_dummy)) {
             m_p_socket_stats->counters.n_tx_dummy++;
         } else {
@@ -3138,7 +3151,7 @@ int sockinfo_udp::recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_
             break;
         }
         reuse_buffer(buff);
-        m_p_socket_stats->n_rx_zcopy_pkt_count--;
+        IF_STATS(m_p_socket_stats->n_rx_zcopy_pkt_count--);
     }
     m_lock_rcv.unlock();
     return ret;
@@ -3167,7 +3180,7 @@ timestamps_t *sockinfo_udp::get_socket_timestamps()
 void sockinfo_udp::post_deqeue(bool release_buff)
 {
     mem_buf_desc_t *to_resue = m_rx_pkt_ready_list.get_and_pop_front();
-    m_p_socket_stats->n_rx_ready_pkt_count--;
+    IF_STATS(m_p_socket_stats->n_rx_ready_pkt_count--);
     m_n_rx_pkt_ready_list_count--;
     if (release_buff) {
         reuse_buffer(to_resue);
@@ -3203,7 +3216,7 @@ int sockinfo_udp::zero_copy_rx(iovec *p_iov, mem_buf_desc_t *p_desc, int *p_flag
         total_rx += p_desc_iter->rx.frag.iov_len;
     }
 
-    m_p_socket_stats->n_rx_zcopy_pkt_count++;
+    IF_STATS(m_p_socket_stats->n_rx_zcopy_pkt_count++);
 
     si_udp_logfunc("copied pointers to %d bytes to user buffer", total_rx);
     return total_rx;
@@ -3214,7 +3227,7 @@ size_t sockinfo_udp::handle_msg_trunc(size_t total_rx, size_t payload_size, int 
 {
     if (payload_size > total_rx) {
         m_rx_ready_byte_count -= (payload_size - total_rx);
-        m_p_socket_stats->n_rx_ready_byte_count -= (payload_size - total_rx);
+        IF_STATS(m_p_socket_stats->n_rx_ready_byte_count -= (payload_size - total_rx));
         *p_out_flags |= MSG_TRUNC;
         if (in_flags & MSG_TRUNC) {
             return payload_size;

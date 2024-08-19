@@ -108,6 +108,15 @@
 #define IS_DUMMY_PACKET(flags)            (flags & XLIO_SND_FLAGS_DUMMY)
 #define NOTIFY_ON_EVENTS(context, events) context->set_events(events)
 
+#define IF_STATS(x)                                                                                \
+    if (unlikely(m_p_socket_stats)) {                                                              \
+        (x);                                                                                       \
+    }
+#define IF_STATS_O(o, x)                                                                           \
+    if (unlikely((o)->m_p_socket_stats)) {                                                         \
+        (x);                                                                                       \
+    }
+
 // Sockinfo setsockopt() return values
 // Internal socket option, should not pass request to OS.
 #define SOCKOPT_INTERNAL_XLIO_SUPPORT 0
@@ -335,7 +344,6 @@ public:
     void set_ec_ring_list_next(sockinfo *sock) { m_socketxtreme_ring_list_next = sock; }
 
     bool has_epoll_context() { return (!safe_mce_sys().enable_socketxtreme && m_econtext); }
-    bool has_stats() const { return m_has_stats; }
     bool get_rx_pkt_ready_list_count() const { return m_n_rx_pkt_ready_list_count; }
     int get_fd() const { return m_fd; };
     sa_family_t get_family() { return m_family; }
@@ -475,22 +483,22 @@ protected:
     dst_entry *m_p_connected_dst_entry = nullptr;
     sockinfo_state m_state = SOCKINFO_OPENED; // socket current state
     uint8_t m_n_tsing_flags = 0U;
-    bool m_has_stats = false;
     bool m_b_rcvtstamp = false;
     bool m_b_zc = false;
     bool m_b_blocking = true;
     bool m_b_rcvtstampns = false;
+    bool m_skip_cq_poll_in_rx;
     rfs *m_rfs_ptr = nullptr;
+    socket_stats_t *m_p_socket_stats = nullptr;
     ring *m_p_rx_ring = nullptr; // used in TCP/UDP
     ring_ec *m_socketxtreme_ec_first = nullptr;
     ring_ec *m_socketxtreme_ec_last = nullptr;
-    sockinfo *m_socketxtreme_ring_list_next = nullptr;
 
     // End of first cache line
 
+    sockinfo *m_socketxtreme_ring_list_next = nullptr;
     void *m_fd_context; // Context data stored with socket
     mem_buf_desc_t *m_last_zcdesc = nullptr;
-    socket_stats_t *m_p_socket_stats = nullptr;
 
     /* Socket error queue that keeps local errors and internal data required
      * to provide notification ability.
@@ -540,12 +548,12 @@ protected:
     bool m_rx_reuse_buf_pending = false;
     // used to mark threshold was reached, but free was not done yet
     bool m_rx_reuse_buf_postponed = false;
-    bool m_skip_cq_poll_in_rx;
     bool m_reuseaddr = false; // to track setsockopt with SO_REUSEADDR
     bool m_reuseport = false; // to track setsockopt with SO_REUSEPORT
     bool m_b_pktinfo = false;
     bool m_bind_no_port = false;
     bool m_is_ipv6only;
+    uint8_t m_src_sel_flags = 0U;
 
     multilock m_lock_rcv;
     lock_mutex m_lock_snd;
@@ -568,7 +576,6 @@ protected:
     uint32_t m_pcp = 0U;
     uint32_t m_flow_tag_id = 0U; // Flow Tag for this socket
     uint8_t m_n_uc_ttl_hop_lim;
-    uint8_t m_src_sel_flags = 0U;
 
 public:
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
@@ -605,8 +612,10 @@ void sockinfo::sock_pop_descs_rx_ready(descq_t *cache)
     }
     m_n_rx_pkt_ready_list_count = 0;
     m_rx_ready_byte_count = 0;
-    m_p_socket_stats->n_rx_ready_pkt_count = 0;
-    m_p_socket_stats->n_rx_ready_byte_count = 0;
+    if (m_p_socket_stats) {
+        m_p_socket_stats->n_rx_ready_pkt_count = 0;
+        m_p_socket_stats->n_rx_ready_byte_count = 0;
+    }
 
     unlock_rx_q();
 }
@@ -643,7 +652,7 @@ void sockinfo::set_events(uint64_t events)
 
 void sockinfo::save_strq_stats(uint32_t packet_strides)
 {
-    if (unlikely(has_stats())) {
+    if (unlikely(m_p_socket_stats)) {
         m_p_socket_stats->counters.n_rx_packets++;
         m_p_socket_stats->strq_counters.n_strq_total_strides +=
             static_cast<uint64_t>(packet_strides);
@@ -733,9 +742,7 @@ int sockinfo::dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, soc
             rx_pkt_ready_offset; // if MSG_PEEK is on, m_rx_pkt_ready_offset must be zero-ed
         // save_stats_rx_offload(total_rx); //TODO??
     } else {
-        if (unlikely(has_stats())) {
-            m_p_socket_stats->n_rx_ready_byte_count -= total_rx;
-        }
+        IF_STATS(m_p_socket_stats->n_rx_ready_byte_count -= total_rx);
         m_rx_ready_byte_count -= total_rx;
         post_deqeue(relase_buff);
         save_stats_rx_offload(total_rx);
