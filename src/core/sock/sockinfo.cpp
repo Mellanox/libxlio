@@ -99,19 +99,19 @@ const char *sockinfo::setsockopt_so_opt_to_str(int opt)
 
 sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     : m_skip_cq_poll_in_rx(safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_ENABLE)
-    , m_is_ipv6only(safe_mce_sys().sysctl_reader.get_ipv6_bindv6only())
-    , m_rx_num_buffs_reuse(safe_mce_sys().rx_bufs_batch)
     , m_fd(fd)
     , m_family(domain)
+    , m_rx_num_buffs_reuse(safe_mce_sys().rx_bufs_batch)
+    , m_n_uc_ttl_hop_lim(m_family == AF_INET
+                             ? safe_mce_sys().sysctl_reader.get_net_ipv4_ttl()
+                             : safe_mce_sys().sysctl_reader.get_net_ipv6_hop_limit())
+    , m_is_ipv6only(safe_mce_sys().sysctl_reader.get_ipv6_bindv6only())
     , m_lock_rcv(MULTILOCK_RECURSIVE, MODULE_NAME "::m_lock_rcv")
     , m_lock_snd(MODULE_NAME "::m_lock_snd")
     , m_so_bindtodevice_ip(ip_address::any_addr(), domain)
     , m_rx_ring_map_lock(MODULE_NAME "::m_rx_ring_map_lock")
     , m_ring_alloc_log_rx(safe_mce_sys().ring_allocation_logic_rx, use_ring_locks)
     , m_ring_alloc_log_tx(safe_mce_sys().ring_allocation_logic_tx, use_ring_locks)
-    , m_n_uc_ttl_hop_lim(m_family == AF_INET
-                             ? safe_mce_sys().sysctl_reader.get_net_ipv4_ttl()
-                             : safe_mce_sys().sysctl_reader.get_net_ipv6_hop_limit())
 {
     m_rx_epfd = SYSCALL(epoll_create, 128);
     if (unlikely(m_rx_epfd == -1)) {
@@ -160,7 +160,7 @@ sockinfo::~sockinfo()
         }
     }
 
-    if (m_has_stats) {
+    if (m_p_socket_stats) {
         xlio_stats_instance_remove_socket_block(m_p_socket_stats);
         sock_stats::instance().return_stats_obj(m_p_socket_stats);
     }
@@ -181,14 +181,12 @@ sockinfo::~sockinfo()
 
 void sockinfo::socket_stats_init()
 {
-    if (!m_has_stats) { // This check is for listen sockets.
+    if (!m_p_socket_stats) { // This check is for listen sockets.
         m_p_socket_stats = sock_stats::instance().get_stats_obj();
         if (!m_p_socket_stats) {
-            m_p_socket_stats = &sock_stats::t_dummy_stats;
             return;
         }
 
-        m_has_stats = true;
         // Save stats as local copy and allow state publisher to copy from this location
         xlio_stats_instance_create_socket_block(m_p_socket_stats);
     }
@@ -209,7 +207,7 @@ void sockinfo::set_blocking(bool is_blocked)
 {
     si_logdbg("set socket to %s mode", is_blocked ? "blocked" : "non-blocking");
     m_b_blocking = is_blocked;
-    m_p_socket_stats->b_blocking = m_b_blocking;
+    IF_STATS(m_p_socket_stats->b_blocking = m_b_blocking);
 }
 
 int sockinfo::fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit)
@@ -307,9 +305,11 @@ int sockinfo::set_ring_attr(xlio_ring_alloc_logic_attr *attr)
         }
         ring_alloc_logic_updater du(get_fd(), m_lock_snd, m_ring_alloc_log_tx, m_p_socket_stats);
         update_header_field(&du);
-        m_p_socket_stats->ring_alloc_logic_tx = m_ring_alloc_log_tx.get_ring_alloc_logic();
-        m_p_socket_stats->ring_user_id_tx =
-            ring_allocation_logic_tx(get_fd(), m_ring_alloc_log_tx).calc_res_key_by_logic();
+        if (m_p_socket_stats) {
+            m_p_socket_stats->ring_alloc_logic_tx = m_ring_alloc_log_tx.get_ring_alloc_logic();
+            m_p_socket_stats->ring_user_id_tx =
+                ring_allocation_logic_tx(get_fd(), m_ring_alloc_log_tx).calc_res_key_by_logic();
+        }
     }
     if ((attr->comp_mask & XLIO_RING_ALLOC_MASK_RING_INGRESS) && attr->ingress) {
         ring_alloc_logic_attr old_key(*m_ring_alloc_logic_rx.get_key());
@@ -324,8 +324,10 @@ int sockinfo::set_ring_attr(xlio_ring_alloc_logic_attr *attr)
             do_rings_migration_rx(old_key);
         }
 
-        m_p_socket_stats->ring_alloc_logic_rx = m_ring_alloc_log_rx.get_ring_alloc_logic();
-        m_p_socket_stats->ring_user_id_rx = m_ring_alloc_logic_rx.calc_res_key_by_logic();
+        if (m_p_socket_stats) {
+            m_p_socket_stats->ring_alloc_logic_rx = m_ring_alloc_log_rx.get_ring_alloc_logic();
+            m_p_socket_stats->ring_user_id_rx = m_ring_alloc_logic_rx.calc_res_key_by_logic();
+        }
     }
 
     return SOCKOPT_INTERNAL_XLIO_SUPPORT;
@@ -348,8 +350,10 @@ void sockinfo::set_ring_logic_rx(ring_alloc_logic_attr ral)
     if (m_rx_ring_map.empty()) {
         m_ring_alloc_log_rx = ral;
         m_ring_alloc_logic_rx = ring_allocation_logic_rx(get_fd(), m_ring_alloc_log_rx);
-        m_p_socket_stats->ring_alloc_logic_rx = m_ring_alloc_log_rx.get_ring_alloc_logic();
-        m_p_socket_stats->ring_user_id_rx = m_ring_alloc_logic_rx.calc_res_key_by_logic();
+        if (m_p_socket_stats) {
+            m_p_socket_stats->ring_alloc_logic_rx = m_ring_alloc_log_rx.get_ring_alloc_logic();
+            m_p_socket_stats->ring_user_id_rx = m_ring_alloc_logic_rx.calc_res_key_by_logic();
+        }
     }
 }
 
@@ -357,9 +361,11 @@ void sockinfo::set_ring_logic_tx(ring_alloc_logic_attr ral)
 {
     if (!m_p_connected_dst_entry) {
         m_ring_alloc_log_tx = ral;
-        m_p_socket_stats->ring_alloc_logic_tx = m_ring_alloc_log_tx.get_ring_alloc_logic();
-        m_p_socket_stats->ring_user_id_tx =
-            ring_allocation_logic_tx(get_fd(), m_ring_alloc_log_tx).calc_res_key_by_logic();
+        if (m_p_socket_stats) {
+            m_p_socket_stats->ring_alloc_logic_tx = m_ring_alloc_log_tx.get_ring_alloc_logic();
+            m_p_socket_stats->ring_user_id_tx =
+                ring_allocation_logic_tx(get_fd(), m_ring_alloc_log_tx).calc_res_key_by_logic();
+        }
     }
 }
 
@@ -801,7 +807,7 @@ int sockinfo::get_sock_by_L3_L4(in_protocol_t protocol, const ip_address &ip, in
 
 void sockinfo::save_stats_rx_offload(int nbytes)
 {
-    if (unlikely(has_stats()) && nbytes < 0) {
+    if (unlikely(m_p_socket_stats) && nbytes < 0) {
         if (errno == EAGAIN) {
             m_p_socket_stats->counters.n_rx_eagain++;
         } else {
@@ -812,25 +818,29 @@ void sockinfo::save_stats_rx_offload(int nbytes)
 
 void sockinfo::save_stats_rx_os(int bytes)
 {
-    if (bytes >= 0) {
-        m_p_socket_stats->counters.n_rx_os_bytes += bytes;
-        m_p_socket_stats->counters.n_rx_os_packets++;
-    } else if (errno == EAGAIN) {
-        m_p_socket_stats->counters.n_rx_os_eagain++;
-    } else {
-        m_p_socket_stats->counters.n_rx_os_errors++;
+    if (m_p_socket_stats) {
+        if (bytes >= 0) {
+            m_p_socket_stats->counters.n_rx_os_bytes += bytes;
+            m_p_socket_stats->counters.n_rx_os_packets++;
+        } else if (errno == EAGAIN) {
+            m_p_socket_stats->counters.n_rx_os_eagain++;
+        } else {
+            m_p_socket_stats->counters.n_rx_os_errors++;
+        }
     }
 }
 
 void sockinfo::save_stats_tx_os(int bytes)
 {
-    if (bytes >= 0) {
-        m_p_socket_stats->counters.n_tx_os_bytes += bytes;
-        m_p_socket_stats->counters.n_tx_os_packets++;
-    } else if (errno == EAGAIN) {
-        m_p_socket_stats->counters.n_rx_os_eagain++;
-    } else {
-        m_p_socket_stats->counters.n_tx_os_errors++;
+    if (m_p_socket_stats) {
+        if (bytes >= 0) {
+            m_p_socket_stats->counters.n_tx_os_bytes += bytes;
+            m_p_socket_stats->counters.n_tx_os_packets++;
+        } else if (errno == EAGAIN) {
+            m_p_socket_stats->counters.n_rx_os_eagain++;
+        } else {
+            m_p_socket_stats->counters.n_tx_os_errors++;
+        }
     }
 }
 
@@ -1227,7 +1237,7 @@ void sockinfo::do_rings_migration_rx(resource_allocation_key &old_key)
     }
 
     unlock_rx_q();
-    m_p_socket_stats->counters.n_rx_migrations++;
+    IF_STATS(m_p_socket_stats->counters.n_rx_migrations++);
 }
 
 void sockinfo::consider_rings_migration_rx()
@@ -1355,7 +1365,7 @@ void sockinfo::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
                     m_p_connected_dst_entry->is_offloaded() ? "true" : "false");
     }
 
-    if (!has_stats()) {
+    if (!m_p_socket_stats) {
         return;
     }
 
@@ -1697,10 +1707,11 @@ void sockinfo::pop_descs_rx_ready(descq_t *cache, ring *p_ring)
             continue;
         }
         m_n_rx_pkt_ready_list_count--;
-        m_p_socket_stats->n_rx_ready_pkt_count--;
-
         m_rx_ready_byte_count -= temp->rx.sz_payload;
-        m_p_socket_stats->n_rx_ready_byte_count -= temp->rx.sz_payload;
+        if (m_p_socket_stats) {
+            m_p_socket_stats->n_rx_ready_pkt_count--;
+            m_p_socket_stats->n_rx_ready_byte_count -= temp->rx.sz_payload;
+        }
         cache->push_back(temp);
     }
 }
@@ -1715,10 +1726,11 @@ void sockinfo::push_descs_rx_ready(descq_t *cache)
         temp = cache->front();
         cache->pop_front();
         m_n_rx_pkt_ready_list_count++;
-        m_p_socket_stats->n_rx_ready_pkt_count++;
-
         m_rx_ready_byte_count += temp->rx.sz_payload;
-        m_p_socket_stats->n_rx_ready_byte_count += temp->rx.sz_payload;
+        if (m_p_socket_stats) {
+            m_p_socket_stats->n_rx_ready_pkt_count++;
+            m_p_socket_stats->n_rx_ready_byte_count += temp->rx.sz_payload;
+        }
         push_back_m_rx_pkt_ready_list(temp);
     }
 }

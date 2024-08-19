@@ -88,7 +88,10 @@ public:
     sockinfo_udp(int fd, int domain);
     ~sockinfo_udp() override;
 
-    void setPassthrough() override { m_p_socket_stats->b_is_offloaded = m_sock_offload = false; }
+    void setPassthrough() override
+    {
+        IF_STATS(m_p_socket_stats->b_is_offloaded = m_sock_offload = false);
+    }
     bool isPassthrough() override { return !m_sock_offload; }
 
     int prepare_to_connect(const sockaddr *__to, socklen_t __tolen);

@@ -433,7 +433,9 @@ static ssize_t sendfile_helper(sockinfo *p_socket_object, int in_fd, __off64_t *
             mapping->put();
             rc = fstat(in_fd, &st_buf);
             if ((rc == 0) && (st_buf.st_size >= (off_t)(cur_offset + count))) {
-                s->get_sock_stats()->counters.n_tx_sendfile_overflows++;
+                if (s->get_sock_stats()) {
+                    s->get_sock_stats()->counters.n_tx_sendfile_overflows++;
+                }
                 goto fallback;
             } else {
                 errno = EOVERFLOW;
@@ -456,7 +458,9 @@ static ssize_t sendfile_helper(sockinfo *p_socket_object, int in_fd, __off64_t *
     fallback:
         /* Fallback to readv() implementation */
         if (totSent == 0) {
-            s->get_sock_stats()->counters.n_tx_sendfile_fallbacks++;
+            if (s->get_sock_stats()) {
+                s->get_sock_stats()->counters.n_tx_sendfile_fallbacks++;
+            }
             tx_arg.clear();
             tx_arg.opcode = TX_FILE;
             tx_arg.attr.iov = piov;
@@ -527,7 +531,9 @@ static ssize_t sendfile_helper(sockinfo *p_socket_object, int in_fd, __off64_t *
             char buf[sysconf(_SC_PAGE_SIZE)];
             ssize_t toRead, numRead, numSent = 0;
 
-            s->get_sock_stats()->counters.n_tx_sendfile_fallbacks++;
+            if (s->get_sock_stats()) {
+                s->get_sock_stats()->counters.n_tx_sendfile_fallbacks++;
+            }
 
             while (count > 0) {
                 toRead = min(sizeof(buf), count);

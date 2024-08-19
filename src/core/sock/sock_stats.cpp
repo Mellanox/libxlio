@@ -34,7 +34,6 @@
 
 #include "sock_stats.h"
 
-thread_local socket_stats_t sock_stats::t_dummy_stats;
 sock_stats *sock_stats::s_instance = nullptr;
 
 void sock_stats::init_instance(size_t max_stats)
