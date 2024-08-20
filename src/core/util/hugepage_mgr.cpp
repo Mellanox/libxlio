@@ -113,7 +113,43 @@ void *hugepage_mgr::alloc_hugepages_helper(size_t &size, size_t hugepage)
         ptr = nullptr;
         __log_info_dbg("mmap failed (errno=%d), skipping hugepage %zu kB", errno, hugepage / 1024U);
     } else {
-        size = actual_size;
+        /* Check whether all the pages are resident. In a container, allocation beyond the limit can
+         * be successful and lead to SIGBUS on an access.
+         */
+        const size_t pages_nr = actual_size / hugepage;
+        size_t resident_nr = 0;
+        char *page_ptr = reinterpret_cast<char *>(ptr);
+        int rc = 0;
+
+        /* Checking a single page per hugepage in a loop is more efficient than a single mincore()
+         * syscall for the entire range. A single syscall would also require an array allocation
+         * which can grow to tens of MB for the preallocated memory region.
+         */
+        for (size_t i = 0; rc == 0 && i < pages_nr; ++i) {
+            unsigned char vec;
+            rc = mincore(page_ptr, 1, &vec);
+            resident_nr += rc == 0 ? (vec & 1U) : 0;
+            page_ptr += hugepage;
+        }
+
+        if (rc != 0 || resident_nr != pages_nr) {
+            int rc2 = munmap(ptr, actual_size);
+            if (rc2 < 0) {
+                __log_info_dbg("munmap failed (errno=%d)", errno);
+            }
+            if (rc < 0) {
+                __log_info_dbg("mincore() failed to verify hugepages (errno=%d)", errno);
+            } else if (resident_nr != pages_nr) {
+                __log_info_dbg("Not all hugepages are resident (allocated=%zu resident=%zu)",
+                               pages_nr, resident_nr);
+            }
+            __log_info_dbg("Cannot use hugepages, skipping hugepage %zu kB", hugepage / 1024U);
+
+            ptr = nullptr;
+        } else {
+            // Success.
+            size = actual_size;
+        }
     }
     return ptr;
 }
