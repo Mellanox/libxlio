@@ -401,7 +401,6 @@ public:
 
     uint32_t strq_stride_num_per_rwqe;
     uint32_t strq_stride_size_bytes;
-    uint32_t strq_strides_num_bufs;
     uint32_t strq_strides_compensation_level;
 
     uint32_t gro_streams_max;
@@ -589,7 +588,6 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_STRQ                            "XLIO_STRQ"
 #define SYS_VAR_STRQ_NUM_STRIDES                "XLIO_STRQ_NUM_STRIDES"
 #define SYS_VAR_STRQ_STRIDE_SIZE_BYTES          "XLIO_STRQ_STRIDE_SIZE_BYTES"
-#define SYS_VAR_STRQ_STRIDES_NUM_BUFS           "XLIO_STRQ_STRIDES_NUM_BUFS"
 #define SYS_VAR_STRQ_STRIDES_COMPENSATION_LEVEL "XLIO_STRQ_STRIDES_COMPENSATION_LEVEL"
 
 #define SYS_VAR_RX_BUF_SIZE                   "XLIO_RX_BUF_SIZE"
@@ -750,7 +748,6 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_STRQ_NUM_WRE                    (8)
 #define MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV       (1)
 #define MCE_DEFAULT_STRQ_COMPENSATION_LEVEL         (1)
-#define MCE_DEFAULT_STRQ_STRIDES_NUM_BUFS           (262144)
 #define MCE_DEFAULT_STRQ_STRIDES_COMPENSATION_LEVEL (16384)
 
 #define MCE_DEFAULT_RX_BUF_SIZE                   (0)
