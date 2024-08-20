@@ -566,8 +566,6 @@ void print_xlio_global_settings()
     VLOG_PARAM_STRING("Zerocopy Cache Threshold", safe_mce_sys().zc_cache_threshold,
                       MCE_DEFAULT_ZC_CACHE_THRESHOLD, SYS_VAR_ZC_CACHE_THRESHOLD,
                       option_size::to_str(safe_mce_sys().zc_cache_threshold));
-    VLOG_PARAM_NUMBER("Tx Mem Bufs", safe_mce_sys().tx_num_bufs, MCE_DEFAULT_TX_NUM_BUFS,
-                      SYS_VAR_TX_NUM_BUFS);
     VLOG_PARAM_STRING("Tx Mem Buf size", safe_mce_sys().tx_buf_size, MCE_DEFAULT_TX_BUF_SIZE,
                       SYS_VAR_TX_BUF_SIZE, option_size::to_str(safe_mce_sys().tx_buf_size));
     VLOG_PARAM_NUMBER("Tx QP WRE", safe_mce_sys().tx_num_wr, MCE_DEFAULT_TX_NUM_WRE,
@@ -593,10 +591,6 @@ void print_xlio_global_settings()
     VLOG_PARAM_STRING("TCP Send Buffer size", safe_mce_sys().tcp_send_buffer_size,
                       MCE_DEFAULT_TCP_SEND_BUFFER_SIZE, SYS_VAR_TCP_SEND_BUFFER_SIZE,
                       option_size::to_str(safe_mce_sys().tcp_send_buffer_size));
-    VLOG_PARAM_NUMBER(
-        "Rx Mem Bufs", safe_mce_sys().rx_num_bufs,
-        (safe_mce_sys().enable_striding_rq ? MCE_DEFAULT_STRQ_NUM_BUFS : MCE_DEFAULT_RX_NUM_BUFS),
-        SYS_VAR_RX_NUM_BUFS);
     VLOG_PARAM_NUMBER(
         "Rx QP WRE", safe_mce_sys().rx_num_wr,
         (safe_mce_sys().enable_striding_rq ? MCE_DEFAULT_STRQ_NUM_WRE : MCE_DEFAULT_RX_NUM_WRE),
