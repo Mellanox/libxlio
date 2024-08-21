@@ -72,7 +72,8 @@ typedef enum {
     TRANS_DEFAULT
 } transport_t;
 
-typedef enum { PROTO_UNDEFINED, PROTO_UDP, PROTO_TCP, PROTO_ALL } in_protocol_t;
+enum { PROTO_UNDEFINED, PROTO_UDP, PROTO_TCP, PROTO_ALL };
+typedef uint16_t in_protocol_t;
 
 typedef enum { DEV_CLONE, DEV_REPLACE } dev_conf_mode_t;
 
