@@ -72,7 +72,8 @@ typedef enum {
     TRANS_DEFAULT
 } transport_t;
 
-typedef enum { PROTO_UNDEFINED, PROTO_UDP, PROTO_TCP, PROTO_ALL } in_protocol_t;
+enum { PROTO_UNDEFINED, PROTO_UDP, PROTO_TCP, PROTO_ALL };
+typedef uint16_t in_protocol_t;
 
 typedef enum { DEV_CLONE, DEV_REPLACE } dev_conf_mode_t;
 
@@ -185,8 +186,8 @@ struct use_family_rule {
     struct address_port_rule first;
     struct address_port_rule second;
     unsigned char use_second;
-    transport_t target_transport; /* if match - use this transport	*/
     in_protocol_t protocol; /* protocol family for mapping		*/
+    transport_t target_transport; /* if match - use this transport	*/
 };
 
 /* data structure for holding the devices xlio will handle */
