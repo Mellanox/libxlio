@@ -443,10 +443,10 @@ typedef struct {
 
 // Version info
 typedef struct {
-    uint8_t xlio_lib_maj;
-    uint8_t xlio_lib_min;
-    uint8_t xlio_lib_rev;
-    uint8_t xlio_lib_rel;
+    uint16_t xlio_lib_maj;
+    uint16_t xlio_lib_min;
+    uint16_t xlio_lib_rev;
+    uint16_t xlio_lib_rel;
 } version_info_t;
 
 typedef struct sh_mem_t {
