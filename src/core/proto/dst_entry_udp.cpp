@@ -54,8 +54,6 @@ dst_entry_udp::dst_entry_udp(const sock_addr &dst, uint16_t src_port, socket_dat
     , m_n_sysvar_tx_prefetch_bytes(safe_mce_sys().tx_prefetch_bytes)
 {
     dst_udp_logdbg("%s", to_str().c_str());
-    atomic_set(&m_a_tx_ip_id, 0);
-    m_n_tx_ip_id = 0;
 }
 
 dst_entry_udp::~dst_entry_udp()
@@ -530,12 +528,12 @@ void dst_entry_udp::init_sge()
     m_sge[0].lkey = m_p_ring->get_tx_lkey(m_id);
 }
 
-ssize_t dst_entry_udp::pass_buff_to_neigh(const iovec *p_iov, size_t sz_iov, uint32_t packet_id)
+ssize_t dst_entry_udp::pass_buff_to_neigh(const iovec *p_iov, size_t sz_iov)
 {
     m_header_neigh->init();
     m_header_neigh->configure_udp_header(m_dst_port, m_src_port);
 
-    packet_id = (get_sa_family() == AF_INET6) ? gen_packet_id_ip6() : gen_packet_id_ip4();
+    uint32_t packet_id = (get_sa_family() == AF_INET6) ? gen_packet_id_ip6() : gen_packet_id_ip4();
 
-    return (dst_entry::pass_buff_to_neigh(p_iov, sz_iov, packet_id));
+    return pass_pkt_to_neigh(p_iov, sz_iov, packet_id);
 }

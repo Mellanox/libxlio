@@ -62,14 +62,13 @@ protected:
     virtual ibv_sge *get_sge_lst_4_not_inline_send() { return &m_sge[1]; };
     virtual void configure_headers();
     virtual void init_sge();
-    virtual ssize_t pass_buff_to_neigh(const iovec *p_iov, size_t sz_iov, uint32_t packet_id = 0);
-    atomic_t m_a_tx_ip_id;
-    size_t m_n_tx_ip_id;
+    ssize_t pass_buff_to_neigh(const iovec *p_iov, size_t sz_iov);
 
 private:
-    inline uint16_t gen_packet_id_ip4() { return htons(atomic_fetch_and_inc(&m_a_tx_ip_id)); }
+    inline uint16_t gen_packet_id_ip4() { return htons(static_cast<uint16_t>(m_frag_tx_pkt_id++)); }
 
-    inline uint32_t gen_packet_id_ip6() { return htonl(atomic_fetch_and_inc(&m_a_tx_ip_id)); }
+    inline uint32_t gen_packet_id_ip6() { return htonl(m_frag_tx_pkt_id++); }
+
     inline ssize_t fast_send_not_fragmented(const iovec *p_iov, const ssize_t sz_iov,
                                             xlio_wr_tx_packet_attr attr, size_t sz_udp_payload,
                                             ssize_t sz_data_payload);
@@ -83,6 +82,7 @@ private:
                                  xlio_wr_tx_packet_attr attr, size_t sz_udp_payload,
                                  ssize_t sz_data_payload);
 
+    uint32_t m_frag_tx_pkt_id = 0U;
     const uint32_t m_n_sysvar_tx_bufs_batch_udp;
     const bool m_b_sysvar_tx_nonblocked_eagains;
     const uint32_t m_n_sysvar_tx_prefetch_bytes;
