@@ -976,28 +976,10 @@ net_device_resources_t *sockinfo::create_nd_resources(const ip_addr &ip_local)
         // Need to register as observer to net_device
         net_device_resources_t nd_resources;
         nd_resources.refcnt = 0;
-        nd_resources.p_nde = nullptr;
-        nd_resources.p_ndv = nullptr;
-        nd_resources.p_ring = nullptr;
 
-        BULLSEYE_EXCLUDE_BLOCK_START
-        cache_entry_subject<int, net_device_val *> *net_dev_entry = nullptr;
-        net_device_val *net_dev = g_p_net_device_table_mgr->get_net_device_val(ip_local);
-        if (!net_dev ||
-            !g_p_net_device_table_mgr->register_observer(net_dev->get_if_idx(), &m_rx_nd_observer,
-                                                         &net_dev_entry)) {
-            si_logwarn("Failed to register observer for local ip %s, if_index %d",
-                       ip_local.to_str().c_str(), (net_dev ? net_dev->get_if_idx() : -1));
-            goto err;
-        }
-        nd_resources.p_nde = (net_device_entry *)net_dev_entry;
-        if (!nd_resources.p_nde) {
-            si_logerr("Got NULL net_devide_entry for local ip %s", ip_local.to_str().c_str());
-            goto err;
-        }
-        if (!nd_resources.p_nde->get_val(nd_resources.p_ndv)) {
-            si_logerr("Got net_device_val=NULL (interface is not offloaded) for local ip %s",
-                      ip_local.to_str().c_str());
+        nd_resources.p_ndv = g_p_net_device_table_mgr->get_net_device_val(ip_local);
+        if (!nd_resources.p_ndv) {
+            si_logwarn("Failed to obtain device for local ip %s", ip_local.to_str().c_str());
             goto err;
         }
 
@@ -1034,7 +1016,6 @@ net_device_resources_t *sockinfo::create_nd_resources(const ip_addr &ip_local)
             si_logerr("Failed to find rx_nd_iter");
             goto err;
         }
-        BULLSEYE_EXCLUDE_BLOCK_END
     }
 
     // Now we have the net_device object (created or found)
@@ -1073,7 +1054,6 @@ bool sockinfo::destroy_nd_resources(const ip_addr &ip_local)
     if (p_nd_resources->refcnt == 0) {
 
         // Release ring reference
-        BULLSEYE_EXCLUDE_BLOCK_START
         unlock_rx_q();
         resource_allocation_key *key;
         if (m_ring_alloc_logic_rx.get_alloc_logic_type() != RING_LOGIC_PER_IP) {
@@ -1088,15 +1068,6 @@ bool sockinfo::destroy_nd_resources(const ip_addr &ip_local)
             return false;
         }
         lock_rx_q();
-
-        // Release observer reference
-        if (!g_p_net_device_table_mgr->unregister_observer(p_nd_resources->p_ndv->get_if_idx(),
-                                                           &m_rx_nd_observer)) {
-            si_logwarn("Failed to unregister observer (nd_resource) for if_index %d",
-                       p_nd_resources->p_ndv->get_if_idx());
-            return false;
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
 
         m_rx_nd_map.erase(rx_nd_iter);
     }
