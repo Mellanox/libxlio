@@ -706,7 +706,7 @@ uint16_t dst_entry::get_dst_port()
     return m_dst_port;
 }
 
-ssize_t dst_entry::pass_buff_to_neigh(const iovec *p_iov, size_t sz_iov, uint32_t packet_id)
+ssize_t dst_entry::pass_pkt_to_neigh(const iovec *p_iov, size_t sz_iov, uint32_t packet_id)
 {
     ssize_t ret_val = 0;
 
