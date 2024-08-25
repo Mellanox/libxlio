@@ -92,15 +92,15 @@ void route_entry::register_to_net_device()
 {
     cache_entry_subject<int, net_device_val *> *net_dev_entry = nullptr;
     if (g_p_net_device_table_mgr->register_observer(m_val->get_if_index(), this, &net_dev_entry)) {
-        rt_entry_logdbg("route_entry [%p] is registered to an offloaded device", this);
+        rt_entry_logdbg("route_entry [%p] is registered to if_index: %d", this,
+                        m_val->get_if_index());
         m_p_net_dev_entry = (net_device_entry *)net_dev_entry;
         m_p_net_dev_entry->get_val(m_p_net_dev_val);
         m_b_offloaded_net_dev = true;
     } else {
         // We try to register also non-offloaded devices -> this log should be dbg.
-        rt_entry_logdbg("route_entry [%p] tried to register to non-offloaded device ---> "
-                        "registration failed, if_index: %d",
-                        this, m_val->get_if_index());
+        rt_entry_logdbg("route_entry [%p] failed to register to if_index: %d", this,
+                        m_val->get_if_index());
         m_b_offloaded_net_dev = false;
     }
 }
@@ -113,7 +113,7 @@ void route_entry::unregister_to_net_device()
     }
 
     if (m_p_net_dev_val) {
-        rt_entry_logdbg("unregister from net device idx %d", m_p_net_dev_val->get_if_idx());
+        rt_entry_logdbg("Unregistering from if_index: %d", m_p_net_dev_val->get_if_idx());
         if (!g_p_net_device_table_mgr->unregister_observer(m_p_net_dev_val->get_if_idx(), this)) {
             rt_entry_logwarn("Failed to unregister net_device_entry (route_entry) if_index %d",
                              m_p_net_dev_val->get_if_idx());
