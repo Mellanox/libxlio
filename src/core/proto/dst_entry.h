@@ -202,7 +202,6 @@ protected:
     virtual bool resolve_neigh();
     virtual bool resolve_ring();
     virtual bool release_ring();
-    virtual ssize_t pass_buff_to_neigh(const iovec *p_iov, size_t sz_iov, uint32_t packet_id = 0);
     virtual void configure_ip_header(header *h, uint16_t packet_id = 0);
     virtual void configure_headers() { conf_hdrs_and_snd_wqe(); };
     bool conf_hdrs_and_snd_wqe();
@@ -210,6 +209,7 @@ protected:
                                uint16_t dev_vlan);
     virtual bool conf_l2_hdr_and_snd_wqe_eth();
     virtual void init_sge() {};
+    ssize_t pass_pkt_to_neigh(const iovec *p_iov, size_t sz_iov, uint32_t packet_id);
     bool alloc_transport_dep_res();
     bool alloc_neigh_val(transport_type_t tranport);
     bool get_routing_addr_sel_src(ip_address &out_ip) const;

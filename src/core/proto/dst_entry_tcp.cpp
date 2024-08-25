@@ -367,12 +367,11 @@ void dst_entry_tcp::configure_headers()
     dst_entry::configure_headers();
 }
 
-ssize_t dst_entry_tcp::pass_buff_to_neigh(const iovec *p_iov, size_t sz_iov, uint32_t packet_id)
+ssize_t dst_entry_tcp::pass_buff_to_neigh(const iovec *p_iov, size_t sz_iov)
 {
-    NOT_IN_USE(packet_id);
     m_header_neigh->init();
     m_header_neigh->configure_tcp_ports(m_dst_port, m_src_port);
-    return (dst_entry::pass_buff_to_neigh(p_iov, sz_iov));
+    return pass_pkt_to_neigh(p_iov, sz_iov, 0U);
 }
 
 mem_buf_desc_t *dst_entry_tcp::get_buffer(pbuf_type type, pbuf_desc *desc,
