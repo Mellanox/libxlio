@@ -1,7 +1,7 @@
 ---
 job: LIBXLIO-release
 # step_allow_single_selector: false
-registry_host: harbor.mellanox.com
+registry_host: $REGISTRY_HOST
 registry_auth: 1daaea28-800e-425f-a91f-3bd3e9136eea
 registry_path: /swx-infra/media/xlio
 
@@ -15,6 +15,7 @@ kubernetes:
 
 env:
   MAIL_FROM: jenkins@nvidia.com
+  REGISTRY_HOST: $REGISTRY_HOST
 
 volumes:
   # Default release location
@@ -23,7 +24,7 @@ volumes:
   - {mountPath: /var/home/swx-jenkins, hostPath: /labhome/swx-jenkins}
 
 runs_on_dockers:
-  - {file: '.ci/dockerfiles/Dockerfile.rhel8.6.release', name: 'rhel8.6', uri: '$arch/$name/release', build_args: '--no-cache', arch: 'x86_64', tag: '20240718'}
+  - {file: '.ci/dockerfiles/Dockerfile.rhel8.6.release', name: 'rhel8.6', uri: '$arch/$name/release', build_args: '--build-arg HARBOR_URL=$registry_host --no-cache', arch: 'x86_64', tag: '20240718'}
 
 
 steps:
