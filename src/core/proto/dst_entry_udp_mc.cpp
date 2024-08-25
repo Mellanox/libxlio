@@ -62,6 +62,8 @@ dst_entry_udp_mc::~dst_entry_udp_mc()
         // Registered in: dst_entry_udp_mc::resolve_net_dev
         // With: g_p_net_device_table_mgr->register_observer(ip_addr(m_mc_tx_src_ip.get_in_addr()),
         //                                                   this, &net_dev_entry).
+        dst_udp_mc_logdbg("Unregistering net_dev MC observer if_index: %d",
+                          m_p_net_dev_val->get_if_idx());
         if (!g_p_net_device_table_mgr->unregister_observer(m_p_net_dev_val->get_if_idx(), this)) {
             dst_udp_mc_logwarn("Failed to unregister observer (dst_entry_udp_mc) for if_index %d",
                                m_p_net_dev_val->get_if_idx());
@@ -94,6 +96,8 @@ bool dst_entry_udp_mc::resolve_net_dev()
                 if (g_p_net_device_table_mgr->register_observer(mc_net_dev->get_if_idx(), this,
                                                                 &net_dev_entry)) {
                     m_p_net_dev_entry = dynamic_cast<net_device_entry *>(net_dev_entry);
+                    dst_udp_mc_logdbg("Registered net_dev MC observer if_index: %d",
+                                      mc_net_dev->get_if_idx());
                 } else {
                     dst_udp_mc_logwarn(
                         "Failed to register observer (dst_entry_udp_mc) for if_index %d",

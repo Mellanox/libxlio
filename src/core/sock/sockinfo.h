@@ -178,7 +178,6 @@ struct epoll_fd_rec {
 };
 
 struct net_device_resources_t {
-    net_device_entry *p_nde;
     net_device_val *p_ndv;
     ring *p_ring;
     int refcnt;
@@ -533,7 +532,6 @@ protected:
     sock_addr m_bound;
     sock_addr m_connected;
     ip_addr m_so_bindtodevice_ip;
-    cache_observer m_rx_nd_observer;
     rx_net_device_map_t m_rx_nd_map;
     rx_flow_map_t m_rx_flow_map;
     rx_ring_map_t m_rx_ring_map; // CQ map
