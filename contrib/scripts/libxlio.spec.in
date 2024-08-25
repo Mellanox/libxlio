@@ -189,7 +189,7 @@ fi
 %{_mandir}/man8/xlio_stats.*
 
 %changelog
-* Wed Aug  7 2024 NVIDIA CORPORATION <networking-support@nvidia.com> 3.940.0-1
-- Bump version to 3.940.0
+* Sun Aug 25 2024 NVIDIA CORPORATION <networking-support@nvidia.com> 3.940.1-1
+- Bump version to 3.940.1
 - Please refer to CHANGES for full changelog.
 
