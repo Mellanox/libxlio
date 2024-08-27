@@ -30,7 +30,7 @@
 # SOFTWARE.
 #
 
-# doca.m4 - Library to operate with DevX
+# doca.m4 - DOCA Libraries
 #
 
 ##########################
@@ -54,8 +54,8 @@ get_version_number_doca()
         n=${doca_cv_token//[[!0-9]]/ }
         v=(${n//\./ })
 
-        # DOCA vesrion string parts may have leading zeros such as 2.8.0038
-        # A string such as '0038' cannot be used as a number.
+        # DOCA vesrion string parts may have leading zeros such as 2.9.0029
+        # A string such as '0029' cannot be used as a number.
         echo "$((${v[[0]]} * 1000000 + ${v[[1]]} * 10000 + $(expr ${v[[2]]} + 0)))"
     else
         echo 0
@@ -64,7 +64,7 @@ get_version_number_doca()
 
 get_min_supported_version_doca()
 {
-    echo 2080070
+    echo 2090029
 }
 
 AC_ARG_WITH([doca],

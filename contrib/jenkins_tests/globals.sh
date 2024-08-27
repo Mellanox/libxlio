@@ -296,7 +296,7 @@ do_compile_doca()
     echo ""
     echo "===== DOCA checkout & compilation starts ====="
     echo ""
-    doca_version="2.8.0070-1"
+    doca_version="2.9.0029-1"
     doca_sdk="$WORKSPACE/$prefix/doca-sdk"
     doca_repo="ssh://git-nbu.nvidia.com:12023/doca/doca"
     doca_build="$WORKSPACE/$prefix/doca"
@@ -335,6 +335,10 @@ do_compile_doca()
     wget https://github.com/Mellanox/libxlio/files/15446734/0001-TEMP-Enable-Multiprocess-DPDK.patch
     git apply 0001-TEMP-Enable-Multiprocess-DPDK.patch
 
+    # Patch from Iftah Levi, solving the "Suspend/Resume PE functionallity" in DOCA
+    wget https://github.com/user-attachments/files/16740209/0001-Disable-suspend-during-epoll.patch
+    git apply 0001-Disable-suspend-during-epoll.patch
+
     if [[ -f /.dockerenv ]]; then
         SUDO=""
     else
@@ -353,7 +357,7 @@ do_compile_doca()
 
     $SUDO mkdir -p "$doca_build"
 
-    if ! $SUDO meson -Dsetup_doca_env=false "$doca_build"; then
+    if ! $SUDO meson "$doca_build"; then
         echo "Cannot prepare the project for compilation..."
         exit 1
     fi
