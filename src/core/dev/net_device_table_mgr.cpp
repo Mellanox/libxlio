@@ -192,6 +192,9 @@ void net_device_table_mgr::update_tbl()
     static int _seq = 0;
     net_device_val *p_net_device_val;
 
+    /* Track ips assigned to multiple-interfaces */
+    std::set<std::string> duplicate_ips;
+
     /* Set up the netlink socket */
     fd = SYSCALL(socket, AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
     if (fd < 0) {
@@ -266,19 +269,31 @@ void net_device_table_mgr::update_tbl()
                 if ((int)get_max_mtu() < p_net_device_val->get_mtu()) {
                     set_max_mtu(p_net_device_val->get_mtu());
                 }
+                auto handle_ip_insertion = [&p_net_device_val, &duplicate_ips](
+                                               const std::unique_ptr<ip_data> &ip,
+                                               net_device_map_addr &net_device_map,
+                                               sa_family_t family) {
+                    auto it = net_device_map.find(ip->local_addr);
+                    if (it != net_device_map.end()) {
+                        duplicate_ips.insert(ip->local_addr.to_str(family));
+                    }
+                    if (it == net_device_map.end() ||
+                        p_net_device_val->get_state() != net_device_val::DOWN) {
+                        net_device_map[ip->local_addr] = p_net_device_val;
+                    }
+                };
 
                 const ip_data_vector_t &ipvec_v4 = p_net_device_val->get_ip_array(AF_INET);
                 std::for_each(ipvec_v4.begin(), ipvec_v4.end(),
-                              [this, p_net_device_val](const std::unique_ptr<ip_data> &ip) {
-                                  m_net_device_map_addr_v4[ip->local_addr] = p_net_device_val;
+                              [this, &handle_ip_insertion](const std::unique_ptr<ip_data> &ip) {
+                                  handle_ip_insertion(ip, m_net_device_map_addr_v4, AF_INET);
                               });
 
                 const ip_data_vector_t &ipvec_v6 = p_net_device_val->get_ip_array(AF_INET6);
                 std::for_each(ipvec_v6.begin(), ipvec_v6.end(),
-                              [this, p_net_device_val](const std::unique_ptr<ip_data> &ip) {
-                                  m_net_device_map_addr_v6[ip->local_addr] = p_net_device_val;
+                              [this, &handle_ip_insertion](const std::unique_ptr<ip_data> &ip) {
+                                  handle_ip_insertion(ip, m_net_device_map_addr_v6, AF_INET6);
                               });
-
                 m_net_device_map_index[p_net_device_val->get_if_idx()] = p_net_device_val;
             }
 
@@ -295,9 +310,15 @@ void net_device_table_mgr::update_tbl()
 ret:
 
     m_lock.unlock();
+
     ndtm_logdbg("Check completed. Found %ld offload capable network interfaces",
                 m_net_device_map_index.size());
-
+    for (const auto &ip : duplicate_ips) {
+        vlog_printf(VLOG_WARNING,
+                    "Duplicate IP address %s detected on multiple interfaces. XLIO will work with "
+                    "a single interface.\n",
+                    ip.c_str());
+    }
     SYSCALL(close, fd);
 }
 
