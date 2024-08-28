@@ -315,7 +315,8 @@ public:
     }
 
     ip_addr(ip_addr &&addr)
-        : ip_address(addr)
+        : ip_address(std::forward<ip_address>(addr))
+        // coverity[copy_constructor_call:FALSE] /*Turn off check use_after_move*/
         , m_family(addr.m_family)
     {
     }
