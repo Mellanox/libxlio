@@ -3593,8 +3593,7 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     new_sock->m_b_blocking = true;
 
     /* Dump statistics of the previous incarnation of the socket. */
-    IF_STATS_O(new_sock,
-               print_full_stats(new_sock->m_p_socket_stats, nullptr, safe_mce_sys().stats_file));
+    IF_STATS_O(new_sock, print_full_stats(new_sock->m_p_socket_stats, nullptr, g_stats_file));
 
     new_sock->socket_stats_init();
 

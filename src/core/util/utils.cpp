@@ -92,6 +92,21 @@ int check_if_regular_file(char *path)
     return 0;
 }
 
+void open_stats_file()
+{
+    if (*safe_mce_sys().stats_filename) {
+        if (check_if_regular_file(safe_mce_sys().stats_filename)) {
+            vlog_printf(VLOG_WARNING,
+                        "FAILED to create " PRODUCT_NAME
+                        " statistics file. %s is not a regular file.\n",
+                        safe_mce_sys().stats_filename);
+        } else if (!(g_stats_file = fopen(safe_mce_sys().stats_filename, "w"))) {
+            vlog_printf(VLOG_WARNING, "Couldn't open statistics file: %s (errno=%d)\n",
+                        safe_mce_sys().stats_filename, errno);
+        }
+    }
+}
+
 int get_sys_max_fd_num(int def_max_fd /*=1024*/)
 {
     struct rlimit rlim;
