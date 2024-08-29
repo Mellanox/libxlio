@@ -52,6 +52,7 @@
 #include "utils/compiler.h"
 #include "utils/rdtsc.h"
 #include "util/xlio_stats.h"
+#include "util/hugepage_mgr.h"
 #include "util/utils.h"
 #include "event/event_handler_manager.h"
 #include "event/poll_group.h"
@@ -120,6 +121,11 @@ static int free_libxlio_resources()
     vlog_printf(VLOG_DEBUG, "%s: Closing libxlio resources\n", __FUNCTION__);
 
     g_b_exit = true;
+
+    if (safe_mce_sys().print_report) {
+        buffer_pool::print_full_report(VLOG_INFO);
+        g_hugepage_mgr.print_report();
+    }
 
     // Destroy polling groups before fd_collection to clear XLIO sockets from the fd_collection
     poll_group::destroy_all_groups();
@@ -196,10 +202,6 @@ static int free_libxlio_resources()
         delete g_socketxtreme_ec_pool;
     }
     g_socketxtreme_ec_pool = NULL;
-
-    if (safe_mce_sys().print_report) {
-        buffer_pool::print_full_report(VLOG_INFO);
-    }
 
     if (g_buffer_pool_zc) {
         delete g_buffer_pool_zc;
