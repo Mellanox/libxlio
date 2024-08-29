@@ -1185,8 +1185,8 @@ void mce_sys_var::get_env_params()
         tx_max_inline = (uint32_t)atoi(env_ptr);
     }
     if (tx_max_inline > MAX_SUPPORTED_IB_INLINE_SIZE) {
-        vlog_printf(VLOG_WARNING, "%s  must be smaller or equal to %d [%d]\n",
-                    SYS_VAR_TX_MAX_INLINE, MAX_SUPPORTED_IB_INLINE_SIZE, tx_max_inline);
+        vlog_printf(VLOG_WARNING, "%s must be smaller or equal to %d [%d]\n", SYS_VAR_TX_MAX_INLINE,
+                    MAX_SUPPORTED_IB_INLINE_SIZE, tx_max_inline);
         tx_max_inline = MAX_SUPPORTED_IB_INLINE_SIZE;
     }
 
@@ -1288,7 +1288,7 @@ void mce_sys_var::get_env_params()
         rx_poll_num = atoi(env_ptr);
     }
     if (rx_poll_num < MCE_MIN_RX_NUM_POLLS || rx_poll_num > MCE_MAX_RX_NUM_POLLS) {
-        vlog_printf(VLOG_WARNING, " Rx Poll loops should be between %d and %d [%d]\n",
+        vlog_printf(VLOG_WARNING, "Rx Poll loops should be between %d and %d [%d]\n",
                     MCE_MIN_RX_NUM_POLLS, MCE_MAX_RX_NUM_POLLS, rx_poll_num);
         rx_poll_num = MCE_DEFAULT_RX_NUM_POLLS;
     }
@@ -1296,7 +1296,7 @@ void mce_sys_var::get_env_params()
         rx_poll_num_init = atoi(env_ptr);
     }
     if (rx_poll_num_init < MCE_MIN_RX_NUM_POLLS || rx_poll_num_init > MCE_MAX_RX_NUM_POLLS) {
-        vlog_printf(VLOG_WARNING, " Rx Poll loops should be between %d and %d [%d]\n",
+        vlog_printf(VLOG_WARNING, "Rx Poll loops should be between %d and %d [%d]\n",
                     MCE_MIN_RX_NUM_POLLS, MCE_MAX_RX_NUM_POLLS, rx_poll_num_init);
         rx_poll_num_init = MCE_DEFAULT_RX_NUM_POLLS_INIT;
     }
@@ -1337,7 +1337,7 @@ void mce_sys_var::get_env_params()
     }
     if (rx_prefetch_bytes < MCE_MIN_RX_PREFETCH_BYTES ||
         rx_prefetch_bytes > MCE_MAX_RX_PREFETCH_BYTES) {
-        vlog_printf(VLOG_WARNING, " Rx prefetch bytes size out of range [%d] (min=%d, max=%d)\n",
+        vlog_printf(VLOG_WARNING, "Rx prefetch bytes size out of range [%d] (min=%d, max=%d)\n",
                     rx_prefetch_bytes, MCE_MIN_RX_PREFETCH_BYTES, MCE_MAX_RX_PREFETCH_BYTES);
         rx_prefetch_bytes = MCE_DEFAULT_RX_PREFETCH_BYTES;
     }
@@ -1348,10 +1348,9 @@ void mce_sys_var::get_env_params()
     if (rx_prefetch_bytes_before_poll != 0 &&
         (rx_prefetch_bytes_before_poll < MCE_MIN_RX_PREFETCH_BYTES ||
          rx_prefetch_bytes_before_poll > MCE_MAX_RX_PREFETCH_BYTES)) {
-        vlog_printf(VLOG_WARNING,
-                    " Rx prefetch bytes size out of range [%d] (min=%d, max=%d, disabled=0)\n",
-                    rx_prefetch_bytes_before_poll, MCE_MIN_RX_PREFETCH_BYTES,
-                    MCE_MAX_RX_PREFETCH_BYTES);
+        vlog_printf(
+            VLOG_WARNING, "Rx prefetch bytes size out of range [%d] (min=%d, max=%d, disabled=0)\n",
+            rx_prefetch_bytes_before_poll, MCE_MIN_RX_PREFETCH_BYTES, MCE_MAX_RX_PREFETCH_BYTES);
         rx_prefetch_bytes_before_poll = MCE_DEFAULT_RX_PREFETCH_BYTES_BEFORE_POLL;
     }
 
@@ -1400,7 +1399,7 @@ void mce_sys_var::get_env_params()
     }
 
     if (select_poll_num < MCE_MIN_RX_NUM_POLLS || select_poll_num > MCE_MAX_RX_NUM_POLLS) {
-        vlog_printf(VLOG_WARNING, " Select Poll loops can not be below zero [%d]\n",
+        vlog_printf(VLOG_WARNING, "Select Poll loops can not be below zero [%d]\n",
                     select_poll_num);
         select_poll_num = MCE_DEFAULT_SELECT_NUM_POLLS;
     }
@@ -1503,7 +1502,7 @@ void mce_sys_var::get_env_params()
         cq_poll_batch_max = (uint32_t)atoi(env_ptr);
     }
     if (cq_poll_batch_max < MCE_MIN_CQ_POLL_BATCH || cq_poll_batch_max > MCE_MAX_CQ_POLL_BATCH) {
-        vlog_printf(VLOG_WARNING, " Rx number of cq poll batchs should be between %d and %d [%d]\n",
+        vlog_printf(VLOG_WARNING, "Rx number of cq poll batchs should be between %d and %d [%d]\n",
                     MCE_MIN_CQ_POLL_BATCH, MCE_MAX_CQ_POLL_BATCH, cq_poll_batch_max);
         cq_poll_batch_max = MCE_DEFAULT_CQ_POLL_BATCH;
     }
@@ -1617,7 +1616,7 @@ void mce_sys_var::get_env_params()
 
     if (tcp_timer_resolution_msec < timer_resolution_msec) {
         vlog_printf(VLOG_WARNING,
-                    " TCP timer resolution [%s=%d] cannot be smaller than timer resolution "
+                    "TCP timer resolution [%s=%d] cannot be smaller than timer resolution "
                     "[%s=%d]. Setting TCP timer resolution to %d msec.\n",
                     SYS_VAR_TCP_TIMER_RESOLUTION_MSEC, tcp_timer_resolution_msec,
                     SYS_VAR_TIMER_RESOLUTION_MSEC, timer_resolution_msec, timer_resolution_msec);
@@ -1642,7 +1641,7 @@ void mce_sys_var::get_env_params()
     }
     if (env_to_cpuset(internal_thread_affinity_str, &internal_thread_affinity)) {
         vlog_printf(VLOG_WARNING,
-                    " Failed to set internal thread affinity: %s...  deferring to cpu-0.\n",
+                    "Failed to set internal thread affinity: %s...  deferring to cpu-0.\n",
                     internal_thread_affinity_str);
     }
 
