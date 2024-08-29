@@ -72,7 +72,7 @@ Example:
  XLIO DETAILS: Stats File                                                [XLIO_STATS_FILE]
  XLIO DETAILS: Stats shared memory directory  /tmp/xlio                  [XLIO_STATS_SHMEM_DIR]
  XLIO DETAILS: SERVICE output directory       /tmp/xlio                  [XLIO_SERVICE_NOTIFY_DIR]
- XLIO DETAILS: Stats FD Num (max)             100                        [XLIO_STATS_FD_NUM]
+ XLIO DETAILS: Stats FD Num (max)             0                          [XLIO_STATS_FD_NUM]
  XLIO DETAILS: Conf File                      /etc/libxlio.conf          [XLIO_CONFIG_FILE]
  XLIO DETAILS: Application ID                 XLIO_DEFAULT_APPLICATION_ID [XLIO_APPLICATION_ID]
  XLIO DETAILS: Polling CPU idle usage         Disabled                   [XLIO_CPU_USAGE_STATS]
@@ -89,7 +89,6 @@ Example:
  XLIO DETAILS: Zerocopy Mem Bufs              200000                     [XLIO_ZC_BUFS]
  XLIO DETAILS: Zerocopy Cache Threshold       10 GB                      [XLIO_ZC_CACHE_THRESHOLD]
  XLIO DETAILS: Tx Mem Buf size                0                          [XLIO_TX_BUF_SIZE]
- XLIO DETAILS: ZC TX size                     32 KB                      [XLIO_ZC_TX_SIZE]
  XLIO DETAILS: Tx QP WRE                      32768                      [XLIO_TX_WRE]
  XLIO DETAILS: Tx QP WRE Batching             64                         [XLIO_TX_WRE_BATCHING]
  XLIO DETAILS: Tx Max QP INLINE               204                        [XLIO_TX_MAX_INLINE]
@@ -280,9 +279,10 @@ Default value is /tmp/xlio/
 Note: when used xliod must be run with --notify-dir directing the same folder.
 
 XLIO_STATS_FD_NUM
-Max number of sockets monitored by XLIO statistic mechanism.
-Value range is 0 to 1024.
-Default value is 100
+Maximum number of sockets monitored by XLIO statistic mechanism. This affects
+the number of sockets that xlio_stats and XLIO_STATS_FILE can report
+simultaneously. xlio_stats tool is additionally limited by 1024 sockets.
+Default value is 0
 
 XLIO_CONFIG_FILE
 Sets the full path to the XLIO configuration file.
@@ -1007,11 +1007,6 @@ Default value is 0 (LWIP).
 XLIO_TCP_SEND_BUFFER_SIZE
 TCP send buffer size of LWIP.
 Default value is 1MB.
-
-XLIO_ZC_TX_SIZE
-Determines the maximum segment size for zero copy buffers.
-Maximum value is 65535.
-Default value is 32KB.
 
 XLIO_TCP_MAX_SYN_RATE
 Limit the number of TCP SYN packets that XLIO will handle
