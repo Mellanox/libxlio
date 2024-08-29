@@ -248,11 +248,13 @@ latency
     Example: XLIO_SPEC=latency
 
 ultra-latency
-    Optimized for use cases that are keen on latency even more. This mode uses singe threaded model, avoid OS polling and progress engine.
+    Optimized for use cases that are keen on latency even more. This mode uses
+    singe threaded model, avoid OS polling and progress engine.
     Example: XLIO_SPEC=ultra-latency
 
 nginx
-    Optimized for nginx. This profile must be used to offload nginx. This profile is turned indirectly by setting:
+    Optimized for nginx. This profile must be used to offload nginx. This profile
+    is turned indirectly by setting:
     XLIO_NGINX_WORKERS_NUM=<N> where N is the number of nginx workers.
 
 nginx_dpu
@@ -681,7 +683,8 @@ The size, in bytes, of each stride in a receive WQE. Must be power of two and in
 Default: 64
 
 XLIO_STRQ_STRIDES_COMPENSATION_LEVEL
-Number of spare stride objects a CQ holds to allow faster allocation of a stride object when a packet arrives.
+Number of spare stride objects a CQ holds to allow faster allocation of a stride object when
+a packet arrives.
 Default: 32768
 
 XLIO_SELECT_POLL
@@ -989,7 +992,8 @@ XLIO_MTU
 Size of each Rx and Tx data buffer (Maximum Transfer Unit).
 This value sets the fragmentation size of the packets sent by the library.
 If XLIO_MTU is 0 then for each interface XLIO will follow the actual MTU.
-If XLIO_MTU is greater than 0 then this MTU value is applicable to all interfaces regardless of their actual MTU
+If XLIO_MTU is greater than 0 then this MTU value is applicable to all
+interfaces regardless of their actual MTU
 Default value is 0 (following interface actual MTU)
 
 XLIO_MSS
