@@ -1150,7 +1150,7 @@ void mce_sys_var::get_env_params()
         stats_fd_num_max = (uint32_t)atoi(env_ptr);
         stats_fd_num_monitor = std::min(stats_fd_num_max, MAX_STATS_FD_NUM);
         if (stats_fd_num_max > MAX_STATS_FD_NUM) {
-            vlog_printf(VLOG_WARNING, " Can only monitor maximum %d sockets in statistics \n",
+            vlog_printf(VLOG_INFO, "xlio_stats monitoring will be limited by %d sockets\n",
                         MAX_STATS_FD_NUM);
         }
     }
