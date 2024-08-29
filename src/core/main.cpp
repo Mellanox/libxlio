@@ -272,8 +272,6 @@ static int free_libxlio_resources()
     vlog_stop();
 
     if (g_stats_file) {
-        // cosmetics - remove when adding iomux block
-        fprintf(g_stats_file, "======================================================\n");
         fclose(g_stats_file);
         g_stats_file = nullptr;
     }
@@ -1188,7 +1186,6 @@ void reset_globals()
     g_p_route_table_mgr = nullptr;
     g_bind_no_port = nullptr;
     g_p_rule_table_mgr = nullptr;
-    g_stats_file = nullptr;
     g_p_net_device_table_mgr = nullptr;
     g_p_neigh_table_mgr = nullptr;
     g_p_lwip = nullptr;
@@ -1288,19 +1285,7 @@ extern "C" int xlio_init(void)
     check_locked_mem();
     check_netperf_flags();
 
-    if (*safe_mce_sys().stats_filename) {
-        if (check_if_regular_file(safe_mce_sys().stats_filename)) {
-            vlog_printf(VLOG_WARNING,
-                        "FAILED to create " PRODUCT_NAME
-                        " statistics file. %s is not a regular file.\n",
-                        safe_mce_sys().stats_filename);
-        } else if (!(g_stats_file = fopen(safe_mce_sys().stats_filename, "w"))) {
-            vlog_printf(VLOG_WARNING, " Couldn't open statistics file: %s\n",
-                        safe_mce_sys().stats_filename);
-        }
-    }
-    safe_mce_sys().stats_file = g_stats_file;
-
+    open_stats_file();
     sock_redirect_main();
 
     return 0;
