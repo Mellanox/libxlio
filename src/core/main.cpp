@@ -628,6 +628,8 @@ void print_xlio_global_settings()
     VLOG_PARAM_NUMBER("Disable flow tag", safe_mce_sys().disable_flow_tag,
                       MCE_DEFAULT_DISABLE_FLOW_TAG, SYS_VAR_DISABLE_FLOW_TAG);
 
+    VLOG_PARAM_STRING("TCP 2T rules", safe_mce_sys().tcp_2t_rules, MCE_DEFAULT_TCP_2T_RULES,
+                      SYS_VAR_TCP_2T_RULES, safe_mce_sys().tcp_2t_rules ? "Enabled " : "Disabled");
     VLOG_PARAM_STRING("TCP 3T rules", safe_mce_sys().tcp_3t_rules, MCE_DEFAULT_TCP_3T_RULES,
                       SYS_VAR_TCP_3T_RULES, safe_mce_sys().tcp_3t_rules ? "Enabled " : "Disabled");
     VLOG_PARAM_STRING("UDP 3T rules", safe_mce_sys().udp_3t_rules, MCE_DEFAULT_UDP_3T_RULES,
