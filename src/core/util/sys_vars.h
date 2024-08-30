@@ -399,6 +399,7 @@ public:
     bool disable_flow_tag;
 
     bool enable_striding_rq;
+    bool tcp_2t_rules;
     bool tcp_3t_rules;
     bool udp_3t_rules;
     bool eth_mc_l2_only_rules;
@@ -596,6 +597,7 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_RX_CQ_DRAIN_RATE_NSEC         "XLIO_RX_CQ_DRAIN_RATE_NSEC"
 #define SYS_VAR_GRO_STREAMS_MAX               "XLIO_GRO_STREAMS_MAX"
 #define SYS_VAR_DISABLE_FLOW_TAG              "XLIO_DISABLE_FLOW_TAG"
+#define SYS_VAR_TCP_2T_RULES                  "XLIO_TCP_2T_RULES"
 #define SYS_VAR_TCP_3T_RULES                  "XLIO_TCP_3T_RULES"
 #define SYS_VAR_UDP_3T_RULES                  "XLIO_UDP_3T_RULES"
 #define SYS_VAR_ETH_MC_L2_ONLY_RULES          "XLIO_ETH_MC_L2_ONLY_RULES"
@@ -755,6 +757,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_RX_CQ_DRAIN_RATE              (MCE_RX_CQ_DRAIN_RATE_DISABLED)
 #define MCE_DEFAULT_GRO_STREAMS_MAX               (32)
 #define MCE_DEFAULT_DISABLE_FLOW_TAG              (false)
+#define MCE_DEFAULT_TCP_2T_RULES                  (false)
 #define MCE_DEFAULT_TCP_3T_RULES                  (false)
 #define MCE_DEFAULT_UDP_3T_RULES                  (true)
 #define MCE_DEFAULT_ETH_MC_L2_ONLY_RULES          (false)

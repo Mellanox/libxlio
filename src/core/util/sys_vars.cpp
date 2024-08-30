@@ -817,6 +817,7 @@ void mce_sys_var::get_env_params()
     gro_streams_max = MCE_DEFAULT_GRO_STREAMS_MAX;
     disable_flow_tag = MCE_DEFAULT_DISABLE_FLOW_TAG;
 
+    tcp_2t_rules = MCE_DEFAULT_TCP_2T_RULES;
     tcp_3t_rules = MCE_DEFAULT_TCP_3T_RULES;
     udp_3t_rules = MCE_DEFAULT_UDP_3T_RULES;
     eth_mc_l2_only_rules = MCE_DEFAULT_ETH_MC_L2_ONLY_RULES;
@@ -1357,6 +1358,9 @@ void mce_sys_var::get_env_params()
         gro_streams_max = std::max(atoi(env_ptr), 0);
     }
 
+    if ((env_ptr = getenv(SYS_VAR_TCP_2T_RULES))) {
+        tcp_2t_rules = atoi(env_ptr) ? true : false;
+    }
     if ((env_ptr = getenv(SYS_VAR_TCP_3T_RULES))) {
         tcp_3t_rules = atoi(env_ptr) ? true : false;
     }

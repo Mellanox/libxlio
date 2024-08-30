@@ -302,7 +302,10 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
         sock_addr rule_key(flow_spec_5t.get_family(), &flow_spec_5t.get_dst_ip(),
                            flow_spec_5t.get_dst_port());
         rfs_rule_filter *dst_port_filter = nullptr;
-        if (safe_mce_sys().tcp_3t_rules) {
+        if (safe_mce_sys().tcp_3t_rules || safe_mce_sys().tcp_2t_rules) {
+            if (safe_mce_sys().tcp_2t_rules) {
+                rule_key.set_in_port(0);
+            }
             auto dst_port_iter = m_ring.m_tcp_dst_port_attach_map.find(rule_key);
             if (dst_port_iter == m_ring.m_tcp_dst_port_attach_map.end()) {
                 m_ring.m_tcp_dst_port_attach_map[rule_key].counter = 1;
@@ -313,7 +316,8 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
         }
 
         if (flow_tag_id &&
-            (flow_spec_5t.is_3_tuple() || (!force_5t && safe_mce_sys().tcp_3t_rules))) {
+            (flow_spec_5t.is_3_tuple() || (!force_5t && safe_mce_sys().tcp_3t_rules) ||
+             safe_mce_sys().tcp_2t_rules)) {
             ring_logdbg("flow tag id = %d is disabled for socket fd = %d to be processed on RFS!",
                         flow_tag_id, si->get_fd());
             flow_tag_id = FLOW_TAG_MASK;
@@ -323,7 +327,12 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
         if (itr == end(m_flow_tcp_map)) {
             // It means that no rfs object exists so I need to create a new one and insert it to
             // the flow map
-            if (!force_5t && safe_mce_sys().tcp_3t_rules) {
+            if (safe_mce_sys().tcp_2t_rules) {
+                flow_tuple tcp_2t_only(flow_spec_5t.get_dst_ip(), 0, ip_address::any_addr(), 0,
+                                       flow_spec_5t.get_protocol(), flow_spec_5t.get_family());
+                dst_port_filter =
+                    new rfs_rule_filter(m_ring.m_tcp_dst_port_attach_map, rule_key, tcp_2t_only);
+            } else if (!force_5t && safe_mce_sys().tcp_3t_rules) {
                 flow_tuple tcp_3t_only(flow_spec_5t.get_dst_ip(), flow_spec_5t.get_dst_port(),
                                        ip_address::any_addr(), 0, flow_spec_5t.get_protocol(),
                                        flow_spec_5t.get_family());
@@ -484,7 +493,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::detach_flow(flow_tuple &flow_spec_5t, 
                       flow_spec_5t.get_dst_port(), flow_spec_5t.get_src_port());
         sock_addr rule_key(flow_spec_5t.get_family(), &flow_spec_5t.get_dst_ip(),
                            flow_spec_5t.get_dst_port());
-        if (safe_mce_sys().tcp_3t_rules) {
+        if (safe_mce_sys().tcp_3t_rules || safe_mce_sys().tcp_2t_rules) {
             auto dst_port_iter = m_ring.m_tcp_dst_port_attach_map.find(rule_key);
             BULLSEYE_EXCLUDE_BLOCK_START
             if (dst_port_iter == m_ring.m_tcp_dst_port_attach_map.end()) {

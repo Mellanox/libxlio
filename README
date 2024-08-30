@@ -112,6 +112,7 @@ Example:
  XLIO DETAILS: Rx Prefetch Bytes Before Poll  0                          [XLIO_RX_PREFETCH_BYTES_BEFORE_POLL]
  XLIO DETAILS: Rx CQ Drain Rate               Disabled                   [XLIO_RX_CQ_DRAIN_RATE_NSEC]
  XLIO DETAILS: GRO max streams                32                         [XLIO_GRO_STREAMS_MAX]
+ XLIO DETAILS: TCP 2T rules                   Disabled                   [XLIO_TCP_2T_RULES]
  XLIO DETAILS: TCP 3T rules                   Disabled                   [XLIO_TCP_3T_RULES]
  XLIO DETAILS: UDP 3T rules                   Enabled                    [XLIO_UDP_3T_RULES]
  XLIO DETAILS: ETH MC L2 only rules           Disabled                   [XLIO_ETH_MC_L2_ONLY_RULES]
@@ -620,6 +621,14 @@ XLIO_GRO_STREAMS_MAX
 Control the number of TCP streams to perform GRO (generic receive offload) simultaneously.
 Disable GRO with a value of 0.
 Default value is 32
+
+XLIO_TCP_2T_RULES
+Use only 2 tuple rules for TCP connections, instead of using 5 tuple rules.
+This can help to overcome steering limitations for outgoing TCP connections.
+However, this option requires a unique local IP address per XLIO ring. In
+the default ring per thread configuration, this means that each thread must
+bind its sockets to a thread local IP address.
+Default: 0 (Disabled)
 
 XLIO_TCP_3T_RULES
 Use only 3 tuple rules for incoming TCP connections, instead of using 5 tuple
