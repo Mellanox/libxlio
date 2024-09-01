@@ -1,3 +1,22 @@
+Merged Version 3.40.0-1:
+Date + Time 2024-09-01
+=============================================================
+Added:
+        - RM #3992651 Allow XLIO socket queue to grow for non-zc sends
+        - RM #3928453 XLIO_PRINT_REPORT prints report unconditionally
+        - RM #4019192 Always build TCP_OVERSIZE
+        - RM #4019192 Remove max_tcp_snd_queuelen
+        - RM #4019192 Refactor oversized pbufs feature
+
+Fixed:
+        - RM #3502635 Avoid epoll OS polling through internal thread
+        - RM #3857909 Fix iomux sleep without draining the CQ
+
+Removed:
+        - RM #3857909 Clean deprecated XLIO_RX_POLL_OS_RATIO XLIO_RX_SKIP_OS
+        - RM #3857909 Removing DEFINED_FORCE_TX_POLLING
+        - RM #3928006 Remove unused XLIO_BF
+
 Version 3.940.1-1:
 Date + Time 2024-08-25
 =============================================================
@@ -19,7 +38,7 @@ Added:
         - RM #3898156 Remove RX Zero Copy API
         - RM #3898040 DOCA RX data path with hw_queue_rx
 
-Version 3.31.2-1:
+Merged Version 3.31.2-1:
 Date + Time 2024-07-15
 =============================================================
 Added:
