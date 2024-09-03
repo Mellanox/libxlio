@@ -112,7 +112,7 @@ private:
 
     bool prepare_doca_rxq();
     void submit_rxq_tasks();
-    bool submit_rxq_task();
+    bool submit_rxq_task(uint32_t task_flag);
     bool fill_buffers_from_global_pool();
     void return_doca_buf(doca_buf *buf);
     void start_doca_rxq();

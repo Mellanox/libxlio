@@ -243,14 +243,19 @@ void hw_queue_rx::submit_rxq_tasks()
 {
     fill_buffers_from_global_pool();
 
-    while (m_rxq_task_debt > 0 && m_rx_pool.size()) {
-        if (unlikely(!submit_rxq_task())) {
-            break;
+    size_t batch_size = std::min(static_cast<size_t>(m_rxq_task_debt), m_rx_pool.size());
+    if (batch_size > 0) {
+        while (--batch_size > 0) {
+            if (unlikely(!submit_rxq_task(DOCA_TASK_SUBMIT_FLAG_NONE))) {
+                break;
+            }
         }
+
+        submit_rxq_task(DOCA_TASK_SUBMIT_FLAG_FLUSH);
     }
 }
 
-bool hw_queue_rx::submit_rxq_task()
+bool hw_queue_rx::submit_rxq_task(uint32_t task_flag)
 {
     doca_eth_rxq_task_recv *rx_doca_task = nullptr;
     doca_buf *rx_doca_buf = nullptr;
@@ -271,7 +276,7 @@ bool hw_queue_rx::submit_rxq_task()
     }
 
     --m_rxq_task_debt; // Must be set before return_doca_task()
-    rc = doca_task_submit(doca_eth_rxq_task_recv_as_doca_task(rx_doca_task));
+    rc = doca_task_submit_ex(doca_eth_rxq_task_recv_as_doca_task(rx_doca_task), task_flag);
     if (DOCA_IS_ERROR(rc)) {
         return_doca_task(rx_doca_task);
         PRINT_DOCA_ERR(hwqrx_logerr, rc, "doca_eth_rxq_task_recv_as_doca_task");
