@@ -35,7 +35,7 @@ general:
         - ".*src/core/config_parser.*"
         - ".*src/core/config_scanner\\.c"
 
-nbu-open-source:
+bsd:
     include:
         - ".*"
     exclude:
