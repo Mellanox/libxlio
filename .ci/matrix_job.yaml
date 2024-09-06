@@ -17,6 +17,7 @@ kubernetes:
 
 credentials:
   - {credentialsId: '925b0900-e273-4042-bc7c-facaefae0727', usernameVariable: 'XLIO_COV_USER', passwordVariable: 'XLIO_COV_PASSWORD'}
+  - {credentialsId: 'fb735938-fa1c-4b61-b568-a7c153b4fe74', usernameVariable: 'MELLANOX_GH_USER', passwordVariable: 'MELLANOX_GH_TOKEN'}
 
 volumes:
   - {mountPath: /hpc/local/bin, hostPath: /hpc/local/bin}
@@ -123,7 +124,8 @@ steps:
 
   - name: Copyrights
     enable: ${do_copyrights}
-    run: env WORKSPACE=$PWD ./contrib/jenkins_tests/copyrights.sh
+    credentialsId: 'fb735938-fa1c-4b61-b568-a7c153b4fe74'
+    run: env WORKSPACE=$PWD GITHUB_TOKEN=$MELLANOX_GH_TOKEN ./contrib/jenkins_tests/copyrights.sh
     containerSelector:
       - "{name: 'header-check', category: 'tool', variant: 1}"
     agentSelector:

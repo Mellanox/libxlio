@@ -12,7 +12,12 @@ if [ ! -d "$WORKSPACE" ]; then
     exit 1
 fi
 
-cpp_files='        "extensions": [".c", ".cc", ".cpp", "c++", ".h", ".hpp", ".cs", ".l", ".y"],'
+if [[ -z $GITHUB_TOKEN ]]; then
+    echo "ERROR: GITHUB_TOKEN variable is empty"
+    exit 1
+fi
+
+cpp_files='        "extensions": [".c", ".cc", ".cpp", "c++", ".h", ".hpp", ".cs", ".inl", ".l", ".y"],'
 sed -i "s/.*\"extensions\": \[\"\.c\".*/$cpp_files/g" /opt/nvidia/ProjectConfig/header-types.json
 
 cat /opt/nvidia/ProjectConfig/header-types.json
