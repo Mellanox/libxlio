@@ -796,11 +796,11 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_CQ_AIM_MAX_PERIOD_USEC         (1000)
 #define MCE_DEFAULT_CQ_AIM_INTERVAL_MSEC           (1000)
 #define MCE_DEFAULT_CQ_AIM_INTERRUPTS_RATE_PER_SEC (1000)
-#define MCE_DEFAULT_CQ_POLL_BATCH                  (128)
-#define MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC  (0)
+#define MCE_DEFAULT_CQ_POLL_BATCH                  (1024)
+#define MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC  (10)
 #define MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX        (10000)
 #define MCE_DEFAULT_CQ_KEEP_QP_FULL                (true)
-#define MCE_DEFAULT_QP_COMPENSATION_LEVEL          (256)
+#define MCE_DEFAULT_QP_COMPENSATION_LEVEL          (1024)
 #define MCE_DEFAULT_USER_HUGE_PAGE_SIZE            (2 * 1024 * 1024)
 #define MCE_DEFAULT_INTERNAL_THREAD_ARM_CQ_ENABLED (false)
 #define MCE_DEFAULT_QP_FORCE_MC_ATTACH             (false)
@@ -857,16 +857,16 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_CQ_ADAPTIVE_MODERATION_DISABLED (0)
 #define MCE_MIN_CQ_POLL_BATCH               (1)
 #define MCE_MAX_CQ_POLL_BATCH               (32768)
-#define MCE_DEFAULT_TSO                     (option_3::AUTO)
+#define MCE_DEFAULT_TSO                     (option_3::ON)
 #define MCE_DEFAULT_MAX_TSO_SIZE            (256 * 1024)
 #ifdef DEFINED_UTLS
 #define MCE_DEFAULT_UTLS_RX                        (false)
-#define MCE_DEFAULT_UTLS_TX                        (true)
+#define MCE_DEFAULT_UTLS_TX                        (false)
 #define MCE_DEFAULT_UTLS_HIGH_WMARK_DEK_CACHE_SIZE (1024)
 #define MCE_DEFAULT_UTLS_LOW_WMARK_DEK_CACHE_SIZE  (512)
 #endif /* DEFINED_UTLS */
 
-#define MCE_DEFAULT_LRO                            (option_3::AUTO)
+#define MCE_DEFAULT_LRO                            (option_3::OFF)
 #define MCE_DEFAULT_DEFERRED_CLOSE                 (false)
 #define MCE_DEFAULT_TCP_ABORT_ON_CLOSE             (false)
 #define MCE_DEFAULT_RX_POLL_ON_TX_TCP              (false)
@@ -875,6 +875,8 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_ALIGNMENT                              ((unsigned long)63)
 #define MCE_DEFAULT_SKIP_POLL_IN_RX                (SKIP_POLL_IN_RX_DISABLE)
 #define MCE_DEFAULT_MULTILOCK                      (MULTILOCK_SPIN)
+#define MCE_DEFAULT_DOCA_RX                        (true)
+#define MCE_DEFAULT_DOCA_TX                        (true)
 
 /*
  * This block consists of auxiliary constants

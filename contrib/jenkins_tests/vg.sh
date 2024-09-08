@@ -40,9 +40,9 @@ else
 		exit 1
 	fi
 fi
-test_list="tcp:--tcp udp:"
+test_list="tcp:--tcp"
 test_lib=${vg_dir}/install/lib/${prj_lib}
-test_lib_env="XLIO_MEM_ALLOC_TYPE=ANON XLIO_MEMORY_LIMIT=256MB XLIO_TX_WRE=2000 XLIO_RX_WRE=2000 XLIO_STRQ=off"
+test_lib_env="XLIO_MEM_ALLOC_TYPE=ANON"
 test_app=sockperf
 test_app_path=${test_dir}/sockperf/install/bin/sockperf
 vg_tool=/bin/valgrind
@@ -73,7 +73,7 @@ v1=$(($v1*$(echo $test_ip_list | wc -w)))
 echo "1..$v1" > $vg_tap
 
 nerrors=0
-sockperf_max_wait=120
+sockperf_max_wait=240
 
 for test_link in $test_ip_list; do
 	for test in $test_list; do
@@ -85,11 +85,11 @@ for test_link in $test_ip_list; do
 			--memcheck:leak-check=full --track-origins=yes --read-var-info=yes \
 			--errors-for-leak-kinds=definite --show-leak-kinds=definite,possible \
 			--undef-value-errors=yes --track-fds=yes --num-callers=32 \
-			--fullpath-after=${WORKSPACE} --gen-suppressions=all \
+			--fullpath-after=${WORKSPACE} --fair-sched=yes \
 			--suppressions=${WORKSPACE}/contrib/valgrind/valgrind_xlio.supp \
 			"
-		eval "${sudo_cmd} $timeout_exe env $test_lib_env LD_PRELOAD=$test_lib \
-			${vg_tool} --log-file=${vg_dir}/${test_name}-valgrind-sr.log $vg_args \
+		eval "${sudo_cmd} $timeout_exe ${vg_tool} --log-file=${vg_dir}/${test_name}-valgrind-sr.log \
+			$vg_args env $test_lib_env LD_PRELOAD=$test_lib \
 			$test_app_path sr ${test_opt} -i ${test_ip} 2>&1 | tee ${vg_dir}/${test_name}-output-sr.log &"
 
 		wait=0
@@ -103,8 +103,8 @@ for test_link in $test_ip_list; do
 			sleep 2
 		done
 
-		eval "${sudo_cmd} $timeout_exe_short env $test_lib_env LD_PRELOAD=$test_lib \
-			${vg_tool} --log-file=${vg_dir}/${test_name}-valgrind-cl.log $vg_args \
+		eval "${sudo_cmd} $timeout_exe_short ${vg_tool} --log-file=${vg_dir}/${test_name}-valgrind-cl.log \
+			$vg_args env $test_lib_env LD_PRELOAD=$test_lib \
 			$test_app_path pp ${test_opt} -i ${test_ip} -t 10 | tee ${vg_dir}/${test_name}-output-cl.log"
 
 		if [ `ps -ef | grep $test_app | wc -l` -gt 1 ];

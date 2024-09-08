@@ -331,10 +331,6 @@ do_compile_doca()
         pushd "$doca_sdk" || exit 1
     fi
 
-    # Patch from Alex Grissik, solving the "Multiprocess is not supported" in DOCA (DPDK)
-    wget https://github.com/Mellanox/libxlio/files/15446734/0001-TEMP-Enable-Multiprocess-DPDK.patch
-    git apply 0001-TEMP-Enable-Multiprocess-DPDK.patch
-
     # Patch from Iftah Levi, solving the "Suspend/Resume PE functionallity" in DOCA
     wget https://github.com/user-attachments/files/16740209/0001-Disable-suspend-during-epoll.patch
     git apply 0001-Disable-suspend-during-epoll.patch
