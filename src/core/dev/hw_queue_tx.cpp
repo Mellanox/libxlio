@@ -2139,7 +2139,8 @@ get_first_buf:
             return_doca_buf(tx_doca_buf);
             return 0;
         }
-        doca_buf_chain_list(prev_doca_buf, next_doca_buf);
+
+        doca_buf_chain_list_tail(tx_doca_buf, prev_doca_buf, next_doca_buf);
         prev_doca_buf = next_doca_buf;
         p = p->next;
     }
