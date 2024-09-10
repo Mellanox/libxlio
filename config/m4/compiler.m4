@@ -162,4 +162,31 @@ else
     AC_MSG_CHECKING([for symbols visibility])
     AC_MSG_RESULT([yes])
 fi
+
+AC_MSG_CHECKING([for AddressSanitizer])
+AC_ARG_ENABLE(sanitizer, AS_HELP_STRING([--enable-sanitizer], [Enable AddressSanitizer]),
+	 [
+		enable_sanitizer=$enableval
+	 ], [enable_sanitizer=no])
+
+AS_IF([test "x$enable_sanitizer" = "xyes"],
+	  [
+		case $CC in
+			gcc*|g++*)
+				AC_SUBST([XLIO_SANITIZE], ["-fsanitize=address"])
+				;;
+			clang*|clang++*)
+				AC_SUBST([XLIO_SANITIZE], ["-fsanitize=address"])
+				;;
+			*)
+				AC_MSG_ERROR([Compiler doesn't support AddressSanitizer])
+				;;
+		esac
+		AC_MSG_RESULT([yes])
+	  ],
+	  [
+		AC_SUBST([XLIO_SANITIZE], [""])
+		AC_MSG_RESULT([no])
+	  ]
+)
 ])
