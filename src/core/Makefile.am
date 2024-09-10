@@ -49,10 +49,10 @@ lib_LTLIBRARIES = libxlio.la
 AM_CPPFLAGS := \
 	-I$(top_srcdir)/src ${LIBNL_CFLAGS}
 
-libxlio_la_CFLAGS = $(XLIO_STATIC_BUILD) $(XLIO_LTO) $(XLIO_PROFILE)
-libxlio_la_CXXFLAGS = $(XLIO_STATIC_BUILD) $(XLIO_LTO) $(XLIO_PROFILE)
+libxlio_la_CFLAGS = $(XLIO_STATIC_BUILD) $(XLIO_LTO) $(XLIO_PROFILE) $(XLIO_SANITIZE)
+libxlio_la_CXXFLAGS = $(XLIO_STATIC_BUILD) $(XLIO_LTO) $(XLIO_PROFILE) $(XLIO_SANITIZE)
 
-libxlio_la_LDFLAGS := $(XLIO_LTO) $(XLIO_PROFILE) -no-undefined \
+libxlio_la_LDFLAGS := $(XLIO_LTO) $(XLIO_PROFILE) $(XLIO_SANITIZE) -no-undefined \
 	-version-number @PRJ_LIBRARY_MAJOR@:@PRJ_LIBRARY_MINOR@:@PRJ_LIBRARY_REVISION@
 
 libxlio_la_LIBADD = \

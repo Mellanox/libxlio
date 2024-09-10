@@ -175,7 +175,7 @@ ring_simple::~ring_simple()
         }
     }
 
-    if (!safe_mce_sys().doca_rx && m_p_rx_comp_event_channel) {
+    if (m_p_rx_comp_event_channel) {
         IF_VERBS_FAILURE(ibv_destroy_comp_channel(m_p_rx_comp_event_channel))
         {
             ring_logdbg("destroy comp channel failed (errno=%d %m)", errno);
