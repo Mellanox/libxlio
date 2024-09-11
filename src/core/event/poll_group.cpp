@@ -120,7 +120,7 @@ void poll_group::destroy_all_groups()
 void poll_group::poll()
 {
     for (ring *rng : m_rings) {
-        uint64_t sn;
+        uint64_t sn = 0;
         rng->poll_and_process_element_tx(&sn);
         sn = 0;
         rng->poll_and_process_element_rx(&sn);
