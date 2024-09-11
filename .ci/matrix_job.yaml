@@ -4,7 +4,7 @@ job: LIBXLIO
 step_allow_single_selector: false
 
 registry_host: harbor.mellanox.com
-registry_auth: 1daaea28-800e-425f-a91f-3bd3e9136eea
+registry_auth: swx-infra_harbor_credentials
 registry_path: /swx-infra/media
 
 kubernetes:
@@ -16,8 +16,8 @@ kubernetes:
   requests: '{memory: 8Gi, cpu: 7000m}'
 
 credentials:
-  - {credentialsId: '925b0900-e273-4042-bc7c-facaefae0727', usernameVariable: 'XLIO_COV_USER', passwordVariable: 'XLIO_COV_PASSWORD'}
-  - {credentialsId: 'fb735938-fa1c-4b61-b568-a7c153b4fe74', usernameVariable: 'MELLANOX_GH_USER', passwordVariable: 'MELLANOX_GH_TOKEN'}
+  - {credentialsId: 'media_coverity_credentials', usernameVariable: 'XLIO_COV_USER', passwordVariable: 'XLIO_COV_PASSWORD'}
+  - {credentialsId: 'mellanox_github_credentials', usernameVariable: 'MELLANOX_GH_USER', passwordVariable: 'MELLANOX_GH_TOKEN'}
 
 volumes:
   - {mountPath: /hpc/local/bin, hostPath: /hpc/local/bin}
@@ -124,7 +124,7 @@ steps:
 
   - name: Copyrights
     enable: ${do_copyrights}
-    credentialsId: 'fb735938-fa1c-4b61-b568-a7c153b4fe74'
+    credentialsId: 'mellanox_github_credentials'
     run: env WORKSPACE=$PWD GITHUB_TOKEN=$MELLANOX_GH_TOKEN ./contrib/jenkins_tests/copyrights.sh
     containerSelector:
       - "{name: 'header-check', category: 'tool', variant: 1}"
@@ -225,7 +225,7 @@ steps:
 
   - name: Coverity
     enable: ${do_coverity}
-    credentialsId: '925b0900-e273-4042-bc7c-facaefae0727'
+    credentialsId: 'media_coverity_credentials'
     containerSelector:
       - "{name: 'toolbox', category: 'tool'}"
     agentSelector:
@@ -360,7 +360,7 @@ steps:
       reportName: "BlackDuck report"
       scanMode: "source"
       skipDockerDaemonCheck: true
-      credentialsId: "b68aedbd-e39f-4ee2-acce-e25a5b91fe18"
+      credentialsId: "swx-jenkins3-svc_git-nbu_token"
     env:
       SPRING_APPLICATION_JSON: '{"blackduck.url":"https://blackduck.mellanox.com/","blackduck.api.token":"ODMwOWYwMzEtODA2ZC00MzBjLWI1ZDEtNmFiMjBkYzQzMzkwOjNmNjExN2M1LWE2ZmEtNDZlYS1hZjRiLTZlNDgwNjAwOTVjNw=="}'
 
