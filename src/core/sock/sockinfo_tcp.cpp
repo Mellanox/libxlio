@@ -403,6 +403,14 @@ void sockinfo_tcp::rx_add_ring_cb(ring *p_ring)
 
 void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
 {
+    if (m_rx_epfd != -1) {
+        // XLIO Socket API doesn't use per socket epfd
+        // Closing it here leads to 2 extra syscalls per connection
+        m_sock_wakeup_pipe.wakeup_set_epoll_fd(0);
+        SYSCALL(close, m_rx_epfd);
+        m_rx_epfd = -1;
+    }
+
     m_xlio_socket_userdata = attr->userdata_sq;
     m_p_group = reinterpret_cast<poll_group *>(attr->group);
 
@@ -3029,7 +3037,6 @@ int sockinfo_tcp::listen(int backlog)
 
     // Calling to orig_listen() by default to monitor connection requests for not offloaded
     // sockets
-    BULLSEYE_EXCLUDE_BLOCK_START
     if (SYSCALL(listen, m_fd, orig_backlog)) {
         // NOTE: The attach_as_uc_receiver at this stage already created steering rules.
         // Packets may arrive into the queues and the application may theoreticaly
@@ -3038,25 +3045,24 @@ int sockinfo_tcp::listen(int backlog)
         unlock_tcp_con();
         return -1;
     }
-    BULLSEYE_EXCLUDE_BLOCK_END
 
-    // Add the user's orig fd to the rx epfd handle
-    epoll_event ev = {0, {nullptr}};
-    ev.events = EPOLLIN;
-    ev.data.fd = m_fd;
-    int ret = SYSCALL(epoll_ctl, m_rx_epfd, EPOLL_CTL_ADD, ev.data.fd, &ev);
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (unlikely(ret)) {
-        if (errno == EEXIST) {
-            si_tcp_logdbg("failed to add user's fd to internal epfd errno=%d (%m)", errno);
-        } else {
-            si_tcp_logerr("failed to add user's fd to internal epfd errno=%d (%m)", errno);
-            destructor_helper_tcp();
-            passthrough_unlock("Fallback the connection to os");
-            return 0;
+    if (m_rx_epfd != -1) {
+        // Add the user's orig fd to the rx epfd handle
+        epoll_event ev = {0, {nullptr}};
+        ev.events = EPOLLIN;
+        ev.data.fd = m_fd;
+        int ret = SYSCALL(epoll_ctl, m_rx_epfd, EPOLL_CTL_ADD, ev.data.fd, &ev);
+        if (unlikely(ret)) {
+            if (errno == EEXIST) {
+                si_tcp_logdbg("failed to add user's fd to internal epfd errno=%d (%m)", errno);
+            } else {
+                si_tcp_logerr("failed to add user's fd to internal epfd errno=%d (%m)", errno);
+                destructor_helper_tcp();
+                passthrough_unlock("Fallback the connection to os");
+                return 0;
+            }
         }
     }
-    BULLSEYE_EXCLUDE_BLOCK_END
 
     if (tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)) {
         g_p_event_handler_manager->register_socket_timer_event(this);

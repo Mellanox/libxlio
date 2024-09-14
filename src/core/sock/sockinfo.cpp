@@ -150,8 +150,10 @@ sockinfo::~sockinfo()
 
     // Change to non-blocking socket so calling threads can exit
     m_b_blocking = false;
-    // This will wake up any blocked thread in rx() call to SYSCALL(epoll_wait, )
-    SYSCALL(close, m_rx_epfd);
+    if (m_rx_epfd != -1) {
+        // This will wake up any blocked thread in rx() call to SYSCALL(epoll_wait, )
+        SYSCALL(close, m_rx_epfd);
+    }
 
     while (!m_error_queue.empty()) {
         mem_buf_desc_t *buff = m_error_queue.get_and_pop_front();
@@ -1548,6 +1550,10 @@ int sockinfo::os_epoll_wait(epoll_event *ep_events, int maxevents)
 // this new fd)
 void sockinfo::add_cqfd_to_sock_rx_epfd(ring *p_ring)
 {
+    if (unlikely(m_rx_epfd == -1)) {
+        return;
+    }
+
     epoll_event ev = {0, {nullptr}};
     ev.events = EPOLLIN;
     size_t num_ring_rx_fds;
@@ -1556,28 +1562,28 @@ void sockinfo::add_cqfd_to_sock_rx_epfd(ring *p_ring)
     for (size_t i = 0; i < num_ring_rx_fds; i++) {
         ev.data.fd = ring_rx_fds_array[i];
 
-        BULLSEYE_EXCLUDE_BLOCK_START
         if (unlikely(SYSCALL(epoll_ctl, m_rx_epfd, EPOLL_CTL_ADD, ev.data.fd, &ev))) {
             si_logerr("failed to add cq channel fd to internal epfd errno=%d (%m)", errno);
         }
-        BULLSEYE_EXCLUDE_BLOCK_END
     }
 }
 
 void sockinfo::remove_cqfd_from_sock_rx_epfd(ring *base_ring)
 {
+    if (unlikely(m_rx_epfd == -1)) {
+        return;
+    }
+
     size_t num_ring_rx_fds;
     int *ring_rx_fds_array = base_ring->get_rx_channel_fds(num_ring_rx_fds);
 
     for (size_t i = 0; i < num_ring_rx_fds; i++) {
-        BULLSEYE_EXCLUDE_BLOCK_START
         if (unlikely(
                 (SYSCALL(epoll_ctl, m_rx_epfd, EPOLL_CTL_DEL, ring_rx_fds_array[i], nullptr)) &&
                 (!(errno == ENOENT || errno == EBADF)))) {
             si_logerr("failed to delete cq channel fd from internal epfd (errno=%d %s)", errno,
                       strerror(errno));
         }
-        BULLSEYE_EXCLUDE_BLOCK_END
     }
 }
 
