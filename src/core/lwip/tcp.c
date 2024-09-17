@@ -321,7 +321,7 @@ void tcp_abandon(struct tcp_pcb *pcb, int reset)
     if (get_tcp_state(pcb) == TIME_WAIT) {
         tcp_pcb_remove(pcb);
     } else {
-        int send_rst = reset && (get_tcp_state(pcb) != CLOSED);
+        int send_rst = reset && (get_tcp_state(pcb) != CLOSED) && (get_tcp_state(pcb) != SYN_RCVD);
         void *errf_arg = pcb->my_container;
         tcp_err_fn errf = pcb->errf;
 
