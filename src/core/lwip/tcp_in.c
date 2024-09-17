@@ -189,9 +189,10 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb)
                     /* TF_RESET means that the connection was reset by the other
                        end. We then call the error callback to inform the
                        application that the connection is dead before we
-                       deallocate the PCB. */
-                    tcp_pcb_remove(pcb);
+                       deallocate the PCB.
+                       Error callback will trigger event only if pcb is active. */
                     TCP_EVENT_ERR(pcb->errf, pcb->my_container, ERR_RST);
+                    tcp_pcb_remove(pcb);
                 } else if (in_data.recv_flags & TF_CLOSED) {
                     /* The connection has been closed and we will deallocate the
                        PCB. */
