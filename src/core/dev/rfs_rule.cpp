@@ -56,9 +56,8 @@ rfs_rule::~rfs_rule()
     }
 }
 
-bool rfs_rule::create(doca_flow_match &match_val, doca_flow_match &match_msk, uint16_t rx_queue_id,
-                      dpcp::match_params &match_value, dpcp::match_params &match_mask,
-                      dpcp::tir &in_tir, uint16_t priority, uint32_t flow_tag,
+bool rfs_rule::create(doca_flow_match &match_value, doca_flow_match &match_mask,
+                      uint16_t rx_queue_id, uint16_t priority, uint32_t flow_tag,
                       ib_ctx_handler &in_dev)
 {
     doca_flow_pipe *root_pipe = in_dev.get_doca_root_pipe();
@@ -66,6 +65,84 @@ bool rfs_rule::create(doca_flow_match &match_val, doca_flow_match &match_msk, ui
         return false;
     }
 
+    rfs_logdbg("Creating flow dpcp_adpater::create_flow_rule(), priority %" PRIu16
+               ", flow_tag: %" PRIu32,
+               priority, flow_tag);
+    rfs_logdbg("match_mask:\n"
+               "ethertype: 0x%04" PRIx16 ", vlan_id: 0x%04" PRIx16 ", l2_valid_header: 0x%02" PRIx16
+               ", protocol: 0x%04" PRIx32 ", ip_version: 0x%04" PRIx32 "\n"
+               "dst_port: 0x%04" PRIx16 ", src_ports: 0x%04" PRIx16 "\n"
+               "src_ip: ipv4: 0x%08" PRIx32 ", ipv6: 0x%016" PRIx64 "%016" PRIx64 "\n"
+               "dst_ip: ipv4: 0x%08" PRIx32 ", ipv6: 0x%016" PRIx64 "%016" PRIx64 "\n"
+               "dst_mac: 0x%02" PRIu8 "%02" PRIu8 "%02" PRIu8 "%02" PRIu8 "%02" PRIu8 "%02" PRIu8,
+               match_mask.outer.eth.type, match_mask.outer.eth_vlan[0].tci,
+               match_mask.outer.l2_valid_headers, static_cast<int>(match_mask.outer.l4_type_ext),
+               static_cast<int>(match_mask.outer.l3_type), match_mask.outer.transport.dst_port,
+               match_mask.outer.transport.src_port, match_mask.outer.ip4.src_ip,
+               *reinterpret_cast<uint64_t *>(match_mask.outer.ip6.src_ip + 2),
+               *reinterpret_cast<uint64_t *>(match_mask.outer.ip6.src_ip + (0 / 1)),
+               match_mask.outer.ip4.dst_ip,
+               *reinterpret_cast<uint64_t *>(match_mask.outer.ip6.dst_ip + 2),
+               *reinterpret_cast<uint64_t *>(match_mask.outer.ip6.dst_ip + (0 / 1)),
+               match_mask.outer.eth.dst_mac[0], match_mask.outer.eth.dst_mac[1],
+               match_mask.outer.eth.dst_mac[2], match_mask.outer.eth.dst_mac[3],
+               match_mask.outer.eth.dst_mac[4], match_mask.outer.eth.dst_mac[5]);
+    rfs_logdbg("match_value:\n"
+               "ethertype: 0x%04" PRIx16 ", vlan_id: 0x%04" PRIu16 ", l2_valid_header: 0x%02" PRIx16
+               ", protocol: 0x%04" PRIu8 ", ip_version: 0x%04" PRIu32 "\n"
+               "dst_port: %" PRIu16 ", src_ports: %" PRIu16 "\n"
+               "src_ip: ipv4: 0x%08" PRIx32 ", ipv6: 0x%016" PRIx64 "%016" PRIx64 "\n"
+               "dst_ip: ipv4: 0x%08" PRIx32 ", ipv6: 0x%016" PRIx64 "%016" PRIx64 "\n"
+               "dst_mac: 0x%02" PRIu8 "%02" PRIu8 "%02" PRIu8 "%02" PRIu8 "%02" PRIu8 "%02" PRIu8,
+               match_value.outer.eth.type, match_value.outer.eth_vlan[0].tci,
+               match_value.outer.l2_valid_headers, static_cast<int>(match_value.outer.l4_type_ext),
+               static_cast<int>(match_value.outer.l3_type), match_value.outer.transport.dst_port,
+               match_value.outer.transport.src_port, match_value.outer.ip4.src_ip,
+               *reinterpret_cast<uint64_t *>(match_value.outer.ip6.src_ip + 2),
+               *reinterpret_cast<uint64_t *>(match_value.outer.ip6.src_ip + (0 / 1)),
+               match_value.outer.ip4.dst_ip,
+               *reinterpret_cast<uint64_t *>(match_value.outer.ip6.dst_ip + 2),
+               *reinterpret_cast<uint64_t *>(match_value.outer.ip6.dst_ip + (0 / 1)),
+               match_value.outer.eth.dst_mac[0], match_value.outer.eth.dst_mac[1],
+               match_value.outer.eth.dst_mac[2], match_value.outer.eth.dst_mac[3],
+               match_value.outer.eth.dst_mac[4], match_value.outer.eth.dst_mac[5]);
+
+    doca_flow_fwd all_fwd;
+    memset(&all_fwd, 0, sizeof(all_fwd));
+    all_fwd.type = DOCA_FLOW_FWD_RSS;
+    all_fwd.num_of_queues = 1;
+    all_fwd.rss_queues = &rx_queue_id;
+    all_fwd.rss_outer_flags =
+        (match_value.outer.l3_type == DOCA_FLOW_L3_TYPE_IP4 ? DOCA_FLOW_RSS_IPV4
+                                                            : DOCA_FLOW_RSS_IPV6);
+    all_fwd.rss_outer_flags |=
+        (match_value.outer.l4_type_ext == DOCA_FLOW_L4_TYPE_EXT_TCP ? DOCA_FLOW_RSS_TCP
+                                                                    : DOCA_FLOW_RSS_UDP);
+
+    doca_error_t rc = doca_flow_pipe_control_add_entry(
+        0, priority, root_pipe, &match_value, &match_mask, nullptr, nullptr, nullptr, nullptr,
+        nullptr, &all_fwd, nullptr, &m_doca_flow_entry);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(rfs_logerr, rc, "doca_flow_pipe_control_add_entry root_pipe: %p", root_pipe);
+        return false;
+    }
+
+    rc = doca_flow_entries_process(in_dev.get_doca_flow_port(), 0, 60000U, 2U);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(rfs_logerr, rc, "doca_flow_pipe_control_add_entry port/root_pipe: %p,%p",
+                       in_dev.get_doca_flow_port(), root_pipe);
+        return false;
+    }
+
+    rfs_logdbg("DOCA Flow Entry added (%p)", m_doca_flow_entry);
+
+    return true;
+}
+
+bool rfs_rule::create_dpcp(dpcp::match_params &match_value, dpcp::match_params &match_mask,
+                           dpcp::tir &in_tir, uint16_t priority, uint32_t flow_tag,
+                           ib_ctx_handler &in_dev)
+{
     dpcp::adapter &in_adapter = *in_dev.get_dpcp_adapter();
 
     rfs_logdbg("Creating flow dpcp_adpater::create_flow_rule(), priority %" PRIu16
@@ -99,41 +176,6 @@ bool rfs_rule::create(doca_flow_match &match_val, doca_flow_match &match_msk, ui
                *reinterpret_cast<uint64_t *>(match_value.dst.ipv6 + 8),
                *reinterpret_cast<uint64_t *>(match_value.dst.ipv6),
                *reinterpret_cast<uint64_t *>(match_value.dst_mac));
-
-    if (safe_mce_sys().doca_rx) { // Temporary check
-        NOT_IN_USE(match_val);
-        NOT_IN_USE(match_msk);
-        NOT_IN_USE(rx_queue_id);
-        doca_flow_fwd all_fwd;
-        memset(&all_fwd, 0, sizeof(all_fwd));
-        all_fwd.type = DOCA_FLOW_FWD_RSS;
-        all_fwd.num_of_queues = 1;
-        all_fwd.rss_queues = &rx_queue_id;
-        all_fwd.rss_outer_flags =
-            (match_value.ip_version = 4U ? DOCA_FLOW_RSS_IPV4 : DOCA_FLOW_RSS_IPV6);
-        all_fwd.rss_outer_flags |=
-            (match_value.protocol == IPPROTO_TCP ? DOCA_FLOW_RSS_TCP : DOCA_FLOW_RSS_UDP);
-
-        doca_error_t rc = doca_flow_pipe_control_add_entry(
-            0, priority, root_pipe, &match_val, &match_msk, nullptr, nullptr, nullptr, nullptr,
-            nullptr, &all_fwd, nullptr, &m_doca_flow_entry);
-        if (DOCA_IS_ERROR(rc)) {
-            PRINT_DOCA_ERR(rfs_logerr, rc, "doca_flow_pipe_control_add_entry root_pipe: %p",
-                           root_pipe);
-            return false;
-        }
-
-        rc = doca_flow_entries_process(in_dev.get_doca_flow_port(), 0, 60000U, 2U);
-        if (DOCA_IS_ERROR(rc)) {
-            PRINT_DOCA_ERR(rfs_logerr, rc, "doca_flow_pipe_control_add_entry port/root_pipe: %p,%p",
-                           in_dev.get_doca_flow_port(), root_pipe);
-            return false;
-        }
-
-        rfs_logdbg("DOCA Flow Entry added (%p)", m_doca_flow_entry);
-
-        return true; // [Temp] SKIP DPCP Rule.
-    }
 
     dpcp::flow_rule *new_rule = nullptr;
     dpcp::status status_out = in_adapter.create_flow_rule(priority, match_mask, new_rule);
