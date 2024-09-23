@@ -1025,15 +1025,13 @@ ring *net_device_val::reserve_ring(resource_allocation_key *key)
         m_h_ring_map[new_key] = std::make_pair(the_ring, 0); // each ring is born with ref_count = 0
         ring_iter = m_h_ring_map.find(new_key);
         epoll_event ev = {0, {nullptr}};
-        size_t num_ring_rx_fds;
-        int *ring_rx_fds_array = the_ring->get_rx_channel_fds(num_ring_rx_fds);
+        size_t num_ring_rx_fds = the_ring->get_rx_channels_num();
         ev.events = EPOLLIN;
         for (size_t i = 0; i < num_ring_rx_fds; i++) {
-            int cq_ch_fd = ring_rx_fds_array[i];
-            ev.data.fd = cq_ch_fd;
+            ev.data.fd = the_ring->get_rx_channel_fd(i);
             BULLSEYE_EXCLUDE_BLOCK_START
             if (unlikely(SYSCALL(epoll_ctl, g_p_net_device_table_mgr->global_ring_epfd_get(),
-                                 EPOLL_CTL_ADD, cq_ch_fd, &ev))) {
+                                 EPOLL_CTL_ADD, ev.data.fd, &ev))) {
                 nd_logerr(
                     "Failed to add RING notification fd to global_table_mgr_epfd (errno=%d %s)",
                     errno, strerror(errno));
@@ -1076,17 +1074,16 @@ int net_device_val::release_ring(resource_allocation_key *key)
                   the_ring->get_parent(), RING_REF_CNT, red_key->to_str().c_str());
 
         if (TEST_REF_CNT_ZERO) {
-            size_t num_ring_rx_fds;
-            int *ring_rx_fds_array = the_ring->get_rx_channel_fds(num_ring_rx_fds);
             nd_logdbg("Deleting RING %p for key %s and removing notification fd from "
                       "global_table_mgr_epfd (epfd=%d)",
                       the_ring, red_key->to_str().c_str(),
                       g_p_net_device_table_mgr->global_ring_epfd_get());
+
+            size_t num_ring_rx_fds = the_ring->get_rx_channels_num();
             for (size_t i = 0; i < num_ring_rx_fds; i++) {
-                int cq_ch_fd = ring_rx_fds_array[i];
                 BULLSEYE_EXCLUDE_BLOCK_START
                 if (unlikely((SYSCALL(epoll_ctl, g_p_net_device_table_mgr->global_ring_epfd_get(),
-                                      EPOLL_CTL_DEL, cq_ch_fd, nullptr)) &&
+                                      EPOLL_CTL_DEL, the_ring->get_rx_channel_fd(i), nullptr)) &&
                              (!(errno == ENOENT || errno == EBADF)))) {
                     nd_logerr("Failed to delete RING notification fd to global_table_mgr_epfd "
                               "(errno=%d %s)",

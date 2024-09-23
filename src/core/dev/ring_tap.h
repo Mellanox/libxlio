@@ -49,6 +49,8 @@ public:
     virtual int poll_and_process_element_tx() { return 0; }
     virtual void clear_rx_notification() {};
     virtual int drain_and_proccess();
+    virtual size_t get_rx_channels_num() const { return 1U; };
+    virtual int get_rx_channel_fd(size_t ch_idx) const;
     virtual bool reclaim_recv_buffers(descq_t *rx_reuse);
     virtual bool reclaim_recv_buffers(mem_buf_desc_t *buff);
     virtual void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,

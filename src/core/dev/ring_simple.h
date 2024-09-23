@@ -105,6 +105,8 @@ public:
         m_p_ib_ctx->convert_hw_time_to_system_time(hwtime, systime);
     }
     int modify_ratelimit(struct xlio_rate_limit_t &rate_limit) override;
+    size_t get_rx_channels_num() const override { return 1U; };
+    int get_rx_channel_fd(size_t ch_idx) const override;
     int get_tx_channel_fd() const override
     {
         return m_p_tx_comp_event_channel ? m_p_tx_comp_event_channel->fd : -1;

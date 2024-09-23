@@ -97,11 +97,8 @@ public:
     virtual uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, bool is_zerocopy) = 0;
 
     virtual int get_num_resources() const = 0;
-    virtual int *get_rx_channel_fds(size_t &length) const
-    {
-        length = 1;
-        return m_p_n_rx_channel_fds;
-    }
+    virtual size_t get_rx_channels_num() const = 0;
+    virtual int get_rx_channel_fd(size_t ch_idx) const = 0;
     virtual int get_tx_channel_fd() const { return -1; }
     virtual bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe) = 0;
     virtual bool request_notification(cq_type_t cq_type) = 0;
@@ -253,7 +250,6 @@ protected:
     inline void set_parent(ring *parent) { m_parent = (parent ? parent : this); }
     inline void set_if_index(int if_index) { m_if_index = if_index; }
 
-    int *m_p_n_rx_channel_fds = nullptr;
     ring *m_parent = nullptr;
 
     struct tcp_seg *m_tcp_seg_list = nullptr;

@@ -162,38 +162,37 @@ void ring_bond::restart()
             ring_tap *p_ring_tap = dynamic_cast<ring_tap *>(p_ring_bond_netvsc->m_tap_ring);
             if (p_ring_tap) {
                 size_t num_ring_rx_fds = 0;
-                int *ring_rx_fds_array = nullptr;
                 int epfd = -1;
                 int fd = -1;
                 int rc = 0;
                 size_t i, j, k;
 
                 if (slaves.empty()) {
-                    ring_rx_fds_array =
-                        p_ring_bond_netvsc->m_vf_ring->get_rx_channel_fds(num_ring_rx_fds);
+                    num_ring_rx_fds = p_ring_bond_netvsc->m_vf_ring->get_rx_channels_num();
 
                     for (k = 0; k < num_ring_rx_fds; k++) {
                         epfd = g_p_net_device_table_mgr->global_ring_epfd_get();
                         if (epfd > 0) {
-                            fd = ring_rx_fds_array[k];
+                            fd = p_ring_bond_netvsc->m_vf_ring->get_rx_channel_fd(k);
                             rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_DEL, fd, nullptr);
                             ring_logdbg("Remove fd=%d from epfd=%d rc=%d errno=%d", fd, epfd, rc,
                                         errno);
                         }
                     }
+
                     for (j = 0; j < m_rx_flows.size(); j++) {
                         sockinfo *si = static_cast<sockinfo *>(m_rx_flows[j].sink);
                         for (k = 0; k < num_ring_rx_fds; k++) {
                             epfd = si->get_rx_epfd();
                             if (epfd > 0) {
-                                fd = ring_rx_fds_array[k];
+                                fd = p_ring_bond_netvsc->m_vf_ring->get_rx_channel_fd(k);
                                 rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_DEL, fd, NULL);
                                 ring_logdbg("Remove fd=%d from epfd=%d rc=%d errno=%d", fd, epfd,
                                             rc, errno);
                             }
                             epfd = si->get_epoll_context_fd();
                             if (epfd > 0) {
-                                fd = ring_rx_fds_array[k];
+                                fd = p_ring_bond_netvsc->m_vf_ring->get_rx_channel_fd(k);
                                 rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_DEL, fd, NULL);
                                 ring_logdbg("Remove fd=%d from epfd=%d rc=%d errno=%d", fd, epfd,
                                             rc, errno);
@@ -214,14 +213,13 @@ void ring_bond::restart()
                             slave_create(slaves[i]->if_index);
                             p_ring_tap->set_vf_ring(p_ring_bond_netvsc->m_vf_ring);
 
-                            ring_rx_fds_array =
-                                p_ring_bond_netvsc->m_vf_ring->get_rx_channel_fds(num_ring_rx_fds);
+                            num_ring_rx_fds = p_ring_bond_netvsc->m_vf_ring->get_rx_channels_num();
 
                             for (k = 0; k < num_ring_rx_fds; k++) {
                                 epfd = g_p_net_device_table_mgr->global_ring_epfd_get();
                                 if (epfd > 0) {
                                     epoll_event ev = {0, {nullptr}};
-                                    fd = ring_rx_fds_array[k];
+                                    fd = p_ring_bond_netvsc->m_vf_ring->get_rx_channel_fd(k);
                                     ev.events = EPOLLIN;
                                     ev.data.fd = fd;
                                     rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_ADD, fd, &ev);
@@ -237,7 +235,7 @@ void ring_bond::restart()
                                     epfd = si->get_rx_epfd();
                                     if (epfd > 0) {
                                         epoll_event ev = {0, {0}};
-                                        fd = ring_rx_fds_array[k];
+                                        fd = p_ring_bond_netvsc->m_vf_ring->get_rx_channel_fd(k);
                                         ev.events = EPOLLIN;
                                         ev.data.fd = fd;
                                         rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_ADD, fd, &ev);
@@ -248,7 +246,7 @@ void ring_bond::restart()
                                     if (epfd > 0) {
 #define CQ_FD_MARK 0xabcd /* see sockinfo */
                                         epoll_event ev = {0, {0}};
-                                        fd = ring_rx_fds_array[k];
+                                        fd = p_ring_bond_netvsc->m_vf_ring->get_rx_channel_fd(k);
                                         ev.events = EPOLLIN | EPOLLPRI;
                                         ev.data.u64 = (((uint64_t)CQ_FD_MARK << 32) | fd);
                                         rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_ADD, fd, &ev);
@@ -794,17 +792,15 @@ void ring_bond::update_rx_channel_fds()
         delete[] m_p_n_rx_channel_fds;
         m_p_n_rx_channel_fds = nullptr;
     }
+
     if (m_recv_rings.size() == 0) {
         return;
     }
 
     m_p_n_rx_channel_fds = new int[m_recv_rings.size()];
     for (uint32_t i = 0; i < m_recv_rings.size(); i++) {
-        size_t num_rx_channel_fds;
-        int *p_rx_channel_fds = m_bond_rings[i]->get_rx_channel_fds(num_rx_channel_fds);
-        /* Assume that a slave ring contains exactly 1 channel fd. */
-        NOT_IN_USE(num_rx_channel_fds);
-        m_p_n_rx_channel_fds[i] = p_rx_channel_fds[0];
+        // Assume that a slave ring contains exactly 1 channel fd.
+        m_p_n_rx_channel_fds[i] = m_bond_rings[i]->get_rx_channel_fd(0U);
     }
 }
 

@@ -184,8 +184,6 @@ ring_simple::~ring_simple()
         VALGRIND_MAKE_MEM_UNDEFINED(m_p_rx_comp_event_channel, sizeof(struct ibv_comp_channel));
     }
 
-    delete[] m_p_n_rx_channel_fds;
-
     ring_logdbg("Tx buffer poll: free count = %lu, sender_has = %u, total = %d, %s (%lu)",
                 m_tx_pool.size() + m_zc_pool.size(), m_missing_buf_ref_count,
                 m_tx_num_bufs + m_zc_num_bufs,
@@ -371,17 +369,13 @@ void ring_simple::create_resources()
     m_hqtx = temp_hqtx.release();
     m_hqrx = temp_hqrx.release();
 
-    m_p_n_rx_channel_fds = new int[1];
-    if (!safe_mce_sys().doca_rx) {
-        m_p_n_rx_channel_fds[0] = m_p_rx_comp_event_channel->fd;
-    } else {
-        m_p_n_rx_channel_fds[0] = m_hqrx->get_notification_handle();
-    }
+    int rx_channel = (safe_mce_sys().doca_rx ? m_hqrx->get_notification_handle()
+                                             : m_p_rx_comp_event_channel->fd);
 
     // Add the rx channel fd to the global fd collection
     if (g_p_fd_collection) {
         // Create new cq_channel info in the global fd collection
-        g_p_fd_collection->add_cq_channel_fd(m_p_n_rx_channel_fds[0], this);
+        g_p_fd_collection->add_cq_channel_fd(rx_channel, this);
         g_p_fd_collection->add_cq_channel_fd(m_p_tx_comp_event_channel->fd, this);
     }
 
@@ -406,6 +400,16 @@ void ring_simple::create_resources()
     }
 
     ring_logdbg("new ring_simple() completed");
+}
+
+int ring_simple::get_rx_channel_fd(size_t ch_idx) const
+{
+    NOT_IN_USE(ch_idx);
+    if (safe_mce_sys().doca_rx) {
+        return m_hqrx->get_notification_handle();
+    }
+
+    return m_p_rx_comp_event_channel->fd;
 }
 
 bool ring_simple::request_notification(cq_type_t cq_type)
