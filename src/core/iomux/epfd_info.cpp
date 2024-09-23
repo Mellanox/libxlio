@@ -324,21 +324,20 @@ void epfd_info::increase_ring_ref_count(ring *ring)
     } else {
         m_ring_map[ring] = 1;
 
-        // add cq channel fd to the epfd
-        size_t num_ring_rx_fds;
-        int *ring_rx_fds_array = ring->get_rx_channel_fds(num_ring_rx_fds);
+        // Add cq channel fd to the epfd
+        size_t num_ring_rx_fds = ring->get_rx_channels_num();
         for (size_t i = 0; i < num_ring_rx_fds; i++) {
+            int fd = ring->get_rx_channel_fd(i);
             epoll_event evt = {0, {nullptr}};
             evt.events = EPOLLIN | EPOLLPRI;
-            int fd = ring_rx_fds_array[i];
             evt.data.u64 = (((uint64_t)CQ_FD_MARK << 32) | fd);
             int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_ADD, fd, &evt);
             BULLSEYE_EXCLUDE_BLOCK_START
             if (ret < 0) {
-                __log_dbg("failed to add cq fd=%d to epoll epfd=%d (errno=%d %m)", fd, m_epfd,
+                __log_dbg("Failed to add cq fd=%d to epoll epfd=%d (errno=%d %m)", fd, m_epfd,
                           errno);
             } else {
-                __log_dbg("add cq fd=%d to epfd=%d", fd, m_epfd);
+                __log_dbg("Added cq fd=%d to epfd=%d", fd, m_epfd);
             }
             BULLSEYE_EXCLUDE_BLOCK_END
         }
@@ -364,18 +363,17 @@ void epfd_info::decrease_ring_ref_count(ring *ring)
     if (iter->second == 0) {
         m_ring_map.erase(iter);
 
-        // remove cq channel fd from the epfd
-        size_t num_ring_rx_fds;
-        int *ring_rx_fds_array = ring->get_rx_channel_fds(num_ring_rx_fds);
+        // Remove cq channel fd from the epfd
+        size_t num_ring_rx_fds = ring->get_rx_channels_num();
         for (size_t i = 0; i < num_ring_rx_fds; i++) {
-            // delete cq fd from epfd
-            int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, ring_rx_fds_array[i], nullptr);
+            int fd = ring->get_rx_channel_fd(i);
+            int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, fd, nullptr);
             BULLSEYE_EXCLUDE_BLOCK_START
             if (ret < 0) {
-                __log_dbg("failed to remove cq fd=%d from epfd=%d (errno=%d %m)",
-                          ring_rx_fds_array[i], m_epfd, errno);
+                __log_dbg("Failed to remove cq fd=%d from epfd=%d (errno=%d %m)", fd, m_epfd,
+                          errno);
             } else {
-                __log_dbg("remove cq fd=%d from epfd=%d", ring_rx_fds_array[i], m_epfd);
+                __log_dbg("Removed cq fd=%d from epfd=%d", fd, m_epfd);
             }
             BULLSEYE_EXCLUDE_BLOCK_END
         }

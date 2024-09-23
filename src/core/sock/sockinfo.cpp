@@ -1515,11 +1515,10 @@ void sockinfo::add_cqfd_to_sock_rx_epfd(ring *p_ring)
 {
     epoll_event ev = {0, {nullptr}};
     ev.events = EPOLLIN;
-    size_t num_ring_rx_fds;
-    int *ring_rx_fds_array = p_ring->get_rx_channel_fds(num_ring_rx_fds);
+    size_t num_ring_rx_fds = p_ring->get_rx_channels_num();
 
     for (size_t i = 0; i < num_ring_rx_fds; i++) {
-        ev.data.fd = ring_rx_fds_array[i];
+        ev.data.fd = p_ring->get_rx_channel_fd(i);
 
         BULLSEYE_EXCLUDE_BLOCK_START
         if (unlikely(SYSCALL(epoll_ctl, m_rx_epfd, EPOLL_CTL_ADD, ev.data.fd, &ev))) {
@@ -1531,14 +1530,12 @@ void sockinfo::add_cqfd_to_sock_rx_epfd(ring *p_ring)
 
 void sockinfo::remove_cqfd_from_sock_rx_epfd(ring *base_ring)
 {
-    size_t num_ring_rx_fds;
-    int *ring_rx_fds_array = base_ring->get_rx_channel_fds(num_ring_rx_fds);
-
+    size_t num_ring_rx_fds = base_ring->get_rx_channels_num();
     for (size_t i = 0; i < num_ring_rx_fds; i++) {
         BULLSEYE_EXCLUDE_BLOCK_START
-        if (unlikely(
-                (SYSCALL(epoll_ctl, m_rx_epfd, EPOLL_CTL_DEL, ring_rx_fds_array[i], nullptr)) &&
-                (!(errno == ENOENT || errno == EBADF)))) {
+        if (unlikely((SYSCALL(epoll_ctl, m_rx_epfd, EPOLL_CTL_DEL, base_ring->get_rx_channel_fd(i),
+                              nullptr)) &&
+                     (!(errno == ENOENT || errno == EBADF)))) {
             si_logerr("failed to delete cq channel fd from internal epfd (errno=%d %s)", errno,
                       strerror(errno));
         }

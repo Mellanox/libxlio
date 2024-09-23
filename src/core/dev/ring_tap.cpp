@@ -59,9 +59,6 @@ ring_tap::ring_tap(int if_index, ring *parent)
     tap_create(p_ndev);
 
     /* Register tap ring to the internal thread */
-    m_p_n_rx_channel_fds = new int[1];
-    m_p_n_rx_channel_fds[0] = m_tap_fd;
-
     if (m_tap_fd >= 0) {
         g_p_fd_collection->addtapfd(m_tap_fd, this);
         g_p_event_handler_manager->update_epfd(m_tap_fd, EPOLL_CTL_ADD,
@@ -102,8 +99,6 @@ ring_tap::~ring_tap()
 
     /* Release RX buffer poll */
     g_buffer_pool_rx_ptr->put_buffers_thread_safe(&m_rx_pool, m_rx_pool.size());
-
-    delete[] m_p_n_rx_channel_fds;
 
     /* TAP device release */
     tap_destroy();
@@ -273,6 +268,12 @@ bool ring_tap::detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink)
     }
 
     return ret;
+}
+
+int ring_tap::get_rx_channel_fd(size_t ch_idx) const
+{
+    NOT_IN_USE(ch_idx);
+    return m_tap_fd;
 }
 
 bool ring_tap::poll_and_process_element_rx(void *pv_fd_ready_array)

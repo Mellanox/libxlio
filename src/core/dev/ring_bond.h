@@ -53,12 +53,8 @@ public:
     virtual ~ring_bond();
 
     virtual void print_val();
-
-    virtual int *get_rx_channel_fds(size_t &length) const
-    {
-        length = m_recv_rings.size();
-        return m_p_n_rx_channel_fds;
-    };
+    virtual size_t get_rx_channels_num() const { return m_recv_rings.size(); };
+    virtual int get_rx_channel_fd(size_t ch_idx) const { return m_p_n_rx_channel_fds[ch_idx]; }
     virtual bool request_notification(cq_type_t cq_type);
     virtual void clear_rx_notification();
     virtual bool poll_and_process_element_rx(void *pv_fd_ready_array = nullptr);
@@ -167,6 +163,7 @@ protected:
     ring_slave_vector_t m_recv_rings;
 
     std::vector<struct flow_sink_t> m_rx_flows;
+    int *m_p_n_rx_channel_fds = nullptr;
     uint32_t m_max_inline_data;
     uint32_t m_max_send_sge;
 
