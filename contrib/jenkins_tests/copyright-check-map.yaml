@@ -35,7 +35,8 @@ general:
         - ".*src/core/config_parser.*"
         - ".*src/core/config_scanner\\.c"
 
-bsd:
+dual_gpl_2_bsd_3:
+    validate-spdx-license: True
     include:
         - ".*"
     exclude:
