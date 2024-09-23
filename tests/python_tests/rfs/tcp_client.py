@@ -39,5 +39,8 @@ for x in range(mySocksNum):
         print x, " Wrong"
 
 for x in range(mySocksNum):
+        socks[x].send(buffs[x])
+
+for x in range(mySocksNum):
     socks[x].close()
 
