@@ -356,7 +356,8 @@ void ring_simple::create_resources()
     BULLSEYE_EXCLUDE_BLOCK_END
     VALGRIND_MAKE_MEM_DEFINED(m_p_rx_comp_event_channel, sizeof(struct ibv_comp_channel));
 
-    std::unique_ptr<hw_queue_tx> temp_hqtx(new hw_queue_tx(this, p_slave, get_tx_num_wr()));
+    std::unique_ptr<hw_queue_tx> temp_hqtx(
+        new hw_queue_tx(this, p_slave, m_p_tx_comp_event_channel, get_tx_num_wr()));
     std::unique_ptr<hw_queue_rx> temp_hqrx(
         new hw_queue_rx(this, p_slave->p_ib_ctx, m_p_rx_comp_event_channel, m_vlan));
     BULLSEYE_EXCLUDE_BLOCK_START
@@ -605,7 +606,7 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
                     // prepare to block
                     // CQ is armed, block on the CQ's Tx event channel (fd)
                     struct pollfd poll_fd = {/*.fd=*/0, /*.events=*/POLLIN, /*.revents=*/0};
-                    poll_fd.fd = get_tx_comp_event_channel()->fd;
+                    poll_fd.fd = m_p_tx_comp_event_channel->fd;
 
                     // Now it is time to release the ring lock (for restart events to be handled
                     // while this thread block on CQ channel)
@@ -631,7 +632,7 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
                     // It might not be the active_cq object since we have a single TX CQ comp
                     // channel for all cq_mgr_tx's
                     cq_mgr_tx *p_cq_mgr_tx =
-                        cq_mgr_tx::get_cq_mgr_from_cq_event(get_tx_comp_event_channel());
+                        cq_mgr_tx::get_cq_mgr_from_cq_event(m_p_tx_comp_event_channel);
                     if (p_cq_mgr_tx) {
 
                         // Allow additional CQ arming now
@@ -818,7 +819,7 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
                 // prepare to block
                 // CQ is armed, block on the CQ's Tx event channel (fd)
                 struct pollfd poll_fd = {/*.fd=*/0, /*.events=*/POLLIN, /*.revents=*/0};
-                poll_fd.fd = get_tx_comp_event_channel()->fd;
+                poll_fd.fd = m_p_tx_comp_event_channel->fd;
 
                 // Now it is time to release the ring lock (for restart events to be handled
                 // while this thread block on CQ channel)
@@ -841,7 +842,7 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
                 // It might not be the active_cq object since we have a single TX CQ comp
                 // channel for all cq_mgr_tx's
                 cq_mgr_tx *p_cq_mgr_tx =
-                    cq_mgr_tx::get_cq_mgr_from_cq_event(get_tx_comp_event_channel());
+                    cq_mgr_tx::get_cq_mgr_from_cq_event(m_p_tx_comp_event_channel);
                 if (p_cq_mgr_tx) {
 
                     // Allow additional CQ arming now

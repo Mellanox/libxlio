@@ -128,7 +128,6 @@ public:
     }
     bool is_tso(void) override;
 
-    struct ibv_comp_channel *get_tx_comp_event_channel() { return m_p_tx_comp_event_channel; }
     void modify_cq_moderation(uint32_t period, uint32_t count);
 
     void update_tso_stats(uint64_t bytes)
