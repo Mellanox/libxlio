@@ -132,7 +132,8 @@ static inline uint32_t get_mlx5_opcode(xlio_ibv_wr_opcode verbs_opcode)
     }
 }
 
-hw_queue_tx::hw_queue_tx(ring_simple *ring, const slave_data_t *slave, const uint32_t tx_num_wr)
+hw_queue_tx::hw_queue_tx(ring_simple *ring, const slave_data_t *slave,
+                         struct ibv_comp_channel *p_tx_comp_event_channel, const uint32_t tx_num_wr)
     : m_p_ring(ring)
     , m_p_ib_ctx_handler(slave->p_ib_ctx)
     , m_n_sysvar_tx_num_wr_to_signal(safe_mce_sys().tx_num_wr_to_signal)
@@ -158,7 +159,7 @@ hw_queue_tx::hw_queue_tx(ring_simple *ring, const slave_data_t *slave, const uin
     // Check device capabilities for dummy send support
     m_hw_dummy_send_support = xlio_is_nop_supported(m_p_ib_ctx_handler->get_ibv_device_attr());
 
-    if (configure(slave)) {
+    if (configure(slave, p_tx_comp_event_channel)) {
         throw_xlio_exception("Failed to configure");
     }
 }
@@ -437,7 +438,8 @@ void hw_queue_tx::stop_doca_txq()
     }
 }
 
-int hw_queue_tx::configure(const slave_data_t *slave)
+int hw_queue_tx::configure(const slave_data_t *slave,
+                           struct ibv_comp_channel *p_tx_comp_event_channel)
 {
     hwqtx_logdbg("Creating QP of transport type '%s' on ibv device '%s' [%p] on port %d",
                  priv_xlio_transport_type_str(m_p_ring->get_transport_type()),
@@ -447,7 +449,7 @@ int hw_queue_tx::configure(const slave_data_t *slave)
 
     // Create associated cq_mgr_tx and unused cq_mgr_rx_regrq just for QP sake.
     BULLSEYE_EXCLUDE_BLOCK_START
-    m_p_cq_mgr_tx = init_tx_cq_mgr();
+    m_p_cq_mgr_tx = init_tx_cq_mgr(p_tx_comp_event_channel);
     if (!m_p_cq_mgr_tx) {
         hwqtx_logerr("Failed allocating m_p_cq_mgr_tx (errno=%d %m)", errno);
         return -1;
@@ -780,11 +782,10 @@ void hw_queue_tx::update_next_wqe_hot()
     eth_seg->inline_hdr_sz = htons(MLX5_ETH_INLINE_HEADER_SIZE);
 }
 
-cq_mgr_tx *hw_queue_tx::init_tx_cq_mgr()
+cq_mgr_tx *hw_queue_tx::init_tx_cq_mgr(struct ibv_comp_channel *p_tx_comp_event_channel)
 {
     m_tx_num_wr = align32pow2(m_tx_num_wr);
-    return new cq_mgr_tx(m_p_ring, m_p_ib_ctx_handler, m_tx_num_wr,
-                         m_p_ring->get_tx_comp_event_channel());
+    return new cq_mgr_tx(m_p_ring, m_p_ib_ctx_handler, m_tx_num_wr, p_tx_comp_event_channel);
 }
 
 inline void hw_queue_tx::ring_doorbell(int num_wqebb, bool skip_comp /*=false*/)

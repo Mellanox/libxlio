@@ -100,7 +100,8 @@ class hw_queue_tx : public xlio_ti_owner {
     friend class cq_mgr_tx;
 
 public:
-    hw_queue_tx(ring_simple *ring, const slave_data_t *slave, const uint32_t tx_num_wr);
+    hw_queue_tx(ring_simple *ring, const slave_data_t *slave,
+                struct ibv_comp_channel *p_tx_comp_event_channel, const uint32_t tx_num_wr);
     virtual ~hw_queue_tx();
 
     virtual void ti_released(xlio_ti *ti) override;
@@ -228,9 +229,9 @@ public:
     void put_lso_metadata(doca_lso_metadata *lso_metadata);
 
 private:
-    cq_mgr_tx *init_tx_cq_mgr();
+    cq_mgr_tx *init_tx_cq_mgr(struct ibv_comp_channel *p_tx_comp_event_channel);
 
-    int configure(const slave_data_t *slave);
+    int configure(const slave_data_t *slave, struct ibv_comp_channel *p_tx_comp_event_channel);
     int prepare_queue(xlio_ibv_qp_init_attr &qp_init_attr);
     void init_queue();
     void init_device_memory();
