@@ -55,6 +55,7 @@ public:
     virtual void print_val();
     virtual size_t get_rx_channels_num() const { return m_recv_rings.size(); };
     virtual int get_rx_channel_fd(size_t ch_idx) const { return m_p_n_rx_channel_fds[ch_idx]; }
+    virtual int get_tx_channel_fd() const { return -1; }
     virtual bool request_notification(cq_type_t cq_type);
     virtual void clear_rx_notification();
     virtual bool poll_and_process_element_rx(void *pv_fd_ready_array = nullptr);

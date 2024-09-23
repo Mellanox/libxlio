@@ -107,10 +107,7 @@ public:
     int modify_ratelimit(struct xlio_rate_limit_t &rate_limit) override;
     size_t get_rx_channels_num() const override { return 1U; };
     int get_rx_channel_fd(size_t ch_idx) const override;
-    int get_tx_channel_fd() const override
-    {
-        return m_p_tx_comp_event_channel ? m_p_tx_comp_event_channel->fd : -1;
-    }
+    int get_tx_channel_fd() const override;
     uint32_t get_tx_user_lkey(void *addr, size_t length) override;
     uint32_t get_max_inline_data() override;
     ib_ctx_handler *get_ctx(ring_user_id_t id) override

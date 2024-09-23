@@ -143,21 +143,8 @@ ring_simple::~ring_simple()
     // Was done in order to allow iperf's FIN packet to be sent.
     usleep(25000);
 
-    if (m_hqtx) {
-        stop_active_queue_tx();
-
-        // Release QP/CQ resources
-        delete m_hqtx;
-        m_hqtx = nullptr;
-    }
-
-    if (m_hqrx) {
-        stop_active_queue_rx();
-
-        // Release QP/CQ resources
-        delete m_hqrx;
-        m_hqrx = nullptr;
-    }
+    stop_active_queue_tx();
+    stop_active_queue_rx();
 
     /* coverity[double_lock] TODO: RM#1049980 */
     m_lock_ring_rx.lock();
@@ -165,15 +152,17 @@ ring_simple::~ring_simple()
 
     delete_l2_address();
 
-    // Delete the rx channel fd from the global fd collection
+    // Delete the RX/TX channel fd from the global fd collection
     if (g_p_fd_collection) {
-        if (!safe_mce_sys().doca_rx && m_p_rx_comp_event_channel) {
-            g_p_fd_collection->del_cq_channel_fd(m_p_rx_comp_event_channel->fd, true);
-        }
-        if (m_p_tx_comp_event_channel) {
-            g_p_fd_collection->del_cq_channel_fd(m_p_tx_comp_event_channel->fd, true);
-        }
+        g_p_fd_collection->del_cq_channel_fd(get_rx_channel_fd(0U), true);
+        g_p_fd_collection->del_cq_channel_fd(get_tx_channel_fd(), true);
     }
+
+    delete m_hqtx;
+    m_hqtx = nullptr;
+
+    delete m_hqrx;
+    m_hqrx = nullptr;
 
     if (m_p_rx_comp_event_channel) {
         IF_VERBS_FAILURE(ibv_destroy_comp_channel(m_p_rx_comp_event_channel))
@@ -370,14 +359,11 @@ void ring_simple::create_resources()
     m_hqtx = temp_hqtx.release();
     m_hqrx = temp_hqrx.release();
 
-    int rx_channel = (safe_mce_sys().doca_rx ? m_hqrx->get_notification_handle()
-                                             : m_p_rx_comp_event_channel->fd);
-
     // Add the rx channel fd to the global fd collection
     if (g_p_fd_collection) {
         // Create new cq_channel info in the global fd collection
-        g_p_fd_collection->add_cq_channel_fd(rx_channel, this);
-        g_p_fd_collection->add_cq_channel_fd(m_p_tx_comp_event_channel->fd, this);
+        g_p_fd_collection->add_cq_channel_fd(get_rx_channel_fd(0U), this);
+        g_p_fd_collection->add_cq_channel_fd(get_tx_channel_fd(), this);
     }
 
     // save pointers
@@ -411,6 +397,15 @@ int ring_simple::get_rx_channel_fd(size_t ch_idx) const
     }
 
     return m_p_rx_comp_event_channel->fd;
+}
+
+int ring_simple::get_tx_channel_fd() const
+{
+    if (safe_mce_sys().doca_tx) {
+        return m_hqtx->get_notification_handle();
+    }
+
+    return m_p_tx_comp_event_channel->fd;
 }
 
 bool ring_simple::request_notification(cq_type_t cq_type)
@@ -606,7 +601,7 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
                     // prepare to block
                     // CQ is armed, block on the CQ's Tx event channel (fd)
                     struct pollfd poll_fd = {/*.fd=*/0, /*.events=*/POLLIN, /*.revents=*/0};
-                    poll_fd.fd = m_p_tx_comp_event_channel->fd;
+                    poll_fd.fd = get_tx_channel_fd();
 
                     // Now it is time to release the ring lock (for restart events to be handled
                     // while this thread block on CQ channel)
@@ -819,7 +814,7 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
                 // prepare to block
                 // CQ is armed, block on the CQ's Tx event channel (fd)
                 struct pollfd poll_fd = {/*.fd=*/0, /*.events=*/POLLIN, /*.revents=*/0};
-                poll_fd.fd = m_p_tx_comp_event_channel->fd;
+                poll_fd.fd = get_tx_channel_fd();
 
                 // Now it is time to release the ring lock (for restart events to be handled
                 // while this thread block on CQ channel)
