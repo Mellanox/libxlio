@@ -772,15 +772,25 @@ rfs_rule *hw_queue_rx::create_rfs_rule(doca_flow_match &match_val, doca_flow_mat
                                        dpcp::match_params &match_mask, uint16_t priority,
                                        uint32_t flow_tag, xlio_tir *tir_ext)
 {
+    if (safe_mce_sys().doca_rx) {
+        std::unique_ptr<rfs_rule> new_rule(new rfs_rule());
+        // TODO: Add Support for TLS-RX.
+        if (m_doca_rx_queue_id && m_p_ib_ctx_handler &&
+            new_rule->create(match_val, match_msk, m_doca_rx_queue_id, priority, flow_tag,
+                             *m_p_ib_ctx_handler)) {
+            return new_rule.release();
+        }
+
+        return nullptr;
+    }
+
     if (m_p_ib_ctx_handler && m_p_ib_ctx_handler->get_dpcp_adapter()) {
         // TLS RX uses tir_ext.
         dpcp::tir *dpcp_tir = (tir_ext ? xlio_tir_to_dpcp_tir(tir_ext) : m_tir.get());
-        uint16_t rxq_id = m_doca_rx_queue_id; // TODO: Add Support for TLS-RX.
-
         std::unique_ptr<rfs_rule> new_rule(new rfs_rule());
-        if (dpcp_tir && m_doca_rx_queue_id &&
-            new_rule->create(match_val, match_msk, rxq_id, match_value, match_mask, *dpcp_tir,
-                             priority, flow_tag, *m_p_ib_ctx_handler)) {
+        if (dpcp_tir &&
+            new_rule->create_dpcp(match_value, match_mask, *dpcp_tir, priority, flow_tag,
+                                  *m_p_ib_ctx_handler)) {
             return new_rule.release();
         }
     }
