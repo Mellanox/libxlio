@@ -176,6 +176,12 @@ bool hw_queue_rx::prepare_doca_rxq()
         return false;
     }
 
+    err = doca_eth_rxq_set_flow_tag(m_doca_rxq.get(), 1U);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqrx_logerr, err, "doca_eth_rxq_set_flow_tag");
+        return false;
+    }
+
     doca_pe *pe;
     err = doca_pe_create(&pe);
     if (DOCA_IS_ERROR(err)) {
@@ -485,22 +491,28 @@ void hw_queue_rx::rx_task_completion_cb(doca_eth_rxq_task_recv *task_recv, doca_
 
     uint8_t l3ok = 0U;
     uint8_t l4ok = 0U;
+    uint32_t flow_tag = FLOW_TAG_MASK;
     rc = doca_buf_get_data_len(buf, &mem_buf->sz_data);
     doca_error_t rc3 = doca_eth_rxq_task_recv_get_l3_ok(task_recv, &l3ok);
     doca_error_t rc4 = doca_eth_rxq_task_recv_get_l4_ok(task_recv, &l4ok);
-    if (unlikely(DOCA_IS_ERROR(rc) || DOCA_IS_ERROR(rc3) || DOCA_IS_ERROR(rc4))) {
-        __log_err("rx_task_completion_cb, task_recv: %p, buf: %p, rc/rc3/rc4: %d/%d/%d", task_recv,
-                  buf, static_cast<int>(rc), static_cast<int>(rc3), static_cast<int>(rc4));
+    doca_error_t rctag = doca_eth_rxq_task_recv_get_flow_tag(task_recv, &flow_tag);
+    if (unlikely(DOCA_IS_ERROR(rc) || DOCA_IS_ERROR(rc3) || DOCA_IS_ERROR(rc4) ||
+                 DOCA_IS_ERROR(rctag))) {
+        __log_err("rx_task_completion_cb, task_recv: %p, buf: %p, rc/rc3/rc4/rctag: %d/%d/%d/%d",
+                  task_recv, buf, static_cast<int>(rc), static_cast<int>(rc3),
+                  static_cast<int>(rc4), static_cast<int>(rctag));
         rx_task_error_cb(task_recv, task_user_data, ctx_user_data);
         return;
     }
 
     mem_buf->rx.is_sw_csum_need = (l3ok == 0U || l4ok == 0);
+    mem_buf->rx.flow_tag_id = flow_tag;
 
     hw_rx->return_doca_task(task_recv);
     hw_rx->m_polled_buf = mem_buf;
 
-    __log_func("rx_task_completion_cb pid: %d\n", (int)getpid());
+    __log_func("rx_task_completion_cb pid: %d. flowtag: %" PRIu32, static_cast<int>(getpid()),
+               flow_tag);
 }
 
 void hw_queue_rx::rx_task_error_cb(doca_eth_rxq_task_recv *task_recv, doca_data task_user_data,

@@ -28,5 +28,9 @@ for x in range(mySocksNum):
     socks[x].send(buffs[x])
 
 for x in range(mySocksNum):
+    socks[x].recv(16)
+
+for x in range(mySocksNum):
     socks[x].close()
 
+print "All sockets closed"

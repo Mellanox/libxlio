@@ -107,6 +107,20 @@ bool rfs_rule::create(doca_flow_match &match_value, doca_flow_match &match_mask,
                match_value.outer.eth.dst_mac[2], match_value.outer.eth.dst_mac[3],
                match_value.outer.eth.dst_mac[4], match_value.outer.eth.dst_mac[5]);
 
+    doca_flow_actions actions_flowtag;
+    doca_flow_actions actions_mask_flowtag;
+    doca_flow_actions *actions = nullptr;
+    doca_flow_actions *actions_mask = nullptr;
+    if (flow_tag) {
+        rfs_logerr("RFS flow tag %u Priority %hu", flow_tag, priority);
+        memset(&actions_flowtag, 0U, sizeof(actions_flowtag));
+        memset(&actions_mask_flowtag, 0U, sizeof(actions_mask_flowtag));
+        actions_flowtag.meta.mark = htonl(flow_tag);
+        actions_mask_flowtag.meta.mark = 0xFFFFFFFFU;
+        actions = &actions_flowtag;
+        actions_mask = &actions_mask_flowtag;
+    }
+
     doca_flow_fwd all_fwd;
     memset(&all_fwd, 0, sizeof(all_fwd));
     all_fwd.type = DOCA_FLOW_FWD_RSS;
@@ -120,7 +134,7 @@ bool rfs_rule::create(doca_flow_match &match_value, doca_flow_match &match_mask,
                                                                     : DOCA_FLOW_RSS_UDP);
 
     doca_error_t rc = doca_flow_pipe_control_add_entry(
-        0, priority, root_pipe, &match_value, &match_mask, nullptr, nullptr, nullptr, nullptr,
+        0, priority, root_pipe, &match_value, &match_mask, nullptr, actions, actions_mask, nullptr,
         nullptr, &all_fwd, nullptr, &m_doca_flow_entry);
     if (DOCA_IS_ERROR(rc)) {
         PRINT_DOCA_ERR(rfs_logerr, rc, "doca_flow_pipe_control_add_entry root_pipe: %p", root_pipe);
