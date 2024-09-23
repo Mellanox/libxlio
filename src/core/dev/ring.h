@@ -99,7 +99,7 @@ public:
     virtual int get_num_resources() const = 0;
     virtual size_t get_rx_channels_num() const = 0;
     virtual int get_rx_channel_fd(size_t ch_idx) const = 0;
-    virtual int get_tx_channel_fd() const { return -1; }
+    virtual int get_tx_channel_fd() const = 0;
     virtual bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe) = 0;
     virtual bool request_notification(cq_type_t cq_type) = 0;
     virtual bool reclaim_recv_buffers(descq_t *rx_reuse) = 0;
