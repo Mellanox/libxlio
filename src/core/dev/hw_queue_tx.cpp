@@ -2083,7 +2083,7 @@ get_task:
     return (DOCA_IS_ERROR(rc) ? 0 : len);
 }
 
-uint32_t hw_queue_tx::send_doca_lso(struct iovec &h, struct pbuf *p, bool is_zerocopy)
+uint32_t hw_queue_tx::send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss, bool is_zerocopy)
 {
     struct doca_eth_txq_task_lso_send *task = nullptr;
     doca_buf *tx_doca_buf = nullptr;
@@ -2124,6 +2124,9 @@ get_first_buf:
     lso_metadata->buff = reinterpret_cast<mem_buf_desc_t *>(p);
     p = p->next;
 
+    hwqtx_logfunc("LSO first part, len=% " PRIu32 ". LSO-Headers len=%" PRIu64, first_pkt_len,
+                  lso_metadata->headers.len);
+
     doca_buf *prev_doca_buf = tx_doca_buf;
     doca_buf *next_doca_buf = nullptr;
     while (p) {
@@ -2141,6 +2144,8 @@ get_first_buf:
             return 0;
         }
 
+        hwqtx_logfunc("LSO part, len=%" PRIu32, p->len);
+
         doca_buf_chain_list_tail(tx_doca_buf, prev_doca_buf, next_doca_buf);
         prev_doca_buf = next_doca_buf;
         p = p->next;
@@ -2157,6 +2162,10 @@ get_lso_task:
         return_doca_buf(tx_doca_buf);
         return 0;
     }
+
+    hwqtx_logfunc("LSO Task, len_sent=% " PRIu32 ", mss=%" PRIu16, len_sent, mss);
+
+    doca_eth_txq_task_lso_send_set_mss(task, mss);
 
     rc = doca_task_submit(doca_eth_txq_task_lso_send_as_doca_task(task));
     if (DOCA_IS_ERROR(rc)) {

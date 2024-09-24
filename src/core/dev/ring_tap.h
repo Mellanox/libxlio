@@ -115,10 +115,11 @@ public:
         NOT_IN_USE(buff);
         return -1;
     }
-    uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, bool is_zerocopy)
+    uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss, bool is_zerocopy)
     {
         NOT_IN_USE(h);
         NOT_IN_USE(p);
+        NOT_IN_USE(mss);
         NOT_IN_USE(is_zerocopy);
         return -1;
     }
