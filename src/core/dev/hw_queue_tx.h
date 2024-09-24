@@ -222,7 +222,7 @@ public:
     doca_notification_handle_t get_notification_handle() const { return m_notification_handle; }
 
     uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *user_data);
-    uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, bool is_zerocopy);
+    uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss, bool is_zerocopy);
     int poll_and_process_doca_tx();
     bool request_notification();
     void clear_notification();

@@ -1332,6 +1332,19 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
     return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp, is_dummy, is_send_zerocopy);
 }
 
+/*
+ * TODO Remove 'p' from the interface and use 'seg'.
+ * There are multiple places where ip_output() is used without allocating
+ * a tcp_seg object. Therefore, 'seg' may be NULL now. However, we can improve
+ * those places in such a way:
+ * - LwIP will always allocate a tcp_seg even to send a TCP header. The
+ *   allocation must be a fast operation.
+ * - ip_output() will accept only 'seg' without 'p'.
+ * - Segments with empty pbuf list will be supported.
+ * - tcp_seg contains a buffer for TCP header. This buffer will be used to hold
+ *   TCP header for segments with 0 payload.
+ * - The TCP/IP headers will be inlined into WQE.
+ */
 err_t sockinfo_tcp::ip_output_doca(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn,
                                    uint16_t flags)
 {
@@ -1342,9 +1355,9 @@ err_t sockinfo_tcp::ip_output_doca(struct pbuf *p, struct tcp_seg *seg, void *v_
 
     uint32_t ret = 0;
     if (likely(p_dst->is_valid())) {
-        ret = p_dst->send_doca(p, flags);
+        ret = p_dst->send_doca(p, flags, pcb->mss);
     } else {
-        ret = p_dst->doca_slow_path(p, flags, p_si_tcp->m_so_ratelimit);
+        ret = p_dst->doca_slow_path(p, flags, pcb->mss, p_si_tcp->m_so_ratelimit);
     }
     return (ret > 0 ? ERR_OK : ERR_WOULDBLOCK);
 }

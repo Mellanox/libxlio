@@ -762,10 +762,10 @@ uint32_t ring_simple::send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *
     return ret;
 }
 
-uint32_t ring_simple::send_doca_lso(struct iovec &h, struct pbuf *p, bool is_zerocopy)
+uint32_t ring_simple::send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss, bool is_zerocopy)
 {
     std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-    uint32_t ret = m_hqtx->send_doca_lso(h, p, is_zerocopy);
+    uint32_t ret = m_hqtx->send_doca_lso(h, p, mss, is_zerocopy);
     m_hqtx->poll_and_process_doca_tx();
     return ret;
 }

@@ -94,7 +94,8 @@ public:
     virtual int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
                                  xlio_wr_tx_packet_attr attr, xlio_tis *tis) = 0;
     virtual uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *buff) = 0;
-    virtual uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, bool is_zerocopy) = 0;
+    virtual uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss,
+                                   bool is_zerocopy) = 0;
 
     virtual int get_num_resources() const = 0;
     virtual size_t get_rx_channels_num() const = 0;

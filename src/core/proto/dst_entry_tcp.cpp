@@ -66,7 +66,7 @@ transport_t dst_entry_tcp::get_transport(const sock_addr &to)
     return TRANS_XLIO;
 }
 
-uint32_t dst_entry_tcp::send_doca(struct pbuf *p, uint16_t flags)
+uint32_t dst_entry_tcp::send_doca(struct pbuf *p, uint16_t flags, uint16_t mss)
 {
     bool is_zerocopy = !!(flags & XLIO_TX_PACKET_ZEROCOPY);
     bool is_tso = !!(flags & XLIO_TX_PACKET_TSO);
@@ -98,7 +98,8 @@ uint32_t dst_entry_tcp::send_doca(struct pbuf *p, uint16_t flags)
         size_t tcp_hdr_len = (static_cast<tcphdr *>(p_tcp_hdr))->doff << 2;
         struct iovec h = {(void *)((uint8_t *)p->payload - m_header->m_total_hdr_len),
                           m_header->m_total_hdr_len + tcp_hdr_len};
-        return m_p_ring->send_doca_lso(h, payload_pbuf, is_zerocopy);
+        uint16_t lso_mss = mss - (tcp_hdr_len - TCP_HLEN); // Substract TCP options length.
+        return m_p_ring->send_doca_lso(h, payload_pbuf, lso_mss, is_zerocopy);
     }
 
     // Regular send - single packet with a single pbuf
@@ -355,7 +356,7 @@ out:
     return ret;
 }
 
-uint32_t dst_entry_tcp::doca_slow_path(struct pbuf *p, uint16_t flags,
+uint32_t dst_entry_tcp::doca_slow_path(struct pbuf *p, uint16_t flags, uint16_t mss,
                                        struct xlio_rate_limit_t &rate_limit)
 {
     uint32_t ret = 0;
@@ -364,7 +365,7 @@ uint32_t dst_entry_tcp::doca_slow_path(struct pbuf *p, uint16_t flags,
     prepare_to_send(rate_limit, true);
     if (m_b_is_offloaded) {
         if (is_valid()) {
-            ret = send_doca(p, flags);
+            ret = send_doca(p, flags, mss);
         } else {
             bool is_tso_or_zerocopy = !!(flags & (XLIO_TX_PACKET_ZEROCOPY | XLIO_TX_PACKET_TSO));
             if (is_tso_or_zerocopy) {
