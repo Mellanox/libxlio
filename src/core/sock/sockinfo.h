@@ -605,7 +605,17 @@ void sockinfo::sock_pop_descs_rx_ready(descq_t *cache)
     lock_rx_q();
     mem_buf_desc_t *temp;
     const size_t size = get_size_m_rx_pkt_ready_list();
-
+    if (size != 0 && m_rx_pkt_ready_offset != 0) {
+        // Adjust the first pbuf by discarding the already read bytes
+        temp = get_front_m_rx_pkt_ready_list();
+        temp->lwip_pbuf.len -= m_rx_pkt_ready_offset;
+        temp->lwip_pbuf.tot_len -= m_rx_pkt_ready_offset;
+        temp->lwip_pbuf.payload = (uint8_t *)temp->lwip_pbuf.payload + m_rx_pkt_ready_offset;
+        // Adjust iovec independently of lwip_pbuf; pbuf undefined for UDP
+        temp->rx.frag.iov_len -= m_rx_pkt_ready_offset;
+        temp->rx.frag.iov_base = (uint8_t *)temp->rx.frag.iov_base + m_rx_pkt_ready_offset;
+        temp->rx.sz_payload -= m_rx_pkt_ready_offset;
+    }
     for (size_t i = 0; i < size; i++) {
         temp = get_front_m_rx_pkt_ready_list();
         pop_front_m_rx_pkt_ready_list();
@@ -613,6 +623,7 @@ void sockinfo::sock_pop_descs_rx_ready(descq_t *cache)
     }
     m_n_rx_pkt_ready_list_count = 0;
     m_rx_ready_byte_count = 0;
+    m_rx_pkt_ready_offset = 0;
     if (m_p_socket_stats) {
         m_p_socket_stats->n_rx_ready_pkt_count = 0;
         m_p_socket_stats->n_rx_ready_byte_count = 0;
