@@ -53,7 +53,7 @@ runs_on_dockers:
      category: 'tool'
     }
   - {name: 'toolbox', url: 'harbor.mellanox.com/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
-  - {name: 'blackduck', url: 'harbor.mellanox.com/toolbox/ngci-centos:7.9.2009.2', category: 'tool', arch: 'x86_64'}
+  - {name: 'blackduck', url: 'harbor.mellanox.com/toolbox/blackduck_post_scan:latest', category: 'tool', arch: 'x86_64'}
   - {name: 'header-check', url: 'harbor.mellanox.com/toolbox/header_check:0.0.51', category: 'tool', arch: 'x86_64', tag: '0.0.51'}
 # static tests
   - {file: '.ci/dockerfiles/Dockerfile.rhel8.6',
