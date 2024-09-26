@@ -402,7 +402,7 @@ protected:
                                                int &rx_pkt_ready_list_idx) = 0;
     virtual timestamps_t *get_socket_timestamps() = 0;
     virtual void update_socket_timestamps(timestamps_t *ts) = 0;
-    virtual void post_deqeue(bool release_buff) = 0;
+    virtual void post_dequeue(bool release_buff) = 0;
     virtual int os_epoll_wait(epoll_event *ep_events, int maxevents);
     virtual int zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags) = 0;
     virtual void handle_ip_pktinfo(struct cmsg_state *cm_state) = 0;
@@ -679,7 +679,7 @@ int sockinfo::dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, soc
     mem_buf_desc_t *pdesc;
     int total_rx = 0;
     uint32_t nbytes, pos;
-    bool relase_buff = true;
+    bool release_buff = true;
 
     bool is_peek = in_flags & MSG_PEEK;
     int rx_pkt_ready_list_idx = 1;
@@ -702,7 +702,7 @@ int sockinfo::dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, soc
     }
 
     if (in_flags & MSG_XLIO_ZCOPY) {
-        relase_buff = false;
+        release_buff = false;
         total_rx = zero_copy_rx(p_iov, pdesc, p_out_flags);
         if (unlikely(total_rx < 0)) {
             return -1;
@@ -756,7 +756,7 @@ int sockinfo::dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, soc
     } else {
         IF_STATS(m_p_socket_stats->n_rx_ready_byte_count -= total_rx);
         m_rx_ready_byte_count -= total_rx;
-        post_deqeue(relase_buff);
+        post_dequeue(release_buff);
         save_stats_rx_offload(total_rx);
     }
 

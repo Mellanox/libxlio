@@ -3178,7 +3178,7 @@ timestamps_t *sockinfo_udp::get_socket_timestamps()
     return &m_rx_pkt_ready_list.front()->rx.timestamps;
 }
 
-void sockinfo_udp::post_deqeue(bool release_buff)
+void sockinfo_udp::post_dequeue(bool release_buff)
 {
     mem_buf_desc_t *to_resue = m_rx_pkt_ready_list.get_and_pop_front();
     IF_STATS(m_p_socket_stats->n_rx_ready_pkt_count--);
