@@ -569,7 +569,7 @@ private:
         }
     }
 
-    void post_deqeue(bool release_buff) override;
+    void post_dequeue(bool release_buff) override;
     int zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags) override;
 
     // Returns the connected pcb, with 5 tuple which matches the input arguments,
