@@ -5282,7 +5282,7 @@ timestamps_t *sockinfo_tcp::get_socket_timestamps()
     return &m_rx_timestamps;
 }
 
-void sockinfo_tcp::post_deqeue(bool release_buff)
+void sockinfo_tcp::post_dequeue(bool release_buff)
 {
     NOT_IN_USE(release_buff);
 }
