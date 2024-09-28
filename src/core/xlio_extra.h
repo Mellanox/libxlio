@@ -332,6 +332,7 @@ struct __attribute__((packed)) xlio_api_t {
     int (*xlio_socket_update)(xlio_socket_t sock, unsigned flags, uintptr_t userdata_sq);
     int (*xlio_socket_setsockopt)(xlio_socket_t sock, int level, int optname, const void *optval,
                                   socklen_t optlen);
+    int (*xlio_socket_getsockname)(xlio_socket_t sock, struct sockaddr *addr, socklen_t *addrlen);
     int (*xlio_socket_getpeername)(xlio_socket_t sock, struct sockaddr *addr, socklen_t *addrlen);
     int (*xlio_socket_bind)(xlio_socket_t sock, const struct sockaddr *addr, socklen_t addrlen);
     int (*xlio_socket_connect)(xlio_socket_t sock, const struct sockaddr *to, socklen_t tolen);
