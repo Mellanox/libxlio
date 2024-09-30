@@ -65,7 +65,7 @@ runs_on_dockers:
      category: 'tool'
     }
   - {name: 'blackduck', url: 'harbor.mellanox.com/toolbox/blackduck_post_scan', category: 'tool', arch: 'x86_64'}
-  - {name: 'header-check', url: 'harbor.mellanox.com/toolbox/header_check:0.0.14', category: 'tool', arch: 'x86_64', tag: '0.0.14'}
+  - {name: 'header-check', url: 'harbor.mellanox.com/toolbox/header_check:0.0.51', category: 'tool', arch: 'x86_64', tag: '0.0.51'}
 # static tests
   - {
      file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
