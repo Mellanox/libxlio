@@ -3705,7 +3705,7 @@ bool sockinfo_tcp::is_readable(bool check_only, fd_array_t *p_fd_array)
         return true;
     }
 
-    if (check_only) {
+    if (check_only || m_skip_cq_poll_in_rx) {
         return false;
     }
 
@@ -3740,11 +3740,7 @@ bool sockinfo_tcp::is_readable(bool check_only, fd_array_t *p_fd_array)
     }
 
     m_rx_ring_map_lock.unlock();
-    if (!m_n_rx_pkt_ready_list_count) {
-        return false;
-    }
-
-    return true;
+    return (m_n_rx_pkt_ready_list_count != 0);
 }
 
 bool sockinfo_tcp::is_writeable()
