@@ -3939,7 +3939,7 @@ bool sockinfo_tcp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array)
         return true;
     }
 
-    if (!p_poll_sn) {
+    if (!p_poll_sn || m_skip_cq_poll_in_rx) {
         return false;
     }
 
@@ -3974,11 +3974,7 @@ bool sockinfo_tcp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array)
     }
 
     m_rx_ring_map_lock.unlock();
-    if (!m_n_rx_pkt_ready_list_count) {
-        return false;
-    }
-
-    return true;
+    return (m_n_rx_pkt_ready_list_count != 0);
 }
 
 bool sockinfo_tcp::is_writeable()
