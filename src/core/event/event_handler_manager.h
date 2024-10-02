@@ -180,6 +180,7 @@ public:
     void register_command_event(int fd, command *cmd);
 
     void *thread_loop();
+    int start_thread();
     void stop_thread();
     bool is_running() { return m_b_continue_running; };
 
@@ -223,7 +224,6 @@ protected:
     void handle_registration_action(reg_action_t &reg_action);
     void process_ibverbs_event(event_handler_map_t::iterator &i);
     void process_rdma_cm_event(event_handler_map_t::iterator &i);
-    int start_thread();
 
     void event_channel_post_process_for_rdma_events(void *p_event);
     void *event_channel_pre_process_for_rdma_events(void *p_event_channel_handle, void **p_event);
