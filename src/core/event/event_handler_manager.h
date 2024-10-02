@@ -238,8 +238,6 @@ protected:
 
     void event_channel_post_process_for_rdma_events(void *p_event);
     void *event_channel_pre_process_for_rdma_events(void *p_event_channel_handle, void **p_event);
-
-    void free_evh_resources(void);
 };
 
 extern event_handler_manager *g_p_event_handler_manager;
