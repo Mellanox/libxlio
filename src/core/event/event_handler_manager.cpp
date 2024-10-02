@@ -227,8 +227,8 @@ event_handler_manager::event_handler_manager(bool internal_thread_mode)
     m_epfd = -1;
     m_event_handler_tid = 0;
 
+    m_b_continue_running = true;
     if (!internal_thread_mode) {
-        m_b_continue_running = true;
         return;
     }
 
@@ -236,12 +236,9 @@ event_handler_manager::event_handler_manager(bool internal_thread_mode)
     BULLSEYE_EXCLUDE_BLOCK_START
     if (m_epfd == -1) {
         evh_logdbg("epoll_create failed on ibv device collection (errno=%d %m)", errno);
-        free_evh_resources();
         throw_xlio_exception("epoll_create failed on ibv device collection");
     }
     BULLSEYE_EXCLUDE_BLOCK_END
-
-    m_b_continue_running = true;
 
     wakeup_set_epoll_fd(m_epfd);
     going_to_sleep();
@@ -249,16 +246,12 @@ event_handler_manager::event_handler_manager(bool internal_thread_mode)
 
 event_handler_manager::~event_handler_manager()
 {
-    free_evh_resources();
-}
-
-void event_handler_manager::free_evh_resources()
-{
-    evh_logfunc("");
-
-    // Flag thread to stop on next loop
     stop_thread();
-    evh_logfunc("Thread stopped");
+
+    if (m_epfd >= 0) {
+        SYSCALL(close, m_epfd);
+    }
+    m_epfd = -1;
 }
 
 // event handler main thread startup
@@ -370,18 +363,12 @@ void event_handler_manager::stop_thread()
         // Wait for thread exit
         if (m_event_handler_tid) {
             pthread_join(m_event_handler_tid, nullptr);
-            evh_logdbg("event handler thread stopped");
+            evh_logdbg("Event handler thread stopped.");
         } else {
-            evh_logdbg("event handler thread not running");
+            evh_logdbg("Event handler thread not running.");
         }
     }
     m_event_handler_tid = 0;
-
-    // Close main epfd and signaling socket
-    if (m_epfd >= 0) {
-        SYSCALL(close, m_epfd);
-    }
-    m_epfd = -1;
 }
 
 void event_handler_manager::update_epfd(int fd, int operation, int events)
