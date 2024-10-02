@@ -307,56 +307,53 @@ int event_handler_manager::start_thread()
 {
     cpu_set_t cpu_set;
     pthread_attr_t tattr;
+    int ret;
+    bool affinity_requested = false;
 
     if (!m_b_continue_running) {
+        errno = ECANCELED;
         return -1;
     }
-
     if (m_event_handler_tid != 0) {
         return 0;
     }
 
-    // m_reg_action_q.reserve(); //todo change to vector and reserve
-
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (pthread_attr_init(&tattr)) {
-        evh_logpanic("Failed to initialize thread attributes");
+    ret = pthread_attr_init(&tattr);
+    if (ret != 0) {
+        return -1;
     }
-    BULLSEYE_EXCLUDE_BLOCK_END
 
     cpu_set = safe_mce_sys().internal_thread_affinity;
     if (strcmp(safe_mce_sys().internal_thread_affinity_str, "-1") &&
-        !strcmp(safe_mce_sys().internal_thread_cpuset,
-                MCE_DEFAULT_INTERNAL_THREAD_CPUSET)) { // no affinity
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (pthread_attr_setaffinity_np(&tattr, sizeof(cpu_set), &cpu_set)) {
-            evh_logpanic("Failed to set CPU affinity");
+        !strcmp(safe_mce_sys().internal_thread_cpuset, MCE_DEFAULT_INTERNAL_THREAD_CPUSET)) {
+        ret = pthread_attr_setaffinity_np(&tattr, sizeof(cpu_set), &cpu_set);
+        if (ret != 0) {
+            evh_logwarn("Failed to set event handler thread affinity. (errno=%d)", errno);
         }
-        BULLSEYE_EXCLUDE_BLOCK_END
+        affinity_requested = (ret == 0);
     } else {
         evh_logdbg("Internal thread affinity not set.");
     }
 
-    int ret = pthread_create(&m_event_handler_tid, &tattr, event_handler_thread, this);
-    if (ret) {
-        // maybe it's the cset issue? try without affinity
-        evh_logwarn("Failed to start event handler thread with thread affinity - trying without. "
-                    "[errno=%d %s]",
-                    ret, strerror(ret));
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (pthread_attr_init(&tattr)) {
-            evh_logpanic("Failed to initialize thread attributes");
-        }
-        if (pthread_create(&m_event_handler_tid, &tattr, event_handler_thread, this)) {
-            evh_logpanic("Failed to start event handler thread");
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
+    ret = pthread_create(&m_event_handler_tid, &tattr, event_handler_thread, this);
+    if (ret != 0 && affinity_requested) {
+        // Try without affinity in case this is a cset issue.
+        evh_logwarn("Failed to start event handler thread with a thread affinity. Trying default "
+                    "thread affinity. (errno=%d)",
+                    errno);
+        pthread_attr_destroy(&tattr);
+        ret = pthread_attr_init(&tattr)
+            ?: pthread_create(&m_event_handler_tid, &tattr, event_handler_thread, this);
     }
-
+    // Destroy will either succeed or return EINVAL if the init fails in the above block.
     pthread_attr_destroy(&tattr);
 
-    evh_logdbg("Started event handler thread");
-    return 0;
+    if (ret == 0) {
+        evh_logdbg("Started event handler thread.");
+    } else {
+        evh_logerr("Failed to start event handler thread. (errno=%d)", errno);
+    }
+    return ret;
 }
 
 void event_handler_manager::stop_thread()
@@ -448,15 +445,11 @@ void event_handler_manager::post_new_reg_action(reg_action_t &reg_action)
         return;
     }
 
-    start_thread();
-
     evh_logfunc("add event action %s (%d)", reg_action_str(reg_action.type), reg_action.type);
 
-    bool is_empty = false;
+    bool is_empty;
     m_reg_action_q_lock.lock();
-    if (m_p_reg_action_q_to_push_to->empty()) {
-        is_empty = true;
-    }
+    is_empty = m_p_reg_action_q_to_push_to->empty();
     m_p_reg_action_q_to_push_to->push_back(reg_action);
     m_reg_action_q_lock.unlock();
     if (is_empty) {
