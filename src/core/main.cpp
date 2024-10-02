@@ -1045,6 +1045,7 @@ static void do_global_ctors_helper()
 {
     static lock_spin_recursive g_globals_lock;
     std::lock_guard<decltype(g_globals_lock)> lock(g_globals_lock);
+    int rc;
 
     if (!g_init_xlio_init_done || g_init_global_ctors_done) {
         return;
@@ -1080,6 +1081,12 @@ static void do_global_ctors_helper()
 
     // Create all global management objects
     NEW_CTOR(g_p_event_handler_manager, event_handler_manager());
+    rc = g_p_event_handler_manager->start_thread();
+    if (rc != 0) {
+        BULLSEYE_EXCLUDE_BLOCK_START
+        throw_xlio_exception("Failed to start event handler thread.\n");
+        BULLSEYE_EXCLUDE_BLOCK_END
+    }
 
     xlio_shmem_stats_open(&g_p_vlogger_level, &g_p_vlogger_details);
     *g_p_vlogger_level = g_vlogger_level;
