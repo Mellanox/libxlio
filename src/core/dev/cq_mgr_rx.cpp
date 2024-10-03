@@ -105,9 +105,6 @@ cq_mgr_rx::cq_mgr_rx(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int 
 
 void cq_mgr_rx::configure(int cq_size)
 {
-    xlio_ibv_cq_init_attr attr;
-    memset(&attr, 0, sizeof(attr));
-
     struct ibv_context *context = m_p_ib_ctx_handler->get_ibv_context();
     int comp_vector = 0;
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
@@ -119,8 +116,8 @@ void cq_mgr_rx::configure(int cq_size)
         comp_vector = g_p_app->get_worker_id() % context->num_comp_vectors;
     }
 #endif
-    m_p_ibv_cq = xlio_ibv_create_cq(context, cq_size - 1, (void *)this, m_comp_event_channel,
-                                    comp_vector, &attr);
+    m_p_ibv_cq = ibv_create_cq(context, cq_size - 1, (void *)this, m_comp_event_channel,
+                               comp_vector);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!m_p_ibv_cq) {
         cq_logerr("Failed to create CQ, this: %p, ctx: %p size: %d compch: %p", this, context,
