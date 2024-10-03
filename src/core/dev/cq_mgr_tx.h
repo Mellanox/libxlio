@@ -143,10 +143,6 @@ inline struct xlio_mlx5_cqe *cq_mgr_tx::get_cqe_tx(uint32_t &num_polled_cqes)
                                        ((m_mlx5_cq.cq_ci & (m_mlx5_cq.cqe_count - 1))
                                         << m_mlx5_cq.cqe_size_log));
     }
-    if (cqe_ret) {
-        rmb();
-        *m_mlx5_cq.dbrec = htonl(m_mlx5_cq.cq_ci);
-    }
     return cqe_ret;
 }
 

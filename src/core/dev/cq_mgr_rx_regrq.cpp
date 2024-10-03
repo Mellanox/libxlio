@@ -106,13 +106,10 @@ mem_buf_desc_t *cq_mgr_rx_regrq::poll(enum buff_status_e &status)
     }
     xlio_mlx5_cqe *cqe = check_cqe();
     if (likely(cqe)) {
-        /* Update the consumer index */
         ++m_mlx5_cq.cq_ci;
-        rmb();
         cqe_to_mem_buff_desc(cqe, m_rx_hot_buffer, status);
 
         ++m_hqrx_ptr->m_rq_data.tail;
-        *m_mlx5_cq.dbrec = htonl(m_mlx5_cq.cq_ci & 0xffffff);
 
         buff = m_rx_hot_buffer;
         m_rx_hot_buffer = nullptr;
