@@ -165,10 +165,6 @@ typedef struct ibv_wc xlio_ibv_wc;
 #define xlio_wc_rx_hw_csum_ok(wc)          (1)
 #endif
 
-typedef int xlio_ibv_cq_init_attr;
-#define xlio_ibv_create_cq(context, cqe, cq_context, channel, comp_vector, attr)                   \
-    ibv_create_cq(context, cqe, cq_context, channel, comp_vector)
-
 // rx hw timestamp
 #ifdef DEFINED_IBV_CQ_TIMESTAMP
 #define XLIO_IBV_DEVICE_ATTR_HCA_CORE_CLOCK 0
