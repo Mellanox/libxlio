@@ -187,10 +187,7 @@ mem_buf_desc_t *cq_mgr_rx_strq::poll(enum buff_status_e &status, mem_buf_desc_t 
 
     xlio_mlx5_cqe *cqe = check_cqe();
     if (likely(cqe)) {
-        /* Update the consumer index */
         ++m_mlx5_cq.cq_ci;
-        rmb();
-        *m_mlx5_cq.dbrec = htonl(m_mlx5_cq.cq_ci & 0xffffff);
 
         bool is_filler = false;
         bool is_wqe_complete = strq_cqe_to_mem_buff_desc(cqe, status, is_filler);
