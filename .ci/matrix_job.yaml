@@ -35,13 +35,30 @@ volumes:
   - {mountPath: /var/home/swx-jenkins, hostPath: /labhome/swx-jenkins}
 
 runs_on_dockers:
-# mofed
+# build
   - {name: 'ub22.04-x86_64', url: 'harbor.mellanox.com/hpcx/x86_64/ubuntu22.04/base', category: 'base', arch: 'x86_64'}
   - {name: 'ub22.04-aarch64', url: 'harbor.mellanox.com/hpcx/aarch64/ubuntu22.04/base', category: 'base', arch: 'aarch64'}
   - {name: 'rhel8.6-x86_64',  url: 'harbor.mellanox.com/hpcx/x86_64/rhel8.6/base', category: 'base', arch: 'x86_64'}
   - {name: 'ub24.04-x86_64', url: 'harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/base', category: 'base', arch: 'x86_64'}
   - {name: 'ub24.04-aarch64', url: 'harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/base', category: 'base', arch: 'aarch64'}
-  #  - {name: 'oracle8.6-mofed-x86_64',  url: 'harbor.mellanox.com/rivermax/base_oraclelinux8.6:mofed-5.9-0.3.4.0', category: 'base', arch: 'x86_64'}
+  - {
+      file: '.ci/dockerfiles/Dockerfile.openeuler22.03-sp1',
+      arch: 'x86_64',
+      name: 'openeuler22.03-sp1-x86_64',
+      uri: 'xlio/$arch/$name/build',
+      tag: '20241001',
+      build_args: '--build-arg ARCH=x86_64 --no-cache',
+      category: 'base'
+    }
+  - {
+      file: '.ci/dockerfiles/Dockerfile.openeuler22.03-sp1',
+      arch: 'aarch64',
+      name: 'openeuler22.03-sp1-aarch64',
+      uri: 'xlio/$arch/$name/build',
+      tag: '20241001',
+      build_args: '--build-arg ARCH=aarch64 --no-cache',
+      category: 'base'
+    }
 # tool
   - {
      file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
