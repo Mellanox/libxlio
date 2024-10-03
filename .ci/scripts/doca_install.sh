@@ -69,7 +69,7 @@ function map_os_and_arch {
         openEuler)
             OS="ctyunos23.01"
             GPG_KEY_CMD='rpm --import "${GPG_KEY}"'
-            REPO_CMD="cat <<EOF | sed 's/^[ \t]*//' >> /etc/yum.repos.d/doca.repo
+            REPO_CMD="cat <<EOF | sed 's/^[ \t]*//' > /etc/yum.repos.d/doca.repo
 [doca]
 name=DOCA
 baseurl=\${REPO_URL}
