@@ -66,6 +66,23 @@ function map_os_and_arch {
             UPDATE_CMD="makecache"
             ;;
 
+        openEuler)
+            OS="ctyunos23.01"
+            GPG_KEY_CMD='rpm --import "${GPG_KEY}"'
+            REPO_CMD="cat <<EOF | sed 's/^[ \t]*//' >> /etc/yum.repos.d/doca.repo
+[doca]
+name=DOCA
+baseurl=\${REPO_URL}
+enabled=1
+gpgcheck=1
+EOF
+"
+            PKG_TYPE="rpm"
+            PKG_TOOL="rpm"
+            PKG_MGR="yum --nogpgcheck"
+            UPDATE_CMD="makecache"
+            ;;
+
         *)
             echo "Unsupported OS: $ID"
             return 1

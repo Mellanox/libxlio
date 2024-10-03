@@ -1,0 +1,23 @@
+ARG ARCH=x86_64
+ARG HARBOR_URL=harbor.mellanox.com
+FROM ${HARBOR_URL}/swx-infra/media/${ARCH}/base/openeuler:22.03-lts-sp1
+ARG _UID=6213
+ARG _GID=101
+ARG _LOGIN=swx-jenkins
+ARG _HOME=/var/home/$_LOGIN
+
+RUN yum install -y autoconf automake make libtool git gcc-c++ \
+    util-linux sudo rpm-build \
+ && yum clean all \
+ && rm -rf /var/cache/yum
+
+RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
+    echo "root ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
+    mkdir -p ${_HOME} && \
+    groupadd -f -g "$_GID" "$_LOGIN" && \
+    useradd -u "$_UID" -g "$_GID" -s /bin/bash -m -d ${_HOME} "${_LOGIN}" && \
+    chown -R ${_LOGIN} ${_HOME} && \
+    mkdir /build && chown -R ${_LOGIN} /build
+
+USER "$_LOGIN"
+ENTRYPOINT [ "/bin/bash", "--login", "--rcfile", "/etc/bashrc", "-c" ]
