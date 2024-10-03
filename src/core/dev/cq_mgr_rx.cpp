@@ -116,8 +116,20 @@ void cq_mgr_rx::configure(int cq_size)
         comp_vector = g_p_app->get_worker_id() % context->num_comp_vectors;
     }
 #endif
-    m_p_ibv_cq = ibv_create_cq(context, cq_size - 1, (void *)this, m_comp_event_channel,
-                               comp_vector);
+
+    struct ibv_cq_init_attr_ex attr = {};
+    struct mlx5dv_cq_init_attr dvattr = {};
+
+    attr.cqe = cq_size - 1; // This parameter is incremented by 1 in libibverbs
+    attr.cq_context = (void *)this;
+    attr.channel = m_comp_event_channel;
+    attr.comp_vector = comp_vector;
+    attr.wc_flags = IBV_WC_STANDARD_FLAGS;
+    attr.comp_mask = IBV_CQ_INIT_ATTR_MASK_FLAGS;
+    attr.flags = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN;
+
+    struct ibv_cq_ex *cq_ex = mlx5dv_create_cq(context, &attr, &dvattr);
+    m_p_ibv_cq = ibv_cq_ex_to_cq(cq_ex);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!m_p_ibv_cq) {
         cq_logerr("Failed to create CQ, this: %p, ctx: %p size: %d compch: %p", this, context,
