@@ -1,3 +1,11 @@
+Version 3.40.2-1:
+Date + Time 2024-10-07
+=============================================================
+Fixed:
+        - RM #4082058 3.40.1 is causing a performance degradation with multiple nginx scenarios
+        - RM #4071902 Getting low CPS Performance and wrong duration when running PKA with XLIO
+        - RM #4021863 XLIO with wrk while enabling multiple threads fails with a seg fault
+
 Version 3.40.1-1:
 Date + Time 2024-09-11
 =============================================================
