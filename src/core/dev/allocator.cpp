@@ -334,7 +334,7 @@ void xlio_registrator::deregister_memory()
 
     rc = doca_mmap_destroy(m_p_doca_mmap);
     if (DOCA_IS_ERROR(rc)) {
-        PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_destroy");
+        PRINT_DOCA_ERR(__log_info_warn, rc, "doca_mmap_destroy");
     }
     m_p_doca_mmap = nullptr;
 }

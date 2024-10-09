@@ -234,7 +234,7 @@ bool hw_queue_tx::check_doca_caps(doca_devinfo *devinfo, uint32_t &max_burst_siz
     uint32_t txq_burst_size_conf = (align32pow2(safe_mce_sys().tx_num_wr));
     if (txq_burst_size_conf > max_burst_size) {
         // TODO: Currently we will always have this warning... tx_num_wr set to 32K.
-        hwqtx_logwarn("Decreasing BurstSize %u to capability %u.", txq_burst_size_conf,
+        hwqtx_loginfo("Decreasing BurstSize %u to capability %u.", txq_burst_size_conf,
                       max_burst_size);
         txq_burst_size_conf = max_burst_size;
     }
