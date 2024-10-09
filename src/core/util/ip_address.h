@@ -317,7 +317,8 @@ public:
     }
 
     ip_addr(ip_addr &&addr)
-        : ip_address(addr)
+        : ip_address(std::forward<ip_address>(addr))
+        // coverity[use_after_move:FALSE] /*Turn off check use_after_move*/
         , m_family(addr.m_family)
     {
     }
