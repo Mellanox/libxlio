@@ -691,7 +691,7 @@ err_t sockinfo_tcp_ops_tls::tls_rx_consume_ready_packets()
         descq_t descs_rx_ready;
 
         m_p_sock->sock_pop_descs_rx_ready(&descs_rx_ready);
-        for (size_t i = 0; i < descs_rx_ready.size(); i++) {
+        while (descs_rx_ready.size()) {
             mem_buf_desc_t *temp;
             temp = descs_rx_ready.front();
             descs_rx_ready.pop_front();
