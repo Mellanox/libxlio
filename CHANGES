@@ -1,3 +1,19 @@
+Merged Version 3.40.1-1:
+Date + Time 2024-10-09
+=============================================================
+Added:
+        - RM #4033654 Rotten test folder cleanup
+        - RM #4034865 XLIO parameters and specs cleanup
+        - RM #4034844: Manage SPDK/OCI parameters with nvme_bf3 XLIO_SPEC
+Fixed:
+        - RM #4014486 Missing ack for partial TSO segments after retransmission
+        - RM #4014504 RTO after fast retransmission puts TCP segments in wrong order in unsent list
+        - RM #3382805 XLIO shows warning: "could not figure out source ip for rtv"
+        - RM #3594311 Segmentation fault in nginx scenario - unlock_tcp_con
+        - RM #4043152 Sockperf with multiple IPv6 sockets fails with XLIO warning and an error
+        - RM #4039462 XLIO crashes on stats with thread_local dummy
+        - RM #3502635 Instability with Nginx performance results on BF3
+
 Merged Version 3.40.0-1:
 Date + Time 2024-09-01
 =============================================================
