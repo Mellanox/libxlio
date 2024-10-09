@@ -75,8 +75,7 @@ uint32_t dst_entry_tcp::send_doca(struct pbuf *p, uint16_t flags, uint16_t mss)
 
     struct pbuf *payload_pbuf = is_zerocopy ? p->next : p;
     if (unlikely(payload_pbuf->ref > 1)) {
-        dst_tcp_logwarn(
-            "There is no such list in DOCA implementation. Need to test if this scenario works");
+        dst_tcp_loginfo("Resending TCP segment while previous attempt is not yet completed");
     }
     payload_pbuf->ref++;
 
