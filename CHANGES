@@ -1,3 +1,12 @@
+Merged Version 3.40.2-1:
+Date + Time 2024-10-09
+=============================================================
+Added:
+        - RM #4021863 Add XLIO_TCP_2T_RULES
+Fixed:
+        - RM #4071902 Fix notifications after RST
+        - RM #4082058 Fixing return from rx_wait_helper without data
+
 Merged Version 3.40.1-1:
 Date + Time 2024-10-09
 =============================================================
