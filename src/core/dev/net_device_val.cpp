@@ -1542,9 +1542,6 @@ bool net_device_val::verify_qp_creation(const char *ifname, enum ibv_qp_type qp_
     xlio_ibv_qp_init_attr qp_init_attr;
     memset(&qp_init_attr, 0, sizeof(qp_init_attr));
 
-    xlio_ibv_cq_init_attr attr;
-    memset(&attr, 0, sizeof(attr));
-
     qp_init_attr.cap.max_send_wr = 2048;
     qp_init_attr.cap.max_recv_wr = MCE_DEFAULT_RX_NUM_WRE;
     qp_init_attr.cap.max_inline_data = MCE_DEFAULT_TX_MAX_INLINE;
@@ -1593,8 +1590,7 @@ bool net_device_val::verify_qp_creation(const char *ifname, enum ibv_qp_type qp_
     }
     VALGRIND_MAKE_MEM_DEFINED(channel, sizeof(ibv_comp_channel));
     context = p_ib_ctx->get_ibv_context();
-    cq = xlio_ibv_create_cq(context, safe_mce_sys().tx_num_wr, (void *)this, channel, comp_vector,
-                            &attr);
+    cq = ibv_create_cq(context, safe_mce_sys().tx_num_wr, (void *)this, channel, comp_vector);
     if (!cq) {
         nd_logdbg("cq creation failed for interface %s (errno=%d %s)", ifname, errno,
                   strerror(errno));
