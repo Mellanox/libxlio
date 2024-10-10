@@ -384,7 +384,7 @@ void xlio_stats_instance_remove_socket_block(socket_stats_t *local_addr)
 
     g_lock_skt_inst_arr.lock();
 
-    print_full_stats(local_addr, NULL, safe_mce_sys().stats_file);
+    print_full_stats(local_addr, NULL, g_stats_file);
     socket_stats_t *p_skt_stats =
         (socket_stats_t *)g_p_stats_data_reader->pop_data_reader(local_addr);
 

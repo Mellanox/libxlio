@@ -207,7 +207,7 @@ void hugepage_mgr::print_report(bool short_report /*=false*/)
                     m_hugepages[hugepage].nr_hugepages_allocated,
                     m_hugepages[hugepage].nr_allocations);
     }
-    vlog_printf(VLOG_INFO, "  Total: allocations=%u fails=%u\n", m_stats.allocations,
+    vlog_printf(VLOG_INFO, "  Total: allocations=%u unsatisfied=%u\n", m_stats.allocations,
                 m_stats.fails);
     vlog_printf(VLOG_INFO, "  Total: allocated=%zuMB requested=%zuMB unused_space=%zuMB\n",
                 m_stats.total_allocated / ONE_MB, m_stats.total_requested / ONE_MB,

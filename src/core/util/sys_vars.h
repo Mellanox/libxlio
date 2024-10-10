@@ -502,7 +502,6 @@ public:
     uint32_t tcp_send_buffer_size;
     uint32_t tx_segs_ring_batch_tcp;
     uint32_t tx_segs_pool_batch_tcp;
-    FILE *stats_file;
     /* This field should be used to store and use data for XLIO_EXTRA_API_IOCTL */
     struct {
         struct {
@@ -528,7 +527,6 @@ private:
     // prevent unautothrized creation of objects
     mce_sys_var()
         : sysctl_reader(sysctl_reader_t::instance())
-        , stats_file(nullptr)
         , m_ioctl {}
     {
         // coverity[uninit_member]

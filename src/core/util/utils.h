@@ -53,8 +53,10 @@
 
 /**
  * Check if file type is regular
- **/
+ */
 int check_if_regular_file(char *path);
+
+void open_stats_file();
 
 /**
  * L3 and L4 Header Checksum Calculation

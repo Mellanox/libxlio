@@ -52,6 +52,7 @@
 #include "utils/compiler.h"
 #include "utils/rdtsc.h"
 #include "util/xlio_stats.h"
+#include "util/hugepage_mgr.h"
 #include "util/utils.h"
 #include "event/event_handler_manager.h"
 #include "event/poll_group.h"
@@ -120,6 +121,11 @@ static int free_libxlio_resources()
     vlog_printf(VLOG_DEBUG, "%s: Closing libxlio resources\n", __FUNCTION__);
 
     g_b_exit = true;
+
+    if (safe_mce_sys().print_report) {
+        buffer_pool::print_full_report(VLOG_INFO);
+        g_hugepage_mgr.print_report();
+    }
 
     // Destroy polling groups before fd_collection to clear XLIO sockets from the fd_collection
     poll_group::destroy_all_groups();
@@ -197,10 +203,6 @@ static int free_libxlio_resources()
     }
     g_socketxtreme_ec_pool = NULL;
 
-    if (safe_mce_sys().print_report) {
-        buffer_pool::print_full_report(VLOG_INFO);
-    }
-
     if (g_buffer_pool_zc) {
         delete g_buffer_pool_zc;
     }
@@ -272,8 +274,6 @@ static int free_libxlio_resources()
     vlog_stop();
 
     if (g_stats_file) {
-        // cosmetics - remove when adding iomux block
-        fprintf(g_stats_file, "======================================================\n");
         fclose(g_stats_file);
         g_stats_file = nullptr;
     }
@@ -1186,7 +1186,6 @@ void reset_globals()
     g_p_route_table_mgr = nullptr;
     g_bind_no_port = nullptr;
     g_p_rule_table_mgr = nullptr;
-    g_stats_file = nullptr;
     g_p_net_device_table_mgr = nullptr;
     g_p_neigh_table_mgr = nullptr;
     g_p_lwip = nullptr;
@@ -1286,19 +1285,7 @@ extern "C" int xlio_init(void)
     check_locked_mem();
     check_netperf_flags();
 
-    if (*safe_mce_sys().stats_filename) {
-        if (check_if_regular_file(safe_mce_sys().stats_filename)) {
-            vlog_printf(VLOG_WARNING,
-                        "FAILED to create " PRODUCT_NAME
-                        " statistics file. %s is not a regular file.\n",
-                        safe_mce_sys().stats_filename);
-        } else if (!(g_stats_file = fopen(safe_mce_sys().stats_filename, "w"))) {
-            vlog_printf(VLOG_WARNING, " Couldn't open statistics file: %s\n",
-                        safe_mce_sys().stats_filename);
-        }
-    }
-    safe_mce_sys().stats_file = g_stats_file;
-
+    open_stats_file();
     sock_redirect_main();
 
     return 0;

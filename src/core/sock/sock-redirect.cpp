@@ -2291,6 +2291,16 @@ EXPORT_SYMBOL pid_t XLIO_SYMBOL(fork)(void)
         }
         srdr_logdbg_exit("Child Process: starting with %d", getpid());
         g_is_forked_child = false;
+
+        const char *stats_filename = getenv(SYS_VAR_STATS_FILENAME);
+        if (stats_filename && strstr(stats_filename, "%d")) {
+            // Re-open the stats file in case of per-process filename.
+            if (g_stats_file) {
+                fclose(g_stats_file);
+                g_stats_file = nullptr;
+            }
+            open_stats_file();
+        }
         sock_redirect_main();
 
 #if defined(DEFINED_NGINX)
