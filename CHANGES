@@ -1,3 +1,22 @@
+Version 3.940.2-1:
+Date + Time 2024-10-10
+=============================================================
+Added:
+        - RM #3898109 Bump to DOCA version 2.9.0029
+        - RM #3898109 DOCA RX Task batching
+        - RM #3898201 Enable DOCA data path by default
+	- RM #4082814 Separate rfs rule create for DOCA
+	- RM #3898125 Integrate DOCA flow tag support
+	- RM #4067236 Integrating per task LSO mss
+        - HPCINFRA-1798 Update code base to clang-format-15
+Fixed:
+	- RM #4067241 Fix doca_buf LSO chaining
+        - RM #4082814 Fix TX/RX channel fd handling for DOCA
+	- RM #4098047 Changing valid flows warnings to info
+	- HPCINFRA-2661 Nvidia license and copyright information update
+Merged:
+	- XLIO 3.40.2
+
 Merged Version 3.40.2-1:
 Date + Time 2024-10-09
 =============================================================
