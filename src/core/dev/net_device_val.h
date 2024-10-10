@@ -289,7 +289,7 @@ private:
     resource_allocation_key *get_ring_key_redirection(resource_allocation_key *key);
     void ring_key_redirection_release(resource_allocation_key *key);
     void print_ips();
-    bool get_up_and_active_slaves(bool *up_and_active_slaves, size_t size);
+    bool get_up_and_active_slaves(); /* Returns true if a slave status is changed */
 
     /* See: RFC 3549 2.3.3.1. */
     int m_if_idx; /* Uniquely identifies interface (not unique: eth4 and eth4:5 has the same idx) */

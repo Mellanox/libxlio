@@ -2209,15 +2209,20 @@ err_t sockinfo_tcp::rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, str
         }
 
         // fill io vector array with data buffer pointers
-        iovec iov[p_first_desc->rx.n_frags];
-        nr_frags = 0;
-        for (tmp = p_first_desc; tmp; tmp = tmp->p_next_desc) {
-            iov[nr_frags++] = tmp->rx.frag;
-        }
+        struct iovec *iov = new struct iovec[p_first_desc->rx.n_frags];
+        if (likely(iov)) {
+            nr_frags = 0;
+            for (tmp = p_first_desc; tmp; tmp = tmp->p_next_desc) {
+                iov[nr_frags++] = tmp->rx.frag;
+            }
 
-        // call user callback
-        callback_retval =
-            conn->m_rx_callback(conn->m_fd, nr_frags, iov, &pkt_info, conn->m_rx_callback_context);
+            // call user callback
+            callback_retval = conn->m_rx_callback(conn->m_fd, nr_frags, iov, &pkt_info,
+                                                  conn->m_rx_callback_context);
+            delete[] iov;
+        } else {
+            callback_retval = XLIO_PACKET_DROP;
+        }
     }
 
     if (callback_retval == XLIO_PACKET_DROP) {
