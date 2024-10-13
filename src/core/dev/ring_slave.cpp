@@ -657,8 +657,8 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
                 struct tcphdr *p_tcp_h = (struct tcphdr *)((uint8_t *)p_ip_h + ip_hdr_len);
 
                 // Update packet descriptor with datagram base address and length
-                p_rx_wc_buf_desc->rx.frag.iov_base = (uint8_t *)p_tcp_h + sizeof(struct tcphdr);
-                p_rx_wc_buf_desc->rx.frag.iov_len = ip_payload_len - sizeof(struct tcphdr);
+                p_rx_wc_buf_desc->rx.frag.iov_base = (uint8_t *)p_tcp_h + p_tcp_h->doff * 4;
+                p_rx_wc_buf_desc->rx.frag.iov_len = ip_payload_len - p_tcp_h->doff * 4;
                 p_rx_wc_buf_desc->rx.sz_payload = ip_payload_len - p_tcp_h->doff * 4;
 
                 p_rx_wc_buf_desc->rx.tcp.p_ip_h = p_ip_h;
