@@ -456,6 +456,18 @@ extern "C" int xlio_poll_group_destroy(xlio_poll_group_t group)
     return 0;
 }
 
+extern "C" int xlio_poll_group_update(xlio_poll_group_t group,
+                                      const struct xlio_poll_group_attr *attr)
+{
+    poll_group *grp = reinterpret_cast<poll_group *>(group);
+
+    if (!attr || !attr->socket_event_cb) {
+        errno = EINVAL;
+        return -1;
+    }
+    return grp->update(attr);
+}
+
 extern "C" void xlio_poll_group_poll(xlio_poll_group_t group)
 {
     poll_group *grp = reinterpret_cast<poll_group *>(group);

@@ -117,6 +117,21 @@ void poll_group::destroy_all_groups()
     }
 }
 
+int poll_group::update(const struct xlio_poll_group_attr *attr)
+{
+    if (m_group_flags != attr->flags) {
+        // Runtime flags change is not supported for now.
+        errno = EINVAL;
+        return -1;
+    }
+
+    m_socket_event_cb = attr->socket_event_cb;
+    m_socket_comp_cb = attr->socket_comp_cb;
+    m_socket_rx_cb = attr->socket_rx_cb;
+
+    return 0;
+}
+
 void poll_group::poll()
 {
     for (ring *rng : m_rings) {
