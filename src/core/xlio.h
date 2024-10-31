@@ -425,6 +425,7 @@ int xlio_init_ex(const struct xlio_init_attr *attr);
 
 int xlio_poll_group_create(const struct xlio_poll_group_attr *attr, xlio_poll_group_t *group_out);
 int xlio_poll_group_destroy(xlio_poll_group_t group);
+int xlio_poll_group_update(xlio_poll_group_t group, const struct xlio_poll_group_attr *attr);
 void xlio_poll_group_poll(xlio_poll_group_t group);
 
 /*

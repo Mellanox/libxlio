@@ -55,6 +55,8 @@ public:
     ~poll_group();
     static void destroy_all_groups();
 
+    int update(const struct xlio_poll_group_attr *attr);
+
     void poll();
 
     void add_dirty_socket(sockinfo_tcp *si);
