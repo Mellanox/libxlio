@@ -1356,6 +1356,13 @@ err_t sockinfo_tcp::ip_output_doca(struct pbuf *p, struct tcp_seg *seg, void *v_
     } else {
         ret = p_dst->doca_slow_path(p, flags, pcb->mss, p_si_tcp->m_so_ratelimit);
     }
+
+    if (unlikely(safe_mce_sys().ring_migration_ratio_tx > 0)) { // Condition for cache optimization
+        if (p_dst->try_migrate_ring_tx(p_si_tcp->m_tcp_con_lock.get_lock_base())) {
+            IF_STATS_O(p_si_tcp, p_si_tcp->m_p_socket_stats->counters.n_tx_migrations++);
+        }
+    }
+
     return (ret > 0 ? ERR_OK : ERR_WOULDBLOCK);
 }
 
