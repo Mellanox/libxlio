@@ -41,7 +41,6 @@
 #include <sys/time.h>
 
 #include "hash.h"
-#include "tc.h"
 #include "daemon.h"
 
 int open_store(void);

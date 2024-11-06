@@ -127,12 +127,6 @@
             sys_log(LOG_INFO, "[TRACE ] " fmt, ##__VA_ARGS__);                                     \
     } while (0)
 
-#define log_hexdump(_ptr, _size)                                                                   \
-    do {                                                                                           \
-        if (daemon_cfg.opt.log_level > 5)                                                          \
-            sys_hexdump((_ptr), (_size));                                                          \
-    } while (0)
-
 /**
  * @struct module_cfg
  * @brief Configuration parameters in global values
@@ -160,7 +154,6 @@ struct module_cfg {
     int notify_fd;
     const char *notify_dir;
     hash_t ht;
-    tc_t tc;
     struct list_head if_list;
 };
 
@@ -185,7 +178,6 @@ struct sockaddr_store {
 struct store_pid {
     pid_t pid; /**< Process id */
     hash_t ht; /**< Handle to socket store */
-    struct list_head flow_list; /**< List of flows */
     uint32_t lib_ver; /**< Library version that the process uses */
     struct timeval t_start; /**< Start time of the process */
 };
@@ -202,28 +194,10 @@ struct store_fid {
     uint8_t state; /**< Current TCP state of the connection */
 };
 
-/**
- * @struct store_flow
- * @brief Describe flow
- */
-struct store_flow {
-    struct list_head item; /**< Link to use in queue */
-    uint32_t handle; /**< Handle value in term of tc */
-    int type; /**< Flow type */
-    uint32_t if_id; /**< Interface index */
-    uint32_t tap_id; /**< Tap device index */
-    struct {
-        struct sockaddr_store src; /**< Source address */
-        struct sockaddr_store dst; /**< Destination address */
-    } flow;
-};
-
 void sys_log(int level, const char *format, ...);
 
 ssize_t sys_sendto(int sockfd, const void *buf, size_t len, int flags,
                    const struct sockaddr *dest_addr, socklen_t addrlen);
-
-char *sys_exec(const char *format, ...);
 
 static inline char *sys_addr2str(struct sockaddr_store *addr)
 {
@@ -238,126 +212,6 @@ static inline char *sys_addr2str(struct sockaddr_store *addr)
     }
 
     return addrbuf;
-}
-
-static inline char *sys_ip2str(struct sockaddr_store *addr)
-{
-    static __thread char ipbuf[100];
-    if (addr->family == AF_INET) {
-        inet_ntop(addr->family, &addr->addr4.sin_addr, ipbuf, sizeof(ipbuf) - 1);
-    } else {
-        inet_ntop(addr->family, &addr->addr6.sin6_addr, ipbuf, sizeof(ipbuf) - 1);
-    }
-
-    return ipbuf;
-}
-
-static inline uint32_t sys_lo_ifindex(void)
-{
-    static __thread uint32_t lo_ifindex = 0;
-    struct ifaddrs *ifaddr, *ifa;
-
-    if (lo_ifindex > 0) {
-        return lo_ifindex;
-    }
-
-    if (!getifaddrs(&ifaddr)) {
-        for (ifa = ifaddr; NULL != ifa; ifa = ifa->ifa_next) {
-            if (ifa->ifa_addr->sa_family == AF_INET && (ifa->ifa_flags & IFF_LOOPBACK)) {
-                lo_ifindex = if_nametoindex(ifa->ifa_name);
-                break;
-            }
-        }
-        freeifaddrs(ifaddr);
-    }
-
-    return lo_ifindex;
-}
-
-static inline char *sys_lo_ifname(void)
-{
-    static __thread char lo_ifname[IF_NAMESIZE] = {0};
-
-    if (lo_ifname[0] > 0) {
-        return lo_ifname;
-    }
-
-    if (NULL == if_indextoname(sys_lo_ifindex(), lo_ifname)) {
-        lo_ifname[0] = 0;
-    }
-
-    return lo_ifname;
-}
-
-static inline int sys_iplocal(uint32_t addr)
-{
-    int rc = 0;
-    struct ifaddrs *ifaddr, *ifa;
-    struct sockaddr_in *sa;
-
-    if (!getifaddrs(&ifaddr)) {
-        for (ifa = ifaddr; NULL != ifa; ifa = ifa->ifa_next) {
-            if (ifa->ifa_addr->sa_family == AF_INET) {
-                sa = (struct sockaddr_in *)ifa->ifa_addr;
-                if (addr == sa->sin_addr.s_addr) {
-                    rc = 1;
-                    break;
-                }
-            }
-        }
-        freeifaddrs(ifaddr);
-    }
-
-    return rc;
-}
-
-static inline void sys_hexdump(void *ptr, int buflen)
-{
-    unsigned char *buf = (unsigned char *)ptr;
-    char out_buf[256];
-    int ret = 0;
-    int out_pos = 0;
-    int i, j;
-
-    log_trace("dump data at %p\n", ptr);
-    for (i = 0; i < buflen; i += 16) {
-        out_pos = 0;
-        ret = sprintf(out_buf + out_pos, "%06x: ", i);
-        if (ret < 0) {
-            return;
-        }
-        out_pos += ret;
-        for (j = 0; j < 16; j++) {
-            if (i + j < buflen) {
-                ret = sprintf(out_buf + out_pos, "%02x ", buf[i + j]);
-            } else {
-                ret = sprintf(out_buf + out_pos, "   ");
-            }
-            if (ret < 0) {
-                return;
-            }
-            out_pos += ret;
-        }
-        ret = sprintf(out_buf + out_pos, " ");
-        if (ret < 0) {
-            return;
-        }
-        out_pos += ret;
-        for (j = 0; j < 16; j++) {
-            if (i + j < buflen) {
-                ret = sprintf(out_buf + out_pos, "%c", isprint(buf[i + j]) ? buf[i + j] : '.');
-                if (ret < 0) {
-                    return;
-                }
-                out_pos += ret;
-            }
-        }
-        ret = sprintf(out_buf + out_pos, "\n");
-        if (ret < 0) {
-            return;
-        }
-        log_trace("%s", out_buf);
-    }
 }
 
 #endif /* TOOLS_DAEMON_DAEMON_H_ */

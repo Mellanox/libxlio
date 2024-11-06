@@ -172,7 +172,7 @@ typedef std::unordered_map<uint32_t, uint32_t> tc_class_priority_map;
 class net_device_val {
 public:
     enum state { DOWN, UP, RUNNING, INVALID };
-    enum bond_type { NO_BOND, ACTIVE_BACKUP, LAG_8023ad, NETVSC };
+    enum bond_type { NO_BOND, ACTIVE_BACKUP, LAG_8023ad };
     enum bond_xmit_hash_policy {
         XHP_LAYER_2,
         XHP_LAYER_3_4,

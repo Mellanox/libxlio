@@ -42,13 +42,10 @@
 #include <sys/un.h>
 
 #include "hash.h"
-#include "tc.h"
 #include "daemon.h"
 
 extern int open_store(void);
 extern void close_store(void);
-extern int open_flow(void);
-extern void close_flow(void);
 extern int open_message(void);
 extern void close_message(void);
 extern int proc_message(void);
@@ -69,12 +66,6 @@ int proc_loop(void)
 
     log_debug("setting store ...\n");
     rc = open_store();
-    if (rc < 0) {
-        goto err;
-    }
-
-    log_debug("setting flow ...\n");
-    rc = open_flow();
     if (rc < 0) {
         goto err;
     }
@@ -137,7 +128,6 @@ err:
 
     close_message();
     close_notify();
-    close_flow();
     close_store();
 
     return rc;

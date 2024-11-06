@@ -38,7 +38,6 @@
 #include <unordered_map>
 
 #include "vlogger/vlogger.h"
-#include "dev/ring_tap.h"
 #include "event/event_handler_manager.h"
 #include "event/timer_handler.h"
 #include "sock/cleanable_obj.h"
@@ -105,14 +104,6 @@ public:
     int add_cq_channel_fd(int cq_ch_fd, ring *p_ring);
 
     /**
-     * Add tap fd index to tap_map.
-     * @param tapfd: tap fd.
-     * @param p_ring: pointer to ring owner of the tap.
-     * @return 0 on success, -1 on failure.
-     */
-    int addtapfd(int tapfd, ring_tap *p_ring);
-
-    /**
      * Remove sockinfo.
      */
     int del_sockfd(int fd, bool is_for_udp_pool = false);
@@ -128,18 +119,9 @@ public:
      */
     int del_cq_channel_fd(int fd, bool b_cleanup = false);
 
-    /**
-     * Remove tap_fd from tap_map.
-     */
-    void del_tapfd(int fd);
-
     void set_socket(int fd, sockinfo *si) { m_p_sockfd_map[fd] = si; }
     void clear_socket(int fd) { m_p_sockfd_map[fd] = nullptr; }
     void clear_sockets();
-    /**
-     * Call set_immediate_os_sample of the input fd.
-     */
-    inline bool set_immediate_os_sample(int fd);
 
     inline void reuse_sockfd(int fd, sockinfo *p_sfd_api_obj);
     inline void destroy_sockfd(sockinfo *p_sfd_api_obj);
@@ -157,11 +139,6 @@ public:
      * Get cq_channel_info by fd.
      */
     inline cq_channel_info *get_cq_channel_fd(int fd);
-
-    /**
-     * Get rint_tap by tap fd.
-     */
-    inline ring_tap *get_tapfd(int fd);
 
     /**
      * Get the fd_map size.
@@ -213,7 +190,6 @@ private:
     sockinfo **m_p_sockfd_map;
     epfd_info **m_p_epfd_map;
     cq_channel_info **m_p_cq_channel_map;
-    ring_tap **m_p_tap_map;
 
     epfd_info_list_t m_epfd_lst;
     // Contains fds which are in closing process
@@ -251,22 +227,6 @@ template <typename cls> inline cls *fd_collection::get(int fd, cls **map_type)
     return obj;
 }
 
-inline bool fd_collection::set_immediate_os_sample(int fd)
-{
-    ring_tap *p_ring;
-
-    lock();
-
-    if ((p_ring = get_tapfd(fd))) {
-        p_ring->set_tap_data_available();
-        unlock();
-        return true;
-    }
-
-    unlock();
-    return false;
-}
-
 inline void fd_collection::reuse_sockfd(int fd, sockinfo *p_sfd_api_obj)
 {
     lock();
@@ -298,11 +258,6 @@ inline epfd_info *fd_collection::get_epfd(int fd)
 inline cq_channel_info *fd_collection::get_cq_channel_fd(int fd)
 {
     return get(fd, m_p_cq_channel_map);
-}
-
-inline ring_tap *fd_collection::get_tapfd(int fd)
-{
-    return get(fd, m_p_tap_map);
 }
 
 inline int fd_collection::get_fd_map_size()

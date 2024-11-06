@@ -84,9 +84,6 @@ fd_collection::fd_collection()
 
     m_p_cq_channel_map = new cq_channel_info *[m_n_fd_map_size];
     memset(m_p_cq_channel_map, 0, m_n_fd_map_size * sizeof(cq_channel_info *));
-
-    m_p_tap_map = new ring_tap *[m_n_fd_map_size];
-    memset(m_p_tap_map, 0, m_n_fd_map_size * sizeof(ring_tap *));
 }
 
 fd_collection::~fd_collection()
@@ -104,9 +101,6 @@ fd_collection::~fd_collection()
 
     delete[] m_p_cq_channel_map;
     m_p_cq_channel_map = nullptr;
-
-    delete[] m_p_tap_map;
-    m_p_tap_map = nullptr;
 
     m_epfd_lst.clear_without_cleanup();
     m_pending_to_remove_lst.clear_without_cleanup();
@@ -191,11 +185,6 @@ void fd_collection::clear()
             }
             m_p_cq_channel_map[fd] = nullptr;
             fdcoll_logdbg("destroyed cq_channel_fd=%d", fd);
-        }
-
-        if (m_p_tap_map[fd]) {
-            m_p_tap_map[fd] = nullptr;
-            fdcoll_logdbg("destroyed tapfd=%d", fd);
         }
     }
 
@@ -390,29 +379,6 @@ int fd_collection::addepfd(int epfd, int size)
     return 0;
 }
 
-int fd_collection::addtapfd(int tapfd, ring_tap *p_ring)
-{
-    fdcoll_logfunc("tapfd=%d, p_ring=%p", tapfd, p_ring);
-
-    if (!is_valid_fd(tapfd)) {
-        return -1;
-    }
-
-    lock();
-
-    if (get_tapfd(tapfd)) {
-        fdcoll_logwarn("[tapfd=%d] already exist in the collection (ring %p)", tapfd,
-                       get_tapfd(tapfd));
-        return -1;
-    }
-
-    m_p_tap_map[tapfd] = p_ring;
-
-    unlock();
-
-    return 0;
-}
-
 int fd_collection::add_cq_channel_fd(int cq_ch_fd, ring *p_ring)
 {
     fdcoll_logfunc("cq_ch_fd=%d", cq_ch_fd);
@@ -522,17 +488,6 @@ void fd_collection::remove_epfd_from_list(epfd_info *epfd)
 int fd_collection::del_cq_channel_fd(int fd, bool b_cleanup /*=false*/)
 {
     return del(fd, b_cleanup, m_p_cq_channel_map);
-}
-
-void fd_collection::del_tapfd(int fd)
-{
-    if (!is_valid_fd(fd)) {
-        return;
-    }
-
-    lock();
-    m_p_tap_map[fd] = nullptr;
-    unlock();
 }
 
 template <typename cls> int fd_collection::del(int fd, bool b_cleanup, cls **map_type)

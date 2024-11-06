@@ -45,7 +45,6 @@
 #endif
 
 #include "hash.h"
-#include "tc.h"
 #include "daemon.h"
 
 extern int proc_loop(void);
@@ -267,7 +266,6 @@ static int config_def(void)
     daemon_cfg.notify_fd = -1;
     daemon_cfg.notify_dir = XLIO_AGENT_PATH;
     daemon_cfg.ht = NULL;
-    daemon_cfg.tc = NULL;
 
     return rc;
 }
@@ -420,57 +418,4 @@ ssize_t sys_sendto(int sockfd, const void *buf, size_t len, int flags,
     } while (!(flags & MSG_DONTWAIT) && (len > 0));
     // coverity[return_overflow:FALSE] /*Turn off coverity check for overflow*/
     return nb;
-}
-
-char *sys_exec(const char *format, ...)
-{
-    static __thread char outbuf[256];
-    FILE *file = NULL;
-    va_list va;
-    char *cmd;
-    int ret;
-
-    /* calculate needed size for command buffer */
-    va_start(va, format);
-    ret = vsnprintf(NULL, 0, format, va);
-    va_end(va);
-    if (ret <= 0) {
-        goto err;
-    }
-
-    /* allocate command buffer */
-    ret += 1;
-    cmd = malloc(ret);
-    if (NULL == cmd) {
-        goto err;
-    }
-
-    /* fill command buffer */
-    va_start(va, format);
-    ret = vsnprintf(cmd, ret, format, va);
-    va_end(va);
-    if (ret <= 0) {
-        free(cmd);
-        goto err;
-    }
-
-    /* execute command */
-    file = popen(cmd, "r");
-    log_trace("Run command: %s\n", cmd);
-    free(cmd);
-    if (NULL == file) {
-        goto err;
-    }
-
-    /* save output */
-    memset(outbuf, 0, sizeof(outbuf));
-    if ((NULL == fgets(outbuf, sizeof(outbuf) - 1, file)) && (ferror(file))) {
-        pclose(file);
-        goto err;
-    }
-    pclose(file);
-
-    return outbuf;
-err:
-    return NULL;
 }

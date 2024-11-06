@@ -35,7 +35,6 @@
 
 #include "sock/sockinfo.h"
 #include "dev/ring_simple.h"
-#include "dev/ring_tap.h"
 
 #undef MODULE_NAME
 #define MODULE_NAME "ring_bond"
@@ -156,185 +155,76 @@ void ring_bond::restart()
     m_lock_ring_rx.lock();
     m_lock_ring_tx.lock();
 
-    if (p_ndev->get_is_bond() == net_device_val::NETVSC) {
-        ring_bond_netvsc *p_ring_bond_netvsc = dynamic_cast<ring_bond_netvsc *>(this);
-        if (p_ring_bond_netvsc) {
-            ring_tap *p_ring_tap = dynamic_cast<ring_tap *>(p_ring_bond_netvsc->m_tap_ring);
-            if (p_ring_tap) {
-                size_t num_ring_rx_fds = 0;
-                int epfd = -1;
-                int fd = -1;
-                int rc = 0;
-                size_t i, j, k;
+    /* for active-backup mode
+     * It is guaranteed that the first slave is active by popup_active_rings()
+     */
+    ring_simple *previously_active = dynamic_cast<ring_simple *>(m_xmit_rings[0]);
 
-                if (slaves.empty()) {
-                    num_ring_rx_fds = p_ring_bond_netvsc->m_vf_ring->get_rx_channels_num();
+    for (uint32_t i = 0; i < m_bond_rings.size(); i++) {
+        ring_simple *tmp_ring = dynamic_cast<ring_simple *>(m_bond_rings[i]);
 
-                    for (k = 0; k < num_ring_rx_fds; k++) {
-                        epfd = g_p_net_device_table_mgr->global_ring_epfd_get();
-                        if (epfd > 0) {
-                            fd = p_ring_bond_netvsc->m_vf_ring->get_rx_channel_fd(k);
-                            rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_DEL, fd, nullptr);
-                            ring_logdbg("Remove fd=%d from epfd=%d rc=%d errno=%d", fd, epfd, rc,
-                                        errno);
-                        }
-                    }
-
-                    for (j = 0; j < m_rx_flows.size(); j++) {
-                        sockinfo *si = static_cast<sockinfo *>(m_rx_flows[j].sink);
-                        for (k = 0; k < num_ring_rx_fds; k++) {
-                            epfd = si->get_rx_epfd();
-                            if (epfd > 0) {
-                                fd = p_ring_bond_netvsc->m_vf_ring->get_rx_channel_fd(k);
-                                rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_DEL, fd, NULL);
-                                ring_logdbg("Remove fd=%d from epfd=%d rc=%d errno=%d", fd, epfd,
-                                            rc, errno);
-                            }
-                            epfd = si->get_epoll_context_fd();
-                            if (epfd > 0) {
-                                fd = p_ring_bond_netvsc->m_vf_ring->get_rx_channel_fd(k);
-                                rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_DEL, fd, NULL);
-                                ring_logdbg("Remove fd=%d from epfd=%d rc=%d errno=%d", fd, epfd,
-                                            rc, errno);
-                            }
-                        }
-                    }
-
-                    p_ring_tap->m_active = true;
-                    p_ring_tap->inc_vf_plugouts();
-                    p_ring_bond_netvsc->slave_destroy(
-                        p_ring_bond_netvsc->m_vf_ring->get_if_index());
-                    p_ring_bond_netvsc->m_vf_ring = nullptr;
-                    p_ring_tap->set_vf_ring(nullptr);
-                } else {
-                    for (i = 0; i < slaves.size(); i++) {
-                        if (slaves[i]->if_index != p_ring_tap->get_if_index()) {
-                            p_ring_tap->m_active = false;
-                            slave_create(slaves[i]->if_index);
-                            p_ring_tap->set_vf_ring(p_ring_bond_netvsc->m_vf_ring);
-
-                            num_ring_rx_fds = p_ring_bond_netvsc->m_vf_ring->get_rx_channels_num();
-
-                            for (k = 0; k < num_ring_rx_fds; k++) {
-                                epfd = g_p_net_device_table_mgr->global_ring_epfd_get();
-                                if (epfd > 0) {
-                                    epoll_event ev = {0, {nullptr}};
-                                    fd = p_ring_bond_netvsc->m_vf_ring->get_rx_channel_fd(k);
-                                    ev.events = EPOLLIN;
-                                    ev.data.fd = fd;
-                                    rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_ADD, fd, &ev);
-                                    ring_logdbg("Add fd=%d from epfd=%d rc=%d errno=%d", fd, epfd,
-                                                rc, errno);
-                                }
-                            }
-                            for (j = 0; j < m_rx_flows.size(); j++) {
-                                sockinfo *si = static_cast<sockinfo *>(m_rx_flows[j].sink);
-                                p_ring_bond_netvsc->m_vf_ring->attach_flow(m_rx_flows[j].flow,
-                                                                           m_rx_flows[j].sink);
-                                for (k = 0; k < num_ring_rx_fds; k++) {
-                                    epfd = si->get_rx_epfd();
-                                    if (epfd > 0) {
-                                        epoll_event ev = {0, {0}};
-                                        fd = p_ring_bond_netvsc->m_vf_ring->get_rx_channel_fd(k);
-                                        ev.events = EPOLLIN;
-                                        ev.data.fd = fd;
-                                        rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_ADD, fd, &ev);
-                                        ring_logdbg("Add fd=%d from epfd=%d rc=%d errno=%d", fd,
-                                                    epfd, rc, errno);
-                                    }
-                                    epfd = si->get_epoll_context_fd();
-                                    if (epfd > 0) {
-#define CQ_FD_MARK 0xabcd /* see sockinfo */
-                                        epoll_event ev = {0, {0}};
-                                        fd = p_ring_bond_netvsc->m_vf_ring->get_rx_channel_fd(k);
-                                        ev.events = EPOLLIN | EPOLLPRI;
-                                        ev.data.u64 = (((uint64_t)CQ_FD_MARK << 32) | fd);
-                                        rc = SYSCALL(epoll_ctl, epfd, EPOLL_CTL_ADD, fd, &ev);
-                                        ring_logdbg("Add fd=%d from epfd=%d rc=%d errno=%d", fd,
-                                                    epfd, rc, errno);
-                                    }
-                                }
-                            }
-                            break;
-                        }
-                    }
-                }
-                NOT_IN_USE(rc); // Suppress --enable-opt-log=high warning
-            }
+        if (!tmp_ring) {
+            continue;
         }
-    } else {
-        /* for active-backup mode
-         * It is guaranteed that the first slave is active by popup_active_rings()
-         */
-        ring_simple *previously_active = dynamic_cast<ring_simple *>(m_xmit_rings[0]);
 
-        for (uint32_t i = 0; i < m_bond_rings.size(); i++) {
-            ring_simple *tmp_ring = dynamic_cast<ring_simple *>(m_bond_rings[i]);
+        for (uint32_t j = 0; j < slaves.size(); j++) {
 
-            if (!tmp_ring) {
+            if (slaves[j]->if_index != m_bond_rings[i]->get_if_index()) {
                 continue;
             }
 
-            for (uint32_t j = 0; j < slaves.size(); j++) {
-
-                if (slaves[j]->if_index != m_bond_rings[i]->get_if_index()) {
-                    continue;
+            /* For RoCE LAG device income data is processed by single ring only
+             * Consider using ring related slave with lag_tx_port_affinity = 1
+             * even if slave is not active.
+             * Always keep this ring active for RX
+             * but keep common logic for TX
+             */
+            if (slaves[j]->active) {
+                ring_logdbg("ring %d active", i);
+                if (slaves[j]->lag_tx_port_affinity != 1) {
+                    tmp_ring->start_active_queue_tx();
+                    /* coverity[sleep] */
+                    tmp_ring->start_active_queue_rx();
                 }
-
-                /* For RoCE LAG device income data is processed by single ring only
-                 * Consider using ring related slave with lag_tx_port_affinity = 1
-                 * even if slave is not active.
-                 * Always keep this ring active for RX
-                 * but keep common logic for TX
-                 */
-                if (slaves[j]->active) {
-                    ring_logdbg("ring %d active", i);
-                    if (slaves[j]->lag_tx_port_affinity != 1) {
-                        tmp_ring->start_active_queue_tx();
-                        /* coverity[sleep] */
-                        tmp_ring->start_active_queue_rx();
-                    }
-                    m_bond_rings[i]->m_active = true;
-                } else {
-                    ring_logdbg("ring %d not active", i);
-                    if (slaves[j]->lag_tx_port_affinity != 1) {
-                        /* coverity[sleep] */
-                        tmp_ring->stop_active_queue_tx();
-                        /* coverity[sleep] */
-                        tmp_ring->stop_active_queue_rx();
-                    }
-                    m_bond_rings[i]->m_active = false;
+                m_bond_rings[i]->m_active = true;
+            } else {
+                ring_logdbg("ring %d not active", i);
+                if (slaves[j]->lag_tx_port_affinity != 1) {
+                    /* coverity[sleep] */
+                    tmp_ring->stop_active_queue_tx();
+                    /* coverity[sleep] */
+                    tmp_ring->stop_active_queue_rx();
                 }
-                break;
+                m_bond_rings[i]->m_active = false;
             }
+            break;
         }
-        popup_xmit_rings();
+    }
+    popup_xmit_rings();
 
-        if (!request_notification(CQT_RX)) {
-            ring_logdbg("Failed arming RX notification");
-        }
-        if (!request_notification(CQT_TX)) {
-            ring_logdbg("Failed arming TX notification");
-        }
+    if (!request_notification(CQT_RX)) {
+        ring_logdbg("Failed arming RX notification");
+    }
+    if (!request_notification(CQT_TX)) {
+        ring_logdbg("Failed arming TX notification");
+    }
 
-        if (m_type == net_device_val::ACTIVE_BACKUP) {
-            ring_simple *currently_active = dynamic_cast<ring_simple *>(m_xmit_rings[0]);
-            if (currently_active && safe_mce_sys().cq_moderation_enable) {
-                if (likely(previously_active)) {
-                    currently_active->m_cq_moderation_info.period =
-                        previously_active->m_cq_moderation_info.period;
-                    currently_active->m_cq_moderation_info.count =
-                        previously_active->m_cq_moderation_info.count;
-                } else {
-                    currently_active->m_cq_moderation_info.period =
-                        safe_mce_sys().cq_moderation_period_usec;
-                    currently_active->m_cq_moderation_info.count =
-                        safe_mce_sys().cq_moderation_count;
-                }
-
-                currently_active->modify_cq_moderation(safe_mce_sys().cq_moderation_period_usec,
-                                                       safe_mce_sys().cq_moderation_count);
+    if (m_type == net_device_val::ACTIVE_BACKUP) {
+        ring_simple *currently_active = dynamic_cast<ring_simple *>(m_xmit_rings[0]);
+        if (currently_active && safe_mce_sys().cq_moderation_enable) {
+            if (likely(previously_active)) {
+                currently_active->m_cq_moderation_info.period =
+                    previously_active->m_cq_moderation_info.period;
+                currently_active->m_cq_moderation_info.count =
+                    previously_active->m_cq_moderation_info.count;
+            } else {
+                currently_active->m_cq_moderation_info.period =
+                    safe_mce_sys().cq_moderation_period_usec;
+                currently_active->m_cq_moderation_info.count = safe_mce_sys().cq_moderation_count;
             }
+
+            currently_active->modify_cq_moderation(safe_mce_sys().cq_moderation_period_usec,
+                                                   safe_mce_sys().cq_moderation_count);
         }
     }
 
@@ -767,13 +657,8 @@ void ring_bond::popup_recv_rings()
      * - For RoCE LAG device (lag_tx_port_affinity > 0) income data is processed by single ring only
      * Consider using ring related slave with lag_tx_port_affinity = 1
      * even if slave is not active.
-     * - For NETVSC device all rings (vf and tap) should be ready for receive.
      */
     for (uint32_t i = 0; i < m_bond_rings.size(); i++) {
-        if (p_ndev->get_is_bond() == net_device_val::NETVSC) {
-            m_recv_rings.push_back(m_bond_rings[i]);
-            continue;
-        }
         for (uint32_t j = 0; j < slaves.size(); j++) {
             if (slaves[j]->if_index != m_bond_rings[i]->get_if_index()) {
                 continue;
@@ -944,36 +829,6 @@ void ring_bond_eth::slave_create(int if_index)
     if (m_bond_rings.size() > MAX_NUM_RING_RESOURCES) {
         ring_logpanic("Error creating bond ring with more than %d resource",
                       MAX_NUM_RING_RESOURCES);
-    }
-
-    popup_xmit_rings();
-    popup_recv_rings();
-    update_rx_channel_fds();
-}
-
-void ring_bond_netvsc::slave_create(int if_index)
-{
-    ring_slave *cur_slave = nullptr;
-    net_device_val *p_ndev = nullptr;
-
-    p_ndev = g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index());
-    if (!p_ndev) {
-        ring_logpanic("Error creating bond ring");
-    }
-
-    if (if_index == p_ndev->get_if_idx()) {
-        cur_slave = new ring_tap(if_index, this);
-        m_tap_ring = cur_slave;
-    } else {
-        cur_slave = new ring_eth(if_index, this);
-        m_vf_ring = cur_slave;
-        update_cap(cur_slave);
-    }
-
-    m_bond_rings.push_back(cur_slave);
-
-    if (m_bond_rings.size() > 2) {
-        ring_logpanic("Error creating bond ring with more than %d resource", 2);
     }
 
     popup_xmit_rings();

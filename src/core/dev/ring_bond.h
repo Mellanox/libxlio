@@ -34,9 +34,7 @@
 #ifndef RING_BOND_H
 #define RING_BOND_H
 
-#include "ring.h"
-
-#include "dev/ring_tap.h"
+#include "ring_slave.h"
 #include "dev/net_device_table_mgr.h"
 
 typedef std::vector<ring_slave *> ring_slave_vector_t;
@@ -194,41 +192,6 @@ public:
 
 protected:
     virtual void slave_create(int if_index);
-};
-
-class ring_bond_netvsc : public ring_bond {
-public:
-    ring_bond_netvsc(int if_index)
-        : ring_bond(if_index)
-    {
-        net_device_val *p_ndev =
-            g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index());
-
-        m_vf_ring = nullptr;
-        m_tap_ring = nullptr;
-        if (p_ndev) {
-            const slave_data_vector_t &slaves = p_ndev->get_slave_array();
-            update_cap();
-            slave_create(p_ndev->get_if_idx());
-            for (size_t i = 0; i < slaves.size(); i++) {
-                slave_create(slaves[i]->if_index);
-            }
-
-            if (m_tap_ring && m_vf_ring) {
-                ring_tap *p_ring_tap = dynamic_cast<ring_tap *>(m_tap_ring);
-                if (p_ring_tap) {
-                    p_ring_tap->set_vf_ring(m_vf_ring);
-                }
-            }
-        }
-    }
-
-protected:
-    virtual void slave_create(int if_index);
-
-public:
-    ring_slave *m_vf_ring;
-    ring_slave *m_tap_ring;
 };
 
 #endif /* RING_BOND_H */

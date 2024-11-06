@@ -85,8 +85,8 @@ inline void ring_simple::send_status_handler(int ret, xlio_ibv_send_wr *p_send_w
     BULLSEYE_EXCLUDE_BLOCK_END
 }
 
-ring_simple::ring_simple(int if_index, ring *parent, ring_type_t type, bool use_locks)
-    : ring_slave(if_index, parent, type, use_locks)
+ring_simple::ring_simple(int if_index, ring *parent, bool use_locks)
+    : ring_slave(if_index, parent, use_locks)
     , m_lock_ring_tx_buf_wait("ring:lock_tx_buf_wait")
     , m_p_doca_mmap(g_buffer_pool_tx->get_doca_mmap())
     , m_gro_mgr(safe_mce_sys().gro_streams_max, MAX_GRO_BUFS)
@@ -900,7 +900,7 @@ mem_buf_desc_t *ring_simple::get_tx_buffers(pbuf_type type, uint32_t n_num_mem_b
             /*
              * TODO Unify request_more_tx_buffers so ring_slave
              * keeps number of buffers instead of reinventing it in
-             * ring_simple and ring_tap.
+             * ring_simple.
              */
             if (type == PBUF_ZEROCOPY) {
                 m_zc_num_bufs += count;

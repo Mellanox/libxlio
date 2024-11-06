@@ -53,7 +53,6 @@
 #include "event/event_handler_manager.h"
 #include "proto/L2_address.h"
 #include "dev/ib_ctx_handler_collection.h"
-#include "dev/ring_tap.h"
 #include "dev/ring_simple.h"
 #include "dev/ring_slave.h"
 #include "dev/ring_bond.h"
@@ -229,8 +228,6 @@ net_device_val::net_device_val(struct net_device_val_desc *desc)
     /* Identify device type */
     if ((get_flags() & IFF_MASTER) || check_bond_device_exist(get_ifname_link())) {
         verify_bonding_mode();
-    } else if (check_netvsc_device_exist(get_ifname_link())) {
-        m_bond = NETVSC;
     } else {
         m_bond = NO_BOND;
     }
@@ -240,16 +237,6 @@ net_device_val::net_device_val(struct net_device_val_desc *desc)
     valid = false;
     ib_ctx = g_p_ib_ctx_handler_collection->get_ib_ctx(get_ifname_link());
     switch (m_bond) {
-    case NETVSC:
-        if (get_type() == ARPHRD_ETHER) {
-            char slave_ifname[IFNAMSIZ] = {0};
-            unsigned int slave_flags = 0;
-            /* valid = true; uncomment it is valid flow to operate w/o SRIOV */
-            if (get_netvsc_slave(get_ifname_link(), slave_ifname, slave_flags)) {
-                valid = verify_qp_creation(slave_ifname, IBV_QPT_RAW_PACKET);
-            }
-        }
-        break;
     case LAG_8023ad:
     case ACTIVE_BACKUP:
         // this is a bond interface (or a vlan/alias over bond), find the slaves
@@ -518,9 +505,6 @@ const std::string net_device_val::to_str_ex() const
 
     rc += " (";
     switch (m_bond) {
-    case NETVSC:
-        rc += "netvsc";
-        break;
     case LAG_8023ad:
         rc += "lag 8023ad";
         break;
@@ -579,16 +563,7 @@ void net_device_val::set_slave_array()
 
     nd_logdbg("");
 
-    if (m_bond == NETVSC) {
-        slave_data_t *s = nullptr;
-        unsigned int slave_flags = 0;
-        if (get_netvsc_slave(get_ifname_link(), active_slave, slave_flags)) {
-            if ((slave_flags & IFF_UP) && verify_qp_creation(active_slave, IBV_QPT_RAW_PACKET)) {
-                s = new slave_data_t(if_nametoindex(active_slave));
-                m_slaves.push_back(s);
-            }
-        }
-    } else if (m_bond == NO_BOND) {
+    if (m_bond == NO_BOND) {
         slave_data_t *s = new slave_data_t(if_nametoindex(get_ifname()));
         m_slaves.push_back(s);
     } else {
@@ -651,10 +626,6 @@ void net_device_val::set_slave_array()
             }
         }
 
-        if (m_bond == NETVSC) {
-            m_slaves[i]->active = true;
-        }
-
         if (m_bond == NO_BOND) {
             m_slaves[i]->active = true;
         }
@@ -677,7 +648,7 @@ void net_device_val::set_slave_array()
         }
     }
 
-    if (m_slaves.empty() && NETVSC != m_bond) {
+    if (m_slaves.empty()) {
         m_state = INVALID;
         nd_logpanic("No slave found.");
     }
@@ -1392,15 +1363,11 @@ ring *net_device_val_eth::create_ring(resource_allocation_key *key)
     try {
         switch (m_bond) {
         case NO_BOND:
-            ring = new ring_eth(get_if_idx(), nullptr, RING_ETH, true,
-                                (key ? key->get_use_locks() : true));
+            ring = new ring_eth(get_if_idx(), nullptr, true, (key ? key->get_use_locks() : true));
             break;
         case ACTIVE_BACKUP:
         case LAG_8023ad:
             ring = new ring_bond_eth(get_if_idx());
-            break;
-        case NETVSC:
-            ring = new ring_bond_netvsc(get_if_idx());
             break;
         default:
             nd_logdbg("Unknown ring type");
