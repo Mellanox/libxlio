@@ -61,7 +61,7 @@ struct cq_moderation_info {
  */
 class ring_simple : public ring_slave {
 public:
-    ring_simple(int if_index, ring *parent, ring_type_t type, bool use_locks);
+    ring_simple(int if_index, ring *parent, bool use_locks);
     virtual ~ring_simple();
 
     bool request_notification(cq_type_t cq_type) override;
@@ -398,9 +398,9 @@ private:
 
 class ring_eth : public ring_simple {
 public:
-    ring_eth(int if_index, ring *parent = nullptr, ring_type_t type = RING_ETH,
-             bool call_create_res = true, bool use_locks = true)
-        : ring_simple(if_index, parent, type, use_locks)
+    ring_eth(int if_index, ring *parent = nullptr, bool call_create_res = true,
+             bool use_locks = true)
+        : ring_simple(if_index, parent, use_locks)
     {
         net_device_val_eth *p_ndev = dynamic_cast<net_device_val_eth *>(
             g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index()));

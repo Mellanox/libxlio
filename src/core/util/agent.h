@@ -86,7 +86,6 @@ public:
     void unregister_cb(agent_cb_t fn, void *arg);
     int put(const void *data, size_t length, intptr_t tag);
     void progress(void);
-    int send_msg_flow(struct xlio_msg_flow *data);
 
 private:
     /* state of this object */

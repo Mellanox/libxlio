@@ -578,53 +578,6 @@ err:
     return rc;
 }
 
-int agent::send_msg_flow(struct xlio_msg_flow *data)
-{
-    int rc = 0;
-    struct xlio_msg_flow answer;
-
-    if (AGENT_ACTIVE != m_state) {
-        return -ENODEV;
-    }
-
-    if (m_sock_fd < 0) {
-        return -EBADF;
-    }
-
-    /* wait answer */
-    data->hdr.status = 1;
-
-    /* send(XLIO_MSG_TC) in blocking manner */
-    sys_call(rc, send, m_sock_fd, data, sizeof(*data), 0);
-    if (rc < 0) {
-        __log_dbg("Failed to send(XLIO_MSG_TC) errno %d (%s)", errno, strerror(errno));
-        rc = -errno;
-        goto err;
-    }
-
-    /* recv(XLIO_MSG_TC|ACK) in blocking manner */
-    memset(&answer, 0, sizeof(answer));
-    sys_call(rc, recv, m_sock_fd, &answer.hdr, sizeof(answer.hdr), 0);
-    if (rc < (int)sizeof(answer.hdr)) {
-        __log_dbg("Failed to recv(XLIO_MSG_TC) errno %d (%s)", errno, strerror(errno));
-        rc = -ECONNREFUSED;
-        goto err;
-    }
-
-    /* reply sanity check */
-    if (!(answer.hdr.code == (data->hdr.code | XLIO_MSG_ACK) && answer.hdr.ver == data->hdr.ver &&
-          answer.hdr.pid == data->hdr.pid)) {
-        __log_dbg("Protocol version mismatch: code = 0x%X ver = 0x%X pid = %d", answer.hdr.code,
-                  answer.hdr.ver, answer.hdr.pid);
-        rc = -EPROTO;
-        goto err;
-    }
-
-    rc = answer.hdr.status;
-err:
-    return rc;
-}
-
 int agent::create_agent_socket(void)
 {
     int rc = 0;

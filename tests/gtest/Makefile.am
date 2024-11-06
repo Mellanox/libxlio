@@ -128,8 +128,7 @@ gtest_SOURCES = \
 	xliod/xliod_bitmap.cc \
 	xliod/xliod_hash.cc \
 	xliod/xliod_init.cc \
-	xliod/xliod_state.cc \
-	xliod/xliod_flow.cc
+	xliod/xliod_state.cc
 
 noinst_HEADERS = \
 	common/tap.h \

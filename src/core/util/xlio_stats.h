@@ -353,10 +353,6 @@ typedef struct {
     cq_stats_t cq_stats;
 } cq_instance_block_t;
 
-typedef enum { RING_ETH = 0, RING_TAP } ring_type_t;
-
-static const char *const ring_type_str[] = {"RING_ETH", "RING_TAP"};
-
 // Ring stat info
 typedef struct {
     uint64_t n_rx_pkt_count;
@@ -369,7 +365,6 @@ typedef struct {
     uint32_t n_tx_tls_contexts;
     uint32_t n_rx_tls_contexts;
 #endif /* DEFINED_UTLS */
-    ring_type_t n_type;
     union {
         struct {
             uint64_t n_tx_tso_pkt_count;
@@ -386,12 +381,6 @@ typedef struct {
             uint32_t n_tx_num_bufs;
             uint32_t n_zc_num_bufs;
         } simple;
-        struct {
-            char s_tap_name[IFNAMSIZ];
-            uint32_t n_tap_fd;
-            uint32_t n_rx_buffers;
-            uint32_t n_vf_plugouts;
-        } tap;
     };
 } ring_stats_t;
 
