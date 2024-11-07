@@ -129,7 +129,7 @@ Example:
  XLIO DETAILS: CQ AIM Max Count               560                        [XLIO_CQ_AIM_MAX_COUNT]
  XLIO DETAILS: CQ AIM Max Period (usec)       250                        [XLIO_CQ_AIM_MAX_PERIOD_USEC]
  XLIO DETAILS: CQ AIM Interval (msec)         250                        [XLIO_CQ_AIM_INTERVAL_MSEC]
- XLIO DETAILS: CQ AIM Interrupts Rate (per sec) 5000                       [XLIO_CQ_AIM_INTERRUPTS_RATE_PER_SEC]
+ XLIO DETAILS: CQ AIM Interrupts Rate (per sec) 1000                       [XLIO_CQ_AIM_INTERRUPTS_RATE_PER_SEC]
  XLIO DETAILS: CQ Poll Batch (max)            16                         [XLIO_CQ_POLL_BATCH_MAX]
  XLIO DETAILS: CQ Keeps QP Full               Enabled                    [XLIO_CQ_KEEP_QP_FULL]
  XLIO DETAILS: QP Compensation Level          256                        [XLIO_QP_COMPENSATION_LEVEL]
@@ -765,7 +765,7 @@ XLIO_CQ_AIM_INTERRUPTS_RATE_PER_SEC
 Desired interrupts rate per second for each ring (CQ).
 The count and period parameters for CQ moderation will change automatically
 to achieve the desired interrupt rate for the current traffic rate.
-Default value is 5000
+Default value is 1000
 
 XLIO_CQ_POLL_BATCH_MAX
 Max size of the array while polling the CQs in the XLIO
