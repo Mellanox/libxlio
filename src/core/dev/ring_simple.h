@@ -51,6 +51,7 @@ struct cq_moderation_info {
     uint64_t packets;
     uint64_t prev_packets;
     uint32_t missed_rounds;
+    uint32_t interrupt_rate_per_sec;
 };
 
 /**

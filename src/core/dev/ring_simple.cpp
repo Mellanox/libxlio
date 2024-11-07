@@ -122,6 +122,7 @@ ring_simple::ring_simple(int if_index, ring *parent, ring_type_t type, bool use_
     m_mtu = p_ndev->get_mtu();
 
     memset(&m_cq_moderation_info, 0, sizeof(m_cq_moderation_info));
+    m_cq_moderation_info.interrupt_rate_per_sec = safe_mce_sys().cq_aim_interrupts_rate_per_sec;
     memset(&m_tso, 0, sizeof(m_tso));
 #ifdef DEFINED_UTLS
     memset(&m_tls, 0, sizeof(m_tls));
@@ -1060,6 +1061,10 @@ void ring_simple::adapt_cq_moderation()
     BULLSEYE_EXCLUDE_BLOCK_END
 
     if (interval_packets == 0) {
+        // no traffic - wait eagerly for packet
+        // i.e. - bigger interrupt_rate_per_sec
+        m_cq_moderation_info.interrupt_rate_per_sec += 500;
+
         // todo if no traffic, set moderation to default?
         modify_cq_moderation(safe_mce_sys().cq_moderation_period_usec,
                              safe_mce_sys().cq_moderation_count);
@@ -1070,12 +1075,18 @@ void ring_simple::adapt_cq_moderation()
     uint32_t avg_packet_rate =
         (interval_packets * 1000) / (safe_mce_sys().cq_aim_interval_msec * (1 + missed_rounds));
 
-    uint32_t ir_rate = safe_mce_sys().cq_aim_interrupts_rate_per_sec;
+    uint32_t count = avg_packet_rate / m_cq_moderation_info.interrupt_rate_per_sec;
+    if (count > safe_mce_sys().cq_aim_max_count) {
+        // more traffic - wait patiently for packets and aggregate completions
+        // i.e. - smaller interrupt_rate_per_sec
+        m_cq_moderation_info.interrupt_rate_per_sec -= 500;
+        count = safe_mce_sys().cq_aim_max_count;
+    }
 
-    uint32_t count = std::min(avg_packet_rate / ir_rate, safe_mce_sys().cq_aim_max_count);
     uint32_t period = std::min<uint32_t>(
         safe_mce_sys().cq_aim_max_period_usec,
-        ((1000000UL / ir_rate) - (1000000UL / std::max(avg_packet_rate, ir_rate))));
+        ((1000000UL / m_cq_moderation_info.interrupt_rate_per_sec) -
+         (1000000UL / std::max(avg_packet_rate, m_cq_moderation_info.interrupt_rate_per_sec))));
 
     modify_cq_moderation(period, count);
 
