@@ -4,7 +4,7 @@ set -xvEe -o pipefail
 
 DOCA_REPO_PATH="https://doca-repo-prod.nvidia.com/internal/repo/doca"
 TARGET=${TARGET:=all}
-DOCA_VERSION=${DOCA_VERSION:='2.8.0'}
+DOCA_VERSION=${DOCA_VERSION:='2.9.0'}
 DOCA_BRANCH=${DOCA_BRANCH:="latest"}
 GPG_KEY="GPG-KEY-Mellanox.pub"
 
@@ -66,7 +66,8 @@ function map_os_and_arch {
             UPDATE_CMD="makecache"
             ;;
 
-        openEuler)
+        ctyunos|openEuler)
+            # OS="${ID}${VERSION_ID}"
             OS="ctyunos23.01"
             GPG_KEY_CMD='rpm --import "${GPG_KEY}"'
             REPO_CMD="cat <<EOF | sed 's/^[ \t]*//' > /etc/yum.repos.d/doca.repo
@@ -79,7 +80,7 @@ EOF
 "
             PKG_TYPE="rpm"
             PKG_TOOL="rpm"
-            PKG_MGR="yum --nogpgcheck"
+            PKG_MGR="dnf --nogpgcheck"
             UPDATE_CMD="makecache"
             ;;
 
