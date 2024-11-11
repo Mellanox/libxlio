@@ -130,8 +130,8 @@ public:
 
     void update_tso_stats(uint64_t bytes)
     {
-        ++m_p_ring_stat->simple.n_tx_tso_pkt_count;
-        m_p_ring_stat->simple.n_tx_tso_byte_count += bytes;
+        ++m_p_ring_stat->n_tx_tso_pkt_count;
+        m_p_ring_stat->n_tx_tso_byte_count += bytes;
     }
 
 #ifdef DEFINED_UTLS
