@@ -113,7 +113,7 @@ bool dm_mgr::allocate_resources(ib_ctx_handler *ib_ctx, ring_stats_t *ring_stats
     }
 
     m_allocation = allocation_size;
-    m_p_ring_stat->simple.n_tx_dev_mem_allocated = m_allocation;
+    m_p_ring_stat->n_tx_dev_mem_allocated = m_allocation;
 
     dm_logdbg("Device memory allocation completed successfully! device[%s] bytes[%zu] dm_mr "
               "handle[%d] dm_mr lkey[%d]",
@@ -244,8 +244,8 @@ bool dm_mgr::copy_data(struct mlx5_wqe_data_seg *seg, uint8_t *src, uint32_t len
     m_used += dev_mem_length;
 
     // Update On Device Memory statistics
-    m_p_ring_stat->simple.n_tx_dev_mem_pkt_count++;
-    m_p_ring_stat->simple.n_tx_dev_mem_byte_count += length;
+    m_p_ring_stat->n_tx_dev_mem_pkt_count++;
+    m_p_ring_stat->n_tx_dev_mem_byte_count += length;
 
     NOT_IN_USE(continuous_left);
     dm_logfunc("Send completed successfully! Buffer[%p] length[%d] length_aligned_8[%d] "
@@ -259,7 +259,7 @@ dev_mem_oob:
                "head[%zu] used[%zu]",
                buff, length, length_aligned_8, continuous_left, m_head, m_used);
 
-    m_p_ring_stat->simple.n_tx_dev_mem_oob++;
+    m_p_ring_stat->n_tx_dev_mem_oob++;
 
     return false;
 }
