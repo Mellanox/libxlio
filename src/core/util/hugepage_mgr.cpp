@@ -141,7 +141,7 @@ void *hugepage_mgr::alloc_hugepages_helper(size_t &size, size_t hugepage)
     if (ptr == MAP_FAILED) {
         ptr = nullptr;
         __log_info_dbg("mmap failed (errno=%d)", errno);
-    } else {
+    } else if (!safe_mce_sys().quick_start) {
         /* Check whether all the pages are resident. Allocation beyond the cgroup limit can be
          * successful and lead to a SIGBUS on an access. For example, the limit can be configured
          * for a container.

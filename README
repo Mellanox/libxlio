@@ -79,6 +79,7 @@ Example:
  XLIO DETAILS: SigIntr Ctrl-C Handle          Enabled                    [XLIO_HANDLE_SIGINTR]
  XLIO DETAILS: SegFault Backtrace             Disabled                   [XLIO_HANDLE_SIGSEGV]
  XLIO DETAILS: Print a report                 Disabled                   [XLIO_PRINT_REPORT]
+ XLIO DETAILS: Quick start                    Disabled                   [XLIO_QUICK_START]
  XLIO DETAILS: Ring allocation logic TX       0 (Ring per interface)     [XLIO_RING_ALLOCATION_LOGIC_TX]
  XLIO DETAILS: Ring allocation logic RX       0 (Ring per interface)     [XLIO_RING_ALLOCATION_LOGIC_RX]
  XLIO INFO   : Ring migration ratio TX        -1                         [XLIO_RING_MIGRATION_RATIO_TX]
@@ -306,6 +307,13 @@ Default value is 1 (Enabled)
 XLIO_HANDLE_SIGSEGV
 When Enabled, print backtrace if segmentation fault happens.
 Value range is 0 to 1
+Default value is 0 (Disabled)
+
+XLIO_QUICK_START
+Avoid expensive extra checks to reduce the initialization time. This may result
+in failures in case of a system misconfiguration.
+For example, if the parameter is enabled and hugepages are requested beyond the
+cgroup limit, XLIO crashes due to an access to an unmapped page.
 Default value is 0 (Disabled)
 
 XLIO_ZC_BUFS
