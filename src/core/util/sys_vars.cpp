@@ -761,6 +761,7 @@ void mce_sys_var::get_env_params()
     service_enable = MCE_DEFAULT_SERVICE_ENABLE;
 
     print_report = MCE_DEFAULT_PRINT_REPORT;
+    quick_start = MCE_DEFAULT_QUICK_START;
     log_level = VLOG_DEFAULT;
     log_details = MCE_DEFAULT_LOG_DETAILS;
     log_colors = MCE_DEFAULT_LOG_COLORS;
@@ -1082,6 +1083,10 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_PRINT_REPORT))) {
         print_report = atoi(env_ptr) ? true : false;
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_QUICK_START))) {
+        quick_start = atoi(env_ptr) ? true : false;
     }
 
     if ((env_ptr = getenv(SYS_VAR_LOG_FILENAME))) {

@@ -501,6 +501,8 @@ void print_xlio_global_settings()
                       safe_mce_sys().handle_segfault ? "Enabled " : "Disabled");
     VLOG_PARAM_STRING("Print a report", safe_mce_sys().print_report, MCE_DEFAULT_PRINT_REPORT,
                       SYS_VAR_PRINT_REPORT, safe_mce_sys().print_report ? "Enabled " : "Disabled");
+    VLOG_PARAM_STRING("Quick start", safe_mce_sys().quick_start, MCE_DEFAULT_QUICK_START,
+                      SYS_VAR_QUICK_START, safe_mce_sys().quick_start ? "Enabled " : "Disabled");
 
     VLOG_PARAM_NUMSTR("Ring allocation logic TX", safe_mce_sys().ring_allocation_logic_tx,
                       MCE_DEFAULT_RING_ALLOCATION_LOGIC_TX, SYS_VAR_RING_ALLOCATION_LOGIC_TX,
