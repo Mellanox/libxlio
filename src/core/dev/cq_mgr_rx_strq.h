@@ -40,15 +40,15 @@
 
 class cq_mgr_rx_strq : public cq_mgr_rx {
 public:
-    cq_mgr_rx_strq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
-                   uint32_t stride_size_bytes, uint32_t strides_num,
+    cq_mgr_rx_strq(ring_simple *p_ring, hw_queue_rx *hqrx_ptr, ib_ctx_handler *p_ib_ctx_handler,
+                   uint32_t cq_size, uint32_t stride_size_bytes, uint32_t strides_num,
                    struct ibv_comp_channel *p_comp_event_channel);
 
     virtual ~cq_mgr_rx_strq() override;
 
     virtual int drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id = NULL) override;
     virtual bool poll_and_process_element_rx(void *pv_fd_ready_array = NULL) override;
-    virtual void add_hqrx(hw_queue_rx *qp) override;
+    virtual void add_hqrx() override;
     virtual uint32_t clean_cq() override;
 
 protected:

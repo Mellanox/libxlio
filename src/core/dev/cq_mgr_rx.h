@@ -80,8 +80,8 @@ public:
         BS_GENERAL_ERR
     };
 
-    cq_mgr_rx(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int cq_size,
-              struct ibv_comp_channel *p_comp_event_channel);
+    cq_mgr_rx(ring_simple *p_ring, hw_queue_rx *hqrx_ptr, ib_ctx_handler *p_ib_ctx_handler,
+              int cq_size, struct ibv_comp_channel *p_comp_event_channel);
     virtual ~cq_mgr_rx();
 
     void configure(int cq_size);
@@ -124,8 +124,8 @@ public:
     void mem_buf_desc_return_to_owner(mem_buf_desc_t *p_mem_buf_desc,
                                       void *pv_fd_ready_array = nullptr);
 
-    virtual void add_hqrx(hw_queue_rx *hqrx_ptr);
-    virtual void del_hqrx(hw_queue_rx *hqrx_ptr);
+    virtual void add_hqrx();
+    virtual void del_hqrx();
 
     virtual uint32_t clean_cq() = 0;
 

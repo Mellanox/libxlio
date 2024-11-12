@@ -245,7 +245,7 @@ struct ring_packet_aggregate {
             // coverity[missing_lock:FALSE] /* Turn off coverity missing_lock check*/
             if (ring_stat.b_enabled) {
                 val.tx += ring_stat.hwq_tx_stats.n_tx_pkt_count;
-                val.rx += ring_stat.ring_stats.n_rx_pkt_count;
+                val.rx += ring_stat.hwq_rx_stats.n_rx_pkt_count;
             }
             return val;
         };

@@ -143,11 +143,12 @@ hw_queue_tx::hw_queue_tx(ring_simple *ring, const slave_data_t *slave,
 {
     hwqtx_logfunc("");
 
+    memset(&m_hwq_tx_stats, 0, sizeof(m_hwq_tx_stats));
+
     if (!prepare_doca_txq()) {
         throw_xlio_exception("Failed to create DOCA TXQ");
     }
 
-    memset(&m_hwq_tx_stats, 0, sizeof(m_hwq_tx_stats));
     memset(&m_mlx5_qp, 0, sizeof(m_mlx5_qp));
 
     m_mlx5_qp.cap.max_inline_data = safe_mce_sys().tx_max_inline;
@@ -443,7 +444,7 @@ int hw_queue_tx::configure(const slave_data_t *slave,
         hwqtx_logerr("Failed allocating m_p_cq_mgr_tx (errno=%d %m)", errno);
         return -1;
     }
-    m_p_cq_mgr_rx_unused = new cq_mgr_rx_regrq(m_p_ring, m_p_ib_ctx_handler, 2, nullptr);
+    m_p_cq_mgr_rx_unused = new cq_mgr_rx_regrq(m_p_ring, nullptr, m_p_ib_ctx_handler, 2, nullptr);
     if (!m_p_cq_mgr_rx_unused) {
         hwqtx_logerr("Failed allocating m_p_cq_mgr_rx_unused (errno=%d %m)", errno);
         return -1;

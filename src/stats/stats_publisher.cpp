@@ -478,18 +478,22 @@ void xlio_stats_mc_group_remove(const ip_address &mc_grp, socket_stats_t *p_sock
 }
 
 void xlio_stats_instance_create_ring_block(ring_stats_t *local_stats_addr,
-                                           hw_queue_tx_stats_t *local_hwq_tx_addr)
+                                           hw_queue_tx_stats_t *local_hwq_tx_addr,
+                                           hw_queue_rx_stats_t *local_hwq_rx_addr)
 {
     ring_stats_t *p_instance_ring = NULL;
     hw_queue_tx_stats_t *p_instance_hwq_tx = NULL;
+    hw_queue_rx_stats_t *p_instance_hwq_rx = NULL;
     g_lock_ring_inst_arr.lock();
     for (int i = 0; i < NUM_OF_SUPPORTED_RINGS; i++) {
         if (!g_sh_mem->ring_inst_arr[i].b_enabled) {
             g_sh_mem->ring_inst_arr[i].b_enabled = true;
             p_instance_ring = &g_sh_mem->ring_inst_arr[i].ring_stats;
             p_instance_hwq_tx = &g_sh_mem->ring_inst_arr[i].hwq_tx_stats;
+            p_instance_hwq_rx = &g_sh_mem->ring_inst_arr[i].hwq_rx_stats;
             memset(p_instance_ring, 0, sizeof(*p_instance_ring));
             memset(p_instance_hwq_tx, 0, sizeof(*p_instance_hwq_tx));
+            memset(p_instance_hwq_rx, 0, sizeof(*p_instance_hwq_rx));
             break;
         }
     }
@@ -506,20 +510,33 @@ void xlio_stats_instance_create_ring_block(ring_stats_t *local_stats_addr,
             g_p_stats_data_reader->add_data_reader(local_hwq_tx_addr, p_instance_hwq_tx,
                                                    sizeof(hw_queue_tx_stats_t));
         }
-        __log_dbg("Added ring local=%p shm=%p, local_hwq_tx=%p, shm_hwq_tx=%p", local_stats_addr,
-                  p_instance_ring, local_hwq_tx_addr, p_instance_hwq_tx);
+
+        if (local_hwq_rx_addr) {
+            g_p_stats_data_reader->add_data_reader(local_hwq_rx_addr, p_instance_hwq_rx,
+                                                   sizeof(hw_queue_rx_stats_t));
+        }
+        __log_dbg("Added ring local=%p shm=%p, local_hwq_tx=%p, shm_hwq_tx=%p, local_hwq_rx=%p, "
+                  "shm_hwq_rx=%p",
+                  local_stats_addr, p_instance_ring, local_hwq_tx_addr, p_instance_hwq_tx,
+                  local_hwq_rx_addr, p_instance_hwq_rx);
     }
     g_lock_ring_inst_arr.unlock();
 }
 
 void xlio_stats_instance_remove_ring_block(ring_stats_t *local_stats_addr,
-                                           hw_queue_tx_stats_t *local_hwq_tx_addr)
+                                           hw_queue_tx_stats_t *local_hwq_tx_addr,
+                                           hw_queue_rx_stats_t *local_hwq_rx_addr)
 {
     g_lock_ring_inst_arr.lock();
-    __log_dbg("Remove ring local=%p, local_hwq_tx=%p", local_stats_addr, local_hwq_tx_addr);
+    __log_dbg("Remove ring local=%p, local_hwq_tx=%p, local_hwq_rx=%p", local_stats_addr,
+              local_hwq_tx_addr, local_hwq_rx_addr);
 
     if (local_hwq_tx_addr) {
         g_p_stats_data_reader->pop_data_reader(local_hwq_tx_addr);
+    }
+
+    if (local_hwq_rx_addr) {
+        g_p_stats_data_reader->pop_data_reader(local_hwq_rx_addr);
     }
 
     ring_stats_t *p_ring_stats =

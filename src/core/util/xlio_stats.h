@@ -336,15 +336,7 @@ typedef struct {
     uint64_t n_rx_packet_count;
     uint64_t n_rx_consumed_rwqe_count;
     uint64_t n_rx_pkt_drop;
-    uint64_t n_rx_lro_packets;
-    uint64_t n_rx_lro_bytes;
-    uint64_t n_rx_gro_packets;
-    uint64_t n_rx_gro_bytes;
-    uint64_t n_rx_gro_frags;
     uint32_t n_rx_sw_queue_len;
-    uint32_t n_rx_drained_at_once_max;
-    uint32_t n_buffer_pool_len;
-    uint32_t n_rx_cqe_error;
     uint16_t n_rx_max_stirde_per_packet;
 } cq_stats_t;
 
@@ -358,16 +350,10 @@ typedef struct {
     uint32_t n_tx_num_bufs;
     uint32_t n_zc_num_bufs;
     uint64_t n_tx_retransmits;
-    uint64_t n_rx_pkt_count;
-    uint64_t n_rx_byte_count;
 #ifdef DEFINED_UTLS
     uint32_t n_tx_tls_contexts;
     uint32_t n_rx_tls_contexts;
 #endif /* DEFINED_UTLS */
-    uint64_t n_rx_interrupt_requests;
-    uint64_t n_rx_interrupt_received;
-    uint32_t n_rx_cq_moderation_count;
-    uint32_t n_rx_cq_moderation_period;
     uint64_t n_tx_dropped_wqes;
     uint64_t n_tx_dev_mem_pkt_count;
     uint64_t n_tx_dev_mem_byte_count;
@@ -384,9 +370,27 @@ typedef struct {
 } hw_queue_tx_stats_t;
 
 typedef struct {
+    uint64_t n_rx_pkt_count;
+    uint64_t n_rx_byte_count;
+    uint64_t n_rx_lro_packets;
+    uint64_t n_rx_lro_bytes;
+    uint64_t n_rx_gro_packets;
+    uint64_t n_rx_gro_bytes;
+    uint64_t n_rx_gro_frags;
+    uint32_t n_rx_buffer_pool_len;
+    uint32_t n_rx_drained_at_once_max;
+    uint64_t n_rx_task_error;
+    uint64_t n_rx_interrupt_requests;
+    uint64_t n_rx_interrupt_received;
+    uint32_t n_rx_cq_moderation_count;
+    uint32_t n_rx_cq_moderation_period;
+} hw_queue_rx_stats_t;
+
+typedef struct {
     bool b_enabled;
     ring_stats_t ring_stats;
     hw_queue_tx_stats_t hwq_tx_stats;
+    hw_queue_rx_stats_t hwq_rx_stats;
 
 } ring_instance_block_t;
 
@@ -533,8 +537,10 @@ void xlio_stats_instance_remove_socket_block(socket_stats_t *);
 void xlio_stats_mc_group_add(const ip_address &mc_grp, socket_stats_t *p_socket_stats);
 void xlio_stats_mc_group_remove(const ip_address &mc_grp, socket_stats_t *p_socket_stats);
 
-void xlio_stats_instance_create_ring_block(ring_stats_t *, hw_queue_tx_stats_t *local_hwq_tx_addr);
-void xlio_stats_instance_remove_ring_block(ring_stats_t *, hw_queue_tx_stats_t *local_hwq_tx_addr);
+void xlio_stats_instance_create_ring_block(ring_stats_t *, hw_queue_tx_stats_t *local_hwq_tx_addr,
+                                           hw_queue_rx_stats_t *local_hwq_rx_addr);
+void xlio_stats_instance_remove_ring_block(ring_stats_t *, hw_queue_tx_stats_t *local_hwq_tx_addr,
+                                           hw_queue_rx_stats_t *local_hwq_rx_addr);
 
 void xlio_stats_instance_create_cq_block(cq_stats_t *);
 void xlio_stats_instance_remove_cq_block(cq_stats_t *);

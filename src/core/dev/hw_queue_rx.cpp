@@ -69,6 +69,8 @@ hw_queue_rx::hw_queue_rx(ring_simple *ring, ib_ctx_handler *ib_ctx,
 {
     hwqrx_logfunc("");
 
+    memset(&m_hwq_rx_stats, 0, sizeof(m_hwq_rx_stats));
+
     if (!prepare_doca_rxq()) {
         throw_xlio_exception("Failed to create DOCA RXQ");
     }
@@ -242,6 +244,7 @@ void hw_queue_rx::submit_rxq_tasks()
         }
 
         submit_rxq_task(DOCA_TASK_SUBMIT_FLAG_FLUSH);
+        update_rx_buffer_pool_len_stats();
     }
 }
 
@@ -293,8 +296,7 @@ bool hw_queue_rx::fill_buffers_from_global_pool()
         }
     }
 
-    // TODO DOCA: Add Statistics
-    // m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
+    update_rx_buffer_pool_len_stats();
     return true;
 }
 
@@ -417,7 +419,7 @@ void hw_queue_rx::reclaim_rx_buffer_chain_loop(mem_buf_desc_t *buff)
             free_lwip_pbuf(&temp->lwip_pbuf);
             m_rx_pool.push_front(temp);
         }
-        // m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
+        update_rx_buffer_pool_len_stats();
     } else if (buff->lwip_pbuf.ref != (unsigned int)buff->get_ref_count()) {
         hwqrx_logwarn("Uneven lwip.ref and buf.ref %u,%d", buff->lwip_pbuf.ref,
                       buff->get_ref_count());
@@ -456,7 +458,7 @@ void hw_queue_rx::return_extra_buffers()
 
         hwqrx_logfunc("Returning %zu buffers to global RX pool", return_buffs_num);
         g_buffer_pool_rx_rwqe->put_buffers_thread_safe(&m_rx_pool, return_buffs_num);
-        // m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
+        update_rx_buffer_pool_len_stats();
     }
 }
 
@@ -520,6 +522,7 @@ void hw_queue_rx::rx_task_error_cb(doca_eth_rxq_task_recv *task_recv, doca_data 
     hw_rx->return_doca_task(task_recv);
     hw_rx->reclaim_rx_buffer_chain_loop(mem_buf);
     hw_rx->m_polled_buf = nullptr;
+    ++hw_rx->m_hwq_rx_stats.n_rx_task_error;
 }
 
 bool hw_queue_rx::poll_and_process_rx()
@@ -550,6 +553,9 @@ bool hw_queue_rx::poll_and_process_rx()
 
 void hw_queue_rx::process_recv_buffer(mem_buf_desc_t *p_mem_buf_desc)
 {
+    m_hwq_rx_stats.n_rx_byte_count += p_mem_buf_desc->sz_data;
+    ++m_hwq_rx_stats.n_rx_pkt_count;
+
     if (!m_p_ring->rx_process_buffer(p_mem_buf_desc, nullptr)) {
         // If buffer is dropped by callback - return to RX pool
         reclaim_rx_buffer_chain_loop(p_mem_buf_desc);
@@ -564,6 +570,8 @@ bool hw_queue_rx::request_notification()
             PRINT_DOCA_ERR(hwqrx_logerr, rc, "doca_pe_request_notification");
             return false;
         }
+
+        ++m_hwq_rx_stats.n_rx_interrupt_requests;
     }
 
     hwqrx_logfunc("Requested notification hw_queue_rx: %p", this);
@@ -578,6 +586,8 @@ void hw_queue_rx::clear_notification()
         doca_error_t rc = doca_pe_clear_notification(m_doca_pe.get(), m_notification_handle);
         if (unlikely(DOCA_IS_ERROR(rc))) {
             PRINT_DOCA_ERR(hwqrx_logerr, rc, "doca_pe_clear_notification");
+        } else {
+            ++m_hwq_rx_stats.n_rx_interrupt_received;
         }
     } else {
         hwqrx_logwarn("Clear notification attempt on unarmed PE. hw_queue_rx: %p", this);
@@ -590,6 +600,9 @@ void hw_queue_rx::modify_moderation(uint16_t period_usec, uint16_t comp_count)
         doca_eth_rxq_set_notification_moderation(m_doca_rxq.get(), period_usec, comp_count);
     if (unlikely(DOCA_IS_ERROR(rc))) {
         PRINT_DOCA_ERR(hwqrx_logerr, rc, "doca_eth_rxq_set_notification_moderation");
+    } else {
+        m_hwq_rx_stats.n_rx_cq_moderation_period = period_usec;
+        m_hwq_rx_stats.n_rx_cq_moderation_count = comp_count;
     }
 }
 
@@ -662,7 +675,7 @@ void hw_queue_rx::up()
 
     modify_queue_to_ready_state();
 
-    m_p_cq_mgr_rx->add_hqrx(this);
+    m_p_cq_mgr_rx->add_hqrx();
 }
 
 void hw_queue_rx::down()
@@ -680,7 +693,7 @@ void hw_queue_rx::down()
     usleep(1000);
 
     release_rx_buffers();
-    m_p_cq_mgr_rx->del_hqrx(this);
+    m_p_cq_mgr_rx->del_hqrx();
 }
 
 void hw_queue_rx::release_rx_buffers()
@@ -920,13 +933,14 @@ out:
 cq_mgr_rx *hw_queue_rx::init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel)
 {
     if (safe_mce_sys().enable_striding_rq) {
-        return new cq_mgr_rx_strq(m_p_ring, m_p_ib_ctx_handler,
+        return new cq_mgr_rx_strq(m_p_ring, this, m_p_ib_ctx_handler,
                                   safe_mce_sys().strq_stride_num_per_rwqe * m_rx_num_wr,
                                   safe_mce_sys().strq_stride_size_bytes,
                                   safe_mce_sys().strq_stride_num_per_rwqe, p_rx_comp_event_channel);
     }
 
-    return new cq_mgr_rx_regrq(m_p_ring, m_p_ib_ctx_handler, m_rx_num_wr, p_rx_comp_event_channel);
+    return new cq_mgr_rx_regrq(m_p_ring, this, m_p_ib_ctx_handler, m_rx_num_wr,
+                               p_rx_comp_event_channel);
 }
 
 #if defined(DEFINED_UTLS)
