@@ -222,9 +222,9 @@ int sockinfo_tcp_ops_nvme::postrouting(pbuf *p, tcp_seg *seg, xlio_send_attr &at
     return ERR_OK;
 }
 
-bool sockinfo_tcp_ops_nvme::handle_send_ret(ssize_t ret, tcp_seg *seg)
+bool sockinfo_tcp_ops_nvme::handle_send_ret(uint32_t ret, tcp_seg *seg)
 {
-    if (ret < 0 && seg) {
+    if (ret == 0U && seg) {
         m_expected_seqno -= seg->len;
         return false;
     }
