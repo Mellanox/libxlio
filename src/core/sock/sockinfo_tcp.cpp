@@ -1357,6 +1357,12 @@ err_t sockinfo_tcp::ip_output_doca(struct pbuf *p, struct tcp_seg *seg, void *v_
         ret = p_dst->doca_slow_path(p, flags, pcb->mss, p_si_tcp->m_so_ratelimit);
     }
 
+    bool rc = p_si_tcp->m_ops->handle_send_ret(ret, seg);
+
+    if (unlikely(p_si_tcp->m_p_socket_stats && (flags & XLIO_TX_PACKET_REXMIT) && rc)) {
+        ++p_si_tcp->m_p_socket_stats->counters.n_tx_retransmits;
+    }
+
     if (unlikely(safe_mce_sys().ring_migration_ratio_tx > 0)) { // Condition for cache optimization
         if (p_dst->try_migrate_ring_tx(p_si_tcp->m_tcp_con_lock.get_lock_base())) {
             IF_STATS_O(p_si_tcp, p_si_tcp->m_p_socket_stats->counters.n_tx_migrations++);
@@ -1457,7 +1463,7 @@ send_iov:
         ? p_dst->fast_send((struct iovec *)lwip_iovec, count, attr)
         : p_dst->slow_send((struct iovec *)lwip_iovec, count, attr, p_si_tcp->m_so_ratelimit);
 
-    rc = p_si_tcp->m_ops->handle_send_ret(ret, seg);
+    rc = p_si_tcp->m_ops->handle_send_ret(ret >= 0 ? 1U : 0U, seg);
 
     if (unlikely(safe_mce_sys().ring_migration_ratio_tx > 0)) { // Condition for cache optimization
         if (p_dst->try_migrate_ring_tx(p_si_tcp->m_tcp_con_lock.get_lock_base())) {

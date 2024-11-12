@@ -75,7 +75,7 @@ int sockinfo_tcp_ops::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_send
 }
 
 /*virtual*/
-bool sockinfo_tcp_ops::handle_send_ret(ssize_t ret, struct tcp_seg *seg)
+bool sockinfo_tcp_ops::handle_send_ret(uint32_t ret, struct tcp_seg *seg)
 {
     NOT_IN_USE(ret);
     NOT_IN_USE(seg);
@@ -997,9 +997,9 @@ int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_
     return 0;
 }
 
-bool sockinfo_tcp_ops_tls::handle_send_ret(ssize_t ret, struct tcp_seg *seg)
+bool sockinfo_tcp_ops_tls::handle_send_ret(uint32_t ret, struct tcp_seg *seg)
 {
-    if (ret < 0 && seg) {
+    if (ret == 0U && seg) {
         m_expected_seqno -= seg->len;
         return false;
     }

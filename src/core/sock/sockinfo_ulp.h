@@ -61,7 +61,7 @@ public:
     virtual int setsockopt(int __level, int __optname, const void *__optval, socklen_t __optlen);
     virtual ssize_t tx(xlio_tx_call_attr_t &tx_arg);
     virtual int postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_send_attr &attr);
-    virtual bool handle_send_ret(ssize_t ret, struct tcp_seg *seg);
+    virtual bool handle_send_ret(uint32_t ret, struct tcp_seg *seg);
 
     virtual err_t recv(struct pbuf *p)
     {
@@ -90,7 +90,7 @@ public:
     int setsockopt(int, int, const void *, socklen_t) override;
     ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
     int postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_send_attr &attr) override;
-    bool handle_send_ret(ssize_t ret, struct tcp_seg *seg) override;
+    bool handle_send_ret(uint32_t ret, struct tcp_seg *seg) override;
 
     void get_record_buf(mem_buf_desc_t *&buf, uint8_t *&data, bool is_zerocopy);
 
