@@ -339,6 +339,21 @@ void update_delta_iomux_stat(iomux_func_stats_t *p_curr_stats, iomux_func_stats_
     }
 }
 
+void update_delta_hwq_tx_stat(hw_queue_tx_stats_t *p_curr_hwq_tx_stats,
+                              hw_queue_tx_stats_t *p_prev_hwq_tx_stats)
+{
+    int delay = user_params.interval;
+    p_prev_hwq_tx_stats->n_tx_byte_count =
+        (p_curr_hwq_tx_stats->n_tx_byte_count - p_prev_hwq_tx_stats->n_tx_byte_count) / delay;
+    p_prev_hwq_tx_stats->n_tx_pkt_count =
+        (p_curr_hwq_tx_stats->n_tx_pkt_count - p_prev_hwq_tx_stats->n_tx_pkt_count) / delay;
+    p_prev_hwq_tx_stats->n_tx_tso_pkt_count =
+        (p_curr_hwq_tx_stats->n_tx_tso_pkt_count - p_prev_hwq_tx_stats->n_tx_tso_pkt_count) / delay;
+    p_prev_hwq_tx_stats->n_tx_tso_byte_count =
+        (p_curr_hwq_tx_stats->n_tx_tso_byte_count - p_prev_hwq_tx_stats->n_tx_tso_byte_count) /
+        delay;
+}
+
 void update_delta_ring_stat(ring_stats_t *p_curr_ring_stats, ring_stats_t *p_prev_ring_stats)
 {
     int delay = user_params.interval;
@@ -347,61 +362,37 @@ void update_delta_ring_stat(ring_stats_t *p_curr_ring_stats, ring_stats_t *p_pre
             (p_curr_ring_stats->n_rx_byte_count - p_prev_ring_stats->n_rx_byte_count) / delay;
         p_prev_ring_stats->n_rx_pkt_count =
             (p_curr_ring_stats->n_rx_pkt_count - p_prev_ring_stats->n_rx_pkt_count) / delay;
-        p_prev_ring_stats->n_tx_byte_count =
-            (p_curr_ring_stats->n_tx_byte_count - p_prev_ring_stats->n_tx_byte_count) / delay;
-        p_prev_ring_stats->n_tx_pkt_count =
-            (p_curr_ring_stats->n_tx_pkt_count - p_prev_ring_stats->n_tx_pkt_count) / delay;
         p_prev_ring_stats->n_tx_retransmits =
             (p_curr_ring_stats->n_tx_retransmits - p_prev_ring_stats->n_tx_retransmits) / delay;
         p_prev_ring_stats->n_tx_dropped_wqes =
-            (p_curr_ring_stats->n_tx_dropped_wqes -
-             p_prev_ring_stats->n_tx_dropped_wqes) /
-            delay;
+            (p_curr_ring_stats->n_tx_dropped_wqes - p_prev_ring_stats->n_tx_dropped_wqes) / delay;
         p_prev_ring_stats->n_tx_num_bufs =
-            (p_curr_ring_stats->n_tx_num_bufs - p_prev_ring_stats->n_tx_num_bufs) /
-            delay;
+            (p_curr_ring_stats->n_tx_num_bufs - p_prev_ring_stats->n_tx_num_bufs) / delay;
         p_prev_ring_stats->n_zc_num_bufs =
-            (p_curr_ring_stats->n_zc_num_bufs - p_prev_ring_stats->n_zc_num_bufs) /
-            delay;
+            (p_curr_ring_stats->n_zc_num_bufs - p_prev_ring_stats->n_zc_num_bufs) / delay;
 #ifdef DEFINED_UTLS
         p_prev_ring_stats->n_tx_tls_contexts =
             (p_curr_ring_stats->n_tx_tls_contexts - p_prev_ring_stats->n_tx_tls_contexts) / delay;
         p_prev_ring_stats->n_rx_tls_contexts =
             (p_curr_ring_stats->n_rx_tls_contexts - p_prev_ring_stats->n_rx_tls_contexts) / delay;
 #endif /* DEFINED_UTLS */
-        p_prev_ring_stats->n_tx_tso_pkt_count =
-            (p_curr_ring_stats->n_tx_tso_pkt_count -
-             p_prev_ring_stats->n_tx_tso_pkt_count) /
+        p_prev_ring_stats->n_rx_interrupt_received = (p_curr_ring_stats->n_rx_interrupt_received -
+                                                      p_prev_ring_stats->n_rx_interrupt_received) /
             delay;
-        p_prev_ring_stats->n_tx_tso_byte_count =
-            (p_curr_ring_stats->n_tx_tso_byte_count -
-             p_prev_ring_stats->n_tx_tso_byte_count) /
+        p_prev_ring_stats->n_rx_interrupt_requests = (p_curr_ring_stats->n_rx_interrupt_requests -
+                                                      p_prev_ring_stats->n_rx_interrupt_requests) /
             delay;
-        p_prev_ring_stats->n_rx_interrupt_received =
-            (p_curr_ring_stats->n_rx_interrupt_received -
-             p_prev_ring_stats->n_rx_interrupt_received) /
+        p_prev_ring_stats->n_rx_cq_moderation_count = p_curr_ring_stats->n_rx_cq_moderation_count;
+        p_prev_ring_stats->n_rx_cq_moderation_period = p_curr_ring_stats->n_rx_cq_moderation_period;
+        p_prev_ring_stats->n_tx_dev_mem_allocated = p_curr_ring_stats->n_tx_dev_mem_allocated;
+        p_prev_ring_stats->n_tx_dev_mem_byte_count = (p_curr_ring_stats->n_tx_dev_mem_byte_count -
+                                                      p_prev_ring_stats->n_tx_dev_mem_byte_count) /
             delay;
-        p_prev_ring_stats->n_rx_interrupt_requests =
-            (p_curr_ring_stats->n_rx_interrupt_requests -
-             p_prev_ring_stats->n_rx_interrupt_requests) /
+        p_prev_ring_stats->n_tx_dev_mem_pkt_count = (p_curr_ring_stats->n_tx_dev_mem_pkt_count -
+                                                     p_prev_ring_stats->n_tx_dev_mem_pkt_count) /
             delay;
-        p_prev_ring_stats->n_rx_cq_moderation_count =
-            p_curr_ring_stats->n_rx_cq_moderation_count;
-        p_prev_ring_stats->n_rx_cq_moderation_period =
-            p_curr_ring_stats->n_rx_cq_moderation_period;
-        p_prev_ring_stats->n_tx_dev_mem_allocated =
-            p_curr_ring_stats->n_tx_dev_mem_allocated;
-        p_prev_ring_stats->n_tx_dev_mem_byte_count =
-            (p_curr_ring_stats->n_tx_dev_mem_byte_count -
-             p_prev_ring_stats->n_tx_dev_mem_byte_count) /
-            delay;
-        p_prev_ring_stats->n_tx_dev_mem_pkt_count =
-            (p_curr_ring_stats->n_tx_dev_mem_pkt_count -
-             p_prev_ring_stats->n_tx_dev_mem_pkt_count) /
-            delay;
-        p_prev_ring_stats->n_tx_dev_mem_oob = (p_curr_ring_stats->n_tx_dev_mem_oob -
-                                               p_prev_ring_stats->n_tx_dev_mem_oob) /
-            delay;
+        p_prev_ring_stats->n_tx_dev_mem_oob =
+            (p_curr_ring_stats->n_tx_dev_mem_oob - p_prev_ring_stats->n_tx_dev_mem_oob) / delay;
     }
 }
 
@@ -480,7 +471,6 @@ void update_delta_global_stat(global_stats_t *p_curr_global_stats,
 
 void print_ring_stats(ring_instance_block_t *p_ring_inst_arr)
 {
-    ring_stats_t *p_ring_stats = NULL;
     char post_fix[3] = "";
 
     if (user_params.print_details_mode == e_deltas) {
@@ -490,19 +480,24 @@ void print_ring_stats(ring_instance_block_t *p_ring_inst_arr)
     for (int i = 0; i < NUM_OF_SUPPORTED_RINGS; i++) {
         // coverity[missing_lock:FALSE] /* Turn off coverity missing_lock check*/
         if (p_ring_inst_arr[i].b_enabled) {
-            p_ring_stats = &p_ring_inst_arr[i].ring_stats;
+            ring_stats_t *p_ring_stats = &p_ring_inst_arr[i].ring_stats;
+            hw_queue_tx_stats_t *p_hwq_tx_stats = &p_ring_inst_arr[i].hwq_tx_stats;
             printf("======================================================\n");
+            printf("\tETH=[%u]\n", i);
 
             if (p_ring_stats->p_ring_master) {
                 printf(FORMAT_RING_MASTER, "Master:", p_ring_stats->p_ring_master);
             }
 
             printf(FORMAT_RING_PACKETS,
-                   "Tx Offload:", p_ring_stats->n_tx_byte_count / BYTES_TRAFFIC_UNIT,
-                   p_ring_stats->n_tx_pkt_count, post_fix);
-            printf(FORMAT_RING_PACKETS,
-                   "Rx Offload:", p_ring_stats->n_rx_byte_count / BYTES_TRAFFIC_UNIT,
-                   p_ring_stats->n_rx_pkt_count, post_fix);
+                   "TX Offload:", p_hwq_tx_stats->n_tx_byte_count / BYTES_TRAFFIC_UNIT,
+                   p_hwq_tx_stats->n_tx_pkt_count, post_fix);
+
+            if (p_hwq_tx_stats->n_tx_tso_pkt_count || p_hwq_tx_stats->n_tx_tso_byte_count) {
+                printf(FORMAT_RING_PACKETS,
+                       "TSO Offload:", p_hwq_tx_stats->n_tx_tso_byte_count / BYTES_TRAFFIC_UNIT,
+                       p_hwq_tx_stats->n_tx_tso_pkt_count, post_fix);
+            }
 
             if (p_ring_stats->n_tx_retransmits) {
                 printf(FORMAT_STATS_64bit, "Retransmissions:", p_ring_stats->n_tx_retransmits,
@@ -510,8 +505,33 @@ void print_ring_stats(ring_instance_block_t *p_ring_inst_arr)
             }
 
             if (p_ring_stats->n_tx_dropped_wqes) {
-                printf(FORMAT_STATS_64bit,
-                       "TX Dropped Send Reqs:", p_ring_stats->n_tx_dropped_wqes, post_fix);
+                printf(FORMAT_STATS_64bit, "TX Dropped Reqs:", p_ring_stats->n_tx_dropped_wqes,
+                       post_fix);
+            }
+
+            printf(FORMAT_STATS_32bit, "TX buffers in use:", p_ring_stats->n_tx_num_bufs);
+            printf(FORMAT_STATS_32bit, "TX ZC buffers in use:", p_ring_stats->n_zc_num_bufs);
+
+            if (p_ring_stats->n_tx_dev_mem_allocated) {
+                printf(FORMAT_STATS_32bit, "Dev Mem Alloc:", p_ring_stats->n_tx_dev_mem_allocated);
+                printf(FORMAT_RING_DM_STATS,
+                       "Dev Mem Stats:", p_ring_stats->n_tx_dev_mem_byte_count / BYTES_TRAFFIC_UNIT,
+                       p_ring_stats->n_tx_dev_mem_pkt_count, p_ring_stats->n_tx_dev_mem_oob,
+                       post_fix);
+            }
+
+            printf(FORMAT_RING_PACKETS,
+                   "RX Offload:", p_ring_stats->n_rx_byte_count / BYTES_TRAFFIC_UNIT,
+                   p_ring_stats->n_rx_pkt_count, post_fix);
+
+            if (p_ring_stats->n_rx_interrupt_requests || p_ring_stats->n_rx_interrupt_received) {
+                printf(FORMAT_RING_INTERRUPT, "Interrupts:", p_ring_stats->n_rx_interrupt_requests,
+                       p_ring_stats->n_rx_interrupt_received, post_fix);
+            }
+            if (p_ring_stats->n_rx_cq_moderation_count || p_ring_stats->n_rx_cq_moderation_period) {
+                printf(FORMAT_RING_MODERATION,
+                       "Moderation:", p_ring_stats->n_rx_cq_moderation_count,
+                       p_ring_stats->n_rx_cq_moderation_period, post_fix);
             }
 
 #ifdef DEFINED_UTLS
@@ -526,37 +546,6 @@ void print_ring_stats(ring_instance_block_t *p_ring_inst_arr)
                        post_fix);
             }
 #endif /* DEFINED_UTLS */
-
-            if (p_ring_stats->n_tx_tso_pkt_count ||
-                p_ring_stats->n_tx_tso_byte_count) {
-                printf(FORMAT_RING_PACKETS, "TSO Offload:",
-                       p_ring_stats->n_tx_tso_byte_count / BYTES_TRAFFIC_UNIT,
-                       p_ring_stats->n_tx_tso_pkt_count, post_fix);
-            }
-            if (p_ring_stats->n_rx_interrupt_requests ||
-                p_ring_stats->n_rx_interrupt_received) {
-                printf(FORMAT_RING_INTERRUPT,
-                       "Interrupts:", p_ring_stats->n_rx_interrupt_requests,
-                       p_ring_stats->n_rx_interrupt_received, post_fix);
-            }
-            if (p_ring_stats->n_rx_cq_moderation_count ||
-                p_ring_stats->n_rx_cq_moderation_period) {
-                printf(FORMAT_RING_MODERATION,
-                       "Moderation:", p_ring_stats->n_rx_cq_moderation_count,
-                       p_ring_stats->n_rx_cq_moderation_period, post_fix);
-            }
-            if (p_ring_stats->n_tx_dev_mem_allocated) {
-                printf(FORMAT_STATS_32bit,
-                       "Dev Mem Alloc:", p_ring_stats->n_tx_dev_mem_allocated);
-                printf(FORMAT_RING_DM_STATS, "Dev Mem Stats:",
-                       p_ring_stats->n_tx_dev_mem_byte_count / BYTES_TRAFFIC_UNIT,
-                       p_ring_stats->n_tx_dev_mem_pkt_count,
-                       p_ring_stats->n_tx_dev_mem_oob, post_fix);
-            }
-
-            printf(FORMAT_STATS_32bit, "TX buffers inflight:", p_ring_stats->n_tx_num_bufs);
-            printf(FORMAT_STATS_32bit,
-                   "TX ZC buffers inflight:", p_ring_stats->n_zc_num_bufs);
         }
     }
     printf("======================================================\n");
@@ -1059,6 +1048,8 @@ void print_ring_deltas(ring_instance_block_t *p_curr_ring_stats,
         return;
     }
     for (int i = 0; i < NUM_OF_SUPPORTED_RINGS; i++) {
+        update_delta_hwq_tx_stat(&p_curr_ring_stats[i].hwq_tx_stats,
+                                 &p_prev_ring_stats[i].hwq_tx_stats);
         update_delta_ring_stat(&p_curr_ring_stats[i].ring_stats, &p_prev_ring_stats[i].ring_stats);
     }
     print_ring_stats(p_prev_ring_stats);
@@ -1788,19 +1779,17 @@ void zero_iomux_stats(iomux_stats_t *p_iomux_stats)
     // memset(p_iomux_stats, 0, sizeof(*p_iomux_stats));
 }
 
-void zero_ring_stats(ring_stats_t *p_ring_stats)
+void zero_ring_stats(ring_stats_t *p_ring_stats, hw_queue_tx_stats_t *p_hwq_tx_stats)
 {
+    memset(p_hwq_tx_stats, 0, sizeof(*p_hwq_tx_stats));
+
     p_ring_stats->n_rx_pkt_count = 0;
     p_ring_stats->n_rx_byte_count = 0;
-    p_ring_stats->n_tx_pkt_count = 0;
-    p_ring_stats->n_tx_byte_count = 0;
     p_ring_stats->n_tx_retransmits = 0;
 #ifdef DEFINED_UTLS
     p_ring_stats->n_tx_tls_contexts = 0;
     p_ring_stats->n_rx_tls_contexts = 0;
 #endif /* DEFINED_UTLS */
-    p_ring_stats->n_tx_tso_pkt_count = 0;
-    p_ring_stats->n_tx_tso_byte_count = 0;
     p_ring_stats->n_rx_interrupt_received = 0;
     p_ring_stats->n_rx_interrupt_requests = 0;
     p_ring_stats->n_tx_dropped_wqes = 0;
@@ -1837,7 +1826,8 @@ void zero_counters(sh_mem_t *p_sh_mem)
         zero_cq_stats(&p_sh_mem->cq_inst_arr[i].cq_stats);
     }
     for (int i = 0; i < NUM_OF_SUPPORTED_RINGS; i++) {
-        zero_ring_stats(&p_sh_mem->ring_inst_arr[i].ring_stats);
+        zero_ring_stats(&p_sh_mem->ring_inst_arr[i].ring_stats,
+                        &p_sh_mem->ring_inst_arr[i].hwq_tx_stats);
     }
     for (int i = 0; i < NUM_OF_SUPPORTED_BPOOLS; i++) {
         zero_bpool_stats(&p_sh_mem->bpool_inst_arr[i].bpool_stats);

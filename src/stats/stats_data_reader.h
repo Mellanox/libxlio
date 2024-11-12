@@ -244,7 +244,7 @@ struct ring_packet_aggregate {
         auto count_if_enabled = [](pkt_cnt &val, const ring_instance_block_t &ring_stat) {
             // coverity[missing_lock:FALSE] /* Turn off coverity missing_lock check*/
             if (ring_stat.b_enabled) {
-                val.tx += ring_stat.ring_stats.n_tx_pkt_count;
+                val.tx += ring_stat.hwq_tx_stats.n_tx_pkt_count;
                 val.rx += ring_stat.ring_stats.n_rx_pkt_count;
             }
             return val;

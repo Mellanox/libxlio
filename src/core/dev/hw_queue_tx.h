@@ -98,6 +98,7 @@ struct sq_wqe_prop {
 // Once created it requests from the system a CQ to work with.
 class hw_queue_tx : public xlio_ti_owner {
     friend class cq_mgr_tx;
+    friend class ring_simple;
 
 public:
     hw_queue_tx(ring_simple *ring, const slave_data_t *slave,
@@ -343,6 +344,7 @@ private:
     doca_ctx *m_doca_ctx_txq = nullptr;
     doca_notification_handle_t m_notification_handle;
     doca_lso_metadata *m_p_doca_lso_metadata_list = nullptr;
+    hw_queue_tx_stats_t m_hwq_tx_stats;
 
     static void tx_task_completion_cb(doca_eth_txq_task_send *task_send, doca_data task_user_data,
                                       doca_data ctx_user_data);

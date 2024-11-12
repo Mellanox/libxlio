@@ -477,15 +477,19 @@ void xlio_stats_mc_group_remove(const ip_address &mc_grp, socket_stats_t *p_sock
     g_lock_mc_info.unlock();
 }
 
-void xlio_stats_instance_create_ring_block(ring_stats_t *local_stats_addr)
+void xlio_stats_instance_create_ring_block(ring_stats_t *local_stats_addr,
+                                           hw_queue_tx_stats_t *local_hwq_tx_addr)
 {
     ring_stats_t *p_instance_ring = NULL;
+    hw_queue_tx_stats_t *p_instance_hwq_tx = NULL;
     g_lock_ring_inst_arr.lock();
     for (int i = 0; i < NUM_OF_SUPPORTED_RINGS; i++) {
         if (!g_sh_mem->ring_inst_arr[i].b_enabled) {
             g_sh_mem->ring_inst_arr[i].b_enabled = true;
             p_instance_ring = &g_sh_mem->ring_inst_arr[i].ring_stats;
+            p_instance_hwq_tx = &g_sh_mem->ring_inst_arr[i].hwq_tx_stats;
             memset(p_instance_ring, 0, sizeof(*p_instance_ring));
+            memset(p_instance_hwq_tx, 0, sizeof(*p_instance_hwq_tx));
             break;
         }
     }
@@ -498,33 +502,34 @@ void xlio_stats_instance_create_ring_block(ring_stats_t *local_stats_addr)
     } else {
         g_p_stats_data_reader->add_data_reader(local_stats_addr, p_instance_ring,
                                                sizeof(ring_stats_t));
-        __log_dbg("Added ring local=%p shm=%p", local_stats_addr, p_instance_ring);
+        if (local_hwq_tx_addr) {
+            g_p_stats_data_reader->add_data_reader(local_hwq_tx_addr, p_instance_hwq_tx,
+                                                   sizeof(hw_queue_tx_stats_t));
+        }
+        __log_dbg("Added ring local=%p shm=%p, local_hwq_tx=%p, shm_hwq_tx=%p", local_stats_addr,
+                  p_instance_ring, local_hwq_tx_addr, p_instance_hwq_tx);
     }
     g_lock_ring_inst_arr.unlock();
 }
 
-void xlio_stats_instance_remove_ring_block(ring_stats_t *local_stats_addr)
+void xlio_stats_instance_remove_ring_block(ring_stats_t *local_stats_addr,
+                                           hw_queue_tx_stats_t *local_hwq_tx_addr)
 {
     g_lock_ring_inst_arr.lock();
-    __log_dbg("Remove ring local=%p", local_stats_addr);
+    __log_dbg("Remove ring local=%p, local_hwq_tx=%p", local_stats_addr, local_hwq_tx_addr);
+
+    if (local_hwq_tx_addr) {
+        g_p_stats_data_reader->pop_data_reader(local_hwq_tx_addr);
+    }
 
     ring_stats_t *p_ring_stats =
         (ring_stats_t *)g_p_stats_data_reader->pop_data_reader(local_stats_addr);
 
     if (p_ring_stats == NULL) { // happens on the tx cq (why don't we keep tx cq stats?)
-        __log_dbg("application xlio_stats pointer is NULL");
+        __log_dbg("application xlio_stats-ring pointer is NULL");
         g_lock_ring_inst_arr.unlock();
         return;
     }
-
-    // coverity - g_sh_mem->ring_inst_arr cannot be null
-    /*BULLSEYE_EXCLUDE_BLOCK_START
-    if (g_sh_mem->ring_inst_arr == NULL) {
-        vlog_printf(VLOG_ERROR,"%s:%d: g_sh_mem->instances_arr not init\n", __func__, __LINE__);
-                g_lock_skt_stats.unlock();
-        return;
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END*/
 
     // Search sh_mem block to release
     for (int i = 0; i < NUM_OF_SUPPORTED_RINGS; i++) {
