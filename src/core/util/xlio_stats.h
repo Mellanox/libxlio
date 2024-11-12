@@ -355,18 +355,15 @@ typedef struct {
 
 // Ring stat info
 typedef struct {
+    uint32_t n_tx_num_bufs;
+    uint32_t n_zc_num_bufs;
+    uint64_t n_tx_retransmits;
     uint64_t n_rx_pkt_count;
     uint64_t n_rx_byte_count;
-    uint64_t n_tx_pkt_count;
-    uint64_t n_tx_byte_count;
-    uint64_t n_tx_retransmits;
-    void *p_ring_master;
 #ifdef DEFINED_UTLS
     uint32_t n_tx_tls_contexts;
     uint32_t n_rx_tls_contexts;
 #endif /* DEFINED_UTLS */
-    uint64_t n_tx_tso_pkt_count;
-    uint64_t n_tx_tso_byte_count;
     uint64_t n_rx_interrupt_requests;
     uint64_t n_rx_interrupt_received;
     uint32_t n_rx_cq_moderation_count;
@@ -376,13 +373,21 @@ typedef struct {
     uint64_t n_tx_dev_mem_byte_count;
     uint64_t n_tx_dev_mem_oob;
     uint32_t n_tx_dev_mem_allocated;
-    uint32_t n_tx_num_bufs;
-    uint32_t n_zc_num_bufs;
+    void *p_ring_master;
 } ring_stats_t;
+
+typedef struct {
+    uint64_t n_tx_pkt_count;
+    uint64_t n_tx_byte_count;
+    uint64_t n_tx_tso_pkt_count;
+    uint64_t n_tx_tso_byte_count;
+} hw_queue_tx_stats_t;
 
 typedef struct {
     bool b_enabled;
     ring_stats_t ring_stats;
+    hw_queue_tx_stats_t hwq_tx_stats;
+
 } ring_instance_block_t;
 
 // Buffer Pool stat info
@@ -528,8 +533,8 @@ void xlio_stats_instance_remove_socket_block(socket_stats_t *);
 void xlio_stats_mc_group_add(const ip_address &mc_grp, socket_stats_t *p_socket_stats);
 void xlio_stats_mc_group_remove(const ip_address &mc_grp, socket_stats_t *p_socket_stats);
 
-void xlio_stats_instance_create_ring_block(ring_stats_t *);
-void xlio_stats_instance_remove_ring_block(ring_stats_t *);
+void xlio_stats_instance_create_ring_block(ring_stats_t *, hw_queue_tx_stats_t *local_hwq_tx_addr);
+void xlio_stats_instance_remove_ring_block(ring_stats_t *, hw_queue_tx_stats_t *local_hwq_tx_addr);
 
 void xlio_stats_instance_create_cq_block(cq_stats_t *);
 void xlio_stats_instance_remove_cq_block(cq_stats_t *);

@@ -75,8 +75,8 @@ inline void ring_simple::send_status_handler(int ret, xlio_ibv_send_wr *p_send_w
     } else {
         // Update TX statistics
         sg_array sga(p_send_wqe->sg_list, p_send_wqe->num_sge);
-        m_p_ring_stat->n_tx_byte_count += sga.length();
-        ++m_p_ring_stat->n_tx_pkt_count;
+        m_hqtx->m_hwq_tx_stats.n_tx_byte_count += sga.length();
+        ++m_hqtx->m_hwq_tx_stats.n_tx_pkt_count;
 
         // Decrease counter in order to keep track of how many missing buffers we have when
         // doing ring->restart() and then drain_tx_buffers_to_buffer_pool()
@@ -157,6 +157,8 @@ ring_simple::~ring_simple()
         g_p_fd_collection->del_cq_channel_fd(get_rx_channel_fd(0U), true);
         g_p_fd_collection->del_cq_channel_fd(get_tx_channel_fd(), true);
     }
+
+    xlio_stats_instance_remove_ring_block(m_p_ring_stat.get(), &m_hqtx->m_hwq_tx_stats);
 
     delete m_hqtx;
     m_hqtx = nullptr;
@@ -385,6 +387,8 @@ void ring_simple::create_resources()
         modify_cq_moderation(safe_mce_sys().cq_moderation_period_usec,
                              safe_mce_sys().cq_moderation_count);
     }
+
+    xlio_stats_instance_create_ring_block(m_p_ring_stat.get(), &m_hqtx->m_hwq_tx_stats);
 
     ring_logdbg("new ring_simple() completed");
 }

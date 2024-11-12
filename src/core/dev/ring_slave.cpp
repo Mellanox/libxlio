@@ -99,18 +99,12 @@ ring_slave::ring_slave(int if_index, ring *parent, bool use_locks)
     m_tx_pool.set_id("ring_slave (%p) : m_tx_pool", this);
     m_zc_pool.set_id("ring_slave (%p) : m_zc_pool", this);
 
-    xlio_stats_instance_create_ring_block(m_p_ring_stat.get());
-
     print_val();
 }
 
 ring_slave::~ring_slave()
 {
     print_val();
-
-    if (m_p_ring_stat) {
-        xlio_stats_instance_remove_ring_block(m_p_ring_stat.get());
-    }
 
     /* Release TX buffer poll */
     g_buffer_pool_tx->put_buffers_thread_safe(&m_tx_pool, m_tx_pool.size());

@@ -128,12 +128,6 @@ public:
 
     void modify_cq_moderation(uint32_t period, uint32_t count);
 
-    void update_tso_stats(uint64_t bytes)
-    {
-        ++m_p_ring_stat->n_tx_tso_pkt_count;
-        m_p_ring_stat->n_tx_tso_byte_count += bytes;
-    }
-
 #ifdef DEFINED_UTLS
     bool tls_tx_supported(void) override { return m_tls.tls_tx; }
     bool tls_rx_supported(void) override { return m_tls.tls_rx; }

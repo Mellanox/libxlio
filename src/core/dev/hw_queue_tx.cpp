@@ -147,6 +147,7 @@ hw_queue_tx::hw_queue_tx(ring_simple *ring, const slave_data_t *slave,
         throw_xlio_exception("Failed to create DOCA TXQ");
     }
 
+    memset(&m_hwq_tx_stats, 0, sizeof(m_hwq_tx_stats));
     memset(&m_mlx5_qp, 0, sizeof(m_mlx5_qp));
 
     m_mlx5_qp.cap.max_inline_data = safe_mce_sys().tx_max_inline;
@@ -1029,7 +1030,8 @@ inline int hw_queue_tx::fill_wqe_lso(xlio_ibv_send_wr *pswr, int data_len)
         ctrl->opmod_idx_opcode =
             htonl(((m_sq_wqe_counter & 0xffff) << 8) | (get_mlx5_opcode(XLIO_IBV_WR_SEND) & 0xff));
     } else {
-        m_p_ring->update_tso_stats(static_cast<uint64_t>(data_len));
+        ++m_hwq_tx_stats.n_tx_tso_pkt_count;
+        m_hwq_tx_stats.n_tx_tso_byte_count += static_cast<uint64_t>(data_len);
     }
 
     eseg = (struct mlx5_wqe_eth_seg *)((uint8_t *)m_sq_wqe_hot + sizeof(*ctrl));
@@ -2079,8 +2081,12 @@ get_task:
     if (DOCA_IS_ERROR(rc)) {
         return_doca_task(task);
         PRINT_DOCA_ERR(hwqtx_logerr, rc, "doca_eth_txq_task_send_as_doca_task");
+        return 0;
     }
-    return (DOCA_IS_ERROR(rc) ? 0 : len);
+
+    ++m_hwq_tx_stats.n_tx_pkt_count;
+    m_hwq_tx_stats.n_tx_byte_count += len;
+    return len;
 }
 
 uint32_t hw_queue_tx::send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss, bool is_zerocopy)
@@ -2174,6 +2180,10 @@ get_lso_task:
         return 0;
     }
 
+    ++m_hwq_tx_stats.n_tx_pkt_count;
+    m_hwq_tx_stats.n_tx_byte_count += len_sent;
+    ++m_hwq_tx_stats.n_tx_tso_pkt_count;
+    m_hwq_tx_stats.n_tx_tso_byte_count += len_sent;
     return len_sent;
 }
 
