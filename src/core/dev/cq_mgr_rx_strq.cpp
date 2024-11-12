@@ -55,10 +55,11 @@
                         ##log_args);                                                               \
     } while (0)
 
-cq_mgr_rx_strq::cq_mgr_rx_strq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler,
-                               uint32_t cq_size, uint32_t stride_size_bytes, uint32_t strides_num,
+cq_mgr_rx_strq::cq_mgr_rx_strq(ring_simple *p_ring, hw_queue_rx *hqrx_ptr,
+                               ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
+                               uint32_t stride_size_bytes, uint32_t strides_num,
                                struct ibv_comp_channel *p_comp_event_channel)
-    : cq_mgr_rx(p_ring, p_ib_ctx_handler, cq_size, p_comp_event_channel)
+    : cq_mgr_rx(p_ring, hqrx_ptr, p_ib_ctx_handler, cq_size, p_comp_event_channel)
     , _owner_ring(p_ring)
     , _stride_size_bytes(stride_size_bytes)
     , _strides_num(strides_num)
@@ -126,10 +127,6 @@ uint32_t cq_mgr_rx_strq::clean_cq()
 {
     uint32_t ret_total = 0;
     uint64_t cq_poll_sn = 0;
-
-    if (!m_hqrx_ptr) { // Sanity check
-        return 0;
-    }
 
     mem_buf_desc_t *stride_buf = nullptr;
     buff_status_e status = BS_OK;
@@ -257,8 +254,8 @@ inline bool cq_mgr_rx_strq::strq_cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe,
 #endif /* DEFINED_UTLS */
         if (cqe->lro_num_seg > 1) {
             lro_update_hdr(cqe, _hot_buffer_stride);
-            m_p_cq_stat->n_rx_lro_packets++;
-            m_p_cq_stat->n_rx_lro_bytes += _hot_buffer_stride->sz_data;
+            m_hqrx_ptr->m_hwq_rx_stats.n_rx_lro_packets++;
+            m_hqrx_ptr->m_hwq_rx_stats.n_rx_lro_bytes += _hot_buffer_stride->sz_data;
         }
         break;
     }
@@ -402,8 +399,8 @@ int cq_mgr_rx_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id)
 
     // Update cq statistics
     m_p_cq_stat->n_rx_sw_queue_len = m_rx_queue.size();
-    m_p_cq_stat->n_rx_drained_at_once_max =
-        std::max(ret_total, m_p_cq_stat->n_rx_drained_at_once_max);
+    m_hqrx_ptr->m_hwq_rx_stats.n_rx_drained_at_once_max =
+        std::max(ret_total, m_hqrx_ptr->m_hwq_rx_stats.n_rx_drained_at_once_max);
 
     return ret_total;
 }
@@ -471,12 +468,12 @@ bool cq_mgr_rx_strq::poll_and_process_element_rx(void *pv_fd_ready_array)
     return (rx_polled < m_n_sysvar_cq_poll_batch_max);
 }
 
-void cq_mgr_rx_strq::add_hqrx(hw_queue_rx *hqrx)
+void cq_mgr_rx_strq::add_hqrx()
 {
     cq_logfunc("");
     _hot_buffer_stride = nullptr;
     _current_wqe_consumed_bytes = 0U;
-    cq_mgr_rx::add_hqrx(hqrx);
+    cq_mgr_rx::add_hqrx();
 }
 
 void cq_mgr_rx_strq::statistics_print()
@@ -487,8 +484,9 @@ void cq_mgr_rx_strq::statistics_print()
     cq_logdbg_no_funcname("Max Strides per Packet: %12" PRIu16,
                           m_p_cq_stat->n_rx_max_stirde_per_packet);
     cq_logdbg_no_funcname("Strides count: %12" PRIu64, m_p_cq_stat->n_rx_stride_count);
-    cq_logdbg_no_funcname("LRO packet count: %12" PRIu64, m_p_cq_stat->n_rx_lro_packets);
-    cq_logdbg_no_funcname("LRO bytes: %12" PRIu64, m_p_cq_stat->n_rx_lro_bytes);
+    cq_logdbg_no_funcname("LRO packet count: %12" PRIu64,
+                          m_hqrx_ptr->m_hwq_rx_stats.n_rx_lro_packets);
+    cq_logdbg_no_funcname("LRO bytes: %12" PRIu64, m_hqrx_ptr->m_hwq_rx_stats.n_rx_lro_bytes);
 }
 
 void cq_mgr_rx_strq::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
@@ -523,7 +521,7 @@ void cq_mgr_rx_strq::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
                 return_stride(temp);
             }
 
-            m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
+            m_hqrx_ptr->update_rx_buffer_pool_len_stats();
         } else {
             cq_logfunc("Stride returned to wrong CQ");
             g_buffer_pool_rx_ptr->put_buffers_thread_safe(buff);

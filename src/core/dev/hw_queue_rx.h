@@ -58,6 +58,7 @@ class hw_queue_rx : public xlio_ti_owner {
     friend class cq_mgr_rx;
     friend class cq_mgr_rx_regrq;
     friend class cq_mgr_rx_strq;
+    friend class ring_simple;
 
 public:
     hw_queue_rx(ring_simple *ring, ib_ctx_handler *ib_ctx, ibv_comp_channel *rx_comp_event_channel,
@@ -85,6 +86,14 @@ public:
     cq_mgr_rx *get_rx_cq_mgr() const { return m_p_cq_mgr_rx; }
     uint32_t get_rx_max_wr_num() const { return m_rx_num_wr; }
     uint16_t get_vlan() const { return m_vlan; };
+
+    void update_gro_stats(uint64_t gro_frags, uint64_t gro_bytes)
+    {
+        m_hwq_rx_stats.n_rx_gro_packets++;
+        m_hwq_rx_stats.n_rx_gro_frags += gro_frags;
+        m_hwq_rx_stats.n_rx_gro_bytes += gro_bytes;
+    }
+
     void modify_queue_to_ready_state();
     void modify_queue_to_error_state();
     void release_rx_buffers();
@@ -133,6 +142,11 @@ private:
     int xlio_raw_post_recv(struct ibv_recv_wr **bad_wr);
     bool is_rq_empty() const { return (m_rq_data.head == m_rq_data.tail); }
 
+    void update_rx_buffer_pool_len_stats()
+    {
+        m_hwq_rx_stats.n_rx_buffer_pool_len = static_cast<uint32_t>(m_rx_pool.size());
+    }
+
     dpcp::tir *create_tir(bool is_tls = false);
     dpcp::tir *xlio_tir_to_dpcp_tir(xlio_tir *tir) { return tir->m_p_tir.get(); }
 
@@ -162,10 +176,11 @@ private:
     descq_t m_rx_pool;
     mem_buf_desc_t *m_polled_buf = nullptr;
     uint32_t m_rxq_task_debt = 0U;
+    uint32_t m_rx_debt_submit_treshold = 0U;
+    hw_queue_rx_stats_t m_hwq_rx_stats;
     uint32_t m_rxq_burst_size = 0U;
     uint32_t m_rx_buff_pool_treshold_max = 0U;
     uint32_t m_rx_buff_pool_treshold_min = 0U;
-    uint32_t m_rx_debt_submit_treshold = 0U;
     doca_notification_handle_t m_notification_handle;
     ring_simple *m_p_ring;
     bool m_notification_armed = false;

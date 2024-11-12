@@ -38,8 +38,8 @@
 
 class cq_mgr_rx_regrq : public cq_mgr_rx {
 public:
-    cq_mgr_rx_regrq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
-                    struct ibv_comp_channel *p_comp_event_channel);
+    cq_mgr_rx_regrq(ring_simple *p_ring, hw_queue_rx *hqrx_ptr, ib_ctx_handler *p_ib_ctx_handler,
+                    uint32_t cq_size, struct ibv_comp_channel *p_comp_event_channel);
 
     virtual ~cq_mgr_rx_regrq() override;
 

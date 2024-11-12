@@ -157,10 +157,7 @@ out:
         flush_gro_desc(pv_fd_ready_array);
     }
 
-    cq_stats_t &cq_stats = *m_p_ring_simple->m_p_cq_mgr_rx->m_p_cq_stat;
-    cq_stats.n_rx_gro_packets++;
-    cq_stats.n_rx_gro_frags += 1;
-    cq_stats.n_rx_gro_bytes += p_rx_pkt_mem_buf_desc_info->lwip_pbuf.tot_len;
+    m_p_ring_simple->m_hqrx->update_gro_stats(1U, p_rx_pkt_mem_buf_desc_info->lwip_pbuf.tot_len);
 
     return rfs_uc::rx_dispatch_packet(p_rx_pkt_mem_buf_desc_info, pv_fd_ready_array);
 }
@@ -255,10 +252,8 @@ void rfs_uc_tcp_gro::flush_gro_desc(void *pv_fd_ready_array)
                ntohl(m_gro_desc.p_tcp_h->seq), ntohl(m_gro_desc.p_tcp_h->ack_seq),
                ntohs(m_gro_desc.p_tcp_h->window), m_gro_desc.ip_tot_len, m_gro_desc.buf_count);
 
-    cq_stats_t &cq_stats = *m_p_ring_simple->m_p_cq_mgr_rx->m_p_cq_stat;
-    cq_stats.n_rx_gro_packets++;
-    cq_stats.n_rx_gro_frags += m_gro_desc.buf_count;
-    cq_stats.n_rx_gro_bytes += m_gro_desc.p_first->lwip_pbuf.tot_len;
+    m_p_ring_simple->m_hqrx->update_gro_stats(m_gro_desc.buf_count,
+                                              m_gro_desc.p_first->lwip_pbuf.tot_len);
 
     if (!rfs_uc::rx_dispatch_packet(m_gro_desc.p_first, pv_fd_ready_array)) {
         m_p_ring_simple->reclaim_recv_buffers_no_lock(m_gro_desc.p_first);

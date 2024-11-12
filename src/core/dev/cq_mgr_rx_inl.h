@@ -47,6 +47,8 @@
 inline void cq_mgr_rx::process_recv_buffer(mem_buf_desc_t *p_mem_buf_desc, void *pv_fd_ready_array)
 {
     // Assume locked!!!
+    m_hqrx_ptr->m_hwq_rx_stats.n_rx_byte_count += p_mem_buf_desc->sz_data;
+    ++m_hqrx_ptr->m_hwq_rx_stats.n_rx_pkt_count;
 
     // Pass the Rx buffer ib_comm_mgr for further IP processing
     if (!m_p_ring->rx_process_buffer(p_mem_buf_desc, pv_fd_ready_array)) {

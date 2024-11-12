@@ -71,9 +71,10 @@ atomic_t cq_mgr_rx::m_n_cq_id_counter_rx = ATOMIC_INIT(1);
 
 uint64_t cq_mgr_rx::m_n_global_sn_rx = 0;
 
-cq_mgr_rx::cq_mgr_rx(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int cq_size,
-                     struct ibv_comp_channel *p_comp_event_channel)
-    : m_p_ring(p_ring)
+cq_mgr_rx::cq_mgr_rx(ring_simple *p_ring, hw_queue_rx *hqrx_ptr, ib_ctx_handler *p_ib_ctx_handler,
+                     int cq_size, struct ibv_comp_channel *p_comp_event_channel)
+    : m_hqrx_ptr(hqrx_ptr)
+    , m_p_ring(p_ring)
     , m_n_sysvar_cq_poll_batch_max(safe_mce_sys().cq_poll_batch_max)
     , m_n_sysvar_progress_engine_wce_max(safe_mce_sys().progress_engine_wce_max)
     , m_p_cq_stat(&m_cq_stat_static) // use local copy of stats by default
@@ -151,7 +152,7 @@ cq_mgr_rx::~cq_mgr_rx()
         m_p_cq_stat->n_rx_sw_queue_len = m_rx_queue.size();
 
         g_buffer_pool_rx_rwqe->put_buffers_thread_safe(&m_rx_pool, m_rx_pool.size());
-        m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
+        m_hqrx_ptr->update_rx_buffer_pool_len_stats();
     }
 
     cq_logfunc("destroying ibv_cq");
@@ -170,19 +171,21 @@ cq_mgr_rx::~cq_mgr_rx()
 
 void cq_mgr_rx::statistics_print()
 {
-    if (m_p_cq_stat->n_rx_pkt_drop || m_p_cq_stat->n_rx_sw_queue_len ||
-        m_p_cq_stat->n_rx_drained_at_once_max || m_p_cq_stat->n_buffer_pool_len) {
+    if (m_hqrx_ptr &&
+        (m_p_cq_stat->n_rx_pkt_drop || m_p_cq_stat->n_rx_sw_queue_len ||
+         m_hqrx_ptr->m_hwq_rx_stats.n_rx_drained_at_once_max ||
+         m_hqrx_ptr->m_hwq_rx_stats.n_rx_buffer_pool_len)) {
         cq_logdbg_no_funcname("Packets dropped: %12llu",
                               (unsigned long long int)m_p_cq_stat->n_rx_pkt_drop);
-        cq_logdbg_no_funcname("Drained max: %17u", m_p_cq_stat->n_rx_drained_at_once_max);
+        cq_logdbg_no_funcname("Drained max: %17u",
+                              m_hqrx_ptr->m_hwq_rx_stats.n_rx_drained_at_once_max);
         cq_logdbg_no_funcname("CQE errors: %18llu",
-                              (unsigned long long int)m_p_cq_stat->n_rx_cqe_error);
+                              (unsigned long long int)m_hqrx_ptr->m_hwq_rx_stats.n_rx_task_error);
     }
 }
 
-void cq_mgr_rx::add_hqrx(hw_queue_rx *hqrx_ptr)
+void cq_mgr_rx::add_hqrx()
 {
-    m_hqrx_ptr = hqrx_ptr;
     m_hqrx_ptr->m_rq_wqe_counter = 0; // In case of bonded hqrx, wqe_counter must be reset to zero
     m_rx_hot_buffer = nullptr;
 
@@ -191,19 +194,17 @@ void cq_mgr_rx::add_hqrx(hw_queue_rx *hqrx_ptr)
     }
 
     VALGRIND_MAKE_MEM_DEFINED(&m_mlx5_cq, sizeof(m_mlx5_cq));
-    cq_logfunc("hqrx_ptr=%p m_mlx5_cq.dbrec=%p m_mlx5_cq.cq_buf=%p", hqrx_ptr, m_mlx5_cq.dbrec,
+    cq_logfunc("hqrx_ptr=%p m_mlx5_cq.dbrec=%p m_mlx5_cq.cq_buf=%p", m_hqrx_ptr, m_mlx5_cq.dbrec,
                m_mlx5_cq.cq_buf);
 
     descq_t temp_desc_list;
     temp_desc_list.set_id("cq_mgr_rx (%p) : temp_desc_list", this);
 
-    m_p_cq_stat->n_rx_drained_at_once_max = 0;
-
     /* return_extra_buffers(); */ // todo??
 
     // Initial fill of receiver work requests
-    uint32_t hqrx_wr_num = hqrx_ptr->get_rx_max_wr_num();
-    cq_logdbg("Trying to push %d WRE to allocated hqrx (%p)", hqrx_wr_num, hqrx_ptr);
+    uint32_t hqrx_wr_num = m_hqrx_ptr->get_rx_max_wr_num();
+    cq_logdbg("Trying to push %d WRE to allocated hqrx (%p)", hqrx_wr_num, m_hqrx_ptr);
     while (hqrx_wr_num) {
         uint32_t n_num_mem_bufs = m_n_sysvar_rx_num_wr_to_post_recv;
         if (n_num_mem_bufs > hqrx_wr_num) {
@@ -215,14 +216,15 @@ void cq_mgr_rx::add_hqrx(hw_queue_rx *hqrx_ptr)
             VLOG_PRINTF_INFO_ONCE_THEN_ALWAYS(
                 VLOG_WARNING, VLOG_DEBUG,
                 "Out of mem_buf_desc in global RX buffer pool for hqrx initialization (hqrx=%p)",
-                hqrx_ptr);
+                m_hqrx_ptr);
             break;
         }
 
-        hqrx_ptr->post_recv_buffers(&temp_desc_list, temp_desc_list.size());
+        m_hqrx_ptr->post_recv_buffers(&temp_desc_list, temp_desc_list.size());
         if (!temp_desc_list.empty()) {
             cq_logdbg("hqrx_ptr post recv is already full (push=%d, planned=%d)",
-                      hqrx_ptr->get_rx_max_wr_num() - hqrx_wr_num, hqrx_ptr->get_rx_max_wr_num());
+                      m_hqrx_ptr->get_rx_max_wr_num() - hqrx_wr_num,
+                      m_hqrx_ptr->get_rx_max_wr_num());
             g_buffer_pool_rx_rwqe->put_buffers_thread_safe(&temp_desc_list, temp_desc_list.size());
             break;
         }
@@ -230,24 +232,15 @@ void cq_mgr_rx::add_hqrx(hw_queue_rx *hqrx_ptr)
     }
 
     cq_logdbg("Successfully post_recv hqrx with %d new Rx buffers (planned=%d)",
-              hqrx_ptr->get_rx_max_wr_num() - hqrx_wr_num, hqrx_ptr->get_rx_max_wr_num());
+              m_hqrx_ptr->get_rx_max_wr_num() - hqrx_wr_num, m_hqrx_ptr->get_rx_max_wr_num());
 
     m_debt = 0;
 }
 
-void cq_mgr_rx::del_hqrx(hw_queue_rx *hqrx_ptr)
+void cq_mgr_rx::del_hqrx()
 {
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (m_hqrx_ptr != hqrx_ptr) {
-        cq_logdbg("wrong hqrx_ptr=%p != m_hqrx_ptr=%p", hqrx_ptr, m_hqrx_ptr);
-        return;
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-    cq_logdbg("m_hqrx_ptr=%p", m_hqrx_ptr);
     return_extra_buffers();
-
     clean_cq();
-    m_hqrx_ptr = nullptr;
     m_debt = 0;
 }
 
@@ -318,7 +311,7 @@ bool cq_mgr_rx::request_more_buffers()
         return false;
     };
 
-    m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
+    m_hqrx_ptr->update_rx_buffer_pool_len_stats();
     return true;
 }
 
@@ -331,7 +324,7 @@ void cq_mgr_rx::return_extra_buffers()
 
     cq_logfunc("releasing %d buffers to global rx pool", buff_to_rel);
     g_buffer_pool_rx_rwqe->put_buffers_thread_safe(&m_rx_pool, buff_to_rel);
-    m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
+    m_hqrx_ptr->update_rx_buffer_pool_len_stats();
 }
 
 mem_buf_desc_t *cq_mgr_rx::cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc, enum buff_status_e status)
@@ -367,7 +360,7 @@ bool cq_mgr_rx::compensate_qp_poll_success(mem_buf_desc_t *buff_cur)
         size_t buffers = std::min<size_t>(m_debt, m_rx_pool.size());
         m_hqrx_ptr->post_recv_buffers(&m_rx_pool, buffers);
         m_debt -= buffers;
-        m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
+        m_hqrx_ptr->update_rx_buffer_pool_len_stats();
     } else if (m_b_sysvar_cq_keep_qp_full || m_debt >= (int)m_hqrx_ptr->m_rx_num_wr) {
         m_p_cq_stat->n_rx_pkt_drop++;
         m_hqrx_ptr->post_recv_buffer(buff_cur);
@@ -386,8 +379,8 @@ void cq_mgr_rx::compensate_qp_poll_failed()
         if (likely(m_rx_pool.size() || request_more_buffers())) {
             size_t buffers = std::min<size_t>(m_debt, m_rx_pool.size());
             m_hqrx_ptr->post_recv_buffers(&m_rx_pool, buffers);
+            m_hqrx_ptr->update_rx_buffer_pool_len_stats();
             m_debt -= buffers;
-            m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
         }
     }
 }
@@ -409,7 +402,7 @@ void cq_mgr_rx::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
                 free_lwip_pbuf(&temp->lwip_pbuf);
                 m_rx_pool.push_back(temp);
             }
-            m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
+            m_hqrx_ptr->update_rx_buffer_pool_len_stats();
         } else {
             cq_logfunc("Buffer returned to wrong CQ");
             g_buffer_pool_rx_rwqe->put_buffers_thread_safe(buff);
@@ -472,6 +465,7 @@ bool cq_mgr_rx::request_notification()
         else
         {
             m_b_notification_armed = true;
+            ++m_hqrx_ptr->m_hwq_rx_stats.n_rx_interrupt_requests;
         }
         ENDIF_VERBS_FAILURE;
     }
@@ -508,6 +502,7 @@ void cq_mgr_rx::wait_for_notification()
 
             // Clear flag
             m_b_notification_armed = false;
+            ++m_hqrx_ptr->m_hwq_rx_stats.n_rx_interrupt_received;
         }
         ENDIF_VERBS_FAILURE;
     } else {

@@ -158,7 +158,8 @@ ring_simple::~ring_simple()
         g_p_fd_collection->del_cq_channel_fd(get_tx_channel_fd(), true);
     }
 
-    xlio_stats_instance_remove_ring_block(m_p_ring_stat.get(), &m_hqtx->m_hwq_tx_stats);
+    xlio_stats_instance_remove_ring_block(m_p_ring_stat.get(), &m_hqtx->m_hwq_tx_stats,
+                                          &m_hqrx->m_hwq_rx_stats);
 
     delete m_hqtx;
     m_hqtx = nullptr;
@@ -388,7 +389,8 @@ void ring_simple::create_resources()
                              safe_mce_sys().cq_moderation_count);
     }
 
-    xlio_stats_instance_create_ring_block(m_p_ring_stat.get(), &m_hqtx->m_hwq_tx_stats);
+    xlio_stats_instance_create_ring_block(m_p_ring_stat.get(), &m_hqtx->m_hwq_tx_stats,
+                                          &m_hqrx->m_hwq_rx_stats);
 
     ring_logdbg("new ring_simple() completed");
 }
@@ -416,7 +418,6 @@ bool ring_simple::request_notification(cq_type_t cq_type)
 {
     if (likely(CQT_RX == cq_type)) {
         std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
-        ++m_p_ring_stat->n_rx_interrupt_requests;
         return (!safe_mce_sys().doca_rx ? m_p_cq_mgr_rx->request_notification()
                                         : m_hqrx->request_notification());
     }
@@ -429,7 +430,6 @@ bool ring_simple::request_notification(cq_type_t cq_type)
 void ring_simple::clear_rx_notification()
 {
     std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
-    ++m_p_ring_stat->n_rx_interrupt_received;
     if (!safe_mce_sys().doca_rx) {
         m_p_cq_mgr_rx->wait_for_notification();
     } else {
@@ -1038,12 +1038,11 @@ void ring_simple::modify_cq_moderation(uint32_t period, uint32_t count)
     m_cq_moderation_info.period = period;
     m_cq_moderation_info.count = count;
 
-    m_p_ring_stat->n_rx_cq_moderation_period = period;
-    m_p_ring_stat->n_rx_cq_moderation_count = count;
-
     // todo all cqs or just active? what about HA?
     if (!safe_mce_sys().doca_rx) {
         priv_ibv_modify_cq_moderation(m_p_cq_mgr_rx->get_ibv_cq_hndl(), period, count);
+        m_hqrx->m_hwq_rx_stats.n_rx_cq_moderation_period = period;
+        m_hqrx->m_hwq_rx_stats.n_rx_cq_moderation_count = count;
     } else if (m_hqrx) {
         m_hqrx->modify_moderation(static_cast<uint16_t>(period), static_cast<uint16_t>(count));
     }

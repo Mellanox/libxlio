@@ -52,9 +52,10 @@
 #define cq_logpanic   __log_info_panic
 #define cq_logfuncall __log_info_funcall
 
-cq_mgr_rx_regrq::cq_mgr_rx_regrq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler,
-                                 uint32_t cq_size, struct ibv_comp_channel *p_comp_event_channel)
-    : cq_mgr_rx(p_ring, p_ib_ctx_handler, cq_size, p_comp_event_channel)
+cq_mgr_rx_regrq::cq_mgr_rx_regrq(ring_simple *p_ring, hw_queue_rx *hqrx_ptr,
+                                 ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
+                                 struct ibv_comp_channel *p_comp_event_channel)
+    : cq_mgr_rx(p_ring, hqrx_ptr, p_ib_ctx_handler, cq_size, p_comp_event_channel)
 {
     cq_logfunc("");
 }
@@ -64,10 +65,6 @@ uint32_t cq_mgr_rx_regrq::clean_cq()
     uint32_t ret_total = 0;
     uint64_t cq_poll_sn = 0;
     mem_buf_desc_t *buff;
-
-    if (!m_hqrx_ptr) { // Sanity check
-        return 0;
-    }
 
     buff_status_e status = BS_OK;
     while ((buff = poll(status))) {
@@ -153,8 +150,8 @@ void cq_mgr_rx_regrq::cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe,
               (cqe->hds_ip_ext & MLX5_CQE_L3_OK));
         if (cqe->lro_num_seg > 1) {
             lro_update_hdr(cqe, p_rx_wc_buf_desc);
-            m_p_cq_stat->n_rx_lro_packets++;
-            m_p_cq_stat->n_rx_lro_bytes += p_rx_wc_buf_desc->sz_data;
+            m_hqrx_ptr->m_hwq_rx_stats.n_rx_lro_packets++;
+            m_hqrx_ptr->m_hwq_rx_stats.n_rx_lro_bytes += p_rx_wc_buf_desc->sz_data;
         }
         return;
     }
@@ -199,7 +196,7 @@ void cq_mgr_rx_regrq::cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe,
     case MLX5_CQE_INVALID:
     case MLX5_CQE_REQ_ERR:
     case MLX5_CQE_RESP_ERR:
-        m_p_cq_stat->n_rx_cqe_error++;
+        m_hqrx_ptr->m_hwq_rx_stats.n_rx_task_error++;
         break;
     }
 }
@@ -268,8 +265,8 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
 
     // Update cq statistics
     m_p_cq_stat->n_rx_sw_queue_len = m_rx_queue.size();
-    m_p_cq_stat->n_rx_drained_at_once_max =
-        std::max(ret_total, m_p_cq_stat->n_rx_drained_at_once_max);
+    m_hqrx_ptr->m_hwq_rx_stats.n_rx_drained_at_once_max =
+        std::max(ret_total, m_hqrx_ptr->m_hwq_rx_stats.n_rx_drained_at_once_max);
 
     return ret_total;
 }
