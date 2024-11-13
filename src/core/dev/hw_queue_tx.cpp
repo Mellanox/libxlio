@@ -363,6 +363,7 @@ bool hw_queue_tx::prepare_doca_txq()
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     // TODO: [DOCA] Replace with real information from DOCA.
+    /*
     int comp_channel_num = 1U;
 
     if (safe_mce_sys().app.distribute_cq_interrupts && g_p_app->get_worker_id() >= 0 &&
@@ -377,6 +378,7 @@ bool hw_queue_tx::prepare_doca_txq()
                            m_doca_ctx_txq, m_doca_txq.get());
         }
     }
+    */
 #endif
 
     err = doca_pe_get_notification_handle(pe, &m_notification_handle);

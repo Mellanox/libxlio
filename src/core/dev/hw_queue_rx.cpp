@@ -203,7 +203,7 @@ bool hw_queue_rx::prepare_doca_rxq()
     // CPUs to improve CPS in case of multiple processes.
 
     // TODO: [DOCA] Replace with real information from DOCA.
-    int comp_channel_num = 1U;
+    /*int comp_channel_num = 1U;
 
     // TODO: [DOCA] Currently not functional.
     if (safe_mce_sys().app.distribute_cq_interrupts && g_p_app->get_worker_id() >= 0 &&
@@ -217,7 +217,7 @@ bool hw_queue_rx::prepare_doca_rxq()
                            "doca_pe_set_notification_affinity pe/ctx/rxq: %p,%p,%p", pe,
                            m_doca_ctx_rxq, m_doca_rxq.get());
         }
-    }
+    }*/
 #endif
 
     err = doca_pe_get_notification_handle(pe, &m_notification_handle);
