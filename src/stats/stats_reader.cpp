@@ -352,6 +352,12 @@ void update_delta_hwq_tx_stat(hw_queue_tx_stats_t *p_curr_hwq_tx_stats,
     p_prev_hwq_tx_stats->n_tx_tso_byte_count =
         (p_curr_hwq_tx_stats->n_tx_tso_byte_count - p_prev_hwq_tx_stats->n_tx_tso_byte_count) /
         delay;
+    p_prev_hwq_tx_stats->n_tx_interrupt_received = (p_curr_hwq_tx_stats->n_tx_interrupt_received -
+                                                    p_prev_hwq_tx_stats->n_tx_interrupt_received) /
+        delay;
+    p_prev_hwq_tx_stats->n_tx_interrupt_requests = (p_curr_hwq_tx_stats->n_tx_interrupt_requests -
+                                                    p_prev_hwq_tx_stats->n_tx_interrupt_requests) /
+        delay;
 }
 
 void update_delta_hwq_rx_stat(hw_queue_rx_stats_t *p_curr_hwq_rx_stats,
@@ -518,6 +524,13 @@ void print_ring_stats(ring_instance_block_t *p_ring_inst_arr)
 
             printf(FORMAT_STATS_32bit, "TX buff in use:", p_ring_stats->n_tx_num_bufs);
             printf(FORMAT_STATS_32bit, "TX ZC buff in use:", p_ring_stats->n_zc_num_bufs);
+
+            if (p_hwq_tx_stats->n_tx_interrupt_requests ||
+                p_hwq_tx_stats->n_tx_interrupt_received) {
+                printf(FORMAT_RING_INTERRUPT,
+                       "TX Interrupts:", p_hwq_tx_stats->n_tx_interrupt_requests,
+                       p_hwq_tx_stats->n_tx_interrupt_received, post_fix);
+            }
 
             if (p_ring_stats->n_tx_dev_mem_allocated) {
                 printf(FORMAT_STATS_32bit,
