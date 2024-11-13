@@ -41,6 +41,7 @@
 #include "util/valgrind.h"
 #include <doca_buf.h>
 #include <doca_log.h>
+#include <doca_pe.h>
 #include <thread>
 #include <cinttypes>
 #include <sock/sock-app.h>
@@ -2033,6 +2034,22 @@ void hw_queue_tx::clear_notification()
     }
 }
 
+doca_error_t hw_queue_tx::submit_txq_task(doca_task *task)
+{
+    // By default - flush and ring doorbell
+    uint32_t submit_flags = DOCA_TASK_SUBMIT_FLAG_FLUSH;
+
+    if (is_completion_need()) {
+        set_unsignaled_count();
+    } else {
+        // If completion not needed - enable CQE batching
+        submit_flags |= DOCA_TASK_SUBMIT_FLAG_OPTIMIZE_REPORTS;
+        dec_unsignaled_count();
+    }
+
+    return doca_task_submit_ex(task, submit_flags);
+}
+
 /*
     1. doca_buf_inventory_buf_get_by_data
     2. doca task allocation
@@ -2067,7 +2084,7 @@ get_task:
         return 0;
     }
 
-    rc = doca_task_submit(doca_eth_txq_task_send_as_doca_task(task));
+    rc = submit_txq_task(doca_eth_txq_task_send_as_doca_task(task));
     if (DOCA_IS_ERROR(rc)) {
         return_doca_task(task);
         PRINT_DOCA_ERR(hwqtx_logerr, rc, "doca_eth_txq_task_send_as_doca_task");
@@ -2159,10 +2176,10 @@ get_lso_task:
 
     doca_eth_txq_task_lso_send_set_mss(task, mss);
 
-    rc = doca_task_submit(doca_eth_txq_task_lso_send_as_doca_task(task));
+    rc = submit_txq_task(doca_eth_txq_task_lso_send_as_doca_task(task));
     if (DOCA_IS_ERROR(rc)) {
         return_doca_lso_task(task);
-        PRINT_DOCA_ERR(hwqtx_logerr, rc, "doca_task_submit");
+        PRINT_DOCA_ERR(hwqtx_logerr, rc, "submit_txq_task");
         return 0;
     }
 

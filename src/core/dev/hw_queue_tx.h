@@ -223,6 +223,7 @@ public:
 
     uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *user_data);
     uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss, bool is_zerocopy);
+    doca_error_t submit_txq_task(doca_task *task);
     int poll_and_process_doca_tx();
     bool request_notification();
     void clear_notification();
