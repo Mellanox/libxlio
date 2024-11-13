@@ -367,6 +367,8 @@ typedef struct {
     uint64_t n_tx_byte_count;
     uint64_t n_tx_tso_pkt_count;
     uint64_t n_tx_tso_byte_count;
+    uint64_t n_tx_interrupt_requests;
+    uint64_t n_tx_interrupt_received;
 } hw_queue_tx_stats_t;
 
 typedef struct {

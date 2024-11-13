@@ -2017,6 +2017,8 @@ bool hw_queue_tx::request_notification()
             PRINT_DOCA_ERR(hwqtx_logerr, rc, "doca_pe_request_notification");
             return false;
         }
+
+        ++m_hwq_tx_stats.n_tx_interrupt_requests;
     }
 
     m_notification_armed = true;
@@ -2030,6 +2032,8 @@ void hw_queue_tx::clear_notification()
         doca_error_t rc = doca_pe_clear_notification(m_doca_pe.get(), m_notification_handle);
         if (unlikely(DOCA_IS_ERROR(rc))) {
             PRINT_DOCA_ERR(hwqtx_logerr, rc, "doca_pe_clear_notification");
+        } else {
+            ++m_hwq_tx_stats.n_tx_interrupt_received;
         }
     } else {
         hwqtx_logwarn("Clear notification attempt on unarmed PE. hw_queue_tx: %p", this);
