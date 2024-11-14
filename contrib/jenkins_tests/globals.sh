@@ -296,7 +296,7 @@ do_compile_doca()
     echo ""
     echo "===== DOCA checkout & compilation starts ====="
     echo ""
-    doca_version="2.9.0029-1"
+    doca_version="2.10.0025-1"
     doca_sdk="$WORKSPACE/$prefix/doca-sdk"
     doca_repo="ssh://git-nbu.nvidia.com:12023/doca/doca"
     doca_build="$WORKSPACE/$prefix/doca"
@@ -330,10 +330,6 @@ do_compile_doca()
         fi
         pushd "$doca_sdk" || exit 1
     fi
-
-    # Patch from Iftah Levi, solving the "Suspend/Resume PE functionallity" in DOCA
-    wget https://github.com/user-attachments/files/16740209/0001-Disable-suspend-during-epoll.patch
-    git apply 0001-Disable-suspend-during-epoll.patch
 
     if [[ -f /.dockerenv ]]; then
         SUDO=""
