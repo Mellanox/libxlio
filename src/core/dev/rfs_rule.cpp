@@ -124,12 +124,13 @@ bool rfs_rule::create(doca_flow_match &match_value, doca_flow_match &match_mask,
     doca_flow_fwd all_fwd;
     memset(&all_fwd, 0, sizeof(all_fwd));
     all_fwd.type = DOCA_FLOW_FWD_RSS;
-    all_fwd.num_of_queues = 1;
-    all_fwd.rss_queues = &rx_queue_id;
-    all_fwd.rss_outer_flags =
+    all_fwd.rss_type = DOCA_FLOW_RESOURCE_TYPE_NONE;
+    all_fwd.rss.nr_queues = 1;
+    all_fwd.rss.queues_array = &rx_queue_id;
+    all_fwd.rss.outer_flags =
         (match_value.outer.l3_type == DOCA_FLOW_L3_TYPE_IP4 ? DOCA_FLOW_RSS_IPV4
                                                             : DOCA_FLOW_RSS_IPV6);
-    all_fwd.rss_outer_flags |=
+    all_fwd.rss.outer_flags |=
         (match_value.outer.l4_type_ext == DOCA_FLOW_L4_TYPE_EXT_TCP ? DOCA_FLOW_RSS_TCP
                                                                     : DOCA_FLOW_RSS_UDP);
 

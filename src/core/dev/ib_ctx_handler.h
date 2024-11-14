@@ -114,7 +114,6 @@ public:
 
 private:
     void open_doca_dev(doca_devinfo *devinfo);
-    void check_doca_dev_caps(doca_devinfo *devinfo);
     void handle_event_device_fatal();
     doca_error_t start_doca_flow_port();
     doca_error_t create_doca_root_pipe();

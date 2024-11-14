@@ -203,21 +203,21 @@ bool hw_queue_rx::prepare_doca_rxq()
     // CPUs to improve CPS in case of multiple processes.
 
     // TODO: [DOCA] Replace with real information from DOCA.
-    int comp_channel_num = 1U;
+    //int comp_channel_num = 1U;
 
     // TODO: [DOCA] Currently not functional.
-    if (safe_mce_sys().app.distribute_cq_interrupts && g_p_app->get_worker_id() >= 0 &&
-        m_p_ib_ctx_handler->is_notification_affinity_supported()) {
-        uint32_t comp_ch = g_p_app->get_worker_id() % comp_channel_num;
-        hwqrx_logdbg("Setting PE completion affinity: %" PRIu32 ", pid: %d", comp_ch, getpid());
+    //if (safe_mce_sys().app.distribute_cq_interrupts && g_p_app->get_worker_id() >= 0 &&
+    //m_p_ib_ctx_handler->is_notification_affinity_supported()) {
+    //uint32_t comp_ch = g_p_app->get_worker_id() % comp_channel_num;
+    //hwqrx_logdbg("Setting PE completion affinity: %" PRIu32 ", pid: %d", comp_ch, getpid());
 
-        err = doca_pe_set_notification_affinity(pe, comp_ch);
-        if (DOCA_IS_ERROR(err)) {
-            PRINT_DOCA_ERR(hwqrx_logerr, err,
-                           "doca_pe_set_notification_affinity pe/ctx/rxq: %p,%p,%p", pe,
-                           m_doca_ctx_rxq, m_doca_rxq.get());
-        }
-    }
+    //err = doca_pe_set_notification_affinity(pe, comp_ch);
+    //if (DOCA_IS_ERROR(err)) {
+    //    PRINT_DOCA_ERR(hwqrx_logerr, err,
+    //                   "doca_pe_set_notification_affinity pe/ctx/rxq: %p,%p,%p", pe,
+    //                   m_doca_ctx_rxq, m_doca_rxq.get());
+    //}
+    //}
 #endif
 
     err = doca_pe_get_notification_handle(pe, &m_notification_handle);
