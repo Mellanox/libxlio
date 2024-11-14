@@ -361,23 +361,11 @@ bool hw_queue_tx::prepare_doca_txq()
         return false;
     }
 
-#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    // TODO: [DOCA] Replace with real information from DOCA.
-    //int comp_channel_num = 1U;
-
-    //if (safe_mce_sys().app.distribute_cq_interrupts && g_p_app->get_worker_id() >= 0 &&
-    //m_p_ib_ctx_handler->is_notification_affinity_supported()) {
-    //uint32_t comp_ch = g_p_app->get_worker_id() % comp_channel_num;
-    //hwqtx_logdbg("Setting PE completion affinity: %" PRIu32 ", pid: %d", comp_ch, getpid());
-
-    //err = doca_pe_set_notification_affinity(pe, comp_ch);
-    //if (DOCA_IS_ERROR(err)) {
-    //PRINT_DOCA_ERR(hwqtx_logerr, err,
-    //"doca_pe_set_notification_affinity pe/ctx/txq: %p,%p,%p", pe,
-    //m_doca_ctx_txq, m_doca_txq.get());
-    //}
-    //}
-#endif
+    err = doca_pe_set_event_mode(pe, DOCA_PE_EVENT_MODE_PROGRESS_ALL);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_pe_set_event_mode pe: %p", pe);
+        return false;
+    }
 
     err = doca_pe_get_notification_handle(pe, &m_notification_handle);
     if (DOCA_IS_ERROR(err)) {
@@ -555,7 +543,9 @@ int hw_queue_tx::configure(const slave_data_t *slave,
 
 void hw_queue_tx::up()
 {
-    start_doca_txq();
+    if (safe_mce_sys().doca_tx) {
+        start_doca_txq();
+    }
 
     init_queue();
 
@@ -573,7 +563,9 @@ void hw_queue_tx::up()
 
 void hw_queue_tx::down()
 {
-    stop_doca_txq();
+    if (safe_mce_sys().doca_tx) {
+        stop_doca_txq();
+    }
 
     if (m_dm_enabled) {
         m_dm_mgr.release_resources();
