@@ -1203,11 +1203,6 @@ bool net_device_val::global_ring_request_notification()
             nd_logerr("Error RX ring[%p]->request_notification()", THE_RING);
             return false;
         }
-
-        if (!THE_RING->request_notification(CQT_TX)) {
-            nd_logerr("Error TX ring[%p]->request_notification()", THE_RING);
-            return false;
-        }
     }
 
     return true;

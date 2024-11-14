@@ -638,12 +638,6 @@ bool epfd_info::ring_request_notification()
             m_ring_map_lock.unlock();
             return false;
         }
-
-        if (!iter->first->request_notification(CQT_TX)) {
-            __log_err("Error TX ring[%p]->request_notification()", iter->first);
-            m_ring_map_lock.unlock();
-            return false;
-        }
     }
 
     m_ring_map_lock.unlock();
