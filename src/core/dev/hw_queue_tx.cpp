@@ -375,6 +375,32 @@ bool hw_queue_tx::prepare_doca_txq()
         return false;
     }
 
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+    if (safe_mce_sys().app.distribute_cq_interrupts) {
+        uint32_t num_comp_vectors = 0;
+        err = doca_ctx_cap_get_num_completion_vectors(devinfo, &num_comp_vectors);
+        if (DOCA_IS_ERROR(err)) {
+            PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_ctx_cap_get_num_completion_vectors devinfo: %p",
+                           devinfo);
+            return false;
+        }
+
+        // fetching once - as this operation requires locking
+        const int worker_id = g_p_app->get_worker_id();
+        if (likely(worker_id >= 0)) {
+            const uint32_t comp_vector = worker_id % num_comp_vectors;
+            hwqtx_logdbg("Setting PE completion affinity: %" PRIu32 ", pid: %d", comp_vector,
+                         getpid());
+            err = doca_ctx_set_completion_vector(m_doca_ctx_txq, comp_vector);
+            if (DOCA_IS_ERROR(err)) {
+                PRINT_DOCA_ERR(hwqtx_logerr, err,
+                               "doca_ctx_set_completion_vector ctx/comp_vector: %p,%" PRIu32,
+                               m_doca_ctx_txq, comp_vector);
+            }
+        }
+    }
+#endif
+
     doca_buf_inventory *inventory = nullptr;
     err = doca_buf_inventory_create(max_burst_size, &inventory);
     if (DOCA_IS_ERROR(err)) {
