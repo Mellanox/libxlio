@@ -71,17 +71,13 @@ inline void ring_simple::send_status_handler(int ret, xlio_ibv_send_wr *p_send_w
         // Error during post_send, reclaim the tx buffer
         if (p_send_wqe) {
             mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)(p_send_wqe->wr_id);
-            mem_buf_tx_release(p_mem_buf_desc, true);
+            mem_buf_tx_release(p_mem_buf_desc);
         }
     } else {
         // Update TX statistics
         sg_array sga(p_send_wqe->sg_list, p_send_wqe->num_sge);
         m_hqtx->m_hwq_tx_stats.n_tx_byte_count += sga.length();
         ++m_hqtx->m_hwq_tx_stats.n_tx_pkt_count;
-
-        // Decrease counter in order to keep track of how many missing buffers we have when
-        // doing ring->restart() and then drain_tx_buffers_to_buffer_pool()
-        m_missing_buf_ref_count--;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 }
@@ -177,15 +173,8 @@ ring_simple::~ring_simple()
         VALGRIND_MAKE_MEM_UNDEFINED(m_p_rx_comp_event_channel, sizeof(struct ibv_comp_channel));
     }
 
-    ring_logdbg("Tx buffer poll: free count = %lu, sender_has = %u, total = %d, %s (%lu)",
-                m_tx_pool.size() + m_zc_pool.size(), m_missing_buf_ref_count,
-                m_tx_num_bufs + m_zc_num_bufs,
-                ((m_tx_num_bufs + m_zc_num_bufs - m_tx_pool.size() - m_zc_pool.size() -
-                  m_missing_buf_ref_count)
-                     ? "bad accounting!!"
-                     : "good accounting"),
-                (m_tx_num_bufs + m_zc_num_bufs - m_tx_pool.size() - m_zc_pool.size() -
-                 m_missing_buf_ref_count));
+    ring_logdbg("Tx buffer poll: free count = %lu, total = %d", m_tx_pool.size() + m_zc_pool.size(),
+                m_tx_num_bufs + m_zc_num_bufs);
     ring_logdbg("Rx buffer pool: %lu free global buffers available", m_tx_pool.size());
 
     // Release verbs resources
@@ -671,18 +660,12 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
         }
     }
 
-    // We got the buffers
-    // Increase counter in order to keep track of how many buffers ring is missing when reclaiming
-    // them during ring->restart()
-    m_missing_buf_ref_count += n_num_mem_bufs;
-
     /* coverity[double_unlock] TODO: RM#1049980 */
     m_lock_ring_tx.unlock();
     return buff_list;
 }
 
-int ring_simple::mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool b_accounting,
-                                    bool trylock /*=false*/)
+int ring_simple::mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool trylock /*=false*/)
 {
     ring_logfuncall(LOG_FUNCTION_CALL);
 
@@ -693,9 +676,6 @@ int ring_simple::mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool b_
     }
 
     int accounting = put_tx_buffers(p_mem_buf_desc_list);
-    if (b_accounting) {
-        m_missing_buf_ref_count -= accounting;
-    }
     m_lock_ring_tx.unlock();
     return accounting;
 }

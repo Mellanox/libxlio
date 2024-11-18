@@ -231,7 +231,7 @@ protected:
             } else {
                 /* free the buffer if dummy send is not supported */
                 mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)(p_send_wqe->wr_id);
-                m_p_ring->mem_buf_tx_release(p_mem_buf_desc, true);
+                m_p_ring->mem_buf_tx_release(p_mem_buf_desc);
             }
         } else {
             m_p_ring->send_ring_buffer(id, p_send_wqe, attr);

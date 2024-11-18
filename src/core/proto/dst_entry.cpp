@@ -103,11 +103,11 @@ dst_entry::~dst_entry()
         }
 
         if (m_p_tx_mem_buf_desc_list) {
-            m_p_ring->mem_buf_tx_release(m_p_tx_mem_buf_desc_list, true);
+            m_p_ring->mem_buf_tx_release(m_p_tx_mem_buf_desc_list);
             m_p_tx_mem_buf_desc_list = nullptr;
         }
         if (m_p_zc_mem_buf_desc_list) {
-            m_p_ring->mem_buf_tx_release(m_p_zc_mem_buf_desc_list, true);
+            m_p_ring->mem_buf_tx_release(m_p_zc_mem_buf_desc_list);
             m_p_zc_mem_buf_desc_list = nullptr;
         }
 
@@ -373,11 +373,11 @@ bool dst_entry::release_ring()
     if (m_p_net_dev_val) {
         if (m_p_ring) {
             if (m_p_tx_mem_buf_desc_list) {
-                m_p_ring->mem_buf_tx_release(m_p_tx_mem_buf_desc_list, true);
+                m_p_ring->mem_buf_tx_release(m_p_tx_mem_buf_desc_list);
                 m_p_tx_mem_buf_desc_list = nullptr;
             }
             if (m_p_zc_mem_buf_desc_list) {
-                m_p_ring->mem_buf_tx_release(m_p_zc_mem_buf_desc_list, true);
+                m_p_ring->mem_buf_tx_release(m_p_zc_mem_buf_desc_list);
                 m_p_zc_mem_buf_desc_list = nullptr;
             }
             dst_logdbg("releasing a ring");
@@ -555,11 +555,11 @@ bool dst_entry::prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_
                                                  htons(ETH_P_IP), m_pkt_src_ip, m_dst_ip,
                                                  m_src_port, m_dst_port);
                     if (m_p_tx_mem_buf_desc_list) {
-                        m_p_ring->mem_buf_tx_release(m_p_tx_mem_buf_desc_list, true);
+                        m_p_ring->mem_buf_tx_release(m_p_tx_mem_buf_desc_list);
                         m_p_tx_mem_buf_desc_list = nullptr;
                     }
                     if (m_p_zc_mem_buf_desc_list) {
-                        m_p_ring->mem_buf_tx_release(m_p_zc_mem_buf_desc_list, true);
+                        m_p_ring->mem_buf_tx_release(m_p_zc_mem_buf_desc_list);
                         m_p_zc_mem_buf_desc_list = nullptr;
                     }
                     resolved = true;
@@ -672,10 +672,10 @@ void dst_entry::do_ring_migration_tx(lock_base &socket_lock, resource_allocation
     socket_lock.unlock();
 
     if (tmp_list) {
-        old_ring->mem_buf_tx_release(tmp_list, true);
+        old_ring->mem_buf_tx_release(tmp_list);
     }
     if (tmp_list_zc) {
-        old_ring->mem_buf_tx_release(tmp_list_zc, true);
+        old_ring->mem_buf_tx_release(tmp_list_zc);
     }
 
     m_p_net_dev_val->release_ring(&old_key);
@@ -768,13 +768,13 @@ void dst_entry::return_buffers_pool()
 
     if (m_b_tx_mem_buf_desc_list_pending && m_p_ring) {
         if (m_p_tx_mem_buf_desc_list) {
-            count = m_p_ring->mem_buf_tx_release(m_p_tx_mem_buf_desc_list, true, true);
+            count = m_p_ring->mem_buf_tx_release(m_p_tx_mem_buf_desc_list, true);
             if (count) {
                 m_p_tx_mem_buf_desc_list = nullptr;
             }
         }
         if (m_p_zc_mem_buf_desc_list) {
-            count = m_p_ring->mem_buf_tx_release(m_p_zc_mem_buf_desc_list, true, true);
+            count = m_p_ring->mem_buf_tx_release(m_p_zc_mem_buf_desc_list, true);
             if (count) {
                 m_p_zc_mem_buf_desc_list = nullptr;
             }

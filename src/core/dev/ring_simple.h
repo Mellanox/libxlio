@@ -86,8 +86,7 @@ public:
     void stop_active_queue_rx();
     mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
                                    int n_num_mem_bufs = 1) override;
-    int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool b_accounting,
-                           bool trylock = false) override;
+    int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool trylock = false) override;
     void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
                           xlio_wr_tx_packet_attr attr) override;
     int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
@@ -332,7 +331,6 @@ private:
     uint32_t m_tx_num_bufs = 0U;
     uint32_t m_zc_num_bufs = 0U;
     uint32_t m_tx_num_wr = 0U;
-    uint32_t m_missing_buf_ref_count = 0U;
     uint32_t m_tx_lkey = 0U; // this is the registered memory lkey for a given specific device for
                              // the buffer pool use
     doca_mmap *m_p_doca_mmap;
