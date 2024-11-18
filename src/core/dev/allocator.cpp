@@ -299,6 +299,12 @@ bool xlio_registrator::register_memory(void *data, size_t size)
         return false;
     }
 
+    rc = doca_mmap_enable_thread_safety(m_p_doca_mmap);
+    if (DOCA_IS_ERROR(rc)) {
+        PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_enable_thread_safety");
+        return false;
+    }
+
     rc = doca_mmap_start(m_p_doca_mmap);
     if (DOCA_IS_ERROR(rc)) {
         PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_start");
