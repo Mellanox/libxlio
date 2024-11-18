@@ -475,7 +475,7 @@ bool neigh_entry::post_send_udp_ipv4(neigh_send_data *n_send_data)
                  n_num_frags, ntohs(h->get_udp_hdr()->source), ntohs(h->get_udp_hdr()->dest));
 
     // Get all needed tx buf descriptor and data buffers
-    p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, false, PBUF_RAM, n_num_frags);
+    p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, PBUF_RAM, n_num_frags);
 
     if (unlikely(!p_mem_buf_desc)) {
         neigh_logdbg("Packet dropped. not enough tx buffers");
@@ -583,7 +583,7 @@ bool neigh_entry::post_send_udp_ipv6_fragmented(neigh_send_data *n_send_data, si
     int n_num_frags =
         (sz_udp_payload + max_payload_size_per_packet - 1) / max_payload_size_per_packet;
 
-    mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, false, PBUF_RAM, n_num_frags);
+    mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, PBUF_RAM, n_num_frags);
     if (unlikely(!p_mem_buf_desc)) {
         neigh_logdbg("Packet dropped. not enough tx buffers");
         return false;
@@ -598,7 +598,7 @@ bool neigh_entry::post_send_udp_ipv6_fragmented(neigh_send_data *n_send_data, si
 bool neigh_entry::post_send_udp_ipv6_not_fragmented(neigh_send_data *n_send_data)
 {
     neigh_logdbg("ENTER post_send_udp_ipv6_not_fragmented");
-    mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, false, PBUF_RAM);
+    mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, PBUF_RAM);
     if (unlikely(!p_mem_buf_desc)) {
         neigh_logdbg("Packet dropped. not enough tx buffers");
         return false;
@@ -671,7 +671,7 @@ bool neigh_entry::post_send_tcp(neigh_send_data *p_data)
     size_t total_packet_len = 0;
     header *h = p_data->m_header;
 
-    p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, false, PBUF_RAM, 1);
+    p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, PBUF_RAM, 1);
 
     BULLSEYE_EXCLUDE_BLOCK_START
     if (unlikely(!p_mem_buf_desc)) {
@@ -1634,7 +1634,7 @@ bool neigh_eth::send_arp_request(bool is_broadcast)
                                  netdevice_eth->get_vlan() ? htons(ETH_P_8021Q) : htons(ETH_P_ARP),
                                  htons(ETH_P_ARP), ip_address::any_addr(), ip_address::any_addr(),
                                  0, 0);
-    mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, false, PBUF_RAM, 1);
+    mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, PBUF_RAM, 1);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (unlikely(!p_mem_buf_desc)) {
         neigh_logdbg("No free TX buffer, not sending ARP");
@@ -1726,7 +1726,7 @@ bool neigh_eth::send_neighbor_solicitation()
     m_id = m_p_ring->generate_id(src_mac->get_address(), dst_mac.get_address(),
                                  net_dev->get_vlan() ? htons(ETH_P_8021Q) : htons(ETH_P_IPV6),
                                  htons(ETH_P_IPV6), m_src_addr, dst_snm, 0, 0);
-    mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, false, PBUF_RAM, 1);
+    mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, PBUF_RAM, 1);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (unlikely(!p_mem_buf_desc)) {
         neigh_logdbg("No free TX buffer - not sending NS");

@@ -203,22 +203,17 @@ inline ssize_t dst_entry_udp::fast_send_not_fragmented(const iovec *p_iov, const
 {
     mem_buf_desc_t *p_mem_buf_desc;
     xlio_ibv_send_wr *p_send_wqe;
-    bool b_blocked = is_set(attr, XLIO_TX_PACKET_BLOCK);
 
     // Get a bunch of tx buf descriptor and data buffers
     if (unlikely(!m_p_tx_mem_buf_desc_list)) {
         m_p_tx_mem_buf_desc_list =
-            m_p_ring->mem_buf_tx_get(m_id, b_blocked, PBUF_RAM, m_n_sysvar_tx_bufs_batch_udp);
+            m_p_ring->mem_buf_tx_get(m_id, PBUF_RAM, m_n_sysvar_tx_bufs_batch_udp);
 
         if (unlikely(!m_p_tx_mem_buf_desc_list)) {
-            if (b_blocked) {
-                dst_udp_logdbg("Error when blocking for next tx buffer (errno=%d %m)", errno);
-            } else {
-                dst_udp_logfunc(
-                    "Packet dropped. NonBlocked call but not enough tx buffers. Returning OK");
-                if (!m_b_sysvar_tx_nonblocked_eagains) {
-                    return sz_data_payload;
-                }
+            dst_udp_logfunc(
+                "Packet dropped. NonBlocked call but not enough tx buffers. Returning OK");
+            if (!m_b_sysvar_tx_nonblocked_eagains) {
+                return sz_data_payload;
             }
             errno = EAGAIN;
             return -1;
@@ -309,7 +304,7 @@ inline ssize_t dst_entry_udp::fast_send_not_fragmented(const iovec *p_iov, const
     // request tx buffers for the next packets
     if (unlikely(!m_p_tx_mem_buf_desc_list)) {
         m_p_tx_mem_buf_desc_list =
-            m_p_ring->mem_buf_tx_get(m_id, b_blocked, PBUF_RAM, m_n_sysvar_tx_bufs_batch_udp);
+            m_p_ring->mem_buf_tx_get(m_id, PBUF_RAM, m_n_sysvar_tx_bufs_batch_udp);
     }
 
     // If all went well :) then return the user data count transmitted
@@ -428,31 +423,23 @@ ssize_t dst_entry_udp::fast_send_fragmented(const iovec *p_iov, const ssize_t sz
                                             xlio_wr_tx_packet_attr attr, size_t sz_udp_payload,
                                             ssize_t sz_data_payload)
 {
-    bool b_blocked = is_set(attr, XLIO_TX_PACKET_BLOCK);
     bool is_ipv6 = (get_sa_family() == AF_INET6);
     uint16_t max_payload_size_per_packet = m_max_ip_payload_size - (is_ipv6 ? FRAG_EXT_HLEN : 0);
 
     // Find number of ip fragments (-> packets, buffers, buffer descs...)
     int n_num_frags =
         (sz_udp_payload + max_payload_size_per_packet - 1) / max_payload_size_per_packet;
-    dst_udp_logfunc(
-        "udp info: IPv%s, payload_sz=%lu, frags=%d, scr_port=%d, dst_port=%d, blocked=%s, ",
-        (is_ipv6) ? "6" : "4", sz_data_payload, n_num_frags, ntohs(m_header->get_udp_hdr()->source),
-        ntohs(m_dst_port), b_blocked ? "true" : "false");
+    dst_udp_logfunc("udp info: IPv%s, payload_sz=%lu, frags=%d, scr_port=%d, dst_port=%d, ",
+                    (is_ipv6) ? "6" : "4", sz_data_payload, n_num_frags,
+                    ntohs(m_header->get_udp_hdr()->source), ntohs(m_dst_port));
 
     // Get all needed tx buf descriptor and data buffers
-    mem_buf_desc_t *p_mem_buf_desc =
-        m_p_ring->mem_buf_tx_get(m_id, b_blocked, PBUF_RAM, n_num_frags);
+    mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, PBUF_RAM, n_num_frags);
 
     if (unlikely(!p_mem_buf_desc)) {
-        if (b_blocked) {
-            dst_udp_logdbg("Error when blocking for next tx buffer (errno=%d %m)", errno);
-        } else {
-            dst_udp_logfunc(
-                "Packet dropped. NonBlocked call but not enough tx buffers. Returning OK");
-            if (!m_b_sysvar_tx_nonblocked_eagains) {
-                return sz_data_payload;
-            }
+        dst_udp_logfunc("Packet dropped. NonBlocked call but not enough tx buffers. Returning OK");
+        if (!m_b_sysvar_tx_nonblocked_eagains) {
+            return sz_data_payload;
         }
         errno = EAGAIN;
         return -1;

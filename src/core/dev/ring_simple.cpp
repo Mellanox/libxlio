@@ -542,127 +542,56 @@ int ring_simple::drain_and_proccess()
     return ret;
 }
 
-mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
-                                            int n_num_mem_bufs /* default = 1 */)
+mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, pbuf_type type,
+                                            uint32_t n_num_mem_bufs /* default = 1 */)
 {
+    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
     NOT_IN_USE(id);
-    int ret = 0;
-    mem_buf_desc_t *buff_list = nullptr;
-
     ring_logfuncall("n_num_mem_bufs=%d", n_num_mem_bufs);
 
-    m_lock_ring_tx.lock();
-    buff_list = get_tx_buffers(type, n_num_mem_bufs);
-    while (!buff_list) {
+    mem_buf_desc_t *head;
+    descq_t &pool = type == PBUF_ZEROCOPY ? m_zc_pool : m_tx_pool;
 
-        // Try to poll once in the hope that we get a few freed tx mem_buf_desc
-        ret = m_p_cq_mgr_tx->poll_and_process_element_tx();
-        if (ret < 0) {
-            ring_logdbg("failed polling on cq_mgr_tx (hqtx=%p, cq_mgr_tx=%p) (ret=%d %m)", m_hqtx,
-                        m_p_cq_mgr_tx, ret);
-            /* coverity[double_unlock] TODO: RM#1049980 */
-            m_lock_ring_tx.unlock();
-            return nullptr;
-        } else if (ret > 0) {
-            ring_logfunc("polling succeeded on cq_mgr_tx (%d wce)", ret);
-            buff_list = get_tx_buffers(type, n_num_mem_bufs);
-        } else if (b_block) { // (ret == 0)
-            // Arm & Block on tx cq_mgr_tx notification channel
-            // until we get a few freed tx mem_buf_desc & data buffers
-
-            // Only a single thread should block on next Tx cqe event, hence the dedicated lock!
-            /* coverity[double_unlock] coverity[unlock] TODO: RM#1049980 */
-            m_lock_ring_tx.unlock();
-            m_lock_ring_tx_buf_wait.lock();
-            /* coverity[double_lock] TODO: RM#1049980 */
-            m_lock_ring_tx.lock();
-
-            // poll once more (in the hope that we get a few freed tx mem_buf_desc)
-            buff_list = get_tx_buffers(type, n_num_mem_bufs);
-            if (!buff_list) {
-                // Arm the CQ event channel for next Tx buffer release (tx cqe)
-                if (!safe_mce_sys().doca_tx) {
-                    ret = m_p_cq_mgr_tx->request_notification();
-                } else {
-                    ret = m_hqtx->request_notification();
-                }
-                if (ret < 0) {
-                    // this is most likely due to cq_poll_sn out of sync, need to poll_cq again
-                    ring_logdbg("failed arming cq_mgr_tx (hqtx=%p, cq_mgr_tx=%p) (errno=%d %m)",
-                                m_hqtx, m_p_cq_mgr_tx, errno);
-                } else if (ret == 0) {
-
-                    // prepare to block
-                    // CQ is armed, block on the CQ's Tx event channel (fd)
-                    struct pollfd poll_fd = {/*.fd=*/0, /*.events=*/POLLIN, /*.revents=*/0};
-                    poll_fd.fd = get_tx_channel_fd();
-
-                    // Now it is time to release the ring lock (for restart events to be handled
-                    // while this thread block on CQ channel)
-                    /* coverity[double_unlock] coverity[unlock] TODO: RM#1049980 */
-                    m_lock_ring_tx.unlock();
-
-                    ret = SYSCALL(poll, &poll_fd, 1, 100);
-                    if (ret == 0) {
-                        m_lock_ring_tx_buf_wait.unlock();
-                        /* coverity[double_lock] TODO: RM#1049980 */
-                        m_lock_ring_tx.lock();
-                        buff_list = get_tx_buffers(type, n_num_mem_bufs);
-                        continue;
-                    } else if (ret < 0) {
-                        ring_logdbg("failed blocking on cq_mgr_tx (errno=%d %m)", errno);
-                        m_lock_ring_tx_buf_wait.unlock();
-                        return nullptr;
-                    }
-                    /* coverity[double_lock] TODO: RM#1049980 */
-                    m_lock_ring_tx.lock();
-
-                    // Find the correct cq_mgr_tx from the CQ event,
-                    // It might not be the active_cq object since we have a single TX CQ comp
-                    // channel for all cq_mgr_tx's
-                    cq_mgr_tx *p_cq_mgr_tx =
-                        cq_mgr_tx::get_cq_mgr_from_cq_event(m_p_tx_comp_event_channel);
-                    if (p_cq_mgr_tx) {
-
-                        // Allow additional CQ arming now
-                        if (safe_mce_sys().doca_tx) {
-                            m_hqtx->clear_notification();
-                        } else {
-                            p_cq_mgr_tx->reset_notification_armed();
-                        }
-
-                        // Perform a non blocking event read, clear the fd channel
-                        ret = p_cq_mgr_tx->poll_and_process_element_tx();
-                        if (ret < 0) {
-                            ring_logdbg("failed handling cq_mgr_tx channel (hqtx=%p, "
-                                        "cq_mgr_tx=%p) (errno=%d %m)",
-                                        m_hqtx, m_p_cq_mgr_tx, errno);
-                            /* coverity[double_unlock] TODO: RM#1049980 */
-                            m_lock_ring_tx.unlock();
-                            m_lock_ring_tx_buf_wait.unlock();
-                            return nullptr;
-                        }
-                        ring_logfunc("polling/blocking succeeded on cq_mgr_tx (we got %d wce)",
-                                     ret);
-                    }
-                }
-                buff_list = get_tx_buffers(type, n_num_mem_bufs);
+    if (unlikely(pool.size() < n_num_mem_bufs)) {
+        int count = std::max(RING_TX_BUFS_COMPENSATE, n_num_mem_bufs);
+        if (request_more_tx_buffers(type, count, m_tx_lkey)) {
+            /*
+             * TODO Unify request_more_tx_buffers so ring_slave
+             * keeps number of buffers instead of reinventing it in
+             * ring_simple and ring_tap.
+             */
+            if (type == PBUF_ZEROCOPY) {
+                m_zc_num_bufs += count;
+                m_p_ring_stat->n_zc_num_bufs = m_zc_num_bufs;
+            } else {
+                m_tx_num_bufs += count;
+                m_p_ring_stat->n_tx_num_bufs = m_tx_num_bufs;
             }
-            /* coverity[double_unlock] TODO: RM#1049980 */
-            m_lock_ring_tx.unlock();
-            m_lock_ring_tx_buf_wait.unlock();
-            /* coverity[double_lock] TODO: RM#1049980 */
-            m_lock_ring_tx.lock();
-        } else {
-            // get out on non blocked socket
-            m_lock_ring_tx.unlock();
+        }
+
+        if (unlikely(pool.size() < n_num_mem_bufs)) {
             return nullptr;
         }
     }
 
-    /* coverity[double_unlock] TODO: RM#1049980 */
-    m_lock_ring_tx.unlock();
-    return buff_list;
+    head = pool.get_and_pop_back();
+    head->lwip_pbuf.ref = 1;
+    assert(head->lwip_pbuf.type == type);
+    head->lwip_pbuf.type = type;
+    n_num_mem_bufs--;
+
+    mem_buf_desc_t *next = head;
+    while (n_num_mem_bufs) {
+        next->p_next_desc = pool.get_and_pop_back();
+        next = next->p_next_desc;
+        next->lwip_pbuf.ref = 1;
+        assert(head->lwip_pbuf.type == type);
+        next->lwip_pbuf.type = type;
+        n_num_mem_bufs--;
+    }
+    next->p_next_desc = nullptr;
+
+    return head;
 }
 
 int ring_simple::mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool trylock /*=false*/)
@@ -871,54 +800,6 @@ void ring_simple::init_tx_buffers(uint32_t count)
 void ring_simple::inc_cq_moderation_stats()
 {
     ++m_cq_moderation_info.packets;
-}
-
-// call under m_lock_ring_tx lock
-mem_buf_desc_t *ring_simple::get_tx_buffers(pbuf_type type, uint32_t n_num_mem_bufs)
-{
-    mem_buf_desc_t *head;
-    descq_t &pool = type == PBUF_ZEROCOPY ? m_zc_pool : m_tx_pool;
-
-    if (unlikely(pool.size() < n_num_mem_bufs)) {
-        int count = std::max(RING_TX_BUFS_COMPENSATE, n_num_mem_bufs);
-        if (request_more_tx_buffers(type, count, m_tx_lkey)) {
-            /*
-             * TODO Unify request_more_tx_buffers so ring_slave
-             * keeps number of buffers instead of reinventing it in
-             * ring_simple.
-             */
-            if (type == PBUF_ZEROCOPY) {
-                m_zc_num_bufs += count;
-                m_p_ring_stat->n_zc_num_bufs = m_zc_num_bufs;
-            } else {
-                m_tx_num_bufs += count;
-                m_p_ring_stat->n_tx_num_bufs = m_tx_num_bufs;
-            }
-        }
-
-        if (unlikely(pool.size() < n_num_mem_bufs)) {
-            return nullptr;
-        }
-    }
-
-    head = pool.get_and_pop_back();
-    head->lwip_pbuf.ref = 1;
-    assert(head->lwip_pbuf.type == type);
-    head->lwip_pbuf.type = type;
-    n_num_mem_bufs--;
-
-    mem_buf_desc_t *next = head;
-    while (n_num_mem_bufs) {
-        next->p_next_desc = pool.get_and_pop_back();
-        next = next->p_next_desc;
-        next->lwip_pbuf.ref = 1;
-        assert(head->lwip_pbuf.type == type);
-        next->lwip_pbuf.type = type;
-        n_num_mem_bufs--;
-    }
-    next->p_next_desc = nullptr;
-
-    return head;
 }
 
 void ring_simple::return_to_global_pool()
