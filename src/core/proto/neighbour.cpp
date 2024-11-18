@@ -534,7 +534,7 @@ bool neigh_entry::post_send_udp_ipv4(neigh_send_data *n_send_data)
         if (ret != (int)sz_user_data_to_copy) {
             neigh_logerr("memcpy_fromiovec error (sz_user_data_to_copy=%zd, ret=%d)",
                          sz_user_data_to_copy, ret);
-            m_p_ring->mem_buf_tx_release(p_mem_buf_desc, true);
+            m_p_ring->mem_buf_tx_release(p_mem_buf_desc);
             errno = EINVAL;
             return false;
         }
@@ -637,7 +637,7 @@ bool neigh_entry::post_send_udp_ipv6_not_fragmented(neigh_send_data *n_send_data
     if (ret != (int)sz_data_payload) {
         neigh_logerr("memcpy_fromiovec error (sz_user_data_to_copy=%zd, ret=%d)", sz_data_payload,
                      ret);
-        m_p_ring->mem_buf_tx_release(p_mem_buf_desc, true);
+        m_p_ring->mem_buf_tx_release(p_mem_buf_desc);
         errno = EINVAL;
         return false;
     }

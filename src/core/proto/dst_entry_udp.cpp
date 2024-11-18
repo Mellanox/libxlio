@@ -157,7 +157,7 @@ bool dst_entry_udp::fast_send_fragmented_ipv6(mem_buf_desc_t *p_mem_buf_desc, co
         if (ret != (int)sz_user_data_to_copy) {
             __log_err("memcpy_fromiovec error (sz_user_data_to_copy=%zu, ret=%d)\n",
                       sz_user_data_to_copy, ret);
-            p_ring->mem_buf_tx_release(p_mem_buf_desc, true);
+            p_ring->mem_buf_tx_release(p_mem_buf_desc);
             return false;
         }
         BULLSEYE_EXCLUDE_BLOCK_END
@@ -296,7 +296,7 @@ inline ssize_t dst_entry_udp::fast_send_not_fragmented(const iovec *p_iov, const
         if (ret != (int)sz_data_payload) {
             dst_udp_logerr("memcpy_fromiovec error (sz_user_data_to_copy=%lu, ret=%d)",
                            sz_data_payload, ret);
-            m_p_ring->mem_buf_tx_release(p_mem_buf_desc, true);
+            m_p_ring->mem_buf_tx_release(p_mem_buf_desc);
             errno = EINVAL;
             return -1;
         }
@@ -386,7 +386,7 @@ inline bool dst_entry_udp::fast_send_fragmented_ipv4(mem_buf_desc_t *p_mem_buf_d
         if (ret != (int)sz_user_data_to_copy) {
             dst_udp_logerr("memcpy_fromiovec error (sz_user_data_to_copy=%lu, ret=%d)",
                            sz_user_data_to_copy, ret);
-            m_p_ring->mem_buf_tx_release(p_mem_buf_desc, true);
+            m_p_ring->mem_buf_tx_release(p_mem_buf_desc);
             return false;
         }
         BULLSEYE_EXCLUDE_BLOCK_END

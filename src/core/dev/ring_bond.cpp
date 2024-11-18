@@ -269,8 +269,7 @@ mem_buf_desc_t *ring_bond::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_
     return ret;
 }
 
-int ring_bond::mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool b_accounting,
-                                  bool trylock /*=false*/)
+int ring_bond::mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool trylock /*=false*/)
 {
     mem_buf_desc_t *buffer_per_ring[MAX_NUM_RING_RESOURCES];
     int ret = 0;
@@ -283,7 +282,7 @@ int ring_bond::mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool b_ac
 
     for (i = 0; i < m_bond_rings.size(); i++) {
         if (buffer_per_ring[i]) {
-            ret += m_bond_rings[i]->mem_buf_tx_release(buffer_per_ring[i], b_accounting, trylock);
+            ret += m_bond_rings[i]->mem_buf_tx_release(buffer_per_ring[i], trylock);
         }
     }
     return ret;
@@ -328,9 +327,9 @@ void ring_bond::send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe
                      p_mem_buf_desc);
         p_mem_buf_desc->p_next_desc = nullptr;
         if (likely(p_mem_buf_desc->p_desc_owner == m_bond_rings[id])) {
-            m_bond_rings[id]->mem_buf_tx_release(p_mem_buf_desc, true);
+            m_bond_rings[id]->mem_buf_tx_release(p_mem_buf_desc);
         } else {
-            mem_buf_tx_release(p_mem_buf_desc, true);
+            mem_buf_tx_release(p_mem_buf_desc);
         }
     }
 }

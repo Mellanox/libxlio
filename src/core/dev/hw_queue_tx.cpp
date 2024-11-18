@@ -1765,7 +1765,6 @@ void hw_queue_tx::trigger_completion_for_all_sent_packets()
         hwqtx_logdbg("Need to send closing tx wr...");
         mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(0, true, PBUF_RAM);
         // Align Tx buffer accounting since we will be bypassing the normal send calls
-        m_p_ring->m_missing_buf_ref_count--;
         if (!p_mem_buf_desc) {
             hwqtx_logerr("no buffer in pool");
             return;

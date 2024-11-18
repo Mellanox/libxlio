@@ -69,8 +69,7 @@ public:
     virtual void restart();
     virtual mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
                                            int n_num_mem_bufs = 1);
-    virtual int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool b_accounting,
-                                   bool trylock = false);
+    virtual int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool trylock = false);
     virtual void inc_tx_retransmissions_stats(ring_user_id_t id);
     virtual void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
                                   xlio_wr_tx_packet_attr attr);
