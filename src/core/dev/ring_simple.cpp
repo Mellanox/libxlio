@@ -692,8 +692,6 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
     bool granted;
     int ret;
 
-    // TODO credits_get() does TX polling. Call current method only for bocking mode?
-
     do {
         // Try to poll once in the hope that we get space in SQ
         ret = m_p_cq_mgr_tx->poll_and_process_element_tx();
@@ -755,11 +753,7 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
                 if (p_cq_mgr_tx) {
 
                     // Allow additional CQ arming now
-                    if (safe_mce_sys().doca_tx) {
-                        m_hqtx->clear_notification();
-                    } else {
-                        p_cq_mgr_tx->reset_notification_armed();
-                    }
+                    p_cq_mgr_tx->reset_notification_armed();
 
                     // Perform a non blocking event read, clear the fd channel
                     ret = p_cq_mgr_tx->poll_and_process_element_tx();
