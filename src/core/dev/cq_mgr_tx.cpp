@@ -137,10 +137,6 @@ bool cq_mgr_tx::request_notification()
 {
     cq_logfuncall(LOG_FUNCTION_CALL);
 
-    if (safe_mce_sys().doca_tx) {
-        return m_hqtx_ptr->request_notification();
-    }
-
     if (m_b_notification_armed == false) {
         cq_logfunc("arming cq_mgr_tx notification channel");
 
@@ -187,10 +183,6 @@ cq_mgr_tx *cq_mgr_tx::get_cq_mgr_from_cq_event(struct ibv_comp_channel *p_cq_cha
 int cq_mgr_tx::poll_and_process_element_tx()
 {
     cq_logfuncall(LOG_FUNCTION_CALL);
-
-    if (safe_mce_sys().doca_tx) {
-        return m_hqtx_ptr->poll_and_process_doca_tx();
-    }
 
     static auto is_error_opcode = [&](uint8_t opcode) {
         return opcode == MLX5_CQE_REQ_ERR || opcode == MLX5_CQE_RESP_ERR;
