@@ -1763,7 +1763,7 @@ void hw_queue_tx::trigger_completion_for_all_sent_packets()
     if (!is_signal_requested_for_last_wqe()) {
         // Post a dummy WQE and request a signal to complete all the unsignaled WQEs in SQ
         hwqtx_logdbg("Need to send closing tx wr...");
-        mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(0, true, PBUF_RAM);
+        mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(0, PBUF_RAM);
         // Align Tx buffer accounting since we will be bypassing the normal send calls
         if (!p_mem_buf_desc) {
             hwqtx_logerr("no buffer in pool");

@@ -258,13 +258,13 @@ void ring_bond::flow_del_all_rfs_safe()
     }
 }
 
-mem_buf_desc_t *ring_bond::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
-                                          int n_num_mem_bufs /* default = 1 */)
+mem_buf_desc_t *ring_bond::mem_buf_tx_get(ring_user_id_t id, pbuf_type type,
+                                          uint32_t n_num_mem_bufs /* default = 1 */)
 {
     mem_buf_desc_t *ret = nullptr;
 
     std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-    ret = m_xmit_rings[id]->mem_buf_tx_get(id, b_block, type, n_num_mem_bufs);
+    ret = m_xmit_rings[id]->mem_buf_tx_get(id, type, n_num_mem_bufs);
 
     return ret;
 }

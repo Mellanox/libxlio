@@ -239,13 +239,11 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
              * We don't change data, only pointer to buffer descriptor.
              */
             pbuf_type type = (pbuf_type)p_tcp_iov[0].p_desc->lwip_pbuf.type;
-            mem_buf_desc_t *p_mem_buf_desc =
-                get_buffer(type, &(p_tcp_iov[0].p_desc->lwip_pbuf.desc),
-                           is_set(attr.flags, XLIO_TX_PACKET_BLOCK));
-            if (!p_mem_buf_desc) {
+            mem_buf_desc_t *p_mem_buf = get_buffer(type, &(p_tcp_iov[0].p_desc->lwip_pbuf.desc));
+            if (!p_mem_buf) {
                 return -1;
             }
-            p_tcp_iov[0].p_desc = p_mem_buf_desc;
+            p_tcp_iov[0].p_desc = p_mem_buf;
         } else {
             p_tcp_iov[0].p_desc->lwip_pbuf.ref++;
         }
@@ -301,7 +299,7 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
         mem_buf_desc_t *p_mem_buf_desc;
         size_t total_packet_len = 0;
 
-        p_mem_buf_desc = get_buffer(PBUF_RAM, nullptr, is_set(attr.flags, XLIO_TX_PACKET_BLOCK));
+        p_mem_buf_desc = get_buffer(PBUF_RAM, nullptr);
         if (!p_mem_buf_desc) {
             ret = -1;
             goto out;
@@ -344,8 +342,8 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
     }
 
     if (unlikely(!m_p_tx_mem_buf_desc_list)) {
-        m_p_tx_mem_buf_desc_list = m_p_ring->mem_buf_tx_get(
-            m_id, is_set(attr.flags, XLIO_TX_PACKET_BLOCK), PBUF_RAM, m_n_sysvar_tx_bufs_batch_tcp);
+        m_p_tx_mem_buf_desc_list =
+            m_p_ring->mem_buf_tx_get(m_id, PBUF_RAM, m_n_sysvar_tx_bufs_batch_tcp);
     }
 
 out:
@@ -441,8 +439,7 @@ ssize_t dst_entry_tcp::pass_buff_to_neigh(const iovec *p_iov, size_t sz_iov)
     return pass_pkt_to_neigh(p_iov, sz_iov, 0U);
 }
 
-mem_buf_desc_t *dst_entry_tcp::get_buffer(pbuf_type type, pbuf_desc *desc,
-                                          bool b_blocked /*=false*/)
+mem_buf_desc_t *dst_entry_tcp::get_buffer(pbuf_type type, pbuf_desc *desc)
 {
     mem_buf_desc_t **p_desc_list;
 
@@ -452,8 +449,7 @@ mem_buf_desc_t *dst_entry_tcp::get_buffer(pbuf_type type, pbuf_desc *desc,
 
     // Get a bunch of tx buf descriptor and data buffers
     if (unlikely(!*p_desc_list)) {
-        *p_desc_list =
-            m_p_ring->mem_buf_tx_get(m_id, b_blocked, type, m_n_sysvar_tx_bufs_batch_tcp);
+        *p_desc_list = m_p_ring->mem_buf_tx_get(m_id, type, m_n_sysvar_tx_bufs_batch_tcp);
     }
 
     mem_buf_desc_t *p_mem_buf_desc = *p_desc_list;
