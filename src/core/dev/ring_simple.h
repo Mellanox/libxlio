@@ -97,8 +97,6 @@ public:
     void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc) override;
     void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc,
                                               unsigned ref) override;
-    void mem_buf_desc_return_single_locked(mem_buf_desc_t *buff);
-    void return_tx_pool_to_global_pool();
     bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe) override;
     inline void convert_hw_time_to_system_time(uint64_t hwtime, struct timespec *systime)
     {
@@ -277,6 +275,7 @@ public:
         m_hqtx->credits_return(credits);
     }
 
+    friend class cq_mgr_tx;
     friend class cq_mgr_rx;
     friend class cq_mgr_rx_regrq;
     friend class cq_mgr_rx_strq;
@@ -298,10 +297,10 @@ protected:
 
 private:
     inline void send_status_handler(int ret, xlio_ibv_send_wr *p_send_wqe);
-    inline int put_tx_buffer_helper(mem_buf_desc_t *buff);
+    int put_tx_buffer_helper(mem_buf_desc_t *buff);
     inline int put_tx_buffers(mem_buf_desc_t *buff_list);
     inline int put_tx_single_buffer(mem_buf_desc_t *buff);
-    inline void return_to_global_pool();
+    void return_to_global_pool();
     bool is_available_qp_wr(bool b_block, unsigned credits);
     void save_l2_address(const L2_address *p_l2_addr)
     {

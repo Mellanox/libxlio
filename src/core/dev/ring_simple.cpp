@@ -529,12 +529,6 @@ void ring_simple::mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf
     put_tx_single_buffer(p_mem_buf_desc);
 }
 
-// Call under m_lock_ring_tx lock
-void ring_simple::mem_buf_desc_return_single_locked(mem_buf_desc_t *buff)
-{
-    put_tx_buffer_helper(buff);
-}
-
 int ring_simple::drain_and_proccess()
 {
     int ret = 0;
@@ -814,11 +808,7 @@ void ring_simple::return_to_global_pool()
     }
 }
 
-void ring_simple::return_tx_pool_to_global_pool()
-{
-    return_to_global_pool();
-}
-
+// Call under m_lock_ring_tx lock
 int ring_simple::put_tx_buffer_helper(mem_buf_desc_t *buff)
 {
     if (buff->tx.dev_mem_length) {
