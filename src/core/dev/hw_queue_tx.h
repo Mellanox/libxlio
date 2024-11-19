@@ -359,7 +359,6 @@ private:
     void return_doca_buf(doca_buf *buf);
     bool expand_doca_inventory();
     bool expand_doca_task_pool(bool is_lso);
-    void handle_completion(mem_buf_desc_t *mem_buf);
     void start_doca_txq();
     void stop_doca_txq();
     bool check_doca_caps(doca_devinfo *devinfo, uint32_t &max_burst_size, uint32_t &max_send_sge);

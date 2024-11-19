@@ -247,7 +247,7 @@ void cq_mgr_tx::handle_sq_wqe_prop(unsigned index)
 
     do {
         if (p->buf) {
-            m_p_ring->mem_buf_desc_return_single_locked(p->buf);
+            m_p_ring->put_tx_buffer_helper(p->buf);
         }
         if (p->ti) {
             xlio_ti *ti = p->ti;
@@ -266,7 +266,7 @@ void cq_mgr_tx::handle_sq_wqe_prop(unsigned index)
         p = p->next;
     } while (p && m_hqtx_ptr->is_sq_wqe_prop_valid(p, prev));
 
-    m_p_ring->return_tx_pool_to_global_pool();
+    m_p_ring->return_to_global_pool();
     m_hqtx_ptr->credits_return(credits);
     m_hqtx_ptr->m_sq_wqe_prop_last_signalled = index;
 }

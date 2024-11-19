@@ -1893,7 +1893,7 @@ void hw_queue_tx::tx_task_completion_cb(doca_eth_txq_task_send *task_send, doca_
     hw_queue_tx *hw_tx = reinterpret_cast<hw_queue_tx *>(ctx_user_data.ptr);
 
     hw_tx->return_doca_task(task_send);
-    hw_tx->handle_completion(mem_buf);
+    hw_tx->m_p_ring->put_tx_buffer_helper(mem_buf);
 }
 
 void hw_queue_tx::tx_task_lso_completion_cb(doca_eth_txq_task_lso_send *lso_task,
@@ -1903,7 +1903,7 @@ void hw_queue_tx::tx_task_lso_completion_cb(doca_eth_txq_task_lso_send *lso_task
     hw_queue_tx *hw_tx = reinterpret_cast<hw_queue_tx *>(ctx_user_data.ptr);
 
     hw_tx->return_doca_lso_task(lso_task);
-    hw_tx->handle_completion(lso_metadata->buff);
+    hw_tx->m_p_ring->put_tx_buffer_helper(lso_metadata->buff);
     hw_tx->put_lso_metadata(lso_metadata);
 }
 
@@ -1923,7 +1923,7 @@ void hw_queue_tx::tx_task_error_cb(doca_eth_txq_task_send *task_send, doca_data 
     }
 
     hw_tx->return_doca_task(task_send);
-    hw_tx->handle_completion(mem_buf);
+    hw_tx->m_p_ring->put_tx_buffer_helper(mem_buf);
 }
 
 void hw_queue_tx::tx_task_lso_error_cb(doca_eth_txq_task_lso_send *lso_task,
@@ -1945,7 +1945,7 @@ void hw_queue_tx::tx_task_lso_error_cb(doca_eth_txq_task_lso_send *lso_task,
                rc_state, ctx_state);
 
     hw_tx->return_doca_lso_task(lso_task);
-    hw_tx->handle_completion(lso_metadata->buff);
+    hw_tx->m_p_ring->put_tx_buffer_helper(lso_metadata->buff);
     hw_tx->put_lso_metadata(lso_metadata);
 }
 
@@ -1981,12 +1981,6 @@ void hw_queue_tx::return_doca_buf(doca_buf *buf)
     if (unlikely(rc_state != DOCA_SUCCESS)) {
         PRINT_DOCA_ERR(hwqtx_logerr, rc_state, "doca_buf_dec_refcount");
     }
-}
-
-void hw_queue_tx::handle_completion(mem_buf_desc_t *mem_buf)
-{
-    m_p_ring->mem_buf_desc_return_single_locked(mem_buf);
-    m_p_ring->return_tx_pool_to_global_pool();
 }
 
 bool hw_queue_tx::expand_doca_inventory()
@@ -2216,6 +2210,8 @@ int hw_queue_tx::poll_and_process_doca_tx()
     while (doca_pe_progress(m_doca_pe.get())) {
         ++ret;
     }
+
+    m_p_ring->return_to_global_pool();
 
     return ret;
 }
