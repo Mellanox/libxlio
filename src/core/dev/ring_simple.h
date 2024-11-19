@@ -66,7 +66,7 @@ public:
 
     bool request_notification(cq_type_t cq_type) override;
     bool poll_and_process_element_rx(void *pv_fd_ready_array = nullptr) override;
-    int poll_and_process_element_tx() override;
+    void poll_and_process_element_tx() override;
     void adapt_cq_moderation() override;
     bool reclaim_recv_buffers(descq_t *rx_reuse) override;
     bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst) override;

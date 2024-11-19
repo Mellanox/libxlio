@@ -57,7 +57,7 @@ public:
     virtual bool request_notification(cq_type_t cq_type);
     virtual void clear_rx_notification();
     virtual bool poll_and_process_element_rx(void *pv_fd_ready_array = nullptr);
-    virtual int poll_and_process_element_tx();
+    virtual void poll_and_process_element_tx();
     virtual void adapt_cq_moderation();
     virtual bool reclaim_recv_buffers(descq_t *rx_reuse);
     virtual bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst);

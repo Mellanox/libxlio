@@ -616,14 +616,11 @@ void hw_queue_tx::down()
 
 void hw_queue_tx::release_tx_buffers()
 {
-    int ret;
     hwqtx_logdbg("draining cq_mgr_tx %p", m_p_cq_mgr_tx);
-    while (m_p_cq_mgr_tx && m_mlx5_qp.qp &&
-           ((ret = m_p_cq_mgr_tx->poll_and_process_element_tx()) > 0) &&
-           (errno != EIO && !m_p_ib_ctx_handler->is_removed())) {
-        hwqtx_logdbg("draining completed on cq_mgr_tx (%d wce)", ret);
+    if (m_p_cq_mgr_tx && m_mlx5_qp.qp) {
+        m_p_cq_mgr_tx->poll_and_process_element_tx();
     }
-    NOT_IN_USE(ret); // Suppress --enable-opt-log=high warning
+    hwqtx_logdbg("draining completed on cq_mgr_tx");
 }
 
 void hw_queue_tx::send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio_tis *tis,
@@ -647,13 +644,7 @@ void hw_queue_tx::send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr 
     send_to_wire(p_send_wqe, attr, request_comp, tis, credits);
 
     if (!skip_tx_poll && is_signal_requested_for_last_wqe()) {
-        int ret = m_p_cq_mgr_tx->poll_and_process_element_tx();
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (ret < 0) {
-            hwqtx_logerr("error from cq_mgr_tx->process_next_element (ret=%d %m)", ret);
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
-        hwqtx_logfunc("polling succeeded on cq_mgr_tx (%d wce)", ret);
+        m_p_cq_mgr_tx->poll_and_process_element_tx();
     }
 }
 
@@ -2204,14 +2195,11 @@ get_lso_task:
     return len_sent;
 }
 
-int hw_queue_tx::poll_and_process_doca_tx()
+void hw_queue_tx::poll_and_process_doca_tx()
 {
-    int ret = 0;
     while (doca_pe_progress(m_doca_pe.get())) {
-        ++ret;
+        ;
     }
 
     m_p_ring->return_to_global_pool();
-
-    return ret;
 }

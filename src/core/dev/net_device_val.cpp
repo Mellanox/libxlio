@@ -1153,7 +1153,7 @@ bool net_device_val::global_ring_poll_and_process_element(void *pv_fd_ready_arra
     rings_hash_map_t::iterator ring_iter;
     for (ring_iter = m_h_ring_map.begin(); ring_iter != m_h_ring_map.end(); ring_iter++) {
         all_drained &= THE_RING->poll_and_process_element_rx(pv_fd_ready_array);
-        all_drained &= (THE_RING->poll_and_process_element_tx() >= 0);
+        THE_RING->poll_and_process_element_tx();
     }
     return all_drained;
 }
