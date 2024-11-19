@@ -392,29 +392,19 @@ bool ring_bond::poll_and_process_element_rx(void *pv_fd_ready_array /*NULL*/)
     return all_drained;
 }
 
-int ring_bond::poll_and_process_element_tx()
+void ring_bond::poll_and_process_element_tx()
 {
     if (m_lock_ring_tx.trylock()) {
         errno = EAGAIN;
-        return 0;
+        return;
     }
 
-    int temp = 0;
-    int ret = 0;
     for (uint32_t i = 0; i < m_bond_rings.size(); i++) {
         if (m_bond_rings[i]->is_up()) {
-            temp = m_bond_rings[i]->poll_and_process_element_tx();
-            if (temp > 0) {
-                ret += temp;
-            }
+            m_bond_rings[i]->poll_and_process_element_tx();
         }
     }
     m_lock_ring_tx.unlock();
-    if (ret > 0) {
-        return ret;
-    } else {
-        return temp;
-    }
 }
 
 int ring_bond::drain_and_proccess()
