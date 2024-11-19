@@ -180,7 +180,7 @@ cq_mgr_tx *cq_mgr_tx::get_cq_mgr_from_cq_event(struct ibv_comp_channel *p_cq_cha
     return p_cq_mgr;
 }
 
-int cq_mgr_tx::poll_and_process_element_tx()
+void cq_mgr_tx::poll_and_process_element_tx()
 {
     cq_logfuncall(LOG_FUNCTION_CALL);
 
@@ -188,7 +188,6 @@ int cq_mgr_tx::poll_and_process_element_tx()
         return opcode == MLX5_CQE_REQ_ERR || opcode == MLX5_CQE_RESP_ERR;
     };
 
-    int ret = 0;
     uint32_t num_polled_cqes = 0;
     xlio_mlx5_cqe *cqe = get_cqe_tx(num_polled_cqes);
 
@@ -202,10 +201,7 @@ int cq_mgr_tx::poll_and_process_element_tx()
         }
 
         handle_sq_wqe_prop(index);
-        ret = 1;
     }
-
-    return ret;
 }
 
 void cq_mgr_tx::log_cqe_error(struct xlio_mlx5_cqe *cqe)

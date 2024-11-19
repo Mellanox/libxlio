@@ -614,7 +614,7 @@ bool epfd_info::ring_poll_and_process_element(void *pv_fd_ready_array /* = NULL*
     bool all_drained = true;
     for (ring_map_t::iterator iter = m_ring_map.begin(); iter != m_ring_map.end(); iter++) {
         all_drained &= iter->first->poll_and_process_element_rx(pv_fd_ready_array);
-        all_drained &= (iter->first->poll_and_process_element_tx() >= 0);
+        iter->first->poll_and_process_element_tx();
     }
 
     m_ring_map_lock.unlock();
