@@ -257,8 +257,10 @@ public:
     void flow_del_all_rfs();
 
 #ifdef DEFINED_UTLS
+#ifdef DEFINED_DPCP_PATH_RX
     /* Call this method in an RX ring. */
     rfs_rule *tls_rx_create_rule(const flow_tuple &flow_spec_5t, xlio_tir *tir);
+#endif // DEFINED_DPCP_PATH_RX
 #endif /* DEFINED_UTLS */
 
 private:
@@ -296,8 +298,10 @@ public:
     virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink);
 
 #ifdef DEFINED_UTLS
+#ifdef DEFINED_DPCP_PATH_RX
     /* Call this method in an RX ring. */
     rfs_rule *tls_rx_create_rule(const flow_tuple &flow_spec_5t, xlio_tir *tir);
+#endif // DEFINED_DPCP_PATH_RX
 #endif /* DEFINED_UTLS */
 
     transport_type_t get_transport_type() const { return m_transport_type; }

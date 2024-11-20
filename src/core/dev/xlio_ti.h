@@ -34,6 +34,7 @@
 #ifndef XLIO_TI_H
 #define XLIO_TI_H
 
+#include "config.h"
 #include <cstdint>
 #include <memory>
 #include <assert.h>
@@ -140,6 +141,8 @@ private:
     uint32_t m_dek_id;
 };
 
+#ifdef DEFINED_DPCP_PATH_RX
+
 class xlio_tir : public xlio_ti {
 public:
     xlio_tir(xlio_ti_owner *ti_owner, dpcp::tir *dpcp_tir, xlio_ti::ti_type type)
@@ -181,5 +184,7 @@ private:
     uint32_t m_tirn;
     uint32_t m_dek_id;
 };
+
+#endif // DEFINED_DPCP_PATH_RX
 
 #endif // XLIO_TI_H

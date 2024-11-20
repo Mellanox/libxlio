@@ -34,6 +34,9 @@
 #ifndef CQ_MGR_RX_H
 #define CQ_MGR_RX_H
 
+#include "config.h"
+#ifdef DEFINED_DPCP_PATH_RX
+
 #include "ib/base/verbs_extra.h"
 #include "utils/atomic.h"
 #include "dev/ib_ctx_handler.h"
@@ -230,4 +233,5 @@ inline struct xlio_mlx5_cqe *cq_mgr_rx::check_cqe(void)
     return nullptr;
 }
 
+#endif // DEFINED_DPCP_PATH_RX
 #endif // CQ_MGR_H
