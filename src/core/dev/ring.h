@@ -138,6 +138,7 @@ public:
 #ifdef DEFINED_UTLS
     virtual bool tls_tx_supported(void) { return false; }
     virtual bool tls_rx_supported(void) { return false; }
+#ifdef DEFINED_DPCP_PATH_RX
     virtual xlio_tir *tls_create_tir(bool cached)
     {
         NOT_IN_USE(cached);
@@ -173,6 +174,7 @@ public:
         NOT_IN_USE(lkey);
     }
     virtual void tls_release_tir(xlio_tir *tir) { NOT_IN_USE(tir); }
+#endif // DEFINED_DPCP_PATH_RX
     virtual void tls_release_tis(xlio_tis *tis) { NOT_IN_USE(tis); }
     virtual xlio_tis *tls_context_setup_tx(const xlio_tls_info *info)
     {

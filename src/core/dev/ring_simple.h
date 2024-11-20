@@ -149,6 +149,21 @@ public:
         m_hqtx->tls_context_resync_tx(info, tis, skip_static);
         m_p_cq_mgr_tx->poll_and_process_element_tx();
     }
+    void tls_release_tis(xlio_tis *tis) override
+    {
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        m_hqtx->tls_release_tis(tis);
+    }
+    void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
+                              bool first) override
+    {
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        if (lkey == LKEY_TX_DEFAULT) {
+            lkey = m_tx_lkey;
+        }
+        m_hqtx->tls_tx_post_dump_wqe(tis, addr, len, lkey, first);
+    }
+#ifdef DEFINED_DPCP_PATH_RX
     xlio_tir *tls_create_tir(bool cached) override
     {
         /*
@@ -196,20 +211,7 @@ public:
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         m_hqrx->tls_release_tir(tir);
     }
-    void tls_release_tis(xlio_tis *tis) override
-    {
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_hqtx->tls_release_tis(tis);
-    }
-    void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
-                              bool first) override
-    {
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        if (lkey == LKEY_TX_DEFAULT) {
-            lkey = m_tx_lkey;
-        }
-        m_hqtx->tls_tx_post_dump_wqe(tis, addr, len, lkey, first);
-    }
+#endif // DEFINED_DPCP_PATH_RX
 #endif /* DEFINED_UTLS */
 
     std::unique_ptr<xlio_tis> create_tis(uint32_t flags) const override
@@ -320,7 +322,9 @@ protected:
     hw_queue_tx *m_hqtx = nullptr;
     hw_queue_rx *m_hqrx = nullptr;
     struct cq_moderation_info m_cq_moderation_info;
+#ifdef DEFINED_DPCP_PATH_RX
     cq_mgr_rx *m_p_cq_mgr_rx = nullptr;
+#endif
     cq_mgr_tx *m_p_cq_mgr_tx = nullptr;
     std::unordered_map<void *, uint32_t> m_user_lkey_map;
 

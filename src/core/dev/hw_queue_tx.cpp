@@ -199,11 +199,6 @@ hw_queue_tx::~hw_queue_tx()
         m_p_cq_mgr_tx = nullptr;
     }
 
-    if (m_p_cq_mgr_rx_unused) {
-        delete m_p_cq_mgr_rx_unused;
-        m_p_cq_mgr_rx_unused = nullptr;
-    }
-
     if (m_p_doca_lso_metadata_list) {
         g_lso_metadata_pool->put_objs(m_p_doca_lso_metadata_list);
     }
@@ -473,11 +468,6 @@ int hw_queue_tx::configure(const slave_data_t *slave,
         hwqtx_logerr("Failed allocating m_p_cq_mgr_tx (errno=%d %m)", errno);
         return -1;
     }
-    m_p_cq_mgr_rx_unused = new cq_mgr_rx_regrq(m_p_ring, nullptr, m_p_ib_ctx_handler, 2, nullptr);
-    if (!m_p_cq_mgr_rx_unused) {
-        hwqtx_logerr("Failed allocating m_p_cq_mgr_rx_unused (errno=%d %m)", errno);
-        return -1;
-    }
     BULLSEYE_EXCLUDE_BLOCK_END
 
     // Modify the cq_mgr_tx to use a non-blocking event channel
@@ -495,7 +485,7 @@ int hw_queue_tx::configure(const slave_data_t *slave,
     m_mlx5_qp.cap.max_recv_sge = 1;
 
     memcpy(&qp_init_attr.cap, &m_mlx5_qp.cap, sizeof(qp_init_attr.cap));
-    qp_init_attr.recv_cq = m_p_cq_mgr_rx_unused->get_ibv_cq_hndl();
+    qp_init_attr.recv_cq = m_p_cq_mgr_tx->get_ibv_cq_hndl();
     qp_init_attr.send_cq = m_p_cq_mgr_tx->get_ibv_cq_hndl();
     qp_init_attr.sq_sig_all = 0;
 
@@ -1412,6 +1402,7 @@ void hw_queue_tx::tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis
     m_b_fence_needed = true;
 }
 
+#ifdef DEFINED_DPCP_PATH_RX
 int hw_queue_tx::tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info,
                                       uint32_t next_record_tcp_sn, xlio_comp_cb_t callback,
                                       void *callback_arg)
@@ -1457,6 +1448,8 @@ void hw_queue_tx::tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t 
 
     tls_get_progress_params_wqe(tir, tir->get_tirn(), buf, lkey);
 }
+
+#endif // DEFINED_DPCP_PATH_RX
 
 inline void hw_queue_tx::tls_fill_static_params_wqe(struct mlx5_wqe_tls_static_params_seg *params,
                                                     const struct xlio_tls_info *info,

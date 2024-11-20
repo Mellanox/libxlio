@@ -40,9 +40,16 @@
 #include "dev/buffer_pool.h"
 #include "dev/ring_simple.h"
 #include "dev/rfs_rule.h"
+
+#ifdef DEFINED_DPCP_PATH_RX
 #include "dev/cq_mgr_rx_regrq.h"
 #include "dev/cq_mgr_rx_strq.h"
 #include <doca_buf.h>
+
+#define ALIGN_WR_DOWN(_num_wr_) (std::max(32, ((_num_wr_) & ~(0xf))))
+#else // DEFINED_DPCP_PATH_RX
+#include <doca_buf.h>
+#endif // DEFINED_DPCP_PATH_RX
 
 #undef MODULE_NAME
 #define MODULE_NAME "hw_queue_rx"
@@ -56,14 +63,27 @@ DOCA_LOG_REGISTER(hw_queue_rx);
 #define hwqrx_logfunc    __log_info_func
 #define hwqrx_logfuncall __log_info_funcall
 
-#define ALIGN_WR_DOWN(_num_wr_) (std::max(32, ((_num_wr_) & ~(0xf))))
-
+#ifdef DEFINED_DPCP_PATH_RX
 hw_queue_rx::hw_queue_rx(ring_simple *ring, ib_ctx_handler *ib_ctx,
                          ibv_comp_channel *rx_comp_event_channel, uint16_t vlan)
     : m_n_sysvar_rx_num_wr_to_post_recv(safe_mce_sys().rx_num_wr_to_post_recv)
     , m_rx_num_wr(align32pow2(safe_mce_sys().rx_num_wr))
     , m_n_sysvar_rx_prefetch_bytes_before_poll(safe_mce_sys().rx_prefetch_bytes_before_poll)
-    , m_doca_mmap(g_buffer_pool_rx_rwqe->get_doca_mmap())
+    , m_vlan(vlan)
+    , m_p_ring(ring)
+    , m_p_ib_ctx_handler(ib_ctx)
+{
+    hwqrx_logfunc("");
+
+    memset(&m_hwq_rx_stats, 0, sizeof(m_hwq_rx_stats));
+
+    if (!configure_rq(rx_comp_event_channel)) {
+        throw_xlio_exception("Failed to create RQ");
+    }
+}
+#else // DEFINED_DPCP_PATH_RX
+hw_queue_rx::hw_queue_rx(ring_simple *ring, ib_ctx_handler *ib_ctx, uint16_t vlan)
+    : m_doca_mmap(g_buffer_pool_rx_rwqe->get_doca_mmap())
     , m_vlan(vlan)
     , m_p_ring(ring)
     , m_p_ib_ctx_handler(ib_ctx)
@@ -75,18 +95,15 @@ hw_queue_rx::hw_queue_rx(ring_simple *ring, ib_ctx_handler *ib_ctx,
     if (!prepare_doca_rxq()) {
         throw_xlio_exception("Failed to create DOCA RXQ");
     }
-
-    if (!configure_rq(rx_comp_event_channel)) {
-        throw_xlio_exception("Failed to create RQ");
-    }
 }
+#endif // DEFINED_DPCP_PATH_RX
 
 hw_queue_rx::~hw_queue_rx()
 {
     hwqrx_logfunc(LOG_FUNCTION_CALL);
 
+#ifdef DEFINED_DPCP_PATH_RX
     m_rq.reset(nullptr); // Must be destroyed before RX CQ.
-    m_doca_rxq.reset(nullptr); // Must be destroyed before RX PE.
 
     if (m_rq_wqe_idx_to_wrid) {
         if (0 != munmap(m_rq_wqe_idx_to_wrid, m_rx_num_wr * sizeof(*m_rq_wqe_idx_to_wrid))) {
@@ -103,6 +120,9 @@ hw_queue_rx::~hw_queue_rx()
 
     delete[] m_ibv_rx_sg_array;
     delete[] m_ibv_rx_wr_array;
+#else // DEFINED_DPCP_PATH_RX
+    m_doca_rxq.reset(nullptr); // Must be destroyed before RX PE.
+#endif // DEFINED_DPCP_PATH_RX
 
     g_buffer_pool_rx_rwqe->put_buffers_thread_safe(&m_rx_pool, m_rx_pool.size());
 
@@ -110,6 +130,7 @@ hw_queue_rx::~hw_queue_rx()
                  g_buffer_pool_rx_rwqe->get_free_count());
 }
 
+#ifdef DEFINED_DPCP_PATH_RX
 bool hw_queue_rx::configure_rq(ibv_comp_channel *rx_comp_event_channel)
 {
     // Create associated cq_mgr_tx
@@ -481,8 +502,8 @@ bool hw_queue_rx::prepare_rq(uint32_t cqn)
     // At RDY state without a TIR, Work Requests can be submitted to the RQ.
     modify_queue_to_ready_state();
 
-    hwqrx_logdbg("Succeeded to create dpcp rq, rqn: %" PRIu32 ", cqn: %" PRIu32, m_rq_data.rqn,
-                 cqn);
+    hwqrx_loginfo("Succeeded to create DPCP RQ, rqn: %" PRIu32 ", cqn: %" PRIu32, m_rq_data.rqn,
+                  cqn);
 
     return true;
 }
@@ -581,23 +602,10 @@ void hw_queue_rx::ti_released(xlio_ti *ti)
 void hw_queue_rx::ti_released(xlio_ti *) {};
 #endif /* defined(DEFINED_UTLS) */
 
-rfs_rule *hw_queue_rx::create_rfs_rule(doca_flow_match &match_val, doca_flow_match &match_msk,
-                                       dpcp::match_params &match_value,
+rfs_rule *hw_queue_rx::create_rfs_rule(dpcp::match_params &match_value,
                                        dpcp::match_params &match_mask, uint16_t priority,
                                        uint32_t flow_tag, xlio_tir *tir_ext)
 {
-    if (safe_mce_sys().doca_rx) {
-        std::unique_ptr<rfs_rule> new_rule(new rfs_rule());
-        // TODO: Add Support for TLS-RX.
-        if (m_doca_rx_queue_id && m_p_ib_ctx_handler &&
-            new_rule->create(match_val, match_msk, m_doca_rx_queue_id, priority, flow_tag,
-                             *m_p_ib_ctx_handler)) {
-            return new_rule.release();
-        }
-
-        return nullptr;
-    }
-
     if (m_p_ib_ctx_handler && m_p_ib_ctx_handler->get_dpcp_adapter()) {
         // TLS RX uses tir_ext.
         dpcp::tir *dpcp_tir = (tir_ext ? xlio_tir_to_dpcp_tir(tir_ext) : m_tir.get());
@@ -611,7 +619,7 @@ rfs_rule *hw_queue_rx::create_rfs_rule(doca_flow_match &match_val, doca_flow_mat
 
     return nullptr;
 }
-
+#else // DEFINED_DPCP_PATH_RX
 bool hw_queue_rx::prepare_doca_rxq()
 {
     doca_dev *dev = m_p_ib_ctx_handler->get_doca_device();
@@ -1135,12 +1143,27 @@ void hw_queue_rx::modify_moderation(uint16_t period_usec, uint16_t comp_count)
     }
 }
 
-void hw_queue_rx::up()
+rfs_rule *hw_queue_rx::create_rfs_rule(doca_flow_match &match_val, doca_flow_match &match_msk,
+                                       uint16_t priority, uint32_t flow_tag)
+
 {
-    if (safe_mce_sys().doca_rx) {
-        start_doca_rxq();
+    std::unique_ptr<rfs_rule> new_rule(new rfs_rule());
+    // TODO: Add Support for TLS-RX.
+    if (m_doca_rx_queue_id && m_p_ib_ctx_handler &&
+        new_rule->create(match_val, match_msk, m_doca_rx_queue_id, priority, flow_tag,
+                         *m_p_ib_ctx_handler)) {
+        return new_rule.release();
     }
 
+    return nullptr;
+}
+
+void hw_queue_rx::ti_released(xlio_ti *) {};
+#endif // DEFINED_DPCP_PATH_RX
+
+void hw_queue_rx::up()
+{
+#ifdef DEFINED_DPCP_PATH_RX
     m_tir.reset(create_tir());
     if (!m_tir) {
         hwqrx_logpanic("TIR creation for hw_queue_rx failed (errno=%d %m)", errno);
@@ -1151,14 +1174,14 @@ void hw_queue_rx::up()
     modify_queue_to_ready_state();
 
     m_p_cq_mgr_rx->add_hqrx();
+#else // DEFINED_DPCP_PATH_RX
+    start_doca_rxq();
+#endif // DEFINED_DPCP_PATH_RX
 }
 
 void hw_queue_rx::down()
 {
-    if (safe_mce_sys().doca_rx) {
-        stop_doca_rxq();
-    }
-
+#ifdef DEFINED_DPCP_PATH_RX
     m_tir.reset(nullptr);
 
     modify_queue_to_error_state();
@@ -1169,4 +1192,7 @@ void hw_queue_rx::down()
 
     release_rx_buffers();
     m_p_cq_mgr_rx->del_hqrx();
+#else // DEFINED_DPCP_PATH_RX
+    stop_doca_rxq();
+#endif // DEFINED_DPCP_PATH_RX
 }

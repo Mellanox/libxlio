@@ -704,10 +704,10 @@ void print_xlio_global_settings()
     VLOG_PARAM_STRING("CQ Keeps QP Full", safe_mce_sys().cq_keep_qp_full,
                       MCE_DEFAULT_CQ_KEEP_QP_FULL, SYS_VAR_CQ_KEEP_QP_FULL,
                       safe_mce_sys().cq_keep_qp_full ? "Enabled" : "Disabled");
-    if (!safe_mce_sys().doca_rx) {
-        VLOG_PARAM_NUMBER("QP Compensation Level", safe_mce_sys().qp_compensation_level,
-                          safe_mce_sys().rx_num_wr / 2U, SYS_VAR_QP_COMPENSATION_LEVEL);
-    }
+#ifdef DEFINED_DPCP_PATH_RX
+    VLOG_PARAM_NUMBER("QP Compensation Level", safe_mce_sys().qp_compensation_level,
+                      safe_mce_sys().rx_num_wr / 2U, SYS_VAR_QP_COMPENSATION_LEVEL);
+#endif
     VLOG_PARAM_STRING("Offloaded Sockets", safe_mce_sys().offloaded_sockets,
                       MCE_DEFAULT_OFFLOADED_SOCKETS, SYS_VAR_OFFLOADED_SOCKETS,
                       safe_mce_sys().offloaded_sockets ? "Enabled" : "Disabled");
@@ -778,8 +778,6 @@ void print_xlio_global_settings()
     VLOG_STR_PARAM_STRING("LRO support", option_3::to_str(safe_mce_sys().enable_lro),
                           option_3::to_str(MCE_DEFAULT_LRO), SYS_VAR_LRO,
                           option_3::to_str(safe_mce_sys().enable_lro));
-    VLOG_PARAM_STRING("DOCA RX", safe_mce_sys().doca_rx, MCE_DEFAULT_DOCA_RX, "XLIO_DOCA_RX",
-                      safe_mce_sys().doca_rx ? "Enabled " : "Disabled");
     VLOG_PARAM_STRING("DOCA TX", safe_mce_sys().doca_tx, MCE_DEFAULT_DOCA_TX, "XLIO_DOCA_TX",
                       safe_mce_sys().doca_tx ? "Enabled " : "Disabled");
 #ifdef DEFINED_UTLS

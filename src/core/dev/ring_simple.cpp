@@ -164,6 +164,7 @@ ring_simple::~ring_simple()
     delete m_hqrx;
     m_hqrx = nullptr;
 
+#ifdef DEFINED_DPCP_PATH_RX
     if (m_p_rx_comp_event_channel) {
         IF_VERBS_FAILURE(ibv_destroy_comp_channel(m_p_rx_comp_event_channel))
         {
@@ -172,6 +173,7 @@ ring_simple::~ring_simple()
         ENDIF_VERBS_FAILURE;
         VALGRIND_MAKE_MEM_UNDEFINED(m_p_rx_comp_event_channel, sizeof(struct ibv_comp_channel));
     }
+#endif // DEFINED_DPCP_PATH_RX
 
     ring_logdbg("Tx buffer poll: free count = %lu, total = %d", m_tx_pool.size() + m_zc_pool.size(),
                 m_tx_num_bufs + m_zc_num_bufs);
@@ -321,6 +323,7 @@ void ring_simple::create_resources()
 #endif
     ring_logdbg("ring attributes: m_flow_tag_enabled = %d", m_flow_tag_enabled);
 
+#ifdef DEFINED_DPCP_PATH_RX
     m_p_rx_comp_event_channel = ibv_create_comp_channel(m_p_ib_ctx->get_ibv_context());
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!m_p_rx_comp_event_channel) {
@@ -338,10 +341,17 @@ void ring_simple::create_resources()
     BULLSEYE_EXCLUDE_BLOCK_END
     VALGRIND_MAKE_MEM_DEFINED(m_p_rx_comp_event_channel, sizeof(struct ibv_comp_channel));
 
-    std::unique_ptr<hw_queue_tx> temp_hqtx(
-        new hw_queue_tx(this, p_slave, m_p_tx_comp_event_channel, get_tx_num_wr()));
     std::unique_ptr<hw_queue_rx> temp_hqrx(
         new hw_queue_rx(this, p_slave->p_ib_ctx, m_p_rx_comp_event_channel, m_vlan));
+    m_p_cq_mgr_rx = temp_hqrx->get_rx_cq_mgr();
+#else // DEFINED_DPCP_PATH_RX
+    std::unique_ptr<hw_queue_rx> temp_hqrx(new hw_queue_rx(this, p_slave->p_ib_ctx, m_vlan));
+#endif // DEFINED_DPCP_PATH_RX
+
+    std::unique_ptr<hw_queue_tx> temp_hqtx(
+        new hw_queue_tx(this, p_slave, m_p_tx_comp_event_channel, get_tx_num_wr()));
+    m_p_cq_mgr_tx = temp_hqtx->get_tx_cq_mgr();
+
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!temp_hqtx || !temp_hqrx) {
         ring_logerr("Failed to allocate hw_queue_tx/hw_queue_rx!");
@@ -358,10 +368,6 @@ void ring_simple::create_resources()
         g_p_fd_collection->add_cq_channel_fd(get_rx_channel_fd(0U), this);
         g_p_fd_collection->add_cq_channel_fd(get_tx_channel_fd(), this);
     }
-
-    // save pointers
-    m_p_cq_mgr_rx = m_hqrx->get_rx_cq_mgr();
-    m_p_cq_mgr_tx = m_hqtx->get_tx_cq_mgr();
 
     init_tx_buffers(RING_TX_BUFS_COMPENSATE);
 
@@ -388,11 +394,11 @@ void ring_simple::create_resources()
 int ring_simple::get_rx_channel_fd(size_t ch_idx) const
 {
     NOT_IN_USE(ch_idx);
-    if (safe_mce_sys().doca_rx) {
-        return m_hqrx->get_notification_handle();
-    }
-
+#ifdef DEFINED_DPCP_PATH_RX
     return m_p_rx_comp_event_channel->fd;
+#else // DEFINED_DPCP_PATH_RX
+    return m_hqrx->get_notification_handle();
+#endif // DEFINED_DPCP_PATH_RX
 }
 
 int ring_simple::get_tx_channel_fd() const
@@ -408,8 +414,11 @@ bool ring_simple::request_notification(cq_type_t cq_type)
 {
     if (likely(CQT_RX == cq_type)) {
         std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
-        return (!safe_mce_sys().doca_rx ? m_p_cq_mgr_rx->request_notification()
-                                        : m_hqrx->request_notification());
+#ifdef DEFINED_DPCP_PATH_RX
+        return m_p_cq_mgr_rx->request_notification();
+#else // DEFINED_DPCP_PATH_RX
+        return m_hqrx->request_notification();
+#endif // DEFINED_DPCP_PATH_RX
     }
 
     std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
@@ -420,18 +429,22 @@ bool ring_simple::request_notification(cq_type_t cq_type)
 void ring_simple::clear_rx_notification()
 {
     std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
-    if (!safe_mce_sys().doca_rx) {
-        m_p_cq_mgr_rx->wait_for_notification();
-    } else {
-        m_hqrx->clear_notification();
-    }
+#ifdef DEFINED_DPCP_PATH_RX
+    m_p_cq_mgr_rx->wait_for_notification();
+#else // DEFINED_DPCP_PATH_RX
+    m_hqrx->clear_notification();
+#endif // DEFINED_DPCP_PATH_RX
 }
 
 bool ring_simple::poll_and_process_element_rx(void *pv_fd_ready_array /*NULL*/)
 {
     std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
-    return (!safe_mce_sys().doca_rx ? m_p_cq_mgr_rx->poll_and_process_element_rx(pv_fd_ready_array)
-                                    : m_hqrx->poll_and_process_rx());
+#ifdef DEFINED_DPCP_PATH_RX
+    return m_p_cq_mgr_rx->poll_and_process_element_rx(pv_fd_ready_array);
+#else // DEFINED_DPCP_PATH_RX
+    NOT_IN_USE(pv_fd_ready_array);
+    return m_hqrx->poll_and_process_rx();
+#endif // DEFINED_DPCP_PATH_RX
 }
 
 void ring_simple::poll_and_process_element_tx()
@@ -443,13 +456,11 @@ void ring_simple::poll_and_process_element_tx()
 
 bool ring_simple::reclaim_recv_buffers(descq_t *rx_reuse)
 {
-    if (!safe_mce_sys().doca_rx) {
-        bool ret = false;
-        RING_TRY_LOCK_RUN_AND_UPDATE_RET(m_lock_ring_rx,
-                                         m_p_cq_mgr_rx->reclaim_recv_buffers(rx_reuse));
-        return ret;
-    }
-
+#ifdef DEFINED_DPCP_PATH_RX
+    bool ret = false;
+    RING_TRY_LOCK_RUN_AND_UPDATE_RET(m_lock_ring_rx, m_p_cq_mgr_rx->reclaim_recv_buffers(rx_reuse));
+    return ret;
+#else // DEFINED_DPCP_PATH_RX
     if (likely(!m_lock_ring_rx.trylock())) {
         m_hqrx->reclaim_rx_buffer_chain_queue(rx_reuse);
         m_lock_ring_rx.unlock();
@@ -458,17 +469,17 @@ bool ring_simple::reclaim_recv_buffers(descq_t *rx_reuse)
 
     errno = EAGAIN;
     return false;
+#endif // DEFINED_DPCP_PATH_RX
 }
 
 bool ring_simple::reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst)
 {
-    if (!safe_mce_sys().doca_rx) {
-        bool ret = false;
-        RING_TRY_LOCK_RUN_AND_UPDATE_RET(m_lock_ring_rx,
-                                         m_p_cq_mgr_rx->reclaim_recv_buffers(rx_reuse_lst));
-        return ret;
-    }
-
+#ifdef DEFINED_DPCP_PATH_RX
+    bool ret = false;
+    RING_TRY_LOCK_RUN_AND_UPDATE_RET(m_lock_ring_rx,
+                                     m_p_cq_mgr_rx->reclaim_recv_buffers(rx_reuse_lst));
+    return ret;
+#else // DEFINED_DPCP_PATH_RX
     if (likely(!m_lock_ring_rx.trylock())) {
         m_hqrx->reclaim_rx_buffer_chain(rx_reuse_lst);
         m_lock_ring_rx.unlock();
@@ -477,18 +488,20 @@ bool ring_simple::reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst)
 
     errno = EAGAIN;
     return false;
+#endif // DEFINED_DPCP_PATH_RX
 }
 
 bool ring_simple::reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst)
 {
-    if (!safe_mce_sys().doca_rx) {
-        return m_p_cq_mgr_rx->reclaim_recv_buffers_no_lock(rx_reuse_lst);
-    }
-
+#ifdef DEFINED_DPCP_PATH_RX
+    return m_p_cq_mgr_rx->reclaim_recv_buffers_no_lock(rx_reuse_lst);
+#else // DEFINED_DPCP_PATH_RX
     m_hqrx->reclaim_rx_buffer_chain(rx_reuse_lst);
     return true;
+#endif // DEFINED_DPCP_PATH_RX
 }
 
+#ifdef DEFINED_DPCP_PATH_RX
 void ring_simple::mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc,
                                                   void *pv_fd_ready_array /*NULL*/)
 {
@@ -497,6 +510,7 @@ void ring_simple::mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc
         m_lock_ring_rx,
         m_p_cq_mgr_rx->mem_buf_desc_return_to_owner(p_mem_buf_desc, pv_fd_ready_array));
 }
+#endif
 
 void ring_simple::mem_buf_desc_return_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc)
 {
@@ -525,7 +539,9 @@ void ring_simple::mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf
 int ring_simple::drain_and_proccess()
 {
     int ret = 0;
+#ifdef DEFINED_DPCP_PATH_RX
     RING_TRY_LOCK_RUN_AND_UPDATE_RET(m_lock_ring_rx, m_p_cq_mgr_rx->drain_and_proccess());
+#endif // DEFINED_DPCP_PATH_RX
     return ret;
 }
 
@@ -860,13 +876,15 @@ void ring_simple::modify_cq_moderation(uint32_t period, uint32_t count)
     m_cq_moderation_info.count = count;
 
     // todo all cqs or just active? what about HA?
-    if (!safe_mce_sys().doca_rx) {
-        priv_ibv_modify_cq_moderation(m_p_cq_mgr_rx->get_ibv_cq_hndl(), period, count);
-        m_hqrx->m_hwq_rx_stats.n_rx_cq_moderation_period = period;
-        m_hqrx->m_hwq_rx_stats.n_rx_cq_moderation_count = count;
-    } else if (m_hqrx) {
+#ifdef DEFINED_DPCP_PATH_RX
+    priv_ibv_modify_cq_moderation(m_p_cq_mgr_rx->get_ibv_cq_hndl(), period, count);
+    m_hqrx->m_hwq_rx_stats.n_rx_cq_moderation_period = period;
+    m_hqrx->m_hwq_rx_stats.n_rx_cq_moderation_count = count;
+#else // DEFINED_DPCP_PATH_RX
+    if (m_hqrx) {
         m_hqrx->modify_moderation(static_cast<uint16_t>(period), static_cast<uint16_t>(count));
     }
+#endif
 }
 
 void ring_simple::adapt_cq_moderation()

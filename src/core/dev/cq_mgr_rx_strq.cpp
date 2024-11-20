@@ -31,10 +31,10 @@
  * SOFTWARE.
  */
 
+#include "config.h"
+#ifdef DEFINED_DPCP_PATH_RX
+
 #include "cq_mgr_rx_strq.h"
-
-#if defined(DEFINED_DIRECT_VERBS)
-
 #include <util/valgrind.h>
 #include "cq_mgr_rx_inl.h"
 #include "hw_queue_rx.h"
@@ -526,4 +526,4 @@ void cq_mgr_rx_strq::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
     }
 }
 
-#endif /* DEFINED_DIRECT_VERBS */
+#endif // DEFINED_DPCP_PATH_RX

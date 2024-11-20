@@ -31,10 +31,10 @@
  * SOFTWARE.
  */
 
+#include "config.h"
+#ifdef DEFINED_DPCP_PATH_RX
+
 #include "cq_mgr_rx_regrq.h"
-
-#if defined(DEFINED_DIRECT_VERBS)
-
 #include <util/valgrind.h>
 #include "cq_mgr_rx_inl.h"
 #include "hw_queue_rx.h"
@@ -317,4 +317,4 @@ bool cq_mgr_rx_regrq::poll_and_process_element_rx(void *pv_fd_ready_array)
     return (rx_polled < m_n_sysvar_cq_poll_batch_max);
 }
 
-#endif /* DEFINED_DIRECT_VERBS */
+#endif // DEFINED_DPCP_PATH_RX

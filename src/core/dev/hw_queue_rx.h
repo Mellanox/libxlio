@@ -38,9 +38,12 @@
 #include "dev/ib_ctx_handler.h"
 #include "dev/rfs_rule.h"
 #include "proto/mem_buf_desc.h"
+
+#ifdef DEFINED_DPCP_PATH_RX
 #include <vector>
 #include "dev/cq_mgr_rx.h"
 #include "util/sg_array.h"
+#else // DEFINED_DPCP_PATH_RX
 #include <doca_eth_rxq.h>
 #include <doca_pe.h>
 #include <doca_buf_inventory.h>
@@ -49,6 +52,8 @@
 #include <doca_eth_rxq_cpu_data_path.h>
 
 struct doca_flow_match;
+#endif // DEFINED_DPCP_PATH_RX
+
 class ring_simple;
 
 // @class hw_queue_rx
@@ -74,6 +79,7 @@ public:
         m_hwq_rx_stats.n_rx_gro_bytes += gro_bytes;
     }
 
+#ifdef DEFINED_DPCP_PATH_RX
     friend class cq_mgr_rx;
     friend class cq_mgr_rx_regrq;
     friend class cq_mgr_rx_strq;
@@ -93,21 +99,25 @@ public:
     void modify_queue_to_error_state();
     void release_rx_buffers();
 
-    rfs_rule *create_rfs_rule(doca_flow_match &match_val, doca_flow_match &match_msk,
-                              dpcp::match_params &match_value, dpcp::match_params &match_mask,
+    rfs_rule *create_rfs_rule(dpcp::match_params &match_value, dpcp::match_params &match_mask,
                               uint16_t priority, uint32_t flow_tag, xlio_tir *tir_ext);
 
 #ifdef DEFINED_UTLS
     xlio_tir *tls_create_tir(bool cached);
     void tls_release_tir(xlio_tir *tir);
 #endif /* DEFINED_UTLS */
-
+#else // DEFINED_DPCP_PATH_RX
+    hw_queue_rx(ring_simple *ring, ib_ctx_handler *ib_ctx, uint16_t vlan);
     bool poll_and_process_rx();
     void reclaim_rx_buffer_chain(mem_buf_desc_t *buff_chain);
     void reclaim_rx_buffer_chain_queue(descq_t *buff_list);
     bool request_notification();
     void clear_notification();
     doca_notification_handle_t get_notification_handle() const { return m_notification_handle; }
+
+    rfs_rule *create_rfs_rule(doca_flow_match &match_val, doca_flow_match &match_msk,
+                              uint16_t priority, uint32_t flow_tag);
+#endif // DEFINED_DPCP_PATH_RX
 
 private:
     void return_extra_buffers();
@@ -117,6 +127,7 @@ private:
         m_hwq_rx_stats.n_rx_buffer_pool_len = static_cast<uint32_t>(m_rx_pool.size());
     }
 
+#ifdef DEFINED_DPCP_PATH_RX
     cq_mgr_rx *init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_channel);
     void post_recv_buffer_rq(mem_buf_desc_t *p_mem_buf_desc);
     bool prepare_rq(uint32_t cqn);
@@ -128,7 +139,7 @@ private:
 
     dpcp::tir *create_tir(bool is_tls = false);
     dpcp::tir *xlio_tir_to_dpcp_tir(xlio_tir *tir) { return tir->m_p_tir.get(); }
-
+#else // DEFINED_DPCP_PATH_RX
     static void destory_doca_rxq(doca_eth_rxq *rxq);
     static void destory_doca_inventory(doca_buf_inventory *inv);
     static void destory_doca_pe(doca_pe *pe);
@@ -150,7 +161,9 @@ private:
     void reclaim_rx_buffer_chain_loop(mem_buf_desc_t *buff);
     void post_reclaim_fill();
     void process_recv_buffer(mem_buf_desc_t *p_mem_buf_desc);
+#endif // DEFINED_DPCP_PATH_RX
 
+#ifdef DEFINED_DPCP_PATH_RX
     struct {
         volatile uint32_t *dbrec;
         void *buf;
@@ -179,7 +192,7 @@ private:
     std::vector<xlio_tir *> m_tls_tir_cache;
     std::unique_ptr<dpcp::tir> m_tir {nullptr};
     std::unique_ptr<dpcp::basic_rq> m_rq {nullptr};
-
+#else // DEFINED_DPCP_PATH_RX
     std::unique_ptr<doca_eth_rxq, decltype(&destory_doca_rxq)> m_doca_rxq {nullptr,
                                                                            destory_doca_rxq};
     std::unique_ptr<doca_buf_inventory, decltype(&destory_doca_inventory)> m_doca_inventory {
@@ -188,17 +201,19 @@ private:
 
     doca_mmap *m_doca_mmap = nullptr;
     doca_ctx *m_doca_ctx_rxq = nullptr;
-    descq_t m_rx_pool;
     mem_buf_desc_t *m_polled_buf = nullptr;
     uint32_t m_rxq_task_debt = 0U;
     uint32_t m_rx_debt_submit_treshold = 0U;
-    hw_queue_rx_stats_t m_hwq_rx_stats;
     uint32_t m_rxq_burst_size = 0U;
-    uint32_t m_rx_buff_pool_treshold_max = 0U;
-    uint32_t m_rx_buff_pool_treshold_min = 0U;
     doca_notification_handle_t m_notification_handle;
     uint16_t m_doca_rx_queue_id = 0U;
+#endif // DEFINED_DPCP_PATH_RX
+
     uint16_t m_vlan;
+    descq_t m_rx_pool;
+    hw_queue_rx_stats_t m_hwq_rx_stats;
+    uint32_t m_rx_buff_pool_treshold_max = 0U;
+    uint32_t m_rx_buff_pool_treshold_min = 0U;
     ring_simple *m_p_ring;
     ib_ctx_handler *m_p_ib_ctx_handler;
     bool m_notification_armed = false;

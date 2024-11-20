@@ -73,12 +73,15 @@ void rfs_uc::prepare_flow_spec()
     prepare_flow_spec_eth_ip(m_flow_tuple.get_dst_ip(), m_flow_tuple.get_src_ip());
     prepare_flow_spec_tcp_udp();
 
-    memset(&m_doca_match_mask.outer.eth.dst_mac, 0xFF, sizeof(m_doca_match_mask.outer.eth.dst_mac));
-    memcpy(&m_doca_match_value.outer.eth.dst_mac, m_p_ring_simple->m_p_l2_addr->get_address(),
-           sizeof(m_doca_match_value.outer.eth.dst_mac));
+#ifdef DEFINED_DPCP_PATH_RX
     memset(&m_match_mask.dst_mac, 0xFF, sizeof(m_match_mask.dst_mac));
     memcpy(&m_match_value.dst_mac, m_p_ring_simple->m_p_l2_addr->get_address(),
            sizeof(m_match_value.dst_mac));
+#else // DEFINED_DPCP_PATH_RX
+    memset(&m_doca_match_mask.outer.eth.dst_mac, 0xFF, sizeof(m_doca_match_mask.outer.eth.dst_mac));
+    memcpy(&m_doca_match_value.outer.eth.dst_mac, m_p_ring_simple->m_p_l2_addr->get_address(),
+           sizeof(m_doca_match_value.outer.eth.dst_mac));
+#endif // DEFINED_DPCP_PATH_RX
 
     if (m_flow_tuple.get_src_port() || !m_flow_tuple.get_src_ip().is_anyaddr()) {
         // Set priority of 5-tuple to be higher than 3-tuple
@@ -102,21 +105,23 @@ void rfs_uc::prepare_flow_spec()
                 src_port = g_p_app->get_worker_id();
             }
 
-            m_doca_match_mask.outer.transport.src_port = htons(
-                static_cast<uint16_t>((g_p_app->workers_pow2 * g_p_app->src_port_stride) - 2));
-            m_doca_match_value.outer.transport.src_port =
-                htons(static_cast<uint16_t>(src_port * g_p_app->src_port_stride));
-            m_match_mask.src_port =
+            uint16_t src_port_msk =
                 static_cast<uint16_t>((g_p_app->workers_pow2 * g_p_app->src_port_stride) - 2);
-            m_match_value.src_port = static_cast<uint16_t>(src_port * g_p_app->src_port_stride);
-
+            uint16_t src_port_val = static_cast<uint16_t>(src_port * g_p_app->src_port_stride);
+#ifdef DEFINED_DPCP_PATH_RX
+            m_match_mask.src_port = src_port_msk;
+            m_match_value.src_port = src_port_val;
+#else // DEFINED_DPCP_PATH_RX
+            m_doca_match_mask.outer.transport.src_port = htons(src_port_msk);
+            m_doca_match_value.outer.transport.src_port = htons(src_port_val);
+#endif // DEFINED_DPCP_PATH_RX
             m_priority = 1;
+            m_flow_tuple.set_src_port(src_port_val);
             rfs_logdbg("src_port_stride: %d workers_num %d \n", g_p_app->src_port_stride,
                        g_p_app->workers_num);
-            rfs_logdbg("sp_tcp_udp->val.src_port: %d p_tcp_udp->mask.src_port %d \n",
-                       m_match_value.src_port, m_match_mask.src_port);
-
-            m_flow_tuple.set_src_port(m_match_value.src_port);
+            rfs_logdbg("sp_tcp_udp->val.src_port: %" PRIu16 " p_tcp_udp->mask.src_port %" PRIu16
+                       "\n",
+                       src_port_val, src_port_msk);
         }
     }
 #endif

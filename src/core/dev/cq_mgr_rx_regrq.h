@@ -34,6 +34,9 @@
 #ifndef CQ_MGR_REGRQ_H
 #define CQ_MGR_REGRQ_H
 
+#include "config.h"
+#ifdef DEFINED_DPCP_PATH_RX
+
 #include "cq_mgr_rx.h"
 
 class cq_mgr_rx_regrq : public cq_mgr_rx {
@@ -54,4 +57,5 @@ protected:
                                      enum buff_status_e &status);
 };
 
+#endif // DEFINED_DPCP_PATH_RX
 #endif // CQ_MGR_MLX5_H
