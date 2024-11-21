@@ -145,21 +145,22 @@ public:
     virtual bool tls_tx_supported() = 0;
     virtual bool tls_rx_supported() = 0;
     virtual xlio_tis *tls_context_setup_tx(const xlio_tls_info *info) = 0;
+    virtual void tls_release_tis(xlio_tis *tis) = 0;
+    virtual void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis,
+                                       bool skip_static) = 0;
+    virtual void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
+                                      bool first) = 0;
+#ifdef DEFINED_DPCP_PATH_RX
     virtual xlio_tir *tls_create_tir(bool cached) = 0;
     virtual int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info,
                                      uint32_t next_record_tcp_sn, xlio_comp_cb_t callback,
                                      void *callback_arg) = 0;
     virtual rfs_rule *tls_rx_create_rule(const flow_tuple &flow_spec_5t, xlio_tir *tir) = 0;
-    virtual void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis,
-                                       bool skip_static) = 0;
     virtual void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info,
                                uint32_t hw_resync_tcp_sn) = 0;
     virtual void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey) = 0;
-    virtual void tls_release_tis(xlio_tis *tis) = 0;
     virtual void tls_release_tir(xlio_tir *tir) = 0;
-    virtual void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
-                                      bool first) = 0;
-
+#endif // DEFINED_DPCP_PATH_RX
 #endif /* DEFINED_UTLS */
 
     ring *get_parent() { return m_parent; }

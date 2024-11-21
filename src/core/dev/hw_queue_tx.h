@@ -38,7 +38,6 @@
 #include <vector>
 #include "dev/xlio_ti.h"
 #include "dev/cq_mgr_tx.h"
-#include "dev/cq_mgr_rx.h"
 #include "dev/dm_mgr.h"
 #include "proto/mem_buf_desc.h"
 #include "proto/xlio_lwip.h"
@@ -130,13 +129,15 @@ public:
     void dm_release_data(mem_buf_desc_t *buff) { m_dm_mgr.release_data(buff); }
 
 #ifdef DEFINED_UTLS
-    xlio_tis *tls_context_setup_tx(const xlio_tls_info *info);
+#ifdef DEFINED_DPCP_PATH_RX
     int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t next_record_tcp_sn,
                              xlio_comp_cb_t callback, void *callback_arg);
-    void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static);
     void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn);
     void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey);
+#endif // DEFINED_DPCP_PATH_RX
+    xlio_tis *tls_context_setup_tx(const xlio_tls_info *info);
     void tls_release_tis(xlio_tis *tis);
+    void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static);
     void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first);
 #endif /* DEFINED_UTLS */
 
@@ -298,7 +299,6 @@ private:
     xlio_ib_mlx5_qp_t m_mlx5_qp;
     ring_simple *m_p_ring;
     cq_mgr_tx *m_p_cq_mgr_tx;
-    cq_mgr_rx *m_p_cq_mgr_rx_unused;
     ib_ctx_handler *m_p_ib_ctx_handler;
     sq_wqe_prop *m_sq_wqe_idx_to_prop = nullptr;
     sq_wqe_prop *m_sq_wqe_prop_last = nullptr;

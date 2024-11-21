@@ -868,7 +868,6 @@ void mce_sys_var::get_env_params()
 #endif /* DEFINED_UTLS */
     enable_lro = MCE_DEFAULT_LRO;
     handle_fork = MCE_DEFAULT_FORK_SUPPORT;
-    doca_rx = MCE_DEFAULT_DOCA_RX;
     doca_tx = MCE_DEFAULT_DOCA_TX;
     close_on_dup2 = MCE_DEFAULT_CLOSE_ON_DUP2;
     mtu = MCE_DEFAULT_MTU;
@@ -1652,10 +1651,6 @@ void mce_sys_var::get_env_params()
                        option_size::to_str(MCE_MAX_HUGEPAGE_SIZE));
             hugepage_size = MCE_DEFAULT_HUGEPAGE_SIZE;
         }
-    }
-
-    if ((env_ptr = getenv("XLIO_DOCA_RX"))) {
-        doca_rx = atoi(env_ptr) ? true : false;
     }
 
     if ((env_ptr = getenv("XLIO_DOCA_TX"))) {
