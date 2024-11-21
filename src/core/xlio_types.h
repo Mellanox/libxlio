@@ -48,7 +48,6 @@
 #define SO_XLIO_SHUTDOWN_RX      2821
 #define SO_XLIO_PD               2822
 #define SCM_XLIO_PD              SO_XLIO_PD
-#define SCM_XLIO_NVME_PD         2823
 #define SO_XLIO_EXT_VLAN_TAG     2824
 
 /**
@@ -111,19 +110,6 @@ struct xlio_pd_key {
         uint32_t message_length;
     };
     uint32_t mkey;
-};
-
-#define NVDA_NVME 666
-#define NVME_TX   1
-#define NVME_RX   2
-
-enum {
-    XLIO_NVME_DDGST_ENABLE = 1U << 31,
-    XLIO_NVME_DDGST_OFFLOAD = 1U << 30,
-    XLIO_NVME_HDGST_ENABLE = 1U << 29,
-    XLIO_NVME_HDGST_OFFLOAD = 1U << 28,
-    XLIO_NVME_PDA_MASK = ((1U << 4) - 1U),
-    XLIO_NVME_DDGST_MASK = (XLIO_NVME_DDGST_ENABLE | XLIO_NVME_DDGST_OFFLOAD),
 };
 
 struct xlio_rate_limit_t {
