@@ -367,13 +367,11 @@ ssize_t sendmsg_internal(void *sock, __const struct msghdr *__msg, int __flags)
 
     if (0 < __msg->msg_controllen) {
         struct cmsghdr *cmsg = CMSG_FIRSTHDR((struct msghdr *)__msg);
-        if ((cmsg->cmsg_level == SOL_SOCKET) &&
-            (cmsg->cmsg_type == SCM_XLIO_PD || cmsg->cmsg_type == SCM_XLIO_NVME_PD)) {
+        if ((cmsg->cmsg_level == SOL_SOCKET) && (cmsg->cmsg_type == SCM_XLIO_PD)) {
             if ((tx_arg.attr.flags & MSG_ZEROCOPY) &&
                 (__msg->msg_iovlen ==
                  ((cmsg->cmsg_len - CMSG_LEN(0)) / sizeof(struct xlio_pd_key)))) {
-                tx_arg.priv.attr =
-                    (cmsg->cmsg_type == SCM_XLIO_PD) ? PBUF_DESC_MKEY : PBUF_DESC_NVME_TX;
+                tx_arg.priv.attr = PBUF_DESC_MKEY;
                 tx_arg.priv.opaque = (void *)CMSG_DATA(cmsg);
             } else {
                 errno = EINVAL;

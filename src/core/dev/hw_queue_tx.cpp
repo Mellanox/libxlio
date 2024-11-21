@@ -1151,120 +1151,27 @@ void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_a
 std::unique_ptr<xlio_tis> hw_queue_tx::create_tis(uint32_t flags)
 {
     dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
-    bool is_tls = flags & dpcp::TIS_ATTR_TLS, is_nvme = flags & dpcp::TIS_ATTR_NVMEOTCP;
-    if (unlikely(!adapter || (is_tls && is_nvme))) {
+    bool is_tls = flags & dpcp::TIS_ATTR_TLS;
+    if (unlikely(!adapter)) {
         return nullptr;
     }
 
     dpcp::tis::attr tis_attr = {
         .flags = flags,
         .tls_en = is_tls,
-        .nvmeotcp = is_nvme,
+        .nvmeotcp = 0,
         .transport_domain = adapter->get_td(),
         .pd = adapter->get_pd(),
     };
 
     dpcp::tis *dpcp_tis = nullptr;
     if (unlikely(adapter->create_tis(tis_attr, dpcp_tis) != dpcp::DPCP_OK)) {
-        hwqtx_logerr("Failed to create TIS with NVME enabled");
+        hwqtx_logerr("Failed to create TIS");
         return nullptr;
     }
 
-    auto tis_type = is_tls ? xlio_ti::ti_type::TLS_TIS : xlio_ti::ti_type::NVME_TIS;
-    return std::make_unique<xlio_tis>(this, std::unique_ptr<dpcp::tis>(dpcp_tis), tis_type);
-}
-
-static inline void nvme_fill_static_params_control(xlio_mlx5_wqe_ctrl_seg *cseg,
-                                                   xlio_mlx5_wqe_umr_ctrl_seg *ucseg,
-                                                   uint32_t producer_index, uint32_t qpn,
-                                                   uint32_t tisn, uint8_t fence_flags)
-{
-    memset(cseg, 0, sizeof(*cseg));
-    memset(ucseg, 0, sizeof(*ucseg));
-    cseg->opmod_idx_opcode =
-        htobe32(((producer_index & 0xffff) << 8) | MLX5_OPCODE_UMR |
-                (MLX5_CTRL_SEGMENT_OPC_MOD_UMR_NVMEOTCP_TIS_STATIC_PARAMS << 24));
-    size_t num_wqe_ds = 12U;
-    cseg->qpn_ds = htobe32((qpn << MLX5_WQE_CTRL_QPN_SHIFT) | num_wqe_ds);
-    cseg->fm_ce_se = fence_flags;
-    cseg->tis_tir_num = htobe32(tisn << MLX5_WQE_CTRL_TIR_TIS_INDEX_SHIFT);
-
-    ucseg->flags = MLX5_UMR_INLINE;
-    ucseg->bsf_octowords = htobe16(MLX5E_TRANSPORT_STATIC_PARAMS_OCTWORD_SIZE);
-}
-
-static inline void nvme_fill_static_params_transport_params(
-    mlx5_wqe_transport_static_params_seg *params, uint32_t config)
-
-{
-    memset(params, 0, sizeof(*params));
-    void *ctx = params->ctx;
-
-    DEVX_SET(transport_static_params, ctx, const_1, 1);
-    DEVX_SET(transport_static_params, ctx, const_2, 2);
-    DEVX_SET(transport_static_params, ctx, acc_type, MLX5_TRANSPORT_STATIC_PARAMS_ACC_TYPE_NVMETCP);
-    DEVX_SET(transport_static_params, ctx, nvme_resync_tcp_sn, 0);
-    DEVX_SET(transport_static_params, ctx, pda, static_cast<uint8_t>(config & XLIO_NVME_PDA_MASK));
-    DEVX_SET(transport_static_params, ctx, ddgst_en, bool(config & XLIO_NVME_DDGST_ENABLE));
-    DEVX_SET(transport_static_params, ctx, ddgst_offload_en,
-             bool(config & XLIO_NVME_DDGST_OFFLOAD));
-    DEVX_SET(transport_static_params, ctx, hddgst_en, bool(config & XLIO_NVME_HDGST_ENABLE));
-    DEVX_SET(transport_static_params, ctx, hdgst_offload_en,
-             bool(config & XLIO_NVME_HDGST_OFFLOAD));
-    DEVX_SET(transport_static_params, ctx, ti, MLX5_TRANSPORT_STATIC_PARAMS_TI_INITIATOR);
-    DEVX_SET(transport_static_params, ctx, const1, 1);
-    DEVX_SET(transport_static_params, ctx, zero_copy_en, 0);
-}
-
-static inline void nvme_fill_progress_wqe(mlx5e_set_nvmeotcp_progress_params_wqe *wqe,
-                                          uint32_t producer_index, uint32_t qpn, uint32_t tisn,
-                                          uint32_t tcp_seqno, uint8_t fence_flags)
-{
-    memset(wqe, 0, sizeof(*wqe));
-    auto cseg = &wqe->ctrl.ctrl;
-
-    size_t progres_params_ds = DIV_ROUND_UP(sizeof(*wqe), MLX5_SEND_WQE_DS);
-    cseg->opmod_idx_opcode =
-        htobe32(((producer_index & 0xffff) << 8) | XLIO_MLX5_OPCODE_SET_PSV |
-                (MLX5_CTRL_SEGMENT_OPC_MOD_UMR_NVMEOTCP_TIS_PROGRESS_PARAMS << 24));
-    cseg->qpn_ds = htobe32((qpn << MLX5_WQE_CTRL_QPN_SHIFT) | progres_params_ds);
-    cseg->fm_ce_se = fence_flags;
-
-    mlx5_seg_nvmeotcp_progress_params *params = &wqe->params;
-    params->tir_num = htobe32(tisn);
-    void *ctx = params->ctx;
-
-    DEVX_SET(nvmeotcp_progress_params, ctx, next_pdu_tcp_sn, tcp_seqno);
-    DEVX_SET(nvmeotcp_progress_params, ctx, pdu_tracker_state,
-             MLX5E_NVMEOTCP_PROGRESS_PARAMS_PDU_TRACKER_STATE_START);
-    /* if (is_tx) offloading state == 0*/
-    DEVX_SET(nvmeotcp_progress_params, ctx, offloading_state, 0);
-}
-
-void hw_queue_tx::nvme_set_static_context(xlio_tis *tis, uint32_t config)
-{
-    auto *cseg = wqebb_get<xlio_mlx5_wqe_ctrl_seg *>(0U);
-    auto *ucseg = wqebb_get<xlio_mlx5_wqe_umr_ctrl_seg *>(0U, sizeof(*cseg));
-
-    nvme_fill_static_params_control(cseg, ucseg, m_sq_wqe_counter, m_mlx5_qp.qpn, tis->get_tisn(),
-                                    0);
-    memset(wqebb_get<void *>(1U), 0, sizeof(mlx5_mkey_seg));
-
-    auto *params = wqebb_get<mlx5_wqe_transport_static_params_seg *>(2U);
-    nvme_fill_static_params_transport_params(params, config);
-    store_current_wqe_prop(nullptr, SQ_CREDITS_UMR, tis);
-    ring_doorbell(MLX5E_TRANSPORT_SET_STATIC_PARAMS_WQEBBS);
-    update_next_wqe_hot();
-}
-
-void hw_queue_tx::nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno)
-{
-    auto *wqe = reinterpret_cast<mlx5e_set_nvmeotcp_progress_params_wqe *>(m_sq_wqe_hot);
-    nvme_fill_progress_wqe(wqe, m_sq_wqe_counter, m_mlx5_qp.qpn, tis->get_tisn(), tcp_seqno,
-                           MLX5_FENCE_MODE_INITIATOR_SMALL);
-    store_current_wqe_prop(nullptr, SQ_CREDITS_SET_PSV, tis);
-    ring_doorbell(MLX5E_NVMEOTCP_PROGRESS_PARAMS_WQEBBS);
-    update_next_wqe_hot();
+    return std::make_unique<xlio_tis>(this, std::unique_ptr<dpcp::tis>(dpcp_tis),
+                                      xlio_ti::ti_type::TLS_TIS);
 }
 
 #if defined(DEFINED_UTLS)

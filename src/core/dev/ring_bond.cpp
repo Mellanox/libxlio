@@ -883,23 +883,6 @@ std::unique_ptr<xlio_tis> ring_bond::create_tis(uint32_t flag) const
     return nullptr;
 }
 
-void ring_bond::nvme_set_static_context(xlio_tis *tis, uint32_t config)
-{
-    NOT_IN_USE(tis);
-    NOT_IN_USE(config);
-}
-
-void ring_bond::nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno)
-{
-    NOT_IN_USE(tis);
-    NOT_IN_USE(tcp_seqno);
-}
-
-int ring_bond::get_supported_nvme_feature_mask() const
-{
-    return 0;
-}
-
 void ring_bond::post_nop_fence()
 {
 }

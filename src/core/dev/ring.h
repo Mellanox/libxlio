@@ -69,12 +69,6 @@ extern tcp_seg_pool *g_tcp_seg_pool;
 
 class ring {
 public:
-    enum {
-        NVME_CRC_TX = 1 << 0,
-        NVME_CRC_RX = 1 << 1,
-        NVME_ZEROCOPY = 1 << 2,
-    };
-
     ring();
     virtual ~ring();
 
@@ -130,11 +124,8 @@ public:
     virtual bool is_tso() = 0;
     virtual ib_ctx_handler *get_ctx(ring_user_id_t id) = 0;
     virtual std::unique_ptr<xlio_tis> create_tis(uint32_t flag) const = 0;
-    virtual void nvme_set_static_context(xlio_tis *tis, uint32_t config) = 0;
-    virtual void nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno) = 0;
     virtual void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx) = 0;
     virtual void flow_del_all_rfs_safe() = 0;
-    virtual int get_supported_nvme_feature_mask() const = 0;
     virtual void post_nop_fence() = 0;
     virtual void post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
                                bool first) = 0;

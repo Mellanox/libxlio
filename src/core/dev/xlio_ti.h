@@ -53,7 +53,7 @@ public:
 
 class xlio_ti {
 public:
-    enum ti_type : uint8_t { UNKNOWN, TLS_TIS, TLS_TIR, NVME_TIS, NVME_TIR };
+    enum ti_type : uint8_t { UNKNOWN, TLS_TIS, TLS_TIR };
 
     xlio_ti(xlio_ti_owner *ti_owner, ti_type type = UNKNOWN)
         : m_ti_owner(ti_owner)
