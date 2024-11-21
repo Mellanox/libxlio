@@ -202,24 +202,7 @@ public:
         NOT_IN_USE(flag);
         return nullptr;
     }
-    virtual void nvme_set_static_context(xlio_tis *tis, uint32_t config)
-    {
-        NOT_IN_USE(tis);
-        NOT_IN_USE(config);
-    }
-    virtual void nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno)
-    {
-        NOT_IN_USE(tis);
-        NOT_IN_USE(tcp_seqno);
-    }
 
-    enum {
-        NVME_CRC_TX = 1 << 0,
-        NVME_CRC_RX = 1 << 1,
-        NVME_ZEROCOPY = 1 << 2,
-    };
-
-    virtual int get_supported_nvme_feature_mask() const { return 0; }
     virtual void post_nop_fence(void) {}
     virtual void post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first)
     {
