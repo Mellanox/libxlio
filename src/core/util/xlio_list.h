@@ -41,11 +41,9 @@
 #define VLIST_ID_SIZE 200
 
 #define vlist_logwarn(log_fmt, log_args...)                                                        \
-    vlog_printf(VLOG_WARNING, "vlist[%p]:%d:%s() " log_fmt "\n", this, __LINE__, __FUNCTION__,     \
-                ##log_args)
+    __log_header_warn("vlist[%p]:%d:%s() " log_fmt "\n", this, __LINE__, __FUNCTION__, ##log_args)
 #define vlist_logerr(log_fmt, log_args...)                                                         \
-    vlog_printf(VLOG_ERROR, "vlist[%p]:%d:%s() " log_fmt "\n", this, __LINE__, __FUNCTION__,       \
-                ##log_args)
+    __log_header_err("vlist[%p]:%d:%s() " log_fmt "\n", this, __LINE__, __FUNCTION__, ##log_args)
 
 #if VLIST_DEBUG
 template <class T, size_t offset(void)> class xlio_list_t;

@@ -49,7 +49,8 @@
 #include "sock/sock-extra.h"
 #include "xlio.h"
 
-#define MODULE_NAME "extra:"
+#define MODULE_NAME "extra"
+DOCA_LOG_REGISTER(extra);
 
 #define SET_EXTRA_API(__dst, __func, __mask)                                                       \
     do {                                                                                           \

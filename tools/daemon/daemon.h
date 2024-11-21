@@ -54,6 +54,7 @@
 #include <net/if.h>
 #include <sys/time.h>
 #include <ifaddrs.h>
+#include <doca_log.h>
 
 #ifdef HAVE_LINUX_LIMITS_H
 #include <linux/limits.h>
@@ -90,42 +91,6 @@
 #define NAME_MAX 255 /**< chars in a file name */
 #define PATH_MAX 4096 /**< chars in a path name including null */
 #endif
-
-#define log_fatal(fmt, ...)                                                                        \
-    do {                                                                                           \
-        if (daemon_cfg.opt.log_level > 0)                                                          \
-            sys_log(LOG_ALERT, "[FATAL ] " fmt, ##__VA_ARGS__);                                    \
-    } while (0)
-
-#define log_error(fmt, ...)                                                                        \
-    do {                                                                                           \
-        if (daemon_cfg.opt.log_level > 1)                                                          \
-            sys_log(LOG_ERR, "[ERROR ] " fmt, ##__VA_ARGS__);                                      \
-    } while (0)
-
-#define log_warn(fmt, ...)                                                                         \
-    do {                                                                                           \
-        if (daemon_cfg.opt.log_level > 2)                                                          \
-            sys_log(LOG_WARNING, "[WARN  ] " fmt, ##__VA_ARGS__);                                  \
-    } while (0)
-
-#define log_info(fmt, ...)                                                                         \
-    do {                                                                                           \
-        if (daemon_cfg.opt.log_level > 3)                                                          \
-            sys_log(LOG_NOTICE, "[INFO  ] " fmt, ##__VA_ARGS__);                                   \
-    } while (0)
-
-#define log_debug(fmt, ...)                                                                        \
-    do {                                                                                           \
-        if (daemon_cfg.opt.log_level > 4)                                                          \
-            sys_log(LOG_INFO, "[DEBUG ] " fmt, ##__VA_ARGS__);                                     \
-    } while (0)
-
-#define log_trace(fmt, ...)                                                                        \
-    do {                                                                                           \
-        if (daemon_cfg.opt.log_level > 5)                                                          \
-            sys_log(LOG_INFO, "[TRACE ] " fmt, ##__VA_ARGS__);                                     \
-    } while (0)
 
 /**
  * @struct module_cfg

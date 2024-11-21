@@ -13,7 +13,8 @@ noinst_PROGRAMS = state_machine_test
 state_machine_test_LDADD = \
 	libstate_machine.la \
 	$(top_builddir)/src/utils/libutils.la \
-	$(top_builddir)/src/vlogger/libvlogger.la
+	$(top_builddir)/src/vlogger/libvlogger.la \
+	$(DOCA_LIBS)
 
 state_machine_test_SOURCES = main.cpp
 	

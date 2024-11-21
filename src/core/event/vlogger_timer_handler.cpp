@@ -65,7 +65,4 @@ void vlogger_timer_handler::handle_timer_expired(void *user_data)
     if (g_p_vlogger_level) {
         g_vlogger_level = *g_p_vlogger_level;
     }
-    if (g_p_vlogger_details) {
-        g_vlogger_details = *g_p_vlogger_details;
-    }
 }

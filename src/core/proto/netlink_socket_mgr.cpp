@@ -43,7 +43,8 @@
 #include <unistd.h> // getpid()
 
 #ifndef MODULE_NAME
-#define MODULE_NAME "netlink_socket_mgr:"
+#define MODULE_NAME "netlink_socket_mgr"
+DOCA_LOG_REGISTER(netlink_socket_mgr);
 #endif
 
 #define MSG_BUFF_SIZE 81920
@@ -170,7 +171,7 @@ void netlink_socket_mgr::update_tbl(nl_data_t data_type)
     uint32_t nl_pid = getpid();
     uint32_t nl_seq = static_cast<uint32_t>(data_type);
 
-    __log_dbg("");
+    __log_dbg(LOG_FUNCTION_CALL);
 
     buf = new char[MSG_BUFF_SIZE];
     if (!buf) {

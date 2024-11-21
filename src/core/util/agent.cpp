@@ -50,7 +50,8 @@
 #include "core/util/agent.h"
 
 #undef MODULE_NAME
-#define MODULE_NAME "agent:"
+#define MODULE_NAME "agent"
+DOCA_LOG_REGISTER(agent);
 #undef MODULE_HDR
 #define MODULE_HDR MODULE_NAME "%d:%s() "
 
@@ -81,15 +82,15 @@
     do {                                                                                           \
         vlog_levels_t _level =                                                                     \
             (mce_sys_var::HYPER_MSHV == safe_mce_sys().hypervisor ? VLOG_WARNING : VLOG_DEBUG);    \
-        vlog_printf(_level, "*************************************************************\n");    \
+        __log_raw(_level, "*************************************************************\n");      \
         if (rc == -EPROTONOSUPPORT)                                                                \
-            vlog_printf(                                                                           \
+            __log_raw(                                                                             \
                 _level,                                                                            \
                 "* Protocol version mismatch was found between the library and the service. *\n"); \
         else                                                                                       \
-            vlog_printf(_level, "* Can not establish connection with the service.      *\n");      \
-        vlog_printf(_level, "* UDP/TCP connections are likely to be limited.             *\n");    \
-        vlog_printf(_level, "*************************************************************\n");    \
+            __log_raw(_level, "* Can not establish connection with the service.      *\n");        \
+        __log_raw(_level, "* UDP/TCP connections are likely to be limited.             *\n");      \
+        __log_raw(_level, "*************************************************************\n");      \
     } while (0)
 
 agent *g_p_agent = nullptr;

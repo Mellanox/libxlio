@@ -220,8 +220,8 @@ extern void get_orig_funcs();
     do {                                                                                           \
         int __res = do_global_ctors();                                                             \
         if (__res) {                                                                               \
-            vlog_printf(VLOG_ERROR, "%s " PRODUCT_NAME " failed to start errno: %s\n",             \
-                        __FUNCTION__, strerror(errno));                                            \
+            __log_header_err("%s " PRODUCT_NAME " failed to start errno: %s\n", __FUNCTION__,      \
+                             strerror(errno));                                                     \
             if (safe_mce_sys().exception_handling == xlio_exception_handling::MODE_EXIT) {         \
                 exit(-1);                                                                          \
             }                                                                                      \

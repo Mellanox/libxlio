@@ -51,7 +51,8 @@ uint64_t g_polling_time_usec = 0; // polling time in the last second in usec
 timeval g_last_zero_polling_time; // the last time g_polling_time_usec was zeroed
 int g_n_last_checked_index = 0; // save the last fd index we checked in check_offloaded_rsockets()
 
-#define MODULE_NAME "io_mux_call:"
+#define MODULE_NAME "io_mux_call"
+DOCA_LOG_REGISTER(io_mux_call);
 
 int io_mux_call::m_n_skip_os_count = 0;
 
@@ -418,7 +419,7 @@ int io_mux_call::call()
 {
     // TODO: need stats adjustments for write...
 
-    __log_funcall("");
+    __log_funcall(LOG_FUNCTION_CALL);
 
     if (0 == *m_p_num_all_offloaded_fds) {
         // 1st scenario

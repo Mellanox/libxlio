@@ -39,6 +39,7 @@
 #include "core/util/utils.h"
 
 #define MODULE_NAME "dst"
+DOCA_LOG_REGISTER(dst);
 
 #define dst_logpanic   __log_panic
 #define dst_logerr     __log_err
@@ -312,7 +313,7 @@ bool dst_entry::resolve_net_dev()
 
 bool dst_entry::resolve_neigh()
 {
-    dst_logdbg("");
+    dst_logdbg(LOG_FUNCTION_CALL);
     bool ret_val = false;
     ip_address dst_addr = m_dst_ip;
 
@@ -390,7 +391,7 @@ bool dst_entry::release_ring()
 
 void dst_entry::notify_cb()
 {
-    dst_logdbg("");
+    dst_logdbg(LOG_FUNCTION_CALL);
     set_state(false);
 }
 
@@ -684,14 +685,14 @@ void dst_entry::do_ring_migration_tx(lock_base &socket_lock, resource_allocation
 
 void dst_entry::set_bound_addr(const ip_address &addr)
 {
-    dst_logdbg("");
+    dst_logdbg(LOG_FUNCTION_CALL);
     m_bound_ip = addr;
     set_state(false);
 }
 
 void dst_entry::set_so_bindtodevice_addr(const ip_address &addr)
 {
-    dst_logdbg("");
+    dst_logdbg(LOG_FUNCTION_CALL);
     m_so_bindtodevice_ip = addr;
     set_state(false);
 }
@@ -710,7 +711,7 @@ ssize_t dst_entry::pass_pkt_to_neigh(const iovec *p_iov, size_t sz_iov, uint32_t
 {
     ssize_t ret_val = 0;
 
-    dst_logdbg("");
+    dst_logdbg(LOG_FUNCTION_CALL);
 
     // For IPv4 - packet_id will be taken from header
     // For IPv6 - packet_id will be taken from neigh_send_data

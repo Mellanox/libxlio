@@ -33,11 +33,14 @@
 
 #include <stdlib.h>
 
+#include "doca_log.h"
 #include "vlogger.h"
 
 #if _BullseyeCoverage
 #pragma BullseyeCoverage off
 #endif
+
+DOCA_LOG_REGISTER(VLOGGER_MAIN);
 
 int main(int argc, char **argv)
 {
@@ -49,13 +52,13 @@ int main(int argc, char **argv)
     printf(">> starting vlogger in level: %d\n", (int)vlog_levels_init);
     vlog_start("Voltaire Logger test module: ", vlog_levels_init);
 
-    vlog_printf(VLOG_PANIC, "%s: test log_print in level VLOG_PANIC\n", __func__);
-    vlog_printf(VLOG_ERROR, "%s: test log_print in level VLOG_ERROR\n", __func__);
-    vlog_printf(VLOG_WARNING, "%s: test log_print in level VLOG_WARNING\n", __func__);
-    vlog_printf(VLOG_INFO, "%s: test log_print in level VLOG_INFO\n", __func__);
-    vlog_printf(VLOG_DEBUG, "%s: test log_print in level VLOG_DEBUG\n", __func__);
-    vlog_printf(VLOG_FUNC, "%s: test log_print in level VLOG_FUNC\n", __func__);
-    vlog_printf(VLOG_FUNC_ALL, "%s: test log_print in level VLOG_FUNC_ALL\n", __func__);
+    __log_raw(VLOG_PANIC, "%s: test log_print in level VLOG_PANIC\n", __func__);
+    __log_err("%s: test log_print in level VLOG_ERROR\n", __func__);
+    __log_warn("%s: test log_print in level VLOG_WARNING\n", __func__);
+    __log_info("%s: test log_print in level VLOG_INFO\n", __func__);
+    __log_dbg("%s: test log_print in level VLOG_DEBUG\n", __func__);
+    __log_func("%s: test log_print in level VLOG_FUNC\n", __func__);
+    __log_raw(VLOG_FUNC_ALL, "%s: test log_print in level VLOG_FUNC_ALL\n", __func__);
 
     usleep(10000);
 

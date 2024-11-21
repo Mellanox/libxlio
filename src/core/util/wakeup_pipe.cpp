@@ -37,6 +37,7 @@
 #include "sock/sock-redirect.h"
 
 #define MODULE_NAME "wakeup_pipe"
+DOCA_LOG_REGISTER(wakeup_pipe);
 
 #define wkup_logpanic   __log_info_panic
 #define wkup_logerr     __log_info_err
@@ -81,7 +82,7 @@ wakeup_pipe::wakeup_pipe()
 
 void wakeup_pipe::do_wakeup()
 {
-    wkup_logfuncall("");
+    wkup_logfuncall(LOG_FUNCTION_CALL);
 
     // m_wakeup_lock.lock();
     // This func should be called under socket / epoll lock
@@ -93,7 +94,7 @@ void wakeup_pipe::do_wakeup()
         return;
     }
 
-    wkup_entry_dbg("");
+    wkup_entry_dbg(LOG_FUNCTION_CALL);
 
     int errno_tmp = errno; // don't let wakeup affect errno, as this can fail with EEXIST
     BULLSEYE_EXCLUDE_BLOCK_START
@@ -113,7 +114,7 @@ void wakeup_pipe::remove_wakeup_fd()
     if (m_is_sleeping) {
         return;
     }
-    wkup_entry_dbg("");
+    wkup_entry_dbg(LOG_FUNCTION_CALL);
     int tmp_errno = errno;
     if (SYSCALL(epoll_ctl, m_wakeup_epfd, EPOLL_CTL_DEL, g_wakeup_pipes[0], nullptr)) {
         BULLSEYE_EXCLUDE_BLOCK_START

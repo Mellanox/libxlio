@@ -42,7 +42,8 @@
 
 #include "epfd_info.h"
 
-#define MODULE_NAME "epoll_wait_call:"
+#define MODULE_NAME "epoll_wait_call"
+DOCA_LOG_REGISTER(epoll_wait_call);
 
 epoll_wait_call::epoll_wait_call(epoll_event *extra_events_buffer,
                                  offloaded_mode_t *off_modes_buffer, int epfd, epoll_event *events,

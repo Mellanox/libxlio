@@ -78,7 +78,8 @@ typedef struct {
 
 typedef enum { e_K = 1024, e_M = 1048576 } units_t;
 
-#define MODULE_NAME                   "xliostat"
+#define MODULE_NAME "xliostat"
+DOCA_LOG_REGISTER(xliostat);
 #define PRODUCT_NAME                  "XLIO"
 #define log_msg(log_fmt, log_args...) printf(MODULE_NAME ": " log_fmt "\n", ##log_args)
 #define log_err(log_fmt, log_args...) fprintf(stderr, MODULE_NAME ": " log_fmt "\n", ##log_args)
@@ -128,7 +129,6 @@ typedef enum { e_K = 1024, e_M = 1048576 } units_t;
 #define DEFAULT_DETAILS_MODE    e_totals
 #define DEFAULT_PROC_IDENT_MODE e_by_runn_proccess
 #define VLOG_DETAILS_NUM        4
-#define INIT_XLIO_LOG_DETAILS   -1
 #define NANO_TO_MICRO(n)        (((n) + 500) / 1000)
 #define SEC_TO_MICRO(n)         ((n)*1000000)
 #define TIME_DIFF_in_MICRO(start, end)                                                             \
@@ -1382,7 +1382,6 @@ void set_defaults()
     user_params.print_details_mode = DEFAULT_DETAILS_MODE;
     user_params.proc_ident_mode = DEFAULT_PROC_IDENT_MODE;
     user_params.xlio_log_level = VLOG_INIT;
-    user_params.xlio_details_level = INIT_XLIO_LOG_DETAILS;
     user_params.forbid_cleaning = false;
     user_params.zero_counters = false;
     user_params.write_auth = true; // needed to set read flag on
@@ -1925,11 +1924,6 @@ void set_xlio_log_level(sh_mem_t *p_sh_mem)
     p_sh_mem->log_level = user_params.xlio_log_level;
 }
 
-void set_xlio_log_details_level(sh_mem_t *p_sh_mem)
-{
-    p_sh_mem->log_details_level = (int)user_params.xlio_details_level;
-}
-
 //////////////////forward declarations /////////////////////////////
 void get_all_processes_pids(std::vector<int> &pids);
 int print_processes_stats(const std::vector<int> &pids);
@@ -2101,19 +2095,6 @@ int main(int argc, char **argv)
                 return 1;
             }
         } break;
-        case 'D': {
-            errno = 0;
-            int details_level = 0;
-            details_level = strtol(optarg, NULL, 0);
-            if (errno != 0 || details_level < 0 || details_level >= VLOG_DETAILS_NUM) {
-                log_err("'-%c' Invalid details level val: %s", c, optarg);
-                usage(argv[0]);
-                cleanup(NULL);
-                return 1;
-            }
-            user_params.write_auth = true;
-            user_params.xlio_details_level = details_level;
-        } break;
         case 'n':
             user_params.proc_ident_mode = e_by_app_name;
             strncpy(proc_desc, optarg, sizeof(proc_desc) - 1);
@@ -2255,9 +2236,6 @@ int init_print_process_stats(sh_mem_info_t &sh_mem_info)
     }
     if (user_params.xlio_log_level != VLOG_INIT) {
         set_xlio_log_level(sh_mem);
-    }
-    if (user_params.xlio_details_level != INIT_XLIO_LOG_DETAILS) {
-        set_xlio_log_details_level(sh_mem);
     }
     if (user_params.dump != DUMP_DISABLED) {
         set_dumping_data(sh_mem);

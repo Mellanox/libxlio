@@ -42,6 +42,7 @@
 #include "event/event_handler_manager.h"
 
 #define MODULE_NAME "ib_ctx_collection"
+DOCA_LOG_REGISTER(ib_ctx_collection);
 
 #define ibchc_logpanic   __log_panic
 #define ibchc_logerr     __log_err
@@ -55,7 +56,7 @@ ib_ctx_handler_collection *g_p_ib_ctx_handler_collection = nullptr;
 
 ib_ctx_handler_collection::ib_ctx_handler_collection()
 {
-    ibchc_logdbg("");
+    ibchc_logdbg(LOG_FUNCTION_CALL);
 
     /* Read ib table from kernel and save it in local variable. */
     update_tbl();
@@ -68,7 +69,7 @@ ib_ctx_handler_collection::ib_ctx_handler_collection()
 
 ib_ctx_handler_collection::~ib_ctx_handler_collection()
 {
-    ibchc_logdbg("");
+    ibchc_logdbg(LOG_FUNCTION_CALL);
 
     ib_context_map_t::iterator ib_ctx_iter;
     while ((ib_ctx_iter = m_ib_ctx_map.begin()) != m_ib_ctx_map.end()) {
@@ -82,7 +83,7 @@ ib_ctx_handler_collection::~ib_ctx_handler_collection()
 
 void ib_ctx_handler_collection::stop_all_doca_flow_ports()
 {
-    ibchc_logdbg("");
+    ibchc_logdbg(LOG_FUNCTION_CALL);
     for (auto &itr : m_ib_ctx_map) {
         itr.second->stop_doca_flow_port();
     }
@@ -113,8 +114,8 @@ void ib_ctx_handler_collection::update_tbl(const char *ifa_name)
     if (!num_devices) {
         vlog_levels_t _level =
             ifa_name ? VLOG_DEBUG : VLOG_ERROR; // Print an error only during initialization.
-        vlog_printf(_level, PRODUCT_NAME " does not detect IB capable devices\n");
-        vlog_printf(_level, "No performance gain is expected in current configuration\n");
+        __log_raw(_level, PRODUCT_NAME " does not detect IB capable devices\n");
+        __log_raw(_level, "No performance gain is expected in current configuration\n");
     }
 
     BULLSEYE_EXCLUDE_BLOCK_END

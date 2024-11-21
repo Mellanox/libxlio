@@ -56,8 +56,8 @@ typedef std::unordered_map<pthread_t, int> offload_thread_rule_t;
 #define fdcoll_logfuncall(log_fmt, log_args...)                                                    \
     do {                                                                                           \
         if (g_vlogger_level >= VLOG_FUNC_ALL)                                                      \
-            vlog_printf(VLOG_FUNC_ALL, "fdc:%d:%s() " log_fmt "\n", __LINE__, __FUNCTION__,        \
-                        ##log_args);                                                               \
+            __log_raw_header(VLOG_FUNC_ALL, "fdc:%d:%s() " log_fmt "\n", __LINE__, __FUNCTION__,   \
+                             ##log_args);                                                          \
     } while (0)
 #endif /* MAX_DEFINED_LOG_LEVEL */
 

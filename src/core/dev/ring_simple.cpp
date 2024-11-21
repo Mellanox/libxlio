@@ -40,6 +40,7 @@
 
 #undef MODULE_NAME
 #define MODULE_NAME "ring_simple"
+DOCA_LOG_REGISTER(ring_simple);
 #undef MODULE_HDR
 #define MODULE_HDR MODULE_NAME "%d:%s() "
 
@@ -509,7 +510,7 @@ bool ring_simple::reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst)
 void ring_simple::mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc,
                                                   void *pv_fd_ready_array /*NULL*/)
 {
-    ring_logfuncall("");
+    ring_logfuncall(LOG_FUNCTION_CALL);
     RING_LOCK_AND_RUN(
         m_lock_ring_rx,
         m_p_cq_mgr_rx->mem_buf_desc_return_to_owner(p_mem_buf_desc, pv_fd_ready_array));
@@ -517,13 +518,13 @@ void ring_simple::mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc
 
 void ring_simple::mem_buf_desc_return_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc)
 {
-    ring_logfuncall("");
+    ring_logfuncall(LOG_FUNCTION_CALL);
     RING_LOCK_AND_RUN(m_lock_ring_tx, put_tx_buffers(p_mem_buf_desc));
 }
 
 void ring_simple::mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc)
 {
-    ring_logfuncall("");
+    ring_logfuncall(LOG_FUNCTION_CALL);
     RING_LOCK_AND_RUN(m_lock_ring_tx, put_tx_single_buffer(p_mem_buf_desc));
 }
 
@@ -683,7 +684,7 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
 int ring_simple::mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool b_accounting,
                                     bool trylock /*=false*/)
 {
-    ring_logfuncall("");
+    ring_logfuncall(LOG_FUNCTION_CALL);
 
     if (!trylock) {
         m_lock_ring_tx.lock();

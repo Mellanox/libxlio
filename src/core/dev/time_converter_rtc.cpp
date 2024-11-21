@@ -40,6 +40,7 @@
 #ifdef DEFINED_IBV_CLOCK_INFO
 
 #define MODULE_NAME "tc_rtc"
+DOCA_LOG_REGISTER(tc_rtc);
 
 #define ibchtc_logerr  __log_err
 #define ibchtc_logwarn __log_warn
@@ -63,6 +64,6 @@ void time_converter_rtc::convert_hw_time_to_system_time(uint64_t hwtime, struct 
     systime->tv_sec = (uint32_t)(hwtime >> 32);
 
     ibchtc_logfine("hwtime: 	%09ld", hwtime);
-    ibchtc_logfine("systime:	%lld.%.9ld", systime->tv_sec, systime->tv_nsec);
+    ibchtc_logfine("systime:	%ld.%.9ld", systime->tv_sec, systime->tv_nsec);
 }
 #endif // DEFINED_IBV_CLOCK_INFO

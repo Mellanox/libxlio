@@ -55,7 +55,8 @@
 #include "rule_table_mgr.h"
 
 // debugging macros
-#define MODULE_NAME "rrm:"
+#define MODULE_NAME "rrm"
+DOCA_LOG_REGISTER(rrm);
 
 #define rr_mgr_if_logpanic __log_panic
 #define rr_mgr_logerr      __log_err
@@ -75,7 +76,7 @@ rule_table_mgr::rule_table_mgr()
     , cache_table_mgr<route_rule_table_key, std::deque<rule_val *> *>("rule_table_mgr")
 {
 
-    rr_mgr_logdbg("");
+    rr_mgr_logdbg(LOG_FUNCTION_CALL);
 
     m_table_in4.reserve(DEFAULT_RULE_TABLE_SIZE);
     m_table_in6.reserve(DEFAULT_RULE_TABLE_SIZE);
@@ -186,7 +187,7 @@ void rule_table_mgr::print_tbl()
 //	Returns created rule entry object.
 rule_entry *rule_table_mgr::create_new_entry(route_rule_table_key key, const observer *obs)
 {
-    rr_mgr_logdbg("");
+    rr_mgr_logdbg(LOG_FUNCTION_CALL);
     NOT_IN_USE(obs);
     rule_entry *p_ent = new rule_entry(key);
     update_entry(p_ent);

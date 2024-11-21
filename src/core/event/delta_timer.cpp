@@ -41,7 +41,8 @@
 #include "delta_timer.h"
 #include "timer_handler.h"
 
-#define MODULE_NAME "tmr:"
+#define MODULE_NAME "tmr"
+DOCA_LOG_REGISTER(tmr);
 
 #define tmr_logpanic __log_panic
 #define tmr_logerr   __log_err
@@ -68,7 +69,7 @@ timer::~timer()
 {
     timer_node_t *iter = m_list_head;
     timer_node_t *to_free = nullptr;
-    tmr_logfunc("");
+    tmr_logfunc(LOG_FUNCTION_CALL);
     m_list_head = nullptr;
     // free all the list
     while (iter) {
@@ -388,7 +389,7 @@ const char *timer_req_type_str(timer_req_type_t type)
 void timer::debug_print_list()
 {
 	timer_node_t* iter = m_list_head;
-	tmr_logdbg("");
+	tmr_logdbg(LOG_FUNCTION_CALL);
 	while (iter) {
 		tmr_logdbg("node %p timer %d",iter, iter->delta_time_msec);
 		iter = iter->next;

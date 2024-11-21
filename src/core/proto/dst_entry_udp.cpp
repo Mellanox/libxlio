@@ -37,6 +37,7 @@
 #include "sock/sockinfo.h"
 
 #define MODULE_NAME "dst_udp"
+DOCA_LOG_REGISTER(dst_udp);
 
 #define dst_udp_logpanic   __log_panic
 #define dst_udp_logerr     __log_err
@@ -154,8 +155,8 @@ bool dst_entry_udp::fast_send_fragmented_ipv6(mem_buf_desc_t *p_mem_buf_desc, co
             memcpy_fromiovec(p_payload, p_iov, sz_iov, sz_user_data_offset, sz_user_data_to_copy);
         BULLSEYE_EXCLUDE_BLOCK_START
         if (ret != (int)sz_user_data_to_copy) {
-            vlog_printf(VLOG_ERROR, "memcpy_fromiovec error (sz_user_data_to_copy=%zu, ret=%d)\n",
-                        sz_user_data_to_copy, ret);
+            __log_err("memcpy_fromiovec error (sz_user_data_to_copy=%zu, ret=%d)\n",
+                      sz_user_data_to_copy, ret);
             p_ring->mem_buf_tx_release(p_mem_buf_desc, true);
             return false;
         }
@@ -170,9 +171,9 @@ bool dst_entry_udp::fast_send_fragmented_ipv6(mem_buf_desc_t *p_mem_buf_desc, co
         p_sge[0].lkey = p_ring->get_tx_lkey(user_id);
         p_send_wqe->wr_id = (uintptr_t)p_mem_buf_desc;
 
-        vlog_printf(VLOG_DEBUG, "packet_sz=%d, payload_sz=%zu, ip_offset=%u id=%u\n",
-                    p_sge[0].length - p_header->m_transport_header_len, sz_user_data_to_copy,
-                    n_ip_frag_offset, ntohl(packet_id));
+        __log_dbg("packet_sz=%d, payload_sz=%zu, ip_offset=%u id=%u\n",
+                  p_sge[0].length - p_header->m_transport_header_len, sz_user_data_to_copy,
+                  n_ip_frag_offset, ntohl(packet_id));
 
         tmp = p_mem_buf_desc->p_next_desc;
         p_mem_buf_desc->p_next_desc = nullptr;
@@ -399,7 +400,7 @@ inline bool dst_entry_udp::fast_send_fragmented_ipv4(mem_buf_desc_t *p_mem_buf_d
         m_sge[1].lkey = m_p_ring->get_tx_lkey(m_id);
         p_send_wqe->wr_id = (uintptr_t)p_mem_buf_desc;
 
-        dst_udp_logfunc("packet_sz=%d, payload_sz=%d, ip_offset=%d id=%d",
+        dst_udp_logfunc("packet_sz=%d, payload_sz=%lu, ip_offset=%d id=%d",
                         m_sge[1].length - m_header->m_transport_header_len, sz_user_data_to_copy,
                         n_ip_frag_offset, ntohs(packet_id));
 
@@ -435,7 +436,7 @@ ssize_t dst_entry_udp::fast_send_fragmented(const iovec *p_iov, const ssize_t sz
     int n_num_frags =
         (sz_udp_payload + max_payload_size_per_packet - 1) / max_payload_size_per_packet;
     dst_udp_logfunc(
-        "udp info: IPv%s, payload_sz=%d, frags=%d, scr_port=%d, dst_port=%d, blocked=%s, ",
+        "udp info: IPv%s, payload_sz=%lu, frags=%d, scr_port=%d, dst_port=%d, blocked=%s, ",
         (is_ipv6) ? "6" : "4", sz_data_payload, n_num_frags, ntohs(m_header->get_udp_hdr()->source),
         ntohs(m_dst_port), b_blocked ? "true" : "false");
 

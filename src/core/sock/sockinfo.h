@@ -723,7 +723,7 @@ void sockinfo::reuse_buffer(mem_buf_desc_t *buff)
     } else {
         // Retuned buffer to global pool when owner can't be found
         // In case ring was deleted while buffers where still queued
-        vlog_printf(VLOG_DEBUG, "Buffer owner not found\n");
+        __log_header_dbg("Buffer owner not found\n");
         // Awareness: these are best efforts: decRef without lock in case no CQ
         g_buffer_pool_rx_ptr->put_buffer_after_deref_thread_safe(buff);
     }

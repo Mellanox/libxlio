@@ -46,6 +46,7 @@
 
 #undef MODULE_NAME
 #define MODULE_NAME "hw_queue_rx"
+DOCA_LOG_REGISTER(hw_queue_rx);
 
 #define hwqrx_logpanic   __log_info_panic
 #define hwqrx_logerr     __log_info_err
@@ -67,7 +68,7 @@ hw_queue_rx::hw_queue_rx(ring_simple *ring, ib_ctx_handler *ib_ctx,
     , m_n_sysvar_rx_prefetch_bytes_before_poll(safe_mce_sys().rx_prefetch_bytes_before_poll)
     , m_vlan(vlan)
 {
-    hwqrx_logfunc("");
+    hwqrx_logfunc(LOG_FUNCTION_CALL);
 
     memset(&m_hwq_rx_stats, 0, sizeof(m_hwq_rx_stats));
 
@@ -82,7 +83,7 @@ hw_queue_rx::hw_queue_rx(ring_simple *ring, ib_ctx_handler *ib_ctx,
 
 hw_queue_rx::~hw_queue_rx()
 {
-    hwqrx_logfunc("");
+    hwqrx_logfunc(LOG_FUNCTION_CALL);
 
     m_rq.reset(nullptr); // Must be destroyed before RX CQ.
     m_doca_rxq.reset(nullptr); // Must be destroyed before RX PE.
@@ -313,7 +314,7 @@ bool hw_queue_rx::fill_buffers_from_global_pool()
         (m_rxq_task_debt > m_rx_pool.size() ? m_rxq_task_debt - m_rx_pool.size() : 0U);
 
     if (more_bufs) {
-        hwqrx_logfunc("Allocating additional %d buffers for internal use", more_bufs);
+        hwqrx_logfunc("Allocating additional %ld buffers for internal use", more_bufs);
 
         // Assume locked!
         // Add an additional free buffer descs to RX cq mgr
@@ -553,7 +554,7 @@ void hw_queue_rx::rx_task_error_cb(doca_eth_rxq_task_recv *task_recv, doca_data 
 
 bool hw_queue_rx::poll_and_process_rx()
 {
-    hwqrx_logfunc("");
+    hwqrx_logfunc(LOG_FUNCTION_CALL);
 
     // DOCA forbides calling doca_pe_progress on armed PE.
     if (unlikely(m_notification_armed)) {
@@ -770,7 +771,7 @@ void hw_queue_rx::release_rx_buffers()
 
 void hw_queue_rx::post_recv_buffers(descq_t *p_buffers, size_t count)
 {
-    hwqrx_logfuncall("");
+    hwqrx_logfuncall(LOG_FUNCTION_CALL);
     // Called from cq_mgr_rx context under cq_mgr_rx::LOCK!
     while (count--) {
         post_recv_buffer(p_buffers->get_and_pop_front());
@@ -779,7 +780,7 @@ void hw_queue_rx::post_recv_buffers(descq_t *p_buffers, size_t count)
 
 void hw_queue_rx::modify_queue_to_ready_state()
 {
-    hwqrx_logdbg("");
+    hwqrx_logdbg(LOG_FUNCTION_CALL);
     dpcp::status rc = m_rq->modify_state(dpcp::RQ_RDY);
     if (dpcp::DPCP_OK != rc) {
         hwqrx_logerr("Failed to modify rq state to RDY, rc: %d, rqn: %" PRIu32,
@@ -789,7 +790,7 @@ void hw_queue_rx::modify_queue_to_ready_state()
 
 void hw_queue_rx::modify_queue_to_error_state()
 {
-    hwqrx_logdbg("");
+    hwqrx_logdbg(LOG_FUNCTION_CALL);
 
     m_p_cq_mgr_rx->clean_cq();
 
@@ -1062,7 +1063,7 @@ dpcp::tir *hw_queue_rx::create_tir(bool is_tls /*=false*/)
 
 bool hw_queue_rx::prepare_rq(uint32_t cqn)
 {
-    hwqrx_logdbg("");
+    hwqrx_logdbg(LOG_FUNCTION_CALL);
 
     dpcp::adapter *dpcp_adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
     if (!dpcp_adapter) {

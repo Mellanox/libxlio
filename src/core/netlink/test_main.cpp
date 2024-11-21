@@ -43,6 +43,7 @@
 
 extern uint8_t g_vlogger_level;
 #define MODULE_NAME "NETLINK_TEST"
+DOCA_LOG_REGISTER(NETLINK_TEST);
 
 class neigh_observer : public observer {
     virtual void notify_cb(event *ev)

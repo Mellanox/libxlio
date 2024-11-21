@@ -41,6 +41,7 @@
 #include <sys/socket.h>
 
 #define MODULE_NAME "si_ulp"
+DOCA_LOG_REGISTER(si_ulp);
 
 #define si_ulp_logdbg  __log_info_dbg
 #define si_ulp_loginfo __log_info_info
@@ -1584,7 +1585,7 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
                 utls->m_p_tx_ring->tls_resync_rx(utls->m_p_tir, &utls->m_tls_info_rx, resync_seqno);
             } else {
                 /* We will retry RX resync with the next incoming packet. */
-                vlog_printf(VLOG_DEBUG, "Skip TLS RX resync due to full SQ\n");
+                __log_dbg("Skip TLS RX resync due to full SQ\n");
             }
         } else {
             /* TODO Investigate this case. It isn't described in PRM. */
@@ -1596,7 +1597,7 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
         const flow_tuple_with_local_if &tuple = utls->m_p_sock->get_flow_tuple();
         utls->m_rx_rule = utls->m_p_rx_ring->tls_rx_create_rule(tuple, utls->m_p_tir);
         if (!utls->m_rx_rule) {
-            vlog_printf(VLOG_ERROR, "TLS rule failed for %s\n", tuple.to_str().c_str());
+            __log_err("TLS rule failed for %s\n", tuple.to_str().c_str());
         }
     }
 }

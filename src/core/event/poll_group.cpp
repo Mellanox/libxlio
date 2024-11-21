@@ -40,7 +40,8 @@
 #include "event/event_handler_manager_local.h"
 #include "sock/sockinfo_tcp.h"
 
-#define MODULE_NAME "group:"
+#define MODULE_NAME "group"
+DOCA_LOG_REGISTER(group);
 
 #define grp_logpanic __log_panic
 #define grp_logerr   __log_err

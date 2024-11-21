@@ -31,6 +31,7 @@
  * SOFTWARE.
  */
 
+#include <doca_log.h>
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -43,6 +44,8 @@
 
 #include "hash.h"
 #include "daemon.h"
+
+DOCA_LOG_REGISTER(loop);
 
 extern int open_store(void);
 extern void close_store(void);
@@ -57,32 +60,32 @@ int proc_loop(void)
 {
     int rc = 0;
 
-    log_debug("setting working directory ...\n");
+    DOCA_LOG_DBG("setting working directory ...\n");
     if ((mkdir(daemon_cfg.notify_dir, 0777) != 0) && (errno != EEXIST)) {
         rc = -errno;
-        log_error("failed create folder %s (errno = %d)\n", daemon_cfg.notify_dir, errno);
+        DOCA_LOG_ERR("failed create folder %s (errno = %d)\n", daemon_cfg.notify_dir, errno);
         goto err;
     }
 
-    log_debug("setting store ...\n");
+    DOCA_LOG_DBG("setting store ...\n");
     rc = open_store();
     if (rc < 0) {
         goto err;
     }
 
-    log_debug("setting notification ...\n");
+    DOCA_LOG_DBG("setting notification ...\n");
     rc = open_notify();
     if (rc < 0) {
         goto err;
     }
 
-    log_debug("setting message processing ...\n");
+    DOCA_LOG_DBG("setting message processing ...\n");
     rc = open_message();
     if (rc < 0) {
         goto err;
     }
 
-    log_debug("starting loop ...\n");
+    DOCA_LOG_DBG("starting loop ...\n");
     while ((0 == daemon_cfg.sig) && (errno != EINTR)) {
         fd_set readfds;
         struct timeval tv;
@@ -103,7 +106,7 @@ int proc_loop(void)
             rc = 0;
             if (errno != EINTR) {
                 rc = -errno;
-                log_error("Failed select() errno %d (%s)\n", errno, strerror(errno));
+                DOCA_LOG_ERR("Failed select() errno %d (%s)\n", errno, strerror(errno));
             }
             goto err;
         } else if (rc == 0) {
@@ -112,19 +115,19 @@ int proc_loop(void)
 
         /* Check messages from processes */
         if (FD_ISSET(daemon_cfg.sock_fd, &readfds)) {
-            log_debug("message processing ...\n");
+            DOCA_LOG_DBG("message processing ...\n");
             rc = proc_message();
         }
 
         /* Check any events from file system monitor */
         if (FD_ISSET(daemon_cfg.notify_fd, &readfds)) {
-            log_debug("notification processing ...\n");
+            DOCA_LOG_DBG("notification processing ...\n");
             rc = proc_notify();
         }
     }
 
 err:
-    log_debug("finishing loop ...\n");
+    DOCA_LOG_DBG("finishing loop ...\n");
 
     close_message();
     close_notify();

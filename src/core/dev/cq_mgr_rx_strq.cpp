@@ -42,6 +42,7 @@
 #include <cinttypes>
 
 #define MODULE_NAME "cq_mgr_rx_strq"
+DOCA_LOG_REGISTER(cq_mgr_rx_strq);
 
 #define cq_logfunc    __log_info_func
 #define cq_logdbg     __log_info_dbg
@@ -51,8 +52,7 @@
 #define cq_logdbg_no_funcname(log_fmt, log_args...)                                                \
     do {                                                                                           \
         if (g_vlogger_level >= VLOG_DEBUG)                                                         \
-            vlog_printf(VLOG_DEBUG, MODULE_NAME "[%p]:%d: " log_fmt "\n", __INFO__, __LINE__,      \
-                        ##log_args);                                                               \
+            __log_dbg(MODULE_NAME "[%p]:%d: " log_fmt "\n", __INFO__, __LINE__, ##log_args);       \
     } while (0)
 
 cq_mgr_rx_strq::cq_mgr_rx_strq(ring_simple *p_ring, hw_queue_rx *hqrx_ptr,
@@ -65,7 +65,7 @@ cq_mgr_rx_strq::cq_mgr_rx_strq(ring_simple *p_ring, hw_queue_rx *hqrx_ptr,
     , _strides_num(strides_num)
     , _wqe_buff_size_bytes(strides_num * stride_size_bytes)
 {
-    cq_logfunc("");
+    cq_logfunc(LOG_FUNCTION_CALL);
     m_n_sysvar_rx_prefetch_bytes_before_poll =
         std::min(m_n_sysvar_rx_prefetch_bytes_before_poll, stride_size_bytes);
 
@@ -74,7 +74,7 @@ cq_mgr_rx_strq::cq_mgr_rx_strq(ring_simple *p_ring, hw_queue_rx *hqrx_ptr,
 
 cq_mgr_rx_strq::~cq_mgr_rx_strq()
 {
-    cq_logfunc("");
+    cq_logfunc(LOG_FUNCTION_CALL);
     cq_logdbg("destroying CQ STRQ");
 
     if (m_rx_queue.size()) {
@@ -314,9 +314,6 @@ inline bool cq_mgr_rx_strq::strq_cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe,
                static_cast<int>(status), cqe->wqe_id, (host_byte_cnt >> 31), cqe->byte_cnt,
                (host_byte_cnt & 0x0000FFFFU), _hot_buffer_stride->rx.strides_num,
                _current_wqe_consumed_bytes, m_rx_hot_buffer, m_rx_hot_buffer->sz_buffer);
-    // vlog_print_buffer(VLOG_FINE, "STRQ CQE. Data: ", "\n",
-    //	reinterpret_cast<const char*>(_hot_buffer_stride->p_buffer), min(112,
-    // static_cast<int>(_hot_buffer_stride->sz_data)));
 
     if (_current_wqe_consumed_bytes >= _wqe_buff_size_bytes) {
         _current_wqe_consumed_bytes = 0;
@@ -365,7 +362,7 @@ int cq_mgr_rx_strq::drain_and_proccess_helper(mem_buf_desc_t *buff, mem_buf_desc
 
 int cq_mgr_rx_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id)
 {
-    cq_logfuncall("cq contains %d wce in m_rx_queue", m_rx_queue.size());
+    cq_logfuncall("cq contains %lu wce in m_rx_queue", m_rx_queue.size());
 
     // CQ polling loop until max wce limit is reached for this interval or CQ is drained
     uint32_t ret_total = 0;
@@ -409,7 +406,7 @@ mem_buf_desc_t *cq_mgr_rx_strq::process_strq_cq_element_rx(mem_buf_desc_t *p_mem
                                                            enum buff_status_e status)
 {
     /* Assume locked!!! */
-    cq_logfuncall("");
+    cq_logfuncall(LOG_FUNCTION_CALL);
 
     if (unlikely(status != BS_OK)) {
         reclaim_recv_buffer_helper(p_mem_buf_desc);
@@ -427,7 +424,7 @@ mem_buf_desc_t *cq_mgr_rx_strq::process_strq_cq_element_rx(mem_buf_desc_t *p_mem
 
 bool cq_mgr_rx_strq::poll_and_process_element_rx(void *pv_fd_ready_array)
 {
-    cq_logfuncall("");
+    cq_logfuncall(LOG_FUNCTION_CALL);
 
     if (unlikely(m_n_sysvar_cq_poll_batch_max <= process_recv_queue(pv_fd_ready_array))) {
         m_p_ring->m_gro_mgr.flush_all(pv_fd_ready_array);
@@ -470,7 +467,7 @@ bool cq_mgr_rx_strq::poll_and_process_element_rx(void *pv_fd_ready_array)
 
 void cq_mgr_rx_strq::add_hqrx()
 {
-    cq_logfunc("");
+    cq_logfunc(LOG_FUNCTION_CALL);
     _hot_buffer_stride = nullptr;
     _current_wqe_consumed_bytes = 0U;
     cq_mgr_rx::add_hqrx();

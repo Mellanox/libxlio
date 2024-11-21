@@ -45,6 +45,7 @@
 #include <netinet/ether.h>
 #include <arpa/inet.h>
 
+#include "doca_log.h"
 #include "utils/bullseye.h"
 #include "utils/lock_wrapper.h"
 #include "vlogger/vlogger.h"
@@ -58,7 +59,8 @@
 #include "rule_table_mgr.h"
 
 // debugging macros
-#define MODULE_NAME        "rtm:"
+#define MODULE_NAME "rtm"
+DOCA_LOG_REGISTER(rtm);
 #define rt_mgr_if_logpanic __log_panic
 #define rt_mgr_logerr      __log_err
 #define rt_mgr_logwarn     __log_warn
@@ -78,7 +80,7 @@ route_table_mgr::route_table_mgr()
     : netlink_socket_mgr()
     , cache_table_mgr<route_rule_table_key, route_val *>("route_table_mgr")
 {
-    rt_mgr_logdbg("");
+    rt_mgr_logdbg(LOG_FUNCTION_CALL);
 
     memset(&m_stats, 0, sizeof(m_stats));
 
@@ -100,7 +102,7 @@ route_table_mgr::route_table_mgr()
 
 route_table_mgr::~route_table_mgr()
 {
-    rt_mgr_logdbg("");
+    rt_mgr_logdbg(LOG_FUNCTION_CALL);
 
     auto cache_itr = m_cache_tbl.begin();
     for (; cache_itr != m_cache_tbl.end(); cache_itr = m_cache_tbl.begin()) {
@@ -132,11 +134,11 @@ void route_table_mgr::dump_tbl()
 
     rt_mgr_loginfo("Routing table IPv4:");
     print_tbl(m_table_in4, false);
-    rt_mgr_loginfo("");
+    rt_mgr_loginfo(LOG_FUNCTION_CALL);
     rt_mgr_loginfo("Routing table IPv6:");
     print_tbl(m_table_in6, false);
 
-    rt_mgr_loginfo("");
+    rt_mgr_loginfo(LOG_FUNCTION_CALL);
     rt_mgr_loginfo("Routing table lookup stats: %u / %u [hit/miss]", m_stats.n_lookup_hit,
                    m_stats.n_lookup_miss);
     rt_mgr_loginfo("Routing table update stats: %u / %u / %u [new/del/unhandled]",
@@ -380,7 +382,7 @@ route_entry *route_table_mgr::create_new_entry(route_rule_table_key key, const o
 {
     // no need for lock - lock is activated in cache_collection_mgr::register_observer
 
-    rt_mgr_logdbg("");
+    rt_mgr_logdbg(LOG_FUNCTION_CALL);
     NOT_IN_USE(obs);
     route_entry *p_ent = new route_entry(key);
     update_entry(p_ent, true);

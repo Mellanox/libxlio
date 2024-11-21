@@ -32,6 +32,8 @@
  */
 
 #include <inttypes.h>
+#include <sstream>
+#include <iomanip>
 #include <netinet/ip6.h>
 #include "ring_slave.h"
 #include "proto/ip_frag.h"
@@ -39,9 +41,11 @@
 #include "dev/rfs_uc_tcp_gro.h"
 #include "sock/fd_collection.h"
 #include "sock/sockinfo.h"
+#include "vlogger/vlogger.h"
 
 #undef MODULE_NAME
 #define MODULE_NAME "ring_slave"
+DOCA_LOG_REGISTER(ring_slave);
 #undef MODULE_HDR
 #define MODULE_HDR MODULE_NAME "%d:%s() "
 
@@ -633,10 +637,10 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
             // Remove ethernet padding from the data size
             p_rx_wc_buf_desc->sz_data = transport_header_len + ip_hdr_len + ip_payload_len;
 
-            ring_logfunc("FAST PATH Rx packet info: transport_header_len: %d, IP_header_len: %d L3 "
-                         "proto: %d flow_tag_id: %d",
-                         transport_header_len, ip_hdr_len, protocol,
-                         p_rx_wc_buf_desc->rx.flow_tag_id);
+            ring_logfunc(
+                "FAST PATH Rx packet info: transport_header_len: %ld, IP_header_len: %d L3 "
+                "proto: %d flow_tag_id: %d",
+                transport_header_len, ip_hdr_len, protocol, p_rx_wc_buf_desc->rx.flow_tag_id);
 
             if (likely(protocol == IPPROTO_TCP)) {
                 struct tcphdr *p_tcp_h = (struct tcphdr *)((uint8_t *)p_ip_h + ip_hdr_len);
@@ -652,7 +656,7 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
                 p_rx_wc_buf_desc->rx.n_frags = 1;
 
                 ring_logfunc("FAST PATH Rx TCP segment info: src_port=%d, dst_port=%d, "
-                             "flags='%s%s%s%s%s%s' seq=%u, ack=%u, win=%u, payload_sz=%u",
+                             "flags='%s%s%s%s%s%s' seq=%u, ack=%u, win=%u, payload_sz=%lu",
                              ntohs(p_tcp_h->source), ntohs(p_tcp_h->dest), p_tcp_h->urg ? "U" : "",
                              p_tcp_h->ack ? "A" : "", p_tcp_h->psh ? "P" : "",
                              p_tcp_h->rst ? "R" : "", p_tcp_h->syn ? "S" : "",
@@ -678,7 +682,7 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
                 p_rx_wc_buf_desc->rx.n_frags = 1;
 
                 ring_logfunc("FAST PATH Rx UDP datagram info: src_port=%d, dst_port=%d, "
-                             "payload_sz=%d, csum=%#x",
+                             "payload_sz=%lu, csum=%#x",
                              ntohs(p_udp_h->source), ntohs(p_udp_h->dest),
                              p_rx_wc_buf_desc->rx.sz_payload, p_udp_h->check);
 
@@ -899,6 +903,17 @@ static inline uint16_t csum_hdr_len(ip6_hdr *p_ip_h, const ext_hdr_data &ext_dat
     return (ext_data.ip_hdr_len - IPV6_HLEN);
 }
 
+static std::string packet_data_to_hex_string(const mem_buf_desc_t *p_rx_wc_buf_desc)
+{
+    std::ostringstream oss;
+    for (uint8_t i = 0; i < std::min(112, (int)p_rx_wc_buf_desc->sz_data); ++i) {
+        oss << std::hex << std::setw(2) << std::setfill('0')
+            << (unsigned)p_rx_wc_buf_desc->p_buffer[i];
+    }
+
+    return oss.str();
+}
+
 template <typename KEY4T, typename KEY2T, typename HDR>
 bool steering_handler<KEY4T, KEY2T, HDR>::rx_process_buffer_no_flow_id(
     mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array, HDR *p_ip_h)
@@ -913,9 +928,8 @@ bool steering_handler<KEY4T, KEY2T, HDR>::rx_process_buffer_no_flow_id(
             sz_data, ip_tot_len);
         ring_loginfo("Rx packet info (buf->%p, bufsize=%zu), id=%s", p_rx_wc_buf_desc->p_buffer,
                      p_rx_wc_buf_desc->sz_data, hdr_get_id(p_ip_h).c_str());
-        vlog_print_buffer(VLOG_INFO, "rx packet data: ", "\n",
-                          (const char *)p_rx_wc_buf_desc->p_buffer,
-                          std::min(112, (int)p_rx_wc_buf_desc->sz_data));
+
+        __log_info("rx packet data: \n%s", packet_data_to_hex_string(p_rx_wc_buf_desc).c_str());
         return false;
     }
 

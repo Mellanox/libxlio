@@ -38,6 +38,7 @@
 #include "sock/sockinfo.h"
 
 #define MODULE_NAME "rfs_mc"
+DOCA_LOG_REGISTER(rfs_mc);
 
 #define rfs_logpanic   __log_info_panic
 #define rfs_logerr     __log_info_err

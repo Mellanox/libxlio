@@ -41,6 +41,7 @@
 
 #undef MODULE_NAME
 #define MODULE_NAME "sm"
+DOCA_LOG_REGISTER(sm);
 
 #define sm_logpanic __log_info_panic
 #define sm_logerr   __log_info_err

@@ -40,7 +40,8 @@
 #include <string.h>
 #include <sys/mman.h>
 
-#define MODULE_NAME "map:"
+#define MODULE_NAME "map"
+DOCA_LOG_REGISTER(map);
 
 #define map_logpanic   __log_panic
 #define map_logerr     __log_err

@@ -45,6 +45,7 @@
 #include <doca_mmap.h>
 
 #define MODULE_NAME "allocator"
+DOCA_LOG_REGISTER(allocator);
 
 // See description at the xlio_memory_cb_t definition.
 xlio_memory_cb_t g_user_memory_cb = nullptr;
@@ -227,18 +228,17 @@ void xlio_allocator::print_hugepages_warning(size_t requested_size)
 
     if (!s_printed_once) {
         s_printed_once = true;
-        vlog_printf(VLOG_WARNING, "************************************************************\n");
-        vlog_printf(VLOG_WARNING, "NO IMMEDIATE ACTION NEEDED!\n");
-        vlog_printf(VLOG_WARNING, "Not enough suitable hugepages to allocate %zu kB.\n",
-                    requested_size / 1024U);
-        vlog_printf(VLOG_WARNING, "Allocation will be done with regular pages.\n");
-        vlog_printf(VLOG_WARNING, "To avoid this message, either increase number of hugepages\n");
-        vlog_printf(VLOG_WARNING, "or switch to a different memory allocation type:\n");
-        vlog_printf(VLOG_WARNING, "  %s=ANON\n", SYS_VAR_MEM_ALLOC_TYPE);
+        __log_warn("************************************************************\n");
+        __log_warn("NO IMMEDIATE ACTION NEEDED!\n");
+        __log_warn("Not enough suitable hugepages to allocate %zu kB.\n", requested_size / 1024U);
+        __log_warn("Allocation will be done with regular pages.\n");
+        __log_warn("To avoid this message, either increase number of hugepages\n");
+        __log_warn("or switch to a different memory allocation type:\n");
+        __log_warn("  %s=ANON\n", SYS_VAR_MEM_ALLOC_TYPE);
 
         g_hugepage_mgr.print_report(true);
 
-        vlog_printf(VLOG_WARNING, "************************************************************\n");
+        __log_warn("************************************************************\n");
     } else {
         __log_info_dbg("Failed to allocated %zu kB with hugepages.", requested_size / 1024U);
     }

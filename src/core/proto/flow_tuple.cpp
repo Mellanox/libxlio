@@ -37,6 +37,7 @@
 #include <unordered_map>
 
 #define MODULE_NAME "flow_tuple"
+DOCA_LOG_REGISTER(flow_tuple);
 
 flow_tuple::flow_tuple()
     : m_dst_ip(INADDR_ANY)

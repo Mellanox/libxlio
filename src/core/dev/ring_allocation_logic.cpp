@@ -34,6 +34,7 @@
 #include "dev/ring_allocation_logic.h"
 
 #define MODULE_NAME "ral"
+DOCA_LOG_REGISTER(ral);
 
 #undef MODULE_HDR_INFO
 #define MODULE_HDR_INFO MODULE_NAME "%s:%d:%s() "

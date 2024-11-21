@@ -41,6 +41,7 @@
 
 // debugging macros
 #define MODULE_NAME "rte"
+DOCA_LOG_REGISTER(rte);
 #undef MODULE_HDR_INFO
 #define MODULE_HDR_INFO MODULE_NAME "[%s]:%d:%s() "
 #undef __INFO__
@@ -79,7 +80,7 @@ const std::string route_entry::to_str() const
 
 bool route_entry::get_val(INOUT route_val *&val)
 {
-    rt_entry_logdbg("");
+    rt_entry_logdbg(LOG_FUNCTION_CALL);
     val = m_val;
     return is_valid();
 }
@@ -128,7 +129,7 @@ void route_entry::unregister_to_net_device()
 void route_entry::notify_cb()
 {
     // got addr_change event from net_device_entry --> does not change the validity of route_entry!
-    rt_entry_logdbg("");
+    rt_entry_logdbg(LOG_FUNCTION_CALL);
     if (m_p_net_dev_entry->is_valid()) {
         m_p_net_dev_entry->get_val(m_p_net_dev_val);
     } else {

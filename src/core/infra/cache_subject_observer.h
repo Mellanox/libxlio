@@ -47,7 +47,7 @@
 #include "core/event/event_handler_manager.h"
 
 #ifndef MODULE_NAME
-#define MODULE_NAME "cache_subject_observer:"
+#define MODULE_NAME "cache_subject_observer"
 #endif
 
 typedef uint64_t ticks_t;
@@ -189,17 +189,17 @@ void cache_table_mgr<Key, Val>::try_to_remove_cache_entry(
     cache_entry_subject<Key, Val> *cache_entry = itr->second;
     Key key = itr->first;
     if (!cache_entry->get_observers_count() && cache_entry->is_deletable()) {
-        __log_dbg("Deleting cache_entry %s", cache_entry->to_str().c_str());
+        __log_header_dbg("Deleting cache_entry %s", cache_entry->to_str().c_str());
         m_cache_tbl.erase(key);
         cache_entry->clean_obj();
     } else {
-        __log_dbg("Cache_entry %s is not deletable", itr->second->to_str().c_str());
+        __log_header_dbg("Cache_entry %s is not deletable", itr->second->to_str().c_str());
     }
 }
 
 template <typename Key, typename Val> void cache_table_mgr<Key, Val>::run_garbage_collector()
 {
-    __log_dbg("");
+    __log_header_dbg(LOG_FUNCTION_CALL);
     std::lock_guard<decltype(m_lock)> lock(m_lock);
     for (auto cache_itr = m_cache_tbl.begin(); cache_itr != m_cache_tbl.end();) {
         auto cache_itr_tmp = cache_itr;
@@ -217,7 +217,7 @@ void cache_table_mgr<Key, Val>::start_garbage_collector(int timeout_msec)
     m_timer_handle =
         g_p_event_handler_manager->register_timer_event(timeout_msec, this, PERIODIC_TIMER, NULL);
     if (!m_timer_handle) {
-        __log_warn("Failed to start garbage_collector");
+        __log_header_warn("Failed to start garbage_collector");
     }
 }
 
@@ -242,7 +242,7 @@ bool cache_table_mgr<Key, Val>::register_observer(IN const Key &key,
                                                   OUT cache_entry_subject<Key, Val> **cache_entry)
 {
     if (new_observer == NULL) {
-        __log_dbg("new_observer == NULL");
+        __log_header_dbg("new_observer == NULL");
         return false;
     }
 
@@ -253,12 +253,12 @@ bool cache_table_mgr<Key, Val>::register_observer(IN const Key &key,
         // Create new entry and insert it to the table
         my_cache_entry = create_new_entry(key, new_observer);
         if (!my_cache_entry) {
-            __log_dbg("Failed to allocate new cache_entry_subject with Key = %s",
-                      to_string_val(key).c_str());
+            __log_header_dbg("Failed to allocate new cache_entry_subject with Key = %s",
+                             to_string_val(key).c_str());
             return false;
         }
         m_cache_tbl[key] = my_cache_entry;
-        __log_dbg("Created new cache_entry Key = %s", to_string_val(key).c_str());
+        __log_header_dbg("Created new cache_entry Key = %s", to_string_val(key).c_str());
     } else {
         my_cache_entry = m_cache_tbl[key];
     }
@@ -272,9 +272,9 @@ template <typename Key, typename Val>
 bool cache_table_mgr<Key, Val>::unregister_observer(IN Key key,
                                                     IN const cache_observer *old_observer)
 {
-    __log_dbg("");
+    __log_header_dbg(LOG_FUNCTION_CALL);
     if (old_observer == NULL) {
-        __log_dbg("old_observer == NULL");
+        __log_header_dbg("old_observer == NULL");
         return false;
     }
 
@@ -283,8 +283,8 @@ bool cache_table_mgr<Key, Val>::unregister_observer(IN Key key,
     typename std::unordered_map<Key, cache_entry_subject<Key, Val> *>::iterator cache_itr =
         m_cache_tbl.find(key);
     if (cache_itr == m_cache_tbl.end()) {
-        __log_dbg("Couldn't unregister observer, the cache_entry (Key = %s) doesn't exist",
-                  to_string_val(key).c_str());
+        __log_header_dbg("Couldn't unregister observer, the cache_entry (Key = %s) doesn't exist",
+                         to_string_val(key).c_str());
         return false;
     }
 
@@ -312,12 +312,12 @@ template <typename Key, typename Val> void cache_table_mgr<Key, Val>::print_tbl(
     typename std::unordered_map<Key, cache_entry_subject<Key, Val> *>::iterator cache_itr =
         m_cache_tbl.begin();
     if (cache_itr != m_cache_tbl.end()) {
-        __log_dbg("%s contains:", to_str().c_str());
+        __log_header_dbg("%s contains:", to_str().c_str());
         for (; cache_itr != m_cache_tbl.end(); cache_itr++) {
-            __log_dbg(" %s", cache_itr->second->to_str().c_str());
+            __log_header_dbg(" %s", cache_itr->second->to_str().c_str());
         }
     } else {
-        __log_dbg("%s empty", to_str().c_str());
+        __log_header_dbg("%s empty", to_str().c_str());
     }
 }
 

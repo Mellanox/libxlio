@@ -338,7 +338,7 @@ public:
                                                        : new lock_mutex(_str);
             break;
         default:
-            vlog_printf(VLOG_ERROR, "multilock type is not supported.\n");
+            __log_header_err("multilock type is not supported.\n");
             return nullptr;
         }
 

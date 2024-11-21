@@ -40,7 +40,8 @@
 #include "core/sock/sock-redirect.h"
 #include "core/event/event_handler_manager.h"
 
-#define MODULE_NAME "STATS: "
+#define MODULE_NAME "STATS"
+DOCA_LOG_REGISTER(STATS);
 
 static lock_spin g_lock_mc_info("g_lock_mc_info");
 static lock_spin g_lock_skt_inst_arr("g_lock_skt_inst_arr");
@@ -163,7 +164,7 @@ void write_version_details_to_shmem(version_info_t *p_ver_info)
     p_ver_info->xlio_lib_rel = PRJ_LIBRARY_RELEASE;
 }
 
-void xlio_shmem_stats_open(vlog_levels_t **p_p_xlio_log_level, uint8_t **p_p_xlio_log_details)
+void xlio_shmem_stats_open(vlog_levels_t **p_p_xlio_log_level)
 {
     void *buf = NULL;
     void *p_shmem = NULL;
@@ -176,8 +177,7 @@ void xlio_shmem_stats_open(vlog_levels_t **p_p_xlio_log_level, uint8_t **p_p_xli
 
     BULLSEYE_EXCLUDE_BLOCK_START
     if (NULL == g_p_stats_data_reader) {
-        vlog_printf(VLOG_ERROR, "%s:%d: Can't allocate g_p_stats_data_reader\n", __func__,
-                    __LINE__);
+        __log_err("%s:%d: Can't allocate g_p_stats_data_reader\n", __func__, __LINE__);
         goto shmem_error;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
@@ -196,7 +196,7 @@ void xlio_shmem_stats_open(vlog_levels_t **p_p_xlio_log_level, uint8_t **p_p_xli
     }
 
     if ((mkdir(dir_path, 0777) != 0) && (errno != EEXIST)) {
-        vlog_printf(VLOG_DEBUG, "Failed to create folder %s (errno = %d)\n", dir_path, errno);
+        __log_dbg("Failed to create folder %s (errno = %d)\n", dir_path, errno);
         goto no_shmem;
     }
 
@@ -205,8 +205,7 @@ void xlio_shmem_stats_open(vlog_levels_t **p_p_xlio_log_level, uint8_t **p_p_xli
     ret = snprintf(g_sh_mem_info.filename_sh_stats, sizeof(g_sh_mem_info.filename_sh_stats),
                    "%s/xliostat.%d", dir_path, getpid());
     if (!((0 < ret) && (ret < (int)sizeof(g_sh_mem_info.filename_sh_stats)))) {
-        vlog_printf(VLOG_ERROR, "%s: Could not create file under %s %s\n", __func__, dir_path,
-                    strerror(errno));
+        __log_err("%s: Could not create file under %s %s\n", __func__, dir_path, strerror(errno));
         goto no_shmem;
     }
     saved_mode = umask(0);
@@ -216,8 +215,8 @@ void xlio_shmem_stats_open(vlog_levels_t **p_p_xlio_log_level, uint8_t **p_p_xli
 
     BULLSEYE_EXCLUDE_BLOCK_START
     if (g_sh_mem_info.fd_sh_stats < 0) {
-        vlog_printf(VLOG_ERROR, "%s: Could not open %s %s\n", __func__,
-                    g_sh_mem_info.filename_sh_stats, strerror(errno));
+        __log_err("%s: Could not open %s %s\n", __func__, g_sh_mem_info.filename_sh_stats,
+                  strerror(errno));
         goto no_shmem;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
@@ -226,8 +225,8 @@ void xlio_shmem_stats_open(vlog_levels_t **p_p_xlio_log_level, uint8_t **p_p_xli
 
     BULLSEYE_EXCLUDE_BLOCK_START
     if (ret < 0) {
-        vlog_printf(VLOG_ERROR, "%s: Could not write to %s - %s\n", __func__,
-                    g_sh_mem_info.filename_sh_stats, strerror(errno));
+        __log_err("%s: Could not write to %s - %s\n", __func__, g_sh_mem_info.filename_sh_stats,
+                  strerror(errno));
         goto no_shmem;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
@@ -237,8 +236,8 @@ void xlio_shmem_stats_open(vlog_levels_t **p_p_xlio_log_level, uint8_t **p_p_xli
 
     BULLSEYE_EXCLUDE_BLOCK_START
     if (g_sh_mem_info.p_sh_stats == MAP_FAILED) {
-        vlog_printf(VLOG_ERROR, "%s: MAP_FAILED for %s - %s\n", __func__,
-                    g_sh_mem_info.filename_sh_stats, strerror(errno));
+        __log_err("%s: MAP_FAILED for %s - %s\n", __func__, g_sh_mem_info.filename_sh_stats,
+                  strerror(errno));
         goto no_shmem;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
@@ -275,7 +274,6 @@ success:
 
     // Update the shmem initial log values
     g_sh_mem->log_level = **p_p_xlio_log_level;
-    g_sh_mem->log_details_level = **p_p_xlio_log_details;
 
     // Update the shmem with initial fd dump values
     g_sh_mem->dump = DUMP_DISABLED;
@@ -284,7 +282,6 @@ success:
 
     // ReMap internal log level to ShMem area
     *p_p_xlio_log_level = &g_sh_mem->log_level;
-    *p_p_xlio_log_details = &g_sh_mem->log_details_level;
 
     g_p_stats_data_reader->register_to_timer();
 
@@ -298,7 +295,6 @@ shmem_error:
     g_sh_mem = &g_local_sh_mem;
     g_sh_mem->reset();
     *p_p_xlio_log_level = &g_sh_mem->log_level;
-    *p_p_xlio_log_details = &g_sh_mem->log_details_level;
     BULLSEYE_EXCLUDE_BLOCK_END
 }
 
@@ -312,10 +308,9 @@ void xlio_shmem_stats_close()
         BULLSEYE_EXCLUDE_BLOCK_START
         if (munmap(g_sh_mem_info.p_sh_stats,
                    SHMEM_STATS_SIZE(safe_mce_sys().stats_fd_num_monitor)) != 0) {
-            vlog_printf(VLOG_ERROR,
-                        "%s: file [%s] fd [%d] error while unmap shared memory at [%p]\n", __func__,
-                        g_sh_mem_info.filename_sh_stats, g_sh_mem_info.fd_sh_stats,
-                        g_sh_mem_info.p_sh_stats);
+            __log_err("%s: file [%s] fd [%d] error while unmap shared memory at [%p]\n", __func__,
+                      g_sh_mem_info.filename_sh_stats, g_sh_mem_info.fd_sh_stats,
+                      g_sh_mem_info.p_sh_stats);
         }
         BULLSEYE_EXCLUDE_BLOCK_END
 
@@ -333,7 +328,6 @@ void xlio_shmem_stats_close()
     }
     g_sh_mem = NULL;
     g_p_vlogger_level = NULL;
-    g_p_vlogger_details = NULL;
     delete g_p_stats_data_reader;
     g_p_stats_data_reader = NULL;
 }
@@ -362,8 +356,8 @@ void xlio_stats_instance_create_socket_block(socket_stats_t *local_stats_addr)
         if (!printed_sock_limit_info) {
             printed_sock_limit_info = true;
             if (safe_mce_sys().stats_fd_num_monitor < MAX_STATS_FD_NUM) {
-                vlog_printf(VLOG_INFO, "Statistics can monitor up to %d sockets - increase %s\n",
-                            safe_mce_sys().stats_fd_num_monitor, SYS_VAR_STATS_FD_NUM);
+                __log_info("Statistics can monitor up to %d sockets - increase %s\n",
+                           safe_mce_sys().stats_fd_num_monitor, SYS_VAR_STATS_FD_NUM);
             }
         }
         goto out;
@@ -396,7 +390,7 @@ void xlio_stats_instance_remove_socket_block(socket_stats_t *local_addr)
     // coverity - g_sh_mem->skt_inst_arr cannot be null
     /*BULLSEYE_EXCLUDE_BLOCK_START
     if (g_sh_mem->skt_inst_arr == NULL) {
-        vlog_printf(VLOG_ERROR,"%s:%d: g_sh_mem->instances_arr not init\n", __func__, __LINE__);
+        __log_err("%s:%d: g_sh_mem->instances_arr not init\n", __func__, __LINE__);
         g_lock_skt_stats.unlock();
         return;
     }
@@ -411,8 +405,7 @@ void xlio_stats_instance_remove_socket_block(socket_stats_t *local_addr)
         }
     }
 
-    vlog_printf(VLOG_ERROR, "%s:%d: Could not find user pointer (%p)\n", __func__, __LINE__,
-                p_skt_stats);
+    __log_err("%s:%d: Could not find user pointer (%p)\n", __func__, __LINE__, p_skt_stats);
     g_lock_skt_inst_arr.unlock();
 }
 
@@ -452,7 +445,7 @@ void xlio_stats_mc_group_add(const ip_address &mc_grp, socket_stats_t *p_socket_
     }
     g_lock_mc_info.unlock();
     if (index_to_insert == -1) {
-        vlog_printf(VLOG_INFO, "Statistics can monitor up to %d mc groups\n", MC_TABLE_SIZE);
+        __log_info("Statistics can monitor up to %d mc groups\n", MC_TABLE_SIZE);
     }
 }
 
@@ -500,8 +493,7 @@ void xlio_stats_instance_create_ring_block(ring_stats_t *local_stats_addr,
     if (p_instance_ring == NULL) {
         if (!printed_ring_limit_info) {
             printed_ring_limit_info = true;
-            vlog_printf(VLOG_INFO, "Statistics can monitor up to %d ring elements\n",
-                        NUM_OF_SUPPORTED_RINGS);
+            __log_info("Statistics can monitor up to %d ring elements\n", NUM_OF_SUPPORTED_RINGS);
         }
     } else {
         g_p_stats_data_reader->add_data_reader(local_stats_addr, p_instance_ring,
@@ -557,8 +549,7 @@ void xlio_stats_instance_remove_ring_block(ring_stats_t *local_stats_addr,
         }
     }
 
-    vlog_printf(VLOG_ERROR, "%s:%d: Could not find user pointer (%p)\n", __func__, __LINE__,
-                p_ring_stats);
+    __log_err("%s:%d: Could not find user pointer (%p)\n", __func__, __LINE__, p_ring_stats);
     g_lock_ring_inst_arr.unlock();
 }
 
@@ -577,8 +568,7 @@ void xlio_stats_instance_create_cq_block(cq_stats_t *local_stats_addr)
     if (p_instance_cq == NULL) {
         if (!printed_cq_limit_info) {
             printed_cq_limit_info = true;
-            vlog_printf(VLOG_INFO, "Statistics can monitor up to %d cq elements\n",
-                        NUM_OF_SUPPORTED_CQS);
+            __log_info("Statistics can monitor up to %d cq elements\n", NUM_OF_SUPPORTED_CQS);
         }
     } else {
         g_p_stats_data_reader->add_data_reader(local_stats_addr, p_instance_cq, sizeof(cq_stats_t));
@@ -603,7 +593,7 @@ void xlio_stats_instance_remove_cq_block(cq_stats_t *local_stats_addr)
     // coverity - g_sh_mem->cq_inst_arr cannot be null
     /*BULLSEYE_EXCLUDE_BLOCK_START
     if (g_sh_mem->cq_inst_arr == NULL) {
-        vlog_printf(VLOG_ERROR,"%s:%d: g_sh_mem->instances_arr not init\n", __func__, __LINE__);
+        __log_err("%s:%d: g_sh_mem->instances_arr not init\n", __func__, __LINE__);
                 g_lock_skt_stats.unlock();
         return;
     }
@@ -618,8 +608,7 @@ void xlio_stats_instance_remove_cq_block(cq_stats_t *local_stats_addr)
         }
     }
 
-    vlog_printf(VLOG_ERROR, "%s:%d: Could not find user pointer (%p)\n", __func__, __LINE__,
-                p_cq_stats);
+    __log_err("%s:%d: Could not find user pointer (%p)\n", __func__, __LINE__, p_cq_stats);
     g_lock_cq_inst_arr.unlock();
 }
 
@@ -638,8 +627,7 @@ void xlio_stats_instance_create_bpool_block(bpool_stats_t *local_stats_addr)
     if (p_instance_bpool == NULL) {
         if (!printed_bpool_limit_info) {
             printed_bpool_limit_info = true;
-            vlog_printf(VLOG_INFO, "Statistics can monitor up to %d buffer pools\n",
-                        NUM_OF_SUPPORTED_BPOOLS);
+            __log_info("Statistics can monitor up to %d buffer pools\n", NUM_OF_SUPPORTED_BPOOLS);
         }
     } else {
         g_p_stats_data_reader->add_data_reader(local_stats_addr, p_instance_bpool,
@@ -672,8 +660,7 @@ void xlio_stats_instance_remove_bpool_block(bpool_stats_t *local_stats_addr)
         }
     }
 
-    vlog_printf(VLOG_ERROR, "%s:%d: Could not find user pointer (%p)\n", __func__, __LINE__,
-                p_bpool_stats);
+    __log_err("%s:%d: Could not find user pointer (%p)\n", __func__, __LINE__, p_bpool_stats);
     g_lock_bpool_inst_arr.unlock();
 }
 
@@ -693,8 +680,7 @@ void xlio_stats_instance_create_global_block(global_stats_t *local_stats_addr)
     if (p_instance_global == NULL) {
         if (!printed_global_limit_info) {
             printed_global_limit_info = true;
-            vlog_printf(VLOG_INFO, "Statistics can monitor up to %d globals\n",
-                        NUM_OF_SUPPORTED_GLOBALS);
+            __log_info("Statistics can monitor up to %d globals\n", NUM_OF_SUPPORTED_GLOBALS);
         }
     } else {
         g_p_stats_data_reader->add_data_reader(local_stats_addr, p_instance_global,
@@ -727,8 +713,7 @@ void xlio_stats_instance_remove_global_block(global_stats_t *local_stats_addr)
         }
     }
 
-    vlog_printf(VLOG_ERROR, "%s:%d: Could not find user pointer (%p)\n", __func__, __LINE__,
-                p_global_stats);
+    __log_err("%s:%d: Could not find user pointer (%p)\n", __func__, __LINE__, p_global_stats);
     g_lock_global_inst.unlock();
 }
 
@@ -760,7 +745,7 @@ void xlio_stats_instance_create_epoll_block(int fd, iomux_func_stats_t *local_st
         }
     }
 
-    vlog_printf(VLOG_INFO, "Statistics can monitor up to %d epoll fds\n", NUM_OF_SUPPORTED_EPFDS);
+    __log_info("Statistics can monitor up to %d epoll fds\n", NUM_OF_SUPPORTED_EPFDS);
     g_lock_iomux.unlock();
     return;
 }
@@ -786,8 +771,7 @@ void xlio_stats_instance_remove_epoll_block(iomux_func_stats_t *local_stats_addr
         }
     }
 
-    vlog_printf(VLOG_ERROR, "%s:%d: Could not find user pointer (%p)\n", __func__, __LINE__,
-                ep_func_stats);
+    __log_err("%s:%d: Could not find user pointer (%p)\n", __func__, __LINE__, ep_func_stats);
     g_lock_iomux.unlock();
     return;
 }

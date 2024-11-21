@@ -35,10 +35,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "sm.h"
-#include "sm_fifo.h"
 #include <string.h>
 
-#define MODULE_NAME "SM_TEST: "
+#define MODULE_NAME "SM_TEST"
+DOCA_LOG_REGISTER(SM_TEST);
 
 #define NOT_IN_USE(a) ((void)(a))
 
@@ -117,20 +117,20 @@ void fifo_test()
 	};
 
 
-	vlog_printf(VLOG_INFO, "fifo test\n");
+	__log_info( "fifo test\n");
 
 	while (i<10) {
 		my_fifo.push_back(arr_num[i].event, (void *) arr_num[i].name );
-		vlog_printf(VLOG_ERROR, "element %d was inserted\n", arr_num[i]);
+		__log_err( "element %d was inserted\n", arr_num[i]);
 		my_fifo.debug_print_fifo();
 		ret = my_fifo.get_front();
-		vlog_printf(VLOG_ERROR, "element %d was removed (%s)\n", ret.event, ret.ev_data);
+		__log_err( "element %d was removed (%s)\n", ret.event, ret.ev_data);
 		my_fifo.debug_print_fifo();
 		i++;
 	}
 	/*while (i>0) {
 			ret = my_fifo.get_element();
-			vlog_printf(VLOG_ERROR, "element %d was removeded\n", ret);
+			__log_err( "element %d was removeded\n", ret);
 			my_fifo.debug_print_fifo();
 			i--;
 	}*/
@@ -155,7 +155,7 @@ int main(int argc, char *argv[])
             return -1;
         }
     }
-    vlog_start("SM_TEST", log_level, NULL, 0);
+    vlog_start("SM_TEST", log_level, NULL);
     // fifo_test();
 
     g_sm = new state_machine(NULL, SM_ST_A, SM_ST_LAST, SM_EV_LAST, sm_short_table,
