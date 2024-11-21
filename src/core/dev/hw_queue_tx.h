@@ -130,21 +130,20 @@ public:
     void dm_release_data(mem_buf_desc_t *buff) { m_dm_mgr.release_data(buff); }
 
 #ifdef DEFINED_UTLS
-    xlio_tis *tls_context_setup_tx(const xlio_tls_info *info);
+#ifdef DEFINED_DPCP_PATH_RX
     int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t next_record_tcp_sn,
                              xlio_comp_cb_t callback, void *callback_arg);
-    void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static);
     void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn);
     void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey);
+#endif // DEFINED_DPCP_PATH_RX
+    xlio_tis *tls_context_setup_tx(const xlio_tls_info *info);
     void tls_release_tis(xlio_tis *tis);
+    void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static);
     void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first);
 #endif /* DEFINED_UTLS */
 
-#define DPCP_TIS_FLAGS     (dpcp::TIS_ATTR_TRANSPORT_DOMAIN | dpcp::TIS_ATTR_PD)
-#define DPCP_TIS_NVME_FLAG (dpcp::TIS_ATTR_NVMEOTCP)
+#define DPCP_TIS_FLAGS (dpcp::TIS_ATTR_TRANSPORT_DOMAIN | dpcp::TIS_ATTR_PD)
     std::unique_ptr<xlio_tis> create_tis(uint32_t flags);
-    void nvme_set_static_context(xlio_tis *tis, uint32_t config);
-    void nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno);
 
     /* Get a memory inside a wqebb at a wqebb_num offset from the m_sq_wqe_hot and account for
      * m_sq_wqe_counter wrap-around. Use offset_in_wqebb to for the internal address. Use the
@@ -298,7 +297,6 @@ private:
     xlio_ib_mlx5_qp_t m_mlx5_qp;
     ring_simple *m_p_ring;
     cq_mgr_tx *m_p_cq_mgr_tx;
-    cq_mgr_rx *m_p_cq_mgr_rx_unused;
     ib_ctx_handler *m_p_ib_ctx_handler;
     sq_wqe_prop *m_sq_wqe_idx_to_prop = nullptr;
     sq_wqe_prop *m_sq_wqe_prop_last = nullptr;

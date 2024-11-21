@@ -96,9 +96,11 @@ public:
     bool detach_flow(sockinfo *sink); // Delete a sink. If this is the last sink --> delete it
                                       // and detach flow from QP
 #ifdef DEFINED_UTLS
+#ifdef DEFINED_DPCP_PATH_RX
     rfs_rule *create_rule(xlio_tir *tir,
                           const flow_tuple &flow_spec); // Create a duplicate rule which points to
                                                         // specific TIR, caller is owner of the rule
+#endif // DEFINED_DPCP_PATH_RX
 #endif /* DEFINED_UTLS */
 
     uint32_t get_num_of_sinks() const { return m_n_sinks_list_entries; }
@@ -118,10 +120,13 @@ protected:
     uint16_t m_priority = 2U; // Almost highest priority, 1 is used for 5-tuple later
     bool m_b_tmp_is_attached; // Only temporary, while ibcm calls attach_flow with no sinks...
 
-    doca_flow_match m_doca_match_value;
-    doca_flow_match m_doca_match_mask;
+#ifdef DEFINED_DPCP_PATH_RX
     dpcp::match_params m_match_value;
     dpcp::match_params m_match_mask;
+#else // DEFINED_DPCP_PATH_RX
+    doca_flow_match m_doca_match_value;
+    doca_flow_match m_doca_match_mask;
+#endif
 
     bool create_flow(); // Attach flow to all queues
     bool destroy_flow(); // Detach flow from all queues

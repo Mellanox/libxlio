@@ -146,6 +146,27 @@ public:
 
         return tis;
     }
+    void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static) override
+    {
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        m_hqtx->tls_context_resync_tx(info, tis, skip_static);
+        m_p_cq_mgr_tx->poll_and_process_element_tx();
+    }
+    void tls_release_tis(xlio_tis *tis) override
+    {
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        m_hqtx->tls_release_tis(tis);
+    }
+    void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
+                              bool first) override
+    {
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        if (lkey == LKEY_TX_DEFAULT) {
+            lkey = m_tx_lkey;
+        }
+        m_hqtx->tls_tx_post_dump_wqe(tis, addr, len, lkey, first);
+    }
+#ifdef DEFINED_DPCP_PATH_RX
     xlio_tir *tls_create_tir(bool cached) override
     {
         /*
@@ -172,12 +193,6 @@ public:
 
         return rc;
     }
-    void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static) override
-    {
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_hqtx->tls_context_resync_tx(info, tis, skip_static);
-        m_p_cq_mgr_tx->poll_and_process_element_tx();
-    }
     void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
@@ -193,57 +208,19 @@ public:
         /* Do polling to speedup handling of the completion. */
         m_p_cq_mgr_tx->poll_and_process_element_tx();
     }
-    void tls_release_tis(xlio_tis *tis) override
-    {
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_hqtx->tls_release_tis(tis);
-    }
     void tls_release_tir(xlio_tir *tir) override
     {
         /* TIR objects are protected with TX lock */
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         m_hqrx->tls_release_tir(tir);
     }
-    void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
-                              bool first) override
-    {
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        if (lkey == LKEY_TX_DEFAULT) {
-            lkey = m_tx_lkey;
-        }
-        m_hqtx->tls_tx_post_dump_wqe(tis, addr, len, lkey, first);
-    }
+#endif // DEFINED_DPCP_PATH_RX
 #endif /* DEFINED_UTLS */
 
     std::unique_ptr<xlio_tis> create_tis(uint32_t flags) const override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         return m_hqtx->create_tis(flags);
-    }
-    int get_supported_nvme_feature_mask() const override
-    {
-        dpcp::adapter_hca_capabilities caps {};
-        auto adapter = m_p_ib_ctx->get_dpcp_adapter();
-
-        if (!adapter || (dpcp::DPCP_OK != adapter->get_hca_capabilities(caps)) ||
-            !caps.nvmeotcp_caps.enabled) {
-            return 0;
-        }
-        return (NVME_CRC_TX * caps.nvmeotcp_caps.crc_tx) |
-            (NVME_CRC_RX * caps.nvmeotcp_caps.crc_rx) |
-            (NVME_ZEROCOPY * caps.nvmeotcp_caps.zerocopy);
-    }
-
-    void nvme_set_static_context(xlio_tis *tis, uint32_t config) override
-    {
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_hqtx->nvme_set_static_context(tis, config);
-    }
-
-    void nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno) override
-    {
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_hqtx->nvme_set_progress_context(tis, tcp_seqno);
     }
 
     void post_nop_fence(void) override
@@ -323,7 +300,9 @@ protected:
     hw_queue_tx *m_hqtx = nullptr;
     hw_queue_rx *m_hqrx = nullptr;
     struct cq_moderation_info m_cq_moderation_info;
+#ifdef DEFINED_DPCP_PATH_RX
     cq_mgr_rx *m_p_cq_mgr_rx = nullptr;
+#endif
     cq_mgr_tx *m_p_cq_mgr_tx = nullptr;
     std::unordered_map<void *, uint32_t> m_user_lkey_map;
 

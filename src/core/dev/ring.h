@@ -139,11 +139,7 @@ public:
 #ifdef DEFINED_UTLS
     virtual bool tls_tx_supported(void) { return false; }
     virtual bool tls_rx_supported(void) { return false; }
-    virtual xlio_tis *tls_context_setup_tx(const xlio_tls_info *info)
-    {
-        NOT_IN_USE(info);
-        return NULL;
-    }
+#ifdef DEFINED_DPCP_PATH_RX
     virtual xlio_tir *tls_create_tir(bool cached)
     {
         NOT_IN_USE(cached);
@@ -166,12 +162,6 @@ public:
         NOT_IN_USE(tir);
         return NULL;
     }
-    virtual void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static)
-    {
-        NOT_IN_USE(info);
-        NOT_IN_USE(tis);
-        NOT_IN_USE(skip_static);
-    }
     virtual void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn)
     {
         NOT_IN_USE(tir);
@@ -184,8 +174,20 @@ public:
         NOT_IN_USE(buf);
         NOT_IN_USE(lkey);
     }
-    virtual void tls_release_tis(xlio_tis *tis) { NOT_IN_USE(tis); }
     virtual void tls_release_tir(xlio_tir *tir) { NOT_IN_USE(tir); }
+#endif // DEFINED_DPCP_PATH_RX
+    virtual void tls_release_tis(xlio_tis *tis) { NOT_IN_USE(tis); }
+    virtual xlio_tis *tls_context_setup_tx(const xlio_tls_info *info)
+    {
+        NOT_IN_USE(info);
+        return NULL;
+    }
+    virtual void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static)
+    {
+        NOT_IN_USE(info);
+        NOT_IN_USE(tis);
+        NOT_IN_USE(skip_static);
+    }
     virtual void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
                                       bool first)
     {
@@ -201,24 +203,7 @@ public:
         NOT_IN_USE(flag);
         return nullptr;
     }
-    virtual void nvme_set_static_context(xlio_tis *tis, uint32_t config)
-    {
-        NOT_IN_USE(tis);
-        NOT_IN_USE(config);
-    }
-    virtual void nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno)
-    {
-        NOT_IN_USE(tis);
-        NOT_IN_USE(tcp_seqno);
-    }
 
-    enum {
-        NVME_CRC_TX = 1 << 0,
-        NVME_CRC_RX = 1 << 1,
-        NVME_ZEROCOPY = 1 << 2,
-    };
-
-    virtual int get_supported_nvme_feature_mask() const { return 0; }
     virtual void post_nop_fence(void) {}
     virtual void post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first)
     {
