@@ -37,7 +37,6 @@
 #include <sys/socket.h>
 #include "config.h"
 #include "xlio_extra.h"
-#include "dev/cq_mgr_rx.h"
 #include "dev/buffer_pool.h"
 #include "sock/cleanable_obj.h"
 #include "vlogger/vlogger.h"

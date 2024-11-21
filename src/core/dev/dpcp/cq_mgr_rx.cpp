@@ -31,6 +31,9 @@
  * SOFTWARE.
  */
 
+#include "config.h"
+#ifdef DEFINED_DPCP_PATH_RX
+
 #include "cq_mgr_rx.h"
 #include "cq_mgr_rx_inl.h"
 #include <errno.h>
@@ -46,9 +49,9 @@
 #include <sock/sock-app.h>
 #include "ib/base/verbs_extra.h"
 
-#include "buffer_pool.h"
-#include "hw_queue_rx.h"
-#include "ring_simple.h"
+#include "dev/buffer_pool.h"
+#include "dev/dpcp/hw_queue_rx_dpcp.h"
+#include "dev/ring_simple.h"
 
 #define MODULE_NAME "cq_mgr_rx"
 DOCA_LOG_REGISTER(cq_mgr_rx);
@@ -509,3 +512,5 @@ void cq_mgr_rx::wait_for_notification()
         cq_logwarn("notification channel is not armed");
     }
 }
+
+#endif // DEFINED_DPCP_PATH_RX

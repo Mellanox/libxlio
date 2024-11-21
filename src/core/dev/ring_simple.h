@@ -41,7 +41,8 @@
 
 #include "dev/gro_mgr.h"
 #include "dev/hw_queue_tx.h"
-#include "dev/hw_queue_rx.h"
+#include "dev/dpcp/hw_queue_rx_dpcp.h"
+#include "dev/doca/hw_queue_rx_doca.h"
 #include "dev/net_device_table_mgr.h"
 
 struct cq_moderation_info {
@@ -143,63 +144,16 @@ public:
 
         return tis;
     }
-    xlio_tir *tls_create_tir(bool cached) override
-    {
-        /*
-         * This method can be called for either RX or TX ring.
-         * Locking is required for TX ring with cached=true.
-         */
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        return m_hqrx->tls_create_tir(cached);
-    }
-    int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t next_record_tcp_sn,
-                             xlio_comp_cb_t callback, void *callback_arg) override
-    {
-        /* Protect with TX lock since we post WQEs to the send queue. */
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-
-        int rc =
-            m_hqtx->tls_context_setup_rx(tir, info, next_record_tcp_sn, callback, callback_arg);
-        if (likely(rc == 0)) {
-            ++m_p_ring_stat->n_rx_tls_contexts;
-        }
-
-        /* Do polling to speedup handling of the completion. */
-        m_p_cq_mgr_tx->poll_and_process_element_tx();
-
-        return rc;
-    }
     void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         m_hqtx->tls_context_resync_tx(info, tis, skip_static);
         m_p_cq_mgr_tx->poll_and_process_element_tx();
     }
-    void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn) override
-    {
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_hqtx->tls_resync_rx(tir, info, hw_resync_tcp_sn);
-    }
-    void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey) override
-    {
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        if (lkey == LKEY_TX_DEFAULT) {
-            lkey = m_tx_lkey;
-        }
-        m_hqtx->tls_get_progress_params_rx(tir, buf, lkey);
-        /* Do polling to speedup handling of the completion. */
-        m_p_cq_mgr_tx->poll_and_process_element_tx();
-    }
     void tls_release_tis(xlio_tis *tis) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         m_hqtx->tls_release_tis(tis);
-    }
-    void tls_release_tir(xlio_tir *tir) override
-    {
-        /* TIR objects are protected with TX lock */
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_hqrx->tls_release_tir(tir);
     }
     void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
                               bool first) override
@@ -276,9 +230,6 @@ public:
     }
 
     friend class cq_mgr_tx;
-    friend class cq_mgr_rx;
-    friend class cq_mgr_rx_regrq;
-    friend class cq_mgr_rx_strq;
     friend class hw_queue_tx;
     friend class hw_queue_rx;
     friend class rfs;
@@ -320,7 +271,6 @@ protected:
     hw_queue_tx *m_hqtx = nullptr;
     hw_queue_rx *m_hqrx = nullptr;
     struct cq_moderation_info m_cq_moderation_info;
-    cq_mgr_rx *m_p_cq_mgr_rx = nullptr;
     cq_mgr_tx *m_p_cq_mgr_tx = nullptr;
     std::unordered_map<void *, uint32_t> m_user_lkey_map;
 
@@ -384,6 +334,64 @@ private:
          */
         uint32_t max_payload_sz;
     } m_lro;
+
+#ifdef DEFINED_DPCP_PATH_RX
+public:
+    friend class cq_mgr_rx;
+    friend class cq_mgr_rx_regrq;
+    friend class cq_mgr_rx_strq;
+#ifdef DEFINED_UTLS
+    xlio_tir *tls_create_tir(bool cached) override
+    {
+        /*
+         * This method can be called for either RX or TX ring.
+         * Locking is required for TX ring with cached=true.
+         */
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        return m_hqrx->tls_create_tir(cached);
+    }
+    int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t next_record_tcp_sn,
+                             xlio_comp_cb_t callback, void *callback_arg) override
+    {
+        /* Protect with TX lock since we post WQEs to the send queue. */
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+
+        int rc =
+            m_hqtx->tls_context_setup_rx(tir, info, next_record_tcp_sn, callback, callback_arg);
+        if (likely(rc == 0)) {
+            ++m_p_ring_stat->n_rx_tls_contexts;
+        }
+
+        /* Do polling to speedup handling of the completion. */
+        m_p_cq_mgr_tx->poll_and_process_element_tx();
+
+        return rc;
+    }
+    void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn) override
+    {
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        m_hqtx->tls_resync_rx(tir, info, hw_resync_tcp_sn);
+    }
+    void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey) override
+    {
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        if (lkey == LKEY_TX_DEFAULT) {
+            lkey = m_tx_lkey;
+        }
+        m_hqtx->tls_get_progress_params_rx(tir, buf, lkey);
+        /* Do polling to speedup handling of the completion. */
+        m_p_cq_mgr_tx->poll_and_process_element_tx();
+    }
+    void tls_release_tir(xlio_tir *tir) override
+    {
+        /* TIR objects are protected with TX lock */
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        m_hqrx->tls_release_tir(tir);
+    }
+#endif // DEFINED_UTLS
+protected:
+    cq_mgr_rx *m_p_cq_mgr_rx = nullptr;
+#endif // DEFINED_DPCP_PATH_RX
 };
 
 class ring_eth : public ring_simple {

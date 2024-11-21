@@ -38,7 +38,6 @@
 #include "proto/mem_buf_desc.h"
 #include "sock/sockinfo.h"
 #include "dev/buffer_pool.h"
-#include "dev/cq_mgr_rx.h"
 #include "xlio_extra.h"
 
 #include "lwip/opt.h"

@@ -364,8 +364,6 @@ sockinfo_tcp_ops_tls::sockinfo_tcp_ops_tls(sockinfo_tcp *sock)
     m_zc_stor_offset = 0;
     m_expected_seqno = 0;
     m_next_recno_tx = 0;
-
-    m_p_tir = nullptr;
     m_p_evp_cipher = nullptr;
     m_p_cipher_ctx = nullptr;
     m_next_recno_rx = 0;
@@ -377,6 +375,9 @@ sockinfo_tcp_ops_tls::sockinfo_tcp_ops_tls(sockinfo_tcp *sock)
     m_rx_rule = nullptr;
     m_rx_psv_buf = nullptr;
     m_rx_resync_recno = 0;
+#ifdef DEFINED_DPCP_PATH_RX
+    m_p_tir = nullptr;
+#endif // DEFINED_DPCP_PATH_RX
 }
 
 sockinfo_tcp_ops_tls::~sockinfo_tcp_ops_tls()
@@ -399,8 +400,10 @@ sockinfo_tcp_ops_tls::~sockinfo_tcp_ops_tls()
             delete m_rx_rule;
             m_rx_rule = nullptr;
         }
+#ifdef DEFINED_DPCP_PATH_RX
         m_p_tx_ring->tls_release_tir(m_p_tir);
         m_p_tir = nullptr;
+#endif // DEFINED_DPCP_PATH_RX
         if (m_p_cipher_ctx) {
             g_tls_api->EVP_CIPHER_CTX_free(reinterpret_cast<EVP_CIPHER_CTX *>(m_p_cipher_ctx));
             m_p_cipher_ctx = nullptr;
@@ -619,13 +622,17 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
         m_next_recno_rx = be64toh(recno_be64);
         m_is_tls_rx = true;
 
+#ifdef DEFINED_DPCP_PATH_RX
         /*
          * First, get TIR from the TX ring cache. Create new one in
          * the RX ring if the cache is empty.
          */
         m_p_tir = m_p_tx_ring->tls_create_tir(true) ?: m_p_rx_ring->tls_create_tir(false);
+#endif // DEFINED_DPCP_PATH_RX
 
         m_p_sock->lock_tcp_con();
+
+#ifdef DEFINED_DPCP_PATH_RX
         if (m_p_tir) {
             err_t err = tls_rx_consume_ready_packets();
             if (unlikely(err != ERR_OK)) {
@@ -658,7 +665,7 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
             errno = ENOPROTOOPT;
             return -1;
         }
-
+#endif // DEFINED_DPCP_PATH_RX
         tcp_recv(m_p_sock->get_pcb(), sockinfo_tcp_ops_tls::rx_lwip_cb);
         if (m_p_sock->get_sock_stats()) {
             m_p_sock->get_sock_stats()->tls_rx_offload = true;
@@ -1307,7 +1314,9 @@ err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
         if (likely(m_rx_psv_buf->sz_buffer >= (size_t)(payload - m_rx_psv_buf->p_buffer + 64))) {
             memset(m_rx_psv_buf->lwip_pbuf.payload, 0, 64);
             m_rx_resync_recno = m_next_recno_rx;
+#ifdef DEFINED_DPCP_PATH_RX
             m_p_tx_ring->tls_get_progress_params_rx(m_p_tir, payload, LKEY_TX_DEFAULT);
+#endif // DEFINED_DPCP_PATH_RX
             if (m_p_sock->get_sock_stats()) {
                 ++m_p_sock->get_sock_stats()->tls_counters.n_tls_rx_resync;
             }
@@ -1582,7 +1591,9 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
             if (utls->m_p_tx_ring->credits_get(SQ_CREDITS_TLS_RX_RESYNC)) {
                 uint64_t recno_be64 = htobe64(utls->find_recno(resync_seqno));
                 memcpy(utls->m_tls_info_rx.rec_seq, &recno_be64, TLS_AES_GCM_REC_SEQ_LEN);
+#ifdef DEFINED_DPCP_PATH_RX
                 utls->m_p_tx_ring->tls_resync_rx(utls->m_p_tir, &utls->m_tls_info_rx, resync_seqno);
+#endif // DEFINED_DPCP_PATH_RX
             } else {
                 /* We will retry RX resync with the next incoming packet. */
                 __log_dbg("Skip TLS RX resync due to full SQ\n");
@@ -1595,7 +1606,9 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
     } else if (!utls->m_rx_rule) {
         /* Initial setup flow. */
         const flow_tuple_with_local_if &tuple = utls->m_p_sock->get_flow_tuple();
+#ifdef DEFINED_DPCP_PATH_RX
         utls->m_rx_rule = utls->m_p_rx_ring->tls_rx_create_rule(tuple, utls->m_p_tir);
+#endif
         if (!utls->m_rx_rule) {
             __log_err("TLS rule failed for %s\n", tuple.to_str().c_str());
         }

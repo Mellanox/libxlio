@@ -175,7 +175,9 @@ private:
     uint64_t m_next_recno_tx;
 
     /* RX specific fields */
+#ifdef DEFINED_DPCP_PATH_RX
     xlio_tir *m_p_tir;
+#endif
 
     /* OpenSSL objects for SW decryption. */
     void *m_p_evp_cipher;

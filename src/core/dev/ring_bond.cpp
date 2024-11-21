@@ -942,6 +942,29 @@ xlio_tis *ring_bond::tls_context_setup_tx(const xlio_tls_info *info)
     return nullptr;
 }
 
+void ring_bond::tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static)
+{
+    NOT_IN_USE(info);
+    NOT_IN_USE(tis);
+    NOT_IN_USE(skip_static);
+}
+
+void ring_bond::tls_release_tis(xlio_tis *tis)
+{
+    NOT_IN_USE(tis);
+}
+
+void ring_bond::tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
+                                     bool first)
+{
+    NOT_IN_USE(tis);
+    NOT_IN_USE(addr);
+    NOT_IN_USE(len);
+    NOT_IN_USE(lkey);
+    NOT_IN_USE(first);
+}
+
+#ifdef DEFINED_DPCP_PATH_RX
 xlio_tir *ring_bond::tls_create_tir(bool cached)
 {
     NOT_IN_USE(cached);
@@ -967,13 +990,6 @@ rfs_rule *ring_bond::tls_rx_create_rule(const flow_tuple &flow_spec_5t, xlio_tir
     return nullptr;
 }
 
-void ring_bond::tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static)
-{
-    NOT_IN_USE(info);
-    NOT_IN_USE(tis);
-    NOT_IN_USE(skip_static);
-}
-
 void ring_bond::tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn)
 {
     NOT_IN_USE(tir);
@@ -988,23 +1004,9 @@ void ring_bond::tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lk
     NOT_IN_USE(lkey);
 }
 
-void ring_bond::tls_release_tis(xlio_tis *tis)
-{
-    NOT_IN_USE(tis);
-}
-
 void ring_bond::tls_release_tir(xlio_tir *tir)
 {
     NOT_IN_USE(tir);
 }
-
-void ring_bond::tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
-                                     bool first)
-{
-    NOT_IN_USE(tis);
-    NOT_IN_USE(addr);
-    NOT_IN_USE(len);
-    NOT_IN_USE(lkey);
-    NOT_IN_USE(first);
-}
+#endif // DEFINED_DPCP_PATH_RX
 #endif /* DEFINED_UTLS */

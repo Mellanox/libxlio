@@ -68,13 +68,14 @@ libxlio_la_LIBADD = \
 libxlio_la_SOURCES := \
 	dev/allocator.cpp \
 	dev/buffer_pool.cpp \
-	dev/cq_mgr_rx.cpp \
-	dev/cq_mgr_rx_regrq.cpp \
-	dev/cq_mgr_rx_strq.cpp \
+	dev/dpcp/cq_mgr_rx.cpp \
+	dev/dpcp/cq_mgr_rx_regrq.cpp \
+	dev/dpcp/cq_mgr_rx_strq.cpp \
 	dev/cq_mgr_tx.cpp \
 	dev/dm_mgr.cpp \
 	dev/hw_queue_tx.cpp \
-	dev/hw_queue_rx.cpp \
+	dev/dpcp/hw_queue_rx_dpcp.cpp \
+	dev/doca/hw_queue_rx_doca.cpp \
 	dev/gro_mgr.cpp \
 	dev/rfs.cpp \
 	dev/rfs_uc.cpp \
@@ -96,6 +97,8 @@ libxlio_la_SOURCES := \
 	dev/ring_bond.cpp \
 	dev/ring_slave.cpp \
 	dev/ring_simple.cpp \
+	dev/dpcp/ring_simple_dpcp.cpp \
+	dev/doca/ring_simple_doca.cpp \
 	dev/ring_allocation_logic.cpp \
 	\
 	event/delta_timer.cpp \
@@ -172,10 +175,10 @@ libxlio_la_SOURCES := \
 	\
 	dev/allocator.h \
 	dev/buffer_pool.h \
-	dev/cq_mgr_rx.h \
-	dev/cq_mgr_rx_inl.h \
-	dev/cq_mgr_rx_regrq.h \
-	dev/cq_mgr_rx_strq.h \
+	dev/dpcp/cq_mgr_rx.h \
+	dev/dpcp/cq_mgr_rx_inl.h \
+	dev/dpcp/cq_mgr_rx_regrq.h \
+	dev/dpcp/cq_mgr_rx_strq.h \
 	dev/cq_mgr_tx.h \
 	dev/dm_mgr.h \
 	dev/gro_mgr.h \
@@ -188,7 +191,8 @@ libxlio_la_SOURCES := \
 	dev/net_device_entry.h \
 	dev/net_device_table_mgr.h \
 	dev/net_device_val.h \
-	dev/hw_queue_rx.h \
+	dev/dpcp/hw_queue_rx_dpcp.h \
+	dev/doca/hw_queue_rx_doca.h \
 	dev/hw_queue_tx.h \
 	dev/rfs.h \
 	dev/rfs_mc.h \

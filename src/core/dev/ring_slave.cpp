@@ -534,6 +534,7 @@ bool ring_slave::detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink)
 }
 
 #ifdef DEFINED_UTLS
+#ifdef DEFINED_DPCP_PATH_RX
 template <typename KEY4T, typename KEY2T, typename HDR>
 rfs_rule *steering_handler<KEY4T, KEY2T, HDR>::tls_rx_create_rule(const flow_tuple &flow_spec_5t,
                                                                   xlio_tir *tir)
@@ -555,6 +556,7 @@ rfs_rule *ring_slave::tls_rx_create_rule(const flow_tuple &flow_spec_5t, xlio_ti
                 ? m_steering_ipv4.tls_rx_create_rule(flow_spec_5t, tir)
                 : m_steering_ipv6.tls_rx_create_rule(flow_spec_5t, tir));
 }
+#endif // DEFINED_DPCP_PATH_RX
 #endif /* DEFINED_UTLS */
 
 // calling sockinfo with RFS bypass
