@@ -143,6 +143,12 @@ public:
 
         return tis;
     }
+    void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static) override
+    {
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        m_hqtx->tls_context_resync_tx(info, tis, skip_static);
+        m_p_cq_mgr_tx->poll_and_process_element_tx();
+    }
     xlio_tir *tls_create_tir(bool cached) override
     {
         /*
@@ -169,12 +175,6 @@ public:
 
         return rc;
     }
-    void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static) override
-    {
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_hqtx->tls_context_resync_tx(info, tis, skip_static);
-        m_p_cq_mgr_tx->poll_and_process_element_tx();
-    }
     void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
@@ -190,16 +190,16 @@ public:
         /* Do polling to speedup handling of the completion. */
         m_p_cq_mgr_tx->poll_and_process_element_tx();
     }
-    void tls_release_tis(xlio_tis *tis) override
-    {
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_hqtx->tls_release_tis(tis);
-    }
     void tls_release_tir(xlio_tir *tir) override
     {
         /* TIR objects are protected with TX lock */
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         m_hqrx->tls_release_tir(tir);
+    }
+    void tls_release_tis(xlio_tis *tis) override
+    {
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        m_hqtx->tls_release_tis(tis);
     }
     void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
                               bool first) override
