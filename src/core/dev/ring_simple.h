@@ -171,31 +171,6 @@ public:
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         return m_hqtx->create_tis(flags);
     }
-    int get_supported_nvme_feature_mask() const override
-    {
-        dpcp::adapter_hca_capabilities caps {};
-        auto adapter = m_p_ib_ctx->get_dpcp_adapter();
-
-        if (!adapter || (dpcp::DPCP_OK != adapter->get_hca_capabilities(caps)) ||
-            !caps.nvmeotcp_caps.enabled) {
-            return 0;
-        }
-        return (NVME_CRC_TX * caps.nvmeotcp_caps.crc_tx) |
-            (NVME_CRC_RX * caps.nvmeotcp_caps.crc_rx) |
-            (NVME_ZEROCOPY * caps.nvmeotcp_caps.zerocopy);
-    }
-
-    void nvme_set_static_context(xlio_tis *tis, uint32_t config) override
-    {
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_hqtx->nvme_set_static_context(tis, config);
-    }
-
-    void nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno) override
-    {
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_hqtx->nvme_set_progress_context(tis, tcp_seqno);
-    }
 
     void post_nop_fence(void) override
     {

@@ -100,9 +100,6 @@ public:
                            bool is_zerocopy) override;
     void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx) override;
     std::unique_ptr<xlio_tis> create_tis(uint32_t flag) const override;
-    void nvme_set_static_context(xlio_tis *tis, uint32_t config) override;
-    void nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno) override;
-    int get_supported_nvme_feature_mask() const override;
     void post_nop_fence() override;
     void post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first) override;
     bool credits_get(unsigned credits) override;

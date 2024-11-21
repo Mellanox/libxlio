@@ -45,7 +45,6 @@
 
 #include "sockinfo.h"
 #include "sockinfo_ulp.h"
-#include "sockinfo_nvme.h"
 
 /* Forward declarations */
 struct xlio_socket_attr;
@@ -385,8 +384,6 @@ public:
     inline void reset_ops() noexcept { set_ops(m_ops_tcp); }
 
     bool is_utls_supported(int direction) const;
-
-    int get_supported_nvme_feature_mask() const;
 
     inline int trylock_tcp_con() { return m_tcp_con_lock.trylock(); }
     inline void lock_tcp_con() { m_tcp_con_lock.lock(); }
