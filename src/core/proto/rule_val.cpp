@@ -36,6 +36,7 @@
 #include "rule_val.h"
 
 #define MODULE_NAME "rrv"
+DOCA_LOG_REGISTER(rrv);
 
 #define rr_val_loginfo __log_info_info
 #define rr_val_logdbg  __log_info_dbg

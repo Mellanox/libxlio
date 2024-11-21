@@ -31,6 +31,7 @@
  * SOFTWARE.
  */
 
+#include "doca_log.h"
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -73,6 +74,8 @@
 
 #include "core/util/instrumentation.h"
 
+DOCA_LOG_REGISTER(sys_vars);
+
 void check_netperf_flags();
 
 // Do not rely on global variable initialization in code that might be called from library
@@ -88,15 +91,11 @@ mce_sys_var &safe_mce_sys()
 
 void mce_sys_var::print_xlio_load_failure_msg()
 {
-    vlog_printf(VLOG_ERROR,
-                "***************************************************************************\n");
-    vlog_printf(VLOG_ERROR,
-                "* Failed loading " PRODUCT_NAME
-                " library! Try executing the application without " PRODUCT_NAME ".  *\n");
-    vlog_printf(VLOG_ERROR,
-                "* 'unset LD_PRELOAD' environment variable and rerun the application.      *\n");
-    vlog_printf(VLOG_ERROR,
-                "***************************************************************************\n");
+    __log_err("***************************************************************************\n");
+    __log_err("* Failed loading " PRODUCT_NAME
+              " library! Try executing the application without " PRODUCT_NAME ".  *\n");
+    __log_err("* 'unset LD_PRELOAD' environment variable and rerun the application.      *\n");
+    __log_err("***************************************************************************\n");
 }
 
 namespace xlio_spec {
@@ -524,14 +523,14 @@ bool mce_sys_var::check_cpuinfo_flag(const char *flag)
 
     fp = fopen("/proc/cpuinfo", "r");
     if (!fp) {
-        vlog_printf(VLOG_ERROR, "error while fopen\n");
+        __log_err("error while fopen\n");
         print_xlio_load_failure_msg();
         return false;
     }
     line = (char *)malloc(MAX_CMD_LINE);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!line) {
-        vlog_printf(VLOG_ERROR, "error while malloc\n");
+        __log_err("error while malloc\n");
         print_xlio_load_failure_msg();
         goto exit;
     }
@@ -638,10 +637,9 @@ void mce_sys_var::read_strq_strides_num()
     }
 
     if (!isOK) {
-        vlog_printf(VLOG_INFO,
-                    " Invalid " SYS_VAR_STRQ_NUM_STRIDES
-                    ": Must be power of 2 and in the range of (%d,%d). Using: %d.\n",
-                    STRQ_MIN_STRIDES_NUM, STRQ_MAX_STRIDES_NUM, stirdes_num);
+        __log_info(" Invalid " SYS_VAR_STRQ_NUM_STRIDES
+                   ": Must be power of 2 and in the range of (%d,%d). Using: %d.\n",
+                   STRQ_MIN_STRIDES_NUM, STRQ_MAX_STRIDES_NUM, stirdes_num);
     }
 
     strq_stride_num_per_rwqe = static_cast<uint32_t>(stirdes_num);
@@ -668,10 +666,9 @@ void mce_sys_var::read_strq_stride_size_bytes()
     }
 
     if (!isOK) {
-        vlog_printf(VLOG_INFO,
-                    " Invalid " SYS_VAR_STRQ_STRIDE_SIZE_BYTES
-                    ": Must be power of 2 and in the range of (%d,%d). Using: %d.\n",
-                    STRQ_MIN_STRIDE_SIZE_BYTES, STRQ_MAX_STRIDE_SIZE_BYTES, stirde_size_bytes);
+        __log_info(" Invalid " SYS_VAR_STRQ_STRIDE_SIZE_BYTES
+                   ": Must be power of 2 and in the range of (%d,%d). Using: %d.\n",
+                   STRQ_MIN_STRIDE_SIZE_BYTES, STRQ_MAX_STRIDE_SIZE_BYTES, stirde_size_bytes);
     }
 
     strq_stride_size_bytes = static_cast<uint32_t>(stirde_size_bytes);
@@ -715,7 +712,7 @@ void mce_sys_var::get_env_params()
 
     fp = fopen("/proc/self/cmdline", "r");
     if (!fp) {
-        vlog_printf(VLOG_ERROR, "error while fopen\n");
+        __log_err("error while fopen\n");
         print_xlio_load_failure_msg();
         exit(1);
     }
@@ -723,7 +720,7 @@ void mce_sys_var::get_env_params()
     app_name = (char *)malloc(app_name_size);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!app_name) {
-        vlog_printf(VLOG_ERROR, "error while malloc\n");
+        __log_err("error while malloc\n");
         print_xlio_load_failure_msg();
         exit(1);
     }
@@ -735,7 +732,7 @@ void mce_sys_var::get_env_params()
             app_name = (char *)realloc(app_name, app_name_size);
             BULLSEYE_EXCLUDE_BLOCK_START
             if (!app_name) {
-                vlog_printf(VLOG_ERROR, "error while malloc\n");
+                __log_err("error while malloc\n");
                 print_xlio_load_failure_msg();
                 exit(1);
             }
@@ -762,8 +759,6 @@ void mce_sys_var::get_env_params()
 
     print_report = MCE_DEFAULT_PRINT_REPORT;
     log_level = VLOG_DEFAULT;
-    log_details = MCE_DEFAULT_LOG_DETAILS;
-    log_colors = MCE_DEFAULT_LOG_COLORS;
     handle_sigintr = MCE_DEFAULT_HANDLE_SIGINTR;
     handle_segfault = MCE_DEFAULT_HANDLE_SIGFAULT;
     stats_fd_num_max = MCE_DEFAULT_STATS_FD_NUM;
@@ -1097,24 +1092,11 @@ void mce_sys_var::get_env_params()
     }
     if (HYPER_MSHV == hypervisor && !service_enable) {
         service_enable = true;
-        vlog_printf(VLOG_DEBUG, "%s parameter is forced to 'true' for MSHV hypervisor\n",
-                    SYS_VAR_SERVICE_ENABLE);
+        __log_dbg("%s parameter is forced to 'true' for MSHV hypervisor\n", SYS_VAR_SERVICE_ENABLE);
     }
 
     if ((env_ptr = getenv(SYS_VAR_LOG_LEVEL))) {
         log_level = log_level::from_str(env_ptr, VLOG_DEFAULT);
-    }
-
-    if (log_level >= VLOG_DEBUG) {
-        log_details = 2;
-    }
-
-    if ((env_ptr = getenv(SYS_VAR_LOG_DETAILS))) {
-        log_details = (uint32_t)atoi(env_ptr);
-    }
-
-    if ((env_ptr = getenv(SYS_VAR_LOG_COLORS))) {
-        log_colors = atoi(env_ptr) ? true : false;
     }
 
     if ((env_ptr = getenv(SYS_VAR_APPLICATION_ID))) {
@@ -1133,8 +1115,7 @@ void mce_sys_var::get_env_params()
         stats_fd_num_max = (uint32_t)atoi(env_ptr);
         stats_fd_num_monitor = std::min(stats_fd_num_max, MAX_STATS_FD_NUM);
         if (stats_fd_num_max > MAX_STATS_FD_NUM) {
-            vlog_printf(VLOG_WARNING, " Can only monitor maximum %d sockets in statistics \n",
-                        MAX_STATS_FD_NUM);
+            __log_warn(" Can only monitor maximum %d sockets in statistics \n", MAX_STATS_FD_NUM);
         }
     }
 
@@ -1173,8 +1154,8 @@ void mce_sys_var::get_env_params()
         tx_max_inline = (uint32_t)atoi(env_ptr);
     }
     if (tx_max_inline > MAX_SUPPORTED_IB_INLINE_SIZE) {
-        vlog_printf(VLOG_WARNING, "%s  must be smaller or equal to %d [%d]\n",
-                    SYS_VAR_TX_MAX_INLINE, MAX_SUPPORTED_IB_INLINE_SIZE, tx_max_inline);
+        __log_warn("%s  must be smaller or equal to %d [%d]\n", SYS_VAR_TX_MAX_INLINE,
+                   MAX_SUPPORTED_IB_INLINE_SIZE, tx_max_inline);
         tx_max_inline = MAX_SUPPORTED_IB_INLINE_SIZE;
     }
 
@@ -1213,9 +1194,9 @@ void mce_sys_var::get_env_params()
     if ((env_ptr = getenv(SYS_VAR_RING_ALLOCATION_LOGIC_TX))) {
         ring_allocation_logic_tx = (ring_logic_t)atoi(env_ptr);
         if (!is_ring_logic_valid(ring_allocation_logic_tx)) {
-            vlog_printf(VLOG_WARNING, "%s = %d is not valid, setting logic to default = %d\n",
-                        SYS_VAR_RING_ALLOCATION_LOGIC_TX, ring_allocation_logic_tx,
-                        MCE_DEFAULT_RING_ALLOCATION_LOGIC_TX);
+            __log_warn("%s = %d is not valid, setting logic to default = %d\n",
+                       SYS_VAR_RING_ALLOCATION_LOGIC_TX, ring_allocation_logic_tx,
+                       MCE_DEFAULT_RING_ALLOCATION_LOGIC_TX);
             ring_allocation_logic_tx = MCE_DEFAULT_RING_ALLOCATION_LOGIC_TX;
         }
     }
@@ -1223,9 +1204,9 @@ void mce_sys_var::get_env_params()
     if ((env_ptr = getenv(SYS_VAR_RING_ALLOCATION_LOGIC_RX))) {
         ring_allocation_logic_rx = (ring_logic_t)atoi(env_ptr);
         if (!is_ring_logic_valid(ring_allocation_logic_rx)) {
-            vlog_printf(VLOG_WARNING, "%s = %d is not valid, setting logic to default = %d\n",
-                        SYS_VAR_RING_ALLOCATION_LOGIC_RX, ring_allocation_logic_rx,
-                        MCE_DEFAULT_RING_ALLOCATION_LOGIC_RX);
+            __log_warn("%s = %d is not valid, setting logic to default = %d\n",
+                       SYS_VAR_RING_ALLOCATION_LOGIC_RX, ring_allocation_logic_rx,
+                       MCE_DEFAULT_RING_ALLOCATION_LOGIC_RX);
             ring_allocation_logic_rx = MCE_DEFAULT_RING_ALLOCATION_LOGIC_RX;
         }
     }
@@ -1265,11 +1246,10 @@ void mce_sys_var::get_env_params()
     if (enable_striding_rq && (strq_stride_num_per_rwqe * rx_num_wr > MAX_MLX5_CQ_SIZE_ITEMS)) {
         rx_num_wr = MAX_MLX5_CQ_SIZE_ITEMS / strq_stride_num_per_rwqe;
 
-        vlog_printf(VLOG_WARNING,
-                    "Requested " SYS_VAR_STRQ_NUM_STRIDES " * " SYS_VAR_RX_NUM_WRE
-                    " > Maximum CQE per CQ (%d)."
-                    " Decreasing " SYS_VAR_RX_NUM_WRE " to %" PRIu32 "\n",
-                    MAX_MLX5_CQ_SIZE_ITEMS, rx_num_wr);
+        __log_warn("Requested " SYS_VAR_STRQ_NUM_STRIDES " * " SYS_VAR_RX_NUM_WRE
+                   " > Maximum CQE per CQ (%d)."
+                   " Decreasing " SYS_VAR_RX_NUM_WRE " to %" PRIu32 "\n",
+                   MAX_MLX5_CQ_SIZE_ITEMS, rx_num_wr);
     }
 
     if (rx_num_wr <= (rx_num_wr_to_post_recv * 2)) {
@@ -1280,16 +1260,16 @@ void mce_sys_var::get_env_params()
         rx_poll_num = atoi(env_ptr);
     }
     if (rx_poll_num < MCE_MIN_RX_NUM_POLLS || rx_poll_num > MCE_MAX_RX_NUM_POLLS) {
-        vlog_printf(VLOG_WARNING, " Rx Poll loops should be between %d and %d [%d]\n",
-                    MCE_MIN_RX_NUM_POLLS, MCE_MAX_RX_NUM_POLLS, rx_poll_num);
+        __log_warn(" Rx Poll loops should be between %d and %d [%d]\n", MCE_MIN_RX_NUM_POLLS,
+                   MCE_MAX_RX_NUM_POLLS, rx_poll_num);
         rx_poll_num = MCE_DEFAULT_RX_NUM_POLLS;
     }
     if ((env_ptr = getenv(SYS_VAR_RX_NUM_POLLS_INIT))) {
         rx_poll_num_init = atoi(env_ptr);
     }
     if (rx_poll_num_init < MCE_MIN_RX_NUM_POLLS || rx_poll_num_init > MCE_MAX_RX_NUM_POLLS) {
-        vlog_printf(VLOG_WARNING, " Rx Poll loops should be between %d and %d [%d]\n",
-                    MCE_MIN_RX_NUM_POLLS, MCE_MAX_RX_NUM_POLLS, rx_poll_num_init);
+        __log_warn(" Rx Poll loops should be between %d and %d [%d]\n", MCE_MIN_RX_NUM_POLLS,
+                   MCE_MAX_RX_NUM_POLLS, rx_poll_num_init);
         rx_poll_num_init = MCE_DEFAULT_RX_NUM_POLLS_INIT;
     }
     if (rx_poll_num == 0) {
@@ -1303,8 +1283,7 @@ void mce_sys_var::get_env_params()
     if ((env_ptr = getenv(SYS_VAR_HW_TS_CONVERSION_MODE))) {
         hw_ts_conversion_mode = (ts_conversion_mode_t)atoi(env_ptr);
         if ((uint32_t)hw_ts_conversion_mode >= TS_CONVERSION_MODE_LAST) {
-            vlog_printf(
-                VLOG_WARNING,
+            __log_warn(
                 "HW TS conversion size out of range [%d] (min=%d, max=%d). using default [%d]\n",
                 hw_ts_conversion_mode, TS_CONVERSION_MODE_DISABLE, TS_CONVERSION_MODE_LAST - 1,
                 MCE_DEFAULT_HW_TS_CONVERSION_MODE);
@@ -1329,8 +1308,8 @@ void mce_sys_var::get_env_params()
     }
     if (rx_prefetch_bytes < MCE_MIN_RX_PREFETCH_BYTES ||
         rx_prefetch_bytes > MCE_MAX_RX_PREFETCH_BYTES) {
-        vlog_printf(VLOG_WARNING, " Rx prefetch bytes size out of range [%d] (min=%d, max=%d)\n",
-                    rx_prefetch_bytes, MCE_MIN_RX_PREFETCH_BYTES, MCE_MAX_RX_PREFETCH_BYTES);
+        __log_warn(" Rx prefetch bytes size out of range [%d] (min=%d, max=%d)\n",
+                   rx_prefetch_bytes, MCE_MIN_RX_PREFETCH_BYTES, MCE_MAX_RX_PREFETCH_BYTES);
         rx_prefetch_bytes = MCE_DEFAULT_RX_PREFETCH_BYTES;
     }
 
@@ -1340,10 +1319,9 @@ void mce_sys_var::get_env_params()
     if (rx_prefetch_bytes_before_poll != 0 &&
         (rx_prefetch_bytes_before_poll < MCE_MIN_RX_PREFETCH_BYTES ||
          rx_prefetch_bytes_before_poll > MCE_MAX_RX_PREFETCH_BYTES)) {
-        vlog_printf(VLOG_WARNING,
-                    " Rx prefetch bytes size out of range [%d] (min=%d, max=%d, disabled=0)\n",
-                    rx_prefetch_bytes_before_poll, MCE_MIN_RX_PREFETCH_BYTES,
-                    MCE_MAX_RX_PREFETCH_BYTES);
+        __log_warn(" Rx prefetch bytes size out of range [%d] (min=%d, max=%d, disabled=0)\n",
+                   rx_prefetch_bytes_before_poll, MCE_MIN_RX_PREFETCH_BYTES,
+                   MCE_MAX_RX_PREFETCH_BYTES);
         rx_prefetch_bytes_before_poll = MCE_DEFAULT_RX_PREFETCH_BYTES_BEFORE_POLL;
     }
 
@@ -1380,9 +1358,8 @@ void mce_sys_var::get_env_params()
     if ((env_ptr = getenv(SYS_VAR_MC_FORCE_FLOWTAG))) {
         mc_force_flowtag = atoi(env_ptr) ? true : false;
         if (disable_flow_tag) {
-            vlog_printf(VLOG_WARNING, "%s and %s can't be set together. Disabling %s\n",
-                        SYS_VAR_DISABLE_FLOW_TAG, SYS_VAR_MC_FORCE_FLOWTAG,
-                        SYS_VAR_MC_FORCE_FLOWTAG);
+            __log_warn("%s and %s can't be set together. Disabling %s\n", SYS_VAR_DISABLE_FLOW_TAG,
+                       SYS_VAR_MC_FORCE_FLOWTAG, SYS_VAR_MC_FORCE_FLOWTAG);
             mc_force_flowtag = 0;
         }
     }
@@ -1392,8 +1369,7 @@ void mce_sys_var::get_env_params()
     }
 
     if (select_poll_num < MCE_MIN_RX_NUM_POLLS || select_poll_num > MCE_MAX_RX_NUM_POLLS) {
-        vlog_printf(VLOG_WARNING, " Select Poll loops can not be below zero [%d]\n",
-                    select_poll_num);
+        __log_warn(" Select Poll loops can not be below zero [%d]\n", select_poll_num);
         select_poll_num = MCE_DEFAULT_SELECT_NUM_POLLS;
     }
 
@@ -1453,32 +1429,27 @@ void mce_sys_var::get_env_params()
     }
 #else
     if ((env_ptr = getenv(SYS_VAR_CQ_MODERATION_ENABLE)) != NULL) {
-        vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
-                    SYS_VAR_CQ_MODERATION_ENABLE);
+        __log_warn("'%s' is not supported on this environment\n", SYS_VAR_CQ_MODERATION_ENABLE);
     }
     if ((env_ptr = getenv(SYS_VAR_CQ_MODERATION_COUNT)) != NULL) {
-        vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
-                    SYS_VAR_CQ_MODERATION_COUNT);
+        __log_warn("'%s' is not supported on this environment\n", SYS_VAR_CQ_MODERATION_COUNT);
     }
     if ((env_ptr = getenv(SYS_VAR_CQ_MODERATION_PERIOD_USEC)) != NULL) {
-        vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
-                    SYS_VAR_CQ_MODERATION_PERIOD_USEC);
+        __log_warn("'%s' is not supported on this environment\n",
+                   SYS_VAR_CQ_MODERATION_PERIOD_USEC);
     }
     if ((env_ptr = getenv(SYS_VAR_CQ_AIM_MAX_COUNT)) != NULL) {
-        vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
-                    SYS_VAR_CQ_AIM_MAX_COUNT);
+        __log_warn("'%s' is not supported on this environment\n", SYS_VAR_CQ_AIM_MAX_COUNT);
     }
     if ((env_ptr = getenv(SYS_VAR_CQ_AIM_MAX_PERIOD_USEC)) != NULL) {
-        vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
-                    SYS_VAR_CQ_AIM_MAX_PERIOD_USEC);
+        __log_warn("'%s' is not supported on this environment\n", SYS_VAR_CQ_AIM_MAX_PERIOD_USEC);
     }
     if ((env_ptr = getenv(SYS_VAR_CQ_AIM_INTERVAL_MSEC)) != NULL) {
-        vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
-                    SYS_VAR_CQ_AIM_INTERVAL_MSEC);
+        __log_warn("'%s' is not supported on this environment\n", SYS_VAR_CQ_AIM_INTERVAL_MSEC);
     }
     if ((env_ptr = getenv(SYS_VAR_CQ_AIM_INTERRUPTS_RATE_PER_SEC)) != NULL) {
-        vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
-                    SYS_VAR_CQ_AIM_INTERRUPTS_RATE_PER_SEC);
+        __log_warn("'%s' is not supported on this environment\n",
+                   SYS_VAR_CQ_AIM_INTERRUPTS_RATE_PER_SEC);
     }
 #endif /* DEFINED_IBV_CQ_ATTR_MODERATE */
 
@@ -1486,8 +1457,8 @@ void mce_sys_var::get_env_params()
         cq_poll_batch_max = (uint32_t)atoi(env_ptr);
     }
     if (cq_poll_batch_max < MCE_MIN_CQ_POLL_BATCH || cq_poll_batch_max > MCE_MAX_CQ_POLL_BATCH) {
-        vlog_printf(VLOG_WARNING, " Rx number of cq poll batchs should be between %d and %d [%d]\n",
-                    MCE_MIN_CQ_POLL_BATCH, MCE_MAX_CQ_POLL_BATCH, cq_poll_batch_max);
+        __log_warn(" Rx number of cq poll batchs should be between %d and %d [%d]\n",
+                   MCE_MIN_CQ_POLL_BATCH, MCE_MAX_CQ_POLL_BATCH, cq_poll_batch_max);
         cq_poll_batch_max = MCE_DEFAULT_CQ_POLL_BATCH;
     }
 
@@ -1534,19 +1505,18 @@ void mce_sys_var::get_env_params()
         tcp_ctl_thread = option_tcp_ctl_thread::from_str(env_ptr, MCE_DEFAULT_TCP_CTL_THREAD);
         if (tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
             if (progress_engine_interval_msec != MCE_CQ_DRAIN_INTERVAL_DISABLED) {
-                vlog_printf(VLOG_DEBUG, "%s parameter is forced to %d in case %s=%s is enabled\n",
-                            SYS_VAR_PROGRESS_ENGINE_INTERVAL, MCE_CQ_DRAIN_INTERVAL_DISABLED,
-                            SYS_VAR_TCP_CTL_THREAD, option_tcp_ctl_thread::to_str(tcp_ctl_thread));
+                __log_dbg("%s parameter is forced to %d in case %s=%s is enabled\n",
+                          SYS_VAR_PROGRESS_ENGINE_INTERVAL, MCE_CQ_DRAIN_INTERVAL_DISABLED,
+                          SYS_VAR_TCP_CTL_THREAD, option_tcp_ctl_thread::to_str(tcp_ctl_thread));
 
                 progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
             }
             if (ring_allocation_logic_tx != RING_LOGIC_PER_THREAD ||
                 ring_allocation_logic_rx != RING_LOGIC_PER_THREAD) {
-                vlog_printf(VLOG_DEBUG,
-                            "%s,%s parameter is forced to %s in case %s=%s is enabled\n",
-                            SYS_VAR_RING_ALLOCATION_LOGIC_TX, SYS_VAR_RING_ALLOCATION_LOGIC_RX,
-                            ring_logic_str(RING_LOGIC_PER_THREAD), SYS_VAR_TCP_CTL_THREAD,
-                            option_tcp_ctl_thread::to_str(tcp_ctl_thread));
+                __log_dbg("%s,%s parameter is forced to %s in case %s=%s is enabled\n",
+                          SYS_VAR_RING_ALLOCATION_LOGIC_TX, SYS_VAR_RING_ALLOCATION_LOGIC_RX,
+                          ring_logic_str(RING_LOGIC_PER_THREAD), SYS_VAR_TCP_CTL_THREAD,
+                          option_tcp_ctl_thread::to_str(tcp_ctl_thread));
 
                 ring_allocation_logic_tx = ring_allocation_logic_rx = RING_LOGIC_PER_THREAD;
             }
@@ -1556,11 +1526,10 @@ void mce_sys_var::get_env_params()
     if ((env_ptr = getenv(SYS_VAR_TCP_TIMESTAMP_OPTION))) {
         tcp_ts_opt = (tcp_ts_opt_t)atoi(env_ptr);
         if ((uint32_t)tcp_ts_opt >= TCP_TS_OPTION_LAST) {
-            vlog_printf(VLOG_WARNING,
-                        "TCP timestamp option value is out of range [%d] (min=%d, max=%d). using "
-                        "default [%d]\n",
-                        tcp_ts_opt, TCP_TS_OPTION_DISABLE, TCP_TS_OPTION_LAST - 1,
-                        MCE_DEFAULT_TCP_TIMESTAMP_OPTION);
+            __log_warn("TCP timestamp option value is out of range [%d] (min=%d, max=%d). using "
+                       "default [%d]\n",
+                       tcp_ts_opt, TCP_TS_OPTION_DISABLE, TCP_TS_OPTION_LAST - 1,
+                       MCE_DEFAULT_TCP_TIMESTAMP_OPTION);
             tcp_ts_opt = MCE_DEFAULT_TCP_TIMESTAMP_OPTION;
         }
     }
@@ -1593,11 +1562,10 @@ void mce_sys_var::get_env_params()
     }
 
     if (tcp_timer_resolution_msec < timer_resolution_msec) {
-        vlog_printf(VLOG_WARNING,
-                    " TCP timer resolution [%s=%d] cannot be smaller than timer resolution "
-                    "[%s=%d]. Setting TCP timer resolution to %d msec.\n",
-                    SYS_VAR_TCP_TIMER_RESOLUTION_MSEC, tcp_timer_resolution_msec,
-                    SYS_VAR_TIMER_RESOLUTION_MSEC, timer_resolution_msec, timer_resolution_msec);
+        __log_warn(" TCP timer resolution [%s=%d] cannot be smaller than timer resolution "
+                   "[%s=%d]. Setting TCP timer resolution to %d msec.\n",
+                   SYS_VAR_TCP_TIMER_RESOLUTION_MSEC, tcp_timer_resolution_msec,
+                   SYS_VAR_TIMER_RESOLUTION_MSEC, timer_resolution_msec, timer_resolution_msec);
         tcp_timer_resolution_msec = timer_resolution_msec;
     }
 
@@ -1614,13 +1582,12 @@ void mce_sys_var::get_env_params()
         int n = snprintf(internal_thread_affinity_str, sizeof(internal_thread_affinity_str), "%s",
                          env_ptr);
         if (unlikely(((int)sizeof(internal_thread_affinity_str) < n) || (n < 0))) {
-            vlog_printf(VLOG_WARNING, "Failed to process: %s.\n", SYS_VAR_INTERNAL_THREAD_AFFINITY);
+            __log_warn("Failed to process: %s.\n", SYS_VAR_INTERNAL_THREAD_AFFINITY);
         }
     }
     if (env_to_cpuset(internal_thread_affinity_str, &internal_thread_affinity)) {
-        vlog_printf(VLOG_WARNING,
-                    " Failed to set internal thread affinity: %s...  deferring to cpu-0.\n",
-                    internal_thread_affinity_str);
+        __log_warn(" Failed to set internal thread affinity: %s...  deferring to cpu-0.\n",
+                   internal_thread_affinity_str);
     }
 
     if ((env_ptr = getenv(SYS_VAR_WAIT_AFTER_JOIN_MSEC))) {
@@ -1669,13 +1636,13 @@ void mce_sys_var::get_env_params()
     if ((env_ptr = getenv(SYS_VAR_HUGEPAGE_SIZE))) {
         hugepage_size = option_size::from_str(env_ptr);
         if (hugepage_size & (hugepage_size - 1)) {
-            vlog_printf(VLOG_WARNING, "%s must be a power of 2. Fallback to default value (%s)\n",
-                        SYS_VAR_HUGEPAGE_SIZE, option_size::to_str(MCE_DEFAULT_HUGEPAGE_SIZE));
+            __log_warn("%s must be a power of 2. Fallback to default value (%s)\n",
+                       SYS_VAR_HUGEPAGE_SIZE, option_size::to_str(MCE_DEFAULT_HUGEPAGE_SIZE));
             hugepage_size = MCE_DEFAULT_HUGEPAGE_SIZE;
         }
         if (hugepage_size > MCE_MAX_HUGEPAGE_SIZE) {
-            vlog_printf(VLOG_WARNING, "%s exceeds maximum possible hugepage size (%s)\n",
-                        SYS_VAR_HUGEPAGE_SIZE, option_size::to_str(MCE_MAX_HUGEPAGE_SIZE));
+            __log_warn("%s exceeds maximum possible hugepage size (%s)\n", SYS_VAR_HUGEPAGE_SIZE,
+                       option_size::to_str(MCE_MAX_HUGEPAGE_SIZE));
             hugepage_size = MCE_DEFAULT_HUGEPAGE_SIZE;
         }
     }
@@ -1702,8 +1669,8 @@ void mce_sys_var::get_env_params()
 
     if ((enable_tso != option_3::OFF) && (ring_migration_ratio_tx != -1)) {
         ring_migration_ratio_tx = -1;
-        vlog_printf(VLOG_DEBUG, "%s parameter is forced to %d in case %s is enabled\n",
-                    SYS_VAR_RING_MIGRATION_RATIO_TX, -1, SYS_VAR_TSO);
+        __log_dbg("%s parameter is forced to %d in case %s is enabled\n",
+                  SYS_VAR_RING_MIGRATION_RATIO_TX, -1, SYS_VAR_TSO);
     }
 
 #ifdef DEFINED_UTLS

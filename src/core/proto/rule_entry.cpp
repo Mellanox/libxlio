@@ -36,6 +36,7 @@
 #include "core/infra/cache_subject_observer.h"
 
 #define MODULE_NAME "rre"
+DOCA_LOG_REGISTER(rre);
 #undef MODULE_HDR_INFO
 #define MODULE_HDR_INFO MODULE_NAME "[%s]:%d:%s() "
 #undef __INFO__
@@ -51,7 +52,7 @@ rule_entry::rule_entry(route_rule_table_key rrk)
 
 bool rule_entry::get_val(INOUT std::deque<rule_val *> *&val)
 {
-    rr_entry_logdbg("");
+    rr_entry_logdbg(LOG_FUNCTION_CALL);
     val = m_val;
     return is_valid();
 }

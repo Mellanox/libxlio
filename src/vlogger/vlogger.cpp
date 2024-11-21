@@ -33,17 +33,19 @@
 
 #include "vlogger.h"
 
+#include <mellanox/dpcp.h>
 #include <sys/types.h>
 #include <sys/syscall.h>
 #include <execinfo.h>
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
+#include <doca_log.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <unordered_map>
 
 #include "utils/bullseye.h"
-#include "core/util/utils.h"
 #include "core/util/sys_vars.h"
 
 #define VLOG_DEFAULT_MODULE_NAME "XLIO"
@@ -54,70 +56,49 @@ int g_vlogger_fd = -1;
 FILE *g_vlogger_file = NULL;
 vlog_levels_t g_vlogger_level = VLOG_DEFAULT;
 vlog_levels_t *g_p_vlogger_level = NULL;
-uint8_t g_vlogger_details = 0;
-uint8_t *g_p_vlogger_details = NULL;
-uint32_t g_vlogger_usec_on_startup = 0;
-bool g_vlogger_log_in_colors = MCE_DEFAULT_LOG_COLORS;
-xlio_log_cb_t g_vlogger_cb = NULL;
+
+DOCA_LOG_REGISTER(logger);
+
+// similiarly to DOCA_DLOG_HDR
+// all the headers calling `__log_raw_header`
+// use the `logger` registered source
+int get_header_source()
+{
+    // the source registered as part of `DOCA_LOG_REGISTER(logger)`
+    return log_source;
+}
 
 namespace log_level {
-typedef struct {
-    vlog_levels_t level;
-    const char *output_name;
-    const char *output_color;
-    const char **input_names;
-} level_names;
-
-static const char *log_names_none[] = {"none", NULL};
-static const char *log_names_panic[] = {"panic", "0", NULL};
-static const char *log_names_error[] = {"error", "1", NULL};
-static const char *log_names_warn[] = {"warn", "warning", "2", NULL};
-static const char *log_names_info[] = {"info", "information", "3", NULL};
-static const char *log_names_details[] = {"details", NULL};
-static const char *log_names_debug[] = {"debug", "4", NULL};
-static const char *log_names_fine[] = {"fine", "func", "5", NULL};
-static const char *log_names_finer[] = {"finer",    "func+", "funcall", "func_all",
-                                        "func-all", "6",     NULL};
-static const char *log_names_all[] = {"all", NULL};
-
-// must be by order because "to_str" relies on that!
-static const level_names levels[] = {
-    {VLOG_NONE, "NONE   ", "\e[0;31m" /*Red*/, (const char **)log_names_none},
-    {VLOG_PANIC, "PANIC  ", "\e[0;31m" /*Red*/, (const char **)log_names_panic},
-    {VLOG_ERROR, "ERROR  ", "\e[0;31m" /*Red*/, (const char **)log_names_error},
-    {VLOG_WARNING, "WARNING", "\e[2;35m" /*Magenta*/, (const char **)log_names_warn},
-    {VLOG_INFO, "INFO   ", "\e[0m" /*Default*/, (const char **)log_names_info},
-    {VLOG_DETAILS, "DETAILS", "\e[0m" /*Default*/, (const char **)log_names_details},
-    {VLOG_DEBUG, "DEBUG  ", "\e[0m" /*Default*/, (const char **)log_names_debug},
-    {VLOG_FINE, "FINE   ", "\e[2m" /*Grey*/, (const char **)log_names_fine},
-    {VLOG_FINER, "FINER  ", "\e[2m" /*Grey*/, (const char **)log_names_finer},
-    {VLOG_ALL, "ALL    ", "\e[2m" /*Grey*/, (const char **)log_names_all},
-};
 
 // convert str to vlog_levels_t; upon error - returns the given 'def_value'
 vlog_levels_t from_str(const char *str, vlog_levels_t def_value)
 {
-    size_t num_levels = sizeof(levels) / sizeof(levels[0]);
-    for (size_t i = 0; i < num_levels; ++i) {
-        const char **input_name = levels[i].input_names;
-        while (*input_name) {
-            if (strcasecmp(str, *input_name) == 0) {
-                /* Set maximum accessible logging level in case
-                 * a user requests level that is reduced during compilation
-                 * or requested one if the level is in valid range
-                 */
-                if (levels[i].level <= MAX_DEFINED_LOG_LEVEL) {
-                    return levels[i].level;
-                }
-                def_value = (vlog_levels_t)(MAX_DEFINED_LOG_LEVEL);
-                vlog_printf(VLOG_WARNING, "Trace level set to max level %s\n", to_str(def_value));
-                return def_value;
-            }
-            input_name++;
-        }
+    static const std::unordered_map<const char *, vlog_levels_t> string_to_level = {
+        {"none", VLOG_NONE},        {"panic", VLOG_PANIC},   {"0", VLOG_PANIC},
+        {"error", VLOG_ERROR},      {"1", VLOG_ERROR},       {"warn", VLOG_WARNING},
+        {"warning", VLOG_WARNING},  {"2", VLOG_WARNING},     {"info", VLOG_INFO},
+        {"information", VLOG_INFO}, {"3", VLOG_INFO},        {"details", VLOG_DETAILS},
+        {"debug", VLOG_DEBUG},      {"4", VLOG_DEBUG},       {"fine", VLOG_FINE},
+        {"func", VLOG_FINE},        {"5", VLOG_FINE},        {"finer", VLOG_FINER},
+        {"func+", VLOG_FINER},      {"funcall", VLOG_FINER}, {"func_all", VLOG_FINER},
+        {"func-all", VLOG_FINER},   {"6", VLOG_FINER},       {"all", VLOG_ALL},
+    };
+
+    if (str == NULL) {
+        return def_value;
     }
 
-    return def_value; // not found. use given def_value
+    const auto string_level_tuple = string_to_level.find(str);
+    if (string_level_tuple == std::end(string_to_level)) {
+        return def_value;
+    }
+
+    if (string_level_tuple->second <= MAX_DEFINED_LOG_LEVEL) {
+        return string_level_tuple->second;
+    }
+    __log_warn("Trace level set to max level %s\n", to_str(def_value));
+
+    return static_cast<vlog_levels_t>(MAX_DEFINED_LOG_LEVEL);
 }
 
 // convert int to vlog_levels_t; upon error - returns the given 'def_value'
@@ -131,14 +112,21 @@ vlog_levels_t from_int(const int int_log, vlog_levels_t def_value)
 
 const char *to_str(vlog_levels_t level)
 {
-    static int base = VLOG_NONE;
-    return levels[level - base].output_name;
-}
+    static const std::unordered_map<vlog_levels_t, const char *> level_to_string = {
+        {VLOG_NONE, "VLOG_NONE"},         {VLOG_PANIC, "VLOG_PANIC"},
+        {VLOG_ERROR, "VLOG_ERROR"},       {VLOG_WARNING, "VLOG_WARNING"},
+        {VLOG_INFO, "VLOG_INFO"},         {VLOG_DETAILS, "VLOG_DETAILS"},
+        {VLOG_DEBUG, "VLOG_DEBUG"},       {VLOG_FINE, "VLOG_FINE"},
+        {VLOG_FUNC, "VLOG_FUNC"},         {VLOG_FINER, "VLOG_FINER"},
+        {VLOG_FUNC_ALL, "VLOG_FUNC_ALL"}, {VLOG_ALL, "VLOG_ALL"},
+    };
 
-const char *get_color(vlog_levels_t level)
-{
-    static int base = VLOG_NONE;
-    return levels[level - base].output_color;
+    const auto level_string_tuple = level_to_string.find(level);
+    if (level_string_tuple == std::end(level_to_string)) {
+        return "VLOG_INVALID_LEVEL";
+    }
+
+    return level_string_tuple->second;
 }
 } // namespace log_level
 
@@ -216,63 +204,66 @@ void printf_backtrace(void)
 #pragma BullseyeCoverage on
 #endif
 
-////////////////////////////////////////////////////////////////////////////////
-// NOTE: this function matches 'bool xlio_log_set_cb_func(xlio_log_cb_t log_cb)' that
-// we gave customers; hence, you must not change our side without considering their side
-static xlio_log_cb_t xlio_log_get_cb_func()
-{
-    xlio_log_cb_t log_cb = NULL;
-    const char *const CB_STR = getenv(XLIO_LOG_CB_ENV_VAR);
-    if (!CB_STR || !*CB_STR) {
-        return NULL;
-    }
+#define PRINT_DOCA_INIT_ERR(err, log_fmt, log_args...)                                             \
+    fprintf(stderr, "Initialization error: %s, %s. " log_fmt, doca_error_get_name(err),            \
+            doca_error_get_descr(err), ##log_args)
 
-    if (1 != sscanf(CB_STR, "%p", &log_cb)) {
-        return NULL;
-    }
-    return log_cb;
-}
+#define PRINT_INIT_ERR(log_fmt, log_args...)                                                       \
+    fprintf(stderr, "Initialization error: " log_fmt, ##log_args)
 
-void vlog_start(const char *log_module_name, vlog_levels_t log_level, const char *log_filename,
-                int log_details, bool log_in_colors)
+void vlog_start(const char *log_module_name, vlog_levels_t log_level, const char *log_filename)
 {
     g_vlogger_file = stderr;
 
-    g_vlogger_cb = xlio_log_get_cb_func();
-
     strncpy(g_vlogger_module_name, log_module_name, sizeof(g_vlogger_module_name) - 1);
     g_vlogger_module_name[sizeof(g_vlogger_module_name) - 1] = '\0';
-
-    vlog_get_usec_since_start();
 
     char local_log_filename[255];
     if (log_filename != NULL && strcmp(log_filename, "")) {
         sprintf(local_log_filename, "%s", log_filename);
         g_vlogger_fd = open(local_log_filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (g_vlogger_fd < 0) {
-            vlog_printf(VLOG_PANIC, "Failed to open logfile: %s\n", local_log_filename);
-            exit(1);
+            PRINT_INIT_ERR("Failed to open logfile: %s\n", local_log_filename);
+            std::terminate();
         }
         g_vlogger_file = fdopen(g_vlogger_fd, "w");
 
         BULLSEYE_EXCLUDE_BLOCK_START
         if (g_vlogger_file == NULL) {
             g_vlogger_file = stderr;
-            vlog_printf(VLOG_PANIC, "Failed to open logfile: %s\n", local_log_filename);
-            exit(1);
+            PRINT_INIT_ERR("Failed to open logfile: %s\n", local_log_filename);
+            std::terminate();
         }
         BULLSEYE_EXCLUDE_BLOCK_END
     }
 
+    struct doca_log_backend *g_logger_backend = nullptr;
+    const doca_error_t backend_create_status =
+        doca_log_backend_create_with_file(g_vlogger_file, &g_logger_backend);
+
+    if (backend_create_status != DOCA_SUCCESS) {
+        PRINT_DOCA_INIT_ERR(backend_create_status, "doca_log_backend_create_with_file");
+        std::terminate();
+    }
+
+    const doca_error_t backend_set_lower_level_status =
+        doca_log_backend_set_level_lower_limit(g_logger_backend, log_level);
+    if (backend_set_lower_level_status != DOCA_SUCCESS) {
+        PRINT_DOCA_INIT_ERR(backend_set_lower_level_status,
+                            "doca_log_backend_set_level_lower_limit");
+        std::terminate();
+    }
+
+    const doca_error_t backend_set_upper_level_status =
+        doca_log_backend_set_level_upper_limit(g_logger_backend, log_level);
+    if (backend_set_upper_level_status != DOCA_SUCCESS) {
+        PRINT_DOCA_INIT_ERR(backend_set_upper_level_status,
+                            "doca_log_backend_set_level_upper_limit");
+        std::terminate();
+    }
+
     g_vlogger_level = log_level;
     g_p_vlogger_level = &g_vlogger_level;
-    g_vlogger_details = log_details;
-    g_p_vlogger_details = &g_vlogger_details;
-
-    int file_fd = fileno(g_vlogger_file);
-    if (file_fd >= 0 && isatty(file_fd) && log_in_colors) {
-        g_vlogger_log_in_colors = log_in_colors;
-    }
 }
 
 void vlog_stop(void)
@@ -295,122 +286,4 @@ void vlog_stop(void)
     // fix for using LD_PRELOAD with LBM. Unset the pointer given by the parent process, so a child
     // could get his own pointer without issues.
     unsetenv(XLIO_LOG_CB_ENV_VAR);
-}
-
-void vlog_output(vlog_levels_t log_level, const char *fmt, ...)
-{
-    int len = 0;
-    char buf[VLOGGER_STR_SIZE];
-
-    // Format header
-
-    // Set color scheme
-    if (g_vlogger_log_in_colors) {
-        len +=
-            snprintf(buf + len, VLOGGER_STR_SIZE - len - 1, "%s", log_level::get_color(log_level));
-    }
-
-    switch (g_vlogger_details) {
-    case 3: // Time
-        len += snprintf(buf + len, VLOGGER_STR_SIZE - len - 1, " Time: %9.3f",
-                        ((float)vlog_get_usec_since_start()) / 1000); // fallthrough
-    case 2: // Pid
-        len +=
-            snprintf(buf + len, VLOGGER_STR_SIZE - len - 1, " Pid: %5u", getpid()); // fallthrough
-    case 1: // Tid
-        len +=
-            snprintf(buf + len, VLOGGER_STR_SIZE - len - 1, " Tid: %5u", gettid()); // fallthrough
-    case 0: // Func
-    default:
-        len += snprintf(buf + len, VLOGGER_STR_SIZE - len - 1, " %s %s: ", g_vlogger_module_name,
-                        log_level::to_str(log_level));
-    }
-
-    if (len < 0) {
-        return;
-    }
-    buf[len + 1] = '\0';
-
-    // Format body
-    va_list ap;
-    va_start(ap, fmt);
-    if (fmt != NULL) {
-        len += vsnprintf(buf + len, VLOGGER_STR_SIZE - len, fmt, ap);
-    }
-    va_end(ap);
-
-    // Reset color scheme
-    if (g_vlogger_log_in_colors) {
-        // Save enough room for color code termination and EOL
-        if (len > VLOGGER_STR_SIZE - VLOGGER_STR_TERMINATION_SIZE) {
-            len = VLOGGER_STR_SIZE - VLOGGER_STR_TERMINATION_SIZE - 1;
-        }
-
-        len = snprintf(buf + len, VLOGGER_STR_TERMINATION_SIZE, VLOGGER_STR_COLOR_TERMINATION_STR);
-        if (len < 0) {
-            return;
-        }
-    }
-
-    if (g_vlogger_cb) {
-        g_vlogger_cb(log_level, buf);
-    } else if (g_vlogger_file) {
-        // Print out
-        fprintf(g_vlogger_file, "%s", buf);
-        fflush(g_vlogger_file);
-    } else {
-        fprintf(stderr, "%s", buf);
-    }
-}
-
-void vlog_print_buffer(vlog_levels_t log_level, const char *msg_header, const char *msg_tail,
-                       const char *buf_user, int buf_len)
-{
-    if (g_vlogger_level < log_level) {
-        return;
-    }
-
-    int len = 0;
-    char buf[VLOGGER_STR_SIZE];
-
-    // Format header
-    if (g_vlogger_level >= VLOG_DEBUG) {
-        // vlog_time(log_level, log_msg);
-        len = snprintf(buf, sizeof(buf) - 1, " Tid: %11lx : %s %s: ", pthread_self(),
-                       g_vlogger_module_name, log_level::to_str(log_level));
-    } else {
-        len = snprintf(buf, sizeof(buf) - 1, "%s %s: ", g_vlogger_module_name,
-                       log_level::to_str(log_level));
-    }
-    if (len < 0) {
-        return;
-    }
-    buf[len + 1] = '\0';
-
-    if (msg_header) {
-        len += snprintf(buf + len, VLOGGER_STR_SIZE - len - 1, "%s", msg_header);
-    }
-
-    for (int c = 0; c < buf_len && len < (VLOGGER_STR_SIZE - 1 - 6); c++) {
-        len += sprintf(buf + len, "%2.2X ", (unsigned char)buf_user[c]);
-        if ((c % 8) == 7) {
-            len += sprintf(buf + len, " ");
-        }
-    }
-
-    if (msg_tail) {
-        len += snprintf(buf + len, VLOGGER_STR_SIZE - len - 1, "%s", msg_tail);
-    }
-
-    buf[len + 1] = '\0';
-
-    // Print out
-    if (g_vlogger_cb) {
-        g_vlogger_cb(log_level, buf);
-    } else if (g_vlogger_file) {
-        fprintf(g_vlogger_file, "%s", buf);
-        fflush(g_vlogger_file);
-    } else {
-        printf("%s", buf);
-    }
 }

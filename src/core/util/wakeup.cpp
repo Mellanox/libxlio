@@ -37,6 +37,7 @@
 #include <core/sock/sock-redirect.h>
 
 #define MODULE_NAME "wakeup"
+DOCA_LOG_REGISTER(wakeup);
 
 #define wkup_logpanic   __log_info_panic
 #define wkup_logerr     __log_info_err

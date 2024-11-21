@@ -64,6 +64,7 @@
     return _ret;
 // debugging macros
 #define MODULE_NAME "si_tcp"
+DOCA_LOG_REGISTER(si_tcp);
 
 #undef MODULE_HDR_INFO
 #define MODULE_HDR_INFO MODULE_NAME "[fd=%d]:%d:%s() "
@@ -297,7 +298,7 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     , m_tcp_seg_list(nullptr)
     , m_user_huge_page_mask(~((uint64_t)safe_mce_sys().user_huge_page_size - 1))
 {
-    si_tcp_logfuncall("");
+    si_tcp_logfuncall(LOG_FUNCTION_CALL);
 
     m_ops = m_ops_tcp = new sockinfo_tcp_ops(this);
     assert(m_ops != NULL); /* XXX */
@@ -526,7 +527,7 @@ void sockinfo_tcp::err_lwip_cb_xlio_socket(void *pcb_container, err_t err)
 
 sockinfo_tcp::~sockinfo_tcp()
 {
-    si_tcp_logfunc("");
+    si_tcp_logfunc(LOG_FUNCTION_CALL);
     g_global_stat_static.socket_tcp_destructor_counter.fetch_add(1, std::memory_order_relaxed);
 
     lock_tcp_con();
@@ -662,7 +663,7 @@ bool sockinfo_tcp::prepare_listen_to_close()
 
 bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
 {
-    si_tcp_logdbg("");
+    si_tcp_logdbg(LOG_FUNCTION_CALL);
 
     lock_tcp_con();
 
@@ -1048,7 +1049,7 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
         return ret;
     }
 
-    si_tcp_logfunc("tx: iov=%p niovs=%d", p_iov, sz_iov);
+    si_tcp_logfunc("tx: iov=%p niovs=%ld", p_iov, sz_iov);
 
     if (m_sysvar_rx_poll_on_tx_tcp) {
         rx_wait_helper(poll_count, false);
@@ -1081,7 +1082,7 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
 
     int total_tx = 0;
     for (size_t i = 0; i < sz_iov; i++) {
-        si_tcp_logfunc("iov:%d base=%p len=%d", i, p_iov[i].iov_base, p_iov[i].iov_len);
+        si_tcp_logfunc("iov:%ld base=%p len=%ld", i, p_iov[i].iov_base, p_iov[i].iov_len);
         if (unlikely(!p_iov[i].iov_base)) {
             continue;
         }
@@ -1204,7 +1205,7 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
     off64_t file_offset = 0;
     bool block_this_run = BLOCK_THIS_RUN(m_b_blocking, flags);
     for (size_t i = 0; i < sz_iov; i++) {
-        si_tcp_logfunc("iov:%d base=%p len=%d", i, p_iov[i].iov_base, p_iov[i].iov_len);
+        si_tcp_logfunc("iov:%ld base=%p len=%ld", i, p_iov[i].iov_base, p_iov[i].iov_len);
         if (unlikely(!p_iov[i].iov_base)) {
             continue;
         }
@@ -1454,8 +1455,7 @@ zc_fill_iov:
 send_iov:
     /* Sanity check */
     if (unlikely(p)) {
-        vlog_printf(VLOG_ERROR, "Number of buffers in request exceed  %d, so silently dropped.\n",
-                    max_count);
+        __log_err("Number of buffers in request exceed  %d, so silently dropped.\n", max_count);
         return ERR_OK;
     }
 
@@ -1508,7 +1508,7 @@ err_t sockinfo_tcp::ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void 
 
         // We don't expect pbuf chain at all
         if (p) {
-            vlog_printf(VLOG_ERROR, "pbuf chain size > 64!!! silently dropped.\n");
+            __log_err("pbuf chain size > 64!!! silently dropped.\n");
             return ERR_OK;
         }
     }
@@ -1558,7 +1558,7 @@ uint16_t sockinfo_tcp::get_route_mtu(struct tcp_pcb *pcb)
                              reinterpret_cast<ip_address &>(pcb->remote_ip), family, pcb->tos);
     if (g_p_route_table_mgr->route_resolve(rule_key, res)) {
         if (res.mtu) {
-            vlog_printf(VLOG_DEBUG, "Using route mtu %u\n", res.mtu);
+            __log_dbg("Using route mtu %u\n", res.mtu);
             return res.mtu;
         }
 
@@ -1568,7 +1568,7 @@ uint16_t sockinfo_tcp::get_route_mtu(struct tcp_pcb *pcb)
         }
     }
 
-    vlog_printf(VLOG_DEBUG, "Could not find device, mtu 0 is used\n");
+    __log_dbg("Could not find device, mtu 0 is used\n");
     return 0;
 }
 
@@ -1582,7 +1582,7 @@ void sockinfo_tcp::err_lwip_cb(void *pcb_container, err_t err)
     __log_dbg("[fd=%d] sock=%p lwip_pcb=%p err=%d", conn->m_fd, conn, &(conn->m_pcb), err);
 
     if (get_tcp_state(&conn->m_pcb) == LISTEN && err == ERR_RST) {
-        vlog_printf(VLOG_ERROR, "listen socket should not receive RST\n");
+        __log_err("listen socket should not receive RST\n");
         return;
     }
 
@@ -1699,7 +1699,7 @@ bool sockinfo_tcp::process_peer_ctl_packets(xlio_desc_list_t &peer_packets)
 
 void sockinfo_tcp::process_my_ctl_packets()
 {
-    si_tcp_logfunc("");
+    si_tcp_logfunc(LOG_FUNCTION_CALL);
 
     // 0. fast swap of m_rx_ctl_packets_list with temp_list under lock
     xlio_desc_list_t temp_list;
@@ -1840,7 +1840,7 @@ void sockinfo_tcp::process_reuse_ctl_packets()
 
 void sockinfo_tcp::process_rx_ctl_packets()
 {
-    si_tcp_logfunc("");
+    si_tcp_logfunc(LOG_FUNCTION_CALL);
 
     process_my_ctl_packets();
     process_children_ctl_packets();
@@ -1850,7 +1850,7 @@ void sockinfo_tcp::process_rx_ctl_packets()
 // Execute TCP timers of this connection
 void sockinfo_tcp::handle_timer_expired()
 {
-    si_tcp_logfunc("");
+    si_tcp_logfunc(LOG_FUNCTION_CALL);
 
     if (tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)) {
         process_rx_ctl_packets();
@@ -1999,7 +1999,7 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
 err_t sockinfo_tcp::handle_fin(struct tcp_pcb *pcb, err_t err)
 {
     if (is_server()) {
-        vlog_printf(VLOG_ERROR, "listen socket should not receive FIN\n");
+        __log_err("listen socket should not receive FIN\n");
         return ERR_OK;
     }
 
@@ -2017,7 +2017,7 @@ void sockinfo_tcp::handle_rx_lwip_cb_error(pbuf *p)
     NOTIFY_ON_EVENTS(this, EPOLLERR);
 
     m_sock_wakeup_pipe.do_wakeup();
-    vlog_printf(VLOG_ERROR, "%s:%d %s\n", __func__, __LINE__, "recv error!!!");
+    __log_err("%s:%d %s\n", __func__, __LINE__, "recv error!!!");
     pbuf_free(p);
     m_sock_state = TCP_SOCK_INITED;
 }
@@ -2187,7 +2187,7 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
 
     m_loops_timer.start();
 
-    si_tcp_logfuncall("");
+    si_tcp_logfuncall(LOG_FUNCTION_CALL);
     if (unlikely(m_sock_offload != TCP_SOCK_LWIP)) {
         int ret = 0;
         ret = rx_os(call_type, p_iov, sz_iov, in_flags, __from, __fromlen, __msg);
@@ -2216,7 +2216,7 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
         }
     }
 
-    si_tcp_logfunc("rx: iov=%p niovs=%d", p_iov, sz_iov);
+    si_tcp_logfunc("rx: iov=%p niovs=%ld", p_iov, sz_iov);
 
     /* poll rx queue till we have something */
     lock_tcp_con();
@@ -2612,7 +2612,7 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
 
 int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
 {
-    si_tcp_logfuncall("");
+    si_tcp_logfuncall(LOG_FUNCTION_CALL);
 
     int ret = 0;
 
@@ -2729,7 +2729,7 @@ int sockinfo_tcp::prepareListen()
     transport_t target_family;
     sock_addr addr;
     socklen_t addr_len;
-    si_tcp_logfuncall("");
+    si_tcp_logfuncall(LOG_FUNCTION_CALL);
 
     if (m_sock_offload == TCP_SOCK_PASSTHROUGH) {
         return 1; // passthrough
@@ -2792,7 +2792,7 @@ int sockinfo_tcp::prepareListen()
 
 int sockinfo_tcp::listen(int backlog)
 {
-    si_tcp_logfuncall("");
+    si_tcp_logfuncall(LOG_FUNCTION_CALL);
 
     int orig_backlog = backlog;
 
@@ -2924,7 +2924,7 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
     int poll_count = safe_mce_sys().rx_poll_num; // do one poll and go to sleep (if blocking)
     int ret;
 
-    si_tcp_logfuncall("");
+    si_tcp_logfuncall(LOG_FUNCTION_CALL);
 
     // if in os pathrough just redirect to os
     if (m_sock_offload == TCP_SOCK_PASSTHROUGH) {
@@ -3077,14 +3077,14 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
 
 int sockinfo_tcp::accept(struct sockaddr *__addr, socklen_t *__addrlen)
 {
-    si_tcp_logfuncall("");
+    si_tcp_logfuncall(LOG_FUNCTION_CALL);
 
     return accept_helper(__addr, __addrlen);
 }
 
 int sockinfo_tcp::accept4(struct sockaddr *__addr, socklen_t *__addrlen, int __flags)
 {
-    si_tcp_logfuncall("");
+    si_tcp_logfuncall(LOG_FUNCTION_CALL);
     si_tcp_logdbg("socket accept4, flags=%d", __flags);
 
     return accept_helper(__addr, __addrlen, __flags);
@@ -3153,7 +3153,7 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     __log_dbg("initial state=%x", get_tcp_state(&conn->m_pcb));
     __log_dbg("accept cb: arg=%p, new pcb=%p err=%d", arg, child_pcb, err);
     if (err != ERR_OK) {
-        vlog_printf(VLOG_ERROR, "%s:%d: accept cb failed\n", __func__, __LINE__);
+        __log_err("%s:%d: accept cb failed\n", __func__, __LINE__);
         return err;
     }
     if (conn->m_sock_state != TCP_SOCK_ACCEPT_READY) {
@@ -3165,7 +3165,7 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     new_sock = (sockinfo_tcp *)child_pcb->my_container;
 
     if (!new_sock) {
-        vlog_printf(VLOG_ERROR, "%s:%d: failed to clone socket\n", __func__, __LINE__);
+        __log_err("%s:%d: failed to clone socket\n", __func__, __LINE__);
         return ERR_RST;
     }
 
@@ -3596,7 +3596,7 @@ int sockinfo_tcp::wait_for_conn_ready_blocking()
 {
     int poll_count = 0;
 
-    si_tcp_logfuncall("");
+    si_tcp_logfuncall(LOG_FUNCTION_CALL);
 
     while (m_conn_state == TCP_CONN_CONNECTING && m_sock_state != TCP_SOCK_INITED) {
         /*In case of connect error err_lwip_cb is called and not connect_lwip_cb
@@ -4775,7 +4775,7 @@ int sockinfo_tcp::getsockopt(int __level, int __optname, void *__optval, socklen
                  (unsigned)__level, (unsigned)__optname, __optlen ? *__optlen : 0);
         buf[sizeof(buf) - 1] = '\0';
 
-        VLOG_PRINTF_INFO(safe_mce_sys().exception_handling.get_log_severity(), "%s", buf);
+        __log_raw(safe_mce_sys().exception_handling.get_log_severity(), "%s", buf);
         int rc = handle_exception_flow();
         switch (rc) {
         case -1:
@@ -4803,7 +4803,7 @@ int sockinfo_tcp::getsockopt(int __level, int __optname, void *__optval, socklen
 
 int sockinfo_tcp::getsockname(sockaddr *__name, socklen_t *__namelen)
 {
-    __log_info_func("");
+    __log_info_func(LOG_FUNCTION_CALL);
 
     if (m_sock_offload == TCP_SOCK_PASSTHROUGH) {
         si_tcp_logdbg("passthrough - go to OS getsockname");
@@ -4826,7 +4826,7 @@ int sockinfo_tcp::getsockname(sockaddr *__name, socklen_t *__namelen)
 
 int sockinfo_tcp::getpeername(sockaddr *__name, socklen_t *__namelen)
 {
-    __log_info_func("");
+    __log_info_func(LOG_FUNCTION_CALL);
 
     if (m_sock_offload == TCP_SOCK_PASSTHROUGH) {
         si_tcp_logdbg("passthrough - go to OS getpeername");
@@ -4860,7 +4860,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
     epoll_event rx_epfd_events[SI_RX_EPFD_EVENT_MAX];
 
     // poll for completion
-    __log_info_func("");
+    __log_info_func(LOG_FUNCTION_CALL);
     poll_count++;
     // if in listen state go directly to wait part
 
@@ -5124,112 +5124,110 @@ void sockinfo_tcp::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
     unlock_tcp_con();
 
     // Socket data
-    vlog_printf(log_level, "Socket state : %s\n", tcp_sock_state_str[sock_state]);
-    vlog_printf(log_level, "Connection state : %s\n", tcp_conn_state_str[conn_state]);
-    vlog_printf(log_level,
-                "Receive buffer : m_rcvbuff_current %d, m_rcvbuff_max %d, "
-                "m_rcvbuff_non_tcp_recved %d\n",
-                rcvbuff_current, rcvbuff_max, rcvbuff_non_tcp_recved);
-    vlog_printf(log_level,
-                "Rx lists size : m_rx_pkt_ready_list %d, m_rx_ctl_packets_list %d, "
-                "m_rx_ctl_reuse_list %d\n",
-                rx_pkt_ready_list_size, rx_ctl_packets_list_size, rx_ctl_reuse_list_size);
+    __log_raw(log_level, "Socket state : %s\n", tcp_sock_state_str[sock_state]);
+    __log_raw(log_level, "Connection state : %s\n", tcp_conn_state_str[conn_state]);
+    __log_raw(log_level,
+              "Receive buffer : m_rcvbuff_current %d, m_rcvbuff_max %d, "
+              "m_rcvbuff_non_tcp_recved %d\n",
+              rcvbuff_current, rcvbuff_max, rcvbuff_non_tcp_recved);
+    __log_raw(log_level,
+              "Rx lists size : m_rx_pkt_ready_list %d, m_rx_ctl_packets_list %d, "
+              "m_rx_ctl_reuse_list %d\n",
+              rx_pkt_ready_list_size, rx_ctl_packets_list_size, rx_ctl_reuse_list_size);
 
     // PCB data
-    vlog_printf(log_level, "PCB state : %s\n", tcp_state_str[get_tcp_state(&pcb)]);
-    vlog_printf(log_level, "PCB flags : 0x%x\n", pcb.flags);
-    vlog_printf(log_level, "Segment size : mss %hu, advtsd_mss %hu\n", pcb.mss, pcb.advtsd_mss);
+    __log_raw(log_level, "PCB state : %s\n", tcp_state_str[get_tcp_state(&pcb)]);
+    __log_raw(log_level, "PCB flags : 0x%x\n", pcb.flags);
+    __log_raw(log_level, "Segment size : mss %hu, advtsd_mss %hu\n", pcb.mss, pcb.advtsd_mss);
 
     // Window scaling
     if (pcb.flags & TF_WND_SCALE) {
-        vlog_printf(log_level, "Window scaling : ENABLED, rcv_scale %u, snd_scale %u\n",
-                    pcb.rcv_scale, pcb.snd_scale);
+        __log_raw(log_level, "Window scaling : ENABLED, rcv_scale %u, snd_scale %u\n",
+                  pcb.rcv_scale, pcb.snd_scale);
 
         // Receive and send windows
-        vlog_printf(log_level,
-                    "Receive window : rcv_wnd %u (%u), rcv_ann_wnd %u (%u), rcv_wnd_max %u (%u), "
-                    "rcv_wnd_max_desired %u (%u)\n",
-                    pcb.rcv_wnd, RCV_WND_SCALE(&pcb, pcb.rcv_wnd), pcb.rcv_ann_wnd,
-                    RCV_WND_SCALE(&pcb, pcb.rcv_ann_wnd), pcb.rcv_wnd_max,
-                    RCV_WND_SCALE(&pcb, pcb.rcv_wnd_max), pcb.rcv_wnd_max_desired,
-                    RCV_WND_SCALE(&pcb, pcb.rcv_wnd_max_desired));
+        __log_raw(log_level,
+                  "Receive window : rcv_wnd %u (%u), rcv_ann_wnd %u (%u), rcv_wnd_max %u (%u), "
+                  "rcv_wnd_max_desired %u (%u)\n",
+                  pcb.rcv_wnd, RCV_WND_SCALE(&pcb, pcb.rcv_wnd), pcb.rcv_ann_wnd,
+                  RCV_WND_SCALE(&pcb, pcb.rcv_ann_wnd), pcb.rcv_wnd_max,
+                  RCV_WND_SCALE(&pcb, pcb.rcv_wnd_max), pcb.rcv_wnd_max_desired,
+                  RCV_WND_SCALE(&pcb, pcb.rcv_wnd_max_desired));
 
-        vlog_printf(log_level, "Send window : snd_wnd %u (%u), snd_wnd_max %u (%u)\n", pcb.snd_wnd,
-                    (pcb.snd_wnd >> pcb.snd_scale), pcb.snd_wnd_max,
-                    (pcb.snd_wnd_max >> pcb.snd_scale));
+        __log_raw(log_level, "Send window : snd_wnd %u (%u), snd_wnd_max %u (%u)\n", pcb.snd_wnd,
+                  (pcb.snd_wnd >> pcb.snd_scale), pcb.snd_wnd_max,
+                  (pcb.snd_wnd_max >> pcb.snd_scale));
     } else {
-        vlog_printf(log_level, "Window scaling : DISABLED\n");
+        __log_raw(log_level, "Window scaling : DISABLED\n");
 
         // Receive and send windows
-        vlog_printf(log_level,
-                    "Receive window : rcv_wnd %u, rcv_ann_wnd %u, rcv_wnd_max %u, "
-                    "rcv_wnd_max_desired %u\n",
-                    pcb.rcv_wnd, pcb.rcv_ann_wnd, pcb.rcv_wnd_max, pcb.rcv_wnd_max_desired);
+        __log_raw(log_level,
+                  "Receive window : rcv_wnd %u, rcv_ann_wnd %u, rcv_wnd_max %u, "
+                  "rcv_wnd_max_desired %u\n",
+                  pcb.rcv_wnd, pcb.rcv_ann_wnd, pcb.rcv_wnd_max, pcb.rcv_wnd_max_desired);
 
-        vlog_printf(log_level, "Send window : snd_wnd %u, snd_wnd_max %u\n", pcb.snd_wnd,
-                    pcb.snd_wnd_max);
+        __log_raw(log_level, "Send window : snd_wnd %u, snd_wnd_max %u\n", pcb.snd_wnd,
+                  pcb.snd_wnd_max);
     }
 
     // Congestion variable
-    vlog_printf(log_level, "Congestion : cwnd %u\n", pcb.cwnd);
+    __log_raw(log_level, "Congestion : cwnd %u\n", pcb.cwnd);
 
     // Receiver variables
-    vlog_printf(log_level, "Receiver data : rcv_nxt %u, rcv_ann_right_edge %u\n", pcb.rcv_nxt,
-                pcb.rcv_ann_right_edge);
+    __log_raw(log_level, "Receiver data : rcv_nxt %u, rcv_ann_right_edge %u\n", pcb.rcv_nxt,
+              pcb.rcv_ann_right_edge);
 
     // Sender variables
-    vlog_printf(log_level, "Sender data : snd_nxt %u, snd_wl1 %u, snd_wl2 %u\n", pcb.snd_nxt,
-                pcb.snd_wl1, pcb.snd_wl2);
+    __log_raw(log_level, "Sender data : snd_nxt %u, snd_wl1 %u, snd_wl2 %u\n", pcb.snd_nxt,
+              pcb.snd_wl1, pcb.snd_wl2);
 
     // Send buffer
-    vlog_printf(log_level, "Send buffer : snd_buf %d, max_snd_buff %u\n", pcb.snd_buf,
-                pcb.max_snd_buff);
+    __log_raw(log_level, "Send buffer : snd_buf %d, max_snd_buff %u\n", pcb.snd_buf,
+              pcb.max_snd_buff);
 
     // Retransmission
-    vlog_printf(log_level, "Retransmission : rtime %hd, rto %u, nrtx %u\n", pcb.rtime, pcb.rto,
-                pcb.nrtx);
+    __log_raw(log_level, "Retransmission : rtime %hd, rto %u, nrtx %u\n", pcb.rtime, pcb.rto,
+              pcb.nrtx);
 
     // RTT
-    vlog_printf(log_level, "RTT variables : rttest %u, rtseq %u\n", pcb.rttest, pcb.rtseq);
+    __log_raw(log_level, "RTT variables : rttest %u, rtseq %u\n", pcb.rttest, pcb.rtseq);
 
     // First unsent
     if (first_unsent_seqno) {
-        vlog_printf(log_level, "First unsent : seqno %u, len %hu, seqno + len %u\n",
-                    first_unsent_seqno, first_unsent_len, first_unsent_seqno + first_unsent_len);
+        __log_raw(log_level, "First unsent : seqno %u, len %u, seqno + len %u\n",
+                  first_unsent_seqno, first_unsent_len, first_unsent_seqno + first_unsent_len);
 
         // Last unsent
         if (last_unsent_seqno) {
-            vlog_printf(log_level, "Last unsent : seqno %u, len %hu, seqno + len %u\n",
-                        last_unsent_seqno, last_unsent_len, last_unsent_seqno + last_unsent_len);
+            __log_raw(log_level, "Last unsent : seqno %u, len %u, seqno + len %u\n",
+                      last_unsent_seqno, last_unsent_len, last_unsent_seqno + last_unsent_len);
         }
     } else {
-        vlog_printf(log_level, "First unsent : NULL\n");
+        __log_raw(log_level, "First unsent : NULL\n");
     }
 
     // First unsent
     if (first_unacked_seqno) {
-        vlog_printf(log_level, "First unacked : seqno %u, len %hu, seqno + len %u\n",
-                    first_unacked_seqno, first_unacked_len,
-                    first_unacked_seqno + first_unacked_len);
+        __log_raw(log_level, "First unacked : seqno %u, len %u, seqno + len %u\n",
+                  first_unacked_seqno, first_unacked_len, first_unacked_seqno + first_unacked_len);
 
         // Last unacked
         if (last_unacked_seqno) {
-            vlog_printf(log_level, "Last unacked : seqno %u, len %hu, seqno + len %u\n",
-                        last_unacked_seqno, last_unacked_len,
-                        last_unacked_seqno + last_unacked_len);
+            __log_raw(log_level, "Last unacked : seqno %u, len %u, seqno + len %u\n",
+                      last_unacked_seqno, last_unacked_len, last_unacked_seqno + last_unacked_len);
         }
     } else {
-        vlog_printf(log_level, "First unacked : NULL\n");
+        __log_raw(log_level, "First unacked : NULL\n");
     }
 
     // Acknowledge
-    vlog_printf(log_level, "Acknowledge : lastack %u\n", pcb.lastack);
+    __log_raw(log_level, "Acknowledge : lastack %u\n", pcb.lastack);
 
     // TCP timestamp
 #if LWIP_TCP_TIMESTAMPS
     if (pcb.flags & TF_TIMESTAMP) {
-        vlog_printf(log_level, "Timestamp : ts_lastacksent %u, ts_recent %u\n", pcb.ts_lastacksent,
-                    pcb.ts_recent);
+        __log_raw(log_level, "Timestamp : ts_lastacksent %u, ts_recent %u\n", pcb.ts_lastacksent,
+                  pcb.ts_recent);
     }
 #endif
 }

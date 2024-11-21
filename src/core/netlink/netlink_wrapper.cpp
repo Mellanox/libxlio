@@ -47,7 +47,8 @@
 #include <netlink/route/route.h>
 #include <netlink/utils.h>
 
-#define MODULE_NAME "nl_wrapper:"
+#define MODULE_NAME "nl_wrapper"
+DOCA_LOG_REGISTER(nl_wrapper);
 
 #define nl_logpanic __log_panic
 #define nl_logerr   __log_err

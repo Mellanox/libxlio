@@ -42,6 +42,7 @@
 #include "proto/mem_buf_desc.h"
 
 #define MODULE_NAME "bpool"
+DOCA_LOG_REGISTER(bpool);
 
 // A pointer to differentiate between g_buffer_pool_rx_stride and g_buffer_pool_rx_rwqe
 // and create an abstraction to the layers above device layer for cases when Striding RQ is on/off.
@@ -181,8 +182,7 @@ buffer_pool::buffer_pool(buffer_pool_type type, size_t buf_size, alloc_t alloc_f
 
     if (initial_pool_size) {
         if (!expand(initial_pool_size)) {
-            vlog_printf(
-                VLOG_WARNING,
+            __log_warn(
                 "Insufficient memory to initialize %s%s buffer pool. Increase XLIO_MEMORY_LIMIT.\n",
                 m_buf_size ? "" : "zcopy ", type == BUFFER_POOL_RX ? "Rx" : "Tx");
             throw_xlio_exception("Failed to allocate buffers");
@@ -215,15 +215,15 @@ void buffer_pool::print_report(vlog_levels_t log_level /*=VLOG_DEBUG*/)
     char str1[64];
     char str2[64];
 
-    vlog_printf(log_level, "Buffer pool %p (%s%s):\n", this, m_p_bpool_stat->is_rx ? "Rx" : "Tx",
-                m_buf_size ? "" : ", zcopy");
-    vlog_printf(log_level, "  Buffers: %zu created, %zu free\n", m_n_buffers_created, m_n_buffers);
-    vlog_printf(log_level, "  Memory consumption: %s (%s per buffer), expanded %u times\n",
-                option_size::to_str(m_buf_size * m_n_buffers_created, str1, sizeof(str1)),
-                option_size::to_str(m_buf_size, str2, sizeof(str2)),
-                m_p_bpool_stat->n_buffer_pool_expands);
-    vlog_printf(log_level, "  Requests: %u unsatisfied buffer requests\n",
-                m_p_bpool_stat->n_buffer_pool_no_bufs);
+    __log_raw(log_level, "Buffer pool %p (%s%s):\n", this, m_p_bpool_stat->is_rx ? "Rx" : "Tx",
+              m_buf_size ? "" : ", zcopy");
+    __log_raw(log_level, "  Buffers: %zu created, %zu free\n", m_n_buffers_created, m_n_buffers);
+    __log_raw(log_level, "  Memory consumption: %s (%s per buffer), expanded %u times\n",
+              option_size::to_str(m_buf_size * m_n_buffers_created, str1, sizeof(str1)),
+              option_size::to_str(m_buf_size, str2, sizeof(str2)),
+              m_p_bpool_stat->n_buffer_pool_expands);
+    __log_raw(log_level, "  Requests: %u unsatisfied buffer requests\n",
+              m_p_bpool_stat->n_buffer_pool_no_bufs);
 }
 
 /* static */
@@ -239,9 +239,9 @@ void buffer_pool::print_full_report(vlog_levels_t log_level)
     }
 
     if (is_error) {
-        vlog_printf(log_level,
-                    "XLIO detected insufficient memory. Increasing XLIO_MEMORY_LIMIT can improve "
-                    "performance.\n");
+        __log_raw(log_level,
+                  "XLIO detected insufficient memory. Increasing XLIO_MEMORY_LIMIT can improve "
+                  "performance.\n");
     }
 }
 
@@ -382,8 +382,7 @@ void Floyd_LogCircleInfo(Node x0)
             break; // extra safety; not really needed
         }
     }
-    vlog_printf(VLOG_ERROR, "circle first index (mu) = %d, circle length (lambda) = %d\n", mu,
-                lambda);
+    __log_err("circle first index (mu) = %d, circle length (lambda) = %d\n", mu, lambda);
 }
 
 void buffer_pool::buffersPanic()
@@ -404,7 +403,7 @@ void buffer_pool::buffersPanic()
     int count = backtrace(addresses, MAX_BACKTRACE);
     symbols = backtrace_symbols(addresses, count);
     for (int i = 0; i < count; ++i) {
-        vlog_printf(VLOG_ERROR, "   %2d  %s\n", i, symbols[i]);
+        __log_err("   %2d  %s\n", i, symbols[i]);
     }
 
     __log_info_panic("m_n_buffers(%lu) > m_n_buffers_created(%lu)", m_n_buffers,

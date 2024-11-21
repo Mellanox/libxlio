@@ -74,7 +74,8 @@
 using namespace std;
 
 #undef MODULE_NAME
-#define MODULE_NAME "utils:"
+#define MODULE_NAME "utils"
+DOCA_LOG_REGISTER(utils);
 
 int check_if_regular_file(char *path)
 {
@@ -179,45 +180,39 @@ int get_base_interface_name(const char *if_name, char *base_ifname, size_t sz_ba
 void print_roce_lag_warnings(const char *interface, char *disable_path /* = NULL */,
                              const char *port1 /* = NULL */, const char *port2 /* = NULL */)
 {
-    vlog_printf(VLOG_WARNING,
-                "**********************************************************************************"
-                "********************\n");
+    __log_warn("**********************************************************************************"
+               "********************\n");
 
     if (port1 && port2) {
-        vlog_printf(
-            VLOG_WARNING,
+        __log_warn(
             "* Bond %s has two slaves of the same device while RoCE LAG is enabled (%s, %s).\n",
             interface, port1, port2);
-        vlog_printf(VLOG_WARNING, "* Unexpected behaviour may occur during runtime.\n");
+        __log_warn("* Unexpected behaviour may occur during runtime.\n");
     } else {
-        vlog_printf(VLOG_WARNING, "* Interface %s will not be offloaded.\n", interface);
-        vlog_printf(VLOG_WARNING,
-                    "* " PRODUCT_NAME " cannot offload the device while RoCE LAG is enabled.\n");
+        __log_warn("* Interface %s will not be offloaded.\n", interface);
+        __log_warn("* " PRODUCT_NAME " cannot offload the device while RoCE LAG is enabled.\n");
     }
 
-    vlog_printf(VLOG_WARNING, "* Please refer to " PRODUCT_NAME " Release Notes for more info\n");
+    __log_warn("* Please refer to " PRODUCT_NAME " Release Notes for more info\n");
 
     if (disable_path) {
-        vlog_printf(VLOG_WARNING, "* In order to disable RoCE LAG please use:\n");
-        vlog_printf(VLOG_WARNING, "* echo 0 > %s\n", disable_path);
+        __log_warn("* In order to disable RoCE LAG please use:\n");
+        __log_warn("* echo 0 > %s\n", disable_path);
     }
-    vlog_printf(VLOG_WARNING,
-                "**********************************************************************************"
-                "********************\n");
+    __log_warn("**********************************************************************************"
+               "********************\n");
 }
 
 void print_warning_rlimit_memlock(size_t length, int error)
 {
-    vlog_printf(VLOG_ERROR,
-                "**********************************************************************************"
-                "********************\n");
-    vlog_printf(VLOG_ERROR, "* Failed registering a memory region of size %zu bytes\n", length);
-    vlog_printf(VLOG_ERROR, "* (errno=%d %m)\n", error);
-    vlog_printf(VLOG_ERROR, "* Could be due to lack of locked memory in kernel.\n");
-    vlog_printf(VLOG_ERROR, "* Please check max allowed locked memory (ulimit -l)\n");
-    vlog_printf(VLOG_ERROR,
-                "**********************************************************************************"
-                "********************\n");
+    __log_err("**********************************************************************************"
+              "********************\n");
+    __log_err("* Failed registering a memory region of size %zu bytes\n", length);
+    __log_err("* (errno=%d %m)\n", error);
+    __log_err("* Could be due to lack of locked memory in kernel.\n");
+    __log_err("* Please check max allowed locked memory (ulimit -l)\n");
+    __log_err("**********************************************************************************"
+              "********************\n");
 }
 
 void compute_tx_checksum(mem_buf_desc_t *p_mem_buf_desc, bool l3_csum, bool l4_csum)

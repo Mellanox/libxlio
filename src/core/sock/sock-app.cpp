@@ -47,7 +47,8 @@
 
 using namespace std;
 
-#define MODULE_NAME "app:"
+#define MODULE_NAME "app"
+DOCA_LOG_REGISTER(app);
 
 #define app_logpanic __log_panic
 #define app_logerr   __log_err

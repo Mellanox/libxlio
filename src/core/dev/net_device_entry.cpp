@@ -37,6 +37,7 @@
 #include "event/event_handler_manager.h"
 
 #define MODULE_NAME "nde"
+DOCA_LOG_REGISTER(nde);
 
 #define nde_logdbg __log_info_dbg
 #define nde_logerr __log_info_err
@@ -48,7 +49,7 @@
 net_device_entry::net_device_entry(int if_index, net_device_val *ndv)
     : cache_entry_subject<int, net_device_val *>(if_index)
 {
-    nde_logdbg("");
+    nde_logdbg(LOG_FUNCTION_CALL);
     m_val = ndv;
     m_is_valid = false;
     m_cma_id_bind_trial_count = 0;

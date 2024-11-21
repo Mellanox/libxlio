@@ -57,7 +57,8 @@
 #include "core/util/sys_vars.h"
 
 // debugging macros
-#define MODULE_NAME "match:"
+#define MODULE_NAME "match"
+DOCA_LOG_REGISTER(match);
 
 #define match_logpanic   __log_panic
 #define match_logerr     __log_err
@@ -246,7 +247,7 @@ static void print_instance_conf(struct instance *instance)
         match_logdbg("\tudp connect rules:");
         print_rules_lst(node);
 
-        match_logdbg(" ");
+        match_logdbg(LOG_FUNCTION_CALL);
     }
 }
 

@@ -40,7 +40,8 @@
 #include "util/valgrind.h"
 
 #undef MODULE_NAME
-#define MODULE_NAME "verbs_extra:"
+#define MODULE_NAME "verbs_extra"
+DOCA_LOG_REGISTER(verbs_extra);
 
 // See - IB Arch Spec - 11.6.2 COMPLETION RETURN STATUS
 const char *priv_ibv_wc_status_str(enum ibv_wc_status status)
@@ -280,10 +281,10 @@ int priv_ibv_query_burst_supported(struct ibv_qp *qp, uint8_t port_num)
 int xlio_rdma_lib_reset()
 {
 #ifdef HAVE_RDMA_LIB_RESET
-    vlog_printf(VLOG_DEBUG, "rdma_lib_reset called\n");
+    __log_dbg("rdma_lib_reset called\n");
     return rdma_lib_reset();
 #else
-    vlog_printf(VLOG_DEBUG, "rdma_lib_reset doesn't exist returning 0\n");
+    __log_dbg("rdma_lib_reset doesn't exist returning 0\n");
     return 0;
 #endif
 }
@@ -297,7 +298,7 @@ int priv_ibv_modify_qp_ratelimit(struct ibv_qp *qp, struct xlio_rate_limit_t &ra
     uint64_t attr_mask = IBV_QP_STATE;
 
     if (priv_ibv_query_qp_state(qp) != IBV_QPS_RTS) {
-        vlog_printf(VLOG_DEBUG, "failed querying QP\n");
+        __log_dbg("failed querying QP\n");
         return -1;
     }
     memset(&qp_attr, 0, sizeof(qp_attr));
@@ -316,20 +317,20 @@ int priv_ibv_modify_qp_ratelimit(struct ibv_qp *qp, struct xlio_rate_limit_t &ra
     BULLSEYE_EXCLUDE_BLOCK_START
     IF_VERBS_FAILURE(xlio_ibv_modify_qp_rate_limit(qp, &qp_attr, attr_mask))
     {
-        vlog_printf(VLOG_DEBUG, "failed setting rate limit\n");
+        __log_dbg("failed setting rate limit\n");
         return -2;
     }
     ENDIF_VERBS_FAILURE;
     BULLSEYE_EXCLUDE_BLOCK_END
 #ifdef DEFINED_IBV_QP_SUPPORT_BURST
-    vlog_printf(VLOG_DEBUG, "qp was set to rate limit %d, burst size %d, packet size %d\n",
-                rate_limit.rate, rate_limit.max_burst_sz, rate_limit.typical_pkt_sz);
+    __log_dbg("qp was set to rate limit %d, burst size %d, packet size %d\n", rate_limit.rate,
+              rate_limit.max_burst_sz, rate_limit.typical_pkt_sz);
 #else
-    vlog_printf(VLOG_DEBUG, "qp was set to rate limit %d\n", rate_limit.rate);
+    __log_dbg("qp was set to rate limit %d\n", rate_limit.rate);
 #endif
     return 0;
 #else
-    vlog_printf(VLOG_DEBUG, "rate limit not supported\n");
+    __log_dbg("rate limit not supported\n");
     NOT_IN_USE(qp);
     NOT_IN_USE(rate_limit);
     NOT_IN_USE(rl_changes);
@@ -346,11 +347,11 @@ void priv_ibv_modify_cq_moderation(struct ibv_cq *cq, uint32_t period, uint32_t 
     xlio_cq_attr_moderation(cq_attr).cq_count = count;
     xlio_cq_attr_moderation(cq_attr).cq_period = period;
 
-    vlog_printf(VLOG_FUNC, "modify cq moderation, period=%d, count=%d\n", period, count);
+    __log_func("modify cq moderation, period=%d, count=%d\n", period, count);
 
     IF_VERBS_FAILURE_EX(xlio_ibv_modify_cq(cq, &cq_attr, xlio_IBV_CQ_MODERATION), EIO)
     {
-        vlog_printf(VLOG_DEBUG, "Failure modifying cq moderation (errno=%d %m)\n", errno);
+        __log_dbg("Failure modifying cq moderation (errno=%d %m)\n", errno);
     }
     ENDIF_VERBS_FAILURE;
 #else

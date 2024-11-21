@@ -111,11 +111,13 @@ bool g_init_global_ctors_done = true;
 static command_netlink *s_cmd_nl = nullptr;
 #define MAX_VERSION_STR_LEN 128
 
+DOCA_LOG_REGISTER(CORE_MAIN);
+
 global_stats_t g_global_stat_static;
 
 static int free_libxlio_resources()
 {
-    vlog_printf(VLOG_DEBUG, "%s: Closing libxlio resources\n", __FUNCTION__);
+    __log_dbg("%s: Closing libxlio resources\n", __FUNCTION__);
 
     g_b_exit = true;
 
@@ -156,7 +158,7 @@ static int free_libxlio_resources()
 
     doca_flow_destroy();
 
-    vlog_printf(VLOG_DEBUG, "doca_flow_destroy\n");
+    __log_dbg("doca_flow_destroy\n");
 
     // Block all sock-redicrt API calls into our offloading core
     fd_collection *g_p_fd_collection_temp = g_p_fd_collection;
@@ -277,7 +279,7 @@ static int free_libxlio_resources()
     }
     safe_mce_sys().app_name = nullptr;
 
-    vlog_printf(VLOG_DEBUG, "Stopping logger module\n");
+    __log_dbg("Stopping logger module\n");
 
     sock_stats::destroy_instance();
 
@@ -304,7 +306,7 @@ static int free_libxlio_resources()
 
 static void handle_segfault(int)
 {
-    vlog_printf(VLOG_ERROR, "Segmentation Fault\n");
+    __log_err("Segmentation Fault\n");
     printf_backtrace();
 
     kill(getpid(), SIGKILL);
@@ -313,16 +315,11 @@ static void handle_segfault(int)
 void check_debug()
 {
     if (safe_mce_sys().log_level >= VLOG_DEBUG) {
-        vlog_printf(VLOG_WARNING,
-                    "*************************************************************\n");
-        vlog_printf(VLOG_WARNING,
-                    "* " PRODUCT_NAME " is currently configured with high log level          *\n");
-        vlog_printf(VLOG_WARNING,
-                    "* Application performance will decrease in this log level!  *\n");
-        vlog_printf(VLOG_WARNING,
-                    "* This log level is recommended for debugging purposes only *\n");
-        vlog_printf(VLOG_WARNING,
-                    "*************************************************************\n");
+        __log_warn("*************************************************************\n");
+        __log_warn("* " PRODUCT_NAME " is currently configured with high log level          *\n");
+        __log_warn("* Application performance will decrease in this log level!  *\n");
+        __log_warn("* This log level is recommended for debugging purposes only *\n");
+        __log_warn("*************************************************************\n");
     }
 }
 
@@ -330,36 +327,25 @@ void check_cpu_speed()
 {
     double hz_min = -1, hz_max = -1;
     if (!get_cpu_hz(hz_min, hz_max)) {
-        vlog_printf(
-            VLOG_DEBUG,
-            "***************************************************************************\n");
-        vlog_printf(VLOG_DEBUG, "Failure in reading CPU speeds\n");
-        vlog_printf(
-            VLOG_DEBUG,
+        __log_dbg("***************************************************************************\n");
+        __log_dbg("Failure in reading CPU speeds\n");
+        __log_dbg(
             "Time measurements will not be accurate and Max Performance might not be achieved\n");
-        vlog_printf(VLOG_DEBUG, "Verify with: cat /proc/cpuinfo | grep \"MHz\\|clock\"\n");
-        vlog_printf(
-            VLOG_DEBUG,
-            "***************************************************************************\n");
+        __log_dbg("Verify with: cat /proc/cpuinfo | grep \"MHz\\|clock\"\n");
+        __log_dbg("***************************************************************************\n");
     } else if (!compare_double(hz_min, hz_max)) {
         // CPU cores are running at different speed
         // Machine is probably running not in high performance configuration
-        vlog_printf(
-            VLOG_DEBUG,
-            "***************************************************************************\n");
-        vlog_printf(VLOG_DEBUG,
-                    "CPU cores are running at different speeds: min= %.3lf MHz, max= %.3lf MHz\n",
-                    hz_min / 1e6, hz_max / 1e6);
-        vlog_printf(
-            VLOG_DEBUG,
+        __log_dbg("***************************************************************************\n");
+        __log_dbg("CPU cores are running at different speeds: min= %.3lf MHz, max= %.3lf MHz\n",
+                  hz_min / 1e6, hz_max / 1e6);
+        __log_dbg(
             "Time measurements will not be accurate and Max Performance might not be achieved\n");
-        vlog_printf(VLOG_DEBUG, "Verify with: cat /proc/cpuinfo | grep \"MHz\\|clock\"\n");
-        vlog_printf(
-            VLOG_DEBUG,
-            "***************************************************************************\n");
+        __log_dbg("Verify with: cat /proc/cpuinfo | grep \"MHz\\|clock\"\n");
+        __log_dbg("***************************************************************************\n");
     } else {
         // CPU cores are all running at identical speed
-        vlog_printf(VLOG_DEBUG, "CPU speed for all cores is: %.3lf MHz\n", hz_min / 1e6);
+        __log_dbg("CPU speed for all cores is: %.3lf MHz\n", hz_min / 1e6);
     }
 }
 
@@ -367,16 +353,12 @@ void check_locked_mem()
 {
     struct rlimit rlim;
     if (getrlimit(RLIMIT_MEMLOCK, &rlim) == 0 && rlim.rlim_max != RLIM_INFINITY) {
-        vlog_printf(VLOG_WARNING,
-                    "************************************************************************\n");
-        vlog_printf(VLOG_WARNING,
-                    "Your current max locked memory is: %ld. Please change it to unlimited.\n",
-                    rlim.rlim_max);
-        vlog_printf(VLOG_WARNING, "Set this user's default to `ulimit -l unlimited`.\n");
-        vlog_printf(VLOG_WARNING,
-                    "Read more about this topic in the " PRODUCT_NAME "'s User Manual.\n");
-        vlog_printf(VLOG_WARNING,
-                    "************************************************************************\n");
+        __log_warn("************************************************************************\n");
+        __log_warn("Your current max locked memory is: %ld. Please change it to unlimited.\n",
+                   rlim.rlim_max);
+        __log_warn("Set this user's default to `ulimit -l unlimited`.\n");
+        __log_warn("Read more about this topic in the " PRODUCT_NAME "'s User Manual.\n");
+        __log_warn("************************************************************************\n");
     }
 }
 
@@ -399,21 +381,21 @@ const char *buffer_batching_mode_str(buffer_batching_mode_t buffer_batching_mode
 #define FORMAT_STRING "%-30s %-26s [%s]\n"
 #define FORMAT_NUMSTR "%-30s %-2d%-24s [%s]\n"
 
-#define VLOG_STR_PARAM_DETAILS(param_val, param_def_val, args...)                                  \
+#define VLOG_STR_PARAM_DETAILS(param_val, param_def_val, _format, args...)                         \
     do {                                                                                           \
         if (param_val && strcmp(param_val, param_def_val)) {                                       \
-            vlog_printf(VLOG_INFO, ##args);                                                        \
+            __log_info(_format, ##args);                                                           \
         } else {                                                                                   \
-            vlog_printf(VLOG_DETAILS, ##args);                                                     \
+            __log_dbg(_format, ##args);                                                            \
         }                                                                                          \
     } while (0);
 
-#define VLOG_NUM_PARAM_DETAILS(param_val, param_def_val, args...)                                  \
+#define VLOG_NUM_PARAM_DETAILS(param_val, param_def_val, _format, args...)                         \
     do {                                                                                           \
         if (param_val != param_def_val) {                                                          \
-            vlog_printf(VLOG_INFO, ##args);                                                        \
+            __log_info(_format, ##args);                                                           \
         } else {                                                                                   \
-            vlog_printf(VLOG_DETAILS, ##args);                                                     \
+            __log_dbg(_format, ##args);                                                            \
         }                                                                                          \
     } while (0);
 
@@ -445,13 +427,12 @@ void print_xlio_global_settings()
     time_t clock = time(nullptr);
     char ofed_version_info[MAX_VERSION_STR_LEN];
 
-    vlog_printf(VLOG_INFO,
-                "---------------------------------------------------------------------------\n");
-    vlog_printf(VLOG_INFO, "%s\n", xlio_version_str);
+    __log_info("---------------------------------------------------------------------------\n");
+    __log_info("%s\n", xlio_version_str);
     if (PRJ_GIT_VERSION[0]) {
-        vlog_printf(VLOG_INFO, "%s\n", "Git: " PRJ_GIT_VERSION);
+        __log_info("%s\n", "Git: " PRJ_GIT_VERSION);
     }
-    vlog_printf(VLOG_INFO, "Cmd Line: %s\n", safe_mce_sys().app_name);
+    __log_info("Cmd Line: %s\n", safe_mce_sys().app_name);
 
     // Use DEBUG level logging with more details in RPM release builds
     vlog_levels_t log_level = VLOG_DEBUG;
@@ -459,35 +440,30 @@ void print_xlio_global_settings()
     // If non RPM (development builds) use more verbosity
     log_level = VLOG_DEFAULT;
 #endif
-    vlog_printf(log_level, "Current Time: %s", ctime(&clock));
-    vlog_printf(log_level, "Pid: %5u\n", getpid());
+    __log_raw(log_level, "Current Time: %s", ctime(&clock));
+    __log_raw(log_level, "Pid: %5u\n", getpid());
 
     ofed_version_info[0] = '\0';
     int ret = get_ofed_version_info(ofed_version_info, MAX_VERSION_STR_LEN);
     if (!ret && strlen(ofed_version_info) > 0) {
-        vlog_printf(VLOG_INFO, "OFED Version: %s\n", ofed_version_info);
+        __log_info("OFED Version: %s\n", ofed_version_info);
     }
 
     if (!uname(&sys_info)) {
-        vlog_printf(VLOG_DEBUG, "System: %s\n", sys_info.release);
-        vlog_printf(log_level, "Architecture: %s\n", sys_info.machine);
-        vlog_printf(log_level, "Node: %s\n", sys_info.nodename);
+        __log_dbg("System: %s\n", sys_info.release);
+        __log_raw(log_level, "Architecture: %s\n", sys_info.machine);
+        __log_raw(log_level, "Node: %s\n", sys_info.nodename);
     }
 
-    vlog_printf(VLOG_INFO,
-                "---------------------------------------------------------------------------\n");
+    __log_info("---------------------------------------------------------------------------\n");
 
     if (safe_mce_sys().mce_spec != MCE_SPEC_NONE) {
-        vlog_printf(VLOG_INFO, FORMAT_STRING, "Spec",
-                    xlio_spec::to_str((xlio_spec_t)safe_mce_sys().mce_spec), SYS_VAR_SPEC);
+        __log_info(FORMAT_STRING, "Spec", xlio_spec::to_str((xlio_spec_t)safe_mce_sys().mce_spec),
+                   SYS_VAR_SPEC);
     }
 
     VLOG_STR_PARAM_STRING("Log Level", log_level::to_str(safe_mce_sys().log_level), "",
                           SYS_VAR_LOG_LEVEL, log_level::to_str(safe_mce_sys().log_level));
-    VLOG_PARAM_NUMBER("Log Details", safe_mce_sys().log_details, MCE_DEFAULT_LOG_DETAILS,
-                      SYS_VAR_LOG_DETAILS);
-    VLOG_PARAM_STRING("Log Colors", safe_mce_sys().log_colors, MCE_DEFAULT_LOG_COLORS,
-                      SYS_VAR_LOG_COLORS, safe_mce_sys().log_colors ? "Enabled " : "Disabled");
     VLOG_STR_PARAM_STRING("Log File", safe_mce_sys().log_filename, MCE_DEFAULT_LOG_FILE,
                           SYS_VAR_LOG_FILENAME, safe_mce_sys().log_filename);
     VLOG_STR_PARAM_STRING("Stats File", safe_mce_sys().stats_filename, MCE_DEFAULT_STATS_FILE,
@@ -523,16 +499,14 @@ void print_xlio_global_settings()
                       MCE_DEFAULT_RING_ALLOCATION_LOGIC_RX, SYS_VAR_RING_ALLOCATION_LOGIC_RX,
                       ring_logic_str(safe_mce_sys().ring_allocation_logic_rx));
     if (safe_mce_sys().ring_allocation_logic_rx == RING_LOGIC_PER_USER_ID) {
-        vlog_printf(VLOG_WARNING,
-                    "user_id is not supported using "
-                    "environment variable , use etra_api, using default\n");
+        __log_warn("user_id is not supported using "
+                   "environment variable , use etra_api, using default\n");
         safe_mce_sys().ring_allocation_logic_rx = MCE_DEFAULT_RING_ALLOCATION_LOGIC_RX;
     }
 
     if (safe_mce_sys().ring_allocation_logic_tx == RING_LOGIC_PER_USER_ID) {
-        vlog_printf(VLOG_WARNING,
-                    "user_id is not supported using "
-                    "environment variable , use etra_api, using default\n");
+        __log_warn("user_id is not supported using "
+                   "environment variable , use etra_api, using default\n");
         safe_mce_sys().ring_allocation_logic_tx = MCE_DEFAULT_RING_ALLOCATION_LOGIC_TX;
     }
 
@@ -689,8 +663,7 @@ void print_xlio_global_settings()
 
     if (safe_mce_sys().progress_engine_interval_msec == MCE_CQ_DRAIN_INTERVAL_DISABLED ||
         safe_mce_sys().progress_engine_wce_max == 0) {
-        vlog_printf(VLOG_INFO, FORMAT_STRING, "CQ Drain Thread", "Disabled",
-                    SYS_VAR_PROGRESS_ENGINE_INTERVAL);
+        __log_info(FORMAT_STRING, "CQ Drain Thread", "Disabled", SYS_VAR_PROGRESS_ENGINE_INTERVAL);
     } else {
         VLOG_PARAM_NUMBER("CQ Drain Interval (msec)", safe_mce_sys().progress_engine_interval_msec,
                           MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC,
@@ -711,8 +684,8 @@ void print_xlio_global_settings()
     VLOG_PARAM_NUMBER("CQ AIM Max Period (usec)", safe_mce_sys().cq_aim_max_period_usec,
                       MCE_DEFAULT_CQ_AIM_MAX_PERIOD_USEC, SYS_VAR_CQ_AIM_MAX_PERIOD_USEC);
     if (safe_mce_sys().cq_aim_interval_msec == MCE_CQ_ADAPTIVE_MODERATION_DISABLED) {
-        vlog_printf(VLOG_INFO, FORMAT_STRING, "CQ Adaptive Moderation", "Disabled",
-                    SYS_VAR_CQ_AIM_INTERVAL_MSEC);
+        __log_info(FORMAT_STRING, "CQ Adaptive Moderation", "Disabled",
+                   SYS_VAR_CQ_AIM_INTERVAL_MSEC);
     } else {
         VLOG_PARAM_NUMBER("CQ AIM Interval (msec)", safe_mce_sys().cq_aim_interval_msec,
                           MCE_DEFAULT_CQ_AIM_INTERVAL_MSEC, SYS_VAR_CQ_AIM_INTERVAL_MSEC);
@@ -891,8 +864,7 @@ void print_xlio_global_settings()
                       SYS_VAR_MULTILOCK,
                       (safe_mce_sys().multilock == MULTILOCK_SPIN ? "Spin " : "Mutex"));
 
-    vlog_printf(VLOG_INFO,
-                "---------------------------------------------------------------------------\n");
+    __log_info("---------------------------------------------------------------------------\n");
 }
 
 void prepare_fork()
@@ -900,24 +872,18 @@ void prepare_fork()
     if (safe_mce_sys().handle_fork && !g_init_ibv_fork_done) {
         IF_VERBS_FAILURE(ibv_fork_init())
         {
-            vlog_printf(VLOG_DEBUG, "ibv_fork_init failed (errno=%d %m)\n", errno);
-            vlog_printf(
-                VLOG_ERROR,
-                "************************************************************************\n");
-            vlog_printf(VLOG_ERROR,
-                        "ibv_fork_init() failed! The effect of the application calling 'fork()' is "
-                        "undefined!\n");
-            vlog_printf(VLOG_ERROR,
-                        "Read the fork section in the " PRODUCT_NAME
-                        "'s User Manual for more information\n");
-            vlog_printf(
-                VLOG_ERROR,
-                "************************************************************************\n");
+            __log_dbg("ibv_fork_init failed (errno=%d %m)\n", errno);
+            __log_err("************************************************************************\n");
+            __log_err("ibv_fork_init() failed! The effect of the application calling 'fork()' is "
+                      "undefined!\n");
+            __log_err("Read the fork section in the " PRODUCT_NAME
+                      "'s User Manual for more information\n");
+            __log_err("************************************************************************\n");
         }
         else
         {
             g_init_ibv_fork_done = true;
-            vlog_printf(VLOG_DEBUG, "ibv_fork_init() succeeded, fork() may be used safely!!\n");
+            __log_dbg("ibv_fork_init() succeeded, fork() may be used safely!!\n");
         }
         ENDIF_VERBS_FAILURE;
     }
@@ -931,15 +897,15 @@ void register_handler_segv()
     act.sa_flags = 0;
     sigemptyset(&act.sa_mask);
     sigaction(SIGSEGV, &act, nullptr);
-    vlog_printf(VLOG_INFO, "Registered a SIGSEGV handler\n");
+    __log_info("Registered a SIGSEGV handler\n");
 }
 
 extern "C" void sock_redirect_main(void)
 {
-    vlog_printf(VLOG_DEBUG, "%s()\n", __FUNCTION__);
+    __log_dbg("%s()\n", __FUNCTION__);
     //	int ret = atexit(sock_redirect_exit);
     //	if (ret)
-    //		vlog_printf(VLOG_ERROR, "%s() ERROR at atexit() (ret=%d %m)\n", __FUNCTION__, ret);
+    //		__log_err( "%s() ERROR at atexit() (ret=%d %m)\n", __FUNCTION__, ret);
 
     tv_clear(&g_last_zero_polling_time);
 
@@ -950,7 +916,7 @@ extern "C" void sock_redirect_main(void)
 
 extern "C" void sock_redirect_exit(void)
 {
-    vlog_printf(VLOG_DEBUG, "%s()\n", __FUNCTION__);
+    __log_dbg("%s()\n", __FUNCTION__);
 
     if (g_init_global_ctors_done) {
         xlio_stats_instance_remove_global_block(&g_global_stat_static);
@@ -981,12 +947,11 @@ static size_t calc_rx_wqe_buff_size()
         size_t min_puff_size = g_p_net_device_table_mgr->get_max_mtu() + ETH_VLAN_HDR_LEN;
         buff_size = safe_mce_sys().strq_stride_num_per_rwqe * safe_mce_sys().strq_stride_size_bytes;
         if (buff_size < min_puff_size) {
-            vlog_printf(VLOG_INFO,
-                        "The requested " SYS_VAR_STRQ_NUM_STRIDES "(%" PRIu32
-                        ") * " SYS_VAR_STRQ_STRIDE_SIZE_BYTES "(%" PRIu32 ") = %zu "
-                        "is less then MTU + Headers (%zu)",
-                        safe_mce_sys().strq_stride_num_per_rwqe,
-                        safe_mce_sys().strq_stride_size_bytes, buff_size, min_puff_size);
+            __log_info("The requested " SYS_VAR_STRQ_NUM_STRIDES "(%" PRIu32
+                       ") * " SYS_VAR_STRQ_STRIDE_SIZE_BYTES "(%" PRIu32 ") = %zu "
+                       "is less then MTU + Headers (%zu)",
+                       safe_mce_sys().strq_stride_num_per_rwqe,
+                       safe_mce_sys().strq_stride_size_bytes, buff_size, min_puff_size);
 
             buff_size = g_p_net_device_table_mgr->get_max_mtu() + ETH_VLAN_HDR_LEN;
         }
@@ -1015,7 +980,7 @@ static doca_error_t init_doca_flow()
     }
 #endif
 
-    vlog_printf(VLOG_DEBUG, "Initializing DOCA Flow\n");
+    __log_dbg("Initializing DOCA Flow\n");
 
     result = doca_flow_cfg_create(&rxq_flow_cfg);
     if (result != DOCA_SUCCESS) {
@@ -1092,18 +1057,17 @@ static void do_global_ctors_helper()
     /* Open communication with daemon */
     if (safe_mce_sys().service_enable) {
         NEW_CTOR(g_p_agent, agent());
-        vlog_printf(VLOG_DEBUG, "Agent setup state: g_p_agent=%p active=%d\n", g_p_agent,
-                    (g_p_agent ? g_p_agent->state() : -1));
+        __log_dbg("Agent setup state: g_p_agent=%p active=%d\n", g_p_agent,
+                  (g_p_agent ? g_p_agent->state() : -1));
     } else {
-        vlog_printf(VLOG_DEBUG, "Agent is disabled\n");
+        __log_dbg("Agent is disabled\n");
     }
 
     // Create all global management objects
     NEW_CTOR(g_p_event_handler_manager, event_handler_manager());
 
-    xlio_shmem_stats_open(&g_p_vlogger_level, &g_p_vlogger_details);
+    xlio_shmem_stats_open(&g_p_vlogger_level);
     *g_p_vlogger_level = g_vlogger_level;
-    *g_p_vlogger_details = g_vlogger_details;
 
     sock_stats::init_instance(safe_mce_sys().stats_fd_num_max);
 
@@ -1196,16 +1160,13 @@ static void do_global_ctors_helper()
     NEW_CTOR(g_p_fd_collection, fd_collection());
 
     if (check_if_regular_file(safe_mce_sys().conf_filename)) {
-        vlog_printf(VLOG_WARNING,
-                    "FAILED to read library configuration file. %s is not a regular file.\n",
-                    safe_mce_sys().conf_filename);
+        __log_warn("FAILED to read library configuration file. %s is not a regular file.\n",
+                   safe_mce_sys().conf_filename);
         if (strcmp(MCE_DEFAULT_CONF_FILE, safe_mce_sys().conf_filename)) {
-            vlog_printf(VLOG_INFO, "Please see README section regarding %s\n",
-                        SYS_VAR_CONF_FILENAME);
+            __log_info("Please see README section regarding %s\n", SYS_VAR_CONF_FILENAME);
         }
     } else if (__xlio_parse_config_file(safe_mce_sys().conf_filename)) {
-        vlog_printf(VLOG_DEBUG, "FAILED to read library configuration file: %s\n",
-                    safe_mce_sys().conf_filename);
+        __log_dbg("FAILED to read library configuration file: %s\n", safe_mce_sys().conf_filename);
     }
 
     // initialize LWIP tcp/ip stack
@@ -1245,10 +1206,10 @@ int do_global_ctors()
     try {
         do_global_ctors_helper();
     } catch (const xlio_exception &error) {
-        vlog_printf(VLOG_DETAILS, "Error: %s", error.what());
+        __log_details("Error: %s", error.what());
         return -1;
     } catch (const std::exception &error) {
-        vlog_printf(VLOG_ERROR, "%s", error.what());
+        __log_err("%s", error.what());
         return -1;
     }
     /* do not return internal errno in case constructor is executed successfully */
@@ -1286,8 +1247,8 @@ void reset_globals()
 }
 
 // checks that netserver runs with flags: -D, -f. Otherwise, warn user for wrong usage
-// this test is performed since xlio does not support fork, and these flags make sure the netserver
-// application will not use fork.
+// this test is performed since xlio does not support fork, and these flags make sure the
+// netserver application will not use fork.
 void check_netperf_flags()
 {
     char cmd_line[FILENAME_MAX];
@@ -1320,7 +1281,7 @@ void check_netperf_flags()
         pch = strtok(nullptr, " ");
     }
     if (!b_D_flag || !b_f_flag) {
-        vlog_printf(VLOG_WARNING, "Running netserver without flags: -D, -f can cause failure\n");
+        __log_warn("Running netserver without flags: -D, -f can cause failure\n");
         add_flags[0] = '-'; // check which flags need to be added to the command
         if (!b_D_flag) {
             add_flags[1] = 'D';
@@ -1328,8 +1289,7 @@ void check_netperf_flags()
         if (!b_f_flag) {
             add_flags[1] == 0 ? add_flags[1] = 'f' : add_flags[2] = 'f';
         }
-        vlog_printf(VLOG_WARNING, "Recommended command line: %s %s\n", safe_mce_sys().app_name,
-                    add_flags);
+        __log_warn("Recommended command line: %s %s\n", safe_mce_sys().app_name, add_flags);
     }
 }
 
@@ -1365,8 +1325,7 @@ extern "C" int xlio_init(void)
 
     g_init_global_ctors_done = false;
 
-    vlog_start(PRODUCT_NAME, safe_mce_sys().log_level, safe_mce_sys().log_filename,
-               safe_mce_sys().log_details, safe_mce_sys().log_colors);
+    vlog_start(PRODUCT_NAME, safe_mce_sys().log_level, safe_mce_sys().log_filename);
 
     print_xlio_global_settings();
 
@@ -1377,13 +1336,11 @@ extern "C" int xlio_init(void)
 
     if (*safe_mce_sys().stats_filename) {
         if (check_if_regular_file(safe_mce_sys().stats_filename)) {
-            vlog_printf(VLOG_WARNING,
-                        "FAILED to create " PRODUCT_NAME
-                        " statistics file. %s is not a regular file.\n",
-                        safe_mce_sys().stats_filename);
+            __log_warn("FAILED to create " PRODUCT_NAME
+                       " statistics file. %s is not a regular file.\n",
+                       safe_mce_sys().stats_filename);
         } else if (!(g_stats_file = fopen(safe_mce_sys().stats_filename, "w"))) {
-            vlog_printf(VLOG_WARNING, " Couldn't open statistics file: %s\n",
-                        safe_mce_sys().stats_filename);
+            __log_warn(" Couldn't open statistics file: %s\n", safe_mce_sys().stats_filename);
         }
     }
     safe_mce_sys().stats_file = g_stats_file;

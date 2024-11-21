@@ -39,6 +39,7 @@
 #include "hw_queue_tx.h"
 
 #define MODULE_NAME "cq_mgr_tx"
+DOCA_LOG_REGISTER(cq_mgr_tx);
 
 #define cq_logpanic   __log_info_panic
 #define cq_logerr     __log_info_err
@@ -134,7 +135,7 @@ void cq_mgr_tx::del_qp_tx(hw_queue_tx *hqtx_ptr)
 
 bool cq_mgr_tx::request_notification()
 {
-    cq_logfuncall("");
+    cq_logfuncall(LOG_FUNCTION_CALL);
 
     if (safe_mce_sys().doca_tx) {
         return m_hqtx_ptr->request_notification();
@@ -168,10 +169,9 @@ cq_mgr_tx *cq_mgr_tx::get_cq_mgr_from_cq_event(struct ibv_comp_channel *p_cq_cha
     // read & ack the CQ event
     IF_VERBS_FAILURE(ibv_get_cq_event(p_cq_channel, &p_cq_hndl, &p_context))
     {
-        vlog_printf(VLOG_INFO,
-                    MODULE_NAME
-                    ":%d: waiting on cq_mgr_tx event returned with error (errno=%d %m)\n",
-                    __LINE__, errno);
+        __log_info(MODULE_NAME
+                   ":%d: waiting on cq_mgr_tx event returned with error (errno=%d %m)\n",
+                   __LINE__, errno);
     }
     else
     {
@@ -186,7 +186,7 @@ cq_mgr_tx *cq_mgr_tx::get_cq_mgr_from_cq_event(struct ibv_comp_channel *p_cq_cha
 
 int cq_mgr_tx::poll_and_process_element_tx()
 {
-    cq_logfuncall("");
+    cq_logfuncall(LOG_FUNCTION_CALL);
 
     if (safe_mce_sys().doca_tx) {
         return m_hqtx_ptr->poll_and_process_doca_tx();

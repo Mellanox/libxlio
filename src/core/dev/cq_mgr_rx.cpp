@@ -51,6 +51,7 @@
 #include "ring_simple.h"
 
 #define MODULE_NAME "cq_mgr_rx"
+DOCA_LOG_REGISTER(cq_mgr_rx);
 
 #define cq_logpanic   __log_info_panic
 #define cq_logerr     __log_info_err
@@ -63,8 +64,7 @@
 #define cq_logdbg_no_funcname(log_fmt, log_args...)                                                \
     do {                                                                                           \
         if (g_vlogger_level >= VLOG_DEBUG)                                                         \
-            vlog_printf(VLOG_DEBUG, MODULE_NAME "[%p]:%d: " log_fmt "\n", __INFO__, __LINE__,      \
-                        ##log_args);                                                               \
+            __log_dbg(MODULE_NAME "[%p]:%d: " log_fmt "\n", __INFO__, __LINE__, ##log_args);       \
     } while (0)
 
 atomic_t cq_mgr_rx::m_n_cq_id_counter_rx = ATOMIC_INIT(1);
@@ -330,7 +330,7 @@ void cq_mgr_rx::return_extra_buffers()
 mem_buf_desc_t *cq_mgr_rx::cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc, enum buff_status_e status)
 {
     /* Assume locked!!! */
-    cq_logfuncall("");
+    cq_logfuncall(LOG_FUNCTION_CALL);
 
     if (unlikely(status != BS_OK)) {
         m_p_next_rx_desc_poll = nullptr;
@@ -414,7 +414,7 @@ void cq_mgr_rx::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
 void cq_mgr_rx::mem_buf_desc_return_to_owner(mem_buf_desc_t *p_mem_buf_desc,
                                              void *pv_fd_ready_array /*=NULL*/)
 {
-    cq_logfuncall("");
+    cq_logfuncall(LOG_FUNCTION_CALL);
     NOT_IN_USE(pv_fd_ready_array);
     cq_mgr_rx::reclaim_recv_buffer_helper(p_mem_buf_desc);
 }
@@ -438,7 +438,7 @@ bool cq_mgr_rx::reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst)
 
 bool cq_mgr_rx::reclaim_recv_buffers(descq_t *rx_reuse)
 {
-    cq_logfuncall("");
+    cq_logfuncall(LOG_FUNCTION_CALL);
     // Called from outside cq_mgr_rx context which is not locked!!
     while (!rx_reuse->empty()) {
         mem_buf_desc_t *buff = rx_reuse->get_and_pop_front();
@@ -451,7 +451,7 @@ bool cq_mgr_rx::reclaim_recv_buffers(descq_t *rx_reuse)
 
 bool cq_mgr_rx::request_notification()
 {
-    cq_logfuncall("");
+    cq_logfuncall(LOG_FUNCTION_CALL);
 
     if (m_b_notification_armed == false) {
         cq_logfunc("arming cq_mgr_rx notification channel");
@@ -475,7 +475,7 @@ bool cq_mgr_rx::request_notification()
 
 void cq_mgr_rx::wait_for_notification()
 {
-    cq_logfunc("");
+    cq_logfunc(LOG_FUNCTION_CALL);
 
     if (m_b_notification_armed) {
         struct ibv_cq *p_cq_hndl = nullptr;

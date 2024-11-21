@@ -66,8 +66,6 @@ Example:
  XLIO INFO   : Node: r-aa-zorro006
  XLIO INFO   : ---------------------------------------------------------------------------
  XLIO INFO   : Log Level                      DEBUG                      [XLIO_TRACELEVEL]
- XLIO DETAILS: Log Details                    0                          [XLIO_LOG_DETAILS]
- XLIO DETAILS: Log Colors                     Enabled                    [XLIO_LOG_COLORS]
  XLIO DETAILS: Log File                                                  [XLIO_LOG_FILE]
  XLIO DETAILS: Stats File                                                [XLIO_STATS_FILE]
  XLIO DETAILS: Stats shared memory directory  /tmp/xlio                  [XLIO_STATS_SHMEM_DIR]
@@ -214,20 +212,6 @@ finer
     It is recommended to use this level with XLIO_LOG_FILE parameter.
 all
     today this level is identical to finer
-
-XLIO_LOG_DETAILS
-Add details on each log line.
-0 = Basic log line
-1 = ThreadId
-2 = ProcessId + ThreadId
-3 = Time + ProcessId + ThreadId [Time is in milli-seconds from start of process]
-Default value is 0
-
-XLIO_LOG_COLORS
-Use color scheme when logging. Red for errors, purple for warnings and dim for
-low level debugs. XLIO_LOG_COLORS is automatically disabled when logging is direct
-to a non terminal device (e.g. XLIO_LOG_FILE is configured).
-Default value is 1 (Enabled)
 
 XLIO_LOG_FILE
 Redirect all logging to a specific user defined file.

@@ -48,6 +48,7 @@
 #include "util/sys_vars.h"
 
 #define MODULE_NAME "hugepage_mgr"
+DOCA_LOG_REGISTER(hugepage_mgr);
 
 hugepage_mgr g_hugepage_mgr;
 
@@ -59,10 +60,9 @@ hugepage_mgr::hugepage_mgr()
 
     /* Check hugepage size if requested by user explicitly. */
     if (safe_mce_sys().hugepage_size != 0 && !is_hugepage_supported(safe_mce_sys().hugepage_size)) {
-        vlog_printf(VLOG_WARNING,
-                    "Requested hugepage %s is not supported by the system. "
-                    "XLIO will autodetect optimal hugepage.\n",
-                    option_size::to_str(safe_mce_sys().hugepage_size));
+        __log_warn("Requested hugepage %s is not supported by the system. "
+                   "XLIO will autodetect optimal hugepage.\n",
+                   option_size::to_str(safe_mce_sys().hugepage_size));
         /* Value 0 means default autodetection behavior. Don't set MCE_DEFAULT_HUGEPAGE_SIZE
          * here, because it can be defined to an unsupported specific value.
          */
@@ -186,31 +186,30 @@ void hugepage_mgr::print_report(bool short_report /*=false*/)
     read_sysfs();
 
     get_supported_hugepages(hugepages);
-    vlog_printf(VLOG_INFO, "Hugepages info:\n");
+    __log_info("Hugepages info:\n");
     if (safe_mce_sys().hugepage_size) {
-        vlog_printf(VLOG_INFO, "  User forced to use %lu kB hugepages.\n",
-                    (safe_mce_sys().hugepage_size) / 1024U);
+        __log_info("  User forced to use %lu kB hugepages.\n",
+                   (safe_mce_sys().hugepage_size) / 1024U);
     }
     for (size_t hugepage : hugepages) {
-        vlog_printf(VLOG_INFO, "  %zu kB : total=%u free=%u\n", hugepage / 1024U,
-                    get_total_hugepages(hugepage), get_free_hugepages(hugepage));
+        __log_info("  %zu kB : total=%u free=%u\n", hugepage / 1024U, get_total_hugepages(hugepage),
+                   get_free_hugepages(hugepage));
     }
 
     if (short_report) {
         return;
     }
 
-    vlog_printf(VLOG_INFO, "Hugepages statistics:\n");
+    __log_info("Hugepages statistics:\n");
     for (size_t hugepage : hugepages) {
-        vlog_printf(VLOG_INFO, "  %zu kB : allocated_pages=%u allocations=%u\n", hugepage / 1024U,
-                    m_hugepages[hugepage].nr_hugepages_allocated,
-                    m_hugepages[hugepage].nr_allocations);
+        __log_info("  %zu kB : allocated_pages=%u allocations=%u\n", hugepage / 1024U,
+                   m_hugepages[hugepage].nr_hugepages_allocated,
+                   m_hugepages[hugepage].nr_allocations);
     }
-    vlog_printf(VLOG_INFO, "  Total: allocations=%u fails=%u\n", m_stats.allocations,
-                m_stats.fails);
-    vlog_printf(VLOG_INFO, "  Total: allocated=%zuMB requested=%zuMB unused_space=%zuMB\n",
-                m_stats.total_allocated / ONE_MB, m_stats.total_requested / ONE_MB,
-                m_stats.total_unused / ONE_MB);
+    __log_info("  Total: allocations=%u fails=%u\n", m_stats.allocations, m_stats.fails);
+    __log_info("  Total: allocated=%zuMB requested=%zuMB unused_space=%zuMB\n",
+               m_stats.total_allocated / ONE_MB, m_stats.total_requested / ONE_MB,
+               m_stats.total_unused / ONE_MB);
 }
 
 void hugepage_mgr::read_sysfs()

@@ -35,6 +35,7 @@
 #include "dev/rfs_uc_tcp_gro.h"
 
 #define MODULE_NAME "gro_mgr"
+DOCA_LOG_REGISTER(gro_mgr);
 
 gro_mgr::gro_mgr(uint32_t flow_max, uint32_t buf_max)
     : m_n_flow_max(flow_max)

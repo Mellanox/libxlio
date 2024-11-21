@@ -40,12 +40,16 @@
 #include <stdint.h>
 #include <getopt.h>
 
+#include <doca_log.h>
+
 #if HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
 #endif
 
 #include "hash.h"
 #include "daemon.h"
+
+DOCA_LOG_REGISTER(daemon);
 
 extern int proc_loop(void);
 
@@ -61,12 +65,19 @@ int main(int argc, char *argv[])
 {
     int rc = 0;
 
-    /* Setup syslog logging */
-    openlog(MODULE_NAME, LOG_PID, LOG_LOCAL5);
+    struct doca_log_backend *g_logger_backend = NULL;
+    const doca_error_t backend_create_status =
+        doca_log_backend_create_with_syslog(MODULE_NAME, &g_logger_backend);
+
+    if (backend_create_status != DOCA_SUCCESS) {
+        printf("Initialization ERROR - doca_log_backend_create_with_file returned: %d",
+               backend_create_status);
+        goto err;
+    }
 
     /* command line parsing... */
     config_def();
-    log_info("Starting\n");
+    DOCA_LOG_INFO("Starting\n");
 
     config_set(argc, argv);
 
@@ -81,8 +92,8 @@ int main(int argc, char *argv[])
     /* Set name of the process */
 #if HAVE_SYS_PRCTL_H
     if (prctl(PR_SET_NAME, MODULE_NAME, NULL, NULL, NULL) < 0) {
-        log_error("cannot set process name to %s, errno=%d (%s)\n", MODULE_NAME, errno,
-                  strerror(errno));
+        DOCA_LOG_ERR("cannot set process name to %s, errno=%d (%s)\n", MODULE_NAME, errno,
+                     strerror(errno));
         goto err;
     }
 #endif
@@ -94,22 +105,22 @@ int main(int argc, char *argv[])
         daemon_cfg.lock_fd =
             open(daemon_cfg.lock_file, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP);
         if (daemon_cfg.lock_fd < 0) {
-            log_error("could not open PID lock file %s, errno=%d (%s)\n", daemon_cfg.lock_file,
-                      errno, strerror(errno));
+            DOCA_LOG_ERR("could not open PID lock file %s, errno=%d (%s)\n", daemon_cfg.lock_file,
+                         errno, strerror(errno));
             goto err;
         }
 
         if (lockf(daemon_cfg.lock_fd, F_TLOCK, 0) < 0) {
-            log_error("could not lock PID lock file %s, errno=%d (%s)\n", daemon_cfg.lock_file,
-                      errno, strerror(errno));
+            DOCA_LOG_ERR("could not lock PID lock file %s, errno=%d (%s)\n", daemon_cfg.lock_file,
+                         errno, strerror(errno));
             goto err;
         }
 
         /* Write pid to lockfile */
         sprintf(str, "%d\n", getpid());
         if (write(daemon_cfg.lock_fd, str, strlen(str)) < 0) {
-            log_error("could not write to PID lock file %s, errno=%d (%s)\n", daemon_cfg.lock_file,
-                      errno, strerror(errno));
+            DOCA_LOG_ERR("could not write to PID lock file %s, errno=%d (%s)\n",
+                         daemon_cfg.lock_file, errno, strerror(errno));
             goto err;
         }
     }
@@ -121,7 +132,7 @@ int main(int argc, char *argv[])
     close(daemon_cfg.lock_fd);
     unlink(daemon_cfg.lock_file);
 
-    log_info("Terminated with code %d\n", rc);
+    DOCA_LOG_INFO("Terminated with code %d\n", rc);
     closelog();
 
     return (rc < 0 ? EXIT_FAILURE : EXIT_SUCCESS);
@@ -131,7 +142,7 @@ err:
 
 static void handle_signal(int signo)
 {
-    log_debug("Getting signal (%d)\n", signo);
+    DOCA_LOG_DBG("Getting signal (%d)\n", signo);
 
     switch (signo) {
     case SIGALRM:
@@ -154,7 +165,7 @@ static void daemonize(void)
     /* Fork off the parent process */
     pid = fork();
     if (pid < 0) {
-        log_error("unable to fork daemon, code=%d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_ERR("unable to fork daemon, code=%d (%s)\n", errno, strerror(errno));
         exit(EXIT_FAILURE);
     }
     /* If we got a good PID, then we can exit the parent process. */
@@ -165,18 +176,18 @@ static void daemonize(void)
         sigemptyset(&sa.sa_mask);
         sa.sa_flags = 0;
         if (sigaction(SIGUSR1, &sa, NULL) < 0) {
-            log_error("cannot register SIGUSR1 signal handler, errno=%d (%s)\n", errno,
-                      strerror(errno));
+            DOCA_LOG_ERR("cannot register SIGUSR1 signal handler, errno=%d (%s)\n", errno,
+                         strerror(errno));
             exit(EXIT_FAILURE);
         }
         if (sigaction(SIGCHLD, &sa, NULL) < 0) {
-            log_error("cannot register SIGCHLD signal handler, errno=%d (%s)\n", errno,
-                      strerror(errno));
+            DOCA_LOG_ERR("cannot register SIGCHLD signal handler, errno=%d (%s)\n", errno,
+                         strerror(errno));
             exit(EXIT_FAILURE);
         }
         if (sigaction(SIGALRM, &sa, NULL) < 0) {
-            log_error("cannot register SIGALRM signal handler, errno=%d (%s)\n", errno,
-                      strerror(errno));
+            DOCA_LOG_ERR("cannot register SIGALRM signal handler, errno=%d (%s)\n", errno,
+                         strerror(errno));
             exit(EXIT_FAILURE);
         }
 
@@ -207,36 +218,38 @@ static void daemonize(void)
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     if (sigaction(SIGINT, &sa, NULL) < 0) {
-        log_error("cannot register SIGINT signal handler, errno=%d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_ERR("cannot register SIGINT signal handler, errno=%d (%s)\n", errno,
+                     strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     /* Create a new SID for the child process */
     sid = setsid();
     if (sid < 0) {
-        log_error("unable to create a new session, errno %d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_ERR("unable to create a new session, errno %d (%s)\n", errno, strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     /* Change the current working directory */
     if ((chdir("/")) < 0) {
-        log_error("unable to change directory to %s, errno %d (%s)\n", "/", errno, strerror(errno));
+        DOCA_LOG_ERR("unable to change directory to %s, errno %d (%s)\n", "/", errno,
+                     strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     /* Redirect standard files to /dev/null */
     if (NULL == freopen("/dev/null", "r", stdin)) {
-        log_error("unable redirect stdin, errno %d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_ERR("unable redirect stdin, errno %d (%s)\n", errno, strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     if (NULL == freopen("/dev/null", "w", stdout)) {
-        log_error("unable redirect stdout, errno %d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_ERR("unable redirect stdout, errno %d (%s)\n", errno, strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     if (NULL == freopen("/dev/null", "w", stderr)) {
-        log_error("unable redirect stderr, errno %d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_ERR("unable redirect stderr, errno %d (%s)\n", errno, strerror(errno));
         exit(EXIT_FAILURE);
     }
 
@@ -337,18 +350,18 @@ static int config_set(int argc, char **argv)
         }
     }
 
-    log_debug("CONFIGURATION:\n");
-    log_debug("package version: %s\n", PACKAGE_VERSION);
-    log_debug("mode: %d\n", daemon_cfg.opt.mode);
-    log_debug("log level: %d\n", daemon_cfg.opt.log_level);
-    log_debug("max pid: %d\n", daemon_cfg.opt.max_pid_num);
-    log_debug("max fid: %d\n", daemon_cfg.opt.max_fid_num);
-    log_debug("force rst: %d\n", daemon_cfg.opt.force_rst);
-    log_debug("retry interval: %d ms \n", daemon_cfg.opt.retry_interval);
-    log_debug("lock file: %s\n", daemon_cfg.lock_file);
-    log_debug("sock file: %s\n", daemon_cfg.sock_file);
-    log_debug("notify dir: %s\n", daemon_cfg.notify_dir);
-    log_debug("format version: 0x%X\n", XLIO_AGENT_VER);
+    DOCA_LOG_DBG("CONFIGURATION:\n");
+    DOCA_LOG_DBG("package version: %s\n", PACKAGE_VERSION);
+    DOCA_LOG_DBG("mode: %d\n", daemon_cfg.opt.mode);
+    DOCA_LOG_DBG("log level: %d\n", daemon_cfg.opt.log_level);
+    DOCA_LOG_DBG("max pid: %d\n", daemon_cfg.opt.max_pid_num);
+    DOCA_LOG_DBG("max fid: %d\n", daemon_cfg.opt.max_fid_num);
+    DOCA_LOG_DBG("force rst: %d\n", daemon_cfg.opt.force_rst);
+    DOCA_LOG_DBG("retry interval: %d ms \n", daemon_cfg.opt.retry_interval);
+    DOCA_LOG_DBG("lock file: %s\n", daemon_cfg.lock_file);
+    DOCA_LOG_DBG("sock file: %s\n", daemon_cfg.sock_file);
+    DOCA_LOG_DBG("notify dir: %s\n", daemon_cfg.notify_dir);
+    DOCA_LOG_DBG("format version: 0x%X\n", XLIO_AGENT_VER);
 
     if (0 != rc) {
         usage();

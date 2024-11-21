@@ -42,7 +42,7 @@
 class tostr {
 public:
     virtual ~tostr() {};
-    virtual const std::string to_str() const { return std::string(""); };
+    virtual const std::string to_str() const { return std::string(" "); };
 };
 
 #endif /* TO_STR_H_ */

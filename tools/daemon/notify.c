@@ -40,6 +40,8 @@
 #include <stdint.h>
 #include <sys/socket.h>
 
+#include <doca_log.h>
+
 #ifdef HAVE_SYS_INOTIFY_H
 #include <sys/inotify.h>
 #endif
@@ -49,6 +51,8 @@
 
 #include "hash.h"
 #include "daemon.h"
+
+DOCA_LOG_REGISTER(notify);
 
 #ifndef KERNEL_O_LARGEFILE
 #if defined(__aarch64__) || defined(__powerpc__)
@@ -149,7 +153,7 @@ int open_notify(void)
     if (rc < 0) {
         goto err;
     }
-    log_debug("setting raw socket ...\n");
+    DOCA_LOG_DBG("setting raw socket ...\n");
 
     rc = do_open_notify();
     if (rc < 0) {
@@ -162,7 +166,7 @@ err:
 
 void close_notify(void)
 {
-    log_debug("closing raw socket ...\n");
+    DOCA_LOG_DBG("closing raw socket ...\n");
 
     if (daemon_cfg.notify_fd > 0) {
         close(daemon_cfg.notify_fd);
@@ -194,7 +198,7 @@ again:
             goto again;
         }
         rc = -errno;
-        log_error("Failed read events() errno %d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_ERR("Failed read events() errno %d (%s)\n", errno, strerror(errno));
         goto err;
     }
 
@@ -224,9 +228,9 @@ static int setup_notify(void)
         close(fd);
         return 0;
     } else {
-        log_debug("fanotify_init() errno %d (%s)\n", errno,
-                  (ENOSYS == errno ? "missing support for fanotify (check CONFIG_FANOTIFY=y)\n"
-                                   : strerror(errno)));
+        DOCA_LOG_DBG("fanotify_init() errno %d (%s)\n", errno,
+                     (ENOSYS == errno ? "missing support for fanotify (check CONFIG_FANOTIFY=y)\n"
+                                      : strerror(errno)));
     }
 #endif
 
@@ -238,14 +242,15 @@ static int setup_notify(void)
         close(fd);
         return 0;
     } else {
-        log_debug("inotify_init() errno %d (%s)\n", errno,
-                  (ENOSYS == errno ? "missing support for inotify (check CONFIG_INOTIFY_USER=y)\n"
-                                   : strerror(errno)));
+        DOCA_LOG_DBG(
+            "inotify_init() errno %d (%s)\n", errno,
+            (ENOSYS == errno ? "missing support for inotify (check CONFIG_INOTIFY_USER=y)\n"
+                             : strerror(errno)));
     }
 #endif
 
-    log_error("Failed notify way selection, check kernel configuration errno %d (%s)\n", errno,
-              strerror(errno));
+    DOCA_LOG_ERR("Failed notify way selection, check kernel configuration errno %d (%s)\n", errno,
+                 strerror(errno));
     return -ENOSYS;
 }
 
@@ -258,7 +263,7 @@ static int create_raw_socket(void)
     daemon_cfg.raw_fd_ip4 = socket(PF_INET, SOCK_RAW, IPPROTO_TCP);
     if (daemon_cfg.raw_fd_ip4 < 0) {
         /* socket creation failed, may be because of non-root privileges */
-        log_error("Failed to call socket(ip4) errno %d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_ERR("Failed to call socket(ip4) errno %d (%s)\n", errno, strerror(errno));
         rc = -errno;
         goto err;
     }
@@ -267,7 +272,7 @@ static int create_raw_socket(void)
     /* Inform the kernel the IP header is already attached via a socket option */
     rc = setsockopt(daemon_cfg.raw_fd_ip4, IPPROTO_IP, IP_HDRINCL, &optval, sizeof(optval));
     if (rc < 0) {
-        log_error("Failed to call setsockopt() errno %d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_ERR("Failed to call setsockopt() errno %d (%s)\n", errno, strerror(errno));
         rc = -errno;
         goto err;
     }
@@ -276,7 +281,7 @@ static int create_raw_socket(void)
     daemon_cfg.raw_fd_ip6 = socket(PF_INET6, SOCK_RAW, IPPROTO_TCP);
     if (daemon_cfg.raw_fd_ip6 < 0) {
         /* socket creation failed, may be because of non-root privileges */
-        log_error("Failed to call socket(ip6) errno %d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_ERR("Failed to call socket(ip6) errno %d (%s)\n", errno, strerror(errno));
         rc = -errno;
         goto err;
     }
@@ -286,7 +291,7 @@ static int create_raw_socket(void)
      * disable */
     rc = setsockopt(daemon_cfg.raw_fd_ip6, IPPROTO_IPV6, IPV6_CHECKSUM, &optval, sizeof(optval));
     if (rc < 0) {
-        log_error("Failed to call setsockopt() errno %d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_ERR("Failed to call setsockopt() errno %d (%s)\n", errno, strerror(errno));
         rc = -errno;
         goto err;
     }
@@ -306,7 +311,7 @@ static int clean_process(pid_t pid)
         if (!check_process(pid)) {
             struct store_pid *pid_value = NULL;
 
-            log_debug("[%d] detect abnormal termination\n", pid);
+            DOCA_LOG_DBG("[%d] detect abnormal termination\n", pid);
             pid_value = hash_get(daemon_cfg.ht, pid);
             if (pid_value) {
                 struct rst_info rst;
@@ -323,15 +328,15 @@ static int clean_process(pid_t pid)
                     }
 
                     j++;
-                    log_debug("[%d] #%d found fid: %d type: %d state: %d\n", pid_value->pid, j,
-                              fid_value->fid, fid_value->type, fid_value->state);
+                    DOCA_LOG_DBG("[%d] #%d found fid: %d type: %d state: %d\n", pid_value->pid, j,
+                                 fid_value->fid, fid_value->type, fid_value->state);
 
                     if (STATE_ESTABLISHED != fid_value->state) {
-                        log_debug("[%d] #%d skip fid: %d\n", pid_value->pid, j, fid_value->fid);
+                        DOCA_LOG_DBG("[%d] #%d skip fid: %d\n", pid_value->pid, j, fid_value->fid);
                         continue;
                     }
 
-                    log_debug("[%d] #%d process fid: %d\n", pid_value->pid, j, fid_value->fid);
+                    DOCA_LOG_DBG("[%d] #%d process fid: %d\n", pid_value->pid, j, fid_value->fid);
 
                     /* Notification is based on sending RST packet to all peers
                      * and looks as spoofing attacks that uses a technique
@@ -357,7 +362,7 @@ static int clean_process(pid_t pid)
                 }
 
                 hash_del(daemon_cfg.ht, pid);
-                log_debug("[%d] remove from the storage\n", pid);
+                DOCA_LOG_DBG("[%d] remove from the storage\n", pid);
 
                 /* Set OK */
                 rc = 0;
@@ -493,7 +498,7 @@ static int get_seqno_ip4(struct rst_info *rst)
         if (rc < 0) {
             goto out;
         }
-        log_debug("send SYN to: %s\n", sys_addr2str(&rst->remote_addr));
+        DOCA_LOG_DBG("send SYN to: %s\n", sys_addr2str(&rst->remote_addr));
         t_wait.tv_sec = daemon_cfg.opt.retry_interval / 1000;
         t_wait.tv_usec = (daemon_cfg.opt.retry_interval % 1000) * 1000;
         gettimeofday(&t_end, NULL);
@@ -536,8 +541,8 @@ static int get_seqno_ip4(struct rst_info *rst)
                 msg_recv.ip.daddr == msg.ip.saddr && msg_recv.tcp.source == msg.tcp.dest &&
                 msg_recv.tcp.dest == msg.tcp.source && msg_recv.tcp.ack == 1) {
                 rst->seqno = msg_recv.tcp.ack_seq;
-                log_debug("recv SYN|ACK from: %s with SegNo: %d\n", sys_addr2str(&gotaddr),
-                          ntohl(rst->seqno));
+                DOCA_LOG_DBG("recv SYN|ACK from: %s with SegNo: %d\n", sys_addr2str(&gotaddr),
+                             ntohl(rst->seqno));
                 return 0;
             }
         } while (tv_cmp(&t_now, &t_end, <));
@@ -599,7 +604,7 @@ static int get_seqno_ip6(struct rst_info *rst)
         if (rc < 0) {
             goto out;
         }
-        log_debug("send SYN to: %s\n", sys_addr2str(&rst->remote_addr));
+        DOCA_LOG_DBG("send SYN to: %s\n", sys_addr2str(&rst->remote_addr));
         t_wait.tv_sec = daemon_cfg.opt.retry_interval / 1000;
         t_wait.tv_usec = (daemon_cfg.opt.retry_interval % 1000) * 1000;
         gettimeofday(&t_end, NULL);
@@ -640,8 +645,8 @@ static int get_seqno_ip6(struct rst_info *rst)
             if (msg_recv.tcp.source == msg.tcp.dest && msg_recv.tcp.dest == msg.tcp.source &&
                 msg_recv.tcp.ack == 1) {
                 rst->seqno = msg_recv.tcp.ack_seq;
-                log_debug("recv SYN|ACK from: %s with SegNo: %d\n", sys_addr2str(&gotaddr),
-                          ntohl(rst->seqno));
+                DOCA_LOG_DBG("recv SYN|ACK from: %s with SegNo: %d\n", sys_addr2str(&gotaddr),
+                             ntohl(rst->seqno));
                 return 0;
             }
         } while (tv_cmp(&t_now, &t_end, <));
@@ -719,7 +724,7 @@ static int send_rst_ip4(struct rst_info *rst)
     if (rc < 0) {
         goto out;
     }
-    log_debug("send RST to: %s\n", sys_addr2str(&rst->remote_addr));
+    DOCA_LOG_DBG("send RST to: %s\n", sys_addr2str(&rst->remote_addr));
 
     rc = 0;
 
@@ -772,7 +777,7 @@ static int send_rst_ip6(struct rst_info *rst)
     if (rc < 0) {
         goto out;
     }
-    log_debug("send RST to: %s\n", sys_addr2str(&rst->remote_addr));
+    DOCA_LOG_DBG("send RST to: %s\n", sys_addr2str(&rst->remote_addr));
 
     rc = 0;
 
@@ -785,10 +790,10 @@ static int open_fanotify(void)
 {
     int rc = 0;
 
-    log_debug("selected fanotify ...\n");
+    DOCA_LOG_DBG("selected fanotify ...\n");
 
     if ((daemon_cfg.notify_fd = fanotify_init(0, KERNEL_O_LARGEFILE)) < 0) {
-        log_error("Cannot initialize fanotify_init() errno %d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_ERR("Cannot initialize fanotify_init() errno %d (%s)\n", errno, strerror(errno));
         rc = -errno;
         goto err;
     }
@@ -797,8 +802,8 @@ static int open_fanotify(void)
                        daemon_cfg.notify_dir);
     if (rc < 0) {
         rc = -errno;
-        log_error("Failed to add watch for directory %s errno %d (%s)\n", daemon_cfg.notify_dir,
-                  errno, strerror(errno));
+        DOCA_LOG_ERR("Failed to add watch for directory %s errno %d (%s)\n", daemon_cfg.notify_dir,
+                     errno, strerror(errno));
         goto err;
     }
 
@@ -817,7 +822,7 @@ static int proc_fanotify(void *buffer, int nbyte)
         /* Check that run-time and compile-time structures match */
         if (data->vers != FANOTIFY_METADATA_VERSION) {
             rc = -EPROTO;
-            log_error("Mismatch of fanotify metadata version\n");
+            DOCA_LOG_ERR("Mismatch of fanotify metadata version\n");
             goto err;
         }
         /* Current check is based on monitoring special pid file events
@@ -836,31 +841,31 @@ static int proc_fanotify(void *buffer, int nbyte)
             rc = snprintf(buf, sizeof(buf) - 1, "/proc/self/fd/%d", data->fd);
             if ((rc < 0) || (rc == (sizeof(buf) - 1))) {
                 rc = -ENOMEM;
-                log_error("Cannot read process name errno %d (%s)\n", errno, strerror(errno));
+                DOCA_LOG_ERR("Cannot read process name errno %d (%s)\n", errno, strerror(errno));
                 goto err;
             }
             rc = readlink(buf, pathname, sizeof(pathname) - 1);
             if (rc < 0) {
                 rc = -ENOMEM;
-                log_error("Cannot read process name errno %d (%s)\n", errno, strerror(errno));
+                DOCA_LOG_ERR("Cannot read process name errno %d (%s)\n", errno, strerror(errno));
                 goto err;
             }
 
-            log_debug("getting event ([0x%llx] pid: %d fd: %d name: %s)\n", data->mask, data->pid,
-                      data->fd, pathname);
+            DOCA_LOG_DBG("getting event ([0x%llx] pid: %d fd: %d name: %s)\n", data->mask,
+                         data->pid, data->fd, pathname);
 
             rc = snprintf(buf, sizeof(buf) - 1, "%s/%s.%d.pid", daemon_cfg.notify_dir,
                           XLIO_AGENT_BASE_NAME, data->pid);
             if ((rc < 0) || (rc == (sizeof(buf) - 1))) {
                 rc = -ENOMEM;
-                log_error("failed allocate pid file errno %d (%s)\n", errno, strerror(errno));
+                DOCA_LOG_ERR("failed allocate pid file errno %d (%s)\n", errno, strerror(errno));
                 goto err;
             }
 
             /* Process event related pid file only */
             rc = 0;
             if (!strncmp(buf, pathname, strlen(buf))) {
-                log_debug("[%d] check the event\n", data->pid);
+                DOCA_LOG_DBG("[%d] check the event\n", data->pid);
 
                 /* Check if termination is unexpected and send RST to peers
                  * Return status should be 0 in case we send RST and
@@ -870,7 +875,7 @@ static int proc_fanotify(void *buffer, int nbyte)
                 rc = clean_process(data->pid);
                 if (0 == rc) {
                     /* Cleanup unexpected termination */
-                    log_debug("[%d] cleanup after unexpected termination\n", data->pid);
+                    DOCA_LOG_DBG("[%d] cleanup after unexpected termination\n", data->pid);
                     /* To suppress TOCTOU (time-of-check, time-of-use race condition) */
                     strcpy(pathname, buf);
                     unlink(pathname);
@@ -880,11 +885,11 @@ static int proc_fanotify(void *buffer, int nbyte)
                     }
                 } else if (-ESRCH == rc) {
                     /* No need in peer notification */
-                    log_debug("[%d] no need in peer notification\n", data->pid);
+                    DOCA_LOG_DBG("[%d] no need in peer notification\n", data->pid);
                     rc = 0;
                 }
             } else {
-                log_debug("[%d] skip the event\n", data->pid);
+                DOCA_LOG_DBG("[%d] skip the event\n", data->pid);
             }
         }
 
@@ -904,10 +909,10 @@ static int open_inotify(void)
 {
     int rc = 0;
 
-    log_debug("selected inotify ...\n");
+    DOCA_LOG_DBG("selected inotify ...\n");
 
     if ((daemon_cfg.notify_fd = inotify_init()) < 0) {
-        log_error("Cannot initialize inotify_init() errno %d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_ERR("Cannot initialize inotify_init() errno %d (%s)\n", errno, strerror(errno));
         rc = -errno;
         goto err;
     }
@@ -916,8 +921,8 @@ static int open_inotify(void)
                            IN_CLOSE_WRITE | IN_CLOSE_NOWRITE | IN_DELETE);
     if (rc < 0) {
         rc = -errno;
-        log_error("Failed to add watch for directory %s errno %d (%s)\n", daemon_cfg.notify_dir,
-                  errno, strerror(errno));
+        DOCA_LOG_ERR("Failed to add watch for directory %s errno %d (%s)\n", daemon_cfg.notify_dir,
+                     errno, strerror(errno));
         goto err;
     }
 
@@ -948,24 +953,24 @@ static int proc_inotify(void *buffer, int nbyte)
                           data->name);
             if ((rc < 0) || (rc == (sizeof(pathname) - 1))) {
                 rc = -ENOMEM;
-                log_error("failed allocate pid file errno %d (%s)\n", errno, strerror(errno));
+                DOCA_LOG_ERR("failed allocate pid file errno %d (%s)\n", errno, strerror(errno));
                 goto err;
             }
 
-            log_debug("getting event ([0x%x] pid: %d name: %s)\n", data->mask, pid, pathname);
+            DOCA_LOG_DBG("getting event ([0x%x] pid: %d name: %s)\n", data->mask, pid, pathname);
 
             rc = snprintf(buf, sizeof(buf) - 1, "%s/%s.%d.pid", daemon_cfg.notify_dir,
                           XLIO_AGENT_BASE_NAME, pid);
             if ((rc < 0) || (rc == (sizeof(buf) - 1))) {
                 rc = -ENOMEM;
-                log_error("failed allocate pid file errno %d (%s)\n", errno, strerror(errno));
+                DOCA_LOG_ERR("failed allocate pid file errno %d (%s)\n", errno, strerror(errno));
                 goto err;
             }
 
             /* Process event related pid file only */
             rc = 0;
             if (!strncmp(buf, pathname, strlen(buf))) {
-                log_debug("[%d] check the event\n", pid);
+                DOCA_LOG_DBG("[%d] check the event\n", pid);
 
                 /* Check if termination is unexpected and send RST to peers
                  * Return status should be 0 in case we send RST and
@@ -975,7 +980,7 @@ static int proc_inotify(void *buffer, int nbyte)
                 rc = clean_process(pid);
                 if (0 == rc) {
                     /* Cleanup unexpected termination */
-                    log_debug("[%d] cleanup after unexpected termination\n", pid);
+                    DOCA_LOG_DBG("[%d] cleanup after unexpected termination\n", pid);
                     unlink(buf);
                     if (snprintf(buf, sizeof(buf) - 1, "%s/%s.%d.sock", daemon_cfg.notify_dir,
                                  XLIO_AGENT_BASE_NAME, pid) > 0) {
@@ -983,11 +988,11 @@ static int proc_inotify(void *buffer, int nbyte)
                     }
                 } else if (-ESRCH == rc) {
                     /* No need in peer notification */
-                    log_debug("[%d] no need in peer notification\n", pid);
+                    DOCA_LOG_DBG("[%d] no need in peer notification\n", pid);
                     rc = 0;
                 }
             } else {
-                log_debug("[%d] skip the event\n", pid);
+                DOCA_LOG_DBG("[%d] skip the event\n", pid);
             }
         }
 

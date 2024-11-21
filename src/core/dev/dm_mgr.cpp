@@ -45,6 +45,7 @@
 
 #undef MODULE_NAME
 #define MODULE_NAME "dm_mgr"
+DOCA_LOG_REGISTER(dm_mgr);
 #undef MODULE_HDR
 #define MODULE_HDR MODULE_NAME "%d:%s() "
 

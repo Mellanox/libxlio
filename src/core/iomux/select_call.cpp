@@ -40,7 +40,8 @@
 #include <sock/fd_collection.h>
 #include <dev/net_device_table_mgr.h>
 
-#define MODULE_NAME "select_call:"
+#define MODULE_NAME "select_call"
+DOCA_LOG_REGISTER(select_call);
 
 #define FD_COPY(__fddst, __fdsrc, __nfds)                                                          \
     memcpy(__FDS_BITS(__fddst), __FDS_BITS(__fdsrc), ((__nfds) + 7) >> 3)

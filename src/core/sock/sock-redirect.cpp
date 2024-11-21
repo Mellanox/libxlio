@@ -36,6 +36,7 @@
 #include "sock-redirect.h"
 #include "sock-extra.h"
 #include "sock-app.h"
+#include "vlogger/vlogger.h"
 #include "xlio.h"
 
 #include <sys/sendfile.h>
@@ -69,7 +70,8 @@
 
 using namespace std;
 
-#define MODULE_NAME "srdr:"
+#define MODULE_NAME "srdr"
+DOCA_LOG_REGISTER(srdr);
 
 #define srdr_logpanic   __log_panic
 #define srdr_logerr     __log_err
@@ -308,9 +310,9 @@ int socket_internal(int __domain, int __type, int __protocol, bool shadow, bool 
     fd = SOCKET_FAKE_FD;
     if (shadow || !offload_sockets || !g_p_fd_collection) {
         fd = SYSCALL(socket, __domain, __type, __protocol);
-        vlog_printf(VLOG_DEBUG, "ENTER: %s(domain=%s(%d), type=%s(%d), protocol=%d) = %d\n",
-                    __func__, socket_get_domain_str(__domain), __domain,
-                    socket_get_type_str(__type), __type, __protocol, fd);
+        __log_dbg("ENTER: %s(domain=%s(%d), type=%s(%d), protocol=%d) = %d\n", __func__,
+                  socket_get_domain_str(__domain), __domain, socket_get_type_str(__type), __type,
+                  __protocol, fd);
         if (fd < 0) {
             return fd;
         }
@@ -860,7 +862,7 @@ EXPORT_SYMBOL void XLIO_SYMBOL(__res_iclose)(res_state statp, bool free_addr)
        fd. This will break the socket functionality.
        Assume that resolver doesn't use the above scenarios.  */
 
-    srdr_logdbg_entry("");
+    srdr_logdbg_entry(LOG_FUNCTION_CALL);
     for (int ns = 0; ns < statp->_u._ext.nscount; ns++) {
         int sock = statp->_u._ext.nssocks[ns];
         if (sock != -1) {
@@ -1233,7 +1235,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(ioctl)(int __fd, unsigned long int __request, ...)
 {
     PROFILE_FUNC
 
-    srdr_logfunc_entry("fd=%d, request=%d", __fd, __request);
+    srdr_logfunc_entry("fd=%d, request=%ld", __fd, __request);
 
     int res = -1;
     va_list va;
@@ -1643,7 +1645,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(write)(int __fd, __const void *__buf, size_t _
 {
     PROFILE_FUNC
 
-    srdr_logfuncall_entry("fd=%d, nbytes=%d", __fd, __nbytes);
+    srdr_logfuncall_entry("fd=%d, nbytes=%ld", __fd, __nbytes);
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
@@ -1694,7 +1696,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(send)(int __fd, __const void *__buf, size_t __
 {
     PROFILE_FUNC
 
-    srdr_logfuncall_entry("fd=%d, nbytes=%d", __fd, __nbytes);
+    srdr_logfuncall_entry("fd=%d, nbytes=%ld", __fd, __nbytes);
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
@@ -1813,7 +1815,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendto)(int __fd, __const void *__buf, size_t 
 {
     PROFILE_FUNC
 
-    srdr_logfuncall_entry("fd=%d, nbytes=%d", __fd, __nbytes);
+    srdr_logfuncall_entry("fd=%d, nbytes=%ld", __fd, __nbytes);
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
@@ -1844,7 +1846,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendfile)(int out_fd, int in_fd, off_t *offset
 {
     PROFILE_FUNC
 
-    srdr_logfuncall_entry("out_fd=%d, in_fd=%d, offset=%p, *offset=%zu, count=%d", out_fd, in_fd,
+    srdr_logfuncall_entry("out_fd=%d, in_fd=%d, offset=%p, *offset=%zu, count=%ld", out_fd, in_fd,
                           offset, offset ? *offset : 0, count);
 
     sockinfo *p_socket_object = fd_collection_get_sockfd(out_fd);
@@ -1860,7 +1862,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendfile64)(int out_fd, int in_fd, __off64_t *
 {
     PROFILE_FUNC
 
-    srdr_logfuncall_entry("out_fd=%d, in_fd=%d, offset=%p, *offset=%zu, count=%d", out_fd, in_fd,
+    srdr_logfuncall_entry("out_fd=%d, in_fd=%d, offset=%p, *offset=%zu, count=%ld", out_fd, in_fd,
                           offset, offset ? *offset : 0, count);
 
     sockinfo *p_socket_object = fd_collection_get_sockfd(out_fd);
@@ -1881,7 +1883,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(select)(int __nfds, fd_set *__readfds, fd_set *__w
     }
 
     if (__timeout) {
-        srdr_logfunc_entry("nfds=%d, timeout=(%d sec, %d usec)", __nfds, __timeout->tv_sec,
+        srdr_logfunc_entry("nfds=%d, timeout=(%ld sec, %ld usec)", __nfds, __timeout->tv_sec,
                            __timeout->tv_usec);
     } else {
         srdr_logfunc_entry("nfds=%d, timeout=(infinite)", __nfds);
@@ -1902,7 +1904,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(pselect)(int __nfds, fd_set *__readfds, fd_set *__
 
     struct timeval select_time;
     if (__timeout) {
-        srdr_logfunc_entry("nfds=%d, timeout=(%d sec, %d nsec)", __nfds, __timeout->tv_sec,
+        srdr_logfunc_entry("nfds=%d, timeout=(%ld sec, %ld nsec)", __nfds, __timeout->tv_sec,
                            __timeout->tv_nsec);
         select_time.tv_sec = __timeout->tv_sec;
         select_time.tv_usec = __timeout->tv_nsec / 1000;
@@ -1922,7 +1924,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(poll)(struct pollfd *__fds, nfds_t __nfds, int __t
         return SYSCALL(poll, __fds, __nfds, __timeout);
     }
 
-    srdr_logfunc_entry("nfds=%d, timeout=(%d milli-sec)", __nfds, __timeout);
+    srdr_logfunc_entry("nfds=%ld, timeout=(%d milli-sec)", __nfds, __timeout);
 
     return poll_helper(__fds, __nfds, __timeout);
 }
@@ -1943,7 +1945,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(__poll_chk)(struct pollfd *__fds, nfds_t __nfds, i
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    srdr_logfunc_entry("nfds=%d, timeout=(%d milli-sec)", __nfds, __timeout);
+    srdr_logfunc_entry("nfds=%ld, timeout=(%d milli-sec)", __nfds, __timeout);
 
     return poll_helper(__fds, __nfds, __timeout);
 }
@@ -1960,7 +1962,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(ppoll)(struct pollfd *__fds, nfds_t __nfds,
 
     int timeout = (!__timeout) ? -1 : (__timeout->tv_sec * 1000 + __timeout->tv_nsec / 1000000);
 
-    srdr_logfunc_entry("nfds=%d, timeout=(%d milli-sec)", __nfds, timeout);
+    srdr_logfunc_entry("nfds=%ld, timeout=(%d milli-sec)", __nfds, timeout);
 
     return poll_helper(__fds, __nfds, timeout, __sigmask);
 }
@@ -1985,7 +1987,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(__ppoll_chk)(struct pollfd *__fds, nfds_t __nfds,
 
     int timeout = (!__timeout) ? -1 : (__timeout->tv_sec * 1000 + __timeout->tv_nsec / 1000000);
 
-    srdr_logfunc_entry("nfds=%d, timeout=(%d milli-sec)", __nfds, timeout);
+    srdr_logfunc_entry("nfds=%ld, timeout=(%d milli-sec)", __nfds, timeout);
 
     return poll_helper(__fds, __nfds, timeout, __sigmask);
 }
@@ -2051,7 +2053,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(epoll_ctl)(int __epfd, int __op, int __fd,
     const static char *op_names[] = {"<null>", "ADD", "DEL", "MOD"};
     NOT_IN_USE(op_names); /* to suppress warning in case MAX_DEFINED_LOG_LEVEL */
     if (__event) {
-        srdr_logfunc_entry("epfd=%d, op=%s, fd=%d, events=%#x, data=%x", __epfd, op_names[__op],
+        srdr_logfunc_entry("epfd=%d, op=%s, fd=%d, events=%#x, data=%lx", __epfd, op_names[__op],
                            __fd, __event->events, __event->data.u64);
     } else {
         srdr_logfunc_entry("epfd=%d, op=%s, fd=%d, event=NULL", __epfd, op_names[__op], __fd);
@@ -2295,8 +2297,7 @@ EXPORT_SYMBOL pid_t XLIO_SYMBOL(fork)(void)
         sock_redirect_exit();
 
         safe_mce_sys().get_env_params();
-        vlog_start(PRODUCT_NAME, safe_mce_sys().log_level, safe_mce_sys().log_filename,
-                   safe_mce_sys().log_details, safe_mce_sys().log_colors);
+        vlog_start(PRODUCT_NAME, safe_mce_sys().log_level, safe_mce_sys().log_filename);
         if (xlio_rdma_lib_reset()) {
             srdr_logerr("Child Process: rdma_lib_reset failed %d %s", errno, strerror(errno));
         }
@@ -2376,8 +2377,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(daemon)(int __nochdir, int __noclose)
         sock_redirect_exit();
 
         safe_mce_sys().get_env_params();
-        vlog_start(PRODUCT_NAME, safe_mce_sys().log_level, safe_mce_sys().log_filename,
-                   safe_mce_sys().log_details, safe_mce_sys().log_colors);
+        vlog_start(PRODUCT_NAME, safe_mce_sys().log_level, safe_mce_sys().log_filename);
         if (xlio_rdma_lib_reset()) {
             srdr_logerr("Child Process: rdma_lib_reset failed %d %s", errno, strerror(errno));
         }

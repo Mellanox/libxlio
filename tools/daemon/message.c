@@ -31,6 +31,7 @@
  * SOFTWARE.
  */
 
+#include "doca_log.h"
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -45,6 +46,8 @@
 #include "core/lwip/tcp.h" /* display TCP states */
 #include "hash.h"
 #include "daemon.h"
+
+DOCA_LOG_REGISTER(message);
 
 int open_message(void);
 void close_message(void);
@@ -68,7 +71,7 @@ int open_message(void)
     unlink(daemon_cfg.sock_file);
 
     if ((daemon_cfg.sock_fd = socket(AF_UNIX, SOCK_DGRAM, 0)) < 0) {
-        log_error("Failed to call socket() errno %d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_ERR("Failed to call socket() errno %d (%s)\n", errno, strerror(errno));
         rc = -errno;
         goto err;
     }
@@ -76,14 +79,14 @@ int open_message(void)
     optval = 1;
     rc = setsockopt(daemon_cfg.sock_fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
     if (rc < 0) {
-        log_error("Failed to call setsockopt() errno %d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_ERR("Failed to call setsockopt() errno %d (%s)\n", errno, strerror(errno));
         rc = -errno;
         goto err;
     }
 
     /* bind created socket */
     if (bind(daemon_cfg.sock_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-        log_error("Failed to call bind() errno %d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_ERR("Failed to call bind() errno %d (%s)\n", errno, strerror(errno));
         rc = -errno;
         goto err;
     }
@@ -92,14 +95,14 @@ int open_message(void)
     optval = fcntl(daemon_cfg.sock_fd, F_GETFL);
     if (optval < 0) {
         rc = -errno;
-        log_error("Failed to get socket flags errno %d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_ERR("Failed to get socket flags errno %d (%s)\n", errno, strerror(errno));
         goto err;
     }
     optval |= O_NONBLOCK;
     rc = fcntl(daemon_cfg.sock_fd, F_SETFL, optval);
     if (rc < 0) {
         rc = -errno;
-        log_error("Failed to set socket flags errno %d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_ERR("Failed to set socket flags errno %d (%s)\n", errno, strerror(errno));
         goto err;
     }
 
@@ -132,7 +135,7 @@ again:
             goto again;
         }
         rc = -errno;
-        log_error("Failed recvfrom() errno %d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_ERR("Failed recvfrom() errno %d (%s)\n", errno, strerror(errno));
         goto err;
     }
 
@@ -140,13 +143,13 @@ again:
     while (len > 0) {
         if (len < (int)sizeof(struct xlio_hdr)) {
             rc = -EBADMSG;
-            log_error("Invalid message lenght from %s as %d errno %d (%s)\n",
-                      (addrlen > 0 ? peeraddr.sun_path : "n/a"), len, errno, strerror(errno));
+            DOCA_LOG_ERR("Invalid message lenght from %s as %d errno %d (%s)\n",
+                         (addrlen > 0 ? peeraddr.sun_path : "n/a"), len, errno, strerror(errno));
             goto err;
         }
         msg_hdr = (struct xlio_hdr *)&msg_recv;
-        log_debug("getting message ([%d] ver: %d pid: %d)\n", msg_hdr->code, msg_hdr->ver,
-                  msg_hdr->pid);
+        DOCA_LOG_DBG("getting message ([%d] ver: %d pid: %d)\n", msg_hdr->code, msg_hdr->ver,
+                     msg_hdr->pid);
 
         switch (msg_hdr->code) {
         case XLIO_MSG_INIT:
@@ -160,7 +163,7 @@ again:
             break;
         default:
             rc = -EPROTO;
-            log_error("Received unknown message errno %d (%s)\n", errno, strerror(errno));
+            DOCA_LOG_ERR("Received unknown message errno %d (%s)\n", errno, strerror(errno));
             goto err;
         }
         if (0 < rc) {
@@ -192,8 +195,8 @@ static int proc_msg_init(struct xlio_hdr *msg_hdr, size_t size, struct sockaddr_
 
     /* Message protocol version check */
     if (data->hdr.ver > XLIO_AGENT_VER) {
-        log_error("Protocol message mismatch (XLIO_AGENT_VER = %d) errno %d (%s)\n", XLIO_AGENT_VER,
-                  errno, strerror(errno));
+        DOCA_LOG_ERR("Protocol message mismatch (XLIO_AGENT_VER = %d) errno %d (%s)\n",
+                     XLIO_AGENT_VER, errno, strerror(errno));
         err = -EBADMSG;
         goto send_response;
     }
@@ -212,28 +215,28 @@ static int proc_msg_init(struct xlio_hdr *msg_hdr, size_t size, struct sockaddr_
 
     value->ht = hash_create(&free, daemon_cfg.opt.max_fid_num);
     if (NULL == value->ht) {
-        log_error("Failed hash_create() for %d entries errno %d (%s)\n", daemon_cfg.opt.max_fid_num,
-                  errno, strerror(errno));
+        DOCA_LOG_ERR("Failed hash_create() for %d entries errno %d (%s)\n",
+                     daemon_cfg.opt.max_fid_num, errno, strerror(errno));
         free(value);
         return -EFAULT;
     }
 
     if (hash_put(daemon_cfg.ht, value->pid, value) != value) {
-        log_error("Failed hash_put() count: %d size: %d errno %d (%s)\n", hash_count(daemon_cfg.ht),
-                  hash_size(daemon_cfg.ht), errno, strerror(errno));
+        DOCA_LOG_ERR("Failed hash_put() count: %d size: %d errno %d (%s)\n",
+                     hash_count(daemon_cfg.ht), hash_size(daemon_cfg.ht), errno, strerror(errno));
         hash_destroy(value->ht);
         free(value);
         return -EFAULT;
     }
 
-    log_debug("[%d] put into the storage\n", data->hdr.pid);
+    DOCA_LOG_DBG("[%d] put into the storage\n", data->hdr.pid);
 
 send_response:
     data->hdr.code |= XLIO_MSG_ACK;
     data->hdr.ver = XLIO_AGENT_VER;
     if (0 > sys_sendto(daemon_cfg.sock_fd, data, sizeof(*data), 0, (struct sockaddr *)peeraddr,
                        sizeof(*peeraddr))) {
-        log_warn("Failed sendto() message errno %d (%s)\n", errno, strerror(errno));
+        DOCA_LOG_WARN("Failed sendto() message errno %d (%s)\n", errno, strerror(errno));
     }
 
     return err ? err : (sizeof(*data));
@@ -258,7 +261,7 @@ static int proc_msg_exit(struct xlio_hdr *msg_hdr, size_t size)
         hash_del(daemon_cfg.ht, pid_value->pid);
     }
 
-    log_debug("[%d] remove from the storage\n", data->hdr.pid);
+    DOCA_LOG_DBG("[%d] remove from the storage\n", data->hdr.pid);
 
     return (sizeof(*data));
 }
@@ -284,9 +287,9 @@ static int proc_msg_state(struct xlio_hdr *msg_hdr, size_t size)
          * if the process is terminated using abnormal way
          * So no needs in acknowledgement.
          */
-        log_debug("Failed hash_get() for pid %d errno %d (%s). The process should be abnormal "
-                  "terminated\n",
-                  data->hdr.pid, errno, strerror(errno));
+        DOCA_LOG_DBG("Failed hash_get() for pid %d errno %d (%s). The process should be abnormal "
+                     "terminated\n",
+                     data->hdr.pid, errno, strerror(errno));
         return ((int)sizeof(*data));
     }
 
@@ -298,10 +301,11 @@ static int proc_msg_state(struct xlio_hdr *msg_hdr, size_t size)
     if ((CLOSED == data->state) && (SOCK_STREAM == data->type)) {
         hash_del(pid_value->ht, data->fid);
 
-        log_debug("[%d] remove fid: %d type: %d state: %s\n", data->hdr.pid, data->fid, data->type,
-                  (data->state < (sizeof(tcp_state_str) / sizeof(tcp_state_str[0]))
-                       ? tcp_state_str[data->state]
-                       : "n/a"));
+        DOCA_LOG_DBG("[%d] remove fid: %d type: %d state: %s\n", data->hdr.pid, data->fid,
+                     data->type,
+                     (data->state < (sizeof(tcp_state_str) / sizeof(tcp_state_str[0]))
+                          ? tcp_state_str[data->state]
+                          : "n/a"));
         return (sizeof(*data));
     }
 
@@ -336,16 +340,17 @@ static int proc_msg_state(struct xlio_hdr *msg_hdr, size_t size)
     }
 
     if (hash_put(pid_value->ht, value->fid, value) != value) {
-        log_error("Failed hash_put() count: %d size: %d errno %d (%s)\n", hash_count(pid_value->ht),
-                  hash_size(pid_value->ht), errno, strerror(errno));
+        DOCA_LOG_ERR("Failed hash_put() count: %d size: %d errno %d (%s)\n",
+                     hash_count(pid_value->ht), hash_size(pid_value->ht), errno, strerror(errno));
         free(value);
         return -EFAULT;
     }
 
-    log_debug("[%d] update fid: %d type: %d state: %s\n", pid_value->pid, value->fid, value->type,
-              (value->state < (sizeof(tcp_state_str) / sizeof(tcp_state_str[0]))
-                   ? tcp_state_str[value->state]
-                   : "n/a"));
+    DOCA_LOG_DBG("[%d] update fid: %d type: %d state: %s\n", pid_value->pid, value->fid,
+                 value->type,
+                 (value->state < (sizeof(tcp_state_str) / sizeof(tcp_state_str[0]))
+                      ? tcp_state_str[value->state]
+                      : "n/a"));
 
     return (sizeof(*data));
 }

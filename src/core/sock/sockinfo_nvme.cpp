@@ -39,6 +39,7 @@
 #include "proto/nvme_parse_input_args.h"
 
 #define MODULE_NAME "si_nvme"
+DOCA_LOG_REGISTER(si_nvme);
 
 #define si_nvme_logdbg  __log_info_dbg
 #define si_nvme_loginfo __log_info_info

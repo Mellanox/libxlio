@@ -1,13 +1,13 @@
 sbin_PROGRAMS = xliod
 
-xliod_LDADD =
+xliod_LDADD = $(DOCA_LIBS)
 
 xliod_CPPFLAGS = \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/core
 
 xliod_LDFLAGS  = 
-xliod_CFLAGS = 
+xliod_CFLAGS = -Wno-deprecated-declarations
 
 xliod_SOURCES = \
 	daemon.c \

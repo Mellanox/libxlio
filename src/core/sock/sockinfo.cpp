@@ -47,6 +47,7 @@
 #include "dev/ring_simple.h"
 
 #define MODULE_NAME "si"
+DOCA_LOG_REGISTER(si);
 #undef MODULE_HDR_INFO
 #define MODULE_HDR_INFO MODULE_NAME "[fd=%d]:%d:%s() "
 #undef __INFO__
@@ -223,15 +224,15 @@ int sockinfo::fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit)
         set_blocking(!(__arg & O_NONBLOCK));
         break;
     case F_GETFL: // Get file status flags.
-        si_logfunc("cmd=F_GETFL, arg=%#x", __arg);
+        si_logfunc("cmd=F_GETFL, arg=%#lx", __arg);
         rc = O_NONBLOCK * !m_b_blocking;
         break;
 
     case F_GETFD: // Get file descriptor flags.
-        si_logfunc("cmd=F_GETFD, arg=%#x", __arg);
+        si_logfunc("cmd=F_GETFD, arg=%#lx", __arg);
         break;
     case F_SETFD: // Set file descriptor flags.
-        si_logfunc("cmd=F_SETFD, arg=%#x", __arg);
+        si_logfunc("cmd=F_SETFD, arg=%#lx", __arg);
         break;
 
     default:
@@ -240,7 +241,7 @@ int sockinfo::fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit)
                  (unsigned)__arg);
         buf[sizeof(buf) - 1] = '\0';
 
-        VLOG_PRINTF_INFO(safe_mce_sys().exception_handling.get_log_severity(), "%s", buf);
+        __log_raw(safe_mce_sys().exception_handling.get_log_severity(), "%s", buf);
         rc = handle_exception_flow();
         switch (rc) {
         case 0:
@@ -397,7 +398,7 @@ int sockinfo::ioctl(unsigned long int __request, unsigned long int __arg)
                  (unsigned)__request, (unsigned)__arg);
         buf[sizeof(buf) - 1] = '\0';
 
-        VLOG_PRINTF_INFO(safe_mce_sys().exception_handling.get_log_severity(), "%s", buf);
+        __log_raw(safe_mce_sys().exception_handling.get_log_severity(), "%s", buf);
         rc = handle_exception_flow();
         switch (rc) {
         case -1:
@@ -1344,25 +1345,25 @@ void sockinfo::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
     int epoll_fd = get_epoll_context_fd();
 
     // Socket data
-    vlog_printf(log_level, "Fd number : %d\n", m_fd);
+    __log_raw(log_level, "Fd number : %d\n", m_fd);
     if (epoll_fd) {
-        vlog_printf(log_level, "Socket epoll Fd : %d\n", epoll_fd);
-        vlog_printf(log_level, "Socket epoll flags : 0x%x\n", m_fd_rec.events);
+        __log_raw(log_level, "Socket epoll Fd : %d\n", epoll_fd);
+        __log_raw(log_level, "Socket epoll flags : 0x%x\n", m_fd_rec.events);
     }
 
-    vlog_printf(log_level, "Bind info : %s\n", m_bound.to_str_ip_port(true).c_str());
-    vlog_printf(log_level, "Connection info : %s\n", m_connected.to_str_ip_port(true).c_str());
-    vlog_printf(log_level, "Protocol : %s\n", in_protocol_str[m_protocol]);
-    vlog_printf(log_level, "Is closed : %s\n", m_state_str[m_state]);
-    vlog_printf(log_level, "Is blocking : %s\n", m_b_blocking ? "true" : "false");
-    vlog_printf(log_level, "Rx reuse buffer pending : %s\n",
-                m_rx_reuse_buf_pending ? "true" : "false");
-    vlog_printf(log_level, "Rx reuse buffer postponed : %s\n",
-                m_rx_reuse_buf_postponed ? "true" : "false");
+    __log_raw(log_level, "Bind info : %s\n", m_bound.to_str_ip_port(true).c_str());
+    __log_raw(log_level, "Connection info : %s\n", m_connected.to_str_ip_port(true).c_str());
+    __log_raw(log_level, "Protocol : %s\n", in_protocol_str[m_protocol]);
+    __log_raw(log_level, "Is closed : %s\n", m_state_str[m_state]);
+    __log_raw(log_level, "Is blocking : %s\n", m_b_blocking ? "true" : "false");
+    __log_raw(log_level, "Rx reuse buffer pending : %s\n",
+              m_rx_reuse_buf_pending ? "true" : "false");
+    __log_raw(log_level, "Rx reuse buffer postponed : %s\n",
+              m_rx_reuse_buf_postponed ? "true" : "false");
 
     if (m_p_connected_dst_entry) {
-        vlog_printf(log_level, "Is offloaded : %s\n",
-                    m_p_connected_dst_entry->is_offloaded() ? "true" : "false");
+        __log_raw(log_level, "Is offloaded : %s\n",
+                  m_p_connected_dst_entry->is_offloaded() ? "true" : "false");
     }
 
     if (!m_p_socket_stats) {
@@ -1370,50 +1371,49 @@ void sockinfo::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
     }
 
     if (m_p_socket_stats->ring_alloc_logic_rx == RING_LOGIC_PER_USER_ID) {
-        vlog_printf(log_level, "RX Ring User ID : %lu\n", m_p_socket_stats->ring_user_id_rx);
+        __log_raw(log_level, "RX Ring User ID : %lu\n", m_p_socket_stats->ring_user_id_rx);
     }
     if (m_p_socket_stats->ring_alloc_logic_tx == RING_LOGIC_PER_USER_ID) {
-        vlog_printf(log_level, "TX Ring User ID : %lu\n", m_p_socket_stats->ring_user_id_tx);
+        __log_raw(log_level, "TX Ring User ID : %lu\n", m_p_socket_stats->ring_user_id_tx);
     }
 
     if (m_p_socket_stats->counters.n_tx_sent_byte_count ||
         m_p_socket_stats->counters.n_tx_sent_pkt_count || m_p_socket_stats->counters.n_tx_errors ||
         m_p_socket_stats->counters.n_tx_eagain) {
-        vlog_printf(log_level,
-                    "Tx Offload : %" PRIu64
-                    " KB / %d / %d / %d [kilobytes/packets/eagains/errors]\n",
-                    m_p_socket_stats->counters.n_tx_sent_byte_count / 1024,
-                    m_p_socket_stats->counters.n_tx_sent_pkt_count,
-                    m_p_socket_stats->counters.n_tx_eagain, m_p_socket_stats->counters.n_tx_errors);
+        __log_raw(log_level,
+                  "Tx Offload : %" PRIu64 " KB / %d / %d / %d [kilobytes/packets/eagains/errors]\n",
+                  m_p_socket_stats->counters.n_tx_sent_byte_count / 1024,
+                  m_p_socket_stats->counters.n_tx_sent_pkt_count,
+                  m_p_socket_stats->counters.n_tx_eagain, m_p_socket_stats->counters.n_tx_errors);
         b_any_activity = true;
     }
     if (m_p_socket_stats->counters.n_tx_os_bytes || m_p_socket_stats->counters.n_tx_os_packets ||
         m_p_socket_stats->counters.n_tx_os_errors) {
-        vlog_printf(log_level, "Tx OS info : %" PRIu64 " KB / %d / %d [kilobytes/packets/errors]\n",
-                    m_p_socket_stats->counters.n_tx_os_bytes / 1024,
-                    m_p_socket_stats->counters.n_tx_os_packets,
-                    m_p_socket_stats->counters.n_tx_os_errors);
+        __log_raw(log_level, "Tx OS info : %" PRIu64 " KB / %d / %d [kilobytes/packets/errors]\n",
+                  m_p_socket_stats->counters.n_tx_os_bytes / 1024,
+                  m_p_socket_stats->counters.n_tx_os_packets,
+                  m_p_socket_stats->counters.n_tx_os_errors);
         b_any_activity = true;
     }
     if (m_p_socket_stats->counters.n_tx_dummy) {
-        vlog_printf(log_level, "Tx Dummy messages : %d\n", m_p_socket_stats->counters.n_tx_dummy);
+        __log_raw(log_level, "Tx Dummy messages : %d\n", m_p_socket_stats->counters.n_tx_dummy);
         b_any_activity = true;
     }
     if (m_p_socket_stats->counters.n_rx_bytes || m_p_socket_stats->counters.n_rx_packets ||
         m_p_socket_stats->counters.n_rx_errors || m_p_socket_stats->counters.n_rx_eagain ||
         m_p_socket_stats->n_rx_ready_pkt_count) {
-        vlog_printf(
-            log_level,
-            "Rx Offload : %" PRIu64 " KB / %d / %d / %d [kilobytes/packets/eagains/errors]\n",
-            m_p_socket_stats->counters.n_rx_bytes / 1024, m_p_socket_stats->counters.n_rx_packets,
-            m_p_socket_stats->counters.n_rx_eagain, m_p_socket_stats->counters.n_rx_errors);
-        vlog_printf(
-            log_level,
-            "Rx data packets: %" PRIu64 " / %u / %u / %u [kilobytes/packets/frags/chained]\n",
-            m_p_socket_stats->counters.n_rx_bytes / 1024, m_p_socket_stats->counters.n_rx_data_pkts,
-            m_p_socket_stats->counters.n_rx_frags, m_p_socket_stats->counters.n_gro);
+        __log_raw(log_level,
+                  "Rx Offload : %" PRIu64 " KB / %d / %d / %d [kilobytes/packets/eagains/errors]\n",
+                  m_p_socket_stats->counters.n_rx_bytes / 1024,
+                  m_p_socket_stats->counters.n_rx_packets, m_p_socket_stats->counters.n_rx_eagain,
+                  m_p_socket_stats->counters.n_rx_errors);
+        __log_raw(log_level,
+                  "Rx data packets: %" PRIu64 " / %u / %u / %u [kilobytes/packets/frags/chained]\n",
+                  m_p_socket_stats->counters.n_rx_bytes / 1024,
+                  m_p_socket_stats->counters.n_rx_data_pkts, m_p_socket_stats->counters.n_rx_frags,
+                  m_p_socket_stats->counters.n_gro);
         if (m_p_socket_stats->counters.n_rx_data_pkts) {
-            vlog_printf(
+            __log_raw(
                 log_level, "Avg. aggr packet size: %" PRIu64 " fragments per packet: %.1f\n",
                 m_p_socket_stats->counters.n_rx_bytes / m_p_socket_stats->counters.n_rx_data_pkts,
                 static_cast<double>(m_p_socket_stats->counters.n_rx_frags) /
@@ -1427,47 +1427,47 @@ void sockinfo::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
                     (float)(m_p_socket_stats->counters.n_rx_ready_byte_drop * 100) /
                     (float)m_p_socket_stats->counters.n_rx_packets;
             }
-            vlog_printf(log_level, "Rx byte : max %d / dropped %d (%2.2f%%)\n",
-                        m_p_socket_stats->counters.n_rx_ready_byte_max,
-                        m_p_socket_stats->counters.n_rx_ready_byte_drop, rx_drop_percentage);
+            __log_raw(log_level, "Rx byte : max %d / dropped %d (%2.2f%%)\n",
+                      m_p_socket_stats->counters.n_rx_ready_byte_max,
+                      m_p_socket_stats->counters.n_rx_ready_byte_drop, rx_drop_percentage);
 
             if (m_p_socket_stats->n_rx_ready_pkt_count) {
                 rx_drop_percentage = (float)(m_p_socket_stats->counters.n_rx_ready_pkt_drop * 100) /
                     (float)m_p_socket_stats->counters.n_rx_packets;
             }
-            vlog_printf(log_level, "Rx pkt : max %d / dropped %d (%2.2f%%)\n",
-                        m_p_socket_stats->counters.n_rx_ready_pkt_max,
-                        m_p_socket_stats->counters.n_rx_ready_pkt_drop, rx_drop_percentage);
+            __log_raw(log_level, "Rx pkt : max %d / dropped %d (%2.2f%%)\n",
+                      m_p_socket_stats->counters.n_rx_ready_pkt_max,
+                      m_p_socket_stats->counters.n_rx_ready_pkt_drop, rx_drop_percentage);
         }
 
         b_any_activity = true;
     }
     if (m_p_socket_stats->strq_counters.n_strq_total_strides) {
-        vlog_printf(log_level, "Rx RQ Strides: %" PRIu64 " / %u [total/max-per-packet]\n",
-                    m_p_socket_stats->strq_counters.n_strq_total_strides,
-                    m_p_socket_stats->strq_counters.n_strq_max_strides_per_packet);
+        __log_raw(log_level, "Rx RQ Strides: %" PRIu64 " / %u [total/max-per-packet]\n",
+                  m_p_socket_stats->strq_counters.n_strq_total_strides,
+                  m_p_socket_stats->strq_counters.n_strq_max_strides_per_packet);
     }
     if (m_p_socket_stats->counters.n_rx_os_bytes || m_p_socket_stats->counters.n_rx_os_packets ||
         m_p_socket_stats->counters.n_rx_os_errors || m_p_socket_stats->counters.n_rx_os_eagain) {
-        vlog_printf(
-            log_level,
-            "Rx OS info : %" PRIu64 " KB / %d / %d / %d [kilobytes/packets/eagains/errors]\n",
-            m_p_socket_stats->counters.n_rx_os_bytes / 1024,
-            m_p_socket_stats->counters.n_rx_os_packets, m_p_socket_stats->counters.n_rx_os_eagain,
-            m_p_socket_stats->counters.n_rx_os_errors);
+        __log_raw(log_level,
+                  "Rx OS info : %" PRIu64 " KB / %d / %d / %d [kilobytes/packets/eagains/errors]\n",
+                  m_p_socket_stats->counters.n_rx_os_bytes / 1024,
+                  m_p_socket_stats->counters.n_rx_os_packets,
+                  m_p_socket_stats->counters.n_rx_os_eagain,
+                  m_p_socket_stats->counters.n_rx_os_errors);
         b_any_activity = true;
     }
     if (m_p_socket_stats->counters.n_rx_poll_miss || m_p_socket_stats->counters.n_rx_poll_hit) {
         float rx_poll_hit_percentage = (float)(m_p_socket_stats->counters.n_rx_poll_hit * 100) /
             (float)(m_p_socket_stats->counters.n_rx_poll_miss +
                     m_p_socket_stats->counters.n_rx_poll_hit);
-        vlog_printf(log_level, "Rx poll : %d / %d (%2.2f%%) [miss/hit]\n",
-                    m_p_socket_stats->counters.n_rx_poll_miss,
-                    m_p_socket_stats->counters.n_rx_poll_hit, rx_poll_hit_percentage);
+        __log_raw(log_level, "Rx poll : %d / %d (%2.2f%%) [miss/hit]\n",
+                  m_p_socket_stats->counters.n_rx_poll_miss,
+                  m_p_socket_stats->counters.n_rx_poll_hit, rx_poll_hit_percentage);
         b_any_activity = true;
     }
     if (b_any_activity == false) {
-        vlog_printf(log_level, "Socket activity : Rx and Tx where not active\n");
+        __log_raw(log_level, "Socket activity : Rx and Tx where not active\n");
     }
 }
 
@@ -1526,7 +1526,7 @@ void sockinfo::remove_cqfd_from_sock_rx_epfd(ring *base_ring)
 
 void sockinfo::rx_add_ring_cb(ring *p_ring)
 {
-    si_logdbg("");
+    si_logdbg(LOG_FUNCTION_CALL);
 
     bool notify_epoll = false;
 
@@ -1590,7 +1590,7 @@ void sockinfo::rx_add_ring_cb(ring *p_ring)
 
 void sockinfo::rx_del_ring_cb(ring *p_ring)
 {
-    si_logdbg("");
+    si_logdbg(LOG_FUNCTION_CALL);
 
     bool notify_epoll = false;
 
@@ -1949,7 +1949,7 @@ int sockinfo::setsockopt_kernel(int __level, int __optname, const void *__optval
                  (unsigned)__level, (unsigned)__optname, __optlen, __optlen, (char *)__optval);
         buf[sizeof(buf) - 1] = '\0';
 
-        VLOG_PRINTF_INFO(safe_mce_sys().exception_handling.get_log_severity(), "%s", buf);
+        __log_raw(safe_mce_sys().exception_handling.get_log_severity(), "%s", buf);
         int rc = handle_exception_flow();
         switch (rc) {
         case -1:

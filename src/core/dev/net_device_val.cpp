@@ -61,6 +61,7 @@
 #include "proto/neighbour_table_mgr.h"
 
 #define MODULE_NAME "ndv"
+DOCA_LOG_REGISTER(ndv);
 
 #define nd_logpanic   __log_panic
 #define nd_logerr     __log_err
@@ -526,13 +527,13 @@ void net_device_val::print_val() const
     nd_logdbg("%s", to_str_ex().c_str());
 
     nd_logdbg("  IPv4 list: %s", (m_ipv4.empty() ? "empty " : ""));
-    std::for_each(m_ipv4.begin(), m_ipv4.end(), [this](const std::unique_ptr<ip_data> &ip) {
+    std::for_each(m_ipv4.begin(), m_ipv4.end(), [](const std::unique_ptr<ip_data> &ip) {
         nd_logdbg("    inet: %s/%d flags: 0x%X scope: 0x%x", ip->local_addr.to_str(AF_INET).c_str(),
                   ip->prefixlen, ip->flags, ip->scope);
     });
 
     nd_logdbg("  IPv6 list: %s", (m_ipv6.empty() ? "empty " : ""));
-    std::for_each(m_ipv6.begin(), m_ipv6.end(), [this](const std::unique_ptr<ip_data> &ip) {
+    std::for_each(m_ipv6.begin(), m_ipv6.end(), [](const std::unique_ptr<ip_data> &ip) {
         nd_logdbg("    inet6: %s/%d flags: 0x%X scope: 0x%x",
                   ip->local_addr.to_str(AF_INET6).c_str(), ip->prefixlen, ip->flags, ip->scope);
     });
@@ -561,7 +562,7 @@ void net_device_val::set_slave_array()
 {
     char active_slave[IFNAMSIZ] = {0}; // gather the slave data (only for active-backup)-
 
-    nd_logdbg("");
+    nd_logdbg(LOG_FUNCTION_CALL);
 
     if (m_bond == NO_BOND) {
         slave_data_t *s = new slave_data_t(if_nametoindex(get_ifname()));
@@ -721,9 +722,8 @@ void net_device_val::verify_bonding_mode()
                 m_bond_xmit_hash_policy = (bond_xmit_hash_policy)strtol(bond_xhp, nullptr, 10);
                 if (m_bond_xmit_hash_policy < XHP_LAYER_2 ||
                     m_bond_xmit_hash_policy > XHP_ENCAP_3_4) {
-                    vlog_printf(VLOG_WARNING,
-                                "" PRODUCT_NAME " does not support xmit hash policy = %d\n",
-                                m_bond_xmit_hash_policy);
+                    __log_warn("" PRODUCT_NAME " does not support xmit hash policy = %d\n",
+                               m_bond_xmit_hash_policy);
                     m_bond_xmit_hash_policy = XHP_LAYER_2;
                 }
             }
@@ -734,22 +734,16 @@ void net_device_val::verify_bonding_mode()
     }
 
     if (m_bond == NO_BOND || m_bond_fail_over_mac > 1) {
-        vlog_printf(
-            VLOG_WARNING,
+        __log_warn(
             "******************************************************************************\n");
-        vlog_printf(VLOG_WARNING,
-                    "" PRODUCT_NAME " doesn't support current bonding configuration of %s.\n",
-                    get_ifname_link());
-        vlog_printf(
-            VLOG_WARNING,
+        __log_warn("" PRODUCT_NAME " doesn't support current bonding configuration of %s.\n",
+                   get_ifname_link());
+        __log_warn(
             "The only supported bonding mode is \"802.3ad 4(#4)\" or \"active-backup(#1)\"\n");
-        vlog_printf(VLOG_WARNING, "with \"fail_over_mac=1\" or \"fail_over_mac=0\".\n");
-        vlog_printf(VLOG_WARNING,
-                    "The effect of working in unsupported bonding mode is undefined.\n");
-        vlog_printf(VLOG_WARNING,
-                    "Read more about Bonding in the " PRODUCT_NAME "'s User Manual\n");
-        vlog_printf(
-            VLOG_WARNING,
+        __log_warn("with \"fail_over_mac=1\" or \"fail_over_mac=0\".\n");
+        __log_warn("The effect of working in unsupported bonding mode is undefined.\n");
+        __log_warn("Read more about Bonding in the " PRODUCT_NAME "'s User Manual\n");
+        __log_warn(
             "******************************************************************************\n");
     }
 }
@@ -979,7 +973,7 @@ const std::string net_device_val::to_str() const
 
 ring *net_device_val::reserve_ring(resource_allocation_key *key)
 {
-    nd_logfunc("");
+    nd_logfunc(LOG_FUNCTION_CALL);
     std::lock_guard<decltype(m_lock)> lock(m_lock);
     key = ring_key_redirection_reserve(key);
     ring *the_ring = nullptr;
@@ -1028,7 +1022,7 @@ ring *net_device_val::reserve_ring(resource_allocation_key *key)
 
 int net_device_val::release_ring(resource_allocation_key *key)
 {
-    nd_logfunc("");
+    nd_logfunc(LOG_FUNCTION_CALL);
 
     resource_allocation_key *red_key;
 
@@ -1153,7 +1147,7 @@ void net_device_val::ring_key_redirection_release(resource_allocation_key *key)
 
 bool net_device_val::global_ring_poll_and_process_element(void *pv_fd_ready_array /*=NULL*/)
 {
-    nd_logfuncall("");
+    nd_logfuncall(LOG_FUNCTION_CALL);
     bool all_drained = true;
     std::lock_guard<decltype(m_lock)> lock(m_lock);
     rings_hash_map_t::iterator ring_iter;
@@ -1277,12 +1271,9 @@ void net_device_val_eth::configure()
         parse_prio_egress_map();
     }
     if (m_vlan && m_bond != NO_BOND && m_bond_fail_over_mac == 1) {
-        vlog_printf(VLOG_WARNING,
-                    " ******************************************************************\n");
-        vlog_printf(VLOG_WARNING, "%s: vlan over bond while fail_over_mac=1 is not offloaded\n",
-                    get_ifname());
-        vlog_printf(VLOG_WARNING,
-                    " ******************************************************************\n");
+        __log_warn(" ******************************************************************\n");
+        __log_warn("%s: vlan over bond while fail_over_mac=1 is not offloaded\n", get_ifname());
+        __log_warn(" ******************************************************************\n");
         m_state = INVALID;
     }
     if (!m_vlan && (get_flags() & IFF_MASTER)) {
@@ -1412,16 +1403,13 @@ bool net_device_val::verify_bond_or_eth_qp_creation()
     char slaves[IFNAMSIZ * MAX_SLAVES] = {0};
 
     if (!get_bond_slaves_name_list(get_ifname_link(), slaves, sizeof slaves)) {
-        vlog_printf(VLOG_WARNING,
-                    "******************************************************************************"
-                    "*************************\n");
-        vlog_printf(
-            VLOG_WARNING,
+        __log_warn("******************************************************************************"
+                   "*************************\n");
+        __log_warn(
             "* Interface %s will not be offloaded, slave list or bond name could not be found\n",
             get_ifname());
-        vlog_printf(VLOG_WARNING,
-                    "******************************************************************************"
-                    "*************************\n");
+        __log_warn("******************************************************************************"
+                   "*************************\n");
         return false;
     }
     // go over all slaves and check preconditions
@@ -1441,16 +1429,13 @@ bool net_device_val::verify_bond_or_eth_qp_creation()
         slave_name = strtok_r(nullptr, " ", &save_ptr);
     }
     if (!bond_ok) {
-        vlog_printf(VLOG_WARNING,
-                    "******************************************************************************"
-                    "*************************\n");
-        vlog_printf(VLOG_WARNING,
-                    "* Bond %s will not be offloaded due to problem with its slaves.\n",
-                    get_ifname());
-        vlog_printf(VLOG_WARNING, "* Check warning messages for more information.\n");
-        vlog_printf(VLOG_WARNING,
-                    "******************************************************************************"
-                    "*************************\n");
+        __log_warn("******************************************************************************"
+                   "*************************\n");
+        __log_warn("* Bond %s will not be offloaded due to problem with its slaves.\n",
+                   get_ifname());
+        __log_warn("* Check warning messages for more information.\n");
+        __log_warn("******************************************************************************"
+                   "*************************\n");
     } else {
 #if defined(DEFINED_ROCE_LAG)
         /* Sanity check for image guid is not correct
@@ -1583,31 +1568,24 @@ bool net_device_val::verify_qp_creation(const char *ifname, enum ibv_qp_type qp_
 
         int err = errno; // verify_raw_qp_privliges can overwrite errno so keep it before the call
         if (validate_user_has_cap_net_raw_privliges() == 0 || err == EPERM) {
-            vlog_printf(VLOG_WARNING,
-                        "**************************************************************************"
-                        "*****************************\n");
-            vlog_printf(VLOG_WARNING, "* Interface %s will not be offloaded.\n", ifname);
-            vlog_printf(VLOG_WARNING,
-                        "* Offloaded resources are restricted to root or user with CAP_NET_RAW "
-                        "privileges\n");
-            vlog_printf(VLOG_WARNING,
-                        "* Read the CAP_NET_RAW and root access section in the " PRODUCT_NAME
-                        "'s User Manual for more information\n");
-            vlog_printf(VLOG_WARNING,
-                        "**************************************************************************"
-                        "*****************************\n");
+            __log_warn("**************************************************************************"
+                       "*****************************\n");
+            __log_warn("* Interface %s will not be offloaded.\n", ifname);
+            __log_warn("* Offloaded resources are restricted to root or user with CAP_NET_RAW "
+                       "privileges\n");
+            __log_warn("* Read the CAP_NET_RAW and root access section in the " PRODUCT_NAME
+                       "'s User Manual for more information\n");
+            __log_warn("**************************************************************************"
+                       "*****************************\n");
         } else {
-            vlog_printf(VLOG_WARNING,
-                        "**************************************************************************"
-                        "*****************************\n");
-            vlog_printf(VLOG_WARNING, "* Interface %s will not be offloaded.\n", ifname);
-            vlog_printf(VLOG_WARNING,
-                        "* " PRODUCT_NAME
-                        " was not able to create QP for this device (errno = %d).\n",
-                        err);
-            vlog_printf(VLOG_WARNING,
-                        "**************************************************************************"
-                        "*****************************\n");
+            __log_warn("**************************************************************************"
+                       "*****************************\n");
+            __log_warn("* Interface %s will not be offloaded.\n", ifname);
+            __log_warn("* " PRODUCT_NAME
+                       " was not able to create QP for this device (errno = %d).\n",
+                       err);
+            __log_warn("**************************************************************************"
+                       "*****************************\n");
         }
     }
 

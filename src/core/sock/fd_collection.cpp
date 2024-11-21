@@ -43,7 +43,8 @@
 #include "iomux/epfd_info.h"
 
 #undef MODULE_NAME
-#define MODULE_NAME "fdc:"
+#define MODULE_NAME "fdc"
+DOCA_LOG_REGISTER(fdc);
 #undef MODULE_HDR
 #define MODULE_HDR MODULE_NAME "%d:%s() "
 
@@ -67,7 +68,7 @@ fd_collection::fd_collection()
     , m_socket_pool_counter(0)
 #endif
 {
-    fdcoll_logfunc("");
+    fdcoll_logfunc(LOG_FUNCTION_CALL);
 
     m_n_fd_map_size = 1024;
     struct rlimit rlim;
@@ -88,7 +89,7 @@ fd_collection::fd_collection()
 
 fd_collection::~fd_collection()
 {
-    fdcoll_logfunc("");
+    fdcoll_logfunc(LOG_FUNCTION_CALL);
 
     clear();
     m_n_fd_map_size = -1;
@@ -164,7 +165,7 @@ void fd_collection::clear_sockets()
 // termination of DOCA flow and fd_collection destructor.
 void fd_collection::clear()
 {
-    fdcoll_logfunc("");
+    fdcoll_logfunc(LOG_FUNCTION_CALL);
 
     lock();
 
@@ -310,12 +311,12 @@ void fd_collection::statistics_print_helper(int fd, vlog_levels_t log_level)
     epfd_info *epoll_fd;
 
     if ((socket_fd = get_sockfd(fd))) {
-        vlog_printf(log_level, "==================== SOCKET FD ===================\n");
+        __log_raw(log_level, "==================== SOCKET FD ===================\n");
         socket_fd->statistics_print(log_level);
         goto found_fd;
     }
     if ((epoll_fd = get_epfd(fd))) {
-        vlog_printf(log_level, "==================== EPOLL FD ====================\n");
+        __log_raw(log_level, "==================== EPOLL FD ====================\n");
         epoll_fd->statistics_print(log_level);
         goto found_fd;
     }
@@ -324,23 +325,23 @@ void fd_collection::statistics_print_helper(int fd, vlog_levels_t log_level)
 
 found_fd:
 
-    vlog_printf(log_level, "==================================================\n");
+    __log_raw(log_level, "==================================================\n");
 }
 
 void fd_collection::statistics_print(int fd, vlog_levels_t log_level)
 {
-    vlog_printf(log_level, "==================================================\n");
+    __log_raw(log_level, "==================================================\n");
     if (fd) {
-        vlog_printf(log_level, "============ DUMPING FD %d STATISTICS ============\n", fd);
+        __log_raw(log_level, "============ DUMPING FD %d STATISTICS ============\n", fd);
         g_p_fd_collection->statistics_print_helper(fd, log_level);
     } else {
-        vlog_printf(log_level, "======= DUMPING STATISTICS FOR ALL OPEN FDS ======\n");
+        __log_raw(log_level, "======= DUMPING STATISTICS FOR ALL OPEN FDS ======\n");
         int fd_map_size = g_p_fd_collection->get_fd_map_size();
         for (int i = 0; i < fd_map_size; i++) {
             g_p_fd_collection->statistics_print_helper(i, log_level);
         }
     }
-    vlog_printf(log_level, "==================================================\n");
+    __log_raw(log_level, "==================================================\n");
 }
 
 int fd_collection::addepfd(int epfd, int size)

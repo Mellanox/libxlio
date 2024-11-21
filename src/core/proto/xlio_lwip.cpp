@@ -41,6 +41,7 @@
 
 // debugging macros
 #define MODULE_NAME "lwip"
+DOCA_LOG_REGISTER(lwip);
 #undef MODULE_HDR_INFO
 #define MODULE_HDR_INFO MODULE_NAME ":%s%d:%s() "
 #undef __INFO__
@@ -96,7 +97,7 @@ xlio_lwip::xlio_lwip()
         __xlio_print_conf_file(__instance_list);
     }
 
-    lwip_logdbg("");
+    lwip_logdbg(LOG_FUNCTION_CALL);
 
     lwip_cc_algo_module = (enum cc_algo_mod)safe_mce_sys().lwip_cc_algo_mod;
 

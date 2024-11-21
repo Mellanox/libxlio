@@ -47,6 +47,7 @@
 
 #undef MODULE_NAME
 #define MODULE_NAME "hw_queue_tx"
+DOCA_LOG_REGISTER(hw_queue_tx);
 
 #define hwqtx_logpanic   __log_info_panic
 #define hwqtx_logerr     __log_info_err
@@ -141,7 +142,7 @@ hw_queue_tx::hw_queue_tx(ring_simple *ring, const slave_data_t *slave,
     , m_port_num(slave->port_num)
     , m_doca_mmap(g_buffer_pool_tx->get_doca_mmap())
 {
-    hwqtx_logfunc("");
+    hwqtx_logfunc(LOG_FUNCTION_CALL);
 
     memset(&m_hwq_tx_stats, 0, sizeof(m_hwq_tx_stats));
 
@@ -168,7 +169,7 @@ hw_queue_tx::hw_queue_tx(ring_simple *ring, const slave_data_t *slave,
 
 hw_queue_tx::~hw_queue_tx()
 {
-    hwqtx_logfunc("");
+    hwqtx_logfunc(LOG_FUNCTION_CALL);
 
     m_doca_txq.reset(nullptr); // Must be destroyed before TX PE.
 
@@ -658,7 +659,7 @@ void hw_queue_tx::send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr 
 
 void hw_queue_tx::modify_queue_to_ready_state()
 {
-    hwqtx_logdbg("");
+    hwqtx_logdbg(LOG_FUNCTION_CALL);
     int ret = 0;
     int qp_state = priv_ibv_query_qp_state(m_mlx5_qp.qp);
     if (qp_state != IBV_QPS_INIT) {
@@ -679,7 +680,7 @@ void hw_queue_tx::modify_queue_to_ready_state()
 
 void hw_queue_tx::modify_queue_to_error_state()
 {
-    hwqtx_logdbg("");
+    hwqtx_logdbg(LOG_FUNCTION_CALL);
 
     BULLSEYE_EXCLUDE_BLOCK_START
     if (priv_ibv_modify_qp_to_err(m_mlx5_qp.qp)) {
@@ -690,7 +691,7 @@ void hw_queue_tx::modify_queue_to_error_state()
 
 int hw_queue_tx::prepare_queue(xlio_ibv_qp_init_attr &qp_init_attr)
 {
-    hwqtx_logdbg("");
+    hwqtx_logdbg(LOG_FUNCTION_CALL);
     int ret = 0;
 
     qp_init_attr.qp_type = IBV_QPT_RAW_PACKET;
@@ -1089,7 +1090,7 @@ inline int hw_queue_tx::fill_wqe_lso(xlio_ibv_send_wr *pswr, int data_len)
         dpseg->lkey = htonl(pswr->sg_list[i].lkey);
         dpseg->byte_count = htonl(pswr->sg_list[i].length);
 
-        hwqtx_logfunc("DATA_SEG: addr:%llx len: %d lkey: %x dp_seg: %p wqe_size: %d",
+        hwqtx_logfunc("DATA_SEG: addr:%lx len: %d lkey: %x dp_seg: %p wqe_size: %d",
                       pswr->sg_list[i].addr, pswr->sg_list[i].length, dpseg->lkey, dpseg, wqe_size);
 
         dpseg++;
@@ -1160,7 +1161,7 @@ void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_a
     update_next_wqe_hot();
 
     hwqtx_logfunc(
-        "m_sq_wqe_hot: %p m_sq_wqe_hot_index: %d wqe_counter: %d new_hot_index: %d wr_id: %llx",
+        "m_sq_wqe_hot: %p m_sq_wqe_hot_index: %d wqe_counter: %d new_hot_index: %d wr_id: %lx",
         m_sq_wqe_hot, m_sq_wqe_hot_index, m_sq_wqe_counter, (m_sq_wqe_counter & (m_tx_num_wr - 1)),
         p_send_wqe->wr_id);
 }
@@ -2153,7 +2154,7 @@ get_first_buf:
     lso_metadata->buff = reinterpret_cast<mem_buf_desc_t *>(p);
     p = p->next;
 
-    hwqtx_logfunc("LSO first part, len=% " PRIu32 ". LSO-Headers len=%" PRIu64, first_pkt_len,
+    hwqtx_logfunc("LSO first part, len=%" PRIu32 ". LSO-Headers len=%" PRIu64, first_pkt_len,
                   lso_metadata->headers.len);
 
     doca_buf *prev_doca_buf = tx_doca_buf;
@@ -2192,7 +2193,7 @@ get_lso_task:
         return 0;
     }
 
-    hwqtx_logfunc("LSO Task, len_sent=% " PRIu32 ", mss=%" PRIu16, len_sent, mss);
+    hwqtx_logfunc("LSO Task, len_sent=%" PRIu32 ", mss=%" PRIu16, len_sent, mss);
 
     doca_eth_txq_task_lso_send_set_mss(task, mss);
 

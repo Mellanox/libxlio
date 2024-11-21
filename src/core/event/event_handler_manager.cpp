@@ -46,7 +46,8 @@
 #include "core/sock/sockinfo_tcp.h"
 #include "core/util/instrumentation.h"
 
-#define MODULE_NAME "evh:"
+#define MODULE_NAME "evh"
+DOCA_LOG_REGISTER(evh);
 
 #define evh_logpanic   __log_panic
 #define evh_logerr     __log_err
@@ -58,7 +59,7 @@
 
 #undef VLOG_PRINTF_ENTRY
 #define VLOG_PRINTF_ENTRY(log_level, log_fmt, log_args...)                                         \
-    vlog_printf(log_level, MODULE_NAME "%d:%s(" log_fmt ")\n", __LINE__, __FUNCTION__, ##log_args)
+    __log_raw(log_level, MODULE_NAME "%d:%s(" log_fmt ")\n", __LINE__, __FUNCTION__, ##log_args)
 
 #if (MAX_DEFINED_LOG_LEVEL < DEFINED_VLOG_DEBUG)
 #define evh_logdbg_entry(log_fmt, log_args...) ((void)0)
@@ -257,7 +258,7 @@ event_handler_manager::event_handler_manager(bool internal_thread_mode)
     , m_b_sysvar_internal_thread_arm_cq_enabled(safe_mce_sys().internal_thread_arm_cq_enabled)
     , m_n_sysvar_timer_resolution_msec(safe_mce_sys().timer_resolution_msec)
 {
-    evh_logfunc("");
+    evh_logfunc(LOG_FUNCTION_CALL);
 
     m_cq_epfd = 0;
     m_epfd = -1;
@@ -290,7 +291,7 @@ event_handler_manager::~event_handler_manager()
 
 void event_handler_manager::free_evh_resources()
 {
-    evh_logfunc("");
+    evh_logfunc(LOG_FUNCTION_CALL);
 
     // Flag thread to stop on next loop
     stop_thread();
@@ -521,7 +522,7 @@ void event_handler_manager::priv_unregister_all_handler_timers(timer_reg_info_t 
 
 void event_handler_manager::priv_prepare_ibverbs_async_event_queue(event_handler_map_t::iterator &i)
 {
-    evh_logdbg_entry("");
+    evh_logdbg_entry(LOG_FUNCTION_CALL);
 
     int cnt = 0;
     struct pollfd poll_fd = {/*.fd=*/0, /*.events=*/POLLIN, /*.revents=*/0};
@@ -778,7 +779,7 @@ void event_handler_manager::handle_registration_action(reg_action_t &reg_action)
 
 void event_handler_manager::query_for_ibverbs_event(int async_fd)
 {
-    evh_logfunc_entry("");
+    evh_logfunc_entry(LOG_FUNCTION_CALL);
 
     struct pollfd poll_fd;
     event_handler_map_t::iterator i;
@@ -830,7 +831,7 @@ void event_handler_manager::statistics_print(dump_type_t dump_type, int fd, vlog
 
 void event_handler_manager::process_ibverbs_event(event_handler_map_t::iterator &i)
 {
-    evh_logfunc_entry("");
+    evh_logfunc_entry(LOG_FUNCTION_CALL);
 
     //
     // Pre handling
@@ -842,8 +843,8 @@ void event_handler_manager::process_ibverbs_event(event_handler_map_t::iterator 
     {
         vlog_levels_t _level =
             (errno == EBADF) ? VLOG_DEBUG : VLOG_ERROR; // EBADF may returned during plugout
-        vlog_printf(_level, "[%d] Received HCA event but failed to get it (errno=%d %m)\n",
-                    hca->async_fd, errno);
+        __log_raw(_level, "[%d] Received HCA event but failed to get it (errno=%d %m)\n",
+                  hca->async_fd, errno);
         return;
     }
     ENDIF_VERBS_FAILURE;

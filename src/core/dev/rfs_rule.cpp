@@ -37,6 +37,7 @@
 #include "dev/rfs.h"
 
 #define MODULE_NAME "rfs_rule"
+DOCA_LOG_REGISTER(rfs_rule);
 
 #define rfs_logpanic   __log_info_panic
 #define rfs_logerr     __log_info_err
@@ -112,7 +113,7 @@ bool rfs_rule::create(doca_flow_match &match_value, doca_flow_match &match_mask,
     doca_flow_actions *actions = nullptr;
     doca_flow_actions *actions_mask = nullptr;
     if (flow_tag) {
-        rfs_logerr("RFS flow tag %u Priority %hu", flow_tag, priority);
+        rfs_loginfo("RFS flow tag %u Priority %hu", flow_tag, priority);
         memset(&actions_flowtag, 0U, sizeof(actions_flowtag));
         memset(&actions_mask_flowtag, 0U, sizeof(actions_mask_flowtag));
         actions_flowtag.meta.mark = htonl(flow_tag);
@@ -133,7 +134,6 @@ bool rfs_rule::create(doca_flow_match &match_value, doca_flow_match &match_mask,
     all_fwd.rss.outer_flags |=
         (match_value.outer.l4_type_ext == DOCA_FLOW_L4_TYPE_EXT_TCP ? DOCA_FLOW_RSS_TCP
                                                                     : DOCA_FLOW_RSS_UDP);
-
     doca_error_t rc = doca_flow_pipe_control_add_entry(
         0, priority, root_pipe, &match_value, &match_mask, nullptr, actions, actions_mask, nullptr,
         nullptr, &all_fwd, nullptr, &m_doca_flow_entry);

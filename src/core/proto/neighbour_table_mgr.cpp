@@ -41,7 +41,8 @@
 
 #include "core/dev/net_device_table_mgr.h"
 
-#define MODULE_NAME "ntm:"
+#define MODULE_NAME "ntm"
+DOCA_LOG_REGISTER(ntm);
 
 #define neigh_mgr_logpanic   __log_panic
 #define neigh_mgr_logerr     __log_err
@@ -117,7 +118,7 @@ neigh_entry *neigh_table_mgr::create_new_entry(neigh_key neigh_key, const observ
 
 void neigh_table_mgr::notify_cb(event *ev)
 {
-    neigh_mgr_logdbg("");
+    neigh_mgr_logdbg(LOG_FUNCTION_CALL);
     // Got event from netlink
 
     neigh_nl_event *nl_ev = dynamic_cast<neigh_nl_event *>(ev);

@@ -42,14 +42,11 @@
 #define CHUNK_LIST_CONTIANER_THRESHOLD 15 // Maximum number of containers before free.
 
 #define clist_logfunc(log_fmt, log_args...)                                                        \
-    vlog_printf(VLOG_FUNC, "clist[%p]:%d:%s() " log_fmt "\n", this, __LINE__, __FUNCTION__,        \
-                ##log_args)
+    __log_header_func("clist[%p]:%d:%s() " log_fmt "\n", this, __LINE__, __FUNCTION__, ##log_args)
 #define clist_logwarn(log_fmt, log_args...)                                                        \
-    vlog_printf(VLOG_WARNING, "clist[%p]:%d:%s() " log_fmt "\n", this, __LINE__, __FUNCTION__,     \
-                ##log_args)
+    __log_header_warn("clist[%p]:%d:%s() " log_fmt "\n", this, __LINE__, __FUNCTION__, ##log_args)
 #define clist_logerr(log_fmt, log_args...)                                                         \
-    vlog_printf(VLOG_ERROR, "clist[%p]:%d:%s() " log_fmt "\n", this, __LINE__, __FUNCTION__,       \
-                ##log_args)
+    __log_header_err("clist[%p]:%d:%s() " log_fmt "\n", this, __LINE__, __FUNCTION__, ##log_args)
 
 template <typename T> class chunk_list_t {
 

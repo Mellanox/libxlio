@@ -53,6 +53,7 @@
 #include "ib_ctx_handler_collection.h"
 
 #define MODULE_NAME "ndtm"
+DOCA_LOG_REGISTER(ndtm);
 
 #define ndtm_logpanic   __log_panic
 #define ndtm_logerr     __log_err
@@ -75,7 +76,7 @@ net_device_table_mgr::net_device_table_mgr()
     m_global_ring_epfd = 0;
     m_max_mtu = 0;
 
-    ndtm_logdbg("");
+    ndtm_logdbg(LOG_FUNCTION_CALL);
 
     m_global_ring_epfd = SYSCALL(epoll_create, 48);
 
@@ -170,7 +171,7 @@ void net_device_table_mgr::free_ndtm_resources()
 
 net_device_table_mgr::~net_device_table_mgr()
 {
-    ndtm_logdbg("");
+    ndtm_logdbg(LOG_FUNCTION_CALL);
     free_ndtm_resources();
     ndtm_logdbg("Done");
 }
@@ -368,7 +369,7 @@ out:
 
 net_device_entry *net_device_table_mgr::create_new_entry(int if_index, const observer *obs)
 {
-    ndtm_logdbg("");
+    ndtm_logdbg(LOG_FUNCTION_CALL);
     NOT_IN_USE(obs);
 
     net_device_val *p_ndv = get_net_device_val(if_index);
@@ -402,7 +403,7 @@ void net_device_table_mgr::get_ip_list(local_ip_list_t &ip_list, sa_family_t fam
 
 bool net_device_table_mgr::global_ring_poll_and_process_element(void *pv_fd_ready_array /*= NULL*/)
 {
-    ndtm_logfunc("");
+    ndtm_logfunc(LOG_FUNCTION_CALL);
     bool all_drained = true;
 
     net_device_map_index_t::iterator net_dev_iter;
@@ -417,7 +418,7 @@ bool net_device_table_mgr::global_ring_poll_and_process_element(void *pv_fd_read
 
 bool net_device_table_mgr::global_ring_request_notification()
 {
-    ndtm_logfunc("");
+    ndtm_logfunc(LOG_FUNCTION_CALL);
     net_device_map_index_t::iterator net_dev_iter;
     for (net_dev_iter = m_net_device_map_index.begin();
          m_net_device_map_index.end() != net_dev_iter; net_dev_iter++) {
@@ -440,7 +441,7 @@ int net_device_table_mgr::global_ring_epfd_get()
 
 void net_device_table_mgr::global_ring_clear_rx_notification()
 {
-    ndtm_logfunc("");
+    ndtm_logfunc(LOG_FUNCTION_CALL);
     int max_fd = 16;
     struct epoll_event events[max_fd];
 
@@ -470,7 +471,7 @@ void net_device_table_mgr::global_ring_clear_rx_notification()
 
 int net_device_table_mgr::global_ring_drain_and_procces()
 {
-    ndtm_logfuncall("");
+    ndtm_logfuncall(LOG_FUNCTION_CALL);
     int ret_total = 0;
 
     net_device_map_index_t::iterator net_dev_iter;
@@ -493,7 +494,7 @@ int net_device_table_mgr::global_ring_drain_and_procces()
 
 void net_device_table_mgr::global_ring_adapt_cq_moderation()
 {
-    ndtm_logfuncall("");
+    ndtm_logfuncall(LOG_FUNCTION_CALL);
 
     net_device_map_index_t::iterator net_dev_iter;
     for (net_dev_iter = m_net_device_map_index.begin();
@@ -504,7 +505,7 @@ void net_device_table_mgr::global_ring_adapt_cq_moderation()
 
 void net_device_table_mgr::global_ring_clear_all_rfs()
 {
-    ndtm_logfuncall("");
+    ndtm_logfuncall(LOG_FUNCTION_CALL);
     for (auto &itr : m_net_device_map_index) {
         itr.second->ring_clear_all_rfs();
     }
@@ -527,7 +528,7 @@ void net_device_table_mgr::handle_timer_expired(void *user_data)
 
 void net_device_table_mgr::global_ring_wakeup()
 {
-    ndtm_logdbg("");
+    ndtm_logdbg(LOG_FUNCTION_CALL);
     epoll_event ev = {0, {nullptr}};
 
     ev.events = EPOLLIN;

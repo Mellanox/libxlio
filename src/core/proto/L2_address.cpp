@@ -36,6 +36,7 @@
 #include "core/proto/L2_address.h"
 
 #define MODULE_NAME "L2_addr"
+DOCA_LOG_REGISTER(L2_addr);
 
 #define L2_panic      __log_panic
 #define L2_logerr     __log_info_err

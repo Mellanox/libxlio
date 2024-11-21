@@ -50,6 +50,7 @@
 #include <netinet/icmp6.h>
 
 #define MODULE_NAME "ne"
+DOCA_LOG_REGISTER(ne);
 #undef MODULE_HDR_INFO
 #define MODULE_HDR_INFO MODULE_NAME "[%s]:%d:%s() "
 #undef __INFO__
@@ -82,7 +83,7 @@ static const uint64_t g_ipv6_link_local_prefix = htobe64(0xfe80000000000000ULL);
 // This function create new val and initiate it with Multicast MAC
 inline int neigh_eth::build_mc_neigh_val()
 {
-    neigh_logdbg("");
+    neigh_logdbg(LOG_FUNCTION_CALL);
 
     // We need lock in any case that we change entry
     std::lock_guard<decltype(m_lock)> lock(m_lock);
@@ -120,7 +121,7 @@ inline int neigh_eth::build_mc_neigh_val()
 
 inline int neigh_eth::build_uc_neigh_val()
 {
-    neigh_logdbg("");
+    neigh_logdbg(LOG_FUNCTION_CALL);
 
     // We need lock in any case that we change entry
     std::lock_guard<decltype(m_lock)> lock(m_lock);
@@ -241,7 +242,7 @@ neigh_entry::neigh_entry(neigh_key key, transport_type_t _type, bool is_init_res
 
 neigh_entry::~neigh_entry()
 {
-    neigh_logdbg("");
+    neigh_logdbg(LOG_FUNCTION_CALL);
 
     if (m_state_machine) {
         delete m_state_machine;
@@ -295,7 +296,7 @@ void neigh_entry::clean_obj()
 
 int neigh_entry::send(neigh_send_data &s_info)
 {
-    neigh_logdbg("");
+    neigh_logdbg(LOG_FUNCTION_CALL);
     std::lock_guard<decltype(m_lock)> lock(m_lock);
     // Need to copy send info
     neigh_send_data *ns_data = new neigh_send_data(std::move(s_info));
@@ -311,7 +312,7 @@ int neigh_entry::send(neigh_send_data &s_info)
 
 void neigh_entry::empty_unsent_queue()
 {
-    neigh_logdbg("");
+    neigh_logdbg(LOG_FUNCTION_CALL);
     std::lock_guard<decltype(m_lock)> lock(m_lock);
 
     while (!m_unsent_queue.empty()) {
@@ -735,7 +736,7 @@ bool neigh_entry::post_send_tcp(neigh_send_data *p_data)
     struct tcphdr *p_tcp_h = reinterpret_cast<tcphdr *>(p_tcp_hdr);
     NOT_IN_USE(p_tcp_h); /* to supress warning in case MAX_DEFINED_LOG_LEVEL */
     neigh_logdbg("Tx TCP segment info: src_port=%d, dst_port=%d, flags='%s%s%s%s%s%s' seq=%u, "
-                 "ack=%u, win=%u, payload_sz=%u",
+                 "ack=%u, win=%u, payload_sz=%lu",
                  ntohs(p_tcp_h->source), ntohs(p_tcp_h->dest), p_tcp_h->urg ? "U" : "",
                  p_tcp_h->ack ? "A" : "", p_tcp_h->psh ? "P" : "", p_tcp_h->rst ? "R" : "",
                  p_tcp_h->syn ? "S" : "", p_tcp_h->fin ? "F" : "", ntohl(p_tcp_h->seq),
@@ -1211,7 +1212,7 @@ int neigh_entry::priv_enter_solicit_send()
 // Private enter function for ADDR_RESOLVED state
 int neigh_entry::priv_enter_addr_resolved()
 {
-    neigh_logfunc("");
+    neigh_logfunc(LOG_FUNCTION_CALL);
 
     std::lock_guard<decltype(m_lock)> lock(m_lock);
 
@@ -1232,7 +1233,7 @@ int neigh_entry::priv_enter_addr_resolved()
 // Private enter function for NOT_ACTIVE state
 void neigh_entry::priv_enter_not_active()
 {
-    neigh_logfunc("");
+    neigh_logfunc(LOG_FUNCTION_CALL);
 
     std::lock_guard<decltype(m_lock)> lock(m_lock);
 
@@ -1266,7 +1267,7 @@ void neigh_entry::priv_enter_not_active()
 // Private enter function for NOT_ERROR state
 void neigh_entry::priv_enter_error()
 {
-    neigh_logfunc("");
+    neigh_logfunc(LOG_FUNCTION_CALL);
 
     m_lock.lock();
 
@@ -1304,7 +1305,7 @@ void neigh_entry::priv_enter_error()
 // Private enter function for READY state
 int neigh_entry::priv_enter_ready()
 {
-    neigh_logfunc("");
+    neigh_logfunc(LOG_FUNCTION_CALL);
     std::lock_guard<decltype(m_lock)> lock(m_lock);
 
     m_state = true;
@@ -1418,7 +1419,7 @@ void neigh_entry::priv_unregister_timer()
 neigh_eth::neigh_eth(neigh_key key)
     : neigh_entry(key, XLIO_TRANSPORT_ETH)
 {
-    neigh_logdbg("");
+    neigh_logdbg(LOG_FUNCTION_CALL);
     m_rdma_port_space = RDMA_PS_UDP;
 
     if (key.get_ip_addr().is_mc()) {
@@ -1482,7 +1483,7 @@ neigh_eth::neigh_eth(neigh_key key)
 
 neigh_eth::~neigh_eth()
 {
-    neigh_logdbg("");
+    neigh_logdbg(LOG_FUNCTION_CALL);
     priv_enter_not_active();
 }
 
@@ -1590,7 +1591,7 @@ bool neigh_eth::priv_handle_neigh_is_l2_changed(address_t new_l2_address_str)
 
 int neigh_eth::priv_enter_ready()
 {
-    neigh_logfunc("");
+    neigh_logfunc(LOG_FUNCTION_CALL);
 
     // In case of ETH, we want to unregister from events and destroy rdma cm handle
     priv_destroy_cma_id();
@@ -1817,7 +1818,7 @@ bool neigh_eth::send_neighbor_solicitation()
 
 bool neigh_eth::prepare_to_send_packet(neigh_send_data *snd_data)
 {
-    neigh_logdbg("");
+    neigh_logdbg(LOG_FUNCTION_CALL);
 
     header *h = snd_data->m_header;
     const L2_address *src = m_p_dev->get_l2_address();

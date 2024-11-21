@@ -39,7 +39,8 @@
 #include "core/util/libxlio.h"
 #include "vlogger/vlogger.h"
 
-#define MODULE_NAME "route_info:"
+#define MODULE_NAME "route_info"
+DOCA_LOG_REGISTER(route_info);
 
 netlink_route_info::netlink_route_info(struct rtnl_route *nl_route_obj)
     : m_route_val()

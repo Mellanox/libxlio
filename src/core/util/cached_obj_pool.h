@@ -82,9 +82,9 @@ cached_obj_pool<T>::cached_obj_pool(const char *pool_name, size_t alloc_batch,
 
 template <typename T> cached_obj_pool<T>::~cached_obj_pool()
 {
-    vlog_printf(VLOG_DEBUG, "%s pool statistics:\n", m_pool_name);
-    vlog_printf(VLOG_DEBUG, "  allocations=%u expands=%u total_objs=%u\n", m_stats.allocations,
-                m_stats.expands, m_stats.total_objs);
+    __log_header_dbg("%s pool statistics:\n", m_pool_name);
+    __log_header_dbg("  allocations=%u expands=%u total_objs=%u\n", m_stats.allocations,
+                     m_stats.expands, m_stats.total_objs);
 }
 
 template <typename T> T *cached_obj_pool<T>::get_objs(uint32_t amount)
@@ -169,7 +169,7 @@ template <typename T> bool cached_obj_pool<T>::expand()
     size_t size = sizeof(T) * m_alloc_batch;
     T *objs_array = (T *)m_allocator.alloc(size);
     if (!objs_array) {
-        vlog_printf(VLOG_DEBUG, "Cached pool failed to allocate objects (%s)\n", m_pool_name);
+        __log_header_dbg("Cached pool failed to allocate objects (%s)\n", m_pool_name);
         return false;
     }
 
