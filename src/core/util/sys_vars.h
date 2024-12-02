@@ -362,6 +362,7 @@ public:
     int tcp_max_syn_rate;
 
     size_t zc_cache_threshold;
+    uint32_t tx_queue_max_elements;
     uint32_t tx_buf_size;
     uint32_t tcp_nodelay_treshold;
     uint32_t tx_num_wr;
@@ -567,6 +568,7 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_RING_DEV_MEM_TX          "XLIO_RING_DEV_MEM_TX"
 
 #define SYS_VAR_ZC_CACHE_THRESHOLD    "XLIO_ZC_CACHE_THRESHOLD"
+#define SYS_VAR_TX_QUEUE_MAX_ELEMENTS "XLIO_TX_QUEUE_MAX_ELEMENTS"
 #define SYS_VAR_TX_BUF_SIZE           "XLIO_TX_BUF_SIZE"
 #define SYS_VAR_TCP_NODELAY_TRESHOLD  "XLIO_TCP_NODELAY_TRESHOLD"
 #define SYS_VAR_TX_NUM_WRE            "XLIO_TX_WRE"
@@ -719,6 +721,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_TCP_MAX_SYN_RATE         (0)
 #define MCE_DEFAULT_TCP_NODELAY_TRESHOLD     (0)
 #define MCE_DEFAULT_ZC_CACHE_THRESHOLD       (10LU * 1024 * 1024 * 1024) // 10GB
+#define MCE_DEFAULT_TX_QUEUE_MAX_ELEMENTS    (32768)
 #define MCE_DEFAULT_TX_BUF_SIZE              (0)
 #define MCE_DEFAULT_TX_NUM_WRE               (32768)
 #define MCE_DEFAULT_TX_NUM_WRE_TO_SIGNAL     (64)

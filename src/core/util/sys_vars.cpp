@@ -31,6 +31,7 @@
  * SOFTWARE.
  */
 
+#include "doca_log.h"
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -779,6 +780,9 @@ void mce_sys_var::get_env_params()
     tcp_max_syn_rate = MCE_DEFAULT_TCP_MAX_SYN_RATE;
 
     zc_cache_threshold = MCE_DEFAULT_ZC_CACHE_THRESHOLD;
+
+    tx_queue_max_elements = MCE_DEFAULT_TX_QUEUE_MAX_ELEMENTS;
+
     tx_buf_size = MCE_DEFAULT_TX_BUF_SIZE;
     tcp_nodelay_treshold = MCE_DEFAULT_TCP_NODELAY_TRESHOLD;
     tx_num_wr = MCE_DEFAULT_TX_NUM_WRE;
@@ -1147,6 +1151,10 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_ZC_CACHE_THRESHOLD))) {
         zc_cache_threshold = option_size::from_str(env_ptr);
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_TX_QUEUE_MAX_ELEMENTS))) {
+        tx_queue_max_elements = (uint32_t)option_size::from_str(env_ptr);
     }
 
     if ((env_ptr = getenv(SYS_VAR_TX_BUF_SIZE))) {
