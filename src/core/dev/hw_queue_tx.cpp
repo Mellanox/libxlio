@@ -335,6 +335,8 @@ bool hw_queue_tx::prepare_doca_txq()
         return false;
     }
 
+    m_task_list_count = max_burst_size;
+
     err = doca_eth_txq_set_l3_chksum_offload(txq, DOCA_CHECKSUM_HW_L3_ENABLE);
     if (DOCA_IS_ERROR(err)) {
         PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_set_l3_chksum_offload txq: %p",
@@ -1986,18 +1988,30 @@ bool hw_queue_tx::expand_doca_inventory()
 
 bool hw_queue_tx::expand_doca_task_pool(bool is_lso)
 {
+    if (m_task_list_count >= safe_mce_sys().tx_queue_max_elements) {
+        hwqtx_logfunc("Silent packet drop, can't expand task pool");
+        return false;
+    }
+
+    const uint16_t expand_batch_size =
+        (m_task_list_count + DOCA_EXPAND_BATCH_SIZE) >= safe_mce_sys().tx_queue_max_elements
+        ? (m_task_list_count + DOCA_EXPAND_BATCH_SIZE) % DOCA_EXPAND_BATCH_SIZE
+        : (DOCA_EXPAND_BATCH_SIZE);
+
     doca_error_t rc;
     doca_eth_txq *txq = m_doca_txq.get();
     if (is_lso) {
-        rc = doca_eth_txq_task_lso_send_num_expand(txq, DOCA_EXPAND_BATCH_SIZE);
+        rc = doca_eth_txq_task_lso_send_num_expand(txq, expand_batch_size);
     } else {
-        rc = doca_eth_txq_task_send_num_expand(txq, DOCA_EXPAND_BATCH_SIZE);
+        rc = doca_eth_txq_task_send_num_expand(txq, expand_batch_size);
     }
 
     if (DOCA_IS_ERROR(rc)) {
         PRINT_DOCA_ERR(hwqtx_logerr, rc, "DOCA expand task pool (LSO=%d) failed", is_lso);
         return false;
     }
+
+    m_task_list_count += expand_batch_size;
     return true;
 }
 

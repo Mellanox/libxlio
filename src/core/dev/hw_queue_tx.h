@@ -345,6 +345,7 @@ private:
     doca_notification_handle_t m_notification_handle;
     doca_lso_metadata *m_p_doca_lso_metadata_list = nullptr;
     hw_queue_tx_stats_t m_hwq_tx_stats;
+    uint32_t m_task_list_count = 0;
 
     static void tx_task_completion_cb(doca_eth_txq_task_send *task_send, doca_data task_user_data,
                                       doca_data ctx_user_data);

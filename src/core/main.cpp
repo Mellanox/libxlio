@@ -539,6 +539,11 @@ void print_xlio_global_settings()
     VLOG_PARAM_STRING("Zerocopy Cache Threshold", safe_mce_sys().zc_cache_threshold,
                       MCE_DEFAULT_ZC_CACHE_THRESHOLD, SYS_VAR_ZC_CACHE_THRESHOLD,
                       option_size::to_str(safe_mce_sys().zc_cache_threshold));
+
+    VLOG_PARAM_STRING("Tx Queue Expansions Limit", safe_mce_sys().tx_queue_max_elements,
+                      MCE_DEFAULT_TX_QUEUE_MAX_ELEMENTS, SYS_VAR_TX_QUEUE_MAX_ELEMENTS,
+                      option_size::to_str(safe_mce_sys().tx_queue_max_elements));
+
     VLOG_PARAM_STRING("Tx Mem Buf size", safe_mce_sys().tx_buf_size, MCE_DEFAULT_TX_BUF_SIZE,
                       SYS_VAR_TX_BUF_SIZE, option_size::to_str(safe_mce_sys().tx_buf_size));
     VLOG_PARAM_NUMBER("Tx QP WRE", safe_mce_sys().tx_num_wr, MCE_DEFAULT_TX_NUM_WRE,
