@@ -188,6 +188,8 @@ enum : size_t {
     TLS_RECORD_MAX = 16384U,
     /* Block size big enough to hold TLS header/trailer for zerocopy records. */
     TLS_ZC_BLOCK = 32U,
+    /* Maximum number of scatter-gather elements for TCP send operation. */
+    TLS_IOV_SIZE = 3U,
 };
 
 class tls_record : public mem_desc {
@@ -297,8 +299,12 @@ public:
         }
     }
 
-    inline void fill_iov(struct iovec *iov, size_t iov_max, bool is_tls13)
+    inline void fill_iov(xlio_tx_call_attr_t &tx_attr, struct iovec *iov, bool is_tls13)
     {
+        /* Check that the iov size is sufficient for the heaviest scenario (zerocopy). */
+        static_assert(TLS_IOV_SIZE >= 3U);
+
+        tx_attr.attr.iov = iov;
         if (m_p_zc_owner) {
             /*
              * For zerocopy case we create 3 scatter-gather elements in this order:
@@ -306,8 +312,7 @@ public:
              * [1] Payload
              * [2] Trailer which contains TAG and TLS 1.3 type if applicable
              */
-            assert(iov_max >= 3);
-            (void)iov_max;
+            tx_attr.attr.sz_iov = 3;
             iov[0].iov_base = m_p_data;
             iov[0].iov_len =
                 TLS_RECORD_HDR_LEN + (is_tls13 ? TLS_13_RECORD_IV_LEN : TLS_RECORD_IV_LEN);
@@ -316,6 +321,7 @@ public:
             iov[2].iov_base = m_p_data + iov[0].iov_len;
             iov[2].iov_len = TLS_RECORD_TAG_LEN + !!is_tls13;
         } else {
+            tx_attr.attr.sz_iov = 1;
             iov[0].iov_base = m_p_data;
             iov[0].iov_len = m_size;
         }
@@ -719,7 +725,7 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
 
     xlio_tx_call_attr_t tls_arg;
     struct iovec *p_iov;
-    struct iovec tls_iov[3]; /* 3 elements are for zerocopy case: header, payload and trailer. */
+    struct iovec tls_iov[TLS_IOV_SIZE];
     uint64_t last_recno;
     ssize_t ret;
     size_t pos;
@@ -737,8 +743,6 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
     tls_arg.opcode = TX_FILE; /* Not to use hugepage zerocopy path */
     tls_arg.attr.flags = MSG_ZEROCOPY;
     tls_arg.xlio_flags = TX_FLAG_NO_PARTIAL_WRITE;
-    tls_arg.attr.iov = tls_iov;
-    tls_arg.attr.sz_iov = is_zerocopy ? 3 : 1;
     tls_arg.priv.attr = PBUF_DESC_MDESC;
 
     p_iov = tx_arg.attr.iov;
@@ -766,6 +770,7 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
             tls_record *rec;
             ssize_t ret2;
             size_t tosend = std::min<size_t>(p_iov[i].iov_len - pos, TLS_RECORD_MAX);
+            size_t tosend_tcp;
 
             if (m_p_sock->sndbuf_available() == 0U && !block_this_run) {
                 if (ret == 0) {
@@ -793,11 +798,12 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
             }
 
             tosend = rec->append_data((uint8_t *)p_iov[i].iov_base + pos, tosend, is_tx_tls13());
+            pos += tosend;
             /* Set type after all data, because for TLS1.3 it is in the tail. */
             rec->set_type(tls_type, is_tx_tls13());
-            rec->fill_iov(tls_arg.attr.iov, ARRAY_SIZE(tls_iov), is_tx_tls13());
+            rec->fill_iov(tls_arg, tls_iov, is_tx_tls13());
             tls_arg.priv.mdesc = reinterpret_cast<void *>(rec);
-            pos += tosend;
+            tosend_tcp = rec->m_size;
 
             ++m_next_recno_tx;
             /*
@@ -817,15 +823,22 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
             } else {
                 ret2 = m_p_sock->tcp_tx(tls_arg);
             }
-            if (block_this_run && (ret2 != (ssize_t)tls_arg.attr.iov[0].iov_len)) {
+            if (unlikely(block_this_run && ret2 != (ssize_t)tosend_tcp)) {
                 if ((ret2 >= 0) || (errno == EINTR && !g_b_exit)) {
                     ret2 = ret2 < 0 ? 0 : ret2;
+                    tosend_tcp -= ret2;
+                    while (tls_arg.attr.iov[0].iov_len > 1 &&
+                           ret2 >= (ssize_t)tls_arg.attr.iov[0].iov_len) {
+                        ret2 -= tls_arg.attr.iov[0].iov_len;
+                        tls_arg.attr.iov = tls_arg.attr.iov + 1;
+                        --tls_arg.attr.sz_iov;
+                    }
                     tls_arg.attr.iov[0].iov_len -= ret2;
                     tls_arg.attr.iov[0].iov_base =
                         (void *)((uint8_t *)tls_arg.attr.iov[0].iov_base + ret2);
                     goto retry;
                 }
-                if (tls_arg.attr.iov[0].iov_len != rec->m_size) {
+                if (tosend_tcp != rec->m_size) {
                     /* We cannot recover from a fail in the middle of a TLS record */
                     if (!g_b_exit) {
                         m_p_sock->abort_connection();
