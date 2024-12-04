@@ -2307,15 +2307,22 @@ inline xlio_recv_callback_retval_t sockinfo_udp::inspect_by_user_cb(mem_buf_desc
     }
 
     // fill io vector array with data buffer pointers
-    iovec iov[p_desc->rx.n_frags];
     int nr_frags = 0;
+    struct iovec *iov = new struct iovec[p_desc->rx.n_frags];
+    if (!iov) {
+        return XLIO_PACKET_DROP;
+    }
 
     for (mem_buf_desc_t *tmp = p_desc; tmp; tmp = tmp->p_next_desc) {
         iov[nr_frags++] = tmp->rx.frag;
     }
 
     // call user callback
-    return m_rx_callback(m_fd, nr_frags, iov, &pkt_info, m_rx_callback_context);
+    xlio_recv_callback_retval_t ret =
+        m_rx_callback(m_fd, nr_frags, iov, &pkt_info, m_rx_callback_context);
+
+    delete[] iov;
+    return ret;
 }
 
 /* Update completion with

@@ -599,20 +599,25 @@ int ring_tap::mem_buf_tx_release(mem_buf_desc_t *buff_list, bool b_accounting, b
 
 int ring_tap::send_buffer(xlio_ibv_send_wr *wr, xlio_wr_tx_packet_attr attr)
 {
-    int ret = 0;
-    iovec iovec[wr->num_sge];
     NOT_IN_USE(attr);
+
+    struct iovec *iovec = new struct iovec[wr->num_sge];
+    if (!iovec) {
+        errno = ENOMEM;
+        return -1;
+    }
 
     for (int i = 0; i < wr->num_sge; i++) {
         iovec[i].iov_base = (void *)wr->sg_list[i].addr;
         iovec[i].iov_len = wr->sg_list[i].length;
     }
 
-    ret = SYSCALL(writev, m_tap_fd, iovec, wr->num_sge);
+    int ret = SYSCALL(writev, m_tap_fd, iovec, wr->num_sge);
     if (ret < 0) {
         ring_logdbg("writev: tap_fd %d, errno: %d\n", m_tap_fd, errno);
     }
 
+    delete[] iovec;
     return ret;
 }
 
