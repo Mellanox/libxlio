@@ -1106,6 +1106,9 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
         if ((tx_arg.priv.attr == PBUF_DESC_MKEY) && pd_key_array) {
             tx_arg.priv.mkey = pd_key_array[i].mkey;
         }
+
+        si_tcp_loginfo("mkey: %ul", tx_arg.priv.mkey);
+
         unsigned pos = 0;
         while (pos < p_iov[i].iov_len) {
             unsigned tx_size = sndbuf_available();
