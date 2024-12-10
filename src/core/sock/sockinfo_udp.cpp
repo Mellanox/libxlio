@@ -2181,7 +2181,7 @@ ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
     }
 
     {
-        xlio_send_attr attr = {(xlio_wr_tx_packet_attr)0, 0, 0, nullptr};
+        xlio_send_attr attr = (xlio_wr_tx_packet_attr)0;
         bool b_blocking = m_b_blocking;
         if (unlikely(__flags & MSG_DONTWAIT)) {
             b_blocking = false;

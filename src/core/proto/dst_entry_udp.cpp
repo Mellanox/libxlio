@@ -477,7 +477,7 @@ ssize_t dst_entry_udp::fast_send_fragmented(const iovec *p_iov, const ssize_t sz
     return sz_data_payload;
 }
 
-ssize_t dst_entry_udp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr)
+ssize_t dst_entry_udp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr &attr)
 {
     /* Suppress flags that should not be used anymore
      * to avoid conflicts with XLIO_TX_PACKET_L3_CSUM and XLIO_TX_PACKET_L4_CSUM
@@ -496,7 +496,7 @@ ssize_t dst_entry_udp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
     }
 }
 
-ssize_t dst_entry_udp::slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr,
+ssize_t dst_entry_udp::slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr &attr,
                                  struct xlio_rate_limit_t &rate_limit, int flags /*= 0*/,
                                  sockinfo *sock /*= 0*/, tx_call_t call_type /*= 0*/)
 {

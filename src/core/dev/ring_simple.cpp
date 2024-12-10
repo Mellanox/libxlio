@@ -33,6 +33,7 @@
 #include <mutex>
 #include "ring_simple.h"
 
+#include "proto/dst_entry.h"
 #include "util/valgrind.h"
 #include "util/sg_array.h"
 #include "sock/fd_collection.h"
@@ -719,15 +720,15 @@ void ring_simple::mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc)
 }
 
 /* note that this function is inline, so keep it above the functions using it */
-inline int ring_simple::send_buffer(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
-                                    xlio_tis *tis)
+inline int ring_simple::send_buffer(xlio_ibv_send_wr *p_send_wqe, xlio_send_attr &attr)
 {
     int ret = 0;
     unsigned credits = m_hqtx->credits_calculate(p_send_wqe);
 
     if (likely(m_hqtx->credits_get(credits)) ||
-        is_available_qp_wr(is_set(attr, XLIO_TX_PACKET_BLOCK), credits)) {
-        m_hqtx->send_wqe(p_send_wqe, attr, tis, credits);
+        is_available_qp_wr(is_set(attr.flags, XLIO_TX_PACKET_BLOCK), credits)) {
+        xlio_send_attr send_attr = attr;
+        m_hqtx->send_wqe(p_send_wqe, send_attr, credits);
     } else {
         ring_logdbg("Silent packet drop, SQ is full!");
         ret = -1;
@@ -757,16 +758,17 @@ void ring_simple::send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_w
     }
 
     std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-    int ret = send_buffer(p_send_wqe, attr, nullptr);
+    xlio_send_attr send_attr = attr;
+    int ret = send_buffer(p_send_wqe, send_attr);
     send_status_handler(ret, p_send_wqe);
 }
 
 int ring_simple::send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                                  xlio_wr_tx_packet_attr attr, xlio_tis *tis)
+                                  xlio_send_attr &attr)
 {
     NOT_IN_USE(id);
     std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-    int ret = send_buffer(p_send_wqe, attr, tis);
+    int ret = send_buffer(p_send_wqe, attr);
     send_status_handler(ret, p_send_wqe);
     return ret;
 }

@@ -34,6 +34,7 @@
 #include <util/valgrind.h>
 #include <sock/sock-redirect.h>
 #include <sock/sock-app.h>
+#include "lwip/tcp.h"
 #include "ring_simple.h"
 #include "hw_queue_tx.h"
 
@@ -212,6 +213,14 @@ int cq_mgr_tx::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
         if (unlikely(cqe->op_own & 0x80) && is_error_opcode(cqe->op_own >> 4)) {
             // m_p_cq_stat->n_tx_cqe_error++; Future counter
             log_cqe_error(cqe);
+
+            tcp_pcb *pcb = m_hqtx_ptr->m_sq_wqe_idx_to_prop[index].pcb;
+
+            cq_logwarn("closing %p", pcb);
+            const auto tcp_state = get_tcp_state(pcb);
+            if (tcp_state != CLOSING && tcp_state != CLOSED) {
+                set_tcp_state(m_hqtx_ptr->m_sq_wqe_idx_to_prop[index].pcb, CLOSING);
+            }
         }
 
         handle_sq_wqe_prop(index);

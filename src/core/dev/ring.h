@@ -48,6 +48,7 @@ struct xlio_tls_info;
 class sockinfo;
 class rfs_rule;
 class poll_group;
+struct xlio_send_attr;
 
 #define ring_logpanic   __log_info_panic
 #define ring_logerr     __log_info_err
@@ -99,7 +100,7 @@ public:
     virtual void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
                                   xlio_wr_tx_packet_attr attr) = 0;
     virtual int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                                 xlio_wr_tx_packet_attr attr, xlio_tis *tis) = 0;
+                                 xlio_send_attr &attr) = 0;
 
     virtual int get_num_resources() const = 0;
     virtual int *get_rx_channel_fds(size_t &length) const
@@ -231,7 +232,7 @@ public:
     };
 
     virtual int get_supported_nvme_feature_mask() const { return 0; }
-    virtual void post_nop_fence(void) {}
+    virtual void post_nop_fence(void) { }
     virtual void post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first)
     {
         NOT_IN_USE(tis);

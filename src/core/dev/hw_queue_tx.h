@@ -39,6 +39,8 @@
 #include "dev/cq_mgr_tx.h"
 #include "dev/cq_mgr_rx.h"
 #include "dev/dm_mgr.h"
+#include "lwip/tcp.h"
+#include "proto/dst_entry.h"
 #include "proto/mem_buf_desc.h"
 #include "proto/xlio_lwip.h"
 #include "util/sg_array.h"
@@ -71,6 +73,7 @@ struct sq_wqe_prop {
     /* Transport interface (TIS/TIR) current WQE holds reference to. */
     xlio_ti *ti;
     struct sq_wqe_prop *next;
+    tcp_pcb *pcb;
 };
 
 // @class hw_queue_tx
@@ -88,8 +91,7 @@ public:
     void up();
     void down();
 
-    void send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio_tis *tis,
-                  unsigned credits);
+    void send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_send_attr &attr, unsigned credits);
 
     struct ibv_qp *get_ibv_qp() const { return m_mlx5_qp.qp; };
 
@@ -213,8 +215,8 @@ private:
     void destroy_tis_cache();
     void put_tls_tis_in_cache(xlio_tis *tis);
 
-    void send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, bool request_comp,
-                      xlio_tis *tis, unsigned credits);
+    void send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_send_attr &attr, bool request_comp,
+                      unsigned credits);
 
     void set_unsignaled_count(void) { m_n_unsignaled_count = m_n_sysvar_tx_num_wr_to_signal - 1; }
 
@@ -258,7 +260,11 @@ private:
     inline void tls_get_progress_params_wqe(xlio_ti *ti, uint32_t tirn, void *buf, uint32_t lkey);
 #endif /* DEFINED_UTLS */
 
-    inline void store_current_wqe_prop(mem_buf_desc_t *wr_id, unsigned credits, xlio_ti *ti);
+    inline void store_current_wqe_prop(mem_buf_desc_t *wr_id, unsigned credits,
+                                       xlio_send_attr &attr);
+
+    inline void store_current_wqe_prop(mem_buf_desc_t *wr_id, unsigned credits, xlio_ti *ti,
+                                       tcp_pcb *pcb = nullptr);
     inline int fill_wqe(xlio_ibv_send_wr *p_send_wqe);
     inline int fill_wqe_send(xlio_ibv_send_wr *pswr);
     inline int fill_wqe_lso(xlio_ibv_send_wr *pswr, int data_len);

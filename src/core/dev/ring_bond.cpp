@@ -442,14 +442,14 @@ void ring_bond::send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe
 }
 
 int ring_bond::send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                                xlio_wr_tx_packet_attr attr, xlio_tis *tis)
+                                xlio_send_attr &attr)
 {
     mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)(p_send_wqe->wr_id);
 
     std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
 
     if (is_active_member(p_mem_buf_desc->p_desc_owner, id)) {
-        return m_xmit_rings[id]->send_lwip_buffer(id, p_send_wqe, attr, tis);
+        return m_xmit_rings[id]->send_lwip_buffer(id, p_send_wqe, attr);
     }
 
     ring_logfunc("active ring=%p, silent packet drop (%p), (HA event?)", m_xmit_rings[id],

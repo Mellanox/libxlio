@@ -65,7 +65,7 @@ transport_t dst_entry_tcp::get_transport(const sock_addr &to)
     return TRANS_XLIO;
 }
 
-ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr)
+ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr &attr)
 {
     int ret = 0;
     void *p_pkt;
@@ -253,7 +253,7 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
             }
         }
 
-        ret = send_lwip_buffer(m_id, p_send_wqe, attr.flags, attr.tis);
+        ret = send_lwip_buffer(m_id, p_send_wqe, attr);
     } else { // We don'nt support inline in this case, since we believe that this a very rare case
         mem_buf_desc_t *p_mem_buf_desc;
         size_t total_packet_len = 0;
@@ -313,7 +313,7 @@ out:
     return ret;
 }
 
-ssize_t dst_entry_tcp::slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr,
+ssize_t dst_entry_tcp::slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr &attr,
                                  struct xlio_rate_limit_t &rate_limit, int flags /*= 0*/,
                                  sockinfo *sock /*= 0*/, tx_call_t call_type /*= 0*/)
 {

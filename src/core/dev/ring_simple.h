@@ -81,8 +81,7 @@ public:
     void mem_buf_desc_return_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc);
     void mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc,
                                          void *pv_fd_ready_array = nullptr);
-    inline int send_buffer(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
-                           xlio_tis *tis);
+    inline int send_buffer(xlio_ibv_send_wr *p_send_wqe, xlio_send_attr &attr);
     bool is_up() override;
     void start_active_queue_tx();
     void start_active_queue_rx();
@@ -95,7 +94,7 @@ public:
     void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
                           xlio_wr_tx_packet_attr attr) override;
     int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                         xlio_wr_tx_packet_attr attr, xlio_tis *tis) override;
+                         xlio_send_attr &attr) override;
     void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc) override;
     void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc,
                                               unsigned ref) override;

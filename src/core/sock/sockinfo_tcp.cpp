@@ -1167,6 +1167,7 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
  */
 ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
 {
+    // TODO - call tcp_close(pcb) if you identify the error
     iovec *p_iov = tx_arg.attr.iov;
     size_t sz_iov = tx_arg.attr.sz_iov;
     int flags = tx_arg.attr.flags;
@@ -1366,7 +1367,7 @@ err_t sockinfo_tcp::ip_output(struct pbuf *p, struct tcp_seg *seg, void *v_p_con
     tcp_iovec lwip_iovec[max_count];
     xlio_send_attr attr = {
         (xlio_wr_tx_packet_attr)(flags | (!!p_si_tcp->is_xlio_socket() * XLIO_TX_SKIP_POLL)),
-        p_si_tcp->m_pcb.mss, 0, nullptr};
+        p_si_tcp->m_pcb.mss, 0, nullptr, (tcp_pcb *)v_p_conn};
     int count = 0;
     void *cur_end;
 

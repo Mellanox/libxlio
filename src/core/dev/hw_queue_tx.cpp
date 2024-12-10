@@ -57,7 +57,7 @@
 #define OCTOWORD 16
 #define WQEBB    64
 
-//#define DBG_DUMP_WQE 1
+// #define DBG_DUMP_WQE 1
 
 #ifdef DBG_DUMP_WQE
 #define dbg_dump_wqe(_addr, _size)                                                                 \
@@ -346,8 +346,7 @@ void hw_queue_tx::release_tx_buffers()
     NOT_IN_USE(ret); // Suppress --enable-opt-log=high warning
 }
 
-void hw_queue_tx::send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio_tis *tis,
-                           unsigned credits)
+void hw_queue_tx::send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_send_attr &attr, unsigned credits)
 {
     mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)p_send_wqe->wr_id;
     /* Control tx completions:
@@ -360,11 +359,11 @@ void hw_queue_tx::send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr 
      *   m_n_unsignaled_count must be zero for this time.
      */
     const bool request_comp = (p_mem_buf_desc->m_flags & mem_buf_desc_t::ZCOPY);
-    const bool skip_tx_poll = (attr & XLIO_TX_SKIP_POLL);
+    const bool skip_tx_poll = (attr.flags & XLIO_TX_SKIP_POLL);
 
     hwqtx_logfunc("VERBS send, unsignaled_count: %d", m_n_unsignaled_count);
 
-    send_to_wire(p_send_wqe, attr, request_comp, tis, credits);
+    send_to_wire(p_send_wqe, attr, request_comp, credits);
 
     if (!skip_tx_poll && is_signal_requested_for_last_wqe()) {
         uint64_t dummy_poll_sn = 0;
@@ -824,27 +823,33 @@ inline int hw_queue_tx::fill_wqe_lso(xlio_ibv_send_wr *pswr, int data_len)
     return wqebbs;
 }
 
-void hw_queue_tx::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits, xlio_ti *ti)
+void hw_queue_tx::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits, xlio_ti *ti,
+                                         tcp_pcb *pcb /*=nullptr*/)
 {
-    m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index] = sq_wqe_prop {
-        .buf = buf,
-        .credits = credits,
-        .ti = ti,
-        .next = m_sq_wqe_prop_last,
-    };
+    m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index] = sq_wqe_prop {.buf = buf,
+                                                            .credits = credits,
+                                                            .ti = ti,
+                                                            .next = m_sq_wqe_prop_last,
+                                                            .pcb = pcb};
     m_sq_wqe_prop_last = &m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index];
     if (ti) {
         ti->get();
     }
 }
 
+void hw_queue_tx::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits,
+                                         xlio_send_attr &attr)
+{
+    store_current_wqe_prop(buf, credits, attr.tis, attr.pcb);
+}
+
 //! Send one RAW packet
-void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
-                               bool request_comp, xlio_tis *tis, unsigned credits)
+void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_send_attr &attr,
+                               bool request_comp, unsigned credits)
 {
     struct xlio_mlx5_wqe_ctrl_seg *ctrl = nullptr;
     struct mlx5_wqe_eth_seg *eseg = nullptr;
-    uint32_t tisn = tis ? tis->get_tisn() : 0;
+    uint32_t tisn = attr.tis ? attr.tis->get_tisn() : 0;
 
     ctrl = (struct xlio_mlx5_wqe_ctrl_seg *)m_sq_wqe_hot;
     eseg = (struct mlx5_wqe_eth_seg *)((uint8_t *)m_sq_wqe_hot + sizeof(*ctrl));
@@ -864,10 +869,11 @@ void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_a
      */
     *((uint64_t *)eseg) = 0;
     eseg->rsvd2 = 0;
-    eseg->cs_flags = (uint8_t)(attr & (XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM) & 0xff);
+    eseg->cs_flags =
+        (uint8_t)(attr.flags & (XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM) & 0xff);
 
     /* Store buffer descriptor */
-    store_current_wqe_prop(reinterpret_cast<mem_buf_desc_t *>(p_send_wqe->wr_id), credits, tis);
+    store_current_wqe_prop(reinterpret_cast<mem_buf_desc_t *>(p_send_wqe->wr_id), credits, attr);
 
     /* Complete WQE */
     int wqebbs = fill_wqe(p_send_wqe);
@@ -1517,10 +1523,9 @@ void hw_queue_tx::trigger_completion_for_all_sent_packets()
             hwqtx_logdbg("No space in SQ to trigger completions with a post operation");
             return;
         }
-
-        send_to_wire(&send_wr,
-                     (xlio_wr_tx_packet_attr)(XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM),
-                     true, nullptr, credits);
+        xlio_send_attr send_attrs =
+            (xlio_wr_tx_packet_attr)(XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM);
+        send_to_wire(&send_wr, send_attrs, true, credits);
     }
 }
 

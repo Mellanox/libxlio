@@ -48,8 +48,8 @@ public:
                   resource_allocation_key &ring_alloc_logic);
     virtual ~dst_entry_tcp();
 
-    ssize_t fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr);
-    ssize_t slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr,
+    ssize_t fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr &attr);
+    ssize_t slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr &attr,
                       struct xlio_rate_limit_t &rate_limit, int flags = 0, sockinfo *sock = nullptr,
                       tx_call_t call_type = TX_UNDEF);
     ssize_t slow_send_neigh(const iovec *p_iov, size_t sz_iov,
@@ -75,13 +75,13 @@ private:
     uint64_t m_user_huge_page_mask;
 
     inline int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                                xlio_wr_tx_packet_attr attr, xlio_tis *tis)
+                                xlio_send_attr &attr)
     {
-        if (unlikely(is_set(attr, XLIO_TX_PACKET_DUMMY))) {
+        if (unlikely(is_set(attr.flags, XLIO_TX_PACKET_DUMMY))) {
             if (m_p_ring->get_hw_dummy_send_support(id, p_send_wqe)) {
                 xlio_ibv_wr_opcode last_opcode =
                     m_p_send_wqe_handler->set_opcode(*p_send_wqe, XLIO_IBV_WR_NOP);
-                m_p_ring->send_lwip_buffer(id, p_send_wqe, attr, tis);
+                m_p_ring->send_lwip_buffer(id, p_send_wqe, attr);
                 m_p_send_wqe_handler->set_opcode(*p_send_wqe, last_opcode);
             }
             /* no need to free the buffer if dummy send is not supported, as for lwip buffers we
@@ -92,7 +92,7 @@ private:
             return 0;
         }
 
-        return m_p_ring->send_lwip_buffer(id, p_send_wqe, attr, tis);
+        return m_p_ring->send_lwip_buffer(id, p_send_wqe, attr);
     }
 };
 

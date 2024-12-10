@@ -63,7 +63,7 @@ public:
     virtual void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
                                   xlio_wr_tx_packet_attr attr);
     virtual int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                                 xlio_wr_tx_packet_attr attr, xlio_tis *tis);
+                                 xlio_send_attr &attr);
     virtual void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc);
     virtual void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc, unsigned ref);
     virtual mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
@@ -82,7 +82,7 @@ public:
         NOT_IN_USE(poll_sn);
         return 0;
     }
-    virtual void adapt_cq_moderation() {}
+    virtual void adapt_cq_moderation() { }
 
     virtual int socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_completions,
                                   unsigned int ncompletions, int flags)
@@ -98,7 +98,7 @@ public:
         NOT_IN_USE(rate_limit);
         return 0;
     }
-    void inc_cq_moderation_stats() {}
+    void inc_cq_moderation_stats() { }
     virtual uint32_t get_tx_user_lkey(void *addr, size_t length)
     {
         NOT_IN_USE(addr);
@@ -131,7 +131,7 @@ private:
     int prepare_flow_message(xlio_msg_flow &data, msg_flow_t flow_action);
     int process_element_rx(void *pv_fd_ready_array);
     bool request_more_rx_buffers();
-    int send_buffer(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr);
+    int send_buffer(xlio_ibv_send_wr *p_send_wqe, xlio_send_attr &attr);
     void send_status_handler(int ret, xlio_ibv_send_wr *p_send_wqe);
     void tap_create(net_device_val *p_ndev);
     void tap_destroy();

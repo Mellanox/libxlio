@@ -38,6 +38,7 @@
 #include "core/util/if.h"
 #include <netinet/in.h>
 
+#include "lwip/tcp.h"
 #include "vlogger/vlogger.h"
 #include "utils/lock_wrapper.h"
 #include "core/proto/route_entry.h"
@@ -78,6 +79,27 @@ struct xlio_send_attr {
     uint16_t mss;
     size_t length;
     xlio_tis *tis;
+    tcp_pcb *pcb;
+
+    // converting constructor
+    xlio_send_attr(const xlio_wr_tx_packet_attr &packet_attr)
+        : flags(packet_attr)
+        , mss(0)
+        , length(0)
+        , tis(nullptr)
+        , pcb(nullptr)
+    {
+    }
+
+    xlio_send_attr(xlio_wr_tx_packet_attr other_flags, uint16_t other_mss, size_t other_length,
+                   xlio_tis *other_tis, tcp_pcb *other_pcb)
+        : flags(other_flags)
+        , mss(other_mss)
+        , length(other_length)
+        , tis(other_tis)
+        , pcb(other_pcb)
+    {
+    }
 };
 
 class dst_entry : public cache_observer, public tostr {
@@ -92,8 +114,8 @@ public:
 
     virtual bool prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_rules = false,
                                  bool is_connect = false);
-    virtual ssize_t fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr) = 0;
-    virtual ssize_t slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr,
+    virtual ssize_t fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr &attr) = 0;
+    virtual ssize_t slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr &attr,
                               struct xlio_rate_limit_t &rate_limit, int flags = 0,
                               sockinfo *sock = nullptr, tx_call_t call_type = TX_UNDEF) = 0;
 
