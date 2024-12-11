@@ -695,9 +695,7 @@ bool sockinfo_tcp::prepare_listen_to_close()
     while (!m_accepted_conns.empty()) {
         sockinfo_tcp *new_sock = m_accepted_conns.get_and_pop_front();
         new_sock->m_sock_state = TCP_SOCK_INITED;
-        class flow_tuple key;
-        sockinfo_tcp::create_flow_tuple_key_from_pcb(key, &(new_sock->m_pcb));
-        m_syn_received.erase(key);
+        remove_received_syn_socket(new_sock);
         m_ready_conn_cnt--;
         new_sock->lock_tcp_con();
         new_sock->m_parent = nullptr;
@@ -1933,12 +1931,7 @@ void sockinfo_tcp::handle_incoming_handshake_failure(sockinfo_tcp *child_conn)
         m_ready_pcbs.erase(&child_conn->m_pcb);
     }
 
-    // remove the connection from m_syn_received and close it by caller
-    flow_tuple key;
-    sockinfo_tcp::create_flow_tuple_key_from_pcb(key, &(child_conn->m_pcb));
-    if (!m_syn_received.erase(key)) {
-        si_tcp_logerr("Unable to find the established pcb in syn received list");
-    }
+    remove_received_syn_socket(child_conn);
 
     si_tcp_logfunc("Received-RST/internal-error/timeout in SYN_RCVD state");
     if (m_p_socket_stats) {
@@ -3260,15 +3253,7 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
     m_ready_conn_cnt--;
     IF_STATS(m_p_socket_stats->listen_counters.n_conn_backlog--);
 
-    class flow_tuple key;
-    sockinfo_tcp::create_flow_tuple_key_from_pcb(key, &(ns->m_pcb));
-
-    // Since the pcb is already contained in connected sockinfo_tcp no need to keep it listen's
-    // socket SYN list
-    if (!m_syn_received.erase(key)) {
-        // Should we worry about that?
-        __log_dbg("Can't find the established pcb in syn received list");
-    }
+    remove_received_syn_socket(ns);
 
     if (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_WITH_WAKEUP &&
         !m_rx_peer_packets.empty()) {
@@ -3447,6 +3432,25 @@ void sockinfo_tcp::accept_connection_socketxtreme(sockinfo_tcp *parent, sockinfo
               parent->m_pcb.flags, child->m_fd, child->m_pcb.flags, get_tcp_state(&child->m_pcb));
 }
 
+void sockinfo_tcp::accept_connection_xlio_socket(sockinfo_tcp *new_sock)
+{
+    remove_received_syn_socket(new_sock);
+    m_p_group->m_socket_accept_cb(reinterpret_cast<xlio_socket_t>(new_sock),
+                                  reinterpret_cast<xlio_socket_t>(this),
+                                  m_xlio_socket_userdata);
+}
+
+void sockinfo_tcp::remove_received_syn_socket(sockinfo_tcp *accepted)
+{
+    class flow_tuple key;
+    sockinfo_tcp::create_flow_tuple_key_from_pcb(key, &(accepted->m_pcb));
+
+    // The PCB should be removed from the listen socket list of awaiting PCBs.
+    if (!m_syn_received.erase(key)) {
+        si_tcp_logwarn("Unable to find the established pcb in m_syn_received");
+    }
+}
+
 err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t err)
 {
     sockinfo_tcp *conn = (sockinfo_tcp *)(arg);
@@ -3560,9 +3564,7 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     conn->m_ready_pcbs.erase(&new_sock->m_pcb);
 
     if (conn->is_xlio_socket()) {
-        conn->m_p_group->m_socket_accept_cb(reinterpret_cast<xlio_socket_t>(new_sock),
-                                            reinterpret_cast<xlio_socket_t>(conn),
-                                            conn->m_xlio_socket_userdata);
+        conn->accept_connection_xlio_socket(new_sock);
     } else if (safe_mce_sys().enable_socketxtreme) {
         accept_connection_socketxtreme(conn, new_sock);
     } else {

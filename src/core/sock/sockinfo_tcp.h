@@ -417,6 +417,8 @@ private:
     void tcp_timer();
 
     bool prepare_listen_to_close();
+    void remove_received_syn_socket(sockinfo_tcp *accepted);
+    void accept_connection_xlio_socket(sockinfo_tcp *new_sock);
 
     // Builds rfs key
     static void create_flow_tuple_key_from_pcb(flow_tuple &key, struct tcp_pcb *pcb);
