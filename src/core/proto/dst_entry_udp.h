@@ -42,6 +42,7 @@ public:
                   resource_allocation_key &ring_alloc_logic);
     virtual ~dst_entry_udp();
 
+#ifdef DEFINED_DPCP_PATH_TX
     ssize_t fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr);
     ssize_t slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr,
                       struct xlio_rate_limit_t &rate_limit, int flags = 0, sockinfo *sock = nullptr,
@@ -53,22 +54,25 @@ public:
                                           ibv_sge *p_sge, header *p_header,
                                           uint16_t max_ip_payload_size, ring *p_ring,
                                           uint32_t pakcet_id);
+#endif // DEFINED_DPCP_PATH_TX
 
 protected:
     virtual transport_t get_transport(const sock_addr &to);
     virtual uint8_t get_protocol_type() const { return IPPROTO_UDP; };
+    virtual void configure_headers();
+    ssize_t pass_buff_to_neigh(const iovec *p_iov, size_t sz_iov);
+#ifdef DEFINED_DPCP_PATH_TX
     virtual uint32_t get_inline_sge_num() { return 2; };
     virtual ibv_sge *get_sge_lst_4_inline_send() { return m_sge; };
     virtual ibv_sge *get_sge_lst_4_not_inline_send() { return &m_sge[1]; };
-    virtual void configure_headers();
     virtual void init_sge();
-    ssize_t pass_buff_to_neigh(const iovec *p_iov, size_t sz_iov);
+#endif // DEFINED_DPCP_PATH_TX
 
 private:
     inline uint16_t gen_packet_id_ip4() { return htons(static_cast<uint16_t>(m_frag_tx_pkt_id++)); }
 
     inline uint32_t gen_packet_id_ip6() { return htonl(m_frag_tx_pkt_id++); }
-
+#ifdef DEFINED_DPCP_PATH_TX
     inline ssize_t fast_send_not_fragmented(const iovec *p_iov, const ssize_t sz_iov,
                                             xlio_wr_tx_packet_attr attr, size_t sz_udp_payload,
                                             ssize_t sz_data_payload);
@@ -81,7 +85,7 @@ private:
     ssize_t fast_send_fragmented(const iovec *p_iov, const ssize_t sz_iov,
                                  xlio_wr_tx_packet_attr attr, size_t sz_udp_payload,
                                  ssize_t sz_data_payload);
-
+#endif // DEFINED_DPCP_PATH_TX
     uint32_t m_frag_tx_pkt_id = 0U;
     const uint32_t m_n_sysvar_tx_bufs_batch_udp;
     const bool m_b_sysvar_tx_nonblocked_eagains;

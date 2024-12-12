@@ -58,6 +58,7 @@
 #include "dev/buffer_pool.h"
 #include "dev/ib_ctx_handler_collection.h"
 #include "dev/net_device_table_mgr.h"
+#include "dev/hw_queue_tx.h"
 #include "proto/ip_frag.h"
 #include "proto/xlio_lwip.h"
 #include "proto/route_table_mgr.h"
@@ -208,11 +209,12 @@ static int free_libxlio_resources()
     }
     g_tcp_seg_pool = nullptr;
 
+#ifndef DEFINED_DPCP_PATH_TX
     if (g_lso_metadata_pool) {
         delete g_lso_metadata_pool;
     }
     g_lso_metadata_pool = nullptr;
-
+#endif // !DEFINED_DPCP_PATH_TX
     if (safe_mce_sys().print_report) {
         buffer_pool::print_full_report(VLOG_INFO);
     }
@@ -778,8 +780,6 @@ void print_xlio_global_settings()
     VLOG_STR_PARAM_STRING("LRO support", option_3::to_str(safe_mce_sys().enable_lro),
                           option_3::to_str(MCE_DEFAULT_LRO), SYS_VAR_LRO,
                           option_3::to_str(safe_mce_sys().enable_lro));
-    VLOG_PARAM_STRING("DOCA TX", safe_mce_sys().doca_tx, MCE_DEFAULT_DOCA_TX, "XLIO_DOCA_TX",
-                      safe_mce_sys().doca_tx ? "Enabled " : "Disabled");
 #ifdef DEFINED_UTLS
     VLOG_PARAM_STRING("UTLS RX support", safe_mce_sys().enable_utls_rx, MCE_DEFAULT_UTLS_RX,
                       SYS_VAR_UTLS_RX, safe_mce_sys().enable_utls_rx ? "Enabled " : "Disabled");
@@ -1146,10 +1146,12 @@ static void do_global_ctors_helper()
                           g_global_stat_static.n_tcp_seg_pool_size,
                           g_global_stat_static.n_tcp_seg_pool_no_segs));
 
+#ifndef DEFINED_DPCP_PATH_TX
     NEW_CTOR(g_lso_metadata_pool,
              lso_metadata_pool("LSO metadata objects", safe_mce_sys().lso_pool_batch,
                                g_global_stat_static.n_lso_metadata_pool_size,
                                g_global_stat_static.n_lso_metadata_pool_no_segs));
+#endif // !DEFINED_DPCP_PATH_TX
 
     // For delegated TCP timers the global collection is not used.
     if (safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
@@ -1231,7 +1233,9 @@ void reset_globals()
     g_buffer_pool_tx = nullptr;
     g_buffer_pool_zc = nullptr;
     g_tcp_seg_pool = nullptr;
+#ifndef DEFINED_DPCP_PATH_TX
     g_lso_metadata_pool = nullptr;
+#endif // DEFINED_DPCP_PATH_TX
     g_tcp_timers_collection = nullptr;
     g_p_vlogger_timer_handler = nullptr;
     g_p_event_handler_manager = nullptr;

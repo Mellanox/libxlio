@@ -1158,7 +1158,6 @@ rfs_rule *hw_queue_rx::create_rfs_rule(doca_flow_match &match_val, doca_flow_mat
     return nullptr;
 }
 
-void hw_queue_rx::ti_released(xlio_ti *) {};
 #endif // DEFINED_DPCP_PATH_RX
 
 void hw_queue_rx::up()

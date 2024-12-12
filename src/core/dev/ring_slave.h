@@ -281,7 +281,6 @@ public:
 
     virtual void print_val();
     virtual void restart();
-    virtual int get_num_resources() const { return 1; };
     virtual bool is_member(ring_slave *rng);
     virtual bool is_active_member(ring_slave *rng, ring_user_id_t id);
     virtual ring_user_id_t generate_id();
@@ -311,7 +310,6 @@ public:
     bool m_active; /* State indicator */
 
 protected:
-    bool request_more_tx_buffers(pbuf_type type, uint32_t count, uint32_t lkey);
     void flow_del_all_rfs();
 
     steering_handler<flow_spec_4t_key_ipv4, flow_spec_2t_key_ipv4, iphdr> m_steering_ipv4;

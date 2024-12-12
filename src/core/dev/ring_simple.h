@@ -34,11 +34,9 @@
 #ifndef RING_SIMPLE_H
 #define RING_SIMPLE_H
 
-#include "ring_slave.h"
-
 #include <mutex>
 #include <unordered_map>
-
+#include "dev/ring_slave.h"
 #include "dev/gro_mgr.h"
 #include "dev/hw_queue_tx.h"
 #include "dev/hw_queue_rx.h"
@@ -74,61 +72,66 @@ public:
     void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc) override;
     int drain_and_proccess() override;
     void clear_rx_notification() override;
-    void mem_buf_desc_return_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc);
     void mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc,
                                          void *pv_fd_ready_array = nullptr);
-    inline int send_buffer(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
-                           xlio_tis *tis);
     bool is_up() override;
-    void start_active_queue_tx();
-    void start_active_queue_rx();
-    void stop_active_queue_tx();
-    void stop_active_queue_rx();
     mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, pbuf_type type,
                                    uint32_t n_num_mem_bufs = 1) override;
     int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool trylock = false) override;
-    void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                          xlio_wr_tx_packet_attr attr) override;
-    int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                         xlio_wr_tx_packet_attr attr, xlio_tis *tis) override;
-    uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *buff) override;
-    uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss,
-                           bool is_zerocopy) override;
     void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc) override;
     void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc,
                                               unsigned ref) override;
-    bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe) override;
-    inline void convert_hw_time_to_system_time(uint64_t hwtime, struct timespec *systime)
-    {
-        m_p_ib_ctx->convert_hw_time_to_system_time(hwtime, systime);
-    }
-    int modify_ratelimit(struct xlio_rate_limit_t &rate_limit) override;
     size_t get_rx_channels_num() const override { return 1U; };
     int get_rx_channel_fd(size_t ch_idx) const override;
     int get_tx_channel_fd() const override;
-    uint32_t get_tx_user_lkey(void *addr, size_t length) override;
-    uint32_t get_max_inline_data() override;
+    uint32_t get_max_payload_sz(void) override;
+    uint16_t get_max_header_sz() override;
+    bool is_tso(void) override;
+    int modify_ratelimit(struct xlio_rate_limit_t &rate_limit) override;
+
     ib_ctx_handler *get_ctx(ring_user_id_t id) override
     {
         NOT_IN_USE(id);
         return m_p_ib_ctx;
     }
+
+    void start_active_queue_tx();
+    void start_active_queue_rx();
+    void stop_active_queue_tx();
+    void stop_active_queue_rx();
+    void modify_cq_moderation(uint32_t period, uint32_t count);
+    void convert_hw_time_to_system_time(uint64_t hwtime, struct timespec *systime)
+    {
+        m_p_ib_ctx->convert_hw_time_to_system_time(hwtime, systime);
+    }
+
+#ifdef DEFINED_DPCP_PATH_TX
     uint32_t get_max_send_sge(void) override;
-    uint32_t get_max_payload_sz(void) override;
-    uint16_t get_max_header_sz(void) override;
+    uint32_t get_tx_user_lkey(void *addr, size_t length) override;
+    uint32_t get_max_inline_data() override;
+    bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe) override;
+    void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
+                          xlio_wr_tx_packet_attr attr) override;
+    int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
+                         xlio_wr_tx_packet_attr attr, xlio_tis *tis) override;
     uint32_t get_tx_lkey(ring_user_id_t id) override
     {
         NOT_IN_USE(id);
         return m_tx_lkey;
     }
-    bool is_tso(void) override;
-
-    void modify_cq_moderation(uint32_t period, uint32_t count);
+    inline int send_buffer(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
+                           xlio_tis *tis);
+#else // DEFINED_DPCP_PATH_TX
+    uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *buff) override;
+    uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss,
+                           bool is_zerocopy) override;
+#endif // DEFINED_DPCP_PATH_TX
 
 #ifdef DEFINED_UTLS
     bool tls_tx_supported(void) override { return m_tls.tls_tx; }
     bool tls_rx_supported(void) override { return m_tls.tls_rx; }
     bool tls_sync_dek_supported() { return m_tls.tls_synchronize_dek; }
+#ifdef DEFINED_DPCP_PATH_TX
     xlio_tis *tls_context_setup_tx(const xlio_tls_info *info) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
@@ -163,57 +166,6 @@ public:
         }
         m_hqtx->tls_tx_post_dump_wqe(tis, addr, len, lkey, first);
     }
-#ifdef DEFINED_DPCP_PATH_RX
-    xlio_tir *tls_create_tir(bool cached) override
-    {
-        /*
-         * This method can be called for either RX or TX ring.
-         * Locking is required for TX ring with cached=true.
-         */
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        return m_hqrx->tls_create_tir(cached);
-    }
-    int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t next_record_tcp_sn,
-                             xlio_comp_cb_t callback, void *callback_arg) override
-    {
-        /* Protect with TX lock since we post WQEs to the send queue. */
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-
-        int rc =
-            m_hqtx->tls_context_setup_rx(tir, info, next_record_tcp_sn, callback, callback_arg);
-        if (likely(rc == 0)) {
-            ++m_p_ring_stat->n_rx_tls_contexts;
-        }
-
-        /* Do polling to speedup handling of the completion. */
-        m_p_cq_mgr_tx->poll_and_process_element_tx();
-
-        return rc;
-    }
-    void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn) override
-    {
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_hqtx->tls_resync_rx(tir, info, hw_resync_tcp_sn);
-    }
-    void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey) override
-    {
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        if (lkey == LKEY_TX_DEFAULT) {
-            lkey = m_tx_lkey;
-        }
-        m_hqtx->tls_get_progress_params_rx(tir, buf, lkey);
-        /* Do polling to speedup handling of the completion. */
-        m_p_cq_mgr_tx->poll_and_process_element_tx();
-    }
-    void tls_release_tir(xlio_tir *tir) override
-    {
-        /* TIR objects are protected with TX lock */
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        m_hqrx->tls_release_tir(tir);
-    }
-#endif // DEFINED_DPCP_PATH_RX
-#endif /* DEFINED_UTLS */
-
     std::unique_ptr<xlio_tis> create_tis(uint32_t flags) const override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
@@ -253,9 +205,62 @@ public:
     }
 
     friend class cq_mgr_tx;
+#endif // DEFINED_DPCP_PATH_TX
+#ifdef DEFINED_DPCP_PATH_RX
     friend class cq_mgr_rx;
     friend class cq_mgr_rx_regrq;
     friend class cq_mgr_rx_strq;
+#endif // DEFINED_DPCP_PATH_RX
+#if defined(DEFINED_DPCP_PATH_RX) && defined(DEFINED_DPCP_PATH_TX)
+    xlio_tir *tls_create_tir(bool cached) override
+    {
+        /*
+         * This method can be called for either RX or TX ring.
+         * Locking is required for TX ring with cached=true.
+         */
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        return m_hqrx->tls_create_tir(cached);
+    }
+    int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t next_record_tcp_sn,
+                             xlio_comp_cb_t callback, void *callback_arg) override
+    {
+        /* Protect with TX lock since we post WQEs to the send queue. */
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        int rc =
+            m_hqtx->tls_context_setup_rx(tir, info, next_record_tcp_sn, callback, callback_arg);
+        if (likely(rc == 0)) {
+            ++m_p_ring_stat->n_rx_tls_contexts;
+        }
+
+        /* Do polling to speedup handling of the completion. */
+        m_p_cq_mgr_tx->poll_and_process_element_tx();
+
+        return rc;
+    }
+    void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn) override
+    {
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        m_hqtx->tls_resync_rx(tir, info, hw_resync_tcp_sn);
+    }
+    void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey) override
+    {
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        if (lkey == LKEY_TX_DEFAULT) {
+            lkey = m_tx_lkey;
+        }
+        m_hqtx->tls_get_progress_params_rx(tir, buf, lkey);
+        /* Do polling to speedup handling of the completion. */
+        m_p_cq_mgr_tx->poll_and_process_element_tx();
+    }
+    void tls_release_tir(xlio_tir *tir) override
+    {
+        /* TIR objects are protected with TX lock */
+        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+        m_hqrx->tls_release_tir(tir);
+    }
+#endif // DEFINED_DPCP_PATH_RX && DEFINED_DPCP_PATH_TX
+#endif /* DEFINED_UTLS */
+
     friend class hw_queue_tx;
     friend class hw_queue_rx;
     friend class rfs;
@@ -268,17 +273,20 @@ protected:
     void create_resources();
     virtual void init_tx_buffers(uint32_t count);
     void inc_cq_moderation_stats() override;
-    inline void set_tx_num_wr(uint32_t num_wr) { m_tx_num_wr = num_wr; }
-    inline uint32_t get_tx_num_wr() { return m_tx_num_wr; }
     inline uint32_t get_mtu() { return m_mtu; }
 
 private:
+#ifdef DEFINED_DPCP_PATH_TX
     inline void send_status_handler(int ret, xlio_ibv_send_wr *p_send_wqe);
+    bool is_available_qp_wr(bool b_block, unsigned credits);
+#endif // DEFINED_DPCP_PATH_TX
+    inline mem_buf_desc_t *get_tx_buffers(pbuf_type type, uint32_t n_num_mem_bufs);
     int put_tx_buffer_helper(mem_buf_desc_t *buff);
     inline int put_tx_buffers(mem_buf_desc_t *buff_list);
     inline int put_tx_single_buffer(mem_buf_desc_t *buff);
     void return_to_global_pool();
-    bool is_available_qp_wr(bool b_block, unsigned credits);
+    bool request_more_tx_buffers(pbuf_type type, uint32_t count);
+    
     void save_l2_address(const L2_address *p_l2_addr)
     {
         delete_l2_address();
@@ -300,22 +308,33 @@ protected:
 #ifdef DEFINED_DPCP_PATH_RX
     cq_mgr_rx *m_p_cq_mgr_rx = nullptr;
 #endif
+#ifdef DEFINED_DPCP_PATH_TX
     cq_mgr_tx *m_p_cq_mgr_tx = nullptr;
     std::unordered_map<void *, uint32_t> m_user_lkey_map;
+#endif // DEFINED_DPCP_PATH_TX
 
 private:
-    lock_mutex m_lock_ring_tx_buf_wait;
-    uint32_t m_tx_num_bufs = 0U;
-    uint32_t m_zc_num_bufs = 0U;
+#ifdef DEFINED_DPCP_PATH_RX
+    struct ibv_comp_channel *m_p_rx_comp_event_channel = nullptr;
+#endif // DEFINED_DPCP_PATH_RX
+
+#ifdef DEFINED_DPCP_PATH_TX
+    struct ibv_comp_channel *m_p_tx_comp_event_channel = nullptr;
     uint32_t m_tx_num_wr = 0U;
     uint32_t m_tx_lkey = 0U; // this is the registered memory lkey for a given specific device for
                              // the buffer pool use
+#else // DEFINED_DPCP_PATH_TX
     doca_mmap *m_p_doca_mmap;
+#endif // DEFINED_DPCP_PATH_TX
+
+    lock_mutex m_lock_ring_tx_buf_wait;
+    uint32_t m_tx_num_bufs = 0U;
+    uint32_t m_zc_num_bufs = 0U; 
+   
     gro_mgr m_gro_mgr;
     bool m_up_tx = false;
     bool m_up_rx = false;
-    struct ibv_comp_channel *m_p_rx_comp_event_channel = nullptr;
-    struct ibv_comp_channel *m_p_tx_comp_event_channel = nullptr;
+
     L2_address *m_p_l2_addr = nullptr;
     uint32_t m_mtu;
 

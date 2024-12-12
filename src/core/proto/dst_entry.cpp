@@ -97,11 +97,12 @@ dst_entry::~dst_entry()
     }
 
     if (m_p_ring) {
+#ifdef DEFINED_DPCP_PATH_TX
         if (m_sge) {
             delete[] m_sge;
             m_sge = nullptr;
         }
-
+#endif // DEFINED_DPCP_PATH_TX
         if (m_p_tx_mem_buf_desc_list) {
             m_p_ring->mem_buf_tx_release(m_p_tx_mem_buf_desc_list);
             m_p_tx_mem_buf_desc_list = nullptr;
@@ -148,14 +149,16 @@ void dst_entry::init_members()
     m_p_neigh_entry = nullptr;
     m_p_neigh_val = nullptr;
     m_p_rt_entry = nullptr;
+#ifdef DEFINED_DPCP_PATH_TX
     memset(&m_inline_send_wqe, 0, sizeof(m_inline_send_wqe));
     memset(&m_not_inline_send_wqe, 0, sizeof(m_not_inline_send_wqe));
     memset(&m_fragmented_send_wqe, 0, sizeof(m_not_inline_send_wqe));
-    m_p_send_wqe_handler = nullptr;
     m_sge = nullptr;
+    m_max_inline = 0;
+#endif // DEFINED_DPCP_PATH_TX
+    m_p_send_wqe_handler = nullptr;
     m_b_is_offloaded = true;
     m_b_is_initialized = false;
-    m_max_inline = 0;
     m_max_ip_payload_size = 0;
     m_max_udp_payload_size = 0;
     m_b_force_os = false;
@@ -350,6 +353,7 @@ bool dst_entry::resolve_ring()
                 m_p_net_dev_val->reserve_ring(m_ring_alloc_logic_tx.create_new_key(m_pkt_src_ip));
         }
         if (m_p_ring) {
+#ifdef DEFINED_DPCP_PATH_TX
             if (m_sge) {
                 delete[] m_sge;
                 m_sge = nullptr;
@@ -361,6 +365,7 @@ bool dst_entry::resolve_ring()
             m_max_inline = m_p_ring->get_max_inline_data();
             m_max_inline = std::min<uint32_t>(
                 m_max_inline, get_route_mtu() + (uint32_t)m_header->m_transport_header_len);
+#endif // DEFINED_DPCP_PATH_TX
             ret_val = true;
         }
     }
@@ -436,12 +441,13 @@ bool dst_entry::conf_l2_hdr_and_snd_wqe_eth()
     if (!m_p_send_wqe_handler) {
         dst_logpanic("%s Failed to allocate send WQE handler", to_str().c_str());
     }
+#ifdef DEFINED_DPCP_PATH_TX
     m_p_send_wqe_handler->init_inline_wqe(m_inline_send_wqe, get_sge_lst_4_inline_send(),
                                           get_inline_sge_num());
     m_p_send_wqe_handler->init_not_inline_wqe(m_not_inline_send_wqe,
                                               get_sge_lst_4_not_inline_send(), 1);
     m_p_send_wqe_handler->init_wqe(m_fragmented_send_wqe, get_sge_lst_4_not_inline_send(), 1);
-
+#endif // DEFINED_DPCP_PATH_TX
     const net_device_val_eth *netdevice_eth =
         dynamic_cast<const net_device_val_eth *>(m_p_net_dev_val);
     BULLSEYE_EXCLUDE_BLOCK_START
@@ -651,6 +657,7 @@ void dst_entry::do_ring_migration_tx(lock_base &socket_lock, resource_allocation
 
     ring *old_ring = m_p_ring;
     m_p_ring = new_ring;
+#ifdef DEFINED_DPCP_PATH_TX
     if (m_sge) {
         delete[] m_sge;
         m_sge = nullptr;
@@ -662,7 +669,7 @@ void dst_entry::do_ring_migration_tx(lock_base &socket_lock, resource_allocation
     m_max_inline = m_p_ring->get_max_inline_data();
     m_max_inline = std::min<uint32_t>(m_max_inline,
                                       get_route_mtu() + (uint32_t)m_header->m_transport_header_len);
-
+#endif // DEFINED_DPCP_PATH_TX
     mem_buf_desc_t *tmp_list = m_p_tx_mem_buf_desc_list;
     m_p_tx_mem_buf_desc_list = nullptr;
     mem_buf_desc_t *tmp_list_zc = m_p_zc_mem_buf_desc_list;

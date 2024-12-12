@@ -31,6 +31,9 @@
  * SOFTWARE.
  */
 
+#include "config.h"
+#ifdef DEFINED_DPCP_PATH_TX
+
 #include "dev/cq_mgr_tx.h"
 #include <util/valgrind.h>
 #include <sock/sock-redirect.h>
@@ -266,3 +269,5 @@ void cq_mgr_tx::handle_sq_wqe_prop(unsigned index)
     m_hqtx_ptr->credits_return(credits);
     m_hqtx_ptr->m_sq_wqe_prop_last_signalled = index;
 }
+
+#endif // DEFINED_DPCP_PATH_TX

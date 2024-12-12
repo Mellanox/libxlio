@@ -75,6 +75,17 @@ void dst_entry_udp::configure_headers()
     dst_entry::configure_headers();
 }
 
+ssize_t dst_entry_udp::pass_buff_to_neigh(const iovec *p_iov, size_t sz_iov)
+{
+    m_header_neigh->init();
+    m_header_neigh->configure_udp_header(m_dst_port, m_src_port);
+
+    uint32_t packet_id = (get_sa_family() == AF_INET6) ? gen_packet_id_ip6() : gen_packet_id_ip4();
+
+    return pass_pkt_to_neigh(p_iov, sz_iov, packet_id);
+}
+
+#ifdef DEFINED_DPCP_PATH_TX
 // Static function to server both neigh (slow) path and dst_entry (fast) path
 bool dst_entry_udp::fast_send_fragmented_ipv6(mem_buf_desc_t *p_mem_buf_desc, const iovec *p_iov,
                                               const ssize_t sz_iov, xlio_wr_tx_packet_attr attr,
@@ -515,13 +526,4 @@ void dst_entry_udp::init_sge()
     m_sge[0].addr = m_header->m_actual_hdr_addr;
     m_sge[0].lkey = m_p_ring->get_tx_lkey(m_id);
 }
-
-ssize_t dst_entry_udp::pass_buff_to_neigh(const iovec *p_iov, size_t sz_iov)
-{
-    m_header_neigh->init();
-    m_header_neigh->configure_udp_header(m_dst_port, m_src_port);
-
-    uint32_t packet_id = (get_sa_family() == AF_INET6) ? gen_packet_id_ip6() : gen_packet_id_ip4();
-
-    return pass_pkt_to_neigh(p_iov, sz_iov, packet_id);
-}
+#endif // DEFINED_DPCP_PATH_TX

@@ -63,7 +63,6 @@ public:
     virtual bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst);
     virtual void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc);
     virtual int drain_and_proccess();
-    virtual int get_num_resources() const { return m_bond_rings.size(); };
     virtual bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t = false);
     virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink);
     virtual void restart();
@@ -71,20 +70,16 @@ public:
                                            uint32_t n_num_mem_bufs = 1);
     virtual int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool trylock = false);
     virtual void inc_tx_retransmissions_stats(ring_user_id_t id);
+
+#ifdef DEFINED_DPCP_PATH_TX
     virtual void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
                                   xlio_wr_tx_packet_attr attr);
     virtual int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
                                  xlio_wr_tx_packet_attr attr, xlio_tis *tis);
-    virtual void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc);
-    virtual void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc, unsigned ref);
-    virtual bool is_member(ring_slave *rng);
-    virtual bool is_active_member(ring_slave *rng, ring_user_id_t id);
-    virtual ring_user_id_t generate_id(const address_t src_mac, const address_t dst_mac,
-                                       uint16_t eth_proto, uint16_t encap_proto,
-                                       const ip_address &src_ip, const ip_address &dst_ip,
-                                       uint16_t src_port, uint16_t dst_port);
     virtual bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe);
-    virtual int modify_ratelimit(struct xlio_rate_limit_t &rate_limit);
+    virtual uint32_t get_max_inline_data();
+    virtual uint32_t get_max_send_sge(void);
+    virtual uint32_t get_tx_lkey(ring_user_id_t id) { return m_xmit_rings[id]->get_tx_lkey(id); }
     /* XXX TODO We have to support ring_bond for zerocopy. */
     virtual uint32_t get_tx_user_lkey(void *addr, size_t length)
     {
@@ -92,16 +87,11 @@ public:
         NOT_IN_USE(length);
         return LKEY_ERROR;
     }
-    virtual uint32_t get_max_inline_data();
-    ib_ctx_handler *get_ctx(ring_user_id_t id) { return m_xmit_rings[id]->get_ctx(0); }
-    virtual uint32_t get_max_send_sge(void);
-    virtual uint32_t get_max_payload_sz(void);
-    virtual uint16_t get_max_header_sz(void);
-    virtual uint32_t get_tx_lkey(ring_user_id_t id) { return m_xmit_rings[id]->get_tx_lkey(id); }
-    virtual bool is_tso(void);
-    virtual void slave_create(int if_index) = 0;
-    virtual void slave_destroy(int if_index);
-    virtual void flow_del_all_rfs_safe();
+    void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)
+    {
+        m_xmit_rings[id]->reset_inflight_zc_buffers_ctx(id, ctx);
+    }
+#else // DEFINED_DPCP_PATH_TX
     uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *buff)
     {
         NOT_IN_USE(ptr);
@@ -117,14 +107,30 @@ public:
         NOT_IN_USE(is_zerocopy);
         return -1;
     }
+#endif // DEFINED_DPCP_PATH_TX
 
-    void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)
-    {
-        m_xmit_rings[id]->reset_inflight_zc_buffers_ctx(id, ctx);
-    }
+    virtual void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc);
+    virtual void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc, unsigned ref);
+    virtual bool is_member(ring_slave *rng);
+    virtual bool is_active_member(ring_slave *rng, ring_user_id_t id);
+    virtual ring_user_id_t generate_id(const address_t src_mac, const address_t dst_mac,
+                                       uint16_t eth_proto, uint16_t encap_proto,
+                                       const ip_address &src_ip, const ip_address &dst_ip,
+                                       uint16_t src_port, uint16_t dst_port);
+    
+    virtual int modify_ratelimit(struct xlio_rate_limit_t &rate_limit);
+    ib_ctx_handler *get_ctx(ring_user_id_t id) { return m_xmit_rings[id]->get_ctx(0); }
+    virtual uint32_t get_max_payload_sz();
+    virtual uint16_t get_max_header_sz();
+    virtual bool is_tso(void);
+    virtual void slave_create(int if_index) = 0;
+    virtual void slave_destroy(int if_index);
+    virtual void flow_del_all_rfs_safe();
 
 protected:
+#ifdef DEFINED_DPCP_PATH_TX
     void update_cap(ring_slave *slave = nullptr);
+#endif // DEFINED_DPCP_PATH_TX
     void update_rx_channel_fds();
 
     /* Fill m_xmit_rings array */
@@ -163,8 +169,10 @@ protected:
 
     std::vector<struct flow_sink_t> m_rx_flows;
     int *m_p_n_rx_channel_fds = nullptr;
+#ifdef DEFINED_DPCP_PATH_TX
     uint32_t m_max_inline_data;
     uint32_t m_max_send_sge;
+#endif // DEFINED_DPCP_PATH_TX
 
 private:
     net_device_val::bond_type m_type;
@@ -182,7 +190,9 @@ public:
             g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index());
         if (p_ndev) {
             const slave_data_vector_t &slaves = p_ndev->get_slave_array();
+#ifdef DEFINED_DPCP_PATH_TX
             update_cap();
+#endif // DEFINED_DPCP_PATH_TX
             for (size_t i = 0; i < slaves.size(); i++) {
                 slave_create(slaves[i]->if_index);
             }

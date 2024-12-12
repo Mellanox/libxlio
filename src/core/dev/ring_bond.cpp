@@ -68,8 +68,10 @@ ring_bond::ring_bond(int if_index)
     m_recv_rings.clear();
     m_type = p_ndev->get_is_bond();
     m_xmit_hash_policy = p_ndev->get_bond_xmit_hash_policy();
+#ifdef DEFINED_DPCP_PATH_TX
     m_max_inline_data = 0;
     m_max_send_sge = 0;
+#endif // DEFINED_DPCP_PATH_TX
 
     print_val();
 }
@@ -313,6 +315,7 @@ void ring_bond::mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_d
     p_mem_buf_desc->p_desc_owner->mem_buf_desc_return_single_multi_ref(p_mem_buf_desc, ref);
 }
 
+#ifdef DEFINED_DPCP_PATH_TX
 void ring_bond::send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
                                  xlio_wr_tx_packet_attr attr)
 {
@@ -371,6 +374,34 @@ bool ring_bond::get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p
 
     return false;
 }
+
+uint32_t ring_bond::get_max_inline_data()
+{
+    return m_max_inline_data;
+}
+
+uint32_t ring_bond::get_max_send_sge(void)
+{
+    return m_max_send_sge;
+}
+
+void ring_bond::update_cap(ring_slave *slave)
+{
+    if (!slave) {
+        m_max_inline_data = (uint32_t)(-1);
+        m_max_send_sge = (uint32_t)(-1);
+        return;
+    }
+
+    m_max_inline_data = (m_max_inline_data == (uint32_t)(-1)
+                             ? slave->get_max_inline_data()
+                             : std::min(m_max_inline_data, slave->get_max_inline_data()));
+
+    m_max_send_sge =
+        (m_max_send_sge == (uint32_t)(-1) ? slave->get_max_send_sge()
+                                          : std::min(m_max_send_sge, slave->get_max_send_sge()));
+}
+#endif // DEFINED_DPCP_PATH_TX
 
 bool ring_bond::poll_and_process_element_rx(void *pv_fd_ready_array /*NULL*/)
 {
@@ -511,23 +542,6 @@ bool ring_bond::reclaim_recv_buffers(mem_buf_desc_t *)
 {
     /* TODO: not supported */
     return false;
-}
-
-void ring_bond::update_cap(ring_slave *slave)
-{
-    if (!slave) {
-        m_max_inline_data = (uint32_t)(-1);
-        m_max_send_sge = (uint32_t)(-1);
-        return;
-    }
-
-    m_max_inline_data = (m_max_inline_data == (uint32_t)(-1)
-                             ? slave->get_max_inline_data()
-                             : std::min(m_max_inline_data, slave->get_max_inline_data()));
-
-    m_max_send_sge =
-        (m_max_send_sge == (uint32_t)(-1) ? slave->get_max_send_sge()
-                                          : std::min(m_max_send_sge, slave->get_max_send_sge()));
 }
 
 void ring_bond::devide_buffers_helper(descq_t *rx_reuse, descq_t *buffer_per_ring)
@@ -761,22 +775,12 @@ int ring_bond::modify_ratelimit(struct xlio_rate_limit_t &rate_limit)
     return 0;
 }
 
-uint32_t ring_bond::get_max_inline_data()
-{
-    return m_max_inline_data;
-}
-
-uint32_t ring_bond::get_max_send_sge(void)
-{
-    return m_max_send_sge;
-}
-
-uint32_t ring_bond::get_max_payload_sz(void)
+uint32_t ring_bond::get_max_payload_sz()
 {
     return 0;
 }
 
-uint16_t ring_bond::get_max_header_sz(void)
+uint16_t ring_bond::get_max_header_sz()
 {
     return 0;
 }
@@ -812,8 +816,9 @@ void ring_bond_eth::slave_create(int if_index)
     if (!cur_slave) {
         ring_logpanic("Error creating bond ring: memory allocation error");
     }
-
+#ifdef DEFINED_DPCP_PATH_TX
     update_cap(cur_slave);
+#endif // DEFINED_DPCP_PATH_TX
     m_bond_rings.push_back(cur_slave);
 
     if (m_bond_rings.size() > MAX_NUM_RING_RESOURCES) {

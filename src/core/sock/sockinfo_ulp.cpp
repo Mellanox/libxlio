@@ -359,7 +359,9 @@ sockinfo_tcp_ops_tls::sockinfo_tcp_ops_tls(sockinfo_tcp *sock)
     m_is_tls_rx = false;
     m_tls_rec_overhead = 0;
 
+#ifdef DEFINED_DPCP_PATH_TX
     m_p_tis = nullptr;
+#endif // DEFINED_DPCP_PATH_TX
     m_zc_stor = nullptr;
     m_zc_stor_offset = 0;
     m_expected_seqno = 0;
@@ -385,8 +387,10 @@ sockinfo_tcp_ops_tls::~sockinfo_tcp_ops_tls()
     /* Destroy TLS object under TCP connection lock. */
 
     if (m_is_tls_tx) {
+#ifdef DEFINED_DPCP_PATH_TX
         m_p_tx_ring->tls_release_tis(m_p_tis);
         m_p_tis = nullptr;
+#endif
         if (m_zc_stor) {
             /* Release references taken in advance, but not used. See get_record_buf(). */
             unsigned extra_ref = (m_zc_stor->sz_buffer - m_zc_stor_offset) / TLS_ZC_BLOCK;
@@ -400,10 +404,10 @@ sockinfo_tcp_ops_tls::~sockinfo_tcp_ops_tls()
             delete m_rx_rule;
             m_rx_rule = nullptr;
         }
-#ifdef DEFINED_DPCP_PATH_RX
+#if defined(DEFINED_DPCP_PATH_RX) && defined(DEFINED_DPCP_PATH_TX)
         m_p_tx_ring->tls_release_tir(m_p_tir);
         m_p_tir = nullptr;
-#endif // DEFINED_DPCP_PATH_RX
+#endif // DEFINED_DPCP_PATH_RX && DEFINED_DPCP_PATH_TX
         if (m_p_cipher_ctx) {
             g_tls_api->EVP_CIPHER_CTX_free(reinterpret_cast<EVP_CIPHER_CTX *>(m_p_cipher_ctx));
             m_p_cipher_ctx = nullptr;
@@ -592,6 +596,7 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
         (base_info->version == TLS_1_2_VERSION) ? TLS_12_RECORD_OVERHEAD : TLS_13_RECORD_OVERHEAD;
 
     if (__optname == TLS_TX) {
+#ifdef DEFINED_DPCP_PATH_TX
         if (!m_p_tx_ring->credits_get(SQ_CREDITS_TLS_TX_CONTEXT)) {
             si_ulp_logdbg("No available space in SQ to create TLS TX context");
             errno = ENOPROTOOPT;
@@ -607,6 +612,7 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
             errno = ENOPROTOOPT;
             return -1;
         }
+#endif // DEFINED_DPCP_PATH_TX
         m_is_tls_tx = true;
         if (m_p_sock->get_sock_stats()) {
             m_p_sock->get_sock_stats()->tls_tx_offload = true;
@@ -622,17 +628,17 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
         m_next_recno_rx = be64toh(recno_be64);
         m_is_tls_rx = true;
 
-#ifdef DEFINED_DPCP_PATH_RX
+#if defined(DEFINED_DPCP_PATH_RX) && defined(DEFINED_DPCP_PATH_TX)
         /*
          * First, get TIR from the TX ring cache. Create new one in
          * the RX ring if the cache is empty.
          */
         m_p_tir = m_p_tx_ring->tls_create_tir(true) ?: m_p_rx_ring->tls_create_tir(false);
-#endif // DEFINED_DPCP_PATH_RX
+#endif // DEFINED_DPCP_PATH_RX && DEFINED_DPCP_PATH_TX
 
         m_p_sock->lock_tcp_con();
 
-#ifdef DEFINED_DPCP_PATH_RX
+#if defined(DEFINED_DPCP_PATH_RX) && defined(DEFINED_DPCP_PATH_TX)
         if (m_p_tir) {
             err_t err = tls_rx_consume_ready_packets();
             if (unlikely(err != ERR_OK)) {
@@ -665,7 +671,7 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
             errno = ENOPROTOOPT;
             return -1;
         }
-#endif // DEFINED_DPCP_PATH_RX
+#endif // DEFINED_DPCP_PATH_RX && DEFINED_DPCP_PATH_TX
         tcp_recv(m_p_sock->get_pcb(), sockinfo_tcp_ops_tls::rx_lwip_cb);
         if (m_p_sock->get_sock_stats()) {
             m_p_sock->get_sock_stats()->tls_rx_offload = true;
@@ -899,6 +905,7 @@ int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_
                 si_ulp_logdbg("TX resync flow: record_number=%lu seqno%u", rec->m_record_number,
                               seg->seqno);
 
+#ifdef DEFINED_DPCP_PATH_TX
                 uint8_t *addr = rec->m_p_data;
                 uint64_t recno_be64 = htobe64(rec->m_record_number);
                 bool skip_static =
@@ -949,6 +956,7 @@ int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_
                 if (!skip_static) {
                     memcpy(m_tls_info_tx.rec_seq, &recno_be64, TLS_AES_GCM_REC_SEQ_LEN);
                 }
+
                 m_p_tx_ring->tls_context_resync_tx(&m_tls_info_tx, m_p_tis, skip_static);
 
                 if (totlen == 0) {
@@ -989,6 +997,7 @@ int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_
 
                 assert(dump_nr == 0);
                 NOT_IN_USE(dump_nr);
+#endif // DEFINED_DPCP_PATH_TX
                 m_expected_seqno = seg->seqno;
 
                 /* Statistics */
@@ -999,7 +1008,11 @@ int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_
                 }
             }
             m_expected_seqno += seg->len;
+#ifdef DEFINED_DPCP_PATH_TX
             attr.tis = m_p_tis;
+#else
+            NOT_IN_USE(attr);
+#endif // DEFINED_DPCP_PATH_TX
         }
     }
     return 0;
@@ -1282,8 +1295,9 @@ int sockinfo_tcp_ops_tls::tls_rx_encrypt(struct pbuf *plist)
 
 err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
 {
-    bool resync_requested = false;
     err_t err;
+#if defined(DEFINED_DPCP_PATH_RX) && defined(DEFINED_DPCP_PATH_TX)
+    bool resync_requested = false;
 
     if (m_rx_bufs.empty()) {
         m_rx_offset = 0;
@@ -1304,6 +1318,7 @@ err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
         p = ptmp;
     }
 
+
     if (unlikely(resync_requested && !m_rx_psv_buf) &&
         m_p_tx_ring->credits_get(SQ_CREDITS_TLS_RX_GET_PSV)) {
         /* If we fail to request credits we will retry resync flow with the next incoming packet. */
@@ -1314,14 +1329,16 @@ err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
         if (likely(m_rx_psv_buf->sz_buffer >= (size_t)(payload - m_rx_psv_buf->p_buffer + 64))) {
             memset(m_rx_psv_buf->lwip_pbuf.payload, 0, 64);
             m_rx_resync_recno = m_next_recno_rx;
-#ifdef DEFINED_DPCP_PATH_RX
+
             m_p_tx_ring->tls_get_progress_params_rx(m_p_tir, payload, LKEY_TX_DEFAULT);
-#endif // DEFINED_DPCP_PATH_RX
             if (m_p_sock->get_sock_stats()) {
                 ++m_p_sock->get_sock_stats()->tls_counters.n_tls_rx_resync;
             }
         }
     }
+#else // DEFINED_DPCP_PATH_RX && DEFINED_DPCP_PATH_TX
+    NOT_IN_USE(p);
+#endif // DEFINED_DPCP_PATH_RX
 
     if (unlikely(m_refused_data)) {
         err =
@@ -1581,6 +1598,7 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
     sockinfo_tcp_ops_tls *utls = reinterpret_cast<sockinfo_tcp_ops_tls *>(arg);
 
     if (utls->m_rx_psv_buf) {
+#if defined(DEFINED_DPCP_PATH_RX) && defined(DEFINED_DPCP_PATH_TX)
         /* Resync flow, GET_PSV is completed. */
         struct xlio_tls_progress_params *params =
             (struct xlio_tls_progress_params *)utls->m_rx_psv_buf->lwip_pbuf.payload;
@@ -1591,9 +1609,7 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
             if (utls->m_p_tx_ring->credits_get(SQ_CREDITS_TLS_RX_RESYNC)) {
                 uint64_t recno_be64 = htobe64(utls->find_recno(resync_seqno));
                 memcpy(utls->m_tls_info_rx.rec_seq, &recno_be64, TLS_AES_GCM_REC_SEQ_LEN);
-#ifdef DEFINED_DPCP_PATH_RX
                 utls->m_p_tx_ring->tls_resync_rx(utls->m_p_tir, &utls->m_tls_info_rx, resync_seqno);
-#endif // DEFINED_DPCP_PATH_RX
             } else {
                 /* We will retry RX resync with the next incoming packet. */
                 __log_dbg("Skip TLS RX resync due to full SQ\n");
@@ -1601,14 +1617,15 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
         } else {
             /* TODO Investigate this case. It isn't described in PRM. */
         }
+#endif // DEFINED_DPCP_PATH_RX && DEFINED_DPCP_PATH_TX
         utls->m_p_tx_ring->mem_buf_desc_return_single_to_owner_tx(utls->m_rx_psv_buf);
         utls->m_rx_psv_buf = nullptr;
     } else if (!utls->m_rx_rule) {
         /* Initial setup flow. */
         const flow_tuple_with_local_if &tuple = utls->m_p_sock->get_flow_tuple();
-#ifdef DEFINED_DPCP_PATH_RX
+#if defined(DEFINED_DPCP_PATH_RX) && defined(DEFINED_DPCP_PATH_TX)
         utls->m_rx_rule = utls->m_p_rx_ring->tls_rx_create_rule(tuple, utls->m_p_tir);
-#endif
+#endif // DEFINED_DPCP_PATH_RX && DEFINED_DPCP_PATH_TX
         if (!utls->m_rx_rule) {
             __log_err("TLS rule failed for %s\n", tuple.to_str().c_str());
         }

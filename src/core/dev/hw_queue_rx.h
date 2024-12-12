@@ -65,8 +65,6 @@ class hw_queue_rx : public xlio_ti_owner {
 public:
     virtual ~hw_queue_rx();
 
-    virtual void ti_released(xlio_ti *ti) override;
-
     void up();
     void down();
     uint16_t get_vlan() const { return m_vlan; };
@@ -85,6 +83,8 @@ public:
     friend class cq_mgr_rx_strq;
     hw_queue_rx(ring_simple *ring, ib_ctx_handler *ib_ctx, ibv_comp_channel *rx_comp_event_channel,
                 uint16_t vlan);
+
+    void ti_released(xlio_ti *ti) override;
 
     // Post for receive single mem_buf_desc
     void post_recv_buffer(mem_buf_desc_t *p_mem_buf_desc);
@@ -108,6 +108,7 @@ public:
 #endif /* DEFINED_UTLS */
 #else // DEFINED_DPCP_PATH_RX
     hw_queue_rx(ring_simple *ring, ib_ctx_handler *ib_ctx, uint16_t vlan);
+    void ti_released(xlio_ti *ti) override { NOT_IN_USE(ti); } // Dummy
     bool poll_and_process_rx();
     void reclaim_rx_buffer_chain(mem_buf_desc_t *buff_chain);
     void reclaim_rx_buffer_chain_queue(descq_t *buff_list);

@@ -35,7 +35,6 @@
 #define RING_H
 
 #include <memory>
-#include "ib/base/verbs_extra.h"
 #include "dev/buffer_pool.h"
 #include "dev/xlio_ti.h"
 #include "proto/flow_tuple.h"
@@ -43,6 +42,11 @@
 #include "proto/L2_address.h"
 #include "util/cached_obj_pool.h"
 #include "lwip/tcp_impl.h"
+#include "core/lwip/pbuf.h"
+
+#if defined(DEFINED_DPCP_PATH_TX) || defined(DEFINED_DPCP_PATH_RX)
+#include "ib/base/verbs_extra.h"
+#endif
 
 /* Forward declarations */
 struct xlio_tls_info;
@@ -88,19 +92,10 @@ public:
     {
         buffer_pool::free_rx_lwip_pbuf_custom(&p_mem_buf_desc->lwip_pbuf);
     }
-    virtual void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                                  xlio_wr_tx_packet_attr attr) = 0;
-    virtual int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                                 xlio_wr_tx_packet_attr attr, xlio_tis *tis) = 0;
-    virtual uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *buff) = 0;
-    virtual uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss,
-                                   bool is_zerocopy) = 0;
-
-    virtual int get_num_resources() const = 0;
+    
     virtual size_t get_rx_channels_num() const = 0;
     virtual int get_rx_channel_fd(size_t ch_idx) const = 0;
     virtual int get_tx_channel_fd() const = 0;
-    virtual bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe) = 0;
     virtual bool request_notification(cq_type_t cq_type) = 0;
     virtual bool reclaim_recv_buffers(descq_t *rx_reuse) = 0;
     virtual bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst) = 0;
@@ -117,28 +112,73 @@ public:
     virtual void inc_tx_retransmissions_stats(ring_user_id_t id) = 0;
     virtual bool is_member(ring_slave *rng) = 0;
     virtual bool is_active_member(ring_slave *rng, ring_user_id_t id) = 0;
-    ring *get_parent() { return m_parent; }
-    ring_user_id_t generate_id() { return 0; }
+    virtual void flow_del_all_rfs_safe() = 0;
     virtual ring_user_id_t generate_id(const address_t src_mac, const address_t dst_mac,
                                        uint16_t eth_proto, uint16_t encap_proto,
                                        const ip_address &src_ip, const ip_address &dst_ip,
                                        uint16_t src_port, uint16_t dst_port) = 0;
+    virtual uint32_t get_max_payload_sz() = 0;
+    virtual uint16_t get_max_header_sz() = 0;
+    virtual bool is_tso(void) = 0;
+    virtual ib_ctx_handler *get_ctx(ring_user_id_t id) = 0;
     virtual int modify_ratelimit(struct xlio_rate_limit_t &rate_limit) = 0;
+
+    ring *get_parent() { return m_parent; }
+    ring_user_id_t generate_id() { return 0; }
+    int get_if_index() { return m_if_index; }
+    struct tcp_seg *get_tcp_segs(uint32_t num);
+    void put_tcp_segs(struct tcp_seg *seg);
+
+#ifdef DEFINED_DPCP_PATH_TX
+    virtual bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe) = 0;
     virtual uint32_t get_tx_user_lkey(void *addr, size_t length) = 0;
     virtual uint32_t get_max_inline_data() = 0;
     virtual uint32_t get_max_send_sge(void) = 0;
-    virtual uint32_t get_max_payload_sz(void) = 0;
-    virtual uint16_t get_max_header_sz(void) = 0;
     virtual uint32_t get_tx_lkey(ring_user_id_t id) = 0;
-    virtual bool is_tso(void) = 0;
-    virtual ib_ctx_handler *get_ctx(ring_user_id_t id) = 0;
+    virtual void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
+                                  xlio_wr_tx_packet_attr attr) = 0;
+    virtual int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
+                                 xlio_wr_tx_packet_attr attr, xlio_tis *tis) = 0;
 
-    inline int get_if_index() { return m_if_index; }
+    virtual std::unique_ptr<xlio_tis> create_tis(uint32_t flag) const
+    {
+        NOT_IN_USE(flag);
+        return nullptr;
+    }
+
+    virtual void post_nop_fence(void) {}
+    virtual void post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first)
+    {
+        NOT_IN_USE(tis);
+        NOT_IN_USE(addr);
+        NOT_IN_USE(len);
+        NOT_IN_USE(lkey);
+        NOT_IN_USE(first);
+    }
+
+    virtual void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)
+    {
+        NOT_IN_USE(id);
+        NOT_IN_USE(ctx);
+    }
+
+    // TODO Add id argument for bonding
+    virtual bool credits_get(unsigned credits)
+    {
+        NOT_IN_USE(credits);
+        return false;
+    }
+    virtual void credits_return(unsigned credits) { NOT_IN_USE(credits); }
+#else // DEFINED_DPCP_PATH_TX
+    virtual uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *buff) = 0;
+    virtual uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss,
+                                   bool is_zerocopy) = 0;
+#endif // DEFINED_DPCP_PATH_TX
 
 #ifdef DEFINED_UTLS
     virtual bool tls_tx_supported(void) { return false; }
     virtual bool tls_rx_supported(void) { return false; }
-#ifdef DEFINED_DPCP_PATH_RX
+#if defined(DEFINED_DPCP_PATH_RX) && defined(DEFINED_DPCP_PATH_TX)
     virtual xlio_tir *tls_create_tir(bool cached)
     {
         NOT_IN_USE(cached);
@@ -174,7 +214,8 @@ public:
         NOT_IN_USE(lkey);
     }
     virtual void tls_release_tir(xlio_tir *tir) { NOT_IN_USE(tir); }
-#endif // DEFINED_DPCP_PATH_RX
+#endif // DEFINED_DPCP_PATH_RX && DEFINED_DPCP_PATH_TX
+#ifdef DEFINED_DPCP_PATH_TX
     virtual void tls_release_tis(xlio_tis *tis) { NOT_IN_USE(tis); }
     virtual xlio_tis *tls_context_setup_tx(const xlio_tls_info *info)
     {
@@ -196,41 +237,8 @@ public:
         NOT_IN_USE(lkey);
         NOT_IN_USE(first);
     }
+#endif // DEFINED_DPCP_PATH_TX
 #endif /* DEFINED_UTLS */
-    virtual std::unique_ptr<xlio_tis> create_tis(uint32_t flag) const
-    {
-        NOT_IN_USE(flag);
-        return nullptr;
-    }
-
-    virtual void post_nop_fence(void) {}
-    virtual void post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first)
-    {
-        NOT_IN_USE(tis);
-        NOT_IN_USE(addr);
-        NOT_IN_USE(len);
-        NOT_IN_USE(lkey);
-        NOT_IN_USE(first);
-    }
-
-    virtual void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)
-    {
-        NOT_IN_USE(id);
-        NOT_IN_USE(ctx);
-    }
-
-    // TODO Add id argument for bonding
-    virtual bool credits_get(unsigned credits)
-    {
-        NOT_IN_USE(credits);
-        return false;
-    }
-    virtual void credits_return(unsigned credits) { NOT_IN_USE(credits); }
-    virtual void flow_del_all_rfs_safe() = 0;
-
-    struct tcp_seg *get_tcp_segs(uint32_t num);
-    void put_tcp_segs(struct tcp_seg *seg);
-
 protected:
     inline void set_parent(ring *parent) { m_parent = (parent ? parent : this); }
     inline void set_if_index(int if_index) { m_if_index = if_index; }

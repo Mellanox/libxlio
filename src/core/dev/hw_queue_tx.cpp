@@ -36,14 +36,17 @@
 #include <netinet/ip.h>
 #include "dev/hw_queue_tx.h"
 #include "dev/ring_simple.h"
-#include "dev/cq_mgr_rx_regrq.h"
 #include "proto/tls.h"
 #include "util/valgrind.h"
-#include <doca_buf.h>
-#include <doca_log.h>
 #include <thread>
 #include <cinttypes>
 #include <sock/sock-app.h>
+#ifdef DEFINED_DPCP_PATH_TX
+#include "dev/cq_mgr_rx_regrq.h"
+#else // DEFINED_DPCP_PATH_TX
+#include <doca_buf.h>
+#include <doca_log.h>
+#endif // DEFINED_DPCP_PATH_TX
 
 #undef MODULE_NAME
 #define MODULE_NAME "hw_queue_tx"
@@ -57,18 +60,7 @@ DOCA_LOG_REGISTER(hw_queue_tx);
 #define hwqtx_logfunc    __log_info_func
 #define hwqtx_logfuncall __log_info_funcall
 
-#if !defined(MLX5_ETH_INLINE_HEADER_SIZE)
-#define MLX5_ETH_INLINE_HEADER_SIZE 18
-#endif
-
-#define OCTOWORD                   16
-#define WQEBB                      64
-#define DOCA_EXPAND_BATCH_SIZE     (1024)
-#define DOCA_MAX_LSO_HEADER        (64)
-#define DOCA_CHECKSUM_HW_L3_ENABLE (1)
-#define DOCA_CHECKSUM_HW_L4_ENABLE (1)
-#define DOCA_MAX_SGE_WITHOUT_TSO   (1)
-
+#ifdef DEFINED_DPCP_PATH_TX
 //#define DBG_DUMP_WQE 1
 
 #ifdef DBG_DUMP_WQE
@@ -85,7 +77,11 @@ DOCA_LOG_REGISTER(hw_queue_tx);
 #define dbg_dump_wqe(_addr, _size)
 #endif
 
-lso_metadata_pool *g_lso_metadata_pool = nullptr;
+#if !defined(MLX5_ETH_INLINE_HEADER_SIZE)
+#define MLX5_ETH_INLINE_HEADER_SIZE 18
+#endif
+#define OCTOWORD                   16
+#define WQEBB                      64
 
 static inline uint64_t align_to_octoword_up(uint64_t val)
 {
@@ -132,23 +128,28 @@ static inline uint32_t get_mlx5_opcode(xlio_ibv_wr_opcode verbs_opcode)
         return MLX5_OPCODE_SEND;
     }
 }
+#else // DEFINED_DPCP_PATH_TX
+#define DOCA_EXPAND_BATCH_SIZE     (1024)
+#define DOCA_MAX_LSO_HEADER        (64)
+#define DOCA_CHECKSUM_HW_L3_ENABLE (1)
+#define DOCA_CHECKSUM_HW_L4_ENABLE (1)
+#define DOCA_MAX_SGE_WITHOUT_TSO   (1)
 
+lso_metadata_pool *g_lso_metadata_pool = nullptr;
+#endif
+
+#ifdef DEFINED_DPCP_PATH_TX
 hw_queue_tx::hw_queue_tx(ring_simple *ring, const slave_data_t *slave,
                          struct ibv_comp_channel *p_tx_comp_event_channel, const uint32_t tx_num_wr)
-    : m_p_ring(ring)
-    , m_p_ib_ctx_handler(slave->p_ib_ctx)
-    , m_n_sysvar_tx_num_wr_to_signal(safe_mce_sys().tx_num_wr_to_signal)
+    : m_n_sysvar_tx_num_wr_to_signal(safe_mce_sys().tx_num_wr_to_signal)
     , m_tx_num_wr(tx_num_wr)
     , m_port_num(slave->port_num)
-    , m_doca_mmap(g_buffer_pool_tx->get_doca_mmap())
+    , m_p_ring(ring)
+    , m_p_ib_ctx_handler(slave->p_ib_ctx)
 {
     hwqtx_logfunc(LOG_FUNCTION_CALL);
 
     memset(&m_hwq_tx_stats, 0, sizeof(m_hwq_tx_stats));
-
-    if (!prepare_doca_txq()) {
-        throw_xlio_exception("Failed to create DOCA TXQ");
-    }
 
     memset(&m_mlx5_qp, 0, sizeof(m_mlx5_qp));
 
@@ -166,13 +167,27 @@ hw_queue_tx::hw_queue_tx(ring_simple *ring, const slave_data_t *slave,
         throw_xlio_exception("Failed to configure");
     }
 }
+#else // DEFINED_DPCP_PATH_TX
+hw_queue_tx::hw_queue_tx(ring_simple *ring, const slave_data_t *slave)
+    : m_doca_mmap(g_buffer_pool_tx->get_doca_mmap())
+    , m_p_ring(ring)
+    , m_p_ib_ctx_handler(slave->p_ib_ctx)
+{
+    hwqtx_logfunc("");
+
+    memset(&m_hwq_tx_stats, 0, sizeof(m_hwq_tx_stats));
+
+    if (!prepare_doca_txq()) {
+        throw_xlio_exception("Failed to create DOCA TXQ");
+    }
+}
+#endif // DEFINED_DPCP_PATH_TX
 
 hw_queue_tx::~hw_queue_tx()
 {
     hwqtx_logfunc(LOG_FUNCTION_CALL);
 
-    m_doca_txq.reset(nullptr); // Must be destroyed before TX PE.
-
+#ifdef DEFINED_DPCP_PATH_TX
     if (m_sq_wqe_idx_to_prop) {
         if (0 != munmap(m_sq_wqe_idx_to_prop, m_tx_num_wr * sizeof(*m_sq_wqe_idx_to_prop))) {
             hwqtx_logerr(
@@ -198,260 +213,17 @@ hw_queue_tx::~hw_queue_tx()
         delete m_p_cq_mgr_tx;
         m_p_cq_mgr_tx = nullptr;
     }
+#else // DEFINED_DPCP_PATH_TX
+    m_doca_txq.reset(nullptr); // Must be destroyed before TX PE.
 
     if (m_p_doca_lso_metadata_list) {
         g_lso_metadata_pool->put_objs(m_p_doca_lso_metadata_list);
     }
-
+#endif // DEFINED_DPCP_PATH_TX
     hwqtx_logdbg("Destructor hw_queue_tx end");
 }
 
-bool hw_queue_tx::check_doca_caps(doca_devinfo *devinfo, uint32_t &max_burst_size,
-                                  uint32_t &max_send_sge)
-{
-    doca_error_t err = doca_eth_txq_cap_is_type_supported(devinfo, DOCA_ETH_TXQ_TYPE_REGULAR,
-                                                          DOCA_ETH_TXQ_DATA_PATH_TYPE_CPU);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_cap_is_type_supported");
-        return false;
-    }
-
-    err = doca_eth_txq_cap_get_max_send_buf_list_len(devinfo, &max_send_sge);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_cap_get_max_send_buf_list_len");
-        return false;
-    }
-
-    err = doca_eth_txq_cap_get_max_burst_size(devinfo, max_send_sge, DOCA_MAX_LSO_HEADER,
-                                              &max_burst_size);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_cap_get_max_burst_size");
-        return false;
-    }
-
-    uint32_t txq_burst_size_conf = (align32pow2(safe_mce_sys().tx_num_wr));
-    if (txq_burst_size_conf > max_burst_size) {
-        // TODO: Currently we will always have this warning... tx_num_wr set to 32K.
-        hwqtx_loginfo("Decreasing BurstSize %u to capability %u.", txq_burst_size_conf,
-                      max_burst_size);
-        txq_burst_size_conf = max_burst_size;
-    }
-    max_burst_size = txq_burst_size_conf;
-
-    err = doca_eth_txq_cap_is_l3_chksum_offload_supported(devinfo);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_cap_is_l3_chksum_offload_supported");
-        return false;
-    }
-
-    err = doca_eth_txq_cap_is_l4_chksum_offload_supported(devinfo);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_cap_is_l4_chksum_offload_supported");
-        return false;
-    }
-
-    return true;
-}
-
-bool hw_queue_tx::prepare_doca_txq()
-{
-    doca_error_t err;
-    doca_dev *dev = m_p_ib_ctx_handler->get_doca_device();
-    doca_devinfo *devinfo = doca_dev_as_devinfo(dev);
-    uint32_t max_burst_size = 0U;
-    uint32_t max_send_sge = 0U;
-
-    if (!check_doca_caps(devinfo, max_burst_size, max_send_sge)) {
-        hwqtx_logerr("TXQ caps failed, Dev:%s", m_p_ib_ctx_handler->get_ibname().c_str());
-        return false;
-    }
-
-    doca_eth_txq *txq = nullptr;
-    err = doca_eth_txq_create(dev, max_burst_size, &txq);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_create");
-        return false;
-    }
-    m_doca_txq.reset(txq);
-    m_doca_ctx_txq = doca_eth_txq_as_doca_ctx(m_doca_txq.get());
-
-    err = doca_eth_txq_set_max_send_buf_list_len(txq, max_send_sge);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_set_max_send_buf_list_len");
-        return false;
-    }
-
-    /*  Issues with mss configuration per txq:
-        1. LSO will not work if remote side decided to reduce MSS.
-        2. We reduce mss to allow LSO for both IPv4 and IPv6. It means IPv4 packets will be smaller
-       by 20 bytes, so the performance will be slightly worse than what we can get with bigger
-       packets.
-    */
-    // err = doca_eth_txq_set_mss(m_doca_txq.get(), m_p_ring->get_mtu() - IPV6_HLEN - TCP_HLEN);
-    err = doca_eth_txq_set_mss(m_doca_txq.get(), m_p_ring->get_mtu() - 20 - TCP_HLEN);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_set_mss");
-        return false;
-    }
-
-    err = doca_eth_txq_set_max_lso_header_size(m_doca_txq.get(), DOCA_MAX_LSO_HEADER);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_set_max_lso_header_size");
-        return false;
-    }
-
-    err = doca_ctx_set_user_data(m_doca_ctx_txq, {.ptr = this});
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_ctx_set_user_data ctx/hw_queue_tx: %p,%p",
-                       m_doca_ctx_txq, this);
-        return false;
-    }
-
-    err = doca_eth_txq_set_type(m_doca_txq.get(), DOCA_ETH_TXQ_TYPE_REGULAR);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_get_type_supported");
-        return false;
-    }
-
-    err = doca_eth_txq_task_send_set_conf(m_doca_txq.get(), tx_task_completion_cb, tx_task_error_cb,
-                                          max_burst_size);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_task_send_set_conf txq: %p max-tasks: %u",
-                       txq, max_burst_size);
-        return false;
-    }
-
-    err = doca_eth_txq_task_lso_send_set_conf(m_doca_txq.get(), tx_task_lso_completion_cb,
-                                              tx_task_lso_error_cb, max_burst_size);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err,
-                       "doca_eth_txq_task_lso_send_set_conf txq: %p max-tasks: %u",
-                       m_doca_txq.get(), max_burst_size);
-        return false;
-    }
-
-    m_task_list_count = max_burst_size;
-
-    err = doca_eth_txq_set_l3_chksum_offload(txq, DOCA_CHECKSUM_HW_L3_ENABLE);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_set_l3_chksum_offload txq: %p",
-                       m_doca_txq.get());
-        return false;
-    }
-
-    err = doca_eth_txq_set_l4_chksum_offload(txq, DOCA_CHECKSUM_HW_L4_ENABLE);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_set_l4_chksum_offload txq: %p",
-                       m_doca_txq.get());
-        return false;
-    }
-
-    doca_pe *pe;
-    err = doca_pe_create(&pe);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_pe_create");
-        return false;
-    }
-    m_doca_pe.reset(pe);
-
-    err = doca_pe_connect_ctx(pe, m_doca_ctx_txq);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_pe_connect_ctx pe/ctx/txq: %p,%p,%p", pe,
-                       m_doca_ctx_txq, m_doca_txq.get());
-        return false;
-    }
-
-    err = doca_pe_set_event_mode(pe, DOCA_PE_EVENT_MODE_PROGRESS_ALL);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_pe_set_event_mode pe: %p", pe);
-        return false;
-    }
-
-    err = doca_pe_get_notification_handle(pe, &m_notification_handle);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_pe_get_notification_handle");
-        return false;
-    }
-
-#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    if (safe_mce_sys().app.distribute_cq_interrupts) {
-        uint32_t num_comp_vectors = 0;
-        err = doca_ctx_cap_get_num_completion_vectors(devinfo, &num_comp_vectors);
-        if (DOCA_IS_ERROR(err)) {
-            PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_ctx_cap_get_num_completion_vectors devinfo: %p",
-                           devinfo);
-            return false;
-        }
-
-        // fetching once - as this operation requires locking
-        const int worker_id = g_p_app->get_worker_id();
-        if (likely(worker_id >= 0)) {
-            const uint32_t comp_vector = worker_id % num_comp_vectors;
-            hwqtx_logdbg("Setting PE completion affinity: %" PRIu32 ", pid: %d", comp_vector,
-                         getpid());
-            err = doca_ctx_set_completion_vector(m_doca_ctx_txq, comp_vector);
-            if (DOCA_IS_ERROR(err)) {
-                PRINT_DOCA_ERR(hwqtx_logerr, err,
-                               "doca_ctx_set_completion_vector ctx/comp_vector: %p,%" PRIu32,
-                               m_doca_ctx_txq, comp_vector);
-            }
-        }
-    }
-#endif
-
-    doca_buf_inventory *inventory = nullptr;
-    err = doca_buf_inventory_create(max_burst_size, &inventory);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_buf_inventory_create");
-        return false;
-    }
-    m_doca_inventory.reset(inventory);
-
-    err = doca_buf_inventory_start(inventory);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_buf_inventory_start");
-        return false;
-    }
-
-    hwqtx_loginfo("Creating DOCA TXQ MaxBurstSize: %u, Dev:%s", max_burst_size,
-                  m_p_ib_ctx_handler->get_ibname().c_str());
-    return true;
-}
-
-void hw_queue_tx::start_doca_txq()
-{
-    doca_error_t err = doca_ctx_start(m_doca_ctx_txq);
-    if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_ctx_start(TXQ). TXQ:%p", m_doca_txq.get());
-        return;
-    }
-
-    hwqtx_loginfo("DOCA TXQ started, ctx: %p", m_doca_ctx_txq);
-}
-
-void hw_queue_tx::stop_doca_txq()
-{
-    hwqtx_logdbg("Stopping DOCA TXQ: %p", m_doca_txq.get());
-
-    doca_error_t err = doca_ctx_stop(m_doca_ctx_txq);
-    if (DOCA_ERROR_IN_PROGRESS == err) {
-        doca_ctx_states ctx_state = DOCA_CTX_STATE_STOPPING; // Just to enter the while loop.
-        while (DOCA_CTX_STATE_IDLE != ctx_state) {
-            if (!doca_pe_progress(m_doca_pe.get())) {
-                err = doca_ctx_get_state(m_doca_ctx_txq, &ctx_state);
-                if (err != DOCA_SUCCESS) {
-                    PRINT_DOCA_ERR(hwqtx_logerr, err,
-                                   "Error flushing DOCA TXQ (doca_ctx_get_state). TXQ:%p",
-                                   m_doca_txq.get());
-                    break;
-                }
-            }
-        }
-    } else if (DOCA_IS_ERROR(err)) {
-        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_ctx_stop(TXQ). TXQ:%p", m_doca_txq.get());
-    }
-}
-
+#ifdef DEFINED_DPCP_PATH_TX
 int hw_queue_tx::configure(const slave_data_t *slave,
                            struct ibv_comp_channel *p_tx_comp_event_channel)
 {
@@ -560,50 +332,6 @@ int hw_queue_tx::configure(const slave_data_t *slave,
 #endif /* DEFINED_ROCE_LAG */
     NOT_IN_USE(slave);
     return 0;
-}
-
-void hw_queue_tx::up()
-{
-    if (safe_mce_sys().doca_tx) {
-        start_doca_txq();
-    }
-
-    init_queue();
-
-    // Add buffers
-    hwqtx_logdbg("QP current state: %d", priv_ibv_query_qp_state(m_mlx5_qp.qp));
-
-    m_p_cq_mgr_tx->add_qp_tx(this);
-
-    release_tx_buffers();
-
-    modify_queue_to_ready_state();
-
-    init_device_memory();
-}
-
-void hw_queue_tx::down()
-{
-    if (safe_mce_sys().doca_tx) {
-        stop_doca_txq();
-    }
-
-    if (m_dm_enabled) {
-        m_dm_mgr.release_resources();
-    }
-
-    hwqtx_logdbg("QP current state: %d", priv_ibv_query_qp_state(m_mlx5_qp.qp));
-    modify_queue_to_error_state();
-
-    // free buffers from current active resource iterator
-    trigger_completion_for_all_sent_packets();
-
-    // let the QP drain all wqe's to flushed cqe's now that we moved
-    // it to error state and post_sent final trigger for completion
-    usleep(1000);
-
-    release_tx_buffers();
-    m_p_cq_mgr_tx->del_qp_tx(this);
 }
 
 void hw_queue_tx::release_tx_buffers()
@@ -1104,11 +832,6 @@ void hw_queue_tx::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits, 
 void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
                                bool request_comp, xlio_tis *tis, unsigned credits)
 {
-    if (safe_mce_sys().doca_tx) {
-        hwqtx_logerr("Should use doca_tx path");
-        return;
-    }
-
     struct xlio_mlx5_wqe_ctrl_seg *ctrl = nullptr;
     struct mlx5_wqe_eth_seg *eseg = nullptr;
     uint32_t tisn = tis ? tis->get_tisn() : 0;
@@ -1308,55 +1031,6 @@ void hw_queue_tx::tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis
     tls_post_progress_params_wqe(tis, tisn, 0, skip_static, true);
     m_b_fence_needed = true;
 }
-
-#ifdef DEFINED_DPCP_PATH_RX
-int hw_queue_tx::tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info,
-                                      uint32_t next_record_tcp_sn, xlio_comp_cb_t callback,
-                                      void *callback_arg)
-{
-    uint32_t tirn;
-    dpcp::tls_dek *_dek;
-    dpcp::status status;
-    dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
-    struct dpcp::dek_attr dek_attr;
-
-    memset(&dek_attr, 0, sizeof(dek_attr));
-    dek_attr.key_blob = (void *)info->key;
-    dek_attr.key_blob_size = info->key_len;
-    dek_attr.key_size = info->key_len;
-    dek_attr.pd_id = adapter->get_pd();
-    status = adapter->create_tls_dek(dek_attr, _dek);
-    if (unlikely(status != dpcp::DPCP_OK)) {
-        hwqtx_logerr("Failed to create DEK, status: %d", status);
-        return -1;
-    }
-    tir->assign_dek(_dek);
-    tir->assign_callback(callback, callback_arg);
-    tirn = tir->get_tirn();
-
-    tls_post_static_params_wqe(NULL, info, tirn, _dek->get_key_id(), 0, false, false);
-    tls_post_progress_params_wqe(tir, tirn, next_record_tcp_sn, false, false);
-
-    assert(!tir->m_released);
-
-    return 0;
-}
-
-void hw_queue_tx::tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn)
-{
-    tls_post_static_params_wqe(tir, info, tir->get_tirn(), tir->get_dek_id(), hw_resync_tcp_sn,
-                               false, false);
-}
-
-void hw_queue_tx::tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey)
-{
-    /* Address must be aligned by 64. */
-    assert((uintptr_t)buf == ((uintptr_t)buf >> 6U << 6U));
-
-    tls_get_progress_params_wqe(tir, tir->get_tirn(), buf, lkey);
-}
-
-#endif // DEFINED_DPCP_PATH_RX
 
 inline void hw_queue_tx::tls_fill_static_params_wqe(struct mlx5_wqe_tls_static_params_seg *params,
                                                     const struct xlio_tls_info *info,
@@ -1647,10 +1321,6 @@ void hw_queue_tx::post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_
 // So we can post_send anything we want :)
 void hw_queue_tx::trigger_completion_for_all_sent_packets()
 {
-    if (safe_mce_sys().doca_tx) {
-        return;
-    }
-
     hwqtx_logfunc("unsignaled count=%d", m_n_unsignaled_count);
 
     if (!is_signal_requested_for_last_wqe()) {
@@ -1724,35 +1394,251 @@ void hw_queue_tx::reset_inflight_zc_buffers_ctx(void *ctx)
     }
 }
 
-uint32_t hw_queue_tx::is_ratelimit_change(struct xlio_rate_limit_t &rate_limit)
+#else // DEFINED_DPCP_PATH_TX
+bool hw_queue_tx::check_doca_caps(doca_devinfo *devinfo, uint32_t &max_burst_size,
+                                  uint32_t &max_send_sge)
 {
-    uint32_t rl_changes = 0;
-
-    if (m_rate_limit.rate != rate_limit.rate) {
-        rl_changes |= RL_RATE;
-    }
-    if (m_rate_limit.max_burst_sz != rate_limit.max_burst_sz) {
-        rl_changes |= RL_BURST_SIZE;
-    }
-    if (m_rate_limit.typical_pkt_sz != rate_limit.typical_pkt_sz) {
-        rl_changes |= RL_PKT_SIZE;
+    doca_error_t err = doca_eth_txq_cap_is_type_supported(devinfo, DOCA_ETH_TXQ_TYPE_REGULAR,
+                                                          DOCA_ETH_TXQ_DATA_PATH_TYPE_CPU);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_cap_is_type_supported");
+        return false;
     }
 
-    return rl_changes;
+    err = doca_eth_txq_cap_get_max_send_buf_list_len(devinfo, &max_send_sge);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_cap_get_max_send_buf_list_len");
+        return false;
+    }
+
+    err = doca_eth_txq_cap_get_max_burst_size(devinfo, max_send_sge, DOCA_MAX_LSO_HEADER,
+                                              &max_burst_size);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_cap_get_max_burst_size");
+        return false;
+    }
+
+    uint32_t txq_burst_size_conf = (align32pow2(safe_mce_sys().tx_num_wr));
+    if (txq_burst_size_conf > max_burst_size) {
+        // TODO: Currently we will always have this warning... tx_num_wr set to 32K.
+        hwqtx_loginfo("Decreasing BurstSize %u to capability %u.", txq_burst_size_conf,
+                      max_burst_size);
+        txq_burst_size_conf = max_burst_size;
+    }
+    max_burst_size = txq_burst_size_conf;
+
+    err = doca_eth_txq_cap_is_l3_chksum_offload_supported(devinfo);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_cap_is_l3_chksum_offload_supported");
+        return false;
+    }
+
+    err = doca_eth_txq_cap_is_l4_chksum_offload_supported(devinfo);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_cap_is_l4_chksum_offload_supported");
+        return false;
+    }
+
+    return true;
 }
 
-int hw_queue_tx::modify_qp_ratelimit(struct xlio_rate_limit_t &rate_limit, uint32_t rl_changes)
+bool hw_queue_tx::prepare_doca_txq()
 {
-    int ret;
+    doca_error_t err;
+    doca_dev *dev = m_p_ib_ctx_handler->get_doca_device();
+    doca_devinfo *devinfo = doca_dev_as_devinfo(dev);
+    uint32_t max_burst_size = 0U;
+    uint32_t max_send_sge = 0U;
 
-    ret = priv_ibv_modify_qp_ratelimit(m_mlx5_qp.qp, rate_limit, rl_changes);
-    if (ret) {
-        hwqtx_logdbg("failed to modify qp ratelimit ret %d (errno=%d %m)", ret, errno);
-        return -1;
+    if (!check_doca_caps(devinfo, max_burst_size, max_send_sge)) {
+        hwqtx_logerr("TXQ caps failed, Dev:%s", m_p_ib_ctx_handler->get_ibname().c_str());
+        return false;
     }
 
-    m_rate_limit = rate_limit;
-    return 0;
+    doca_eth_txq *txq = nullptr;
+    err = doca_eth_txq_create(dev, max_burst_size, &txq);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_create");
+        return false;
+    }
+    m_doca_txq.reset(txq);
+    m_doca_ctx_txq = doca_eth_txq_as_doca_ctx(m_doca_txq.get());
+
+    err = doca_eth_txq_set_max_send_buf_list_len(txq, max_send_sge);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_set_max_send_buf_list_len");
+        return false;
+    }
+
+    /*  Issues with mss configuration per txq:
+        1. LSO will not work if remote side decided to reduce MSS.
+        2. We reduce mss to allow LSO for both IPv4 and IPv6. It means IPv4 packets will be smaller
+       by 20 bytes, so the performance will be slightly worse than what we can get with bigger
+       packets.
+    */
+    // err = doca_eth_txq_set_mss(m_doca_txq.get(), m_p_ring->get_mtu() - IPV6_HLEN - TCP_HLEN);
+    err = doca_eth_txq_set_mss(m_doca_txq.get(), m_p_ring->get_mtu() - 20 - TCP_HLEN);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_set_mss");
+        return false;
+    }
+
+    err = doca_eth_txq_set_max_lso_header_size(m_doca_txq.get(), DOCA_MAX_LSO_HEADER);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_set_max_lso_header_size");
+        return false;
+    }
+
+    err = doca_ctx_set_user_data(m_doca_ctx_txq, {.ptr = this});
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_ctx_set_user_data ctx/hw_queue_tx: %p,%p",
+                       m_doca_ctx_txq, this);
+        return false;
+    }
+
+    err = doca_eth_txq_set_type(m_doca_txq.get(), DOCA_ETH_TXQ_TYPE_REGULAR);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_get_type_supported");
+        return false;
+    }
+
+    err = doca_eth_txq_task_send_set_conf(m_doca_txq.get(), tx_task_completion_cb, tx_task_error_cb,
+                                          max_burst_size);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_task_send_set_conf txq: %p max-tasks: %u",
+                       txq, max_burst_size);
+        return false;
+    }
+
+    err = doca_eth_txq_task_lso_send_set_conf(m_doca_txq.get(), tx_task_lso_completion_cb,
+                                              tx_task_lso_error_cb, max_burst_size);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err,
+                       "doca_eth_txq_task_lso_send_set_conf txq: %p max-tasks: %u",
+                       m_doca_txq.get(), max_burst_size);
+        return false;
+    }
+
+    m_task_list_count = max_burst_size;
+
+    err = doca_eth_txq_set_l3_chksum_offload(txq, DOCA_CHECKSUM_HW_L3_ENABLE);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_set_l3_chksum_offload txq: %p",
+                       m_doca_txq.get());
+        return false;
+    }
+
+    err = doca_eth_txq_set_l4_chksum_offload(txq, DOCA_CHECKSUM_HW_L4_ENABLE);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_eth_txq_set_l4_chksum_offload txq: %p",
+                       m_doca_txq.get());
+        return false;
+    }
+
+    doca_pe *pe;
+    err = doca_pe_create(&pe);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_pe_create");
+        return false;
+    }
+    m_doca_pe.reset(pe);
+
+    err = doca_pe_connect_ctx(pe, m_doca_ctx_txq);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_pe_connect_ctx pe/ctx/txq: %p,%p,%p", pe,
+                       m_doca_ctx_txq, m_doca_txq.get());
+        return false;
+    }
+
+    err = doca_pe_set_event_mode(pe, DOCA_PE_EVENT_MODE_PROGRESS_ALL);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_pe_set_event_mode pe: %p", pe);
+        return false;
+    }
+
+    err = doca_pe_get_notification_handle(pe, &m_notification_handle);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_pe_get_notification_handle");
+        return false;
+    }
+
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+    if (safe_mce_sys().app.distribute_cq_interrupts) {
+        uint32_t num_comp_vectors = 0;
+        err = doca_ctx_cap_get_num_completion_vectors(devinfo, &num_comp_vectors);
+        if (DOCA_IS_ERROR(err)) {
+            PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_ctx_cap_get_num_completion_vectors devinfo: %p",
+                           devinfo);
+            return false;
+        }
+
+        // fetching once - as this operation requires locking
+        const int worker_id = g_p_app->get_worker_id();
+        if (likely(worker_id >= 0)) {
+            const uint32_t comp_vector = worker_id % num_comp_vectors;
+            hwqtx_logdbg("Setting PE completion affinity: %" PRIu32 ", pid: %d", comp_vector,
+                         getpid());
+            err = doca_ctx_set_completion_vector(m_doca_ctx_txq, comp_vector);
+            if (DOCA_IS_ERROR(err)) {
+                PRINT_DOCA_ERR(hwqtx_logerr, err,
+                               "doca_ctx_set_completion_vector ctx/comp_vector: %p,%" PRIu32,
+                               m_doca_ctx_txq, comp_vector);
+            }
+        }
+    }
+#endif
+
+    doca_buf_inventory *inventory = nullptr;
+    err = doca_buf_inventory_create(max_burst_size, &inventory);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_buf_inventory_create");
+        return false;
+    }
+    m_doca_inventory.reset(inventory);
+
+    err = doca_buf_inventory_start(inventory);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_buf_inventory_start");
+        return false;
+    }
+
+    hwqtx_loginfo("Creating DOCA TXQ MaxBurstSize: %u, Dev:%s", max_burst_size,
+                  m_p_ib_ctx_handler->get_ibname().c_str());
+    return true;
+}
+
+void hw_queue_tx::start_doca_txq()
+{
+    doca_error_t err = doca_ctx_start(m_doca_ctx_txq);
+    if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_ctx_start(TXQ). TXQ:%p", m_doca_txq.get());
+        return;
+    }
+
+    hwqtx_loginfo("DOCA TXQ started, ctx: %p", m_doca_ctx_txq);
+}
+
+void hw_queue_tx::stop_doca_txq()
+{
+    hwqtx_logdbg("Stopping DOCA TXQ: %p", m_doca_txq.get());
+
+    doca_error_t err = doca_ctx_stop(m_doca_ctx_txq);
+    if (DOCA_ERROR_IN_PROGRESS == err) {
+        doca_ctx_states ctx_state = DOCA_CTX_STATE_STOPPING; // Just to enter the while loop.
+        while (DOCA_CTX_STATE_IDLE != ctx_state) {
+            if (!doca_pe_progress(m_doca_pe.get())) {
+                err = doca_ctx_get_state(m_doca_ctx_txq, &ctx_state);
+                if (err != DOCA_SUCCESS) {
+                    PRINT_DOCA_ERR(hwqtx_logerr, err,
+                                   "Error flushing DOCA TXQ (doca_ctx_get_state). TXQ:%p",
+                                   m_doca_txq.get());
+                    break;
+                }
+            }
+        }
+    } else if (DOCA_IS_ERROR(err)) {
+        PRINT_DOCA_ERR(hwqtx_logerr, err, "doca_ctx_stop(TXQ). TXQ:%p", m_doca_txq.get());
+    }
 }
 
 void hw_queue_tx::destory_doca_txq(doca_eth_txq *txq)
@@ -2117,3 +2003,134 @@ void hw_queue_tx::poll_and_process_doca_tx()
 
     m_p_ring->return_to_global_pool();
 }
+
+#endif // DEFINED_DPCP_PATH_TX
+
+void hw_queue_tx::up()
+{
+#ifdef DEFINED_DPCP_PATH_TX
+    init_queue();
+
+    // Add buffers
+    hwqtx_logdbg("QP current state: %d", priv_ibv_query_qp_state(m_mlx5_qp.qp));
+
+    m_p_cq_mgr_tx->add_qp_tx(this);
+
+    release_tx_buffers();
+
+    modify_queue_to_ready_state();
+
+    init_device_memory();
+#else // DEFINED_DPCP_PATH_TX
+    start_doca_txq();
+#endif // DEFINED_DPCP_PATH_TX
+}
+
+void hw_queue_tx::down()
+{
+#ifdef DEFINED_DPCP_PATH_TX
+    if (m_dm_enabled) {
+        m_dm_mgr.release_resources();
+    }
+
+    hwqtx_logdbg("QP current state: %d", priv_ibv_query_qp_state(m_mlx5_qp.qp));
+    modify_queue_to_error_state();
+
+    // free buffers from current active resource iterator
+    trigger_completion_for_all_sent_packets();
+
+    // let the QP drain all wqe's to flushed cqe's now that we moved
+    // it to error state and post_sent final trigger for completion
+    usleep(1000);
+
+    release_tx_buffers();
+    m_p_cq_mgr_tx->del_qp_tx(this);
+#else // DEFINED_DPCP_PATH_TX
+    stop_doca_txq();
+#endif // DEFINED_DPCP_PATH_TX
+}
+
+uint32_t hw_queue_tx::is_ratelimit_change(struct xlio_rate_limit_t &rate_limit)
+{
+    uint32_t rl_changes = 0;
+
+    if (m_rate_limit.rate != rate_limit.rate) {
+        rl_changes |= RL_RATE;
+    }
+    if (m_rate_limit.max_burst_sz != rate_limit.max_burst_sz) {
+        rl_changes |= RL_BURST_SIZE;
+    }
+    if (m_rate_limit.typical_pkt_sz != rate_limit.typical_pkt_sz) {
+        rl_changes |= RL_PKT_SIZE;
+    }
+
+    return rl_changes;
+}
+
+int hw_queue_tx::modify_qp_ratelimit(struct xlio_rate_limit_t &rate_limit, uint32_t rl_changes)
+{
+#ifdef DEFINED_DPCP_PATH_TX
+    int ret;
+
+    ret = priv_ibv_modify_qp_ratelimit(m_mlx5_qp.qp, rate_limit, rl_changes);
+    if (ret) {
+        hwqtx_logdbg("failed to modify qp ratelimit ret %d (errno=%d %m)", ret, errno);
+        return -1;
+    }
+
+    m_rate_limit = rate_limit;
+#else
+    NOT_IN_USE(rate_limit);
+    NOT_IN_USE(rl_changes);
+#endif // DEFINED_DPCP_PATH_TX
+    return 0;
+}
+
+#if defined(DEFINED_DPCP_PATH_RX) && defined(DEFINED_DPCP_PATH_TX)
+int hw_queue_tx::tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info,
+                                      uint32_t next_record_tcp_sn, xlio_comp_cb_t callback,
+                                      void *callback_arg)
+{
+    uint32_t tirn;
+    dpcp::tls_dek *_dek;
+    dpcp::status status;
+    dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
+    struct dpcp::dek_attr dek_attr;
+
+    memset(&dek_attr, 0, sizeof(dek_attr));
+    dek_attr.key_blob = (void *)info->key;
+    dek_attr.key_blob_size = info->key_len;
+    dek_attr.key_size = info->key_len;
+    dek_attr.pd_id = adapter->get_pd();
+    status = adapter->create_tls_dek(dek_attr, _dek);
+    if (unlikely(status != dpcp::DPCP_OK)) {
+        hwqtx_logerr("Failed to create DEK, status: %d", status);
+        return -1;
+    }
+    tir->assign_dek(_dek);
+    tir->assign_callback(callback, callback_arg);
+    tirn = tir->get_tirn();
+
+    tls_post_static_params_wqe(NULL, info, tirn, _dek->get_key_id(), 0, false, false);
+    tls_post_progress_params_wqe(tir, tirn, next_record_tcp_sn, false, false);
+
+    assert(!tir->m_released);
+
+    return 0;
+}
+
+void hw_queue_tx::tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn)
+{
+    tls_post_static_params_wqe(tir, info, tir->get_tirn(), tir->get_dek_id(), hw_resync_tcp_sn,
+                               false, false);
+}
+
+void hw_queue_tx::tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey)
+{
+    /* Address must be aligned by 64. */
+    assert((uintptr_t)buf == ((uintptr_t)buf >> 6U << 6U));
+
+    tls_get_progress_params_wqe(tir, tir->get_tirn(), buf, lkey);
+}
+
+#endif // DEFINED_DPCP_PATH_RX && DEFINED_DPCP_PATH_RX
