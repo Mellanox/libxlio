@@ -31,12 +31,15 @@
  * SOFTWARE.
  */
 
-#include "dev/cq_mgr_tx.h"
+#include "config.h"
+#ifdef DEFINED_DPCP_PATH_TX
+
+#include "dev/dpcp/cq_mgr_tx.h"
 #include <util/valgrind.h>
 #include <sock/sock-redirect.h>
 #include <sock/sock-app.h>
-#include "ring_simple.h"
-#include "hw_queue_tx.h"
+#include "dev/ring_simple.h"
+#include "hw_queue_tx_dpcp.h"
 
 #define MODULE_NAME "cq_mgr_tx"
 DOCA_LOG_REGISTER(cq_mgr_tx);
@@ -266,3 +269,5 @@ void cq_mgr_tx::handle_sq_wqe_prop(unsigned index)
     m_hqtx_ptr->credits_return(credits);
     m_hqtx_ptr->m_sq_wqe_prop_last_signalled = index;
 }
+
+#endif // DEFINED_DPCP_PATH_TX

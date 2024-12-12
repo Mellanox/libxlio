@@ -336,8 +336,11 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
 
     si_tcp_logdbg("new pcb %p pcb state %d", &m_pcb, get_tcp_state(&m_pcb));
     tcp_arg(&m_pcb, this);
-    tcp_ip_output(&m_pcb,
-                  safe_mce_sys().doca_tx ? sockinfo_tcp::ip_output_doca : sockinfo_tcp::ip_output);
+#ifdef DEFINED_DPCP_PATH_TX
+    tcp_ip_output(&m_pcb, sockinfo_tcp::ip_output);
+#else // DEFINED_DPCP_PATH_TX
+    tcp_ip_output(&m_pcb, sockinfo_tcp::ip_output_doca);
+#endif
     tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb);
     tcp_err(&m_pcb, sockinfo_tcp::err_lwip_cb);
     tcp_sent(&m_pcb, sockinfo_tcp::ack_recvd_lwip_cb);
@@ -731,9 +734,11 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
 
     return_reuse_buffers_postponed();
 
+#ifdef DEFINED_DPCP_PATH_TX
     if (m_b_zc && m_p_connected_dst_entry) {
         m_p_connected_dst_entry->reset_inflight_zc_buffers_ctx(this);
     }
+#endif
 
     /* According to "UNIX Network Programming" third edition,
      * setting SO_LINGER with timeout 0 prior to calling close()
@@ -879,8 +884,11 @@ bool sockinfo_tcp::prepare_dst_to_send(bool is_accepted_socket /* = false */)
             uint32_t max_tso_sz = std::min(ring->get_max_payload_sz(), safe_mce_sys().max_tso_sz);
             m_pcb.tso.max_buf_sz = std::min(safe_mce_sys().tx_buf_size, max_tso_sz);
             m_pcb.tso.max_payload_sz = max_tso_sz;
-            m_pcb.tso.max_header_sz = ring->get_max_header_sz();
+#ifdef DEFINED_DPCP_PATH_TX
             m_pcb.tso.max_send_sge = ring->get_max_send_sge();
+#else
+            m_pcb.tso.max_send_sge = 8;
+#endif
         }
     }
     return ret_val;
@@ -1330,6 +1338,7 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
     return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp, is_dummy, is_send_zerocopy);
 }
 
+#ifndef DEFINED_DPCP_PATH_TX
 /*
  * TODO Remove 'p' from the interface and use 'seg'.
  * There are multiple places where ip_output() is used without allocating
@@ -1372,7 +1381,7 @@ err_t sockinfo_tcp::ip_output_doca(struct pbuf *p, struct tcp_seg *seg, void *v_
 
     return (ret > 0 ? ERR_OK : ERR_WOULDBLOCK);
 }
-
+#else //!DEFINED_DPCP_PATH_TX
 /*
  * TODO Remove 'p' from the interface and use 'seg'.
  * There are multiple places where ip_output() is used without allocating
@@ -1477,6 +1486,7 @@ send_iov:
 
     return (ret >= 0 ? ERR_OK : ERR_WOULDBLOCK);
 }
+#endif //!DEFINED_DPCP_PATH_TX
 
 err_t sockinfo_tcp::ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn,
                                       uint16_t flags)
@@ -3169,8 +3179,11 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
         return ERR_RST;
     }
 
-    tcp_ip_output(&(new_sock->m_pcb),
-                  safe_mce_sys().doca_tx ? sockinfo_tcp::ip_output_doca : sockinfo_tcp::ip_output);
+#ifdef DEFINED_DPCP_PATH_TX
+    tcp_ip_output(&(new_sock->m_pcb), sockinfo_tcp::ip_output);
+#else // DEFINED_DPCP_PATH_TX
+    tcp_ip_output(&(new_sock->m_pcb), sockinfo_tcp::ip_output_doca);
+#endif // DEFINED_DPCP_PATH_TX
     tcp_arg(&(new_sock->m_pcb), new_sock);
     tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb);
     tcp_err(&(new_sock->m_pcb), sockinfo_tcp::err_lwip_cb);
@@ -4918,7 +4931,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
     /* coverity[double_lock] */
     m_rx_ring_map_lock.lock();
     if (likely(m_p_rx_ring)) {
-        if (!m_p_rx_ring->request_notification(CQT_RX)) {
+        if (!m_p_rx_ring->request_notification_rx()) {
             m_rx_ring_map_lock.unlock();
             return 0;
         }
@@ -4930,7 +4943,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
             }
             ring *p_ring = rx_ring_iter->first;
             if (p_ring) {
-                if (!p_ring->request_notification(CQT_RX)) {
+                if (!p_ring->request_notification_rx()) {
                     m_rx_ring_map_lock.unlock();
                     return 0;
                 }

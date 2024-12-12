@@ -67,6 +67,7 @@ transport_t dst_entry_tcp::get_transport(const sock_addr &to)
     return TRANS_XLIO;
 }
 
+#ifndef DEFINED_DPCP_PATH_TX
 uint32_t dst_entry_tcp::send_doca(struct pbuf *p, uint16_t flags, uint16_t mss)
 {
     bool is_zerocopy = !!(flags & XLIO_TX_PACKET_ZEROCOPY);
@@ -108,6 +109,30 @@ uint32_t dst_entry_tcp::send_doca(struct pbuf *p, uint16_t flags, uint16_t mss)
     return m_p_ring->send_doca_single(ptr, total_packet_len, user_data);
 }
 
+uint32_t dst_entry_tcp::doca_slow_path(struct pbuf *p, uint16_t flags, uint16_t mss,
+                                       struct xlio_rate_limit_t &rate_limit)
+{
+    uint32_t ret = 0;
+
+    m_slow_path_lock.lock();
+    prepare_to_send(rate_limit, true);
+    if (m_b_is_offloaded) {
+        if (is_valid()) {
+            ret = send_doca(p, flags, mss);
+        } else {
+            bool is_tso_or_zerocopy = !!(flags & (XLIO_TX_PACKET_ZEROCOPY | XLIO_TX_PACKET_TSO));
+            if (is_tso_or_zerocopy) {
+                dst_tcp_logwarn("TSO/ZC send when dst_entry is not valid");
+            }
+
+            iovec iov = {p, p->len};
+            ret = pass_buff_to_neigh(&iov, 1);
+        }
+    }
+    m_slow_path_lock.unlock();
+    return ret;
+}
+#else // !DEFINED_DPCP_PATH_TX
 ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr)
 {
     int ret = 0;
@@ -353,30 +378,6 @@ out:
     return ret;
 }
 
-uint32_t dst_entry_tcp::doca_slow_path(struct pbuf *p, uint16_t flags, uint16_t mss,
-                                       struct xlio_rate_limit_t &rate_limit)
-{
-    uint32_t ret = 0;
-
-    m_slow_path_lock.lock();
-    prepare_to_send(rate_limit, true);
-    if (m_b_is_offloaded) {
-        if (is_valid()) {
-            ret = send_doca(p, flags, mss);
-        } else {
-            bool is_tso_or_zerocopy = !!(flags & (XLIO_TX_PACKET_ZEROCOPY | XLIO_TX_PACKET_TSO));
-            if (is_tso_or_zerocopy) {
-                dst_tcp_logwarn("TSO/ZC send when dst_entry is not valid");
-            }
-
-            iovec iov = {p, p->len};
-            ret = pass_buff_to_neigh(&iov, 1);
-        }
-    }
-    m_slow_path_lock.unlock();
-    return ret;
-}
-
 ssize_t dst_entry_tcp::slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr,
                                  struct xlio_rate_limit_t &rate_limit, int flags /*= 0*/,
                                  sockinfo *sock /*= 0*/, tx_call_t call_type /*= 0*/)
@@ -404,7 +405,7 @@ ssize_t dst_entry_tcp::slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
     m_slow_path_lock.unlock();
     return ret_val;
 }
-
+#endif // !DEFINED_DPCP_PATH_TX
 ssize_t dst_entry_tcp::slow_send_neigh(const iovec *p_iov, size_t sz_iov,
                                        struct xlio_rate_limit_t &rate_limit)
 {

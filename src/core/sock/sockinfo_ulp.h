@@ -162,8 +162,10 @@ private:
     /* TLS record overhead (header + trailer). Different across versions. */
     uint32_t m_tls_rec_overhead;
 
+#ifdef DEFINED_DPCP_PATH_TX
     /* TX specific fields */
     xlio_tis *m_p_tis;
+#endif // DEFINED_DPCP_PATH_TX
 
     /* A buffer to keep multiple headers for zerocopy TLS records. */
     mem_buf_desc_t *m_zc_stor;

@@ -71,11 +71,12 @@ libxlio_la_SOURCES := \
 	dev/dpcp/cq_mgr_rx.cpp \
 	dev/dpcp/cq_mgr_rx_regrq.cpp \
 	dev/dpcp/cq_mgr_rx_strq.cpp \
-	dev/cq_mgr_tx.cpp \
+	dev/dpcp/cq_mgr_tx.cpp \
 	dev/dm_mgr.cpp \
-	dev/hw_queue_tx.cpp \
 	dev/dpcp/hw_queue_rx_dpcp.cpp \
 	dev/doca/hw_queue_rx_doca.cpp \
+	dev/dpcp/hw_queue_tx_dpcp.cpp \
+	dev/doca/hw_queue_tx_doca.cpp \
 	dev/gro_mgr.cpp \
 	dev/rfs.cpp \
 	dev/rfs_uc.cpp \
@@ -178,7 +179,7 @@ libxlio_la_SOURCES := \
 	dev/dpcp/cq_mgr_rx_inl.h \
 	dev/dpcp/cq_mgr_rx_regrq.h \
 	dev/dpcp/cq_mgr_rx_strq.h \
-	dev/cq_mgr_tx.h \
+	dev/dpcp/cq_mgr_tx.h \
 	dev/dm_mgr.h \
 	dev/gro_mgr.h \
 	dev/ib_ctx_handler_collection.h \
@@ -192,7 +193,8 @@ libxlio_la_SOURCES := \
 	dev/net_device_val.h \
 	dev/dpcp/hw_queue_rx_dpcp.h \
 	dev/doca/hw_queue_rx_doca.h \
-	dev/hw_queue_tx.h \
+	dev/dpcp/hw_queue_tx_dpcp.h \
+	dev/doca/hw_queue_tx_doca.h \
 	dev/rfs.h \
 	dev/rfs_mc.h \
 	dev/rfs_uc.h \

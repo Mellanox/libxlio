@@ -405,9 +405,6 @@ struct tcp_pcb {
         /* Maximum length of TCP payload for TSO */
         u32_t max_payload_sz;
 
-        /* Maximum length of header for TSO */
-        u16_t max_header_sz;
-
         /* Maximum number of SGE */
         u32_t max_send_sge;
     } tso;

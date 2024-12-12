@@ -34,7 +34,7 @@
 #ifndef XLIO_TI_H
 #define XLIO_TI_H
 
-#include "config.h"
+#include "util/vtypes.h"
 #include <cstdint>
 #include <memory>
 #include <assert.h>
@@ -101,6 +101,7 @@ public:
     void *m_callback_arg;
 };
 
+#ifdef DEFINED_DPCP_PATH_TX
 class xlio_tis : public xlio_ti {
 public:
     xlio_tis(xlio_ti_owner *ti_owner, std::unique_ptr<dpcp::tis> _tis, xlio_ti::ti_type type)
@@ -140,6 +141,7 @@ private:
     uint32_t m_tisn;
     uint32_t m_dek_id;
 };
+#endif // DEFINED_DPCP_PATH_TX
 
 #ifdef DEFINED_DPCP_PATH_RX
 

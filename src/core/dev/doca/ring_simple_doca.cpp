@@ -31,8 +31,8 @@
  * SOFTWARE.
  */
 
-#include "config.h"
-#ifndef DEFINED_DPCP_PATH_RX
+#include "util/vtypes.h"
+#ifndef DEFINED_DPCP_PATH_RX_AND_TX
 #include <mutex>
 #include "dev/ring_simple.h"
 
@@ -42,10 +42,56 @@ DOCA_LOG_REGISTER(ring_simple_doca);
 #undef MODULE_HDR
 #define MODULE_HDR MODULE_NAME "%d:%s() "
 
+#ifndef DEFINED_DPCP_PATH_TX
+// This probably can be removed completely for DOCA.
+// It is unused in epoll and for DOCA we remove the full SQ poll attempt.
+int ring_simple::get_tx_channel_fd() const
+{
+    return m_hqtx->get_notification_handle();
+}
+
+bool ring_simple::request_notification_tx()
+{
+    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+    return m_hqtx->request_notification();
+}
+
+void ring_simple::poll_and_process_element_tx()
+{
+    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+    m_hqtx->poll_and_process_doca_tx();
+}
+
+uint32_t ring_simple::send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *buff)
+{
+    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+    uint32_t ret = m_hqtx->send_doca_single(ptr, len, buff);
+    m_p_ring_stat->n_tx_dropped_wqes += (ret == 0);
+    m_hqtx->poll_and_process_doca_tx();
+    return ret;
+}
+
+uint32_t ring_simple::send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss, bool is_zerocopy)
+{
+    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+    uint32_t ret = m_hqtx->send_doca_lso(h, p, mss, is_zerocopy);
+    m_p_ring_stat->n_tx_dropped_wqes += (ret == 0);
+    m_hqtx->poll_and_process_doca_tx();
+    return ret;
+}
+#endif // !DEFINED_DPCP_PATH_TX
+
+#ifndef DEFINED_DPCP_PATH_RX
 int ring_simple::get_rx_channel_fd(size_t ch_idx) const
 {
     NOT_IN_USE(ch_idx);
     return m_hqrx->get_notification_handle();
+}
+
+bool ring_simple::request_notification_rx()
+{
+    std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
+    return m_hqrx->request_notification();
 }
 
 void ring_simple::clear_rx_notification()
@@ -97,3 +143,4 @@ int ring_simple::drain_and_proccess()
 }
 
 #endif // !DEFINED_DPCP_PATH_RX
+#endif // !DEFINED_DPCP_PATH_RX_AND_TX

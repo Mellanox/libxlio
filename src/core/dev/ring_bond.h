@@ -54,7 +54,8 @@ public:
     size_t get_rx_channels_num() const override;
     int get_rx_channel_fd(size_t ch_idx) const override;
     int get_tx_channel_fd() const override;
-    bool request_notification(cq_type_t cq_type) override;
+    bool request_notification_rx() override;
+    bool request_notification_tx() override;
     void clear_rx_notification() override;
     bool poll_and_process_element_rx(void *pv_fd_ready_array = nullptr) override;
     void poll_and_process_element_tx() override;
@@ -64,7 +65,6 @@ public:
     bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *) override;
     void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc) override;
     int drain_and_proccess() override;
-    int get_num_resources() const override;
     bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t = false) override;
     bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink) override;
     void restart();
@@ -72,10 +72,6 @@ public:
                                    uint32_t n_num_mem_bufs = 1) override;
     int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool trylock = false) override;
     void inc_tx_retransmissions_stats(ring_user_id_t id) override;
-    void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                          xlio_wr_tx_packet_attr attr) override;
-    int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                         xlio_wr_tx_packet_attr attr, xlio_tis *tis) override;
     void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc) override;
     void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc,
                                               unsigned ref) override;
@@ -84,36 +80,48 @@ public:
     ring_user_id_t generate_id(const address_t src_mac, const address_t dst_mac, uint16_t eth_proto,
                                uint16_t encap_proto, const ip_address &src_ip,
                                const ip_address &dst_ip, uint16_t src_port, uint16_t dst_port);
-    bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe) override;
+
     int modify_ratelimit(struct xlio_rate_limit_t &rate_limit) override;
-    uint32_t get_tx_user_lkey(void *addr, size_t length) override;
     ib_ctx_handler *get_ctx(ring_user_id_t id) override;
-    uint32_t get_max_inline_data() override;
-    uint32_t get_max_send_sge() override;
     uint32_t get_max_payload_sz() override;
     uint16_t get_max_header_sz() override;
-    uint32_t get_tx_lkey(ring_user_id_t id) override;
     bool is_tso() override;
     void flow_del_all_rfs_safe() override;
-    uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *buff) override;
-    uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss,
-                           bool is_zerocopy) override;
+    bool tls_tx_supported() override;
+    bool tls_rx_supported() override;
+    void slave_create(int if_index);
+
+#ifdef DEFINED_DPCP_PATH_TX
+    void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
+                          xlio_wr_tx_packet_attr attr) override;
+    int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
+                         xlio_wr_tx_packet_attr attr, xlio_tis *tis) override;
+    bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe) override;
+    uint32_t get_tx_user_lkey(void *addr, size_t length) override;
+    uint32_t get_max_inline_data() override;
+    uint32_t get_max_send_sge() override;
+    uint32_t get_tx_lkey(ring_user_id_t id) override;
     void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx) override;
     std::unique_ptr<xlio_tis> create_tis(uint32_t flag) const override;
     void post_nop_fence() override;
     void post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first) override;
     bool credits_get(unsigned credits) override;
     void credits_return(unsigned credits) override;
+#else // DEFINED_DPCP_PATH_TX
+    uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *buff) override;
+    uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss,
+                           bool is_zerocopy) override;
+#endif // DEFINED_DPCP_PATH_TX
 
-#ifdef DEFINED_UTLS
-    bool tls_tx_supported(void) override;
-    bool tls_rx_supported(void) override;
+#if defined(DEFINED_DPCP_PATH_TX) && defined(DEFINED_UTLS)
     xlio_tis *tls_context_setup_tx(const xlio_tls_info *info) override;
     void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static) override;
     void tls_release_tis(xlio_tis *tis) override;
     void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
                               bool first) override;
-#ifdef DEFINED_DPCP_PATH_RX
+#endif // DEFINED_DPCP_PATH_RX && DEFINED_DPCP_PATH_TX
+
+#if defined(DEFINED_DPCP_PATH_RX_AND_TX) && defined(DEFINED_UTLS)
     xlio_tir *tls_create_tir(bool cached) override;
     int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t next_record_tcp_sn,
                              xlio_comp_cb_t callback, void *callback_arg) override;
@@ -122,13 +130,9 @@ public:
                        uint32_t hw_resync_tcp_sn) override;
     void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey) override;
     void tls_release_tir(xlio_tir *tir) override;
-#endif // DEFINED_DPCP_PATH_RX
-#endif /* DEFINED_UTLS */
-
-    void slave_create(int if_index);
+#endif // DEFINED_DPCP_PATH_RX_AND_TX && DEFINED_UTLS
 
 protected:
-    void update_cap(ring_slave *slave = nullptr);
     void update_rx_channel_fds();
 
     /* Fill m_xmit_rings array */
@@ -167,8 +171,11 @@ protected:
 
     std::vector<struct flow_sink_t> m_rx_flows;
     int *m_p_n_rx_channel_fds = nullptr;
+#ifdef DEFINED_DPCP_PATH_TX
+    void update_cap(ring_slave *slave = nullptr);
     uint32_t m_max_inline_data;
     uint32_t m_max_send_sge;
+#endif // DEFINED_DPCP_PATH_TX
 
 private:
     net_device_val::bond_type m_type;

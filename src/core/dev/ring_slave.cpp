@@ -1155,22 +1155,3 @@ void ring_slave::flow_del_all_rfs_safe()
     std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
     flow_del_all_rfs();
 }
-
-bool ring_slave::request_more_tx_buffers(pbuf_type type, uint32_t count, uint32_t lkey)
-{
-    bool res;
-
-    ring_logfuncall("Allocating additional %d buffers for internal use", count);
-
-    if (type == PBUF_ZEROCOPY) {
-        res = g_buffer_pool_zc->get_buffers_thread_safe(m_zc_pool, this, count, lkey);
-    } else {
-        res = g_buffer_pool_tx->get_buffers_thread_safe(m_tx_pool, this, count, lkey);
-    }
-    if (!res) {
-        ring_logfunc("Out of mem_buf_desc from TX free pool for internal object pool");
-        return false;
-    }
-
-    return true;
-}
