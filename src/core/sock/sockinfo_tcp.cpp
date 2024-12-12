@@ -412,6 +412,8 @@ int sockinfo_tcp::update_xlio_socket(unsigned flags, uintptr_t userdata_sq)
 
 int sockinfo_tcp::detach_xlio_group()
 {
+    std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
+
     // Only connected socket can be detached.
     if (!m_p_group || !m_p_connected_dst_entry || m_rx_flow_map.empty() || 
         get_tcp_state(&m_pcb) != ESTABLISHED) {
@@ -454,6 +456,8 @@ int sockinfo_tcp::attach_xlio_group(poll_group *group)
         .group = reinterpret_cast<xlio_poll_group_t>(group),
         .userdata_sq = m_xlio_socket_userdata,
     };
+
+    std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
 
     if (m_p_group) {
         si_tcp_logwarn("Attaching undetached XLIO socket %p, group %p, new-group %p",
