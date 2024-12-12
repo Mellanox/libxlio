@@ -449,8 +449,16 @@ int sockinfo_tcp::update_xlio_socket(unsigned flags, uintptr_t userdata_sq)
 
 int sockinfo_tcp::detach_xlio_group()
 {
-    // TODO check that socket is connected and has all the objects (to attach them unconditionally
-    // later)
+    // Only connected socket can be detached.
+    if (!m_p_group || !m_p_connected_dst_entry || m_rx_flow_map.empty() || 
+        get_tcp_state(&m_pcb) != ESTABLISHED) {
+        si_tcp_logwarn("Unable to detach socket %p, state %s, group %p, dst_entry %p,"
+                       " rx_flow_size %zu. Only connected attached socket can be detached.",
+                       this, tcp_state_str[get_tcp_state(&m_pcb)], m_p_group,
+                       m_p_connected_dst_entry, m_rx_flow_map.size());
+        return -1;
+    }
+
     // TODO replace lwip callbacks with drops
 
     remove_timer();
@@ -484,7 +492,12 @@ int sockinfo_tcp::attach_xlio_group(poll_group *group)
         .userdata_sq = m_xlio_socket_userdata,
     };
 
-    // TODO check that socket is detached
+    if (m_p_group) {
+        si_tcp_logwarn("Attaching undetached XLIO socket %p, group %p, new-group %p",
+                       this, m_p_group, group);
+        return -1;
+    }
+
     // TODO reinitialize lwip callbacks
 
     set_xlio_socket(&attr);
