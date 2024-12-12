@@ -452,7 +452,6 @@ public:
     char internal_thread_affinity_str[FILENAME_MAX];
     cpu_set_t internal_thread_affinity;
     bool internal_thread_arm_cq_enabled;
-    bool doca_tx;
     skip_poll_in_rx_t skip_poll_in_rx;
     multilock_t multilock;
 
@@ -850,8 +849,6 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_ALIGNMENT                              ((unsigned long)63)
 #define MCE_DEFAULT_SKIP_POLL_IN_RX                (SKIP_POLL_IN_RX_DISABLE)
 #define MCE_DEFAULT_MULTILOCK                      (MULTILOCK_SPIN)
-#define MCE_DEFAULT_DOCA_RX                        (true)
-#define MCE_DEFAULT_DOCA_TX                        (true)
 
 /*
  * This block consists of auxiliary constants

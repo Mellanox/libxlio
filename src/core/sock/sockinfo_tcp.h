@@ -251,9 +251,12 @@ public:
     ssize_t rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
                sockaddr *__from = nullptr, socklen_t *__fromlen = nullptr,
                struct msghdr *__msg = nullptr) override;
+#ifdef DEFINED_DPCP_PATH_TX
     static err_t ip_output(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn, uint16_t flags);
+#else // DEFINED_DPCP_PATH_TX
     static err_t ip_output_doca(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn,
                                 uint16_t flags);
+#endif
     static err_t ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn,
                                    uint16_t flags);
     static void tcp_state_observer(void *pcb_container, enum tcp_state new_state);

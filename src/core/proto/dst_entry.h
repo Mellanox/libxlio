@@ -78,7 +78,11 @@ struct xlio_send_attr {
     xlio_wr_tx_packet_attr flags;
     uint16_t mss;
     size_t length;
+#ifdef DEFINED_DPCP_PATH_TX
     xlio_tis *tis;
+#else // DEFINED_DPCP_PATH_TX
+    void *tis;
+#endif // DEFINED_DPCP_PATH_TX
 };
 
 class dst_entry : public cache_observer, public tostr {
@@ -92,10 +96,12 @@ public:
     virtual void notify_cb(event *ev);
 
     virtual bool prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_rules = false);
+#ifdef DEFINED_DPCP_PATH_TX
     virtual ssize_t fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr) = 0;
     virtual ssize_t slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr,
                               struct xlio_rate_limit_t &rate_limit, int flags = 0,
                               sockinfo *sock = nullptr, tx_call_t call_type = TX_UNDEF) = 0;
+#endif // DEFINED_DPCP_PATH_TX
 
     bool try_migrate_ring_tx(lock_base &socket_lock);
 
@@ -127,11 +133,12 @@ public:
     uint8_t get_tos() const { return m_tos; }
     uint8_t get_ttl_hop_limit() const { return m_ttl_hop_limit; }
     void set_external_vlan_tag(uint16_t vlan_tag) { m_external_vlan_tag = vlan_tag; }
+#ifdef DEFINED_DPCP_PATH_TX
     void reset_inflight_zc_buffers_ctx(void *ctx)
     {
         m_p_ring->reset_inflight_zc_buffers_ctx(m_id, ctx);
     }
-
+#endif // DEFINED_DPCP_PATH_TX
     inline bool is_the_same_ifname(const std::string &ifname)
     {
         return ifname.compare(m_p_net_dev_val->get_ifname()) == 0;
@@ -153,11 +160,14 @@ protected:
     ip_address m_pkt_src_ip; // source IP address copied into IP header
     lock_mutex_recursive m_slow_path_lock;
     lock_mutex m_tx_migration_lock;
+#ifdef DEFINED_DPCP_PATH_TX
     xlio_ibv_send_wr m_inline_send_wqe;
     xlio_ibv_send_wr m_not_inline_send_wqe;
     xlio_ibv_send_wr m_fragmented_send_wqe;
-    wqe_send_handler *m_p_send_wqe_handler;
     ibv_sge *m_sge;
+    uint32_t m_max_inline;
+#endif // DEFINED_DPCP_PATH_TX
+    wqe_send_handler *m_p_send_wqe_handler;
     route_entry *m_p_rt_entry;
     route_val *m_p_rt_val;
     net_device_entry *m_p_net_dev_entry;
@@ -171,12 +181,9 @@ protected:
     mem_buf_desc_t *m_p_zc_mem_buf_desc_list;
     int m_b_tx_mem_buf_desc_list_pending;
     uint8_t m_ttl_hop_limit;
-
     uint8_t m_tos;
     uint8_t m_pcp;
     bool m_b_is_initialized;
-
-    uint32_t m_max_inline;
     ring_user_id_t m_id;
     uint16_t m_max_ip_payload_size;
     uint16_t m_max_udp_payload_size;
@@ -188,10 +195,11 @@ protected:
 
     virtual transport_t get_transport(const sock_addr &to) = 0;
     virtual uint8_t get_protocol_type() const = 0;
+#ifdef DEFINED_DPCP_PATH_TX
     virtual uint32_t get_inline_sge_num() = 0;
     virtual ibv_sge *get_sge_lst_4_inline_send() = 0;
     virtual ibv_sge *get_sge_lst_4_not_inline_send() = 0;
-
+#endif // DEFINED_DPCP_PATH_TX
     virtual bool offloaded_according_to_rules();
     virtual void init_members();
     virtual bool resolve_net_dev();
@@ -219,6 +227,7 @@ protected:
         m_b_tx_mem_buf_desc_list_pending = is_pending;
     }
     uint32_t get_priority_by_tc_class(uint32_t tc_clas);
+#ifdef DEFINED_DPCP_PATH_TX
     inline void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
                                  xlio_wr_tx_packet_attr attr)
     {
@@ -237,6 +246,7 @@ protected:
             m_p_ring->send_ring_buffer(id, p_send_wqe, attr);
         }
     }
+#endif // DEFINED_DPCP_PATH_TX
 };
 
 #endif /* DST_ENTRY_H */

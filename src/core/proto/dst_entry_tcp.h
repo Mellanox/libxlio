@@ -49,13 +49,16 @@ public:
                   resource_allocation_key &ring_alloc_logic);
     virtual ~dst_entry_tcp();
 
+#ifndef DEFINED_DPCP_PATH_TX
     uint32_t doca_slow_path(struct pbuf *p, uint16_t flags, uint16_t mss,
                             struct xlio_rate_limit_t &rate_limit);
     uint32_t send_doca(struct pbuf *p, uint16_t flags, uint16_t mss);
+#else // !DEFINED_DPCP_PATH_TX
     ssize_t fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr);
     ssize_t slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr,
                       struct xlio_rate_limit_t &rate_limit, int flags = 0, sockinfo *sock = nullptr,
                       tx_call_t call_type = TX_UNDEF);
+#endif // !DEFINED_DPCP_PATH_TX
     ssize_t slow_send_neigh(const iovec *p_iov, size_t sz_iov,
                             struct xlio_rate_limit_t &rate_limit);
 
@@ -66,9 +69,11 @@ public:
 protected:
     transport_t get_transport(const sock_addr &to);
     virtual uint8_t get_protocol_type() const { return IPPROTO_TCP; };
+#ifdef DEFINED_DPCP_PATH_TX
     virtual uint32_t get_inline_sge_num() { return 1; };
     virtual ibv_sge *get_sge_lst_4_inline_send() { return m_sge; };
     virtual ibv_sge *get_sge_lst_4_not_inline_send() { return m_sge; };
+#endif // DEFINED_DPCP_PATH_TX
 
     virtual void configure_headers();
     ssize_t pass_buff_to_neigh(const iovec *p_iov, size_t sz_iov);
@@ -78,6 +83,7 @@ private:
     const uint32_t m_n_sysvar_user_huge_page_size;
     uint64_t m_user_huge_page_mask;
 
+#ifdef DEFINED_DPCP_PATH_TX
     inline int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
                                 xlio_wr_tx_packet_attr attr, xlio_tis *tis)
     {
@@ -98,6 +104,7 @@ private:
 
         return m_p_ring->send_lwip_buffer(id, p_send_wqe, attr, tis);
     }
+#endif // DEFINED_DPCP_PATH_TX
 };
 
 #endif /* DST_ENTRY_TCP_H */

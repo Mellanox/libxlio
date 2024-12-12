@@ -868,7 +868,6 @@ void mce_sys_var::get_env_params()
 #endif /* DEFINED_UTLS */
     enable_lro = MCE_DEFAULT_LRO;
     handle_fork = MCE_DEFAULT_FORK_SUPPORT;
-    doca_tx = MCE_DEFAULT_DOCA_TX;
     close_on_dup2 = MCE_DEFAULT_CLOSE_ON_DUP2;
     mtu = MCE_DEFAULT_MTU;
 #if defined(DEFINED_NGINX)
@@ -1159,11 +1158,14 @@ void mce_sys_var::get_env_params()
     if ((env_ptr = getenv(SYS_VAR_TX_MAX_INLINE))) {
         tx_max_inline = (uint32_t)atoi(env_ptr);
     }
+
+#ifdef DEFINED_DPCP_PATH_TX
     if (tx_max_inline > MAX_SUPPORTED_IB_INLINE_SIZE) {
         __log_warn("%s  must be smaller or equal to %d [%d]\n", SYS_VAR_TX_MAX_INLINE,
                    MAX_SUPPORTED_IB_INLINE_SIZE, tx_max_inline);
         tx_max_inline = MAX_SUPPORTED_IB_INLINE_SIZE;
     }
+#endif
 
     if ((env_ptr = getenv(SYS_VAR_TX_MC_LOOPBACK))) {
         tx_mc_loopback_default = atoi(env_ptr) ? true : false;
@@ -1651,10 +1653,6 @@ void mce_sys_var::get_env_params()
                        option_size::to_str(MCE_MAX_HUGEPAGE_SIZE));
             hugepage_size = MCE_DEFAULT_HUGEPAGE_SIZE;
         }
-    }
-
-    if ((env_ptr = getenv("XLIO_DOCA_TX"))) {
-        doca_tx = atoi(env_ptr) ? true : false;
     }
 
     if ((env_ptr = getenv(SYS_VAR_FORK))) {

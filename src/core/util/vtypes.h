@@ -39,7 +39,7 @@
 #include <sys/socket.h>
 #include <linux/kernel.h>
 #include <byteswap.h>
-
+#include "config.h"
 #include "utils/types.h"
 #include "utils/bullseye.h"
 
@@ -53,6 +53,14 @@
 
 #ifndef INOUT
 #define INOUT
+#endif
+
+#if defined(DEFINED_DPCP_PATH_RX) && defined(DEFINED_DPCP_PATH_TX)
+#define DEFINED_DPCP_PATH_RX_AND_TX
+#endif
+
+#if defined(DEFINED_DPCP_PATH_RX) || defined(DEFINED_DPCP_PATH_TX)
+#define DEFINED_DPCP_PATH_RX_OR_TX
 #endif
 
 #if !defined(__BYTE_ORDER__) || !defined(__ORDER_LITTLE_ENDIAN__) || !defined(__ORDER_BIG_ENDIAN__)

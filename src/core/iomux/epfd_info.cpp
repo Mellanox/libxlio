@@ -634,7 +634,7 @@ bool epfd_info::ring_request_notification()
     m_ring_map_lock.lock();
 
     for (ring_map_t::iterator iter = m_ring_map.begin(); iter != m_ring_map.end(); iter++) {
-        if (!iter->first->request_notification(CQT_RX)) {
+        if (!iter->first->request_notification_rx()) {
             __log_err("Error RX ring[%p]->request_notification()", iter->first);
             m_ring_map_lock.unlock();
             return false;

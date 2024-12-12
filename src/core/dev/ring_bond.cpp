@@ -68,13 +68,14 @@ ring_bond::ring_bond(int if_index)
     m_recv_rings.clear();
     m_type = p_ndev->get_is_bond();
     m_xmit_hash_policy = p_ndev->get_bond_xmit_hash_policy();
+#ifdef DEFINED_DPCP_PATH_TX
     m_max_inline_data = 0;
     m_max_send_sge = 0;
+    update_cap();
+#endif // DEFINED_DPCP_PATH_TX
 
     print_val();
-
     const slave_data_vector_t &slaves = p_ndev->get_slave_array();
-    update_cap();
     for (size_t i = 0; i < slaves.size(); i++) {
         slave_create(slaves[i]->if_index);
     }
@@ -224,10 +225,10 @@ void ring_bond::restart()
     }
     popup_xmit_rings();
 
-    if (!request_notification(CQT_RX)) {
+    if (!request_notification_rx()) {
         ring_logdbg("Failed arming RX notification");
     }
-    if (!request_notification(CQT_TX)) {
+    if (!request_notification_tx()) {
         ring_logdbg("Failed arming TX notification");
     }
 
@@ -334,65 +335,6 @@ void ring_bond::mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_d
     p_mem_buf_desc->p_desc_owner->mem_buf_desc_return_single_multi_ref(p_mem_buf_desc, ref);
 }
 
-void ring_bond::send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                                 xlio_wr_tx_packet_attr attr)
-{
-    mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)(p_send_wqe->wr_id);
-
-    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-
-    if (is_active_member(p_mem_buf_desc->p_desc_owner, id)) {
-        m_xmit_rings[id]->send_ring_buffer(id, p_send_wqe, attr);
-    } else {
-        ring_logfunc("active ring=%p, silent packet drop (%p), (HA event?)", m_xmit_rings[id],
-                     p_mem_buf_desc);
-        p_mem_buf_desc->p_next_desc = nullptr;
-        if (likely(p_mem_buf_desc->p_desc_owner == m_bond_rings[id])) {
-            m_bond_rings[id]->mem_buf_tx_release(p_mem_buf_desc);
-        } else {
-            mem_buf_tx_release(p_mem_buf_desc);
-        }
-    }
-}
-
-int ring_bond::send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                                xlio_wr_tx_packet_attr attr, xlio_tis *tis)
-{
-    mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)(p_send_wqe->wr_id);
-
-    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-
-    if (is_active_member(p_mem_buf_desc->p_desc_owner, id)) {
-        return m_xmit_rings[id]->send_lwip_buffer(id, p_send_wqe, attr, tis);
-    }
-
-    ring_logfunc("active ring=%p, silent packet drop (%p), (HA event?)", m_xmit_rings[id],
-                 p_mem_buf_desc);
-    p_mem_buf_desc->p_next_desc = nullptr;
-    /* no need to free the buffer here, as for lwip buffers we have 2 ref counts, */
-    /* one for caller, and one for completion. for completion, we ref count in    */
-    /* send_lwip_buffer(). Since we are not going in, the caller will free the    */
-    /* buffer. */
-    return -1;
-}
-
-bool ring_bond::get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe)
-{
-    mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)(p_send_wqe->wr_id);
-
-    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-
-    if (is_active_member(p_mem_buf_desc->p_desc_owner, id)) {
-        return m_xmit_rings[id]->get_hw_dummy_send_support(id, p_send_wqe);
-    } else {
-        if (likely(p_mem_buf_desc->p_desc_owner == m_bond_rings[id])) {
-            return m_bond_rings[id]->get_hw_dummy_send_support(id, p_send_wqe);
-        }
-    }
-
-    return false;
-}
-
 bool ring_bond::poll_and_process_element_rx(void *pv_fd_ready_array /*NULL*/)
 {
     if (m_lock_ring_rx.trylock()) {
@@ -456,11 +398,6 @@ int ring_bond::drain_and_proccess()
     }
 }
 
-int ring_bond::get_num_resources() const
-{
-    return m_bond_rings.size();
-}
-
 void ring_bond::clear_rx_notification()
 {
     std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
@@ -472,22 +409,36 @@ void ring_bond::clear_rx_notification()
     }
 }
 
-bool ring_bond::request_notification(cq_type_t cq_type)
+bool ring_bond::request_notification_rx()
 {
-    lock_mutex_recursive &ring_lock = (CQT_RX == cq_type ? m_lock_ring_rx : m_lock_ring_tx);
+    m_lock_ring_rx.lock();
 
-    ring_lock.lock();
-
-    ring_slave_vector_t *bond_rings = (cq_type == CQT_RX ? &m_recv_rings : &m_xmit_rings);
-    for (uint32_t i = 0; i < (*bond_rings).size(); i++) {
-        if ((*bond_rings)[i]->is_up()) {
-            if (!(*bond_rings)[i]->request_notification(cq_type)) {
+    for (uint32_t i = 0; i < m_recv_rings.size(); i++) {
+        if (m_recv_rings[i]->is_up()) {
+            if (!m_recv_rings[i]->request_notification_rx()) {
                 return false;
             }
         }
     }
 
-    ring_lock.unlock();
+    m_lock_ring_rx.unlock();
+
+    return true;
+}
+
+bool ring_bond::request_notification_tx()
+{
+    m_lock_ring_tx.lock();
+
+    for (uint32_t i = 0; i < m_xmit_rings.size(); i++) {
+        if (m_xmit_rings[i]->is_up()) {
+            if (!m_xmit_rings[i]->request_notification_tx()) {
+                return false;
+            }
+        }
+    }
+
+    m_lock_ring_tx.unlock();
 
     return true;
 }
@@ -542,23 +493,6 @@ bool ring_bond::reclaim_recv_buffers(mem_buf_desc_t *)
 bool ring_bond::reclaim_recv_buffers_no_lock(mem_buf_desc_t *)
 {
     return false;
-}
-
-void ring_bond::update_cap(ring_slave *slave)
-{
-    if (!slave) {
-        m_max_inline_data = (uint32_t)(-1);
-        m_max_send_sge = (uint32_t)(-1);
-        return;
-    }
-
-    m_max_inline_data = (m_max_inline_data == (uint32_t)(-1)
-                             ? slave->get_max_inline_data()
-                             : std::min(m_max_inline_data, slave->get_max_inline_data()));
-
-    m_max_send_sge =
-        (m_max_send_sge == (uint32_t)(-1) ? slave->get_max_send_sge()
-                                          : std::min(m_max_send_sge, slave->get_max_send_sge()));
 }
 
 void ring_bond::devide_buffers_helper(descq_t *rx_reuse, descq_t *buffer_per_ring)
@@ -792,26 +726,9 @@ int ring_bond::modify_ratelimit(struct xlio_rate_limit_t &rate_limit)
     return 0;
 }
 
-uint32_t ring_bond::get_tx_user_lkey(void *addr, size_t length)
-{
-    NOT_IN_USE(addr);
-    NOT_IN_USE(length);
-    return LKEY_ERROR;
-}
-
 ib_ctx_handler *ring_bond::get_ctx(ring_user_id_t id)
 {
     return m_xmit_rings[id]->get_ctx(0);
-}
-
-uint32_t ring_bond::get_max_inline_data()
-{
-    return m_max_inline_data;
-}
-
-uint32_t ring_bond::get_max_send_sge()
-{
-    return m_max_send_sge;
 }
 
 uint32_t ring_bond::get_max_payload_sz()
@@ -829,11 +746,6 @@ bool ring_bond::is_tso()
     return false;
 }
 
-uint32_t ring_bond::get_tx_lkey(ring_user_id_t id)
-{
-    return m_xmit_rings[id]->get_tx_lkey(id);
-}
-
 void ring_bond::slave_create(int if_index)
 {
     ring_slave *cur_slave;
@@ -842,8 +754,9 @@ void ring_bond::slave_create(int if_index)
     if (!cur_slave) {
         ring_logpanic("Error creating bond ring: memory allocation error");
     }
-
+#ifdef DEFINED_DPCP_PATH_TX
     update_cap(cur_slave);
+#endif // DEFINED_DPCP_PATH_TX
     m_bond_rings.push_back(cur_slave);
 
     if (m_bond_rings.size() > MAX_NUM_RING_RESOURCES) {
@@ -856,31 +769,113 @@ void ring_bond::slave_create(int if_index)
     update_rx_channel_fds();
 }
 
-void ring_bond::reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)
+bool ring_bond::tls_tx_supported()
 {
-    m_xmit_rings[id]->reset_inflight_zc_buffers_ctx(id, ctx);
+    return false;
 }
 
-uint32_t ring_bond::send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *buff)
+bool ring_bond::tls_rx_supported()
 {
-    NOT_IN_USE(ptr);
-    NOT_IN_USE(len);
-    NOT_IN_USE(buff);
-    return -1;
+    return false;
 }
-uint32_t ring_bond::send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss, bool is_zerocopy)
-{
-    NOT_IN_USE(h);
-    NOT_IN_USE(p);
-    NOT_IN_USE(mss);
-    NOT_IN_USE(is_zerocopy);
-    return -1;
-}
+
+#ifdef DEFINED_DPCP_PATH_TX
 
 std::unique_ptr<xlio_tis> ring_bond::create_tis(uint32_t flag) const
 {
     NOT_IN_USE(flag);
     return nullptr;
+}
+
+void ring_bond::send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
+                                 xlio_wr_tx_packet_attr attr)
+{
+    mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)(p_send_wqe->wr_id);
+
+    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+
+    if (is_active_member(p_mem_buf_desc->p_desc_owner, id)) {
+        m_xmit_rings[id]->send_ring_buffer(id, p_send_wqe, attr);
+    } else {
+        ring_logfunc("active ring=%p, silent packet drop (%p), (HA event?)", m_xmit_rings[id],
+                     p_mem_buf_desc);
+        p_mem_buf_desc->p_next_desc = nullptr;
+        if (likely(p_mem_buf_desc->p_desc_owner == m_bond_rings[id])) {
+            m_bond_rings[id]->mem_buf_tx_release(p_mem_buf_desc);
+        } else {
+            mem_buf_tx_release(p_mem_buf_desc);
+        }
+    }
+}
+
+int ring_bond::send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
+                                xlio_wr_tx_packet_attr attr, xlio_tis *tis)
+{
+    mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)(p_send_wqe->wr_id);
+
+    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+
+    if (is_active_member(p_mem_buf_desc->p_desc_owner, id)) {
+        return m_xmit_rings[id]->send_lwip_buffer(id, p_send_wqe, attr, tis);
+    }
+
+    ring_logfunc("active ring=%p, silent packet drop (%p), (HA event?)", m_xmit_rings[id],
+                 p_mem_buf_desc);
+    p_mem_buf_desc->p_next_desc = nullptr;
+    /* no need to free the buffer here, as for lwip buffers we have 2 ref counts, */
+    /* one for caller, and one for completion. for completion, we ref count in    */
+    /* send_lwip_buffer(). Since we are not going in, the caller will free the    */
+    /* buffer. */
+    return -1;
+}
+
+bool ring_bond::get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe)
+{
+    mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)(p_send_wqe->wr_id);
+
+    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
+
+    if (is_active_member(p_mem_buf_desc->p_desc_owner, id)) {
+        return m_xmit_rings[id]->get_hw_dummy_send_support(id, p_send_wqe);
+    } else {
+        if (likely(p_mem_buf_desc->p_desc_owner == m_bond_rings[id])) {
+            return m_bond_rings[id]->get_hw_dummy_send_support(id, p_send_wqe);
+        }
+    }
+
+    return false;
+}
+
+uint32_t ring_bond::get_max_inline_data()
+{
+    return m_max_inline_data;
+}
+
+uint32_t ring_bond::get_max_send_sge()
+{
+    return m_max_send_sge;
+}
+
+void ring_bond::update_cap(ring_slave *slave)
+{
+    if (!slave) {
+        m_max_inline_data = (uint32_t)(-1);
+        m_max_send_sge = (uint32_t)(-1);
+        return;
+    }
+
+    m_max_inline_data = (m_max_inline_data == (uint32_t)(-1)
+                             ? slave->get_max_inline_data()
+                             : std::min(m_max_inline_data, slave->get_max_inline_data()));
+
+    m_max_send_sge =
+        (m_max_send_sge == (uint32_t)(-1) ? slave->get_max_send_sge()
+                                          : std::min(m_max_send_sge, slave->get_max_send_sge()));
+}
+
+void ring_bond::reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)
+{
+    m_xmit_rings[id]->reset_inflight_zc_buffers_ctx(id, ctx);
 }
 
 void ring_bond::post_nop_fence()
@@ -896,7 +891,6 @@ void ring_bond::post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t 
     NOT_IN_USE(first);
 }
 
-// TODO Add id argument for bonding
 bool ring_bond::credits_get(unsigned credits)
 {
     NOT_IN_USE(credits);
@@ -908,17 +902,19 @@ void ring_bond::credits_return(unsigned credits)
     NOT_IN_USE(credits);
 }
 
+uint32_t ring_bond::get_tx_user_lkey(void *addr, size_t length)
+{
+    NOT_IN_USE(addr);
+    NOT_IN_USE(length);
+    return LKEY_ERROR;
+}
+
+uint32_t ring_bond::get_tx_lkey(ring_user_id_t id)
+{
+    return m_xmit_rings[id]->get_tx_lkey(id);
+}
+
 #ifdef DEFINED_UTLS
-bool ring_bond::tls_tx_supported()
-{
-    return false;
-}
-
-bool ring_bond::tls_rx_supported()
-{
-    return false;
-}
-
 xlio_tis *ring_bond::tls_context_setup_tx(const xlio_tls_info *info)
 {
     NOT_IN_USE(info);
@@ -946,8 +942,26 @@ void ring_bond::tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, ui
     NOT_IN_USE(lkey);
     NOT_IN_USE(first);
 }
+#endif // DEFINED_UTLS
+#else // DEFINED_DPCP_PATH_TX
+uint32_t ring_bond::send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *buff)
+{
+    NOT_IN_USE(ptr);
+    NOT_IN_USE(len);
+    NOT_IN_USE(buff);
+    return -1;
+}
+uint32_t ring_bond::send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss, bool is_zerocopy)
+{
+    NOT_IN_USE(h);
+    NOT_IN_USE(p);
+    NOT_IN_USE(mss);
+    NOT_IN_USE(is_zerocopy);
+    return -1;
+}
+#endif // DEFINED_DPCP_PATH_TX
 
-#ifdef DEFINED_DPCP_PATH_RX
+#if defined(DEFINED_DPCP_PATH_RX_AND_TX) && defined(DEFINED_UTLS)
 xlio_tir *ring_bond::tls_create_tir(bool cached)
 {
     NOT_IN_USE(cached);
@@ -991,5 +1005,4 @@ void ring_bond::tls_release_tir(xlio_tir *tir)
 {
     NOT_IN_USE(tir);
 }
-#endif // DEFINED_DPCP_PATH_RX
-#endif /* DEFINED_UTLS */
+#endif // DEFINED_DPCP_PATH_RX_AND_TX && DEFINED_UTLS

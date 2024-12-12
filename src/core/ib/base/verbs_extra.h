@@ -189,9 +189,8 @@ typedef struct ibv_values_ex xlio_ts_values;
 #define xlio_ibv_wr_opcode          ibv_wr_opcode
 #define xlio_send_wr_opcode(wr)     (wr).opcode
 
-#define XLIO_IBV_WR_TSO                (xlio_ibv_wr_opcode) IBV_WR_TSO
-#define xlio_check_dev_attr_tso(_attr) 1
-#define xlio_get_tso_caps(_attr)       (((xlio_ibv_device_attr_ex *)(_attr))->tso_caps)
+#define XLIO_IBV_WR_TSO          (xlio_ibv_wr_opcode) IBV_WR_TSO
+#define xlio_get_tso_caps(_attr) (((xlio_ibv_device_attr_ex *)(_attr))->tso_caps)
 #define xlio_ibv_qp_init_attr_tso(_attr, _max_tso_header)                                          \
     do {                                                                                           \
         _attr.comp_mask |= IBV_QP_INIT_ATTR_MAX_TSO_HEADER;                                        \

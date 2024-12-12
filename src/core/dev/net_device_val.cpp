@@ -1164,8 +1164,8 @@ bool net_device_val::global_ring_request_notification()
 
     for (rings_hash_map_t::iterator ring_iter = m_h_ring_map.begin();
          ring_iter != m_h_ring_map.end(); ring_iter++) {
-        if (!THE_RING->request_notification(CQT_RX)) {
-            nd_logerr("Error RX ring[%p]->request_notification()", THE_RING);
+        if (!THE_RING->request_notification_rx()) {
+            nd_logerr("Error RX ring[%p]->request_notification_rx()", THE_RING);
             return false;
         }
     }
