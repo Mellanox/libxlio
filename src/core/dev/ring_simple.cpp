@@ -257,8 +257,7 @@ void ring_simple::create_resources()
 
     /* Detect TSO capabilities */
     memset(&m_tso, 0, sizeof(m_tso));
-    if ((safe_mce_sys().enable_tso == option_3::ON) ||
-        ((safe_mce_sys().enable_tso == option_3::AUTO) && (1 == validate_tso(get_if_index())))) {
+    if ((safe_mce_sys().enable_tso == option_3::ON)) {
         if (xlio_check_dev_attr_tso(m_p_ib_ctx->get_ibv_device_attr())) {
             const xlio_ibv_tso_caps *caps =
                 &xlio_get_tso_caps(m_p_ib_ctx->get_ibv_device_attr_ex());
@@ -280,8 +279,7 @@ void ring_simple::create_resources()
 
     /* Detect LRO capabilities */
     memset(&m_lro, 0, sizeof(m_lro));
-    if ((safe_mce_sys().enable_lro == option_3::ON) ||
-        ((safe_mce_sys().enable_lro == option_3::AUTO) && (1 == validate_lro(get_if_index())))) {
+    if (safe_mce_sys().enable_lro == option_3::ON) {
         dpcp::adapter_hca_capabilities caps;
 
         if (m_p_ib_ctx->get_dpcp_adapter() &&

@@ -870,7 +870,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_MIN_CQ_POLL_BATCH               (1)
 #define MCE_MAX_CQ_POLL_BATCH               (32768)
 #define MCE_DEFAULT_SOCKETXTREME            (false)
-#define MCE_DEFAULT_TSO                     (option_3::AUTO)
+#define MCE_DEFAULT_TSO                     (option_3::ON)
 #define MCE_DEFAULT_MAX_TSO_SIZE            (256 * 1024)
 #ifdef DEFINED_UTLS
 #define MCE_DEFAULT_UTLS_RX                        (false)
@@ -879,7 +879,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_UTLS_LOW_WMARK_DEK_CACHE_SIZE  (512)
 #endif /* DEFINED_UTLS */
 
-#define MCE_DEFAULT_LRO                            (option_3::AUTO)
+#define MCE_DEFAULT_LRO                            (option_3::ON)
 #define MCE_DEFAULT_DEFERRED_CLOSE                 (false)
 #define MCE_DEFAULT_TCP_ABORT_ON_CLOSE             (false)
 #define MCE_DEFAULT_RX_POLL_ON_TX_TCP              (false)

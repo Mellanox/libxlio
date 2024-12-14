@@ -486,11 +486,8 @@ prototype TCP and IP headers of the incoming send buffer to carve out segments
 of required size. Copying the prototype header and options, then calculating
 the sequence number and checksum fields creates TCP segment headers.
 Expected benefits: Throughput increase and CPU unload.
-Default value: auto
+Default value: on
 
-auto
-    Depends on ethtool setting and adapter ability.
-    See ethtool -k <eth0> | grep tcp-segmentation-offload
 on
     Enabled in case adapter supports it
 off
@@ -513,11 +510,9 @@ high-bandwidth network connections by reducing central processing unit (CPU)
 overhead. It works by aggregating multiple incoming packets from a single stream
 into a larger buffer before they are passed higher up the networking stack,
 thus reducing the number of packets that must be processed.
-Default value: auto
+Default value: on
 
-auto
-    Depends on ethtool setting and adapter ability.
-    See ethtool -k <eth0> | grep large-receive-offload
+
 on
     Enabled in case adapter supports it
 off
