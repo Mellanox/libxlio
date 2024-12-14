@@ -877,6 +877,90 @@ void print_xlio_global_settings()
                       SYS_VAR_MULTILOCK,
                       (safe_mce_sys().multilock == MULTILOCK_SPIN ? "Spin " : "Mutex"));
 
+    //Sysctl parameters
+    VLOG_PARAM_NUMBER("TCP max syn backlog", safe_mce_sys().sysctl_reader.tcp_max_syn_backlog,
+                      MCE_DEFAULT_TCP_MAX_SYN_BACKLOG, SYS_VAR_TCP_MAX_SYN_BACKLOG);
+
+    VLOG_PARAM_NUMBER("Listen max connections", safe_mce_sys().sysctl_reader.listen_maxconn,
+                      MCE_DEFAULT_LISTEN_MAXCONN, SYS_VAR_LISTEN_MAXCONN);
+
+    VLOG_PARAM_NUMBER("TCP window scaling", safe_mce_sys().sysctl_reader.tcp_window_scaling,
+                      MCE_DEFAULT_TCP_WINDOW_SCALING, SYS_VAR_TCP_WINDOW_SCALING);
+
+    VLOG_PARAM_NUMBER("TCP write memory (min)", safe_mce_sys().sysctl_reader.tcp_wmem.min_value,
+                      MCE_DEFAULT_TCP_WMEM_MIN, SYS_VAR_TCP_WMEM_MIN);
+
+    VLOG_PARAM_NUMBER("TCP write memory (default)",
+                      safe_mce_sys().sysctl_reader.tcp_wmem.default_value,
+                      MCE_DEFAULT_TCP_WMEM_DEFAULT, SYS_VAR_TCP_WMEM_DEFAULT);
+
+    VLOG_PARAM_NUMBER("TCP write memory (max)", safe_mce_sys().sysctl_reader.tcp_wmem.max_value,
+                      MCE_DEFAULT_TCP_WMEM_MAX, SYS_VAR_TCP_WMEM_MAX);
+
+    VLOG_PARAM_NUMBER("TCP read memory (min)", safe_mce_sys().sysctl_reader.tcp_rmem.min_value,
+                      MCE_DEFAULT_TCP_RMEM_MIN, SYS_VAR_TCP_RMEM_MIN);
+
+    VLOG_PARAM_NUMBER("TCP read memory (default)",
+                      safe_mce_sys().sysctl_reader.tcp_rmem.default_value,
+                      MCE_DEFAULT_TCP_RMEM_DEFAULT, SYS_VAR_TCP_RMEM_DEFAULT);
+
+    VLOG_PARAM_NUMBER("TCP read memory (max)", safe_mce_sys().sysctl_reader.tcp_rmem.max_value,
+                      MCE_DEFAULT_TCP_RMEM_MAX, SYS_VAR_TCP_RMEM_MAX);
+
+    VLOG_PARAM_NUMBER("TCP keepalive time",
+                      safe_mce_sys().sysctl_reader.tcp_keepalive_infos.idle_secs,
+                      MCE_DEFAULT_TCP_KEEPALIVE_TIME, SYS_VAR_TCP_KEEPALIVE_IDLE);
+
+    VLOG_PARAM_NUMBER("TCP keepalive interval",
+                      safe_mce_sys().sysctl_reader.tcp_keepalive_infos.interval_secs,
+                      MCE_DEFAULT_TCP_KEEPALIVE_INTERVAL, SYS_VAR_TCP_KEEPALIVE_INTERVAL);
+
+    VLOG_PARAM_NUMBER("TCP keepalive probes",
+                      safe_mce_sys().sysctl_reader.tcp_keepalive_infos.num_probes,
+                      MCE_DEFAULT_TCP_KEEPALIVE_PROBES, SYS_VAR_TCP_KEEPALIVE_PROBES);
+
+    VLOG_PARAM_NUMBER("Net core receive memory max", safe_mce_sys().sysctl_reader.net_core_rmem_max,
+                      MCE_DEFAULT_NET_CORE_RMEM_MAX, SYS_VAR_NET_CORE_RMEM_MAX);
+
+    VLOG_PARAM_NUMBER("Net core write memory max", safe_mce_sys().sysctl_reader.net_core_wmem_max,
+                      MCE_DEFAULT_NET_CORE_WMEM_MAX, SYS_VAR_NET_CORE_WMEM_MAX);
+
+    VLOG_PARAM_NUMBER("Net IPv4 TCP timestamps",
+                      safe_mce_sys().sysctl_reader.net_ipv4_tcp_timestamps,
+                      MCE_DEFAULT_NET_IPV4_TCP_TIMESTAMPS, SYS_VAR_NET_IPV4_TCP_TIMESTAMPS);
+
+    // behavior params
+    // VLOG_PARAM_NUMBER("Net IPv4 TTL", safe_mce_sys().sysctl_reader.net_ipv4_ttl,
+    //                   MCE_DEFAULT_NET_IPV4_TTL, SYS_VAR_NET_IPV4_TTL);
+
+    // VLOG_PARAM_NUMBER("IGMP max membership", safe_mce_sys().sysctl_reader.igmp_max_membership,
+    //                   MCE_DEFAULT_IGMP_MAX_MEMBERSHIP, SYS_VAR_IGMP_MAX_MEMBERSHIP);
+
+    // VLOG_PARAM_NUMBER("IGMP max source membership",
+    //                   safe_mce_sys().sysctl_reader.igmp_max_source_membership,
+    //                   MCE_DEFAULT_IGMP_MAX_SOURCE_MEMBERSHIP,
+    //                   SYS_VAR_IGMP_MAX_SOURCE_MEMBERSHIP);
+
+    // VLOG_PARAM_NUMBER("MLD max source membership",
+    //                   safe_mce_sys().sysctl_reader.mld_max_source_membership,
+    //                   MCE_DEFAULT_MLD_MAX_SOURCE_MEMBERSHIP, SYS_VAR_MLD_MAX_SOURCE_MEMBERSHIP);
+
+    // VLOG_PARAM_NUMBER("Net IPv6 hop limit", safe_mce_sys().sysctl_reader.net_ipv6_hop_limit,
+    //                   MCE_DEFAULT_NET_IPV6_HOP_LIMIT, SYS_VAR_NET_IPV6_HOP_LIMIT);
+
+    // VLOG_PARAM_NUMBER("IPv6 bindv6only", safe_mce_sys().sysctl_reader.ipv6_bindv6only,
+    //                   MCE_DEFAULT_IPV6_BINDV6ONLY, SYS_VAR_IPV6_BINDV6ONLY);
+
+    // VLOG_PARAM_NUMBER(
+    //     "IPv6 conf all optimistic dad",
+    //     safe_mce_sys().sysctl_reader.ipv6_conf_all_optimistic_dad,
+    //     MCE_DEFAULT_IPV6_CONF_ALL_OPTIMISTIC_DAD, SYS_VAR_IPV6_CONF_ALL_OPTIMISTIC_DAD);
+
+    // VLOG_PARAM_NUMBER(
+    //     "IPv6 conf all use optimistic",
+    //     safe_mce_sys().sysctl_reader.ipv6_conf_all_use_optimistic,
+    //     MCE_DEFAULT_IPV6_CONF_ALL_USE_OPTIMISTIC, SYS_VAR_IPV6_CONF_ALL_USE_OPTIMISTIC);
+
     vlog_printf(VLOG_INFO,
                 "---------------------------------------------------------------------------\n");
 }

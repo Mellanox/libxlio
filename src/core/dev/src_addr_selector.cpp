@@ -44,8 +44,8 @@
 bool ipv6_source_addr_score::use_optimistic_addr() const
 {
     sysctl_reader_t &ctl = sysctl_reader_t::instance();
-    return (ctl.get_ipv6_conf_all_optimistic_dad() || m_dev->ipv6_optimistic_dad()) &&
-        (ctl.get_ipv6_conf_all_use_optimistic() || m_dev->ipv6_use_optimistic());
+    return (ctl.ipv6_conf_all_optimistic_dad || m_dev->ipv6_optimistic_dad()) &&
+        (ctl.ipv6_conf_all_use_optimistic || m_dev->ipv6_use_optimistic());
 }
 
 int ipv6_source_addr_score::get_score(const ipv6_source_addr_score_dst &score_dst, int rule)

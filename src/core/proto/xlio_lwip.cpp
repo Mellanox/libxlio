@@ -69,7 +69,7 @@ u32_t xlio_lwip::sys_now(void)
 u8_t xlio_lwip::read_tcp_timestamp_option(void)
 {
     u8_t res = (safe_mce_sys().tcp_ts_opt == TCP_TS_OPTION_FOLLOW_OS)
-        ? safe_mce_sys().sysctl_reader.get_net_ipv4_tcp_timestamps()
+        ? safe_mce_sys().sysctl_reader.net_ipv4_tcp_timestamps
         : (safe_mce_sys().tcp_ts_opt == TCP_TS_OPTION_ENABLE ? 1 : 0);
     if (res) {
 #if LWIP_TCP_TIMESTAMPS
@@ -108,10 +108,10 @@ xlio_lwip::xlio_lwip()
 
     enable_push_flag = !!safe_mce_sys().tcp_push_flag;
     enable_ts_option = read_tcp_timestamp_option();
-    int is_window_scaling_enabled = safe_mce_sys().sysctl_reader.get_tcp_window_scaling();
+    int is_window_scaling_enabled = safe_mce_sys().sysctl_reader.tcp_window_scaling;
     if (is_window_scaling_enabled) {
-        int rmem_max_value = safe_mce_sys().sysctl_reader.get_tcp_rmem()->max_value;
-        int core_rmem_max = safe_mce_sys().sysctl_reader.get_net_core_rmem_max();
+        int rmem_max_value = safe_mce_sys().sysctl_reader.tcp_rmem.max_value;
+        int core_rmem_max = safe_mce_sys().sysctl_reader.net_core_rmem_max;
         enable_wnd_scale = 1;
         rcv_wnd_scale = get_window_scaling_factor(rmem_max_value, core_rmem_max);
     } else {

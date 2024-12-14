@@ -330,7 +330,7 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
 
     tcp_pcb_init(&m_pcb, TCP_PRIO_NORMAL, this);
 
-    const tcp_keepalive_info keepalive_info = safe_mce_sys().sysctl_reader.get_tcp_keepalive_info();
+    const tcp_keepalive_info keepalive_info = safe_mce_sys().sysctl_reader.tcp_keepalive_infos;
     tcp_set_keepalive(&m_pcb, static_cast<u32_t>(1000U * keepalive_info.idle_secs),
                       static_cast<u32_t>(1000U * keepalive_info.interval_secs),
                       static_cast<u32_t>(keepalive_info.num_probes));
@@ -350,7 +350,7 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     m_iomux_ready_fd_array = nullptr;
 
     /* RCVBUF accounting */
-    m_rcvbuff_max = safe_mce_sys().sysctl_reader.get_tcp_rmem()->default_value;
+    m_rcvbuff_max = safe_mce_sys().sysctl_reader.tcp_rmem.default_value;
 
     m_rcvbuff_current = 0;
     m_rcvbuff_non_tcp_recved = 0;
@@ -1716,7 +1716,7 @@ void sockinfo_tcp::process_my_ctl_packets()
         mem_buf_desc_t *desc = temp_list.get_and_pop_front();
 
         static const unsigned int MAX_SYN_RCVD = tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)
-            ? safe_mce_sys().sysctl_reader.get_tcp_max_syn_backlog()
+            ? safe_mce_sys().sysctl_reader.tcp_max_syn_backlog
             : 0;
         // NOTE: currently, in case tcp_ctl_thread is disabled, only established backlog is
         // supported (no syn-rcvd backlog)
@@ -2536,7 +2536,7 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
             /// distinguish between backlog of established sockets vs. backlog of syn-rcvd
             static const unsigned int MAX_SYN_RCVD =
                 tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)
-                ? safe_mce_sys().sysctl_reader.get_tcp_max_syn_backlog()
+                ? safe_mce_sys().sysctl_reader.tcp_max_syn_backlog
                 : 0;
             // NOTE: currently, in case tcp_ctl_thread is disabled, only established backlog is
             // supported (no syn-rcvd backlog)
@@ -2974,7 +2974,7 @@ int sockinfo_tcp::listen(int backlog)
      * Note: backlog behavior depends on safe_mce_sys().tcp_ctl_thread status.
      */
     if (backlog < 0) {
-        backlog = safe_mce_sys().sysctl_reader.get_listen_maxconn();
+        backlog = safe_mce_sys().sysctl_reader.listen_maxconn;
         si_tcp_logdbg("changing listen backlog=%d to the maximum=%d", orig_backlog, backlog);
     } else if (backlog == 0) {
         backlog = 1;
@@ -2986,8 +2986,8 @@ int sockinfo_tcp::listen(int backlog)
         /* If an application calls listen() with a backlog value larger than net.core.somaxconn,
          * then the backlog for that listener will be silently truncated to the somaxconn value.
          */
-        if (backlog > safe_mce_sys().sysctl_reader.get_listen_maxconn()) {
-            backlog = safe_mce_sys().sysctl_reader.get_listen_maxconn();
+        if (backlog > safe_mce_sys().sysctl_reader.listen_maxconn) {
+            backlog = safe_mce_sys().sysctl_reader.listen_maxconn;
             si_tcp_logdbg("truncating listen backlog=%d to the maximun=%d", orig_backlog, backlog);
         }
     }
@@ -4478,7 +4478,7 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             si_tcp_logdbg("(SO_KEEPALIVE) val: %d", val);
             break;
         case SO_RCVBUF:
-            val = std::min(*(int *)__optval, safe_mce_sys().sysctl_reader.get_net_core_rmem_max());
+            val = std::min(*(int *)__optval, safe_mce_sys().sysctl_reader.net_core_rmem_max);
             lock_tcp_con();
             // OS allocates double the size of memory requested by the application - not sure we
             // need it.
@@ -4489,7 +4489,7 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             si_tcp_logdbg("setsockopt SO_RCVBUF: %d", m_rcvbuff_max);
             break;
         case SO_SNDBUF:
-            val = std::min(*(int *)__optval, safe_mce_sys().sysctl_reader.get_net_core_wmem_max());
+            val = std::min(*(int *)__optval, safe_mce_sys().sysctl_reader.net_core_wmem_max);
             lock_tcp_con();
             // OS allocates double the size of memory requested by the application - not sure we
             // need it.

@@ -902,6 +902,33 @@ void mce_sys_var::get_env_params()
     skip_poll_in_rx = MCE_DEFAULT_SKIP_POLL_IN_RX;
     multilock = MCE_DEFAULT_MULTILOCK;
 
+    // Sysctl configurations
+    sysctl_reader.tcp_max_syn_backlog = MCE_DEFAULT_TCP_MAX_SYN_BACKLOG;
+    sysctl_reader.listen_maxconn = MCE_DEFAULT_LISTEN_MAXCONN; //SOMAXCONN CHECK This in socket.h
+    sysctl_reader.tcp_wmem.min_value = MCE_DEFAULT_TCP_WMEM_MIN;
+    sysctl_reader.tcp_wmem.default_value = MCE_DEFAULT_TCP_WMEM_DEFAULT;
+    sysctl_reader.tcp_wmem.max_value = MCE_DEFAULT_TCP_WMEM_MAX;
+    sysctl_reader.tcp_rmem.min_value = MCE_DEFAULT_TCP_RMEM_MIN;
+    sysctl_reader.tcp_rmem.default_value = MCE_DEFAULT_TCP_RMEM_DEFAULT;
+    sysctl_reader.tcp_rmem.max_value = MCE_DEFAULT_TCP_RMEM_MAX;
+    sysctl_reader.tcp_keepalive_infos.idle_secs = MCE_DEFAULT_TCP_KEEPALIVE_TIME;
+    sysctl_reader.tcp_keepalive_infos.interval_secs = MCE_DEFAULT_TCP_KEEPALIVE_INTERVAL;
+    sysctl_reader.tcp_keepalive_infos.num_probes = MCE_DEFAULT_TCP_KEEPALIVE_PROBES;
+    sysctl_reader.tcp_window_scaling = MCE_DEFAULT_TCP_WINDOW_SCALING;
+    sysctl_reader.net_core_rmem_max = MCE_DEFAULT_NET_CORE_RMEM_MAX;
+    sysctl_reader.net_core_wmem_max = MCE_DEFAULT_NET_CORE_WMEM_MAX;
+    sysctl_reader.net_ipv4_tcp_timestamps = MCE_DEFAULT_NET_IPV4_TCP_TIMESTAMPS;
+
+    // behavior params
+    // sysctl_reader.net_ipv4_ttl = MCE_DEFAULT_NET_IPV4_TTL;
+    // sysctl_reader.igmp_max_membership = MCE_DEFAULT_IGMP_MAX_MEMBERSHIP;
+    // sysctl_reader.igmp_max_source_membership = MCE_DEFAULT_IGMP_MAX_SOURCE_MEMBERSHIP;
+    // sysctl_reader.mld_max_source_membership = MCE_DEFAULT_MLD_MAX_SOURCE_MEMBERSHIP;
+    // sysctl_reader.net_ipv6_hop_limit = MCE_DEFAULT_NET_IPV6_HOP_LIMIT;
+    // sysctl_reader.ipv6_bindv6only = MCE_DEFAULT_IPV6_BINDV6ONLY;
+    // sysctl_reader.ipv6_conf_all_optimistic_dad = MCE_DEFAULT_IPV6_CONF_ALL_OPTIMISTIC_DAD;
+    // sysctl_reader.ipv6_conf_all_use_optimistic = MCE_DEFAULT_IPV6_CONF_ALL_USE_OPTIMISTIC;
+
     read_hv();
 
     /* Configure enable_socketxtreme as first because
@@ -1823,6 +1850,93 @@ void mce_sys_var::get_env_params()
         }
         multilock = (multilock_t)temp;
     }
+
+    /* Sysctl params*/
+    if ((env_ptr = getenv(SYS_VAR_TCP_MAX_SYN_BACKLOG))) {
+        sysctl_reader.tcp_max_syn_backlog = atoi(env_ptr);
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_LISTEN_MAXCONN))) {
+        sysctl_reader.listen_maxconn = atoi(env_ptr);
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_TCP_WMEM_MIN))) {
+        sysctl_reader.tcp_wmem.min_value = atoi(env_ptr);
+    }
+    if ((env_ptr = getenv(SYS_VAR_TCP_WMEM_DEFAULT))) {
+        sysctl_reader.tcp_wmem.default_value = atoi(env_ptr);
+    }
+    if ((env_ptr = getenv(SYS_VAR_TCP_WMEM_MAX))) {
+        sysctl_reader.tcp_wmem.max_value = atoi(env_ptr);
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_TCP_RMEM_MIN))) {
+        sysctl_reader.tcp_rmem.min_value = atoi(env_ptr);
+    }
+    if ((env_ptr = getenv(SYS_VAR_TCP_RMEM_DEFAULT))) {
+        sysctl_reader.tcp_rmem.default_value = atoi(env_ptr);
+    }
+    if ((env_ptr = getenv(SYS_VAR_TCP_RMEM_MAX))) {
+        sysctl_reader.tcp_rmem.max_value = atoi(env_ptr);
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_TCP_KEEPALIVE_IDLE))) {
+        sysctl_reader.tcp_keepalive_infos.idle_secs = atoi(env_ptr);
+    }
+    if ((env_ptr = getenv(SYS_VAR_TCP_KEEPALIVE_INTERVAL))) {
+        sysctl_reader.tcp_keepalive_infos.interval_secs = atoi(env_ptr);
+    }
+    if ((env_ptr = getenv(SYS_VAR_TCP_KEEPALIVE_PROBES))) {
+        sysctl_reader.tcp_keepalive_infos.num_probes = atoi(env_ptr);
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_TCP_WINDOW_SCALING))) {
+        sysctl_reader.tcp_window_scaling = atoi(env_ptr);
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_NET_CORE_RMEM_MAX))) {
+        sysctl_reader.net_core_rmem_max = atoi(env_ptr);
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_NET_CORE_WMEM_MAX))) {
+        sysctl_reader.net_core_wmem_max = atoi(env_ptr);
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_NET_IPV4_TCP_TIMESTAMPS))) {
+        sysctl_reader.net_ipv4_tcp_timestamps = atoi(env_ptr);
+    }
+
+    // if ((env_ptr = getenv(SYS_VAR_NET_IPV4_TTL))) {
+    //     sysctl_reader.net_ipv4_ttl = atoi(env_ptr);
+    // }
+
+    // if ((env_ptr = getenv(SYS_VAR_IGMP_MAX_MEMBERSHIP))) {
+    //     sysctl_reader.igmp_max_membership = atoi(env_ptr);
+    // }
+
+    // if ((env_ptr = getenv(SYS_VAR_IGMP_MAX_SOURCE_MEMBERSHIP))) {
+    //     sysctl_reader.igmp_max_source_membership = atoi(env_ptr);
+    // }
+
+    // if ((env_ptr = getenv(SYS_VAR_MLD_MAX_SOURCE_MEMBERSHIP))) {
+    //     sysctl_reader.mld_max_source_membership = atoi(env_ptr);
+    // }
+
+    // if ((env_ptr = getenv(SYS_VAR_NET_IPV6_HOP_LIMIT))) {
+    //     sysctl_reader.net_ipv6_hop_limit = atoi(env_ptr);
+    // }
+
+    // if ((env_ptr = getenv(SYS_VAR_IPV6_BINDV6ONLY))) {
+    //     sysctl_reader.ipv6_bindv6only = atoi(env_ptr);
+    // }
+
+    // if ((env_ptr = getenv(SYS_VAR_IPV6_CONF_ALL_OPTIMISTIC_DAD))) {
+    //     sysctl_reader.ipv6_conf_all_optimistic_dad = atoi(env_ptr);
+    // }
+
+    // if ((env_ptr = getenv(SYS_VAR_IPV6_CONF_ALL_USE_OPTIMISTIC))) {
+    //     sysctl_reader.ipv6_conf_all_use_optimistic = atoi(env_ptr);
+    // }
 }
 
 void set_env_params()
