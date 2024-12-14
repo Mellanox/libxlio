@@ -2675,7 +2675,7 @@ int sockinfo_udp::mc_change_membership_start_helper_ip4(const ip_address &mc_grp
     case IP_ADD_MEMBERSHIP:
         if (m_mc_memberships_map.find(mc_grp) == m_mc_memberships_map.end() &&
             m_mc_memberships_map.size() >=
-                (size_t)safe_mce_sys().sysctl_reader.get_igmp_max_membership()) {
+                (size_t)safe_mce_sys().sysctl_reader.igmp_max_membership) {
             errno = ENOBUFS;
             return -1;
         }
@@ -2684,13 +2684,13 @@ int sockinfo_udp::mc_change_membership_start_helper_ip4(const ip_address &mc_grp
         if (m_mc_memberships_map.find(mc_grp) != m_mc_memberships_map.end()) { // This group is
                                                                                // exist
             if (m_mc_memberships_map[mc_grp].size() >=
-                (size_t)safe_mce_sys().sysctl_reader.get_igmp_max_source_membership()) {
+                (size_t)safe_mce_sys().sysctl_reader.igmp_max_source_membership) {
                 errno = ENOBUFS;
                 return -1;
             }
         } else { // This group is not exist
             if (m_mc_memberships_map.size() >=
-                (size_t)safe_mce_sys().sysctl_reader.get_igmp_max_membership()) {
+                (size_t)safe_mce_sys().sysctl_reader.igmp_max_membership) {
                 errno = ENOBUFS;
                 return -1;
             }
@@ -2917,7 +2917,7 @@ int sockinfo_udp::mc_change_membership_start_helper_ip6(const mc_pending_pram *p
     case MCAST_JOIN_SOURCE_GROUP: {
         if (group_exists) {
             if (m_mc_memberships_map[mc_grp].size() >=
-                (size_t)safe_mce_sys().sysctl_reader.get_mld_max_source_membership()) {
+                (size_t)safe_mce_sys().sysctl_reader.mld_max_source_membership) {
                 errno = ENOBUFS;
                 return -1;
             }
@@ -2936,8 +2936,8 @@ int sockinfo_udp::mc_change_membership_start_helper_ip6(const mc_pending_pram *p
         open MCAST_BLOCK_SOURCE and MCAST_UNBLOCK_SOURCE
         requires a fix in drop packet logic - see bug #3202713 above
         size_t max_cap = is_ipv6 ?
-        (size_t)safe_mce_sys().sysctl_reader.get_mld_max_source_membership() :
-        (size_t)safe_mce_sys().sysctl_reader.get_igmp_max_source_membership(); if (group_exists
+        (size_t)safe_mce_sys().sysctl_reader.mld_max_source_membership :
+        (size_t)safe_mce_sys().sysctl_reader.igmp_max_source_membership; if (group_exists
         && !src_exists) {
             if (m_mc_memberships_map[mc_grp].size() >= max_cap) {
                 errno = ENOBUFS;

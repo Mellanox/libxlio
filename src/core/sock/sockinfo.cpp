@@ -104,16 +104,15 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     , m_family(domain)
     , m_fd(fd)
     , m_rx_num_buffs_reuse(safe_mce_sys().rx_bufs_batch)
-    , m_is_ipv6only(safe_mce_sys().sysctl_reader.get_ipv6_bindv6only())
+    , m_is_ipv6only(safe_mce_sys().sysctl_reader.ipv6_bindv6only)
     , m_lock_rcv(MULTILOCK_RECURSIVE, MODULE_NAME "::m_lock_rcv")
     , m_lock_snd(MODULE_NAME "::m_lock_snd")
     , m_so_bindtodevice_ip(ip_address::any_addr(), domain)
     , m_rx_ring_map_lock(MODULE_NAME "::m_rx_ring_map_lock")
     , m_ring_alloc_log_rx(safe_mce_sys().ring_allocation_logic_rx, use_ring_locks)
     , m_ring_alloc_log_tx(safe_mce_sys().ring_allocation_logic_tx, use_ring_locks)
-    , m_n_uc_ttl_hop_lim(m_family == AF_INET
-                             ? safe_mce_sys().sysctl_reader.get_net_ipv4_ttl()
-                             : safe_mce_sys().sysctl_reader.get_net_ipv6_hop_limit())
+    , m_n_uc_ttl_hop_lim(m_family == AF_INET ? safe_mce_sys().sysctl_reader.net_ipv4_ttl
+                                             : safe_mce_sys().sysctl_reader.net_ipv6_hop_limit)
 {
     m_rx_epfd = SYSCALL(epoll_create, 128);
     if (unlikely(m_rx_epfd == -1)) {
@@ -601,9 +600,8 @@ int sockinfo::setsockopt(int __level, int __optname, const void *__optval, sockl
                     ret = SOCKOPT_NO_XLIO_SUPPORT;
                     errno = EINVAL;
                 } else {
-                    m_n_uc_ttl_hop_lim = (val == -1)
-                        ? safe_mce_sys().sysctl_reader.get_net_ipv4_ttl()
-                        : (uint8_t)val;
+                    m_n_uc_ttl_hop_lim =
+                        (val == -1) ? safe_mce_sys().sysctl_reader.net_ipv4_ttl : (uint8_t)val;
                     header_ttl_hop_limit_updater du(m_n_uc_ttl_hop_lim, false);
                     update_header_field(&du);
                     si_logdbg("IPPROTO_IP, optname=IP_TTL (%d)", m_n_uc_ttl_hop_lim);
