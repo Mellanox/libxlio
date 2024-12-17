@@ -75,7 +75,8 @@ public:
     void reset_notification_armed() { m_b_notification_armed = false; }
 
 private:
-    void log_cqe_error(struct xlio_mlx5_cqe *cqe);
+    std::string wqe_to_hexstring(uint16_t wqe_index, uint32_t credits) const;
+    void log_cqe_error(struct xlio_mlx5_cqe *cqe, uint16_t wqe_index, uint32_t credits) const;
     void handle_sq_wqe_prop(unsigned index);
 
     void get_cq_event(int count = 1) { xlio_ib_mlx5_get_cq_event(&m_mlx5_cq, count); };
