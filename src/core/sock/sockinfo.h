@@ -181,7 +181,7 @@ struct epoll_fd_rec {
     void reset()
     {
         this->events = 0;
-        memset(&this->epdata, 0, sizeof(this->epdata));
+        epdata.ptr = nullptr;
         this->offloaded_index = 0;
     }
 };
