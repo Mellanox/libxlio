@@ -214,6 +214,8 @@ int cq_mgr_tx::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
         if (unlikely(cqe->op_own & 0x80) && is_error_opcode(cqe->op_own >> 4)) {
             // m_p_cq_stat->n_tx_cqe_error++; Future counter
             log_cqe_error(cqe);
+
+            m_hqtx_ptr->m_sq_wqe_idx_to_prop[index].buf->m_flags |= mem_buf_desc_t::HAD_CQE_ERROR;
         }
 
         handle_sq_wqe_prop(index);
