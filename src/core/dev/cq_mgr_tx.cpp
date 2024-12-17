@@ -36,6 +36,7 @@
 #include <util/valgrind.h>
 #include <sock/sock-redirect.h>
 #include <sock/sock-app.h>
+#include <iomanip>
 #include "ring_simple.h"
 #include "hw_queue_tx.h"
 
@@ -48,6 +49,8 @@
 #define cq_logdbg     __log_info_dbg
 #define cq_logfunc    __log_info_func
 #define cq_logfuncall __log_info_funcall
+
+#define WQEBB_SIZE 64
 
 atomic_t cq_mgr_tx::m_n_cq_id_counter_tx = ATOMIC_INIT(1);
 
@@ -204,6 +207,26 @@ cq_mgr_tx *cq_mgr_tx::get_cq_mgr_from_cq_event(struct ibv_comp_channel *p_cq_cha
     return p_cq_mgr;
 }
 
+std::string cq_mgr_tx::wqe_to_hexstring(uint16_t index, uint32_t credits) const
+{
+    const auto sq_start = static_cast<const uint8_t *>(m_hqtx_ptr->m_mlx5_qp.sq.buf);
+
+    std::ostringstream oss;
+    // see `calculate_credits` - credits is give or take the amount of WQEBBs per WQE
+    for (uint32_t wqebb_i = 0; wqebb_i < credits; ++wqebb_i) {
+        const uint32_t wqebb_wrapped_index = (index + wqebb_i) & (m_hqtx_ptr->m_tx_num_wr - 1);
+        const auto current_wqebb_begin = sq_start + wqebb_wrapped_index * WQEBB_SIZE;
+
+        for (uint8_t wqebb_inner_i = 0; wqebb_inner_i < WQEBB_SIZE; ++wqebb_inner_i) {
+            const auto current_byte_ptr = current_wqebb_begin + wqebb_inner_i;
+            oss << std::hex << std::setw(2) << std::setfill('0')
+                << static_cast<uint32_t>(*current_byte_ptr);
+        }
+    }
+
+    return oss.str();
+}
+
 int cq_mgr_tx::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
 {
     cq_logfuncall("");
@@ -222,7 +245,7 @@ int cq_mgr_tx::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
         // All error opcodes have the most significant bit set.
         if (unlikely(cqe->op_own & 0x80) && is_error_opcode(cqe->op_own >> 4)) {
             // m_p_cq_stat->n_tx_cqe_error++; Future counter
-            log_cqe_error(cqe);
+            log_cqe_error(cqe, index, m_hqtx_ptr->m_sq_wqe_idx_to_prop[index].credits);
         }
 
         handle_sq_wqe_prop(index);
@@ -233,7 +256,7 @@ int cq_mgr_tx::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
     return ret;
 }
 
-void cq_mgr_tx::log_cqe_error(struct xlio_mlx5_cqe *cqe)
+void cq_mgr_tx::log_cqe_error(struct xlio_mlx5_cqe *cqe, uint16_t wqe_index, uint32_t credits) const
 {
     struct mlx5_err_cqe *ecqe = (struct mlx5_err_cqe *)cqe;
 
@@ -244,10 +267,10 @@ void cq_mgr_tx::log_cqe_error(struct xlio_mlx5_cqe *cqe)
 
     if (MLX5_CQE_SYNDROME_WR_FLUSH_ERR != ecqe->syndrome) {
         cq_logwarn("cqe: syndrome=0x%x vendor=0x%x hw=0x%x (type=0x%x) wqe_opcode_qpn=0x%x "
-                   "wqe_counter=0x%x",
+                   "wqe_counter=0x%x wqe=%s",
                    ecqe->syndrome, ecqe->vendor_err_synd, *((uint8_t *)&ecqe->rsvd1 + 16),
                    *((uint8_t *)&ecqe->rsvd1 + 17), ntohl(ecqe->s_wqe_opcode_qpn),
-                   ntohs(ecqe->wqe_counter));
+                   ntohs(ecqe->wqe_counter), wqe_to_hexstring(wqe_index, credits).c_str());
     }
 }
 
