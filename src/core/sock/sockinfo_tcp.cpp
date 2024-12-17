@@ -1355,6 +1355,18 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
     return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp, is_dummy, is_send_zerocopy);
 }
 
+static bool inspect_socket_error_state(const mem_buf_desc_t *mem_buf_desc, struct tcp_pcb *pcb)
+{
+    // this means a retransmit happened - let's check the error_state we'll put if we got error
+    // cqe
+    if (mem_buf_desc->m_flags & mem_buf_desc_t::HAD_CQE_ERROR) {
+        TCP_EVENT_ERR(pcb->errf, pcb->my_container, ERR_RST);
+        return true;
+    }
+
+    return false;
+}
+
 /*
  * TODO Remove 'p' from the interface and use 'seg'.
  * There are multiple places where ip_output() is used without allocating
@@ -1379,6 +1391,13 @@ err_t sockinfo_tcp::ip_output(struct pbuf *p, struct tcp_seg *seg, void *v_p_con
         p_si_tcp->m_pcb.mss, 0, nullptr};
     int count = 0;
     void *cur_end;
+
+    if (unlikely(flags & XLIO_TX_PACKET_REXMIT)) {
+        if (unlikely(inspect_socket_error_state(reinterpret_cast<const mem_buf_desc_t *>(p),
+                                                reinterpret_cast<struct tcp_pcb *>(v_p_conn)))) {
+            return ERR_RST;
+        }
+    }
 
     int rc = p_si_tcp->m_ops->postrouting(p, seg, attr);
     if (rc != 0) {
@@ -1590,7 +1609,8 @@ void sockinfo_tcp::err_lwip_cb(void *pcb_container, err_t err)
             } else {
                 NOTIFY_ON_EVENTS(conn, (EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP));
             }
-            /* TODO what about no route to host type of errors, need to add EPOLLERR in this case ?
+            /* TODO what about no route to host type of errors, need to add EPOLLERR in this
+             * case ?
              */
         } else { // ERR_TIMEOUT
             NOTIFY_ON_EVENTS(conn, (EPOLLIN | EPOLLHUP));
@@ -1598,8 +1618,9 @@ void sockinfo_tcp::err_lwip_cb(void *pcb_container, err_t err)
 
         /* SOCKETXTREME comment:
          * Add this fd to the ready fd list
-         * Note: No issue is expected in case socketxtreme_poll() usage because 'pv_fd_ready_array'
-         * is null in such case and as a result update_fd_array() call means nothing
+         * Note: No issue is expected in case socketxtreme_poll() usage because
+         * 'pv_fd_ready_array' is null in such case and as a result update_fd_array() call means
+         * nothing
          */
 
         io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
@@ -1638,7 +1659,8 @@ bool sockinfo_tcp::process_peer_ctl_packets(xlio_desc_list_t &peer_packets)
             return false;
         }
 
-        // Listen socket is 3T and so rx.src/dst are set as part of rx_process_buffer_no_flow_id.
+        // Listen socket is 3T and so rx.src/dst are set as part of
+        // rx_process_buffer_no_flow_id.
         struct tcp_pcb *pcb = get_syn_received_pcb(desc->rx.src, desc->rx.dst);
 
         // 2.1.2 get the pcb and sockinfo
@@ -1751,8 +1773,8 @@ void sockinfo_tcp::process_my_ctl_packets()
         }
         // prepare for next map iteration
         if (peer_packets.empty()) {
-            m_rx_peer_packets.erase(itr++); // // advance itr before invalidating it by erase (itr++
-                                            // returns the value before advance)
+            m_rx_peer_packets.erase(itr++); // // advance itr before invalidating it by erase
+                                            // (itr++ returns the value before advance)
         } else {
             ++itr;
         }
@@ -1887,9 +1909,9 @@ void sockinfo_tcp::handle_incoming_handshake_failure(sockinfo_tcp *child_conn)
         // we finish with the current processing.
         XLIO_CALL(close, child_conn->get_fd());
     } else {
-        // With delegate mode calling close() will destroy the socket object and cause access after
-        // free in the subsequent flows. Instead, we add the socket for postponed close that will be
-        // as part of the delegate timer.
+        // With delegate mode calling close() will destroy the socket object and cause access
+        // after free in the subsequent flows. Instead, we add the socket for postponed close
+        // that will be as part of the delegate timer.
         g_event_handler_manager_local.add_close_postponed_socket(child_conn);
     }
 }
@@ -6053,7 +6075,8 @@ void tcp_timers_collection::remove_timer(sockinfo_tcp *sock)
         __log_dbg("TCP socket [%p] timer was removed", sock);
     } else {
         // Listen sockets are not added to timers.
-        // As part of socket general unregister and destroy they will get here and will no be found.
+        // As part of socket general unregister and destroy they will get here and will no be
+        // found.
         __log_dbg("TCP socket [%p] timer was not found (listen socket)", sock);
     }
 }
