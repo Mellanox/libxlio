@@ -58,6 +58,10 @@ function map_os_and_arch {
 
         rhel|ol)
             OS="${ID}${VERSION_ID}"
+            if [[ "$VERSION_ID" =~ "9.4" ]]; then
+                export DOCA_VERSION='2.10.0'
+                export DOCA_BRANCH='dev'
+            fi
             GPG_KEY_CMD='rpm --import "${GPG_KEY}"'
             REPO_CMD='yum install -y yum-utils && yum-config-manager --add-repo "${REPO_URL}"'
             PKG_TYPE="rpm"
