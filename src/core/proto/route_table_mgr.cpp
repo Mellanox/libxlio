@@ -152,113 +152,117 @@ void route_table_mgr::update_tbl(nl_data_t data_type)
     netlink_socket_mgr::update_tbl(data_type);
 }
 
-void route_table_mgr::parse_entry(struct nlmsghdr *nl_header)
+void route_table_mgr::parse_entry(struct nl_object *nl_obj)
 {
-    int len;
-    struct rtmsg *rt_msg;
-    struct rtattr *rt_attribute;
     route_val val;
 
-    // get route entry header
-    rt_msg = (struct rtmsg *)NLMSG_DATA(nl_header);
+    // Cast the generic nl_object to a specific route or rule object
+    struct rtnl_route *route = reinterpret_cast<struct rtnl_route *>(nl_obj);
 
-    if (rt_msg->rtm_family != AF_INET && rt_msg->rtm_family != AF_INET6) {
-        return;
+    val.set_family(rtnl_route_get_family(route));
+    val.set_protocol(rtnl_route_get_protocol(route));
+    val.set_scope(rtnl_route_get_scope(route));
+    val.set_type(rtnl_route_get_type(route));
+    val.set_table_id(rtnl_route_get_table(route));
+
+    // Set destination mask and prefix length
+    struct nl_addr *dst = rtnl_route_get_dst(route);
+    if (dst) {
+        val.set_dst_pref_len(nl_addr_get_prefixlen(dst));
     }
 
-    val.set_family(rt_msg->rtm_family);
-    val.set_protocol(rt_msg->rtm_protocol);
-    val.set_scope(rt_msg->rtm_scope);
-    val.set_type(rt_msg->rtm_type);
-    val.set_table_id(rt_msg->rtm_table);
-    val.set_dst_pref_len(rt_msg->rtm_dst_len);
+    parse_attr(route, val);
 
-    len = RTM_PAYLOAD(nl_header);
-    rt_attribute = (struct rtattr *)RTM_RTA(rt_msg);
-
-    for (; RTA_OK(rt_attribute, len); rt_attribute = RTA_NEXT(rt_attribute, len)) {
-        parse_attr(rt_attribute, val);
-    }
     val.set_state(true);
 
     route_table_t &table = val.get_family() == AF_INET ? m_table_in4 : m_table_in6;
     table.push_back(val);
 }
 
-void route_table_mgr::parse_attr(struct rtattr *rt_attribute, route_val &val)
+void route_table_mgr::parse_attr(struct rtnl_route *route, route_val &val)
 {
-    char if_name[IFNAMSIZ];
+    struct nl_addr *addr;
 
-    switch (rt_attribute->rta_type) {
-    case RTA_DST:
-        val.set_dst_addr(ip_address((void *)RTA_DATA(rt_attribute), val.get_family()));
-        break;
-    // next hop address
-    case RTA_GATEWAY:
-        val.set_gw(ip_address((void *)RTA_DATA(rt_attribute), val.get_family()));
-        break;
-    // unique ID associated with the network interface
-    case RTA_OIF:
-        val.set_if_index(*(int *)RTA_DATA(rt_attribute));
-        if_indextoname(val.get_if_index(), if_name);
+    // Destination Address
+    addr = rtnl_route_get_dst(route);
+    if (addr) {
+        val.set_dst_addr(ip_address(nl_addr_get_binary_addr(addr), val.get_family()));
+    }
+
+    // Gateway Address (Next Hop)
+    struct rtnl_nexthop *nh = rtnl_route_nexthop_n(route, 0); // Assuming the first nexthop
+    if (nh) {
+        addr = rtnl_route_nh_get_gateway(nh);
+        if (addr) {
+            val.set_gw(ip_address(nl_addr_get_binary_addr(addr), val.get_family()));
+        }
+    }
+
+    // Output Interface Index and Name
+    const int if_index = rtnl_route_nh_get_ifindex(nh);
+    if (if_index > 0) {
+        val.set_if_index(if_index);
+
+        char if_name[IFNAMSIZ] = {0};
+        if_indextoname(if_index, if_name);
         val.set_if_name(if_name);
-        break;
-    case RTA_SRC:
-    case RTA_PREFSRC:
-        val.set_src_addr(ip_address((void *)RTA_DATA(rt_attribute), val.get_family()));
-        break;
-    case RTA_TABLE:
-        val.set_table_id(*(uint32_t *)RTA_DATA(rt_attribute));
-        break;
-    case RTA_METRICS: {
-        struct rtattr *rta = (struct rtattr *)RTA_DATA(rt_attribute);
-        int len = RTA_PAYLOAD(rt_attribute);
-        uint16_t type;
-        while (RTA_OK(rta, len)) {
-            type = rta->rta_type;
-            switch (type) {
-            case RTAX_MTU:
-                val.set_mtu(*(uint32_t *)RTA_DATA(rta));
-                break;
-            default:
-                rt_mgr_logdbg("got unexpected METRICS %d %x", type, *(uint32_t *)RTA_DATA(rta));
-                break;
-            }
-            rta = RTA_NEXT(rta, len);
-        }
-        break;
     }
-    case RTA_MULTIPATH: {
-        struct rtnexthop *rtnh = (struct rtnexthop *)RTA_DATA(rt_attribute);
-        int rtnh_len = RTA_PAYLOAD(rt_attribute);
-        while (RTNH_OK(rtnh, rtnh_len)) {
-            val.set_if_index(rtnh->rtnh_ifindex);
-            if_indextoname(val.get_if_index(), if_name);
-            val.set_if_name(if_name);
 
-            int len = rtnh->rtnh_len - sizeof(*rtnh);
-            for (struct rtattr *rta = RTNH_DATA(rtnh); RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
-                parse_attr(rta, val);
-            }
-
-            const ip_address &gw_addr = val.get_gw_addr();
-            if (!gw_addr.is_anyaddr() && !gw_addr.is_linklocal(val.get_family())) {
-                // Currently, we support only a single nexthop per multipath route
-                // and we found a good one.
-                // If the gw is link-local we will check the next nexthop if present.
-                // FIXME We cannot rely on that the next entry overwrites all the attributes.
-                break;
-            }
-
-            rtnh = RTNH_NEXT(rtnh);
-            rtnh_len -= RTNH_ALIGN(rtnh->rtnh_len);
-        }
-        break;
+    // Source Address
+    addr = rtnl_route_get_pref_src(route);
+    if (addr) {
+        val.set_src_addr(ip_address(nl_addr_get_binary_addr(addr), val.get_family()));
     }
-    default:
-        rt_mgr_logdbg("got unexpected type %d %x", rt_attribute->rta_type,
-                      *(uint32_t *)RTA_DATA(rt_attribute));
-        break;
+
+    // Metrics (e.g., MTU)
+    uint32_t mtu = 0;
+    int get_metric_result = rtnl_route_get_metric(route, RTAX_MTU, &mtu);
+    if (get_metric_result == 0) {
+        if (mtu > 0) {
+            val.set_mtu(mtu);
+        }
+    }
+
+    struct nexthop_iterator_context {
+        struct rtnl_nexthop *best_next_hop;
+        uint8_t best_next_hop_weight;
+
+    } best_next_hop_context = {.best_next_hop = nullptr, .best_next_hop_weight = 0xff};
+
+    // Multi-path
+    rtnl_route_foreach_nexthop(
+        route,
+        [](struct rtnl_nexthop *next_hop, void *context) {
+            nexthop_iterator_context *best_next_hop = (nexthop_iterator_context *)context;
+            const uint8_t current_nh_weight = rtnl_route_nh_get_weight(next_hop);
+
+            // min valid weight is 1
+            if (current_nh_weight > 0 && current_nh_weight < best_next_hop->best_next_hop_weight) {
+                best_next_hop->best_next_hop_weight = current_nh_weight;
+                best_next_hop->best_next_hop = next_hop;
+            }
+        },
+        &best_next_hop_context);
+
+    if (best_next_hop_context.best_next_hop != nullptr) {
+        struct rtnl_nexthop *best_next_hop = best_next_hop_context.best_next_hop;
+        const auto nh_gateway = rtnl_route_nh_get_gateway(best_next_hop);
+
+        const ip_address &gw_addr =
+            ip_address(nl_addr_get_binary_addr(nh_gateway), nl_addr_get_family(nh_gateway));
+
+        val.set_if_index(rtnl_route_nh_get_ifindex(best_next_hop));
+        char nh_if_name[IFNAMSIZ] = {0};
+        if_indextoname(val.get_if_index(), nh_if_name);
+        val.set_if_name(nh_if_name);
+
+        val.set_gw(gw_addr);
+
+        // Set destination mask and prefix length
+        struct nl_addr *dst = rtnl_route_nh_get_newdst(best_next_hop);
+        if (dst) {
+            val.set_dst_pref_len(nl_addr_get_prefixlen(dst));
+        }
     }
 }
 
