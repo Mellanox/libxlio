@@ -7,7 +7,6 @@
 #ifndef RULE_TABLE_MGR_H
 #define RULE_TABLE_MGR_H
 
-#include "core/infra/cache_subject_observer.h"
 #include "core/proto/netlink_socket_mgr.h"
 #include "route_rule_table_key.h"
 #include "rule_entry.h"
@@ -29,13 +28,13 @@ public:
     std::vector<uint32_t> rule_resolve(route_rule_table_key key);
 
 protected:
-    virtual void parse_entry(struct nlmsghdr *nl_header) override;
+    virtual void parse_entry(struct nl_object *nl_obj) override;
     virtual void update_tbl(nl_data_t data_type) override;
 
     rule_entry *create_new_entry(route_rule_table_key key, const observer *obs) override;
 
 private:
-    void parse_attr(struct rtattr *rt_attribute, rule_val &val);
+    void parse_attr(struct rtnl_rule *rule, rule_val &val);
     void print_tbl();
 
     void update_entry(rule_entry *p_ent);
