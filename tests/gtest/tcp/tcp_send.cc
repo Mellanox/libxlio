@@ -184,6 +184,8 @@ TEST_F(tcp_send, null_iov_elements)
                     vec[1].iov_len = 1000U;
                     rcs = sendmsg(fd, &msg, 0);
                     EXPECT_LE_ERRNO(rcs, 0);
+                    EXPECT_EQ(0, rcs);
+                    EXPECT_EQ(14, errno); // TODO - remove after check
                     EXPECT_TRUE(rcs == 0 || 14 == errno);
                     log_trace("Sent5: %zd.\n", rcs);
 
