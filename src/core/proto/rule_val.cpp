@@ -19,8 +19,6 @@ rule_val::rule_val()
     , m_src_addr(in6addr_any)
 {
     m_protocol = 0;
-    m_scope = 0;
-    m_type = 0;
     m_tos = 0;
     m_family = 0;
     m_is_valid = false;
