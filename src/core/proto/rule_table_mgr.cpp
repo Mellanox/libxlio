@@ -18,6 +18,9 @@
 #include <netinet/ether.h>
 #include <arpa/inet.h>
 
+#include <netlink/route/rule.h>
+#include <netlink/netlink.h>
+
 #include "utils/bullseye.h"
 #include "utils/lock_wrapper.h"
 #include "vlogger/vlogger.h"
@@ -73,33 +76,28 @@ void rule_table_mgr::update_tbl(nl_data_t data_type)
 }
 
 // Parse received rule entry into custom object (rule_val).
-// Parameters:
-//		nl_header	: object that contain rule entry.
-//		p_val		: custom object that contain parsed rule data.
-// return true if its not related to local or default table, false otherwise.
-void rule_table_mgr::parse_entry(struct nlmsghdr *nl_header)
+void rule_table_mgr::parse_entry(struct nl_object *nl_obj)
 {
-    int len;
-    struct rtmsg *rt_msg;
-    struct rtattr *rt_attribute;
+    int err = 0;
     rule_val val;
 
-    // get rule entry header
-    rt_msg = (struct rtmsg *)NLMSG_DATA(nl_header);
+    // Cast the generic nl_object to a specific route or rule object
+    struct rtnl_rule *rule = reinterpret_cast<struct rtnl_rule *>(nl_obj);
 
-    val.set_family(rt_msg->rtm_family);
-    val.set_protocol(rt_msg->rtm_protocol);
-    val.set_scope(rt_msg->rtm_scope);
-    val.set_type(rt_msg->rtm_type);
-    val.set_tos(rt_msg->rtm_tos);
-    val.set_table_id(rt_msg->rtm_table);
-
-    len = RTM_PAYLOAD(nl_header);
-    rt_attribute = (struct rtattr *)RTM_RTA(rt_msg);
-
-    for (; RTA_OK(rt_attribute, len); rt_attribute = RTA_NEXT(rt_attribute, len)) {
-        parse_attr(rt_attribute, val);
+    // Set rule properties in p_val using libnl getters
+    uint8_t protocol = 0;
+    err = rtnl_rule_get_protocol(rule, &protocol);
+    if (err < 0) {
+        rr_mgr_logdbg("Rule without protocol attribute, using default");
     }
+
+    val.set_family(rtnl_rule_get_family(rule));
+    val.set_protocol(protocol);
+    val.set_tos(rtnl_rule_get_dsfield(rule));
+    val.set_table_id(rtnl_rule_get_table(rule));
+
+    parse_attr(rule, val);
+
     val.set_state(true);
 
     rule_table_t &table = val.get_family() == AF_INET ? m_table_in4 : m_table_in6;
@@ -107,36 +105,40 @@ void rule_table_mgr::parse_entry(struct nlmsghdr *nl_header)
 }
 
 // Parse received rule attribute for given rule.
-// Parameters:
-//		rt_attribute	: object that contain rule attribute.
-//		p_val			: custom object that contain parsed rule data.
-void rule_table_mgr::parse_attr(struct rtattr *rt_attribute, rule_val &val)
+void rule_table_mgr::parse_attr(struct rtnl_rule *rule, rule_val &val)
 {
-    switch (rt_attribute->rta_type) {
-    case FRA_PRIORITY:
-        val.set_priority(*(uint32_t *)RTA_DATA(rt_attribute));
-        break;
-    case FRA_DST:
-        val.set_dst_addr(ip_address((void *)RTA_DATA(rt_attribute), val.get_family()));
-        break;
-    case FRA_SRC:
-        val.set_src_addr(ip_address((void *)RTA_DATA(rt_attribute), val.get_family()));
-        break;
-    case FRA_IFNAME:
-        val.set_iif_name((char *)RTA_DATA(rt_attribute));
-        break;
-    case FRA_TABLE:
-        val.set_table_id(*(uint32_t *)RTA_DATA(rt_attribute));
-        break;
-#if DEFINED_FRA_OIFNAME
-    case FRA_OIFNAME:
-        val.set_oif_name((char *)RTA_DATA(rt_attribute));
-        break;
-#endif
-    default:
-        rr_mgr_logdbg("got undetected rta_type %d %x", rt_attribute->rta_type,
-                      *(uint32_t *)RTA_DATA(rt_attribute));
-        break;
+    // FRA_PRIORITY: Rule Priority
+    uint32_t priority = rtnl_rule_get_prio(rule);
+    val.set_priority(priority);
+
+    // FRA_DST: Destination Address
+    struct nl_addr *dst = rtnl_rule_get_dst(rule);
+    if (dst && is_valid_addr(dst)) {
+        val.set_dst_addr(ip_address(nl_addr_get_binary_addr(dst), nl_addr_get_family(dst)));
+    }
+
+    // FRA_SRC: Source Address
+    struct nl_addr *src = rtnl_rule_get_src(rule);
+    if (src && is_valid_addr(src)) {
+        val.set_src_addr(ip_address(nl_addr_get_binary_addr(src), nl_addr_get_family(src)));
+    }
+
+    // FRA_IFNAME: Input Interface Name
+    char *iif_name = rtnl_rule_get_iif(rule);
+    if (iif_name) {
+        val.set_iif_name(iif_name);
+    }
+
+    // FRA_TABLE: Table ID
+    uint32_t table_id = rtnl_rule_get_table(rule);
+    if (table_id) {
+        val.set_table_id(table_id);
+    }
+
+    // FRA_OIFNAME: Output Interface Name (if available)
+    char *oif_name = rtnl_rule_get_oif(rule);
+    if (oif_name) {
+        val.set_oif_name(oif_name);
     }
 }
 
