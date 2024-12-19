@@ -108,7 +108,7 @@ public:
     virtual int drain_and_proccess() = 0;
     virtual void clear_rx_notification() = 0;
     virtual bool poll_and_process_element_rx(void *pv_fd_ready_array = nullptr) = 0;
-    virtual int poll_and_process_element_tx() = 0;
+    virtual void poll_and_process_element_tx() = 0;
     virtual void adapt_cq_moderation() = 0;
     virtual void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc) = 0;
     virtual void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc,

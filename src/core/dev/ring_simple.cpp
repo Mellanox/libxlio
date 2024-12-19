@@ -434,18 +434,11 @@ bool ring_simple::poll_and_process_element_rx(void *pv_fd_ready_array /*NULL*/)
                                     : m_hqrx->poll_and_process_rx());
 }
 
-int ring_simple::poll_and_process_element_tx()
+void ring_simple::poll_and_process_element_tx()
 {
-    int ret = 0;
-
     std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-    if (safe_mce_sys().doca_tx) {
-        ret = m_hqtx->poll_and_process_doca_tx();
-    } else {
-        ret = m_p_cq_mgr_tx->poll_and_process_element_tx();
-    }
-
-    return ret ? 1 : 0;
+    (safe_mce_sys().doca_tx ? m_hqtx->poll_and_process_doca_tx()
+                            : m_p_cq_mgr_tx->poll_and_process_element_tx());
 }
 
 bool ring_simple::reclaim_recv_buffers(descq_t *rx_reuse)
@@ -527,12 +520,6 @@ void ring_simple::mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf
 
     p_mem_buf_desc->lwip_pbuf.ref -= std::min<unsigned>(p_mem_buf_desc->lwip_pbuf.ref, ref - 1);
     put_tx_single_buffer(p_mem_buf_desc);
-}
-
-// Call under m_lock_ring_tx lock
-void ring_simple::mem_buf_desc_return_single_locked(mem_buf_desc_t *buff)
-{
-    put_tx_buffer_helper(buff);
 }
 
 int ring_simple::drain_and_proccess()
@@ -694,13 +681,7 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
 
     do {
         // Try to poll once in the hope that we get space in SQ
-        ret = m_p_cq_mgr_tx->poll_and_process_element_tx();
-        if (ret < 0) {
-            ring_logdbg("failed polling on cq_mgr_tx (hqtx=%p, cq_mgr_tx=%p) (ret=%d %m)", m_hqtx,
-                        m_p_cq_mgr_tx, ret);
-            /* coverity[missing_unlock] */
-            return false;
-        }
+        m_p_cq_mgr_tx->poll_and_process_element_tx();
         granted = m_hqtx->credits_get(credits);
         if (granted) {
             break;
@@ -756,19 +737,7 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
                     p_cq_mgr_tx->reset_notification_armed();
 
                     // Perform a non blocking event read, clear the fd channel
-                    ret = p_cq_mgr_tx->poll_and_process_element_tx();
-                    if (ret < 0) {
-                        ring_logdbg("failed handling cq_mgr_tx channel (hqtx=%p "
-                                    "cq_mgr_tx=%p) (errno=%d %m)",
-                                    m_hqtx, m_p_cq_mgr_tx, errno);
-                        /* coverity[double_unlock] TODO: RM#1049980 */
-                        m_lock_ring_tx.unlock();
-                        m_lock_ring_tx_buf_wait.unlock();
-                        /* coverity[double_lock] TODO: RM#1049980 */
-                        m_lock_ring_tx.lock();
-                        return false;
-                    }
-                    ring_logfunc("polling/blocking succeeded on cq_mgr_tx (we got %d wce)", ret);
+                    p_cq_mgr_tx->poll_and_process_element_tx();
                 }
             }
 
@@ -814,11 +783,7 @@ void ring_simple::return_to_global_pool()
     }
 }
 
-void ring_simple::return_tx_pool_to_global_pool()
-{
-    return_to_global_pool();
-}
-
+// Call under m_lock_ring_tx lock
 int ring_simple::put_tx_buffer_helper(mem_buf_desc_t *buff)
 {
     if (buff->tx.dev_mem_length) {

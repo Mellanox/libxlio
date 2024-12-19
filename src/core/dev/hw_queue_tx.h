@@ -224,7 +224,7 @@ public:
 
     uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *user_data);
     uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss, bool is_zerocopy);
-    int poll_and_process_doca_tx();
+    void poll_and_process_doca_tx();
     bool request_notification();
     void clear_notification();
     void put_lso_metadata(doca_lso_metadata *lso_metadata);
@@ -359,7 +359,6 @@ private:
     void return_doca_buf(doca_buf *buf);
     bool expand_doca_inventory();
     bool expand_doca_task_pool(bool is_lso);
-    void handle_completion(mem_buf_desc_t *mem_buf);
     void start_doca_txq();
     void stop_doca_txq();
     bool check_doca_caps(doca_devinfo *devinfo, uint32_t &max_burst_size, uint32_t &max_send_sge);
