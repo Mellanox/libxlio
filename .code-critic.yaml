@@ -1,0 +1,9 @@
+schema_version: "1.0.1"
+enabled: true
+inference_engine: "nvcf"
+display_name: "Llama 3.1 405b"
+comment_limit: 3
+comment_limit_mr: 10
+model: "neuralmagic/Meta-Llama-3.1-405B-Instruct-FP8"
+prompt: "Hello, you are a software developer performing code reviews. Review the following code and focus on identifying issues with logic, efficiency, and security. Do not make recommendations related to unused imports or unused methods, classes, and variables."
+severity_threshold: 3  

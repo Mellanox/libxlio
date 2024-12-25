@@ -119,6 +119,7 @@ static uint32_t g_ec_pool_no_objs = 0U;
 static int free_libxlio_resources()
 {
     vlog_printf(VLOG_DEBUG, "%s: Closing libxlio resources\n", __FUNCTION__);
+    vlog_printf(VLOG_DEBUG, "%s: Closing libxlio resources\n", __FUNCTION__);
 
     g_b_exit = true;
 
