@@ -133,6 +133,7 @@ for test_link in $test_ip_list; do
 				pushd $PWD
 				wget https://github.com/user-attachments/files/18245148/doca_support.patch
 				git apply doca_support.patch
+				rm doca_support.patch
 				${sudo_cmd} $timeout_exe $PWD/tests/verifier/verifier.pl -o 4 -a ${test_app} -x " --pre-warmup-wait=2 --debug " \
 					-t ${test}:tc[6-9]$ -s ${test_ip} -l ${test_dir}/${test_name}.log \
 					-e " XLIO_MEM_ALLOC_TYPE=ANON XLIO_DOCA_RX=1 XLIO_DOCA_TX=1 LD_PRELOAD=$test_lib " \
