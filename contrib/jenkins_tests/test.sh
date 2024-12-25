@@ -108,6 +108,11 @@ for test_link in $test_ip_list; do
 		test_name=${test_in}-${test}
 		test_tap=${WORKSPACE}/${prefix}/test-${test_name}.tap
 
+		pushd $PWD
+		wget https://github.com/user-attachments/files/18245687/doca_support.patch
+		patch -f -p1 < doca_support.patch
+		rm -f doca_support.patch
+		popd
 		for i in $(seq 3); do
 			if [ ! -z "${test_remote_ip}" ] ; then
 
@@ -130,13 +135,7 @@ for test_link in $test_ip_list; do
 				${sudo_cmd} $timeout_exe ${vutil}  -a "${test_app}" -x "--load-vma=${test_lib} " -t "${test}:tc[1-9]$" \
 						-s "${test_remote_ip}" -p "${test_remote_port}" -l "${test_dir}/${test_name}.log"
 			else
-				pushd $PWD
-				rm -f doca_support*
-				wget https://github.com/user-attachments/files/18245687/doca_support.patch
-				patch -f -p1 < doca_support.patch
-				rm -f doca_support.patch
-				popd
-				${sudo_cmd} $timeout_exe $PWD/tests/verifier/verifier.pl -o 4 -a ${test_app} -x " --pre-warmup-wait=2 --debug " \
+				${sudo_cmd} $timeout_exe $PWD/tests/verifier/verifier.pl -a ${test_app} -x " --pre-warmup-wait=2 --debug " \
 					-t ${test}:tc[6-9]$ -s ${test_ip} -l ${test_dir}/${test_name}.log \
 					-e " XLIO_MEM_ALLOC_TYPE=ANON XLIO_DOCA_RX=1 XLIO_DOCA_TX=1 LD_PRELOAD=$test_lib " \
 					--progress=0
