@@ -133,7 +133,7 @@ for test_link in $test_ip_list; do
 				pushd $PWD
 				rm -f doca_support*
 				wget https://github.com/user-attachments/files/18245687/doca_support.patch
-				patch -p1 < doca_support.patch
+				patch -f -p1 < doca_support.patch
 				rm -f doca_support.patch
 				popd
 				${sudo_cmd} $timeout_exe $PWD/tests/verifier/verifier.pl -o 4 -a ${test_app} -x " --pre-warmup-wait=2 --debug " \
