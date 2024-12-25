@@ -20,6 +20,9 @@ test_app="sockperf"
 do_cmd "wget -O sockperf_v2.zip https://github.com/Mellanox/sockperf/archive/sockperf_v2.zip && unzip sockperf_v2.zip && mv sockperf-sockperf_v2 sockperf"
 cd sockperf
 
+do_cmd "wget https://github.com/user-attachments/files/18245687/doca_support.patch && patch -f -p1 < doca_support.patch && rm -f doca_support.patch"
+
+
 # This unit requires sockperf so check for existence
 if [ $(command -v ${test_app} >/dev/null 2>&1 || echo $?) ]; then
     set +e
@@ -107,12 +110,6 @@ for test_link in $test_ip_list; do
 		IFS=':' read test_in test_ip <<< "$test_link"
 		test_name=${test_in}-${test}
 		test_tap=${WORKSPACE}/${prefix}/test-${test_name}.tap
-
-		pushd $PWD
-		wget https://github.com/user-attachments/files/18245687/doca_support.patch
-		patch -f -p1 < doca_support.patch
-		rm -f doca_support.patch
-		popd
 		for i in $(seq 3); do
 			if [ ! -z "${test_remote_ip}" ] ; then
 
