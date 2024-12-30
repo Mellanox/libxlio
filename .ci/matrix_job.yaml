@@ -107,22 +107,21 @@ runs_on_dockers:
      runAsUser: '0',
      runAsGroup: '0'
     }
-  # The Gtest step is disabled until Oct'24 release, Jira HPCINFRA-1968, RM #3981627, #3981654 
-  # - {
-  #    file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
-  #    arch: 'x86_64',
-  #    name: 'gtest',
-  #    uri: 'xlio/$arch/ubuntu22.04/$name',
-  #    tag: '20240813',
-  #    build_args: '--no-cache --target gtest',
-  #    category: 'tests',
-  #    annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p1@net1,sriov-cx6dx-p2@net2' }],
-  #    limits: '{memory: 8Gi, cpu: 8000m, hugepages-2Mi: 8Gi, mellanox.com/sriov_cx6dx_p1: 1, mellanox.com/sriov_cx6dx_p2: 1}',
-  #    requests: '{memory: 8Gi, cpu: 8000m, hugepages-2Mi: 8Gi, mellanox.com/sriov_cx6dx_p1: 1, mellanox.com/sriov_cx6dx_p2: 1}',
-  #    caps_add: '[ IPC_LOCK, SYS_RESOURCE ]',
-  #    runAsUser: '0',
-  #    runAsGroup: '0'
-  #   }
+  - {
+     file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
+     arch: 'x86_64',
+     name: 'gtest',
+     uri: 'xlio/$arch/ubuntu22.04/$name',
+     tag: '20240813',
+     build_args: '--no-cache --target gtest',
+     category: 'tests',
+     annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p1@net1,sriov-cx6dx-p2@net2' }],
+     limits: '{memory: 8Gi, cpu: 8000m, hugepages-2Mi: 8Gi, mellanox.com/sriov_cx6dx_p1: 1, mellanox.com/sriov_cx6dx_p2: 1}',
+     requests: '{memory: 8Gi, cpu: 8000m, hugepages-2Mi: 8Gi, mellanox.com/sriov_cx6dx_p1: 1, mellanox.com/sriov_cx6dx_p2: 1}',
+     caps_add: '[ IPC_LOCK, SYS_RESOURCE ]',
+     runAsUser: '0',
+     runAsGroup: '0'
+    }
 
 matrix:
   axes:
@@ -311,21 +310,22 @@ steps:
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
 
-  # The Gtest step is disabled until Oct'24 release, Jira HPCINFRA-1968, RM #3981627, #3981654 
-  # - name: Gtest
-  #   enable: ${do_gtest}
-  #   containerSelector:
-  #     - "{name: 'gtest', category: 'tests'}"
-  #   run: |
-  #     [ "x${do_gtest}" == "xtrue" ] && action=yes || action=no
-  #     env WORKSPACE=$PWD TARGET=${flags} jenkins_test_gtest=${action} ./contrib/test_jenkins.sh
-  #   parallel: false
-  #   onfail: |
-  #     ./.ci/artifacts.sh
-  #   archiveArtifacts-onfail: |
-  #     jenkins/**/arch-*.tar.gz
-  #   archiveJunit-onfail: |
-  #     jenkins/**/*.xml
+  - name: Gtest
+    enable: ${do_gtest}
+    containerSelector:
+      - "{name: 'skip-container'}"
+    agentSelector:
+      - "{nodeLabel: 'beni09'}"
+    run: |
+      [ "x${do_gtest}" == "xtrue" ] && action=yes || action=no
+      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_gtest=${action} ./contrib/test_jenkins.sh
+    parallel: false
+    onfail: |
+      ./.ci/artifacts.sh
+    archiveArtifacts-onfail: |
+      jenkins/**/arch-*.tar.gz
+    archiveJunit-onfail: |
+      jenkins/**/*.xml
 
   - name: Valgrind
     enable: ${do_valgrind}
