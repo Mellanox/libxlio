@@ -36,6 +36,7 @@
 #include "common/log.h"
 #include "common/sys.h"
 #include "common/base.h"
+#include "common/cmn.h"
 #include "src/core/util/sock_addr.h"
 #include "udp_base.h"
 
