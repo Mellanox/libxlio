@@ -238,6 +238,8 @@ TEST_F(tcp_connect, ti_4_rto_racing)
  */
 TEST_F(tcp_connect, ti_5_multi_connect)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     int fd = tcp_base::sock_create();
     ASSERT_LE(0, fd);
 

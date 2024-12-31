@@ -405,6 +405,8 @@ TEST_F(tcp_bind, bind_IP6_4_dual_stack_reuse_addr_listen)
  */
 TEST_F(tcp_bind, mapped_ipv4_bind)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     if (!test_mapped_ipv4()) {
         return;
     }

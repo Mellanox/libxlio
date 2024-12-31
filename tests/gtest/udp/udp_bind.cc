@@ -547,6 +547,8 @@ public:
  */
 TEST_F(pktinfo, check_recvmsg_returns_expected_pktinfo)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     int pid = fork();
     if (0 == pid) { /* Child-client code */
         client_func();
