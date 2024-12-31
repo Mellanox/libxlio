@@ -305,7 +305,7 @@ do_compile_doca()
 
     if [[ -d $doca_install && -f $doca_install/include/doca_version.h ]]; then
         echo ""
-        echo "===== DOCA is already compiled and installed ====="
+        echo "===== DOCA is already compiled and installed at $doca_install ====="
         echo ""
         eval "$1=$doca_install"
         return
