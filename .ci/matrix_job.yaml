@@ -311,12 +311,11 @@ steps:
       jenkins/**/arch-*.tar.gz
 
   - name: Gtest
-    enable: true
+    enable: ${do_gtest}
     containerSelector:
-      - "{name: 'skip-container'}"
-    agentSelector:
-      - "{nodeLabel: 'beni09'}"
+      - "{name: 'gtest', category: 'tests'}"
     run: |
+      [ "x${do_gtest}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_gtest=${action} ./contrib/test_jenkins.sh
     parallel: false
     onfail: |
