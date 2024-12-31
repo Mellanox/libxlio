@@ -40,8 +40,6 @@ uint16_t test_base::m_port = 0;
 int test_base::m_family = PF_INET;
 int test_base::m_break_signal = 0;
 
-bool run_fork_tests = false;
-
 test_base::test_base()
 {
     m_port = gtest_conf.port;

@@ -49,7 +49,7 @@ class udp_rfs : public udp_base {};
  */
 TEST_F(udp_rfs, single_rule_send)
 {
-    SKIP_TRUE(!run_fork_tests, "run_fork_tests was not set");
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
 
     int rc = EOK;
     int fd;

@@ -61,8 +61,6 @@
 
 #define SOCK_STR(x) sockaddr2str(reinterpret_cast<const sockaddr *>(&x), sizeof(x)).c_str()
 
-extern bool run_fork_tests;
-
 class test_base_sock {
 public:
     virtual int get_sock_type() const = 0;

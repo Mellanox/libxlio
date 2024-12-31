@@ -101,7 +101,7 @@ TEST_F(tcp_send, ti_2)
  */
 TEST_F(tcp_send, null_iov_elements)
 {
-    SKIP_TRUE(!run_fork_tests, "run_fork_tests was not set");
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
 
     std::string buff1("abcd");
     std::string buff2("efgh");

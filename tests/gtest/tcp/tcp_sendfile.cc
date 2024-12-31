@@ -44,7 +44,7 @@ class tcp_sendfile : public tcp_base {
 protected:
     void SetUp()
     {
-        SKIP_TRUE(!run_fork_tests, "run_fork_tests was not set");
+        GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
 
         tcp_base::SetUp();
 
