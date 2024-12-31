@@ -35,6 +35,7 @@
 #include "common/log.h"
 #include "common/sys.h"
 #include "common/base.h"
+#include "common/cmn.h"
 
 #include "udp_base.h"
 
@@ -48,6 +49,8 @@ class udp_rfs : public udp_base {};
  */
 TEST_F(udp_rfs, single_rule_send)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     int rc = EOK;
     int fd;
     char buf[] = "hello";

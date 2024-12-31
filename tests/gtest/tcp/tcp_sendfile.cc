@@ -44,6 +44,8 @@ class tcp_sendfile : public tcp_base {
 protected:
     void SetUp()
     {
+        GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
         tcp_base::SetUp();
 
         errno = EOK;

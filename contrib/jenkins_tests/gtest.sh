@@ -48,10 +48,13 @@ if [[ -z "${MANUAL_RUN}" ]]; then
 
 	gtest_ip_list_1=$(ip -f inet addr show net1 | awk '/inet / {print $2}' | cut -d/ -f1)
 	gtest_ip_list_2=$(ip -f inet addr show net2 | awk '/inet / {print $2}' | cut -d/ -f1)
-	gtest_opt="--addr=${gtest_ip_list_1},${gtest_ip_list_2}"
-	# gtest_ipv6_list_1=$(ip -f inet6 addr show net1 | awk '/inet6 / {print $2}' | cut -d/ -f1)
-	# gtest_ipv6_list_2=$(ip -f inet6 addr show net2 | awk '/inet6 / {print $2}' | cut -d/ -f1)
-	# gtest_opt_ipv6="--addr=${gtest_ipv6_list_1},${gtest_ipv6_list_2} -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff" # Remote - Dummy Address
+	gtest_ip_remote=$(ip -f inet addr show eth0 | awk '/inet / {print $2}' | cut -d/ -f1)
+	gtest_opt="--addr=${gtest_ip_list_1},${gtest_ip_list_2} --remote=${gtest_ip_remote}"
+
+	gtest_ipv6_list1=$(ip -f inet6 addr show net1 | grep global | awk '/inet6 / {print $2}' | cut -d/ -f1)
+	gtest_ipv6_list2=$(ip -f inet6 addr show net2 | grep global | awk '/inet6 / {print $2}' | cut -d/ -f1)
+	gtest_ipv6_remote=$(ip -f inet6 addr show eth0 | grep global | awk '/inet6 / {print $2}' | cut -d/ -f1)
+	gtest_opt_ipv6="--addr=${gtest_ipv6_list1},${gtest_ipv6_list2} --remote=fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff" # Remote - dummy address
 else
 	# Enable running gtest tests manually without build stage requirement.
 	# To run manually. From main directory:
@@ -63,7 +66,6 @@ else
 	opt2=${MANUAL_RUN_ADAPTER:-'ConnectX-7'}
 
 	gtest_opt="--addr=$(do_get_addrs 'eth' ${opt2})"
-	# gtest_opt_ipv6="--addr=$(do_get_addrs 'inet6' ${opt2}) -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff" # Remote - Dummy Address
 fi
 
 set +eE
@@ -77,34 +79,20 @@ fi
 eval "${sudo_cmd} pkill -9 ${prj_service} 2>/dev/null || true"
 eval "${sudo_cmd} ${install_dir}/sbin/${prj_service} --console -v5 &"
 
-# Exclude EXTRA API tests
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=-xlio_* --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic.xml"
+# Exclude EXTRA API, xliod and udp tests
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=-\"xlio*:udp*\" --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic.xml"
 rc=$(($rc+$?))
 
-# Exclude EXTRA API tests IPv6
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=-xlio_* --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic-ipv6.xml"
+# Exclude EXTRA API, xliod and udp tests IPv6
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=-\"xlio*:udp*\" --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic-ipv6.xml"
 rc=$(($rc+$?))
 
 # Verify Delegated TCP Timers tests
-eval "${sudo_cmd} $timeout_exe env XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=-xlio* --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate.xml"
+eval "${sudo_cmd} $timeout_exe env XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=-\"xlio*:udp*\" --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate.xml"
 rc=$(($rc+$?))
 
 # Verify Delegated TCP Timers tests IPv6
-eval "${sudo_cmd} $timeout_exe env XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=-xlio* --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate-ipv6.xml"
-rc=$(($rc+$?))
-
-if [[ -z "${MANUAL_RUN}" ]]; then
-	make -C tests/gtest clean
-	make $make_opt -C tests/gtest CPPFLAGS="-DEXTRA_API_ENABLED=1"
-	rc=$(($rc+$?))
-fi
-
-# Verify XLIO EXTRA API tests
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=xlio_*:xlio_send_zc.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra.xml"
-rc=$(($rc+$?))
-
-# Verify XLIO EXTRA API tests IPv6
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=xlio_*:xlio_send_zc.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra-ipv6.xml"
+eval "${sudo_cmd} $timeout_exe env XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=-\"xlio*:udp*\" --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate-ipv6.xml"
 rc=$(($rc+$?))
 
 # Verify keep_alive

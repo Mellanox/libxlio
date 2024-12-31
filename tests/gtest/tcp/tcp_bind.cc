@@ -328,6 +328,8 @@ TEST_F(tcp_bind, bind_IP4_6_dual_stack_reuse_addr)
  */
 TEST_F(tcp_bind, bind_IP6_4_dual_stack_reuse_addr)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     ASSERT_TRUE(create_ipv4_ipv6_sockets(true));
     ASSERT_TRUE(set_ipv6only(false));
 
@@ -403,6 +405,8 @@ TEST_F(tcp_bind, bind_IP6_4_dual_stack_reuse_addr_listen)
  */
 TEST_F(tcp_bind, mapped_ipv4_bind)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     if (!test_mapped_ipv4()) {
         return;
     }

@@ -124,7 +124,9 @@ int xliod_base::msg_init(pid_t pid)
     data.hdr.pid = pid;
     version = (uint8_t *)&data.ver;
     version[0] = PRJ_LIBRARY_MAJOR;
-    version[1] = PRJ_LIBRARY_MINOR;
+    // DOCA minor is 9XY where XY is XLIO minor
+    // putting the XLIO minor in these tests
+    version[1] = PRJ_LIBRARY_MINOR % 100;
     version[2] = PRJ_LIBRARY_RELEASE;
     version[3] = PRJ_LIBRARY_REVISION;
 

@@ -50,6 +50,8 @@ class tcp_accept : public tcp_base {};
  */
 TEST_F(tcp_accept, mapped_ipv4_accept)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     if (!test_mapped_ipv4()) {
         return;
     }

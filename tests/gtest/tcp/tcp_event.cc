@@ -73,7 +73,6 @@ TEST_F(tcp_event, ti_2)
 
     fd = tcp_base::sock_create_nb();
     ASSERT_LE(0, fd);
-
     rc = connect(fd, (struct sockaddr *)&remote_addr, sizeof(remote_addr));
     ASSERT_EQ(EINPROGRESS, errno);
     ASSERT_EQ((-1), rc);

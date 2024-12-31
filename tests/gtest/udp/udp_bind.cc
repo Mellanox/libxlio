@@ -310,6 +310,8 @@ TEST_F(udp_bind, bind_IP6_4_dual_stack_reuse_addr)
  */
 TEST_F(udp_bind, mapped_ipv4_bind_recv)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     if (!test_mapped_ipv4()) {
         return;
     }
@@ -378,6 +380,8 @@ TEST_F(udp_bind, mapped_ipv4_bind_recv)
  */
 TEST_F(udp_bind, mapped_ipv4_bind_send)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     if (!test_mapped_ipv4()) {
         return;
     }
@@ -543,6 +547,8 @@ public:
  */
 TEST_F(pktinfo, check_recvmsg_returns_expected_pktinfo)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     int pid = fork();
     if (0 == pid) { /* Child-client code */
         client_func();

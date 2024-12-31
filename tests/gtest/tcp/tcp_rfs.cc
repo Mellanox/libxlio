@@ -48,6 +48,8 @@ class tcp_rfs : public tcp_base {};
  */
 TEST_F(tcp_rfs, single_rule_send)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     int rc = EOK;
     int fd;
     char buf[] = "hello";

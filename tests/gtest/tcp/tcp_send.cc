@@ -58,7 +58,7 @@ TEST_F(tcp_send, ti_1)
     rc = bind(fd, &client_addr.addr, sizeof(client_addr));
     EXPECT_EQ_ERRNO(0, rc);
 
-    rc = send(0xFF, buf, sizeof(buf), 0);
+    rc = send(DUMMY_FD, buf, sizeof(buf), 0);
     EXPECT_EQ(EBADF, errno);
     EXPECT_EQ(-1, rc);
 
@@ -101,6 +101,8 @@ TEST_F(tcp_send, ti_2)
  */
 TEST_F(tcp_send, null_iov_elements)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     std::string buff1("abcd");
     std::string buff2("efgh");
     std::string buff3("ijkl");

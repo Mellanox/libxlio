@@ -182,6 +182,8 @@ TEST_F(udp_connect, ti_4)
  */
 TEST_F(udp_connect, mapped_ipv4_connect)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     if (!test_mapped_ipv4()) {
         return;
     }

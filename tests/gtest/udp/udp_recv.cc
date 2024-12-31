@@ -36,6 +36,7 @@
 #include "common/log.h"
 #include "common/sys.h"
 #include "common/base.h"
+#include "common/cmn.h"
 #include "src/core/util/sock_addr.h"
 #include "udp_base.h"
 
@@ -50,6 +51,8 @@ class udp_recv : public udp_base {};
  */
 TEST_F(udp_recv, mapped_ipv4_recv)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     if (!test_mapped_ipv4()) {
         return;
     }

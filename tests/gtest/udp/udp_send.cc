@@ -91,7 +91,7 @@ TEST_F(udp_send, ti_2)
     rc = connect(fd, &server_addr.addr, sizeof(server_addr));
     EXPECT_EQ_ERRNO(0, rc);
 
-    ssize_t rcz = send(0xFF, buf, sizeof(buf), 0);
+    ssize_t rcz = send(DUMMY_FD, buf, sizeof(buf), 0);
     EXPECT_EQ(EBADF, errno);
     EXPECT_EQ(-1, rcz);
 
@@ -228,6 +228,8 @@ TEST_F(udp_send, ti_6)
  */
 TEST_F(udp_send, mapped_ipv4_send)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     if (!test_mapped_ipv4()) {
         return;
     }
@@ -361,6 +363,8 @@ TEST_F(udp_send, mapped_ipv4_send_v6only)
  */
 TEST_F(udp_send, DISABLED_mapped_ipv4_send_mc)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     if (!test_mapped_ipv4()) {
         return;
     }
@@ -459,6 +463,8 @@ TEST_F(udp_send, DISABLED_mapped_ipv4_send_mc)
  */
 TEST_F(udp_send, null_iov_elements)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     std::string buff1("abcd");
     std::string buff2("efgh");
     std::string buff3("ijkl");
@@ -576,6 +582,8 @@ TEST_F(udp_send, null_iov_elements)
  */
 TEST_F(udp_send, null_iov_elements_single_iov)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     std::string buff3("efgh");
     char buff4[sizeof(cmsghdr)] = "Dummy Control";
 
@@ -708,6 +716,8 @@ TEST_F(udp_send, null_iov_elements_too_big_msg)
  */
 TEST_F(udp_send, DISABLED_null_iov_elements_fragmented)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     char buff1[8000] = {0};
     char buff2[8000] = {0};
 

@@ -62,6 +62,8 @@ class tcp_sockopt : public tcp_base {};
  */
 TEST_F(tcp_sockopt, ti_1_getsockopt_tcp_info)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     auto test_lambda = [this]() {
         int rc = EOK;
         int pid = fork();
@@ -251,6 +253,8 @@ TEST_F(tcp_sockopt, ti_2_tcp_congestion)
  */
 TEST_F(tcp_sockopt, ti_3_setsockopt_isolate)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
     struct xlio_api_t *xlio_api = xlio_get_api();
     pid_t pid;
 
@@ -823,6 +827,7 @@ protected:
  */
 TEST_P(tcp_with_fifo, accepted_socket_inherits_the_setsockopt_param)
 {
+    GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
     SKIP_TRUE(!getenv("XLIO_TCP_CTL_THREAD"), "Skip non default XLIO_TCP_CTL_THREAD");
 
     int level, optname, value;

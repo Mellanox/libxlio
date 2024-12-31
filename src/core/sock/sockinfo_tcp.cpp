@@ -5603,6 +5603,7 @@ void tcp_timers_collection::clean_obj()
 void tcp_timers_collection::handle_timer_expired(void *user_data)
 {
     NOT_IN_USE(user_data);
+    NOT_IN_USE(user_data);
     sock_list &bucket = m_p_intervals[m_n_location];
     m_n_location = (m_n_location + 1) % m_n_intervals_size;
 

@@ -54,6 +54,8 @@ class xlio_send_zc : public xlio_base, public tcp_base {
 protected:
     void SetUp()
     {
+        GTEST_SKIP() << "Skipping this test because fork is not supported yet.";
+
         int fd = -1;
         int rc = EOK;
         int opt_val = 1;

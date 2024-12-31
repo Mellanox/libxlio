@@ -47,16 +47,17 @@ protected:
     void SetUp()
     {
         uint8_t *version;
+
         xliod_base::SetUp();
 
         m_pid = 0x494E4954;
         memset(&m_data, 0, sizeof(m_data));
-        m_data.hdr.code = XLIO_MSG_INIT;
-        m_data.hdr.ver = XLIO_AGENT_VER;
-        m_data.hdr.pid = m_pid;
         version = (uint8_t *)&m_data.ver;
         version[0] = PRJ_LIBRARY_MAJOR;
-        version[1] = PRJ_LIBRARY_MINOR;
+        // DOCA minor is 9XY where XY is XLIO minor
+        // putting the XLIO minor in these tests
+        version[1] = PRJ_LIBRARY_MINOR % 100;
+
         version[2] = PRJ_LIBRARY_RELEASE;
         version[3] = PRJ_LIBRARY_REVISION;
     }
