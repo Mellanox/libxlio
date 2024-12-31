@@ -310,6 +310,8 @@ TEST_F(udp_bind, bind_IP6_4_dual_stack_reuse_addr)
  */
 TEST_F(udp_bind, mapped_ipv4_bind_recv)
 {
+    SKIP_TRUE(!run_fork_tests, "run_fork_tests was not set");
+
     if (!test_mapped_ipv4()) {
         return;
     }
@@ -378,6 +380,8 @@ TEST_F(udp_bind, mapped_ipv4_bind_recv)
  */
 TEST_F(udp_bind, mapped_ipv4_bind_send)
 {
+    SKIP_TRUE(!run_fork_tests, "run_fork_tests was not set");
+
     if (!test_mapped_ipv4()) {
         return;
     }

@@ -182,6 +182,8 @@ TEST_F(udp_connect, ti_4)
  */
 TEST_F(udp_connect, mapped_ipv4_connect)
 {
+    SKIP_TRUE(!run_fork_tests, "run_fork_tests was not set");
+
     if (!test_mapped_ipv4()) {
         return;
     }

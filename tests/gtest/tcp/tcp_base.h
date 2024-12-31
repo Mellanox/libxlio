@@ -79,6 +79,8 @@ class tcp_send_zc : public tcp_base {
 protected:
     void SetUp()
     {
+        SKIP_TRUE(!run_fork_tests, "run_fork_tests was not set");
+
         int fd = -1;
         int rc = EOK;
         int opt_val = 1;

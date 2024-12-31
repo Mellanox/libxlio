@@ -50,6 +50,8 @@ class udp_recv : public udp_base {};
  */
 TEST_F(udp_recv, mapped_ipv4_recv)
 {
+    SKIP_TRUE(!run_fork_tests, "run_fork_tests was not set");
+
     if (!test_mapped_ipv4()) {
         return;
     }

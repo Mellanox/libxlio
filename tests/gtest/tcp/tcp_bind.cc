@@ -328,6 +328,8 @@ TEST_F(tcp_bind, bind_IP4_6_dual_stack_reuse_addr)
  */
 TEST_F(tcp_bind, bind_IP6_4_dual_stack_reuse_addr)
 {
+    SKIP_TRUE(!run_fork_tests, "run_fork_tests was not set");
+
     ASSERT_TRUE(create_ipv4_ipv6_sockets(true));
     ASSERT_TRUE(set_ipv6only(false));
 

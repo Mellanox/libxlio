@@ -62,6 +62,8 @@ class tcp_sockopt : public tcp_base {};
  */
 TEST_F(tcp_sockopt, ti_1_getsockopt_tcp_info)
 {
+    SKIP_TRUE(!run_fork_tests, "run_fork_tests was not set");
+
     auto test_lambda = [this]() {
         int rc = EOK;
         int pid = fork();
@@ -251,6 +253,8 @@ TEST_F(tcp_sockopt, ti_2_tcp_congestion)
  */
 TEST_F(tcp_sockopt, ti_3_setsockopt_isolate)
 {
+    SKIP_TRUE(!run_fork_tests, "run_fork_tests was not set");
+
     struct xlio_api_t *xlio_api = xlio_get_api();
     pid_t pid;
 

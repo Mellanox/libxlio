@@ -44,8 +44,8 @@
               if (val1 > val2) { log_trace("Failed. errno = %d\n", errno); })
 
 #define EXPECT_EQ_ERRNO(val1, val2)                                                                \
-    DO_WHILE0(EXPECT_EQ((val1), (val2));                                                           \
-              if (val1 != val2) { log_trace("Failed. errno = %d\n", errno); })
+    ` DO_WHILE0(EXPECT_EQ((val1), (val2));                                                         \
+                if (val1 != val2) { log_trace("Failed. errno = %d\n", errno); })
 
 #define EXPECT_EQ_MAPPED_IPV4(addr6, sin_addr)                                                     \
     DO_WHILE0(EXPECT_EQ(AF_INET6, (addr6).sin6_family);                                            \
@@ -60,6 +60,8 @@
               EXPECT_EQ(addrp1[0], addrp2[0]); EXPECT_EQ(addrp1[1], addrp2[1]);)
 
 #define SOCK_STR(x) sockaddr2str(reinterpret_cast<const sockaddr *>(&x), sizeof(x)).c_str()
+
+static bool run_fork_tests = false;
 
 class test_base_sock {
 public:

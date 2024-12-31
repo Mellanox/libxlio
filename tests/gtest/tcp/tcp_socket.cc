@@ -64,6 +64,8 @@ TEST_F(tcp_socket, ti_1_ip_socket)
  */
 TEST_F(tcp_socket, ti_2_ipv6only_listen_all)
 {
+    SKIP_TRUE(!run_fork_tests, "run_fork_tests was not set");
+
     // Test only for IPv4 to IPv6 mode.
     if (server_addr.addr.sa_family != AF_INET6 || client_addr.addr.sa_family != AF_INET) {
         return;

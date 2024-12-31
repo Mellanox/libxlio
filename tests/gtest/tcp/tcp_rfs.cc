@@ -48,6 +48,8 @@ class tcp_rfs : public tcp_base {};
  */
 TEST_F(tcp_rfs, single_rule_send)
 {
+    SKIP_TRUE(!run_fork_tests, "run_fork_tests was not set");
+
     int rc = EOK;
     int fd;
     char buf[] = "hello";

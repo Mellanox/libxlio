@@ -101,6 +101,8 @@ TEST_F(tcp_send, ti_2)
  */
 TEST_F(tcp_send, null_iov_elements)
 {
+    SKIP_TRUE(!run_fork_tests, "run_fork_tests was not set");
+
     std::string buff1("abcd");
     std::string buff2("efgh");
     std::string buff3("ijkl");

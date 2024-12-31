@@ -142,6 +142,8 @@ TEST_F(tcp_connect, DISABLED_ti_3)
  */
 TEST_F(tcp_connect, ti_4_rto_racing)
 {
+    SKIP_TRUE(!run_fork_tests, "run_fork_tests was not set");
+
     int pid = fork();
 
     if (0 == pid) { /* I am the child */
@@ -337,6 +339,8 @@ TEST_F(tcp_connect, ti_5_multi_connect)
  */
 TEST_F(tcp_connect, mapped_ipv4_connect)
 {
+    SKIP_TRUE(!run_fork_tests, "run_fork_tests was not set");
+
     if (!test_mapped_ipv4()) {
         return;
     }
@@ -466,6 +470,8 @@ TEST_F(tcp_connect, mapped_ipv4_connect_v6only)
  */
 TEST_F(tcp_connect, ti_6_incoming_conn)
 {
+    SKIP_TRUE(!run_fork_tests, "run_fork_tests was not set");
+
     int rc = EOK;
     int pid = fork();
 
