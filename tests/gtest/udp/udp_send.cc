@@ -91,7 +91,7 @@ TEST_F(udp_send, ti_2)
     rc = connect(fd, &server_addr.addr, sizeof(server_addr));
     EXPECT_EQ_ERRNO(0, rc);
 
-    ssize_t rcz = send(0xFF, buf, sizeof(buf), 0);
+    ssize_t rcz = send(DUMMY_FD, buf, sizeof(buf), 0);
     EXPECT_EQ(EBADF, errno);
     EXPECT_EQ(-1, rcz);
 

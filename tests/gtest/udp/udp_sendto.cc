@@ -90,7 +90,7 @@ TEST_F(udp_sendto, ti_2)
     EXPECT_EQ(0, rc);
 
     errno = EOK;
-    rc = sendto(0xFF, (void *)buf, sizeof(buf), 0, (struct sockaddr *)&server_addr,
+    rc = sendto(DUMMY_FD, (void *)buf, sizeof(buf), 0, (struct sockaddr *)&server_addr,
                 sizeof(server_addr));
     EXPECT_EQ(EBADF, errno);
     EXPECT_EQ(-1, rc);

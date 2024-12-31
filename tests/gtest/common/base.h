@@ -61,6 +61,10 @@
 
 #define SOCK_STR(x) sockaddr2str(reinterpret_cast<const sockaddr *>(&x), sizeof(x)).c_str()
 
+// assumption - the dummy fd is dummy
+// we don't check it though!
+#define DUMMY_FD (0xFFFF)
+
 class test_base_sock {
 public:
     virtual int get_sock_type() const = 0;

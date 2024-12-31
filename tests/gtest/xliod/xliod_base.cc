@@ -116,17 +116,13 @@ int xliod_base::msg_init(pid_t pid)
 {
     int rc = 0;
     struct xlio_msg_init data;
-    uint8_t *version;
 
     memset(&data, 0, sizeof(data));
     data.hdr.code = XLIO_MSG_INIT;
     data.hdr.ver = XLIO_AGENT_VER;
     data.hdr.pid = pid;
-    version = (uint8_t *)&data.ver;
-    version[0] = PRJ_LIBRARY_MAJOR;
-    version[1] = 0;
-    version[2] = PRJ_LIBRARY_RELEASE;
-    version[3] = PRJ_LIBRARY_REVISION;
+    data.ver = (PRJ_LIBRARY_MAJOR << 12) | (PRJ_LIBRARY_MINOR << 8) | (PRJ_LIBRARY_RELEASE << 4) |
+        PRJ_LIBRARY_REVISION;
 
     errno = 0;
     rc = send(m_sock_fd, &data, sizeof(data), 0);
