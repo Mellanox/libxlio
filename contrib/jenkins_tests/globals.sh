@@ -296,7 +296,7 @@ do_compile_doca()
     echo ""
     echo "===== DOCA checkout & compilation starts ====="
     echo ""
-    doca_version="2.10.0025-1"
+    doca_version="b74a24b66f546bfee96452ad2f7e3377a10f80cf" # last stable commit from master
     doca_sdk="$WORKSPACE/$prefix/doca-sdk"
     doca_repo="ssh://git-nbu.nvidia.com:12023/doca/doca"
     doca_build="$WORKSPACE/$prefix/doca"
