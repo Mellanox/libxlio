@@ -356,12 +356,13 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
 
     queuelen = pcb->snd_queuelen;
     mss_local = tcp_xmit_size_goal(pcb, 1);
+
     if (is_file) {
         offset = offset_next = *(__off64_t *)arg;
     }
 
     /*
-     * TCP segmentation is done in two phases with increasing complexity:
+     * TCP segmentation is done in two phases:
      *
      * 1. Copy data directly into an oversized pbuf.
      * 2. Create new segments.
@@ -392,9 +393,17 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
             (pcb->last_unsent->seqno + pcb->last_unsent->len == pcb->snd_lbb)) {
             oversize_used = mss_local - (pcb->last_unsent->len + unsent_optlen);
             oversize_used = LWIP_MIN(oversize_used, len);
-            pos += oversize_used;
         }
         seg = pcb->last_unsent;
+    }
+
+    /*
+     * If we have used oversize, we need to adjust 'len' and 'arg' for the remaining data,
+     * and update 'pcb->snd_lbb' accordingly to fix the sequence number calculation.
+     */
+    if (oversize_used > 0) {
+        len -= oversize_used; // Adjust remaining length
+        arg = (const u8_t *)arg + oversize_used; // Adjust data pointer
     }
 
     /*
@@ -432,6 +441,7 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
                  * does not support partial write
                  */
                 if (ret != piov_cur_len) {
+                    pbuf_free(p);
                     goto memerr;
                 }
                 piov_cur_index = 0;
@@ -443,7 +453,10 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
             memcpy((char *)p->payload + optlen, (u8_t *)arg + pos, seglen);
         }
 
-        seg = tcp_create_segment(pcb, p, 0, pcb->snd_lbb + pos, optflags);
+        // Adjust the sequence number to include any data added via oversize
+        const u32_t seqno = pcb->snd_lbb + pos + (oversize_used > 0 ? oversize_used : 0);
+
+        seg = tcp_create_segment(pcb, p, 0, seqno, optflags);
         if (!seg) {
             tcp_tx_pbuf_free(pcb, p);
             goto memerr;
@@ -472,11 +485,14 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
         for (p = pcb->last_unsent->p; p; p = p->next) {
             p->tot_len += oversize_used;
             if (p->next == NULL) {
-                memcpy((char *)p->payload + p->len, arg, oversize_used);
+                memcpy((char *)p->payload + p->len, arg - oversize_used, oversize_used);
                 p->len += oversize_used;
             }
         }
         pcb->last_unsent->len += oversize_used;
+
+        // Update 'pcb->snd_lbb' to include the data added via oversize
+        pcb->snd_lbb += oversize_used;
     }
 
     /*
@@ -487,11 +503,15 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
     } else {
         pcb->last_unsent->next = queue;
     }
-    pcb->last_unsent = seg;
+
+    // Update 'pcb->last_unsent' to point to the last segment
+    if (prev_seg != NULL) {
+        pcb->last_unsent = prev_seg;
+    }
 
     /* Finally update the pcb state. */
-    pcb->snd_lbb += len;
-    pcb->snd_buf -= len;
+    pcb->snd_lbb += len; // Add remaining length to 'snd_lbb'
+    pcb->snd_buf -= (oversize_used + len);
     pcb->snd_queuelen = queuelen;
 
     LWIP_DEBUGF(TCP_QLEN_DEBUG, ("tcp_write: %" S16_F " (after enqueued)\n", pcb->snd_queuelen));
