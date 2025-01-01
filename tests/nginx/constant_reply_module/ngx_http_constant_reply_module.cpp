@@ -1,6 +1,6 @@
 /*
  * SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
- * Copyright (c) 2001-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2001-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: GPL-2.0-only or BSD-3-Clause
  *
  * This software is available to you under a choice of one of two
@@ -181,3 +181,4 @@ static ngx_int_t ngx_http_constant_reply_handler(ngx_http_request_t *r)
     // Send reply content
     return ngx_http_output_filter(r, &out);
 }
+
