@@ -7,7 +7,8 @@ echo "Checking for valgrind ..."
 #do_module "tools/valgrind-3.12.0"
 
 set +eE
-
+which valgrind
+/bin/valgrind --version
 cd $WORKSPACE
 rm -rf $vg_dir
 mkdir -p $vg_dir
@@ -42,7 +43,7 @@ else
 fi
 test_list="tcp:--tcp"
 test_lib=${vg_dir}/install/lib/${prj_lib}
-test_lib_env="XLIO_MEM_ALLOC_TYPE=ANON XLIO_DOCA_RX=0 XLIO_DOCA_TX=0"
+test_lib_env="XLIO_MEM_ALLOC_TYPE=ANON XLIO_DOCA_RX=1 XLIO_DOCA_TX=1"
 test_app=sockperf
 test_app_path=${test_dir}/sockperf/install/bin/sockperf
 vg_tool=/bin/valgrind
@@ -85,9 +86,9 @@ for test_link in $test_ip_list; do
 			--memcheck:leak-check=full --track-origins=yes --read-var-info=yes \
 			--errors-for-leak-kinds=definite --show-leak-kinds=definite,possible \
 			--undef-value-errors=yes --track-fds=yes --num-callers=32 \
-			--fullpath-after=${WORKSPACE} --fair-sched=yes \
-			--suppressions=${WORKSPACE}/contrib/valgrind/valgrind_xlio.supp \
-			"
+			--fullpath-after=${WORKSPACE} --fair-sched=yes "
+			# --suppressions=${WORKSPACE}/contrib/valgrind/valgrind_xlio.supp \
+			# "
 		eval "${sudo_cmd} $timeout_exe ${vg_tool} --log-file=${vg_dir}/${test_name}-valgrind-sr.log \
 			$vg_args env $test_lib_env LD_PRELOAD=$test_lib \
 			$test_app_path sr ${test_opt} -i ${test_ip} 2>&1 | tee ${vg_dir}/${test_name}-output-sr.log &"

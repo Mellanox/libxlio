@@ -107,7 +107,7 @@ runs_on_dockers:
      runAsUser: '0',
      runAsGroup: '0'
     }
-  # The Gtest step is disabled until Oct'24 release, Jira HPCINFRA-1968, RM #3981627, #3981654 
+  # The Gtest step is disabled until Oct'24 release, Jira HPCINFRA-1968, RM #3981627, #3981654
   # - {
   #    file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
   #    arch: 'x86_64',
@@ -311,7 +311,7 @@ steps:
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
 
-  # The Gtest step is disabled until Oct'24 release, Jira HPCINFRA-1968, RM #3981627, #3981654 
+  # The Gtest step is disabled until Oct'24 release, Jira HPCINFRA-1968, RM #3981627, #3981654
   # - name: Gtest
   #   enable: ${do_gtest}
   #   containerSelector:
@@ -337,9 +337,9 @@ steps:
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
-    archiveArtifacts-onfail: |
+    archiveArtifacts: |
       jenkins/**/arch-*.tar.gz,
-      jenkins/**/vg/*valgrind*.log
+      jenkins/**/vg/*.log
 
   - name: Commit
     enable: ${do_commit}
