@@ -5692,18 +5692,24 @@ void sockinfo_tcp::tcp_tx_pbuf_free(void *p_conn, struct pbuf *p_buff)
     sockinfo_tcp *p_si_tcp = (sockinfo_tcp *)(((struct tcp_pcb *)p_conn)->my_container);
     dst_entry_tcp *p_dst = (dst_entry_tcp *)(p_si_tcp->m_p_connected_dst_entry);
 
+    static lock_mutex_recursive pbuf_ref_count_lock("sockinfo_tcp::tcp_tx_pbuf_free");
     if (likely(p_dst)) {
         p_dst->put_buffer((mem_buf_desc_t *)p_buff);
     } else if (p_buff) {
         mem_buf_desc_t *p_desc = (mem_buf_desc_t *)p_buff;
 
-        // potential race, ref is protected here by tcp lock, and in ring by ring_tx lock
+        // potential race, ref is protected here by tcp lock in most TX cases, and in ring by
+        // ring_tx lock
+        // Note: when we either RST immediately when getting invalid SYN from client - or
+        // when we answer with an empty ack - we don't have a p_dst and ref is not protected as the
+        // flow is not TX based (not originating from tcp_tx_handle_done_and_unlock)
+        pbuf_ref_count_lock.lock();
         if (likely(p_desc->lwip_pbuf_get_ref_count())) {
             p_desc->lwip_pbuf_dec_ref_count();
         } else {
             __log_err("ref count of %p is already zero, double free??", p_desc);
         }
-
+        pbuf_ref_count_lock.unlock();
         if (p_desc->lwip_pbuf.ref == 0) {
             p_desc->p_next_desc = nullptr;
             buffer_pool::free_tx_lwip_pbuf_custom(p_buff);
