@@ -28,8 +28,8 @@ RUN ARCH=$(uname -m) && \
     g++ make vim python3-pip curl \
     git libglib2.0-dev \
 && echo >> /etc/apt/sources.list.d/doca.list \
-&& echo deb [signed-by=/etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub] https://doca-repo-prod.nvidia.com/internal/repo/doca/2.9.1/ubuntu22.04/$DOCA_ARCH/dev ./ >> /etc/apt/sources.list.d/doca.list \
-&& curl https://doca-repo-prod.nvidia.com/internal/repo/doca/2.9.1/ubuntu22.04/$DOCA_ARCH/dev//GPG-KEY-Mellanox.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub \
+&& echo deb [signed-by=/etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub] https://doca-repo-prod.nvidia.com/internal/repo/doca/2.10.0/ubuntu22.04/$DOCA_ARCH/dev ./ >> /etc/apt/sources.list.d/doca.list \
+&& curl https://doca-repo-prod.nvidia.com/internal/repo/doca/2.10.0/ubuntu22.04/$DOCA_ARCH/dev//GPG-KEY-Mellanox.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub \
 && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get -qq update \
