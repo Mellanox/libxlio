@@ -65,7 +65,7 @@ get_version_number_doca()
 
 get_min_supported_version_doca()
 {
-    echo 2100025
+    echo 2100045
 }
 
 AC_ARG_WITH([doca],
