@@ -1,3 +1,25 @@
+Version 3.941.0-1:
+Date + Time 2025-01-07
+=============================================================
+Added:
+        - RM #4144194 Bump to DOCA version 2.10.0045
+        - RM #4144194 Integrating progress-all notification mechanism
+        - RM #4144197 Using doca_mmap thread safety mode
+        - RM #4159519 Introducing hw_queue stats for DOCA
+        - RM #4144195 MSIX distribution
+        - RM #4144188 DOCA logger integration
+        - RM #4159515 Move logics from CQ Mgr to hw_queue
+        - RM #4159516 Optimize return to global pool for DOCA path
+        - RM #4158085 DOCA TX credits limit
+Fixed:
+        - RM #4082814 Fix TX migration for DOCA DP
+        - RM #4082814 Adding DOCA send failure handling for future TLS
+        - RM #4144194 Fixing compiler warning for fortified checked memset
+        - RM #4159517 Removing return code from TX poll and process
+        - RM #4232351 DOCA copyrights header to 2025
+Removed:
+        - RM #4154211 Removing ring_tap
+
 Version 3.940.2-1:
 Date + Time 2024-10-10
 =============================================================
