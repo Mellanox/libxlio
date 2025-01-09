@@ -24,7 +24,7 @@ ${WORKSPACE}/configure $jenkins_test_custom_configure > "${cppcheck_dir}/cppchec
 
 set +eE
 eval "find ${WORKSPACE}/src -name '*.h' -o -name '*.cpp' -o -name '*.c' -o -name '*.hpp' | \
-	${tool_app} --std=c++11 --language=c++ --force --enable=information \
+	${tool_app} --std=c++14 --language=c++ --force --enable=information \
 	-I${WORKSPACE}/src \
 	-I${WORKSPACE}/src/stats \
 	-I${WORKSPACE}/src/utils \

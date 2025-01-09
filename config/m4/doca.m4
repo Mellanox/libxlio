@@ -101,7 +101,6 @@ prj_cv_doca_LIBS="-ldoca_common -ldoca_eth -ldoca_flow"
 prj_cv_doca_LDFLAGS="-L$with_doca/lib/$prj_cv_doca_LDFLAGS_arch -Wl,--rpath,$with_doca/lib/$prj_cv_doca_LDFLAGS_arch"
 
 CPPFLAGS="$prj_cv_doca_CPPFLAGS $CPPFLAGS"
-CXXFLAGS="-std=c++11 $CXXFLAGS"
 LDFLAGS="$prj_cv_doca_LDFLAGS $LDFLAGS"
 LIBS="$prj_cv_doca_LIBS $LIBS"
 
