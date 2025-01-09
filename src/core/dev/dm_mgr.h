@@ -33,7 +33,8 @@
 
 #ifndef DM_MGR_H
 #define DM_MGR_H
-
+#include "config.h"
+#ifdef DEFINED_DPCP_PATH_TX
 #include "ib/base/verbs_extra.h"
 #include "util/xlio_stats.h"
 
@@ -94,4 +95,5 @@ public:
 
 #endif /* DEFINED_IBV_DM */
 #endif /* DEFINED_DIRECT_VERBS */
+#endif // DEFINED_DPCP_PATH_TX
 #endif /* DM_MGR_H */

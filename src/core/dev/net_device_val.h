@@ -251,9 +251,10 @@ public:
     inline bond_type get_is_bond() { return m_bond; }
     inline bond_xmit_hash_policy get_bond_xmit_hash_policy() { return m_bond_xmit_hash_policy; }
     bool update_active_slaves();
-    void update_netvsc_slaves(int if_index, int if_flags);
+#ifdef DEFINED_DPCP_PATH_RX_OR_TX
     void register_to_ibverbs_events(event_handler_ibverbs *handler);
     void unregister_to_ibverbs_events(event_handler_ibverbs *handler);
+#endif // DEFINED_DPCP_PATH_RX_OR_TX
     uint32_t get_priority_by_tc_class(uint32_t tc_class);
 
 protected:
@@ -280,9 +281,6 @@ protected:
 
 private:
     void verify_bonding_mode();
-    bool verify_qp_creation(const char *ifname, enum ibv_qp_type qp_type);
-    bool verify_bond_or_eth_qp_creation();
-    bool verify_eth_qp_creation(const char *interface_name);
 
     resource_allocation_key *ring_key_redirection_reserve(resource_allocation_key *key);
     resource_allocation_key *get_ring_key_redirection(resource_allocation_key *key);

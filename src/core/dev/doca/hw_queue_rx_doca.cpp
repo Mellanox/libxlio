@@ -85,7 +85,7 @@ hw_queue_rx::~hw_queue_rx()
 
 bool hw_queue_rx::prepare_doca_rxq()
 {
-    doca_dev *dev = m_p_ib_ctx_handler->get_doca_device();
+    doca_dev *dev = m_p_ib_ctx_handler->get_ctx_doca_dev().get_doca_device();
     doca_devinfo *devinfo = doca_dev_as_devinfo(dev);
 
     doca_error_t type_supported = doca_eth_rxq_cap_is_type_supported(
@@ -322,7 +322,7 @@ void hw_queue_rx::start_doca_rxq()
 {
     hwqrx_logdbg("Starting DOCA RXQ: %p pid: %d", m_doca_rxq.get(), getpid());
 
-    if (!m_p_ib_ctx_handler->get_doca_flow_port()) {
+    if (!m_p_ib_ctx_handler->get_ctx_doca_dev().get_doca_flow_port()) {
         hwqrx_logerr("modify_queue_to_ready_state unable to get DOCA flow port, RXQ: %p", this);
     }
 

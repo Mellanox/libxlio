@@ -31,60 +31,39 @@
  * SOFTWARE.
  */
 
-#ifndef TIME_CONVERTER_H
-#define TIME_CONVERTER_H
+#ifndef IB_CTX_HANDLER_DOCA_H
+#define IB_CTX_HANDLER_DOCA_H
 
-#include <unordered_map>
-#include <infiniband/verbs.h>
+#include "util/vtypes.h"
+#ifndef DEFINED_DPCP_PATH_RX_AND_TX
+#include <doca_dev.h>
+#include <doca_flow.h>
+#include <doca_pe.h>
+#include "dev/time_converter.h"
 
-#include "util/sys_vars.h"
-#include "sock/cleanable_obj.h"
-#include "event/timer_handler.h"
-
-class net_device_val;
-typedef std::unordered_map<int, net_device_val *> net_device_map_t;
-
-class ctx_timestamping_params_t {
+class ib_ctx_handler_doca {
 public:
-    uint64_t hca_core_clock;
-    uint64_t sync_hw_clock;
-    struct timespec sync_systime;
+    ib_ctx_handler_doca(doca_devinfo *devinfo, std::string &ibname, const char *ifname);
+    ~ib_ctx_handler_doca();
+    doca_dev *get_doca_device() const { return m_doca_dev; }
+    doca_flow_port *get_doca_flow_port();
+    doca_flow_pipe *get_doca_root_pipe();
+    void stop_doca_flow_port();
+    void set_ctx_time_converter_status(ts_conversion_mode_t conversion_mode);
+    void convert_hw_time_to_system_time(uint64_t hwtime, struct timespec *systime);
+    const std::string &get_ifname() const { return m_ifname; }
 
-    ctx_timestamping_params_t()
-        : hca_core_clock(0)
-        , sync_hw_clock(0)
-    {
-        sync_systime.tv_sec = 0;
-        sync_systime.tv_nsec = 0;
-    }
+private:
+    void open_doca_dev(doca_devinfo *devinfo);
+    doca_error_t start_doca_flow_port();
+    doca_error_t create_doca_root_pipe();
+
+    doca_dev *m_doca_dev = nullptr;
+    doca_flow_port *m_doca_port = nullptr;
+    doca_flow_pipe *m_doca_root_pipe = nullptr;
+    time_converter *m_p_ctx_time_converter = nullptr;
+    std::string m_ifname;
+    std::string &m_ibname;
 };
-
-class time_converter : public timer_handler, public cleanable_obj {
-public:
-    time_converter()
-        : m_timer_handle(NULL)
-        , m_converter_status(TS_CONVERSION_MODE_DISABLE) {};
-    virtual ~time_converter() = 0;
-
-    virtual void convert_hw_time_to_system_time(uint64_t hwtime, struct timespec *systime) = 0;
-    virtual void handle_timer_expired(void *user_data) = 0;
-    virtual void clean_obj();
-    ts_conversion_mode_t get_converter_status() { return m_converter_status; };
-
-    static ts_conversion_mode_t update_device_converters_status(net_device_map_t &net_devices);
-
-protected:
-    void *m_timer_handle;
-    ts_conversion_mode_t m_converter_status;
-
-#ifdef DEFINED_DPCP_PATH_RX
-    static uint32_t get_single_converter_status(struct ibv_context *ctx);
-#endif // DEFINED_DPCP_PATH_RX
-};
-
-// pure virtual destructor implementation
-inline time_converter::~time_converter()
-{
-}
-
-#endif // TIME_CONVERTER_H
+#endif // !DEFINED_DPCP_PATH_RX_AND_TX
+#endif // IB_CTX_HANDLER_DOCA_H

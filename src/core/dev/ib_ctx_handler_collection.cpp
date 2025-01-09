@@ -73,7 +73,7 @@ ib_ctx_handler_collection::~ib_ctx_handler_collection()
 
     ib_context_map_t::iterator ib_ctx_iter;
     while ((ib_ctx_iter = m_ib_ctx_map.begin()) != m_ib_ctx_map.end()) {
-        ib_ctx_handler *p_ib_ctx_handler = ib_ctx_iter->second;
+        ib_ctx_handler *p_ib_ctx_handler = *ib_ctx_iter;
         delete p_ib_ctx_handler;
         m_ib_ctx_map.erase(ib_ctx_iter);
     }
@@ -81,50 +81,52 @@ ib_ctx_handler_collection::~ib_ctx_handler_collection()
     ibchc_logdbg("Done");
 }
 
+#ifndef DEFINED_DPCP_PATH_RX
 void ib_ctx_handler_collection::stop_all_doca_flow_ports()
 {
     ibchc_logdbg(LOG_FUNCTION_CALL);
-    for (auto &itr : m_ib_ctx_map) {
-        itr.second->stop_doca_flow_port();
+    for (auto itr : m_ib_ctx_map) {
+        itr->get_ctx_doca_dev().stop_doca_flow_port();
     }
 }
+#endif // !DEFINED_DPCP_PATH_RX
 
-void ib_ctx_handler_collection::update_tbl(const char *ifa_name)
+void ib_ctx_handler_collection::update_tbl()
 {
     ibchc_logdbg("Checking for offload capable IB devices...");
-
-    doca_devinfo **dev_list_doca;
     uint32_t num_devices_doca = 0U;
+    int num_devices_ibv = 0;
+
+#ifndef DEFINED_DPCP_PATH_RX_AND_TX
+    doca_devinfo **dev_list_doca;
     doca_error_t err = doca_devinfo_create_list(&dev_list_doca, &num_devices_doca);
     if (DOCA_IS_ERROR(err)) {
         PRINT_DOCA_ERR(ibchc_logerr, err, "doca_devinfo_create_list");
         return;
     }
 
-    // ------ Remove when DOCA fully implemented ------
-    int num_devices = 0;
-    struct ibv_device **dev_list = xlio_ibv_get_device_list(&num_devices);
+    char doca_ifname_name[DOCA_DEVINFO_IFACE_NAME_SIZE] = {0};
+    char doca_ibdev_name[DOCA_DEVINFO_IFACE_NAME_SIZE] = {0};
+#endif // !DEFINED_DPCP_PATH_RX_AND_TX
+
+#ifdef DEFINED_DPCP_PATH_RX_OR_TX
+    struct ibv_device **dev_list = xlio_ibv_get_device_list(&num_devices_ibv);
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (!dev_list) {
-        ibchc_logerr("Failure in xlio_ibv_get_device_list() (error=%d %m)", errno);
-        ibchc_logerr("Please check rdma configuration");
+    if (!dev_list || num_devices_ibv <= 0) {
+        ibchc_logerr(
+            "Failure in xlio_ibv_get_device_list() (error=%d %m). Please check rdma configuration",
+            errno);
         throw_xlio_exception("No IB capable devices found!");
-    }
-    if (!num_devices) {
-        vlog_levels_t _level =
-            ifa_name ? VLOG_DEBUG : VLOG_ERROR; // Print an error only during initialization.
-        __log_raw(_level, PRODUCT_NAME " does not detect IB capable devices\n");
-        __log_raw(_level, "No performance gain is expected in current configuration\n");
     }
 
     BULLSEYE_EXCLUDE_BLOCK_END
-    // -------------------------------------------------
+#endif // DEFINED_DPCP_PATH_RX_OR_TX
 
-    char doca_ifname_name[DOCA_DEVINFO_IFACE_NAME_SIZE] = {0};
-    char doca_ibdev_name[DOCA_DEVINFO_IFACE_NAME_SIZE] = {0};
-
-    for (uint32_t devidx = 0; devidx < num_devices_doca; devidx++) {
+    uint32_t devices_num =
+        (num_devices_doca > 0U ? num_devices_doca : static_cast<uint32_t>(num_devices_ibv));
+    for (uint32_t devidx = 0; devidx < devices_num; devidx++) {
+#ifndef DEFINED_DPCP_PATH_RX_AND_TX
         doca_error_t err_iface = doca_devinfo_get_iface_name(
             dev_list_doca[devidx], doca_ifname_name, sizeof(doca_ifname_name));
         doca_error_t err_ibdev = doca_devinfo_get_ibdev_name(dev_list_doca[devidx], doca_ibdev_name,
@@ -136,58 +138,60 @@ void ib_ctx_handler_collection::update_tbl(const char *ifa_name)
         }
 
         ibchc_logdbg("DOCA dev found: ifname: %s -> ibname: %s", doca_ifname_name, doca_ibdev_name);
-
-        // Skip existing devices (compare by name)
-        if (ifa_name && 0 == strncmp(ifa_name, doca_ifname_name, DOCA_DEVINFO_IFACE_NAME_SIZE)) {
-            continue;
-        }
-
-        // ------ Remove when DOCA fully implemented ------
+#ifdef DEFINED_DPCP_PATH_RX_OR_TX
         int ibidx = 0;
-        for (; ibidx < num_devices; ++ibidx) {
+        for (; ibidx < num_devices_ibv; ++ibidx) {
             if (0 ==
                 strncmp(dev_list[ibidx]->name, doca_ibdev_name, DOCA_DEVINFO_IFACE_NAME_SIZE)) {
                 break;
             }
         }
 
-        if (ibidx == num_devices) {
+        if (ibidx == num_devices_ibv) {
             ibchc_logerr("IBV device not found for DOCA dev %s", doca_ibdev_name);
             continue;
         }
-        // -------------------------------------------------
 
-        // Add new ib devices
-        ib_ctx_handler *p_ib_ctx_handler =
-            new ib_ctx_handler(dev_list_doca[devidx], doca_ibdev_name, dev_list[ibidx]);
-        if (!p_ib_ctx_handler) {
-            ibchc_logerr("Failed allocating new ib_ctx_handler (errno=%d %m)", errno);
-            continue;
-        }
-
+        ib_ctx_handler *p_ib_ctx_handler = new ib_ctx_handler(doca_ibdev_name);
+        p_ib_ctx_handler->construct_ctx_ibv_dev(dev_list[ibidx]);
+        p_ib_ctx_handler->construct_ctx_doca_dev(dev_list_doca[devidx], doca_ifname_name);
         ibchc_logdbg("DOCA dev initialized: %s,%s -> IBV: %s", doca_ifname_name, doca_ibdev_name,
                      dev_list[ibidx]->name);
-        m_ib_ctx_map[p_ib_ctx_handler->get_ibv_device()] = p_ib_ctx_handler;
+#else // DEFINED_DPCP_PATH_RX_OR_TX
+        ib_ctx_handler *p_ib_ctx_handler = new ib_ctx_handler(doca_ibdev_name);
+        p_ib_ctx_handler->construct_ctx_doca_dev(dev_list_doca[devidx], doca_ifname_name);
+        ibchc_logdbg("DOCA dev initialized: %s,%s", doca_ifname_name, doca_ibdev_name);
+#endif // DEFINED_DPCP_PATH_RX_OR_TX
+#else // !DEFINED_DPCP_PATH_RX_AND_TX
+        ib_ctx_handler *p_ib_ctx_handler = new ib_ctx_handler(dev_list[devidx]->name);
+        p_ib_ctx_handler->construct_ctx_ibv_dev(dev_list[devidx]);
+        ibchc_logdbg("IBV dev initialized: %s", dev_list[devidx]->name);
+#endif // !DEFINED_DPCP_PATH_RX_AND_TX
+
+        m_ib_ctx_map.emplace(p_ib_ctx_handler);
     }
 
     ibchc_logdbg("Check completed. Found %lu offload capable IB devices", m_ib_ctx_map.size());
 
+#ifdef DEFINED_DPCP_PATH_RX_OR_TX
     if (dev_list) {
         ibv_free_device_list(dev_list);
     }
+#endif // DEFINED_DPCP_PATH_RX_OR_TX
 
+#ifndef DEFINED_DPCP_PATH_RX_AND_TX
     err = doca_devinfo_destroy_list(dev_list_doca);
     if (DOCA_IS_ERROR(err)) {
         PRINT_DOCA_ERR(ibchc_logerr, err, "doca_devinfo_destroy_list");
     }
+#endif // !DEFINED_DPCP_PATH_RX_AND_TX
 }
 
 void ib_ctx_handler_collection::print_val_tbl()
 {
     ib_context_map_t::iterator itr;
     for (itr = m_ib_ctx_map.begin(); itr != m_ib_ctx_map.end(); itr++) {
-        ib_ctx_handler *p_ib_ctx_handler = itr->second;
-        p_ib_ctx_handler->print_val();
+        (*itr)->print_val();
     }
 }
 
@@ -220,21 +224,16 @@ ib_ctx_handler *ib_ctx_handler_collection::get_ib_ctx(const char *ifa_name)
     }
 
     for (ib_ctx_iter = m_ib_ctx_map.begin(); ib_ctx_iter != m_ib_ctx_map.end(); ib_ctx_iter++) {
-        if (check_device_name_ib_name(ifa_name, ib_ctx_iter->second->get_ibname().c_str())) {
-            return ib_ctx_iter->second;
+#ifndef DEFINED_DPCP_PATH_RX_AND_TX
+        if ((*ib_ctx_iter)->get_ctx_doca_dev().get_ifname() == ifa_name) {
+            return *ib_ctx_iter;
         }
+#else // DEFINED_DPCP_PATH_RX_AND_TX
+        if (check_device_name_ib_name(ifa_name, (*ib_ctx_iter)->get_ibname().c_str())) {
+            return *ib_ctx_iter;
+        }
+#endif // DEFINED_DPCP_PATH_RX_AND_TX
     }
 
     return nullptr;
-}
-
-void ib_ctx_handler_collection::del_ib_ctx(ib_ctx_handler *ib_ctx)
-{
-    if (ib_ctx) {
-        ib_context_map_t::iterator ib_ctx_iter = m_ib_ctx_map.find(ib_ctx->get_ibv_device());
-        if (ib_ctx_iter != m_ib_ctx_map.end()) {
-            delete ib_ctx_iter->second;
-            m_ib_ctx_map.erase(ib_ctx_iter);
-        }
-    }
 }

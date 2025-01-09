@@ -51,6 +51,8 @@ DOCA_LOG_REGISTER(time_converter);
 #define ibchtc_loginfo __log_info
 #define ibchtc_logdbg  __log_dbg
 
+#ifdef DEFINED_DPCP_PATH_RX
+
 #define IB_CTX_TC_DEVIATION_THRESHOLD 10
 
 #define XLIO_QUERY_DEVICE_SUPPORTED (1 << 0)
@@ -118,8 +120,8 @@ ts_conversion_mode_t time_converter::update_device_converters_status(net_device_
                 slave_data_vector_t slaves = dev_iter->second->get_slave_array();
                 for (slave_data_vector_t::iterator slaves_iter = slaves.begin();
                      slaves_iter != slaves.end(); slaves_iter++) {
-                    devs_status &=
-                        get_single_converter_status((*slaves_iter)->p_ib_ctx->get_ibv_context());
+                    devs_status &= get_single_converter_status(
+                        (*slaves_iter)->p_ib_ctx->get_ctx_ibv_dev().get_ibv_context());
                 }
             }
         }
@@ -182,6 +184,35 @@ ts_conversion_mode_t time_converter::update_device_converters_status(net_device_
 
     return ts_conversion_mode;
 }
+#else // DEFINED_DPCP_PATH_RX
+ts_conversion_mode_t time_converter::update_device_converters_status(net_device_map_t &net_devices)
+{
+    ibchtc_logdbg("Checking RX HW time stamp status for all devices [%lu]", net_devices.size());
+    ts_conversion_mode_t ts_conversion_mode = TS_CONVERSION_MODE_DISABLE;
+
+    if (net_devices.empty()) {
+        ibchtc_logdbg("No supported devices was found, return");
+        return ts_conversion_mode;
+    }
+
+    ibchtc_logdbg("Conversion status was set to %d", ts_conversion_mode);
+
+    for (net_device_map_index_t::iterator dev_iter = net_devices.begin();
+         dev_iter != net_devices.end(); dev_iter++) {
+        slave_data_vector_t slaves = dev_iter->second->get_slave_array();
+        for (slave_data_vector_t::iterator slaves_iter = slaves.begin();
+             slaves_iter != slaves.end(); slaves_iter++) {
+            ts_conversion_mode_t dev_ts_conversion_mode =
+                dev_iter->second->get_state() == net_device_val::RUNNING
+                ? ts_conversion_mode
+                : TS_CONVERSION_MODE_DISABLE;
+            (*slaves_iter)->p_ib_ctx->set_ctx_time_converter_status(dev_ts_conversion_mode);
+        }
+    }
+
+    return ts_conversion_mode;
+}
+#endif // DEFINED_DPCP_PATH_RX
 
 void time_converter::clean_obj()
 {

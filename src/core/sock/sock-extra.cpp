@@ -325,10 +325,15 @@ extern "C" int xlio_socket_connect(xlio_socket_t sock, const struct sockaddr *to
 
 extern "C" struct ibv_pd *xlio_socket_get_pd(xlio_socket_t sock)
 {
+#ifdef DEFINED_DPCP_PATH_RX_OR_TX
     sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
     ib_ctx_handler *ctx = si->get_ctx();
 
-    return ctx ? ctx->get_ibv_pd() : nullptr;
+    return ctx ? ctx->get_ctx_ibv_dev().get_ibv_pd() : nullptr;
+#else
+    NOT_IN_USE(sock);
+    return nullptr;
+#endif // DEFINED_DPCP_PATH_RX_OR_TX
 }
 
 static void xlio_buf_free(struct xlio_buf *buf)

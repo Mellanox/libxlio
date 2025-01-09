@@ -88,6 +88,8 @@ libxlio_la_SOURCES := \
 	dev/time_converter_rtc.cpp \
 	dev/time_converter_ib_ctx.cpp \
 	dev/ib_ctx_handler.cpp \
+	dev/dpcp/ib_ctx_handler_ibv.cpp \
+	dev/doca/ib_ctx_handler_doca.cpp \
 	dev/ib_ctx_handler_collection.cpp \
 	dev/net_device_val.cpp \
 	dev/net_device_entry.cpp \
@@ -184,6 +186,8 @@ libxlio_la_SOURCES := \
 	dev/gro_mgr.h \
 	dev/ib_ctx_handler_collection.h \
 	dev/ib_ctx_handler.h \
+	dev/dpcp/ib_ctx_handler_ibv.h \
+	dev/doca/ib_ctx_handler_doca.h \
 	dev/time_converter.h \
 	dev/time_converter_ptp.h \
 	dev/time_converter_rtc.h \

@@ -34,6 +34,8 @@
 #ifndef TIME_CONVERTER_IB_CTX_H
 #define TIME_CONVERTER_IB_CTX_H
 
+#include "util/vtypes.h"
+#ifdef DEFINED_DPCP_PATH_RX_OR_TX
 #include <infiniband/verbs.h>
 #include <util/sys_vars.h>
 #include "time_converter.h"
@@ -60,4 +62,5 @@ private:
     bool sync_clocks(struct timespec *st, uint64_t *hw_clock);
 };
 
-#endif // TIME_CONVERTER_IB_CTX_H
+#endif // DEFINED_DPCP_PATH_RX_OR_TX
+#endif // DEFINED_DPCP_PATH_RX
