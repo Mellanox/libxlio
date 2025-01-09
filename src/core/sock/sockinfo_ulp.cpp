@@ -249,6 +249,7 @@ public:
         }
     }
 
+#ifdef DEFINED_DPCP_PATH_TX
     uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, const void *addr,
                       size_t len) override
     {
@@ -261,6 +262,7 @@ public:
             return m_p_zc_owner->get_lkey(desc, ib_ctx, addr, len);
         }
     }
+#endif // DEFINED_DPCP_PATH_TX
 
     inline size_t append_data(void *data, size_t len, bool is_tls13)
     {

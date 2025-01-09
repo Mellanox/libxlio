@@ -179,7 +179,7 @@ void hw_queue_rx::release_rx_buffers()
                  m_last_posted_rx_wr_id);
     uintptr_t last_polled_rx_wr_id = 0;
     while (m_p_cq_mgr_rx && last_polled_rx_wr_id != m_last_posted_rx_wr_id && errno != EIO &&
-           !is_rq_empty() && !m_p_ib_ctx_handler->is_removed()) {
+           !is_rq_empty() && !m_p_ib_ctx_handler->get_ctx_ibv_dev().is_removed()) {
 
         // Process the FLUSH'ed WQE's
         int ret = m_p_cq_mgr_rx->drain_and_proccess(&last_polled_rx_wr_id);
@@ -191,7 +191,7 @@ void hw_queue_rx::release_rx_buffers()
         if (!ret) {
             // Query context for ib_verbs events (especially for IBV_EVENT_DEVICE_FATAL)
             g_p_event_handler_manager->query_for_ibverbs_event(
-                m_p_ib_ctx_handler->get_ibv_context()->async_fd);
+                m_p_ib_ctx_handler->get_ctx_ibv_dev().get_ibv_context()->async_fd);
         }
 
         // Add short delay (500 usec) to allow for WQE's to be flushed to CQ every poll cycle
@@ -382,7 +382,7 @@ dpcp::tir *hw_queue_rx::create_tir(bool is_tls /*=false*/)
     memset(&tir_attr, 0, sizeof(tir_attr));
     tir_attr.flags = dpcp::TIR_ATTR_INLINE_RQN | dpcp::TIR_ATTR_TRANSPORT_DOMAIN;
     tir_attr.inline_rqn = m_rq_data.rqn;
-    tir_attr.transport_domain = m_p_ib_ctx_handler->get_dpcp_adapter()->get_td();
+    tir_attr.transport_domain = m_p_ib_ctx_handler->get_ctx_ibv_dev().get_dpcp_adapter()->get_td();
 
     if (m_p_ring->m_lro.cap && m_p_ring->m_lro.max_payload_sz) {
         tir_attr.flags |= dpcp::TIR_ATTR_LRO;
@@ -396,7 +396,8 @@ dpcp::tir *hw_queue_rx::create_tir(bool is_tls /*=false*/)
         tir_attr.tls_en = 1;
     }
 
-    status = m_p_ib_ctx_handler->get_dpcp_adapter()->create_tir(tir_attr, tir_obj);
+    status =
+        m_p_ib_ctx_handler->get_ctx_ibv_dev().get_dpcp_adapter()->create_tir(tir_attr, tir_obj);
 
     if (dpcp::DPCP_OK != status) {
         hwqrx_logerr("Failed creating dpcp tir with flags=0x%x status=%d", tir_attr.flags, status);
@@ -412,7 +413,7 @@ bool hw_queue_rx::prepare_rq(uint32_t cqn)
 {
     hwqrx_logdbg(LOG_FUNCTION_CALL);
 
-    dpcp::adapter *dpcp_adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
+    dpcp::adapter *dpcp_adapter = m_p_ib_ctx_handler->get_ctx_ibv_dev().get_dpcp_adapter();
     if (!dpcp_adapter) {
         hwqrx_logerr("Failed to get dpcp::adapter for prepare_rq");
         return false;
@@ -580,7 +581,7 @@ rfs_rule *hw_queue_rx::create_rfs_rule(dpcp::match_params &match_value,
                                        dpcp::match_params &match_mask, uint16_t priority,
                                        uint32_t flow_tag, xlio_tir *tir_ext)
 {
-    if (m_p_ib_ctx_handler && m_p_ib_ctx_handler->get_dpcp_adapter()) {
+    if (m_p_ib_ctx_handler && m_p_ib_ctx_handler->get_ctx_ibv_dev().get_dpcp_adapter()) {
         // TLS RX uses tir_ext.
         dpcp::tir *dpcp_tir = (tir_ext ? xlio_tir_to_dpcp_tir(tir_ext) : m_tir.get());
         std::unique_ptr<rfs_rule> new_rule(new rfs_rule());

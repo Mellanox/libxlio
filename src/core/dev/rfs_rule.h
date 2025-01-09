@@ -45,16 +45,21 @@ class rfs_rule {
 public:
     ~rfs_rule();
 
+#ifndef DEFINED_DPCP_PATH_RX
     bool create(doca_flow_match &match_value, doca_flow_match &match_mask, uint16_t rx_queue_id,
                 uint16_t priority, uint32_t flow_tag, ib_ctx_handler &in_dev);
-
+#else // !DEFINED_DPCP_PATH_RX
     bool create_dpcp(dpcp::match_params &match_value, dpcp::match_params &match_mask,
                      dpcp::tir &in_tir, uint16_t priority, uint32_t flow_tag,
                      ib_ctx_handler &in_dev);
+#endif // !DEFINED_DPCP_PATH_RX
 
 private:
+#ifdef DEFINED_DPCP_PATH_RX
     std::unique_ptr<dpcp::flow_rule> _dpcp_flow;
+#else // !DEFINED_DPCP_PATH_RX
     doca_flow_pipe_entry *m_doca_flow_entry = nullptr;
+#endif // !DEFINED_DPCP_PATH_RX
 };
 
 #endif

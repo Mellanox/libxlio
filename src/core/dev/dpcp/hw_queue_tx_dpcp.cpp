@@ -139,13 +139,14 @@ hw_queue_tx::hw_queue_tx(ring_simple *ring, const slave_data_t *slave,
 
     m_mlx5_qp.cap.max_inline_data = safe_mce_sys().tx_max_inline;
     m_mlx5_qp.cap.max_send_sge =
-        (m_p_ring->is_tso() ? m_p_ib_ctx_handler->get_ibv_device_attr()->max_sge
+        (m_p_ring->is_tso() ? m_p_ib_ctx_handler->get_ctx_ibv_dev().get_ibv_device_attr()->max_sge
                             : MCE_DEFAULT_TX_NUM_SGE);
 
     memset(&m_rate_limit, 0, sizeof(struct xlio_rate_limit_t));
 
     // Check device capabilities for dummy send support
-    m_hw_dummy_send_support = xlio_is_nop_supported(m_p_ib_ctx_handler->get_ibv_device_attr());
+    m_hw_dummy_send_support =
+        xlio_is_nop_supported(m_p_ib_ctx_handler->get_ctx_ibv_dev().get_ibv_device_attr());
 
     if (configure(slave, p_tx_comp_event_channel)) {
         throw_xlio_exception("Failed to configure");
@@ -190,8 +191,8 @@ int hw_queue_tx::configure(const slave_data_t *slave,
 {
     hwqtx_logdbg("Creating QP of transport type '%s' on ibv device '%s' [%p] on port %d",
                  priv_xlio_transport_type_str(m_p_ring->get_transport_type()),
-                 m_p_ib_ctx_handler->get_ibname().c_str(), m_p_ib_ctx_handler->get_ibv_device(),
-                 m_port_num);
+                 m_p_ib_ctx_handler->get_ibname().c_str(),
+                 m_p_ib_ctx_handler->get_ctx_ibv_dev().get_ibv_device(), m_port_num);
     hwqtx_logdbg("HW Dummy send support for QP = %d", m_hw_dummy_send_support);
 
     // Create associated cq_mgr_tx and unused cq_mgr_rx_regrq just for QP sake.
@@ -265,8 +266,8 @@ int hw_queue_tx::configure(const slave_data_t *slave,
     m_mlx5_qp.cap.max_inline_data =
         std::min(tmp_ibv_qp_attr.cap.max_inline_data, m_mlx5_qp.cap.max_inline_data);
 
-    hwqtx_logdbg("Succeeded to create TX QP (num=%d) wre: tx = %d sge: tx = %d inline: %d", m_mlx5_qp.qp->qp_num,
-                 m_mlx5_qp.cap.max_send_wr, m_mlx5_qp.cap.max_send_sge,
+    hwqtx_logdbg("Succeeded to create TX QP (num=%d) wre: tx = %d sge: tx = %d inline: %d",
+                 m_mlx5_qp.qp->qp_num, m_mlx5_qp.cap.max_send_wr, m_mlx5_qp.cap.max_send_sge,
                  m_mlx5_qp.cap.max_inline_data);
 
 #if defined(DEFINED_ROCE_LAG)
@@ -275,7 +276,7 @@ int hw_queue_tx::configure(const slave_data_t *slave,
 
         memset(&attr_out, 0, sizeof(attr_out));
         attr_out.comp_mask |= MLX5DV_CONTEXT_MASK_NUM_LAG_PORTS;
-        if (!mlx5dv_query_device(slave->p_ib_ctx->get_ibv_context(), &attr_out)) {
+        if (!mlx5dv_query_device(slave->p_ib_ctx->get_ctx_ibv_dev().get_ibv_context(), &attr_out)) {
             hwqtx_logdbg("QP ROCE LAG port: %d of %d", slave->lag_tx_port_affinity,
                          attr_out.num_lag_ports);
 
@@ -367,14 +368,16 @@ int hw_queue_tx::prepare_queue(xlio_ibv_qp_init_attr &qp_init_attr)
     int ret = 0;
 
     qp_init_attr.qp_type = IBV_QPT_RAW_PACKET;
-    xlio_ibv_qp_init_attr_comp_mask(m_p_ib_ctx_handler->get_ibv_pd(), qp_init_attr);
+    xlio_ibv_qp_init_attr_comp_mask(m_p_ib_ctx_handler->get_ctx_ibv_dev().get_ibv_pd(),
+                                    qp_init_attr);
 
     if (m_p_ring->is_tso()) {
         xlio_ibv_qp_init_attr_tso(qp_init_attr, m_p_ring->get_max_header_sz());
         hwqtx_logdbg("create qp with max_tso_header = %d", m_p_ring->get_max_header_sz());
     }
 
-    m_mlx5_qp.qp = xlio_ibv_create_qp(m_p_ib_ctx_handler->get_ibv_pd(), &qp_init_attr);
+    m_mlx5_qp.qp =
+        xlio_ibv_create_qp(m_p_ib_ctx_handler->get_ctx_ibv_dev().get_ibv_pd(), &qp_init_attr);
 
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!m_mlx5_qp.qp) {
@@ -434,8 +437,8 @@ void hw_queue_tx::init_queue()
         m_sq_wqe_prop_last = nullptr;
     }
 
-    hwqtx_loginfo("Succeeded to init TX QP m_tx_num_wr=%d max_inline_data: %d m_max_sge=%u", m_tx_num_wr,
-                  get_max_inline_data(), m_mlx5_qp.cap.max_send_sge);
+    hwqtx_loginfo("Succeeded to init TX QP m_tx_num_wr=%d max_inline_data: %d m_max_sge=%u",
+                  m_tx_num_wr, get_max_inline_data(), m_mlx5_qp.cap.max_send_sge);
 
     memset((void *)(uintptr_t)m_sq_wqe_hot, 0, sizeof(struct mlx5_eth_wqe));
     m_sq_wqe_hot->ctrl.data[0] = htonl(MLX5_OPCODE_SEND);
@@ -455,8 +458,8 @@ void hw_queue_tx::init_device_memory()
     /* This limitation is done because of a observation
      * that dm_copy takes a lot of time on VMs w/o BF (RM:1542628)
      */
-    if (m_p_ib_ctx_handler->get_on_device_memory_size() > 0 &&
-        is_bf(m_p_ib_ctx_handler->get_ibv_context())) {
+    if (m_p_ib_ctx_handler->get_ctx_ibv_dev().get_on_device_memory_size() > 0 &&
+        is_bf(m_p_ib_ctx_handler->get_ctx_ibv_dev().get_ibv_context())) {
         m_dm_enabled =
             m_dm_mgr.allocate_resources(m_p_ib_ctx_handler, m_p_ring->m_p_ring_stat.get());
     }
@@ -835,7 +838,7 @@ void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_a
 
 std::unique_ptr<xlio_tis> hw_queue_tx::create_tis(uint32_t flags)
 {
-    dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
+    dpcp::adapter *adapter = m_p_ib_ctx_handler->get_ctx_ibv_dev().get_dpcp_adapter();
     bool is_tls = flags & dpcp::TIS_ATTR_TLS;
     if (unlikely(!adapter)) {
         return nullptr;
@@ -864,7 +867,7 @@ std::unique_ptr<dpcp::tls_dek> hw_queue_tx::get_new_tls_dek(const void *key,
                                                             uint32_t key_size_bytes)
 {
     dpcp::tls_dek *_dek = nullptr;
-    dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
+    dpcp::adapter *adapter = m_p_ib_ctx_handler->get_ctx_ibv_dev().get_dpcp_adapter();
     if (likely(adapter)) {
         dpcp::status status;
         struct dpcp::dek_attr dek_attr;
@@ -889,7 +892,7 @@ std::unique_ptr<dpcp::tls_dek> hw_queue_tx::get_new_tls_dek(const void *key,
 std::unique_ptr<dpcp::tls_dek> hw_queue_tx::get_tls_dek(const void *key, uint32_t key_size_bytes)
 {
     dpcp::status status;
-    dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
+    dpcp::adapter *adapter = m_p_ib_ctx_handler->get_ctx_ibv_dev().get_dpcp_adapter();
 
     if (unlikely(!adapter)) {
         return std::unique_ptr<dpcp::tls_dek>(nullptr);
@@ -1430,7 +1433,7 @@ int hw_queue_tx::tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info,
     uint32_t tirn;
     dpcp::tls_dek *_dek;
     dpcp::status status;
-    dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
+    dpcp::adapter *adapter = m_p_ib_ctx_handler->get_ctx_ibv_dev().get_dpcp_adapter();
     struct dpcp::dek_attr dek_attr;
 
     memset(&dek_attr, 0, sizeof(dek_attr));

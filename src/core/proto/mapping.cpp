@@ -182,6 +182,7 @@ int mapping_t::unmap(void)
     return rc;
 }
 
+#ifdef DEFINED_DPCP_PATH_TX
 uint32_t mapping_t::get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *p_ib_ctx, const void *addr,
                              size_t len)
 {
@@ -191,6 +192,7 @@ uint32_t mapping_t::get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *p_ib_ctx, con
 
     return m_registrator.find_lkey_by_ib_ctx(p_ib_ctx);
 }
+#endif // DEFINED_DPCP_PATH_TX
 
 bool mapping_t::memory_belongs(uintptr_t addr, size_t size)
 {

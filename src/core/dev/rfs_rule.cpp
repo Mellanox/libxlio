@@ -49,19 +49,22 @@ DOCA_LOG_REGISTER(rfs_rule);
 
 rfs_rule::~rfs_rule()
 {
+#ifndef DEFINED_DPCP_PATH_RX
     if (m_doca_flow_entry) {
         doca_error_t rc = doca_flow_pipe_remove_entry(0, 0U, m_doca_flow_entry);
         if (DOCA_IS_ERROR(rc)) {
             PRINT_DOCA_ERR(rfs_logerr, rc, "doca_flow_pipe_rm_entry entry: %p", m_doca_flow_entry);
         }
     }
+#endif // DEFINED_DPCP_PATH_RX
 }
 
+#ifndef DEFINED_DPCP_PATH_RX
 bool rfs_rule::create(doca_flow_match &match_value, doca_flow_match &match_mask,
                       uint16_t rx_queue_id, uint16_t priority, uint32_t flow_tag,
                       ib_ctx_handler &in_dev)
 {
-    doca_flow_pipe *root_pipe = in_dev.get_doca_root_pipe();
+    doca_flow_pipe *root_pipe = in_dev.get_ctx_doca_dev().get_doca_root_pipe();
     if (!root_pipe) {
         return false;
     }
@@ -142,10 +145,10 @@ bool rfs_rule::create(doca_flow_match &match_value, doca_flow_match &match_mask,
         return false;
     }
 
-    rc = doca_flow_entries_process(in_dev.get_doca_flow_port(), 0, 60000U, 2U);
+    rc = doca_flow_entries_process(in_dev.get_ctx_doca_dev().get_doca_flow_port(), 0, 60000U, 2U);
     if (DOCA_IS_ERROR(rc)) {
         PRINT_DOCA_ERR(rfs_logerr, rc, "doca_flow_pipe_control_add_entry port/root_pipe: %p,%p",
-                       in_dev.get_doca_flow_port(), root_pipe);
+                       in_dev.get_ctx_doca_dev().get_doca_flow_port(), root_pipe);
         return false;
     }
 
@@ -153,12 +156,12 @@ bool rfs_rule::create(doca_flow_match &match_value, doca_flow_match &match_mask,
 
     return true;
 }
-
+#else // !DEFINED_DPCP_PATH_RX
 bool rfs_rule::create_dpcp(dpcp::match_params &match_value, dpcp::match_params &match_mask,
                            dpcp::tir &in_tir, uint16_t priority, uint32_t flow_tag,
                            ib_ctx_handler &in_dev)
 {
-    dpcp::adapter &in_adapter = *in_dev.get_dpcp_adapter();
+    dpcp::adapter &in_adapter = *in_dev.get_ctx_ibv_dev().get_dpcp_adapter();
 
     rfs_logdbg("Creating flow dpcp_adpater::create_flow_rule(), priority %" PRIu16
                ", flow_tag: %" PRIu32,
@@ -246,3 +249,4 @@ bool rfs_rule::create_dpcp(dpcp::match_params &match_value, dpcp::match_params &
 
     return true;
 }
+#endif // !DEFINED_DPCP_PATH_RX

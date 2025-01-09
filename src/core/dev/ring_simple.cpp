@@ -188,7 +188,8 @@ void ring_simple::create_resources()
     save_l2_address(p_slave->p_L2_addr);
 
 #ifdef DEFINED_DPCP_PATH_TX
-    m_p_tx_comp_event_channel = ibv_create_comp_channel(m_p_ib_ctx->get_ibv_context());
+    m_p_tx_comp_event_channel =
+        ibv_create_comp_channel(m_p_ib_ctx->get_ctx_ibv_dev().get_ibv_context());
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!m_p_tx_comp_event_channel) {
         VLOG_PRINTF_INFO_ONCE_THEN_ALWAYS(
@@ -205,7 +206,8 @@ void ring_simple::create_resources()
     BULLSEYE_EXCLUDE_BLOCK_END
     VALGRIND_MAKE_MEM_DEFINED(m_p_tx_comp_event_channel, sizeof(struct ibv_comp_channel));
     // Check device capabilities for max QP work requests
-    uint32_t max_qp_wr = ALIGN_WR_DOWN(m_p_ib_ctx->get_ibv_device_attr()->max_qp_wr);
+    uint32_t max_qp_wr =
+        ALIGN_WR_DOWN(m_p_ib_ctx->get_ctx_ibv_dev().get_ibv_device_attr()->max_qp_wr);
     m_tx_num_wr = safe_mce_sys().tx_num_wr;
     if (m_tx_num_wr > max_qp_wr) {
         ring_logwarn(
@@ -220,7 +222,9 @@ void ring_simple::create_resources()
     memset(&m_tso, 0, sizeof(m_tso));
     if ((safe_mce_sys().enable_tso == option_3::ON) ||
         ((safe_mce_sys().enable_tso == option_3::AUTO) && (1 == validate_tso(get_if_index())))) {
-        const xlio_ibv_tso_caps *caps = &xlio_get_tso_caps(m_p_ib_ctx->get_ibv_device_attr_ex());
+#ifdef DEFINED_DPCP_PATH_TX
+        const xlio_ibv_tso_caps *caps =
+            &xlio_get_tso_caps(m_p_ib_ctx->get_ctx_ibv_dev().get_ibv_device_attr_ex());
         if (ibv_is_qpt_supported(caps->supported_qpts, IBV_QPT_RAW_PACKET)) {
             if (caps->max_tso && (caps->max_tso > MCE_DEFAULT_MAX_TSO_SIZE)) {
                 ring_logwarn("max_tso cap (=%u) is higher than default TSO size (=%u). "
@@ -231,19 +235,25 @@ void ring_simple::create_resources()
             /* ETH(14) + IP(20) + TCP(20) + TCP OPTIONS(40) */
             m_tso.max_header_sz = 94;
         }
+#else // DEFINED_DPCP_PATH_TX
+        m_tso.max_payload_sz = MCE_DEFAULT_MAX_TSO_SIZE;
+        m_tso.max_header_sz = 94;
+#endif // DEFINED_DPCP_PATH_TX
     }
     ring_logdbg("ring attributes: m_tso = %d", is_tso());
     ring_logdbg("ring attributes: m_tso:max_payload_sz = %d", get_max_payload_sz());
     ring_logdbg("ring attributes: m_tso:max_header_sz = %d", get_max_header_sz());
 
+#ifdef DEFINED_DPCP_PATH_RX
     /* Detect LRO capabilities */
     memset(&m_lro, 0, sizeof(m_lro));
     if ((safe_mce_sys().enable_lro == option_3::ON) ||
         ((safe_mce_sys().enable_lro == option_3::AUTO) && (1 == validate_lro(get_if_index())))) {
         dpcp::adapter_hca_capabilities caps;
 
-        if (m_p_ib_ctx->get_dpcp_adapter() &&
-            (dpcp::DPCP_OK == m_p_ib_ctx->get_dpcp_adapter()->get_hca_capabilities(caps))) {
+        if (m_p_ib_ctx->get_ctx_ibv_dev().get_dpcp_adapter() &&
+            (dpcp::DPCP_OK ==
+             m_p_ib_ctx->get_ctx_ibv_dev().get_dpcp_adapter()->get_hca_capabilities(caps))) {
             m_lro.cap = caps.lro_cap;
             m_lro.psh_flag = caps.lro_psh_flag;
             m_lro.time_stamp = caps.lro_time_stamp;
@@ -275,12 +285,14 @@ void ring_simple::create_resources()
                 m_lro.timer_supported_periods[0], m_lro.timer_supported_periods[1],
                 m_lro.timer_supported_periods[2], m_lro.timer_supported_periods[3]);
     ring_logdbg("ring attributes: m_lro:max_payload_sz = %d", m_lro.max_payload_sz);
+#endif // DEFINED_DPCP_PATH_RX
 
-#ifdef DEFINED_UTLS
+#if defined(DEFINED_DPCP_PATH_RX_OR_TX) && defined(DEFINED_UTLS)
     {
         dpcp::adapter_hca_capabilities caps;
-        if (m_p_ib_ctx->get_dpcp_adapter() &&
-            (dpcp::DPCP_OK == m_p_ib_ctx->get_dpcp_adapter()->get_hca_capabilities(caps))) {
+        if (m_p_ib_ctx->get_ctx_ibv_dev().get_dpcp_adapter() &&
+            (dpcp::DPCP_OK ==
+             m_p_ib_ctx->get_ctx_ibv_dev().get_dpcp_adapter()->get_hca_capabilities(caps))) {
             m_tls.tls_tx = caps.tls_tx;
             m_tls.tls_rx = caps.tls_rx;
             m_tls.tls_synchronize_dek = caps.synchronize_dek;
@@ -289,7 +301,7 @@ void ring_simple::create_resources()
         ring_logdbg("ring attributes: m_tls:tls_rx = %d", m_tls.tls_rx);
         ring_logdbg("ring attributes: m_tls:tls_synchronize_dek = %d", m_tls.tls_synchronize_dek);
     }
-#endif /* DEFINED_UTLS */
+#endif // DEFINED_DPCP_PATH_RX_OR_TX || DEFINED_UTLS
 
     m_flow_tag_enabled = !safe_mce_sys().disable_flow_tag && m_p_ib_ctx->get_flow_tag_capability();
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
@@ -300,7 +312,8 @@ void ring_simple::create_resources()
     ring_logdbg("ring attributes: m_flow_tag_enabled = %d", m_flow_tag_enabled);
 
 #ifdef DEFINED_DPCP_PATH_RX
-    m_p_rx_comp_event_channel = ibv_create_comp_channel(m_p_ib_ctx->get_ibv_context());
+    m_p_rx_comp_event_channel =
+        ibv_create_comp_channel(m_p_ib_ctx->get_ctx_ibv_dev().get_ibv_context());
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!m_p_rx_comp_event_channel) {
         VLOG_PRINTF_INFO_ONCE_THEN_ALWAYS(
@@ -493,7 +506,7 @@ void ring_simple::mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc)
 int ring_simple::modify_ratelimit(struct xlio_rate_limit_t &rate_limit)
 {
     if (!m_p_ib_ctx->is_packet_pacing_supported(rate_limit.rate)) {
-        ring_logwarn("Packet pacing is not supported for this device");
+        ring_logdbg("Packet pacing is not supported for this device");
         return -1;
     }
 

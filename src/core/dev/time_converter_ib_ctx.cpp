@@ -31,6 +31,8 @@
  * SOFTWARE.
  */
 
+#include "util/vtypes.h"
+#ifdef DEFINED_DPCP_PATH_RX_OR_TX
 #include <stdlib.h>
 #include <vlogger/vlogger.h>
 #include "event/event_handler_manager.h"
@@ -237,3 +239,5 @@ void time_converter_ib_ctx::convert_hw_time_to_system_time(uint64_t hwtime,
         }
     }
 }
+
+#endif // DEFINED_DPCP_PATH_RX_OR_TX

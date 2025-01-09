@@ -111,7 +111,7 @@ void cq_mgr_rx::configure(int cq_size)
     xlio_ibv_cq_init_attr attr;
     memset(&attr, 0, sizeof(attr));
 
-    struct ibv_context *context = m_p_ib_ctx_handler->get_ibv_context();
+    struct ibv_context *context = m_p_ib_ctx_handler->get_ctx_ibv_dev().get_ibv_context();
     int comp_vector = 0;
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     /*
@@ -135,7 +135,8 @@ void cq_mgr_rx::configure(int cq_size)
 
     xlio_stats_instance_create_cq_block(m_p_cq_stat);
 
-    m_b_is_rx_hw_csum_on = xlio_is_rx_hw_csum_supported(m_p_ib_ctx_handler->get_ibv_device_attr());
+    m_b_is_rx_hw_csum_on =
+        xlio_is_rx_hw_csum_supported(m_p_ib_ctx_handler->get_ctx_ibv_dev().get_ibv_device_attr());
 
     cq_logdbg("RX CSUM support = %d", m_b_is_rx_hw_csum_on);
 

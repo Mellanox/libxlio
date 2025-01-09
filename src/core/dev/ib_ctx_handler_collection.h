@@ -34,20 +34,22 @@
 #ifndef IB_CTX_HANDLER_COLLECTION_H
 #define IB_CTX_HANDLER_COLLECTION_H
 
-#include <unordered_map>
+#include <unordered_set>
 
 #include "ib/base/verbs_extra.h"
 #include "ib_ctx_handler.h"
 
-typedef std::unordered_map<struct ibv_device *, ib_ctx_handler *> ib_context_map_t;
+typedef std::unordered_set<ib_ctx_handler *> ib_context_map_t;
 
 class ib_ctx_handler_collection {
 public:
     ib_ctx_handler_collection();
     ~ib_ctx_handler_collection();
 
+#ifndef DEFINED_DPCP_PATH_RX
     void stop_all_doca_flow_ports();
-    void update_tbl(const char *ifa_name = nullptr);
+#endif // !DEFINED_DPCP_PATH_RX
+    void update_tbl();
     void print_val_tbl();
 
     inline ib_context_map_t *get_ib_cxt_list()
@@ -55,7 +57,6 @@ public:
         return (m_ib_ctx_map.size() ? &m_ib_ctx_map : NULL);
     }
     ib_ctx_handler *get_ib_ctx(const char *ifa_name);
-    void del_ib_ctx(ib_ctx_handler *ib_ctx);
 
 private:
     ib_context_map_t m_ib_ctx_map;

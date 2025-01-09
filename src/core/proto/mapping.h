@@ -83,8 +83,11 @@ public:
     int unmap(void);
 
     /* mem_desc interface */
+#ifdef DEFINED_DPCP_PATH_TX
     uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, const void *addr, size_t len);
+#else // DEFINED_DPCP_PATH_TX
     doca_mmap *get_doca_mmap() const { return m_registrator.get_doca_mmap(); };
+#endif // DEFINED_DPCP_PATH_TX
     void get();
     void put();
 

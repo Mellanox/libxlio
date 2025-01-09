@@ -31,6 +31,8 @@
  * SOFTWARE.
  */
 
+#include "config.h"
+#ifdef DEFINED_DPCP_PATH_TX
 #include "dm_mgr.h"
 #include "vlogger/vlogger.h"
 #include "proto/mem_buf_desc.h"
@@ -76,7 +78,7 @@ bool dm_mgr::allocate_resources(ib_ctx_handler *ib_ctx, ring_stats_t *ring_stats
         return false;
     }
 
-    if (!ib_ctx->get_on_device_memory_size()) {
+    if (!ib_ctx->get_ctx_ibv_dev().get_on_device_memory_size()) {
         // On Device Memory usage is not supported
         return false;
     }
@@ -84,7 +86,7 @@ bool dm_mgr::allocate_resources(ib_ctx_handler *ib_ctx, ring_stats_t *ring_stats
     // Allocate on device memory buffer
     memset(&dm_attr, 0, sizeof(dm_attr));
     dm_attr.length = allocation_size;
-    m_p_ibv_dm = xlio_ibv_alloc_dm(ib_ctx->get_ibv_context(), &dm_attr);
+    m_p_ibv_dm = xlio_ibv_alloc_dm(ib_ctx->get_ctx_ibv_dev().get_ibv_context(), &dm_attr);
     if (!m_p_ibv_dm) {
         // Memory allocation can fail if we have already allocated the maximum possible.
         VLOG_PRINTF_ONCE_THEN_DEBUG(
@@ -102,7 +104,7 @@ bool dm_mgr::allocate_resources(ib_ctx_handler *ib_ctx, ring_stats_t *ring_stats
 
     // Initialize MR attributes
     memset(&mr_in, 0, sizeof(mr_in));
-    xlio_ibv_init_dm_mr(mr_in, ib_ctx->get_ibv_pd(), allocation_size, m_p_ibv_dm);
+    xlio_ibv_init_dm_mr(mr_in, ib_ctx->get_ctx_ibv_dev().get_ibv_pd(), allocation_size, m_p_ibv_dm);
 
     // Register On Device Memory MR
     m_p_dm_mr = xlio_ibv_reg_dm_mr(&mr_in);
@@ -118,7 +120,8 @@ bool dm_mgr::allocate_resources(ib_ctx_handler *ib_ctx, ring_stats_t *ring_stats
 
     dm_logdbg("Device memory allocation completed successfully! device[%s] bytes[%zu] dm_mr "
               "handle[%d] dm_mr lkey[%d]",
-              ib_ctx->get_ibv_device()->name, dm_attr.length, m_p_dm_mr->handle, m_p_dm_mr->lkey);
+              ib_ctx->get_ctx_ibv_dev().get_ibv_device()->name, dm_attr.length, m_p_dm_mr->handle,
+              m_p_dm_mr->lkey);
 
     return true;
 }
@@ -280,3 +283,4 @@ void dm_mgr::release_data(mem_buf_desc_t *buff)
 
 #endif /* DEFINED_IBV_DM */
 #endif /* DEFINED_DIRECT_VERBS */
+#endif // DEFINED_DPCP_PATH_TX

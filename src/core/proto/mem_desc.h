@@ -62,6 +62,7 @@ public:
      */
     virtual void put() = 0;
 
+#ifdef DEFINED_DPCP_PATH_TX
     /* get_lkey() is always called under socket lock */
     virtual uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, const void *addr,
                               size_t len)
@@ -72,6 +73,7 @@ public:
         NOT_IN_USE(len);
         return LKEY_ERROR;
     }
+#endif // DEFINED_DPCP_PATH_TX
 };
 
 #endif /* _MEM_DESC_H */

@@ -86,7 +86,7 @@ void cq_mgr_tx::configure(int cq_size)
     xlio_ibv_cq_init_attr attr;
     memset(&attr, 0, sizeof(attr));
 
-    struct ibv_context *context = m_p_ib_ctx_handler->get_ibv_context();
+    struct ibv_context *context = m_p_ib_ctx_handler->get_ctx_ibv_dev().get_ibv_context();
     int comp_vector = 0;
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     /*

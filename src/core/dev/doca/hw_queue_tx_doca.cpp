@@ -136,7 +136,7 @@ bool hw_queue_tx::check_doca_caps(doca_devinfo *devinfo, uint32_t &max_burst_siz
 bool hw_queue_tx::prepare_doca_txq()
 {
     doca_error_t err;
-    doca_dev *dev = m_p_ib_ctx_handler->get_doca_device();
+    doca_dev *dev = m_p_ib_ctx_handler->get_ctx_doca_dev().get_doca_device();
     doca_devinfo *devinfo = doca_dev_as_devinfo(dev);
     uint32_t max_burst_size = 0U;
     uint32_t max_send_sge = 0U;

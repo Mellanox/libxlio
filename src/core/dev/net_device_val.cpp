@@ -158,7 +158,6 @@ const std::string ring_alloc_logic_attr::to_str() const
 net_device_val::net_device_val(struct net_device_val_desc *desc)
     : m_lock(MULTILOCK_RECURSIVE, "net_device_val")
 {
-    bool valid = false;
     ib_ctx_handler *ib_ctx;
     struct nlmsghdr *nl_msg = nullptr;
     struct ifinfomsg *nl_msgdata = nullptr;
@@ -235,20 +234,8 @@ net_device_val::net_device_val(struct net_device_val_desc *desc)
 
     nd_logdbg("Check interface '%s' (index=%d flags=%X)", get_ifname(), get_if_idx(), get_flags());
 
-    valid = false;
     ib_ctx = g_p_ib_ctx_handler_collection->get_ib_ctx(get_ifname_link());
-    switch (m_bond) {
-    case LAG_8023ad:
-    case ACTIVE_BACKUP:
-        // this is a bond interface (or a vlan/alias over bond), find the slaves
-        valid = verify_bond_or_eth_qp_creation();
-        break;
-    default:
-        valid = (bool)(ib_ctx && verify_eth_qp_creation(get_ifname_link()));
-        break;
-    }
-
-    if (!valid) {
+    if (!ib_ctx) {
         nd_logdbg("Skip interface '%s'", get_ifname());
         return;
     }
@@ -278,9 +265,8 @@ net_device_val::net_device_val(struct net_device_val_desc *desc)
 
     nd_logdbg("Use interface '%s'", get_ifname());
     if (ib_ctx) {
-        nd_logdbg("%s ==> %s port %d (%s)", get_ifname(), ib_ctx->get_ibname().c_str(),
-                  get_port_from_ifname(get_ifname_link()),
-                  (ib_ctx->is_active(get_port_from_ifname(get_ifname_link())) ? "Up" : "Down"));
+        nd_logdbg("%s ==> %s port %d", get_ifname(), ib_ctx->get_ibname().c_str(),
+                  get_port_from_ifname(get_ifname_link()));
     } else {
         nd_logdbg("%s ==> none", get_ifname());
     }
@@ -898,74 +884,6 @@ bool net_device_val::update_active_slaves()
     return 0;
 }
 
-// TODO: azure related, see comment below
-void net_device_val::update_netvsc_slaves(int if_index, int if_flags)
-{
-    slave_data_t *s = nullptr;
-    bool found = false;
-    ib_ctx_handler *ib_ctx = nullptr, *up_ib_ctx = nullptr;
-    char if_name[IFNAMSIZ] = {0};
-
-    m_lock.lock();
-
-    if (if_indextoname(if_index, if_name) && (if_flags & IFF_UP) && (if_flags & IFF_RUNNING)) {
-        nd_logdbg("slave %d is up", if_index);
-
-        g_p_ib_ctx_handler_collection->update_tbl(if_name);
-        if ((up_ib_ctx = g_p_ib_ctx_handler_collection->get_ib_ctx(if_name))) {
-            s = new slave_data_t(if_index);
-            s->active = true;
-            s->p_ib_ctx = up_ib_ctx;
-            s->p_L2_addr = create_L2_address(if_name);
-            s->port_num = get_port_from_ifname(if_name);
-            m_slaves.push_back(s);
-
-            up_ib_ctx->set_ctx_time_converter_status(
-                g_p_net_device_table_mgr->get_ctx_time_conversion_mode());
-
-            // TODO commented out because other than this specific flow - we shouldn't use
-            // specific ib_ctx. So remove ctx argument from register_memory api. This specific flow
-            // will be removed later
-
-            // g_buffer_pool_rx_rwqe->register_memory(s->p_ib_ctx);
-            // g_buffer_pool_tx->register_memory(s->p_ib_ctx);
-            g_buffer_pool_rx_rwqe->register_memory();
-            g_buffer_pool_tx->register_memory();
-            found = true;
-        }
-    } else {
-        if (!m_slaves.empty()) {
-            s = m_slaves.back();
-            m_slaves.pop_back();
-
-            nd_logdbg("slave %d is down ", s->if_index);
-
-            ib_ctx = s->p_ib_ctx;
-            delete s;
-            found = true;
-        }
-    }
-
-    m_lock.unlock();
-
-    if (!found) {
-        nd_logdbg("Unable to detect any changes for interface %d. ignoring", if_index);
-        return;
-    }
-
-    /* restart if status changed */
-    m_p_L2_addr = create_L2_address(get_ifname());
-    // restart rings
-    rings_hash_map_t::iterator ring_iter;
-    for (ring_iter = m_h_ring_map.begin(); ring_iter != m_h_ring_map.end(); ring_iter++) {
-        THE_RING->restart();
-    }
-
-    if (ib_ctx) {
-        g_p_ib_ctx_handler_collection->del_ib_ctx(ib_ctx);
-    }
-}
-
 const std::string net_device_val::to_str() const
 {
     return std::string("Net Device: " + m_name);
@@ -1213,6 +1131,7 @@ void net_device_val::ring_clear_all_rfs()
     }
 }
 
+#ifdef DEFINED_DPCP_PATH_RX_OR_TX
 void net_device_val::register_to_ibverbs_events(event_handler_ibverbs *handler)
 {
     for (size_t i = 0; i < m_slaves.size(); i++) {
@@ -1229,8 +1148,8 @@ void net_device_val::register_to_ibverbs_events(event_handler_ibverbs *handler)
         }
         nd_logfunc("registering slave to ibverbs events slave=%p", m_slaves[i]);
         g_p_event_handler_manager->register_ibverbs_event(
-            m_slaves[i]->p_ib_ctx->get_ibv_context()->async_fd, handler,
-            m_slaves[i]->p_ib_ctx->get_ibv_context(), 0);
+            m_slaves[i]->p_ib_ctx->get_ctx_ibv_dev().get_ibv_context()->async_fd, handler,
+            m_slaves[i]->p_ib_ctx->get_ctx_ibv_dev().get_ibv_context(), 0);
     }
 }
 
@@ -1250,9 +1169,10 @@ void net_device_val::unregister_to_ibverbs_events(event_handler_ibverbs *handler
         }
         nd_logfunc("unregistering slave to ibverbs events slave=%p", m_slaves[i]);
         g_p_event_handler_manager->unregister_ibverbs_event(
-            m_slaves[i]->p_ib_ctx->get_ibv_context()->async_fd, handler);
+            m_slaves[i]->p_ib_ctx->get_ctx_ibv_dev().get_ibv_context()->async_fd, handler);
     }
 }
+#endif // DEFINED_DPCP_PATH_RX_OR_TX
 
 void net_device_val_eth::configure()
 {
@@ -1396,227 +1316,4 @@ void net_device_val_eth::create_br_address(const char *ifname)
 const std::string net_device_val_eth::to_str() const
 {
     return std::string("ETH: " + net_device_val::to_str());
-}
-
-bool net_device_val::verify_bond_or_eth_qp_creation()
-{
-    char slaves[IFNAMSIZ * MAX_SLAVES] = {0};
-
-    if (!get_bond_slaves_name_list(get_ifname_link(), slaves, sizeof slaves)) {
-        __log_warn("******************************************************************************"
-                   "*************************\n");
-        __log_warn(
-            "* Interface %s will not be offloaded, slave list or bond name could not be found\n",
-            get_ifname());
-        __log_warn("******************************************************************************"
-                   "*************************\n");
-        return false;
-    }
-    // go over all slaves and check preconditions
-    bool bond_ok = true;
-    char *slave_name;
-    char *save_ptr;
-    slave_name = strtok_r(slaves, " ", &save_ptr);
-    while (slave_name) {
-        char *p = strchr(slave_name, '\n');
-        if (p) {
-            *p = '\0'; // Remove the tailing 'new line" char
-        }
-        if (!verify_eth_qp_creation(slave_name)) {
-            // check all slaves but print only once for bond
-            bond_ok = false;
-        }
-        slave_name = strtok_r(nullptr, " ", &save_ptr);
-    }
-    if (!bond_ok) {
-        __log_warn("******************************************************************************"
-                   "*************************\n");
-        __log_warn("* Bond %s will not be offloaded due to problem with its slaves.\n",
-                   get_ifname());
-        __log_warn("* Check warning messages for more information.\n");
-        __log_warn("******************************************************************************"
-                   "*************************\n");
-    } else {
-#if defined(DEFINED_ROCE_LAG)
-        /* Sanity check for image guid is not correct
-         * for RoCE LAG on upstream rdma-core
-         */
-#else
-        /*
-         * Print warning message while bond device contains two slaves of the same HCA
-         * while RoCE LAG is enabled for both slaves.
-         */
-        sys_image_guid_map_t::iterator guid_iter;
-        for (guid_iter = m_sys_image_guid_map.begin(); guid_iter != m_sys_image_guid_map.end();
-             guid_iter++) {
-            char bond_roce_lag_path[256] = {0};
-            if (guid_iter->second.size() > 1 &&
-                check_bond_roce_lag_exist(bond_roce_lag_path, sizeof(bond_roce_lag_path),
-                                          guid_iter->second.front().c_str()) &&
-                check_bond_roce_lag_exist(bond_roce_lag_path, sizeof(bond_roce_lag_path),
-                                          guid_iter->second.back().c_str())) {
-                print_roce_lag_warnings(get_ifname_link(), bond_roce_lag_path,
-                                        guid_iter->second.front().c_str(),
-                                        guid_iter->second.back().c_str());
-            }
-        }
-#endif /* DEFINED_ROCE_LAG */
-    }
-    return bond_ok;
-}
-
-// interface name can be slave while ifa struct can describe bond
-bool net_device_val::verify_eth_qp_creation(const char *interface_name)
-{
-    if (m_type == ARPHRD_ETHER) {
-        if (verify_qp_creation(interface_name, IBV_QPT_RAW_PACKET)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// ifname should point to a physical device
-bool net_device_val::verify_qp_creation(const char *ifname, enum ibv_qp_type qp_type)
-{
-    bool success = false;
-    char bond_roce_lag_path[256] = {0};
-    struct ibv_cq *cq = nullptr;
-    struct ibv_comp_channel *channel = nullptr;
-    struct ibv_qp *qp = nullptr;
-    struct ibv_context *context;
-    int comp_vector = 0;
-
-    xlio_ibv_qp_init_attr qp_init_attr;
-    memset(&qp_init_attr, 0, sizeof(qp_init_attr));
-
-    xlio_ibv_cq_init_attr attr;
-    memset(&attr, 0, sizeof(attr));
-
-    qp_init_attr.cap.max_send_wr = 2048;
-    qp_init_attr.cap.max_recv_wr = MCE_DEFAULT_RX_NUM_WRE;
-    qp_init_attr.cap.max_inline_data = MCE_DEFAULT_TX_MAX_INLINE;
-    qp_init_attr.cap.max_send_sge = MCE_DEFAULT_TX_NUM_SGE;
-    qp_init_attr.cap.max_recv_sge = 1U;
-    qp_init_attr.sq_sig_all = 0;
-    qp_init_attr.qp_type = qp_type;
-
-    // find ib_cxt
-    char base_ifname[IFNAMSIZ];
-    get_base_interface_name((const char *)(ifname), base_ifname, sizeof(base_ifname));
-    int port_num = get_port_from_ifname(base_ifname);
-    ib_ctx_handler *p_ib_ctx = g_p_ib_ctx_handler_collection->get_ib_ctx(base_ifname);
-
-    if (!p_ib_ctx) {
-        nd_logdbg("Cant find ib_ctx for interface %s", base_ifname);
-        if (qp_type == IBV_QPT_RAW_PACKET && m_bond != NO_BOND) {
-            if (check_bond_roce_lag_exist(bond_roce_lag_path, sizeof(bond_roce_lag_path), ifname)) {
-                print_roce_lag_warnings(get_ifname_link(), bond_roce_lag_path);
-            } else if ((p_ib_ctx = g_p_ib_ctx_handler_collection->get_ib_ctx(get_ifname_link())) &&
-                       strstr(p_ib_ctx->get_ibname().c_str(), "bond")) {
-                print_roce_lag_warnings(get_ifname_link());
-            }
-        }
-        goto release_resources;
-    } else if (port_num > p_ib_ctx->get_ibv_device_attr()->phys_port_cnt) {
-        nd_logdbg("Invalid port for interface %s", base_ifname);
-        if (qp_type == IBV_QPT_RAW_PACKET && m_bond != NO_BOND && p_ib_ctx->is_mlx4()) {
-            print_roce_lag_warnings(get_ifname_link());
-        }
-        goto release_resources;
-    }
-
-    // Add to guid map in order to detect roce lag issue
-    if (qp_type == IBV_QPT_RAW_PACKET && m_bond != NO_BOND) {
-        m_sys_image_guid_map[p_ib_ctx->get_ibv_device_attr()->sys_image_guid].push_back(
-            base_ifname);
-    }
-
-    // create qp resources
-    channel = ibv_create_comp_channel(p_ib_ctx->get_ibv_context());
-    if (!channel) {
-        nd_logdbg("channel creation failed for interface %s (errno=%d %s)", ifname, errno,
-                  strerror(errno));
-        goto release_resources;
-    }
-    VALGRIND_MAKE_MEM_DEFINED(channel, sizeof(ibv_comp_channel));
-    context = p_ib_ctx->get_ibv_context();
-    cq = xlio_ibv_create_cq(context, safe_mce_sys().tx_num_wr, (void *)this, channel, comp_vector,
-                            &attr);
-    if (!cq) {
-        nd_logdbg("cq creation failed for interface %s (errno=%d %s)", ifname, errno,
-                  strerror(errno));
-        goto release_resources;
-    }
-
-    xlio_ibv_qp_init_attr_comp_mask(p_ib_ctx->get_ibv_pd(), qp_init_attr);
-    qp_init_attr.recv_cq = cq;
-    qp_init_attr.send_cq = cq;
-
-    qp = xlio_ibv_create_qp(p_ib_ctx->get_ibv_pd(), &qp_init_attr);
-    if (qp) {
-        success = true;
-        if (qp_type == IBV_QPT_RAW_PACKET && p_ib_ctx->is_packet_pacing_supported() &&
-            !priv_ibv_query_burst_supported(qp, port_num)) {
-            p_ib_ctx->set_burst_capability(true);
-        }
-        nd_logdbg("verified interface %s for burst capabilities : %s", ifname,
-                  p_ib_ctx->get_burst_capability() ? "enabled" : "disabled");
-    } else {
-        nd_logdbg("QP creation failed on interface %s (errno=%d %s), Traffic will not be offloaded",
-                  ifname, errno, strerror(errno));
-
-        int err = errno; // verify_raw_qp_privliges can overwrite errno so keep it before the call
-        if (validate_user_has_cap_net_raw_privliges() == 0 || err == EPERM) {
-            __log_warn("**************************************************************************"
-                       "*****************************\n");
-            __log_warn("* Interface %s will not be offloaded.\n", ifname);
-            __log_warn("* Offloaded resources are restricted to root or user with CAP_NET_RAW "
-                       "privileges\n");
-            __log_warn("* Read the CAP_NET_RAW and root access section in the " PRODUCT_NAME
-                       "'s User Manual for more information\n");
-            __log_warn("**************************************************************************"
-                       "*****************************\n");
-        } else {
-            __log_warn("**************************************************************************"
-                       "*****************************\n");
-            __log_warn("* Interface %s will not be offloaded.\n", ifname);
-            __log_warn("* " PRODUCT_NAME
-                       " was not able to create QP for this device (errno = %d).\n",
-                       err);
-            __log_warn("**************************************************************************"
-                       "*****************************\n");
-        }
-    }
-
-release_resources:
-    if (qp) {
-        IF_VERBS_FAILURE(ibv_destroy_qp(qp))
-        {
-            nd_logdbg("qp destroy failed on interface %s (errno=%d %s)", ifname, errno,
-                      strerror(errno));
-            success = false;
-        }
-        ENDIF_VERBS_FAILURE;
-    }
-    if (cq) {
-        IF_VERBS_FAILURE(ibv_destroy_cq(cq))
-        {
-            nd_logdbg("cq destroy failed on interface %s (errno=%d %s)", ifname, errno,
-                      strerror(errno));
-            success = false;
-        }
-        ENDIF_VERBS_FAILURE;
-    }
-    if (channel) {
-        IF_VERBS_FAILURE(ibv_destroy_comp_channel(channel))
-        {
-            nd_logdbg("channel destroy failed on interface %s (errno=%d %s)", ifname, errno,
-                      strerror(errno));
-            success = false;
-        }
-        ENDIF_VERBS_FAILURE;
-        VALGRIND_MAKE_MEM_UNDEFINED(channel, sizeof(ibv_comp_channel));
-    }
-    return success;
 }

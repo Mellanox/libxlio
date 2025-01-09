@@ -153,6 +153,7 @@ static int free_libxlio_resources()
         g_p_net_device_table_mgr->global_ring_clear_all_rfs();
     }
 
+#ifndef DEFINED_DPCP_PATH_RX
     if (g_p_ib_ctx_handler_collection) {
         g_p_ib_ctx_handler_collection->stop_all_doca_flow_ports();
     }
@@ -160,6 +161,7 @@ static int free_libxlio_resources()
     doca_flow_destroy();
 
     __log_dbg("doca_flow_destroy\n");
+#endif // !DEFINED_DPCP_PATH_RX
 
     // Block all sock-redicrt API calls into our offloading core
     fd_collection *g_p_fd_collection_temp = g_p_fd_collection;
@@ -963,6 +965,7 @@ static size_t calc_rx_wqe_buff_size()
     return buff_size;
 }
 
+#ifndef DEFINED_DPCP_PATH_RX
 /*
  * Initalize DOCA Flow with the flags: VNF/Hardware Steering/Isolated
  *
@@ -1026,6 +1029,7 @@ destroy_cfg:
 
     return result;
 }
+#endif // DEFINED_DPCP_PATH_RX
 
 static void do_global_ctors_helper()
 {
@@ -1077,10 +1081,12 @@ static void do_global_ctors_helper()
     g_global_stat_static.init();
     xlio_stats_instance_create_global_block(&g_global_stat_static);
 
+#ifndef DEFINED_DPCP_PATH_RX
     doca_error_t doca_rc = init_doca_flow();
     if (DOCA_IS_ERROR(doca_rc)) {
         throw_xlio_exception("Failed to initialize DOCA Flow\n");
     }
+#endif // DEFINED_DPCP_PATH_RX_AND_TX
 
     // Create new netlink listener
     NEW_CTOR(g_p_netlink_handler, netlink_wrapper());

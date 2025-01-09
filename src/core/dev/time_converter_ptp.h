@@ -34,6 +34,8 @@
 #ifndef TIME_CONVERTER_PTP_H
 #define TIME_CONVERTER_PTP_H
 
+#include "config.h"
+#ifdef DEFINED_DPCP_PATH_RX_OR_TX
 #include <infiniband/verbs.h>
 #include "event/timer_handler.h"
 #include <util/sys_vars.h>
@@ -57,4 +59,5 @@ private:
 };
 
 #endif // DEFINED_IBV_CLOCK_INFO
+#endif // DEFINED_DPCP_PATH_RX_OR_TX
 #endif // TIME_CONVERTER_PTP_H
