@@ -4130,13 +4130,15 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                     ops = new sockinfo_tcp_ops_tls(this);
                 }
             }
-#endif /* DEFINED_UTLS */
             else {
                 si_tcp_logdbg("(TCP_ULP) %s option is not supported", (char *)__optval);
                 errno = ENOPROTOOPT;
                 ret = -1;
                 break;
             }
+#else
+            errno = ENOPROTOOPT;
+#endif /* DEFINED_UTLS */
 
             if (unlikely(!ops)) {
                 errno = ENOMEM;
