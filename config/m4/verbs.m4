@@ -140,7 +140,7 @@ CHECK_VERBS_ATTRIBUTE([IBV_QPT_RAW_PACKET], [infiniband/verbs.h])
 CHECK_VERBS_ATTRIBUTE([IBV_WC_WITH_VLAN], [infiniband/verbs.h])
 CHECK_VERBS_ATTRIBUTE([IBV_DEVICE_RAW_IP_CSUM], [infiniband/verbs.h])
 CHECK_VERBS_ATTRIBUTE([IBV_SEND_IP_CSUM], [infiniband/verbs.h])
-CHECK_VERBS_ATTRIBUTE([IBV_WC_EX_WITH_COMPLETION_TIMESTAMP], [infiniband/verbs.h], [IBV_CQ_TIMESTAMP])
+#CHECK_VERBS_ATTRIBUTE([IBV_WC_EX_WITH_COMPLETION_TIMESTAMP], [infiniband/verbs.h], [IBV_CQ_TIMESTAMP])
 CHECK_VERBS_MEMBER([struct ibv_device_attr_ex.orig_attr], [infiniband/verbs.h], [IBV_DEVICE_ATTR_EX])
 CHECK_VERBS_MEMBER([struct ibv_alloc_dm_attr.length], [infiniband/verbs.h], [IBV_DM])
 CHECK_VERBS_MEMBER([struct ibv_packet_pacing_caps.qp_rate_limit_min], [infiniband/verbs.h], [IBV_PACKET_PACING_CAPS])
@@ -153,7 +153,7 @@ if test "x$prj_cv_verbs" == x3; then
 
     if test "x$prj_cv_directverbs" == x3; then
         CHECK_VERBS_ATTRIBUTE([MLX5_OPCODE_NOP], [infiniband/mlx5dv.h], [IBV_WR_NOP])
-        CHECK_VERBS_MEMBER([struct mlx5dv_clock_info.last_cycles], [infiniband/mlx5dv.h], [IBV_CLOCK_INFO])
+        #CHECK_VERBS_MEMBER([struct mlx5dv_clock_info.last_cycles], [infiniband/mlx5dv.h], [IBV_CLOCK_INFO])
         CHECK_VERBS_MEMBER([struct mlx5dv_context.num_lag_ports], [infiniband/mlx5dv.h], [ROCE_LAG])
         CHECK_VERBS_ATTRIBUTE([MLX5DV_QP_MASK_RAW_QP_HANDLES], [infiniband/mlx5dv.h], [DV_RAW_QP_HANDLES])
     fi

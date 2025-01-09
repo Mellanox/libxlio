@@ -49,14 +49,17 @@ DOCA_LOG_REGISTER(rfs_rule);
 
 rfs_rule::~rfs_rule()
 {
+#ifndef DEFINED_DPCP_PATH_RX
     if (m_doca_flow_entry) {
         doca_error_t rc = doca_flow_pipe_remove_entry(0, 0U, m_doca_flow_entry);
         if (DOCA_IS_ERROR(rc)) {
             PRINT_DOCA_ERR(rfs_logerr, rc, "doca_flow_pipe_rm_entry entry: %p", m_doca_flow_entry);
         }
     }
+#endif // DEFINED_DPCP_PATH_RX
 }
 
+#ifndef DEFINED_DPCP_PATH_RX
 bool rfs_rule::create(doca_flow_match &match_value, doca_flow_match &match_mask,
                       uint16_t rx_queue_id, uint16_t priority, uint32_t flow_tag,
                       ib_ctx_handler &in_dev)
@@ -153,7 +156,7 @@ bool rfs_rule::create(doca_flow_match &match_value, doca_flow_match &match_mask,
 
     return true;
 }
-
+#else // !DEFINED_DPCP_PATH_RX
 bool rfs_rule::create_dpcp(dpcp::match_params &match_value, dpcp::match_params &match_mask,
                            dpcp::tir &in_tir, uint16_t priority, uint32_t flow_tag,
                            ib_ctx_handler &in_dev)
@@ -246,3 +249,4 @@ bool rfs_rule::create_dpcp(dpcp::match_params &match_value, dpcp::match_params &
 
     return true;
 }
+#endif // !DEFINED_DPCP_PATH_RX

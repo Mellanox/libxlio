@@ -67,21 +67,19 @@ public:
     ib_ctx_handler(doca_devinfo *devinfo, const char *ibname, ibv_device *ibvdevice);
     virtual ~ib_ctx_handler();
 
-    /*
-     * on init or constructor:
-     *      register to event manager with m_channel and this.
-     * */
-    ibv_pd *get_ibv_pd() { return m_p_ibv_pd; }
-    ibv_device *get_ibv_device() { return m_p_ibv_device; }
+#if !defined(DEFINED_DPCP_PATH_RX) || !defined(DEFINED_DPCP_PATH_TX)
     doca_dev *get_doca_device() const { return m_doca_dev; }
     doca_flow_port *get_doca_flow_port();
     doca_flow_pipe *get_doca_root_pipe();
-    const std::string &get_ibname() const { return m_ibname; }
+    void stop_doca_flow_port();
+#endif // !DEFINED_DPCP_PATH_RX || !DEFINED_DPCP_PATH_TX
+
+#if defined(DEFINED_DPCP_PATH_RX) || defined(DEFINED_DPCP_PATH_TX)
+    ibv_pd *get_ibv_pd() { return m_p_ibv_pd; }
     struct ibv_context *get_ibv_context() { return m_p_ibv_context; }
     dpcp::adapter *set_dpcp_adapter();
     dpcp::adapter *get_dpcp_adapter() { return m_p_adapter; }
     void check_capabilities();
-    void stop_doca_flow_port();
     xlio_ibv_device_attr *get_ibv_device_attr()
     {
         return xlio_get_device_orig_attr(m_p_ibv_device_attr);
@@ -91,6 +89,10 @@ public:
     void mem_dereg(uint32_t lkey);
     struct ibv_mr *get_mem_reg(uint32_t lkey);
     uint32_t user_mem_reg(void *addr, size_t length, uint64_t access);
+#endif // DEFINED_DPCP_PATH_RX || DEFINED_DPCP_PATH_TX
+
+    ibv_device *get_ibv_device() { return m_p_ibv_device; }
+    const std::string &get_ibname() const { return m_ibname; }
     bool is_removed() { return m_removed; }
     void set_ctx_time_converter_status(ts_conversion_mode_t conversion_mode);
     void set_flow_tag_capability(bool flow_tag_capability);
@@ -99,7 +101,6 @@ public:
     bool get_burst_capability() { return m_pacing_caps.burst; }
     bool is_packet_pacing_supported(uint32_t rate = 1);
     size_t get_on_device_memory_size() { return m_on_device_memory; }
-    bool is_active(int port_num);
     bool is_mlx4() { return is_mlx4(get_ibname().c_str()); }
     static bool is_mlx4(const char *dev) { return strncmp(dev, "mlx4", 4) == 0; }
     virtual void handle_event_ibverbs_cb(void *ev_data, void *ctx);
@@ -111,28 +112,35 @@ public:
         m_p_ctx_time_converter->convert_hw_time_to_system_time(hwtime, systime);
     }
 
-private:
-    void open_doca_dev(doca_devinfo *devinfo);
+private:    
+#if defined(DEFINED_DPCP_PATH_RX) || defined(DEFINED_DPCP_PATH_TX)
     void handle_event_device_fatal();
+    
+    struct ibv_context *m_p_ibv_context = nullptr;
+    dpcp::adapter *m_p_adapter;
+    xlio_ibv_device_attr_ex *m_p_ibv_device_attr;
+    ibv_pd *m_p_ibv_pd;
+    mr_map_lkey_t m_mr_map_lkey;
+    std::unordered_map<void *, uint32_t> m_user_mem_lkey_map;
+#endif // DEFINED_DPCP_PATH_RX || DEFINED_DPCP_PATH_TX
+
+#if !defined(DEFINED_DPCP_PATH_RX) || !defined(DEFINED_DPCP_PATH_TX)
+    void open_doca_dev(doca_devinfo *devinfo);
     doca_error_t start_doca_flow_port();
     doca_error_t create_doca_root_pipe();
 
-    ibv_device *m_p_ibv_device; // HCA handle
-    struct ibv_context *m_p_ibv_context = nullptr;
-    dpcp::adapter *m_p_adapter;
     doca_dev *m_doca_dev = nullptr;
     doca_flow_port *m_doca_port = nullptr;
     doca_flow_pipe *m_doca_root_pipe = nullptr;
-    xlio_ibv_device_attr_ex *m_p_ibv_device_attr;
-    ibv_pd *m_p_ibv_pd;
+#endif // !DEFINED_DPCP_PATH_RX || !DEFINED_DPCP_PATH_TX
+
+    ibv_device *m_p_ibv_device; // HCA handle
     bool m_flow_tag_enabled;
     pacing_caps_t m_pacing_caps;
     size_t m_on_device_memory;
     bool m_removed;
     lock_spin m_lock_umr;
     time_converter *m_p_ctx_time_converter;
-    mr_map_lkey_t m_mr_map_lkey;
-    std::unordered_map<void *, uint32_t> m_user_mem_lkey_map;
     std::string m_ibname;
 };
 

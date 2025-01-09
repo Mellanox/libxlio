@@ -84,7 +84,9 @@ bool dm_mgr::allocate_resources(ib_ctx_handler *ib_ctx, ring_stats_t *ring_stats
     // Allocate on device memory buffer
     memset(&dm_attr, 0, sizeof(dm_attr));
     dm_attr.length = allocation_size;
+#ifdef DEFINED_DPCP_PATH_TX
     m_p_ibv_dm = xlio_ibv_alloc_dm(ib_ctx->get_ibv_context(), &dm_attr);
+#endif // DEFINED_DPCP_PATH_TX
     if (!m_p_ibv_dm) {
         // Memory allocation can fail if we have already allocated the maximum possible.
         VLOG_PRINTF_ONCE_THEN_DEBUG(
@@ -102,7 +104,9 @@ bool dm_mgr::allocate_resources(ib_ctx_handler *ib_ctx, ring_stats_t *ring_stats
 
     // Initialize MR attributes
     memset(&mr_in, 0, sizeof(mr_in));
+#ifdef DEFINED_DPCP_PATH_TX
     xlio_ibv_init_dm_mr(mr_in, ib_ctx->get_ibv_pd(), allocation_size, m_p_ibv_dm);
+#endif // DEFINED_DPCP_PATH_TX
 
     // Register On Device Memory MR
     m_p_dm_mr = xlio_ibv_reg_dm_mr(&mr_in);

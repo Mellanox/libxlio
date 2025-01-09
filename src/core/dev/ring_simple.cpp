@@ -253,6 +253,7 @@ void ring_simple::create_resources()
     memset(&m_tso, 0, sizeof(m_tso));
     if ((safe_mce_sys().enable_tso == option_3::ON) ||
         ((safe_mce_sys().enable_tso == option_3::AUTO) && (1 == validate_tso(get_if_index())))) {
+#ifdef DEFINED_DPCP_PATH_TX
         const xlio_ibv_tso_caps *caps =
             &xlio_get_tso_caps(m_p_ib_ctx->get_ibv_device_attr_ex());
         if (ibv_is_qpt_supported(caps->supported_qpts, IBV_QPT_RAW_PACKET)) {
@@ -265,11 +266,17 @@ void ring_simple::create_resources()
             /* ETH(14) + IP(20) + TCP(20) + TCP OPTIONS(40) */
             m_tso.max_header_sz = 94;
         }
+#else // DEFINED_DPCP_PATH_TX
+        m_tso.max_payload_sz = 256 * 1014;
+        /* ETH(14) + IP(20) + TCP(20) + TCP OPTIONS(40) */
+        m_tso.max_header_sz = 94;
+#endif // DEFINED_DPCP_PATH_TX
     }
     ring_logdbg("ring attributes: m_tso = %d", is_tso());
     ring_logdbg("ring attributes: m_tso:max_payload_sz = %d", get_max_payload_sz());
     ring_logdbg("ring attributes: m_tso:max_header_sz = %d", get_max_header_sz());
 
+#ifdef DEFINED_DPCP_PATH_RX
     /* Detect LRO capabilities */
     memset(&m_lro, 0, sizeof(m_lro));
     if ((safe_mce_sys().enable_lro == option_3::ON) ||
@@ -309,7 +316,9 @@ void ring_simple::create_resources()
                 m_lro.timer_supported_periods[0], m_lro.timer_supported_periods[1],
                 m_lro.timer_supported_periods[2], m_lro.timer_supported_periods[3]);
     ring_logdbg("ring attributes: m_lro:max_payload_sz = %d", m_lro.max_payload_sz);
+#endif // DEFINED_DPCP_PATH_RX
 
+#if defined(DEFINED_DPCP_PATH_RX) || defined(DEFINED_DPCP_PATH_TX)
 #ifdef DEFINED_UTLS
     {
         dpcp::adapter_hca_capabilities caps;
@@ -324,6 +333,7 @@ void ring_simple::create_resources()
         ring_logdbg("ring attributes: m_tls:tls_synchronize_dek = %d", m_tls.tls_synchronize_dek);
     }
 #endif /* DEFINED_UTLS */
+#endif // DEFINED_DPCP_PATH_RX || DEFINED_DPCP_PATH_TX
 
     m_flow_tag_enabled = !safe_mce_sys().disable_flow_tag && m_p_ib_ctx->get_flow_tag_capability();
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)

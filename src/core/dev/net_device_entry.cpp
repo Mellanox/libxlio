@@ -70,9 +70,11 @@ net_device_entry::net_device_entry(int if_index, net_device_val *ndv)
         m_timer_handle = g_p_event_handler_manager->register_timer_event(
             SLAVE_CHECK_TIMER_PERIOD_MSEC, this, PERIODIC_TIMER, 0);
     }
+#if defined(DEFINED_DPCP_PATH_RX) || defined(DEFINED_DPCP_PATH_TX)
     if (ndv->get_is_bond() == net_device_val::LAG_8023ad) {
         ndv->register_to_ibverbs_events(this);
     }
+#endif // DEFINED_DPCP_PATH_RX || DEFINED_DPCP_PATH_TX
     nde_logdbg("Done");
 }
 
@@ -82,10 +84,12 @@ net_device_entry::~net_device_entry()
         g_p_event_handler_manager->unregister_timer_event(this, m_timer_handle);
         m_timer_handle = nullptr;
     }
+#if defined(DEFINED_DPCP_PATH_RX) || defined(DEFINED_DPCP_PATH_TX)
     net_device_val *p_ndv = dynamic_cast<net_device_val *>(m_val);
     if (p_ndv && p_ndv->get_is_bond() == net_device_val::LAG_8023ad) {
         p_ndv->unregister_to_ibverbs_events(this);
     }
+#endif // DEFINED_DPCP_PATH_RX || DEFINED_DPCP_PATH_TX
     nde_logdbg("Done");
 }
 

@@ -65,27 +65,30 @@ ib_ctx_handler::ib_ctx_handler(doca_devinfo *devinfo, const char *ibname, ibv_de
     , m_lock_umr("spin_lock_umr")
     , m_p_ctx_time_converter(nullptr)
 {
-    if (!devinfo) {
-        ibch_logpanic("Nullptr devinfo in ib_ctx_handler");
-    }
-
     if (!ibvdevice) {
         ibch_logpanic("Nullptr ibv_device in ib_ctx_handler");
     }
 
     m_ibname = ibname;
-
-    open_doca_dev(devinfo);
-
     m_p_ibv_device = ibvdevice;
 
+#if !defined(DEFINED_DPCP_PATH_RX) || !defined(DEFINED_DPCP_PATH_TX)
+    if (!devinfo) {
+        ibch_logpanic("Nullptr devinfo in ib_ctx_handler");
+    }
+
+    open_doca_dev(devinfo);
+    ibch_logdbg("Device opened doca_dev: %p", m_doca_dev);
+#else // !DEFINED_DPCP_PATH_RX || !DEFINED_DPCP_PATH_TX
+    NOT_IN_USE(devinfo); 
+#endif // !DEFINED_DPCP_PATH_RX || !DEFINED_DPCP_PATH_TX
+
+#if defined(DEFINED_DPCP_PATH_RX) || defined(DEFINED_DPCP_PATH_TX)
     m_p_adapter = set_dpcp_adapter();
     if (!m_p_adapter) {
         ibch_logpanic("ibv device %p adapter allocation failure (errno=%d %m)", m_p_ibv_device,
                       errno);
     }
-
-    ibch_logdbg("Device opened doca_dev: %p", m_doca_dev);
 
     VALGRIND_MAKE_MEM_DEFINED(m_p_ibv_pd, sizeof(struct ibv_pd));
 
@@ -131,10 +134,12 @@ err:
         delete m_p_adapter;
         m_p_ibv_context = nullptr;
     }
+#endif // DEFINED_DPCP_PATH_RX || DEFINED_DPCP_PATH_TX
 }
 
 ib_ctx_handler::~ib_ctx_handler()
 {
+#if defined(DEFINED_DPCP_PATH_RX) || defined(DEFINED_DPCP_PATH_TX)
     if (!m_removed) {
         g_p_event_handler_manager->unregister_ibverbs_event(m_p_ibv_context->async_fd, this);
     }
@@ -156,19 +161,23 @@ ib_ctx_handler::~ib_ctx_handler()
         VALGRIND_MAKE_MEM_UNDEFINED(m_p_ibv_pd, sizeof(struct ibv_pd));
         m_p_ibv_pd = nullptr;
     }
+#endif // DEFINED_DPCP_PATH_RX || DEFINED_DPCP_PATH_TX
 
     if (m_p_ctx_time_converter) {
         m_p_ctx_time_converter->clean_obj();
     }
+
+#if defined(DEFINED_DPCP_PATH_RX) || defined(DEFINED_DPCP_PATH_TX)
     delete m_p_ibv_device_attr;
 
     if (m_p_adapter) {
         delete m_p_adapter;
         m_p_ibv_context = nullptr;
     }
-
     BULLSEYE_EXCLUDE_BLOCK_END
+#endif // DEFINED_DPCP_PATH_RX || DEFINED_DPCP_PATH_TX
 
+#if !defined(DEFINED_DPCP_PATH_RX) || !defined(DEFINED_DPCP_PATH_TX)
     stop_doca_flow_port();
 
     if (m_doca_dev) {
@@ -178,8 +187,10 @@ ib_ctx_handler::~ib_ctx_handler()
                            m_ibname.c_str(), static_cast<int>(getpid()));
         }
     }
+#endif // !DEFINED_DPCP_PATH_RX || !DEFINED_DPCP_PATH_TX
 }
 
+#if !defined(DEFINED_DPCP_PATH_RX) || !defined(DEFINED_DPCP_PATH_TX)
 void ib_ctx_handler::open_doca_dev(doca_devinfo *devinfo)
 {
 #ifdef DEFINED_NGINX
@@ -350,6 +361,7 @@ destroy_pipe_cfg:
 
     return rc;
 }
+#endif // !DEFINED_DPCP_PATH_RX || !DEFINED_DPCP_PATH_TX
 
 void ib_ctx_handler::print_val()
 {
@@ -362,6 +374,7 @@ void ib_ctx_handler::print_val()
     sprintf(str_x, " %s:", get_ibname().c_str());
     strcat(temp_str, str_x);
 
+#if defined(DEFINED_DPCP_PATH_RX) || defined(DEFINED_DPCP_PATH_TX)
     str_x[0] = '\0';
     sprintf(str_x, " port(s): %d", get_ibv_device_attr()->phys_port_cnt);
     strcat(temp_str, str_x);
@@ -377,6 +390,7 @@ void ib_ctx_handler::print_val()
     str_x[0] = '\0';
     sprintf(str_x, " max_qp_wr: %d", get_ibv_device_attr()->max_qp_wr);
     strcat(temp_str, str_x);
+#endif // DEFINED_DPCP_PATH_RX || DEFINED_DPCP_PATH_TX
 
     str_x[0] = '\0';
     sprintf(str_x, " on_device_memory: %zu", m_on_device_memory);
@@ -390,6 +404,7 @@ void ib_ctx_handler::print_val()
     ibch_logdbg("%s", temp_str);
 }
 
+#if defined(DEFINED_DPCP_PATH_RX) || defined(DEFINED_DPCP_PATH_TX)
 int parse_dpcp_version(const char *dpcp_ver)
 {
     static const std::string s_delimiter(".");
@@ -534,74 +549,6 @@ void ib_ctx_handler::check_capabilities()
     }
 }
 
-void ib_ctx_handler::set_ctx_time_converter_status(ts_conversion_mode_t conversion_mode)
-{
-    if (m_p_ctx_time_converter) {
-        /*
-         * Don't override time_converter object. Current method may be
-         * called more than once if multiple slaves point to the same
-         * ib_context.
-         * If we overrode the time_converter we would lose the object
-         * and wouldn't be able to stop its timer and destroy it.
-         */
-        return;
-    }
-
-#ifdef DEFINED_IBV_CQ_TIMESTAMP
-    switch (conversion_mode) {
-    case TS_CONVERSION_MODE_DISABLE:
-        m_p_ctx_time_converter =
-            new time_converter_ib_ctx(m_p_ibv_context, TS_CONVERSION_MODE_DISABLE, 0);
-        break;
-    case TS_CONVERSION_MODE_PTP: {
-#ifdef DEFINED_IBV_CLOCK_INFO
-        if (is_mlx4()) {
-            m_p_ctx_time_converter = new time_converter_ib_ctx(
-                m_p_ibv_context, TS_CONVERSION_MODE_SYNC, m_p_ibv_device_attr->hca_core_clock);
-            ibch_logwarn("ptp is not supported for mlx4 devices, reverting to mode "
-                         "TS_CONVERSION_MODE_SYNC (ibv context %p)",
-                         m_p_ibv_context);
-        } else {
-            xlio_ibv_clock_info clock_info;
-            memset(&clock_info, 0, sizeof(clock_info));
-            int ret = xlio_ibv_query_clock_info(m_p_ibv_context, &clock_info);
-            if (ret == 0) {
-                m_p_ctx_time_converter = new time_converter_ptp(m_p_ibv_context);
-            } else {
-                m_p_ctx_time_converter = new time_converter_ib_ctx(
-                    m_p_ibv_context, TS_CONVERSION_MODE_SYNC, m_p_ibv_device_attr->hca_core_clock);
-                ibch_logwarn("xlio_ibv_query_clock_info failure for clock_info, reverting to mode "
-                             "TS_CONVERSION_MODE_SYNC (ibv context %p) (ret %d)",
-                             m_p_ibv_context, ret);
-            }
-        }
-#else
-        m_p_ctx_time_converter = new time_converter_ib_ctx(m_p_ibv_context, TS_CONVERSION_MODE_SYNC,
-                                                           m_p_ibv_device_attr->hca_core_clock);
-        ibch_logwarn("PTP is not supported by the underlying Infiniband verbs. "
-                     "DEFINED_IBV_CLOCK_INFO not defined. "
-                     "reverting to mode TS_CONVERSION_MODE_SYNC");
-#endif // DEFINED_IBV_CLOCK_INFO
-    } break;
-    case TS_CONVERSION_MODE_RTC:
-        m_p_ctx_time_converter = new time_converter_rtc();
-        break;
-    default:
-        m_p_ctx_time_converter = new time_converter_ib_ctx(m_p_ibv_context, conversion_mode,
-                                                           m_p_ibv_device_attr->hca_core_clock);
-        break;
-    }
-#else
-    m_p_ctx_time_converter =
-        new time_converter_ib_ctx(m_p_ibv_context, TS_CONVERSION_MODE_DISABLE, 0);
-    if (conversion_mode != TS_CONVERSION_MODE_DISABLE) {
-        ibch_logwarn("time converter mode not applicable (configuration "
-                     "value=%d). set to TS_CONVERSION_MODE_DISABLE.",
-                     conversion_mode);
-    }
-#endif // DEFINED_IBV_CQ_TIMESTAMP
-}
-
 uint32_t ib_ctx_handler::mem_reg(void *addr, size_t length, uint64_t access)
 {
     struct ibv_mr *mr = nullptr;
@@ -671,41 +618,6 @@ uint32_t ib_ctx_handler::user_mem_reg(void *addr, size_t length, uint64_t access
     return lkey;
 }
 
-void ib_ctx_handler::set_flow_tag_capability(bool flow_tag_capability)
-{
-    m_flow_tag_enabled = flow_tag_capability;
-}
-
-void ib_ctx_handler::set_burst_capability(bool burst)
-{
-    m_pacing_caps.burst = burst;
-}
-
-bool ib_ctx_handler::is_packet_pacing_supported(uint32_t rate /* =1 */)
-{
-    if (rate) {
-        return m_pacing_caps.rate_limit_min <= rate && rate <= m_pacing_caps.rate_limit_max;
-    } else {
-        return true;
-    }
-}
-
-bool ib_ctx_handler::is_active(int port_num)
-{
-    ibv_port_attr port_attr;
-
-    memset(&port_attr, 0, sizeof(ibv_port_attr));
-    IF_VERBS_FAILURE(ibv_query_port(m_p_ibv_context, port_num, &port_attr))
-    {
-        ibch_logdbg("ibv_query_port failed on ibv device %p, port %d "
-                    "(errno=%d)",
-                    m_p_ibv_context, port_num, errno);
-    }
-    ENDIF_VERBS_FAILURE;
-    VALGRIND_MAKE_MEM_DEFINED(&port_attr.state, sizeof(port_attr.state));
-    return port_attr.state == IBV_PORT_ACTIVE;
-}
-
 void ib_ctx_handler::handle_event_ibverbs_cb(void *ev_data, void *ctx)
 {
     NOT_IN_USE(ctx);
@@ -736,5 +648,103 @@ void ib_ctx_handler::handle_event_device_fatal()
     if (m_p_ctx_time_converter) {
         m_p_ctx_time_converter->clean_obj();
         m_p_ctx_time_converter = nullptr;
+    }
+}
+#else
+void ib_ctx_handler::handle_event_ibverbs_cb(void *ev_data, void *ctx)
+{
+    NOT_IN_USE(ev_data);
+    NOT_IN_USE(ctx);
+}
+#endif // DEFINED_DPCP_PATH_RX || DEFINED_DPCP_PATH_TX
+
+void ib_ctx_handler::set_ctx_time_converter_status(ts_conversion_mode_t conversion_mode)
+{
+    if (m_p_ctx_time_converter) {
+        /*
+         * Don't override time_converter object. Current method may be
+         * called more than once if multiple slaves point to the same
+         * ib_context.
+         * If we overrode the time_converter we would lose the object
+         * and wouldn't be able to stop its timer and destroy it.
+         */
+        return;
+    }
+
+#ifdef DEFINED_IBV_CQ_TIMESTAMP
+    switch (conversion_mode) {
+    case TS_CONVERSION_MODE_DISABLE:
+        m_p_ctx_time_converter =
+            new time_converter_ib_ctx(m_p_ibv_context, TS_CONVERSION_MODE_DISABLE, 0);
+        break;
+    case TS_CONVERSION_MODE_PTP: {
+#ifdef DEFINED_IBV_CLOCK_INFO
+        if (is_mlx4()) {
+            m_p_ctx_time_converter = new time_converter_ib_ctx(
+                m_p_ibv_context, TS_CONVERSION_MODE_SYNC, m_p_ibv_device_attr->hca_core_clock);
+            ibch_logwarn("ptp is not supported for mlx4 devices, reverting to mode "
+                         "TS_CONVERSION_MODE_SYNC (ibv context %p)",
+                         m_p_ibv_context);
+        } else {
+            xlio_ibv_clock_info clock_info;
+            memset(&clock_info, 0, sizeof(clock_info));
+            int ret = xlio_ibv_query_clock_info(m_p_ibv_context, &clock_info);
+            if (ret == 0) {
+                m_p_ctx_time_converter = new time_converter_ptp(m_p_ibv_context);
+            } else {
+                m_p_ctx_time_converter = new time_converter_ib_ctx(
+                    m_p_ibv_context, TS_CONVERSION_MODE_SYNC, m_p_ibv_device_attr->hca_core_clock);
+                ibch_logwarn("xlio_ibv_query_clock_info failure for clock_info, reverting to mode "
+                             "TS_CONVERSION_MODE_SYNC (ibv context %p) (ret %d)",
+                             m_p_ibv_context, ret);
+            }
+        }
+#else
+        m_p_ctx_time_converter = new time_converter_ib_ctx(m_p_ibv_context, TS_CONVERSION_MODE_SYNC,
+                                                           m_p_ibv_device_attr->hca_core_clock);
+        ibch_logwarn("PTP is not supported by the underlying Infiniband verbs. "
+                     "DEFINED_IBV_CLOCK_INFO not defined. "
+                     "reverting to mode TS_CONVERSION_MODE_SYNC");
+#endif // DEFINED_IBV_CLOCK_INFO
+    } break;
+    case TS_CONVERSION_MODE_RTC:
+        m_p_ctx_time_converter = new time_converter_rtc();
+        break;
+    default:
+        m_p_ctx_time_converter = new time_converter_ib_ctx(m_p_ibv_context, conversion_mode,
+                                                           m_p_ibv_device_attr->hca_core_clock);
+        break;
+    }
+#else
+#if defined(DEFINED_DPCP_PATH_RX) || defined(DEFINED_DPCP_PATH_TX)
+    m_p_ctx_time_converter =
+        new time_converter_ib_ctx(m_p_ibv_context, TS_CONVERSION_MODE_DISABLE, 0);
+    if (conversion_mode != TS_CONVERSION_MODE_DISABLE) {
+        ibch_logwarn("time converter mode not applicable (configuration "
+                     "value=%d). set to TS_CONVERSION_MODE_DISABLE.",
+                     conversion_mode);
+    }
+#else // DEFINED_DPCP_PATH_RX || DEFINED_DPCP_PATH_TX
+    NOT_IN_USE(conversion_mode);
+#endif // DEFINED_DPCP_PATH_RX || DEFINED_DPCP_PATH_TX
+#endif // DEFINED_IBV_CQ_TIMESTAMP
+}
+
+void ib_ctx_handler::set_flow_tag_capability(bool flow_tag_capability)
+{
+    m_flow_tag_enabled = flow_tag_capability;
+}
+
+void ib_ctx_handler::set_burst_capability(bool burst)
+{
+    m_pacing_caps.burst = burst;
+}
+
+bool ib_ctx_handler::is_packet_pacing_supported(uint32_t rate /* =1 */)
+{
+    if (rate) {
+        return m_pacing_caps.rate_limit_min <= rate && rate <= m_pacing_caps.rate_limit_max;
+    } else {
+        return true;
     }
 }

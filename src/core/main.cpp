@@ -153,6 +153,7 @@ static int free_libxlio_resources()
         g_p_net_device_table_mgr->global_ring_clear_all_rfs();
     }
 
+#if !defined(DEFINED_DPCP_PATH_RX) || !defined(DEFINED_DPCP_PATH_TX)
     if (g_p_ib_ctx_handler_collection) {
         g_p_ib_ctx_handler_collection->stop_all_doca_flow_ports();
     }
@@ -160,6 +161,7 @@ static int free_libxlio_resources()
     doca_flow_destroy();
 
     __log_dbg("doca_flow_destroy\n");
+#endif // !DEFINED_DPCP_PATH_RX || !DEFINED_DPCP_PATH_TX
 
     // Block all sock-redicrt API calls into our offloading core
     fd_collection *g_p_fd_collection_temp = g_p_fd_collection;

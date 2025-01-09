@@ -46,7 +46,9 @@ public:
     ib_ctx_handler_collection();
     ~ib_ctx_handler_collection();
 
+#if !defined(DEFINED_DPCP_PATH_RX) || !defined(DEFINED_DPCP_PATH_TX)
     void stop_all_doca_flow_ports();
+#endif // !DEFINED_DPCP_PATH_RX || !DEFINED_DPCP_PATH_TX
     void update_tbl(const char *ifa_name = nullptr);
     void print_val_tbl();
 

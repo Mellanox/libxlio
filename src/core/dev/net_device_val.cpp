@@ -158,8 +158,6 @@ const std::string ring_alloc_logic_attr::to_str() const
 net_device_val::net_device_val(struct net_device_val_desc *desc)
     : m_lock(MULTILOCK_RECURSIVE, "net_device_val")
 {
-    bool valid = false;
-    ib_ctx_handler *ib_ctx;
     struct nlmsghdr *nl_msg = nullptr;
     struct ifinfomsg *nl_msgdata = nullptr;
     int nl_attrlen;
@@ -235,8 +233,9 @@ net_device_val::net_device_val(struct net_device_val_desc *desc)
 
     nd_logdbg("Check interface '%s' (index=%d flags=%X)", get_ifname(), get_if_idx(), get_flags());
 
-    valid = false;
-    ib_ctx = g_p_ib_ctx_handler_collection->get_ib_ctx(get_ifname_link());
+#if defined(DEFINED_DPCP_PATH_RX) || defined(DEFINED_DPCP_PATH_TX)
+    bool valid = false;
+    ib_ctx_handler *ib_ctx = g_p_ib_ctx_handler_collection->get_ib_ctx(get_ifname_link());
     switch (m_bond) {
     case LAG_8023ad:
     case ACTIVE_BACKUP:
@@ -252,6 +251,7 @@ net_device_val::net_device_val(struct net_device_val_desc *desc)
         nd_logdbg("Skip interface '%s'", get_ifname());
         return;
     }
+#endif // DEFINED_DPCP_PATH_RX || DEFINED_DPCP_PATH_TX
 
     if (safe_mce_sys().mtu != 0 && (int)safe_mce_sys().mtu != get_mtu()) {
         nd_logwarn("Mismatch between interface %s MTU=%d and XLIO_MTU=%d."
@@ -277,13 +277,6 @@ net_device_val::net_device_val(struct net_device_val_desc *desc)
     }
 
     nd_logdbg("Use interface '%s'", get_ifname());
-    if (ib_ctx) {
-        nd_logdbg("%s ==> %s port %d (%s)", get_ifname(), ib_ctx->get_ibname().c_str(),
-                  get_port_from_ifname(get_ifname_link()),
-                  (ib_ctx->is_active(get_port_from_ifname(get_ifname_link())) ? "Up" : "Down"));
-    } else {
-        nd_logdbg("%s ==> none", get_ifname());
-    }
 }
 
 net_device_val::~net_device_val()
@@ -1213,6 +1206,7 @@ void net_device_val::ring_clear_all_rfs()
     }
 }
 
+#if defined(DEFINED_DPCP_PATH_RX) || defined(DEFINED_DPCP_PATH_TX)
 void net_device_val::register_to_ibverbs_events(event_handler_ibverbs *handler)
 {
     for (size_t i = 0; i < m_slaves.size(); i++) {
@@ -1253,6 +1247,7 @@ void net_device_val::unregister_to_ibverbs_events(event_handler_ibverbs *handler
             m_slaves[i]->p_ib_ctx->get_ibv_context()->async_fd, handler);
     }
 }
+#endif // DEFINED_DPCP_PATH_RX || DEFINED_DPCP_PATH_TX
 
 void net_device_val_eth::configure()
 {
@@ -1398,6 +1393,7 @@ const std::string net_device_val_eth::to_str() const
     return std::string("ETH: " + net_device_val::to_str());
 }
 
+#if defined(DEFINED_DPCP_PATH_RX) || defined(DEFINED_DPCP_PATH_TX)
 bool net_device_val::verify_bond_or_eth_qp_creation()
 {
     char slaves[IFNAMSIZ * MAX_SLAVES] = {0};
@@ -1620,3 +1616,4 @@ release_resources:
     }
     return success;
 }
+#endif // DEFINED_DPCP_PATH_RX || DEFINED_DPCP_PATH_TX

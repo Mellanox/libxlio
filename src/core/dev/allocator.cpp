@@ -256,6 +256,9 @@ xlio_registrator::~xlio_registrator()
 
 bool xlio_registrator::register_memory(void *data, size_t size)
 {
+    ib_context_map_t *ib_ctx_map = g_p_ib_ctx_handler_collection->get_ib_cxt_list();
+
+#if !defined(DEFINED_DPCP_PATH_RX) || !defined(DEFINED_DPCP_PATH_TX)
     if (m_p_doca_mmap) {
         __log_info_err("Memory already registered, doca_mmap already exists=%p",
                        (void *)m_p_doca_mmap);
@@ -269,21 +272,23 @@ bool xlio_registrator::register_memory(void *data, size_t size)
         PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_create");
         return false;
     }
-
-    ib_context_map_t *ib_ctx_map = g_p_ib_ctx_handler_collection->get_ib_cxt_list();
+    
     uint32_t num_of_devices = ib_ctx_map->size();
     rc = doca_mmap_set_max_num_devices(m_p_doca_mmap, num_of_devices);
     if (DOCA_IS_ERROR(rc)) {
         PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_set_max_num_devices");
         return false;
     }
+#endif // !DEFINED_DPCP_PATH_RX || !DEFINED_DPCP_PATH_TX
 
     for (const auto &ib_ctx_key_val : *ib_ctx_map) {
         ib_ctx_handler *p_ib_ctx_h = ib_ctx_key_val.second;
+#if defined(DEFINED_DPCP_PATH_RX) || defined(DEFINED_DPCP_PATH_TX)
         // keep ibv mem_reg to allow doca integration with working traffic
         uint32_t lkey = p_ib_ctx_h->mem_reg(data, size, XLIO_IBV_ACCESS_LOCAL_WRITE);
         m_lkey_map_ib_ctx[p_ib_ctx_h] = lkey;
-
+#endif
+#if !defined(DEFINED_DPCP_PATH_RX) || !defined(DEFINED_DPCP_PATH_TX)
         if ((new_dev = p_ib_ctx_h->get_doca_device())) {
             rc = doca_mmap_add_dev(m_p_doca_mmap, new_dev);
             if (DOCA_IS_ERROR(rc)) {
@@ -291,8 +296,10 @@ bool xlio_registrator::register_memory(void *data, size_t size)
                 return false;
             }
         }
+#endif // !DEFINED_DPCP_PATH_RX || !DEFINED_DPCP_PATH_TX
     }
 
+#if !defined(DEFINED_DPCP_PATH_RX) || !defined(DEFINED_DPCP_PATH_TX)
     rc = doca_mmap_set_memrange(m_p_doca_mmap, data, size);
     if (DOCA_IS_ERROR(rc)) {
         PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_set_memrange");
@@ -310,12 +317,14 @@ bool xlio_registrator::register_memory(void *data, size_t size)
         PRINT_DOCA_ERR(__log_info_err, rc, "doca_mmap_start");
         return false;
     }
+#endif // !DEFINED_DPCP_PATH_RX || !DEFINED_DPCP_PATH_TX
 
     return true;
 }
 
 void xlio_registrator::deregister_memory()
 {
+#if defined(DEFINED_DPCP_PATH_RX) || defined(DEFINED_DPCP_PATH_TX)
     uint32_t lkey;
     ib_ctx_handler *p_ib_ctx_h;
 
@@ -328,7 +337,9 @@ void xlio_registrator::deregister_memory()
     }
 
     m_lkey_map_ib_ctx.clear();
+#endif // DEFINED_DPCP_PATH_RX || DEFINED_DPCP_PATH_TX
 
+#if !defined(DEFINED_DPCP_PATH_RX) || !defined(DEFINED_DPCP_PATH_TX)
     if (!m_p_doca_mmap) {
         return;
     }
@@ -343,6 +354,7 @@ void xlio_registrator::deregister_memory()
         PRINT_DOCA_ERR(__log_info_warn, rc, "doca_mmap_destroy");
     }
     m_p_doca_mmap = nullptr;
+#endif // !DEFINED_DPCP_PATH_RX || !DEFINED_DPCP_PATH_TX
 }
 
 uint32_t xlio_registrator::find_lkey_by_ib_ctx(ib_ctx_handler *p_ib_ctx_h) const

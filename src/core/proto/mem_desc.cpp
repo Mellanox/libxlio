@@ -41,11 +41,13 @@ uint32_t zcopy_hugepage::get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, 
     NOT_IN_USE(desc);
     NOT_IN_USE(addr);
     NOT_IN_USE(len);
+    NOT_IN_USE(ib_ctx);
 
     if (unlikely(!m_is_pinned)) {
         lock();
         if (!m_is_pinned) {
-            m_lkey = ib_ctx->user_mem_reg(m_addr, m_size, XLIO_IBV_ACCESS_LOCAL_WRITE);
+            // Unused class - To be removed
+            //m_lkey = ib_ctx->user_mem_reg(m_addr, m_size, XLIO_IBV_ACCESS_LOCAL_WRITE);
             m_is_pinned = true;
         }
         unlock();

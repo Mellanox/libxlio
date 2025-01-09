@@ -4129,15 +4129,15 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                     }
                     ops = new sockinfo_tcp_ops_tls(this);
                 }
-            }
-#endif /* DEFINED_UTLS */
-            else {
+            } else {
                 si_tcp_logdbg("(TCP_ULP) %s option is not supported", (char *)__optval);
                 errno = ENOPROTOOPT;
                 ret = -1;
                 break;
             }
-
+#else
+            errno = ENOPROTOOPT;
+#endif /* DEFINED_UTLS */
             if (unlikely(!ops)) {
                 errno = ENOMEM;
                 ret = -1;
@@ -4730,7 +4730,11 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
                         if (p_ib_ctx_h) {
                             struct xlio_pd_attr *pd_attr = (struct xlio_pd_attr *)__optval;
                             pd_attr->flags = 0;
+#if defined(DEFINED_DPCP_PATH_RX) || defined(DEFINED_DPCP_PATH_TX)
                             pd_attr->ib_pd = (void *)p_ib_ctx_h->get_ibv_pd();
+#else // DEFINED_DPCP_PATH_RX || DEFINED_DPCP_PATH_TX
+                            pd_attr->ib_pd = 0;
+#endif // DEFINED_DPCP_PATH_RX || DEFINED_DPCP_PATH_TX
                             ret = 0;
                         }
                     }

@@ -81,6 +81,7 @@ ib_ctx_handler_collection::~ib_ctx_handler_collection()
     ibchc_logdbg("Done");
 }
 
+#if !defined(DEFINED_DPCP_PATH_RX) || !defined(DEFINED_DPCP_PATH_TX)
 void ib_ctx_handler_collection::stop_all_doca_flow_ports()
 {
     ibchc_logdbg(LOG_FUNCTION_CALL);
@@ -88,6 +89,7 @@ void ib_ctx_handler_collection::stop_all_doca_flow_ports()
         itr.second->stop_doca_flow_port();
     }
 }
+#endif // !DEFINED_DPCP_PATH_RX || !DEFINED_DPCP_PATH_TX
 
 void ib_ctx_handler_collection::update_tbl(const char *ifa_name)
 {
