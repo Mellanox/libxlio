@@ -92,7 +92,6 @@ if test -d "$with_dpcp/lib64"; then
 fi
 
 CPPFLAGS="$prj_cv_dpcp_CPPFLAGS $CPPFLAGS"
-CXXFLAGS="-std=c++11 $CXXFLAGS"
 LDFLAGS="$prj_cv_dpcp_LDFLAGS $LDFLAGS"
 LIBS="$prj_cv_dpcp_LIBS $LIBS"
 
@@ -124,6 +123,7 @@ if test "$prj_cv_dpcp" -ne 0; then
     if test "$dpcp_version_number" -ge "$min_supported_version"; then
         AC_DEFINE_UNQUOTED([DEFINED_DPCP_MIN], [$min_supported_version], [Define to DPCP version number (major * 10000 + minor * 100 + patch)])
         AC_DEFINE_UNQUOTED([DEFINED_DPCP_PATH_RX], [1], [Enable DPCP RX data path])
+        AC_DEFINE_UNQUOTED([DEFINED_DPCP_PATH_TX], [1], [Enable DPCP TX data path])
         AC_MSG_RESULT([yes])
     else
         AC_MSG_ERROR([found incompatible dpcp version $dpcp_version_number (min supported version $min_supported_version) ])
