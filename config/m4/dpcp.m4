@@ -92,7 +92,6 @@ if test -d "$with_dpcp/lib64"; then
 fi
 
 CPPFLAGS="$prj_cv_dpcp_CPPFLAGS $CPPFLAGS"
-CXXFLAGS="-std=c++11 $CXXFLAGS"
 LDFLAGS="$prj_cv_dpcp_LDFLAGS $LDFLAGS"
 LIBS="$prj_cv_dpcp_LIBS $LIBS"
 

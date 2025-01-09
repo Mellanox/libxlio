@@ -4,7 +4,7 @@ noinst_PROGRAMS = gtest
 AM_CXXFLAGS = \
 	-Wno-error=sign-compare \
 	-Wno-error=missing-field-initializers \
-	-g -O3 -std=c++11
+	-g -O3 -std=c++14
 
 AM_CPPFLAGS = \
 	-DGTEST_LANG_CXX11=1 \
