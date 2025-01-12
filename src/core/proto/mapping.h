@@ -85,8 +85,8 @@ public:
     /* mem_desc interface */
     uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, const void *addr, size_t len);
     doca_mmap *get_doca_mmap() const { return m_registrator.get_doca_mmap(); };
-    void get(void);
-    void put(void);
+    void get();
+    void put();
 
     /* For debug */
     bool memory_belongs(uintptr_t addr, size_t size);
