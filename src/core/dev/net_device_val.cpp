@@ -1353,7 +1353,7 @@ ring *net_device_val_eth::create_ring(resource_allocation_key *key)
             break;
         case ACTIVE_BACKUP:
         case LAG_8023ad:
-            ring = new ring_bond_eth(get_if_idx());
+            ring = new ring_bond(get_if_idx());
             break;
         default:
             nd_logdbg("Unknown ring type");

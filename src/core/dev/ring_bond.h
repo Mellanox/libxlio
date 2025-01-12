@@ -48,80 +48,58 @@ class ring_bond : public ring {
 
 public:
     ring_bond(int if_index);
-    virtual ~ring_bond();
+    ~ring_bond() override;
 
-    virtual void print_val();
-    virtual size_t get_rx_channels_num() const { return m_recv_rings.size(); };
-    virtual int get_rx_channel_fd(size_t ch_idx) const { return m_p_n_rx_channel_fds[ch_idx]; }
-    virtual int get_tx_channel_fd() const { return -1; }
-    virtual bool request_notification(cq_type_t cq_type);
-    virtual void clear_rx_notification();
-    virtual bool poll_and_process_element_rx(void *pv_fd_ready_array = nullptr);
-    virtual void poll_and_process_element_tx();
-    virtual void adapt_cq_moderation();
-    virtual bool reclaim_recv_buffers(descq_t *rx_reuse);
-    virtual bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst);
-    virtual void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc);
-    virtual int drain_and_proccess();
-    virtual int get_num_resources() const { return m_bond_rings.size(); };
-    virtual bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t = false);
-    virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink);
-    virtual void restart();
-    virtual mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, pbuf_type type,
-                                           uint32_t n_num_mem_bufs = 1);
-    virtual int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool trylock = false);
-    virtual void inc_tx_retransmissions_stats(ring_user_id_t id);
-    virtual void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                                  xlio_wr_tx_packet_attr attr);
-    virtual int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                                 xlio_wr_tx_packet_attr attr, xlio_tis *tis);
-    virtual void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc);
-    virtual void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc, unsigned ref);
-    virtual bool is_member(ring_slave *rng);
-    virtual bool is_active_member(ring_slave *rng, ring_user_id_t id);
-    virtual ring_user_id_t generate_id(const address_t src_mac, const address_t dst_mac,
-                                       uint16_t eth_proto, uint16_t encap_proto,
-                                       const ip_address &src_ip, const ip_address &dst_ip,
-                                       uint16_t src_port, uint16_t dst_port);
-    virtual bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe);
-    virtual int modify_ratelimit(struct xlio_rate_limit_t &rate_limit);
-    /* XXX TODO We have to support ring_bond for zerocopy. */
-    virtual uint32_t get_tx_user_lkey(void *addr, size_t length)
-    {
-        NOT_IN_USE(addr);
-        NOT_IN_USE(length);
-        return LKEY_ERROR;
-    }
-    virtual uint32_t get_max_inline_data();
-    ib_ctx_handler *get_ctx(ring_user_id_t id) { return m_xmit_rings[id]->get_ctx(0); }
-    virtual uint32_t get_max_send_sge(void);
-    virtual uint32_t get_max_payload_sz(void);
-    virtual uint16_t get_max_header_sz(void);
-    virtual uint32_t get_tx_lkey(ring_user_id_t id) { return m_xmit_rings[id]->get_tx_lkey(id); }
-    virtual bool is_tso(void);
-    virtual void slave_create(int if_index) = 0;
-    virtual void slave_destroy(int if_index);
-    virtual void flow_del_all_rfs_safe();
-    uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *buff)
-    {
-        NOT_IN_USE(ptr);
-        NOT_IN_USE(len);
-        NOT_IN_USE(buff);
-        return -1;
-    }
-    uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss, bool is_zerocopy)
-    {
-        NOT_IN_USE(h);
-        NOT_IN_USE(p);
-        NOT_IN_USE(mss);
-        NOT_IN_USE(is_zerocopy);
-        return -1;
-    }
+    void print_val() override;
+    size_t get_rx_channels_num() const override;
+    int get_rx_channel_fd(size_t ch_idx) const override;
+    int get_tx_channel_fd() const override;
+    bool request_notification(cq_type_t cq_type) override;
+    void clear_rx_notification() override;
+    bool poll_and_process_element_rx(void *pv_fd_ready_array = nullptr) override;
+    void poll_and_process_element_tx() override;
+    void adapt_cq_moderation() override;
+    bool reclaim_recv_buffers(descq_t *rx_reuse) override;
+    bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst) override;
+    void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc) override;
+    int drain_and_proccess() override;
+    int get_num_resources() const override;
+    bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t = false) override;
+    bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink) override;
+    void restart();
+    mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, pbuf_type type,
+                                   uint32_t n_num_mem_bufs = 1) override;
+    int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool trylock = false) override;
+    void inc_tx_retransmissions_stats(ring_user_id_t id) override;
+    void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
+                          xlio_wr_tx_packet_attr attr) override;
+    int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
+                         xlio_wr_tx_packet_attr attr, xlio_tis *tis) override;
+    void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc) override;
+    void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc,
+                                              unsigned ref) override;
+    bool is_member(ring_slave *rng) override;
+    bool is_active_member(ring_slave *rng, ring_user_id_t id) override;
+    ring_user_id_t generate_id(const address_t src_mac, const address_t dst_mac, uint16_t eth_proto,
+                               uint16_t encap_proto, const ip_address &src_ip,
+                               const ip_address &dst_ip, uint16_t src_port, uint16_t dst_port);
+    bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe) override;
+    int modify_ratelimit(struct xlio_rate_limit_t &rate_limit) override;
+    uint32_t get_tx_user_lkey(void *addr, size_t length) override;
+    ib_ctx_handler *get_ctx(ring_user_id_t id) override;
+    uint32_t get_max_inline_data() override;
+    uint32_t get_max_send_sge() override;
+    uint32_t get_max_payload_sz() override;
+    uint16_t get_max_header_sz() override;
+    uint32_t get_tx_lkey(ring_user_id_t id) override;
+    bool is_tso() override;
+    void flow_del_all_rfs_safe() override;
+    uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *buff) override;
+    uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss,
+                           bool is_zerocopy) override;
+    void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx) override;
 
-    void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)
-    {
-        m_xmit_rings[id]->reset_inflight_zc_buffers_ctx(id, ctx);
-    }
+    void slave_create(int if_index);
 
 protected:
     void update_cap(ring_slave *slave = nullptr);
@@ -171,26 +149,6 @@ private:
     net_device_val::bond_xmit_hash_policy m_xmit_hash_policy;
     lock_mutex_recursive m_lock_ring_rx;
     lock_mutex_recursive m_lock_ring_tx;
-};
-
-class ring_bond_eth : public ring_bond {
-public:
-    ring_bond_eth(int if_index)
-        : ring_bond(if_index)
-    {
-        net_device_val *p_ndev =
-            g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index());
-        if (p_ndev) {
-            const slave_data_vector_t &slaves = p_ndev->get_slave_array();
-            update_cap();
-            for (size_t i = 0; i < slaves.size(); i++) {
-                slave_create(slaves[i]->if_index);
-            }
-        }
-    }
-
-protected:
-    virtual void slave_create(int if_index);
 };
 
 #endif /* RING_BOND_H */
