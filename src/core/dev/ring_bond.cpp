@@ -72,6 +72,12 @@ ring_bond::ring_bond(int if_index)
     m_max_send_sge = 0;
 
     print_val();
+
+    const slave_data_vector_t &slaves = p_ndev->get_slave_array();
+    update_cap();
+    for (size_t i = 0; i < slaves.size(); i++) {
+        slave_create(slaves[i]->if_index);
+    }
 }
 
 ring_bond::~ring_bond()
@@ -98,6 +104,21 @@ void ring_bond::print_val()
 {
     ring_logdbg("%d: %p: parent %p type %s", m_if_index, this,
                 ((uintptr_t)this == (uintptr_t)m_parent ? nullptr : m_parent), "bond");
+}
+
+size_t ring_bond::get_rx_channels_num() const
+{
+    return m_recv_rings.size();
+}
+
+int ring_bond::get_rx_channel_fd(size_t ch_idx) const
+{
+    return m_p_n_rx_channel_fds[ch_idx];
+}
+
+int ring_bond::get_tx_channel_fd() const
+{
+    return -1;
 }
 
 bool ring_bond::attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t)
@@ -435,6 +456,11 @@ int ring_bond::drain_and_proccess()
     }
 }
 
+int ring_bond::get_num_resources() const
+{
+    return m_bond_rings.size();
+}
+
 void ring_bond::clear_rx_notification()
 {
     std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
@@ -761,50 +787,49 @@ int ring_bond::modify_ratelimit(struct xlio_rate_limit_t &rate_limit)
     return 0;
 }
 
+uint32_t ring_bond::get_tx_user_lkey(void *addr, size_t length)
+{
+    NOT_IN_USE(addr);
+    NOT_IN_USE(length);
+    return LKEY_ERROR;
+}
+
+ib_ctx_handler *ring_bond::get_ctx(ring_user_id_t id)
+{
+    return m_xmit_rings[id]->get_ctx(0);
+}
+
 uint32_t ring_bond::get_max_inline_data()
 {
     return m_max_inline_data;
 }
 
-uint32_t ring_bond::get_max_send_sge(void)
+uint32_t ring_bond::get_max_send_sge()
 {
     return m_max_send_sge;
 }
 
-uint32_t ring_bond::get_max_payload_sz(void)
+uint32_t ring_bond::get_max_payload_sz()
 {
     return 0;
 }
 
-uint16_t ring_bond::get_max_header_sz(void)
+uint16_t ring_bond::get_max_header_sz()
 {
     return 0;
 }
 
-bool ring_bond::is_tso(void)
+bool ring_bond::is_tso()
 {
     return false;
 }
 
-void ring_bond::slave_destroy(int if_index)
+uint32_t ring_bond::get_tx_lkey(ring_user_id_t id)
 {
-    ring_slave *cur_slave = nullptr;
-    ring_slave_vector_t::iterator iter;
-
-    for (iter = m_bond_rings.begin(); iter != m_bond_rings.end(); iter++) {
-        cur_slave = *iter;
-        if (cur_slave->get_if_index() == if_index) {
-            delete cur_slave;
-            m_bond_rings.erase(iter);
-            popup_xmit_rings();
-            popup_recv_rings();
-            update_rx_channel_fds();
-            break;
-        }
-    }
+    return m_xmit_rings[id]->get_tx_lkey(id);
 }
 
-void ring_bond_eth::slave_create(int if_index)
+void ring_bond::slave_create(int if_index)
 {
     ring_slave *cur_slave;
 
@@ -824,4 +849,25 @@ void ring_bond_eth::slave_create(int if_index)
     popup_xmit_rings();
     popup_recv_rings();
     update_rx_channel_fds();
+}
+
+void ring_bond::reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)
+{
+    m_xmit_rings[id]->reset_inflight_zc_buffers_ctx(id, ctx);
+}
+
+uint32_t ring_bond::send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *buff)
+{
+    NOT_IN_USE(ptr);
+    NOT_IN_USE(len);
+    NOT_IN_USE(buff);
+    return -1;
+}
+uint32_t ring_bond::send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss, bool is_zerocopy)
+{
+    NOT_IN_USE(h);
+    NOT_IN_USE(p);
+    NOT_IN_USE(mss);
+    NOT_IN_USE(is_zerocopy);
+    return -1;
 }
