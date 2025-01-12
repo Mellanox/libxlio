@@ -121,7 +121,7 @@ public:
         NOT_IN_USE(id);
         return m_tx_lkey;
     }
-    bool is_tso(void) override;
+    bool is_tso() override;
 
     void modify_cq_moderation(uint32_t period, uint32_t count);
 

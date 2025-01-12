@@ -46,7 +46,6 @@ tcp_seg_pool *g_tcp_seg_pool = nullptr;
 
 ring::ring()
 {
-    print_val();
 }
 
 ring::~ring()
@@ -126,10 +125,4 @@ void ring::put_tcp_segs(tcp_seg *seg)
     std::lock_guard<decltype(m_tcp_seg_lock)> lock(m_tcp_seg_lock);
 
     put_obj_list(g_tcp_seg_pool, m_tcp_seg_list, seg, m_tcp_seg_count, return_treshold);
-}
-
-void ring::print_val()
-{
-    ring_logdbg("%d: %p: parent %p", m_if_index, this,
-                ((uintptr_t)this == (uintptr_t)m_parent ? nullptr : m_parent));
 }

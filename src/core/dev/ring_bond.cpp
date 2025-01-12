@@ -539,6 +539,11 @@ bool ring_bond::reclaim_recv_buffers(mem_buf_desc_t *)
     return false;
 }
 
+bool ring_bond::reclaim_recv_buffers_no_lock(mem_buf_desc_t *)
+{
+    return false;
+}
+
 void ring_bond::update_cap(ring_slave *slave)
 {
     if (!slave) {
@@ -871,3 +876,135 @@ uint32_t ring_bond::send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss,
     NOT_IN_USE(is_zerocopy);
     return -1;
 }
+
+std::unique_ptr<xlio_tis> ring_bond::create_tis(uint32_t flag) const
+{
+    NOT_IN_USE(flag);
+    return nullptr;
+}
+
+void ring_bond::nvme_set_static_context(xlio_tis *tis, uint32_t config)
+{
+    NOT_IN_USE(tis);
+    NOT_IN_USE(config);
+}
+
+void ring_bond::nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno)
+{
+    NOT_IN_USE(tis);
+    NOT_IN_USE(tcp_seqno);
+}
+
+int ring_bond::get_supported_nvme_feature_mask() const
+{
+    return 0;
+}
+
+void ring_bond::post_nop_fence()
+{
+}
+
+void ring_bond::post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first)
+{
+    NOT_IN_USE(tis);
+    NOT_IN_USE(addr);
+    NOT_IN_USE(len);
+    NOT_IN_USE(lkey);
+    NOT_IN_USE(first);
+}
+
+// TODO Add id argument for bonding
+bool ring_bond::credits_get(unsigned credits)
+{
+    NOT_IN_USE(credits);
+    return false;
+}
+
+void ring_bond::credits_return(unsigned credits)
+{
+    NOT_IN_USE(credits);
+}
+
+#ifdef DEFINED_UTLS
+bool ring_bond::tls_tx_supported()
+{
+    return false;
+}
+
+bool ring_bond::tls_rx_supported()
+{
+    return false;
+}
+
+xlio_tis *ring_bond::tls_context_setup_tx(const xlio_tls_info *info)
+{
+    NOT_IN_USE(info);
+    return nullptr;
+}
+
+xlio_tir *ring_bond::tls_create_tir(bool cached)
+{
+    NOT_IN_USE(cached);
+    return nullptr;
+}
+
+int ring_bond::tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info,
+                                    uint32_t next_record_tcp_sn, xlio_comp_cb_t callback,
+                                    void *callback_arg)
+{
+    NOT_IN_USE(tir);
+    NOT_IN_USE(info);
+    NOT_IN_USE(next_record_tcp_sn);
+    NOT_IN_USE(callback);
+    NOT_IN_USE(callback_arg);
+    return -1;
+}
+
+rfs_rule *ring_bond::tls_rx_create_rule(const flow_tuple &flow_spec_5t, xlio_tir *tir)
+{
+    NOT_IN_USE(flow_spec_5t);
+    NOT_IN_USE(tir);
+    return nullptr;
+}
+
+void ring_bond::tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static)
+{
+    NOT_IN_USE(info);
+    NOT_IN_USE(tis);
+    NOT_IN_USE(skip_static);
+}
+
+void ring_bond::tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn)
+{
+    NOT_IN_USE(tir);
+    NOT_IN_USE(info);
+    NOT_IN_USE(hw_resync_tcp_sn);
+}
+
+void ring_bond::tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey)
+{
+    NOT_IN_USE(tir);
+    NOT_IN_USE(buf);
+    NOT_IN_USE(lkey);
+}
+
+void ring_bond::tls_release_tis(xlio_tis *tis)
+{
+    NOT_IN_USE(tis);
+}
+
+void ring_bond::tls_release_tir(xlio_tir *tir)
+{
+    NOT_IN_USE(tir);
+}
+
+void ring_bond::tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
+                                     bool first)
+{
+    NOT_IN_USE(tis);
+    NOT_IN_USE(addr);
+    NOT_IN_USE(len);
+    NOT_IN_USE(lkey);
+    NOT_IN_USE(first);
+}
+#endif /* DEFINED_UTLS */
