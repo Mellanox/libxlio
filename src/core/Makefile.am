@@ -131,7 +131,6 @@ libxlio_la_SOURCES := \
 	proto/neighbour_table_mgr.cpp \
 	proto/netlink_socket_mgr.cpp \
 	proto/L2_address.cpp \
-	proto/mem_desc.cpp \
 	proto/mapping.cpp \
 	proto/route_table_mgr.cpp \
 	proto/route_entry.cpp \
