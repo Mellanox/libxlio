@@ -125,6 +125,8 @@
             auth-id: 'swx-jenkins5_gh_token'
             org-list: ["Mellanox"]
             white-list: ["swx-jenkins","swx-jenkins2","swx-jenkins3","mellanox-github"]
+            black-list-target-branches:
+              - doca_xlio_vNext
             allow-whitelist-orgs-as-admins: true
             cancel-builds-on-update: true
     pipeline-scm:
