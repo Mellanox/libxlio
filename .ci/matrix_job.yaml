@@ -40,8 +40,8 @@ runs_on_dockers:
       file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
       arch: 'x86_64',
       name: 'ubuntu22.04',
-      uri: 'xlio/$arch/$name/build',
-      tag: '20240813',
+      uri: 'xlio_doca/$arch/$name/build',
+      tag: '20250115',
       build_args: '--no-cache --target build',
       category: 'base'
     }
@@ -49,8 +49,8 @@ runs_on_dockers:
       file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
       arch: 'aarch64',
       name: 'ubuntu22.04',
-      uri: 'xlio/$arch/ubuntu22.04/build',
-      tag: '20240813',
+      uri: 'xlio_doca/$arch/ubuntu22.04/build',
+      tag: '20250115',
       build_args: '--target build --no-cache --build-arg ARCH=aarch64 --build-arg REPO_ARCH=arm64',
       category: 'base'
     }
@@ -59,8 +59,8 @@ runs_on_dockers:
      file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
      arch: 'x86_64',
      name: 'toolbox',
-     uri: 'xlio/$arch/ubuntu22.04/$name',
-     tag: '20240813',
+     uri: 'xlio_doca/$arch/ubuntu22.04/$name',
+     tag: '20250115',
      build_args: '--no-cache --target toolbox',
      category: 'tool'
     }
@@ -71,8 +71,8 @@ runs_on_dockers:
      file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
      arch: 'x86_64',
      name: 'static',
-     uri: 'xlio/$arch/ubuntu22.04/$name',
-     tag: '20240813',
+     uri: 'xlio_doca/$arch/ubuntu22.04/$name',
+     tag: '20250115',
      build_args: '--no-cache --target static',
      category: 'tool'
     }
@@ -81,8 +81,8 @@ runs_on_dockers:
       file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
       arch: 'x86_64',
       name: 'test',
-      uri: 'xlio/$arch/ubuntu22.04/$name',
-      tag: '20240813',
+      uri: 'xlio_doca/$arch/ubuntu22.04/$name',
+      tag: '20250115',
       build_args: '--no-cache --target test',
       category: 'tests',
       annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p1' }],
@@ -96,8 +96,8 @@ runs_on_dockers:
      file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
      arch: 'x86_64',
      name: 'vg',
-     uri: 'xlio/$arch/ubuntu22.04/$name',
-     tag: '20240813',
+     uri: 'xlio_doca/$arch/ubuntu22.04/$name',
+     tag: '20250115',
      build_args: '--no-cache --target vg',
      category: 'tool',
      annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p2' }],
@@ -107,13 +107,13 @@ runs_on_dockers:
      runAsUser: '0',
      runAsGroup: '0'
     }
-  # The Gtest step is disabled until Oct'24 release, Jira HPCINFRA-1968, RM #3981627, #3981654 
+  # The Gtest step is disabled until Oct'24 release, Jira HPCINFRA-1968, RM #3981627, #3981654
   # - {
   #    file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
   #    arch: 'x86_64',
   #    name: 'gtest',
-  #    uri: 'xlio/$arch/ubuntu22.04/$name',
-  #    tag: '20240813',
+  #    uri: 'xlio_doca/$arch/ubuntu22.04/$name',
+  #    tag: '20250115',
   #    build_args: '--no-cache --target gtest',
   #    category: 'tests',
   #    annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p1@net1,sriov-cx6dx-p2@net2' }],
@@ -311,7 +311,7 @@ steps:
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
 
-  # The Gtest step is disabled until Oct'24 release, Jira HPCINFRA-1968, RM #3981627, #3981654 
+  # The Gtest step is disabled until Oct'24 release, Jira HPCINFRA-1968, RM #3981627, #3981654
   # - name: Gtest
   #   enable: ${do_gtest}
   #   containerSelector:
