@@ -4,7 +4,7 @@ set -xvEe -o pipefail
 
 DOCA_REPO_PATH="https://doca-repo-prod.nvidia.com/internal/repo/doca"
 TARGET=${TARGET:=all}
-DOCA_VERSION=${DOCA_VERSION:='2.9.0'}
+DOCA_VERSION=${DOCA_VERSION:='2.10.0'}
 DOCA_BRANCH=${DOCA_BRANCH:="latest"}
 GPG_KEY="GPG-KEY-Mellanox.pub"
 
