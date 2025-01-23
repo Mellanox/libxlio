@@ -64,19 +64,11 @@ libxlio_la_LIBADD = \
 	$(top_builddir)/src/core/netlink/libnetlink.la \
 	$(top_builddir)/src/core/infra/libinfra.la \
 	libconfig_parser.la
-	
+
 libxlio_la_SOURCES := \
 	dev/allocator.cpp \
 	dev/buffer_pool.cpp \
-	dev/dpcp/cq_mgr_rx.cpp \
-	dev/dpcp/cq_mgr_rx_regrq.cpp \
-	dev/dpcp/cq_mgr_rx_strq.cpp \
-	dev/dpcp/cq_mgr_tx.cpp \
 	dev/dm_mgr.cpp \
-	dev/dpcp/hw_queue_rx_dpcp.cpp \
-	dev/doca/hw_queue_rx_doca.cpp \
-	dev/dpcp/hw_queue_tx_dpcp.cpp \
-	dev/doca/hw_queue_tx_doca.cpp \
 	dev/gro_mgr.cpp \
 	dev/rfs.cpp \
 	dev/rfs_uc.cpp \
@@ -88,8 +80,6 @@ libxlio_la_SOURCES := \
 	dev/time_converter_rtc.cpp \
 	dev/time_converter_ib_ctx.cpp \
 	dev/ib_ctx_handler.cpp \
-	dev/dpcp/ib_ctx_handler_ibv.cpp \
-	dev/doca/ib_ctx_handler_doca.cpp \
 	dev/ib_ctx_handler_collection.cpp \
 	dev/net_device_val.cpp \
 	dev/net_device_entry.cpp \
@@ -100,8 +90,6 @@ libxlio_la_SOURCES := \
 	dev/ring_bond.cpp \
 	dev/ring_slave.cpp \
 	dev/ring_simple.cpp \
-	dev/dpcp/ring_simple_dpcp.cpp \
-	dev/doca/ring_simple_doca.cpp \
 	dev/ring_allocation_logic.cpp \
 	\
 	event/delta_timer.cpp \
@@ -177,17 +165,10 @@ libxlio_la_SOURCES := \
 	\
 	dev/allocator.h \
 	dev/buffer_pool.h \
-	dev/dpcp/cq_mgr_rx.h \
-	dev/dpcp/cq_mgr_rx_inl.h \
-	dev/dpcp/cq_mgr_rx_regrq.h \
-	dev/dpcp/cq_mgr_rx_strq.h \
-	dev/dpcp/cq_mgr_tx.h \
 	dev/dm_mgr.h \
 	dev/gro_mgr.h \
 	dev/ib_ctx_handler_collection.h \
 	dev/ib_ctx_handler.h \
-	dev/dpcp/ib_ctx_handler_ibv.h \
-	dev/doca/ib_ctx_handler_doca.h \
 	dev/time_converter.h \
 	dev/time_converter_ptp.h \
 	dev/time_converter_rtc.h \
@@ -195,10 +176,6 @@ libxlio_la_SOURCES := \
 	dev/net_device_entry.h \
 	dev/net_device_table_mgr.h \
 	dev/net_device_val.h \
-	dev/dpcp/hw_queue_rx_dpcp.h \
-	dev/doca/hw_queue_rx_doca.h \
-	dev/dpcp/hw_queue_tx_dpcp.h \
-	dev/doca/hw_queue_tx_doca.h \
 	dev/rfs.h \
 	dev/rfs_mc.h \
 	dev/rfs_uc.h \
@@ -320,6 +297,49 @@ libxlio_la_SOURCES := \
 	xlio.h \
 	xlio_extra.h \
 	xlio_types.h
+
+if DEFINED_DPCP_PATH_RX
+libxlio_la_SOURCES += \
+	dev/dpcp/cq_mgr_rx.cpp \
+	dev/dpcp/cq_mgr_rx_regrq.cpp \
+	dev/dpcp/cq_mgr_rx_strq.cpp \
+	dev/dpcp/hw_queue_rx_dpcp.cpp \
+	dev/dpcp/cq_mgr_rx.h \
+	dev/dpcp/cq_mgr_rx_inl.h \
+	dev/dpcp/cq_mgr_rx_regrq.h \
+	dev/dpcp/cq_mgr_rx_strq.h \
+	dev/dpcp/hw_queue_rx_dpcp.h
+else
+libxlio_la_SOURCES += \
+	dev/doca/hw_queue_rx_doca.cpp \
+	dev/doca/hw_queue_rx_doca.h
+endif
+
+if DEFINED_DPCP_PATH_TX
+libxlio_la_SOURCES += \
+	dev/dpcp/cq_mgr_tx.cpp \
+	dev/dpcp/hw_queue_tx_dpcp.cpp \
+	dev/dpcp/cq_mgr_tx.h \
+	dev/dpcp/hw_queue_tx_dpcp.h
+else
+libxlio_la_SOURCES += \
+	dev/doca/hw_queue_tx_doca.cpp \
+	dev/doca/hw_queue_tx_doca.h
+endif
+
+if DEFINED_DPCP_PATH_ANY
+libxlio_la_SOURCES += \
+	dev/dpcp/ring_simple_dpcp.cpp \
+	dev/dpcp/ib_ctx_handler_ibv.cpp \
+	dev/dpcp/ib_ctx_handler_ibv.h
+endif
+
+if DEFINED_DPCP_PATH_MIX
+libxlio_la_SOURCES += \
+	dev/doca/ib_ctx_handler_doca.cpp \
+	dev/doca/ring_simple_doca.cpp \
+	dev/doca/ib_ctx_handler_doca.h
+endif
 
 libxlio_la_DEPENDENCIES = \
 	$(top_builddir)/src/vlogger/libvlogger.la \

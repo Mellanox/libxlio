@@ -67,7 +67,7 @@ public:
     int drain_and_proccess() override;
     bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t = false) override;
     bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink) override;
-    void restart();
+    void restart() override;
     mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, pbuf_type type,
                                    uint32_t n_num_mem_bufs = 1) override;
     int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool trylock = false) override;
