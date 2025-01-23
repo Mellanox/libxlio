@@ -121,11 +121,13 @@ AC_ARG_WITH([dpcp],
 
             if test "$dpcp_version_number" -ge "$min_supported_version"; then
                 AC_DEFINE_UNQUOTED([DEFINED_DPCP_MIN], [$min_supported_version], [Define to DPCP version number (major * 10000 + minor * 100 + patch)])
-                AC_ARG_ENABLE([dpcp_rx], AS_HELP_STRING([--enable-dpcp_rx], [Enable DPCP RX when using with-dpcp (default=yes)]), [], [enable_dpcp_rx=yes])
-                AC_ARG_ENABLE([dpcp_tx], AS_HELP_STRING([--enable-dpcp_tx], [Enable DPCP TX when using with-dpcp (default=yes)]), [], [enable_dpcp_tx=yes])
+                AC_ARG_ENABLE([dpcp-rx], AS_HELP_STRING([--enable-dpcp-rx], [Enable DPCP RX when using with-dpcp (default=yes)]), [], [enable_dpcp_rx=yes])
+                AC_ARG_ENABLE([dpcp-tx], AS_HELP_STRING([--enable-dpcp-tx], [Enable DPCP TX when using with-dpcp (default=yes)]), [], [enable_dpcp_tx=yes])
+
                 if test "x$enable_dpcp_rx" = xyes; then
                     AC_DEFINE_UNQUOTED([DEFINED_DPCP_PATH_RX], [1], [Enable DPCP RX data path])
                 fi
+
                 if test "x$enable_dpcp_tx" = xyes; then
                     AC_DEFINE_UNQUOTED([DEFINED_DPCP_PATH_TX], [1], [Enable DPCP TX data path])
                 fi
@@ -138,4 +140,12 @@ AC_ARG_WITH([dpcp],
     ],
     []
 )
+
+AM_CONDITIONAL([DEFINED_DPCP_PATH_RX], [test "x$enable_dpcp_rx" = xyes])
+AM_CONDITIONAL([DEFINED_DPCP_PATH_TX], [test "x$enable_dpcp_tx" = xyes])
+# DPCP TX or RX or both
+AM_CONDITIONAL([DEFINED_DPCP_PATH_ANY], [test "x$enable_dpcp_rx" = xyes || test "x$enable_dpcp_tx" = xyes])
+# DPCP TX or RX or DOCA only
+AM_CONDITIONAL([DEFINED_DPCP_PATH_MIX], [test "x$enable_dpcp_rx" != xyes || test "x$enable_dpcp_tx" != xyes])
+
 ])
