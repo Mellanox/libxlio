@@ -38,7 +38,6 @@
 #include <sys/socket.h>
 #include "core/util/if.h"
 #include <netinet/in.h>
-
 #include "vlogger/vlogger.h"
 #include "utils/lock_wrapper.h"
 #include "core/proto/route_entry.h"
@@ -46,12 +45,15 @@
 #include "core/proto/neighbour_table_mgr.h"
 #include "core/dev/net_device_val.h"
 #include "core/dev/net_device_table_mgr.h"
-#include "core/dev/wqe_send_handler.h"
 #include "core/dev/ring.h"
 #include "core/dev/ring_allocation_logic.h"
 #include "core/infra/sender.h"
 #include "header.h"
 #include "core/util/ip_address.h"
+
+#ifdef DEFINED_DPCP_PATH_TX
+#include "core/dev/dpcp/wqe_send_handler.h"
+#endif // DEFINED_DPCP_PATH_TX
 
 /* Forward declarations */
 class xlio_tis;
@@ -166,8 +168,8 @@ protected:
     xlio_ibv_send_wr m_fragmented_send_wqe;
     ibv_sge *m_sge;
     uint32_t m_max_inline;
-#endif // DEFINED_DPCP_PATH_TX
     wqe_send_handler *m_p_send_wqe_handler;
+#endif // DEFINED_DPCP_PATH_TX
     route_entry *m_p_rt_entry;
     route_val *m_p_rt_val;
     net_device_entry *m_p_net_dev_entry;

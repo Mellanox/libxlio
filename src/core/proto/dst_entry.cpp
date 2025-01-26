@@ -97,12 +97,6 @@ dst_entry::~dst_entry()
     }
 
     if (m_p_ring) {
-#ifdef DEFINED_DPCP_PATH_TX
-        if (m_sge) {
-            delete[] m_sge;
-            m_sge = nullptr;
-        }
-#endif // DEFINED_DPCP_PATH_TX
         if (m_p_tx_mem_buf_desc_list) {
             m_p_ring->mem_buf_tx_release(m_p_tx_mem_buf_desc_list);
             m_p_tx_mem_buf_desc_list = nullptr;
@@ -116,11 +110,18 @@ dst_entry::~dst_entry()
         m_p_ring = nullptr;
     }
 
+#ifdef DEFINED_DPCP_PATH_TX
+    if (m_sge) {
+        delete[] m_sge;
+        m_sge = nullptr;
+    }
+
     if (m_p_send_wqe_handler) {
         delete m_p_send_wqe_handler;
         m_p_send_wqe_handler = nullptr;
     }
-
+#endif // DEFINED_DPCP_PATH_TX
+    
     if (m_p_neigh_val) {
         delete m_p_neigh_val;
         m_p_neigh_val = nullptr;
@@ -155,8 +156,8 @@ void dst_entry::init_members()
     memset(&m_fragmented_send_wqe, 0, sizeof(m_not_inline_send_wqe));
     m_sge = nullptr;
     m_max_inline = 0;
-#endif // DEFINED_DPCP_PATH_TX
     m_p_send_wqe_handler = nullptr;
+#endif // DEFINED_DPCP_PATH_TX
     m_b_is_offloaded = true;
     m_b_is_initialized = false;
     m_max_ip_payload_size = 0;
@@ -430,6 +431,7 @@ bool dst_entry::conf_l2_hdr_and_snd_wqe_eth()
 {
     bool ret_val = false;
 
+#ifdef DEFINED_DPCP_PATH_TX
     // Maybe we after invalidation so we free the wqe_handler since we are going to build it from
     // scratch
     if (m_p_send_wqe_handler) {
@@ -441,7 +443,7 @@ bool dst_entry::conf_l2_hdr_and_snd_wqe_eth()
     if (!m_p_send_wqe_handler) {
         dst_logpanic("%s Failed to allocate send WQE handler", to_str().c_str());
     }
-#ifdef DEFINED_DPCP_PATH_TX
+
     m_p_send_wqe_handler->init_inline_wqe(m_inline_send_wqe, get_sge_lst_4_inline_send(),
                                           get_inline_sge_num());
     m_p_send_wqe_handler->init_not_inline_wqe(m_not_inline_send_wqe,

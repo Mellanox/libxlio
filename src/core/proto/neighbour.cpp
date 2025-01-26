@@ -38,7 +38,6 @@
 #include "vlogger/vlogger.h"
 #include "core/dev/ib_ctx_handler_collection.h"
 #include "core/dev/src_addr_selector.h"
-#include "core/dev/wqe_send_handler.h"
 #include "core/proto/dst_entry_udp.h"
 #include "core/proto/neighbour.h"
 #include "core/proto/neighbour_table_mgr.h"
@@ -48,6 +47,10 @@
 // This include should be after xlio includes
 #include <netinet/tcp.h>
 #include <netinet/icmp6.h>
+
+#ifdef DEFINED_DPCP_PATH_TX
+#include "core/dev/dpcp/wqe_send_handler.h"
+#endif // DEFINED_DPCP_PATH_TX
 
 #define MODULE_NAME "ne"
 DOCA_LOG_REGISTER(ne);
@@ -1651,9 +1654,6 @@ bool neigh_eth::send_arp_request(bool is_broadcast)
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    wqe_send_handler wqe_sh;
-    wqe_sh.init_wqe(m_send_wqe, &m_sge, 1);
-
     h.init();
     if (netdevice_eth->get_vlan()) { // vlan interface
         h.configure_vlan_eth_headers(*src, *dst, netdevice_eth->get_vlan(), ETH_P_ARP);
@@ -1673,9 +1673,11 @@ bool neigh_eth::send_arp_request(bool is_broadcast)
     m_sge.length = sizeof(eth_arp_hdr) + h.m_total_hdr_len;
     m_sge.lkey = p_mem_buf_desc->lkey;
     p_mem_buf_desc->p_next_desc = nullptr;
-    m_send_wqe.wr_id = (uintptr_t)p_mem_buf_desc;
 
 #ifdef DEFINED_DPCP_PATH_TX
+    wqe_send_handler wqe_sh;
+    wqe_sh.init_wqe(m_send_wqe, &m_sge, 1);
+    m_send_wqe.wr_id = (uintptr_t)p_mem_buf_desc;
     m_p_ring->send_ring_buffer(m_id, &m_send_wqe, (xlio_wr_tx_packet_attr)0);
 #else // DEFINED_DPCP_PATH_TX
     m_p_ring->send_doca_single(reinterpret_cast<void *>(m_sge.addr), m_sge.length, p_mem_buf_desc);
@@ -1742,9 +1744,6 @@ bool neigh_eth::send_neighbor_solicitation()
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    wqe_send_handler wqe_sh;
-    wqe_sh.init_wqe(m_send_wqe, &m_sge, 1);
-
     header_ipv6 h;
     h.init();
 
@@ -1809,11 +1808,13 @@ bool neigh_eth::send_neighbor_solicitation()
     m_sge.length = static_cast<uintptr_t>(tail - head);
     m_sge.lkey = p_mem_buf_desc->lkey;
     p_mem_buf_desc->p_next_desc = nullptr;
-    m_send_wqe.wr_id = (uintptr_t)p_mem_buf_desc;
     neigh_logdbg("NS request: base=%p addr=%p length=%" PRIu32, p_mem_buf_desc->p_buffer,
                  (void *)m_sge.addr, m_sge.length);
 
 #ifdef DEFINED_DPCP_PATH_TX
+    wqe_send_handler wqe_sh;
+    wqe_sh.init_wqe(m_send_wqe, &m_sge, 1);
+    m_send_wqe.wr_id = (uintptr_t)p_mem_buf_desc;
     m_p_ring->send_ring_buffer(m_id, &m_send_wqe, (xlio_wr_tx_packet_attr)0);
 #else // DEFINED_DPCP_PATH_TX
     m_p_ring->send_doca_single(reinterpret_cast<void *>(m_sge.addr), m_sge.length, p_mem_buf_desc);
@@ -1838,8 +1839,11 @@ bool neigh_eth::prepare_to_send_packet(neigh_send_data *snd_data)
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
+#ifdef DEFINED_DPCP_PATH_TX
+    // For UDP
     wqe_send_handler wqe_sh;
     wqe_sh.init_wqe(m_send_wqe, &m_sge, 1);
+#endif // DEFINED_DPCP_PATH_TX
 
     h->set_mac_to_eth_header(*src, *dst);
 
