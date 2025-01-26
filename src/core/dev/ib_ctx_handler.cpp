@@ -45,21 +45,27 @@ DOCA_LOG_REGISTER(ibch);
 #define ibch_logfunc    __log_info_func
 #define ibch_logfuncall __log_info_funcall
 
-ib_ctx_handler::ib_ctx_handler(const char *ibname)
+#if defined(DEFINED_DPCP_PATH_ONLY)
+ib_ctx_handler::ib_ctx_handler(ibv_device &ibvdevice)
+    : m_ibname(ibvdevice.name)
+    , m_ctx_ibv_dev(ibvdevice, *this)
 {
-    m_ibname = ibname;
 }
-
-ib_ctx_handler::~ib_ctx_handler()
+#elif defined(DEFINED_DPCP_PATH_ANY)
+ib_ctx_handler::ib_ctx_handler(const char *ibname, const char *ifname, doca_devinfo &devinfo,
+                               ibv_device &ibvdevice)
+    : m_ibname(ibname)
+    , m_ctx_ibv_dev(ibvdevice, *this)
+    , m_ctx_doca_dev(devinfo, *this, ifname)
 {
-#ifndef DEFINED_DPCP_PATH_ONLY
-    delete m_ctx_doca_dev;
-#endif // !DEFINED_DPCP_PATH_ONLY
-
-#ifdef DEFINED_DPCP_PATH_ANY
-    delete m_ctx_ibv_dev;
-#endif // !DEFINED_DPCP_PATH_ANY
 }
+#else
+ib_ctx_handler::ib_ctx_handler(const char *ibname, const char *ifname, doca_devinfo &devinfo)
+    : m_ibname(ibname)
+    , m_ctx_doca_dev(devinfo, *this, ifname)
+{
+}
+#endif
 
 bool ib_ctx_handler::get_burst_capability() const
 {

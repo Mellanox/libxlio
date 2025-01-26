@@ -55,12 +55,13 @@ struct pacing_caps_t {
         , burst(false) {};
 };
 
+class ib_ctx_handler;
+
 class ib_ctx_handler_ibv : public event_handler_ibverbs {
 public:
-    ib_ctx_handler_ibv(ibv_device *ibvdevice, std::string &ibname);
+    ib_ctx_handler_ibv(ibv_device &ibvdevice, ib_ctx_handler &ib_ctx);
     virtual ~ib_ctx_handler_ibv();
     ibv_pd *get_ibv_pd() { return m_p_ibv_pd; }
-    ibv_device *get_ibv_device() { return m_p_ibv_device; }
     struct ibv_context *get_ibv_context() { return m_p_ibv_context; }
     dpcp::adapter *set_dpcp_adapter();
     dpcp::adapter *get_dpcp_adapter() { return m_p_adapter; }
@@ -96,7 +97,7 @@ public:
 private:
     void handle_event_device_fatal();
 
-    ibv_device *m_p_ibv_device; // HCA handle
+    ibv_device &m_p_ibv_device; // HCA handle
     struct ibv_context *m_p_ibv_context = nullptr;
     dpcp::adapter *m_p_adapter;
     xlio_ibv_device_attr_ex *m_p_ibv_device_attr;
@@ -109,7 +110,7 @@ private:
     size_t m_on_device_memory;
     bool m_flow_tag_enabled;
     bool m_removed;
-    std::string &m_ibname;
+    ib_ctx_handler &m_ib_ctx;
 };
 
 #endif // IB_CTX_HANDLER_IBV_H

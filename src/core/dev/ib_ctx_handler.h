@@ -34,13 +34,26 @@
 #ifndef IB_CTX_HANDLER_H
 #define IB_CTX_HANDLER_H
 
+#include "util/vtypes.h"
+
+#ifdef DEFINED_DPCP_PATH_ANY
 #include "dpcp/ib_ctx_handler_ibv.h"
+#endif // DEFINED_DPCP_PATH_ANY
+
+#ifndef DEFINED_DPCP_PATH_ONLY
 #include "doca/ib_ctx_handler_doca.h"
+#endif // !DEFINED_DPCP_PATH_ONLY
 
 class ib_ctx_handler {
 public:
-    ib_ctx_handler(const char *ibname);
-    virtual ~ib_ctx_handler();
+#if defined(DEFINED_DPCP_PATH_ONLY)
+    ib_ctx_handler(ibv_device &ibvdevice);
+#elif defined(DEFINED_DPCP_PATH_ANY)
+    ib_ctx_handler(const char *ibname, const char *ifname, doca_devinfo &devinfo,
+                   ibv_device &ibvdevice);
+#else
+    ib_ctx_handler(const char *ibname, const char *ifname, doca_devinfo &devinfo);
+#endif
 
     const std::string &get_ibname() const { return m_ibname; }
     bool get_flow_tag_capability() const;
@@ -55,27 +68,19 @@ private:
 
 #ifdef DEFINED_DPCP_PATH_ANY
 public:
-    ib_ctx_handler_ibv &get_ctx_ibv_dev() { return *m_ctx_ibv_dev; }
-    const ib_ctx_handler_ibv &get_ctx_ibv_dev() const { return *m_ctx_ibv_dev; }
-    void construct_ctx_ibv_dev(ibv_device *ibvdevice)
-    {
-        m_ctx_ibv_dev = new ib_ctx_handler_ibv(ibvdevice, m_ibname);
-    }
+    ib_ctx_handler_ibv &get_ctx_ibv_dev() { return m_ctx_ibv_dev; }
+    const ib_ctx_handler_ibv &get_ctx_ibv_dev() const { return m_ctx_ibv_dev; }
 
 private:
-    ib_ctx_handler_ibv *m_ctx_ibv_dev;
+    ib_ctx_handler_ibv m_ctx_ibv_dev;
 #endif // DEFINED_DPCP_PATH_ANY
 
 #ifndef DEFINED_DPCP_PATH_ONLY
 public:
-    ib_ctx_handler_doca &get_ctx_doca_dev() { return *m_ctx_doca_dev; }
-    void construct_ctx_doca_dev(doca_devinfo *devinfo, const char *ifname)
-    {
-        m_ctx_doca_dev = new ib_ctx_handler_doca(devinfo, m_ibname, ifname);
-    }
+    ib_ctx_handler_doca &get_ctx_doca_dev() { return m_ctx_doca_dev; }
 
 private:
-    ib_ctx_handler_doca *m_ctx_doca_dev;
+    ib_ctx_handler_doca m_ctx_doca_dev;
 #endif // !DEFINED_DPCP_PATH_ONLY
 };
 
