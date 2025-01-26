@@ -74,19 +74,6 @@ inline void ring_simple::send_status_handler(int ret, xlio_ibv_send_wr *p_send_w
     BULLSEYE_EXCLUDE_BLOCK_END
 }
 
-// This probably can be removed completely for DOCA.
-// It is unused in epoll and for DOCA we remove the full SQ poll attempt.
-int ring_simple::get_tx_channel_fd() const
-{
-    return m_p_tx_comp_event_channel->fd;
-}
-
-bool ring_simple::request_notification_tx()
-{
-    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-    return m_p_cq_mgr_tx->request_notification();
-}
-
 void ring_simple::poll_and_process_element_tx()
 {
     std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
@@ -182,7 +169,7 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
                 // prepare to block
                 // CQ is armed, block on the CQ's Tx event channel (fd)
                 struct pollfd poll_fd = {/*.fd=*/0, /*.events=*/POLLIN, /*.revents=*/0};
-                poll_fd.fd = get_tx_channel_fd();
+                poll_fd.fd = m_p_tx_comp_event_channel->fd;
 
                 // Now it is time to release the ring lock (for restart events to be handled
                 // while this thread block on CQ channel)

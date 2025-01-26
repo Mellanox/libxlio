@@ -117,11 +117,6 @@ int ring_bond::get_rx_channel_fd(size_t ch_idx) const
     return m_p_n_rx_channel_fds[ch_idx];
 }
 
-int ring_bond::get_tx_channel_fd() const
-{
-    return -1;
-}
-
 bool ring_bond::attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t)
 {
     bool ret = true;
@@ -227,9 +222,6 @@ void ring_bond::restart()
 
     if (!request_notification_rx()) {
         ring_logdbg("Failed arming RX notification");
-    }
-    if (!request_notification_tx()) {
-        ring_logdbg("Failed arming TX notification");
     }
 
     if (m_type == net_device_val::ACTIVE_BACKUP) {
@@ -411,7 +403,7 @@ void ring_bond::clear_rx_notification()
 
 bool ring_bond::request_notification_rx()
 {
-    m_lock_ring_rx.lock();
+    std::lock_guard<decltype(m_lock_ring_rx)> guard(m_lock_ring_rx);
 
     for (uint32_t i = 0; i < m_recv_rings.size(); i++) {
         if (m_recv_rings[i]->is_up()) {
@@ -420,25 +412,6 @@ bool ring_bond::request_notification_rx()
             }
         }
     }
-
-    m_lock_ring_rx.unlock();
-
-    return true;
-}
-
-bool ring_bond::request_notification_tx()
-{
-    m_lock_ring_tx.lock();
-
-    for (uint32_t i = 0; i < m_xmit_rings.size(); i++) {
-        if (m_xmit_rings[i]->is_up()) {
-            if (!m_xmit_rings[i]->request_notification_tx()) {
-                return false;
-            }
-        }
-    }
-
-    m_lock_ring_tx.unlock();
 
     return true;
 }

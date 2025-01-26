@@ -87,8 +87,6 @@ public:
 
     virtual size_t get_rx_channels_num() const = 0;
     virtual int get_rx_channel_fd(size_t ch_idx) const = 0;
-    virtual int get_tx_channel_fd() const = 0;
-    virtual bool request_notification_tx() = 0;
     virtual bool request_notification_rx() = 0;
     virtual bool reclaim_recv_buffers(descq_t *rx_reuse) = 0;
     virtual bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst) = 0;
