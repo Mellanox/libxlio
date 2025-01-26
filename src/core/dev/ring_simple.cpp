@@ -287,7 +287,7 @@ void ring_simple::create_resources()
     ring_logdbg("ring attributes: m_lro:max_payload_sz = %d", m_lro.max_payload_sz);
 #endif // DEFINED_DPCP_PATH_RX
 
-#if defined(DEFINED_DPCP_PATH_RX_OR_TX) && defined(DEFINED_UTLS)
+#if defined(DEFINED_DPCP_PATH_ANY) && defined(DEFINED_UTLS)
     {
         dpcp::adapter_hca_capabilities caps;
         if (m_p_ib_ctx->get_ctx_ibv_dev().get_dpcp_adapter() &&
@@ -301,7 +301,7 @@ void ring_simple::create_resources()
         ring_logdbg("ring attributes: m_tls:tls_rx = %d", m_tls.tls_rx);
         ring_logdbg("ring attributes: m_tls:tls_synchronize_dek = %d", m_tls.tls_synchronize_dek);
     }
-#endif // DEFINED_DPCP_PATH_RX_OR_TX || DEFINED_UTLS
+#endif // DEFINED_DPCP_PATH_ANY && DEFINED_UTLS
 
     m_flow_tag_enabled = !safe_mce_sys().disable_flow_tag && m_p_ib_ctx->get_flow_tag_capability();
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)

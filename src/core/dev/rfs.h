@@ -35,13 +35,17 @@
 #define RFS_H
 
 #include <vector>
-#include <mellanox/dpcp.h>
 #include "ib/base/verbs_extra.h"
 #include "util/vtypes.h"
 #include "dev/ring_simple.h"
 #include "proto/mem_buf_desc.h"
 #include "proto/flow_tuple.h"
+
+#ifdef DEFINED_DPCP_PATH_RX
+#include <mellanox/dpcp.h>
+#else
 #include <doca_flow.h>
+#endif
 
 #define RFS_SINKS_LIST_DEFAULT_LEN 32
 

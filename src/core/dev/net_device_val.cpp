@@ -1131,7 +1131,7 @@ void net_device_val::ring_clear_all_rfs()
     }
 }
 
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
+#ifdef DEFINED_DPCP_PATH_ANY
 void net_device_val::register_to_ibverbs_events(event_handler_ibverbs *handler)
 {
     for (size_t i = 0; i < m_slaves.size(); i++) {
@@ -1172,7 +1172,7 @@ void net_device_val::unregister_to_ibverbs_events(event_handler_ibverbs *handler
             m_slaves[i]->p_ib_ctx->get_ctx_ibv_dev().get_ibv_context()->async_fd, handler);
     }
 }
-#endif // DEFINED_DPCP_PATH_RX_OR_TX
+#endif // DEFINED_DPCP_PATH_ANY
 
 void net_device_val_eth::configure()
 {

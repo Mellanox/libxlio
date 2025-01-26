@@ -53,7 +53,7 @@ public:
 private:
     std::string m_ibname;
 
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
+#ifdef DEFINED_DPCP_PATH_ANY
 public:
     ib_ctx_handler_ibv &get_ctx_ibv_dev() { return *m_ctx_ibv_dev; }
     const ib_ctx_handler_ibv &get_ctx_ibv_dev() const { return *m_ctx_ibv_dev; }
@@ -64,9 +64,9 @@ public:
 
 private:
     ib_ctx_handler_ibv *m_ctx_ibv_dev;
-#endif // DEFINED_DPCP_PATH_RX_OR_TX
+#endif // DEFINED_DPCP_PATH_ANY
 
-#ifndef DEFINED_DPCP_PATH_RX_AND_TX
+#ifndef DEFINED_DPCP_PATH_ONLY
 public:
     ib_ctx_handler_doca &get_ctx_doca_dev() { return *m_ctx_doca_dev; }
     void construct_ctx_doca_dev(doca_devinfo *devinfo, const char *ifname)
@@ -76,7 +76,7 @@ public:
 
 private:
     ib_ctx_handler_doca *m_ctx_doca_dev;
-#endif
+#endif // !DEFINED_DPCP_PATH_ONLY
 };
 
 #endif

@@ -299,7 +299,7 @@ libxlio_la_SOURCES += \
 	dev/dpcp/cq_mgr_rx_inl.h \
 	dev/dpcp/cq_mgr_rx_regrq.h \
 	dev/dpcp/cq_mgr_rx_strq.h \
-	dev/dpcp/hw_queue_rx_dpcp.h \
+	dev/dpcp/hw_queue_rx_dpcp.h
 else
 libxlio_la_SOURCES += \
 	dev/doca/hw_queue_rx_doca.cpp \

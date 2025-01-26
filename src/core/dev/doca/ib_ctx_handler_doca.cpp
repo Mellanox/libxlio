@@ -31,8 +31,6 @@
  * SOFTWARE.
  */
 
-#include "util/vtypes.h"
-#ifndef DEFINED_DPCP_PATH_RX_AND_TX
 #include "vlogger/vlogger.h"
 #include <util/sys_vars.h>
 #include "dev/ib_ctx_handler.h"
@@ -271,5 +269,3 @@ void ib_ctx_handler_doca::convert_hw_time_to_system_time(uint64_t hwtime, struct
 {
     m_p_ctx_time_converter->convert_hw_time_to_system_time(hwtime, systime);
 }
-
-#endif // !DEFINED_DPCP_PATH_RX_AND_TX

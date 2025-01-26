@@ -34,8 +34,6 @@
 #ifndef IB_CTX_HANDLER_DOCA_H
 #define IB_CTX_HANDLER_DOCA_H
 
-#include "util/vtypes.h"
-#ifndef DEFINED_DPCP_PATH_RX_AND_TX
 #include <doca_dev.h>
 #include <doca_flow.h>
 #include <doca_pe.h>
@@ -65,5 +63,5 @@ private:
     std::string m_ifname;
     std::string &m_ibname;
 };
-#endif // !DEFINED_DPCP_PATH_RX_AND_TX
+
 #endif // IB_CTX_HANDLER_DOCA_H

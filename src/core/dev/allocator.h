@@ -90,7 +90,7 @@ public:
     bool register_memory(void *data, size_t size);
     void deregister_memory();
 
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
+#ifdef DEFINED_DPCP_PATH_ANY
 public:
     bool register_memory_dpcp(void *data, size_t size);
     void deregister_memory_dpcp();
@@ -98,9 +98,9 @@ public:
 
 private:
     std::unordered_map<ib_ctx_handler *, uint32_t> m_lkey_map_ib_ctx;
-#endif // DEFINED_DPCP_PATH_RX_OR_TX
+#endif // DEFINED_DPCP_PATH_ANY
 
-#ifndef DEFINED_DPCP_PATH_RX_AND_TX
+#ifndef DEFINED_DPCP_PATH_ONLY
 public:
     bool register_memory_doca(void *data, size_t size);
     void deregister_memory_doca();
@@ -108,7 +108,7 @@ public:
 
 private:
     doca_mmap *m_p_doca_mmap = nullptr;
-#endif // !DEFINED_DPCP_PATH_RX_AND_TX
+#endif // !DEFINED_DPCP_PATH_ONLY
 };
 
 class xlio_allocator_hw : public xlio_allocator, public xlio_registrator {
@@ -129,12 +129,12 @@ public:
 
     void *alloc(size_t &size);
     bool register_memory();
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
+#ifdef DEFINED_DPCP_PATH_ANY
     uint32_t find_lkey_by_ib_ctx(ib_ctx_handler *p_ib_ctx_h) const;
-#endif // DEFINED_DPCP_PATH_RX_OR_TX
-#ifndef DEFINED_DPCP_PATH_RX_AND_TX
+#endif // DEFINED_DPCP_PATH_ANY
+#ifndef DEFINED_DPCP_PATH_ONLY
     doca_mmap *get_doca_mmap() const;
-#endif // !DEFINED_DPCP_PATH_RX_AND_TX
+#endif // !DEFINED_DPCP_PATH_ONLY
 
     bool is_hw() const { return m_b_hw; }
 
@@ -160,12 +160,12 @@ public:
 
     void *alloc(size_t &size);
     bool register_memory();
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
+#ifdef DEFINED_DPCP_PATH_ANY
     uint32_t find_lkey_by_ib_ctx(ib_ctx_handler *p_ib_ctx_h) const;
-#endif // DEFINED_DPCP_PATH_RX_OR_TX
-#ifndef DEFINED_DPCP_PATH_RX_AND_TX
+#endif // DEFINED_DPCP_PATH_ANY
+#ifndef DEFINED_DPCP_PATH_ONLY
     doca_mmap *get_doca_mmap() const { return m_p_heap->get_doca_mmap(); }
-#endif // !DEFINED_DPCP_PATH_RX_AND_TX
+#endif // !DEFINED_DPCP_PATH_ONLY
 
 private:
     xlio_heap *m_p_heap;

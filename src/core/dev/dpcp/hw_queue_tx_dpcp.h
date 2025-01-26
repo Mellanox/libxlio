@@ -34,8 +34,6 @@
 #ifndef HW_QUEUE_TX_DPCP_H
 #define HW_QUEUE_TX_DPCP_H
 
-#include "config.h"
-#ifdef DEFINED_DPCP_PATH_TX
 #include <list>
 #include <vector>
 #include "dev/dpcp/xlio_ti.h"
@@ -292,5 +290,4 @@ private:
 #endif
 };
 
-#endif // DEFINED_DPCP_PATH_TX
 #endif // HW_QUEUE_TX_DPCP_H

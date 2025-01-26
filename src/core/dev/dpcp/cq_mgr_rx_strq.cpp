@@ -31,9 +31,6 @@
  * SOFTWARE.
  */
 
-#include "config.h"
-#ifdef DEFINED_DPCP_PATH_RX
-
 #include "cq_mgr_rx_strq.h"
 #include <util/valgrind.h>
 #include "cq_mgr_rx_inl.h"
@@ -525,5 +522,3 @@ void cq_mgr_rx_strq::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
         }
     }
 }
-
-#endif // DEFINED_DPCP_PATH_RX

@@ -43,7 +43,7 @@
 #include "lwip/tcp_impl.h"
 #include "core/lwip/pbuf.h"
 
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
+#ifdef DEFINED_DPCP_PATH_ANY
 #include "dev/dpcp/xlio_ti.h"
 #include "ib/base/verbs_extra.h"
 #endif
@@ -155,7 +155,7 @@ public:
                                       bool first) = 0;
 #endif // DEFINED_DPCP_PATH_TX && DEFINED_UTLS
 
-#if defined(DEFINED_DPCP_PATH_RX_AND_TX) && defined(DEFINED_UTLS)
+#if defined(DEFINED_DPCP_PATH_ONLY) && defined(DEFINED_UTLS)
     virtual xlio_tir *tls_create_tir(bool cached) = 0;
     virtual int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info,
                                      uint32_t next_record_tcp_sn, xlio_comp_cb_t callback,
@@ -165,7 +165,7 @@ public:
                                uint32_t hw_resync_tcp_sn) = 0;
     virtual void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey) = 0;
     virtual void tls_release_tir(xlio_tir *tir) = 0;
-#endif // DEFINED_DPCP_PATH_RX_AND_TX && DEFINED_UTLS
+#endif // DEFINED_DPCP_PATH_ONLY && DEFINED_UTLS
 
 protected:
     void set_parent(ring *parent) { m_parent = (parent ? parent : this); }

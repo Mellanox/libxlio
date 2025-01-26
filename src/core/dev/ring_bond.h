@@ -121,7 +121,7 @@ public:
                               bool first) override;
 #endif // DEFINED_DPCP_PATH_RX && DEFINED_DPCP_PATH_TX
 
-#if defined(DEFINED_DPCP_PATH_RX_AND_TX) && defined(DEFINED_UTLS)
+#if defined(DEFINED_DPCP_PATH_ONLY) && defined(DEFINED_UTLS)
     xlio_tir *tls_create_tir(bool cached) override;
     int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t next_record_tcp_sn,
                              xlio_comp_cb_t callback, void *callback_arg) override;
@@ -130,7 +130,7 @@ public:
                        uint32_t hw_resync_tcp_sn) override;
     void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey) override;
     void tls_release_tir(xlio_tir *tir) override;
-#endif // DEFINED_DPCP_PATH_RX_AND_TX && DEFINED_UTLS
+#endif // DEFINED_DPCP_PATH_ONLY && DEFINED_UTLS
 
 protected:
     void update_rx_channel_fds();

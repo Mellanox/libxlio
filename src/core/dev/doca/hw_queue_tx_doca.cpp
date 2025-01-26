@@ -31,8 +31,6 @@
  * SOFTWARE.
  */
 
-#include "config.h"
-#ifndef DEFINED_DPCP_PATH_TX
 #include <time.h>
 #include "dev/doca/hw_queue_tx_doca.h"
 #include "dev/ring_simple.h"
@@ -705,4 +703,3 @@ void hw_queue_tx::poll_and_process_doca_tx()
 
     m_p_ring->return_to_global_pool();
 }
-#endif // DEFINED_DPCP_PATH_TX

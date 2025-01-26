@@ -34,9 +34,6 @@
 #ifndef CQ_MGR_TX_H
 #define CQ_MGR_TX_H
 
-#include "config.h"
-#ifdef DEFINED_DPCP_PATH_TX
-
 #include "dev/ib_ctx_handler.h"
 
 class hw_queue_tx;
@@ -148,5 +145,4 @@ inline struct xlio_mlx5_cqe *cq_mgr_tx::get_cqe_tx(uint32_t &num_polled_cqes)
     return cqe_ret;
 }
 
-#endif // DEFINED_DPCP_PATH_TX
 #endif // CQ_MGR_TX_H

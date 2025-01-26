@@ -56,11 +56,11 @@
 #endif
 
 #if defined(DEFINED_DPCP_PATH_RX) && defined(DEFINED_DPCP_PATH_TX)
-#define DEFINED_DPCP_PATH_RX_AND_TX
+#define DEFINED_DPCP_PATH_ONLY
 #endif
 
 #if defined(DEFINED_DPCP_PATH_RX) || defined(DEFINED_DPCP_PATH_TX)
-#define DEFINED_DPCP_PATH_RX_OR_TX
+#define DEFINED_DPCP_PATH_ANY
 #endif
 
 #if !defined(__BYTE_ORDER__) || !defined(__ORDER_LITTLE_ENDIAN__) || !defined(__ORDER_BIG_ENDIAN__)

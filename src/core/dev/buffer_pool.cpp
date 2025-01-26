@@ -290,13 +290,13 @@ bool buffer_pool::get_buffers_thread_safe(descq_t &pDeque, ring_slave *desc_owne
     return true;
 }
 
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
+#ifdef DEFINED_DPCP_PATH_ANY
 uint32_t buffer_pool::find_lkey_by_ib_ctx_thread_safe(ib_ctx_handler *p_ib_ctx_h)
 {
     std::lock_guard<decltype(m_lock)> lock(m_lock);
     return m_allocator_data.find_lkey_by_ib_ctx(p_ib_ctx_h);
 }
-#endif // DEFINED_DPCP_PATH_RX_OR_TX
+#endif // DEFINED_DPCP_PATH_ANY
 
 #if _BullseyeCoverage
 #pragma BullseyeCoverage off

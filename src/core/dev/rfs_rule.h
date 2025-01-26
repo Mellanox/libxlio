@@ -36,8 +36,12 @@
 
 #include <memory>
 #include "ib/base/verbs_extra.h"
+
+#ifdef DEFINED_DPCP_PATH_RX
 #include <mellanox/dpcp.h>
+#else
 #include <doca_flow.h>
+#endif
 
 class ib_ctx_handler;
 
