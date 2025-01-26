@@ -479,17 +479,12 @@ bool hw_queue_tx::expand_doca_task_pool(bool is_lso)
         return false;
     }
 
-    const uint16_t expand_batch_size =
-        (m_task_list_count + DOCA_EXPAND_BATCH_SIZE) >= safe_mce_sys().tx_queue_max_elements
-        ? (m_task_list_count + DOCA_EXPAND_BATCH_SIZE) % DOCA_EXPAND_BATCH_SIZE
-        : (DOCA_EXPAND_BATCH_SIZE);
-
     doca_error_t rc;
     doca_eth_txq *txq = m_doca_txq.get();
     if (is_lso) {
-        rc = doca_eth_txq_task_lso_send_num_expand(txq, expand_batch_size);
+        rc = doca_eth_txq_task_lso_send_num_expand(txq, DOCA_EXPAND_BATCH_SIZE);
     } else {
-        rc = doca_eth_txq_task_send_num_expand(txq, expand_batch_size);
+        rc = doca_eth_txq_task_send_num_expand(txq, DOCA_EXPAND_BATCH_SIZE);
     }
 
     if (DOCA_IS_ERROR(rc)) {
@@ -497,7 +492,7 @@ bool hw_queue_tx::expand_doca_task_pool(bool is_lso)
         return false;
     }
 
-    m_task_list_count += expand_batch_size;
+    m_task_list_count += DOCA_EXPAND_BATCH_SIZE;
     return true;
 }
 
