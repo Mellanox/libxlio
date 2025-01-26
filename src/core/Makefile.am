@@ -76,9 +76,7 @@ libxlio_la_SOURCES := \
 	dev/rfs_mc.cpp \
 	dev/rfs_rule.cpp \
 	dev/time_converter.cpp \
-	dev/time_converter_ptp.cpp \
 	dev/time_converter_rtc.cpp \
-	dev/time_converter_ib_ctx.cpp \
 	dev/ib_ctx_handler.cpp \
 	dev/ib_ctx_handler_collection.cpp \
 	dev/net_device_val.cpp \
@@ -169,9 +167,7 @@ libxlio_la_SOURCES := \
 	dev/ib_ctx_handler_collection.h \
 	dev/ib_ctx_handler.h \
 	dev/time_converter.h \
-	dev/time_converter_ptp.h \
 	dev/time_converter_rtc.h \
-	dev/time_converter_ib_ctx.h \
 	dev/net_device_entry.h \
 	dev/net_device_table_mgr.h \
 	dev/net_device_val.h \
@@ -306,7 +302,7 @@ libxlio_la_SOURCES += \
 	dev/dpcp/cq_mgr_rx_inl.h \
 	dev/dpcp/cq_mgr_rx_regrq.h \
 	dev/dpcp/cq_mgr_rx_strq.h \
-	dev/dpcp/hw_queue_rx_dpcp.h
+	dev/dpcp/hw_queue_rx_dpcp.h \
 else
 libxlio_la_SOURCES += \
 	dev/doca/hw_queue_rx_doca.cpp \
@@ -331,7 +327,11 @@ if DEFINED_DPCP_PATH_ANY
 libxlio_la_SOURCES += \
 	dev/dpcp/ring_simple_dpcp.cpp \
 	dev/dpcp/ib_ctx_handler_ibv.cpp \
-	dev/dpcp/ib_ctx_handler_ibv.h
+	dev/dpcp/time_converter_ib_ctx.cpp \
+	dev/dpcp/time_converter_ptp.cpp \
+	dev/dpcp/ib_ctx_handler_ibv.h \
+	dev/dpcp/time_converter_ib_ctx.h \
+	dev/dpcp/time_converter_ptp.h
 endif
 
 if DEFINED_DPCP_PATH_MIX
