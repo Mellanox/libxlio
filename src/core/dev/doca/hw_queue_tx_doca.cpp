@@ -33,6 +33,7 @@
 
 #include "config.h"
 #ifndef DEFINED_DPCP_PATH_TX
+#include <time.h>
 #include "dev/doca/hw_queue_tx_doca.h"
 #include "dev/ring_simple.h"
 #include <cinttypes>

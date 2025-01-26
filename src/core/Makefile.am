@@ -180,7 +180,6 @@ libxlio_la_SOURCES := \
 	dev/ring_slave.h \
 	dev/ring_simple.h \
 	dev/ring_allocation_logic.h \
-	dev/xlio_ti.h \
 	\
 	event/command.h \
 	event/delta_timer.h \
@@ -331,7 +330,8 @@ libxlio_la_SOURCES += \
 	dev/dpcp/time_converter_ptp.cpp \
 	dev/dpcp/ib_ctx_handler_ibv.h \
 	dev/dpcp/time_converter_ib_ctx.h \
-	dev/dpcp/time_converter_ptp.h
+	dev/dpcp/time_converter_ptp.h \
+	dev/dpcp/xlio_ti.h
 endif
 
 if DEFINED_DPCP_PATH_MIX

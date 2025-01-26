@@ -36,7 +36,6 @@
 
 #include <memory>
 #include "dev/buffer_pool.h"
-#include "dev/xlio_ti.h"
 #include "proto/flow_tuple.h"
 #include "proto/xlio_lwip.h"
 #include "proto/L2_address.h"
@@ -45,6 +44,7 @@
 #include "core/lwip/pbuf.h"
 
 #ifdef DEFINED_DPCP_PATH_RX_OR_TX
+#include "dev/dpcp/xlio_ti.h"
 #include "ib/base/verbs_extra.h"
 #endif
 
