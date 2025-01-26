@@ -36,7 +36,7 @@
 
 #include "config.h"
 #ifndef DEFINED_DPCP_PATH_RX
-#include "dev/xlio_ti.h"
+#include "dev/dpcp/xlio_ti.h"
 #include "dev/ib_ctx_handler.h"
 #include "dev/rfs_rule.h"
 #include "proto/mem_buf_desc.h"

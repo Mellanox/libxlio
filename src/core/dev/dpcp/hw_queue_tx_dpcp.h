@@ -38,7 +38,7 @@
 #ifdef DEFINED_DPCP_PATH_TX
 #include <list>
 #include <vector>
-#include "dev/xlio_ti.h"
+#include "dev/dpcp/xlio_ti.h"
 #include "proto/mem_buf_desc.h"
 #include "proto/xlio_lwip.h"
 #include "util/cached_obj_pool.h"
