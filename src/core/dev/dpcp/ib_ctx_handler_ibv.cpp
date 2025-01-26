@@ -73,23 +73,17 @@ int parse_dpcp_version(const char *dpcp_ver)
     return (loops == 0U ? ver : 0);
 }
 
-ib_ctx_handler_ibv::ib_ctx_handler_ibv(ibv_device *ibvdevice, std::string &ibname)
-    : m_lock_umr("spin_lock_umr")
+ib_ctx_handler_ibv::ib_ctx_handler_ibv(ibv_device &ibvdevice, ib_ctx_handler &ib_ctx)
+    : m_p_ibv_device(ibvdevice)
+    , m_lock_umr("spin_lock_umr")
     , m_p_ctx_time_converter(nullptr)
     , m_on_device_memory(0)
     , m_removed(false)
-    , m_ibname(ibname)
+    , m_ib_ctx(ib_ctx)
 {
-    if (!ibvdevice) {
-        ibch_logpanic("Nullptr ibv_device in ib_ctx_handler");
-    }
-
-    m_ibname = ibname;
-    m_p_ibv_device = ibvdevice;
-
     m_p_adapter = set_dpcp_adapter();
     if (!m_p_adapter) {
-        ibch_logpanic("ibv device %p adapter allocation failure (errno=%d %m)", m_p_ibv_device,
+        ibch_logpanic("ibv device %p adapter allocation failure (errno=%d %m)", &m_p_ibv_device,
                       errno);
     }
 
@@ -98,13 +92,13 @@ ib_ctx_handler_ibv::ib_ctx_handler_ibv(ibv_device *ibvdevice, std::string &ibnam
     m_p_ibv_device_attr = new xlio_ibv_device_attr_ex();
     if (!m_p_ibv_device_attr) {
         ibch_logpanic("ibv device %p attr allocation failure (ibv context %p) (errno=%d %m)",
-                      m_p_ibv_device, m_p_ibv_context, errno);
+                      &m_p_ibv_device, m_p_ibv_context, errno);
     }
     xlio_ibv_device_attr_comp_mask(m_p_ibv_device_attr);
     IF_VERBS_FAILURE(xlio_ibv_query_device(m_p_ibv_context, m_p_ibv_device_attr))
     {
         ibch_logerr("ibv_query_device failed on ibv device %p (ibv context %p) (errno=%d %m)",
-                    m_p_ibv_device, m_p_ibv_context, errno);
+                    &m_p_ibv_device, m_p_ibv_context, errno);
         goto err;
     }
     ENDIF_VERBS_FAILURE;
@@ -185,9 +179,6 @@ dpcp::adapter *ib_ctx_handler_ibv::set_dpcp_adapter()
     int dpcp_ver = 0;
 
     m_p_adapter = nullptr;
-    if (!m_p_ibv_device) {
-        return nullptr;
-    }
 
     status = dpcp::provider::get_instance(p_provider);
     if (dpcp::DPCP_OK != status) {
@@ -226,7 +217,7 @@ dpcp::adapter *ib_ctx_handler_ibv::set_dpcp_adapter()
     }
 
     for (i = 0; i < adapters_num; i++) {
-        if (dpcp_lst[i].name == m_p_ibv_device->name) {
+        if (dpcp_lst[i].name == m_p_ibv_device.name) {
             dpcp::adapter *adapter = nullptr;
 
             status = p_provider->open_adapter(dpcp_lst[i].name, adapter);
@@ -375,8 +366,8 @@ uint32_t ib_ctx_handler_ibv::mem_reg(void *addr, size_t length, uint64_t access)
         m_mr_map_lkey[mr->lkey] = mr;
         lkey = mr->lkey;
 
-        ibch_logdbg("dev:%s (%p) addr=%p length=%lu pd=%p", m_ibname.c_str(), m_p_ibv_device, addr,
-                    length, m_p_ibv_pd);
+        ibch_logdbg("dev:%s (%p) addr=%p length=%lu pd=%p", m_ib_ctx.get_ibname().c_str(),
+                    &m_p_ibv_device, addr, length, m_p_ibv_pd);
     }
 
     return lkey;
@@ -387,8 +378,8 @@ void ib_ctx_handler_ibv::mem_dereg(uint32_t lkey)
     auto iter = m_mr_map_lkey.find(lkey);
     if (iter != m_mr_map_lkey.end()) {
         struct ibv_mr *mr = iter->second;
-        ibch_logdbg("dev:%s (%p) addr=%p length=%lu pd=%p", m_ibname.c_str(), m_p_ibv_device,
-                    mr->addr, mr->length, m_p_ibv_pd);
+        ibch_logdbg("dev:%s (%p) addr=%p length=%lu pd=%p", m_ib_ctx.get_ibname().c_str(),
+                    &m_p_ibv_device, mr->addr, mr->length, m_p_ibv_pd);
         IF_VERBS_FAILURE_EX(ibv_dereg_mr(mr), EIO)
         {
             ibch_logdbg("failed de-registering a memory region "

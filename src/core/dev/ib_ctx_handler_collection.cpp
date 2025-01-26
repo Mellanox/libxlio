@@ -152,19 +152,17 @@ void ib_ctx_handler_collection::update_tbl()
             continue;
         }
 
-        ib_ctx_handler *p_ib_ctx_handler = new ib_ctx_handler(doca_ibdev_name);
-        p_ib_ctx_handler->construct_ctx_ibv_dev(dev_list[ibidx]);
-        p_ib_ctx_handler->construct_ctx_doca_dev(dev_list_doca[devidx], doca_ifname_name);
+        ib_ctx_handler *p_ib_ctx_handler = new ib_ctx_handler(
+            doca_ibdev_name, doca_ifname_name, *dev_list_doca[devidx], *dev_list[ibidx]);
         ibchc_logdbg("DOCA dev initialized: %s,%s -> IBV: %s", doca_ifname_name, doca_ibdev_name,
                      dev_list[ibidx]->name);
 #else // DEFINED_DPCP_PATH_ANY
-        ib_ctx_handler *p_ib_ctx_handler = new ib_ctx_handler(doca_ibdev_name);
-        p_ib_ctx_handler->construct_ctx_doca_dev(dev_list_doca[devidx], doca_ifname_name);
+        ib_ctx_handler *p_ib_ctx_handler =
+            new ib_ctx_handler(doca_ibdev_name, doca_ifname_name, *dev_list_doca[devidx]);
         ibchc_logdbg("DOCA dev initialized: %s,%s", doca_ifname_name, doca_ibdev_name);
 #endif // DEFINED_DPCP_PATH_ANY
 #else // !DEFINED_DPCP_PATH_ONLY
-        ib_ctx_handler *p_ib_ctx_handler = new ib_ctx_handler(dev_list[devidx]->name);
-        p_ib_ctx_handler->construct_ctx_ibv_dev(dev_list[devidx]);
+        ib_ctx_handler *p_ib_ctx_handler = new ib_ctx_handler(*dev_list[devidx]);
         ibchc_logdbg("IBV dev initialized: %s", dev_list[devidx]->name);
 #endif // !DEFINED_DPCP_PATH_ONLY
 

@@ -118,8 +118,7 @@ bool dm_mgr::allocate_resources(ib_ctx_handler *ib_ctx, ring_stats_t *ring_stats
 
     dm_logdbg("Device memory allocation completed successfully! device[%s] bytes[%zu] dm_mr "
               "handle[%d] dm_mr lkey[%d]",
-              ib_ctx->get_ctx_ibv_dev().get_ibv_device()->name, dm_attr.length, m_p_dm_mr->handle,
-              m_p_dm_mr->lkey);
+              ib_ctx->get_ibname().c_str(), dm_attr.length, m_p_dm_mr->handle, m_p_dm_mr->lkey);
 
     return true;
 }

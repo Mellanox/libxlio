@@ -39,9 +39,11 @@
 #include <doca_pe.h>
 #include "dev/time_converter.h"
 
+class ib_ctx_handler;
+
 class ib_ctx_handler_doca {
 public:
-    ib_ctx_handler_doca(doca_devinfo *devinfo, std::string &ibname, const char *ifname);
+    ib_ctx_handler_doca(doca_devinfo &devinfo, ib_ctx_handler &ib_ctx, const char *ifname);
     ~ib_ctx_handler_doca();
     doca_dev *get_doca_device() const { return m_doca_dev; }
     doca_flow_port *get_doca_flow_port();
@@ -61,7 +63,7 @@ private:
     doca_flow_pipe *m_doca_root_pipe = nullptr;
     time_converter *m_p_ctx_time_converter = nullptr;
     std::string m_ifname;
-    std::string &m_ibname;
+    ib_ctx_handler &m_ib_ctx;
 };
 
 #endif // IB_CTX_HANDLER_DOCA_H

@@ -187,10 +187,9 @@ hw_queue_tx::~hw_queue_tx()
 int hw_queue_tx::configure(const slave_data_t *slave,
                            struct ibv_comp_channel *p_tx_comp_event_channel)
 {
-    hwqtx_logdbg("Creating QP of transport type '%s' on ibv device '%s' [%p] on port %d",
+    hwqtx_logdbg("Creating QP of transport type '%s' on ibv device '%s' on port %d",
                  priv_xlio_transport_type_str(m_p_ring->get_transport_type()),
-                 m_p_ib_ctx_handler->get_ibname().c_str(),
-                 m_p_ib_ctx_handler->get_ctx_ibv_dev().get_ibv_device(), m_port_num);
+                 m_p_ib_ctx_handler->get_ibname().c_str(), m_port_num);
     hwqtx_logdbg("HW Dummy send support for QP = %d", m_hw_dummy_send_support);
 
     // Create associated cq_mgr_tx and unused cq_mgr_rx_regrq just for QP sake.
