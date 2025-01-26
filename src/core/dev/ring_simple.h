@@ -73,7 +73,6 @@ public:
     virtual ~ring_simple();
 
     bool request_notification_rx() override;
-    bool request_notification_tx() override;
     bool poll_and_process_element_rx(void *pv_fd_ready_array = nullptr) override;
     void poll_and_process_element_tx() override;
     void adapt_cq_moderation() override;
@@ -94,7 +93,6 @@ public:
                                               unsigned ref) override;
     size_t get_rx_channels_num() const override { return 1U; };
     int get_rx_channel_fd(size_t ch_idx) const override;
-    int get_tx_channel_fd() const override;
     uint32_t get_max_payload_sz(void) override;
     uint16_t get_max_header_sz() override;
     bool is_tso(void) override;

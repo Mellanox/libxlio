@@ -126,7 +126,6 @@ ring_simple::~ring_simple()
     // Delete the RX/TX channel fd from the global fd collection
     if (g_p_fd_collection) {
         g_p_fd_collection->del_cq_channel_fd(get_rx_channel_fd(0U), true);
-        g_p_fd_collection->del_cq_channel_fd(get_tx_channel_fd(), true);
     }
 
     xlio_stats_instance_remove_ring_block(m_p_ring_stat.get(), &m_hqtx->m_hwq_tx_stats,
@@ -359,7 +358,6 @@ void ring_simple::create_resources()
     if (g_p_fd_collection) {
         // Create new cq_channel info in the global fd collection
         g_p_fd_collection->add_cq_channel_fd(get_rx_channel_fd(0U), this);
-        g_p_fd_collection->add_cq_channel_fd(get_tx_channel_fd(), this);
     }
 
     init_tx_buffers(RING_TX_BUFS_COMPENSATE);

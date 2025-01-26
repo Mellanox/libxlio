@@ -53,9 +53,7 @@ public:
     void print_val() override;
     size_t get_rx_channels_num() const override;
     int get_rx_channel_fd(size_t ch_idx) const override;
-    int get_tx_channel_fd() const override;
     bool request_notification_rx() override;
-    bool request_notification_tx() override;
     void clear_rx_notification() override;
     bool poll_and_process_element_rx(void *pv_fd_ready_array = nullptr) override;
     void poll_and_process_element_tx() override;
@@ -79,7 +77,8 @@ public:
     bool is_active_member(ring_slave *rng, ring_user_id_t id) override;
     ring_user_id_t generate_id(const address_t src_mac, const address_t dst_mac, uint16_t eth_proto,
                                uint16_t encap_proto, const ip_address &src_ip,
-                               const ip_address &dst_ip, uint16_t src_port, uint16_t dst_port);
+                               const ip_address &dst_ip, uint16_t src_port,
+                               uint16_t dst_port) override;
 
     int modify_ratelimit(struct xlio_rate_limit_t &rate_limit) override;
     ib_ctx_handler *get_ctx(ring_user_id_t id) override;

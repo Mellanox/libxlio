@@ -515,37 +515,6 @@ void hw_queue_tx::put_lso_metadata(doca_lso_metadata *lso_metadata)
     m_p_doca_lso_metadata_list = lso_metadata;
 }
 
-bool hw_queue_tx::request_notification()
-{
-    if (likely(!m_notification_armed)) {
-        doca_error_t rc = doca_pe_request_notification(m_doca_pe.get());
-        if (unlikely(DOCA_IS_ERROR(rc))) {
-            PRINT_DOCA_ERR(hwqtx_logerr, rc, "doca_pe_request_notification");
-            return false;
-        }
-
-        ++m_hwq_tx_stats.n_tx_interrupt_requests;
-    }
-
-    m_notification_armed = true;
-    return true;
-}
-
-void hw_queue_tx::clear_notification()
-{
-    if (m_notification_armed) {
-        m_notification_armed = false;
-        doca_error_t rc = doca_pe_clear_notification(m_doca_pe.get(), m_notification_handle);
-        if (unlikely(DOCA_IS_ERROR(rc))) {
-            PRINT_DOCA_ERR(hwqtx_logerr, rc, "doca_pe_clear_notification");
-        } else {
-            ++m_hwq_tx_stats.n_tx_interrupt_received;
-        }
-    } else {
-        hwqtx_logwarn("Clear notification attempt on unarmed PE. hw_queue_tx: %p", this);
-    }
-}
-
 /*
     1. doca_buf_inventory_buf_get_by_data
     2. doca task allocation

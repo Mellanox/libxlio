@@ -41,18 +41,6 @@ DOCA_LOG_REGISTER(ring_simple_doca);
 #define MODULE_HDR MODULE_NAME "%d:%s() "
 
 #ifndef DEFINED_DPCP_PATH_TX
-// This probably can be removed completely for DOCA.
-// It is unused in epoll and for DOCA we remove the full SQ poll attempt.
-int ring_simple::get_tx_channel_fd() const
-{
-    return m_hqtx->get_notification_handle();
-}
-
-bool ring_simple::request_notification_tx()
-{
-    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-    return m_hqtx->request_notification();
-}
 
 void ring_simple::poll_and_process_element_tx()
 {

@@ -4117,8 +4117,8 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             si_tcp_logdbg("(TCP_QUICKACK) value: %d", val);
             break;
         case TCP_ULP: {
-            sockinfo_tcp_ops *ops {nullptr};
 #ifdef DEFINED_UTLS
+            sockinfo_tcp_ops *ops {nullptr};
             if (__optval && __optlen >= 3 && strncmp((char *)__optval, "tls", 3) == 0) {
                 if (is_utls_supported(UTLS_MODE_TX | UTLS_MODE_RX)) {
                     si_tcp_logdbg("(TCP_ULP) val: tls");
@@ -4135,9 +4135,6 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                 ret = -1;
                 break;
             }
-#else
-            errno = ENOPROTOOPT;
-#endif /* DEFINED_UTLS */
 
             if (unlikely(!ops)) {
                 errno = ENOMEM;
@@ -4150,6 +4147,11 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             unlock_tcp_con();
             /* On success we call kernel setsockopt() in case this socket is not connected
                and is unoffloaded later.  */
+#else
+            si_tcp_logdbg("TCP_ULP is not supported");
+            errno = ENOPROTOOPT;
+            ret = -1;
+#endif /* DEFINED_UTLS */
             break;
         }
         case TCP_CONGESTION:

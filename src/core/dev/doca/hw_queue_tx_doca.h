@@ -78,8 +78,6 @@ public:
     uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *user_data);
     uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss, bool is_zerocopy);
     void poll_and_process_doca_tx();
-    bool request_notification();
-    void clear_notification();
     void put_lso_metadata(doca_lso_metadata *lso_metadata);
 
 private:
