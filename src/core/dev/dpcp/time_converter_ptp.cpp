@@ -31,8 +31,6 @@
  * SOFTWARE.
  */
 
-#include "config.h"
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
 #include <stdlib.h>
 #include <vlogger/vlogger.h>
 #include "event/event_handler_manager.h"
@@ -40,7 +38,7 @@
 #include "utils/rdtsc.h"
 #include "util/instrumentation.h"
 #include "util/utils.h"
-#include "dev/time_converter_ptp.h"
+#include "time_converter_ptp.h"
 #include "ib/base/verbs_extra.h"
 
 #ifdef DEFINED_IBV_CLOCK_INFO
@@ -103,4 +101,3 @@ void time_converter_ptp::convert_hw_time_to_system_time(uint64_t hwtime, struct 
     ibchtc_logfine("systime:	%ld.%.9ld", systime->tv_sec, systime->tv_nsec);
 }
 #endif // DEFINED_IBV_CLOCK_INFO
-#endif // DEFINED_DPCP_PATH_RX_OR_TX
