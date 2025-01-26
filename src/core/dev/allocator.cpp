@@ -286,7 +286,8 @@ bool xlio_registrator::register_memory_dpcp(void *data, size_t size)
         uint32_t lkey =
             p_ib_ctx_h->get_ctx_ibv_dev().mem_reg(data, size, XLIO_IBV_ACCESS_LOCAL_WRITE);
         if (LKEY_ERROR == lkey) {
-            __log_info_warn("Unable to register memory for device: %s", p_ib_ctx_h->get_ibname().c_str());
+            __log_info_warn("Unable to register memory for device: %s",
+                            p_ib_ctx_h->get_ibname().c_str());
             // Continue to other devices to allow them to work.
         } else {
             // We need at least one device to allow XLIO to work.

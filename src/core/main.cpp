@@ -58,7 +58,6 @@
 #include "dev/buffer_pool.h"
 #include "dev/ib_ctx_handler_collection.h"
 #include "dev/net_device_table_mgr.h"
-//#include "dev/hw_queue_tx.h"
 #include "proto/ip_frag.h"
 #include "proto/xlio_lwip.h"
 #include "proto/route_table_mgr.h"

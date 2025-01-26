@@ -51,8 +51,7 @@ struct doca_flow_match;
 class ring_simple;
 
 // @class hw_queue_rx
-// Object to manages the SQ operations. This object is used for Rx.
-// Once created it requests from the system a CQ to work with.
+// This objects represents DOCA HW RX queue
 class hw_queue_rx {
     friend class ring_simple;
 
@@ -61,7 +60,7 @@ public:
 
     void up();
     void down();
-    uint16_t get_vlan() const { return m_vlan; };
+    uint16_t get_vlan() const { return m_vlan; }
     void modify_moderation(uint16_t period_usec, uint16_t comp_count);
 
     void update_gro_stats(uint64_t gro_frags, uint64_t gro_bytes)
@@ -83,9 +82,9 @@ public:
                               uint16_t priority, uint32_t flow_tag);
 
 private:
-    static void destory_doca_rxq(doca_eth_rxq *rxq);
-    static void destory_doca_inventory(doca_buf_inventory *inv);
-    static void destory_doca_pe(doca_pe *pe);
+    static void destroy_doca_rxq(doca_eth_rxq *rxq);
+    static void destroy_doca_inventory(doca_buf_inventory *inv);
+    static void destroy_doca_pe(doca_pe *pe);
 
     static void rx_task_completion_cb(doca_eth_rxq_task_recv *task_recv, doca_data task_user_data,
                                       doca_data ctx_user_data);
@@ -111,11 +110,11 @@ private:
     void post_reclaim_fill();
     void process_recv_buffer(mem_buf_desc_t *p_mem_buf_desc);
 
-    std::unique_ptr<doca_eth_rxq, decltype(&destory_doca_rxq)> m_doca_rxq {nullptr,
-                                                                           destory_doca_rxq};
-    std::unique_ptr<doca_buf_inventory, decltype(&destory_doca_inventory)> m_doca_inventory {
-        nullptr, destory_doca_inventory};
-    std::unique_ptr<doca_pe, decltype(&destory_doca_pe)> m_doca_pe {nullptr, destory_doca_pe};
+    std::unique_ptr<doca_eth_rxq, decltype(&destroy_doca_rxq)> m_doca_rxq {nullptr,
+                                                                           destroy_doca_rxq};
+    std::unique_ptr<doca_buf_inventory, decltype(&destroy_doca_inventory)> m_doca_inventory {
+        nullptr, destroy_doca_inventory};
+    std::unique_ptr<doca_pe, decltype(&destroy_doca_pe)> m_doca_pe {nullptr, destroy_doca_pe};
 
     doca_mmap *m_doca_mmap = nullptr;
     doca_ctx *m_doca_ctx_rxq = nullptr;

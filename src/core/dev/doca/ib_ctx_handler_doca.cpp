@@ -124,7 +124,7 @@ doca_flow_pipe *ib_ctx_handler_doca::get_doca_root_pipe()
 
 doca_error_t ib_ctx_handler_doca::start_doca_flow_port()
 {
-    doca_error_t tmp_result;
+    doca_error_t close_result;
     struct doca_flow_port_cfg *port_cfg = nullptr;
 
     doca_error_t err = doca_flow_port_cfg_create(&port_cfg);
@@ -151,11 +151,11 @@ doca_error_t ib_ctx_handler_doca::start_doca_flow_port()
                 m_doca_port);
 
 destroy_port_cfg:
-    tmp_result = doca_flow_port_cfg_destroy(port_cfg);
-    if (DOCA_IS_ERROR(tmp_result)) {
+    close_result = doca_flow_port_cfg_destroy(port_cfg);
+    if (DOCA_IS_ERROR(close_result)) {
         PRINT_DOCA_ERR(ibch_logerr, err, "doca_flow_port_start dev/port: %p,%s,%p", m_doca_dev,
                        m_ibname.c_str(), m_doca_port);
-        DOCA_ERROR_PROPAGATE(err, tmp_result);
+        DOCA_ERROR_PROPAGATE(err, close_result);
     }
 
     return err;
@@ -170,11 +170,11 @@ void ib_ctx_handler_doca::stop_doca_flow_port()
 
     if (m_doca_port) {
         doca_error_t err = doca_flow_port_stop(m_doca_port);
-        m_doca_port = nullptr;
         if (DOCA_IS_ERROR(err)) {
             PRINT_DOCA_ERR(ibch_logerr, err, "doca_flow_port_stop port: %p,%s", m_doca_port,
                            m_ibname.c_str());
         }
+        m_doca_port = nullptr;
         ibch_logdbg("DOCA port stopped %s", m_ibname.c_str());
     }
 }
