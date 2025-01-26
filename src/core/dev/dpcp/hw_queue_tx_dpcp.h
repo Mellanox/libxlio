@@ -42,7 +42,7 @@
 #include "proto/mem_buf_desc.h"
 #include "proto/xlio_lwip.h"
 #include "util/cached_obj_pool.h"
-#include "dev/dm_mgr.h"
+#include "dev/dpcp/dm_mgr.h"
 #include "dev/dpcp/cq_mgr_tx.h"
 #include "util/sg_array.h"
 
