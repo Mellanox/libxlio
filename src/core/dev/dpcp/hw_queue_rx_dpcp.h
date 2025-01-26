@@ -34,8 +34,6 @@
 #ifndef HW_QUEUE_RX_DPCP_H
 #define HW_QUEUE_RX_DPCP_H
 
-#include "config.h"
-#ifdef DEFINED_DPCP_PATH_RX
 #include "dev/dpcp/xlio_ti.h"
 #include "dev/ib_ctx_handler.h"
 #include "dev/rfs_rule.h"
@@ -152,5 +150,4 @@ private:
     bool m_notification_armed = false;
 };
 
-#endif // DEFINED_DPCP_PATH_RX
 #endif // HW_QUEUE_RX_DPCP_H

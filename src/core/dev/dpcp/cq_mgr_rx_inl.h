@@ -34,7 +34,6 @@
 #ifndef CQ_MGR_INL_H
 #define CQ_MGR_INL_H
 
-#ifdef DEFINED_DPCP_PATH_RX
 #include "cq_mgr_rx.h"
 #include "dev/ring_simple.h"
 #include "util/utils.h"
@@ -111,5 +110,4 @@ inline bool is_eth_tcp_frame(mem_buf_desc_t *buff)
     return false;
 }
 
-#endif // DEFINED_DPCP_PATH_RX
 #endif // CQ_MGR_INL_H

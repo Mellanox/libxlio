@@ -31,8 +31,6 @@
  * SOFTWARE.
  */
 
-#include "util/vtypes.h"
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
 #include <mutex>
 #include "dev/ring_simple.h"
 #include "sock/sock-redirect.h"
@@ -328,5 +326,4 @@ int ring_simple::drain_and_proccess()
     return ret;
 }
 
-#endif // DEFINED_DPCP_PATH_RX
 #endif // DEFINED_DPCP_PATH_RX

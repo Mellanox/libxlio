@@ -82,12 +82,12 @@ public:
     void print_report(vlog_levels_t log_level = VLOG_DEBUG);
     static void print_full_report(vlog_levels_t log_level);
 
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
+#ifdef DEFINED_DPCP_PATH_ANY
     uint32_t find_lkey_by_ib_ctx_thread_safe(ib_ctx_handler *p_ib_ctx_h);
-#endif // DEFINED_DPCP_PATH_RX_OR_TX
-#ifndef DEFINED_DPCP_PATH_RX_AND_TX
+#endif // DEFINED_DPCP_PATH_ANY
+#ifndef DEFINED_DPCP_PATH_ONLY
     doca_mmap *get_doca_mmap() const { return m_allocator_data.get_doca_mmap(); }
-#endif // !DEFINED_DPCP_PATH_RX_AND_TX
+#endif // !DEFINED_DPCP_PATH_ONLY
 
     /**
      * Get buffers from the pool - thread safe

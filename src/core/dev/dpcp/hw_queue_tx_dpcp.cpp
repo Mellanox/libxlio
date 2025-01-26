@@ -31,8 +31,6 @@
  * SOFTWARE.
  */
 
-#include "config.h"
-#ifdef DEFINED_DPCP_PATH_TX
 #include <algorithm>
 #include <sys/mman.h>
 #include <netinet/ip.h>
@@ -1473,5 +1471,3 @@ void hw_queue_tx::tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t 
 }
 
 #endif // DEFINED_DPCP_PATH_RX
-
-#endif // DEFINED_DPCP_PATH_TX

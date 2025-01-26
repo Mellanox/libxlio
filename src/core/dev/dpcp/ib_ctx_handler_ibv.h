@@ -34,8 +34,6 @@
 #ifndef IB_CTX_HANDLER_IBV_H
 #define IB_CTX_HANDLER_IBV_H
 
-#include "util/vtypes.h"
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
 #include <infiniband/verbs.h>
 #include <unordered_map>
 #include "event/event_handler_ibverbs.h"
@@ -113,5 +111,5 @@ private:
     bool m_removed;
     std::string &m_ibname;
 };
-#endif // DEFINED_DPCP_PATH_RX_OR_TX
+
 #endif // IB_CTX_HANDLER_IBV_H

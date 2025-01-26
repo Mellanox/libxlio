@@ -31,8 +31,6 @@
  * SOFTWARE.
  */
 
-#include "util/vtypes.h"
-#ifndef DEFINED_DPCP_PATH_RX_AND_TX
 #include <mutex>
 #include "dev/ring_simple.h"
 
@@ -143,4 +141,3 @@ int ring_simple::drain_and_proccess()
 }
 
 #endif // !DEFINED_DPCP_PATH_RX
-#endif // !DEFINED_DPCP_PATH_RX_AND_TX

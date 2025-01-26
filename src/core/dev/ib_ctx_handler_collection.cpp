@@ -97,7 +97,7 @@ void ib_ctx_handler_collection::update_tbl()
     uint32_t num_devices_doca = 0U;
     int num_devices_ibv = 0;
 
-#ifndef DEFINED_DPCP_PATH_RX_AND_TX
+#ifndef DEFINED_DPCP_PATH_ONLY
     doca_devinfo **dev_list_doca;
     doca_error_t err = doca_devinfo_create_list(&dev_list_doca, &num_devices_doca);
     if (DOCA_IS_ERROR(err)) {
@@ -107,9 +107,9 @@ void ib_ctx_handler_collection::update_tbl()
 
     char doca_ifname_name[DOCA_DEVINFO_IFACE_NAME_SIZE] = {0};
     char doca_ibdev_name[DOCA_DEVINFO_IFACE_NAME_SIZE] = {0};
-#endif // !DEFINED_DPCP_PATH_RX_AND_TX
+#endif // !DEFINED_DPCP_PATH_ONLY
 
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
+#ifdef DEFINED_DPCP_PATH_ANY
     struct ibv_device **dev_list = xlio_ibv_get_device_list(&num_devices_ibv);
 
     BULLSEYE_EXCLUDE_BLOCK_START
@@ -121,12 +121,12 @@ void ib_ctx_handler_collection::update_tbl()
     }
 
     BULLSEYE_EXCLUDE_BLOCK_END
-#endif // DEFINED_DPCP_PATH_RX_OR_TX
+#endif // DEFINED_DPCP_PATH_ANY
 
     uint32_t devices_num =
         (num_devices_doca > 0U ? num_devices_doca : static_cast<uint32_t>(num_devices_ibv));
     for (uint32_t devidx = 0; devidx < devices_num; devidx++) {
-#ifndef DEFINED_DPCP_PATH_RX_AND_TX
+#ifndef DEFINED_DPCP_PATH_ONLY
         doca_error_t err_iface = doca_devinfo_get_iface_name(
             dev_list_doca[devidx], doca_ifname_name, sizeof(doca_ifname_name));
         doca_error_t err_ibdev = doca_devinfo_get_ibdev_name(dev_list_doca[devidx], doca_ibdev_name,
@@ -138,7 +138,7 @@ void ib_ctx_handler_collection::update_tbl()
         }
 
         ibchc_logdbg("DOCA dev found: ifname: %s -> ibname: %s", doca_ifname_name, doca_ibdev_name);
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
+#ifdef DEFINED_DPCP_PATH_ANY
         int ibidx = 0;
         for (; ibidx < num_devices_ibv; ++ibidx) {
             if (0 ==
@@ -157,34 +157,34 @@ void ib_ctx_handler_collection::update_tbl()
         p_ib_ctx_handler->construct_ctx_doca_dev(dev_list_doca[devidx], doca_ifname_name);
         ibchc_logdbg("DOCA dev initialized: %s,%s -> IBV: %s", doca_ifname_name, doca_ibdev_name,
                      dev_list[ibidx]->name);
-#else // DEFINED_DPCP_PATH_RX_OR_TX
+#else // DEFINED_DPCP_PATH_ANY
         ib_ctx_handler *p_ib_ctx_handler = new ib_ctx_handler(doca_ibdev_name);
         p_ib_ctx_handler->construct_ctx_doca_dev(dev_list_doca[devidx], doca_ifname_name);
         ibchc_logdbg("DOCA dev initialized: %s,%s", doca_ifname_name, doca_ibdev_name);
-#endif // DEFINED_DPCP_PATH_RX_OR_TX
-#else // !DEFINED_DPCP_PATH_RX_AND_TX
+#endif // DEFINED_DPCP_PATH_ANY
+#else // !DEFINED_DPCP_PATH_ONLY
         ib_ctx_handler *p_ib_ctx_handler = new ib_ctx_handler(dev_list[devidx]->name);
         p_ib_ctx_handler->construct_ctx_ibv_dev(dev_list[devidx]);
         ibchc_logdbg("IBV dev initialized: %s", dev_list[devidx]->name);
-#endif // !DEFINED_DPCP_PATH_RX_AND_TX
+#endif // !DEFINED_DPCP_PATH_ONLY
 
         m_ib_ctx_map.emplace(p_ib_ctx_handler);
     }
 
     ibchc_logdbg("Check completed. Found %lu offload capable IB devices", m_ib_ctx_map.size());
 
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
+#ifdef DEFINED_DPCP_PATH_ANY
     if (dev_list) {
         ibv_free_device_list(dev_list);
     }
-#endif // DEFINED_DPCP_PATH_RX_OR_TX
+#endif // DEFINED_DPCP_PATH_ANY
 
-#ifndef DEFINED_DPCP_PATH_RX_AND_TX
+#ifndef DEFINED_DPCP_PATH_ONLY
     err = doca_devinfo_destroy_list(dev_list_doca);
     if (DOCA_IS_ERROR(err)) {
         PRINT_DOCA_ERR(ibchc_logerr, err, "doca_devinfo_destroy_list");
     }
-#endif // !DEFINED_DPCP_PATH_RX_AND_TX
+#endif // !DEFINED_DPCP_PATH_ONLY
 }
 
 void ib_ctx_handler_collection::print_val_tbl()
@@ -224,15 +224,15 @@ ib_ctx_handler *ib_ctx_handler_collection::get_ib_ctx(const char *ifa_name)
     }
 
     for (ib_ctx_iter = m_ib_ctx_map.begin(); ib_ctx_iter != m_ib_ctx_map.end(); ib_ctx_iter++) {
-#ifndef DEFINED_DPCP_PATH_RX_AND_TX
+#ifndef DEFINED_DPCP_PATH_ONLY
         if ((*ib_ctx_iter)->get_ctx_doca_dev().get_ifname() == ifa_name) {
             return *ib_ctx_iter;
         }
-#else // DEFINED_DPCP_PATH_RX_AND_TX
+#else // DEFINED_DPCP_PATH_ONLY
         if (check_device_name_ib_name(ifa_name, (*ib_ctx_iter)->get_ibname().c_str())) {
             return *ib_ctx_iter;
         }
-#endif // DEFINED_DPCP_PATH_RX_AND_TX
+#endif // !DEFINED_DPCP_PATH_ONLY
     }
 
     return nullptr;

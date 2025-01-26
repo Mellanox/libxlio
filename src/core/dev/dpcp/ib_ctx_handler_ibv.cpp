@@ -31,8 +31,6 @@
  * SOFTWARE.
  */
 
-#include "util/vtypes.h"
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
 #include <mutex>
 #include <array>
 #include <infiniband/verbs.h>
@@ -479,5 +477,3 @@ void ib_ctx_handler_ibv::handle_event_device_fatal()
         m_p_ctx_time_converter = nullptr;
     }
 }
-
-#endif // DEFINED_DPCP_PATH_RX_OR_TX

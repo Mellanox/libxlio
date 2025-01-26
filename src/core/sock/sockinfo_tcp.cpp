@@ -4723,7 +4723,7 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
                 if (m_p_connected_dst_entry) {
                     ring *tx_ring = m_p_connected_dst_entry->get_ring();
                     if (tx_ring) {
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
+#ifdef DEFINED_DPCP_PATH_ANY
                         /*
                          * For bonding we get context of the 1st slave. This approach
                          * works for RoCE LAG mode.
@@ -4735,10 +4735,10 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
                             pd_attr->ib_pd = (void *)p_ib_ctx_h->get_ctx_ibv_dev().get_ibv_pd();
                             ret = 0;
                         }
-#else // DEFINED_DPCP_PATH_RX_OR_TX
+#else // DEFINED_DPCP_PATH_ANY
                         ret = -1;
                         errno = EPERM;
-#endif // DEFINED_DPCP_PATH_RX_OR_TX
+#endif // DEFINED_DPCP_PATH_ANY
                     }
                 }
             }

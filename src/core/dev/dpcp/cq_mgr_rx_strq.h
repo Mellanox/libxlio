@@ -34,9 +34,6 @@
 #ifndef CQ_MGR_STRQ_H
 #define CQ_MGR_STRQ_H
 
-#include "config.h"
-#ifdef DEFINED_DPCP_PATH_RX
-
 #include <config.h>
 #include <vector>
 #include "cq_mgr_rx.h"
@@ -81,5 +78,4 @@ private:
     uint32_t _current_wqe_consumed_bytes = 0U;
 };
 
-#endif // DEFINED_DPCP_PATH_RX
 #endif

@@ -406,10 +406,10 @@ sockinfo_tcp_ops_tls::~sockinfo_tcp_ops_tls()
             delete m_rx_rule;
             m_rx_rule = nullptr;
         }
-#ifdef DEFINED_DPCP_PATH_RX_AND_TX
+#ifdef DEFINED_DPCP_PATH_ONLY
         m_p_tx_ring->tls_release_tir(m_p_tir);
         m_p_tir = nullptr;
-#endif // DEFINED_DPCP_PATH_RX_AND_TX
+#endif // DEFINED_DPCP_PATH_ONLY
         if (m_p_cipher_ctx) {
             g_tls_api->EVP_CIPHER_CTX_free(reinterpret_cast<EVP_CIPHER_CTX *>(m_p_cipher_ctx));
             m_p_cipher_ctx = nullptr;
@@ -630,17 +630,15 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
         m_next_recno_rx = be64toh(recno_be64);
         m_is_tls_rx = true;
 
-#ifdef DEFINED_DPCP_PATH_RX_AND_TX
+#ifdef DEFINED_DPCP_PATH_ONLY
         /*
          * First, get TIR from the TX ring cache. Create new one in
          * the RX ring if the cache is empty.
          */
         m_p_tir = m_p_tx_ring->tls_create_tir(true) ?: m_p_rx_ring->tls_create_tir(false);
-#endif // DEFINED_DPCP_PATH_RX_AND_TX
 
         m_p_sock->lock_tcp_con();
 
-#ifdef DEFINED_DPCP_PATH_RX_AND_TX
         if (m_p_tir) {
             err_t err = tls_rx_consume_ready_packets();
             if (unlikely(err != ERR_OK)) {
@@ -673,7 +671,7 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
             errno = ENOPROTOOPT;
             return -1;
         }
-#endif // DEFINED_DPCP_PATH_RX_AND_TX
+#endif // DEFINED_DPCP_PATH_ONLY
         tcp_recv(m_p_sock->get_pcb(), sockinfo_tcp_ops_tls::rx_lwip_cb);
         if (m_p_sock->get_sock_stats()) {
             m_p_sock->get_sock_stats()->tls_rx_offload = true;
@@ -1298,7 +1296,7 @@ int sockinfo_tcp_ops_tls::tls_rx_encrypt(struct pbuf *plist)
 err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
 {
     err_t err;
-#ifdef DEFINED_DPCP_PATH_RX_AND_TX
+#ifdef DEFINED_DPCP_PATH_ONLY
     bool resync_requested = false;
 
     if (m_rx_bufs.empty()) {
@@ -1337,9 +1335,8 @@ err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
             }
         }
     }
-#else // DEFINED_DPCP_PATH_RX_AND_TX
+#endif // DEFINED_DPCP_PATH_ONLY
     NOT_IN_USE(p);
-#endif // DEFINED_DPCP_PATH_RX_AND_TX
 
     if (unlikely(m_refused_data)) {
         err =
@@ -1596,10 +1593,11 @@ uint64_t sockinfo_tcp_ops_tls::find_recno(uint32_t seqno)
 /* static */
 void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
 {
+#ifdef DEFINED_DPCP_PATH_ONLY
     sockinfo_tcp_ops_tls *utls = reinterpret_cast<sockinfo_tcp_ops_tls *>(arg);
 
     if (utls->m_rx_psv_buf) {
-#ifdef DEFINED_DPCP_PATH_RX_AND_TX
+
         /* Resync flow, GET_PSV is completed. */
         struct xlio_tls_progress_params *params =
             (struct xlio_tls_progress_params *)utls->m_rx_psv_buf->lwip_pbuf.payload;
@@ -1618,18 +1616,17 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
         } else {
             /* TODO Investigate this case. It isn't described in PRM. */
         }
-#endif // DEFINED_DPCP_PATH_RX_AND_TX
         utls->m_p_tx_ring->mem_buf_desc_return_single_to_owner_tx(utls->m_rx_psv_buf);
         utls->m_rx_psv_buf = nullptr;
     } else if (!utls->m_rx_rule) {
         /* Initial setup flow. */
         const flow_tuple_with_local_if &tuple = utls->m_p_sock->get_flow_tuple();
-#ifdef DEFINED_DPCP_PATH_RX_AND_TX
         utls->m_rx_rule = utls->m_p_rx_ring->tls_rx_create_rule(tuple, utls->m_p_tir);
-#endif // DEFINED_DPCP_PATH_RX_AND_TX
         if (!utls->m_rx_rule) {
             __log_err("TLS rule failed for %s\n", tuple.to_str().c_str());
         }
     }
+#endif // DEFINED_DPCP_PATH_ONLY
+    NOT_IN_USE(arg);
 }
 #endif /* DEFINED_UTLS */

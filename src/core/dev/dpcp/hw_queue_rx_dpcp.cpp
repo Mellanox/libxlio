@@ -31,8 +31,6 @@
  * SOFTWARE.
  */
 
-#include "config.h"
-#ifdef DEFINED_DPCP_PATH_RX
 #include <algorithm>
 #include <thread>
 #include <cinttypes>
@@ -622,5 +620,3 @@ void hw_queue_rx::down()
     release_rx_buffers();
     m_p_cq_mgr_rx->del_hqrx();
 }
-
-#endif // DEFINED_DPCP_PATH_RX

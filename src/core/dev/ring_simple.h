@@ -38,11 +38,19 @@
 #include <unordered_map>
 #include "dev/ring_slave.h"
 #include "dev/gro_mgr.h"
-#include "dev/dpcp/hw_queue_tx_dpcp.h"
-#include "dev/doca/hw_queue_tx_doca.h"
-#include "dev/dpcp/hw_queue_rx_dpcp.h"
-#include "dev/doca/hw_queue_rx_doca.h"
 #include "dev/net_device_table_mgr.h"
+
+#ifdef DEFINED_DPCP_PATH_TX
+#include "dev/dpcp/hw_queue_tx_dpcp.h"
+#else // DEFINED_DPCP_PATH_TX
+#include "dev/doca/hw_queue_tx_doca.h"
+#endif // DEFINED_DPCP_PATH_TX
+
+#ifdef DEFINED_DPCP_PATH_RX
+#include "dev/dpcp/hw_queue_rx_dpcp.h"
+#else // DEFINED_DPCP_PATH_RX
+#include "dev/doca/hw_queue_rx_doca.h"
+#endif // DEFINED_DPCP_PATH_RX
 
 struct cq_moderation_info {
     uint32_t period;
@@ -327,7 +335,7 @@ public:
     }
 #endif // DEFINED_DPCP_PATH_TX && DEFINED_UTLS
 
-#if defined(DEFINED_DPCP_PATH_RX_AND_TX) && defined(DEFINED_UTLS)
+#if defined(DEFINED_DPCP_PATH_ONLY) && defined(DEFINED_UTLS)
 public:
     xlio_tir *tls_create_tir(bool cached) override
     {
@@ -376,7 +384,7 @@ public:
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         m_hqrx->tls_release_tir(tir);
     }
-#endif // DEFINED_DPCP_PATH_RX && DEFINED_DPCP_PATH_TX && DEFINED_UTLS
+#endif // DEFINED_DPCP_PATH_ONLY && DEFINED_UTLS
 };
 
 class ring_eth : public ring_simple {

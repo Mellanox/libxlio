@@ -1085,7 +1085,7 @@ static void do_global_ctors_helper()
     if (DOCA_IS_ERROR(doca_rc)) {
         throw_xlio_exception("Failed to initialize DOCA Flow\n");
     }
-#endif // DEFINED_DPCP_PATH_RX_AND_TX
+#endif // DEFINED_DPCP_PATH_RX
 
     // Create new netlink listener
     NEW_CTOR(g_p_netlink_handler, netlink_wrapper());

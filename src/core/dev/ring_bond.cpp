@@ -961,7 +961,7 @@ uint32_t ring_bond::send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss,
 }
 #endif // DEFINED_DPCP_PATH_TX
 
-#if defined(DEFINED_DPCP_PATH_RX_AND_TX) && defined(DEFINED_UTLS)
+#if defined(DEFINED_DPCP_PATH_ONLY) && defined(DEFINED_UTLS)
 xlio_tir *ring_bond::tls_create_tir(bool cached)
 {
     NOT_IN_USE(cached);
@@ -1005,4 +1005,4 @@ void ring_bond::tls_release_tir(xlio_tir *tir)
 {
     NOT_IN_USE(tir);
 }
-#endif // DEFINED_DPCP_PATH_RX_AND_TX && DEFINED_UTLS
+#endif // DEFINED_DPCP_PATH_ONLY && DEFINED_UTLS

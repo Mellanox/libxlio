@@ -31,8 +31,6 @@
  * SOFTWARE.
  */
 
-#include "config.h"
-#ifndef DEFINED_DPCP_PATH_RX
 #include <algorithm>
 #include <thread>
 #include <cinttypes>
@@ -630,5 +628,3 @@ void hw_queue_rx::down()
 {
     stop_doca_rxq();
 }
-
-#endif // !DEFINED_DPCP_PATH_RX

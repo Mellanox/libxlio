@@ -257,26 +257,26 @@ xlio_registrator::~xlio_registrator()
 bool xlio_registrator::register_memory(void *data, size_t size)
 {
     bool rc = true;
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
+#ifdef DEFINED_DPCP_PATH_ANY
     rc &= register_memory_dpcp(data, size);
-#endif // DEFINED_DPCP_PATH_RX_OR_TX
-#ifndef DEFINED_DPCP_PATH_RX_AND_TX
+#endif // DEFINED_DPCP_PATH_ANY
+#ifndef DEFINED_DPCP_PATH_ONLY
     rc &= register_memory_doca(data, size);
-#endif // !DEFINED_DPCP_PATH_RX_AND_TX
+#endif // !DEFINED_DPCP_PATH_ONLY
     return rc;
 }
 
 void xlio_registrator::deregister_memory()
 {
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
+#ifdef DEFINED_DPCP_PATH_ANY
     deregister_memory_dpcp();
-#endif // DEFINED_DPCP_PATH_RX_OR_TX
-#ifndef DEFINED_DPCP_PATH_RX_AND_TX
+#endif // DEFINED_DPCP_PATH_ANY
+#ifndef DEFINED_DPCP_PATH_ONLY
     deregister_memory_doca();
-#endif // !DEFINED_DPCP_PATH_RX_AND_TX
+#endif // !DEFINED_DPCP_PATH_ONLY
 }
 
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
+#ifdef DEFINED_DPCP_PATH_ANY
 bool xlio_registrator::register_memory_dpcp(void *data, size_t size)
 {
     bool rc = false;
@@ -321,9 +321,9 @@ uint32_t xlio_registrator::find_lkey_by_ib_ctx(ib_ctx_handler *p_ib_ctx_h) const
     uint32_t ret = (iter != m_lkey_map_ib_ctx.end()) ? iter->second : LKEY_ERROR;
     return ret;
 }
-#endif // DEFINED_DPCP_PATH_RX_OR_TX
+#endif // DEFINED_DPCP_PATH_ANY
 
-#ifndef DEFINED_DPCP_PATH_RX_AND_TX
+#ifndef DEFINED_DPCP_PATH_ONLY
 bool xlio_registrator::register_memory_doca(void *data, size_t size)
 {
     if (m_p_doca_mmap) {
@@ -395,7 +395,7 @@ void xlio_registrator::deregister_memory_doca()
     }
     m_p_doca_mmap = nullptr;
 }
-#endif // !DEFINED_DPCP_PATH_RX_AND_TX
+#endif // !DEFINED_DPCP_PATH_ONLY
 
 xlio_allocator_hw::xlio_allocator_hw()
     : xlio_allocator()
@@ -588,21 +588,21 @@ bool xlio_heap::register_memory()
     return m_b_hw && m_blocks.size() ? m_blocks.back()->register_memory() : false;
 }
 
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
+#ifdef DEFINED_DPCP_PATH_ANY
 uint32_t xlio_heap::find_lkey_by_ib_ctx(ib_ctx_handler *p_ib_ctx_h) const
 {
     // Current implementation doesn't support runtime registrations, lock is not necessary.
     return m_b_hw && m_blocks.size() ? m_blocks.back()->find_lkey_by_ib_ctx(p_ib_ctx_h)
                                      : LKEY_ERROR;
 }
-#endif // DEFINED_DPCP_PATH_RX_OR_TX
+#endif // DEFINED_DPCP_PATH_ANY
 
-#ifndef DEFINED_DPCP_PATH_RX_AND_TX
+#ifndef DEFINED_DPCP_PATH_ONLY
 doca_mmap *xlio_heap::get_doca_mmap() const
 {
     return (m_b_hw && m_blocks.size()) ? m_blocks.back()->get_doca_mmap() : nullptr;
 }
-#endif // !DEFINED_DPCP_PATH_RX_AND_TX
+#endif // !DEFINED_DPCP_PATH_ONLY
 
 xlio_allocator_heap::xlio_allocator_heap(alloc_t alloc_func, free_t free_func, bool hw)
 {
@@ -632,9 +632,9 @@ bool xlio_allocator_heap::register_memory()
     return m_p_heap->register_memory();
 }
 
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
+#ifdef DEFINED_DPCP_PATH_ANY
 uint32_t xlio_allocator_heap::find_lkey_by_ib_ctx(ib_ctx_handler *p_ib_ctx_h) const
 {
     return m_p_heap->find_lkey_by_ib_ctx(p_ib_ctx_h);
 }
-#endif // DEFINED_DPCP_PATH_RX_OR_TX
+#endif // DEFINED_DPCP_PATH_ANY

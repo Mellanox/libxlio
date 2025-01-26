@@ -31,9 +31,6 @@
  * SOFTWARE.
  */
 
-#include "config.h"
-#ifdef DEFINED_DPCP_PATH_RX
-
 #include "cq_mgr_rx_regrq.h"
 #include <util/valgrind.h>
 #include "cq_mgr_rx_inl.h"
@@ -316,5 +313,3 @@ bool cq_mgr_rx_regrq::poll_and_process_element_rx(void *pv_fd_ready_array)
 
     return (rx_polled < m_n_sysvar_cq_poll_batch_max);
 }
-
-#endif // DEFINED_DPCP_PATH_RX

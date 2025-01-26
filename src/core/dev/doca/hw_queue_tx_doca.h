@@ -34,8 +34,6 @@
 #ifndef HW_QUEUE_TX_DOCA_H
 #define HW_QUEUE_TX_DOCA_H
 
-#include "config.h"
-#ifndef DEFINED_DPCP_PATH_TX
 #include <list>
 #include "proto/mem_buf_desc.h"
 #include "proto/xlio_lwip.h"
@@ -124,5 +122,4 @@ private:
     ib_ctx_handler *m_p_ib_ctx_handler;
 };
 
-#endif // !DEFINED_DPCP_PATH_TX
 #endif // HW_QUEUE_TX_DOCA_H

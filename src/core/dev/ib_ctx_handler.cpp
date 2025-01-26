@@ -52,13 +52,13 @@ ib_ctx_handler::ib_ctx_handler(const char *ibname)
 
 ib_ctx_handler::~ib_ctx_handler()
 {
-#ifndef DEFINED_DPCP_PATH_RX_AND_TX
+#ifndef DEFINED_DPCP_PATH_ONLY
     delete m_ctx_doca_dev;
-#endif // !DEFINED_DPCP_PATH_RX_AND_TX
+#endif // !DEFINED_DPCP_PATH_ONLY
 
-#ifdef DEFINED_DPCP_PATH_RX_OR_TX
+#ifdef DEFINED_DPCP_PATH_ANY
     delete m_ctx_ibv_dev;
-#endif // !DEFINED_DPCP_PATH_RX_AND_TX
+#endif // !DEFINED_DPCP_PATH_ANY
 }
 
 bool ib_ctx_handler::get_burst_capability() const

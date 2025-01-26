@@ -549,9 +549,6 @@ bool neigh_entry::post_send_udp_ipv4(neigh_send_data *n_send_data)
         m_sge.addr =
             (uintptr_t)(p_mem_buf_desc->p_buffer + (uint8_t)h->m_transport_header_tx_offset);
         m_sge.length = sz_user_data_to_copy + hdr_len;
-#ifdef DEFINED_DPCP_PATH_TX
-        m_sge.lkey = m_p_ring->get_tx_lkey(m_id);
-#endif // DEFINED_DPCP_PATH_TX
         m_send_wqe.wr_id = (uintptr_t)p_mem_buf_desc;
 
         neigh_logdbg("packet_sz=%d, payload_sz=%zd, ip_offset=%d id=%d",
@@ -565,6 +562,7 @@ bool neigh_entry::post_send_udp_ipv4(neigh_send_data *n_send_data)
         // We don't check the return value of post send when we reach the HW we consider that we
         // completed our job
 #ifdef DEFINED_DPCP_PATH_TX
+        m_sge.lkey = m_p_ring->get_tx_lkey(m_id);
         m_p_ring->send_ring_buffer(m_id, &m_send_wqe, XLIO_TX_PACKET_L3_CSUM);
 #endif // DEFINED_DPCP_PATH_TX
         p_mem_buf_desc = tmp;
@@ -656,9 +654,6 @@ bool neigh_entry::post_send_udp_ipv6_not_fragmented(neigh_send_data *n_send_data
 
     m_sge.addr = (uintptr_t)(p_mem_buf_desc->p_buffer + (uint8_t)h->m_transport_header_tx_offset);
     m_sge.length = sz_data_payload + hdr_len;
-#ifdef DEFINED_DPCP_PATH_TX
-    m_sge.lkey = m_p_ring->get_tx_lkey(m_id);
-#endif // DEFINED_DPCP_PATH_TX
     m_send_wqe.wr_id = reinterpret_cast<uintptr_t>(p_mem_buf_desc);
 
     neigh_logdbg("packet_sz=%d, payload_sz=%zd, id=%d", m_sge.length - h->m_transport_header_len,
@@ -667,6 +662,7 @@ bool neigh_entry::post_send_udp_ipv6_not_fragmented(neigh_send_data *n_send_data
     // We don't check the return value of post send when we reach the HW we consider that we
     // completed our job
 #ifdef DEFINED_DPCP_PATH_TX
+    m_sge.lkey = m_p_ring->get_tx_lkey(m_id);
     xlio_wr_tx_packet_attr attr =
         (xlio_wr_tx_packet_attr)(XLIO_TX_PACKET_L4_CSUM | XLIO_TX_PACKET_L3_CSUM);
     m_p_ring->send_ring_buffer(m_id, &m_send_wqe, attr);
@@ -719,9 +715,7 @@ bool neigh_entry::post_send_tcp(neigh_send_data *p_data)
     size_t hdr_alignment_diff = h->m_aligned_l2_l3_len - h->m_total_hdr_len;
     m_sge.addr = (uintptr_t)((uint8_t *)p_pkt + hdr_alignment_diff);
     m_sge.length = total_packet_len;
-#ifdef DEFINED_DPCP_PATH_TX
-    m_sge.lkey = m_p_ring->get_tx_lkey(m_id);
-#endif // DEFINED_DPCP_PATH_TX
+
     /* for DEBUG */
     if ((uint8_t *)m_sge.addr < p_mem_buf_desc->p_buffer) {
         neigh_logerr("p_buffer - addr=%d, m_total_hdr_len=%u, p_buffer=%p, type=%d, len=%d, "
@@ -737,6 +731,7 @@ bool neigh_entry::post_send_tcp(neigh_send_data *p_data)
     p_mem_buf_desc->tx.p_tcp_h = reinterpret_cast<tcphdr *>(p_tcp_hdr);
 
 #ifdef DEFINED_DPCP_PATH_TX
+    m_sge.lkey = m_p_ring->get_tx_lkey(m_id);
     xlio_wr_tx_packet_attr attr =
         (xlio_wr_tx_packet_attr)(XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM);
     m_p_ring->send_ring_buffer(m_id, &m_send_wqe, attr);
