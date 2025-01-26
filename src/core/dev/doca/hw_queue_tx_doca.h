@@ -41,7 +41,6 @@
 #include "proto/mem_buf_desc.h"
 #include "proto/xlio_lwip.h"
 #include "util/cached_obj_pool.h"
-#include "dev/dm_mgr.h"
 #include <doca_eth_txq.h>
 #include <doca_pe.h>
 #include <doca_buf_inventory.h>

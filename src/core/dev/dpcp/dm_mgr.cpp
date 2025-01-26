@@ -31,8 +31,6 @@
  * SOFTWARE.
  */
 
-#include "config.h"
-#ifdef DEFINED_DPCP_PATH_TX
 #include "dm_mgr.h"
 #include "vlogger/vlogger.h"
 #include "proto/mem_buf_desc.h"
@@ -283,4 +281,3 @@ void dm_mgr::release_data(mem_buf_desc_t *buff)
 
 #endif /* DEFINED_IBV_DM */
 #endif /* DEFINED_DIRECT_VERBS */
-#endif // DEFINED_DPCP_PATH_TX

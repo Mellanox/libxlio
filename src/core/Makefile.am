@@ -68,7 +68,6 @@ libxlio_la_LIBADD = \
 libxlio_la_SOURCES := \
 	dev/allocator.cpp \
 	dev/buffer_pool.cpp \
-	dev/dm_mgr.cpp \
 	dev/gro_mgr.cpp \
 	dev/rfs.cpp \
 	dev/rfs_uc.cpp \
@@ -162,7 +161,6 @@ libxlio_la_SOURCES := \
 	\
 	dev/allocator.h \
 	dev/buffer_pool.h \
-	dev/dm_mgr.h \
 	dev/gro_mgr.h \
 	dev/ib_ctx_handler_collection.h \
 	dev/ib_ctx_handler.h \
@@ -314,9 +312,11 @@ libxlio_la_SOURCES += \
 	dev/dpcp/cq_mgr_tx.cpp \
 	dev/dpcp/hw_queue_tx_dpcp.cpp \
 	dev/dpcp/wqe_send_handler.cpp \
+	dev/dpcp/dm_mgr.cpp \
 	dev/dpcp/cq_mgr_tx.h \
 	dev/dpcp/hw_queue_tx_dpcp.h \
-	dev/dpcp/wqe_send_handler.h
+	dev/dpcp/wqe_send_handler.h \
+	dev/dpcp/dm_mgr.h
 else
 libxlio_la_SOURCES += \
 	dev/doca/hw_queue_tx_doca.cpp \
