@@ -53,13 +53,11 @@ class ring_simple;
 // @class hw_queue_rx
 // Object to manages the SQ operations. This object is used for Rx.
 // Once created it requests from the system a CQ to work with.
-class hw_queue_rx : public xlio_ti_owner {
+class hw_queue_rx {
     friend class ring_simple;
 
 public:
     virtual ~hw_queue_rx();
-
-    virtual void ti_released(xlio_ti *ti) override;
 
     void up();
     void down();
