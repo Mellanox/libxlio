@@ -279,15 +279,23 @@ void xlio_registrator::deregister_memory()
 #ifdef DEFINED_DPCP_PATH_RX_OR_TX
 bool xlio_registrator::register_memory_dpcp(void *data, size_t size)
 {
-    auto *ib_ctx_map = g_p_ib_ctx_handler_collection->get_ib_cxt_list();
+    bool rc = false;
+    ib_context_map_t *ib_ctx_map = g_p_ib_ctx_handler_collection->get_ib_cxt_list();
     for (const auto p_ib_ctx_h : *ib_ctx_map) {
         // keep ibv mem_reg to allow doca integration with working traffic
         uint32_t lkey =
             p_ib_ctx_h->get_ctx_ibv_dev().mem_reg(data, size, XLIO_IBV_ACCESS_LOCAL_WRITE);
+        if (LKEY_ERROR == lkey) {
+            __log_info_warn("Unable to register memory for device: %s", p_ib_ctx_h->get_ibname().c_str());
+            // Continue to other devices to allow them to work.
+        } else {
+            // We need at least one device to allow XLIO to work.
+            rc = true;
+        }
         m_lkey_map_ib_ctx[p_ib_ctx_h] = lkey;
     }
 
-    return true;
+    return rc;
 }
 
 void xlio_registrator::deregister_memory_dpcp()
@@ -329,7 +337,7 @@ bool xlio_registrator::register_memory_doca(void *data, size_t size)
         return false;
     }
 
-    auto *ib_ctx_map = g_p_ib_ctx_handler_collection->get_ib_cxt_list();
+    ib_context_map_t *ib_ctx_map = g_p_ib_ctx_handler_collection->get_ib_cxt_list();
     uint32_t num_of_devices = ib_ctx_map->size();
     rc = doca_mmap_set_max_num_devices(m_p_doca_mmap, num_of_devices);
     if (DOCA_IS_ERROR(rc)) {
