@@ -121,7 +121,7 @@ dst_entry::~dst_entry()
         m_p_send_wqe_handler = nullptr;
     }
 #endif // DEFINED_DPCP_PATH_TX
-    
+
     if (m_p_neigh_val) {
         delete m_p_neigh_val;
         m_p_neigh_val = nullptr;

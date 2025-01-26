@@ -63,8 +63,7 @@ struct xlio_tls_info;
 class ring_simple;
 
 // @class hw_queue_tx
-// Object to manages the SQ operations. This object is used for Tx.
-// Once created it requests from the system a CQ to work with.
+// This objects represents DOCA HW TX queue
 class hw_queue_tx {
     friend class ring_simple;
 
@@ -86,9 +85,9 @@ public:
     void put_lso_metadata(doca_lso_metadata *lso_metadata);
 
 private:
-    static void destory_doca_txq(doca_eth_txq *txq);
-    static void destory_doca_inventory(doca_buf_inventory *inv);
-    static void destory_doca_pe(doca_pe *pe);
+    static void destroy_doca_txq(doca_eth_txq *txq);
+    static void destroy_doca_inventory(doca_buf_inventory *inv);
+    static void destroy_doca_pe(doca_pe *pe);
     static void tx_task_completion_cb(doca_eth_txq_task_send *task_send, doca_data task_user_data,
                                       doca_data ctx_user_data);
     static void tx_task_error_cb(doca_eth_txq_task_send *task_send, doca_data task_user_data,
@@ -108,11 +107,11 @@ private:
     bool check_doca_caps(doca_devinfo *devinfo, uint32_t &max_burst_size, uint32_t &max_send_sge);
     doca_lso_metadata *get_lso_metadata();
 
-    std::unique_ptr<doca_eth_txq, decltype(&destory_doca_txq)> m_doca_txq {nullptr,
-                                                                           destory_doca_txq};
-    std::unique_ptr<doca_buf_inventory, decltype(&destory_doca_inventory)> m_doca_inventory {
-        nullptr, destory_doca_inventory};
-    std::unique_ptr<doca_pe, decltype(&destory_doca_pe)> m_doca_pe {nullptr, destory_doca_pe};
+    std::unique_ptr<doca_eth_txq, decltype(&destroy_doca_txq)> m_doca_txq {nullptr,
+                                                                           destroy_doca_txq};
+    std::unique_ptr<doca_buf_inventory, decltype(&destroy_doca_inventory)> m_doca_inventory {
+        nullptr, destroy_doca_inventory};
+    std::unique_ptr<doca_pe, decltype(&destroy_doca_pe)> m_doca_pe {nullptr, destroy_doca_pe};
     doca_mmap *m_doca_mmap = nullptr;
     doca_ctx *m_doca_ctx_txq = nullptr;
     doca_notification_handle_t m_notification_handle;

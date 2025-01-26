@@ -365,7 +365,7 @@ void hw_queue_rx::stop_doca_rxq()
     }
 }
 
-void hw_queue_rx::destory_doca_rxq(doca_eth_rxq *rxq)
+void hw_queue_rx::destroy_doca_rxq(doca_eth_rxq *rxq)
 {
     doca_error_t err = doca_eth_rxq_destroy(rxq);
     if (DOCA_IS_ERROR(err)) {
@@ -373,7 +373,7 @@ void hw_queue_rx::destory_doca_rxq(doca_eth_rxq *rxq)
     }
 }
 
-void hw_queue_rx::destory_doca_inventory(doca_buf_inventory *inv)
+void hw_queue_rx::destroy_doca_inventory(doca_buf_inventory *inv)
 {
     doca_error_t err = doca_buf_inventory_destroy(inv);
     if (DOCA_IS_ERROR(err)) {
@@ -381,7 +381,7 @@ void hw_queue_rx::destory_doca_inventory(doca_buf_inventory *inv)
     }
 }
 
-void hw_queue_rx::destory_doca_pe(doca_pe *pe)
+void hw_queue_rx::destroy_doca_pe(doca_pe *pe)
 {
     doca_error_t err = doca_pe_destroy(pe);
     if (DOCA_IS_ERROR(err)) {
