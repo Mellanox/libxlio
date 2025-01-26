@@ -84,7 +84,6 @@ libxlio_la_SOURCES := \
 	dev/net_device_val.cpp \
 	dev/net_device_entry.cpp \
 	dev/net_device_table_mgr.cpp \
-	dev/wqe_send_handler.cpp \
 	dev/src_addr_selector.cpp \
 	dev/ring.cpp \
 	dev/ring_bond.cpp \
@@ -187,7 +186,6 @@ libxlio_la_SOURCES := \
 	dev/ring_slave.h \
 	dev/ring_simple.h \
 	dev/ring_allocation_logic.h \
-	dev/wqe_send_handler.h \
 	dev/xlio_ti.h \
 	\
 	event/command.h \
@@ -319,8 +317,10 @@ if DEFINED_DPCP_PATH_TX
 libxlio_la_SOURCES += \
 	dev/dpcp/cq_mgr_tx.cpp \
 	dev/dpcp/hw_queue_tx_dpcp.cpp \
+	dev/dpcp/wqe_send_handler.cpp \
 	dev/dpcp/cq_mgr_tx.h \
-	dev/dpcp/hw_queue_tx_dpcp.h
+	dev/dpcp/hw_queue_tx_dpcp.h \
+	dev/dpcp/wqe_send_handler.h
 else
 libxlio_la_SOURCES += \
 	dev/doca/hw_queue_tx_doca.cpp \
