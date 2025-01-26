@@ -67,7 +67,7 @@ class ring_simple;
 // @class hw_queue_tx
 // Object to manages the SQ operations. This object is used for Tx.
 // Once created it requests from the system a CQ to work with.
-class hw_queue_tx : public xlio_ti_owner {
+class hw_queue_tx {
     friend class ring_simple;
 
 public:
@@ -79,7 +79,6 @@ public:
     int modify_qp_ratelimit(struct xlio_rate_limit_t &, uint32_t) { return -1; }
     void dm_release_data(mem_buf_desc_t *) {}
     uint32_t is_ratelimit_change(struct xlio_rate_limit_t &) { return 0; }
-    void ti_released(xlio_ti *) override {} // Dummy
     doca_notification_handle_t get_notification_handle() const { return m_notification_handle; }
     uint32_t send_doca_single(void *ptr, uint32_t len, mem_buf_desc_t *user_data);
     uint32_t send_doca_lso(struct iovec &h, struct pbuf *p, uint16_t mss, bool is_zerocopy);
