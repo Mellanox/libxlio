@@ -963,7 +963,7 @@ int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_
                     m_p_tx_ring->post_nop_fence();
                 } else {
                     bool b_fence = true;
-                    uint8_t *addr_tail;
+                    uint8_t *addr_tail = nullptr;
 
                     if (is_zerocopy) {
                         /* hdrlen and taillen are prepared above. */

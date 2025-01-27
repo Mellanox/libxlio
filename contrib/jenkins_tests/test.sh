@@ -18,7 +18,8 @@ test_app="sockperf"
 
 # Download sockperf to use verifier
 do_cmd "wget -O sockperf_v2.zip https://github.com/Mellanox/sockperf/archive/sockperf_v2.zip && unzip sockperf_v2.zip && mv sockperf-sockperf_v2 sockperf"
-cd sockperf
+test_app_dir=${test_dir}/sockperf
+cd $test_app_dir
 
 # This unit requires sockperf so check for existence
 if [ $(command -v ${test_app} >/dev/null 2>&1 || echo $?) ]; then
@@ -102,75 +103,106 @@ fi
 
 nerrors=0
 
-for test_link in $test_ip_list; do
-	for test in $test_list; do
-		IFS=':' read test_in test_ip <<< "$test_link"
-		test_name=${test_in}-${test}
-		test_tap=${WORKSPACE}/${prefix}/test-${test_name}.tap
+do_test_helper()
+{
+	test_num=${1:-'0'}
 
-		for i in $(seq 3); do
-			if [ ! -z "${test_remote_ip}" ] ; then
+	for test_link in $test_ip_list; do
+		for test in $test_list; do
+			IFS=':' read test_in test_ip <<< "$test_link"
+			test_name=${test_in}-${test}-${test_num}
+			test_tap=${WORKSPACE}/${prefix}/test-${test_name}.tap
 
-				eval "pid=$(${sudo_cmd} pidof ${prj_service})"
-				[ ! -z "${pid}" ] && eval "${sudo_cmd} kill -9 ${pid}"
-				eval "${sudo_cmd} ${install_dir}/sbin/${prj_service} --console -v5 & "
+			for i in $(seq 3); do
+				if [ ! -z "${test_remote_ip}" ] ; then
 
-				echo "BUILD_NUMBER=${BUILD_NUMBER}"
-				eval "pid=$(${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} pidof ${prj_service})"
-				if [ ! -z "${pid}" ] ;  then
-					echo "${prj_service} pid=${pid}"
-					eval "${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} kill -9 ${pid}"
+					eval "pid=$(${sudo_cmd} pidof ${prj_service})"
+					[ ! -z "${pid}" ] && eval "${sudo_cmd} kill -9 ${pid}"
+					eval "${sudo_cmd} ${install_dir}/sbin/${prj_service} --console -v5 & "
+
+					echo "BUILD_NUMBER=${BUILD_NUMBER}"
+					eval "pid=$(${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} pidof ${prj_service})"
+					if [ ! -z "${pid}" ] ;  then
+						echo "${prj_service} pid=${pid}"
+						eval "${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} kill -9 ${pid}"
+					fi
+					${sudo_cmd} scp -q ${install_dir}/sbin/${prj_service} ${rmt_user}@${test_remote_ip}:${sperf_exec_dir}
+					eval "${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} ${sudo_cmd} ${sperf_exec_dir}/${prj_service} &"
+
+					vutil="$(dirname $0)/vutil.sh"
+					[ ! -e "${vutil}" ] && { echo "error vutil not found" ; exit 1 ; }
+
+					${sudo_cmd} $timeout_exe ${vutil}  -a "${test_app}" -x "--load-vma=${test_lib} " -t "${test}:tc[1-9]$" \
+							-s "${test_remote_ip}" -p "${test_remote_port}" -l "${test_dir}/${test_name}.log"
+				else
+					${sudo_cmd} $timeout_exe $PWD/tests/verifier/verifier.pl -a ${test_app} -x " --pre-warmup-wait=2 --debug " \
+						-t ${test}:tc[6-9]$ -s ${test_ip} -l ${test_dir}/${test_name}.log \
+						-e " XLIO_MEM_ALLOC_TYPE=ANON LD_PRELOAD=$test_lib " \
+						--progress=0
 				fi
-				${sudo_cmd} scp -q ${install_dir}/sbin/${prj_service} ${rmt_user}@${test_remote_ip}:${sperf_exec_dir}
-				eval "${sudo_cmd} ssh ${rmt_user}@${test_remote_ip} ${sudo_cmd} ${sperf_exec_dir}/${prj_service} &"
 
-				vutil="$(dirname $0)/vutil.sh"
-				[ ! -e "${vutil}" ] && { echo "error vutil not found" ; exit 1 ; }
-
-				${sudo_cmd} $timeout_exe ${vutil}  -a "${test_app}" -x "--load-vma=${test_lib} " -t "${test}:tc[1-9]$" \
-						-s "${test_remote_ip}" -p "${test_remote_port}" -l "${test_dir}/${test_name}.log"
-			else
-				${sudo_cmd} $timeout_exe $PWD/tests/verifier/verifier.pl -a ${test_app} -x " --pre-warmup-wait=2 --debug " \
-					-t ${test}:tc[6-9]$ -s ${test_ip} -l ${test_dir}/${test_name}.log \
-					-e " XLIO_MEM_ALLOC_TYPE=ANON XLIO_DOCA_RX=0 XLIO_DOCA_TX=0 LD_PRELOAD=$test_lib " \
-					--progress=0
-			fi
+				cp $PWD/${test_name}.dump ${test_dir}/${test_name}.dump
+				if grep -q 'FAIL' ${test_dir}/${test_name}.dump; then
+					if [ "$i" -lt "3" ]; then
+						rm -fv ${test_dir}/${test_name}.log ${test_dir}/${test_name}.dump
+					fi
+				else
+					break
+				fi
+			done
 
 			cp $PWD/${test_name}.dump ${test_dir}/${test_name}.dump
-			if grep -q 'FAIL' ${test_dir}/${test_name}.dump; then
-				if [ "$i" -lt "3" ]; then
-					rm -fv ${test_dir}/${test_name}.log ${test_dir}/${test_name}.dump
+
+			grep -e 'PASS' -e 'FAIL' ${test_dir}/${test_name}.dump > ${test_dir}/${test_name}.tmp
+
+			do_archive "${test_dir}/${test_name}.dump" "${test_dir}/${test_name}.log"
+
+			echo "1..$(wc -l < ${test_dir}/${test_name}.tmp)" > $test_tap
+
+			v1=1
+			while read line; do
+				if [[ $(echo $line | cut -f1 -d' ') =~ 'PASS' ]]; then
+					v0='ok'
+					v2=$(echo $line | sed 's/PASS //')
+				else
+					v0='not ok'
+					v2=$(echo $line | sed 's/FAIL //')
+					nerrors=$((nerrors+1))
 				fi
-			else
-				break
-			fi
+
+				echo -e "$v0 ${test_in}: $v2" >> $test_tap
+				v1=$(($v1+1))
+			done < ${test_dir}/${test_name}.tmp
+			rm -f ${test_dir}/${test_name}.tmp
 		done
-
-		cp $PWD/${test_name}.dump ${test_dir}/${test_name}.dump
-		
-		grep -e 'PASS' -e 'FAIL' ${test_dir}/${test_name}.dump > ${test_dir}/${test_name}.tmp
-
-		do_archive "${test_dir}/${test_name}.dump" "${test_dir}/${test_name}.log"
-
-		echo "1..$(wc -l < ${test_dir}/${test_name}.tmp)" > $test_tap
-
-		v1=1
-		while read line; do
-		    if [[ $(echo $line | cut -f1 -d' ') =~ 'PASS' ]]; then
-		        v0='ok'
-		        v2=$(echo $line | sed 's/PASS //')
-		    else
-		        v0='not ok'
-		        v2=$(echo $line | sed 's/FAIL //')
-	            nerrors=$((nerrors+1))
-		    fi
-
-		    echo -e "$v0 ${test_in}: $v2" >> $test_tap
-		    v1=$(($v1+1))
-		done < ${test_dir}/${test_name}.tmp
-		rm -f ${test_dir}/${test_name}.tmp
 	done
-done
+}
+
+do_test_helper 'doca'
+
+do_check_dpcp dpcp_path
+if [ -z "${dpcp_path}" ]; then
+	echo "Requested dpcp support can not be executed"
+	exit 1
+fi
+
+test_lib=${install_dir}_dpcp/lib/${prj_lib}
+
+do_run_with_dpcp()
+{
+	test_dpcp_name=${1:-'dpcp'}
+	test_dpcp_arg=${2:-''}
+
+	cd $WORKSPACE
+	${WORKSPACE}/configure --prefix=${install_dir}_dpcp --with-dpcp=${dpcp_path} $jenkins_test_custom_configure ${test_dpcp_arg}
+	make -j2 install
+	cd $test_app_dir
+	do_test_helper ${test_dpcp_name}
+}
+
+do_run_with_dpcp 'dpcp', ''
+do_run_with_dpcp 'dpcp-tx', '--disable-dpcp-rx'
+do_run_with_dpcp 'dpcp-rx', '--disable-dpcp-tx'
 
 rc=$(($rc+$nerrors))
 

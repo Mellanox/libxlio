@@ -106,23 +106,9 @@ i=0
 if [ "$TARGET" == "all" -o "$TARGET" == "default" ]; then
     export jenkins_target="default"
     export prefix=${jenkins_test_custom_prefix}/${jenkins_target}
-    if "$COMPILE_DPCP"; then
-        do_check_dpcp opt_value
-        if [ ! -z "${opt_value}" ]; then
-            target_list[$i]="default: --enable-nginx --with-dpcp=${opt_value}"
-        else
-            echo "Requested dpcp support can not be executed"
-    		do_err "target: $TARGET"
-    		exit 1
-        fi
-    else
-        echo "dpcp support was not requested"
-		# We need to define a minimum list of targets to iterate over later
-		target_list[$i]="default: --enable-nginx"
-    fi
     if "$COMPILE_DOCA"; then
         if do_compile_doca doca_path; then
-            target_list[$i]="${target_list} --with-doca=${doca_path}"
+            target_list[$i]="default: --with-doca=${doca_path}"
         else 
             echo "Requested DOCA support can not be executed"
             do_err "target: $TARGET"
@@ -131,7 +117,7 @@ if [ "$TARGET" == "all" -o "$TARGET" == "default" ]; then
     else
         echo "DOCA support was not requested"
     fi
-	if [ ! -z "${opt_value}" ]; then
+	if [ ! -z "${doca_path}" ]; then
 	    i=$((i+1))
 	fi
 fi

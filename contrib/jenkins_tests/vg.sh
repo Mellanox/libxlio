@@ -42,7 +42,7 @@ else
 fi
 test_list="tcp:--tcp"
 test_lib=${vg_dir}/install/lib/${prj_lib}
-test_lib_env="XLIO_MEM_ALLOC_TYPE=ANON XLIO_DOCA_RX=1 XLIO_DOCA_TX=1"
+test_lib_env="XLIO_MEM_ALLOC_TYPE=ANON"
 test_app=sockperf
 test_app_path=${test_dir}/sockperf/install/bin/sockperf
 vg_tool=/bin/valgrind
