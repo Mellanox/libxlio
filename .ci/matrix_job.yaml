@@ -136,7 +136,6 @@ matrix:
 env:
   jenkins_opt_artifacts: 'none'
   COMPILE_DOCA: true
-  COMPILE_DPCP: true
 
 steps:
   - name: Setup
@@ -157,7 +156,7 @@ steps:
   - name: Copyrights
     enable: ${do_copyrights}
     credentialsId: 'mellanox_github_credentials'
-    run: env WORKSPACE=$PWD COMPILE_DOCA=false COMPILE_DPCP=false GITHUB_TOKEN=$MELLANOX_GH_TOKEN ./contrib/jenkins_tests/copyrights.sh
+    run: env WORKSPACE=$PWD COMPILE_DOCA=false GITHUB_TOKEN=$MELLANOX_GH_TOKEN ./contrib/jenkins_tests/copyrights.sh
     containerSelector:
       - "{name: 'header-check', category: 'tool', variant: 1}"
     agentSelector:
@@ -291,7 +290,7 @@ steps:
       - "{name: 'static', category: 'tool'}"
     run: |
       [ "x${do_csbuild}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} COMPILE_DOCA=false COMPILE_DPCP=false jenkins_test_csbuild=${action} ./contrib/test_jenkins.sh
+      env WORKSPACE=$PWD TARGET=${flags} COMPILE_DOCA=false jenkins_test_csbuild=${action} ./contrib/test_jenkins.sh
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
