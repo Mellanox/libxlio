@@ -9,9 +9,9 @@ registry_path: /swx-infra/media
 
 kubernetes:
   privileged: true
-  cloud: swx-k8s-spray
+  cloud: il-ipp-blossom-prod
   nodeSelector: 'beta.kubernetes.io/os=linux'
-  namespace: xlio-ci
+  namespace: swx-media
   limits: '{memory: 8Gi, cpu: 7000m}'
   requests: '{memory: 8Gi, cpu: 7000m}'
 
