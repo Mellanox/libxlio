@@ -1,3 +1,20 @@
+Version 3.50.0-1:
+Date + Time 2025-02-04
+=============================================================
+Added:
+        - RM #4203242 dump wqe to log in case of ecqe
+        - RM #4232341 Align vNext copyrights to 2025
+        - RM #3782717 Improve XLIO Fairness for NGINX High Concurrency
+        - RM #3884801 Check for resident hugepages to avoid SIGBUS
+        - RM #4124248 Don't update consumer index in CQ
+
+Fixed:
+        - RM #4183221 propagate socket errors
+        - RM #4023262 Handle IP conflicts between multiple interfaces
+        - RM #3914075 CQ Moderation with small payloads
+        - RM #4039879 Handling partial read packets when clearing RX buffer
+        - RM #4154286 Fix print report logic
+
 Version 3.40.2-1:
 Date + Time 2024-10-07
 =============================================================
