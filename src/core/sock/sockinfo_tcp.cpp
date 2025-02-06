@@ -1393,7 +1393,7 @@ err_t sockinfo_tcp::ip_output(struct pbuf *p, struct tcp_seg *seg, void *v_p_con
     void *cur_end;
 
     if (unlikely(flags & XLIO_TX_PACKET_REXMIT)) {
-        if (unlikely(inspect_socket_error_state(reinterpret_cast<const mem_buf_desc_t *>(p),
+        if (unlikely(inspect_socket_error_state(reinterpret_cast<const mem_buf_desc_t *>(seg->p),
                                                 reinterpret_cast<struct tcp_pcb *>(v_p_conn)))) {
             return ERR_RST;
         }
