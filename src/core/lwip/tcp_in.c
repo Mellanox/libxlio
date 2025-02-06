@@ -947,6 +947,15 @@ static void ack_partial_or_whole_segment(struct tcp_pcb *pcb, u32_t ackno, struc
     struct tcp_seg *whole_seg_to_ack;
     while ((*seg) != NULL && TCP_SEQ_GT(ackno, (*seg)->seqno)) {
         if (TCP_SEQ_LT(ackno, (*seg)->seqno + TCP_SEGLEN((*seg)))) {
+            if ((*seg)->tcp_flags & TCP_FIN) {
+                // Avoid shrinking a segment with the FIN flag not to handle corner cases.
+                // The most challenging scenario is ACK for the entire data, but not the FIN. In
+                // this case the shrink implementation removes all the pbufs from the segment
+                // what leads to a segfault eventually.
+                // Let's keep the whole segment and retransmit the duplicate data if needed
+                // until the shrink implementations are improved or removed by arch update.
+                break;
+            }
             // Ack partial TCP segment
             u32_t removed = (*seg)->flags & TF_SEG_OPTS_ZEROCOPY
                 ? tcp_shrink_zc_segment(pcb, (*seg), ackno)
