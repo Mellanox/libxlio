@@ -1270,6 +1270,7 @@ err_t tcp_output(struct tcp_pcb *pcb)
     if (pcb->is_last_seg_dropped && pcb->unacked && !pcb->unacked->next) {
         /* Forcibly retransmit segment from the unacked queue if it was dropped
          * on the previous iteration.
+         * Disable the retransmission timer after the unacked queue is emptied.
          */
         pcb->is_last_seg_dropped = false;
         pcb->unacked->next = pcb->unsent;
@@ -1279,6 +1280,8 @@ err_t tcp_output(struct tcp_pcb *pcb)
             pcb->last_unsent = pcb->last_unacked;
         }
         pcb->last_unacked = NULL;
+        pcb->rtime = -1;
+        pcb->ticks_since_data_sent = -1;
     }
     seg = pcb->unsent;
 
