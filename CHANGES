@@ -1,3 +1,10 @@
+Version 3.50.1-1:
+Date + Time 2025-02-12
+=============================================================
+Fixed:
+        - RM #4287937 Getting init_worker() bind() error on Nginx Func tests
+        - RM #4288036 On Nginx Func check Traffic was not offloaded
+
 Version 3.50.0-1:
 Date + Time 2025-02-04
 =============================================================
