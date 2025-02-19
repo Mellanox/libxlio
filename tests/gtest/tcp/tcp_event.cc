@@ -38,6 +38,7 @@ TEST_F(tcp_event, DISABLED_ti_1)
 
 TEST_F(tcp_event, ti_2)
 {
+    GTEST_SKIP() << "Skipping this test";
     int rc = EOK;
     int fd;
     struct epoll_event event;

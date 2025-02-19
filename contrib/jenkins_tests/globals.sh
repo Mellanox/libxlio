@@ -82,6 +82,17 @@ function do_archive()
 # Otherwise, return error code.
 # $1 - module name
 #
+
+function do_hugepages()
+{
+    if [[ -f /.dockerenv && ! $(grep -q hugetlbfs /proc/mounts) ]]; then
+        mkdir -p /mnt/huge
+        mount -t hugetlbfs nodev /mnt/huge
+        grep hugetlbfs /proc/mounts
+        echo $?
+    fi
+}
+
 function do_module()
 {
     [ -z "$1" ] && return

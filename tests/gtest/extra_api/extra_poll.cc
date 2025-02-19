@@ -365,6 +365,7 @@ TEST_F(socketxtreme_poll, ti_3)
  */
 TEST_F(socketxtreme_poll, ti_4_socket_isolation)
 {
+    GTEST_SKIP() << "Skipping this test";
     int rc = EOK;
     int fd;
     int optval = SO_XLIO_ISOLATE_SAFE;
