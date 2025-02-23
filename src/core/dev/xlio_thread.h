@@ -50,6 +50,7 @@ public:
     void start_thread();
     void stop_thread();
     int add_listen_socket(sockinfo_tcp *si);
+    int add_accepted_socket(sockinfo_tcp *si);
 
 private:
 

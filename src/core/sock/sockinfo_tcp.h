@@ -415,7 +415,6 @@ public:
                        void *opaque_op);
     int tcp_tx_express_inline(const struct iovec *iov, unsigned iov_len, unsigned flags);
     void flush();
-
     void set_xlio_socket_thread(poll_group *group);
     void set_xlio_socket(const struct xlio_socket_attr *attr);
     int update_xlio_socket(unsigned flags, uintptr_t userdata_sq);
@@ -423,7 +422,7 @@ public:
     void add_tx_ring_to_group();
     poll_group *get_poll_group() const { return m_p_group; }
     int detach_xlio_group();
-    int attach_xlio_group(poll_group *group);
+    int attach_xlio_group(poll_group *group, bool xlio_thread);
     void xlio_socket_event(int event, int value);
     static err_t rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
     static void err_lwip_cb_xlio_socket(void *pcb_container, err_t err);

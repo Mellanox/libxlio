@@ -403,6 +403,8 @@ void sockinfo_tcp::rx_add_ring_cb(ring *p_ring)
 
 void sockinfo_tcp::set_xlio_socket_thread(poll_group *group)
 {
+    std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
+
     m_p_group = group;
 
     bool current_locks = m_ring_alloc_log_rx.get_use_locks();
@@ -510,7 +512,7 @@ int sockinfo_tcp::detach_xlio_group()
     return 0;
 }
 
-int sockinfo_tcp::attach_xlio_group(poll_group *group)
+int sockinfo_tcp::attach_xlio_group(poll_group *group, bool xlio_thread)
 {
     struct xlio_socket_attr attr = {
         .flags = 0, /* unused */
@@ -529,7 +531,12 @@ int sockinfo_tcp::attach_xlio_group(poll_group *group)
 
     // TODO reinitialize lwip callbacks
 
-    set_xlio_socket(&attr);
+    if (!xlio_thread) {
+        set_xlio_socket(&attr);
+    } else {
+        set_xlio_socket_thread(group);
+    }
+
     group->add_socket(this);
 
     create_dst_entry();
@@ -3625,7 +3632,7 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     // todo check that listen socket was not closed by now ? (is_server())
     conn->m_ready_pcbs.erase(&new_sock->m_pcb);
 
-    if (conn->is_xlio_socket()) {
+    if (conn->is_xlio_socket() && conn->m_p_group->m_socket_accept_cb) {
         conn->accept_connection_xlio_socket(new_sock);
     } else if (safe_mce_sys().enable_socketxtreme) {
         accept_connection_socketxtreme(conn, new_sock);

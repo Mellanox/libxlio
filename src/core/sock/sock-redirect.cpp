@@ -956,7 +956,6 @@ EXPORT_SYMBOL int XLIO_SYMBOL(listen)(int __fd, int backlog)
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
-
     if (p_socket_object) {
         if (p_socket_object->get_protocol() == PROTO_TCP &&
             safe_mce_sys().xlio_threads > 0U) {
@@ -994,7 +993,20 @@ EXPORT_SYMBOL int XLIO_SYMBOL(accept)(int __fd, struct sockaddr *__addr, socklen
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
-        return p_socket_object->accept(__addr, __addrlen);
+        int rc = p_socket_object->accept(__addr, __addrlen);
+        if (rc > 0) {
+            sockinfo *p_accepted_socket = fd_collection_get_sockfd(rc);
+            if (p_accepted_socket && p_accepted_socket->get_protocol() == PROTO_TCP &&
+                safe_mce_sys().xlio_threads > 0) {
+                sockinfo_tcp *sock_tcp = reinterpret_cast<sockinfo_tcp *>(p_accepted_socket);
+                poll_group *pg = sock_tcp->get_poll_group();
+                if (0 == sock_tcp->detach_xlio_group()) {
+                    pg->poll();
+                    g_p_xlio_thread_manager->add_accepted_socket(sock_tcp);
+                }
+            }
+        }
+        return rc;
     }
 
     return SYSCALL(accept, __fd, __addr, __addrlen);
