@@ -81,6 +81,7 @@
 #include "util/instrumentation.h"
 #include "util/agent.h"
 #include "xlio.h"
+#include "dev/xlio_thread_manager.h"
 
 void check_netperf_flags();
 
@@ -121,6 +122,11 @@ static int free_libxlio_resources()
     vlog_printf(VLOG_DEBUG, "%s: Closing libxlio resources\n", __FUNCTION__);
 
     g_b_exit = true;
+
+    if (g_p_xlio_thread_manager) {
+        delete g_p_xlio_thread_manager;
+        g_p_xlio_thread_manager = nullptr;
+    }
 
     if (safe_mce_sys().print_report) {
         buffer_pool::print_full_report(VLOG_INFO);
@@ -876,6 +882,8 @@ void print_xlio_global_settings()
     VLOG_PARAM_STRING("Lock Type", safe_mce_sys().multilock, MCE_DEFAULT_MULTILOCK,
                       SYS_VAR_MULTILOCK,
                       (safe_mce_sys().multilock == MULTILOCK_SPIN ? "Spin " : "Mutex"));
+    VLOG_PARAM_NUMBER("XLIO Threads", safe_mce_sys().xlio_threads,
+                      MCE_DEFAULT_XLIO_THREADS, SYS_VAR_XLIO_THREADS);
 
     vlog_printf(VLOG_INFO,
                 "---------------------------------------------------------------------------\n");
@@ -1150,6 +1158,8 @@ static void do_global_ctors_helper()
 #ifdef DEFINED_UTLS
     xlio_tls_api_setup();
 #endif /* DEFINED_UTLS */
+
+    NEW_CTOR(g_p_xlio_thread_manager, xlio_thread_manager(safe_mce_sys().xlio_threads));
 }
 
 int do_global_ctors()
