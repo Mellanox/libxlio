@@ -1,0 +1,1167 @@
+{
+    "core": {
+        "append_pid_to_path": {
+            "type": "bool",
+            "default": false,
+            "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
+        },
+        "log": {
+            "level": {
+                "type": "int",
+                "default": 3,
+                "constraints": {
+                    "min": -2,
+                    "max": 8
+                },
+                "enum_mapping": {
+                    "none": -1,
+                    "panic": 0,
+                    "error": 1,
+                    "warn": 2,
+                    "info": 3,
+                    "details": 4,
+                    "debug": 5,
+                    "fine": 6,
+                    "finer": 7,
+                    "all": 8
+                },
+                "description": "Sets level according to desired logging verbosity. (maps to XLIO_TRACELEVEL. Default is info.)",
+                "example": [
+                    {
+                        "value": 3,
+                        "explanation": "Default info level"
+                    },
+                    {
+                        "value": 5,
+                        "explanation": "Enable debug level logs"
+                    }
+                ]
+            },
+            "file_path": {
+                "type": "string",
+                "default": "",
+                "description": "Path to the log file. An empty string disables file logging. (maps to XLIO_LOG_FILE)",
+                "special_values": {
+                    "disable": ""
+                },
+                "example": [
+                    {
+                        "value": "/var/log/xlio.log",
+                        "explanation": "Custom log path"
+                    }
+                ]
+            }
+        },
+        "exit_report": {
+            "type": "bool",
+            "default": false,
+            "description": "Enable printing a summary report on library exit. (maps to XLIO_PRINT_REPORT)"
+        },
+        "stats": {
+            "file_path": {
+                "type": "string",
+                "default": "",
+                "description": "Path to the stats file; empty string disables stats logging. (maps to XLIO_STATS_FILE)",
+                "special_values": {
+                    "disable": ""
+                }
+            },
+            "fd_num": {
+                "type": "int",
+                "default": 100,
+                "constraints": {
+                    "min": 0,
+                    "max": 1024
+                },
+                "description": "Maximum number of file descriptors tracked for stats (maps to XLIO_STATS_FD_NUM)."
+            },
+            "shmem_dir": {
+                "type": "string",
+                "default": "/tmp/libxlio",
+                "description": "Directory for shared memory usage (maps to XLIO_STATS_SHMEM_DIR)."
+            },
+            "cpu_usage": {
+                "type": "bool",
+                "default": false,
+                "description": "Enable per-CPU statistics collection. (maps to XLIO_CPU_USAGE_STATS)"
+            }
+        },
+        "init": {
+            "quick": {
+                "type": "bool",
+                "default": true,
+                "description": "Skip extended initialization steps if true. (maps to XLIO_QUICK_START)"
+            }
+        },
+        "cpu": {
+            "affinity": {
+                "type": "string",
+                "default": "-1",
+                "description": "Comma delimited CPU list; -1 means no affinity. (maps to XLIO_INTERNAL_THREAD_AFFINITY)",
+                "special_values": {
+                    "disable": "-1"
+                },
+                "example": [
+                    {
+                        "value": "0,1,2,7-9",
+                        "explanation": "Internal threads will be run on cores 0, 1, 2, 7, 8, and 9."
+                    }
+                ]
+            },
+            "cpuset": {
+                "type": "string",
+                "default": "",
+                "description": "Path to a cpuset (e.g. /dev/cpuset/my_set); empty means none. (maps to XLIO_INTERNAL_THREAD_CPUSET)",
+                "special_values": {
+                    "none": ""
+                },
+                "example": [
+                    {
+                        "value": "/dev/cpuset/my_set",
+                        "explanation": "Internal threads will be run on cpuset /dev/cpuset/my_set."
+                    }
+                ]
+            }
+        },
+        "syscall": {
+            "dup2_support": {
+                "type": "bool",
+                "default": true,
+                "description": "Allow dup2 calls to propagate."
+            }
+        },
+        "exception": {
+            "mode": {
+                "type": "int",
+                "default": -1,
+                "constraints": {
+                    "min": -2,
+                    "max": 3
+                },
+                "enum_mapping": {
+                    "exit": -2,
+                    "handle_debug": -1,
+                    "log_debug_undo_offload": 0,
+                    "log_error_undo_offload": 1,
+                    "log_error_return_error": 2,
+                    "log_error_abort": 3
+                },
+                "description": "Controls internal exception handling mode (maps to XLIO_EXCEPTION_HANDLING)."
+            }
+        },
+        "memory": {
+            "heap_metadata_block_size": {
+                "type": "int",
+                "default": 33554432,
+                "description": "Determines the metadata block size added to every heap allocation (maps to XLIO_HEAP_METADATA_BLOCK)."
+            },
+            "hugepages": {
+                "enable": {
+                    "type": "bool",
+                    "default": true,
+                    "description": "Enable hugepages if available (maps to XLIO_MEM_ALLOC_TYPE)."
+                },
+                "size": {
+                    "type": "int",
+                    "default": 0,
+                    "special_values": {
+                        "os_default": 0
+                    },
+                    "enum_mapping": {
+                        "GB": 1073741824,
+                        "MB": 1048576,
+                        "KB": 1024
+                    },
+                    "description": "Requested hugepage size; 0 uses the OS default. (maps to XLIO_HUGEPAGE_SIZE)."
+                }
+            },
+            "limit": {
+                "type": "int",
+                "default": 2147483648,
+                "special_values": {
+                    "unlimited": 0
+                },
+                "enum_mapping": {
+                    "GB": 1073741824,
+                    "MB": 1048576,
+                    "KB": 1024
+                },
+                "description": "Overall memory limit (0 means unlimited, maps to XLIO_MEMORY_LIMIT)."
+            }
+        },
+        "handlers": {
+            "timer_msec": {
+                "type": "int",
+                "default": 10,
+                "constraints": {
+                    "min": 0
+                },
+                "description": "Interval (in milliseconds) for internal threads' tasks. (maps to XLIO_TIMER_RESOLUTION_MSEC)."
+            },
+            "behavior": {
+                "type": "int",
+                "default": 0,
+                "constraints": {
+                    "min": 0,
+                    "max": 3
+                },
+                "enum_mapping": {
+                    "disable": 0,
+                    "delegate": 1,
+                    "with_wakeup": 2,
+                    "no_wakeup": 3
+                },
+                "description": "Select which TCP control flows are done in the internal thread. (maps to XLIO_TCP_CTL_THREAD)."
+            },
+        },
+        "signals": {
+            "sigint": {
+                "exit": {
+                    "type": "bool",
+                    "default": true,
+                    "description": "Exit gracefully on SIGINT (maps to XLIO_HANDLE_SIGINTR)."
+                }
+            },
+            "sigsegv": {
+                "backtrace": {
+                    "type": "bool",
+                    "default": false,
+                    "description": "Print a backtrace on SIGSEGV if true (maps to XLIO_HANDLE_SIGSEGV)."
+                }
+            }
+        },
+        "mutex_over_spinlock": {
+            "type": "bool",
+            "default": false,
+            "description": "Use mutex instead of spinlocks. (maps to XLIO_MULTILOCK)."
+        }
+    },
+    "xlio": {
+        "log": {
+            "details": {
+                "type": "int",
+                "default": 0,
+                "constraints": {
+                    "min": 0,
+                    "max": 3
+                },
+                "description": "Sets details on each log line: 0=basic, 1=ThreadId, 2=ProcessId+ThreadId, 3=Time+ProcessId+ThreadId. (maps to XLIO_LOG_DETAILS).",
+                "example": [
+                    {
+                        "value": 1,
+                        "explanation": "Include thread ID in each log line."
+                    }
+                ]
+            },
+            "colors": {
+                "type": "bool",
+                "default": true,
+                "description": "Enable colored log output (maps to XLIO_LOG_COLORS; auto-disabled when logging to file)."
+            }
+        },
+        "daemon": {
+            "enable": {
+                "type": "bool",
+                "default": false,
+                "description": "Enable the XLIO daemon (maps to XLIO_SERVICE_ENABLE)."
+            },
+            "dir": {
+                "type": "string",
+                "default": "/tmp/libxlio",
+                "description": "Working directory of the XLIO daemon (maps to XLIO_SERVICE_NOTIFY_DIR)."
+            }
+        },
+        "syscall": {
+            "fork_support": {
+                "type": "bool",
+                "default": true,
+                "description": "Enables fork support for the library (maps to XLIO_FORK)."
+            },
+            "getsockname_dummy_send": {
+                "type": "bool",
+                "default": false,
+                "description": "Use dummy packet send from getsockname() to warm up the caches. (maps to XLIO_TRIGGER_DUMMY_SEND_GETSOCKNAME)."
+            }
+        },
+        "memory": {
+            "external": {
+                "limit": {
+                    "type": "int",
+                    "default": 0,
+                    "special_values": {
+                        "no_limit": 0
+                    },
+                    "description": "External memory usage limit for XLIO; 0 means no limit. (maps to XLIO_MEMORY_LIMIT_USER)."
+                }
+            }
+        },
+        "api": {
+            "socketextreme": {
+                "type": "bool",
+                "default": false,
+                "description": "Enable socket extreme API (maps to XLIO_SOCKETEXTREME)."
+            },
+            "sendfile_limit": {
+                "type": "int",
+                "default": 10737418240,
+                "enum_mapping": {
+                    "GB": 1073741824,
+                    "MB": 1048576,
+                    "KB": 1024
+                },
+                "description": "Maximum allowed bytes for sendfile calls. (maps to XLIO_ZC_CACHE_THRESHOLD)."
+            },
+            "hugepages": {
+                "size": {
+                    "type": "int",
+                    "default": 2097152,
+                    "enum_mapping": {
+                        "GB": 1073741824,
+                        "MB": 1048576,
+                        "KB": 1024
+                    },
+                    "description": "Override hugepage size for the XLIO API. (maps to XLIO_USER_HUGE_PAGE_SIZE)."
+                }
+            }
+        },
+        "nginx": {
+            "src_port_stride": {
+                "type": "int",
+                "default": 2,
+                "description": "Controls how source ports are spread across workers. (maps to XLIO_NGINX_SRC_PORT_STRIDE)."
+            },
+            "workers_num": {
+                "type": "int",
+                "default": 0,
+                "description": "Controls how many nginx workers to support. (maps to XLIO_NGINX_WORKERS_NUM)."
+            },
+            "udp_pool_size": {
+                "type": "int",
+                "default": 0,
+                "special_values": {
+                    "default": 0
+                },
+                "description": "Buffer pool size for Nginx+XLIO; 0 uses default. (maps to XLIO_NGINX_UDP_POOL_SIZE)."
+            },
+            "udp_socket_pool_reuse": {
+                "type": "bool",
+                "default": false,
+                "description": "Enable udp socket pools with reuse (maps to XLIO_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE)."
+            },
+            "distribute_cq": {
+                "type": "bool",
+                "default": false,
+                "description": "Nginx Distribute CQ (maps to XLIO_DISTRIBUTE_CQ)."
+            }
+        },
+        "udp": {
+            "buf": {
+                "batch_size": {
+                    "type": "int",
+                    "default": 16,
+                    "constraints": {
+                        "min": 1
+                    },
+                    "description": "Number of TX buffers fetched by a UDP socket at once. (no mapping to XLIO)."
+                }
+            },
+            "3t_rules": {
+                "type": "bool",
+                "default": true,
+                "description": "Enable UDP 3‑tuple offload rules (maps to XLIO_UDP_3T_RULES)."
+            },
+            "only_mc_l2_rules": {
+                "type": "bool",
+                "default": false,
+                "description": "Only install layer‑2 rules for UDP multicast (maps to XLIO_ETH_MC_L2_ONLY_RULES)."
+            },
+            "mc_loopback": {
+                "type": "bool",
+                "default": true,
+                "description": "Enable UDP multicast loopback (maps to XLIO_TX_MC_LOOPBACK)."
+            },
+            "mc_flowtag_acceleration": {
+                "type": "bool",
+                "default": false,
+                "description": "Accelerate flowtag for multicast traffic. (maps to XLIO_MC_FORCE_FLOWTAG)."
+            },
+            "mc_disable_flowtag": {
+                "type": "bool",
+                "default": false,
+                "description": "Disable flowtag for multicast traffic. (maps to XLIO_MC_DISABLE_FLOWTAG)."
+            },
+            "yield_on_poll": {
+                "type": "bool",
+                "default": false,
+                "description": "Yield CPU when no UDP packets are found during poll. (maps to XLIO_RX_POLL_YIELD)."
+            },
+            "offload_transition_poll_count": {
+                "type": "int",
+                "default": 0,
+                "constraints": {
+                    "min": -1,
+                    "max": 100000000
+                },
+                "special_values": {
+                    "infinite_polling": -1,
+                    "disabled": 0
+                },
+                "description": "Poll count for offload transition (-1 means infinite, 0 disabled; maps to XLIO_RX_POLL_INIT)."
+            },
+            "rx_kernel_fd_attention_level": {
+                "type": "int",
+                "default": 100,
+                "constraints": {
+                    "min": 0
+                },
+                "enum_mapping": {
+                    "no_attention": 0
+                },
+                "description": "When set to 0, switch to kernel FD for UDP Rx (threshold value; 0 means never; maps to XLIO_RX_UDP_POLL_OS_RATIO)."
+            }
+        },
+        "poll": {
+            "rx_poll_on_tx": {
+                "type": "bool",
+                "default": false,
+                "description": "Poll Rx queues on transmit if true. (maps to XLIO_RX_POLL_ON_TX_TCP)."
+            },
+            "skip_cq_on_rx": {
+                "type": "int",
+                "default": 0,
+                "special_values": {
+                    "disable": 0,
+                    "always_skip": 1,
+                    "skip_on_epoll": 2
+                },
+                "description": "Policy for skipping completion‑queue checks on Rx. (maps to XLIO_SKIP_POLL_IN_RX)."
+            },
+            "rx_cq_wait_ctrl": {
+                "type": "bool",
+                "default": false,
+                "description": "Ensures fd is added only to sleeping sockets epoll descriptors, reducing the kernel scan overhead. (maps to XLIO_RX_CQ_WAIT_CTRL)."
+            },
+        },
+        "cq": {
+            "interrupt_per_packet": {
+                "type": "bool",
+                "default": false,
+                "description": "Generate an interrupt for every received packet if true. (maps to XLIO_INTERNAL_THREAD_ARM_CQ)."
+            },
+            "keep_full": {
+                "type": "bool",
+                "default": true,
+                "description": "Keep the completion queue full. (maps to XLIO_CQ_KEEP_QP_FULL)."
+            },
+            "periodic_drain_msec": {
+                "type": "int",
+                "default": 10,
+                "constraints": {
+                    "min": 0
+                },
+                "description": "Interval between Drain periods (in milliseconds) for the CQ. (maps to XLIO_PROGRESS_ENGINE_INTERVAL)."
+            },
+            "periodic_drain_max_cqes": {
+                "type": "int",
+                "default": 10000,
+                "constraints": {
+                    "min": 0
+                },
+                "description": "Max number of CQEs processed during a periodic drain. (maps to XLIO_PROGRESS_ENGINE_WCE_MAX)."
+            },
+            "rx_drain_rate_nsec": {
+                "type": "int",
+                "default": 0,
+                "constraints": {
+                    "min": 0
+                },
+                "special_values": {
+                    "disable": 0
+                },
+                "description": "Drain rate (in nanoseconds) for Rx; 0 disables rate control. (maps to XLIO_RX_CQ_DRAIN_RATE_NSEC)."
+            },
+            "rx_poll_count": {
+                "type": "int",
+                "default": 100000,
+                "constraints": {
+                    "min": -1,
+                    "max": 100000000
+                },
+                "special_values": {
+                    "infinite_polling": -1,
+                    "disabled": 0
+                },
+                "description": "Poll operations count for Rx (-1 means infinite, 0 disabled; maps to XLIO_RX_POLL)."
+            },
+            "interrupt_moderation": {
+                "enable": {
+                    "type": "bool",
+                    "default": true,
+                    "description": "Enable interrupt moderation (maps to XLIO_CQ_MODERATION_ENABLE)."
+                },
+                "packet_count": {
+                    "type": "int",
+                    "default": 48,
+                    "description": "Packet count threshold before an interrupt (maps to XLIO_CQ_MODERATION_COUNT)."
+                },
+                "period_usec": {
+                    "type": "int",
+                    "default": 50,
+                    "description": "Interrupt moderation period in microseconds (maps to XLIO_CQ_MODERATION_PERIOD_USEC)."
+                },
+                "adaptive_count": {
+                    "type": "int",
+                    "default": 560,
+                    "description": "Adaptive moderation count threshold (maps to XLIO_CQ_AIM_MAX_COUNT)."
+                },
+                "adaptive_period_usec": {
+                    "type": "int",
+                    "default": 250,
+                    "description": "Adaptive moderation period (in microseconds; maps to XLIO_CQ_AIM_MAX_PERIOD_USEC)."
+                },
+                "adaptive_change_frequency_msec": {
+                    "type": "int",
+                    "default": 250,
+                    "special_values": {
+                        "disable_adaptive": 0
+                    },
+                    "description": "Frequency (in milliseconds) to update adaptive moderation; 0 disables adaptation (maps to XLIO_CQ_AIM_INTERVAL_MSEC)."
+                },
+                "interrupt_per_sec": {
+                    "type": "int",
+                    "default": 5000,
+                    "description": "Target interrupt rate per second (maps to XLIO_CQ_AIM_INTERRUPTS_RATE_PER_SEC)."
+                }
+            },
+            "buf": {
+                "rx_spare": {
+                    "type": "int",
+                    "default": 256,
+                    "description": "Minimum spare Rx buffers in the CQ. (maps to XLIO_QP_COMPENSATION_LEVEL)."
+                }
+            }
+        },
+        "sq": {
+            "buf": {
+                "size": {
+                    "type": "int",
+                    "default": 0,
+                    "constraints": {
+                        "min": 0,
+                        "max": 65280
+                    },
+                    "special_values": {
+                        "auto": 0
+                    },
+                    "description": "Size of each TX data buffer element; 0 for auto (must be at least the MTU if manually set; maps to XLIO_TX_BUF_SIZE)."
+                },
+                "batch_size": {
+                    "type": "int",
+                    "default": 16,
+                    "constraints": {
+                        "min": 1
+                    },
+                    "description": "Number of TX buffers fetched by a TCP socket at once. (maps to XLIO_TX_BUFS_BATCH_TCP)."
+                },
+                "global_array_size": {
+                    "type": "int",
+                    "default": 200000,
+                    "constraints": {
+                        "min": 0
+                    },
+                    "description": "Global TX buffer array size for all SQ buffers. (maps to XLIO_TX_BUFS)."
+                }
+            },
+            "prefetch": {
+                "cache_size": {
+                    "type": "int",
+                    "default": 256,
+                    "constraints": {
+                        "min": 0
+                    },
+                    "description": "Prefetch cache size; 0 disables prefetch."
+                }
+            },
+            "wre": {
+                "global_array_size": {
+                    "type": "int",
+                    "default": 32768,
+                    "constraints": {
+                        "min": 0
+                    },
+                    "description": "Global array size for SQ work request elements."
+                },
+                "completion_batch_size": {
+                    "type": "int",
+                    "default": 64,
+                    "constraints": {
+                        "min": 1,
+                        "max": 64
+                    },
+                    "description": "Number of WRE completions batched per poll."
+                },
+                "max_inline_size": {
+                    "type": "int",
+                    "default": 204,
+                    "constraints": {
+                        "min": 0,
+                        "max": 884 // MAX_SUPPORTED_IB_INLINE_SIZE
+                    },
+                    "special_values": {
+                        "disable_inline": 0
+                    },
+                    "description": "Maximum inline size for SQ postings; 0 disables inline sending (maps to XLIO_TX_MAX_INLINE)."
+                }
+            },
+            "nonblocking": {
+                "eagain": {
+                    "type": "bool",
+                    "default": false,
+                    "description": "Return EAGAIN on nonblocking send instead of waiting."
+                }
+            },
+            "segments": {
+                "socket_batch_size": {
+                    "type": "int",
+                    "default": 64,
+                    "constraints": {
+                        "min": 1
+                    },
+                    "description": "Number of segments batched per socket."
+                },
+                "ring_batch_size": {
+                    "type": "int",
+                    "default": 1024,
+                    "constraints": {
+                        "min": 1
+                    },
+                    "description": "Number of segments batched per ring operation."
+                },
+                "pool_batch_size": {
+                    "type": "int",
+                    "default": 1024,
+                    "constraints": {
+                        "min": 1
+                    },
+                    "description": "Number of segments batched per ring operation."
+                }
+            },
+            "tso": {
+                "enable": {
+                    "type": "int",
+                    "default": 2,
+                    "special_values": {
+                        "disable": 0
+                    },
+                    "enum_mapping": {
+                        "disable": 0,
+                        "enable": 1,
+                        "ethtool_auto": 2
+                    },
+                    "description": "Set TCP segmentation offload policy for XLIO’s sends (maps to XLIO_TSO)."
+                },
+                "max_size": {
+                    "type": "int",
+                    "default": 262144,
+                    "constraints": {
+                        "min": 1
+                    },
+                    "description": "TSO max size. (maps to XLIO_TSO_MAX_SIZE)."
+                }
+            },
+            "tls_offload": {
+                "enable": {
+                    "type": "bool",
+                    "default": true,
+                    "description": "Enable TLS offload for outgoing traffic."
+                },
+                "dek_cache_max_size": {
+                    "type": "int",
+                    "default": 1024,
+                    "description": "Set TX TLS Offload DEK max cache size (maps to XLIO_HIGH_WMARK_DEK_CACHE_SIZE)."
+                },
+                "dek_cache_min_size": {
+                    "type": "int",
+                    "default": 512,
+                    "description": "Set TX TLS Offload DEK min cache size (maps to XLIO_LOW_WMARK_DEK_CACHE_SIZE)."
+                }
+            }
+        },
+        "rq": {
+            "buf": {
+                "size": {
+                    "type": "int",
+                    "default": 0,
+                    "constraints": {
+                        "min": 0,
+                        "max": 65280
+                    },
+                    "special_values": {
+                        "auto": 0
+                    },
+                    "description": "Receive buffer size; 0 means auto (must be at least the MTU if manually set)."
+                },
+                "global_array_size": {
+                    "type": "int",
+                    "default": 32768,
+                    "constraints": {
+                        "min": 0
+                    },
+                    "description": "Global pool size for all RQ buffers."
+                },
+                "override_rcvbuf_limit": {
+                    "type": "int",
+                    "default": 65536,
+                    "description": "Override for the OS receive buffer limit (maps to XLIO_RX_BYTES_MIN)."
+                },
+                "batch_size": {
+                    "type": "int",
+                    "default": 16,
+                    "constraints": {
+                        "min": 1
+                    },
+                    "description": "Number of RX buffers fetched by a TCP socket at once. (no mapping to XLIO)."
+                }
+            },
+            "wre": {
+                "global_array_size": {
+                    "type": "int",
+                    "default": 16000,
+                    "constraints": {
+                        "min": 0
+                    },
+                    "description": "Global array size for RQ work request elements."
+                },
+                "rx_batch_size": {
+                    "type": "int",
+                    "default": 1024,
+                    "constraints": {
+                        "min": 1,
+                        "max": 1024
+                    },
+                    "description": "Batch size for receive completions."
+                }
+            },
+            "prefetch": {
+                "cache_size": {
+                    "type": "int",
+                    "default": 256,
+                    "constraints": {
+                        "min": 32
+                    },
+                    "description": "Receive prefetch cache size; 0 disables prefetch (minimum is 32)."
+                },
+                "fetch_before_poll": {
+                    "type": "bool",
+                    "default": false,
+                    "description": "Prefetch data before polling if true."
+                }
+            },
+            "lro": {
+                "type": "int",
+                "default": 2,
+                "special_values": {
+                    "disable": 0
+                },
+                "enum_mapping": {
+                    "disable": 0,
+                    "enable": 1,
+                    "ethtool_auto": 2
+                },
+                "description": "Large Receive Offload policy (maps to XLIO_LRO)."
+            },
+            "tls_offload": {
+                "enable": {
+                    "type": "bool",
+                    "default": false,
+                    "description": "Enable TLS offload for incoming traffic. (maps to XLIO_UTLS_RX)."
+                }
+            },
+            "max_gro_streams": {
+                "type": "int",
+                "default": 32,
+                "special_values": {
+                    "disable": 0
+                },
+                "description": "Maximum number of GRO streams; 0 disables GRO. (maps to XLIO_GRO_STREAMS_MAX)."
+            },
+            "striding": {
+                "enable": {
+                    "type": "bool",
+                    "default": true,
+                    "description": "Enable striding for RQ buffer management. (maps to XLIO_STRQ)."
+                },
+                "strides": {
+                    "type": "int",
+                    "default": 2048,
+                    "constraints": {
+                        "min": 512,
+                        "max": 65536
+                    },
+                    "description": "Number of strides per WQE (must be a power of 2; maps to XLIO_STRQ_NUM_STRIDES)."
+                },
+                "stride_size": {
+                    "type": "int",
+                    "default": 64,
+                    "constraints": {
+                        "min": 64,
+                        "max": 8192
+                    },
+                    "description": "Size (in bytes) of each stride (must be a power of 2; maps to XLIO_STRQ_STRIDE_SIZE_BYTES)."
+                },
+                "spare_strides": {
+                    "type": "int",
+                    "default": 32768,
+                    "description": "Extra strides reserved. (maps to XLIO_STRQ_STRIDES_COMPENSATION_LEVEL)."
+                }
+            }
+        },
+        "ring": {
+            "tcp_2t_rules": {
+                "type": "bool",
+                "default": true,
+                "description": "Enable TCP 2‑tuple offload rules (maps to XLIO_TCP_2T_RULES)."
+            },
+            "tcp_3t_rules": {
+                "type": "bool",
+                "default": true,
+                "description": "Enable TCP 3‑tuple offload rules (maps to XLIO_TCP_3T_RULES)."
+            },
+            "tx": {
+                "alloc_logic": {
+                    "type": "int",
+                    "default": 0,
+                    "enum_mapping": {
+                        "per_interface": 0,
+                        "per_ip_address": 1,
+                        "per_socket": 10,
+                        "per_thread": 20,
+                        "per_cpuid": 30,
+                        "per_core": 31
+                    },
+                    "description": "Transmission ring allocation logic (maps to XLIO_RING_ALLOCATION_LOGIC_TX)."
+                },
+                "migration_ratio": {
+                    "type": "int",
+                    "default": -1,
+                    "special_values": {
+                        "disabled": -1
+                    },
+                    "description": "Tx ring migration ratio; -1 disables migration (maps to XLIO_RING_MIGRATION_RATIO_TX)."
+                },
+                "max_on_device_memory": {
+                    "type": "int",
+                    "default": 0,
+                    "constraints": {
+                        "min": 0,
+                        "max": 262144
+                    },
+                    "special_values": {
+                        "unlimited": 0
+                    },
+                    "description": "Maximum Tx memory (in KB) on device; 0 means unlimited (maps to XLIO_RING_DEV_MEM_TX)."
+                }
+            },
+            "rx": {
+                "alloc_logic": {
+                    "type": "int",
+                    "default": 0,
+                    "enum_mapping": {
+                        "per_interface": 0,
+                        "per_ip_address": 1,
+                        "per_socket": 10,
+                        "per_thread": 20,
+                        "per_cpuid": 30,
+                        "per_core": 31
+                    },
+                    "description": "Reception ring allocation logic (maps to XLIO_RING_ALLOCATION_LOGIC_RX)."
+                },
+                "migration_ratio": {
+                    "type": "int",
+                    "default": -1,
+                    "special_values": {
+                        "disabled": -1
+                    },
+                    "description": "Rx ring migration ratio; -1 disables migration (maps to XLIO_RING_MIGRATION_RATIO_RX)."
+                },
+            },
+            "max_per_interface": {
+                "type": "int",
+                "default": 0,
+                "special_values": {
+                    "unlimited": 0
+                },
+                "description": "Maximum rings per interface; 0 means unlimited (maps to XLIO_RING_LIMIT_PER_INTERFACE)."
+            }
+        },
+        "batching_mode": {
+            "type": "int",
+            "default": 1,
+            "special_values": {
+                "disable": 0
+            },
+            "enum_mapping": {
+                "disable": 0,
+                "enable_and_reuse": 1,
+                "enable": 2
+            },
+            "description": "Controls batching for sends/receives (performance optimization; maps to XLIO_BUFFER_BATCHING_MODE)."
+        },
+        "ts_conversion": {
+            "type": "int",
+            "default": 3,
+            "enum_mapping": {
+                "disable": 0,
+                "raw_hw": 1,
+                "best_possible": 2,
+                "system": 3,
+                "ptp": 4,
+                "rtc": 5
+            },
+            "description": "Timestamp conversion mode (maps to XLIO_HW_TS_CONVERSION; default 3 means system clock)."
+        },
+        "spec": {
+            // TODO - specs should be removed and turned into tuning scripts
+            "type": "int",
+            "default": 0,
+            "enum_mapping": {
+                "none": 0,
+                "sockperf_ultra_latency": 1,
+                "sockperf_latency": 2,
+                "nginx": 3,
+                "nginx_dpu": 4,
+                "nvme_bf3": 5,
+                "all": 6
+            },
+            "description": "DEPRECATED - XLIO Specs (maps to XLIO_SPEC)."
+        }
+    },
+    "net": {
+        "offload": {
+            "enable": {
+                "type": "bool",
+                "default": true,
+                "description": "Enable hardware offloads on the network interface."
+            },
+            "transport_control": {
+                "type": "string",
+                "default": "", // in MVP - we do not refactor the original synatx at all
+                // we save the data currently as: "app1:action1,action2;app2:action1,action2"
+                // e.g. - 
+                // "application-id tcp-lat B1:use vma tcp_client 192.168.1.0/24:*:*:*,use os  tcp_server   *:5001,use os  udp_connect  *:53; application-id tcp-lat2 B2:use vma tcp_client tcp_client 192.168.1.0/24:*:*:*"
+                "description": "Enable transport control per apps. (maps to libxlio.conf)."
+            },
+            "app_id": {
+                "type": "string",
+                "default": "*", // in MVP - we do not refactor the original synatx or usage at all
+                "description": "App id that effectively selects the transport_control actions. (maps to XLIO_APPLICATION_ID)."
+            }
+        },
+        "deferred_close": {
+            "type": "bool",
+            "default": false,
+            "description": "Defer closing of fd to when closing the socket. (maps to XLIO_DEFERRED_CLOSE)."
+        },
+        "tcp": {
+            "congestion_control": {
+                "type": "int",
+                "default": 0,
+                "enum_mapping": {
+                    "lwip": 0,
+                    "cubic": 1,
+                    "disable": 2
+                },
+                "description": "TCP congestion control algorithm (maps to XLIO_TCP_CC_ALGO)."
+            },
+            "wmem": {
+                "type": "int",
+                "default": 1048576,
+                "enum_mapping": {
+                    "GB": 1073741824,
+                    "MB": 1048576,
+                    "KB": 1024
+                },
+                "description": "Per-socket write buffer size in bytes (maps to XLIO_TCP_SEND_BUFFER_SIZE)."
+            },
+            "max_syn_rate": {
+                "type": "int",
+                "default": 0,
+                "constraints": {
+                    "min": 0,
+                    "max": 100000
+                },
+                "special_values": {
+                    "unlimited": 0
+                },
+                "description": "Maximum SYNs per second (0 means unlimited, maps to XLIO_TCP_MAX_SYN_RATE)."
+            },
+            "linger_0": {
+                "type": "bool",
+                "default": false,
+                "description": "Set TCP linger time to 0 if true. (maps to XLIO_TCP_ABORT_ON_CLOSE)."
+            },
+            "push": {
+                "type": "bool",
+                "default": true,
+                "description": "Set TCP Push flag. (maps to XLIO_TCP_PUSH_FLAG)."
+            },
+            "nodelay": {
+                "enable": {
+                    "type": "bool",
+                    "default": false,
+                    "description": "Disable Nagle’s algorithm via TCP_NODELAY when true (maps to XLIO_TCP_NODELAY)."
+                },
+                "byte_threshold": {
+                    "type": "int",
+                    "default": 0,
+                    "description": "Data threshold for flush; 0 flushes immediately (maps to XLIO_TCP_NODELAY_TRESHOLD)."
+                }
+            },
+            "quickack": {
+                "type": "bool",
+                "default": false,
+                "description": "Enable quick ACKs if true (maps to XLIO_TCP_QUICKACK)."
+            },
+            "timestamps": {
+                "type": "int",
+                "default": 0,
+                "enum_mapping": {
+                    "disable": 0,
+                    "enable": 1,
+                    "os": 2
+                },
+                "description": "TCP timestamps mode (2 means OS default)."
+            },
+            "timer_msec": {
+                "type": "int",
+                "default": 100,
+                "constraints": {
+                    "min": 0
+                },
+                "description": "Timer interval in milliseconds for TCP retransmissions/checks (maps to XLIO_TCP_TIMER_RESOLUTION_MSEC)."
+            },
+            "offload": {
+                "enable_posix_ctl": {
+                    "type": "bool",
+                    "default": true,
+                    "description": "Allow POSIX sysctl control of TCP offload parameters (maps to XLIO_OFFLOADED_SOCKETS control)."
+                },
+                "allow_privileged_sockopt": {
+                    "type": "bool",
+                    "default": true,
+                    "description": "Allow privileged sock opt. (maps to XLIO_ALLOW_PRIVILEGED_SOCK_OPT)."
+                },
+            },
+            "mss": {
+                "type": "int",
+                "default": 0,
+                "constraints": {
+                    "min": 0,
+                    "max": 8960
+                },
+                "special_values": {
+                    "auto": 0
+                },
+                "description": "Maximum Segment Size; 0 means auto (maps to XLIO_MSS)."
+            }
+        },
+        "mtu": {
+            "type": "int",
+            "default": 0,
+            "constraints": {
+                "min": 0,
+                "max": 9000
+            },
+            "special_values": {
+                "os_default": 0
+            },
+            "description": "Override MTU (0 uses OS setting; maps to XLIO_MTU)."
+        },
+        "neighbor": {
+            "update_interval_msec": {
+                "type": "int",
+                "default": 10000,
+                "constraints": {
+                    "min": 0
+                },
+                "description": "Neighbor update interval in milliseconds (maps to XLIO_NETLINK_TIMER)."
+            },
+            "uc_arp_retries": {
+                "type": "int",
+                "default": 3,
+                "constraints": {
+                    "min": 0
+                },
+                "description": "ARP retry count for unicast; retries before failure. (maps to XLIO_NEIGH_UC_ARP_QUATA)."
+            },
+            "uc_arp_delay_msec": {
+                "type": "int",
+                "default": 10000,
+                "constraints": {
+                    "min": 0
+                },
+                "description": "Delay (in milliseconds) before resending ARP. (maps to XLIO_NEIGH_UC_ARP_DELAY_MSEC)"
+            },
+            "errors_before_reset": {
+                "type": "int",
+                "default": 1,
+                "constraints": {
+                    "min": 0
+                },
+                "description": "Number of errors before neighbor resets. (maps to XLIO_NEIGH_NUM_ERR_RETRIES)."
+            }
+        },
+        "poll": {
+            "rx_duration_usec": {
+                "type": "int",
+                "default": 100000,
+                "constraints": {
+                    "min": -1,
+                    "max": 100000000
+                },
+                "special_values": {
+                    "infinite_polling": -1,
+                    "no_polling": 0
+                },
+                "description": "Poll duration in microseconds for Rx (-1 means infinite, maps to XLIO_RX_POLL)."
+            },
+            "kernel_fd_attention_level": {
+                "type": "int",
+                "default": 10,
+                "constraints": {
+                    "min": 0
+                },
+                "enum_mapping": {
+                    "no_attention": 0
+                },
+                "description": "Kernel FD attention threshold (0 means never; maps to XLIO_RING_KERNEL_FD_ATTENTION_LEVEL)."
+            },
+            "offload_fd_priority": {
+                "type": "int",
+                "default": 4,
+                "constraints": {
+                    "min": 0
+                },
+                "description": "Priority for offload file descriptors (maps to related XLIO parameter)."
+            },
+            "rx_buffer_max_count": {
+                "type": "int",
+                "default": 16,
+                "constraints": {
+                    "min": 0
+                },
+                "description": "Maximum number of Rx buffers per poll pass."
+            }
+        },
+        "doca_eth": {
+            "max_elements_queue_size": {
+                "type": "int",
+                "default": 32768,
+                "constraints": {
+                    "min": 0
+                },
+                "description": "Maximum queue size for DOCA Ethernet operations."
+            }
+        }
+    }
+}

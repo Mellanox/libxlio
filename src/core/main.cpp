@@ -19,6 +19,10 @@
 #include <execinfo.h>
 #include <libgen.h>
 #include <linux/igmp.h>
+#include <string>
+#include <vector>
+#include <sstream>
+#include <algorithm>
 
 #include "vlogger/vlogger.h"
 #include "utils/compiler.h"
@@ -460,8 +464,9 @@ void print_xlio_global_settings()
                           safe_mce_sys().service_notify_dir);
     VLOG_PARAM_NUMBER("Stats FD Num (max)", safe_mce_sys().stats_fd_num_max,
                       MCE_DEFAULT_STATS_FD_NUM, SYS_VAR_STATS_FD_NUM);
-    VLOG_STR_PARAM_STRING("Conf File", safe_mce_sys().conf_filename, MCE_DEFAULT_CONF_FILE,
-                          SYS_VAR_CONF_FILENAME, safe_mce_sys().conf_filename);
+    VLOG_STR_PARAM_STRING("Conf File", safe_mce_sys().transport_control_context,
+                          MCE_DEFAULT_CONF_FILE, SYS_VAR_transport_control_context,
+                          safe_mce_sys().transport_control_context);
     VLOG_STR_PARAM_STRING("Application ID", safe_mce_sys().app_id, MCE_DEFAULT_APP_ID,
                           SYS_VAR_APPLICATION_ID, safe_mce_sys().app_id);
     VLOG_PARAM_STRING("Polling CPU idle usage", safe_mce_sys().select_handle_cpu_usage_stats,
@@ -1083,17 +1088,18 @@ static void do_global_ctors_helper()
 
     NEW_CTOR(g_p_fd_collection, fd_collection());
 
-    if (check_if_regular_file(safe_mce_sys().conf_filename)) {
-        vlog_printf(VLOG_WARNING,
-                    "FAILED to read library configuration file. %s is not a regular file.\n",
-                    safe_mce_sys().conf_filename);
-        if (strcmp(MCE_DEFAULT_CONF_FILE, safe_mce_sys().conf_filename)) {
-            vlog_printf(VLOG_INFO, "Please see README section regarding %s\n",
-                        SYS_VAR_CONF_FILENAME);
-        }
-    } else if (__xlio_parse_config_file(safe_mce_sys().conf_filename)) {
+    if (access(safe_mce_sys().transport_control_context, F_OK) != 0) {
+        std::string transport_control_as_string(safe_mce_sys().transport_control_context);
+        // transform format "app1,action1,action2;app2,action1,action2"
+        // to a content that will be accepted by parser
+        std::replace(transport_control_as_string.begin(), transport_control_as_string.end(), ';',
+                     '\n');
+        std::replace(transport_control_as_string.begin(), transport_control_as_string.end(), ',',
+                     '\n');
+        xlio_add_conf_rule(transport_control_as_string.c_str());
+    } else if (__xlio_parse_config_file(safe_mce_sys().transport_control_context)) {
         vlog_printf(VLOG_DEBUG, "FAILED to read library configuration file: %s\n",
-                    safe_mce_sys().conf_filename);
+                    safe_mce_sys().transport_control_context);
     }
 
     // initialize LWIP tcp/ip stack
