@@ -48,6 +48,7 @@
 #include <libgen.h>
 #include <linux/igmp.h>
 #include <math.h>
+#include <thread>
 
 #include "vlogger/vlogger.h"
 #include "utils/rdtsc.h"
@@ -1827,6 +1828,9 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_XLIO_THREADS))) {
         xlio_threads = option_size::from_str(env_ptr) ?: 1;
+        if (xlio_threads > std::thread::hardware_concurrency()) {
+            xlio_threads = std::thread::hardware_concurrency();
+        }
     }
 }
 

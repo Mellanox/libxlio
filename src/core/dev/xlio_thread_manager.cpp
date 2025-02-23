@@ -40,7 +40,10 @@ xlio_thread_manager *g_p_xlio_thread_manager = nullptr;
 xlio_thread_manager::xlio_thread_manager(size_t threads)
     : m_threads_num(threads)
 {
-    m_xlio_threads = std::move(std::make_unique<xlio_thread[]>(threads));
+    if (m_threads_num > 0 && m_threads_num < UINT32_MAX) {
+        m_xlio_threads = std::move(std::make_unique<xlio_thread[]>(m_threads_num));
+    }
+
     std::for_each(m_xlio_threads.get(), m_xlio_threads.get() + m_threads_num,
         [](xlio_thread& t) { t.start_thread(); });
 }
@@ -54,6 +57,13 @@ xlio_thread_manager::~xlio_thread_manager()
 int xlio_thread_manager::add_listen_socket(sockinfo_tcp *sock)
 {
     int rc = m_xlio_threads.get()[m_next_add_group++].add_listen_socket(sock);
+    m_next_add_group %= m_threads_num;
+    return rc;
+}
+
+int xlio_thread_manager::add_accepted_socket(sockinfo_tcp *sock)
+{
+    int rc = m_xlio_threads.get()[m_next_add_group++].add_accepted_socket(sock);
     m_next_add_group %= m_threads_num;
     return rc;
 }

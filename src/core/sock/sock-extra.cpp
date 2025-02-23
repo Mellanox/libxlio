@@ -617,7 +617,7 @@ int xlio_socket_attach_group(xlio_socket_t sock, xlio_poll_group_t group)
     sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
     poll_group *grp = reinterpret_cast<poll_group *>(group);
 
-    return si->attach_xlio_group(grp);
+    return si->attach_xlio_group(grp, false);
 }
 
 static void xlio_buf_free(struct xlio_buf *buf)

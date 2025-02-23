@@ -74,7 +74,7 @@ void xlio_thread::socket_rx_cb(xlio_socket_t sock, uintptr_t userdata_sq, void *
                                struct xlio_buf *buf)
 {
     sockinfo_tcp *tcp_sock = reinterpret_cast<sockinfo_tcp *>(sock);
-    __log_info("sock-fd: %d, len: %sz", tcp_sock->get_fd(), len);
+    __log_info("sock-fd: %d, len: %zu", tcp_sock->get_fd(), len);
 
     NOT_IN_USE(userdata_sq);
     NOT_IN_USE(data);
@@ -103,6 +103,14 @@ int xlio_thread::add_listen_socket(sockinfo_tcp *si)
     return rc;
 }
 
+int xlio_thread::add_accepted_socket(sockinfo_tcp *si)
+{
+    int rc = si->attach_xlio_group(m_poll_group, true);
+
+    xt_loginfo("Socket added tid: %d, fd: %d, rc: %d", (int)gettid(), si->get_fd(), rc);
+    return rc;
+}
+
 void xlio_thread::xlio_thread_loop()
 {
     while (m_running.load(std::memory_order_relaxed)) {
@@ -120,7 +128,7 @@ void xlio_thread::xlio_thread_main(xlio_thread& t)
         socket_event_cb,
         socket_comp_cb,
         socket_rx_cb,
-        socket_accept_cb
+        nullptr
     };
 
     t.m_poll_group = new poll_group(&pollg_attr);

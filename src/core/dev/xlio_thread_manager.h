@@ -48,6 +48,8 @@ public:
     ~xlio_thread_manager();
 
     int add_listen_socket(sockinfo_tcp *sock);
+    int add_accepted_socket(sockinfo_tcp *sock);
+
 private:
 
     // The std::vector is not usable here since it requires the object
