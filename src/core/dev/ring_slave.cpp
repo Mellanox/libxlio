@@ -739,8 +739,9 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
 
         // Validate IP header as next protocol
         if (unlikely(h_proto != NET_ETH_P_IP) && unlikely(h_proto != NET_ETH_P_IPV6)) {
-            ring_logwarn("Rx buffer dropped - Invalid Ethr Type (%#x : %#x, %#x)", p_eth_h->h_proto,
-                         NET_ETH_P_IP, NET_ETH_P_IPV6);
+            ring_logwarn("Rx buffer dropped - Invalid Ethr Type (h_proto=%#x-p_eth_h->h_proto=%#x "
+                         ": %#x, %#x)",
+                         h_proto, p_eth_h->h_proto, NET_ETH_P_IP, NET_ETH_P_IPV6);
             return false;
         }
     } break;

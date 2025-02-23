@@ -188,6 +188,7 @@ mem_buf_desc_t *cq_mgr_rx_strq::poll(enum buff_status_e &status, mem_buf_desc_t 
     xlio_mlx5_cqe *cqe = check_cqe();
     if (likely(cqe)) {
         ++m_mlx5_cq.cq_ci;
+        rmb();
 
         bool is_filler = false;
         bool is_wqe_complete = strq_cqe_to_mem_buff_desc(cqe, status, is_filler);
