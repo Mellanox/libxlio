@@ -38,6 +38,7 @@
 #include <thread>
 #include <atomic>
 #include "core/util/wakeup_pipe.h"
+#include "core/event/poll_group.h"
 
 class xlio_thread : public wakeup_pipe
 {
@@ -51,7 +52,17 @@ public:
 
 private:
 
-    static void xlio_thread_loop(xlio_thread& t);
+    static void socket_event_cb(xlio_socket_t, uintptr_t userdata_sq, int event, int value);
+    static void socket_comp_cb(xlio_socket_t, uintptr_t userdata_sq, uintptr_t userdata_op);
+    static void socket_rx_cb(xlio_socket_t, uintptr_t userdata_sq, void *data, size_t len,
+                             struct xlio_buf *buf);
+    static void socket_accept_cb(xlio_socket_t sock, xlio_socket_t parent,
+                                 uintptr_t parent_userdata_sq);
+    static void xlio_thread_main(xlio_thread& t);
+
+    void xlio_thread_loop();
+
+    poll_group *m_poll_group;
 
     std::thread m_thread;
 
