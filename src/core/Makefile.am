@@ -1,8 +1,6 @@
 
 noinst_LTLIBRARIES = \
 	libconfig_parser.la
-libconfig_parser_la_SOURCES =
-BUILT_SOURCES =
 
 AM_LFLAGS = -Plibxlio_yy
 AM_YFLAGS = -plibxlio_yy -d
@@ -15,10 +13,8 @@ LEX_OUTPUT_ROOT=lex.libxlio_yy
 #
 #BUILT_SOURCES += config_scanner.c config_parser.h config_parser.c
 #libconfig_parser_la_SOURCES += util/config_scanner.l util/config_parser.y
-libconfig_parser_la_SOURCES += config_scanner.c config_parser.c
+libconfig_parser_la_SOURCES = config_scanner.c config_parser.c
 
-
-CLEANFILES = $(BUILT_SOURCES)
 dist-hook:
 	cd $(distdir); rm -f $(BUILT_SOURCES)
 
@@ -56,7 +52,7 @@ libxlio_la_LDFLAGS := $(XLIO_LTO) $(XLIO_PROFILE) -no-undefined \
 	-version-number @PRJ_LIBRARY_MAJOR@:@PRJ_LIBRARY_MINOR@:@PRJ_LIBRARY_REVISION@
 
 libxlio_la_LIBADD = \
-	-lrt -ldl -lpthread $(LIBNL_LIBS) $(VERBS_LIBS) $(DPCP_LIBS) $(XLIO_GCOV) \
+	-lrt -ldl -lpthread $(LIBNL_LIBS) $(VERBS_LIBS) $(DPCP_LIBS) $(XLIO_GCOV) $(JSON_C_LIBS) \
 	$(top_builddir)/src/utils/libutils.la \
 	$(top_builddir)/src/vlogger/libvlogger.la \
 	$(top_builddir)/src/state_machine/libstate_machine.la \
@@ -64,6 +60,16 @@ libxlio_la_LIBADD = \
 	$(top_builddir)/src/core/netlink/libnetlink.la \
 	$(top_builddir)/src/core/infra/libinfra.la \
 	libconfig_parser.la
+
+dist_noinst_DATA = config/descriptor_providers/json_descriptor.json
+
+BUILT_SOURCES = config/descriptor_providers/json_descriptor.h
+
+config/descriptor_providers/json_descriptor.h: config/descriptor_providers/json_descriptor.json
+	xxd -i config/descriptor_providers/json_descriptor.json > $@
+
+CLEANFILES = $(BUILT_SOURCES)
+
 	
 libxlio_la_SOURCES := \
 	dev/allocator.cpp \
@@ -168,6 +174,14 @@ libxlio_la_SOURCES := \
 	util/sys_vars.cpp \
 	util/agent.cpp \
 	util/data_updater.cpp \
+	\
+	config/config_manager.cpp \
+	config/loaders/inline_loader.cpp \
+	config/loaders/json_loader.cpp \
+	config/descriptors/parameter_descriptor.cpp \
+	config/descriptors/config_descriptor.cpp \
+	config/descriptor_providers/json_descriptor_provider.cpp \
+	config/utils/json_parsing.cpp \
 	\
 	libxlio.c \
 	main.cpp \

@@ -19,6 +19,7 @@
 #include "core/util/sysctl_reader.h"
 #include "core/util/agent_def.h"
 #include "core/xlio_extra.h"
+#include "core/config/config_manager.h"
 
 typedef enum {
     MCE_SPEC_NONE = 0,
@@ -301,7 +302,7 @@ public:
     enum hyper_t { HYPER_NONE = 0, HYPER_XEN, HYPER_KVM, HYPER_MSHV, HYPER_VMWARE };
 
 public:
-    void get_env_params();
+    void get_params();
 
     // Update parameters for multi-process applications
     void update_multi_process_params();
@@ -318,7 +319,7 @@ public:
     char log_filename[PATH_MAX];
     char stats_filename[PATH_MAX];
     char stats_shmem_dirname[PATH_MAX];
-    char conf_filename[PATH_MAX];
+    char transport_control_context[PATH_MAX];
     char service_notify_dir[PATH_MAX];
     bool service_enable;
     bool log_colors;
@@ -485,6 +486,9 @@ public:
     } m_ioctl;
 
 private:
+    void get_app_name();
+    void legacy_get_env_params();
+    void new_get_params(const config_manager &config_manager);
     void print_xlio_load_failure_msg();
     int list_to_cpuset(char *cpulist, cpu_set_t *cpu_set);
     int hex_to_cpuset(char *start, cpu_set_t *cpu_set);
@@ -499,11 +503,11 @@ private:
 
     // prevent unautothrized creation of objects
     mce_sys_var()
-        : sysctl_reader(sysctl_reader_t::instance())
+        : sysctl_reader(sysctl_reader_t::instance()) // TODO - Bashar
         , m_ioctl {}
     {
         // coverity[uninit_member]
-        get_env_params();
+        get_params();
     }
     mce_sys_var(const mce_sys_var &);
     mce_sys_var &operator=(const mce_sys_var &);
@@ -515,21 +519,21 @@ extern mce_sys_var &safe_mce_sys();
  * This block consists of library specific configuration
  * environment variables
  */
-#define SYS_VAR_PRINT_REPORT        "XLIO_PRINT_REPORT"
-#define SYS_VAR_LOG_LEVEL           "XLIO_TRACELEVEL"
-#define SYS_VAR_LOG_DETAILS         "XLIO_LOG_DETAILS"
-#define SYS_VAR_LOG_FILENAME        "XLIO_LOG_FILE"
-#define SYS_VAR_STATS_FILENAME      "XLIO_STATS_FILE"
-#define SYS_VAR_STATS_SHMEM_DIRNAME "XLIO_STATS_SHMEM_DIR"
-#define SYS_VAR_SERVICE_DIR         "XLIO_SERVICE_NOTIFY_DIR"
-#define SYS_VAR_SERVICE_ENABLE      "XLIO_SERVICE_ENABLE"
-#define SYS_VAR_CONF_FILENAME       "XLIO_CONFIG_FILE"
-#define SYS_VAR_LOG_COLORS          "XLIO_LOG_COLORS"
-#define SYS_VAR_APPLICATION_ID      "XLIO_APPLICATION_ID"
-#define SYS_VAR_HANDLE_SIGINTR      "XLIO_HANDLE_SIGINTR"
-#define SYS_VAR_HANDLE_SIGSEGV      "XLIO_HANDLE_SIGSEGV"
-#define SYS_VAR_STATS_FD_NUM        "XLIO_STATS_FD_NUM"
-#define SYS_VAR_QUICK_START         "XLIO_QUICK_START"
+#define SYS_VAR_PRINT_REPORT              "XLIO_PRINT_REPORT"
+#define SYS_VAR_LOG_LEVEL                 "XLIO_TRACELEVEL"
+#define SYS_VAR_LOG_DETAILS               "XLIO_LOG_DETAILS"
+#define SYS_VAR_LOG_FILENAME              "XLIO_LOG_FILE"
+#define SYS_VAR_STATS_FILENAME            "XLIO_STATS_FILE"
+#define SYS_VAR_STATS_SHMEM_DIRNAME       "XLIO_STATS_SHMEM_DIR"
+#define SYS_VAR_SERVICE_DIR               "XLIO_SERVICE_NOTIFY_DIR"
+#define SYS_VAR_SERVICE_ENABLE            "XLIO_SERVICE_ENABLE"
+#define SYS_VAR_transport_control_context "XLIO_CONFIG_FILE"
+#define SYS_VAR_LOG_COLORS                "XLIO_LOG_COLORS"
+#define SYS_VAR_APPLICATION_ID            "XLIO_APPLICATION_ID"
+#define SYS_VAR_HANDLE_SIGINTR            "XLIO_HANDLE_SIGINTR"
+#define SYS_VAR_HANDLE_SIGSEGV            "XLIO_HANDLE_SIGSEGV"
+#define SYS_VAR_STATS_FD_NUM              "XLIO_STATS_FD_NUM"
+#define SYS_VAR_QUICK_START               "XLIO_QUICK_START"
 
 #define SYS_VAR_RING_ALLOCATION_LOGIC_TX "XLIO_RING_ALLOCATION_LOGIC_TX"
 #define SYS_VAR_RING_ALLOCATION_LOGIC_RX "XLIO_RING_ALLOCATION_LOGIC_RX"

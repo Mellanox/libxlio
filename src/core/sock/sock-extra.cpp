@@ -381,7 +381,7 @@ extern "C" int xlio_init_ex(const struct xlio_init_attr *attr)
     }
 
     // Read the updated parameters. A global object could trigger the reading earlier.
-    safe_mce_sys().get_env_params();
+    safe_mce_sys().get_params();
 
     xlio_init();
 
