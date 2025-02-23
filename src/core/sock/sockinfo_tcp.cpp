@@ -401,6 +401,31 @@ void sockinfo_tcp::rx_add_ring_cb(ring *p_ring)
     sockinfo::rx_add_ring_cb(p_ring);
 }
 
+void sockinfo_tcp::set_xlio_socket_thread(poll_group *group)
+{
+    m_p_group = group;
+
+    bool current_locks = m_ring_alloc_log_rx.get_use_locks();
+
+    m_ring_alloc_log_rx.set_ring_alloc_logic(RING_LOGIC_PER_USER_ID);
+    m_ring_alloc_log_rx.set_user_id_key(reinterpret_cast<uint64_t>(m_p_group));
+    m_ring_alloc_log_rx.set_use_locks(current_locks ||
+                                      (m_p_group->get_flags() & XLIO_GROUP_FLAG_SAFE));
+    m_ring_alloc_logic_rx = ring_allocation_logic_rx(get_fd(), m_ring_alloc_log_rx);
+
+    m_ring_alloc_log_tx.set_ring_alloc_logic(RING_LOGIC_PER_USER_ID);
+    m_ring_alloc_log_tx.set_user_id_key(reinterpret_cast<uint64_t>(m_p_group));
+    m_ring_alloc_log_tx.set_use_locks(current_locks ||
+                                      (m_p_group->get_flags() & XLIO_GROUP_FLAG_SAFE));
+
+    if (!current_locks && (m_p_group->get_flags() & XLIO_GROUP_FLAG_SAFE)) {
+        m_tcp_con_lock = multilock::create_new_lock(MULTILOCK_RECURSIVE, "tcp_con");
+    }
+
+    tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_xlio_socket);
+    tcp_err(&m_pcb, sockinfo_tcp::err_lwip_cb_xlio_socket);
+}
+
 void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
 {
     if (m_rx_epfd != -1) {

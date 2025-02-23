@@ -56,6 +56,15 @@
  */
 static std::vector<poll_group *> s_poll_groups;
 static lock_spin s_poll_groups_lock;
+static thread_local lock_dummy t_lock_dummy_group;
+
+static lock_base *get_new_group_lock()
+{
+    return (
+        safe_mce_sys().xlio_threads > 0
+            ? static_cast<lock_base *>(multilock::create_new_lock(MULTILOCK_RECURSIVE, "poll_group"))
+            : static_cast<lock_base *>(&t_lock_dummy_group));
+}
 
 poll_group::poll_group(const struct xlio_poll_group_attr *attr)
     : m_socket_event_cb(attr->socket_event_cb)
@@ -63,6 +72,7 @@ poll_group::poll_group(const struct xlio_poll_group_attr *attr)
     , m_socket_rx_cb(attr->socket_rx_cb)
     , m_socket_accept_cb(attr->socket_accept_cb)
     , m_group_flags(attr->flags)
+    , m_group_lock(get_new_group_lock())
 {
     /*
      * In the best case, we expect a single ring per group. Reserve two elements for a scenario
@@ -135,6 +145,8 @@ int poll_group::update(const struct xlio_poll_group_attr *attr)
 
 void poll_group::poll()
 {
+    std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
+
     for (ring *rng : m_rings) {
         uint64_t sn = 0;
         rng->poll_and_process_element_tx(&sn);
@@ -153,6 +165,8 @@ void poll_group::add_dirty_socket(sockinfo_tcp *si)
 
 void poll_group::flush()
 {
+    std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
+
     for (auto si : m_dirty_sockets) {
         si->flush();
     }
@@ -191,6 +205,8 @@ void poll_group::add_ring(ring *rng, ring_alloc_logic_attr *attr)
 
 void poll_group::add_socket(sockinfo_tcp *si)
 {
+    std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
+
     m_sockets_list.push_back(si);
     // For the flow_tag fast path support.
     g_p_fd_collection->set_socket(si->get_fd(), si);
@@ -198,6 +214,8 @@ void poll_group::add_socket(sockinfo_tcp *si)
 
 void poll_group::remove_socket(sockinfo_tcp *si)
 {
+    std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
+
     g_p_fd_collection->clear_socket(si->get_fd());
     m_sockets_list.erase(si);
 
@@ -209,6 +227,8 @@ void poll_group::remove_socket(sockinfo_tcp *si)
 
 void poll_group::close_socket(sockinfo_tcp *si, bool force /*=false*/)
 {
+    std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
+
     remove_socket(si);
 
     bool closed = si->prepare_to_close(force);
@@ -222,6 +242,9 @@ void poll_group::close_socket(sockinfo_tcp *si, bool force /*=false*/)
          * not completed TX operations.
          */
         poll();
+
         si->clean_socket_obj();
+    } else {
+
     }
 }

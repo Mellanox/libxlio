@@ -416,6 +416,7 @@ public:
     int tcp_tx_express_inline(const struct iovec *iov, unsigned iov_len, unsigned flags);
     void flush();
 
+    void set_xlio_socket_thread(poll_group *group);
     void set_xlio_socket(const struct xlio_socket_attr *attr);
     int update_xlio_socket(unsigned flags, uintptr_t userdata_sq);
     bool is_xlio_socket() const { return m_p_group != nullptr; }
