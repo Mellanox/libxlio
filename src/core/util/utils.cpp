@@ -1391,29 +1391,3 @@ uint32_t fd2inode(int fd)
     int rc = fstat(fd, &buf);
     return rc == 0 ? buf.st_ino : 0; // no inode is 0
 }
-
-///////////////////////////////////////////
-xlio_error::xlio_error(const char *_message, const char *_function, const char *_filename,
-                       int _lineno, int _errnum) throw()
-    : message(_message)
-    , function(_function)
-    , filename(_filename)
-    , lineno(_lineno)
-    , errnum(_errnum)
-{
-    snprintf(formatted_message, sizeof(formatted_message),
-             "xlio_error <%s> (errno=%d %s) in %s:%d\n", message, errnum, strerror(errnum),
-             filename, lineno);
-    formatted_message[sizeof(formatted_message) - 1] = '\0';
-}
-
-xlio_error::~xlio_error() throw()
-{
-}
-
-const char *xlio_error::what() const throw()
-{
-    return formatted_message;
-}
-
-///////////////////////////////////////////

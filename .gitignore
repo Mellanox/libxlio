@@ -21,7 +21,8 @@ Makefile.in
 Makefile
 aclocal.m4
 autom4te.cache/
-config.h
+json_descriptor.h
+/config.h
 config.h.in
 config.h.in~
 config.log
@@ -77,3 +78,6 @@ docs/man/xlio.7
 docs/man/xlio_stats.8
 docs/man/xliod.8
 tools/daemon/xliod
+
+tests/unit_tests/unit_tests
+*.pyc

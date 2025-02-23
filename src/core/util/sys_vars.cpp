@@ -46,6 +46,11 @@
 
 #include "core/util/instrumentation.h"
 
+#include "core/config/config_manager.h"
+#include "core/config/loaders/json_loader.h"
+#include "core/config/loaders/inline_loader.h"
+#include "core/config/descriptor_providers/json_descriptor_provider.h"
+
 void check_netperf_flags();
 
 // Do not rely on global variable initialization in code that might be called from library
@@ -677,47 +682,9 @@ void mce_sys_var::update_multi_process_params()
 #endif /* DEFINED_NGINX */
 }
 
-void mce_sys_var::get_env_params()
+void mce_sys_var::legacy_get_env_params()
 {
-    int c = 0, len = 0;
     char *env_ptr;
-    FILE *fp = nullptr;
-    int app_name_size = MAX_CMD_LINE;
-    // Large buffer size to avoid need for realloc
-
-    fp = fopen("/proc/self/cmdline", "r");
-    if (!fp) {
-        vlog_printf(VLOG_ERROR, "error while fopen\n");
-        print_xlio_load_failure_msg();
-        exit(1);
-    }
-
-    app_name = (char *)malloc(app_name_size);
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!app_name) {
-        vlog_printf(VLOG_ERROR, "error while malloc\n");
-        print_xlio_load_failure_msg();
-        exit(1);
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-    while ((c = fgetc(fp)) != EOF) {
-        app_name[len++] = (c == 0 ? ' ' : c);
-        if (len >= app_name_size) {
-            app_name_size = app_name_size * 2;
-            app_name = (char *)realloc(app_name, app_name_size);
-            BULLSEYE_EXCLUDE_BLOCK_START
-            if (!app_name) {
-                vlog_printf(VLOG_ERROR, "error while malloc\n");
-                print_xlio_load_failure_msg();
-                exit(1);
-            }
-            BULLSEYE_EXCLUDE_BLOCK_END
-        }
-    }
-
-    app_name[len - 1] = '\0';
-    fclose(fp);
-
     memset(log_filename, 0, sizeof(log_filename));
     memset(stats_filename, 0, sizeof(stats_filename));
     memset(stats_shmem_dirname, 0, sizeof(stats_shmem_dirname));
@@ -725,7 +692,7 @@ void mce_sys_var::get_env_params()
     strcpy(stats_filename, MCE_DEFAULT_STATS_FILE);
     strcpy(service_notify_dir, MCE_DEFAULT_SERVICE_FOLDER);
     strcpy(stats_shmem_dirname, MCE_DEFAULT_STATS_SHMEM_DIR);
-    strcpy(conf_filename, MCE_DEFAULT_CONF_FILE);
+    strcpy(transport_control_context, MCE_DEFAULT_CONF_FILE);
     strcpy(app_id, MCE_DEFAULT_APP_ID);
     strcpy(internal_thread_cpuset, MCE_DEFAULT_INTERNAL_THREAD_CPUSET);
     strcpy(internal_thread_affinity_str, MCE_DEFAULT_INTERNAL_THREAD_AFFINITY_STR);
@@ -1073,8 +1040,9 @@ void mce_sys_var::get_env_params()
         read_env_variable_with_pid(stats_shmem_dirname, sizeof(stats_shmem_dirname), env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_CONF_FILENAME))) {
-        read_env_variable_with_pid(conf_filename, sizeof(conf_filename), env_ptr);
+    if ((env_ptr = getenv(SYS_VAR_transport_control_context))) {
+        read_env_variable_with_pid(transport_control_context, sizeof(transport_control_context),
+                                   env_ptr);
     }
 
     if ((env_ptr = getenv(SYS_VAR_SERVICE_DIR))) {
@@ -1794,6 +1762,987 @@ void mce_sys_var::get_env_params()
             temp = 0;
         }
         multilock = (multilock_t)temp;
+    }
+}
+
+static void set_string_member(char *sys_var_member, size_t sys_var_member_size,
+                              const std::string &value)
+{
+    memset(sys_var_member, 0, sys_var_member_size);
+    if (value.empty()) {
+        return;
+    }
+    snprintf(sys_var_member, sys_var_member_size, "%s", value.c_str());
+}
+
+static void set_path_member(char *sys_var_member, size_t sys_var_member_size,
+                            const std::string &value, bool add_pid)
+{
+    memset(sys_var_member, 0, sys_var_member_size);
+    if (value.empty()) {
+        return;
+    }
+
+    if (add_pid) {
+        snprintf(sys_var_member, sys_var_member_size, "%s.%d", value.c_str(), getpid());
+    } else {
+        snprintf(sys_var_member, sys_var_member_size, "%s", value.c_str());
+    }
+}
+
+void mce_sys_var::new_get_params(const config_manager &config_manager)
+{
+    const bool core_append_pid_to_path = config_manager.get_value<bool>("core.append_pid_to_path");
+
+    const std::string net_offload_transport_control =
+        config_manager.get_value<std::string>("net.offload.transport_control");
+    set_string_member(transport_control_context, sizeof(transport_control_context),
+                      net_offload_transport_control);
+
+    const std::string net_offload_app_id =
+        config_manager.get_value<std::string>("net.offload.app_id");
+    set_string_member(app_id, sizeof(app_id), net_offload_app_id);
+
+    const std::string core_log_file_path =
+        config_manager.get_value<std::string>("core.log.file_path");
+    set_path_member(log_filename, sizeof(log_filename), core_log_file_path,
+                    core_append_pid_to_path);
+
+    const std::string core_stats_file_path =
+        config_manager.get_value<std::string>("core.stats.file_path");
+    set_path_member(stats_filename, sizeof(stats_filename), core_stats_file_path,
+                    core_append_pid_to_path);
+
+    const std::string core_stats_shmem_dir =
+        config_manager.get_value<std::string>("core.stats.shmem_dir");
+    set_path_member(stats_shmem_dirname, sizeof(stats_shmem_dirname), core_stats_shmem_dir,
+                    core_append_pid_to_path);
+
+    const std::string xlio_daemon_dir = config_manager.get_value<std::string>("xlio.daemon.dir");
+    set_path_member(service_notify_dir, sizeof(service_notify_dir), xlio_daemon_dir,
+                    core_append_pid_to_path);
+
+    const bool xlio_daemon_enable = config_manager.get_value<bool>("xlio.daemon.enable");
+    service_enable = xlio_daemon_enable;
+
+    memset(internal_thread_cpuset, 0, sizeof(internal_thread_cpuset));
+    const std::string core_cpu_cpuset = config_manager.get_value<std::string>("core.cpu.cpuset");
+    snprintf(internal_thread_cpuset, sizeof(internal_thread_cpuset), "%s", core_cpu_cpuset.c_str());
+
+    memset(internal_thread_affinity_str, 0, sizeof(internal_thread_affinity_str));
+    const std::string core_cpu_affinity =
+        config_manager.get_value<std::string>("core.cpu.affinity");
+    snprintf(internal_thread_affinity_str, sizeof(internal_thread_affinity_str), "%s",
+             core_cpu_affinity.c_str());
+
+    const bool core_exit_report = config_manager.get_value<bool>("core.exit_report");
+    print_report = core_exit_report;
+
+    const bool core_init_quick = config_manager.get_value<bool>("core.init.quick");
+    quick_start = core_init_quick;
+
+    const int64_t core_log_level = config_manager.get_value<int64_t>("core.log.level");
+    log_level = static_cast<vlog_levels_t>(core_log_level);
+
+    const int64_t xlio_log_details = config_manager.get_value<int64_t>("xlio.log.details");
+    log_details = xlio_log_details;
+
+    const bool xlio_log_colors = config_manager.get_value<bool>("xlio.log.colors");
+    log_colors = xlio_log_colors;
+
+    const bool core_signals_sigint_exit =
+        config_manager.get_value<bool>("core.signals.sigint.exit");
+    handle_sigintr = core_signals_sigint_exit;
+
+    const bool core_signals_sigsegv_backtrace =
+        config_manager.get_value<bool>("core.signals.sigsegv.backtrace");
+    handle_segfault = core_signals_sigsegv_backtrace;
+
+    const int64_t core_stats_fd_num = config_manager.get_value<int64_t>("core.stats.fd_num");
+    stats_fd_num_max = core_stats_fd_num;
+    stats_fd_num_monitor = core_stats_fd_num; // constrained by "max": 1024 by design
+
+    const int64_t ring_tx_alloc_logic =
+        config_manager.get_value<int64_t>("xlio.ring.tx.alloc_logic");
+    ring_allocation_logic_tx = static_cast<ring_logic_t>(ring_tx_alloc_logic);
+
+    const int64_t ring_rx_alloc_logic =
+        config_manager.get_value<int64_t>("xlio.ring.rx.alloc_logic");
+    ring_allocation_logic_rx = static_cast<ring_logic_t>(ring_rx_alloc_logic);
+
+    const int64_t ring_tx_migration_ratio =
+        config_manager.get_value<int64_t>("xlio.ring.tx.migration_ratio");
+    ring_migration_ratio_tx = ring_tx_migration_ratio;
+
+    const int64_t ring_rx_migration_ratio =
+        config_manager.get_value<int64_t>("xlio.ring.rx.migration_ratio");
+    ring_migration_ratio_rx = ring_rx_migration_ratio;
+
+    const int64_t ring_max_per_interface =
+        config_manager.get_value<int64_t>("xlio.ring.max_per_interface");
+    ring_limit_per_interface = ring_max_per_interface;
+
+    const int64_t ring_tx_max_on_device_memory =
+        config_manager.get_value<int64_t>("xlio.ring.tx.max_on_device_memory");
+    ring_dev_mem_tx = ring_tx_max_on_device_memory;
+
+    const int64_t net_tcp_max_syn_rate = config_manager.get_value<int64_t>("net.tcp.max_syn_rate");
+    tcp_max_syn_rate = net_tcp_max_syn_rate;
+
+    const int64_t xlio_api_sendfile_limit =
+        config_manager.get_value<int64_t>("xlio.api.sendfile_limit");
+    zc_cache_threshold = xlio_api_sendfile_limit;
+
+    const int64_t xlio_sq_buf_size = config_manager.get_value<int64_t>("xlio.sq.buf.size");
+    tx_buf_size = xlio_sq_buf_size;
+
+    const int64_t net_tcp_nodelay_byte_threshold =
+        config_manager.get_value<int64_t>("net.tcp.nodelay.byte_threshold");
+    tcp_nodelay_treshold = net_tcp_nodelay_byte_threshold;
+
+    const int64_t xlio_sq_wre_global_array_size =
+        config_manager.get_value<int64_t>("xlio.sq.wre.global_array_size");
+    tx_num_wr = xlio_sq_wre_global_array_size;
+
+    const int64_t xlio_sq_wre_completion_batch_size =
+        config_manager.get_value<int64_t>("xlio.sq.wre.completion_batch_size");
+    tx_num_wr_to_signal = xlio_sq_wre_completion_batch_size;
+
+    const int64_t xlio_sq_wre_max_inline_size =
+        config_manager.get_value<int64_t>("xlio.sq.wre.max_inline_size");
+    tx_max_inline = xlio_sq_wre_max_inline_size;
+
+    const bool xlio_udp_mc_loopback = config_manager.get_value<bool>("xlio.udp.mc_loopback");
+    tx_mc_loopback_default = xlio_udp_mc_loopback;
+
+    const bool xlio_sq_nonblocking_eagain =
+        config_manager.get_value<bool>("xlio.sq.nonblocking.eagain");
+    tx_nonblocked_eagains = xlio_sq_nonblocking_eagain;
+
+    const int64_t xlio_sq_prefetch_cache_size =
+        config_manager.get_value<int64_t>("xlio.sq.prefetch.cache_size");
+    tx_prefetch_bytes = xlio_sq_prefetch_cache_size;
+
+    const int64_t xlio_udp_buf_batch_size =
+        config_manager.get_value<int64_t>("xlio.udp.buf.batch_size");
+    tx_bufs_batch_udp = xlio_udp_buf_batch_size;
+
+    const int64_t xlio_sq_buf_batch_size =
+        config_manager.get_value<int64_t>("xlio.sq.buf.batch_size");
+    tx_bufs_batch_tcp = xlio_sq_buf_batch_size;
+
+    const int64_t xlio_sq_segments_socket_batch_size =
+        config_manager.get_value<int64_t>("xlio.sq.segments.socket_batch_size");
+    tx_segs_batch_tcp = xlio_sq_segments_socket_batch_size;
+
+    const int64_t xlio_sq_segments_ring_batch_size =
+        config_manager.get_value<int64_t>("xlio.sq.segments.ring_batch_size");
+    tx_segs_ring_batch_tcp = xlio_sq_segments_ring_batch_size;
+
+    const int64_t xlio_sq_segments_pool_batch_size =
+        config_manager.get_value<int64_t>("xlio.sq.segments.pool_batch_size");
+    tx_segs_pool_batch_tcp = xlio_sq_segments_pool_batch_size;
+
+    const int64_t xlio_rq_buf_size = config_manager.get_value<int64_t>("xlio.rq.buf.size");
+    rx_buf_size = xlio_rq_buf_size;
+
+    const int64_t xlio_rq_buf_batch_size =
+        config_manager.get_value<int64_t>("xlio.rq.buf.batch_size");
+    rx_bufs_batch = xlio_rq_buf_batch_size;
+
+    const int64_t xlio_rq_wre_global_array_size =
+        config_manager.get_value<int64_t>("xlio.rq.wre.global_array_size");
+    rx_num_wr = xlio_rq_wre_global_array_size;
+
+    const int64_t xlio_rq_wre_rx_batch_size =
+        config_manager.get_value<int64_t>("xlio.rq.wre.rx_batch_size");
+    rx_num_wr_to_post_recv = xlio_rq_wre_rx_batch_size;
+
+    const int64_t xlio_cq_rx_poll_count =
+        config_manager.get_value<int64_t>("xlio.cq.rx_poll_count");
+    rx_poll_num = xlio_cq_rx_poll_count;
+
+    const int64_t xlio_udp_offload_transition_poll_count =
+        config_manager.get_value<int64_t>("xlio.udp.offload_transition_poll_count");
+    rx_poll_num_init = xlio_udp_offload_transition_poll_count;
+
+    const int64_t xlio_udp_rx_kernel_fd_attention_level =
+        config_manager.get_value<int64_t>("xlio.udp.rx_kernel_fd_attention_level");
+    rx_udp_poll_os_ratio = xlio_udp_rx_kernel_fd_attention_level;
+
+    const int64_t xlio_ts_conversion = config_manager.get_value<int64_t>("xlio.ts_conversion");
+    hw_ts_conversion_mode = static_cast<ts_conversion_mode_t>(xlio_ts_conversion);
+
+    const bool xlio_udp_yield_on_poll = config_manager.get_value<bool>("xlio.udp.yield_on_poll");
+    rx_poll_yield_loops = xlio_udp_yield_on_poll;
+
+    const bool core_stats_cpu_usage = config_manager.get_value<bool>("core.stats.cpu_usage");
+    select_handle_cpu_usage_stats = core_stats_cpu_usage;
+
+    const int64_t xlio_rq_buf_override_rcvbuf_limit =
+        config_manager.get_value<int64_t>("xlio.rq.buf.override_rcvbuf_limit");
+    rx_ready_byte_min_limit = xlio_rq_buf_override_rcvbuf_limit;
+
+    const int64_t xlio_rq_prefetch_cache_size =
+        config_manager.get_value<int64_t>("xlio.rq.prefetch.cache_size");
+    rx_prefetch_bytes = xlio_rq_prefetch_cache_size;
+
+    const bool xlio_rq_prefetch_fetch_before_poll =
+        config_manager.get_value<bool>("xlio.rq.prefetch.fetch_before_poll");
+    rx_prefetch_bytes_before_poll = xlio_rq_prefetch_fetch_before_poll;
+
+    const int64_t xlio_cq_rx_drain_rate_nsec =
+        config_manager.get_value<int64_t>("xlio.cq.rx_drain_rate_nsec");
+    rx_cq_drain_rate_nsec = xlio_cq_rx_drain_rate_nsec;
+
+    rx_delta_tsc_between_cq_polls = 0;
+
+    const bool xlio_rq_striding_enable = config_manager.get_value<bool>("xlio.rq.striding.enable");
+    enable_strq_env = xlio_rq_striding_enable ? option_3::ON : option_3::OFF;
+
+    const int64_t xlio_rq_striding_strides =
+        config_manager.get_value<int64_t>("xlio.rq.striding.strides");
+    strq_stride_num_per_rwqe = xlio_rq_striding_strides;
+
+    const int64_t xlio_rq_striding_stride_size =
+        config_manager.get_value<int64_t>("xlio.rq.striding.stride_size");
+    strq_stride_size_bytes = xlio_rq_striding_stride_size;
+
+    const int64_t xlio_rq_striding_spare_strides =
+        config_manager.get_value<int64_t>("xlio.rq.striding.spare_strides");
+    strq_strides_compensation_level = xlio_rq_striding_spare_strides;
+
+    const int64_t xlio_rq_max_gro_streams =
+        config_manager.get_value<int64_t>("xlio.rq.max_gro_streams");
+    gro_streams_max = xlio_rq_max_gro_streams;
+
+    const bool xlio_udp_mc_disable_flowtag =
+        config_manager.get_value<bool>("xlio.udp.mc_disable_flowtag");
+    disable_flow_tag = xlio_udp_mc_disable_flowtag;
+
+    const bool xlio_ring_tcp_2t_rules = config_manager.get_value<bool>("xlio.ring.tcp_2t_rules");
+    tcp_2t_rules = xlio_ring_tcp_2t_rules;
+
+    const bool xlio_ring_tcp_3t_rules = config_manager.get_value<bool>("xlio.ring.tcp_3t_rules");
+    tcp_3t_rules = xlio_ring_tcp_3t_rules;
+
+    const bool xlio_udp_3t_rules = config_manager.get_value<bool>("xlio.udp.3t_rules");
+    udp_3t_rules = xlio_udp_3t_rules;
+
+    const bool xlio_udp_only_mc_l2_rules =
+        config_manager.get_value<bool>("xlio.udp.only_mc_l2_rules");
+    eth_mc_l2_only_rules = xlio_udp_only_mc_l2_rules;
+
+    const bool xlio_udp_mc_flowtag_acceleration =
+        config_manager.get_value<bool>("xlio.udp.mc_flowtag_acceleration");
+    mc_force_flowtag = xlio_udp_mc_flowtag_acceleration;
+
+    const int64_t net_poll_rx_duration =
+        config_manager.get_value<int64_t>("net.poll.rx_duration_usec");
+    select_poll_num = net_poll_rx_duration;
+
+    select_poll_os_force =
+        MCE_DEFAULT_SELECT_POLL_OS_FORCE; // TODO - discovered to be buggy - see libvma patch
+
+    const int64_t net_poll_kernel_fd_attention =
+        config_manager.get_value<int64_t>("net.poll.kernel_fd_attention_level");
+    select_poll_os_ratio = net_poll_kernel_fd_attention;
+
+    const int64_t net_poll_offload_fd_priority =
+        config_manager.get_value<int64_t>("net.poll.offload_fd_priority");
+    select_skip_os_fd_check = net_poll_offload_fd_priority;
+
+    const bool xlio_cq_interrupt_moderation_enable =
+        config_manager.get_value<bool>("xlio.cq.interrupt_moderation.enable");
+    cq_moderation_enable = xlio_cq_interrupt_moderation_enable;
+
+    const int64_t xlio_cq_interrupt_moderation_packet_count =
+        config_manager.get_value<int64_t>("xlio.cq.interrupt_moderation.packet_count");
+    cq_moderation_count = xlio_cq_interrupt_moderation_packet_count;
+
+    const int64_t xlio_cq_interrupt_moderation_period_usec =
+        config_manager.get_value<int64_t>("xlio.cq.interrupt_moderation.period_usec");
+    cq_moderation_period_usec = xlio_cq_interrupt_moderation_period_usec;
+
+    const int64_t xlio_cq_interrupt_moderation_adaptive_count =
+        config_manager.get_value<int64_t>("xlio.cq.interrupt_moderation.adaptive_count");
+    cq_aim_max_count = xlio_cq_interrupt_moderation_adaptive_count;
+
+    const int64_t xlio_cq_interrupt_moderation_adaptive_period_usec =
+        config_manager.get_value<int64_t>("xlio.cq.interrupt_moderation.adaptive_period_usec");
+    cq_aim_max_period_usec = xlio_cq_interrupt_moderation_adaptive_period_usec;
+
+    const int64_t xlio_cq_interrupt_moderation_adaptive_change_frequency_msec =
+        config_manager.get_value<int64_t>(
+            "xlio.cq.interrupt_moderation.adaptive_change_frequency_msec");
+    cq_aim_interval_msec = xlio_cq_interrupt_moderation_adaptive_change_frequency_msec;
+
+    const int64_t xlio_cq_interrupt_moderation_interrupt_per_sec =
+        config_manager.get_value<int64_t>("xlio.cq.interrupt_moderation.interrupt_per_sec");
+    cq_aim_interrupts_rate_per_sec = xlio_cq_interrupt_moderation_interrupt_per_sec;
+
+    const int64_t net_poll_rx_buffer_max_count =
+        config_manager.get_value<int64_t>("net.poll.rx_buffer_max_count");
+    cq_poll_batch_max = net_poll_rx_buffer_max_count;
+
+    const int64_t xlio_cq_periodic_drain_ms =
+        config_manager.get_value<int64_t>("xlio.cq.periodic_drain_msec");
+    progress_engine_interval_msec = xlio_cq_periodic_drain_ms;
+
+    const int64_t xlio_cq_periodic_drain_max_cqes =
+        config_manager.get_value<int64_t>("xlio.cq.periodic_drain_max_cqes");
+    progress_engine_wce_max = xlio_cq_periodic_drain_max_cqes;
+
+    const bool xlio_cq_keep_full = config_manager.get_value<bool>("xlio.cq.keep_full");
+    cq_keep_qp_full = xlio_cq_keep_full;
+
+    const int64_t xlio_sq_tso_max_size = config_manager.get_value<int64_t>("xlio.sq.tso.max_size");
+    max_tso_sz = xlio_sq_tso_max_size;
+
+    const int64_t xlio_api_hugepages_size =
+        config_manager.get_value<int64_t>("xlio.api.hugepages.size");
+    user_huge_page_size = xlio_api_hugepages_size;
+
+    const bool xlio_cq_interrupt_per_packet =
+        config_manager.get_value<bool>("xlio.cq.interrupt_per_packet");
+    internal_thread_arm_cq_enabled = xlio_cq_interrupt_per_packet;
+
+    const bool net_offload_enable = config_manager.get_value<bool>("net.offload.enable");
+    offloaded_sockets = net_offload_enable;
+
+    const int64_t core_handlers_timer_msec =
+        config_manager.get_value<int64_t>("core.handlers.timer_msec");
+    timer_resolution_msec = core_handlers_timer_msec;
+
+    const int64_t net_tcp_timer_msec = config_manager.get_value<int64_t>("net.tcp.timer_msec");
+    tcp_timer_resolution_msec = net_tcp_timer_msec;
+
+    const int64_t net_tcp_timestamps = config_manager.get_value<int64_t>("net.tcp.timestamps");
+    tcp_ts_opt = static_cast<tcp_ts_opt_t>(net_tcp_timestamps);
+
+    const bool net_tcp_nodelay_enable = config_manager.get_value<bool>("net.tcp.nodelay.enable");
+    tcp_nodelay = net_tcp_nodelay_enable;
+
+    const bool net_tcp_quickack = config_manager.get_value<bool>("net.tcp.quickack");
+    tcp_quickack = net_tcp_quickack;
+
+    const bool net_tcp_push = config_manager.get_value<bool>("net.tcp.push");
+    tcp_push_flag = net_tcp_push;
+
+    const bool net_tcp_offload_enable_posix_ctl =
+        config_manager.get_value<bool>("net.tcp.offload.enable_posix_ctl");
+    avoid_sys_calls_on_tcp_fd = net_tcp_offload_enable_posix_ctl;
+
+    const bool net_tcp_offload_allow_privileged_sockopt =
+        config_manager.get_value<bool>("net.tcp.offload.allow_privileged_sockopt");
+    allow_privileged_sock_opt = net_tcp_offload_allow_privileged_sockopt;
+
+    //	exception_handling is handled by its CTOR
+
+    wait_after_join_msec =
+        MCE_DEFAULT_WAIT_AFTER_JOIN_MSEC; // TODO - not in use - should be deleted
+
+    const int64_t xlio_batching_mode = config_manager.get_value<int64_t>("xlio.batching_mode");
+    buffer_batching_mode = static_cast<buffer_batching_mode_t>(xlio_batching_mode);
+
+    const bool core_memory_hugepages_enable =
+        config_manager.get_value<bool>("core.memory.hugepages.enable");
+    mem_alloc_type = core_memory_hugepages_enable ? option_alloc_type::mode_t::HUGE
+                                                  : option_alloc_type::mode_t::ANON;
+
+    const int64_t core_memory_limit = config_manager.get_value<int64_t>("core.memory.limit");
+    memory_limit = core_memory_limit;
+
+    const int64_t xlio_memory_external_limit =
+        config_manager.get_value<int64_t>("xlio.memory.external.limit");
+    memory_limit_user = xlio_memory_external_limit;
+
+    const int64_t core_memory_heap_metadata_block_size =
+        config_manager.get_value<int64_t>("core.memory.heap_metadata_block_size");
+    heap_metadata_block = core_memory_heap_metadata_block_size;
+
+    const int64_t core_memory_hugepages_size =
+        config_manager.get_value<int64_t>("core.memory.hugepages.size");
+    hugepage_size = core_memory_hugepages_size;
+
+    const bool xlio_api_socketextreme = config_manager.get_value<bool>("xlio.api.socketextreme");
+    enable_socketxtreme = xlio_api_socketextreme;
+
+    const int64_t xlio_sq_tso_enable = config_manager.get_value<int64_t>("xlio.sq.tso.enable");
+    enable_tso = xlio_sq_tso_enable ? option_3::ON : option_3::OFF;
+
+#ifdef DEFINED_UTLS
+
+    const bool xlio_rq_tls_offload_enable =
+        config_manager.get_value<bool>("xlio.rq.tls_offload.enable");
+    enable_utls_rx = xlio_rq_tls_offload_enable;
+
+    const bool xlio_sq_tls_offload_enable =
+        config_manager.get_value<bool>("xlio.sq.tls_offload.enable");
+    enable_utls_tx = xlio_sq_tls_offload_enable;
+
+    const int64_t xlio_sq_tls_offload_dek_cache_max_size =
+        config_manager.get_value<int64_t>("xlio.sq.tls_offload.dek_cache_max_size");
+    utls_high_wmark_dek_cache_size = xlio_sq_tls_offload_dek_cache_max_size;
+
+    const int64_t xlio_sq_tls_offload_dek_cache_min_size =
+        config_manager.get_value<int64_t>("xlio.sq.tls_offload.dek_cache_min_size");
+    utls_low_wmark_dek_cache_size = xlio_sq_tls_offload_dek_cache_min_size;
+
+    if (utls_low_wmark_dek_cache_size >= utls_high_wmark_dek_cache_size) {
+        utls_low_wmark_dek_cache_size = utls_high_wmark_dek_cache_size / 2U;
+    }
+
+#endif /* DEFINED_UTLS */
+
+    const int64_t xlio_rq_lro = config_manager.get_value<int64_t>("xlio.rq.lro");
+    enable_lro = xlio_rq_lro ? option_3::ON : option_3::OFF;
+
+    const bool xlio_syscall_fork_support =
+        config_manager.get_value<bool>("xlio.syscall.fork_support");
+    handle_fork = xlio_syscall_fork_support;
+
+    const bool core_syscall_dup2_support =
+        config_manager.get_value<bool>("core.syscall.dup2_support");
+    close_on_dup2 = core_syscall_dup2_support;
+
+    const int64_t net_mtu = config_manager.get_value<int64_t>("net.mtu");
+    mtu = net_mtu;
+
+#if defined(DEFINED_NGINX)
+
+    const int64_t xlio_nginx_udp_pool_size =
+        config_manager.get_value<int64_t>("xlio.nginx.udp_pool_size");
+    nginx_udp_socket_pool_size = xlio_nginx_udp_pool_size;
+
+    const bool xlio_nginx_udp_socket_pool_reuse =
+        config_manager.get_value<bool>("xlio.nginx.udp_socket_pool_reuse");
+    nginx_udp_socket_pool_rx_num_buffs_reuse = xlio_nginx_udp_socket_pool_reuse;
+
+#endif
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+    const int64_t xlio_nginx_workers_num =
+        config_manager.get_value<int64_t>("xlio.nginx.workers_num");
+    app.workers_num = xlio_nginx_workers_num;
+
+    const int64_t xlio_nginx_src_port_stride =
+        config_manager.get_value<int64_t>("xlio.nginx.src_port_stride");
+    app.src_port_stride = xlio_nginx_src_port_stride;
+
+    const bool xlio_nginx_distribute_cq =
+        config_manager.get_value<bool>("xlio.nginx.distribute_cq");
+    app.distribute_cq_interrupts = xlio_nginx_distribute_cq;
+#endif
+
+    const int64_t net_tcp_mss = config_manager.get_value<int64_t>("net.tcp.mss");
+    lwip_mss = net_tcp_mss;
+
+    // TODO - stopped here
+    const int64_t net_tcp_congestion_control =
+        config_manager.get_value<int64_t>("net.tcp.congestion_control");
+    lwip_cc_algo_mod = net_tcp_congestion_control;
+
+    const int64_t xlio_spec = config_manager.get_value<int64_t>("xlio.spec");
+    mce_spec = xlio_spec;
+
+    const int64_t net_neighbor_errors_before_reset =
+        config_manager.get_value<int64_t>("net.neighbor.errors_before_reset");
+    neigh_num_err_retries = net_neighbor_errors_before_reset;
+
+    const int64_t net_neighbor_uc_arp_retries =
+        config_manager.get_value<int64_t>("net.neighbor.uc_arp_retries");
+    neigh_uc_arp_quata = net_neighbor_uc_arp_retries;
+
+    const int64_t net_neighbor_uc_arp_delay_msec =
+        config_manager.get_value<int64_t>("net.neighbor.uc_arp_delay_msec");
+    neigh_wait_till_send_arp_msec = net_neighbor_uc_arp_delay_msec;
+
+    const int64_t net_neighbor_update_interval_msec =
+        config_manager.get_value<int64_t>("net.neighbor.update_interval_msec");
+    timer_netlink_update_msec = net_neighbor_update_interval_msec;
+
+    const bool net_deferred_close = config_manager.get_value<bool>("net.deferred_close");
+    deferred_close = net_deferred_close;
+
+    const bool net_tcp_linger_0 = config_manager.get_value<bool>("net.tcp.linger_0");
+    tcp_abort_on_close = net_tcp_linger_0;
+
+    const bool xlio_poll_rx_poll_on_tx = config_manager.get_value<bool>("xlio.poll.rx_poll_on_tx");
+    rx_poll_on_tx_tcp = xlio_poll_rx_poll_on_tx;
+
+    const bool xlio_poll_rx_cq_wait_ctrl =
+        config_manager.get_value<bool>("xlio.poll.rx_cq_wait_ctrl");
+    rx_cq_wait_ctrl = xlio_poll_rx_cq_wait_ctrl;
+
+    const bool xlio_syscall_getsockname_dummy_send =
+        config_manager.get_value<bool>("xlio.syscall.getsockname_dummy_send");
+    trigger_dummy_send_getsockname = xlio_syscall_getsockname_dummy_send;
+
+    const int64_t net_tcp_wmem = config_manager.get_value<int64_t>("net.tcp.wmem");
+    tcp_send_buffer_size = net_tcp_wmem;
+
+    const int64_t xlio_poll_skip_cq_on_rx =
+        config_manager.get_value<int64_t>("xlio.poll.skip_cq_on_rx");
+    skip_poll_in_rx = static_cast<skip_poll_in_rx_t>(xlio_poll_skip_cq_on_rx);
+
+    const bool core_mutex_over_spinlock =
+        config_manager.get_value<bool>("core.mutex_over_spinlock");
+    multilock =
+        core_mutex_over_spinlock ? multilock_t::MULTILOCK_MUTEX : multilock_t::MULTILOCK_SPIN;
+
+    read_hv();
+
+    /* Configure enable_socketxtreme as first because
+     * this mode has some special predefined parameter limitations
+     */
+    if (enable_socketxtreme) {
+        /* Set following parameters as default for SocketXtreme mode */
+        gro_streams_max = 0;
+        progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
+    }
+
+    enable_strq_env = xlio_rq_striding_enable ? option_3::ON : option_3::OFF;
+    enable_striding_rq = (enable_strq_env == option_3::ON || enable_strq_env == option_3::AUTO);
+
+    if (enable_striding_rq) {
+        rx_num_wr = MCE_DEFAULT_STRQ_NUM_WRE;
+        rx_num_wr_to_post_recv = MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV;
+    }
+
+/*
+ * Check for specific application configuration first. We can make decisions
+ * based on number of workers or application type further.
+ */
+#if defined(DEFINED_NGINX)
+    if (app.workers_num > 0) {
+        app.type = APP_NGINX;
+        // In order to ease the usage of Nginx cases, we apply Nginx profile when
+        // user will choose to use Nginx workers environment variable.
+        if (mce_spec == MCE_SPEC_NONE) {
+            mce_spec = MCE_SPEC_NGINX;
+        }
+    }
+#endif // DEFINED_NGINX
+
+    switch (mce_spec) {
+    case MCE_SPEC_SOCKPERF_ULTRA_LATENCY:
+        memory_limit = 128LU * 1024 * 1024;
+        tx_num_wr = 256;
+        tx_num_wr_to_signal = 4;
+        tx_prefetch_bytes = MCE_DEFAULT_TX_PREFETCH_BYTES;
+        tx_bufs_batch_udp = 1;
+        tx_bufs_batch_tcp = 1;
+        rx_bufs_batch = 4;
+        rx_poll_num = -1;
+        enable_tso = option_3::OFF;
+        rx_udp_poll_os_ratio = 0;
+        rx_prefetch_bytes = MCE_DEFAULT_RX_PREFETCH_BYTES;
+        rx_prefetch_bytes_before_poll = 256;
+        select_poll_num = -1;
+        select_poll_os_ratio = 0;
+        select_skip_os_fd_check = 0;
+        avoid_sys_calls_on_tcp_fd = true;
+        gro_streams_max = 0;
+        progress_engine_interval_msec = 0;
+        cq_keep_qp_full = false;
+        tcp_nodelay = true;
+        ring_dev_mem_tx = 16384;
+        strcpy(internal_thread_affinity_str, "0");
+
+        if (enable_striding_rq) {
+            rx_num_wr = 4U;
+        } else {
+            rx_num_wr = 256;
+            rx_num_wr_to_post_recv = 4;
+        }
+        break;
+
+    case MCE_SPEC_SOCKPERF_LATENCY:
+        tx_num_wr = 256;
+        tx_num_wr_to_signal = 4;
+        tx_bufs_batch_udp = 1;
+        tx_bufs_batch_tcp = 1;
+        rx_bufs_batch = 4;
+
+        rx_poll_num = -1;
+        enable_tso = option_3::OFF;
+        rx_prefetch_bytes_before_poll = 256;
+        select_poll_num = -1;
+        avoid_sys_calls_on_tcp_fd = true;
+        gro_streams_max = 0;
+        cq_keep_qp_full = false;
+        strcpy(internal_thread_affinity_str, "0");
+        progress_engine_interval_msec = 100;
+        select_poll_os_ratio = 100;
+        select_poll_os_force = 1;
+        tcp_nodelay = true;
+        ring_dev_mem_tx = 16384;
+
+        if (enable_striding_rq) {
+            rx_num_wr = 4U;
+        } else {
+            rx_num_wr = 256;
+            rx_num_wr_to_post_recv = 4;
+        }
+
+        break;
+
+#ifdef DEFINED_NGINX
+    case MCE_SPEC_NGINX:
+        // Fallthrough
+    case MCE_SPEC_NGINX_DPU:
+        ring_allocation_logic_tx = RING_LOGIC_PER_INTERFACE;
+        ring_allocation_logic_rx = RING_LOGIC_PER_INTERFACE;
+        progress_engine_interval_msec = 0; // Disable internal thread CQ draining logic.
+        cq_poll_batch_max = 128; // Maximum CQEs to poll in one batch.
+        enable_tso = option_3::ON; // Enable TCP Segmentation Offload(=TSO).
+        timer_resolution_msec = 32; // Reduce CPU utilization of internal thread.
+        tcp_timer_resolution_msec = 256; // Reduce CPU utilization of internal thread.
+        tcp_send_buffer_size = 2 * 1024 * 1024; // LWIP TCP send buffer size.
+        tcp_push_flag = false; // When false, we don't set PSH flag in outgoing TCP segments.
+        select_poll_num = 0; // Poll CQ only once before going to sleep.
+        select_skip_os_fd_check = 1000; // Poll OS every X epoll_waits if we do not sleep.
+        tcp_3t_rules = true; // Use 3 tuple instead rules of 5 tuple rules.
+        app.distribute_cq_interrupts = true;
+        rx_cq_wait_ctrl = true;
+
+        if (mce_spec == MCE_SPEC_NGINX) {
+            memory_limit = (app.workers_num > 16 ? 3072LU : 4096LU) * 1024 * 1024;
+            memory_limit *= std::max(app.workers_num, 1);
+            rx_bufs_batch = 8; // RX buffers batch size.
+
+            // Do polling on RX queue on TX operations, helpful to maintain TCP stack management.
+            rx_poll_on_tx_tcp = true;
+        } else if (mce_spec == MCE_SPEC_NGINX_DPU) {
+            memory_limit = (app.workers_num == 16 ? 512LU : 1024LU) * 1024 * 1024;
+            memory_limit *= std::max(app.workers_num, 1);
+            buffer_batching_mode = BUFFER_BATCHING_NONE;
+        }
+        break;
+#endif // DEFINED_NGINX
+    case MCE_SPEC_NVME_BF3:
+        strq_stride_num_per_rwqe = 8192U;
+        enable_lro = option_3::ON;
+        handle_fork = false;
+        strcpy(internal_thread_affinity_str, "0x01");
+        gro_streams_max = 0;
+        tx_num_wr_to_signal = 128U;
+        tx_num_wr = 1024U;
+        rx_num_wr = 32U;
+        enable_tso = option_3::ON;
+        rx_prefetch_bytes_before_poll = 256U;
+        ring_dev_mem_tx = 1024;
+        cq_keep_qp_full = false;
+        cq_aim_interval_msec = MCE_CQ_ADAPTIVE_MODERATION_DISABLED;
+        progress_engine_interval_msec = 0U;
+        tcp_abort_on_close = true;
+        memory_limit = 256U * 1024U * 1024U;
+        memory_limit_user = 2U * 1024U * 1024U * 1024U;
+
+        tx_bufs_batch_udp = 1;
+        tx_bufs_batch_tcp = 1;
+        rx_bufs_batch = 4;
+        tcp_nodelay = true;
+    case MCE_SPEC_NONE:
+    default:
+        break;
+    }
+
+    if (HYPER_MSHV == hypervisor && !service_enable) {
+        service_enable = true;
+        vlog_printf(VLOG_DEBUG, "%s parameter is forced to 'true' for MSHV hypervisor\n",
+                    SYS_VAR_SERVICE_ENABLE);
+    }
+
+    if (log_level >= VLOG_DEBUG) {
+        log_details = 2;
+    }
+
+    log_details = xlio_log_details;
+
+    stats_fd_num_monitor = std::min(stats_fd_num_max, MAX_STATS_FD_NUM);
+    if (stats_fd_num_max > MAX_STATS_FD_NUM) {
+        vlog_printf(VLOG_INFO, "xlio_stats monitoring will be limited by %d sockets\n",
+                    MAX_STATS_FD_NUM);
+    }
+
+    int64_t strides_num = xlio_rq_striding_strides;
+
+    // TODO - have power of 2 constraint in config descriptor
+    bool is_strides_num_ok = true;
+    if (!is_ilog2(static_cast<unsigned int>(strides_num))) {
+        strides_num = align32pow2(static_cast<uint32_t>(strides_num));
+        is_strides_num_ok = false;
+    }
+
+    if (!is_strides_num_ok) {
+        vlog_printf(VLOG_INFO,
+                    " Invalid xlio.rq.striding.strides: Must be power of 2. Using: %d.\n",
+                    strides_num);
+    }
+
+    strq_stride_num_per_rwqe = static_cast<uint32_t>(strides_num);
+
+    // TODO - have power of 2 constraint in config descriptor
+    bool is_stride_size_ok = true;
+    int64_t stride_size = xlio_rq_striding_stride_size;
+    if (!is_ilog2(static_cast<unsigned int>(stride_size))) {
+        stride_size = align32pow2(static_cast<uint32_t>(stride_size));
+        is_stride_size_ok = false;
+    }
+
+    if (!is_stride_size_ok) {
+        vlog_printf(VLOG_INFO,
+                    " Invalid xlio.rq.striding.stride_size: Must be power of 2. Using: %d.\n",
+                    stride_size);
+    }
+
+    strq_stride_size_bytes = static_cast<uint32_t>(stride_size);
+
+    strq_strides_compensation_level = xlio_rq_striding_spare_strides;
+
+    tx_buf_size = xlio_sq_buf_size;
+
+    tcp_nodelay_treshold = net_tcp_nodelay_byte_threshold;
+
+    if (tx_num_wr <= (tx_num_wr_to_signal * 2)) {
+        tx_num_wr = tx_num_wr_to_signal * 2;
+    }
+
+    // TODO - have a joint constraint
+    if (enable_striding_rq && (strq_stride_num_per_rwqe * rx_num_wr > MAX_MLX5_CQ_SIZE_ITEMS)) {
+        rx_num_wr = MAX_MLX5_CQ_SIZE_ITEMS / strq_stride_num_per_rwqe;
+
+        vlog_printf(VLOG_WARNING,
+                    "Requested " SYS_VAR_STRQ_NUM_STRIDES " * " SYS_VAR_RX_NUM_WRE
+                    " > Maximum CQE per CQ (%d)."
+                    " Decreasing " SYS_VAR_RX_NUM_WRE " to %" PRIu32 "\n",
+                    MAX_MLX5_CQ_SIZE_ITEMS, rx_num_wr);
+    }
+
+    if (rx_num_wr <= (rx_num_wr_to_post_recv * 2)) {
+        rx_num_wr = rx_num_wr_to_post_recv * 2;
+    }
+
+    if (rx_poll_num == 0) {
+        rx_poll_num = 1; // Force at least one good polling loop
+    }
+
+    // Update the rx cq polling rate for draining logic
+    tscval_t tsc_per_second = get_tsc_rate_per_second();
+    rx_delta_tsc_between_cq_polls = tsc_per_second * rx_cq_drain_rate_nsec / NSEC_PER_SEC;
+
+    // mc_force_flowtag must be adjusted based on disable_flow_tag
+    if (disable_flow_tag) {
+        vlog_printf(VLOG_WARNING, "%s and %s can't be set together. Disabling %s\n",
+                    SYS_VAR_DISABLE_FLOW_TAG, SYS_VAR_MC_FORCE_FLOWTAG, SYS_VAR_MC_FORCE_FLOWTAG);
+        mc_force_flowtag = 0;
+    }
+
+    if (select_poll_os_force) {
+        select_poll_os_ratio = 1;
+        select_skip_os_fd_check = 1;
+    }
+
+#ifdef DEFINED_IBV_CQ_ATTR_MODERATE
+    if (rx_poll_num < 0 || select_poll_num < 0) {
+        cq_moderation_enable = false;
+    }
+
+    uint32_t max_cq_moderation_count =
+        (!enable_striding_rq ? rx_num_wr : (strq_stride_num_per_rwqe * rx_num_wr)) / 2U;
+    if (cq_moderation_count > max_cq_moderation_count) {
+        cq_moderation_count = max_cq_moderation_count;
+    }
+
+    uint32_t max_cq_aim_max_count =
+        (!enable_striding_rq ? rx_num_wr : (strq_stride_num_per_rwqe * rx_num_wr)) / 2U;
+    if (cq_aim_max_count > max_cq_aim_max_count) {
+        cq_aim_max_count = max_cq_aim_max_count;
+    }
+
+    if (!cq_moderation_enable) {
+        cq_aim_interval_msec = MCE_CQ_ADAPTIVE_MODERATION_DISABLED;
+    }
+
+#else
+    if (cq_moderation_enable == true) {
+        vlog_printf(VLOG_WARNING,
+                    "'xlio.cq.interrupt_moderation.enable' is not supported on this environment\n");
+    }
+    if (max_cq_moderation_count != 0) {
+        vlog_printf(
+            VLOG_WARNING,
+            "'xlio.cq.interrupt_moderation.packet_count' is not supported on this environment\n");
+    }
+    if (cq_moderation_period_usec != 0) {
+        vlog_printf(
+            VLOG_WARNING,
+            "'xlio.cq.interrupt_moderation.period_usec' is not supported on this environment\n");
+    }
+    if (cq_aim_max_count != 0) {
+        vlog_printf(
+            VLOG_WARNING,
+            "'xlio.cq.interrupt_moderation.adaptive_count' is not supported on this environment\n");
+    }
+    if (cq_aim_max_period_usec != 0) {
+        vlog_printf(VLOG_WARNING,
+                    "'xlio.cq.interrupt_moderation.adaptive_period_usec' is not supported on this "
+                    "environment\n");
+    }
+    if (cq_aim_interval_msec != 0) {
+        vlog_printf(VLOG_WARNING,
+                    "'xlio.cq.interrupt_moderation.adaptive_change_frequency_ms' is not supported "
+                    "on this environment\n");
+    }
+    if (cq_aim_interrupts_rate_per_sec != 0) {
+        vlog_printf(VLOG_WARNING,
+                    "'xlio.cq.interrupt_moderation.interrupt_per_sec' is not supported on this "
+                    "environment\n");
+    }
+#endif /* DEFINED_IBV_CQ_ATTR_MODERATE */
+
+    if (enable_socketxtreme && (progress_engine_interval_msec != MCE_CQ_DRAIN_INTERVAL_DISABLED)) {
+        progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
+        vlog_printf(VLOG_DEBUG,
+                    "xlio.cq.periodic_drain_ms parameter is forced to %d in case "
+                    "xlio.api.socketextreme is enabled\n",
+                    progress_engine_interval_msec);
+    }
+
+    qp_compensation_level = rx_num_wr / 2U;
+
+    const int64_t xlio_cq_buf_rx_spare = config_manager.get_value<int64_t>("xlio.cq.buf.rx_spare");
+    qp_compensation_level = xlio_cq_buf_rx_spare;
+    if (qp_compensation_level < rx_num_wr_to_post_recv) {
+        qp_compensation_level = rx_num_wr_to_post_recv;
+    }
+
+    if (user_huge_page_size == 0) {
+        user_huge_page_size = g_hugepage_mgr.get_default_hugepage();
+    }
+
+    const int64_t core_handlers_behavior =
+        config_manager.get_value<int64_t>("core.handlers.behavior");
+    tcp_ctl_thread = static_cast<option_tcp_ctl_thread::mode_t>(core_handlers_behavior);
+    if (tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+        if (progress_engine_interval_msec != MCE_CQ_DRAIN_INTERVAL_DISABLED) {
+            vlog_printf(VLOG_DEBUG,
+                        "xlio.cq.periodic_drain_ms parameter is forced to %d in case "
+                        "core.handlers.behavior=%s is enabled\n",
+                        MCE_CQ_DRAIN_INTERVAL_DISABLED,
+                        option_tcp_ctl_thread::to_str(tcp_ctl_thread));
+
+            progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
+        }
+        if (ring_allocation_logic_tx != RING_LOGIC_PER_THREAD ||
+            ring_allocation_logic_rx != RING_LOGIC_PER_THREAD) {
+            vlog_printf(VLOG_DEBUG,
+                        "xlio.ring.tx.alloc_logic,xlio.ring.rx.alloc_logic parameter is forced to "
+                        "%s in case core.handlers.behavior=%s is enabled\n",
+                        ring_logic_str(RING_LOGIC_PER_THREAD),
+                        option_tcp_ctl_thread::to_str(tcp_ctl_thread));
+
+            ring_allocation_logic_tx = ring_allocation_logic_rx = RING_LOGIC_PER_THREAD;
+        }
+    }
+
+    const int64_t core_exception_mode = config_manager.get_value<int64_t>("core.exception.mode");
+
+    // TODO (old - not config): this should be replaced by calling "exception_handling.init()" that
+    // will be called from init()
+    exception_handling = xlio_exception_handling(
+        core_exception_mode); // xlio_exception_handling is responsible for its invariant
+
+    // TODO - add dependencies and joint constraints
+    if (tcp_timer_resolution_msec < timer_resolution_msec) {
+        vlog_printf(
+            VLOG_WARNING,
+            "TCP timer resolution [net.tcp.timer_msec=%d] cannot be smaller than timer resolution "
+            "[core.handlers.timer_msec=%d]. Setting TCP timer resolution to %d msec.\n",
+            tcp_timer_resolution_msec, timer_resolution_msec, timer_resolution_msec);
+        tcp_timer_resolution_msec = timer_resolution_msec;
+    }
+
+    // handle internal thread affinity - default is CPU-0
+    if (env_to_cpuset(internal_thread_affinity_str, &internal_thread_affinity)) {
+        vlog_printf(VLOG_WARNING,
+                    "Failed to set internal thread affinity: %s...  deferring to cpu-0.\n",
+                    internal_thread_affinity_str);
+    }
+
+    if (buffer_batching_mode == BUFFER_BATCHING_NONE) {
+        tx_bufs_batch_tcp = 1;
+        tx_bufs_batch_udp = 1;
+        rx_bufs_batch = 1;
+    }
+
+    if (hugepage_size & (hugepage_size - 1)) {
+        vlog_printf(VLOG_WARNING, "%s must be a power of 2. Fallback to default value (%s)\n",
+                    SYS_VAR_HUGEPAGE_SIZE, option_size::to_str(MCE_DEFAULT_HUGEPAGE_SIZE));
+        hugepage_size = MCE_DEFAULT_HUGEPAGE_SIZE;
+    }
+
+    if ((enable_tso != option_3::OFF) && (ring_migration_ratio_tx != -1)) {
+        ring_migration_ratio_tx = -1;
+        vlog_printf(VLOG_DEBUG, "%s parameter is forced to %d in case %s is enabled\n",
+                    SYS_VAR_RING_MIGRATION_RATIO_TX, -1, SYS_VAR_TSO);
+    }
+}
+
+void mce_sys_var::get_app_name()
+{
+    int c = 0, len = 0;
+    FILE *fp = nullptr;
+    int app_name_size = MAX_CMD_LINE;
+
+    fp = fopen("/proc/self/cmdline", "r");
+    if (!fp) {
+        vlog_printf(VLOG_ERROR, "error while fopen\n");
+        print_xlio_load_failure_msg();
+        exit(1);
+    }
+
+    app_name = (char *)malloc(app_name_size);
+    BULLSEYE_EXCLUDE_BLOCK_START
+    if (!app_name) {
+        vlog_printf(VLOG_ERROR, "error while malloc\n");
+        print_xlio_load_failure_msg();
+        exit(1);
+    }
+    BULLSEYE_EXCLUDE_BLOCK_END
+    while ((c = fgetc(fp)) != EOF) {
+        app_name[len++] = (c == 0 ? ' ' : c);
+        if (len >= app_name_size) {
+            app_name_size = app_name_size * 2;
+            app_name = (char *)realloc(app_name, app_name_size);
+            BULLSEYE_EXCLUDE_BLOCK_START
+            if (!app_name) {
+                vlog_printf(VLOG_ERROR, "error while malloc\n");
+                print_xlio_load_failure_msg();
+                exit(1);
+            }
+            BULLSEYE_EXCLUDE_BLOCK_END
+        }
+    }
+
+    app_name[len - 1] = '\0';
+    fclose(fp);
+}
+
+void mce_sys_var::get_params()
+{
+    get_app_name();
+
+    // legacy method - config manager is not relevant for this case
+    if (std::getenv("XLIO_USE_DEPRECATED_CONFIG")) {
+        vlog_printf(VLOG_WARNING, "Using deprecated environment variables.\n");
+        vlog_printf(
+            VLOG_WARNING,
+            "---------------------------------------------------------------------------\n");
+        legacy_get_env_params();
+    } else {
+        new_get_params(config_manager());
     }
 }
 
