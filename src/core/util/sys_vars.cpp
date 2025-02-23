@@ -901,6 +901,7 @@ void mce_sys_var::get_env_params()
     tcp_send_buffer_size = MCE_DEFAULT_TCP_SEND_BUFFER_SIZE;
     skip_poll_in_rx = MCE_DEFAULT_SKIP_POLL_IN_RX;
     multilock = MCE_DEFAULT_MULTILOCK;
+    xlio_threads = MCE_DEFAULT_XLIO_THREADS;
 
     read_hv();
 
@@ -1822,6 +1823,10 @@ void mce_sys_var::get_env_params()
             temp = 0;
         }
         multilock = (multilock_t)temp;
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_XLIO_THREADS))) {
+        xlio_threads = option_size::from_str(env_ptr) ?: 1;
     }
 }
 

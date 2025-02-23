@@ -98,6 +98,8 @@ libxlio_la_SOURCES := \
 	dev/ring_simple.cpp \
 	dev/ring_tap.cpp \
 	dev/ring_allocation_logic.cpp \
+	dev/xlio_thread.cpp \
+	dev/xlio_thread_manager.cpp \
 	\
 	event/delta_timer.cpp \
 	event/event_handler_manager.cpp \
@@ -206,6 +208,8 @@ libxlio_la_SOURCES := \
 	dev/ring_allocation_logic.h \
 	dev/wqe_send_handler.h \
 	dev/xlio_ti.h \
+	dev/xlio_thread.h \
+	dev/xlio_thread_manager.h \
 	\
 	event/command.h \
 	event/delta_timer.h \
