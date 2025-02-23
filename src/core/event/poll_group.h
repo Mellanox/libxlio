@@ -86,6 +86,7 @@ private:
     unsigned m_group_flags;
     std::vector<sockinfo_tcp *> m_dirty_sockets;
 
+    multilock m_group_lock;
     sock_fd_api_list_t m_sockets_list;
     std::vector<std::pair<std::unique_ptr<ring_alloc_logic_attr>, net_device_val *>> m_rings_ref;
 };

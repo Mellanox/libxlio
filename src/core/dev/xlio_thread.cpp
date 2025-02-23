@@ -91,6 +91,18 @@ void xlio_thread::socket_accept_cb(xlio_socket_t sock, xlio_socket_t parent,
     NOT_IN_USE(parent_userdata_sq);
 }
 
+int xlio_thread::add_listen_socket(sockinfo_tcp *si)
+{
+    si->set_xlio_socket_thread(m_poll_group);
+    m_poll_group->add_socket(si);
+
+    // TODO handle positive return code from prepareListen() and convert it to errno
+    int rc = (si->prepareListen() ?: si->listen(-1));
+
+    xt_loginfo("Socket added tid: %d, fd: %d, rc: %d", (int)gettid(), si->get_fd(), rc);
+    return rc;
+}
+
 void xlio_thread::xlio_thread_loop()
 {
     while (m_running.load(std::memory_order_relaxed)) {

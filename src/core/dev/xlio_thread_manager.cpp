@@ -33,6 +33,7 @@
  */
 
 #include "xlio_thread_manager.h"
+#include "core/sock/sockinfo_tcp.h"
 
 xlio_thread_manager *g_p_xlio_thread_manager = nullptr;
 
@@ -48,4 +49,11 @@ xlio_thread_manager::~xlio_thread_manager()
 {
     std::for_each(m_xlio_threads.get(), m_xlio_threads.get() + m_threads_num,
         [](xlio_thread& t) { t.stop_thread(); });
+}
+
+int xlio_thread_manager::add_listen_socket(sockinfo_tcp *sock)
+{
+    int rc = m_xlio_threads.get()[m_next_add_group++].add_listen_socket(sock);
+    m_next_add_group %= m_threads_num;
+    return rc;
 }

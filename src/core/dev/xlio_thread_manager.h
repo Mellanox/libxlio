@@ -39,18 +39,22 @@
 #include <cstdint>
 #include "xlio_thread.h"
 
+class sockinfo_tcp;
+
 class xlio_thread_manager
 {
 public:
     xlio_thread_manager(size_t threads);
     ~xlio_thread_manager();
 
+    int add_listen_socket(sockinfo_tcp *sock);
 private:
 
     // The std::vector is not usable here since it requires the object
     // to be CopyAssignable 
     std::unique_ptr<xlio_thread[]> m_xlio_threads;
     size_t m_threads_num = 0U;
+    size_t m_next_add_group = 0U;
 };
 
 extern xlio_thread_manager *g_p_xlio_thread_manager;

@@ -61,7 +61,7 @@
 #include <proto/mapping.h>
 #include <proto/xlio_lwip.h>
 #include <main.h>
-
+#include "core/dev/xlio_thread_manager.h"
 #include <sock/sockinfo_tcp.h>
 #include <sock/sockinfo_udp.h>
 
@@ -260,9 +260,24 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
             // Save this value before pointer is destructed
             is_for_udp_pool = sockfd->m_is_for_socket_pool;
 #endif
-            g_p_fd_collection->del_sockfd(fd, is_for_udp_pool);
-            if (safe_mce_sys().deferred_close) {
-                to_close_now = false;
+            bool reg_close = true;
+            if (sockfd->get_protocol() == PROTO_TCP) {
+                sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sockfd);
+                poll_group *grp = si->get_poll_group();
+
+                if (grp) {
+                    // We always force TCP reset not to handle FIN handshake and TIME-WAIT state.
+                    grp->close_socket(si, true);
+                    to_close_now = false;
+                    reg_close = false;
+                }
+            }
+
+            if (reg_close) {
+                g_p_fd_collection->del_sockfd(fd, is_for_udp_pool);
+                if (safe_mce_sys().deferred_close) {
+                    to_close_now = false;
+                }
             }
         }
         if (fd_collection_get_epfd(fd)) {
@@ -943,6 +958,12 @@ EXPORT_SYMBOL int XLIO_SYMBOL(listen)(int __fd, int backlog)
     p_socket_object = fd_collection_get_sockfd(__fd);
 
     if (p_socket_object) {
+        if (p_socket_object->get_protocol() == PROTO_TCP &&
+            safe_mce_sys().xlio_threads > 0U) {
+            return g_p_xlio_thread_manager->add_listen_socket(
+                reinterpret_cast<sockinfo_tcp *>(p_socket_object));
+        }
+
         // for verifying that the socket is really offloaded
         int ret = p_socket_object->prepareListen();
         if (ret < 0) {
