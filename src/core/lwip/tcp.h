@@ -126,7 +126,7 @@ typedef void (*tcp_accepted_pcb_fn)(struct tcp_pcb *accepted_pcb);
  *            Only return ERR_ABRT if you have called tcp_abort from within the
  *            callback function!
  */
-typedef err_t (*tcp_recv_fn)(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
+typedef err_t (*tcp_recv_fn)(void *arg, struct tcp_pcb *tpcb, struct pbuf *p);
 
 /** Function prototype for tcp sent callback functions. Called when sent data has
  * been acknowledged by the remote side. Use it to free corresponding resources.

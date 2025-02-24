@@ -231,19 +231,19 @@ PACK_STRUCT_END
             (ret) = ERR_OK;                                                                        \
     } while (0)
 
-#define TCP_EVENT_RECV(pcb, p, err, ret)                                                           \
+#define TCP_EVENT_RECV(pcb, p, ret)                                                           \
     do {                                                                                           \
         if ((pcb)->recv != NULL) {                                                                 \
-            (ret) = (pcb)->recv((pcb)->callback_arg, (pcb), (p), (err));                           \
+            (ret) = (pcb)->recv((pcb)->callback_arg, (pcb), (p));                           \
         } else {                                                                                   \
-            (ret) = tcp_recv_null(NULL, (pcb), (p), (err));                                        \
+            (ret) = tcp_recv_null(NULL, (pcb), (p));                                        \
         }                                                                                          \
     } while (0)
 
 #define TCP_EVENT_CLOSED(pcb, ret)                                                                 \
     do {                                                                                           \
         if (((pcb)->recv != NULL)) {                                                               \
-            (ret) = (pcb)->recv((pcb)->callback_arg, (pcb), NULL, ERR_OK);                         \
+            (ret) = (pcb)->recv((pcb)->callback_arg, (pcb), NULL);                         \
         } else {                                                                                   \
             (ret) = ERR_OK;                                                                        \
         }                                                                                          \
@@ -371,7 +371,7 @@ void tcp_zero_window_probe(struct tcp_pcb *pcb);
 u16_t tcp_initial_mss(struct tcp_pcb *pcb);
 u16_t tcp_send_mss(struct tcp_pcb *pcb);
 
-err_t tcp_recv_null(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
+err_t tcp_recv_null(void *arg, struct tcp_pcb *pcb, struct pbuf *p);
 
 #if TCP_DEBUG || TCP_INPUT_DEBUG || TCP_OUTPUT_DEBUG
 void tcp_debug_print(struct tcp_hdr *tcphdr);

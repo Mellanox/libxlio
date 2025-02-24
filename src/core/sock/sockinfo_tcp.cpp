@@ -582,8 +582,7 @@ void sockinfo_tcp::xlio_socket_event(int event, int value)
 }
 
 /*static*/
-err_t sockinfo_tcp::rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *pcb, struct pbuf *p,
-                                           err_t err)
+err_t sockinfo_tcp::rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *pcb, struct pbuf *p)
 {
     sockinfo_tcp *conn = (sockinfo_tcp *)arg;
 
@@ -592,12 +591,7 @@ err_t sockinfo_tcp::rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *pcb, struc
 
     // if is FIN
     if (unlikely(!p)) {
-        return conn->handle_fin(pcb, err);
-    }
-
-    if (unlikely(err != ERR_OK)) {
-        conn->handle_rx_lwip_cb_error(p);
-        return err;
+        return conn->handle_fin(pcb);
     }
 
     tcp_recved(pcb, p->tot_len);
@@ -2084,7 +2078,7 @@ void sockinfo_tcp::tcp_shutdown_rx()
     tcp_recv(&m_pcb, sockinfo_tcp::rx_drop_lwip_cb);
 }
 
-err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
+err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p)
 {
 
     sockinfo_tcp *conn = (sockinfo_tcp *)arg;
@@ -2100,12 +2094,7 @@ err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, e
 
     // if is FIN
     if (unlikely(!p)) {
-        return conn->handle_fin(pcb, err);
-    }
-
-    if (unlikely(err != ERR_OK)) {
-        conn->handle_rx_lwip_cb_error(p);
-        return err;
+        return conn->handle_fin(pcb);
     }
 
     conn->rx_lwip_process_chained_pbufs(p);
@@ -2157,7 +2146,7 @@ inline void sockinfo_tcp::rx_lwip_cb_socketxtreme_helper(pbuf *p)
     save_stats_rx_offload(p->tot_len);
 }
 
-err_t sockinfo_tcp::handle_fin(struct tcp_pcb *pcb, err_t err)
+err_t sockinfo_tcp::handle_fin(struct tcp_pcb *pcb)
 {
     if (is_server()) {
         vlog_printf(VLOG_ERROR, "listen socket should not receive FIN\n");
@@ -2165,22 +2154,10 @@ err_t sockinfo_tcp::handle_fin(struct tcp_pcb *pcb, err_t err)
     }
 
     NOT_IN_USE(pcb);
-    NOT_IN_USE(err);
-    __log_dbg("[fd=%d] null pbuf sock(%p %p) err=%d", m_fd, &(m_pcb), pcb, err);
+    __log_dbg("[fd=%d] null pbuf sock(%p %p)", m_fd, &(m_pcb), pcb);
     tcp_shutdown_rx();
 
     return ERR_OK;
-}
-
-void sockinfo_tcp::handle_rx_lwip_cb_error(pbuf *p)
-{
-    // notify io_mux
-    NOTIFY_ON_EVENTS(this, EPOLLERR);
-
-    m_sock_wakeup_pipe.do_wakeup();
-    vlog_printf(VLOG_ERROR, "%s:%d %s\n", __func__, __LINE__, "recv error!!!");
-    pbuf_free(p);
-    m_sock_state = TCP_SOCK_INITED;
 }
 
 inline void sockinfo_tcp::rx_lwip_process_chained_pbufs(pbuf *p)
@@ -2270,8 +2247,7 @@ inline void sockinfo_tcp::rx_lwip_shrink_rcv_wnd(size_t pbuf_tot_len, int bytes_
     }
 }
 
-err_t sockinfo_tcp::rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *pcb, struct pbuf *p,
-                                            err_t err)
+err_t sockinfo_tcp::rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *pcb, struct pbuf *p)
 {
     sockinfo_tcp *conn = (sockinfo_tcp *)arg;
 
@@ -2284,12 +2260,7 @@ err_t sockinfo_tcp::rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *pcb, stru
 
     // if is FIN
     if (unlikely(!p)) {
-        return conn->handle_fin(pcb, err);
-    }
-
-    if (unlikely(err != ERR_OK)) {
-        conn->handle_rx_lwip_cb_error(p);
-        return err;
+        return conn->handle_fin(pcb);
     }
 
     conn->rx_lwip_process_chained_pbufs(p);
@@ -2310,8 +2281,7 @@ err_t sockinfo_tcp::rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *pcb, stru
     return ERR_OK;
 }
 
-err_t sockinfo_tcp::rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, struct pbuf *p,
-                                             err_t err)
+err_t sockinfo_tcp::rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, struct pbuf *p)
 {
     sockinfo_tcp *conn = (sockinfo_tcp *)arg;
 
@@ -2324,12 +2294,7 @@ err_t sockinfo_tcp::rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, str
 
     // if is FIN
     if (unlikely(!p)) {
-        return conn->handle_fin(pcb, err);
-    }
-
-    if (unlikely(err != ERR_OK)) {
-        conn->handle_rx_lwip_cb_error(p);
-        return err;
+        return conn->handle_fin(pcb);
     }
 
     conn->rx_lwip_process_chained_pbufs(p);
@@ -2408,7 +2373,7 @@ err_t sockinfo_tcp::rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, str
     return ERR_OK;
 }
 
-err_t sockinfo_tcp::rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
+err_t sockinfo_tcp::rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p)
 {
     NOT_IN_USE(tpcb);
     NOT_IN_USE(arg);
@@ -2417,9 +2382,6 @@ err_t sockinfo_tcp::rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf
 
     if (!p) {
         return ERR_OK;
-    }
-    if (unlikely(err != ERR_OK)) { // not suppose to get here
-        return err;
     }
 
     return ERR_CONN;

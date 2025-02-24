@@ -221,7 +221,7 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb)
                             in_data.recv_data->flags |= PBUF_FLAG_PUSH;
                         }
                         /* Notify application that data has been received. */
-                        TCP_EVENT_RECV(pcb, in_data.recv_data, ERR_OK, err);
+                        TCP_EVENT_RECV(pcb, in_data.recv_data, err);
                         if (err == ERR_ABRT) {
                             goto aborted;
                         }

@@ -397,12 +397,10 @@ public:
     inline void unlock_tcp_con() { m_tcp_con_lock.unlock(); }
     tcp_timers_collection *get_tcp_timer_collection();
     bool is_cleaned() const { return m_is_cleaned; }
-    static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
-    static err_t rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
-                                         err_t err);
-    static err_t rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, struct pbuf *p,
-                                          err_t err);
-    static err_t rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
+    static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p);
+    static err_t rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *tpcb, struct pbuf *p);
+    static err_t rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, struct pbuf *p);
+    static err_t rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p);
     inline void rx_lwip_cb_socketxtreme_helper(pbuf *p);
 
     int register_callback(xlio_recv_callback_t callback, void *context) override
@@ -424,7 +422,7 @@ public:
     int detach_xlio_group();
     int attach_xlio_group(poll_group *group, bool xlio_thread);
     void xlio_socket_event(int event, int value);
-    static err_t rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
+    static err_t rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *tpcb, struct pbuf *p);
     static void err_lwip_cb_xlio_socket(void *pcb_container, err_t err);
 
 protected:
@@ -495,8 +493,7 @@ private:
     ssize_t tcp_tx_handle_sndbuf_unavailable(ssize_t total_tx, bool is_dummy, bool is_send_zerocopy,
                                              int errno_to_restore);
     ssize_t tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg);
-    err_t handle_fin(struct tcp_pcb *pcb, err_t err);
-    void handle_rx_lwip_cb_error(pbuf *p);
+    err_t handle_fin(struct tcp_pcb *pcb);
     void rx_lwip_cb_error(pbuf *p);
     inline void rx_lwip_process_chained_pbufs(pbuf *p);
     inline void rx_lwip_shrink_rcv_wnd(size_t pbuf_tot_len, int nbytes);
