@@ -889,13 +889,13 @@ struct tcp_seg *tcp_seg_copy(struct tcp_pcb *pcb, struct tcp_seg *seg)
  * Default receive callback that is called if the user didn't register
  * a recv callback for the pcb.
  */
-err_t tcp_recv_null(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
+err_t tcp_recv_null(void *arg, struct tcp_pcb *pcb, struct pbuf *p)
 {
     LWIP_UNUSED_ARG(arg);
     if (p != NULL) {
         tcp_recved(pcb, (u32_t)p->tot_len);
         pbuf_free(p);
-    } else if (err == ERR_OK) {
+    } else {
         return tcp_close(pcb);
     }
     return ERR_OK;

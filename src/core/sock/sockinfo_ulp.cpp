@@ -1316,7 +1316,7 @@ err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
 
     if (unlikely(m_refused_data)) {
         err =
-            sockinfo_tcp::rx_lwip_cb((void *)m_p_sock, m_p_sock->get_pcb(), m_refused_data, ERR_OK);
+            sockinfo_tcp::rx_lwip_cb((void *)m_p_sock, m_p_sock->get_pcb(), m_refused_data);
         if (unlikely(err != ERR_OK)) {
             /*
              * We queue all incoming packets and never return an error.
@@ -1502,7 +1502,7 @@ check_single_record:
     tcp_recved(m_p_sock->get_pcb(), m_tls_rec_overhead);
     if (likely(pres)) {
         assert(pres->tot_len == (m_rx_rec_len - m_tls_rec_overhead));
-        err = sockinfo_tcp::rx_lwip_cb((void *)m_p_sock, m_p_sock->get_pcb(), pres, ERR_OK);
+        err = sockinfo_tcp::rx_lwip_cb((void *)m_p_sock, m_p_sock->get_pcb(), pres);
         if (err != ERR_OK) {
             /* Underlying buffers are held by 'pres', we can free them below. */
             m_refused_data = pres;
@@ -1543,15 +1543,15 @@ check_single_record:
 }
 
 /* static */
-err_t sockinfo_tcp_ops_tls::rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
+err_t sockinfo_tcp_ops_tls::rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p)
 {
     sockinfo_tcp *conn = (sockinfo_tcp *)arg;
     sockinfo_tcp_ops *ops = conn->get_ops();
 
-    if (likely(p && err == ERR_OK)) {
+    if (likely(p)) {
         return ops->recv(p);
     }
-    return sockinfo_tcp::rx_lwip_cb(arg, tpcb, p, err);
+    return sockinfo_tcp::rx_lwip_cb(arg, tpcb, p);
 }
 
 uint64_t sockinfo_tcp_ops_tls::find_recno(uint32_t seqno)
