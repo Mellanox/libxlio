@@ -1,4 +1,10 @@
-FROM harbor.mellanox.com/hpcx/x86_64/ubuntu22.04/base AS style
+ARG ARCH=x86_64
+FROM harbor.mellanox.com/hpcx/$ARCH/ubuntu22.04/base AS build
+RUN apt-get update \
+ && apt-get install -y libjson-c-dev \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+FROM build as style
 RUN apt-get update \
  && apt-get install -y clang-15 clang-format-15 \
  && update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-15 100 \

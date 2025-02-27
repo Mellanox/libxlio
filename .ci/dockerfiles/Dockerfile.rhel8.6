@@ -1,8 +1,20 @@
-FROM harbor.mellanox.com/hpcx/x86_64/rhel8.6/core:latest
+ARG ARCH=x86_64
+ARG HARBOR_URL=nbu-harbor.gtm.nvidia.com
+FROM $HARBOR_URL/hpcx/$ARCH/rhel8.6/core:latest as core
 ARG _UID=6213
 ARG _GID=101
 ARG _LOGIN=swx-jenkins
 ARG _HOME=/var/home/$_LOGIN
+RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
+    echo "root ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
+    mkdir -p ${_HOME} && \
+    groupadd -f -g "$_GID" "$_LOGIN" && \
+    useradd -u "$_UID" -g "$_GID" -s /bin/bash -m -d ${_HOME} "${_LOGIN}" && \
+    chown -R ${_LOGIN} ${_HOME} && \
+    mkdir /build && chown -R ${_LOGIN} /build
+
+FROM core as static
+ARG _LOGIN=swx-jenkins
 
 RUN yum install -y yum-utils \
  && yum-config-manager --add-repo https://archives.fedoraproject.org/pub/archive/epel/7/x86_64/ \
@@ -15,13 +27,31 @@ RUN yum install -y yum-utils \
 RUN pip3 install -U pip --no-cache-dir \
  && pip3 install compiledb --no-cache-dir
 
-RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
-    echo "root ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
-    mkdir -p ${_HOME} && \
-    groupadd -f -g "$_GID" "$_LOGIN" && \
-    useradd -u "$_UID" -g "$_GID" -s /bin/bash -m -d ${_HOME} "${_LOGIN}" && \
-    chown -R ${_LOGIN} ${_HOME} && \
-    mkdir /build && chown -R ${_LOGIN} /build
-
 USER "$_LOGIN"
 ENTRYPOINT [ "/bin/bash", "--login", "--rcfile", "/etc/bashrc", "-c" ]
+
+
+FROM core as release
+ARG _UID=6213
+ARG _GID=101
+ARG _LOGIN=swx-jenkins
+ARG _HOME=/var/home/$_LOGIN
+ARG WEBREPO_URL=webrepo.gtm.nvidia.com
+RUN sed -i "s#http://webrepo#http://${WEBREPO_URL}#" /etc/yum.repos.d/* && \
+    sed -i 's/mirrorlist/#mirrorlist/;s!#baseurl=http://mirror.centos.org!baseurl=http://vault.centos.org!' /etc/yum.repos.d/* && \
+    echo "[mlnx-opt]" > /etc/yum.repos.d/mlnx-opt.repo && \
+    echo "name=RHEL 8.6 mirror" >> /etc/yum.repos.d/mlnx-opt.repo && \
+    echo "baseurl=http://${WEBREPO_URL}/RH/optional/8.6/x86_64/" >> /etc/yum.repos.d/mlnx-opt.repo && \
+    echo "enabled=1" >> /etc/yum.repos.d/mlnx-opt.repo && \
+    echo "gpgcheck=0" >> /etc/yum.repos.d/mlnx-opt.repo && \
+    yum makecache
+
+RUN yum install --allowerasing -y \
+    git autoconf automake libtool gcc \
+    sudo gcc-c++ libibverbs-devel json-c-devel rdma-core \
+    librdmacm unzip patch wget make \
+    libnl3-devel rpm-build
+
+
+FROM harbor.mellanox.com/hpcx/$ARCH/rhel8.6/base as build
+RUN yum install -y json-c-devel

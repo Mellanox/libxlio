@@ -7,7 +7,7 @@ ARG _GID=101
 ARG _LOGIN=swx-jenkins
 ARG _HOME=/var/home/$_LOGIN
 
-RUN dnf --releasever=23.01 install -y autoconf automake make libtool git gcc-c++ \
+RUN dnf --releasever=23.01 install -y autoconf automake make libtool json-c-devel git gcc-c++ \
     util-linux sudo rpm-build \
  && dnf clean all \
  && rm -rf /var/cache/dnf
