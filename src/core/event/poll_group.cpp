@@ -153,6 +153,7 @@ void poll_group::poll()
         sn = 0;
         rng->poll_and_process_element_rx(&sn);
     }
+    clear_rx_buffers();
     m_event_handler->do_tasks();
 }
 
@@ -246,5 +247,25 @@ void poll_group::close_socket(sockinfo_tcp *si, bool force /*=false*/)
         si->clean_socket_obj();
     } else {
 
+    }
+}
+
+void poll_group::return_rx_buffers(mem_buf_desc_t *first, mem_buf_desc_t*last)
+{
+    m_returned_buffers.put_objs(first, last);
+}
+
+void poll_group::clear_rx_buffers()
+{
+    mem_buf_desc_t *temp;
+    mem_buf_desc_t *first = m_returned_buffers.get_all_objs();
+    while (first) {
+        temp = first->p_next_desc;
+        first->p_next_desc = nullptr;
+        if (unlikely(!first->p_desc_owner->reclaim_recv_buffers(first))) {
+            g_buffer_pool_rx_ptr->put_buffer_after_deref_thread_safe(first);
+        }
+
+        first = temp;
     }
 }

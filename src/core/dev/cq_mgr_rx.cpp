@@ -426,7 +426,7 @@ void cq_mgr_rx::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
                 temp->p_prev_desc = nullptr;
                 temp->reset_ref_count();
                 free_lwip_pbuf(&temp->lwip_pbuf);
-                m_rx_pool.push_back(temp);
+                m_rx_pool.push_front(temp);
             }
             m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
         } else {

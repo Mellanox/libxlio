@@ -1827,8 +1827,9 @@ void mce_sys_var::get_env_params()
     }
 
     if ((env_ptr = getenv(SYS_VAR_XLIO_THREADS))) {
-        xlio_threads = option_size::from_str(env_ptr) ?: 1;
-        if (xlio_threads > std::thread::hardware_concurrency()) {
+        xlio_threads = option_size::from_str(env_ptr);
+        if (std::thread::hardware_concurrency() > 0 &&
+            xlio_threads > std::thread::hardware_concurrency()) {
             xlio_threads = std::thread::hardware_concurrency();
         }
     }

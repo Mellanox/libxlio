@@ -72,6 +72,8 @@ public:
     event_handler_manager_local *get_event_handler() const { return m_event_handler.get(); }
     tcp_timers_collection *get_tcp_timers() const { return m_tcp_timers.get(); }
 
+    void return_rx_buffers(mem_buf_desc_t *first, mem_buf_desc_t*last);
+
 public:
     xlio_socket_event_cb_t m_socket_event_cb;
     xlio_socket_comp_cb_t m_socket_comp_cb;
@@ -79,6 +81,10 @@ public:
     xlio_socket_accept_cb_t m_socket_accept_cb;
 
 private:
+    void clear_rx_buffers();
+
+    cached_obj_pool_simple<mem_buf_desc_t> m_returned_buffers;
+
     std::vector<ring *> m_rings;
     std::unique_ptr<event_handler_manager_local> m_event_handler;
     std::unique_ptr<tcp_timers_collection> m_tcp_timers;

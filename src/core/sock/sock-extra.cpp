@@ -502,9 +502,14 @@ extern "C" int xlio_socket_create(const struct xlio_socket_attr *attr, xlio_sock
         errno = ENOMEM;
         return -1;
     }
-    si->set_xlio_socket(attr);
 
     poll_group *grp = reinterpret_cast<poll_group *>(attr->group);
+    if (grp->m_socket_rx_cb) {
+        si->set_xlio_socket(attr);
+    } else {
+        si->set_xlio_socket_thread(grp);
+    }
+
     grp->add_socket(si);
 
     *sock_out = reinterpret_cast<xlio_socket_t>(si);

@@ -39,6 +39,42 @@
 #include "dev/allocator.h"
 #include "utils/lock_wrapper.h"
 
+template <typename T> class cached_obj_pool_simple : lock_spin {
+public:
+    cached_obj_pool_simple() {}
+    T *get_all_objs();
+    void put_objs(T *first, T *last);
+
+private:
+    T *m_p_head = nullptr;
+};
+
+template <typename T> void cached_obj_pool_simple<T>::put_objs(T *first, T *last)
+{
+    if (unlikely(!first || !last)) {
+        return;
+    }
+
+    lock();
+    last->p_next_desc = m_p_head;
+    m_p_head = first;
+    unlock();
+}
+
+template <typename T> T *cached_obj_pool_simple<T>::get_all_objs()
+{
+    if (!m_p_head) {
+        return nullptr;
+    }
+
+    lock();
+    T *temp = m_p_head;
+    m_p_head = nullptr;
+    unlock();
+
+    return temp;
+}
+
 template <typename T> class cached_obj_pool : lock_spin {
 public:
     cached_obj_pool(const char *pool_name, size_t alloc_batch, uint32_t &global_obj_pool_size_ref,
