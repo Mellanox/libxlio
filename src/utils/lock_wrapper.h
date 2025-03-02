@@ -494,7 +494,7 @@ public:
     {
     }
 
-    void delete_obj() override {}
+    //void delete_obj() override {}
     int lock() override { return 0; }
     int trylock() override { return 0; }
     int unlock() override { return 0; }

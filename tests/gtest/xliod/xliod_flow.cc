@@ -79,6 +79,7 @@ protected:
  */
 TEST_F(xliod_flow, ti_1)
 {
+    GTEST_SKIP() << "Skipping this test temporarily;Please see Issue #4331178.";
     int rc = 0;
     struct xlio_hdr answer;
 

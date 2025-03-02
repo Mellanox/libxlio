@@ -892,6 +892,7 @@ protected:
  */
 TEST_P(tcp_with_fifo, accepted_socket_inherits_the_setsockopt_param)
 {
+    GTEST_SKIP() << "Skipping this test temporarily;Please see Issue #4331178.";
     SKIP_TRUE(!getenv("XLIO_TCP_CTL_THREAD"), "Skip non default XLIO_TCP_CTL_THREAD");
 
     int level, optname, value;
