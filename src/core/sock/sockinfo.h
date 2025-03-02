@@ -450,7 +450,7 @@ protected:
     int set_sockopt_prio(__const void *__optval, socklen_t __optlen);
     bool ipv6_set_addr_sel_pref(int val);
     int ipv6_get_addr_sel_pref();
-    inline void handle_recv_timestamping(struct cmsg_state *cm_state);
+    void handle_recv_timestamping(struct cmsg_state *cm_state, timestamps_t *packet_timestamps);
     inline void handle_recv_errqueue(struct cmsg_state *cm_state);
     void insert_cmsg(struct cmsg_state *cm_state, int level, int type, void *data, int len);
     void handle_cmsg(struct msghdr *msg, int flags);
@@ -757,8 +757,8 @@ int sockinfo::dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, soc
     } else {
         IF_STATS(m_p_socket_stats->n_rx_ready_byte_count -= total_rx);
         m_rx_ready_byte_count -= total_rx;
-        post_dequeue(release_buff);
         save_stats_rx_offload(total_rx);
+        post_dequeue(release_buff);
     }
 
     total_rx = handle_msg_trunc(total_rx, payload_size, in_flags, p_out_flags);

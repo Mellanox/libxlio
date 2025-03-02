@@ -259,6 +259,8 @@ public:
     ssize_t rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
                sockaddr *__from = nullptr, socklen_t *__fromlen = nullptr,
                struct msghdr *__msg = nullptr) override;
+    ssize_t rx_legacy(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
+                      sockaddr *__from, socklen_t *__fromlen, struct msghdr *__msg);
     static err_t ip_output(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn, uint16_t flags);
     static err_t ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn,
                                    uint16_t flags);
@@ -402,7 +404,7 @@ public:
     static err_t rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, struct pbuf *p);
     static err_t rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p);
     inline void rx_lwip_cb_socketxtreme_helper(pbuf *p);
-
+    static err_t rx_lwip_cb_thread_socket(void *arg, struct tcp_pcb *tpcb, struct pbuf *p);
     int register_callback(xlio_recv_callback_t callback, void *context) override
     {
         tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_recv_callback);
@@ -608,6 +610,12 @@ private:
     void process_rx_ctl_packets();
     static void put_agent_msg(void *arg);
     bool is_connected_and_ready_to_send();
+
+    int rx_xlio_socket_wait_for_data(int in_flags, struct msghdr *__msg, loops_timer &rcv_timeout);
+    int rx_xlio_socket_wait_blocking(loops_timer &rcv_timeout);
+    size_t rx_xlio_socket_fetch_ready_buffers(iovec *p_iov, iovec *p_iov_end, struct msghdr *__msg);
+    bool rx_xlio_socket_tls_msg(struct msghdr *__msg, mem_buf_desc_t* out_buf_list);
+    void rx_xlio_handle_cmsg(struct msghdr *msg, mem_buf_desc_t* out_buf_list);
 
     inline event_handler_manager *get_event_mgr();
 

@@ -34,6 +34,7 @@
 
 #include <functional>
 #include <numeric>
+#include <thread>
 #include <stdio.h>
 #include <sys/time.h>
 #include <netinet/tcp.h>
@@ -424,7 +425,7 @@ void sockinfo_tcp::set_xlio_socket_thread(poll_group *group)
         m_tcp_con_lock = multilock::create_new_lock(MULTILOCK_RECURSIVE, "tcp_con");
     }
 
-    tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_xlio_socket);
+    tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_thread_socket);
     tcp_err(&m_pcb, sockinfo_tcp::err_lwip_cb_xlio_socket);
 }
 
@@ -622,6 +623,59 @@ err_t sockinfo_tcp::rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *pcb, struc
     } else {
         pbuf_free(p);
     }
+
+    return ERR_OK;
+}
+
+err_t sockinfo_tcp::rx_lwip_cb_thread_socket(void *arg, struct tcp_pcb *pcb, struct pbuf *p)
+{
+    sockinfo_tcp *conn = (sockinfo_tcp *)arg;
+
+    NOT_IN_USE(pcb);
+    assert((uintptr_t)pcb->my_container == (uintptr_t)arg);
+
+    // If FIN
+    if (unlikely(!p)) {
+        return conn->handle_fin(pcb);
+    }
+
+    struct mem_buf_desc_t *buff;
+    struct pbuf *ptmp = p;
+
+    if (unlikely(conn->m_p_socket_stats)) {
+        conn->m_p_socket_stats->counters.n_rx_bytes += p->tot_len;
+        conn->m_p_socket_stats->counters.n_rx_data_pkts++;
+        // Assume that all chained buffers are GRO packets.
+        conn->m_p_socket_stats->counters.n_gro += !!p->next;
+    }
+
+    while (ptmp) {
+        buff = reinterpret_cast<mem_buf_desc_t *>(ptmp);
+        if (unlikely(conn->m_p_socket_stats)) {
+            conn->m_p_socket_stats->counters.n_rx_frags++;
+            // The 1st pbuf in the chain is already handled in the rx_input_cb().
+            if (ptmp != p) {
+                conn->save_strq_stats(buff->rx.strides_num);
+            }
+        }
+
+        conn->process_timestamps(buff);
+
+        buff->p_next_desc = buff->p_prev_desc = nullptr;
+        conn->m_rx_pkt_ready_list.push_back(buff);
+        conn->m_n_rx_pkt_ready_list_count++;
+        conn->m_rx_ready_byte_count += ptmp->len;
+
+        ptmp = ptmp->next;
+        buff->lwip_pbuf.next = nullptr;
+    }
+
+    // notify io_mux
+    NOTIFY_ON_EVENTS(conn, EPOLLIN);
+    io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
+
+    // OLG: Now we should wakeup all threads that are sleeping on this socket.
+    conn->m_sock_wakeup_pipe.do_wakeup();
 
     return ERR_OK;
 }
@@ -2080,7 +2134,6 @@ void sockinfo_tcp::tcp_shutdown_rx()
 
 err_t sockinfo_tcp::rx_lwip_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p)
 {
-
     sockinfo_tcp *conn = (sockinfo_tcp *)arg;
     uint32_t bytes_to_tcp_recved;
     int rcv_buffer_space;
@@ -2391,12 +2444,11 @@ int sockinfo_tcp::handle_rx_error(bool blocking)
 {
     int ret = -1;
 
-    lock_tcp_con();
-
     if (g_b_exit) {
         errno = EINTR;
         si_tcp_logdbg("returning with: EINTR");
     } else if (!is_rtr()) {
+        lock_tcp_con();
         if (m_conn_state == TCP_CONN_INIT) {
             si_tcp_logdbg("RX on never connected socket");
             errno = ENOTCONN;
@@ -2414,6 +2466,7 @@ int sockinfo_tcp::handle_rx_error(bool blocking)
             si_tcp_logdbg("RX on disconnected socket - EOF");
             ret = 0;
         }
+        unlock_tcp_con();
     }
 
     if ((errno == EBUSY || errno == EWOULDBLOCK) && !blocking) {
@@ -2428,16 +2481,278 @@ int sockinfo_tcp::handle_rx_error(bool blocking)
         }
     }
 
+    return ret;
+}
+
+ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
+    sockaddr *__from, socklen_t *__fromlen, struct msghdr *__msg)
+{
+    si_tcp_logfuncall("");
+    int in_flags = *p_flags;
+    if (unlikely(m_sock_offload != TCP_SOCK_LWIP)) {
+        int ret = 0;
+        ret = rx_os(call_type, p_iov, sz_iov, in_flags, __from, __fromlen, __msg);
+        save_stats_rx_os(ret);
+        return ret;
+    }
+
+    if (!is_xlio_socket()) {
+        return rx_legacy(call_type, p_iov, sz_iov, p_flags, __from, __fromlen, __msg);
+    }
+
+    if (!p_iov || sz_iov <= 0U) {
+        return 0;
+    }
+
+    int errno_tmp = errno;
+    loops_timer rcv_timeout(m_loops_timer.get_timeout_msec());
+    int rx_tot_size = 0;
+    do {
+        int rc = rx_xlio_socket_wait_for_data(in_flags, __msg, rcv_timeout);
+        if (rc < 1) {
+            // For MSG_WAITALL we could already read some data. We must return it.
+            if (rc == 0 && (in_flags & MSG_WAITALL) && rx_tot_size > 0) {
+                break;
+            }
+            return rc;
+        }
+
+        // Handle cmsg including TLS-RX only on the first received packet.
+        rx_tot_size += rx_xlio_socket_fetch_ready_buffers(
+            p_iov, p_iov + sz_iov, (rx_tot_size == 0 ? __msg : nullptr));
+    } while (0);
+    // Currently MSG_WAITALL and MSG_PEEK are not supported.
+    // In case of MSG_WAITALL we should loop here until all data is received.
+    // Error queue is not supported.
+
+    if (__from && __fromlen) {
+        // For TCP connected 5T fetch from m_connected.
+        // For TCP flow-tag we avoid filling packet with src for performance.
+        m_connected.get_sa_by_family(__from, *__fromlen, m_family);
+    }
+
+    si_tcp_logfunc("RX completed, %d bytes.", rx_tot_size);
+
+    // Restore errno on function entry in case success
+    errno = errno_tmp;
+    return rx_tot_size;
+}
+
+int sockinfo_tcp::rx_xlio_socket_wait_for_data(int in_flags, struct msghdr *__msg, loops_timer &rcv_timeout)
+{
+    // This conditions ensures that m_rx_pkt_ready_list.front() is not null later.
+    if (m_rx_ready_byte_count < 1) {
+        bool blocking = BLOCK_THIS_RUN(m_b_blocking, in_flags);
+        if ((!blocking && (errno = EAGAIN)) ||
+            (rx_xlio_socket_wait_blocking(rcv_timeout) < 1)) {
+            int ret = handle_rx_error(blocking);
+            if (__msg && ret == 0) {
+                /* We don't return a control message in this case. */
+                __msg->msg_controllen = 0;
+            }
+            return ret;
+        }
+    }
+
+    return 1;
+}
+
+int sockinfo_tcp::rx_xlio_socket_wait_blocking(loops_timer &rcv_timeout)
+{
+    __log_info_func("");
+    int32_t busy_loop_count = 0;
+
+    while (m_rx_ready_byte_count < 1 &&
+           (busy_loop_count < safe_mce_sys().rx_poll_num || safe_mce_sys().rx_poll_num == -1)) {
+        if (unlikely(g_b_exit || !is_rtr())) {
+            return -1;
+        }
+
+        // If in blocking accept state skip poll phase and go to sleep directly
+        if (rcv_timeout.is_timeout()) {
+            errno = EAGAIN;
+            return -1;
+        }
+
+        if (safe_mce_sys().rx_poll_yield_loops > 0 &&
+            static_cast<uint32_t>(busy_loop_count) > safe_mce_sys().rx_poll_yield_loops) {
+            std::this_thread::yield();
+        }
+
+        //m_p_group->poll();
+
+        busy_loop_count++;
+        rmb(); // For the CPU to fetch m_rx_ready_byte_count which can be updated from another core.
+    }
+
+    lock_tcp_con();
+
+    if (m_rx_ready_byte_count >= 1) {
+        unlock_tcp_con();
+        return 1;
+    }
+
+    // Go to sleep
+    si_tcp_logfuncall("%d: Too many loops without data", m_fd);
+
+    // Check if we have a packet in receive queue before we going to sleep and
+    // update is_sleeping flag under the same lock to synchronize between
+    // this code and wakeup mechanism.
+
+    m_sock_wakeup_pipe.going_to_sleep();
     unlock_tcp_con();
 
-    return ret;
+    epoll_event rx_epfd_events[SI_RX_EPFD_EVENT_MAX];
+    int ret = SYSCALL(epoll_wait, m_rx_epfd, rx_epfd_events, SI_RX_EPFD_EVENT_MAX, rcv_timeout.time_left_msec());
+
+    lock_tcp_con();
+    m_sock_wakeup_pipe.return_from_sleep();
+    unlock_tcp_con();
+
+    if (ret <= 0) {
+        return ret;
+    }
+
+    // Remove wakeup fd only if its found to save syscalls.
+    for (int event_idx = 0; event_idx < ret; event_idx++) {
+        if (m_sock_wakeup_pipe.is_wakeup_fd(rx_epfd_events[event_idx].data.fd)) { // Wakeup event
+            lock_tcp_con();
+            m_sock_wakeup_pipe.remove_wakeup_fd();
+            unlock_tcp_con();
+            break;
+        }
+    }
+
+    rmb(); // For the CPU to fetch m_rx_ready_byte_count which can be updated from another core.
+
+    if (m_rx_ready_byte_count == 0U) { // Sanity check
+        errno = EAGAIN;
+        return -1;
+    }
+
+    return 1;
+}
+
+size_t sockinfo_tcp::rx_xlio_socket_fetch_ready_buffers(
+    iovec *p_iov, iovec *p_iov_end, struct msghdr *__msg)
+{
+    decltype(m_rx_pkt_ready_list) temp_list;
+    int temp_ready_byte_count;
+    int temp_rx_ready_list_count;
+
+    {
+        // Take all available buffers in a quick shot
+        std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
+        temp_list.splice_head(m_rx_pkt_ready_list);
+        temp_ready_byte_count = m_rx_ready_byte_count;
+        temp_rx_ready_list_count = m_n_rx_pkt_ready_list_count;
+        m_rx_ready_byte_count = 0U;
+        m_n_rx_pkt_ready_list_count = 0;
+    }
+
+    mem_buf_desc_t *free_buf_last = nullptr;
+    mem_buf_desc_t *free_buf_first;
+    mem_buf_desc_t *partial_last = free_buf_first = temp_list.front();
+    size_t prev_ready_byte_count = temp_ready_byte_count;
+    size_t curr_iov_left = p_iov->iov_len;
+    size_t curr_buf_left;
+    uint8_t tls_type = partial_last->rx.tls_type;
+
+    while (partial_last && partial_last->rx.tls_type == tls_type) {
+        // we can work with m_rx_pkt_ready_offset outside the lock because only the
+        // retriever updates the offset.
+        curr_buf_left = partial_last->lwip_pbuf.len - m_rx_pkt_ready_offset;
+        if (curr_buf_left >= curr_iov_left) {
+            memcpy(reinterpret_cast<char *>(p_iov->iov_base) + p_iov->iov_len - curr_iov_left,
+                   reinterpret_cast<char *>(partial_last->lwip_pbuf.payload) + m_rx_pkt_ready_offset, curr_iov_left);
+            temp_ready_byte_count -= curr_iov_left;
+            m_rx_pkt_ready_offset += curr_iov_left;
+            if (++p_iov < p_iov_end) {
+                curr_iov_left = p_iov->iov_len;
+            } else {
+                break;
+            }
+        } else {
+            memcpy(reinterpret_cast<char *>(p_iov->iov_base) + p_iov->iov_len - curr_iov_left,
+                   reinterpret_cast<char *>(partial_last->lwip_pbuf.payload) + m_rx_pkt_ready_offset, curr_buf_left);
+            temp_ready_byte_count -= curr_buf_left;
+            curr_iov_left -= curr_buf_left;
+            temp_list.pop_front();
+            free_buf_last = partial_last;
+            --temp_rx_ready_list_count;
+            m_rx_pkt_ready_offset = 0U;
+            partial_last->p_next_desc = temp_list.front();
+            partial_last = partial_last->p_next_desc;
+        }
+    }
+
+    if (__msg && __msg->msg_control && free_buf_first) {
+        if (!rx_xlio_socket_tls_msg(__msg, free_buf_first)) {
+            rx_xlio_handle_cmsg(__msg, free_buf_first);
+        }
+    }
+
+    if (free_buf_last) {
+        m_p_group->return_rx_buffers(free_buf_first, free_buf_last);
+    }
+
+    {
+        std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
+        if (!temp_list.empty()) {
+            // If the buffers did not fit into iov return them back
+            m_rx_pkt_ready_list.splice_head(temp_list);
+            m_rx_ready_byte_count += temp_ready_byte_count;
+            m_n_rx_pkt_ready_list_count += temp_rx_ready_list_count;
+        }
+
+        tcp_recved(&m_pcb, static_cast<uint32_t>(prev_ready_byte_count - temp_ready_byte_count));
+    }
+
+    return prev_ready_byte_count - temp_ready_byte_count;
+}
+
+bool sockinfo_tcp::rx_xlio_socket_tls_msg(struct msghdr *__msg, mem_buf_desc_t* out_buf_list)
+{
+#ifdef DEFINED_UTLS
+    /*
+     * kTLS API doesn't require to set TLS_GET_RECORD_TYPE control
+     * message for application data records (type 0x17). However,
+     * OpenSSL returns an error if we don't insert 0x17 record type.
+     */
+    if (out_buf_list && out_buf_list->rx.tls_type != 0 &&
+        likely(__msg->msg_controllen >= CMSG_SPACE(1))) {
+        struct cmsghdr *cmsg = CMSG_FIRSTHDR(__msg);
+        cmsg->cmsg_level = SOL_TLS;
+        cmsg->cmsg_type = TLS_GET_RECORD_TYPE;
+        cmsg->cmsg_len = CMSG_LEN(1);
+        *CMSG_DATA(cmsg) = out_buf_list->rx.tls_type;
+        __msg->msg_controllen = CMSG_SPACE(1);
+        return true;
+    }
+#endif // DEFINED_UTLS
+    return false;
+}
+
+void sockinfo_tcp::rx_xlio_handle_cmsg(struct msghdr *msg, mem_buf_desc_t* out_buf_list)
+{
+    struct cmsg_state cm_state;
+
+    cm_state.mhdr = msg;
+    cm_state.cmhdr = CMSG_FIRSTHDR(msg);
+    cm_state.cmsg_bytes_consumed = 0;
+
+    if (m_b_rcvtstamp || m_n_tsing_flags) {
+        handle_recv_timestamping(&cm_state, &out_buf_list->rx.timestamps);
+    }
+
+    cm_state.mhdr->msg_controllen = cm_state.cmsg_bytes_consumed;
 }
 
 //
 // FIXME: we should not require lwip lock for rx
 //
-ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
-                         sockaddr *__from, socklen_t *__fromlen, struct msghdr *__msg)
+ssize_t sockinfo_tcp::rx_legacy(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
+                                sockaddr *__from, socklen_t *__fromlen, struct msghdr *__msg)
 {
     int errno_tmp = errno;
     int total_rx = 0;
@@ -3515,7 +3830,7 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     tcp_arg(&new_sock->m_pcb, new_sock);
 
     if (new_sock->is_xlio_socket()) {
-        tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb_xlio_socket);
+        tcp_recv(&new_sock->m_pcb, conn->m_pcb.recv);
     } else if (safe_mce_sys().enable_socketxtreme) {
         tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb_socketxtreme);
     } else {

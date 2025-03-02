@@ -2139,7 +2139,7 @@ void sockinfo::process_timestamps(mem_buf_desc_t *p_desc)
     }
 }
 
-void sockinfo::handle_recv_timestamping(struct cmsg_state *cm_state)
+void sockinfo::handle_recv_timestamping(struct cmsg_state *cm_state, timestamps_t *packet_timestamps)
 {
     struct {
         struct timespec systime;
@@ -2149,7 +2149,6 @@ void sockinfo::handle_recv_timestamping(struct cmsg_state *cm_state)
 
     memset(&tsing, 0, sizeof(tsing));
 
-    timestamps_t *packet_timestamps = get_socket_timestamps();
     struct timespec *packet_systime = &packet_timestamps->sw;
 
     // Only fill in SO_TIMESTAMPNS if both requested.
@@ -2251,7 +2250,7 @@ void sockinfo::handle_cmsg(struct msghdr *msg, int flags)
         handle_ip_pktinfo(&cm_state);
     }
     if (m_b_rcvtstamp || m_n_tsing_flags) {
-        handle_recv_timestamping(&cm_state);
+        handle_recv_timestamping(&cm_state, get_socket_timestamps());
     }
     if (flags & MSG_ERRQUEUE) {
         handle_recv_errqueue(&cm_state);
