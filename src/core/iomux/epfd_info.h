@@ -138,5 +138,6 @@ private:
     epoll_stats_t m_local_stats;
     epoll_stats_t *m_stats;
     int m_log_invalid_events;
+    uint32_t m_events_for_wakeup;
 };
 #endif /* _EPFD_INFO_H */

@@ -169,6 +169,9 @@ public:
     void rx_del_ring_cb(ring *p_ring) override;
     int rx_verify_available_data() override;
 
+    void add_epoll_ctx_cb() override {};
+    void remove_epoll_ctx_cb() override {};
+
     /**
      *	This callback will handle ready rx packet notification,
      *	in case packet is OK, completion for SOCKETXTREME mode

@@ -56,6 +56,7 @@ xlio_thread_manager::~xlio_thread_manager()
 
 int xlio_thread_manager::add_listen_socket(sockinfo_tcp *sock)
 {
+    std::lock_guard<decltype(m_mgr_lock)> lock(m_mgr_lock);
     int rc = m_xlio_threads.get()[m_next_add_group++].add_listen_socket(sock);
     m_next_add_group %= m_threads_num;
     return rc;
@@ -63,6 +64,7 @@ int xlio_thread_manager::add_listen_socket(sockinfo_tcp *sock)
 
 int xlio_thread_manager::add_accepted_socket(sockinfo_tcp *sock)
 {
+    std::lock_guard<decltype(m_mgr_lock)> lock(m_mgr_lock);
     int rc = m_xlio_threads.get()[m_next_add_group++].add_accepted_socket(sock);
     m_next_add_group %= m_threads_num;
     return rc;

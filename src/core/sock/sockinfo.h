@@ -326,6 +326,9 @@ public:
     virtual void set_immediate_os_sample() = 0;
     virtual void unset_immediate_os_sample() = 0;
 
+    virtual void add_epoll_ctx_cb() = 0;
+    virtual void remove_epoll_ctx_cb() = 0;
+
     // In some cases we need the socket can't be deleted immidiatly
     //(for example STREAME sockets)
     // This prepares the socket for termination and return true if the

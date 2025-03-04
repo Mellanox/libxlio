@@ -147,14 +147,20 @@ void poll_group::poll()
 {
     std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
 
+    bool all_drained = true;
     for (ring *rng : m_rings) {
         uint64_t sn = 0;
         rng->poll_and_process_element_tx(&sn);
         sn = 0;
-        rng->poll_and_process_element_rx(&sn);
+        all_drained &= rng->poll_and_process_element_rx(&sn);
     }
     clear_rx_buffers();
     m_event_handler->do_tasks();
+    
+    if (all_drained && safe_mce_sys().cq_moderation_count > 0U) {
+        std::for_each(std::begin(m_epoll_ctx), std::end(m_epoll_ctx),
+                      [](epfd_info *epfd) { epfd->do_wakeup(); });
+    }
 }
 
 void poll_group::add_dirty_socket(sockinfo_tcp *si)
@@ -268,4 +274,16 @@ void poll_group::clear_rx_buffers()
 
         first = temp;
     }
+}
+
+void poll_group::add_epoll_ctx(epfd_info *epfd)
+{
+    std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
+    m_epoll_ctx.emplace(epfd);
+}
+
+void poll_group::remove_epoll_ctx(epfd_info *epfd)
+{
+    std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
+    m_epoll_ctx.erase(epfd);
 }

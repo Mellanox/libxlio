@@ -61,6 +61,7 @@ epfd_info::epfd_info(int epfd, int size)
     , m_epfd(epfd)
     , m_size(size)
     , m_ring_map_lock("epfd_ring_map_lock")
+    , m_events_for_wakeup(0U)
 {
     __log_funcall("");
     int max_sys_fd = get_sys_max_fd_num();
@@ -587,7 +588,9 @@ void epfd_info::insert_epoll_event(sockinfo *sock_fd, uint32_t event_flags)
         m_ready_fds.push_back(sock_fd);
     }
 
-    do_wakeup();
+    if (++m_events_for_wakeup >= safe_mce_sys().cq_moderation_count) {
+        do_wakeup();
+    }
 }
 
 void epfd_info::remove_epoll_event(sockinfo *sock_fd, uint32_t event_flags)
