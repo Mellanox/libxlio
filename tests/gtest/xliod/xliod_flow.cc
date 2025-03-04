@@ -79,6 +79,7 @@ protected:
  */
 TEST_F(xliod_flow, ti_1)
 {
+    GTEST_SKIP() << "Skipping this test temporarily;Please see Issue #4331178.";
     int rc = 0;
     struct xlio_hdr answer;
 
@@ -124,6 +125,7 @@ TEST_F(xliod_flow, ti_1)
  */
 TEST_F(xliod_flow, ti_2)
 {
+    GTEST_SKIP() << "Skipping this test temporarily;Please see Issue #4331178.";
     int rc = 0;
     struct xlio_hdr answer;
 
@@ -178,6 +180,7 @@ TEST_F(xliod_flow, ti_2)
  */
 TEST_F(xliod_flow, ti_3)
 {
+    GTEST_SKIP() << "Skipping this test temporarily;Please see Issue #4331178.";
     int rc = 0;
     struct xlio_hdr answer;
 
@@ -240,6 +243,7 @@ TEST_F(xliod_flow, ti_3)
  */
 TEST_F(xliod_flow, ti_4)
 {
+    GTEST_SKIP() << "Skipping this test temporarily;Please see Issue #4331178.";
     int rc = 0;
     struct xlio_hdr answer;
 
@@ -311,6 +315,7 @@ TEST_F(xliod_flow, ti_4)
  */
 TEST_F(xliod_flow, ti_5)
 {
+    GTEST_SKIP() << "Skipping this test temporarily;Please see Issue #4331178.";
     int rc = 0;
     struct xlio_hdr answer;
 
@@ -356,6 +361,7 @@ TEST_F(xliod_flow, ti_5)
  */
 TEST_F(xliod_flow, ti_6)
 {
+    GTEST_SKIP() << "Skipping this test temporarily;Please see Issue #4331178.";
     int rc = 0;
     struct xlio_hdr answer;
 

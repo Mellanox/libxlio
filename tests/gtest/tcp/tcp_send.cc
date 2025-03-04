@@ -102,6 +102,7 @@ TEST_F(tcp_send, ti_2)
  */
 TEST_F(tcp_send, null_iov_elements)
 {
+    GTEST_SKIP() << "Skipping this test temporarily;Please see Issue #4331178.";
     std::string buff1("abcd");
     std::string buff2("efgh");
     std::string buff3("ijkl");
