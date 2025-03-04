@@ -134,7 +134,7 @@ static int _tcp_create_and_bind(struct sockaddr_in *addr)
     int fd;
     int flag;
 
-    fd = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
+    fd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (!fd) {
         rc = -EBUSY;
         printf("Failed to create socket\n");
@@ -248,7 +248,7 @@ int main(int argc, char *argv[])
         token2 = strtok(NULL, s);
 
         memset(&addr, 0, sizeof(addr));
-        addr.sin_family = PF_INET;
+        addr.sin_family = AF_INET;
         addr.sin_addr.s_addr = inet_addr(token1);
         addr.sin_port = htons(atoi(token2));
         sfd[i] = _tcp_create_and_bind(&addr);
