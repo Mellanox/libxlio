@@ -345,7 +345,7 @@ int main(int argc, char *argv[])
             /* Step:6 Process data */
             if (event & EPOLLIN) {
 #if defined(XLIO_API) && (XLIO_API == 1)
-                printf("xlio_comps[j].packet.num_bufs equal to %d \n",
+                printf("xlio_comps[j].packet.num_bufs equal to %lu \n",
                        xlio_comps[j].packet.num_bufs);
                 assert(1 == xlio_comps[j].packet.num_bufs);
                 assert(sizeof(conns.msg) > xlio_comps[j].packet.total_len);
