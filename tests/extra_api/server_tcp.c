@@ -51,6 +51,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <net/if.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
@@ -141,7 +142,9 @@ static int _tcp_create_and_bind(struct sockaddr_in *addr)
     }
 
 #if defined(IB_DEV)
-    rc = setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, (void *)IB_DEV, strlen(IB_DEV));
+    struct ifreq ifr = {};
+    strncpy(ifr.ifr_name, IB_DEV, IFNAMSIZ);
+    rc = setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr));
     if (rc < 0) {
         printf("Failed to setsockopt(SO_BINDTODEVICE) for %s: %s\n", IB_DEV, strerror(errno));
         exit(1);
