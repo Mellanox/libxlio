@@ -78,7 +78,7 @@ int xlio_thread::add_listen_socket(sockinfo_tcp *si)
     // TODO handle positive return code from prepareListen() and convert it to errno
     int rc = (si->prepareListen() ?: si->listen(-1));
 
-    xt_loginfo("Socket added tid: %d, fd: %d, rc: %d", (int)gettid(), si->get_fd(), rc);
+    xt_loginfo("Socket added xt: %p, fd: %d, rc: %d", this, si->get_fd(), rc);
     return rc;
 }
 
@@ -86,7 +86,7 @@ int xlio_thread::add_accepted_socket(sockinfo_tcp *si)
 {
     int rc = si->attach_xlio_group(m_poll_group, true);
 
-    xt_loginfo("Socket added tid: %d, fd: %d, rc: %d", (int)gettid(), si->get_fd(), rc);
+    xt_loginfo("Socket added xt: %p, fd: %d, rc: %d", this, si->get_fd(), rc);
     return rc;
 }
 

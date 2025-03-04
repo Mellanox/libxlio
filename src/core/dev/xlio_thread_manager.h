@@ -57,6 +57,7 @@ private:
     std::unique_ptr<xlio_thread[]> m_xlio_threads;
     size_t m_threads_num = 0U;
     size_t m_next_add_group = 0U;
+    lock_spin m_mgr_lock;
 };
 
 extern xlio_thread_manager *g_p_xlio_thread_manager;

@@ -362,15 +362,25 @@ bool epoll_wait_call::handle_epoll_event(bool is_ready, uint32_t events, sockinf
 
 bool epoll_wait_call::ring_poll_and_process_element()
 {
-    return m_epfd_info->ring_poll_and_process_element(&m_poll_sn_rx, &m_poll_sn_tx, nullptr);
+    if (safe_mce_sys().xlio_threads == 0U) {
+        return m_epfd_info->ring_poll_and_process_element(&m_poll_sn_rx, &m_poll_sn_tx, nullptr);
+    }
+
+    return true;
 }
 
 int epoll_wait_call::ring_request_notification()
 {
-    return m_epfd_info->ring_request_notification(m_poll_sn_rx, m_poll_sn_tx);
+    if (safe_mce_sys().xlio_threads == 0U) {
+        return m_epfd_info->ring_request_notification(m_poll_sn_rx, m_poll_sn_tx);
+    }
+
+    return 0;
 }
 
 void epoll_wait_call::ring_wait_for_notification_and_process_element(void *pv_fd_ready_array)
 {
-    m_epfd_info->ring_wait_for_notification_and_process_element(&m_poll_sn_rx, pv_fd_ready_array);
+    if (safe_mce_sys().xlio_threads == 0U) {
+        m_epfd_info->ring_wait_for_notification_and_process_element(&m_poll_sn_rx, pv_fd_ready_array);
+    }
 }

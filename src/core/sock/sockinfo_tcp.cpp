@@ -402,6 +402,20 @@ void sockinfo_tcp::rx_add_ring_cb(ring *p_ring)
     sockinfo::rx_add_ring_cb(p_ring);
 }
 
+void sockinfo_tcp::add_epoll_ctx_cb()
+{
+    if (m_p_group) {
+        m_p_group->add_epoll_ctx(m_econtext);
+    }
+}
+
+void sockinfo_tcp::remove_epoll_ctx_cb()
+{
+    if (m_p_group) {
+        m_p_group->remove_epoll_ctx(m_econtext);
+    }
+}
+
 void sockinfo_tcp::set_xlio_socket_thread(poll_group *group)
 {
     std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);

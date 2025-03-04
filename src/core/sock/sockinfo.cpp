@@ -1318,6 +1318,7 @@ int sockinfo::add_epoll_context(epfd_info *epfd)
     if (!m_econtext && !safe_mce_sys().enable_socketxtreme) {
         // This socket is not registered to any epfd
         m_econtext = epfd;
+        add_epoll_ctx_cb();
     } else {
         // Currently XLIO does not support more then 1 epfd listed
         errno = (m_econtext == epfd) ? EEXIST : ENOMEM;
@@ -1334,7 +1335,7 @@ int sockinfo::add_epoll_context(epfd_info *epfd)
 
     sock_ring_map_iter = m_rx_ring_map.begin();
     while (sock_ring_map_iter != m_rx_ring_map.end()) {
-        if (has_epoll_context()) {
+        if (safe_mce_sys().xlio_threads == 0U && has_epoll_context()) {
             m_econtext->increase_ring_ref_count(sock_ring_map_iter->first);
         }
         sock_ring_map_iter++;
@@ -1359,13 +1360,16 @@ void sockinfo::remove_epoll_context(epfd_info *epfd)
         return;
     }
 
-    rx_ring_map_t::const_iterator sock_ring_map_iter = m_rx_ring_map.begin();
-    while (sock_ring_map_iter != m_rx_ring_map.end()) {
-        m_econtext->decrease_ring_ref_count(sock_ring_map_iter->first);
-        sock_ring_map_iter++;
+    if (safe_mce_sys().xlio_threads == 0U) {
+        rx_ring_map_t::const_iterator sock_ring_map_iter = m_rx_ring_map.begin();
+        while (sock_ring_map_iter != m_rx_ring_map.end()) {
+            m_econtext->decrease_ring_ref_count(sock_ring_map_iter->first);
+            sock_ring_map_iter++;
+        }
     }
 
     if (m_econtext == epfd) {
+        remove_epoll_ctx_cb();
         m_econtext = NULL;
     }
 
@@ -1641,7 +1645,7 @@ void sockinfo::rx_add_ring_cb(ring *p_ring)
         // first in order. possible race between removal of fd from epoll (epoll_ctl del, or epoll
         // close) and here. need to add a third-side lock (fd_collection?) to sync between epoll and
         // socket.
-        if (has_epoll_context()) {
+        if (safe_mce_sys().xlio_threads == 0U && has_epoll_context()) {
             m_econtext->increase_ring_ref_count(p_ring);
         }
     }
@@ -1724,7 +1728,7 @@ void sockinfo::rx_del_ring_cb(ring *p_ring)
         // first in order. possible race between removal of fd from epoll (epoll_ctl del, or epoll
         // close) and here. need to add a third-side lock (fd_collection?) to sync between epoll and
         // socket.
-        if (has_epoll_context()) {
+        if (safe_mce_sys().xlio_threads == 0U && has_epoll_context()) {
             m_econtext->decrease_ring_ref_count(base_ring);
         }
     }
