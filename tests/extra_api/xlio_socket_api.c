@@ -32,21 +32,23 @@
  * SOFTWARE.
  */
 
-/* g++ -I./install/include -L./install/lib -L../dpcp/install/lib -o test xlio_socket_api.c -lxlio -lm -lnl-3 -ldpcp -libverbs -lmlx5 -lrdmacm -lnl-route-3 -g3 */
-/* LD_LIBRARY_PATH=./install/lib:../dpcp/install/lib ./test */
-/* Use `nc -l 8080` on the remote side */
+/* Build:
+ *     gcc -o xlio_socket_api xlio_socket_api.c -lxlio -libverbs -g3
+ * Remote/server side:
+ *     nc -l 8080
+ * Local/client side:
+ *     sudo ./xlio_socket_api <server_ip_addr>
+ */
 
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
 
-#include <mellanox/xlio.h>
 #include <infiniband/verbs.h>
+#include <mellanox/xlio.h>
+#include <mellanox/xlio_extra.h>
 
 #define TEST_USERDATA_MAGIC 0xfeedbeef
 #define FAKE_PORT           65535
@@ -57,6 +59,16 @@ static int g_test_events;
 static int g_comp_events = 0;
 static char sndbuf[256];
 static struct ibv_mr *mr_buf;
+
+static struct xlio_api_t *xlio_api = NULL;
+void __attribute__((constructor)) init_xlio_api(void)
+{
+    xlio_api = xlio_get_api();
+    if (xlio_api == NULL) {
+        printf("Extra API not found\n");
+	exit(-1);
+    }
+}
 
 static void memory_cb(void *data, size_t size, size_t page_size)
 {
@@ -72,9 +84,9 @@ static void send_single_msg(xlio_socket_t sock, const void *data, size_t len, ui
         .userdata_op = userdata_op,
     };
     memcpy(sndbuf, data, len);
-    int ret = xlio_socket_send(sock, sndbuf, len, &attr);
+    int ret = xlio_api->xlio_socket_send(sock, sndbuf, len, &attr);
     assert(ret == 0);
-    xlio_socket_flush(sock);
+    xlio_api->xlio_socket_flush(sock);
 }
 
 static void send_inline_msg(xlio_socket_t sock, const void *data, size_t len, uintptr_t userdata_op,
@@ -85,9 +97,9 @@ static void send_inline_msg(xlio_socket_t sock, const void *data, size_t len, ui
         .mkey = 0,
         .userdata_op = userdata_op,
     };
-    int ret = xlio_socket_send(sock, data, len, &attr);
+    int ret = xlio_api->xlio_socket_send(sock, data, len, &attr);
     assert(ret == 0);
-    xlio_socket_flush(sock);
+    xlio_api->xlio_socket_flush(sock);
 }
 
 static void socket_event_cb(xlio_socket_t sock, uintptr_t userdata_sq, int event, int value)
@@ -143,7 +155,7 @@ static void socket_rx_cb(xlio_socket_t sock, uintptr_t userdata_sq, void *data, 
     free(msg);
 
     send_single_msg(sock, data, len, 0xdeadbeef, 0);
-    xlio_socket_buf_free(sock, buf);
+    xlio_api->xlio_socket_buf_free(sock, buf);
 }
 
 static void test_event_cb(xlio_socket_t sock, uintptr_t userdata_sq, int event, int value)
@@ -172,7 +184,7 @@ static void test_rx_cb(xlio_socket_t sock, uintptr_t userdata_sq, void *data, si
     (void)data;
     (void)len;
     assert(userdata_sq = TEST_USERDATA_MAGIC);
-    xlio_socket_buf_free(sock, buf);
+    xlio_api->xlio_socket_buf_free(sock, buf);
 }
 
 static void test_multi_groups(const char *ip)
@@ -192,13 +204,13 @@ static void test_multi_groups(const char *ip)
         .socket_rx_cb = &test_rx_cb,
     };
 
-    rc = xlio_poll_group_create(&gattr, &group1);
+    rc = xlio_api->xlio_poll_group_create(&gattr, &group1);
     assert(rc == 0);
-    rc = xlio_poll_group_create(&gattr, &group2);
+    rc = xlio_api->xlio_poll_group_create(&gattr, &group2);
     assert(rc == 0);
 
     gattr.flags = XLIO_GROUP_FLAG_SAFE;
-    rc = xlio_poll_group_create(&gattr, &group3);
+    rc = xlio_api->xlio_poll_group_create(&gattr, &group3);
     assert(rc == 0);
 
     struct xlio_socket_attr sattr = {
@@ -207,15 +219,15 @@ static void test_multi_groups(const char *ip)
     };
 
     sattr.group = group1;
-    rc = xlio_socket_create(&sattr, &sock1_1);
+    rc = xlio_api->xlio_socket_create(&sattr, &sock1_1);
     assert(rc == 0);
-    rc = xlio_socket_create(&sattr, &sock1_2);
+    rc = xlio_api->xlio_socket_create(&sattr, &sock1_2);
     assert(rc == 0);
     sattr.group = group2;
-    rc = xlio_socket_create(&sattr, &sock2);
+    rc = xlio_api->xlio_socket_create(&sattr, &sock2);
     assert(rc == 0);
     sattr.group = group3;
-    rc = xlio_socket_create(&sattr, &sock3);
+    rc = xlio_api->xlio_socket_create(&sattr, &sock3);
     assert(rc == 0);
 
     struct sockaddr_in addr = {};
@@ -226,40 +238,40 @@ static void test_multi_groups(const char *ip)
 
     g_test_events = 0;
     /* Connect will fail, we need it to allocate rings for the checks below. */
-    rc = xlio_socket_connect(sock1_1, (struct sockaddr *)&addr, sizeof(addr));
+    rc = xlio_api->xlio_socket_connect(sock1_1, (struct sockaddr *)&addr, sizeof(addr));
     assert(rc == 0);
-    rc = xlio_socket_connect(sock1_2, (struct sockaddr *)&addr, sizeof(addr));
+    rc = xlio_api->xlio_socket_connect(sock1_2, (struct sockaddr *)&addr, sizeof(addr));
     assert(rc == 0);
-    rc = xlio_socket_connect(sock2, (struct sockaddr *)&addr, sizeof(addr));
+    rc = xlio_api->xlio_socket_connect(sock2, (struct sockaddr *)&addr, sizeof(addr));
     assert(rc == 0);
-    rc = xlio_socket_connect(sock3, (struct sockaddr *)&addr, sizeof(addr));
+    rc = xlio_api->xlio_socket_connect(sock3, (struct sockaddr *)&addr, sizeof(addr));
     assert(rc == 0);
 
     /* TODO There is no API to check expected internal ring distribution. */
 
     /* Wait for ERROR events (ECONREFUSED). */
     while (g_test_events < 4) {
-        xlio_poll_group_poll(group1);
-        xlio_poll_group_poll(group2);
-        xlio_poll_group_poll(group3);
+        xlio_api->xlio_poll_group_poll(group1);
+        xlio_api->xlio_poll_group_poll(group2);
+        xlio_api->xlio_poll_group_poll(group3);
     }
 
     g_test_events = 0;
-    xlio_socket_destroy(sock1_1);
-    xlio_socket_destroy(sock1_2);
-    xlio_socket_destroy(sock2);
-    xlio_socket_destroy(sock3);
+    xlio_api->xlio_socket_destroy(sock1_1);
+    xlio_api->xlio_socket_destroy(sock1_2);
+    xlio_api->xlio_socket_destroy(sock2);
+    xlio_api->xlio_socket_destroy(sock3);
 
     /* Wait for TERMINATED events. */
     while (g_test_events < 4) {
-        xlio_poll_group_poll(group1);
-        xlio_poll_group_poll(group2);
-        xlio_poll_group_poll(group3);
+        xlio_api->xlio_poll_group_poll(group1);
+        xlio_api->xlio_poll_group_poll(group2);
+        xlio_api->xlio_poll_group_poll(group3);
     }
 
-    xlio_poll_group_destroy(group1);
-    xlio_poll_group_destroy(group2);
-    xlio_poll_group_destroy(group3);
+    xlio_api->xlio_poll_group_destroy(group1);
+    xlio_api->xlio_poll_group_destroy(group2);
+    xlio_api->xlio_poll_group_destroy(group3);
 
     printf("Multi group test done.\n");
 }
@@ -288,12 +300,12 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    rc = xlio_init_ex(&iattr);
+    rc = xlio_api->xlio_init_ex(&iattr);
     assert(rc == 0);
 
     test_multi_groups(argv[1]);
 
-    rc = xlio_poll_group_create(&gattr, &group);
+    rc = xlio_api->xlio_poll_group_create(&gattr, &group);
     assert(rc == 0);
 
     printf("Group created.\n");
@@ -304,7 +316,7 @@ int main(int argc, char **argv)
         .userdata_sq = 0xdeadc0de,
     };
 
-    rc = xlio_socket_create(&sattr, &sock);
+    rc = xlio_api->xlio_socket_create(&sattr, &sock);
     assert(rc == 0);
 
     printf("Socket created, connecting to %s:8080.\n", argv[1]);
@@ -315,10 +327,10 @@ int main(int argc, char **argv)
     rc = inet_aton(argv[1], &addr.sin_addr);
     assert(rc != 0);
 
-    rc = xlio_socket_connect(sock, (struct sockaddr *)&addr, sizeof(addr));
+    rc = xlio_api->xlio_socket_connect(sock, (struct sockaddr *)&addr, sizeof(addr));
     assert(rc == 0);
 
-    struct ibv_pd *pd = xlio_socket_get_pd(sock);
+    struct ibv_pd *pd = xlio_api->xlio_socket_get_pd(sock);
     assert(pd != NULL);
     mr_buf = ibv_reg_mr(pd, sndbuf, sizeof(sndbuf), IBV_ACCESS_LOCAL_WRITE);
     assert(mr_buf != NULL);
@@ -326,19 +338,19 @@ int main(int argc, char **argv)
     printf("Starting polling loop.\n");
 
     while (!quit) {
-        xlio_poll_group_poll(group);
+        xlio_api->xlio_poll_group_poll(group);
     }
 
     printf("Quiting...\n");
 
-    rc = xlio_socket_destroy(sock);
+    rc = xlio_api->xlio_socket_destroy(sock);
     assert(rc == 0);
 
     while (!terminated) {
-        xlio_poll_group_poll(group);
+        xlio_api->xlio_poll_group_poll(group);
     }
 
-    rc = xlio_poll_group_destroy(group);
+    rc = xlio_api->xlio_poll_group_destroy(group);
     assert(rc == 0);
 
     printf("Zerocopy completion events: %d\n", g_comp_events);
