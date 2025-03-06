@@ -13,7 +13,7 @@
             properties-content: |
               jjb_proj={jjb_proj}
     description: Do NOT edit this job through the Web GUI !
-    concurrent: false
+    concurrent: true
     parameters:
         - string:
             name: "sha1"
