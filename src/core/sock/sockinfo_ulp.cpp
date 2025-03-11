@@ -63,7 +63,7 @@ int sockinfo_tcp_ops::setsockopt(int __level, int __optname, const void *__optva
 /*virtual*/
 ssize_t sockinfo_tcp_ops::tx(xlio_tx_call_attr_t &tx_arg)
 {
-    return m_p_sock->tcp_tx(tx_arg);
+    return m_p_sock->is_xlio_socket() ? m_p_sock->tcp_tx_thread(tx_arg) : m_p_sock->tcp_tx(tx_arg);
 }
 
 /*virtual*/

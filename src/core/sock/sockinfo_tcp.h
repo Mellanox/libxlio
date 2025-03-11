@@ -261,6 +261,7 @@ public:
 
     ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
     ssize_t tcp_tx(xlio_tx_call_attr_t &tx_arg);
+    ssize_t tcp_tx_thread(xlio_tx_call_attr_t &tx_arg);
     ssize_t rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
                sockaddr *__from = nullptr, socklen_t *__fromlen = nullptr,
                struct msghdr *__msg = nullptr) override;
@@ -435,6 +436,8 @@ public:
     static err_t rx_lwip_cb_thread_socket(void *arg, struct tcp_pcb *tpcb, struct pbuf *p);
     static void err_lwip_cb_xlio_socket(void *pcb_container, err_t err);
     static void err_lwip_cb_thread_socket(void *pcb_container, err_t err);
+
+    void make_dirty();
 
 protected:
     void lock_rx_q() override;

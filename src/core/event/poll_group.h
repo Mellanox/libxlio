@@ -36,6 +36,7 @@
 #define XLIO_GROUP_H
 
 #include <memory>
+#include <queue>
 #include <vector>
 
 #include "sock/fd_collection.h"
@@ -50,6 +51,11 @@ class event_handler_manager_local;
 class ring;
 class ring_alloc_logic_attr;
 class tcp_timers_collection;
+
+struct job_desc {
+    sockinfo_tcp *sock;
+    mem_buf_desc_t *buf;
+};
 
 class poll_group {
 public:
@@ -75,6 +81,8 @@ public:
     event_handler_manager_local *get_event_handler() const { return m_event_handler.get(); }
     tcp_timers_collection *get_tcp_timers() const { return m_tcp_timers.get(); }
 
+    mem_buf_desc_t *get_tx_buffer();
+    void return_tx_buffer(mem_buf_desc_t *buf);
     void return_rx_buffers(mem_buf_desc_t *first, mem_buf_desc_t*last);
     void add_epoll_ctx(epfd_info *epfd, sockinfo_tcp &sock);
     void remove_epoll_ctx(epfd_info *epfd);
@@ -82,6 +90,13 @@ public:
     bool add_ack_ready_socket(sockinfo_tcp &sock) { return m_ack_ready_list.push(&sock); }
 
     const std::chrono::high_resolution_clock::time_point& get_curr_time() const { return m_event_handler.get()->curr_time_sample(); }
+
+    void job_insert(sockinfo_tcp *si, mem_buf_desc_t *buf)
+    {
+        std::lock_guard<decltype(m_job_q_lock)> lock(m_job_q_lock);
+        m_job_q.push((job_desc) {si, buf});
+    }
+
 public:
     xlio_socket_event_cb_t m_socket_event_cb;
     xlio_socket_comp_cb_t m_socket_comp_cb;
@@ -108,6 +123,9 @@ private:
 
     std::unordered_map<epfd_info *, std::pair<uint32_t, ep_ready_fd_list_t*>> m_epoll_ctx;
     xlio_lockless_stack<sockinfo_tcp, sockinfo_tcp::ack_thread_ready_list> m_ack_ready_list;
+
+    lock_spin m_job_q_lock;
+    std::queue<job_desc> m_job_q;
 };
 
 #endif /* XLIO_GROUP_H */

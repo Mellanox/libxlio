@@ -229,9 +229,15 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
                 auto &pbuf_descriptor = p_desc->lwip_pbuf.desc;
                 if (PBUF_DESC_EXPRESS == pbuf_descriptor.attr) {
                     m_sge[i].lkey = pbuf_descriptor.mkey;
+                    if (m_sge[i].lkey == LKEY_TX_DEFAULT) {
+                        m_sge[i].lkey = m_p_ring->get_tx_lkey(m_id);
+                    }
                 } else if (PBUF_DESC_MKEY == pbuf_descriptor.attr) {
                     /* PBUF_DESC_MKEY - value is provided by user */
                     m_sge[i].lkey = pbuf_descriptor.mkey;
+                    if (m_sge[i].lkey == LKEY_TX_DEFAULT) {
+                        m_sge[i].lkey = m_p_ring->get_tx_lkey(m_id);
+                    }
                 } else if (PBUF_DESC_MDESC == pbuf_descriptor.attr ||
                            PBUF_DESC_NVME_TX == pbuf_descriptor.attr) {
                     mem_desc *mdesc = (mem_desc *)pbuf_descriptor.mdesc;

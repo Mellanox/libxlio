@@ -1423,6 +1423,51 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
     return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp, is_dummy, is_non_file_zerocopy);
 }
 
+ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
+{
+    iovec *p_iov = tx_arg.attr.iov;
+    size_t sz_iov = tx_arg.attr.sz_iov;
+    char *addr = reinterpret_cast<char *>(p_iov[0].iov_base);
+    size_t tosend = p_iov[0].iov_len;
+    ssize_t sent = 0;
+
+    if (sz_iov > 1) {
+        errno = ENOTSUP;
+        return -1;
+    }
+
+    lock_tcp_con();
+    unsigned sndbuf = sndbuf_available();
+//    m_pcb.snd_buf -= std::min<int>(sndbuf, tosend);
+//  TODO decrease sndbuf and take into account sndbuf change in tcp_write
+    unlock_tcp_con();
+
+    while (sndbuf > 0 && tosend > 0) {
+        mem_buf_desc_t *buf = m_p_group->get_tx_buffer();
+        if (!buf) {
+            break;
+        }
+
+        size_t buflen = std::min<size_t>(std::min<size_t>(tosend, sndbuf), buf->sz_buffer);
+        memcpy(buf->p_buffer, addr, buflen);
+        buf->sz_data = buflen;
+        addr += buflen;
+        sent += buflen;
+        sndbuf -= buflen;
+        tosend -= buflen;
+
+        m_p_group->job_insert(this, buf);
+    }
+
+    /* TODO Handle disconnected socket */
+
+    if (!sent) {
+        errno = EAGAIN;
+        sent = -1;
+    }
+    return sent;
+}
+
 /**
  * Handles transmission operations on a TCP socket similar to tcp_tx.
  * This is a fallback function when the operation is either blocking, not zero-copy, or the socket
@@ -6697,6 +6742,14 @@ inline bool sockinfo_tcp::handle_bind_no_port(int &bind_ret, in_port_t in_port,
     return CONTINUE_WITH_BIND;
 }
 
+void sockinfo_tcp::make_dirty()
+{
+    if (!m_b_xlio_socket_dirty) {
+        m_b_xlio_socket_dirty = true;
+        m_p_group->add_dirty_socket(this);
+    }
+}
+
 int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint32_t mkey,
                                  unsigned flags, void *opaque_op)
 {
@@ -6736,9 +6789,8 @@ int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint
     if (!(flags & XLIO_EXPRESS_MSG_MORE)) {
         tcp_output(&m_pcb);
         m_b_xlio_socket_dirty = false;
-    } else if (m_p_group && !m_b_xlio_socket_dirty) {
-        m_b_xlio_socket_dirty = true;
-        m_p_group->add_dirty_socket(this);
+    } else if (m_p_group) {
+        make_dirty();
     }
 
     unlock_tcp_con();
@@ -6774,9 +6826,8 @@ int sockinfo_tcp::tcp_tx_express_inline(const struct iovec *iov, unsigned iov_le
     if (!(flags & XLIO_EXPRESS_MSG_MORE)) {
         m_b_xlio_socket_dirty = false;
         tcp_output(&m_pcb);
-    } else if (m_p_group && !m_b_xlio_socket_dirty) {
-        m_b_xlio_socket_dirty = true;
-        m_p_group->add_dirty_socket(this);
+    } else if (m_p_group) {
+        make_dirty();
     }
 
     unlock_tcp_con();

@@ -64,10 +64,12 @@ void xlio_thread::socket_event_cb(xlio_socket_t sock, uintptr_t userdata_sq, int
 void xlio_thread::socket_comp_cb(xlio_socket_t sock, uintptr_t userdata_sq, uintptr_t userdata_op)
 {
     sockinfo_tcp *tcp_sock = reinterpret_cast<sockinfo_tcp *>(sock);
-    __log_info("sock-fd: %d", tcp_sock->get_fd());
+//    __log_info("sock-fd: %d", tcp_sock->get_fd());
+
+    mem_buf_desc_t *buf = reinterpret_cast<mem_buf_desc_t *>(userdata_op);
+    tcp_sock->get_poll_group()->return_tx_buffer(buf);
 
     NOT_IN_USE(userdata_sq);
-    NOT_IN_USE(userdata_op);
 }
 
 int xlio_thread::add_listen_socket(sockinfo_tcp *si)

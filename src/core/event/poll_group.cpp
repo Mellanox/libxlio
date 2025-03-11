@@ -169,6 +169,8 @@ int poll_group::process()
     m_event_handler->take_curr_time();
 
     int all_drained = poll();
+    bool wastx = false;
+    bool empty;
 
     if (clear_rx_buffers()) {
         all_drained = 0;
@@ -186,11 +188,30 @@ int poll_group::process()
         });
     }
 
-    if (handle_ack_ready_sockets()) {
-        all_drained = 0;
+    do {
+        job_desc jd;
+        m_job_q_lock.lock();
+        empty = m_job_q.empty();
+        if (!empty) {
+            jd = m_job_q.front();
+            m_job_q.pop();
+        }
+        m_job_q_lock.unlock();
+        if (!empty) {
+            const struct iovec iov = {.iov_base = reinterpret_cast<void *>(jd.buf->p_buffer), .iov_len = jd.buf->sz_data};
+            jd.sock->tcp_tx_express(&iov, 1, LKEY_TX_DEFAULT, 0, reinterpret_cast<void *>(jd.buf));
+        }
+        wastx |= !empty;
+    } while (!empty);
+
+    if (wastx) {
+        flush();
     }
 
-    //flush();
+    if (handle_ack_ready_sockets()) {
+        all_drained = 0;
+        wastx = true;
+    }
 
     //if (all_drained && safe_mce_sys().cq_moderation_count > 0U) {
     //    std::for_each(std::begin(m_epoll_ctx), std::end(m_epoll_ctx),
@@ -206,9 +227,7 @@ bool poll_group::handle_ack_ready_sockets()
         auto temp_stack = m_ack_ready_list.pop_all();
         while (!temp_stack.empty()) {
             sockinfo_tcp *sock = temp_stack.get_and_pop();
-            sock->lock_tcp_con();
-            tcp_output(sock->get_pcb());
-            sock->unlock_tcp_con();
+            sock->make_dirty();
         }
 
         return true;
@@ -307,6 +326,26 @@ void poll_group::close_socket(sockinfo_tcp *si, bool force /*=false*/)
         si->clean_socket_obj();
     } else {
 
+    }
+}
+
+mem_buf_desc_t *poll_group::get_tx_buffer()
+{
+    mem_buf_desc_t *buf = nullptr;
+    ring *rng = m_rings.front();
+
+    if (rng) {
+        buf = rng->mem_buf_tx_get(0, false, PBUF_RAM, 1);
+    }
+    return buf;
+}
+
+void poll_group::return_tx_buffer(mem_buf_desc_t *buf)
+{
+    ring *rng = m_rings.front();
+    if (rng) {
+        buf->p_next_desc = nullptr;
+        rng->mem_buf_tx_release(buf, false, false);
     }
 }
 
