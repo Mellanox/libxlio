@@ -2729,7 +2729,7 @@ size_t sockinfo_tcp::rx_xlio_socket_fetch_ready_buffers(
             m_n_rx_pkt_ready_list_count += temp_rx_ready_list_count;
         }
 
-        tcp_recved(&m_pcb, static_cast<uint32_t>(prev_ready_byte_count - temp_ready_byte_count));
+        tcp_recved_no_output(&m_pcb, static_cast<uint32_t>(prev_ready_byte_count - temp_ready_byte_count));
     }
 
     return prev_ready_byte_count - temp_ready_byte_count;
