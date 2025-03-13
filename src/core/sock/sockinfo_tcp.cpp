@@ -440,7 +440,7 @@ void sockinfo_tcp::set_xlio_socket_thread(poll_group *group)
     }
 
     tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_thread_socket);
-    tcp_err(&m_pcb, sockinfo_tcp::err_lwip_cb_xlio_socket);
+    tcp_err(&m_pcb, sockinfo_tcp::err_lwip_cb_thread_socket);
 }
 
 void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
@@ -694,35 +694,91 @@ err_t sockinfo_tcp::rx_lwip_cb_thread_socket(void *arg, struct tcp_pcb *pcb, str
     return ERR_OK;
 }
 
+void sockinfo_tcp::err_lwip_cb_set_conn_err(err_t err)
+{
+    m_conn_state = TCP_CONN_FAILED;
+    m_error_status = ECONNABORTED;
+    if (err == ERR_TIMEOUT) {
+        m_conn_state = TCP_CONN_TIMEOUT;
+        m_error_status = ETIMEDOUT;
+    } else if (err == ERR_RST) {
+        if (m_sock_state == TCP_SOCK_ASYNC_CONNECT) {
+            m_conn_state = TCP_CONN_ERROR;
+            m_error_status = ECONNREFUSED;
+        } else {
+            m_conn_state = TCP_CONN_RESETED;
+            m_error_status = ECONNRESET;
+        }
+    }
+
+    // Avoid binding twice in case of calling connect again after previous call failed.
+    if (m_sock_state != TCP_SOCK_BOUND) { // TODO: maybe we need to exclude more states?
+        m_sock_state = TCP_SOCK_INITED;
+    }
+}
+
+void sockinfo_tcp::err_lwip_cb_notify_conn_err(err_t err)
+{
+    /*
+     * In case we got RST from the other end we need to marked this socket as ready to read for
+     * epoll
+     */
+    if ((m_sock_state == TCP_SOCK_CONNECTED_RD ||
+        m_sock_state == TCP_SOCK_CONNECTED_RDWR ||
+        m_sock_state == TCP_SOCK_ASYNC_CONNECT ||
+        m_conn_state == TCP_CONN_CONNECTING) &&
+       PCB_IN_ACTIVE_STATE(&m_pcb)) {
+       if (err == ERR_RST) {
+           if (m_sock_state == TCP_SOCK_ASYNC_CONNECT) {
+               NOTIFY_ON_EVENTS(this, (EPOLLIN | EPOLLERR | EPOLLHUP));
+           } else {
+               NOTIFY_ON_EVENTS(this, (EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP));
+           }
+           /* TODO what about no route to host type of errors, need to add EPOLLERR in this
+            * case ?
+            */
+       } else { // ERR_TIMEOUT
+           NOTIFY_ON_EVENTS(this, (EPOLLIN | EPOLLHUP));
+       }
+
+       // Currently XLIO-Thread does not support select/poll
+       // For Socketxtreme m_iomux_ready_fd_array is null.
+       io_mux_call::update_fd_array(m_iomux_ready_fd_array, m_fd);
+   }
+}
+
 /*static*/
 void sockinfo_tcp::err_lwip_cb_xlio_socket(void *pcb_container, err_t err)
 {
     sockinfo_tcp *conn = reinterpret_cast<sockinfo_tcp *>(pcb_container);
 
-    // TODO Reduce copy-paste
-    conn->m_conn_state = TCP_CONN_FAILED;
-    conn->m_error_status = ECONNABORTED;
-    if (err == ERR_TIMEOUT) {
-        conn->m_conn_state = TCP_CONN_TIMEOUT;
-        conn->m_error_status = ETIMEDOUT;
-    } else if (err == ERR_RST) {
-        if (conn->m_sock_state == TCP_SOCK_ASYNC_CONNECT) {
-            conn->m_conn_state = TCP_CONN_ERROR;
-            conn->m_error_status = ECONNREFUSED;
-        } else {
-            conn->m_conn_state = TCP_CONN_RESETED;
-            conn->m_error_status = ECONNRESET;
-        }
-    }
-
-    // Avoid binding twice in case of calling connect again after previous call failed.
-    if (conn->m_sock_state != TCP_SOCK_BOUND) { // TODO: maybe we need to exclude more states?
-        conn->m_sock_state = TCP_SOCK_INITED;
-    }
+    conn->err_lwip_cb_set_conn_err(err);
 
     if (conn->m_state != SOCKINFO_CLOSING) {
         conn->xlio_socket_event(XLIO_SOCKET_EVENT_ERROR, conn->m_error_status);
     }
+}
+
+void sockinfo_tcp::err_lwip_cb_thread_socket(void *pcb_container, err_t err)
+{
+    sockinfo_tcp *conn = reinterpret_cast<sockinfo_tcp *>(pcb_container);
+
+    if (get_tcp_state(&conn->m_pcb) == LISTEN && err == ERR_RST) {
+        vlog_printf(VLOG_ERROR, "listen socket should not receive RST\n");
+        return;
+    }
+
+    // We got RST/error/timeout before the handshake is complete
+    if (conn->m_parent) {
+        conn->m_parent->handle_incoming_handshake_failure(conn); // TODO: Is this good?
+        return;
+    }
+
+    conn->err_lwip_cb_notify_conn_err(err);
+
+    conn->err_lwip_cb_set_conn_err(err);
+
+    conn->m_sock_wakeup_pipe.do_wakeup();
 }
 
 sockinfo_tcp::~sockinfo_tcp()
@@ -1779,55 +1835,9 @@ void sockinfo_tcp::err_lwip_cb(void *pcb_container, err_t err)
         return;
     }
 
-    /*
-     * In case we got RST from the other end we need to marked this socket as ready to read for
-     * epoll
-     */
-    if ((conn->m_sock_state == TCP_SOCK_CONNECTED_RD ||
-         conn->m_sock_state == TCP_SOCK_CONNECTED_RDWR ||
-         conn->m_sock_state == TCP_SOCK_ASYNC_CONNECT ||
-         conn->m_conn_state == TCP_CONN_CONNECTING) &&
-        PCB_IN_ACTIVE_STATE(&conn->m_pcb)) {
-        if (err == ERR_RST) {
-            if (conn->m_sock_state == TCP_SOCK_ASYNC_CONNECT) {
-                NOTIFY_ON_EVENTS(conn, (EPOLLIN | EPOLLERR | EPOLLHUP));
-            } else {
-                NOTIFY_ON_EVENTS(conn, (EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP));
-            }
-            /* TODO what about no route to host type of errors, need to add EPOLLERR in this
-             * case ?
-             */
-        } else { // ERR_TIMEOUT
-            NOTIFY_ON_EVENTS(conn, (EPOLLIN | EPOLLHUP));
-        }
+    conn->err_lwip_cb_notify_conn_err(err);
 
-        /* SOCKETXTREME comment:
-         * Add this fd to the ready fd list
-         * Note: No issue is expected in case socketxtreme_poll() usage because
-         * 'pv_fd_ready_array' is null in such case and as a result update_fd_array() call means
-         * nothing
-         */
-
-        io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
-    }
-
-    conn->m_conn_state = TCP_CONN_FAILED;
-    if (err == ERR_TIMEOUT) {
-        conn->m_conn_state = TCP_CONN_TIMEOUT;
-        conn->m_error_status = ETIMEDOUT;
-    } else if (err == ERR_RST) {
-        if (conn->m_sock_state == TCP_SOCK_ASYNC_CONNECT) {
-            conn->m_conn_state = TCP_CONN_ERROR;
-            conn->m_error_status = ECONNREFUSED;
-        } else {
-            conn->m_conn_state = TCP_CONN_RESETED;
-        }
-    }
-
-    // Avoid binding twice in case of calling connect again after previous call failed.
-    if (conn->m_sock_state != TCP_SOCK_BOUND) { // TODO: maybe we need to exclude more states?
-        conn->m_sock_state = TCP_SOCK_INITED;
-    }
+    conn->err_lwip_cb_set_conn_err(err);
 
     conn->m_sock_wakeup_pipe.do_wakeup();
 }

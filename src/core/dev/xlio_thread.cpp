@@ -57,7 +57,6 @@ void xlio_thread::socket_event_cb(xlio_socket_t sock, uintptr_t userdata_sq, int
 {
     sockinfo_tcp *tcp_sock = reinterpret_cast<sockinfo_tcp *>(sock);
     __log_info("sock-fd: %d, event: %d, value: %d", tcp_sock->get_fd(), event, value);
-
     NOT_IN_USE(userdata_sq);
 }
 
@@ -78,7 +77,7 @@ int xlio_thread::add_listen_socket(sockinfo_tcp *si)
     // TODO handle positive return code from prepareListen() and convert it to errno
     int rc = (si->prepareListen() ?: si->listen(-1));
 
-    xt_loginfo("Socket added xt: %p, fd: %d, rc: %d", this, si->get_fd(), rc);
+    xt_loginfo("Listen socket added xt: %p, fd: %d, rc: %d", this, si->get_fd(), rc);
     return rc;
 }
 
@@ -86,7 +85,28 @@ int xlio_thread::add_accepted_socket(sockinfo_tcp *si)
 {
     int rc = si->attach_xlio_group(m_poll_group, true);
 
-    xt_loginfo("Socket added xt: %p, fd: %d, rc: %d", this, si->get_fd(), rc);
+    xt_loginfo("Accepted socket added xt: %p, fd: %d, rc: %d", this, si->get_fd(), rc);
+    return rc;
+}
+
+int xlio_thread::add_connect_socket(sockinfo_tcp *si, const struct sockaddr *to, socklen_t tolen)
+{
+    si->set_xlio_socket_thread(m_poll_group);
+    m_poll_group->add_socket(si);
+
+    int errno_save = errno;
+    int rc = si->connect(to, tolen);
+    int rc_temp = (rc == -1 && (errno == EINPROGRESS || errno == EAGAIN)) ? 0 : rc;
+    if (rc_temp == 0) {
+        si->add_tx_ring_to_group();
+        if (rc >= 0) {
+            errno = errno_save;
+        } else {
+            xt_loginfo("Connect EAGAIN xt: %p, fd: %d, rc: %d", this, si->get_fd(), rc);
+        }
+    }
+
+    xt_loginfo("Connect socket added xt: %p, fd: %d, rc: %d", this, si->get_fd(), rc);
     return rc;
 }
 

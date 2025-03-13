@@ -406,7 +406,6 @@ public:
     static err_t rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, struct pbuf *p);
     static err_t rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p);
     inline void rx_lwip_cb_socketxtreme_helper(pbuf *p);
-    static err_t rx_lwip_cb_thread_socket(void *arg, struct tcp_pcb *tpcb, struct pbuf *p);
     int register_callback(xlio_recv_callback_t callback, void *context) override
     {
         tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_recv_callback);
@@ -427,7 +426,9 @@ public:
     int attach_xlio_group(poll_group *group, bool xlio_thread);
     void xlio_socket_event(int event, int value);
     static err_t rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *tpcb, struct pbuf *p);
+    static err_t rx_lwip_cb_thread_socket(void *arg, struct tcp_pcb *tpcb, struct pbuf *p);
     static void err_lwip_cb_xlio_socket(void *pcb_container, err_t err);
+    static void err_lwip_cb_thread_socket(void *pcb_container, err_t err);
 
 protected:
     void lock_rx_q() override;
@@ -473,6 +474,9 @@ private:
     static void accepted_pcb_cb(struct tcp_pcb *newpcb);
 
     int accept_helper(struct sockaddr *__addr, socklen_t *__addrlen, int __flags = 0);
+
+    void err_lwip_cb_notify_conn_err(err_t err);
+    void err_lwip_cb_set_conn_err(err_t err);
 
     // clone socket in accept call
     sockinfo_tcp *accept_clone();

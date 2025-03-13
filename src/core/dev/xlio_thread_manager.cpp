@@ -69,3 +69,11 @@ int xlio_thread_manager::add_accepted_socket(sockinfo_tcp *sock)
     m_next_add_group %= m_threads_num;
     return rc;
 }
+
+int xlio_thread_manager::add_connect_socket(sockinfo_tcp *sock, const struct sockaddr *to, socklen_t tolen)
+{
+    std::lock_guard<decltype(m_mgr_lock)> lock(m_mgr_lock);
+    int rc = m_xlio_threads.get()[m_next_add_group++].add_connect_socket(sock, to, tolen);
+    m_next_add_group %= m_threads_num;
+    return rc;
+}

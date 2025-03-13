@@ -49,6 +49,7 @@ public:
 
     int add_listen_socket(sockinfo_tcp *sock);
     int add_accepted_socket(sockinfo_tcp *sock);
+    int add_connect_socket(sockinfo_tcp *sock, const struct sockaddr *to, socklen_t tolen);
 
 private:
 

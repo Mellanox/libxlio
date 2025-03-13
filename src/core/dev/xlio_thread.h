@@ -51,6 +51,7 @@ public:
     void stop_thread();
     int add_listen_socket(sockinfo_tcp *si);
     int add_accepted_socket(sockinfo_tcp *si);
+    int add_connect_socket(sockinfo_tcp *si, const struct sockaddr *to, socklen_t tolen);
 
 private:
 
