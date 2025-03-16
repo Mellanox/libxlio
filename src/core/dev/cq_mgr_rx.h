@@ -140,6 +140,7 @@ public:
     bool reclaim_recv_buffers(descq_t *rx_reuse);
     bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst);
     bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst);
+    void reclaim_recv_buffer_chain(mem_buf_desc_t *rx_reuse_lst);
     int reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse);
 
     void get_cq_event(int count = 1) { xlio_ib_mlx5_get_cq_event(&m_mlx5_cq, count); };
@@ -163,6 +164,7 @@ protected:
     mem_buf_desc_t *cqe_process_rx(mem_buf_desc_t *p_mem_buf_desc, enum buff_status_e status);
 
     virtual void reclaim_recv_buffer_helper(mem_buf_desc_t *buff);
+    virtual void reclaim_recv_buffer_helper_single(mem_buf_desc_t *buff);
 
     // Returns true if the given buffer was used,
     // false if the given buffer was not used.

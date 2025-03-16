@@ -343,7 +343,7 @@ void cq_mgr_rx::return_extra_buffers()
     }
     int buff_to_rel = m_rx_pool.size() - m_n_sysvar_qp_compensation_level;
 
-    cq_logfunc("releasing %d buffers to global rx pool", buff_to_rel);
+    cq_loginfo("releasing %d buffers to global rx pool", buff_to_rel);
     g_buffer_pool_rx_rwqe->put_buffers_thread_safe(&m_rx_pool, buff_to_rel);
     m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
 }
@@ -421,7 +421,7 @@ void cq_mgr_rx::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
                 temp = buff;
                 assert(temp->lwip_pbuf.type != PBUF_ZEROCOPY);
                 buff = temp->p_next_desc;
-                temp->clear_transport_data();
+                //temp->clear_transport_data();
                 temp->p_next_desc = nullptr;
                 temp->p_prev_desc = nullptr;
                 temp->reset_ref_count();
@@ -430,7 +430,24 @@ void cq_mgr_rx::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
             }
             m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
         } else {
-            cq_logfunc("Buffer returned to wrong CQ");
+            cq_loginfo("Buffer returned to wrong CQ");
+            g_buffer_pool_rx_rwqe->put_buffers_thread_safe(buff);
+        }
+    }
+}
+
+void cq_mgr_rx::reclaim_recv_buffer_helper_single(mem_buf_desc_t *buff)
+{
+    if (buff->dec_ref_count() <= 1 && (buff->lwip_pbuf.ref-- <= 1)) {
+        if (likely(buff->p_desc_owner == m_p_ring)) {
+            buff->p_next_desc = nullptr;
+            buff->p_prev_desc = nullptr;
+            buff->reset_ref_count();
+            free_lwip_pbuf(&buff->lwip_pbuf);
+            m_rx_pool.push_front(buff);
+            m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
+        } else {
+            cq_loginfo("Buffer returned to wrong CQ");
             g_buffer_pool_rx_rwqe->put_buffers_thread_safe(buff);
         }
     }
@@ -464,6 +481,16 @@ bool cq_mgr_rx::reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst)
         return true;
     }
     return false;
+}
+
+void cq_mgr_rx::reclaim_recv_buffer_chain(mem_buf_desc_t *rx_reuse_lst)
+{
+    mem_buf_desc_t *temp = rx_reuse_lst;
+    while (likely(rx_reuse_lst)) {
+        temp = rx_reuse_lst->p_next_desc;
+        reclaim_recv_buffer_helper_single(rx_reuse_lst);
+        rx_reuse_lst = temp;
+    }
 }
 
 int cq_mgr_rx::reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse)

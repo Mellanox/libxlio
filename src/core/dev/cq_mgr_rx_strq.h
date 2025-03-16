@@ -57,6 +57,7 @@ public:
 protected:
     virtual void statistics_print() override;
     virtual void reclaim_recv_buffer_helper(mem_buf_desc_t *buff) override;
+    virtual void reclaim_recv_buffer_helper_single(mem_buf_desc_t *buff) override;
 
     mem_buf_desc_t *poll(enum buff_status_e &status, mem_buf_desc_t *&buff_stride);
 

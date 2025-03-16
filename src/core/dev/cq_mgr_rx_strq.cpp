@@ -539,13 +539,45 @@ void cq_mgr_rx_strq::reclaim_recv_buffer_helper(mem_buf_desc_t *buff)
                 temp = buff;
                 assert(temp->lwip_pbuf.type != PBUF_ZEROCOPY);
                 buff = temp->p_next_desc;
-                temp->clear_transport_data();
+                //temp->clear_transport_data();
                 temp->p_next_desc = nullptr;
                 temp->p_prev_desc = nullptr;
                 temp->reset_ref_count();
                 free_lwip_pbuf(&temp->lwip_pbuf);
                 return_stride(temp);
             }
+
+            m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
+        } else {
+            cq_logfunc("Stride returned to wrong CQ");
+            g_buffer_pool_rx_ptr->put_buffers_thread_safe(buff);
+        }
+    }
+}
+
+void cq_mgr_rx_strq::reclaim_recv_buffer_helper_single(mem_buf_desc_t *buff)
+{
+    if (buff->dec_ref_count() <= 1 && (buff->lwip_pbuf.ref-- <= 1)) {
+        if (likely(buff->p_desc_owner == m_p_ring)) {
+            if (unlikely(buff->lwip_pbuf.desc.attr != PBUF_DESC_STRIDE)) {
+                __log_info_err("CQ STRQ reclaim_recv_buffer_helper with incompatible "
+                                "mem_buf_desc_t object");
+                // We cannot continue iterating over a broken buffer object.
+                return;
+            }
+
+            mem_buf_desc_t *rwqe =
+                reinterpret_cast<mem_buf_desc_t *>(buff->lwip_pbuf.desc.mdesc);
+            if (buff->rx.strides_num == rwqe->add_ref_count(-buff->rx.strides_num)) {
+                // Is last stride.
+                cq_mgr_rx::reclaim_recv_buffer_helper_single(rwqe);
+            }
+
+            buff->p_next_desc = nullptr;
+            buff->p_prev_desc = nullptr;
+            buff->reset_ref_count();
+            free_lwip_pbuf(&buff->lwip_pbuf);
+            return_stride(buff);
 
             m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
         } else {

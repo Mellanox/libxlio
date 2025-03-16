@@ -115,6 +115,7 @@ public:
     virtual bool reclaim_recv_buffers(descq_t *rx_reuse) = 0;
     virtual bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst) = 0;
     virtual bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *) { return false; }
+    virtual void reclaim_recv_buffers_chain(mem_buf_desc_t *) {}
     virtual int drain_and_proccess() = 0;
     virtual void wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
                                                            void *pv_fd_ready_array = nullptr) = 0;

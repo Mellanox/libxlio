@@ -513,6 +513,13 @@ bool ring_simple::reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst)
     return ret;
 }
 
+void ring_simple::reclaim_recv_buffers_chain(mem_buf_desc_t *rx_reuse_lst)
+{
+    m_lock_ring_rx.lock();
+    m_p_cq_mgr_rx->reclaim_recv_buffer_chain(rx_reuse_lst);
+    m_lock_ring_rx.unlock();
+}
+
 bool ring_simple::reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst)
 {
     return m_p_cq_mgr_rx->reclaim_recv_buffers_no_lock(rx_reuse_lst);
