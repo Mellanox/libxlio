@@ -292,6 +292,7 @@ static inline bool use_socket_ring_locks()
 
 sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     : sockinfo(fd, domain, use_socket_ring_locks())
+    , m_tcp_con_lock_app(get_new_tcp_lock())
     , m_tcp_con_lock(get_new_tcp_lock())
     , m_sysvar_buffer_batching_mode(safe_mce_sys().buffer_batching_mode)
     , m_sysvar_tx_segs_batch_tcp(safe_mce_sys().tx_segs_batch_tcp)
@@ -2555,7 +2556,7 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
         m_connected.get_sa_by_family(__from, *__fromlen, m_family);
     }
 
-    si_tcp_logfunc("RX completed, %d bytes.", rx_tot_size);
+    si_tcp_logfunc("RX completed, %d bytes. tid: %d", rx_tot_size, gettid());
 
     // Restore errno on function entry in case success
     errno = errno_tmp;
@@ -2660,6 +2661,7 @@ int sockinfo_tcp::rx_xlio_socket_wait_blocking(loops_timer &rcv_timeout)
 size_t sockinfo_tcp::rx_xlio_socket_fetch_ready_buffers(
     iovec *p_iov, iovec *p_iov_end, struct msghdr *__msg)
 {
+    std::lock_guard<decltype(m_tcp_con_lock_app)> lock_app(m_tcp_con_lock_app);
     decltype(m_rx_pkt_ready_list) temp_list;
     int temp_ready_byte_count;
     int temp_rx_ready_list_count;
@@ -2680,7 +2682,7 @@ size_t sockinfo_tcp::rx_xlio_socket_fetch_ready_buffers(
     size_t prev_ready_byte_count = temp_ready_byte_count;
     size_t curr_iov_left = p_iov->iov_len;
     size_t curr_buf_left;
-    uint8_t tls_type = partial_last->rx.tls_type;
+    uint8_t tls_type = partial_last ? partial_last->rx.tls_type : 0U;
 
     while (partial_last && partial_last->rx.tls_type == tls_type) {
         // we can work with m_rx_pkt_ready_offset outside the lock because only the

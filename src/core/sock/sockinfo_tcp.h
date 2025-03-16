@@ -673,6 +673,7 @@ private:
     uint32_t m_ready_conn_cnt;
     int m_backlog;
 
+    multilock m_tcp_con_lock_app;
     multilock m_tcp_con_lock;
 
     // used for reporting 'connected' on second non-blocking call to connect or
