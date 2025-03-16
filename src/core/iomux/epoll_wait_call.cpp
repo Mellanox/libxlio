@@ -172,6 +172,99 @@ int epoll_wait_call::get_current_events()
     return (i);
 }
 
+int epoll_wait_call::get_current_events_thread()
+{
+    rmb();
+
+    if (m_epfd_info->m_ready_fds.empty()) {
+        return m_n_all_ready_fds;
+    }
+
+    ep_ready_fd_list_t socket_fd_list;
+    ep_ready_fd_list_t socket_fd_list_ret;
+
+    lock();
+    socket_fd_list.splice_tail(m_epfd_info->m_ready_fds);
+    unlock();
+
+    int i = m_n_all_ready_fds;
+    int ready_rfds = 0;
+    int ready_wfds = 0;
+    while (i < m_maxevents && !socket_fd_list.empty()) {
+        sockinfo *si = socket_fd_list.get_and_pop_front();
+        bool got_event = false;
+
+        m_events[i].events = 0;
+
+        uint32_t fetched_events = si->m_epoll_event_flags_atomic.exchange(0U, std::memory_order::memory_order_release);
+        // epoll_wait will always wait for EPOLLERR and EPOLLHUP.
+        uint32_t mutual_events =
+            fetched_events & (si->m_fd_rec.events | EPOLLERR | EPOLLHUP);
+
+        // EPOLLHUP & EPOLLOUT are mutually exclusive. See poll man pages. Epoll adapts the poll
+        // behavior.
+        if ((mutual_events & EPOLLHUP) && (mutual_events & EPOLLOUT)) {
+            mutual_events &= ~EPOLLOUT;
+        }
+
+        if (mutual_events & EPOLLIN) {
+            if (handle_epoll_event_thread(si->is_readable_thread(), fetched_events, EPOLLIN, si, i)) {
+                ready_rfds++;
+                got_event = true;
+            }
+            mutual_events &= ~EPOLLIN;
+        }
+
+        if (mutual_events & EPOLLOUT) {
+            if (handle_epoll_event_thread(si->is_writeable(), fetched_events, EPOLLOUT, si, i)) {
+                ready_wfds++;
+                got_event = true;
+            }
+            mutual_events &= ~EPOLLOUT;
+        }
+
+        // Handle zcopy notification mechanism
+        if (mutual_events & EPOLLERR) {
+            int unused;
+            if (handle_epoll_event_thread(si->is_errorable(&unused), fetched_events, EPOLLERR, si, i)) {
+                got_event = true;
+            }
+            mutual_events &= ~EPOLLERR;
+        }
+
+        if (mutual_events) {
+            if (handle_epoll_event_thread(true, fetched_events, mutual_events, si, i)) {
+                got_event = true;
+            }
+        }
+
+        if (got_event) {
+            ++i;
+        }
+
+        // In case of Level-Trigger or unconsumed events, need to keep socket events.
+        if (fetched_events && !si->m_epoll_event_flags_atomic.fetch_or(fetched_events, std::memory_order::memory_order_acquire)) {
+            socket_fd_list_ret.push_back(si);
+        }
+    }
+
+    // Any non cinsumed sockets becuase of return array limit should be moved to the head of ready list.
+    socket_fd_list_ret.splice_head(socket_fd_list);
+
+    // In case of Level-Trigger or unconsumed events, need to keep the sockets in the ready list.
+    if (!socket_fd_list_ret.empty()) {
+        lock();
+        m_epfd_info->m_ready_fds.splice_tail(socket_fd_list_ret);
+        unlock();
+    }
+
+    m_n_ready_rfds += ready_rfds; // No lock need since this is per epoll_wait call.
+    m_n_ready_wfds += ready_wfds; // No lock need since this is per epoll_wait call.
+    m_p_stats->n_iomux_rx_ready += ready_rfds; // TODO: Change to atomic to avoid locks.
+
+    return (i);
+}
+
 epoll_wait_call::~epoll_wait_call()
 {
 }
@@ -330,7 +423,7 @@ bool epoll_wait_call::check_all_offloaded_sockets()
 {
     // check cq for acks
     bool all_drained = ring_poll_and_process_element();
-    m_n_all_ready_fds = get_current_events();
+    m_n_all_ready_fds = safe_mce_sys().xlio_threads == 0U ? get_current_events() : get_current_events_thread();
 
     __log_func("m_n_all_ready_fds=%d, m_n_ready_rfds=%d, m_n_ready_wfds=%d, all_drained=%d",
                m_n_all_ready_fds, m_n_ready_rfds, m_n_ready_wfds, !!all_drained);
@@ -356,6 +449,29 @@ bool epoll_wait_call::handle_epoll_event(bool is_ready, uint32_t events, sockinf
     } else {
         // not readable, need to erase from our ready list (LT support)
         m_epfd_info->remove_epoll_event(socket_object, events);
+        return false;
+    }
+}
+
+bool epoll_wait_call::handle_epoll_event_thread(bool is_ready, uint32_t &sock_events, uint32_t events, sockinfo *socket_object,
+                                                int index)
+{
+    if (is_ready) {
+        epoll_fd_rec &fd_rec = socket_object->m_fd_rec;
+        m_events[index].data = fd_rec.epdata;
+        m_events[index].events |= events;
+
+        if (fd_rec.events & EPOLLONESHOT) {
+            // Clear events for this fd
+            fd_rec.events &= ~events;
+        }
+        if (fd_rec.events & EPOLLET) {
+            sock_events &= ~events;
+        }
+        return true;
+    } else {
+        // Not ready for this event. Clear the event.
+        sock_events &= ~events;
         return false;
     }
 }

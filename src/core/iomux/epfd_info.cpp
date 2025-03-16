@@ -57,7 +57,7 @@ int epfd_info::remove_fd_from_epoll_os(int fd)
 }
 
 epfd_info::epfd_info(int epfd, int size)
-    : lock_mutex_recursive("epfd_info")
+    : lock_spin_recursive("epfd_info")
     , m_epfd(epfd)
     , m_size(size)
     , m_ring_map_lock("epfd_ring_map_lock")
@@ -585,10 +585,23 @@ void epfd_info::insert_epoll_event(sockinfo *sock_fd, uint32_t event_flags)
         sock_fd->m_epoll_event_flags |= event_flags;
     } else {
         sock_fd->m_epoll_event_flags = event_flags;
+
         m_ready_fds.push_back(sock_fd);
     }
 
     if (++m_events_for_wakeup >= safe_mce_sys().cq_moderation_count) {
+        do_wakeup();
+    }
+}
+
+void epfd_info::move_thread_ready_sockets(ep_ready_fd_list_t &ready_thread_fds)
+{
+    lock();
+    m_events_for_wakeup += static_cast<uint32_t>(ready_thread_fds.size());
+    m_ready_fds.splice_tail(ready_thread_fds);
+    unlock();
+
+    if (m_events_for_wakeup >= safe_mce_sys().cq_moderation_count) {
         do_wakeup();
     }
 }

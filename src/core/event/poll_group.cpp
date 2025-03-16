@@ -157,10 +157,18 @@ void poll_group::poll()
     clear_rx_buffers();
     m_event_handler->do_tasks();
     
-    if (all_drained && safe_mce_sys().cq_moderation_count > 0U) {
-        std::for_each(std::begin(m_epoll_ctx), std::end(m_epoll_ctx),
-                      [](epfd_info *epfd) { epfd->do_wakeup(); });
-    }
+    std::for_each(std::begin(m_epoll_ctx), std::end(m_epoll_ctx),
+                  [](auto itr) {
+        if (itr.second.second->size() > 0) {
+            itr.first->move_thread_ready_sockets(*itr.second.second);
+            itr.first->do_wakeup();
+        }
+    });
+
+    //if (all_drained && safe_mce_sys().cq_moderation_count > 0U) {
+    //    std::for_each(std::begin(m_epoll_ctx), std::end(m_epoll_ctx),
+    //                  [](auto itr) { itr.first->do_wakeup(); });
+    //}
 }
 
 void poll_group::add_dirty_socket(sockinfo_tcp *si)
@@ -276,14 +284,27 @@ void poll_group::clear_rx_buffers()
     }
 }
 
-void poll_group::add_epoll_ctx(epfd_info *epfd)
+void poll_group::add_epoll_ctx(epfd_info *epfd, sockinfo_tcp &sock)
 {
     std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
-    m_epoll_ctx.emplace(epfd);
+    auto res = m_epoll_ctx.emplace(
+        epfd, std::make_pair<uint32_t, ep_ready_fd_list_t*>(1U, nullptr));
+    if (res.second) {
+        res.first->second.second = new ep_ready_fd_list_t;
+    } else {
+        ++(res.first->second.first);
+    }
+    sock.set_thread_ready_socket_list(res.first->second.second);
 }
 
 void poll_group::remove_epoll_ctx(epfd_info *epfd)
 {
     std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
-    m_epoll_ctx.erase(epfd);
+    auto itr = m_epoll_ctx.find(epfd);
+    if (itr != m_epoll_ctx.end()) {
+        if (!--(itr->second.first)) {
+            delete itr->second.second;
+            m_epoll_ctx.erase(itr);
+        }
+    }
 }

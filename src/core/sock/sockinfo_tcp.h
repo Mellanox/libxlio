@@ -293,6 +293,8 @@ public:
     void tcp_tx_zc_handle(mem_buf_desc_t *p_desc);
 
     bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = NULL) override;
+    bool is_readable_thread() override;
+    void insert_thread_epoll_event(uint64_t events) override;
     bool is_writeable() override;
     bool is_errorable(int *errors) override;
     bool is_closable() override
@@ -412,6 +414,7 @@ public:
         return register_callback_ctx(callback, context);
     }
 
+    void set_thread_ready_socket_list(ep_ready_fd_list_t *v) { m_p_thread_ready_socket_list = v; }
     int tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint32_t mkey, unsigned flags,
                        void *opaque_op);
     int tcp_tx_express_inline(const struct iovec *iov, unsigned iov_len, unsigned flags);
@@ -710,6 +713,7 @@ private:
     bool m_b_xlio_socket_dirty = false;
     uintptr_t m_xlio_socket_userdata = 0;
     poll_group *m_p_group = nullptr;
+    ep_ready_fd_list_t *m_p_thread_ready_socket_list = nullptr;
 };
 
 #endif

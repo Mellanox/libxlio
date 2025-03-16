@@ -98,6 +98,7 @@ public:
     void init_offloaded_fds();
 
     int get_current_events();
+    int get_current_events_thread();
 
     bool handle_epoll_event(bool is_ready, uint32_t events, sockinfo *socket_object, int index);
 
@@ -110,6 +111,8 @@ protected:
 
 private:
     bool _wait(int timeout);
+    bool handle_epoll_event_thread(bool is_ready, uint32_t &sock_events, uint32_t events, sockinfo *socket_object,
+                                   int index);
 
     /// Parameters for the call
     const int m_epfd;

@@ -406,7 +406,7 @@ void sockinfo_tcp::rx_add_ring_cb(ring *p_ring)
 void sockinfo_tcp::add_epoll_ctx_cb()
 {
     if (m_p_group) {
-        m_p_group->add_epoll_ctx(m_econtext);
+        m_p_group->add_epoll_ctx(m_econtext, *this);
     }
 }
 
@@ -414,6 +414,7 @@ void sockinfo_tcp::remove_epoll_ctx_cb()
 {
     if (m_p_group) {
         m_p_group->remove_epoll_ctx(m_econtext);
+        m_p_thread_ready_socket_list = nullptr;
     }
 }
 
@@ -685,7 +686,7 @@ err_t sockinfo_tcp::rx_lwip_cb_thread_socket(void *arg, struct tcp_pcb *pcb, str
         buff->lwip_pbuf.next = nullptr;
     }
 
-    // notify io_mux
+    // Notify on event
     NOTIFY_ON_EVENTS(conn, EPOLLIN);
     io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
 
@@ -693,6 +694,19 @@ err_t sockinfo_tcp::rx_lwip_cb_thread_socket(void *arg, struct tcp_pcb *pcb, str
     conn->m_sock_wakeup_pipe.do_wakeup();
 
     return ERR_OK;
+}
+
+void sockinfo_tcp::insert_thread_epoll_event(uint64_t events)
+{
+    if (m_econtext) {
+        if (likely(m_p_group && m_p_thread_ready_socket_list)) {
+            if (!m_epoll_event_flags_atomic.fetch_or(static_cast<uint32_t>(events), std::memory_order::memory_order_acquire)) {
+                m_p_thread_ready_socket_list->push_back(this);
+            }
+        } else {
+            m_econtext->insert_epoll_event_cb(this, static_cast<uint32_t>(events));
+        }
+    }
 }
 
 void sockinfo_tcp::err_lwip_cb_set_conn_err(err_t err)
@@ -4459,6 +4473,38 @@ bool sockinfo_tcp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array)
     }
 
     m_rx_ring_map_lock.unlock();
+    return (m_n_rx_pkt_ready_list_count != 0);
+}
+
+bool sockinfo_tcp::is_readable_thread()
+{
+    if (is_server()) {
+        bool state;
+        // tcp_si_logwarn("select on accept()");
+        // m_conn_cond.lock();
+        state = m_ready_conn_cnt == 0 ? false : true;
+        if (state) {
+            si_tcp_logdbg("accept ready");
+            return true;
+        }
+
+        if (m_sock_state == TCP_SOCK_ACCEPT_SHUT) {
+            return true;
+        }
+
+        return false;
+    } else if (m_sock_state == TCP_SOCK_ASYNC_CONNECT) {
+        // socket is not ready to read in this state!!!
+        return false;
+    }
+
+    if (!is_rtr()) {
+        // unconnected tcp sock is always ready for read!
+        // return its fd as ready
+        si_tcp_logdbg("block check on unconnected socket");
+        return true;
+    }
+
     return (m_n_rx_pkt_ready_list_count != 0);
 }
 

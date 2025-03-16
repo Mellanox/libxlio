@@ -288,6 +288,7 @@ public:
 
     virtual ssize_t tx(xlio_tx_call_attr_t &tx_arg) = 0;
     virtual bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = nullptr) = 0;
+    virtual bool is_readable_thread() = 0;
     virtual bool is_writeable() = 0;
     virtual bool is_errorable(int *errors) = 0;
     virtual void clean_socket_obj() = 0;
@@ -430,7 +431,6 @@ protected:
                               int in_flags, int *p_out_flags);
 
     int get_sock_by_L3_L4(in_protocol_t protocol, const ip_address &ip, in_port_t port);
-    void notify_epoll_context(uint32_t events);
     void save_stats_rx_os(int bytes);
     void save_stats_tx_os(int bytes);
     void save_stats_rx_offload(int nbytes);
@@ -462,6 +462,7 @@ protected:
     void remove_cqfd_from_sock_rx_epfd(ring *p_ring);
     int os_wait_sock_rx_epfd(epoll_event *ep_events, int maxevents);
     void insert_epoll_event(uint64_t events);
+    virtual void insert_thread_epoll_event(uint64_t events) = 0;
     int handle_exception_flow();
 
     // Attach to all relevant rings for offloading receive flows - always used from slow path
@@ -537,6 +538,7 @@ public:
     list_node<sockinfo, sockinfo::pending_to_remove_node_offset> pending_to_remove_node;
     epoll_fd_rec m_fd_rec;
     uint32_t m_epoll_event_flags = 0U;
+    std::atomic_uint32_t m_epoll_event_flags_atomic{0};
 
 protected:
     int m_fd; // identification information <socket fd>
@@ -661,6 +663,8 @@ void sockinfo::set_events(uint64_t events)
         if (m_state == SOCKINFO_OPENED) {
             set_events_socketxtreme(events, true);
         }
+    } else if (safe_mce_sys().xlio_threads > 0U) {
+        insert_thread_epoll_event(events);
     } else {
         insert_epoll_event(events);
     }

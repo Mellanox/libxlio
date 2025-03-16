@@ -148,6 +148,11 @@ public:
      * While polling CQ, the fd_array is filled with a list of newly queued packets FD's
      */
     bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = nullptr) override;
+
+    bool is_readable_thread() override { return false; }
+
+    void insert_thread_epoll_event(uint64_t events) override { NOT_IN_USE(events); }
+
     /**
      * Arm the event channel(s) assosiated with this sockinfo
      * Fill the fd_set (p_rxfds) with the correct fd channel values and the p_nfds with the (max_fd

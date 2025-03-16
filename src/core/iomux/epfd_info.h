@@ -45,7 +45,7 @@ typedef std::unordered_map<int, epoll_fd_rec> fd_info_map_t;
 typedef std::unordered_map<ring *, int /*ref count*/> ring_map_t;
 typedef std::deque<int> ready_cq_fd_q_t;
 
-class epfd_info : public lock_mutex_recursive, public cleanable_obj, public wakeup_pipe {
+class epfd_info : public lock_spin_recursive, public cleanable_obj, public wakeup_pipe {
 public:
     epfd_info(int epfd, int size);
     ~epfd_info();
@@ -115,6 +115,8 @@ public:
     void remove_epoll_event(sockinfo *sock_fd, uint32_t event_flags);
     void increase_ring_ref_count(ring *ring);
     void decrease_ring_ref_count(ring *ring);
+
+    void move_thread_ready_sockets(ep_ready_fd_list_t &ready_thread_fds);
 
 private:
     int add_fd(int fd, epoll_event *event);

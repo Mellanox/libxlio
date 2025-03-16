@@ -73,7 +73,7 @@ public:
     tcp_timers_collection *get_tcp_timers() const { return m_tcp_timers.get(); }
 
     void return_rx_buffers(mem_buf_desc_t *first, mem_buf_desc_t*last);
-    void add_epoll_ctx(epfd_info *epfd);
+    void add_epoll_ctx(epfd_info *epfd, sockinfo_tcp &sock);
     void remove_epoll_ctx(epfd_info *epfd);
 
 public:
@@ -98,7 +98,7 @@ private:
     sock_fd_api_list_t m_sockets_list;
     std::vector<std::pair<std::unique_ptr<ring_alloc_logic_attr>, net_device_val *>> m_rings_ref;
 
-    std::unordered_set<epfd_info *> m_epoll_ctx;
+    std::unordered_map<epfd_info *, std::pair<uint32_t, ep_ready_fd_list_t*>> m_epoll_ctx;
 };
 
 #endif /* XLIO_GROUP_H */
