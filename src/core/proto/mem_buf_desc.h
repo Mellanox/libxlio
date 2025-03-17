@@ -78,14 +78,14 @@ public:
 
 public:
     mem_buf_desc_t(uint8_t *buffer, size_t size, pbuf_type type)
-        : p_buffer(buffer)
+        : p_next_desc(nullptr)
+        , p_prev_desc(nullptr)
+        , p_desc_owner(nullptr)
+        , p_buffer(buffer)
         , m_flags(mem_buf_desc_t::TYPICAL)
         , lkey(0)
-        , p_next_desc(nullptr)
-        , p_prev_desc(nullptr)
         , sz_buffer(size)
         , sz_data(0)
-        , p_desc_owner(nullptr)
         , unused_padding {0}
     {
         memset(&lwip_pbuf, 0, sizeof(lwip_pbuf));
@@ -155,6 +155,12 @@ public:
 public:
     /* This field must be first in this class. It encapsulates pbuf structure from lwip */
     struct pbuf lwip_pbuf;
+    mem_buf_desc_t *p_next_desc; // A general purpose linked list of mem_buf_desc
+    mem_buf_desc_t *p_prev_desc;
+    atomic_t n_ref_count; // number of interested receivers (sockinfo) [can be modified only in cq_mgr_rx context]
+    // Tx: cq_mgr_tx owns the mem_buf_desc and the associated data buffer
+    // Rx: cq_mgr_rx owns the mem_buf_desc and the associated data buffer
+    ring_slave *p_desc_owner;
     uint8_t *p_buffer;
 
     static inline size_t buffer_node_offset(void)
@@ -230,17 +236,9 @@ public:
     struct sock_extended_err ee;
     int m_flags; /* object description */
     uint32_t lkey; // Buffers lkey for QP access
-    mem_buf_desc_t *p_next_desc; // A general purpose linked list of mem_buf_desc
-    mem_buf_desc_t *p_prev_desc;
     size_t sz_buffer; // this is the size of the buffer
     size_t sz_data; // this is the amount of data inside the buffer (sz_data <= sz_buffer)
 
-    // Tx: cq_mgr_tx owns the mem_buf_desc and the associated data buffer
-    // Rx: cq_mgr_rx owns the mem_buf_desc and the associated data buffer
-    ring_slave *p_desc_owner;
-
-    atomic_t n_ref_count; // number of interested receivers (sockinfo) [can be modified only in
-                          // cq_mgr_rx context]
     uint64_t unused_padding[2]; // Align the structure to the cache line boundary
 };
 
