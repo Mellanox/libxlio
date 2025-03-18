@@ -111,10 +111,10 @@ public:
 
     /**
      * Poll RX CQ. Each CQE processed directly.
-     * @return True if CQ was drained.
+     * @return LT 0 - No progress/Drained, 0 - Drained with progress, GT 0 > Undrained with progress.
      */
-    virtual bool poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
-                                             void *pv_fd_ready_array = nullptr) = 0;
+    virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
+                                            void *pv_fd_ready_array = nullptr) = 0;
     virtual mem_buf_desc_t *poll_and_process_socketxtreme() { return nullptr; };
 
     /**

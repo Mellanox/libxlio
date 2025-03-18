@@ -4452,8 +4452,8 @@ bool sockinfo_tcp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array)
     while (!g_b_exit && is_rtr()) {
         if (likely(m_p_rx_ring)) {
             // likely scenario: rx socket bound to specific cq
-            bool drained = m_p_rx_ring->poll_and_process_element_rx(p_poll_sn, p_fd_array);
-            if (m_n_rx_pkt_ready_list_count || drained) {
+            int drained = m_p_rx_ring->poll_and_process_element_rx(p_poll_sn, p_fd_array);
+            if (m_n_rx_pkt_ready_list_count || drained <= 0) {
                 break;
             }
         } else if (!m_rx_ring_map.empty()) {
@@ -4465,8 +4465,8 @@ bool sockinfo_tcp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array)
                 }
                 ring *p_ring = rx_ring_iter->first;
                 // g_p_lwip->do_timers();
-                bool drained = p_ring->poll_and_process_element_rx(p_poll_sn, p_fd_array);
-                if (m_n_rx_pkt_ready_list_count || drained) {
+                int drained = p_ring->poll_and_process_element_rx(p_poll_sn, p_fd_array);
+                if (m_n_rx_pkt_ready_list_count || drained <= 0) {
                     break;
                 }
             }
@@ -5631,7 +5631,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
     // It can be too expansive for the application to get nothing just because of lock contention.
     // In this case it will be better to have a lock() version of poll_and_process_element_rx.
     // And then we should continue polling untill we have ready packets or we drained the CQ.
-    bool all_drained = true;
+    int all_drained = -1;
     if (likely(m_p_rx_ring)) {
         all_drained = m_p_rx_ring->poll_and_process_element_rx(&poll_sn);
     } else { // There's more than one CQ, go over each one
@@ -5642,13 +5642,13 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
                 continue;
             }
 
-            all_drained &= rx_ring_iter->first->poll_and_process_element_rx(&poll_sn);
+            all_drained = std::max(all_drained, rx_ring_iter->first->poll_and_process_element_rx(&poll_sn));
         }
     }
     m_rx_ring_map_lock.unlock();
     lock_tcp_con(); // We must take a lock before checking m_n_rx_pkt_ready_list_count
 
-    if (likely(m_n_rx_pkt_ready_list_count || !all_drained)) { // Got completions from CQ
+    if (likely(m_n_rx_pkt_ready_list_count || all_drained > 0)) { // Got completions from CQ
         __log_entry_funcall("Ready %d packets. sn=%llu", m_n_rx_pkt_ready_list_count,
                             (unsigned long long)poll_sn);
         IF_STATS(m_p_socket_stats->counters.n_rx_poll_hit++);

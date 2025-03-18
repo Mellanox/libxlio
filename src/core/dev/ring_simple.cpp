@@ -419,10 +419,10 @@ int ring_simple::request_notification(cq_type_t cq_type, uint64_t poll_sn)
     return ret;
 }
 
-bool ring_simple::poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
-                                              void *pv_fd_ready_array /*NULL*/)
+int ring_simple::poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
+                                             void *pv_fd_ready_array /*NULL*/)
 {
-    bool ret = false; // CQ was not drained.
+    int ret = 1; // CQ was not drained.
     if (!m_lock_ring_rx.trylock()) {
         ret = m_p_cq_mgr_rx->poll_and_process_element_rx(p_cq_poll_sn, pv_fd_ready_array);
         m_lock_ring_rx.unlock();
@@ -432,7 +432,7 @@ bool ring_simple::poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
 
 int ring_simple::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
 {
-    int ret = 0;
+    int ret = 1;
     RING_TRY_LOCK_RUN_AND_UPDATE_RET(m_lock_ring_tx,
                                      m_p_cq_mgr_tx->poll_and_process_element_tx(p_cq_poll_sn));
     return ret;
@@ -592,16 +592,10 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
 
         // Try to poll once in the hope that we get a few freed tx mem_buf_desc
         ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
-        if (ret < 0) {
-            ring_logdbg("failed polling on cq_mgr_tx (hqtx=%p, cq_mgr_tx=%p) (ret=%d %m)", m_hqtx,
-                        m_p_cq_mgr_tx, ret);
-            /* coverity[double_unlock] TODO: RM#1049980 */
-            m_lock_ring_tx.unlock();
-            return nullptr;
-        } else if (ret > 0) {
+        if (ret > -1) {
             ring_logfunc("polling succeeded on cq_mgr_tx (%d wce)", ret);
             buff_list = get_tx_buffers(type, n_num_mem_bufs);
-        } else if (b_block) { // (ret == 0)
+        } else if (b_block) { // (ret == -1)
             // Arm & Block on tx cq_mgr_tx notification channel
             // until we get a few freed tx mem_buf_desc & data buffers
 
@@ -659,18 +653,8 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
                         p_cq_mgr_tx->reset_notification_armed();
 
                         // Perform a non blocking event read, clear the fd channel
-                        ret = p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
-                        if (ret < 0) {
-                            ring_logdbg("failed handling cq_mgr_tx channel (hqtx=%p, "
-                                        "cq_mgr_tx=%p) (errno=%d %m)",
-                                        m_hqtx, m_p_cq_mgr_tx, errno);
-                            /* coverity[double_unlock] TODO: RM#1049980 */
-                            m_lock_ring_tx.unlock();
-                            m_lock_ring_tx_buf_wait.unlock();
-                            return nullptr;
-                        }
-                        ring_logfunc("polling/blocking succeeded on cq_mgr_tx (we got %d wce)",
-                                     ret);
+                        p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
+                        ring_logfunc("polling/blocking succeeded on cq_mgr_tx");
                     }
                 }
                 buff_list = get_tx_buffers(type, n_num_mem_bufs);
@@ -789,13 +773,7 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
 
     do {
         // Try to poll once in the hope that we get space in SQ
-        ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
-        if (ret < 0) {
-            ring_logdbg("failed polling on cq_mgr_tx (hqtx=%p, cq_mgr_tx=%p) (ret=%d %m)", m_hqtx,
-                        m_p_cq_mgr_tx, ret);
-            /* coverity[missing_unlock] */
-            return false;
-        }
+        m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
         granted = m_hqtx->credits_get(credits);
         if (granted) {
             break;
@@ -851,19 +829,8 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
                     p_cq_mgr_tx->reset_notification_armed();
 
                     // Perform a non blocking event read, clear the fd channel
-                    ret = p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
-                    if (ret < 0) {
-                        ring_logdbg("failed handling cq_mgr_tx channel (hqtx=%p "
-                                    "cq_mgr_tx=%p) (errno=%d %m)",
-                                    m_hqtx, m_p_cq_mgr_tx, errno);
-                        /* coverity[double_unlock] TODO: RM#1049980 */
-                        m_lock_ring_tx.unlock();
-                        m_lock_ring_tx_buf_wait.unlock();
-                        /* coverity[double_lock] TODO: RM#1049980 */
-                        m_lock_ring_tx.lock();
-                        return false;
-                    }
-                    ring_logfunc("polling/blocking succeeded on cq_mgr_tx (we got %d wce)", ret);
+                    p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
+                    ring_logfunc("polling/blocking succeeded on cq_mgr_tx");
                 }
             }
 

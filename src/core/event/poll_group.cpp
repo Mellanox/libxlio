@@ -147,12 +147,12 @@ void poll_group::poll()
 {
     std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
 
-    bool all_drained = true;
+    int all_drained = -1;
     for (ring *rng : m_rings) {
         uint64_t sn = 0;
-        rng->poll_and_process_element_tx(&sn);
+        all_drained = std::max(all_drained, rng->poll_and_process_element_tx(&sn));
         sn = 0;
-        all_drained &= rng->poll_and_process_element_rx(&sn);
+        all_drained = std::max(all_drained, rng->poll_and_process_element_rx(&sn));
     }
     clear_rx_buffers();
     m_event_handler->do_tasks();

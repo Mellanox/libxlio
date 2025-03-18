@@ -276,9 +276,9 @@ bool ring_tap::detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink)
     return ret;
 }
 
-bool ring_tap::poll_and_process_element_rx(uint64_t *, void *pv_fd_ready_array)
+int ring_tap::poll_and_process_element_rx(uint64_t *, void *pv_fd_ready_array)
 {
-    return (process_element_rx(pv_fd_ready_array) == 0);
+    return process_element_rx(pv_fd_ready_array);
 }
 
 void ring_tap::wait_for_notification_and_process_element(uint64_t *, void *pv_fd_ready_array)
@@ -288,7 +288,7 @@ void ring_tap::wait_for_notification_and_process_element(uint64_t *, void *pv_fd
 
 int ring_tap::drain_and_proccess()
 {
-    return process_element_rx(nullptr);
+    return process_element_rx(nullptr) + 1;
 }
 
 bool ring_tap::reclaim_recv_buffers(descq_t *rx_reuse)
@@ -435,10 +435,10 @@ int ring_tap::process_element_rx(void *pv_fd_ready_array)
                 if ((ret = rx_process_buffer(buff, pv_fd_ready_array))) {
                     m_p_ring_stat->tap.n_rx_buffers--;
                 }
-            }
-            if (ret <= 0) {
-                /* Unable to read data, return buffer to pool */
                 ret = 0;
+            } else {
+                /* Unable to read data, return buffer to pool */
+                ret = -1;
                 m_rx_pool.push_front(buff);
             }
 

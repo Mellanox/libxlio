@@ -1181,14 +1181,14 @@ bool net_device_val::global_ring_poll_and_process_element(uint64_t *p_poll_sn_rx
                                                           void *pv_fd_ready_array /*=NULL*/)
 {
     nd_logfuncall("");
-    bool all_drained = true;
+    int all_drained = -1;
     std::lock_guard<decltype(m_lock)> lock(m_lock);
     rings_hash_map_t::iterator ring_iter;
     for (ring_iter = m_h_ring_map.begin(); ring_iter != m_h_ring_map.end(); ring_iter++) {
-        all_drained &= THE_RING->poll_and_process_element_rx(p_poll_sn_rx, pv_fd_ready_array);
-        all_drained &= (THE_RING->poll_and_process_element_tx(p_poll_sn_tx) >= 0);
+        all_drained = std::max(all_drained, THE_RING->poll_and_process_element_rx(p_poll_sn_rx, pv_fd_ready_array));
+        all_drained = std::max(all_drained, THE_RING->poll_and_process_element_tx(p_poll_sn_tx));
     }
-    return all_drained;
+    return (all_drained <= 0);
 }
 
 int net_device_val::global_ring_request_notification(uint64_t poll_sn_rx, uint64_t poll_sn_tx)
