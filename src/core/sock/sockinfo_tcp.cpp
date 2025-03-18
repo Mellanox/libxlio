@@ -2745,7 +2745,11 @@ size_t sockinfo_tcp::rx_xlio_socket_fetch_ready_buffers(
             m_n_rx_pkt_ready_list_count += temp_rx_ready_list_count;
         }
 
-        tcp_recved_no_output(&m_pcb, static_cast<uint32_t>(prev_ready_byte_count - temp_ready_byte_count));
+        if (tcp_recved_no_output(&m_pcb, static_cast<uint32_t>(prev_ready_byte_count - temp_ready_byte_count))) {
+            if (!m_ack_ready_list_node.is_stack_member()) {
+                m_p_group->add_ack_ready_socket(*this);
+            }
+        }
     }
 
     return prev_ready_byte_count - temp_ready_byte_count;

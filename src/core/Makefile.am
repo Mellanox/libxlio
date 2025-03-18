@@ -307,6 +307,7 @@ libxlio_la_SOURCES := \
 	util/utils.h \
 	util/valgrind.h \
 	util/xlio_list.h \
+	util/xlio_lockless_stack.h \
 	util/xlio_stats.h \
 	util/vtypes.h \
 	util/wakeup.h \

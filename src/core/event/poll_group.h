@@ -40,13 +40,14 @@
 
 #include "sock/fd_collection.h"
 #include "xlio.h"
+#include "sock/sockinfo_tcp.h"
+#include "util/xlio_lockless_stack.h"
 
 /* Forward declarations */
 struct xlio_poll_group_attr;
 class event_handler_manager_local;
 class ring;
 class ring_alloc_logic_attr;
-class sockinfo_tcp;
 class tcp_timers_collection;
 
 class poll_group {
@@ -76,6 +77,8 @@ public:
     void add_epoll_ctx(epfd_info *epfd, sockinfo_tcp &sock);
     void remove_epoll_ctx(epfd_info *epfd);
 
+    bool add_ack_ready_socket(sockinfo_tcp &sock) { return m_ack_ready_list.push(&sock); }
+
 public:
     xlio_socket_event_cb_t m_socket_event_cb;
     xlio_socket_comp_cb_t m_socket_comp_cb;
@@ -84,6 +87,7 @@ public:
 
 private:
     void clear_rx_buffers();
+    void handle_ack_ready_sockets();
 
     cached_obj_pool_simple<mem_buf_desc_t> m_returned_buffers;
 
@@ -99,6 +103,7 @@ private:
     std::vector<std::pair<std::unique_ptr<ring_alloc_logic_attr>, net_device_val *>> m_rings_ref;
 
     std::unordered_map<epfd_info *, std::pair<uint32_t, ep_ready_fd_list_t*>> m_epoll_ctx;
+    xlio_lockless_stack<sockinfo_tcp, sockinfo_tcp::ack_thread_ready_list> m_ack_ready_list;
 };
 
 #endif /* XLIO_GROUP_H */

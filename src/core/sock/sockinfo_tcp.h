@@ -41,13 +41,12 @@
 #include "dev/buffer_pool.h"
 #include "dev/cq_mgr_rx.h"
 #include "xlio_extra.h"
-
 #include "lwip/opt.h"
 #include "lwip/tcp_impl.h"
-
 #include "sockinfo.h"
 #include "sockinfo_ulp.h"
 #include "sockinfo_nvme.h"
+#include "util/xlio_lockless_stack.h"
 
 /* Forward declarations */
 struct xlio_socket_attr;
@@ -190,6 +189,10 @@ public:
     static inline size_t accepted_conns_node_offset()
     {
         return NODE_OFFSET(sockinfo_tcp, accepted_conns_node);
+    }
+    static inline size_t ack_thread_ready_list()
+    {
+        return NODE_OFFSET(sockinfo_tcp, m_ack_ready_list_node);
     }
     typedef xlio_list_t<sockinfo_tcp, sockinfo_tcp::accepted_conns_node_offset> sock_list_t;
     sockinfo_tcp(int fd, int domain);
@@ -714,6 +717,7 @@ private:
     uintptr_t m_xlio_socket_userdata = 0;
     poll_group *m_p_group = nullptr;
     ep_ready_fd_list_t *m_p_thread_ready_socket_list = nullptr;
+    stack_node<sockinfo_tcp, sockinfo_tcp::ack_thread_ready_list> m_ack_ready_list_node;
 };
 
 #endif

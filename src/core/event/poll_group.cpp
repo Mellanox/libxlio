@@ -165,10 +165,25 @@ void poll_group::poll()
         }
     });
 
+    handle_ack_ready_sockets();
+
     //if (all_drained && safe_mce_sys().cq_moderation_count > 0U) {
     //    std::for_each(std::begin(m_epoll_ctx), std::end(m_epoll_ctx),
     //                  [](auto itr) { itr.first->do_wakeup(); });
     //}
+}
+
+void poll_group::handle_ack_ready_sockets()
+{
+    if (!m_ack_ready_list.empty()) {
+        auto temp_stack = m_ack_ready_list.pop_all();
+        while (!temp_stack.empty()) {
+            sockinfo_tcp *sock = temp_stack.get_and_pop();
+            sock->lock_tcp_con();
+            tcp_output(sock->get_pcb());
+            sock->unlock_tcp_con();
+        }
+    }
 }
 
 void poll_group::add_dirty_socket(sockinfo_tcp *si)

@@ -13,6 +13,8 @@
 
 /* This is a modified version of Linux kernel list.h */
 
+#define NODE_OFFSET(_obj_type, _node_name) ((size_t)(&(char &)(((_obj_type *)1)->_node_name)) - 1)
+
 struct list_head {
     struct list_head *next, *prev;
 };

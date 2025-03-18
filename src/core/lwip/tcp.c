@@ -508,7 +508,7 @@ void tcp_recved(struct tcp_pcb *pcb, u32_t len)
  * @param pcb the tcp_pcb for which data is read
  * @param len the amount of bytes that have been read by the application
  */
-void tcp_recved_no_output(struct tcp_pcb *pcb, u32_t len)
+bool tcp_recved_no_output(struct tcp_pcb *pcb, u32_t len)
 {
     u32_t wnd_inflation;
 
@@ -538,12 +538,13 @@ void tcp_recved_no_output(struct tcp_pcb *pcb, u32_t len)
     if (wnd_inflation >= TCP_WND_UPDATE_THRESHOLD) {
         tcp_ack_now(pcb);
         //tcp_output(pcb);
-        // TODO: Add XLIO Thread output queue support
+        return true;
     }
 
     LWIP_DEBUGF(TCP_DEBUG,
                 ("tcp_recved: recveived %" U16_F " bytes, wnd %" U16_F " (%" U16_F ").\n", len,
                  pcb->rcv_wnd, TCP_WND_SCALED(pcb) - pcb->rcv_wnd));
+    return false;
 }
 
 /**
