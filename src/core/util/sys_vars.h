@@ -459,6 +459,7 @@ public:
     skip_poll_in_rx_t skip_poll_in_rx;
     multilock_t multilock;
     size_t xlio_threads;
+    int xlio_thread_idle_count_sec;
 
     bool enable_socketxtreme;
     option_3::mode_t enable_tso;
@@ -694,6 +695,7 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_SKIP_POLL_IN_RX                "XLIO_SKIP_POLL_IN_RX"
 #define SYS_VAR_MULTILOCK                      "XLIO_MULTILOCK"
 #define SYS_VAR_XLIO_THREADS                   "XLIO_THREADS"
+#define SYS_VAR_XLIO_THREADS_COUNT_IDLE_SEC    "XLIO_THREADS_COUNT_IDLE_SEC"
 
 /*
  * This block consists of default values for library specific
@@ -860,6 +862,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_SKIP_POLL_IN_RX                (SKIP_POLL_IN_RX_DISABLE)
 #define MCE_DEFAULT_MULTILOCK                      (MULTILOCK_SPIN)
 #define MCE_DEFAULT_XLIO_THREADS                   (1)
+#define MCE_DEFAULT_XLIO_THREADS_COUNT_IDLE_SEC    (2)
 
 /*
  * This block consists of auxiliary constants

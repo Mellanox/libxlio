@@ -113,8 +113,36 @@ int xlio_thread::add_connect_socket(sockinfo_tcp *si, const struct sockaddr *to,
 void xlio_thread::xlio_thread_loop()
 {
     while (m_running.load(std::memory_order_relaxed)) {
-        m_poll_group->poll();
-        m_poll_group->flush();
+        bool idle = (m_poll_group->process() < 0);
+
+        if (safe_mce_sys().xlio_thread_idle_count_sec > 0) {
+            xlio_thread_measure_idle(idle);
+        }
+    }
+}
+
+void xlio_thread::xlio_thread_measure_idle(bool last_process_idle)
+{
+    if (m_busy_time && last_process_idle) {
+        m_prev_idle_time = m_poll_group->get_curr_time();
+        m_busy_time = false;
+    } else if (!m_busy_time && !last_process_idle) {
+        m_idle_time += m_poll_group->get_curr_time() - m_prev_idle_time;
+        m_busy_time = true;
+    }
+
+    if (likely(safe_mce_sys().xlio_thread_idle_count_sec <
+               duration_cast<seconds>(m_poll_group->get_curr_time() - m_prev_count_time).count())) {
+        if (!m_busy_time) {
+            m_idle_time += m_poll_group->get_curr_time() - m_prev_idle_time;
+            m_prev_idle_time = m_poll_group->get_curr_time();
+        }
+        auto total_time_ms = duration_cast<milliseconds>(m_poll_group->get_curr_time() - m_prev_count_time).count();
+        auto idle_time_ms = duration_cast<milliseconds>(m_idle_time).count();
+        m_prev_count_time = high_resolution_clock::now();
+        m_idle_time = m_idle_time.zero();
+        xt_loginfo("XLIOThread (%d) Idle time: %.0f%", static_cast<int>(gettid()),
+            (idle_time_ms * 100) / static_cast<double>(total_time_ms));
     }
 }
 

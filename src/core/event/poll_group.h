@@ -37,11 +37,15 @@
 
 #include <memory>
 #include <vector>
+#include <chrono>
 
 #include "sock/fd_collection.h"
 #include "xlio.h"
 #include "sock/sockinfo_tcp.h"
 #include "util/xlio_lockless_stack.h"
+#include "event/event_handler_manager_local.h"
+
+using namespace std::chrono;
 
 /* Forward declarations */
 struct xlio_poll_group_attr;
@@ -58,7 +62,8 @@ public:
 
     int update(const struct xlio_poll_group_attr *attr);
 
-    void poll();
+    int poll();
+    int process();
 
     void add_dirty_socket(sockinfo_tcp *si);
     void flush();
@@ -79,6 +84,7 @@ public:
 
     bool add_ack_ready_socket(sockinfo_tcp &sock) { return m_ack_ready_list.push(&sock); }
 
+    const high_resolution_clock::time_point& get_curr_time() const { return m_event_handler.get()->curr_time_sample(); }
 public:
     xlio_socket_event_cb_t m_socket_event_cb;
     xlio_socket_comp_cb_t m_socket_comp_cb;
@@ -86,8 +92,9 @@ public:
     xlio_socket_accept_cb_t m_socket_accept_cb;
 
 private:
-    void clear_rx_buffers();
-    void handle_ack_ready_sockets();
+    int poll_rings();
+    bool clear_rx_buffers();
+    bool handle_ack_ready_sockets();
 
     cached_obj_pool_simple<mem_buf_desc_t> m_returned_buffers;
 

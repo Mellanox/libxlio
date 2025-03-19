@@ -64,13 +64,20 @@ private:
     static void xlio_thread_main(xlio_thread& t);
 
     void xlio_thread_loop();
+    void xlio_thread_measure_idle(bool last_process_idle);
 
     poll_group *m_poll_group;
 
-    std::thread m_thread;
-
     // Must be atomic for the start and stop to synchronize.
     std::atomic_bool m_running{false};
+
+    bool m_busy_time = true;
+
+    high_resolution_clock::time_point m_prev_count_time;
+    high_resolution_clock::time_point m_prev_idle_time;
+    high_resolution_clock::duration m_idle_time;
+
+    std::thread m_thread;
 };
 
 #endif // XLIO_THREAD_H

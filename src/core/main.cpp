@@ -884,6 +884,8 @@ void print_xlio_global_settings()
                       (safe_mce_sys().multilock == MULTILOCK_SPIN ? "Spin " : "Mutex"));
     VLOG_PARAM_NUMBER("XLIO Threads", safe_mce_sys().xlio_threads,
                       MCE_DEFAULT_XLIO_THREADS, SYS_VAR_XLIO_THREADS);
+    VLOG_PARAM_NUMBER("XLIO Thread Count Idle Sec", safe_mce_sys().xlio_thread_idle_count_sec,
+                      MCE_DEFAULT_XLIO_THREADS_COUNT_IDLE_SEC, SYS_VAR_XLIO_THREADS_COUNT_IDLE_SEC);
 
     vlog_printf(VLOG_INFO,
                 "---------------------------------------------------------------------------\n");

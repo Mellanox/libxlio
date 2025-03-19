@@ -51,15 +51,25 @@ void event_handler_manager_local::post_new_reg_action(reg_action_t &reg_action)
     handle_registration_action(reg_action);
 }
 
+void event_handler_manager_local::take_curr_time()
+{
+    m_curr_sample = high_resolution_clock::now();
+}
+
 void event_handler_manager_local::do_tasks()
 {
-    auto curr_time = steady_clock::now();
+    take_curr_time();
+    do_tasks_check();
+}
+
+void event_handler_manager_local::do_tasks_check()
+{
     if (likely(safe_mce_sys().tcp_timer_resolution_msec >
-               duration_cast<milliseconds>(curr_time - m_last_run_time).count())) {
+               duration_cast<milliseconds>(m_curr_sample - m_last_run_time).count())) {
         return;
     }
 
-    m_last_run_time = curr_time;
+    m_last_run_time = m_curr_sample;
 
     do_tasks_for_thread_local();
 }

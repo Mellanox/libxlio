@@ -143,9 +143,9 @@ int poll_group::update(const struct xlio_poll_group_attr *attr)
     return 0;
 }
 
-void poll_group::poll()
+int poll_group::poll_rings()
 {
-    std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
+    m_event_handler->do_tasks_check();
 
     int all_drained = -1;
     for (ring *rng : m_rings) {
@@ -154,26 +154,51 @@ void poll_group::poll()
         sn = 0;
         all_drained = std::max(all_drained, rng->poll_and_process_element_rx(&sn));
     }
-    clear_rx_buffers();
-    m_event_handler->do_tasks();
+
+    return all_drained;
+}
+
+int poll_group::poll()
+{
+    m_event_handler->take_curr_time();
+    return poll_rings();
+}
+
+int poll_group::process()
+{
+    m_event_handler->take_curr_time();
+    std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
+
+    int all_drained = poll();
+
+    if (clear_rx_buffers()) {
+        all_drained = 0;
+    }
     
     std::for_each(std::begin(m_epoll_ctx), std::end(m_epoll_ctx),
-                  [](auto itr) {
+                  [&all_drained](auto itr) {
         if (itr.second.second->size() > 0) {
             itr.first->move_thread_ready_sockets(*itr.second.second);
             itr.first->do_wakeup();
+            all_drained = 0;
         }
     });
 
-    handle_ack_ready_sockets();
+    if (handle_ack_ready_sockets()) {
+        all_drained = 0;
+    }
+
+    flush();
 
     //if (all_drained && safe_mce_sys().cq_moderation_count > 0U) {
     //    std::for_each(std::begin(m_epoll_ctx), std::end(m_epoll_ctx),
     //                  [](auto itr) { itr.first->do_wakeup(); });
     //}
+
+    return all_drained;
 }
 
-void poll_group::handle_ack_ready_sockets()
+bool poll_group::handle_ack_ready_sockets()
 {
     if (!m_ack_ready_list.empty()) {
         auto temp_stack = m_ack_ready_list.pop_all();
@@ -183,7 +208,11 @@ void poll_group::handle_ack_ready_sockets()
             tcp_output(sock->get_pcb());
             sock->unlock_tcp_con();
         }
+
+        return true;
     }
+
+    return false;
 }
 
 void poll_group::add_dirty_socket(sockinfo_tcp *si)
@@ -284,13 +313,16 @@ void poll_group::return_rx_buffers(mem_buf_desc_t *first, mem_buf_desc_t*last)
     m_returned_buffers.put_objs(first, last);
 }
 
-void poll_group::clear_rx_buffers()
+bool poll_group::clear_rx_buffers()
 {
     mem_buf_desc_t *first = m_returned_buffers.get_all_objs();
     if (first) {
         // We assume only one RX ring per group.
         first->p_desc_owner->reclaim_recv_buffers_chain(first);
+        return true;
     }
+
+    return false;
 }
 
 void poll_group::add_epoll_ctx(epfd_info *epfd, sockinfo_tcp &sock)

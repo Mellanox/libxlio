@@ -903,6 +903,7 @@ void mce_sys_var::get_env_params()
     skip_poll_in_rx = MCE_DEFAULT_SKIP_POLL_IN_RX;
     multilock = MCE_DEFAULT_MULTILOCK;
     xlio_threads = MCE_DEFAULT_XLIO_THREADS;
+    xlio_thread_idle_count_sec = MCE_DEFAULT_XLIO_THREADS_COUNT_IDLE_SEC;
 
     read_hv();
 
@@ -1832,6 +1833,10 @@ void mce_sys_var::get_env_params()
             xlio_threads > std::thread::hardware_concurrency()) {
             xlio_threads = std::thread::hardware_concurrency();
         }
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_XLIO_THREADS_COUNT_IDLE_SEC))) {
+        xlio_thread_idle_count_sec = atoi(env_ptr);
     }
 }
 

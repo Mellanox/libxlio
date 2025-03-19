@@ -46,6 +46,10 @@ public:
 
     void add_close_postponed_socket(sockinfo *sock);
     void do_tasks();
+    void do_tasks_check();
+    void take_curr_time();
+
+    const std::chrono::high_resolution_clock::time_point& curr_time_sample() const { return m_curr_sample; }
 
 protected:
     virtual void post_new_reg_action(reg_action_t &reg_action) override;
@@ -53,7 +57,8 @@ protected:
 private:
     void do_tasks_for_thread_local();
 
-    std::chrono::steady_clock::time_point m_last_run_time;
+    std::chrono::high_resolution_clock::time_point m_last_run_time;
+    std::chrono::high_resolution_clock::time_point m_curr_sample;
 
     // When delegate mode is enabled, incoming sockets with failed handshake are not closed
     // immediately because in this mode socket object will be immediately destroyed in the middle of
