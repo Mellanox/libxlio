@@ -2702,16 +2702,12 @@ size_t sockinfo_tcp::rx_xlio_socket_fetch_ready_buffers(
         // we can work with m_rx_pkt_ready_offset outside the lock because only the
         // retriever updates the offset.
         curr_buf_left = partial_last->lwip_pbuf.len - m_rx_pkt_ready_offset;
-        if (curr_buf_left >= curr_iov_left) {
+        if (curr_buf_left > curr_iov_left) {
             memcpy(reinterpret_cast<char *>(p_iov->iov_base) + p_iov->iov_len - curr_iov_left,
                    reinterpret_cast<char *>(partial_last->lwip_pbuf.payload) + m_rx_pkt_ready_offset, curr_iov_left);
             temp_ready_byte_count -= curr_iov_left;
             m_rx_pkt_ready_offset += curr_iov_left;
-            if (++p_iov < p_iov_end) {
-                curr_iov_left = p_iov->iov_len;
-            } else {
-                break;
-            }
+            curr_iov_left = 0;
         } else {
             memcpy(reinterpret_cast<char *>(p_iov->iov_base) + p_iov->iov_len - curr_iov_left,
                    reinterpret_cast<char *>(partial_last->lwip_pbuf.payload) + m_rx_pkt_ready_offset, curr_buf_left);
@@ -2723,6 +2719,14 @@ size_t sockinfo_tcp::rx_xlio_socket_fetch_ready_buffers(
             m_rx_pkt_ready_offset = 0U;
             partial_last->p_next_desc = temp_list.front();
             partial_last = partial_last->p_next_desc;
+        }
+
+        if (!curr_iov_left) {
+            if (++p_iov < p_iov_end) {
+                curr_iov_left = p_iov->iov_len;
+            } else {
+                break;
+            }
         }
     }
 
