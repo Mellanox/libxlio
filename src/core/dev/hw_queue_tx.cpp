@@ -488,13 +488,6 @@ void hw_queue_tx::init_queue()
     hwqtx_logfunc("m_tx_num_wr=%d max_inline_data: %d m_sq_wqe_idx_to_prop=%p", m_tx_num_wr,
                   get_max_inline_data(), m_sq_wqe_idx_to_prop);
 
-    memset((void *)(uintptr_t)m_sq_wqe_hot, 0, sizeof(struct mlx5_eth_wqe));
-    m_sq_wqe_hot->ctrl.data[0] = htonl(MLX5_OPCODE_SEND);
-    m_sq_wqe_hot->ctrl.data[1] = htonl((m_mlx5_qp.qpn << 8) | 4);
-    m_sq_wqe_hot->ctrl.data[2] = 0;
-    m_sq_wqe_hot->eseg.inline_hdr_sz = htons(MLX5_ETH_INLINE_HEADER_SIZE);
-    m_sq_wqe_hot->eseg.cs_flags = XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM;
-
     hwqtx_logfunc("%p allocated for %d QPs sq_wqes:%p sq_wqes_end: %p and configured %d WRs "
                   "BlueFlame: %p",
                   m_mlx5_qp.qp, m_mlx5_qp.qpn, m_sq_wqes, m_sq_wqes_end, m_tx_num_wr,
@@ -515,15 +508,9 @@ void hw_queue_tx::init_device_memory()
 
 void hw_queue_tx::update_next_wqe_hot()
 {
-    // Preparing next WQE as Ethernet send WQE and index:
+    // Preparing pointer to the next WQE after a doorbell
     m_sq_wqe_hot = &(*m_sq_wqes)[m_sq_wqe_counter & (m_tx_num_wr - 1)];
     m_sq_wqe_hot_index = m_sq_wqe_counter & (m_tx_num_wr - 1);
-    memset(m_sq_wqe_hot, 0, sizeof(mlx5_eth_wqe));
-
-    // Fill Ethernet segment with header inline:
-    struct mlx5_wqe_eth_seg *eth_seg =
-        (struct mlx5_wqe_eth_seg *)((uint8_t *)m_sq_wqe_hot + sizeof(struct mlx5_wqe_ctrl_seg));
-    eth_seg->inline_hdr_sz = htons(MLX5_ETH_INLINE_HEADER_SIZE);
 }
 
 cq_mgr_tx *hw_queue_tx::init_tx_cq_mgr()
@@ -609,6 +596,10 @@ inline int hw_queue_tx::fill_wqe(xlio_ibv_send_wr *pswr)
         hwqtx_logfunc(
             "wqe_hot:%p num_sge: %d data_addr: %p data_len: %d max_inline_len: %d inline_len: %d",
             m_sq_wqe_hot, pswr->num_sge, data_addr, data_len, max_inline_len, inline_len);
+
+        struct mlx5_wqe_eth_seg *eth_seg =
+            (struct mlx5_wqe_eth_seg *)((uint8_t *)m_sq_wqe_hot + sizeof(struct mlx5_wqe_ctrl_seg));
+        eth_seg->inline_hdr_sz = htons(MLX5_ETH_INLINE_HEADER_SIZE);
 
         // Fill Ethernet segment with header inline, static data
         // were populated in preset after previous packet send
@@ -850,6 +841,8 @@ void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_a
 
     ctrl = (struct xlio_mlx5_wqe_ctrl_seg *)m_sq_wqe_hot;
     eseg = (struct mlx5_wqe_eth_seg *)((uint8_t *)m_sq_wqe_hot + sizeof(*ctrl));
+
+    memset(m_sq_wqe_hot, 0, sizeof(mlx5_eth_wqe));
 
     /* Configure ctrl segment
      * qpn_ds or ctrl.data[1] is set inside fill_wqe()
@@ -1261,7 +1254,6 @@ inline void hw_queue_tx::tls_post_static_params_wqe(xlio_ti *ti, const struct xl
      * one WQEBB and will be posted before m_sq_wqes_end.
      */
 
-    // XXX: We set inline_hdr_sz for every new hot wqe. This corrupts UMR WQE without memset().
     memset(m_sq_wqe_hot, 0, sizeof(*m_sq_wqe_hot));
     cseg->opmod_idx_opcode =
         htobe32(((m_sq_wqe_counter & 0xffff) << 8) | MLX5_OPCODE_UMR | (opmod << 24));
