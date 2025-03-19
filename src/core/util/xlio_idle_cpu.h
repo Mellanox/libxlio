@@ -32,49 +32,30 @@
  * SOFTWARE.
  */
 
-#ifndef XLIO_THREAD_H
-#define XLIO_THREAD_H
+#ifndef XLIO_IDLE_CPU_H
+#define XLIO_IDLE_CPU_H
 
-#include <thread>
-#include <atomic>
-#include "core/util/wakeup_pipe.h"
-#include "core/event/poll_group.h"
-#include "core/util/xlio_idle_cpu.h"
+#include <chrono>
 
-class xlio_thread : public wakeup_pipe
+using namespace std::chrono;
+
+class xlio_idle_cpu
 {
 public:
 
-    xlio_thread();
-    ~xlio_thread();
+    xlio_idle_cpu(const char *name);
 
-    void start_thread();
-    void stop_thread();
-    int add_listen_socket(sockinfo_tcp *si);
-    int add_accepted_socket(sockinfo_tcp *si);
-    int add_connect_socket(sockinfo_tcp *si, const struct sockaddr *to, socklen_t tolen);
+    void measure_idle(const high_resolution_clock::time_point& curr_time, bool last_process_idle);
 
 private:
 
-    static void socket_event_cb(xlio_socket_t, uintptr_t userdata_sq, int event, int value);
-    static void socket_comp_cb(xlio_socket_t, uintptr_t userdata_sq, uintptr_t userdata_op);
-    static void socket_rx_cb(xlio_socket_t, uintptr_t userdata_sq, void *data, size_t len,
-                             struct xlio_buf *buf);
-    static void socket_accept_cb(xlio_socket_t sock, xlio_socket_t parent,
-                                 uintptr_t parent_userdata_sq);
-    static void xlio_thread_main(xlio_thread& t);
-
-    void xlio_thread_loop();
-    void xlio_thread_measure_idle(bool last_process_idle);
-
-    poll_group *m_poll_group;
-
-    // Must be atomic for the start and stop to synchronize.
-    std::atomic_bool m_running{false};
-
-    xlio_idle_cpu m_idle_cpu;
-
-    std::thread m_thread;
+    high_resolution_clock::time_point m_prev_count_time;
+    high_resolution_clock::time_point m_prev_idle_time;
+    high_resolution_clock::duration m_idle_time;
+    const char *m_name;
 };
 
-#endif // XLIO_THREAD_H
+extern thread_local xlio_idle_cpu tl_idle_cpu;
+
+#endif // XLIO_IDLE_CPU_H
+ 

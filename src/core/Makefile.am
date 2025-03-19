@@ -164,6 +164,7 @@ libxlio_la_SOURCES := \
 	util/hugepage_mgr.cpp \
 	util/wakeup.cpp \
 	util/wakeup_pipe.cpp \
+	util/xlio_idle_cpu.cpp \
 	util/match.cpp \
 	util/utils.cpp \
 	util/instrumentation.cpp \
@@ -306,6 +307,7 @@ libxlio_la_SOURCES := \
 	util/to_str.h \
 	util/utils.h \
 	util/valgrind.h \
+	util/xlio_idle_cpu.h \
 	util/xlio_list.h \
 	util/xlio_lockless_stack.h \
 	util/xlio_stats.h \
