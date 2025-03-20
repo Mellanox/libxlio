@@ -5104,6 +5104,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
     // It can be too expansive for the application to get nothing just because of lock contention.
     // In this case it will be better to have a lock() version of poll_and_process_element_rx.
     // And then we should continue polling untill we have ready packets or we drained the CQ.
+    auto prev_sndbuf = sndbuf_available();
     bool all_drained = true;
     if (likely(m_p_rx_ring)) {
         all_drained = m_p_rx_ring->poll_and_process_element_rx(&poll_sn);
@@ -5121,7 +5122,8 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
     m_rx_ring_map_lock.unlock();
     lock_tcp_con(); // We must take a lock before checking m_n_rx_pkt_ready_list_count
 
-    if (likely(m_n_rx_pkt_ready_list_count || !all_drained)) { // Got completions from CQ
+    bool sndbuf_change = (sndbuf_available() != prev_sndbuf);
+    if (likely(m_n_rx_pkt_ready_list_count || !all_drained || sndbuf_change)) { // Got completions from CQ
         __log_entry_funcall("Ready %d packets. sn=%llu", m_n_rx_pkt_ready_list_count,
                             (unsigned long long)poll_sn);
         IF_STATS(m_p_socket_stats->counters.n_rx_poll_hit++);
