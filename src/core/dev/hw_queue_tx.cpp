@@ -975,6 +975,8 @@ void hw_queue_tx::nvme_set_static_context(xlio_tis *tis, uint32_t config)
     auto *cseg = wqebb_get<xlio_mlx5_wqe_ctrl_seg *>(0U);
     auto *ucseg = wqebb_get<xlio_mlx5_wqe_umr_ctrl_seg *>(0U, sizeof(*cseg));
 
+    memset(cseg, 0, sizeof(mlx5_eth_wqe));
+
     nvme_fill_static_params_control(cseg, ucseg, m_sq_wqe_counter, m_mlx5_qp.qpn, tis->get_tisn(),
                                     0);
     memset(wqebb_get<void *>(1U), 0, sizeof(mlx5_mkey_seg));
@@ -989,6 +991,7 @@ void hw_queue_tx::nvme_set_static_context(xlio_tis *tis, uint32_t config)
 void hw_queue_tx::nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno)
 {
     auto *wqe = reinterpret_cast<mlx5e_set_nvmeotcp_progress_params_wqe *>(m_sq_wqe_hot);
+    memset(wqe, 0, sizeof(mlx5_eth_wqe));
     nvme_fill_progress_wqe(wqe, m_sq_wqe_counter, m_mlx5_qp.qpn, tis->get_tisn(), tcp_seqno,
                            MLX5_FENCE_MODE_INITIATOR_SMALL);
     store_current_wqe_prop(nullptr, SQ_CREDITS_SET_PSV, tis);
@@ -1317,7 +1320,7 @@ inline void hw_queue_tx::tls_post_progress_params_wqe(xlio_ti *ti, uint32_t tis_
     uint8_t opmod =
         is_tx ? MLX5_OPC_MOD_TLS_TIS_PROGRESS_PARAMS : MLX5_OPC_MOD_TLS_TIR_PROGRESS_PARAMS;
 
-    memset(wqe, 0, sizeof(*wqe));
+    memset(wqe, 0, sizeof(mlx5_eth_wqe));
 
 #define PROGRESS_PARAMS_DS_CNT DIV_ROUND_UP(sizeof(*wqe), MLX5_SEND_WQE_DS)
 
@@ -1346,7 +1349,7 @@ inline void hw_queue_tx::tls_get_progress_params_wqe(xlio_ti *ti, uint32_t tirn,
     struct xlio_mlx5_seg_get_psv *psv = &wqe->psv;
     uint8_t opmod = MLX5_OPC_MOD_TLS_TIR_PROGRESS_PARAMS;
 
-    memset(wqe, 0, sizeof(*wqe));
+    memset(wqe, 0, sizeof(mlx5_eth_wqe));
 
 #define PROGRESS_PARAMS_DS_CNT DIV_ROUND_UP(sizeof(*wqe), MLX5_SEND_WQE_DS)
 
@@ -1418,7 +1421,7 @@ void hw_queue_tx::post_nop_fence(void)
     struct mlx5_wqe *wqe = reinterpret_cast<struct mlx5_wqe *>(m_sq_wqe_hot);
     struct xlio_mlx5_wqe_ctrl_seg *cseg = &wqe->ctrl;
 
-    memset(wqe, 0, sizeof(*wqe));
+    memset(wqe, 0, sizeof(mlx5_eth_wqe));
 
     cseg->opmod_idx_opcode = htobe32(((m_sq_wqe_counter & 0xffff) << 8) | MLX5_OPCODE_NOP);
     cseg->qpn_ds = htobe32((m_mlx5_qp.qpn << MLX5_WQE_CTRL_QPN_SHIFT) | 0x01);
@@ -1440,7 +1443,7 @@ void hw_queue_tx::post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_
     uint32_t tisn = tis ? tis->get_tisn() : 0;
     uint16_t ds_cnt = sizeof(*wqe) / MLX5_SEND_WQE_DS;
 
-    memset(wqe, 0, sizeof(*wqe));
+    memset(wqe, 0, sizeof(mlx5_eth_wqe));
 
     cseg->opmod_idx_opcode = htobe32(((m_sq_wqe_counter & 0xffff) << 8) | XLIO_MLX5_OPCODE_DUMP);
     cseg->qpn_ds = htobe32((m_mlx5_qp.qpn << MLX5_WQE_CTRL_QPN_SHIFT) | ds_cnt);
