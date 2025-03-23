@@ -167,7 +167,6 @@ int poll_group::poll()
 int poll_group::process()
 {
     m_event_handler->take_curr_time();
-    std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
 
     int all_drained = poll();
 
@@ -175,20 +174,23 @@ int poll_group::process()
         all_drained = 0;
     }
     
-    std::for_each(std::begin(m_epoll_ctx), std::end(m_epoll_ctx),
-                  [&all_drained](auto itr) {
-        if (itr.second.second->size() > 0) {
-            itr.first->move_thread_ready_sockets(*itr.second.second);
-            itr.first->do_wakeup();
-            all_drained = 0;
-        }
-    });
+    {
+        std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
+        std::for_each(std::begin(m_epoll_ctx), std::end(m_epoll_ctx),
+                    [&all_drained](auto itr) {
+            if (itr.second.second->size() > 0) {
+                itr.first->move_thread_ready_sockets(*itr.second.second);
+                itr.first->do_wakeup();
+                all_drained = 0;
+            }
+        });
+    }
 
     if (handle_ack_ready_sockets()) {
         all_drained = 0;
     }
 
-    flush();
+    //flush();
 
     //if (all_drained && safe_mce_sys().cq_moderation_count > 0U) {
     //    std::for_each(std::begin(m_epoll_ctx), std::end(m_epoll_ctx),
