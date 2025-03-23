@@ -70,8 +70,9 @@ void xlio_idle_cpu::measure_idle(const high_resolution_clock::time_point& curr_t
         auto total_time_ms = duration_cast<milliseconds>(curr_time - m_prev_count_time).count();
         auto idle_time_ms = duration_cast<milliseconds>(m_idle_time).count();
         m_prev_count_time = high_resolution_clock::now();
+        xidle_loginfo("%s (%d) Idle time: %.0f% (%zu ns)", m_name, static_cast<int>(gettid()),
+            (idle_time_ms * 100) / static_cast<double>(total_time_ms),
+            duration_cast<nanoseconds>(m_idle_time).count());
         m_idle_time = m_idle_time.zero();
-        xidle_loginfo("%s (%d) Idle time: %.0f%", m_name, static_cast<int>(gettid()),
-            (idle_time_ms * 100) / static_cast<double>(total_time_ms));
     }
 }

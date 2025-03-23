@@ -314,7 +314,6 @@ void io_mux_call::polling_loops()
         zero_polling_cpu(before_polling_timer);
     }
 
-    auto start_time_sample = high_resolution_clock::now();
     do {
         __log_funcall("poll_os_countdown=%d, check_timer_countdown=%d, m_num_offloaded_rfds=%d, "
                       "m_n_all_ready_fds=%d, m_n_ready_rfds=%d, m_n_ready_wfds=%d, "
@@ -327,12 +326,13 @@ void io_mux_call::polling_loops()
             break;
         }
 
+        auto time_point = high_resolution_clock::now();
         // Poll offloaded sockets.
         // If this is successful we must exit - wait_os() might mess the results.
         all_drained = check_all_offloaded_sockets();
 
         if (safe_mce_sys().xlio_thread_idle_count_sec > 0) {
-            tl_idle_cpu.measure_idle(start_time_sample, (all_drained && !m_n_all_ready_fds));
+            tl_idle_cpu.measure_idle(time_point, !m_n_all_ready_fds);
         }
 
         if (m_n_all_ready_fds) { // We have events.
@@ -444,6 +444,10 @@ void io_mux_call::blocking_loops()
             }
         }
     } while (!m_n_all_ready_fds && !is_timeout(m_elapsed));
+
+    if (safe_mce_sys().xlio_thread_idle_count_sec > 0) {
+        tl_idle_cpu.measure_idle(high_resolution_clock::now(), !m_n_all_ready_fds);
+    }
 }
 
 int io_mux_call::call()
