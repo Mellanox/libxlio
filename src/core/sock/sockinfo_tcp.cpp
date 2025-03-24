@@ -497,7 +497,7 @@ int sockinfo_tcp::detach_xlio_group()
     std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
 
     // Only connected socket can be detached.
-    if (!m_p_group || !m_p_connected_dst_entry || m_rx_flow_map.empty() || 
+    if (!m_p_group || !m_p_connected_dst_entry || (m_rx_flow_map.empty() && safe_mce_sys().xlio_threads == 0U) ||
         get_tcp_state(&m_pcb) != ESTABLISHED) {
         si_tcp_logwarn("Unable to detach socket %p, state %s, group %p, dst_entry %p,"
                        " rx_flow_size %zu. Only connected attached socket can be detached.",
@@ -3924,9 +3924,11 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
 
     /* if attach failed, we should continue getting traffic through the listen socket */
     // todo register as 3-tuple rule for the case the listener is gone?
-    if (!new_sock->m_b_attached) {
-        new_sock->attach_as_uc_receiver(role_t(NULL), true);
-        new_sock->m_b_attached = true;
+    if (safe_mce_sys().xlio_threads == 0U) {
+        if (!new_sock->m_b_attached) {
+            new_sock->attach_as_uc_receiver(role_t(NULL), true);
+            new_sock->m_b_attached = true;
+        }
     }
 
     if (tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)) {
