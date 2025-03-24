@@ -287,7 +287,7 @@ int epfd_info::add_fd(int fd, epoll_event *event)
         // if the socket is ready, add it to ready events
         uint32_t events = 0;
         int errors;
-        if ((event->events & EPOLLIN) && temp_sock_fd_api->is_readable(nullptr, nullptr)) {
+        if ((event->events & EPOLLIN) && temp_sock_fd_api->is_readable_thread()) {
             events |= EPOLLIN;
         }
         if ((event->events & EPOLLOUT) && temp_sock_fd_api->is_writeable()) {
@@ -302,7 +302,7 @@ int epfd_info::add_fd(int fd, epoll_event *event)
             }
         }
         if (events != 0) {
-            insert_epoll_event(temp_sock_fd_api, events);
+            temp_sock_fd_api->insert_epoll_event(events);
         } else {
             do_wakeup();
         }
@@ -514,7 +514,7 @@ int epfd_info::mod_fd(int fd, epoll_event *event)
     uint32_t events = 0;
     if (is_offloaded) {
         // if the socket is ready, add it to ready events
-        if ((event->events & EPOLLIN) && temp_sock_fd_api->is_readable(nullptr, nullptr)) {
+        if ((event->events & EPOLLIN) && temp_sock_fd_api->is_readable_thread()) {
             events |= EPOLLIN;
         }
         if ((event->events & EPOLLOUT) && temp_sock_fd_api->is_writeable()) {
@@ -524,11 +524,12 @@ int epfd_info::mod_fd(int fd, epoll_event *event)
             events |= EPOLLOUT;
         }
         if (events != 0) {
-            insert_epoll_event(temp_sock_fd_api, events);
+            temp_sock_fd_api->insert_epoll_event(events);
         }
     }
 
     if (event->events == 0 || events == 0) {
+        // TODO: Handle XLIOThread mode.
         if (temp_sock_fd_api && temp_sock_fd_api->ep_ready_fd_node.is_list_member()) {
             temp_sock_fd_api->m_epoll_event_flags = 0;
             m_ready_fds.erase(temp_sock_fd_api);
@@ -587,10 +588,6 @@ void epfd_info::insert_epoll_event(sockinfo *sock_fd, uint32_t event_flags)
         sock_fd->m_epoll_event_flags = event_flags;
 
         m_ready_fds.push_back(sock_fd);
-    }
-
-    if (++m_events_for_wakeup >= safe_mce_sys().cq_moderation_count) {
-        do_wakeup();
     }
 }
 

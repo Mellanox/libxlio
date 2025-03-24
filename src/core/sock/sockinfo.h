@@ -373,6 +373,7 @@ public:
     int add_epoll_context(epfd_info *epfd);
     void remove_epoll_context(epfd_info *epfd);
     int get_epoll_context_fd();
+    void insert_epoll_event(uint64_t events);
 
     // Calling OS transmit
     ssize_t tx_os(const tx_call_t call_type, const iovec *p_iov, const ssize_t sz_iov,
@@ -461,7 +462,6 @@ protected:
     void add_cqfd_to_sock_rx_epfd(ring *p_ring);
     void remove_cqfd_from_sock_rx_epfd(ring *p_ring);
     int os_wait_sock_rx_epfd(epoll_event *ep_events, int maxevents);
-    void insert_epoll_event(uint64_t events);
     virtual void insert_thread_epoll_event(uint64_t events) = 0;
     int handle_exception_flow();
 
@@ -663,8 +663,6 @@ void sockinfo::set_events(uint64_t events)
         if (m_state == SOCKINFO_OPENED) {
             set_events_socketxtreme(events, true);
         }
-    } else if (safe_mce_sys().xlio_threads > 0U) {
-        insert_thread_epoll_event(events);
     } else {
         insert_epoll_event(events);
     }

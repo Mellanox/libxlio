@@ -149,9 +149,11 @@ public:
      */
     bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = nullptr) override;
 
-    bool is_readable_thread() override { return false; }
+    bool is_readable_thread() override { return is_readable(nullptr, nullptr); }
 
-    void insert_thread_epoll_event(uint64_t events) override { NOT_IN_USE(events); }
+    void insert_thread_epoll_event(uint64_t events) override { 
+        m_econtext->insert_epoll_event_cb(this, static_cast<uint32_t>(events));
+    }
 
     /**
      * Arm the event channel(s) assosiated with this sockinfo

@@ -60,6 +60,7 @@
 #include "sockinfo_tcp.h"
 #include "bind_no_port.h"
 #include "xlio.h"
+#include "core/dev/xlio_thread_manager.h"
 
 #define UNLOCK_RET(_ret)                                                                           \
     unlock_tcp_con();                                                                              \
@@ -698,14 +699,13 @@ err_t sockinfo_tcp::rx_lwip_cb_thread_socket(void *arg, struct tcp_pcb *pcb, str
 
 void sockinfo_tcp::insert_thread_epoll_event(uint64_t events)
 {
-    if (m_econtext) {
-        if (likely(m_p_group && m_p_thread_ready_socket_list)) {
-            if (!m_epoll_event_flags_atomic.fetch_or(static_cast<uint32_t>(events), std::memory_order::memory_order_acquire)) {
-                m_p_thread_ready_socket_list->push_back(this);
-            }
-        } else {
-            m_econtext->insert_epoll_event_cb(this, static_cast<uint32_t>(events));
+    if (likely(m_p_group && m_p_thread_ready_socket_list)) {
+        if (!m_epoll_event_flags_atomic.fetch_or(static_cast<uint32_t>(events), std::memory_order::memory_order_acquire)) {
+            m_p_thread_ready_socket_list->push_back(this);
         }
+    } else {
+        si_tcp_logwarn("Adding regular event for XLIO Thread socket");
+        m_econtext->insert_epoll_event_cb(this, static_cast<uint32_t>(events));
     }
 }
 
@@ -3712,6 +3712,15 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
 
     si_tcp_logdbg("CONN ACCEPTED: TCP PCB FLAGS: acceptor:0x%x newsock: fd=%d 0x%x new state: %d",
                   m_pcb.flags, ns->m_fd, ns->m_pcb.flags, get_tcp_state(&ns->m_pcb));
+
+    if (safe_mce_sys().xlio_threads > 0) {
+        poll_group *pg = ns->get_poll_group();
+        if (0 == ns->detach_xlio_group()) {
+            pg->poll();
+            g_p_xlio_thread_manager->add_accepted_socket(ns);
+        }
+    }
+
     return ns->m_fd;
 }
 
@@ -4486,6 +4495,10 @@ bool sockinfo_tcp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array)
 
 bool sockinfo_tcp::is_readable_thread()
 {
+    if (unlikely(safe_mce_sys().xlio_threads == 0U)) {
+        return is_readable(nullptr, nullptr);
+    }
+
     if (is_server()) {
         bool state;
         // tcp_si_logwarn("select on accept()");

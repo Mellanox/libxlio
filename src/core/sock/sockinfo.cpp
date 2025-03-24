@@ -331,7 +331,11 @@ int sockinfo::get_epoll_context_fd()
 void sockinfo::insert_epoll_event(uint64_t events)
 {
     if (has_epoll_context()) {
-        m_econtext->insert_epoll_event_cb(this, static_cast<uint32_t>(events));
+        if (safe_mce_sys().xlio_threads > 0U) {
+            insert_thread_epoll_event(events);
+        } else {
+            m_econtext->insert_epoll_event_cb(this, static_cast<uint32_t>(events));
+        }
     }
 }
 
