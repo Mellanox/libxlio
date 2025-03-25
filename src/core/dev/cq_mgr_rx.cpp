@@ -448,6 +448,7 @@ void cq_mgr_rx::reclaim_recv_buffer_helper_single(mem_buf_desc_t *buff)
             m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
         } else {
             cq_loginfo("Buffer returned to wrong CQ");
+            buff->p_next_desc = nullptr;
             g_buffer_pool_rx_rwqe->put_buffers_thread_safe(buff);
         }
     }

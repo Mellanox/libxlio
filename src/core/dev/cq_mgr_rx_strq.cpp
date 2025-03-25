@@ -582,6 +582,7 @@ void cq_mgr_rx_strq::reclaim_recv_buffer_helper_single(mem_buf_desc_t *buff)
             m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
         } else {
             cq_logfunc("Stride returned to wrong CQ");
+            buff->p_next_desc = nullptr;
             g_buffer_pool_rx_ptr->put_buffers_thread_safe(buff);
         }
     }
