@@ -328,7 +328,7 @@ public:
     virtual void unset_immediate_os_sample() = 0;
 
     virtual void add_epoll_ctx_cb() = 0;
-    virtual void remove_epoll_ctx_cb() = 0;
+    virtual void remove_epoll_ctx_cb(epfd_info *econtext) = 0;
 
     // In some cases we need the socket can't be deleted immidiatly
     //(for example STREAME sockets)

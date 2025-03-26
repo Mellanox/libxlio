@@ -238,7 +238,7 @@ public:
     void set_immediate_os_sample() override {};
     void unset_immediate_os_sample() override {};
     void add_epoll_ctx_cb() override;
-    void remove_epoll_ctx_cb() override;
+    void remove_epoll_ctx_cb(epfd_info *econtext) override;
 
     inline bool handle_bind_no_port(int &bind_ret, in_port_t in_port, const sockaddr *__addr,
                                     socklen_t __addrlen);

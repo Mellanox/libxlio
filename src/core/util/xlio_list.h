@@ -219,6 +219,7 @@ public:
         list_node<T, offset> *node_obj = GET_NODE(obj, T, offset);
         if (unlikely(node_obj->is_list_member())) {
             VLIST_DEBUG_PRINT_ERROR_IS_MEMBER;
+            sleep(60);
         }
 
         VLIST_DEBUG_SET_PARENT(node_obj, this);

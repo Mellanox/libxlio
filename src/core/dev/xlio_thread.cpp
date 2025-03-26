@@ -57,7 +57,7 @@ xlio_thread::~xlio_thread()
 void xlio_thread::socket_event_cb(xlio_socket_t sock, uintptr_t userdata_sq, int event, int value)
 {
     sockinfo_tcp *tcp_sock = reinterpret_cast<sockinfo_tcp *>(sock);
-    __log_info("sock-fd: %d, event: %d, value: %d", tcp_sock->get_fd(), event, value);
+    __log_dbg("sock-fd: %d, event: %d, value: %d", tcp_sock->get_fd(), event, value);
     NOT_IN_USE(userdata_sq);
 }
 
@@ -95,6 +95,7 @@ int xlio_thread::add_accepted_socket(sockinfo_tcp *si)
 int xlio_thread::add_connect_socket(sockinfo_tcp *si, const struct sockaddr *to, socklen_t tolen)
 {
     si->set_xlio_socket_thread(m_poll_group);
+
     m_poll_group->add_socket(si);
 
     int errno_save = errno;

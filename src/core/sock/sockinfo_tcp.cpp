@@ -411,10 +411,10 @@ void sockinfo_tcp::add_epoll_ctx_cb()
     }
 }
 
-void sockinfo_tcp::remove_epoll_ctx_cb()
+void sockinfo_tcp::remove_epoll_ctx_cb(epfd_info *econtext)
 {
     if (m_p_group) {
-        m_p_group->remove_epoll_ctx(m_econtext);
+        m_p_group->remove_epoll_ctx(econtext);
         m_p_thread_ready_socket_list = nullptr;
     }
 }

@@ -177,7 +177,7 @@ public:
     int rx_verify_available_data() override;
 
     void add_epoll_ctx_cb() override {};
-    void remove_epoll_ctx_cb() override {};
+    void remove_epoll_ctx_cb(epfd_info *) override {};
 
     /**
      *	This callback will handle ready rx packet notification,

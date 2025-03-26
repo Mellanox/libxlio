@@ -1356,6 +1356,7 @@ unlock_locks:
 void sockinfo::remove_epoll_context(epfd_info *epfd)
 {
     m_rx_ring_map_lock.lock();
+    decltype(m_econtext) temp_ectx = nullptr;
     lock_rx_q();
 
     if (!has_epoll_context() || m_econtext != epfd) {
@@ -1372,16 +1373,17 @@ void sockinfo::remove_epoll_context(epfd_info *epfd)
         }
     }
 
-    if (m_econtext == epfd) {
-        remove_epoll_ctx_cb();
-        m_econtext = NULL;
-    }
+    temp_ectx = m_econtext;
+    m_econtext = NULL;
 
     if (safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_EPOLL_ONLY) {
         m_skip_cq_poll_in_rx = false;
     }
 
     unlock_rx_q();
+    if (temp_ectx) {
+        remove_epoll_ctx_cb(temp_ectx);
+    }
     m_rx_ring_map_lock.unlock();
 }
 
