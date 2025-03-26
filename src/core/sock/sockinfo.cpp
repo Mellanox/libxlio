@@ -2179,12 +2179,11 @@ void sockinfo::handle_recv_timestamping(struct cmsg_state *cm_state)
 void sockinfo::handle_recv_errqueue(struct cmsg_state *cm_state)
 {
     mem_buf_desc_t *buff = nullptr;
-
-    m_error_queue_lock.lock();
+    // coverity[missing_lock:FALSE] /* Turn off coverity check for missing lock */
     if (m_error_queue.empty()) {
-        m_error_queue_lock.unlock();
         return;
     }
+    m_error_queue_lock.lock();
     buff = m_error_queue.get_and_pop_front();
     m_error_queue_lock.unlock();
 
