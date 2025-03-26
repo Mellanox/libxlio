@@ -1427,22 +1427,18 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
 {
     iovec *p_iov = tx_arg.attr.iov;
     size_t sz_iov = tx_arg.attr.sz_iov;
-    char *addr = reinterpret_cast<char *>(p_iov[0].iov_base);
-    size_t tosend = p_iov[0].iov_len;
+    iovec *p_iov_end = p_iov + sz_iov;
+    //char *addr = reinterpret_cast<char *>(p_iov[0].iov_base);
+    //size_t tosend = p_iov[0].iov_len;
     ssize_t sent = 0;
 
-    if (sz_iov > 1) {
-        errno = ENOTSUP;
-        return -1;
-    }
-
     lock_tcp_con();
-    unsigned sndbuf = sndbuf_available();
+    ssize_t sndbuf = sndbuf_available();
 //    m_pcb.snd_buf -= std::min<int>(sndbuf, tosend);
 //  TODO decrease sndbuf and take into account sndbuf change in tcp_write
     unlock_tcp_con();
 
-    while (sndbuf > 0 && tosend > 0) {
+    /*while (sndbuf > 0 && tosend > 0) {
         mem_buf_desc_t *buf = m_p_group->get_tx_buffer();
         if (!buf) {
             break;
@@ -1456,7 +1452,55 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
         sndbuf -= buflen;
         tosend -= buflen;
 
-        m_p_group->job_insert(JOB_TYPE_TX, this, buf);
+        m_p_group->job_insert(JOB_TYPE_TX,this, buf);
+    }*/
+
+    size_t curr_iov_left = p_iov->iov_len;
+    size_t curr_buf_left;
+    size_t buf_offset = 0U;
+    mem_buf_desc_t *buf = m_p_group->get_tx_buffer();
+    while (buf && sndbuf > 0) {
+        curr_buf_left = buf->sz_buffer - buf_offset;
+        if (curr_buf_left > curr_iov_left) {
+            memcpy(buf->p_buffer + buf_offset,
+                   reinterpret_cast<char *>(p_iov->iov_base) + p_iov->iov_len - curr_iov_left, curr_iov_left);
+            sent += curr_iov_left;
+            sndbuf -= curr_iov_left;
+            buf_offset += curr_iov_left;
+            curr_iov_left = 0;
+        } else {
+            memcpy(buf->p_buffer + buf_offset,
+                   reinterpret_cast<char *>(p_iov->iov_base) + p_iov->iov_len - curr_iov_left, curr_buf_left);
+            sent += curr_buf_left;
+            sndbuf -= curr_buf_left;
+            buf_offset = 0U;
+            curr_iov_left -= curr_buf_left;
+            buf->sz_data = buf->sz_buffer;
+            m_p_group->job_insert(JOB_TYPE_TX, this, buf);
+            buf = nullptr;
+
+            // Is last iov needs more buffer or its not last iov.
+            if (sndbuf > 0 && (curr_iov_left || (p_iov + 1 < p_iov_end))) {
+                buf = m_p_group->get_tx_buffer();
+            }
+        }
+
+        if (!curr_iov_left) {
+            if (++p_iov < p_iov_end) {
+                curr_iov_left = p_iov->iov_len;
+            } else {
+                break;
+            }
+        }
+    }
+
+    if (buf) {
+        if (buf_offset) {
+            buf->sz_data = buf_offset;
+            m_p_group->job_insert(JOB_TYPE_TX, this, buf);
+        } else {
+            m_p_group->return_tx_buffer(buf);
+        }
     }
 
     /* TODO Handle disconnected socket */
@@ -3143,6 +3187,12 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
     int ret = 0;
 
     lock_tcp_con();
+
+    if (safe_mce_sys().xlio_threads > 0U && !m_p_group) {
+        ret = g_p_xlio_thread_manager->add_connect_socket(this, __to, __tolen);
+        unlock_tcp_con();
+        return ret;
+    }
 
     /* Connection was closed by RST, timeout, ICMP error
      * or another process disconnected us.

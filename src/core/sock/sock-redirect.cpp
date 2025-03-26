@@ -267,7 +267,7 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
 
                 if (grp) {
                     // We always force TCP reset not to handle FIN handshake and TIME-WAIT state.
-                    grp->close_socket(si, true);
+                    grp->close_socket_threaded(si);
                     to_close_now = false;
                     reg_close = false;
                 }
@@ -1073,13 +1073,8 @@ EXPORT_SYMBOL int XLIO_SYMBOL(connect)(int __fd, const struct sockaddr *__to, so
         p_socket_object->setPassthrough();
         ret = SYSCALL(connect, __fd, __to, __tolen);
     } else {
-        if (p_socket_object->get_protocol() == PROTO_TCP &&
-            safe_mce_sys().xlio_threads > 0U) {
-            ret = g_p_xlio_thread_manager->add_connect_socket(
-                reinterpret_cast<sockinfo_tcp *>(p_socket_object), __to, __tolen);
-        } else {
-            ret = p_socket_object->connect(__to, __tolen);
-        }
+        ret = p_socket_object->connect(__to, __tolen);
+
         if (p_socket_object->isPassthrough()) {
             handle_close(__fd, false, true);
             if (ret) {
