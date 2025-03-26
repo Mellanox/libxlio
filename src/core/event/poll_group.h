@@ -52,7 +52,11 @@ class ring;
 class ring_alloc_logic_attr;
 class tcp_timers_collection;
 
+#define JOB_TYPE_TX         0
+#define JOB_TYPE_CLOSE_SOCK 1
+
 struct job_desc {
+    int job_type;
     sockinfo_tcp *sock;
     mem_buf_desc_t *buf;
 };
@@ -70,12 +74,14 @@ public:
 
     void add_dirty_socket(sockinfo_tcp *si);
     void flush();
+    void flush_no_lock();
 
     void add_ring(ring *rng, ring_alloc_logic_attr *attr);
 
     void add_socket(sockinfo_tcp *si);
     void remove_socket(sockinfo_tcp *si);
     void close_socket(sockinfo_tcp *si, bool force = false);
+    void close_socket_threaded(sockinfo_tcp *si);
 
     unsigned get_flags() const { return m_group_flags; }
     event_handler_manager_local *get_event_handler() const { return m_event_handler.get(); }
@@ -91,10 +97,10 @@ public:
 
     const std::chrono::high_resolution_clock::time_point& get_curr_time() const { return m_event_handler.get()->curr_time_sample(); }
 
-    void job_insert(sockinfo_tcp *si, mem_buf_desc_t *buf)
+    void job_insert(int job_type, sockinfo_tcp *si, mem_buf_desc_t *buf)
     {
         std::lock_guard<decltype(m_job_q_lock)> lock(m_job_q_lock);
-        m_job_q.push((job_desc) {si, buf});
+        m_job_q.push((job_desc) {job_type,si, buf});
     }
 
 public:
@@ -126,6 +132,8 @@ private:
 
     lock_spin m_job_q_lock;
     std::queue<job_desc> m_job_q;
+    std::queue<job_desc> m_rem_socket_jobs;
+    std::queue<job_desc> m_all_jobs_temp;
 };
 
 #endif /* XLIO_GROUP_H */

@@ -1456,7 +1456,7 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
         sndbuf -= buflen;
         tosend -= buflen;
 
-        m_p_group->job_insert(this, buf);
+        m_p_group->job_insert(JOB_TYPE_TX, this, buf);
     }
 
     /* TODO Handle disconnected socket */

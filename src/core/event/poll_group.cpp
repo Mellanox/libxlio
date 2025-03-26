@@ -169,13 +169,11 @@ int poll_group::process()
     m_event_handler->take_curr_time();
 
     int all_drained = poll();
-    bool wastx = false;
-    bool empty;
 
     if (clear_rx_buffers()) {
         all_drained = 0;
     }
-    
+
     {
         std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
         std::for_each(std::begin(m_epoll_ctx), std::end(m_epoll_ctx),
@@ -186,31 +184,38 @@ int poll_group::process()
                 all_drained = 0;
             }
         });
-    }
 
-    do {
-        job_desc jd;
         m_job_q_lock.lock();
-        empty = m_job_q.empty();
-        if (!empty) {
-            jd = m_job_q.front();
-            m_job_q.pop();
-        }
+        m_all_jobs_temp.swap(m_job_q);
         m_job_q_lock.unlock();
-        if (!empty) {
-            const struct iovec iov = {.iov_base = reinterpret_cast<void *>(jd.buf->p_buffer), .iov_len = jd.buf->sz_data};
-            jd.sock->tcp_tx_express(&iov, 1, LKEY_TX_DEFAULT, 0, reinterpret_cast<void *>(jd.buf));
-        }
-        wastx |= !empty;
-    } while (!empty);
 
-    if (wastx) {
-        flush();
+        bool wastx = false;
+        while (!m_all_jobs_temp.empty()) {
+            job_desc jd = m_all_jobs_temp.front();
+            m_all_jobs_temp.pop();
+            if (jd.job_type == JOB_TYPE_TX) {
+                const struct iovec iov = {.iov_base = reinterpret_cast<void *>(jd.buf->p_buffer), .iov_len = jd.buf->sz_data};
+                jd.sock->tcp_tx_express(&iov, 1, LKEY_TX_DEFAULT, 0, reinterpret_cast<void *>(jd.buf));
+                wastx = true;
+            } else if (jd.job_type == JOB_TYPE_CLOSE_SOCK) {
+                m_rem_socket_jobs.push((job_desc){JOB_TYPE_CLOSE_SOCK,jd.sock,nullptr});
+            }
+        }
+
+        if (wastx) {
+            flush_no_lock();
+        }
+
+        if (handle_ack_ready_sockets()) {
+            all_drained = 0;
+            wastx = true;
+        }
     }
 
-    if (handle_ack_ready_sockets()) {
-        all_drained = 0;
-        wastx = true;
+    while (!m_rem_socket_jobs.empty()) {
+        job_desc jd = m_rem_socket_jobs.front();
+        m_rem_socket_jobs.pop();
+        close_socket(jd.sock, true);
     }
 
     //if (all_drained && safe_mce_sys().cq_moderation_count > 0U) {
@@ -246,7 +251,11 @@ void poll_group::add_dirty_socket(sockinfo_tcp *si)
 void poll_group::flush()
 {
     std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
+    flush_no_lock();
+}
 
+void poll_group::flush_no_lock()
+{
     for (auto si : m_dirty_sockets) {
         si->flush();
     }
@@ -305,11 +314,18 @@ void poll_group::remove_socket(sockinfo_tcp *si)
     }
 }
 
+void poll_group::close_socket_threaded(sockinfo_tcp *si)
+{
+    job_insert(JOB_TYPE_CLOSE_SOCK, si, nullptr);
+}
+
 void poll_group::close_socket(sockinfo_tcp *si, bool force /*=false*/)
 {
-    std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
+    {
+        std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
 
-    remove_socket(si);
+        remove_socket(si);
+    }
 
     bool closed = si->prepare_to_close(force);
     if (closed) {

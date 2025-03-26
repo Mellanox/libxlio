@@ -523,7 +523,7 @@ extern "C" int xlio_socket_destroy(xlio_socket_t sock)
 
     if (likely(grp)) {
         // We always force TCP reset not to handle FIN handshake and TIME-WAIT state.
-        grp->close_socket(si, true);
+        grp->close_socket_threaded(si);
     } else {
         return XLIO_CALL(close, si->get_fd());
     }
