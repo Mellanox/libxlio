@@ -33,6 +33,7 @@ poll_group::poll_group(const struct xlio_poll_group_attr *attr)
     : m_socket_event_cb(attr->socket_event_cb)
     , m_socket_comp_cb(attr->socket_comp_cb)
     , m_socket_rx_cb(attr->socket_rx_cb)
+    , m_socket_accept_cb(attr->socket_accept_cb)
     , m_group_flags(attr->flags)
 {
     /*
@@ -167,7 +168,7 @@ void poll_group::add_socket(sockinfo_tcp *si)
     g_p_fd_collection->set_socket(si->get_fd(), si);
 }
 
-void poll_group::close_socket(sockinfo_tcp *si, bool force /*=false*/)
+void poll_group::remove_socket(sockinfo_tcp *si)
 {
     g_p_fd_collection->clear_socket(si->get_fd());
     m_sockets_list.erase(si);
@@ -176,6 +177,11 @@ void poll_group::close_socket(sockinfo_tcp *si, bool force /*=false*/)
     if (iter != std::end(m_dirty_sockets)) {
         m_dirty_sockets.erase(iter);
     }
+}
+
+void poll_group::close_socket(sockinfo_tcp *si, bool force /*=false*/)
+{
+    remove_socket(si);
 
     bool closed = si->prepare_to_close(force);
     if (closed) {
