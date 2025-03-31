@@ -89,18 +89,17 @@ epfd_info::epfd_info(int epfd, int size)
 
     xlio_stats_instance_create_epoll_block(m_epfd, &(m_stats->stats));
 
+    m_ready_fds_thread.resize(std::max(1UL, safe_mce_sys().xlio_threads));
+
     wakeup_set_epoll_fd(m_epfd);
 }
 
 epfd_info::~epfd_info()
 {
     __log_funcall("");
+    lock_all();
+
     sockinfo *sock_fd;
-
-    // Meny: going over all handled fds and removing epoll context.
-
-    lock();
-
     while (!m_ready_fds.empty()) {
         sock_fd = m_ready_fds.get_and_pop_front();
         sock_fd->m_epoll_event_flags = 0;
@@ -115,13 +114,13 @@ epfd_info::~epfd_info()
         sock_fd = fd_collection_get_sockfd(m_p_offloaded_fds[i]);
         BULLSEYE_EXCLUDE_BLOCK_START
         if (sock_fd) {
-            unlock();
+            unlock_all();
             /* coverity[double_lock] */
             m_ring_map_lock.lock();
             sock_fd->remove_epoll_context(this);
             m_ring_map_lock.unlock();
             /* coverity[double_lock] */
-            lock();
+            lock_all();
         } else {
             __log_err(
                 "Invalid temp_sock_fd_api==NULL. Deleted fds should have been removed from epfd.");
@@ -129,10 +128,59 @@ epfd_info::~epfd_info()
         BULLSEYE_EXCLUDE_BLOCK_END
     }
 
-    unlock();
+    for_each(std::begin(m_ready_fds_thread), std::end(m_ready_fds_thread),
+        [](auto &ready_socks) {
+            sockinfo *sk;
+            while (!ready_socks.m_ready_sockets.empty()) {
+                sk = ready_socks.m_ready_sockets.get_and_pop_front();
+                sk->m_epoll_event_flags_thread = 0;
+            }
+        });
+
+    unlock_all();
 
     xlio_stats_instance_remove_epoll_block(&m_stats->stats);
     delete[] m_p_offloaded_fds;
+}
+
+void epfd_info::lock_all()
+{
+    lock();
+    if (safe_mce_sys().xlio_threads > 0U) {
+        for_each(std::begin(m_ready_fds_thread), std::end(m_ready_fds_thread),
+            [](auto &ready_socks) {
+                ready_socks.m_ready_sockets_lock.lock();
+            }
+        );
+    }
+}
+
+void epfd_info::unlock_all()
+{
+    unlock();
+    if (safe_mce_sys().xlio_threads > 0U) {
+        for_each(std::begin(m_ready_fds_thread), std::end(m_ready_fds_thread),
+            [](auto &ready_socks) {
+                ready_socks.m_ready_sockets_lock.unlock();
+            }
+        );
+    }
+}
+
+void epfd_info::lock_thread(sockinfo *sock)
+{
+    lock();
+    if (sock) {
+        m_ready_fds_thread[sock->get_thread_idx()].m_ready_sockets_lock.lock();
+    }
+}
+
+void epfd_info::unlock_thread(sockinfo *sock)
+{
+    unlock();
+    if (sock) {
+        m_ready_fds_thread[sock->get_thread_idx()].m_ready_sockets_lock.unlock();
+    }
 }
 
 int epfd_info::ctl(int op, int fd, epoll_event *event)
@@ -147,7 +195,8 @@ int epfd_info::ctl(int op, int fd, epoll_event *event)
     // YossiE TODO make "event table" - and add index in that table instead
     // of real event (in SYSCALL(epoll_ctl)). must have this because fd's can
     // be added after the cq.
-    lock();
+    sockinfo *sock = fd_collection_get_sockfd(fd);
+    lock_thread(sock);
 
     switch (op) {
     case EPOLL_CTL_ADD:
@@ -165,7 +214,7 @@ int epfd_info::ctl(int op, int fd, epoll_event *event)
         break;
     }
 
-    unlock();
+    unlock_thread(sock);
     return ret;
 }
 
@@ -251,11 +300,11 @@ int epfd_info::add_fd(int fd, epoll_event *event)
 
         // NOTE: when supporting epoll on epfd, need to add epfd ring list
         // NOTE: when having rings in pipes, need to overload add_epoll_context
-        unlock();
+        unlock_thread(temp_sock_fd_api);
         m_ring_map_lock.lock();
         ret = temp_sock_fd_api->add_epoll_context(this);
         m_ring_map_lock.unlock();
-        lock();
+        lock_thread(temp_sock_fd_api);
 
         if (ret < 0) {
             switch (errno) {
@@ -283,11 +332,11 @@ int epfd_info::add_fd(int fd, epoll_event *event)
         m_fd_offloaded_list.push_back(temp_sock_fd_api);
         fd_rec.offloaded_index = m_n_offloaded_fds;
         temp_sock_fd_api->m_fd_rec = fd_rec;
-
         // if the socket is ready, add it to ready events
         uint32_t events = 0;
         int errors;
         if ((event->events & EPOLLIN) && temp_sock_fd_api->is_readable_thread()) {
+            __log_dbg("Found pending IN events fd=%d", temp_sock_fd_api->get_fd());
             events |= EPOLLIN;
         }
         if ((event->events & EPOLLOUT) && temp_sock_fd_api->is_writeable()) {
@@ -415,11 +464,11 @@ int epfd_info::del_fd(int fd, bool passthrough)
         /* Firstly remove epoll context from socket
          * to avoid new events insertion into m_ready_fds queue
          */
-        unlock();
+        unlock_thread(temp_sock_fd_api);
         m_ring_map_lock.lock();
         temp_sock_fd_api->remove_epoll_context(this);
         m_ring_map_lock.unlock();
-        lock();
+        lock_thread(temp_sock_fd_api);
 
         m_fd_offloaded_list.erase(temp_sock_fd_api);
         if (passthrough) {
@@ -429,10 +478,7 @@ int epfd_info::del_fd(int fd, bool passthrough)
             m_fd_non_offloaded_map[fd].offloaded_index = -1;
         }
 
-        if (temp_sock_fd_api->ep_ready_fd_node.is_list_member()) {
-            temp_sock_fd_api->m_epoll_event_flags = 0;
-            m_ready_fds.erase(temp_sock_fd_api);
-        }
+        remove_socket_from_ready_list(temp_sock_fd_api);
 
         // check if the index of fd, which is being removed, is the last one.
         // if does, it is enough to decrease the val of m_n_offloaded_fds in order
@@ -529,11 +575,7 @@ int epfd_info::mod_fd(int fd, epoll_event *event)
     }
 
     if (event->events == 0 || events == 0) {
-        // TODO: Handle XLIOThread mode.
-        if (temp_sock_fd_api && temp_sock_fd_api->ep_ready_fd_node.is_list_member()) {
-            temp_sock_fd_api->m_epoll_event_flags = 0;
-            m_ready_fds.erase(temp_sock_fd_api);
-        }
+        remove_socket_from_ready_list(temp_sock_fd_api);
     }
 
     __log_func("fd %d modified in epfd %d with events=%#x and data=%#x", fd, m_epfd, event->events,
@@ -541,11 +583,29 @@ int epfd_info::mod_fd(int fd, epoll_event *event)
     return 0;
 }
 
+void epfd_info::remove_socket_from_ready_list(sockinfo *sk)
+{
+    if (sk) {
+        if (sk->ep_ready_fd_node.is_list_member()) {
+            __log_dbg("Removing fd=%d from epoll=%d (ready_fds)",
+                      sk->get_fd(), get_epoll_fd());
+            sk->m_epoll_event_flags = 0;
+            m_ready_fds.erase(sk);
+        }
+        if (sk->socket_fd_list_node.is_list_member()) {
+            __log_dbg("Removing fd=%d from epoll =%d (thread_ready_fds)",
+                      sk->get_fd(), get_epoll_fd());
+            sk->m_epoll_event_flags_thread = 0;
+            m_ready_fds_thread[sk->get_thread_idx()].m_ready_sockets.erase(sk);
+        }
+    }
+}
+
 epoll_fd_rec *epfd_info::get_fd_rec(int fd)
 {
     epoll_fd_rec *fd_rec = nullptr;
     sockinfo *temp_sock_fd_api = fd_collection_get_sockfd(fd);
-    lock();
+    lock_thread(temp_sock_fd_api);
 
     if (temp_sock_fd_api && temp_sock_fd_api->get_epoll_context_fd() == m_epfd) {
         fd_rec = &temp_sock_fd_api->m_fd_rec;
@@ -556,50 +616,57 @@ epoll_fd_rec *epfd_info::get_fd_rec(int fd)
         }
     }
 
-    unlock();
+    unlock_thread(temp_sock_fd_api);
     return fd_rec;
 }
 
 void epfd_info::fd_closed(int fd, bool passthrough)
 {
-    lock();
+    sockinfo *temp_sock_fd_api = fd_collection_get_sockfd(fd);
+    lock_thread(temp_sock_fd_api);
     if (get_fd_rec(fd)) {
         del_fd(fd, passthrough);
     }
-    unlock();
+    unlock_thread(temp_sock_fd_api);
 }
 
 void epfd_info::insert_epoll_event_cb(sockinfo *sock_fd, uint32_t event_flags)
 {
-    lock();
     // EPOLLHUP | EPOLLERR are reported without user request
     if (event_flags & (sock_fd->m_fd_rec.events | EPOLLHUP | EPOLLERR)) {
         insert_epoll_event(sock_fd, event_flags);
     }
-    unlock();
 }
 
 void epfd_info::insert_epoll_event(sockinfo *sock_fd, uint32_t event_flags)
 {
-    // assumed lock
-    if (sock_fd->ep_ready_fd_node.is_list_member()) {
-        sock_fd->m_epoll_event_flags |= event_flags;
+    if (safe_mce_sys().xlio_threads > 0) {
+        thread_ready_sockets &ready_sockets = m_ready_fds_thread[sock_fd->get_thread_idx()];
+        ready_sockets.m_ready_sockets_lock.lock();
+        if (sock_fd->socket_fd_list_node.is_list_member()) {
+            __log_dbg("Adding inlist event %u (fd=%d)", event_flags, sock_fd->get_fd());
+            sock_fd->m_epoll_event_flags_thread |= event_flags;
+        } else {
+            __log_dbg("Adding event %u (fd=%d)", event_flags, sock_fd->get_fd());
+            sock_fd->m_epoll_event_flags_thread = event_flags;
+            ready_sockets.m_ready_sockets.push_back(sock_fd);
+        }
+        // Needs some atomic probably for threaded mode.
+        //if (++m_events_for_wakeup >= safe_mce_sys().cq_moderation_count) {
+            do_wakeup();
+        //}
+        ready_sockets.m_ready_sockets_lock.unlock();
     } else {
-        sock_fd->m_epoll_event_flags = event_flags;
+        lock();
+        if (sock_fd->ep_ready_fd_node.is_list_member()) {
+            sock_fd->m_epoll_event_flags |= event_flags;
+        } else {
+            sock_fd->m_epoll_event_flags = event_flags;
 
-        m_ready_fds.push_back(sock_fd);
-    }
-}
-
-void epfd_info::move_thread_ready_sockets(ep_ready_fd_list_t &ready_thread_fds)
-{
-    lock();
-    m_events_for_wakeup += static_cast<uint32_t>(ready_thread_fds.size());
-    m_ready_fds.splice_tail(ready_thread_fds);
-    unlock();
-
-    if (m_events_for_wakeup >= safe_mce_sys().cq_moderation_count) {
+            m_ready_fds.push_back(sock_fd);
+        }
         do_wakeup();
+        unlock();
     }
 }
 

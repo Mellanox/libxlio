@@ -48,7 +48,7 @@ public:
     xlio_thread();
     ~xlio_thread();
 
-    void start_thread();
+    void start_thread(size_t thread_idx);
     void stop_thread();
     int add_listen_socket(sockinfo_tcp *si);
     int add_accepted_socket(sockinfo_tcp *si);
@@ -62,7 +62,7 @@ private:
                              struct xlio_buf *buf);
     static void socket_accept_cb(xlio_socket_t sock, xlio_socket_t parent,
                                  uintptr_t parent_userdata_sq);
-    static void xlio_thread_main(xlio_thread& t);
+    static void xlio_thread_main(xlio_thread& t, size_t thread_idx);
 
     void xlio_thread_loop();
     void xlio_thread_measure_idle(bool last_process_idle);

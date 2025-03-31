@@ -50,6 +50,11 @@ public:
     epfd_info(int epfd, int size);
     ~epfd_info();
 
+    void lock_all();
+    void unlock_all();
+    void lock_thread(sockinfo *sock);
+    void unlock_thread(sockinfo *sock);
+
     /**
      * Lock and perform epoll_ctl.
      * Arguments the same as for epoll_ctl()
@@ -116,14 +121,19 @@ public:
     void increase_ring_ref_count(ring *ring);
     void decrease_ring_ref_count(ring *ring);
 
-    void move_thread_ready_sockets(ep_ready_fd_list_t &ready_thread_fds);
-
 private:
     int add_fd(int fd, epoll_event *event);
     int del_fd(int fd, bool passthrough = false);
     int mod_fd(int fd, epoll_event *event);
+    void remove_socket_from_ready_list(sockinfo *sk);
 
 public:
+    struct thread_ready_sockets {
+        xlio_list_t<sockinfo, sockinfo::socket_fd_list_node_offset> m_ready_sockets;
+        lock_spin_recursive m_ready_sockets_lock;
+    };
+
+    std::vector<thread_ready_sockets> m_ready_fds_thread;
     ep_ready_fd_list_t m_ready_fds;
     list_node<epfd_info, epfd_info::epfd_info_node_offset> epfd_info_node;
 

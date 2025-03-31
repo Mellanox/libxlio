@@ -116,6 +116,7 @@ int xlio_thread::add_connect_socket(sockinfo_tcp *si, const struct sockaddr *to,
 
 void xlio_thread::xlio_thread_loop()
 {
+    m_running.store(true);
     while (m_running.load(std::memory_order_relaxed)) {
         bool idle = (m_poll_group->process() < 0);
 
@@ -125,7 +126,7 @@ void xlio_thread::xlio_thread_loop()
     }
 }
 
-void xlio_thread::xlio_thread_main(xlio_thread& t)
+void xlio_thread::xlio_thread_main(xlio_thread& t, size_t thread_idx)
 {
     xt_loginfo("Started");
 
@@ -137,7 +138,7 @@ void xlio_thread::xlio_thread_main(xlio_thread& t)
         nullptr
     };
 
-    t.m_poll_group = new poll_group(&pollg_attr);
+    t.m_poll_group = new poll_group(&pollg_attr, thread_idx);
 
     t.xlio_thread_loop();
 
@@ -146,11 +147,15 @@ void xlio_thread::xlio_thread_main(xlio_thread& t)
     xt_loginfo("Terminated");
 }
 
-void xlio_thread::start_thread()
+void xlio_thread::start_thread(size_t thread_idx)
 {
     xt_loginfo("Starting XLIO thread");
-    m_running.store(true);
-    m_thread = std::move(std::thread(xlio_thread_main, std::ref(*this)));
+
+    m_thread = std::move(std::thread(xlio_thread_main, std::ref(*this), thread_idx));
+    while (!m_running.load(std::memory_order_relaxed)) {
+        // We must wait for the thread to start to avoid races of API usage while
+        // the thread can still not be ready.
+    }
 }
 
 void xlio_thread::stop_thread()

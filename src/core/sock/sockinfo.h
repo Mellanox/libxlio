@@ -327,9 +327,6 @@ public:
     virtual void set_immediate_os_sample() = 0;
     virtual void unset_immediate_os_sample() = 0;
 
-    virtual void add_epoll_ctx_cb() = 0;
-    virtual void remove_epoll_ctx_cb(epfd_info *econtext) = 0;
-
     // In some cases we need the socket can't be deleted immidiatly
     //(for example STREAME sockets)
     // This prepares the socket for termination and return true if the
@@ -350,6 +347,8 @@ public:
     void set_ec_ring_list_next(sockinfo *sock) { m_socketxtreme_ring_list_next = sock; }
 
     bool has_epoll_context() { return (!safe_mce_sys().enable_socketxtreme && m_econtext); }
+    void set_thread_idx(size_t thread_idx) { m_thread_idx = thread_idx; }
+    size_t get_thread_idx() const { return m_thread_idx; }
     bool get_rx_pkt_ready_list_count() const { return m_n_rx_pkt_ready_list_count; }
     int get_fd() const { return m_fd; };
     sa_family_t get_family() { return m_family; }
@@ -462,7 +461,6 @@ protected:
     void add_cqfd_to_sock_rx_epfd(ring *p_ring);
     void remove_cqfd_from_sock_rx_epfd(ring *p_ring);
     int os_wait_sock_rx_epfd(epoll_event *ep_events, int maxevents);
-    virtual void insert_thread_epoll_event(uint64_t events) = 0;
     int handle_exception_flow();
 
     // Attach to all relevant rings for offloading receive flows - always used from slow path
@@ -525,6 +523,7 @@ protected:
 
     // End of second cache line
 
+    size_t m_thread_idx = 0U;
     epfd_info *m_econtext = nullptr;
     wakeup_pipe m_sock_wakeup_pipe;
     int m_rx_epfd;
@@ -538,7 +537,7 @@ public:
     list_node<sockinfo, sockinfo::pending_to_remove_node_offset> pending_to_remove_node;
     epoll_fd_rec m_fd_rec;
     uint32_t m_epoll_event_flags = 0U;
-    std::atomic_uint32_t m_epoll_event_flags_atomic{0};
+    uint32_t m_epoll_event_flags_thread = 0U;
 
 protected:
     int m_fd; // identification information <socket fd>

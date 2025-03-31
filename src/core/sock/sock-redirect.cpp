@@ -742,9 +742,7 @@ inline int epoll_wait_helper(int __epfd, struct epoll_event *__events, int __max
         epoll_wait_call epcall(extra_events_buffer, nullptr, __epfd, __events, __maxevents,
                                __timeout, __sigmask);
 
-        int rc = safe_mce_sys().xlio_threads == 0U
-            ? epcall.get_current_events() // returns ready nfds
-            : epcall.get_current_events_thread();
+        int rc = epcall.get_current_events(); // returns ready nfds
 
         if (rc <= 0) {
             // if no ready nfds available then check all lower level queues (XLIO ring's and OS

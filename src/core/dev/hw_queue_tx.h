@@ -241,9 +241,10 @@ private:
     {
         unsigned p_i = p - m_sq_wqe_idx_to_prop;
         unsigned prev_i = prev - m_sq_wqe_idx_to_prop;
-        return (p_i != m_sq_wqe_prop_last_signalled) &&
+        return ((p_i != m_sq_wqe_prop_last_signalled) &&
             ((m_tx_num_wr + p_i - m_sq_wqe_prop_last_signalled) % m_tx_num_wr <
-             (m_tx_num_wr + prev_i - m_sq_wqe_prop_last_signalled) % m_tx_num_wr);
+             (m_tx_num_wr + prev_i - m_sq_wqe_prop_last_signalled) % m_tx_num_wr)) ||
+            (prev_i == m_sq_wqe_prop_last_signalled);
     }
 
 #if defined(DEFINED_UTLS)

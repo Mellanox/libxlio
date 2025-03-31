@@ -64,6 +64,7 @@ struct job_desc {
 class poll_group {
 public:
     poll_group(const struct xlio_poll_group_attr *attr);
+    poll_group(const struct xlio_poll_group_attr *attr, size_t xlio_thread_idx);
     ~poll_group();
     static void destroy_all_groups();
 
@@ -86,12 +87,10 @@ public:
     unsigned get_flags() const { return m_group_flags; }
     event_handler_manager_local *get_event_handler() const { return m_event_handler.get(); }
     tcp_timers_collection *get_tcp_timers() const { return m_tcp_timers.get(); }
-
+    size_t get_xlio_thread_idx() const { return m_xlio_thread_idx; }
     mem_buf_desc_t *get_tx_buffer();
     void return_tx_buffer(mem_buf_desc_t *buf);
     void return_rx_buffers(mem_buf_desc_t *first, mem_buf_desc_t*last);
-    void add_epoll_ctx(epfd_info *epfd, sockinfo_tcp &sock);
-    void remove_epoll_ctx(epfd_info *epfd);
 
     bool add_ack_ready_socket(sockinfo_tcp &sock) { return m_ack_ready_list.push(&sock); }
 
@@ -126,10 +125,9 @@ private:
     multilock m_group_lock;
     sock_fd_api_list_t m_sockets_list;
     std::vector<std::pair<std::unique_ptr<ring_alloc_logic_attr>, net_device_val *>> m_rings_ref;
-
-    std::unordered_map<epfd_info *, std::pair<uint32_t, ep_ready_fd_list_t*>> m_epoll_ctx;
     xlio_lockless_stack<sockinfo_tcp, sockinfo_tcp::ack_thread_ready_list> m_ack_ready_list;
 
+    size_t m_xlio_thread_idx = 0U;
     lock_spin m_job_q_lock;
     std::queue<job_desc> m_job_q;
     std::queue<job_desc> m_rem_socket_jobs;

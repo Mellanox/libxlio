@@ -727,7 +727,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_ZC_CACHE_THRESHOLD       (10LU * 1024 * 1024 * 1024) // 10GB
 #define MCE_DEFAULT_TX_BUF_SIZE              (0)
 #define MCE_DEFAULT_TX_NUM_WRE               (32768)
-#define MCE_DEFAULT_TX_NUM_WRE_TO_SIGNAL     (64)
+#define MCE_DEFAULT_TX_NUM_WRE_TO_SIGNAL     (1)
 #define MCE_DEFAULT_TX_MAX_INLINE            (204) //+18(always inline ETH header) = 222
 #define MCE_DEFAULT_TX_BUILD_IP_CHKSUM       (true)
 #define MCE_DEFAULT_TX_MC_LOOPBACK           (true)

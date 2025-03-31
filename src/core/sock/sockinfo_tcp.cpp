@@ -404,21 +404,6 @@ void sockinfo_tcp::rx_add_ring_cb(ring *p_ring)
     sockinfo::rx_add_ring_cb(p_ring);
 }
 
-void sockinfo_tcp::add_epoll_ctx_cb()
-{
-    if (m_p_group) {
-        m_p_group->add_epoll_ctx(m_econtext, *this);
-    }
-}
-
-void sockinfo_tcp::remove_epoll_ctx_cb(epfd_info *econtext)
-{
-    if (m_p_group) {
-        m_p_group->remove_epoll_ctx(econtext);
-        m_p_thread_ready_socket_list = nullptr;
-    }
-}
-
 void sockinfo_tcp::set_xlio_socket_thread(poll_group *group)
 {
     std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
@@ -695,18 +680,6 @@ err_t sockinfo_tcp::rx_lwip_cb_thread_socket(void *arg, struct tcp_pcb *pcb, str
     conn->m_sock_wakeup_pipe.do_wakeup();
 
     return ERR_OK;
-}
-
-void sockinfo_tcp::insert_thread_epoll_event(uint64_t events)
-{
-    if (likely(m_p_group && m_p_thread_ready_socket_list)) {
-        if (!m_epoll_event_flags_atomic.fetch_or(static_cast<uint32_t>(events), std::memory_order::memory_order_acquire)) {
-            m_p_thread_ready_socket_list->push_back(this);
-        }
-    } else {
-        si_tcp_logwarn("Adding regular event for XLIO Thread socket");
-        m_econtext->insert_epoll_event_cb(this, static_cast<uint32_t>(events));
-    }
 }
 
 void sockinfo_tcp::err_lwip_cb_set_conn_err(err_t err)

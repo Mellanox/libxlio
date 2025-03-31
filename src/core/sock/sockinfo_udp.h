@@ -151,10 +151,6 @@ public:
 
     bool is_readable_thread() override { return is_readable(nullptr, nullptr); }
 
-    void insert_thread_epoll_event(uint64_t events) override { 
-        m_econtext->insert_epoll_event_cb(this, static_cast<uint32_t>(events));
-    }
-
     /**
      * Arm the event channel(s) assosiated with this sockinfo
      * Fill the fd_set (p_rxfds) with the correct fd channel values and the p_nfds with the (max_fd
@@ -175,9 +171,6 @@ public:
     void rx_add_ring_cb(ring *p_ring) override;
     void rx_del_ring_cb(ring *p_ring) override;
     int rx_verify_available_data() override;
-
-    void add_epoll_ctx_cb() override {};
-    void remove_epoll_ctx_cb(epfd_info *) override {};
 
     /**
      *	This callback will handle ready rx packet notification,

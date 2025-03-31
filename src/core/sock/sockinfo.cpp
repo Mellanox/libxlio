@@ -331,11 +331,7 @@ int sockinfo::get_epoll_context_fd()
 void sockinfo::insert_epoll_event(uint64_t events)
 {
     if (has_epoll_context()) {
-        if (safe_mce_sys().xlio_threads > 0U) {
-            insert_thread_epoll_event(events);
-        } else {
-            m_econtext->insert_epoll_event_cb(this, static_cast<uint32_t>(events));
-        }
+        m_econtext->insert_epoll_event_cb(this, static_cast<uint32_t>(events));
     }
 }
 
@@ -1300,7 +1296,8 @@ void sockinfo::do_rings_migration_rx(resource_allocation_key &old_key)
 
 void sockinfo::consider_rings_migration_rx()
 {
-    if (m_ring_alloc_logic_rx.is_logic_support_migration()) {
+    if (safe_mce_sys().xlio_threads == 0U &&
+        m_ring_alloc_logic_rx.is_logic_support_migration()) {
         if (!m_rx_migration_lock.trylock()) {
             if (m_ring_alloc_logic_rx.should_migrate_ring()) {
                 ring_alloc_logic_attr old_key(*m_ring_alloc_logic_rx.get_key());
@@ -1322,7 +1319,6 @@ int sockinfo::add_epoll_context(epfd_info *epfd)
     if (!m_econtext && !safe_mce_sys().enable_socketxtreme) {
         // This socket is not registered to any epfd
         m_econtext = epfd;
-        add_epoll_ctx_cb();
     } else {
         // Currently XLIO does not support more then 1 epfd listed
         errno = (m_econtext == epfd) ? EEXIST : ENOMEM;
@@ -1356,7 +1352,6 @@ unlock_locks:
 void sockinfo::remove_epoll_context(epfd_info *epfd)
 {
     m_rx_ring_map_lock.lock();
-    decltype(m_econtext) temp_ectx = nullptr;
     lock_rx_q();
 
     if (!has_epoll_context() || m_econtext != epfd) {
@@ -1373,7 +1368,6 @@ void sockinfo::remove_epoll_context(epfd_info *epfd)
         }
     }
 
-    temp_ectx = m_econtext;
     m_econtext = NULL;
 
     if (safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_EPOLL_ONLY) {
@@ -1381,9 +1375,6 @@ void sockinfo::remove_epoll_context(epfd_info *epfd)
     }
 
     unlock_rx_q();
-    if (temp_ectx) {
-        remove_epoll_ctx_cb(temp_ectx);
-    }
     m_rx_ring_map_lock.unlock();
 }
 

@@ -44,8 +44,9 @@ xlio_thread_manager::xlio_thread_manager(size_t threads)
         m_xlio_threads = std::move(std::make_unique<xlio_thread[]>(m_threads_num));
     }
 
+    size_t thread_idx = 0U;
     std::for_each(m_xlio_threads.get(), m_xlio_threads.get() + m_threads_num,
-        [](xlio_thread& t) { t.start_thread(); });
+        [&thread_idx](xlio_thread& t) { t.start_thread(thread_idx++); });
 }
 
 xlio_thread_manager::~xlio_thread_manager()

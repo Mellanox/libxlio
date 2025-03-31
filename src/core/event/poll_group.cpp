@@ -92,6 +92,12 @@ poll_group::poll_group(const struct xlio_poll_group_attr *attr)
     grp_logdbg("Polling group %p created", this);
 }
 
+poll_group::poll_group(const struct xlio_poll_group_attr *attr, size_t xlio_thread_idx)
+    : poll_group(attr)
+{
+    m_xlio_thread_idx = xlio_thread_idx;
+}
+
 poll_group::~poll_group()
 {
     s_poll_groups_lock.lock();
@@ -174,42 +180,30 @@ int poll_group::process()
         all_drained = 0;
     }
 
-    {
-        std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
-        std::for_each(std::begin(m_epoll_ctx), std::end(m_epoll_ctx),
-                    [&all_drained](auto itr) {
-            if (itr.second.second->size() > 0) {
-                itr.first->move_thread_ready_sockets(*itr.second.second);
-                itr.first->do_wakeup();
-                all_drained = 0;
-            }
-        });
+    m_job_q_lock.lock();
+    m_all_jobs_temp.swap(m_job_q);
+    m_job_q_lock.unlock();
 
-        m_job_q_lock.lock();
-        m_all_jobs_temp.swap(m_job_q);
-        m_job_q_lock.unlock();
-
-        bool wastx = false;
-        while (!m_all_jobs_temp.empty()) {
-            job_desc jd = m_all_jobs_temp.front();
-            m_all_jobs_temp.pop();
-            if (jd.job_type == JOB_TYPE_TX) {
-                const struct iovec iov = {.iov_base = reinterpret_cast<void *>(jd.buf->p_buffer), .iov_len = jd.buf->sz_data};
-                jd.sock->tcp_tx_express(&iov, 1, LKEY_TX_DEFAULT, 0, reinterpret_cast<void *>(jd.buf));
-                wastx = true;
-            } else if (jd.job_type == JOB_TYPE_CLOSE_SOCK) {
-                m_rem_socket_jobs.push((job_desc){JOB_TYPE_CLOSE_SOCK,jd.sock,nullptr});
-            }
-        }
-
-        if (wastx) {
-            flush_no_lock();
-        }
-
-        if (handle_ack_ready_sockets()) {
-            all_drained = 0;
+    bool wastx = false;
+    while (!m_all_jobs_temp.empty()) {
+        job_desc jd = m_all_jobs_temp.front();
+        m_all_jobs_temp.pop();
+        if (jd.job_type == JOB_TYPE_TX) {
+            const struct iovec iov = {.iov_base = reinterpret_cast<void *>(jd.buf->p_buffer), .iov_len = jd.buf->sz_data};
+            jd.sock->tcp_tx_express(&iov, 1, LKEY_TX_DEFAULT, 0, reinterpret_cast<void *>(jd.buf));
             wastx = true;
+        } else if (jd.job_type == JOB_TYPE_CLOSE_SOCK) {
+            m_rem_socket_jobs.push((job_desc){JOB_TYPE_CLOSE_SOCK,jd.sock,nullptr});
         }
+    }
+
+    if (handle_ack_ready_sockets()) {
+        all_drained = 0;
+        wastx = true;
+    }
+
+    if (wastx) {
+        flush();
     }
 
     while (!m_rem_socket_jobs.empty()) {
@@ -217,11 +211,6 @@ int poll_group::process()
         m_rem_socket_jobs.pop();
         close_socket(jd.sock, true);
     }
-
-    //if (all_drained && safe_mce_sys().cq_moderation_count > 0U) {
-    //    std::for_each(std::begin(m_epoll_ctx), std::end(m_epoll_ctx),
-    //                  [](auto itr) { itr.first->do_wakeup(); });
-    //}
 
     return all_drained;
 }
@@ -380,29 +369,4 @@ bool poll_group::clear_rx_buffers()
     }
 
     return false;
-}
-
-void poll_group::add_epoll_ctx(epfd_info *epfd, sockinfo_tcp &sock)
-{
-    std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
-    auto res = m_epoll_ctx.emplace(
-        epfd, std::make_pair<uint32_t, ep_ready_fd_list_t*>(1U, nullptr));
-    if (res.second) {
-        res.first->second.second = new ep_ready_fd_list_t;
-    } else {
-        ++(res.first->second.first);
-    }
-    sock.set_thread_ready_socket_list(res.first->second.second);
-}
-
-void poll_group::remove_epoll_ctx(epfd_info *epfd)
-{
-    std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
-    auto itr = m_epoll_ctx.find(epfd);
-    if (itr != m_epoll_ctx.end()) {
-        if (!--(itr->second.first)) {
-            delete itr->second.second;
-            m_epoll_ctx.erase(itr);
-        }
-    }
 }
