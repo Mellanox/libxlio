@@ -473,6 +473,14 @@ public:
     int is_locked_by_me() override { return 1; }
 };
 
+// Users of lock_dummy may wish to alignas(64) to place this lock in in a different cache-line and
+// prevent false sharing
+struct alignas(64) padded_lock_dummy {
+    lock_dummy lock;
+    // Padding to fill a full cache line
+    char padding[64 - sizeof(lock_dummy)];
+};
+
 static inline void lock_deleter_func(lock_base *lock)
 {
     lock->delete_obj();
