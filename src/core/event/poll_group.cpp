@@ -294,6 +294,7 @@ void poll_group::remove_socket(sockinfo_tcp *si)
 {
     std::lock_guard<decltype(m_group_lock)> lock(m_group_lock);
 
+    g_p_fd_collection->remove_from_all_epfds(si->get_fd(), false);
     g_p_fd_collection->clear_socket(si->get_fd());
     m_sockets_list.erase(si);
 
