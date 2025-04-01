@@ -417,8 +417,7 @@ int io_mux_call::call()
 
     __log_funcall("");
 
-    if (!safe_mce_sys().select_poll_os_force // TODO: evaluate/consider this logic
-        && (*m_p_num_all_offloaded_fds == 0)) {
+    if (*m_p_num_all_offloaded_fds == 0) {
         // 1st scenario
         timer_update();
         wait_os(false);
