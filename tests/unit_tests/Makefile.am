@@ -92,7 +92,6 @@ unit_tests_SOURCES = \
 	$(top_builddir)/src/core/config/descriptor_providers/json_descriptor_provider.cpp \
 	$(top_builddir)/src/core/config/descriptors/parameter_descriptor.cpp \
 	$(top_builddir)/src/core/config/descriptors/config_descriptor.cpp \
-    $(top_builddir)/src/core/config/utils/json_parsing.cpp \
 	$(top_builddir)/src/core/config/config_manager.cpp
 
 

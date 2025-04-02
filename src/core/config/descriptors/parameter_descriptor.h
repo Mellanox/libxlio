@@ -50,6 +50,8 @@ public:
     parameter_descriptor(parameter_descriptor &&pd) noexcept;
     parameter_descriptor(const parameter_descriptor &pd);
 
+    void add_string_mapping(const std::string &str, const std::experimental::any &val);
+
     // Validates the given value against:
     //    1) type_index check
     //    2) all constraints
@@ -59,6 +61,11 @@ public:
 
     using constraint_t = std::function<bool(const std::experimental::any &)>;
     void add_constraint(constraint_t c);
+
+    // Clear all constraints
+    void clear_constraints();
+
+    std::experimental::any get_value(const std::experimental::any &val) const;
 
 private:
     std::experimental::any m_default_value;
@@ -71,4 +78,7 @@ private:
     // (In a real system, these could be pointers to constraint objects
     //  or std::function<bool(const std::experimental::any&)>, etc.)
     std::vector<constraint_t> m_constraints;
+
+    // Map of string values to their corresponding values. useful for enums.
+    std::map<std::string, std::experimental::any> m_string_mapping;
 };

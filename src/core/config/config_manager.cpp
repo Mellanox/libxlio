@@ -59,6 +59,12 @@ config_manager::config_manager()
     initialize_manager(std::move(loaders), std::make_unique<json_descriptor_provider>());
 }
 
+config_manager::config_manager(std::queue<std::unique_ptr<loader>> &&value_loaders,
+                               std::unique_ptr<descriptor_provider> descriptor_provider)
+{
+    initialize_manager(std::move(value_loaders), std::move(descriptor_provider));
+}
+
 void config_manager::initialize_manager(std::queue<std::unique_ptr<loader>> &&value_loaders,
                                         std::unique_ptr<descriptor_provider> descriptor_provider)
 {
@@ -66,12 +72,11 @@ void config_manager::initialize_manager(std::queue<std::unique_ptr<loader>> &&va
         throw_xlio_exception("loader/descriptor_provider cannot be null");
     }
 
-    // 1) Load raw config data - first in queue means higher priority.
+    // 1) Load raw config data - first in queue means higher priority
     std::map<std::string, std::experimental::any> aggregated_config_data;
     while (!value_loaders.empty()) {
         auto loaded_data = value_loaders.front()->load_all();
         aggregated_config_data.insert(loaded_data.begin(), loaded_data.end());
-
         value_loaders.pop();
     }
 
@@ -84,14 +89,22 @@ void config_manager::initialize_manager(std::queue<std::unique_ptr<loader>> &&va
     validate_config();
 }
 
-config_manager::config_manager(std::queue<std::unique_ptr<loader>> &&value_loaders,
-                               std::unique_ptr<descriptor_provider> descriptor_provider)
+// Formats a value for error messages based on its type
+static std::string format_value_for_error(const std::experimental::any &value)
 {
-    initialize_manager(std::move(value_loaders), std::move(descriptor_provider));
+    if (value.type() == typeid(int64_t)) {
+        return " (integer value: " + std::to_string(std::experimental::any_cast<int64_t>(value)) +
+            ")";
+    } else if (value.type() == typeid(std::string)) {
+        return " (string value: " + std::experimental::any_cast<std::string>(value) + ")";
+    } else if (value.type() == typeid(bool)) {
+        return " (boolean value: " +
+            std::string(std::experimental::any_cast<bool>(value) ? "true" : "false") + ")";
+    }
+    return "";
 }
 
 // Validate all config items against their descriptors & constraints.
-// A real application might do more elaborate error handling/logging.
 void config_manager::validate_config() const
 {
     // For each key-value in config_data, see if we have descriptor constraints
@@ -101,22 +114,33 @@ void config_manager::validate_config() const
 
         // Retrieve the descriptor (could be empty if not found)
         auto param_desc = m_config_bundle.m_config_descriptor.get_parameter(key);
-        // If there's a specific type required, check constraints
-        if (!param_desc.validate(value)) {
-            // Throw an exception if validation fails
-            throw_xlio_exception("Validation failed for key: " + key);
+
+        try {
+            // If there's a specific type required, check constraints
+            if (!param_desc.validate(value)) {
+                // Validation failed - build appropriate error message
+                std::string error_msg =
+                    "Validation failed for key: " + key + format_value_for_error(value);
+                throw_xlio_exception(error_msg);
+            }
+        } catch (const std::experimental::bad_any_cast &e) {
+            // Type mismatch error
+            throw_xlio_exception("Type mismatch for key: " + key + " (" + e.what() + ")");
         }
     }
 }
-
 std::experimental::any config_manager::get_value_as_any(const std::string &key) const
 {
     // Try to find the key in the loaded data
-    auto it = m_config_bundle.m_config_data.find(key);
+    const auto it = m_config_bundle.m_config_data.find(key);
+
+    // Get the parameter descriptor once
+    const parameter_descriptor param = m_config_bundle.m_config_descriptor.get_parameter(key);
+
     if (it == m_config_bundle.m_config_data.end()) {
         // Not found in data. Fallback to descriptor's default.
-        return m_config_bundle.m_config_descriptor.get_parameter(key).default_value();
+        return param.default_value();
     }
 
-    return (it->second);
+    return param.get_value(it->second);
 }

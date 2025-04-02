@@ -33,7 +33,6 @@
  */
 
 #include "json_loader.h"
-#include "../utils/json_parsing.h"
 #include "core/util/xlio_exception.h"
 #include <queue>
 #include <tuple>
@@ -41,8 +40,28 @@
 #include <typeindex>
 #include <json-c/json.h>
 
-static std::experimental::any to_any_value(json_object *obj);
-static std::map<std::string, std::experimental::any> flatten_json_to_parameters(json_object *root);
+static std::experimental::any to_any_value(json_object *obj)
+{
+    if (obj == nullptr) {
+        throw_xlio_exception("obj can't be nullptr");
+    }
+
+    json_type type = json_object_get_type(obj);
+    switch (type) {
+    case json_type_boolean:
+        return bool(json_object_get_boolean(obj));
+    case json_type_int:
+        return json_object_get_int64(obj);
+    case json_type_string: {
+        const char *s = json_object_get_string(obj);
+        return std::string(s ? s : "");
+    }
+    // For object/array, we flatten them iteratively, so this is unexpected behavior.
+    // For double - is simply not supported in the config.
+    default:
+        throw_xlio_exception("unsupported/unexpected type " + std::to_string(type));
+    }
+}
 
 json_loader::json_loader(const char *file_path)
     : m_file_path(file_path)
@@ -73,7 +92,42 @@ std::map<std::string, std::experimental::any> json_loader::load_all() &
     }
 
     try {
-        m_data = flatten_json_to_parameters(root_obj);
+        std::queue<std::pair<std::string, json_object *>> queue;
+        queue.push({"", root_obj});
+
+        while (!queue.empty()) {
+            auto front = queue.front();
+            queue.pop();
+
+            std::string current_prefix = front.first;
+            json_object *current_obj = front.second;
+            if (!current_obj) {
+                continue;
+            }
+
+            // Check the type
+            json_type type = json_object_get_type(current_obj);
+            switch (type) {
+            case json_type_object: {
+                // For objects, iterate over each key and add to the queue
+                json_object_object_foreach(current_obj, key, val)
+                {
+                    // Build new prefix. If empty, just the key; else prefix + "." + key
+                    const std::string new_prefix =
+                        (current_prefix.empty() ? key : (current_prefix + "." + key));
+                    queue.push({new_prefix, val});
+                }
+                break;
+            }
+            case json_type_array: {
+                throw_xlio_exception("Arrays in config are not supported.");
+                break;
+            }
+            default:
+                m_data[current_prefix] = to_any_value(current_obj);
+                break;
+            }
+        }
     } catch (...) {
         json_object_put(root_obj);
         throw;
@@ -82,39 +136,4 @@ std::map<std::string, std::experimental::any> json_loader::load_all() &
     // Release JSON object memory
     json_object_put(root_obj);
     return m_data;
-}
-
-static std::experimental::any to_any_value(json_object *obj)
-{
-    if (obj == nullptr) {
-        throw_xlio_exception("obj can't be nullptr");
-    }
-
-    json_type type = json_object_get_type(obj);
-    switch (type) {
-    case json_type_boolean:
-        return bool(json_object_get_boolean(obj));
-    case json_type_int:
-        return json_object_get_int64(obj);
-    case json_type_string: {
-        const char *s = json_object_get_string(obj);
-        return std::string(s ? s : "");
-    }
-    // For object/array, we flatten them iteratively, so this is unexpected behavior.
-    // For double - is simply not supported in the config.
-    default:
-        throw_xlio_exception("unsupported/unexpected type " + std::to_string(type));
-    }
-}
-
-std::map<std::string, std::experimental::any> flatten_json_to_parameters(json_object *root)
-{
-    std::map<std::string, std::experimental::any> result;
-    flatten_json(
-        root, [](json_object *, const std::string &) { return true; },
-        [&result](json_object *obj, const std::string &current_prefix) {
-            result[current_prefix] = to_any_value(obj);
-        });
-
-    return result;
 }
