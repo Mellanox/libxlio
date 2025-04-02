@@ -41,19 +41,59 @@
 #include "utils.h"
 
 static const char *sample_descriptor = R"({
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "XLIO Configuration Schema",
+    "description": "Schema for XLIO configuration",
+    "type": "object",
+    "properties": {
         "core": {
-            "log": {
-                "level": {
-                    "type": "int",
-                    "default": 3,
-                    "constraints": { "min": -2, "max": 8 },
-                    "description": "Logging level."
+            "description": "controls the core functionality of libxlio.",
+            "type": "object",
+            "properties": {
+                "append_pid_to_path": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
+                },
+                "log": {
+                    "description": "controls logging behavior.",
+                    "type": "object",
+                    "properties": {
+                        "level": {
+                            "oneOf": [
+                                {
+                                    "type": "integer",
+                                    "enum": [-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8],
+                                    "default": 3
+                                },
+                                {
+                                    "type": "string",
+                                    "enum": [
+                                        "init",
+                                        "none",
+                                        "panic",
+                                        "error",
+                                        "warn",
+                                        "info",
+                                        "details",
+                                        "debug",
+                                        "fine",
+                                        "finer",
+                                        "all"
+                                    ],
+                                    "default": "info"
+                                }
+                            ],
+                            "description": "Sets level according to desired logging verbosity."
+                        }
+                    }
                 }
             }
         }
-    })";
+    }
+})";
 
-static const char *sample_json_config = R"({ "core": { "log": { "level": 2 } } })";
+static const char *sample_json_config = R"({ "core": { "log": { "level": "debug" } } })";
 
 TEST(config, config_manager_sanity)
 {
@@ -64,7 +104,7 @@ TEST(config, config_manager_sanity)
     config_manager manager(std::move(loaders),
                            std::make_unique<json_descriptor_provider>(sample_descriptor));
 
-    ASSERT_EQ(2, manager.get_value<int64_t>("core.log.level"));
+    ASSERT_EQ(5, manager.get_value<int64_t>("core.log.level"));
 }
 
 TEST(config, config_manager_value_not_respecting_constraints_throws)
@@ -100,22 +140,57 @@ TEST(config, config_manager_missing_gets_defaults)
     conf_file_writer json_config(sample_json_config);
 
     const char *descriptor_with_missing_property = R"({
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "XLIO Configuration Schema",
+    "description": "Schema for XLIO configuration",
+    "type": "object",
+    "properties": {
         "core": {
-            "missing": {
-                "type": "string",
-                "default": "hello",
-                "description": "A missing property"
-            },
-            "log": {
-                "level": {
-                    "type": "int",
-                    "default": 3,
-                    "constraints": { "min": -2, "max": 8 },
-                    "description": "Logging level."
+            "description": "controls the core functionality of libxlio.",
+            "type": "object",
+            "properties": {
+                "missing": {
+                    "type": "string",
+                    "default": "hello",
+                    "description": "A missing property"
+                },
+                "log": {
+                    "description": "controls logging behavior.",
+                    "type": "object",
+                    "properties": {
+                        "level": {
+                            "oneOf": [
+                                {
+                                    "type": "integer",
+                                    "enum": [-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8],
+                                    "default": 3
+                                },
+                                {
+                                    "type": "string",
+                                    "enum": [
+                                        "init",
+                                        "none",
+                                        "panic",
+                                        "error",
+                                        "warn",
+                                        "info",
+                                        "details",
+                                        "debug",
+                                        "fine",
+                                        "finer",
+                                        "all"
+                                    ],
+                                    "default": "info"
+                                }
+                            ],
+                            "description": "Sets level according to desired logging verbosity."
+                        }
+                    }
                 }
             }
         }
-    })";
+    }
+})";
 
     std::queue<std::unique_ptr<loader>> loaders;
     loaders.push(std::make_unique<json_loader>(json_config.get()));
@@ -204,19 +279,29 @@ TEST(config, config_manager_mixed_loaders_merge)
     loaders.push(std::make_unique<inline_loader>("XLIO_INLINE_CONFIG"));
 
     const char *descriptor = R"({
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "XLIO Configuration Schema",
+    "description": "Schema for XLIO configuration",
+    "type": "object",
+    "properties": {
         "core": {
-            "json_only": {
-                "type": "string",
-                "default": "default_json",
-                "description": "Only in JSON."
-            },
-            "inline_only": {
-                "type": "string",
-                "default": "default_inline",
-                "description": "Only in inline config."
+            "description": "controls the core functionality of libxlio.",
+            "type": "object",
+            "properties": {
+                "json_only": {
+                    "type": "string",
+                    "default": "from_json",
+                    "description": "dummy description"
+                },
+                "inline_only": {
+                    "type": "string",
+                    "default": "from_inline",
+                    "description": "dummy description"
+                },
             }
         }
-    })";
+    }
+})";
 
     config_manager manager(std::move(loaders),
                            std::make_unique<json_descriptor_provider>(descriptor));

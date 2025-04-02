@@ -42,21 +42,18 @@ class json_descriptor_provider : public descriptor_provider {
 public:
     explicit json_descriptor_provider();
     explicit json_descriptor_provider(const char *json_string);
-
     ~json_descriptor_provider() override = default;
-
     config_descriptor load_descriptors() override;
 
 private:
     const char *m_json_string;
-    // Attempt to parse the object at val as a parameter if it has "type"
-    // Return true if we recognized this object as a parameter and added it to `desc`, else false.
-    bool try_add_parameter(json_object *obj, const std::string &full_key, config_descriptor &desc);
-
-    // Utility to determine the type (int, bool, string) from a JSON string
-    std::type_index compute_type_index(const std::string &type_str) const;
-
-    // Parse the "constraints" object, adding min, max, or other constraints to pd
-    void parse_constraints(json_object *constraints_obj, parameter_descriptor &pd,
-                           const std::type_index &ti);
+    void validate_schema(json_object *schema);
+    bool process_schema_property(json_object *property_obj, const std::string &property_name,
+                                 config_descriptor &desc, const std::string &path_prefix = "");
+    bool process_one_of_property(json_object *one_of, const std::string &current_path,
+                                 config_descriptor &desc);
+    std::type_index get_property_type(json_object *property_obj);
+    std::experimental::any get_property_default(json_object *property_obj,
+                                                std::type_index type_index);
+    void add_property_constraints(json_object *property_obj, parameter_descriptor &desc);
 };

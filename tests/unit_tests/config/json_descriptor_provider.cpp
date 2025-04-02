@@ -40,25 +40,57 @@
 TEST(config, json_descriptor_provider_sanity)
 {
     json_descriptor_provider provider(R"({
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "XLIO Configuration Schema",
+    "description": "Schema for XLIO configuration",
+    "type": "object",
+    "properties": {
         "core": {
-            "append_pid_to_path": {
-                "type": "bool",
-                "default": false,
-                "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
-            },
-            "log": {
-                "level": {
-                    "type": "int",
-                    "default": 3,
-                    "constraints": {
-                        "min": -2,
-                        "max": 8
-                    },
-                    "description": "Sets level according to desired logging verbosity.",
+            "type": "object",
+            "description": "controls the core functionality of libxlio.",
+            "properties": {
+                "append_pid_to_path": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
+                },
+                "log": {
+                    "type": "object",
+                    "description": "controls logging behavior.",
+                    "properties": {
+                        "level": {
+                            "oneOf": [
+                                {
+                                    "type": "integer",
+                                    "enum": [-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8],
+                                    "default": 3
+                                },
+                                {
+                                    "type": "string",
+                                    "enum": [
+                                        "init",
+                                        "none",
+                                        "panic",
+                                        "error",
+                                        "warn",
+                                        "info",
+                                        "details",
+                                        "debug",
+                                        "fine",
+                                        "finer",
+                                        "all"
+                                    ],
+                                    "default": "info"
+                                }
+                            ],
+                            "description": "Sets level according to desired logging verbosity."
+                        }
+                    }
                 }
             }
         }
-    })");
+    }
+})");
 
     config_descriptor cd = provider.load_descriptors();
     ASSERT_EQ(
@@ -71,26 +103,57 @@ TEST(config, json_descriptor_provider_sanity)
 
 TEST(config, json_descriptor_provider_invalid_json_throws)
 {
-    // comma after no more element "max": 8,
     json_descriptor_provider provider(R"({
-        "core": {
-            "append_pid_to_path": {
-                "type": "bool",
-                "default": false,
-                "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
-            },
-            "log": {
-                "level": {
-                    "type": "int",
-                    "default": 3,
-                    "constraints": {
-                        "min": -2,
-                        "max": 8,
+            "$schema": "http://json-schema.org/draft-07/schema#","lolzzzzzzzzzzzzzzzz"
+            "title": "XLIO Configuration Schema",
+            "description": "Schema for XLIO configuration",
+            "type": "object",
+            "properties": {
+                "core": {
+                    "type": "object",
+                    "description": "controls the core functionality of libxlio.",
+                    "properties": {
+                        "append_pid_to_path": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
+                        },
+                        "log": {
+                            "type": "object",
+                            "description": "controls logging behavior.",
+                            "properties": {
+                                "level": {
+                                    "oneOf": [
+                                        {
+                                            "type": "integer",
+                                            "minimum": -2,
+                                            "maximum": 8
+                                        },
+                                        {
+                                            "type": "string",
+                                            "enum": [
+                                                "none",
+                                                "panic",
+                                                "error",
+                                                "warn",
+                                                "info",
+                                                "details",
+                                                "debug",
+                                                "fine",
+                                                "finer",
+                                                "all"
+                                            ]
+                                        }
+                                    ],
+                                    "default": 3,
+                                    "description": "Sets level according to desired logging verbosity."
+                                }
+                            }
+                        }
                     }
                 }
             }
-        }
-    })");
+        })");
 
     ASSERT_THROW(provider.load_descriptors(), xlio_exception);
 }
@@ -99,24 +162,55 @@ TEST(config, json_descriptor_provider_no_description_throws)
 {
     // core.log.level has no description - should throw
     json_descriptor_provider provider(R"({
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "XLIO Configuration Schema",
+    "description": "Schema for XLIO configuration",
+    "type": "object",
+    "properties": {
         "core": {
-            "append_pid_to_path": {
-                "type": "bool",
-                "default": false,
-                "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
-            },
-            "log": {
-                "level": {
-                    "type": "int",
-                    "default": 3,
-                    "constraints": {
-                        "min": -2,
-                        "max": 8
+            "type": "object",
+            "description": "controls the core functionality of libxlio.",
+            "properties": {
+                "append_pid_to_path": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
+                },
+                "log": {
+                    "type": "object",
+                    "description": "controls logging behavior.",
+                    "properties": {
+                        "level": {
+                            "oneOf": [
+                                {
+                                    "type": "integer",
+                                    "minimum": -2,
+                                    "maximum": 8
+                                },
+                                {
+                                    "type": "string",
+                                    "enum": [
+                                        "none",
+                                        "panic",
+                                        "error",
+                                        "warn",
+                                        "info",
+                                        "details",
+                                        "debug",
+                                        "fine",
+                                        "finer",
+                                        "all"
+                                    ]
+                                }
+                            ],
+                            "default": 3,
+                        }
                     }
                 }
             }
         }
-    })");
+    }
+})");
 
     ASSERT_THROW(provider.load_descriptors(), xlio_exception);
 }
@@ -126,19 +220,29 @@ TEST(config, json_descriptor_provider_no_description_throws)
 TEST(config, json_descriptor_provider_duplication_last_is_taken)
 {
     json_descriptor_provider provider(R"({
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "XLIO Configuration Schema",
+    "description": "Schema for XLIO configuration",
+    "type": "object",
+    "properties": {
         "core": {
-            "append_pid_to_path": {
-                "type": "bool",
-                "default": false,
-                "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
-            },
-            "append_pid_to_path": {
-                "type": "bool",
-                "default": true,
-                "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
-            },
+            "type": "object",
+            "description": "controls the core functionality of libxlio.",
+            "properties": {
+                "append_pid_to_path": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
+                },
+                "append_pid_to_path": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
+                }
+            }
         }
-    })");
+    }
+})");
 
     config_descriptor cd = provider.load_descriptors();
     ASSERT_EQ(true,
@@ -149,13 +253,23 @@ TEST(config, json_descriptor_provider_duplication_last_is_taken)
 TEST(config, json_descriptor_provider_unrecognized_type_throws)
 {
     json_descriptor_provider provider(R"({
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "XLIO Configuration Schema",
+    "description": "Schema for XLIO configuration",
+    "type": "object",
+    "properties": {
         "core": {
-            "unknown": {
-                "type": "float",
-                "default": 1.5,
-                "description": "A float value"
+            "type": "object",
+            "description": "controls the core functionality of libxlio.",
+            "properties": {
+                "lolz": {
+                    "type": "float",
+                    "default": 3.5,
+                    "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
+                },
             }
         }
-    })");
+    }
+})");
     ASSERT_THROW(provider.load_descriptors(), xlio_exception);
 }
