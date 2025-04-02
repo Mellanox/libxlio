@@ -181,7 +181,6 @@ libxlio_la_SOURCES := \
 	config/descriptors/parameter_descriptor.cpp \
 	config/descriptors/config_descriptor.cpp \
 	config/descriptor_providers/json_descriptor_provider.cpp \
-	config/utils/json_parsing.cpp \
 	\
 	libxlio.c \
 	main.cpp \
