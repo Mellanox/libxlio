@@ -203,6 +203,7 @@ int poll_group::process()
     }
 
     if (wastx) {
+        all_drained = 0;
         flush();
     }
 
