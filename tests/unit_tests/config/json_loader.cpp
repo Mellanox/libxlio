@@ -123,15 +123,6 @@ TEST(config, json_loader_unsupported_double)
     ASSERT_THROW(loader.load_all(), xlio_exception);
 }
 
-TEST(config, json_loader_unsupported_array)
-{
-    conf_file_writer json_config(R"({
-       "core": { "log": { "level": [2] } }
-    })");
-    json_loader loader(json_config.get());
-    ASSERT_THROW(loader.load_all(), xlio_exception);
-}
-
 TEST(config, json_loader_flattens_nested_objects)
 {
     conf_file_writer json_config(R"({
@@ -167,4 +158,183 @@ TEST(config, json_loader_load_huge_int_value)
     std::map<std::string, std::experimental::any> data = loader.load_all();
 
     ASSERT_EQ(50000000000, std::experimental::any_cast<int64_t>(data["core.memory.limit"]));
+}
+
+TEST(config, json_loader_array_simple)
+{
+    conf_file_writer json_config(R"({
+        "test": {
+            "string_array": ["one", "two", "three"],
+            "int_array": [1, 2, 3],
+            "bool_array": [true, false, true]
+        }
+    })");
+
+    json_loader loader(json_config.get());
+    std::map<std::string, std::experimental::any> data = loader.load_all();
+
+    // Check string array
+    auto string_array =
+        std::experimental::any_cast<std::vector<std::experimental::any>>(data["test.string_array"]);
+    ASSERT_EQ(static_cast<size_t>(3), string_array.size());
+    ASSERT_EQ("one", std::experimental::any_cast<std::string>(string_array[0]));
+    ASSERT_EQ("two", std::experimental::any_cast<std::string>(string_array[1]));
+    ASSERT_EQ("three", std::experimental::any_cast<std::string>(string_array[2]));
+
+    // Check int array
+    auto int_array =
+        std::experimental::any_cast<std::vector<std::experimental::any>>(data["test.int_array"]);
+    ASSERT_EQ(static_cast<size_t>(3), int_array.size());
+    ASSERT_EQ(1, std::experimental::any_cast<int64_t>(int_array[0]));
+    ASSERT_EQ(2, std::experimental::any_cast<int64_t>(int_array[1]));
+    ASSERT_EQ(3, std::experimental::any_cast<int64_t>(int_array[2]));
+
+    // Check bool array
+    auto bool_array =
+        std::experimental::any_cast<std::vector<std::experimental::any>>(data["test.bool_array"]);
+    ASSERT_EQ(static_cast<size_t>(3), bool_array.size());
+    ASSERT_EQ(true, std::experimental::any_cast<bool>(bool_array[0]));
+    ASSERT_EQ(false, std::experimental::any_cast<bool>(bool_array[1]));
+    ASSERT_EQ(true, std::experimental::any_cast<bool>(bool_array[2]));
+}
+
+TEST(config, json_loader_array_of_objects)
+{
+    conf_file_writer json_config(R"({
+        "users": [
+            {
+                "id": 1,
+                "name": "John",
+                "active": true
+            },
+            {
+                "id": 2,
+                "name": "Jane",
+                "active": false
+            }
+        ]
+    })");
+
+    json_loader loader(json_config.get());
+    std::map<std::string, std::experimental::any> data = loader.load_all();
+
+    auto users = std::experimental::any_cast<std::vector<std::experimental::any>>(data["users"]);
+    ASSERT_EQ(static_cast<size_t>(2), users.size());
+
+    // Check first user
+    auto user1 =
+        std::experimental::any_cast<std::map<std::string, std::experimental::any>>(users[0]);
+    ASSERT_EQ(1, std::experimental::any_cast<int64_t>(user1["id"]));
+    ASSERT_EQ("John", std::experimental::any_cast<std::string>(user1["name"]));
+    ASSERT_EQ(true, std::experimental::any_cast<bool>(user1["active"]));
+
+    // Check second user
+    auto user2 =
+        std::experimental::any_cast<std::map<std::string, std::experimental::any>>(users[1]);
+    ASSERT_EQ(2, std::experimental::any_cast<int64_t>(user2["id"]));
+    ASSERT_EQ("Jane", std::experimental::any_cast<std::string>(user2["name"]));
+    ASSERT_EQ(false, std::experimental::any_cast<bool>(user2["active"]));
+}
+
+TEST(config, json_loader_nested_arrays)
+{
+    conf_file_writer json_config(R"({
+        "matrix": [
+            [1, 2, 3],
+            [4, 5, 6],
+            [7, 8, 9]
+        ]
+    })");
+
+    json_loader loader(json_config.get());
+    std::map<std::string, std::experimental::any> data = loader.load_all();
+
+    auto matrix = std::experimental::any_cast<std::vector<std::experimental::any>>(data["matrix"]);
+    ASSERT_EQ(static_cast<size_t>(3), matrix.size());
+
+    auto row1 = std::experimental::any_cast<std::vector<std::experimental::any>>(matrix[0]);
+    ASSERT_EQ(static_cast<size_t>(3), row1.size());
+    ASSERT_EQ(1, std::experimental::any_cast<int64_t>(row1[0]));
+    ASSERT_EQ(2, std::experimental::any_cast<int64_t>(row1[1]));
+    ASSERT_EQ(3, std::experimental::any_cast<int64_t>(row1[2]));
+
+    auto row2 = std::experimental::any_cast<std::vector<std::experimental::any>>(matrix[1]);
+    ASSERT_EQ(static_cast<size_t>(3), row2.size());
+    ASSERT_EQ(4, std::experimental::any_cast<int64_t>(row2[0]));
+    ASSERT_EQ(5, std::experimental::any_cast<int64_t>(row2[1]));
+    ASSERT_EQ(6, std::experimental::any_cast<int64_t>(row2[2]));
+
+    auto row3 = std::experimental::any_cast<std::vector<std::experimental::any>>(matrix[2]);
+    ASSERT_EQ(static_cast<size_t>(3), row3.size());
+    ASSERT_EQ(7, std::experimental::any_cast<int64_t>(row3[0]));
+    ASSERT_EQ(8, std::experimental::any_cast<int64_t>(row3[1]));
+    ASSERT_EQ(9, std::experimental::any_cast<int64_t>(row3[2]));
+}
+
+TEST(config, json_loader_transport_control)
+{
+    conf_file_writer json_config(R"({
+        "net": {
+            "offload": {
+                "transport_control": [
+                    {
+                        "id": "app1",
+                        "name": "Application 1",
+                        "actions": ["action1", "action2"]
+                    },
+                    {
+                        "id": "app2",
+                        "name": "Application 2",
+                        "actions": ["action3"]
+                    }
+                ]
+            }
+        }
+    })");
+
+    json_loader loader(json_config.get());
+    std::map<std::string, std::experimental::any> data = loader.load_all();
+
+    auto transport_control = std::experimental::any_cast<std::vector<std::experimental::any>>(
+        data["net.offload.transport_control"]);
+    ASSERT_EQ(static_cast<size_t>(2), transport_control.size());
+
+    // Check first app
+    auto app1 = std::experimental::any_cast<std::map<std::string, std::experimental::any>>(
+        transport_control[0]);
+    ASSERT_EQ("app1", std::experimental::any_cast<std::string>(app1["id"]));
+    ASSERT_EQ("Application 1", std::experimental::any_cast<std::string>(app1["name"]));
+
+    auto app1_actions =
+        std::experimental::any_cast<std::vector<std::experimental::any>>(app1["actions"]);
+    ASSERT_EQ(static_cast<size_t>(2), app1_actions.size());
+    ASSERT_EQ("action1", std::experimental::any_cast<std::string>(app1_actions[0]));
+    ASSERT_EQ("action2", std::experimental::any_cast<std::string>(app1_actions[1]));
+
+    // Check second app
+    auto app2 = std::experimental::any_cast<std::map<std::string, std::experimental::any>>(
+        transport_control[1]);
+    ASSERT_EQ("app2", std::experimental::any_cast<std::string>(app2["id"]));
+    ASSERT_EQ("Application 2", std::experimental::any_cast<std::string>(app2["name"]));
+
+    auto app2_actions =
+        std::experimental::any_cast<std::vector<std::experimental::any>>(app2["actions"]);
+    ASSERT_EQ(static_cast<size_t>(1), app2_actions.size());
+    ASSERT_EQ("action3", std::experimental::any_cast<std::string>(app2_actions[0]));
+}
+
+TEST(config, json_loader_empty_array)
+{
+    conf_file_writer json_config(R"({
+        "test": {
+            "empty_array": []
+        }
+    })");
+
+    json_loader loader(json_config.get());
+    std::map<std::string, std::experimental::any> data = loader.load_all();
+
+    auto empty_array =
+        std::experimental::any_cast<std::vector<std::experimental::any>>(data["test.empty_array"]);
+    ASSERT_TRUE(empty_array.empty());
 }

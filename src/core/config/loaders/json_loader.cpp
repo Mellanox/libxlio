@@ -56,7 +56,25 @@ static std::experimental::any to_any_value(json_object *obj)
         const char *s = json_object_get_string(obj);
         return std::string(s ? s : "");
     }
-    // For object/array, we flatten them iteratively, so this is unexpected behavior.
+    case json_type_object: {
+        // For objects, we create a map of key-value pairs
+        std::map<std::string, std::experimental::any> obj_map;
+        json_object_object_foreach(obj, key, val)
+        {
+            obj_map[key] = to_any_value(val);
+        }
+        return obj_map;
+    }
+    case json_type_array: {
+        // For arrays, we create a vector of values
+        std::vector<std::experimental::any> array_values;
+        int array_length = json_object_array_length(obj);
+        for (int i = 0; i < array_length; i++) {
+            json_object *item = json_object_array_get_idx(obj, i);
+            array_values.push_back(to_any_value(item));
+        }
+        return array_values;
+    }
     // For double - is simply not supported in the config.
     default:
         throw_xlio_exception("unsupported/unexpected type " + std::to_string(type));
@@ -120,7 +138,8 @@ std::map<std::string, std::experimental::any> json_loader::load_all() &
                 break;
             }
             case json_type_array: {
-                throw_xlio_exception("Arrays in config are not supported.");
+                // For arrays, store the entire array as a single value
+                m_data[current_prefix] = to_any_value(current_obj);
                 break;
             }
             default:
