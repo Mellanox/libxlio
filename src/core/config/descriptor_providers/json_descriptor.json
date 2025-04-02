@@ -1085,9 +1085,29 @@
                             "description": "Enable hardware offloads on the network interface."
                         },
                         "transport_control": {
-                            "type": "string",
-                            "default": "",
-                            "description": "Enable transport control per apps. (maps to libxlio.conf)."
+                            "type": "array",
+                            "default": [],
+                            "description": "Transport control per apps. (maps to libxlio.conf).",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "string",
+                                        "description": "Identifier for the transport control"
+                                    },
+                                    "name": {
+                                        "type": "string",
+                                        "description": "Name of the application"
+                                    },
+                                    "actions": {
+                                        "type": "array",
+                                        "description": "List of actions for the transport control",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
                         },
                         "app_id": {
                             "type": "string",

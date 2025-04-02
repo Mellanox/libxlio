@@ -116,6 +116,9 @@ template <> std::vector<std::string> extract_enum_values<std::string>(json_objec
     return values;
 }
 
+// Helper function to convert JSON objects to any values
+static std::experimental::any to_any_value(json_object *obj);
+
 void json_descriptor_provider::validate_schema(json_object *schema)
 {
     // Basic schema validation
@@ -164,6 +167,8 @@ std::type_index json_descriptor_provider::get_property_type(json_object *propert
         return typeid(std::string);
     } else if (type_str == "object") {
         return typeid(json_object *);
+    } else if (type_str == "array") {
+        return typeid(std::vector<std::experimental::any>);
     }
 
     throw_xlio_exception("json_descriptor_provider: Unsupported type: " + type_str);
@@ -182,6 +187,8 @@ std::experimental::any json_descriptor_provider::get_property_default(json_objec
             return int64_t(0);
         } else if (type_index == typeid(std::string)) {
             return std::string("");
+        } else if (type_index == typeid(std::vector<std::experimental::any>)) {
+            return std::vector<std::experimental::any>();
         }
         throw_xlio_exception("json_descriptor_provider: No default value for unsupported type.");
     }
@@ -203,9 +210,62 @@ std::experimental::any json_descriptor_provider::get_property_default(json_objec
             return std::string(str);
         }
         throw_xlio_exception("json_descriptor_provider: Invalid string for default value.");
+    } else if (type_index == typeid(std::vector<std::experimental::any>)) {
+        if (json_object_get_type(default_field) == json_type_array) {
+            std::vector<std::experimental::any> array_values;
+            int array_length = json_object_array_length(default_field);
+            for (int i = 0; i < array_length; i++) {
+                json_object *item = json_object_array_get_idx(default_field, i);
+                array_values.push_back(to_any_value(item));
+            }
+            return array_values;
+        }
+        // If default is not an array, return empty array
+        return std::vector<std::experimental::any>();
     }
 
     throw_xlio_exception("json_descriptor_provider: Unsupported type for default value.");
+}
+
+// Helper function to convert JSON objects to any values
+static std::experimental::any to_any_value(json_object *obj)
+{
+    if (obj == nullptr) {
+        throw_xlio_exception("obj can't be nullptr");
+    }
+
+    json_type type = json_object_get_type(obj);
+    switch (type) {
+    case json_type_boolean:
+        return bool(json_object_get_boolean(obj));
+    case json_type_int:
+        return json_object_get_int64(obj);
+    case json_type_string: {
+        const char *s = json_object_get_string(obj);
+        return std::string(s ? s : "");
+    }
+    case json_type_object: {
+        // For objects, we create a map of key-value pairs
+        std::map<std::string, std::experimental::any> obj_map;
+        json_object_object_foreach(obj, key, val)
+        {
+            obj_map[key] = to_any_value(val);
+        }
+        return obj_map;
+    }
+    case json_type_array: {
+        // For arrays, we create a vector of values
+        std::vector<std::experimental::any> array_values;
+        int array_length = json_object_array_length(obj);
+        for (int i = 0; i < array_length; i++) {
+            json_object *item = json_object_array_get_idx(obj, i);
+            array_values.push_back(to_any_value(item));
+        }
+        return array_values;
+    }
+    default:
+        throw_xlio_exception("unsupported/unexpected type " + std::to_string(type));
+    }
 }
 
 void json_descriptor_provider::add_property_constraints(json_object *property_obj,
@@ -342,6 +402,23 @@ bool json_descriptor_provider::process_one_of_property(json_object *one_of,
     return true;
 }
 
+// Process a property with type array
+bool json_descriptor_provider::process_array_property(json_object *property_obj,
+                                                      const std::string &current_path,
+                                                      config_descriptor &desc)
+{
+    // Get default value
+    std::experimental::any default_value =
+        get_property_default(property_obj, typeid(std::vector<std::experimental::any>));
+
+    // Create parameter descriptor
+    parameter_descriptor param_desc(default_value, typeid(std::vector<std::experimental::any>));
+
+    // Add to config descriptor
+    desc.set_parameter(current_path, std::move(param_desc));
+    return true;
+}
+
 bool json_descriptor_provider::process_schema_property(json_object *property_obj,
                                                        const std::string &property_name,
                                                        config_descriptor &desc,
@@ -396,6 +473,12 @@ bool json_descriptor_provider::process_schema_property(json_object *property_obj
             added_any |= process_schema_property(nested_obj, nested_name, desc, current_path);
         }
         return added_any;
+    }
+
+    // Process array properties
+    if (type_field && json_object_get_type(type_field) == json_type_string &&
+        json_object_get_string(type_field) == std::string("array")) {
+        return process_array_property(property_obj, current_path, desc);
     }
 
     return false;
