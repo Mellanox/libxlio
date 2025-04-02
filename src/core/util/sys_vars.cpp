@@ -1790,12 +1790,48 @@ static void set_path_member(char *sys_var_member, size_t sys_var_member_size,
     }
 }
 
+std::string transport_control_to_legacy(
+    const std::vector<std::experimental::any> &transport_control)
+{
+    std::string result;
+
+    for (size_t i = 0; i < transport_control.size(); i++) {
+        auto rule_object =
+            std::experimental::any_cast<std::map<std::string, std::experimental::any>>(
+                transport_control[i]);
+
+        // Add application info
+        result += "application-id " +
+            std::experimental::any_cast<std::string>(rule_object["name"]) + " " +
+            std::experimental::any_cast<std::string>(rule_object["id"]) + ",";
+
+        // Add actions
+        auto actions = std::experimental::any_cast<std::vector<std::experimental::any>>(
+            rule_object["actions"]);
+
+        for (size_t j = 0; j < actions.size(); j++) {
+            result += std::experimental::any_cast<std::string>(actions[j]);
+            if (j < actions.size() - 1) {
+                result += ",";
+            }
+        }
+
+        // Add separator between rules
+        if (i < transport_control.size() - 1) {
+            result += ";";
+        }
+    }
+
+    return result;
+}
+
 void mce_sys_var::new_get_params(const config_manager &config_manager)
 {
     const bool core_append_pid_to_path = config_manager.get_value<bool>("core.append_pid_to_path");
 
     const std::string net_offload_transport_control =
-        config_manager.get_value<std::string>("net.offload.transport_control");
+        transport_control_to_legacy(config_manager.get_value<std::vector<std::experimental::any>>(
+            "net.offload.transport_control"));
     set_string_member(transport_control_context, sizeof(transport_control_context),
                       net_offload_transport_control);
 

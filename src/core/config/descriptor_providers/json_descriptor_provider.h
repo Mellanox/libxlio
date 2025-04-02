@@ -52,6 +52,8 @@ private:
                                  config_descriptor &desc, const std::string &path_prefix = "");
     bool process_one_of_property(json_object *one_of, const std::string &current_path,
                                  config_descriptor &desc);
+    bool process_array_property(json_object *property_obj, const std::string &current_path,
+                                config_descriptor &desc);
     std::type_index get_property_type(json_object *property_obj);
     std::experimental::any get_property_default(json_object *property_obj,
                                                 std::type_index type_index);
