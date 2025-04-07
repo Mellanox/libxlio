@@ -19,7 +19,7 @@
 #include "core/util/sysctl_reader.h"
 #include "core/util/agent_def.h"
 #include "core/xlio_extra.h"
-#include "core/config/config_manager.h"
+#include "core/config/config_registry.h"
 
 typedef enum {
     MCE_SPEC_NONE = 0,
@@ -488,7 +488,11 @@ public:
 private:
     void get_app_name();
     void legacy_get_env_params();
-    void new_get_params(const config_manager &config_manager);
+    void apply_settings(const config_registry &registry);
+    void pre_profile_adjust_settings();
+    void apply_config_from_registry();
+    void post_profile_adjust_settings(const config_registry &registry);
+    void apply_profile_settings();
     void print_xlio_load_failure_msg();
     int list_to_cpuset(char *cpulist, cpu_set_t *cpu_set);
     int hex_to_cpuset(char *start, cpu_set_t *cpu_set);
@@ -503,7 +507,7 @@ private:
 
     // prevent unautothrized creation of objects
     mce_sys_var()
-        : sysctl_reader(sysctl_reader_t::instance()) // TODO - Bashar
+        : sysctl_reader(sysctl_reader_t::instance())
         , m_ioctl {}
     {
         // coverity[uninit_member]
