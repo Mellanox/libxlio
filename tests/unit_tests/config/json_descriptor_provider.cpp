@@ -1,35 +1,7 @@
 /*
  * SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
- * Copyright (c) 2001-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: GPL-2.0-only or BSD-3-Clause
- *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * BSD license below:
- *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
- *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
- *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
  */
 
 #include <gtest/gtest.h>
@@ -371,7 +343,7 @@ TEST(config, json_descriptor_provider_array_with_default_values)
     std::vector<std::experimental::any> str_array =
         std::experimental::any_cast<std::vector<std::experimental::any>>(string_array);
 
-    ASSERT_EQ(3, str_array.size());
+    ASSERT_EQ(static_cast<size_t>(3), str_array.size());
     ASSERT_EQ("value1", std::experimental::any_cast<std::string>(str_array[0]));
     ASSERT_EQ("value2", std::experimental::any_cast<std::string>(str_array[1]));
     ASSERT_EQ("value3", std::experimental::any_cast<std::string>(str_array[2]));
@@ -381,7 +353,7 @@ TEST(config, json_descriptor_provider_array_with_default_values)
     std::vector<std::experimental::any> i_array =
         std::experimental::any_cast<std::vector<std::experimental::any>>(int_array);
 
-    ASSERT_EQ(3, i_array.size());
+    ASSERT_EQ(static_cast<size_t>(3), i_array.size());
     ASSERT_EQ(1, std::experimental::any_cast<int64_t>(i_array[0]));
     ASSERT_EQ(2, std::experimental::any_cast<int64_t>(i_array[1]));
     ASSERT_EQ(3, std::experimental::any_cast<int64_t>(i_array[2]));
@@ -452,7 +424,7 @@ TEST(config, json_descriptor_provider_array_of_objects)
     // Should be an array with two objects
     std::vector<std::experimental::any> tc_array =
         std::experimental::any_cast<std::vector<std::experimental::any>>(transport_control);
-    ASSERT_EQ(2, tc_array.size());
+    ASSERT_EQ(static_cast<size_t>(2), tc_array.size());
 
     // Check first object
     auto app1 =
@@ -462,7 +434,7 @@ TEST(config, json_descriptor_provider_array_of_objects)
 
     auto app1_actions =
         std::experimental::any_cast<std::vector<std::experimental::any>>(app1["actions"]);
-    ASSERT_EQ(2, app1_actions.size());
+    ASSERT_EQ(static_cast<size_t>(2), app1_actions.size());
     ASSERT_EQ("action1", std::experimental::any_cast<std::string>(app1_actions[0]));
     ASSERT_EQ("action2", std::experimental::any_cast<std::string>(app1_actions[1]));
 
@@ -474,6 +446,6 @@ TEST(config, json_descriptor_provider_array_of_objects)
 
     auto app2_actions =
         std::experimental::any_cast<std::vector<std::experimental::any>>(app2["actions"]);
-    ASSERT_EQ(1, app2_actions.size());
+    ASSERT_EQ(static_cast<size_t>(1), app2_actions.size());
     ASSERT_EQ("action3", std::experimental::any_cast<std::string>(app2_actions[0]));
 }

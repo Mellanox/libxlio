@@ -21,7 +21,7 @@ Makefile.in
 Makefile
 aclocal.m4
 autom4te.cache/
-json_descriptor.h
+xlio_config_schema.h
 /config.h
 config.h.in
 config.h.in~

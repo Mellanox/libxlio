@@ -21,9 +21,9 @@ dist-hook:
 SUBDIRS = infra netlink
 
 EXTRA_DIST = \
-	util/libxlio.conf
+	config/descriptor_providers/xlio_config_schema.json
 
-sysconf_DATA = util/libxlio.conf
+sysconf_DATA = config/descriptor_providers/xlio_config_schema.json
 otherincludedir = $(includedir)/mellanox
 otherinclude_HEADERS = \
 	xlio.h \
@@ -61,12 +61,12 @@ libxlio_la_LIBADD = \
 	$(top_builddir)/src/core/infra/libinfra.la \
 	libconfig_parser.la
 
-dist_noinst_DATA = config/descriptor_providers/json_descriptor.json
+dist_noinst_DATA = config/descriptor_providers/xlio_config_schema.json
 
-BUILT_SOURCES = config/descriptor_providers/json_descriptor.h
+BUILT_SOURCES = config/descriptor_providers/xlio_config_schema.h
 
-config/descriptor_providers/json_descriptor.h: config/descriptor_providers/json_descriptor.json
-	xxd -i config/descriptor_providers/json_descriptor.json > $@
+config/descriptor_providers/xlio_config_schema.h: config/descriptor_providers/xlio_config_schema.json
+	xxd -i config/descriptor_providers/xlio_config_schema.json > $@
 
 CLEANFILES = $(BUILT_SOURCES)
 
@@ -175,12 +175,13 @@ libxlio_la_SOURCES := \
 	util/agent.cpp \
 	util/data_updater.cpp \
 	\
-	config/config_manager.cpp \
+	config/config_registry.cpp \
 	config/loaders/inline_loader.cpp \
 	config/loaders/json_loader.cpp \
 	config/descriptors/parameter_descriptor.cpp \
 	config/descriptors/config_descriptor.cpp \
 	config/descriptor_providers/json_descriptor_provider.cpp \
+	config/config_strings.cpp \
 	\
 	libxlio.c \
 	main.cpp \
