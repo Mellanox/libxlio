@@ -1,0 +1,60 @@
+name: PR_agent call
+
+on:
+  issue_comment:
+    types:
+      - created
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  checks: none 
+
+jobs:
+  handle_pr_comments:
+    runs-on: 
+      - pr-agent
+      - self-hosted
+    if: ${{ github.event_name == 'issue_comment' && github.event.sender.type != 'Bot' && startsWith(github.event.comment.body, '/') }}
+    steps:
+      # PR URL is stored differently in different event classes in Actions
+      # So it is better to get it in a separate step.
+      - name: Extract PR URL
+        run: echo "PR_URL=${{ github.event.issue.html_url }}" >> $GITHUB_ENV
+
+      - name: Determine Action from Comment
+        id: detect_command
+        run: |
+          COMMENT_BODY='${{ github.event.comment.body }}'
+          case "$COMMENT_BODY" in
+            /review|/describe|/improve|/update_changelog|/ask\ *)
+              action="${COMMENT_BODY:1}"
+              echo "BOT_ACTION=${action}" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "No matching command found."
+              exit 0
+              ;;
+          esac
+
+      # We use GitHub App to authenticate the PR-agent bot: 
+      # Link to GH App: https://github.com/organizations/Mellanox-lab/settings/apps/pr-review-bot-app
+      # App doesn't use classic or Fine-Grained token, but is working with short-term auth tokens instead, 
+      # with TTL=1 hour, which requires refresh minimum once an hour.
+      # To make it simple, we re-generate the token each time we call PR-agent for PR review
+      # but in the future, we can make use of the Actions caching mechanism to refresh not so often.
+      - name: Generate token
+        if: steps.detect_command.outputs.bot_action != ''
+        run: |
+          GITHUB_USER_TOKEN=$(python3 /actions-runner/generate_github_app_token.py)
+          echo "GITHUB.USER_TOKEN=$GITHUB_USER_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Run PR Agent
+        if: steps.detect_command.outputs.bot_action != ''
+        run: |
+          echo "PR_URL=$PR_URL"
+          echo "BOT_ACTION=${{ steps.detect_command.outputs.bot_action }}"
+          cd /app
+          python3 /app/pr_agent/cli.py --pr_url "$PR_URL" "${{ steps.detect_command.outputs.bot_action }}"
+

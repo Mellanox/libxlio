@@ -1,0 +1,17 @@
+The pr_agent self-hosted runner is deployed in kube-spray cluster:
+
+k8s:
+  namespace: swx-media
+  kind: Deployment
+  name:  pr-agent-mellanox-libxlio-dp
+  image: "nbu-harbor.gtm.nvidia.com/swx-infra/media/x86_64/base/single_runner_pr_agent:2.323.0-0.28-2025-04-03"
+gh:
+  repo: Mellanox/libxlio
+  appId: "1200830"
+  secretKeyName: gh-app-mlnx-secret-key
+openai: 
+  apiKeySecretName: openai-key
+  deploymentId: gpt-4o-20241120
+  apiBase: https://llm-proxy.perflab.nvidia.com
+  apiType: azure
+  
