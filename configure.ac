@@ -415,7 +415,7 @@ AC_CONFIG_FILES([
 		src/state_machine/Makefile
 		tests/Makefile
 		tests/gtest/Makefile
-        tests/unit_tests/Makefile
+		tests/unit_tests/Makefile
 		tools/Makefile
 		tools/daemon/Makefile
 		docs/man/Makefile

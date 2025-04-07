@@ -3,7 +3,7 @@ usr/lib/libxlio.so
 usr/share/doc/libxlio/README
 usr/share/doc/libxlio/CHANGES
 usr/sbin/
-etc/libxlio.conf
+etc/xlio_config_schema.json
 etc/
 contrib/scripts/xlio.service lib/systemd/system
 usr/share/man/man7/xlio.*

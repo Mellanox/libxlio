@@ -18,9 +18,9 @@ XLIO dynamically links with these applications at run-time, redirect standard
 socket API calls allowing them to be accelerated without modification.
 
 .SH FILES
-.I /etc/libxlio.conf
+.I /etc/xlio_config_schema.json
 .RS
-The system wide configuration file. Look inside libxlio.conf for instructions
+The JSON Schema for XLIO configuration files.
 and examples.
 .RE
 .I /usr/share/doc/libxlio/README
