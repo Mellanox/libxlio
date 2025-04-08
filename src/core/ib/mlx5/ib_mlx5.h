@@ -178,7 +178,7 @@ typedef struct xlio_mlx5_cqe {
     uint8_t rsvd4[4];
     __be32 byte_cnt;
     __be64 timestamp;
-    __be32 sop_drop_qpn;
+    __be32 sop_rxdrop_qpn_flowtag;
     __be16 wqe_counter;
     uint8_t rsvd5;
     uint8_t op_own;
