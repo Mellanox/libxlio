@@ -1640,7 +1640,7 @@ void mce_sys_var::legacy_get_env_params()
                         SYS_VAR_HUGEPAGE_SIZE, option_size::to_str(MCE_DEFAULT_HUGEPAGE_SIZE));
             hugepage_size = MCE_DEFAULT_HUGEPAGE_SIZE;
         }
-        if (hugepage_size > MCE_MAX_HUGEPAGE_SIZE) {
+        if (hugepage_size > static_cast<int64_t>(MCE_MAX_HUGEPAGE_SIZE)) {
             vlog_printf(VLOG_WARNING, "%s exceeds maximum possible hugepage size (%s)\n",
                         SYS_VAR_HUGEPAGE_SIZE, option_size::to_str(MCE_MAX_HUGEPAGE_SIZE));
             hugepage_size = MCE_DEFAULT_HUGEPAGE_SIZE;
@@ -1858,8 +1858,7 @@ void mce_sys_var::apply_settings(const config_registry &registry)
     set_path_member(service_notify_dir, sizeof(service_notify_dir), xlio_daemon_dir,
                     core_append_pid_to_path);
 
-    const bool xlio_daemon_enable = registry.get_value<bool>("xlio.daemon.enable");
-    service_enable = xlio_daemon_enable;
+    service_enable = registry.get_value<bool>("xlio.daemon.enable");
 
     memset(internal_thread_cpuset, 0, sizeof(internal_thread_cpuset));
     const std::string core_cpu_cpuset = registry.get_value<std::string>("core.cpu.cpuset");
@@ -1871,255 +1870,115 @@ void mce_sys_var::apply_settings(const config_registry &registry)
     snprintf(internal_thread_affinity_str, sizeof(internal_thread_affinity_str), "%s",
              core_cpu_affinity.c_str());
 
-    const bool core_exit_report = registry.get_value<bool>("core.exit_report");
-    print_report = core_exit_report;
+    print_report = registry.get_value<bool>("core.exit_report");
 
-    const bool core_init_quick = registry.get_value<bool>("core.init.quick");
-    quick_start = core_init_quick;
+    quick_start = registry.get_value<bool>("core.init.quick");
 
-    const int64_t core_log_level = registry.get_value<int64_t>("core.log.level");
-    if (core_log_level < std::numeric_limits<vlog_levels_t>::min() || 
-        core_log_level > std::numeric_limits<vlog_levels_t>::max()) {
-        throw_xlio_exception("core.log.level value is out of range for vlog_levels_t");
-    }
-    log_level = static_cast<vlog_levels_t>(core_log_level);
+    log_level = static_cast<vlog_levels_t>(registry.get_value<int>("core.log.level"));
 
-    const int64_t xlio_log_details = registry.get_value<int64_t>("xlio.log.details");
-    if (xlio_log_details < 0 || xlio_log_details > std::numeric_limits<uint32_t>::max()) {
-        throw_xlio_exception("xlio.log.details value is out of range for uint32_t");
-    }
-    log_details = static_cast<uint32_t>(xlio_log_details);
+    log_details = registry.get_value<decltype(log_details)>("xlio.log.details");
 
-    const bool xlio_log_colors = registry.get_value<bool>("xlio.log.colors");
-    log_colors = xlio_log_colors;
+    log_colors = registry.get_value<bool>("xlio.log.colors");
 
-    const bool core_signals_sigint_exit =
+    handle_sigintr =
         registry.get_value<bool>("core.signals.sigint.exit");
-    handle_sigintr = core_signals_sigint_exit;
 
-    const bool core_signals_sigsegv_backtrace =
+    handle_segfault =
         registry.get_value<bool>("core.signals.sigsegv.backtrace");
-    handle_segfault = core_signals_sigsegv_backtrace;
 
-    const int64_t core_stats_fd_num = registry.get_value<int64_t>("core.stats.fd_num");
-    stats_fd_num_max = core_stats_fd_num;
-    stats_fd_num_monitor = core_stats_fd_num; // constrained by "max": 1024 by design
+    stats_fd_num_max = registry.get_value<decltype(stats_fd_num_max)>("core.stats.fd_num");
+    stats_fd_num_monitor = stats_fd_num_max;
 
-    const int64_t ring_tx_alloc_logic =
-        registry.get_value<int64_t>("xlio.ring.tx.alloc_logic");
-    ring_allocation_logic_tx = static_cast<ring_logic_t>(ring_tx_alloc_logic);
+    ring_allocation_logic_tx =
+        static_cast<ring_logic_t>(registry.get_value<int>("xlio.ring.tx.alloc_logic"));
 
-    const int64_t ring_rx_alloc_logic =
-        registry.get_value<int64_t>("xlio.ring.rx.alloc_logic");
-    ring_allocation_logic_rx = static_cast<ring_logic_t>(ring_rx_alloc_logic);
+    ring_allocation_logic_rx =
+        static_cast<ring_logic_t>(registry.get_value<int>("xlio.ring.rx.alloc_logic"));
 
-    const int64_t ring_tx_migration_ratio =
-        registry.get_value<int64_t>("xlio.ring.tx.migration_ratio");
-    if (ring_tx_migration_ratio < std::numeric_limits<int>::min() || 
-        ring_tx_migration_ratio > std::numeric_limits<int>::max()) {
-        throw_xlio_exception("xlio.ring.tx.migration_ratio value is out of range for int");
-    }
-    ring_migration_ratio_tx = static_cast<int>(ring_tx_migration_ratio);
+    ring_migration_ratio_tx =
+        registry.get_value<decltype(ring_migration_ratio_tx)>("xlio.ring.tx.migration_ratio");
 
-    const int64_t ring_rx_migration_ratio =
-        registry.get_value<int64_t>("xlio.ring.rx.migration_ratio");
-    if (ring_rx_migration_ratio < std::numeric_limits<int>::min() || 
-        ring_rx_migration_ratio > std::numeric_limits<int>::max()) {
-        throw_xlio_exception("xlio.ring.rx.migration_ratio value is out of range for int");
-    }
-    ring_migration_ratio_rx = static_cast<int>(ring_rx_migration_ratio);
+    ring_migration_ratio_rx =
+        registry.get_value<decltype(ring_migration_ratio_rx)>("xlio.ring.rx.migration_ratio");
 
-    const int64_t ring_max_per_interface =
-        registry.get_value<int64_t>("xlio.ring.max_per_interface");
-    if (ring_max_per_interface < std::numeric_limits<int>::min() || 
-        ring_max_per_interface > std::numeric_limits<int>::max()) {
-        throw_xlio_exception("xlio.ring.max_per_interface value is out of range for int");
-    }
-    ring_limit_per_interface = static_cast<int>(ring_max_per_interface);
+    ring_limit_per_interface =
+        registry.get_value<decltype(ring_limit_per_interface)>("xlio.ring.max_per_interface");
 
-    const int64_t ring_tx_max_on_device_memory =
-        registry.get_value<int64_t>("xlio.ring.tx.max_on_device_memory");
-    if (ring_tx_max_on_device_memory < std::numeric_limits<int>::min() || 
-        ring_tx_max_on_device_memory > std::numeric_limits<int>::max()) {
-        throw_xlio_exception("xlio.ring.tx.max_on_device_memory value is out of range for int");
-    }
-    ring_dev_mem_tx = static_cast<int>(ring_tx_max_on_device_memory);
+    ring_dev_mem_tx =
+        registry.get_value<decltype(ring_dev_mem_tx)>("xlio.ring.tx.max_on_device_memory");
 
-    const int64_t net_tcp_max_syn_rate = registry.get_value<int64_t>("net.tcp.max_syn_rate");
-    if (net_tcp_max_syn_rate < 0 || 
-        net_tcp_max_syn_rate > std::numeric_limits<int>::max()) {
-        throw_xlio_exception("net.tcp.max_syn_rate value is out of range for int");
-    }
-    tcp_max_syn_rate = static_cast<int>(net_tcp_max_syn_rate);
+    tcp_max_syn_rate =
+        registry.get_value<decltype(tcp_max_syn_rate)>("net.tcp.max_syn_rate");
 
-    const int64_t xlio_api_sendfile_limit =
-        registry.get_value<int64_t>("xlio.api.sendfile_limit");
-    if (xlio_api_sendfile_limit < 0 || 
-        xlio_api_sendfile_limit > std::numeric_limits<uint32_t>::max()) {
-        throw_xlio_exception("xlio.api.sendfile_limit value is out of range for uint32_t");
-    }
-    zc_cache_threshold = static_cast<uint32_t>(xlio_api_sendfile_limit);
+    zc_cache_threshold =
+        registry.get_value<decltype(zc_cache_threshold)>("xlio.api.sendfile_limit");
 
-    const int64_t xlio_sq_buf_size = registry.get_value<int64_t>("xlio.sq.buf.size");
-    if (xlio_sq_buf_size < 0 || 
-        xlio_sq_buf_size > std::numeric_limits<uint32_t>::max()) {
-        throw_xlio_exception("xlio.sq.buf.size value is out of range for uint32_t");
-    }
-    tx_buf_size = static_cast<uint32_t>(xlio_sq_buf_size);
+    tx_buf_size =
+        registry.get_value<decltype(tx_buf_size)>("xlio.sq.buf.size");
 
-    const int64_t net_tcp_nodelay_byte_threshold =
-        registry.get_value<int64_t>("net.tcp.nodelay.byte_threshold");
-    if (net_tcp_nodelay_byte_threshold < 0 || 
-        net_tcp_nodelay_byte_threshold > std::numeric_limits<uint32_t>::max()) {
-        throw_xlio_exception("net.tcp.nodelay.byte_threshold value is out of range for uint32_t");
-    }
-    tcp_nodelay_treshold = static_cast<uint32_t>(net_tcp_nodelay_byte_threshold);
+    tcp_nodelay_treshold =
+        registry.get_value<decltype(tcp_nodelay_treshold)>("net.tcp.nodelay.byte_threshold");
 
-    const int64_t xlio_sq_wre_global_array_size =
-        registry.get_value<int64_t>("xlio.sq.wre.global_array_size");
-    if (xlio_sq_wre_global_array_size < 0 || 
-        xlio_sq_wre_global_array_size > std::numeric_limits<uint32_t>::max()) {
-        throw_xlio_exception("xlio.sq.wre.global_array_size value is out of range for uint32_t");
-    }
-    tx_num_wr = static_cast<uint32_t>(xlio_sq_wre_global_array_size);
+    tx_num_wr =
+        registry.get_value<decltype(tx_num_wr)>("xlio.sq.wre.global_array_size");
 
-    const int64_t xlio_sq_wre_completion_batch_size =
-        registry.get_value<int64_t>("xlio.sq.wre.completion_batch_size");
-    if (xlio_sq_wre_completion_batch_size < 0 || 
-        xlio_sq_wre_completion_batch_size > std::numeric_limits<uint32_t>::max()) {
-        throw_xlio_exception("xlio.sq.wre.completion_batch_size value is out of range for uint32_t");
-    }
-    tx_num_wr_to_signal = static_cast<uint32_t>(xlio_sq_wre_completion_batch_size);
+    tx_num_wr_to_signal =
+        registry.get_value<decltype(tx_num_wr_to_signal)>("xlio.sq.wre.completion_batch_size");
 
-    const int64_t xlio_sq_wre_max_inline_size =
-        registry.get_value<int64_t>("xlio.sq.wre.max_inline_size");
-    if (xlio_sq_wre_max_inline_size < 0 || 
-        xlio_sq_wre_max_inline_size > std::numeric_limits<uint32_t>::max()) {
-        throw_xlio_exception("xlio.sq.wre.max_inline_size value is out of range for uint32_t");
-    }
-    tx_max_inline = static_cast<uint32_t>(xlio_sq_wre_max_inline_size);
+    tx_max_inline =
+        registry.get_value<decltype(tx_max_inline)>("xlio.sq.wre.max_inline_size");
 
-    const bool xlio_udp_mc_loopback = registry.get_value<bool>("xlio.udp.mc_loopback");
-    tx_mc_loopback_default = xlio_udp_mc_loopback;
+    tx_mc_loopback_default =
+        registry.get_value<bool>("xlio.udp.mc_loopback");
 
-    const bool xlio_sq_nonblocking_eagain =
+    tx_nonblocked_eagains =
         registry.get_value<bool>("xlio.sq.nonblocking.eagain");
-    tx_nonblocked_eagains = xlio_sq_nonblocking_eagain;
 
-    const int64_t xlio_sq_prefetch_cache_size =
-        registry.get_value<int64_t>("xlio.sq.prefetch.cache_size");
-    if (xlio_sq_prefetch_cache_size < 0 || 
-        xlio_sq_prefetch_cache_size > std::numeric_limits<uint32_t>::max()) {
-        throw_xlio_exception("xlio.sq.prefetch.cache_size value is out of range for uint32_t");
-    }
-    tx_prefetch_bytes = static_cast<uint32_t>(xlio_sq_prefetch_cache_size);
+    tx_prefetch_bytes =
+        registry.get_value<decltype(tx_prefetch_bytes)>("xlio.sq.prefetch.cache_size");
 
-    const int64_t xlio_udp_buf_batch_size =
-        registry.get_value<int64_t>("xlio.udp.buf.batch_size");
-    if (xlio_udp_buf_batch_size < 0 || 
-        xlio_udp_buf_batch_size > std::numeric_limits<uint32_t>::max()) {
-        throw_xlio_exception("xlio.udp.buf.batch_size value is out of range for uint32_t");
-    }
-    tx_bufs_batch_udp = static_cast<uint32_t>(xlio_udp_buf_batch_size);
+    tx_bufs_batch_udp =
+        registry.get_value<decltype(tx_bufs_batch_udp)>("xlio.udp.buf.batch_size");
 
-    const int64_t xlio_sq_buf_batch_size =
-        registry.get_value<int64_t>("xlio.sq.buf.batch_size");
-    if (xlio_sq_buf_batch_size < 0 || 
-        xlio_sq_buf_batch_size > std::numeric_limits<uint32_t>::max()) {
-        throw_xlio_exception("xlio.sq.buf.batch_size value is out of range for uint32_t");
-    }
-    tx_bufs_batch_tcp = static_cast<uint32_t>(xlio_sq_buf_batch_size);
+    tx_bufs_batch_tcp =
+        registry.get_value<decltype(tx_bufs_batch_tcp)>("xlio.sq.buf.batch_size");
 
-    const int64_t xlio_sq_segments_socket_batch_size =
-        registry.get_value<int64_t>("xlio.sq.segments.socket_batch_size");
-    if (xlio_sq_segments_socket_batch_size < 0 || 
-        xlio_sq_segments_socket_batch_size > std::numeric_limits<uint32_t>::max()) {
-        throw_xlio_exception("xlio.sq.segments.socket_batch_size value is out of range for uint32_t");
-    }
-    tx_segs_batch_tcp = static_cast<uint32_t>(xlio_sq_segments_socket_batch_size);
+    tx_segs_batch_tcp =
+        registry.get_value<decltype(tx_segs_batch_tcp)>("xlio.sq.segments.socket_batch_size");
 
-    const int64_t xlio_sq_segments_ring_batch_size =
-        registry.get_value<int64_t>("xlio.sq.segments.ring_batch_size");
-    if (xlio_sq_segments_ring_batch_size < 0 || 
-        xlio_sq_segments_ring_batch_size > std::numeric_limits<uint32_t>::max()) {
-        throw_xlio_exception("xlio.sq.segments.ring_batch_size value is out of range for uint32_t");
-    }
-    tx_segs_ring_batch_tcp = static_cast<uint32_t>(xlio_sq_segments_ring_batch_size);
+    tx_segs_ring_batch_tcp =
+        registry.get_value<decltype(tx_segs_ring_batch_tcp)>("xlio.sq.segments.ring_batch_size");
 
-    const int64_t xlio_sq_segments_pool_batch_size =
-        registry.get_value<int64_t>("xlio.sq.segments.pool_batch_size");
-    if (xlio_sq_segments_pool_batch_size < 0 || 
-        xlio_sq_segments_pool_batch_size > std::numeric_limits<uint32_t>::max()) {
-        throw_xlio_exception("xlio.sq.segments.pool_batch_size value is out of range for uint32_t");
-    }
-    tx_segs_pool_batch_tcp = static_cast<uint32_t>(xlio_sq_segments_pool_batch_size);
+    tx_segs_pool_batch_tcp =
+        registry.get_value<decltype(tx_segs_pool_batch_tcp)>("xlio.sq.segments.pool_batch_size");
 
-    const int64_t xlio_rq_buf_size = registry.get_value<int64_t>("xlio.rq.buf.size");
-    if (xlio_rq_buf_size < 0 || 
-        xlio_rq_buf_size > std::numeric_limits<uint32_t>::max()) {
-        throw_xlio_exception("xlio.rq.buf.size value is out of range for uint32_t");
-    }
-    rx_buf_size = static_cast<uint32_t>(xlio_rq_buf_size);
+    rx_buf_size = registry.get_value<decltype(rx_buf_size)>("xlio.rq.buf.size");
 
-    const int64_t xlio_rq_buf_batch_size =
-        registry.get_value<int64_t>("xlio.rq.buf.batch_size");
-    if (xlio_rq_buf_batch_size < 0 || 
-        xlio_rq_buf_batch_size > std::numeric_limits<uint32_t>::max()) {
-        throw_xlio_exception("xlio.rq.buf.batch_size value is out of range for uint32_t");
-    }
-    rx_bufs_batch = static_cast<uint32_t>(xlio_rq_buf_batch_size);
+    rx_bufs_batch = registry.get_value<decltype(rx_bufs_batch)>("xlio.rq.buf.batch_size");
 
-    const int64_t xlio_rq_wre_global_array_size =
-        registry.get_value<int64_t>("xlio.rq.wre.global_array_size");
-    if (xlio_rq_wre_global_array_size < 0 || 
-        xlio_rq_wre_global_array_size > std::numeric_limits<uint32_t>::max()) {
-        throw_xlio_exception("xlio.rq.wre.global_array_size value is out of range for uint32_t");
-    }
-    rx_num_wr = static_cast<uint32_t>(xlio_rq_wre_global_array_size);
+    rx_num_wr = registry.get_value<decltype(rx_num_wr)>("xlio.rq.wre.global_array_size");
 
-    const int64_t xlio_rq_wre_rx_batch_size =
-        registry.get_value<int64_t>("xlio.rq.wre.rx_batch_size");
-    if (xlio_rq_wre_rx_batch_size < 0 || 
-        xlio_rq_wre_rx_batch_size > std::numeric_limits<uint32_t>::max()) {
-        throw_xlio_exception("xlio.rq.wre.rx_batch_size value is out of range for uint32_t");
-    }
-    rx_num_wr_to_post_recv = static_cast<uint32_t>(xlio_rq_wre_rx_batch_size);
+    rx_num_wr_to_post_recv = registry.get_value<decltype(rx_num_wr_to_post_recv)>("xlio.rq.wre.rx_batch_size");
 
-    const int64_t xlio_cq_rx_poll_count = registry.get_value<int64_t>("xlio.cq.rx_poll_count");
-    rx_poll_num = static_cast<int>(xlio_cq_rx_poll_count);
+    rx_poll_num = registry.get_value<decltype(rx_poll_num)>("xlio.cq.rx_poll_count");
 
-    const int64_t xlio_udp_offload_transition_poll_count =
-        registry.get_value<int64_t>("xlio.udp.offload_transition_poll_count");
-    rx_poll_num_init = static_cast<int>(xlio_udp_offload_transition_poll_count);
+    rx_poll_num_init = registry.get_value<decltype(rx_poll_num_init)>("xlio.udp.offload_transition_poll_count");
 
-    const int64_t xlio_udp_rx_kernel_fd_attention_level =
-        registry.get_value<int64_t>("xlio.udp.rx_kernel_fd_attention_level");
-    rx_udp_poll_os_ratio = static_cast<uint32_t>(xlio_udp_rx_kernel_fd_attention_level);
+    rx_udp_poll_os_ratio = registry.get_value<decltype(rx_udp_poll_os_ratio)>("xlio.udp.rx_kernel_fd_attention_level");
 
-    const int64_t xlio_ts_conversion = registry.get_value<int64_t>("xlio.ts_conversion");
-    hw_ts_conversion_mode = static_cast<ts_conversion_mode_t>(xlio_ts_conversion);
+    hw_ts_conversion_mode = static_cast<ts_conversion_mode_t>(registry.get_value<int>("xlio.ts_conversion"));
 
-    const bool xlio_udp_yield_on_poll = registry.get_value<bool>("xlio.udp.yield_on_poll");
-    rx_poll_yield_loops = xlio_udp_yield_on_poll;
+    rx_poll_yield_loops = registry.get_value<bool>("xlio.udp.yield_on_poll");
 
-    const bool core_stats_cpu_usage = registry.get_value<bool>("core.stats.cpu_usage");
-    select_handle_cpu_usage_stats = core_stats_cpu_usage;
+    select_handle_cpu_usage_stats = registry.get_value<bool>("core.stats.cpu_usage");
 
-    const int64_t xlio_rq_buf_override_rcvbuf_limit =
-        registry.get_value<int64_t>("xlio.rq.buf.override_rcvbuf_limit");
-    rx_ready_byte_min_limit = static_cast<uint32_t>(xlio_rq_buf_override_rcvbuf_limit);
+    rx_ready_byte_min_limit = registry.get_value<decltype(rx_ready_byte_min_limit)>("xlio.rq.buf.override_rcvbuf_limit");
 
-    const int64_t xlio_rq_prefetch_cache_size =
-        registry.get_value<int64_t>("xlio.rq.prefetch.cache_size");
-    rx_prefetch_bytes = static_cast<uint32_t>(xlio_rq_prefetch_cache_size);
+    rx_prefetch_bytes = registry.get_value<decltype(rx_prefetch_bytes)>("xlio.rq.prefetch.cache_size");
 
-    const bool xlio_rq_prefetch_fetch_before_poll =
-        registry.get_value<bool>("xlio.rq.prefetch.fetch_before_poll");
-    rx_prefetch_bytes_before_poll = xlio_rq_prefetch_fetch_before_poll ? rx_prefetch_bytes : 0;
+    rx_prefetch_bytes_before_poll = registry.get_value<bool>("xlio.rq.prefetch.fetch_before_poll") ? rx_prefetch_bytes : 0;
 
-    const int64_t xlio_cq_rx_drain_rate_nsec =
-        registry.get_value<int64_t>("xlio.cq.rx_drain_rate_nsec");
-    rx_cq_drain_rate_nsec = static_cast<uint32_t>(xlio_cq_rx_drain_rate_nsec);
+    rx_cq_drain_rate_nsec = registry.get_value<decltype(rx_cq_drain_rate_nsec)>("xlio.cq.rx_drain_rate_nsec");
 
     // Update the rx cq polling rate for draining logic
     tscval_t tsc_per_second = get_tsc_rate_per_second();
@@ -2129,173 +1988,144 @@ void mce_sys_var::apply_settings(const config_registry &registry)
     enable_strq_env = xlio_rq_striding_enable ? option_3::ON : option_3::OFF;
     enable_striding_rq = xlio_rq_striding_enable;
 
-    const int64_t xlio_rq_striding_strides =
-        registry.get_value<int64_t>("xlio.rq.striding.strides");
-    strq_stride_num_per_rwqe = static_cast<uint32_t>(xlio_rq_striding_strides);
+    strq_stride_num_per_rwqe =
+        registry.get_value<decltype(strq_stride_num_per_rwqe)>("xlio.rq.striding.strides");
 
-    const int64_t xlio_rq_striding_stride_size =
-        registry.get_value<int64_t>("xlio.rq.striding.stride_size");
-    strq_stride_size_bytes = static_cast<uint32_t>(xlio_rq_striding_stride_size);
+    strq_stride_size_bytes =
+        registry.get_value<decltype(strq_stride_size_bytes)>("xlio.rq.striding.stride_size");
 
-    const int64_t xlio_rq_striding_spare_strides =
-        registry.get_value<int64_t>("xlio.rq.striding.spare_strides");
-    strq_strides_compensation_level = static_cast<uint32_t>(xlio_rq_striding_spare_strides);
+    strq_strides_compensation_level =
+        registry.get_value<decltype(strq_strides_compensation_level)>("xlio.rq.striding.spare_strides");
 
-    const int64_t xlio_rq_max_gro_streams =
-        registry.get_value<int64_t>("xlio.rq.max_gro_streams");
-    gro_streams_max = static_cast<uint32_t>(xlio_rq_max_gro_streams);
+    gro_streams_max =
+        registry.get_value<decltype(gro_streams_max)>("xlio.rq.max_gro_streams");
 
-    const bool xlio_udp_mc_disable_flowtag =
+    disable_flow_tag =
         registry.get_value<bool>("xlio.udp.mc_disable_flowtag");
-    disable_flow_tag = xlio_udp_mc_disable_flowtag;
 
-    const bool xlio_ring_tcp_2t_rules = registry.get_value<bool>("xlio.ring.tcp_2t_rules");
-    tcp_2t_rules = xlio_ring_tcp_2t_rules;
+    tcp_2t_rules =
+        registry.get_value<bool>("xlio.ring.tcp_2t_rules");
 
-    const bool xlio_ring_tcp_3t_rules = registry.get_value<bool>("xlio.ring.tcp_3t_rules");
-    tcp_3t_rules = xlio_ring_tcp_3t_rules;
+    tcp_3t_rules =
+        registry.get_value<bool>("xlio.ring.tcp_3t_rules");
 
-    const bool xlio_udp_3t_rules = registry.get_value<bool>("xlio.udp.3t_rules");
-    udp_3t_rules = xlio_udp_3t_rules;
+    udp_3t_rules =
+        registry.get_value<bool>("xlio.udp.3t_rules");
 
-    const bool xlio_udp_only_mc_l2_rules =
+    eth_mc_l2_only_rules =
         registry.get_value<bool>("xlio.udp.only_mc_l2_rules");
-    eth_mc_l2_only_rules = xlio_udp_only_mc_l2_rules;
 
-    const bool xlio_udp_mc_flowtag_acceleration =
+    mc_force_flowtag =
         registry.get_value<bool>("xlio.udp.mc_flowtag_acceleration");
-    mc_force_flowtag = xlio_udp_mc_flowtag_acceleration;
 
-    const int64_t net_poll_rx_duration =
-        registry.get_value<int64_t>("net.poll.rx_duration_usec");
-    select_poll_num = static_cast<int>(net_poll_rx_duration);
+    select_poll_num =
+        registry.get_value<decltype(select_poll_num)>("net.poll.rx_duration_usec");
 
     select_poll_os_force =
         MCE_DEFAULT_SELECT_POLL_OS_FORCE; // TODO - discovered to be buggy - see libvma patch
 
-    const int64_t net_poll_kernel_fd_attention =
-        registry.get_value<int64_t>("net.poll.kernel_fd_attention_level");
-    select_poll_os_ratio = static_cast<uint32_t>(net_poll_kernel_fd_attention);
+    select_poll_os_ratio =
+        registry.get_value<decltype(select_poll_os_ratio)>("net.poll.kernel_fd_attention_level");
 
-    const int64_t net_poll_offload_fd_priority =
-        registry.get_value<int64_t>("net.poll.offload_fd_priority");
-    select_skip_os_fd_check = static_cast<uint32_t>(net_poll_offload_fd_priority);
+    select_skip_os_fd_check =
+        registry.get_value<decltype(select_skip_os_fd_check)>("net.poll.offload_fd_priority");
 
-    const bool xlio_cq_interrupt_moderation_enable =
+    cq_moderation_enable =
         registry.get_value<bool>("xlio.cq.interrupt_moderation.enable");
-    cq_moderation_enable = xlio_cq_interrupt_moderation_enable;
 
-    const int64_t xlio_cq_interrupt_moderation_packet_count =
-        registry.get_value<int64_t>("xlio.cq.interrupt_moderation.packet_count");
-    cq_moderation_count = static_cast<uint32_t>(xlio_cq_interrupt_moderation_packet_count);
+    cq_moderation_count =
+        registry.get_value<decltype(cq_moderation_count)>("xlio.cq.interrupt_moderation.packet_count");
 
-    const int64_t xlio_cq_interrupt_moderation_period_usec =
-        registry.get_value<int64_t>("xlio.cq.interrupt_moderation.period_usec");
-    cq_moderation_period_usec = static_cast<uint32_t>(xlio_cq_interrupt_moderation_period_usec);
+    cq_moderation_period_usec =
+        registry.get_value<decltype(cq_moderation_period_usec)>("xlio.cq.interrupt_moderation.period_usec");
 
-    const int64_t xlio_cq_interrupt_moderation_adaptive_count =
-        registry.get_value<int64_t>("xlio.cq.interrupt_moderation.adaptive_count");
-    cq_aim_max_count = static_cast<uint32_t>(xlio_cq_interrupt_moderation_adaptive_count);
+    cq_aim_max_count =
+        registry.get_value<decltype(cq_aim_max_count)>("xlio.cq.interrupt_moderation.adaptive_count");
 
-    const int64_t xlio_cq_interrupt_moderation_adaptive_period_usec =
-        registry.get_value<int64_t>("xlio.cq.interrupt_moderation.adaptive_period_usec");
-    cq_aim_max_period_usec = static_cast<uint32_t>(xlio_cq_interrupt_moderation_adaptive_period_usec);
+    cq_aim_max_period_usec =
+        registry.get_value<decltype(cq_aim_max_period_usec)>("xlio.cq.interrupt_moderation.adaptive_period_usec");
 
-    const int64_t xlio_cq_interrupt_moderation_adaptive_change_frequency_msec =
-        registry.get_value<int64_t>(
-            "xlio.cq.interrupt_moderation.adaptive_change_frequency_msec");
-    cq_aim_interval_msec = static_cast<uint32_t>(xlio_cq_interrupt_moderation_adaptive_change_frequency_msec);
+    cq_aim_interval_msec =
+        registry.get_value<decltype(cq_aim_interval_msec)>("xlio.cq.interrupt_moderation.adaptive_change_frequency_msec");
 
-    const int64_t xlio_cq_interrupt_moderation_interrupt_per_sec =
-        registry.get_value<int64_t>("xlio.cq.interrupt_moderation.interrupt_per_sec");
-    cq_aim_interrupts_rate_per_sec = static_cast<uint32_t>(xlio_cq_interrupt_moderation_interrupt_per_sec);
+    cq_aim_interrupts_rate_per_sec =
+        registry.get_value<decltype(cq_aim_interrupts_rate_per_sec)>("xlio.cq.interrupt_moderation.interrupt_per_sec");
 
-    const int64_t net_poll_rx_buffer_max_count =
-        registry.get_value<int64_t>("net.poll.rx_buffer_max_count");
-    cq_poll_batch_max = net_poll_rx_buffer_max_count;
+    cq_poll_batch_max =
+        registry.get_value<decltype(cq_poll_batch_max)>("net.poll.rx_buffer_max_count");
 
-    const int64_t xlio_cq_periodic_drain_ms =
-        registry.get_value<int64_t>("xlio.cq.periodic_drain_msec");
-    progress_engine_interval_msec = xlio_cq_periodic_drain_ms;
+    progress_engine_interval_msec =
+        registry.get_value<decltype(progress_engine_interval_msec)>("xlio.cq.periodic_drain_msec");
 
-    const int64_t xlio_cq_periodic_drain_max_cqes =
-        registry.get_value<int64_t>("xlio.cq.periodic_drain_max_cqes");
-    progress_engine_wce_max = xlio_cq_periodic_drain_max_cqes;
+    progress_engine_wce_max =
+        registry.get_value<decltype(progress_engine_wce_max)>("xlio.cq.periodic_drain_max_cqes");
 
-    const bool xlio_cq_keep_full = registry.get_value<bool>("xlio.cq.keep_full");
-    cq_keep_qp_full = xlio_cq_keep_full;
+    cq_keep_qp_full =
+        registry.get_value<bool>("xlio.cq.keep_full");
 
-    const int64_t xlio_sq_tso_max_size = registry.get_value<int64_t>("xlio.sq.tso.max_size");
-    max_tso_sz = xlio_sq_tso_max_size;
+    max_tso_sz =
+        registry.get_value<decltype(max_tso_sz)>("xlio.sq.tso.max_size");
 
-    const int64_t xlio_api_hugepages_size =
-        registry.get_value<int64_t>("xlio.api.hugepages.size");
-    user_huge_page_size = xlio_api_hugepages_size;
+    user_huge_page_size =
+        registry.get_value<decltype(user_huge_page_size)>("xlio.api.hugepages.size");
 
-    const bool xlio_cq_interrupt_per_packet =
+    internal_thread_arm_cq_enabled =
         registry.get_value<bool>("xlio.cq.interrupt_per_packet");
-    internal_thread_arm_cq_enabled = xlio_cq_interrupt_per_packet;
 
-    const bool net_offload_enable = registry.get_value<bool>("net.offload.enable");
-    offloaded_sockets = net_offload_enable;
+    offloaded_sockets =
+        registry.get_value<bool>("net.offload.enable");
 
-    const int64_t core_handlers_timer_msec =
-        registry.get_value<int64_t>("core.handlers.timer_msec");
-    timer_resolution_msec = core_handlers_timer_msec;
+    timer_resolution_msec =
+        registry.get_value<decltype(timer_resolution_msec)>("core.handlers.timer_msec");
 
-    const int64_t net_tcp_timer_msec = registry.get_value<int64_t>("net.tcp.timer_msec");
-    tcp_timer_resolution_msec = net_tcp_timer_msec;
+    tcp_timer_resolution_msec =
+        registry.get_value<decltype(tcp_timer_resolution_msec)>("net.tcp.timer_msec");
 
-    const int64_t net_tcp_timestamps = registry.get_value<int64_t>("net.tcp.timestamps");
-    tcp_ts_opt = static_cast<tcp_ts_opt_t>(net_tcp_timestamps);
+    tcp_ts_opt =
+        static_cast<tcp_ts_opt_t>(registry.get_value<int>("net.tcp.timestamps"));
 
-    const bool net_tcp_nodelay_enable = registry.get_value<bool>("net.tcp.nodelay.enable");
-    tcp_nodelay = net_tcp_nodelay_enable;
+    tcp_nodelay =
+        registry.get_value<bool>("net.tcp.nodelay.enable");
 
-    const bool net_tcp_quickack = registry.get_value<bool>("net.tcp.quickack");
-    tcp_quickack = net_tcp_quickack;
+    tcp_quickack =
+        registry.get_value<bool>("net.tcp.quickack");
 
-    const bool net_tcp_push = registry.get_value<bool>("net.tcp.push");
-    tcp_push_flag = net_tcp_push;
+    tcp_push_flag =
+        registry.get_value<bool>("net.tcp.push");
 
-    const bool net_tcp_offload_enable_posix_ctl =
+    avoid_sys_calls_on_tcp_fd =
         registry.get_value<bool>("net.tcp.offload.enable_posix_ctl");
-    avoid_sys_calls_on_tcp_fd = net_tcp_offload_enable_posix_ctl;
 
-    const bool net_tcp_offload_allow_privileged_sockopt =
+    allow_privileged_sock_opt =
         registry.get_value<bool>("net.tcp.offload.allow_privileged_sockopt");
-    allow_privileged_sock_opt = net_tcp_offload_allow_privileged_sockopt;
 
     //	exception_handling is handled by its CTOR
 
     wait_after_join_msec =
         MCE_DEFAULT_WAIT_AFTER_JOIN_MSEC; // TODO - not in use - should be deleted
 
-    const int64_t xlio_batching_mode = registry.get_value<int64_t>("xlio.batching_mode");
-    buffer_batching_mode = static_cast<buffer_batching_mode_t>(xlio_batching_mode);
+    buffer_batching_mode =
+        static_cast<buffer_batching_mode_t>(registry.get_value<int>("xlio.batching_mode"));
 
     const bool core_memory_hugepages_enable =
         registry.get_value<bool>("core.memory.hugepages.enable");
     mem_alloc_type = core_memory_hugepages_enable ? option_alloc_type::mode_t::HUGE
                                                   : option_alloc_type::mode_t::ANON;
 
-    const int64_t core_memory_limit = registry.get_value<int64_t>("core.memory.limit");
-    memory_limit = core_memory_limit;
+    memory_limit =
+        registry.get_value<decltype(memory_limit)>("core.memory.limit");
 
-    const int64_t xlio_memory_external_limit =
-        registry.get_value<int64_t>("xlio.memory.external.limit");
-    memory_limit_user = xlio_memory_external_limit;
+    memory_limit_user =
+        registry.get_value<decltype(memory_limit_user)>("xlio.memory.external.limit");
 
-    const int64_t core_memory_heap_metadata_block_size =
-        registry.get_value<int64_t>("core.memory.heap_metadata_block_size");
-    heap_metadata_block = core_memory_heap_metadata_block_size;
+    heap_metadata_block =
+        registry.get_value<decltype(heap_metadata_block)>("core.memory.heap_metadata_block_size");
 
-    const int64_t core_memory_hugepages_size =
-        registry.get_value<int64_t>("core.memory.hugepages.size");
-    hugepage_size = core_memory_hugepages_size;
+    hugepage_size =
+        registry.get_value<decltype(hugepage_size)>("core.memory.hugepages.size");
 
-    const bool xlio_api_socketextreme = registry.get_value<bool>("xlio.api.socketextreme");
-    enable_socketxtreme = xlio_api_socketextreme;
+    enable_socketxtreme =
+        registry.get_value<bool>("xlio.api.socketextreme");
 
     const int64_t xlio_sq_tso_enable = registry.get_value<int64_t>("xlio.sq.tso.enable");
     enable_tso = xlio_sq_tso_enable ? option_3::ON : option_3::OFF;
@@ -2310,13 +2140,11 @@ void mce_sys_var::apply_settings(const config_registry &registry)
         registry.get_value<bool>("xlio.sq.tls_offload.enable");
     enable_utls_tx = xlio_sq_tls_offload_enable;
 
-    const int64_t xlio_sq_tls_offload_dek_cache_max_size =
-        registry.get_value<int64_t>("xlio.sq.tls_offload.dek_cache_max_size");
-    utls_high_wmark_dek_cache_size = xlio_sq_tls_offload_dek_cache_max_size;
+    utls_high_wmark_dek_cache_size =
+        registry.get_value<decltype(utls_high_wmark_dek_cache_size)>("xlio.sq.tls_offload.dek_cache_max_size");
 
-    const int64_t xlio_sq_tls_offload_dek_cache_min_size =
-        registry.get_value<int64_t>("xlio.sq.tls_offload.dek_cache_min_size");
-    utls_low_wmark_dek_cache_size = xlio_sq_tls_offload_dek_cache_min_size;
+    utls_low_wmark_dek_cache_size =
+        registry.get_value<decltype(utls_low_wmark_dek_cache_size)>("xlio.sq.tls_offload.dek_cache_min_size");
 
     if (utls_low_wmark_dek_cache_size >= utls_high_wmark_dek_cache_size) {
         utls_low_wmark_dek_cache_size = utls_high_wmark_dek_cache_size / 2U;
@@ -2327,92 +2155,76 @@ void mce_sys_var::apply_settings(const config_registry &registry)
     const int64_t xlio_rq_lro = registry.get_value<int64_t>("xlio.rq.lro");
     enable_lro = xlio_rq_lro ? option_3::ON : option_3::OFF;
 
-    const bool xlio_syscall_fork_support =
+    handle_fork =
         registry.get_value<bool>("xlio.syscall.fork_support");
-    handle_fork = xlio_syscall_fork_support;
 
-    const bool core_syscall_dup2_support =
+    close_on_dup2 =
         registry.get_value<bool>("core.syscall.dup2_support");
-    close_on_dup2 = core_syscall_dup2_support;
 
-    const int64_t net_mtu = registry.get_value<int64_t>("net.mtu");
-    mtu = net_mtu;
+    mtu =
+        registry.get_value<decltype(mtu)>("net.mtu");
 
 #if defined(DEFINED_NGINX)
 
-    const int64_t xlio_nginx_udp_pool_size =
-        registry.get_value<int64_t>("xlio.nginx.udp_pool_size");
-    nginx_udp_socket_pool_size = xlio_nginx_udp_pool_size;
+    nginx_udp_socket_pool_size =
+        registry.get_value<decltype(nginx_udp_socket_pool_size)>("xlio.nginx.udp_pool_size");
 
-    const bool xlio_nginx_udp_socket_pool_reuse =
+    nginx_udp_socket_pool_rx_num_buffs_reuse =
         registry.get_value<bool>("xlio.nginx.udp_socket_pool_reuse");
-    nginx_udp_socket_pool_rx_num_buffs_reuse = xlio_nginx_udp_socket_pool_reuse;
 
 #endif
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    const int64_t xlio_nginx_workers_num =
-        registry.get_value<int64_t>("xlio.nginx.workers_num");
-    app.workers_num = xlio_nginx_workers_num;
+    app.workers_num =
+        registry.get_value<decltype(app.workers_num)>("xlio.nginx.workers_num");
 
-    const int64_t xlio_nginx_src_port_stride =
-        registry.get_value<int64_t>("xlio.nginx.src_port_stride");
-    app.src_port_stride = xlio_nginx_src_port_stride;
+    app.src_port_stride =
+        registry.get_value<decltype(app.src_port_stride)>("xlio.nginx.src_port_stride");
 
-    const bool xlio_nginx_distribute_cq =
+    app.distribute_cq_interrupts =
         registry.get_value<bool>("xlio.nginx.distribute_cq");
-    app.distribute_cq_interrupts = xlio_nginx_distribute_cq;
 #endif
 
-    const int64_t net_tcp_mss = registry.get_value<int64_t>("net.tcp.mss");
-    lwip_mss = net_tcp_mss;
+    lwip_mss =
+        registry.get_value<decltype(lwip_mss)>("net.tcp.mss");
 
-    // TODO - stopped here
-    const int64_t net_tcp_congestion_control =
-        registry.get_value<int64_t>("net.tcp.congestion_control");
-    lwip_cc_algo_mod = net_tcp_congestion_control;
+    lwip_cc_algo_mod =
+        registry.get_value<decltype(lwip_cc_algo_mod)>("net.tcp.congestion_control");
 
-    const int64_t xlio_spec = registry.get_value<int64_t>("xlio.spec");
-    mce_spec = xlio_spec;
+    mce_spec =
+        registry.get_value<decltype(mce_spec)>("xlio.spec");
 
-    const int64_t net_neighbor_errors_before_reset =
-        registry.get_value<int64_t>("net.neighbor.errors_before_reset");
-    neigh_num_err_retries = net_neighbor_errors_before_reset;
+    neigh_num_err_retries =
+        registry.get_value<decltype(neigh_num_err_retries)>("net.neighbor.errors_before_reset");
 
-    const int64_t net_neighbor_uc_arp_retries =
-        registry.get_value<int64_t>("net.neighbor.uc_arp_retries");
-    neigh_uc_arp_quata = net_neighbor_uc_arp_retries;
+    neigh_uc_arp_quata =
+        registry.get_value<decltype(neigh_uc_arp_quata)>("net.neighbor.uc_arp_retries");
 
-    const int64_t net_neighbor_uc_arp_delay_msec =
-        registry.get_value<int64_t>("net.neighbor.uc_arp_delay_msec");
-    neigh_wait_till_send_arp_msec = net_neighbor_uc_arp_delay_msec;
+    neigh_wait_till_send_arp_msec =
+        registry.get_value<decltype(neigh_wait_till_send_arp_msec)>("net.neighbor.uc_arp_delay_msec");
 
-    const int64_t net_neighbor_update_interval_msec =
-        registry.get_value<int64_t>("net.neighbor.update_interval_msec");
-    timer_netlink_update_msec = net_neighbor_update_interval_msec;
+    timer_netlink_update_msec =
+        registry.get_value<decltype(timer_netlink_update_msec)>("net.neighbor.update_interval_msec");
 
-    const bool net_deferred_close = registry.get_value<bool>("net.deferred_close");
-    deferred_close = net_deferred_close;
+    deferred_close =
+        registry.get_value<bool>("net.deferred_close");
 
-    const bool net_tcp_linger_0 = registry.get_value<bool>("net.tcp.linger_0");
-    tcp_abort_on_close = net_tcp_linger_0;
+    tcp_abort_on_close =
+        registry.get_value<bool>("net.tcp.linger_0");
 
-    const bool xlio_poll_rx_poll_on_tx = registry.get_value<bool>("xlio.poll.rx_poll_on_tx");
-    rx_poll_on_tx_tcp = xlio_poll_rx_poll_on_tx;
+    rx_poll_on_tx_tcp =
+        registry.get_value<bool>("xlio.poll.rx_poll_on_tx");
 
-    const bool xlio_poll_rx_cq_wait_ctrl =
+    rx_cq_wait_ctrl =
         registry.get_value<bool>("xlio.poll.rx_cq_wait_ctrl");
-    rx_cq_wait_ctrl = xlio_poll_rx_cq_wait_ctrl;
 
-    const bool xlio_syscall_getsockname_dummy_send =
+    trigger_dummy_send_getsockname =
         registry.get_value<bool>("xlio.syscall.getsockname_dummy_send");
-    trigger_dummy_send_getsockname = xlio_syscall_getsockname_dummy_send;
 
-    const int64_t net_tcp_wmem = registry.get_value<int64_t>("net.tcp.wmem");
-    tcp_send_buffer_size = net_tcp_wmem;
+    tcp_send_buffer_size =
+        registry.get_value<decltype(tcp_send_buffer_size)>("net.tcp.wmem");
 
-    const int64_t xlio_poll_skip_cq_on_rx =
-        registry.get_value<int64_t>("xlio.poll.skip_cq_on_rx");
-    skip_poll_in_rx = static_cast<skip_poll_in_rx_t>(xlio_poll_skip_cq_on_rx);
+    skip_poll_in_rx =
+        static_cast<skip_poll_in_rx_t>(registry.get_value<int>("xlio.poll.skip_cq_on_rx"));
 
     const bool core_mutex_over_spinlock =
         registry.get_value<bool>("core.mutex_over_spinlock");
