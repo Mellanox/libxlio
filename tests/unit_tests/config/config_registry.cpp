@@ -184,7 +184,22 @@ TEST(config, config_registry_get_value_wrong_type_throws)
     config_registry registry(std::move(loaders),
                            std::make_unique<json_descriptor_provider>(sample_descriptor));
 
-    ASSERT_THROW(registry.get_value<std::string>("core.log.level"), std::runtime_error);
+    ASSERT_THROW(registry.get_value<std::string>("core.log.level"), xlio_exception);
+}
+
+// our config provider represents ints by int64_t, for size_t we can lose information
+// so instead of static_cast and risk bugs, we throw to inform the user on load time.
+TEST(config, config_registry_get_value_size_t_throws)
+{
+    conf_file_writer json_config(sample_json_config);
+
+    std::queue<std::unique_ptr<loader>> loaders;
+    loaders.push(std::make_unique<json_loader>(json_config.get()));
+
+    config_registry registry(std::move(loaders),
+                           std::make_unique<json_descriptor_provider>(sample_descriptor));
+
+    ASSERT_THROW(registry.get_value<size_t>("core.log.level"), xlio_exception);
 }
 
 TEST(config, config_registry_missing_descriptor_for_key_throws)

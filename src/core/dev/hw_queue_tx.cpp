@@ -1019,7 +1019,7 @@ std::unique_ptr<dpcp::tls_dek> hw_queue_tx::get_tls_dek(const void *key, uint32_
     // of active connections.
     if (unlikely(!m_p_ring->tls_sync_dek_supported()) ||
         (unlikely(m_tls_dek_get_cache.empty()) &&
-         (m_tls_dek_put_cache.size() <= safe_mce_sys().utls_low_wmark_dek_cache_size))) {
+         (static_cast<int64_t>(m_tls_dek_put_cache.size()) <= safe_mce_sys().utls_low_wmark_dek_cache_size))) {
         return get_new_tls_dek(key, key_size_bytes);
     }
 
@@ -1061,7 +1061,7 @@ void hw_queue_tx::put_tls_dek(std::unique_ptr<dpcp::tls_dek> &&tls_dek_obj)
     }
     // We don't allow unlimited DEK cache to avoid system DEK starvation.
     if (likely(m_p_ring->tls_sync_dek_supported()) &&
-        m_tls_dek_put_cache.size() < safe_mce_sys().utls_high_wmark_dek_cache_size) {
+        static_cast<int64_t>(m_tls_dek_put_cache.size()) < safe_mce_sys().utls_high_wmark_dek_cache_size) {
         m_tls_dek_put_cache.emplace_back(std::forward<std::unique_ptr<dpcp::tls_dek>>(tls_dek_obj));
     }
 }
