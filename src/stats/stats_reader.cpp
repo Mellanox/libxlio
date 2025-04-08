@@ -398,6 +398,9 @@ void update_delta_cq_stat(cq_stats_t *p_curr_cq_stats, cq_stats_t *p_prev_cq_sta
         p_prev_cq_stats->n_rx_drained_at_once_max = p_curr_cq_stats->n_rx_drained_at_once_max;
         p_prev_cq_stats->n_rx_pkt_drop =
             (p_curr_cq_stats->n_rx_pkt_drop - p_prev_cq_stats->n_rx_pkt_drop) / delay;
+        p_prev_cq_stats->n_rx_drop_counter =
+            (p_curr_cq_stats->n_rx_drop_counter - p_prev_cq_stats->n_rx_drop_counter) / delay;
+
         p_prev_cq_stats->n_rx_sw_queue_len = p_curr_cq_stats->n_rx_sw_queue_len;
         p_prev_cq_stats->n_buffer_pool_len = p_curr_cq_stats->n_buffer_pool_len;
         p_prev_cq_stats->n_rx_lro_packets =
@@ -570,6 +573,8 @@ void print_cq_stats(cq_instance_block_t *p_cq_inst_arr)
             printf("======================================================\n");
             printf("\tCQ=[%u]\n", i);
             printf(FORMAT_STATS_64bit, "Packets dropped:", p_cq_stats->n_rx_pkt_drop, post_fix);
+            printf(FORMAT_STATS_64bit, "HW RX Packets dropped:", p_cq_stats->n_rx_drop_counter,
+                   post_fix);
             printf(FORMAT_STATS_32bit, "Packets queue len:", p_cq_stats->n_rx_sw_queue_len);
             printf(FORMAT_STATS_32bit, "Drained max:", p_cq_stats->n_rx_drained_at_once_max);
             printf(FORMAT_STATS_32bit, "Buffer pool size:", p_cq_stats->n_buffer_pool_len);
