@@ -156,10 +156,13 @@ cq_mgr_rx::~cq_mgr_rx()
 
 void cq_mgr_rx::statistics_print()
 {
-    if (m_p_cq_stat->n_rx_pkt_drop || m_p_cq_stat->n_rx_sw_queue_len ||
-        m_p_cq_stat->n_rx_drained_at_once_max || m_p_cq_stat->n_buffer_pool_len) {
+    if (m_p_cq_stat->n_rx_pkt_drop || m_p_cq_stat->n_rx_drop_counter ||
+        m_p_cq_stat->n_rx_sw_queue_len || m_p_cq_stat->n_rx_drained_at_once_max ||
+        m_p_cq_stat->n_buffer_pool_len) {
         cq_logdbg_no_funcname("Packets dropped: %12llu",
                               (unsigned long long int)m_p_cq_stat->n_rx_pkt_drop);
+        cq_logdbg_no_funcname("HW RX Packets dropped: %12llu",
+                              (unsigned long long int)m_p_cq_stat->n_rx_drop_counter);
         cq_logdbg_no_funcname("Drained max: %17u", m_p_cq_stat->n_rx_drained_at_once_max);
         cq_logdbg_no_funcname("CQE errors: %18llu",
                               (unsigned long long int)m_p_cq_stat->n_rx_cqe_error);
