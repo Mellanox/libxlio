@@ -336,7 +336,7 @@ public:
     int ring_dev_mem_tx;
     int tcp_max_syn_rate;
 
-    size_t zc_cache_threshold;
+    int64_t zc_cache_threshold;
     uint32_t tx_buf_size;
     uint32_t tcp_nodelay_treshold;
     uint32_t tx_num_wr;
@@ -400,7 +400,7 @@ public:
     bool cq_keep_qp_full;
     uint32_t qp_compensation_level;
     uint32_t max_tso_sz;
-    size_t user_huge_page_size;
+    int64_t user_huge_page_size;
 
     bool offloaded_sockets;
     uint32_t timer_resolution_msec;
@@ -416,10 +416,10 @@ public:
     uint32_t wait_after_join_msec;
     buffer_batching_mode_t buffer_batching_mode;
     option_alloc_type::mode_t mem_alloc_type;
-    size_t memory_limit;
-    size_t memory_limit_user;
-    size_t heap_metadata_block;
-    size_t hugepage_size;
+    int64_t memory_limit;
+    int64_t memory_limit_user;
+    int64_t heap_metadata_block;
+    int64_t hugepage_size;
     bool handle_fork;
     bool close_on_dup2;
     uint32_t mtu; /* effective MTU. If mtu==0 then auto calculate the MTU */
@@ -440,10 +440,10 @@ public:
     bool enable_utls_rx;
     bool enable_utls_tx;
     // DEK cache size high-watermark. Max number of DEKs to be stored in the cache.
-    size_t utls_high_wmark_dek_cache_size;
+    int64_t utls_high_wmark_dek_cache_size;
     // DEK cache size low-watermark. Min number of available DEKs required in the cache
     // to perform Crypto-Sync and reuse.
-    size_t utls_low_wmark_dek_cache_size;
+    int64_t utls_low_wmark_dek_cache_size;
 #endif /* DEFINED_UTLS */
     uint32_t timer_netlink_update_msec;
 
@@ -783,7 +783,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_MEMORY_LIMIT_USER              (0)
 #define MCE_DEFAULT_HEAP_METADATA_BLOCK            (32LU * 1024 * 1024)
 #define MCE_DEFAULT_HUGEPAGE_SIZE                  (0)
-#define MCE_MAX_HUGEPAGE_SIZE                      (1ULL << 63ULL)
+#define MCE_MAX_HUGEPAGE_SIZE                      (1ULL << 63ULL) - 1
 #define MCE_DEFAULT_FORK_SUPPORT                   (true)
 #define MCE_DEFAULT_CLOSE_ON_DUP2                  (true)
 #define MCE_DEFAULT_MTU                            (0)
