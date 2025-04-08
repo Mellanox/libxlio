@@ -316,6 +316,7 @@ typedef struct {
     uint64_t n_rx_gro_packets;
     uint64_t n_rx_gro_bytes;
     uint64_t n_rx_gro_frags;
+    uint64_t n_rx_drop_counter;
     uint32_t n_rx_sw_queue_len;
     uint32_t n_rx_drained_at_once_max;
     uint32_t n_buffer_pool_len;
