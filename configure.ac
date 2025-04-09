@@ -419,6 +419,8 @@ AC_CONFIG_FILES([
 		tools/Makefile
 		tools/daemon/Makefile
 		docs/man/Makefile
+		third_party/Makefile
+		third_party/json-c/Makefile
 		contrib/scripts/xlio.init
 		contrib/scripts/xlio.service
 		contrib/scripts/libxlio.spec
