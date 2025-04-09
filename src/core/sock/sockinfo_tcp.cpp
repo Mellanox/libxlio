@@ -850,7 +850,9 @@ sockinfo_tcp::~sockinfo_tcp()
     destructor_helper_tcp();
 
     if (m_tcp_seg_in_use) {
-        si_tcp_logwarn("still %d tcp segs in use!", m_tcp_seg_in_use);
+        si_tcp_logwarn(
+            "still %d tcp segs in use! state=%d, pcb.unsent=%p, pcb.unacked=%p, pcb.seg_alloc=%p",
+            m_tcp_seg_in_use, get_tcp_state(&m_pcb), m_pcb.unsent, m_pcb.unacked, m_pcb.seg_alloc);
     }
     if (m_tcp_seg_list) {
         g_tcp_seg_pool->put_objs(m_tcp_seg_list);
@@ -1961,6 +1963,11 @@ void sockinfo_tcp::handle_incoming_handshake_failure(sockinfo_tcp *child_conn)
     unlock_tcp_con(); // Unlock the listen parent socket
 
     child_conn->lock_tcp_con();
+
+    /* Abort the connection first to avoid sending RST/FIN during close().
+     * tcp_abort() -> tcp_abandon() does NOT send RST for SYN_RCVD state (per Linux behavior).
+     * This prevents segment allocation during close() path. */
+    child_conn->abort_connection();
 
     if (safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
         // Object destruction is expected to happen in internal thread. Unless XLIO is in late
