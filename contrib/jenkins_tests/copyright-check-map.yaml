@@ -4,6 +4,7 @@ general:
         - "\\.ci.*"
         - "\\.dockers.*"
         - "build.*"
+        - "third_party\\.*"
         - "contrib/jenkins_tests.*"
         - "contrib/valgrind.*"
         - "contrib/xlio-bench.*"

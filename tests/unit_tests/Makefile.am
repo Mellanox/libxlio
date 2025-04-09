@@ -65,7 +65,7 @@ libgtest_la_SOURCES = \
 	$(top_srcdir)/tests/gtest/googletest/src/gtest_main.cc
 
 # unit_tests
-unit_tests_LDADD = libgtest.la $(JSON_C_LIBS)
+unit_tests_LDADD = libgtest.la $(LIBJSON_LIBS)
 
 unit_tests_CPPFLAGS = \
 	-I$(top_srcdir)/ \
@@ -74,7 +74,8 @@ unit_tests_CPPFLAGS = \
     -I$(top_srcdir)/src/core/util \
 	-I$(top_srcdir)/tests/gtest \
 	-I$(top_srcdir)/tests/gtest/googletest/include \
-	$(AM_CPPFLAGS)
+	$(AM_CPPFLAGS) \
+	$(LIBJSON_CFLAGS)
 
 unit_tests_LDFLAGS = -no-install
 unit_tests_CXXFLAGS = \
@@ -93,7 +94,8 @@ unit_tests_SOURCES = \
 	$(top_builddir)/src/core/config/descriptors/parameter_descriptor.cpp \
 	$(top_builddir)/src/core/config/descriptors/config_descriptor.cpp \
 	$(top_builddir)/src/core/config/config_registry.cpp \
-	$(top_builddir)/src/core/config/config_strings.cpp
+	$(top_builddir)/src/core/config/config_strings.cpp \
+	$(top_builddir)/src/core/config/json_object_handle.cpp
 
 
 unit_tests_DEPENDENCIES = \

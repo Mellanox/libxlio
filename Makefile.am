@@ -1,7 +1,7 @@
-SUBDIRS := src tools docs/man
+SUBDIRS := third_party src tools docs/man
 
 
-DIST_SUBDIRS := src tests tools docs/man
+DIST_SUBDIRS := third_party src tests tools docs/man
 
 noinst_SCRIPTS = \
 	$(wildcard contrib/scripts/*)
