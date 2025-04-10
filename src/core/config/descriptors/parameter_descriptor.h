@@ -17,28 +17,27 @@
 
 class parameter_descriptor {
 public:
-  explicit parameter_descriptor() = default;
-  explicit parameter_descriptor(const std::experimental::any &def);
+    explicit parameter_descriptor() = default;
+    explicit parameter_descriptor(const std::experimental::any &def);
 
-  parameter_descriptor(parameter_descriptor &&pd) noexcept = default;
+    parameter_descriptor(parameter_descriptor &&pd) noexcept = default;
 
-  // non-trivial copy constructor
-  parameter_descriptor(const parameter_descriptor &pd);
+    // non-trivial copy constructor
+    parameter_descriptor(const parameter_descriptor &pd);
 
-  void add_string_mapping(const std::string &str,
-                          const std::experimental::any &val);
+    void add_string_mapping(const std::string &str, const std::experimental::any &val);
 
-  bool validate_constraints(const std::experimental::any &val) const;
+    bool validate_constraints(const std::experimental::any &val) const;
 
-  std::experimental::any default_value() const;
+    std::experimental::any default_value() const;
 
-  using constraint_t = std::function<bool(const std::experimental::any &)>;
-  void add_constraint(constraint_t constraint);
+    using constraint_t = std::function<bool(const std::experimental::any &)>;
+    void add_constraint(constraint_t constraint);
 
-  std::experimental::any get_value(const std::experimental::any &val) const;
+    std::experimental::any get_value(const std::experimental::any &val) const;
 
 private:
-  std::experimental::any m_default_value;
-  std::vector<constraint_t> m_constraints;
-  std::map<std::string, std::experimental::any> m_string_mapping;
+    std::experimental::any m_default_value;
+    std::vector<constraint_t> m_constraints;
+    std::map<std::string, std::experimental::any> m_string_mapping;
 };

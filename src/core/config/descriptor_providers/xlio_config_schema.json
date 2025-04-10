@@ -6,12 +6,14 @@
     "properties": {
         "core": {
             "type": "object",
+            "title": "Core system configuration",
             "description": "includes fundamental system or application configurations, focusing on essential functionalities like logging, statistics collection, initialization processes, CPU usage, memory management, exception handling, and signal processing.",
             "properties": {
                 "append_pid_to_path": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
+                    "title": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path.",
+                    "description": "Appends the process ID (PID) to the specified paths to help distinguish between multiple instances of XLIO running on the same system."
                 },
                 "log": {
                     "type": "object",
@@ -54,19 +56,22 @@
                                     "default": "info"
                                 }
                             ],
-                            "description": "Sets level according to desired logging verbosity. (maps to XLIO_TRACELEVEL. Default is info.)"
+                            "title": "Sets level according to desired logging verbosity. (maps to XLIO_TRACELEVEL. Default is info.)",
+                            "description": "Controls the logging level of XLIO. Available levels are:\n- none: Print no log at all\n- panic: Fatal behavior that will throw an exception, typically memory allocation problems\n- error: Runtime errors like failures in OS or Infiniband verbs calls, internal resource mapping issues\n- warn: Runtime warnings about setup problems, address resolution failures, corrupted packets\n- info: General information to help users better use the library\n- details: Complete XLIO configuration and high-level insight into critical decisions\n- debug: API call logging and high-level control channel activity\n- fine: Low-level runtime logging including basic Tx/Rx in fast path (impacts performance)\n- finer: Very low-level runtime logging (significantly impacts performance)\n- all: Identical to finer level"
                         },
                         "file_path": {
                             "type": "string",
                             "default": "",
-                            "description": "Path to the log file. An empty string disables file logging. (maps to XLIO_LOG_FILE)"
+                            "title": "Path to the log file. An empty string disables file logging. (maps to XLIO_LOG_FILE)",
+                            "description": "Redirect all logging to a specific user defined file. This is very useful when raising the log level. XLIO will replace a single '%d' appearing in the log file name with the pid of the process loaded with XLIO, which can help in running multiple instances of XLIO each with its own log file."
                         }
                     }
                 },
                 "exit_report": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Enable printing a summary report on library exit. (maps to XLIO_PRINT_REPORT)"
+                    "title": "Enable printing a summary report on library exit. (maps to XLIO_PRINT_REPORT)",
+                    "description": "Print a human readable report of resources usage at exit. The report is printed during termination phase. Therefore, it can be missed if the process is killed with the SIGKILL signal."
                 },
                 "stats": {
                     "type": "object",
@@ -75,24 +80,28 @@
                         "file_path": {
                             "type": "string",
                             "default": "",
-                            "description": "Path to the stats file; empty string disables stats logging. (maps to XLIO_STATS_FILE)"
+                            "title": "Path to the stats file; empty string disables stats logging. (maps to XLIO_STATS_FILE)",
+                            "description": "Redirect socket statistics to a specific user defined file. XLIO will dump each socket's statistics into a file when closing the socket. An empty string disables this feature."
                         },
                         "fd_num": {
                             "type": "integer",
                             "minimum": 0,
                             "maximum": 1024,
                             "default": 100,
-                            "description": "Maximum number of file descriptors tracked for stats (maps to XLIO_STATS_FD_NUM)."
+                            "title": "Maximum number of file descriptors tracked for stats (maps to XLIO_STATS_FD_NUM).",
+                            "description": "Maximum number of sockets monitored by XLIO statistic mechanism. This affects the number of sockets that xlio_stats and XLIO_STATS_FILE can report simultaneously. The xlio_stats tool is additionally limited by 1024 sockets."
                         },
                         "shmem_dir": {
                             "type": "string",
                             "default": "/tmp/libxlio",
-                            "description": "Directory for shared memory usage (maps to XLIO_STATS_SHMEM_DIR)."
+                            "title": "Directory for shared memory usage (maps to XLIO_STATS_SHMEM_DIR).",
+                            "description": "Set the directory path for the library to create the shared memory files for xlio_stats. No files will be created when setting this value to an empty string."
                         },
                         "cpu_usage": {
                             "type": "boolean",
                             "default": false,
-                            "description": "Enable per-CPU statistics collection. (maps to XLIO_CPU_USAGE_STATS)"
+                            "title": "Enable per-CPU statistics collection. (maps to XLIO_CPU_USAGE_STATS)",
+                            "description": "Calculate XLIO CPU usage during polling hardware loops. This information is available through the XLIO stats utility."
                         }
                     }
                 },
@@ -103,7 +112,8 @@
                         "quick": {
                             "type": "boolean",
                             "default": true,
-                            "description": "Skip extended initialization steps if true. (maps to XLIO_QUICK_START)"
+                            "title": "Skip extended initialization steps if true. (maps to XLIO_QUICK_START)",
+                            "description": "Avoid expensive extra checks to reduce the initialization time. This may result in failures in case of a system misconfiguration. For example, if enabled and hugepages are requested beyond the cgroup limit, XLIO may crash due to an access to an unmapped page."
                         }
                     }
                 },
@@ -114,12 +124,14 @@
                         "affinity": {
                             "type": "string",
                             "default": "-1",
-                            "description": "Comma delimited CPU list; -1 means no affinity. (maps to XLIO_INTERNAL_THREAD_AFFINITY)"
+                            "title": "Comma delimited CPU list; -1 means no affinity. (maps to XLIO_INTERNAL_THREAD_AFFINITY)",
+                            "description": "Control which CPU core(s) the XLIO internal thread is serviced on. The cpu set should be provided as either a hexadecimal value that represents a bitmask, or as a comma delimited list of values (ranges are ok). Both methods are identical to what is supported by the taskset command. Examples: '0,4,8' runs on processors 0,4,8; '0,1,7-10' runs on processors 0,1,7,8,9,10; '-1' disables thread affinity."
                         },
                         "cpuset": {
                             "type": "string",
                             "default": "",
-                            "description": "Path to a cpuset (e.g. /dev/cpuset/my_set); empty means none. (maps to XLIO_INTERNAL_THREAD_CPUSET)"
+                            "title": "Path to a cpuset (e.g. /dev/cpuset/my_set); empty means none. (maps to XLIO_INTERNAL_THREAD_CPUSET)",
+                            "description": "Select a cpuset for XLIO internal thread. The value is the path to the cpuset (for example: /dev/cpuset/my_set), or an empty string to run it on the same cpuset the process runs on."
                         }
                     }
                 },
@@ -130,7 +142,8 @@
                         "dup2_support": {
                             "type": "boolean",
                             "default": true,
-                            "description": "Allow dup2 calls to propagate."
+                            "title": "Allow dup2 calls to propagate. (maps to XLIO_CLOSE_ON_DUP2)",
+                            "description": "When enabled, XLIO will handle the duplicate fd (oldfd) as if it was closed (clear internal data structures) and only then forward the call to the OS. This provides basic dup2 support for cases where dup2 is used to close file descriptors."
                         }
                     }
                 },
@@ -165,7 +178,8 @@
                                     "default": "handle_debug"
                                 }
                             ],
-                            "description": "Controls internal exception handling mode (maps to XLIO_EXCEPTION_HANDLING)."
+                            "title": "Controls internal exception handling mode (maps to XLIO_EXCEPTION_HANDLING).",
+                            "description": "Mode for handling missing support or error cases in Socket API or functionality by XLIO. Options: exit (-2, exit on XLIO startup failure), handle_debug (-1, just log at DEBUG severity), log_debug_undo_offload (0, log DEBUG message and try recovering via kernel network stack), log_error_undo_offload (1, log ERROR message and try recovering via kernel network stack), log_error_return_error (2, log ERROR message and return API respectful error code), log_error_abort (3, log ERROR message and abort application)."
                         }
                     }
                 },
@@ -176,7 +190,8 @@
                         "heap_metadata_block_size": {
                             "type": "integer",
                             "default": 33554432,
-                            "description": "Determines the metadata block size added to every heap allocation (maps to XLIO_HEAP_METADATA_BLOCK)."
+                            "title": "Determines the metadata block size added to every heap allocation (maps to XLIO_HEAP_METADATA_BLOCK).",
+                            "description": "Specifies the size of metadata block that's added to every heap allocation made by XLIO. This affects memory management efficiency."
                         },
                         "hugepages": {
                             "type": "object",
@@ -185,19 +200,22 @@
                                 "enable": {
                                     "type": "boolean",
                                     "default": true,
-                                    "description": "Enable hugepages if available (maps to XLIO_MEM_ALLOC_TYPE)."
+                                    "title": "Enable hugepages if available (maps to XLIO_MEM_ALLOC_TYPE).",
+                                    "description": "XLIO will try to allocate data buffers using the specified method: when true, uses huge pages; when false, uses regular pages (malloc). Using huge pages can improve performance by reducing TLB misses."
                                 },
                                 "size": {
                                     "type": "integer",
                                     "default": 0,
-                                    "description": "Requested hugepage size; 0 uses the OS default. (maps to XLIO_HUGEPAGE_SIZE)."
+                                    "title": "Requested hugepage size; 0 uses the OS default. (maps to XLIO_HUGEPAGE_SIZE).",
+                                    "description": "Force specific hugepage size for XLIO internal memory allocations. Value 0 allows using any supported and available hugepages. The size may be specified in bytes."
                                 }
                             }
                         },
                         "limit": {
                             "type": "integer",
                             "default": 2147483648,
-                            "description": "Overall memory limit (0 means unlimited, maps to XLIO_MEMORY_LIMIT)."
+                            "title": "Overall memory limit (0 means unlimited, maps to XLIO_MEMORY_LIMIT).",
+                            "description": "Pre-allocated memory limit for buffers in bytes. Note that the limit doesn't include dynamic memory allocation and XLIO memory consumption can exceed the limit. A value of 0 means unlimited memory allocation."
                         }
                     }
                 },
@@ -209,7 +227,8 @@
                             "type": "integer",
                             "minimum": 0,
                             "default": 10,
-                            "description": "Interval (in milliseconds) for internal threads' tasks. (maps to XLIO_TIMER_RESOLUTION_MSEC)."
+                            "title": "Interval (in milliseconds) for internal threads' tasks. (maps to XLIO_TIMER_RESOLUTION_MSEC).",
+                            "description": "Control XLIO internal thread wakeup timer resolution in milliseconds. This affects how often internal housekeeping tasks are performed."
                         },
                         "behavior": {
                             "oneOf": [
@@ -234,7 +253,8 @@
                                     "default": "disable"
                                 }
                             ],
-                            "description": "Select which TCP control flows are done in the internal thread. (maps to XLIO_TCP_CTL_THREAD)."
+                            "title": "Select which TCP control flows are done in the internal thread. (maps to XLIO_TCP_CTL_THREAD).",
+                            "description": "Controls how TCP timer and control flows are handled. Options: 'disable' (default) - feature disabled, 'delegate' - handle TCP timers in application context threads (socket must be handled by the same thread throughout its lifecycle), 'with_wakeup' - wake up the thread when there is work to do, 'no_wakeup' - wait for thread timer to expire. This feature should be kept disabled if using blocking poll/select (epoll is OK)."
                         }
                     }
                 },
@@ -249,7 +269,8 @@
                                 "exit": {
                                     "type": "boolean",
                                     "default": true,
-                                    "description": "Exit gracefully on SIGINT (maps to XLIO_HANDLE_SIGINTR)."
+                                    "title": "Exit gracefully on SIGINT (maps to XLIO_HANDLE_SIGINTR).",
+                                    "description": "When enabled, the library handler will be called when an interrupt signal (SIGINT) is sent to the process. XLIO will also call the application's handler if one exists."
                                 }
                             }
                         },
@@ -260,7 +281,8 @@
                                 "backtrace": {
                                     "type": "boolean",
                                     "default": false,
-                                    "description": "Print a backtrace on SIGSEGV if true (maps to XLIO_HANDLE_SIGSEGV)."
+                                    "title": "Print a backtrace on SIGSEGV if true (maps to XLIO_HANDLE_SIGSEGV).",
+                                    "description": "When enabled, print a backtrace if a segmentation fault (SIGSEGV) occurs, which can help with troubleshooting crash issues."
                                 }
                             }
                         }
@@ -269,7 +291,8 @@
                 "mutex_over_spinlock": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Use mutex instead of spinlocks. (maps to XLIO_MULTILOCK)."
+                    "title": "Use mutex instead of spinlocks. (maps to XLIO_MULTILOCK).",
+                    "description": "Control locking type mechanism for some specific flows. Note that usage of Mutex might increase latency, but can be beneficial in certain environments where spin locks cause excessive CPU usage."
                 }
             }
         },
@@ -286,12 +309,14 @@
                             "minimum": 0,
                             "maximum": 3,
                             "default": 0,
-                            "description": "Sets details on each log line: 0=basic, 1=ThreadId, 2=ProcessId+ThreadId, 3=Time+ProcessId+ThreadId. (maps to XLIO_LOG_DETAILS)."
+                            "title": "Sets details on each log line: 0=basic, 1=ThreadId, 2=ProcessId+ThreadId, 3=Time+ProcessId+ThreadId. (maps to XLIO_LOG_DETAILS).",
+                            "description": "Controls the amount of contextual information included with each log line. Higher values add more identification information to help with debugging multi-process or multi-threaded applications."
                         },
                         "colors": {
                             "type": "boolean",
                             "default": true,
-                            "description": "Enable colored log output (maps to XLIO_LOG_COLORS; auto-disabled when logging to file)."
+                            "title": "Enable colored log output (maps to XLIO_LOG_COLORS; auto-disabled when logging to file).",
+                            "description": "Use color scheme when logging. Red for errors, purple for warnings and dim for low level debugs. Colors are automatically disabled when logging is directed to a non-terminal device (when file_path is configured)."
                         }
                     }
                 },
@@ -302,12 +327,14 @@
                         "enable": {
                             "type": "boolean",
                             "default": false,
-                            "description": "Enable the XLIO daemon (maps to XLIO_SERVICE_ENABLE)."
+                            "title": "Enable the XLIO daemon (maps to XLIO_SERVICE_ENABLE).",
+                            "description": "Enable the XLIO daemon service which can provide additional monitoring and management capabilities."
                         },
                         "dir": {
                             "type": "string",
                             "default": "/tmp/libxlio",
-                            "description": "Working directory of the XLIO daemon (maps to XLIO_SERVICE_NOTIFY_DIR)."
+                            "title": "Working directory of the XLIO daemon (maps to XLIO_SERVICE_NOTIFY_DIR).",
+                            "description": "Set the directory path for XLIO to write files used by xliod. When using xliod, it must be run with --notify-dir pointing to the same folder."
                         }
                     }
                 },
@@ -318,12 +345,14 @@
                         "fork_support": {
                             "type": "boolean",
                             "default": true,
-                            "description": "Enables fork support for the library (maps to XLIO_FORK)."
+                            "title": "Enables fork support for the library (maps to XLIO_FORK).",
+                            "description": "Control whether XLIO should support fork. When enabled, XLIO calls ibv_fork_init() function which initializes libibverbs's data structures to handle fork() function calls correctly and avoid data corruption. If ibv_fork_init() is not called or returns a non-zero status, then libibverbs data structures are not fork()-safe and the effect of an application calling fork() is undefined."
                         },
                         "getsockname_dummy_send": {
                             "type": "boolean",
                             "default": false,
-                            "description": "Use dummy packet send from getsockname() to warm up the caches. (maps to XLIO_TRIGGER_DUMMY_SEND_GETSOCKNAME)."
+                            "title": "Use dummy packet send from getsockname() to warm up the caches. (maps to XLIO_TRIGGER_DUMMY_SEND_GETSOCKNAME).",
+                            "description": "When enabled, triggers dummy packet send from getsockname() calls, which will warm up the caches and can improve performance for the first real packet sent."
                         }
                     }
                 },
@@ -338,7 +367,8 @@
                                 "limit": {
                                     "type": "integer",
                                     "default": 0,
-                                    "description": "External memory usage limit for XLIO; 0 means no limit. (maps to XLIO_MEMORY_LIMIT_USER)."
+                                    "title": "External memory usage limit for XLIO; 0 means no limit. (maps to XLIO_MEMORY_LIMIT_USER).",
+                                    "description": "Memory limit for external user allocator. The user allocator can optionally be provided with XLIO extra API. A value of 0 makes XLIO use the core.memory.limit value for user allocations."
                                 }
                             }
                         }
@@ -351,12 +381,14 @@
                         "socketextreme": {
                             "type": "boolean",
                             "default": false,
-                            "description": "Enable socket extreme API (maps to XLIO_SOCKETEXTREME)."
+                            "title": "Enable socket extreme API (maps to XLIO_SOCKETEXTREME).",
+                            "description": "When enabled, XLIO operates in SocketXtreme mode. This mode reduces latency by eliminating copy operations and increases throughput by allowing applications to further utilize true kernel bypass architecture. Applications must use the socket extension API named SocketXtreme to benefit from this mode."
                         },
                         "sendfile_limit": {
                             "type": "integer",
                             "default": 10737418240,
-                            "description": "Maximum allowed bytes for sendfile calls. (maps to XLIO_ZC_CACHE_THRESHOLD)."
+                            "title": "Maximum allowed bytes for sendfile calls. (maps to XLIO_ZC_CACHE_THRESHOLD).",
+                            "description": "Memory limit for the mapping cache which is used by sendfile() zero-copy operations. Defaults to 10GB."
                         },
                         "hugepages": {
                             "type": "object",
@@ -365,7 +397,8 @@
                                 "size": {
                                     "type": "integer",
                                     "default": 2097152,
-                                    "description": "Override hugepage size for the XLIO API. (maps to XLIO_USER_HUGE_PAGE_SIZE)."
+                                    "title": "Override hugepage size for the XLIO API. (maps to XLIO_USER_HUGE_PAGE_SIZE).",
+                                    "description": "Size of huge pages used by user application for buffers provided as part of the TX Zero Copy socket API (sendmsg with MSG_ZEROCOPY flag). Default is 2MB."
                                 }
                             }
                         }
@@ -378,12 +411,14 @@
                         "tcp_2t_rules": {
                             "type": "boolean",
                             "default": true,
-                            "description": "Enable TCP 2‑tuple offload rules (maps to XLIO_TCP_2T_RULES)."
+                            "title": "Enable TCP 2‑tuple offload rules (maps to XLIO_TCP_2T_RULES).",
+                            "description": "Use only 2-tuple rules for TCP connections, instead of using 5-tuple rules. This can help overcome steering limitations for outgoing TCP connections. However, this option requires a unique local IP address per XLIO ring. In the default ring per thread configuration, this means that each thread must bind its sockets to a thread local IP address."
                         },
                         "tcp_3t_rules": {
                             "type": "boolean",
                             "default": true,
-                            "description": "Enable TCP 3‑tuple offload rules (maps to XLIO_TCP_3T_RULES)."
+                            "title": "Enable TCP 3‑tuple offload rules (maps to XLIO_TCP_3T_RULES).",
+                            "description": "Use only 3-tuple rules for incoming TCP connections, instead of using 5-tuple rules. This can improve performance for a server with listen socket which accepts many connections. Outgoing TCP connections that are established with connect() syscall aren't affected by this option."
                         },
                         "tx": {
                             "type": "object",
@@ -416,19 +451,22 @@
                                             "default": "per_thread"
                                         }
                                     ],
-                                    "description": "Transmission ring allocation logic (maps to XLIO_RING_ALLOCATION_LOGIC_TX)."
+                                    "title": "Transmission ring allocation logic (maps to XLIO_RING_ALLOCATION_LOGIC_TX).",
+                                    "description": "Ring allocation logic is used to separate traffic to different rings. By default all sockets use the same ring for TX over the same interface. Options: per_interface (0) - one ring per interface, per_ip_address (1) - separate by IP address, per_socket (10) - separate by socket file descriptor, per_thread (20) - separate by thread ID, per_cpuid/per_core (30/31) - separate by CPU core. Warning: This feature might hurt performance for applications with main processing loop based on select() or poll()."
                                 },
                                 "migration_ratio": {
                                     "type": "integer",
                                     "default": -1,
-                                    "description": "Tx ring migration ratio; -1 disables migration (maps to XLIO_RING_MIGRATION_RATIO_TX)."
+                                    "title": "Tx ring migration ratio; -1 disables migration (maps to XLIO_RING_MIGRATION_RATIO_TX).",
+                                    "description": "Used with the 'per_thread' ring allocation logic to decide when it's beneficial to replace the socket's ring with the ring allocated for the current thread. Each X iterations (where X is this value) we check if the current thread ID matches the ring's thread, and consider migration. If we keep accessing the ring from the same thread for some iterations, we migrate the socket to this thread's ring. A value of -1 disables migration."
                                 },
                                 "max_on_device_memory": {
                                     "type": "integer",
                                     "minimum": 0,
                                     "maximum": 262144,
                                     "default": 0,
-                                    "description": "Maximum Tx memory (in KB) on device; 0 means unlimited (maps to XLIO_RING_DEV_MEM_TX)."
+                                    "title": "Maximum Tx memory (in KB) on device; 0 means unlimited (maps to XLIO_RING_DEV_MEM_TX).",
+                                    "description": "XLIO can use the On Device Memory to store the egress packet if it doesn't fit into the BF inline buffer. This improves application egress latency by reducing PCI transactions. This parameter sets the amount of On Device Memory buffer allocated for each TX ring."
                                 }
                             }
                         },
@@ -463,19 +501,22 @@
                                             "default": "per_thread"
                                         }
                                     ],
-                                    "description": "Reception ring allocation logic (maps to XLIO_RING_ALLOCATION_LOGIC_RX)."
+                                    "title": "Reception ring allocation logic (maps to XLIO_RING_ALLOCATION_LOGIC_RX).",
+                                    "description": "Ring allocation logic is used to separate traffic to different rings. By default all sockets use the same ring for RX over the same interface. Options: per_interface (0) - one ring per interface, per_ip_address (1) - separate by IP address, per_socket (10) - separate by socket file descriptor, per_thread (20) - separate by thread ID, per_cpuid/per_core (30/31) - separate by CPU core. Warning: This feature might hurt performance for applications with main processing loop based on select() or poll()."
                                 },
                                 "migration_ratio": {
                                     "type": "integer",
                                     "default": -1,
-                                    "description": "Rx ring migration ratio; -1 disables migration (maps to XLIO_RING_MIGRATION_RATIO_RX)."
+                                    "title": "Rx ring migration ratio; -1 disables migration (maps to XLIO_RING_MIGRATION_RATIO_RX).",
+                                    "description": "Used with the 'per_thread' ring allocation logic to decide when it's beneficial to replace the socket's ring with the ring allocated for the current thread. Each X iterations (where X is this value) we check if the current thread ID matches the ring's thread, and consider migration. If we keep accessing the ring from the same thread for some iterations, we migrate the socket to this thread's ring. A value of -1 disables migration."
                                 }
                             }
                         },
                         "max_per_interface": {
                             "type": "integer",
                             "default": 0,
-                            "description": "Maximum rings per interface; 0 means unlimited (maps to XLIO_RING_LIMIT_PER_INTERFACE)."
+                            "title": "Maximum rings per interface; 0 means unlimited (maps to XLIO_RING_LIMIT_PER_INTERFACE).",
+                            "description": "Limit the number of rings that can be allocated per interface. For example, in ring allocation per socket logic, if the number of sockets using the same interface is larger than the limit, then several sockets will be sharing the same ring. A value of 0 means unlimited number of rings."
                         }
                     }
                 },
@@ -500,7 +541,8 @@
                             "default": "enable_and_reuse"
                         }
                     ],
-                    "description": "Controls batching for sends/receives (performance optimization; maps to XLIO_BUFFER_BATCHING_MODE)."
+                    "title": "Controls batching for sends/receives (performance optimization; maps to XLIO_BUFFER_BATCHING_MODE).",
+                    "description": "Batching of returning Rx buffers and pulling Tx buffers per socket. Options: disable (0) - don't use buffer batching, enable_and_reuse (1) - use buffer batching and periodically reclaim unused buffers, enable (2) - use buffer batching without reclaim."
                 },
                 "ts_conversion": {
                     "oneOf": [
@@ -529,7 +571,8 @@
                             "default": "system"
                         }
                     ],
-                    "description": "Timestamp conversion mode (maps to XLIO_HW_TS_CONVERSION; default 3 means system clock)."
+                    "title": "Timestamp conversion mode (maps to XLIO_HW_TS_CONVERSION; default 3 means system clock).",
+                    "description": "Defines the time stamp conversion method. Options: disable (0) - No conversion, raw_hw (1) - Only convert the timestamp to seconds/nanoseconds units, best_possible (2) - Try sync to system time, then raw hardware time, system (3) - Convert to system comparable time, ptp (4) - Use PTP synchronization if available, rtc (5) - Use RTC synchronization if available. The conversion is determined by all devices - if hardware of one device doesn't support the chosen method, it will be disabled for other devices too."
                 },
                 "nginx": {
                     "type": "object",
@@ -538,27 +581,32 @@
                         "src_port_stride": {
                             "type": "integer",
                             "default": 2,
-                            "description": "Controls how source ports are spread across workers. (maps to XLIO_NGINX_SRC_PORT_STRIDE)."
+                            "title": "Controls how source ports are spread across workers. (maps to XLIO_NGINX_SRC_PORT_STRIDE).",
+                            "description": "Controls how source ports are distributed across Nginx worker processes to avoid port conflicts and ensure even distribution."
                         },
                         "workers_num": {
                             "type": "integer",
                             "default": 0,
-                            "description": "Controls how many nginx workers to support. (maps to XLIO_NGINX_WORKERS_NUM)."
+                            "title": "Controls how many nginx workers to support. (maps to XLIO_NGINX_WORKERS_NUM).",
+                            "description": "Specifies the number of Nginx worker processes that XLIO should optimize for. This must be set when using the 'nginx' profile in the XLIO_SPEC parameter."
                         },
                         "udp_pool_size": {
                             "type": "integer",
                             "default": 0,
-                            "description": "Buffer pool size for Nginx+XLIO; 0 uses default. (maps to XLIO_NGINX_UDP_POOL_SIZE)."
+                            "title": "Buffer pool size for Nginx+XLIO; 0 uses default. (maps to XLIO_NGINX_UDP_POOL_SIZE).",
+                            "description": "Defines the size of UDP socket pool for NGINX. For any value different than 0, close() socket will not destroy the socket, but will place it in a pool for next socket UDP creation. Disable with 0."
                         },
                         "udp_socket_pool_reuse": {
                             "type": "boolean",
                             "default": false,
-                            "description": "Enable udp socket pools with reuse (maps to XLIO_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE)."
+                            "title": "Enable udp socket pools with reuse (maps to XLIO_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE).",
+                            "description": "When enabled, allows reuse of UDP socket pools specifically for NGINX deployments, enhancing performance with multiple UDP connections."
                         },
                         "distribute_cq": {
                             "type": "boolean",
                             "default": false,
-                            "description": "Nginx Distribute CQ (maps to XLIO_DISTRIBUTE_CQ)."
+                            "title": "Nginx Distribute CQ (maps to XLIO_DISTRIBUTE_CQ).",
+                            "description": "When enabled, distributes completion queue (CQ) processing across worker processes for better performance in NGINX deployments."
                         }
                     }
                 },
@@ -574,52 +622,61 @@
                                     "type": "integer",
                                     "default": 16,
                                     "minimum": 1,
-                                    "description": "Number of TX buffers fetched by a UDP socket at once. (no mapping to XLIO)."
+                                    "title": "Number of TX buffers fetched by a UDP socket at once. (maps to TX_BUFS_BATCH_UDP).",
+                                    "description": "The number of buffers fetched from the ring pool by a UDP socket at once. Higher numbers mean fewer ring accesses to fetch buffers, while lower numbers mean less memory consumption by a socket."
                                 }
                             }
                         },
                         "3t_rules": {
                             "type": "boolean",
                             "default": true,
-                            "description": "Enable UDP 3‑tuple offload rules (maps to XLIO_UDP_3T_RULES)."
+                            "title": "Enable UDP 3‑tuple offload rules (maps to XLIO_UDP_3T_RULES).",
+                            "description": "This parameter can be relevant when applications use connected UDP sockets. 3-tuple rules are used in hardware flow steering rule when the parameter is enabled, and 5-tuple flow steering rule when it is disabled. Enabling this option can reduce hardware flow steering resources, but when disabled the application might see benefits in latency and cycles per packet."
                         },
                         "only_mc_l2_rules": {
                             "type": "boolean",
                             "default": false,
-                            "description": "Only install layer‑2 rules for UDP multicast (maps to XLIO_ETH_MC_L2_ONLY_RULES)."
+                            "title": "Only install layer‑2 rules for UDP multicast (maps to XLIO_ETH_MC_L2_ONLY_RULES).",
+                            "description": "Use only L2 (Ethernet) rules for Ethernet Multicast. When enabled, all loopback traffic will be handled by XLIO instead of the OS."
                         },
                         "mc_loopback": {
                             "type": "boolean",
                             "default": true,
-                            "description": "Enable UDP multicast loopback (maps to XLIO_TX_MC_LOOPBACK)."
+                            "title": "Enable UDP multicast loopback (maps to XLIO_TX_MC_LOOPBACK).",
+                            "description": "This parameter sets the initial value used by XLIO internally to control multicast loopback packets behavior during transmission. An application that calls setsockopt() with IP_MULTICAST_LOOP will override this initial value."
                         },
                         "mc_flowtag_acceleration": {
                             "type": "boolean",
                             "default": false,
-                            "description": "Accelerate flowtag for multicast traffic. (maps to XLIO_MC_FORCE_FLOWTAG)."
+                            "title": "Accelerate flowtag for multicast traffic. (maps to XLIO_MC_FORCE_FLOWTAG).",
+                            "description": "Forces the use of flow tag acceleration for multicast flows where setsockopt(SO_REUSEADDR) is set. Applicable if there are no other sockets opened for the same flow in the system."
                         },
                         "mc_disable_flowtag": {
                             "type": "boolean",
                             "default": false,
-                            "description": "Disable flowtag for multicast traffic. (maps to XLIO_MC_DISABLE_FLOWTAG)."
+                            "title": "Disable flowtag for multicast traffic. (maps to XLIO_MC_DISABLE_FLOWTAG).",
+                            "description": "When enabled, disables flow tag functionality for multicast traffic. This can be useful in environments where multicast flow tagging causes issues."
                         },
                         "yield_on_poll": {
                             "type": "boolean",
                             "default": false,
-                            "description": "Yield CPU when no UDP packets are found during poll. (maps to XLIO_RX_POLL_YIELD)."
+                            "title": "Yield CPU when no UDP packets are found during poll. (maps to XLIO_RX_POLL_YIELD).",
+                            "description": "When an application is running with multiple threads on a limited number of cores, this setting allows each thread polling inside XLIO (read, readv, recv & recvfrom) to yield the CPU to other polling threads to prevent starving them from processing incoming packets."
                         },
                         "offload_transition_poll_count": {
                             "type": "integer",
                             "default": 0,
                             "minimum": -1,
                             "maximum": 100000000,
-                            "description": "Poll count for offload transition (-1 means infinite, 0 disabled; maps to XLIO_RX_POLL_INIT)."
+                            "title": "Poll count for offload transition (-1 means infinite, 0 disabled; maps to XLIO_RX_POLL_INIT).",
+                            "description": "XLIO maps all UDP sockets as potential offloaded capable. Only after the ADD_MEMBERSHIP does the offload start to work. This parameter controls the polling count during this transition phase where the socket is a UDP unicast socket and no multicast addresses were added to it."
                         },
                         "rx_kernel_fd_attention_level": {
                             "type": "integer",
                             "default": 100,
                             "minimum": 0,
-                            "description": "When set to 0, switch to kernel FD for UDP Rx (threshold value; 0 means never; maps to XLIO_RX_UDP_POLL_OS_RATIO)."
+                            "title": "When set to 0, switch to kernel FD for UDP Rx (threshold value; 0 means never; maps to XLIO_RX_UDP_POLL_OS_RATIO).",
+                            "description": "This parameter defines the ratio between XLIO CQ poll and OS FD poll. This will result in a single poll of the not-offloaded sockets every X offloaded socket (CQ) polls. A value of 0 means only offloaded sockets are polled."
                         }
                     }
                 },
@@ -630,17 +687,20 @@
                         "rx_poll_on_tx": {
                             "type": "boolean",
                             "default": false,
-                            "description": "Poll Rx queues on transmit if true. (maps to XLIO_RX_POLL_ON_TX_TCP)."
+                            "title": "Poll Rx queues on transmit if true. (maps to XLIO_RX_POLL_ON_TX_TCP).",
+                            "description": "When enabled, TCP RX polling is performed during TCP TX operations, which can accelerate TCP ACK reception and improve overall latency."
                         },
                         "skip_cq_on_rx": {
                             "type": "integer",
                             "default": 0,
-                            "description": "Policy for skipping completion‑queue checks on Rx. (maps to XLIO_SKIP_POLL_IN_RX)."
+                            "title": "Policy for skipping completion‑queue checks on Rx. (maps to XLIO_SKIP_POLL_IN_RX).",
+                            "description": "Allows TCP socket to skip CQ polling in rx socket call. 0 - Disabled, 1 - Skip always, 2 - Skip only if this socket was added to epoll before."
                         },
                         "rx_cq_wait_ctrl": {
                             "type": "boolean",
                             "default": false,
-                            "description": "Ensures fd is added only to sleeping sockets epoll descriptors, reducing the kernel scan overhead. (maps to XLIO_RX_CQ_WAIT_CTRL)."
+                            "title": "Ensures fd is added only to sleeping sockets epoll descriptors, reducing the kernel scan overhead. (maps to XLIO_RX_CQ_WAIT_CTRL).",
+                            "description": "When enabled, ensures file descriptors are added only to sleeping sockets' epoll descriptors, which can reduce kernel scan overhead in certain workloads."
                         }
                     }
                 },
@@ -651,76 +711,89 @@
                         "interrupt_per_packet": {
                             "type": "boolean",
                             "default": false,
-                            "description": "Generate an interrupt for every received packet if true. (maps to XLIO_INTERNAL_THREAD_ARM_CQ)."
+                            "title": "Generate an interrupt for every received packet if true. (maps to XLIO_INTERNAL_THREAD_ARM_CQ).",
+                            "description": "Wakeup the internal thread for each packet that the CQ receives. The thread will poll and process the packet and bring it to the socket layer. This can minimize latency for busy applications unable to immediately receive packets, but may decrease performance with high packet rates."
                         },
                         "keep_full": {
                             "type": "boolean",
                             "default": true,
-                            "description": "Keep the completion queue full. (maps to XLIO_CQ_KEEP_QP_FULL)."
+                            "title": "Keep the completion queue full. (maps to XLIO_CQ_KEEP_QP_FULL).",
+                            "description": "If enabled (default), CQ will try to compensate QP for each polled receive completion. If buffers are short it will re-post a recently completed buffer, which may cause packet drops. If disabled, CQ will track a 'debt' of missing WREs for each QP and fill them when buffers become available."
                         },
                         "periodic_drain_msec": {
                             "type": "integer",
                             "default": 10,
                             "minimum": 0,
-                            "description": "Interval between Drain periods (in milliseconds) for the CQ. (maps to XLIO_PROGRESS_ENGINE_INTERVAL)."
+                            "title": "Interval between Drain periods (in milliseconds) for the CQ. (maps to XLIO_PROGRESS_ENGINE_INTERVAL).",
+                            "description": "XLIO internal thread safe check that the CQ is drained at least once every N milliseconds. This allows the library to progress the TCP stack even when the application doesn't access its socket. If CQ was already drained by application receive socket API calls, this thread goes back to sleep. A value of 0 disables this mechanism."
                         },
                         "periodic_drain_max_cqes": {
                             "type": "integer",
                             "default": 10000,
                             "minimum": 0,
-                            "description": "Max number of CQEs processed during a periodic drain. (maps to XLIO_PROGRESS_ENGINE_WCE_MAX)."
+                            "title": "Max number of CQEs processed during a periodic drain. (maps to XLIO_PROGRESS_ENGINE_WCE_MAX).",
+                            "description": "Each time XLIO's internal thread starts CQ draining, it will stop when reaching this maximum value. The application is not limited by this value in the number of CQ elements it can process from calling receive path socket APIs."
                         },
                         "rx_drain_rate_nsec": {
                             "type": "integer",
                             "default": 0,
                             "minimum": 0,
-                            "description": "Drain rate (in nanoseconds) for Rx; 0 disables rate control. (maps to XLIO_RX_CQ_DRAIN_RATE_NSEC)."
+                            "title": "Drain rate (in nanoseconds) for Rx; 0 disables rate control. (maps to XLIO_RX_CQ_DRAIN_RATE_NSEC).",
+                            "description": "Socket's receive path CQ drain logic rate control. When enabled (non-zero), even if the socket's receive ready packet queue is not empty, it will still check the CQ for ready completions for processing. This CQ polling rate is controlled in nanosecond resolution to prevent CPU consumption from over-polling. This enables a more 'real-time' monitoring of the socket's ready packet queue. Recommended values are 100-5000 nanoseconds. A value of 0 disables this feature."
                         },
                         "rx_poll_count": {
                             "type": "integer",
                             "default": 100000,
                             "minimum": -1,
                             "maximum": 100000000,
-                            "description": "Poll operations count for Rx (-1 means infinite, 0 disabled; maps to XLIO_RX_POLL)."
+                            "title": "Poll operations count for Rx (-1 means infinite, 0 disabled; maps to XLIO_RX_POLL).",
+                            "description": "The number of times to poll on Rx path for ready packets before going to sleep (wait for interrupt in blocked mode) or return -1 (in non-blocked mode). This polling is done when the application is working with direct blocked calls to read(), recv(), recvfrom() & recvmsg(). When Rx path has successful poll hits, the latency is improved dramatically at the cost of higher CPU utilization. Value -1 means infinite polling, 0 disables polling completely."
                         },
                         "interrupt_moderation": {
                             "type": "object",
-                            "description": "controls interrupt moderation for completion queues.",
+                            "description": "controls interrupt moderation for completion queues. Reduces CPU utilization by coalescing interrupts at the cost of some latency. Adaptive algorithms automatically adjust parameters to reach desired interrupt rate.",
                             "properties": {
                                 "enable": {
                                     "type": "boolean",
                                     "default": true,
-                                    "description": "Enable interrupt moderation (maps to XLIO_CQ_MODERATION_ENABLE)."
+                                    "title": "Enable interrupt moderation (maps to XLIO_CQ_MODERATION_ENABLE).",
+                                    "description": "When enabled, the hardware will not generate an interrupt for each packet, but instead only after some amount of packets are received or after a packet was held for some time."
                                 },
                                 "packet_count": {
                                     "type": "integer",
                                     "default": 48,
-                                    "description": "Packet count threshold before an interrupt (maps to XLIO_CQ_MODERATION_COUNT)."
+                                    "title": "Packet count threshold before an interrupt (maps to XLIO_CQ_MODERATION_COUNT).",
+                                    "description": "Number of packets to hold before generating an interrupt. Higher values reduce CPU usage but increase latency."
                                 },
                                 "period_usec": {
                                     "type": "integer",
                                     "default": 50,
-                                    "description": "Interrupt moderation period in microseconds (maps to XLIO_CQ_MODERATION_PERIOD_USEC)."
+                                    "title": "Interrupt moderation period in microseconds (maps to XLIO_CQ_MODERATION_PERIOD_USEC).",
+                                    "description": "Maximum time in microseconds to hold packets before generating an interrupt, regardless of packet count."
                                 },
                                 "adaptive_count": {
                                     "type": "integer",
                                     "default": 560,
-                                    "description": "Adaptive moderation count threshold (maps to XLIO_CQ_AIM_MAX_COUNT)."
+                                    "title": "Adaptive moderation count threshold (maps to XLIO_CQ_AIM_MAX_COUNT).",
+                                    "description": "Maximum possible packet count threshold that can be set by the adaptive algorithm."
                                 },
                                 "adaptive_period_usec": {
                                     "type": "integer",
                                     "default": 250,
-                                    "description": "Adaptive moderation period (in microseconds; maps to XLIO_CQ_AIM_MAX_PERIOD_USEC)."
+                                    "title": "Adaptive moderation period (in microseconds; maps to XLIO_CQ_AIM_MAX_PERIOD_USEC).",
+                                    "description": "Maximum possible time period in microseconds that can be set by the adaptive algorithm."
                                 },
                                 "adaptive_change_frequency_msec": {
                                     "type": "integer",
                                     "default": 250,
-                                    "description": "Frequency (in milliseconds) to update adaptive moderation; 0 disables adaptation (maps to XLIO_CQ_AIM_INTERVAL_MSEC)."
+                                    "title": "Frequency (in milliseconds) to update adaptive moderation; 0 disables adaptation (maps to XLIO_CQ_AIM_INTERVAL_MSEC).",
+                                    "description": "How often the adaptive algorithm runs to adjust interrupt moderation parameters. Setting to 0 disables adaptive behavior."
                                 },
                                 "interrupt_per_sec": {
                                     "type": "integer",
                                     "default": 5000,
-                                    "description": "Target interrupt rate per second (maps to XLIO_CQ_AIM_INTERRUPTS_RATE_PER_SEC)."
+                                    "title": "Target interrupt rate per second (maps to XLIO_CQ_AIM_INTERRUPTS_RATE_PER_SEC).",
+                                    "description": "The desired rate of interrupts per second that the adaptive algorithm will try to maintain by adjusting count and period parameters."
                                 }
                             }
                         },
@@ -731,7 +804,8 @@
                                 "rx_spare": {
                                     "type": "integer",
                                     "default": 256,
-                                    "description": "Minimum spare Rx buffers in the CQ. (maps to XLIO_QP_COMPENSATION_LEVEL)."
+                                    "title": "Minimum spare Rx buffers in the CQ. (maps to XLIO_QP_COMPENSATION_LEVEL).",
+                                    "description": "Number of spare receive buffer CQ holds to allow for filling up QP while full receive buffers are being processed inside XLIO."
                                 }
                             }
                         }
@@ -750,19 +824,22 @@
                                     "default": 0,
                                     "minimum": 0,
                                     "maximum": 65280,
-                                    "description": "Size of each TX data buffer element; 0 for auto (must be at least the MTU if manually set; maps to XLIO_TX_BUF_SIZE)."
+                                    "title": "Size of each TX data buffer element; 0 for auto (must be at least the MTU if manually set; maps to XLIO_TX_BUF_SIZE).",
+                                    "description": "Size of Tx data buffer elements allocation. Cannot be less than MTU (Maximum Transfer Unit) or greater than 0xFF00. A value of 0 means automatic calculation based on XLIO_MTU and XLIO_MSS."
                                 },
                                 "batch_size": {
                                     "type": "integer",
                                     "default": 16,
                                     "minimum": 1,
-                                    "description": "Number of TX buffers fetched by a TCP socket at once. (maps to XLIO_TX_BUFS_BATCH_TCP)."
+                                    "title": "Number of TX buffers fetched by a TCP socket at once. (maps to XLIO_TX_BUFS_BATCH_TCP).",
+                                    "description": "The number of buffers fetched from the ring pool by a TCP socket at once. Higher number means fewer ring accesses to fetch buffers, lower number means less memory consumption by a socket."
                                 },
                                 "global_array_size": {
                                     "type": "integer",
                                     "default": 200000,
                                     "minimum": 0,
-                                    "description": "Global TX buffer array size for all SQ buffers. (maps to XLIO_TX_BUFS)."
+                                    "title": "Global TX buffer array size for all SQ buffers. (maps to XLIO_TX_BUFS).",
+                                    "description": "Number of global zerocopy data buffer elements allocation."
                                 }
                             }
                         },
@@ -774,7 +851,8 @@
                                     "type": "integer",
                                     "default": 256,
                                     "minimum": 0,
-                                    "description": "Prefetch cache size; 0 disables prefetch."
+                                    "title": "Prefetch cache size; 0 disables prefetch. (maps to XLIO_TX_PREFETCH_BYTES).",
+                                    "description": "Accelerate offloaded send operation by optimizing cache. Different values give optimized send rate on different machines. Values range from 0 (disable) to MTU size. The default of 256 bytes works well on most systems."
                                 }
                             }
                         },
@@ -786,21 +864,24 @@
                                     "type": "integer",
                                     "default": 32768,
                                     "minimum": 0,
-                                    "description": "Global array size for SQ work request elements."
+                                    "title": "Global array size for SQ work request elements. (maps to XLIO_TX_WRE).",
+                                    "description": "Number of Work Request Elements allocated in all transmit QP's. The number of QP's can change according to the number of network offloaded interfaces."
                                 },
                                 "completion_batch_size": {
                                     "type": "integer",
                                     "default": 64,
                                     "minimum": 1,
                                     "maximum": 64,
-                                    "description": "Number of WRE completions batched per poll."
+                                    "title": "Number of WRE completions batched per poll. (maps to XLIO_TX_WRE_BATCHING).",
+                                    "description": "The number of Tx Work Request Elements used until a completion signal is requested. Tuning this parameter allows better control of the jitter encountered from the Tx CQE handling. Higher values result in higher PPS and lower average latency, while lower values result in lower latency standard deviation."
                                 },
                                 "max_inline_size": {
                                     "type": "integer",
                                     "default": 204,
                                     "minimum": 0,
                                     "maximum": 884,
-                                    "description": "Maximum inline size for SQ postings; 0 disables inline sending (maps to XLIO_TX_MAX_INLINE)."
+                                    "title": "Maximum inline size for SQ postings; 0 disables inline sending (maps to XLIO_TX_MAX_INLINE).",
+                                    "description": "Max send inline data set for QP. Data copied into the INLINE space includes at least 32 bytes of headers with the rest available for user datagram payload. Setting to 0 disables INLINEing on the Tx transmit path."
                                 }
                             }
                         },
@@ -811,7 +892,8 @@
                                 "eagain": {
                                     "type": "boolean",
                                     "default": false,
-                                    "description": "Return EAGAIN on nonblocking send instead of waiting."
+                                    "title": "Return EAGAIN on nonblocking send instead of waiting. (maps to XLIO_TX_NONBLOCKED_EAGAINS).",
+                                    "description": "When enabled, the library will return with error EAGAIN if it was unable to accomplish the send operation and the datagram was dropped. When disabled (default OS behavior), send operations on non-blocked UDP sockets return OK even if the datagram is silently dropped."
                                 }
                             }
                         },
@@ -823,19 +905,22 @@
                                     "type": "integer",
                                     "default": 64,
                                     "minimum": 1,
-                                    "description": "Number of segments batched per socket."
+                                    "title": "Number of segments batched per socket. (maps to XLIO_TX_SEGS_BATCH_TCP).",
+                                    "description": "Controls the number of TCP segments fetched from the segments pool by a socket at once. Higher values improve performance by reducing the frequency of segment fetching operations."
                                 },
                                 "ring_batch_size": {
                                     "type": "integer",
                                     "default": 1024,
                                     "minimum": 1,
-                                    "description": "Number of segments batched per ring operation."
+                                    "title": "Number of segments batched per ring operation. (maps to XLIO_TX_SEGS_RING_BATCH_TCP).",
+                                    "description": "Controls the number of TCP segments fetched from the segments pool by a ring at once. Higher values improve performance by reducing the frequency of segment fetching operations at the ring level."
                                 },
                                 "pool_batch_size": {
                                     "type": "integer",
                                     "default": 1024,
                                     "minimum": 1,
-                                    "description": "Number of segments batched per ring operation."
+                                    "title": "Number of segments batched per ring operation. (maps to XLIO_TX_SEGS_POOL_BATCH_TCP).",
+                                    "description": "Controls how many TCP segments are batched when fetched from the segments pool at once. Higher values can improve performance by reducing the frequency of pool access operations."
                                 }
                             }
                         },
@@ -864,13 +949,15 @@
                                             "default": "ethtool_auto"
                                         }
                                     ],
-                                    "description": "Set TCP segmentation offload policy for XLIO's sends (maps to XLIO_TSO)."
+                                    "title": "Set TCP segmentation offload policy for XLIO's sends (maps to XLIO_TSO).",
+                                    "description": "With TCP Segmentation Offload (TSO), TCP can pass a buffer to be transmitted that is larger than the maximum transmission unit (MTU). Intelligent adapters implement TSO by using the prototype TCP and IP headers to create segments of required size. Benefits include increased throughput and reduced CPU load. Options: disable (off), enable (on), ethtool_auto (use adapter settings)."
                                 },
                                 "max_size": {
                                     "type": "integer",
                                     "default": 262144,
                                     "minimum": 1,
-                                    "description": "TSO max size. (maps to XLIO_TSO_MAX_SIZE)."
+                                    "title": "TSO max size. (maps to XLIO_TSO_MAX_SIZE).",
+                                    "description": "Maximum size in bytes of a TCP segment that can be transmitted with TCP Segmentation Offload. Larger values can improve performance by reducing CPU overhead for segmentation."
                                 }
                             }
                         },
@@ -881,17 +968,20 @@
                                 "enable": {
                                     "type": "boolean",
                                     "default": true,
-                                    "description": "Enable TLS offload for outgoing traffic."
+                                    "title": "Enable TLS offload for outgoing traffic. (maps to XLIO_UTLS_TX).",
+                                    "description": "When enabled, XLIO offloads TLS TX (transmit) path through the kTLS API if possible. This provides TLS data path acceleration for outgoing traffic."
                                 },
                                 "dek_cache_max_size": {
                                     "type": "integer",
                                     "default": 1024,
-                                    "description": "Set TX TLS Offload DEK max cache size (maps to XLIO_HIGH_WMARK_DEK_CACHE_SIZE)."
+                                    "title": "Set TX TLS Offload DEK max cache size (maps to XLIO_HIGH_WMARK_DEK_CACHE_SIZE).",
+                                    "description": "Maximum size of the Data Encryption Key (DEK) cache for TLS offload operations. Controls the high watermark for DEK cache management."
                                 },
                                 "dek_cache_min_size": {
                                     "type": "integer",
                                     "default": 512,
-                                    "description": "Set TX TLS Offload DEK min cache size (maps to XLIO_LOW_WMARK_DEK_CACHE_SIZE)."
+                                    "title": "Set TX TLS Offload DEK min cache size (maps to XLIO_LOW_WMARK_DEK_CACHE_SIZE).",
+                                    "description": "Minimum size of the Data Encryption Key (DEK) cache for TLS offload operations. Controls the low watermark for DEK cache management."
                                 }
                             }
                         }
@@ -910,24 +1000,28 @@
                                     "default": 0,
                                     "minimum": 0,
                                     "maximum": 65280,
-                                    "description": "Receive buffer size; 0 means auto (must be at least the MTU if manually set)."
+                                    "title": "Receive buffer size; 0 means auto (must be at least the MTU if manually set; maps to XLIO_RX_BUF_SIZE).",
+                                    "description": "Size of receive buffer elements allocation. Cannot be less than MTU (Maximum Transfer Unit) or greater than 0xFF00. A value of 0 means automatic calculation based on maximum MTU."
                                 },
                                 "global_array_size": {
                                     "type": "integer",
                                     "default": 32768,
                                     "minimum": 0,
-                                    "description": "Global pool size for all RQ buffers."
+                                    "title": "Global pool size for all RQ buffers. (maps to XLIO_RX_BUFS).",
+                                    "description": "Number of receive buffers allocated globally across all receive queues. This affects the overall memory consumption of the library."
                                 },
                                 "override_rcvbuf_limit": {
                                     "type": "integer",
                                     "default": 65536,
-                                    "description": "Override for the OS receive buffer limit (maps to XLIO_RX_BYTES_MIN)."
+                                    "title": "Override for the OS receive buffer limit (maps to XLIO_RX_BYTES_MIN).",
+                                    "description": "Minimum value in bytes that will be used per socket by XLIO when applications call setsockopt(SO_RCVBUF). If the application tries to set a smaller value, XLIO will force this minimum limit value on the socket."
                                 },
                                 "batch_size": {
                                     "type": "integer",
                                     "default": 16,
                                     "minimum": 1,
-                                    "description": "Number of RX buffers fetched by a TCP socket at once. (no mapping to XLIO)."
+                                    "title": "Number of RX buffers fetched by a TCP socket at once. (maps to RX_BUFS_BATCH).",
+                                    "description": "The number of receive buffers fetched at once by a TCP socket. Higher values can improve performance by reducing the frequency of buffer fetching operations."
                                 }
                             }
                         },
@@ -939,14 +1033,16 @@
                                     "type": "integer",
                                     "default": 16000,
                                     "minimum": 0,
-                                    "description": "Global array size for RQ work request elements."
+                                    "title": "Global array size for RQ work request elements. (maps to XLIO_RX_WRE).",
+                                    "description": "Number of Work Request Elements allocated in all RQs. This affects the receive capacity of the system."
                                 },
                                 "rx_batch_size": {
                                     "type": "integer",
                                     "default": 1024,
                                     "minimum": 1,
                                     "maximum": 1024,
-                                    "description": "Batch size for receive completions."
+                                    "title": "Batch size for receive completions. (maps to XLIO_RX_WRE_BATCHING).",
+                                    "description": "Number of Work Request Elements and RX buffers to batch before recycling. Batching decreases latency mean but might increase latency standard deviation."
                                 }
                             }
                         },
@@ -958,12 +1054,14 @@
                                     "type": "integer",
                                     "default": 256,
                                     "minimum": 32,
-                                    "description": "Receive prefetch cache size; 0 disables prefetch (minimum is 32)."
+                                    "title": "Receive prefetch cache size; 0 disables prefetch (minimum is 32; maps to XLIO_RX_PREFETCH_BYTES).",
+                                    "description": "Size of receive buffer in bytes to prefetch into CPU cache while processing ingress packets. The default is to prefetch enough bytes to cover the IP+UDP headers and part of the user payload. Increasing this can help improve performance for larger user payload sizes."
                                 },
                                 "fetch_before_poll": {
                                     "type": "boolean",
                                     "default": false,
-                                    "description": "Prefetch data before polling if true."
+                                    "title": "Prefetch data before polling if true. (maps to XLIO_RX_PREFETCH_BYTES_BEFORE_POLL).",
+                                    "description": "Same as cache_size, but prefetch is done before actually getting the packets. This can benefit low packets-per-second traffic latency."
                                 }
                             }
                         },
@@ -988,7 +1086,8 @@
                                     "default": "ethtool_auto"
                                 }
                             ],
-                            "description": "Large Receive Offload policy (maps to XLIO_LRO)."
+                            "title": "Large Receive Offload policy (maps to XLIO_LRO).",
+                            "description": "Large Receive Offload (LRO) increases inbound throughput of high-bandwidth connections by reducing CPU overhead. It works by aggregating multiple incoming packets from a single stream into a larger buffer before passing them up the networking stack, reducing the number of packets that must be processed. Options: disable (off), enable (on), ethtool_auto (use adapter settings)."
                         },
                         "tls_offload": {
                             "type": "object",
@@ -997,14 +1096,16 @@
                                 "enable": {
                                     "type": "boolean",
                                     "default": false,
-                                    "description": "Enable TLS offload for incoming traffic. (maps to XLIO_UTLS_RX)."
+                                    "title": "Enable TLS offload for incoming traffic. (maps to XLIO_UTLS_RX).",
+                                    "description": "UTLS provides TLS data path acceleration by offloading Linux kTLS API. When enabled, XLIO offloads TLS RX (receive) path if possible. Refer to your TLS library documentation for kTLS support information."
                                 }
                             }
                         },
                         "max_gro_streams": {
                             "type": "integer",
                             "default": 32,
-                            "description": "Maximum number of GRO streams; 0 disables GRO. (maps to XLIO_GRO_STREAMS_MAX)."
+                            "title": "Maximum number of GRO streams; 0 disables GRO. (maps to XLIO_GRO_STREAMS_MAX).",
+                            "description": "Controls the number of TCP streams to perform GRO (Generic Receive Offload) simultaneously. Disable GRO with a value of 0."
                         },
                         "striding": {
                             "type": "object",
@@ -1013,26 +1114,30 @@
                                 "enable": {
                                     "type": "boolean",
                                     "default": true,
-                                    "description": "Enable striding for RQ buffer management. (maps to XLIO_STRQ)."
+                                    "title": "Enable striding for RQ buffer management. (maps to XLIO_STRQ).",
+                                    "description": "Enable or disable Striding Receive Queues. Each WQE in a Striding RQ may receive several packets. The WQE buffer size is controlled by strides x stride_size parameters. This can improve performance for high-packet rate workloads."
                                 },
                                 "strides": {
                                     "type": "integer",
                                     "default": 2048,
                                     "minimum": 512,
                                     "maximum": 65536,
-                                    "description": "Number of strides per WQE (must be a power of 2; maps to XLIO_STRQ_NUM_STRIDES)."
+                                    "title": "Number of strides per WQE (must be a power of 2; maps to XLIO_STRQ_NUM_STRIDES).",
+                                    "description": "The number of strides in each receive WQE. Must be a power of two and in the range of 512 to 65536."
                                 },
                                 "stride_size": {
                                     "type": "integer",
                                     "default": 64,
                                     "minimum": 64,
                                     "maximum": 8192,
-                                    "description": "Size (in bytes) of each stride (must be a power of 2; maps to XLIO_STRQ_STRIDE_SIZE_BYTES)."
+                                    "title": "Size (in bytes) of each stride (must be a power of 2; maps to XLIO_STRQ_STRIDE_SIZE_BYTES).",
+                                    "description": "The size, in bytes, of each stride in a receive WQE. Must be a power of two and in the range of 64 to 8192 bytes."
                                 },
                                 "spare_strides": {
                                     "type": "integer",
                                     "default": 32768,
-                                    "description": "Extra strides reserved. (maps to XLIO_STRQ_STRIDES_COMPENSATION_LEVEL)."
+                                    "title": "Extra strides reserved. (maps to XLIO_STRQ_STRIDES_COMPENSATION_LEVEL).",
+                                    "description": "Number of spare stride objects a CQ holds to allow faster allocation of a stride object when a packet arrives."
                                 }
                             }
                         }
@@ -1067,12 +1172,14 @@
                             "default": "none"
                         }
                     ],
-                    "description": "DEPRECATED - XLIO Specs (maps to XLIO_SPEC)."
+                    "title": "DEPRECATED - XLIO Specs (maps to XLIO_SPEC).",
+                    "description": "XLIO predefined specification profiles. Options include: latency (optimized for latency-sensitive use cases), ultra-latency (optimized for extreme latency using single thread model and avoiding OS polling), nginx (optimized for nginx web server), nginx_dpu (optimized for nginx running inside NVIDIA DPU), nvme_bf3 (optimized for SPDK solution over NVIDIA DPU BF3). This option is deprecated and will be removed in future releases."
                 }
             }
         },
         "net": {
             "type": "object",
+            "title": "Network configuration settings",
             "description": "network-related configuration parameters, managing aspects of network functionality such as TCP settings, offloading capabilities, neighbor interactions, and polling mechanisms.",
             "properties": {
                 "offload": {
@@ -1082,28 +1189,34 @@
                         "enable": {
                             "type": "boolean",
                             "default": true,
-                            "description": "Enable hardware offloads on the network interface."
+                            "title": "Enable hardware offloads on the network interface. (maps to XLIO_OFFLOADED_SOCKETS).",
+                            "description": "Create all sockets as offloaded by default when enabled. When disabled, sockets will use the standard kernel network stack."
                         },
                         "transport_control": {
                             "type": "array",
                             "default": [],
-                            "description": "Transport control per apps. (maps to libxlio.conf).",
+                            "title": "Transport control rules for specific applications (maps to libxlio.conf).",
+                            "description": "Transport control configures the target applications or processes to which the configured control settings apply. It defines the transport protocol to be used for created sockets, and specifies the IP addresses and ports to offload. By default, the configuration file allows XLIO to offload everything except for the DNS server-side protocol (UDP, port 53) which will be handled by the OS. (maps to libxlio.conf).",
                             "items": {
                                 "type": "object",
                                 "properties": {
                                     "id": {
                                         "type": "string",
-                                        "description": "Identifier for the transport control"
+                                        "title": "Identifier for the transport control",
+                                        "description": "Unique identifier for this transport control rule, used for identification and reference."
                                     },
                                     "name": {
                                         "type": "string",
-                                        "description": "Name of the application"
+                                        "title": "Name of the application",
+                                        "description": "Name of the application that this transport control applies to. Used to match applications with the appropriate control policy."
                                     },
                                     "actions": {
                                         "type": "array",
                                         "description": "List of actions for the transport control",
                                         "items": {
-                                            "type": "string"
+                                            "type": "string",
+                                            "title": "Specific action to be applied as part of the transport control policy.",
+                                            "description": "A directive that modifies the behavior of the transport layer for the matching application. These actions can control when to offload based on IP, port or application characteristics."
                                         }
                                     }
                                 }
@@ -1112,14 +1225,16 @@
                         "app_id": {
                             "type": "string",
                             "default": "*",
-                            "description": "App id that effectively selects the transport_control actions. (maps to XLIO_APPLICATION_ID)."
+                            "title": "App id that effectively selects the transport_control actions. (maps to XLIO_APPLICATION_ID).",
+                            "description": "Specifies a group of rules from libxlio.conf for XLIO to apply. Used to match only specific group rules from the configuration file. Default value is \"*\" which matches only the default group rule."
                         }
                     }
                 },
                 "deferred_close": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Defer closing of fd to when closing the socket. (maps to XLIO_DEFERRED_CLOSE)."
+                    "title": "Defer closing of fd to when closing the socket. (maps to XLIO_DEFERRED_CLOSE).",
+                    "description": "When enabled, defers closing of the file descriptor to when the socket is actually closed, which can be useful in certain multi-threaded applications that need to maintain socket handles longer."
                 },
                 "tcp": {
                     "type": "object",
@@ -1146,29 +1261,34 @@
                                     "default": "lwip"
                                 }
                             ],
-                            "description": "TCP congestion control algorithm (maps to XLIO_TCP_CC_ALGO)."
+                            "title": "TCP congestion control algorithm (maps to XLIO_TCP_CC_ALGO).",
+                            "description": "Select the TCP congestion control algorithm. Options are: lwip (default algorithm, a variation of Reno/New-Reno), cubic (adapted from FreeBSD implementation), or disable (turn off congestion control completely)."
                         },
                         "wmem": {
                             "type": "integer",
                             "default": 1048576,
-                            "description": "Per-socket write buffer size in bytes (maps to XLIO_TCP_SEND_BUFFER_SIZE)."
+                            "title": "Per-socket write buffer size in bytes (maps to XLIO_TCP_SEND_BUFFER_SIZE).",
+                            "description": "TCP send buffer size for LWIP implementation. Default is 1MB (1048576 bytes)."
                         },
                         "max_syn_rate": {
                             "type": "integer",
                             "minimum": 0,
                             "maximum": 100000,
                             "default": 0,
-                            "description": "Maximum SYNs per second (0 means unlimited, maps to XLIO_TCP_MAX_SYN_RATE)."
+                            "title": "Maximum SYNs per second (0 means unlimited, maps to XLIO_TCP_MAX_SYN_RATE).",
+                            "description": "Limit the number of TCP SYN packets that XLIO will handle per second per listen socket. For example, 10 means XLIO will accept at most 10 new connections per second per listen socket. A value of 0 means no limit."
                         },
                         "linger_0": {
                             "type": "boolean",
                             "default": false,
-                            "description": "Set TCP linger time to 0 if true. (maps to XLIO_TCP_ABORT_ON_CLOSE)."
+                            "title": "Set TCP linger time to 0 if true. (maps to XLIO_TCP_ABORT_ON_CLOSE).",
+                            "description": "This parameter controls how XLIO performs socket close operation. If enabled, XLIO sends RST segment and discards TCP state for the socket. Note that in this scenario pending data segments may be unsent. If disabled, XLIO sends pending data segments and then FIN segment."
                         },
                         "push": {
                             "type": "boolean",
                             "default": true,
-                            "description": "Set TCP Push flag. (maps to XLIO_TCP_PUSH_FLAG)."
+                            "title": "Set TCP Push flag. (maps to XLIO_TCP_PUSH_FLAG).",
+                            "description": "When enabled, sets the TCP PUSH flag on outgoing packets, which can help with ensuring data is sent immediately without delay."
                         },
                         "nodelay": {
                             "type": "object",
@@ -1177,19 +1297,22 @@
                                 "enable": {
                                     "type": "boolean",
                                     "default": false,
-                                    "description": "Disable Nagle's algorithm via TCP_NODELAY when true (maps to XLIO_TCP_NODELAY)."
+                                    "title": "Disable Nagle's algorithm via TCP_NODELAY when true (maps to XLIO_TCP_NODELAY).",
+                                    "description": "If set, disables the Nagle algorithm for each TCP socket during initialization. This means that TCP segments are always sent as soon as possible, even if there is only a small amount of data, which can reduce latency at the cost of potentially increased packet count."
                                 },
                                 "byte_threshold": {
                                     "type": "integer",
                                     "default": 0,
-                                    "description": "Data threshold for flush; 0 flushes immediately (maps to XLIO_TCP_NODELAY_TRESHOLD)."
+                                    "title": "Data threshold for flush; 0 flushes immediately (maps to XLIO_TCP_NODELAY_TRESHOLD).",
+                                    "description": "Triggers TCP nodelay only if unsent data is larger than this value (in bytes). A value of 0 means no threshold, so nodelay is applied for all packets when enabled."
                                 }
                             }
                         },
                         "quickack": {
                             "type": "boolean",
                             "default": false,
-                            "description": "Enable quick ACKs if true (maps to XLIO_TCP_QUICKACK)."
+                            "title": "Enable quick ACKs if true (maps to XLIO_TCP_QUICKACK).",
+                            "description": "If set, disables delayed acknowledgment ability. This means that TCP responds with an ACK packet after every received packet instead of potentially combining ACKs, which can improve latency at the cost of increased network traffic."
                         },
                         "timestamps": {
                             "oneOf": [
@@ -1212,13 +1335,15 @@
                                     "default": "disable"
                                 }
                             ],
-                            "description": "TCP timestamps mode (2 means OS default)."
+                            "title": "TCP timestamps mode (2 means OS default; maps to XLIO_TCP_TIMESTAMP_OPTION).",
+                            "description": "Controls whether TCP timestamp option is enabled. Currently, LWIP does not support RTTM and PAWS mechanisms described in RFC1323. Options: disable (0), enable (1), or os (2, follow OS settings). Enabling may cause a slight performance degradation."
                         },
                         "timer_msec": {
                             "type": "integer",
                             "minimum": 0,
                             "default": 100,
-                            "description": "Timer interval in milliseconds for TCP retransmissions/checks (maps to XLIO_TCP_TIMER_RESOLUTION_MSEC)."
+                            "title": "Timer interval in milliseconds for TCP retransmissions/checks (maps to XLIO_TCP_TIMER_RESOLUTION_MSEC).",
+                            "description": "Control XLIO internal TCP timer resolution (fast timer) in milliseconds. This affects TCP retransmissions and other periodic checks. The minimum value is the internal thread wakeup timer resolution (core.handlers.timer_msec)."
                         },
                         "offload": {
                             "type": "object",
@@ -1227,12 +1352,14 @@
                                 "enable_posix_ctl": {
                                     "type": "boolean",
                                     "default": true,
-                                    "description": "Allow POSIX sysctl control of TCP offload parameters (maps to XLIO_OFFLOADED_SOCKETS control)."
+                                    "title": "Allow POSIX sysctl control of TCP offload parameters (maps to XLIO_OFFLOADED_SOCKETS control).",
+                                    "description": "When enabled, allows POSIX sysctl control of TCP offload parameters. This provides better compatibility with applications that rely on standard sysctl interfaces."
                                 },
                                 "allow_privileged_sockopt": {
                                     "type": "boolean",
                                     "default": true,
-                                    "description": "Allow privileged sock opt. (maps to XLIO_ALLOW_PRIVILEGED_SOCK_OPT)."
+                                    "title": "Allow privileged sock opt. (maps to XLIO_ALLOW_PRIVILEGED_SOCK_OPT).",
+                                    "description": "When enabled, allows the use of privileged socket options that might require special permissions normally."
                                 }
                             }
                         },
@@ -1241,7 +1368,8 @@
                             "minimum": 0,
                             "maximum": 8960,
                             "default": 0,
-                            "description": "Maximum Segment Size; 0 means auto (maps to XLIO_MSS)."
+                            "title": "Maximum Segment Size; 0 means auto (maps to XLIO_MSS).",
+                            "description": "Defines the max TCP payload size that can be sent without IP fragmentation. A value of 0 will set XLIO's TCP MSS to be aligned with MTU configuration (TCP MSS = MTU - 40 bytes for IP + TCP headers). Other values will force XLIO's TCP MSS to that specific value."
                         }
                     }
                 },
@@ -1250,7 +1378,8 @@
                     "minimum": 0,
                     "maximum": 9000,
                     "default": 0,
-                    "description": "Override MTU (0 uses OS setting; maps to XLIO_MTU)."
+                    "title": "Override MTU (0 uses OS setting; maps to XLIO_MTU).",
+                    "description": "Size of each Rx and Tx data buffer (Maximum Transfer Unit). This value sets the fragmentation size of the packets sent by the library. If set to 0, XLIO will follow the actual MTU for each interface. If greater than 0, this MTU value is applicable to all interfaces regardless of their actual MTU."
                 },
                 "neighbor": {
                     "type": "object",
@@ -1260,25 +1389,29 @@
                             "type": "integer",
                             "minimum": 0,
                             "default": 10000,
-                            "description": "Neighbor update interval in milliseconds (maps to XLIO_NETLINK_TIMER)."
+                            "title": "Neighbor update interval in milliseconds (maps to XLIO_NETLINK_TIMER).",
+                            "description": "Sets the interval in milliseconds between neighbor table updates. Controls how frequently the neighbor discovery process occurs."
                         },
                         "uc_arp_retries": {
                             "type": "integer",
                             "minimum": 0,
                             "default": 3,
-                            "description": "ARP retry count for unicast; retries before failure. (maps to XLIO_NEIGH_UC_ARP_QUATA)."
+                            "title": "ARP retry count for unicast; retries before failure. (maps to XLIO_NEIGH_UC_ARP_QUATA).",
+                            "description": "XLIO will send UC ARP in case neigh state is NUD_STALE. If the neigh state is still NUD_STALE, XLIO will try this many retries to send UC ARP again before sending BC ARP."
                         },
                         "uc_arp_delay_msec": {
                             "type": "integer",
                             "minimum": 0,
                             "default": 10000,
-                            "description": "Delay (in milliseconds) before resending ARP. (maps to XLIO_NEIGH_UC_ARP_DELAY_MSEC)"
+                            "title": "Delay (in milliseconds) before resending ARP. (maps to XLIO_NEIGH_UC_ARP_DELAY_MSEC).",
+                            "description": "This parameter indicates the number of milliseconds to wait between every unicast ARP attempt."
                         },
                         "errors_before_reset": {
                             "type": "integer",
                             "minimum": 0,
                             "default": 1,
-                            "description": "Number of errors before neighbor resets. (maps to XLIO_NEIGH_NUM_ERR_RETRIES)."
+                            "title": "Number of errors before neighbor resets. (maps to XLIO_NEIGH_NUM_ERR_RETRIES).",
+                            "description": "This number indicates how many retries to restart the neighbor state machine in case the neighbor received an ERROR event."
                         }
                     }
                 },
@@ -1291,25 +1424,29 @@
                             "minimum": -1,
                             "maximum": 100000000,
                             "default": 100000,
-                            "description": "Poll duration in microseconds for Rx (-1 means infinite, maps to XLIO_RX_POLL)."
+                            "title": "Poll duration in microseconds for Rx (-1 means infinite, maps to XLIO_RX_POLL).",
+                            "description": "The duration in micro-seconds (usec) to poll the hardware on Rx path before going to sleep (pending an interrupt) when blocking on OS select(), poll() or epoll_wait(). The max polling duration is limited by the timeout the user is using. When successful poll hits occur, latency is dramatically improved at the cost of higher CPU utilization. Value -1 means infinite polling, 0 means no polling (interrupt driven only)."
                         },
                         "kernel_fd_attention_level": {
                             "type": "integer",
                             "minimum": 0,
                             "default": 10,
-                            "description": "Kernel FD attention threshold (0 means never; maps to XLIO_RING_KERNEL_FD_ATTENTION_LEVEL)."
+                            "title": "Kernel FD attention threshold (0 means never; maps to XLIO_RING_KERNEL_FD_ATTENTION_LEVEL).",
+                            "description": "Controls the threshold for checking kernel file descriptors during polling operations. A value of 0 means never check kernel FDs."
                         },
                         "offload_fd_priority": {
                             "type": "integer",
                             "minimum": 0,
                             "default": 4,
-                            "description": "Priority for offload file descriptors (maps to related XLIO parameter)."
+                            "title": "Priority for offload file descriptors (maps to XLIO_SELECT_SKIP_OS).",
+                            "description": "For select() or poll() this will force XLIO to check the non-offloaded fd even though an offloaded socket has ready packets found while polling."
                         },
                         "rx_buffer_max_count": {
                             "type": "integer",
                             "minimum": 0,
                             "default": 16,
-                            "description": "Maximum number of Rx buffers per poll pass."
+                            "title": "Maximum number of Rx buffers per poll pass. (maps to XLIO_CQ_POLL_BATCH_MAX).",
+                            "description": "Maximum size of the array while polling the Completion Queues in XLIO. Controls how many receive buffers can be processed in a single poll operation."
                         }
                     }
                 },
@@ -1321,7 +1458,8 @@
                             "type": "integer",
                             "minimum": 0,
                             "default": 32768,
-                            "description": "Maximum queue size for DOCA Ethernet operations."
+                            "title": "Maximum queue size for DOCA Ethernet operations.",
+                            "description": "Controls the maximum number of elements that can be queued for DOCA Ethernet operations. This affects memory usage and performance of DOCA Ethernet processing."
                         }
                     }
                 }

@@ -1040,7 +1040,7 @@ void mce_sys_var::legacy_get_env_params()
         read_env_variable_with_pid(stats_shmem_dirname, sizeof(stats_shmem_dirname), env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_transport_control_context))) {
+    if ((env_ptr = getenv(SYS_VAR_TRANSPORT_CONTROL_CONTEXT))) {
         read_env_variable_with_pid(transport_control_context, sizeof(transport_control_context),
                                    env_ptr);
     }
@@ -1640,7 +1640,7 @@ void mce_sys_var::legacy_get_env_params()
                         SYS_VAR_HUGEPAGE_SIZE, option_size::to_str(MCE_DEFAULT_HUGEPAGE_SIZE));
             hugepage_size = MCE_DEFAULT_HUGEPAGE_SIZE;
         }
-        if (hugepage_size > static_cast<int64_t>(MCE_MAX_HUGEPAGE_SIZE)) {
+        if (hugepage_size > MCE_MAX_HUGEPAGE_SIZE) {
             vlog_printf(VLOG_WARNING, "%s exceeds maximum possible hugepage size (%s)\n",
                         SYS_VAR_HUGEPAGE_SIZE, option_size::to_str(MCE_MAX_HUGEPAGE_SIZE));
             hugepage_size = MCE_DEFAULT_HUGEPAGE_SIZE;
@@ -1766,17 +1766,7 @@ void mce_sys_var::legacy_get_env_params()
 }
 
 static void set_string_member(char *sys_var_member, size_t sys_var_member_size,
-                              const std::string &value)
-{
-    memset(sys_var_member, 0, sys_var_member_size);
-    if (value.empty()) {
-        return;
-    }
-    snprintf(sys_var_member, sys_var_member_size, "%s", value.c_str());
-}
-
-static void set_path_member(char *sys_var_member, size_t sys_var_member_size,
-                            const std::string &value, bool add_pid)
+                              const std::string &value, bool add_pid)
 {
     memset(sys_var_member, 0, sys_var_member_size);
     if (value.empty()) {
@@ -1829,34 +1819,31 @@ void mce_sys_var::apply_settings(const config_registry &registry)
 {
     const bool core_append_pid_to_path = registry.get_value<bool>("core.append_pid_to_path");
 
-    const std::string net_offload_transport_control =
-        transport_control_to_legacy(registry.get_value<std::vector<std::experimental::any>>(
-            "net.offload.transport_control"));
+    const std::string net_offload_transport_control = transport_control_to_legacy(
+        registry.get_value<std::vector<std::experimental::any>>("net.offload.transport_control"));
     set_string_member(transport_control_context, sizeof(transport_control_context),
-                      net_offload_transport_control);
+                      net_offload_transport_control, false);
 
-    const std::string net_offload_app_id =
-        registry.get_value<std::string>("net.offload.app_id");
-    set_string_member(app_id, sizeof(app_id), net_offload_app_id);
+    const std::string net_offload_app_id = registry.get_value<std::string>("net.offload.app_id");
+    set_string_member(app_id, sizeof(app_id), net_offload_app_id, false);
 
-    const std::string core_log_file_path =
-        registry.get_value<std::string>("core.log.file_path");
-    set_path_member(log_filename, sizeof(log_filename), core_log_file_path,
-                    core_append_pid_to_path);
+    const std::string core_log_file_path = registry.get_value<std::string>("core.log.file_path");
+    set_string_member(log_filename, sizeof(log_filename), core_log_file_path,
+                      core_append_pid_to_path);
 
     const std::string core_stats_file_path =
         registry.get_value<std::string>("core.stats.file_path");
-    set_path_member(stats_filename, sizeof(stats_filename), core_stats_file_path,
-                    core_append_pid_to_path);
+    set_string_member(stats_filename, sizeof(stats_filename), core_stats_file_path,
+                      core_append_pid_to_path);
 
     const std::string core_stats_shmem_dir =
         registry.get_value<std::string>("core.stats.shmem_dir");
-    set_path_member(stats_shmem_dirname, sizeof(stats_shmem_dirname), core_stats_shmem_dir,
-                    core_append_pid_to_path);
+    set_string_member(stats_shmem_dirname, sizeof(stats_shmem_dirname), core_stats_shmem_dir,
+                      core_append_pid_to_path);
 
     const std::string xlio_daemon_dir = registry.get_value<std::string>("xlio.daemon.dir");
-    set_path_member(service_notify_dir, sizeof(service_notify_dir), xlio_daemon_dir,
-                    core_append_pid_to_path);
+    set_string_member(service_notify_dir, sizeof(service_notify_dir), xlio_daemon_dir,
+                      core_append_pid_to_path);
 
     service_enable = registry.get_value<bool>("xlio.daemon.enable");
 
@@ -1865,8 +1852,7 @@ void mce_sys_var::apply_settings(const config_registry &registry)
     snprintf(internal_thread_cpuset, sizeof(internal_thread_cpuset), "%s", core_cpu_cpuset.c_str());
 
     memset(internal_thread_affinity_str, 0, sizeof(internal_thread_affinity_str));
-    const std::string core_cpu_affinity =
-        registry.get_value<std::string>("core.cpu.affinity");
+    const std::string core_cpu_affinity = registry.get_value<std::string>("core.cpu.affinity");
     snprintf(internal_thread_affinity_str, sizeof(internal_thread_affinity_str), "%s",
              core_cpu_affinity.c_str());
 
@@ -1880,11 +1866,9 @@ void mce_sys_var::apply_settings(const config_registry &registry)
 
     log_colors = registry.get_value<bool>("xlio.log.colors");
 
-    handle_sigintr =
-        registry.get_value<bool>("core.signals.sigint.exit");
+    handle_sigintr = registry.get_value<bool>("core.signals.sigint.exit");
 
-    handle_segfault =
-        registry.get_value<bool>("core.signals.sigsegv.backtrace");
+    handle_segfault = registry.get_value<bool>("core.signals.sigsegv.backtrace");
 
     stats_fd_num_max = registry.get_value<decltype(stats_fd_num_max)>("core.stats.fd_num");
     stats_fd_num_monitor = stats_fd_num_max;
@@ -1907,41 +1891,32 @@ void mce_sys_var::apply_settings(const config_registry &registry)
     ring_dev_mem_tx =
         registry.get_value<decltype(ring_dev_mem_tx)>("xlio.ring.tx.max_on_device_memory");
 
-    tcp_max_syn_rate =
-        registry.get_value<decltype(tcp_max_syn_rate)>("net.tcp.max_syn_rate");
+    tcp_max_syn_rate = registry.get_value<decltype(tcp_max_syn_rate)>("net.tcp.max_syn_rate");
 
-    zc_cache_threshold =
-        registry.get_value<decltype(zc_cache_threshold)>("xlio.api.sendfile_limit");
+    zc_cache_threshold = registry.get_value<int64_t>("xlio.api.sendfile_limit");
 
-    tx_buf_size =
-        registry.get_value<decltype(tx_buf_size)>("xlio.sq.buf.size");
+    tx_buf_size = registry.get_value<decltype(tx_buf_size)>("xlio.sq.buf.size");
 
     tcp_nodelay_treshold =
         registry.get_value<decltype(tcp_nodelay_treshold)>("net.tcp.nodelay.byte_threshold");
 
-    tx_num_wr =
-        registry.get_value<decltype(tx_num_wr)>("xlio.sq.wre.global_array_size");
+    tx_num_wr = registry.get_value<decltype(tx_num_wr)>("xlio.sq.wre.global_array_size");
 
     tx_num_wr_to_signal =
         registry.get_value<decltype(tx_num_wr_to_signal)>("xlio.sq.wre.completion_batch_size");
 
-    tx_max_inline =
-        registry.get_value<decltype(tx_max_inline)>("xlio.sq.wre.max_inline_size");
+    tx_max_inline = registry.get_value<decltype(tx_max_inline)>("xlio.sq.wre.max_inline_size");
 
-    tx_mc_loopback_default =
-        registry.get_value<bool>("xlio.udp.mc_loopback");
+    tx_mc_loopback_default = registry.get_value<bool>("xlio.udp.mc_loopback");
 
-    tx_nonblocked_eagains =
-        registry.get_value<bool>("xlio.sq.nonblocking.eagain");
+    tx_nonblocked_eagains = registry.get_value<bool>("xlio.sq.nonblocking.eagain");
 
     tx_prefetch_bytes =
         registry.get_value<decltype(tx_prefetch_bytes)>("xlio.sq.prefetch.cache_size");
 
-    tx_bufs_batch_udp =
-        registry.get_value<decltype(tx_bufs_batch_udp)>("xlio.udp.buf.batch_size");
+    tx_bufs_batch_udp = registry.get_value<decltype(tx_bufs_batch_udp)>("xlio.udp.buf.batch_size");
 
-    tx_bufs_batch_tcp =
-        registry.get_value<decltype(tx_bufs_batch_tcp)>("xlio.sq.buf.batch_size");
+    tx_bufs_batch_tcp = registry.get_value<decltype(tx_bufs_batch_tcp)>("xlio.sq.buf.batch_size");
 
     tx_segs_batch_tcp =
         registry.get_value<decltype(tx_segs_batch_tcp)>("xlio.sq.segments.socket_batch_size");
@@ -1958,27 +1933,35 @@ void mce_sys_var::apply_settings(const config_registry &registry)
 
     rx_num_wr = registry.get_value<decltype(rx_num_wr)>("xlio.rq.wre.global_array_size");
 
-    rx_num_wr_to_post_recv = registry.get_value<decltype(rx_num_wr_to_post_recv)>("xlio.rq.wre.rx_batch_size");
+    rx_num_wr_to_post_recv =
+        registry.get_value<decltype(rx_num_wr_to_post_recv)>("xlio.rq.wre.rx_batch_size");
 
     rx_poll_num = registry.get_value<decltype(rx_poll_num)>("xlio.cq.rx_poll_count");
 
-    rx_poll_num_init = registry.get_value<decltype(rx_poll_num_init)>("xlio.udp.offload_transition_poll_count");
+    rx_poll_num_init =
+        registry.get_value<decltype(rx_poll_num_init)>("xlio.udp.offload_transition_poll_count");
 
-    rx_udp_poll_os_ratio = registry.get_value<decltype(rx_udp_poll_os_ratio)>("xlio.udp.rx_kernel_fd_attention_level");
+    rx_udp_poll_os_ratio =
+        registry.get_value<decltype(rx_udp_poll_os_ratio)>("xlio.udp.rx_kernel_fd_attention_level");
 
-    hw_ts_conversion_mode = static_cast<ts_conversion_mode_t>(registry.get_value<int>("xlio.ts_conversion"));
+    hw_ts_conversion_mode =
+        static_cast<ts_conversion_mode_t>(registry.get_value<int>("xlio.ts_conversion"));
 
     rx_poll_yield_loops = registry.get_value<bool>("xlio.udp.yield_on_poll");
 
     select_handle_cpu_usage_stats = registry.get_value<bool>("core.stats.cpu_usage");
 
-    rx_ready_byte_min_limit = registry.get_value<decltype(rx_ready_byte_min_limit)>("xlio.rq.buf.override_rcvbuf_limit");
+    rx_ready_byte_min_limit =
+        registry.get_value<decltype(rx_ready_byte_min_limit)>("xlio.rq.buf.override_rcvbuf_limit");
 
-    rx_prefetch_bytes = registry.get_value<decltype(rx_prefetch_bytes)>("xlio.rq.prefetch.cache_size");
+    rx_prefetch_bytes =
+        registry.get_value<decltype(rx_prefetch_bytes)>("xlio.rq.prefetch.cache_size");
 
-    rx_prefetch_bytes_before_poll = registry.get_value<bool>("xlio.rq.prefetch.fetch_before_poll") ? rx_prefetch_bytes : 0;
+    rx_prefetch_bytes_before_poll =
+        registry.get_value<bool>("xlio.rq.prefetch.fetch_before_poll") ? rx_prefetch_bytes : 0;
 
-    rx_cq_drain_rate_nsec = registry.get_value<decltype(rx_cq_drain_rate_nsec)>("xlio.cq.rx_drain_rate_nsec");
+    rx_cq_drain_rate_nsec =
+        registry.get_value<decltype(rx_cq_drain_rate_nsec)>("xlio.cq.rx_drain_rate_nsec");
 
     // Update the rx cq polling rate for draining logic
     tscval_t tsc_per_second = get_tsc_rate_per_second();
@@ -1994,35 +1977,26 @@ void mce_sys_var::apply_settings(const config_registry &registry)
     strq_stride_size_bytes =
         registry.get_value<decltype(strq_stride_size_bytes)>("xlio.rq.striding.stride_size");
 
-    strq_strides_compensation_level =
-        registry.get_value<decltype(strq_strides_compensation_level)>("xlio.rq.striding.spare_strides");
+    strq_strides_compensation_level = registry.get_value<decltype(strq_strides_compensation_level)>(
+        "xlio.rq.striding.spare_strides");
 
-    gro_streams_max =
-        registry.get_value<decltype(gro_streams_max)>("xlio.rq.max_gro_streams");
+    gro_streams_max = registry.get_value<decltype(gro_streams_max)>("xlio.rq.max_gro_streams");
 
-    disable_flow_tag =
-        registry.get_value<bool>("xlio.udp.mc_disable_flowtag");
+    disable_flow_tag = registry.get_value<bool>("xlio.udp.mc_disable_flowtag");
 
-    tcp_2t_rules =
-        registry.get_value<bool>("xlio.ring.tcp_2t_rules");
+    tcp_2t_rules = registry.get_value<bool>("xlio.ring.tcp_2t_rules");
 
-    tcp_3t_rules =
-        registry.get_value<bool>("xlio.ring.tcp_3t_rules");
+    tcp_3t_rules = registry.get_value<bool>("xlio.ring.tcp_3t_rules");
 
-    udp_3t_rules =
-        registry.get_value<bool>("xlio.udp.3t_rules");
+    udp_3t_rules = registry.get_value<bool>("xlio.udp.3t_rules");
 
-    eth_mc_l2_only_rules =
-        registry.get_value<bool>("xlio.udp.only_mc_l2_rules");
+    eth_mc_l2_only_rules = registry.get_value<bool>("xlio.udp.only_mc_l2_rules");
 
-    mc_force_flowtag =
-        registry.get_value<bool>("xlio.udp.mc_flowtag_acceleration");
+    mc_force_flowtag = registry.get_value<bool>("xlio.udp.mc_flowtag_acceleration");
 
-    select_poll_num =
-        registry.get_value<decltype(select_poll_num)>("net.poll.rx_duration_usec");
+    select_poll_num = registry.get_value<decltype(select_poll_num)>("net.poll.rx_duration_usec");
 
-    select_poll_os_force =
-        MCE_DEFAULT_SELECT_POLL_OS_FORCE; // TODO - discovered to be buggy - see libvma patch
+    select_poll_os_force = MCE_DEFAULT_SELECT_POLL_OS_FORCE;
 
     select_poll_os_ratio =
         registry.get_value<decltype(select_poll_os_ratio)>("net.poll.kernel_fd_attention_level");
@@ -2030,26 +2004,25 @@ void mce_sys_var::apply_settings(const config_registry &registry)
     select_skip_os_fd_check =
         registry.get_value<decltype(select_skip_os_fd_check)>("net.poll.offload_fd_priority");
 
-    cq_moderation_enable =
-        registry.get_value<bool>("xlio.cq.interrupt_moderation.enable");
+    cq_moderation_enable = registry.get_value<bool>("xlio.cq.interrupt_moderation.enable");
 
-    cq_moderation_count =
-        registry.get_value<decltype(cq_moderation_count)>("xlio.cq.interrupt_moderation.packet_count");
+    cq_moderation_count = registry.get_value<decltype(cq_moderation_count)>(
+        "xlio.cq.interrupt_moderation.packet_count");
 
-    cq_moderation_period_usec =
-        registry.get_value<decltype(cq_moderation_period_usec)>("xlio.cq.interrupt_moderation.period_usec");
+    cq_moderation_period_usec = registry.get_value<decltype(cq_moderation_period_usec)>(
+        "xlio.cq.interrupt_moderation.period_usec");
 
-    cq_aim_max_count =
-        registry.get_value<decltype(cq_aim_max_count)>("xlio.cq.interrupt_moderation.adaptive_count");
+    cq_aim_max_count = registry.get_value<decltype(cq_aim_max_count)>(
+        "xlio.cq.interrupt_moderation.adaptive_count");
 
-    cq_aim_max_period_usec =
-        registry.get_value<decltype(cq_aim_max_period_usec)>("xlio.cq.interrupt_moderation.adaptive_period_usec");
+    cq_aim_max_period_usec = registry.get_value<decltype(cq_aim_max_period_usec)>(
+        "xlio.cq.interrupt_moderation.adaptive_period_usec");
 
-    cq_aim_interval_msec =
-        registry.get_value<decltype(cq_aim_interval_msec)>("xlio.cq.interrupt_moderation.adaptive_change_frequency_msec");
+    cq_aim_interval_msec = registry.get_value<decltype(cq_aim_interval_msec)>(
+        "xlio.cq.interrupt_moderation.adaptive_change_frequency_msec");
 
-    cq_aim_interrupts_rate_per_sec =
-        registry.get_value<decltype(cq_aim_interrupts_rate_per_sec)>("xlio.cq.interrupt_moderation.interrupt_per_sec");
+    cq_aim_interrupts_rate_per_sec = registry.get_value<decltype(cq_aim_interrupts_rate_per_sec)>(
+        "xlio.cq.interrupt_moderation.interrupt_per_sec");
 
     cq_poll_batch_max =
         registry.get_value<decltype(cq_poll_batch_max)>("net.poll.rx_buffer_max_count");
@@ -2060,20 +2033,15 @@ void mce_sys_var::apply_settings(const config_registry &registry)
     progress_engine_wce_max =
         registry.get_value<decltype(progress_engine_wce_max)>("xlio.cq.periodic_drain_max_cqes");
 
-    cq_keep_qp_full =
-        registry.get_value<bool>("xlio.cq.keep_full");
+    cq_keep_qp_full = registry.get_value<bool>("xlio.cq.keep_full");
 
-    max_tso_sz =
-        registry.get_value<decltype(max_tso_sz)>("xlio.sq.tso.max_size");
+    max_tso_sz = registry.get_value<decltype(max_tso_sz)>("xlio.sq.tso.max_size");
 
-    user_huge_page_size =
-        registry.get_value<decltype(user_huge_page_size)>("xlio.api.hugepages.size");
+    user_huge_page_size = registry.get_value<int64_t>("xlio.api.hugepages.size");
 
-    internal_thread_arm_cq_enabled =
-        registry.get_value<bool>("xlio.cq.interrupt_per_packet");
+    internal_thread_arm_cq_enabled = registry.get_value<bool>("xlio.cq.interrupt_per_packet");
 
-    offloaded_sockets =
-        registry.get_value<bool>("net.offload.enable");
+    offloaded_sockets = registry.get_value<bool>("net.offload.enable");
 
     timer_resolution_msec =
         registry.get_value<decltype(timer_resolution_msec)>("core.handlers.timer_msec");
@@ -2081,28 +2049,22 @@ void mce_sys_var::apply_settings(const config_registry &registry)
     tcp_timer_resolution_msec =
         registry.get_value<decltype(tcp_timer_resolution_msec)>("net.tcp.timer_msec");
 
-    tcp_ts_opt =
-        static_cast<tcp_ts_opt_t>(registry.get_value<int>("net.tcp.timestamps"));
+    tcp_ts_opt = static_cast<tcp_ts_opt_t>(registry.get_value<int>("net.tcp.timestamps"));
 
-    tcp_nodelay =
-        registry.get_value<bool>("net.tcp.nodelay.enable");
+    tcp_nodelay = registry.get_value<bool>("net.tcp.nodelay.enable");
 
-    tcp_quickack =
-        registry.get_value<bool>("net.tcp.quickack");
+    tcp_quickack = registry.get_value<bool>("net.tcp.quickack");
 
-    tcp_push_flag =
-        registry.get_value<bool>("net.tcp.push");
+    tcp_push_flag = registry.get_value<bool>("net.tcp.push");
 
-    avoid_sys_calls_on_tcp_fd =
-        registry.get_value<bool>("net.tcp.offload.enable_posix_ctl");
+    avoid_sys_calls_on_tcp_fd = registry.get_value<bool>("net.tcp.offload.enable_posix_ctl");
 
     allow_privileged_sock_opt =
         registry.get_value<bool>("net.tcp.offload.allow_privileged_sockopt");
 
     //	exception_handling is handled by its CTOR
 
-    wait_after_join_msec =
-        MCE_DEFAULT_WAIT_AFTER_JOIN_MSEC; // TODO - not in use - should be deleted
+    wait_after_join_msec = MCE_DEFAULT_WAIT_AFTER_JOIN_MSEC;
 
     buffer_batching_mode =
         static_cast<buffer_batching_mode_t>(registry.get_value<int>("xlio.batching_mode"));
@@ -2112,39 +2074,32 @@ void mce_sys_var::apply_settings(const config_registry &registry)
     mem_alloc_type = core_memory_hugepages_enable ? option_alloc_type::mode_t::HUGE
                                                   : option_alloc_type::mode_t::ANON;
 
-    memory_limit =
-        registry.get_value<decltype(memory_limit)>("core.memory.limit");
+    memory_limit = registry.get_value<int64_t>("core.memory.limit");
 
-    memory_limit_user =
-        registry.get_value<decltype(memory_limit_user)>("xlio.memory.external.limit");
+    memory_limit_user = registry.get_value<int64_t>("xlio.memory.external.limit");
 
-    heap_metadata_block =
-        registry.get_value<decltype(heap_metadata_block)>("core.memory.heap_metadata_block_size");
+    heap_metadata_block = registry.get_value<int64_t>("core.memory.heap_metadata_block_size");
 
-    hugepage_size =
-        registry.get_value<decltype(hugepage_size)>("core.memory.hugepages.size");
+    hugepage_size = registry.get_value<int64_t>("core.memory.hugepages.size");
 
-    enable_socketxtreme =
-        registry.get_value<bool>("xlio.api.socketextreme");
+    enable_socketxtreme = registry.get_value<bool>("xlio.api.socketextreme");
 
     const int64_t xlio_sq_tso_enable = registry.get_value<int64_t>("xlio.sq.tso.enable");
     enable_tso = xlio_sq_tso_enable ? option_3::ON : option_3::OFF;
 
 #ifdef DEFINED_UTLS
 
-    const bool xlio_rq_tls_offload_enable =
-        registry.get_value<bool>("xlio.rq.tls_offload.enable");
+    const bool xlio_rq_tls_offload_enable = registry.get_value<bool>("xlio.rq.tls_offload.enable");
     enable_utls_rx = xlio_rq_tls_offload_enable;
 
-    const bool xlio_sq_tls_offload_enable =
-        registry.get_value<bool>("xlio.sq.tls_offload.enable");
+    const bool xlio_sq_tls_offload_enable = registry.get_value<bool>("xlio.sq.tls_offload.enable");
     enable_utls_tx = xlio_sq_tls_offload_enable;
 
     utls_high_wmark_dek_cache_size =
-        registry.get_value<decltype(utls_high_wmark_dek_cache_size)>("xlio.sq.tls_offload.dek_cache_max_size");
+        registry.get_value<int64_t>("xlio.sq.tls_offload.dek_cache_max_size");
 
     utls_low_wmark_dek_cache_size =
-        registry.get_value<decltype(utls_low_wmark_dek_cache_size)>("xlio.sq.tls_offload.dek_cache_min_size");
+        registry.get_value<int64_t>("xlio.sq.tls_offload.dek_cache_min_size");
 
     if (utls_low_wmark_dek_cache_size >= utls_high_wmark_dek_cache_size) {
         utls_low_wmark_dek_cache_size = utls_high_wmark_dek_cache_size / 2U;
@@ -2155,14 +2110,11 @@ void mce_sys_var::apply_settings(const config_registry &registry)
     const int64_t xlio_rq_lro = registry.get_value<int64_t>("xlio.rq.lro");
     enable_lro = xlio_rq_lro ? option_3::ON : option_3::OFF;
 
-    handle_fork =
-        registry.get_value<bool>("xlio.syscall.fork_support");
+    handle_fork = registry.get_value<bool>("xlio.syscall.fork_support");
 
-    close_on_dup2 =
-        registry.get_value<bool>("core.syscall.dup2_support");
+    close_on_dup2 = registry.get_value<bool>("core.syscall.dup2_support");
 
-    mtu =
-        registry.get_value<decltype(mtu)>("net.mtu");
+    mtu = registry.get_value<decltype(mtu)>("net.mtu");
 
 #if defined(DEFINED_NGINX)
 
@@ -2174,24 +2126,19 @@ void mce_sys_var::apply_settings(const config_registry &registry)
 
 #endif
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    app.workers_num =
-        registry.get_value<decltype(app.workers_num)>("xlio.nginx.workers_num");
+    app.workers_num = registry.get_value<decltype(app.workers_num)>("xlio.nginx.workers_num");
 
     app.src_port_stride =
         registry.get_value<decltype(app.src_port_stride)>("xlio.nginx.src_port_stride");
 
-    app.distribute_cq_interrupts =
-        registry.get_value<bool>("xlio.nginx.distribute_cq");
+    app.distribute_cq_interrupts = registry.get_value<bool>("xlio.nginx.distribute_cq");
 #endif
 
-    lwip_mss =
-        registry.get_value<decltype(lwip_mss)>("net.tcp.mss");
+    lwip_mss = registry.get_value<decltype(lwip_mss)>("net.tcp.mss");
 
-    lwip_cc_algo_mod =
-        registry.get_value<decltype(lwip_cc_algo_mod)>("net.tcp.congestion_control");
+    lwip_cc_algo_mod = registry.get_value<decltype(lwip_cc_algo_mod)>("net.tcp.congestion_control");
 
-    mce_spec =
-        registry.get_value<decltype(mce_spec)>("xlio.spec");
+    mce_spec = registry.get_value<decltype(mce_spec)>("xlio.spec");
 
     neigh_num_err_retries =
         registry.get_value<decltype(neigh_num_err_retries)>("net.neighbor.errors_before_reset");
@@ -2199,35 +2146,29 @@ void mce_sys_var::apply_settings(const config_registry &registry)
     neigh_uc_arp_quata =
         registry.get_value<decltype(neigh_uc_arp_quata)>("net.neighbor.uc_arp_retries");
 
-    neigh_wait_till_send_arp_msec =
-        registry.get_value<decltype(neigh_wait_till_send_arp_msec)>("net.neighbor.uc_arp_delay_msec");
+    neigh_wait_till_send_arp_msec = registry.get_value<decltype(neigh_wait_till_send_arp_msec)>(
+        "net.neighbor.uc_arp_delay_msec");
 
-    timer_netlink_update_msec =
-        registry.get_value<decltype(timer_netlink_update_msec)>("net.neighbor.update_interval_msec");
+    timer_netlink_update_msec = registry.get_value<decltype(timer_netlink_update_msec)>(
+        "net.neighbor.update_interval_msec");
 
-    deferred_close =
-        registry.get_value<bool>("net.deferred_close");
+    deferred_close = registry.get_value<bool>("net.deferred_close");
 
-    tcp_abort_on_close =
-        registry.get_value<bool>("net.tcp.linger_0");
+    tcp_abort_on_close = registry.get_value<bool>("net.tcp.linger_0");
 
-    rx_poll_on_tx_tcp =
-        registry.get_value<bool>("xlio.poll.rx_poll_on_tx");
+    rx_poll_on_tx_tcp = registry.get_value<bool>("xlio.poll.rx_poll_on_tx");
 
-    rx_cq_wait_ctrl =
-        registry.get_value<bool>("xlio.poll.rx_cq_wait_ctrl");
+    rx_cq_wait_ctrl = registry.get_value<bool>("xlio.poll.rx_cq_wait_ctrl");
 
     trigger_dummy_send_getsockname =
         registry.get_value<bool>("xlio.syscall.getsockname_dummy_send");
 
-    tcp_send_buffer_size =
-        registry.get_value<decltype(tcp_send_buffer_size)>("net.tcp.wmem");
+    tcp_send_buffer_size = registry.get_value<decltype(tcp_send_buffer_size)>("net.tcp.wmem");
 
     skip_poll_in_rx =
         static_cast<skip_poll_in_rx_t>(registry.get_value<int>("xlio.poll.skip_cq_on_rx"));
 
-    const bool core_mutex_over_spinlock =
-        registry.get_value<bool>("core.mutex_over_spinlock");
+    const bool core_mutex_over_spinlock = registry.get_value<bool>("core.mutex_over_spinlock");
     multilock =
         core_mutex_over_spinlock ? multilock_t::MULTILOCK_MUTEX : multilock_t::MULTILOCK_SPIN;
 
@@ -2255,143 +2196,163 @@ void mce_sys_var::pre_profile_adjust_settings()
         rx_num_wr_to_post_recv = MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV;
     }
 
-    /*
-    * Check for specific application configuration first. We can make decisions
-    * based on number of workers or application type further.
-    */
-    #if defined(DEFINED_NGINX)
-        if (app.workers_num > 0) {
-            app.type = APP_NGINX;
-            // In order to ease the usage of Nginx cases, we apply Nginx profile when
-            // user will choose to use Nginx workers environment variable.
-            if (mce_spec == MCE_SPEC_NONE) {
-                mce_spec = MCE_SPEC_NGINX;
-            }
+/*
+ * Check for specific application configuration first. We can make decisions
+ * based on number of workers or application type further.
+ */
+#if defined(DEFINED_NGINX)
+    if (app.workers_num > 0) {
+        app.type = APP_NGINX;
+        // In order to ease the usage of Nginx cases, we apply Nginx profile when
+        // user will choose to use Nginx workers environment variable.
+        if (mce_spec == MCE_SPEC_NONE) {
+            mce_spec = MCE_SPEC_NGINX;
         }
-    #endif // DEFINED_NGINX
+    }
+#endif // DEFINED_NGINX
+}
+
+void mce_sys_var::apply_sockperf_ultra_latency_settings()
+{
+    memory_limit = 128LU * 1024 * 1024;
+    tx_num_wr = 256;
+    tx_num_wr_to_signal = 4;
+    tx_prefetch_bytes = MCE_DEFAULT_TX_PREFETCH_BYTES;
+    tx_bufs_batch_udp = 1;
+    tx_bufs_batch_tcp = 1;
+    rx_bufs_batch = 4;
+    rx_poll_num = -1;
+    enable_tso = option_3::OFF;
+    rx_udp_poll_os_ratio = 0;
+    rx_prefetch_bytes = MCE_DEFAULT_RX_PREFETCH_BYTES;
+    rx_prefetch_bytes_before_poll = 256;
+    select_poll_num = -1;
+    select_poll_os_ratio = 0;
+    select_skip_os_fd_check = 0;
+    avoid_sys_calls_on_tcp_fd = true;
+    gro_streams_max = 0;
+    progress_engine_interval_msec = 0;
+    cq_keep_qp_full = false;
+    tcp_nodelay = true;
+    ring_dev_mem_tx = 16384;
+    strcpy(internal_thread_affinity_str, "0");
+
+    if (enable_striding_rq) {
+        rx_num_wr = 4U;
+    } else {
+        rx_num_wr = 256;
+        rx_num_wr_to_post_recv = 4;
+    }
+}
+
+void mce_sys_var::apply_sockperf_latency_settings()
+{
+    tx_num_wr = 256;
+    tx_num_wr_to_signal = 4;
+    tx_bufs_batch_udp = 1;
+    tx_bufs_batch_tcp = 1;
+    rx_bufs_batch = 4;
+
+    rx_poll_num = -1;
+    enable_tso = option_3::OFF;
+    rx_prefetch_bytes_before_poll = 256;
+    select_poll_num = -1;
+    avoid_sys_calls_on_tcp_fd = true;
+    gro_streams_max = 0;
+    cq_keep_qp_full = false;
+    strcpy(internal_thread_affinity_str, "0");
+    progress_engine_interval_msec = 100;
+    select_poll_os_ratio = 100;
+    select_poll_os_force = 1;
+    tcp_nodelay = true;
+    ring_dev_mem_tx = 16384;
+
+    if (enable_striding_rq) {
+        rx_num_wr = 4U;
+    } else {
+        rx_num_wr = 256;
+        rx_num_wr_to_post_recv = 4;
+    }
+}
+
+void mce_sys_var::apply_nginx_settings()
+{
+    ring_allocation_logic_tx = RING_LOGIC_PER_INTERFACE;
+    ring_allocation_logic_rx = RING_LOGIC_PER_INTERFACE;
+    progress_engine_interval_msec = 0; // Disable internal thread CQ draining logic.
+    cq_poll_batch_max = 128; // Maximum CQEs to poll in one batch.
+    enable_tso = option_3::ON; // Enable TCP Segmentation Offload(=TSO).
+    timer_resolution_msec = 32; // Reduce CPU utilization of internal thread.
+    tcp_timer_resolution_msec = 256; // Reduce CPU utilization of internal thread.
+    tcp_send_buffer_size = 2 * 1024 * 1024; // LWIP TCP send buffer size.
+    tcp_push_flag = false; // When false, we don't set PSH flag in outgoing TCP segments.
+    select_poll_num = 0; // Poll CQ only once before going to sleep.
+    select_skip_os_fd_check = 1000; // Poll OS every X epoll_waits if we do not sleep.
+    tcp_3t_rules = true; // Use 3 tuple instead rules of 5 tuple rules.
+    app.distribute_cq_interrupts = true;
+    rx_cq_wait_ctrl = true;
+
+    if (mce_spec == MCE_SPEC_NGINX) {
+        memory_limit = (app.workers_num > 16 ? 3072LU : 4096LU) * 1024 * 1024;
+        memory_limit *= std::max(app.workers_num, 1);
+        rx_bufs_batch = 8; // RX buffers batch size.
+
+        // Do polling on RX queue on TX operations, helpful to maintain TCP stack management.
+        rx_poll_on_tx_tcp = true;
+    } else if (mce_spec == MCE_SPEC_NGINX_DPU) {
+        memory_limit = (app.workers_num == 16 ? 512LU : 1024LU) * 1024 * 1024;
+        memory_limit *= std::max(app.workers_num, 1);
+        buffer_batching_mode = BUFFER_BATCHING_NONE;
+    }
+}
+
+void mce_sys_var::apply_nvme_bf3_settings()
+{
+    strq_stride_num_per_rwqe = 8192U;
+    enable_lro = option_3::ON;
+    handle_fork = false;
+    strcpy(internal_thread_affinity_str, "0x01");
+    gro_streams_max = 0;
+    tx_num_wr_to_signal = 128U;
+    tx_num_wr = 1024U;
+    rx_num_wr = 32U;
+    enable_tso = option_3::ON;
+    rx_prefetch_bytes_before_poll = 256U;
+    ring_dev_mem_tx = 1024;
+    cq_keep_qp_full = false;
+    cq_aim_interval_msec = MCE_CQ_ADAPTIVE_MODERATION_DISABLED;
+    progress_engine_interval_msec = 0U;
+    tcp_abort_on_close = true;
+    memory_limit = 256U * 1024U * 1024U;
+    memory_limit_user = 2U * 1024U * 1024U * 1024U;
+
+    tx_bufs_batch_udp = 1;
+    tx_bufs_batch_tcp = 1;
+    rx_bufs_batch = 4;
+    tcp_nodelay = true;
 }
 
 void mce_sys_var::apply_profile_settings()
-{   
+{
     switch (mce_spec) {
     case MCE_SPEC_SOCKPERF_ULTRA_LATENCY:
-        memory_limit = 128LU * 1024 * 1024;
-        tx_num_wr = 256;
-        tx_num_wr_to_signal = 4;
-        tx_prefetch_bytes = MCE_DEFAULT_TX_PREFETCH_BYTES;
-        tx_bufs_batch_udp = 1;
-        tx_bufs_batch_tcp = 1;
-        rx_bufs_batch = 4;
-        rx_poll_num = -1;
-        enable_tso = option_3::OFF;
-        rx_udp_poll_os_ratio = 0;
-        rx_prefetch_bytes = MCE_DEFAULT_RX_PREFETCH_BYTES;
-        rx_prefetch_bytes_before_poll = 256;
-        select_poll_num = -1;
-        select_poll_os_ratio = 0;
-        select_skip_os_fd_check = 0;
-        avoid_sys_calls_on_tcp_fd = true;
-        gro_streams_max = 0;
-        progress_engine_interval_msec = 0;
-        cq_keep_qp_full = false;
-        tcp_nodelay = true;
-        ring_dev_mem_tx = 16384;
-        strcpy(internal_thread_affinity_str, "0");
-
-        if (enable_striding_rq) {
-            rx_num_wr = 4U;
-        } else {
-            rx_num_wr = 256;
-            rx_num_wr_to_post_recv = 4;
-        }
+        apply_sockperf_ultra_latency_settings();
         break;
 
     case MCE_SPEC_SOCKPERF_LATENCY:
-        tx_num_wr = 256;
-        tx_num_wr_to_signal = 4;
-        tx_bufs_batch_udp = 1;
-        tx_bufs_batch_tcp = 1;
-        rx_bufs_batch = 4;
-
-        rx_poll_num = -1;
-        enable_tso = option_3::OFF;
-        rx_prefetch_bytes_before_poll = 256;
-        select_poll_num = -1;
-        avoid_sys_calls_on_tcp_fd = true;
-        gro_streams_max = 0;
-        cq_keep_qp_full = false;
-        strcpy(internal_thread_affinity_str, "0");
-        progress_engine_interval_msec = 100;
-        select_poll_os_ratio = 100;
-        select_poll_os_force = 1;
-        tcp_nodelay = true;
-        ring_dev_mem_tx = 16384;
-
-        if (enable_striding_rq) {
-            rx_num_wr = 4U;
-        } else {
-            rx_num_wr = 256;
-            rx_num_wr_to_post_recv = 4;
-        }
-
+        apply_sockperf_latency_settings();
         break;
 
 #ifdef DEFINED_NGINX
     case MCE_SPEC_NGINX:
         // Fallthrough
     case MCE_SPEC_NGINX_DPU:
-        ring_allocation_logic_tx = RING_LOGIC_PER_INTERFACE;
-        ring_allocation_logic_rx = RING_LOGIC_PER_INTERFACE;
-        progress_engine_interval_msec = 0; // Disable internal thread CQ draining logic.
-        cq_poll_batch_max = 128; // Maximum CQEs to poll in one batch.
-        enable_tso = option_3::ON; // Enable TCP Segmentation Offload(=TSO).
-        timer_resolution_msec = 32; // Reduce CPU utilization of internal thread.
-        tcp_timer_resolution_msec = 256; // Reduce CPU utilization of internal thread.
-        tcp_send_buffer_size = 2 * 1024 * 1024; // LWIP TCP send buffer size.
-        tcp_push_flag = false; // When false, we don't set PSH flag in outgoing TCP segments.
-        select_poll_num = 0; // Poll CQ only once before going to sleep.
-        select_skip_os_fd_check = 1000; // Poll OS every X epoll_waits if we do not sleep.
-        tcp_3t_rules = true; // Use 3 tuple instead rules of 5 tuple rules.
-        app.distribute_cq_interrupts = true;
-        rx_cq_wait_ctrl = true;
-
-        if (mce_spec == MCE_SPEC_NGINX) {
-            memory_limit = (app.workers_num > 16 ? 3072LU : 4096LU) * 1024 * 1024;
-            memory_limit *= std::max(app.workers_num, 1);
-            rx_bufs_batch = 8; // RX buffers batch size.
-
-            // Do polling on RX queue on TX operations, helpful to maintain TCP stack management.
-            rx_poll_on_tx_tcp = true;
-        } else if (mce_spec == MCE_SPEC_NGINX_DPU) {
-            memory_limit = (app.workers_num == 16 ? 512LU : 1024LU) * 1024 * 1024;
-            memory_limit *= std::max(app.workers_num, 1);
-            buffer_batching_mode = BUFFER_BATCHING_NONE;
-        }
+        apply_nginx_settings();
         break;
 #endif // DEFINED_NGINX
     case MCE_SPEC_NVME_BF3:
-        strq_stride_num_per_rwqe = 8192U;
-        enable_lro = option_3::ON;
-        handle_fork = false;
-        strcpy(internal_thread_affinity_str, "0x01");
-        gro_streams_max = 0;
-        tx_num_wr_to_signal = 128U;
-        tx_num_wr = 1024U;
-        rx_num_wr = 32U;
-        enable_tso = option_3::ON;
-        rx_prefetch_bytes_before_poll = 256U;
-        ring_dev_mem_tx = 1024;
-        cq_keep_qp_full = false;
-        cq_aim_interval_msec = MCE_CQ_ADAPTIVE_MODERATION_DISABLED;
-        progress_engine_interval_msec = 0U;
-        tcp_abort_on_close = true;
-        memory_limit = 256U * 1024U * 1024U;
-        memory_limit_user = 2U * 1024U * 1024U * 1024U;
-
-        tx_bufs_batch_udp = 1;
-        tx_bufs_batch_tcp = 1;
-        rx_bufs_batch = 4;
-        tcp_nodelay = true;
+        apply_nvme_bf3_settings();
+        break;
     case MCE_SPEC_NONE:
     default:
         break;
@@ -2418,7 +2379,6 @@ void mce_sys_var::post_profile_adjust_settings(const config_registry &registry)
 
     int64_t strides_num = strq_stride_num_per_rwqe;
 
-    // TODO - have power of 2 constraint in config descriptor
     bool is_strides_num_ok = true;
     if (!is_ilog2(static_cast<unsigned int>(strides_num))) {
         strides_num = align32pow2(static_cast<uint32_t>(strides_num));
@@ -2433,7 +2393,6 @@ void mce_sys_var::post_profile_adjust_settings(const config_registry &registry)
 
     strq_stride_num_per_rwqe = static_cast<uint32_t>(strides_num);
 
-    // TODO - have power of 2 constraint in config descriptor
     bool is_stride_size_ok = true;
     int64_t stride_size = strq_stride_size_bytes;
     if (!is_ilog2(static_cast<unsigned int>(stride_size))) {
@@ -2566,8 +2525,7 @@ void mce_sys_var::post_profile_adjust_settings(const config_registry &registry)
         user_huge_page_size = g_hugepage_mgr.get_default_hugepage();
     }
 
-    const int64_t core_handlers_behavior =
-        registry.get_value<int64_t>("core.handlers.behavior");
+    const int64_t core_handlers_behavior = registry.get_value<int64_t>("core.handlers.behavior");
     tcp_ctl_thread = static_cast<option_tcp_ctl_thread::mode_t>(core_handlers_behavior);
     if (tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
         if (progress_engine_interval_msec != MCE_CQ_DRAIN_INTERVAL_DISABLED) {
@@ -2591,7 +2549,6 @@ void mce_sys_var::post_profile_adjust_settings(const config_registry &registry)
         }
     }
 
-    // TODO - add dependencies and joint constraints
     if (tcp_timer_resolution_msec < timer_resolution_msec) {
         vlog_printf(
             VLOG_WARNING,
@@ -2625,14 +2582,13 @@ void mce_sys_var::post_profile_adjust_settings(const config_registry &registry)
         vlog_printf(VLOG_DEBUG, "%s parameter is forced to %d in case %s is enabled\n",
                     SYS_VAR_RING_MIGRATION_RATIO_TX, -1, SYS_VAR_TSO);
     }
-
 }
 
 void mce_sys_var::apply_config_from_registry()
 {
     config_registry registry;
     apply_settings(registry);
-    
+
     read_hv();
     pre_profile_adjust_settings();
     apply_profile_settings();

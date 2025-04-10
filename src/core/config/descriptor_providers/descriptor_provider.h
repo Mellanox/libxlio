@@ -5,12 +5,12 @@
  */
 
 #pragma once
-#include "../descriptors/config_descriptor.h"
+#include "core/config/descriptors/config_descriptor.h"
 
 class descriptor_provider {
 public:
-  virtual ~descriptor_provider() = default;
+    virtual ~descriptor_provider() = default;
 
-  // The interface requires a config_descriptor object to be returned.
-  virtual config_descriptor load_descriptors() = 0;
+    // The interface requires a config_descriptor object to be returned.
+    virtual config_descriptor load_descriptors() = 0;
 };
