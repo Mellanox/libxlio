@@ -258,8 +258,16 @@ err_t tcp_close(struct tcp_pcb *pcb)
         /* Set a flag not to receive any more data... */
         pcb->flags |= TF_RXCLOSED;
     }
-    /* ... and close */
-    return tcp_close_shutdown(pcb, 1);
+
+    if (get_tcp_state(pcb) == SYN_RCVD) {
+        // according to the RFC, in case we get a SYN and no more data
+        // we should just close w/o FIN or RST
+        tcp_pcb_purge(pcb);
+        set_tcp_state(pcb, CLOSED);
+        return ERR_OK;
+    } else {
+        return tcp_close_shutdown(pcb, 1);
+    }
 }
 
 /**
