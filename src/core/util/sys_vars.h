@@ -7,19 +7,19 @@
 #ifndef SYS_VARS_H
 #define SYS_VARS_H
 
-#include <stdio.h>
-#include <sched.h>
-#include <string>
 #include <netinet/in.h>
+#include <sched.h>
+#include <stdio.h>
+#include <string>
 
-#include "vtypes.h"
 #include "config.h"
+#include "vtypes.h"
 
-#include "core/ib/base/verbs_extra.h"
-#include "core/util/sysctl_reader.h"
-#include "core/util/agent_def.h"
-#include "core/xlio_extra.h"
 #include "core/config/config_registry.h"
+#include "core/ib/base/verbs_extra.h"
+#include "core/util/agent_def.h"
+#include "core/util/sysctl_reader.h"
+#include "core/xlio_extra.h"
 
 typedef enum {
     MCE_SPEC_NONE = 0,
@@ -319,7 +319,10 @@ public:
     char log_filename[PATH_MAX];
     char stats_filename[PATH_MAX];
     char stats_shmem_dirname[PATH_MAX];
-    char transport_control_context[PATH_MAX];
+
+    // can be used both for legacy config file path and transport control rules
+    char transport_control[PATH_MAX];
+
     char service_notify_dir[PATH_MAX];
     bool service_enable;
     bool log_colors;
@@ -336,7 +339,7 @@ public:
     int ring_dev_mem_tx;
     int tcp_max_syn_rate;
 
-    int64_t zc_cache_threshold;
+    size_t zc_cache_threshold;
     uint32_t tx_buf_size;
     uint32_t tcp_nodelay_treshold;
     uint32_t tx_num_wr;
@@ -361,9 +364,10 @@ public:
     uint32_t rx_ready_byte_min_limit;
     uint32_t rx_prefetch_bytes;
     uint32_t rx_prefetch_bytes_before_poll;
-    uint32_t rx_cq_drain_rate_nsec; // If enabled this will cause the Rx to drain all wce in CQ
-                                    // before returning to user, Else (Default: Disbaled) it will
-                                    // return when first ready packet is in socket queue
+    uint32_t rx_cq_drain_rate_nsec; // If enabled this will cause the Rx to drain
+                                    // all wce in CQ before returning to user,
+                                    // Else (Default: Disbaled) it will return
+                                    // when first ready packet is in socket queue
     uint32_t rx_delta_tsc_between_cq_polls;
 
     uint32_t strq_stride_num_per_rwqe;
@@ -400,7 +404,7 @@ public:
     bool cq_keep_qp_full;
     uint32_t qp_compensation_level;
     uint32_t max_tso_sz;
-    int64_t user_huge_page_size;
+    size_t user_huge_page_size;
 
     bool offloaded_sockets;
     uint32_t timer_resolution_msec;
@@ -416,10 +420,10 @@ public:
     uint32_t wait_after_join_msec;
     buffer_batching_mode_t buffer_batching_mode;
     option_alloc_type::mode_t mem_alloc_type;
-    int64_t memory_limit;
-    int64_t memory_limit_user;
-    int64_t heap_metadata_block;
-    int64_t hugepage_size;
+    size_t memory_limit;
+    size_t memory_limit_user;
+    size_t heap_metadata_block;
+    size_t hugepage_size;
     bool handle_fork;
     bool close_on_dup2;
     uint32_t mtu; /* effective MTU. If mtu==0 then auto calculate the MTU */
@@ -439,11 +443,12 @@ public:
 #ifdef DEFINED_UTLS
     bool enable_utls_rx;
     bool enable_utls_tx;
-    // DEK cache size high-watermark. Max number of DEKs to be stored in the cache.
-    int64_t utls_high_wmark_dek_cache_size;
-    // DEK cache size low-watermark. Min number of available DEKs required in the cache
-    // to perform Crypto-Sync and reuse.
-    int64_t utls_low_wmark_dek_cache_size;
+    // DEK cache size high-watermark. Max number of DEKs to be stored in the
+    // cache.
+    size_t utls_high_wmark_dek_cache_size;
+    // DEK cache size low-watermark. Min number of available DEKs required in the
+    // cache to perform Crypto-Sync and reuse.
+    size_t utls_low_wmark_dek_cache_size;
 #endif /* DEFINED_UTLS */
     uint32_t timer_netlink_update_msec;
 
@@ -453,8 +458,9 @@ public:
     uint32_t neigh_num_err_retries;
 
     sysctl_reader_t &sysctl_reader;
-    // Workaround for #3440429: postpone close(2) to the socket destructor, so the sockfd is closed
-    // after the rfs rule is destroyed. Otherwise, flow_tag or TCP port can be reused too early.
+    // Workaround for #3440429: postpone close(2) to the socket destructor, so the
+    // sockfd is closed after the rfs rule is destroyed. Otherwise, flow_tag or
+    // TCP port can be reused too early.
     bool deferred_close;
     bool tcp_abort_on_close;
     bool rx_poll_on_tx_tcp;
@@ -488,16 +494,36 @@ public:
 private:
     void get_app_name();
     void legacy_get_env_params();
-    void apply_settings(const config_registry &registry);
-    void pre_profile_adjust_settings();
+    void initialize_base_variables(const config_registry &registry);
+    void read_hypervisor_info();
+    void configure_socketxtreme(const config_registry &registry);
+    void configure_striding_rq(const config_registry &registry);
+    void detect_application_profile(const config_registry &registry);
+    void apply_spec_profile_optimizations();
+    void apply_sockperf_ultra_latency_profile();
+    void apply_sockperf_latency_profile();
+    void apply_nginx_profile();
+    void apply_nvme_bf3_profile();
+    void configure_observability(const config_registry &registry);
+    void configure_ring_allocation(const config_registry &registry);
+    void configure_tcp_parameters(const config_registry &registry);
+    void configure_buffer_sizes(const config_registry &registry);
+    void configure_polling_mechanism(const config_registry &registry);
+    void configure_completion_queue(const config_registry &registry);
+    void configure_thread_affinity(const config_registry &registry);
+    void configure_memory_limits(const config_registry &registry);
+    void configure_multicast_settings(const config_registry &registry);
+    void configure_network_protocols(const config_registry &registry);
+    void configure_application_specifics(const config_registry &registry);
+    void configure_syscall_behavior(const config_registry &registry);
+    void configure_network_timing(const config_registry &registry);
     void apply_config_from_registry();
-    void post_profile_adjust_settings(const config_registry &registry);
-    void apply_profile_settings();
     void print_xlio_load_failure_msg();
     int list_to_cpuset(char *cpulist, cpu_set_t *cpu_set);
     int hex_to_cpuset(char *start, cpu_set_t *cpu_set);
     int env_to_cpuset(char *orig_start, cpu_set_t *cpu_set);
-    void read_env_variable_with_pid(char *mce_sys_name, size_t mce_sys_max_size, char *env_ptr);
+    void read_env_variable_with_pid(char *mce_sys_name, size_t mce_sys_max_size,
+                                    const char *env_ptr);
     bool check_cpuinfo_flag(const char *flag);
     bool cpuid_hv();
     const char *cpuid_hv_vendor();
@@ -523,21 +549,21 @@ extern mce_sys_var &safe_mce_sys();
  * This block consists of library specific configuration
  * environment variables
  */
-#define SYS_VAR_PRINT_REPORT              "XLIO_PRINT_REPORT"
-#define SYS_VAR_LOG_LEVEL                 "XLIO_TRACELEVEL"
-#define SYS_VAR_LOG_DETAILS               "XLIO_LOG_DETAILS"
-#define SYS_VAR_LOG_FILENAME              "XLIO_LOG_FILE"
-#define SYS_VAR_STATS_FILENAME            "XLIO_STATS_FILE"
-#define SYS_VAR_STATS_SHMEM_DIRNAME       "XLIO_STATS_SHMEM_DIR"
-#define SYS_VAR_SERVICE_DIR               "XLIO_SERVICE_NOTIFY_DIR"
-#define SYS_VAR_SERVICE_ENABLE            "XLIO_SERVICE_ENABLE"
-#define SYS_VAR_transport_control_context "XLIO_CONFIG_FILE"
-#define SYS_VAR_LOG_COLORS                "XLIO_LOG_COLORS"
-#define SYS_VAR_APPLICATION_ID            "XLIO_APPLICATION_ID"
-#define SYS_VAR_HANDLE_SIGINTR            "XLIO_HANDLE_SIGINTR"
-#define SYS_VAR_HANDLE_SIGSEGV            "XLIO_HANDLE_SIGSEGV"
-#define SYS_VAR_STATS_FD_NUM              "XLIO_STATS_FD_NUM"
-#define SYS_VAR_QUICK_START               "XLIO_QUICK_START"
+#define SYS_VAR_PRINT_REPORT        "XLIO_PRINT_REPORT"
+#define SYS_VAR_LOG_LEVEL           "XLIO_TRACELEVEL"
+#define SYS_VAR_LOG_DETAILS         "XLIO_LOG_DETAILS"
+#define SYS_VAR_LOG_FILENAME        "XLIO_LOG_FILE"
+#define SYS_VAR_STATS_FILENAME      "XLIO_STATS_FILE"
+#define SYS_VAR_STATS_SHMEM_DIRNAME "XLIO_STATS_SHMEM_DIR"
+#define SYS_VAR_SERVICE_DIR         "XLIO_SERVICE_NOTIFY_DIR"
+#define SYS_VAR_SERVICE_ENABLE      "XLIO_SERVICE_ENABLE"
+#define SYS_VAR_TRANSPORT_CONTROL   "XLIO_CONFIG_FILE"
+#define SYS_VAR_LOG_COLORS          "XLIO_LOG_COLORS"
+#define SYS_VAR_APPLICATION_ID      "XLIO_APPLICATION_ID"
+#define SYS_VAR_HANDLE_SIGINTR      "XLIO_HANDLE_SIGINTR"
+#define SYS_VAR_HANDLE_SIGSEGV      "XLIO_HANDLE_SIGSEGV"
+#define SYS_VAR_STATS_FD_NUM        "XLIO_STATS_FD_NUM"
+#define SYS_VAR_QUICK_START         "XLIO_QUICK_START"
 
 #define SYS_VAR_RING_ALLOCATION_LOGIC_TX "XLIO_RING_ALLOCATION_LOGIC_TX"
 #define SYS_VAR_RING_ALLOCATION_LOGIC_RX "XLIO_RING_ALLOCATION_LOGIC_RX"

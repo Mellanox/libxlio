@@ -44,61 +44,23 @@ extern const char *JSON_TYPE_ARRAY;
 
 // Error messages
 namespace errors {
-extern const char *JSON_DESCRIPTOR_PROVIDER_PREFIX;
-extern const char *JSON_DESCRIPTOR_PROVIDER_SCHEMA_NOT_OBJECT;
-extern const char *JSON_DESCRIPTOR_PROVIDER_MISSING_FIELD;
-extern const char *JSON_DESCRIPTOR_PROVIDER_FIELD_SUFFIX;
-extern const char *JSON_DESCRIPTOR_PROVIDER_ROOT_TYPE_OBJECT;
-extern const char *JSON_DESCRIPTOR_PROVIDER_MISSING_TYPE;
-extern const char *JSON_DESCRIPTOR_PROVIDER_UNSUPPORTED_TYPE;
-extern const char *JSON_DESCRIPTOR_PROVIDER_NO_DEFAULT;
-extern const char *JSON_DESCRIPTOR_PROVIDER_INVALID_BOOLEAN;
-extern const char *JSON_DESCRIPTOR_PROVIDER_INVALID_INTEGER;
-extern const char *JSON_DESCRIPTOR_PROVIDER_INVALID_STRING;
-extern const char *NULL_OBJECT;
-extern const char *JSON_DESCRIPTOR_PROVIDER_UNSUPPORTED_TYPE_DEFAULT;
-extern const char *JSON_DESCRIPTOR_PROVIDER_UNSUPPORTED_TYPE_FORMAT;
-extern const char *JSON_DESCRIPTOR_PROVIDER_NO_PROPERTY_DESCRIPTION;
-extern const char *JSON_DESCRIPTOR_PROVIDER_NO_DESCRIPTION_SUFFIX;
-extern const char *JSON_DESCRIPTOR_PROVIDER_NO_DEFAULT_VALUE;
-extern const char *JSON_DESCRIPTOR_PROVIDER_NO_DEFAULT_VALUE_SUFFIX;
-extern const char *JSON_DESCRIPTOR_PROVIDER_DIFFERENT_OPTION_COUNT;
-extern const char *JSON_DESCRIPTOR_PROVIDER_DIFFERENT_OPTION_COUNT_SUFFIX;
-extern const char *JSON_DESCRIPTOR_PROVIDER_SCHEMA_PARSE_FAILED;
-extern const char *JSON_DESCRIPTOR_PROVIDER_MISSING_PROPERTIES;
-extern const char *CONFIG_MANAGER_NULL_LOADER;
-extern const char *CONFIG_MANAGER_VALIDATION_FAILED;
-extern const char *CONFIG_MANAGER_TYPE_MISMATCH;
+
+// TODO - remove all refs to ERROR_STRING
+// use throw_xlio_exception instead
+
 extern const char *OPEN_PAREN;
 extern const char *CLOSE_PAREN;
 
-extern const char *CONFIG_PROVIDER_BAD_ANY_CAST;
-
-// JSON Loader error messages
-extern const char *JSON_LOADER_CANNOT_OPEN;
-extern const char *JSON_LOADER_PARSE_FAILED;
-extern const char *JSON_LOADER_NOT_OBJECT;
-
-// Config descriptor error messages
-extern const char *CONFIG_DESCRIPTOR_PARAMETER_NOT_FOUND_PREFIX;
-extern const char *CONFIG_DESCRIPTOR_PARAMETER_NOT_FOUND_SUFFIX;
-
-// Inline loader error messages
-extern const char *INLINE_LOADER_CONFIG_KEY_NULL;
-extern const char *INLINE_LOADER_CONFIG_KEY_NOT_SET;
-extern const char *INLINE_LOADER_INVALID_PAIR;
-extern const char *INLINE_LOADER_EMPTY_KEY;
-extern const char *INLINE_LOADER_INVALID_CONFIG;
 } // namespace errors
 
 // Formatted error components
-namespace error_format {
+namespace type_format {
 extern const char *INTEGER_PREFIX;
 extern const char *STRING_PREFIX;
 extern const char *BOOLEAN_PREFIX;
 extern const char *TRUE_VALUE;
 extern const char *FALSE_VALUE;
-} // namespace error_format
+} // namespace type_format
 
 // Miscellaneous
 namespace misc {

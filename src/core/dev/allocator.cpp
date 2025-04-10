@@ -504,7 +504,7 @@ repeat:
         data = (void *)((uintptr_t)m_blocks.back()->data() + m_latest_offset);
         m_latest_offset += actual_size;
     } else if (!m_b_hw) {
-        if (expand(std::max(static_cast<size_t>(safe_mce_sys().heap_metadata_block), actual_size))) {
+        if (expand(std::max(safe_mce_sys().heap_metadata_block, actual_size))) {
             goto repeat;
         }
     }

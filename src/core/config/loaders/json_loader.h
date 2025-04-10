@@ -7,15 +7,17 @@
 #pragma once
 
 #include "loader.h"
+#include <json-c/json.h>
 #include <map>
 #include <string>
 
 class json_loader : public loader {
 public:
-  explicit json_loader(const char *json_string);
-  std::map<std::string, std::experimental::any> load_all() & override;
+    explicit json_loader(const char *json_string);
+    std::map<std::string, std::experimental::any> load_all() & override;
 
 private:
-  // Path to the JSON file
-  std::string m_file_path;
+    void process_json_object(const std::string &prefix, json_object *obj);
+
+    std::string m_file_path;
 };

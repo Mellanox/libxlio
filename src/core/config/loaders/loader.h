@@ -11,10 +11,10 @@
 
 class loader {
 public:
-  virtual ~loader() noexcept = default;
-  virtual std::map<std::string, std::experimental::any> load_all() & = 0;
+    virtual ~loader() noexcept = default;
+    virtual std::map<std::string, std::experimental::any> load_all() & = 0;
 
 protected:
-  // Cache of key->value pairs read
-  std::map<std::string, std::experimental::any> m_data;
+    // Cache of key->value pairs read
+    std::map<std::string, std::experimental::any> m_data;
 };

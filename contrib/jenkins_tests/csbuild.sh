@@ -33,6 +33,9 @@ rc=$(($rc+$?))
 eval "csgrep --quiet --event 'error|warning' \
 	--path '^${WORKSPACE}' --strip-path-prefix '${WORKSPACE}' \
 	--remove-duplicates '${csbuild_dir}/csbuild.log' | \
+	csgrep --invert-match --path '.*third_party.*' | \
+	# json_descriptor_provider.cpp is including auto-generated header csbuild doesn't create
+	csgrep --invert-match --path '.*json_descriptor_provider.cpp' | \
 	csgrep --invert-match --path '^ksh-.*[0-9]+\.c$' | \
 	csgrep --invert-match --checker CLANG_WARNING --msg \"internal warning\" | \
 	csgrep --invert-match --checker CLANG_WARNING --event \"warning\[deadcode.DeadStores\]\" | \
