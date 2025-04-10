@@ -164,7 +164,7 @@ fi
 %dir %{_pkgdocdir}
 %doc %{_pkgdocdir}/README
 %doc %{_pkgdocdir}/CHANGES
-%config(noreplace) %{_sysconfdir}/libxlio.conf
+%config(noreplace) %{_sysconfdir}/xlio_config_schema.json
 %{_sbindir}/xliod
 %if "%{use_systemd}" == "1"
 %{_prefix}/lib/systemd/system/xlio.service

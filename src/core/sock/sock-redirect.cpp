@@ -2255,7 +2255,7 @@ EXPORT_SYMBOL pid_t XLIO_SYMBOL(fork)(void)
         g_init_global_ctors_done = false;
         sock_redirect_exit();
 
-        safe_mce_sys().get_env_params();
+        safe_mce_sys().get_params();
         vlog_start(PRODUCT_NAME, safe_mce_sys().log_level, safe_mce_sys().log_filename,
                    safe_mce_sys().log_details, safe_mce_sys().log_colors);
         if (xlio_rdma_lib_reset()) {
@@ -2346,7 +2346,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(daemon)(int __nochdir, int __noclose)
         g_init_global_ctors_done = false;
         sock_redirect_exit();
 
-        safe_mce_sys().get_env_params();
+        safe_mce_sys().get_params();
         vlog_start(PRODUCT_NAME, safe_mce_sys().log_level, safe_mce_sys().log_filename,
                    safe_mce_sys().log_details, safe_mce_sys().log_colors);
         if (xlio_rdma_lib_reset()) {

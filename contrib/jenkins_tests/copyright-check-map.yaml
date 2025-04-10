@@ -22,6 +22,7 @@ general:
         - ".*configure\\.ac"
         - ".*Jenkinsfile"
         - ".*\\.docx"
+        - ".*\\.json"
         - ".*\\.py"
         - ".*\\.txt"
         - ".*\\.log"

@@ -1,0 +1,1 @@
+SUBDIRS = json-c 
