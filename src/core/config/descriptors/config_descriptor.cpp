@@ -8,20 +8,16 @@
 #include "core/config/config_strings.h"
 #include "core/util/xlio_exception.h"
 
-using namespace config_strings;
-
-parameter_descriptor
-config_descriptor::get_parameter(const std::string &key) const {
-  auto it = parameter_map.find(key);
-  if (it == parameter_map.end()) {
-    throw_xlio_exception(errors::CONFIG_DESCRIPTOR_PARAMETER_NOT_FOUND_PREFIX +
-                         key +
-                         errors::CONFIG_DESCRIPTOR_PARAMETER_NOT_FOUND_SUFFIX);
-  }
-  return it->second;
+parameter_descriptor config_descriptor::get_parameter(const std::string &key) const
+{
+    auto it = parameter_map.find(key);
+    if (it == parameter_map.end()) {
+        throw_xlio_exception("Parameter descriptor for '" + key + "' not found");
+    }
+    return it->second;
 }
 
-void config_descriptor::set_parameter(const std::string &key,
-                                      parameter_descriptor &&descriptor) {
-  parameter_map.insert({key, std::move(descriptor)});
+void config_descriptor::set_parameter(const std::string &key, parameter_descriptor &&descriptor)
+{
+    parameter_map.insert({key, std::move(descriptor)});
 }

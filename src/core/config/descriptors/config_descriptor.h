@@ -11,12 +11,12 @@
 
 class config_descriptor {
 public:
-  explicit config_descriptor() = default;
-  // Retrieves descriptor by key, throws if not found
-  parameter_descriptor get_parameter(const std::string &key) const;
-  void set_parameter(const std::string &key, parameter_descriptor &&descriptor);
+    explicit config_descriptor() = default;
+    // Retrieves descriptor by key, throws if not found
+    parameter_descriptor get_parameter(const std::string &key) const;
+    void set_parameter(const std::string &key, parameter_descriptor &&descriptor);
 
 private:
-  // A map from parameter name to its descriptor. available to providers to fill
-  std::map<std::string, parameter_descriptor> parameter_map;
+    // A map from parameter name to its descriptor. available to providers to fill
+    std::map<std::string, parameter_descriptor> parameter_map;
 };

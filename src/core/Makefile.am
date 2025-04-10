@@ -1,4 +1,3 @@
-
 noinst_LTLIBRARIES = \
 	libconfig_parser.la
 
@@ -13,7 +12,7 @@ LEX_OUTPUT_ROOT=lex.libxlio_yy
 #
 #BUILT_SOURCES += config_scanner.c config_parser.h config_parser.c
 #libconfig_parser_la_SOURCES += util/config_scanner.l util/config_parser.y
-libconfig_parser_la_SOURCES = config_scanner.c config_parser.c
+libconfig_parser_la_SOURCES = $(top_builddir)/third_party/legacy_config_parser/config_scanner.c $(top_builddir)/third_party/legacy_config_parser/config_parser.c
 
 dist-hook:
 	cd $(distdir); rm -f $(BUILT_SOURCES)
@@ -61,12 +60,17 @@ libxlio_la_LIBADD = \
 	$(top_builddir)/src/core/infra/libinfra.la \
 	libconfig_parser.la
 
-dist_noinst_DATA = config/descriptor_providers/xlio_config_schema.json
+dist_noinst_DATA = $(top_builddir)/src/core/config/descriptor_providers/xlio_config_schema.json
 
-BUILT_SOURCES = config/descriptor_providers/xlio_config_schema.h
+BUILT_SOURCES = $(top_builddir)/src/core/config/descriptor_providers/xlio_config_schema.h
 
-config/descriptor_providers/xlio_config_schema.h: config/descriptor_providers/xlio_config_schema.json
-	xxd -i config/descriptor_providers/xlio_config_schema.json > $@
+$(top_builddir)/src/core/config/descriptor_providers/xlio_config_schema.h: $(top_builddir)/src/core/config/descriptor_providers/xlio_config_schema.json
+	(echo "#pragma once"; \
+	echo "unsigned char config_descriptor_providers_xlio_config_schema_json[] = {"; \
+	hexdump -v -e '16/1 "0x%02x, " "\n"' $(top_builddir)/src/core/config/descriptor_providers/xlio_config_schema.json | \
+	sed 's/0x  ,//g; s/, $$/,/'; \
+	echo "};"; \
+	echo "unsigned int config_descriptor_providers_xlio_config_schema_json_len = $$(wc -c < $(top_builddir)/src/core/config/descriptor_providers/xlio_config_schema.json);") > $@
 
 CLEANFILES = $(BUILT_SOURCES)
 
@@ -326,7 +330,7 @@ libxlio_la_SOURCES := \
 	util/agent_def.h \
 	util/data_updater.h \
 	\
-	config_parser.h \
+	$(top_builddir)/third_party/legacy_config_parser/config_parser.h \
 	main.h \
 	xlio.h \
 	xlio_extra.h \
@@ -339,4 +343,5 @@ libxlio_la_DEPENDENCIES = \
 	$(top_builddir)/src/core/netlink/libnetlink.la \
 	$(top_builddir)/src/core/infra/libinfra.la \
 	libconfig_parser.la \
-	$(LIBJSON_LIBS)
+	$(LIBJSON_LIBS) \
+	$(top_builddir)/src/core/config/descriptor_providers/xlio_config_schema.h

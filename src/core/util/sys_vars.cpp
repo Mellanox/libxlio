@@ -10,51 +10,59 @@
 
 #include "main.h"
 
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/resource.h>
-#include <sys/utsname.h>
-#include <time.h>
-#include <mcheck.h>
 #include <execinfo.h>
 #include <libgen.h>
 #include <linux/igmp.h>
 #include <math.h>
+#include <mcheck.h>
+#include <string.h>
+#include <sys/resource.h>
+#include <sys/stat.h>
+#include <sys/utsname.h>
+#include <time.h>
 
-#include "vlogger/vlogger.h"
-#include "utils/rdtsc.h"
-#include "core/util/hugepage_mgr.h"
-#include "core/util/xlio_stats.h"
-#include "core/util/utils.h"
-#include "core/event/event_handler_manager.h"
-#include "core/event/vlogger_timer_handler.h"
 #include "core/dev/buffer_pool.h"
 #include "core/dev/ib_ctx_handler_collection.h"
 #include "core/dev/net_device_table_mgr.h"
+#include "core/event/event_handler_manager.h"
+#include "core/event/vlogger_timer_handler.h"
 #include "core/proto/ip_frag.h"
 #include "core/proto/xlio_lwip.h"
+#include "core/util/hugepage_mgr.h"
+#include "core/util/utils.h"
+#include "core/util/xlio_stats.h"
+#include "utils/rdtsc.h"
+#include "vlogger/vlogger.h"
 
-#include "core/proto/neighbour_table_mgr.h"
-#include "core/netlink/netlink_wrapper.h"
 #include "core/event/command.h"
+#include "core/netlink/netlink_wrapper.h"
+#include "core/proto/neighbour_table_mgr.h"
 
-#include "core/sock/sock-redirect.h"
+#include "core/iomux/io_mux_call.h"
 #include "core/sock/fd_collection.h"
+#include "core/sock/sock-redirect.h"
 #include "core/sock/sockinfo_tcp.h"
 #include "core/sock/sockinfo_udp.h"
-#include "core/iomux/io_mux_call.h"
 
 #include "core/util/instrumentation.h"
 
 #include "core/config/config_registry.h"
-#include "core/config/loaders/json_loader.h"
-#include "core/config/loaders/inline_loader.h"
 #include "core/config/descriptor_providers/json_descriptor_provider.h"
+#include "core/config/loaders/inline_loader.h"
+#include "core/config/loaders/json_loader.h"
+
+template <typename T>
+static void set_value_from_registry(T &key, const std::string &name,
+                                    const config_registry &registry);
+
+template <typename T>
+static void set_value_from_registry_if_exists(T &key, const std::string &name,
+                                              const config_registry &registry);
 
 void check_netperf_flags();
 
-// Do not rely on global variable initialization in code that might be called from library
-// constructor
+// Do not rely on global variable initialization in code that might be called
+// from library constructor
 mce_sys_var &safe_mce_sys()
 {
     return mce_sys_var::instance();
@@ -67,14 +75,17 @@ mce_sys_var &safe_mce_sys()
 void mce_sys_var::print_xlio_load_failure_msg()
 {
     vlog_printf(VLOG_ERROR,
-                "***************************************************************************\n");
+                "****************************************************"
+                "***********************\n");
     vlog_printf(VLOG_ERROR,
                 "* Failed loading " PRODUCT_NAME
                 " library! Try executing the application without " PRODUCT_NAME ".  *\n");
     vlog_printf(VLOG_ERROR,
-                "* 'unset LD_PRELOAD' environment variable and rerun the application.      *\n");
+                "* 'unset LD_PRELOAD' environment variable and rerun "
+                "the application.      *\n");
     vlog_printf(VLOG_ERROR,
-                "***************************************************************************\n");
+                "****************************************************"
+                "***********************\n");
 }
 
 namespace xlio_spec {
@@ -467,22 +478,23 @@ int mce_sys_var::env_to_cpuset(char *orig_start, cpu_set_t *cpu_set)
 }
 
 void mce_sys_var::read_env_variable_with_pid(char *mce_sys_name, size_t mce_sys_max_size,
-                                             char *env_ptr)
+                                             const char *env_ptr)
 {
     int n = -1;
-    char *d_pos = nullptr;
+    const char *d_pos = nullptr;
 
     if (!env_ptr || !mce_sys_name || mce_sys_max_size < 2) {
         return;
     }
 
-    d_pos = strstr(env_ptr, "%d");
+    d_pos = std::strstr(env_ptr, "%d");
     if (!d_pos) { // no %d in the string
         n = snprintf(mce_sys_name, mce_sys_max_size - 1, "%s", env_ptr);
         if (unlikely((((int)mce_sys_max_size - 1) < n) || (n < 0))) {
             mce_sys_name[0] = '\0';
         }
-    } else { // has at least one occurrence of %d - replace the first one with the process PID
+    } else { // has at least one occurrence of %d - replace the first one with the
+             // process PID
         size_t bytes_num = std::min<size_t>(d_pos - env_ptr, mce_sys_max_size - 1);
         strncpy(mce_sys_name, env_ptr, bytes_num);
         mce_sys_name[bytes_num] = '\0';
@@ -530,10 +542,12 @@ exit:
 }
 
 /*
- * Intel and AMD CPUs have reserved bit 31 of ECX of CPUID leaf 0x1 as the hypervisor present bit.
- * This bit allows hypervisors to indicate their presence to the guest operating system.
- * Hypervisors set this bit and physical CPUs (all existing and future CPUs) set this bit to zero.
- * Guest operating systems can test bit 31 to detect if they are running inside a virtual machine.
+ * Intel and AMD CPUs have reserved bit 31 of ECX of CPUID leaf 0x1 as the
+ * hypervisor present bit. This bit allows hypervisors to indicate their
+ * presence to the guest operating system. Hypervisors set this bit and physical
+ * CPUs (all existing and future CPUs) set this bit to zero. Guest operating
+ * systems can test bit 31 to detect if they are running inside a virtual
+ * machine.
  */
 bool mce_sys_var::cpuid_hv()
 {
@@ -547,14 +561,15 @@ bool mce_sys_var::cpuid_hv()
 }
 
 /*
- * Intel and AMD have also reserved CPUID leaves 0x40000000 - 0x400000FF for software use.
- * Hypervisors can use these leaves to provide an interface to pass information from the
- * hypervisor to the guest operating system running inside a virtual machine.
- * The hypervisor bit indicates the presence of a hypervisor and that it is safe to test
- * these additional software leaves. VMware defines the 0x40000000 leaf as the hypervisor CPUID
- * information leaf. Code running on a VMware hypervisor can test the CPUID information leaf
- * for the hypervisor signature. VMware stores the string "VMwareVMware" in
- * EBX, ECX, EDX of CPUID leaf 0x40000000.
+ * Intel and AMD have also reserved CPUID leaves 0x40000000 - 0x400000FF for
+ * software use. Hypervisors can use these leaves to provide an interface to
+ * pass information from the hypervisor to the guest operating system running
+ * inside a virtual machine. The hypervisor bit indicates the presence of a
+ * hypervisor and that it is safe to test these additional software leaves.
+ * VMware defines the 0x40000000 leaf as the hypervisor CPUID information leaf.
+ * Code running on a VMware hypervisor can test the CPUID information leaf for
+ * the hypervisor signature. VMware stores the string "VMwareVMware" in EBX,
+ * ECX, EDX of CPUID leaf 0x40000000.
  */
 const char *mce_sys_var::cpuid_hv_vendor()
 {
@@ -595,7 +610,7 @@ void mce_sys_var::read_hv()
     }
 }
 
-void mce_sys_var::read_strq_strides_num()
+void mce_sys_var::legacy_read_strq_strides_num()
 {
     char *env_ptr = nullptr;
     if (!enable_striding_rq || !((env_ptr = getenv(SYS_VAR_STRQ_NUM_STRIDES)))) {
@@ -625,7 +640,31 @@ void mce_sys_var::read_strq_strides_num()
     strq_stride_num_per_rwqe = static_cast<uint32_t>(stirdes_num);
 }
 
-void mce_sys_var::read_strq_stride_size_bytes()
+void mce_sys_var::read_strq_strides_num(const config_registry &registry)
+{
+    if (!enable_striding_rq ||
+        !((registry.value_exists("hardware_features.striding_rq.strides")))) {
+        return;
+    }
+
+    int stirdes_num = registry.get_value<int>("hardware_features.striding_rq.strides");
+    bool isOK = true;
+    if (!is_ilog2(static_cast<unsigned int>(stirdes_num))) {
+        stirdes_num = align32pow2(static_cast<uint32_t>(stirdes_num));
+        isOK = false;
+    }
+
+    if (!isOK) {
+        vlog_printf(VLOG_INFO,
+                    " Invalid " SYS_VAR_STRQ_NUM_STRIDES
+                    ": Must be power of 2 and in the range of (%d,%d). Using: %d.\n",
+                    STRQ_MIN_STRIDES_NUM, STRQ_MAX_STRIDES_NUM, stirdes_num);
+    }
+
+    strq_stride_num_per_rwqe = static_cast<uint32_t>(stirdes_num);
+}
+
+void mce_sys_var::legacy_read_strq_stride_size_bytes()
 {
     char *env_ptr = nullptr;
     if (!enable_striding_rq || !((env_ptr = getenv(SYS_VAR_STRQ_STRIDE_SIZE_BYTES)))) {
@@ -655,6 +694,30 @@ void mce_sys_var::read_strq_stride_size_bytes()
     strq_stride_size_bytes = static_cast<uint32_t>(stirde_size_bytes);
 }
 
+void mce_sys_var::read_strq_stride_size_bytes(const config_registry &registry)
+{
+    if (!enable_striding_rq ||
+        !((registry.value_exists("hardware_features.striding_rq.stride_size")))) {
+        return;
+    }
+
+    int stirde_size_bytes = registry.get_value<int>("hardware_features.striding_rq.stride_size");
+    bool isOK = true;
+    if (!is_ilog2(static_cast<unsigned int>(stirde_size_bytes))) {
+        stirde_size_bytes = align32pow2(static_cast<uint32_t>(stirde_size_bytes));
+        isOK = false;
+    }
+
+    if (!isOK) {
+        vlog_printf(VLOG_INFO,
+                    " Invalid " SYS_VAR_STRQ_STRIDE_SIZE_BYTES
+                    ": Must be power of 2 and in the range of (%d,%d). Using: %d.\n",
+                    STRQ_MIN_STRIDE_SIZE_BYTES, STRQ_MAX_STRIDE_SIZE_BYTES, stirde_size_bytes);
+    }
+
+    strq_stride_size_bytes = static_cast<uint32_t>(stirde_size_bytes);
+}
+
 void mce_sys_var::update_multi_process_params()
 {
 #if defined(DEFINED_NGINX)
@@ -664,8 +727,8 @@ void mce_sys_var::update_multi_process_params()
         // Memory limit is per application, so distribute it across processes.
         memory_limit /= std::max<size_t>(app.workers_num, 1U);
         if (is_nginx_master) {
-            // We don't want to waste memory on the master process which doesn't handle traffic.
-            // Set parameters to preallocate minimum resources.
+            // We don't want to waste memory on the master process which doesn't
+            // handle traffic. Set parameters to preallocate minimum resources.
             mem_alloc_type = option_alloc_type::ANON;
             memory_limit = 12LU * 1024 * 1024;
             heap_metadata_block = 2LU * 1024 * 1024;
@@ -692,7 +755,7 @@ void mce_sys_var::legacy_get_env_params()
     strcpy(stats_filename, MCE_DEFAULT_STATS_FILE);
     strcpy(service_notify_dir, MCE_DEFAULT_SERVICE_FOLDER);
     strcpy(stats_shmem_dirname, MCE_DEFAULT_STATS_SHMEM_DIR);
-    strcpy(transport_control_context, MCE_DEFAULT_CONF_FILE);
+    strcpy(transport_control, MCE_DEFAULT_CONF_FILE);
     strcpy(app_id, MCE_DEFAULT_APP_ID);
     strcpy(internal_thread_cpuset, MCE_DEFAULT_INTERNAL_THREAD_CPUSET);
     strcpy(internal_thread_affinity_str, MCE_DEFAULT_INTERNAL_THREAD_AFFINITY_STR);
@@ -983,7 +1046,8 @@ void mce_sys_var::legacy_get_env_params()
             memory_limit *= std::max(app.workers_num, 1);
             rx_bufs_batch = 8; // RX buffers batch size.
 
-            // Do polling on RX queue on TX operations, helpful to maintain TCP stack management.
+            // Do polling on RX queue on TX operations, helpful to maintain TCP stack
+            // management.
             rx_poll_on_tx_tcp = true;
         } else if (mce_spec == MCE_SPEC_NGINX_DPU) {
             memory_limit = (app.workers_num == 16 ? 512LU : 1024LU) * 1024 * 1024;
@@ -1040,9 +1104,8 @@ void mce_sys_var::legacy_get_env_params()
         read_env_variable_with_pid(stats_shmem_dirname, sizeof(stats_shmem_dirname), env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_transport_control_context))) {
-        read_env_variable_with_pid(transport_control_context, sizeof(transport_control_context),
-                                   env_ptr);
+    if ((env_ptr = getenv(SYS_VAR_TRANSPORT_CONTROL))) {
+        read_env_variable_with_pid(transport_control, sizeof(transport_control), env_ptr);
     }
 
     if ((env_ptr = getenv(SYS_VAR_SERVICE_DIR))) {
@@ -1095,8 +1158,8 @@ void mce_sys_var::legacy_get_env_params()
         }
     }
 
-    read_strq_strides_num();
-    read_strq_stride_size_bytes();
+    legacy_read_strq_strides_num();
+    legacy_read_strq_stride_size_bytes();
 
     if ((env_ptr = getenv(SYS_VAR_STRQ_STRIDES_COMPENSATION_LEVEL))) {
         strq_strides_compensation_level = (uint32_t)atoi(env_ptr);
@@ -1256,11 +1319,11 @@ void mce_sys_var::legacy_get_env_params()
     if ((env_ptr = getenv(SYS_VAR_HW_TS_CONVERSION_MODE))) {
         hw_ts_conversion_mode = (ts_conversion_mode_t)atoi(env_ptr);
         if ((uint32_t)hw_ts_conversion_mode >= TS_CONVERSION_MODE_LAST) {
-            vlog_printf(
-                VLOG_WARNING,
-                "HW TS conversion size out of range [%d] (min=%d, max=%d). using default [%d]\n",
-                hw_ts_conversion_mode, TS_CONVERSION_MODE_DISABLE, TS_CONVERSION_MODE_LAST - 1,
-                MCE_DEFAULT_HW_TS_CONVERSION_MODE);
+            vlog_printf(VLOG_WARNING,
+                        "HW TS conversion size out of range [%d] (min=%d, max=%d). "
+                        "using default [%d]\n",
+                        hw_ts_conversion_mode, TS_CONVERSION_MODE_DISABLE,
+                        TS_CONVERSION_MODE_LAST - 1, MCE_DEFAULT_HW_TS_CONVERSION_MODE);
             hw_ts_conversion_mode = MCE_DEFAULT_HW_TS_CONVERSION_MODE;
         }
     }
@@ -1293,9 +1356,11 @@ void mce_sys_var::legacy_get_env_params()
     if (rx_prefetch_bytes_before_poll != 0 &&
         (rx_prefetch_bytes_before_poll < MCE_MIN_RX_PREFETCH_BYTES ||
          rx_prefetch_bytes_before_poll > MCE_MAX_RX_PREFETCH_BYTES)) {
-        vlog_printf(
-            VLOG_WARNING, "Rx prefetch bytes size out of range [%d] (min=%d, max=%d, disabled=0)\n",
-            rx_prefetch_bytes_before_poll, MCE_MIN_RX_PREFETCH_BYTES, MCE_MAX_RX_PREFETCH_BYTES);
+        vlog_printf(VLOG_WARNING,
+                    "Rx prefetch bytes size out of range [%d] (min=%d, max=%d, "
+                    "disabled=0)\n",
+                    rx_prefetch_bytes_before_poll, MCE_MIN_RX_PREFETCH_BYTES,
+                    MCE_MAX_RX_PREFETCH_BYTES);
         rx_prefetch_bytes_before_poll = MCE_DEFAULT_RX_PREFETCH_BYTES_BEFORE_POLL;
     }
 
@@ -1524,7 +1589,8 @@ void mce_sys_var::legacy_get_env_params()
         tcp_ts_opt = (tcp_ts_opt_t)atoi(env_ptr);
         if ((uint32_t)tcp_ts_opt >= TCP_TS_OPTION_LAST) {
             vlog_printf(VLOG_WARNING,
-                        "TCP timestamp option value is out of range [%d] (min=%d, max=%d). using "
+                        "TCP timestamp option value is out of range [%d] (min=%d, "
+                        "max=%d). using "
                         "default [%d]\n",
                         tcp_ts_opt, TCP_TS_OPTION_DISABLE, TCP_TS_OPTION_LAST - 1,
                         MCE_DEFAULT_TCP_TIMESTAMP_OPTION);
@@ -1544,11 +1610,12 @@ void mce_sys_var::legacy_get_env_params()
         tcp_push_flag = atoi(env_ptr) ? true : false;
     }
 
-    // TODO: this should be replaced by calling "exception_handling.init()" that will be called from
-    // init()
+    // TODO: this should be replaced by calling "exception_handling.init()" that
+    // will be called from init()
     if ((env_ptr = getenv(xlio_exception_handling::getSysVar()))) {
-        exception_handling = xlio_exception_handling(strtol(
-            env_ptr, nullptr, 10)); // xlio_exception_handling is responsible for its invariant
+        exception_handling = xlio_exception_handling(
+            strtol(env_ptr, nullptr,
+                   10)); // xlio_exception_handling is responsible for its invariant
     }
 
     if ((env_ptr = getenv(SYS_VAR_AVOID_SYS_CALLS_ON_TCP_FD))) {
@@ -1640,7 +1707,7 @@ void mce_sys_var::legacy_get_env_params()
                         SYS_VAR_HUGEPAGE_SIZE, option_size::to_str(MCE_DEFAULT_HUGEPAGE_SIZE));
             hugepage_size = MCE_DEFAULT_HUGEPAGE_SIZE;
         }
-        if (hugepage_size > static_cast<int64_t>(MCE_MAX_HUGEPAGE_SIZE)) {
+        if (hugepage_size > MCE_MAX_HUGEPAGE_SIZE) {
             vlog_printf(VLOG_WARNING, "%s exceeds maximum possible hugepage size (%s)\n",
                         SYS_VAR_HUGEPAGE_SIZE, option_size::to_str(MCE_MAX_HUGEPAGE_SIZE));
             hugepage_size = MCE_DEFAULT_HUGEPAGE_SIZE;
@@ -1765,32 +1832,7 @@ void mce_sys_var::legacy_get_env_params()
     }
 }
 
-static void set_string_member(char *sys_var_member, size_t sys_var_member_size,
-                              const std::string &value)
-{
-    memset(sys_var_member, 0, sys_var_member_size);
-    if (value.empty()) {
-        return;
-    }
-    snprintf(sys_var_member, sys_var_member_size, "%s", value.c_str());
-}
-
-static void set_path_member(char *sys_var_member, size_t sys_var_member_size,
-                            const std::string &value, bool add_pid)
-{
-    memset(sys_var_member, 0, sys_var_member_size);
-    if (value.empty()) {
-        return;
-    }
-
-    if (add_pid) {
-        snprintf(sys_var_member, sys_var_member_size, "%s.%d", value.c_str(), getpid());
-    } else {
-        snprintf(sys_var_member, sys_var_member_size, "%s", value.c_str());
-    }
-}
-
-std::string transport_control_to_legacy(
+static std::string transport_control_to_legacy(
     const std::vector<std::experimental::any> &transport_control)
 {
     std::string result;
@@ -1825,635 +1867,620 @@ std::string transport_control_to_legacy(
     return result;
 }
 
-void mce_sys_var::apply_settings(const config_registry &registry)
+void mce_sys_var::initialize_base_variables(const config_registry &registry)
 {
-    const bool core_append_pid_to_path = registry.get_value<bool>("core.append_pid_to_path");
+    memset(log_filename, 0, sizeof(log_filename));
+    memset(stats_filename, 0, sizeof(stats_filename));
+    memset(stats_shmem_dirname, 0, sizeof(stats_shmem_dirname));
+    memset(service_notify_dir, 0, sizeof(service_notify_dir));
 
+    strcpy(stats_filename,
+           registry.get_default_value<std::string>("observability.stats.file_path").c_str());
+    strcpy(service_notify_dir,
+           registry.get_default_value<std::string>("observability.daemon.dir").c_str());
+    strcpy(stats_shmem_dirname,
+           registry.get_default_value<std::string>("observability.stats.shmem_dir").c_str());
     const std::string net_offload_transport_control =
         transport_control_to_legacy(registry.get_value<std::vector<std::experimental::any>>(
-            "net.offload.transport_control"));
-    set_string_member(transport_control_context, sizeof(transport_control_context),
-                      net_offload_transport_control);
+            "applications.acceleration_control.transport_control"));
+    strcpy(transport_control, net_offload_transport_control.c_str());
+    strcpy(app_id,
+           registry.get_default_value<std::string>("applications.acceleration_control.app_id")
+               .c_str());
+    strcpy(internal_thread_cpuset,
+           registry.get_default_value<std::string>("performance.threading.cpuset").c_str());
+    strcpy(internal_thread_affinity_str,
+           registry.get_default_value<std::string>("performance.threading.cpu_affinity").c_str());
 
-    const std::string net_offload_app_id =
-        registry.get_value<std::string>("net.offload.app_id");
-    set_string_member(app_id, sizeof(app_id), net_offload_app_id);
+    service_enable = registry.get_default_value<bool>("observability.daemon.enable");
 
-    const std::string core_log_file_path =
-        registry.get_value<std::string>("core.log.file_path");
-    set_path_member(log_filename, sizeof(log_filename), core_log_file_path,
-                    core_append_pid_to_path);
-
-    const std::string core_stats_file_path =
-        registry.get_value<std::string>("core.stats.file_path");
-    set_path_member(stats_filename, sizeof(stats_filename), core_stats_file_path,
-                    core_append_pid_to_path);
-
-    const std::string core_stats_shmem_dir =
-        registry.get_value<std::string>("core.stats.shmem_dir");
-    set_path_member(stats_shmem_dirname, sizeof(stats_shmem_dirname), core_stats_shmem_dir,
-                    core_append_pid_to_path);
-
-    const std::string xlio_daemon_dir = registry.get_value<std::string>("xlio.daemon.dir");
-    set_path_member(service_notify_dir, sizeof(service_notify_dir), xlio_daemon_dir,
-                    core_append_pid_to_path);
-
-    service_enable = registry.get_value<bool>("xlio.daemon.enable");
-
-    memset(internal_thread_cpuset, 0, sizeof(internal_thread_cpuset));
-    const std::string core_cpu_cpuset = registry.get_value<std::string>("core.cpu.cpuset");
-    snprintf(internal_thread_cpuset, sizeof(internal_thread_cpuset), "%s", core_cpu_cpuset.c_str());
-
-    memset(internal_thread_affinity_str, 0, sizeof(internal_thread_affinity_str));
-    const std::string core_cpu_affinity =
-        registry.get_value<std::string>("core.cpu.affinity");
-    snprintf(internal_thread_affinity_str, sizeof(internal_thread_affinity_str), "%s",
-             core_cpu_affinity.c_str());
-
-    print_report = registry.get_value<bool>("core.exit_report");
-
-    quick_start = registry.get_value<bool>("core.init.quick");
-
-    log_level = static_cast<vlog_levels_t>(registry.get_value<int>("core.log.level"));
-
-    log_details = registry.get_value<decltype(log_details)>("xlio.log.details");
-
-    log_colors = registry.get_value<bool>("xlio.log.colors");
-
-    handle_sigintr =
-        registry.get_value<bool>("core.signals.sigint.exit");
-
-    handle_segfault =
-        registry.get_value<bool>("core.signals.sigsegv.backtrace");
-
-    stats_fd_num_max = registry.get_value<decltype(stats_fd_num_max)>("core.stats.fd_num");
+    print_report = registry.get_default_value<bool>("observability.exit_report");
+    quick_start = registry.get_default_value<bool>("core.quick_init");
+    log_level = static_cast<decltype(log_level)>(
+        registry.get_default_value<int>("observability.log.level"));
+    log_details = registry.get_default_value<uint32_t>("observability.log.details");
+    log_colors = registry.get_default_value<bool>("observability.log.colors");
+    handle_sigintr = registry.get_default_value<bool>("core.signals.sigint.exit");
+    handle_segfault = registry.get_default_value<bool>("core.signals.sigsegv.backtrace");
+    stats_fd_num_max = registry.get_default_value<uint32_t>("observability.stats.fd_num");
     stats_fd_num_monitor = stats_fd_num_max;
 
-    ring_allocation_logic_tx =
-        static_cast<ring_logic_t>(registry.get_value<int>("xlio.ring.tx.alloc_logic"));
-
-    ring_allocation_logic_rx =
-        static_cast<ring_logic_t>(registry.get_value<int>("xlio.ring.rx.alloc_logic"));
-
+    ring_allocation_logic_tx = static_cast<ring_logic_t>(
+        registry.get_default_value<int>("performance.rings.tx.allocation_logic"));
+    ring_allocation_logic_rx = static_cast<ring_logic_t>(
+        registry.get_default_value<int>("performance.rings.rx.allocation_logic"));
     ring_migration_ratio_tx =
-        registry.get_value<decltype(ring_migration_ratio_tx)>("xlio.ring.tx.migration_ratio");
-
+        registry.get_default_value<int>("performance.rings.tx.migration_ratio");
     ring_migration_ratio_rx =
-        registry.get_value<decltype(ring_migration_ratio_rx)>("xlio.ring.rx.migration_ratio");
-
+        registry.get_default_value<int>("performance.rings.rx.migration_ratio");
     ring_limit_per_interface =
-        registry.get_value<decltype(ring_limit_per_interface)>("xlio.ring.max_per_interface");
+        registry.get_default_value<int>("performance.rings.max_per_interface");
+    ring_dev_mem_tx = registry.get_default_value<int>("performance.rings.tx.max_on_device_memory");
 
-    ring_dev_mem_tx =
-        registry.get_value<decltype(ring_dev_mem_tx)>("xlio.ring.tx.max_on_device_memory");
+    tcp_max_syn_rate = registry.get_default_value<int>("network.protocols.tcp.max_syn_rate");
 
-    tcp_max_syn_rate =
-        registry.get_value<decltype(tcp_max_syn_rate)>("net.tcp.max_syn_rate");
-
-    zc_cache_threshold =
-        registry.get_value<decltype(zc_cache_threshold)>("xlio.api.sendfile_limit");
-
-    tx_buf_size =
-        registry.get_value<decltype(tx_buf_size)>("xlio.sq.buf.size");
-
+    zc_cache_threshold = registry.get_default_value<int64_t>("applications.api.sendfile_limit");
+    tx_buf_size = registry.get_default_value<uint32_t>("performance.buffers.tx.buf_size");
     tcp_nodelay_treshold =
-        registry.get_value<decltype(tcp_nodelay_treshold)>("net.tcp.nodelay.byte_threshold");
-
-    tx_num_wr =
-        registry.get_value<decltype(tx_num_wr)>("xlio.sq.wre.global_array_size");
-
-    tx_num_wr_to_signal =
-        registry.get_value<decltype(tx_num_wr_to_signal)>("xlio.sq.wre.completion_batch_size");
-
-    tx_max_inline =
-        registry.get_value<decltype(tx_max_inline)>("xlio.sq.wre.max_inline_size");
-
-    tx_mc_loopback_default =
-        registry.get_value<bool>("xlio.udp.mc_loopback");
-
+        registry.get_default_value<uint32_t>("network.protocols.tcp.nodelay.byte_threshold");
+    tx_num_wr = registry.get_default_value<uint32_t>(
+        "performance.buffers.work_request_elements.tx_global_array_size");
+    tx_num_wr_to_signal = registry.get_default_value<int>(
+        "performance.buffers.work_request_elements.tx_completion_batch_size");
+    tx_max_inline = registry.get_default_value<uint32_t>(
+        "performance.buffers.work_request_elements.tx_max_inline_size");
+    tx_mc_loopback_default = registry.get_default_value<bool>("network.multicast.mc_loopback");
     tx_nonblocked_eagains =
-        registry.get_value<bool>("xlio.sq.nonblocking.eagain");
-
+        registry.get_default_value<bool>("performance.buffers.tx.nonblocking_eagain");
     tx_prefetch_bytes =
-        registry.get_value<decltype(tx_prefetch_bytes)>("xlio.sq.prefetch.cache_size");
-
+        registry.get_default_value<uint32_t>("performance.buffers.tx.prefetch_size");
     tx_bufs_batch_udp =
-        registry.get_value<decltype(tx_bufs_batch_udp)>("xlio.udp.buf.batch_size");
-
-    tx_bufs_batch_tcp =
-        registry.get_value<decltype(tx_bufs_batch_tcp)>("xlio.sq.buf.batch_size");
-
+        registry.get_default_value<decltype(tx_bufs_batch_udp)>("network.protocols.udp.batch_size");
+    tx_bufs_batch_tcp = registry.get_default_value<int>("performance.buffers.tx.tcp_batch_size");
     tx_segs_batch_tcp =
-        registry.get_value<decltype(tx_segs_batch_tcp)>("xlio.sq.segments.socket_batch_size");
-
+        registry.get_default_value<int>("performance.buffers.tcp_segments.socket_batch_size");
     tx_segs_ring_batch_tcp =
-        registry.get_value<decltype(tx_segs_ring_batch_tcp)>("xlio.sq.segments.ring_batch_size");
-
+        registry.get_default_value<int>("performance.buffers.tcp_segments.ring_batch_size");
     tx_segs_pool_batch_tcp =
-        registry.get_value<decltype(tx_segs_pool_batch_tcp)>("xlio.sq.segments.pool_batch_size");
+        registry.get_default_value<int>("performance.buffers.tcp_segments.pool_batch_size");
+    rx_buf_size = registry.get_default_value<uint32_t>("performance.buffers.rx.buf_size");
 
-    rx_buf_size = registry.get_value<decltype(rx_buf_size)>("xlio.rq.buf.size");
+    // TODO: No direct mapping for rx_bufs_batch
+    rx_bufs_batch = MCE_DEFAULT_RX_BUFS_BATCH;
 
-    rx_bufs_batch = registry.get_value<decltype(rx_bufs_batch)>("xlio.rq.buf.batch_size");
+    rx_num_wr = registry.get_default_value<uint32_t>(
+        "performance.buffers.work_request_elements.rx_global_array_size");
+    rx_num_wr_to_post_recv =
+        registry.get_default_value<int>("performance.buffers.work_request_elements.rx_batch_size");
+    rx_poll_num = registry.get_default_value<int>("performance.polling.rx_duration_usec");
+    rx_poll_num_init =
+        registry.get_default_value<int>("performance.polling.offload_transition_poll_count");
+    rx_udp_poll_os_ratio =
+        registry.get_default_value<uint32_t>("performance.polling.rx_kernel_fd_attention_level");
+    hw_ts_conversion_mode = static_cast<ts_conversion_mode_t>(
+        registry.get_default_value<int>("network.timing.ts_conversion"));
+    rx_poll_yield_loops = registry.get_default_value<bool>("performance.polling.yield_on_poll");
+    select_handle_cpu_usage_stats =
+        registry.get_default_value<bool>("observability.stats.cpu_usage");
+    rx_ready_byte_min_limit =
+        registry.get_default_value<uint32_t>("performance.buffers.rx.override_rcvbuf_limit");
+    rx_prefetch_bytes =
+        registry.get_default_value<uint32_t>("performance.buffers.rx.prefetch_size");
+    rx_prefetch_bytes_before_poll =
+        registry.get_default_value<uint32_t>("performance.buffers.rx.prefetch_before_poll");
+    rx_cq_drain_rate_nsec =
+        registry.get_default_value<int>("performance.completion_queue.rx_drain_rate_nsec");
+    rx_delta_tsc_between_cq_polls = 0;
 
-    rx_num_wr = registry.get_value<decltype(rx_num_wr)>("xlio.rq.wre.global_array_size");
-
-    rx_num_wr_to_post_recv = registry.get_value<decltype(rx_num_wr_to_post_recv)>("xlio.rq.wre.rx_batch_size");
-
-    rx_poll_num = registry.get_value<decltype(rx_poll_num)>("xlio.cq.rx_poll_count");
-
-    rx_poll_num_init = registry.get_value<decltype(rx_poll_num_init)>("xlio.udp.offload_transition_poll_count");
-
-    rx_udp_poll_os_ratio = registry.get_value<decltype(rx_udp_poll_os_ratio)>("xlio.udp.rx_kernel_fd_attention_level");
-
-    hw_ts_conversion_mode = static_cast<ts_conversion_mode_t>(registry.get_value<int>("xlio.ts_conversion"));
-
-    rx_poll_yield_loops = registry.get_value<bool>("xlio.udp.yield_on_poll");
-
-    select_handle_cpu_usage_stats = registry.get_value<bool>("core.stats.cpu_usage");
-
-    rx_ready_byte_min_limit = registry.get_value<decltype(rx_ready_byte_min_limit)>("xlio.rq.buf.override_rcvbuf_limit");
-
-    rx_prefetch_bytes = registry.get_value<decltype(rx_prefetch_bytes)>("xlio.rq.prefetch.cache_size");
-
-    rx_prefetch_bytes_before_poll = registry.get_value<bool>("xlio.rq.prefetch.fetch_before_poll") ? rx_prefetch_bytes : 0;
-
-    rx_cq_drain_rate_nsec = registry.get_value<decltype(rx_cq_drain_rate_nsec)>("xlio.cq.rx_drain_rate_nsec");
-
-    // Update the rx cq polling rate for draining logic
-    tscval_t tsc_per_second = get_tsc_rate_per_second();
-    rx_delta_tsc_between_cq_polls = tsc_per_second * rx_cq_drain_rate_nsec / NSEC_PER_SEC;
-
-    const bool xlio_rq_striding_enable = registry.get_value<bool>("xlio.rq.striding.enable");
-    enable_strq_env = xlio_rq_striding_enable ? option_3::ON : option_3::OFF;
-    enable_striding_rq = xlio_rq_striding_enable;
-
+    enable_strq_env = static_cast<decltype(enable_strq_env)>(
+        registry.get_default_value<bool>("hardware_features.striding_rq.enable"));
     strq_stride_num_per_rwqe =
-        registry.get_value<decltype(strq_stride_num_per_rwqe)>("xlio.rq.striding.strides");
-
+        registry.get_default_value<uint32_t>("hardware_features.striding_rq.strides");
     strq_stride_size_bytes =
-        registry.get_value<decltype(strq_stride_size_bytes)>("xlio.rq.striding.stride_size");
-
+        registry.get_default_value<uint32_t>("hardware_features.striding_rq.stride_size");
     strq_strides_compensation_level =
-        registry.get_value<decltype(strq_strides_compensation_level)>("xlio.rq.striding.spare_strides");
+        registry.get_default_value<uint32_t>("hardware_features.striding_rq.spare_strides");
 
-    gro_streams_max =
-        registry.get_value<decltype(gro_streams_max)>("xlio.rq.max_gro_streams");
+    gro_streams_max = registry.get_default_value<int>("performance.max_gro_streams");
+    disable_flow_tag = registry.get_default_value<bool>("network.multicast.mc_disable_flowtag");
 
-    disable_flow_tag =
-        registry.get_value<bool>("xlio.udp.mc_disable_flowtag");
-
-    tcp_2t_rules =
-        registry.get_value<bool>("xlio.ring.tcp_2t_rules");
-
-    tcp_3t_rules =
-        registry.get_value<bool>("xlio.ring.tcp_3t_rules");
-
-    udp_3t_rules =
-        registry.get_value<bool>("xlio.udp.3t_rules");
-
+    tcp_2t_rules = registry.get_default_value<bool>("performance.steering_rules.tcp.2t_rules");
+    tcp_3t_rules = registry.get_default_value<bool>("performance.steering_rules.tcp.3t_rules");
+    udp_3t_rules = registry.get_default_value<bool>("performance.steering_rules.udp.3t_rules");
     eth_mc_l2_only_rules =
-        registry.get_value<bool>("xlio.udp.only_mc_l2_rules");
-
+        registry.get_default_value<bool>("performance.steering_rules.udp.only_mc_l2_rules");
     mc_force_flowtag =
-        registry.get_value<bool>("xlio.udp.mc_flowtag_acceleration");
+        registry.get_default_value<bool>("network.multicast.mc_flowtag_acceleration");
 
-    select_poll_num =
-        registry.get_value<decltype(select_poll_num)>("net.poll.rx_duration_usec");
-
+    select_poll_num = registry.get_default_value<int>("performance.polling.select.poll_usec");
     select_poll_os_force =
-        MCE_DEFAULT_SELECT_POLL_OS_FORCE; // TODO - discovered to be buggy - see libvma patch
-
+        registry.get_default_value<bool>("performance.polling.select.poll_os_force");
     select_poll_os_ratio =
-        registry.get_value<decltype(select_poll_os_ratio)>("net.poll.kernel_fd_attention_level");
-
+        registry.get_default_value<int>("performance.polling.select.poll_os_ratio");
     select_skip_os_fd_check =
-        registry.get_value<decltype(select_skip_os_fd_check)>("net.poll.offload_fd_priority");
+        registry.get_default_value<uint32_t>("performance.polling.select.skip_os");
 
-    cq_moderation_enable =
-        registry.get_value<bool>("xlio.cq.interrupt_moderation.enable");
-
-    cq_moderation_count =
-        registry.get_value<decltype(cq_moderation_count)>("xlio.cq.interrupt_moderation.packet_count");
-
-    cq_moderation_period_usec =
-        registry.get_value<decltype(cq_moderation_period_usec)>("xlio.cq.interrupt_moderation.period_usec");
-
-    cq_aim_max_count =
-        registry.get_value<decltype(cq_aim_max_count)>("xlio.cq.interrupt_moderation.adaptive_count");
-
-    cq_aim_max_period_usec =
-        registry.get_value<decltype(cq_aim_max_period_usec)>("xlio.cq.interrupt_moderation.adaptive_period_usec");
-
-    cq_aim_interval_msec =
-        registry.get_value<decltype(cq_aim_interval_msec)>("xlio.cq.interrupt_moderation.adaptive_change_frequency_msec");
-
-    cq_aim_interrupts_rate_per_sec =
-        registry.get_value<decltype(cq_aim_interrupts_rate_per_sec)>("xlio.cq.interrupt_moderation.interrupt_per_sec");
+    cq_moderation_enable = registry.get_default_value<bool>(
+        "performance.completion_queue.interrupt_moderation.enable");
+    cq_moderation_count = registry.get_default_value<uint32_t>(
+        "performance.completion_queue.interrupt_moderation.packet_count");
+    cq_moderation_period_usec = registry.get_default_value<uint32_t>(
+        "performance.completion_queue.interrupt_moderation.period_usec");
+    cq_aim_max_count = registry.get_default_value<uint32_t>(
+        "performance.completion_queue.interrupt_moderation.adaptive_count");
+    cq_aim_max_period_usec = registry.get_default_value<uint32_t>(
+        "performance.completion_queue.interrupt_moderation.adaptive_period_usec");
+    cq_aim_interval_msec = registry.get_default_value<uint32_t>(
+        "performance.completion_queue.interrupt_moderation.adaptive_change_"
+        "frequency_msec");
+    cq_aim_interrupts_rate_per_sec = registry.get_default_value<uint32_t>(
+        "performance.completion_queue.interrupt_moderation.interrupt_per_sec");
 
     cq_poll_batch_max =
-        registry.get_value<decltype(cq_poll_batch_max)>("net.poll.rx_buffer_max_count");
-
+        registry.get_default_value<uint32_t>("performance.polling.rx_buffer_max_count");
     progress_engine_interval_msec =
-        registry.get_value<decltype(progress_engine_interval_msec)>("xlio.cq.periodic_drain_msec");
-
-    progress_engine_wce_max =
-        registry.get_value<decltype(progress_engine_wce_max)>("xlio.cq.periodic_drain_max_cqes");
-
-    cq_keep_qp_full =
-        registry.get_value<bool>("xlio.cq.keep_full");
-
-    max_tso_sz =
-        registry.get_value<decltype(max_tso_sz)>("xlio.sq.tso.max_size");
-
-    user_huge_page_size =
-        registry.get_value<decltype(user_huge_page_size)>("xlio.api.hugepages.size");
-
+        registry.get_default_value<uint32_t>("performance.completion_queue.periodic_drain_msec");
+    progress_engine_wce_max = registry.get_default_value<uint32_t>(
+        "performance.completion_queue.periodic_drain_max_cqes");
+    cq_keep_qp_full = registry.get_default_value<bool>("performance.completion_queue.keep_full");
+    max_tso_sz = registry.get_default_value<int64_t>("hardware_features.tcp.tso.max_size");
+    user_huge_page_size = registry.get_default_value<int64_t>("applications.api.hugepages.size");
     internal_thread_arm_cq_enabled =
-        registry.get_value<bool>("xlio.cq.interrupt_per_packet");
+        registry.get_default_value<bool>("performance.completion_queue.interrupt_per_packet");
 
     offloaded_sockets =
-        registry.get_value<bool>("net.offload.enable");
-
+        registry.get_default_value<bool>("applications.acceleration_control.default_acceleration");
     timer_resolution_msec =
-        registry.get_value<decltype(timer_resolution_msec)>("core.handlers.timer_msec");
-
-    tcp_timer_resolution_msec =
-        registry.get_value<decltype(tcp_timer_resolution_msec)>("net.tcp.timer_msec");
-
-    tcp_ts_opt =
-        static_cast<tcp_ts_opt_t>(registry.get_value<int>("net.tcp.timestamps"));
-
-    tcp_nodelay =
-        registry.get_value<bool>("net.tcp.nodelay.enable");
-
-    tcp_quickack =
-        registry.get_value<bool>("net.tcp.quickack");
-
-    tcp_push_flag =
-        registry.get_value<bool>("net.tcp.push");
-
-    avoid_sys_calls_on_tcp_fd =
-        registry.get_value<bool>("net.tcp.offload.enable_posix_ctl");
-
+        registry.get_default_value<int>("performance.threading.handlers.timer_msec");
+    tcp_timer_resolution_msec = registry.get_default_value<int>("network.protocols.tcp.timer_msec");
+    tcp_ctl_thread = static_cast<decltype(tcp_ctl_thread)>(
+        registry.get_default_value<int>("performance.threading.handlers.behavior"));
+    tcp_ts_opt = static_cast<tcp_ts_opt_t>(
+        registry.get_default_value<int>("network.protocols.tcp.timestamps"));
+    tcp_nodelay = registry.get_default_value<bool>("network.protocols.tcp.nodelay.enable");
+    tcp_quickack = registry.get_default_value<bool>("network.protocols.tcp.quickack");
+    tcp_push_flag = registry.get_default_value<bool>("network.protocols.tcp.push");
+    // Exception_handling is handled by its CTOR
+    avoid_sys_calls_on_tcp_fd = registry.get_default_value<bool>("core.syscall.avoid_ctl_syscalls");
     allow_privileged_sock_opt =
-        registry.get_value<bool>("net.tcp.offload.allow_privileged_sockopt");
-
-    //	exception_handling is handled by its CTOR
-
+        registry.get_default_value<bool>("core.syscall.allow_privileged_sockopt");
     wait_after_join_msec =
-        MCE_DEFAULT_WAIT_AFTER_JOIN_MSEC; // TODO - not in use - should be deleted
-
-    buffer_batching_mode =
-        static_cast<buffer_batching_mode_t>(registry.get_value<int>("xlio.batching_mode"));
-
-    const bool core_memory_hugepages_enable =
-        registry.get_value<bool>("core.memory.hugepages.enable");
-    mem_alloc_type = core_memory_hugepages_enable ? option_alloc_type::mode_t::HUGE
-                                                  : option_alloc_type::mode_t::ANON;
-
-    memory_limit =
-        registry.get_value<decltype(memory_limit)>("core.memory.limit");
-
-    memory_limit_user =
-        registry.get_value<decltype(memory_limit_user)>("xlio.memory.external.limit");
-
+        registry.get_default_value<uint32_t>("network.multicast.wait_after_join_msec");
+    buffer_batching_mode = static_cast<buffer_batching_mode_t>(
+        registry.get_default_value<int>("performance.buffers.batching_mode"));
+    mem_alloc_type = registry.get_default_value<bool>("core.resources.hugepages.enable")
+        ? option_alloc_type::HUGE
+        : option_alloc_type::ANON;
+    memory_limit = registry.get_default_value<int64_t>("core.resources.memory_limit");
+    memory_limit_user = registry.get_default_value<int64_t>("core.resources.external_memory_limit");
     heap_metadata_block =
-        registry.get_value<decltype(heap_metadata_block)>("core.memory.heap_metadata_block_size");
-
-    hugepage_size =
-        registry.get_value<decltype(hugepage_size)>("core.memory.hugepages.size");
-
-    enable_socketxtreme =
-        registry.get_value<bool>("xlio.api.socketextreme");
-
-    const int64_t xlio_sq_tso_enable = registry.get_value<int64_t>("xlio.sq.tso.enable");
-    enable_tso = xlio_sq_tso_enable ? option_3::ON : option_3::OFF;
-
+        registry.get_default_value<int64_t>("core.resources.heap_metadata_block_size");
+    hugepage_size = registry.get_default_value<int64_t>("core.resources.hugepages.size");
+    enable_socketxtreme = registry.get_default_value<bool>("applications.api.socketextreme");
+    enable_tso = static_cast<decltype(enable_tso)>(
+        registry.get_default_value<int>("hardware_features.tcp.tso.enable"));
 #ifdef DEFINED_UTLS
-
-    const bool xlio_rq_tls_offload_enable =
-        registry.get_value<bool>("xlio.rq.tls_offload.enable");
-    enable_utls_rx = xlio_rq_tls_offload_enable;
-
-    const bool xlio_sq_tls_offload_enable =
-        registry.get_value<bool>("xlio.sq.tls_offload.enable");
-    enable_utls_tx = xlio_sq_tls_offload_enable;
-
+    enable_utls_rx =
+        registry.get_default_value<bool>("hardware_features.tcp.tls_offload.rx_enable");
+    enable_utls_tx =
+        registry.get_default_value<bool>("hardware_features.tcp.tls_offload.tx_enable");
     utls_high_wmark_dek_cache_size =
-        registry.get_value<decltype(utls_high_wmark_dek_cache_size)>("xlio.sq.tls_offload.dek_cache_max_size");
-
+        registry.get_default_value<int>("hardware_features.tcp.tls_offload.dek_cache_max_size");
     utls_low_wmark_dek_cache_size =
-        registry.get_value<decltype(utls_low_wmark_dek_cache_size)>("xlio.sq.tls_offload.dek_cache_min_size");
-
-    if (utls_low_wmark_dek_cache_size >= utls_high_wmark_dek_cache_size) {
-        utls_low_wmark_dek_cache_size = utls_high_wmark_dek_cache_size / 2U;
-    }
-
+        registry.get_default_value<int>("hardware_features.tcp.tls_offload.dek_cache_min_size");
 #endif /* DEFINED_UTLS */
-
-    const int64_t xlio_rq_lro = registry.get_value<int64_t>("xlio.rq.lro");
-    enable_lro = xlio_rq_lro ? option_3::ON : option_3::OFF;
-
-    handle_fork =
-        registry.get_value<bool>("xlio.syscall.fork_support");
-
-    close_on_dup2 =
-        registry.get_value<bool>("core.syscall.dup2_support");
-
-    mtu =
-        registry.get_value<decltype(mtu)>("net.mtu");
-
+    enable_lro = static_cast<decltype(enable_lro)>(
+        registry.get_default_value<int>("hardware_features.tcp.lro"));
+    handle_fork = registry.get_default_value<bool>("core.syscall.fork_support");
+    close_on_dup2 = registry.get_default_value<bool>("core.syscall.dup2_support");
+    mtu = registry.get_default_value<uint32_t>("network.protocols.ip.mtu");
 #if defined(DEFINED_NGINX)
-
     nginx_udp_socket_pool_size =
-        registry.get_value<decltype(nginx_udp_socket_pool_size)>("xlio.nginx.udp_pool_size");
-
+        registry.get_default_value<uint32_t>("applications.nginx.udp_pool_size");
     nginx_udp_socket_pool_rx_num_buffs_reuse =
-        registry.get_value<bool>("xlio.nginx.udp_socket_pool_reuse");
-
+        registry.get_default_value<bool>("applications.nginx.udp_socket_pool_reuse");
 #endif
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    app.workers_num =
-        registry.get_value<decltype(app.workers_num)>("xlio.nginx.workers_num");
-
+    app.type = APP_NONE;
+    app.workers_num = registry.get_default_value<uint32_t>("applications.nginx.workers_num");
     app.src_port_stride =
-        registry.get_value<decltype(app.src_port_stride)>("xlio.nginx.src_port_stride");
-
+        registry.get_default_value<uint32_t>("applications.nginx.src_port_stride");
     app.distribute_cq_interrupts =
-        registry.get_value<bool>("xlio.nginx.distribute_cq");
+        registry.get_default_value<bool>("applications.nginx.distribute_cq");
 #endif
-
-    lwip_mss =
-        registry.get_value<decltype(lwip_mss)>("net.tcp.mss");
-
+    lwip_mss = registry.get_default_value<uint32_t>("network.protocols.tcp.mss");
     lwip_cc_algo_mod =
-        registry.get_value<decltype(lwip_cc_algo_mod)>("net.tcp.congestion_control");
-
-    mce_spec =
-        registry.get_value<decltype(mce_spec)>("xlio.spec");
+        registry.get_default_value<uint32_t>("network.protocols.tcp.congestion_control");
+    mce_spec = static_cast<decltype(mce_spec)>(
+        registry.get_default_value<int>("applications.profiles.spec"));
 
     neigh_num_err_retries =
-        registry.get_value<decltype(neigh_num_err_retries)>("net.neighbor.errors_before_reset");
-
-    neigh_uc_arp_quata =
-        registry.get_value<decltype(neigh_uc_arp_quata)>("net.neighbor.uc_arp_retries");
-
+        registry.get_default_value<uint32_t>("network.neighbor.errors_before_reset");
+    neigh_uc_arp_quata = registry.get_default_value<uint32_t>("network.neighbor.arp.uc_retries");
     neigh_wait_till_send_arp_msec =
-        registry.get_value<decltype(neigh_wait_till_send_arp_msec)>("net.neighbor.uc_arp_delay_msec");
-
+        registry.get_default_value<uint32_t>("network.neighbor.arp.uc_delay_msec");
     timer_netlink_update_msec =
-        registry.get_value<decltype(timer_netlink_update_msec)>("net.neighbor.update_interval_msec");
+        registry.get_default_value<uint32_t>("network.neighbor.update_interval_msec");
 
-    deferred_close =
-        registry.get_value<bool>("net.deferred_close");
-
-    tcp_abort_on_close =
-        registry.get_value<bool>("net.tcp.linger_0");
-
-    rx_poll_on_tx_tcp =
-        registry.get_value<bool>("xlio.poll.rx_poll_on_tx");
-
-    rx_cq_wait_ctrl =
-        registry.get_value<bool>("xlio.poll.rx_cq_wait_ctrl");
-
+    deferred_close = registry.get_default_value<bool>("core.syscall.deferred_close");
+    tcp_abort_on_close = registry.get_default_value<bool>("network.protocols.tcp.linger_0");
+    rx_poll_on_tx_tcp = registry.get_default_value<bool>("performance.polling.rx_poll_on_tx");
+    rx_cq_wait_ctrl = registry.get_default_value<bool>("performance.polling.rx_cq_wait_ctrl");
     trigger_dummy_send_getsockname =
-        registry.get_value<bool>("xlio.syscall.getsockname_dummy_send");
-
-    tcp_send_buffer_size =
-        registry.get_value<decltype(tcp_send_buffer_size)>("net.tcp.wmem");
-
-    skip_poll_in_rx =
-        static_cast<skip_poll_in_rx_t>(registry.get_value<int>("xlio.poll.skip_cq_on_rx"));
-
-    const bool core_mutex_over_spinlock =
-        registry.get_value<bool>("core.mutex_over_spinlock");
-    multilock =
-        core_mutex_over_spinlock ? multilock_t::MULTILOCK_MUTEX : multilock_t::MULTILOCK_SPIN;
-
-    const int64_t core_exception_mode = registry.get_value<int64_t>("core.exception.mode");
-
-    // TODO (old - not config): this should be replaced by calling "exception_handling.init()" that
-    // will be called from init()
-    exception_handling = xlio_exception_handling(
-        core_exception_mode); // xlio_exception_handling is responsible for its invariant
+        registry.get_default_value<bool>("core.syscall.getsockname_dummy_send");
+    tcp_send_buffer_size = registry.get_default_value<uint32_t>("network.protocols.tcp.wmem");
+    skip_poll_in_rx = static_cast<skip_poll_in_rx_t>(
+        registry.get_default_value<int>("performance.polling.skip_cq_on_rx"));
+    multilock = registry.get_default_value<bool>("performance.threading.mutex_over_spinlock")
+        ? MULTILOCK_MUTEX
+        : MULTILOCK_SPIN;
 }
 
-void mce_sys_var::pre_profile_adjust_settings()
+void mce_sys_var::read_hypervisor_info()
+{
+    read_hv();
+}
+
+void mce_sys_var::configure_socketxtreme(const config_registry &registry)
 {
     /* Configure enable_socketxtreme as first because
      * this mode has some special predefined parameter limitations
      */
+    set_value_from_registry_if_exists(enable_socketxtreme, "applications.api.socketextreme",
+                                      registry);
     if (enable_socketxtreme) {
         /* Set following parameters as default for SocketXtreme mode */
         gro_streams_max = 0;
         progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
     }
+}
+
+void mce_sys_var::configure_striding_rq(const config_registry &registry)
+{
+    set_value_from_registry_if_exists(enable_strq_env, "hardware_features.striding_rq.enable",
+                                      registry);
+
+    enable_striding_rq = (enable_strq_env == option_3::ON || enable_strq_env == option_3::AUTO);
 
     if (enable_striding_rq) {
         rx_num_wr = MCE_DEFAULT_STRQ_NUM_WRE;
         rx_num_wr_to_post_recv = MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV;
     }
-
-    /*
-    * Check for specific application configuration first. We can make decisions
-    * based on number of workers or application type further.
-    */
-    #if defined(DEFINED_NGINX)
-        if (app.workers_num > 0) {
-            app.type = APP_NGINX;
-            // In order to ease the usage of Nginx cases, we apply Nginx profile when
-            // user will choose to use Nginx workers environment variable.
-            if (mce_spec == MCE_SPEC_NONE) {
-                mce_spec = MCE_SPEC_NGINX;
-            }
-        }
-    #endif // DEFINED_NGINX
 }
 
-void mce_sys_var::apply_profile_settings()
-{   
+void mce_sys_var::detect_application_profile(const config_registry &registry)
+{
+    set_value_from_registry_if_exists(mce_spec, "applications.profiles.spec", registry);
+
+    /*
+     * Check for specific application configuration first. We can make decisions
+     * based on number of workers or application type further.
+     */
+#if defined(DEFINED_NGINX)
+    set_value_from_registry_if_exists(app.workers_num, "applications.nginx.workers_num", registry);
+    if (app.workers_num > 0) {
+        app.type = APP_NGINX;
+        // In order to ease the usage of Nginx cases, we apply Nginx profile when
+        // user will choose to use Nginx workers environment variable.
+        if (mce_spec == MCE_SPEC_NONE) {
+            mce_spec = MCE_SPEC_NGINX;
+        }
+    }
+
+#endif // DEFINED_NGINX
+#if defined(DEFINED_ENVOY)
+    // TODO - config - add to schema
+    set_value_from_registry_if_exists(app.workers_num, "applications.envoy.workers_num", registry);
+    if (app.workers_num > 0) {
+        app.type = APP_ENVOY;
+    }
+#endif /* DEFINED_ENVOY */
+}
+
+void mce_sys_var::apply_spec_profile_optimizations()
+{
     switch (mce_spec) {
     case MCE_SPEC_SOCKPERF_ULTRA_LATENCY:
-        memory_limit = 128LU * 1024 * 1024;
-        tx_num_wr = 256;
-        tx_num_wr_to_signal = 4;
-        tx_prefetch_bytes = MCE_DEFAULT_TX_PREFETCH_BYTES;
-        tx_bufs_batch_udp = 1;
-        tx_bufs_batch_tcp = 1;
-        rx_bufs_batch = 4;
-        rx_poll_num = -1;
-        enable_tso = option_3::OFF;
-        rx_udp_poll_os_ratio = 0;
-        rx_prefetch_bytes = MCE_DEFAULT_RX_PREFETCH_BYTES;
-        rx_prefetch_bytes_before_poll = 256;
-        select_poll_num = -1;
-        select_poll_os_ratio = 0;
-        select_skip_os_fd_check = 0;
-        avoid_sys_calls_on_tcp_fd = true;
-        gro_streams_max = 0;
-        progress_engine_interval_msec = 0;
-        cq_keep_qp_full = false;
-        tcp_nodelay = true;
-        ring_dev_mem_tx = 16384;
-        strcpy(internal_thread_affinity_str, "0");
-
-        if (enable_striding_rq) {
-            rx_num_wr = 4U;
-        } else {
-            rx_num_wr = 256;
-            rx_num_wr_to_post_recv = 4;
-        }
+        apply_sockperf_ultra_latency_profile();
         break;
 
     case MCE_SPEC_SOCKPERF_LATENCY:
-        tx_num_wr = 256;
-        tx_num_wr_to_signal = 4;
-        tx_bufs_batch_udp = 1;
-        tx_bufs_batch_tcp = 1;
-        rx_bufs_batch = 4;
-
-        rx_poll_num = -1;
-        enable_tso = option_3::OFF;
-        rx_prefetch_bytes_before_poll = 256;
-        select_poll_num = -1;
-        avoid_sys_calls_on_tcp_fd = true;
-        gro_streams_max = 0;
-        cq_keep_qp_full = false;
-        strcpy(internal_thread_affinity_str, "0");
-        progress_engine_interval_msec = 100;
-        select_poll_os_ratio = 100;
-        select_poll_os_force = 1;
-        tcp_nodelay = true;
-        ring_dev_mem_tx = 16384;
-
-        if (enable_striding_rq) {
-            rx_num_wr = 4U;
-        } else {
-            rx_num_wr = 256;
-            rx_num_wr_to_post_recv = 4;
-        }
-
+        apply_sockperf_latency_profile();
         break;
 
 #ifdef DEFINED_NGINX
     case MCE_SPEC_NGINX:
-        // Fallthrough
     case MCE_SPEC_NGINX_DPU:
-        ring_allocation_logic_tx = RING_LOGIC_PER_INTERFACE;
-        ring_allocation_logic_rx = RING_LOGIC_PER_INTERFACE;
-        progress_engine_interval_msec = 0; // Disable internal thread CQ draining logic.
-        cq_poll_batch_max = 128; // Maximum CQEs to poll in one batch.
-        enable_tso = option_3::ON; // Enable TCP Segmentation Offload(=TSO).
-        timer_resolution_msec = 32; // Reduce CPU utilization of internal thread.
-        tcp_timer_resolution_msec = 256; // Reduce CPU utilization of internal thread.
-        tcp_send_buffer_size = 2 * 1024 * 1024; // LWIP TCP send buffer size.
-        tcp_push_flag = false; // When false, we don't set PSH flag in outgoing TCP segments.
-        select_poll_num = 0; // Poll CQ only once before going to sleep.
-        select_skip_os_fd_check = 1000; // Poll OS every X epoll_waits if we do not sleep.
-        tcp_3t_rules = true; // Use 3 tuple instead rules of 5 tuple rules.
-        app.distribute_cq_interrupts = true;
-        rx_cq_wait_ctrl = true;
-
-        if (mce_spec == MCE_SPEC_NGINX) {
-            memory_limit = (app.workers_num > 16 ? 3072LU : 4096LU) * 1024 * 1024;
-            memory_limit *= std::max(app.workers_num, 1);
-            rx_bufs_batch = 8; // RX buffers batch size.
-
-            // Do polling on RX queue on TX operations, helpful to maintain TCP stack management.
-            rx_poll_on_tx_tcp = true;
-        } else if (mce_spec == MCE_SPEC_NGINX_DPU) {
-            memory_limit = (app.workers_num == 16 ? 512LU : 1024LU) * 1024 * 1024;
-            memory_limit *= std::max(app.workers_num, 1);
-            buffer_batching_mode = BUFFER_BATCHING_NONE;
-        }
+        apply_nginx_profile();
         break;
 #endif // DEFINED_NGINX
-    case MCE_SPEC_NVME_BF3:
-        strq_stride_num_per_rwqe = 8192U;
-        enable_lro = option_3::ON;
-        handle_fork = false;
-        strcpy(internal_thread_affinity_str, "0x01");
-        gro_streams_max = 0;
-        tx_num_wr_to_signal = 128U;
-        tx_num_wr = 1024U;
-        rx_num_wr = 32U;
-        enable_tso = option_3::ON;
-        rx_prefetch_bytes_before_poll = 256U;
-        ring_dev_mem_tx = 1024;
-        cq_keep_qp_full = false;
-        cq_aim_interval_msec = MCE_CQ_ADAPTIVE_MODERATION_DISABLED;
-        progress_engine_interval_msec = 0U;
-        tcp_abort_on_close = true;
-        memory_limit = 256U * 1024U * 1024U;
-        memory_limit_user = 2U * 1024U * 1024U * 1024U;
 
-        tx_bufs_batch_udp = 1;
-        tx_bufs_batch_tcp = 1;
-        rx_bufs_batch = 4;
-        tcp_nodelay = true;
+    case MCE_SPEC_NVME_BF3:
+        apply_nvme_bf3_profile();
+        break;
+
     case MCE_SPEC_NONE:
     default:
         break;
     }
 }
 
-void mce_sys_var::post_profile_adjust_settings(const config_registry &registry)
+void mce_sys_var::apply_sockperf_ultra_latency_profile()
 {
+    memory_limit = 128LU * 1024 * 1024;
+    tx_num_wr = 256;
+    tx_num_wr_to_signal = 4;
+    tx_prefetch_bytes = MCE_DEFAULT_TX_PREFETCH_BYTES;
+    tx_bufs_batch_udp = 1;
+    tx_bufs_batch_tcp = 1;
+    rx_bufs_batch = 4;
+    rx_poll_num = -1;
+    enable_tso = option_3::OFF;
+    rx_udp_poll_os_ratio = 0;
+    rx_prefetch_bytes = MCE_DEFAULT_RX_PREFETCH_BYTES;
+    rx_prefetch_bytes_before_poll = 256;
+    select_poll_num = -1;
+    select_poll_os_ratio = 0;
+    select_skip_os_fd_check = 0;
+    avoid_sys_calls_on_tcp_fd = true;
+    gro_streams_max = 0;
+    progress_engine_interval_msec = 0;
+    cq_keep_qp_full = false;
+    tcp_nodelay = true;
+    ring_dev_mem_tx = 16384;
+    strcpy(internal_thread_affinity_str, "0");
+
+    if (enable_striding_rq) {
+        rx_num_wr = 4U;
+    } else {
+        rx_num_wr = 256;
+        rx_num_wr_to_post_recv = 4;
+    }
+}
+
+void mce_sys_var::apply_sockperf_latency_profile()
+{
+    tx_num_wr = 256;
+    tx_num_wr_to_signal = 4;
+    tx_bufs_batch_udp = 1;
+    tx_bufs_batch_tcp = 1;
+    rx_bufs_batch = 4;
+
+    rx_poll_num = -1;
+    enable_tso = option_3::OFF;
+    rx_prefetch_bytes_before_poll = 256;
+    select_poll_num = -1;
+    avoid_sys_calls_on_tcp_fd = true;
+    gro_streams_max = 0;
+    cq_keep_qp_full = false;
+    strcpy(internal_thread_affinity_str, "0");
+    progress_engine_interval_msec = 100;
+    select_poll_os_ratio = 100;
+    select_poll_os_force = 1;
+    tcp_nodelay = true;
+    ring_dev_mem_tx = 16384;
+
+    if (enable_striding_rq) {
+        rx_num_wr = 4U;
+    } else {
+        rx_num_wr = 256;
+        rx_num_wr_to_post_recv = 4;
+    }
+}
+
+#ifdef DEFINED_NGINX
+void mce_sys_var::apply_nginx_profile()
+{
+    ring_allocation_logic_tx = RING_LOGIC_PER_INTERFACE;
+    ring_allocation_logic_rx = RING_LOGIC_PER_INTERFACE;
+    progress_engine_interval_msec = 0; // Disable internal thread CQ draining logic.
+    cq_poll_batch_max = 128; // Maximum CQEs to poll in one batch.
+    enable_tso = option_3::ON; // Enable TCP Segmentation Offload(=TSO).
+    timer_resolution_msec = 32; // Reduce CPU utilization of internal thread.
+    tcp_timer_resolution_msec = 256; // Reduce CPU utilization of internal thread.
+    tcp_send_buffer_size = 2 * 1024 * 1024; // LWIP TCP send buffer size.
+    tcp_push_flag = false; // When false, we don't set PSH flag in outgoing TCP segments.
+    select_poll_num = 0; // Poll CQ only once before going to sleep.
+    select_skip_os_fd_check = 1000; // Poll OS every X epoll_waits if we do not sleep.
+    tcp_3t_rules = true; // Use 3 tuple instead rules of 5 tuple rules.
+    app.distribute_cq_interrupts = true;
+    rx_cq_wait_ctrl = true;
+
+    if (mce_spec == MCE_SPEC_NGINX) {
+        memory_limit = (app.workers_num > 16 ? 3072LU : 4096LU) * 1024 * 1024;
+        memory_limit *= std::max(app.workers_num, 1);
+        rx_bufs_batch = 8; // RX buffers batch size.
+
+        // Do polling on RX queue on TX operations, helpful to maintain TCP stack
+        // management.
+        rx_poll_on_tx_tcp = true;
+    } else if (mce_spec == MCE_SPEC_NGINX_DPU) {
+        memory_limit = (app.workers_num == 16 ? 512LU : 1024LU) * 1024 * 1024;
+        memory_limit *= std::max(app.workers_num, 1);
+        buffer_batching_mode = BUFFER_BATCHING_NONE;
+    }
+}
+#endif // DEFINED_NGINX
+
+void mce_sys_var::apply_nvme_bf3_profile()
+{
+    strq_stride_num_per_rwqe = 8192U;
+    enable_lro = option_3::ON;
+    handle_fork = false;
+    strcpy(internal_thread_affinity_str, "0x01");
+    gro_streams_max = 0;
+    tx_num_wr_to_signal = 128U;
+    tx_num_wr = 1024U;
+    rx_num_wr = 32U;
+    enable_tso = option_3::ON;
+    rx_prefetch_bytes_before_poll = 256U;
+    ring_dev_mem_tx = 1024;
+    cq_keep_qp_full = false;
+    cq_aim_interval_msec = MCE_CQ_ADAPTIVE_MODERATION_DISABLED;
+    progress_engine_interval_msec = 0U;
+    tcp_abort_on_close = true;
+    memory_limit = 256U * 1024U * 1024U;
+    memory_limit_user = 2U * 1024U * 1024U * 1024U;
+
+    tx_bufs_batch_udp = 1;
+    tx_bufs_batch_tcp = 1;
+    rx_bufs_batch = 4;
+    tcp_nodelay = true;
+}
+
+void mce_sys_var::configure_observability(const config_registry &registry)
+{
+    set_value_from_registry_if_exists(print_report, "observability.exit_report", registry);
+
+    set_value_from_registry_if_exists(quick_start, "core.quick_init", registry);
+
+    if (registry.value_exists("observability.log.file_path")) {
+        read_env_variable_with_pid(
+            log_filename, sizeof(log_filename),
+            registry.get_value<std::string>("observability.log.file_path").c_str());
+    }
+
+    if (registry.value_exists("observability.stats.file_path")) {
+        read_env_variable_with_pid(
+            stats_filename, sizeof(stats_filename),
+            registry.get_value<std::string>("observability.stats.file_path").c_str());
+    }
+
+    if (registry.value_exists("observability.stats.shmem_dir")) {
+        read_env_variable_with_pid(
+            stats_shmem_dirname, sizeof(stats_shmem_dirname),
+            registry.get_value<std::string>("observability.stats.shmem_dir").c_str());
+    }
+
+    if (registry.value_exists("observability.daemon.dir")) {
+        read_env_variable_with_pid(
+            service_notify_dir, sizeof(service_notify_dir),
+            registry.get_value<std::string>("observability.daemon.dir").c_str());
+    }
+
+    set_value_from_registry_if_exists(service_enable, "observability.daemon.enable", registry);
+
     if (HYPER_MSHV == hypervisor && !service_enable) {
         service_enable = true;
         vlog_printf(VLOG_DEBUG, "%s parameter is forced to 'true' for MSHV hypervisor\n",
                     SYS_VAR_SERVICE_ENABLE);
     }
 
+    set_value_from_registry_if_exists(log_level, "observability.log.level", registry);
+
     if (log_level >= VLOG_DEBUG) {
         log_details = 2;
     }
 
+    set_value_from_registry_if_exists(log_details, "observability.log.details", registry);
+
+    set_value_from_registry_if_exists(log_colors, "observability.log.colors", registry);
+
+    if (registry.value_exists("applications.acceleration_control.app_id")) {
+        read_env_variable_with_pid(
+            app_id, sizeof(app_id),
+            registry.get_value<std::string>("applications.acceleration_control.app_id").c_str());
+    }
+
+    set_value_from_registry_if_exists(handle_sigintr, "core.signals.sigint.exit", registry);
+
+    set_value_from_registry_if_exists(handle_segfault, "core.signals.sigsegv.backtrace", registry);
+
+    set_value_from_registry_if_exists(stats_fd_num_max, "observability.stats.fd_num", registry);
     stats_fd_num_monitor = std::min(stats_fd_num_max, MAX_STATS_FD_NUM);
     if (stats_fd_num_max > MAX_STATS_FD_NUM) {
         vlog_printf(VLOG_INFO, "xlio_stats monitoring will be limited by %d sockets\n",
                     MAX_STATS_FD_NUM);
     }
+}
 
-    int64_t strides_num = strq_stride_num_per_rwqe;
+void mce_sys_var::configure_buffer_allocation(const config_registry &registry)
+{
+    read_strq_strides_num(registry);
+    read_strq_stride_size_bytes(registry);
 
-    // TODO - have power of 2 constraint in config descriptor
-    bool is_strides_num_ok = true;
-    if (!is_ilog2(static_cast<unsigned int>(strides_num))) {
-        strides_num = align32pow2(static_cast<uint32_t>(strides_num));
-        is_strides_num_ok = false;
-    }
+    set_value_from_registry_if_exists(strq_strides_compensation_level,
+                                      "hardware_features.striding_rq.spare_strides", registry);
 
-    if (!is_strides_num_ok) {
-        vlog_printf(VLOG_INFO,
-                    " Invalid xlio.rq.striding.strides: Must be power of 2. Using: %d.\n",
-                    strides_num);
-    }
+    set_value_from_registry_if_exists(zc_cache_threshold, "applications.api.sendfile_limit",
+                                      registry);
 
-    strq_stride_num_per_rwqe = static_cast<uint32_t>(strides_num);
+    set_value_from_registry_if_exists(tx_buf_size, "performance.buffers.tx.buf_size", registry);
 
-    // TODO - have power of 2 constraint in config descriptor
-    bool is_stride_size_ok = true;
-    int64_t stride_size = strq_stride_size_bytes;
-    if (!is_ilog2(static_cast<unsigned int>(stride_size))) {
-        stride_size = align32pow2(static_cast<uint32_t>(stride_size));
-        is_stride_size_ok = false;
-    }
+    set_value_from_registry_if_exists(tcp_nodelay_treshold,
+                                      "network.protocols.tcp.nodelay.byte_threshold", registry);
 
-    if (!is_stride_size_ok) {
-        vlog_printf(VLOG_INFO,
-                    " Invalid xlio.rq.striding.stride_size: Must be power of 2. Using: %d.\n",
-                    stride_size);
-    }
+    set_value_from_registry_if_exists(
+        tx_num_wr, "performance.buffers.work_request_elements.tx_global_array_size", registry);
 
-    strq_stride_size_bytes = static_cast<uint32_t>(stride_size);
+    set_value_from_registry_if_exists(
+        tx_num_wr_to_signal, "performance.buffers.work_request_elements.tx_completion_batch_size",
+        registry);
 
     if (tx_num_wr <= (tx_num_wr_to_signal * 2)) {
         tx_num_wr = tx_num_wr_to_signal * 2;
     }
 
-    // TODO - have a joint constraint
+    set_value_from_registry_if_exists(
+        tx_max_inline, "performance.buffers.work_request_elements.tx_max_inline_size", registry);
+
+    set_value_from_registry_if_exists(tx_mc_loopback_default, "network.multicast.mc_loopback",
+                                      registry);
+
+    set_value_from_registry_if_exists(tx_nonblocked_eagains,
+                                      "performance.buffers.tx.nonblocking_eagain", registry);
+
+    set_value_from_registry_if_exists(tx_prefetch_bytes, "performance.buffers.tx.prefetch_size",
+                                      registry);
+
+    set_value_from_registry_if_exists(tx_bufs_batch_tcp, "performance.buffers.tx.tcp_batch_size",
+                                      registry);
+
+    set_value_from_registry_if_exists(
+        tx_segs_batch_tcp, "performance.buffers.tcp_segments.socket_batch_size", registry);
+
+    set_value_from_registry_if_exists(tx_segs_ring_batch_tcp,
+                                      "performance.buffers.tcp_segments.ring_batch_size", registry);
+
+    set_value_from_registry_if_exists(tx_segs_pool_batch_tcp,
+                                      "performance.buffers.tcp_segments.pool_batch_size", registry);
+}
+
+void mce_sys_var::configure_tcp_parameters(const config_registry &registry)
+{
+    set_value_from_registry_if_exists(ring_allocation_logic_tx,
+                                      "performance.rings.tx.allocation_logic", registry);
+
+    set_value_from_registry_if_exists(ring_allocation_logic_rx,
+                                      "performance.rings.rx.allocation_logic", registry);
+
+    set_value_from_registry_if_exists(ring_migration_ratio_tx,
+                                      "performance.rings.tx.migration_ratio", registry);
+
+    set_value_from_registry_if_exists(ring_migration_ratio_rx,
+                                      "performance.rings.rx.migration_ratio", registry);
+
+    set_value_from_registry_if_exists(ring_limit_per_interface,
+                                      "performance.rings.max_per_interface", registry);
+
+    set_value_from_registry_if_exists(ring_dev_mem_tx, "performance.rings.tx.max_on_device_memory",
+                                      registry);
+
+    set_value_from_registry_if_exists(tcp_max_syn_rate, "network.protocols.tcp.max_syn_rate",
+                                      registry);
+}
+
+void mce_sys_var::configure_buffer_sizes(const config_registry &registry)
+{
+    set_value_from_registry_if_exists(rx_buf_size, "performance.buffers.rx.buf_size", registry);
+
+    set_value_from_registry_if_exists(rx_num_wr_to_post_recv,
+                                      "performance.buffers.work_request_elements.rx_batch_size",
+                                      registry);
+
+    set_value_from_registry_if_exists(
+        rx_num_wr, "performance.buffers.work_request_elements.rx_global_array_size", registry);
+
     if (enable_striding_rq && (strq_stride_num_per_rwqe * rx_num_wr > MAX_MLX5_CQ_SIZE_ITEMS)) {
         rx_num_wr = MAX_MLX5_CQ_SIZE_ITEMS / strq_stride_num_per_rwqe;
 
@@ -2467,31 +2494,118 @@ void mce_sys_var::post_profile_adjust_settings(const config_registry &registry)
     if (rx_num_wr <= (rx_num_wr_to_post_recv * 2)) {
         rx_num_wr = rx_num_wr_to_post_recv * 2;
     }
+}
+
+void mce_sys_var::configure_polling_mechanism(const config_registry &registry)
+{
+    set_value_from_registry_if_exists(rx_poll_num, "performance.polling.rx_duration_usec",
+                                      registry);
+
+    set_value_from_registry_if_exists(
+        rx_poll_num_init, "performance.polling.offload_transition_poll_count", registry);
 
     if (rx_poll_num == 0) {
         rx_poll_num = 1; // Force at least one good polling loop
     }
 
+    set_value_from_registry_if_exists(rx_udp_poll_os_ratio,
+                                      "performance.polling.rx_kernel_fd_attention_level", registry);
+
+    if (registry.value_exists("network.timing.ts_conversion")) {
+        hw_ts_conversion_mode = static_cast<ts_conversion_mode_t>(
+            registry.get_value<int>("network.timing.ts_conversion"));
+    }
+
+    set_value_from_registry_if_exists(rx_poll_yield_loops, "performance.polling.yield_on_poll",
+                                      registry);
+
+    set_value_from_registry_if_exists(select_handle_cpu_usage_stats,
+                                      "observability.stats.cpu_usage", registry);
+
+    set_value_from_registry_if_exists(rx_ready_byte_min_limit,
+                                      "performance.buffers.rx.override_rcvbuf_limit", registry);
+
+    set_value_from_registry_if_exists(rx_prefetch_bytes, "performance.buffers.rx.prefetch_size",
+                                      registry);
+
+    set_value_from_registry_if_exists(rx_prefetch_bytes_before_poll,
+                                      "performance.buffers.rx.prefetch_before_poll", registry);
+
+    set_value_from_registry_if_exists(rx_cq_drain_rate_nsec,
+                                      "performance.completion_queue.rx_drain_rate_nsec", registry);
+
     // Update the rx cq polling rate for draining logic
     tscval_t tsc_per_second = get_tsc_rate_per_second();
     rx_delta_tsc_between_cq_polls = tsc_per_second * rx_cq_drain_rate_nsec / NSEC_PER_SEC;
 
-    // mc_force_flowtag must be adjusted based on disable_flow_tag
-    if (disable_flow_tag) {
-        vlog_printf(VLOG_WARNING, "%s and %s can't be set together. Disabling %s\n",
-                    SYS_VAR_DISABLE_FLOW_TAG, SYS_VAR_MC_FORCE_FLOWTAG, SYS_VAR_MC_FORCE_FLOWTAG);
-        mc_force_flowtag = 0;
+    set_value_from_registry_if_exists(gro_streams_max, "performance.max_gro_streams", registry);
+}
+
+void mce_sys_var::configure_completion_queue(const config_registry &registry)
+{
+    set_value_from_registry_if_exists(tcp_2t_rules, "performance.steering_rules.tcp.2t_rules",
+                                      registry);
+
+    set_value_from_registry_if_exists(tcp_3t_rules, "performance.steering_rules.tcp.3t_rules",
+                                      registry);
+
+    set_value_from_registry_if_exists(udp_3t_rules, "performance.steering_rules.udp.3t_rules",
+                                      registry);
+
+    set_value_from_registry_if_exists(udp_3t_rules, "performance.steering_rules.udp.3t_rules",
+                                      registry);
+
+    set_value_from_registry_if_exists(eth_mc_l2_only_rules,
+                                      "performance.steering_rules.udp.only_mc_l2_rules", registry);
+
+    set_value_from_registry_if_exists(disable_flow_tag, "network.multicast.mc_disable_flowtag",
+                                      registry);
+
+    set_value_from_registry_if_exists(eth_mc_l2_only_rules,
+                                      "performance.steering_rules.udp.only_mc_l2_rules", registry);
+
+    set_value_from_registry_if_exists(disable_flow_tag, "network.multicast.mc_disable_flowtag",
+                                      registry);
+
+    // mc_force_flowtag must be after disable_flow_tag
+    if (registry.value_exists("network.multicast.mc_flowtag_acceleration")) {
+        mc_force_flowtag = registry.get_value<bool>("network.multicast.mc_flowtag_acceleration");
+        if (disable_flow_tag) {
+            vlog_printf(VLOG_WARNING, "%s and %s can't be set together. Disabling %s\n",
+                        SYS_VAR_DISABLE_FLOW_TAG, SYS_VAR_MC_FORCE_FLOWTAG,
+                        SYS_VAR_MC_FORCE_FLOWTAG);
+            mc_force_flowtag = 0;
+        }
     }
+
+    set_value_from_registry_if_exists(select_poll_num, "performance.polling.select.poll_usec",
+                                      registry);
+
+    set_value_from_registry_if_exists(select_poll_os_force,
+                                      "performance.polling.select.poll_os_force", registry);
 
     if (select_poll_os_force) {
         select_poll_os_ratio = 1;
         select_skip_os_fd_check = 1;
     }
 
+    set_value_from_registry_if_exists(select_poll_os_ratio,
+                                      "performance.polling.select.poll_os_ratio", registry);
+
+    set_value_from_registry_if_exists(select_skip_os_fd_check, "performance.polling.select.skip_os",
+                                      registry);
+
 #ifdef DEFINED_IBV_CQ_ATTR_MODERATE
     if (rx_poll_num < 0 || select_poll_num < 0) {
         cq_moderation_enable = false;
     }
+
+    set_value_from_registry_if_exists(
+        cq_moderation_enable, "performance.completion_queue.interrupt_moderation.enable", registry);
+
+    set_value_from_registry_if_exists(
+        cq_moderation_count, "performance.completion_queue.interrupt_moderation.packet_count",
+        registry);
 
     uint32_t max_cq_moderation_count =
         (!enable_striding_rq ? rx_num_wr : (strq_stride_num_per_rwqe * rx_num_wr)) / 2U;
@@ -2499,126 +2613,283 @@ void mce_sys_var::post_profile_adjust_settings(const config_registry &registry)
         cq_moderation_count = max_cq_moderation_count;
     }
 
+    set_value_from_registry_if_exists(
+        cq_moderation_period_usec, "performance.completion_queue.interrupt_moderation.period_usec",
+        registry);
+
+    set_value_from_registry_if_exists(
+        cq_aim_max_count, "performance.completion_queue.interrupt_moderation.adaptive_count",
+        registry);
+
     uint32_t max_cq_aim_max_count =
         (!enable_striding_rq ? rx_num_wr : (strq_stride_num_per_rwqe * rx_num_wr)) / 2U;
     if (cq_aim_max_count > max_cq_aim_max_count) {
         cq_aim_max_count = max_cq_aim_max_count;
     }
 
+    set_value_from_registry_if_exists(cq_aim_max_period_usec,
+                                      "performance.completion_queue.interrupt_moderation."
+                                      "adaptive_period_usec",
+                                      registry);
+
+    set_value_from_registry_if_exists(cq_aim_interval_msec,
+                                      "performance.completion_queue.interrupt_moderation."
+                                      "adaptive_change_frequency_msec",
+                                      registry);
+
     if (!cq_moderation_enable) {
         cq_aim_interval_msec = MCE_CQ_ADAPTIVE_MODERATION_DISABLED;
     }
 
+    set_value_from_registry_if_exists(cq_aim_interrupts_rate_per_sec,
+                                      "performance.completion_queue.interrupt_moderation."
+                                      "interrupt_per_sec",
+                                      registry);
+
 #else
-    if (cq_moderation_enable == true) {
-        vlog_printf(VLOG_WARNING,
-                    "'xlio.cq.interrupt_moderation.enable' is not supported on this environment\n");
+    if (registry.value_exists("performance.completion_queue.interrupt_moderation.enable")) {
+        vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
+                    SYS_VAR_CQ_MODERATION_ENABLE);
     }
-    if (max_cq_moderation_count != 0) {
-        vlog_printf(
-            VLOG_WARNING,
-            "'xlio.cq.interrupt_moderation.packet_count' is not supported on this environment\n");
+    if (registry.value_exists("performance.completion_queue.interrupt_moderation.packet_count")) {
+        vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
+                    SYS_VAR_CQ_MODERATION_COUNT);
     }
-    if (cq_moderation_period_usec != 0) {
-        vlog_printf(
-            VLOG_WARNING,
-            "'xlio.cq.interrupt_moderation.period_usec' is not supported on this environment\n");
+    if (registry.value_exists("performance.completion_queue.interrupt_moderation.period_usec")) {
+        vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
+                    SYS_VAR_CQ_MODERATION_PERIOD_USEC);
     }
-    if (cq_aim_max_count != 0) {
-        vlog_printf(
-            VLOG_WARNING,
-            "'xlio.cq.interrupt_moderation.adaptive_count' is not supported on this environment\n");
+    if (registry.value_exists("performance.completion_queue.interrupt_moderation.adaptive_count")) {
+        vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
+                    SYS_VAR_CQ_AIM_MAX_COUNT);
     }
-    if (cq_aim_max_period_usec != 0) {
-        vlog_printf(VLOG_WARNING,
-                    "'xlio.cq.interrupt_moderation.adaptive_period_usec' is not supported on this "
-                    "environment\n");
+    if (registry.value_exists("performance.completion_queue.interrupt_moderation."
+                              "adaptive_period_usec")) {
+        vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
+                    SYS_VAR_CQ_AIM_MAX_PERIOD_USEC);
     }
-    if (cq_aim_interval_msec != 0) {
-        vlog_printf(VLOG_WARNING,
-                    "'xlio.cq.interrupt_moderation.adaptive_change_frequency_ms' is not supported "
-                    "on this environment\n");
+    if (registry.value_exists("performance.completion_queue.interrupt_moderation."
+                              "adaptive_change_frequency_msec")) {
+        vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
+                    SYS_VAR_CQ_AIM_INTERVAL_MSEC);
     }
-    if (cq_aim_interrupts_rate_per_sec != 0) {
-        vlog_printf(VLOG_WARNING,
-                    "'xlio.cq.interrupt_moderation.interrupt_per_sec' is not supported on this "
-                    "environment\n");
+    if (registry.value_exists("performance.completion_queue.interrupt_moderation."
+                              "interrupt_per_sec")) {
+        vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
+                    SYS_VAR_CQ_AIM_INTERRUPTS_RATE_PER_SEC);
     }
 #endif /* DEFINED_IBV_CQ_ATTR_MODERATE */
 
+    set_value_from_registry_if_exists(cq_poll_batch_max, "performance.polling.rx_buffer_max_count",
+                                      registry);
+
+    set_value_from_registry_if_exists(progress_engine_interval_msec,
+                                      "performance.completion_queue.periodic_drain_msec", registry);
+
     if (enable_socketxtreme && (progress_engine_interval_msec != MCE_CQ_DRAIN_INTERVAL_DISABLED)) {
         progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
-        vlog_printf(VLOG_DEBUG,
-                    "xlio.cq.periodic_drain_ms parameter is forced to %d in case "
-                    "xlio.api.socketextreme is enabled\n",
-                    progress_engine_interval_msec);
+        vlog_printf(VLOG_DEBUG, "%s parameter is forced to %d in case %s is enabled\n",
+                    SYS_VAR_PROGRESS_ENGINE_INTERVAL, progress_engine_interval_msec,
+                    SYS_VAR_SOCKETXTREME);
     }
 
-    qp_compensation_level = rx_num_wr / 2U;
+    set_value_from_registry_if_exists(
+        progress_engine_wce_max, "performance.completion_queue.periodic_drain_max_cqes", registry);
 
-    const int64_t xlio_cq_buf_rx_spare = registry.get_value<int64_t>("xlio.cq.buf.rx_spare");
-    qp_compensation_level = xlio_cq_buf_rx_spare;
+    set_value_from_registry_if_exists(cq_keep_qp_full, "performance.completion_queue.keep_full",
+                                      registry);
+
+    qp_compensation_level = rx_num_wr / 2U;
+    set_value_from_registry_if_exists(qp_compensation_level,
+                                      "performance.completion_queue.rx_spare_buffers", registry);
+
     if (qp_compensation_level < rx_num_wr_to_post_recv) {
         qp_compensation_level = rx_num_wr_to_post_recv;
     }
+}
 
-    if (user_huge_page_size == 0) {
-        user_huge_page_size = g_hugepage_mgr.get_default_hugepage();
-    }
-
-    const int64_t core_handlers_behavior =
-        registry.get_value<int64_t>("core.handlers.behavior");
-    tcp_ctl_thread = static_cast<option_tcp_ctl_thread::mode_t>(core_handlers_behavior);
-    if (tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
-        if (progress_engine_interval_msec != MCE_CQ_DRAIN_INTERVAL_DISABLED) {
-            vlog_printf(VLOG_DEBUG,
-                        "xlio.cq.periodic_drain_ms parameter is forced to %d in case "
-                        "core.handlers.behavior=%s is enabled\n",
-                        MCE_CQ_DRAIN_INTERVAL_DISABLED,
-                        option_tcp_ctl_thread::to_str(tcp_ctl_thread));
-
-            progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
-        }
-        if (ring_allocation_logic_tx != RING_LOGIC_PER_THREAD ||
-            ring_allocation_logic_rx != RING_LOGIC_PER_THREAD) {
-            vlog_printf(VLOG_DEBUG,
-                        "xlio.ring.tx.alloc_logic,xlio.ring.rx.alloc_logic parameter is forced to "
-                        "%s in case core.handlers.behavior=%s is enabled\n",
-                        ring_logic_str(RING_LOGIC_PER_THREAD),
-                        option_tcp_ctl_thread::to_str(tcp_ctl_thread));
-
-            ring_allocation_logic_tx = ring_allocation_logic_rx = RING_LOGIC_PER_THREAD;
+void mce_sys_var::configure_thread_affinity(const config_registry &registry)
+{
+    if (registry.value_exists("applications.api.hugepages.size")) {
+        user_huge_page_size = registry.get_value<int64_t>("applications.api.hugepages.size");
+        if (user_huge_page_size == 0) {
+            user_huge_page_size = g_hugepage_mgr.get_default_hugepage();
         }
     }
 
-    // TODO - add dependencies and joint constraints
+    set_value_from_registry_if_exists(
+        offloaded_sockets, "applications.acceleration_control.default_acceleration", registry);
+
+    set_value_from_registry_if_exists(timer_resolution_msec,
+                                      "performance.threading.handlers.timer_msec", registry);
+
+    set_value_from_registry_if_exists(tcp_timer_resolution_msec, "network.protocols.tcp.timer_msec",
+                                      registry);
+
+    set_value_from_registry_if_exists(tcp_ctl_thread, "performance.threading.handlers.behavior",
+                                      registry);
+
+    if (registry.value_exists("performance.threading.handlers.behavior")) {
+        tcp_ctl_thread = static_cast<decltype(tcp_ctl_thread)>(
+            registry.get_value<int>("performance.threading.handlers.behavior"));
+        if (tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+            if (progress_engine_interval_msec != MCE_CQ_DRAIN_INTERVAL_DISABLED) {
+                vlog_printf(VLOG_DEBUG, "%s parameter is forced to %d in case %s=%s is enabled\n",
+                            SYS_VAR_PROGRESS_ENGINE_INTERVAL, MCE_CQ_DRAIN_INTERVAL_DISABLED,
+                            SYS_VAR_TCP_CTL_THREAD, option_tcp_ctl_thread::to_str(tcp_ctl_thread));
+
+                progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
+            }
+            if (ring_allocation_logic_tx != RING_LOGIC_PER_THREAD ||
+                ring_allocation_logic_rx != RING_LOGIC_PER_THREAD) {
+                vlog_printf(VLOG_DEBUG,
+                            "%s,%s parameter is forced to %s in case %s=%s is enabled\n",
+                            SYS_VAR_RING_ALLOCATION_LOGIC_TX, SYS_VAR_RING_ALLOCATION_LOGIC_RX,
+                            ring_logic_str(RING_LOGIC_PER_THREAD), SYS_VAR_TCP_CTL_THREAD,
+                            option_tcp_ctl_thread::to_str(tcp_ctl_thread));
+
+                ring_allocation_logic_tx = ring_allocation_logic_rx = RING_LOGIC_PER_THREAD;
+            }
+        }
+    }
+}
+
+void mce_sys_var::configure_memory_limits(const config_registry &registry)
+{
+    if (registry.value_exists("network.protocols.tcp.timestamps")) {
+        tcp_ts_opt =
+            static_cast<tcp_ts_opt_t>(registry.get_value<int>("network.protocols.tcp.timestamps"));
+        if ((uint32_t)tcp_ts_opt >= TCP_TS_OPTION_LAST) {
+            vlog_printf(VLOG_WARNING,
+                        "TCP timestamp option value is out of range [%d] (min=%d, "
+                        "max=%d). using "
+                        "default [%d]\n",
+                        tcp_ts_opt, TCP_TS_OPTION_DISABLE, TCP_TS_OPTION_LAST - 1,
+                        MCE_DEFAULT_TCP_TIMESTAMP_OPTION);
+            tcp_ts_opt = MCE_DEFAULT_TCP_TIMESTAMP_OPTION;
+        }
+    }
+
+    set_value_from_registry_if_exists(tcp_nodelay, "network.protocols.tcp.nodelay.enable",
+                                      registry);
+
+    set_value_from_registry_if_exists(tcp_quickack, "network.protocols.tcp.quickack", registry);
+
+    set_value_from_registry_if_exists(tcp_push_flag, "network.protocols.tcp.push", registry);
+
+    // TODO: this should be replaced by calling "exception_handling.init()" that
+    // will be called from init()
+    set_value_from_registry_if_exists(exception_handling, "core.exception_handling.mode", registry);
+
+    set_value_from_registry_if_exists(avoid_sys_calls_on_tcp_fd, "core.syscall.avoid_ctl_syscalls",
+                                      registry);
+
+    set_value_from_registry_if_exists(allow_privileged_sock_opt,
+                                      "core.syscall.allow_privileged_sockopt", registry);
+
     if (tcp_timer_resolution_msec < timer_resolution_msec) {
-        vlog_printf(
-            VLOG_WARNING,
-            "TCP timer resolution [net.tcp.timer_msec=%d] cannot be smaller than timer resolution "
-            "[core.handlers.timer_msec=%d]. Setting TCP timer resolution to %d msec.\n",
-            tcp_timer_resolution_msec, timer_resolution_msec, timer_resolution_msec);
+        vlog_printf(VLOG_WARNING,
+                    "TCP timer resolution [%s=%d] cannot be smaller than timer resolution "
+                    "[%s=%d]. Setting TCP timer resolution to %d msec.\n",
+                    SYS_VAR_TCP_TIMER_RESOLUTION_MSEC, tcp_timer_resolution_msec,
+                    SYS_VAR_TIMER_RESOLUTION_MSEC, timer_resolution_msec, timer_resolution_msec);
         tcp_timer_resolution_msec = timer_resolution_msec;
     }
 
+    set_value_from_registry_if_exists(internal_thread_arm_cq_enabled,
+                                      "performance.completion_queue.interrupt_per_packet",
+                                      registry);
+
+    if (registry.value_exists("performance.threading.cpuset")) {
+        snprintf(internal_thread_cpuset, FILENAME_MAX, "%s",
+                 registry.get_value<std::string>("performance.threading.cpuset").c_str());
+    }
+
     // handle internal thread affinity - default is CPU-0
+    if (registry.value_exists("performance.threading.cpu_affinity")) {
+        int n =
+            snprintf(internal_thread_affinity_str, sizeof(internal_thread_affinity_str), "%s",
+                     registry.get_value<std::string>("performance.threading.cpu_affinity").c_str());
+        if (unlikely(((int)sizeof(internal_thread_affinity_str) < n) || (n < 0))) {
+            vlog_printf(VLOG_WARNING, "Failed to process: %s.\n", SYS_VAR_INTERNAL_THREAD_AFFINITY);
+        }
+    }
     if (env_to_cpuset(internal_thread_affinity_str, &internal_thread_affinity)) {
         vlog_printf(VLOG_WARNING,
                     "Failed to set internal thread affinity: %s...  deferring to cpu-0.\n",
                     internal_thread_affinity_str);
     }
+}
+
+void mce_sys_var::configure_multicast_settings(const config_registry &registry)
+{
+    set_value_from_registry_if_exists(wait_after_join_msec,
+                                      "network.multicast.wait_after_join_msec", registry);
+
+    set_value_from_registry_if_exists(buffer_batching_mode, "performance.buffers.batching_mode",
+                                      registry);
 
     if (buffer_batching_mode == BUFFER_BATCHING_NONE) {
         tx_bufs_batch_tcp = 1;
         tx_bufs_batch_udp = 1;
         rx_bufs_batch = 1;
     }
+}
 
-    if (hugepage_size & (hugepage_size - 1)) {
-        vlog_printf(VLOG_WARNING, "%s must be a power of 2. Fallback to default value (%s)\n",
-                    SYS_VAR_HUGEPAGE_SIZE, option_size::to_str(MCE_DEFAULT_HUGEPAGE_SIZE));
-        hugepage_size = MCE_DEFAULT_HUGEPAGE_SIZE;
+void mce_sys_var::configure_network_protocols(const config_registry &registry)
+{
+    set_value_from_registry_if_exists(timer_netlink_update_msec,
+                                      "network.neighbor.update_interval_msec", registry);
+
+    set_value_from_registry_if_exists(neigh_num_err_retries, "network.neighbor.errors_before_reset",
+                                      registry);
+
+    set_value_from_registry_if_exists(neigh_wait_till_send_arp_msec,
+                                      "network.neighbor.arp.uc_delay_msec", registry);
+
+    set_value_from_registry_if_exists(neigh_uc_arp_quata, "network.neighbor.arp.uc_retries",
+                                      registry);
+
+    if (registry.value_exists("core.resources.hugepages.enable")) {
+        mem_alloc_type = registry.get_value<bool>("core.resources.hugepages.enable")
+            ? option_alloc_type::HUGE
+            : option_alloc_type::ANON;
     }
+
+    if (registry.value_exists("core.resources.memory_limit")) {
+        memory_limit =
+            registry.get_value<int64_t>("core.resources.memory_limit") ?: MCE_DEFAULT_MEMORY_LIMIT;
+    }
+
+    set_value_from_registry_if_exists(memory_limit_user, "core.resources.external_memory_limit",
+                                      registry);
+
+    if (registry.value_exists("core.resources.heap_metadata_block_size")) {
+        heap_metadata_block = registry.get_value<int64_t>("core.resources.heap_metadata_block_size")
+            ?: MCE_DEFAULT_HEAP_METADATA_BLOCK;
+    }
+    if (registry.value_exists("core.resources.hugepages.size")) {
+        hugepage_size = registry.get_value<int64_t>("core.resources.hugepages.size");
+        if (hugepage_size & (hugepage_size - 1)) {
+            vlog_printf(VLOG_WARNING, "%s must be a power of 2. Fallback to default value (%s)\n",
+                        SYS_VAR_HUGEPAGE_SIZE, option_size::to_str(MCE_DEFAULT_HUGEPAGE_SIZE));
+            hugepage_size = MCE_DEFAULT_HUGEPAGE_SIZE;
+        }
+        if (hugepage_size > MCE_MAX_HUGEPAGE_SIZE) {
+            vlog_printf(VLOG_WARNING, "%s exceeds maximum possible hugepage size (%s)\n",
+                        SYS_VAR_HUGEPAGE_SIZE, option_size::to_str(MCE_MAX_HUGEPAGE_SIZE));
+            hugepage_size = MCE_DEFAULT_HUGEPAGE_SIZE;
+        }
+    }
+}
+
+void mce_sys_var::configure_application_specifics(const config_registry &registry)
+{
+    set_value_from_registry_if_exists(handle_fork, "core.syscall.fork_support", registry);
+
+    set_value_from_registry_if_exists(enable_tso, "hardware_features.tcp.tso.enable", registry);
+
+    set_value_from_registry_if_exists(max_tso_sz, "hardware_features.tcp.tso.max_size", registry);
 
     if ((enable_tso != option_3::OFF) && (ring_migration_ratio_tx != -1)) {
         ring_migration_ratio_tx = -1;
@@ -2626,18 +2897,118 @@ void mce_sys_var::post_profile_adjust_settings(const config_registry &registry)
                     SYS_VAR_RING_MIGRATION_RATIO_TX, -1, SYS_VAR_TSO);
     }
 
+#ifdef DEFINED_UTLS
+    set_value_from_registry_if_exists(enable_utls_rx, "hardware_features.tcp.tls_offload.rx_enable",
+                                      registry);
+
+    set_value_from_registry_if_exists(enable_utls_tx, "hardware_features.tcp.tls_offload.tx_enable",
+                                      registry);
+
+    if (registry.value_exists("hardware_features.tcp.tls_offload.dek_cache_max_size")) {
+        int temp = registry.get_value<int>("hardware_features.tcp.tls_offload.dek_cache_max_size");
+        utls_high_wmark_dek_cache_size = (temp >= 0 ? static_cast<size_t>(temp) : 0);
+    }
+
+    if (registry.value_exists("hardware_features.tcp.tls_offload.dek_cache_min_size")) {
+        int temp = registry.get_value<int>("hardware_features.tcp.tls_offload.dek_cache_min_size");
+        utls_low_wmark_dek_cache_size = (temp >= 0 ? static_cast<size_t>(temp) : 0);
+        if (utls_low_wmark_dek_cache_size >= utls_high_wmark_dek_cache_size) {
+            utls_low_wmark_dek_cache_size = utls_high_wmark_dek_cache_size / 2U;
+        }
+    }
+#endif /* DEFINED_UTLS */
+    if (registry.value_exists("hardware_features.tcp.lro")) {
+        enable_lro =
+            static_cast<decltype(enable_lro)>(registry.get_value<int>("hardware_features.tcp.lro"));
+    }
+
+    set_value_from_registry_if_exists(close_on_dup2, "core.syscall.dup2_support", registry);
+
+    set_value_from_registry_if_exists(mtu, "network.protocols.ip.mtu", registry);
+
+#if defined(DEFINED_NGINX)
+    set_value_from_registry_if_exists(nginx_udp_socket_pool_size,
+                                      "applications.nginx.udp_pool_size", registry);
+
+    set_value_from_registry_if_exists(nginx_udp_socket_pool_rx_num_buffs_reuse,
+                                      "applications.nginx.udp_socket_pool_reuse", registry);
+#endif // DEFINED_NGINX
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+    set_value_from_registry_if_exists(app.src_port_stride, "applications.nginx.src_port_stride",
+                                      registry);
+
+    set_value_from_registry_if_exists(app.distribute_cq_interrupts,
+                                      "applications.nginx.distribute_cq", registry);
+#endif
+}
+
+void mce_sys_var::configure_syscall_behavior(const config_registry &registry)
+{
+    set_value_from_registry_if_exists(lwip_mss, "network.protocols.tcp.mss", registry);
+
+    set_value_from_registry_if_exists(lwip_cc_algo_mod, "network.protocols.tcp.congestion_control",
+                                      registry);
+
+    set_value_from_registry_if_exists(deferred_close, "core.syscall.deferred_close", registry);
+
+    set_value_from_registry_if_exists(tcp_abort_on_close, "network.protocols.tcp.linger_0",
+                                      registry);
+
+    set_value_from_registry_if_exists(rx_poll_on_tx_tcp, "performance.polling.rx_poll_on_tx",
+                                      registry);
+
+    set_value_from_registry_if_exists(rx_cq_wait_ctrl, "performance.polling.rx_cq_wait_ctrl",
+                                      registry);
+
+    set_value_from_registry_if_exists(trigger_dummy_send_getsockname,
+                                      "core.syscall.getsockname_dummy_send", registry);
+}
+
+void mce_sys_var::configure_network_timing(const config_registry &registry)
+{
+    set_value_from_registry_if_exists(tcp_send_buffer_size, "network.protocols.tcp.wmem", registry);
+
+    if (registry.value_exists("performance.polling.skip_cq_on_rx")) {
+        int temp = registry.get_value<int>("performance.polling.skip_cq_on_rx");
+        if (temp < 0 || temp > SKIP_POLL_IN_RX_EPOLL_ONLY) {
+            temp = 0;
+        }
+        skip_poll_in_rx = static_cast<skip_poll_in_rx_t>(temp);
+    }
+
+    if (registry.value_exists("performance.threading.mutex_over_spinlock")) {
+        multilock = registry.get_value<bool>("performance.threading.mutex_over_spinlock")
+            ? MULTILOCK_MUTEX
+            : MULTILOCK_SPIN;
+    }
 }
 
 void mce_sys_var::apply_config_from_registry()
 {
     config_registry registry;
-    apply_settings(registry);
-    
-    read_hv();
-    pre_profile_adjust_settings();
-    apply_profile_settings();
 
-    post_profile_adjust_settings(registry);
+    initialize_base_variables(registry);
+    read_hypervisor_info();
+
+    configure_socketxtreme(registry);
+    configure_striding_rq(registry);
+    detect_application_profile(registry);
+    apply_spec_profile_optimizations();
+
+    configure_observability(registry);
+    configure_buffer_allocation(registry);
+    configure_tcp_parameters(registry);
+    configure_buffer_sizes(registry);
+    configure_polling_mechanism(registry);
+    configure_completion_queue(registry);
+    configure_thread_affinity(registry);
+    configure_memory_limits(registry);
+
+    configure_multicast_settings(registry);
+    configure_network_protocols(registry);
+    configure_application_specifics(registry);
+    configure_syscall_behavior(registry);
+    configure_network_timing(registry);
 }
 
 void mce_sys_var::get_app_name()
@@ -2685,11 +3056,11 @@ void mce_sys_var::get_params()
     get_app_name();
 
     // legacy method - config registry is not relevant for this case
-    if (std::getenv("XLIO_USE_DEPRECATED_CONFIG")) {
+    if (!std::getenv("XLIO_USE_NEW_CONFIG")) {
         vlog_printf(VLOG_WARNING, "Using deprecated environment variables.\n");
-        vlog_printf(
-            VLOG_WARNING,
-            "---------------------------------------------------------------------------\n");
+        vlog_printf(VLOG_WARNING,
+                    "------------------------------------------------"
+                    "---------------------------\n");
         legacy_get_env_params();
     } else {
         apply_config_from_registry();
@@ -2718,8 +3089,9 @@ void set_env_params()
         break;
     case option_alloc_type::HUGE:
         setenv("RDMAV_HUGEPAGES_SAFE", "1", 0);
-        // Don't request hugepages from rdma-core in case of giant default hugepage size,
-        // otherwise, we will waste a lot of memory. Consider 32MB hugepages as acceptable.
+        // Don't request hugepages from rdma-core in case of giant default hugepage
+        // size, otherwise, we will waste a lot of memory. Consider 32MB hugepages
+        // as acceptable.
         if (g_hugepage_mgr.get_default_hugepage() <= 32U * 1024U * 1024U) {
             ibv_alloc_type = "ALL";
         }
@@ -2735,5 +3107,21 @@ void set_env_params()
     }
     if (!getenv("MLX_CQ_ALLOC_TYPE")) {
         setenv("MLX_CQ_ALLOC_TYPE", ibv_alloc_type, 0);
+    }
+}
+
+template <typename T>
+static void set_value_from_registry(T &key, const std::string &name,
+                                    const config_registry &registry)
+{
+    key = registry.get_value<T>(name);
+}
+
+template <typename T>
+static void set_value_from_registry_if_exists(T &key, const std::string &name,
+                                              const config_registry &registry)
+{
+    if (registry.value_exists(name)) {
+        key = registry.get_value<T>(name);
     }
 }

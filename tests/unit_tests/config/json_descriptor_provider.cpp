@@ -19,11 +19,13 @@ TEST(config, json_descriptor_provider_sanity)
     "properties": {
         "core": {
             "type": "object",
-            "description": "controls the core functionality of libxlio.",
+            "title": "controls the core functionality of libxlio.",
+            "description": "The core category includes fundamental system or application configurations, focusing on essential functionalities like logging, statistics collection, initialization processes, CPU usage, memory management, exception handling, and signal processing.",
             "properties": {
                 "append_pid_to_path": {
                     "type": "boolean",
                     "default": false,
+                    "title": "Append PID to dirs",
                     "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
                 },
                 "log": {
@@ -55,6 +57,7 @@ TEST(config, json_descriptor_provider_sanity)
                                     "default": "info"
                                 }
                             ],
+                            "title": "Sets log level.",
                             "description": "Sets level according to desired logging verbosity."
                         }
                     }
@@ -88,6 +91,7 @@ TEST(config, json_descriptor_provider_invalid_json_throws)
                         "append_pid_to_path": {
                             "type": "boolean",
                             "default": false,
+                            "title": "Append PID to dirs",
                             "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
                         },
                         "log": {
@@ -118,6 +122,7 @@ TEST(config, json_descriptor_provider_invalid_json_throws)
                                         }
                                     ],
                                     "default": 3,
+                                    "title": "Sets log level.",
                                     "description": "Sets level according to desired logging verbosity."
                                 }
                             }
@@ -146,6 +151,7 @@ TEST(config, json_descriptor_provider_no_description_throws)
                 "append_pid_to_path": {
                     "type": "boolean",
                     "default": false,
+                    "title": "Append PID to dirs",
                     "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
                 },
                 "log": {
@@ -204,11 +210,13 @@ TEST(config, json_descriptor_provider_duplication_last_is_taken)
                 "append_pid_to_path": {
                     "type": "boolean",
                     "default": false,
+                    "title": "Append PID to dirs",
                     "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
                 },
                 "append_pid_to_path": {
                     "type": "boolean",
                     "default": true,
+                    "title": "Append PID to dirs",
                     "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
                 }
             }
@@ -237,6 +245,7 @@ TEST(config, json_descriptor_provider_unrecognized_type_throws)
                 "lolz": {
                     "type": "float",
                     "default": 3.5,
+                    "title": "Sets log level.",
                     "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
                 },
             }
@@ -265,6 +274,7 @@ TEST(config, json_descriptor_provider_array_support)
                         "transport_control": {
                             "type": "array",
                             "default": [],
+                            "title": "Transport control per apps.",
                             "description": "Transport control per apps.",
                             "items": {
                                 "type": "object",
@@ -319,6 +329,7 @@ TEST(config, json_descriptor_provider_array_with_default_values)
                     "type": "array",
                     "default": ["value1", "value2", "value3"],
                     "description": "Array of strings",
+                    "title": "String array",
                     "items": {
                         "type": "string"
                     }
@@ -327,6 +338,7 @@ TEST(config, json_descriptor_provider_array_with_default_values)
                     "type": "array",
                     "default": [1, 2, 3],
                     "description": "Array of integers",
+                    "title": "Integer array",
                     "items": {
                         "type": "integer"
                     }
@@ -390,6 +402,7 @@ TEST(config, json_descriptor_provider_array_of_objects)
                                 }
                             ],
                             "description": "Transport control per apps.",
+                            "title": "Transport control per apps.",
                             "items": {
                                 "type": "object",
                                 "properties": {
