@@ -115,6 +115,7 @@ public:
     int reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse);
 
     void get_cq_event(int count = 1) { xlio_ib_mlx5_get_cq_event(&m_mlx5_cq, count); };
+    uint64_t get_n_rx_drop_counter() { return m_p_cq_stat->n_rx_drop_counter; }
 
 protected:
     /**
