@@ -23,6 +23,8 @@
 #include "hw_queue_rx.h"
 #include "ring_simple.h"
 
+#include "core/dev/net_device_table_mgr.h"
+
 #define MODULE_NAME "cq_mgr_rx"
 
 #define cq_logpanic   __log_info_panic
@@ -148,6 +150,8 @@ cq_mgr_rx::~cq_mgr_rx()
     ENDIF_VERBS_FAILURE;
     VALGRIND_MAKE_MEM_UNDEFINED(m_p_ibv_cq, sizeof(ibv_cq));
 
+    g_p_net_device_table_mgr->increase_closed_rings_rx_cq_drop_counter(
+        m_p_cq_stat->n_rx_drop_counter);
     statistics_print();
     xlio_stats_instance_remove_cq_block(m_p_cq_stat);
 
@@ -168,7 +172,10 @@ void cq_mgr_rx::statistics_print()
                               (unsigned long long int)m_p_cq_stat->n_rx_cqe_error);
     }
 }
-
+uint64_t cq_mgr_rx::get_n_rx_drop_counter()
+{
+    return m_p_cq_stat->n_rx_drop_counter;
+}
 void cq_mgr_rx::add_hqrx(hw_queue_rx *hqrx_ptr)
 {
     m_hqrx_ptr = hqrx_ptr;

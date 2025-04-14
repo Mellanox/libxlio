@@ -72,6 +72,13 @@ public:
 
     int global_ring_epfd_get();
 
+    /*
+     * This will get accumlated RX out of buffer drops
+     * for all net devices.
+     */
+    uint64_t global_get_rx_drop_counter(void);
+    void print_report(vlog_levels_t log_level);
+
     void handle_timer_expired(void *user_data);
 
     uint32_t get_max_mtu() const { return m_max_mtu; }
@@ -79,6 +86,13 @@ public:
     inline ts_conversion_mode_t get_ctx_time_conversion_mode() { return m_time_conversion_mode; };
 
     void get_net_devices(local_dev_vector &vec);
+
+    void increase_closed_rings_rx_cq_drop_counter(uint64_t count)
+    {
+        m_lock.lock();
+        m_closed_rings_rx_cq_drop_counter += count;
+        m_lock.unlock();
+    }
 
 private:
     void del_link_event(const netlink_link_info *info);
@@ -98,6 +112,7 @@ private:
     int m_global_ring_pipe_fds[2];
 
     uint32_t m_max_mtu;
+    uint64_t m_closed_rings_rx_cq_drop_counter;
 };
 
 extern net_device_table_mgr *g_p_net_device_table_mgr;

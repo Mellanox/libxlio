@@ -89,6 +89,7 @@ public:
     {
         m_xmit_rings[id]->reset_inflight_zc_buffers_ctx(id, ctx);
     }
+    virtual uint64_t get_rx_cq_out_of_buffer_drop();
 
 protected:
     void update_cap(ring_slave *slave = nullptr);

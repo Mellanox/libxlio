@@ -94,6 +94,7 @@ public:
         NOT_IN_USE(id);
         return 0;
     }
+    virtual uint64_t get_rx_cq_out_of_buffer_drop() { return 0; }
     virtual bool is_tso(void) { return false; }
 
     inline void set_tap_data_available() { m_tap_data_available = true; }
