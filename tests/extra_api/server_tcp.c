@@ -23,6 +23,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <net/if.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
@@ -105,7 +106,7 @@ static int _tcp_create_and_bind(struct sockaddr_in *addr)
     int fd;
     int flag;
 
-    fd = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
+    fd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (!fd) {
         rc = -EBUSY;
         printf("Failed to create socket\n");
@@ -113,7 +114,9 @@ static int _tcp_create_and_bind(struct sockaddr_in *addr)
     }
 
 #if defined(IB_DEV)
-    rc = setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, (void *)IB_DEV, strlen(IB_DEV));
+    struct ifreq ifr = {};
+    strncpy(ifr.ifr_name, IB_DEV, IFNAMSIZ);
+    rc = setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr));
     if (rc < 0) {
         printf("Failed to setsockopt(SO_BINDTODEVICE) for %s: %s\n", IB_DEV, strerror(errno));
         exit(1);
@@ -217,7 +220,7 @@ int main(int argc, char *argv[])
         token2 = strtok(NULL, s);
 
         memset(&addr, 0, sizeof(addr));
-        addr.sin_family = PF_INET;
+        addr.sin_family = AF_INET;
         addr.sin_addr.s_addr = inet_addr(token1);
         addr.sin_port = htons(atoi(token2));
         sfd[i] = _tcp_create_and_bind(&addr);
@@ -317,7 +320,7 @@ int main(int argc, char *argv[])
             /* Step:6 Process data */
             if (event & EPOLLIN) {
 #if defined(XLIO_API) && (XLIO_API == 1)
-                printf("xlio_comps[j].packet.num_bufs equal to %d \n",
+                printf("xlio_comps[j].packet.num_bufs equal to %lu \n",
                        xlio_comps[j].packet.num_bufs);
                 assert(1 == xlio_comps[j].packet.num_bufs);
                 assert(sizeof(conns.msg) > xlio_comps[j].packet.total_len);
