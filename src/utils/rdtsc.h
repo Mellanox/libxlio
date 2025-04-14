@@ -126,7 +126,7 @@ inline int gettimefromtsc(struct timespec *ts)
 
 static inline int gettime(struct timespec *ts)
 {
-    return gettimefromtsc(ts);
+    return clock_gettime(CLOCK_MONOTONIC, ts);
 }
 
 static inline int gettime(struct timeval *tv)
