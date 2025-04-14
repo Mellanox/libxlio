@@ -228,6 +228,7 @@ public:
     void register_to_ibverbs_events(event_handler_ibverbs *handler);
     void unregister_to_ibverbs_events(event_handler_ibverbs *handler);
     uint32_t get_priority_by_tc_class(uint32_t tc_class);
+    uint64_t get_accumulative_rx_cq_drop_counter();
 
 protected:
     void set_slave_array();

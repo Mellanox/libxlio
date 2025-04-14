@@ -55,6 +55,7 @@ public:
     virtual ~ring();
 
     virtual void print_val();
+    virtual uint64_t get_rx_cq_out_of_buffer_drop() = 0;
 
     virtual bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t = false) = 0;
     virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink) = 0;
