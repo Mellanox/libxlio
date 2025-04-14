@@ -900,6 +900,14 @@ int ring_bond::socketxtreme_poll(struct xlio_socketxtreme_completion_t *, unsign
 {
     return 0;
 }
+uint64_t ring_bond::get_rx_cq_out_of_buffer_drop()
+{
+    uint64_t accumulator = 0;
+    for (uint32_t i = 0; i < m_recv_rings.size(); i++) {
+        accumulator += m_recv_rings[i]->get_rx_cq_out_of_buffer_drop();
+    }
+    return accumulator;
+}
 
 void ring_bond::slave_destroy(int if_index)
 {

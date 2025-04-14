@@ -47,7 +47,7 @@ net_device_table_mgr::net_device_table_mgr()
     m_num_devices = 0;
     m_global_ring_epfd = 0;
     m_max_mtu = 0;
-
+    m_closed_rings_rx_cq_drop_counter = 0;
     ndtm_logdbg("");
 
     m_global_ring_epfd = SYSCALL(epoll_create, 48);
@@ -455,6 +455,26 @@ int net_device_table_mgr::global_ring_request_notification(uint64_t poll_sn_rx, 
 int net_device_table_mgr::global_ring_epfd_get()
 {
     return m_global_ring_epfd;
+}
+
+uint64_t net_device_table_mgr::global_get_rx_drop_counter()
+{
+    // coverity[missing_lock:FALSE] /*Turn off coverity missing_lock check*/
+    uint64_t accumulator = this->m_closed_rings_rx_cq_drop_counter;
+    std::for_each(g_p_net_device_table_mgr->m_net_device_map_index.begin(),
+                  g_p_net_device_table_mgr->m_net_device_map_index.end(),
+                  [&accumulator](const auto &net_dev_map_iter) {
+                      accumulator += net_dev_map_iter.second->get_accumulative_rx_cq_drop_counter();
+                  });
+    return accumulator;
+}
+
+void net_device_table_mgr::print_report(vlog_levels_t log_level)
+{
+    uint64_t accumulator = global_get_rx_drop_counter();
+    vlog_printf(log_level, "*********************************\n");
+    vlog_printf(log_level, "Total HW RX drop counter: %lu\n", accumulator);
+    vlog_printf(log_level, "*********************************\n");
 }
 
 void net_device_table_mgr::global_ring_wait_for_notification_and_process_element(

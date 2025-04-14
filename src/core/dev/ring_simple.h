@@ -111,6 +111,8 @@ public:
         m_p_ring_stat->simple.n_tx_tso_byte_count += bytes;
     }
 
+    virtual uint64_t get_rx_cq_out_of_buffer_drop() override;
+
 #ifdef DEFINED_UTLS
     bool tls_tx_supported(void) override { return m_tls.tls_tx; }
     bool tls_rx_supported(void) override { return m_tls.tls_rx; }

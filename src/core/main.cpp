@@ -97,6 +97,7 @@ static int free_libxlio_resources()
     if (safe_mce_sys().print_report) {
         buffer_pool::print_full_report(VLOG_INFO);
         g_hugepage_mgr.print_report();
+        g_p_net_device_table_mgr->print_report(VLOG_INFO);
     }
 
     // Destroy polling groups before fd_collection to clear XLIO sockets from the fd_collection
