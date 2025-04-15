@@ -1036,7 +1036,14 @@ XLIO_PRINT_REPORT
 Print a human readable report of resources usage at exit. The report is printed
 during termination phase. Therefore, It can be missed if the process is killed
 with the SIGKILL signal.
-Default: 0 (Disabled)
+Default value: auto
+
+auto
+    Print report if anomaly is detected
+on
+    Print report
+off
+    Disabled
 
 XLIO Monitoring & Performance Counters
 =====================================

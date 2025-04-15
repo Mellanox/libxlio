@@ -192,8 +192,13 @@ void hugepage_mgr::dealloc_hugepages(void *ptr, size_t size)
     }
 }
 
-void hugepage_mgr::print_report(bool short_report /*=false*/)
+void hugepage_mgr::print_report(vlog_levels_t log_level, bool print_only_critical /*=false*/,
+                                bool short_report /*=false*/)
 {
+    if (print_only_critical) {
+        return;
+    }
+
     std::lock_guard<decltype(m_lock)> lock(m_lock);
 
     const size_t ONE_MB = 1024U * 1024U;
@@ -203,13 +208,13 @@ void hugepage_mgr::print_report(bool short_report /*=false*/)
     read_sysfs();
 
     get_supported_hugepages(hugepages);
-    vlog_printf(VLOG_INFO, "Hugepages info:\n");
+    vlog_printf(log_level, "Hugepages info:\n");
     if (safe_mce_sys().hugepage_size) {
-        vlog_printf(VLOG_INFO, "  User forced to use %lu kB hugepages.\n",
+        vlog_printf(log_level, "  User forced to use %lu kB hugepages.\n",
                     (safe_mce_sys().hugepage_size) / 1024U);
     }
     for (size_t hugepage : hugepages) {
-        vlog_printf(VLOG_INFO, "  %zu kB : total=%u free=%u\n", hugepage / 1024U,
+        vlog_printf(log_level, "  %zu kB : total=%u free=%u\n", hugepage / 1024U,
                     get_total_hugepages(hugepage), get_free_hugepages(hugepage));
     }
 
@@ -217,15 +222,15 @@ void hugepage_mgr::print_report(bool short_report /*=false*/)
         return;
     }
 
-    vlog_printf(VLOG_INFO, "Hugepages statistics:\n");
+    vlog_printf(log_level, "Hugepages statistics:\n");
     for (size_t hugepage : hugepages) {
-        vlog_printf(VLOG_INFO, "  %zu kB : allocated_pages=%u allocations=%u\n", hugepage / 1024U,
+        vlog_printf(log_level, "  %zu kB : allocated_pages=%u allocations=%u\n", hugepage / 1024U,
                     m_hugepages[hugepage].nr_hugepages_allocated,
                     m_hugepages[hugepage].nr_allocations);
     }
-    vlog_printf(VLOG_INFO, "  Total: allocations=%u unsatisfied=%u\n", m_stats.allocations,
+    vlog_printf(log_level, "  Total: allocations=%u unsatisfied=%u\n", m_stats.allocations,
                 m_stats.fails);
-    vlog_printf(VLOG_INFO, "  Total: allocated=%zuMB requested=%zuMB unused_space=%zuMB\n",
+    vlog_printf(log_level, "  Total: allocated=%zuMB requested=%zuMB unused_space=%zuMB\n",
                 m_stats.total_allocated / ONE_MB, m_stats.total_requested / ONE_MB,
                 m_stats.total_unused / ONE_MB);
 }

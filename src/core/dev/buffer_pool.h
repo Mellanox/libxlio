@@ -53,7 +53,7 @@ public:
     void register_memory(ib_ctx_handler *p_ib_ctx_h);
     void print_val_tbl();
     void print_report(vlog_levels_t log_level = VLOG_DEBUG);
-    static void print_full_report(vlog_levels_t log_level);
+    static void print_full_report(vlog_levels_t log_level, bool print_only_critical = false);
 
     uint32_t find_lkey_by_ib_ctx_thread_safe(ib_ctx_handler *p_ib_ctx_h);
 

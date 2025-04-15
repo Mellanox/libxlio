@@ -94,10 +94,11 @@ static int free_libxlio_resources()
 
     g_b_exit = true;
 
-    if (safe_mce_sys().print_report) {
-        buffer_pool::print_full_report(VLOG_INFO);
-        g_hugepage_mgr.print_report();
-        g_p_net_device_table_mgr->print_report(VLOG_INFO);
+    if (safe_mce_sys().print_report != option_3::OFF) {
+        bool print_only_critical = (safe_mce_sys().print_report == option_3::AUTO);
+        buffer_pool::print_full_report(VLOG_INFO, print_only_critical);
+        g_hugepage_mgr.print_report(VLOG_INFO, print_only_critical);
+        g_p_net_device_table_mgr->print_report(VLOG_INFO, print_only_critical);
     }
 
     // Destroy polling groups before fd_collection to clear XLIO sockets from the fd_collection
@@ -472,8 +473,9 @@ void print_xlio_global_settings()
     VLOG_PARAM_STRING("SegFault Backtrace", safe_mce_sys().handle_segfault,
                       MCE_DEFAULT_HANDLE_SIGFAULT, SYS_VAR_HANDLE_SIGSEGV,
                       safe_mce_sys().handle_segfault ? "Enabled " : "Disabled");
-    VLOG_PARAM_STRING("Print a report", safe_mce_sys().print_report, MCE_DEFAULT_PRINT_REPORT,
-                      SYS_VAR_PRINT_REPORT, safe_mce_sys().print_report ? "Enabled " : "Disabled");
+    VLOG_PARAM_STRING("Print a report", option_3::to_str(safe_mce_sys().print_report),
+                      option_3::to_str(MCE_DEFAULT_PRINT_REPORT), SYS_VAR_PRINT_REPORT,
+                      option_3::to_str(safe_mce_sys().print_report));
     VLOG_PARAM_STRING("Quick start", safe_mce_sys().quick_start, MCE_DEFAULT_QUICK_START,
                       SYS_VAR_QUICK_START, safe_mce_sys().quick_start ? "Enabled " : "Disabled");
 

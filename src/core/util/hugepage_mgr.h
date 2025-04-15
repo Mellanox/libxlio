@@ -43,7 +43,8 @@ public:
     void *alloc_hugepages(size_t &size, size_t &hugepage_size);
     void dealloc_hugepages(void *ptr, size_t size);
 
-    void print_report(bool short_report = false);
+    void print_report(vlog_levels_t log_level, bool print_only_critical = false,
+                      bool short_report = false);
 
 private:
     enum {
