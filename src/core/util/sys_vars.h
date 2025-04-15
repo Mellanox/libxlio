@@ -311,7 +311,7 @@ public:
 
     uint32_t mce_spec;
 
-    bool print_report;
+    option_3::mode_t print_report;
     bool quick_start;
     vlog_levels_t log_level;
     uint32_t log_details;
@@ -669,7 +669,7 @@ extern mce_sys_var &safe_mce_sys();
  * This block consists of default values for library specific
  * configuration variables
  */
-#define MCE_DEFAULT_PRINT_REPORT             (false)
+#define MCE_DEFAULT_PRINT_REPORT             (option_3::AUTO)
 #define MCE_DEFAULT_TCP_SEND_BUFFER_SIZE     (1024 * 1024)
 #define MCE_DEFAULT_LOG_FILE                 ("")
 #define MCE_DEFAULT_CONF_FILE                ("/etc/libxlio.conf")

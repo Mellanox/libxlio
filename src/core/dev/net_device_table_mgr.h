@@ -77,7 +77,7 @@ public:
      * for all net devices.
      */
     uint64_t global_get_rx_drop_counter(void);
-    void print_report(vlog_levels_t log_level);
+    void print_report(vlog_levels_t log_level, option_3::mode_t mode_type = option_3::OFF);
 
     void handle_timer_expired(void *user_data);
 

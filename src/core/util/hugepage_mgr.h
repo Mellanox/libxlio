@@ -43,7 +43,7 @@ public:
     void *alloc_hugepages(size_t &size, size_t &hugepage_size);
     void dealloc_hugepages(void *ptr, size_t size);
 
-    void print_report(bool short_report = false);
+    void print_report(bool short_report = false, option_3::mode_t mode_type = option_3::OFF);
 
 private:
     enum {
