@@ -469,9 +469,13 @@ uint64_t net_device_table_mgr::global_get_rx_drop_counter()
     return accumulator;
 }
 
-void net_device_table_mgr::print_report(vlog_levels_t log_level)
+void net_device_table_mgr::print_report(vlog_levels_t log_level,
+                                        bool print_only_critical /*=false*/)
 {
     uint64_t accumulator = global_get_rx_drop_counter();
+    if (print_only_critical && !accumulator) {
+        return;
+    }
     vlog_printf(log_level, "*********************************\n");
     vlog_printf(log_level, "Total HW RX drop counter: %lu\n", accumulator);
     vlog_printf(log_level, "*********************************\n");

@@ -208,7 +208,7 @@ void xlio_allocator::print_hugepages_warning(size_t requested_size)
         vlog_printf(VLOG_WARNING, "or switch to a different memory allocation type:\n");
         vlog_printf(VLOG_WARNING, "  %s=ANON\n", SYS_VAR_MEM_ALLOC_TYPE);
 
-        g_hugepage_mgr.print_report(true);
+        g_hugepage_mgr.print_report(VLOG_INFO, false, true);
 
         vlog_printf(VLOG_WARNING, "************************************************************\n");
     } else {

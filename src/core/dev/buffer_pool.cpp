@@ -200,7 +200,7 @@ void buffer_pool::print_report(vlog_levels_t log_level /*=VLOG_DEBUG*/)
 }
 
 /* static */
-void buffer_pool::print_full_report(vlog_levels_t log_level)
+void buffer_pool::print_full_report(vlog_levels_t log_level, bool print_only_critical /*=false*/)
 {
     std::vector<buffer_pool *> pools = {g_buffer_pool_rx_rwqe, g_buffer_pool_rx_stride,
                                         g_buffer_pool_tx, g_buffer_pool_zc};
@@ -209,7 +209,9 @@ void buffer_pool::print_full_report(vlog_levels_t log_level)
     for (auto &pool : pools) {
         if (pool != nullptr) {
             is_error = is_error || pool->m_p_bpool_stat->n_buffer_pool_no_bufs;
-            pool->print_report(log_level);
+            if (!print_only_critical) {
+                pool->print_report(log_level);
+            }
         }
     }
 
