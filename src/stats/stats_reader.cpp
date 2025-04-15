@@ -572,7 +572,8 @@ void print_cq_stats(cq_instance_block_t *p_cq_inst_arr)
             p_cq_stats = &p_cq_inst_arr[i].cq_stats;
             printf("======================================================\n");
             printf("\tCQ=[%u]\n", i);
-            printf(FORMAT_STATS_64bit, "Packets dropped:", p_cq_stats->n_rx_pkt_drop, post_fix);
+            printf(FORMAT_STATS_64bit, "SW RX Packets dropped:", p_cq_stats->n_rx_pkt_drop,
+                   post_fix);
             printf(FORMAT_STATS_64bit, "HW RX Packets dropped:", p_cq_stats->n_rx_drop_counter,
                    post_fix);
             printf(FORMAT_STATS_32bit, "Packets queue len:", p_cq_stats->n_rx_sw_queue_len);

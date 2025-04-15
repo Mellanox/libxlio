@@ -163,7 +163,7 @@ void cq_mgr_rx::statistics_print()
     if (m_p_cq_stat->n_rx_pkt_drop || m_p_cq_stat->n_rx_drop_counter ||
         m_p_cq_stat->n_rx_sw_queue_len || m_p_cq_stat->n_rx_drained_at_once_max ||
         m_p_cq_stat->n_buffer_pool_len) {
-        cq_logdbg_no_funcname("Packets dropped: %12llu",
+        cq_logdbg_no_funcname("SW RX Packets dropped: %12llu",
                               (unsigned long long int)m_p_cq_stat->n_rx_pkt_drop);
         cq_logdbg_no_funcname("HW RX Packets dropped: %12llu",
                               (unsigned long long int)m_p_cq_stat->n_rx_drop_counter);
