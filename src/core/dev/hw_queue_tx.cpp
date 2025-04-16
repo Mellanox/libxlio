@@ -455,7 +455,7 @@ void hw_queue_tx::init_queue()
     m_tx_num_wr = (m_sq_wqes_end - (uint8_t *)m_sq_wqe_hot) / WQEBB;
 
     // We use the min between CQ size and the QP size (that might be increases by ibv creation).
-    m_sq_free_credits = std::min(m_tx_num_wr, old_wr_val);
+    m_sq_free_credits = std::min(m_tx_num_wr-4, old_wr_val);
 
     /* Maximum BF inlining consists of:
      * - CTRL:
