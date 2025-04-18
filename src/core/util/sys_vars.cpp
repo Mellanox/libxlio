@@ -1054,7 +1054,7 @@ void mce_sys_var::get_env_params()
     }
 
     if ((env_ptr = getenv(SYS_VAR_PRINT_REPORT))) {
-        print_report = atoi(env_ptr) ? true : false;
+        print_report = option_3::from_str(env_ptr, MCE_DEFAULT_PRINT_REPORT);
     }
 
     if ((env_ptr = getenv(SYS_VAR_QUICK_START))) {

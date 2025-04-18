@@ -1009,6 +1009,11 @@ void ring_simple::modify_cq_moderation(uint32_t period, uint32_t count)
     priv_ibv_modify_cq_moderation(m_p_cq_mgr_rx->get_ibv_cq_hndl(), period, count);
 }
 
+uint64_t ring_simple::get_rx_cq_out_of_buffer_drop()
+{
+    return m_p_cq_mgr_rx->get_n_rx_drop_counter();
+}
+
 void ring_simple::adapt_cq_moderation()
 {
     if (m_lock_ring_rx.trylock()) {

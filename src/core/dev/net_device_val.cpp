@@ -905,7 +905,15 @@ bool net_device_val::update_active_slaves()
     }
     return 0;
 }
-
+uint64_t net_device_val::get_accumulative_rx_cq_drop_counter()
+{
+    uint64_t accumaltor = 0;
+    std::for_each(m_h_ring_map.begin(), m_h_ring_map.end(),
+                  [&accumaltor](const auto &m_h_ring_map_iter) {
+                      accumaltor += m_h_ring_map_iter.second.first->get_rx_cq_out_of_buffer_drop();
+                  });
+    return accumaltor;
+};
 void net_device_val::update_netvsc_slaves(int if_index, int if_flags)
 {
     slave_data_t *s = nullptr;

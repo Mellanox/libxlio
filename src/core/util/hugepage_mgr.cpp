@@ -192,8 +192,11 @@ void hugepage_mgr::dealloc_hugepages(void *ptr, size_t size)
     }
 }
 
-void hugepage_mgr::print_report(bool short_report /*=false*/)
+void hugepage_mgr::print_report(bool short_report /*=false*/, option_3::mode_t mode_type /*=OFF*/)
 {
+    if (mode_type != option_3::ON) {
+        return;
+    }
     std::lock_guard<decltype(m_lock)> lock(m_lock);
 
     const size_t ONE_MB = 1024U * 1024U;
