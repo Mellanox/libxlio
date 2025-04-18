@@ -79,9 +79,17 @@ runs_on_dockers:
      category: 'tool'
     }
   - {name: 'toolbox', url: 'harbor.mellanox.com/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
-  - {name: 'blackduck', url: 'harbor.mellanox.com/toolbox/blackduck_post_scan:latest', category: 'tool', arch: 'x86_64'}
   - {name: 'header-check', url: 'harbor.mellanox.com/toolbox/header_check:0.0.58', category: 'tool', arch: 'x86_64', tag: '0.0.58'}
 # static tests
+  - {
+     file: '.ci/dockerfiles/Dockerfile.rhel8.6',
+     arch: 'x86_64',
+     name: 'xlio_static.bduck',
+     uri: '$arch/$name',
+     tag: '20250418',
+     build_args: '--no-cache --target bduck',
+     category: 'tool'
+    }
   - {file: '.ci/dockerfiles/Dockerfile.rhel8.6',
      arch: 'x86_64',
      name: 'xlio_static.cppcheck',
@@ -365,23 +373,16 @@ steps:
   - name: Blackduck
     enable: ${do_blackduck}
     containerSelector:
-      - "{name: 'blackduck', category:'tool', variant:1}"
+      - "{name: 'xlio_static.bduck', category:'tool'}"
     agentSelector:
       - "{nodeLabel: 'skip-agent'}"
-    shell: action
-    module: ngci
-    run: NGCIBlackDuckScan
-    args:
-      projectName: "libxlio"
-      projectVersion: "${sha1}"
-      projectSrcPath: "src"
-      attachArtifact: true
-      reportName: "BlackDuck report"
-      scanMode: "source"
-      skipDockerDaemonCheck: true
-      credentialsId: "swx-jenkins3-svc_git-nbu_token"
-    env:
-      SPRING_APPLICATION_JSON: '{"blackduck.url":"https://blackduck.mellanox.com/","blackduck.api.token":"ODMwOWYwMzEtODA2ZC00MzBjLWI1ZDEtNmFiMjBkYzQzMzkwOjNmNjExN2M1LWE2ZmEtNDZlYS1hZjRiLTZlNDgwNjAwOTVjNw=="}'
+    run: |
+      export BLACKDUCK_API_TOKEN="ODMwOWYwMzEtODA2ZC00MzBjLWI1ZDEtNmFiMjBkYzQzMzkwOjNmNjExN2M1LWE2ZmEtNDZlYS1hZjRiLTZlNDgwNjAwOTVjNw=="
+      # WA for possible CI-Demo bug: HPCINFRA-1614
+      if ${do_blackduck} ; then
+        .ci/blackduck_source.sh
+      fi
+    archiveArtifacts: 'logs/'
 
 pipeline_start:
   run: |
