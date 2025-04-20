@@ -1479,8 +1479,7 @@ bool net_device_val::verify_bond_or_eth_qp_creation()
                                           guid_iter->second.front().c_str()) &&
                 check_bond_roce_lag_exist(bond_roce_lag_path, sizeof(bond_roce_lag_path),
                                           guid_iter->second.back().c_str())) {
-                print_roce_lag_warnings(get_ifname_link(), bond_roce_lag_path,
-                                        guid_iter->second.front().c_str(),
+                print_roce_lag_warnings(get_ifname_link(), guid_iter->second.front().c_str(),
                                         guid_iter->second.back().c_str());
             }
         }
@@ -1532,7 +1531,7 @@ bool net_device_val::verify_qp_creation(const char *ifname, enum ibv_qp_type qp_
         nd_logdbg("Cant find ib_ctx for interface %s", base_ifname);
         if (qp_type == IBV_QPT_RAW_PACKET && m_bond != NO_BOND) {
             if (check_bond_roce_lag_exist(bond_roce_lag_path, sizeof(bond_roce_lag_path), ifname)) {
-                print_roce_lag_warnings(get_ifname_link(), bond_roce_lag_path);
+                print_roce_lag_warnings(get_ifname_link());
             } else if ((p_ib_ctx = g_p_ib_ctx_handler_collection->get_ib_ctx(get_ifname_link())) &&
                        strstr(p_ib_ctx->get_ibname(), "bond")) {
                 print_roce_lag_warnings(get_ifname_link());
