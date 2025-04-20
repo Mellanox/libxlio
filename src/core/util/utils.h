@@ -254,9 +254,8 @@ size_t get_vlan_base_name_from_ifname(const char *ifname, char *base_ifname, siz
 /* Upon success - returns the actual address len in bytes; Upon error - returns zero*/
 size_t get_local_ll_addr(const char *ifname, unsigned char *addr, int addr_len, bool is_broadcast);
 
-/* Print warning while RoCE Lag is enabled */
-void print_roce_lag_warnings(const char *interface, char *disable_path = nullptr,
-                             const char *port1 = nullptr, const char *port2 = nullptr);
+void print_roce_lag_warnings(const char *interface, const char *port1 = nullptr,
+                             const char *port2 = nullptr);
 
 /*Print a warning to the user when there was an error registering memory*/
 void print_warning_rlimit_memlock(size_t length, int error);
