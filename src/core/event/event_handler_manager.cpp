@@ -156,12 +156,12 @@ void event_handler_manager::unregister_timers_event_and_delete(timer_handler *ha
     post_new_reg_action(reg_action);
 }
 
-void event_handler_manager::unregister_socket_timer_and_delete(sockinfo_tcp *sock_tcp)
+void event_handler_manager::unregister_socket_and_delete(sockinfo_tcp *sock_tcp)
 {
-    evh_logdbg("Unregistering TCP socket timer: %p", sock_tcp);
+    evh_logdbg("Deleting TCP socket: %p", sock_tcp);
     reg_action_t reg_action;
     memset(&reg_action, 0, sizeof(reg_action));
-    reg_action.type = UNREGISTER_TCP_SOCKET_TIMER_AND_DELETE;
+    reg_action.type = UNREGISTER_SOCKET_AND_DELETE;
     reg_action.info.timer.user_data = sock_tcp;
     post_new_reg_action(reg_action);
 }
@@ -421,8 +421,6 @@ const char *event_handler_manager::reg_action_str(event_action_type_e reg_action
     switch (reg_action_type) {
     case REGISTER_TCP_SOCKET_TIMER:
         return "REGISTER_TCP_SOCKET_TIMER";
-    case UNREGISTER_TCP_SOCKET_TIMER_AND_DELETE:
-        return "UNREGISTER_TCP_SOCKET_TIMER_AND_DELETE";
     case REGISTER_TIMER:
         return "REGISTER_TIMER";
     case UNREGISTER_TIMER:
@@ -441,6 +439,8 @@ const char *event_handler_manager::reg_action_str(event_action_type_e reg_action
         return "REGISTER_COMMAND";
     case UNREGISTER_COMMAND:
         return "UNREGISTER_COMMAND";
+    case UNREGISTER_SOCKET_AND_DELETE:
+        return "UNREGISTER_SOCKET_AND_DELETE";
         BULLSEYE_EXCLUDE_BLOCK_START
     default:
         return "UNKNOWN";
@@ -703,9 +703,9 @@ void event_handler_manager::handle_registration_action(reg_action_t &reg_action)
         sock = reinterpret_cast<sockinfo_tcp *>(reg_action.info.timer.user_data);
         sock->get_tcp_timer_collection()->add_new_timer(sock);
         break;
-    case UNREGISTER_TCP_SOCKET_TIMER_AND_DELETE:
+    case UNREGISTER_SOCKET_AND_DELETE:
         sock = reinterpret_cast<sockinfo_tcp *>(reg_action.info.timer.user_data);
-        sock->get_tcp_timer_collection()->remove_timer(sock);
+        // Just delete the socket without trying to remove from timer collection
         delete sock;
         break;
     case REGISTER_TIMER:
