@@ -594,9 +594,17 @@ void sockinfo_tcp::clean_socket_obj()
     lock_tcp_con();
 
     if (is_cleaned()) {
+        unlock_tcp_con();
         return;
     }
     m_is_cleaned = true;
+
+    // Important: Remove from timer collection WHILE STILL HOLDING THE LOCK
+    // This prevents the timer thread from processing this socket after it's marked for cleanup
+    if (is_timer_registered()) {
+        tcp_timers_collection *p_collection = get_tcp_timer_collection();
+        p_collection->remove_timer(this);
+    }
 
     unlock_tcp_con();
 
@@ -605,7 +613,7 @@ void sockinfo_tcp::clean_socket_obj()
         (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS);
 
     if (p_event_mgr->is_running() && !delegated_timers_exit) {
-        p_event_mgr->unregister_socket_timer_and_delete(this);
+        p_event_mgr->unregister_socket_and_delete(this);
     } else {
         delete this;
     }
