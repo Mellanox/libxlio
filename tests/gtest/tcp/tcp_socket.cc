@@ -9,7 +9,7 @@
 #include "common/sys.h"
 #include "common/base.h"
 #include "tcp_base.h"
-
+#include <thread>
 class tcp_socket : public tcp_base {};
 
 /**
@@ -124,4 +124,29 @@ TEST_F(tcp_socket, ti_2_ipv6only_listen_all)
 
     test_lambda(true);
     test_lambda(false);
+}
+
+/**
+ * @test tcp_socket.ti_3_socket_closed_different_thread_works
+ * @brief
+ *    Test that a socket can be closed after its creator thread terminates
+ * @details
+ *    Creates a socket in a separate thread, then closes it from the main thread
+ *    after the creator thread has terminated. This verifies that socket cleanup
+ *    works correctly across thread boundaries.
+ */
+TEST_F(tcp_socket, ti_3_socket_closed_different_thread_works)
+{
+    int fd = -1;
+
+    std::thread t([&fd]() {
+        fd = socket(m_family, SOCK_STREAM, IPPROTO_IP);
+        EXPECT_LE(0, fd);
+        EXPECT_EQ(errno, EOK);
+    });
+
+    t.join();
+
+    EXPECT_LE(0, fd);
+    close(fd);
 }

@@ -57,7 +57,8 @@ extern global_stats_t g_global_stat_static;
 tcp_timers_collection *g_tcp_timers_collection = nullptr;
 thread_local thread_local_tcp_timers g_thread_local_tcp_timers;
 bind_no_port *g_bind_no_port = nullptr;
-static thread_local lock_dummy t_lock_dummy_socket;
+
+static padded_lock_dummy g_lock_dummy_socket;
 
 /*
  * The following socket options are inherited by a connected TCP socket from the listening socket:
@@ -137,7 +138,7 @@ static lock_base *get_new_tcp_lock()
     return (
         safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS
             ? static_cast<lock_base *>(multilock::create_new_lock(MULTILOCK_RECURSIVE, "tcp_con"))
-            : static_cast<lock_base *>(&t_lock_dummy_socket));
+            : static_cast<lock_base *>(&g_lock_dummy_socket.lock));
 }
 
 inline void sockinfo_tcp::lwip_pbuf_init_custom(mem_buf_desc_t *p_desc)
@@ -594,9 +595,17 @@ void sockinfo_tcp::clean_socket_obj()
     lock_tcp_con();
 
     if (is_cleaned()) {
+        unlock_tcp_con();
         return;
     }
     m_is_cleaned = true;
+
+    // Important: Remove from timer collection WHILE STILL HOLDING THE LOCK
+    // This prevents the timer thread from processing this socket after it's marked for cleanup
+    if (is_timer_registered()) {
+        tcp_timers_collection *p_collection = get_tcp_timer_collection();
+        p_collection->remove_timer(this);
+    }
 
     unlock_tcp_con();
 
@@ -605,7 +614,7 @@ void sockinfo_tcp::clean_socket_obj()
         (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS);
 
     if (p_event_mgr->is_running() && !delegated_timers_exit) {
-        p_event_mgr->unregister_socket_timer_and_delete(this);
+        p_event_mgr->unregister_socket_and_delete(this);
     } else {
         delete this;
     }
