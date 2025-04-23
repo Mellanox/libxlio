@@ -80,6 +80,8 @@ struct xlio_tls_api {
                               const unsigned char *);
     int (*EVP_EncryptUpdate)(EVP_CIPHER_CTX *, unsigned char *, int *, const unsigned char *, int);
     int (*EVP_EncryptFinal_ex)(EVP_CIPHER_CTX *, unsigned char *, int *);
+    const char *(*OpenSSL_version)(int t);
+    unsigned long (*OpenSSL_version_num)();
 };
 
 static struct xlio_tls_api *g_tls_api = nullptr;
@@ -110,12 +112,20 @@ void xlio_tls_api_setup()
     XLIO_TLS_API_FIND(EVP_EncryptInit_ex);
     XLIO_TLS_API_FIND(EVP_EncryptUpdate);
     XLIO_TLS_API_FIND(EVP_EncryptFinal_ex);
+    XLIO_TLS_API_FIND(OpenSSL_version);
+    XLIO_TLS_API_FIND(OpenSSL_version_num);
     if (s_tls_api.EVP_CIPHER_CTX_new && s_tls_api.EVP_CIPHER_CTX_free &&
         s_tls_api.EVP_CIPHER_CTX_reset && s_tls_api.EVP_aes_128_gcm && s_tls_api.EVP_aes_256_gcm &&
         s_tls_api.EVP_DecryptInit_ex && s_tls_api.EVP_DecryptUpdate &&
         s_tls_api.EVP_CIPHER_CTX_ctrl && s_tls_api.EVP_DecryptFinal_ex &&
         s_tls_api.EVP_EncryptInit_ex && s_tls_api.EVP_EncryptUpdate &&
         s_tls_api.EVP_EncryptFinal_ex) {
+        if (s_tls_api.OpenSSL_version) {
+            vlog_printf(VLOG_DEBUG, "Found OpenSSL version: %s\n", s_tls_api.OpenSSL_version(0));
+        } else if (s_tls_api.OpenSSL_version_num) {
+            vlog_printf(VLOG_DEBUG, "Found OpenSSL version: 0x%lx",
+                        s_tls_api.OpenSSL_version_num());
+        }
         g_tls_api = &s_tls_api;
     }
 }
