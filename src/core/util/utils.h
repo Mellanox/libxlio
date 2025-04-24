@@ -51,6 +51,8 @@
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
 #endif /* ARRAY_SIZE */
 
+void non_temporal_copy(void* dst, void * src, size_t size);
+
 /**
  * Check if file type is regular
  */

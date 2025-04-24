@@ -1450,4 +1450,241 @@ const char *xlio_error::what() const throw()
     return formatted_message;
 }
 
-///////////////////////////////////////////
+#if defined(__x86_64__) || defined(_M_X64) || defined(i386) || defined(_M_IX86)
+#if defined(__GNUC__) || defined(__clang__)
+#include <immintrin.h>
+
+#ifdef __AVX512F__
+#define XLIO_NON_TEMPORAL_COPY
+void non_temporal_copy(void* dst, void* src, size_t size)
+{
+    // Check alignment - both pointers must be 32-byte aligned
+    if ((size < 32768) || ((reinterpret_cast<uintptr_t>(dst) & 0x3F) != 0)) {
+        memcpy(dst, src, size);
+        return;
+    }
+
+    __m512i* d = static_cast<__m512i*>(dst);
+    __m512i* s = static_cast<__m512i*>(src);
+
+    while (size >= 2048) {
+        // Load 32 blocks using streaming loads
+        __m512i zmm0  = _mm512_loadu_si512(s + 0);
+        __m512i zmm1  = _mm512_loadu_si512(s + 1);
+        __m512i zmm2  = _mm512_loadu_si512(s + 2);
+        __m512i zmm3  = _mm512_loadu_si512(s + 3);
+        __m512i zmm4  = _mm512_loadu_si512(s + 4);
+        __m512i zmm5  = _mm512_loadu_si512(s + 5);
+        __m512i zmm6  = _mm512_loadu_si512(s + 6);
+        __m512i zmm7  = _mm512_loadu_si512(s + 7);
+        __m512i zmm8  = _mm512_loadu_si512(s + 8);
+        __m512i zmm9  = _mm512_loadu_si512(s + 9);
+        __m512i zmm10 = _mm512_loadu_si512(s + 10);
+        __m512i zmm11 = _mm512_loadu_si512(s + 11);
+        __m512i zmm12 = _mm512_loadu_si512(s + 12);
+        __m512i zmm13 = _mm512_loadu_si512(s + 13);
+        __m512i zmm14 = _mm512_loadu_si512(s + 14);
+        __m512i zmm15 = _mm512_loadu_si512(s + 15);
+        __m512i zmm16 = _mm512_loadu_si512(s + 16);
+        __m512i zmm17 = _mm512_loadu_si512(s + 17);
+        __m512i zmm18 = _mm512_loadu_si512(s + 18);
+        __m512i zmm19 = _mm512_loadu_si512(s + 19);
+        __m512i zmm20 = _mm512_loadu_si512(s + 20);
+        __m512i zmm21 = _mm512_loadu_si512(s + 21);
+        __m512i zmm22 = _mm512_loadu_si512(s + 22);
+        __m512i zmm23 = _mm512_loadu_si512(s + 23);
+        __m512i zmm24 = _mm512_loadu_si512(s + 24);
+        __m512i zmm25 = _mm512_loadu_si512(s + 25);
+        __m512i zmm26 = _mm512_loadu_si512(s + 26);
+        __m512i zmm27 = _mm512_loadu_si512(s + 27);
+        __m512i zmm28 = _mm512_loadu_si512(s + 28);
+        __m512i zmm29 = _mm512_loadu_si512(s + 29);
+        __m512i zmm30 = _mm512_loadu_si512(s + 30);
+        __m512i zmm31 = _mm512_loadu_si512(s + 31);
+
+        // Store 32 blocks using streaming stores
+        _mm512_stream_si512(d + 0, zmm0);
+        _mm512_stream_si512(d + 1, zmm1);
+        _mm512_stream_si512(d + 2, zmm2);
+        _mm512_stream_si512(d + 3, zmm3);
+        _mm512_stream_si512(d + 4, zmm4);
+        _mm512_stream_si512(d + 5, zmm5);
+        _mm512_stream_si512(d + 6, zmm6);
+        _mm512_stream_si512(d + 7, zmm7);
+        _mm512_stream_si512(d + 8, zmm8);
+        _mm512_stream_si512(d + 9, zmm9);
+        _mm512_stream_si512(d + 10, zmm10);
+        _mm512_stream_si512(d + 11, zmm11);
+        _mm512_stream_si512(d + 12, zmm12);
+        _mm512_stream_si512(d + 13, zmm13);
+        _mm512_stream_si512(d + 14, zmm14);
+        _mm512_stream_si512(d + 15, zmm15);
+        _mm512_stream_si512(d + 16, zmm16);
+        _mm512_stream_si512(d + 17, zmm17);
+        _mm512_stream_si512(d + 18, zmm18);
+        _mm512_stream_si512(d + 19, zmm19);
+        _mm512_stream_si512(d + 20, zmm20);
+        _mm512_stream_si512(d + 21, zmm21);
+        _mm512_stream_si512(d + 22, zmm22);
+        _mm512_stream_si512(d + 23, zmm23);
+        _mm512_stream_si512(d + 24, zmm24);
+        _mm512_stream_si512(d + 25, zmm25);
+        _mm512_stream_si512(d + 26, zmm26);
+        _mm512_stream_si512(d + 27, zmm27);
+        _mm512_stream_si512(d + 28, zmm28);
+        _mm512_stream_si512(d + 29, zmm29);
+        _mm512_stream_si512(d + 30, zmm30);
+        _mm512_stream_si512(d + 31, zmm31);
+
+        // Move pointers forward
+        s += 32;
+        d += 32;
+        size -= 2048;
+    }
+
+    // Ensure all streaming stores are completed
+    // Not sure it is really needed (memcpy does it).
+    _mm_sfence();
+
+    // Copy the remaining size
+    if (size > 0) {
+        memcpy(d, s, size);
+    }
+}
+#elif defined(__AVX2__)
+#define XLIO_NON_TEMPORAL_COPY
+void non_temporal_copy(void* dst, void* src, size_t size) {
+    // Check alignment - both pointers must be 32-byte aligned
+    if ((size < 32768) || ((reinterpret_cast<uintptr_t>(dst) & 0x1F) != 0)) {
+        memcpy(dst, src, size);
+        return;
+    }
+
+    __m256i* d = static_cast<__m256i *>(dst);
+    __m256i* s = static_cast<__m256i *>(src);
+
+    while (size >= 512) {
+        // Load 32 blocks using streaming loads
+        __m256i ymm0  = _mm256_loadu_si256(s + 0);
+        __m256i ymm1  = _mm256_loadu_si256(s + 1);
+        __m256i ymm2  = _mm256_loadu_si256(s + 2);
+        __m256i ymm3  = _mm256_loadu_si256(s + 3);
+        __m256i ymm4  = _mm256_loadu_si256(s + 4);
+        __m256i ymm5  = _mm256_loadu_si256(s + 5);
+        __m256i ymm6  = _mm256_loadu_si256(s + 6);
+        __m256i ymm7  = _mm256_loadu_si256(s + 7);
+        __m256i ymm8  = _mm256_loadu_si256(s + 8);
+        __m256i ymm9  = _mm256_loadu_si256(s + 9);
+        __m256i ymm10 = _mm256_loadu_si256(s + 10);
+        __m256i ymm11 = _mm256_loadu_si256(s + 11);
+        __m256i ymm12 = _mm256_loadu_si256(s + 12);
+        __m256i ymm13 = _mm256_loadu_si256(s + 13);
+        __m256i ymm14 = _mm256_loadu_si256(s + 14);
+        __m256i ymm15 = _mm256_loadu_si256(s + 15);
+
+        // Store 32 blocks using streaming stores
+        _mm256_stream_si256(d + 0, ymm0);
+        _mm256_stream_si256(d + 1, ymm1);
+        _mm256_stream_si256(d + 2, ymm2);
+        _mm256_stream_si256(d + 3, ymm3);
+        _mm256_stream_si256(d + 4, ymm4);
+        _mm256_stream_si256(d + 5, ymm5);
+        _mm256_stream_si256(d + 6, ymm6);
+        _mm256_stream_si256(d + 7, ymm7);
+        _mm256_stream_si256(d + 8, ymm8);
+        _mm256_stream_si256(d + 9, ymm9);
+        _mm256_stream_si256(d + 10, ymm10);
+        _mm256_stream_si256(d + 11, ymm11);
+        _mm256_stream_si256(d + 12, ymm12);
+        _mm256_stream_si256(d + 13, ymm13);
+        _mm256_stream_si256(d + 14, ymm14);
+        _mm256_stream_si256(d + 15, ymm15);
+
+        // Move pointers forward
+        s += 16;
+        d += 16;
+        size -= 512;
+    }
+
+    // Ensure all streaming stores are completed
+    _mm_sfence();
+
+    // Copy the remaining size
+    if (size > 0) {
+        memcpy(d, s, size);
+    }
+}
+#elif defined(__SSE2__)
+#define XLIO_NON_TEMPORAL_COPY
+void non_temporal_copy(void* dst, void* src, size_t size) {
+    // For small sizes prefer memcpy.
+    // Check alignment - both pointers must be 16-byte aligned
+    if ((size < 32768) || ((reinterpret_cast<uintptr_t>(dst) & 0xF) != 0)) {
+        memcpy(dst, src, size);
+        return;
+    }
+
+    __m128i* d = static_cast<__m128i*>(dst);
+    __m128i* s = static_cast<__m128i*>(src);
+
+    while (size >= 256) {
+        // Load 32 blocks using streaming loads
+        __m128i xmm0  = _mm_loadu_si128(s + 0);
+        __m128i xmm1  = _mm_loadu_si128(s + 1);
+        __m128i xmm2  = _mm_loadu_si128(s + 2);
+        __m128i xmm3  = _mm_loadu_si128(s + 3);
+        __m128i xmm4  = _mm_loadu_si128(s + 4);
+        __m128i xmm5  = _mm_loadu_si128(s + 5);
+        __m128i xmm6  = _mm_loadu_si128(s + 6);
+        __m128i xmm7  = _mm_loadu_si128(s + 7);
+        __m128i xmm8  = _mm_loadu_si128(s + 8);
+        __m128i xmm9  = _mm_loadu_si128(s + 9);
+        __m128i xmm10 = _mm_loadu_si128(s + 10);
+        __m128i xmm11 = _mm_loadu_si128(s + 11);
+        __m128i xmm12 = _mm_loadu_si128(s + 12);
+        __m128i xmm13 = _mm_loadu_si128(s + 13);
+        __m128i xmm14 = _mm_loadu_si128(s + 14);
+        __m128i xmm15 = _mm_loadu_si128(s + 15);
+
+        // Store 32 blocks using streaming stores
+        _mm_stream_si128(d + 0, xmm0);
+        _mm_stream_si128(d + 1, xmm1);
+        _mm_stream_si128(d + 2, xmm2);
+        _mm_stream_si128(d + 3, xmm3);
+        _mm_stream_si128(d + 4, xmm4);
+        _mm_stream_si128(d + 5, xmm5);
+        _mm_stream_si128(d + 6, xmm6);
+        _mm_stream_si128(d + 7, xmm7);
+        _mm_stream_si128(d + 8, xmm8);
+        _mm_stream_si128(d + 9, xmm9);
+        _mm_stream_si128(d + 10, xmm10);
+        _mm_stream_si128(d + 11, xmm11);
+        _mm_stream_si128(d + 12, xmm12);
+        _mm_stream_si128(d + 13, xmm13);
+        _mm_stream_si128(d + 14, xmm14);
+        _mm_stream_si128(d + 15, xmm15);
+
+        // Move pointers forward
+        s += 16;
+        d += 16;
+        size -= 256;
+    }
+
+    // Ensure all streaming stores are completed
+    _mm_sfence();
+
+    // Copy the remaining size.
+    // For small sizes memcpy will not emit another fence.
+    if (size > 0) {
+        memcpy(d, s, size);
+    }
+}
+#endif
+#endif
+#endif
+
+#ifndef XLIO_NON_TEMPORAL_COPY
+void non_temporal_copy(void* dst, void* src, size_t size) {
+    memcpy(dst, src, size);
+}
+#endif

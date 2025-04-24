@@ -1435,14 +1435,14 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
     while (buf && sndbuf > 0) {
         curr_buf_left = buf->sz_buffer - buf_offset;
         if (curr_buf_left > curr_iov_left) {
-            memcpy(buf->p_buffer + buf_offset,
+            non_temporal_copy(buf->p_buffer + buf_offset,
                    reinterpret_cast<char *>(p_iov->iov_base) + p_iov->iov_len - curr_iov_left, curr_iov_left);
             sent += curr_iov_left;
             sndbuf -= curr_iov_left;
             buf_offset += curr_iov_left;
             curr_iov_left = 0;
         } else {
-            memcpy(buf->p_buffer + buf_offset,
+            non_temporal_copy(buf->p_buffer + buf_offset,
                    reinterpret_cast<char *>(p_iov->iov_base) + p_iov->iov_len - curr_iov_left, curr_buf_left);
             sent += curr_buf_left;
             sndbuf -= curr_buf_left;
