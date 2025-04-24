@@ -18,6 +18,7 @@ kubernetes:
 credentials:
   - {credentialsId: 'media_coverity_credentials', usernameVariable: 'XLIO_COV_USER', passwordVariable: 'XLIO_COV_PASSWORD'}
   - {credentialsId: 'mellanox_github_credentials', usernameVariable: 'MELLANOX_GH_USER', passwordVariable: 'MELLANOX_GH_TOKEN'}
+  - {credentialsId: 'blackduck_api_token', type: 'string', variable: 'BLACKDUCK_API_TOKEN'}
 
 volumes:
   - {mountPath: /hpc/local/bin, hostPath: /hpc/local/bin}
@@ -384,12 +385,12 @@ steps:
     agentSelector:
       - "{nodeLabel: 'skip-agent'}"
     run: |
-      export BLACKDUCK_API_TOKEN="ODMwOWYwMzEtODA2ZC00MzBjLWI1ZDEtNmFiMjBkYzQzMzkwOjNmNjExN2M1LWE2ZmEtNDZlYS1hZjRiLTZlNDgwNjAwOTVjNw=="
       # WA for possible CI-Demo bug: HPCINFRA-1614
       if ${do_blackduck} ; then
         .ci/blackduck_source.sh
       fi
     archiveArtifacts: 'logs/'
+    credentialsId: 'blackduck_api_token'
 
 pipeline_start:
   run: |
