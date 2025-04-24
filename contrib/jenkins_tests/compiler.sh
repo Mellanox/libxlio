@@ -30,6 +30,9 @@ for compiler in $compiler_list; do
     [ ! -z "$module" ] && module unload "$module"
     cd ${compiler_dir}
     test_id=$((test_id+1))
+    pushd ${WORKSPACE}/third_party/json-c
+    make distclean
+    popd
 done
 
 echo "[${0##*/}]..................exit code = $rc"

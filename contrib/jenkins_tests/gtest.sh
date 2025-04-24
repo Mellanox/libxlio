@@ -126,6 +126,11 @@ rc=$(($rc+$?))
 eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=keep_alive* --gtest_output=xml:${WORKSPACE}/${prefix}/test-keepalive_ipv6.xml"
 rc=$(($rc+$?))
 
+# Verify New Config with keep_alive tests
+echo "{}" > /tmp/test.json
+eval "${sudo_cmd} $timeout_exe env XLIO_USE_NEW_CONFIG=1 XLIO_CONFIG_FILE=/tmp/test.json LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=keep_alive* --gtest_output=xml:${WORKSPACE}/${prefix}/test-keepalive_ipv4.xml"
+rc=$(($rc+$?))
+
 eval "${sudo_cmd} pkill -9 ${prj_service} 2>/dev/null || true"
 
 set -eE

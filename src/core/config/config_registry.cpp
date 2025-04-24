@@ -15,7 +15,7 @@
 
 static const char *get_config_path()
 {
-    const char *custom_path = std::getenv(config_strings::env::XLIO_CUSTOM_CONFIG_FILE);
+    const char *custom_path = std::getenv(config_strings::env::XLIO_CONFIG_FILE);
     return custom_path ? custom_path : config_strings::paths::DEFAULT_CONFIG_FILE;
 }
 
@@ -44,6 +44,11 @@ config_registry::config_registry(std::queue<std::unique_ptr<loader>> &&value_loa
     initialize_registry(std::move(value_loaders), std::move(descriptor_provider));
 }
 
+std::vector<std::string> config_registry::get_sources() const
+{
+    return m_sources;
+}
+
 void config_registry::initialize_registry(std::queue<std::unique_ptr<loader>> &&value_loaders,
                                           std::unique_ptr<descriptor_provider> descriptor_provider)
 {
@@ -57,6 +62,7 @@ void config_registry::initialize_registry(std::queue<std::unique_ptr<loader>> &&
         std::map<std::string, std::experimental::any> loaded_data =
             value_loaders.front()->load_all();
         aggregated_config_data.insert(loaded_data.begin(), loaded_data.end());
+        m_sources.push_back(value_loaders.front()->source());
         value_loaders.pop();
     }
 

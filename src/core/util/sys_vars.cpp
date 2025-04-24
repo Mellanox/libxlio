@@ -20,6 +20,7 @@
 #include <sys/stat.h>
 #include <sys/utsname.h>
 #include <time.h>
+#include <numeric>
 
 #include "core/dev/buffer_pool.h"
 #include "core/dev/ib_ctx_handler_collection.h"
@@ -52,12 +53,12 @@
 #include "core/config/loaders/json_loader.h"
 
 template <typename T>
-static void set_value_from_registry(T &key, const std::string &name,
-                                    const config_registry &registry);
+typename std::enable_if<std::is_enum<T>::value, void>::type set_value_from_registry_if_exists(
+    T &key, const std::string &name, const config_registry &registry);
 
 template <typename T>
-static void set_value_from_registry_if_exists(T &key, const std::string &name,
-                                              const config_registry &registry);
+typename std::enable_if<!std::is_enum<T>::value, void>::type set_value_from_registry_if_exists(
+    T &key, const std::string &name, const config_registry &registry);
 
 void check_netperf_flags();
 
@@ -1104,7 +1105,7 @@ void mce_sys_var::legacy_get_env_params()
         read_env_variable_with_pid(stats_shmem_dirname, sizeof(stats_shmem_dirname), env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TRANSPORT_CONTROL))) {
+    if ((env_ptr = getenv(SYS_VAR_CONF_FILENAME))) {
         read_env_variable_with_pid(transport_control, sizeof(transport_control), env_ptr);
     }
 
@@ -1874,25 +1875,41 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
     memset(stats_shmem_dirname, 0, sizeof(stats_shmem_dirname));
     memset(service_notify_dir, 0, sizeof(service_notify_dir));
 
-    strcpy(stats_filename,
-           registry.get_default_value<std::string>("observability.stats.file_path").c_str());
-    strcpy(service_notify_dir,
-           registry.get_default_value<std::string>("observability.daemon.dir").c_str());
-    strcpy(stats_shmem_dirname,
-           registry.get_default_value<std::string>("observability.stats.shmem_dir").c_str());
+    strncpy(stats_filename,
+            registry.get_default_value<std::string>("observability.stats.file_path").c_str(),
+            sizeof(stats_filename) - 1);
+    stats_filename[sizeof(stats_filename) - 1] = '\0';
+    strncpy(service_notify_dir, registry.get_default_value<std::string>("core.daemon.dir").c_str(),
+            sizeof(service_notify_dir) - 1);
+    service_notify_dir[sizeof(service_notify_dir) - 1] = '\0';
+
+    strncpy(stats_shmem_dirname,
+            registry.get_default_value<std::string>("observability.stats.shmem_dir").c_str(),
+            sizeof(stats_shmem_dirname) - 1);
+    stats_shmem_dirname[sizeof(stats_shmem_dirname) - 1] = '\0';
+
     const std::string net_offload_transport_control =
         transport_control_to_legacy(registry.get_value<std::vector<std::experimental::any>>(
-            "applications.acceleration_control.transport_control"));
-    strcpy(transport_control, net_offload_transport_control.c_str());
-    strcpy(app_id,
-           registry.get_default_value<std::string>("applications.acceleration_control.app_id")
-               .c_str());
-    strcpy(internal_thread_cpuset,
-           registry.get_default_value<std::string>("performance.threading.cpuset").c_str());
-    strcpy(internal_thread_affinity_str,
-           registry.get_default_value<std::string>("performance.threading.cpu_affinity").c_str());
+            "acceleration_control.transport_control"));
+    strncpy(transport_control, net_offload_transport_control.c_str(),
+            sizeof(transport_control) - 1);
+    transport_control[sizeof(transport_control) - 1] = '\0';
 
-    service_enable = registry.get_default_value<bool>("observability.daemon.enable");
+    strncpy(app_id, registry.get_default_value<std::string>("acceleration_control.app_id").c_str(),
+            sizeof(app_id) - 1);
+    app_id[sizeof(app_id) - 1] = '\0';
+
+    strncpy(internal_thread_cpuset,
+            registry.get_default_value<std::string>("performance.threading.cpuset").c_str(),
+            sizeof(internal_thread_cpuset) - 1);
+    internal_thread_cpuset[sizeof(internal_thread_cpuset) - 1] = '\0';
+
+    strncpy(internal_thread_affinity_str,
+            registry.get_default_value<std::string>("performance.threading.cpu_affinity").c_str(),
+            sizeof(internal_thread_affinity_str) - 1);
+    internal_thread_affinity_str[sizeof(internal_thread_affinity_str) - 1] = '\0';
+
+    service_enable = registry.get_default_value<bool>("core.daemon.enable");
 
     print_report = registry.get_default_value<bool>("observability.exit_report");
     quick_start = registry.get_default_value<bool>("core.quick_init");
@@ -1919,7 +1936,7 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
 
     tcp_max_syn_rate = registry.get_default_value<int>("network.protocols.tcp.max_syn_rate");
 
-    zc_cache_threshold = registry.get_default_value<int64_t>("applications.api.sendfile_limit");
+    zc_cache_threshold = registry.get_default_value<int64_t>("core.syscall.sendfile_limit");
     tx_buf_size = registry.get_default_value<uint32_t>("performance.buffers.tx.buf_size");
     tcp_nodelay_treshold =
         registry.get_default_value<uint32_t>("network.protocols.tcp.nodelay.byte_threshold");
@@ -2001,20 +2018,20 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
         registry.get_default_value<uint32_t>("performance.polling.select.skip_os");
 
     cq_moderation_enable = registry.get_default_value<bool>(
-        "performance.completion_queue.interrupt_moderation.enable");
+        "performance.completion_queue.interrupt_moderation.manual_moderation.enable");
     cq_moderation_count = registry.get_default_value<uint32_t>(
-        "performance.completion_queue.interrupt_moderation.packet_count");
+        "performance.completion_queue.interrupt_moderation.manual_moderation.packet_count");
     cq_moderation_period_usec = registry.get_default_value<uint32_t>(
-        "performance.completion_queue.interrupt_moderation.period_usec");
+        "performance.completion_queue.interrupt_moderation.manual_moderation.period_usec");
     cq_aim_max_count = registry.get_default_value<uint32_t>(
-        "performance.completion_queue.interrupt_moderation.adaptive_count");
+        "performance.completion_queue.interrupt_moderation.manual_moderation.adaptive_count");
     cq_aim_max_period_usec = registry.get_default_value<uint32_t>(
-        "performance.completion_queue.interrupt_moderation.adaptive_period_usec");
+        "performance.completion_queue.interrupt_moderation.manual_moderation.adaptive_period_usec");
     cq_aim_interval_msec = registry.get_default_value<uint32_t>(
-        "performance.completion_queue.interrupt_moderation.adaptive_change_"
+        "performance.completion_queue.interrupt_moderation.manual_moderation.adaptive_change_"
         "frequency_msec");
     cq_aim_interrupts_rate_per_sec = registry.get_default_value<uint32_t>(
-        "performance.completion_queue.interrupt_moderation.interrupt_per_sec");
+        "performance.completion_queue.interrupt_moderation.manual_moderation.interrupt_per_sec");
 
     cq_poll_batch_max =
         registry.get_default_value<uint32_t>("performance.polling.rx_buffer_max_count");
@@ -2024,12 +2041,12 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
         "performance.completion_queue.periodic_drain_max_cqes");
     cq_keep_qp_full = registry.get_default_value<bool>("performance.completion_queue.keep_full");
     max_tso_sz = registry.get_default_value<int64_t>("hardware_features.tcp.tso.max_size");
-    user_huge_page_size = registry.get_default_value<int64_t>("applications.api.hugepages.size");
-    internal_thread_arm_cq_enabled =
-        registry.get_default_value<bool>("performance.completion_queue.interrupt_per_packet");
+    user_huge_page_size = registry.get_default_value<int64_t>("extra_api.hugepage_size");
+    internal_thread_arm_cq_enabled = registry.get_default_value<bool>(
+        "performance.completion_queue.interrupt_moderation.interrupt_per_packet");
 
     offloaded_sockets =
-        registry.get_default_value<bool>("applications.acceleration_control.default_acceleration");
+        registry.get_default_value<bool>("acceleration_control.default_acceleration");
     timer_resolution_msec =
         registry.get_default_value<int>("performance.threading.handlers.timer_msec");
     tcp_timer_resolution_msec = registry.get_default_value<int>("network.protocols.tcp.timer_msec");
@@ -2056,7 +2073,7 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
     heap_metadata_block =
         registry.get_default_value<int64_t>("core.resources.heap_metadata_block_size");
     hugepage_size = registry.get_default_value<int64_t>("core.resources.hugepages.size");
-    enable_socketxtreme = registry.get_default_value<bool>("applications.api.socketextreme");
+    enable_socketxtreme = registry.get_default_value<bool>("extra_api.socketextreme");
     enable_tso = static_cast<decltype(enable_tso)>(
         registry.get_default_value<int>("hardware_features.tcp.tso.enable"));
 #ifdef DEFINED_UTLS
@@ -2126,8 +2143,7 @@ void mce_sys_var::configure_socketxtreme(const config_registry &registry)
     /* Configure enable_socketxtreme as first because
      * this mode has some special predefined parameter limitations
      */
-    set_value_from_registry_if_exists(enable_socketxtreme, "applications.api.socketextreme",
-                                      registry);
+    set_value_from_registry_if_exists(enable_socketxtreme, "extra_api.socketextreme", registry);
     if (enable_socketxtreme) {
         /* Set following parameters as default for SocketXtreme mode */
         gro_streams_max = 0;
@@ -2352,13 +2368,12 @@ void mce_sys_var::configure_observability(const config_registry &registry)
             registry.get_value<std::string>("observability.stats.shmem_dir").c_str());
     }
 
-    if (registry.value_exists("observability.daemon.dir")) {
-        read_env_variable_with_pid(
-            service_notify_dir, sizeof(service_notify_dir),
-            registry.get_value<std::string>("observability.daemon.dir").c_str());
+    if (registry.value_exists("core.daemon.dir")) {
+        read_env_variable_with_pid(service_notify_dir, sizeof(service_notify_dir),
+                                   registry.get_value<std::string>("core.daemon.dir").c_str());
     }
 
-    set_value_from_registry_if_exists(service_enable, "observability.daemon.enable", registry);
+    set_value_from_registry_if_exists(service_enable, "core.daemon.enable", registry);
 
     if (HYPER_MSHV == hypervisor && !service_enable) {
         service_enable = true;
@@ -2376,10 +2391,10 @@ void mce_sys_var::configure_observability(const config_registry &registry)
 
     set_value_from_registry_if_exists(log_colors, "observability.log.colors", registry);
 
-    if (registry.value_exists("applications.acceleration_control.app_id")) {
+    if (registry.value_exists("acceleration_control.app_id")) {
         read_env_variable_with_pid(
             app_id, sizeof(app_id),
-            registry.get_value<std::string>("applications.acceleration_control.app_id").c_str());
+            registry.get_value<std::string>("acceleration_control.app_id").c_str());
     }
 
     set_value_from_registry_if_exists(handle_sigintr, "core.signals.sigint.exit", registry);
@@ -2402,8 +2417,7 @@ void mce_sys_var::configure_buffer_allocation(const config_registry &registry)
     set_value_from_registry_if_exists(strq_strides_compensation_level,
                                       "hardware_features.striding_rq.spare_strides", registry);
 
-    set_value_from_registry_if_exists(zc_cache_threshold, "applications.api.sendfile_limit",
-                                      registry);
+    set_value_from_registry_if_exists(zc_cache_threshold, "core.syscall.sendfile_limit", registry);
 
     set_value_from_registry_if_exists(tx_buf_size, "performance.buffers.tx.buf_size", registry);
 
@@ -2601,10 +2615,12 @@ void mce_sys_var::configure_completion_queue(const config_registry &registry)
     }
 
     set_value_from_registry_if_exists(
-        cq_moderation_enable, "performance.completion_queue.interrupt_moderation.enable", registry);
+        cq_moderation_enable,
+        "performance.completion_queue.interrupt_moderation.manual_moderation.enable", registry);
 
     set_value_from_registry_if_exists(
-        cq_moderation_count, "performance.completion_queue.interrupt_moderation.packet_count",
+        cq_moderation_count,
+        "performance.completion_queue.interrupt_moderation.manual_moderation.packet_count",
         registry);
 
     uint32_t max_cq_moderation_count =
@@ -2614,11 +2630,13 @@ void mce_sys_var::configure_completion_queue(const config_registry &registry)
     }
 
     set_value_from_registry_if_exists(
-        cq_moderation_period_usec, "performance.completion_queue.interrupt_moderation.period_usec",
+        cq_moderation_period_usec,
+        "performance.completion_queue.interrupt_moderation.manual_moderation.period_usec",
         registry);
 
     set_value_from_registry_if_exists(
-        cq_aim_max_count, "performance.completion_queue.interrupt_moderation.adaptive_count",
+        cq_aim_max_count,
+        "performance.completion_queue.interrupt_moderation.manual_moderation.adaptive_count",
         registry);
 
     uint32_t max_cq_aim_max_count =
@@ -2627,53 +2645,60 @@ void mce_sys_var::configure_completion_queue(const config_registry &registry)
         cq_aim_max_count = max_cq_aim_max_count;
     }
 
-    set_value_from_registry_if_exists(cq_aim_max_period_usec,
-                                      "performance.completion_queue.interrupt_moderation."
-                                      "adaptive_period_usec",
-                                      registry);
+    set_value_from_registry_if_exists(
+        cq_aim_max_period_usec,
+        "performance.completion_queue.interrupt_moderation.manual_moderation."
+        "adaptive_period_usec",
+        registry);
 
-    set_value_from_registry_if_exists(cq_aim_interval_msec,
-                                      "performance.completion_queue.interrupt_moderation."
-                                      "adaptive_change_frequency_msec",
-                                      registry);
+    set_value_from_registry_if_exists(
+        cq_aim_interval_msec,
+        "performance.completion_queue.interrupt_moderation.manual_moderation."
+        "adaptive_change_frequency_msec",
+        registry);
 
     if (!cq_moderation_enable) {
         cq_aim_interval_msec = MCE_CQ_ADAPTIVE_MODERATION_DISABLED;
     }
 
-    set_value_from_registry_if_exists(cq_aim_interrupts_rate_per_sec,
-                                      "performance.completion_queue.interrupt_moderation."
-                                      "interrupt_per_sec",
-                                      registry);
+    set_value_from_registry_if_exists(
+        cq_aim_interrupts_rate_per_sec,
+        "performance.completion_queue.interrupt_moderation.manual_moderation."
+        "interrupt_per_sec",
+        registry);
 
 #else
-    if (registry.value_exists("performance.completion_queue.interrupt_moderation.enable")) {
+    if (registry.value_exists(
+            "performance.completion_queue.interrupt_moderation.manual_moderation.enable")) {
         vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
                     SYS_VAR_CQ_MODERATION_ENABLE);
     }
-    if (registry.value_exists("performance.completion_queue.interrupt_moderation.packet_count")) {
+    if (registry.value_exists(
+            "performance.completion_queue.interrupt_moderation.manual_moderation.packet_count")) {
         vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
                     SYS_VAR_CQ_MODERATION_COUNT);
     }
-    if (registry.value_exists("performance.completion_queue.interrupt_moderation.period_usec")) {
+    if (registry.value_exists(
+            "performance.completion_queue.interrupt_moderation.manual_moderation.period_usec")) {
         vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
                     SYS_VAR_CQ_MODERATION_PERIOD_USEC);
     }
-    if (registry.value_exists("performance.completion_queue.interrupt_moderation.adaptive_count")) {
+    if (registry.value_exists(
+            "performance.completion_queue.interrupt_moderation.manual_moderation.adaptive_count")) {
         vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
                     SYS_VAR_CQ_AIM_MAX_COUNT);
     }
-    if (registry.value_exists("performance.completion_queue.interrupt_moderation."
+    if (registry.value_exists("performance.completion_queue.interrupt_moderation.manual_moderation."
                               "adaptive_period_usec")) {
         vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
                     SYS_VAR_CQ_AIM_MAX_PERIOD_USEC);
     }
-    if (registry.value_exists("performance.completion_queue.interrupt_moderation."
+    if (registry.value_exists("performance.completion_queue.interrupt_moderation.manual_moderation."
                               "adaptive_change_frequency_msec")) {
         vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
                     SYS_VAR_CQ_AIM_INTERVAL_MSEC);
     }
-    if (registry.value_exists("performance.completion_queue.interrupt_moderation."
+    if (registry.value_exists("performance.completion_queue.interrupt_moderation.manual_moderation."
                               "interrupt_per_sec")) {
         vlog_printf(VLOG_WARNING, "'%s' is not supported on this environment\n",
                     SYS_VAR_CQ_AIM_INTERRUPTS_RATE_PER_SEC);
@@ -2710,15 +2735,15 @@ void mce_sys_var::configure_completion_queue(const config_registry &registry)
 
 void mce_sys_var::configure_thread_affinity(const config_registry &registry)
 {
-    if (registry.value_exists("applications.api.hugepages.size")) {
-        user_huge_page_size = registry.get_value<int64_t>("applications.api.hugepages.size");
+    if (registry.value_exists("extra_api.hugepage_size")) {
+        user_huge_page_size = registry.get_value<int64_t>("extra_api.hugepage_size");
         if (user_huge_page_size == 0) {
             user_huge_page_size = g_hugepage_mgr.get_default_hugepage();
         }
     }
 
-    set_value_from_registry_if_exists(
-        offloaded_sockets, "applications.acceleration_control.default_acceleration", registry);
+    set_value_from_registry_if_exists(offloaded_sockets,
+                                      "acceleration_control.default_acceleration", registry);
 
     set_value_from_registry_if_exists(timer_resolution_msec,
                                       "performance.threading.handlers.timer_msec", registry);
@@ -2796,9 +2821,10 @@ void mce_sys_var::configure_memory_limits(const config_registry &registry)
         tcp_timer_resolution_msec = timer_resolution_msec;
     }
 
-    set_value_from_registry_if_exists(internal_thread_arm_cq_enabled,
-                                      "performance.completion_queue.interrupt_per_packet",
-                                      registry);
+    set_value_from_registry_if_exists(
+        internal_thread_arm_cq_enabled,
+        "performance.completion_queue.interrupt_moderation.manual_moderation.interrupt_per_packet",
+        registry);
 
     if (registry.value_exists("performance.threading.cpuset")) {
         snprintf(internal_thread_cpuset, FILENAME_MAX, "%s",
@@ -2987,6 +3013,16 @@ void mce_sys_var::apply_config_from_registry()
 {
     config_registry registry;
 
+    std::string sources;
+    const auto &source_list = registry.get_sources();
+    if (!source_list.empty()) {
+        sources = std::accumulate(
+            std::next(source_list.begin()), source_list.end(), source_list.front(),
+            [](const std::string &a, const std::string &b) { return a + ", " + b; });
+    }
+
+    vlog_printf(VLOG_INFO, "Config sources: %s\n", sources.c_str());
+
     initialize_base_variables(registry);
     read_hypervisor_info();
 
@@ -3110,18 +3146,22 @@ void set_env_params()
     }
 }
 
+// Generic implementation for non-integer types
 template <typename T>
-static void set_value_from_registry(T &key, const std::string &name,
-                                    const config_registry &registry)
-{
-    key = registry.get_value<T>(name);
-}
-
-template <typename T>
-static void set_value_from_registry_if_exists(T &key, const std::string &name,
-                                              const config_registry &registry)
+typename std::enable_if<!std::is_enum<T>::value, void>::type set_value_from_registry_if_exists(
+    T &key, const std::string &name, const config_registry &registry)
 {
     if (registry.value_exists(name)) {
         key = registry.get_value<T>(name);
+    }
+}
+
+template <typename T>
+typename std::enable_if<std::is_enum<T>::value, void>::type set_value_from_registry_if_exists(
+    T &key, const std::string &name, const config_registry &registry)
+{
+    if (registry.value_exists(name)) {
+        int temp = registry.get_value<int>(name);
+        key = static_cast<T>(temp);
     }
 }

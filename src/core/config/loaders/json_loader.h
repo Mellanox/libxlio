@@ -11,13 +11,31 @@
 #include <map>
 #include <string>
 
+/**
+ * @brief Loads configuration from JSON files
+ *
+ * Parses JSON configuration files and extracts parameter values,
+ * handling nested objects with dot notation.
+ */
 class json_loader : public loader {
 public:
-    explicit json_loader(const char *json_string);
+    /**
+     * @brief Constructor with JSON file path
+     * @param file_path Path to the JSON configuration file
+     */
+    explicit json_loader(const char *file_path);
+
+    /**
+     * @brief Loads all configuration values from the JSON file
+     * @return Map of configuration keys to their values
+     */
     std::map<std::string, std::experimental::any> load_all() & override;
 
 private:
+    /**
+     * @brief Recursively processes a JSON object
+     * @param prefix Key prefix for nested values
+     * @param obj JSON object to process
+     */
     void process_json_object(const std::string &prefix, json_object *obj);
-
-    std::string m_file_path;
 };

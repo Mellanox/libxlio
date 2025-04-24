@@ -84,11 +84,11 @@ static std::experimental::any to_any_value(json_object *obj)
 }
 
 json_loader::json_loader(const char *file_path)
-    : m_file_path(file_path)
+    : loader(file_path)
 {
-    std::ifstream ifs(m_file_path.c_str());
+    std::ifstream ifs(m_source.c_str());
     if (!ifs.good()) {
-        throw_xlio_exception("Cannot open file: " + m_file_path);
+        throw_xlio_exception("Cannot open file: " + m_source);
     }
 }
 
@@ -98,15 +98,15 @@ std::map<std::string, std::experimental::any> json_loader::load_all() &
         return m_data;
     }
 
-    json_object *raw_obj = json_object_from_file(m_file_path.c_str());
+    json_object *raw_obj = json_object_from_file(m_source.c_str());
     if (!raw_obj) {
-        throw_xlio_exception("Failed to parse JSON file: " + m_file_path);
+        throw_xlio_exception("Failed to parse JSON file: " + m_source);
     }
 
     json_object_handle root_obj(raw_obj);
 
     if (json_object_get_type(root_obj.get()) != json_type_object) {
-        throw_xlio_exception("Top-level JSON is not an object: " + m_file_path);
+        throw_xlio_exception("Top-level JSON is not an object: " + m_source);
     }
 
     process_json_object(config_strings::misc::EMPTY_STRING, root_obj.get());

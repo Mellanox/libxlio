@@ -41,6 +41,7 @@ eval "csgrep --quiet --event 'error|warning' \
 	csgrep --invert-match --checker CLANG_WARNING --event \"warning\[deadcode.DeadStores\]\" | \
 	csgrep --invert-match --checker COMPILER_WARNING --event \"warning\[-Woverloaded-virtual\]\" | \
 	csgrep --invert-match --checker COMPILER_WARNING --event \"warning\[-Wformat-nonliteral\]\" | \
+	csgrep --invert-match --checker CLANG_WARNING --event \"warning\[unix.Malloc\]\" | \
 	csgrep --mode=grep --invert-match --event 'internal warning' --prune-events=1 | \
 	cssort --key=path > ${csbuild_dir}/csbuild.err 2>&1 \
 	"

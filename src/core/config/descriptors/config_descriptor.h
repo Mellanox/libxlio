@@ -9,14 +9,37 @@
 #include "parameter_descriptor.h"
 #include <map>
 
+/**
+ * @brief Collection of parameter descriptors
+ *
+ * Contains a mapping of parameter names to their descriptors.
+ * Used to store metadata about all configuration parameters.
+ */
 class config_descriptor {
 public:
+    /**
+     * @brief Default constructor
+     */
     explicit config_descriptor() = default;
-    // Retrieves descriptor by key, throws if not found
+
+    /**
+     * @brief Gets a parameter descriptor by key
+     * @param key Parameter name
+     * @return Parameter descriptor
+     * @throws xlio_exception If parameter not found
+     */
     parameter_descriptor get_parameter(const std::string &key) const;
+
+    /**
+     * @brief Sets a parameter descriptor
+     * @param key Parameter name
+     * @param descriptor Descriptor for the parameter
+     */
     void set_parameter(const std::string &key, parameter_descriptor &&descriptor);
 
 private:
-    // A map from parameter name to its descriptor. available to providers to fill
+    /**
+     * @brief Map from parameter name to its descriptor
+     */
     std::map<std::string, parameter_descriptor> parameter_map;
 };

@@ -7,10 +7,22 @@
 #pragma once
 #include "core/config/descriptors/config_descriptor.h"
 
+/**
+ * @brief Interface for providing parameter descriptors
+ *
+ * Abstract base class for providers that load parameter descriptors
+ * from various sources (e.g., JSON schema).
+ */
 class descriptor_provider {
 public:
+    /**
+     * @brief Virtual destructor
+     */
     virtual ~descriptor_provider() = default;
 
-    // The interface requires a config_descriptor object to be returned.
+    /**
+     * @brief Loads parameter descriptors from a source
+     * @return Configuration descriptor containing all parameter descriptors
+     */
     virtual config_descriptor load_descriptors() = 0;
 };
