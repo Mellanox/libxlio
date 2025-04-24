@@ -195,7 +195,6 @@ AC_CHECK_SIZEOF([int64_t], [], [#include <stdint.h>])
 AC_CONFIG_FILES([
 Makefile
 json-c.pc
-tests/Makefile
 json-c-uninstalled.pc
 ])
 

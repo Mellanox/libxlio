@@ -1,17 +1,4 @@
-#ACLOCAL_AMFLAGS = -I autoconf-archive/m4
-
-EXTRA_DIST = README.md README.html
-EXTRA_DIST += config.h.win32
-EXTRA_DIST += Doxyfile
-EXTRA_DIST += issues_closed_for_0.13.md
-
 AM_CFLAGS = -Wno-error -Wno-unused-parameter -Wno-unused-function -D_GNU_SOURCE
-
-# Disable dist-hook when building as part of another project
-#dist-hook:
-#	test -d "$(distdir)/doc" || mkdir "$(distdir)/doc"
-#	chmod -R u+w "$(distdir)/doc"
-#	cd "$(distdir)" && doxygen
 
 SUBDIRS = .
 
@@ -21,8 +8,33 @@ noinst_LTLIBRARIES = libjson-c.la
 #pkgconfigdir = $(libdir)/pkgconfig
 #pkgconfig_DATA = json-c.pc
 
-libjson_cincludedir = $(includedir)/json-c
-libjson_cinclude_HEADERS = \
+# Comment out header installation
+#libjson_cincludedir = $(includedir)/json-c
+#libjson_cinclude_HEADERS = \
+#	arraylist.h \
+#	bits.h \
+#	debug.h \
+#	json.h \
+#	json_c_version.h \
+#	json_config.h \
+#	json_inttypes.h \
+#	json_object.h \
+#	json_object_iterator.h \
+#	json_pointer.h \
+#	json_tokener.h \
+#	json_util.h \
+#	json_visit.h \
+#	linkhash.h \
+#	printbuf.h
+
+noinst_HEADERS=\
+	json_object_private.h \
+	math_compat.h \
+	strdup_compat.h \
+	snprintf_compat.h \
+	vasprintf_compat.h \
+	random_seed.h \
+	strerror_override.h \
 	arraylist.h \
 	bits.h \
 	debug.h \
@@ -39,16 +51,7 @@ libjson_cinclude_HEADERS = \
 	linkhash.h \
 	printbuf.h
 
-noinst_HEADERS=\
-	json_object_private.h \
-	math_compat.h \
-	strdup_compat.h \
-	snprintf_compat.h \
-	vasprintf_compat.h \
-	random_seed.h \
-	strerror_override.h
-
-libjson_c_la_LDFLAGS = -no-undefined
+libjson_c_la_LDFLAGS = -no-undefined -no-install
 
 libjson_c_la_SOURCES = \
 	arraylist.c \
@@ -107,18 +110,3 @@ really-clean:
 uninstall-local:
 	rm -rf "$(DESTDIR)@includedir@/json-c"
 	rm -f "$(DESTDIR)@includedir@/json"
-
-ANDROID_CFLAGS = -I$(top_srcdir) -DHAVE_CONFIG_H
-
-Android.mk: Makefile.am
-	androgenizer -:PROJECT json-c \
-		-:SHARED libjson-c \
-		-:TAGS eng debug \
-		-:REL_TOP $(top_srcdir) -:ABS_TOP $(abs_top_srcdir) \
-		-:SOURCES $(libjson_c_la_SOURCES) $(nodist_libjson_c_la_SOURCES) \
-		-:CFLAGS $(DEFS) $(ANDROID_CFLAGS) $(libjson_c_la_CFLAGS) \
-		-:LDFLAGS $(libjson_c_la_LDFLAGS) $(libjson_c_la_LIBADD) \
-		-:HEADER_TARGET json-c \
-		-:HEADERS $(libjson_cinclude_HEADERS) \
-		-:PASSTHROUGH LOCAL_ARM_MODE:=arm \
-	> $@

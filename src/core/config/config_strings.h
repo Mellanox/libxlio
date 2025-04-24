@@ -6,67 +6,84 @@
 
 #pragma once
 
+/**
+ * @brief Common string constants used throughout the configuration subsystem
+ */
 namespace config_strings {
 
-// Environment variables
+/**
+ * @brief Environment variable names
+ */
 namespace env {
-extern const char *XLIO_INLINE_CONFIG;
-extern const char *XLIO_CUSTOM_CONFIG_FILE;
+extern const char *XLIO_INLINE_CONFIG; /**< Environment variable for inline configuration */
+extern const char *XLIO_CONFIG_FILE; /**< Environment variable for custom config file path */
 } // namespace env
 
-// File paths
+/**
+ * @brief File path constants
+ */
 namespace paths {
-extern const char *DEFAULT_CONFIG_FILE;
+extern const char *DEFAULT_CONFIG_FILE; /**< Default configuration file path */
 }
 
-// JSON schema keys/fields
+/**
+ * @brief JSON schema key names
+ */
 namespace schema {
-extern const char *JSON_SCHEMA;
-extern const char *JSON_TITLE;
-extern const char *JSON_TYPE;
-extern const char *JSON_PROPERTIES;
-extern const char *JSON_DESCRIPTION;
-extern const char *JSON_DEFAULT;
-extern const char *JSON_ENUM;
-extern const char *JSON_ONE_OF;
-extern const char *JSON_MINIMUM;
-extern const char *JSON_MAXIMUM;
+extern const char *JSON_SCHEMA; /**< Schema identifier key */
+extern const char *JSON_TITLE; /**< Title key */
+extern const char *JSON_TYPE; /**< Type key */
+extern const char *JSON_PROPERTIES; /**< Properties key */
+extern const char *JSON_DESCRIPTION; /**< Description key */
+extern const char *JSON_DEFAULT; /**< Default value key */
+extern const char *JSON_ENUM; /**< Enumeration values key */
+extern const char *JSON_ONE_OF; /**< One of values key */
+extern const char *JSON_MINIMUM; /**< Minimum value key */
+extern const char *JSON_MAXIMUM; /**< Maximum value key */
 } // namespace schema
 
-// JSON schema types
+/**
+ * @brief JSON schema type names
+ */
 namespace schema_types {
-extern const char *JSON_TYPE_BOOLEAN;
-extern const char *JSON_TYPE_INTEGER;
-extern const char *JSON_TYPE_STRING;
-extern const char *JSON_TYPE_OBJECT;
-extern const char *JSON_TYPE_ARRAY;
+extern const char *JSON_TYPE_BOOLEAN; /**< Boolean type identifier */
+extern const char *JSON_TYPE_INTEGER; /**< Integer type identifier */
+extern const char *JSON_TYPE_STRING; /**< String type identifier */
+extern const char *JSON_TYPE_OBJECT; /**< Object type identifier */
+extern const char *JSON_TYPE_ARRAY; /**< Array type identifier */
 } // namespace schema_types
 
-// Error messages
+/**
+ * @brief Error message components
+ */
 namespace errors {
 
 // TODO - remove all refs to ERROR_STRING
 // use throw_xlio_exception instead
 
-extern const char *OPEN_PAREN;
-extern const char *CLOSE_PAREN;
+extern const char *OPEN_PAREN; /**< Opening parenthesis for error messages */
+extern const char *CLOSE_PAREN; /**< Closing parenthesis for error messages */
 
 } // namespace errors
 
-// Formatted error components
+/**
+ * @brief Type formatting components for error messages
+ */
 namespace type_format {
-extern const char *INTEGER_PREFIX;
-extern const char *STRING_PREFIX;
-extern const char *BOOLEAN_PREFIX;
-extern const char *TRUE_VALUE;
-extern const char *FALSE_VALUE;
+extern const char *INTEGER_PREFIX; /**< Prefix for integer values in errors */
+extern const char *STRING_PREFIX; /**< Prefix for string values in errors */
+extern const char *BOOLEAN_PREFIX; /**< Prefix for boolean values in errors */
+extern const char *TRUE_VALUE; /**< String representation of true value */
+extern const char *FALSE_VALUE; /**< String representation of false value */
 } // namespace type_format
 
-// Miscellaneous
+/**
+ * @brief Miscellaneous string constants
+ */
 namespace misc {
-extern const char *JSON_STRING;
-extern const char *EMPTY_STRING;
-extern const char *DOT;
+extern const char *JSON_STRING; /**< JSON string identifier */
+extern const char *EMPTY_STRING; /**< Empty string constant */
+extern const char *DOT; /**< Dot character */
 } // namespace misc
 
 } // namespace config_strings

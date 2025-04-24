@@ -8,7 +8,9 @@
 #include "core/config/config_strings.h"
 #include "core/util/xlio_exception.h"
 
+#include <algorithm>
 #include <sstream>
+#include <vector>
 
 static std::vector<std::string> split(const std::string &s, char delimiter);
 static std::string remove_spaces(std::string str);
@@ -16,14 +18,15 @@ static std::string remove_spaces(std::string str);
 static std::experimental::any parse_value(const std::string &val);
 
 inline_loader::inline_loader(const char *inline_config_key)
+    : loader(inline_config_key)
 {
-    if (inline_config_key == nullptr) {
+    if (m_source.empty()) {
         throw_xlio_exception("inline_config_key cannot be null.");
     }
 
-    const char *inline_config = std::getenv(inline_config_key);
+    const char *inline_config = std::getenv(m_source.c_str());
     if (inline_config == nullptr) {
-        throw_xlio_exception("inline config key not set: " + std::string(inline_config_key));
+        throw_xlio_exception("inline config key not set: " + m_source);
     }
 
     m_inline_config = inline_config;

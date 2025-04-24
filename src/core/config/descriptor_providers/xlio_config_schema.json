@@ -17,7 +17,7 @@
                             "type": "integer",
                             "default": 2147483648,
                             "title": "Memory limit (bytes)",
-                            "description": "Pre-allocated memory limit for buffers in bytes. Note that the limit doesn't include dynamic memory allocation and XLIO memory consumption can exceed the limit. A value of 0 means unlimited memory allocation. Maps to XLIO_MEMORY_LIMIT environment variable."
+                            "description": "Pre-allocated memory limit for buffers. Maps to XLIO_MEMORY_LIMIT environment variable. Note that the limit doesn't include dynamic memory allocation and XLIO memory consumption can exceed the limit. A value of 0 means unlimited memory allocation."
                         },
                         "hugepages": {
                             "type": "object",
@@ -41,7 +41,7 @@
                             "type": "integer",
                             "default": 0,
                             "title": "External memory limit (bytes)",
-                            "description": "Memory limit for external user allocator. The user allocator can optionally be provided with XLIO extra API. Default value 0 makes XLIO use the core.resources.memory_limit value for user allocations. Maps to XLIO_MEMORY_LIMIT_USER environment variable."
+                            "description": "Memory limit for external user allocator. Maps to XLIO_MEMORY_LIMIT_USER environment variable. The user allocator can optionally be provided with XLIO extra API. Default value 0 makes XLIO use the core.resources.memory_limit value for user allocations."
                         },
                         "heap_metadata_block_size": {
                             "type": "integer",
@@ -55,7 +55,7 @@
                     "type": "boolean",
                     "default": false,
                     "title": "Quick initialization",
-                    "description": "Avoid expensive extra checks to reduce the initialization time. This may result in failures in case of a system misconfiguration. For example, if the parameter is enabled and hugepages are requested beyond the cgroup limit, XLIO crashes due to an access to an unmapped page. Maps to XLIO_QUICK_START environment variable."
+                    "description": "Avoid expensive extra checks to reduce the initialization time. Maps to XLIO_QUICK_START environment variable. This may result in failures in case of a system misconfiguration. For example, if the parameter is enabled and hugepages are requested beyond the cgroup limit, XLIO crashes due to an access to an unmapped page."
                 },
                 "exception_handling": {
                     "type": "object",
@@ -89,7 +89,7 @@
                                 }
                             ],
                             "title": "Exception handling mode",
-                            "description": "Mode for handling missing support or error cases in Socket API or functionality by XLIO. Values: exit (-2) to exit on XLIO startup failure; handle_debug (-1) for just handling at DEBUG severity; log_debug_undo_offload (0) to log DEBUG message and try recovering via Kernel network stack (un-offloading the socket); log_error_undo_offload (1) to log ERROR message and try recovering via Kernel network stack; log_error_return_error (2) to log ERROR message and return API respectful error code; log_error_abort (3) to log ERROR message and abort application (throw xlio_error exception). Maps to XLIO_EXCEPTION_HANDLING environment variable."
+                            "description": "Mode for handling missing support or error cases in Socket API or functionality by XLIO. Maps to XLIO_EXCEPTION_HANDLING environment variable. Useful for quickly identifying XLIO unsupported Socket API or features.\nUse value of -2/exit to exit() on XLIO startup failure.\nUse value of -1/handle_debug for just handling at DEBUG severity.\nUse value of 0/log_debug_undo_offload to log DEBUG message and try recovering via Kernel network stack (un-offloading the socket).\nUse value of 1/log_error_undo_offload to log ERROR message and try recovering via Kernel network stack (un-offloading the socket).\nUse value of 2/log_error_return_error to log ERROR message and return API respectful error code.\nUse value of 3/log_error_abort to log ERROR message and abort application (throw xlio_error exception).\nDefault value is -1 (notice, that in the future the default value will be changed to 0)"
                         }
                     }
                 },
@@ -105,7 +105,7 @@
                                     "type": "boolean",
                                     "default": true,
                                     "title": "Exit on SIGINT",
-                                    "description": "When enabled, the library handler will be called when interrupt signal is sent to the process. XLIO will also call the application's handler if it exists. Maps to XLIO_HANDLE_SIGINTR environment variable."
+                                    "description": "When enabled, the library handler will be called when interrupt signal is sent to the process. Maps to XLIO_HANDLE_SIGINTR environment variable. XLIO will also call the application's handler if it exists.\nValue range is 0 to 1"
                                 }
                             }
                         },
@@ -117,7 +117,7 @@
                                     "type": "boolean",
                                     "default": false,
                                     "title": "Print backtrace on SIGSEGV",
-                                    "description": "When enabled, print backtrace if segmentation fault happens. Maps to XLIO_HANDLE_SIGSEGV environment variable."
+                                    "description": "When enabled, print backtrace if segmentation fault happens. Maps to XLIO_HANDLE_SIGSEGV environment variable.\nValue range is 0 to 1"
                                 }
                             }
                         }
@@ -131,19 +131,19 @@
                             "type": "boolean",
                             "default": true,
                             "title": "Support dup2 calls",
-                            "description": "When this parameter is enabled, XLIO will handle the duplicate fd (oldfd) as if it was closed (clear internal data structures) and only then, will forward the call to the OS. This is, in practice, a very rudimentary dup2 support. It only supports the case where dup2 is used to close file descriptors. Maps to XLIO_CLOSE_ON_DUP2 environment variable."
+                            "description": "When this parameter is enabled, XLIO will handle the duplicate fd (oldfd) as if it was closed (clear internal data structures) and only then, will forward the call to the OS. Maps to XLIO_CLOSE_ON_DUP2 environment variable. This is, in practice, a very rudimentary dup2 support. It only supports the case where dup2 is used to close file descriptors."
                         },
                         "fork_support": {
                             "type": "boolean",
                             "default": true,
                             "title": "Enable fork support",
-                            "description": "Control whether XLIO should support fork. Setting this flag on will cause XLIO to call ibv_fork_init() function. ibv_fork_init() initializes libibverbs's data structures to handle fork() function calls correctly and avoid data corruption. If ibv_fork_init() is not called or returns a non-zero status, then libibverbs data structures are not fork()-safe and the effect of an application calling fork() is undefined. Maps to XLIO_FORK environment variable."
+                            "description": "Control whether XLIO should support fork. Maps to XLIO_FORK environment variable. Setting this flag on will cause XLIO to call ibv_fork_init() function. ibv_fork_init() initializes libibverbs's data structures to handle fork() function calls correctly and avoid data corruption. If ibv_fork_init() is not called or returns a non-zero status, then libibverbs data structures are not fork()-safe and the effect of an application calling fork() is undefined."
                         },
                         "getsockname_dummy_send": {
                             "type": "boolean",
                             "default": false,
                             "title": "Use dummy packet from getsockname()",
-                            "description": "This parameter triggers dummy packet send from getsockname(), this will warm up the caches. Maps to XLIO_TRIGGER_DUMMY_SEND_GETSOCKNAME environment variable."
+                            "description": "This parameter triggers dummy packet send from getsockname(), this will warm up the caches. Maps to XLIO_TRIGGER_DUMMY_SEND_GETSOCKNAME environment variable.\nFor more information regarding dummy send, see XLIO user manual document."
                         },
                         "deferred_close": {
                             "type": "boolean",
@@ -161,7 +161,31 @@
                             "type": "boolean",
                             "default": false,
                             "title": "Avoid system control calls on TCP",
-                            "description": "For TCP fd, avoid system calls for the supported options of: ioctl, fcntl, getsockopt, setsockopt. Non-supported options will go to OS. Maps to XLIO_AVOID_SYS_CALLS_ON_TCP_FD environment variable."
+                            "description": "For TCP fd, avoid system calls for the supported options of: ioctl, fcntl, getsockopt, setsockopt. Maps to XLIO_AVOID_SYS_CALLS_ON_TCP_FD environment variable. Non-supported options will go to OS.\nTo activate, use XLIO_AVOID_SYS_CALLS_ON_TCP_FD=1."
+                        },
+                        "sendfile_limit": {
+                            "type": "integer",
+                            "default": 10737418240,
+                            "title": "Sendfile byte limit",
+                            "description": "Memory limit for the mapping cache which is used by sendfile(). Maps to XLIO_ZC_CACHE_THRESHOLD environment variable."
+                        }
+                    }
+                },
+                "daemon": {
+                    "type": "object",
+                    "description": "XLIO daemon configuration.",
+                    "properties": {
+                        "enable": {
+                            "type": "boolean",
+                            "default": false,
+                            "title": "Enable XLIO daemon",
+                            "description": "Enable the XLIO daemon service for additional monitoring capabilities. Maps to XLIO_SERVICE_ENABLE environment variable."
+                        },
+                        "dir": {
+                            "type": "string",
+                            "default": "/tmp/xlio",
+                            "title": "Daemon working directory",
+                            "description": "Set the directory path for XLIO to write files used by xliod. Maps to XLIO_SERVICE_NOTIFY_DIR environment variable. Default value is /tmp/xlio/\nNote: when used xliod must be run with --notify-dir directing the same folder."
                         }
                     }
                 }
@@ -204,7 +228,7 @@
                                 }
                             ],
                             "title": "Timestamp conversion mode",
-                            "description": "Defines how hardware timestamps are converted to a comparable format. Options: 0/disable - Disabled; 1/raw_hw - Only convert the time stamp to seconds.nano_seconds time units; 2/best_possible - Sync to system time, then Raw hardware time; 3/system (default) - Convert the time stamp to seconds.nano_seconds time units comparable to receive software timestamp; 4/ptp - Convert using PTP sync, fall back to system if not supported; 5/rtc - Convert using RTC sync, fall back to system if not supported. The value is determined by all devices - if the hardware of one device does not support the conversion, then it will be disabled for other devices. Maps to XLIO_HW_TS_CONVERSION environment variable."
+                            "description": "Defines how hardware timestamps are converted to a comparable format. Maps to XLIO_HW_TS_CONVERSION environment variable.\nThe value of XLIO_HW_TS_CONVERSION is determined by all devices - i.e if the hardware of one device does not support the conversion, then it will be disabled for the other devices.\nOptions = [0,1,2,3,4,5]:\n0 = Disabled\n1 = Raw-HW time - only convert the time stamp to seconds.nano_seconds time units (or disable if hardware does not supports).\n2 = Best possible - Raw-HW or system time - Sync to system time, then Raw hardware time - disable if none of them are supported by hardware.\n3 = Sync to system time - convert the time stamp to seconds.nano_seconds time units comparable to receive software timestamp. disable if hardware does not supports.\n4 = PTP Sync - convert the time stamp to seconds.nano_seconds time units. in case it is not supported - will apply option 3 (or disable if hardware does not supports).\n5 = RTC Sync - convert the time stamp to seconds.nano_seconds time units. in case it is not supported - will apply option 3 (or disable if hardware does not supports).\nDefault value: 3"
                         }
                     }
                 },
@@ -222,7 +246,7 @@
                                     "maximum": 9000,
                                     "default": 0,
                                     "title": "MTU size",
-                                    "description": "Size of each Rx and Tx data buffer (Maximum Transfer Unit). This value sets the fragmentation size of the packets sent by the library. If set to 0 then for each interface XLIO will follow the actual MTU. If greater than 0 then this MTU value is applicable to all interfaces regardless of their actual MTU. Maps to XLIO_MTU environment variable."
+                                    "description": "Size of each Rx and Tx data buffer (Maximum Transfer Unit). Maps to XLIO_MTU environment variable. This value sets the fragmentation size of the packets sent by the library. If XLIO_MTU is 0 then for each interface XLIO will follow the actual MTU. If XLIO_MTU is greater than 0 then this MTU value is applicable to all interfaces regardless of their actual MTU."
                                 }
                             }
                         },
@@ -234,7 +258,7 @@
                                     "type": "integer",
                                     "default": 1048576,
                                     "title": "Write buffer size (bytes)",
-                                    "description": "TCP send buffer size of LWIP. Default value is 1MB. Maps to XLIO_TCP_SEND_BUFFER_SIZE environment variable."
+                                    "description": "TCP send buffer size of LWIP. Maps to XLIO_TCP_SEND_BUFFER_SIZE environment variable."
                                 },
                                 "nodelay": {
                                     "type": "object",
@@ -244,7 +268,7 @@
                                             "type": "boolean",
                                             "default": false,
                                             "title": "Disable Nagle's algorithm",
-                                            "description": "If set, disable the Nagle algorithm option for each TCP socket during initialization. This means that TCP segments are always sent as soon as possible, even if there is only a small amount of data. For more information on TCP_NODELAY flag refer to TCP manual page. Maps to XLIO_TCP_NODELAY environment variable."
+                                            "description": "When enabled, disables Nagle's algorithm to reduce latency. Maps to XLIO_TCP_NODELAY environment variable. If set, disable the Nagle algorithm option for each TCP socket during initialization. This means that TCP segments are always sent as soon as possible, even if there is only a small amount of data. For more information on TCP_NODELAY flag refer to TCP manual page.\nValid Values are:\nUse value of 0 to disable.\nUse value of 1 for enable.\nDefault value is Disabled."
                                         },
                                         "byte_threshold": {
                                             "type": "integer",
@@ -258,7 +282,7 @@
                                     "type": "boolean",
                                     "default": false,
                                     "title": "Enable quick ACKs",
-                                    "description": "If set, disable delayed acknowledge ability. This means that TCP responds after every packet. For more information on TCP_QUICKACK flag refer to TCP manual page. Maps to XLIO_TCP_QUICKACK environment variable."
+                                    "description": "If set, disable delayed acknowledge ability. Maps to XLIO_TCP_QUICKACK environment variable. This means that TCP responds after every packet. For more information on TCP_QUICKACK flag refer to TCP manual page.\nValid Values are:\nUse value of 0 to disable.\nUse value of 1 for enable.\nDefault value is Disabled."
                                 },
                                 "push": {
                                     "type": "boolean",
@@ -270,7 +294,7 @@
                                     "type": "boolean",
                                     "default": false,
                                     "title": "Abort TCP connections on close",
-                                    "description": "This parameter controls how XLIO performs socket close operation. If enabled, XLIO sends RST segment and discards TCP state for the socket. Notice, in this scenario pending data segments may be unsent. If disabled, XLIO sends pending data segments and then FIN segment. Maps to XLIO_TCP_ABORT_ON_CLOSE environment variable."
+                                    "description": "This parameter controls how XLIO performs socket close operation. Maps to XLIO_TCP_ABORT_ON_CLOSE environment variable. If enabled, XLIO sends RST segment and discards TCP state for the socket. Notice, in this scenario pending data segments may be unsent. If disabled, XLIO sends pending data segments and then FIN segment.\nDefault: 0 (Disabled)"
                                 },
                                 "congestion_control": {
                                     "oneOf": [
@@ -294,7 +318,7 @@
                                         }
                                     ],
                                     "title": "TCP congestion control algorithm",
-                                    "description": "TCP congestion control algorithm. The default algorithm coming with LWIP is a variation of Reno/New-Reno. The new Cubic algorithm was adapted from FreeBSD implementation. Use lwip/0 for LWIP algorithm, cubic/1 for Cubic algorithm, or disable/2 to disable the congestion algorithm. Maps to XLIO_TCP_CC_ALGO environment variable."
+                                    "description": "TCP congestion control algorithm. Maps to XLIO_TCP_CC_ALGO environment variable. The default algorithm coming with LWIP is a variation of Reno/New-Reno. The new Cubic algorithm was adapted from FreeBSD implementation.\nUse value of 0 for LWIP algorithm.\nUse value of 1 for Cubic algorithm.\nUse value of 2 in order to disable the congestion algorithm."
                                 },
                                 "max_syn_rate": {
                                     "type": "integer",
@@ -302,7 +326,7 @@
                                     "maximum": 100000,
                                     "default": 0,
                                     "title": "Maximum SYNs per second",
-                                    "description": "Limit the number of TCP SYN packets that XLIO will handle per second per listen socket. For example, with a value of 10, XLIO will accept at most 10 new connections per second per listen socket. A value of 0 means unlimited. Maps to XLIO_TCP_MAX_SYN_RATE environment variable."
+                                    "description": "Limit the number of TCP SYN packets that XLIO will handle per second per listen socket. Maps to XLIO_TCP_MAX_SYN_RATE environment variable. For example, in case you use 10 for this value than XLIO will accept at most 10 (could be less) new connections per second per listen socket. Use a value of 0 for un-limiting the number of TCP SYN packets that can be handled. Value range is 0 to 100000."
                                 },
                                 "timestamps": {
                                     "oneOf": [
@@ -326,7 +350,7 @@
                                         }
                                     ],
                                     "title": "TCP timestamps mode",
-                                    "description": "If set, enable TCP timestamp option. Currently, LWIP is not supporting RTTM and PAWS mechanisms. See RFC1323 for info. Use disable/0 to disable, enable/1 to enable, or os/2 for OS follow up. Disabled by default (enabling causes a slight performance degradation). Maps to XLIO_TCP_TIMESTAMP_OPTION environment variable."
+                                    "description": "If set, enable TCP timestamp option. Maps to XLIO_TCP_TIMESTAMP_OPTION environment variable. Currently, LWIP is not supporting RTTM and PAWS mechanisms. See RFC1323 for info.\nUse value of 0 to disable.\nUse value of 1 for enable.\nUse value of 2 for OS follow up.\nDisabled by default (enabling causes a slight performance degradation)."
                                 },
                                 "timer_msec": {
                                     "type": "integer",
@@ -341,7 +365,7 @@
                                     "maximum": 8960,
                                     "default": 0,
                                     "title": "Maximum Segment Size",
-                                    "description": "Defines the max TCP payload size that can be sent without IP fragmentation. Value of 0 will set the TCP MSS to be aligned with the MTU configuration (leaving 40 bytes room for IP + TCP headers; \"TCP MSS = MTU - 40\"). Other values will force the TCP MSS to that specific value. Maps to XLIO_MSS environment variable."
+                                    "description": "Defines the max TCP payload size that can be sent without IP fragmentation. Maps to XLIO_MSS environment variable. Value of 0 will set XLIO's TCP MSS to be aligned with XLIO_MTU configuration (leaving 40 bytes room for IP + TCP headers; \"TCP MSS = XLIO_MTU - 40\"). Other XLIO_MSS values will force XLIO's TCP MSS to that specific value."
                                 }
                             }
                         },
@@ -368,13 +392,13 @@
                             "type": "boolean",
                             "default": true,
                             "title": "Enable multicast loopback",
-                            "description": "This parameter sets the initial value used by XLIO internally to controls the multicast loopback packets behavior during transmission. An application that calls setsockopt() with IP_MULTICAST_LOOP will run over the initial value set by this parameter. Maps to XLIO_TX_MC_LOOPBACK environment variable."
+                            "description": "This parameter sets the initial value used by XLIO internally to controls the multicast loopback packets behavior during transmission. Maps to XLIO_TX_MC_LOOPBACK environment variable. An application that calls setsockopt() with IP_MULTICAST_LOOP will run over the initial value set by this parameter. Read more in 'Multicast loopback behavior' in notes section below."
                         },
                         "mc_flowtag_acceleration": {
                             "type": "boolean",
                             "default": false,
                             "title": "Accelerate flowtag for multicast",
-                            "description": "Forces the use of flow tag acceleration for multicast flows where setsockopt(SO_REUSEADDR) is set. Applicable if there are no other sockets opened for the same flow in system. Maps to XLIO_MC_FORCE_FLOWTAG environment variable."
+                            "description": "Forces the use of flow tag acceleration for multicast flows where setsockopt(SO_REUSEADDR) is set. Maps to XLIO_MC_FORCE_FLOWTAG environment variable. Applicable if there are no other sockets opened for the same flow in system."
                         },
                         "mc_disable_flowtag": {
                             "type": "boolean",
@@ -387,7 +411,7 @@
                             "default": 0,
                             "minimum": 0,
                             "title": "Delay after multicast join (msec)",
-                            "description": "This parameter indicates the time of delay in milliseconds for the first packet sent after receiving the multicast JOINED event from the SM. This is helpful to overcome loss of first few packets of an outgoing stream due to SM lengthy handling of MFT configuration on the switch chips. Maps to XLIO_WAIT_AFTER_JOIN_MSEC environment variable."
+                            "description": "This parameter indicates the time of delay in milliseconds for the first packet sent after receiving the multicast JOINED event from the SM. Maps to XLIO_WAIT_AFTER_JOIN_MSEC environment variable. This is helpful to overcome loss of first few packets of an outgoing stream due to SM lengthy handling of MFT configuration on the switch chips."
                         }
                     }
                 },
@@ -446,7 +470,7 @@
                             "type": "boolean",
                             "default": true,
                             "title": "Enable striding receive queues",
-                            "description": "Enable/Disable Striding Receive Queues. Each WQE in a Striding RQ may receive several packets. Thus, the WQE buffer size is controlled by the stride size multiplied by the number of strides. Values: on/true - Enabled, off/false - Disabled. Maps to XLIO_STRQ environment variable."
+                            "description": "Enable/Disable Striding Receive Queues. Maps to XLIO_STRQ environment variable. Each WQE in a Striding RQ may receive several packets. Thus, the WQE buffer size is controlled by XLIO_STRQ_NUM_STRIDES x XLIO_STRQ_STRIDE_SIZE_BYTES. Values: on, off\nDefault: on (Enabled)"
                         },
                         "strides": {
                             "type": "integer",
@@ -454,7 +478,7 @@
                             "minimum": 512,
                             "maximum": 65536,
                             "title": "Number of strides per WQE",
-                            "description": "The number of strides in each receive WQE. Must be power of two and in range [512 - 65536]. Maps to XLIO_STRQ_NUM_STRIDES environment variable."
+                            "description": "The number of strides in each receive WQE. Maps to XLIO_STRQ_NUM_STRIDES environment variable. Must be power of two and in range [512 - 65536].\nDefault: 2048"
                         },
                         "stride_size": {
                             "type": "integer",
@@ -462,13 +486,13 @@
                             "minimum": 64,
                             "maximum": 8192,
                             "title": "Size of each stride (bytes)",
-                            "description": "The size, in bytes, of each stride in a receive WQE. Must be power of two and in range [64 - 8192]. Maps to XLIO_STRQ_STRIDE_SIZE_BYTES environment variable."
+                            "description": "The size, in bytes, of each stride in a receive WQE. Maps to XLIO_STRQ_STRIDE_SIZE_BYTES environment variable. Must be power of two and in range [64 - 8192].\nDefault: 64"
                         },
                         "spare_strides": {
                             "type": "integer",
                             "default": 32768,
                             "title": "Extra strides reserved",
-                            "description": "Number of spare stride objects a CQ holds to allow faster allocation of a stride object when a packet arrives. Maps to XLIO_STRQ_STRIDES_COMPENSATION_LEVEL environment variable."
+                            "description": "Number of spare stride objects a CQ holds to allow faster allocation of a stride object when a packet arrives. Maps to XLIO_STRQ_STRIDES_COMPENSATION_LEVEL environment variable.\nDefault: 32768"
                         }
                     }
                 },
@@ -498,7 +522,7 @@
                                 }
                             ],
                             "title": "Large Receive Offload policy",
-                            "description": "Large receive offload (LRO) is a technique for increasing inbound throughput of high-bandwidth network connections by reducing CPU overhead. It works by aggregating multiple incoming packets from a single stream into a larger buffer before they are passed higher up the networking stack, thus reducing the number of packets that must be processed. Values: 'ethtool_auto'/-1 depends on ethtool setting and adapter ability (see ethtool -k <eth0> | grep large-receive-offload); 'enable'/1 enabled if adapter supports it; 'disable'/0 disabled. Maps to XLIO_LRO environment variable."
+                            "description": "Large receive offload (LRO) is a technique for increasing inbound throughput of high-bandwidth network connections by reducing CPU overhead. Maps to XLIO_LRO environment variable. It works by aggregating multiple incoming packets from a single stream into a larger buffer before they are passed higher up the networking stack, thus reducing the number of packets that must be processed.\nDefault value: auto\n\nauto\n    Depends on ethtool setting and adapter ability.\n    See ethtool -k <eth0> | grep large-receive-offload\non\n    Enabled in case adapter supports it\noff\n    Disabled"
                         },
                         "tso": {
                             "type": "object",
@@ -526,7 +550,7 @@
                                         }
                                     ],
                                     "title": "TCP segmentation offload policy",
-                                    "description": "With Segmentation Offload, or TCP Large Send, TCP can pass a buffer to be transmitted that is bigger than the maximum transmission unit (MTU) supported by the medium. Intelligent adapters implement large sends by using the prototype TCP and IP headers of the incoming send buffer to carve out segments of required size. Copying the prototype header and options, then calculating the sequence number and checksum fields creates TCP segment headers. Expected benefits: Throughput increase and CPU unload. Values: 'ethtool_auto'/-1 depends on ethtool setting and adapter ability (see ethtool -k <eth0> | grep tcp-segmentation-offload); 'enable'/1 enabled if adapter supports it; 'disable'/0 disabled. Maps to XLIO_TSO environment variable."
+                                    "description": "With Segmentation Offload, or TCP Large Send, TCP can pass a buffer to be transmitted that is bigger than the maximum transmission unit (MTU) supported by the medium. Maps to XLIO_TSO environment variable. Intelligent adapters implement large sends by using the prototype TCP and IP headers of the incoming send buffer to carve out segments of required size. Copying the prototype header and options, then calculating the sequence number and checksum fields creates TCP segment headers. Expected benefits: Throughput increase and CPU unload.\nDefault value: auto\n\nauto\n    Depends on ethtool setting and adapter ability.\n    See ethtool -k <eth0> | grep tcp-segmentation-offload\non\n    Enabled in case adapter supports it\noff\n    Disabled"
                                 },
                                 "max_size": {
                                     "type": "integer",
@@ -545,13 +569,13 @@
                                     "type": "boolean",
                                     "default": true,
                                     "title": "Enable TLS TX offload",
-                                    "description": "When this parameter is enabled, XLIO offloads TLS TX path through kTLS API if possible. UTLS provides TLS data path acceleration by offloading Linux kTLS API. Refer to your TLS library documentation for kTLS support information. Maps to XLIO_UTLS_TX environment variable."
+                                    "description": "When this parameter is enabled, XLIO offloads TLS TX path through kTLS API if possible. Maps to XLIO_UTLS_TX environment variable. UTLS provides TLS data path acceleration by offloading Linux kTLS API. Refer to your TLS library documentation for kTLS support information."
                                 },
                                 "rx_enable": {
                                     "type": "boolean",
                                     "default": false,
                                     "title": "Enable TLS RX offload",
-                                    "description": "When this parameter is enabled, XLIO offloads TLS RX path through the kTLS API if possible. UTLS provides TLS data path acceleration by offloading Linux kTLS API. Refer to your TLS library documentation for kTLS support information. Maps to XLIO_UTLS_RX environment variable."
+                                    "description": "When this parameter is enabled, XLIO offloads TLS RX path through the kTLS API if possible. Maps to XLIO_UTLS_RX environment variable. UTLS provides TLS data path acceleration by offloading Linux kTLS API. Refer to your TLS library documentation for kTLS support information."
                                 },
                                 "dek_cache_max_size": {
                                     "type": "integer",
@@ -588,13 +612,13 @@
                                     "type": "boolean",
                                     "default": false,
                                     "title": "Enable 2-tuple rules",
-                                    "description": "Use only 2 tuple rules for TCP connections, instead of using 5 tuple rules. This can help to overcome steering limitations for outgoing TCP connections. However, this option requires a unique local IP address per XLIO ring. In the default ring per thread configuration, this means that each thread must bind its sockets to a thread local IP address. Maps to XLIO_TCP_2T_RULES environment variable."
+                                    "description": "Use only 2 tuple rules for TCP connections, instead of using 5 tuple rules. Maps to XLIO_TCP_2T_RULES environment variable. This can help to overcome steering limitations for outgoing TCP connections. However, this option requires a unique local IP address per XLIO ring. In the default ring per thread configuration, this means that each thread must bind its sockets to a thread local IP address.\nDefault: 0 (Disabled)"
                                 },
                                 "3t_rules": {
                                     "type": "boolean",
                                     "default": false,
                                     "title": "Enable 3-tuple rules",
-                                    "description": "Use only 3 tuple rules for incoming TCP connections, instead of using 5 tuple rules. This can improve performance for a server with listen socket which accepts many connections. Outgoing TCP connections that are established with connect() syscall aren't affected by this option. Maps to XLIO_TCP_3T_RULES environment variable."
+                                    "description": "Use only 3 tuple rules for incoming TCP connections, instead of using 5 tuple rules. Maps to XLIO_TCP_3T_RULES environment variable. This can improve performance for a server with listen socket which accepts many connections. Outgoing TCP connections that are established with connect() syscall aren't affected by this option.\nDefault: 0 (Disabled)"
                                 }
                             }
                         },
@@ -606,13 +630,13 @@
                                     "type": "boolean",
                                     "default": true,
                                     "title": "Enable 3-tuple rules",
-                                    "description": "This parameter can be relevant in case application uses connected UDP sockets. 3 tuple rules are used in hardware flow steering rule when the parameter is enabled and 5 tuple flow steering rule when it is disabled. Enabling this option can reduce hardware flow steering resources. But when it is disabled application might see benefits in latency and cycles per packet. Maps to XLIO_UDP_3T_RULES environment variable."
+                                    "description": "This parameter can be relevant in case application uses connected UDP sockets. Maps to XLIO_UDP_3T_RULES environment variable. 3 tuple rules are used in hardware flow steering rule when the parameter is enabled and 5 tuple flow steering rule when it is disabled. Enabling this option can reduce hardware flow steering resources. But when it is disabled application might see benefits in latency and cycles per packet.\nDefault: 1 (Enabled)"
                                 },
                                 "only_mc_l2_rules": {
                                     "type": "boolean",
                                     "default": false,
                                     "title": "Use only L2 rules for multicast",
-                                    "description": "Use only L2 rules for Ethernet Multicast. All loopback traffic will be handled by XLIO instead of OS. Maps to XLIO_ETH_MC_L2_ONLY_RULES environment variable."
+                                    "description": "Use only L2 rules for Ethernet Multicast. Maps to XLIO_ETH_MC_L2_ONLY_RULES environment variable. All loopback traffic will be handled by XLIO instead of OS."
                                 }
                             }
                         }
@@ -626,7 +650,7 @@
                             "type": "integer",
                             "default": 0,
                             "title": "Maximum rings per interface",
-                            "description": "Limit on rings per interface. 0 means unlimited. Maps to XLIO_RING_LIMIT_PER_INTERFACE environment variable."
+                            "description": "Limit on rings per interface. Maps to XLIO_RING_LIMIT_PER_INTERFACE environment variable. Limit the number of rings that can be allocated per interface. For example, in ring allocation per socket logic, if the number of sockets using the same interface is larger than the limit, then several sockets will be sharing the same ring. Use a value of 0 for unlimited number of rings."
                         },
                         "tx": {
                             "type": "object",
@@ -660,13 +684,13 @@
                                         }
                                     ],
                                     "title": "TX ring allocation logic",
-                                    "description": "Ring allocation logic is used to separate the traffic to different rings. By default all sockets use the same ring for both RX and TX over the same interface. Even when specifying the logic to be per socket or thread, for different interfaces we use different rings. This is useful when tuning for a multi-threaded application and aiming for HW resource separation. Warning: This feature might hurt performance for applications which their main processing loop is based in select() and/or poll(). Options: 0/per_interface - Ring per interface; 1/per_ip_address - Ring per IP address; 10/per_socket - Ring per socket (using socket fd as separator); 20/per_thread - Ring per thread (using the id of the thread in which the socket was created); 30/per_cpuid - Ring per core (using cpu id); 31/per_core - Ring per core - attach threads: attach each thread to a cpu core. Maps to XLIO_RING_ALLOCATION_LOGIC_TX environment variable."
+                                    "description": "Ring allocation logic is used to separate the traffic to different rings. Maps to XLIO_RING_ALLOCATION_LOGIC_TX environment variable. By default all sockets use the same ring for both RX and TX over the same interface. Even when specifying the logic to be per socket or thread, for different interfaces we use different rings. This is useful when tuning for a multi-threaded application and aiming for HW resource separation.\nWarning: This feature might hurt performance for applications which their main processing loop is based in select() and/or poll().\nThe logic options are:\n0  - Ring per interface\n1  - Ring per ip address (using ip address)\n10 - Ring per socket (using socket fd as separator)\n20 - Ring per thread (using the id of the thread in which the socket was created)\n30 - Ring per core (using cpu id)\n31 - Ring per core - attach threads : attach each thread to a cpu core"
                                 },
                                 "migration_ratio": {
                                     "type": "integer",
                                     "default": -1,
                                     "title": "TX ring migration ratio",
-                                    "description": "Controls when to replace a socket's ring with the current thread's ring. -1 disables migration. Maps to XLIO_RING_MIGRATION_RATIO_TX environment variable."
+                                    "description": "Controls when to replace a socket's ring with the current thread's ring. Maps to XLIO_RING_MIGRATION_RATIO_TX environment variable. Ring migration ratio is used with the \"ring per thread\" logic in order to decide when it is beneficial to replace the socket's ring with the ring allocated for the current thread. Each XLIO_RING_MIGRATION_RATIO iterations (of accessing the ring) we check the current thread ID and see if our ring is matching the current thread. If not, we consider ring migration. If we keep accessing the ring from the same thread for some iterations, we migrate the socket to this thread ring. Use a value of -1 in order to disable migration.\nDefault value is -1"
                                 },
                                 "max_on_device_memory": {
                                     "type": "integer",
@@ -710,13 +734,13 @@
                                         }
                                     ],
                                     "title": "RX ring allocation logic",
-                                    "description": "Controls how reception rings are allocated and separated. Maps to XLIO_RING_ALLOCATION_LOGIC_RX environment variable."
+                                    "description": "Controls how reception rings are allocated and separated. Maps to XLIO_RING_ALLOCATION_LOGIC_RX environment variable. By default all sockets use the same ring for both RX and TX over the same interface. Even when specifying the logic to be per socket or thread, for different interfaces we use different rings. This is useful when tuning for a multi-threaded application and aiming for HW resource separation.\nWarning: This feature might hurt performance for applications which their main processing loop is based in select() and/or poll().\nThe logic options are:\n0  - Ring per interface\n1  - Ring per ip address (using ip address)\n10 - Ring per socket (using socket fd as separator)\n20 - Ring per thread (using the id of the thread in which the socket was created)\n30 - Ring per core (using cpu id)\n31 - Ring per core - attach threads : attach each thread to a cpu core"
                                 },
                                 "migration_ratio": {
                                     "type": "integer",
                                     "default": -1,
                                     "title": "RX ring migration ratio",
-                                    "description": "Controls when to replace a socket's ring with the current thread's ring. -1 disables migration. Maps to XLIO_RING_MIGRATION_RATIO_RX environment variable."
+                                    "description": "Controls when to replace a socket's ring with the current thread's ring. Maps to XLIO_RING_MIGRATION_RATIO_RX environment variable. Ring migration ratio is used with the \"ring per thread\" logic in order to decide when it is beneficial to replace the socket's ring with the ring allocated for the current thread. Each XLIO_RING_MIGRATION_RATIO iterations (of accessing the ring) we check the current thread ID and see if our ring is matching the current thread. If not, we consider ring migration. If we keep accessing the ring from the same thread for some iterations, we migrate the socket to this thread ring. Use a value of -1 in order to disable migration.\nDefault value is -1"
                                 }
                             }
                         }
@@ -730,19 +754,19 @@
                             "type": "boolean",
                             "default": false,
                             "title": "Use mutex instead of spinlocks",
-                            "description": "Use mutex instead of spinlocks for locking mechanisms. May increase latency but can be beneficial in environments where spin locks cause excessive CPU usage. Maps to XLIO_MULTILOCK environment variable."
+                            "description": "Control locking type mechanism for some specific flows. Maps to XLIO_MULTILOCK environment variable. Note that usage of Mutex might increase latency.\n0 - Spin\n1 - Mutex\nDefault: 0 (Spin)"
                         },
                         "cpu_affinity": {
                             "type": "string",
                             "default": "-1",
                             "title": "CPU affinity",
-                            "description": "Control which CPU core(s) the XLIO internal thread runs on. Can be specified as a hexadecimal bitmask (e.g., 0x00000007 for processors 1,2,3) or as a comma-delimited list with optional ranges (e.g., '0,4,8' or '0,1,7-10'). Value of '-1' disables thread affinity setting. Maps to XLIO_INTERNAL_THREAD_AFFINITY environment variable."
+                            "description": "Control which CPU core(s) the XLIO internal thread is serviced on. Maps to XLIO_INTERNAL_THREAD_AFFINITY environment variable. The cpu set should be provided as *EITHER* a hexadecimal value that represents a bitmask. *OR* as a comma delimited of values (ranges are ok). Both the bitmask and comma delimited list methods are identical to what is supported by the taskset command. See the man page on taskset for additional information.\nWhere value of -1 disables internal thread affinity setting by XLIO\nBitmask Examples:\n0x00000001 - Run on processor 0.\n0x00000007 - Run on processors 1,2, and 3.\nComma Delimited Examples:\n0,4,8      - Run on processors 0,4, and 8.\n0,1,7-10   - Run on processors 0,1,7,8,9 and 10.\nDefault value is -1 (Disabled)."
                         },
                         "cpuset": {
                             "type": "string",
                             "default": "",
                             "title": "CPU set path",
-                            "description": "Path to a cpuset (e.g. /dev/cpuset/my_set); empty means none. Maps to XLIO_INTERNAL_THREAD_CPUSET environment variable."
+                            "description": "Select a cpuset for XLIO internal thread (see man page of cpuset). Maps to XLIO_INTERNAL_THREAD_CPUSET environment variable. The value is the path to the cpuset (for example: /dev/cpuset/my_set), or an empty string to run it on the same cpuset the process runs on.\nDefault value is an empty string."
                         },
                         "handlers": {
                             "type": "object",
@@ -753,7 +777,7 @@
                                     "minimum": 0,
                                     "default": 10,
                                     "title": "Timer resolution (msec)",
-                                    "description": "Interval in milliseconds for internal threads' housekeeping tasks. Maps to XLIO_TIMER_RESOLUTION_MSEC environment variable."
+                                    "description": "Control XLIO internal thread wakeup timer resolution (in milliseconds). Maps to XLIO_TIMER_RESOLUTION_MSEC environment variable."
                                 },
                                 "behavior": {
                                     "oneOf": [
@@ -779,7 +803,7 @@
                                         }
                                     ],
                                     "title": "TCP control flow behavior",
-                                    "description": "Select which TCP control flows are done in the internal thread. This feature should be kept disabled if using blocking poll/select (epoll is OK). Use 'disable'/0 to disable. Use 'delegate'/1 to handle TCP timers in application context threads. In this mode the socket must be handled by the same thread from the time of its creation to the time of its destruction. Otherwise, it may lead to unexpected behavior. Use 'with_wakeup'/2 for waking up the thread when there is work to do. Use 'no_wakeup'/3 for waiting for thread timer to expire. Maps to XLIO_TCP_CTL_THREAD environment variable."
+                                    "description": "Select which TCP control flows are done in the internal thread. Maps to XLIO_TCP_CTL_THREAD environment variable. This feature should be kept disabled if using blocking poll/select (epoll is OK).\nUse value of 'disable'/0 to disable.\nUse value of 'delegate'/1 to handle TCP timers in application context threads. In this mode the socket must be handled by the same thread from the time of its creation to the time of its destruction. Otherwise, it may lead to an unexpected behaviour.\nUse value of 'with_wakeup'/2 for waking up the thread when there is work to do.\nUse value of 'no_wakeup'/3 for waiting for thread timer to expire.\nDefault value is disabled"
                                 }
                             }
                         }
@@ -868,21 +892,21 @@
                             "minimum": 0,
                             "default": 10,
                             "title": "Kernel FD attention threshold",
-                            "description": "Controls threshold for checking kernel file descriptors during polling. 0 means never check. Maps to XLIO_RING_KERNEL_FD_ATTENTION_LEVEL environment variable."
+                            "description": "Controls threshold for checking kernel file descriptors during polling. 0 means never check. Maps to XLIO_RING_KERNEL_FD_ATTENTION_LEVEL environment variable. This setting affects how often XLIO checks for activity on non-offloaded kernel file descriptors while processing offloaded sockets."
                         },
                         "rx_buffer_max_count": {
                             "type": "integer",
                             "minimum": 0,
                             "default": 16,
                             "title": "Max RX buffers per poll",
-                            "description": "Maximum number of receive buffers processed in a single poll operation. Maps to XLIO_CQ_POLL_BATCH_MAX environment variable."
+                            "description": "Maximum number of receive buffers processed in a single poll operation. Maps to XLIO_CQ_POLL_BATCH_MAX environment variable. Max size of the array while polling the CQs in the XLIO."
                         },
                         "rx_kernel_fd_attention_level": {
                             "type": "integer",
                             "default": 100,
                             "minimum": 0,
                             "title": "RX kernel FD attention level",
-                            "description": "Ratio between XLIO CQ poll and OS FD poll. 0 means only poll offloaded sockets. Maps to XLIO_RX_UDP_POLL_OS_RATIO environment variable."
+                            "description": "Ratio between XLIO CQ poll and OS FD poll. 0 means only poll offloaded sockets. Maps to XLIO_RX_UDP_POLL_OS_RATIO environment variable. This will result in a single poll of the not-offloaded sockets every XLIO_RX_UDP_POLL_OS_RATIO offloaded socket (CQ) polls. No matter if the CQ poll was a hit or miss. No matter if the socket is blocking or non-blocking. When disabled, only offloaded sockets are polled.\nDisable with 0"
                         }
                     }
                 },
@@ -890,17 +914,11 @@
                     "type": "object",
                     "description": "Completion queue behavior settings.",
                     "properties": {
-                        "interrupt_per_packet": {
-                            "type": "boolean",
-                            "default": false,
-                            "title": "Generate interrupt per packet",
-                            "description": "Wakeup the internal thread for each packet that the CQ receives. This can minimize latency in case of a busy application which is not available to receive the packet when it arrived. However, this might decrease performance in case of high pps rate application. Maps to XLIO_INTERNAL_THREAD_ARM_CQ environment variable."
-                        },
                         "keep_full": {
                             "type": "boolean",
                             "default": true,
                             "title": "Keep completion queue full",
-                            "description": "If disabled (false), CQ will not try to compensate for each poll on the receive path. It will use a \"debt\" to remember how many WRE miss from each QP to fill it when buffers become available. If enabled (true), CQ will try to compensate QP for each polled receive completion. If buffers are short it will re-post a recently completed buffer. This causes a packet drop and will be monitored in the xlio_stats. Maps to XLIO_CQ_KEEP_QP_FULL environment variable."
+                            "description": "If disabled (false), CQ will not try to compensate for each poll on the receive path. Maps to XLIO_CQ_KEEP_QP_FULL environment variable. It will use a \"debt\" to remember how many WRE miss from each QP to fill it when buffers become available. If enabled (true), CQ will try to compensate QP for each polled receive completion. If buffers are short it will re-post a recently completed buffer. This causes a packet drop and will be monitored in the xlio_stats."
                         },
                         "periodic_drain_msec": {
                             "type": "integer",
@@ -927,47 +945,59 @@
                             "type": "object",
                             "description": "Interrupt moderation settings to reduce CPU utilization by coalescing interrupts.",
                             "properties": {
-                                "enable": {
+                                "interrupt_per_packet": {
                                     "type": "boolean",
-                                    "default": true,
-                                    "title": "Enable interrupt moderation",
-                                    "description": "Enable CQ interrupt moderation. When enabled, hardware only generates an interrupt after some packets are received or after a packet was held for some time. Maps to XLIO_CQ_MODERATION_ENABLE environment variable."
+                                    "default": false,
+                                    "title": "Generate interrupt per packet",
+                                    "description": "Wakeup the internal thread for each packet that the CQ receives. Maps to XLIO_INTERNAL_THREAD_ARM_CQ environment variable. Poll and process the packet and bring it to the socket layer. This can minimize latency in case of a busy application which is not available to receive the packet when it arrived. However, this might decrease performance in case of high pps rate application."
                                 },
-                                "packet_count": {
-                                    "type": "integer",
-                                    "default": 48,
-                                    "title": "Packet count threshold",
-                                    "description": "Number of packets to hold before generating an interrupt. Maps to XLIO_CQ_MODERATION_COUNT environment variable."
-                                },
-                                "period_usec": {
-                                    "type": "integer",
-                                    "default": 50,
-                                    "title": "Moderation period (µsec)",
-                                    "description": "Period in micro-seconds for holding the packet before generating interrupt. Maps to XLIO_CQ_MODERATION_PERIOD_USEC environment variable."
-                                },
-                                "adaptive_count": {
-                                    "type": "integer",
-                                    "default": 500,
-                                    "title": "Adaptive moderation count threshold",
-                                    "description": "Maximum count value to use in the adaptive interrupt moderation algorithm. Maps to XLIO_CQ_AIM_MAX_COUNT environment variable."
-                                },
-                                "adaptive_period_usec": {
-                                    "type": "integer",
-                                    "default": 1000,
-                                    "title": "Adaptive moderation period (µsec)",
-                                    "description": "Maximum period value to use in the adaptive interrupt moderation algorithm. Maps to XLIO_CQ_AIM_MAX_PERIOD_USEC environment variable."
-                                },
-                                "adaptive_change_frequency_msec": {
-                                    "type": "integer",
-                                    "default": 1000,
-                                    "title": "Adaptive change frequency (msec)",
-                                    "description": "Frequency of interrupt moderation adaptation. Interval in milliseconds between adaptation attempts. Use value of 0 to disable adaptive interrupt moderation. Maps to XLIO_CQ_AIM_INTERVAL_MSEC environment variable."
-                                },
-                                "interrupt_per_sec": {
-                                    "type": "integer",
-                                    "default": 10000,
-                                    "title": "Target interrupts per second",
-                                    "description": "Desired interrupts rate per second for each ring (CQ). The count and period parameters for CQ moderation will change automatically to achieve the desired interrupt rate for the current traffic rate. Maps to XLIO_CQ_AIM_INTERRUPTS_RATE_PER_SEC environment variable."
+                                "manual_moderation": {
+                                    "type": "object",
+                                    "description": "Manual moderation settings.",
+                                    "properties": {
+                                        "enable": {
+                                            "type": "boolean",
+                                            "default": true,
+                                            "title": "Enable interrupt moderation",
+                                            "description": "Enable CQ interrupt moderation. Maps to XLIO_CQ_MODERATION_ENABLE environment variable. When enabled, hardware only generates an interrupt after some packets are received or after a packet was held for some time."
+                                        },
+                                        "packet_count": {
+                                            "type": "integer",
+                                            "default": 48,
+                                            "title": "Packet count threshold",
+                                            "description": "Number of packets to hold before generating interrupt. Maps to XLIO_CQ_MODERATION_COUNT environment variable."
+                                        },
+                                        "period_usec": {
+                                            "type": "integer",
+                                            "default": 50,
+                                            "title": "Moderation period (µsec)",
+                                            "description": "Period in micro-seconds for holding the packet before generating interrupt. Maps to XLIO_CQ_MODERATION_PERIOD_USEC environment variable."
+                                        },
+                                        "adaptive_count": {
+                                            "type": "integer",
+                                            "default": 500,
+                                            "title": "Adaptive moderation count threshold",
+                                            "description": "Maximum count value to use in the adaptive interrupt moderation algorithm. Maps to XLIO_CQ_AIM_MAX_COUNT environment variable."
+                                        },
+                                        "adaptive_period_usec": {
+                                            "type": "integer",
+                                            "default": 1000,
+                                            "title": "Adaptive moderation period (µsec)",
+                                            "description": "Maximum period value to use in the adaptive interrupt moderation algorithm. Maps to XLIO_CQ_AIM_MAX_PERIOD_USEC environment variable."
+                                        },
+                                        "adaptive_change_frequency_msec": {
+                                            "type": "integer",
+                                            "default": 1000,
+                                            "title": "Adaptive change frequency (msec)",
+                                            "description": "Frequency of interrupt moderation adaptation. Maps to XLIO_CQ_AIM_INTERVAL_MSEC environment variable. Interval in milliseconds between adaptation attempts. Use value of 0 to disable adaptive interrupt moderation."
+                                        },
+                                        "interrupt_per_sec": {
+                                            "type": "integer",
+                                            "default": 10000,
+                                            "title": "Target interrupts per second",
+                                            "description": "Desired interrupts rate per second for each ring (CQ). Maps to XLIO_CQ_AIM_INTERRUPTS_RATE_PER_SEC environment variable. The count and period parameters for CQ moderation will change automatically to achieve the desired interrupt rate for the current traffic rate."
+                                        }
+                                    }
                                 }
                             }
                         },
@@ -975,7 +1005,7 @@
                             "type": "integer",
                             "default": 64,
                             "title": "Spare RX buffers",
-                            "description": "Number of spare receive buffer CQ holds to allow for filling up QP while full receive buffers are being processed inside XLIO. Maps to XLIO_QP_COMPENSATION_LEVEL environment variable."
+                            "description": "Number of spare receive buffer CQ holds to allow for filling up QP while full receive buffers are being processed inside XLIO. Maps to XLIO_QP_COMPENSATION_LEVEL environment variable.\nDefault value is XLIO_RX_WRE / 2"
                         }
                     }
                 },
@@ -1005,7 +1035,7 @@
                                 }
                             ],
                             "title": "Buffer batching mode",
-                            "description": "Batching of returning Rx buffers and pulling Tx buffers per socket. Use 0/disable to disable buffer batching. Use 1/enable_and_reuse to enable buffer batching and periodically reclaim unused buffers. Use 2/enable to enable buffer batching with no reclaim. Other values are reserved for future use. Maps to XLIO_BUFFER_BATCHING_MODE environment variable."
+                            "description": "Batching of returning Rx buffers and pulling Tx buffers per socket. Maps to XLIO_BUFFER_BATCHING_MODE environment variable. In case the value is 0 then library will not use buffer batching. In case the value is 1 then library will use buffer batching and will try to periodically reclaim unused buffers. In case the value is 2 then library will use buffer batching with no reclaim. [future: other values are reserved]"
                         },
                         "tx": {
                             "type": "object",
@@ -1024,21 +1054,21 @@
                                     "default": 16,
                                     "minimum": 1,
                                     "title": "TCP buffer batch size",
-                                    "description": "Number of TX buffers fetched by a TCP socket at once. Maps to XLIO_TX_BUFS_BATCH_TCP environment variable."
+                                    "description": "Number of TX buffers fetched by a TCP socket at once. Maps to XLIO_TX_BUFS_BATCH_TCP environment variable. Higher number for less ring accesses to fetch buffers. Lower number for less memory consumption by a socket.\nMin value is 1"
                                 },
                                 "global_array_size": {
                                     "type": "integer",
                                     "default": 200000,
                                     "minimum": 0,
                                     "title": "Global TX buffer array size",
-                                    "description": "Number of global zerocopy data buffer elements allocation. Maps to XLIO_TX_BUFS environment variable."
+                                    "description": "Number of global zerocopy data buffer elements allocation. Maps to XLIO_TX_BUFS environment variable. Controls how many buffers are pre-allocated for TX operations."
                                 },
                                 "prefetch_size": {
                                     "type": "integer",
                                     "default": 256,
                                     "minimum": 0,
                                     "title": "TX prefetch size",
-                                    "description": "Accelerate offloaded send operation by optimizing cache. Different values give optimized send rate on different machines. We recommend you tune this for your specific hardware. Value range is 0 (disable) to MTU size. Maps to XLIO_TX_PREFETCH_BYTES environment variable."
+                                    "description": "Accelerate offloaded send operation by optimizing cache. Maps to XLIO_TX_PREFETCH_BYTES environment variable. Different values give optimized send rate on different machines. We recommend you tune this for your specific hardware.\nValue range is 0 to MTU size\nDisable with a value of 0"
                                 },
                                 "nonblocking_eagain": {
                                     "type": "boolean",
@@ -1071,7 +1101,7 @@
                                     "default": 256,
                                     "minimum": 32,
                                     "title": "RX prefetch size",
-                                    "description": "Size of receive buffer in bytes to prefetch into cache while processing ingress packets. The default is a single cache line of 64 bytes which should be at least 32 bytes to cover the IP+UDP headers and a small part of the users payload. Increasing this can help improve performance for larger user payload sizes. Value range is 32 bytes to MTU size. Maps to XLIO_RX_PREFETCH_BYTES environment variable."
+                                    "description": "Size of receive buffer in bytes to prefetch into cache while processing ingress packets. Maps to XLIO_RX_PREFETCH_BYTES environment variable. The default is a single cache line of 64 bytes which should be at least 32 bytes to cover the IP+UDP headers and a small part of the users payload. Increasing this can help improve performance for larger user payload sizes.\nValue range is 32 bytes to MTU size"
                                 },
                                 "prefetch_before_poll": {
                                     "type": "integer",
@@ -1090,7 +1120,7 @@
                                     "default": 32768,
                                     "minimum": 0,
                                     "title": "TX WRE global array size",
-                                    "description": "Number of Work Request Elements allocated in all transmit QPs. Maps to XLIO_TX_WRE environment variable."
+                                    "description": "Number of Work Request Elements allocated in all transmit QPs. Maps to XLIO_TX_WRE environment variable. The number of QP's can change according to the number of network offloaded interfaces."
                                 },
                                 "tx_completion_batch_size": {
                                     "type": "integer",
@@ -1098,7 +1128,7 @@
                                     "minimum": 1,
                                     "maximum": 64,
                                     "title": "TX WRE completion batch size",
-                                    "description": "Number of TX WREs used until a completion signal is requested. Maps to XLIO_TX_WRE_BATCHING environment variable."
+                                    "description": "Number of TX WREs used until a completion signal is requested. Maps to XLIO_TX_WRE_BATCHING environment variable. Tuning this parameter allows a better control of the jitter encountered from the Tx CQE handling. Setting a high batching value results in high PPS and lower average latency. Setting a low batching value results in lower latency std-dev.\nValue range is 1-64"
                                 },
                                 "tx_max_inline_size": {
                                     "type": "integer",
@@ -1106,14 +1136,14 @@
                                     "minimum": 0,
                                     "maximum": 884,
                                     "title": "Max TX inline size",
-                                    "description": "Maximum data size sent inline. Setting to 0 disables inlining. Maps to XLIO_TX_MAX_INLINE environment variable."
+                                    "description": "Maximum data size sent inline. Setting to 0 disables inlining. Maps to XLIO_TX_MAX_INLINE environment variable. Max send inline data set for QP. Data copied into the INLINE space is at least 32 bytes of headers and the rest can be user datagram payload. XLIO_TX_MAX_INLINE=0 disables INLINEing on the Tx transmit path. In older releases this parameter was called: XLIO_MAX_INLINE."
                                 },
                                 "rx_global_array_size": {
                                     "type": "integer",
                                     "default": 16000,
                                     "minimum": 0,
                                     "title": "RX WRE global array size",
-                                    "description": "Number of Work Request Elements allocated in all RQs. Maps to XLIO_RX_WRE environment variable."
+                                    "description": "Number of Work Request Elements allocated in all RQs. Maps to XLIO_RX_WRE environment variable. "
                                 },
                                 "rx_batch_size": {
                                     "type": "integer",
@@ -1121,7 +1151,7 @@
                                     "minimum": 1,
                                     "maximum": 1024,
                                     "title": "RX WRE batch size",
-                                    "description": "Number of Work Request Elements and RX buffers to batch before recycling. Maps to XLIO_RX_WRE_BATCHING environment variable."
+                                    "description": "Number of Work Request Elements and RX buffers to batch before recycling. Maps to XLIO_RX_WRE_BATCHING environment variable. Batching decrease latency mean, but might increase latency STD.\nValue range is 1-1024."
                                 }
                             }
                         },
@@ -1134,21 +1164,21 @@
                                     "default": 64,
                                     "minimum": 1,
                                     "title": "Socket segment batch size",
-                                    "description": "Number of TCP segments fetched from segments pool by a socket at once. Maps to XLIO_TX_SEGS_BATCH_TCP environment variable."
+                                    "description": "Number of TCP segments fetched from segments pool by a socket at once. Maps to XLIO_TX_SEGS_BATCH_TCP environment variable. Min value is 1"
                                 },
                                 "ring_batch_size": {
                                     "type": "integer",
                                     "default": 1024,
                                     "minimum": 1,
                                     "title": "Ring segment batch size",
-                                    "description": "Number of TCP segments fetched from segments pool by a ring at once. Maps to XLIO_TX_SEGS_RING_BATCH_TCP environment variable."
+                                    "description": "Number of TCP segments fetched from segments pool by a ring at once. Maps to XLIO_TX_SEGS_RING_BATCH_TCP environment variable. Min value is 1"
                                 },
                                 "pool_batch_size": {
                                     "type": "integer",
                                     "default": 1024,
                                     "minimum": 1,
                                     "title": "Pool segment batch size",
-                                    "description": "Number of TCP segments batched when fetched from the segments pool. Maps to XLIO_TX_SEGS_POOL_BATCH_TCP environment variable."
+                                    "description": "Number of TCP segments batched when fetched from the segments pool. Maps to XLIO_TX_SEGS_POOL_BATCH_TCP environment variable. Min value is 1"
                                 }
                             }
                         }
@@ -1158,7 +1188,7 @@
                     "type": "integer",
                     "default": 32,
                     "title": "Maximum GRO streams",
-                    "description": "Controls the number of TCP streams to perform Generic Receive Offload simultaneously. 0 disables GRO. Maps to XLIO_GRO_STREAMS_MAX environment variable."
+                    "description": "Control the number of TCP streams to perform Generic Receive Offload simultaneously. Maps to XLIO_GRO_STREAMS_MAX environment variable. Disable GRO with a value of 0."
                 }
             }
         },
@@ -1167,36 +1197,6 @@
             "title": "Application Integration",
             "description": "Configurations and optimizations for specific applications or use cases.",
             "properties": {
-                "api": {
-                    "type": "object",
-                    "description": "XLIO API configuration.",
-                    "properties": {
-                        "socketextreme": {
-                            "type": "boolean",
-                            "default": false,
-                            "title": "Enable SocketXtreme API",
-                            "description": "When this parameter is enabled, XLIO operates in SocketXtreme mode. SocketXtreme mode brings latency down, eliminating copy operations and increasing throughput allowing applications to further utilize true kernel bypass architecture. An application should use a socket extension API named SocketXtreme. Maps to XLIO_SOCKETEXTREME environment variable."
-                        },
-                        "sendfile_limit": {
-                            "type": "integer",
-                            "default": 10737418240,
-                            "title": "Sendfile byte limit",
-                            "description": "Memory limit for the mapping cache which is used by sendfile(). Default value is 10GB. Maps to XLIO_ZC_CACHE_THRESHOLD environment variable."
-                        },
-                        "hugepages": {
-                            "type": "object",
-                            "description": "API hugepages configuration.",
-                            "properties": {
-                                "size": {
-                                    "type": "integer",
-                                    "default": 2097152,
-                                    "title": "Hugepage size for API",
-                                    "description": "Size of huge pages used by user application for buffers provided as part of the TX Zero Copy socket API (sendmsg with MSG_ZEROCOPY flag). Default value is 2MB. Maps to XLIO_USER_HUGE_PAGE_SIZE environment variable."
-                                }
-                            }
-                        }
-                    }
-                },
                 "nginx": {
                     "type": "object",
                     "description": "NGINX-specific optimizations.",
@@ -1217,7 +1217,7 @@
                             "type": "integer",
                             "default": 0,
                             "title": "UDP buffer pool size",
-                            "description": "The size of UDP socket pool for NGINX. For any value different than 0 - close() socket will not destroy the socket, but will place it in a pool for next socket UDP creation. Disable with 0. Maps to XLIO_NGINX_UDP_POOL_SIZE environment variable."
+                            "description": "The size of UDP socket pool for NGINX. Maps to XLIO_NGINX_UDP_POOL_SIZE environment variable. For any value different than 0 - close() socket will not destroy the socket, but will place it in a pool for next socket UDP creation.\nDisable with 0"
                         },
                         "udp_socket_pool_reuse": {
                             "type": "boolean",
@@ -1230,54 +1230,6 @@
                             "default": false,
                             "title": "Distribute completion queues",
                             "description": "Distributes completion queue processing across worker processes for better performance. Maps to XLIO_DISTRIBUTE_CQ environment variable."
-                        }
-                    }
-                },
-                "acceleration_control": {
-                    "type": "object",
-                    "description": "Socket acceleration control settings.",
-                    "properties": {
-                        "default_acceleration": {
-                            "type": "boolean",
-                            "default": true,
-                            "title": "Enable acceleration by default for all sockets",
-                            "description": "Create all sockets as offloaded/not-offloaded by default. Value of true is for offloaded, false for not-offloaded. Maps to XLIO_OFFLOADED_SOCKETS environment variable."
-                        },
-                        "app_id": {
-                            "type": "string",
-                            "default": "XLIO_DEFAULT_APPLICATION_ID",
-                            "title": "Application ID",
-                            "description": "Specify a group of rules from libxlio.conf for XLIO to apply. Example: 'iperf_server'. Default is 'XLIO_DEFAULT_APPLICATION_ID' (match only the '*' group rule). Maps to XLIO_APPLICATION_ID environment variable."
-                        },
-                        "transport_control": {
-                            "type": "array",
-                            "default": [],
-                            "title": "Transport control rules",
-                            "description": "Rules defining transport protocol and offload settings for specific applications or processes. Maps to configuration in libxlio.conf file.",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "id": {
-                                        "type": "string",
-                                        "title": "Rule identifier",
-                                        "description": "Unique identifier for this transport control rule."
-                                    },
-                                    "name": {
-                                        "type": "string",
-                                        "title": "Application name",
-                                        "description": "Name of the application this rule applies to."
-                                    },
-                                    "actions": {
-                                        "type": "array",
-                                        "description": "Actions to apply for this rule",
-                                        "items": {
-                                            "type": "string",
-                                            "title": "Action directive",
-                                            "description": "Directive that modifies transport layer behavior."
-                                        }
-                                    }
-                                }
-                            }
                         }
                     }
                 },
@@ -1315,7 +1267,55 @@
                                 }
                             ],
                             "title": "Application spec profile",
-                            "description": "XLIO predefined specification profiles. Options: 'latency'/sockperf_latency - Optimized for use cases that are keen on latency; 'ultra-latency'/sockperf_ultra_latency - Optimized for use cases that are keen on latency even more, uses single threaded model, avoids OS polling and progress engine; 'nginx' - Optimized for nginx, must be used to offload nginx (this profile is set indirectly when XLIO_NGINX_WORKERS_NUM is configured); 'nginx_dpu' - Optimized for nginx running inside NVIDIA DPU; 'nvme_bf3' - Optimized for SPDK solution over NVIDIA DPU BF3. Maps to XLIO_SPEC environment variable."
+                            "description": "XLIO predefined specification profiles. Maps to XLIO_SPEC environment variable.\n\nlatency/sockperf_latency\n    Optimized for use cases that are keen on latency.\n    Example: XLIO_SPEC=latency\n\nultra-latency/sockperf_ultra_latency\n    Optimized for use cases that are keen on latency even more. This mode uses\n    single threaded model, avoids OS polling and progress engine.\n    Example: XLIO_SPEC=ultra-latency\n\nnginx\n    Optimized for nginx. This profile must be used to offload nginx. This profile\n    is turned indirectly by setting:\n    XLIO_NGINX_WORKERS_NUM=<N> where N is the number of nginx workers.\n\nnginx_dpu\n    Optimized for nginx running inside NVIDIA DPU.\n    Example: XLIO_SPEC=nginx_dpu XLIO_NGINX_WORKERS_NUM=<N>\n\nnvme_bf3\n    Optimized for SPDK solution over NVIDIA DPU BF3\n    Example: XLIO_SPEC=nvme_bf3"
+                        }
+                    }
+                }
+            }
+        },
+        "acceleration_control": {
+            "type": "object",
+            "description": "Socket acceleration control settings.",
+            "properties": {
+                "default_acceleration": {
+                    "type": "boolean",
+                    "default": true,
+                    "title": "Enable acceleration by default for all sockets",
+                    "description": "Create all sockets as offloaded/not-offloaded by default. Maps to XLIO_OFFLOADED_SOCKETS environment variable. Value of true is for offloaded, false for not-offloaded."
+                },
+                "app_id": {
+                    "type": "string",
+                    "default": "XLIO_DEFAULT_APPLICATION_ID",
+                    "title": "Application ID",
+                    "description": "Specify a group of rules from libxlio.conf for XLIO to apply. Maps to XLIO_APPLICATION_ID environment variable.\nExample: 'XLIO_APPLICATION_ID=iperf_server'.\nDefault is \"XLIO_DEFAULT_APPLICATION_ID\" (match only the '*' group rule)"
+                },
+                "transport_control": {
+                    "type": "array",
+                    "default": [],
+                    "title": "Transport control rules",
+                    "description": "Rules defining transport protocol and offload settings for specific applications or processes. Maps to configuration in libxlio.conf file.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "title": "Rule identifier",
+                                "description": "Unique identifier for this transport control rule."
+                            },
+                            "name": {
+                                "type": "string",
+                                "title": "Application name",
+                                "description": "Name of the application this rule applies to."
+                            },
+                            "actions": {
+                                "type": "array",
+                                "description": "Actions to apply for this rule",
+                                "items": {
+                                    "type": "string",
+                                    "title": "Action directive",
+                                    "description": "Directive that modifies transport layer behavior."
+                                }
+                            }
                         }
                     }
                 }
@@ -1368,13 +1368,13 @@
                                 }
                             ],
                             "title": "Log level",
-                            "description": "Logging level the library will be using. Available levels: none (print no log), panic (fatal behavior), error (runtime errors), warn (runtime warnings that don't disrupt workflow), info (general information), details (complete XLIO configuration information), debug (high level insight to operations), fine (low level runtime activity, includes basic Tx/Rx logging, will lower performance), finer (very low level logging, will DRASTICALLY lower performance), all (identical to finer). Maps to XLIO_TRACELEVEL environment variable."
+                            "description": "Logging level the library will be using. Maps to XLIO_TRACELEVEL environment variable. Default is info\nExample: # XLIO_TRACELEVEL=debug\n\nnone\n    Print no log at all\npanic\n    Panic level logging, this would generally cause fatal behavior and an exception\n    will be thrown by the library. Typically, this is caused by memory\n    allocation problems. This level is rarely used.\nerror\n    Runtime ERRORs in the library.\n    Typically, these can provide insight for the developer of wrong internal\n    logic like: Errors from underlying OS or Infiniband verbs calls. internal\n    double mapping/unmapping of objects.\nwarn\n    Runtime warning that do not disrupt the workflow of the application but\n    might warn of a problem in the setup or the overall setup configuration.\n    Typically, these can be address resolution failure (due to wrong routing\n    setup configuration), corrupted ip packets in the receive path or\n    unsupported functions requested by the user application\ninfo\n    General information passed to the user of the application. Bring up\n    configuration logging or some general info to help the user better\n    use the library\ndetails\n    Complete XLIO's configuration information.\n    Very high level insight of some of the critical decisions done in library.\ndebug\n    High level insight to the operations done in the library. All socket API calls\n    are logged and internal high level control channels log there activity.\nfine\n    Low level run time logging of activity. This logging level includes basic\n    Tx and Rx logging in the fast path and it will lower application\n    performance. It is recommended to use this level with XLIO_LOG_FILE parameter.\nfiner\n    Very low level run time logging of activity!\n    This logging level will DRASTICALLY lower application performance.\n    It is recommended to use this level with XLIO_LOG_FILE parameter.\nall\n    today this level is identical to finer"
                         },
                         "file_path": {
                             "type": "string",
                             "default": "",
                             "title": "Log file path",
-                            "description": "Redirect all logging to a specific user defined file. This is very useful when raising the XLIO_TRACELEVEL. Library will replace a single '%d' appearing in the log file name with the pid of the process loaded with XLIO. Maps to XLIO_LOG_FILE environment variable."
+                            "description": "Redirect all logging to a specific user defined file. This is very useful when raising the XLIO_TRACELEVEL. Library will replace a single '%d' appearing in the log file name with the pid of the process loaded with XLIO. This can help in running multiple instances of XLIO each with it's own log file name. Maps to XLIO_LOG_FILE environment variable.\nExample: XLIO_LOG_FILE=/tmp/xlio_log.txt"
                         },
                         "details": {
                             "type": "integer",
@@ -1400,7 +1400,7 @@
                             "type": "string",
                             "default": "",
                             "title": "Statistics file path",
-                            "description": "Redirect socket statistics to a specific user defined file. Library will dump each socket's statistics into a file when closing the socket. Maps to XLIO_STATS_FILE environment variable."
+                            "description": "Redirect socket statistics to a specific user defined file. Maps to XLIO_STATS_FILE environment variable. Library will dump each socket's statistics into a file when closing the socket.\nExample: XLIO_STATS_FILE=/tmp/stats"
                         },
                         "fd_num": {
                             "type": "integer",
@@ -1408,19 +1408,19 @@
                             "maximum": 1024,
                             "default": 0,
                             "title": "Max tracked file descriptors",
-                            "description": "Maximum number of sockets monitored by XLIO statistic mechanism. This affects the number of sockets that xlio_stats and XLIO_STATS_FILE can report simultaneously. xlio_stats tool is additionally limited by 1024 sockets. Maps to XLIO_STATS_FD_NUM environment variable."
+                            "description": "Maximum number of sockets monitored by XLIO statistic mechanism. Maps to XLIO_STATS_FD_NUM environment variable. This affects the number of sockets that xlio_stats and XLIO_STATS_FILE can report simultaneously. xlio_stats tool is additionally limited by 1024 sockets."
                         },
                         "shmem_dir": {
                             "type": "string",
                             "default": "/tmp/xlio",
                             "title": "Shared memory directory",
-                            "description": "Set the directory path for the library to create the shared memory files for xlio_stats. No files will be created when setting this value to empty string \"\". Maps to XLIO_STATS_SHMEM_DIR environment variable."
+                            "description": "Set the directory path for the library to create the shared memory files for xlio_stats. Maps to XLIO_STATS_SHMEM_DIR environment variable. No files will be created when setting this value to empty string \"\"."
                         },
                         "cpu_usage": {
                             "type": "boolean",
                             "default": false,
                             "title": "Enable CPU usage statistics",
-                            "description": "Calculate XLIO CPU usage during polling HW loops. This information is available through XLIO stats utility. Maps to XLIO_CPU_USAGE_STATS environment variable."
+                            "description": "Calculate XLIO CPU usage during polling HW loops. Maps to XLIO_CPU_USAGE_STATS environment variable. This information is available through XLIO stats utility."
                         }
                     }
                 },
@@ -1428,25 +1428,25 @@
                     "type": "boolean",
                     "default": false,
                     "title": "Enable exit report",
-                    "description": "Print a human readable report of resources usage at exit. The report is printed during termination phase. Therefore, it can be missed if the process is killed with the SIGKILL signal. Maps to XLIO_PRINT_REPORT environment variable."
+                    "description": "Print a human readable report of resources usage at exit. Maps to XLIO_PRINT_REPORT environment variable. The report is printed during termination phase. Therefore, it can be missed if the process is killed with the SIGKILL signal."
+                }
+            }
+        },
+        "extra_api": {
+            "type": "object",
+            "description": "XLIO API configuration.",
+            "properties": {
+                "socketextreme": {
+                    "type": "boolean",
+                    "default": false,
+                    "title": "Enable SocketXtreme API",
+                    "description": "When this parameter is enabled, XLIO operates in SocketXtreme mode. Maps to XLIO_SOCKETEXTREME environment variable. SocketXtreme mode brings latency down, eliminating copy operations and increasing throughput allowing applications to further utilize true kernel bypass architecture. An application should use a socket extension API named SocketXtreme."
                 },
-                "daemon": {
-                    "type": "object",
-                    "description": "XLIO daemon configuration.",
-                    "properties": {
-                        "enable": {
-                            "type": "boolean",
-                            "default": false,
-                            "title": "Enable XLIO daemon",
-                            "description": "Enable the XLIO daemon service for additional monitoring capabilities. Maps to XLIO_SERVICE_ENABLE environment variable."
-                        },
-                        "dir": {
-                            "type": "string",
-                            "default": "/tmp/xlio",
-                            "title": "Daemon working directory",
-                            "description": "Set the directory path for XLIO to write files used by xliod. Note: when used xliod must be run with --notify-dir directing the same folder. Maps to XLIO_SERVICE_NOTIFY_DIR environment variable."
-                        }
-                    }
+                "hugepage_size": {
+                    "type": "integer",
+                    "default": 2097152,
+                    "title": "API hugepage size.",
+                    "description": "Size of huge pages used by user application for buffers provided as part of the TX Zero Copy socket API (sendmsg with MSG_ZEROCOPY flag). Maps to XLIO_USER_HUGE_PAGE_SIZE environment variable."
                 }
             }
         }

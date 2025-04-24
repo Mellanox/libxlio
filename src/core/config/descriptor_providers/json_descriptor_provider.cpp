@@ -265,9 +265,10 @@ static void add_numeric_constraint(json_object *property_obj, parameter_descript
     json_object *field = get_json_field(property_obj, field_name);
     if (field && json_object_get_type(field) == json_type_int) {
         int64_t bound_val = json_object_get_int64(field);
-        param_desc.add_constraint([bound_val, comparator](const std::experimental::any &val) {
-            return comparator(std::experimental::any_cast<int64_t>(val), bound_val);
-        });
+        param_desc.add_constraint(
+            [bound_val, comparator = std::move(comparator)](const std::experimental::any &val) {
+                return comparator(std::experimental::any_cast<int64_t>(val), bound_val);
+            });
     }
 }
 
@@ -285,11 +286,12 @@ void json_descriptor_provider::add_property_constraints(json_object *property_ob
         std::vector<int64_t> allowed_values = extract_enum_values<int64_t>(enum_field);
 
         if (!allowed_values.empty()) {
-            param_desc.add_constraint([allowed_values](const std::experimental::any &val) {
-                int64_t value = std::experimental::any_cast<int64_t>(val);
-                return std::find(allowed_values.begin(), allowed_values.end(), value) !=
-                    allowed_values.end();
-            });
+            param_desc.add_constraint(
+                [allowed_values = std::move(allowed_values)](const std::experimental::any &val) {
+                    int64_t value = std::experimental::any_cast<int64_t>(val);
+                    return std::find(allowed_values.begin(), allowed_values.end(), value) !=
+                        allowed_values.end();
+                });
         }
     }
 }
@@ -344,31 +346,32 @@ static bool create_one_of_mappings(parameter_descriptor &param_desc, json_object
         param_desc.add_string_mapping(allowed_string_values[i], allowed_int_values[i]);
     }
 
-    param_desc.add_constraint(
-        [allowed_int_values, allowed_string_values](const std::experimental::any &val) {
-            try {
-                if (val.type() == typeid(int64_t)) {
-                    int64_t int_val = std::experimental::any_cast<int64_t>(val);
+    param_desc.add_constraint([allowed_int_values = std::move(allowed_int_values),
+                               allowed_string_values = std::move(allowed_string_values)](
+                                  const std::experimental::any &val) {
+        try {
+            if (val.type() == typeid(int64_t)) {
+                int64_t int_val = std::experimental::any_cast<int64_t>(val);
 
-                    if (!allowed_int_values.empty()) {
-                        return std::find(allowed_int_values.begin(), allowed_int_values.end(),
-                                         int_val) != allowed_int_values.end();
-                    }
-                    return true;
-                } else if (val.type() == typeid(std::string)) {
-                    std::string str_val = std::experimental::any_cast<std::string>(val);
-
-                    if (!allowed_string_values.empty()) {
-                        return std::find(allowed_string_values.begin(), allowed_string_values.end(),
-                                         str_val) != allowed_string_values.end();
-                    }
-                    return true;
+                if (!allowed_int_values.empty()) {
+                    return std::find(allowed_int_values.begin(), allowed_int_values.end(),
+                                     int_val) != allowed_int_values.end();
                 }
-            } catch (const std::exception &) {
-                return false;
+                return true;
+            } else if (val.type() == typeid(std::string)) {
+                std::string str_val = std::experimental::any_cast<std::string>(val);
+
+                if (!allowed_string_values.empty()) {
+                    return std::find(allowed_string_values.begin(), allowed_string_values.end(),
+                                     str_val) != allowed_string_values.end();
+                }
+                return true;
             }
+        } catch (const std::exception &) {
             return false;
-        });
+        }
+        return false;
+    });
 
     return true;
 }

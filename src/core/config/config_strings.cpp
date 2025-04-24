@@ -10,7 +10,7 @@ namespace config_strings {
 
 namespace env {
 const char *XLIO_INLINE_CONFIG = "XLIO_INLINE_CONFIG";
-const char *XLIO_CUSTOM_CONFIG_FILE = "XLIO_CUSTOM_CONFIG_FILE";
+const char *XLIO_CONFIG_FILE = "XLIO_CONFIG_FILE";
 } // namespace env
 
 namespace paths {

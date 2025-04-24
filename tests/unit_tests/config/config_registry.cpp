@@ -307,7 +307,7 @@ TEST(config, config_registry_default_ctr_inline_has_precedence)
 {
     conf_file_writer json_config(R"({ "observability": { "log": { "level": 2 } } })");
     env_setter inline_setter("XLIO_INLINE_CONFIG", "observability.log.level=5");
-    env_setter config_file_setter("XLIO_CUSTOM_CONFIG_FILE", json_config.get());
+    env_setter config_file_setter("XLIO_CONFIG_FILE", json_config.get());
 
     config_registry registry;
 
@@ -318,7 +318,7 @@ TEST(config, config_registry_default_ctr_inline_corrupted_json_ok_throws)
 {
     conf_file_writer json_config(R"({ "core": { "log": { "level": 2 } } })");
     env_setter inline_setter("XLIO_INLINE_CONFIG", "core.log.level5");
-    env_setter config_file_setter("XLIO_CUSTOM_CONFIG_FILE", json_config.get());
+    env_setter config_file_setter("XLIO_CONFIG_FILE", json_config.get());
 
     ASSERT_THROW(config_registry(), xlio_exception);
 }

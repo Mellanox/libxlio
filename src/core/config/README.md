@@ -55,7 +55,7 @@ Multiple configuration values can be set in a single environment variable using 
 
 ```bash
 # Set multiple configuration values in one line
-export XLIO_INLINE_CONFIG="core.resources.memory_limit=4294967296, observability.log.file_path=/tmp/xlio.log, network.protocols.tcp.performance.nodelay.enable=true"
+export XLIO_INLINE_CONFIG="core.resources.memory_limit=4294967296, observability.log.file_path=/tmp/xlio.log, network.protocols.tcp.nodelay.enable=true"
 ```
 
 The syntax supports comma-separated key-value pairs where each key uses the dot notation of the configuration hierarchy.
@@ -88,6 +88,15 @@ Configuration can be provided through JSON files that follow the schema structur
 }
 ```
 
+By default, XLIO looks for a JSON configuration file at `/etc/libxlio_config.json`. 
+
+You can specify a custom configuration file location by setting the `XLIO_CONFIG_FILE` environment variable:
+
+```bash
+# Set custom JSON configuration file path
+export XLIO_CONFIG_FILE=/path/to/my/xlio_config.json
+```
+
 ### Legacy Configuration System
 
 The legacy system uses individual environment variables for configuration. These are still supported for backward compatibility:
@@ -99,10 +108,10 @@ export XLIO_MEMORY_LIMIT=4294967296
 export XLIO_TCP_NODELAY=true
 ```
 
-To force XLIO to use the legacy environment variables and ignore any new configuration methods (XLIO_INLINE_CONFIG or JSON files), set:
+To force XLIO to use the new configuration subsystem, set:
 
 ```bash
-export XLIO_USE_DEPRECATED_CONFIG=1
+export XLIO_USE_NEW_CONFIG=1
 ```
 
 ## Environment Variable Mapping
@@ -120,7 +129,7 @@ Configuration keys in the new system follow a hierarchical dot notation that ref
 
 ```
 core.resources.memory_limit
-network.protocols.tcp.performance.nodelay.enable
+network.protocols.tcp.nodelay.enable
 performance.rings.tx.alloc_logic
 performance.buffers.tx.global_array_size
 applications.nginx.distribute_cq
@@ -157,7 +166,7 @@ For users migrating from the legacy environment variable configuration model to 
 
 1. Use the mappings defined in `src/core/config/mappings.py` to understand the new configuration keys
 2. Replace direct environment variable usage with either XLIO_INLINE_CONFIG or JSON configuration
-3. If necessary, you can temporarily revert to the legacy configuration by setting `XLIO_USE_DEPRECATED_CONFIG=1`
+3. `export XLIO_USE_NEW_CONFIG=1` to use the new subsystem.
 
 ## Further Information
 
