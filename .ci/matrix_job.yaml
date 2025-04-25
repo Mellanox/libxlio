@@ -95,16 +95,16 @@ runs_on_dockers:
      arch: 'x86_64',
      name: 'xlio_static.cppcheck',
      uri: '$arch/$name',
-     tag: '20250304',
-     build_args: '--no-cache --target static',
+     tag: '20250425',
+     build_args: '--no-cache --target cppcheck',
      category: 'tool'
      }
   - {file: '.ci/dockerfiles/Dockerfile.rhel8.6',
      arch: 'x86_64',
      name: 'xlio_static.csbuild',
      uri: '$arch/$name',
-     tag: '20250304',
-     build_args: '--no-cache --target static',
+     tag: '20250425',
+     build_args: '--no-cache --target csbuild',
      category: 'tool'
      }
 
