@@ -91,7 +91,7 @@ if [ ! -z "${test_remote_ip}" ] ; then
 else
 	# Get IPv4/6 addresses for net1 interface which is a VF of MLNX NIC
 	test_ip_list="eth_ip4:$(ip -f inet addr show net1 | awk '/inet / {print $2}' | cut -d/ -f1)"
-	# test_ip_list="${test_ip_list} eth_ip6:$(ip -f inet6 addr show net1 | awk '/inet6 / {print $2}' | cut -d/ -f1)"
+	test_ip_list="${test_ip_list} eth_ip6:$(ip -f inet6 addr show net1 | grep global | awk '/inet6 / {print $2}' | cut -d/ -f1)"
 	if [ -z "$test_ip_list" ]; then
 		echo "ERROR: Cannot get IPv4/6 address of net1 interface!"
 		exit 1
