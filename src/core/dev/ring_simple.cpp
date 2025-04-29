@@ -1011,7 +1011,7 @@ void ring_simple::modify_cq_moderation(uint32_t period, uint32_t count)
 
 uint64_t ring_simple::get_rx_cq_out_of_buffer_drop()
 {
-    return m_p_cq_mgr_rx->get_n_rx_drop_counter();
+    return m_p_cq_mgr_rx->get_n_rx_hw_pkt_drops();
 }
 
 void ring_simple::adapt_cq_moderation()

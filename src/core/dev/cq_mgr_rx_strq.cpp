@@ -226,7 +226,7 @@ inline bool cq_mgr_rx_strq::strq_cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe,
         _hot_buffer_stride->rx.timestamps.hw_raw = ntohll(cqe->timestamp);
         uint32_t sop_rxdrop_qpn_flowtag_h_byte = ntohl(cqe->sop_rxdrop_qpn_flowtag);
         _hot_buffer_stride->rx.flow_tag_id = sop_rxdrop_qpn_flowtag_h_byte & 0x00FFFFFF;
-        m_p_cq_stat->n_rx_drop_counter += sop_rxdrop_qpn_flowtag_h_byte >> 24;
+        m_p_cq_stat->n_rx_hw_pkt_drops += sop_rxdrop_qpn_flowtag_h_byte >> 24;
         _hot_buffer_stride->rx.is_sw_csum_need =
             !(m_b_is_rx_hw_csum_on && (cqe->hds_ip_ext & MLX5_CQE_L4_OK) &&
               (cqe->hds_ip_ext & MLX5_CQE_L3_OK));
@@ -322,7 +322,7 @@ int cq_mgr_rx_strq::drain_and_proccess_helper(mem_buf_desc_t *buff, mem_buf_desc
         ++ret_total;
         if (process_strq_cq_element_rx(buff, status)) {
             if (p_recycle_buffers_last_wr_id) {
-                m_p_cq_stat->n_rx_pkt_drop++;
+                m_p_cq_stat->n_rx_sw_pkt_drops++;
                 reclaim_recv_buffer_helper(buff);
             } else {
                 bool procces_now = is_eth_tcp_frame(buff);

@@ -308,10 +308,10 @@ typedef struct {
 // CQ stat info
 typedef struct {
     uint64_t n_rx_stride_count;
-    uint64_t n_rx_drop_counter;
+    uint64_t n_rx_hw_pkt_drops;
     uint64_t n_rx_packet_count;
     uint64_t n_rx_consumed_rwqe_count;
-    uint64_t n_rx_pkt_drop;
+    uint64_t n_rx_sw_pkt_drops;
     uint64_t n_rx_lro_packets;
     uint64_t n_rx_lro_bytes;
     uint64_t n_rx_gro_packets;

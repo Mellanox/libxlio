@@ -151,7 +151,7 @@ cq_mgr_rx::~cq_mgr_rx()
     VALGRIND_MAKE_MEM_UNDEFINED(m_p_ibv_cq, sizeof(ibv_cq));
 
     g_p_net_device_table_mgr->increase_closed_rings_rx_cq_drop_counter(
-        m_p_cq_stat->n_rx_drop_counter);
+        m_p_cq_stat->n_rx_hw_pkt_drops);
     statistics_print();
     xlio_stats_instance_remove_cq_block(m_p_cq_stat);
 
@@ -160,13 +160,13 @@ cq_mgr_rx::~cq_mgr_rx()
 
 void cq_mgr_rx::statistics_print()
 {
-    if (m_p_cq_stat->n_rx_pkt_drop || m_p_cq_stat->n_rx_drop_counter ||
+    if (m_p_cq_stat->n_rx_sw_pkt_drops || m_p_cq_stat->n_rx_hw_pkt_drops ||
         m_p_cq_stat->n_rx_sw_queue_len || m_p_cq_stat->n_rx_drained_at_once_max ||
         m_p_cq_stat->n_buffer_pool_len) {
-        cq_logdbg_no_funcname("SW RX Packets dropped: %12llu",
-                              (unsigned long long int)m_p_cq_stat->n_rx_pkt_drop);
+        cq_logdbg_no_funcname("Packets dropped: %12llu",
+                              (unsigned long long int)m_p_cq_stat->n_rx_sw_pkt_drops);
         cq_logdbg_no_funcname("HW RX Packets dropped: %12llu",
-                              (unsigned long long int)m_p_cq_stat->n_rx_drop_counter);
+                              (unsigned long long int)m_p_cq_stat->n_rx_hw_pkt_drops);
         cq_logdbg_no_funcname("Drained max: %17u", m_p_cq_stat->n_rx_drained_at_once_max);
         cq_logdbg_no_funcname("CQE errors: %18llu",
                               (unsigned long long int)m_p_cq_stat->n_rx_cqe_error);
@@ -367,7 +367,7 @@ bool cq_mgr_rx::compensate_qp_poll_success(mem_buf_desc_t *buff_cur)
         m_debt -= buffers;
         m_p_cq_stat->n_buffer_pool_len = m_rx_pool.size();
     } else if (m_b_sysvar_cq_keep_qp_full || m_debt >= (int)m_hqrx_ptr->m_rx_num_wr) {
-        m_p_cq_stat->n_rx_pkt_drop++;
+        m_p_cq_stat->n_rx_sw_pkt_drops++;
         m_hqrx_ptr->post_recv_buffer(buff_cur);
         --m_debt;
         return true;

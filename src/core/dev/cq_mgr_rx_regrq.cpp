@@ -119,7 +119,7 @@ void cq_mgr_rx_regrq::cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe,
         p_rx_wc_buf_desc->rx.timestamps.hw_raw = ntohll(cqe->timestamp);
         uint32_t sop_rxdrop_qpn_flowtag_h_byte = ntohl(cqe->sop_rxdrop_qpn_flowtag);
         p_rx_wc_buf_desc->rx.flow_tag_id = sop_rxdrop_qpn_flowtag_h_byte & 0x00FFFFFF;
-        m_p_cq_stat->n_rx_drop_counter += sop_rxdrop_qpn_flowtag_h_byte >> 24;
+        m_p_cq_stat->n_rx_hw_pkt_drops += sop_rxdrop_qpn_flowtag_h_byte >> 24;
         p_rx_wc_buf_desc->rx.is_sw_csum_need =
             !(m_b_is_rx_hw_csum_on && (cqe->hds_ip_ext & MLX5_CQE_L4_OK) &&
               (cqe->hds_ip_ext & MLX5_CQE_L3_OK));
@@ -206,7 +206,7 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
 
         if (cqe_process_rx(buff, status)) {
             if (p_recycle_buffers_last_wr_id) {
-                m_p_cq_stat->n_rx_pkt_drop++;
+                m_p_cq_stat->n_rx_sw_pkt_drops++;
                 reclaim_recv_buffer_helper(buff);
             } else {
                 bool procces_now = is_eth_tcp_frame(buff);
@@ -296,7 +296,7 @@ bool cq_mgr_rx_regrq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *
                     process_recv_buffer(buff, pv_fd_ready_array);
                 }
             } else {
-                m_p_cq_stat->n_rx_pkt_drop++;
+                m_p_cq_stat->n_rx_sw_pkt_drops++;
                 if (++m_debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv) {
                     compensate_qp_poll_failed();
                 }
