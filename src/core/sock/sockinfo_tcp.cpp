@@ -3758,6 +3758,13 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                         ret = -1;
                         break;
                     }
+                    ops = dynamic_cast<sockinfo_tcp_ops_tls *>(m_ops);
+                    if (ops) {
+                        si_tcp_loginfo("(TCP_ULP) val: tls, ULP is already TLS");
+                        errno = EEXIST;
+                        ret = -1;
+                        break;
+                    }
                     ops = new sockinfo_tcp_ops_tls(this);
                 }
             } else
