@@ -3748,6 +3748,7 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             break;
         case TCP_ULP: {
             sockinfo_tcp_ops *ops {nullptr};
+            pass_to_os_cond = false;
 #ifdef DEFINED_UTLS
             if (__optval && __optlen >= 3 && strncmp((char *)__optval, "tls", 3) == 0) {
                 if (is_utls_supported(UTLS_MODE_TX | UTLS_MODE_RX)) {
@@ -3777,8 +3778,6 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             lock_tcp_con();
             set_ops(ops);
             unlock_tcp_con();
-            /* On success we call kernel setsockopt() in case this socket is not connected
-               and is unoffloaded later.  */
             break;
         }
         case TCP_CONGESTION:
