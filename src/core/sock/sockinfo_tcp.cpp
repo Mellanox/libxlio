@@ -4326,8 +4326,8 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             break;
         case TCP_ULP: {
             sockinfo_tcp_ops *ops {nullptr};
+            pass_to_os_cond = false;
             if (__optval && __optlen >= 4 && strncmp((char *)__optval, "nvme", 4) == 0) {
-                pass_to_os_cond = false;
                 auto nvme_feature_mask = get_supported_nvme_feature_mask();
                 if (nvme_feature_mask == 0U) {
                     errno = ENOTSUP;
@@ -4343,6 +4343,13 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                     si_tcp_logdbg("(TCP_ULP) val: tls");
                     if (unlikely(!is_rts())) {
                         errno = ENOTCONN;
+                        ret = -1;
+                        break;
+                    }
+                    ops = dynamic_cast<sockinfo_tcp_ops_tls *>(m_ops);
+                    if (ops) {
+                        si_tcp_loginfo("(TCP_ULP) val: tls, ULP is already TLS");
+                        errno = EEXIST;
                         ret = -1;
                         break;
                     }
@@ -4366,8 +4373,6 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             lock_tcp_con();
             set_ops(ops);
             unlock_tcp_con();
-            /* On success we call kernel setsockopt() in case this socket is not connected
-               and is unoffloaded later.  */
             break;
         }
         case TCP_CONGESTION:
