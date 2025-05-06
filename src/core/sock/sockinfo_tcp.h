@@ -561,6 +561,8 @@ private:
     inline int rx_wait(int &poll_count, bool blocking);
     inline int rx_wait_lockless(int &poll_count, bool blocking);
     int rx_wait_helper(int &poll_count, bool blocking);
+    bool poll_and_process_rx(bool *is_timeout);
+    bool request_notification_rx();
     void fit_rcv_wnd(bool force_fit);
     void fit_snd_bufs(unsigned int new_max);
 
