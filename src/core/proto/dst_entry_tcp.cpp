@@ -151,35 +151,7 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
             p_tcp_iov[0].iovec.iov_len = total_packet_len;
         }
 
-        if (unlikely(p_tcp_iov[0].p_desc->lwip_pbuf.ref > 1)) {
-            /*
-             * First buffer in the vector is used for reference counting.
-             * The reference is released after completion depending on
-             * batching mode.
-             * There is situation, when a buffer resides in the list for
-             * batching completion and the same buffer is queued for
-             * retransmission. In this case, sending the buffer leads to
-             * the list corruption because the buffer is re-inserted.
-             *
-             * As workaround, allocate new fake buffer which will be
-             * assigned to wr_id and used for reference counting. This
-             * buffer is allocated with ref == 1, so we must not increase
-             * it. When completion happens, ref becomes 0 and the fake
-             * buffer is released.
-             *
-             * We don't change data, only pointer to buffer descriptor.
-             */
-            pbuf_type type = (pbuf_type)p_tcp_iov[0].p_desc->lwip_pbuf.type;
-            mem_buf_desc_t *p_mem_buf_desc =
-                get_buffer(type, &(p_tcp_iov[0].p_desc->lwip_pbuf.desc),
-                           is_set(attr.flags, XLIO_TX_PACKET_BLOCK));
-            if (!p_mem_buf_desc) {
-                return -1;
-            }
-            p_tcp_iov[0].p_desc = p_mem_buf_desc;
-        } else {
-            p_tcp_iov[0].p_desc->lwip_pbuf.ref++;
-        }
+        p_tcp_iov[0].p_desc->lwip_pbuf.ref++;
 
         /* save pointers to ip and tcp headers for software checksum calculation */
         p_tcp_iov[0].p_desc->tx.p_ip_h = p_ip_hdr;
