@@ -148,6 +148,14 @@ static err_t tcp_close_shutdown(struct tcp_pcb *pcb, u8_t rst_on_unacked_data)
 {
     err_t err;
 
+    if (get_tcp_state(pcb) == SYN_RCVD) {
+        // according to the RFC, in case we get a SYN and no more data
+        // we should just close w/o FIN or RST
+        tcp_pcb_purge(pcb);
+        set_tcp_state(pcb, CLOSED);
+        return ERR_OK;
+    }
+
     if (rst_on_unacked_data &&
         ((get_tcp_state(pcb) == ESTABLISHED) || (get_tcp_state(pcb) == CLOSE_WAIT))) {
         if (pcb->rcv_wnd != pcb->rcv_wnd_max) {
@@ -193,12 +201,6 @@ static err_t tcp_close_shutdown(struct tcp_pcb *pcb, u8_t rst_on_unacked_data)
         err = ERR_OK;
         tcp_pcb_remove(pcb);
         pcb = NULL;
-        break;
-    case SYN_RCVD:
-        err = tcp_send_fin(pcb);
-        if (err == ERR_OK) {
-            set_tcp_state(pcb, FIN_WAIT_1);
-        }
         break;
     case ESTABLISHED:
         err = tcp_send_fin(pcb);
@@ -258,7 +260,7 @@ err_t tcp_close(struct tcp_pcb *pcb)
         /* Set a flag not to receive any more data... */
         pcb->flags |= TF_RXCLOSED;
     }
-    /* ... and close */
+
     return tcp_close_shutdown(pcb, 1);
 }
 
