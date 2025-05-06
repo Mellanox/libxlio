@@ -271,7 +271,7 @@ TEST(config, json_descriptor_provider_array_support)
                     "type": "object",
                     "description": "controls hardware offload capabilities.",
                     "properties": {
-                        "transport_control": {
+                        "rules": {
                             "type": "array",
                             "default": [],
                             "title": "Transport control per apps.",
@@ -305,11 +305,11 @@ TEST(config, json_descriptor_provider_array_support)
 })");
 
     config_descriptor cd = provider.load_descriptors();
-    auto transport_control = cd.get_parameter("net.offload.transport_control").default_value();
+    auto acceleration_rules = cd.get_parameter("net.offload.rules").default_value();
 
     // Default should be an empty array
     std::vector<std::experimental::any> tc_array =
-        std::experimental::any_cast<std::vector<std::experimental::any>>(transport_control);
+        std::experimental::any_cast<std::vector<std::experimental::any>>(acceleration_rules);
     ASSERT_TRUE(tc_array.empty());
 }
 
@@ -387,7 +387,7 @@ TEST(config, json_descriptor_provider_array_of_objects)
                     "type": "object",
                     "description": "controls hardware offload capabilities.",
                     "properties": {
-                        "transport_control": {
+                        "rules": {
                             "type": "array",
                             "default": [
                                 {
@@ -432,11 +432,11 @@ TEST(config, json_descriptor_provider_array_of_objects)
 })");
 
     config_descriptor cd = provider.load_descriptors();
-    auto transport_control = cd.get_parameter("net.offload.transport_control").default_value();
+    auto acceleration_rules = cd.get_parameter("net.offload.rules").default_value();
 
     // Should be an array with two objects
     std::vector<std::experimental::any> tc_array =
-        std::experimental::any_cast<std::vector<std::experimental::any>>(transport_control);
+        std::experimental::any_cast<std::vector<std::experimental::any>>(acceleration_rules);
     ASSERT_EQ(static_cast<size_t>(2), tc_array.size());
 
     // Check first object

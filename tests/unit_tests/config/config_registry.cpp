@@ -305,13 +305,13 @@ TEST(config, config_registry_mixed_loaders_merge)
 
 TEST(config, config_registry_default_ctr_inline_has_precedence)
 {
-    conf_file_writer json_config(R"({ "observability": { "log": { "level": 2 } } })");
-    env_setter inline_setter("XLIO_INLINE_CONFIG", "observability.log.level=5");
+    conf_file_writer json_config(R"({ "monitor": { "log": { "level": 2 } } })");
+    env_setter inline_setter("XLIO_INLINE_CONFIG", "monitor.log.level=5");
     env_setter config_file_setter("XLIO_CONFIG_FILE", json_config.get());
 
     config_registry registry;
 
-    ASSERT_EQ(5, registry.get_value<int64_t>("observability.log.level"));
+    ASSERT_EQ(5, registry.get_value<int64_t>("monitor.log.level"));
 }
 
 TEST(config, config_registry_default_ctr_inline_corrupted_json_ok_throws)

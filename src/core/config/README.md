@@ -39,7 +39,7 @@ The schema organizes configuration into the following main sections:
 3. **hardware**: Hardware-specific configurations and offloads
 4. **performance**: Settings that affect XLIO performance characteristics
 5. **applications**: Configurations and optimizations for specific applications
-6. **observability**: Settings for logging, statistics, and monitoring
+6. **monitor**: Settings for logging, statistics, and monitoring
 
 ## Configuration Methods
 
@@ -55,7 +55,7 @@ Multiple configuration values can be set in a single environment variable using 
 
 ```bash
 # Set multiple configuration values in one line
-export XLIO_INLINE_CONFIG="core.resources.memory_limit=4294967296, observability.log.file_path=/tmp/xlio.log, network.protocols.tcp.nodelay.enable=true"
+export XLIO_INLINE_CONFIG="core.resources.memory_limit=4294967296, monitor.log.file_path=/tmp/xlio.log, network.protocols.tcp.nodelay.enable=true"
 ```
 
 The syntax supports comma-separated key-value pairs where each key uses the dot notation of the configuration hierarchy.
@@ -119,7 +119,7 @@ export XLIO_USE_NEW_CONFIG=1
 The new configuration system maintains compatibility with legacy environment variables through a mapping system. Each configuration parameter in the new system can be associated with a legacy environment variable. This mapping is defined in `src/core/config/mappings.py`.
 
 For example:
-- `observability.log.level` maps to `XLIO_TRACELEVEL`
+- `monitor.log.level` maps to `XLIO_TRACELEVEL`
 - `network.protocols.ip.mtu` maps to `XLIO_MTU`
 - `performance.threading.cpu_affinity` maps to `XLIO_INTERNAL_THREAD_AFFINITY`
 
@@ -133,7 +133,7 @@ network.protocols.tcp.nodelay.enable
 performance.rings.tx.alloc_logic
 performance.buffers.tx.global_array_size
 applications.nginx.distribute_cq
-observability.stats.shmem_dir
+monitor.stats.shmem_dir
 ```
 
 ## Dependencies
@@ -157,7 +157,7 @@ bool enable_hugepages = config->get_value<bool>("core.resources.hugepages.enable
 int64_t memory_limit = config->get_value<int64_t>("core.resources.memory_limit");
 
 // Get a string value
-std::string log_file = config->get_value<std::string>("observability.log.file_path");
+std::string log_file = config->get_value<std::string>("monitor.log.file_path");
 ```
 
 ## Migration Guide

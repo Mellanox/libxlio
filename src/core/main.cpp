@@ -983,30 +983,30 @@ static size_t calc_rx_wqe_buff_size()
  * Process transport control context configuration
  * Handles both configuration file and legacy configuration files
  */
-static void process_transport_control()
+static void process_acceleration_rules()
 {
-    if (access(safe_mce_sys().transport_control, F_OK) != 0) {
+    if (access(safe_mce_sys().acceleration_rules, F_OK) != 0) {
         vlog_printf(VLOG_DEBUG,
                     "legacy library configuration file wasn't found. Parsing as string: %s\n",
-                    safe_mce_sys().transport_control);
+                    safe_mce_sys().acceleration_rules);
 
-        if (std::string(safe_mce_sys().transport_control).find("application-id") ==
+        if (std::string(safe_mce_sys().acceleration_rules).find("application-id") ==
             std::string::npos) {
             vlog_printf(VLOG_DEBUG, "Transport control context is invalid");
             return;
         }
 
-        std::string transport_control_as_string(safe_mce_sys().transport_control);
+        std::string acceleration_rules_as_string(safe_mce_sys().acceleration_rules);
         // transform format "app1,action1,action2;app2,action1,action2"
         // to a content that will be accepted by parser
-        std::replace(transport_control_as_string.begin(), transport_control_as_string.end(), ';',
+        std::replace(acceleration_rules_as_string.begin(), acceleration_rules_as_string.end(), ';',
                      '\n');
-        std::replace(transport_control_as_string.begin(), transport_control_as_string.end(), ',',
+        std::replace(acceleration_rules_as_string.begin(), acceleration_rules_as_string.end(), ',',
                      '\n');
-        xlio_add_conf_rule(transport_control_as_string.c_str());
-    } else if (__xlio_parse_config_file(safe_mce_sys().transport_control)) {
+        xlio_add_conf_rule(acceleration_rules_as_string.c_str());
+    } else if (__xlio_parse_config_file(safe_mce_sys().acceleration_rules)) {
         vlog_printf(VLOG_DEBUG, "FAILED to read library configuration file: %s\n",
-                    safe_mce_sys().transport_control);
+                    safe_mce_sys().acceleration_rules);
     }
 }
 
@@ -1137,7 +1137,7 @@ static void do_global_ctors_helper()
 
     NEW_CTOR(g_p_fd_collection, fd_collection());
 
-    process_transport_control();
+    process_acceleration_rules();
 
     // initialize LWIP tcp/ip stack
     NEW_CTOR(g_p_lwip, xlio_lwip());

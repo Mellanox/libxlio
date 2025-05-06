@@ -243,12 +243,12 @@ TEST(config, json_loader_nested_arrays)
     ASSERT_EQ(9, std::experimental::any_cast<int64_t>(row3[2]));
 }
 
-TEST(config, json_loader_transport_control)
+TEST(config, json_loader_acceleration_rules)
 {
     conf_file_writer json_config(R"({
         "net": {
             "offload": {
-                "transport_control": [
+                "rules": [
                     {
                         "id": "app1",
                         "name": "Application 1",
@@ -267,13 +267,13 @@ TEST(config, json_loader_transport_control)
     json_loader loader(json_config.get());
     std::map<std::string, std::experimental::any> data = loader.load_all();
 
-    auto transport_control = std::experimental::any_cast<std::vector<std::experimental::any>>(
-        data["net.offload.transport_control"]);
-    ASSERT_EQ(static_cast<size_t>(2), transport_control.size());
+    auto acceleration_rules =
+        std::experimental::any_cast<std::vector<std::experimental::any>>(data["net.offload.rules"]);
+    ASSERT_EQ(static_cast<size_t>(2), acceleration_rules.size());
 
     // Check first app
     auto app1 = std::experimental::any_cast<std::map<std::string, std::experimental::any>>(
-        transport_control[0]);
+        acceleration_rules[0]);
     ASSERT_EQ("app1", std::experimental::any_cast<std::string>(app1["id"]));
     ASSERT_EQ("Application 1", std::experimental::any_cast<std::string>(app1["name"]));
 
@@ -285,7 +285,7 @@ TEST(config, json_loader_transport_control)
 
     // Check second app
     auto app2 = std::experimental::any_cast<std::map<std::string, std::experimental::any>>(
-        transport_control[1]);
+        acceleration_rules[1]);
     ASSERT_EQ("app2", std::experimental::any_cast<std::string>(app2["id"]));
     ASSERT_EQ("Application 2", std::experimental::any_cast<std::string>(app2["name"]));
 
