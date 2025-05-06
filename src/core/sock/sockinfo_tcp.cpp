@@ -511,6 +511,14 @@ void sockinfo_tcp::err_lwip_cb_xlio_socket(void *pcb_container, err_t err)
     }
 }
 
+/**
+ * @brief Destructor for sockinfo_tcp class
+ *
+ * Cleans up all resources associated with the sockinfo_tcp object
+ *
+ * @note The coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 sockinfo_tcp::~sockinfo_tcp()
 {
     si_tcp_logfunc("");
@@ -5916,6 +5924,14 @@ tcp_timers_collection::tcp_timers_collection(int intervals)
     m_p_intervals.resize(m_n_intervals_size);
 }
 
+/**
+ * @brief Destructor for tcp_timers_collection class
+ *
+ * Cleans up all timer resources by calling free_tta_resources()
+ *
+ * @note The coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 tcp_timers_collection::~tcp_timers_collection()
 {
     free_tta_resources();

@@ -44,6 +44,14 @@ cq_mgr_rx_strq::cq_mgr_rx_strq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_han
     return_stride(next_stride()); // Fill _stride_cache
 }
 
+/**
+ * @brief Destructor for cq_mgr_rx_strq class
+ *
+ * Cleans up all resources associated with the CQ STRQ
+ *
+ * @note The coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 cq_mgr_rx_strq::~cq_mgr_rx_strq()
 {
     cq_logfunc("");

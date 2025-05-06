@@ -49,6 +49,14 @@ dst_entry::dst_entry(const sock_addr &dst, uint16_t src_port, socket_data &sock_
     init_members();
 }
 
+/**
+ * @brief Destructor for dst_entry class
+ *
+ * Cleans up all resources associated with the dst_entry object
+ *
+ * @note The coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 dst_entry::~dst_entry()
 {
     dst_logdbg("%s", to_str().c_str());

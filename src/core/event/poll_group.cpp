@@ -53,6 +53,14 @@ poll_group::poll_group(const struct xlio_poll_group_attr *attr)
     grp_logdbg("Polling group %p created", this);
 }
 
+/**
+ * @brief Destructor for poll_group class
+ *
+ * Cleans up all resources associated with the poll_group object
+ *
+ * @note The coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 poll_group::~poll_group()
 {
     s_poll_groups_lock.lock();

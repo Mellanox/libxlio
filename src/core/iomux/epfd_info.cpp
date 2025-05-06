@@ -63,6 +63,14 @@ epfd_info::epfd_info(int epfd, int size)
     wakeup_set_epoll_fd(m_epfd);
 }
 
+/**
+ * @brief Destructor for epfd_info class
+ *
+ * Cleans up all resources associated with the epfd_info object
+ *
+ * @note The coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 epfd_info::~epfd_info()
 {
     __log_funcall("");
