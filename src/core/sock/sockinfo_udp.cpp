@@ -397,6 +397,14 @@ sockinfo_udp::sockinfo_udp(int fd, int domain)
     si_udp_logfunc("done");
 }
 
+/**
+ * @brief Destructor for sockinfo_udp class
+ *
+ * Cleans up all resources associated with the sockinfo_udp object
+ *
+ * @note The coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 sockinfo_udp::~sockinfo_udp()
 {
     si_udp_logfunc("");

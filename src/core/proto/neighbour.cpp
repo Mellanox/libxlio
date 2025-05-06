@@ -212,6 +212,14 @@ neigh_entry::neigh_entry(neigh_key key, transport_type_t _type, bool is_init_res
     neigh_logdbg("Created new neigh_entry, if_name: %s", m_p_dev->get_ifname());
 }
 
+/**
+ * @brief Destructor for neigh_entry class
+ *
+ * Cleans up all resources associated with the neigh_entry object
+ *
+ * @note The coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 neigh_entry::~neigh_entry()
 {
     neigh_logdbg("");

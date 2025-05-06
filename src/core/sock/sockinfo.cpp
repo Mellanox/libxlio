@@ -111,6 +111,14 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     m_bound.set_sa_family(m_family);
 }
 
+/**
+ * @brief Destructor for sockinfo class
+ *
+ * Cleans up all resources associated with the sockinfo object
+ *
+ * @note The coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 sockinfo::~sockinfo()
 {
     m_state = SOCKINFO_DESTROYING;

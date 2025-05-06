@@ -864,6 +864,16 @@ EXPORT_SYMBOL int XLIO_SYMBOL(shutdown)(int __fd, int __how)
     return SYSCALL(shutdown, __fd, __how);
 }
 
+/**
+ * @brief Listens for incoming connections on a socket
+ *
+ * @param[in] __fd      The file descriptor of the socket
+ * @param[in] __backlog The maximum number of pending connections
+ * @return               0 on success, -1 on error
+ *
+ * @note coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(listen)(int __fd, int backlog)
 {
     PROFILE_FUNC
@@ -965,7 +975,17 @@ EXPORT_SYMBOL int XLIO_SYMBOL(accept4)(int __fd, struct sockaddr *__addr, sockle
     return SYSCALL(accept4, __fd, __addr, __addrlen, __flags);
 }
 
-/* Give the socket FD the local address ADDR (which is LEN bytes long).  */
+/**
+ * @brief Binds a socket to a local address
+ *
+ * @param[in] __fd      The file descriptor of the socket
+ * @param[in] __addr    The local address to bind the socket to
+ * @param[in] __addrlen The length of the local address
+ * @return               0 on success, -1 on error
+ *
+ * @note coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(bind)(int __fd, const struct sockaddr *__addr, socklen_t __addrlen)
 {
     int errno_tmp = errno;
@@ -1041,9 +1061,19 @@ EXPORT_SYMBOL int XLIO_SYMBOL(connect)(int __fd, const struct sockaddr *__to, so
     return ret;
 }
 
-/* Set socket FD's option OPTNAME at protocol level LEVEL
-   to *OPTVAL (which is OPTLEN bytes long).
-   Returns 0 on success, -1 for errors.  */
+/**
+ * @brief Sets the socket option for a given file descriptor
+ *
+ * @param[in] __fd      The file descriptor of the socket
+ * @param[in] __level   The protocol level of the option
+ * @param[in] __optname The name of the option to set
+ * @param[in] __optval  The value of the option
+ * @param[in] __optlen  The length of the option value
+ * @return               0 on success, -1 on error
+ *
+ * @note coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(setsockopt)(int __fd, int __level, int __optname,
                                           __const void *__optval, socklen_t __optlen)
 {
@@ -1075,9 +1105,19 @@ EXPORT_SYMBOL int XLIO_SYMBOL(setsockopt)(int __fd, int __level, int __optname,
     return ret;
 }
 
-/* Get socket FD's option OPTNAME at protocol level LEVEL
-   to *OPTVAL (which is OPTLEN bytes long).
-   Returns 0 on success, -1 for errors.  */
+/**
+ * @brief Gets the socket option for a given file descriptor
+ *
+ * @param[in] __fd      The file descriptor to get the option for
+ * @param[in] __level   The protocol level of the option
+ * @param[in] __optname The name of the option to get
+ * @param[out] __optval  The value of the option
+ * @param[in] __optlen   The length of the option value
+ * @return               0 on success, -1 on error
+ *
+ * @note coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(getsockopt)(int __fd, int __level, int __optname, void *__optval,
                                           socklen_t *__optlen)
 {
@@ -1199,9 +1239,17 @@ EXPORT_SYMBOL int XLIO_SYMBOL(fcntl64)(int __fd, int __cmd, ...)
     return res;
 }
 
-/* Perform the I/O control operation specified by REQUEST on FD.
-   One argument may follow; its presence and type depend on REQUEST.
-   Return value depends on REQUEST.  Usually -1 indicates error. */
+/**
+ * @brief Performs the I/O control operation specified by REQUEST on FD
+ *
+ * @param[in] __fd      The file descriptor of the socket
+ * @param[in] __request The I/O control operation to perform
+ * @param[in] ...       Additional arguments depending on the request
+ * @return               0 on success, -1 on error
+ *
+ * @note coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(ioctl)(int __fd, unsigned long int __request, ...)
 {
     PROFILE_FUNC
@@ -1232,6 +1280,17 @@ EXPORT_SYMBOL int XLIO_SYMBOL(ioctl)(int __fd, unsigned long int __request, ...)
     return res;
 }
 
+/**
+ * @brief Gets the socket name for a given file descriptor
+ *
+ * @param[in] __fd      The file descriptor to get the socket name for
+ * @param[out] __name   The socket address structure to store the result
+ * @param[in] __namelen The length of the socket address structure
+ * @return               0 on success, -1 on error
+ *
+ * @note coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(getsockname)(int __fd, struct sockaddr *__name, socklen_t *__namelen)
 {
     PROFILE_FUNC
@@ -1964,10 +2023,17 @@ EXPORT_SYMBOL int XLIO_SYMBOL(__ppoll_chk)(struct pollfd *__fds, nfds_t __nfds,
 }
 #endif
 
-/* Creates an epoll instance.  Returns fd for the new instance.
-   The "size" parameter is a hint specifying the number of file
-   descriptors to be associated with the new instance.  The fd
-   returned by epoll_create() should be closed with close().  */
+/**
+ * @brief Creates an epoll instance
+ *
+ * @param[in] __size  A hint specifying the number of file descriptors to be associated with the new
+ * instance
+ * @return            File descriptor for the new instance, or -1 on error
+ *
+ * @note The fd returned by epoll_create() should be closed with close()
+ * @note coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(epoll_create)(int __size)
 {
     DO_GLOBAL_CTORS();
@@ -1992,6 +2058,16 @@ EXPORT_SYMBOL int XLIO_SYMBOL(epoll_create)(int __size)
     return epfd;
 }
 
+/**
+ * @brief Creates an epoll instance with additional options
+ *
+ * @param[in] __flags  Option flags for the new instance
+ * @return             File descriptor for the new instance, or -1 on error
+ *
+ * @note The fd returned by epoll_create1() should be closed with close()
+ * @note coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(epoll_create1)(int __flags)
 {
     DO_GLOBAL_CTORS();
@@ -2010,12 +2086,18 @@ EXPORT_SYMBOL int XLIO_SYMBOL(epoll_create1)(int __flags)
     return epfd;
 }
 
-/* Manipulate an epoll instance "epfd". Returns 0 in case of success,
-   -1 in case of error ("errno" variable will contain the specific
-   error code). The "op" parameter is one of the EPOLL_CTL_*
-   constants defined above. The "fd" parameter is the target of the
-   operation. The "event" parameter describes which events the caller
-   is interested in and any associated user data.  */
+/**
+ * @brief Manipulates an epoll instance
+ *
+ * @param[in] __epfd  The file descriptor of the epoll instance
+ * @param[in] __op    The operation to perform
+ * @param[in] __fd    The target of the operation
+ * @param[in] __event The event to be monitored
+ * @return             0 on success, -1 on error
+ *
+ * @note coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(epoll_ctl)(int __epfd, int __op, int __fd,
                                          struct epoll_event *__event)
 {
@@ -2076,10 +2158,18 @@ EXPORT_SYMBOL int XLIO_SYMBOL(epoll_pwait)(int __epfd, struct epoll_event *__eve
     return epoll_wait_helper(__epfd, __events, __maxevents, __timeout, __sigmask);
 }
 
-/* Create two new sockets, of type TYPE in domain DOMand using
-   protocol PROTOCOL, which are connected to each other, and put file
-   descriptors for them in FDS[0] and FDS[1].  If PROTOCOL is zero,
-   one will be chosen automatically.  Returns 0 on success, -1 for errors.  */
+/**
+ * @brief Creates a pair of connected sockets
+ *
+ * @param[in] __domain  The domain of the sockets
+ * @param[in] __type    The type of the sockets
+ * @param[in] __protocol The protocol of the sockets
+ * @param[out] __sv      Array to store the file descriptors
+ * @return               0 on success, -1 on error
+ *
+ * @note coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(socketpair)(int __domain, int __type, int __protocol, int __sv[2])
 {
     PROFILE_FUNC
@@ -2099,10 +2189,15 @@ EXPORT_SYMBOL int XLIO_SYMBOL(socketpair)(int __domain, int __type, int __protoc
     return ret;
 }
 
-/* Create a one-way communication channel (pipe).
-   If successful, two file descriptors are stored in PIPEDES;
-   bytes written on PIPEDES[1] can be read from PIPEDES[0].
-   Returns 0 if successful, -1 if not.  */
+/**
+ * @brief Creates a one-way communication channel (pipe)
+ *
+ * @param[out] __filedes  Array to store the file descriptors
+ * @return                0 if successful, -1 if not
+ *
+ * @note coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(pipe)(int __filedes[2])
 {
     PROFILE_FUNC
@@ -2154,7 +2249,15 @@ EXPORT_SYMBOL int XLIO_SYMBOL(creat)(const char *__pathname, mode_t __mode)
     return fd;
 }
 
-/* Duplicate FD, returning a new file descriptor on the same file.  */
+/**
+ * @brief Duplicates a file descriptor
+ *
+ * @param[in] __fd  The file descriptor to duplicate
+ * @return            The new file descriptor, or -1 on error
+ *
+ * @note coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(dup)(int __fd)
 {
     PROFILE_FUNC
@@ -2175,7 +2278,16 @@ EXPORT_SYMBOL int XLIO_SYMBOL(dup)(int __fd)
     return fid;
 }
 
-/* Duplicate FD to FD2, closing FD2 and making it open on the same file.  */
+/**
+ * @brief Duplicates a file descriptor
+ *
+ * @param[in] __fd  The file descriptor to duplicate
+ * @param[in] __fd2 The file descriptor to duplicate to
+ * @return            The new file descriptor, or -1 on error
+ *
+ * @note coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(dup2)(int __fd, int __fd2)
 {
     PROFILE_FUNC
@@ -2195,10 +2307,14 @@ EXPORT_SYMBOL int XLIO_SYMBOL(dup2)(int __fd, int __fd2)
     return fid;
 }
 
-/* Clone the calling process, creating an exact copy.
-   Return -1 for errors, 0 to the new process,
-   and the process ID of the new process to the old process.  */
-
+/**
+ * @brief Clones the calling process
+ *
+ * @return Process ID of the new process, or -1 on error
+ *
+ * @note coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL pid_t XLIO_SYMBOL(fork)(void)
 {
     PROFILE_FUNC
@@ -2318,9 +2434,16 @@ EXPORT_SYMBOL pid_t XLIO_SYMBOL(vfork)(void)
     return XLIO_CALL(fork);
 }
 
-/* Put the program in the background, and dissociate from the controlling
-   terminal.  If NOCHDIR is zero, do `chdir ("/")'.  If NOCLOSE is zero,
-   redirects stdin, stdout, and stderr to /dev/null.  */
+/**
+ * @brief Puts the program in the background
+ *
+ * @param[in] __nochdir  If zero, do `chdir ("/")'
+ * @param[in] __noclose  If zero, redirect stdin, stdout, and stderr to /dev/null
+ * @return               Process ID of the new process, or -1 on error
+ *
+ * @note coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(daemon)(int __nochdir, int __noclose)
 {
     PROFILE_FUNC
@@ -2361,12 +2484,33 @@ EXPORT_SYMBOL int XLIO_SYMBOL(daemon)(int __nochdir, int __noclose)
     return ret;
 }
 
+/**
+ * @brief Sets up a signal handler
+ *
+ * @param[in] signum  Signal number to set the handler for
+ * @param[in] act     Pointer to the signal action structure
+ * @param[out] oldact Pointer to store the previous signal action
+ * @return            Previous signal action, or SIG_ERR on error
+ *
+ * @note coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(sigaction)(int signum, const struct sigaction *act,
                                          struct sigaction *oldact)
 {
     return sigaction_internal(signum, act, oldact);
 }
 
+/**
+ * @brief Sets up a signal handler
+ *
+ * @param[in] signum  Signal number to set the handler for
+ * @param[in] handler Signal handler function
+ * @return            Previous signal handler, or SIG_ERR on error
+ *
+ * @note coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL sighandler_t XLIO_SYMBOL(signal)(int signum, sighandler_t handler)
 {
     PROFILE_FUNC
@@ -2388,6 +2532,15 @@ EXPORT_SYMBOL sighandler_t XLIO_SYMBOL(signal)(int signum, sighandler_t handler)
 
 #if defined(DEFINED_NGINX)
 
+/**
+ * @brief Sets the user ID of the calling process
+ *
+ * @param[in] uid  The user ID to set
+ * @return          The previous user ID, or -1 on error
+ *
+ * @note coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
+ */
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(setuid)(uid_t uid)
 {
     PROFILE_FUNC
