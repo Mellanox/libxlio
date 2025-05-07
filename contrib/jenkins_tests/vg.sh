@@ -2,6 +2,9 @@
 
 source $(dirname $0)/globals.sh
 
+# Fix hugepages for docker environments
+do_hugepages
+
 echo "Checking for valgrind ..."
 
 #do_module "tools/valgrind-3.12.0"
@@ -19,17 +22,29 @@ make $make_opt all
 make install
 rc=$?
 
+if [[ -f /.dockerenv ]] || [[ -f /run/.containerenv ]] || [[ -n "${KUBERNETES_SERVICE_HOST}" ]]; then
+    if ip link show net1 > /dev/null 2>&1; then
+        test_ip_list="eth_ip4:$(ip -f inet addr show net1 | awk '/inet / {print $2}' | cut -d/ -f1)"
+        test_ip_list="${test_ip_list} eth_ip6:$(ip -f inet6 addr show net1 | grep global | awk '/inet6 / {print $2}' | cut -d/ -f1)"
+    else
+        echo "ERROR: net1 interface does not exist!"
+        exit 1
+    fi
+else
+	test_ip_list=""
+	if [ ! -z "$(do_get_ip 'eth')" ]; then
+		test_ip_list="${test_ip_list} eth_ip4:$(do_get_ip 'eth')"
+	fi
+	if [ ! -z "$(do_get_ip 'eth')" ]; then
+		test_ip_list="${test_ip_list} eth_ip6:$(do_get_ip 'inet6')"
+	fi
+fi
 
-test_ip_list=""
-#if [ ! -z $(do_get_ip 'ib') ]; then
-#	test_ip_list="${test_ip_list} ib:$(do_get_ip 'ib')"
-#fi
-if [ ! -z "$(do_get_ip 'eth')" ]; then
-	test_ip_list="${test_ip_list} eth_ip4:$(do_get_ip 'eth')"
+if [ "$test_ip_list" == "eth_ip4: eth_ip6:" ] || [ -z "${test_ip_list}" ]; then
+	echo "ERROR: Cannot get IPv4/6 address of net1 interface!"
+	exit 1
 fi
-if [ ! -z "$(do_get_ip 'eth')" ]; then
-	test_ip_list="${test_ip_list} eth_ip6:$(do_get_ip 'inet6')"
-fi
+
 test_list="tcp:--tcp udp:"
 test_lib=${vg_dir}/install/lib/${prj_lib}
 test_lib_env="XLIO_MEM_ALLOC_TYPE=ANON XLIO_MEMORY_LIMIT=256MB XLIO_TX_WRE=2000 XLIO_RX_WRE=2000 XLIO_STRQ=off"
