@@ -4,7 +4,22 @@ RUN apt-get update \
  && apt-get install -y libjson-c-dev \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-FROM build as style
+# Base for all tests (Gtest, Valgrind, test), installs utilities.
+FROM build AS tests
+RUN apt-get update && \
+    apt-get install -y \
+    net-tools unzip iproute2 wget \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Valgrind target, installs valgrind
+FROM tests AS vg
+RUN apt-get update && \
+    apt-get install -y \
+    valgrind \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Style target, installs clang-format-15
+FROM build AS style
 RUN apt-get update \
  && apt-get install -y clang-15 clang-format-15 \
  && update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-15 100 \
