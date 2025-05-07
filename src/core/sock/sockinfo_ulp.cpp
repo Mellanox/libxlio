@@ -116,10 +116,34 @@ template <typename T> static void dlsym_default(T &ptr, const char *name)
     dlsym_handle(ptr, name, RTLD_DEFAULT);
 }
 
-#define XLIO_TLS_API_FIND(__name) dlsym_default(s_tls_api.__name, #__name);
+static void *openssl_handle = nullptr;
 
-void xlio_tls_api_setup()
+#define XLIO_TLS_API_FIND(__name) dlsym_handle(s_tls_api.__name, #__name, openssl_handle);
+
+inline bool check_openssl_loaded()
 {
+    openssl_handle = dlopen("libssl.so.3", RTLD_NOW | RTLD_GLOBAL);
+    if (!openssl_handle) {
+        vlog_printf(VLOG_DEBUG, "Failed to dlopen libssl.so.3: %s", dlerror());
+        return false;
+    } else {
+        vlog_printf(VLOG_DEBUG, "Successfully loaded libssl.so.3");
+        return true;
+    }
+}
+
+inline void xlio_tls_api_setup()
+{
+    if (openssl_handle) {
+        // OpenSSL symbols is already loaded
+        return;
+    }
+
+    if (!check_openssl_loaded()) {
+        vlog_printf(VLOG_DEBUG, "OpenSSL library not found or failed to load");
+        return;
+    }
+
     XLIO_TLS_API_FIND(EVP_CIPHER_CTX_new);
     XLIO_TLS_API_FIND(EVP_CIPHER_CTX_free);
     XLIO_TLS_API_FIND(EVP_CIPHER_CTX_reset);
@@ -132,6 +156,7 @@ void xlio_tls_api_setup()
     XLIO_TLS_API_FIND(EVP_EncryptInit_ex);
     XLIO_TLS_API_FIND(EVP_EncryptUpdate);
     XLIO_TLS_API_FIND(EVP_EncryptFinal_ex);
+
     if (s_tls_api.EVP_CIPHER_CTX_new && s_tls_api.EVP_CIPHER_CTX_free &&
         s_tls_api.EVP_CIPHER_CTX_reset && s_tls_api.EVP_aes_128_gcm && s_tls_api.EVP_aes_256_gcm &&
         s_tls_api.EVP_DecryptInit_ex && s_tls_api.EVP_DecryptUpdate &&
@@ -508,6 +533,9 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
             return -1;
         }
     } else {
+#ifdef DEFINED_UTLS
+        xlio_tls_api_setup();
+#endif /* DEFINED_UTLS */
         /* RX offload checks. */
         if (unlikely(!m_p_sock->is_utls_supported(UTLS_MODE_RX))) {
             si_ulp_logdbg("TLS_RX is not supported.");
