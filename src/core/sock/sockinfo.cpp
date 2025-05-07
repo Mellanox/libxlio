@@ -756,6 +756,29 @@ int sockinfo::getsockopt(int __level, int __optname, void *__optval, socklen_t *
                 errno = EINVAL;
             }
             break;
+        case SO_TYPE:
+            if (*__optlen != sizeof(int)) {
+                errno = EINVAL;
+                si_logdbg("(SO_TYPE) invalid length");
+                break;
+            }
+            switch (m_protocol) {
+            case PROTO_TCP:
+                *(int *)__optval = SOCK_STREAM;
+                ret = 0;
+                si_logdbg("(SO_TYPE) value: %d", SOCK_STREAM);
+                break;
+            case PROTO_UDP:
+                *(int *)__optval = SOCK_DGRAM;
+                ret = 0;
+                si_logdbg("(SO_TYPE) value: %d", SOCK_DGRAM);
+                break;
+            default:
+                errno = EINVAL;
+                si_logdbg("(SO_TYPE) invalid protocol");
+                break;
+            }
+            break;
         case SO_MAX_PACING_RATE:
             if (*__optlen == sizeof(struct xlio_rate_limit_t)) {
                 *(struct xlio_rate_limit_t *)__optval = m_so_ratelimit;
