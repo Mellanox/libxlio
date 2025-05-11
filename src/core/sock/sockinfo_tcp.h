@@ -413,7 +413,7 @@ private:
     inline void lwip_pbuf_init_custom(mem_buf_desc_t *p_desc);
 
     void tcp_timer();
-
+    bool poll_and_progress_rx(uint64_t &poll_sn);
     bool prepare_listen_to_close();
 
     // Builds rfs key
