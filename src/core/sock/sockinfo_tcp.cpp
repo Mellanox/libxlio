@@ -5184,14 +5184,42 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
             }
         }
     }
+
+    // Do another poll to avoid request notofication race with incoming packets.
+
+    prev_sndbuf = sndbuf_available();
+    all_drained = true;
+    if (likely(m_p_rx_ring)) {
+        poll_sn = 0;
+        all_drained = m_p_rx_ring->poll_and_process_element_rx(&poll_sn);
+    } else { // There's more than one CQ, go over each one
+        for (rx_ring_iter = m_rx_ring_map.begin(); rx_ring_iter != m_rx_ring_map.end();
+             rx_ring_iter++) {
+            if (unlikely(rx_ring_iter->second->refcnt <= 0)) {
+                __log_err("Attempt to poll illegal cq");
+                continue;
+            }
+
+            poll_sn = 0;
+            all_drained &= rx_ring_iter->first->poll_and_process_element_rx(&poll_sn);
+        }
+    }
     m_rx_ring_map_lock.unlock();
+    lock_tcp_con(); // We must take a lock before checking m_n_rx_pkt_ready_list_count
 
-    // Check if we have a packet in receive queue before we going to sleep and
-    // update is_sleeping flag under the same lock to synchronize between
-    // this code and wakeup mechanism.
+    sndbuf_change = (sndbuf_available() != prev_sndbuf);
+    if (likely(m_n_rx_pkt_ready_list_count || !all_drained || sndbuf_change)) { // Got completions from CQ
+        __log_entry_funcall("Ready %d packets. sn=%llu", m_n_rx_pkt_ready_list_count,
+                            (unsigned long long)poll_sn);
+        IF_STATS(m_p_socket_stats->counters.n_rx_poll_hit++);
+        unlock_tcp_con();
+        return 1;
+    }
 
-    lock_tcp_con();
-    if (!m_n_rx_pkt_ready_list_count && !m_ready_conn_cnt) {
+    IF_STATS(m_p_socket_stats->counters.n_rx_poll_miss++);
+    // End of do another poll.
+
+    if (!m_ready_conn_cnt) {
         m_sock_wakeup_pipe.going_to_sleep();
         unlock_tcp_con();
     } else {
