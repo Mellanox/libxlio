@@ -1826,15 +1826,7 @@ wait:
      * If we got here, either the socket is not offloaded or rx_wait() returned 1.
      */
 os:
-    if (in_flags & MSG_XLIO_ZCOPY_FORCE) {
-        // Enable the next non-blocked read to check the OS
-        m_rx_udp_poll_os_ratio_counter = m_n_sysvar_rx_udp_poll_os_ratio;
-        errno = EIO;
-        ret = -1;
-        goto out;
-    }
 
-    in_flags &= ~MSG_XLIO_ZCOPY;
     ret = rx_os(call_type, p_iov, sz_iov, in_flags, __from, __fromlen, __msg);
     *p_flags = in_flags;
     save_stats_rx_os(ret);
@@ -2355,8 +2347,6 @@ inline void sockinfo_udp::update_ready(mem_buf_desc_t *p_desc, void *pv_fd_ready
         }
         m_sock_wakeup_pipe.do_wakeup();
         m_lock_rcv.unlock();
-    } else {
-        IF_STATS(m_p_socket_stats->n_rx_zcopy_pkt_count++);
     }
 
     NOTIFY_ON_EVENTS(this, EPOLLIN);
@@ -3117,28 +3107,6 @@ void sockinfo_udp::save_stats_tx_offload(int bytes, bool is_dummy)
     }
 }
 
-int sockinfo_udp::recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
-                                              size_t count)
-{
-    int ret = 0;
-    unsigned int index = 0;
-    mem_buf_desc_t *buff;
-
-    m_lock_rcv.lock();
-    for (index = 0; index < count; index++) {
-        buff = (mem_buf_desc_t *)pkts[index].packet_id;
-        if (m_rx_ring_map.find(buff->p_desc_owner->get_parent()) == m_rx_ring_map.end()) {
-            errno = ENOENT;
-            ret = -1;
-            break;
-        }
-        reuse_buffer(buff);
-        IF_STATS(m_p_socket_stats->n_rx_zcopy_pkt_count--);
-    }
-    m_lock_rcv.unlock();
-    return ret;
-}
-
 mem_buf_desc_t *sockinfo_udp::get_next_desc(mem_buf_desc_t *p_desc)
 {
     return p_desc->p_next_desc;
@@ -3159,49 +3127,13 @@ timestamps_t *sockinfo_udp::get_socket_timestamps()
     return &m_rx_pkt_ready_list.front()->rx.timestamps;
 }
 
-void sockinfo_udp::post_dequeue(bool release_buff)
+void sockinfo_udp::post_dequeue()
 {
     mem_buf_desc_t *to_resue = m_rx_pkt_ready_list.get_and_pop_front();
     IF_STATS(m_p_socket_stats->n_rx_ready_pkt_count--);
     m_n_rx_pkt_ready_list_count--;
-    if (release_buff) {
-        reuse_buffer(to_resue);
-    }
+    reuse_buffer(to_resue);
     m_rx_pkt_ready_offset = 0;
-}
-
-int sockinfo_udp::zero_copy_rx(iovec *p_iov, mem_buf_desc_t *p_desc, int *p_flags)
-{
-    mem_buf_desc_t *p_desc_iter;
-    int total_rx = 0;
-    int len = p_iov[0].iov_len - sizeof(xlio_recvfrom_zcopy_packets_t) -
-        sizeof(xlio_recvfrom_zcopy_packet_t);
-
-    // Make sure there is enough room for the header
-    if (len < 0) {
-        errno = ENOBUFS;
-        return -1;
-    }
-
-    // Copy iov pointers to user buffer
-    xlio_recvfrom_zcopy_packets_t *p_packets = (xlio_recvfrom_zcopy_packets_t *)p_iov[0].iov_base;
-    p_packets->n_packet_num = 1;
-    p_packets->pkts[0].packet_id = (void *)p_desc;
-    p_packets->pkts[0].sz_iov = 0;
-    for (p_desc_iter = p_desc; p_desc_iter; p_desc_iter = p_desc_iter->p_next_desc) {
-        len -= sizeof(p_packets->pkts[0].iov[0]);
-        if (len < 0) {
-            *p_flags = MSG_TRUNC;
-            break;
-        }
-        p_packets->pkts[0].iov[p_packets->pkts[0].sz_iov++] = p_desc_iter->rx.frag;
-        total_rx += p_desc_iter->rx.frag.iov_len;
-    }
-
-    IF_STATS(m_p_socket_stats->n_rx_zcopy_pkt_count++);
-
-    si_udp_logfunc("copied pointers to %d bytes to user buffer", total_rx);
-    return total_rx;
 }
 
 size_t sockinfo_udp::handle_msg_trunc(size_t total_rx, size_t payload_size, int in_flags,

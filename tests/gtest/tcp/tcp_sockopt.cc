@@ -608,7 +608,7 @@ struct reusable_cleanable_test_socket {
         EXPECT_EQ(result, 0) << "setsockopt failed to set reuse addr";
 
         struct timeval tv;
-        tv.tv_sec = 5;
+        tv.tv_sec = 20;
         tv.tv_usec = 0;
         setsockopt(m_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     }

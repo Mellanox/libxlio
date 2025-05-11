@@ -216,7 +216,6 @@ void update_delta_stat(socket_stats_t *p_curr_stat, socket_stats_t *p_prev_stat)
         delay;
     p_prev_stat->n_rx_ready_pkt_count = p_curr_stat->n_rx_ready_pkt_count;
     p_prev_stat->counters.n_rx_ready_pkt_max = p_curr_stat->counters.n_rx_ready_pkt_max;
-    p_prev_stat->n_rx_zcopy_pkt_count = p_curr_stat->n_rx_zcopy_pkt_count;
     p_prev_stat->strq_counters.n_strq_total_strides =
         (p_curr_stat->strq_counters.n_strq_total_strides -
          p_prev_stat->strq_counters.n_strq_total_strides) /

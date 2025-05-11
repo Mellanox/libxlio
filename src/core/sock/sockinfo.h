@@ -291,9 +291,6 @@ public:
                        int *p_flags = 0, sockaddr *__from = nullptr, socklen_t *__fromlen = nullptr,
                        struct msghdr *__msg = nullptr) = 0;
 
-    virtual int recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
-                                            size_t count) = 0;
-
     // Instructing the socket to immediately sample/un-sample the OS in receive flow
     virtual void set_immediate_os_sample() = 0;
     virtual void unset_immediate_os_sample() = 0;
@@ -375,9 +372,8 @@ protected:
                                                int &rx_pkt_ready_list_idx) = 0;
     virtual timestamps_t *get_socket_timestamps() = 0;
     virtual void update_socket_timestamps(timestamps_t *ts) = 0;
-    virtual void post_dequeue(bool release_buff) = 0;
+    virtual void post_dequeue() = 0;
     virtual int os_epoll_wait(epoll_event *ep_events, int maxevents);
-    virtual int zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags) = 0;
     virtual void handle_ip_pktinfo(struct cmsg_state *cm_state) = 0;
     virtual bool try_un_offloading(); // un-offload the socket if possible
 
@@ -652,7 +648,6 @@ int sockinfo::dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, soc
     mem_buf_desc_t *pdesc;
     int total_rx = 0;
     uint32_t nbytes, pos;
-    bool release_buff = true;
 
     bool is_peek = in_flags & MSG_PEEK;
     int rx_pkt_ready_list_idx = 1;
@@ -674,62 +669,52 @@ int sockinfo::dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, soc
         }
     }
 
-    if (in_flags & MSG_XLIO_ZCOPY) {
-        release_buff = false;
-        total_rx = zero_copy_rx(p_iov, pdesc, p_out_flags);
-        if (unlikely(total_rx < 0)) {
-            return -1;
-        }
-        m_rx_pkt_ready_offset = 0;
-    } else {
 #ifdef DEFINED_UTLS
-        uint8_t tls_type = pdesc->rx.tls_type;
+    uint8_t tls_type = pdesc->rx.tls_type;
 #endif /* DEFINED_UTLS */
-        for (int i = 0; i < sz_iov && pdesc; i++) {
-            pos = 0;
-            while (pos < p_iov[i].iov_len && pdesc) {
+    for (int i = 0; i < sz_iov && pdesc; i++) {
+        pos = 0;
+        while (pos < p_iov[i].iov_len && pdesc) {
 #ifdef DEFINED_UTLS
-                if (unlikely(pdesc->rx.tls_type != tls_type)) {
-                    break;
-                }
+            if (unlikely(pdesc->rx.tls_type != tls_type)) {
+                break;
+            }
 #endif /* DEFINED_UTLS */
-                nbytes = p_iov[i].iov_len - pos;
-                if (nbytes > bytes_left) {
-                    nbytes = bytes_left;
+            nbytes = p_iov[i].iov_len - pos;
+            if (nbytes > bytes_left) {
+                nbytes = bytes_left;
+            }
+            memcpy((char *)(p_iov[i].iov_base) + pos, iov_base, nbytes);
+            pos += nbytes;
+            total_rx += nbytes;
+            m_rx_pkt_ready_offset += nbytes;
+            bytes_left -= nbytes;
+            iov_base = (uint8_t *)iov_base + nbytes;
+            if (m_b_rcvtstamp || m_n_tsing_flags) {
+                update_socket_timestamps(&pdesc->rx.timestamps);
+            }
+            if (bytes_left <= 0) {
+                if (unlikely(is_peek)) {
+                    pdesc = get_next_desc_peek(pdesc, rx_pkt_ready_list_idx);
+                } else {
+                    pdesc = get_next_desc(pdesc);
                 }
-                memcpy((char *)(p_iov[i].iov_base) + pos, iov_base, nbytes);
-                pos += nbytes;
-                total_rx += nbytes;
-                m_rx_pkt_ready_offset += nbytes;
-                bytes_left -= nbytes;
-                iov_base = (uint8_t *)iov_base + nbytes;
-                if (m_b_rcvtstamp || m_n_tsing_flags) {
-                    update_socket_timestamps(&pdesc->rx.timestamps);
-                }
-                if (bytes_left <= 0) {
-                    if (unlikely(is_peek)) {
-                        pdesc = get_next_desc_peek(pdesc, rx_pkt_ready_list_idx);
-                    } else {
-                        pdesc = get_next_desc(pdesc);
-                    }
-                    m_rx_pkt_ready_offset = 0;
-                    if (pdesc) {
-                        iov_base = pdesc->rx.frag.iov_base;
-                        bytes_left = pdesc->rx.frag.iov_len;
-                    }
+                m_rx_pkt_ready_offset = 0;
+                if (pdesc) {
+                    iov_base = pdesc->rx.frag.iov_base;
+                    bytes_left = pdesc->rx.frag.iov_len;
                 }
             }
         }
     }
 
     if (unlikely(is_peek)) {
-        m_rx_pkt_ready_offset =
-            rx_pkt_ready_offset; // if MSG_PEEK is on, m_rx_pkt_ready_offset must be zero-ed
-        // save_stats_rx_offload(total_rx); //TODO??
+        // if MSG_PEEK is on, m_rx_pkt_ready_offset must be zero-ed
+        m_rx_pkt_ready_offset = rx_pkt_ready_offset;
     } else {
         IF_STATS(m_p_socket_stats->n_rx_ready_byte_count -= total_rx);
         m_rx_ready_byte_count -= total_rx;
-        post_dequeue(release_buff);
+        post_dequeue();
         save_stats_rx_offload(total_rx);
     }
 

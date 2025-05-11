@@ -210,8 +210,6 @@ public:
     inline bool handle_bind_no_port(int &bind_ret, in_port_t in_port, const sockaddr *__addr,
                                     socklen_t __addrlen);
     inline void non_tcp_recved(int rx_len);
-    int recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
-                                    size_t count) override;
 
     void socketxtreme_recv_buffs_tcp(mem_buf_desc_t *desc, uint16_t len);
 
@@ -542,8 +540,7 @@ private:
         }
     }
 
-    void post_dequeue(bool release_buff) override;
-    int zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags) override;
+    void post_dequeue() override {};
 
     // Returns the connected pcb, with 5 tuple which matches the input arguments,
     // in state "SYN Received" or NULL if pcb wasn't found
