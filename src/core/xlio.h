@@ -124,49 +124,6 @@ int xlio_init(void);
 /* After finishing workling with XLIO interface call xlio_exit */
 int xlio_exit(void);
 
-/**
- * Zero-copy revcfrom implementation.
- *
- * @param s Socket file descriptor.
- * @param buf Buffer to fill with received data or pointers to data (see below).
- * @param flags Pointer to flags (see below).
- * @param from If not NULL, will be filled with source address (same as recvfrom).
- * @param fromlen If not NULL, will be filled with source address size (same as recvfrom).
- *
- * This function attempts to receive a packet without doing data copy.
- * The flags argument can contain the usual flags of recvmsg(), and also the
- * MSG_XLIO_ZCOPY_FORCE flag. If the latter is set, the function will not
- * fall back to data copy. Otherwise, the function falls back to data copy
- * if zero-copy cannot be performed. If zero-copy is done then MSG_XLIO_ZCOPY
- * flag is set upon exit.
- *
- * If zero copy is performed (MSG_XLIO_ZCOPY flag is returned), the buffer
- * is filled with a xlio_recvfrom_zcopy_packets_t structure, holding as much fragments
- * as `len' allows. The total size of all fragments is returned.
- * Otherwise the MSG_XLIO_ZCOPY flag is not set and the buffer is filled
- * with actual data and it's size is returned (same as recvfrom())
- * If no data was received the return value is zero.
- *
- * NOTE: The returned packet must be freed with free_packet() after
- * the application finished using it.
- */
-int xlio_recvfrom_zcopy(int s, void *buf, size_t len, int *flags, struct sockaddr *from,
-                        socklen_t *fromlen);
-
-/**
- * Frees a packet received by recvfrom_zcopy() or held by receive callback.
- *
- * @param s Socket from which the packet was received.
- * @param pkts Array of packet.
- * @param count Number of packets in the array.
- * @return 0 on success, -1 on failure
- *
- * errno is set to: EINVAL - not a offloaded socket
- *                  ENOENT - the packet was not received from `s'.
- */
-int xlio_recvfrom_zcopy_free_packets(int s, struct xlio_recvfrom_zcopy_packet_t *pkts,
-                                     size_t count);
-
 /*
  * Add a libxlio.conf rule to the top of the list.
  * This rule will not apply to existing sockets which already considered the conf rules.
