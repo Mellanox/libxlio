@@ -414,6 +414,7 @@ private:
 
     void tcp_timer();
     bool poll_and_progress_rx(uint64_t &poll_sn);
+    bool check_last_rx_poll_progress(unsigned int prev_sndbuf, bool all_drained);
     bool prepare_listen_to_close();
 
     // Builds rfs key
