@@ -641,9 +641,11 @@ struct ipc {
     {
         if (m_pipe[ReadSide] != -1) {
             close(m_pipe[ReadSide]);
+            m_pipe[ReadSide] = -1;
         }
         if (m_pipe[WriteSide] != -1) {
             close(m_pipe[WriteSide]);
+            m_pipe[WriteSide] = -1;
         }
     }
     bool wait_peer()
