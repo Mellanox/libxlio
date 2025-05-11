@@ -5099,20 +5099,16 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
     auto prev_sndbuf = sndbuf_available();
     bool all_drained = poll_and_progress_rx(poll_sn);
     m_rx_ring_map_lock.unlock();
-    lock_tcp_con(); // We must take a lock before checking m_n_rx_pkt_ready_list_count
 
-    bool sndbuf_change = (sndbuf_available() != prev_sndbuf);
-    if (likely(m_n_rx_pkt_ready_list_count || !all_drained || sndbuf_change)) { // Got completions from CQ
-        __log_entry_funcall("Ready %d packets. sn=%llu", m_n_rx_pkt_ready_list_count,
-                            (unsigned long long)poll_sn);
-        IF_STATS(m_p_socket_stats->counters.n_rx_poll_hit++);
-        unlock_tcp_con();
+    // Instruct check_last_rx_poll_progress to check timeout.
+    lock_tcp_con(); // We must take a lock before checking m_n_rx_pkt_ready_list_count
+    bool progress = check_last_rx_poll_progress(prev_sndbuf, all_drained);
+    bool is_timeout = (!progress) ? m_loops_timer.is_timeout() : false; // Socket lock required.
+    unlock_tcp_con(); // Must happen before g_event_handler_manager_local.do_tasks();
+
+    if (progress) {
         return 1;
     }
-
-    IF_STATS(m_p_socket_stats->counters.n_rx_poll_miss++);
-    bool is_timeout = m_loops_timer.is_timeout(); // We do this under lock.
-    unlock_tcp_con(); // Must happen before g_event_handler_manager_local.do_tasks();
 
     if (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
         // There are scenarios when rx_wait_helper is called in an infinite loop but exits before
@@ -5122,8 +5118,8 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
     }
 
     // if in blocking accept state skip poll phase and go to sleep directly
-    if (!blocking || is_timeout) {
-        errno = EAGAIN;
+    if (!blocking || is_timeout || g_b_exit) {
+        errno = (!g_b_exit ? EAGAIN : EINTR);
         return -1;
     }
 
@@ -5131,18 +5127,12 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
         return 0;
     }
 
-    // if we polling too much - go to sleep
-    si_tcp_logfuncall("%d: too many polls without data blocking=%d", m_fd, blocking);
-    if (g_b_exit) {
-        errno = EINTR;
-        return -1;
-    }
-
-    // arming CQs
+    // If we polling too much - go to sleeps
     /* coverity[double_lock] */
     m_rx_ring_map_lock.lock();
+    si_tcp_logfuncall("%d: too many polls without data blocking=%d", m_fd, blocking);
     if (likely(m_p_rx_ring)) {
-        int ret = m_p_rx_ring->request_notification(CQT_RX, poll_sn);
+        int ret = m_p_rx_ring->request_notification(CQT_RX, poll_sn); // Arming CQs
         if (ret != 0) {
             m_rx_ring_map_lock.unlock();
             return 0;
@@ -5166,31 +5156,21 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
     }
 
     // Do another poll to avoid request notofication race with incoming packets.
-
     prev_sndbuf = sndbuf_available();
     all_drained = poll_and_progress_rx(poll_sn);
     m_rx_ring_map_lock.unlock();
-    lock_tcp_con(); // We must take a lock before checking m_n_rx_pkt_ready_list_count
 
-    sndbuf_change = (sndbuf_available() != prev_sndbuf);
-    if (likely(m_n_rx_pkt_ready_list_count || !all_drained || sndbuf_change)) { // Got completions from CQ
-        __log_entry_funcall("Ready %d packets. sn=%llu", m_n_rx_pkt_ready_list_count,
-                            (unsigned long long)poll_sn);
-        IF_STATS(m_p_socket_stats->counters.n_rx_poll_hit++);
+    lock_tcp_con(); // We must take a lock before checking m_n_rx_pkt_ready_list_count
+    progress = check_last_rx_poll_progress(prev_sndbuf, all_drained);
+    // End of do another poll.
+
+    if (progress || m_ready_conn_cnt) {
         unlock_tcp_con();
         return 1;
     }
 
-    IF_STATS(m_p_socket_stats->counters.n_rx_poll_miss++);
-    // End of do another poll.
-
-    if (!m_ready_conn_cnt) {
-        m_sock_wakeup_pipe.going_to_sleep();
-        unlock_tcp_con();
-    } else {
-        unlock_tcp_con();
-        return 0;
-    }
+    m_sock_wakeup_pipe.going_to_sleep();
+    unlock_tcp_con();
 
     int ret = os_wait_sock_rx_epfd(rx_epfd_events, SI_RX_EPFD_EVENT_MAX);
 
@@ -5204,7 +5184,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
 
     // If there is a ready packet in a queue we want to return to user as quickest as possible
     if (m_n_rx_pkt_ready_list_count) {
-        return 0;
+        return 1;
     }
 
     for (int event_idx = 0; event_idx < ret; event_idx++) {
@@ -5258,6 +5238,20 @@ bool sockinfo_tcp::poll_and_progress_rx(uint64_t &poll_sn)
     }
 
     return all_drained;
+}
+
+bool sockinfo_tcp::check_last_rx_poll_progress(unsigned int prev_sndbuf, bool all_drained)
+{
+    bool sndbuf_change = (sndbuf_available() != prev_sndbuf);
+    if (likely(m_n_rx_pkt_ready_list_count || !all_drained || sndbuf_change)) {
+        // Got completions from CQ
+        __log_entry_funcall("Ready %d packets", m_n_rx_pkt_ready_list_count);
+        IF_STATS(m_p_socket_stats->counters.n_rx_poll_hit++);
+        return true;
+    }
+
+    IF_STATS(m_p_socket_stats->counters.n_rx_poll_miss++);
+    return false;
 }
 
 mem_buf_desc_t *sockinfo_tcp::get_next_desc(mem_buf_desc_t *p_desc)
