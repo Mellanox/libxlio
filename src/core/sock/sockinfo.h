@@ -305,16 +305,9 @@ public:
     inline bool set_flow_tag(uint32_t flow_tag_id);
     inline void sock_pop_descs_rx_ready(descq_t *cache);
 
-    // Socketxtreme related.
-    ring_ec *pop_next_ec();
-    ring_ec *clear_ecs();
-    void add_ec(ring_ec *ec);
-    ring_ec *get_last_ec() { return m_socketxtreme_ec_last; }
-    bool has_next_ec() { return (m_socketxtreme_ec_first != nullptr); }
-    sockinfo *get_ec_ring_list_next() { return m_socketxtreme_ring_list_next; }
-    void set_ec_ring_list_next(sockinfo *sock) { m_socketxtreme_ring_list_next = sock; }
-
-    bool has_epoll_context() { return (!safe_mce_sys().enable_socketxtreme && m_econtext); }
+    uint32_t get_epoll_event_flags() { return m_epoll_event_flags; }
+    void set_epoll_event_flags(uint32_t events) { m_epoll_event_flags = events; }
+    bool has_epoll_context() { return (!!m_econtext); }
     bool get_rx_pkt_ready_list_count() const { return m_n_rx_pkt_ready_list_count; }
     int get_fd() const { return m_fd; };
     sa_family_t get_family() { return m_family; }
@@ -330,8 +323,6 @@ public:
     rfs *get_rfs_ptr() const { return m_rfs_ptr; }
     void set_rfs_ptr(rfs *r) { m_rfs_ptr = r; }
     void destructor_helper();
-    int get_rings_fds(int *ring_fds, int ring_fds_sz);
-    int get_rings_num();
     bool validate_and_convert_mapped_ipv4(sock_addr &sock) const;
     int register_callback_ctx(xlio_recv_callback_t callback, void *context);
     void consider_rings_migration_rx();
@@ -386,8 +377,6 @@ protected:
 
     inline void set_rx_reuse_pending(bool is_pending = true);
     inline void reuse_buffer(mem_buf_desc_t *buff);
-    inline xlio_socketxtreme_completion_t *set_events_socketxtreme(uint64_t events,
-                                                                   bool full_transaction);
     inline void set_events(uint64_t events);
     inline void save_strq_stats(uint32_t packet_strides);
 
@@ -461,13 +450,13 @@ protected:
     rfs *m_rfs_ptr = nullptr;
     socket_stats_t *m_p_socket_stats = nullptr;
     ring *m_p_rx_ring = nullptr; // used in TCP/UDP
-    ring_ec *m_socketxtreme_ec_first = nullptr;
-    ring_ec *m_socketxtreme_ec_last = nullptr;
+    epfd_info *m_econtext = nullptr;
+    uint32_t m_epoll_event_flags = 0U;
+    int m_n_rx_pkt_ready_list_count = 0;
 
     // End of first cache line
 
-    sockinfo *m_socketxtreme_ring_list_next = nullptr;
-    void *m_fd_context; // Context data stored with socket
+    list_node<sockinfo, sockinfo::pending_to_remove_node_offset> pending_to_remove_node;
     mem_buf_desc_t *m_last_zcdesc = nullptr;
 
     /* Socket error queue that keeps local errors and internal data required
@@ -489,22 +478,15 @@ protected:
 
     // End of second cache line
 
-    epfd_info *m_econtext = nullptr;
     wakeup_pipe m_sock_wakeup_pipe;
-    int m_rx_epfd;
-    in_protocol_t m_protocol = PROTO_UNDEFINED;
-    sa_family_t m_family;
 
 public:
+    epoll_fd_rec m_fd_rec;
     list_node<sockinfo, sockinfo::socket_fd_list_node_offset> socket_fd_list_node;
     list_node<sockinfo, sockinfo::ep_ready_fd_node_offset> ep_ready_fd_node;
     list_node<sockinfo, sockinfo::ep_info_fd_node_offset> ep_info_fd_node;
-    list_node<sockinfo, sockinfo::pending_to_remove_node_offset> pending_to_remove_node;
-    epoll_fd_rec m_fd_rec;
-    uint32_t m_epoll_event_flags = 0U;
 
 protected:
-    int m_fd; // identification information <socket fd>
     /**
      * list of pending ready packet on the Rx,
      * each element is a pointer to the ib_conn_mgr that holds this ready rx datagram
@@ -512,7 +494,7 @@ protected:
     size_t m_rx_pkt_ready_offset = 0U;
     size_t m_rx_ready_byte_count = 0U;
     buff_info_t m_rx_reuse_buff; // used in TCP instead of m_rx_ring_map
-    int m_n_rx_pkt_ready_list_count = 0;
+    int m_fd; // identification information <socket fd>
     int m_rx_num_buffs_reuse;
     // used to periodically return buffers, even if threshold was not reached
     bool m_rx_reuse_buf_pending = false;
@@ -524,7 +506,9 @@ protected:
     bool m_bind_no_port = false;
     bool m_is_ipv6only;
     uint8_t m_src_sel_flags = 0U;
-
+    int m_rx_epfd;
+    in_protocol_t m_protocol = PROTO_UNDEFINED;
+    sa_family_t m_family;
     multilock m_lock_rcv;
     lock_mutex m_lock_snd;
     lock_mutex m_rx_migration_lock;
@@ -601,34 +585,9 @@ void sockinfo::sock_pop_descs_rx_ready(descq_t *cache)
     unlock_rx_q();
 }
 
-xlio_socketxtreme_completion_t *sockinfo::set_events_socketxtreme(uint64_t events,
-                                                                  bool full_transaction)
-{
-    bool always_new =
-        ((events & (XLIO_SOCKETXTREME_PACKET | XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED)) != 0U);
-    xlio_socketxtreme_completion_t &completion =
-        m_p_rx_ring->socketxtreme_start_ec_operation(this, always_new);
-    completion.user_data = (uint64_t)m_fd_context;
-    completion.events |= events;
-
-    if (full_transaction) {
-        m_p_rx_ring->socketxtreme_end_ec_operation();
-        return nullptr;
-    }
-
-    return &completion;
-}
-
 void sockinfo::set_events(uint64_t events)
 {
-    /* Collect all events if rx ring is enabled */
-    if (safe_mce_sys().enable_socketxtreme) {
-        if (m_state == SOCKINFO_OPENED) {
-            set_events_socketxtreme(events, true);
-        }
-    } else {
-        insert_epoll_event(events);
-    }
+    insert_epoll_event(events);
 }
 
 void sockinfo::save_strq_stats(uint32_t packet_strides)

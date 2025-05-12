@@ -142,9 +142,7 @@ public:
     int rx_verify_available_data() override;
 
     /**
-     *	This callback will handle ready rx packet notification,
-     *	in case packet is OK, completion for SOCKETXTREME mode
-     *	will be filled or in other cases packet go to ready queue.
+     *	This callback will handle ready rx packet notification.
      *	If packet to be discarded, packet ref. counter will not be
      *	incremented and method returns false.
      *	Normally it is single point from sockinfo to be called from ring level.
@@ -244,7 +242,6 @@ private:
     }
 
     inline xlio_recv_callback_retval_t inspect_by_user_cb(mem_buf_desc_t *p_desc);
-    inline void rx_udp_cb_socketxtreme_helper(mem_buf_desc_t *p_desc);
     inline void update_ready(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array,
                              xlio_recv_callback_retval_t cb_ret);
 

@@ -865,7 +865,6 @@ void mce_sys_var::legacy_get_env_params()
     memory_limit_user = MCE_DEFAULT_MEMORY_LIMIT_USER;
     heap_metadata_block = MCE_DEFAULT_HEAP_METADATA_BLOCK;
     hugepage_size = MCE_DEFAULT_HUGEPAGE_SIZE;
-    enable_socketxtreme = MCE_DEFAULT_SOCKETXTREME;
     enable_tso = MCE_DEFAULT_TSO;
 #ifdef DEFINED_UTLS
     enable_utls_rx = MCE_DEFAULT_UTLS_RX;
@@ -906,18 +905,6 @@ void mce_sys_var::legacy_get_env_params()
     multilock = MCE_DEFAULT_MULTILOCK;
 
     read_hv();
-
-    /* Configure enable_socketxtreme as first because
-     * this mode has some special predefined parameter limitations
-     */
-    if ((env_ptr = getenv(SYS_VAR_SOCKETXTREME))) {
-        enable_socketxtreme = atoi(env_ptr) ? true : false;
-    }
-    if (enable_socketxtreme) {
-        /* Set following parameters as default for SocketXtreme mode */
-        gro_streams_max = 0;
-        progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
-    }
 
     if ((env_ptr = getenv(SYS_VAR_STRQ))) {
         enable_strq_env = option_3::from_str(env_ptr, MCE_DEFAULT_STRQ);
@@ -1521,12 +1508,6 @@ void mce_sys_var::legacy_get_env_params()
     if ((env_ptr = getenv(SYS_VAR_PROGRESS_ENGINE_INTERVAL))) {
         progress_engine_interval_msec = (uint32_t)atoi(env_ptr);
     }
-    if (enable_socketxtreme && (progress_engine_interval_msec != MCE_CQ_DRAIN_INTERVAL_DISABLED)) {
-        progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
-        vlog_printf(VLOG_DEBUG, "%s parameter is forced to %d in case %s is enabled\n",
-                    SYS_VAR_PROGRESS_ENGINE_INTERVAL, progress_engine_interval_msec,
-                    SYS_VAR_SOCKETXTREME);
-    }
 
     if ((env_ptr = getenv(SYS_VAR_PROGRESS_ENGINE_WCE_MAX))) {
         progress_engine_wce_max = (uint32_t)atoi(env_ptr);
@@ -2065,7 +2046,6 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
     heap_metadata_block =
         registry.get_default_value<int64_t>("core.resources.heap_metadata_block_size");
     hugepage_size = registry.get_default_value<int64_t>("core.resources.hugepages.size");
-    enable_socketxtreme = registry.get_default_value<bool>("extra_api.socketextreme");
     enable_tso = static_cast<decltype(enable_tso)>(
         registry.get_default_value<int>("hardware_features.tcp.tso.enable"));
 #ifdef DEFINED_UTLS
@@ -2127,19 +2107,6 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
 void mce_sys_var::read_hypervisor_info()
 {
     read_hv();
-}
-
-void mce_sys_var::configure_socketxtreme(const config_registry &registry)
-{
-    /* Configure enable_socketxtreme as first because
-     * this mode has some special predefined parameter limitations
-     */
-    set_value_from_registry_if_exists(enable_socketxtreme, "extra_api.socketextreme", registry);
-    if (enable_socketxtreme) {
-        /* Set following parameters as default for SocketXtreme mode */
-        gro_streams_max = 0;
-        progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
-    }
 }
 
 void mce_sys_var::configure_striding_rq(const config_registry &registry)
@@ -2690,13 +2657,6 @@ void mce_sys_var::configure_completion_queue(const config_registry &registry)
     set_value_from_registry_if_exists(progress_engine_interval_msec,
                                       "performance.completion_queue.periodic_drain_msec", registry);
 
-    if (enable_socketxtreme && (progress_engine_interval_msec != MCE_CQ_DRAIN_INTERVAL_DISABLED)) {
-        progress_engine_interval_msec = MCE_CQ_DRAIN_INTERVAL_DISABLED;
-        vlog_printf(VLOG_DEBUG, "%s parameter is forced to %d in case %s is enabled\n",
-                    SYS_VAR_PROGRESS_ENGINE_INTERVAL, progress_engine_interval_msec,
-                    SYS_VAR_SOCKETXTREME);
-    }
-
     set_value_from_registry_if_exists(
         progress_engine_wce_max, "performance.completion_queue.periodic_drain_max_cqes", registry);
 
@@ -3004,7 +2964,6 @@ void mce_sys_var::apply_config_from_registry()
     initialize_base_variables(registry);
     read_hypervisor_info();
 
-    configure_socketxtreme(registry);
     configure_striding_rq(registry);
     detect_application_profile(registry);
     apply_spec_profile_optimizations();

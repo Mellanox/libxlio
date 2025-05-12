@@ -92,22 +92,6 @@ static void server(const char *server_ip)
     assert(errno == EINVAL);
 
     /*
-     * Check rings
-     */
-
-    int xlio_ring_fds[3];
-    int xlio_ring_fds2[3];
-    int xlio_ring_fds3[3];
-    rc = xlio_api->get_socket_rings_fds(sock, xlio_ring_fds, ARRAY_SIZE(xlio_ring_fds));
-    assert(rc == 1);
-    rc = xlio_api->get_socket_rings_fds(sock2, xlio_ring_fds2, ARRAY_SIZE(xlio_ring_fds2));
-    assert(rc == 1);
-    rc = xlio_api->get_socket_rings_fds(sock3, xlio_ring_fds3, ARRAY_SIZE(xlio_ring_fds3));
-    assert(rc == 1);
-    assert(xlio_ring_fds[0] == xlio_ring_fds2[0]);
-    assert(xlio_ring_fds[0] != xlio_ring_fds3[0]);
-
-    /*
      * Socket accept
      */
 
@@ -190,14 +174,6 @@ static void client(const char *server_ip)
     rc = setsockopt(sock2, SOL_SOCKET, SO_XLIO_ISOLATE, &val, sizeof(val));
     assert(rc == -1);
     assert(errno == EINVAL);
-
-    int xlio_ring_fds[3];
-    int xlio_ring_fds2[3];
-    rc = xlio_api->get_socket_rings_fds(sock, xlio_ring_fds, ARRAY_SIZE(xlio_ring_fds));
-    assert(rc == 1);
-    rc = xlio_api->get_socket_rings_fds(sock2, xlio_ring_fds2, ARRAY_SIZE(xlio_ring_fds2));
-    assert(rc == 1);
-    assert(xlio_ring_fds[0] != xlio_ring_fds2[0]);
 
     len = write(sock, HELLO_MSG, sizeof(HELLO_MSG));
     assert(len > 0);

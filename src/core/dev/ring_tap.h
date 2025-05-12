@@ -59,15 +59,6 @@ public:
     }
     virtual void adapt_cq_moderation() {}
 
-    virtual int socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_completions,
-                                  unsigned int ncompletions, int flags)
-    {
-        NOT_IN_USE(xlio_completions);
-        NOT_IN_USE(ncompletions);
-        NOT_IN_USE(flags);
-        return 0;
-    }
-
     virtual int modify_ratelimit(struct xlio_rate_limit_t &rate_limit)
     {
         NOT_IN_USE(rate_limit);

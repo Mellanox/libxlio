@@ -152,7 +152,6 @@ Example:
  XLIO DETAILS: Num of UC ARPs                 3                          [network.neighbor.arp.uc_retries]
  XLIO DETAILS: UC ARP delay (msec)            10000                      [network.neighbor.arp.uc_delay_msec]
  XLIO DETAILS: Num of neigh restart retries   1                          [network.neighbor.errors_before_reset]
- XLIO DETAILS: SocketXtreme mode              Disabled                   [extra_api.socketextreme]
  XLIO DETAILS: TSO support                    auto                       [hardware_features.tcp.tso.enable]
  XLIO DETAILS: UTLS RX support                Disabled                   [hardware_features.tcp.tls_offload.rx_enable]
  XLIO DETAILS: UTLS TX support                Enabled                    [hardware_features.tcp.tls_offload.tx_enable]
@@ -317,11 +316,6 @@ EXTRA_API
 extra_api.hugepage_size
 Size of huge pages used by user application for buffers provided as part of the TX Zero Copy socket API (sendmsg with MSG_ZEROCOPY flag). Maps to **XLIO_USER_HUGE_PAGE_SIZE** environment variable.
 Default value is 2 MB
-
-extra_api.socketextreme
-When this parameter is enabled, XLIO operates in SocketXtreme mode. Maps to **XLIO_SOCKETEXTREME** environment variable. SocketXtreme mode brings latency down, eliminating copy operations and increasing throughput allowing applications to further utilize true kernel bypass architecture. An application should use a socket extension API named SocketXtreme.
-Default value is 0 (Disabled)
-
 
 ================================================================================
 
