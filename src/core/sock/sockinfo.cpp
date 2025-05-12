@@ -72,11 +72,10 @@ const char *sockinfo::setsockopt_so_opt_to_str(int opt)
 
 sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     : m_skip_cq_poll_in_rx(safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_ENABLE)
-    , m_fd_context((void *)((uintptr_t)fd))
-    , m_family(domain)
     , m_fd(fd)
     , m_rx_num_buffs_reuse(safe_mce_sys().rx_bufs_batch)
     , m_is_ipv6only(safe_mce_sys().sysctl_reader.get_ipv6_bindv6only())
+    , m_family(domain)
     , m_lock_rcv(MULTILOCK_RECURSIVE, MODULE_NAME "::m_lock_rcv")
     , m_lock_snd(MODULE_NAME "::m_lock_snd")
     , m_so_bindtodevice_ip(ip_address::any_addr(), domain)
@@ -94,7 +93,6 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     m_sock_wakeup_pipe.wakeup_set_epoll_fd(m_rx_epfd);
     if (m_fd == SOCKET_FAKE_FD) {
         m_fd = m_rx_epfd;
-        m_fd_context = (void *)((uintptr_t)m_fd);
     }
 
     m_ring_alloc_logic_rx = ring_allocation_logic_rx(get_fd(), m_ring_alloc_log_rx);
@@ -186,39 +184,6 @@ void sockinfo::socket_stats_init()
     m_p_socket_stats->ring_user_id_tx =
         ring_allocation_logic_tx(get_fd(), m_ring_alloc_log_tx).calc_res_key_by_logic();
     m_p_socket_stats->sa_family = m_family;
-}
-
-ring_ec *sockinfo::pop_next_ec()
-{
-    if (likely(m_socketxtreme_ec_first)) {
-        ring_ec *temp = m_socketxtreme_ec_first;
-        m_socketxtreme_ec_first = m_socketxtreme_ec_first->next;
-        if (likely(!m_socketxtreme_ec_first)) { // We likely to have a single ec most of the time.
-            m_socketxtreme_ec_last = nullptr;
-        }
-
-        return temp;
-    }
-
-    return nullptr;
-}
-
-ring_ec *sockinfo::clear_ecs()
-{
-    ring_ec *temp = m_socketxtreme_ec_first;
-    m_socketxtreme_ec_first = m_socketxtreme_ec_last = nullptr;
-    return temp;
-}
-
-void sockinfo::add_ec(ring_ec *ec)
-{
-    memset(&ec->completion, 0, sizeof(ec->completion));
-    if (likely(!m_socketxtreme_ec_last)) {
-        m_socketxtreme_ec_last = m_socketxtreme_ec_first = ec;
-    } else {
-        m_socketxtreme_ec_last->next = ec;
-        m_socketxtreme_ec_last = ec;
-    }
 }
 
 void sockinfo::set_blocking(bool is_blocked)
@@ -443,16 +408,6 @@ int sockinfo::setsockopt(int __level, int __optname, const void *__optval, sockl
 
     if (__level == SOL_SOCKET) {
         switch (__optname) {
-        case SO_XLIO_USER_DATA:
-            if (__optlen == sizeof(m_fd_context)) {
-                m_fd_context = *(void **)__optval;
-                ret = SOCKOPT_INTERNAL_XLIO_SUPPORT;
-            } else {
-                ret = SOCKOPT_NO_XLIO_SUPPORT;
-                errno = EINVAL;
-            }
-            break;
-
         case SO_REUSEADDR:
             if (__optval && __optlen == sizeof(int)) {
                 m_reuseaddr = *(int *)__optval;
@@ -730,14 +685,6 @@ int sockinfo::getsockopt(int __level, int __optname, void *__optval, socklen_t *
     switch (__level) {
     case SOL_SOCKET:
         switch (__optname) {
-        case SO_XLIO_USER_DATA:
-            if (*__optlen == sizeof(m_fd_context)) {
-                *(void **)__optval = m_fd_context;
-                ret = 0;
-            } else {
-                errno = EINVAL;
-            }
-            break;
         case SO_MAX_PACING_RATE:
             if (*__optlen == sizeof(struct xlio_rate_limit_t)) {
                 *(struct xlio_rate_limit_t *)__optval = m_so_ratelimit;
@@ -1297,7 +1244,7 @@ int sockinfo::add_epoll_context(epfd_info *epfd)
     m_rx_ring_map_lock.lock();
     lock_rx_q();
 
-    if (!m_econtext && !safe_mce_sys().enable_socketxtreme) {
+    if (!m_econtext) {
         // This socket is not registered to any epfd
         m_econtext = epfd;
     } else {
@@ -1680,9 +1627,6 @@ void sockinfo::rx_del_ring_cb(ring *p_ring)
             delete p_ring_info;
 
             if (m_p_rx_ring == base_ring) {
-                // Ring should not have completion events related closed socket in wait list
-                m_p_rx_ring->socketxtreme_ec_clear_sock(this);
-
                 if (m_rx_ring_map.size() == 1) {
                     m_p_rx_ring = m_rx_ring_map.begin()->first;
                 } else {
@@ -1981,57 +1925,6 @@ int sockinfo::modify_ratelimit(dst_entry *p_dst_entry, struct xlio_rate_limit_t 
     si_logwarn(PRODUCT_NAME " is not configured with TX ring allocation logic per "
                             "socket or user-id.");
     return -1;
-}
-
-int sockinfo::get_rings_num()
-{
-    size_t count = 0;
-    size_t num_rx_channel_fds;
-
-    ring *tx_ring = m_p_connected_dst_entry ? m_p_connected_dst_entry->get_ring() : nullptr;
-    if (tx_ring) {
-        (void)tx_ring->get_rx_channel_fds(count);
-    }
-
-    for (auto pair : m_rx_ring_map) {
-        if (tx_ring == pair.first) {
-            continue;
-        }
-        (void)pair.first->get_rx_channel_fds(num_rx_channel_fds);
-        count += num_rx_channel_fds;
-    }
-    return static_cast<int>(count);
-}
-
-int sockinfo::get_rings_fds(int *ring_fds, int ring_fds_sz)
-{
-    size_t num_rx_channel_fds;
-    int *channel_fds;
-    int index = 0;
-
-    /*
-     * We return RX channels for the TX ring to make it consistent and comparable with the RX
-     * rings. The channels are used only as indirect pointers to the rings, therefore, this
-     * doesn't introduce any functionality issues.
-     */
-    ring *tx_ring = m_p_connected_dst_entry ? m_p_connected_dst_entry->get_ring() : nullptr;
-    if (tx_ring) {
-        channel_fds = tx_ring->get_rx_channel_fds(num_rx_channel_fds);
-        for (size_t i = 0; i < num_rx_channel_fds && index < ring_fds_sz; ++i) {
-            ring_fds[index++] = channel_fds[i];
-        }
-    }
-
-    for (auto pair : m_rx_ring_map) {
-        if (tx_ring == pair.first) {
-            continue;
-        }
-        channel_fds = pair.first->get_rx_channel_fds(num_rx_channel_fds);
-        for (size_t i = 0; i < num_rx_channel_fds && index < ring_fds_sz; ++i) {
-            ring_fds[index++] = channel_fds[i];
-        }
-    }
-    return index;
 }
 
 int sockinfo::setsockopt_kernel(int __level, int __optname, const void *__optval,

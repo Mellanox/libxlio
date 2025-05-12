@@ -17,7 +17,6 @@
  * Options for setsockopt()/getsockopt()
  */
 #define SO_XLIO_GET_API          2800
-#define SO_XLIO_USER_DATA        2801
 #define SO_XLIO_RING_ALLOC_LOGIC 2810
 #define SO_XLIO_SHUTDOWN_RX      2821
 #define SO_XLIO_PD               2822
@@ -114,68 +113,6 @@ enum {
     XLIO_NVME_PDA_MASK = ((1U << 4) - 1U),
     XLIO_NVME_DDGST_MASK = (XLIO_NVME_DDGST_ENABLE | XLIO_NVME_DDGST_OFFLOAD),
 };
-
-/************ SocketXtreme API types definition start***************/
-
-enum {
-    SOCKETXTREME_POLL_TX = (1 << 15),
-};
-
-enum {
-    XLIO_SOCKETXTREME_PACKET = (1ULL << 32), /* New packet is available */
-    XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED =
-        (1ULL << 33) /* New connection is auto accepted by server */
-};
-
-/*
- * Represents specific buffer
- * Used in SocketXtreme extended API.
- */
-struct xlio_buff_t {
-    struct xlio_buff_t *next; /* next buffer (for last buffer next == NULL) */
-    void *payload; /* pointer to data */
-    uint16_t len; /* data length */
-};
-
-/**
- * Represents one specific packet
- * Used in SocketXtreme extended API.
- */
-struct xlio_socketxtreme_packet_desc_t {
-    size_t num_bufs; /* number of packet's buffers */
-    uint16_t total_len; /* total data length */
-    struct xlio_buff_t *buff_lst; /* list of packet's buffers */
-    struct timespec hw_timestamp; /* packet hw_timestamp */
-};
-
-/*
- * Represents specific completion form.
- * Used in SocketXtreme extended API.
- */
-struct xlio_socketxtreme_completion_t {
-    /* Packet is valid in case XLIO_SOCKETXTREME_PACKET event is set
-     */
-    struct xlio_socketxtreme_packet_desc_t packet;
-    /* Set of events
-     */
-    uint64_t events;
-    /* User provided data.
-     * By default this field has FD of the socket
-     * User is able to change the content using setsockopt()
-     * with level argument SOL_SOCKET and opname as SO_XLIO_USER_DATA
-     */
-    uint64_t user_data;
-    /* Source address (in network byte order) set for:
-     * XLIO_SOCKETXTREME_PACKET and XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED events
-     */
-    struct sockaddr_in src;
-    /* Connected socket's parent/listen socket fd number.
-     * Valid in case XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED event is set.
-     */
-    int listen_fd;
-};
-
-/************ SocketXtreme API types definition end ***************/
 
 /*
  * Structure holding additional information on the packet and socket

@@ -435,8 +435,6 @@ public:
     bool internal_thread_arm_cq_enabled;
     skip_poll_in_rx_t skip_poll_in_rx;
     multilock_t multilock;
-
-    bool enable_socketxtreme;
     option_3::mode_t enable_tso;
     option_3::mode_t enable_lro;
     option_3::mode_t enable_strq_env;
@@ -496,7 +494,6 @@ private:
     void legacy_get_env_params();
     void initialize_base_variables(const config_registry &registry);
     void read_hypervisor_info();
-    void configure_socketxtreme(const config_registry &registry);
     void configure_striding_rq(const config_registry &registry);
     void detect_application_profile(const config_registry &registry);
     void apply_spec_profile_optimizations();
@@ -677,9 +674,7 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_MSS              "XLIO_MSS"
 #define SYS_VAR_TCP_CC_ALGO      "XLIO_TCP_CC_ALGO"
 #define SYS_VAR_SPEC             "XLIO_SPEC"
-
-#define SYS_VAR_SOCKETXTREME "XLIO_SOCKETXTREME"
-#define SYS_VAR_TSO          "XLIO_TSO"
+#define SYS_VAR_TSO              "XLIO_TSO"
 #ifdef DEFINED_UTLS
 #define SYS_VAR_UTLS_RX                        "XLIO_UTLS_RX"
 #define SYS_VAR_UTLS_TX                        "XLIO_UTLS_TX"
@@ -836,8 +831,7 @@ extern mce_sys_var &safe_mce_sys();
 #define NEW_CONFIG_VAR_TCP_CC_ALGO      "network.protocols.tcp.congestion_control"
 #define NEW_CONFIG_VAR_SPEC             "profiles.spec"
 
-#define NEW_CONFIG_VAR_SOCKETXTREME "extra_api.socketextreme"
-#define NEW_CONFIG_VAR_TSO          "hardware_features.tcp.tso.enable"
+#define NEW_CONFIG_VAR_TSO "hardware_features.tcp.tso.enable"
 #ifdef DEFINED_UTLS
 #define NEW_CONFIG_VAR_UTLS_RX "hardware_features.tcp.tls_offload.rx_enable"
 #define NEW_CONFIG_VAR_UTLS_TX "hardware_features.tcp.tls_offload.tx_enable"
@@ -1014,7 +1008,6 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_CQ_ADAPTIVE_MODERATION_DISABLED (0)
 #define MCE_MIN_CQ_POLL_BATCH               (1)
 #define MCE_MAX_CQ_POLL_BATCH               (32768)
-#define MCE_DEFAULT_SOCKETXTREME            (false)
 #define MCE_DEFAULT_TSO                     (option_3::AUTO)
 #define MCE_DEFAULT_MAX_TSO_SIZE            (256 * 1024)
 #ifdef DEFINED_UTLS
