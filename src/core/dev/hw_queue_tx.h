@@ -94,24 +94,8 @@ public:
     void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first);
 #endif /* DEFINED_UTLS */
 
-#define DPCP_TIS_FLAGS     (dpcp::TIS_ATTR_TRANSPORT_DOMAIN | dpcp::TIS_ATTR_PD)
-#define DPCP_TIS_NVME_FLAG (dpcp::TIS_ATTR_NVMEOTCP)
+#define DPCP_TIS_FLAGS (dpcp::TIS_ATTR_TRANSPORT_DOMAIN | dpcp::TIS_ATTR_PD)
     std::unique_ptr<xlio_tis> create_tis(uint32_t flags);
-    void nvme_set_static_context(xlio_tis *tis, uint32_t config);
-    void nvme_set_progress_context(xlio_tis *tis, uint32_t tcp_seqno);
-
-    /* Get a memory inside a wqebb at a wqebb_num offset from the m_sq_wqe_hot and account for
-     * m_sq_wqe_counter wrap-around. Use offset_in_wqebb to for the internal address. Use the
-     * template parameter to cast the resulting address to the required pointer type */
-    template <typename T>
-    constexpr inline T wqebb_get(size_t wqebb_num, size_t offset_in_wqebb = 0U)
-    {
-        return reinterpret_cast<T>(
-            reinterpret_cast<uintptr_t>(
-                &(*m_sq_wqes)[(m_sq_wqe_counter + wqebb_num) & (m_tx_num_wr - 1)]) +
-            offset_in_wqebb);
-    }
-
     void post_nop_fence();
     void post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first);
 
