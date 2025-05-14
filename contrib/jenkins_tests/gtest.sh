@@ -95,7 +95,7 @@ if [[ -z "${MANUAL_RUN}" ]]; then
 fi
 
 # Verify XLIO EXTRA API tests
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=xlio_*:-socketxtreme_poll.*:socketxtreme_ring.*:xlio_send_zc.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra.xml"
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=xlio_*:-socketxtreme_poll.*:socketxtreme_ring.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra.xml"
 rc=$(($rc+$?))
 
 # Verify XLIO EXTRA API socketxtreme mode tests
@@ -103,7 +103,7 @@ eval "${sudo_cmd} $timeout_exe env XLIO_SOCKETXTREME=1 GTEST_TAP=2 LD_PRELOAD=$g
 rc=$(($rc+$?))
 
 # Verify XLIO EXTRA API tests IPv6
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=xlio_*:-socketxtreme_poll.*:socketxtreme_ring.*:xlio_send_zc.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra-ipv6.xml"
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=xlio_*:-socketxtreme_poll.*:socketxtreme_ring.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra-ipv6.xml"
 rc=$(($rc+$?))
 
 # Verify XLIO EXTRA API socketxtreme mode tests IPv6
