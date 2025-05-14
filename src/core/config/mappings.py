@@ -84,7 +84,6 @@ config_mapping = {
     "performance.max_gro_streams": "XLIO_GRO_STREAMS_MAX",
     "performance.override_rcvbuf_limit": "XLIO_RX_BYTES_MIN",
     "performance.polling.blocking_rx_poll_usec": "XLIO_RX_POLL",
-    "performance.polling.iomux.poll_os_force": "XLIO_SELECT_POLL_OS_FORCE",
     "performance.polling.iomux.poll_os_ratio": "XLIO_SELECT_POLL_OS_RATIO",
     "performance.polling.iomux.poll_usec": "XLIO_SELECT_POLL",
     "performance.polling.iomux.skip_os": "XLIO_SELECT_SKIP_OS",

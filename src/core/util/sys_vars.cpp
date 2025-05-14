@@ -839,7 +839,6 @@ void mce_sys_var::legacy_get_env_params()
     mc_force_flowtag = MCE_DEFAULT_MC_FORCE_FLOWTAG;
 
     select_poll_num = MCE_DEFAULT_SELECT_NUM_POLLS;
-    select_poll_os_force = MCE_DEFAULT_SELECT_POLL_OS_FORCE;
     select_poll_os_ratio = MCE_DEFAULT_SELECT_POLL_OS_RATIO;
     select_skip_os_fd_check = MCE_DEFAULT_SELECT_SKIP_OS;
 
@@ -1008,7 +1007,6 @@ void mce_sys_var::legacy_get_env_params()
         strcpy(internal_thread_affinity_str, "0");
         progress_engine_interval_msec = 100;
         select_poll_os_ratio = 100;
-        select_poll_os_force = 1;
         tcp_nodelay = true;
         ring_dev_mem_tx = 16384;
 
@@ -1411,15 +1409,6 @@ void mce_sys_var::legacy_get_env_params()
         vlog_printf(VLOG_WARNING, "Select Poll loops can not be below zero [%d]\n",
                     select_poll_num);
         select_poll_num = MCE_DEFAULT_SELECT_NUM_POLLS;
-    }
-
-    if ((env_ptr = getenv(SYS_VAR_SELECT_POLL_OS_FORCE))) {
-        select_poll_os_force = (uint32_t)atoi(env_ptr);
-    }
-
-    if (select_poll_os_force) {
-        select_poll_os_ratio = 1;
-        select_skip_os_fd_check = 1;
     }
 
     if ((env_ptr = getenv(SYS_VAR_SELECT_POLL_OS_RATIO))) {
@@ -1987,8 +1976,6 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
         registry.get_default_value<bool>("network.multicast.mc_flowtag_acceleration");
 
     select_poll_num = registry.get_default_value<int>("performance.polling.iomux.poll_usec");
-    select_poll_os_force =
-        registry.get_default_value<bool>("performance.polling.iomux.poll_os_force");
     select_poll_os_ratio =
         registry.get_default_value<int>("performance.polling.iomux.poll_os_ratio");
     select_skip_os_fd_check =
@@ -2233,7 +2220,6 @@ void mce_sys_var::apply_sockperf_latency_profile()
     strcpy(internal_thread_affinity_str, "0");
     progress_engine_interval_msec = 100;
     select_poll_os_ratio = 100;
-    select_poll_os_force = 1;
     tcp_nodelay = true;
     ring_dev_mem_tx = 16384;
 
@@ -2554,14 +2540,6 @@ void mce_sys_var::configure_completion_queue(const config_registry &registry)
 
     set_value_from_registry_if_exists(select_poll_num, "performance.polling.iomux.poll_usec",
                                       registry);
-
-    set_value_from_registry_if_exists(select_poll_os_force,
-                                      "performance.polling.iomux.poll_os_force", registry);
-
-    if (select_poll_os_force) {
-        select_poll_os_ratio = 1;
-        select_skip_os_fd_check = 1;
-    }
 
     set_value_from_registry_if_exists(select_poll_os_ratio,
                                       "performance.polling.iomux.poll_os_ratio", registry);

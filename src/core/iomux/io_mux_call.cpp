@@ -417,8 +417,7 @@ int io_mux_call::call()
 
     __log_funcall("");
 
-    if (!safe_mce_sys().select_poll_os_force // TODO: evaluate/consider this logic
-        && (*m_p_num_all_offloaded_fds == 0)) {
+    if (*m_p_num_all_offloaded_fds == 0) {
         // 1st scenario
         timer_update();
         wait_os(false);
@@ -433,7 +432,8 @@ int io_mux_call::call()
             check_all_offloaded_sockets();
             if (m_n_all_ready_fds) {
                 goto done;
-            } else { // false wake-up, and we already discovered that we should be in 2nd scenario
+            } else { // false wake-up, and we already discovered that we should be in 2nd
+                     // scenario
                 timer_update();
                 if (is_timeout(m_elapsed)) {
                     goto done;
