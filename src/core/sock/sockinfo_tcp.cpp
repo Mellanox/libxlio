@@ -1020,7 +1020,6 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
     int poll_count = 0;
     err_t err;
     void *tx_ptr = nullptr;
-    struct xlio_pd_key *pd_key_array = nullptr;
 
     /* Let allow OS to process all invalid scenarios to avoid any
      * inconsistencies in setting errno values
@@ -1046,10 +1045,6 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
         return tcp_tx_slow_path(tx_arg);
     }
 
-    bool is_non_file_zerocopy = tx_arg.opcode != TX_FILE;
-    pd_key_array =
-        (tx_arg.priv.attr == PBUF_DESC_MKEY ? (struct xlio_pd_key *)tx_arg.priv.opaque : nullptr);
-
     si_tcp_logfunc("tx: iov=%p niovs=%zu", p_iov, sz_iov);
 
     size_t total_iov_len =
@@ -1064,6 +1059,7 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
         return tcp_tx_handle_errno_and_unlock(EAGAIN);
     }
 
+    bool is_non_file_zerocopy = tx_arg.opcode != TX_FILE;
     int total_tx = 0;
     for (size_t i = 0; i < sz_iov; i++) {
         si_tcp_logfunc("iov:%d base=%p len=%d", i, p_iov[i].iov_base, p_iov[i].iov_len);
@@ -1072,9 +1068,6 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
         }
 
         tx_ptr = p_iov[i].iov_base;
-        if ((tx_arg.priv.attr == PBUF_DESC_MKEY) && pd_key_array) {
-            tx_arg.priv.mkey = pd_key_array[i].mkey;
-        }
         unsigned pos = 0;
         while (pos < p_iov[i].iov_len) {
             unsigned tx_size = sndbuf_available();
@@ -1144,7 +1137,6 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
     uint16_t apiflags = 0;
     bool is_send_zerocopy = false;
     void *tx_ptr = nullptr;
-    struct xlio_pd_key *pd_key_array = nullptr;
 
     if (tx_arg.opcode == TX_FILE) {
         /*
@@ -1169,9 +1161,6 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
     if ((flags & MSG_ZEROCOPY) && ((m_b_zc) || (tx_arg.opcode == TX_FILE))) {
         apiflags |= XLIO_TX_PACKET_ZEROCOPY;
         is_send_zerocopy = tx_arg.opcode != TX_FILE;
-        pd_key_array =
-            (tx_arg.priv.attr == PBUF_DESC_MKEY ? (struct xlio_pd_key *)tx_arg.priv.opaque
-                                                : nullptr);
     }
 
     si_tcp_logfunc("tx: iov=%p niovs=%zu", p_iov, sz_iov);
@@ -1199,9 +1188,6 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
             tx_ptr = &file_offset;
         } else {
             tx_ptr = p_iov[i].iov_base;
-            if ((tx_arg.priv.attr == PBUF_DESC_MKEY) && pd_key_array) {
-                tx_arg.priv.mkey = pd_key_array[i].mkey;
-            }
         }
         unsigned pos = 0;
         while (pos < p_iov[i].iov_len) {
@@ -4658,29 +4644,6 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
                 errno = EINVAL;
             }
             break;
-        case SO_XLIO_PD:
-            if (__optlen && *__optlen >= sizeof(struct xlio_pd_attr)) {
-                if (m_p_connected_dst_entry) {
-                    ring *tx_ring = m_p_connected_dst_entry->get_ring();
-                    if (tx_ring) {
-                        /*
-                         * For bonding we get context of the 1st slave. This approach
-                         * works for RoCE LAG mode.
-                         */
-                        ib_ctx_handler *p_ib_ctx_h = (ib_ctx_handler *)tx_ring->get_ctx(0);
-                        if (p_ib_ctx_h) {
-                            struct xlio_pd_attr *pd_attr = (struct xlio_pd_attr *)__optval;
-                            pd_attr->flags = 0;
-                            pd_attr->ib_pd = (void *)p_ib_ctx_h->get_ibv_pd();
-                            ret = 0;
-                        }
-                    }
-                }
-            }
-            if (ret) {
-                errno = EINVAL;
-            }
-            break;
         default:
             ret = SOCKOPT_HANDLE_BY_OS;
             break;
@@ -5240,8 +5203,7 @@ struct pbuf *sockinfo_tcp::tcp_tx_pbuf_alloc(void *p_conn, pbuf_type type, pbuf_
             } else {
                 p_desc->tx.zc.ctx = reinterpret_cast<void *>(p_si_tcp);
             }
-        } else if ((p_desc->lwip_pbuf.desc.attr == PBUF_DESC_NONE) ||
-                   (p_desc->lwip_pbuf.desc.attr == PBUF_DESC_MKEY)) {
+        } else if (p_desc->lwip_pbuf.desc.attr == PBUF_DESC_NONE) {
             /* Prepare error queue fields for send zerocopy */
             if (p_buff) {
                 /* It is a special case that can happen as a result

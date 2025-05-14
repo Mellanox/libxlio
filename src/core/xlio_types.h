@@ -19,8 +19,6 @@
 #define SO_XLIO_GET_API          2800
 #define SO_XLIO_RING_ALLOC_LOGIC 2810
 #define SO_XLIO_SHUTDOWN_RX      2821
-#define SO_XLIO_PD               2822
-#define SCM_XLIO_PD              SO_XLIO_PD
 #define SO_XLIO_EXT_VLAN_TAG     2824
 
 /**
@@ -65,40 +63,6 @@ typedef enum {
                        must return the descriptor to the library using the free packet function
            But not in the context of XLIO's callback itself. */
 } xlio_recv_callback_retval_t;
-
-/**
- * @brief Pass this structure as an argument into getsockopt() with @ref SO_XLIO_PD
- * 	to get protection domain information from ring used for current socket.
- * 	This information can be available after setting connection for TX ring
- * 	and bounding to device for RX ring.
- * 	By default getting PD for TX ring.
- * 	This case can be used with sendmsg(SCM_XLIO_PD) when the data portion contains
- * 	an array of the elements with datatype as struct xlio_pd_key. Number of elements in this
- * 	array should be equal to msg_iovlen value. Every data pointer in msg_iov has
- * 	correspondent memory key.
- *
- * @param flags - to specify needed information.
- * @param pd - protection domain (PD) for the RDMA device context
- */
-struct xlio_pd_attr {
-    uint32_t flags;
-    void *ib_pd;
-};
-
-/**
- * @brief elements with this datatype can be passed into sendmsg(SCM_XLIO_PD)
- * as control message with correspondent pointer to data.
- *
- * @param flags - to specify needed information. By default mkey value is used.
- * @param mkey - memory key
- */
-struct xlio_pd_key {
-    union {
-        uint32_t flags;
-        uint32_t message_length;
-    };
-    uint32_t mkey;
-};
 
 /*
  * Structure holding additional information on the packet and socket

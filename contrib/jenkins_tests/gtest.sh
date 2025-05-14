@@ -95,11 +95,11 @@ if [[ -z "${MANUAL_RUN}" ]]; then
 fi
 
 # Verify XLIO EXTRA API tests
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=xlio_*:xlio_send_zc.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra.xml"
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=xlio_* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra.xml"
 rc=$(($rc+$?))
 
 # Verify XLIO EXTRA API tests IPv6
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=xlio_*:xlio_send_zc.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra-ipv6.xml"
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=xlio_* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra-ipv6.xml"
 rc=$(($rc+$?))
 
 # Verify keep_alive
