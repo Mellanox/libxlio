@@ -4059,19 +4059,8 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             break;
         case TCP_ULP: {
             sockinfo_tcp_ops *ops {nullptr};
-            if (__optval && __optlen >= 4 && strncmp((char *)__optval, "nvme", 4) == 0) {
-                pass_to_os_cond = false;
-                auto nvme_feature_mask = get_supported_nvme_feature_mask();
-                if (nvme_feature_mask == 0U) {
-                    errno = ENOTSUP;
-                    ret = -1;
-                    break;
-                }
-                ops = new sockinfo_tcp_ops_nvme(this, nvme_feature_mask);
-                si_tcp_logdbg("(TCP_NVME) val: nvme");
-            }
 #ifdef DEFINED_UTLS
-            else if (__optval && __optlen >= 3 && strncmp((char *)__optval, "tls", 3) == 0) {
+            if (__optval && __optlen >= 3 && strncmp((char *)__optval, "tls", 3) == 0) {
                 if (is_utls_supported(UTLS_MODE_TX | UTLS_MODE_RX)) {
                     si_tcp_logdbg("(TCP_ULP) val: tls");
                     if (unlikely(!is_rts())) {
@@ -4081,9 +4070,9 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                     }
                     ops = new sockinfo_tcp_ops_tls(this);
                 }
-            }
+            } else
 #endif /* DEFINED_UTLS */
-            else {
+            {
                 si_tcp_logdbg("(TCP_ULP) %s option is not supported", (char *)__optval);
                 errno = ENOPROTOOPT;
                 ret = -1;
@@ -5252,8 +5241,7 @@ struct pbuf *sockinfo_tcp::tcp_tx_pbuf_alloc(void *p_conn, pbuf_type type, pbuf_
                 p_desc->tx.zc.ctx = reinterpret_cast<void *>(p_si_tcp);
             }
         } else if ((p_desc->lwip_pbuf.desc.attr == PBUF_DESC_NONE) ||
-                   (p_desc->lwip_pbuf.desc.attr == PBUF_DESC_MKEY) ||
-                   (p_desc->lwip_pbuf.desc.attr == PBUF_DESC_NVME_TX)) {
+                   (p_desc->lwip_pbuf.desc.attr == PBUF_DESC_MKEY)) {
             /* Prepare error queue fields for send zerocopy */
             if (p_buff) {
                 /* It is a special case that can happen as a result
@@ -5717,15 +5705,6 @@ bool sockinfo_tcp::is_utls_supported(int direction) const
     NOT_IN_USE(direction);
 #endif /* DEFINED_UTLS */
     return result;
-}
-
-int sockinfo_tcp::get_supported_nvme_feature_mask() const
-{
-    ring *p_ring = get_tx_ring();
-    if (!p_ring) {
-        return false;
-    }
-    return p_ring->get_supported_nvme_feature_mask();
 }
 
 inline bool sockinfo_tcp::handle_bind_no_port(int &bind_ret, in_port_t in_port,
