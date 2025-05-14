@@ -125,8 +125,6 @@ gtest_SOURCES = \
 	extra_api/extra_ring.cc \
 	extra_api/extra_poll.cc \
 	\
-	nvme/nvme.cc \
-	\
 	xliod/xliod_base.cc \
 	xliod/xliod_bitmap.cc \
 	xliod/xliod_hash.cc \
