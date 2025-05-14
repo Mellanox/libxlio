@@ -908,12 +908,6 @@
                                     "title": "Select/poll duration (µsec)",
                                     "description": "The duration in micro-seconds (usec) in which to poll the hardware on Rx path before going to sleep (pending an interrupt blocking on OS select(), poll() or epoll_wait(). The max polling duration will be limited by the timeout the user is using when calling select(), poll() or epoll_wait(). When select(), poll() or epoll_wait() path has successful receive poll hits the latency is improved dramatically. This comes on account of CPU utilization. Value range is -1, 0 to 100,000,000. Where value of -1 is used for infinite polling and 0 is used for no polling (interrupt driven). Maps to XLIO_SELECT_POLL environment variable."
                                 },
-                                "poll_os_force": {
-                                    "type": "boolean",
-                                    "default": false,
-                                    "title": "Force poll OS file descriptors",
-                                    "description": "This flag forces to poll the OS file descriptors while user thread calls select(), poll() or epoll_wait() even when no offloaded sockets are mapped. Enabling this flag causes XLIO to set the OS file descriptor polling ratio and OS skip values to 1. This will result in polling the OS file descriptors, along side with offloaded sockets (if such sockets exists), the number of times specified in the select/poll duration setting. Maps to XLIO_SELECT_POLL_OS_FORCE environment variable."
-                                },
                                 "poll_os_ratio": {
                                     "type": "integer",
                                     "minimum": 0,

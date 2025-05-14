@@ -385,7 +385,6 @@ public:
     bool mc_force_flowtag;
 
     int32_t select_poll_num;
-    bool select_poll_os_force;
     uint32_t select_poll_os_ratio;
     uint32_t select_skip_os_fd_check;
     bool select_handle_cpu_usage_stats;
@@ -622,7 +621,6 @@ extern mce_sys_var &safe_mce_sys();
 
 #define SYS_VAR_SELECT_CPU_USAGE_STATS "XLIO_CPU_USAGE_STATS"
 #define SYS_VAR_SELECT_NUM_POLLS       "XLIO_SELECT_POLL"
-#define SYS_VAR_SELECT_POLL_OS_FORCE   "XLIO_SELECT_POLL_OS_FORCE"
 #define SYS_VAR_SELECT_POLL_OS_RATIO   "XLIO_SELECT_POLL_OS_RATIO"
 #define SYS_VAR_SELECT_SKIP_OS         "XLIO_SELECT_SKIP_OS"
 
@@ -771,7 +769,6 @@ extern mce_sys_var &safe_mce_sys();
 
 #define NEW_CONFIG_VAR_SELECT_CPU_USAGE_STATS "monitor.stats.cpu_usage"
 #define NEW_CONFIG_VAR_SELECT_NUM_POLLS       "performance.polling.iomux.poll_usec"
-#define NEW_CONFIG_VAR_SELECT_POLL_OS_FORCE   "performance.polling.iomux.poll_os_force"
 #define NEW_CONFIG_VAR_SELECT_POLL_OS_RATIO   "performance.polling.iomux.poll_os_ratio"
 #define NEW_CONFIG_VAR_SELECT_SKIP_OS         "performance.polling.iomux.skip_os"
 
@@ -940,7 +937,6 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_ETH_MC_L2_ONLY_RULES          (false)
 #define MCE_DEFAULT_MC_FORCE_FLOWTAG              (false)
 #define MCE_DEFAULT_SELECT_NUM_POLLS              (100000)
-#define MCE_DEFAULT_SELECT_POLL_OS_FORCE          (0)
 #define MCE_DEFAULT_SELECT_POLL_OS_RATIO          (10)
 #define MCE_DEFAULT_SELECT_SKIP_OS                (4)
 #define MCE_DEFAULT_SELECT_CPU_USAGE_STATS        (false)

@@ -115,7 +115,6 @@ Example:
  XLIO DETAILS: ETH MC L2 only rules           Disabled                   [performance.steering_rules.udp.only_mc_l2_rules]
  XLIO DETAILS: Force Flowtag for MC           Disabled                   [network.multicast.mc_flowtag_acceleration]
  XLIO DETAILS: Select Poll (usec)             100000                     [performance.polling.iomux.poll_usec]
- XLIO DETAILS: Select Poll OS Force           Disabled                   [performance.polling.iomux.poll_os_force]
  XLIO DETAILS: Select Poll OS Ratio           10                         [performance.polling.iomux.poll_os_ratio]
  XLIO DETAILS: Select Skip OS                 4                          [performance.polling.iomux.skip_os]
  XLIO DETAILS: CQ Drain Interval (msec)       10                         [performance.completion_queue.periodic_drain_msec]
@@ -687,10 +686,6 @@ Default value is 64 KB
 performance.polling.blocking_rx_poll_usec
 The number of times to poll on Rx path for ready packets before going to sleep (wait for interrupt in blocked mode) or return -1 (in non-blocked mode). This Rx polling is done when the application is working with direct blocked calls to read(), recv(), recvfrom() & recvmsg(). When Rx path has successful poll hits, the latency is improved dramatically. This comes at the expense of CPU utilization. Value range is -1, 0 to 100,000,000. Where value of -1 is used for infinite polling and 0 means interrupt-driven only. Maps to **XLIO_RX_POLL** environment variable.
 Default value is 100000
-
-performance.polling.iomux.poll_os_force
-This flag forces to poll the OS file descriptors while user thread calls select(), poll() or epoll_wait() even when no offloaded sockets are mapped. Enabling this flag causes XLIO to set the OS file descriptor polling ratio and OS skip values to 1. This will result in polling the OS file descriptors, along side with offloaded sockets (if such sockets exists), the number of times specified in the select/poll duration setting. Maps to **XLIO_SELECT_POLL_OS_FORCE** environment variable.
-Default value is 0 (Disabled)
 
 performance.polling.iomux.poll_os_ratio
 This will enable polling of the OS file descriptors while user thread calls select() or poll() and XLIO is busy in the offloaded sockets polling loop. This will result in a single poll of the not-offloaded sockets every N offloaded sockets (CQ) polls. When disabled (value of 0), only offloaded sockets are polled. Maps to **XLIO_SELECT_POLL_OS_RATIO** environment variable.
