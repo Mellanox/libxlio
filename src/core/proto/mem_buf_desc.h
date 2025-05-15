@@ -43,7 +43,6 @@ class mem_buf_desc_t {
 public:
     enum flags {
         TYPICAL = 0,
-        CLONED = 0x01,
         ZCOPY = 0x02,
         HAD_CQE_ERROR = 0x04,
     };
@@ -62,7 +61,6 @@ public:
     {
         memset(&lwip_pbuf, 0, sizeof(lwip_pbuf));
         clear_transport_data();
-        memset(&ee, 0, sizeof(ee));
         reset_ref_count();
 
         lwip_pbuf.type = type;
@@ -73,14 +71,6 @@ public:
     {
         // mem_buf_desc_t contains only list_node and sock_addr as class fields.
         memcpy((void *)this, &ref, sizeof(mem_buf_desc_t));
-    }
-
-    inline mem_buf_desc_t *clone()
-    {
-        mem_buf_desc_t *p_desc = new mem_buf_desc_t(*this);
-        INIT_LIST_HEAD(&p_desc->buffer_node.head);
-        p_desc->m_flags |= mem_buf_desc_t::CLONED;
-        return p_desc;
     }
 
     // Destructor specifically for cloned buffers.
@@ -113,7 +103,10 @@ public:
      * which is unused in RX buffers.
      * This is used for XLIO Socket API.
      */
-    struct xlio_buf *to_xlio_buf() { return reinterpret_cast<struct xlio_buf *>(&ee); }
+    struct xlio_buf *to_xlio_buf()
+    {
+        return reinterpret_cast<struct xlio_buf *>(&rx.timestamps.sw);
+    }
     static struct xlio_buf *to_xlio_buf(struct pbuf *p)
     {
         return reinterpret_cast<mem_buf_desc_t *>(p)->to_xlio_buf();
@@ -121,7 +114,7 @@ public:
     static mem_buf_desc_t *from_xlio_buf(struct xlio_buf *buf)
     {
         return reinterpret_cast<mem_buf_desc_t *>(reinterpret_cast<char *>(buf) -
-                                                  offsetof(mem_buf_desc_t, ee));
+                                                  offsetof(mem_buf_desc_t, rx.timestamps.sw));
     }
 
 public:
@@ -181,24 +174,12 @@ public:
                 struct tcphdr *p_tcp_h;
             };
             struct {
-                /* This structure allows to track tx zerocopy flow
-                 * including start send id and range in count field
-                 * with total bytes length as len
-                 * where
-                 * id -> ee.ee_info
-                 * id + count -1 -> ee.ee_data
-                 */
-                uint32_t id;
-                uint32_t len;
-                uint16_t count;
                 void *ctx;
                 void (*callback)(mem_buf_desc_t *);
             } zc;
         } tx;
     };
 
-    /* This field is needed for error queue processing */
-    struct sock_extended_err ee;
     int m_flags; /* object description */
     uint32_t lkey; // Buffers lkey for QP access
     mem_buf_desc_t *p_next_desc; // A general purpose linked list of mem_buf_desc
@@ -212,7 +193,7 @@ public:
 
     atomic_t n_ref_count; // number of interested receivers (sockinfo) [can be modified only in
                           // cq_mgr_rx context]
-    uint64_t unused_padding[3]; // Align the structure to the cache line boundary
+    uint64_t unused_padding[5]; // Align the structure to the cache line boundary
 };
 
 typedef xlio_list_t<mem_buf_desc_t, mem_buf_desc_t::buffer_node_offset> descq_t;

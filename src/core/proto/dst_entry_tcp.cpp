@@ -24,9 +24,7 @@ dst_entry_tcp::dst_entry_tcp(const sock_addr &dst, uint16_t src_port, socket_dat
                              resource_allocation_key &ring_alloc_logic)
     : dst_entry(dst, src_port, sock_data, ring_alloc_logic)
     , m_n_sysvar_tx_bufs_batch_tcp(safe_mce_sys().tx_bufs_batch_tcp)
-    , m_n_sysvar_user_huge_page_size(safe_mce_sys().user_huge_page_size)
 {
-    m_user_huge_page_mask = ~((uint64_t)m_n_sysvar_user_huge_page_size - 1);
 }
 
 dst_entry_tcp::~dst_entry_tcp()
@@ -94,7 +92,6 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
         size_t tcp_hdr_len;
         xlio_ibv_send_wr send_wqe;
         wqe_send_handler send_wqe_h;
-        void *masked_addr;
 
         /* iov_base is a pointer to TCP header and data
          * so p_pkt should point to L2
@@ -181,14 +178,7 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
                         m_sge[i].lkey = m_p_ring->get_tx_lkey(m_id);
                     }
                 } else {
-                    /* Do not check desc.attr for specific type because
-                     * PBUF_DESC_FD - is not possible for XLIO_TX_PACKET_ZEROCOPY
-                     * PBUF_DESC_NONE - map should be initialized to NULL in
-                     * dst_entry_tcp::get_buffer() object
-                     */
-                    masked_addr = (void *)((uint64_t)m_sge[i].addr & m_user_huge_page_mask);
-                    m_sge[i].lkey =
-                        m_p_ring->get_tx_user_lkey(masked_addr, m_n_sysvar_user_huge_page_size);
+                    dst_tcp_logerr("Unexpected pbuf_descriptor.attr %d", pbuf_descriptor.attr);
                 }
             } else {
                 m_sge[i].lkey = (i == 0 ? m_p_ring->get_tx_lkey(m_id) : m_sge[0].lkey);

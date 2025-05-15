@@ -1785,7 +1785,7 @@ ssize_t sockinfo_udp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
         if (m_n_rx_pkt_ready_list_count > 0) {
             // Found a ready packet in the list
             if (__msg) {
-                handle_cmsg(__msg, in_flags);
+                handle_cmsg(__msg);
             }
             ret = dequeue_packet(p_iov, sz_iov, __from, __fromlen, in_flags, &out_flags);
             goto out;
@@ -1808,7 +1808,7 @@ wait:
         // Got 0, means we might have a ready packet
         if (m_n_rx_pkt_ready_list_count > 0) {
             if (__msg) {
-                handle_cmsg(__msg, in_flags);
+                handle_cmsg(__msg);
             }
             ret = dequeue_packet(p_iov, sz_iov, __from, __fromlen, in_flags, &out_flags);
             goto out;
