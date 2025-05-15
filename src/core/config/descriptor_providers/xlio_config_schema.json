@@ -1376,18 +1376,6 @@
                 }
             }
         },
-        "extra_api": {
-            "type": "object",
-            "description": "XLIO API configuration.",
-            "properties": {
-                "hugepage_size": {
-                    "type": "integer",
-                    "default": 2097152,
-                    "title": "API hugepage size.",
-                    "description": "Size of huge pages used by user application for buffers provided as part of the TX Zero Copy socket API (sendmsg with MSG_ZEROCOPY flag). Maps to XLIO_USER_HUGE_PAGE_SIZE environment variable."
-                }
-            }
-        },
         "profiles": {
             "type": "object",
             "description": "Predefined application profiles",

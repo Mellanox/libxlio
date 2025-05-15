@@ -269,7 +269,6 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     , m_sysvar_tx_segs_batch_tcp(safe_mce_sys().tx_segs_batch_tcp)
     , m_tcp_seg_list(nullptr)
     , m_sysvar_rx_poll_on_tx_tcp(safe_mce_sys().rx_poll_on_tx_tcp)
-    , m_user_huge_page_mask(~((uint64_t)safe_mce_sys().user_huge_page_size - 1))
 {
     si_tcp_logfuncall("");
 
@@ -715,10 +714,6 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
 
     return_reuse_buffers_postponed();
 
-    if (m_b_zc && m_p_connected_dst_entry) {
-        m_p_connected_dst_entry->reset_inflight_zc_buffers_ctx(this);
-    }
-
     /* According to "UNIX Network Programming" third edition,
      * setting SO_LINGER with timeout 0 prior to calling close()
      * will cause the normal termination sequence not to be initiated.
@@ -1040,16 +1035,26 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
 
     bool is_dummy = IS_DUMMY_PACKET(flags);
     bool is_blocking = BLOCK_THIS_RUN(m_b_blocking, flags);
-    bool is_packet_zerocopy = (flags & MSG_ZEROCOPY) && ((m_b_zc) || (tx_arg.opcode == TX_FILE));
+
+    // 1. All blocking sockets (Blocking TLS/plain/sendfile/TLS-sendfile)
+    // 2. Non-blocking plain sockets (Copy path).
+    // 3. Non-blocking plain sendfile fallback.
+    bool is_packet_zerocopy = (flags & MSG_ZEROCOPY) && (tx_arg.opcode == TX_FILE);
     if (unlikely(is_dummy) || unlikely(!is_packet_zerocopy) || unlikely(is_blocking)) {
         return tcp_tx_slow_path(tx_arg);
     }
 
+    // Non blocking plain ZC path.
+    // Currently non-blocking plain no-fallback sendfile.
+
     si_tcp_logfunc("tx: iov=%p niovs=%zu", p_iov, sz_iov);
 
+#ifdef DEFINED_TCP_TX_WND_AVAILABILITY
     size_t total_iov_len =
         std::accumulate(&p_iov[0], &p_iov[sz_iov], 0U,
                         [](size_t sum, const iovec &curr) { return sum + curr.iov_len; });
+#endif
+
     lock_tcp_con();
 
     if (unlikely(!is_connected_and_ready_to_send())) {
@@ -1059,7 +1064,6 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
         return tcp_tx_handle_errno_and_unlock(EAGAIN);
     }
 
-    bool is_non_file_zerocopy = tx_arg.opcode != TX_FILE;
     int total_tx = 0;
     for (size_t i = 0; i < sz_iov; i++) {
         si_tcp_logfunc("iov:%d base=%p len=%d", i, p_iov[i].iov_base, p_iov[i].iov_len);
@@ -1075,40 +1079,16 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
             if (tx_size == 0) {
                 // force out TCP data before going on wait()
                 tcp_output(&m_pcb);
-                return tcp_tx_handle_sndbuf_unavailable(total_tx, is_dummy, is_non_file_zerocopy,
-                                                        errno_tmp);
-            }
-            if (tx_arg.xlio_flags & TX_FLAG_NO_PARTIAL_WRITE) {
-                /*
-                 * With TX_FLAG_NO_PARTIAL_WRITE we can queue a single send operation beyond the
-                 * TCP send buffer. However, avoid 32-bit snd_buf overflow.
-                 */
-                if (unlikely(total_iov_len > UINT32_MAX)) {
-                    return tcp_tx_handle_errno_and_unlock(E2BIG);
-                }
-                tx_size = total_iov_len;
+                return tcp_tx_handle_sndbuf_unavailable(total_tx, is_dummy, errno_tmp);
             }
 
             tx_size = std::min<size_t>(p_iov[i].iov_len - pos, tx_size);
-            if (is_non_file_zerocopy) {
-                /*
-                 * For send zerocopy we don't support pbufs which
-                 * cross huge page boundaries. To avoid forming
-                 * such a pbuf, we have to adjust tx_size, so
-                 * tcp_write receives a buffer which doesn't cross
-                 * the boundary.
-                 */
-                unsigned remainder =
-                    ~m_user_huge_page_mask + 1 - ((uint64_t)tx_ptr & ~m_user_huge_page_mask);
-                tx_size = std::min(remainder, tx_size);
-            }
 
             const struct iovec iov = {.iov_base = tx_ptr, .iov_len = tx_size};
             err = tcp_write_express(&m_pcb, &iov, 1, &tx_arg.priv);
             if (unlikely(err != ERR_OK)) {
                 // tcp_write_express() can return only ERR_MEM error.
-                return tcp_tx_handle_partial_send_and_unlock(total_tx, EAGAIN, is_dummy,
-                                                             is_non_file_zerocopy, errno_tmp);
+                return tcp_tx_handle_partial_send_and_unlock(total_tx, EAGAIN, is_dummy, errno_tmp);
             }
             tx_ptr = (void *)((char *)tx_ptr + tx_size);
             pos += tx_size;
@@ -1116,7 +1096,7 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
         }
     }
 
-    return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp, is_dummy, is_non_file_zerocopy);
+    return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp, is_dummy);
 }
 
 /**
@@ -1135,7 +1115,6 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
     int errno_tmp = errno;
     int poll_count = 0;
     uint16_t apiflags = 0;
-    bool is_send_zerocopy = false;
     void *tx_ptr = nullptr;
 
     if (tx_arg.opcode == TX_FILE) {
@@ -1153,14 +1132,10 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
         apiflags |= XLIO_TX_PACKET_DUMMY;
     }
 
-    /* To force zcopy flow there are two possible ways
-     * - send() MSG_ZEROCOPY flag should be passed by user application
-     * and SO_ZEROCOPY activated
-     * - sendfile() MSG_ZEROCOPY flag set internally with opcode TX_FILE
-     */
-    if ((flags & MSG_ZEROCOPY) && ((m_b_zc) || (tx_arg.opcode == TX_FILE))) {
+    // 1. Blocking TLS (TLS disguises itself as TX_FILE with MSG_ZEROCOPY)
+    // 2. Blocking plain ZC sendfile
+    if ((flags & MSG_ZEROCOPY) && (tx_arg.opcode == TX_FILE)) {
         apiflags |= XLIO_TX_PACKET_ZEROCOPY;
-        is_send_zerocopy = tx_arg.opcode != TX_FILE;
     }
 
     si_tcp_logfunc("tx: iov=%p niovs=%zu", p_iov, sz_iov);
@@ -1207,13 +1182,12 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
 
                 // non blocking socket should return in order not to tx_wait()
                 if (!block_this_run) {
-                    return tcp_tx_handle_sndbuf_unavailable(total_tx, is_dummy, is_send_zerocopy,
-                                                            errno_tmp);
+                    return tcp_tx_handle_sndbuf_unavailable(total_tx, is_dummy, errno_tmp);
                 }
 
                 if (unlikely(g_b_exit)) {
                     return tcp_tx_handle_partial_send_and_unlock(total_tx, EINTR, is_dummy,
-                                                                 is_send_zerocopy, errno_tmp);
+                                                                 errno_tmp);
                 }
 
                 tx_size = tx_wait(block_this_run);
@@ -1224,18 +1198,7 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
             }
 
             tx_size = std::min<size_t>(p_iov[i].iov_len - pos, tx_size);
-            if (is_send_zerocopy) {
-                /*
-                 * For send zerocopy we don't support pbufs which
-                 * cross huge page boundaries. To avoid forming
-                 * such a pbuf, we have to adjust tx_size, so
-                 * tcp_write receives a buffer which doesn't cross
-                 * the boundary.
-                 */
-                unsigned remainder =
-                    ~m_user_huge_page_mask + 1 - ((uint64_t)tx_ptr & ~m_user_huge_page_mask);
-                tx_size = std::min(remainder, tx_size);
-            }
+
             do {
                 err_t err;
                 if (apiflags & XLIO_TX_PACKET_ZEROCOPY) {
@@ -1249,7 +1212,7 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
                         si_tcp_logdbg("connection closed: tx'ed = %d", total_tx);
                         shutdown(SHUT_WR);
                         return tcp_tx_handle_partial_send_and_unlock(total_tx, EPIPE, is_dummy,
-                                                                     is_send_zerocopy, errno_tmp);
+                                                                     errno_tmp);
                     }
                     if (unlikely(err != ERR_MEM)) {
                         // we should not get here...
@@ -1260,8 +1223,7 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
                     /* Set return values for nonblocking socket and finish processing */
                     if (!block_this_run) {
                         if (total_tx > 0) {
-                            return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp, is_dummy,
-                                                                 is_send_zerocopy);
+                            return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp, is_dummy);
                         } else {
                             return tcp_tx_handle_errno_and_unlock(EAGAIN);
                         }
@@ -1269,7 +1231,7 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
 
                     if (unlikely(g_b_exit)) {
                         return tcp_tx_handle_partial_send_and_unlock(total_tx, EINTR, is_dummy,
-                                                                     is_send_zerocopy, errno_tmp);
+                                                                     errno_tmp);
                     }
 
                     rx_wait(poll_count, true);
@@ -1288,6 +1250,7 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
                 break;
             } while (true);
             if (tx_arg.opcode == TX_FILE && !(apiflags & XLIO_TX_PACKET_ZEROCOPY)) {
+                // Sendfile fallback path. See sendfile_helper.
                 file_offset += tx_size;
             } else {
                 tx_ptr = (void *)((char *)tx_ptr + tx_size);
@@ -1297,7 +1260,7 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
         }
     }
 
-    return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp, is_dummy, is_send_zerocopy);
+    return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp, is_dummy);
 }
 
 static bool inspect_socket_error_state(const mem_buf_desc_t *mem_buf_desc, struct tcp_pcb *pcb)
@@ -1335,7 +1298,6 @@ err_t sockinfo_tcp::ip_output(struct pbuf *p, struct tcp_seg *seg, void *v_p_con
         (xlio_wr_tx_packet_attr)(flags | (!!p_si_tcp->is_xlio_socket() * XLIO_TX_SKIP_POLL)),
         p_si_tcp->m_pcb.mss, 0, nullptr};
     int count = 0;
-    void *cur_end;
 
     if (unlikely(flags & XLIO_TX_PACKET_REXMIT)) {
         if (unlikely(inspect_socket_error_state(reinterpret_cast<const mem_buf_desc_t *>(seg->p),
@@ -1380,19 +1342,10 @@ zc_fill_iov:
      * Assume here that ZC buffer doesn't cross huge-pages -> ZC lkey scheme works.
      */
     while (p && (count < max_count)) {
-        cur_end =
-            (void *)((uint64_t)lwip_iovec[count].iovec.iov_base + lwip_iovec[count].iovec.iov_len);
-        if ((p->desc.attr == PBUF_DESC_NONE) && (cur_end == p->payload) &&
-            ((uintptr_t)((uint64_t)lwip_iovec[count].iovec.iov_base &
-                         p_si_tcp->m_user_huge_page_mask) ==
-             (uintptr_t)((uint64_t)p->payload & p_si_tcp->m_user_huge_page_mask))) {
-            lwip_iovec[count].iovec.iov_len += p->len;
-        } else {
-            count++;
-            lwip_iovec[count].iovec.iov_base = p->payload;
-            lwip_iovec[count].iovec.iov_len = p->len;
-            lwip_iovec[count].p_desc = (mem_buf_desc_t *)p;
-        }
+        count++;
+        lwip_iovec[count].iovec.iov_base = p->payload;
+        lwip_iovec[count].iovec.iov_len = p->len;
+        lwip_iovec[count].p_desc = (mem_buf_desc_t *)p;
         attr.length += p->len;
         p = p->next;
     }
@@ -2168,19 +2121,6 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
 
     /* poll rx queue till we have something */
     lock_tcp_con();
-
-    /* error queue request should be handled first
-     * It allows to return immediately during failure with correct
-     * error notification without data processing
-     */
-    if (__msg && __msg->msg_control && (in_flags & MSG_ERRQUEUE)) {
-        // coverity[MISSING_LOCK:FALSE] /*Turn off coverity check for missing lock*/
-        if (m_error_queue.empty()) {
-            errno = EAGAIN;
-            unlock_tcp_con();
-            return -1;
-        }
-    }
     return_reuse_buffers_postponed();
     unlock_tcp_con();
 
@@ -2233,7 +2173,7 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
 
     /* Handle all control message requests */
     if (__msg && __msg->msg_control && process_cmsg) {
-        handle_cmsg(__msg, in_flags);
+        handle_cmsg(__msg);
     }
 
     /*
@@ -3323,11 +3263,6 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
 
     new_sock->socket_stats_init();
 
-    /* Reset zerocopy state */
-    atomic_set(&new_sock->m_zckey, 0);
-    new_sock->m_last_zcdesc = nullptr;
-    new_sock->m_b_zc = false;
-
     new_sock->m_state = SOCKINFO_OPENED;
     new_sock->m_sock_state = TCP_SOCK_INITED;
     new_sock->m_conn_state = TCP_CONN_INIT;
@@ -3745,7 +3680,7 @@ bool sockinfo_tcp::is_errorable(int *errors)
         *errors |= POLLHUP;
     }
     // coverity[MISSING_LOCK:FALSE] /*Turn off coverity check for missing lock*/
-    if ((m_conn_state == TCP_CONN_ERROR) || (!m_error_queue.empty())) {
+    if (m_conn_state == TCP_CONN_ERROR) {
         *errors |= POLLERR;
     }
 
@@ -4330,15 +4265,6 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             pass_to_os_always = true;
             break;
         }
-        case SO_ZEROCOPY:
-            if (__optval) {
-                lock_tcp_con();
-                m_b_zc = *(bool *)__optval;
-                unlock_tcp_con();
-            }
-            pass_to_os_always = true;
-            si_tcp_logdbg("(SO_ZEROCOPY) m_b_zc: %d", m_b_zc);
-            break;
         case SO_XLIO_EXT_VLAN_TAG:
             if (__optlen == sizeof(int)) {
                 int tempval = *reinterpret_cast<const int *>(__optval);
@@ -4634,15 +4560,6 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
             break;
         case SO_MAX_PACING_RATE:
             ret = sockinfo::getsockopt(__level, __optname, __optval, __optlen);
-            break;
-        case SO_ZEROCOPY:
-            if (*__optlen >= sizeof(int)) {
-                *(int *)__optval = m_b_zc;
-                si_tcp_logdbg("(SO_ZEROCOPY) m_b_zc: %d", m_b_zc);
-                ret = 0;
-            } else {
-                errno = EINVAL;
-            }
             break;
         default:
             ret = SOCKOPT_HANDLE_BY_OS;
@@ -5203,26 +5120,9 @@ struct pbuf *sockinfo_tcp::tcp_tx_pbuf_alloc(void *p_conn, pbuf_type type, pbuf_
             } else {
                 p_desc->tx.zc.ctx = reinterpret_cast<void *>(p_si_tcp);
             }
-        } else if (p_desc->lwip_pbuf.desc.attr == PBUF_DESC_NONE) {
-            /* Prepare error queue fields for send zerocopy */
-            if (p_buff) {
-                /* It is a special case that can happen as a result
-                 * of split operation of existing zc buffer
-                 */
-                mem_buf_desc_t *p_prev_desc = (mem_buf_desc_t *)p_buff;
-                p_desc->m_flags |= mem_buf_desc_t::ZCOPY;
-                p_desc->tx.zc.id = p_prev_desc->tx.zc.id;
-                p_desc->tx.zc.count = p_prev_desc->tx.zc.count;
-                p_desc->tx.zc.len = p_desc->lwip_pbuf.len;
-                p_desc->tx.zc.ctx = p_prev_desc->tx.zc.ctx;
-                p_desc->tx.zc.callback = tcp_tx_zc_callback;
-                p_prev_desc->tx.zc.count = 0;
-                if (p_si_tcp->m_last_zcdesc == p_prev_desc) {
-                    p_si_tcp->m_last_zcdesc = p_desc;
-                }
-            } else {
-                p_si_tcp->tcp_tx_zc_alloc(p_desc);
-            }
+        } else if (p_desc->lwip_pbuf.desc.attr != PBUF_DESC_MDESC) { // If not sendfile
+            __log_err("Unexpected ZC TX buffer type %d", p_desc->lwip_pbuf.desc.attr);
+            return nullptr;
         }
     }
     return (struct pbuf *)p_desc;
@@ -5264,25 +5164,6 @@ void sockinfo_tcp::tcp_tx_pbuf_free(void *p_conn, struct pbuf *p_buff)
     }
 }
 
-mem_buf_desc_t *sockinfo_tcp::tcp_tx_zc_alloc(mem_buf_desc_t *p_desc)
-{
-    p_desc->m_flags |= mem_buf_desc_t::ZCOPY;
-    p_desc->tx.zc.id = atomic_read(&m_zckey);
-    p_desc->tx.zc.count = 1;
-    p_desc->tx.zc.len = p_desc->lwip_pbuf.len;
-    p_desc->tx.zc.ctx = (void *)this;
-    p_desc->tx.zc.callback = tcp_tx_zc_callback;
-
-    if (m_last_zcdesc && (m_last_zcdesc != p_desc) && (m_last_zcdesc->lwip_pbuf.ref > 0) &&
-        (m_last_zcdesc->tx.zc.id == p_desc->tx.zc.id)) {
-        m_last_zcdesc->tx.zc.len = m_last_zcdesc->lwip_pbuf.len;
-        m_last_zcdesc->tx.zc.count = 0;
-    }
-    m_last_zcdesc = p_desc;
-
-    return p_desc;
-}
-
 /*static*/
 void sockinfo_tcp::tcp_express_zc_callback(mem_buf_desc_t *p_desc)
 {
@@ -5292,95 +5173,6 @@ void sockinfo_tcp::tcp_express_zc_callback(mem_buf_desc_t *p_desc)
     if (opaque_op && si->m_p_group && si->m_p_group->m_socket_comp_cb) {
         si->m_p_group->m_socket_comp_cb(reinterpret_cast<xlio_socket_t>(si),
                                         si->m_xlio_socket_userdata, opaque_op);
-    }
-}
-
-/*static*/
-void sockinfo_tcp::tcp_tx_zc_callback(mem_buf_desc_t *p_desc)
-{
-    sockinfo_tcp *sock = nullptr;
-
-    if (!p_desc) {
-        return;
-    }
-
-    if (!p_desc->tx.zc.ctx || !p_desc->tx.zc.count) {
-        goto cleanup;
-    }
-
-    sock = (sockinfo_tcp *)p_desc->tx.zc.ctx;
-
-    if (sock->m_state != SOCKINFO_OPENED) {
-        goto cleanup;
-    }
-
-    sock->tcp_tx_zc_handle(p_desc);
-
-cleanup:
-    /* Clean up */
-    p_desc->m_flags &= ~mem_buf_desc_t::ZCOPY;
-    memset(&p_desc->tx.zc, 0, sizeof(p_desc->tx.zc));
-    if (sock && p_desc == sock->m_last_zcdesc) {
-        sock->m_last_zcdesc = nullptr;
-    }
-}
-
-void sockinfo_tcp::tcp_tx_zc_handle(mem_buf_desc_t *p_desc)
-{
-    uint32_t lo, hi;
-    uint16_t count;
-    uint32_t prev_lo, prev_hi;
-    mem_buf_desc_t *err_queue = nullptr;
-    sockinfo_tcp *sock = this;
-
-    count = p_desc->tx.zc.count;
-    lo = p_desc->tx.zc.id;
-    hi = lo + count - 1;
-    memset(&p_desc->ee, 0, sizeof(p_desc->ee));
-    p_desc->ee.ee_errno = 0;
-    p_desc->ee.ee_origin = SO_EE_ORIGIN_ZEROCOPY;
-    p_desc->ee.ee_data = hi;
-    p_desc->ee.ee_info = lo;
-    //	p_desc->ee.ee_code |= SO_EE_CODE_ZEROCOPY_COPIED;
-
-    m_error_queue_lock.lock();
-
-    /* Update last error queue element in case it has the same type */
-    err_queue = sock->m_error_queue.back();
-    if (err_queue && (err_queue->ee.ee_origin == p_desc->ee.ee_origin) &&
-        (err_queue->ee.ee_code == p_desc->ee.ee_code)) {
-        uint64_t sum_count = 0;
-
-        prev_hi = err_queue->ee.ee_data;
-        prev_lo = err_queue->ee.ee_info;
-        sum_count = prev_hi - prev_lo + 1ULL + count;
-
-        if (lo == prev_lo) {
-            if (hi > prev_hi) {
-                err_queue->ee.ee_data = hi;
-            }
-        } else if ((sum_count >= (1ULL << 32)) || (lo != prev_hi + 1)) {
-            err_queue = nullptr;
-        } else {
-            err_queue->ee.ee_data += count;
-        }
-    }
-
-    /* Add  information into error queue element */
-    if (!err_queue) {
-        err_queue = p_desc->clone();
-        sock->m_error_queue.push_back(err_queue);
-    }
-
-    m_error_queue_lock.unlock();
-
-    /* Signal events on socket */
-    NOTIFY_ON_EVENTS(sock, EPOLLERR);
-
-    // Avoid cache access unnecessarily.
-    // Non-blocking sockets are waked-up as part of mux handling.
-    if (unlikely(is_blocking())) {
-        sock->m_sock_wakeup_pipe.do_wakeup();
     }
 }
 
@@ -5795,8 +5587,7 @@ void sockinfo_tcp::flush()
     unlock_tcp_con();
 }
 
-ssize_t sockinfo_tcp::tcp_tx_handle_done_and_unlock(ssize_t total_tx, int errno_tmp, bool is_dummy,
-                                                    bool is_send_zerocopy)
+ssize_t sockinfo_tcp::tcp_tx_handle_done_and_unlock(ssize_t total_tx, int errno_tmp, bool is_dummy)
 {
     tcp_output(&m_pcb); // force data out
 
@@ -5807,18 +5598,6 @@ ssize_t sockinfo_tcp::tcp_tx_handle_done_and_unlock(ssize_t total_tx, int errno_
             m_p_socket_stats->counters.n_tx_sent_byte_count += total_tx;
             m_p_socket_stats->counters.n_tx_sent_pkt_count++;
             m_p_socket_stats->n_tx_ready_byte_count += total_tx;
-        }
-    }
-
-    /* Each send call with MSG_ZEROCOPY that successfully sends
-     * data increments the counter.
-     * The counter is not incremented on failure or if called with length zero.
-     */
-    if (is_send_zerocopy && (total_tx > 0)) {
-        if (m_last_zcdesc->tx.zc.id != (uint32_t)atomic_read(&m_zckey)) {
-            /* si_tcp_logerr("Invalid tx zcopy operation"); */
-        } else {
-            atomic_fetch_and_inc(&m_zckey);
         }
     }
 
@@ -5847,12 +5626,10 @@ ssize_t sockinfo_tcp::tcp_tx_handle_errno_and_unlock(int error_number)
 }
 
 ssize_t sockinfo_tcp::tcp_tx_handle_partial_send_and_unlock(ssize_t total_tx, int errno_to_report,
-                                                            bool is_dummy, bool is_send_zerocopy,
-                                                            int errno_to_restore)
+                                                            bool is_dummy, int errno_to_restore)
 {
     if (total_tx > 0) {
-        return tcp_tx_handle_done_and_unlock(total_tx, errno_to_restore, is_dummy,
-                                             is_send_zerocopy);
+        return tcp_tx_handle_done_and_unlock(total_tx, errno_to_restore, is_dummy);
     }
     si_tcp_logdbg("Returning with: %d", errno_to_report);
     return tcp_tx_handle_errno_and_unlock(errno_to_report);
@@ -5889,13 +5666,12 @@ bool sockinfo_tcp::is_connected_and_ready_to_send()
  *    - some data is buffered: return number of bytes ready to be sent
  */
 ssize_t sockinfo_tcp::tcp_tx_handle_sndbuf_unavailable(ssize_t total_tx, bool is_dummy,
-                                                       bool is_send_zerocopy, int errno_to_restore)
+                                                       int errno_to_restore)
 {
     // non blocking socket should return in order not to tx_wait()
     if (total_tx > 0) {
         m_tx_consecutive_eagain_count = 0;
-        return tcp_tx_handle_done_and_unlock(total_tx, errno_to_restore, is_dummy,
-                                             is_send_zerocopy);
+        return tcp_tx_handle_done_and_unlock(total_tx, errno_to_restore, is_dummy);
     } else {
         m_tx_consecutive_eagain_count++;
         if (m_tx_consecutive_eagain_count >= TX_CONSECUTIVE_EAGAIN_THREASHOLD) {

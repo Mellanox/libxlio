@@ -250,10 +250,7 @@ public:
     uint32_t get_next_tcp_seqno() { return m_pcb.snd_lbb; }
     uint32_t get_next_tcp_seqno_rx() { return m_pcb.rcv_nxt; }
 
-    mem_buf_desc_t *tcp_tx_zc_alloc(mem_buf_desc_t *p_desc);
     static void tcp_express_zc_callback(mem_buf_desc_t *p_desc);
-    static void tcp_tx_zc_callback(mem_buf_desc_t *p_desc);
-    void tcp_tx_zc_handle(mem_buf_desc_t *p_desc);
 
     bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = NULL) override;
     bool is_writeable() override;
@@ -434,14 +431,11 @@ private:
     // int rx_wait(int &poll_count, bool blocking = true);
     static err_t ack_recvd_lwip_cb(void *arg, struct tcp_pcb *tpcb, u16_t space);
 
-    ssize_t tcp_tx_handle_done_and_unlock(ssize_t total_tx, int errno_tmp, bool is_dummy,
-                                          bool is_send_zerocopy);
+    ssize_t tcp_tx_handle_done_and_unlock(ssize_t total_tx, int errno_tmp, bool is_dummy);
     ssize_t tcp_tx_handle_errno_and_unlock(int error_number);
     ssize_t tcp_tx_handle_partial_send_and_unlock(ssize_t total_tx, int errno_to_report,
-                                                  bool is_dummy, bool is_send_zerocopy,
-                                                  int errno_to_restore);
-    ssize_t tcp_tx_handle_sndbuf_unavailable(ssize_t total_tx, bool is_dummy, bool is_send_zerocopy,
-                                             int errno_to_restore);
+                                                  bool is_dummy, int errno_to_restore);
+    ssize_t tcp_tx_handle_sndbuf_unavailable(ssize_t total_tx, bool is_dummy, int errno_to_restore);
     ssize_t tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg);
     err_t handle_fin(struct tcp_pcb *pcb, err_t err);
     void handle_rx_lwip_cb_error(pbuf *p);
@@ -632,7 +626,6 @@ private:
     static const unsigned TX_CONSECUTIVE_EAGAIN_THREASHOLD = 10;
     unsigned m_tx_consecutive_eagain_count;
     bool m_sysvar_rx_poll_on_tx_tcp;
-    uint64_t m_user_huge_page_mask;
     uint16_t m_external_vlan_tag = 0U;
     /*
      * Storage API

@@ -72,19 +72,19 @@ const char *sockinfo::setsockopt_so_opt_to_str(int opt)
 
 sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     : m_skip_cq_poll_in_rx(safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_ENABLE)
+    , m_family(domain)
     , m_fd(fd)
     , m_rx_num_buffs_reuse(safe_mce_sys().rx_bufs_batch)
     , m_is_ipv6only(safe_mce_sys().sysctl_reader.get_ipv6_bindv6only())
-    , m_family(domain)
+    , m_n_uc_ttl_hop_lim(m_family == AF_INET
+                             ? safe_mce_sys().sysctl_reader.get_net_ipv4_ttl()
+                             : safe_mce_sys().sysctl_reader.get_net_ipv6_hop_limit())
     , m_lock_rcv(MULTILOCK_RECURSIVE, MODULE_NAME "::m_lock_rcv")
     , m_lock_snd(MODULE_NAME "::m_lock_snd")
     , m_so_bindtodevice_ip(ip_address::any_addr(), domain)
     , m_rx_ring_map_lock(MODULE_NAME "::m_rx_ring_map_lock")
     , m_ring_alloc_log_rx(safe_mce_sys().ring_allocation_logic_rx, use_ring_locks)
     , m_ring_alloc_log_tx(safe_mce_sys().ring_allocation_logic_tx, use_ring_locks)
-    , m_n_uc_ttl_hop_lim(m_family == AF_INET
-                             ? safe_mce_sys().sysctl_reader.get_net_ipv4_ttl()
-                             : safe_mce_sys().sysctl_reader.get_net_ipv6_hop_limit())
 {
     m_rx_epfd = SYSCALL(epoll_create, 128);
     if (unlikely(m_rx_epfd == -1)) {
@@ -102,8 +102,6 @@ sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     m_rx_reuse_buff.n_buff_num = 0;
     memset(&m_so_ratelimit, 0, sizeof(xlio_rate_limit_t));
     set_flow_tag(m_fd + 1);
-
-    atomic_set(&m_zckey, 0);
 
     m_connected.set_sa_family(m_family);
     m_bound.set_sa_family(m_family);
@@ -131,16 +129,6 @@ sockinfo::~sockinfo()
     if (m_rx_epfd != -1) {
         // This will wake up any blocked thread in rx() call to SYSCALL(epoll_wait, )
         SYSCALL(close, m_rx_epfd);
-    }
-
-    while (!m_error_queue.empty()) {
-        mem_buf_desc_t *buff = m_error_queue.get_and_pop_front();
-        if (buff->m_flags & mem_buf_desc_t::CLONED) {
-            delete buff;
-        } else {
-            si_logerr("Detected invalid element in socket error queue as %p with flags 0x%x", buff,
-                      buff->m_flags);
-        }
     }
 
     if (m_p_socket_stats) {
@@ -2049,29 +2037,6 @@ void sockinfo::handle_recv_timestamping(struct cmsg_state *cm_state)
     insert_cmsg(cm_state, SOL_SOCKET, SO_TIMESTAMPING, &tsing, sizeof(tsing));
 }
 
-void sockinfo::handle_recv_errqueue(struct cmsg_state *cm_state)
-{
-    mem_buf_desc_t *buff = nullptr;
-    // coverity[missing_lock:FALSE] /* Turn off coverity check for missing lock */
-    if (m_error_queue.empty()) {
-        return;
-    }
-    m_error_queue_lock.lock();
-    buff = m_error_queue.get_and_pop_front();
-    m_error_queue_lock.unlock();
-
-    if (!(buff->m_flags & mem_buf_desc_t::CLONED)) {
-        si_logerr("Detected invalid element in socket error queue as %p with flags 0x%x", buff,
-                  buff->m_flags);
-        return;
-    }
-
-    insert_cmsg(cm_state, 0, IP_RECVERR, &buff->ee, sizeof(buff->ee));
-    cm_state->mhdr->msg_flags |= MSG_ERRQUEUE;
-
-    delete buff;
-}
-
 void sockinfo::insert_cmsg(struct cmsg_state *cm_state, int level, int type, void *data, int len)
 {
     if (!cm_state->cmhdr || cm_state->mhdr->msg_flags & MSG_CTRUNC) {
@@ -2106,7 +2071,7 @@ void sockinfo::insert_cmsg(struct cmsg_state *cm_state, int level, int type, voi
     }
 }
 
-void sockinfo::handle_cmsg(struct msghdr *msg, int flags)
+void sockinfo::handle_cmsg(struct msghdr *msg)
 {
     struct cmsg_state cm_state;
 
@@ -2119,9 +2084,6 @@ void sockinfo::handle_cmsg(struct msghdr *msg, int flags)
     }
     if (m_b_rcvtstamp || m_n_tsing_flags) {
         handle_recv_timestamping(&cm_state);
-    }
-    if (flags & MSG_ERRQUEUE) {
-        handle_recv_errqueue(&cm_state);
     }
 
     cm_state.mhdr->msg_controllen = cm_state.cmsg_bytes_consumed;

@@ -41,7 +41,6 @@ extern "C" {
 #endif
 
 typedef enum {
-    PBUF_NONE, /* impossible type to catch zeroed pbuf objects */
     PBUF_RAM, /* pbuf data is stored in RAM */
     PBUF_STACK, /* pbuf is allocated on stack and mustn't be freed */
     PBUF_ZEROCOPY /* pbuf points to user's memory which mustn't be modified */
@@ -53,11 +52,11 @@ typedef enum {
 /** Private data depending on type */
 enum {
     PBUF_DESC_NONE = 0,
-    PBUF_DESC_MDESC,
-    PBUF_DESC_FD,
+    PBUF_DESC_MDESC, // sendfile ZC
+    PBUF_DESC_FD, // sendfile fallback
     PBUF_DESC_STRIDE,
     PBUF_DESC_TLS_RX,
-    PBUF_DESC_EXPRESS,
+    PBUF_DESC_EXPRESS
 };
 
 typedef struct {
