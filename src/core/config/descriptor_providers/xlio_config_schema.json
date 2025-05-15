@@ -1380,12 +1380,6 @@
             "type": "object",
             "description": "XLIO API configuration.",
             "properties": {
-                "socketextreme": {
-                    "type": "boolean",
-                    "default": false,
-                    "title": "Enable SocketXtreme API",
-                    "description": "When this parameter is enabled, XLIO operates in SocketXtreme mode. Maps to XLIO_SOCKETEXTREME environment variable. SocketXtreme mode brings latency down, eliminating copy operations and increasing throughput allowing applications to further utilize true kernel bypass architecture. An application should use a socket extension API named SocketXtreme."
-                },
                 "hugepage_size": {
                     "type": "integer",
                     "default": 2097152,

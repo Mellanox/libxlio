@@ -47,8 +47,6 @@ public:
     bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst) override; // No locks
     int reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse) override; // No locks
     void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc) override;
-    int socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_completions,
-                          unsigned int ncompletions, int flags) override;
     int drain_and_proccess() override;
     void wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
                                                    void *pv_fd_ready_array = nullptr) override;

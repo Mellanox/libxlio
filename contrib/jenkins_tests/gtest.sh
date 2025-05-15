@@ -95,35 +95,19 @@ if [[ -z "${MANUAL_RUN}" ]]; then
 fi
 
 # Verify XLIO EXTRA API tests
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=xlio_*:-socketxtreme_poll.*:socketxtreme_ring.*:xlio_send_zc.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra.xml"
-rc=$(($rc+$?))
-
-# Verify XLIO EXTRA API socketxtreme mode tests
-eval "${sudo_cmd} $timeout_exe env XLIO_SOCKETXTREME=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=socketxtreme_poll.*:socketxtreme_ring.*:sock_socket.*:tcp_bind.*:tcp_connect.*:tcp_sendto.*:tcp_set_get_sockopt*:udp_bind.*:udp_connect.*:udp_sendto.*:udp_socket.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-socketxtreme.xml"
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=xlio_*:xlio_send_zc.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra.xml"
 rc=$(($rc+$?))
 
 # Verify XLIO EXTRA API tests IPv6
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=xlio_*:-socketxtreme_poll.*:socketxtreme_ring.*:xlio_send_zc.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra-ipv6.xml"
-rc=$(($rc+$?))
-
-# Verify XLIO EXTRA API socketxtreme mode tests IPv6
-eval "${sudo_cmd} $timeout_exe env XLIO_SOCKETXTREME=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=socketxtreme_poll.*:socketxtreme_ring.*:sock_socket.*:tcp_bind.*:tcp_connect.*:tcp_sendto.*:tcp_set_get_sockopt*:udp_bind.*:udp_connect.*:udp_sendto.*:udp_socket.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-socketxtreme-ipv6.xml"
-rc=$(($rc+$?))
-
-# Verify socketxtreme mode and Delegated TCP Timers tests
-eval "${sudo_cmd} $timeout_exe env XLIO_SOCKETXTREME=1 XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=socketxtreme_poll.*:socketxtreme_ring.*:sock_socket.*:tcp_bind.*:tcp_connect.*:tcp_sendto.*:tcp_set_get_sockopt*:udp_bind.*:udp_connect.*:udp_sendto.*:udp_socket.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-socketxtreme-delegate.xml"
-rc=$(($rc+$?))
-
-# Verify socketxtreme mode and Delegated TCP Timers tests IPv6
-eval "${sudo_cmd} $timeout_exe env XLIO_SOCKETXTREME=1 XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=socketxtreme_poll.*:socketxtreme_ring.*:sock_socket.*:tcp_bind.*:tcp_connect.*:tcp_sendto.*:tcp_set_get_sockopt*:udp_bind.*:udp_connect.*:udp_sendto.*:udp_socket.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-socketxtreme-delegate-ipv6.xml"
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=xlio_*:xlio_send_zc.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra-ipv6.xml"
 rc=$(($rc+$?))
 
 # Verify keep_alive
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=keep_alive* --gtest_output=xml:${WORKSPACE}/${prefix}/test-keepalive_ipv4.xml"
+eval "${sudo_cmd} $timeout_exe env MALLOC_CHECK_=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=keep_alive* --gtest_output=xml:${WORKSPACE}/${prefix}/test-keepalive_ipv4.xml"
 rc=$(($rc+$?))
 
 # Verify keep_alive IPv6
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=keep_alive* --gtest_output=xml:${WORKSPACE}/${prefix}/test-keepalive_ipv6.xml"
+eval "${sudo_cmd} $timeout_exe env MALLOC_CHECK_=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=keep_alive* --gtest_output=xml:${WORKSPACE}/${prefix}/test-keepalive_ipv6.xml"
 rc=$(($rc+$?))
 
 # Verify New Config with keep_alive tests

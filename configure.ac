@@ -222,24 +222,6 @@ PROF_IBPROF_SETUP()
 DPCP_CAPABILITY_SETUP()
 UTLS_CAPABILITY_SETUP()
 
-# Thread locking control
-#
-AC_ARG_ENABLE([thread-lock],
-    AS_HELP_STRING([--enable-thread-lock],
-        [Enable thread locking (default=yes)]))
-AC_MSG_CHECKING(
-    [for thread locking support])
-if test "x$enable_thread_lock" = "xno"; then
-    if test "x$enable_socketxtreme" = xyes; then
-        AC_DEFINE([DEFINED_NO_THREAD_LOCK], 1, [Define to 1 to disable thread locking])
-        AC_MSG_RESULT([no])
-    else
-        AC_MSG_RESULT([yes (socketxtreme is not enabled)])
-    fi
-else
-    AC_MSG_RESULT([yes])
-fi
-
 # Enable tcp tx window availability
 #
 AC_ARG_ENABLE([tcp-tx-wnd-availability],

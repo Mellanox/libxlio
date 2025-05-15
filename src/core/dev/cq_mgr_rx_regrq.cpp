@@ -188,8 +188,6 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
      * Internal thread:
      *   Frequency of real polling can be controlled by
      *   PROGRESS_ENGINE_INTERVAL and PROGRESS_ENGINE_WCE_MAX.
-     * socketxtreme:
-     *   User does socketxtreme_poll()
      * Cleanup:
      *   QP down logic to release rx buffers should force polling to do this.
      *   Not null argument indicates one.
@@ -247,27 +245,6 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
         std::max(ret_total, m_p_cq_stat->n_rx_drained_at_once_max);
 
     return ret_total;
-}
-
-mem_buf_desc_t *cq_mgr_rx_regrq::poll_and_process_socketxtreme()
-{
-    buff_status_e status = BS_OK;
-    mem_buf_desc_t *buff_wqe = poll(status);
-
-    if (buff_wqe) {
-        if (cqe_process_rx(buff_wqe, status)) {
-            if ((++m_debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
-                !compensate_qp_poll_success(buff_wqe)) {
-                return buff_wqe;
-            }
-        } else if (++m_debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv) {
-            compensate_qp_poll_failed();
-        }
-    } else {
-        compensate_qp_poll_failed();
-    }
-
-    return nullptr;
 }
 
 bool cq_mgr_rx_regrq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array)

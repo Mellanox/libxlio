@@ -57,10 +57,13 @@ for file in $check_files; do
     nerrors=$((nerrors+ret))
     set -eE
 
-    file=$(basename ${file})
+    file_name=$(basename ${file})
     if [ $ret -gt 0 ]; then
         i=$((i+1))
-        echo "not ok $i $file # See: ${file}.diff" >> $style_tap
+        echo "not ok $i $file_name # See: ${file_name}.diff" >> $style_tap
+        if [ "$jenkins_opt_style_force" = "auto" ]; then
+            eval "env $test_app -i -style=file ${file}"
+        fi
     else
         rm -rf ${style_diff}
     fi

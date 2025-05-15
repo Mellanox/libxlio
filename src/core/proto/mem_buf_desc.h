@@ -144,7 +144,6 @@ public:
             size_t sz_payload; // This is the total amount of data of the packet, if
                                // (sz_payload>sz_data) means fragmented packet.
             timestamps_t timestamps;
-            void *context;
 
             union {
                 struct {
@@ -215,7 +214,7 @@ public:
 
     atomic_t n_ref_count; // number of interested receivers (sockinfo) [can be modified only in
                           // cq_mgr_rx context]
-    uint64_t unused_padding[2]; // Align the structure to the cache line boundary
+    uint64_t unused_padding[3]; // Align the structure to the cache line boundary
 };
 
 typedef xlio_list_t<mem_buf_desc_t, mem_buf_desc_t::buffer_node_offset> descq_t;

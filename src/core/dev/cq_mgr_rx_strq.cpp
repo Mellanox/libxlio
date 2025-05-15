@@ -404,7 +404,6 @@ mem_buf_desc_t *cq_mgr_rx_strq::process_strq_cq_element_rx(mem_buf_desc_t *p_mem
     /* we use context to verify that on reclaim rx buffer path we return the buffer to the right CQ
      */
     p_mem_buf_desc->rx.is_xlio_thr = false;
-    p_mem_buf_desc->rx.context = nullptr;
 
     if (unlikely(status != BS_OK)) {
         reclaim_recv_buffer_helper(p_mem_buf_desc);
@@ -418,19 +417,6 @@ mem_buf_desc_t *cq_mgr_rx_strq::process_strq_cq_element_rx(mem_buf_desc_t *p_mem
                             (size_t)m_n_sysvar_rx_prefetch_bytes));
 
     return p_mem_buf_desc;
-}
-
-mem_buf_desc_t *cq_mgr_rx_strq::poll_and_process_socketxtreme()
-{
-    buff_status_e status = BS_OK;
-    mem_buf_desc_t *buff = nullptr;
-    mem_buf_desc_t *buff_wqe = poll(status, buff);
-
-    if ((buff_wqe && (++m_debt >= (int)m_n_sysvar_rx_num_wr_to_post_recv)) || !buff) {
-        compensate_qp_poll_failed(); // Reuse this method as success.
-    }
-
-    return (buff && cqe_process_rx(buff, status) ? buff : nullptr);
 }
 
 bool cq_mgr_rx_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array)
