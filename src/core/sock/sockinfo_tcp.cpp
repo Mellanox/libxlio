@@ -5085,11 +5085,8 @@ int sockinfo_tcp::getpeername(sockaddr *__name, socklen_t *__namelen)
 
 int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
 {
-    int ret;
-    uint64_t poll_sn = 0;
-    rx_ring_map_t::iterator rx_ring_iter;
     epoll_event rx_epfd_events[SI_RX_EPFD_EVENT_MAX];
-
+    uint64_t poll_sn = 0;
     // poll for completion
     __log_info_func("");
     poll_count++;
@@ -5099,39 +5096,23 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
 
     // There's only one CQ
     m_rx_ring_map_lock.lock();
+    auto prev_sndbuf = sndbuf_available();
 
     // We need to consider what to do in case poll_and_process_element_rx fails on try_lock.
     // It can be too expansive for the application to get nothing just because of lock contention.
     // In this case it will be better to have a lock() version of poll_and_process_element_rx.
     // And then we should continue polling untill we have ready packets or we drained the CQ.
-    bool all_drained = true;
-    if (likely(m_p_rx_ring)) {
-        all_drained = m_p_rx_ring->poll_and_process_element_rx(&poll_sn);
-    } else { // There's more than one CQ, go over each one
-        for (rx_ring_iter = m_rx_ring_map.begin(); rx_ring_iter != m_rx_ring_map.end();
-             rx_ring_iter++) {
-            if (unlikely(rx_ring_iter->second->refcnt <= 0)) {
-                __log_err("Attempt to poll illegal cq");
-                continue;
-            }
-
-            all_drained &= rx_ring_iter->first->poll_and_process_element_rx(&poll_sn);
-        }
-    }
+    bool all_drained = poll_and_progress_rx(poll_sn);
     m_rx_ring_map_lock.unlock();
-    lock_tcp_con(); // We must take a lock before checking m_n_rx_pkt_ready_list_count
 
-    if (likely(m_n_rx_pkt_ready_list_count || !all_drained)) { // Got completions from CQ
-        __log_entry_funcall("Ready %d packets. sn=%llu", m_n_rx_pkt_ready_list_count,
-                            (unsigned long long)poll_sn);
-        IF_STATS(m_p_socket_stats->counters.n_rx_poll_hit++);
-        unlock_tcp_con();
+    bool is_timeout = true; // Instruct check_last_rx_poll_progress to check timeout.
+    lock_tcp_con(); // We must take a lock before checking m_n_rx_pkt_ready_list_count
+    bool progress = check_last_rx_poll_progress(prev_sndbuf, all_drained, is_timeout);
+    unlock_tcp_con(); // Must happen before g_event_handler_manager_local.do_tasks();
+
+    if (progress) {
         return 1;
     }
-
-    IF_STATS(m_p_socket_stats->counters.n_rx_poll_miss++);
-    bool is_timeout = m_loops_timer.is_timeout(); // We do this under lock.
-    unlock_tcp_con(); // Must happen before g_event_handler_manager_local.do_tasks();
 
     if (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
         // There are scenarios when rx_wait_helper is called in an infinite loop but exits before
@@ -5141,8 +5122,8 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
     }
 
     // if in blocking accept state skip poll phase and go to sleep directly
-    if (!blocking || is_timeout) {
-        errno = EAGAIN;
+    if (!blocking || is_timeout || g_b_exit) {
+        errno = (!g_b_exit ? EAGAIN : EINTR);
         return -1;
     }
 
@@ -5150,23 +5131,18 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
         return 0;
     }
 
-    // if we polling too much - go to sleep
-    si_tcp_logfuncall("%d: too many polls without data blocking=%d", m_fd, blocking);
-    if (g_b_exit) {
-        errno = EINTR;
-        return -1;
-    }
-
-    // arming CQs
+    // If we polling too much - go to sleeps
     /* coverity[double_lock] */
     m_rx_ring_map_lock.lock();
+    si_tcp_logfuncall("%d: too many polls without data blocking=%d", m_fd, blocking);
     if (likely(m_p_rx_ring)) {
-        ret = m_p_rx_ring->request_notification(CQT_RX, poll_sn);
+        int ret = m_p_rx_ring->request_notification(CQT_RX, poll_sn); // Arming CQs
         if (ret != 0) {
             m_rx_ring_map_lock.unlock();
             return 0;
         }
     } else {
+        rx_ring_map_t::iterator rx_ring_iter;
         for (rx_ring_iter = m_rx_ring_map.begin(); rx_ring_iter != m_rx_ring_map.end();
              rx_ring_iter++) {
             if (rx_ring_iter->second->refcnt <= 0) {
@@ -5174,7 +5150,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
             }
             ring *p_ring = rx_ring_iter->first;
             if (p_ring) {
-                ret = p_ring->request_notification(CQT_RX, poll_sn);
+                int ret = p_ring->request_notification(CQT_RX, poll_sn);
                 if (ret != 0) {
                     m_rx_ring_map_lock.unlock();
                     return 0;
@@ -5182,22 +5158,26 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
             }
         }
     }
+
+    // Do another poll to avoid request notofication race with incoming packets.
+    prev_sndbuf = sndbuf_available();
+    all_drained = poll_and_progress_rx(poll_sn);
     m_rx_ring_map_lock.unlock();
 
-    // Check if we have a packet in receive queue before we going to sleep and
-    // update is_sleeping flag under the same lock to synchronize between
-    // this code and wakeup mechanism.
+    lock_tcp_con(); // We must take a lock before checking m_n_rx_pkt_ready_list_count
+    is_timeout = false;
+    progress = check_last_rx_poll_progress(prev_sndbuf, all_drained, is_timeout);
+    // End of do another poll.
 
-    lock_tcp_con();
-    if (!m_n_rx_pkt_ready_list_count && !m_ready_conn_cnt) {
-        m_sock_wakeup_pipe.going_to_sleep();
+    if (progress || m_ready_conn_cnt) {
         unlock_tcp_con();
-    } else {
-        unlock_tcp_con();
-        return 0;
+        return 1;
     }
 
-    ret = os_wait_sock_rx_epfd(rx_epfd_events, SI_RX_EPFD_EVENT_MAX);
+    m_sock_wakeup_pipe.going_to_sleep();
+    unlock_tcp_con();
+
+    int ret = os_wait_sock_rx_epfd(rx_epfd_events, SI_RX_EPFD_EVENT_MAX);
 
     lock_tcp_con();
     m_sock_wakeup_pipe.return_from_sleep();
@@ -5205,11 +5185,6 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
 
     if (ret <= 0) {
         return ret;
-    }
-
-    // If there is a ready packet in a queue we want to return to user as quickest as possible
-    if (m_n_rx_pkt_ready_list_count) {
-        return 0;
     }
 
     for (int event_idx = 0; event_idx < ret; event_idx++) {
@@ -5237,6 +5212,50 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
         }
     }
     return ret;
+}
+
+bool sockinfo_tcp::poll_and_progress_rx(uint64_t &poll_sn)
+{
+    // We need to consider what to do in case poll_and_process_element_rx fails on try_lock.
+    // It can be too expansive for the application to get nothing just because of lock contention.
+    // In this case it will be better to have a lock() version of poll_and_process_element_rx.
+    // And then we should continue polling untill we have ready packets or we drained the CQ.
+    bool all_drained = true;
+    if (likely(m_p_rx_ring)) {
+        all_drained = m_p_rx_ring->poll_and_process_element_rx(&poll_sn);
+    } else { // There's more than one CQ, go over each one
+        rx_ring_map_t::iterator rx_ring_iter;
+        for (rx_ring_iter = m_rx_ring_map.begin(); rx_ring_iter != m_rx_ring_map.end();
+             rx_ring_iter++) {
+            if (unlikely(rx_ring_iter->second->refcnt <= 0)) {
+                __log_err("Attempt to poll illegal cq");
+                continue;
+            }
+
+            all_drained &= rx_ring_iter->first->poll_and_process_element_rx(&poll_sn);
+        }
+    }
+
+    return all_drained;
+}
+
+bool sockinfo_tcp::check_last_rx_poll_progress(unsigned int prev_sndbuf, bool all_drained,
+                                               bool &is_timeout)
+{
+    bool sndbuf_change = (sndbuf_available() != prev_sndbuf);
+    if (likely(m_n_rx_pkt_ready_list_count || !all_drained || sndbuf_change)) {
+        // Got completions from CQ
+        __log_entry_funcall("Ready %d packets", m_n_rx_pkt_ready_list_count);
+        IF_STATS(m_p_socket_stats->counters.n_rx_poll_hit++);
+        return true;
+    }
+
+    IF_STATS(m_p_socket_stats->counters.n_rx_poll_miss++);
+    if (is_timeout) {
+        is_timeout = m_loops_timer.is_timeout(); // Has to be done under socket lock.
+    }
+
+    return false;
 }
 
 mem_buf_desc_t *sockinfo_tcp::get_next_desc(mem_buf_desc_t *p_desc)
