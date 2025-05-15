@@ -139,7 +139,7 @@ int get_base_interface_name(const char *if_name, char *base_ifname, size_t sz_ba
                 }
             }
 
-            unsigned char tmp_mac[ADDR_LEN];
+            unsigned char tmp_mac[MAX_L2_ADDR_LEN];
             if (ADDR_LEN == get_local_ll_addr(ifa->ifa_name, tmp_mac, ADDR_LEN, false)) {
                 int size_to_compare = 0;
                 if (ADDR_LEN == ETH_ALEN) {
