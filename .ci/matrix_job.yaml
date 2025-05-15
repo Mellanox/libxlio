@@ -99,14 +99,7 @@ runs_on_dockers:
      build_args: '--no-cache --target static',
      category: 'tool'
      }
-  - {file: '.ci/dockerfiles/Dockerfile.rhel8.6',
-     arch: 'x86_64',
-     name: 'xlio_static.csbuild',
-     uri: '$arch/$name',
-     tag: '20250304',
-     build_args: '--no-cache --target static',
-     category: 'tool'
-     }
+  - {name: 'xlio_static.csbuild', url: 'harbor.mellanox.com/swx-infra/media/x86_64/xlio_static.csbuild-clang18:20250515', category: 'tool', arch: 'x86_64' }
 # tests
   - {
      file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
