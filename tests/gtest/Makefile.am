@@ -104,7 +104,6 @@ gtest_SOURCES = \
 	tcp/tcp_send.cc \
 	tcp/tcp_sendto.cc \
 	tcp/tcp_sendfile.cc \
-	tcp/tcp_send_zc.cc \
 	tcp/tcp_socket.cc \
 	tcp/tcp_sockopt.cc \
 	tcp/tcp_tls.cc \

@@ -334,7 +334,7 @@ ssize_t sendmsg_internal(void *sock, __const struct msghdr *__msg, int __flags)
     tx_arg.attr.addr = (struct sockaddr *)(__CONST_SOCKADDR_ARG)__msg->msg_name;
     tx_arg.attr.len = (socklen_t)__msg->msg_namelen;
     tx_arg.attr.hdr = __msg;
-    tx_arg.priv.attr = PBUF_NONE;
+    tx_arg.priv.attr = PBUF_DESC_NONE;
 
     return p_socket_object->tx(tx_arg);
 }
