@@ -2256,6 +2256,12 @@ int sockinfo_udp::rx_verify_available_data()
     return ret;
 }
 
+void sockinfo_udp::register_callback(xlio_recv_callback_t callback, void *context)
+{
+    m_rx_callback = callback;
+    m_rx_callback_context = context;
+}
+
 /**
  *	Performs inspection by registered user callback
  *

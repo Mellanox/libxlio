@@ -367,15 +367,7 @@ public:
     tcp_timers_collection *get_tcp_timer_collection();
     bool is_cleaned() const { return m_is_cleaned; }
     static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
-    static err_t rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, struct pbuf *p,
-                                          err_t err);
     static err_t rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
-
-    int register_callback(xlio_recv_callback_t callback, void *context) override
-    {
-        tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_recv_callback);
-        return register_callback_ctx(callback, context);
-    }
 
     int tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint32_t mkey, unsigned flags,
                        void *opaque_op);
@@ -589,7 +581,6 @@ private:
     tcp_sock_state_e m_sock_state;
     sockinfo_tcp *m_parent;
     // received packet source (true if its from internal thread)
-    bool m_xlio_thr;
     bool m_b_incoming;
     bool m_b_attached;
     bool m_timer_registered = false;
@@ -635,8 +626,6 @@ private:
     uint32_t m_tcp_seg_in_use;
 
     xlio_desc_list_t m_rx_pkt_ready_list;
-    xlio_desc_list_t m_rx_cb_dropped_list;
-
     lock_spin_recursive m_rx_ctl_packets_list_lock;
     tscval_t m_last_syn_tsc;
     xlio_desc_list_t m_rx_ctl_packets_list;

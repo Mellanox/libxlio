@@ -39,8 +39,8 @@ extern "C" int xlio_register_recv_callback(int __fd, xlio_recv_callback_t __call
 {
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        p_socket_object->register_callback(__callback, __context);
+    if (p_socket_object && p_socket_object->get_protocol() == PROTO_UDP) {
+        reinterpret_cast<sockinfo_udp *>(p_socket_object)->register_callback(__callback, __context);
         return 0;
     }
     errno = EINVAL;
