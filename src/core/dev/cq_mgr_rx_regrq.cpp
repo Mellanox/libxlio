@@ -211,7 +211,6 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
 
                 /* We process immediately all non udp/ip traffic.. */
                 if (procces_now) {
-                    buff->rx.is_xlio_thr = true;
                     if ((++m_debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||
                         !compensate_qp_poll_success(buff)) {
                         process_recv_buffer(buff, NULL);

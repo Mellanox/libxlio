@@ -1897,13 +1897,6 @@ void sockinfo::destructor_helper()
     m_p_connected_dst_entry = nullptr;
 }
 
-int sockinfo::register_callback_ctx(xlio_recv_callback_t callback, void *context)
-{
-    m_rx_callback = callback;
-    m_rx_callback_context = context;
-    return 0;
-}
-
 int sockinfo::modify_ratelimit(dst_entry *p_dst_entry, struct xlio_rate_limit_t &rate_limit)
 {
     if (m_ring_alloc_log_tx.get_ring_alloc_logic() == RING_LOGIC_PER_SOCKET ||

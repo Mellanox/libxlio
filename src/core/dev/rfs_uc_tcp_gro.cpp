@@ -212,7 +212,6 @@ void rfs_uc_tcp_gro::flush_gro_desc(void *pv_fd_ready_array)
         m_gro_desc.p_first->lwip_pbuf.ref = 1;
         m_gro_desc.p_first->lwip_pbuf.payload =
             (u8_t *)(m_gro_desc.p_first->p_buffer + m_gro_desc.p_first->rx.n_transport_header_len);
-        m_gro_desc.p_first->rx.is_xlio_thr = m_gro_desc.p_last->rx.is_xlio_thr;
 
         for (mem_buf_desc_t *p_desc = m_gro_desc.p_last; p_desc != m_gro_desc.p_first;
              p_desc = p_desc->p_prev_desc) {

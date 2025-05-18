@@ -281,7 +281,6 @@ public:
     virtual bool is_incoming() = 0;
     virtual bool is_closable() = 0;
     virtual void statistics_print(vlog_levels_t log_level = VLOG_DEBUG) = 0;
-    virtual int register_callback(xlio_recv_callback_t callback, void *context) = 0;
     virtual int fcntl(int __cmd, unsigned long int __arg);
     virtual int fcntl64(int __cmd, unsigned long int __arg);
     virtual int ioctl(unsigned long int __request, unsigned long int __arg);
@@ -324,7 +323,6 @@ public:
     void set_rfs_ptr(rfs *r) { m_rfs_ptr = r; }
     void destructor_helper();
     bool validate_and_convert_mapped_ipv4(sock_addr &sock) const;
-    int register_callback_ctx(xlio_recv_callback_t callback, void *context);
     void consider_rings_migration_rx();
     int add_epoll_context(epfd_info *epfd);
     void remove_epoll_context(epfd_info *epfd);
@@ -523,9 +521,6 @@ protected:
     loops_timer m_loops_timer;
     ring_alloc_logic_attr m_ring_alloc_log_rx;
     ring_alloc_logic_attr m_ring_alloc_log_tx;
-    // Callback function pointer to support XLIO extra API (xlio_extra.h)
-    xlio_recv_callback_t m_rx_callback = nullptr;
-    void *m_rx_callback_context = nullptr; // user context
     struct xlio_rate_limit_t m_so_ratelimit;
     uint32_t m_pcp = 0U;
     uint32_t m_flow_tag_id = 0U; // Flow Tag for this socket

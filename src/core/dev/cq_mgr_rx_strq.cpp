@@ -337,7 +337,6 @@ int cq_mgr_rx_strq::drain_and_proccess_helper(mem_buf_desc_t *buff, mem_buf_desc
 
                 // We process immediately all non udp/ip traffic..
                 if (procces_now) {
-                    buff->rx.is_xlio_thr = true;
                     process_recv_buffer(buff, nullptr);
                 } else { // udp/ip traffic we just put in the cq's rx queue
                     m_rx_queue.push_back(buff);
@@ -400,10 +399,6 @@ mem_buf_desc_t *cq_mgr_rx_strq::process_strq_cq_element_rx(mem_buf_desc_t *p_mem
 {
     /* Assume locked!!! */
     cq_logfuncall("");
-
-    /* we use context to verify that on reclaim rx buffer path we return the buffer to the right CQ
-     */
-    p_mem_buf_desc->rx.is_xlio_thr = false;
 
     if (unlikely(status != BS_OK)) {
         reclaim_recv_buffer_helper(p_mem_buf_desc);

@@ -155,6 +155,7 @@ public:
 
     bool prepare_to_close(bool process_shutdown = false) override;
     void update_header_field(data_updater *updater) override;
+    void register_callback(xlio_recv_callback_t callback, void *context);
 
 #if defined(DEFINED_NGINX)
     void prepare_to_close_socket_pool(bool _push_pop) override;
@@ -167,11 +168,6 @@ public:
 #else
     bool is_closable() override { return true; }
 #endif
-
-    int register_callback(xlio_recv_callback_t callback, void *context) override
-    {
-        return register_callback_ctx(callback, context);
-    }
 
 protected:
     void lock_rx_q() override { m_lock_rcv.lock(); }
@@ -288,6 +284,10 @@ private:
     sock_addr m_last_sock_addr;
 
     chunk_list_t<mem_buf_desc_t *> m_rx_pkt_ready_list;
+
+    // Callback function pointer to support XLIO extra API (xlio_extra.h)
+    xlio_recv_callback_t m_rx_callback = nullptr;
+    void *m_rx_callback_context = nullptr; // user context
 
     uint8_t m_tos;
 
