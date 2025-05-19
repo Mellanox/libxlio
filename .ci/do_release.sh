@@ -69,7 +69,7 @@ if [ "${do_release}" = true ] ; then
         exit 1
     fi
     
-    if [[ -e "${DST_DIR}/${pkg_name}" || -e "${DST_DIR}/${tarball_name}"]]; then 
+    if [[ -e "${DST_DIR}/${pkg_name}" || -e "${DST_DIR}/${tarball_name}" ]]; then 
         echo "ERROR: [${DST_DIR}/${pkg_name}] or [${DST_DIR}/${tarball_name}] file already exist. Exit"
         exit 1
     fi
