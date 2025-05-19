@@ -341,26 +341,18 @@ void update_delta_ring_stat(ring_stats_t *p_curr_ring_stats, ring_stats_t *p_pre
             (p_curr_ring_stats->n_tx_pkt_count - p_prev_ring_stats->n_tx_pkt_count) / delay;
         p_prev_ring_stats->n_tx_retransmits =
             (p_curr_ring_stats->n_tx_retransmits - p_prev_ring_stats->n_tx_retransmits) / delay;
-        p_prev_ring_stats->simple.n_tx_dropped_wqes =
-            (p_curr_ring_stats->simple.n_tx_dropped_wqes -
-             p_prev_ring_stats->simple.n_tx_dropped_wqes) /
-            delay;
-        p_prev_ring_stats->simple.n_rx_zc_migiration_drop =
-            (p_curr_ring_stats->simple.n_rx_zc_migiration_drop -
-             p_prev_ring_stats->simple.n_rx_zc_migiration_drop) /
-            delay;
-        p_prev_ring_stats->simple.n_tx_num_bufs =
-            (p_curr_ring_stats->simple.n_tx_num_bufs - p_prev_ring_stats->simple.n_tx_num_bufs) /
-            delay;
-        p_prev_ring_stats->simple.n_zc_num_bufs =
-            (p_curr_ring_stats->simple.n_zc_num_bufs - p_prev_ring_stats->simple.n_zc_num_bufs) /
-            delay;
+        p_prev_ring_stats->n_tx_dropped_wqes =
+            (p_curr_ring_stats->n_tx_dropped_wqes - p_prev_ring_stats->n_tx_dropped_wqes) / delay;
+        p_prev_ring_stats->n_tx_num_bufs =
+            (p_curr_ring_stats->n_tx_num_bufs - p_prev_ring_stats->n_tx_num_bufs) / delay;
+        p_prev_ring_stats->n_zc_num_bufs =
+            (p_curr_ring_stats->n_zc_num_bufs - p_prev_ring_stats->n_zc_num_bufs) / delay;
 #ifdef DEFINED_UTLS
         p_prev_ring_stats->n_tx_tls_contexts =
             (p_curr_ring_stats->n_tx_tls_contexts - p_prev_ring_stats->n_tx_tls_contexts) / delay;
         p_prev_ring_stats->n_rx_tls_contexts =
             (p_curr_ring_stats->n_rx_tls_contexts - p_prev_ring_stats->n_rx_tls_contexts) / delay;
-        p_prev_ring_stats->n_tx_tls_resyncs  =
+        p_prev_ring_stats->n_tx_tls_resyncs =
             (p_curr_ring_stats->n_tx_tls_resyncs - p_prev_ring_stats->n_tx_tls_resyncs) / delay;
         p_prev_ring_stats->n_rx_tls_resyncs =
             (p_curr_ring_stats->n_rx_tls_resyncs - p_prev_ring_stats->n_rx_tls_resyncs) / delay;
@@ -376,26 +368,24 @@ void update_delta_ring_stat(ring_stats_t *p_curr_ring_stats, ring_stats_t *p_pre
             p_prev_ring_stats->tap.n_vf_plugouts =
                 (p_curr_ring_stats->tap.n_vf_plugouts - p_prev_ring_stats->tap.n_vf_plugouts);
         } else {
-            p_prev_ring_stats->simple.n_tx_tso_pkt_count =
-                (p_curr_ring_stats->simple.n_tx_tso_pkt_count -
-                 p_prev_ring_stats->simple.n_tx_tso_pkt_count) /
+            p_prev_ring_stats->n_tx_tso_pkt_count =
+                (p_curr_ring_stats->n_tx_tso_pkt_count - p_prev_ring_stats->n_tx_tso_pkt_count) /
                 delay;
-            p_prev_ring_stats->simple.n_tx_tso_byte_count =
-                (p_curr_ring_stats->simple.n_tx_tso_byte_count -
-                 p_prev_ring_stats->simple.n_tx_tso_byte_count) /
+            p_prev_ring_stats->n_tx_tso_byte_count =
+                (p_curr_ring_stats->n_tx_tso_byte_count - p_prev_ring_stats->n_tx_tso_byte_count) /
                 delay;
-            p_prev_ring_stats->simple.n_rx_interrupt_received =
-                (p_curr_ring_stats->simple.n_rx_interrupt_received -
-                 p_prev_ring_stats->simple.n_rx_interrupt_received) /
+            p_prev_ring_stats->n_rx_interrupt_received =
+                (p_curr_ring_stats->n_rx_interrupt_received -
+                 p_prev_ring_stats->n_rx_interrupt_received) /
                 delay;
-            p_prev_ring_stats->simple.n_rx_interrupt_requests =
-                (p_curr_ring_stats->simple.n_rx_interrupt_requests -
-                 p_prev_ring_stats->simple.n_rx_interrupt_requests) /
+            p_prev_ring_stats->n_rx_interrupt_requests =
+                (p_curr_ring_stats->n_rx_interrupt_requests -
+                 p_prev_ring_stats->n_rx_interrupt_requests) /
                 delay;
-            p_prev_ring_stats->simple.n_rx_cq_moderation_count =
-                p_curr_ring_stats->simple.n_rx_cq_moderation_count;
-            p_prev_ring_stats->simple.n_rx_cq_moderation_period =
-                p_curr_ring_stats->simple.n_rx_cq_moderation_period;
+            p_prev_ring_stats->n_rx_cq_moderation_count =
+                p_curr_ring_stats->n_rx_cq_moderation_count;
+            p_prev_ring_stats->n_rx_cq_moderation_period =
+                p_curr_ring_stats->n_rx_cq_moderation_period;
             p_prev_ring_stats->simple.n_tx_dev_mem_allocated =
                 p_curr_ring_stats->simple.n_tx_dev_mem_allocated;
             p_prev_ring_stats->simple.n_tx_dev_mem_byte_count =
@@ -409,6 +399,10 @@ void update_delta_ring_stat(ring_stats_t *p_curr_ring_stats, ring_stats_t *p_pre
             p_prev_ring_stats->simple.n_tx_dev_mem_oob =
                 (p_curr_ring_stats->simple.n_tx_dev_mem_oob -
                  p_prev_ring_stats->simple.n_tx_dev_mem_oob) /
+                delay;
+            p_prev_ring_stats->simple.n_rx_zc_migiration_drop =
+                (p_curr_ring_stats->simple.n_rx_zc_migiration_drop -
+                 p_prev_ring_stats->simple.n_rx_zc_migiration_drop) /
                 delay;
         }
     }
@@ -517,9 +511,9 @@ void print_ring_stats(ring_instance_block_t *p_ring_inst_arr)
                        post_fix);
             }
 
-            if (p_ring_stats->simple.n_tx_dropped_wqes) {
-                printf(FORMAT_STATS_64bit,
-                       "TX Dropped Send Reqs:", p_ring_stats->simple.n_tx_dropped_wqes, post_fix);
+            if (p_ring_stats->n_tx_dropped_wqes) {
+                printf(FORMAT_STATS_64bit, "TX Dropped Send Reqs:", p_ring_stats->n_tx_dropped_wqes,
+                       post_fix);
             }
             if (p_ring_stats->simple.n_rx_zc_migiration_drop) {
                 printf(FORMAT_STATS_32bit,
@@ -528,17 +522,12 @@ void print_ring_stats(ring_instance_block_t *p_ring_inst_arr)
 
 #ifdef DEFINED_UTLS
             if (p_ring_stats->n_tx_tls_contexts) {
-                printf(FORMAT_RING_TX_TLS,
-                       "HW TLS TX:", p_ring_stats->n_tx_tls_contexts,
-                       p_ring_stats->n_tx_tls_resyncs,
-                       post_fix);
+                printf(FORMAT_RING_TX_TLS, "HW TLS TX:", p_ring_stats->n_tx_tls_contexts,
+                       p_ring_stats->n_tx_tls_resyncs, post_fix);
             }
             if (p_ring_stats->n_rx_tls_contexts) {
-                printf(FORMAT_RING_RX_TLS,
-                       "HW TLS RX:", p_ring_stats->n_rx_tls_contexts,
-                       p_ring_stats->n_rx_tls_resyncs,
-                       p_ring_stats->n_rx_tls_auth_fail,
-                       post_fix);
+                printf(FORMAT_RING_RX_TLS, "HW TLS RX:", p_ring_stats->n_rx_tls_contexts,
+                       p_ring_stats->n_rx_tls_resyncs, p_ring_stats->n_rx_tls_auth_fail, post_fix);
             }
 #endif /* DEFINED_UTLS */
 
@@ -550,23 +539,22 @@ void print_ring_stats(ring_instance_block_t *p_ring_inst_arr)
                 printf(FORMAT_STATS_32bit, "Tap fd:", p_ring_stats->tap.n_tap_fd);
                 printf(FORMAT_RING_TAP_NAME, "Tap Device:", p_ring_stats->tap.s_tap_name);
             } else {
-                if (p_ring_stats->simple.n_tx_tso_pkt_count ||
-                    p_ring_stats->simple.n_tx_tso_byte_count) {
-                    printf(FORMAT_RING_PACKETS, "TSO Offload:",
-                           p_ring_stats->simple.n_tx_tso_byte_count / BYTES_TRAFFIC_UNIT,
-                           p_ring_stats->simple.n_tx_tso_pkt_count, post_fix);
+                if (p_ring_stats->n_tx_tso_pkt_count || p_ring_stats->n_tx_tso_byte_count) {
+                    printf(FORMAT_RING_PACKETS,
+                           "TSO Offload:", p_ring_stats->n_tx_tso_byte_count / BYTES_TRAFFIC_UNIT,
+                           p_ring_stats->n_tx_tso_pkt_count, post_fix);
                 }
-                if (p_ring_stats->simple.n_rx_interrupt_requests ||
-                    p_ring_stats->simple.n_rx_interrupt_received) {
+                if (p_ring_stats->n_rx_interrupt_requests ||
+                    p_ring_stats->n_rx_interrupt_received) {
                     printf(FORMAT_RING_INTERRUPT,
-                           "Interrupts:", p_ring_stats->simple.n_rx_interrupt_requests,
-                           p_ring_stats->simple.n_rx_interrupt_received, post_fix);
+                           "Interrupts:", p_ring_stats->n_rx_interrupt_requests,
+                           p_ring_stats->n_rx_interrupt_received, post_fix);
                 }
-                if (p_ring_stats->simple.n_rx_cq_moderation_count ||
-                    p_ring_stats->simple.n_rx_cq_moderation_period) {
+                if (p_ring_stats->n_rx_cq_moderation_count ||
+                    p_ring_stats->n_rx_cq_moderation_period) {
                     printf(FORMAT_RING_MODERATION,
-                           "Moderation:", p_ring_stats->simple.n_rx_cq_moderation_count,
-                           p_ring_stats->simple.n_rx_cq_moderation_period, post_fix);
+                           "Moderation:", p_ring_stats->n_rx_cq_moderation_count,
+                           p_ring_stats->n_rx_cq_moderation_period, post_fix);
                 }
                 if (p_ring_stats->simple.n_tx_dev_mem_allocated) {
                     printf(FORMAT_STATS_32bit,
@@ -577,10 +565,8 @@ void print_ring_stats(ring_instance_block_t *p_ring_inst_arr)
                            p_ring_stats->simple.n_tx_dev_mem_oob, post_fix);
                 }
 
-                printf(FORMAT_STATS_32bit,
-                       "TX buffers inflight:", p_ring_stats->simple.n_tx_num_bufs);
-                printf(FORMAT_STATS_32bit,
-                       "TX ZC buffers inflight:", p_ring_stats->simple.n_zc_num_bufs);
+                printf(FORMAT_STATS_32bit, "TX buffers inflight:", p_ring_stats->n_tx_num_bufs);
+                printf(FORMAT_STATS_32bit, "TX ZC buffers inflight:", p_ring_stats->n_zc_num_bufs);
             }
         }
     }
@@ -1818,6 +1804,13 @@ void zero_ring_stats(ring_stats_t *p_ring_stats)
     p_ring_stats->n_tx_pkt_count = 0;
     p_ring_stats->n_tx_byte_count = 0;
     p_ring_stats->n_tx_retransmits = 0;
+    p_ring_stats->n_tx_tso_pkt_count = 0;
+    p_ring_stats->n_tx_tso_byte_count = 0;
+    p_ring_stats->n_rx_interrupt_received = 0;
+    p_ring_stats->n_rx_interrupt_requests = 0;
+    p_ring_stats->n_tx_dropped_wqes = 0;
+    p_ring_stats->n_tx_num_bufs = 0;
+    p_ring_stats->n_zc_num_bufs = 0;
 #ifdef DEFINED_UTLS
     p_ring_stats->n_tx_tls_contexts = 0;
     p_ring_stats->n_rx_tls_contexts = 0;
@@ -1828,16 +1821,9 @@ void zero_ring_stats(ring_stats_t *p_ring_stats)
     if (p_ring_stats->n_type == RING_TAP) {
         p_ring_stats->tap.n_vf_plugouts = 0;
     } else {
-        p_ring_stats->simple.n_tx_tso_pkt_count = 0;
-        p_ring_stats->simple.n_tx_tso_byte_count = 0;
-        p_ring_stats->simple.n_rx_interrupt_received = 0;
-        p_ring_stats->simple.n_rx_interrupt_requests = 0;
-        p_ring_stats->simple.n_tx_dropped_wqes = 0;
         p_ring_stats->simple.n_tx_dev_mem_byte_count = 0;
         p_ring_stats->simple.n_tx_dev_mem_pkt_count = 0;
         p_ring_stats->simple.n_tx_dev_mem_oob = 0;
-        p_ring_stats->simple.n_tx_num_bufs = 0;
-        p_ring_stats->simple.n_zc_num_bufs = 0;
         p_ring_stats->simple.n_rx_zc_migiration_drop = 0;
     }
 }

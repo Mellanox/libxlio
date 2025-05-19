@@ -380,7 +380,7 @@ int ring_simple::request_notification(cq_type_t cq_type, uint64_t poll_sn)
     if (likely(CQT_RX == cq_type)) {
         m_lock_ring_rx.lock();
         ret = m_p_cq_mgr_rx->request_notification(poll_sn);
-        ++m_p_ring_stat->simple.n_rx_interrupt_requests;
+        ++m_p_ring_stat->n_rx_interrupt_requests;
         m_lock_ring_rx.unlock();
     } else {
         m_lock_ring_tx.lock();
@@ -415,7 +415,7 @@ void ring_simple::wait_for_notification_and_process_element(uint64_t *p_cq_poll_
 {
     m_lock_ring_rx.lock();
     m_p_cq_mgr_rx->wait_for_notification_and_process_element(p_cq_poll_sn, pv_fd_ready_array);
-    ++m_p_ring_stat->simple.n_rx_interrupt_received;
+    ++m_p_ring_stat->n_rx_interrupt_received;
     m_lock_ring_rx.unlock();
 }
 
@@ -654,7 +654,7 @@ inline int ring_simple::send_buffer(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_pac
         ring_logdbg("Silent packet drop, SQ is full!");
         ret = -1;
         reinterpret_cast<mem_buf_desc_t *>(p_send_wqe->wr_id)->p_next_desc = nullptr;
-        ++m_p_ring_stat->simple.n_tx_dropped_wqes;
+        ++m_p_ring_stat->n_tx_dropped_wqes;
     }
     return ret;
 }
@@ -792,7 +792,7 @@ void ring_simple::init_tx_buffers(uint32_t count)
 {
     request_more_tx_buffers(PBUF_RAM, count, m_tx_lkey);
     m_tx_num_bufs = m_tx_pool.size();
-    m_p_ring_stat->simple.n_tx_num_bufs = m_tx_num_bufs;
+    m_p_ring_stat->n_tx_num_bufs = m_tx_num_bufs;
 }
 
 void ring_simple::inc_cq_moderation_stats()
@@ -816,10 +816,10 @@ mem_buf_desc_t *ring_simple::get_tx_buffers(pbuf_type type, uint32_t n_num_mem_b
              */
             if (type == PBUF_ZEROCOPY) {
                 m_zc_num_bufs += count;
-                m_p_ring_stat->simple.n_zc_num_bufs = m_zc_num_bufs;
+                m_p_ring_stat->n_zc_num_bufs = m_zc_num_bufs;
             } else {
                 m_tx_num_bufs += count;
-                m_p_ring_stat->simple.n_tx_num_bufs = m_tx_num_bufs;
+                m_p_ring_stat->n_tx_num_bufs = m_tx_num_bufs;
             }
         }
 
@@ -854,14 +854,14 @@ void ring_simple::return_to_global_pool()
                  m_tx_num_bufs >= RING_TX_BUFS_COMPENSATE * 2)) {
         int return_bufs = m_tx_pool.size() / 2;
         m_tx_num_bufs -= return_bufs;
-        m_p_ring_stat->simple.n_tx_num_bufs = m_tx_num_bufs;
+        m_p_ring_stat->n_tx_num_bufs = m_tx_num_bufs;
         g_buffer_pool_tx->put_buffers_thread_safe(&m_tx_pool, return_bufs);
     }
     if (unlikely(m_zc_pool.size() > (m_zc_num_bufs / 2) &&
                  m_zc_num_bufs >= RING_TX_BUFS_COMPENSATE * 2)) {
         int return_bufs = m_zc_pool.size() / 2;
         m_zc_num_bufs -= return_bufs;
-        m_p_ring_stat->simple.n_zc_num_bufs = m_zc_num_bufs;
+        m_p_ring_stat->n_zc_num_bufs = m_zc_num_bufs;
         g_buffer_pool_zc->put_buffers_thread_safe(&m_zc_pool, return_bufs);
     }
 }
@@ -946,8 +946,8 @@ void ring_simple::modify_cq_moderation(uint32_t period, uint32_t count)
     m_cq_moderation_info.period = period;
     m_cq_moderation_info.count = count;
 
-    m_p_ring_stat->simple.n_rx_cq_moderation_period = period;
-    m_p_ring_stat->simple.n_rx_cq_moderation_count = count;
+    m_p_ring_stat->n_rx_cq_moderation_period = period;
+    m_p_ring_stat->n_rx_cq_moderation_count = count;
 
     // todo all cqs or just active? what about HA?
     priv_ibv_modify_cq_moderation(m_p_cq_mgr_rx->get_ibv_cq_hndl(), period, count);

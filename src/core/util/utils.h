@@ -12,17 +12,30 @@
 #include <string.h>
 #include <ifaddrs.h>
 #include <linux/if_ether.h>
+#include <limits.h>
 #include <exception>
+#include <cstdint>
+#include <cstddef>
 #include "vtypes.h"
 #include "utils/rdtsc.h"
 #include "vlogger/vlogger.h"
 #include "core/proto/mem_buf_desc.h"
-#include "core/util/xlio_stats.h"
 #include "core/util/xlio_exception.h"
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
 #endif /* ARRAY_SIZE */
+
+#define FILE_NAME_MAX_SIZE (NAME_MAX + 1)
+
+#define PADDING(x)     uint8_t __explicit_padding[x]
+#define CACHELINE_SIZE 64
+#define BOUNDARY_SIZE_ASSERT(type, boundary)                                                       \
+    static_assert(                                                                                 \
+        (offsetof(type, __explicit_padding) + sizeof(type::__explicit_padding)) % (boundary) == 0, \
+        #type " explicit padding is not aligned to a boundary of " #boundary ". "                  \
+              "Adjust PADDING() to correct the alignment.")
+#define CACHELINE_BOUNDARY_SIZE_ASSERT(type) BOUNDARY_SIZE_ASSERT(type, CACHELINE_SIZE)
 
 /**
  * Check if file type is regular
