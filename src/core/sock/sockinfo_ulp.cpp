@@ -19,6 +19,12 @@
 #define si_ulp_loginfo __log_info_info
 #define si_ulp_logerr  __log_info_err
 
+#define TLS_STATS(x) ((x)->get_sock_stats()->tls_counters)
+#define IF_STATS_OB(o, x)                                                                          \
+    if (unlikely((o)->get_sock_stats())) {                                                         \
+        (x);                                                                                       \
+    }
+
 /*inline*/
 ring *sockinfo_tcp_ops::get_tx_ring()
 {
@@ -1199,13 +1205,6 @@ int sockinfo_tcp_ops_tls::tls_rx_encrypt(struct pbuf *plist)
         return TLS_DECRYPT_INTERNAL;
     }
 
-    /* Set authentication tag. TODO We can avoid copy if the tag doesn't cross a pbuf boundary. */
-    copy_by_offset(buf, m_rx_offset + m_rx_rec_len - TLS_RECORD_TAG_LEN, TLS_RECORD_TAG_LEN);
-    ret = g_tls_api->EVP_CIPHER_CTX_ctrl(tls_ctx, EVP_CTRL_GCM_SET_TAG, TLS_RECORD_TAG_LEN, buf);
-    if (unlikely(!ret)) {
-        return TLS_DECRYPT_INTERNAL;
-    }
-
     /* Additional data for AEAD */
     if (is_rx_tls13()) {
         copy_by_offset(buf, m_rx_offset, 3);
@@ -1403,32 +1402,31 @@ check_single_record:
         if (decrypted_nr == 0 || tls_decrypted == TLS_RX_DECRYPTED) {
             /* Case #2 and #3. */
             ret = tls_rx_decrypt(pres);
+            IF_STATS_OB(m_p_sock,
+                        decrypted_nr == 0 ? ++(TLS_STATS(m_p_sock).n_tls_rx_records_full_enc)
+                                          : ++(TLS_STATS(m_p_sock).n_tls_rx_records_head_enc));
         } else if (tls_decrypted == TLS_RX_AUTH_FAIL) {
             /* Case #1. */
             ret = TLS_DECRYPT_BAD_MAC;
+            IF_STATS_OB(m_p_sock, ++(TLS_STATS(m_p_sock).n_tls_rx_records_hw_auth_fail));
         } else {
             /* Case #4 and #5. */
             switch (((mem_buf_desc_t *)pres)->rx.tls_decrypted) {
             case TLS_RX_RESYNC:
                 /* Fallthrough */
             case TLS_RX_ENCRYPTED:
-                ret = tls_rx_decrypt(pres);
+                ret = tls_rx_decrypt(pres); // Case #5
+                IF_STATS_OB(m_p_sock, ++(TLS_STATS(m_p_sock).n_tls_rx_records_mix_enc));
                 /* Fallthrough */
             case TLS_RX_DECRYPTED:
-                ret = ret ?: tls_rx_encrypt(pres) ?: tls_rx_decrypt(pres);
+                ret = ret ?: tls_rx_encrypt(pres) ?: tls_rx_decrypt(pres); // Case #4
+                IF_STATS_OB(m_p_sock, ++(TLS_STATS(m_p_sock).n_tls_rx_records_tail_enc));
                 break;
             default:
                 /* Unexpected case. */
                 assert(0);
                 break;
             }
-        }
-
-        /* Statistics */
-        if (unlikely(m_p_sock->get_sock_stats())) {
-            m_p_sock->get_sock_stats()->tls_counters.n_tls_rx_records_enc += !!(decrypted_nr == 0);
-            m_p_sock->get_sock_stats()->tls_counters.n_tls_rx_records_partial +=
-                !!(decrypted_nr != 0);
         }
     }
 
@@ -1437,6 +1435,7 @@ check_single_record:
         terminate_session_fatal(ret == TLS_DECRYPT_BAD_MAC ? TLS_BAD_RECORD_MAC
                                                            : TLS_INTERNAL_ERROR);
         m_refused_data = pres;
+        IF_STATS_OB(m_p_sock, ++(TLS_STATS(m_p_sock).n_tls_rx_records_sw_dec_fail));
         return ERR_OK;
     }
 
