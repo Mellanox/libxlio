@@ -153,8 +153,12 @@ typedef struct {
     uint32_t n_tls_tx_resync;
     uint32_t n_tls_tx_resync_replay;
     uint32_t n_tls_rx_records;
-    uint32_t n_tls_rx_records_enc;
-    uint32_t n_tls_rx_records_partial;
+    uint32_t n_tls_rx_records_full_enc;
+    uint32_t n_tls_rx_records_head_enc;
+    uint32_t n_tls_rx_records_tail_enc;
+    uint32_t n_tls_rx_records_mix_enc;
+    uint32_t n_tls_rx_records_hw_auth_fail;
+    uint32_t n_tls_rx_records_sw_dec_fail;
     uint32_t n_tls_rx_resync;
 } socket_tls_counters_t;
 #endif /* DEFINED_UTLS */
