@@ -327,7 +327,7 @@ using std::ostream;
 class stats_base : public testing::Test {
 public:
     std::stringstream out;
-    uint8_t buffer[sizeof(sh_mem_t) + sizeof(socket_instance_block_t) * 15];
+    uint8_t buffer[sizeof(sh_mem_t) + sizeof(socket_instance_block_t) * 16];
     sh_mem_t &mem;
     stats_base()
         : buffer()
