@@ -235,14 +235,21 @@ void print_full_stats(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, 
                 p_si_stats->tls_counters.n_tls_tx_resync_replay, post_fix);
     }
 
-    if (p_si_stats->tls_counters.n_tls_rx_records || p_si_stats->tls_counters.n_tls_rx_bytes) {
+    if (p_si_stats->tls_counters.n_tls_rx_records || p_si_stats->tls_counters.n_tls_rx_bytes ||
+        p_si_stats->tls_counters.n_tls_rx_records_sw_dec_fail) {
         fprintf(filename,
-                "TLS Rx Offload: %" PRIu64
-                " / %u / %u / %u [kilobytes/records/encrypted/mixed]%s\n",
+                "TLS Rx Offload: %" PRIu64 " / %u / %u [kilobytes/records/hw-auth-fail]%s\n",
                 p_si_stats->tls_counters.n_tls_rx_bytes / BYTES_TRAFFIC_UNIT,
                 p_si_stats->tls_counters.n_tls_rx_records,
-                p_si_stats->tls_counters.n_tls_rx_records_enc,
-                p_si_stats->tls_counters.n_tls_rx_records_partial, post_fix);
+                p_si_stats->tls_counters.n_tls_rx_records_hw_auth_fail, post_fix);
+        fprintf(filename,
+                "TLS Rx fallback: %u / %u / %u / %u / %u"
+                " [full-enc/head-enc/tail-enc/mix-enc/sw-dec-fail]%s\n",
+                p_si_stats->tls_counters.n_tls_rx_records_full_enc,
+                p_si_stats->tls_counters.n_tls_rx_records_head_enc,
+                p_si_stats->tls_counters.n_tls_rx_records_tail_enc,
+                p_si_stats->tls_counters.n_tls_rx_records_mix_enc,
+                p_si_stats->tls_counters.n_tls_rx_records_sw_dec_fail, post_fix);
         b_any_activiy = true;
     }
     if (p_si_stats->tls_counters.n_tls_rx_resync) {

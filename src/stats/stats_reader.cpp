@@ -240,13 +240,25 @@ void update_delta_stat(socket_stats_t *p_curr_stat, socket_stats_t *p_prev_stat)
     p_prev_stat->tls_counters.n_tls_rx_records =
         (p_curr_stat->tls_counters.n_tls_rx_records - p_prev_stat->tls_counters.n_tls_rx_records) /
         delay;
-    p_prev_stat->tls_counters.n_tls_rx_records_enc =
-        (p_curr_stat->tls_counters.n_tls_rx_records_enc -
-         p_prev_stat->tls_counters.n_tls_rx_records_enc) /
+    p_prev_stat->tls_counters.n_tls_rx_records_full_enc =
+        (p_curr_stat->tls_counters.n_tls_rx_records_full_enc -
+         p_prev_stat->tls_counters.n_tls_rx_records_full_enc) /
         delay;
-    p_prev_stat->tls_counters.n_tls_rx_records_partial =
-        (p_curr_stat->tls_counters.n_tls_rx_records_partial -
-         p_prev_stat->tls_counters.n_tls_rx_records_partial) /
+    p_prev_stat->tls_counters.n_tls_rx_records_head_enc =
+        (p_curr_stat->tls_counters.n_tls_rx_records_head_enc -
+         p_prev_stat->tls_counters.n_tls_rx_records_head_enc) /
+        delay;
+    p_prev_stat->tls_counters.n_tls_rx_records_tail_enc =
+        (p_curr_stat->tls_counters.n_tls_rx_records_tail_enc -
+         p_prev_stat->tls_counters.n_tls_rx_records_tail_enc) /
+        delay;
+    p_prev_stat->tls_counters.n_tls_rx_records_mix_enc =
+        (p_curr_stat->tls_counters.n_tls_rx_records_mix_enc -
+         p_prev_stat->tls_counters.n_tls_rx_records_mix_enc) /
+        delay;
+    p_prev_stat->tls_counters.n_tls_rx_records_hw_auth_fail =
+        (p_curr_stat->tls_counters.n_tls_rx_records_hw_auth_fail -
+         p_prev_stat->tls_counters.n_tls_rx_records_hw_auth_fail) /
         delay;
     p_prev_stat->tls_counters.n_tls_rx_bytes =
         (p_curr_stat->tls_counters.n_tls_rx_bytes - p_prev_stat->tls_counters.n_tls_rx_bytes) /
