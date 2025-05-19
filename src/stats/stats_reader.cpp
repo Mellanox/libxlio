@@ -89,6 +89,8 @@ typedef enum { e_K = 1024, e_M = 1048576 } units_t;
 #define FORMAT_RING_DM_STATS   "%-20s %zu / %zu / %zu [kilobytes/packets/oob] %-3s\n"
 #define FORMAT_RING_TAP_NAME   "%-20s %s\n"
 #define FORMAT_RING_MASTER     "%-20s %p\n"
+#define FORMAT_RING_RX_TLS     "%-20s %u / %u / %u [contexts/resyncs/auth-fail] %-3s\n"
+#define FORMAT_RING_TX_TLS     "%-20s %u / %u [contexts/resyncs] %-3s\n"
 
 #define INTERVAL                1
 #define BYTES_TRAFFIC_UNIT      e_K
@@ -358,6 +360,12 @@ void update_delta_ring_stat(ring_stats_t *p_curr_ring_stats, ring_stats_t *p_pre
             (p_curr_ring_stats->n_tx_tls_contexts - p_prev_ring_stats->n_tx_tls_contexts) / delay;
         p_prev_ring_stats->n_rx_tls_contexts =
             (p_curr_ring_stats->n_rx_tls_contexts - p_prev_ring_stats->n_rx_tls_contexts) / delay;
+        p_prev_ring_stats->n_tx_tls_resyncs  =
+            (p_curr_ring_stats->n_tx_tls_resyncs - p_prev_ring_stats->n_tx_tls_resyncs) / delay;
+        p_prev_ring_stats->n_rx_tls_resyncs =
+            (p_curr_ring_stats->n_rx_tls_resyncs - p_prev_ring_stats->n_rx_tls_resyncs) / delay;
+        p_prev_ring_stats->n_rx_tls_auth_fail =
+            (p_curr_ring_stats->n_rx_tls_auth_fail - p_prev_ring_stats->n_rx_tls_auth_fail) / delay;
 #endif /* DEFINED_UTLS */
 
         if (p_prev_ring_stats->n_type == RING_TAP) {
@@ -520,13 +528,16 @@ void print_ring_stats(ring_instance_block_t *p_ring_inst_arr)
 
 #ifdef DEFINED_UTLS
             if (p_ring_stats->n_tx_tls_contexts) {
-                printf(FORMAT_STATS_64bit,
-                       "TLS TX Context Setups:", (uint64_t)p_ring_stats->n_tx_tls_contexts,
+                printf(FORMAT_RING_TX_TLS,
+                       "HW TLS TX:", p_ring_stats->n_tx_tls_contexts,
+                       p_ring_stats->n_tx_tls_resyncs,
                        post_fix);
             }
             if (p_ring_stats->n_rx_tls_contexts) {
-                printf(FORMAT_STATS_64bit,
-                       "TLS RX Context Setups:", (uint64_t)p_ring_stats->n_rx_tls_contexts,
+                printf(FORMAT_RING_RX_TLS,
+                       "HW TLS RX:", p_ring_stats->n_rx_tls_contexts,
+                       p_ring_stats->n_rx_tls_resyncs,
+                       p_ring_stats->n_rx_tls_auth_fail,
                        post_fix);
             }
 #endif /* DEFINED_UTLS */
@@ -1810,6 +1821,9 @@ void zero_ring_stats(ring_stats_t *p_ring_stats)
 #ifdef DEFINED_UTLS
     p_ring_stats->n_tx_tls_contexts = 0;
     p_ring_stats->n_rx_tls_contexts = 0;
+    p_ring_stats->n_tx_tls_resyncs = 0;
+    p_ring_stats->n_rx_tls_resyncs = 0;
+    p_ring_stats->n_rx_tls_auth_fail = 0;
 #endif /* DEFINED_UTLS */
     if (p_ring_stats->n_type == RING_TAP) {
         p_ring_stats->tap.n_vf_plugouts = 0;
