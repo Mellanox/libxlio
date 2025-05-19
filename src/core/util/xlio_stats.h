@@ -86,17 +86,22 @@ extern user_params_t user_params;
 
 // Epoll group stats
 typedef struct {
-    bool enabled;
-    int epfd;
     iomux_func_stats_t stats;
+    int epfd;
+    bool enabled;
 } epoll_stats_t;
 
+struct alignas(64) epoll_stats_t_aligned : public epoll_stats_t {};
+
 // iomux function stat info
-typedef struct {
+typedef struct alignas(64) {
     iomux_func_stats_t poll;
     iomux_func_stats_t select;
-    epoll_stats_t epoll[NUM_OF_SUPPORTED_EPFDS];
+    epoll_stats_t_aligned epoll[NUM_OF_SUPPORTED_EPFDS];
 } iomux_stats_t;
+
+static_assert(sizeof(iomux_stats_t) % 64 == 0,
+              "iomux_stats_t size is not aligned on cache boundary");
 
 // multicast stat info
 typedef struct {
@@ -326,10 +331,13 @@ typedef struct {
     uint16_t n_rx_max_stirde_per_packet;
 } cq_stats_t;
 
-typedef struct {
-    bool b_enabled;
+typedef struct alignas(64) {
     cq_stats_t cq_stats;
+    bool b_enabled;
 } cq_instance_block_t;
+
+static_assert(sizeof(cq_instance_block_t) % 64 == 0,
+              "cq_instance_block_t size is not aligned on cache boundary");
 
 typedef enum { RING_ETH = 0, RING_TAP } ring_type_t;
 
@@ -339,27 +347,33 @@ static const char *const ring_type_str[] = {"RING_ETH", "RING_TAP"};
 typedef struct {
     uint64_t n_rx_pkt_count;
     uint64_t n_rx_byte_count;
-    uint64_t n_tx_pkt_count;
-    uint64_t n_tx_byte_count;
-    uint64_t n_tx_retransmits;
-#ifdef DEFINED_UTLS
-    uint32_t n_tx_tls_contexts;
-    uint32_t n_tx_tls_resyncs;
+    uint64_t n_rx_interrupt_requests;
+    uint64_t n_rx_interrupt_received;
+    uint32_t n_rx_cq_moderation_count;
+    uint32_t n_rx_cq_moderation_period;
     uint32_t n_rx_tls_contexts;
     uint32_t n_rx_tls_resyncs;
     uint32_t n_rx_tls_auth_fail;
-#endif /* DEFINED_UTLS */
+    ring_type_t n_type;
+    void *p_ring_master;
+
+    // First cache line
+
+    uint64_t n_tx_pkt_count;
+    uint64_t n_tx_byte_count;
+    uint64_t n_tx_retransmits;
+    uint64_t n_tx_tso_pkt_count;
+    uint64_t n_tx_tso_byte_count;
+    uint32_t n_tx_num_bufs;
+    uint32_t n_zc_num_bufs;
+    uint64_t n_tx_dropped_wqes;
+    uint32_t n_tx_tls_contexts;
+    uint32_t n_tx_tls_resyncs;
+
+    // Second cache line
+
     union {
         struct {
-            uint64_t n_tx_tso_pkt_count;
-            uint64_t n_tx_tso_byte_count;
-            uint64_t n_rx_interrupt_requests;
-            uint64_t n_rx_interrupt_received;
-            uint32_t n_rx_cq_moderation_count;
-            uint32_t n_rx_cq_moderation_period;
-            uint64_t n_tx_dropped_wqes;
-            uint32_t n_tx_num_bufs;
-            uint32_t n_zc_num_bufs;
             uint64_t n_tx_dev_mem_pkt_count;
             uint64_t n_tx_dev_mem_byte_count;
             uint64_t n_tx_dev_mem_oob;
@@ -372,29 +386,33 @@ typedef struct {
             uint32_t n_vf_plugouts;
         } tap;
     };
-    void *p_ring_master;
-    ring_type_t n_type;
 } ring_stats_t;
 
-typedef struct {
+typedef struct alignas(64) {
     ring_stats_t ring_stats;
     bool b_enabled;
 } ring_instance_block_t;
 
+static_assert(sizeof(ring_instance_block_t) % 64 == 0,
+              "ring_instance_block_t size is not aligned on cache boundary");
+
 // Buffer Pool stat info
 typedef struct {
-    bool is_rx;
-    bool is_tx;
     uint32_t n_buffer_pool_size;
     uint32_t n_buffer_pool_no_bufs;
     uint32_t n_buffer_pool_expands;
     uint32_t n_buffer_pool_created;
+    bool is_rx;
+    bool is_tx;
 } bpool_stats_t;
 
-typedef struct {
-    bool b_enabled;
+typedef struct alignas(32) {
     bpool_stats_t bpool_stats;
+    bool b_enabled;
 } bpool_instance_block_t;
+
+static_assert(sizeof(bpool_instance_block_t) % 32 == 0,
+              "ring_instance_block_t size is not aligned on cache boundary");
 
 // Global stat info
 typedef struct {
@@ -414,8 +432,8 @@ typedef struct {
 } global_stats_t;
 
 typedef struct {
-    bool b_enabled;
     global_stats_t global_stats;
+    bool b_enabled;
     void init()
     {
         b_enabled = false;
@@ -432,22 +450,22 @@ typedef struct {
 } version_info_t;
 
 typedef struct sh_mem_t {
+    cq_instance_block_t cq_inst_arr[NUM_OF_SUPPORTED_CQS];
+    ring_instance_block_t ring_inst_arr[NUM_OF_SUPPORTED_RINGS];
+    bpool_instance_block_t bpool_inst_arr[NUM_OF_SUPPORTED_BPOOLS];
+    iomux_stats_t iomux;
+    global_instance_block_t global_inst_arr[NUM_OF_SUPPORTED_GLOBALS];
     int reader_counter; // only copy to shm upon active reader
     version_info_t ver_info;
-    char stats_protocol_ver[32];
     vlog_levels_t log_level;
     uint8_t log_details_level;
     dump_type_t dump;
     int fd_dump;
     vlog_levels_t fd_dump_log_level;
-    cq_instance_block_t cq_inst_arr[NUM_OF_SUPPORTED_CQS];
-    ring_instance_block_t ring_inst_arr[NUM_OF_SUPPORTED_RINGS];
-    bpool_instance_block_t bpool_inst_arr[NUM_OF_SUPPORTED_BPOOLS];
-    global_instance_block_t global_inst_arr[NUM_OF_SUPPORTED_GLOBALS];
     mc_grp_info_t mc_info;
-    iomux_stats_t iomux;
     size_t max_skt_inst_num; // number of elements allocated in 'socket_instance_block_t
                              // skt_inst_arr[]'
+    char stats_protocol_ver[32];
 
     /* IMPORTANT:  MUST BE LAST ENTRY in struct: [0] is the allocation start point for all fd's
      *
@@ -471,7 +489,7 @@ typedef struct sh_mem_t {
      * (possibly recursively), may not be a member of a structure or an element of an array.
      * (However, these uses are permitted by GCC as extensions.)
      */
-    socket_instance_block_t skt_inst_arr[1]; // sockets statistics array
+    alignas(64) socket_instance_block_t skt_inst_arr[1]; // sockets statistics array
 
     void reset()
     {
