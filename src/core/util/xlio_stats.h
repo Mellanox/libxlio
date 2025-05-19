@@ -342,12 +342,13 @@ typedef struct {
     uint64_t n_tx_pkt_count;
     uint64_t n_tx_byte_count;
     uint64_t n_tx_retransmits;
-    void *p_ring_master;
 #ifdef DEFINED_UTLS
     uint32_t n_tx_tls_contexts;
+    uint32_t n_tx_tls_resyncs;
     uint32_t n_rx_tls_contexts;
+    uint32_t n_rx_tls_resyncs;
+    uint32_t n_rx_tls_auth_fail;
 #endif /* DEFINED_UTLS */
-    ring_type_t n_type;
     union {
         struct {
             uint64_t n_tx_tso_pkt_count;
@@ -357,12 +358,12 @@ typedef struct {
             uint32_t n_rx_cq_moderation_count;
             uint32_t n_rx_cq_moderation_period;
             uint64_t n_tx_dropped_wqes;
+            uint32_t n_tx_num_bufs;
+            uint32_t n_zc_num_bufs;
             uint64_t n_tx_dev_mem_pkt_count;
             uint64_t n_tx_dev_mem_byte_count;
             uint64_t n_tx_dev_mem_oob;
             uint32_t n_tx_dev_mem_allocated;
-            uint32_t n_tx_num_bufs;
-            uint32_t n_zc_num_bufs;
             uint32_t n_rx_zc_migiration_drop;
         } simple;
         struct {
@@ -372,11 +373,13 @@ typedef struct {
             uint32_t n_vf_plugouts;
         } tap;
     };
+    void *p_ring_master;
+    ring_type_t n_type;
 } ring_stats_t;
 
 typedef struct {
-    bool b_enabled;
     ring_stats_t ring_stats;
+    bool b_enabled;
 } ring_instance_block_t;
 
 // Buffer Pool stat info

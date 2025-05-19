@@ -12,6 +12,7 @@
 #include "dev/rfs_uc_tcp_gro.h"
 #include "sock/fd_collection.h"
 #include "sock/sockinfo.h"
+#include "proto/tls.h"
 
 #undef MODULE_NAME
 #define MODULE_NAME "ring_slave"
@@ -575,6 +576,9 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
 
     m_p_ring_stat->n_rx_byte_count += sz_data;
     ++m_p_ring_stat->n_rx_pkt_count;
+#ifdef DEFINED_UTLS
+    m_p_ring_stat->n_rx_tls_auth_fail += !!(p_rx_wc_buf_desc->rx.tls_decrypted == TLS_RX_AUTH_FAIL);
+#endif /* DEFINED_UTLS */
 
     // This is an internal function (within ring and 'friends'). No need for lock mechanism.
     if (likely(m_flow_tag_enabled && p_rx_wc_buf_desc->rx.flow_tag_id &&

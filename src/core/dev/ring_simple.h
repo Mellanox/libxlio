@@ -161,6 +161,7 @@ public:
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         m_hqtx->tls_context_resync_tx(info, tis, skip_static);
+        ++(m_p_ring_stat->n_tx_tls_resyncs);
 
         uint64_t dummy_poll_sn = 0;
         m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
@@ -169,6 +170,7 @@ public:
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         m_hqtx->tls_resync_rx(tir, info, hw_resync_tcp_sn);
+        ++(m_p_ring_stat->n_rx_tls_resyncs);
     }
     void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey) override
     {
