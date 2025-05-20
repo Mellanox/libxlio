@@ -52,13 +52,25 @@
 #include "core/config/loaders/inline_loader.h"
 #include "core/config/loaders/json_loader.h"
 
+/**
+ * @brief Helper to check if a type is an unsigned 64-bit type
+ * @tparam T Type to check
+ */
+template <typename T>
+struct is_unsigned_64bit
+    : std::integral_constant<bool, sizeof(T) == sizeof(int64_t) && std::is_unsigned<T>::value> {};
+
+template <typename T>
+typename std::enable_if<is_unsigned_64bit<T>::value, void>::type set_value_from_registry_if_exists(
+    T &key, const std::string &name, const config_registry &registry);
+
 template <typename T>
 typename std::enable_if<std::is_enum<T>::value, void>::type set_value_from_registry_if_exists(
     T &key, const std::string &name, const config_registry &registry);
 
 template <typename T>
-typename std::enable_if<!std::is_enum<T>::value, void>::type set_value_from_registry_if_exists(
-    T &key, const std::string &name, const config_registry &registry);
+typename std::enable_if<!std::is_enum<T>::value && !is_unsigned_64bit<T>::value, void>::type
+set_value_from_registry_if_exists(T &key, const std::string &name, const config_registry &registry);
 
 void check_netperf_flags();
 
@@ -3124,16 +3136,52 @@ void set_env_params()
     }
 }
 
-// Generic implementation for non-integer types
+/**
+ * @brief Specialization for unsigned 64-bit types
+ *
+ * This specialization handles unsigned 64-bit types (uint64_t, size_t, etc.) when retrieving
+ * values from the config registry. The config registry internally uses int64_t for integer types,
+ * so we need to cast between these types safely.
+ *
+ * @tparam T The unsigned 64-bit type
+ * @param key Reference to the unsigned 64-bit variable to be set
+ * @param name Configuration parameter name
+ * @param registry The configuration registry
+ */
 template <typename T>
-typename std::enable_if<!std::is_enum<T>::value, void>::type set_value_from_registry_if_exists(
+typename std::enable_if<is_unsigned_64bit<T>::value, void>::type set_value_from_registry_if_exists(
     T &key, const std::string &name, const config_registry &registry)
+{
+    if (registry.value_exists(name)) {
+        int64_t temp = registry.get_value<int64_t>(name);
+        if (temp < 0) {
+            throw std::invalid_argument("Value for unsigned 64-bit type cannot be negative");
+        }
+        key = static_cast<T>(temp);
+    }
+}
+
+template <typename T>
+typename std::enable_if<!std::is_enum<T>::value && !is_unsigned_64bit<T>::value, void>::type
+set_value_from_registry_if_exists(T &key, const std::string &name, const config_registry &registry)
 {
     if (registry.value_exists(name)) {
         key = registry.get_value<T>(name);
     }
 }
 
+/**
+ * @brief Specialization for enum types
+ *
+ * This specialization handles enum types when retrieving values from the config registry.
+ * The config registry internally uses int64_t, and C++ has limitations with enum bounds
+ * (std::numeric_limits<enum_type>::min() and max() both return 0).
+ *
+ * @tparam T The enum type
+ * @param key Reference to the enum variable to be set
+ * @param name Configuration parameter name
+ * @param registry The configuration registry
+ */
 template <typename T>
 typename std::enable_if<std::is_enum<T>::value, void>::type set_value_from_registry_if_exists(
     T &key, const std::string &name, const config_registry &registry)
