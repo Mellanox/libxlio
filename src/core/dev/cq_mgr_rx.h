@@ -87,7 +87,6 @@ public:
      */
     virtual bool poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
                                              void *pv_fd_ready_array = nullptr) = 0;
-    virtual mem_buf_desc_t *poll_and_process_socketxtreme() { return nullptr; };
 
     /**
      * This will check if the cq was drained, and if it wasn't it will drain it.

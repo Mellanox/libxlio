@@ -281,7 +281,6 @@ public:
     virtual bool is_incoming() = 0;
     virtual bool is_closable() = 0;
     virtual void statistics_print(vlog_levels_t log_level = VLOG_DEBUG) = 0;
-    virtual int register_callback(xlio_recv_callback_t callback, void *context) = 0;
     virtual int fcntl(int __cmd, unsigned long int __arg);
     virtual int fcntl64(int __cmd, unsigned long int __arg);
     virtual int ioctl(unsigned long int __request, unsigned long int __arg);
@@ -290,9 +289,6 @@ public:
     virtual ssize_t rx(const rx_call_t call_type, iovec *iov, const ssize_t iovlen,
                        int *p_flags = 0, sockaddr *__from = nullptr, socklen_t *__fromlen = nullptr,
                        struct msghdr *__msg = nullptr) = 0;
-
-    virtual int recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
-                                            size_t count) = 0;
 
     // Instructing the socket to immediately sample/un-sample the OS in receive flow
     virtual void set_immediate_os_sample() = 0;
@@ -308,16 +304,9 @@ public:
     inline bool set_flow_tag(uint32_t flow_tag_id);
     inline void sock_pop_descs_rx_ready(descq_t *cache);
 
-    // Socketxtreme related.
-    ring_ec *pop_next_ec();
-    ring_ec *clear_ecs();
-    void add_ec(ring_ec *ec);
-    ring_ec *get_last_ec() { return m_socketxtreme_ec_last; }
-    bool has_next_ec() { return (m_socketxtreme_ec_first != nullptr); }
-    sockinfo *get_ec_ring_list_next() { return m_socketxtreme_ring_list_next; }
-    void set_ec_ring_list_next(sockinfo *sock) { m_socketxtreme_ring_list_next = sock; }
-
-    bool has_epoll_context() { return (!safe_mce_sys().enable_socketxtreme && m_econtext); }
+    uint32_t get_epoll_event_flags() { return m_epoll_event_flags; }
+    void set_epoll_event_flags(uint32_t events) { m_epoll_event_flags = events; }
+    bool has_epoll_context() { return (!!m_econtext); }
     bool get_rx_pkt_ready_list_count() const { return m_n_rx_pkt_ready_list_count; }
     int get_fd() const { return m_fd; };
     sa_family_t get_family() { return m_family; }
@@ -333,10 +322,7 @@ public:
     rfs *get_rfs_ptr() const { return m_rfs_ptr; }
     void set_rfs_ptr(rfs *r) { m_rfs_ptr = r; }
     void destructor_helper();
-    int get_rings_fds(int *ring_fds, int ring_fds_sz);
-    int get_rings_num();
     bool validate_and_convert_mapped_ipv4(sock_addr &sock) const;
-    int register_callback_ctx(xlio_recv_callback_t callback, void *context);
     void consider_rings_migration_rx();
     int add_epoll_context(epfd_info *epfd);
     void remove_epoll_context(epfd_info *epfd);
@@ -375,9 +361,8 @@ protected:
                                                int &rx_pkt_ready_list_idx) = 0;
     virtual timestamps_t *get_socket_timestamps() = 0;
     virtual void update_socket_timestamps(timestamps_t *ts) = 0;
-    virtual void post_dequeue(bool release_buff) = 0;
+    virtual void post_dequeue() = 0;
     virtual int os_epoll_wait(epoll_event *ep_events, int maxevents);
-    virtual int zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags) = 0;
     virtual void handle_ip_pktinfo(struct cmsg_state *cm_state) = 0;
     virtual bool try_un_offloading(); // un-offload the socket if possible
 
@@ -390,8 +375,6 @@ protected:
 
     inline void set_rx_reuse_pending(bool is_pending = true);
     inline void reuse_buffer(mem_buf_desc_t *buff);
-    inline xlio_socketxtreme_completion_t *set_events_socketxtreme(uint64_t events,
-                                                                   bool full_transaction);
     inline void set_events(uint64_t events);
     inline void save_strq_stats(uint32_t packet_strides);
 
@@ -465,13 +448,13 @@ protected:
     rfs *m_rfs_ptr = nullptr;
     socket_stats_t *m_p_socket_stats = nullptr;
     ring *m_p_rx_ring = nullptr; // used in TCP/UDP
-    ring_ec *m_socketxtreme_ec_first = nullptr;
-    ring_ec *m_socketxtreme_ec_last = nullptr;
+    epfd_info *m_econtext = nullptr;
+    uint32_t m_epoll_event_flags = 0U;
+    int m_n_rx_pkt_ready_list_count = 0;
 
     // End of first cache line
 
-    sockinfo *m_socketxtreme_ring_list_next = nullptr;
-    void *m_fd_context; // Context data stored with socket
+    list_node<sockinfo, sockinfo::pending_to_remove_node_offset> pending_to_remove_node;
     mem_buf_desc_t *m_last_zcdesc = nullptr;
 
     /* Socket error queue that keeps local errors and internal data required
@@ -493,22 +476,15 @@ protected:
 
     // End of second cache line
 
-    epfd_info *m_econtext = nullptr;
     wakeup_pipe m_sock_wakeup_pipe;
-    int m_rx_epfd;
-    in_protocol_t m_protocol = PROTO_UNDEFINED;
-    sa_family_t m_family;
 
 public:
+    epoll_fd_rec m_fd_rec;
     list_node<sockinfo, sockinfo::socket_fd_list_node_offset> socket_fd_list_node;
     list_node<sockinfo, sockinfo::ep_ready_fd_node_offset> ep_ready_fd_node;
     list_node<sockinfo, sockinfo::ep_info_fd_node_offset> ep_info_fd_node;
-    list_node<sockinfo, sockinfo::pending_to_remove_node_offset> pending_to_remove_node;
-    epoll_fd_rec m_fd_rec;
-    uint32_t m_epoll_event_flags = 0U;
 
 protected:
-    int m_fd; // identification information <socket fd>
     /**
      * list of pending ready packet on the Rx,
      * each element is a pointer to the ib_conn_mgr that holds this ready rx datagram
@@ -516,7 +492,7 @@ protected:
     size_t m_rx_pkt_ready_offset = 0U;
     size_t m_rx_ready_byte_count = 0U;
     buff_info_t m_rx_reuse_buff; // used in TCP instead of m_rx_ring_map
-    int m_n_rx_pkt_ready_list_count = 0;
+    int m_fd; // identification information <socket fd>
     int m_rx_num_buffs_reuse;
     // used to periodically return buffers, even if threshold was not reached
     bool m_rx_reuse_buf_pending = false;
@@ -528,7 +504,9 @@ protected:
     bool m_bind_no_port = false;
     bool m_is_ipv6only;
     uint8_t m_src_sel_flags = 0U;
-
+    int m_rx_epfd;
+    in_protocol_t m_protocol = PROTO_UNDEFINED;
+    sa_family_t m_family;
     multilock m_lock_rcv;
     lock_mutex m_lock_snd;
     lock_mutex m_rx_migration_lock;
@@ -543,9 +521,6 @@ protected:
     loops_timer m_loops_timer;
     ring_alloc_logic_attr m_ring_alloc_log_rx;
     ring_alloc_logic_attr m_ring_alloc_log_tx;
-    // Callback function pointer to support XLIO extra API (xlio_extra.h)
-    xlio_recv_callback_t m_rx_callback = nullptr;
-    void *m_rx_callback_context = nullptr; // user context
     struct xlio_rate_limit_t m_so_ratelimit;
     uint32_t m_pcp = 0U;
     uint32_t m_flow_tag_id = 0U; // Flow Tag for this socket
@@ -605,34 +580,9 @@ void sockinfo::sock_pop_descs_rx_ready(descq_t *cache)
     unlock_rx_q();
 }
 
-xlio_socketxtreme_completion_t *sockinfo::set_events_socketxtreme(uint64_t events,
-                                                                  bool full_transaction)
-{
-    bool always_new =
-        ((events & (XLIO_SOCKETXTREME_PACKET | XLIO_SOCKETXTREME_NEW_CONNECTION_ACCEPTED)) != 0U);
-    xlio_socketxtreme_completion_t &completion =
-        m_p_rx_ring->socketxtreme_start_ec_operation(this, always_new);
-    completion.user_data = (uint64_t)m_fd_context;
-    completion.events |= events;
-
-    if (full_transaction) {
-        m_p_rx_ring->socketxtreme_end_ec_operation();
-        return nullptr;
-    }
-
-    return &completion;
-}
-
 void sockinfo::set_events(uint64_t events)
 {
-    /* Collect all events if rx ring is enabled */
-    if (safe_mce_sys().enable_socketxtreme) {
-        if (m_state == SOCKINFO_OPENED) {
-            set_events_socketxtreme(events, true);
-        }
-    } else {
-        insert_epoll_event(events);
-    }
+    insert_epoll_event(events);
 }
 
 void sockinfo::save_strq_stats(uint32_t packet_strides)
@@ -652,7 +602,6 @@ int sockinfo::dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, soc
     mem_buf_desc_t *pdesc;
     int total_rx = 0;
     uint32_t nbytes, pos;
-    bool release_buff = true;
 
     bool is_peek = in_flags & MSG_PEEK;
     int rx_pkt_ready_list_idx = 1;
@@ -674,62 +623,52 @@ int sockinfo::dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, soc
         }
     }
 
-    if (in_flags & MSG_XLIO_ZCOPY) {
-        release_buff = false;
-        total_rx = zero_copy_rx(p_iov, pdesc, p_out_flags);
-        if (unlikely(total_rx < 0)) {
-            return -1;
-        }
-        m_rx_pkt_ready_offset = 0;
-    } else {
 #ifdef DEFINED_UTLS
-        uint8_t tls_type = pdesc->rx.tls_type;
+    uint8_t tls_type = pdesc->rx.tls_type;
 #endif /* DEFINED_UTLS */
-        for (int i = 0; i < sz_iov && pdesc; i++) {
-            pos = 0;
-            while (pos < p_iov[i].iov_len && pdesc) {
+    for (int i = 0; i < sz_iov && pdesc; i++) {
+        pos = 0;
+        while (pos < p_iov[i].iov_len && pdesc) {
 #ifdef DEFINED_UTLS
-                if (unlikely(pdesc->rx.tls_type != tls_type)) {
-                    break;
-                }
+            if (unlikely(pdesc->rx.tls_type != tls_type)) {
+                break;
+            }
 #endif /* DEFINED_UTLS */
-                nbytes = p_iov[i].iov_len - pos;
-                if (nbytes > bytes_left) {
-                    nbytes = bytes_left;
+            nbytes = p_iov[i].iov_len - pos;
+            if (nbytes > bytes_left) {
+                nbytes = bytes_left;
+            }
+            memcpy((char *)(p_iov[i].iov_base) + pos, iov_base, nbytes);
+            pos += nbytes;
+            total_rx += nbytes;
+            m_rx_pkt_ready_offset += nbytes;
+            bytes_left -= nbytes;
+            iov_base = (uint8_t *)iov_base + nbytes;
+            if (m_b_rcvtstamp || m_n_tsing_flags) {
+                update_socket_timestamps(&pdesc->rx.timestamps);
+            }
+            if (bytes_left <= 0) {
+                if (unlikely(is_peek)) {
+                    pdesc = get_next_desc_peek(pdesc, rx_pkt_ready_list_idx);
+                } else {
+                    pdesc = get_next_desc(pdesc);
                 }
-                memcpy((char *)(p_iov[i].iov_base) + pos, iov_base, nbytes);
-                pos += nbytes;
-                total_rx += nbytes;
-                m_rx_pkt_ready_offset += nbytes;
-                bytes_left -= nbytes;
-                iov_base = (uint8_t *)iov_base + nbytes;
-                if (m_b_rcvtstamp || m_n_tsing_flags) {
-                    update_socket_timestamps(&pdesc->rx.timestamps);
-                }
-                if (bytes_left <= 0) {
-                    if (unlikely(is_peek)) {
-                        pdesc = get_next_desc_peek(pdesc, rx_pkt_ready_list_idx);
-                    } else {
-                        pdesc = get_next_desc(pdesc);
-                    }
-                    m_rx_pkt_ready_offset = 0;
-                    if (pdesc) {
-                        iov_base = pdesc->rx.frag.iov_base;
-                        bytes_left = pdesc->rx.frag.iov_len;
-                    }
+                m_rx_pkt_ready_offset = 0;
+                if (pdesc) {
+                    iov_base = pdesc->rx.frag.iov_base;
+                    bytes_left = pdesc->rx.frag.iov_len;
                 }
             }
         }
     }
 
     if (unlikely(is_peek)) {
-        m_rx_pkt_ready_offset =
-            rx_pkt_ready_offset; // if MSG_PEEK is on, m_rx_pkt_ready_offset must be zero-ed
-        // save_stats_rx_offload(total_rx); //TODO??
+        // if MSG_PEEK is on, m_rx_pkt_ready_offset must be zero-ed
+        m_rx_pkt_ready_offset = rx_pkt_ready_offset;
     } else {
         IF_STATS(m_p_socket_stats->n_rx_ready_byte_count -= total_rx);
         m_rx_ready_byte_count -= total_rx;
-        post_dequeue(release_buff);
+        post_dequeue();
         save_stats_rx_offload(total_rx);
     }
 

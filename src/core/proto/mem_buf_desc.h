@@ -144,7 +144,6 @@ public:
             size_t sz_payload; // This is the total amount of data of the packet, if
                                // (sz_payload>sz_data) means fragmented packet.
             timestamps_t timestamps;
-            void *context;
 
             union {
                 struct {
@@ -163,8 +162,6 @@ public:
             size_t n_transport_header_len;
             uint32_t flow_tag_id; // Flow Tag ID of this received packet
             int8_t n_frags; // number of fragments
-            bool is_xlio_thr; // specify whether packet drained from XLIO internal thread or from
-                              // user app thread
             bool is_sw_csum_need; // specify if software checksum is need for this packet
 #ifdef DEFINED_UTLS
             uint8_t tls_decrypted;
@@ -215,7 +212,7 @@ public:
 
     atomic_t n_ref_count; // number of interested receivers (sockinfo) [can be modified only in
                           // cq_mgr_rx context]
-    uint64_t unused_padding[2]; // Align the structure to the cache line boundary
+    uint64_t unused_padding[3]; // Align the structure to the cache line boundary
 };
 
 typedef xlio_list_t<mem_buf_desc_t, mem_buf_desc_t::buffer_node_offset> descq_t;

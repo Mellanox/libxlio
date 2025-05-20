@@ -410,57 +410,6 @@ int ring_simple::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
     return ret;
 }
 
-int ring_simple::socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_completions,
-                                   unsigned int ncompletions, int flags)
-{
-    int i = 0;
-    unsigned int pkts = 0U;
-    bool do_poll = true;
-
-    if (likely(xlio_completions) && ncompletions) {
-        // coverity[missing_lock:FALSE] /*Turn off coverity missing_lock check*/
-        if ((flags & SOCKETXTREME_POLL_TX) && !m_socketxtreme.ec_sock_list_start) {
-            uint64_t poll_sn = 0;
-            const std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-            m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
-        }
-
-        const std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
-        while (!g_b_exit && (i < (int)ncompletions)) {
-            if (m_socketxtreme.ec_sock_list_start) {
-                if (socketxtreme_ec_pop_completion(xlio_completions)) {
-                    xlio_completions++;
-                    i++;
-                }
-            } else if (likely(do_poll)) {
-                mem_buf_desc_t *desc = m_p_cq_mgr_rx->poll_and_process_socketxtreme();
-                if (likely(desc)) {
-                    rx_process_buffer(desc, NULL);
-
-                    // To avoid too many unflushed GRO sessions, We flush GRO and continue polling.
-                    // Otherwise this loop may continue for too long and result in way more
-                    // completions than ncompletions, what is not optimal for performance.
-                    // Not each packet results in a real completion but this check is good enough.
-                    if (++pkts >= ncompletions) {
-                        m_gro_mgr.flush_all(nullptr);
-                        pkts = 0U;
-                    }
-                } else {
-                    m_gro_mgr.flush_all(nullptr);
-                    do_poll = false;
-                }
-            } else {
-                break;
-            }
-        }
-    } else {
-        i = -1;
-        errno = EINVAL;
-    }
-
-    return i;
-}
-
 void ring_simple::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
                                                             void *pv_fd_ready_array /*NULL*/)
 {

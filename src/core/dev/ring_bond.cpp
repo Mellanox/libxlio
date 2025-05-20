@@ -896,10 +896,6 @@ bool ring_bond::is_tso(void)
     return false;
 }
 
-int ring_bond::socketxtreme_poll(struct xlio_socketxtreme_completion_t *, unsigned int, int)
-{
-    return 0;
-}
 uint64_t ring_bond::get_rx_cq_out_of_buffer_drop()
 {
     uint64_t accumulator = 0;

@@ -142,9 +142,7 @@ public:
     int rx_verify_available_data() override;
 
     /**
-     *	This callback will handle ready rx packet notification,
-     *	in case packet is OK, completion for SOCKETXTREME mode
-     *	will be filled or in other cases packet go to ready queue.
+     *	This callback will handle ready rx packet notification.
      *	If packet to be discarded, packet ref. counter will not be
      *	incremented and method returns false.
      *	Normally it is single point from sockinfo to be called from ring level.
@@ -153,12 +151,11 @@ public:
 
     // This call will handle all rdma related events (bind->listen->connect_req->accept)
     void statistics_print(vlog_levels_t log_level = VLOG_DEBUG) override;
-    int recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
-                                    size_t count) override;
     inline fd_type_t get_type() override { return FD_TYPE_SOCKET; }
 
     bool prepare_to_close(bool process_shutdown = false) override;
     void update_header_field(data_updater *updater) override;
+    void register_callback(xlio_recv_callback_t callback, void *context);
 
 #if defined(DEFINED_NGINX)
     void prepare_to_close_socket_pool(bool _push_pop) override;
@@ -171,11 +168,6 @@ public:
 #else
     bool is_closable() override { return true; }
 #endif
-
-    int register_callback(xlio_recv_callback_t callback, void *context) override
-    {
-        return register_callback_ctx(callback, context);
-    }
 
 protected:
     void lock_rx_q() override { m_lock_rcv.lock(); }
@@ -246,12 +238,10 @@ private:
     }
 
     inline xlio_recv_callback_retval_t inspect_by_user_cb(mem_buf_desc_t *p_desc);
-    inline void rx_udp_cb_socketxtreme_helper(mem_buf_desc_t *p_desc);
     inline void update_ready(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array,
                              xlio_recv_callback_retval_t cb_ret);
 
-    void post_dequeue(bool release_buff) override;
-    int zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags) override;
+    void post_dequeue() override;
     size_t handle_msg_trunc(size_t total_rx, size_t payload_size, int in_flags,
                             int *p_out_flags) override;
     void handle_ip_pktinfo(struct cmsg_state *cm_state) override;
@@ -294,6 +284,10 @@ private:
     sock_addr m_last_sock_addr;
 
     chunk_list_t<mem_buf_desc_t *> m_rx_pkt_ready_list;
+
+    // Callback function pointer to support XLIO extra API (xlio_extra.h)
+    xlio_recv_callback_t m_rx_callback = nullptr;
+    void *m_rx_callback_context = nullptr; // user context
 
     uint8_t m_tos;
 

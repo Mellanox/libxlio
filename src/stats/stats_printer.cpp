@@ -184,10 +184,6 @@ void print_full_stats(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, 
                 p_si_stats->counters.n_rx_ready_pkt_drop);
         b_any_activiy = true;
     }
-    if (p_si_stats->n_rx_zcopy_pkt_count) {
-        fprintf(filename, "Rx zero copy buffers: cur %u\n", p_si_stats->n_rx_zcopy_pkt_count);
-        b_any_activiy = true;
-    }
     if (p_si_stats->strq_counters.n_strq_total_strides) {
         fprintf(filename, "Rx RQ Strides: %" PRIu64 " / %u [total/max-per-packet]%s\n",
                 p_si_stats->strq_counters.n_strq_total_strides,

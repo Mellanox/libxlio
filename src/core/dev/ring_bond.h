@@ -80,8 +80,6 @@ public:
     virtual uint16_t get_max_header_sz(void);
     virtual uint32_t get_tx_lkey(ring_user_id_t id) { return m_xmit_rings[id]->get_tx_lkey(id); }
     virtual bool is_tso(void);
-    int socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_completions,
-                          unsigned int ncompletions, int flags);
     virtual void slave_create(int if_index) = 0;
     virtual void slave_destroy(int if_index);
 

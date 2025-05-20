@@ -17,7 +17,6 @@ public:
     virtual ~cq_mgr_rx_regrq() override;
 
     virtual int drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id = nullptr) override;
-    virtual mem_buf_desc_t *poll_and_process_socketxtreme() override;
     virtual bool poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
                                              void *pv_fd_ready_array = nullptr) override;
 

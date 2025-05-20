@@ -210,10 +210,6 @@ public:
     inline bool handle_bind_no_port(int &bind_ret, in_port_t in_port, const sockaddr *__addr,
                                     socklen_t __addrlen);
     inline void non_tcp_recved(int rx_len);
-    int recvfrom_zcopy_free_packets(struct xlio_recvfrom_zcopy_packet_t *pkts,
-                                    size_t count) override;
-
-    void socketxtreme_recv_buffs_tcp(mem_buf_desc_t *desc, uint16_t len);
 
     void statistics_print(vlog_levels_t log_level = VLOG_DEBUG) override;
 
@@ -371,18 +367,7 @@ public:
     tcp_timers_collection *get_tcp_timer_collection();
     bool is_cleaned() const { return m_is_cleaned; }
     static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
-    static err_t rx_lwip_cb_socketxtreme(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
-                                         err_t err);
-    static err_t rx_lwip_cb_recv_callback(void *arg, struct tcp_pcb *pcb, struct pbuf *p,
-                                          err_t err);
     static err_t rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
-    inline void rx_lwip_cb_socketxtreme_helper(pbuf *p);
-
-    int register_callback(xlio_recv_callback_t callback, void *context) override
-    {
-        tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_recv_callback);
-        return register_callback_ctx(callback, context);
-    }
 
     int tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint32_t mkey, unsigned flags,
                        void *opaque_op);
@@ -418,9 +403,6 @@ private:
 
     // Builds rfs key
     static void create_flow_tuple_key_from_pcb(flow_tuple &key, struct tcp_pcb *pcb);
-
-    // auto accept function
-    static void accept_connection_socketxtreme(sockinfo_tcp *parent, sockinfo_tcp *child);
 
     // accept cb func
     static err_t accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t err);
@@ -542,8 +524,7 @@ private:
         }
     }
 
-    void post_dequeue(bool release_buff) override;
-    int zero_copy_rx(iovec *p_iov, mem_buf_desc_t *pdesc, int *p_flags) override;
+    void post_dequeue() override {};
 
     // Returns the connected pcb, with 5 tuple which matches the input arguments,
     // in state "SYN Received" or NULL if pcb wasn't found
@@ -599,7 +580,6 @@ private:
     tcp_sock_state_e m_sock_state;
     sockinfo_tcp *m_parent;
     // received packet source (true if its from internal thread)
-    bool m_xlio_thr;
     bool m_b_incoming;
     bool m_b_attached;
     bool m_timer_registered = false;
@@ -645,8 +625,6 @@ private:
     uint32_t m_tcp_seg_in_use;
 
     xlio_desc_list_t m_rx_pkt_ready_list;
-    xlio_desc_list_t m_rx_cb_dropped_list;
-
     lock_spin_recursive m_rx_ctl_packets_list_lock;
     tscval_t m_last_syn_tsc;
     xlio_desc_list_t m_rx_ctl_packets_list;

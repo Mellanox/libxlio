@@ -36,17 +36,8 @@ typedef enum { CQT_RX, CQT_TX } cq_type_t;
 
 typedef size_t ring_user_id_t;
 
-// Socketxtreme completion
-struct ring_ec {
-    struct xlio_socketxtreme_completion_t completion;
-    ring_ec *next;
-};
-
 typedef cached_obj_pool<tcp_seg> tcp_seg_pool;
-typedef cached_obj_pool<ring_ec> socketxtreme_ec_pool;
-
 extern tcp_seg_pool *g_tcp_seg_pool;
-extern socketxtreme_ec_pool *g_socketxtreme_ec_pool;
 
 class ring {
 public:
@@ -117,9 +108,6 @@ public:
     virtual uint32_t get_tx_lkey(ring_user_id_t id) = 0;
     virtual bool is_tso(void) = 0;
     virtual ib_ctx_handler *get_ctx(ring_user_id_t id) = 0;
-
-    virtual int socketxtreme_poll(struct xlio_socketxtreme_completion_t *xlio_completions,
-                                  unsigned int ncompletions, int flags) = 0;
 
     inline int get_if_index() { return m_if_index; }
 
@@ -233,16 +221,6 @@ public:
     struct tcp_seg *get_tcp_segs(uint32_t num);
     void put_tcp_segs(struct tcp_seg *seg);
 
-    ring_ec *socketxtreme_get_ecs(uint32_t num);
-    void socketxtreme_put_ecs(struct ring_ec *ec);
-
-    void socketxtreme_ec_clear_sock(sockinfo *sock);
-    void socketxtreme_ec_sock_list_add(sockinfo *sock);
-    bool socketxtreme_ec_pop_completion(xlio_socketxtreme_completion_t *completion);
-    void socketxtreme_end_ec_operation();
-    xlio_socketxtreme_completion_t &socketxtreme_start_ec_operation(sockinfo *sock,
-                                                                    bool always_new);
-
 protected:
     inline void set_parent(ring *parent) { m_parent = (parent ? parent : this); }
     inline void set_if_index(int if_index) { m_if_index = if_index; }
@@ -251,20 +229,8 @@ protected:
     ring *m_parent = nullptr;
 
     struct tcp_seg *m_tcp_seg_list = nullptr;
-    ring_ec *m_socketxtreme_ec_list = nullptr;
     uint32_t m_tcp_seg_count = 0U;
-    uint32_t m_socketxtreme_ec_count = 0U;
     lock_spin_recursive m_tcp_seg_lock;
-    lock_spin_recursive m_ec_lock;
-
-    struct {
-        // Queue of ready sockets. Each socket can be added only once to this queue.
-        sockinfo *ec_sock_list_start = nullptr;
-        sockinfo *ec_sock_list_end = nullptr;
-
-        // Thread-safety lock for get/put operations under the queue.
-        lock_spin lock_ec_list;
-    } m_socketxtreme;
 
     int m_if_index = 0; /* Interface index */
 };
