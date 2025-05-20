@@ -102,7 +102,9 @@ static int free_libxlio_resources()
         bool print_only_critical = (safe_mce_sys().print_report == option_3::AUTO);
         buffer_pool::print_full_report(VLOG_INFO, print_only_critical);
         g_hugepage_mgr.print_report(VLOG_INFO, print_only_critical);
-        g_p_net_device_table_mgr->print_report(VLOG_INFO, print_only_critical);
+        if (g_p_net_device_table_mgr) {
+            g_p_net_device_table_mgr->print_report(VLOG_INFO, print_only_critical);
+        }
     }
 
     // Destroy polling groups before fd_collection to clear XLIO sockets from the fd_collection
