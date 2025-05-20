@@ -455,12 +455,11 @@ int net_device_table_mgr::global_ring_epfd_get()
     return m_global_ring_epfd;
 }
 
-uint64_t net_device_table_mgr::global_get_rx_drop_counter()
+uint64_t net_device_table_mgr::get_rx_drop_counter()
 {
     // coverity[missing_lock:FALSE] /*Turn off coverity missing_lock check*/
-    uint64_t accumulator = this->m_closed_rings_rx_cq_drop_counter;
-    std::for_each(g_p_net_device_table_mgr->m_net_device_map_index.begin(),
-                  g_p_net_device_table_mgr->m_net_device_map_index.end(),
+    uint64_t accumulator = m_closed_rings_rx_cq_drop_counter;
+    std::for_each(m_net_device_map_index.begin(), m_net_device_map_index.end(),
                   [&accumulator](const auto &net_dev_map_iter) {
                       accumulator += net_dev_map_iter.second->get_accumulative_rx_cq_drop_counter();
                   });
@@ -470,7 +469,7 @@ uint64_t net_device_table_mgr::global_get_rx_drop_counter()
 void net_device_table_mgr::print_report(vlog_levels_t log_level,
                                         bool print_only_critical /*=false*/)
 {
-    uint64_t accumulator = global_get_rx_drop_counter();
+    uint64_t accumulator = get_rx_drop_counter();
     if (print_only_critical && !accumulator) {
         return;
     }
