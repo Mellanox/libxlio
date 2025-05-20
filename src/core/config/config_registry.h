@@ -165,6 +165,10 @@ private:
         const std::string &key,
         const std::function<std::experimental::any(const std::string &)> &getter) const
     {
+        static_assert(!std::is_same<T, size_t>::value,
+                      "size_t is not allowed because it requires special handling for safe "
+                      "casting from int64_t.");
+
         static_assert(!std::is_enum<T>::value,
                       "T must not be an enum type as std::numeric_limits on enum returns 0. ");
 

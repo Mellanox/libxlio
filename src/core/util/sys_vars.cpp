@@ -53,12 +53,16 @@
 #include "core/config/loaders/json_loader.h"
 
 template <typename T>
+typename std::enable_if<std::is_same<T, size_t>::value, void>::type
+set_value_from_registry_if_exists(T &key, const std::string &name, const config_registry &registry);
+
+template <typename T>
 typename std::enable_if<std::is_enum<T>::value, void>::type set_value_from_registry_if_exists(
     T &key, const std::string &name, const config_registry &registry);
 
 template <typename T>
-typename std::enable_if<!std::is_enum<T>::value, void>::type set_value_from_registry_if_exists(
-    T &key, const std::string &name, const config_registry &registry);
+typename std::enable_if<!std::is_enum<T>::value && !std::is_same<T, size_t>::value, void>::type
+set_value_from_registry_if_exists(T &key, const std::string &name, const config_registry &registry);
 
 void check_netperf_flags();
 
@@ -3124,16 +3128,52 @@ void set_env_params()
     }
 }
 
-// Generic implementation for non-integer types
+/**
+ * @brief Specialization for size_t type
+ *
+ * This specialization handles size_t type when retrieving values from the config registry.
+ * The config registry internally uses int64_t for integer types, so we need to cast
+ * between these types safely.
+ *
+ * @tparam T The size_t type
+ * @param key Reference to the size_t variable to be set
+ * @param name Configuration parameter name
+ * @param registry The configuration registry
+ */
 template <typename T>
-typename std::enable_if<!std::is_enum<T>::value, void>::type set_value_from_registry_if_exists(
-    T &key, const std::string &name, const config_registry &registry)
+typename std::enable_if<std::is_same<T, size_t>::value, void>::type
+set_value_from_registry_if_exists(T &key, const std::string &name, const config_registry &registry)
+{
+    if (registry.value_exists(name)) {
+        int64_t temp = registry.get_value<int64_t>(name);
+        if (temp < 0) {
+            throw std::invalid_argument("Value for size_t cannot be negative");
+        }
+        key = static_cast<size_t>(temp);
+    }
+}
+
+template <typename T>
+typename std::enable_if<!std::is_enum<T>::value && !std::is_same<T, size_t>::value, void>::type
+set_value_from_registry_if_exists(T &key, const std::string &name, const config_registry &registry)
 {
     if (registry.value_exists(name)) {
         key = registry.get_value<T>(name);
     }
 }
 
+/**
+ * @brief Specialization for enum types
+ *
+ * This specialization handles enum types when retrieving values from the config registry.
+ * The config registry internally uses int64_t, and C++ has limitations with enum bounds
+ * (std::numeric_limits<enum_type>::min() and max() both return 0).
+ *
+ * @tparam T The enum type
+ * @param key Reference to the enum variable to be set
+ * @param name Configuration parameter name
+ * @param registry The configuration registry
+ */
 template <typename T>
 typename std::enable_if<std::is_enum<T>::value, void>::type set_value_from_registry_if_exists(
     T &key, const std::string &name, const config_registry &registry)
