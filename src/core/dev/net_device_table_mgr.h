@@ -76,7 +76,7 @@ public:
      * This will get accumlated RX out of buffer drops
      * for all net devices.
      */
-    uint64_t global_get_rx_drop_counter(void);
+    uint64_t get_rx_drop_counter(void);
     void print_report(vlog_levels_t log_level, bool print_only_critical = false);
 
     void handle_timer_expired(void *user_data);
