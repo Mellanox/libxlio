@@ -18,6 +18,22 @@ RUN apt-get update && \
     valgrind \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+FROM tests AS test
+RUN apt-get update && \
+    apt-get install -y \
+    openssh-server psmisc \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# setup ssh server and passwordless login for root for tests flows (verifyer.pl)
+RUN mkdir -p /var/run/sshd ~/.ssh && \
+    rm -rf ~/.ssh/id_rsa* && ssh-keygen -t rsa -N '' -f ~/.ssh/id_rsa && \
+    cat ~/.ssh/id_rsa.pub > ~/.ssh/authorized_keys && \
+    sed -i 's|#PermitRootLogin.*|PermitRootLogin without-password|g' /etc/ssh/sshd_config && \
+    sed -i 's|#PasswordAuthentication.*|PasswordAuthentication no|g' /etc/ssh/sshd_config && \
+    echo "Host *" >> ~/.ssh/config && \
+    echo "   StrictHostKeyChecking no" >> ~/.ssh/config && \
+    echo "   UserKnownHostsFile /dev/null" >> ~/.ssh/config && \
+    echo "   LogLevel ERROR" >> ~/.ssh/config
+
 # Style target, installs clang-format-15
 FROM build AS style
 RUN apt-get update \
@@ -26,4 +42,3 @@ RUN apt-get update \
  && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-15 100 \
                     --slave /usr/bin/clang++ clang++ /usr/bin/clang++-15 \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
- 
