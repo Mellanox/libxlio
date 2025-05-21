@@ -232,7 +232,8 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
         mem_buf_desc_t *p_mem_buf_desc;
         size_t total_packet_len = 0;
 
-        p_mem_buf_desc = get_buffer(PBUF_RAM, nullptr, is_set(attr.flags, XLIO_TX_PACKET_BLOCK));
+        p_mem_buf_desc = get_buffer(PBUF_RAM, nullptr, is_set(attr.flags, XLIO_TX_PACKET_BLOCK),
+                                    is_set(attr.flags, XLIO_TX_SKIP_POLL));
         if (!p_mem_buf_desc) {
             ret = -1;
             goto out;
@@ -276,7 +277,8 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
 
     if (unlikely(!m_p_tx_mem_buf_desc_list)) {
         m_p_tx_mem_buf_desc_list = m_p_ring->mem_buf_tx_get(
-            m_id, is_set(attr.flags, XLIO_TX_PACKET_BLOCK), PBUF_RAM, m_n_sysvar_tx_bufs_batch_tcp);
+            m_id, is_set(attr.flags, XLIO_TX_PACKET_BLOCK), PBUF_RAM, m_n_sysvar_tx_bufs_batch_tcp,
+            is_set(attr.flags, XLIO_TX_SKIP_POLL));
     }
 
 out:
@@ -349,7 +351,7 @@ ssize_t dst_entry_tcp::pass_buff_to_neigh(const iovec *p_iov, size_t sz_iov)
 }
 
 mem_buf_desc_t *dst_entry_tcp::get_buffer(pbuf_type type, pbuf_desc *desc,
-                                          bool b_blocked /*=false*/)
+                                          bool b_blocked /*=false*/, bool tx_skip_poll /*=false*/)
 {
     mem_buf_desc_t **p_desc_list;
 
@@ -359,8 +361,8 @@ mem_buf_desc_t *dst_entry_tcp::get_buffer(pbuf_type type, pbuf_desc *desc,
 
     // Get a bunch of tx buf descriptor and data buffers
     if (unlikely(!*p_desc_list)) {
-        *p_desc_list =
-            m_p_ring->mem_buf_tx_get(m_id, b_blocked, type, m_n_sysvar_tx_bufs_batch_tcp);
+        *p_desc_list = m_p_ring->mem_buf_tx_get(m_id, b_blocked, type, m_n_sysvar_tx_bufs_batch_tcp,
+                                                tx_skip_poll);
     }
 
     mem_buf_desc_t *p_mem_buf_desc = *p_desc_list;

@@ -339,12 +339,13 @@ void ring_bond::adapt_cq_moderation()
 }
 
 mem_buf_desc_t *ring_bond::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
-                                          int n_num_mem_bufs /* default = 1 */)
+                                          int n_num_mem_bufs /* default = 1 */,
+                                          bool tx_skip_poll /* default = false */)
 {
     mem_buf_desc_t *ret = nullptr;
 
     std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-    ret = m_xmit_rings[id]->mem_buf_tx_get(id, b_block, type, n_num_mem_bufs);
+    ret = m_xmit_rings[id]->mem_buf_tx_get(id, b_block, type, n_num_mem_bufs, tx_skip_poll);
 
     return ret;
 }

@@ -441,13 +441,15 @@ bool ring_tap::request_more_rx_buffers()
 }
 
 mem_buf_desc_t *ring_tap::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
-                                         int n_num_mem_bufs)
+                                         int n_num_mem_bufs /* default = 1 */,
+                                         bool tx_skip_poll /* default = false */)
 {
     mem_buf_desc_t *head = nullptr;
 
     NOT_IN_USE(id);
     NOT_IN_USE(b_block);
     NOT_IN_USE(type);
+    NOT_IN_USE(tx_skip_poll);
 
     ring_logfuncall("n_num_mem_bufs=%d", n_num_mem_bufs);
 

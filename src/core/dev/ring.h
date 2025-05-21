@@ -63,7 +63,7 @@ public:
 
     // Get/Release memory buffer descriptor with a linked data memory buffer
     virtual mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
-                                           int n_num_mem_bufs = 1) = 0;
+                                           int n_num_mem_bufs = 1, bool tx_skip_poll = false) = 0;
     virtual int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool b_accounting,
                                    bool trylock = false) = 0;
     virtual void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc)

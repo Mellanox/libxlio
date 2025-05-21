@@ -280,6 +280,10 @@ public:
 
     bool m_active; /* State indicator */
 
+    virtual mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
+                                           int n_num_mem_bufs = 1 /* default = 1 */,
+                                           bool tx_skip_poll = false) = 0;
+
 protected:
     bool request_more_tx_buffers(pbuf_type type, uint32_t count, uint32_t lkey);
     void flow_del_all_rfs();
