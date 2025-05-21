@@ -142,7 +142,6 @@ libxlio_la_SOURCES := \
 	proto/neighbour_table_mgr.cpp \
 	proto/netlink_socket_mgr.cpp \
 	proto/L2_address.cpp \
-	proto/mem_desc.cpp \
 	proto/mapping.cpp \
 	proto/route_table_mgr.cpp \
 	proto/route_entry.cpp \
@@ -166,7 +165,6 @@ libxlio_la_SOURCES := \
 	sock/sock-redirect.cpp \
 	sock/sock-app.cpp \
 	sock/sock-extra.cpp \
-	sock/sockinfo_nvme.cpp \
 	sock/bind_no_port.cpp \
 	\
 	util/hugepage_mgr.cpp \
@@ -303,7 +301,6 @@ libxlio_la_SOURCES := \
 	proto/rule_val.h \
 	proto/tls.h \
 	proto/xlio_lwip.h \
-	proto/nvme_parse_input_args.h \
 	\
 	sock/cleanable_obj.h \
 	sock/fd_collection.h \
@@ -316,7 +313,6 @@ libxlio_la_SOURCES := \
 	sock/sock-redirect-internal.h \
 	sock/sock-app.h \
 	sock/sock-extra.h \
-	sock/sockinfo_nvme.h \
 	sock/bind_no_port.h \
 	\
 	util/chunk_list.h \

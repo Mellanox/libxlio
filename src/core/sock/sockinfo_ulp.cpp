@@ -708,7 +708,6 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
 
     tls_arg.opcode = TX_FILE; /* Not to use hugepage zerocopy path */
     tls_arg.attr.flags = MSG_ZEROCOPY;
-    tls_arg.xlio_flags = TX_FLAG_NO_PARTIAL_WRITE;
     tls_arg.attr.iov = tls_iov;
     tls_arg.attr.sz_iov = is_zerocopy ? 3 : 1;
     tls_arg.priv.attr = PBUF_DESC_MDESC;

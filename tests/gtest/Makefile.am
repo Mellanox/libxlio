@@ -104,7 +104,6 @@ gtest_SOURCES = \
 	tcp/tcp_send.cc \
 	tcp/tcp_sendto.cc \
 	tcp/tcp_sendfile.cc \
-	tcp/tcp_send_zc.cc \
 	tcp/tcp_socket.cc \
 	tcp/tcp_sockopt.cc \
 	tcp/tcp_tls.cc \
@@ -119,13 +118,10 @@ gtest_SOURCES = \
 	\
 	core/xlio_base.cc \
 	core/xlio_sockopt.cc \
-	core/xlio_send_zc.cc \
 	core/xlio_ioctl.cc \
 	\
 	extra_api/extra_ring.cc \
 	extra_api/extra_poll.cc \
-	\
-	nvme/nvme.cc \
 	\
 	xliod/xliod_base.cc \
 	xliod/xliod_bitmap.cc \

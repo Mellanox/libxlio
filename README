@@ -314,10 +314,6 @@ Default value is 10240 MB
 EXTRA_API
 ---------
 
-extra_api.hugepage_size
-Size of huge pages used by user application for buffers provided as part of the TX Zero Copy socket API (sendmsg with MSG_ZEROCOPY flag). Maps to **XLIO_USER_HUGE_PAGE_SIZE** environment variable.
-Default value is 2 MB
-
 extra_api.socketextreme
 When this parameter is enabled, XLIO operates in SocketXtreme mode. Maps to **XLIO_SOCKETEXTREME** environment variable. SocketXtreme mode brings latency down, eliminating copy operations and increasing throughput allowing applications to further utilize true kernel bypass architecture. An application should use a socket extension API named SocketXtreme.
 Default value is 0 (Disabled)
