@@ -2184,3 +2184,13 @@ bool sockinfo::skip_os_select()
     // os (i.e. TRUE...)
     return (!safe_mce_sys().select_poll_os_ratio);
 }
+
+bool sockinfo::is_xlio_socket() const
+{
+    return m_is_xlio_socket;
+}
+
+poll_group *sockinfo::get_poll_group() const
+{
+    return m_p_group;
+}
