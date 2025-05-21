@@ -221,6 +221,10 @@ public:
     struct tcp_seg *get_tcp_segs(uint32_t num);
     void put_tcp_segs(struct tcp_seg *seg);
 
+    // XLIO ZC API
+    void set_poll_group(poll_group *p_group) { m_p_group = p_group; }
+    poll_group *get_poll_group() const { return m_p_group; }
+
 protected:
     inline void set_parent(ring *parent) { m_parent = (parent ? parent : this); }
     inline void set_if_index(int if_index) { m_if_index = if_index; }
@@ -231,6 +235,9 @@ protected:
     struct tcp_seg *m_tcp_seg_list = nullptr;
     uint32_t m_tcp_seg_count = 0U;
     lock_spin_recursive m_tcp_seg_lock;
+
+    // XLIO ZC API
+    poll_group *m_p_group = nullptr;
 
     int m_if_index = 0; /* Interface index */
 };
