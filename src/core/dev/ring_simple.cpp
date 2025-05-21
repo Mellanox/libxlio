@@ -491,7 +491,8 @@ int ring_simple::drain_and_proccess()
 }
 
 mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
-                                            int n_num_mem_bufs /* default = 1 */)
+                                            int n_num_mem_bufs /* default = 1 */,
+                                            bool tx_skip_poll /* default = false */)
 {
     NOT_IN_USE(id);
     int ret = 0;
@@ -505,7 +506,9 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
     while (!buff_list) {
 
         // Try to poll once in the hope that we get a few freed tx mem_buf_desc
-        ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
+        if (!tx_skip_poll) {
+            ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
+        }
         if (ret < 0) {
             ring_logdbg("failed polling on cq_mgr_tx (hqtx=%p, cq_mgr_tx=%p) (ret=%d %m)", m_hqtx,
                         m_p_cq_mgr_tx, ret);
