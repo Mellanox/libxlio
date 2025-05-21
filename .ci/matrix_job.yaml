@@ -89,7 +89,14 @@ runs_on_dockers:
      limits: '{memory: 8Gi, cpu: 4000m}',
      requests: '{memory: 8Gi, cpu: 4000m}'
      }
-  - {name: 'xlio_static.csbuild', url: '${registry_host}/swx-infra/media/x86_64/xlio_static.csbuild-clang18:20250515', category: 'tool', arch: 'x86_64', limits: '{memory: 5Gi, cpu: 4000m}', requests: '{memory: 5Gi, cpu: 4000m}'}
+  - {file: '.ci/dockerfiles/Dockerfile.rhel8.6',
+     arch: 'x86_64',
+     name: 'xlio_static.csbuild',
+     uri: '$arch/$name',
+     tag: '20250521',
+     build_args: '--no-cache --target static',
+     category: 'tool'
+    }
 # tests
   - {
      file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
