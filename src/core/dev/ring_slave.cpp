@@ -584,6 +584,11 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
         assert(g_p_fd_collection);
         si = static_cast<sockinfo *>(
             g_p_fd_collection->get_sockfd(p_rx_wc_buf_desc->rx.flow_tag_id - 1));
+        if (likely(si) && si->is_xlio_socket() &&
+            unlikely(si->get_poll_group() == nullptr ||
+                     si->get_poll_group() != this->get_poll_group())) {
+            return false;
+        }
 
         if (likely(si)) {
             // will process packets with set flow_tag_id and enabled for the socket
