@@ -137,6 +137,7 @@ void poll_group::add_ring(ring *rng, ring_alloc_logic_attr *attr)
     if (std::find(m_rings.begin(), m_rings.end(), rng) == std::end(m_rings)) {
         grp_logdbg("New ring %p in group %p", rng, this);
         m_rings.push_back(rng);
+        rng->set_poll_group(this);
 
         /*
          * Take reference to the ring. This avoids a race between socket destruction and buffer

@@ -242,6 +242,10 @@ public:
     xlio_socketxtreme_completion_t &socketxtreme_start_ec_operation(sockinfo *sock,
                                                                     bool always_new);
 
+    // XLIO ZC API
+    void set_poll_group(poll_group *p_group) { m_p_group = p_group; }
+    poll_group *get_poll_group() const { return m_p_group; }
+
 protected:
     inline void set_parent(ring *parent) { m_parent = (parent ? parent : this); }
     inline void set_if_index(int if_index) { m_if_index = if_index; }
@@ -264,6 +268,9 @@ protected:
         // Thread-safety lock for get/put operations under the queue.
         lock_spin lock_ec_list;
     } m_socketxtreme;
+
+    // XLIO ZC API
+    poll_group *m_p_group = nullptr;
 
     int m_if_index = 0; /* Interface index */
 };
