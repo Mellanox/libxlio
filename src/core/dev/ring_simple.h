@@ -61,7 +61,8 @@ public:
     void stop_active_queue_tx();
     void stop_active_queue_rx();
     mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
-                                   int n_num_mem_bufs = 1) override;
+                                   int n_num_mem_bufs = 1 /* default = 1 */,
+                                   bool tx_skip_poll = false) override;
     int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool b_accounting,
                            bool trylock = false) override;
     void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
