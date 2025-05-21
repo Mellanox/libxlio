@@ -397,7 +397,7 @@ void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
     tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_xlio_socket);
     tcp_err(&m_pcb, sockinfo_tcp::err_lwip_cb_xlio_socket);
     set_blocking(false);
-
+    m_is_xlio_socket = true;
     // Allow the queue to grow for non-zerocopy send operations.
     m_pcb.snd_queuelen_max = TCP_SNDQUEUELEN_OVERFLOW;
 }

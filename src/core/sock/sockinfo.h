@@ -219,6 +219,7 @@ const uint8_t ip_tos2prio[16] = {0, 0, 0, 0, 2, 2, 2, 2, 6, 6, 6, 6, 4, 4, 4, 4}
 
 class epfd_info;
 
+class poll_group; // Forward declaration
 class sockinfo {
 public:
     enum sockinfo_state : uint16_t {
@@ -344,6 +345,11 @@ public:
     void set_rx_num_buffs_reuse(int val) { m_rx_num_buffs_reuse = val; }
 #endif
 #endif
+
+    // XLIO ZC API
+    bool is_xlio_socket() const;
+    poll_group *get_poll_group() const;
+
 protected:
     static const char *setsockopt_so_opt_to_str(int opt);
 
@@ -525,6 +531,13 @@ protected:
     uint32_t m_pcp = 0U;
     uint32_t m_flow_tag_id = 0U; // Flow Tag for this socket
     uint8_t m_n_uc_ttl_hop_lim;
+    /*
+     * Storage API
+     * Move other StorageApi fields from sockinfo_tcp to sockinfo
+     * TODO Move the fields to proper cold/hot sections in the final version.
+     */
+    poll_group *m_p_group = nullptr; // Polling group associated with this socket
+    bool m_is_xlio_socket = false; // Flag indicating if this is an XLIO socket
 
 public:
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
