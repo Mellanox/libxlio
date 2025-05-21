@@ -369,9 +369,7 @@ public:
 
     void set_xlio_socket(const struct xlio_socket_attr *attr);
     int update_xlio_socket(unsigned flags, uintptr_t userdata_sq);
-    bool is_xlio_socket() const { return m_p_group != nullptr; }
     void add_tx_ring_to_group();
-    poll_group *get_poll_group() const { return m_p_group; }
     int detach_xlio_group();
     int attach_xlio_group(poll_group *group);
     void xlio_socket_event(int event, int value);
@@ -638,7 +636,6 @@ private:
      */
     bool m_b_xlio_socket_dirty = false;
     uintptr_t m_xlio_socket_userdata = 0;
-    poll_group *m_p_group = nullptr;
 };
 
 #endif
