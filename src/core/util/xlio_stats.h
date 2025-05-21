@@ -360,6 +360,7 @@ typedef struct {
             uint32_t n_tx_dev_mem_allocated;
             uint32_t n_tx_num_bufs;
             uint32_t n_zc_num_bufs;
+            uint32_t n_rx_zc_migiration_drop;
         } simple;
         struct {
             char s_tap_name[IFNAMSIZ];

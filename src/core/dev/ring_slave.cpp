@@ -587,6 +587,7 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
         if (likely(si) && si->is_xlio_socket() &&
             unlikely(si->get_poll_group() == nullptr ||
                      si->get_poll_group() != this->get_poll_group())) {
+            m_p_ring_stat->simple.n_rx_zc_migiration_drop++;
             return false;
         }
 

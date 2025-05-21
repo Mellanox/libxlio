@@ -332,6 +332,10 @@ void update_delta_ring_stat(ring_stats_t *p_curr_ring_stats, ring_stats_t *p_pre
             (p_curr_ring_stats->simple.n_tx_dropped_wqes -
              p_prev_ring_stats->simple.n_tx_dropped_wqes) /
             delay;
+        p_prev_ring_stats->simple.n_rx_zc_migiration_drop =
+            (p_curr_ring_stats->simple.n_rx_zc_migiration_drop -
+             p_prev_ring_stats->simple.n_rx_zc_migiration_drop) /
+            delay;
         p_prev_ring_stats->simple.n_tx_num_bufs =
             (p_curr_ring_stats->simple.n_tx_num_bufs - p_prev_ring_stats->simple.n_tx_num_bufs) /
             delay;
@@ -494,6 +498,10 @@ void print_ring_stats(ring_instance_block_t *p_ring_inst_arr)
             if (p_ring_stats->simple.n_tx_dropped_wqes) {
                 printf(FORMAT_STATS_64bit,
                        "TX Dropped Send Reqs:", p_ring_stats->simple.n_tx_dropped_wqes, post_fix);
+            }
+            if (p_ring_stats->simple.n_rx_zc_migiration_drop) {
+                printf(FORMAT_STATS_32bit,
+                       "RX ZC Migration Drop:", p_ring_stats->simple.n_rx_zc_migiration_drop);
             }
 
 #ifdef DEFINED_UTLS
@@ -1799,6 +1807,7 @@ void zero_ring_stats(ring_stats_t *p_ring_stats)
         p_ring_stats->simple.n_tx_dev_mem_oob = 0;
         p_ring_stats->simple.n_tx_num_bufs = 0;
         p_ring_stats->simple.n_zc_num_bufs = 0;
+        p_ring_stats->simple.n_rx_zc_migiration_drop = 0;
     }
 }
 
