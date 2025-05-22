@@ -102,14 +102,6 @@ private:
         TLS_DECRYPT_BAD_MAC = -2,
     };
 
-    /* Values for the tls_offload field in CQE. */
-    enum tls_rx_decrypted {
-        TLS_RX_ENCRYPTED = 0x0,
-        TLS_RX_DECRYPTED = 0x1,
-        TLS_RX_RESYNC = 0x2,
-        TLS_RX_AUTH_FAIL = 0x3,
-    };
-
     enum tls_record_tracker_state {
         TLS_TRACKER_START = 0x0,
         TLS_TRACKER_TRACKING = 0x1,
