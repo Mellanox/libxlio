@@ -1591,6 +1591,9 @@ err_t sockinfo_tcp::ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void 
     sockinfo_tcp *p_si_tcp = (sockinfo_tcp *)pcb_container;
     IF_STATS_O(p_si_tcp, p_si_tcp->m_p_socket_stats->tcp_state = new_state);
     if (p_si_tcp->is_xlio_socket()) {
+        if (new_state == CLOSE_WAIT) {
+            p_si_tcp->xlio_socket_event(XLIO_SOCKET_EVENT_CLOSED, 0);
+        }
         if (!p_si_tcp->m_is_xlio_socket_terminated &&
             (new_state == CLOSED || new_state == TIME_WAIT)) {
             p_si_tcp->xlio_socket_event(XLIO_SOCKET_EVENT_TERMINATED, 0);
