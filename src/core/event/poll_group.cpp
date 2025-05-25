@@ -64,6 +64,13 @@ poll_group::poll_group(const struct xlio_poll_group_attr *attr)
 // coverity[UNCAUGHT_EXCEPT]
 poll_group::~poll_group()
 {
+    //destroy all pending to remove sockets
+    while (!m_pending_to_remove_lst.empty()) {
+        sockinfo_tcp *si = m_pending_to_remove_lst.front();
+        m_pending_to_remove_lst.pop_front();
+        si->clean_socket_obj();
+    }
+
     s_poll_groups_lock.lock();
     auto iter = std::find(s_poll_groups.begin(), s_poll_groups.end(), this);
     if (iter != std::end(s_poll_groups)) {
@@ -74,7 +81,7 @@ poll_group::~poll_group()
     while (!m_sockets_list.empty()) {
         sockinfo_tcp *si = dynamic_cast<sockinfo_tcp *>(m_sockets_list.front());
         if (likely(si)) {
-            close_socket(si, true);
+            close_socket_ungracefully(si, true);
         }
     }
 
@@ -115,6 +122,13 @@ int poll_group::update(const struct xlio_poll_group_attr *attr)
 
 void poll_group::poll()
 {
+    if (m_is_sockets_to_close_dirty) {
+        for (auto si : m_sockets_to_close) {
+            close_socket_gracefully(si);
+        }
+        m_sockets_to_close.clear();
+        m_is_sockets_to_close_dirty = false;
+    }
     for (ring *rng : m_rings) {
         uint64_t sn = 0;
         rng->poll_and_process_element_tx(&sn);
@@ -176,19 +190,50 @@ void poll_group::add_socket(sockinfo_tcp *si)
     // For the flow_tag fast path support.
     g_p_fd_collection->set_socket(si->get_fd(), si);
 }
-
-void poll_group::remove_socket(sockinfo_tcp *si)
+void poll_group::remove_socket_helper(sockinfo_tcp *si)
 {
-    g_p_fd_collection->clear_socket(si->get_fd());
     m_sockets_list.erase(si);
-
     auto iter = std::find(m_dirty_sockets.begin(), m_dirty_sockets.end(), si);
     if (iter != std::end(m_dirty_sockets)) {
         m_dirty_sockets.erase(iter);
     }
 }
+void poll_group::remove_socket(sockinfo_tcp *si)
+{
+    g_p_fd_collection->clear_socket(si->get_fd());
+    remove_socket_helper(si);
+}
 
-void poll_group::close_socket(sockinfo_tcp *si, bool force /*=false*/)
+void poll_group::close_socket_gracefully(sockinfo_tcp *si)
+{
+    remove_socket_helper(si);
+    if (si->prepare_to_close()) {
+        // the socket is already closable
+        g_p_fd_collection->clear_socket(si->get_fd());
+        si->clean_socket_obj();
+    } else {
+        // The socket is not ready for close.
+        g_p_fd_collection->clear_socket(si->get_fd());
+        m_pending_to_remove_lst.push_back(si);
+    }
+}
+void poll_group::destroy_pending_to_remove_socket(sockinfo_tcp *si)
+{
+    m_pending_to_remove_lst.remove(si);
+    si->clean_socket_obj();
+}
+void poll_group::reuse_sockfd(int fd, sockinfo_tcp *si)
+{
+    m_pending_to_remove_lst.remove(si);
+    g_p_fd_collection->set_socket(fd, si);
+    m_sockets_list.push_back(si);
+}
+void poll_group::mark_socket_to_close(sockinfo_tcp *si)
+{
+    m_sockets_to_close.push_back(si);
+    m_is_sockets_to_close_dirty = true;
+}
+void poll_group::close_socket_ungracefully(sockinfo_tcp *si, bool force /*=false*/)
 {
     remove_socket(si);
 
@@ -202,6 +247,7 @@ void poll_group::close_socket(sockinfo_tcp *si, bool force /*=false*/)
          * TODO Implement more reliable mechanism of deferred socket destruction if there are
          * not completed TX operations.
          */
+        m_is_sockets_to_close_dirty = false; // Prevent poll() from triggering graceful closes
         poll();
         si->clean_socket_obj();
     }

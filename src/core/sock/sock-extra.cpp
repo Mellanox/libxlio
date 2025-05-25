@@ -282,8 +282,7 @@ extern "C" int xlio_socket_destroy(xlio_socket_t sock)
     poll_group *grp = si->get_poll_group();
 
     if (likely(grp)) {
-        // We always force TCP reset not to handle FIN handshake and TIME-WAIT state.
-        grp->close_socket(si, true);
+        grp->mark_socket_to_close(si);
     } else {
         return XLIO_CALL(close, si->get_fd());
     }
