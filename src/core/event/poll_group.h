@@ -37,12 +37,16 @@ public:
     void add_ring(ring *rng, ring_alloc_logic_attr *attr);
 
     void add_socket(sockinfo_tcp *si);
+    void remove_socket_helper(sockinfo_tcp *si);
     void remove_socket(sockinfo_tcp *si);
-    void close_socket(sockinfo_tcp *si, bool force = false);
-
+    void mark_socket_to_close(sockinfo_tcp *si);
+    void close_socket_gracefully(sockinfo_tcp *si);
+    void close_socket_ungracefully(sockinfo_tcp *si, bool force = false);
     unsigned get_flags() const { return m_group_flags; }
     event_handler_manager_local *get_event_handler() const { return m_event_handler.get(); }
     tcp_timers_collection *get_tcp_timers() const { return m_tcp_timers.get(); }
+    void destroy_pending_to_remove_socket(sockinfo_tcp *si);
+    void reuse_sockfd(int fd, sockinfo_tcp *si);
 
 public:
     xlio_socket_event_cb_t m_socket_event_cb;
@@ -57,7 +61,9 @@ private:
 
     unsigned m_group_flags;
     std::vector<sockinfo_tcp *> m_dirty_sockets;
-
+    std::vector<sockinfo_tcp *> m_sockets_to_close;
+    std::list<sockinfo_tcp *> m_pending_to_remove_lst;
+    bool m_is_sockets_to_close_dirty = false;
     sock_fd_api_list_t m_sockets_list;
     std::vector<std::pair<std::unique_ptr<ring_alloc_logic_attr>, net_device_val *>> m_rings_ref;
 };
