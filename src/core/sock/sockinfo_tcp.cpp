@@ -667,8 +667,6 @@ sockinfo_tcp::~sockinfo_tcp()
         g_p_agent->unregister_cb((agent_cb_t)&sockinfo_tcp::put_agent_msg, (void *)this);
     }
     si_tcp_logdbg("sock closed");
-
-    xlio_socket_event(XLIO_SOCKET_EVENT_TERMINATED, 0);
 }
 
 void sockinfo_tcp::destructor_helper_tcp()
@@ -1579,7 +1577,13 @@ err_t sockinfo_tcp::ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void 
 {
     sockinfo_tcp *p_si_tcp = (sockinfo_tcp *)pcb_container;
     IF_STATS_O(p_si_tcp, p_si_tcp->m_p_socket_stats->tcp_state = new_state);
-
+    if (p_si_tcp->is_xlio_socket()) {
+        if (!p_si_tcp->m_is_xlio_socket_terminated &&
+            (new_state == CLOSED || new_state == TIME_WAIT)) {
+            p_si_tcp->xlio_socket_event(XLIO_SOCKET_EVENT_TERMINATED, 0);
+            p_si_tcp->m_is_xlio_socket_terminated = true;
+        }
+    }
     if (p_si_tcp->m_state == SOCKINFO_CLOSING && (new_state == CLOSED || new_state == TIME_WAIT)) {
         /*
          * We don't need ULP for a closed socket. TLS layer releases
@@ -3511,9 +3515,12 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
 
     IF_STATS_O(listen_sock, listen_sock->m_p_socket_stats->listen_counters.n_rx_syn_tw++);
     listen_sock->m_tcp_con_lock.unlock();
-    assert(g_p_fd_collection);
-    g_p_fd_collection->reuse_sockfd(new_sock->m_fd, new_sock);
-
+    if (new_sock->is_xlio_socket()) {
+        new_sock->get_poll_group()->reuse_sockfd(new_sock->m_fd, new_sock);
+    } else {
+        assert(g_p_fd_collection);
+        g_p_fd_collection->reuse_sockfd(new_sock->m_fd, new_sock);
+    }
     return ERR_OK;
 }
 
@@ -5744,7 +5751,11 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
             }
             p_sock->unlock_tcp_con();
             if (destroyable) {
-                g_p_fd_collection->destroy_sockfd(p_sock);
+                if (p_sock->is_xlio_socket()) {
+                    p_sock->get_poll_group()->destroy_pending_to_remove_socket(p_sock);
+                } else {
+                    g_p_fd_collection->destroy_sockfd(p_sock);
+                }
             }
         }
     }

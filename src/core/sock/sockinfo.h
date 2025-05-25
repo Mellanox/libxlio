@@ -538,6 +538,8 @@ protected:
      */
     poll_group *m_p_group = nullptr; // Polling group associated with this socket
     bool m_is_xlio_socket = false; // Flag indicating if this is an XLIO socket
+    bool m_is_xlio_socket_terminated =
+        false; // Flag indicating if this is an XLIO socket terminat CB was called
 
 public:
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
