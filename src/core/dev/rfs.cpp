@@ -138,13 +138,13 @@ rfs::~rfs()
         prepare_filter_detach(counter, true);
         if (counter == 0) {
             if (m_p_ring->is_simple()) {
-                destroy_flow();
+                destroy_flow(nullptr);
             }
             m_p_rule_filter->m_map.erase(m_p_rule_filter->m_key);
         }
     } else if (m_b_tmp_is_attached) {
         if (m_p_ring->is_simple()) {
-            destroy_flow();
+            destroy_flow(nullptr);
         }
     }
 
@@ -268,7 +268,7 @@ bool rfs::attach_flow(sockinfo *sink)
     return ret;
 }
 
-bool rfs::detach_flow(sockinfo *sink)
+bool rfs::detach_flow(sockinfo *sink, rfs_rule **rule_extract)
 {
     bool ret = false;
     int filter_counter = 0;
@@ -285,7 +285,7 @@ bool rfs::detach_flow(sockinfo *sink)
 
     // We also need to check if this is the LAST sink so we need to call ibv_attach_flow
     if (m_p_ring->is_simple() && (m_n_sinks_list_entries == 0) && (filter_counter == 0)) {
-        ret = destroy_flow();
+        ret = destroy_flow(rule_extract);
     }
 
     return ret;
@@ -351,7 +351,7 @@ bool rfs::create_flow()
     return true;
 }
 
-bool rfs::destroy_flow()
+bool rfs::destroy_flow(rfs_rule **rule_extract)
 {
     if (unlikely(!m_rfs_flow)) {
         rfs_logdbg("Destroy RFS flow failed, RFS flow was not created. "
@@ -359,7 +359,13 @@ bool rfs::destroy_flow()
                    ", Flow: %s, Priority: %" PRIu16,
                    m_flow_tag_id, m_flow_tuple.to_str().c_str(), m_priority);
     } else {
-        delete m_rfs_flow;
+        if (rule_extract) {
+            // We extract the HW rule instead of deleting it. The rule must be either reused
+            // or destroyed explicitly by the caller.
+            *rule_extract = m_rfs_flow;
+        } else {
+            delete m_rfs_flow;
+        }
         m_rfs_flow = nullptr;
     }
 

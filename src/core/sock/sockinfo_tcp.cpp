@@ -424,12 +424,18 @@ int sockinfo_tcp::detach_xlio_group()
     std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
 
     // Only connected socket can be detached.
-    if (!m_p_group || !m_p_connected_dst_entry || m_rx_flow_map.empty() || 
+    if (!m_p_group || !m_p_connected_dst_entry || m_rx_flow_map.empty() ||
         get_tcp_state(&m_pcb) != ESTABLISHED) {
         si_tcp_logwarn("Unable to detach socket %p, state %s, group %p, dst_entry %p,"
                        " rx_flow_size %zu. Only connected attached socket can be detached.",
                        this, tcp_state_str[get_tcp_state(&m_pcb)], m_p_group,
                        m_p_connected_dst_entry, m_rx_flow_map.size());
+        errno = EINVAL;
+        return -1;
+    }
+    // There are more than 1 RX ring. Not supported and can happen only for listen sockets.
+    if (!m_p_rx_ring) {
+        errno = ENOTSUP;
         return -1;
     }
 
@@ -441,9 +447,11 @@ int sockinfo_tcp::detach_xlio_group()
     for (auto rx_flow_iter = m_rx_flow_map.begin(); rx_flow_iter != m_rx_flow_map.end();
          rx_flow_iter = m_rx_flow_map.begin()) {
         flow_tuple_with_local_if flow = rx_flow_iter->first;
-        bool result = detach_receiver(flow);
+        m_p_rule_extracted = nullptr;
+        bool result = detach_receiver(flow, &m_p_rule_extracted);
         if (!result) {
             si_tcp_logwarn("Detach receiver failed, migration may be spoiled");
+            break;
         }
     }
     // TODO SO_BINDTODEVICE support
@@ -469,8 +477,8 @@ int sockinfo_tcp::attach_xlio_group(poll_group *group)
     std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
 
     if (m_p_group) {
-        si_tcp_logwarn("Attaching undetached XLIO socket %p, group %p, new-group %p",
-                       this, m_p_group, group);
+        si_tcp_logwarn("Attaching detached XLIO socket %p, group %p, new-group %p", this, m_p_group,
+                       group);
         return -1;
     }
 
@@ -497,6 +505,10 @@ int sockinfo_tcp::attach_xlio_group(poll_group *group)
         si_tcp_logwarn("Couldn't attach RX, migration failed");
         errno = ECONNABORTED;
         return -1;
+    }
+    if (m_p_rule_extracted) {
+        delete m_p_rule_extracted;
+        m_p_rule_extracted = nullptr;
     }
 
     register_timer();
@@ -646,6 +658,11 @@ sockinfo_tcp::~sockinfo_tcp()
         socket_option_t *opt = m_socket_options_list.front();
         m_socket_options_list.pop_front();
         delete (opt);
+    }
+
+    if (m_p_rule_extracted) {
+        delete m_p_rule_extracted;
+        m_p_rule_extracted = nullptr;
     }
 
     unlock_tcp_con();
@@ -3460,8 +3477,7 @@ void sockinfo_tcp::accept_connection_xlio_socket(sockinfo_tcp *new_sock)
 {
     remove_received_syn_socket(new_sock);
     m_p_group->m_socket_accept_cb(reinterpret_cast<xlio_socket_t>(new_sock),
-                                  reinterpret_cast<xlio_socket_t>(this),
-                                  m_xlio_socket_userdata);
+                                  reinterpret_cast<xlio_socket_t>(this), m_xlio_socket_userdata);
 }
 
 void sockinfo_tcp::remove_received_syn_socket(sockinfo_tcp *accepted)
