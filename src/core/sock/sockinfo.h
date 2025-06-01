@@ -388,7 +388,7 @@ protected:
     void save_stats_rx_offload(int nbytes);
     void socket_stats_init();
     bool attach_receiver(flow_tuple_with_local_if &flow_key);
-    bool detach_receiver(flow_tuple_with_local_if &flow_key);
+    bool detach_receiver(flow_tuple_with_local_if &flow_key, rfs_rule **rule_extract = nullptr);
     net_device_resources_t *create_nd_resources(const ip_addr &ip_local);
     bool destroy_nd_resources(const ip_addr &ip_local);
     void do_rings_migration_rx(resource_allocation_key &old_key);

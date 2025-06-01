@@ -382,7 +382,8 @@ bool ring_slave::attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool forc
 }
 
 template <typename KEY4T, typename KEY2T, typename HDR>
-bool steering_handler<KEY4T, KEY2T, HDR>::detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink)
+bool steering_handler<KEY4T, KEY2T, HDR>::detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink,
+                                                      rfs_rule **rule_extract)
 {
     rfs *p_rfs = nullptr;
 
@@ -415,7 +416,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::detach_flow(flow_tuple &flow_spec_5t, 
         BULLSEYE_EXCLUDE_BLOCK_END
 
         p_rfs = itr->second;
-        p_rfs->detach_flow(sink);
+        p_rfs->detach_flow(sink, rule_extract);
         if (!keep_in_map) {
             m_ring.m_udp_uc_dst_port_attach_map.erase(
                 m_ring.m_udp_uc_dst_port_attach_map.find(rule_key));
@@ -450,7 +451,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::detach_flow(flow_tuple &flow_spec_5t, 
         }
         BULLSEYE_EXCLUDE_BLOCK_END
         p_rfs = itr->second;
-        p_rfs->detach_flow(sink);
+        p_rfs->detach_flow(sink, rule_extract);
         if (!keep_in_map) {
             m_ring.m_l2_mc_ip_attach_map.erase(m_ring.m_l2_mc_ip_attach_map.find(rule_key));
         }
@@ -486,7 +487,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::detach_flow(flow_tuple &flow_spec_5t, 
         BULLSEYE_EXCLUDE_BLOCK_END
 
         p_rfs = itr->second;
-        p_rfs->detach_flow(sink);
+        p_rfs->detach_flow(sink, rule_extract);
         if (!keep_in_map) {
             m_ring.m_tcp_dst_port_attach_map.erase(m_ring.m_tcp_dst_port_attach_map.find(rule_key));
         }
@@ -506,12 +507,13 @@ bool steering_handler<KEY4T, KEY2T, HDR>::detach_flow(flow_tuple &flow_spec_5t, 
     return true;
 }
 
-bool ring_slave::detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink)
+bool ring_slave::detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, rfs_rule **rule_extract)
 {
     std::lock_guard<decltype(m_lock_ring_rx)> lock(m_lock_ring_rx);
 
-    return (flow_spec_5t.get_family() == AF_INET ? m_steering_ipv4.detach_flow(flow_spec_5t, sink)
-                                                 : m_steering_ipv6.detach_flow(flow_spec_5t, sink));
+    return (flow_spec_5t.get_family() == AF_INET
+                ? m_steering_ipv4.detach_flow(flow_spec_5t, sink, rule_extract)
+                : m_steering_ipv6.detach_flow(flow_spec_5t, sink, rule_extract));
 }
 
 #ifdef DEFINED_UTLS
