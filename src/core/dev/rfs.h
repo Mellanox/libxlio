@@ -66,8 +66,8 @@ public:
      */
     bool attach_flow(sockinfo *sink); // Add a sink. If this is the first sink --> map the sink
                                       // and attach flow to QP
-    bool detach_flow(sockinfo *sink); // Delete a sink. If this is the last sink --> delete it
-                                      // and detach flow from QP
+    // Delete a sink. If this is the last sink --> delete it and detach flow from QP
+    bool detach_flow(sockinfo *sink, rfs_rule **rule_extract);
 #ifdef DEFINED_UTLS
     rfs_rule *create_rule(xlio_tir *tir,
                           const flow_tuple &flow_spec); // Create a duplicate rule which points to
@@ -95,7 +95,7 @@ protected:
     dpcp::match_params m_match_mask;
 
     bool create_flow(); // Attach flow to all queues
-    bool destroy_flow(); // Detach flow from all queues
+    bool destroy_flow(rfs_rule **rule_extract); // Detach flow from all queues
     bool add_sink(sockinfo *p_sink);
     bool del_sink(sockinfo *p_sink);
     void prepare_flow_spec_eth_ip(const ip_address &dst_ip, const ip_address &src_ip);

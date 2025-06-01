@@ -646,6 +646,7 @@ private:
      */
     bool m_b_xlio_socket_dirty = false;
     uintptr_t m_xlio_socket_userdata = 0;
+    rfs_rule *m_p_rule_extracted = nullptr;
 };
 
 #endif
