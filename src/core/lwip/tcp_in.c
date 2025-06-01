@@ -313,10 +313,8 @@ static void tcp_listen_input(struct tcp_pcb *pcb, tcp_in_data *in_data)
     if (in_data->flags & TCP_ACK) {
         /* For incoming segments with the ACK flag set, respond with a RST. */
         LWIP_DEBUGF(TCP_RST_DEBUG, ("tcp_listen_input: ACK in LISTEN, sending reset\n"));
-#if 0
         tcp_rst(in_data->ackno + 1, in_data->seqno + in_data->tcplen, in_data->tcphdr->dest,
                 in_data->tcphdr->src, NULL);
-#endif
     } else if (in_data->flags & TCP_SYN) {
         LWIP_DEBUGF(TCP_DEBUG,
                     ("TCP connection request %" U16_F " -> %" U16_F ".\n", in_data->tcphdr->src,

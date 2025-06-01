@@ -914,7 +914,7 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
     return true;
 }
 
-bool sockinfo::detach_receiver(flow_tuple_with_local_if &flow_key)
+bool sockinfo::detach_receiver(flow_tuple_with_local_if &flow_key, rfs_rule **rule_extract)
 {
     si_logdbg("Unregistering receiver: %s", flow_key.to_str().c_str());
 
@@ -935,7 +935,7 @@ bool sockinfo::detach_receiver(flow_tuple_with_local_if &flow_key)
 
     // Detach tuple
     unlock_rx_q();
-    p_ring->detach_flow(flow_key, this);
+    p_ring->detach_flow(flow_key, this, rule_extract);
     lock_rx_q();
 
     // Un-map flow from local map
@@ -1142,7 +1142,7 @@ void sockinfo::do_rings_migration_rx(resource_allocation_key &old_key)
             si_logdbg("Detaching %s from ring %p", flow_key.to_str().c_str(), p_old_ring);
             // Detach tuple
             unlock_rx_q();
-            p_old_ring->detach_flow(flow_key, this);
+            p_old_ring->detach_flow(flow_key, this, nullptr);
             lock_rx_q();
             rx_del_ring_cb(p_old_ring);
 

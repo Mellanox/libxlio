@@ -91,7 +91,7 @@ bool ring_bond::attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force
     return ret;
 }
 
-bool ring_bond::detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink)
+bool ring_bond::detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, rfs_rule **rule_extract)
 {
     bool ret = true;
     struct flow_sink_t value = {flow_spec_5t, sink};
@@ -108,7 +108,7 @@ bool ring_bond::detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink)
     }
 
     for (uint32_t i = 0; i < m_recv_rings.size(); i++) {
-        bool step_ret = m_recv_rings[i]->detach_flow(flow_spec_5t, sink);
+        bool step_ret = m_recv_rings[i]->detach_flow(flow_spec_5t, sink, rule_extract);
         ret = ret && step_ret;
     }
 
