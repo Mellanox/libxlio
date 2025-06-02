@@ -424,6 +424,17 @@ int sockinfo_tcp::detach_xlio_group()
         errno = EINVAL;
         return -1;
     }
+    // We rely on the flow tag feature to drop RX packets during 2-step migration.
+    if (safe_mce_sys().disable_flow_tag) {
+        static bool already_warned = false;
+        if (!already_warned) {
+            si_tcp_logwarn("Flow tag is disabled in the XLIO configuration. Enable it to use the "
+                           "2-step socket migration.");
+            already_warned = true;
+        }
+        errno = ENOTSUP;
+        return -1;
+    }
     // There are more than 1 RX ring. Not supported and can happen only for listen sockets.
     if (!m_p_rx_ring) {
         errno = ENOTSUP;
