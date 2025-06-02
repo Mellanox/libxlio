@@ -5513,7 +5513,7 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
             p_sock->unlock_tcp_con();
             if (destroyable) {
                 if (p_sock->is_xlio_socket()) {
-                    p_sock->get_poll_group()->destroy_pending_to_remove_socket(p_sock);
+                    p_sock->get_poll_group()->mark_socket_to_destroy(p_sock);
                 } else {
                     g_p_fd_collection->destroy_sockfd(p_sock);
                 }
