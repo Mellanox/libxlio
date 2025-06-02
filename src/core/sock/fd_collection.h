@@ -19,7 +19,7 @@
 #include "iomux/epfd_info.h"
 #include "utils/lock_wrapper.h"
 
-typedef xlio_list_t<sockinfo, sockinfo::pending_to_remove_node_offset> sock_fd_api_list_t;
+typedef xlio_list_t<sockinfo, sockinfo::pending_to_remove_node_offset> sockinfo_list_t;
 typedef xlio_list_t<epfd_info, epfd_info::epfd_info_node_offset> epfd_info_list_t;
 
 typedef std::unordered_map<pthread_t, int> offload_thread_rule_t;
@@ -117,7 +117,7 @@ public:
     inline void reuse_sockfd(int fd, sockinfo *p_sfd_api_obj);
     inline void destroy_sockfd(sockinfo *p_sfd_api_obj);
     /**
-     * Get sock_fd_api (sockinfo) by fd.
+     * Get sockinfo by fd.
      */
     inline sockinfo *get_sockfd(int fd);
 
@@ -190,7 +190,7 @@ private:
 
     epfd_info_list_t m_epfd_lst;
     // Contains fds which are in closing process
-    sock_fd_api_list_t m_pending_to_remove_lst;
+    sockinfo_list_t m_pending_to_remove_lst;
 
     const bool m_b_sysvar_offloaded_sockets;
 
