@@ -136,7 +136,7 @@ sockinfo::~sockinfo()
         sock_stats::instance().return_stats_obj(m_p_socket_stats);
     }
 
-    bool toclose = safe_mce_sys().deferred_close && m_fd >= 0;
+    bool toclose = (safe_mce_sys().deferred_close || is_xlio_socket()) && m_fd >= 0;
 
 #if defined(DEFINED_NGINX)
     if (g_p_app->type == APP_NGINX) {
@@ -146,7 +146,10 @@ sockinfo::~sockinfo()
 #endif
 
     if (toclose) {
-        SYSCALL(close, m_fd);
+        int rc = SYSCALL(close, m_fd);
+        if (rc != 0) {
+            si_logdbg("close(fd=%d) failed with errno=%d", m_fd, errno);
+        }
     }
 }
 
