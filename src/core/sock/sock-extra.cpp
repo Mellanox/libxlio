@@ -488,10 +488,18 @@ extern "C" int xlio_socket_destroy(xlio_socket_t sock)
     sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
     poll_group *grp = si->get_poll_group();
 
+    if (unlikely(!si->is_xlio_socket())) {
+        errno = EINVAL;
+        return -1;
+    }
+
     if (likely(grp)) {
         grp->mark_socket_to_close(si);
     } else {
-        return XLIO_CALL(close, si->get_fd());
+        // Detached socket flow.
+        g_p_fd_collection->clear_socket(si->get_fd());
+        si->prepare_to_close(true);
+        si->clean_socket_obj();
     }
     return 0;
 }
