@@ -141,6 +141,7 @@ struct xlio_api_t *extra_api()
 
         // XLIO Socket API.
         SET_EXTRA_API(xlio_init_ex, xlio_init_ex, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_exit, xlio_exit, XLIO_EXTRA_API_XLIO_SOCKET);
         SET_EXTRA_API(xlio_poll_group_create, xlio_poll_group_create, XLIO_EXTRA_API_XLIO_SOCKET);
         SET_EXTRA_API(xlio_poll_group_destroy, xlio_poll_group_destroy, XLIO_EXTRA_API_XLIO_SOCKET);
         SET_EXTRA_API(xlio_poll_group_poll, xlio_poll_group_poll, XLIO_EXTRA_API_XLIO_SOCKET);
