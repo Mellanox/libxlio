@@ -12,6 +12,10 @@
 
 #include "xlio_base.h"
 
+#if defined(EXTRA_API_ENABLED) && (EXTRA_API_ENABLED == 1)
+struct xlio_api_t *xlio_base::xlio_api = nullptr;
+#endif /* EXTRA_API_ENABLED */
+
 void xlio_base::SetUp()
 {
     errno = EOK;
