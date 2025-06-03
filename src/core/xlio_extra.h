@@ -295,6 +295,7 @@ struct __attribute__((packed)) xlio_api_t {
      * XLIO Socket API.
      */
     int (*xlio_init_ex)(const struct xlio_init_attr *attr);
+    int (*xlio_exit)(void);
     int (*xlio_poll_group_create)(const struct xlio_poll_group_attr *attr,
                                   xlio_poll_group_t *group_out);
     int (*xlio_poll_group_destroy)(xlio_poll_group_t group);
