@@ -602,8 +602,10 @@ void sockinfo_tcp::clean_socket_obj()
         (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS);
 
     if (p_event_mgr->is_running() && !delegated_timers_exit) {
+        si_tcp_loginfo("unregister_socket_timer_and_delete %d", m_fd);
         p_event_mgr->unregister_socket_timer_and_delete(this);
     } else {
+        si_tcp_loginfo("delete socket %d", m_fd);
         delete this;
     }
 }
