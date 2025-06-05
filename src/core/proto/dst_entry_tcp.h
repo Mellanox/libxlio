@@ -29,7 +29,8 @@ public:
     ssize_t slow_send_neigh(const iovec *p_iov, size_t sz_iov,
                             struct xlio_rate_limit_t &rate_limit);
 
-    mem_buf_desc_t *get_buffer(pbuf_type type, pbuf_desc *desc, bool b_blocked = false);
+    mem_buf_desc_t *get_buffer(pbuf_type type, pbuf_desc *desc, bool b_blocked = false,
+                               bool tx_skip_poll = false);
     void put_buffer(mem_buf_desc_t *p_desc);
     void put_zc_buffer(mem_buf_desc_t *p_desc);
 

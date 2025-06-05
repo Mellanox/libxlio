@@ -141,15 +141,24 @@ struct xlio_api_t *extra_api()
 
         // XLIO Socket API.
         SET_EXTRA_API(xlio_init_ex, xlio_init_ex, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_exit, xlio_exit, XLIO_EXTRA_API_XLIO_SOCKET);
         SET_EXTRA_API(xlio_poll_group_create, xlio_poll_group_create, XLIO_EXTRA_API_XLIO_SOCKET);
         SET_EXTRA_API(xlio_poll_group_destroy, xlio_poll_group_destroy, XLIO_EXTRA_API_XLIO_SOCKET);
         SET_EXTRA_API(xlio_poll_group_poll, xlio_poll_group_poll, XLIO_EXTRA_API_XLIO_SOCKET);
         SET_EXTRA_API(xlio_socket_create, xlio_socket_create, XLIO_EXTRA_API_XLIO_SOCKET);
         SET_EXTRA_API(xlio_socket_destroy, xlio_socket_destroy, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_socket_update, xlio_socket_update, XLIO_EXTRA_API_XLIO_SOCKET);
         SET_EXTRA_API(xlio_socket_setsockopt, xlio_socket_setsockopt, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_socket_getsockname, xlio_socket_getsockname, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_socket_getpeername, xlio_socket_getpeername, XLIO_EXTRA_API_XLIO_SOCKET);
         SET_EXTRA_API(xlio_socket_bind, xlio_socket_bind, XLIO_EXTRA_API_XLIO_SOCKET);
         SET_EXTRA_API(xlio_socket_connect, xlio_socket_connect, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_socket_listen, xlio_socket_listen, XLIO_EXTRA_API_XLIO_SOCKET);
         SET_EXTRA_API(xlio_socket_get_pd, xlio_socket_get_pd, XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_socket_detach_group, xlio_socket_detach_group,
+                      XLIO_EXTRA_API_XLIO_SOCKET);
+        SET_EXTRA_API(xlio_socket_attach_group, xlio_socket_attach_group,
+                      XLIO_EXTRA_API_XLIO_SOCKET);
         SET_EXTRA_API(xlio_socket_send, xlio_socket_send, XLIO_EXTRA_API_XLIO_SOCKET);
         SET_EXTRA_API(xlio_socket_sendv, xlio_socket_sendv, XLIO_EXTRA_API_XLIO_SOCKET);
         SET_EXTRA_API(xlio_poll_group_flush, xlio_poll_group_flush, XLIO_EXTRA_API_XLIO_SOCKET);
@@ -273,13 +282,26 @@ extern "C" int xlio_socket_destroy(xlio_socket_t sock)
     sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
     poll_group *grp = si->get_poll_group();
 
+    if (unlikely(!si->is_xlio_socket())) {
+        errno = EINVAL;
+        return -1;
+    }
+
     if (likely(grp)) {
-        // We always force TCP reset not to handle FIN handshake and TIME-WAIT state.
-        grp->close_socket(si, true);
+        grp->mark_socket_to_close(si);
     } else {
-        return XLIO_CALL(close, si->get_fd());
+        // Detached socket flow.
+        g_p_fd_collection->clear_socket(si->get_fd());
+        si->prepare_to_close(true);
+        si->clean_socket_obj();
     }
     return 0;
+}
+
+extern "C" int xlio_socket_update(xlio_socket_t sock, unsigned flags, uintptr_t userdata_sq)
+{
+    sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
+    return si->update_xlio_socket(flags, userdata_sq);
 }
 
 extern "C" int xlio_socket_setsockopt(xlio_socket_t sock, int level, int optname,
@@ -293,6 +315,20 @@ extern "C" int xlio_socket_setsockopt(xlio_socket_t sock, int level, int optname
         errno = errno_save;
     }
     return rc;
+}
+
+extern "C" int xlio_socket_getsockname(xlio_socket_t sock, struct sockaddr *addr,
+                                       socklen_t *addrlen)
+{
+    sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
+    return si->getsockname(addr, addrlen);
+}
+
+extern "C" int xlio_socket_getpeername(xlio_socket_t sock, struct sockaddr *addr,
+                                       socklen_t *addrlen)
+{
+    sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
+    return si->getpeername(addr, addrlen);
 }
 
 extern "C" int xlio_socket_bind(xlio_socket_t sock, const struct sockaddr *addr, socklen_t addrlen)
@@ -315,10 +351,22 @@ extern "C" int xlio_socket_connect(xlio_socket_t sock, const struct sockaddr *to
     int rc = si->connect(to, tolen);
     rc = (rc == -1 && (errno == EINPROGRESS || errno == EAGAIN)) ? 0 : rc;
     if (rc == 0) {
-        si->add_tx_ring_to_group();
         errno = errno_save;
     }
     return rc;
+}
+
+extern "C" int xlio_socket_listen(xlio_socket_t sock)
+{
+    sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
+    poll_group *group = si->get_poll_group();
+
+    if (!group->m_socket_accept_cb) {
+        errno = ENOTCONN;
+        return -1;
+    }
+    // TODO handle positive return code from prepareListen() and convert it to errno
+    return si->prepareListen() ?: si->listen(-1);
 }
 
 extern "C" struct ibv_pd *xlio_socket_get_pd(xlio_socket_t sock)
@@ -327,6 +375,21 @@ extern "C" struct ibv_pd *xlio_socket_get_pd(xlio_socket_t sock)
     ib_ctx_handler *ctx = si->get_ctx();
 
     return ctx ? ctx->get_ibv_pd() : nullptr;
+}
+
+int xlio_socket_detach_group(xlio_socket_t sock)
+{
+    sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
+
+    return si->detach_xlio_group();
+}
+
+int xlio_socket_attach_group(xlio_socket_t sock, xlio_poll_group_t group)
+{
+    sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
+    poll_group *grp = reinterpret_cast<poll_group *>(group);
+
+    return si->attach_xlio_group(grp);
 }
 
 static void xlio_buf_free(struct xlio_buf *buf)

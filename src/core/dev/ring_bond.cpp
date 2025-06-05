@@ -91,7 +91,7 @@ bool ring_bond::attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force
     return ret;
 }
 
-bool ring_bond::detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink)
+bool ring_bond::detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, rfs_rule **rule_extract)
 {
     bool ret = true;
     struct flow_sink_t value = {flow_spec_5t, sink};
@@ -108,7 +108,7 @@ bool ring_bond::detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink)
     }
 
     for (uint32_t i = 0; i < m_recv_rings.size(); i++) {
-        bool step_ret = m_recv_rings[i]->detach_flow(flow_spec_5t, sink);
+        bool step_ret = m_recv_rings[i]->detach_flow(flow_spec_5t, sink, rule_extract);
         ret = ret && step_ret;
     }
 
@@ -339,12 +339,13 @@ void ring_bond::adapt_cq_moderation()
 }
 
 mem_buf_desc_t *ring_bond::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
-                                          int n_num_mem_bufs /* default = 1 */)
+                                          int n_num_mem_bufs /* default = 1 */,
+                                          bool tx_skip_poll /* default = false */)
 {
     mem_buf_desc_t *ret = nullptr;
 
     std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-    ret = m_xmit_rings[id]->mem_buf_tx_get(id, b_block, type, n_num_mem_bufs);
+    ret = m_xmit_rings[id]->mem_buf_tx_get(id, b_block, type, n_num_mem_bufs, tx_skip_poll);
 
     return ret;
 }

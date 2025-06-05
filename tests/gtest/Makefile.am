@@ -129,7 +129,14 @@ gtest_SOURCES = \
 	xliod/xliod_hash.cc \
 	xliod/xliod_init.cc \
 	xliod/xliod_state.cc \
-	xliod/xliod_flow.cc
+	xliod/xliod_flow.cc \
+	\
+	xlio_zc_api/xlio_socket.cc \
+	xlio_zc_api/xlio_socket_listen_connect.cc \
+	xlio_zc_api/xlio_socket_migrate.cc \
+	xlio_zc_api/xlio_socket_migrate_2.cc \
+	xlio_zc_api/xlio_socket_send_receive.cc \
+	xlio_zc_api/xlio_socket_send_receive_2.cc
 
 noinst_HEADERS = \
 	common/tap.h \

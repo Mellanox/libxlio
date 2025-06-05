@@ -219,6 +219,7 @@ const uint8_t ip_tos2prio[16] = {0, 0, 0, 0, 2, 2, 2, 2, 6, 6, 6, 6, 4, 4, 4, 4}
 
 class epfd_info;
 
+class poll_group; // Forward declaration
 class sockinfo {
 public:
     enum sockinfo_state : uint16_t {
@@ -344,6 +345,11 @@ public:
     void set_rx_num_buffs_reuse(int val) { m_rx_num_buffs_reuse = val; }
 #endif
 #endif
+
+    // XLIO ZC API
+    bool is_xlio_socket() const;
+    poll_group *get_poll_group() const;
+
 protected:
     static const char *setsockopt_so_opt_to_str(int opt);
 
@@ -388,7 +394,7 @@ protected:
     void save_stats_rx_offload(int nbytes);
     void socket_stats_init();
     bool attach_receiver(flow_tuple_with_local_if &flow_key);
-    bool detach_receiver(flow_tuple_with_local_if &flow_key);
+    bool detach_receiver(flow_tuple_with_local_if &flow_key, rfs_rule **rule_extract = nullptr);
     net_device_resources_t *create_nd_resources(const ip_addr &ip_local);
     bool destroy_nd_resources(const ip_addr &ip_local);
     void do_rings_migration_rx(resource_allocation_key &old_key);
@@ -525,6 +531,15 @@ protected:
     uint32_t m_pcp = 0U;
     uint32_t m_flow_tag_id = 0U; // Flow Tag for this socket
     uint8_t m_n_uc_ttl_hop_lim;
+    /*
+     * Storage API
+     * Move other StorageApi fields from sockinfo_tcp to sockinfo
+     * TODO Move the fields to proper cold/hot sections in the final version.
+     */
+    poll_group *m_p_group = nullptr; // Polling group associated with this socket
+    bool m_is_xlio_socket = false; // Flag indicating if this is an XLIO socket
+    bool m_is_xlio_socket_terminated =
+        false; // Flag indicating if this is an XLIO socket terminat CB was called
 
 public:
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
