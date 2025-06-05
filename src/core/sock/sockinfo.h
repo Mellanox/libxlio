@@ -118,10 +118,6 @@ enum {
 
 typedef enum { RX_READ = 23, RX_READV, RX_RECV, RX_RECVFROM, RX_RECVMSG } rx_call_t;
 
-enum {
-    TX_FLAG_NO_PARTIAL_WRITE = 1 << 0,
-};
-
 enum fd_type_t {
     FD_TYPE_SOCKET = 0,
     FD_TYPE_PIPE,
@@ -182,9 +178,6 @@ struct ring_info_t {
 // Used attributes can be of different types TX_FILE, TX_WRITE, TX_WRITEV, TX_SEND, TX_SENDTO,
 // TX_SENDMSG
 struct xlio_tx_call_attr_t {
-    tx_call_t opcode;
-    unsigned xlio_flags;
-
     struct _attr {
         struct iovec *iov;
         ssize_t sz_iov;
@@ -195,6 +188,7 @@ struct xlio_tx_call_attr_t {
     } attr;
 
     pbuf_desc priv;
+    tx_call_t opcode;
 
     ~xlio_tx_call_attr_t() {};
     void clear(void)
@@ -203,7 +197,6 @@ struct xlio_tx_call_attr_t {
         memset(&attr, 0, sizeof(attr));
         memset(&priv, 0, sizeof(priv));
         priv.attr = PBUF_DESC_NONE;
-        xlio_flags = 0;
     }
 
     xlio_tx_call_attr_t() { clear(); }
@@ -406,9 +399,8 @@ protected:
     bool ipv6_set_addr_sel_pref(int val);
     int ipv6_get_addr_sel_pref();
     inline void handle_recv_timestamping(struct cmsg_state *cm_state);
-    inline void handle_recv_errqueue(struct cmsg_state *cm_state);
     void insert_cmsg(struct cmsg_state *cm_state, int level, int type, void *data, int len);
-    void handle_cmsg(struct msghdr *msg, int flags);
+    void handle_cmsg(struct msghdr *msg);
     void process_timestamps(mem_buf_desc_t *p_desc);
     void add_cqfd_to_sock_rx_epfd(ring *p_ring);
     void remove_cqfd_from_sock_rx_epfd(ring *p_ring);
@@ -441,7 +433,7 @@ protected:
     sockinfo_state m_state = SOCKINFO_OPENED; // socket current state
     uint8_t m_n_tsing_flags = 0U;
     bool m_b_rcvtstamp = false;
-    bool m_b_zc = false;
+    bool m_b_pktinfo = false;
     bool m_b_blocking = true;
     bool m_b_rcvtstampns = false;
     bool m_skip_cq_poll_in_rx;
@@ -454,43 +446,24 @@ protected:
 
     // End of first cache line
 
-    list_node<sockinfo, sockinfo::pending_to_remove_node_offset> pending_to_remove_node;
-    mem_buf_desc_t *m_last_zcdesc = nullptr;
-
-    /* Socket error queue that keeps local errors and internal data required
-     * to provide notification ability.
-     */
-    descq_t m_error_queue;
-    lock_spin_simple m_error_queue_lock;
-
-    /* TX zcopy counter
-     * The notification itself for tx zcopy operation is a simple scalar value.
-     * Each socket maintains an internal unsigned 32-bit counter.
-     * Each send call with MSG_ZEROCOPY that successfully sends data increments
-     * the counter. The counter is not incremented on failure or if called with
-     * length zero.
-     * The counter counts system call invocations, not bytes.
-     * It wraps after UINT_MAX calls.
-     */
-    atomic_t m_zckey;
-
-    // End of second cache line
-
-    wakeup_pipe m_sock_wakeup_pipe;
-
-public:
-    epoll_fd_rec m_fd_rec;
-    list_node<sockinfo, sockinfo::socket_fd_list_node_offset> socket_fd_list_node;
-    list_node<sockinfo, sockinfo::ep_ready_fd_node_offset> ep_ready_fd_node;
-    list_node<sockinfo, sockinfo::ep_info_fd_node_offset> ep_info_fd_node;
-
-protected:
-    /**
-     * list of pending ready packet on the Rx,
-     * each element is a pointer to the ib_conn_mgr that holds this ready rx datagram
-     */
     size_t m_rx_pkt_ready_offset = 0U;
     size_t m_rx_ready_byte_count = 0U;
+
+public:
+    list_node<sockinfo, sockinfo::ep_ready_fd_node_offset> ep_ready_fd_node;
+    epoll_fd_rec m_fd_rec;
+    wakeup_pipe m_sock_wakeup_pipe;
+
+    // End of second cache 24 bytes ago
+
+    list_node<sockinfo, sockinfo::socket_fd_list_node_offset> socket_fd_list_node;
+    list_node<sockinfo, sockinfo::ep_info_fd_node_offset> ep_info_fd_node;
+    list_node<sockinfo, sockinfo::pending_to_remove_node_offset> pending_to_remove_node;
+
+protected:
+    int m_rx_epfd;
+    in_protocol_t m_protocol = PROTO_UNDEFINED;
+    sa_family_t m_family;
     buff_info_t m_rx_reuse_buff; // used in TCP instead of m_rx_ring_map
     int m_fd; // identification information <socket fd>
     int m_rx_num_buffs_reuse;
@@ -500,13 +473,10 @@ protected:
     bool m_rx_reuse_buf_postponed = false;
     bool m_reuseaddr = false; // to track setsockopt with SO_REUSEADDR
     bool m_reuseport = false; // to track setsockopt with SO_REUSEPORT
-    bool m_b_pktinfo = false;
     bool m_bind_no_port = false;
     bool m_is_ipv6only;
     uint8_t m_src_sel_flags = 0U;
-    int m_rx_epfd;
-    in_protocol_t m_protocol = PROTO_UNDEFINED;
-    sa_family_t m_family;
+    uint8_t m_n_uc_ttl_hop_lim;
     multilock m_lock_rcv;
     lock_mutex m_lock_snd;
     lock_mutex m_rx_migration_lock;
@@ -524,7 +494,6 @@ protected:
     struct xlio_rate_limit_t m_so_ratelimit;
     uint32_t m_pcp = 0U;
     uint32_t m_flow_tag_id = 0U; // Flow Tag for this socket
-    uint8_t m_n_uc_ttl_hop_lim;
 
 public:
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)

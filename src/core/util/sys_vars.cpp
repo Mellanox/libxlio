@@ -844,7 +844,6 @@ void mce_sys_var::legacy_get_env_params()
     progress_engine_wce_max = MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX;
     cq_keep_qp_full = MCE_DEFAULT_CQ_KEEP_QP_FULL;
     max_tso_sz = MCE_DEFAULT_MAX_TSO_SIZE;
-    user_huge_page_size = MCE_DEFAULT_USER_HUGE_PAGE_SIZE;
     internal_thread_arm_cq_enabled = MCE_DEFAULT_INTERNAL_THREAD_ARM_CQ_ENABLED;
 
     offloaded_sockets = MCE_DEFAULT_OFFLOADED_SOCKETS;
@@ -1525,13 +1524,6 @@ void mce_sys_var::legacy_get_env_params()
         qp_compensation_level = rx_num_wr_to_post_recv;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_USER_HUGE_PAGE_SIZE))) {
-        user_huge_page_size = option_size::from_str(env_ptr);
-        if (user_huge_page_size == 0) {
-            user_huge_page_size = g_hugepage_mgr.get_default_hugepage();
-        }
-    }
-
     if ((env_ptr = getenv(SYS_VAR_OFFLOADED_SOCKETS))) {
         offloaded_sockets = atoi(env_ptr) ? true : false;
     }
@@ -2014,7 +2006,6 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
         "performance.completion_queue.periodic_drain_max_cqes");
     cq_keep_qp_full = registry.get_default_value<bool>("performance.completion_queue.keep_full");
     max_tso_sz = registry.get_default_value<int64_t>("hardware_features.tcp.tso.max_size");
-    user_huge_page_size = registry.get_default_value<int64_t>("extra_api.hugepage_size");
     internal_thread_arm_cq_enabled = registry.get_default_value<bool>(
         "performance.threading.internal_handler.wakeup_per_packet");
 
@@ -2674,13 +2665,6 @@ void mce_sys_var::configure_completion_queue(const config_registry &registry)
 
 void mce_sys_var::configure_thread_affinity(const config_registry &registry)
 {
-    if (registry.value_exists("extra_api.hugepage_size")) {
-        user_huge_page_size = registry.get_value<int64_t>("extra_api.hugepage_size");
-        if (user_huge_page_size == 0) {
-            user_huge_page_size = g_hugepage_mgr.get_default_hugepage();
-        }
-    }
-
     set_value_from_registry_if_exists(offloaded_sockets,
                                       "acceleration_control.default_acceleration", registry);
 

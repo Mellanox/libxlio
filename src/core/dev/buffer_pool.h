@@ -27,7 +27,7 @@ inline static void free_lwip_pbuf(struct pbuf *lwip_pbuf)
 {
     mem_buf_desc_t *p_desc = reinterpret_cast<mem_buf_desc_t *>(lwip_pbuf);
 
-    if (lwip_pbuf->desc.attr == PBUF_DESC_MDESC || lwip_pbuf->desc.attr == PBUF_DESC_NVME_TX) {
+    if (lwip_pbuf->desc.attr == PBUF_DESC_MDESC) {
         mem_desc *mdesc = reinterpret_cast<mem_desc *>(lwip_pbuf->desc.mdesc);
         mdesc->put();
     }

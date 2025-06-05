@@ -45,8 +45,6 @@ protected:
 
 private:
     const uint32_t m_n_sysvar_tx_bufs_batch_tcp;
-    const uint32_t m_n_sysvar_user_huge_page_size;
-    uint64_t m_user_huge_page_mask;
 
     inline int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
                                 xlio_wr_tx_packet_attr attr, xlio_tis *tis)
