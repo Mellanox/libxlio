@@ -984,6 +984,9 @@ bool sockinfo_tcp::prepare_dst_to_send(bool is_accepted_socket /* = false */)
             m_pcb.tso.max_send_sge = ring->get_max_send_sge();
         }
     }
+    if (ret_val && is_xlio_socket()) {
+        add_tx_ring_to_group();
+    }
     return ret_val;
 }
 
