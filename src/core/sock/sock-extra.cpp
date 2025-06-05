@@ -558,7 +558,6 @@ extern "C" int xlio_socket_connect(xlio_socket_t sock, const struct sockaddr *to
     int rc = si->connect(to, tolen);
     rc = (rc == -1 && (errno == EINPROGRESS || errno == EAGAIN)) ? 0 : rc;
     if (rc == 0) {
-        si->add_tx_ring_to_group();
         errno = errno_save;
     }
     return rc;
