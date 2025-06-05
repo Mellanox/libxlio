@@ -704,8 +704,10 @@ void event_handler_manager::handle_registration_action(reg_action_t &reg_action)
         sock->get_tcp_timer_collection()->add_new_timer(sock);
         break;
     case UNREGISTER_TCP_SOCKET_TIMER_AND_DELETE:
+        evh_loginfo("delete sock event IT");
         sock = reinterpret_cast<sockinfo_tcp *>(reg_action.info.timer.user_data);
         sock->get_tcp_timer_collection()->remove_timer(sock);
+        evh_loginfo("delete sock IT %d", sock->get_fd());
         delete sock;
         break;
     case REGISTER_TIMER:

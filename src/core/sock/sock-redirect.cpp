@@ -281,6 +281,7 @@ int socket_internal(int __domain, int __type, int __protocol, bool shadow, bool 
     fd = SOCKET_FAKE_FD;
     if (shadow || !offload_sockets || !g_p_fd_collection) {
         fd = SYSCALL(socket, __domain, __type, __protocol);
+        srdr_loginfo("new-fd=%d", fd);
         vlog_printf(VLOG_DEBUG, "ENTER: %s(domain=%s(%d), type=%s(%d), protocol=%d) = %d\n",
                     __func__, socket_get_domain_str(__domain), __domain,
                     socket_get_type_str(__type), __type, __protocol, fd);
@@ -812,7 +813,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(close)(int __fd)
 {
     PROFILE_FUNC
 
-    srdr_logdbg_entry("fd=%d", __fd);
+    srdr_loginfo("close-fd=%d", __fd);
 
     bool toclose = handle_close(__fd);
     int rc = toclose ? SYSCALL(close, __fd) : 0;

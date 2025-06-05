@@ -444,7 +444,7 @@ int fd_collection::del_sockfd(int fd, bool is_for_udp_pool /*=false*/)
 {
     int ret_val = -1;
     sockinfo *p_sfd_api;
-
+    fdcoll_loginfo("del_sockfd-fd=%d", fd);
     p_sfd_api = get_sockfd(fd);
 
     if (p_sfd_api) {
@@ -457,8 +457,10 @@ int fd_collection::del_sockfd(int fd, bool is_for_udp_pool /*=false*/)
             // the socket is already closable
             // This may register the socket to be erased by internal thread,
             // However, a timer may tick on this socket before it is deleted.
+            fdcoll_loginfo("del_socket-fd=%d", fd);
             ret_val = del_socket(fd, m_p_sockfd_map);
         } else {
+            fdcoll_loginfo("pending-fd=%d", fd);
             lock();
             // The socket is not ready for close.
             // Delete it from fd_col and add it to pending_to_remove list.

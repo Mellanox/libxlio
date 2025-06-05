@@ -109,6 +109,14 @@ enum tls_alert_description {
     TLS_EXPORT_RESTRICTION = 60, /* fatal*/
 };
 
+// Values for the tls_offload field in CQE.
+enum tls_rx_decrypted {
+    TLS_RX_ENCRYPTED = 0x0,
+    TLS_RX_DECRYPTED = 0x1,
+    TLS_RX_RESYNC = 0x2,
+    TLS_RX_AUTH_FAIL = 0x3,
+};
+
 struct xlio_tls_info {
     uint32_t key_len;
     uint16_t tls_version;
