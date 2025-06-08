@@ -30,9 +30,7 @@ rfs_mc::rfs_mc(flow_tuple *flow_spec_5t, ring_slave *p_ring,
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    if (m_p_ring->is_simple()) {
-        prepare_flow_spec();
-    }
+    prepare_flow_spec();
 }
 
 void rfs_mc::prepare_flow_spec()

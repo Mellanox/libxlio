@@ -63,7 +63,6 @@ using namespace std;
 struct sigaction g_act_prev;
 sighandler_t g_sighandler = nullptr;
 class ring_simple;
-class ring_eth_direct;
 
 template <typename T> void assign_dlsym(T &ptr, const char *name)
 {

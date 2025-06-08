@@ -21,7 +21,6 @@
 #endif
 
 #include "hash.h"
-#include "tc.h"
 #include "daemon.h"
 
 #ifndef KERNEL_O_LARGEFILE
@@ -80,9 +79,6 @@ struct pseudo_header6 {
 int open_notify(void);
 void close_notify(void);
 int proc_notify(void);
-
-extern int add_flow(struct store_pid *pid_value, struct store_flow *value);
-extern int del_flow(struct store_pid *pid_value, struct store_flow *value);
 
 static int setup_notify(void);
 static int create_raw_socket(void);
@@ -288,24 +284,7 @@ static int clean_process(pid_t pid)
             if (pid_value) {
                 struct rst_info rst;
                 struct store_fid *fid_value = NULL;
-                struct store_flow *flow_value = NULL;
-                struct list_head *cur_entry = NULL;
-                struct list_head *tmp_entry = NULL;
                 int i, j;
-
-                /* Cleanup flow store */
-                j = 0;
-                list_for_each_safe(cur_entry, tmp_entry, &pid_value->flow_list)
-                {
-                    flow_value = list_entry(cur_entry, struct store_flow, item);
-                    j++;
-                    log_debug("[%d] #%d found handle: 0x%08X type: %d if_id: %d tap_id: %d\n",
-                              pid_value->pid, j, flow_value->handle, flow_value->type,
-                              flow_value->if_id, flow_value->tap_id);
-                    list_del_init(&flow_value->item);
-                    del_flow(pid_value, flow_value);
-                    free(flow_value);
-                }
 
                 /* Cleanup fid store */
                 j = 0;

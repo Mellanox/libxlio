@@ -247,7 +247,7 @@ private:
 
 class ring_slave : public ring {
 public:
-    ring_slave(int if_index, ring *parent, ring_type_t type, bool use_locks);
+    ring_slave(int if_index, ring *parent, bool use_locks);
     virtual ~ring_slave();
 
     virtual void print_val();
@@ -273,9 +273,7 @@ public:
     rfs_rule *tls_rx_create_rule(const flow_tuple &flow_spec_5t, xlio_tir *tir);
 #endif /* DEFINED_UTLS */
 
-    inline bool is_simple() const { return m_type != RING_TAP; }
     transport_type_t get_transport_type() const { return m_transport_type; }
-    inline ring_type_t get_type() const { return m_type; }
 
     bool m_active; /* State indicator */
 
@@ -313,8 +311,9 @@ protected:
     template <typename KEY4T, typename KEY2T, typename HDR> friend class steering_handler;
 
 private:
-    ring_type_t m_type; /* ring type */
-    uint8_t padding[8]; // make class size up to a whole cache line
+    uint8_t padding[58]; // make class size up to a whole cache line
 };
+
+static_assert(sizeof(ring_slave) % 64 == 0, "ring_slave size is not a multiple of cache line size");
 
 #endif /* RING_SLAVE_H_ */

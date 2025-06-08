@@ -31,7 +31,7 @@ static lock_base *get_new_lock(const char *name, bool real_lock)
                 : static_cast<lock_base *>(&g_lock_dummy_ring.lock));
 }
 
-ring_slave::ring_slave(int if_index, ring *parent, ring_type_t type, bool use_locks)
+ring_slave::ring_slave(int if_index, ring *parent, bool use_locks)
     : ring()
     , m_steering_ipv4(*this)
     , m_steering_ipv6(*this)
@@ -42,7 +42,6 @@ ring_slave::ring_slave(int if_index, ring *parent, ring_type_t type, bool use_lo
     , m_flow_tag_enabled(false)
     , m_b_sysvar_eth_mc_l2_only_rules(safe_mce_sys().eth_mc_l2_only_rules)
     , m_b_sysvar_mc_force_flowtag(safe_mce_sys().mc_force_flowtag)
-    , m_type(type)
 {
     net_device_val *p_ndev = nullptr;
     const slave_data_t *p_slave = nullptr;
@@ -62,15 +61,11 @@ ring_slave::ring_slave(int if_index, ring *parent, ring_type_t type, bool use_lo
     /* Configure ring_slave() fields */
     m_transport_type = p_ndev->get_transport_type();
 
-    /* Set the same ring active status as related slave has for all ring types
-     * excluding ring with type RING_TAP that does not have related slave device.
-     * So it is marked as active just in case related netvsc device is absent.
-     */
+    /* Set the same ring active status as related slave has for all ring types. */
     m_active = p_slave ? p_slave->active : p_ndev->get_slave_array().empty();
 
     // use local copy of stats by default
     memset(m_p_ring_stat.get(), 0, sizeof(ring_stats_t));
-    m_p_ring_stat->n_type = m_type;
     if (m_parent != this) {
         m_p_ring_stat->p_ring_master = m_parent;
     }
@@ -98,9 +93,8 @@ ring_slave::~ring_slave()
 
 void ring_slave::print_val()
 {
-    ring_logdbg("%d: %p: parent %p type %s", m_if_index, this,
-                ((uintptr_t)this == (uintptr_t)m_parent ? nullptr : m_parent),
-                ring_type_str[m_type]);
+    ring_logdbg("%d: %p: parent %p", m_if_index, this,
+                ((uintptr_t)this == (uintptr_t)m_parent ? nullptr : m_parent));
 }
 
 void ring_slave::restart()
@@ -314,7 +308,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
                     new rfs_rule_filter(m_ring.m_tcp_dst_port_attach_map, rule_key, tcp_3t_only);
             }
             try {
-                if (safe_mce_sys().gro_streams_max && m_ring.is_simple()) {
+                if (safe_mce_sys().gro_streams_max) {
                     p_tmp_rfs = new (std::nothrow)
                         rfs_uc_tcp_gro(&flow_spec_5t, &m_ring, dst_port_filter, flow_tag_id);
                 } else {
@@ -593,7 +587,7 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
         if (likely(si) && si->is_xlio_socket() &&
             unlikely(si->get_poll_group() == nullptr ||
                      si->get_poll_group() != this->get_poll_group())) {
-            m_p_ring_stat->simple.n_rx_zc_migiration_drop++;
+            m_p_ring_stat->n_rx_zc_migiration_drop++;
             return false;
         }
 
