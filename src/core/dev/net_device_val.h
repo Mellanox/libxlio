@@ -202,13 +202,14 @@ public:
     bool ipv6_optimistic_dad() const { return m_ipv6_optimistic_dad; }
     bool ipv6_use_optimistic() const { return m_ipv6_use_optimistic; }
     int ipv6_use_tempaddr() const { return m_ipv6_use_tempaddr; }
+    uint16_t get_vlan() const { return m_vlan; }
     void print_val() const;
     void set_ip_array();
+    const std::string to_str() const;
 
     ring *reserve_ring(resource_allocation_key *key); // create if not exists
     int release_ring(resource_allocation_key *); // delete from m_hash if ref_cnt == 0
     state get_state() const { return m_state; } // not sure, look at state init at c'tor
-    virtual const std::string to_str() const;
     const std::string to_str_ex() const;
     inline void set_transport_type(transport_type_t value) { m_transport_type = value; }
     transport_type_t get_transport_type() const { return m_transport_type; }
@@ -231,9 +232,10 @@ public:
 
 protected:
     void set_slave_array();
-    virtual ring *create_ring(resource_allocation_key *key) = 0;
-    virtual void create_br_address(const char *ifname) = 0;
-    virtual L2_address *create_L2_address(const char *ifname) = 0;
+    ring *create_ring(resource_allocation_key *key);
+    void create_br_address(const char *ifname);
+    L2_address *create_L2_address(const char *ifname);
+    void parse_prio_egress_map();
 
     L2_address *m_p_L2_addr;
     L2_address *m_p_br_addr;
@@ -262,6 +264,7 @@ private:
     void ring_key_redirection_release(resource_allocation_key *key);
     void print_ips();
     bool get_up_and_active_slaves(bool *up_and_active_slaves, size_t size);
+    void configure();
 
     /* See: RFC 3549 2.3.3.1. */
     int m_if_idx; /* Uniquely identifies interface (not unique: eth4 and eth4:5 has the same idx) */
@@ -281,33 +284,8 @@ private:
     char m_base_name[IFNAMSIZ]; /* base name of device basing ifname */
     bool m_ipv6_optimistic_dad = false;
     bool m_ipv6_use_optimistic = false;
+    uint16_t m_vlan = 0;
     int m_ipv6_use_tempaddr = 0;
-};
-
-class net_device_val_eth : public net_device_val {
-public:
-    net_device_val_eth(struct net_device_val_desc *desc)
-        : net_device_val(desc)
-        , m_vlan(0)
-    {
-        set_transport_type(XLIO_TRANSPORT_ETH);
-        if (INVALID != get_state()) {
-            set_slave_array();
-            configure();
-        }
-    }
-    uint16_t get_vlan() const { return m_vlan; }
-    const std::string to_str() const;
-
-protected:
-    virtual ring *create_ring(resource_allocation_key *key);
-    void parse_prio_egress_map();
-
-private:
-    void configure();
-    L2_address *create_L2_address(const char *ifname);
-    void create_br_address(const char *ifname);
-    uint16_t m_vlan;
 };
 
 #endif

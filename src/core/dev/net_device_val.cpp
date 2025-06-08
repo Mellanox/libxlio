@@ -256,6 +256,12 @@ net_device_val::net_device_val(struct net_device_val_desc *desc)
     } else {
         nd_logdbg("%s ==> none", get_ifname());
     }
+
+    set_transport_type(XLIO_TRANSPORT_ETH);
+    if (INVALID != get_state()) {
+        set_slave_array();
+        configure();
+    }
 }
 
 net_device_val::~net_device_val()
@@ -886,11 +892,6 @@ uint64_t net_device_val::get_accumulative_rx_cq_drop_counter()
     return accumaltor;
 };
 
-const std::string net_device_val::to_str() const
-{
-    return std::string("Net Device: " + m_name);
-}
-
 ring *net_device_val::reserve_ring(resource_allocation_key *key)
 {
     nd_logfunc("");
@@ -1181,7 +1182,7 @@ void net_device_val::unregister_to_ibverbs_events(event_handler_ibverbs *handler
     }
 }
 
-void net_device_val_eth::configure()
+void net_device_val::configure()
 {
     m_p_L2_addr = create_L2_address(get_ifname());
 
@@ -1227,7 +1228,7 @@ uint32_t net_device_val::get_priority_by_tc_class(uint32_t tc_class)
     return it->second;
 }
 
-void net_device_val_eth::parse_prio_egress_map()
+void net_device_val::parse_prio_egress_map()
 {
     int len, ret;
     nl_cache *cache = nullptr;
@@ -1272,7 +1273,7 @@ out:
     }
 }
 
-ring *net_device_val_eth::create_ring(resource_allocation_key *key)
+ring *net_device_val::create_ring(resource_allocation_key *key)
 {
     ring *ring = nullptr;
 
@@ -1296,7 +1297,7 @@ ring *net_device_val_eth::create_ring(resource_allocation_key *key)
     return ring;
 }
 
-L2_address *net_device_val_eth::create_L2_address(const char *ifname)
+L2_address *net_device_val::create_L2_address(const char *ifname)
 {
     if (m_p_L2_addr) {
         delete m_p_L2_addr;
@@ -1307,7 +1308,7 @@ L2_address *net_device_val_eth::create_L2_address(const char *ifname)
     return new ETH_addr(hw_addr);
 }
 
-void net_device_val_eth::create_br_address(const char *ifname)
+void net_device_val::create_br_address(const char *ifname)
 {
     if (m_p_br_addr) {
         delete m_p_br_addr;
@@ -1323,9 +1324,9 @@ void net_device_val_eth::create_br_address(const char *ifname)
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 }
-const std::string net_device_val_eth::to_str() const
+const std::string net_device_val::to_str() const
 {
-    return std::string("ETH: " + net_device_val::to_str());
+    return std::string("ETH Net Device: " + m_name);
 }
 
 bool net_device_val::verify_bond_or_eth_qp_creation()
