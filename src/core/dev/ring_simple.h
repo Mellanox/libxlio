@@ -353,22 +353,4 @@ private:
     } m_lro;
 };
 
-class ring_eth : public ring_simple {
-public:
-    ring_eth(int if_index, ring *parent = nullptr, bool call_create_res = true,
-             bool use_locks = true)
-        : ring_simple(if_index, parent, use_locks)
-    {
-        net_device_val_eth *p_ndev = dynamic_cast<net_device_val_eth *>(
-            g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index()));
-        if (p_ndev) {
-            m_vlan = p_ndev->get_vlan();
-
-            if (call_create_res) {
-                create_resources();
-            }
-        }
-    }
-};
-
 #endif // RING_SIMPLE_H

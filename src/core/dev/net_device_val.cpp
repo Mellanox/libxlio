@@ -1279,12 +1279,11 @@ ring *net_device_val_eth::create_ring(resource_allocation_key *key)
     try {
         switch (m_bond) {
         case NO_BOND:
-            ring = new ring_eth(get_if_idx(), nullptr, true,
-                                (key ? key->get_use_locks() : true));
+            ring = new ring_simple(get_if_idx(), nullptr, (key ? key->get_use_locks() : true));
             break;
         case ACTIVE_BACKUP:
         case LAG_8023ad:
-            ring = new ring_bond_eth(get_if_idx());
+            ring = new ring_bond(get_if_idx());
             break;
         default:
             nd_logdbg("Unknown ring type");

@@ -43,6 +43,12 @@ ring_bond::ring_bond(int if_index)
     m_max_send_sge = 0;
 
     print_val();
+
+    const slave_data_vector_t &slaves = p_ndev->get_slave_array();
+    update_cap();
+    for (size_t i = 0; i < slaves.size(); i++) {
+        slave_create(slaves[i]->if_index);
+    }
 }
 
 ring_bond::~ring_bond()
@@ -146,11 +152,11 @@ void ring_bond::restart()
             }
 
             /* For RoCE LAG device income data is processed by single ring only
-                * Consider using ring related slave with lag_tx_port_affinity = 1
-                * even if slave is not active.
-                * Always keep this ring active for RX
-                * but keep common logic for TX
-                */
+             * Consider using ring related slave with lag_tx_port_affinity = 1
+             * even if slave is not active.
+             * Always keep this ring active for RX
+             * but keep common logic for TX
+             */
             if (slaves[j]->active) {
                 ring_logdbg("ring %d active", i);
                 if (slaves[j]->lag_tx_port_affinity != 1) {
@@ -196,12 +202,11 @@ void ring_bond::restart()
             } else {
                 currently_active->m_cq_moderation_info.period =
                     safe_mce_sys().cq_moderation_period_usec;
-                currently_active->m_cq_moderation_info.count =
-                    safe_mce_sys().cq_moderation_count;
+                currently_active->m_cq_moderation_info.count = safe_mce_sys().cq_moderation_count;
             }
 
             currently_active->modify_cq_moderation(safe_mce_sys().cq_moderation_period_usec,
-                                                    safe_mce_sys().cq_moderation_count);
+                                                   safe_mce_sys().cq_moderation_count);
         }
     }
 
@@ -772,29 +777,11 @@ uint64_t ring_bond::get_rx_cq_out_of_buffer_drop()
     return accumulator;
 }
 
-void ring_bond::slave_destroy(int if_index)
-{
-    ring_slave *cur_slave = nullptr;
-    ring_slave_vector_t::iterator iter;
-
-    for (iter = m_bond_rings.begin(); iter != m_bond_rings.end(); iter++) {
-        cur_slave = *iter;
-        if (cur_slave->get_if_index() == if_index) {
-            delete cur_slave;
-            m_bond_rings.erase(iter);
-            popup_xmit_rings();
-            popup_recv_rings();
-            update_rx_channel_fds();
-            break;
-        }
-    }
-}
-
-void ring_bond_eth::slave_create(int if_index)
+void ring_bond::slave_create(int if_index)
 {
     ring_slave *cur_slave;
 
-    cur_slave = new ring_eth(if_index, this);
+    cur_slave = new ring_simple(if_index, this, true);
     if (!cur_slave) {
         ring_logpanic("Error creating bond ring: memory allocation error");
     }
