@@ -78,8 +78,7 @@ public:
     virtual uint16_t get_max_header_sz(void);
     virtual uint32_t get_tx_lkey(ring_user_id_t id) { return m_xmit_rings[id]->get_tx_lkey(id); }
     virtual bool is_tso(void);
-    virtual void slave_create(int if_index) = 0;
-    virtual void slave_destroy(int if_index);
+    void slave_create(int if_index);
 
     void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)
     {
@@ -134,26 +133,6 @@ private:
     net_device_val::bond_xmit_hash_policy m_xmit_hash_policy;
     lock_mutex_recursive m_lock_ring_rx;
     lock_mutex_recursive m_lock_ring_tx;
-};
-
-class ring_bond_eth : public ring_bond {
-public:
-    ring_bond_eth(int if_index)
-        : ring_bond(if_index)
-    {
-        net_device_val *p_ndev =
-            g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index());
-        if (p_ndev) {
-            const slave_data_vector_t &slaves = p_ndev->get_slave_array();
-            update_cap();
-            for (size_t i = 0; i < slaves.size(); i++) {
-                slave_create(slaves[i]->if_index);
-            }
-        }
-    }
-
-protected:
-    virtual void slave_create(int if_index);
 };
 
 #endif /* RING_BOND_H */
