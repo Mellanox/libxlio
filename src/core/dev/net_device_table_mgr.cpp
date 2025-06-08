@@ -220,7 +220,7 @@ void net_device_table_mgr::update_tbl()
                 /* Add new interfaces */
                 switch (nl_msgdata->ifi_type) {
                 case ARPHRD_ETHER:
-                    p_net_device_val = new net_device_val_eth(&desc);
+                    p_net_device_val = new net_device_val(&desc);
                     break;
                 default:
                     goto next;
@@ -570,6 +570,7 @@ void net_device_table_mgr::get_net_devices(local_dev_vector &vec)
 void net_device_table_mgr::del_link_event(const netlink_link_info *info)
 {
     ndtm_logdbg("netlink event: RTM_DELLINK if_index: %d", info->ifindex);
+    NOT_IN_USE(info);
 
     /* This flow is actual when interface is removed quickly
      * w/o moving it in DOWN state.
@@ -582,6 +583,7 @@ void net_device_table_mgr::del_link_event(const netlink_link_info *info)
 void net_device_table_mgr::new_link_event(const netlink_link_info *info)
 {
     ndtm_logdbg("netlink event: RTM_NEWLINK if_index: %d", info->ifindex);
+    NOT_IN_USE(info);
 
     /* This flow is used to process interface UP and DOWN scenarios.
      * It is important that interface can be removed w/o putting it into

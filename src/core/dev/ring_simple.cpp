@@ -63,8 +63,7 @@ ring_simple::ring_simple(int if_index, ring *parent, bool use_locks)
     , m_lock_ring_tx_buf_wait("ring:lock_tx_buf_wait")
     , m_gro_mgr(safe_mce_sys().gro_streams_max, MAX_GRO_BUFS)
 {
-    net_device_val_eth *p_ndev = dynamic_cast<net_device_val_eth *>(
-        g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index()));
+    net_device_val *p_ndev = g_p_net_device_table_mgr->get_net_device_val(m_parent->get_if_index());
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!p_ndev) {
         // Coverity warning suppression
