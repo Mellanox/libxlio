@@ -339,10 +339,6 @@ typedef struct {
 
 CACHELINE_BOUNDARY_SIZE_ASSERT(cq_instance_block_t);
 
-typedef enum { RING_ETH = 0, RING_TAP } ring_type_t;
-
-static const char *const ring_type_str[] = {"RING_ETH", "RING_TAP"};
-
 // Ring stat info
 typedef struct {
     uint64_t n_rx_pkt_count;
@@ -354,7 +350,7 @@ typedef struct {
     uint32_t n_rx_tls_contexts;
     uint32_t n_rx_tls_resyncs;
     uint32_t n_rx_tls_auth_fail;
-    ring_type_t n_type;
+    uint32_t n_rx_zc_migiration_drop;
     void *p_ring_master;
 
     // First cache line
@@ -372,21 +368,10 @@ typedef struct {
 
     // Second cache line
 
-    union {
-        struct {
-            uint64_t n_tx_dev_mem_pkt_count;
-            uint64_t n_tx_dev_mem_byte_count;
-            uint64_t n_tx_dev_mem_oob;
-            uint32_t n_tx_dev_mem_allocated;
-            uint32_t n_rx_zc_migiration_drop;
-        } simple;
-        struct {
-            char s_tap_name[IFNAMSIZ];
-            uint32_t n_tap_fd;
-            uint32_t n_rx_buffers;
-            uint32_t n_vf_plugouts;
-        } tap;
-    };
+    uint64_t n_tx_dev_mem_pkt_count;
+    uint64_t n_tx_dev_mem_byte_count;
+    uint64_t n_tx_dev_mem_oob;
+    uint32_t n_tx_dev_mem_allocated;
 } ring_stats_t;
 
 typedef struct {

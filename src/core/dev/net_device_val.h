@@ -145,7 +145,7 @@ typedef std::unordered_map<uint32_t, uint32_t> tc_class_priority_map;
 class net_device_val {
 public:
     enum state { DOWN, UP, RUNNING, INVALID };
-    enum bond_type { NO_BOND, ACTIVE_BACKUP, LAG_8023ad, NETVSC };
+    enum bond_type { NO_BOND, ACTIVE_BACKUP, LAG_8023ad };
     enum bond_xmit_hash_policy {
         XHP_LAYER_2,
         XHP_LAYER_3_4,
@@ -224,7 +224,6 @@ public:
     inline bond_type get_is_bond() { return m_bond; }
     inline bond_xmit_hash_policy get_bond_xmit_hash_policy() { return m_bond_xmit_hash_policy; }
     bool update_active_slaves();
-    void update_netvsc_slaves(int if_index, int if_flags);
     void register_to_ibverbs_events(event_handler_ibverbs *handler);
     void unregister_to_ibverbs_events(event_handler_ibverbs *handler);
     uint32_t get_priority_by_tc_class(uint32_t tc_class);

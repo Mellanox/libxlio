@@ -1026,7 +1026,7 @@ bool get_bond_name(IN const char *ifname, OUT char *bond_name, IN int sz)
     }
 
     for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
-        snprintf(upper_path, sizeof(upper_path), NETVSC_DEVICE_UPPER_FILE, base_ifname,
+        snprintf(upper_path, sizeof(upper_path), BOND_DEVICE_UPPER_FILE, base_ifname,
                  ifa->ifa_name);
         int fd = SYSCALL(open, upper_path, O_RDONLY);
         if (fd >= 0) {
@@ -1071,56 +1071,6 @@ bool check_bond_roce_lag_exist(OUT char *bond_roce_lag_path, int sz, IN const ch
     NOT_IN_USE(slave_name);
     return true;
 #endif
-
-    return false;
-}
-
-bool get_netvsc_slave(IN const char *ifname, OUT char *slave_name, OUT unsigned int &slave_flags)
-{
-    char netvsc_path[256];
-    char base_ifname[IFNAMSIZ];
-    get_base_interface_name(ifname, base_ifname, sizeof(base_ifname));
-    struct ifaddrs *ifaddr, *ifa;
-    bool ret = false;
-
-    if (getifaddrs(&ifaddr) == -1) {
-        __log_err("getifaddrs() failed (errno = %d %m)", errno);
-        return ret;
-    }
-
-    for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
-        snprintf(netvsc_path, sizeof(netvsc_path), NETVSC_DEVICE_LOWER_FILE, base_ifname,
-                 ifa->ifa_name);
-        int fd = SYSCALL(open, netvsc_path, O_RDONLY);
-        if (fd >= 0) {
-            SYSCALL(close, fd);
-            memcpy(slave_name, ifa->ifa_name, IFNAMSIZ);
-            slave_flags = ifa->ifa_flags;
-            __log_dbg("Found slave_name = %s, slave_flags = %u", slave_name, slave_flags);
-            ret = true;
-            break;
-        }
-    }
-
-    freeifaddrs(ifaddr);
-
-    return ret;
-}
-
-bool check_netvsc_device_exist(const char *ifname)
-{
-    int ret = -1;
-    char device_path[256] = {0};
-    char base_ifname[IFNAMSIZ];
-    get_base_interface_name(ifname, base_ifname, sizeof(base_ifname));
-    sprintf(device_path, NETVSC_DEVICE_CLASS_FILE, base_ifname);
-    char sys_res[1024] = {0};
-    if ((ret = priv_read_file(device_path, sys_res, sizeof(sys_res) - 1, VLOG_FUNC)) > 0) {
-        sys_res[ret] = '\0';
-        if (strcmp(sys_res, NETVSC_ID) == 0) {
-            return true;
-        }
-    }
 
     return false;
 }

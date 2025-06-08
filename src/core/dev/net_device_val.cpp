@@ -26,7 +26,6 @@
 #include "event/event_handler_manager.h"
 #include "proto/L2_address.h"
 #include "dev/ib_ctx_handler_collection.h"
-#include "dev/ring_tap.h"
 #include "dev/ring_simple.h"
 #include "dev/ring_slave.h"
 #include "dev/ring_bond.h"
@@ -202,8 +201,6 @@ net_device_val::net_device_val(struct net_device_val_desc *desc)
     /* Identify device type */
     if ((get_flags() & IFF_MASTER) || check_bond_device_exist(get_ifname_link())) {
         verify_bonding_mode();
-    } else if (check_netvsc_device_exist(get_ifname_link())) {
-        m_bond = NETVSC;
     } else {
         m_bond = NO_BOND;
     }
@@ -213,16 +210,6 @@ net_device_val::net_device_val(struct net_device_val_desc *desc)
     valid = false;
     ib_ctx = g_p_ib_ctx_handler_collection->get_ib_ctx(get_ifname_link());
     switch (m_bond) {
-    case NETVSC:
-        if (get_type() == ARPHRD_ETHER) {
-            char slave_ifname[IFNAMSIZ] = {0};
-            unsigned int slave_flags = 0;
-            /* valid = true; uncomment it is valid flow to operate w/o SRIOV */
-            if (get_netvsc_slave(get_ifname_link(), slave_ifname, slave_flags)) {
-                valid = verify_qp_creation(slave_ifname, IBV_QPT_RAW_PACKET);
-            }
-        }
-        break;
     case LAG_8023ad:
     case ACTIVE_BACKUP:
         // this is a bond interface (or a vlan/alias over bond), find the slaves
@@ -491,9 +478,6 @@ const std::string net_device_val::to_str_ex() const
 
     rc += " (";
     switch (m_bond) {
-    case NETVSC:
-        rc += "netvsc";
-        break;
     case LAG_8023ad:
         rc += "lag 8023ad";
         break;
@@ -552,20 +536,11 @@ void net_device_val::set_slave_array()
 
     nd_logdbg("");
 
-    if (m_bond == NETVSC) {
-        slave_data_t *s = nullptr;
-        unsigned int slave_flags = 0;
-        if (get_netvsc_slave(get_ifname_link(), active_slave, slave_flags)) {
-            if ((slave_flags & IFF_UP) && verify_qp_creation(active_slave, IBV_QPT_RAW_PACKET)) {
-                s = new slave_data_t(if_nametoindex(active_slave));
-                m_slaves.push_back(s);
-            }
-        }
-    } else if (m_bond == NO_BOND) {
+    if (m_bond == NO_BOND) {
         slave_data_t *s = new slave_data_t(if_nametoindex(get_ifname()));
         m_slaves.push_back(s);
     } else {
-        // bond device
+        // bond devices
 
         // get list of all slave devices
         char slaves_list[IFNAMSIZ * MAX_SLAVES] = {0};
@@ -624,10 +599,6 @@ void net_device_val::set_slave_array()
             }
         }
 
-        if (m_bond == NETVSC) {
-            m_slaves[i]->active = true;
-        }
-
         if (m_bond == NO_BOND) {
             m_slaves[i]->active = true;
         }
@@ -650,7 +621,7 @@ void net_device_val::set_slave_array()
         }
     }
 
-    if (m_slaves.empty() && NETVSC != m_bond) {
+    if (m_slaves.empty()) {
         m_state = INVALID;
         nd_logpanic("No slave found.");
     }
@@ -914,65 +885,6 @@ uint64_t net_device_val::get_accumulative_rx_cq_drop_counter()
                   });
     return accumaltor;
 };
-void net_device_val::update_netvsc_slaves(int if_index, int if_flags)
-{
-    slave_data_t *s = nullptr;
-    bool found = false;
-    ib_ctx_handler *ib_ctx = nullptr, *up_ib_ctx = nullptr;
-    char if_name[IFNAMSIZ] = {0};
-
-    m_lock.lock();
-
-    if (if_indextoname(if_index, if_name) && (if_flags & IFF_UP) && (if_flags & IFF_RUNNING)) {
-        nd_logdbg("slave %d is up", if_index);
-
-        g_p_ib_ctx_handler_collection->update_tbl(if_name);
-        if ((up_ib_ctx = g_p_ib_ctx_handler_collection->get_ib_ctx(if_name))) {
-            s = new slave_data_t(if_index);
-            s->active = true;
-            s->p_ib_ctx = up_ib_ctx;
-            s->p_L2_addr = create_L2_address(if_name);
-            s->port_num = get_port_from_ifname(if_name);
-            m_slaves.push_back(s);
-
-            up_ib_ctx->set_ctx_time_converter_status(
-                g_p_net_device_table_mgr->get_ctx_time_conversion_mode());
-            g_buffer_pool_rx_rwqe->register_memory(s->p_ib_ctx);
-            g_buffer_pool_tx->register_memory(s->p_ib_ctx);
-            found = true;
-        }
-    } else {
-        if (!m_slaves.empty()) {
-            s = m_slaves.back();
-            m_slaves.pop_back();
-
-            nd_logdbg("slave %d is down ", s->if_index);
-
-            ib_ctx = s->p_ib_ctx;
-            delete s;
-            found = true;
-        }
-    }
-
-    m_lock.unlock();
-
-    if (!found) {
-        nd_logdbg("Unable to detect any changes for interface %d. ignoring", if_index);
-        return;
-    }
-
-    /* restart if status changed */
-    m_p_L2_addr = create_L2_address(get_ifname());
-    // restart rings
-    rings_hash_map_t::iterator ring_iter;
-    for (ring_iter = m_h_ring_map.begin(); ring_iter != m_h_ring_map.end(); ring_iter++) {
-        THE_RING->restart();
-    }
-
-    if (ib_ctx) {
-        g_p_ib_ctx_handler_collection->del_ib_ctx(ib_ctx);
-    }
-}
 
 const std::string net_device_val::to_str() const
 {
@@ -1367,15 +1279,12 @@ ring *net_device_val_eth::create_ring(resource_allocation_key *key)
     try {
         switch (m_bond) {
         case NO_BOND:
-            ring = new ring_eth(get_if_idx(), nullptr, RING_ETH, true,
+            ring = new ring_eth(get_if_idx(), nullptr, true,
                                 (key ? key->get_use_locks() : true));
             break;
         case ACTIVE_BACKUP:
         case LAG_8023ad:
             ring = new ring_bond_eth(get_if_idx());
-            break;
-        case NETVSC:
-            ring = new ring_bond_netvsc(get_if_idx());
             break;
         default:
             nd_logdbg("Unknown ring type");

@@ -31,9 +31,7 @@
 #define XLIO_MSG_INIT  0x01
 #define XLIO_MSG_STATE 0x02
 #define XLIO_MSG_EXIT  0x03
-#define XLIO_MSG_FLOW  0x04
-
-#define XLIO_MSG_ACK 0x80
+#define XLIO_MSG_ACK   0x80
 
 #define XLIO_AGENT_VER 0x04
 
@@ -80,42 +78,6 @@ struct xlio_msg_state {
     } dst;
     uint8_t type;
     uint8_t state;
-};
-
-enum {
-    XLIO_MSG_FLOW_EGRESS = 0,
-    XLIO_MSG_FLOW_UDP_5T = 1,
-    XLIO_MSG_FLOW_UDP_3T = 2,
-    XLIO_MSG_FLOW_TCP_5T = 3,
-    XLIO_MSG_FLOW_TCP_3T = 4
-};
-
-typedef enum { XLIO_MSG_FLOW_ADD = 1, XLIO_MSG_FLOW_DEL = 2 } msg_flow_t;
-
-struct xlio_msg_flow {
-    struct xlio_hdr hdr;
-    uint8_t type; /* format of tc rule command */
-    uint8_t action; /* add, del */
-    uint32_t if_id; /* interface index */
-    uint32_t tap_id; /* tap device index */
-    struct {
-        struct {
-            uint16_t family;
-            uint16_t port;
-            union {
-                uint32_t ipv4;
-                uint8_t ipv6[16];
-            } addr;
-        } src;
-        struct {
-            uint16_t family;
-            uint16_t port;
-            union {
-                uint32_t ipv4;
-                uint8_t ipv6[16];
-            } addr;
-        } dst;
-    } flow;
 };
 
 #pragma pack(pop)

@@ -14,15 +14,9 @@ xliod_SOURCES = \
 	loop.c \
 	hash.c \
 	store.c \
-	flow.c \
 	message.c \
-	notify.c \
-	nl.c \
-	tc.c
+	notify.c
 
 noinst_HEADERS = \
 	daemon.h \
-	hash.h \
-	bitmap.h \
-	nl.h \
-	tc.h
+	hash.h

@@ -96,7 +96,6 @@ libxlio_la_SOURCES := \
 	dev/ring_bond.cpp \
 	dev/ring_slave.cpp \
 	dev/ring_simple.cpp \
-	dev/ring_tap.cpp \
 	dev/ring_allocation_logic.cpp \
 	\
 	event/delta_timer.cpp \
@@ -226,7 +225,6 @@ libxlio_la_SOURCES := \
 	dev/ring_bond.h \
 	dev/ring_slave.h \
 	dev/ring_simple.h \
-	dev/ring_tap.h \
 	dev/ring_allocation_logic.h \
 	dev/wqe_send_handler.h \
 	dev/xlio_ti.h \
