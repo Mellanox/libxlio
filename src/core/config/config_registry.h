@@ -165,6 +165,10 @@ private:
         const std::string &key,
         const std::function<std::experimental::any(const std::string &)> &getter) const
     {
+        static_assert(sizeof(T) <= sizeof(int64_t), "Type T cannot be larger than int64_t");
+        static_assert(!(sizeof(T) == sizeof(int64_t) && std::is_unsigned<T>::value),
+                      "Unsigned 64-bit types like uint64_t cannot safely hold all int64_t values");
+
         static_assert(!std::is_enum<T>::value,
                       "T must not be an enum type as std::numeric_limits on enum returns 0. ");
 
