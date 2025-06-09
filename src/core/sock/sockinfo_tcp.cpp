@@ -361,7 +361,7 @@ void sockinfo_tcp::rx_add_ring_cb(ring *p_ring)
 
 void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
 {
-    if (m_rx_epfd != -1) {
+    if (is_shadow_socket_present() && m_rx_epfd != -1) {
         // XLIO Socket API doesn't use per socket epfd
         // Closing it here leads to 2 extra syscalls per connection
         m_sock_wakeup_pipe.wakeup_set_epoll_fd(0);
@@ -2740,6 +2740,20 @@ sockinfo_tcp *sockinfo_tcp::accept_clone()
     // Clone is always called first when a SYN packet received by a listen socket.
     IF_STATS(m_p_socket_stats->listen_counters.n_rx_syn++);
 
+    // Create the socket object. We skip shadow sockets for incoming connections.
+    fd = socket_internal(m_family, SOCK_STREAM, 0, false, false);
+    if (fd < 0) {
+        IF_STATS(m_p_socket_stats->listen_counters.n_conn_dropped++);
+        return nullptr;
+    }
+
+    si = dynamic_cast<sockinfo_tcp *>(fd_collection_get_sockfd(fd));
+    if (!si) {
+        si_tcp_logwarn("Can not get accept socket from FD collection");
+        XLIO_CALL(close, fd);
+        return nullptr;
+    }
+
     if (is_xlio_socket()) {
         struct xlio_socket_attr attr = {
             .flags = 0, /* unused */
@@ -2747,28 +2761,8 @@ sockinfo_tcp *sockinfo_tcp::accept_clone()
             .group = reinterpret_cast<xlio_poll_group_t>(m_p_group),
             .userdata_sq = 0,
         };
-        xlio_socket_t sock;
-        int rc = xlio_socket_create(&attr, &sock);
-        if (rc != 0) {
-            si_tcp_logdbg("Couldn't create XLIO socket (errno=%d)", errno);
-            IF_STATS(m_p_socket_stats->listen_counters.n_conn_dropped++);
-            return nullptr;
-        }
-        si = reinterpret_cast<sockinfo_tcp *>(sock);
-    } else {
-        // Create the socket object. We skip shadow sockets for incoming connections.
-        fd = socket_internal(m_family, SOCK_STREAM, 0, false, false);
-        if (fd < 0) {
-            IF_STATS(m_p_socket_stats->listen_counters.n_conn_dropped++);
-            return nullptr;
-        }
-
-        si = dynamic_cast<sockinfo_tcp *>(fd_collection_get_sockfd(fd));
-        if (!si) {
-            si_tcp_logwarn("Can not get accept socket from FD collection");
-            XLIO_CALL(close, fd);
-            return nullptr;
-        }
+        si->set_xlio_socket(&attr);
+        m_p_group->add_socket(si);
     }
 
     // This method is called from a flow which assumes that the socket is locked
