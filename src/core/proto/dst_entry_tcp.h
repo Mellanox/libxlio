@@ -46,27 +46,6 @@ protected:
 
 private:
     const uint32_t m_n_sysvar_tx_bufs_batch_tcp;
-
-    inline int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                                xlio_wr_tx_packet_attr attr, xlio_tis *tis)
-    {
-        if (unlikely(is_set(attr, XLIO_TX_PACKET_DUMMY))) {
-            if (m_p_ring->get_hw_dummy_send_support(id, p_send_wqe)) {
-                xlio_ibv_wr_opcode last_opcode =
-                    m_p_send_wqe_handler->set_opcode(*p_send_wqe, XLIO_IBV_WR_NOP);
-                m_p_ring->send_lwip_buffer(id, p_send_wqe, attr, tis);
-                m_p_send_wqe_handler->set_opcode(*p_send_wqe, last_opcode);
-            }
-            /* no need to free the buffer if dummy send is not supported, as for lwip buffers we
-             * have 2 ref counts, */
-            /* one for caller, and one for completion. for completion, we ref count in    */
-            /* send_lwip_buffer(). Since we are not going in, the caller will free the    */
-            /* buffer. */
-            return 0;
-        }
-
-        return m_p_ring->send_lwip_buffer(id, p_send_wqe, attr, tis);
-    }
 };
 
 #endif /* DST_ENTRY_TCP_H */

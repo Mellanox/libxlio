@@ -79,7 +79,6 @@
 #define MSG_ZEROCOPY 0x4000000
 #endif
 
-#define IS_DUMMY_PACKET(flags)            (flags & XLIO_SND_FLAGS_DUMMY)
 #define NOTIFY_ON_EVENTS(context, events) context->set_events(events)
 
 #define IF_STATS(x)                                                                                \

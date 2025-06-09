@@ -909,7 +909,6 @@ void mce_sys_var::legacy_get_env_params()
     tcp_abort_on_close = MCE_DEFAULT_TCP_ABORT_ON_CLOSE;
     rx_poll_on_tx_tcp = MCE_DEFAULT_RX_POLL_ON_TX_TCP;
     rx_cq_wait_ctrl = MCE_DEFAULT_RX_CQ_WAIT_CTRL;
-    trigger_dummy_send_getsockname = MCE_DEFAULT_TRIGGER_DUMMY_SEND_GETSOCKNAME;
     tcp_send_buffer_size = MCE_DEFAULT_TCP_SEND_BUFFER_SIZE;
     skip_poll_in_rx = MCE_DEFAULT_SKIP_POLL_IN_RX;
     multilock = MCE_DEFAULT_MULTILOCK;
@@ -1782,10 +1781,6 @@ void mce_sys_var::legacy_get_env_params()
         rx_cq_wait_ctrl = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_TRIGGER_DUMMY_SEND_GETSOCKNAME))) {
-        trigger_dummy_send_getsockname = atoi(env_ptr) ? true : false;
-    }
-
     if ((env_ptr = getenv(SYS_VAR_TCP_SEND_BUFFER_SIZE))) {
         tcp_send_buffer_size = (uint32_t)option_size::from_str(env_ptr);
     }
@@ -2084,8 +2079,6 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
     tcp_abort_on_close = registry.get_default_value<bool>("network.protocols.tcp.linger_0");
     rx_poll_on_tx_tcp = registry.get_default_value<bool>("performance.polling.rx_poll_on_tx_tcp");
     rx_cq_wait_ctrl = registry.get_default_value<bool>("performance.polling.rx_cq_wait_ctrl");
-    trigger_dummy_send_getsockname =
-        registry.get_default_value<bool>("core.syscall.getsockname_dummy_send");
     tcp_send_buffer_size = registry.get_default_value<uint32_t>("network.protocols.tcp.wmem");
     skip_poll_in_rx = static_cast<skip_poll_in_rx_t>(
         registry.get_default_value<int>("performance.polling.skip_cq_on_rx"));
@@ -2897,9 +2890,6 @@ void mce_sys_var::configure_syscall_behavior(const config_registry &registry)
 
     set_value_from_registry_if_exists(rx_cq_wait_ctrl, "performance.polling.rx_cq_wait_ctrl",
                                       registry);
-
-    set_value_from_registry_if_exists(trigger_dummy_send_getsockname,
-                                      "core.syscall.getsockname_dummy_send", registry);
 }
 
 void mce_sys_var::configure_network_timing(const config_registry &registry)

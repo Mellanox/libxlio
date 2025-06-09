@@ -86,8 +86,6 @@ static inline uint32_t get_mlx5_opcode(xlio_ibv_wr_opcode verbs_opcode)
         return MLX5_OPCODE_SEND;
     case XLIO_IBV_WR_TSO:
         return MLX5_OPCODE_TSO;
-    case XLIO_IBV_WR_NOP:
-        return MLX5_OPCODE_NOP;
     default:
         return MLX5_OPCODE_SEND;
     }
@@ -110,9 +108,6 @@ hw_queue_tx::hw_queue_tx(ring_simple *ring, const slave_data_t *slave, const uin
                             : MCE_DEFAULT_TX_NUM_SGE);
 
     memset(&m_rate_limit, 0, sizeof(struct xlio_rate_limit_t));
-
-    // Check device capabilities for dummy send support
-    m_hw_dummy_send_support = xlio_is_nop_supported(m_p_ib_ctx_handler->get_ibv_device_attr());
 
     if (configure(slave)) {
         throw_xlio_exception("Failed to configure");
@@ -163,7 +158,6 @@ int hw_queue_tx::configure(const slave_data_t *slave)
                  priv_xlio_transport_type_str(m_p_ring->get_transport_type()),
                  m_p_ib_ctx_handler->get_ibname(), m_p_ib_ctx_handler->get_ibv_device(),
                  m_port_num);
-    hwqtx_logdbg("HW Dummy send support for QP = %d", m_hw_dummy_send_support);
 
     // Create associated cq_mgr_tx and unused cq_mgr_rx_regrq just for QP sake.
     BULLSEYE_EXCLUDE_BLOCK_START

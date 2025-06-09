@@ -200,7 +200,7 @@ private:
     void
     save_stats_threadid_tx(); // ThreadId will only saved if logger is at least in DEBUG(4) level
 
-    void save_stats_tx_offload(int bytes, bool is_dummy);
+    void save_stats_tx_offload(int bytes);
 
     inline int rx_wait(bool blocking);
     inline int poll_os();

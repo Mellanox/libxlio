@@ -2125,12 +2125,6 @@ ssize_t sockinfo::tx_os(const tx_call_t call_type, const iovec *p_iov, const ssi
 {
     errno = 0;
 
-    // Ignore dummy messages for OS
-    if (unlikely(IS_DUMMY_PACKET(__flags))) {
-        errno = EINVAL;
-        return -1;
-    }
-
     switch (call_type) {
     case TX_WRITE:
         __log_info_func("calling os transmit with orig write");

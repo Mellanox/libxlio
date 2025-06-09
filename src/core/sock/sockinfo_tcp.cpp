@@ -1015,49 +1015,6 @@ unsigned sockinfo_tcp::tx_wait(bool blocking)
     return sz;
 }
 
-static inline bool cannot_do_requested_dummy_send(const tcp_pcb &pcb,
-                                                  const xlio_tx_call_attr_t &tx_arg)
-{
-    int flags = tx_arg.attr.flags;
-    const iovec *p_iov = tx_arg.attr.iov;
-    size_t sz_iov = tx_arg.attr.sz_iov;
-
-    uint8_t optflags = TF_SEG_OPTS_DUMMY_MSG;
-    uint16_t mss_local = std::min<uint16_t>(pcb.mss, pcb.snd_wnd_max / 2U);
-    mss_local = mss_local ? mss_local : pcb.mss;
-
-#if LWIP_TCP_TIMESTAMPS
-    if ((pcb.flags & TF_TIMESTAMP)) {
-        optflags |= TF_SEG_OPTS_TS;
-        mss_local = std::max<uint16_t>(mss_local, LWIP_TCP_OPT_LEN_TS + 1U);
-    }
-#endif /* LWIP_TCP_TIMESTAMPS */
-
-    u16_t max_len = mss_local - LWIP_TCP_OPT_LENGTH(optflags);
-
-    // Calculate window size
-    u32_t wnd = std::min(pcb.snd_wnd, pcb.cwnd);
-
-    /* The functions asks the inverse of can do dummy send; thus the truth table might look like:
-     * |                   |Is dummy|Not dummy|
-     * |-------------------|--------|---------|
-     * |Can't do dummy send| True   |  False  |
-     * |Can do dummy send  | False  |  False  |
-     *
-     * !m_pcb.unsent - Unsent queue should be empty
-     * !(flags & MSG_MORE) - MSG_MORE flag is not set
-     * sz_iov == 1U - Prevent calling tcp_write() for scatter/gather element
-     * p_iov->iov_len - There is data to send
-     * p_iov->iov_len <= max_len - The data will not be split into more then one segment
-     * wnd - The window is not empty
-     * (p_iov->iov_len + m_pcb.snd_lbb - m_pcb.lastack) <= wnd - The window allows the dummy packet
-     * it to be sent
-     */
-    bool can_do_dummy_send = !pcb.unsent && !(flags & MSG_MORE) && sz_iov == 1U && p_iov->iov_len &&
-        p_iov->iov_len <= max_len && wnd && (p_iov->iov_len + pcb.snd_lbb - pcb.lastack) <= wnd;
-    return IS_DUMMY_PACKET(flags) && !can_do_dummy_send;
-}
-
 void sockinfo_tcp::put_agent_msg(void *arg)
 {
     sockinfo_tcp *p_si_tcp = (sockinfo_tcp *)arg;
@@ -1153,14 +1110,13 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
         rx_wait_helper(poll_count, false);
     }
 
-    bool is_dummy = IS_DUMMY_PACKET(flags);
     bool is_blocking = BLOCK_THIS_RUN(m_b_blocking, flags);
 
     // 1. All blocking sockets (Blocking TLS/plain/sendfile/TLS-sendfile)
     // 2. Non-blocking plain sockets (Copy path).
     // 3. Non-blocking plain sendfile fallback.
     bool is_packet_zerocopy = (flags & MSG_ZEROCOPY) && (tx_arg.opcode == TX_FILE);
-    if (unlikely(is_dummy) || unlikely(!is_packet_zerocopy) || unlikely(is_blocking)) {
+    if (unlikely(!is_packet_zerocopy) || unlikely(is_blocking)) {
         return tcp_tx_slow_path(tx_arg);
     }
 
@@ -1199,7 +1155,7 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
             if (tx_size == 0) {
                 // force out TCP data before going on wait()
                 tcp_output(&m_pcb);
-                return tcp_tx_handle_sndbuf_unavailable(total_tx, is_dummy, errno_tmp);
+                return tcp_tx_handle_sndbuf_unavailable(total_tx, errno_tmp);
             }
 
             tx_size = std::min<size_t>(p_iov[i].iov_len - pos, tx_size);
@@ -1208,7 +1164,7 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
             err = tcp_write_express(&m_pcb, &iov, 1, &tx_arg.priv);
             if (unlikely(err != ERR_OK)) {
                 // tcp_write_express() can return only ERR_MEM error.
-                return tcp_tx_handle_partial_send_and_unlock(total_tx, EAGAIN, is_dummy, errno_tmp);
+                return tcp_tx_handle_partial_send_and_unlock(total_tx, EAGAIN, errno_tmp);
             }
             tx_ptr = (void *)((char *)tx_ptr + tx_size);
             pos += tx_size;
@@ -1216,7 +1172,7 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
         }
     }
 
-    return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp, is_dummy);
+    return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp);
 }
 
 /**
@@ -1247,11 +1203,6 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
         apiflags |= XLIO_TX_FILE;
     }
 
-    bool is_dummy = IS_DUMMY_PACKET(flags);
-    if (unlikely(is_dummy)) {
-        apiflags |= XLIO_TX_PACKET_DUMMY;
-    }
-
     // 1. Blocking TLS (TLS disguises itself as TX_FILE with MSG_ZEROCOPY)
     // 2. Blocking plain ZC sendfile
     if ((flags & MSG_ZEROCOPY) && (tx_arg.opcode == TX_FILE)) {
@@ -1264,9 +1215,6 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
 
     if (unlikely(!is_connected_and_ready_to_send())) {
         return tcp_tx_handle_errno_and_unlock(errno);
-    }
-    if (cannot_do_requested_dummy_send(m_pcb, tx_arg)) {
-        return tcp_tx_handle_errno_and_unlock(EAGAIN);
     }
 
     int total_tx = 0;
@@ -1302,12 +1250,11 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
 
                 // non blocking socket should return in order not to tx_wait()
                 if (!block_this_run) {
-                    return tcp_tx_handle_sndbuf_unavailable(total_tx, is_dummy, errno_tmp);
+                    return tcp_tx_handle_sndbuf_unavailable(total_tx, errno_tmp);
                 }
 
                 if (unlikely(g_b_exit)) {
-                    return tcp_tx_handle_partial_send_and_unlock(total_tx, EINTR, is_dummy,
-                                                                 errno_tmp);
+                    return tcp_tx_handle_partial_send_and_unlock(total_tx, EINTR, errno_tmp);
                 }
 
                 tx_size = tx_wait(block_this_run);
@@ -1331,8 +1278,7 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
                     if (unlikely(err == ERR_CONN)) { // happens when remote drops during big write
                         si_tcp_logdbg("connection closed: tx'ed = %d", total_tx);
                         shutdown(SHUT_WR);
-                        return tcp_tx_handle_partial_send_and_unlock(total_tx, EPIPE, is_dummy,
-                                                                     errno_tmp);
+                        return tcp_tx_handle_partial_send_and_unlock(total_tx, EPIPE, errno_tmp);
                     }
                     if (unlikely(err != ERR_MEM)) {
                         // we should not get here...
@@ -1343,15 +1289,14 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
                     /* Set return values for nonblocking socket and finish processing */
                     if (!block_this_run) {
                         if (total_tx > 0) {
-                            return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp, is_dummy);
+                            return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp);
                         } else {
                             return tcp_tx_handle_errno_and_unlock(EAGAIN);
                         }
                     }
 
                     if (unlikely(g_b_exit)) {
-                        return tcp_tx_handle_partial_send_and_unlock(total_tx, EINTR, is_dummy,
-                                                                     errno_tmp);
+                        return tcp_tx_handle_partial_send_and_unlock(total_tx, EINTR, errno_tmp);
                     }
 
                     rx_wait(poll_count, true);
@@ -1380,7 +1325,7 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
         }
     }
 
-    return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp, is_dummy);
+    return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp);
 }
 
 static bool inspect_socket_error_state(const mem_buf_desc_t *mem_buf_desc, struct tcp_pcb *pcb)
@@ -5769,18 +5714,14 @@ void sockinfo_tcp::flush()
     unlock_tcp_con();
 }
 
-ssize_t sockinfo_tcp::tcp_tx_handle_done_and_unlock(ssize_t total_tx, int errno_tmp, bool is_dummy)
+ssize_t sockinfo_tcp::tcp_tx_handle_done_and_unlock(ssize_t total_tx, int errno_tmp)
 {
     tcp_output(&m_pcb); // force data out
 
     if (unlikely(m_p_socket_stats)) {
-        if (unlikely(is_dummy)) {
-            m_p_socket_stats->counters.n_tx_dummy++;
-        } else if (total_tx) {
-            m_p_socket_stats->counters.n_tx_sent_byte_count += total_tx;
-            m_p_socket_stats->counters.n_tx_sent_pkt_count++;
-            m_p_socket_stats->n_tx_ready_byte_count += total_tx;
-        }
+        m_p_socket_stats->counters.n_tx_sent_byte_count += total_tx;
+        m_p_socket_stats->counters.n_tx_sent_pkt_count++;
+        m_p_socket_stats->n_tx_ready_byte_count += total_tx;
     }
 
     unlock_tcp_con();
@@ -5808,10 +5749,10 @@ ssize_t sockinfo_tcp::tcp_tx_handle_errno_and_unlock(int error_number)
 }
 
 ssize_t sockinfo_tcp::tcp_tx_handle_partial_send_and_unlock(ssize_t total_tx, int errno_to_report,
-                                                            bool is_dummy, int errno_to_restore)
+                                                            int errno_to_restore)
 {
     if (total_tx > 0) {
-        return tcp_tx_handle_done_and_unlock(total_tx, errno_to_restore, is_dummy);
+        return tcp_tx_handle_done_and_unlock(total_tx, errno_to_restore);
     }
     si_tcp_logdbg("Returning with: %d", errno_to_report);
     return tcp_tx_handle_errno_and_unlock(errno_to_report);
@@ -5847,13 +5788,12 @@ bool sockinfo_tcp::is_connected_and_ready_to_send()
  *    - no data is buffered: return (-1) and EAGAIN
  *    - some data is buffered: return number of bytes ready to be sent
  */
-ssize_t sockinfo_tcp::tcp_tx_handle_sndbuf_unavailable(ssize_t total_tx, bool is_dummy,
-                                                       int errno_to_restore)
+ssize_t sockinfo_tcp::tcp_tx_handle_sndbuf_unavailable(ssize_t total_tx, int errno_to_restore)
 {
     // non blocking socket should return in order not to tx_wait()
     if (total_tx > 0) {
         m_tx_consecutive_eagain_count = 0;
-        return tcp_tx_handle_done_and_unlock(total_tx, errno_to_restore, is_dummy);
+        return tcp_tx_handle_done_and_unlock(total_tx, errno_to_restore);
     } else {
         m_tx_consecutive_eagain_count++;
         if (m_tx_consecutive_eagain_count >= TX_CONSECUTIVE_EAGAIN_THREASHOLD) {

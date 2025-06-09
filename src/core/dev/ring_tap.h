@@ -45,12 +45,6 @@ public:
                                            int n_num_mem_bufs = 1, bool tx_skip_poll = false);
     virtual int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool b_accounting,
                                    bool trylock = false);
-    virtual bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe)
-    {
-        NOT_IN_USE(id);
-        NOT_IN_USE(p_send_wqe);
-        return false;
-    }
     virtual int request_notification(cq_type_t cq_type, uint64_t poll_sn)
     {
         NOT_IN_USE(cq_type);

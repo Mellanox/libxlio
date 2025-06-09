@@ -457,7 +457,6 @@ public:
     bool rx_poll_on_tx_tcp;
     bool rx_cq_wait_ctrl;
     hyper_t hypervisor;
-    bool trigger_dummy_send_getsockname;
 #if defined(DEFINED_NGINX)
     int nginx_udp_socket_pool_size;
     int nginx_udp_socket_pool_rx_num_buffs_reuse;
@@ -681,14 +680,13 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_NEIGH_UC_ARP_DELAY_MSEC "XLIO_NEIGH_UC_ARP_DELAY_MSEC"
 #define SYS_VAR_NEIGH_NUM_ERR_RETRIES   "XLIO_NEIGH_NUM_ERR_RETRIES"
 
-#define SYS_VAR_DEFERRED_CLOSE                 "XLIO_DEFERRED_CLOSE"
-#define SYS_VAR_TCP_ABORT_ON_CLOSE             "XLIO_TCP_ABORT_ON_CLOSE"
-#define SYS_VAR_RX_POLL_ON_TX_TCP              "XLIO_RX_POLL_ON_TX_TCP"
-#define SYS_VAR_RX_CQ_WAIT_CTRL                "XLIO_RX_CQ_WAIT_CTRL"
-#define SYS_VAR_TRIGGER_DUMMY_SEND_GETSOCKNAME "XLIO_TRIGGER_DUMMY_SEND_GETSOCKNAME"
-#define SYS_VAR_TCP_SEND_BUFFER_SIZE           "XLIO_TCP_SEND_BUFFER_SIZE"
-#define SYS_VAR_SKIP_POLL_IN_RX                "XLIO_SKIP_POLL_IN_RX"
-#define SYS_VAR_MULTILOCK                      "XLIO_MULTILOCK"
+#define SYS_VAR_DEFERRED_CLOSE       "XLIO_DEFERRED_CLOSE"
+#define SYS_VAR_TCP_ABORT_ON_CLOSE   "XLIO_TCP_ABORT_ON_CLOSE"
+#define SYS_VAR_RX_POLL_ON_TX_TCP    "XLIO_RX_POLL_ON_TX_TCP"
+#define SYS_VAR_RX_CQ_WAIT_CTRL      "XLIO_RX_CQ_WAIT_CTRL"
+#define SYS_VAR_TCP_SEND_BUFFER_SIZE "XLIO_TCP_SEND_BUFFER_SIZE"
+#define SYS_VAR_SKIP_POLL_IN_RX      "XLIO_SKIP_POLL_IN_RX"
+#define SYS_VAR_MULTILOCK            "XLIO_MULTILOCK"
 
 #define NEW_CONFIG_VAR_PRINT_REPORT        "monitor.exit_report"
 #define NEW_CONFIG_VAR_LOG_LEVEL           "monitor.log.level"
@@ -839,14 +837,13 @@ extern mce_sys_var &safe_mce_sys();
 #define NEW_CONFIG_VAR_NEIGH_UC_ARP_DELAY_MSEC "network.neighbor.arp.uc_delay_msec"
 #define NEW_CONFIG_VAR_NEIGH_NUM_ERR_RETRIES   "network.neighbor.errors_before_reset"
 
-#define NEW_CONFIG_VAR_DEFERRED_CLOSE                 "core.syscall.deferred_close"
-#define NEW_CONFIG_VAR_TCP_ABORT_ON_CLOSE             "network.protocols.tcp.linger_0"
-#define NEW_CONFIG_VAR_RX_POLL_ON_TX_TCP              "performance.polling.rx_poll_on_tx_tcp"
-#define NEW_CONFIG_VAR_RX_CQ_WAIT_CTRL                "performance.polling.rx_cq_wait_ctrl"
-#define NEW_CONFIG_VAR_TRIGGER_DUMMY_SEND_GETSOCKNAME "core.syscall.getsockname_dummy_send"
-#define NEW_CONFIG_VAR_TCP_SEND_BUFFER_SIZE           "network.protocols.tcp.wmem"
-#define NEW_CONFIG_VAR_SKIP_POLL_IN_RX                "performance.polling.skip_cq_on_rx"
-#define NEW_CONFIG_VAR_MULTILOCK                      "performance.threading.mutex_over_spinlock"
+#define NEW_CONFIG_VAR_DEFERRED_CLOSE       "core.syscall.deferred_close"
+#define NEW_CONFIG_VAR_TCP_ABORT_ON_CLOSE   "network.protocols.tcp.linger_0"
+#define NEW_CONFIG_VAR_RX_POLL_ON_TX_TCP    "performance.polling.rx_poll_on_tx_tcp"
+#define NEW_CONFIG_VAR_RX_CQ_WAIT_CTRL      "performance.polling.rx_cq_wait_ctrl"
+#define NEW_CONFIG_VAR_TCP_SEND_BUFFER_SIZE "network.protocols.tcp.wmem"
+#define NEW_CONFIG_VAR_SKIP_POLL_IN_RX      "performance.polling.skip_cq_on_rx"
+#define NEW_CONFIG_VAR_MULTILOCK            "performance.threading.mutex_over_spinlock"
 
 /*
  * This block consists of default values for library specific
@@ -1000,15 +997,14 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_UTLS_LOW_WMARK_DEK_CACHE_SIZE  (512)
 #endif /* DEFINED_UTLS */
 
-#define MCE_DEFAULT_LRO                            (option_3::AUTO)
-#define MCE_DEFAULT_DEFERRED_CLOSE                 (false)
-#define MCE_DEFAULT_TCP_ABORT_ON_CLOSE             (false)
-#define MCE_DEFAULT_RX_POLL_ON_TX_TCP              (false)
-#define MCE_DEFAULT_TRIGGER_DUMMY_SEND_GETSOCKNAME (false)
-#define MCE_DEFAULT_RX_CQ_WAIT_CTRL                (false)
-#define MCE_ALIGNMENT                              ((unsigned long)63)
-#define MCE_DEFAULT_SKIP_POLL_IN_RX                (SKIP_POLL_IN_RX_DISABLE)
-#define MCE_DEFAULT_MULTILOCK                      (MULTILOCK_SPIN)
+#define MCE_DEFAULT_LRO                (option_3::AUTO)
+#define MCE_DEFAULT_DEFERRED_CLOSE     (false)
+#define MCE_DEFAULT_TCP_ABORT_ON_CLOSE (false)
+#define MCE_DEFAULT_RX_POLL_ON_TX_TCP  (false)
+#define MCE_DEFAULT_RX_CQ_WAIT_CTRL    (false)
+#define MCE_ALIGNMENT                  ((unsigned long)63)
+#define MCE_DEFAULT_SKIP_POLL_IN_RX    (SKIP_POLL_IN_RX_DISABLE)
+#define MCE_DEFAULT_MULTILOCK          (MULTILOCK_SPIN)
 
 /*
  * This block consists of auxiliary constants

@@ -139,12 +139,6 @@
                             "title": "Enable fork support",
                             "description": "Control whether XLIO should support fork. Maps to XLIO_FORK environment variable. Setting this flag on will cause XLIO to call ibv_fork_init() function. ibv_fork_init() initializes libibverbs's data structures to handle fork() function calls correctly and avoid data corruption. If ibv_fork_init() is not called or returns a non-zero status, then libibverbs data structures are not fork()-safe and the effect of an application calling fork() is undefined."
                         },
-                        "getsockname_dummy_send": {
-                            "type": "boolean",
-                            "default": false,
-                            "title": "Use dummy packet from getsockname()",
-                            "description": "This parameter triggers dummy packet send from getsockname(), this will warm up the caches. Maps to XLIO_TRIGGER_DUMMY_SEND_GETSOCKNAME environment variable.\nFor more information regarding dummy send, see XLIO user manual document."
-                        },
                         "deferred_close": {
                             "type": "boolean",
                             "default": false,
