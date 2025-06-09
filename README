@@ -165,7 +165,6 @@ Example:
  XLIO DETAILS: TCP CC Algorithm               0 (LWIP)                   [network.protocols.tcp.congestion_control]
  XLIO DETAILS: TCP abort on close             Disabled                   [network.protocols.tcp.linger_0]
  XLIO DETAILS: Polling Rx on Tx TCP           Disabled                   [performance.polling.rx_poll_on_tx_tcp]
- XLIO DETAILS: Trig dummy send getsockname()  Disabled                   [core.syscall.getsockname_dummy_send]
  XLIO DETAILS: Skip CQ polling in rx          Disabled                   [performance.polling.skip_cq_on_rx]
  XLIO DETAILS: Lock Type                      Spin                       [performance.threading.mutex_over_spinlock]
  XLIO INFO   : ---------------------------------------------------------------------------
@@ -296,11 +295,6 @@ Default value is 1 (Enabled)
 core.syscall.fork_support
 Control whether XLIO should support fork. Maps to **XLIO_FORK** environment variable. Setting this flag on will cause XLIO to call ibv_fork_init() function. ibv_fork_init() initializes libibverbs's data structures to handle fork() function calls correctly and avoid data corruption. If ibv_fork_init() is not called or returns a non-zero status, then libibverbs data structures are not fork()-safe and the effect of an application calling fork() is undefined.
 Default value is 1 (Enabled)
-
-core.syscall.getsockname_dummy_send
-This parameter triggers dummy packet send from getsockname(), this will warm up the caches. Maps to **XLIO_TRIGGER_DUMMY_SEND_GETSOCKNAME** environment variable.
-For more information regarding dummy send, see XLIO user manual document.
-Default value is 0 (Disabled)
 
 core.syscall.sendfile_cache_limit
 Memory limit for the mapping cache which is used by sendfile(). Maps to **XLIO_ZC_CACHE_THRESHOLD** environment variable.

@@ -43,11 +43,6 @@
 #define SO_XLIO_ISOLATE_SAFE    1
 
 /*
- * Flags for Dummy send API
- */
-#define XLIO_SND_FLAGS_DUMMY MSG_SYN // equals to 0x400
-
-/*
  * Return values for the receive packet notify callback function
  */
 typedef enum {

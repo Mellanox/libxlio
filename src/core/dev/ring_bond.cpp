@@ -437,23 +437,6 @@ int ring_bond::send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
     return -1;
 }
 
-bool ring_bond::get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe)
-{
-    mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)(p_send_wqe->wr_id);
-
-    std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-
-    if (is_active_member(p_mem_buf_desc->p_desc_owner, id)) {
-        return m_xmit_rings[id]->get_hw_dummy_send_support(id, p_send_wqe);
-    } else {
-        if (likely(p_mem_buf_desc->p_desc_owner == m_bond_rings[id])) {
-            return m_bond_rings[id]->get_hw_dummy_send_support(id, p_send_wqe);
-        }
-    }
-
-    return false;
-}
-
 bool ring_bond::poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
                                             void *pv_fd_ready_array /*NULL*/)
 {

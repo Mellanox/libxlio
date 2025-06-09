@@ -185,7 +185,7 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
             }
         }
 
-        ret = send_lwip_buffer(m_id, p_send_wqe, attr.flags, attr.tis);
+        ret = m_p_ring->send_lwip_buffer(m_id, p_send_wqe, attr.flags, attr.tis);
     } else { // We don'nt support inline in this case, since we believe that this a very rare case
         mem_buf_desc_t *p_mem_buf_desc;
         size_t total_packet_len = 0;
@@ -230,7 +230,7 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
         p_send_wqe = &m_not_inline_send_wqe;
         p_send_wqe->wr_id = (uintptr_t)p_mem_buf_desc;
 
-        send_ring_buffer(m_id, p_send_wqe, attr.flags);
+        m_p_ring->send_ring_buffer(m_id, p_send_wqe, attr.flags);
     }
 
     if (unlikely(!m_p_tx_mem_buf_desc_list)) {

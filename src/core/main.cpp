@@ -850,10 +850,6 @@ void print_xlio_global_settings()
                       MCE_DEFAULT_RX_CQ_WAIT_CTRL, NEW_CONFIG_VAR_RX_CQ_WAIT_CTRL,
                       safe_mce_sys().rx_cq_wait_ctrl ? "Enabled " : "Disabled");
     VLOG_PARAM_STRING(
-        "Trig dummy send getsockname()", safe_mce_sys().trigger_dummy_send_getsockname,
-        MCE_DEFAULT_TRIGGER_DUMMY_SEND_GETSOCKNAME, NEW_CONFIG_VAR_TRIGGER_DUMMY_SEND_GETSOCKNAME,
-        safe_mce_sys().trigger_dummy_send_getsockname ? "Enabled " : "Disabled");
-    VLOG_PARAM_STRING(
         "Skip CQ polling in rx", safe_mce_sys().skip_poll_in_rx, MCE_DEFAULT_SKIP_POLL_IN_RX,
         NEW_CONFIG_VAR_SKIP_POLL_IN_RX,
         safe_mce_sys().skip_poll_in_rx

@@ -17,8 +17,6 @@ typedef enum xlio_wr_tx_packet_attr {
      */
     /* retransmit operation. */
     XLIO_TX_PACKET_REXMIT = TCP_WRITE_REXMIT, /* 0x08 */
-    /* nop send operation. */
-    XLIO_TX_PACKET_DUMMY = TCP_WRITE_DUMMY, /* 0x10 */
     /* large segment offload operation. */
     XLIO_TX_PACKET_TSO = TCP_WRITE_TSO, /* 0x20 */
     /* sendfile operation. */

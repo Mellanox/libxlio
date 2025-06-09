@@ -74,7 +74,6 @@ public:
                                               unsigned ref) override;
     void mem_buf_desc_return_single_locked(mem_buf_desc_t *buff);
     void return_tx_pool_to_global_pool();
-    bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe) override;
     inline void convert_hw_time_to_system_time(uint64_t hwtime, struct timespec *systime)
     {
         m_p_ib_ctx->convert_hw_time_to_system_time(hwtime, systime);
