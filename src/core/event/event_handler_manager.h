@@ -30,7 +30,6 @@ typedef enum {
     REGISTER_TCP_SOCKET_TIMER,
     UNREGISTER_TCP_SOCKET_TIMER_AND_DELETE,
     REGISTER_TIMER,
-    WAKEUP_TIMER, /* NOT AVAILABLE FOR GROUPED TIMERS */
     UNREGISTER_TIMER,
     UNREGISTER_TIMERS_AND_DELETE,
     REGISTER_IBVERBS,
@@ -162,7 +161,6 @@ public:
 
     void *register_timer_event(int timeout_msec, timer_handler *handler, timer_req_type_t req_type,
                                void *user_data);
-    void wakeup_timer_event(timer_handler *handler, void *node);
     void unregister_timer_event(timer_handler *handler, void *node);
     void unregister_timers_event_and_delete(timer_handler *handler);
 
@@ -207,7 +205,6 @@ protected:
     event_handler_map_t m_event_handler_map;
 
     void priv_register_timer_handler(timer_reg_info_t &info);
-    void priv_wakeup_timer_handler(timer_reg_info_t &info);
     void priv_unregister_timer_handler(timer_reg_info_t &info);
     void priv_unregister_all_handler_timers(timer_reg_info_t &info);
     void priv_register_ibverbs_events(ibverbs_reg_info_t &info);
