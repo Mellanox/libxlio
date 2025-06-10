@@ -220,12 +220,10 @@ void event_handler_manager::register_command_event(int fd, command *cmd)
 
 event_handler_manager::event_handler_manager(bool internal_thread_mode)
     : m_reg_action_q_lock("reg_action_q_lock")
-    , m_b_sysvar_internal_thread_arm_cq_enabled(safe_mce_sys().internal_thread_arm_cq_enabled)
     , m_n_sysvar_timer_resolution_msec(safe_mce_sys().timer_resolution_msec)
 {
     evh_logfunc("");
 
-    m_cq_epfd = 0;
     m_epfd = -1;
     m_event_handler_tid = 0;
 
@@ -923,31 +921,6 @@ void *event_handler_manager::thread_loop()
             continue;
         }
 
-        if (m_b_sysvar_internal_thread_arm_cq_enabled && m_cq_epfd == 0 &&
-            g_p_net_device_table_mgr) {
-            m_cq_epfd = g_p_net_device_table_mgr->global_ring_epfd_get();
-            if (m_cq_epfd > 0) {
-                epoll_event evt = {0, {nullptr}};
-                evt.events = EPOLLIN | EPOLLPRI;
-                evt.data.fd = m_cq_epfd;
-                SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_ADD, m_cq_epfd, &evt);
-            }
-        }
-
-        uint64_t poll_sn_rx = 0;
-        uint64_t poll_sn_tx = 0;
-        if (m_b_sysvar_internal_thread_arm_cq_enabled && m_cq_epfd > 0 &&
-            g_p_net_device_table_mgr) {
-            g_p_net_device_table_mgr->global_ring_poll_and_process_element(&poll_sn_rx, &poll_sn_tx,
-                                                                           nullptr);
-            int ret =
-                g_p_net_device_table_mgr->global_ring_request_notification(poll_sn_rx, poll_sn_tx);
-            if (ret > 0) {
-                g_p_net_device_table_mgr->global_ring_poll_and_process_element(
-                    &poll_sn_rx, &poll_sn_tx, nullptr);
-            }
-        }
-
         // Make sure we sleep for a minimum of X milli seconds
         if (timeout_msec > 0) {
             if ((int)m_n_sysvar_timer_resolution_msec > timeout_msec) {
@@ -965,11 +938,7 @@ void *event_handler_manager::thread_loop()
 
         // check pipe
         for (int idx = 0; (idx < ret) && (m_b_continue_running); ++idx) {
-            if (m_b_sysvar_internal_thread_arm_cq_enabled && p_events[idx].data.fd == m_cq_epfd &&
-                g_p_net_device_table_mgr) {
-                g_p_net_device_table_mgr->global_ring_wait_for_notification_and_process_element(
-                    &poll_sn_rx, nullptr);
-            } else if (is_wakeup_fd(p_events[idx].data.fd)) {
+            if (is_wakeup_fd(p_events[idx].data.fd)) {
                 // a request for registration was sent
                 m_reg_action_q_lock.lock();
                 reg_action_q_t *temp = m_p_reg_action_q_to_push_to;
@@ -996,15 +965,7 @@ void *event_handler_manager::thread_loop()
 
         // process ready event channels
         for (int idx = 0; (idx < ret) && (m_b_continue_running); ++idx) {
-            // if (p_events[idx].events & (EPOLLERR|EPOLLHUP))
-            //	evh_logdbg("error in fd %d",p_events[idx].data.fd );
-
             int fd = p_events[idx].data.fd;
-
-            if (m_b_sysvar_internal_thread_arm_cq_enabled && fd == m_cq_epfd) {
-                continue;
-            }
-
             evh_logfunc("Processing fd %d", fd);
 
             if (is_wakeup_fd(fd)) { // the pipe was already handled

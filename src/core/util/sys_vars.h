@@ -414,7 +414,6 @@ public:
     char internal_thread_cpuset[FILENAME_MAX];
     char internal_thread_affinity_str[FILENAME_MAX];
     cpu_set_t internal_thread_affinity;
-    bool internal_thread_arm_cq_enabled;
     skip_poll_in_rx_t skip_poll_in_rx;
     multilock_t multilock;
     option_3::mode_t enable_tso;
@@ -660,7 +659,6 @@ extern mce_sys_var &safe_mce_sys();
 
 #define SYS_VAR_INTERNAL_THREAD_AFFINITY "XLIO_INTERNAL_THREAD_AFFINITY"
 #define SYS_VAR_INTERNAL_THREAD_CPUSET   "XLIO_INTERNAL_THREAD_CPUSET"
-#define SYS_VAR_INTERNAL_THREAD_ARM_CQ   "XLIO_INTERNAL_THREAD_ARM_CQ"
 
 #define SYS_VAR_NETLINK_TIMER_MSEC "XLIO_NETLINK_TIMER"
 
@@ -815,8 +813,6 @@ extern mce_sys_var &safe_mce_sys();
 
 #define NEW_CONFIG_VAR_INTERNAL_THREAD_AFFINITY "performance.threading.cpu_affinity"
 #define NEW_CONFIG_VAR_INTERNAL_THREAD_CPUSET   "performance.threading.cpuset"
-#define NEW_CONFIG_VAR_INTERNAL_THREAD_ARM_CQ                                                      \
-    "performance.threading.internal_handler.wakeup_per_packet"
 
 #define NEW_CONFIG_VAR_NETLINK_TIMER_MSEC "network.neighbor.update_interval_msec"
 
@@ -920,7 +916,6 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC  (10)
 #define MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX        (10000)
 #define MCE_DEFAULT_CQ_KEEP_QP_FULL                (true)
-#define MCE_DEFAULT_INTERNAL_THREAD_ARM_CQ_ENABLED (false)
 #define MCE_DEFAULT_QP_FORCE_MC_ATTACH             (false)
 #define MCE_DEFAULT_OFFLOADED_SOCKETS              (true)
 #define MCE_DEFAULT_TIMER_RESOLUTION_MSEC          (10)
