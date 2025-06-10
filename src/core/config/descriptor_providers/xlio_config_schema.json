@@ -835,12 +835,6 @@
                                     "title": "Timer resolution (msec)",
                                     "description": "Control XLIO internal thread wakeup timer resolution (in milliseconds). Maps to XLIO_TIMER_RESOLUTION_MSEC environment variable."
                                 },
-                                "wakeup_per_packet": {
-                                    "type": "boolean",
-                                    "default": false,
-                                    "title": "Generate interrupt per packet",
-                                    "description": "Wakeup the internal thread for each packet that the CQ receives. Maps to XLIO_INTERNAL_THREAD_ARM_CQ environment variable. Poll and process the packet and bring it to the socket layer. This can minimize latency in case of a busy application which is not available to receive the packet when it arrived. However, this might decrease performance in case of high pps rate application."
-                                },
                                 "behavior": {
                                     "oneOf": [
                                         {

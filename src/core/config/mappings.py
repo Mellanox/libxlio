@@ -118,7 +118,6 @@ config_mapping = {
     "performance.threading.cpuset": "XLIO_INTERNAL_THREAD_CPUSET",
     "performance.threading.internal_handler.behavior": "XLIO_TCP_CTL_THREAD",
     "performance.threading.internal_handler.timer_msec": "XLIO_TIMER_RESOLUTION_MSEC",
-    "performance.threading.internal_handler.wakeup_per_packet": "XLIO_INTERNAL_THREAD_ARM_CQ",
     "performance.threading.mutex_over_spinlock": "XLIO_MULTILOCK",
     
     # applications section

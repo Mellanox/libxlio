@@ -142,7 +142,6 @@ Example:
  XLIO DETAILS: Delay after join (msec)        0                          [network.multicast.wait_after_join_msec]
  XLIO DETAILS: Internal Thread Affinity       -1                         [performance.threading.cpu_affinity]
  XLIO DETAILS: Internal Thread Cpuset                                    [performance.threading.cpuset]
- XLIO DETAILS: Internal Thread Arm CQ         Disabled                   [performance.threading.internal_handler.wakeup_per_packet]
  XLIO DETAILS: Buffer batching mode           1 (Batch and reclaim buffers) [performance.buffers.batching_mode]
  XLIO DETAILS: Mem Allocation type            Huge pages                 [core.resources.hugepages.enable]
  XLIO DETAILS: Memory limit                   2 GB                       [core.resources.memory_limit]
@@ -843,10 +842,6 @@ Default value is disabled
 performance.threading.internal_handler.timer_msec
 Control XLIO internal thread wakeup timer resolution (in milliseconds). Maps to **XLIO_TIMER_RESOLUTION_MSEC** environment variable.
 Default value is 10
-
-performance.threading.internal_handler.wakeup_per_packet
-Wakeup the internal thread for each packet that the CQ receives. Maps to **XLIO_INTERNAL_THREAD_ARM_CQ** environment variable. Poll and process the packet and bring it to the socket layer. This can minimize latency in case of a busy application which is not available to receive the packet when it arrived. However, this might decrease performance in case of high pps rate application.
-Default value is 0 (Disabled)
 
 performance.threading.mutex_over_spinlock
 Control locking type mechanism for some specific flows. Maps to **XLIO_MULTILOCK** environment variable. Note that usage of Mutex might increase latency.

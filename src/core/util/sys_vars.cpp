@@ -851,7 +851,6 @@ void mce_sys_var::legacy_get_env_params()
     progress_engine_wce_max = MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX;
     cq_keep_qp_full = MCE_DEFAULT_CQ_KEEP_QP_FULL;
     max_tso_sz = MCE_DEFAULT_MAX_TSO_SIZE;
-    internal_thread_arm_cq_enabled = MCE_DEFAULT_INTERNAL_THREAD_ARM_CQ_ENABLED;
 
     offloaded_sockets = MCE_DEFAULT_OFFLOADED_SOCKETS;
     timer_resolution_msec = MCE_DEFAULT_TIMER_RESOLUTION_MSEC;
@@ -1601,10 +1600,6 @@ void mce_sys_var::legacy_get_env_params()
         tcp_timer_resolution_msec = timer_resolution_msec;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_INTERNAL_THREAD_ARM_CQ))) {
-        internal_thread_arm_cq_enabled = atoi(env_ptr) ? true : false;
-    }
-
     if ((env_ptr = getenv(SYS_VAR_INTERNAL_THREAD_CPUSET))) {
         snprintf(internal_thread_cpuset, FILENAME_MAX, "%s", env_ptr);
     }
@@ -1990,8 +1985,6 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
         "performance.completion_queue.periodic_drain_max_cqes");
     cq_keep_qp_full = registry.get_default_value<bool>("performance.completion_queue.keep_full");
     max_tso_sz = registry.get_default_value<int64_t>("hardware_features.tcp.tso.max_size");
-    internal_thread_arm_cq_enabled = registry.get_default_value<bool>(
-        "performance.threading.internal_handler.wakeup_per_packet");
 
     offloaded_sockets =
         registry.get_default_value<bool>("acceleration_control.default_acceleration");
@@ -2713,10 +2706,6 @@ void mce_sys_var::configure_memory_limits(const config_registry &registry)
                     SYS_VAR_TIMER_RESOLUTION_MSEC, timer_resolution_msec, timer_resolution_msec);
         tcp_timer_resolution_msec = timer_resolution_msec;
     }
-
-    set_value_from_registry_if_exists(internal_thread_arm_cq_enabled,
-                                      "performance.threading.internal_handler.wakeup_per_packet",
-                                      registry);
 
     if (registry.value_exists("performance.threading.cpuset")) {
         snprintf(internal_thread_cpuset, FILENAME_MAX, "%s",
