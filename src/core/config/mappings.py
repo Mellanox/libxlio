@@ -35,7 +35,6 @@ config_mapping = {
     "network.protocols.ip.mtu": "XLIO_MTU",
     "network.protocols.tcp.congestion_control": "XLIO_TCP_CC_ALGO",
     "network.protocols.tcp.linger_0": "XLIO_TCP_ABORT_ON_CLOSE",
-    "network.protocols.tcp.max_syn_rate": "XLIO_TCP_MAX_SYN_RATE",
     "network.protocols.tcp.mss": "XLIO_MSS",
     "network.protocols.tcp.nodelay.byte_threshold": "XLIO_TCP_NODELAY_TRESHOLD",
     "network.protocols.tcp.nodelay.enable": "XLIO_TCP_NODELAY",

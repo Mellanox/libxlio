@@ -113,8 +113,6 @@ typedef enum { MTU_FOLLOW_INTERFACE = 0 } mtu_mode_t;
 typedef enum {
     CTL_THREAD_DISABLE = 0,
     CTL_THREAD_DELEGATE_TCP_TIMERS,
-    CTL_THREAD_WITH_WAKEUP,
-    CTL_THREAD_NO_WAKEUP,
     CTL_THREAD_LAST
 } tcp_ctl_thread_t;
 
@@ -170,17 +168,9 @@ OPTIONS_FROM_TO_STR_DEF;
 } // namespace option_3
 
 namespace option_tcp_ctl_thread {
-typedef enum {
-    CTL_THREAD_DISABLE = 0,
-    CTL_THREAD_DELEGATE_TCP_TIMERS,
-    CTL_THREAD_WITH_WAKEUP,
-    CTL_THREAD_NO_WAKEUP,
-    CTL_THREAD_LAST
-} mode_t;
+typedef enum { CTL_THREAD_DISABLE = 0, CTL_THREAD_DELEGATE_TCP_TIMERS, CTL_THREAD_LAST } mode_t;
 OPTIONS_FROM_TO_STR_DEF;
 } // namespace option_tcp_ctl_thread
-
-#define tcp_ctl_thread_on(var) ((var) > option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS)
 
 namespace option_alloc_type {
 typedef enum {
@@ -332,7 +322,6 @@ public:
     int ring_migration_ratio_rx;
     int ring_limit_per_interface;
     int ring_dev_mem_tx;
-    int tcp_max_syn_rate;
 
     size_t zc_cache_threshold;
     uint32_t tx_buf_size;
@@ -656,11 +645,10 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_SRC_PORT_STRIDE "XLIO_SRC_PORT_STRIDE"
 #define SYS_VAR_DISTRIBUTE_CQ   "XLIO_DISTRIBUTE_CQ"
 #endif
-#define SYS_VAR_TCP_MAX_SYN_RATE "XLIO_TCP_MAX_SYN_RATE"
-#define SYS_VAR_MSS              "XLIO_MSS"
-#define SYS_VAR_TCP_CC_ALGO      "XLIO_TCP_CC_ALGO"
-#define SYS_VAR_SPEC             "XLIO_SPEC"
-#define SYS_VAR_TSO              "XLIO_TSO"
+#define SYS_VAR_MSS         "XLIO_MSS"
+#define SYS_VAR_TCP_CC_ALGO "XLIO_TCP_CC_ALGO"
+#define SYS_VAR_SPEC        "XLIO_SPEC"
+#define SYS_VAR_TSO         "XLIO_TSO"
 #ifdef DEFINED_UTLS
 #define SYS_VAR_UTLS_RX                        "XLIO_UTLS_RX"
 #define SYS_VAR_UTLS_TX                        "XLIO_UTLS_TX"
@@ -809,10 +797,9 @@ extern mce_sys_var &safe_mce_sys();
 #define NEW_CONFIG_VAR_SRC_PORT_STRIDE "applications.nginx.src_port_stride"
 #define NEW_CONFIG_VAR_DISTRIBUTE_CQ   "applications.nginx.distribute_cq"
 #endif
-#define NEW_CONFIG_VAR_TCP_MAX_SYN_RATE "network.protocols.tcp.max_syn_rate"
-#define NEW_CONFIG_VAR_MSS              "network.protocols.tcp.mss"
-#define NEW_CONFIG_VAR_TCP_CC_ALGO      "network.protocols.tcp.congestion_control"
-#define NEW_CONFIG_VAR_SPEC             "profiles.spec"
+#define NEW_CONFIG_VAR_MSS         "network.protocols.tcp.mss"
+#define NEW_CONFIG_VAR_TCP_CC_ALGO "network.protocols.tcp.congestion_control"
+#define NEW_CONFIG_VAR_SPEC        "profiles.spec"
 
 #define NEW_CONFIG_VAR_TSO "hardware_features.tcp.tso.enable"
 #ifdef DEFINED_UTLS
@@ -870,7 +857,6 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_RING_MIGRATION_RATIO_RX  (-1)
 #define MCE_DEFAULT_RING_LIMIT_PER_INTERFACE (0)
 #define MCE_DEFAULT_RING_DEV_MEM_TX          (0)
-#define MCE_DEFAULT_TCP_MAX_SYN_RATE         (0)
 #define MCE_DEFAULT_TCP_NODELAY_TRESHOLD     (0)
 #define MCE_DEFAULT_ZC_CACHE_THRESHOLD       (10LU * 1024 * 1024 * 1024) // 10GB
 #define MCE_DEFAULT_TX_BUF_SIZE              (0)
@@ -1016,7 +1002,6 @@ extern mce_sys_var &safe_mce_sys();
 #define NUM_TX_WRE_TO_SIGNAL_MAX            64
 #define NUM_RX_WRE_TO_POST_RECV_MAX         1024
 #define MAX_MLX5_CQ_SIZE_ITEMS              4194304
-#define TCP_MAX_SYN_RATE_TOP_LIMIT          100000
 #define DEFAULT_MC_TTL                      64
 #define DEFAULT_MC_HOP_LIMIT                1
 #define IFTYPE_PARAM_FILE                   "/sys/class/net/%s/type"

@@ -323,14 +323,6 @@
                                     "title": "TCP congestion control algorithm",
                                     "description": "TCP congestion control algorithm. Maps to XLIO_TCP_CC_ALGO environment variable. The default algorithm coming with LWIP is a variation of Reno/New-Reno. The new Cubic algorithm was adapted from FreeBSD implementation.\nUse value of 0 for LWIP algorithm.\nUse value of 1 for Cubic algorithm.\nUse value of 2 in order to disable the congestion algorithm."
                                 },
-                                "max_syn_rate": {
-                                    "type": "integer",
-                                    "minimum": 0,
-                                    "maximum": 100000,
-                                    "default": 0,
-                                    "title": "Maximum SYNs per second",
-                                    "description": "Limit the number of TCP SYN packets that XLIO will handle per second per listen socket. Maps to XLIO_TCP_MAX_SYN_RATE environment variable. For example, in case you use 10 for this value than XLIO will accept at most 10 (could be less) new connections per second per listen socket. Use a value of 0 for un-limiting the number of TCP SYN packets that can be handled. Value range is 0 to 100000."
-                                },
                                 "timestamps": {
                                     "oneOf": [
                                         {
@@ -855,9 +847,7 @@
                                             "type": "integer",
                                             "enum": [
                                                 0,
-                                                1,
-                                                2,
-                                                3
+                                                1
                                             ],
                                             "default": 0
                                         },
@@ -865,9 +855,7 @@
                                             "type": "string",
                                             "enum": [
                                                 "disable",
-                                                "delegate",
-                                                "with_wakeup",
-                                                "no_wakeup"
+                                                "delegate"
                                             ],
                                             "default": "disable"
                                         }

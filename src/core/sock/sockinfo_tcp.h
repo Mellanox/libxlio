@@ -107,8 +107,6 @@ public:
 
     void handle_timer_expired(void *user_data) override;
 
-    void register_wakeup_event();
-
     void add_new_timer(sockinfo_tcp *sock);
 
     void remove_timer(sockinfo_tcp *sock);
@@ -546,12 +544,6 @@ private:
     inline void put_tcp_seg_direct(struct tcp_seg *seg);
     inline void return_tcp_segs(struct tcp_seg *seg);
 
-    void queue_rx_ctl_packet(struct tcp_pcb *pcb, mem_buf_desc_t *p_desc);
-    bool process_peer_ctl_packets(xlio_desc_list_t &peer_packets);
-    void process_my_ctl_packets();
-    void process_children_ctl_packets();
-    void process_reuse_ctl_packets();
-    void process_rx_ctl_packets();
     static void put_agent_msg(void *arg);
     bool is_connected_and_ready_to_send();
 
@@ -620,12 +612,6 @@ private:
     uint32_t m_tcp_seg_in_use;
 
     xlio_desc_list_t m_rx_pkt_ready_list;
-    lock_spin_recursive m_rx_ctl_packets_list_lock;
-    tscval_t m_last_syn_tsc;
-    xlio_desc_list_t m_rx_ctl_packets_list;
-    peer_map_t m_rx_peer_packets;
-    xlio_desc_list_t m_rx_ctl_reuse_list;
-    ready_pcb_map_t m_ready_pcbs;
     static const unsigned TX_CONSECUTIVE_EAGAIN_THREASHOLD = 10;
     unsigned m_tx_consecutive_eagain_count;
     bool m_sysvar_rx_poll_on_tx_tcp;
