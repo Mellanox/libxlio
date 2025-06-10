@@ -79,7 +79,6 @@ public:
 
     /**
      * Prepare to block on fds.
-     * Set m_cq_epfd.
      */
     virtual void prepare_to_block() = 0;
 
