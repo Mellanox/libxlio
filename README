@@ -500,10 +500,6 @@ This parameter controls how XLIO performs socket close operation. Maps to **XLIO
 Default: 0 (Disabled)
 Default value is 0 (Disabled)
 
-network.protocols.tcp.max_syn_rate
-Limit the number of TCP SYN packets that XLIO will handle per second per listen socket. Maps to **XLIO_TCP_MAX_SYN_RATE** environment variable. For example, in case you use 10 for this value than XLIO will accept at most 10 (could be less) new connections per second per listen socket. Use a value of 0 for un-limiting the number of TCP SYN packets that can be handled. Value range is 0 to 100000.
-Default value is 0
-
 network.protocols.tcp.mss
 Defines the max TCP payload size that can be sent without IP fragmentation. Maps to **XLIO_MSS** environment variable. Value of 0 will set XLIO's TCP MSS to be aligned with XLIO_MTU configuration (leaving 40 bytes room for IP + TCP headers; "TCP MSS = XLIO_MTU - 40"). Other XLIO_MSS values will force XLIO's TCP MSS to that specific value.
 Default value is 0
@@ -842,10 +838,7 @@ performance.threading.internal_handler.behavior
 Select which TCP control flows are done in the internal thread. Maps to **XLIO_TCP_CTL_THREAD** environment variable. This feature should be kept disabled if using blocking poll/select (epoll is OK).
 Use value of 'disable'/0 to disable.
 Use value of 'delegate'/1 to handle TCP timers in application context threads. In this mode the socket must be handled by the same thread from the time of its creation to the time of its destruction. Otherwise, it may lead to an unexpected behaviour.
-Use value of 'with_wakeup'/2 for waking up the thread when there is work to do.
-Use value of 'no_wakeup'/3 for waiting for thread timer to expire.
 Default value is disabled
-Default value is 0
 
 performance.threading.internal_handler.timer_msec
 Control XLIO internal thread wakeup timer resolution (in milliseconds). Maps to **XLIO_TIMER_RESOLUTION_MSEC** environment variable.

@@ -280,10 +280,6 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
 
     m_accepted_conns.set_id("sockinfo_tcp (%p), fd = %d : m_accepted_conns", this, m_fd);
     m_rx_pkt_ready_list.set_id("sockinfo_tcp (%p), fd = %d : m_rx_pkt_ready_list", this, m_fd);
-    m_rx_ctl_packets_list.set_id("sockinfo_tcp (%p), fd = %d : m_rx_ctl_packets_list", this, m_fd);
-    m_rx_ctl_reuse_list.set_id("sockinfo_tcp (%p), fd = %d : m_rx_ctl_reuse_list", this, m_fd);
-
-    m_last_syn_tsc = 0;
 
     m_linger.l_linger = 0;
     m_linger.l_onoff = 0;
@@ -677,17 +673,13 @@ sockinfo_tcp::~sockinfo_tcp()
     unlock_tcp_con();
 
     if (m_n_rx_pkt_ready_list_count || m_rx_ready_byte_count || m_rx_pkt_ready_list.size() ||
-        m_rx_ring_map.size() || m_rx_reuse_buff.n_buff_num || m_rx_reuse_buff.rx_reuse.size() ||
-        m_rx_ctl_packets_list.size() || m_rx_peer_packets.size() || m_rx_ctl_reuse_list.size()) {
+        m_rx_ring_map.size() || m_rx_reuse_buff.n_buff_num || m_rx_reuse_buff.rx_reuse.size()) {
         si_tcp_logerr(
             "not all buffers were freed. protocol=TCP. m_n_rx_pkt_ready_list_count=%d, "
             "m_rx_ready_byte_count=%lu, m_rx_pkt_ready_list.size()=%d, m_rx_ring_map.size()=%d, "
-            "m_rx_reuse_buff.n_buff_num=%d, m_rx_reuse_buff.rx_reuse.size=%lu, "
-            "m_rx_ctl_packets_list.size=%lu, "
-            "m_rx_peer_packets.size=%lu, m_rx_ctl_reuse_list.size=%lu",
+            "m_rx_reuse_buff.n_buff_num=%d, m_rx_reuse_buff.rx_reuse.size=%lu",
             m_n_rx_pkt_ready_list_count, m_rx_ready_byte_count, (int)m_rx_pkt_ready_list.size(),
-            (int)m_rx_ring_map.size(), m_rx_reuse_buff.n_buff_num, m_rx_reuse_buff.rx_reuse.size(),
-            m_rx_ctl_packets_list.size(), m_rx_peer_packets.size(), m_rx_ctl_reuse_list.size());
+            (int)m_rx_ring_map.size(), m_rx_reuse_buff.n_buff_num, m_rx_reuse_buff.rx_reuse.size());
     }
 
     if (g_p_agent) {
@@ -798,36 +790,6 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
         reuse_buffer(p_rx_pkt_desc);
     }
     m_rx_pkt_ready_offset = 0;
-
-    while (!m_rx_ctl_packets_list.empty()) {
-        /* coverity[double_lock] TODO: RM#1049980 */
-        m_rx_ctl_packets_list_lock.lock();
-        if (m_rx_ctl_packets_list.empty()) {
-            m_rx_ctl_packets_list_lock.unlock();
-            break;
-        }
-        mem_buf_desc_t *p_rx_pkt_desc = m_rx_ctl_packets_list.get_and_pop_front();
-        /* coverity[double_unlock] TODO: RM#1049980 */
-        m_rx_ctl_packets_list_lock.unlock();
-        reuse_buffer(p_rx_pkt_desc);
-    }
-
-    for (peer_map_t::iterator itr = m_rx_peer_packets.begin(); itr != m_rx_peer_packets.end();
-         ++itr) {
-        xlio_desc_list_t &peer_packets = itr->second;
-        // loop on packets of a peer
-        while (!peer_packets.empty()) {
-            // get packet from list and reuse them
-            mem_buf_desc_t *desc = peer_packets.get_and_pop_front();
-            reuse_buffer(desc);
-        }
-    }
-    m_rx_peer_packets.clear();
-
-    while (!m_rx_ctl_reuse_list.empty()) {
-        mem_buf_desc_t *p_rx_pkt_desc = m_rx_ctl_reuse_list.get_and_pop_front();
-        reuse_buffer(p_rx_pkt_desc);
-    }
 
     return_reuse_buffers_postponed();
 
@@ -1612,221 +1574,10 @@ void sockinfo_tcp::err_lwip_cb(void *pcb_container, err_t err)
     conn->m_sock_wakeup_pipe.do_wakeup();
 }
 
-bool sockinfo_tcp::process_peer_ctl_packets(xlio_desc_list_t &peer_packets)
-{
-    // 2.1 loop on packets of a peer
-    while (!peer_packets.empty()) {
-        // 2.1.1 get packet from list and find its pcb
-        mem_buf_desc_t *desc = peer_packets.front();
-
-        if (0 != m_tcp_con_lock.trylock()) {
-            /* coverity[missing_unlock] */
-            return false;
-        }
-
-        // Listen socket is 3T and so rx.src/dst are set as part of
-        // rx_process_buffer_no_flow_id.
-        struct tcp_pcb *pcb = get_syn_received_pcb(desc->rx.src, desc->rx.dst);
-
-        // 2.1.2 get the pcb and sockinfo
-        if (!pcb) {
-            pcb = &m_pcb;
-        }
-        sockinfo_tcp *sock = (sockinfo_tcp *)pcb->my_container;
-
-        if (sock == this) { // my socket - consider the backlog for the case I am listen socket
-            if (m_syn_received.size() >= (size_t)m_backlog && desc->rx.tcp.p_tcp_h->syn) {
-                m_tcp_con_lock.unlock();
-                break; // skip to next peer
-            } else if (safe_mce_sys().tcp_max_syn_rate && desc->rx.tcp.p_tcp_h->syn) {
-                static tscval_t tsc_delay =
-                    get_tsc_rate_per_second() / safe_mce_sys().tcp_max_syn_rate;
-                tscval_t tsc_now;
-                gettimeoftsc(&tsc_now);
-                if (tsc_now - m_last_syn_tsc < tsc_delay) {
-                    m_tcp_con_lock.unlock();
-                    break;
-                } else {
-                    m_last_syn_tsc = tsc_now;
-                }
-            }
-        } else { // child socket from a listener context - switch to child lock
-            m_tcp_con_lock.unlock();
-            if (sock->m_tcp_con_lock.trylock()) {
-                break; // skip to next peer
-            }
-        }
-
-        // 2.1.3 process the packet and remove it from list
-        peer_packets.pop_front();
-        // -- start loop
-        desc->inc_ref_count();
-        L3_level_tcp_input((pbuf *)desc, pcb);
-
-        if (desc->dec_ref_count() <= 1) {
-            sock->m_rx_ctl_reuse_list.push_back(desc); // under sock's lock
-        }
-        // -- end loop
-        sock->m_tcp_con_lock.unlock();
-    }
-    return true;
-}
-
-void sockinfo_tcp::process_my_ctl_packets()
-{
-    si_tcp_logfunc("");
-
-    // 0. fast swap of m_rx_ctl_packets_list with temp_list under lock
-    xlio_desc_list_t temp_list;
-
-    m_rx_ctl_packets_list_lock.lock();
-    temp_list.splice_tail(m_rx_ctl_packets_list);
-    m_rx_ctl_packets_list_lock.unlock();
-
-    if (m_backlog == INT_MAX) { // this is a child - no need to demux packets
-        process_peer_ctl_packets(temp_list);
-
-        if (!temp_list.empty()) {
-            m_rx_ctl_packets_list_lock.lock();
-            m_rx_ctl_packets_list.splice_head(temp_list);
-            m_rx_ctl_packets_list_lock.unlock();
-        }
-        return;
-    }
-
-    // 1. demux packets in the listener list to map of list per peer (for child this will be
-    // skipped)
-    while (!temp_list.empty()) {
-        mem_buf_desc_t *desc = temp_list.get_and_pop_front();
-
-        static const unsigned int MAX_SYN_RCVD = tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)
-            ? safe_mce_sys().sysctl_reader.get_tcp_max_syn_backlog()
-            : 0;
-        // NOTE: currently, in case tcp_ctl_thread is disabled, only established backlog is
-        // supported (no syn-rcvd backlog)
-        unsigned int num_con_waiting = m_rx_peer_packets.size();
-
-        if (num_con_waiting < MAX_SYN_RCVD) {
-            m_rx_peer_packets[desc->rx.src].push_back(desc);
-        } else { // map is full
-            peer_map_t::iterator iter = m_rx_peer_packets.find(desc->rx.src);
-            if (iter != m_rx_peer_packets.end()) {
-                // entry already exists, we can concatenate our packet
-                iter->second.push_back(desc);
-            } else {
-                // drop the packet
-                if (desc->dec_ref_count() <= 1) {
-                    si_tcp_logdbg("CTL packet drop. established-backlog=%d (limit=%d) "
-                                  "num_con_waiting=%d (limit=%d)",
-                                  (int)m_syn_received.size(), m_backlog, num_con_waiting,
-                                  MAX_SYN_RCVD);
-                    m_rx_ctl_reuse_list.push_back(desc);
-                }
-            }
-        }
-    }
-
-    // 2. loop on map of peers and process list of packets per peer
-    peer_map_t::iterator itr = m_rx_peer_packets.begin();
-    while (itr != m_rx_peer_packets.end()) {
-        xlio_desc_list_t &peer_packets = itr->second;
-        if (!process_peer_ctl_packets(peer_packets)) {
-            return;
-        }
-        // prepare for next map iteration
-        if (peer_packets.empty()) {
-            m_rx_peer_packets.erase(itr++); // // advance itr before invalidating it by erase
-                                            // (itr++ returns the value before advance)
-        } else {
-            ++itr;
-        }
-    }
-}
-
-void sockinfo_tcp::process_children_ctl_packets()
-{
-    // handle children
-    while (!m_ready_pcbs.empty()) {
-        if (m_tcp_con_lock.trylock()) {
-            return;
-        }
-        ready_pcb_map_t::iterator itr = m_ready_pcbs.begin();
-        if (itr == m_ready_pcbs.end()) {
-            /* coverity[double_unlock] TODO: RM#1049980 */
-            m_tcp_con_lock.unlock();
-            break;
-        }
-        sockinfo_tcp *sock = (sockinfo_tcp *)itr->first->my_container;
-        /* coverity[double_unlock] TODO: RM#1049980 */
-        m_tcp_con_lock.unlock();
-
-        if (sock->m_tcp_con_lock.trylock()) {
-            break;
-        }
-
-        while (!sock->m_rx_ctl_packets_list.empty()) {
-            sock->m_rx_ctl_packets_list_lock.lock();
-            if (sock->m_rx_ctl_packets_list.empty()) {
-                sock->m_rx_ctl_packets_list_lock.unlock();
-                break;
-            }
-            mem_buf_desc_t *desc = sock->m_rx_ctl_packets_list.get_and_pop_front();
-            sock->m_rx_ctl_packets_list_lock.unlock();
-            desc->inc_ref_count();
-            L3_level_tcp_input((pbuf *)desc, &sock->m_pcb);
-            if (desc->dec_ref_count() <= 1) { // todo reuse needed?
-                sock->m_rx_ctl_reuse_list.push_back(desc);
-            }
-        }
-        sock->m_tcp_con_lock.unlock();
-
-        if (m_tcp_con_lock.trylock()) {
-            break;
-        }
-
-        /* coverity[double_lock] TODO: RM#1049980 */
-        sock->m_rx_ctl_packets_list_lock.lock();
-        if (sock->m_rx_ctl_packets_list.empty()) {
-            m_ready_pcbs.erase(&sock->m_pcb);
-        }
-        sock->m_rx_ctl_packets_list_lock.unlock();
-
-        /* coverity[double_unlock] TODO: RM#1049980 */
-        m_tcp_con_lock.unlock();
-    }
-}
-
-void sockinfo_tcp::process_reuse_ctl_packets()
-{
-    while (!m_rx_ctl_reuse_list.empty()) {
-        if (m_tcp_con_lock.trylock()) {
-            return;
-        }
-        mem_buf_desc_t *desc = m_rx_ctl_reuse_list.get_and_pop_front();
-        reuse_buffer(desc);
-        /* coverity[double_unlock] TODO: RM#1049980 */
-        m_tcp_con_lock.unlock();
-    }
-}
-
-void sockinfo_tcp::process_rx_ctl_packets()
-{
-    si_tcp_logfunc("");
-
-    process_my_ctl_packets();
-    process_children_ctl_packets();
-    process_reuse_ctl_packets();
-}
-
 // Execute TCP timers of this connection
 void sockinfo_tcp::handle_timer_expired()
 {
     si_tcp_logfunc("");
-
-    if (tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)) {
-        process_rx_ctl_packets();
-    }
-
     tcp_timer();
 }
 
@@ -1840,10 +1591,6 @@ void sockinfo_tcp::handle_incoming_handshake_failure(sockinfo_tcp *child_conn)
     child_conn->unlock_tcp_con();
 
     lock_tcp_con(); // Lock the listen parent socket
-
-    if (m_ready_pcbs.find(&child_conn->m_pcb) != m_ready_pcbs.end()) {
-        m_ready_pcbs.erase(&child_conn->m_pcb);
-    }
 
     remove_received_syn_socket(child_conn);
 
@@ -2296,29 +2043,6 @@ void sockinfo_tcp::remove_timer()
     }
 }
 
-void sockinfo_tcp::queue_rx_ctl_packet(struct tcp_pcb *pcb, mem_buf_desc_t *p_desc)
-{
-    /* in tcp_ctl_thread mode, always lock the child first*/
-    p_desc->inc_ref_count();
-    lwip_pbuf_init_custom(p_desc);
-
-    sockinfo_tcp *sock = (sockinfo_tcp *)pcb->my_container;
-
-    sock->m_rx_ctl_packets_list_lock.lock();
-    sock->m_rx_ctl_packets_list.push_back(p_desc);
-    sock->m_rx_ctl_packets_list_lock.unlock();
-
-    if (sock != this) {
-        m_ready_pcbs[pcb] = 1;
-    }
-
-    if (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_WITH_WAKEUP) {
-        get_tcp_timer_collection()->register_wakeup_event();
-    }
-
-    return;
-}
-
 bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void *pv_fd_ready_array)
 {
     struct tcp_pcb *pcb = nullptr;
@@ -2333,47 +2057,18 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
         // Listen socket is always 3T and so rx.src/dst are set as part of no-flow-id path.
         pcb = get_syn_received_pcb(p_rx_pkt_mem_buf_desc_info->rx.src,
                                    p_rx_pkt_mem_buf_desc_info->rx.dst);
-        bool established_backlog_full = false;
         if (!pcb) {
             pcb = &m_pcb;
 
-            /// respect TCP listen backlog - See redmine issue #565962
-            /// distinguish between backlog of established sockets vs. backlog of syn-rcvd
-            static const unsigned int MAX_SYN_RCVD =
-                tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)
-                ? safe_mce_sys().sysctl_reader.get_tcp_max_syn_backlog()
-                : 0;
-            // NOTE: currently, in case tcp_ctl_thread is disabled, only established backlog is
-            // supported (no syn-rcvd backlog)
-
-            unsigned int num_con_waiting = m_rx_peer_packets.size();
-
-            // 1st - check established backlog
-            if (num_con_waiting > 0 ||
-                (m_syn_received.size() >= (size_t)m_backlog &&
-                 p_rx_pkt_mem_buf_desc_info->rx.tcp.p_tcp_h->syn)) {
-                established_backlog_full = true;
-            }
-
-            // 2nd - check that we allow secondary backlog (don't check map of peer packets to
-            // avoid races)
-            if (MAX_SYN_RCVD == 0 && established_backlog_full) {
+            // Check established backlog
+            if (m_syn_received.size() >= (size_t)m_backlog &&
+                p_rx_pkt_mem_buf_desc_info->rx.tcp.p_tcp_h->syn) {
                 // TODO: consider check if we can now drain into Q of established
-                si_tcp_logdbg("SYN/CTL packet drop. established-backlog=%d (limit=%d) "
-                              "num_con_waiting=%d (limit=%d)",
-                              (int)m_syn_received.size(), m_backlog, num_con_waiting, MAX_SYN_RCVD);
+                si_tcp_logdbg("SYN/CTL packet drop. established-backlog=%d (limit=%d)",
+                              (int)m_syn_received.size(), m_backlog);
                 unlock_tcp_con();
                 return false; // return without inc_ref_count() => packet will be dropped
             }
-        }
-
-        // 2nd check only worth when MAX_SYN_RCVD>0 for non tcp_ctl_thread
-        if (tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread) || established_backlog_full) {
-            queue_rx_ctl_packet(
-                pcb, p_rx_pkt_mem_buf_desc_info); // TODO: need to trigger queue pulling from
-                                                  // accept in case no tcp_ctl_thread
-            unlock_tcp_con();
-            return true;
         }
     } else {
         pcb = &m_pcb;
@@ -2857,10 +2552,6 @@ int sockinfo_tcp::listen(int backlog)
         }
     }
 
-    if (tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)) {
-        g_p_event_handler_manager->register_socket_timer_event(this);
-    }
-
     unlock_tcp_con();
     return 0;
 }
@@ -2972,11 +2663,6 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
     IF_STATS(m_p_socket_stats->listen_counters.n_conn_backlog--);
 
     remove_received_syn_socket(ns);
-
-    if (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_WITH_WAKEUP &&
-        !m_rx_peer_packets.empty()) {
-        get_tcp_timer_collection()->register_wakeup_event();
-    }
 
     unlock_tcp_con();
 
@@ -3105,10 +2791,6 @@ sockinfo_tcp *sockinfo_tcp::accept_clone()
         si->set_ring_logic_tx(m_ring_alloc_log_tx);
     }
 
-    if (tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)) {
-        tcp_ip_output(&si->m_pcb, sockinfo_tcp::ip_output_syn_ack);
-    }
-
     return si;
 }
 
@@ -3203,28 +2885,6 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
         new_sock->m_b_attached = true;
     }
 
-    if (tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)) {
-        // Before handling packets from flow steering the child should process everything it got
-        // from parent
-        while (!new_sock->m_rx_ctl_packets_list.empty()) {
-            xlio_desc_list_t temp_list;
-            new_sock->m_rx_ctl_packets_list_lock.lock();
-            temp_list.splice_tail(new_sock->m_rx_ctl_packets_list);
-            new_sock->m_rx_ctl_packets_list_lock.unlock();
-
-            while (!temp_list.empty()) {
-                mem_buf_desc_t *desc = temp_list.get_and_pop_front();
-                if (likely(desc)) {
-                    desc->inc_ref_count();
-                    L3_level_tcp_input((pbuf *)desc, &new_sock->m_pcb);
-                    if (desc->dec_ref_count() <= 1) { // todo reuse needed?
-                        new_sock->m_rx_ctl_reuse_list.push_back(desc);
-                    }
-                }
-            }
-        }
-    }
-
     // Set this before moving socket to m_accepted_conns.
     // In case of err_lwip_cb we will not handle new_sock as
     // half open but treat it the same as error on accept ready socket.
@@ -3233,9 +2893,6 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     new_sock->unlock_tcp_con();
 
     conn->lock_tcp_con();
-
-    // todo check that listen socket was not closed by now ? (is_server())
-    conn->m_ready_pcbs.erase(&new_sock->m_pcb);
 
     if (conn->is_xlio_socket()) {
         conn->accept_connection_xlio_socket(new_sock);
@@ -3394,10 +3051,6 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     tcp_sent(&new_sock->m_pcb, sockinfo_tcp::ack_recvd_lwip_cb);
     new_sock->m_pcb.syn_tw_handled_cb = nullptr;
     new_sock->m_sock_wakeup_pipe.wakeup_clear();
-    if (tcp_ctl_thread_on(safe_mce_sys().tcp_ctl_thread)) {
-        tcp_ip_output(&new_sock->m_pcb, sockinfo_tcp::ip_output_syn_ack);
-    }
-
     new_sock->m_rcvbuff_max = std::max(listen_sock->m_rcvbuff_max, 2 * new_sock->m_pcb.mss);
     new_sock->fit_rcv_wnd(true);
 
@@ -5041,8 +4694,7 @@ void sockinfo_tcp::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
     u32_t last_unsent_seqno = 0, last_unacked_seqno = 0, first_unsent_seqno = 0,
           first_unacked_seqno = 0;
     u32_t last_unsent_len = 0, last_unacked_len = 0, first_unsent_len = 0, first_unacked_len = 0;
-    int rcvbuff_max, rcvbuff_current, rcvbuff_non_tcp_recved, rx_pkt_ready_list_size,
-        rx_ctl_packets_list_size, rx_ctl_reuse_list_size;
+    int rcvbuff_max, rcvbuff_current, rcvbuff_non_tcp_recved, rx_pkt_ready_list_size;
 
     sockinfo::statistics_print(log_level);
 
@@ -5077,8 +4729,6 @@ void sockinfo_tcp::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
     rcvbuff_current = m_rcvbuff_current;
     rcvbuff_non_tcp_recved = m_rcvbuff_non_tcp_recved;
     rx_pkt_ready_list_size = m_rx_pkt_ready_list.size();
-    rx_ctl_packets_list_size = m_rx_ctl_packets_list.size();
-    rx_ctl_reuse_list_size = m_rx_ctl_reuse_list.size();
 
     unlock_tcp_con();
 
@@ -5089,10 +4739,7 @@ void sockinfo_tcp::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
                 "Receive buffer : m_rcvbuff_current %d, m_rcvbuff_max %d, "
                 "m_rcvbuff_non_tcp_recved %d\n",
                 rcvbuff_current, rcvbuff_max, rcvbuff_non_tcp_recved);
-    vlog_printf(log_level,
-                "Rx lists size : m_rx_pkt_ready_list %d, m_rx_ctl_packets_list %d, "
-                "m_rx_ctl_reuse_list %d\n",
-                rx_pkt_ready_list_size, rx_ctl_packets_list_size, rx_ctl_reuse_list_size);
+    vlog_printf(log_level, "Rx lists size : m_rx_pkt_ready_list %d\n", rx_pkt_ready_list_size);
 
     // PCB data
     vlog_printf(log_level, "PCB state : %s\n", tcp_state_str[get_tcp_state(&pcb)]);
@@ -5537,11 +5184,6 @@ void tcp_timers_collection::remove_timer(sockinfo_tcp *sock)
         // found.
         __log_dbg("TCP socket [%p] timer was not found (listen socket)", sock);
     }
-}
-
-void tcp_timers_collection::register_wakeup_event()
-{
-    g_p_event_handler_manager->wakeup_timer_event(this, m_timer_handle);
 }
 
 thread_local_tcp_timers::thread_local_tcp_timers()

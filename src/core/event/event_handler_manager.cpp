@@ -105,23 +105,6 @@ void event_handler_manager::register_socket_timer_event(sockinfo_tcp *sock_tcp)
     post_new_reg_action(reg_action);
 }
 
-void event_handler_manager::wakeup_timer_event(timer_handler *handler, void *node)
-{
-    evh_logdbg("timer handler '%p'", handler);
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!handler) {
-        evh_logwarn("bad handler (%p)", handler);
-        return;
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-    reg_action_t reg_action;
-    memset(&reg_action, 0, sizeof(reg_action));
-    reg_action.type = WAKEUP_TIMER;
-    reg_action.info.timer.handler = handler;
-    reg_action.info.timer.node = node;
-    post_new_reg_action(reg_action);
-}
-
 void event_handler_manager::unregister_timer_event(timer_handler *handler, void *node)
 {
     evh_logdbg("timer handler '%p'", handler);
@@ -489,11 +472,6 @@ void event_handler_manager::priv_register_timer_handler(timer_reg_info_t &info)
                           info.user_data, info.req_type);
 }
 
-void event_handler_manager::priv_wakeup_timer_handler(timer_reg_info_t &info)
-{
-    m_timer.wakeup_timer((timer_node_t *)info.node);
-}
-
 void event_handler_manager::priv_unregister_timer_handler(timer_reg_info_t &info)
 {
     m_timer.remove_timer((timer_node_t *)info.node, info.handler);
@@ -726,9 +704,6 @@ void event_handler_manager::handle_registration_action(reg_action_t &reg_action)
         break;
     case REGISTER_TIMER:
         priv_register_timer_handler(reg_action.info.timer);
-        break;
-    case WAKEUP_TIMER:
-        priv_wakeup_timer_handler(reg_action.info.timer);
         break;
     case UNREGISTER_TIMER:
         priv_unregister_timer_handler(reg_action.info.timer);

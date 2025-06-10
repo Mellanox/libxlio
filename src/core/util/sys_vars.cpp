@@ -319,9 +319,7 @@ OPTION_FROM_TO_STR_IMPL
 namespace option_tcp_ctl_thread {
 static option_t<mode_t> options[] = {
     {CTL_THREAD_DISABLE, "Disabled", {"disable", "disabled", NULL}},
-    {CTL_THREAD_DELEGATE_TCP_TIMERS, "Delegated TCP timers", {"delegate", NULL, NULL}},
-    {CTL_THREAD_WITH_WAKEUP, "With Wakeup", {"with_wakeup", NULL, NULL}},
-    {CTL_THREAD_NO_WAKEUP, "No Wakeup", {"no_wakeup", NULL, NULL}}};
+    {CTL_THREAD_DELEGATE_TCP_TIMERS, "Delegated TCP timers", {"delegate", NULL, NULL}}};
 OPTION_FROM_TO_STR_IMPL
 } // namespace option_tcp_ctl_thread
 
@@ -792,8 +790,6 @@ void mce_sys_var::legacy_get_env_params()
     ring_limit_per_interface = MCE_DEFAULT_RING_LIMIT_PER_INTERFACE;
     ring_dev_mem_tx = MCE_DEFAULT_RING_DEV_MEM_TX;
 
-    tcp_max_syn_rate = MCE_DEFAULT_TCP_MAX_SYN_RATE;
-
     zc_cache_threshold = MCE_DEFAULT_ZC_CACHE_THRESHOLD;
     tx_buf_size = MCE_DEFAULT_TX_BUF_SIZE;
     tcp_nodelay_treshold = MCE_DEFAULT_TCP_NODELAY_TRESHOLD;
@@ -1256,10 +1252,6 @@ void mce_sys_var::legacy_get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_RING_DEV_MEM_TX))) {
         ring_dev_mem_tx = std::max(0, atoi(env_ptr));
-    }
-
-    if ((env_ptr = getenv(SYS_VAR_TCP_MAX_SYN_RATE))) {
-        tcp_max_syn_rate = std::min(TCP_MAX_SYN_RATE_TOP_LIMIT, std::max(0, atoi(env_ptr)));
     }
 
     if ((env_ptr = getenv(SYS_VAR_RX_BUF_SIZE))) {
@@ -1898,8 +1890,6 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
         registry.get_default_value<int>("performance.rings.max_per_interface");
     ring_dev_mem_tx = registry.get_default_value<int>("performance.rings.tx.max_on_device_memory");
 
-    tcp_max_syn_rate = registry.get_default_value<int>("network.protocols.tcp.max_syn_rate");
-
     zc_cache_threshold = registry.get_default_value<int64_t>("core.syscall.sendfile_cache_limit");
     tx_buf_size = registry.get_default_value<uint32_t>("performance.buffers.tx.buf_size");
     tcp_nodelay_treshold =
@@ -2421,9 +2411,6 @@ void mce_sys_var::configure_tcp_parameters(const config_registry &registry)
                                       "performance.rings.max_per_interface", registry);
 
     set_value_from_registry_if_exists(ring_dev_mem_tx, "performance.rings.tx.max_on_device_memory",
-                                      registry);
-
-    set_value_from_registry_if_exists(tcp_max_syn_rate, "network.protocols.tcp.max_syn_rate",
                                       registry);
 }
 

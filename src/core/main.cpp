@@ -517,16 +517,6 @@ void print_xlio_global_settings()
     VLOG_PARAM_NUMBER("Ring On Device Memory TX", safe_mce_sys().ring_dev_mem_tx,
                       MCE_DEFAULT_RING_DEV_MEM_TX, NEW_CONFIG_VAR_RING_DEV_MEM_TX);
 
-    if (safe_mce_sys().tcp_max_syn_rate) {
-        VLOG_PARAM_NUMSTR("TCP max syn rate", safe_mce_sys().tcp_max_syn_rate,
-                          MCE_DEFAULT_TCP_MAX_SYN_RATE, NEW_CONFIG_VAR_TCP_MAX_SYN_RATE,
-                          "(per sec)");
-    } else {
-        VLOG_PARAM_NUMSTR("TCP max syn rate", safe_mce_sys().tcp_max_syn_rate,
-                          MCE_DEFAULT_TCP_MAX_SYN_RATE, NEW_CONFIG_VAR_TCP_MAX_SYN_RATE,
-                          "(no limit)");
-    }
-
     VLOG_PARAM_STRING("Zerocopy Cache Threshold", safe_mce_sys().zc_cache_threshold,
                       MCE_DEFAULT_ZC_CACHE_THRESHOLD, NEW_CONFIG_VAR_ZC_CACHE_THRESHOLD,
                       option_size::to_str(safe_mce_sys().zc_cache_threshold));
