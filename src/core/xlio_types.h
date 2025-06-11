@@ -42,8 +42,6 @@
 #define SO_XLIO_ISOLATE_DEFAULT 0
 #define SO_XLIO_ISOLATE_SAFE    1
 
-enum { CMSG_XLIO_IOCTL_USER_ALLOC = 2900 };
-
 /*
  * Flags for Dummy send API
  */
