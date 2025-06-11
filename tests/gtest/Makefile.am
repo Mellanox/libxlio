@@ -118,7 +118,6 @@ gtest_SOURCES = \
 	\
 	core/xlio_base.cc \
 	core/xlio_sockopt.cc \
-	core/xlio_ioctl.cc \
 	\
 	xliod/xliod_base.cc \
 	xliod/xliod_bitmap.cc \
