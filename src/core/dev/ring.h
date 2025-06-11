@@ -49,13 +49,13 @@ public:
     virtual uint64_t get_rx_cq_out_of_buffer_drop() = 0;
 
     virtual bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t = false) = 0;
-    virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink) = 0;
+    virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, rfs_rule **rule_extract) = 0;
 
     virtual void restart() = 0;
 
     // Get/Release memory buffer descriptor with a linked data memory buffer
     virtual mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
-                                           int n_num_mem_bufs = 1) = 0;
+                                           int n_num_mem_bufs = 1, bool tx_skip_poll = false) = 0;
     virtual int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool b_accounting,
                                    bool trylock = false) = 0;
     virtual void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc)
@@ -204,6 +204,10 @@ public:
     struct tcp_seg *get_tcp_segs(uint32_t num);
     void put_tcp_segs(struct tcp_seg *seg);
 
+    // XLIO ZC API
+    void set_poll_group(poll_group *p_group) { m_p_group = p_group; }
+    poll_group *get_poll_group() const { return m_p_group; }
+
 protected:
     inline void set_parent(ring *parent) { m_parent = (parent ? parent : this); }
     inline void set_if_index(int if_index) { m_if_index = if_index; }
@@ -214,6 +218,9 @@ protected:
     struct tcp_seg *m_tcp_seg_list = nullptr;
     uint32_t m_tcp_seg_count = 0U;
     lock_spin_recursive m_tcp_seg_lock;
+
+    // XLIO ZC API
+    poll_group *m_p_group = nullptr;
 
     int m_if_index = 0; /* Interface index */
 };

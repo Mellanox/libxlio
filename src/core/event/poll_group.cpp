@@ -33,6 +33,7 @@ poll_group::poll_group(const struct xlio_poll_group_attr *attr)
     : m_socket_event_cb(attr->socket_event_cb)
     , m_socket_comp_cb(attr->socket_comp_cb)
     , m_socket_rx_cb(attr->socket_rx_cb)
+    , m_socket_accept_cb(attr->socket_accept_cb)
     , m_group_flags(attr->flags)
 {
     /*
@@ -63,6 +64,13 @@ poll_group::poll_group(const struct xlio_poll_group_attr *attr)
 // coverity[UNCAUGHT_EXCEPT]
 poll_group::~poll_group()
 {
+    //destroy all pending to remove sockets
+    while (!m_pending_to_remove_lst.empty()) {
+        sockinfo_tcp *si = m_pending_to_remove_lst.front();
+        m_pending_to_remove_lst.pop_front();
+        si->clean_socket_obj();
+    }
+
     s_poll_groups_lock.lock();
     auto iter = std::find(s_poll_groups.begin(), s_poll_groups.end(), this);
     if (iter != std::end(s_poll_groups)) {
@@ -114,6 +122,11 @@ int poll_group::update(const struct xlio_poll_group_attr *attr)
 
 void poll_group::poll()
 {
+    if (unlikely(m_is_slow_path)) {
+        slow_path_run();
+        m_is_slow_path = false;
+    }
+
     for (ring *rng : m_rings) {
         uint64_t sn = 0;
         rng->poll_and_process_element_tx(&sn);
@@ -121,6 +134,26 @@ void poll_group::poll()
         rng->poll_and_process_element_rx(&sn);
     }
     m_event_handler->do_tasks();
+}
+
+void poll_group::slow_path_run()
+{
+    for (auto &iter : m_slow_path_sockets) {
+        sockinfo_tcp *si = iter.second;
+
+        switch (iter.first) {
+        case POLL_GROUP_SOCKET_CLOSE:
+            close_socket(si);
+            break;
+        case POLL_GROUP_SOCKET_DESTROY:
+            m_pending_to_remove_lst.remove(si);
+            si->clean_socket_obj();
+            break;
+        default:
+            grp_logerr("Unknown operation in the slow path: %d.", iter.first);
+        }
+    }
+    m_slow_path_sockets.clear();
 }
 
 void poll_group::add_dirty_socket(sockinfo_tcp *si)
@@ -144,6 +177,7 @@ void poll_group::add_ring(ring *rng, ring_alloc_logic_attr *attr)
     if (std::find(m_rings.begin(), m_rings.end(), rng) == std::end(m_rings)) {
         grp_logdbg("New ring %p in group %p", rng, this);
         m_rings.push_back(rng);
+        rng->set_poll_group(this);
 
         /*
          * Take reference to the ring. This avoids a race between socket destruction and buffer
@@ -175,27 +209,43 @@ void poll_group::add_socket(sockinfo_tcp *si)
     g_p_fd_collection->set_socket(si->get_fd(), si);
 }
 
-void poll_group::close_socket(sockinfo_tcp *si, bool force /*=false*/)
+void poll_group::remove_socket(sockinfo_tcp *si)
 {
-    g_p_fd_collection->clear_socket(si->get_fd());
     m_sockets_list.erase(si);
-
     auto iter = std::find(m_dirty_sockets.begin(), m_dirty_sockets.end(), si);
     if (iter != std::end(m_dirty_sockets)) {
         m_dirty_sockets.erase(iter);
     }
+}
 
-    bool closed = si->prepare_to_close(force);
-    if (closed) {
-        /*
-         * Current implementation forces TCP reset, so the socket is expected to be closable.
-         * Do a polling iteration to increase the chance that all the relevant WQEs are completed
-         * and XLIO emitted all the TX completion before the XLIO_SOCKET_EVENT_TERMINATED event.
-         *
-         * TODO Implement more reliable mechanism of deferred socket destruction if there are
-         * not completed TX operations.
-         */
-        poll();
+void poll_group::reuse_sockfd(int fd, sockinfo_tcp *si)
+{
+    m_pending_to_remove_lst.remove(si);
+    g_p_fd_collection->set_socket(fd, si);
+    m_sockets_list.push_back(si);
+}
+
+void poll_group::close_socket(sockinfo_tcp *si, bool force /*=false*/)
+{
+    g_p_fd_collection->clear_socket(si->get_fd());
+    remove_socket(si);
+    if (si->prepare_to_close(force)) {
+        // The socket is already closable.
         si->clean_socket_obj();
+    } else {
+        // The socket is not ready for close.
+        m_pending_to_remove_lst.push_back(si);
     }
+}
+
+void poll_group::mark_socket_to_close(sockinfo_tcp *si)
+{
+    m_slow_path_sockets.push_back(std::make_pair(POLL_GROUP_SOCKET_CLOSE, si));
+    m_is_slow_path = true;
+}
+
+void poll_group::mark_socket_to_destroy(sockinfo_tcp *si)
+{
+    m_slow_path_sockets.push_back(std::make_pair(POLL_GROUP_SOCKET_DESTROY, si));
+    m_is_slow_path = true;
 }

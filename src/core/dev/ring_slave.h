@@ -222,7 +222,7 @@ public:
     }
 
     bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t = false);
-    bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink);
+    bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, rfs_rule **rule_extract);
 
     inline bool rx_process_buffer_no_flow_id(mem_buf_desc_t *p_rx_wc_buf_desc,
                                              void *pv_fd_ready_array, HDR *p_ip_h);
@@ -267,7 +267,7 @@ public:
     virtual void inc_cq_moderation_stats() = 0;
 
     virtual bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t = false);
-    virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink);
+    virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, rfs_rule **rule_extract);
 
 #ifdef DEFINED_UTLS
     /* Call this method in an RX ring. */
@@ -279,6 +279,10 @@ public:
     inline ring_type_t get_type() const { return m_type; }
 
     bool m_active; /* State indicator */
+
+    virtual mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
+                                           int n_num_mem_bufs = 1 /* default = 1 */,
+                                           bool tx_skip_poll = false) = 0;
 
 protected:
     bool request_more_tx_buffers(pbuf_type type, uint32_t count, uint32_t lkey);

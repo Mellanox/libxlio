@@ -17,7 +17,7 @@ public:
 
     virtual bool is_up() { return (m_vf_ring || m_active); }
     virtual bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t = false);
-    virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink);
+    virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, rfs_rule **rule_extract);
     virtual bool poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
                                              void *pv_fd_ready_array = NULL);
     virtual int poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
@@ -42,7 +42,7 @@ public:
     virtual void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc);
     virtual void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc, unsigned ref);
     virtual mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
-                                           int n_num_mem_bufs = 1);
+                                           int n_num_mem_bufs = 1, bool tx_skip_poll = false);
     virtual int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool b_accounting,
                                    bool trylock = false);
     virtual bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe)

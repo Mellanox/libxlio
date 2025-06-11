@@ -136,7 +136,7 @@ sockinfo::~sockinfo()
         sock_stats::instance().return_stats_obj(m_p_socket_stats);
     }
 
-    bool toclose = safe_mce_sys().deferred_close && m_fd >= 0;
+    bool toclose = (safe_mce_sys().deferred_close || is_xlio_socket()) && m_fd >= 0;
 
 #if defined(DEFINED_NGINX)
     if (g_p_app->type == APP_NGINX) {
@@ -146,7 +146,10 @@ sockinfo::~sockinfo()
 #endif
 
     if (toclose) {
-        SYSCALL(close, m_fd);
+        int rc = SYSCALL(close, m_fd);
+        if (rc != 0) {
+            si_logdbg("close(fd=%d) failed with errno=%d", m_fd, errno);
+        }
     }
 }
 
@@ -898,9 +901,7 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
     // Registered as receiver successfully
     si_logdbg("Attached %s to ring %p", flow_key.to_str().c_str(), p_nd_resources->p_ring);
 
-    /* Verify 5 tuple over 3 tuple
-     * and replace flow rule with the strongest
-     */
+    // Verify 5 tuple over 3 tuple and replace flow rule with the strongest
     if (flow_key.is_5_tuple()) {
         // Check and remove lesser 3 tuple
         flow_tuple_with_local_if flow_key_3t(
@@ -916,7 +917,7 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
     return true;
 }
 
-bool sockinfo::detach_receiver(flow_tuple_with_local_if &flow_key)
+bool sockinfo::detach_receiver(flow_tuple_with_local_if &flow_key, rfs_rule **rule_extract)
 {
     si_logdbg("Unregistering receiver: %s", flow_key.to_str().c_str());
 
@@ -937,7 +938,7 @@ bool sockinfo::detach_receiver(flow_tuple_with_local_if &flow_key)
 
     // Detach tuple
     unlock_rx_q();
-    p_ring->detach_flow(flow_key, this);
+    p_ring->detach_flow(flow_key, this, rule_extract);
     lock_rx_q();
 
     // Un-map flow from local map
@@ -1144,7 +1145,7 @@ void sockinfo::do_rings_migration_rx(resource_allocation_key &old_key)
             si_logdbg("Detaching %s from ring %p", flow_key.to_str().c_str(), p_old_ring);
             // Detach tuple
             unlock_rx_q();
-            p_old_ring->detach_flow(flow_key, this);
+            p_old_ring->detach_flow(flow_key, this, nullptr);
             lock_rx_q();
             rx_del_ring_cb(p_old_ring);
 
@@ -2185,4 +2186,14 @@ bool sockinfo::skip_os_select()
     // If safe_mce_sys().select_poll_os_ratio == 0, it means that user configured XLIO not to poll
     // os (i.e. TRUE...)
     return (!safe_mce_sys().select_poll_os_ratio);
+}
+
+bool sockinfo::is_xlio_socket() const
+{
+    return m_is_xlio_socket;
+}
+
+poll_group *sockinfo::get_poll_group() const
+{
+    return m_p_group;
 }

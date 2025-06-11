@@ -287,9 +287,6 @@ public:
     }
 
     bool is_incoming() override { return m_b_incoming; }
-    bool is_timer_registered() const { return m_timer_registered; }
-    void set_timer_registered(bool v) { m_timer_registered = v; }
-
     bool is_connected() { return m_sock_state == TCP_SOCK_CONNECTED_RDWR; }
 
     inline bool is_rtr()
@@ -314,6 +311,8 @@ public:
     inline fd_type_t get_type() override { return FD_TYPE_SOCKET; }
 
     void handle_timer_expired();
+    bool is_timer_registered() const { return m_timer_registered; }
+    void set_timer_registered(bool v) { m_timer_registered = v; }
 
     inline ib_ctx_handler *get_ctx()
     {
@@ -369,9 +368,10 @@ public:
     void flush();
 
     void set_xlio_socket(const struct xlio_socket_attr *attr);
+    int update_xlio_socket(unsigned flags, uintptr_t userdata_sq);
     void add_tx_ring_to_group();
-    bool is_xlio_socket() { return m_p_group != nullptr; }
-    poll_group *get_poll_group() { return m_p_group; }
+    int detach_xlio_group();
+    int attach_xlio_group(poll_group *group);
     void xlio_socket_event(int event, int value);
     static err_t rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
     static void err_lwip_cb_xlio_socket(void *pcb_container, err_t err);
@@ -395,6 +395,8 @@ private:
     bool poll_and_progress_rx(uint64_t &poll_sn);
     bool check_last_rx_poll_progress(unsigned int prev_sndbuf, bool all_drained);
     bool prepare_listen_to_close();
+    void remove_received_syn_socket(sockinfo_tcp *accepted);
+    void accept_connection_xlio_socket(sockinfo_tcp *new_sock);
 
     // Builds rfs key
     static void create_flow_tuple_key_from_pcb(flow_tuple &key, struct tcp_pcb *pcb);
@@ -447,8 +449,9 @@ private:
     void set_conn_properties_from_pcb();
     void set_sock_options(sockinfo_tcp *new_sock);
     void passthrough_unlock(const char *dbg);
-    // Register to timer
+
     void register_timer();
+    void remove_timer();
 
     void handle_socket_linger();
 
@@ -633,7 +636,7 @@ private:
      */
     bool m_b_xlio_socket_dirty = false;
     uintptr_t m_xlio_socket_userdata = 0;
-    poll_group *m_p_group = nullptr;
+    rfs_rule *m_p_rule_extracted = nullptr;
 };
 
 #endif
