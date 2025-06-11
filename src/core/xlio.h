@@ -47,8 +47,6 @@ int xlio_fcntl(int __fd, int __cmd, ...);
 
 int xlio_fcntl64(int __fd, int __cmd, ...);
 
-int xlio_ioctl(int __fd, unsigned long int __request, ...);
-
 int xlio_getsockname(int __fd, struct sockaddr *__name, socklen_t *__namelen);
 
 int xlio_getpeername(int __fd, struct sockaddr *__name, socklen_t *__namelen);
@@ -150,23 +148,6 @@ int xlio_thread_offload(int offload, pthread_t tid);
  * @return 0 on success, or error code on failure.
  */
 int xlio_dump_fd_stats(int fd, int log_level);
-
-/**
- * This function allows to communicate with library using extendable protocol
- * based on struct cmshdr.
- *
- * Ancillary data is a sequence of cmsghdr structures with appended data.
- * The sequence of cmsghdr structures should never be accessed directly.
- * Instead, use only the following macros: CMSG_ALIGN, CMSG_SPACE, CMSG_DATA,
- * CMSG_LEN.
- *
- * @param cmsg_hdr - point to control message
- * @param cmsg_len - the byte count of the ancillary data,
- *                   which contains the size of the structure header.
- *
- * @return -1 on failure and 0 on success
- */
-int xlio_extra_ioctl(void *cmsg_hdr, size_t cmsg_len);
 
 /**
  * Register a received packet notification callback.

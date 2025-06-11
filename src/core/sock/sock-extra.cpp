@@ -78,50 +78,6 @@ extern "C" int xlio_dump_fd_stats(int fd, int log_level)
     return -1;
 }
 
-static inline struct cmsghdr *__cmsg_nxthdr(void *__ctl, size_t __size, struct cmsghdr *__cmsg)
-{
-    struct cmsghdr *__ptr;
-
-    __ptr = (struct cmsghdr *)(((unsigned char *)__cmsg) + CMSG_ALIGN(__cmsg->cmsg_len));
-    if ((unsigned long)((char *)(__ptr + 1) - (char *)__ctl) > __size) {
-        return nullptr;
-    }
-
-    return __ptr;
-}
-
-extern "C" int xlio_extra_ioctl(void *cmsg_hdr, size_t cmsg_len)
-{
-    struct cmsghdr *cmsg = (struct cmsghdr *)cmsg_hdr;
-
-    for (; cmsg; cmsg = __cmsg_nxthdr((struct cmsghdr *)cmsg_hdr, cmsg_len, cmsg)) {
-        if (cmsg->cmsg_type == CMSG_XLIO_IOCTL_USER_ALLOC) {
-
-            if (!g_init_global_ctors_done &&
-                (cmsg->cmsg_len - CMSG_LEN(0)) ==
-                    (sizeof(uint8_t) + sizeof(alloc_t) + sizeof(free_t))) {
-                uint8_t *ptr = (uint8_t *)CMSG_DATA(cmsg);
-
-                memcpy(&safe_mce_sys().m_ioctl.user_alloc.flags, ptr, sizeof(uint8_t));
-                ptr += sizeof(uint8_t);
-                memcpy(&safe_mce_sys().m_ioctl.user_alloc.memalloc, ptr, sizeof(alloc_t));
-                ptr += sizeof(alloc_t);
-                memcpy(&safe_mce_sys().m_ioctl.user_alloc.memfree, ptr, sizeof(free_t));
-                if (!(safe_mce_sys().m_ioctl.user_alloc.memalloc &&
-                      safe_mce_sys().m_ioctl.user_alloc.memfree)) {
-                    errno = EINVAL;
-                    return -1;
-                }
-            } else {
-                errno = EINVAL;
-                return -1;
-            }
-        }
-    }
-
-    return 0;
-}
-
 struct xlio_api_t *extra_api()
 {
     static struct xlio_api_t *xlio_api = nullptr;
@@ -137,7 +93,6 @@ struct xlio_api_t *extra_api()
         SET_EXTRA_API(add_conf_rule, xlio_add_conf_rule, XLIO_EXTRA_API_ADD_CONF_RULE);
         SET_EXTRA_API(thread_offload, xlio_thread_offload, XLIO_EXTRA_API_THREAD_OFFLOAD);
         SET_EXTRA_API(dump_fd_stats, xlio_dump_fd_stats, XLIO_EXTRA_API_DUMP_FD_STATS);
-        SET_EXTRA_API(ioctl, xlio_extra_ioctl, XLIO_EXTRA_API_IOCTL);
 
         // XLIO Socket API.
         SET_EXTRA_API(xlio_init_ex, xlio_init_ex, XLIO_EXTRA_API_XLIO_SOCKET);
@@ -182,9 +137,8 @@ extern "C" int xlio_init_ex(const struct xlio_init_attr *attr)
     g_user_memory_cb = attr->memory_cb;
 
     if (attr->memory_alloc) {
-        safe_mce_sys().m_ioctl.user_alloc.flags = IOCTL_USER_ALLOC_TX | IOCTL_USER_ALLOC_RX;
-        safe_mce_sys().m_ioctl.user_alloc.memalloc = attr->memory_alloc;
-        safe_mce_sys().m_ioctl.user_alloc.memfree = attr->memory_free;
+        safe_mce_sys().user_alloc.memalloc = attr->memory_alloc;
+        safe_mce_sys().user_alloc.memfree = attr->memory_free;
         safe_mce_sys().memory_limit_user =
             std::max(safe_mce_sys().memory_limit_user, safe_mce_sys().memory_limit);
     }

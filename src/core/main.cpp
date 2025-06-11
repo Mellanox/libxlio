@@ -1073,12 +1073,7 @@ static void do_global_ctors_helper()
 
     NEW_CTOR(g_buffer_pool_rx_rwqe,
              buffer_pool(BUFFER_POOL_RX, calc_rx_wqe_buff_size(),
-                         (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_RX
-                              ? safe_mce_sys().m_ioctl.user_alloc.memalloc
-                              : nullptr),
-                         (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_RX
-                              ? safe_mce_sys().m_ioctl.user_alloc.memfree
-                              : nullptr)));
+                         safe_mce_sys().user_alloc.memalloc, safe_mce_sys().user_alloc.memfree));
 
     if (safe_mce_sys().enable_striding_rq) {
         NEW_CTOR(g_buffer_pool_rx_stride, buffer_pool(BUFFER_POOL_RX, 0));
@@ -1098,12 +1093,7 @@ static void do_global_ctors_helper()
                                          ? safe_mce_sys().tx_buf_size
                                          : get_lwip_tcp_mss(g_p_net_device_table_mgr->get_max_mtu(),
                                                             safe_mce_sys().lwip_mss)),
-                         (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_TX
-                              ? safe_mce_sys().m_ioctl.user_alloc.memalloc
-                              : nullptr),
-                         (safe_mce_sys().m_ioctl.user_alloc.flags & IOCTL_USER_ALLOC_TX
-                              ? safe_mce_sys().m_ioctl.user_alloc.memfree
-                              : nullptr)));
+                         safe_mce_sys().user_alloc.memalloc, safe_mce_sys().user_alloc.memfree));
 
     NEW_CTOR(g_buffer_pool_zc, buffer_pool(BUFFER_POOL_TX, 0));
 
