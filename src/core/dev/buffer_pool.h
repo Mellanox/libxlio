@@ -65,7 +65,7 @@ public:
      * @param lkey The registered memory lkey.
      * @return False if no buffers are available, else True.
      */
-    bool get_buffers_thread_safe(descq_t &pDeque, ring_slave *desc_owner, size_t count,
+    bool get_buffers_thread_safe(descq_t &pDeque, ring_simple *desc_owner, size_t count,
                                  uint32_t lkey);
 
     /**

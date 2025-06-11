@@ -1581,9 +1581,8 @@ bool neigh_eth::send_arp_request(bool is_broadcast)
     header_ipv4 h;
     neigh_logdbg("Sending %s ARP", is_broadcast ? "BC" : "UC");
 
-    net_device_val_eth *netdevice_eth = dynamic_cast<net_device_val_eth *>(m_p_dev);
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (!netdevice_eth) {
+    if (!m_p_dev) {
         neigh_logdbg("Net dev is NULL not sending ARP");
         return false;
     }
@@ -1605,7 +1604,7 @@ bool neigh_eth::send_arp_request(bool is_broadcast)
     BULLSEYE_EXCLUDE_BLOCK_END
 
     m_id = m_p_ring->generate_id(src->get_address(), dst->get_address(),
-                                 netdevice_eth->get_vlan() ? htons(ETH_P_8021Q) : htons(ETH_P_ARP),
+                                 m_p_dev->get_vlan() ? htons(ETH_P_8021Q) : htons(ETH_P_ARP),
                                  htons(ETH_P_ARP), ip_address::any_addr(), ip_address::any_addr(),
                                  0, 0);
     mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, false, PBUF_RAM, 1);
@@ -1620,8 +1619,8 @@ bool neigh_eth::send_arp_request(bool is_broadcast)
     wqe_sh.init_wqe(m_send_wqe, &m_sge, 1);
 
     h.init();
-    if (netdevice_eth->get_vlan()) { // vlan interface
-        h.configure_vlan_eth_headers(*src, *dst, netdevice_eth->get_vlan(), ETH_P_ARP);
+    if (m_p_dev->get_vlan()) { // vlan interface
+        h.configure_vlan_eth_headers(*src, *dst, m_p_dev->get_vlan(), ETH_P_ARP);
     } else {
         h.configure_eth_headers(*src, *dst, ETH_P_ARP);
     }
@@ -1651,9 +1650,8 @@ bool neigh_eth::send_neighbor_solicitation()
     neigh_logdbg("Sending neighbor solicitation");
     assert(get_family() == AF_INET6);
 
-    net_device_val_eth *net_dev = dynamic_cast<net_device_val_eth *>(m_p_dev);
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (!net_dev) {
+    if (!m_p_dev) {
         neigh_logdbg("Net device is unavailable - not sending NS");
         return false;
     }
@@ -1693,7 +1691,7 @@ bool neigh_eth::send_neighbor_solicitation()
 
     // generate id for tx ring and acquire mem buffer for tx
     m_id = m_p_ring->generate_id(src_mac->get_address(), dst_mac.get_address(),
-                                 net_dev->get_vlan() ? htons(ETH_P_8021Q) : htons(ETH_P_IPV6),
+                                 m_p_dev->get_vlan() ? htons(ETH_P_8021Q) : htons(ETH_P_IPV6),
                                  htons(ETH_P_IPV6), m_src_addr, dst_snm, 0, 0);
     mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(m_id, false, PBUF_RAM, 1);
     BULLSEYE_EXCLUDE_BLOCK_START
@@ -1710,8 +1708,8 @@ bool neigh_eth::send_neighbor_solicitation()
     h.init();
 
     // build ether header
-    if (net_dev->get_vlan()) { // vlan interface
-        h.configure_vlan_eth_headers(*src_mac, dst_mac, net_dev->get_vlan(), ETH_P_IPV6);
+    if (m_p_dev->get_vlan()) { // vlan interface
+        h.configure_vlan_eth_headers(*src_mac, dst_mac, m_p_dev->get_vlan(), ETH_P_IPV6);
     } else {
         h.configure_eth_headers(*src_mac, dst_mac, ETH_P_IPV6);
     }

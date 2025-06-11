@@ -220,7 +220,7 @@ void net_device_table_mgr::update_tbl()
                 /* Add new interfaces */
                 switch (nl_msgdata->ifi_type) {
                 case ARPHRD_ETHER:
-                    p_net_device_val = new net_device_val_eth(&desc);
+                    p_net_device_val = new net_device_val(&desc);
                     break;
                 default:
                     goto next;
@@ -343,25 +343,6 @@ net_device_val *net_device_table_mgr::get_net_device_val(int if_index)
         for (size_t i = 0; i < slaves.size(); i++) {
             if (if_index == slaves[i]->if_index) {
                 goto out;
-            }
-        }
-        /* Check if interface is new netvsc slave */
-        if (net_dev->get_is_bond() == net_device_val::NETVSC) {
-            char if_name[IFNAMSIZ] = {0};
-            char sys_path[256] = {0};
-            int ret = 0;
-            if (if_indextoname(if_index, if_name)) {
-                ret = snprintf(sys_path, sizeof(sys_path), NETVSC_DEVICE_UPPER_FILE, if_name,
-                               net_dev->get_ifname());
-                if (ret > 0 && (size_t)ret < sizeof(sys_path)) {
-                    ret = errno; /* to suppress errno */
-                    int fd = SYSCALL(open, sys_path, O_RDONLY);
-                    if (fd >= 0) {
-                        SYSCALL(close, fd);
-                        goto out;
-                    }
-                    errno = ret;
-                }
             }
         }
     }
@@ -590,55 +571,23 @@ void net_device_table_mgr::get_net_devices(local_dev_vector &vec)
 void net_device_table_mgr::del_link_event(const netlink_link_info *info)
 {
     ndtm_logdbg("netlink event: RTM_DELLINK if_index: %d", info->ifindex);
-
+    NOT_IN_USE(info);
     /* This flow is actual when interface is removed quickly
      * w/o moving it in DOWN state.
      * Usually interface is removed during sequence of RTM_NEWLINK events
      * that puts it in DOWN state. In this case XLIO has more time to release
      * resources correctly.
      */
-    if (info->flags & IFF_SLAVE) {
-        net_device_val *net_dev = nullptr;
-        int if_index = info->ifindex;
-
-        ndtm_logdbg("netlink event: if_index: %d state: %s", info->ifindex,
-                    (info->flags & IFF_RUNNING ? "Up" : "Down"));
-
-        net_dev = get_net_device_val(if_index);
-        if (net_dev && (if_index != net_dev->get_if_idx()) &&
-            (net_dev->get_is_bond() == net_device_val::NETVSC) && (net_dev->get_slave(if_index))) {
-            ndtm_logdbg("found entry [%p]: if_index: %d : %s", net_dev, net_dev->get_if_idx(),
-                        net_dev->get_ifname());
-            net_dev->update_netvsc_slaves(info->ifindex, info->flags);
-        }
-    }
 }
 
 void net_device_table_mgr::new_link_event(const netlink_link_info *info)
 {
     ndtm_logdbg("netlink event: RTM_NEWLINK if_index: %d", info->ifindex);
-
+    NOT_IN_USE(info);
     /* This flow is used to process interface UP and DOWN scenarios.
      * It is important that interface can be removed w/o putting it into
      * DOWN state (see RTM_DELLINK).
      */
-    if (info->flags & IFF_SLAVE) {
-        net_device_val *net_dev = nullptr;
-        int if_index = info->ifindex;
-
-        ndtm_logdbg("netlink event: if_index: %d state: %s", info->ifindex,
-                    (info->flags & IFF_RUNNING ? "Up" : "Down"));
-
-        net_dev = get_net_device_val(if_index);
-        if (net_dev && (if_index != net_dev->get_if_idx()) &&
-            (net_dev->get_is_bond() == net_device_val::NETVSC) &&
-            ((net_dev->get_slave(if_index) && !(info->flags & IFF_RUNNING)) ||
-             (!net_dev->get_slave(if_index) && (info->flags & IFF_RUNNING)))) {
-            ndtm_logdbg("found entry [%p]: if_index: %d : %s", net_dev, net_dev->get_if_idx(),
-                        net_dev->get_ifname());
-            net_dev->update_netvsc_slaves(info->ifindex, info->flags);
-        }
-    }
 }
 
 void net_device_table_mgr::notify_cb(event *ev)

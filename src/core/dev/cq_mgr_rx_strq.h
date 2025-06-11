@@ -44,7 +44,7 @@ private:
                                                enum buff_status_e status);
 
     descq_t _stride_cache;
-    ring_slave *_owner_ring = nullptr;
+    ring_simple *_owner_ring = nullptr;
     mem_buf_desc_t *_hot_buffer_stride = nullptr;
     const uint32_t _stride_size_bytes;
     const uint32_t _strides_num;

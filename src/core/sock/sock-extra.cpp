@@ -332,7 +332,7 @@ extern "C" struct ibv_pd *xlio_socket_get_pd(xlio_socket_t sock)
 static void xlio_buf_free(struct xlio_buf *buf)
 {
     mem_buf_desc_t *desc = mem_buf_desc_t::from_xlio_buf(buf);
-    ring_slave *rng = desc->p_desc_owner;
+    ring_simple *rng = desc->p_desc_owner;
 
     desc->p_next_desc = nullptr;
     bool ret = rng->reclaim_recv_buffers(desc);

@@ -16,7 +16,7 @@
 #include "core/lwip/pbuf.h"
 
 // Forward declarations
-class ring_slave;
+class ring_simple;
 struct iphdr;
 struct ip6_hdr;
 struct xlio_buf;
@@ -189,7 +189,7 @@ public:
 
     // Tx: cq_mgr_tx owns the mem_buf_desc and the associated data buffer
     // Rx: cq_mgr_rx owns the mem_buf_desc and the associated data buffer
-    ring_slave *p_desc_owner;
+    ring_simple *p_desc_owner;
 
     atomic_t n_ref_count; // number of interested receivers (sockinfo) [can be modified only in
                           // cq_mgr_rx context]

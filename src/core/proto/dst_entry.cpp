@@ -422,10 +422,8 @@ bool dst_entry::conf_l2_hdr_and_snd_wqe_eth()
                                               get_sge_lst_4_not_inline_send(), 1);
     m_p_send_wqe_handler->init_wqe(m_fragmented_send_wqe, get_sge_lst_4_not_inline_send(), 1);
 
-    const net_device_val_eth *netdevice_eth =
-        dynamic_cast<const net_device_val_eth *>(m_p_net_dev_val);
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (netdevice_eth) {
+    if (m_p_net_dev_val) {
         BULLSEYE_EXCLUDE_BLOCK_END
         const L2_address *src = m_p_net_dev_val->get_l2_address();
         const L2_address *dst = m_p_neigh_val->get_l2_address();
@@ -433,7 +431,7 @@ bool dst_entry::conf_l2_hdr_and_snd_wqe_eth()
         BULLSEYE_EXCLUDE_BLOCK_START
         if (src && dst) {
             BULLSEYE_EXCLUDE_BLOCK_END
-            configure_eth_headers(m_header, *src, *dst, netdevice_eth->get_vlan());
+            configure_eth_headers(m_header, *src, *dst, m_p_net_dev_val->get_vlan());
             init_sge();
             ret_val = true;
         } else {
@@ -697,12 +695,10 @@ ssize_t dst_entry::pass_pkt_to_neigh(const iovec *p_iov, size_t sz_iov, uint32_t
     // For IPv6 - packet_id will be taken from neigh_send_data
     configure_ip_header(m_header_neigh, (uint16_t)(packet_id & 0xffff));
 
-    const L2_address *dummy =
-        m_p_net_dev_val->get_l2_address(); // Real MAC addresses will be filled by neigh
-    const net_device_val_eth *netdevice_eth =
-        dynamic_cast<const net_device_val_eth *>(m_p_net_dev_val);
-    if (m_p_neigh_entry && netdevice_eth && dummy) {
-        configure_eth_headers(m_header_neigh, *dummy, *dummy, netdevice_eth->get_vlan());
+    // Real MAC addresses will be filled by neigh
+    const L2_address *dummy = m_p_net_dev_val->get_l2_address();
+    if (m_p_neigh_entry && dummy) {
+        configure_eth_headers(m_header_neigh, *dummy, *dummy, m_p_net_dev_val->get_vlan());
 
         neigh_send_data n_send_info(const_cast<iovec *>(p_iov), sz_iov, m_header_neigh,
                                     get_route_mtu(), packet_id);

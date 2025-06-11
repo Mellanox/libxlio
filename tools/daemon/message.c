@@ -17,20 +17,15 @@
 
 #include "core/lwip/tcp.h" /* display TCP states */
 #include "hash.h"
-#include "tc.h"
 #include "daemon.h"
 
 int open_message(void);
 void close_message(void);
 int proc_message(void);
 
-extern int add_flow(struct store_pid *pid_value, struct store_flow *value);
-extern int del_flow(struct store_pid *pid_value, struct store_flow *value);
-
 static int proc_msg_init(struct xlio_hdr *msg_hdr, size_t size, struct sockaddr_un *peeraddr);
 static int proc_msg_exit(struct xlio_hdr *msg_hdr, size_t size);
 static int proc_msg_state(struct xlio_hdr *msg_hdr, size_t size);
-static int proc_msg_flow(struct xlio_hdr *msg_hdr, size_t size, struct sockaddr_un *peeraddr);
 
 int open_message(void)
 {
@@ -136,15 +131,6 @@ again:
         case XLIO_MSG_EXIT:
             rc = proc_msg_exit(msg_hdr, len);
             break;
-        case XLIO_MSG_FLOW:
-            /* Note: special loopback logic, it
-             * should be added first as far as observed issue with delay
-             * in activation loopback filters in case two processes
-             * communicate locally w/o SRIOV
-             */
-            proc_msg_flow(msg_hdr, len, NULL);
-            rc = proc_msg_flow(msg_hdr, len, &peeraddr);
-            break;
         default:
             rc = -EPROTO;
             log_error("Received unknown message errno %d (%s)\n", errno, strerror(errno));
@@ -196,7 +182,6 @@ static int proc_msg_init(struct xlio_hdr *msg_hdr, size_t size, struct sockaddr_
     value->pid = data->hdr.pid;
     value->lib_ver = data->ver;
     gettimeofday(&value->t_start, NULL);
-    INIT_LIST_HEAD(&value->flow_list);
 
     value->ht = hash_create(&free, daemon_cfg.opt.max_fid_num);
     if (NULL == value->ht) {
@@ -243,17 +228,6 @@ static int proc_msg_exit(struct xlio_hdr *msg_hdr, size_t size)
 
     pid_value = hash_get(daemon_cfg.ht, data->hdr.pid);
     if (pid_value) {
-        struct store_flow *flow_value = NULL;
-        struct list_head *cur_entry = NULL;
-        struct list_head *tmp_entry = NULL;
-        list_for_each_safe(cur_entry, tmp_entry, &pid_value->flow_list)
-        {
-            flow_value = list_entry(cur_entry, struct store_flow, item);
-            list_del_init(&flow_value->item);
-            del_flow(pid_value, flow_value);
-            free(flow_value);
-        }
-
         hash_del(daemon_cfg.ht, pid_value->pid);
     }
 
@@ -347,163 +321,4 @@ static int proc_msg_state(struct xlio_hdr *msg_hdr, size_t size)
                    : "n/a"));
 
     return (sizeof(*data));
-}
-
-static int proc_msg_flow(struct xlio_hdr *msg_hdr, size_t size, struct sockaddr_un *peeraddr)
-{
-    int rc = 0;
-    struct xlio_msg_flow *data;
-    struct store_pid *pid_value;
-    struct store_flow *value = NULL;
-    struct store_flow *cur_flow = NULL;
-    struct list_head *cur_entry = NULL;
-    int value_new = 0;
-    int ack = 0;
-
-    assert(msg_hdr);
-    assert((msg_hdr->code & ~XLIO_MSG_ACK) == XLIO_MSG_FLOW);
-    assert(size);
-
-    data = (struct xlio_msg_flow *)msg_hdr;
-    if (size < sizeof(*data)) {
-        rc = -EBADMSG;
-        goto err;
-    }
-
-    /* Note: special loopback logic */
-    if (NULL == peeraddr && data->type == XLIO_MSG_FLOW_EGRESS) {
-        return 0;
-    }
-
-    ack = (1 == data->hdr.status);
-
-    pid_value = hash_get(daemon_cfg.ht, data->hdr.pid);
-    if (NULL == pid_value) {
-        /* Return success because this case can be valid
-         * if the process is terminated using abnormal way
-         * So no needs in acknowledgement.
-         */
-        log_debug("Failed hash_get() for pid %d errno %d (%s). The process should be abnormal "
-                  "terminated\n",
-                  data->hdr.pid, errno, strerror(errno));
-        return ((int)sizeof(*data));
-    }
-
-    /* Allocate memory for this value in this place
-     */
-    value = (void *)calloc(1, sizeof(*value));
-    if (NULL == value) {
-        rc = -ENOMEM;
-        goto err;
-    }
-
-    value->type = data->type;
-    value->if_id = data->if_id;
-    value->tap_id = data->tap_id;
-    value->flow.dst.family = data->flow.dst.family;
-    if (value->flow.dst.family == AF_INET) {
-        value->flow.dst.addr4.sin_port = data->flow.dst.port;
-        value->flow.dst.addr4.sin_addr.s_addr = data->flow.dst.addr.ipv4;
-    } else {
-        value->flow.dst.addr6.sin6_port = data->flow.dst.port;
-        memcpy(&value->flow.dst.addr6.sin6_addr.s6_addr[0], &data->flow.dst.addr.ipv6[0],
-               sizeof(value->flow.dst.addr6.sin6_addr.s6_addr));
-    }
-
-    switch (data->type) {
-    case XLIO_MSG_FLOW_EGRESS:
-    case XLIO_MSG_FLOW_TCP_3T:
-    case XLIO_MSG_FLOW_UDP_3T:
-        break;
-    case XLIO_MSG_FLOW_TCP_5T:
-    case XLIO_MSG_FLOW_UDP_5T:
-        value->flow.src.family = data->flow.src.family;
-        if (value->flow.src.family == AF_INET) {
-            value->flow.src.addr4.sin_port = data->flow.src.port;
-            value->flow.src.addr4.sin_addr.s_addr = data->flow.src.addr.ipv4;
-        } else {
-            value->flow.src.addr6.sin6_port = data->flow.src.port;
-            memcpy(&value->flow.src.addr6.sin6_addr.s6_addr[0], &data->flow.src.addr.ipv6[0],
-                   sizeof(value->flow.src.addr6.sin6_addr.s6_addr));
-        }
-        break;
-    default:
-        log_error("Received unknown message errno %d (%s)\n", errno, strerror(errno));
-        rc = -EPROTO;
-        goto err;
-    }
-
-    /* Note:
-     * - special loopback logic when peeraddr is null
-     * - avoid useless rules creation in case expected 5t traffic is local
-     */
-    if (NULL == peeraddr) {
-        value->if_id = sys_lo_ifindex();
-        ack = 0;
-        if (value->if_id <= 0) {
-            rc = -EFAULT;
-            goto err;
-        }
-    } else if ((XLIO_MSG_FLOW_TCP_5T == data->type || XLIO_MSG_FLOW_UDP_5T == data->type) &&
-               sys_iplocal(value->flow.src.addr4.sin_addr.s_addr)) {
-        rc = 0;
-        goto err;
-    }
-
-    if (XLIO_MSG_FLOW_ADD == data->action) {
-        list_for_each(cur_entry, &pid_value->flow_list)
-        {
-            cur_flow = list_entry(cur_entry, struct store_flow, item);
-            if (value->type == cur_flow->type && value->if_id == cur_flow->if_id &&
-                value->tap_id == cur_flow->tap_id &&
-                !memcmp(&value->flow, &cur_flow->flow, sizeof(cur_flow->flow))) {
-                break;
-            }
-        }
-        if (cur_entry == &pid_value->flow_list) {
-            rc = add_flow(pid_value, value);
-            if (rc < 0) {
-                goto err;
-            }
-            value_new = 1; /* mark value as new to avoid releasing */
-            list_add_tail(&value->item, &pid_value->flow_list);
-
-            log_debug("[%d] add flow handle: 0x%08X type: %d if_id: %d tap_id: %d\n",
-                      pid_value->pid, value->handle, value->type, value->if_id, value->tap_id);
-        }
-    }
-
-    if (XLIO_MSG_FLOW_DEL == data->action) {
-        list_for_each(cur_entry, &pid_value->flow_list)
-        {
-            cur_flow = list_entry(cur_entry, struct store_flow, item);
-            if (value->type == cur_flow->type && value->if_id == cur_flow->if_id &&
-                value->tap_id == cur_flow->tap_id &&
-                !memcmp(&value->flow, &cur_flow->flow, sizeof(cur_flow->flow))) {
-                log_debug("[%d] del flow handle: 0x%08X type: %d if_id: %d tap_id: %d\n",
-                          pid_value->pid, cur_flow->handle, cur_flow->type, cur_flow->if_id,
-                          cur_flow->tap_id);
-                list_del_init(&cur_flow->item);
-                rc = del_flow(pid_value, cur_flow);
-                free(cur_flow);
-                break;
-            }
-        }
-    }
-
-err:
-    if (ack) {
-        data->hdr.code |= XLIO_MSG_ACK;
-        data->hdr.status = (rc ? 1 : 0);
-        if (0 > sys_sendto(daemon_cfg.sock_fd, &data->hdr, sizeof(data->hdr), 0,
-                           (struct sockaddr *)peeraddr, sizeof(*peeraddr))) {
-            log_warn("Failed sendto() message errno %d (%s)\n", errno, strerror(errno));
-        }
-    }
-
-    if (value && !value_new) {
-        free(value);
-    }
-
-    return (rc ? rc : (int)sizeof(*data));
 }

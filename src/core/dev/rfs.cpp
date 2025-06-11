@@ -98,7 +98,7 @@ inline void rfs::prepare_filter_detach(int &filter_counter, bool decrease_counte
     BULLSEYE_EXCLUDE_BLOCK_END
 }
 
-rfs::rfs(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *rule_filter /*= NULL*/,
+rfs::rfs(flow_tuple *flow_spec_5t, ring_simple *p_ring, rfs_rule_filter *rule_filter /*= NULL*/,
          uint32_t flow_tag_id /*=0*/)
     : m_flow_tuple(rule_filter ? rule_filter->m_flow_tuple : *flow_spec_5t)
     , m_p_ring(p_ring)
@@ -137,15 +137,11 @@ rfs::~rfs()
         int counter = 0;
         prepare_filter_detach(counter, true);
         if (counter == 0) {
-            if (m_p_ring->is_simple()) {
-                destroy_flow();
-            }
+            destroy_flow();
             m_p_rule_filter->m_map.erase(m_p_rule_filter->m_key);
         }
     } else if (m_b_tmp_is_attached) {
-        if (m_p_ring->is_simple()) {
-            destroy_flow();
-        }
+        destroy_flow();
     }
 
     if (m_p_rule_filter) {
@@ -242,14 +238,14 @@ bool rfs::attach_flow(sockinfo *sink)
 
     // We also check if this is the FIRST sink so we need to call ibv_attach_flow
     if ((m_n_sinks_list_entries == 0) && (!m_b_tmp_is_attached) && (filter_counter == 1)) {
-        if (m_p_ring->is_simple() && !create_flow()) {
+        if (!create_flow()) {
             return false;
         }
         filter_keep_attached(filter_iter);
     } else {
         rfs_logdbg("rfs: Joining existing flow");
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-        if (g_p_app->type != APP_NONE && m_p_ring->is_simple() && g_p_app->add_second_4t_rule) {
+        if (g_p_app->type != APP_NONE && g_p_app->add_second_4t_rule) {
             // This is second 4 tuple rule for the same worker (when number
             // of workers is not power of two)
             create_flow();
@@ -284,7 +280,7 @@ bool rfs::detach_flow(sockinfo *sink)
     prepare_filter_detach(filter_counter, false);
 
     // We also need to check if this is the LAST sink so we need to call ibv_attach_flow
-    if (m_p_ring->is_simple() && (m_n_sinks_list_entries == 0) && (filter_counter == 0)) {
+    if ((m_n_sinks_list_entries == 0) && (filter_counter == 0)) {
         ret = destroy_flow();
     }
 

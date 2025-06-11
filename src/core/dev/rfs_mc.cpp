@@ -20,7 +20,7 @@
 #define rfs_logfunc    __log_info_func
 #define rfs_logfuncall __log_info_funcall
 
-rfs_mc::rfs_mc(flow_tuple *flow_spec_5t, ring_slave *p_ring,
+rfs_mc::rfs_mc(flow_tuple *flow_spec_5t, ring_simple *p_ring,
                rfs_rule_filter *rule_filter /*= NULL*/, int flow_tag_id /*=0*/)
     : rfs(flow_spec_5t, p_ring, rule_filter, flow_tag_id)
 {
@@ -30,9 +30,7 @@ rfs_mc::rfs_mc(flow_tuple *flow_spec_5t, ring_slave *p_ring,
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    if (m_p_ring->is_simple()) {
-        prepare_flow_spec();
-    }
+    prepare_flow_spec();
 }
 
 void rfs_mc::prepare_flow_spec()

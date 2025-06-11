@@ -35,7 +35,7 @@ inline bool ipv6_check(const struct ip6_hdr &p_ip6_h)
     return (likely(0U == ipv6_get_flowid(p_ip6_h)) && likely(p_ip6_h.ip6_nxt == IPPROTO_TCP));
 }
 
-rfs_uc_tcp_gro::rfs_uc_tcp_gro(flow_tuple *flow_spec_5t, ring_slave *p_ring,
+rfs_uc_tcp_gro::rfs_uc_tcp_gro(flow_tuple *flow_spec_5t, ring_simple *p_ring,
                                rfs_rule_filter *rule_filter, uint32_t flow_tag_id)
     : rfs_uc(flow_spec_5t, p_ring, rule_filter, flow_tag_id)
     , m_b_active(false)

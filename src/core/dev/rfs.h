@@ -53,7 +53,7 @@ public:
 
 class rfs {
 public:
-    rfs(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *rule_filter = nullptr,
+    rfs(flow_tuple *flow_spec_5t, ring_simple *p_ring, rfs_rule_filter *rule_filter = nullptr,
         uint32_t flow_tag_id = 0);
     virtual ~rfs();
 
@@ -79,7 +79,7 @@ public:
 
 protected:
     flow_tuple m_flow_tuple;
-    ring_slave *m_p_ring;
+    ring_simple *m_p_ring;
     ring_simple *m_p_ring_simple;
     rfs_rule_filter *m_p_rule_filter;
     rfs_rule *m_rfs_flow = nullptr;

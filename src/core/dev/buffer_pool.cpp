@@ -222,7 +222,7 @@ void buffer_pool::print_full_report(vlog_levels_t log_level, bool print_only_cri
     }
 }
 
-bool buffer_pool::get_buffers_thread_safe(descq_t &pDeque, ring_slave *desc_owner, size_t count,
+bool buffer_pool::get_buffers_thread_safe(descq_t &pDeque, ring_simple *desc_owner, size_t count,
                                           uint32_t lkey)
 {
     std::lock_guard<decltype(m_lock)> lock(m_lock);

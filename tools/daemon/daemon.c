@@ -18,7 +18,6 @@
 #endif
 
 #include "hash.h"
-#include "tc.h"
 #include "daemon.h"
 
 extern int proc_loop(void);
@@ -240,7 +239,6 @@ static int config_def(void)
     daemon_cfg.notify_fd = -1;
     daemon_cfg.notify_dir = XLIO_AGENT_PATH;
     daemon_cfg.ht = NULL;
-    daemon_cfg.tc = NULL;
 
     return rc;
 }

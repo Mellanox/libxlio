@@ -7,6 +7,7 @@
 #include "dst_entry_tcp.h"
 #include "mapping.h"
 #include "mem_desc.h"
+#include "dev/ring_simple.h"
 #include <netinet/tcp.h>
 
 #define MODULE_NAME "dst_tcp"

@@ -24,7 +24,7 @@
 #include "event/event_handler_manager.h"
 #include "dev/buffer_pool.h"
 #include "dev/ring.h"
-#include "dev/ring_slave.h"
+#include "dev/ring_simple.h"
 #include "dev/ring_bond.h"
 #include "dev/ring_simple.h"
 #include "proto/route_table_mgr.h"

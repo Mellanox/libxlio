@@ -23,7 +23,7 @@
 #define rfs_logfunc    __log_info_func
 #define rfs_logfuncall __log_info_funcall
 
-rfs_uc::rfs_uc(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *rule_filter,
+rfs_uc::rfs_uc(flow_tuple *flow_spec_5t, ring_simple *p_ring, rfs_rule_filter *rule_filter,
                uint32_t flow_tag_id)
     : rfs(flow_spec_5t, p_ring, rule_filter, flow_tag_id)
 {
@@ -33,9 +33,7 @@ rfs_uc::rfs_uc(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *ru
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    if (m_p_ring->is_simple()) {
-        prepare_flow_spec();
-    }
+    prepare_flow_spec();
 }
 
 void rfs_uc::prepare_flow_spec()

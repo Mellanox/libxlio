@@ -133,7 +133,6 @@ struct module_cfg {
     int notify_fd;
     const char *notify_dir;
     hash_t ht;
-    tc_t tc;
     struct list_head if_list;
 };
 
@@ -158,7 +157,6 @@ struct sockaddr_store {
 struct store_pid {
     pid_t pid; /**< Process id */
     hash_t ht; /**< Handle to socket store */
-    struct list_head flow_list; /**< List of flows */
     uint32_t lib_ver; /**< Library version that the process uses */
     struct timeval t_start; /**< Start time of the process */
 };
@@ -173,22 +171,6 @@ struct store_fid {
     struct sockaddr_store dst; /**< Destination address */
     uint8_t type; /**< Connection type */
     uint8_t state; /**< Current TCP state of the connection */
-};
-
-/**
- * @struct store_flow
- * @brief Describe flow
- */
-struct store_flow {
-    struct list_head item; /**< Link to use in queue */
-    uint32_t handle; /**< Handle value in term of tc */
-    int type; /**< Flow type */
-    uint32_t if_id; /**< Interface index */
-    uint32_t tap_id; /**< Tap device index */
-    struct {
-        struct sockaddr_store src; /**< Source address */
-        struct sockaddr_store dst; /**< Destination address */
-    } flow;
 };
 
 void sys_log(int level, const char *format, ...);
