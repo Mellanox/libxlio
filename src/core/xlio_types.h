@@ -21,27 +21,6 @@
 #define SO_XLIO_SHUTDOWN_RX      2821
 #define SO_XLIO_EXT_VLAN_TAG     2824
 
-/**
- * @def SO_XLIO_ISOLATE
- * Socket isolation option groups sockets under specified policy.
- *
- * Supported policies:
- *   - SO_XLIO_ISOLATE_DEFAULT - default behavior according to XLIO configuration.
- *
- *   - SO_XLIO_ISOLATE_SAFE - isolate sockets from the default sockets and guarantee thread
- *     safety regardless of XLIO configuration (note: this option doesn't change socket API
- *     thread safety model). This policy is mostly effective in XLIO_TCP_CTL_THREAD=delegate
- *     configuration.
- *
- * Current limitations:
- *   - SO_XLIO_ISOLATE option is supported only by TCP sockets
- *   - SO_XLIO_ISOLATE must be called according to thread safety model and XLIO configuration
- *   - SO_XLIO_ISOLATE may be called after socket() syscall and before either listen() or connect()
- */
-#define SO_XLIO_ISOLATE         2825
-#define SO_XLIO_ISOLATE_DEFAULT 0
-#define SO_XLIO_ISOLATE_SAFE    1
-
 /*
  * Return values for the receive packet notify callback function
  */
@@ -99,7 +78,6 @@ typedef enum {
     RING_LOGIC_PER_CORE = 30, //!< RING_LOGIC_PER_CORE
     RING_LOGIC_PER_CORE_ATTACH_THREADS = 31, //!< RING_LOGIC_PER_CORE_ATTACH_THREADS
     RING_LOGIC_PER_OBJECT = 32, //!< RING_LOGIC_PER_OBJECT
-    RING_LOGIC_ISOLATE = 33, //!< RING_LOGIC_ISOLATE
     RING_LOGIC_LAST //!< RING_LOGIC_LAST
 } ring_logic_t;
 
