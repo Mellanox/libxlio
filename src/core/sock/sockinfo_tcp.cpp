@@ -4055,34 +4055,6 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             ret = -1;
             errno = EINVAL;
             break;
-        case SO_XLIO_ISOLATE:
-            // See option description in the extra API header.
-            pass_to_os_cond = false;
-            // We support SO_XLIO_ISOLATE only when no TX/RX rings are assigned.
-            if (__optlen == sizeof(int) && !m_p_connected_dst_entry && m_rx_ring_map.empty()) {
-                int tempval = *reinterpret_cast<const int *>(__optval);
-                bool ring_isolated =
-                    m_ring_alloc_log_rx.get_ring_alloc_logic() == RING_LOGIC_ISOLATE &&
-                    m_ring_alloc_log_tx.get_ring_alloc_logic() == RING_LOGIC_ISOLATE;
-
-                if (tempval == SO_XLIO_ISOLATE_DEFAULT && !ring_isolated) {
-                    // Do nothing.
-                    break;
-                }
-                if (tempval == SO_XLIO_ISOLATE_SAFE) {
-                    if (safe_mce_sys().tcp_ctl_thread ==
-                            option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS &&
-                        !ring_isolated) {
-                        m_tcp_con_lock = multilock::create_new_lock(MULTILOCK_RECURSIVE, "tcp_con");
-                    }
-                    set_ring_logic_rx(ring_alloc_logic_attr(RING_LOGIC_ISOLATE, true));
-                    set_ring_logic_tx(ring_alloc_logic_attr(RING_LOGIC_ISOLATE, true));
-                    break;
-                }
-            }
-            ret = -1;
-            errno = EINVAL;
-            break;
         default:
             pass_to_os_always = true;
             supported = false;
