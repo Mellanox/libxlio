@@ -74,7 +74,6 @@ public:
         return m_p_n_rx_channel_fds;
     }
     virtual int get_tx_channel_fd() const { return -1; }
-    virtual bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe) = 0;
     virtual int request_notification(cq_type_t cq_type, uint64_t poll_sn) = 0;
     virtual bool reclaim_recv_buffers(descq_t *rx_reuse) = 0;
     virtual bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst) = 0;

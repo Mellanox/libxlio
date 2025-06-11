@@ -192,24 +192,6 @@ protected:
         m_b_tx_mem_buf_desc_list_pending = is_pending;
     }
     uint32_t get_priority_by_tc_class(uint32_t tc_clas);
-    inline void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                                 xlio_wr_tx_packet_attr attr)
-    {
-        if (unlikely(is_set(attr, XLIO_TX_PACKET_DUMMY))) {
-            if (m_p_ring->get_hw_dummy_send_support(id, p_send_wqe)) {
-                xlio_ibv_wr_opcode last_opcode =
-                    m_p_send_wqe_handler->set_opcode(*p_send_wqe, XLIO_IBV_WR_NOP);
-                m_p_ring->send_ring_buffer(id, p_send_wqe, attr);
-                m_p_send_wqe_handler->set_opcode(*p_send_wqe, last_opcode);
-            } else {
-                /* free the buffer if dummy send is not supported */
-                mem_buf_desc_t *p_mem_buf_desc = (mem_buf_desc_t *)(p_send_wqe->wr_id);
-                m_p_ring->mem_buf_tx_release(p_mem_buf_desc, true);
-            }
-        } else {
-            m_p_ring->send_ring_buffer(id, p_send_wqe, attr);
-        }
-    }
 };
 
 #endif /* DST_ENTRY_H */

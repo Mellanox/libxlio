@@ -2021,7 +2021,6 @@ ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
     const socklen_t __dstlen = tx_arg.attr.len;
     int errno_tmp = errno;
     int ret = 0;
-    bool is_dummy = IS_DUMMY_PACKET(__flags);
     dst_entry *p_dst_entry = m_p_connected_dst_entry; // Default for connected() socket but we'll
                                                       // update it on a specific sendTO(__to) call
 
@@ -2144,8 +2143,7 @@ ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
         }
 
         attr.length = static_cast<size_t>(sz_data_payload);
-        attr.flags = (xlio_wr_tx_packet_attr)((b_blocking * XLIO_TX_PACKET_BLOCK) |
-                                              (is_dummy * XLIO_TX_PACKET_DUMMY));
+        attr.flags = (xlio_wr_tx_packet_attr)((b_blocking * XLIO_TX_PACKET_BLOCK));
         if (likely(p_dst_entry->is_valid())) {
             // All set for fast path packet sending - this is our best performance flow
             ret = p_dst_entry->fast_send(p_iov, sz_iov, attr);
@@ -2172,7 +2170,7 @@ ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
         // Yet we need to add this code to avoid deadlocks in case of EPOLLOUT ET.
         NOTIFY_ON_EVENTS(this, EPOLLOUT);
 
-        save_stats_tx_offload(ret, is_dummy);
+        save_stats_tx_offload(ret);
 
         m_lock_snd.unlock();
 
@@ -3052,20 +3050,16 @@ void sockinfo_udp::save_stats_threadid_tx()
     }
 }
 
-void sockinfo_udp::save_stats_tx_offload(int bytes, bool is_dummy)
+void sockinfo_udp::save_stats_tx_offload(int bytes)
 {
     if (unlikely(m_p_socket_stats)) {
-        if (unlikely(is_dummy)) {
-            m_p_socket_stats->counters.n_tx_dummy++;
+        if (bytes >= 0) {
+            m_p_socket_stats->counters.n_tx_sent_byte_count += bytes;
+            m_p_socket_stats->counters.n_tx_sent_pkt_count++;
+        } else if (errno == EAGAIN) {
+            m_p_socket_stats->counters.n_rx_os_eagain++;
         } else {
-            if (bytes >= 0) {
-                m_p_socket_stats->counters.n_tx_sent_byte_count += bytes;
-                m_p_socket_stats->counters.n_tx_sent_pkt_count++;
-            } else if (errno == EAGAIN) {
-                m_p_socket_stats->counters.n_rx_os_eagain++;
-            } else {
-                m_p_socket_stats->counters.n_tx_errors++;
-            }
+            m_p_socket_stats->counters.n_tx_errors++;
         }
     }
 }

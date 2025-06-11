@@ -45,11 +45,6 @@
 enum { CMSG_XLIO_IOCTL_USER_ALLOC = 2900 };
 
 /*
- * Flags for Dummy send API
- */
-#define XLIO_SND_FLAGS_DUMMY MSG_SYN // equals to 0x400
-
-/*
  * Return values for the receive packet notify callback function
  */
 typedef enum {

@@ -64,7 +64,6 @@ public:
                                        uint16_t eth_proto, uint16_t encap_proto,
                                        const ip_address &src_ip, const ip_address &dst_ip,
                                        uint16_t src_port, uint16_t dst_port);
-    virtual bool get_hw_dummy_send_support(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe);
     virtual int modify_ratelimit(struct xlio_rate_limit_t &rate_limit);
     /* XXX TODO We have to support ring_bond for zerocopy. */
     virtual uint32_t get_tx_user_lkey(void *addr, size_t length)

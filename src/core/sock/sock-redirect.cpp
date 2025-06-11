@@ -1280,29 +1280,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(getsockname)(int __fd, struct sockaddr *__name, so
 
     srdr_logdbg_entry("fd=%d", __fd);
 
-    int ret = 0;
-    sockinfo *p_socket_object = nullptr;
-    p_socket_object = fd_collection_get_sockfd(__fd);
-    if (p_socket_object) {
-        ret = p_socket_object->getsockname(__name, __namelen);
+    sockinfo *p_socket_object = fd_collection_get_sockfd(__fd);
+    int ret = p_socket_object ? p_socket_object->getsockname(__name, __namelen)
+                              : SYSCALL(getsockname, __fd, __name, __namelen);
 
-        if (safe_mce_sys().trigger_dummy_send_getsockname) {
-            char buf[264] = {0};
-            struct iovec msg_iov = {&buf, sizeof(buf)};
-            struct msghdr msg = {nullptr, 0, &msg_iov, 1, nullptr, 0, 0};
-            int ret_send = sendmsg(__fd, &msg, XLIO_SND_FLAGS_DUMMY);
-            srdr_logdbg("Triggered dummy message for socket fd=%d (ret_send=%d)", __fd, ret_send);
-            NOT_IN_USE(ret_send);
-        }
-    } else {
-        ret = SYSCALL(getsockname, __fd, __name, __namelen);
-    }
-
-    if (ret >= 0) {
-        srdr_logdbg_exit("returned with %d", ret);
-    } else {
-        srdr_logdbg_exit("failed (errno=%d %m)", errno);
-    }
+    srdr_logdbg_exit("returned with %d (errno=%d %m)", ret, errno);
     return ret;
 }
 
@@ -1725,12 +1707,6 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(send)(int __fd, __const void *__buf, size_t __
         return p_socket_object->tx(tx_arg);
     }
 
-    // Ignore dummy messages for OS
-    if (unlikely(IS_DUMMY_PACKET(__flags))) {
-        errno = EINVAL;
-        return -1;
-    }
-
     return SYSCALL(send, __fd, __buf, __nbytes, __flags);
 }
 
@@ -1749,12 +1725,6 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendmsg)(int __fd, __const struct msghdr *__ms
     p_socket_object = fd_collection_get_sockfd(__fd);
     if (p_socket_object) {
         return sendmsg_internal(p_socket_object, __msg, __flags);
-    }
-
-    // Ignore dummy messages for OS
-    if (unlikely(IS_DUMMY_PACKET(__flags))) {
-        errno = EINVAL;
-        return -1;
     }
 
     return SYSCALL(sendmsg, __fd, __msg, __flags);
@@ -1808,12 +1778,6 @@ EXPORT_SYMBOL int XLIO_SYMBOL(sendmmsg)(int __fd, struct mmsghdr *__mmsghdr, uns
         return num_of_msg;
     }
 
-    // Ignore dummy messages for OS
-    if (unlikely(IS_DUMMY_PACKET(__flags))) {
-        errno = EINVAL;
-        return -1;
-    }
-
     return SYSCALL(sendmmsg, __fd, __mmsghdr, __vlen, __flags);
 }
 
@@ -1844,12 +1808,6 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendto)(int __fd, __const void *__buf, size_t 
         tx_arg.attr.len = __tolen;
 
         return p_socket_object->tx(tx_arg);
-    }
-
-    // Ignore dummy messages for OS
-    if (unlikely(IS_DUMMY_PACKET(__flags))) {
-        errno = EINVAL;
-        return -1;
     }
 
     return SYSCALL(sendto, __fd, __buf, __nbytes, __flags, __to, __tolen);

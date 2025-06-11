@@ -306,7 +306,6 @@ static inline u32_t tcp_xmit_size_goal(struct tcp_pcb *pcb, int use_max)
  * @param arg Pointer to the data to be enqueued for sending.
  * @param len Data length in bytes
  * @param apiflags combination of following flags:
- * - TCP_WRITE_DUMMY (0x10) indicates if the packet is a dummy packet
  * - TCP_WRITE_FILE (0x40) data should be taken from file
  * @param desc Additional metadata that allows later to check the data mkey/lkey.
  * @return ERR_OK if enqueued, another err_t on error
@@ -332,7 +331,7 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
     off_t offset = 0;
     off_t offset_next = 0;
 
-    if (len < pcb->mss && !(apiflags & TCP_WRITE_DUMMY)) {
+    if (len < pcb->mss) {
         const u32_t byte_queued = pcb->snd_nxt - pcb->lastack;
         pcb->snd_sml_add = (pcb->unacked ? pcb->unacked->len : 0) + byte_queued;
     }
@@ -351,7 +350,6 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
         optflags |= TF_SEG_OPTS_TS;
     }
 #endif /* LWIP_TCP_TIMESTAMPS */
-    optflags |= (apiflags & TCP_WRITE_DUMMY) ? TF_SEG_OPTS_DUMMY_MSG : 0;
     optlen = LWIP_TCP_OPT_LENGTH(optflags);
 
     queuelen = pcb->snd_queuelen;
@@ -896,7 +894,7 @@ static void tcp_tso_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t wnd)
     /* Ignore retransmitted segments and special segments
      */
     if (TCP_SEQ_LT(seg->seqno, pcb->snd_nxt) ||
-        (seg->flags & (TF_SEG_OPTS_TSO | TF_SEG_OPTS_DUMMY_MSG | TF_SEG_OPTS_NOMERGE)) ||
+        (seg->flags & (TF_SEG_OPTS_TSO | TF_SEG_OPTS_NOMERGE)) ||
         ((TCPH_FLAGS(seg->tcphdr) & (~(TCP_ACK | TCP_PSH))) != 0)) {
         goto err;
     }
@@ -1325,7 +1323,6 @@ err_t tcp_output(struct tcp_pcb *pcb)
 
         /* Split the segment in case of a small window */
         if ((NULL == pcb->unacked) && (wnd) && ((seg->len + seg->seqno - pcb->lastack) > wnd)) {
-            LWIP_ASSERT("tcp_output: no window for dummy packet", !LWIP_IS_DUMMY_SEGMENT(seg));
             tcp_split_segment(pcb, seg, wnd);
         }
 
@@ -1341,7 +1338,7 @@ err_t tcp_output(struct tcp_pcb *pcb)
              *   either seg->next != NULL or pcb->unacked == NULL;
              *   RST is no sent using tcp_write/tcp_output.
              */
-            if ((tcp_do_output_nagle(pcb) == 0) && !LWIP_IS_DUMMY_SEGMENT(seg) &&
+            if ((tcp_do_output_nagle(pcb) == 0) &&
                 ((pcb->flags & (TF_NAGLEMEMERR | TF_FIN)) == 0)) {
                 if (pcb->snd_sml_snt > (pcb->unacked ? pcb->unacked->len : 0)) {
                     pcb->flags &= ~(TF_ACK_NOW); // TODO bug #3574064: check if maybe we do want to
@@ -1371,11 +1368,6 @@ err_t tcp_output(struct tcp_pcb *pcb)
             ++i;
 #endif /* TCP_CWND_DEBUG */
 
-            // Send ack now if the packet is a dummy packet
-            if (LWIP_IS_DUMMY_SEGMENT(seg) && (pcb->flags & (TF_ACK_DELAY | TF_ACK_NOW))) {
-                tcp_send_empty_ack(pcb);
-            }
-
             if (get_tcp_state(pcb) != SYN_SENT) {
                 TCPH_SET_FLAG(seg->tcphdr, TCP_ACK);
                 pcb->flags &= ~(TF_ACK_DELAY | TF_ACK_NOW);
@@ -1396,45 +1388,37 @@ err_t tcp_output(struct tcp_pcb *pcb)
 
             pcb->unsent = seg->next;
             snd_nxt = seg->seqno + TCP_SEGLEN(seg);
-            if (TCP_SEQ_LT(pcb->snd_nxt, snd_nxt) && !LWIP_IS_DUMMY_SEGMENT(seg)) {
+            if (TCP_SEQ_LT(pcb->snd_nxt, snd_nxt)) {
                 pcb->snd_nxt = snd_nxt;
             }
             /* put segment on unacknowledged list if length > 0 */
             if (TCP_SEGLEN(seg) > 0) {
                 seg->next = NULL;
-                // unroll dummy segment
-                if (LWIP_IS_DUMMY_SEGMENT(seg)) {
-                    pcb->snd_lbb -= seg->len;
-                    pcb->snd_buf += seg->len;
-                    pcb->snd_queuelen -= pbuf_clen(seg->p);
-                    tcp_tx_seg_free(pcb, seg);
+                /* unacked list is empty? */
+                if (pcb->unacked == NULL) {
+                    pcb->unacked = seg;
+                    pcb->last_unacked = seg;
+                    /* unacked list is not empty? */
                 } else {
-                    /* unacked list is empty? */
-                    if (pcb->unacked == NULL) {
-                        pcb->unacked = seg;
-                        pcb->last_unacked = seg;
-                        /* unacked list is not empty? */
-                    } else {
-                        /* In the case of fast retransmit, the packet should not go to the tail
-                         * of the unacked queue, but rather somewhere before it. We need to check
-                         * for this case. -STJ Jul 27, 2004 */
-                        useg = pcb->last_unacked;
-                        if (TCP_SEQ_LT(seg->seqno, useg->seqno)) {
-                            /* add segment to before tail of unacked list, keeping the list sorted
-                             */
-                            struct tcp_seg **cur_seg = &(pcb->unacked);
-                            while (*cur_seg && TCP_SEQ_LT((*cur_seg)->seqno, seg->seqno)) {
-                                cur_seg = &((*cur_seg)->next);
-                            }
-                            LWIP_ASSERT("Value of last_unacked is invalid",
-                                        *cur_seg != pcb->last_unacked->next);
-                            seg->next = (*cur_seg);
-                            (*cur_seg) = seg;
-                        } else {
-                            /* add segment to tail of unacked list */
-                            useg->next = seg;
-                            pcb->last_unacked = seg;
+                    /* In the case of fast retransmit, the packet should not go to the tail
+                     * of the unacked queue, but rather somewhere before it. We need to check
+                     * for this case. -STJ Jul 27, 2004 */
+                    useg = pcb->last_unacked;
+                    if (TCP_SEQ_LT(seg->seqno, useg->seqno)) {
+                        /* add segment to before tail of unacked list, keeping the list sorted
+                         */
+                        struct tcp_seg **cur_seg = &(pcb->unacked);
+                        while (*cur_seg && TCP_SEQ_LT((*cur_seg)->seqno, seg->seqno)) {
+                            cur_seg = &((*cur_seg)->next);
                         }
+                        LWIP_ASSERT("Value of last_unacked is invalid",
+                                    *cur_seg != pcb->last_unacked->next);
+                        seg->next = (*cur_seg);
+                        (*cur_seg) = seg;
+                    } else {
+                        /* add segment to tail of unacked list */
+                        useg->next = seg;
+                        pcb->last_unacked = seg;
                     }
                 }
                 /* do not queue empty segments on the unacked list */
@@ -1499,9 +1483,8 @@ static err_t tcp_output_segment(struct tcp_seg *seg, struct tcp_pcb *pcb)
         seg->tcphdr->wnd = htons(TCPWND_MIN16(RCV_WND_SCALE(pcb, pcb->rcv_ann_wnd)));
     }
 
-    if (!LWIP_IS_DUMMY_SEGMENT(seg)) {
-        pcb->rcv_ann_right_edge = pcb->rcv_nxt + pcb->rcv_ann_wnd;
-    }
+    pcb->rcv_ann_right_edge = pcb->rcv_nxt + pcb->rcv_ann_wnd;
+
     /* Add any requested options.  NB MSS option is only set on SYN
        packets, so ignore it here */
     LWIP_ASSERT("seg->tcphdr not aligned", ((uintptr_t)(seg->tcphdr + 1) % 4) == 0);
@@ -1520,9 +1503,7 @@ static err_t tcp_output_segment(struct tcp_seg *seg, struct tcp_pcb *pcb)
     }
 
 #if LWIP_TCP_TIMESTAMPS
-    if (!LWIP_IS_DUMMY_SEGMENT(seg)) {
-        pcb->ts_lastacksent = pcb->rcv_nxt;
-    }
+    pcb->ts_lastacksent = pcb->rcv_nxt;
 
     if (seg->flags & TF_SEG_OPTS_TS) {
         tcp_build_timestamp_option(pcb, opts);
@@ -1542,22 +1523,21 @@ static err_t tcp_output_segment(struct tcp_seg *seg, struct tcp_pcb *pcb)
     }
 
     /* Set retransmission timer running if it is not currently enabled */
-    if (!LWIP_IS_DUMMY_SEGMENT(seg)) {
-        if (pcb->rtime == -1) {
-            pcb->rtime = 0;
-        }
-
-        if (pcb->ticks_since_data_sent == -1) {
-            pcb->ticks_since_data_sent = 0;
-        }
-
-        if (pcb->rttest == 0) {
-            pcb->rttest = tcp_ticks;
-            pcb->rtseq = seg->seqno;
-
-            LWIP_DEBUGF(TCP_RTO_DEBUG, ("tcp_output_segment: rtseq %" U32_F "\n", pcb->rtseq));
-        }
+    if (pcb->rtime == -1) {
+        pcb->rtime = 0;
     }
+
+    if (pcb->ticks_since_data_sent == -1) {
+        pcb->ticks_since_data_sent = 0;
+    }
+
+    if (pcb->rttest == 0) {
+        pcb->rttest = tcp_ticks;
+        pcb->rtseq = seg->seqno;
+
+        LWIP_DEBUGF(TCP_RTO_DEBUG, ("tcp_output_segment: rtseq %" U32_F "\n", pcb->rtseq));
+    }
+
     LWIP_DEBUGF(TCP_OUTPUT_DEBUG,
                 ("tcp_output_segment: %" U32_F ":%" U32_F "\n", htonl(seg->tcphdr->seqno),
                  htonl(seg->tcphdr->seqno) + seg->len));
@@ -1583,7 +1563,6 @@ static err_t tcp_output_segment(struct tcp_seg *seg, struct tcp_pcb *pcb)
     }
 
     u16_t flags = 0;
-    flags |= seg->flags & TF_SEG_OPTS_DUMMY_MSG;
     flags |= seg->flags & TF_SEG_OPTS_TSO;
     flags |= (TCP_SEQ_LT(seg->seqno, pcb->snd_nxt) ? TCP_WRITE_REXMIT : 0);
     flags |= seg->flags & TF_SEG_OPTS_ZEROCOPY;

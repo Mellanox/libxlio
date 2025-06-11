@@ -273,13 +273,12 @@ struct tcp_seg {
     u32_t len; /* the TCP length of this segment should allow >64K size */
 
     u8_t flags;
-#define TF_SEG_OPTS_MSS       (u8_t)0x01U /* Include MSS option. */
-#define TF_SEG_OPTS_TS        (u8_t)0x02U /* Include timestamp option. */
-#define TF_SEG_OPTS_WNDSCALE  (u8_t)0x08U /* Include window scaling option */
-#define TF_SEG_OPTS_DUMMY_MSG (u8_t) TCP_WRITE_DUMMY /* Include dummy send option */
-#define TF_SEG_OPTS_TSO       (u8_t) TCP_WRITE_TSO /* Use TSO send mode */
-#define TF_SEG_OPTS_NOMERGE   (u8_t)0x40U /* Don't merge with other segments */
-#define TF_SEG_OPTS_ZEROCOPY  (u8_t) TCP_WRITE_ZEROCOPY /* Use zerocopy send mode */
+#define TF_SEG_OPTS_MSS      (u8_t)0x01U /* Include MSS option. */
+#define TF_SEG_OPTS_TS       (u8_t)0x02U /* Include timestamp option. */
+#define TF_SEG_OPTS_WNDSCALE (u8_t)0x08U /* Include window scaling option */
+#define TF_SEG_OPTS_TSO      (u8_t) TCP_WRITE_TSO /* Use TSO send mode */
+#define TF_SEG_OPTS_NOMERGE  (u8_t)0x40U /* Don't merge with other segments */
+#define TF_SEG_OPTS_ZEROCOPY (u8_t) TCP_WRITE_ZEROCOPY /* Use zerocopy send mode */
 
     u8_t tcp_flags; /* Cached TCP flags for outgoing segments */
 
@@ -292,8 +291,6 @@ struct tcp_seg {
     */
     u32_t l2_l3_tcphdr_zc[25] __attribute__((aligned(4)));
 };
-
-#define LWIP_IS_DUMMY_SEGMENT(seg) (seg->flags & TF_SEG_OPTS_DUMMY_MSG)
 
 #if LWIP_TCP_TIMESTAMPS
 #define LWIP_TCP_OPT_LEN_TS 12U

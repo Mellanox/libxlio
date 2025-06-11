@@ -276,7 +276,7 @@ inline ssize_t dst_entry_udp::fast_send_not_fragmented(const iovec *p_iov, const
     }
 
     p_send_wqe->wr_id = reinterpret_cast<uintptr_t>(p_mem_buf_desc);
-    send_ring_buffer(m_id, p_send_wqe, attr);
+    m_p_ring->send_ring_buffer(m_id, p_send_wqe, attr);
 
     // request tx buffers for the next packets
     if (unlikely(!m_p_tx_mem_buf_desc_list)) {
@@ -381,7 +381,7 @@ inline bool dst_entry_udp::fast_send_fragmented_ipv4(mem_buf_desc_t *p_mem_buf_d
 
         // We don't check the return valuse of post send when we reach the HW we consider that we
         // completed our job
-        send_ring_buffer(m_id, p_send_wqe, attr);
+        m_p_ring->send_ring_buffer(m_id, p_send_wqe, attr);
 
         p_mem_buf_desc = tmp;
 

@@ -66,10 +66,6 @@ public:
                   unsigned credits);
 
     struct ibv_qp *get_ibv_qp() const { return m_mlx5_qp.qp; };
-
-    // This function can be replaced with a parameter during ring creation.
-    // chain of calls may serve as cache warm for dummy send feature.
-    bool get_hw_dummy_send_support() { return m_hw_dummy_send_support; }
     cq_mgr_tx *get_tx_cq_mgr() const { return m_p_cq_mgr_tx; }
     uint32_t get_max_inline_data() const { return m_mlx5_qp.cap.max_inline_data; }
     uint32_t get_max_send_sge() const { return m_mlx5_qp.cap.max_send_sge; }
@@ -247,7 +243,6 @@ private:
     uint8_t m_port_num;
     bool m_b_fence_needed = false;
     bool m_dm_enabled = false;
-    bool m_hw_dummy_send_support = false;
     dm_mgr m_dm_mgr;
 
     // TIS cache. Protected by ring tx lock. TODO Move to ring.

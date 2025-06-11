@@ -167,17 +167,6 @@ typedef struct ibv_values_ex xlio_ts_values;
         _attr.max_tso_header = _max_tso_header;                                                    \
     } while (0)
 typedef struct ibv_tso_caps xlio_ibv_tso_caps;
-
-// Dummy send
-#ifdef DEFINED_IBV_WR_NOP
-#define xlio_is_nop_supported(device_attr) 1
-#define XLIO_IBV_WR_NOP                    (xlio_ibv_wr_opcode) MLX5_OPCODE_NOP
-#else
-#define xlio_is_nop_supported(device_attr) 0
-#define XLIO_IBV_WR_NOP                                                                            \
-    (xlio_ibv_wr_opcode)(0) // Use 0 as "default" opcode when NOP is not defined.
-#endif
-
 typedef struct ibv_send_wr xlio_ibv_send_wr;
 // ibv_reg_mr
 #define XLIO_IBV_ACCESS_LOCAL_WRITE IBV_ACCESS_LOCAL_WRITE
