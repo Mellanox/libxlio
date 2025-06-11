@@ -1014,10 +1014,6 @@ ring *net_device_val::reserve_ring(resource_allocation_key *key)
             BULLSEYE_EXCLUDE_BLOCK_END
         }
 
-        if (key->get_ring_alloc_logic() == RING_LOGIC_ISOLATE) {
-            // Keep isolated rings until termination. Destructor will delete the ring.
-            ADD_RING_REF_CNT;
-        }
         g_p_net_device_table_mgr->global_ring_wakeup();
     }
 

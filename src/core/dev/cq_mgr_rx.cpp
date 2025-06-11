@@ -127,10 +127,6 @@ cq_mgr_rx::~cq_mgr_rx()
 {
     cq_logdbg("Destroying Rx CQ");
 
-    if (m_rx_buffs_rdy_for_free_head) {
-        reclaim_recv_buffers(m_rx_buffs_rdy_for_free_head);
-    }
-
     if (m_rx_queue.size() + m_rx_pool.size()) {
         cq_logdbg("Returning %lu buffers to global Rx pool (ready queue %lu, free pool %lu))",
                   m_rx_queue.size() + m_rx_pool.size(), m_rx_queue.size(), m_rx_pool.size());
@@ -421,10 +417,6 @@ void cq_mgr_rx::mem_buf_desc_return_to_owner(mem_buf_desc_t *p_mem_buf_desc,
 
 bool cq_mgr_rx::reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst)
 {
-    if (m_rx_buffs_rdy_for_free_head) {
-        reclaim_recv_buffer_helper(m_rx_buffs_rdy_for_free_head);
-        m_rx_buffs_rdy_for_free_head = m_rx_buffs_rdy_for_free_tail = nullptr;
-    }
     reclaim_recv_buffer_helper(rx_reuse_lst);
     return_extra_buffers();
 
@@ -438,23 +430,6 @@ bool cq_mgr_rx::reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst)
         return true;
     }
     return false;
-}
-
-int cq_mgr_rx::reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse)
-{
-    int ret_val = 0;
-
-    ret_val = rx_reuse->lwip_pbuf_dec_ref_count();
-    if ((ret_val == 0) && (rx_reuse->get_ref_count() <= 0)) {
-        if (!m_rx_buffs_rdy_for_free_head) {
-            m_rx_buffs_rdy_for_free_head = m_rx_buffs_rdy_for_free_tail = rx_reuse;
-        } else {
-            m_rx_buffs_rdy_for_free_tail->p_next_desc = rx_reuse;
-            m_rx_buffs_rdy_for_free_tail = rx_reuse;
-        }
-        m_rx_buffs_rdy_for_free_tail->p_next_desc = nullptr;
-    }
-    return ret_val;
 }
 
 bool cq_mgr_rx::reclaim_recv_buffers(descq_t *rx_reuse)

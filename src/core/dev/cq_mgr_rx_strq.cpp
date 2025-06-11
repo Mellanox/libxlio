@@ -57,11 +57,6 @@ cq_mgr_rx_strq::~cq_mgr_rx_strq()
     cq_logfunc("");
     cq_logdbg("destroying CQ STRQ");
 
-    if (m_rx_buffs_rdy_for_free_head) {
-        reclaim_recv_buffer_helper(m_rx_buffs_rdy_for_free_head);
-        m_rx_buffs_rdy_for_free_head = m_rx_buffs_rdy_for_free_tail = nullptr;
-    }
-
     if (m_rx_queue.size()) {
         cq_logdbg("Clearing %zu stride objects)", m_rx_queue.size());
 

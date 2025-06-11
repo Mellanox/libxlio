@@ -439,11 +439,6 @@ bool ring_simple::reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst)
     return m_p_cq_mgr_rx->reclaim_recv_buffers_no_lock(rx_reuse_lst);
 }
 
-int ring_simple::reclaim_recv_single_buffer(mem_buf_desc_t *rx_reuse)
-{
-    return m_p_cq_mgr_rx->reclaim_recv_single_buffer(rx_reuse);
-}
-
 void ring_simple::mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc,
                                                   void *pv_fd_ready_array /*NULL*/)
 {
