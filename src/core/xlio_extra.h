@@ -28,7 +28,6 @@ enum {
     XLIO_EXTRA_API_ADD_CONF_RULE = (1 << 3),
     XLIO_EXTRA_API_THREAD_OFFLOAD = (1 << 4),
     XLIO_EXTRA_API_DUMP_FD_STATS = (1 << 11),
-    XLIO_EXTRA_API_IOCTL = (1 << 12),
     XLIO_EXTRA_API_XLIO_SOCKET = (1 << 13),
 };
 
@@ -73,23 +72,6 @@ struct __attribute__((packed)) xlio_api_t {
      * @return 0 on success, or error code on failure.
      */
     int (*dump_fd_stats)(int fd, int log_level);
-
-    /**
-     * This function allows to communicate with library using extendable protocol
-     * based on struct cmshdr.
-     *
-     * Ancillary data is a sequence of cmsghdr structures with appended data.
-     * The sequence of cmsghdr structures should never be accessed directly.
-     * Instead, use only the following macros: CMSG_ALIGN, CMSG_SPACE, CMSG_DATA,
-     * CMSG_LEN.
-     *
-     * @param cmsg_hdr - point to control message
-     * @param cmsg_len - the byte count of the ancillary data,
-     *                   which contains the size of the structure header.
-     *
-     * @return -1 on failure and 0 on success
-     */
-    int (*ioctl)(void *cmsg_hdr, size_t cmsg_len);
 
     /**
      * Register a received packet notification callback.

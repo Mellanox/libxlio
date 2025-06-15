@@ -31,11 +31,6 @@ typedef enum {
     MCE_SPEC_ALL /* last element */
 } xlio_spec_t;
 
-enum {
-    IOCTL_USER_ALLOC_TX = (1 << 0),
-    IOCTL_USER_ALLOC_RX = (1 << 1),
-};
-
 typedef void *(*alloc_t)(size_t);
 typedef void (*free_t)(void *);
 
@@ -479,14 +474,10 @@ public:
     uint32_t tcp_send_buffer_size;
     uint32_t tx_segs_ring_batch_tcp;
     uint32_t tx_segs_pool_batch_tcp;
-    /* This field should be used to store and use data for XLIO_EXTRA_API_IOCTL */
     struct {
-        struct {
-            uint8_t flags;
-            alloc_t memalloc;
-            free_t memfree;
-        } user_alloc;
-    } m_ioctl;
+        alloc_t memalloc;
+        free_t memfree;
+    } user_alloc;
 
 private:
     void get_app_name();
@@ -534,7 +525,7 @@ private:
     // incorrectly flags it as a memory leak
     mce_sys_var()
         : sysctl_reader(sysctl_reader_t::instance())
-        , m_ioctl {}
+        , user_alloc {}
     {
         // coverity[uninit_member]
         // coverity[CTOR_DTOR_LEAK]
