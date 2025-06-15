@@ -66,7 +66,6 @@ public:
 
     void update_all()
     {
-        get_tcp_max_syn_backlog(true);
         get_listen_maxconn(true);
         get_tcp_wmem(true);
         get_tcp_rmem(true);
@@ -83,15 +82,6 @@ public:
         get_ipv6_conf_all_optimistic_dad(true);
         get_ipv6_conf_all_use_optimistic(true);
         get_tcp_keepalive_info(true);
-    }
-
-    int get_tcp_max_syn_backlog(bool update = false)
-    {
-        static int val;
-        if (update) {
-            val = read_file_to_int("/proc/sys/net/ipv4/tcp_max_syn_backlog", 1024);
-        }
-        return val;
     }
 
     int get_listen_maxconn(bool update = false)
