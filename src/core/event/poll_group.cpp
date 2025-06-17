@@ -116,6 +116,7 @@ int poll_group::update(const struct xlio_poll_group_attr *attr)
     m_socket_event_cb = attr->socket_event_cb;
     m_socket_comp_cb = attr->socket_comp_cb;
     m_socket_rx_cb = attr->socket_rx_cb;
+    m_socket_accept_cb = attr->socket_accept_cb;
 
     return 0;
 }
