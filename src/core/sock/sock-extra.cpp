@@ -319,8 +319,13 @@ extern "C" int xlio_socket_listen(xlio_socket_t sock)
         errno = ENOTCONN;
         return -1;
     }
-    // TODO handle positive return code from prepareListen() and convert it to errno
-    return si->prepareListen() ?: si->listen(-1);
+
+    int rc = si->prepareListen();
+    if (rc == 1) {
+        errno = ENODEV;
+        rc = -1;
+    }
+    return rc ?: si->listen(-1);
 }
 
 extern "C" struct ibv_pd *xlio_socket_get_pd(xlio_socket_t sock)
