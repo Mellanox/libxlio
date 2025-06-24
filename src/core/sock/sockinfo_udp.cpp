@@ -2485,7 +2485,10 @@ bool sockinfo_udp::rx_input_cb(mem_buf_desc_t *p_desc, void *pv_fd_ready_array)
     p_desc->inc_ref_count();
     save_strq_stats(p_desc->rx.strides_num);
     update_ready(p_desc, pv_fd_ready_array, cb_ret);
-
+    if (unlikely(m_p_socket_stats)) {
+        m_p_socket_stats->counters.n_rx_bytes += p_desc->rx.sz_payload;
+        m_p_socket_stats->counters.n_rx_data_pkts++;
+    }
     return true;
 }
 
