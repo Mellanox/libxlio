@@ -193,7 +193,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
                 p_tmp_rfs =
                     new (std::nothrow) rfs_uc(&flow_spec_5t, &m_ring, dst_port_filter, flow_tag_id);
             } catch (xlio_exception &e) {
-                ring_logerr("%s", e.message);
+                ring_logerr("%s", e.message.c_str());
                 return false;
             }
             BULLSEYE_EXCLUDE_BLOCK_START
@@ -256,7 +256,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
             try {
                 p_tmp_rfs = new rfs_mc(&flow_spec_5t, &m_ring, l2_mc_ip_filter, flow_tag_id);
             } catch (xlio_exception &e) {
-                ring_logerr("%s", e.message);
+                ring_logerr("%s", e.message.c_str());
                 return false;
             } catch (const std::bad_alloc &e) {
                 NOT_IN_USE(e);
@@ -321,7 +321,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
                         rfs_uc(&flow_spec_5t, &m_ring, dst_port_filter, flow_tag_id);
                 }
             } catch (xlio_exception &e) {
-                ring_logerr("%s", e.message);
+                ring_logerr("%s", e.message.c_str());
                 return false;
             }
             BULLSEYE_EXCLUDE_BLOCK_START

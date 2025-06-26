@@ -9,11 +9,13 @@
 #include <experimental/any>
 #include <functional>
 #include <map>
-#include <memory>
 #include <stdexcept>
 #include <string>
 #include <typeindex>
+#include <utility>
 #include <vector>
+
+using constraint_t = std::function<std::pair<bool, std::string>(const std::experimental::any &)>;
 
 /**
  * @brief Describes a configuration parameter with type, default value, and constraints
@@ -26,7 +28,7 @@ public:
     /**
      * @brief Default constructor
      */
-    explicit parameter_descriptor() = default;
+    explicit parameter_descriptor();
 
     /**
      * @brief Constructor with default value
@@ -55,21 +57,15 @@ public:
 
     /**
      * @brief Validates a value against all constraints
-     * @param val Value to validate
-     * @return True if value satisfies all constraints, false otherwise
+     * @param value Value to validate
      */
-    bool validate_constraints(const std::experimental::any &val) const;
+    void validate_constraints(const std::experimental::any &value) const;
 
     /**
      * @brief Gets the default value
      * @return Default value for the parameter
      */
     std::experimental::any default_value() const;
-
-    /**
-     * @brief Constraint function type
-     */
-    using constraint_t = std::function<bool(const std::experimental::any &)>;
 
     /**
      * @brief Adds a validation constraint
@@ -84,8 +80,15 @@ public:
      */
     std::experimental::any get_value(const std::experimental::any &val) const;
 
+    /**
+     * @brief Gets the type of the parameter
+     * @return The type of the parameter
+     */
+    std::type_index type() const;
+
 private:
     std::experimental::any m_default_value; /**< Default parameter value */
     std::vector<constraint_t> m_constraints; /**< Validation constraints */
     std::map<std::string, std::experimental::any> m_string_mapping; /**< String-to-value mappings */
+    std::type_index m_type;
 };

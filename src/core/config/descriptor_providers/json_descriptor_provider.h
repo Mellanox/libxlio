@@ -104,7 +104,9 @@ private:
     /**
      * @brief Adds constraints to a parameter descriptor
      * @param property_obj JSON property object containing constraints
-     * @param desc Parameter descriptor to add constraints to
+     * @param current_path Current property path
+     * @param param_desc Parameter descriptor to add constraints to
      */
-    void add_property_constraints(json_object *property_obj, parameter_descriptor &desc);
+    void add_property_constraints(json_object *property_obj, const std::string &current_path,
+                                  parameter_descriptor &param_desc);
 };

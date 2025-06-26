@@ -1386,7 +1386,7 @@ ring *net_device_val_eth::create_ring(resource_allocation_key *key)
             break;
         }
     } catch (xlio_error &error) {
-        nd_logdbg("failed creating ring %s", error.message);
+        nd_logdbg("failed creating ring %s", error.message.c_str());
     }
 
     return ring;

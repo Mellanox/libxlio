@@ -13,6 +13,11 @@
 #include <limits>
 #include <string>
 #include <vector>
+#include <fstream>
+#include <iostream>
+#include <map>
+#include <experimental/any>
+#include <sstream>
 
 #include "xlio_config_schema.h"
 
@@ -27,8 +32,9 @@ static std::experimental::any get_property_default(json_object *property_obj,
                                                    std::type_index type_index);
 static std::experimental::any to_any_value(json_object *obj);
 static void add_numeric_constraint(json_object *property_obj, parameter_descriptor &param_desc,
-                                   const char *field_name,
-                                   std::function<bool(int64_t, int64_t)> comparator);
+                                   const char *field_name, const std::string &current_path,
+                                   std::function<bool(int64_t, int64_t)> comparator,
+                                   const char *relation_str);
 
 struct one_of_options {
     json_object *int_option;
@@ -109,7 +115,43 @@ template <> std::vector<std::string> extract_enum_values<std::string>(json_objec
     return values;
 }
 
-static std::experimental::any to_any_value(json_object *obj);
+static std::experimental::any to_any_value(json_object *obj)
+{
+    if (obj == nullptr) {
+        throw_xlio_exception("obj can't be nullptr.");
+    }
+
+    json_type type = json_object_get_type(obj);
+    switch (type) {
+    case json_type_boolean:
+        return bool(json_object_get_boolean(obj));
+    case json_type_int:
+        return json_object_get_int64(obj);
+    case json_type_string: {
+        const char *s = json_object_get_string(obj);
+        return std::string(s ? s : config_strings::misc::EMPTY_STRING);
+    }
+    case json_type_object: {
+        std::map<std::string, std::experimental::any> obj_map;
+        json_object_object_foreach(obj, key, val)
+        {
+            obj_map[key] = to_any_value(val);
+        }
+        return obj_map;
+    }
+    case json_type_array: {
+        std::vector<std::experimental::any> array_values;
+        int array_length = json_object_array_length(obj);
+        for (int i = 0; i < array_length; i++) {
+            json_object *item = json_object_array_get_idx(obj, i);
+            array_values.push_back(to_any_value(item));
+        }
+        return array_values;
+    }
+    default:
+        throw_xlio_exception("unsupported type: " + std::to_string(type));
+    }
+}
 
 void json_descriptor_provider::validate_schema(json_object *schema)
 {
@@ -220,66 +262,40 @@ static std::experimental::any get_property_default(json_object *property_obj,
     return convert_json_to_any(default_field, type_index);
 }
 
-static std::experimental::any to_any_value(json_object *obj)
-{
-    if (obj == nullptr) {
-        throw_xlio_exception("obj can't be nullptr.");
-    }
-
-    json_type type = json_object_get_type(obj);
-    switch (type) {
-    case json_type_boolean:
-        return bool(json_object_get_boolean(obj));
-    case json_type_int:
-        return json_object_get_int64(obj);
-    case json_type_string: {
-        const char *s = json_object_get_string(obj);
-        return std::string(s ? s : config_strings::misc::EMPTY_STRING);
-    }
-    case json_type_object: {
-        std::map<std::string, std::experimental::any> obj_map;
-        json_object_object_foreach(obj, key, val)
-        {
-            obj_map[key] = to_any_value(val);
-        }
-        return obj_map;
-    }
-    case json_type_array: {
-        std::vector<std::experimental::any> array_values;
-        int array_length = json_object_array_length(obj);
-        for (int i = 0; i < array_length; i++) {
-            json_object *item = json_object_array_get_idx(obj, i);
-            array_values.push_back(to_any_value(item));
-        }
-        return array_values;
-    }
-    default:
-        throw_xlio_exception("unsupported type: " + std::to_string(type));
-    }
-}
-
 static void add_numeric_constraint(json_object *property_obj, parameter_descriptor &param_desc,
-                                   const char *field_name,
-                                   std::function<bool(int64_t, int64_t)> comparator)
+                                   const char *field_name, const std::string &current_path,
+                                   std::function<bool(int64_t, int64_t)> comparator,
+                                   const char *relation_str)
 {
     json_object *field = get_json_field(property_obj, field_name);
     if (field && json_object_get_type(field) == json_type_int) {
         int64_t bound_val = json_object_get_int64(field);
         param_desc.add_constraint(
-            [bound_val, comparator = std::move(comparator)](const std::experimental::any &val) {
-                return comparator(std::experimental::any_cast<int64_t>(val), bound_val);
+            [bound_val, moved_comparator = std::move(comparator), current_path,
+             relation_str](const std::experimental::any &val) -> std::pair<bool, std::string> {
+                int64_t value = std::experimental::any_cast<int64_t>(val);
+                if (!moved_comparator(value, bound_val)) {
+                    std::stringstream ss;
+                    ss << "value " << value << " is " << relation_str << " " << bound_val
+                       << " for key '" << current_path << "'";
+                    return {false, ss.str()};
+                }
+                return {true, ""};
             });
     }
 }
 
 void json_descriptor_provider::add_property_constraints(json_object *property_obj,
+                                                        const std::string &current_path,
                                                         parameter_descriptor &param_desc)
 {
-    add_numeric_constraint(property_obj, param_desc, config_strings::schema::JSON_MINIMUM,
-                           [](int64_t value, int64_t min_val) { return value >= min_val; });
+    add_numeric_constraint(
+        property_obj, param_desc, config_strings::schema::JSON_MINIMUM, current_path,
+        [](int64_t value, int64_t min_val) { return value >= min_val; }, "less than minimum");
 
-    add_numeric_constraint(property_obj, param_desc, config_strings::schema::JSON_MAXIMUM,
-                           [](int64_t value, int64_t max_val) { return value <= max_val; });
+    add_numeric_constraint(
+        property_obj, param_desc, config_strings::schema::JSON_MAXIMUM, current_path,
+        [](int64_t value, int64_t max_val) { return value <= max_val; }, "greater than maximum");
 
     json_object *enum_field = get_json_field(property_obj, config_strings::schema::JSON_ENUM);
     if (enum_field && json_object_get_type(enum_field) == json_type_array) {
@@ -287,10 +303,17 @@ void json_descriptor_provider::add_property_constraints(json_object *property_ob
 
         if (!allowed_values.empty()) {
             param_desc.add_constraint(
-                [allowed_values = std::move(allowed_values)](const std::experimental::any &val) {
+                [allowed_values = std::move(allowed_values),
+                 current_path](const std::experimental::any &val) -> std::pair<bool, std::string> {
                     int64_t value = std::experimental::any_cast<int64_t>(val);
-                    return std::find(allowed_values.begin(), allowed_values.end(), value) !=
-                        allowed_values.end();
+                    if (std::find(allowed_values.begin(), allowed_values.end(), value) ==
+                        allowed_values.end()) {
+                        std::stringstream ss;
+                        ss << "value " << value << " is not in enum for key '" << current_path
+                           << "'";
+                        return {false, ss.str()};
+                    }
+                    return {true, ""};
                 });
         }
     }
@@ -346,32 +369,37 @@ static bool create_one_of_mappings(parameter_descriptor &param_desc, json_object
         param_desc.add_string_mapping(allowed_string_values[i], allowed_int_values[i]);
     }
 
-    param_desc.add_constraint([allowed_int_values = std::move(allowed_int_values),
-                               allowed_string_values = std::move(allowed_string_values)](
-                                  const std::experimental::any &val) {
-        try {
+    param_desc.add_constraint(
+        [allowed_int_values = std::move(allowed_int_values),
+         allowed_string_values = std::move(allowed_string_values),
+         current_path](const std::experimental::any &val) -> std::pair<bool, std::string> {
             if (val.type() == typeid(int64_t)) {
                 int64_t int_val = std::experimental::any_cast<int64_t>(val);
 
                 if (!allowed_int_values.empty()) {
-                    return std::find(allowed_int_values.begin(), allowed_int_values.end(),
-                                     int_val) != allowed_int_values.end();
+                    if (std::find(allowed_int_values.begin(), allowed_int_values.end(), int_val) ==
+                        allowed_int_values.end()) {
+                        std::stringstream ss;
+                        ss << "value " << int_val << " is not in enum for key '" << current_path
+                           << "'";
+                        return {false, ss.str()};
+                    }
                 }
-                return true;
             } else if (val.type() == typeid(std::string)) {
                 std::string str_val = std::experimental::any_cast<std::string>(val);
 
                 if (!allowed_string_values.empty()) {
-                    return std::find(allowed_string_values.begin(), allowed_string_values.end(),
-                                     str_val) != allowed_string_values.end();
+                    if (std::find(allowed_string_values.begin(), allowed_string_values.end(),
+                                  str_val) == allowed_string_values.end()) {
+                        std::stringstream ss;
+                        ss << "value " << str_val << " is not in enum for key '" << current_path
+                           << "'";
+                        return {false, ss.str()};
+                    }
                 }
-                return true;
             }
-        } catch (const std::exception &) {
-            return false;
-        }
-        return false;
-    });
+            return {true, ""};
+        });
 
     return true;
 }
@@ -463,7 +491,6 @@ bool json_descriptor_provider::process_simple_property(json_object *property_obj
                                                        const std::string &current_path,
                                                        config_descriptor &desc)
 {
-
     // if you're a leaf property - you must have a title and description
     if (!check_required_field(property_obj, config_strings::schema::JSON_TITLE, json_type_string)) {
         throw_xlio_exception("no title: " + current_path);
@@ -477,9 +504,15 @@ bool json_descriptor_provider::process_simple_property(json_object *property_obj
     std::experimental::any default_value =
         get_property_default(property_obj, get_property_type(property_obj));
 
+    std::type_index type = get_property_type(property_obj);
+    if (type == typeid(nullptr)) {
+        // This should not happen with a valid schema
+        return false;
+    }
+
     parameter_descriptor param_desc(default_value);
 
-    add_property_constraints(property_obj, param_desc);
+    add_property_constraints(property_obj, current_path, param_desc);
 
     desc.set_parameter(current_path, std::move(param_desc));
     return true;

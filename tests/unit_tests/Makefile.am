@@ -85,6 +85,7 @@ unit_tests_CXXFLAGS = \
 unit_tests_SOURCES = \
 	main.cpp \
     config/config_registry.cpp \
+	config/config_descriptor.cpp \
 	config/inline_loader.cpp \
 	config/json_loader.cpp \
 	config/json_descriptor_provider.cpp \
