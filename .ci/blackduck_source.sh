@@ -16,7 +16,7 @@ json=$(jq -n \
 export SPRING_APPLICATION_JSON="$json"
 export PROJECT_NAME=libxlio
 export PROJECT_VERSION="$sha1"
-export PROJECT_SRC_PATH="$topdir"/src/
+export PROJECT_SRC_PATH="$topdir"/
 
 echo "Running BlackDuck (SRC) on $name"
 
@@ -31,7 +31,7 @@ cd /tmp/blackduck
 
 # disable check errors
 set +e
-timeout 3600 ./run_bd_scan.sh
+timeout 3600 ./run_bd_scan.sh signature
 exit_code=$?
 #enable back
 set -e
