@@ -3000,7 +3000,13 @@ void mce_sys_var::get_params()
                     "---------------------------\n");
         legacy_get_env_params();
     } else {
-        apply_config_from_registry();
+        try {
+            apply_config_from_registry();
+        } catch (const xlio_exception &e) {
+            vlog_printf(VLOG_ERROR, "Error: Configuration failed to load.\n%s\n",
+                        e.message.c_str());
+            exit(-1);
+        }
     }
 }
 

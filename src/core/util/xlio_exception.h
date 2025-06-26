@@ -20,9 +20,9 @@ class xlio_error : public std::exception {
     char formatted_message[512];
 
 public:
-    const char *const message;
-    const char *const function;
-    const char *const filename;
+    const std::string message;
+    const std::string function;
+    const std::string filename;
     const int lineno;
     const int errnum;
 
@@ -45,8 +45,8 @@ public:
         , errnum(_errnum)
     {
         snprintf(formatted_message, sizeof(formatted_message),
-                 "xlio_error <%s> (errno=%d %s) in %s:%d\n", message, errnum, strerror(errnum),
-                 filename, lineno);
+                 "xlio_error <%s> (errno=%d %s) in %s:%d\n", message.c_str(), errnum,
+                 strerror(errnum), filename.c_str(), lineno);
         formatted_message[sizeof(formatted_message) - 1] = '\0';
     }
 

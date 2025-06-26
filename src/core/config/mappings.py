@@ -121,6 +121,35 @@ config_mapping = {
     "performance.threading.internal_handler.timer_msec": "XLIO_TIMER_RESOLUTION_MSEC",
     "performance.threading.internal_handler.wakeup_per_packet": "XLIO_INTERNAL_THREAD_ARM_CQ",
     "performance.threading.mutex_over_spinlock": "XLIO_MULTILOCK",
+    
+    # applications section
+    "applications.nginx.distribute_cq": "XLIO_DISTRIBUTE_CQ",
+    "applications.nginx.src_port_stride": "XLIO_NGINX_SRC_PORT_STRIDE",
+    "applications.nginx.udp_pool_size": "XLIO_NGINX_UDP_POOL_SIZE",
+    "applications.nginx.udp_socket_pool_reuse": "XLIO_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE",
+    "applications.nginx.workers_num": "XLIO_NGINX_WORKERS_NUM",
+    
+    # acceleration_control section
+    "acceleration_control.app_id": "XLIO_APPLICATION_ID",
+    "acceleration_control.default_acceleration": "XLIO_OFFLOADED_SOCKETS",
+    
+    # monitor section
+    "monitor.exit_report": "XLIO_PRINT_REPORT",
+    "monitor.log.colors": "XLIO_LOG_COLORS",
+    "monitor.log.details": "XLIO_LOG_DETAILS",
+    "monitor.log.file_path": "XLIO_LOG_FILE",
+    "monitor.log.level": "XLIO_TRACELEVEL",
+    "monitor.stats.cpu_usage": "XLIO_CPU_USAGE_STATS",
+    "monitor.stats.fd_num": "XLIO_STATS_FD_NUM",
+    "monitor.stats.file_path": "XLIO_STATS_FILE",
+    "monitor.stats.shmem_dir": "XLIO_STATS_SHMEM_DIR",
+    
+    # extra_api section
+    "extra_api.hugepage_size": "XLIO_USER_HUGE_PAGE_SIZE",
+    "extra_api.socketextreme": "XLIO_SOCKETEXTREME",
+    
+    # profiles section
+    "profiles.spec": "XLIO_SPEC",
 
 } 
 

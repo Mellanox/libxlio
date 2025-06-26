@@ -10,8 +10,22 @@
 #include "descriptor_providers/json_descriptor_provider.h"
 #include "loaders/inline_loader.h"
 #include "loaders/json_loader.h"
-
+#include <numeric>
 #include <fstream>
+
+static std::string get_user_friendly_type_name(const std::type_index &type)
+{
+    if (type == typeid(int64_t)) {
+        return "integer";
+    }
+    if (type == typeid(bool)) {
+        return "boolean";
+    }
+    if (type == typeid(std::string)) {
+        return "string";
+    }
+    return "unknown type";
+}
 
 static const char *get_config_path()
 {
@@ -56,58 +70,41 @@ void config_registry::initialize_registry(std::queue<std::unique_ptr<loader>> &&
         throw_xlio_exception("loader/descriptor_provider cannot be null");
     }
 
-    // Load raw config data - first in queue means higher priority
-    std::map<std::string, std::experimental::any> aggregated_config_data;
-    while (!value_loaders.empty()) {
-        std::map<std::string, std::experimental::any> loaded_data =
-            value_loaders.front()->load_all();
-        aggregated_config_data.insert(loaded_data.begin(), loaded_data.end());
-        m_sources.push_back(value_loaders.front()->source());
-        value_loaders.pop();
-    }
-
-    m_config_data = std::move(aggregated_config_data);
-
     m_config_descriptor = descriptor_provider->load_descriptors();
 
-    validate_config();
-}
+    // Load raw config data - first in queue means higher priority
+    while (!value_loaders.empty()) {
+        auto &loader = value_loaders.front();
+        std::map<std::string, std::experimental::any> loaded_data = loader->load_all();
 
-static std::string format_value_for_error(const std::experimental::any &value)
-{
-    if (value.type() == typeid(int64_t)) {
-        return config_strings::type_format::INTEGER_PREFIX +
-            std::to_string(std::experimental::any_cast<int64_t>(value)) +
-            config_strings::errors::CLOSE_PAREN;
-    } else if (value.type() == typeid(std::string)) {
-        return config_strings::type_format::STRING_PREFIX +
-            std::experimental::any_cast<std::string>(value) + config_strings::errors::CLOSE_PAREN;
-    } else if (value.type() == typeid(bool)) {
-        return config_strings::type_format::BOOLEAN_PREFIX +
-            std::string(std::experimental::any_cast<bool>(value)
-                            ? config_strings::type_format::TRUE_VALUE
-                            : config_strings::type_format::FALSE_VALUE) +
-            config_strings::errors::CLOSE_PAREN;
-    }
-    return config_strings::misc::EMPTY_STRING;
-}
+        // Validate before merging
+        for (const auto &kv_pair : loaded_data) {
+            const std::string &key = kv_pair.first;
+            const std::experimental::any &value = kv_pair.second;
+            try {
+                const parameter_descriptor param_desc = m_config_descriptor.get_parameter(key);
 
-void config_registry::validate_config() const
-{
-    for (auto const &kv_pair : m_config_data) {
-        const std::string &key = kv_pair.first;
-        const std::experimental::any &value = kv_pair.second;
+                // First, get the canonical value. This will resolve string mappings
+                // and throw bad_any_cast on a true type mismatch.
+                std::experimental::any canonical_value = param_desc.get_value(value);
 
-        const parameter_descriptor param_desc = m_config_descriptor.get_parameter(key);
+                // Now, validate constraints on the canonical value.
+                param_desc.validate_constraints(canonical_value);
 
-        try {
-            if (!param_desc.validate_constraints(value)) {
-                throw_xlio_exception("validation failed: " + key + " - " +
-                                     format_value_for_error(value));
+            } catch (const xlio_exception &e) {
+                throw_xlio_exception("In '" + loader->source() + "': " + e.message);
+            } catch (const std::experimental::bad_any_cast &) {
+                const parameter_descriptor param_desc = m_config_descriptor.get_parameter(key);
+                throw_xlio_exception("In '" + loader->source() + "': Type mismatch for key '" +
+                                     key + "': expected " +
+                                     get_user_friendly_type_name(param_desc.type()) + ", got " +
+                                     get_user_friendly_type_name(value.type()));
             }
-        } catch (const std::experimental::bad_any_cast &e) {
-            throw_xlio_exception("type mismatch: " + key + " - " + e.what());
         }
+
+        m_config_data.insert(loaded_data.begin(), loaded_data.end());
+        m_sources.push_back(loader->source());
+        value_loaders.pop();
     }
 }
 

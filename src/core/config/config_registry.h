@@ -128,7 +128,6 @@ private:
     std::vector<std::string> m_sources;
     std::experimental::any get_value_as_any(const std::string &key) const;
     std::experimental::any get_default_value_as_any(const std::string &key) const;
-    void validate_config() const;
     void initialize_registry(std::queue<std::unique_ptr<loader>> &&value_loaders,
                              std::unique_ptr<descriptor_provider> descriptor_provider);
 
@@ -149,7 +148,7 @@ private:
         try {
             return std::experimental::any_cast<T>(raw_value);
         } catch (const std::experimental::bad_any_cast &e) {
-            throw_xlio_exception("Bad any_cast for key: " + key + " - " + e.what());
+            throw_xlio_exception("Bad cast for key: " + key + " - " + e.what());
         }
     }
 
