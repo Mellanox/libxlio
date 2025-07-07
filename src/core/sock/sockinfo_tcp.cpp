@@ -5298,9 +5298,6 @@ struct pbuf *sockinfo_tcp::tcp_tx_pbuf_alloc(void *p_conn, pbuf_type type, pbuf_
             } else {
                 p_desc->tx.zc.ctx = reinterpret_cast<void *>(p_si_tcp);
             }
-        } else if (p_desc->lwip_pbuf.desc.attr != PBUF_DESC_MDESC) { // If not sendfile
-            __log_err("Unexpected ZC TX buffer type %d", p_desc->lwip_pbuf.desc.attr);
-            return nullptr;
         }
     }
     return (struct pbuf *)p_desc;
