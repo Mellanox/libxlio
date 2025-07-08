@@ -17,6 +17,8 @@
 #define EXTRA_API_ENABLED 0
 #endif
 
+#define SEC_TO_NSEC(sec) ((sec)*1000000000L)
+
 /**
  * XLIO Base class for tests
  */
@@ -64,6 +66,17 @@ public:
         int rc;
         rc = xlio_api->xlio_socket_destroy(sock);
         ASSERT_TRUE(rc == 0);
+    }
+    void base_wait_for_delayed_acks(xlio_poll_group_t group, int timeout_seconds = 5)
+    {
+        struct timespec start_time;
+        clock_gettime(CLOCK_MONOTONIC, &start_time);
+        struct timespec current_time = start_time;
+        while (((SEC_TO_NSEC(current_time.tv_sec - start_time.tv_sec)) +
+                (current_time.tv_nsec - start_time.tv_nsec)) < SEC_TO_NSEC(timeout_seconds)) {
+            xlio_api->xlio_poll_group_poll(group);
+            clock_gettime(CLOCK_MONOTONIC, &current_time);
+        }
     }
     void base_init_xlio_zc_api()
     {

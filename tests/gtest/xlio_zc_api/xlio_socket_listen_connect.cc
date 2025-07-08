@@ -33,17 +33,6 @@ public:
     }
     void destroy_poll_group(xlio_poll_group_t group) { base_destroy_poll_group(group); }
 
-    void wait_for_delayed_acks(xlio_poll_group_t group)
-    {
-        struct timespec start_time;
-        clock_gettime(CLOCK_MONOTONIC, &start_time);
-        struct timespec current_time = {0, 0};
-        while (current_time.tv_sec - start_time.tv_sec < 1) {
-            xlio_api->xlio_poll_group_poll(group);
-            clock_gettime(CLOCK_MONOTONIC, &current_time);
-        }
-    }
-
     static void socket_event_cb(xlio_socket_t sock, uintptr_t userdata_sq, int event, int value)
     {
         UNREFERENCED_PARAMETER(sock);
@@ -118,7 +107,7 @@ TEST_F(zc_api_xlio_socket_listen_connect, ti_1)
         while (connected_counter < 1) {
             xlio_api->xlio_poll_group_poll(group);
         }
-        wait_for_delayed_acks(group);
+        base_wait_for_delayed_acks(group);
         barrier_fork(pid, true); // Tell parent that we got last ack
         base_destroy_socket(sock);
         while (!accepted_sockets.empty()) {
@@ -147,7 +136,7 @@ TEST_F(zc_api_xlio_socket_listen_connect, ti_1)
             xlio_api->xlio_poll_group_poll(group);
         }
 
-        wait_for_delayed_acks(group);
+        base_wait_for_delayed_acks(group);
 
         barrier_fork(pid, true); // Wait for child to get last ack
 

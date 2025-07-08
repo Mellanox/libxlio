@@ -41,16 +41,6 @@ public:
         base_create_poll_group(&gattr, group);
     }
     void destroy_poll_group(xlio_poll_group_t group) { base_destroy_poll_group(group); }
-    void wait_for_delayed_acks(xlio_poll_group_t group)
-    {
-        struct timespec start_time;
-        clock_gettime(CLOCK_MONOTONIC, &start_time);
-        struct timespec current_time = {0, 0};
-        while (current_time.tv_sec - start_time.tv_sec < 1) {
-            xlio_api->xlio_poll_group_poll(group);
-            clock_gettime(CLOCK_MONOTONIC, &current_time);
-        }
-    }
     static void send_single_msg(xlio_socket_t sock, const void *data, size_t len,
                                 uintptr_t userdata_op, unsigned flags)
     {
@@ -153,7 +143,7 @@ TEST_F(zc_api_xlio_socket_send_receive_2, ti_1)
             xlio_api->xlio_poll_group_poll(group);
         }
 
-        wait_for_delayed_acks(group);
+        base_wait_for_delayed_acks(group);
 
         barrier_fork(pid, true);
 
@@ -183,7 +173,7 @@ TEST_F(zc_api_xlio_socket_send_receive_2, ti_1)
             xlio_api->xlio_poll_group_poll(group);
         }
 
-        wait_for_delayed_acks(group);
+        base_wait_for_delayed_acks(group);
 
         barrier_fork(pid, true); // Wait for child to accept + receive last ack
 
