@@ -45,16 +45,6 @@ public:
         base_create_poll_group(&gattr, group);
     }
     void destroy_poll_group(xlio_poll_group_t group) { base_destroy_poll_group(group); }
-    void wait_for_delayed_acks(xlio_poll_group_t group)
-    {
-        struct timespec start_time;
-        clock_gettime(CLOCK_MONOTONIC, &start_time);
-        struct timespec current_time = {0, 0};
-        while (current_time.tv_sec - start_time.tv_sec < 3) {
-            xlio_api->xlio_poll_group_poll(group);
-            clock_gettime(CLOCK_MONOTONIC, &current_time);
-        }
-    }
     static void send_single_msg(xlio_socket_t sock, const void *data, size_t len,
                                 uintptr_t userdata_op, unsigned flags)
     {
@@ -162,7 +152,7 @@ TEST_F(zc_api_xlio_socket_migrate, ti_1)
             }
         }
 
-        wait_for_delayed_acks(group);
+        base_wait_for_delayed_acks(group);
 
         ASSERT_EQ(data_received, data_bytes_to_be_sent);
 
@@ -200,7 +190,7 @@ TEST_F(zc_api_xlio_socket_migrate, ti_1)
             }
         }
 
-        wait_for_delayed_acks(group);
+        base_wait_for_delayed_acks(group);
 
         ASSERT_EQ(data_sent_completed, data_bytes_to_be_sent);
 
