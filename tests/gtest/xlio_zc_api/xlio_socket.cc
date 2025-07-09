@@ -14,17 +14,6 @@
 
 class zc_api_xlio_socket : public xlio_zc_api_base {
 public:
-    void create_poll_group(xlio_poll_group_t *group)
-    {
-        xlio_poll_group_attr gattr = {
-            .flags = 0,
-            .socket_event_cb = &socket_event_cb,
-            .socket_comp_cb = &socket_comp_cb,
-            .socket_rx_cb = &socket_rx_cb,
-            .socket_accept_cb = &socket_accept_cb,
-        };
-        base_create_poll_group(&gattr, group);
-    }
     void destroy_poll_group(xlio_poll_group_t group) { base_destroy_poll_group(group); }
     static void socket_event_cb(xlio_socket_t sock, uintptr_t userdata_sq, int event, int value)
     {
@@ -71,7 +60,8 @@ TEST_F(zc_api_xlio_socket, ti_1)
     xlio_poll_group_t group;
     xlio_socket_t sock;
 
-    create_poll_group(&group);
+    base_create_poll_group(&group, &socket_event_cb, &socket_comp_cb, &socket_rx_cb,
+                           &socket_accept_cb);
     xlio_socket_attr sattr = {
         .flags = 0,
         .domain = AF_INET,

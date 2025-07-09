@@ -20,17 +20,6 @@ class zc_api_xlio_socket_listen_connect : public xlio_zc_api_base {
 public:
     virtual void SetUp() { errno = EOK; };
     virtual void TearDown() {};
-    void create_poll_group(xlio_poll_group_t *group)
-    {
-        xlio_poll_group_attr gattr = {
-            .flags = 0,
-            .socket_event_cb = &socket_event_cb,
-            .socket_comp_cb = &socket_comp_cb,
-            .socket_rx_cb = &socket_rx_cb,
-            .socket_accept_cb = &socket_accept_cb,
-        };
-        base_create_poll_group(&gattr, group);
-    }
     void destroy_poll_group(xlio_poll_group_t group) { base_destroy_poll_group(group); }
 
     static void socket_event_cb(xlio_socket_t sock, uintptr_t userdata_sq, int event, int value)
@@ -88,7 +77,8 @@ TEST_F(zc_api_xlio_socket_listen_connect, ti_1)
     xlio_poll_group_t group;
     xlio_socket_t sock;
 
-    create_poll_group(&group);
+    base_create_poll_group(&group, &socket_event_cb, &socket_comp_cb, &socket_rx_cb,
+                           &socket_accept_cb);
     xlio_socket_attr sattr = {
         .flags = 0,
         .domain = server_addr.addr.sa_family,
@@ -110,10 +100,7 @@ TEST_F(zc_api_xlio_socket_listen_connect, ti_1)
         base_wait_for_delayed_acks(group);
         barrier_fork(pid, true); // Tell parent that we got last ack
         base_destroy_socket(sock);
-        while (!accepted_sockets.empty()) {
-            base_destroy_socket(accepted_sockets.back());
-            accepted_sockets.pop_back();
-        }
+        base_cleanup_accepted_sockets(accepted_sockets);
         while (terminated_counter < 1) {
             xlio_api->xlio_poll_group_poll(group);
         }
