@@ -9,6 +9,8 @@
 
 #include <xlio_extra.h>
 #include <xlio_types.h>
+#include <vector>
+#include <infiniband/verbs.h>
 /**
  * To enable xlio tests you need to set below EXTRA_API_ENABLED to 1
  * or you can add the following CPPFLAG during compilation 'make CPPFLAGS="-DEXTRA_API_ENABLED=1"'
@@ -42,10 +44,21 @@ public:
         errno = EOK;
         base_init_xlio_zc_api();
     };
-    void base_create_poll_group(xlio_poll_group_attr *attr, xlio_poll_group_t *group)
+    void base_create_poll_group(xlio_poll_group_t *group,
+                                void (*socket_event_cb)(xlio_socket_t, uintptr_t, int, int),
+                                void (*socket_comp_cb)(xlio_socket_t, uintptr_t, uintptr_t),
+                                void (*socket_rx_cb)(xlio_socket_t, uintptr_t, void *, size_t,
+                                                     struct xlio_buf *),
+                                void (*socket_accept_cb)(xlio_socket_t, xlio_socket_t, uintptr_t))
     {
-        int rc;
-        rc = xlio_api->xlio_poll_group_create(attr, group);
+        xlio_poll_group_attr gattr = {
+            .flags = 0,
+            .socket_event_cb = socket_event_cb,
+            .socket_comp_cb = socket_comp_cb,
+            .socket_rx_cb = socket_rx_cb,
+            .socket_accept_cb = socket_accept_cb,
+        };
+        int rc = xlio_api->xlio_poll_group_create(&gattr, group);
         ASSERT_TRUE(rc == 0);
     }
     void base_destroy_poll_group(xlio_poll_group_t group)
@@ -76,6 +89,27 @@ public:
                 (current_time.tv_nsec - start_time.tv_nsec)) < SEC_TO_NSEC(timeout_seconds)) {
             xlio_api->xlio_poll_group_poll(group);
             clock_gettime(CLOCK_MONOTONIC, &current_time);
+        }
+    }
+    static void base_send_single_msg(xlio_socket_t sock, const void *data, size_t len,
+                                     uintptr_t userdata_op, unsigned flags, struct ibv_mr *mr_buf,
+                                     char *sndbuf)
+    {
+        struct xlio_socket_send_attr attr = {
+            .flags = flags,
+            .mkey = mr_buf->lkey,
+            .userdata_op = userdata_op,
+        };
+        memcpy(sndbuf, data, len);
+        int ret = xlio_api->xlio_socket_send(sock, sndbuf, len, &attr);
+        ASSERT_EQ(ret, 0);
+        xlio_api->xlio_socket_flush(sock);
+    }
+    void base_cleanup_accepted_sockets(std::vector<xlio_socket_t> &accepted_sockets)
+    {
+        while (!accepted_sockets.empty()) {
+            base_destroy_socket(accepted_sockets.back());
+            accepted_sockets.pop_back();
         }
     }
     void base_init_xlio_zc_api()

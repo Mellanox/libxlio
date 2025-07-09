@@ -29,31 +29,7 @@ class zc_api_xlio_socket_send_receive : public xlio_zc_api_base {
 public:
     virtual void SetUp() { errno = EOK; };
     virtual void TearDown() {};
-    void create_poll_group(xlio_poll_group_t *group)
-    {
-        xlio_poll_group_attr gattr = {
-            .flags = 0,
-            .socket_event_cb = &socket_event_cb,
-            .socket_comp_cb = &socket_comp_cb,
-            .socket_rx_cb = &socket_rx_cb,
-            .socket_accept_cb = &socket_accept_cb,
-        };
-        base_create_poll_group(&gattr, group);
-    }
     void destroy_poll_group(xlio_poll_group_t group) { base_destroy_poll_group(group); }
-    static void send_single_msg(xlio_socket_t sock, const void *data, size_t len,
-                                uintptr_t userdata_op, unsigned flags)
-    {
-        struct xlio_socket_send_attr attr = {
-            .flags = flags,
-            .mkey = mr_buf->lkey,
-            .userdata_op = userdata_op,
-        };
-        memcpy(sndbuf, data, len);
-        int ret = xlio_api->xlio_socket_send(sock, sndbuf, len, &attr);
-        ASSERT_EQ(ret, 0);
-        xlio_api->xlio_socket_flush(sock);
-    }
     static void socket_event_cb(xlio_socket_t sock, uintptr_t userdata_sq, int event, int value)
     {
         UNREFERENCED_PARAMETER(userdata_sq);
@@ -63,7 +39,7 @@ public:
             ASSERT_TRUE(pd != NULL);
             mr_buf = ibv_reg_mr(pd, sndbuf, sizeof(sndbuf), IBV_ACCESS_LOCAL_WRITE);
             ASSERT_TRUE(mr_buf != NULL);
-            send_single_msg(sock, data_to_send, strlen(data_to_send), 0x1, 0);
+            base_send_single_msg(sock, data_to_send, strlen(data_to_send), 0x1, 0, mr_buf, sndbuf);
             connected_counter++;
         } else if (event == XLIO_SOCKET_EVENT_CLOSED) {
             terminated_counter++;
@@ -119,7 +95,8 @@ TEST_F(zc_api_xlio_socket_send_receive, ti_1)
     xlio_poll_group_t group;
     xlio_socket_t sock;
 
-    create_poll_group(&group);
+    base_create_poll_group(&group, &socket_event_cb, &socket_comp_cb, &socket_rx_cb,
+                           &socket_accept_cb);
     xlio_socket_attr sattr = {
         .flags = 0,
         .domain = server_addr.addr.sa_family,
@@ -146,10 +123,7 @@ TEST_F(zc_api_xlio_socket_send_receive, ti_1)
         barrier_fork(pid, false); // Wait for parent to receive last ack
 
         base_destroy_socket(sock);
-        while (!accepted_sockets.empty()) {
-            base_destroy_socket(accepted_sockets.back());
-            accepted_sockets.pop_back();
-        }
+        base_cleanup_accepted_sockets(accepted_sockets);
         while (terminated_counter < 1) {
             xlio_api->xlio_poll_group_poll(group);
         }
