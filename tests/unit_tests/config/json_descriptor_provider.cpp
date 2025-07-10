@@ -462,3 +462,145 @@ TEST(config, json_descriptor_provider_array_of_objects)
     ASSERT_EQ(static_cast<size_t>(1), app2_actions.size());
     ASSERT_EQ("action3", std::experimental::any_cast<std::string>(app2_actions[0]));
 }
+
+TEST(config, json_descriptor_provider_oneOf_memory_size_parsing)
+{
+    json_descriptor_provider provider(R"({
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "XLIO Configuration Schema",
+    "description": "Schema for XLIO configuration",
+    "type": "object",
+    "properties": {
+        "core": {
+            "description": "controls the core functionality of libxlio.",
+            "type": "object",
+            "properties": {
+                "memory_limit": {
+                    "oneOf": [
+                        {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 2147483648
+                        },
+                        {
+                            "type": "string",
+                            "default": "2GB",
+                            "pattern": "^[0-9]+[KMGkmg]?[B]?$"
+                        }
+                    ],
+                    "title": "Memory limit",
+                    "description": "Memory limit in bytes. Supports suffixes: B, KB, MB, GB.",
+                    "x-memory-size": true
+                }
+            }
+        }
+    }
+})");
+
+    config_descriptor cd = provider.load_descriptors();
+
+    // Should parse oneOf schema correctly and return int64_t default value
+    int64_t default_value =
+        std::experimental::any_cast<int64_t>(cd.get_parameter("core.memory_limit").default_value());
+    ASSERT_EQ(2147483648LL, default_value);
+}
+
+TEST(config, json_descriptor_provider_oneOf_without_memory_size_flag)
+{
+    // Test oneOf schema without x-memory-size flag should still work
+    json_descriptor_provider provider(R"({
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "XLIO Configuration Schema",
+    "description": "Schema for XLIO configuration",
+    "type": "object",
+    "properties": {
+        "core": {
+            "description": "controls the core functionality of libxlio.",
+            "type": "object",
+            "properties": {
+                "regular_param": {
+                    "oneOf": [
+                        {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 42,
+                            "enum": [42, 43]
+                        },
+                        {
+                            "type": "string",
+                            "enum": ["42", "43"]
+                        }
+                    ],
+                    "title": "Regular parameter",
+                    "description": "A regular parameter using oneOf without memory size."
+                }
+            }
+        }
+    }
+})");
+
+    config_descriptor cd = provider.load_descriptors();
+
+    // Should parse oneOf schema and detect integer type correctly
+    int64_t default_value = std::experimental::any_cast<int64_t>(
+        cd.get_parameter("core.regular_param").default_value());
+    ASSERT_EQ(42LL, default_value);
+}
+
+TEST(config, json_descriptor_provider_memory_size_transformer_applied)
+{
+    json_descriptor_provider provider(R"({
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "XLIO Configuration Schema",
+    "description": "Schema for XLIO configuration",
+    "type": "object",
+    "properties": {
+        "core": {
+            "description": "controls the core functionality of libxlio.",
+            "type": "object",
+            "properties": {
+                "memory_with_transformer": {
+                    "oneOf": [
+                        {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 1073741824
+                        },
+                        {
+                            "type": "string",
+                            "default": "1GB",
+                            "pattern": "^[0-9]+[KMGkmg]?[B]?$"
+                        }
+                    ],
+                    "title": "Memory with transformer",
+                    "description": "Memory param with transformer.",
+                    "x-memory-size": true
+                },
+                "memory_without_transformer": {
+                    "type": "integer",
+                    "default": 1073741824,
+                    "title": "Memory without transformer",
+                    "description": "Memory param without transformer."
+                }
+            }
+        }
+    }
+})");
+
+    config_descriptor cd = provider.load_descriptors();
+
+    // Get both parameters to verify transformer is only applied where x-memory-size is true
+    parameter_descriptor with_transformer = cd.get_parameter("core.memory_with_transformer");
+    parameter_descriptor without_transformer = cd.get_parameter("core.memory_without_transformer");
+
+    // Test that the transformer transforms "1GB" to bytes for the parameter with x-memory-size
+    std::experimental::any gb_string = std::string("1GB");
+    std::experimental::any transformed = with_transformer.get_value(gb_string);
+    int64_t transformed_value = std::experimental::any_cast<int64_t>(transformed);
+    ASSERT_EQ(1073741824LL, transformed_value); // 1GB in bytes
+
+    // Test that parameter without transformer doesn't transform strings
+    std::experimental::any untransformed = without_transformer.get_value(gb_string);
+    std::string untransformed_value = std::experimental::any_cast<std::string>(untransformed);
+    ASSERT_EQ("1GB", untransformed_value); // Should remain as string
+}

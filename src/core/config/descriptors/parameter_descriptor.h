@@ -14,14 +14,31 @@
 #include <typeindex>
 #include <utility>
 #include <vector>
+#include <cstdint>
 
-using constraint_t = std::function<std::pair<bool, std::string>(const std::experimental::any &)>;
+class constraint_result {
+public:
+    bool m_result = false;
+    std::string m_error_message;
+
+    constraint_result(bool result, std::string error_message = std::string())
+        : m_result(result)
+        , m_error_message(std::move(error_message))
+    {
+    }
+
+    bool result() const { return m_result; }
+
+    const std::string &error_message() const { return m_error_message; }
+};
+using constraint_t = std::function<constraint_result(const std::experimental::any &)>;
+using value_transformer_t = std::function<std::experimental::any(const std::experimental::any &)>;
 
 /**
  * @brief Describes a configuration parameter with type, default value, and constraints
  *
  * Holds metadata about a configuration parameter including its default value,
- * validation constraints, and string-to-value mappings.
+ * validation constraints, string-to-value mappings, and optional value transformations.
  */
 class parameter_descriptor {
 public:
@@ -29,6 +46,13 @@ public:
      * @brief Default constructor
      */
     explicit parameter_descriptor();
+
+    /**
+     * @brief Copy assignment operator
+     * @param pd Parameter descriptor to copy
+     * @return Reference to this parameter descriptor
+     */
+    parameter_descriptor &operator=(const parameter_descriptor &) = default;
 
     /**
      * @brief Constructor with default value
@@ -56,6 +80,12 @@ public:
     void add_string_mapping(const std::string &str, const std::experimental::any &val);
 
     /**
+     * @brief Sets a value transformer function
+     * @param transformer Function to transform input values
+     */
+    void set_value_transformer(value_transformer_t transformer);
+
+    /**
      * @brief Validates a value against all constraints
      * @param value Value to validate
      */
@@ -74,9 +104,9 @@ public:
     void add_constraint(constraint_t constraint);
 
     /**
-     * @brief Resolves string mappings to actual values
+     * @brief Resolves string mappings and applies transformations to actual values
      * @param val Input value (may be a string reference to a mapped value)
-     * @return Resolved value (mapped value if string mapping exists, original otherwise)
+     * @return Resolved value (mapped and transformed value if applicable, original otherwise)
      */
     std::experimental::any get_value(const std::experimental::any &val) const;
 
@@ -86,9 +116,18 @@ public:
      */
     std::type_index type() const;
 
+    /**
+     * @brief Creates a memory size transformer that parses size suffixes (KB, MB, GB)
+     * @return Value transformer function for memory sizes
+     */
+    static value_transformer_t create_memory_size_transformer();
+
 private:
+    static int64_t parse_memory_size(const char *str);
+
     std::experimental::any m_default_value; /**< Default parameter value */
     std::vector<constraint_t> m_constraints; /**< Validation constraints */
     std::map<std::string, std::experimental::any> m_string_mapping; /**< String-to-value mappings */
+    value_transformer_t m_value_transformer; /**< Value transformation function */
     std::type_index m_type;
 };
