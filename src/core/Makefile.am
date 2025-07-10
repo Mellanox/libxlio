@@ -14,18 +14,14 @@ LEX_OUTPUT_ROOT=lex.libxlio_yy
 #libconfig_parser_la_SOURCES += util/config_scanner.l util/config_parser.y
 libconfig_parser_la_SOURCES = $(top_builddir)/third_party/legacy_config_parser/config_scanner.c $(top_builddir)/third_party/legacy_config_parser/config_parser.c
 
-BUILT_SOURCES = config/descriptor_providers/xlio_config_schema.h
-
-dist-hook:
-	cd $(distdir); rm -f $(BUILT_SOURCES)
 
 SUBDIRS = infra netlink
 
 EXTRA_DIST = \
-	$(srcdir)/config/descriptor_providers/xlio_config_schema.json \
-	$(srcdir)/config/descriptor_providers/libxlio_config.json
+	config/descriptor_providers/xlio_config_schema.json \
+	config/descriptor_providers/libxlio_config.json
 
-sysconf_DATA = $(srcdir)/config/descriptor_providers/xlio_config_schema.json $(srcdir)/config/descriptor_providers/libxlio_config.json
+sysconf_DATA = config/descriptor_providers/xlio_config_schema.json config/descriptor_providers/libxlio_config.json
 otherincludedir = $(includedir)/mellanox
 otherinclude_HEADERS = \
 	xlio.h \
@@ -45,7 +41,10 @@ uninstall-hook:
 lib_LTLIBRARIES = libxlio.la
 
 AM_CPPFLAGS := \
-	-I$(top_srcdir)/src ${LIBNL_CFLAGS} ${LIBJSON_CFLAGS}
+	-I$(top_srcdir)/src -I$(top_builddir)/src/core/config/descriptor_providers ${LIBNL_CFLAGS} ${LIBJSON_CFLAGS}
+
+# Files generated during configure should be cleaned during distclean
+DISTCLEANFILES = config/descriptor_providers/xlio_config_schema.h
 
 libxlio_la_CFLAGS = $(XLIO_STATIC_BUILD) $(XLIO_LTO) $(XLIO_PROFILE)
 libxlio_la_CXXFLAGS = $(XLIO_STATIC_BUILD) $(XLIO_LTO) $(XLIO_PROFILE)
@@ -63,17 +62,8 @@ libxlio_la_LIBADD = \
 	$(top_builddir)/src/core/infra/libinfra.la \
 	libconfig_parser.la
 
-dist_noinst_DATA = $(srcdir)/config/descriptor_providers/xlio_config_schema.json
+dist_noinst_DATA = config/descriptor_providers/xlio_config_schema.json
 
-$(srcdir)/config/descriptor_providers/xlio_config_schema.h:
-	(echo "#pragma once"; \
-	echo "unsigned char config_descriptor_providers_xlio_config_schema_json[] = {"; \
-	hexdump -v -e '16/1 "0x%02x, " "\n"' $(srcdir)/config/descriptor_providers/xlio_config_schema.json | \
-	sed 's/0x  ,//g; s/, $$/,/'; \
-	echo "};"; \
-	echo "unsigned int config_descriptor_providers_xlio_config_schema_json_len = $$(wc -c < $(srcdir)/config/descriptor_providers/xlio_config_schema.json);") > $@
-
-CLEANFILES = $(BUILT_SOURCES)
 
 libxlio_la_SOURCES := \
 	dev/allocator.cpp \
@@ -197,7 +187,7 @@ libxlio_la_SOURCES := \
 	config/config_strings.cpp \
 	config/json_object_handle.cpp \
 	\
-	config/descriptor_providers/xlio_config_schema.h \
+	$(top_builddir)/src/core/config/descriptor_providers/xlio_config_schema.h \
 	\
 	libxlio.c \
 	main.cpp \

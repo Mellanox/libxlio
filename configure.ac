@@ -388,6 +388,34 @@ dnl=== SECTION 9: Configure makefiles
 dnl===
 dnl===-----------------------------------------------------------------------===
 show_section_title "Configure makefiles"
+
+# Generate XLIO config schema header file
+#
+AC_MSG_CHECKING([for generating XLIO config schema header])
+CONFIG_SCHEMA_JSON="${srcdir}/src/core/config/descriptor_providers/xlio_config_schema.json"
+CONFIG_SCHEMA_HEADER="src/core/config/descriptor_providers/xlio_config_schema.h"
+
+if test -f "${CONFIG_SCHEMA_JSON}"; then
+    # Create output directory if it doesn't exist
+    mkdir -p "$(dirname "${CONFIG_SCHEMA_HEADER}")"
+    
+    # Generate the header file
+    cat > "${CONFIG_SCHEMA_HEADER}" << EOF
+#pragma once
+unsigned char config_descriptor_providers_xlio_config_schema_json[[]] = {
+EOF
+    hexdump -v -e '16/1 "0x%02x, " "\n"' "${CONFIG_SCHEMA_JSON}" | \
+    sed 's/0x  ,//g; s/, $/,/' >> "${CONFIG_SCHEMA_HEADER}"
+    
+    cat >> "${CONFIG_SCHEMA_HEADER}" << EOF
+};
+unsigned int config_descriptor_providers_xlio_config_schema_json_len = $(wc -c < "${CONFIG_SCHEMA_JSON}");
+EOF
+    AC_MSG_RESULT([yes - generated ${CONFIG_SCHEMA_HEADER}])
+else
+    AC_MSG_ERROR([${CONFIG_SCHEMA_JSON} not found])
+fi
+
 AC_CONFIG_FILES([
 		Makefile
 		src/Makefile
