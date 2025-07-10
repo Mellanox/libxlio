@@ -6,6 +6,8 @@
 
 #pragma once
 #include "descriptor_provider.h"
+#include "schema_analyzer.h"
+#include <memory>
 #include <string>
 
 struct json_object;
@@ -40,6 +42,15 @@ public:
      */
     config_descriptor load_descriptors() override;
 
+    /**
+     * @brief Creates a parameter descriptor from a JSON property
+     * @param property_obj JSON property object
+     * @param path Configuration path for the property
+     * @return Parameter descriptor, or nullptr if not applicable
+     */
+    static std::unique_ptr<parameter_descriptor> create_descriptor(
+        const schema_analyzer::analysis_result &analysis);
+
 private:
     const char *m_json_string; /**< JSON schema string */
 
@@ -51,35 +62,37 @@ private:
     void validate_schema(json_object *schema);
 
     /**
+     * @brief Validates that terminal properties have required fields
+     * @param property_obj JSON property object
+     * @param current_path Current property path for error reporting
+     * @throws xlio_exception If required fields are missing
+     */
+    void validate_terminal_property(json_object *property_obj, const std::string &current_path);
+
+    /**
      * @brief Processes a schema property
      * @param property_obj JSON property object
      * @param property_name Property name
      * @param desc Configuration descriptor to populate
      * @param path_prefix Path prefix for nested properties
-     * @return True if processing succeeded
      */
-    bool process_schema_property(json_object *property_obj, const std::string &property_name,
+    void process_schema_property(json_object *property_obj, const std::string &property_name,
                                  config_descriptor &desc, const std::string &path_prefix = "");
 
-    /**
-     * @brief Processes a oneOf property (alternative types)
-     * @param one_of JSON oneOf array
-     * @param current_path Current property path
-     * @param desc Configuration descriptor to populate
-     * @return True if processing succeeded
-     */
-    bool process_one_of_property(json_object *one_of, const std::string &current_path,
-                                 config_descriptor &desc);
+    // Helper methods for component application
+    static void apply_constraints(parameter_descriptor *descriptor,
+                                  const constraint_config &config);
 
     /**
-     * @brief Processes a simple property (boolean, integer, string)
-     * @param property_obj JSON property object
-     * @param current_path Current property path
-     * @param desc Configuration descriptor to populate
-     * @return True if processing succeeded
+     * @brief Applies value transformation to a parameter descriptor
+     * @param descriptor Parameter descriptor to apply transformation to
+     * @note This method is used to apply only x-memory-size transformation to a parameter
+     * descriptor.
      */
-    bool process_simple_property(json_object *property_obj, const std::string &current_path,
-                                 config_descriptor &desc);
+    static void apply_value_transformation(parameter_descriptor *descriptor);
+
+    static void apply_enum_mapping(parameter_descriptor *descriptor,
+                                   const enum_mapping_config &config);
 
     /**
      * @brief Processes an object property (nested object)

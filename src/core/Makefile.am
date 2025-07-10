@@ -185,8 +185,10 @@ libxlio_la_SOURCES := \
 	config/descriptors/config_descriptor.h \
 	config/descriptor_providers/descriptor_provider.h \
 	config/descriptor_providers/json_descriptor_provider.h \
+	config/descriptor_providers/schema_analyzer.h \
 	config/config_strings.h \
 	config/json_object_handle.h \
+	config/json_utils.h \
 	\
 	config/config_registry.cpp \
 	config/loaders/inline_loader.cpp \
@@ -194,8 +196,10 @@ libxlio_la_SOURCES := \
 	config/descriptors/parameter_descriptor.cpp \
 	config/descriptors/config_descriptor.cpp \
 	config/descriptor_providers/json_descriptor_provider.cpp \
+	config/descriptor_providers/schema_analyzer.cpp \
 	config/config_strings.cpp \
 	config/json_object_handle.cpp \
+	config/json_utils.cpp \
 	\
 	config/descriptor_providers/xlio_config_schema.h \
 	\

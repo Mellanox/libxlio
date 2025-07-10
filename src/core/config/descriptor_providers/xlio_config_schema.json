@@ -14,10 +14,21 @@
                     "description": "Memory and CPU resource allocation settings.",
                     "properties": {
                         "memory_limit": {
-                            "type": "integer",
-                            "default": 2147483648,
+                            "oneOf": [
+                                {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "default": 2147483648
+                                },
+                                {
+                                    "type": "string",
+                                    "default": "2GB",
+                                    "pattern": "^[0-9]+[KMGkmg]?[B]?$"
+                                }
+                            ],
                             "title": "Memory limit (bytes)",
-                            "description": "Pre-allocated memory limit for buffers. Maps to XLIO_MEMORY_LIMIT environment variable. Note that the limit does not include dynamic memory allocation and XLIO memory consumption can exceed the limit. A value of 0 means unlimited memory allocation."
+                            "description": "Pre-allocated memory limit for buffers. Maps to XLIO_MEMORY_LIMIT environment variable. Note that the limit does not include dynamic memory allocation and XLIO memory consumption can exceed the limit. A value of 0 means unlimited memory allocation. Supports suffixes: B, KB, MB, GB.",
+                            "x-memory-size": true
                         },
                         "hugepages": {
                             "type": "object",
@@ -30,24 +41,57 @@
                                     "description": "Use huge pages for data buffers when available to improve performance by reducing TLB misses. XLIO will try to allocate data buffers as configured: when disabled (false or 0/'ANON'), using malloc; when enabled (true or 2/'HUGE'), using huge pages. XLIO also overrides rdma-core parameters MLX_QP_ALLOC_TYPE and MLX_CQ_ALLOC_TYPE accordingly. Maps to XLIO_MEM_ALLOC_TYPE environment variable."
                                 },
                                 "size": {
-                                    "type": "integer",
-                                    "default": 0,
+                                    "oneOf": [
+                                        {
+                                            "type": "integer",
+                                            "minimum": 0,
+                                            "default": 0
+                                        },
+                                        {
+                                            "type": "string",
+                                            "default": "0B",
+                                            "pattern": "^[0-9]+[KMGkmg]?[B]?$"
+                                        }
+                                    ],
                                     "title": "Hugepage size (bytes)",
-                                    "description": "Force specific hugepage size for XLIO internal memory allocations. Value 0 allows to use any supported and available hugepages. The size may be specified with suffixes such as KB, MB, GB. Maps to XLIO_HUGEPAGE_SIZE environment variable."
+                                    "description": "Force specific hugepage size for XLIO internal memory allocations. Value 0 allows to use any supported and available hugepages. The size may be specified with suffixes such as KB, MB, GB. Maps to XLIO_HUGEPAGE_SIZE environment variable.",
+                                    "x-memory-size": true
                                 }
                             }
                         },
                         "external_memory_limit": {
-                            "type": "integer",
-                            "default": 0,
+                            "oneOf": [
+                                {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "default": 0
+                                },
+                                {
+                                    "type": "string",
+                                    "default": "0B",
+                                    "pattern": "^[0-9]+[KMGkmg]?[B]?$"
+                                }
+                            ],
                             "title": "External memory limit (bytes)",
-                            "description": "Memory limit for external user allocator. Maps to XLIO_MEMORY_LIMIT_USER environment variable. The user allocator can optionally be provided with XLIO extra API. Default value 0 makes XLIO use the core.resources.memory_limit value for user allocations."
+                            "description": "Memory limit for external user allocator. Maps to XLIO_MEMORY_LIMIT_USER environment variable. The user allocator can optionally be provided with XLIO extra API. Default value 0 makes XLIO use the core.resources.memory_limit value for user allocations. Supports suffixes: B, KB, MB, GB.",
+                            "x-memory-size": true
                         },
                         "heap_metadata_block_size": {
-                            "type": "integer",
-                            "default": 33554432,
+                            "oneOf": [
+                                {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "default": 33554432
+                                },
+                                {
+                                    "type": "string",
+                                    "default": "32MB",
+                                    "pattern": "^[0-9]+[KMGkmg]?[B]?$"
+                                }
+                            ],
                             "title": "Heap metadata block size",
-                            "description": "Size of metadata block added to every heap allocation. Maps to XLIO_HEAP_METADATA_BLOCK environment variable."
+                            "description": "Size of metadata block added to every heap allocation. Maps to XLIO_HEAP_METADATA_BLOCK environment variable. Supports suffixes: B, KB, MB, GB.",
+                            "x-memory-size": true
                         }
                     },
                     "additionalProperties": false
@@ -162,10 +206,21 @@
                             "description": "For TCP fd, avoid system calls for the supported options of: ioctl, fcntl, getsockopt, setsockopt. Maps to XLIO_AVOID_SYS_CALLS_ON_TCP_FD environment variable. Non-supported options will go to OS.\nTo activate, use XLIO_AVOID_SYS_CALLS_ON_TCP_FD=1."
                         },
                         "sendfile_cache_limit": {
-                            "type": "integer",
-                            "default": 10737418240,
+                            "oneOf": [
+                                {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "default": 10737418240
+                                },
+                                {
+                                    "type": "string",
+                                    "default": "10GB",
+                                    "pattern": "^[0-9]+[KMGkmg]?[B]?$"
+                                }
+                            ],
                             "title": "Sendfile byte limit",
-                            "description": "Memory limit for the mapping cache which is used by sendfile(). Maps to XLIO_ZC_CACHE_THRESHOLD environment variable."
+                            "description": "Memory limit for the mapping cache which is used by sendfile(). Maps to XLIO_ZC_CACHE_THRESHOLD environment variable. Supports suffixes: B, KB, MB, GB.",
+                            "x-memory-size": true
                         }
                     },
                     "additionalProperties": false

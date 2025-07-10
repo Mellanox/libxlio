@@ -28,6 +28,7 @@ const char *JSON_ENUM = "enum";
 const char *JSON_ONE_OF = "oneOf";
 const char *JSON_MINIMUM = "minimum";
 const char *JSON_MAXIMUM = "maximum";
+const char *JSON_PATTERN = "pattern";
 } // namespace schema
 
 namespace schema_types {
@@ -37,6 +38,10 @@ const char *JSON_TYPE_STRING = "string";
 const char *JSON_TYPE_OBJECT = "object";
 const char *JSON_TYPE_ARRAY = "array";
 } // namespace schema_types
+
+namespace schema_extensions {
+const char *JSON_EXTENSION_MEMORY_SIZE = "x-memory-size";
+} // namespace schema_extensions
 
 // Error messages
 namespace errors {

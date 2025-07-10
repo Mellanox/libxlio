@@ -89,14 +89,18 @@ unit_tests_SOURCES = \
 	config/inline_loader.cpp \
 	config/json_loader.cpp \
 	config/json_descriptor_provider.cpp \
+	config/parameter_descriptor.cpp \
+	config/schema_analyzer.cpp \
     $(top_builddir)/src/core/config/loaders/inline_loader.cpp \
 	$(top_builddir)/src/core/config/loaders/json_loader.cpp \
 	$(top_builddir)/src/core/config/descriptor_providers/json_descriptor_provider.cpp \
+	$(top_builddir)/src/core/config/descriptor_providers/schema_analyzer.cpp \
 	$(top_builddir)/src/core/config/descriptors/parameter_descriptor.cpp \
 	$(top_builddir)/src/core/config/descriptors/config_descriptor.cpp \
 	$(top_builddir)/src/core/config/config_registry.cpp \
 	$(top_builddir)/src/core/config/config_strings.cpp \
-	$(top_builddir)/src/core/config/json_object_handle.cpp
+	$(top_builddir)/src/core/config/json_object_handle.cpp \
+	$(top_builddir)/src/core/config/json_utils.cpp
 
 
 unit_tests_DEPENDENCIES = \

@@ -40,6 +40,7 @@ extern const char *JSON_ENUM; /**< Enumeration values key */
 extern const char *JSON_ONE_OF; /**< One of values key */
 extern const char *JSON_MINIMUM; /**< Minimum value key */
 extern const char *JSON_MAXIMUM; /**< Maximum value key */
+extern const char *JSON_PATTERN; /**< Pattern value key */
 } // namespace schema
 
 /**
@@ -54,16 +55,18 @@ extern const char *JSON_TYPE_ARRAY; /**< Array type identifier */
 } // namespace schema_types
 
 /**
+ * @brief JSON schema extension names
+ */
+namespace schema_extensions {
+extern const char *JSON_EXTENSION_MEMORY_SIZE; /**< Memory size extension identifier */
+} //namespace schema_extensions
+
+/**
  * @brief Error message components
  */
 namespace errors {
-
-// TODO - remove all refs to ERROR_STRING
-// use throw_xlio_exception instead
-
 extern const char *OPEN_PAREN; /**< Opening parenthesis for error messages */
 extern const char *CLOSE_PAREN; /**< Closing parenthesis for error messages */
-
 } // namespace errors
 
 /**

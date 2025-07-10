@@ -191,21 +191,6 @@ TEST(config, config_registry_get_value_wrong_type_throws)
     ASSERT_THROW(registry.get_value<std::string>("core.log.level"), xlio_exception);
 }
 
-// our config provider represents ints by int64_t, for size_t we can lose information
-// so instead of static_cast and risk bugs, we throw to inform the user on load time.
-TEST(config, config_registry_get_value_size_t_throws)
-{
-    conf_file_writer json_config(sample_json_config);
-
-    std::queue<std::unique_ptr<loader>> loaders;
-    loaders.push(std::make_unique<json_loader>(json_config.get()));
-
-    config_registry registry(std::move(loaders),
-                             std::make_unique<json_descriptor_provider>(sample_descriptor));
-
-    ASSERT_THROW(registry.get_value<size_t>("core.log.level"), xlio_exception);
-}
-
 TEST(config, config_registry_missing_descriptor_for_key_throws)
 {
     conf_file_writer json_config(sample_json_config);
@@ -314,6 +299,18 @@ TEST(config, config_registry_default_ctr_inline_has_precedence)
     ASSERT_EQ(5, registry.get_value<int64_t>("monitor.log.level"));
 }
 
+TEST(config, config_registry_pattern_transformer_applied)
+{
+    conf_file_writer json_config(
+        R"({ "core": { "syscall": { "sendfile_cache_limit": "10GB" } } })");
+
+    env_setter config_file_setter("XLIO_CONFIG_FILE", json_config.get());
+
+    config_registry registry;
+
+    ASSERT_EQ(10737418240LL, registry.get_value<int64_t>("core.syscall.sendfile_cache_limit"));
+}
+
 TEST(config, config_registry_default_ctr_inline_corrupted_json_ok_throws)
 {
     conf_file_writer json_config(R"({ "core": { "log": { "level": 2 } } })");
@@ -321,4 +318,189 @@ TEST(config, config_registry_default_ctr_inline_corrupted_json_ok_throws)
     env_setter config_file_setter("XLIO_CONFIG_FILE", json_config.get());
 
     ASSERT_THROW(config_registry(), xlio_exception);
+}
+
+TEST(config, config_registry_memory_size_transformer_gb_suffix)
+{
+    const char *memory_schema = R"({
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "XLIO Configuration Schema",
+    "description": "Schema for XLIO configuration",
+    "type": "object",
+    "properties": {
+        "core": {
+            "description": "controls the core functionality of libxlio.",
+            "type": "object",
+            "properties": {
+                "memory_limit": {
+                    "oneOf": [
+                        {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 2147483648
+                        },
+                        {
+                            "type": "string",
+                            "default": "2GB",
+                            "pattern": "^[0-9]+[KMGkmg]?[B]?$"
+                        }
+                    ],
+                    "title": "Memory limit",
+               "description" : "Memory limit in bytes. Supports suffixes: B, KB, MB, GB.",
+               "x-memory-size" : true
+}
+}
+}
+}
+})";
+
+    conf_file_writer json_config(R"({ "core": { "memory_limit": "4GB" } })");
+
+    std::queue<std::unique_ptr<loader>> loaders;
+    loaders.push(std::make_unique<json_loader>(json_config.get()));
+
+    config_registry registry(std::move(loaders),
+                             std::make_unique<json_descriptor_provider>(memory_schema));
+
+    // 4GB = 4 * 1024 * 1024 * 1024 = 4294967296 bytes
+    ASSERT_EQ(4294967296LL, registry.get_value<int64_t>("core.memory_limit"));
+}
+
+TEST(config, config_registry_memory_size_transformer_mb_suffix)
+{
+    const char *memory_schema = R"({
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "XLIO Configuration Schema",
+    "description": "Schema for XLIO configuration",
+    "type": "object",
+    "properties": {
+        "core": {
+            "description": "controls the core functionality of libxlio.",
+            "type": "object",
+            "properties": {
+                "memory_limit": {
+                    "oneOf": [
+                        {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 2147483648
+                        },
+                        {
+                            "type": "string",
+                            "default": "2GB",
+                            "pattern": "^[0-9]+[KMGkmg]?[B]?$"
+                        }
+                    ],
+                    "title": "Memory limit",
+               "description" : "Memory limit in bytes. Supports suffixes: B, KB, MB, GB.",
+               "x-memory-size" : true
+}
+}
+}
+}
+})";
+
+    conf_file_writer json_config(R"({ "core": { "memory_limit": "512MB" } })");
+
+    std::queue<std::unique_ptr<loader>> loaders;
+    loaders.push(std::make_unique<json_loader>(json_config.get()));
+
+    config_registry registry(std::move(loaders),
+                             std::make_unique<json_descriptor_provider>(memory_schema));
+
+    // 512MB = 512 * 1024 * 1024 = 536870912 bytes
+    ASSERT_EQ(536870912LL, registry.get_value<int64_t>("core.memory_limit"));
+}
+
+TEST(config, config_registry_memory_size_transformer_plain_number_backwards_compatibility)
+{
+    const char *memory_schema = R"({
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "XLIO Configuration Schema",
+    "description": "Schema for XLIO configuration",
+    "type": "object",
+    "properties": {
+        "core": {
+            "description": "controls the core functionality of libxlio.",
+            "type": "object",
+            "properties": {
+                "memory_limit": {
+                    "oneOf": [
+                        {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 2147483648
+                        },
+                        {
+                            "type": "string",
+                            "default": "2GB",
+                            "pattern": "^[0-9]+[KMGkmg]?[B]?$"
+                        }
+                    ],
+                    "title": "Memory limit",
+               "description" : "Memory limit in bytes. Supports suffixes: B, KB, MB, GB.",
+               "x-memory-size" : true
+}
+}
+}
+}
+})";
+
+    conf_file_writer json_config(R"({ "core": { "memory_limit": 1073741824 } })");
+
+    std::queue<std::unique_ptr<loader>> loaders;
+    loaders.push(std::make_unique<json_loader>(json_config.get()));
+
+    config_registry registry(std::move(loaders),
+                             std::make_unique<json_descriptor_provider>(memory_schema));
+
+    // Plain number should work as before (1GB in bytes)
+    ASSERT_EQ(1073741824LL, registry.get_value<int64_t>("core.memory_limit"));
+}
+
+TEST(config, config_registry_memory_size_transformer_inline_config)
+{
+    // Test with the inline config loader to ensure memory size suffixes work there too
+    env_setter inline_setter("XLIO_INLINE_CONFIG", "core.memory_limit=2GB");
+
+    const char *memory_schema = R"({
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "XLIO Configuration Schema",
+    "description": "Schema for XLIO configuration",
+    "type": "object",
+    "properties": {
+        "core": {
+            "description": "controls the core functionality of libxlio.",
+            "type": "object",
+            "properties": {
+                "memory_limit": {
+                    "oneOf": [
+                        {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 2147483648
+                        },
+                        {
+                            "type": "string",
+                            "default": "2GB",
+                            "pattern": "^[0-9]+[KMGkmg]?[B]?$"
+                        }
+                    ],
+                    "title": "Memory limit",
+               "description" : "Memory limit in bytes. Supports suffixes: B, KB, MB, GB.",
+               "x-memory-size" : true
+}
+}
+}
+}
+})";
+
+    std::queue<std::unique_ptr<loader>> loaders;
+    loaders.push(std::make_unique<inline_loader>("XLIO_INLINE_CONFIG"));
+
+    config_registry registry(std::move(loaders),
+                             std::make_unique<json_descriptor_provider>(memory_schema));
+
+    // 2GB = 2 * 1024 * 1024 * 1024 = 2147483648 bytes
+    ASSERT_EQ(2147483648LL, registry.get_value<int64_t>("core.memory_limit"));
 }
