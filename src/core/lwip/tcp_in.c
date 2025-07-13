@@ -597,6 +597,7 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
             /* If there's nothing left to acknowledge, stop the retransmit
                timer, otherwise reset it to start again */
             if (pcb->unacked == NULL) {
+                pcb->last_unacked = NULL;
                 pcb->rtime = -1;
                 pcb->ticks_since_data_sent = -1;
             } else {
