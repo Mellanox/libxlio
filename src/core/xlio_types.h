@@ -166,6 +166,36 @@ typedef uintptr_t xlio_poll_group_t;
 typedef uintptr_t xlio_socket_t;
 
 /**
+ * @addtogroup xlio_rx
+ * @{
+ */
+
+/**
+ * @brief Buffer descriptor
+ *
+ * Opaque structure representing a receive buffer in zero-copy RX operations.
+ * Buffers are provided via RX callbacks and must be returned to XLIO.
+ *
+ * @par Buffer Lifecycle:
+ * 1. Buffer provided to application via xlio_socket_rx_cb_t
+ * 2. Application processes data and optionally uses userdata field
+ * 3. Application returns buffer via xlio_socket_buf_free() or xlio_poll_group_buf_free()
+ *
+ * @par User Data Field:
+ * - Available for application use during buffer ownership
+ * - Can be used for reference counting, linking, or other purposes
+ * - Not initialized by XLIO
+ *
+ * @par Structure Members:
+ * - uint64_t userdata: User data field available during buffer ownership
+ */
+struct xlio_buf {
+    uint64_t userdata;
+};
+
+/** @} */ // end of xlio_rx group
+
+/**
  * @defgroup xlio_callbacks Event Callbacks
  * @brief Callback functions for handling socket events
  *
@@ -457,36 +487,6 @@ struct xlio_socket_send_attr {
 };
 
 /** @} */ // end of xlio_tx group
-
-/**
- * @addtogroup xlio_rx
- * @{
- */
-
-/**
- * @brief Buffer descriptor
- *
- * Opaque structure representing a receive buffer in zero-copy RX operations.
- * Buffers are provided via RX callbacks and must be returned to XLIO.
- *
- * @par Buffer Lifecycle:
- * 1. Buffer provided to application via xlio_socket_rx_cb_t
- * 2. Application processes data and optionally uses userdata field
- * 3. Application returns buffer via xlio_socket_buf_free() or xlio_poll_group_buf_free()
- *
- * @par User Data Field:
- * - Available for application use during buffer ownership
- * - Can be used for reference counting, linking, or other purposes
- * - Not initialized by XLIO
- *
- * @par Structure Members:
- * - uint64_t userdata: User data field available during buffer ownership
- */
-struct xlio_buf {
-    uint64_t userdata;
-};
-
-/** @} */ // end of xlio_rx group
 
 /** @} */ // end of xlio_socket_api group
 
