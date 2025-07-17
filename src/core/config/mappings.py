@@ -142,10 +142,6 @@ config_mapping = {
     "monitor.stats.file_path": "XLIO_STATS_FILE",
     "monitor.stats.shmem_dir": "XLIO_STATS_SHMEM_DIR",
     
-    # extra_api section
-    "extra_api.hugepage_size": "XLIO_USER_HUGE_PAGE_SIZE",
-    "extra_api.socketextreme": "XLIO_SOCKETEXTREME",
-    
     # profiles section
     "profiles.spec": "XLIO_SPEC",
 

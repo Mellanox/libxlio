@@ -118,6 +118,9 @@ class SchemaProcessor:
         # Handle properties at current level
         properties = schema.get("properties", {})
         for prop_name, prop_data in properties.items():
+            if prop_name == "additionalProperties":
+                continue
+
             current_path = f"{parent_path}.{prop_name}" if parent_path else prop_name
             
             # Track the current section
