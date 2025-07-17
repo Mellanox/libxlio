@@ -245,7 +245,14 @@ void net_device_table_mgr::update_tbl()
                                                sa_family_t family) {
                     auto it = net_device_map.find(ip->local_addr);
                     if (it != net_device_map.end()) {
-                        duplicate_ips.insert(ip->local_addr.to_str(family));
+                        // Exclude IPv6 link-local addresses from duplicate IP warnings.
+                        // Logical interfaces can legitimately have duplicate IPv6 link-local
+                        // addresses. The warning is not relevant because: (1) users need to specify
+                        // interface along with link-local address, and (2) XLIO doesn't support
+                        // IPv6 link-local at the moment RM #4544719.
+                        if (!(family == AF_INET6 && ip->local_addr.is_linklocal(family))) {
+                            duplicate_ips.insert(ip->local_addr.to_str(family));
+                        }
                     }
                     if (it == net_device_map.end() ||
                         p_net_device_val->get_state() != net_device_val::DOWN) {
