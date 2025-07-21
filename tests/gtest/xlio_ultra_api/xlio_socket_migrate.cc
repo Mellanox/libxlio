@@ -20,9 +20,7 @@ static int terminated_counter = 0;
 static int rx_cb_counter = 0;
 static int comp_cb_counter = 0;
 static const char *data_to_send = "I Love XLIO!";
-#define NUMBER_OF_MESSAGES    1000
-#define MIGRATE_AFTER_SECONDS 10
-static int data_bytes_to_be_sent = strlen(data_to_send) * NUMBER_OF_MESSAGES;
+static int data_bytes_to_be_sent = strlen(data_to_send) * 1000;
 static int data_sent_completed = 0;
 static int data_received = 0;
 static struct ibv_pd *pd = NULL;
@@ -31,7 +29,7 @@ static char sndbuf[256];
 static bool do_migrate = false;
 static std::vector<xlio_socket_t> accepted_sockets;
 
-class zc_api_xlio_socket_migrate_2 : public xlio_zc_api_base {
+class xlio_ultra_api_socket_migrate : public xlio_ultra_api_base {
 public:
     virtual void SetUp() { errno = EOK; };
     virtual void TearDown() {};
@@ -86,16 +84,16 @@ public:
 };
 
 /**
- * @test zc_api_xlio_socket_migrate_2.ti_1
+ * @test xlio_ultra_api_socket_migrate.ti_1
  * @brief
  *    Create TCP socket/connect/send(initiator)/receive(target)
  * @details
  */
-TEST_F(zc_api_xlio_socket_migrate_2, ti_1)
+TEST_F(xlio_ultra_api_socket_migrate, ti_1)
 {
     int rc;
     int pid = fork();
-    xlio_zc_api_base::SetUp();
+    xlio_ultra_api_base::SetUp();
     xlio_poll_group_t group;
     xlio_socket_t sock;
 
@@ -122,24 +120,13 @@ TEST_F(zc_api_xlio_socket_migrate_2, ti_1)
 
         barrier_fork(pid, true);
 
-        bool is_detached = false;
-        struct timespec start_time_detach;
-        struct timespec start_time_now;
         while (data_received < data_bytes_to_be_sent) {
             xlio_api->xlio_poll_group_poll(group);
             xlio_api->xlio_poll_group_poll(group_2);
-            // add timer to attach after 10 seconds of detach
             if (do_migrate) {
-                if (!is_detached) {
-                    clock_gettime(CLOCK_MONOTONIC, &start_time_detach);
-                    xlio_api->xlio_socket_detach_group(accepted_sockets.back());
-                    is_detached = true;
-                }
-                clock_gettime(CLOCK_MONOTONIC, &start_time_now);
-                if (start_time_now.tv_sec - start_time_detach.tv_sec > MIGRATE_AFTER_SECONDS) {
-                    xlio_api->xlio_socket_attach_group(accepted_sockets.back(), group_2);
-                    do_migrate = false;
-                }
+                xlio_api->xlio_socket_detach_group(accepted_sockets.back());
+                xlio_api->xlio_socket_attach_group(accepted_sockets.back(), group_2);
+                do_migrate = false;
             }
         }
 
@@ -176,7 +163,6 @@ TEST_F(zc_api_xlio_socket_migrate_2, ti_1)
                 base_send_single_msg(sock, data_to_send, strlen(data_to_send), strlen(data_to_send),
                                      0, mr_buf, sndbuf);
                 sent_bytes += strlen(data_to_send);
-                usleep(MIGRATE_AFTER_SECONDS * 1000000 / NUMBER_OF_MESSAGES);
             }
         }
 

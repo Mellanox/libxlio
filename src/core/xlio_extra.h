@@ -28,7 +28,7 @@ enum {
     XLIO_EXTRA_API_ADD_CONF_RULE = (1 << 3),
     XLIO_EXTRA_API_THREAD_OFFLOAD = (1 << 4),
     XLIO_EXTRA_API_DUMP_FD_STATS = (1 << 11),
-    XLIO_EXTRA_API_XLIO_SOCKET = (1 << 13),
+    XLIO_EXTRA_API_XLIO_ULTRA = (1 << 13),
 };
 
 struct __attribute__((packed)) xlio_api_t {
@@ -86,7 +86,7 @@ struct __attribute__((packed)) xlio_api_t {
     int (*register_recv_callback)(int s, xlio_recv_callback_t callback, void *context);
 
     /**
-     * XLIO Socket API.
+     * XLIO Ultra API.
      */
     int (*xlio_init_ex)(const struct xlio_init_attr *attr);
     int (*xlio_exit)(void);

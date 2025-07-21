@@ -156,10 +156,10 @@ int xlio_dump_fd_stats(int fd, int log_level);
 int xlio_register_recv_callback(int s, xlio_recv_callback_t callback, void *context);
 
 /**
- * @defgroup xlio_socket_api XLIO Socket API
+ * @defgroup xlio_ultra_api XLIO Ultra API
  * @brief High-performance zero-copy networking interface
  *
- * The XLIO Socket API is a performance-oriented, event-based networking interface
+ * The XLIO Ultra API is a performance-oriented, event-based networking interface
  * designed for applications requiring maximum throughput and minimal latency.
  * It provides zero-copy capabilities and efficient memory management for
  * high-performance networking.
@@ -228,7 +228,7 @@ int xlio_register_recv_callback(int s, xlio_recv_callback_t callback, void *cont
 
 /**
  * @defgroup xlio_init Initialization and Cleanup
- * @brief Functions for initializing and cleaning up the XLIO Socket API
+ * @brief Functions for initializing and cleaning up the XLIO Ultra API
  * @{
  */
 
@@ -236,9 +236,9 @@ int xlio_register_recv_callback(int s, xlio_recv_callback_t callback, void *cont
 struct ibv_pd;
 
 /**
- * @brief Initialize the XLIO Socket API
+ * @brief Initialize the XLIO Ultra API
  *
- * This function must be called before using any other XLIO Socket API functions.
+ * This function must be called before using any other XLIO Ultra API functions.
  * It's a heavy operation that sets up the internal state, allocates resources,
  * and configures the system for high-performance networking.
  *
@@ -290,7 +290,7 @@ int xlio_exit(void);
  * @defgroup xlio_poll_group Polling Groups
  * @brief Functions for managing polling groups and event handling
  *
- * Polling groups are the core event management mechanism in the XLIO Socket API.
+ * Polling groups are the core event management mechanism in the XLIO Ultra API.
  * They allow applications to register event callbacks and efficiently poll for
  * network events across multiple sockets.
  *
@@ -594,7 +594,7 @@ int xlio_socket_attach_group(xlio_socket_t sock, xlio_poll_group_t group);
  * @defgroup xlio_tx Transmit Operations
  * @brief High-performance data transmission functions
  *
- * The XLIO Socket API provides efficient transmission capabilities with
+ * The XLIO Ultra API provides efficient transmission capabilities with
  * zero-copy support and flexible batching options.
  *
  * @section tx_properties TX Flow Properties
@@ -689,7 +689,7 @@ void xlio_socket_flush(xlio_socket_t sock);
  * @defgroup xlio_rx Receive Operations
  * @brief Zero-copy receive buffer management
  *
- * The XLIO Socket API provides zero-copy receive capabilities through
+ * The XLIO Ultra API provides zero-copy receive capabilities through
  * a buffer management system. Received data is delivered via callbacks
  * with buffer descriptors that must be returned to the system.
  *
@@ -733,7 +733,7 @@ void xlio_poll_group_buf_free(xlio_poll_group_t group, struct xlio_buf *buf);
 
 /** @} */ // end of xlio_rx group
 
-/** @} */ // end of xlio_socket_api group
+/** @} */ // end of xlio_ultra_api group
 
 #ifdef __cplusplus
 }

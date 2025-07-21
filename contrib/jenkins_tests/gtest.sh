@@ -117,14 +117,14 @@ rc=$(($rc+$?))
 
 
 
-# XLIO ZC API
+# XLIO Ultra API
 
 #IPV4
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=zc_api_xlio* --gtest_output=xml:${WORKSPACE}/${prefix}/test-zc_api.xml"
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=xlio_ultra_api* --gtest_output=xml:${WORKSPACE}/${prefix}/test-xlio_ultra_api.xml"
 rc=$(($rc+$?))
 
 #IPV6
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=zc_api_xlio* --gtest_output=xml:${WORKSPACE}/${prefix}/test-zc_api-ipv6.xml"
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=xlio_ultra_api* --gtest_output=xml:${WORKSPACE}/${prefix}/test-xlio_ultra_api-ipv6.xml"
 rc=$(($rc+$?))
 
 

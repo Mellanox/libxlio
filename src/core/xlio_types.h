@@ -145,7 +145,7 @@ typedef xlio_recv_callback_retval_t (*xlio_recv_callback_t)(int fd, size_t sz_io
                                                             void *context);
 
 /**
- * @addtogroup xlio_socket_api XLIO Socket API
+ * @addtogroup xlio_ultra_api XLIO Ultra API
  * @{
  */
 
@@ -199,7 +199,7 @@ struct xlio_buf {
  * @defgroup xlio_callbacks Event Callbacks
  * @brief Callback functions for handling socket events
  *
- * The XLIO Socket API uses callbacks to notify applications of various
+ * The XLIO Ultra API uses callbacks to notify applications of various
  * events including connection state changes, data arrival, and completion
  * of zero-copy operations.
  *
@@ -488,6 +488,6 @@ struct xlio_socket_send_attr {
 
 /** @} */ // end of xlio_tx group
 
-/** @} */ // end of xlio_socket_api group
+/** @} */ // end of xlio_ultra_api group
 
 #endif /* XLIO_TYPES_H */
