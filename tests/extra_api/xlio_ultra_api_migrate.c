@@ -4,9 +4,10 @@
  * SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
  */
 
-/* g++ -I./install/include -L./install/lib -L../dpcp/install/lib -o test xlio_socket_api_listen.c -lxlio -lm -lnl-3 -ldpcp -libverbs -lmlx5 -lrdmacm -lnl-route-3 -g3 */
+/* g++ -I./install/include -L./install/lib -L../dpcp/install/lib -o test xlio_ultra_api_migration.c -lxlio -lm -lnl-3 -ldpcp -libverbs -lmlx5 -lrdmacm -lnl-route-3 -g3 */
 /* LD_LIBRARY_PATH=./install/lib:../dpcp/install/lib ./test */
 /* Use `nc <IP> <PORT>` on the remote side */
+/* Send 'mg' to migrate */
 
 #include <assert.h>
 #include <stdbool.h>

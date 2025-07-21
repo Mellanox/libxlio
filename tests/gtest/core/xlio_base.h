@@ -36,13 +36,13 @@ protected:
 };
 
 #if defined(EXTRA_API_ENABLED) && (EXTRA_API_ENABLED == 1)
-class xlio_zc_api_base : public xlio_base {
+class xlio_ultra_api_base : public xlio_base {
 public:
     virtual void SetUp()
     {
         xlio_base::SetUp();
         errno = EOK;
-        base_init_xlio_zc_api();
+        base_init_xlio_ultra_api();
     };
     void base_create_poll_group(xlio_poll_group_t *group,
                                 void (*socket_event_cb)(xlio_socket_t, uintptr_t, int, int),
@@ -112,7 +112,7 @@ public:
             accepted_sockets.pop_back();
         }
     }
-    void base_init_xlio_zc_api()
+    void base_init_xlio_ultra_api()
     {
         int rc;
         struct xlio_init_attr iattr = {
@@ -125,7 +125,7 @@ public:
         rc = xlio_api->xlio_init_ex(&iattr);
         ASSERT_TRUE(rc == 0);
     };
-    void base_cleanup_xlio_zc_api()
+    void base_cleanup_xlio_ultra_api()
     {
         int rc;
         rc = xlio_api->xlio_exit();

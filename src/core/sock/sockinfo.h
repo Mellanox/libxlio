@@ -339,7 +339,7 @@ public:
 #endif
 #endif
 
-    // XLIO ZC API
+    // XLIO Ultra API
     bool is_xlio_socket() const;
     poll_group *get_poll_group() const;
 
@@ -502,14 +502,17 @@ protected:
     uint32_t m_flow_tag_id = 0U; // Flow Tag for this socket
 
     /*
-     * Storage API
-     * Move other StorageApi fields from sockinfo_tcp to sockinfo
+     * XLIO Ultra API
+     * TODO Move other Ultra API fields from sockinfo_tcp to sockinfo
      * TODO Move the fields to proper cold/hot sections in the final version.
      */
-    poll_group *m_p_group = nullptr; // Polling group associated with this socket
-    bool m_is_xlio_socket = false; // Flag indicating if this is an XLIO socket
-    bool m_is_xlio_socket_terminated =
-        false; // Flag indicating if this is an XLIO socket terminat CB was called
+
+    // Polling group associated with this socket
+    poll_group *m_p_group = nullptr;
+    // Flag indicating if this is an XLIO socket
+    bool m_is_xlio_socket = false;
+    // Flag indicating if this is an XLIO socket terminat CB was called
+    bool m_is_xlio_socket_terminated = false;
 
 public:
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)

@@ -617,7 +617,7 @@ private:
     bool m_sysvar_rx_poll_on_tx_tcp;
     uint16_t m_external_vlan_tag = 0U;
     /*
-     * Storage API
+     * XLIO Ultra API
      * TODO Move the fields to proper cold/hot sections in the final version.
      */
     bool m_b_xlio_socket_dirty = false;
