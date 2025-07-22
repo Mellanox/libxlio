@@ -164,7 +164,15 @@ inline int sockinfo_tcp::rx_wait(int &poll_count, bool blocking)
 
 inline int sockinfo_tcp::rx_wait_lockless(int &poll_count, bool blocking)
 {
-    return rx_wait_helper(poll_count, blocking);
+    if (!blocking && has_epoll_context()) {
+        uint64_t poll_sn_rx = 0;
+        uint64_t poll_sn_tx = 0;
+        m_econtext->ring_poll_and_process_element(&poll_sn_rx, &poll_sn_tx, nullptr,
+                                                  epoll_poll_type_t::POLL_RX_ONLY);
+        return 0; // caller only cares if < 0 or not.
+    } else {
+        return rx_wait_helper(poll_count, blocking);
+    }
 }
 
 inline void sockinfo_tcp::return_pending_rx_buffs()
@@ -1030,7 +1038,6 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
     int flags = tx_arg.attr.flags;
     int errno_tmp = errno;
     int ret = 0;
-    int poll_count = 0;
     err_t err;
     void *tx_ptr = nullptr;
     struct xlio_pd_key *pd_key_array = nullptr;
@@ -1048,9 +1055,7 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
 
     si_tcp_logfunc("tx: iov=%p niovs=%d", p_iov, sz_iov);
 
-    if (m_sysvar_rx_poll_on_tx_tcp) {
-        rx_wait_helper(poll_count, false);
-    }
+    rx_poll_on_tx_if_needed();
 
     bool is_dummy = IS_DUMMY_PACKET(flags);
     bool is_blocking = BLOCK_THIS_RUN(m_b_blocking, flags);

@@ -345,8 +345,15 @@ public:
     void rx_poll_on_tx_if_needed()
     {
         if (m_sysvar_rx_poll_on_tx_tcp) {
-            int poll_count = 0;
-            rx_wait_helper(poll_count, false);
+            if (has_epoll_context()) {
+                uint64_t poll_sn_rx = 0;
+                uint64_t poll_sn_tx = 0;
+                m_econtext->ring_poll_and_process_element(&poll_sn_rx, &poll_sn_tx, nullptr,
+                                                          epoll_poll_type_t::POLL_RX_ONLY);
+            } else {
+                int poll_count = 0;
+                rx_wait_helper(poll_count, false);
+            }
         }
     }
 
