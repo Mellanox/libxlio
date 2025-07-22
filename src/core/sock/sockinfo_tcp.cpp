@@ -5269,7 +5269,14 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
     // There's only one CQ
     m_rx_ring_map_lock.lock();
     auto prev_sndbuf = sndbuf_available();
-    bool all_drained = poll_and_progress_rx(poll_sn);
+    bool all_drained = false;
+    if (has_epoll_context() && !blocking) {
+        uint64_t poll_sn_tx = 0;
+        all_drained = m_econtext->ring_poll_and_process_element(&poll_sn, &poll_sn_tx, nullptr,
+                                                                epoll_poll_type_t::POLL_RX_ONLY);
+    } else {
+        all_drained = poll_and_progress_rx(poll_sn);
+    }
     m_rx_ring_map_lock.unlock();
 
     lock_tcp_con(); // We must take a lock before checking m_n_rx_pkt_ready_list_count

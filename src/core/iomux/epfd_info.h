@@ -34,6 +34,12 @@ private:
     lock_spin_recursive m_epoll_ready_sockets_lock;
 };
 
+enum class epoll_poll_type_t {
+    POLL_RX_ONLY, // Poll only RX rings (for pure RX operations)
+    POLL_TX_ONLY, // Poll only TX rings (for TX credit recovery)
+    POLL_BOTH // Poll both RX and TX rings (default epoll_wait behavior)
+};
+
 class epfd_info : public lock_mutex_recursive, public cleanable_obj, public wakeup_pipe {
 public:
     epfd_info(int epfd, int size);
@@ -79,7 +85,8 @@ public:
     epoll_stats_t *stats();
 
     bool ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *p_poll_sn_tx,
-                                       void *pv_fd_ready_array = nullptr);
+                                       void *pv_fd_ready_array = nullptr,
+                                       epoll_poll_type_t poll_type = epoll_poll_type_t::POLL_BOTH);
 
     int ring_request_notification(uint64_t poll_sn_rx, uint64_t poll_sn_tx);
 

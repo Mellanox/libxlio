@@ -635,7 +635,8 @@ epoll_stats_t *epfd_info::stats()
 }
 
 bool epfd_info::ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *p_poll_sn_tx,
-                                              void *pv_fd_ready_array /* = NULL*/)
+                                              void *pv_fd_ready_array /* = NULL*/,
+                                              epoll_poll_type_t poll_type /* = POLL_BOTH */)
 {
     __log_func("");
 
@@ -647,11 +648,20 @@ bool epfd_info::ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *
 
     int all_drained = 1;
     for (ring_map_t::iterator iter = m_ring_map.begin(); iter != m_ring_map.end(); iter++) {
-        all_drained = std::min(
-            all_drained,
-            std::abs(iter->first->poll_and_process_element_rx(p_poll_sn_rx, pv_fd_ready_array)));
-        all_drained =
-            std::min(all_drained, std::abs(iter->first->poll_and_process_element_tx(p_poll_sn_tx)));
+        // Poll RX based on type
+        if (poll_type == epoll_poll_type_t::POLL_RX_ONLY ||
+            poll_type == epoll_poll_type_t::POLL_BOTH) {
+            all_drained = std::min(all_drained,
+                                   std::abs(iter->first->poll_and_process_element_rx(
+                                       p_poll_sn_rx, pv_fd_ready_array)));
+        }
+
+        // Poll TX based on type
+        if (poll_type == epoll_poll_type_t::POLL_TX_ONLY ||
+            poll_type == epoll_poll_type_t::POLL_BOTH) {
+            all_drained = std::min(
+                all_drained, std::abs(iter->first->poll_and_process_element_tx(p_poll_sn_tx)));
+        }
     }
 
     m_ring_map_lock.unlock();
