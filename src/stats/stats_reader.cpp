@@ -521,11 +521,12 @@ void print_ring_stats(ring_instance_block_t *p_ring_inst_arr)
             }
 
 #ifdef DEFINED_UTLS
-            if (p_ring_stats->n_tx_tls_contexts) {
+            if (p_ring_stats->n_tx_tls_contexts || p_ring_stats->n_tx_tls_resyncs) {
                 printf(FORMAT_RING_TX_TLS, "HW TLS TX:", p_ring_stats->n_tx_tls_contexts,
                        p_ring_stats->n_tx_tls_resyncs, post_fix);
             }
-            if (p_ring_stats->n_rx_tls_contexts) {
+            if (p_ring_stats->n_rx_tls_contexts || p_ring_stats->n_rx_tls_resyncs ||
+                p_ring_stats->n_rx_tls_auth_fail) {
                 printf(FORMAT_RING_RX_TLS, "HW TLS RX:", p_ring_stats->n_rx_tls_contexts,
                        p_ring_stats->n_rx_tls_resyncs, p_ring_stats->n_rx_tls_auth_fail, post_fix);
             }
