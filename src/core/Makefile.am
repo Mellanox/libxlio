@@ -104,6 +104,10 @@ libxlio_la_SOURCES := \
 	event/poll_group.cpp \
 	event/vlogger_timer_handler.cpp \
 	event/netlink_event.cpp \
+	event/worker_thread.cpp \
+	event/worker_thread_manager.cpp \
+	event/entity_context.cpp \
+	event/entity_context_manager.cpp \
 	\
 	ib/base/verbs_extra.cpp \
 	ib/mlx5/ib_mlx5.cpp \
@@ -240,6 +244,11 @@ libxlio_la_SOURCES := \
 	event/poll_group.h \
 	event/timer_handler.h \
 	event/vlogger_timer_handler.h \
+	event/worker_thread.h \
+	event/worker_thread_manager.h \
+	event/entity_context.h \
+	event/entity_context_manager.h \
+	event/job_queue.h \
 	\
 	ib/base/verbs_extra.h \
 	ib/mlx5/ib_mlx5.h \

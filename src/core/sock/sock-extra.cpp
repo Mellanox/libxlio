@@ -166,7 +166,7 @@ extern "C" int xlio_poll_group_create(const struct xlio_poll_group_attr *attr,
         return -1;
     }
 
-    poll_group *grp = new poll_group(attr);
+    poll_group *grp = new poll_group(*attr);
     if (!grp) {
         errno = ENOMEM;
         return -1;

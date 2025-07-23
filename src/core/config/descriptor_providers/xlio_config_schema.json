@@ -861,6 +861,14 @@
                     "type": "object",
                     "description": "Thread and locking behavior settings.",
                     "properties": {
+                        "worker_threads": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 512,
+                            "default": 0,
+                            "title": "XLIO Worker Threads number",
+                            "description": "Controls which execution model and number of worker threads to be used to handle networking and progress sockets."
+                        },
                         "mutex_over_spinlock": {
                             "type": "boolean",
                             "default": false,
