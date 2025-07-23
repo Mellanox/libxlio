@@ -26,7 +26,7 @@
 #define PRODUCT_NAME    "XLIO"
 
 #undef MODULE_HDR
-#define MODULE_HDR MODULE_NAME "%d:%s() "
+#define MODULE_HDR MODULE_NAME ":%d:%s() "
 
 #undef MODULE_HDR_INFO
 #define MODULE_HDR_INFO MODULE_NAME "[%p]:%d:%s() "

@@ -41,7 +41,8 @@
 #include "proto/route_table_mgr.h"
 #include "proto/rule_table_mgr.h"
 #include "proto/mapping.h"
-
+#include "event/worker_thread_manager.h"
+#include "event/entity_context_manager.h"
 #include "proto/neighbour_table_mgr.h"
 #include "netlink/netlink_wrapper.h"
 #include "event/command.h"
@@ -96,6 +97,8 @@ static int free_libxlio_resources()
 
     g_b_exit = true;
 
+    worker_thread_manager::destroy();
+
     if (safe_mce_sys().print_report != option_3::OFF) {
         bool print_only_critical = (safe_mce_sys().print_report == option_3::AUTO);
         buffer_pool::print_full_report(VLOG_INFO, print_only_critical);
@@ -104,6 +107,8 @@ static int free_libxlio_resources()
             g_p_net_device_table_mgr->print_report(VLOG_INFO, print_only_critical);
         }
     }
+
+    entity_context_manager::destroy();
 
     // Destroy polling groups before fd_collection to clear XLIO sockets from the fd_collection
     poll_group::destroy_all_groups();
@@ -844,7 +849,8 @@ void print_xlio_global_settings()
     VLOG_PARAM_STRING("Lock Type", safe_mce_sys().multilock, MCE_DEFAULT_MULTILOCK,
                       NEW_CONFIG_VAR_MULTILOCK,
                       (safe_mce_sys().multilock == MULTILOCK_SPIN ? "Spin " : "Mutex"));
-
+    VLOG_PARAM_NUMBER("Worker Threads", safe_mce_sys().worker_threads, MCE_DEFAULT_WORKER_THREADS,
+                      NEW_CONFIG_VAR_WORKER_THREADS);
     vlog_printf(VLOG_INFO,
                 "---------------------------------------------------------------------------\n");
 }
@@ -1125,6 +1131,10 @@ static void do_global_ctors_helper()
 #ifdef DEFINED_UTLS
     xlio_tls_api_setup();
 #endif /* DEFINED_UTLS */
+
+    entity_context_manager::create();
+
+    worker_thread_manager::create();
 }
 
 int do_global_ctors()
@@ -1146,6 +1156,8 @@ int do_global_ctors()
 
 void reset_globals()
 {
+    worker_thread_manager::fork_nullify();
+    entity_context_manager::fork_nullify();
     g_p_fd_collection = nullptr;
     g_p_ip_frag_manager = nullptr;
     g_zc_cache = nullptr;
