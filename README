@@ -166,6 +166,7 @@ Example:
  XLIO DETAILS: Polling Rx on Tx TCP           Disabled                   [performance.polling.rx_poll_on_tx_tcp]
  XLIO DETAILS: Skip CQ polling in rx          Disabled                   [performance.polling.skip_cq_on_rx]
  XLIO DETAILS: Lock Type                      Spin                       [performance.threading.mutex_over_spinlock]
+ XLIO DETAILS: Worker Threads                 0                          [performance.threading.worker_threads]
  XLIO INFO   : ---------------------------------------------------------------------------
 
 Configuration Values
@@ -850,6 +851,18 @@ Control locking type mechanism for some specific flows. Maps to **XLIO_MULTILOCK
 Default: 0 (Spin)
 Default value is 0 (Disabled)
 
+performance.threading.worker_threads
+Controls which mode is used to handle networking and progress sockets.
+Applicable only to POSIX API.
+There are two available modes: Run to completion mode and Worker Threads mode. 
+Run to completion mode:
+Only application execution contexts progress networking as part of socket related syscalls.
+In this mode, XLIO depends on the application to provide execution context to XLIO.
+Worker Threads Mode:
+XLIO spawns worker threads. Worker threads progress networking without dependency on the application to provide execution context to XLIO.
+0 - Run to completion mode
+Number greater than 0 - Worker Threads mode with number of XLIO worker threads specified by the value.
+Default: 0
 
 ================================================================================
 

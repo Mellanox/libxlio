@@ -851,7 +851,7 @@ void mce_sys_var::legacy_get_env_params()
     progress_engine_wce_max = MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX;
     cq_keep_qp_full = MCE_DEFAULT_CQ_KEEP_QP_FULL;
     max_tso_sz = MCE_DEFAULT_MAX_TSO_SIZE;
-
+    worker_threads = MCE_DEFAULT_WORKER_THREADS;
     offloaded_sockets = MCE_DEFAULT_OFFLOADED_SOCKETS;
     timer_resolution_msec = MCE_DEFAULT_TIMER_RESOLUTION_MSEC;
     tcp_timer_resolution_msec = MCE_DEFAULT_TCP_TIMER_RESOLUTION_MSEC;
@@ -1687,6 +1687,10 @@ void mce_sys_var::legacy_get_env_params()
         max_tso_sz = option_size::from_str(env_ptr);
     }
 
+    if ((env_ptr = getenv(SYS_VAR_WORKER_THREADS))) {
+        worker_threads = (uint16_t)atoi(env_ptr);
+    }
+
     if ((enable_tso != option_3::OFF) && (ring_migration_ratio_tx != -1)) {
         ring_migration_ratio_tx = -1;
         vlog_printf(VLOG_DEBUG, "%s parameter is forced to %d in case %s is enabled\n",
@@ -1985,7 +1989,7 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
         "performance.completion_queue.periodic_drain_max_cqes");
     cq_keep_qp_full = registry.get_default_value<bool>("performance.completion_queue.keep_full");
     max_tso_sz = registry.get_default_value<int64_t>("hardware_features.tcp.tso.max_size");
-
+    worker_threads = registry.get_default_value<uint16_t>("performance.threading.worker_threads");
     offloaded_sockets =
         registry.get_default_value<bool>("acceleration_control.default_acceleration");
     timer_resolution_msec =
@@ -2803,6 +2807,9 @@ void mce_sys_var::configure_application_specifics(const config_registry &registr
         vlog_printf(VLOG_DEBUG, "%s parameter is forced to %d in case %s is enabled\n",
                     SYS_VAR_RING_MIGRATION_RATIO_TX, -1, SYS_VAR_TSO);
     }
+
+    set_value_from_registry_if_exists(worker_threads, "performance.threading.worker_threads",
+                                      registry);
 
 #ifdef DEFINED_UTLS
     set_value_from_registry_if_exists(enable_utls_rx, "hardware_features.tcp.tls_offload.rx_enable",

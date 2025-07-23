@@ -29,12 +29,12 @@
 static std::vector<poll_group *> s_poll_groups;
 static lock_spin s_poll_groups_lock;
 
-poll_group::poll_group(const struct xlio_poll_group_attr *attr)
-    : m_socket_event_cb(attr->socket_event_cb)
-    , m_socket_comp_cb(attr->socket_comp_cb)
-    , m_socket_rx_cb(attr->socket_rx_cb)
-    , m_socket_accept_cb(attr->socket_accept_cb)
-    , m_group_flags(attr->flags)
+poll_group::poll_group(const struct xlio_poll_group_attr &attr)
+    : m_socket_event_cb(attr.socket_event_cb)
+    , m_socket_comp_cb(attr.socket_comp_cb)
+    , m_socket_rx_cb(attr.socket_rx_cb)
+    , m_socket_accept_cb(attr.socket_accept_cb)
+    , m_group_flags(attr.flags)
 {
     /*
      * In the best case, we expect a single ring per group. Reserve two elements for a scenario
