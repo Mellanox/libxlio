@@ -288,6 +288,7 @@ public:
 
 public:
     void get_params();
+    bool is_threads_mode() const { return worker_threads > 0; }
 
     // Update parameters for multi-process applications
     void update_multi_process_params();
@@ -389,6 +390,7 @@ public:
     uint32_t max_tso_sz;
 
     bool offloaded_sockets;
+    uint16_t worker_threads;
     uint32_t timer_resolution_msec;
     uint32_t tcp_timer_resolution_msec;
     option_tcp_ctl_thread::mode_t tcp_ctl_thread;
@@ -613,6 +615,7 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_QP_COMPENSATION_LEVEL     "XLIO_QP_COMPENSATION_LEVEL"
 #define SYS_VAR_MAX_TSO_SIZE              "XLIO_MAX_TSO_SIZE"
 #define SYS_VAR_OFFLOADED_SOCKETS         "XLIO_OFFLOADED_SOCKETS"
+#define SYS_VAR_WORKER_THREADS            "XLIO_WORKER_THREADS"
 #define SYS_VAR_TIMER_RESOLUTION_MSEC     "XLIO_TIMER_RESOLUTION_MSEC"
 #define SYS_VAR_TCP_TIMER_RESOLUTION_MSEC "XLIO_TCP_TIMER_RESOLUTION_MSEC"
 #define SYS_VAR_TCP_CTL_THREAD            "XLIO_TCP_CTL_THREAD"
@@ -763,6 +766,7 @@ extern mce_sys_var &safe_mce_sys();
 #define NEW_CONFIG_VAR_CQ_KEEP_QP_FULL           "performance.completion_queue.keep_full"
 #define NEW_CONFIG_VAR_QP_COMPENSATION_LEVEL     "performance.rings.rx.spare_buffers"
 #define NEW_CONFIG_VAR_MAX_TSO_SIZE              "hardware_features.tcp.tso.max_size"
+#define NEW_CONFIG_VAR_WORKER_THREADS            "performance.threading.worker_threads"
 #define NEW_CONFIG_VAR_OFFLOADED_SOCKETS         "acceleration_control.default_acceleration"
 #define NEW_CONFIG_VAR_TIMER_RESOLUTION_MSEC     "performance.threading.internal_handler.timer_msec"
 #define NEW_CONFIG_VAR_TCP_TIMER_RESOLUTION_MSEC "network.protocols.tcp.timer_msec"
@@ -971,6 +975,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_MAX_CQ_POLL_BATCH               (32768)
 #define MCE_DEFAULT_TSO                     (option_3::AUTO)
 #define MCE_DEFAULT_MAX_TSO_SIZE            (256 * 1024)
+#define MCE_DEFAULT_WORKER_THREADS          (0)
 #ifdef DEFINED_UTLS
 #define MCE_DEFAULT_UTLS_RX                        (false)
 #define MCE_DEFAULT_UTLS_TX                        (true)
