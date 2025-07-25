@@ -133,14 +133,6 @@ tcp_timers_collection *sockinfo_tcp::get_tcp_timer_collection()
     }
 }
 
-static lock_base *get_new_tcp_lock()
-{
-    return (
-        safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS
-            ? static_cast<lock_base *>(multilock::create_new_lock(MULTILOCK_RECURSIVE, "tcp_con"))
-            : static_cast<lock_base *>(&g_lock_dummy_socket.lock));
-}
-
 inline void sockinfo_tcp::lwip_pbuf_init_custom(mem_buf_desc_t *p_desc)
 {
     if (!p_desc->lwip_pbuf.gro) {
@@ -257,13 +249,25 @@ inline void sockinfo_tcp::reuse_buffer(mem_buf_desc_t *buff)
     }
 }
 
-static inline bool use_socket_ring_locks()
+static inline bool use_socket_locks()
 {
     return (safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS);
 }
 
+static lock_base *get_tcp_lock(bool use_locks)
+{
+    return use_locks
+        ? static_cast<lock_base *>(multilock::create_new_lock(MULTILOCK_RECURSIVE, "tcp_con"))
+        : static_cast<lock_base *>(&g_lock_dummy_socket.lock);
+}
+
+static lock_base *get_new_tcp_lock()
+{
+    return get_tcp_lock(use_socket_locks());
+}
+
 sockinfo_tcp::sockinfo_tcp(int fd, int domain)
-    : sockinfo(fd, domain, use_socket_ring_locks())
+    : sockinfo(fd, domain, use_socket_locks())
     , m_tcp_con_lock(get_new_tcp_lock())
     , m_sysvar_buffer_batching_mode(safe_mce_sys().buffer_batching_mode)
     , m_sysvar_tx_segs_batch_tcp(safe_mce_sys().tx_segs_batch_tcp)
@@ -372,22 +376,16 @@ void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
     m_xlio_socket_userdata = attr->userdata_sq;
     m_p_group = reinterpret_cast<poll_group *>(attr->group);
 
-    bool current_locks = m_ring_alloc_log_rx.get_use_locks();
-
     m_ring_alloc_log_rx.set_ring_alloc_logic(RING_LOGIC_PER_USER_ID);
     m_ring_alloc_log_rx.set_user_id_key(reinterpret_cast<uint64_t>(m_p_group));
-    m_ring_alloc_log_rx.set_use_locks(current_locks ||
-                                      (m_p_group->get_flags() & XLIO_GROUP_FLAG_SAFE));
+    m_ring_alloc_log_rx.set_use_locks(!!(m_p_group->get_flags() & XLIO_GROUP_FLAG_SAFE));
     m_ring_alloc_logic_rx = ring_allocation_logic_rx(get_fd(), m_ring_alloc_log_rx);
 
     m_ring_alloc_log_tx.set_ring_alloc_logic(RING_LOGIC_PER_USER_ID);
     m_ring_alloc_log_tx.set_user_id_key(reinterpret_cast<uint64_t>(m_p_group));
-    m_ring_alloc_log_tx.set_use_locks(current_locks ||
-                                      (m_p_group->get_flags() & XLIO_GROUP_FLAG_SAFE));
+    m_ring_alloc_log_tx.set_use_locks(!!(m_p_group->get_flags() & XLIO_GROUP_FLAG_SAFE));
 
-    if (!current_locks && (m_p_group->get_flags() & XLIO_GROUP_FLAG_SAFE)) {
-        m_tcp_con_lock = multilock::create_new_lock(MULTILOCK_RECURSIVE, "tcp_con");
-    }
+    m_tcp_con_lock = multilock(get_tcp_lock(!!(m_p_group->get_flags() & XLIO_GROUP_FLAG_SAFE)));
 
     tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_xlio_socket);
     tcp_err(&m_pcb, sockinfo_tcp::err_lwip_cb_xlio_socket);
@@ -471,11 +469,9 @@ int sockinfo_tcp::attach_xlio_group(poll_group *group)
         .userdata_sq = m_xlio_socket_userdata,
     };
 
-    std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
-
     if (m_p_group) {
-        si_tcp_logwarn("Attaching detached XLIO socket %p, group %p, new-group %p", this, m_p_group,
-                       group);
+        si_tcp_logwarn("Cannot attach a non-detached XLIO socket %p, group %p, new-group %p", this,
+                       m_p_group, group);
         return -1;
     }
 
@@ -483,6 +479,8 @@ int sockinfo_tcp::attach_xlio_group(poll_group *group)
 
     set_xlio_socket(&attr);
     group->add_socket(this);
+
+    std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
 
     create_dst_entry();
     if (!m_p_connected_dst_entry) {

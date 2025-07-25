@@ -452,6 +452,9 @@ public:
     {
     }
 
+    multilock(multilock &&) = default;
+    multilock &operator=(multilock &&) = default;
+
     static lock_base *create_new_lock(multilock_recursive_t _recursive, const char *_str)
     {
         lock_base *lock = nullptr;
