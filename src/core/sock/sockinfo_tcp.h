@@ -195,6 +195,8 @@ public:
     int getsockopt(int __level, int __optname, void *__optval, socklen_t *__optlen) override;
     int getsockopt_offload(int __level, int __optname, void *__optval, socklen_t *__optlen);
     int connect(const sockaddr *, socklen_t) override;
+    void connect_entity_context() override;
+    void set_entity_context(entity_context *ctx) override;
     int bind(const sockaddr *__addr, socklen_t __addrlen) override;
     int listen(int backlog) override;
     int accept(struct sockaddr *__addr, socklen_t *__addrlen) override;
@@ -415,6 +417,9 @@ private:
     // @param newpcb The new pcb. Can be nullptr.
     static void accepted_pcb_cb(struct tcp_pcb *newpcb);
 
+    static err_t rx_lwip_cb_entity_context(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
+                                           err_t err);
+
     int accept_helper(struct sockaddr *__addr, socklen_t *__addrlen, int __flags = 0);
 
     // clone socket in accept call
@@ -447,11 +452,14 @@ private:
     void set_conn_properties_from_pcb();
     void set_sock_options(sockinfo_tcp *new_sock);
     void passthrough_unlock(const char *dbg);
-
     void register_timer();
     void remove_timer();
-
     void handle_socket_linger();
+    bool connect_bind_any_and_check_rules();
+    void connect_async_set_errs();
+    void connect_threads_mode();
+    void add_tx_ring_to_entity_context();
+    bool prepare_dst_to_send_entity_context();
 
     /*
      * Supported only for UDP
