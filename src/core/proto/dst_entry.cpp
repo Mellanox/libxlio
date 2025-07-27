@@ -491,7 +491,8 @@ bool dst_entry::offloaded_according_to_rules()
     return ret_val;
 }
 
-bool dst_entry::prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_rules)
+bool dst_entry::prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_rules,
+                                bool skip_resolve_ring)
 {
     bool resolved = false;
     m_slow_path_lock.lock();
@@ -513,7 +514,7 @@ bool dst_entry::prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_
             m_max_udp_payload_size =
                 get_route_mtu() - ((get_sa_family() == AF_INET) ? IP_HLEN : IPV6_HLEN);
             m_max_ip_payload_size = m_max_udp_payload_size & ~0x7;
-            if (resolve_ring()) {
+            if (skip_resolve_ring || resolve_ring()) {
                 b_is_offloaded = true;
                 modify_ratelimit(rate_limit);
                 if (resolve_neigh()) {
@@ -525,20 +526,10 @@ bool dst_entry::prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_
                         dst_logdbg("peer L2 address: %s",
                                    m_p_neigh_val->get_l2_address()->to_str().c_str());
                     }
-                    configure_headers();
-                    m_id = m_p_ring->generate_id(m_p_net_dev_val->get_l2_address()->get_address(),
-                                                 m_p_neigh_val->get_l2_address()->get_address(),
-                                                 /* if vlan, use vlan proto */
-                                                 ((ethhdr *)(m_header->m_actual_hdr_addr))->h_proto,
-                                                 htons(ETH_P_IP), m_pkt_src_ip, m_dst_ip,
-                                                 m_src_port, m_dst_port);
-                    if (m_p_tx_mem_buf_desc_list) {
-                        m_p_ring->mem_buf_tx_release(m_p_tx_mem_buf_desc_list, true);
-                        m_p_tx_mem_buf_desc_list = nullptr;
-                    }
-                    if (m_p_zc_mem_buf_desc_list) {
-                        m_p_ring->mem_buf_tx_release(m_p_zc_mem_buf_desc_list, true);
-                        m_p_zc_mem_buf_desc_list = nullptr;
+
+                    if (!skip_resolve_ring) {
+                        configure_headers();
+                        generate_id();
                     }
                     resolved = true;
                 }
@@ -557,6 +548,31 @@ bool dst_entry::prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_
     m_slow_path_lock.unlock();
 
     return m_b_is_offloaded;
+}
+
+bool dst_entry::prepare_to_send_entity_context(struct xlio_rate_limit_t &rate_limit)
+{
+    if (resolve_ring()) {
+        modify_ratelimit(rate_limit);
+        configure_headers();
+        generate_id();
+        dst_logdbg("Ring resolved, dst entry is offloaded.");
+        return true;
+    }
+
+    m_b_is_offloaded = false;
+    set_state(false);
+    dst_logdbg("Unable to resolve ring, dst enty is not offloaded.");
+    return false;
+}
+
+void dst_entry::generate_id()
+{
+    m_id = m_p_ring->generate_id(m_p_net_dev_val->get_l2_address()->get_address(),
+                                 m_p_neigh_val->get_l2_address()->get_address(),
+                                 /* if vlan, use vlan proto */
+                                 ((ethhdr *)(m_header->m_actual_hdr_addr))->h_proto,
+                                 htons(ETH_P_IP), m_pkt_src_ip, m_dst_ip, m_src_port, m_dst_port);
 }
 
 bool dst_entry::try_migrate_ring_tx(lock_base &socket_lock)

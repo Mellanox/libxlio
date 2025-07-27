@@ -212,6 +212,7 @@ const uint8_t ip_tos2prio[16] = {0, 0, 0, 0, 2, 2, 2, 2, 6, 6, 6, 6, 4, 4, 4, 4}
 // Forward declarations
 class epfd_info;
 class poll_group;
+class entity_context;
 
 class sockinfo {
 public:
@@ -266,6 +267,8 @@ public:
     virtual int accept4(struct sockaddr *__addr, socklen_t *__addrlen, int __flags) = 0;
     virtual int bind(const sockaddr *__addr, socklen_t __addrlen) = 0;
     virtual int connect(const sockaddr *__to, socklen_t __tolen) = 0;
+    virtual void connect_entity_context() = 0;
+    virtual void set_entity_context(entity_context *ctx) = 0;
     virtual int getsockname(sockaddr *__name, socklen_t *__namelen) = 0;
     virtual int getpeername(sockaddr *__name, socklen_t *__namelen) = 0;
     virtual int setsockopt(int __level, int __optname, __const void *__optval,
@@ -447,11 +450,12 @@ protected:
     socket_stats_t *m_p_socket_stats = nullptr;
     ring *m_p_rx_ring = nullptr; // used in TCP/UDP
     epfd_info *m_econtext = nullptr;
-    uint32_t m_epoll_event_flags = 0U;
-    int m_n_rx_pkt_ready_list_count = 0;
+    entity_context *m_entity_context = nullptr;
 
     // End of first cache line
 
+    uint32_t m_epoll_event_flags = 0U;
+    int m_n_rx_pkt_ready_list_count = 0;
     size_t m_rx_pkt_ready_offset = 0U;
     size_t m_rx_ready_byte_count = 0U;
 
@@ -460,7 +464,7 @@ public:
     epoll_fd_rec m_fd_rec;
     wakeup_pipe m_sock_wakeup_pipe;
 
-    // End of second cache 24 bytes ago
+    // End of second cache 16 bytes ago
 
     list_node<sockinfo, sockinfo::socket_fd_list_node_offset> socket_fd_list_node;
     list_node<sockinfo, sockinfo::ep_info_fd_node_offset> ep_info_fd_node;

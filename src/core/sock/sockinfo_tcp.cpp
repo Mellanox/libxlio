@@ -31,6 +31,7 @@
 #include "sockinfo_tcp.h"
 #include "bind_no_port.h"
 #include "xlio.h"
+#include "event/entity_context_manager.h"
 
 #define UNLOCK_RET(_ret)                                                                           \
     unlock_tcp_con();                                                                              \
@@ -113,6 +114,8 @@ event_handler_manager *sockinfo_tcp::get_event_mgr()
 {
     if (is_xlio_socket()) {
         return m_p_group->get_event_handler();
+    } else if (m_entity_context) {
+        return m_entity_context->get_event_handler();
     } else if (safe_mce_sys().tcp_ctl_thread ==
                option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
         return &g_event_handler_manager_local;
@@ -395,6 +398,31 @@ void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
     m_pcb.snd_queuelen_max = TCP_SNDQUEUELEN_OVERFLOW;
 }
 
+void sockinfo_tcp::set_entity_context(entity_context *ctx)
+{
+    m_entity_context = ctx;
+
+    bool current_locks = m_ring_alloc_log_rx.get_use_locks();
+    bool is_safe_ctx = (m_entity_context->get_flags() & XLIO_GROUP_FLAG_SAFE) != 0;
+
+    m_ring_alloc_log_rx.set_ring_alloc_logic(RING_LOGIC_PER_USER_ID);
+    m_ring_alloc_log_rx.set_user_id_key(reinterpret_cast<uint64_t>(m_entity_context));
+    m_ring_alloc_log_rx.set_use_locks(current_locks || is_safe_ctx);
+    m_ring_alloc_logic_rx = ring_allocation_logic_rx(get_fd(), m_ring_alloc_log_rx);
+
+    m_ring_alloc_log_tx.set_ring_alloc_logic(RING_LOGIC_PER_USER_ID);
+    m_ring_alloc_log_tx.set_user_id_key(reinterpret_cast<uint64_t>(m_entity_context));
+    m_ring_alloc_log_tx.set_use_locks(current_locks || is_safe_ctx);
+
+    m_p_connected_dst_entry->update_ring_alloc_logic(m_fd, m_tcp_con_lock.get_lock_base(),
+                                                     m_ring_alloc_log_tx);
+
+    tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_entity_context);
+
+    // Allow the queue to grow for non-zerocopy send operations.
+    m_pcb.snd_queuelen_max = TCP_SNDQUEUELEN_OVERFLOW;
+}
+
 int sockinfo_tcp::update_xlio_socket(unsigned flags, uintptr_t userdata_sq)
 {
     NOT_IN_USE(flags); // Currently unused.
@@ -519,6 +547,14 @@ void sockinfo_tcp::add_tx_ring_to_group()
     }
 }
 
+void sockinfo_tcp::add_tx_ring_to_entity_context()
+{
+    ring *rng = get_tx_ring();
+    if (m_entity_context && rng) {
+        m_entity_context->add_ring(rng, &m_ring_alloc_log_tx);
+    }
+}
+
 void sockinfo_tcp::xlio_socket_event(int event, int value)
 {
     if (is_xlio_socket()) {
@@ -575,6 +611,61 @@ err_t sockinfo_tcp::rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *pcb, struc
     } else {
         pbuf_free(p);
     }
+
+    return ERR_OK;
+}
+
+err_t sockinfo_tcp::rx_lwip_cb_entity_context(void *arg, struct tcp_pcb *pcb, struct pbuf *p,
+                                              err_t err)
+{
+    sockinfo_tcp *conn = (sockinfo_tcp *)arg;
+
+    NOT_IN_USE(pcb);
+    assert((uintptr_t)pcb->my_container == (uintptr_t)arg);
+
+    // err is always ERR_OK - Need to remove the err arg.
+    // Handle FIN
+    if (unlikely(!p)) {
+        return conn->handle_fin(pcb, err);
+    }
+
+    mem_buf_desc_t *buff;
+    pbuf *ptmp = p;
+
+    if (unlikely(conn->m_p_socket_stats)) {
+        conn->m_p_socket_stats->counters.n_rx_bytes += p->tot_len;
+        conn->m_p_socket_stats->counters.n_rx_data_pkts++;
+        // Assume that all chained buffers are GRO packets.
+        conn->m_p_socket_stats->counters.n_gro += !!p->next;
+    }
+
+    while (ptmp) {
+        buff = reinterpret_cast<mem_buf_desc_t *>(ptmp);
+        if (unlikely(conn->m_p_socket_stats)) {
+            conn->m_p_socket_stats->counters.n_rx_frags++;
+            // The 1st pbuf in the chain is already handled in the rx_input_cb().
+            if (ptmp != p) {
+                conn->save_strq_stats(buff->rx.strides_num);
+            }
+        }
+
+        conn->process_timestamps(buff);
+
+        buff->p_next_desc = buff->p_prev_desc = nullptr;
+        conn->m_rx_pkt_ready_list.push_back(buff);
+        conn->m_n_rx_pkt_ready_list_count++;
+        conn->m_rx_ready_byte_count += ptmp->len;
+
+        ptmp = ptmp->next;
+        buff->lwip_pbuf.next = nullptr;
+    }
+
+    // Notify on event
+    NOTIFY_ON_EVENTS(conn, EPOLLIN);
+    io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
+
+    // OLG: Now we should wakeup all threads that are sleeping on this socket.
+    conn->m_sock_wakeup_pipe.do_wakeup();
 
     return ERR_OK;
 }
@@ -943,6 +1034,25 @@ bool sockinfo_tcp::prepare_dst_to_send(bool is_accepted_socket /* = false */)
         add_tx_ring_to_group();
     }
     return ret_val;
+}
+
+bool sockinfo_tcp::prepare_dst_to_send_entity_context()
+{
+    if (m_p_connected_dst_entry &&
+        m_p_connected_dst_entry->prepare_to_send_entity_context(m_so_ratelimit)) {
+        // Set TSO information
+        auto *ring = m_p_connected_dst_entry->get_ring();
+        uint32_t max_tso_sz = std::min(ring->get_max_payload_sz(), safe_mce_sys().max_tso_sz);
+        m_pcb.tso.max_buf_sz = std::min(safe_mce_sys().tx_buf_size, max_tso_sz);
+        m_pcb.tso.max_payload_sz = max_tso_sz;
+        m_pcb.tso.max_header_sz = ring->get_max_header_sz();
+        m_pcb.tso.max_send_sge = ring->get_max_send_sge();
+
+        add_tx_ring_to_entity_context();
+        return true;
+    }
+
+    return false;
 }
 
 unsigned sockinfo_tcp::tx_wait(bool blocking)
@@ -2170,36 +2280,20 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
         return -1;
     }
 
+    if (safe_mce_sys().is_threads_mode()) {
+        // For Threads mode need to do partial preparation and the rest will be done by the Thread.
+        connect_threads_mode();
+        unlock_tcp_con();
+        return -1; // Currently no blocking socket support.
+    }
+
     prepare_dst_to_send(false);
 
-    bool bound_any_addr = m_bound.is_anyaddr();
-    if (bound_any_addr) {
-        const ip_address &ip = m_p_connected_dst_entry->get_src_addr();
-        // The family of local_addr may change due to mapped IPv4.
-        m_bound.set_ip_port(m_p_connected_dst_entry->get_sa_family(), &ip, m_bound.get_in_port());
-    }
-
-    IF_STATS(m_p_socket_stats->set_bound_if(m_bound));
-
-    sock_addr remote_addr;
-    remote_addr.set_sa_family(m_p_connected_dst_entry->get_sa_family());
-    remote_addr.set_in_addr(m_p_connected_dst_entry->get_dst_addr());
-    remote_addr.set_in_port(m_p_connected_dst_entry->get_dst_port());
-    if (!m_p_connected_dst_entry->is_offloaded() ||
-        find_target_family(ROLE_TCP_CLIENT, (sockaddr *)&remote_addr, m_bound.get_p_sa()) !=
-            TRANS_XLIO) {
-        passthrough_unlock("non offloaded socket --> connect only via OS");
+    if (!connect_bind_any_and_check_rules()) {
+        unlock_tcp_con();
         return -1;
-    } else if (has_epoll_context()) {
-        m_econtext->remove_fd_from_epoll_os(m_fd); // remove fd from os epoll
     }
 
-    if (bound_any_addr) {
-        tcp_bind(&m_pcb, reinterpret_cast<const ip_addr_t *>(&m_bound.get_ip_addr()),
-                 ntohs(m_bound.get_in_port()), m_pcb.is_ipv6);
-    }
-
-    m_conn_state = TCP_CONN_CONNECTING;
     bool success = attach_as_uc_receiver((role_t)NULL, true);
     if (!success) {
         passthrough_unlock("non offloaded socket --> connect only via OS");
@@ -2230,11 +2324,8 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
     register_timer();
 
     if (!m_b_blocking) {
-        errno = EINPROGRESS;
-        m_error_status = EINPROGRESS;
-        m_sock_state = TCP_SOCK_ASYNC_CONNECT;
+        connect_async_set_errs();
         unlock_tcp_con();
-        si_tcp_logdbg("NON blocking connect");
         return -1;
     }
 
@@ -2265,6 +2356,123 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
     unlock_tcp_con();
 
     return 0;
+}
+
+bool sockinfo_tcp::connect_bind_any_and_check_rules()
+{
+    bool bound_any_addr = m_bound.is_anyaddr();
+    if (bound_any_addr) {
+        const ip_address &ip = m_p_connected_dst_entry->get_src_addr();
+        // The family of local_addr may change due to mapped IPv4.
+        m_bound.set_ip_port(m_p_connected_dst_entry->get_sa_family(), &ip, m_bound.get_in_port());
+    }
+
+    IF_STATS(m_p_socket_stats->set_bound_if(m_bound));
+
+    sock_addr remote_addr;
+    remote_addr.set_sa_family(m_p_connected_dst_entry->get_sa_family());
+    remote_addr.set_in_addr(m_p_connected_dst_entry->get_dst_addr());
+    remote_addr.set_in_port(m_p_connected_dst_entry->get_dst_port());
+    if (!m_p_connected_dst_entry->is_offloaded() ||
+        find_target_family(ROLE_TCP_CLIENT, (sockaddr *)&remote_addr, m_bound.get_p_sa()) !=
+            TRANS_XLIO) {
+        setPassthrough();
+        si_tcp_logdbg("non offloaded socket --> connect only via OS");
+        return false;
+    }
+
+    if (has_epoll_context()) {
+        m_econtext->remove_fd_from_epoll_os(m_fd); // remove fd from os epoll
+    }
+
+    if (bound_any_addr) {
+        tcp_bind(&m_pcb, reinterpret_cast<const ip_addr_t *>(&m_bound.get_ip_addr()),
+                 ntohs(m_bound.get_in_port()), m_pcb.is_ipv6);
+    }
+
+    m_conn_state = TCP_CONN_CONNECTING;
+    return true;
+}
+
+void sockinfo_tcp::connect_async_set_errs()
+{
+    errno = EINPROGRESS;
+    m_error_status = EINPROGRESS;
+    m_sock_state = TCP_SOCK_ASYNC_CONNECT;
+    si_tcp_logdbg("NON blocking connect");
+}
+
+void sockinfo_tcp::connect_threads_mode()
+{
+    if (m_b_blocking) {
+        m_error_status = ECANCELED; // Temporary no support for blocking sockets.
+        errno = m_error_status;
+        m_conn_state = TCP_CONN_FAILED;
+        si_tcp_logerr("Blocking sockets are not supported in Threads mode.");
+        return;
+    }
+
+    m_p_connected_dst_entry->prepare_to_send(m_so_ratelimit, false, true);
+    if (!connect_bind_any_and_check_rules()) {
+        return;
+    }
+
+    fit_rcv_wnd(true);
+    report_connected = true;
+
+    entity_context_manager::instance()->distribute_socket(
+        this, entity_context::JOB_TYPE_SOCK_ADD_AND_CONNECT);
+
+    if (!m_b_blocking) {
+        connect_async_set_errs();
+        return;
+    }
+
+    // Wait for the worker thread to process connect job.
+
+    errno = m_error_status;
+    si_tcp_logdbg("Blocking connect error, m_sock_state=%d", static_cast<int>(m_sock_state));
+}
+
+void sockinfo_tcp::connect_entity_context()
+{
+    static auto handle_err = [](sockinfo_tcp *sock) {
+        sock->destructor_helper_tcp();
+        sock->m_conn_state = TCP_CONN_FAILED;
+        errno = ECONNREFUSED;
+        sock->m_error_status = errno;
+        NOTIFY_ON_EVENTS(sock, EPOLLERR);
+    };
+
+    std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
+
+    if (!prepare_dst_to_send_entity_context()) {
+        si_tcp_logerr("Unable to prepare dst entry.");
+        handle_err(this);
+        return;
+    }
+
+    if (!attach_as_uc_receiver((role_t)NULL, true)) {
+        si_tcp_logerr("Unable to attach uc receiver.");
+        handle_err(this);
+        return;
+    }
+
+    err_t err =
+        tcp_connect(&m_pcb, reinterpret_cast<const ip_addr_t *>(&m_connected.get_ip_addr()),
+                    ntohs(m_connected.get_in_port()), m_pcb.is_ipv6, sockinfo_tcp::connect_lwip_cb);
+
+    if (err != ERR_OK) {
+        si_tcp_logerr("Unable to tcp_connect, err=%d", err);
+        handle_err(this);
+        return;
+    }
+
+    // Now we should register socket to TCP timer.
+    // It is important to register it before wait_for_conn_ready_blocking(),
+    // since wait_for_conn_ready_blocking may block on epoll_wait and the timer sends SYN
+    // rexmits.
+    register_timer();
 }
 
 int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
