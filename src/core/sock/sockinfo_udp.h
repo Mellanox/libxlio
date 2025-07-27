@@ -72,6 +72,8 @@ public:
     int bind_no_os();
     int bind(const struct sockaddr *__addr, socklen_t __addrlen) override;
     int connect(const struct sockaddr *__to, socklen_t __tolen) override;
+    void connect_entity_context() override {}
+    void set_entity_context(entity_context *) override {}
     void clean_socket_obj() override { delete this; }
     bool is_writeable() override { return true; };
     bool is_errorable(int *errors) override

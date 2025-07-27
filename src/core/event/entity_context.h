@@ -63,6 +63,8 @@ public:
     void add_job(const job_desc &job);
 
 private:
+    void connect_socket_job(sockinfo *sock);
+
     job_queue<job_desc> m_job_queue;
 };
 
