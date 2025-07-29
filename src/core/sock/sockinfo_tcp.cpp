@@ -831,6 +831,9 @@ sockinfo_tcp::~sockinfo_tcp()
     delete m_ops;
     m_ops = nullptr;
 
+    // Release unread RX buffers that may have been received before OR during TCP termination
+    // handshake
+    clear_rx_ready_buffers();
     // Return buffers released in the TLS layer destructor
     m_rx_reuse_buf_postponed = m_rx_reuse_buff.n_buff_num > 0;
     return_reuse_buffers_postponed();
@@ -886,6 +889,23 @@ void sockinfo_tcp::destructor_helper_tcp()
     tcp_tx_preallocted_buffers_free(&m_pcb);
 
     destructor_helper();
+}
+
+void sockinfo_tcp::clear_rx_ready_buffers()
+{
+    m_rx_ready_byte_count += m_rx_pkt_ready_offset;
+    IF_STATS(m_p_socket_stats->n_rx_ready_byte_count += m_rx_pkt_ready_offset);
+    while (m_n_rx_pkt_ready_list_count) {
+        mem_buf_desc_t *p_rx_pkt_desc = m_rx_pkt_ready_list.get_and_pop_front();
+        m_n_rx_pkt_ready_list_count--;
+        m_rx_ready_byte_count -= p_rx_pkt_desc->rx.sz_payload;
+        if (m_p_socket_stats) {
+            m_p_socket_stats->n_rx_ready_pkt_count--;
+            m_p_socket_stats->n_rx_ready_byte_count -= p_rx_pkt_desc->rx.sz_payload;
+        }
+        reuse_buffer(p_rx_pkt_desc);
+    }
+    m_rx_pkt_ready_offset = 0;
 }
 
 void sockinfo_tcp::clean_socket_obj()
@@ -973,20 +993,8 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
         m_sock_state = TCP_SOCK_BOUND;
     }
 
-    m_rx_ready_byte_count += m_rx_pkt_ready_offset;
-    IF_STATS(m_p_socket_stats->n_rx_ready_byte_count += m_rx_pkt_ready_offset);
-    while (m_n_rx_pkt_ready_list_count) {
-        mem_buf_desc_t *p_rx_pkt_desc = m_rx_pkt_ready_list.get_and_pop_front();
-        m_n_rx_pkt_ready_list_count--;
-        m_rx_ready_byte_count -= p_rx_pkt_desc->rx.sz_payload;
-        if (m_p_socket_stats) {
-            m_p_socket_stats->n_rx_ready_pkt_count--;
-            m_p_socket_stats->n_rx_ready_byte_count -= p_rx_pkt_desc->rx.sz_payload;
-        }
-        reuse_buffer(p_rx_pkt_desc);
-    }
-    m_rx_pkt_ready_offset = 0;
-
+    // Release RX ready buffers to return buffers ASAP to prevent buffer pool exhaustion
+    clear_rx_ready_buffers();
     return_reuse_buffers_postponed();
 
     /* According to "UNIX Network Programming" third edition,
