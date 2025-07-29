@@ -1623,6 +1623,10 @@ void tcp_rst(u32_t seqno, u32_t ackno, u16_t local_port, u16_t remote_port, stru
 
     pcb->ip_output(p, NULL, pcb, 0);
     tcp_tx_pbuf_free(pcb, p);
+
+    // Don't send delayed ACKs after RST
+    pcb->flags &= ~TF_ACK_DELAY;
+
     LWIP_DEBUGF(TCP_RST_DEBUG, ("tcp_rst: seqno %" U32_F " ackno %" U32_F ".\n", seqno, ackno));
 }
 
