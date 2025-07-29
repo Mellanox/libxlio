@@ -190,6 +190,8 @@ public:
     void destructor_helper_tcp();
     bool prepare_dst_to_send(bool is_accepted_socket = false);
     void rx_data_recvd(size_t tot_size) override;
+    void clear_rx_ready_buffers();
+
     int fcntl(int __cmd, unsigned long int __arg) override;
     int fcntl64(int __cmd, unsigned long int __arg) override;
     int ioctl(unsigned long int __request, unsigned long int __arg) override;
