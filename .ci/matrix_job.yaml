@@ -56,7 +56,7 @@ runs_on_dockers:
       arch: 'x86_64',
       name: 'ctyunos23.01-x86_64',
       uri: 'xlio/$arch/$name/build',
-      tag: '20241001',
+      tag: '20250731',
       build_args: '--build-arg ARCH=x86_64 --no-cache',
       category: 'base'
     }
@@ -65,7 +65,7 @@ runs_on_dockers:
       arch: 'aarch64',
       name: 'ctyunos23.01-aarch64',
       uri: 'xlio/$arch/$name/build',
-      tag: '20241001',
+      tag: '20250731',
       build_args: '--build-arg ARCH=aarch64 --no-cache',
       category: 'base'
     }
