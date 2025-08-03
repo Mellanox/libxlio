@@ -60,7 +60,7 @@ void entity_context::process()
 {
     poll();
 
-    auto jobs = m_job_queue.get_all();
+    auto &jobs = m_job_queue.get_all();
     for (auto &job : jobs) {
         switch (job.job_id) {
         case JOB_TYPE_SOCK_ADD_AND_CONNECT:
@@ -78,6 +78,13 @@ void entity_context::process()
             break;
         }
     }
+
+    if (m_max_jobs < jobs.size()) {
+        m_max_jobs = jobs.size();
+        ctx_loginfo("New Max Jobs: %zu", m_max_jobs);
+    }
+
+    jobs.clear();
 
     flush();
 }
