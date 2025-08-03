@@ -1479,7 +1479,7 @@ check_single_record:
 
     ++m_next_recno_rx;
 
-    tcp_recved(m_p_sock->get_pcb(), m_tls_rec_overhead);
+    tcp_recved(m_p_sock->get_pcb(), m_tls_rec_overhead, true);
     if (likely(pres)) {
         assert(pres->tot_len == (m_rx_rec_len - m_tls_rec_overhead));
         err = sockinfo_tcp::rx_lwip_cb((void *)m_p_sock, m_p_sock->get_pcb(), pres, ERR_OK);

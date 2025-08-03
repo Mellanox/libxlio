@@ -43,17 +43,13 @@ class mem_buf_desc_t;
 
 class entity_context : public poll_group {
 public:
-    enum job_type {
-        JOB_TYPE_SOCK_ADD_AND_CONNECT,
-        JOB_TYPE_SOCK_TX,
-        JOB_TYPE_SOCK_RX_BUF_RETURN,
-        JOB_TYPE_SOCK_RX_ACK
-    };
+    enum job_type { JOB_TYPE_SOCK_ADD_AND_CONNECT, JOB_TYPE_SOCK_TX, JOB_TYPE_SOCK_RX_DATA_RECVD };
 
     struct job_desc {
         job_type job_id;
         sockinfo *sock;
         mem_buf_desc_t *buf;
+        size_t tot_size;
     };
 
     entity_context();
@@ -63,7 +59,8 @@ public:
     void add_job(const job_desc &job);
 
 private:
-    void connect_socket_job(sockinfo *sock);
+    void connect_socket_job(const job_desc &sock);
+    void rx_data_recvd_job(const job_desc &sock);
 
     job_queue<job_desc> m_job_queue;
 };

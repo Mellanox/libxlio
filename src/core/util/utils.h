@@ -424,6 +424,7 @@ static inline void create_mgid_from_ipv4_mc_ip(uint8_t *mgid, uint16_t pkey, uin
 class loops_timer {
 public:
     loops_timer();
+    loops_timer(int timeout_msec);
     void start();
     int time_left_msec();
     void set_timeout_msec(int timeout_msec) { m_timeout_msec = timeout_msec; }

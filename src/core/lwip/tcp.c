@@ -463,7 +463,7 @@ u32_t tcp_update_rcv_ann_wnd(struct tcp_pcb *pcb)
  * @param pcb the tcp_pcb for which data is read
  * @param len the amount of bytes that have been read by the application
  */
-void tcp_recved(struct tcp_pcb *pcb, u32_t len)
+bool tcp_recved(struct tcp_pcb *pcb, u32_t len, bool do_output)
 {
     u32_t wnd_inflation;
 
@@ -486,18 +486,23 @@ void tcp_recved(struct tcp_pcb *pcb, u32_t len)
 
     wnd_inflation = tcp_update_rcv_ann_wnd(pcb);
 
+    LWIP_DEBUGF(TCP_DEBUG,
+                ("tcp_recved: recveived %" U16_F " bytes, wnd %" U16_F " (%" U16_F ").\n", len,
+                 pcb->rcv_wnd, TCP_WND_SCALED(pcb) - pcb->rcv_wnd));
+
     /* If the change in the right edge of window is significant (default
      * watermark is TCP_WND/4), then send an explicit update now.
      * Otherwise wait for a packet to be sent in the normal course of
      * events (or more window to be available later) */
     if (wnd_inflation >= TCP_WND_UPDATE_THRESHOLD) {
         tcp_ack_now(pcb);
-        tcp_output(pcb);
+        if (do_output) {
+            tcp_output(pcb);
+        }
+        return true;
     }
 
-    LWIP_DEBUGF(TCP_DEBUG,
-                ("tcp_recved: recveived %" U16_F " bytes, wnd %" U16_F " (%" U16_F ").\n", len,
-                 pcb->rcv_wnd, TCP_WND_SCALED(pcb) - pcb->rcv_wnd));
+    return false;
 }
 
 /**
@@ -893,7 +898,7 @@ err_t tcp_recv_null(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
 {
     LWIP_UNUSED_ARG(arg);
     if (p != NULL) {
-        tcp_recved(pcb, (u32_t)p->tot_len);
+        tcp_recved(pcb, (u32_t)p->tot_len, true);
         pbuf_free(p);
     } else if (err == ERR_OK) {
         return tcp_close(pcb);

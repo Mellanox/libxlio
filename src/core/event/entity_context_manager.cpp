@@ -87,5 +87,5 @@ entity_context_manager::~entity_context_manager()
 void entity_context_manager::distribute_socket(sockinfo *si, entity_context::job_type jobtype)
 {
     uint16_t next_idx = m_next_distribute.fetch_add(1U) % safe_mce_sys().worker_threads;
-    m_entity_contexts[next_idx]->add_job(entity_context::job_desc {jobtype, si, nullptr});
+    m_entity_contexts[next_idx]->add_job(entity_context::job_desc {jobtype, si, nullptr, 0U});
 }
