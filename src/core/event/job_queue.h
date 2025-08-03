@@ -35,49 +35,68 @@
 #ifndef JOB_QUEUE_H
 #define JOB_QUEUE_H
 
-#include <deque>
+#include <vector>
+#include <atomic>
 #include "utils/lock_wrapper.h"
 
 template <typename T> class job_queue {
 public:
-    typedef std::deque<T> queue_type;
+    typedef std::vector<T> queue_type;
+
+    job_queue();
 
     void insert_job(T &&job);
     void insert_job(const T &job);
 
     template <typename... Args> void insert_job(Args &&...args);
 
-    queue_type get_all();
+    queue_type &get_all();
 
 private:
-    queue_type m_queue;
+    queue_type m_queue_insert;
+    queue_type m_queue_fetch;
     lock_spin m_queue_lock;
 };
 
+template <typename T> job_queue<T>::job_queue()
+{
+    m_queue_insert.reserve(32);
+    m_queue_fetch.reserve(32);
+}
+
+// Should be called only from the producer.
 template <typename T> void job_queue<T>::insert_job(T &&job)
 {
     std::lock_guard<decltype(m_queue_lock)> lock(m_queue_lock);
-    m_queue.push_back(job);
+    m_queue_insert.push_back(job);
 }
 
+// Should be called only from the producer.
 template <typename T> void job_queue<T>::insert_job(const T &job)
 {
     std::lock_guard<decltype(m_queue_lock)> lock(m_queue_lock);
-    m_queue.push_back(job);
+    m_queue_insert.push_back(job);
 }
 
+// Should be called only from the producer.
 template <typename T> template <typename... Args> void job_queue<T>::insert_job(Args &&...args)
 {
     std::lock_guard<decltype(m_queue_lock)> lock(m_queue_lock);
-    m_queue.empalce_back(std::forward<Args>(args)...);
+    m_queue_insert.empalce_back(std::forward<Args>(args)...);
 }
 
-template <typename T> typename job_queue<T>::queue_type job_queue<T>::get_all()
+// Should be called only from a single consumer.
+template <typename T> typename job_queue<T>::queue_type &job_queue<T>::get_all()
 {
-    typename job_queue<T>::queue_type out;
+    // Avoid heavy lock activity in case of busy loop and empty queue.
+    std::atomic_thread_fence(std::memory_order::memory_order_acquire);
+    if (m_queue_insert.size() <= 0U) {
+        return m_queue_fetch;
+    }
+
     std::lock_guard<decltype(m_queue_lock)> lock(m_queue_lock);
-    m_queue.swap(out);
-    return out; // RVO should kick in and avoid copy to return value.
+    m_queue_insert.swap(m_queue_fetch);
+    return m_queue_fetch;
 }
 
 #endif // JOB_QUEUE_H
