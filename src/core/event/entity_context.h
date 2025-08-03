@@ -63,6 +63,7 @@ private:
     void rx_data_recvd_job(const job_desc &sock);
 
     job_queue<job_desc> m_job_queue;
+    size_t m_max_jobs = 0U;
 };
 
 #endif
