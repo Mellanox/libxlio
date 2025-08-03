@@ -64,19 +64,14 @@ void entity_context::process()
     for (auto &job : jobs) {
         switch (job.job_id) {
         case JOB_TYPE_SOCK_ADD_AND_CONNECT:
-            connect_socket_job(job.sock);
+            connect_socket_job(job);
             break;
         case JOB_TYPE_SOCK_TX:
             // Handle socket transmit job
             // TODO: implement transmit logic
             break;
-        case JOB_TYPE_SOCK_RX_BUF_RETURN:
-            // Handle socket receive buffer return job
-            // TODO: implement buffer return logic
-            break;
-        case JOB_TYPE_SOCK_RX_ACK:
-            // Handle socket receive ack job
-            // TODO: implement ack logic
+        case JOB_TYPE_SOCK_RX_DATA_RECVD:
+            rx_data_recvd_job(job);
             break;
         default:
             // Unknown job type
@@ -92,8 +87,9 @@ void entity_context::add_job(const job_desc &job)
     m_job_queue.insert_job(job);
 }
 
-void entity_context::connect_socket_job(sockinfo *sock)
+void entity_context::connect_socket_job(const job_desc &job)
 {
+    sockinfo *sock = job.sock;
     if (sock->get_protocol() == PROTO_TCP) {
         sock->set_entity_context(this);
         add_socket(reinterpret_cast<sockinfo_tcp *>(sock));
@@ -101,5 +97,16 @@ void entity_context::connect_socket_job(sockinfo *sock)
         ctx_loginfo("New TCP socket added (sock: %p)", sock);
     } else {
         ctx_loginfo("Unsupported socket protocol %hd for Threads mode", sock->get_protocol());
+    }
+}
+
+void entity_context::rx_data_recvd_job(const job_desc &job)
+{
+    if (job.buf) {
+        job.buf->p_desc_owner->reclaim_recv_buffers(job.buf);
+    }
+
+    if (job.sock) {
+        job.sock->rx_data_recvd(job.tot_size);
     }
 }
