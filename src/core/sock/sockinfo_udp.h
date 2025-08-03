@@ -68,7 +68,7 @@ public:
     bool isPassthrough() override { return !m_sock_offload; }
 
     int prepare_to_connect(const sockaddr *__to, socklen_t __tolen);
-
+    void rx_data_recvd(size_t) override {}
     int bind_no_os();
     int bind(const struct sockaddr *__addr, socklen_t __addrlen) override;
     int connect(const struct sockaddr *__to, socklen_t __tolen) override;

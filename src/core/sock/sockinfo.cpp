@@ -10,7 +10,7 @@
 #include <netdb.h>
 #include <linux/sockios.h>
 #include <cinttypes>
-
+#include "event/entity_context.h"
 #include "utils/bullseye.h"
 #include "vlogger/vlogger.h"
 #include "util/if.h"
@@ -72,6 +72,7 @@ const char *sockinfo::setsockopt_so_opt_to_str(int opt)
 
 sockinfo::sockinfo(int fd, int domain, bool use_ring_locks)
     : m_skip_cq_poll_in_rx(safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_ENABLE)
+    , m_app_lock(multilock::create_new_lock(MULTILOCK_RECURSIVE, "app_sock_lock"))
     , m_family(domain)
     , m_fd(fd)
     , m_rx_num_buffs_reuse(safe_mce_sys().rx_bufs_batch)
@@ -1996,7 +1997,8 @@ void sockinfo::process_timestamps(mem_buf_desc_t *p_desc)
     }
 }
 
-void sockinfo::handle_recv_timestamping(struct cmsg_state *cm_state)
+void sockinfo::handle_recv_timestamping(struct cmsg_state *cm_state,
+                                        timestamps_t *packet_timestamps)
 {
     struct {
         struct timespec systime;
@@ -2006,7 +2008,6 @@ void sockinfo::handle_recv_timestamping(struct cmsg_state *cm_state)
 
     memset(&tsing, 0, sizeof(tsing));
 
-    timestamps_t *packet_timestamps = get_socket_timestamps();
     struct timespec *packet_systime = &packet_timestamps->sw;
 
     // Only fill in SO_TIMESTAMPNS if both requested.
@@ -2084,7 +2085,7 @@ void sockinfo::handle_cmsg(struct msghdr *msg)
         handle_ip_pktinfo(&cm_state);
     }
     if (m_b_rcvtstamp || m_n_tsing_flags) {
-        handle_recv_timestamping(&cm_state);
+        handle_recv_timestamping(&cm_state, get_socket_timestamps());
     }
 
     cm_state.mhdr->msg_controllen = cm_state.cmsg_bytes_consumed;
@@ -2190,4 +2191,19 @@ bool sockinfo::is_xlio_socket() const
 poll_group *sockinfo::get_poll_group() const
 {
     return m_p_group;
+}
+
+void sockinfo::rx_handle_cmsg(struct msghdr *msg, mem_buf_desc_t *out_buf)
+{
+    struct cmsg_state cm_state;
+
+    cm_state.mhdr = msg;
+    cm_state.cmhdr = CMSG_FIRSTHDR(msg);
+    cm_state.cmsg_bytes_consumed = 0;
+
+    if (m_b_rcvtstamp || m_n_tsing_flags) {
+        handle_recv_timestamping(&cm_state, &out_buf->rx.timestamps);
+    }
+
+    cm_state.mhdr->msg_controllen = cm_state.cmsg_bytes_consumed;
 }

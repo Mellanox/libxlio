@@ -185,7 +185,7 @@ public:
     void create_dst_entry();
     void destructor_helper_tcp();
     bool prepare_dst_to_send(bool is_accepted_socket = false);
-
+    void rx_data_recvd(size_t tot_size) override;
     int fcntl(int __cmd, unsigned long int __arg) override;
     int fcntl64(int __cmd, unsigned long int __arg) override;
     int ioctl(unsigned long int __request, unsigned long int __arg) override;
@@ -366,7 +366,7 @@ public:
                        void *opaque_op);
     int tcp_tx_express_inline(const struct iovec *iov, unsigned iov_len, unsigned flags);
     void flush();
-
+    void make_dirty();
     void set_xlio_socket(const struct xlio_socket_attr *attr);
     int update_xlio_socket(unsigned flags, uintptr_t userdata_sq);
     void add_tx_ring_to_group();
@@ -420,6 +420,8 @@ private:
     static err_t rx_lwip_cb_entity_context(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
                                            err_t err);
 
+    static void update_ready_packets_stats(socket_stats_t *stats, uint64_t bytes);
+
     int accept_helper(struct sockaddr *__addr, socklen_t *__addrlen, int __flags = 0);
 
     // clone socket in accept call
@@ -460,6 +462,11 @@ private:
     void connect_threads_mode();
     void add_tx_ring_to_entity_context();
     bool prepare_dst_to_send_entity_context();
+    int rx_wait_for_data(int in_flags, struct msghdr *__msg, loops_timer &rcv_timeout);
+    int rx_sleep_wait(loops_timer &rcv_timeout);
+
+    ssize_t rx_read_ready_packets(iovec *p_iov, ssize_t sz_iov, int *p_flags, sockaddr *__from,
+                                  socklen_t *__fromlen, struct msghdr *__msg);
 
     /*
      * Supported only for UDP
@@ -527,6 +534,8 @@ private:
 
     void post_dequeue() override {};
 
+    size_t rx_fetch_ready_buffers(iovec *p_iov, iovec *p_iov_end, struct msghdr *__msg);
+
     // Returns the connected pcb, with 5 tuple which matches the input arguments,
     // in state "SYN Received" or NULL if pcb wasn't found
     struct tcp_pcb *get_syn_received_pcb(const flow_tuple &key) const;
@@ -545,6 +554,7 @@ private:
     int rx_wait_helper(int &poll_count, bool blocking);
     void fit_rcv_wnd(bool force_fit);
     void fit_snd_bufs(unsigned int new_max);
+    bool rx_tls_msg(struct msghdr *__msg, mem_buf_desc_t *out_buf);
 
     inline struct tcp_seg *get_tcp_seg_cached();
     inline struct tcp_seg *get_tcp_seg_direct();

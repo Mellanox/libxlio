@@ -1301,6 +1301,12 @@ loops_timer::loops_timer()
     ts_clear(&m_current);
 }
 
+loops_timer::loops_timer(int timeout_msec)
+    : loops_timer()
+{
+    m_timeout_msec = timeout_msec;
+}
+
 void loops_timer::start()
 {
     ts_clear(&m_start);

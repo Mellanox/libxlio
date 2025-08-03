@@ -156,10 +156,8 @@ public:
             uint32_t flow_tag_id; // Flow Tag ID of this received packet
             int8_t n_frags; // number of fragments
             bool is_sw_csum_need; // specify if software checksum is need for this packet
-#ifdef DEFINED_UTLS
             uint8_t tls_decrypted;
             uint8_t tls_type;
-#endif /* DEFINED_UTLS */
             uint16_t strides_num;
         } rx;
         struct {

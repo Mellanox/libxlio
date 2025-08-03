@@ -253,6 +253,7 @@ public:
     virtual bool rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info,
                              void *pv_fd_ready_array) = 0;
 
+    virtual void rx_data_recvd(size_t tot_size) = 0;
     virtual ssize_t tx(xlio_tx_call_attr_t &tx_arg) = 0;
     virtual bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = nullptr) = 0;
     virtual bool is_writeable() = 0;
@@ -407,7 +408,8 @@ protected:
     int set_sockopt_prio(__const void *__optval, socklen_t __optlen);
     bool ipv6_set_addr_sel_pref(int val);
     int ipv6_get_addr_sel_pref();
-    inline void handle_recv_timestamping(struct cmsg_state *cm_state);
+    inline void handle_recv_timestamping(struct cmsg_state *cm_state,
+                                         timestamps_t *packet_timestamps);
     void insert_cmsg(struct cmsg_state *cm_state, int level, int type, void *data, int len);
     void handle_cmsg(struct msghdr *msg);
     void process_timestamps(mem_buf_desc_t *p_desc);
@@ -416,6 +418,7 @@ protected:
     int os_wait_sock_rx_epfd(epoll_event *ep_events, int maxevents);
     void insert_epoll_event(uint64_t events);
     int handle_exception_flow();
+    void rx_handle_cmsg(struct msghdr *msg, mem_buf_desc_t *out_buf);
 
     // Attach to all relevant rings for offloading receive flows - always used from slow path
     // According to bounded information we need to attach to all UC relevant flows
@@ -458,6 +461,7 @@ protected:
     int m_n_rx_pkt_ready_list_count = 0;
     size_t m_rx_pkt_ready_offset = 0U;
     size_t m_rx_ready_byte_count = 0U;
+    multilock m_app_lock;
 
 public:
     list_node<sockinfo, sockinfo::ep_ready_fd_node_offset> ep_ready_fd_node;
