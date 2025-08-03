@@ -2214,17 +2214,15 @@ void sockinfo_tcp::passthrough_unlock(const char *dbg)
  */
 int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
 {
-    int ret = 0;
-
-    lock_tcp_con();
+    std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
 
     /* Connection was closed by RST, timeout, ICMP error
      * or another process disconnected us.
      * Socket should be recreated.
      */
+    int ret = 0;
     if (report_connected && is_errorable(&ret)) {
         errno = ECONNABORTED;
-        unlock_tcp_con();
         return -1;
     }
 
@@ -2236,7 +2234,6 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
         case TCP_SOCK_CONNECTED_RDWR:
             if (report_connected && !m_b_blocking) {
                 report_connected = false;
-                unlock_tcp_con();
                 return 0;
             }
             errno = EISCONN;
@@ -2250,13 +2247,13 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
             errno = EADDRINUSE;
             break;
         }
-        unlock_tcp_con();
         return -1;
     }
 
     // take local ip from new sock and local port from acceptor
     if (m_sock_state == TCP_SOCK_INITED && bind(m_bound.get_p_sa(), m_bound.get_socklen()) == -1) {
-        passthrough_unlock("non offloaded socket --> connect only via OS");
+        setPassthrough();
+        si_tcp_logdbg("non offloaded socket --> connect only via OS (bind failed)");
         return -1;
     }
 
@@ -2264,39 +2261,42 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
     if (m_sock_state == TCP_SOCK_BOUND_NO_PORT) {
         if (bind(m_bound.get_p_sa(), m_bound.get_socklen()) == -1) {
             m_connected.clear_sa();
-            passthrough_unlock("non offloaded socket --> connect only via OS");
+            setPassthrough();
+            si_tcp_logdbg("non offloaded socket --> connect only via OS (bind no-port failed)");
             return -1;
         }
     }
 
     if (!validate_and_convert_mapped_ipv4(m_connected)) {
-        passthrough_unlock("Mapped IPv4 on IPv6-Only socket --> connect only via OS");
+        setPassthrough();
+        si_tcp_logdbg("Mapped IPv4 on IPv6-Only socket --> connect only via OS");
         return -1;
     }
 
     create_dst_entry();
     if (!m_p_connected_dst_entry) {
-        passthrough_unlock("non offloaded socket --> connect only via OS");
+        setPassthrough();
+        si_tcp_logdbg("non offloaded socket --> connect only via OS (no connected-dst-entry)");
         return -1;
     }
 
     if (safe_mce_sys().is_threads_mode()) {
         // For Threads mode need to do partial preparation and the rest will be done by the Thread.
         connect_threads_mode();
-        unlock_tcp_con();
         return -1; // Currently no blocking socket support.
     }
 
     prepare_dst_to_send(false);
 
     if (!connect_bind_any_and_check_rules()) {
-        unlock_tcp_con();
         return -1;
     }
 
     bool success = attach_as_uc_receiver((role_t)NULL, true);
     if (!success) {
-        passthrough_unlock("non offloaded socket --> connect only via OS");
+        setPassthrough();
+        si_tcp_logdbg(
+            "non offloaded socket --> connect only via OS (attach_as_uc_receiver failed)");
         return -1;
     }
 
@@ -2313,7 +2313,6 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
         m_conn_state = TCP_CONN_FAILED;
         errno = ECONNREFUSED;
         si_tcp_logerr("bad connect, err=%d", err);
-        unlock_tcp_con();
         return -1;
     }
 
@@ -2325,7 +2324,6 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
 
     if (!m_b_blocking) {
         connect_async_set_errs();
-        unlock_tcp_con();
         return -1;
     }
 
@@ -2345,7 +2343,6 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
         tcp_close(&m_pcb);
 
         destructor_helper_tcp();
-        unlock_tcp_con();
         si_tcp_logdbg("Blocking connect error, m_sock_state=%d", static_cast<int>(m_sock_state));
 
         errno = keep_errno;
@@ -2353,8 +2350,6 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
     }
 
     setPassthrough(false);
-    unlock_tcp_con();
-
     return 0;
 }
 
@@ -2377,7 +2372,7 @@ bool sockinfo_tcp::connect_bind_any_and_check_rules()
         find_target_family(ROLE_TCP_CLIENT, (sockaddr *)&remote_addr, m_bound.get_p_sa()) !=
             TRANS_XLIO) {
         setPassthrough();
-        si_tcp_logdbg("non offloaded socket --> connect only via OS");
+        si_tcp_logdbg("non offloaded socket --> connect only via OS (rule or no-dst)");
         return false;
     }
 
