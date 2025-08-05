@@ -162,6 +162,15 @@ runs_on_dockers:
       build_args: '--no-cache --target unit-test',
       category: 'tool',
     }
+  - {
+     file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
+     arch: 'x86_64',
+     name: 'documentation_test',
+     uri: 'xlio/$arch/ubuntu22.04/$name',
+     tag: '20250219',
+     category: 'tool',
+     build_args: '--no-cache --target build',
+    }
 
 runs_on_agents:
   - {nodeLabel: 'beni09', category: 'base'}
@@ -484,6 +493,16 @@ steps:
       fi
     archiveArtifacts: 'logs/'
     credentialsId: 'blackduck_api_token'
+
+  - name: Documentation Test
+    enable: ${do_documentation_test}
+    containerSelector:
+      - "{name: 'documentation_test'}"
+    agentSelector:
+      - "{nodeLabel: 'skip-agent'}"
+    run: |
+      python3 generate_docs.py
+      python3 src/core/config/generate_mappings.py
 
 pipeline_start:
   run: |

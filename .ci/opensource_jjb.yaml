@@ -94,6 +94,10 @@
             default: true
             description: "Use valgrind."
         - bool:
+            name: "do_documentation_test"
+            default: true
+            description: "Execute documentation tests."
+        - bool:
             name: "do_commit"
             default: true
             description: "Use commit message check."
