@@ -36,7 +36,7 @@ protected:
 };
 
 #if defined(EXTRA_API_ENABLED) && (EXTRA_API_ENABLED == 1)
-class xlio_ultra_api_base : public xlio_base {
+class ultra_api_base : public xlio_base {
 public:
     virtual void SetUp()
     {

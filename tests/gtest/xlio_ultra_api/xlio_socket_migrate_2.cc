@@ -31,7 +31,7 @@ static char sndbuf[256];
 static bool do_migrate = false;
 static std::vector<xlio_socket_t> accepted_sockets;
 
-class xlio_ultra_api_socket_migrate_2 : public xlio_ultra_api_base {
+class ultra_api_socket_migrate_2 : public ultra_api_base {
 public:
     virtual void SetUp() { errno = EOK; };
     virtual void TearDown() {};
@@ -86,16 +86,16 @@ public:
 };
 
 /**
- * @test xlio_ultra_api_socket_migrate_2.ti_1
+ * @test ultra_api_socket_migrate_2.ti_1
  * @brief
  *    Create TCP socket/connect/send(initiator)/receive(target)
  * @details
  */
-TEST_F(xlio_ultra_api_socket_migrate_2, ti_1)
+TEST_F(ultra_api_socket_migrate_2, ti_1)
 {
     int rc;
     int pid = fork();
-    xlio_ultra_api_base::SetUp();
+    ultra_api_base::SetUp();
     xlio_poll_group_t group;
     xlio_socket_t sock;
 
