@@ -12,7 +12,7 @@
 
 #if defined(EXTRA_API_ENABLED) && (EXTRA_API_ENABLED == 1)
 
-class xlio_ultra_api_socket : public xlio_ultra_api_base {
+class ultra_api_socket : public ultra_api_base {
 public:
     void destroy_poll_group(xlio_poll_group_t group) { base_destroy_poll_group(group); }
     static void socket_event_cb(xlio_socket_t sock, uintptr_t userdata_sq, int event, int value)
@@ -49,14 +49,14 @@ public:
 };
 
 /**
- * @test xlio_ultra_api_socket.ti_1
+ * @test ultra_api_socket.ti_1
  * @brief
  *    Create TCP socket
  * @details
  */
-TEST_F(xlio_ultra_api_socket, ti_1)
+TEST_F(ultra_api_socket, ti_1)
 {
-    xlio_ultra_api_base::SetUp();
+    ultra_api_base::SetUp();
     xlio_poll_group_t group;
     xlio_socket_t sock;
 

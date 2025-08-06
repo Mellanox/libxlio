@@ -16,7 +16,7 @@ static int connected_counter = 0;
 static int terminated_counter = 0;
 static std::vector<xlio_socket_t> accepted_sockets;
 
-class xlio_ultra_api_socket_listen_connect : public xlio_ultra_api_base {
+class ultra_api_socket_listen_connect : public ultra_api_base {
 public:
     virtual void SetUp() { errno = EOK; };
     virtual void TearDown() {};
@@ -69,11 +69,11 @@ public:
  *    Create TCP socket/listen(target)/connect(initiator)
  * @details
  */
-TEST_F(xlio_ultra_api_socket_listen_connect, ti_1)
+TEST_F(ultra_api_socket_listen_connect, ti_1)
 {
     int rc;
     int pid = fork();
-    xlio_ultra_api_base::SetUp();
+    ultra_api_base::SetUp();
     xlio_poll_group_t group;
     xlio_socket_t sock;
 
