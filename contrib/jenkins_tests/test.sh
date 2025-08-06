@@ -77,17 +77,21 @@ for test_link in ${test_ip_list}; do
 		test_tap=${WORKSPACE}/${prefix}/test-${test_name}.tap
 
 		for i in $(seq 3); do
+			rm -fv ${test_dir}/${test_name}.log ${test_dir}/${test_name}.dump || :
+			set +e
 			${sudo_cmd} ${timeout_exe} ${PWD}/tests/verifier/verifier.pl -a ${test_app} -x " --debug  " \
 				-t ${test}:tc[1-9]$ -s ${test_ip} -l ${test_dir}/${test_name}.log \
 				-e " LD_PRELOAD=${test_lib} " --progress=0
+			# make sure to catch the error
+			ret=$?
+			set -e
 
 			cp ${PWD}/${test_name}.dump ${test_dir}/${test_name}.dump
-			if grep -q 'FAIL' ${test_dir}/${test_name}.dump; then
-				rm -fv ${test_dir}/${test_name}.log ${test_dir}/${test_name}.dump
-			else
+			if ! grep -q 'FAIL' ${test_dir}/${test_name}.dump; then
 				break
 			fi
 		done
+		rc=$((rc+ret))
 		grep -e 'PASS' -e 'FAIL' ${test_dir}/${test_name}.dump > ${test_dir}/${test_name}.tmp
 
 		do_archive "${test_dir}/${test_name}.dump" "${test_dir}/${test_name}.log"
