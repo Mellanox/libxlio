@@ -11,7 +11,9 @@
 #include "util/instrumentation.h"
 #include "sock/sock-redirect.h"
 #include "sock/sock-app.h"
-#include "sock/sockinfo.h"
+#include "sock/sockinfo_tcp.h"
+#include "event/entity_context_manager.h"
+#include "util/sys_vars.h"
 
 #define MODULE_NAME "rfs_uc"
 
@@ -24,8 +26,9 @@
 #define rfs_logfuncall __log_info_funcall
 
 rfs_uc::rfs_uc(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *rule_filter,
-               uint32_t flow_tag_id)
+               uint32_t flow_tag_id, int steering_index)
     : rfs(flow_spec_5t, p_ring, rule_filter, flow_tag_id)
+    , m_steering_index(steering_index)
 {
     BULLSEYE_EXCLUDE_BLOCK_START
     if (m_flow_tuple.is_udp_mc()) {
@@ -53,6 +56,9 @@ void rfs_uc::prepare_flow_spec()
         // Set priority of 5-tuple to be higher than 3-tuple
         // to make sure 5-tuple have higher priority.
         m_priority = 1;
+    } else if (safe_mce_sys().worker_threads != 0) {
+        // TCP listen socket - Threads mode
+        prepare_flow_spec_worker_thread_mode();
     }
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     else if (g_p_app->type != APP_NONE && g_p_app->get_worker_id() >= 0) {
@@ -88,6 +94,58 @@ void rfs_uc::prepare_flow_spec()
 
     rfs_logfunc("Transport type: %d, flow_tag_id: %d", m_p_ring_simple->get_transport_type(),
                 m_flow_tag_id);
+}
+
+void rfs_uc::prepare_flow_spec_worker_thread_mode()
+{
+
+    if (m_steering_index < 0 || !m_flow_tuple.is_3_tuple()) {
+        return;
+    }
+
+    int entity_context_pow2 = entity_context_manager::calculate_entity_context_pow2();
+
+    m_match_mask.src_port =
+        static_cast<uint16_t>((entity_context_pow2 * MCE_DEFAULT_SRC_PORT_STRIDE) - 2);
+    m_match_value.src_port = static_cast<uint16_t>(m_steering_index * MCE_DEFAULT_SRC_PORT_STRIDE);
+
+    m_priority = 2;
+    rfs_logdbg("src_port_stride: %d workers_num %d \n", MCE_DEFAULT_SRC_PORT_STRIDE,
+               entity_context_pow2);
+
+    m_flow_tuple.set_src_port(m_match_value.src_port);
+}
+
+void rfs_uc::prepare_flow_spec_secondary_rule()
+{
+
+    int src_port = safe_mce_sys().worker_threads + m_steering_index;
+
+    // We use the same m_match_mask as the first rule.
+    m_match_value.src_port = static_cast<uint16_t>(src_port * MCE_DEFAULT_SRC_PORT_STRIDE);
+
+    rfs_logdbg("secondary rule src_port_stride: %d workers_num %d \n", MCE_DEFAULT_SRC_PORT_STRIDE,
+               safe_mce_sys().worker_threads);
+}
+
+bool rfs_uc::if_secondary_rule_needed()
+{
+
+    if (safe_mce_sys().worker_threads == 0) {
+        return false;
+    }
+
+    if (m_steering_index < 0 || !m_flow_tuple.is_3_tuple()) {
+        return false;
+    }
+
+    int entity_context_pow2 = entity_context_manager::calculate_entity_context_pow2();
+    if (safe_mce_sys().worker_threads == entity_context_pow2) {
+        return false;
+    }
+
+    // Only certain rss_child listen sockets/workers get the secondary rule to balance load
+    return (m_steering_index < (entity_context_pow2 % safe_mce_sys().worker_threads));
 }
 
 bool rfs_uc::rx_dispatch_packet(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array)
