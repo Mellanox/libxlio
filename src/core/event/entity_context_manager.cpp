@@ -34,6 +34,7 @@
 
 #include "entity_context_manager.h"
 #include "util/sys_vars.h"
+#include "sock/sockinfo_tcp.h"
 
 // Static
 entity_context_manager *entity_context_manager::s_p_entity_context_manager = nullptr;
@@ -88,4 +89,34 @@ void entity_context_manager::distribute_socket(sockinfo *si, entity_context::job
 {
     uint16_t next_idx = m_next_distribute.fetch_add(1U) % safe_mce_sys().worker_threads;
     m_entity_contexts[next_idx]->add_job(entity_context::job_desc {jobtype, si, nullptr, 0U});
+}
+
+void entity_context_manager::distribute_listen_socket(sockinfo_tcp *si)
+{
+    for (size_t i = 0; i < safe_mce_sys().worker_threads &&
+         i < si->get_listen_context()->get_listen_rss_children_size();
+         ++i) {
+        sockinfo_tcp *listen_rss_child = si->get_listen_context()->get_listen_rss_child(i);
+        listen_rss_child->get_listen_context()->set_steering_index(i);
+        m_entity_contexts[i]->add_job(entity_context::job_desc {
+            entity_context::JOB_TYPE_SOCK_ADD_AND_LISTEN, listen_rss_child, nullptr, 0U});
+    }
+}
+
+int entity_context_manager::calculate_entity_context_pow2()
+{
+    int worker_threads = safe_mce_sys().worker_threads;
+
+    if (worker_threads == 0 || worker_threads == 1) {
+        return worker_threads;
+    }
+
+    // Find next power of 2 that is >= worker_threads
+    // Assume the number doesn't exceed 32bit.
+    int pow2 = 1;
+    while (pow2 < worker_threads) {
+        pow2 <<= 1;
+    }
+
+    return pow2;
 }

@@ -29,6 +29,7 @@
 #include "sock-redirect.h"
 #include "fd_collection.h"
 #include "sockinfo_tcp.h"
+#include "sockinfo_tcp_listen_context.h"
 #include "bind_no_port.h"
 #include "xlio.h"
 #include "event/entity_context_manager.h"
@@ -331,6 +332,7 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     m_tcp_seg_in_use = 0;
     m_tx_consecutive_eagain_count = 0;
 
+    m_listen_ctx = nullptr;
     // Disable Nagle algorithm if XLIO_TCP_NODELAY flag was set.
     if (safe_mce_sys().tcp_nodelay) {
         try {
@@ -358,11 +360,36 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     si_tcp_logfunc("done");
 }
 
+void sockinfo_tcp::create_listen_context()
+{
+    if (m_listen_ctx == nullptr) {
+        m_listen_ctx = new sockinfo_tcp_listen_context();
+        si_tcp_logdbg("Created listen context for socket fd=%d", m_fd);
+    }
+}
+
+void sockinfo_tcp::destroy_listen_context()
+{
+    if (m_listen_ctx != nullptr) {
+        delete m_listen_ctx;
+        m_listen_ctx = nullptr;
+        si_tcp_logdbg("Destroyed listen context for socket fd=%d", m_fd);
+    }
+}
+
+bool sockinfo_tcp::is_sockinfo_tcp_listen_rss_child()
+{
+    return m_listen_ctx != nullptr && m_listen_ctx->is_rss_child_listen_socket();
+}
+
 void sockinfo_tcp::rx_add_ring_cb(ring *p_ring)
 {
     if (m_p_group) {
         m_p_group->add_ring(p_ring, &m_ring_alloc_log_rx);
+    } else if (m_entity_context) {
+        m_entity_context->add_ring(p_ring, &m_ring_alloc_log_rx);
     }
+
     sockinfo::rx_add_ring_cb(p_ring);
 }
 
@@ -414,13 +441,85 @@ void sockinfo_tcp::set_entity_context(entity_context *ctx)
     m_ring_alloc_log_tx.set_user_id_key(reinterpret_cast<uint64_t>(m_entity_context));
     m_ring_alloc_log_tx.set_use_locks(current_locks || is_safe_ctx);
 
-    m_p_connected_dst_entry->update_ring_alloc_logic(m_fd, m_tcp_con_lock.get_lock_base(),
-                                                     m_ring_alloc_log_tx);
-
-    tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_entity_context);
+    if (m_p_connected_dst_entry) {
+        m_p_connected_dst_entry->update_ring_alloc_logic(m_fd, m_tcp_con_lock.get_lock_base(),
+                                                         m_ring_alloc_log_tx);
+        tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_entity_context);
+    }
 
     // Allow the queue to grow for non-zerocopy send operations.
     m_pcb.snd_queuelen_max = TCP_SNDQUEUELEN_OVERFLOW;
+}
+
+void sockinfo_tcp::listen_entity_context()
+{
+
+    std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
+
+    if (!attach_as_uc_receiver(ROLE_TCP_SERVER)) {
+        get_parent_listen_context()->increment_error_counter();
+        si_tcp_logerr(
+            "Unable to attach uc receiver for listen socket rss_child in entity context.");
+        return;
+    }
+
+    // Set socket state to accept ready
+    m_sock_state = TCP_SOCK_ACCEPT_READY;
+    get_parent_listen_context()->increment_finish_counter();
+
+    si_tcp_logdbg("Listen socket successfully setup in entity context (sock: %p, backlog: %d)",
+                  this, m_backlog);
+}
+
+int sockinfo_tcp::harvest_sockinfo_tcp_listen_objects()
+{
+    assert(m_listen_ctx->get_listen_rss_children_size() == safe_mce_sys().worker_threads);
+
+    size_t num_rss_children = m_listen_ctx->get_listen_rss_children_size();
+
+    // Try to harvest from rss_children using round-robin
+    for (size_t i = 0; i < num_rss_children; ++i) {
+        size_t rss_child_index = m_listen_ctx->increment_round_robin_index() % num_rss_children;
+
+        if (try_harvest_from_rss_child(rss_child_index)) {
+            return 0; // Success
+        }
+    }
+
+    // No connections found in any rss_child
+    errno = EAGAIN;
+    return -1;
+}
+
+inline bool sockinfo_tcp::try_harvest_from_rss_child(size_t rss_child_index)
+{
+    sockinfo_tcp *rss_child = m_listen_ctx->get_listen_rss_child(rss_child_index);
+
+    if (rss_child->m_ready_conn_cnt == 0) {
+        return false;
+    }
+
+    std::lock_guard<decltype(rss_child->m_tcp_con_lock)> lock(rss_child->m_tcp_con_lock);
+
+    if (rss_child->m_ready_conn_cnt == 0) {
+        return false;
+    }
+
+    assert(rss_child->m_ready_conn_cnt == rss_child->m_accepted_conns.size());
+
+    size_t conn_count = rss_child->m_ready_conn_cnt;
+
+    m_accepted_conns.splice_tail(rss_child->m_accepted_conns);
+    m_ready_conn_cnt += conn_count;
+    rss_child->m_ready_conn_cnt = 0;
+
+    IF_STATS(rss_child->m_p_socket_stats->listen_counters.n_conn_backlog -= conn_count);
+    IF_STATS(rss_child->m_p_socket_stats->listen_counters.n_conn_accepted += conn_count);
+    IF_STATS(m_p_socket_stats->listen_counters.n_conn_backlog += conn_count);
+
+    si_tcp_logdbg("Harvested %zu connections from rss_child %zu", m_ready_conn_cnt,
+                  rss_child_index);
+    return true;
 }
 
 int sockinfo_tcp::update_xlio_socket(unsigned flags, uintptr_t userdata_sq)
@@ -759,6 +858,8 @@ sockinfo_tcp::~sockinfo_tcp()
         delete m_p_rule_extracted;
         m_p_rule_extracted = nullptr;
     }
+    // Clean up listen context if allocated
+    destroy_listen_context();
 
     unlock_tcp_con();
 
@@ -775,6 +876,7 @@ sockinfo_tcp::~sockinfo_tcp()
     if (g_p_agent) {
         g_p_agent->unregister_cb((agent_cb_t)&sockinfo_tcp::put_agent_msg, (void *)this);
     }
+
     si_tcp_logdbg("sock closed");
 }
 
@@ -816,7 +918,11 @@ bool sockinfo_tcp::prepare_listen_to_close()
     while (!m_accepted_conns.empty()) {
         sockinfo_tcp *new_sock = m_accepted_conns.get_and_pop_front();
         new_sock->m_sock_state = TCP_SOCK_INITED;
-        remove_received_syn_socket(new_sock);
+        if (!m_entity_context) {
+            // For threads mode listen socket, we removed accepted sockets from syn_received map
+            // previously
+            remove_received_syn_socket(new_sock);
+        }
         m_ready_conn_cnt--;
         new_sock->lock_tcp_con();
         new_sock->m_parent = nullptr;
@@ -1033,6 +1139,9 @@ bool sockinfo_tcp::prepare_dst_to_send(bool is_accepted_socket /* = false */)
     }
     if (ret_val && is_xlio_socket()) {
         add_tx_ring_to_group();
+    } else if (ret_val && m_entity_context) {
+        // Add the rings of the incoming socket to the entity context.
+        add_tx_ring_to_entity_context();
     }
     return ret_val;
 }
@@ -2988,7 +3097,15 @@ int sockinfo_tcp::listen(int backlog)
     tcp_clone_conn(&m_pcb, sockinfo_tcp::clone_conn_cb);
     tcp_accepted_pcb(&m_pcb, sockinfo_tcp::accepted_pcb_cb);
 
-    bool success = attach_as_uc_receiver(ROLE_TCP_SERVER);
+    bool success = false;
+    // Check if XLIO threads are enforced (> 0) for entity context distribution
+    if (safe_mce_sys().worker_threads > 0) {
+        create_listen_context();
+        start_sockinfo_tcp_listen_objects();
+        success = wait_for_listen_rss_children_ready();
+    } else {
+        success = attach_as_uc_receiver(ROLE_TCP_SERVER);
+    }
 
     if (!success) {
         /* we will get here if attach_as_uc_receiver failed */
@@ -3110,7 +3227,9 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
             }
         }
 
-        if (rx_wait(poll_count, m_b_blocking) < 0) {
+        int tmp_ret = safe_mce_sys().worker_threads > 0 ? harvest_sockinfo_tcp_listen_objects()
+                                                        : rx_wait(poll_count, m_b_blocking);
+        if (tmp_ret < 0) {
             si_tcp_logdbg("interrupted accept");
             unlock_tcp_con();
             return -1;
@@ -3135,7 +3254,7 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
     m_ready_conn_cnt--;
     IF_STATS(m_p_socket_stats->listen_counters.n_conn_backlog--);
 
-    remove_received_syn_socket(ns);
+    safe_mce_sys().worker_threads ? assert(m_syn_received.empty()) : remove_received_syn_socket(ns);
 
     unlock_tcp_con();
 
@@ -3258,7 +3377,123 @@ sockinfo_tcp *sockinfo_tcp::accept_clone()
         si->set_ring_logic_tx(m_ring_alloc_log_tx);
     }
 
+    // listen flow for incoming socket
+    if (m_entity_context) {
+        si->set_entity_context(m_entity_context);
+        // CAUTION: add_socket() modifies the entity_context socket list which may cause
+        // iterator invalidation if the list is being traversed concurrently. Currently it is
+        // safe because the list is accessed solely by the xlio thread.
+        m_entity_context->add_socket(si);
+    }
     return si;
+}
+
+bool sockinfo_tcp::create_listen_rss_children()
+{
+    assert(m_listen_ctx->listen_rss_children_empty());
+
+    size_t num_threads = safe_mce_sys().worker_threads;
+
+    for (size_t i = 0; i < num_threads; ++i) {
+        // Create socket without shadow, following accept_clone() pattern
+        int fd = socket_internal(m_family, SOCK_STREAM, 0, false, false);
+        if (fd < 0) {
+            si_tcp_logerr("Failed to create listen rss_child socket %zu", i);
+            return false;
+        }
+
+        sockinfo_tcp *rss_child = dynamic_cast<sockinfo_tcp *>(fd_collection_get_sockfd(fd));
+        if (!rss_child) {
+            si_tcp_logwarn("Cannot get listen rss_child socket from FD collection");
+            XLIO_CALL(close, fd);
+            return false;
+        }
+
+        rss_child->lock_tcp_con();
+
+        // Create listen context for rss_child if it doesn't exist
+        rss_child->create_listen_context();
+        rss_child->m_listen_ctx->set_parent_listen_socket(this);
+        rss_child->setPassthrough(false);
+
+        // Copy member variables that were updated during socket lifecycle
+        // (create → bind → prepareListen → listen)
+        rss_child->m_family = m_family;
+        rss_child->m_protocol = m_protocol;
+        rss_child->m_backlog = m_backlog / (int)num_threads;
+        rss_child->m_bound = m_bound;
+        rss_child->m_reuseaddr = m_reuseaddr; // SO_REUSEADDR - affects binding
+        rss_child->m_reuseport = m_reuseport; // SO_REUSEPORT - affects port sharing
+        rss_child->m_is_ipv6only = m_is_ipv6only; // IPV6_V6ONLY - affects IPv6 behavior
+        rss_child->m_bind_no_port = m_bind_no_port; // Special binding mode
+        rss_child->m_so_bindtodevice_ip = m_so_bindtodevice_ip; // SO_BINDTODEVICE
+        rss_child->m_sock_offload = m_sock_offload; // From prepareListen/setPassthrough
+        rss_child->m_b_blocking = m_b_blocking; // Blocking mode for accept() calls
+
+        // Bind to same address as parent using already-copied m_bound - do tcp_bind
+        const ip_address &ip = m_bound.get_ip_addr();
+        if (ERR_OK !=
+            tcp_bind(&rss_child->m_pcb, reinterpret_cast<const ip_addr_t *>(&ip),
+                     ntohs(m_bound.get_in_port()), rss_child->m_pcb.is_ipv6)) {
+            si_tcp_logwarn("tcp_bind failed for listen rss_child %zu", i);
+            rss_child->unlock_tcp_con();
+            return false;
+        }
+        if (rss_child->m_p_socket_stats) {
+            rss_child->m_p_socket_stats->set_bound_if(rss_child->m_bound);
+            rss_child->m_p_socket_stats->bound_port = rss_child->m_bound.get_in_port();
+        }
+        rss_child->m_sock_state = TCP_SOCK_BOUND;
+
+        // Set up as listen socket - do tcp_listen
+        if (get_tcp_state(&rss_child->m_pcb) != LISTEN) {
+            struct tcp_pcb tmp_pcb;
+            memcpy(&tmp_pcb, &rss_child->m_pcb, sizeof(struct tcp_pcb));
+            tcp_listen(&rss_child->m_pcb, &tmp_pcb);
+        }
+
+        rss_child->m_sock_state = TCP_SOCK_ACCEPT_READY;
+
+        // Set up TCP callbacks - accept, syn_handled, clone_conn, accepted_pcb
+        tcp_accept(&rss_child->m_pcb, sockinfo_tcp::accept_lwip_cb);
+        tcp_syn_handled(&rss_child->m_pcb, sockinfo_tcp::syn_received_lwip_cb);
+        tcp_clone_conn(&rss_child->m_pcb, sockinfo_tcp::clone_conn_cb);
+        tcp_accepted_pcb(&rss_child->m_pcb, sockinfo_tcp::accepted_pcb_cb);
+
+        rss_child->unlock_tcp_con();
+
+        m_listen_ctx->add_listen_rss_child(rss_child);
+        si_tcp_logdbg("Created listen rss_child %zu (fd: %d)", i, fd);
+    }
+    return true;
+}
+
+void sockinfo_tcp::start_sockinfo_tcp_listen_objects()
+{
+    si_tcp_logfunc("");
+
+    if (!create_listen_rss_children()) {
+        si_tcp_logerr(
+            "Failed to create listen socket rss_children for entity context distribution");
+        return;
+    }
+    entity_context_manager::instance()->distribute_listen_socket(this);
+}
+
+bool sockinfo_tcp::wait_for_listen_rss_children_ready()
+{
+    // Use condition_variable for efficient waiting instead of busy-wait loop
+    m_listen_ctx->wait_for_rss_children_ready();
+
+    if (m_listen_ctx->get_error_counter() > 0) {
+        si_tcp_logerr("Failed to attach uc receiver for listen socket rss_children (%u errors)",
+                      m_listen_ctx->get_error_counter());
+        return false;
+    }
+
+    si_tcp_logdbg("All %zu listen socket rss_children successfully attached as uc receivers",
+                  m_listen_ctx->get_listen_rss_children_size());
+    return true;
 }
 
 void sockinfo_tcp::accept_connection_xlio_socket(sockinfo_tcp *new_sock)
@@ -3313,6 +3548,8 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
 
     if (new_sock->is_xlio_socket()) {
         tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb_xlio_socket);
+    } else if (new_sock->m_entity_context) {
+        tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb_entity_context);
     } else {
         tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb);
     }
@@ -3366,8 +3603,12 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     } else {
         conn->m_accepted_conns.push_back(new_sock);
         conn->m_ready_conn_cnt++;
-
-        NOTIFY_ON_EVENTS(conn, EPOLLIN);
+        if (conn->is_sockinfo_tcp_listen_rss_child()) {
+            conn->remove_received_syn_socket(new_sock);
+            NOTIFY_ON_EVENTS(conn->m_listen_ctx->get_parent_listen_socket(), EPOLLIN);
+        } else {
+            NOTIFY_ON_EVENTS(conn, EPOLLIN);
+        }
     }
 
     if (conn->m_p_socket_stats) {
@@ -3806,10 +4047,19 @@ int sockinfo_tcp::os_epoll_wait_with_tcp_timers(epoll_event *ep_events, int maxe
 bool sockinfo_tcp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array)
 {
     if (is_server()) {
-        bool state;
+        bool state = false;
         // tcp_si_logwarn("select on accept()");
         // m_conn_cond.lock();
-        state = m_ready_conn_cnt == 0 ? false : true;
+        if (m_entity_context) {
+            for (size_t i = 0; i < m_listen_ctx->get_listen_rss_children_size(); i++) {
+                if (m_listen_ctx->get_listen_rss_child(i)->m_ready_conn_cnt > 0) {
+                    state = true;
+                    break;
+                }
+            }
+        }
+
+        state |= m_ready_conn_cnt == 0 ? false : true;
         if (state) {
             si_tcp_logdbg("accept ready");
             return true;

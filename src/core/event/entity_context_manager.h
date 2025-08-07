@@ -40,6 +40,7 @@
 #include "entity_context.h"
 
 class sockinfo;
+class sockinfo_tcp;
 
 class entity_context_manager {
 public:
@@ -52,8 +53,11 @@ public:
     static void fork_nullify();
 
     void distribute_socket(sockinfo *si, entity_context::job_type jobtype);
+    void distribute_listen_socket(sockinfo_tcp *si);
 
     const std::vector<entity_context *> &get_all_contexts() const { return m_entity_contexts; }
+
+    static int calculate_entity_context_pow2();
 
 private:
     static entity_context_manager *s_p_entity_context_manager;
