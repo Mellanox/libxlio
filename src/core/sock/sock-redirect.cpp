@@ -2042,7 +2042,6 @@ EXPORT_SYMBOL int XLIO_SYMBOL(epoll_ctl)(int __epfd, int __op, int __fd,
                                          struct epoll_event *__event)
 {
     PROFILE_FUNC
-
     const static char *op_names[] = {"<null>", "ADD", "DEL", "MOD"};
     NOT_IN_USE(op_names); /* to suppress warning in case MAX_DEFINED_LOG_LEVEL */
     if (__event) {

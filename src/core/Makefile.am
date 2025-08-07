@@ -154,6 +154,7 @@ libxlio_la_SOURCES := \
 	sock/sockinfo_udp.cpp \
 	sock/sockinfo_ulp.cpp \
 	sock/sockinfo_tcp.cpp \
+	sock/sockinfo_tcp_listen_context.cpp \
 	sock/fd_collection.cpp \
 	sock/sock-redirect.cpp \
 	sock/sock-app.cpp \
@@ -308,6 +309,7 @@ libxlio_la_SOURCES := \
 	sock/sock_stats.h \
 	sock/sockinfo.h \
 	sock/sockinfo_tcp.h \
+	sock/sockinfo_tcp_listen_context.h \
 	sock/sockinfo_udp.h \
 	sock/sockinfo_ulp.h \
 	sock/sock-redirect.h \
