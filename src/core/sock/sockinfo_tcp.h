@@ -13,16 +13,20 @@
 #include "dev/buffer_pool.h"
 #include "dev/cq_mgr_rx.h"
 #include "xlio_extra.h"
+#include <atomic>
+#include <vector>
 
 #include "lwip/opt.h"
 #include "lwip/tcp_impl.h"
 
 #include "sockinfo.h"
 #include "sockinfo_ulp.h"
+#include "sockinfo_tcp_listen_context.h"
 
 /* Forward declarations */
 struct xlio_socket_attr;
 class poll_group;
+class sockinfo_tcp;
 
 #define BLOCK_THIS_RUN(blocking, flags) (blocking && !(flags & MSG_DONTWAIT))
 
@@ -196,7 +200,22 @@ public:
     int getsockopt_offload(int __level, int __optname, void *__optval, socklen_t *__optlen);
     int connect(const sockaddr *, socklen_t) override;
     void connect_entity_context() override;
+    void listen_entity_context();
+    int harvest_sockinfo_tcp_listen_objects();
+    inline bool try_harvest_from_rss_child(size_t rss_child_index);
     void set_entity_context(entity_context *ctx) override;
+
+    // Listen context management
+    void create_listen_context();
+    void destroy_listen_context();
+    bool is_sockinfo_tcp_listen_rss_child();
+    sockinfo_tcp_listen_context *get_listen_context() { return m_listen_ctx; }
+    sockinfo_tcp_listen_context *get_parent_listen_context()
+    {
+        return (m_listen_ctx && m_listen_ctx->get_parent_listen_socket())
+            ? m_listen_ctx->get_parent_listen_socket()->m_listen_ctx
+            : nullptr;
+    }
     int bind(const sockaddr *__addr, socklen_t __addrlen) override;
     int listen(int backlog) override;
     int accept(struct sockaddr *__addr, socklen_t *__addrlen) override;
@@ -426,6 +445,11 @@ private:
 
     // clone socket in accept call
     sockinfo_tcp *accept_clone();
+
+    bool create_listen_rss_children();
+    void start_sockinfo_tcp_listen_objects();
+    bool wait_for_listen_rss_children_ready();
+
     // connect() helper & callback func
     int wait_for_conn_ready_blocking();
     static err_t connect_lwip_cb(void *arg, struct tcp_pcb *tpcb, err_t err);
@@ -614,6 +638,7 @@ private:
     uint32_t m_ready_conn_cnt;
     int m_backlog;
 
+private:
     multilock m_tcp_con_lock;
 
     // used for reporting 'connected' on second non-blocking call to connect or
@@ -641,6 +666,9 @@ private:
     bool m_b_xlio_socket_dirty = false;
     uintptr_t m_xlio_socket_userdata = 0;
     rfs_rule *m_p_rule_extracted = nullptr;
+
+    // Listen context - allocated only for listen sockets
+    sockinfo_tcp_listen_context *m_listen_ctx = nullptr;
 };
 
 #endif

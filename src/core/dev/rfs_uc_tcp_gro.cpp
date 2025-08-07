@@ -36,8 +36,9 @@ inline bool ipv6_check(const struct ip6_hdr &p_ip6_h)
 }
 
 rfs_uc_tcp_gro::rfs_uc_tcp_gro(flow_tuple *flow_spec_5t, ring_slave *p_ring,
-                               rfs_rule_filter *rule_filter, uint32_t flow_tag_id)
-    : rfs_uc(flow_spec_5t, p_ring, rule_filter, flow_tag_id)
+                               rfs_rule_filter *rule_filter, uint32_t flow_tag_id,
+                               int steering_index)
+    : rfs_uc(flow_spec_5t, p_ring, rule_filter, flow_tag_id, steering_index)
     , m_b_active(false)
     , m_b_reserved(false)
     , m_pcb(nullptr)

@@ -242,6 +242,13 @@ bool rfs::attach_flow(sockinfo *sink)
             return false;
         }
         filter_keep_attached(filter_iter);
+        if (if_secondary_rule_needed()) {
+            prepare_flow_spec_secondary_rule();
+            if (!create_flow()) {
+                return false;
+            }
+            rfs_logdbg("Added secondary rule to worker: %d", g_p_app->get_worker_id());
+        }
     } else {
         rfs_logdbg("rfs: Joining existing flow");
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
@@ -330,14 +337,21 @@ bool rfs::create_flow()
     if (!m_p_ring_simple) {
         rfs_logpanic("Incompatible ring type");
     }
+    rfs_rule *rfs_flow = m_p_ring_simple->m_hqrx->create_rfs_rule(
+        m_match_value, m_match_mask, m_priority, m_flow_tag_id, nullptr);
 
-    m_rfs_flow = m_p_ring_simple->m_hqrx->create_rfs_rule(m_match_value, m_match_mask, m_priority,
-                                                          m_flow_tag_id, nullptr);
-    if (!m_rfs_flow) {
+    if (!rfs_flow) {
         rfs_logerr("Create RFS flow failed, Tag: %" PRIu32 ", Flow: %s, Priority: %" PRIu16
                    ", errno: %d - %m",
                    m_flow_tag_id, m_flow_tuple.to_str().c_str(), m_priority, errno);
         return false;
+    }
+
+    if (m_rfs_flow) {
+        // if m_rfs_flow exists then this is secondary rule , assign to m_rfs_rule_secondary
+        m_rfs_rule_secondary = rfs_flow;
+    } else {
+        m_rfs_flow = rfs_flow;
     }
 
     m_b_tmp_is_attached = true;
@@ -363,6 +377,10 @@ bool rfs::destroy_flow(rfs_rule **rule_extract)
             delete m_rfs_flow;
         }
         m_rfs_flow = nullptr;
+    }
+    if (m_rfs_rule_secondary) {
+        delete m_rfs_rule_secondary;
+        m_rfs_rule_secondary = nullptr;
     }
 
     m_b_tmp_is_attached = false;

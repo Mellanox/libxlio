@@ -66,6 +66,9 @@ void entity_context::process()
         case JOB_TYPE_SOCK_ADD_AND_CONNECT:
             connect_socket_job(job);
             break;
+        case JOB_TYPE_SOCK_ADD_AND_LISTEN:
+            listen_socket_job(job.sock);
+            break;
         case JOB_TYPE_SOCK_TX:
             // Handle socket transmit job
             // TODO: implement transmit logic
@@ -115,5 +118,17 @@ void entity_context::rx_data_recvd_job(const job_desc &job)
 
     if (job.sock) {
         job.sock->rx_data_recvd(job.tot_size);
+    }
+}
+
+void entity_context::listen_socket_job(sockinfo *sock)
+{
+    if (sock->get_protocol() == PROTO_TCP) {
+        sock->set_entity_context(this);
+        add_socket(reinterpret_cast<sockinfo_tcp *>(sock));
+        reinterpret_cast<sockinfo_tcp *>(sock)->listen_entity_context();
+        ctx_logdbg("New TCP Listen rss_child socket added (sock: %p)", sock);
+    } else {
+        ctx_logdbg("Unsupported socket protocol %hd for Threads mode", sock->get_protocol());
     }
 }

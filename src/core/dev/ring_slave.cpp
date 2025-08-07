@@ -11,7 +11,7 @@
 #include "dev/rfs_mc.h"
 #include "dev/rfs_uc_tcp_gro.h"
 #include "sock/fd_collection.h"
-#include "sock/sockinfo.h"
+#include "sock/sockinfo_tcp.h"
 #include "proto/tls.h"
 
 #undef MODULE_NAME
@@ -134,19 +134,18 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
 {
     rfs *p_rfs;
     rfs *p_tmp_rfs = nullptr;
-    sockinfo *si = static_cast<sockinfo *>(sink);
 
-    if (!si) {
+    if (!sink) {
         return false;
     }
 
-    uint32_t flow_tag_id = si->get_flow_tag_val(); // spec will not be attached to rule
+    uint32_t flow_tag_id = sink->get_flow_tag_val(); // spec will not be attached to rule
     if (!m_ring.m_flow_tag_enabled) {
         flow_tag_id = 0;
     }
     ring_logdbg("flow: %s, with sink (%p), flow tag id %d "
                 "m_flow_tag_enabled: %d",
-                flow_spec_5t.to_str().c_str(), si, flow_tag_id, m_ring.m_flow_tag_enabled);
+                flow_spec_5t.to_str().c_str(), sink, flow_tag_id, m_ring.m_flow_tag_enabled);
 
     /* Get the appropriate hash map (tcp, uc or mc) from the 5t details
      * TODO: Consider unification of following code.
@@ -167,11 +166,11 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
             }
         }
 
-        if (flow_tag_id && si->flow_in_reuse()) {
+        if (flow_tag_id && sink->flow_in_reuse()) {
             flow_tag_id = FLOW_TAG_MASK;
             ring_logdbg("UC flow tag for socketinfo=%p is disabled: SO_REUSEADDR or SO_REUSEPORT "
                         "were enabled",
-                        si);
+                        sink);
         }
 
         auto itr = m_flow_udp_uc_map.find(rfs_key);
@@ -212,16 +211,16 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
         KEY2T key_udp_mc(flow_spec_5t.get_dst_ip(), flow_spec_5t.get_dst_port());
         sock_addr rule_key(flow_spec_5t.get_family(), &flow_spec_5t.get_dst_ip(), 0U);
         if (flow_tag_id) {
-            if (m_ring.m_b_sysvar_mc_force_flowtag || !si->flow_in_reuse()) {
+            if (m_ring.m_b_sysvar_mc_force_flowtag || !sink->flow_in_reuse()) {
                 ring_logdbg("MC flow tag ID=%d for socketinfo=%p is enabled: force_flowtag=%d, "
                             "SO_REUSEADDR | SO_REUSEPORT=%d",
-                            flow_tag_id, si, m_ring.m_b_sysvar_mc_force_flowtag,
-                            si->flow_in_reuse());
+                            flow_tag_id, sink, m_ring.m_b_sysvar_mc_force_flowtag,
+                            sink->flow_in_reuse());
             } else {
                 flow_tag_id = FLOW_TAG_MASK;
                 ring_logdbg("MC flow tag for socketinfo=%p is disabled: force_flowtag=0, "
                             "SO_REUSEADDR or SO_REUSEPORT were enabled",
-                            si);
+                            sink);
             }
         }
         // Note for CX3:
@@ -287,7 +286,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
             (flow_spec_5t.is_3_tuple() || (!force_5t && safe_mce_sys().tcp_3t_rules) ||
              safe_mce_sys().tcp_2t_rules)) {
             ring_logdbg("flow tag id = %d is disabled for socket fd = %d to be processed on RFS!",
-                        flow_tag_id, si->get_fd());
+                        flow_tag_id, sink->get_fd());
             flow_tag_id = FLOW_TAG_MASK;
         }
 
@@ -308,12 +307,18 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
                     new rfs_rule_filter(m_ring.m_tcp_dst_port_attach_map, rule_key, tcp_3t_only);
             }
             try {
+                sockinfo_tcp *tcp_si = dynamic_cast<sockinfo_tcp *>(sink);
+                int steering_index = -1;
+                if (tcp_si && tcp_si->get_listen_context()) {
+                    steering_index = tcp_si->get_listen_context()->get_steering_index();
+                }
+
                 if (safe_mce_sys().gro_streams_max) {
-                    p_tmp_rfs = new (std::nothrow)
-                        rfs_uc_tcp_gro(&flow_spec_5t, &m_ring, dst_port_filter, flow_tag_id);
+                    p_tmp_rfs = new (std::nothrow) rfs_uc_tcp_gro(
+                        &flow_spec_5t, &m_ring, dst_port_filter, flow_tag_id, steering_index);
                 } else {
-                    p_tmp_rfs = new (std::nothrow)
-                        rfs_uc(&flow_spec_5t, &m_ring, dst_port_filter, flow_tag_id);
+                    p_tmp_rfs = new (std::nothrow) rfs_uc(&flow_spec_5t, &m_ring, dst_port_filter,
+                                                          flow_tag_id, steering_index);
                 }
             } catch (xlio_exception &e) {
                 ring_logerr("%s", e.message.c_str());
@@ -327,7 +332,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
             BULLSEYE_EXCLUDE_BLOCK_END
 
             p_rfs = p_tmp_rfs;
-            si->set_rfs_ptr(p_rfs);
+            sink->set_rfs_ptr(p_rfs);
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
             if (g_p_app->type == APP_NONE || !g_p_app->add_second_4t_rule)
 #endif
@@ -349,7 +354,7 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
         if (flow_tag_id && (flow_tag_id != FLOW_TAG_MASK)) {
             // A flow with FlowTag was attached succesfully, check stored rfs for fast path be
             // tag_id
-            si->set_flow_tag(flow_tag_id);
+            sink->set_flow_tag(flow_tag_id);
             ring_logdbg("flow_tag: %d registration is done!", flow_tag_id);
         }
     } else {

@@ -76,6 +76,9 @@ public:
 
     uint32_t get_num_of_sinks() const { return m_n_sinks_list_entries; }
     virtual bool rx_dispatch_packet(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array) = 0;
+    virtual void prepare_flow_spec_worker_thread_mode() = 0;
+    virtual void prepare_flow_spec_secondary_rule() = 0;
+    virtual bool if_secondary_rule_needed() = 0;
 
 protected:
     flow_tuple m_flow_tuple;
@@ -88,11 +91,21 @@ protected:
                                      // a sink is removed)
     uint32_t m_n_sinks_list_max_length;
     uint32_t m_flow_tag_id; // Associated with this rule, set by attach_flow()
-    uint16_t m_priority = 2U; // Almost highest priority, 1 is used for 5-tuple later
+
+    // Rule priority indicator: lower values denote higher priority.
+    // Priority levels:
+    // 0 – Reserved for hardware HW TLS RX flow rules
+    // 1 – Applied to 5-tuple rules
+    // 2 – Applied to 4-tuple rules
+    // 3 – Applied to 3-tuple rules
+    uint16_t m_priority = 3U;
+
     bool m_b_tmp_is_attached; // Only temporary, while ibcm calls attach_flow with no sinks...
 
     dpcp::match_params m_match_value;
     dpcp::match_params m_match_mask;
+
+    rfs_rule *m_rfs_rule_secondary = nullptr; // Second rule for odd number of xlio threads
 
     bool create_flow(); // Attach flow to all queues
     bool destroy_flow(rfs_rule **rule_extract); // Detach flow from all queues

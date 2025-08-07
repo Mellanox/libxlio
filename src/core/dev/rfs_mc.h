@@ -24,6 +24,9 @@ public:
 
     virtual bool rx_dispatch_packet(mem_buf_desc_t *p_rx_wc_buf_desc,
                                     void *pv_fd_ready_array) override;
+    virtual void prepare_flow_spec_worker_thread_mode() override {}
+    virtual void prepare_flow_spec_secondary_rule() override {}
+    virtual bool if_secondary_rule_needed() override { return false; }
 
 protected:
     void prepare_flow_spec() override;
