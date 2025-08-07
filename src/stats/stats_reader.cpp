@@ -384,6 +384,9 @@ void update_delta_ring_stat(ring_stats_t *p_curr_ring_stats, ring_stats_t *p_pre
             delay;
         p_prev_ring_stats->n_tx_dev_mem_oob =
             (p_curr_ring_stats->n_tx_dev_mem_oob - p_prev_ring_stats->n_tx_dev_mem_oob) / delay;
+        p_prev_ring_stats->n_rx_steering_rules =
+            (p_curr_ring_stats->n_rx_steering_rules - p_prev_ring_stats->n_rx_steering_rules) /
+            delay;
     }
 }
 
@@ -531,6 +534,9 @@ void print_ring_stats(ring_instance_block_t *p_ring_inst_arr)
                        "Dev Mem Stats:", p_ring_stats->n_tx_dev_mem_byte_count / BYTES_TRAFFIC_UNIT,
                        p_ring_stats->n_tx_dev_mem_pkt_count, p_ring_stats->n_tx_dev_mem_oob,
                        post_fix);
+            }
+            if (p_ring_stats->n_rx_steering_rules) {
+                printf(FORMAT_STATS_32bit, "RX steering rules:", p_ring_stats->n_rx_steering_rules);
             }
 
             printf(FORMAT_STATS_32bit, "TX buffers inflight:", p_ring_stats->n_tx_num_bufs);

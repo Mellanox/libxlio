@@ -355,6 +355,8 @@ bool rfs::create_flow()
     }
 
     m_b_tmp_is_attached = true;
+    m_p_ring_simple->m_p_ring_stat->n_rx_steering_rules++;
+
     rfs_logdbg("Create RFS flow succeeded, Tag: %" PRIu32 ", Flow: %s", m_flow_tag_id,
                m_flow_tuple.to_str().c_str());
 
@@ -363,6 +365,7 @@ bool rfs::create_flow()
 
 bool rfs::destroy_flow(rfs_rule **rule_extract)
 {
+    int n_rx_steering_rules = 0;
     if (unlikely(!m_rfs_flow)) {
         rfs_logdbg("Destroy RFS flow failed, RFS flow was not created. "
                    "This is OK for MC same ip diff port scenario. Tag: %" PRIu32
@@ -377,15 +380,19 @@ bool rfs::destroy_flow(rfs_rule **rule_extract)
             delete m_rfs_flow;
         }
         m_rfs_flow = nullptr;
+        n_rx_steering_rules++;
     }
     if (m_rfs_rule_secondary) {
         delete m_rfs_rule_secondary;
         m_rfs_rule_secondary = nullptr;
+        n_rx_steering_rules++;
     }
 
     m_b_tmp_is_attached = false;
     rfs_logdbg("Destroy RFS flow succeeded, Tag: %" PRIu32 ", Flow: %s", m_flow_tag_id,
                m_flow_tuple.to_str().c_str());
+
+    m_p_ring_simple->m_p_ring_stat->n_rx_steering_rules -= n_rx_steering_rules;
 
     return true;
 }
