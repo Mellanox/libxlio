@@ -1010,7 +1010,15 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
         (do_abort || process_shutdown || (m_linger.l_onoff && !m_linger.l_linger))) {
         abort_connection();
     } else {
+        enum tcp_state prev_state = get_tcp_state(&m_pcb);
+
         tcp_close(&m_pcb);
+        if (unlikely(prev_state == CLOSED) && get_tcp_state(&m_pcb) == CLOSED && is_xlio_socket()) {
+            /* Trigger XLIO_SOCKET_EVENT_TERMINATED if destroying already closed socket.
+             * This can happen on a failed connect().
+             */
+            tcp_state_observer(reinterpret_cast<void *>(this), CLOSED);
+        }
 
         if (is_listen_socket) {
             tcp_accept(&m_pcb, nullptr);
@@ -1792,7 +1800,8 @@ err_t sockinfo_tcp::ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void 
     return ERR_OK;
 }
 
-/*static*/ void sockinfo_tcp::tcp_state_observer(void *pcb_container, enum tcp_state new_state)
+/*static*/
+void sockinfo_tcp::tcp_state_observer(void *pcb_container, enum tcp_state new_state)
 {
     sockinfo_tcp *p_si_tcp = (sockinfo_tcp *)pcb_container;
     IF_STATS_O(p_si_tcp, p_si_tcp->m_p_socket_stats->tcp_state = new_state);
@@ -1800,8 +1809,8 @@ err_t sockinfo_tcp::ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void 
         if (new_state == CLOSE_WAIT) {
             p_si_tcp->xlio_socket_event(XLIO_SOCKET_EVENT_CLOSED, 0);
         }
-        if (!p_si_tcp->m_is_xlio_socket_terminated &&
-            (new_state == CLOSED || new_state == TIME_WAIT)) {
+        if ((new_state == CLOSED || new_state == TIME_WAIT) &&
+            p_si_tcp->m_state == SOCKINFO_CLOSING && !p_si_tcp->m_is_xlio_socket_terminated) {
             p_si_tcp->xlio_socket_event(XLIO_SOCKET_EVENT_TERMINATED, 0);
             p_si_tcp->m_is_xlio_socket_terminated = true;
         }

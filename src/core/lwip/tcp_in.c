@@ -1457,8 +1457,8 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
                     if (TCPH_FLAGS(cseg->tcphdr) & TCP_FIN) {
                         LWIP_DEBUGF(TCP_INPUT_DEBUG, ("tcp_receive: dequeued FIN.\n"));
                         in_data->recv_flags |= TF_GOT_FIN;
-                        if (get_tcp_state(pcb) ==
-                            ESTABLISHED) { /* force passive close or we can move to active close */
+                        /* force passive close or we can move to active close */
+                        if (get_tcp_state(pcb) == ESTABLISHED) {
                             set_tcp_state(pcb, CLOSE_WAIT);
                         }
                     }
