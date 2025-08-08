@@ -493,6 +493,10 @@ int xlio_socket_getpeername(xlio_socket_t sock, struct sockaddr *addr, socklen_t
  * @param addrlen Length of the address
  * @return 0 on success, -1 on error (errno is set)
  *
+ * @par Error Codes:
+ * - ENODEV: Trying to bind to a non-NVIDIA NIC
+ * - Inherits bind(2) error codes
+ *
  * @see bind(2)
  */
 int xlio_socket_bind(xlio_socket_t sock, const struct sockaddr *addr, socklen_t addrlen);
@@ -508,8 +512,15 @@ int xlio_socket_bind(xlio_socket_t sock, const struct sockaddr *addr, socklen_t 
  * @param tolen Length of the remote address
  * @return 0 on success, -1 on error (errno is set)
  *
+ * @par Error Codes:
+ * - EISCONN: The socket is already connected
+ * - EALREADY: Previous connect attempt hasn't been completed yet
+ * - ECONNABORTED: Previous connect attempt has failed
+ * - ENODEV: Cannot establish connection with XLIO Ultra API or NVIDIA NIC
+ *
  * @note This function returns immediately. Connection establishment is
- * indicated by the XLIO_SOCKET_EVENT_ESTABLISHED event.
+ * indicated by the XLIO_SOCKET_EVENT_ESTABLISHED event. If a connection
+ * failure occurs an XLIO_SOCKET_EVENT_ERROR event will be delivered.
  *
  * @see connect(2)
  */
