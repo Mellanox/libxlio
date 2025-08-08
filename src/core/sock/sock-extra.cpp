@@ -293,6 +293,10 @@ extern "C" int xlio_socket_bind(xlio_socket_t sock, const struct sockaddr *addr,
     int rc = si->bind(addr, addrlen);
     if (rc == 0) {
         errno = errno_save;
+        if (si->isPassthrough()) {
+            rc = -1;
+            errno = ENODEV;
+        }
     }
     return rc;
 }
@@ -301,8 +305,15 @@ extern "C" int xlio_socket_connect(xlio_socket_t sock, const struct sockaddr *to
 {
     sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
     int errno_save = errno;
+    int rc = 0;
 
-    int rc = si->connect(to, tolen);
+    if (!si->isPassthrough()) {
+        rc = si->connect(to, tolen);
+    }
+    if (si->isPassthrough()) {
+        rc = -1;
+        errno = ENODEV;
+    }
     rc = (rc == -1 && (errno == EINPROGRESS || errno == EAGAIN)) ? 0 : rc;
     if (rc == 0) {
         errno = errno_save;
