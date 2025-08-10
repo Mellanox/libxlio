@@ -82,7 +82,7 @@ case $CC in
         CFLAGS="$CFLAGS -Wall -Werror -Wno-self-assign"
         CXXFLAGS="$CXXFLAGS -Wall -Werror"
         # workaround for clang w/o -Wnon-c-typedef-for-linkage
-        CXXFLAGS="$CXXFLAGS -Wno-unknown-warning-option -Wno-non-c-typedef-for-linkage"
+        CXXFLAGS="$CXXFLAGS -Wno-unknown-warning-option -Wno-non-c-typedef-for-linkage -Wno-vla-cxx-extension"
         ;;
     *)
         AC_MSG_RESULT([unknown])
