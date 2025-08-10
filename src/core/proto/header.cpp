@@ -177,11 +177,10 @@ void header_ipv4::configure_ip_header(uint8_t protocol, const ip_address &src,
     iphdr *p_hdr = &m_header.hdr.m_ip_hdr;
     memset(p_hdr, 0, (sizeof(*p_hdr)));
 
-    // build ipv4 header
-    p_hdr->ihl = IPV4_HDR_LEN_WITHOUT_OPTIONS /
-        sizeof(uint32_t); // 5 * 4 bytes (32 bit words) = 20 bytes = regular iph length with out any
-                          // optionals
-    p_hdr->version = IPV4_VERSION;
+    // Build IPv4 header
+    // 5 * 4 bytes (32 bit words) = 20 bytes = regular IPv4 header length without any options
+    p_hdr->ihl = IPV4_HDR_LEN_WITHOUT_OPTIONS / sizeof(uint32_t);
+    p_hdr->version = XLIO_IPV4_VERSION;
     p_hdr->protocol = protocol;
     p_hdr->saddr = src.get_in_addr();
     p_hdr->daddr = dest.get_in_addr();
@@ -259,7 +258,7 @@ void header_ipv6::configure_ip_header(uint8_t protocol, const ip_address &src,
     memset(p_hdr, 0, (sizeof(*p_hdr)));
 
     // build ipv6 header
-    p_hdr->ip6_vfc = IPV6_VERSION << 4;
+    p_hdr->ip6_vfc = XLIO_IPV6_VERSION << 4;
     p_hdr->ip6_nxt = protocol;
 
     *reinterpret_cast<ip_address *>(&p_hdr->ip6_src) = src;

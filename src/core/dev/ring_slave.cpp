@@ -613,7 +613,7 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
 
             struct iphdr *p_ip_h =
                 (struct iphdr *)(p_rx_wc_buf_desc->p_buffer + transport_header_len);
-            if (likely(p_ip_h->version == IPV4_VERSION)) { // IPv4
+            if (likely(p_ip_h->version == XLIO_IPV4_VERSION)) { // IPv4
                 ip_hdr_len = IP_HLEN; //(int)(p_ip_h->ihl)*4;
                 ip_payload_len = ntohs(p_ip_h->tot_len) - ip_hdr_len;
                 protocol = p_ip_h->protocol;
@@ -746,12 +746,12 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
     // Get the ip header pointer
     struct iphdr *p_ip_h = (struct iphdr *)(p_rx_wc_buf_desc->p_buffer + transport_header_len);
 
-    if (likely(p_ip_h->version == IPV4_VERSION)) {
+    if (likely(p_ip_h->version == XLIO_IPV4_VERSION)) {
         return m_steering_ipv4.rx_process_buffer_no_flow_id(p_rx_wc_buf_desc, pv_fd_ready_array,
                                                             p_ip_h);
     }
 
-    if (likely(p_ip_h->version == IPV6_VERSION)) {
+    if (likely(p_ip_h->version == XLIO_IPV6_VERSION)) {
         return m_steering_ipv6.rx_process_buffer_no_flow_id(p_rx_wc_buf_desc, pv_fd_ready_array,
                                                             reinterpret_cast<ip6_hdr *>(p_ip_h));
     }

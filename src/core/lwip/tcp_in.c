@@ -99,7 +99,7 @@ static inline void fill_parsed_ip_hdr(const void *payload, parsed_ip_hdr_t *iphd
     const u8_t *view_8bit = (const u8_t *)payload;
     const u16_t *view_16bit = (const u16_t *)payload;
 
-    iphdr->is_ipv6 = (view_8bit[0] >> 4U) == IPV6_VERSION;
+    iphdr->is_ipv6 = (view_8bit[0] >> 4U) == XLIO_IPV6_VERSION;
     if (iphdr->is_ipv6) {
         iphdr->src = (void *)&view_8bit[8];
         iphdr->dest = (void *)&view_8bit[24];
