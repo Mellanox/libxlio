@@ -254,7 +254,7 @@ void cq_mgr_rx::lro_update_hdr(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_w
         // CQE indicates IPv4 in the l3_hdr_type field
         struct iphdr *p_ip_h = (struct iphdr *)(p_rx_wc_buf_desc->p_buffer + transport_header_len);
 
-        assert(p_ip_h->version == IPV4_VERSION);
+        assert(p_ip_h->version == XLIO_IPV4_VERSION);
         assert(p_ip_h->protocol == IPPROTO_TCP);
 
         p_ip_h->ttl = cqe->lro_min_ttl;
