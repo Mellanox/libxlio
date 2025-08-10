@@ -60,6 +60,7 @@ obj/
 *.vcxproj.user
 *.swp
 VTune Profiler Results/
+.exrc
 
 # XLIO specific
 src/utils/timetest
