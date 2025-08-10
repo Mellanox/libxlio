@@ -148,7 +148,32 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
             p_tcp_iov[0].iovec.iov_len = total_packet_len;
         }
 
-        p_tcp_iov[0].p_desc->lwip_pbuf.ref++;
+        if (unlikely(p_tcp_iov[0].p_desc->lwip_pbuf.ref > 1)) {
+            /*
+             * First buffer in the vector is used for reference counting.
+             * The reference is released after completion depending on batching mode.
+             * There is a situation when a buffer can be sent as rexmit while the first
+             * send attempt is still in the SQ. In such case we allocate a new fake buffer.
+             * It prevents a race when TCP timer which is running from internal thread polls TX
+             * and decrements ref count of other socket pbufs under ring lock while another thread
+             * performs output of rexmit pbufs and incerements the pbuf under socket lock.
+             * Since this is a new pbuf it is still not posted to the SQ and TCP timer
+             * cannot complete it in parallel.
+             * This buffer is allocated with ref == 1, so we must not increase it.
+             * When completion happens, ref becomes 0 and this buffer is released.
+             * We don't change data, only pointer to buffer descriptor.
+             */
+            pbuf_type type = (pbuf_type)p_tcp_iov[0].p_desc->lwip_pbuf.type;
+            mem_buf_desc_t *p_mem_buf_desc =
+                get_buffer(type, &(p_tcp_iov[0].p_desc->lwip_pbuf.desc),
+                           is_set(attr.flags, XLIO_TX_PACKET_BLOCK));
+            if (!p_mem_buf_desc) {
+                return -1;
+            }
+            p_tcp_iov[0].p_desc = p_mem_buf_desc;
+        } else {
+            p_tcp_iov[0].p_desc->lwip_pbuf.ref++;
+        }
 
         /* save pointers to ip and tcp headers for software checksum calculation */
         p_tcp_iov[0].p_desc->tx.p_ip_h = p_ip_hdr;
