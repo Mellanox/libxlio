@@ -75,7 +75,7 @@ entity_context_manager::entity_context_manager()
     m_entity_contexts.reserve(safe_mce_sys().worker_threads);
 
     for (size_t i = 0; i < safe_mce_sys().worker_threads; i++) {
-        m_entity_contexts.push_back(new entity_context());
+        m_entity_contexts.push_back(new entity_context(i));
     }
 }
 

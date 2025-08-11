@@ -39,7 +39,7 @@ config_descriptor json_descriptor_provider::load_descriptors()
 {
     json_object_handle schema_handle(json_tokener_parse(m_json_string));
     if (!schema_handle.get()) {
-        throw_xlio_exception("Failed to parse JSON schema." + std::string(m_json_string));
+        throw_xlio_exception("Failed to parse JSON schema.");
     }
 
     validate_schema(schema_handle.get());

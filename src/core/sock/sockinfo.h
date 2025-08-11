@@ -79,7 +79,7 @@
 #define MSG_ZEROCOPY 0x4000000
 #endif
 
-#define NOTIFY_ON_EVENTS(context, events) context->set_events(events)
+#define NOTIFY_ON_EVENTS(context, events) context->insert_epoll_event(events)
 
 #define IF_STATS(x)                                                                                \
     if (unlikely(m_p_socket_stats)) {                                                              \
@@ -302,8 +302,11 @@ public:
     inline bool set_flow_tag(uint32_t flow_tag_id);
     inline void sock_pop_descs_rx_ready(descq_t *cache);
 
+    entity_context *get_entity_context() const { return m_entity_context; }
     uint32_t get_epoll_event_flags() { return m_epoll_event_flags; }
+    uint32_t get_epoll_event_flags_thread() const { return m_epoll_event_flags_thread; }
     void set_epoll_event_flags(uint32_t events) { m_epoll_event_flags = events; }
+    void set_epoll_event_flags_thread(uint32_t events) { m_epoll_event_flags_thread = events; }
     bool has_epoll_context() { return (!!m_econtext); }
     bool get_rx_pkt_ready_list_count() const { return m_n_rx_pkt_ready_list_count; }
     int get_fd() const { return m_fd; };
@@ -378,7 +381,6 @@ protected:
 
     inline void set_rx_reuse_pending(bool is_pending = true);
     inline void reuse_buffer(mem_buf_desc_t *buff);
-    inline void set_events(uint64_t events);
     inline void save_strq_stats(uint32_t packet_strides);
 
     inline int dequeue_packet(iovec *p_iov, ssize_t sz_iov, sockaddr *__from, socklen_t *__fromlen,
@@ -458,6 +460,7 @@ protected:
     // End of first cache line
 
     uint32_t m_epoll_event_flags = 0U;
+    uint32_t m_epoll_event_flags_thread = 0U;
     int m_n_rx_pkt_ready_list_count = 0;
     size_t m_rx_pkt_ready_offset = 0U;
     size_t m_rx_ready_byte_count = 0U;
@@ -468,7 +471,7 @@ public:
     epoll_fd_rec m_fd_rec;
     wakeup_pipe m_sock_wakeup_pipe;
 
-    // End of second cache 16 bytes ago
+    // End of second cache 8 bytes ago
 
     list_node<sockinfo, sockinfo::socket_fd_list_node_offset> socket_fd_list_node;
     list_node<sockinfo, sockinfo::ep_info_fd_node_offset> ep_info_fd_node;
@@ -574,11 +577,6 @@ void sockinfo::sock_pop_descs_rx_ready(descq_t *cache)
     }
 
     unlock_rx_q();
-}
-
-void sockinfo::set_events(uint64_t events)
-{
-    insert_epoll_event(events);
 }
 
 void sockinfo::save_strq_stats(uint32_t packet_strides)

@@ -57,7 +57,7 @@ public:
     T *obj_ptr() { return reinterpret_cast<T *>(reinterpret_cast<uintptr_t>(this) - offset()); }
 
     /* is_list_member - check if the node is already a member in a list. */
-    bool is_list_member()
+    bool is_list_member() const
     {
         return this->head.next != &this->head || this->head.prev != &this->head;
     }
@@ -182,7 +182,18 @@ public:
      */
     void clear_without_cleanup() { init_list(); }
 
-    void push_back(T *obj)
+    // This method enables easy cleanup of the list.
+    // Each object that resides in the list must be seperately cleared.
+    // Becuase, the next,prev members are part of the inserted object and should be
+    // treated accordingly, otherwise the removed object cannot be reinserted.
+    void clear()
+    {
+        while (!empty()) {
+            pop_front();
+        }
+    }
+
+    void push_back_impl(T *obj, bool err_print)
     {
         if (unlikely(!obj)) {
             vlist_logwarn("Got NULL object - ignoring");
@@ -191,13 +202,20 @@ public:
 
         list_node<T, offset> *node_obj = GET_NODE(obj, T, offset);
         if (unlikely(node_obj->is_list_member())) {
-            VLIST_DEBUG_PRINT_ERROR_IS_MEMBER;
+            if (err_print) {
+                VLIST_DEBUG_PRINT_ERROR_IS_MEMBER;
+            }
+            return;
         }
 
         VLIST_DEBUG_SET_PARENT(node_obj, this);
         list_add_tail(&node_obj->head, &m_list.head);
         m_size++;
     }
+
+    void push_back(T *obj) { push_back_impl(obj, true); }
+
+    void push_back_if_absent(T *obj) { push_back_impl(obj, false); }
 
     void push_front(T *obj)
     {
@@ -263,6 +281,16 @@ public:
         this->move_to_empty(temp_list);
         x.move_to_empty(*this);
         temp_list.move_to_empty(x);
+    }
+
+    bool is_member(const T *obj) const
+    {
+        if (likely(obj)) {
+            list_node<T, offset> *node_obj = GET_NODE(obj, T, offset);
+            return node_obj->is_list_member();
+        }
+
+        return false;
     }
 
 #if VLIST_DEBUG

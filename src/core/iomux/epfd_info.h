@@ -11,11 +11,28 @@
 #include <sock/cleanable_obj.h>
 #include <sock/sockinfo.h>
 
+class entity_context;
+
 typedef xlio_list_t<sockinfo, sockinfo::ep_ready_fd_node_offset> ep_ready_fd_list_t;
 typedef xlio_list_t<sockinfo, sockinfo::ep_info_fd_node_offset> fd_info_list_t;
 typedef std::unordered_map<int, epoll_fd_rec> fd_info_map_t;
 typedef std::unordered_map<ring *, int /*ref count*/> ring_map_t;
 typedef std::deque<int> ready_cq_fd_q_t;
+
+class epfd_info_entity_context_events {
+public:
+    typedef xlio_list_t<sockinfo, sockinfo::socket_fd_list_node_offset> epoll_ready_sock_list;
+
+    ~epfd_info_entity_context_events() { m_epoll_ready_sockets.clear(); }
+
+    void add_epoll_ready_socket(uint64_t events, sockinfo *si);
+    void remove_epoll_ready_socket(sockinfo *si);
+    void move_epoll_ready_events(ep_ready_fd_list_t &out);
+
+private:
+    epoll_ready_sock_list m_epoll_ready_sockets;
+    lock_spin_recursive m_epoll_ready_sockets_lock;
+};
 
 class epfd_info : public lock_mutex_recursive, public cleanable_obj, public wakeup_pipe {
 public:
@@ -87,11 +104,15 @@ public:
     void remove_epoll_event(sockinfo *sock_fd, uint32_t event_flags);
     void increase_ring_ref_count(ring *ring);
     void decrease_ring_ref_count(ring *ring);
+    bool move_entity_context_ready_events();
+    void add_rx_migration_cand(sockinfo *si);
+    void rx_migration_check();
 
 private:
     int add_fd(int fd, epoll_event *event);
     int del_fd(int fd, bool passthrough = false);
     int mod_fd(int fd, epoll_event *event);
+    void remove_socket_from_ready_list(sockinfo *sk);
 
 public:
     ep_ready_fd_list_t m_ready_fds;
@@ -110,5 +131,7 @@ private:
     epoll_stats_t m_local_stats;
     epoll_stats_t *m_stats;
     int m_log_invalid_events;
+    std::vector<sockinfo *> m_rx_migration_cands;
+    std::vector<epfd_info_entity_context_events> m_entity_context_events;
 };
 #endif /* _EPFD_INFO_H */

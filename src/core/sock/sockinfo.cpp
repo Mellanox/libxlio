@@ -1215,7 +1215,7 @@ void sockinfo::do_rings_migration_rx(resource_allocation_key &old_key)
 
 void sockinfo::consider_rings_migration_rx()
 {
-    if (m_ring_alloc_logic_rx.is_logic_support_migration()) {
+    if (!m_entity_context && m_ring_alloc_logic_rx.is_logic_support_migration()) {
         if (!m_rx_migration_lock.trylock()) {
             if (m_ring_alloc_logic_rx.should_migrate_ring()) {
                 ring_alloc_logic_attr old_key(*m_ring_alloc_logic_rx.get_key());
@@ -1237,6 +1237,7 @@ int sockinfo::add_epoll_context(epfd_info *epfd)
     if (!m_econtext) {
         // This socket is not registered to any epfd
         m_econtext = epfd;
+        set_epoll_event_flags_thread(0);
     } else {
         // Currently XLIO does not support more then 1 epfd listed
         errno = (m_econtext == epfd) ? EEXIST : ENOMEM;

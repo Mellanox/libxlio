@@ -57,9 +57,10 @@ public:
         size_t tot_size;
     };
 
-    entity_context();
+    entity_context(size_t index);
     ~entity_context();
 
+    size_t get_index() const { return m_index; }
     void process();
     void add_job(const job_desc &job);
 
@@ -69,6 +70,7 @@ private:
     void listen_socket_job(sockinfo *sock);
 
     job_queue<job_desc> m_job_queue;
+    size_t m_index;
     size_t m_max_jobs = 0U;
 };
 
