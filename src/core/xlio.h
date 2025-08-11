@@ -270,6 +270,7 @@ int xlio_init_ex(const struct xlio_init_attr *attr);
  * - EINVAL: Invalid parameters
  * - ENOMEM: Insufficient memory
  * - ENODEV: No compatible network devices found
+ * - EEXIST: XLIO is already initialized
  *
  * @see xlio_exit()
  */

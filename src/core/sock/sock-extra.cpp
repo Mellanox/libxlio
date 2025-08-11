@@ -132,6 +132,19 @@ struct xlio_api_t *extra_api()
 
 extern "C" int xlio_init_ex(const struct xlio_init_attr *attr)
 {
+    if (g_init_global_ctors_done) {
+        vlog_printf(VLOG_DEBUG, "XLIO is already initialized!!\n");
+        // If XLIO global memory is already allocated, we can't
+        // reinitialize XLIO with new memory allocator
+        if (attr->memory_alloc) {
+            errno = EEXIST;
+            return -1;
+        } else {
+            // XLIO is already initialized, no need to initialize again.
+            return 0;
+        }
+    }
+
     xlio_init();
 
     extern xlio_memory_cb_t g_user_memory_cb;
