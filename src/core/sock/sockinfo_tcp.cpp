@@ -1277,7 +1277,6 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
     int flags = tx_arg.attr.flags;
     int errno_tmp = errno;
     int ret = 0;
-    int poll_count = 0;
     err_t err;
     void *tx_ptr = nullptr;
 
@@ -1294,9 +1293,7 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
 
     si_tcp_logfunc("tx: iov=%p niovs=%d", p_iov, sz_iov);
 
-    if (m_sysvar_rx_poll_on_tx_tcp) {
-        rx_wait_helper(poll_count, false);
-    }
+    rx_poll_on_tx_if_needed();
 
     bool is_blocking = BLOCK_THIS_RUN(m_b_blocking, flags);
 
@@ -3158,8 +3155,9 @@ int sockinfo_tcp::rx_verify_available_data()
 {
     int poll_count = 0;
 
-    // Poll cq to verify the latest amount of ready bytes
-    int ret = rx_wait_helper(poll_count, false);
+    // Poll CQ to verify the latest amount of ready bytes for R2C mode
+    // Otherwise, check exiting m_rx_ready_byte_count.
+    int ret = (!m_entity_context ? rx_wait_helper(poll_count, false) : m_rx_ready_byte_count);
 
     if (ret >= 0 || errno == EAGAIN) {
         errno = 0;
@@ -4094,7 +4092,7 @@ bool sockinfo_tcp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array)
         return true;
     }
 
-    if (!p_poll_sn || m_skip_cq_poll_in_rx) {
+    if (!p_poll_sn || m_skip_cq_poll_in_rx || m_entity_context) {
         return false;
     }
 
@@ -4135,17 +4133,19 @@ bool sockinfo_tcp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array)
 bool sockinfo_tcp::is_writeable()
 {
     if (m_sock_state == TCP_SOCK_ASYNC_CONNECT) {
-        if (m_conn_state == TCP_CONN_CONNECTED) {
-            si_tcp_logdbg("++++ async connect ready");
-            m_sock_state = TCP_SOCK_CONNECTED_RDWR;
-            goto noblock;
-        } else if (m_conn_state != TCP_CONN_CONNECTING) {
-            // async connect failed for some reason. Reset our state and return ready fd
-            si_tcp_logerr("async connect failed");
-            if (m_sock_state != TCP_SOCK_BOUND) { // Avoid binding twice
-                m_sock_state = TCP_SOCK_INITED;
+        if (!m_entity_context) {
+            if (m_conn_state == TCP_CONN_CONNECTED) {
+                si_tcp_logdbg("++++ async connect ready");
+                m_sock_state = TCP_SOCK_CONNECTED_RDWR;
+                goto noblock;
+            } else if (m_conn_state != TCP_CONN_CONNECTING) {
+                // async connect failed for some reason. Reset our state and return ready fd
+                si_tcp_logerr("async connect failed");
+                if (m_sock_state != TCP_SOCK_BOUND) { // Avoid binding twice
+                    m_sock_state = TCP_SOCK_INITED;
+                }
+                goto noblock;
             }
-            goto noblock;
         }
         return false;
     }

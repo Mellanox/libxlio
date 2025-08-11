@@ -356,7 +356,7 @@ public:
 
     void rx_poll_on_tx_if_needed()
     {
-        if (m_sysvar_rx_poll_on_tx_tcp) {
+        if (m_sysvar_rx_poll_on_tx_tcp && !m_entity_context) {
             int poll_count = 0;
             rx_wait_helper(poll_count, false);
         }

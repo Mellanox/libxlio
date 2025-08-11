@@ -494,20 +494,31 @@ bool io_mux_call::immidiate_return(int &poll_os_countdown)
 
 bool io_mux_call::ring_poll_and_process_element()
 {
-    // TODO: (select, poll) this access all CQs, it is better to check only relevant ones
-    return g_p_net_device_table_mgr->global_ring_poll_and_process_element(&m_poll_sn_rx,
-                                                                          &m_poll_sn_tx, nullptr);
+    if (!safe_mce_sys().is_threads_mode()) {
+        // TODO: (select, poll) this access all CQs, it is better to check only relevant ones
+        return g_p_net_device_table_mgr->global_ring_poll_and_process_element(
+            &m_poll_sn_rx, &m_poll_sn_tx, nullptr);
+    }
+
+    return true;
 }
 
 int io_mux_call::ring_request_notification()
 {
-    return g_p_net_device_table_mgr->global_ring_request_notification(m_poll_sn_rx, m_poll_sn_tx);
+    if (!safe_mce_sys().is_threads_mode()) {
+        return g_p_net_device_table_mgr->global_ring_request_notification(m_poll_sn_rx,
+                                                                          m_poll_sn_tx);
+    }
+
+    return 0;
 }
 
 void io_mux_call::ring_wait_for_notification_and_process_element(void *pv_fd_ready_array)
 {
-    g_p_net_device_table_mgr->global_ring_wait_for_notification_and_process_element(
-        &m_poll_sn_rx, pv_fd_ready_array);
+    if (!safe_mce_sys().is_threads_mode()) {
+        g_p_net_device_table_mgr->global_ring_wait_for_notification_and_process_element(
+            &m_poll_sn_rx, pv_fd_ready_array);
+    }
 }
 
 bool io_mux_call::is_sig_pending()

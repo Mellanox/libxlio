@@ -55,13 +55,19 @@ void epoll_wait_call::init_offloaded_fds()
 
 int epoll_wait_call::get_current_events()
 {
-    if (m_epfd_info->m_ready_fds.empty()) {
-        return m_n_all_ready_fds;
+    if (!safe_mce_sys().is_threads_mode()) {
+        if (m_epfd_info->m_ready_fds.empty()) {
+            return m_n_all_ready_fds;
+        }
+        lock();
+    } else {
+        // At this stage need to protect m_ready_fds which can be modified from another thread.
+        lock();
+        if (!m_epfd_info->move_entity_context_ready_events()) {
+            unlock();
+            return m_n_all_ready_fds;
+        }
     }
-
-    xlio_list_t<sockinfo, sockinfo::socket_fd_list_node_offset> socket_fd_list;
-
-    lock();
 
     int i = m_n_all_ready_fds;
     int ready_rfds = 0;
@@ -115,7 +121,7 @@ int epoll_wait_call::get_current_events()
         }
 
         if (got_event) {
-            socket_fd_list.push_back(si);
+            m_epfd_info->add_rx_migration_cand(si);
             ++i;
         }
         si = si_next;
@@ -127,19 +133,8 @@ int epoll_wait_call::get_current_events()
 
     unlock();
 
-    /*
-     * For checking ring migration rx we need a socket context.
-     * In epoll we separate the rings from the sockets, so only here we access the sockets.
-     * Therefore, it is most convenient to check it here.
-     * We need to move the ring migration to the epfd, going over the registered sockets,
-     * when polling the rings was not fruitful.
-     * This  will be more similar to the behavior of select/poll.
-     * See RM task 212058
-     */
-    while (!socket_fd_list.empty()) {
-        si = socket_fd_list.get_and_pop_front();
-        si->consider_rings_migration_rx();
-    }
+    // Must be called outside the lock to avoid cross deadlock.
+    m_epfd_info->rx_migration_check();
 
     return (i);
 }
@@ -334,15 +329,26 @@ bool epoll_wait_call::handle_epoll_event(bool is_ready, uint32_t events, sockinf
 
 bool epoll_wait_call::ring_poll_and_process_element()
 {
-    return m_epfd_info->ring_poll_and_process_element(&m_poll_sn_rx, &m_poll_sn_tx, nullptr);
+    if (!safe_mce_sys().is_threads_mode()) {
+        return m_epfd_info->ring_poll_and_process_element(&m_poll_sn_rx, &m_poll_sn_tx, nullptr);
+    }
+
+    return true;
 }
 
 int epoll_wait_call::ring_request_notification()
 {
-    return m_epfd_info->ring_request_notification(m_poll_sn_rx, m_poll_sn_tx);
+    if (!safe_mce_sys().is_threads_mode()) {
+        return m_epfd_info->ring_request_notification(m_poll_sn_rx, m_poll_sn_tx);
+    }
+
+    return 0;
 }
 
 void epoll_wait_call::ring_wait_for_notification_and_process_element(void *pv_fd_ready_array)
 {
-    m_epfd_info->ring_wait_for_notification_and_process_element(&m_poll_sn_rx, pv_fd_ready_array);
+    if (!safe_mce_sys().is_threads_mode()) {
+        m_epfd_info->ring_wait_for_notification_and_process_element(&m_poll_sn_rx,
+                                                                    pv_fd_ready_array);
+    }
 }

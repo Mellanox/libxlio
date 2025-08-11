@@ -44,9 +44,10 @@
 #define ctx_loginfo  __log_info_info
 #define ctx_logdbg   __log_info_dbg
 
-entity_context::entity_context()
+entity_context::entity_context(size_t index)
     : poll_group(xlio_poll_group_attr {XLIO_GROUP_FLAG_SAFE | XLIO_GROUP_FLAG_DIRTY, nullptr,
                                        nullptr, nullptr, nullptr})
+    , m_index(index)
 {
     ctx_logdbg("Entity Context created");
 }
