@@ -754,6 +754,11 @@ bool dst_entry::alloc_neigh_val(transport_type_t tranport)
     return ret_val;
 }
 
+mem_buf_desc_t *dst_entry::get_tx_buffer()
+{
+    return m_p_ring->mem_buf_tx_get(m_id, false, PBUF_RAM, 1, true);
+}
+
 void dst_entry::return_buffers_pool()
 {
     int count;

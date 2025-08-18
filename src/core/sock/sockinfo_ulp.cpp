@@ -61,6 +61,11 @@ bool sockinfo_tcp_ops::handle_send_ret(ssize_t ret, struct tcp_seg *seg)
     return true;
 }
 
+ssize_t sockinfo_tcp_ops_thread::tx(xlio_tx_call_attr_t &tx_arg)
+{
+    return m_p_sock->tcp_tx_thread(tx_arg);
+}
+
 #ifdef DEFINED_UTLS
 
 #include <openssl/evp.h>

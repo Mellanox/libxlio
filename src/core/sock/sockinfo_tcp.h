@@ -241,6 +241,8 @@ public:
 
     ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
     ssize_t tcp_tx(xlio_tx_call_attr_t &tx_arg);
+    ssize_t tcp_tx_thread(xlio_tx_call_attr_t &tx_arg);
+    void tx_thread_commit(mem_buf_desc_t *buf_list) override;
     ssize_t rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
                sockaddr *__from = nullptr, socklen_t *__fromlen = nullptr,
                struct msghdr *__msg = nullptr) override;
@@ -439,6 +441,7 @@ private:
                                            err_t err);
 
     static void update_ready_packets_stats(socket_stats_t *stats, uint64_t bytes);
+    void stats_update_tx_errors(int error_number);
 
     int accept_helper(struct sockaddr *__addr, socklen_t *__addrlen, int __flags = 0);
 

@@ -46,7 +46,7 @@
 
 entity_context::entity_context(size_t index)
     : poll_group(xlio_poll_group_attr {XLIO_GROUP_FLAG_SAFE | XLIO_GROUP_FLAG_DIRTY, nullptr,
-                                       nullptr, nullptr, nullptr})
+                                       entity_context_comp_cb, nullptr, nullptr})
     , m_index(index)
 {
     ctx_logdbg("Entity Context created");
@@ -71,8 +71,7 @@ void entity_context::process()
             listen_socket_job(job);
             break;
         case JOB_TYPE_SOCK_TX:
-            // Handle socket transmit job
-            // TODO: implement transmit logic
+            tx_data_job(job);
             break;
         case JOB_TYPE_SOCK_RX_DATA_RECVD:
             rx_data_recvd_job(job);
@@ -112,6 +111,15 @@ void entity_context::connect_socket_job(const job_desc &job)
     } else {
         ctx_loginfo("Unsupported socket protocol %hd for Threads mode", sock->get_protocol());
     }
+}
+
+void entity_context::tx_data_job(const job_desc &job)
+{
+    if (unlikely(!job.buf || !job.sock)) {
+        ctx_logwarn("Invalid TX job");
+        return;
+    }
+    job.sock->tx_thread_commit(job.buf);
 }
 
 void entity_context::rx_data_recvd_job(const job_desc &job)
@@ -166,4 +174,16 @@ void entity_context::close_socket_job(const job_desc &job)
         // - prepare_to_close() and clean_socket_obj() or add to pending close list
         close_socket_helper(tcp_si);
     }
+}
+
+/*static*/
+void entity_context::entity_context_comp_cb(xlio_socket_t sock, uintptr_t userdata_sq,
+                                            uintptr_t userdata_op)
+{
+    mem_buf_desc_t *buf_list = reinterpret_cast<mem_buf_desc_t *>(userdata_op);
+
+    NOT_IN_USE(sock);
+    NOT_IN_USE(userdata_sq);
+
+    buf_list->p_desc_owner->mem_buf_tx_release(buf_list, true);
 }

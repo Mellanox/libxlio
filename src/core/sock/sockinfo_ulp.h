@@ -46,6 +46,15 @@ protected:
     sockinfo_tcp *const m_p_sock;
 };
 
+class sockinfo_tcp_ops_thread : public sockinfo_tcp_ops {
+public:
+    sockinfo_tcp_ops_thread(sockinfo_tcp *sock)
+        : sockinfo_tcp_ops(sock) {};
+    virtual ~sockinfo_tcp_ops_thread() = default;
+
+    ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
+};
+
 #ifdef DEFINED_UTLS
 
 enum xlio_utls_mode {

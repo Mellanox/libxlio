@@ -41,6 +41,8 @@
 class sockinfo;
 class mem_buf_desc_t;
 
+#define JOB_SOCK_TX_IOV_MAX 32
+
 class entity_context : public poll_group {
 public:
     enum job_type {
@@ -66,10 +68,14 @@ public:
     void add_job(const job_desc &job);
 
 private:
-    void connect_socket_job(const job_desc &sock);
-    void rx_data_recvd_job(const job_desc &sock);
+    void connect_socket_job(const job_desc &job);
+    void tx_data_job(const job_desc &job);
+    void rx_data_recvd_job(const job_desc &job);
     void listen_socket_job(const job_desc &job);
     void close_socket_job(const job_desc &job);
+
+    static void entity_context_comp_cb(xlio_socket_t sock, uintptr_t userdata_sq,
+                                       uintptr_t userdata_op);
 
     job_queue<job_desc> m_job_queue;
     size_t m_index;
