@@ -129,6 +129,8 @@ tcp_timers_collection *sockinfo_tcp::get_tcp_timer_collection()
 {
     if (is_xlio_socket()) {
         return m_p_group->get_tcp_timers();
+    } else if (m_entity_context) {
+        return m_entity_context->get_tcp_timers();
     } else if (safe_mce_sys().tcp_ctl_thread ==
                option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
         return &g_thread_local_tcp_timers;
@@ -513,8 +515,10 @@ inline bool sockinfo_tcp::try_harvest_from_rss_child(size_t rss_child_index)
     m_ready_conn_cnt += conn_count;
     rss_child->m_ready_conn_cnt = 0;
 
-    IF_STATS(rss_child->m_p_socket_stats->listen_counters.n_conn_backlog -= conn_count);
-    IF_STATS(rss_child->m_p_socket_stats->listen_counters.n_conn_accepted += conn_count);
+    IF_STATS_O(rss_child,
+               rss_child->m_p_socket_stats->listen_counters.n_conn_backlog -= conn_count);
+    IF_STATS_O(rss_child,
+               rss_child->m_p_socket_stats->listen_counters.n_conn_accepted += conn_count);
     IF_STATS(m_p_socket_stats->listen_counters.n_conn_backlog += conn_count);
 
     si_tcp_logdbg("Harvested %zu connections from rss_child %zu", m_ready_conn_cnt,
@@ -4054,9 +4058,8 @@ bool sockinfo_tcp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array)
 {
     if (is_server()) {
         bool state = false;
-        // tcp_si_logwarn("select on accept()");
         // m_conn_cond.lock();
-        if (m_entity_context) {
+        if (m_listen_ctx) {
             for (size_t i = 0; i < m_listen_ctx->get_listen_rss_children_size(); i++) {
                 if (m_listen_ctx->get_listen_rss_child(i)->m_ready_conn_cnt > 0) {
                     state = true;
@@ -5964,7 +5967,11 @@ void sockinfo_tcp::make_dirty()
 {
     if (!m_b_xlio_socket_dirty) {
         m_b_xlio_socket_dirty = true;
-        m_p_group->add_dirty_socket(this);
+        if (m_p_group) {
+            m_p_group->add_dirty_socket(this);
+        } else {
+            m_entity_context->add_dirty_socket(this);
+        }
     }
 }
 

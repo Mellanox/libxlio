@@ -112,8 +112,6 @@ void rfs_uc::prepare_flow_spec_worker_thread_mode()
     m_priority = 2;
     rfs_logdbg("src_port_stride: %d workers_num %d \n", MCE_DEFAULT_SRC_PORT_STRIDE,
                entity_context_pow2);
-
-    m_flow_tuple.set_src_port(m_match_value.src_port);
 }
 
 void rfs_uc::prepare_flow_spec_secondary_rule()
