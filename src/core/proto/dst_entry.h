@@ -85,6 +85,8 @@ public:
     bool update_ring_alloc_logic(int fd, lock_base &socket_lock,
                                  resource_allocation_key &ring_alloc_logic);
 
+    mem_buf_desc_t *get_tx_buffer();
+
     void return_buffers_pool();
     int get_route_mtu();
     inline void set_ip_ttl_hop_limit(uint8_t ttl_hop_limit)

@@ -428,6 +428,13 @@ void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
 void sockinfo_tcp::set_entity_context(entity_context *ctx)
 {
     m_entity_context = ctx;
+    // To reuse Ultra API path of TX completions
+    m_p_group = ctx;
+
+    assert(m_ops == m_ops_tcp);
+    m_ops_tcp = new sockinfo_tcp_ops_thread(this);
+    delete m_ops;
+    m_ops = m_ops_tcp;
 
     bool current_locks = m_ring_alloc_log_rx.get_use_locks();
     bool is_safe_ctx = (m_entity_context->get_flags() & XLIO_GROUP_FLAG_SAFE) != 0;
@@ -1357,6 +1364,100 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
     }
 
     return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp);
+}
+
+ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
+{
+    iovec *p_iov = tx_arg.attr.iov;
+    size_t sz_iov = tx_arg.attr.sz_iov;
+    ssize_t sent_bytes = 0;
+    int errno_tmp = errno;
+
+    // TODO Flags aren't supported now. They usually affect blocking mode and zerocopy.
+
+    /* Note, we do unprotected access to the socket state. State assignment is expected to be
+     * atomic on supported architectures.
+     * In case of false negative, the TX job execution handles it and subsequent send operation
+     * will likely return expected error.
+     */
+    if (!is_rts()) {
+        std::lock_guard<decltype(m_tcp_con_lock)> _lock(m_tcp_con_lock);
+        if (!is_connected_and_ready_to_send()) {
+            return -1;
+        }
+    }
+
+    int sndbuf = tcp_sndbuf(&m_pcb);
+    if (sndbuf <= 0) {
+        errno = EAGAIN;
+        return -1;
+    }
+
+    // TODO Optimize buffers allocation
+    mem_buf_desc_t *head = m_p_connected_dst_entry->get_tx_buffer();
+    mem_buf_desc_t *last = head;
+
+    if (!head) {
+        errno = EAGAIN;
+        return -1;
+    }
+    head->sz_data = 0;
+    unsigned sge_nr = 1;
+
+    for (size_t i = 0; i < sz_iov; ++i) {
+        size_t offset = 0;
+        while (offset < p_iov[i].iov_len) {
+            if (last->sz_data >= last->sz_buffer) {
+                if (unlikely(sge_nr >= JOB_SOCK_TX_IOV_MAX)) {
+                    goto exit;
+                }
+                mem_buf_desc_t *buf = m_p_connected_dst_entry->get_tx_buffer();
+                if (unlikely(!buf)) {
+                    goto exit;
+                }
+                buf->sz_data = 0;
+                last->p_next_desc = buf;
+                last = buf;
+                ++sge_nr;
+            }
+            size_t len = std::min(p_iov[i].iov_len - offset, last->sz_buffer - last->sz_data);
+            memcpy((uint8_t *)last->p_buffer + last->sz_data, (uint8_t *)p_iov[i].iov_base + offset,
+                   len);
+            last->sz_data += len;
+            offset += len;
+            sent_bytes += static_cast<ssize_t>(len);
+        }
+    }
+
+exit:
+
+    last->p_next_desc = nullptr;
+    m_entity_context->add_job(
+        entity_context::job_desc {entity_context::JOB_TYPE_SOCK_TX, this, head, 0});
+
+    errno = errno_tmp;
+    return sent_bytes;
+}
+
+void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf_list)
+{
+    struct iovec iov[JOB_SOCK_TX_IOV_MAX];
+    unsigned iov_len = 0;
+
+
+    for (mem_buf_desc_t *buf = buf_list; buf; buf = buf->p_next_desc) {
+        iov[iov_len++] = iovec {.iov_base = buf->p_buffer, .iov_len = buf->sz_data};
+    }
+
+    int rc = tcp_tx_express(iov, iov_len, buf_list->lkey,
+                            XLIO_EXPRESS_OP_TYPE_DESC | XLIO_EXPRESS_MSG_MORE, buf_list);
+
+    if (rc < 0) {
+        // TODO Make sure failure happened due to terminal state of the socket
+        // TODO In case of memory allocation issue (internal error), fail the socket
+        // TODO Free the buf_list
+        si_tcp_logwarn("tcp_tx_express() failed (errno=%d)", errno);
+    }
 }
 
 /**
@@ -4904,8 +5005,7 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
             strncpy((char *)__optval, cc_name, cc_len);
             *__optlen = cc_len;
             ret = 0;
-            // XLIO doesn't meet Linux kernel behavior if (__optval == NULL && __optlen !=
-            // NULL).
+            // XLIO doesn't meet Linux kernel behavior if (__optval == NULL && __optlen != NULL).
             break;
         case TCP_USER_TIMEOUT:
             if (*__optlen >= sizeof(unsigned int)) {
@@ -6055,18 +6155,22 @@ ssize_t sockinfo_tcp::tcp_tx_handle_done_and_unlock(ssize_t total_tx, int errno_
     return total_tx;
 }
 
-ssize_t sockinfo_tcp::tcp_tx_handle_errno_and_unlock(int error_number)
+void sockinfo_tcp::stats_update_tx_errors(int error_number)
 {
-    errno = error_number;
-
-    // nothing send  nb mode or got some other error
-    if (m_p_socket_stats) {
-        if (errno == EAGAIN) {
+    if (unlikely(m_p_socket_stats)) {
+        if (error_number == EAGAIN) {
             m_p_socket_stats->counters.n_tx_eagain++;
         } else {
             m_p_socket_stats->counters.n_tx_errors++;
         }
     }
+}
+
+ssize_t sockinfo_tcp::tcp_tx_handle_errno_and_unlock(int error_number)
+{
+    errno = error_number;
+
+    stats_update_tx_errors(error_number);
     unlock_tcp_con();
     return -1;
 }
