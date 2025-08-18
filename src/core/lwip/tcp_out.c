@@ -241,13 +241,13 @@ static struct pbuf *tcp_pbuf_prealloc(u32_t length, struct tcp_pcb *pcb, pbuf_ty
     return p;
 }
 
-/** Checks if tcp_write is allowed or not (checks state, snd_buf and snd_queuelen).
+/** Checks if tcp_write is allowed or not ().
  *
  * @param pcb the tcp pcb to check for
  * @param len length of data to send (checked agains snd_buf)
  * @return ERR_OK if tcp_write is allowed to proceed, another err_t otherwise
  */
-static err_t tcp_write_checks(struct tcp_pcb *pcb, u32_t len)
+static err_t tcp_write_is_state_valid(struct tcp_pcb *pcb)
 {
     /* connection is in invalid state for data transmission? */
     if ((get_tcp_state(pcb) != ESTABLISHED) && (get_tcp_state(pcb) != CLOSE_WAIT) &&
@@ -255,17 +255,6 @@ static err_t tcp_write_checks(struct tcp_pcb *pcb, u32_t len)
         LWIP_DEBUGF(TCP_OUTPUT_DEBUG | LWIP_DBG_STATE | LWIP_DBG_LEVEL_SEVERE,
                     ("tcp_write() called in invalid state\n"));
         return ERR_CONN;
-    } else if (len == 0) {
-        return ERR_OK;
-    }
-
-    /* If total number of pbufs on the unsent/unacked queues exceeds the
-     * configured maximum, return an error */
-    if (pcb->snd_queuelen >= pcb->snd_queuelen_max) {
-        LWIP_DEBUGF(TCP_OUTPUT_DEBUG | 3,
-                    ("tcp_write: queue exceeds %" U32_F "\n", pcb->snd_queuelen_max));
-        pcb->flags |= TF_NAGLEMEMERR;
-        return ERR_MEM;
     }
     return ERR_OK;
 }
@@ -316,7 +305,6 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
     struct tcp_seg *prev_seg = NULL;
     struct tcp_seg *queue = NULL;
     u32_t pos = 0;
-    u32_t queuelen;
     u8_t optlen = 0;
     u8_t optflags = 0;
     err_t err;
@@ -340,7 +328,7 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
                 ("tcp_write(pcb=%p, data=%p, len=%" U16_F ", apiflags=%" U16_F ")\n", (void *)pcb,
                  arg, len, (u16_t)apiflags));
 
-    err = tcp_write_checks(pcb, len);
+    err = tcp_write_is_state_valid(pcb);
     if (err != ERR_OK) {
         return err;
     }
@@ -352,7 +340,6 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
 #endif /* LWIP_TCP_TIMESTAMPS */
     optlen = LWIP_TCP_OPT_LENGTH(optflags);
 
-    queuelen = pcb->snd_queuelen;
     mss_local = tcp_xmit_size_goal(pcb, 1);
     if (is_file) {
         offset = offset_next = *(__off64_t *)arg;
@@ -403,12 +390,6 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
         u32_t left = len - pos;
         u32_t seglen = LWIP_MIN(left, mss_local - optlen);
 
-        if (queuelen >= pcb->snd_queuelen_max) {
-            LWIP_DEBUGF(TCP_OUTPUT_DEBUG | 2,
-                        ("tcp_write: queue exceeds %" U32_F "\n", pcb->snd_queuelen_max));
-            goto memerr;
-        }
-
         p = tcp_pbuf_prealloc(seglen + optlen, pcb, PBUF_RAM, desc, NULL);
         if (!p) {
             LWIP_DEBUGF(TCP_OUTPUT_DEBUG | 2, ("tcp_write: could not allocate pbuf\n"));
@@ -454,7 +435,6 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
         prev_seg = seg;
 
         pos += seglen;
-        queuelen++; /* There is only one pbuf in the list */
     }
 
     /*
@@ -490,12 +470,6 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
     /* Finally update the pcb state. */
     pcb->snd_lbb += len;
     pcb->snd_buf -= len;
-    pcb->snd_queuelen = queuelen;
-
-    LWIP_DEBUGF(TCP_QLEN_DEBUG, ("tcp_write: %" S16_F " (after enqueued)\n", pcb->snd_queuelen));
-    if (pcb->snd_queuelen != 0) {
-        LWIP_ASSERT("tcp_write: valid queue length", pcb->unacked != NULL || pcb->unsent != NULL);
-    }
 
     /* Set the PSH flag in the last segment that we enqueued. */
     if (enable_push_flag && seg != NULL && seg->tcphdr != NULL) {
@@ -512,11 +486,6 @@ memerr:
     if (queue != NULL) {
         tcp_tx_segs_free(pcb, queue);
     }
-    if (pcb->snd_queuelen != 0) {
-        LWIP_ASSERT("tcp_write: valid queue length", pcb->unacked != NULL || pcb->unsent != NULL);
-    }
-    LWIP_DEBUGF(TCP_QLEN_DEBUG | LWIP_DBG_STATE,
-                ("tcp_write: %" S16_F " (with mem err)\n", pcb->snd_queuelen));
     return ERR_MEM;
 }
 
@@ -544,7 +513,6 @@ err_t tcp_write_express(struct tcp_pcb *pcb, const struct iovec *iov, u32_t iovc
     u32_t seglen;
     u32_t last_seglen;
     u32_t total_len = 0;
-    u16_t queuelen = 0;
     u8_t optflags = TF_SEG_OPTS_ZEROCOPY;
 
     /*
@@ -600,7 +568,6 @@ err_t tcp_write_express(struct tcp_pcb *pcb, const struct iovec *iov, u32_t iovc
                 pbuf_cat(seg->p, p);
                 seg->len += p->tot_len;
                 pos += seglen;
-                queuelen++;
             }
         }
 
@@ -629,7 +596,6 @@ err_t tcp_write_express(struct tcp_pcb *pcb, const struct iovec *iov, u32_t iovc
             last = seg;
 
             pos += seglen;
-            queuelen++;
         }
 
         total_len += len;
@@ -662,7 +628,6 @@ err_t tcp_write_express(struct tcp_pcb *pcb, const struct iovec *iov, u32_t iovc
     /* Update the pcb state. */
     pcb->snd_lbb += total_len;
     pcb->snd_buf -= total_len;
-    pcb->snd_queuelen += queuelen;
 
     /* TODO Move Minshall's logic to tcp_output(). */
     if (total_len < pcb->mss) {
@@ -719,20 +684,9 @@ err_t tcp_enqueue_flags(struct tcp_pcb *pcb, u8_t flags)
     u8_t optflags = 0;
     u8_t optlen = 0;
 
-    LWIP_DEBUGF(TCP_QLEN_DEBUG,
-                ("tcp_enqueue_flags: queuelen: %" U16_F "\n", (u16_t)pcb->snd_queuelen));
-
     LWIP_ASSERT(
         "tcp_enqueue_flags: need either TCP_SYN or TCP_FIN in flags (programmer violates API)",
         (flags & (TCP_SYN | TCP_FIN)) != 0);
-
-    // Check for max queuelen (FIN flag should always come through).
-    if ((pcb->snd_queuelen >= pcb->snd_queuelen_max) && ((flags & TCP_FIN) == 0)) {
-        LWIP_DEBUGF(TCP_OUTPUT_DEBUG | 3,
-                    ("tcp_enqueue_flags: queue exceeds %" U32_F "\n", pcb->snd_queuelen_max));
-        pcb->flags |= TF_NAGLEMEMERR;
-        return ERR_MEM;
-    }
 
     if (flags & TCP_SYN) {
         optflags = TF_SEG_OPTS_MSS;
@@ -791,11 +745,6 @@ err_t tcp_enqueue_flags(struct tcp_pcb *pcb, u8_t flags)
     if (flags & TCP_FIN) {
         pcb->flags |= TF_FIN;
     }
-
-    /* update number of segments on the queues */
-    pcb->snd_queuelen += pbuf_clen(seg->p);
-    LWIP_DEBUGF(TCP_QLEN_DEBUG,
-                ("tcp_enqueue_flags: %" S16_F " (after enqueued)\n", pcb->snd_queuelen));
 
     return ERR_OK;
 }
@@ -1125,9 +1074,6 @@ void tcp_split_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t wnd)
         if (enable_push_flag) {
             TCPH_SET_FLAG(newseg->tcphdr, TCP_PSH);
         }
-
-        /* Update number of buffer to be send */
-        pcb->snd_queuelen++;
 
         if (pcb->last_unsent == seg) {
             /* We have split the last unsent segment, update last_unsent */

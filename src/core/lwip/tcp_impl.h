@@ -90,7 +90,7 @@ void set_tmr_resolution(u32_t v);
       ((tpcb)->flags & TF_INFR) ||                                                                 \
       (((tpcb)->unsent != NULL) &&                                                                 \
        (((tpcb)->unsent->next != NULL) || ((tpcb)->unsent->len >= (tpcb)->mss))) ||                \
-      ((tcp_sndbuf(tpcb) <= 0) || (tcp_sndqueuelen(tpcb) >= (tpcb)->snd_queuelen_max)))            \
+      (tcp_sndbuf(tpcb) <= 0))                                                                     \
          ? 1                                                                                       \
          : 0)
 #define tcp_output_nagle(tpcb) (tcp_do_output_nagle(tpcb) ? tcp_output(tpcb) : ERR_OK)
@@ -100,9 +100,6 @@ void set_tmr_resolution(u32_t v);
 #define TCP_SEQ_GT(a, b)  ((s32_t)((u32_t)(a) - (u32_t)(b)) > 0)
 #define TCP_SEQ_GEQ(a, b) ((s32_t)((u32_t)(a) - (u32_t)(b)) >= 0)
 /* is b<=a<=c? */
-#if 0 /* see bug #10548 */
-#define TCP_SEQ_BETWEEN(a, b, c) ((c) - (b) >= (a) - (b))
-#endif
 #define TCP_SEQ_BETWEEN(a, b, c) (TCP_SEQ_GEQ(a, b) && TCP_SEQ_LEQ(a, c))
 #define TCP_FIN                  0x01U
 #define TCP_SYN                  0x02U

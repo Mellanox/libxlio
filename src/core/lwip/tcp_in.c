@@ -365,7 +365,7 @@ static void tcp_listen_input(struct tcp_pcb *pcb, tcp_in_data *in_data)
         npcb->ssthresh = npcb->snd_wnd;
 #if TCP_CALCULATE_EFF_SEND_MSS
         // mss can be changed by tcp_parseopt, need to take the MIN
-        UPDATE_PCB_BY_MSS(npcb, LWIP_MIN(npcb->mss, npcb->advtsd_mss));
+        npcb->mss = LWIP_MIN(npcb->mss, npcb->advtsd_mss);
 #endif /* TCP_CALCULATE_EFF_SEND_MSS */
 
         /* Register the new PCB so that we can begin sending segments
@@ -410,7 +410,7 @@ static err_t tcp_pcb_reuse(struct tcp_pcb *pcb, tcp_in_data *in_data)
     pcb->ssthresh = pcb->snd_wnd;
 
     // mss can be changed by tcp_parseopt, need to take the MIN
-    UPDATE_PCB_BY_MSS(pcb, LWIP_MIN(pcb->mss, pcb->advtsd_mss));
+    pcb->mss = LWIP_MIN(pcb->mss, pcb->advtsd_mss);
     rc = pcb->syn_tw_handled_cb(pcb->listen_sock, pcb);
     if (rc != ERR_OK) {
         return rc;
@@ -575,7 +575,7 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
 
 #if TCP_CALCULATE_EFF_SEND_MSS
             // mss can be changed by tcp_parseopt, need to take the MIN
-            UPDATE_PCB_BY_MSS(pcb, LWIP_MIN(pcb->mss, tcp_send_mss(pcb)));
+            pcb->mss = LWIP_MIN(pcb->mss, tcp_send_mss(pcb));
 #endif /* TCP_CALCULATE_EFF_SEND_MSS */
 
             /* Set ssthresh again after changing pcb->mss (already set in tcp_connect
@@ -586,11 +586,6 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
 #else
             pcb->cwnd = ((pcb->cwnd == 1) ? (pcb->mss * 2) : pcb->mss);
 #endif
-            LWIP_ASSERT("pcb->snd_queuelen > 0", (pcb->snd_queuelen > 0));
-            --pcb->snd_queuelen;
-            LWIP_DEBUGF(
-                TCP_QLEN_DEBUG,
-                ("tcp_process: SYN-SENT --queuelen %" U16_F "\n", (u16_t)pcb->snd_queuelen));
             rseg = pcb->unacked;
             pcb->unacked = rseg->next;
 
@@ -785,12 +780,11 @@ static void tcp_oos_insert_segment(struct tcp_pcb *pcb, struct tcp_seg *cseg, st
  * @param ackqno current ackqno
  * @return number of freed pbufs
  */
-static u32_t tcp_shrink_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t ackno)
+static void tcp_shrink_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t ackno)
 {
     struct pbuf *cur_p;
     struct pbuf *p;
     u32_t len;
-    u32_t count = 0;
     u8_t optflags = 0;
     u8_t optlen;
 
@@ -823,7 +817,7 @@ static u32_t tcp_shrink_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t 
         p->payload = (u8_t *)p->payload + len;
         memmove(p->payload, seg->tcphdr, TCP_HLEN);
         seg->tcphdr = p->payload;
-        return count;
+        return;
     }
 
     cur_p = seg->p->next;
@@ -857,7 +851,6 @@ static u32_t tcp_shrink_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t 
             } else {
                 pbuf_free(p);
             }
-            count++;
         }
     }
 
@@ -890,15 +883,12 @@ static u32_t tcp_shrink_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t 
         } else {
             pbuf_free(p);
         }
-        count++;
     }
 
 #if TCP_TSO_DEBUG
     LWIP_DEBUGF(TCP_TSO_DEBUG | LWIP_DBG_TRACE,
-                ("tcp_shrink: count: %-5d unsent %s\n", count, _dump_seg(pcb->unsent)));
+                ("tcp_shrink: unsent %s\n", _dump_seg(pcb->unsent)));
 #endif /* TCP_TSO_DEBUG */
-
-    return count;
 }
 
 /**
@@ -910,10 +900,9 @@ static u32_t tcp_shrink_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t 
  * @param ackqno current ackqno
  * @return number of freed pbufs
  */
-static u32_t tcp_shrink_zc_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t ackno)
+static void tcp_shrink_zc_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32_t ackno)
 {
     struct pbuf *p;
-    u32_t count = 0;
     u32_t len;
 
     assert(seg != NULL);
@@ -928,7 +917,6 @@ static u32_t tcp_shrink_zc_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32
         assert(seg->p != NULL);
         /* XXX Maybe we will need to free zeropcopy pbuf in different way */
         external_tcp_tx_pbuf_free(pcb, p);
-        ++count;
     }
     if (TCP_SEQ_GT(ackno, seg->seqno)) {
         len = ackno - seg->seqno;
@@ -939,8 +927,6 @@ static u32_t tcp_shrink_zc_segment(struct tcp_pcb *pcb, struct tcp_seg *seg, u32
         seg->seqno = ackno;
     }
     seg->tcphdr->seqno = htonl(seg->seqno);
-
-    return count;
 }
 
 static void ack_partial_or_whole_segment(struct tcp_pcb *pcb, u32_t ackno, struct tcp_seg **seg)
@@ -958,10 +944,11 @@ static void ack_partial_or_whole_segment(struct tcp_pcb *pcb, u32_t ackno, struc
                 break;
             }
             // Ack partial TCP segment
-            u32_t removed = (*seg)->flags & TF_SEG_OPTS_ZEROCOPY
-                ? tcp_shrink_zc_segment(pcb, (*seg), ackno)
-                : tcp_shrink_segment(pcb, (*seg), ackno);
-            pcb->snd_queuelen -= removed;
+            if ((*seg)->flags & TF_SEG_OPTS_ZEROCOPY) {
+                tcp_shrink_zc_segment(pcb, (*seg), ackno);
+            } else {
+                tcp_shrink_segment(pcb, (*seg), ackno);
+            }
             break;
         }
 
@@ -973,7 +960,6 @@ static void ack_partial_or_whole_segment(struct tcp_pcb *pcb, u32_t ackno, struc
             pcb->acked--;
         }
 
-        pcb->snd_queuelen -= pbuf_clen(whole_seg_to_ack->p);
         tcp_tx_seg_free(pcb, whole_seg_to_ack);
     }
 }
@@ -1707,10 +1693,11 @@ static bool tcp_parseopt_ts(u8_t *opts, u16_t opts_len, u32_t *tsval)
  */
 static void tcp_parseopt(struct tcp_pcb *pcb, tcp_in_data *in_data)
 {
-    u16_t c, max_c;
+    u16_t c;
+    u16_t max_c;
     u16_t mss;
-    u16_t snd_mss;
-    u8_t *opts, opt;
+    u8_t *opts;
+    u8_t opt;
 #if LWIP_TCP_TIMESTAMPS
     u32_t tsval;
 #endif
@@ -1744,8 +1731,7 @@ static void tcp_parseopt(struct tcp_pcb *pcb, tcp_in_data *in_data)
                     /* An MSS option with the right option length. */
                     mss = (opts[c + 2] << 8) | opts[c + 3];
                     /* Limit the mss to the configured TCP_MSS and prevent division by zero */
-                    snd_mss = ((mss > pcb->advtsd_mss) || (mss == 0)) ? pcb->advtsd_mss : mss;
-                    UPDATE_PCB_BY_MSS(pcb, snd_mss);
+                    pcb->mss = ((mss > pcb->advtsd_mss) || (mss == 0)) ? pcb->advtsd_mss : mss;
                 }
                 /* Advance to next option */
                 c += 0x04;

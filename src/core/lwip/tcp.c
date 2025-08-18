@@ -553,7 +553,7 @@ err_t tcp_connect(struct tcp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port, bool
     pcb->snd_wnd = TCP_WND;
 
     pcb->advtsd_mss = tcp_send_mss(pcb);
-    UPDATE_PCB_BY_MSS(pcb, pcb->advtsd_mss);
+    pcb->mss = pcb->advtsd_mss;
     pcb->cwnd = 1;
     pcb->ssthresh = pcb->mss * 10;
     pcb->connected = connected;
@@ -916,7 +916,6 @@ void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
     pcb->prio = prio;
     pcb->max_snd_buff = lwip_tcp_snd_buf;
     pcb->snd_buf = pcb->max_snd_buff;
-    pcb->snd_queuelen = 0;
     pcb->snd_scale = 0;
     pcb->rcv_scale = 0;
     pcb->rcv_wnd = TCP_WND_SCALED(pcb);
@@ -927,8 +926,8 @@ void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
     pcb->ttl = TCP_TTL;
     pcb->is_ipv6 = false;
 
-    u16_t snd_mss = pcb->advtsd_mss = tcp_initial_mss(pcb);
-    UPDATE_PCB_BY_MSS(pcb, snd_mss);
+    pcb->advtsd_mss = tcp_initial_mss(pcb);
+    pcb->mss = pcb->advtsd_mss;
     pcb->user_timeout_ms = 0;
     pcb->ticks_since_data_sent = -1;
     pcb->rto = 3000 / slow_tmr_interval;
@@ -1017,7 +1016,6 @@ void tcp_pcb_recycle(struct tcp_pcb *pcb)
     pcb->keep_cnt_sent = 0;
     pcb->quickack = 0;
     pcb->is_in_input = 0;
-    pcb->snd_queuelen = 0;
     pcb->snd_scale = 0;
     pcb->rcv_scale = 0;
     pcb->last_unsent = NULL;
