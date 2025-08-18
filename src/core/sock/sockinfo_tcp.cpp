@@ -423,8 +423,6 @@ void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
     tcp_err(&m_pcb, sockinfo_tcp::err_lwip_cb_xlio_socket);
     set_blocking(false);
     m_is_xlio_socket = true;
-    // Allow the queue to grow for non-zerocopy send operations.
-    m_pcb.snd_queuelen_max = TCP_SNDQUEUELEN_OVERFLOW;
 }
 
 void sockinfo_tcp::set_entity_context(entity_context *ctx)
@@ -448,9 +446,6 @@ void sockinfo_tcp::set_entity_context(entity_context *ctx)
                                                          m_ring_alloc_log_tx);
         tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_entity_context);
     }
-
-    // Allow the queue to grow for non-zerocopy send operations.
-    m_pcb.snd_queuelen_max = TCP_SNDQUEUELEN_OVERFLOW;
 }
 
 void sockinfo_tcp::listen_entity_context()
@@ -4373,8 +4368,6 @@ void sockinfo_tcp::fit_snd_bufs(unsigned int new_max_snd_buff)
     // snd_buf can become negative
     m_pcb.snd_buf += ((int)new_max_snd_buff - m_pcb.max_snd_buff);
     m_pcb.max_snd_buff = new_max_snd_buff;
-
-    UPDATE_PCB_BY_MSS(&m_pcb, m_pcb.mss);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -6039,7 +6032,6 @@ int sockinfo_tcp::tcp_tx_express_inline(const struct iovec *iov, unsigned iov_le
         err_t err = tcp_write(&m_pcb, iov[i].iov_base, iov[i].iov_len, 0, &mdesc);
         if (unlikely(err != ERR_OK)) {
             // XXX tcp_write() can return multiple errors.
-            // XXX tcp_write() can also fail due to queuelen limit, but this is unlikely.
             m_conn_state = TCP_CONN_ERROR;
             m_error_status = ENOMEM;
             return tcp_tx_handle_errno_and_unlock(ENOMEM);

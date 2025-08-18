@@ -220,16 +220,6 @@ extern tcp_state_observer_fn external_tcp_state_observer;
 #define SND_WND_SCALE(pcb, wnd) ((u32_t)(wnd) << (pcb)->snd_scale)
 #define TCPWND_MIN16(x)         ((u16_t)LWIP_MIN((x), 0xFFFF))
 
-#define TCP_SNDQUEUELEN_OVERFLOW (0xffffffU)
-#define UPDATE_PCB_BY_MSS(pcb, snd_mss)                                                            \
-    do {                                                                                           \
-        (pcb)->mss = (snd_mss);                                                                    \
-        if ((pcb)->snd_queuelen_max != TCP_SNDQUEUELEN_OVERFLOW) {                                 \
-            (pcb)->snd_queuelen_max =                                                              \
-                LWIP_MIN(16 * (pcb)->max_snd_buff / (pcb)->mss, TCP_SNDQUEUELEN_OVERFLOW - 1);     \
-        }                                                                                          \
-    } while (0)
-
 /* the TCP protocol control block */
 struct tcp_pcb {
     /** IP specific PCB members */
@@ -339,9 +329,6 @@ struct tcp_pcb {
     u32_t snd_sml_snt; /* maintain state for minshall's algorithm */
     u32_t snd_sml_add; /* maintain state for minshall's algorithm */
 
-    u32_t snd_queuelen; /* Available buffer space for sending (in pbufs). */
-    u32_t snd_queuelen_max;
-
     /* These are ordered by sequence number: */
     struct tcp_seg *unsent; /* Unsent (queued) segments. */
     struct tcp_seg *last_unsent; /* Last unsent (queued) segment. */
@@ -436,7 +423,6 @@ void tcp_err(struct tcp_pcb *pcb, tcp_err_fn err);
 
 #define tcp_mss(pcb)            (((pcb)->flags & TF_TIMESTAMP) ? ((pcb)->mss - 12) : (pcb)->mss)
 #define tcp_sndbuf(pcb)         ((pcb)->snd_buf)
-#define tcp_sndqueuelen(pcb)    ((pcb)->snd_queuelen)
 #define tcp_nagle_disable(pcb)  ((pcb)->flags |= TF_NODELAY)
 #define tcp_nagle_enable(pcb)   ((pcb)->flags &= ~TF_NODELAY)
 #define tcp_nagle_disabled(pcb) (((pcb)->flags & TF_NODELAY) != 0)
