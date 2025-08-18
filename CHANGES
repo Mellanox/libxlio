@@ -1,3 +1,47 @@
+Version 3.60.1-1:
+Date + Time 2025-08-18
+=============================================================
+Added:
+        - RM #4367367 XLIO Ultra API Stabilization
+        - RM #4367367 Add support of listen sockets to XLIO Ultra API
+        - RM #4207451 Move from env params to config file
+        - RM #4397660 Add 'AUTO' mode to XLIO_PRINT_REPORT
+	- RM #4397660 Add CQ rx_drop_counter
+        - RM #4446408 Add openssl version to the debug logs
+Fixed:
+        - RM #4424775 Skip kernel setsockopt() for TCP_ULP
+        - RM #4551503 Fix HW tls counters
+        - RM #4424629 Suppress duplicate IP warning for link-local IPv6
+        - RM #4503824 Fix UDP RX Offload socket stats
+        - RM #4409248 Fix RoCE LAG warning
+        - RM #4532810 Fix PCB last_unacked in SYN_SENT state
+        - RM #4502938 Fixing TLS RX ZC buffer tcp_tx_pbuf_alloc
+        - RM #4415379 TLS RX offload encryption fix
+        - RM #4238452 Fixing RX interrupt event handling
+        - RM #4238452 Fixing blocking TCP rx_wait_helper deadlock
+        - RM #4213201 Remove memset for the next hot WQE
+        - RM #4397660 Fix reading flow_tag from CQE
+        - RM #4043235 TCP_USER_TIMER wrong RTO behavior
+        - RM #4347777 Replace thread-local dummy lock
+        - RM #4297240 Disable retransmission timer
+        - RM #4379306 Remove reduandant lock
+        - RM #4479538 Release pipeline is broken
+        - RM #4432537 Replace linux list with BSD list
+Removed:
+        - RM #3886011 Removing ring_tap support
+        - RM #3886011 Removing internal thread arm CQ
+        - RM #3886011 Removing SO_XLIO_ISOLATE
+        - RM #3886011 Removing TCP control thread mode
+        - RM #3886011 Removing dummy message support
+        - RM #3886011 Removing XLIO extra ioctl API
+        - RM #3886011 Removing limited POSIX ZC TX
+        - RM #3886011 Removing TX ZC with mkey
+        - RM #3886011 Removing NVME TX CRC Offload
+        - RM #3886011 Removing RX Zero Copy API
+        - RM #3886011 Removing Socketxtreme API
+        - RM #3886011 Removing TCP RX callback API
+        - RM #4262473 Deprecate XLIO_SELECT_POLL_OS_FORCE
+
 Version 3.50.3-1:
 Date + Time 2025-03-26
 =============================================================
