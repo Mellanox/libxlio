@@ -203,9 +203,14 @@ void poll_group::add_ring(ring *rng, ring_alloc_logic_attr *attr)
     }
 }
 
-void poll_group::add_socket(sockinfo_tcp *si)
+void poll_group::add_socket_helper(sockinfo_tcp *si)
 {
     m_sockets_list.push_back(si);
+}
+
+void poll_group::add_socket(sockinfo_tcp *si)
+{
+    add_socket_helper(si);
     // For the flow_tag fast path support.
     g_p_fd_collection->set_socket(si->get_fd(), si);
 }
@@ -229,6 +234,11 @@ void poll_group::reuse_sockfd(int fd, sockinfo_tcp *si)
 void poll_group::close_socket(sockinfo_tcp *si, bool force /*=false*/)
 {
     g_p_fd_collection->clear_socket(si->get_fd());
+    close_socket_helper(si, force);
+}
+
+void poll_group::close_socket_helper(sockinfo_tcp *si, bool force /*=false*/)
+{
     remove_socket(si);
     if (si->prepare_to_close(force)) {
         // The socket is already closable.

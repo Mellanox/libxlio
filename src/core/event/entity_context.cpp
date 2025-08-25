@@ -68,7 +68,7 @@ void entity_context::process()
             connect_socket_job(job);
             break;
         case JOB_TYPE_SOCK_ADD_AND_LISTEN:
-            listen_socket_job(job.sock);
+            listen_socket_job(job);
             break;
         case JOB_TYPE_SOCK_TX:
             // Handle socket transmit job
@@ -76,6 +76,9 @@ void entity_context::process()
             break;
         case JOB_TYPE_SOCK_RX_DATA_RECVD:
             rx_data_recvd_job(job);
+            break;
+        case JOB_TYPE_SOCK_CLOSE:
+            close_socket_job(job);
             break;
         default:
             // Unknown job type
@@ -122,14 +125,45 @@ void entity_context::rx_data_recvd_job(const job_desc &job)
     }
 }
 
-void entity_context::listen_socket_job(sockinfo *sock)
+void entity_context::listen_socket_job(const job_desc &job)
 {
+    sockinfo *sock = job.sock;
     if (sock->get_protocol() == PROTO_TCP) {
         sock->set_entity_context(this);
-        add_socket(reinterpret_cast<sockinfo_tcp *>(sock));
+        add_socket_helper(reinterpret_cast<sockinfo_tcp *>(sock));
         reinterpret_cast<sockinfo_tcp *>(sock)->listen_entity_context();
         ctx_logdbg("New TCP Listen rss_child socket added (sock: %p)", sock);
     } else {
         ctx_logdbg("Unsupported socket protocol %hd for Threads mode", sock->get_protocol());
+    }
+}
+
+void entity_context::close_socket_job(const job_desc &job)
+{
+    sockinfo *si = job.sock;
+    assert(si);
+
+    ctx_logdbg("Processing close job for socket (sock: %p, fd: %d)", si, si->get_fd());
+
+    if (si->get_protocol() == PROTO_TCP) {
+        sockinfo_tcp *tcp_si = reinterpret_cast<sockinfo_tcp *>(si);
+
+        if (tcp_si->get_listen_context()) {
+            assert(tcp_si->get_listen_context()->is_rss_child_listen_socket());
+            // If this is a listen RSS child, notify parent.
+            // Note: We must notify parent BEFORE calling close_socket_helper():
+            // - If we close the socket first, we lose the reference to the parent
+            // - It's safe to close socket after parent notification because:
+            //   1. Entity context runs on a single thread
+            //   2. No other thread can poll for new incoming connections while we're here
+            //   3. Therefore, we won't call parent epoll notify after this point
+            // - This avoids backing up parent reference and keeps code clean
+            sockinfo_tcp *parent = tcp_si->get_listen_context()->get_parent_listen_socket();
+            parent->get_listen_context()->increment_finish_counter();
+        }
+        // Use poll_group::close_socket_helper which handles :
+        // - remove_socket(si)
+        // - prepare_to_close() and clean_socket_obj() or add to pending close list
+        close_socket_helper(tcp_si);
     }
 }

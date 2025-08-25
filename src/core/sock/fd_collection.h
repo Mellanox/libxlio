@@ -82,6 +82,23 @@ public:
     int del_sockfd(int fd, bool is_for_udp_pool = false);
 
     /**
+     * Handle worker threads mode close flow.
+     * @return true if should return from del_sockfd, false if should continue with legacy flow
+     */
+    bool handle_worker_threads_mode_close(int fd, sockinfo *p_sfd_api);
+
+    /**
+     * Handle listen socket close in worker threads mode - send jobs to children and wait.
+     */
+    void handle_listen_socket_close_worker_threads_mode(sockinfo_tcp *listen_si);
+
+    /**
+     * Handle socket close job in worker threads mode - remove from fd_col and send job to entity
+     * context.
+     */
+    void handle_socket_close_job_worker_threads_mode(sockinfo_tcp *si);
+
+    /**
      * Remove epfd_info.
      */
     int del_epfd(int fd, bool b_cleanup = false);

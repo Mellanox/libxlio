@@ -47,7 +47,8 @@ public:
         JOB_TYPE_SOCK_ADD_AND_CONNECT,
         JOB_TYPE_SOCK_TX,
         JOB_TYPE_SOCK_RX_DATA_RECVD,
-        JOB_TYPE_SOCK_ADD_AND_LISTEN
+        JOB_TYPE_SOCK_ADD_AND_LISTEN,
+        JOB_TYPE_SOCK_CLOSE
     };
 
     struct job_desc {
@@ -67,7 +68,8 @@ public:
 private:
     void connect_socket_job(const job_desc &sock);
     void rx_data_recvd_job(const job_desc &sock);
-    void listen_socket_job(sockinfo *sock);
+    void listen_socket_job(const job_desc &job);
+    void close_socket_job(const job_desc &job);
 
     job_queue<job_desc> m_job_queue;
     size_t m_index;
