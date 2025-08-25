@@ -13,6 +13,7 @@
 #include "sockinfo.h"
 #include "sockinfo_udp.h"
 #include "sockinfo_tcp.h"
+#include "event/entity_context.h"
 #include "iomux/epfd_info.h"
 
 #undef MODULE_NAME
@@ -414,6 +415,10 @@ int fd_collection::del_sockfd(int fd, bool is_for_udp_pool /*=false*/)
     p_sfd_api = get_sockfd(fd);
 
     if (p_sfd_api) {
+        if (safe_mce_sys().worker_threads && handle_worker_threads_mode_close(fd, p_sfd_api)) {
+            return 0;
+        }
+
         // TCP socket need some timer to before it can be deleted,
         // in order to gracefuly terminate TCP connection
         // so we have to stages:
@@ -446,6 +451,53 @@ int fd_collection::del_sockfd(int fd, bool is_for_udp_pool /*=false*/)
     }
 
     return ret_val;
+}
+
+bool fd_collection::handle_worker_threads_mode_close(int fd, sockinfo *p_sfd_api)
+{
+    // Clear the socket from the fd_collection
+    clear_socket(fd);
+
+    if (p_sfd_api->get_protocol() == PROTO_TCP) {
+        sockinfo_tcp *tcp_si = static_cast<sockinfo_tcp *>(p_sfd_api);
+        if (tcp_si->get_entity_context()) {
+            // Incoming/outgoing sockets - delegate to entity context and return
+            handle_socket_close_job_worker_threads_mode(tcp_si);
+            return true; // Should return from del_sockfd
+        } else if (tcp_si->get_listen_context()) {
+            // RSS listen socket - send close jobs to children
+            handle_listen_socket_close_worker_threads_mode(tcp_si);
+            // Main listen socket - Fall through to legacy close flow below
+        }
+        // Other TCP sockets (e.g., created via socket() but not bound/connected/listening) - Fall
+        // through to legacy close flow below
+    }
+    // Non-TCP sockets - Fall through to legacy close flow below
+    return false; // Should continue with legacy flow
+}
+
+void fd_collection::handle_listen_socket_close_worker_threads_mode(sockinfo_tcp *listen_si)
+{
+    // Reset counters before sending close jobs
+    listen_si->get_listen_context()->reset_counters();
+
+    // Send close jobs to all children
+    size_t num_children = listen_si->get_listen_context()->get_listen_rss_children_size();
+    for (size_t i = 0; i < num_children; ++i) {
+        sockinfo_tcp *child = listen_si->get_listen_context()->get_listen_rss_child(i);
+        assert(child);
+        handle_socket_close_job_worker_threads_mode(child);
+    }
+    // Wait for all children to finish
+    listen_si->get_listen_context()->wait_for_rss_children_ready();
+}
+
+void fd_collection::handle_socket_close_job_worker_threads_mode(sockinfo_tcp *si)
+{
+    // Send close job to socket's entity context
+    assert(si->get_entity_context());
+    si->get_entity_context()->add_job(
+        entity_context::job_desc {entity_context::JOB_TYPE_SOCK_CLOSE, si, nullptr, 0U});
 }
 
 int fd_collection::del_epfd(int fd, bool b_cleanup /*=false*/)

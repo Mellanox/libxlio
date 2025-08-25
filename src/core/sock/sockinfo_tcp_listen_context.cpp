@@ -36,6 +36,13 @@ void sockinfo_tcp_listen_context::increment_error_counter()
     m_ready_condition.notify_one();
 }
 
+void sockinfo_tcp_listen_context::reset_counters()
+{
+    std::lock_guard<std::mutex> lock(m_ready_mutex);
+    m_sockinfo_tcp_listen_finish_counter.store(0);
+    m_sockinfo_tcp_listen_error_counter.store(0);
+}
+
 bool sockinfo_tcp_listen_context::wait_for_rss_children_ready()
 {
     // std::condition_variable works only with std::unique_lock<std::mutex>

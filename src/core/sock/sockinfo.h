@@ -302,6 +302,7 @@ public:
     inline bool set_flow_tag(uint32_t flow_tag_id);
     inline void sock_pop_descs_rx_ready(descq_t *cache);
 
+    entity_context *get_entity_context() const { return m_entity_context; }
     uint32_t get_epoll_event_flags() { return m_epoll_event_flags; }
     void set_epoll_event_flags(uint32_t events) { m_epoll_event_flags = events; }
     bool has_epoll_context() { return (!!m_econtext); }

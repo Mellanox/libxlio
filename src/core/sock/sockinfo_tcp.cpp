@@ -3403,17 +3403,10 @@ bool sockinfo_tcp::create_listen_rss_children()
     size_t num_threads = safe_mce_sys().worker_threads;
 
     for (size_t i = 0; i < num_threads; ++i) {
-        // Create socket without shadow, following accept_clone() pattern
-        int fd = socket_internal(m_family, SOCK_STREAM, 0, false, false);
-        if (fd < 0) {
-            si_tcp_logerr("Failed to create listen rss_child socket %zu", i);
-            return false;
-        }
-
-        sockinfo_tcp *rss_child = dynamic_cast<sockinfo_tcp *>(fd_collection_get_sockfd(fd));
+        // Create sockinfo_tcp object with fake fd (RSS child doesn't need shadow socket)
+        sockinfo_tcp *rss_child = new sockinfo_tcp(SOCKET_FAKE_FD, m_family);
         if (!rss_child) {
-            si_tcp_logwarn("Cannot get listen rss_child socket from FD collection");
-            XLIO_CALL(close, fd);
+            si_tcp_logwarn("Cannot create listen rss_child sockinfo %zu", i);
             return false;
         }
 
@@ -3471,7 +3464,7 @@ bool sockinfo_tcp::create_listen_rss_children()
         rss_child->unlock_tcp_con();
 
         m_listen_ctx->add_listen_rss_child(rss_child);
-        si_tcp_logdbg("Created listen rss_child %zu (fd: %d)", i, fd);
+        si_tcp_logdbg("Created listen rss_child %zu (p: %p)", i, rss_child);
     }
     return true;
 }
@@ -3785,6 +3778,8 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     listen_sock->m_tcp_con_lock.unlock();
     if (new_sock->is_xlio_socket()) {
         new_sock->get_poll_group()->reuse_sockfd(new_sock->m_fd, new_sock);
+    } else if (new_sock->m_entity_context) {
+        new_sock->m_entity_context->reuse_sockfd(new_sock->m_fd, new_sock);
     } else {
         assert(g_p_fd_collection);
         g_p_fd_collection->reuse_sockfd(new_sock->m_fd, new_sock);
@@ -5819,6 +5814,8 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
             if (destroyable) {
                 if (p_sock->is_xlio_socket()) {
                     p_sock->get_poll_group()->mark_socket_to_destroy(p_sock);
+                } else if (p_sock->get_entity_context()) {
+                    p_sock->get_entity_context()->mark_socket_to_destroy(p_sock);
                 } else {
                     g_p_fd_collection->destroy_sockfd(p_sock);
                 }

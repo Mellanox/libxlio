@@ -44,6 +44,7 @@ public:
     uint16_t get_finish_counter() const { return m_sockinfo_tcp_listen_finish_counter.load(); }
     uint16_t get_error_counter() const { return m_sockinfo_tcp_listen_error_counter.load(); }
 
+    void reset_counters();
     bool wait_for_rss_children_ready();
 
 private:

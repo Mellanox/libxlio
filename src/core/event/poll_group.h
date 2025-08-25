@@ -43,9 +43,11 @@ public:
     void add_ring(ring *rng, ring_alloc_logic_attr *attr);
 
     void add_socket(sockinfo_tcp *si);
+    void add_socket_helper(sockinfo_tcp *si);
     void remove_socket(sockinfo_tcp *si);
     void reuse_sockfd(int fd, sockinfo_tcp *si);
     void close_socket(sockinfo_tcp *si, bool force = false);
+    void close_socket_helper(sockinfo_tcp *si, bool force = false);
     void mark_socket_to_close(sockinfo_tcp *si);
     void mark_socket_to_destroy(sockinfo_tcp *si);
     unsigned get_flags() const { return m_group_flags; }
