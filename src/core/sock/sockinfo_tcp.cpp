@@ -4680,13 +4680,15 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                 ret = -1;
                 break;
             } else {
+
+                std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
                 // coverity[copy_assignment_call:FALSE] /*Turn off coverity COPY_INSTEAD_OF_MOVE*/
                 m_so_bindtodevice_ip = addr;
 
                 si_tcp_logdbg("SOL_SOCKET, %s='%s' (%s)", setsockopt_so_opt_to_str(__optname),
                               (char *)__optval, m_so_bindtodevice_ip.to_str().c_str());
 
-                if (!is_connected()) {
+                if (!is_connected() && !safe_mce_sys().worker_threads) {
                     /* Current implementation allows to create separate rings for tx and rx.
                      * tx ring is created basing on destination ip during connect() call,
                      * SO_BINDTODEVICE and routing table information
@@ -4699,7 +4701,6 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                      * This inconsistency should be resolved.
                      */
 
-                    lock_tcp_con();
                     /* We need to destroy this if attach/detach receiver is not called
                      * just reference counter for p_nd_resources is updated on attach/detach
                      */
@@ -4707,7 +4708,6 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                         si_tcp_logdbg("Failed to get net device resources on ip %s",
                                       m_so_bindtodevice_ip.to_str().c_str());
                     }
-                    unlock_tcp_con();
                 }
             }
             // handle TX side
