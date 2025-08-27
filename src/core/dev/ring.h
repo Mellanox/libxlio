@@ -206,6 +206,7 @@ public:
     // XLIO Ultra API
     void set_poll_group(poll_group *p_group) { m_p_group = p_group; }
     poll_group *get_poll_group() const { return m_p_group; }
+    bool is_ultra_ring() const { return m_p_group != nullptr; }
 
 protected:
     inline void set_parent(ring *parent) { m_parent = (parent ? parent : this); }

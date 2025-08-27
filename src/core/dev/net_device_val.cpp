@@ -1118,7 +1118,7 @@ int net_device_val::ring_drain_and_proccess()
     std::lock_guard<decltype(m_lock)> lock(m_lock);
     rings_hash_map_t::iterator ring_iter;
     for (ring_iter = m_h_ring_map.begin(); ring_iter != m_h_ring_map.end(); ring_iter++) {
-        if (THE_RING->get_poll_group() != nullptr) {
+        if (THE_RING->is_ultra_ring()) {
             continue;
         }
         int ret = THE_RING->drain_and_proccess();
@@ -1140,6 +1140,9 @@ void net_device_val::ring_adapt_cq_moderation()
     std::lock_guard<decltype(m_lock)> lock(m_lock);
     rings_hash_map_t::iterator ring_iter;
     for (ring_iter = m_h_ring_map.begin(); ring_iter != m_h_ring_map.end(); ring_iter++) {
+        if (THE_RING->is_ultra_ring()) {
+            continue;
+        }
         THE_RING->adapt_cq_moderation();
     }
 }
