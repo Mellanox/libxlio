@@ -19,6 +19,7 @@ static lock_spin g_lock_mc_info("g_lock_mc_info");
 static lock_spin g_lock_skt_inst_arr("g_lock_skt_inst_arr");
 static lock_spin g_lock_ring_inst_arr("g_lock_ring_inst_arr");
 static lock_spin g_lock_cq_inst_arr("g_lock_cq_inst_arr");
+static lock_spin g_lock_ent_ctx_arr("g_lock_ent_ctx_arr");
 static lock_spin g_lock_bpool_inst_arr("g_lock_bpool_inst_arr");
 static lock_spin g_lock_global_inst("g_lock_global_inst");
 static lock_spin g_lock_iomux("g_lock_iomux");
@@ -41,6 +42,7 @@ stats_data_reader *g_p_stats_data_reader = NULL;
 bool printed_sock_limit_info = false;
 bool printed_ring_limit_info = false;
 bool printed_cq_limit_info = false;
+bool printed_ent_ctx_limit_info = false;
 bool printed_bpool_limit_info = false;
 bool printed_global_limit_info = false;
 
@@ -572,6 +574,60 @@ void xlio_stats_instance_remove_cq_block(cq_stats_t *local_stats_addr)
     vlog_printf(VLOG_ERROR, "%s:%d: Could not find user pointer (%p)\n", __func__, __LINE__,
                 p_cq_stats);
     g_lock_cq_inst_arr.unlock();
+}
+
+void xlio_stats_instance_create_ent_ctx_block(entity_context_stats_t *local_stats_addr)
+{
+    entity_context_stats_t *p_instance_ent_ctx = NULL;
+    g_lock_ent_ctx_arr.lock();
+    for (int i = 0; i < NUM_OF_SUPPORTED_ENTITY_CTX; i++) {
+        if (!g_sh_mem->ent_ctx_inst_arr[i].b_enabled) {
+            g_sh_mem->ent_ctx_inst_arr[i].b_enabled = true;
+            p_instance_ent_ctx = &g_sh_mem->ent_ctx_inst_arr[i].entity_ctx_stats;
+            memset(p_instance_ent_ctx, 0, sizeof(*p_instance_ent_ctx));
+            break;
+        }
+    }
+    if (p_instance_ent_ctx == NULL) {
+        if (!printed_ent_ctx_limit_info) {
+            printed_ent_ctx_limit_info = true;
+            vlog_printf(VLOG_INFO, "Statistics can monitor up to %d entity context elements\n",
+                        NUM_OF_SUPPORTED_ENTITY_CTX);
+        }
+    } else {
+        g_p_stats_data_reader->add_data_reader(local_stats_addr, p_instance_ent_ctx,
+                                               sizeof(entity_context_stats_t));
+        __log_dbg("Added ent_ctx local=%p shm=%p", local_stats_addr, p_instance_ent_ctx);
+    }
+    g_lock_ent_ctx_arr.unlock();
+}
+
+void xlio_stats_instance_remove_ent_ctx_block(entity_context_stats_t *local_stats_addr)
+{
+    g_lock_ent_ctx_arr.lock();
+    __log_dbg("Remove ent_ctx local=%p", local_stats_addr);
+
+    entity_context_stats_t *p_ent_ctx_stats =
+        (entity_context_stats_t *)g_p_stats_data_reader->pop_data_reader(local_stats_addr);
+
+    if (p_ent_ctx_stats == NULL) {
+        __log_dbg("application xlio_stats pointer is NULL");
+        g_lock_ent_ctx_arr.unlock();
+        return;
+    }
+
+    // Search sh_mem block to release
+    for (int i = 0; i < NUM_OF_SUPPORTED_ENTITY_CTX; i++) {
+        if (&g_sh_mem->ent_ctx_inst_arr[i].entity_ctx_stats == p_ent_ctx_stats) {
+            g_sh_mem->ent_ctx_inst_arr[i].b_enabled = false;
+            g_lock_ent_ctx_arr.unlock();
+            return;
+        }
+    }
+
+    vlog_printf(VLOG_ERROR, "%s:%d: Could not find user pointer (%p)\n", __func__, __LINE__,
+                p_ent_ctx_stats);
+    g_lock_ent_ctx_arr.unlock();
 }
 
 void xlio_stats_instance_create_bpool_block(bpool_stats_t *local_stats_addr)

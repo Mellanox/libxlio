@@ -917,8 +917,16 @@ Options:
   -F, --forbid_clean            By setting this flag inactive shared objects would not be removed
   -i, --interval=<n>            Print report every <n> seconds
   -c, --cycles=<n>              Do <n> report print cycles and exit, use 0 value for infinite (default)
-  -v, --view=<1|2|3|4|5>        Set view type:1- basic info,2- extra info,3- full info,4- mc groups,5- similar to 'netstat -tunaep'
-  -d, --details=<1|2>           Set details mode:1- to see totals,2- to see deltas
+  -v, --view=<1|2|3|4|5|6>      Set view type:
+                                1 - Basic info
+                                2 - Extra info
+                                3 - Full info
+                                4 - Multicast groups
+                                5 - Show as 'netstat -tunaep'
+                                6 - Entity Context info
+  -d, --details=<1|2>           Set details mode:
+                                1 - Totals
+                                2 - Deltas
   -z, --zero                    Zero counters
   -l, --log_level=<level>       Set XLIO log level to <level>(1 <= level <= 7)
   -S, --fd_dump=<fd> [<level>]  Dump statistics for fd number <fd> using log level <level>. use 0 value for all open fds
@@ -949,7 +957,9 @@ Looking good :)
 - Just about no missed Rx polls (see XLIO_RX_POLL & XLIO_SELECT_POLL), meaning
  the receiving thread did not get to a blocked state to cause a contexts
  switch and hurt latency.
-- No dropped packets caused by socket receive buffer limit (see XLIO_RX_BYTES_MIN)
+- No dropped packets caused by socket receive buffer limit (see XLIO_RX_BYTES_MIN).
+- No 'No buffers' errors in Buffer Pools.
+- No 'HW RX Packets' drops in CQs.
 
 Interrupt Moderation
 ====================

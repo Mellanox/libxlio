@@ -35,7 +35,7 @@ public:
 
     int update(const struct xlio_poll_group_attr *attr);
 
-    void poll();
+    bool poll();
 
     void add_dirty_socket(sockinfo_tcp *si);
     void flush();

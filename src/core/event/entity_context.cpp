@@ -36,6 +36,8 @@
 #include "vlogger/vlogger.h"
 #include "sock/sockinfo_tcp.h"
 
+using namespace std::chrono;
+
 #define MODULE_NAME "worker_thread"
 
 #define ctx_logpanic __log_panic
@@ -48,18 +50,33 @@ entity_context::entity_context(size_t index)
     : poll_group(xlio_poll_group_attr {XLIO_GROUP_FLAG_SAFE | XLIO_GROUP_FLAG_DIRTY, nullptr,
                                        entity_context_comp_cb, nullptr, nullptr})
     , m_index(index)
+    , m_prev_proc_time(steady_clock::now())
 {
+    xlio_stats_instance_create_ent_ctx_block(&m_stats);
+
+    get_event_handler()->do_tasks(); // Update last_taken_time
+
     ctx_logdbg("Entity Context created");
 }
 
 entity_context::~entity_context()
 {
+    xlio_stats_instance_remove_ent_ctx_block(&m_stats);
+
     ctx_logdbg("Entity Context destroyed");
 }
 
 void entity_context::process()
 {
-    poll();
+    auto ts = steady_clock::now();
+    (!m_last_poll_hit ? m_stats.idle_time : m_stats.hit_poll_time) +=
+        duration_cast<nanoseconds>(get_event_handler()->last_taken_time() - m_prev_proc_time)
+            .count();
+    (!m_last_job_size ? m_stats.idle_time : m_stats.job_proc_time) +=
+        duration_cast<nanoseconds>(ts - get_event_handler()->last_taken_time()).count();
+    m_prev_proc_time = ts;
+
+    m_last_poll_hit = poll();
 
     auto &jobs = m_job_queue.get_all();
     for (auto &job : jobs) {
@@ -85,11 +102,11 @@ void entity_context::process()
         }
     }
 
-    if (m_max_jobs < jobs.size()) {
-        m_max_jobs = jobs.size();
-        ctx_loginfo("New Max Jobs: %zu", m_max_jobs);
-    }
-
+    m_stats.job_queue_size_acc += static_cast<uint32_t>(jobs.size());
+    m_stats.job_queue_hits += (jobs.size() ? 1 : 0);
+    m_stats.job_queue_size_max =
+        std::max(m_stats.job_queue_size_max, static_cast<uint32_t>(jobs.size()));
+    m_last_job_size = jobs.size();
     jobs.clear();
 
     flush();
@@ -107,6 +124,7 @@ void entity_context::connect_socket_job(const job_desc &job)
         sock->set_entity_context(this);
         add_socket(reinterpret_cast<sockinfo_tcp *>(sock));
         reinterpret_cast<sockinfo_tcp *>(sock)->connect_entity_context();
+        ++m_stats.socket_num_added;
         ctx_loginfo("New TCP socket added (sock: %p)", sock);
     } else {
         ctx_loginfo("Unsupported socket protocol %hd for Threads mode", sock->get_protocol());
@@ -120,6 +138,14 @@ void entity_context::tx_data_job(const job_desc &job)
         return;
     }
     job.sock->tx_thread_commit(job.buf);
+}
+
+void entity_context::add_incoming_socket(sockinfo *sock)
+{
+    if (sock->get_protocol() == PROTO_TCP) {
+        ++m_stats.socket_num_added;
+        add_socket(reinterpret_cast<sockinfo_tcp *>(sock));
+    }
 }
 
 void entity_context::rx_data_recvd_job(const job_desc &job)
@@ -140,6 +166,7 @@ void entity_context::listen_socket_job(const job_desc &job)
         sock->set_entity_context(this);
         add_socket_helper(reinterpret_cast<sockinfo_tcp *>(sock));
         reinterpret_cast<sockinfo_tcp *>(sock)->listen_entity_context();
+        ++m_stats.listen_rsschild_num;
         ctx_logdbg("New TCP Listen rss_child socket added (sock: %p)", sock);
     } else {
         ctx_logdbg("Unsupported socket protocol %hd for Threads mode", sock->get_protocol());
@@ -168,6 +195,9 @@ void entity_context::close_socket_job(const job_desc &job)
             // - This avoids backing up parent reference and keeps code clean
             sockinfo_tcp *parent = tcp_si->get_listen_context()->get_parent_listen_socket();
             parent->get_listen_context()->increment_finish_counter();
+            --m_stats.listen_rsschild_num;
+        } else {
+            ++m_stats.socket_num_removed;
         }
         // Use poll_group::close_socket_helper which handles :
         // - remove_socket(si)

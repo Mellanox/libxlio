@@ -121,20 +121,23 @@ int poll_group::update(const struct xlio_poll_group_attr *attr)
     return 0;
 }
 
-void poll_group::poll()
+bool poll_group::poll()
 {
     if (unlikely(m_is_slow_path)) {
         slow_path_run();
         m_is_slow_path = false;
     }
 
+    int empty_poll = -1;
     for (ring *rng : m_rings) {
         uint64_t sn = 0;
-        rng->poll_and_process_element_tx(&sn);
+        empty_poll = std::max(empty_poll, rng->poll_and_process_element_tx(&sn));
         sn = 0;
-        rng->poll_and_process_element_rx(&sn);
+        empty_poll = std::max(empty_poll, rng->poll_and_process_element_rx(&sn));
     }
     m_event_handler->do_tasks();
+
+    return !!(empty_poll + 1);
 }
 
 void poll_group::slow_path_run()

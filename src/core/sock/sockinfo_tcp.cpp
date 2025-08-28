@@ -3494,10 +3494,10 @@ sockinfo_tcp *sockinfo_tcp::accept_clone()
     // listen flow for incoming socket
     if (m_entity_context) {
         si->set_entity_context(m_entity_context);
-        // CAUTION: add_socket() modifies the entity_context socket list which may cause
+        // CAUTION: add_incoming_socket() modifies the entity_context socket list which may cause
         // iterator invalidation if the list is being traversed concurrently. Currently it is
         // safe because the list is accessed solely by the xlio thread.
-        m_entity_context->add_socket(si);
+        m_entity_context->add_incoming_socket(si);
     }
     return si;
 }

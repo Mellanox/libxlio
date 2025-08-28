@@ -90,13 +90,14 @@ typedef enum { e_K = 1024, e_M = 1048576 } units_t;
 #define FORMAT_RING_MASTER     "%-20s %p\n"
 #define FORMAT_RING_RX_TLS     "%-20s %u / %u / %u [contexts/resyncs/auth-fail] %-3s\n"
 #define FORMAT_RING_TX_TLS     "%-20s %u / %u [contexts/resyncs] %-3s\n"
+#define FORMAT_ENTCTX          "%-15s"
 
 #define INTERVAL                1
 #define BYTES_TRAFFIC_UNIT      e_K
 #define SCREEN_SIZE             24
 #define MAX_BUFF_SIZE           256
 #define PRINT_DETAILS_MODES_NUM 2
-#define VIEW_MODES_NUM          5
+#define VIEW_MODES_NUM          6
 #define DEFAULT_DELAY_SEC       1
 #define DEFAULT_CYCLES          0
 #define DEFAULT_VIEW_MODE       e_basic
@@ -106,6 +107,7 @@ typedef enum { e_K = 1024, e_M = 1048576 } units_t;
 #define INIT_XLIO_LOG_DETAILS   -1
 #define NANO_TO_MICRO(n)        (((n) + 500) / 1000)
 #define SEC_TO_MICRO(n)         ((n)*1000000)
+#define INFO_TABS               "\t\t\t\t"
 #define TIME_DIFF_in_MICRO(start, end)                                                             \
     (SEC_TO_MICRO((end).tv_sec - (start).tv_sec) + (NANO_TO_MICRO((end).tv_nsec - (start).tv_nsec)))
 
@@ -141,9 +143,12 @@ void usage(const char *argv0)
     printf("  -i, --interval=<n>\t\tPrint report every <n> seconds\n");
     printf("  -c, --cycles=<n>\t\tDo <n> report print cycles and exit, use 0 value for infinite "
            "(default)\n");
-    printf("  -v, --view=<1|2|3|4|5>\tSet view type:1- basic info,2- extra info,3- full info,4- mc "
-           "groups,5- similar to 'netstat -tunaep'\n");
-    printf("  -d, --details=<1|2>\t\tSet details mode:1- to see totals,2- to see deltas\t\t\n");
+    printf("  -v, --view=<1|2|3|4|5|6>\tSet view type:\n" INFO_TABS "1 - Basic info\n" INFO_TABS
+           "2 - Extra info\n" INFO_TABS "3 - Full info\n" INFO_TABS
+           "4 - Multicast groups\n" INFO_TABS "5 - Show as 'netstat -tunaep'\n" INFO_TABS
+           "6 - Entity Context info\n");
+    printf("  -d, --details=<1|2>\t\tSet details mode:\n" INFO_TABS "1 - Totals\n" INFO_TABS
+           "2 - Deltas\n");
     printf("  -z, --zero\t\t\tZero counters\n");
     printf(
         "  -l, --log_level=<level>\tSet " PRODUCT_NAME
@@ -601,6 +606,50 @@ void print_cq_stats(cq_instance_block_t *p_cq_inst_arr)
         }
     }
     printf("======================================================\n");
+}
+
+void print_entity_context_stats(entity_context_instance_block_t *p_ent_ctx_inst_arr)
+{
+    char post_fix[3] = "";
+    if (user_params.print_details_mode == e_deltas) {
+        strcpy(post_fix, "/s");
+    }
+
+    printf("======================================================================================="
+           "============\n");
+    printf("Entity  | CPUTime                  | Job Queue     | Sockets                           "
+           "    | RSS   \n");
+    printf("Context | Idle | PollHit | JobProc | Max   | Avg   | Total   | Added   | Removed | Delt"
+           "a   | Childs\n");
+    printf("---------------------------------------------------------------------------------------"
+           "------------\n");
+
+    for (int i = 0; i < NUM_OF_SUPPORTED_ENTITY_CTX; i++) {
+        if (p_ent_ctx_inst_arr[i].b_enabled) {
+            entity_context_stats_t &p_ent_ctx_stats = p_ent_ctx_inst_arr[i].entity_ctx_stats;
+            int64_t tot_time = p_ent_ctx_stats.hit_poll_time + p_ent_ctx_stats.idle_time +
+                p_ent_ctx_stats.job_proc_time + 1U;
+
+            uint8_t poll_hit_time =
+                static_cast<uint8_t>((p_ent_ctx_stats.hit_poll_time * 100.0) / tot_time);
+            uint8_t job_time =
+                static_cast<uint8_t>((p_ent_ctx_stats.job_proc_time * 100.0) / tot_time);
+            uint8_t idle_time = 100U - poll_hit_time - job_time;
+
+            printf(
+                "%7d | %3" PRIu8 "%% | %6" PRIu8 "%% | %6" PRIu8 "%% | %5" PRIu32 " | %5" PRIu32
+                " | %7" PRIu32 " | %7G"
+                " | %7G | %7G | %" PRIu32 "\n",
+                i, idle_time, poll_hit_time, job_time, p_ent_ctx_stats.job_queue_size_max,
+                p_ent_ctx_stats.job_queue_size_acc / std::max(p_ent_ctx_stats.job_queue_hits, 1U),
+                p_ent_ctx_inst_arr[i].tot_socket,
+                static_cast<double>(p_ent_ctx_stats.socket_num_added),
+                static_cast<double>(p_ent_ctx_stats.socket_num_removed),
+                static_cast<double>(p_ent_ctx_stats.socket_num_added -
+                                    p_ent_ctx_stats.socket_num_removed),
+                p_ent_ctx_stats.listen_rsschild_num);
+        }
+    }
 }
 
 void print_bpool_stats(bpool_instance_block_t *p_bpool_inst_arr)
@@ -1096,6 +1145,48 @@ void show_ring_stats(ring_instance_block_t *p_curr_ring_blocks,
     }
 }
 
+void show_entity_context_stats(entity_context_instance_block_t *p_curr_entctx_blocks,
+                               entity_context_instance_block_t *p_prev_entctx_blocks)
+{
+    if (unlikely(!p_curr_entctx_blocks || !p_prev_entctx_blocks)) {
+        return;
+    }
+
+    for (int i = 0; i < NUM_OF_SUPPORTED_ENTITY_CTX; i++) {
+        int delay = user_params.interval;
+        entity_context_stats_t &curr_entctx_stats = p_curr_entctx_blocks[i].entity_ctx_stats;
+        entity_context_stats_t &prev_entctx_stats = p_prev_entctx_blocks[i].entity_ctx_stats;
+
+        prev_entctx_stats.idle_time =
+            (curr_entctx_stats.idle_time - prev_entctx_stats.idle_time) / delay;
+        prev_entctx_stats.hit_poll_time =
+            (curr_entctx_stats.hit_poll_time - prev_entctx_stats.hit_poll_time) / delay;
+        prev_entctx_stats.job_proc_time =
+            (curr_entctx_stats.job_proc_time - prev_entctx_stats.job_proc_time) / delay;
+        prev_entctx_stats.job_queue_hits =
+            (curr_entctx_stats.job_queue_hits - prev_entctx_stats.job_queue_hits) / delay;
+        prev_entctx_stats.job_queue_size_acc =
+            (curr_entctx_stats.job_queue_size_acc - prev_entctx_stats.job_queue_size_acc) / delay;
+        prev_entctx_stats.job_queue_size_max = curr_entctx_stats.job_queue_size_max;
+        prev_entctx_stats.listen_rsschild_num = curr_entctx_stats.listen_rsschild_num;
+        p_prev_entctx_blocks[i].tot_socket = static_cast<uint32_t>(
+            curr_entctx_stats.socket_num_added - curr_entctx_stats.socket_num_removed);
+
+        if (user_params.print_details_mode == e_totals) {
+            prev_entctx_stats.socket_num_added = curr_entctx_stats.socket_num_added;
+            prev_entctx_stats.socket_num_removed = curr_entctx_stats.socket_num_removed;
+        } else {
+            prev_entctx_stats.socket_num_added =
+                (curr_entctx_stats.socket_num_added - prev_entctx_stats.socket_num_added) / delay;
+            prev_entctx_stats.socket_num_removed =
+                (curr_entctx_stats.socket_num_removed - prev_entctx_stats.socket_num_removed) /
+                delay;
+        }
+    }
+
+    print_entity_context_stats(p_prev_entctx_blocks);
+}
+
 void show_cq_stats(cq_instance_block_t *p_curr_cq_blocks, cq_instance_block_t *p_prev_cq_blocks)
 {
     switch (user_params.print_details_mode) {
@@ -1389,6 +1480,8 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
     cq_instance_block_t curr_cq_blocks[NUM_OF_SUPPORTED_CQS];
     ring_instance_block_t prev_ring_blocks[NUM_OF_SUPPORTED_RINGS];
     ring_instance_block_t curr_ring_blocks[NUM_OF_SUPPORTED_RINGS];
+    entity_context_instance_block_t prev_entctx_blocks[NUM_OF_SUPPORTED_ENTITY_CTX];
+    entity_context_instance_block_t curr_entctx_blocks[NUM_OF_SUPPORTED_ENTITY_CTX];
     bpool_instance_block_t prev_bpool_blocks[NUM_OF_SUPPORTED_BPOOLS];
     bpool_instance_block_t curr_bpool_blocks[NUM_OF_SUPPORTED_BPOOLS];
     global_instance_block_t prev_global_blocks[NUM_OF_SUPPORTED_GLOBALS];
@@ -1434,6 +1527,10 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
     memset((void *)curr_cq_blocks, 0, sizeof(cq_instance_block_t) * NUM_OF_SUPPORTED_CQS);
     memset((void *)prev_ring_blocks, 0, sizeof(ring_instance_block_t) * NUM_OF_SUPPORTED_RINGS);
     memset((void *)curr_ring_blocks, 0, sizeof(ring_instance_block_t) * NUM_OF_SUPPORTED_RINGS);
+    memset((void *)prev_entctx_blocks, 0,
+           sizeof(entity_context_instance_block_t) * NUM_OF_SUPPORTED_ENTITY_CTX);
+    memset((void *)curr_entctx_blocks, 0,
+           sizeof(entity_context_instance_block_t) * NUM_OF_SUPPORTED_ENTITY_CTX);
     memset((void *)prev_bpool_blocks, 0, sizeof(bpool_instance_block_t) * NUM_OF_SUPPORTED_BPOOLS);
     memset((void *)curr_bpool_blocks, 0, sizeof(bpool_instance_block_t) * NUM_OF_SUPPORTED_BPOOLS);
     for (int i = 0; i < NUM_OF_SUPPORTED_GLOBALS; i++) {
@@ -1446,6 +1543,9 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
            sizeof(global_instance_block_t) * NUM_OF_SUPPORTED_GLOBALS);
     memset(&prev_iomux_blocks, 0, sizeof(prev_iomux_blocks));
     memset(&curr_iomux_blocks, 0, sizeof(curr_iomux_blocks));
+
+    memcpy((void *)prev_entctx_blocks, (void *)p_sh_mem->ent_ctx_inst_arr,
+           NUM_OF_SUPPORTED_ENTITY_CTX * sizeof(entity_context_instance_block_t));
 
     if (user_params.print_details_mode == e_deltas) {
         memcpy((void *)prev_instance_blocks, (void *)p_sh_mem->skt_inst_arr,
@@ -1514,6 +1614,12 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
                                 p_sh_mem->max_skt_inst_num);
             goto out;
             break;
+        case e_entctx:
+            memcpy((void *)curr_entctx_blocks, (void *)p_sh_mem->ent_ctx_inst_arr,
+                   NUM_OF_SUPPORTED_ENTITY_CTX * sizeof(entity_context_instance_block_t));
+            show_entity_context_stats(curr_entctx_blocks, prev_entctx_blocks);
+            memcpy((void *)prev_entctx_blocks, (void *)curr_entctx_blocks,
+                   NUM_OF_SUPPORTED_ENTITY_CTX * sizeof(entity_context_instance_block_t));
         default:
             break;
         }
@@ -1800,6 +1906,11 @@ void zero_ring_stats(ring_stats_t *p_ring_stats)
 void zero_cq_stats(cq_stats_t *p_cq_stats)
 {
     memset(p_cq_stats, 0, sizeof(*p_cq_stats));
+}
+
+void zero_ent_ctx_stats(entity_context_stats_t *p_ent_ctx_stats)
+{
+    memset(p_ent_ctx_stats, 0, sizeof(*p_ent_ctx_stats));
 }
 
 void zero_bpool_stats(bpool_stats_t *p_bpool_stats)

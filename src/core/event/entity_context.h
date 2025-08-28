@@ -37,6 +37,8 @@
 
 #include "event/poll_group.h"
 #include "event/job_queue.h"
+#include "util/xlio_stats.h"
+#include "event/event_handler_manager_local.h"
 
 class sockinfo;
 class mem_buf_desc_t;
@@ -67,6 +69,9 @@ public:
     void process();
     void add_job(const job_desc &job);
 
+    // Called only by the XLIO thread executing this context.
+    void add_incoming_socket(sockinfo *sock);
+
 private:
     void connect_socket_job(const job_desc &job);
     void tx_data_job(const job_desc &job);
@@ -79,7 +84,10 @@ private:
 
     job_queue<job_desc> m_job_queue;
     size_t m_index;
-    size_t m_max_jobs = 0U;
+    size_t m_last_job_size = 0U;
+    event_handler_manager_local::time_point m_prev_proc_time;
+    bool m_last_poll_hit = false;
+    entity_context_stats_t m_stats;
 };
 
 #endif
