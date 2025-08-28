@@ -14,10 +14,13 @@
 
 class event_handler_manager_local : public event_handler_manager {
 public:
+    typedef std::chrono::steady_clock::time_point time_point;
+
     event_handler_manager_local();
 
     void add_close_postponed_socket(sockinfo *sock);
     void do_tasks();
+    const time_point &last_taken_time() { return m_last_taken_time; }
 
 protected:
     virtual void post_new_reg_action(reg_action_t &reg_action) override;
@@ -25,8 +28,8 @@ protected:
 private:
     void do_tasks_for_thread_local();
 
-    std::chrono::steady_clock::time_point m_last_run_time;
-
+    time_point m_last_run_time;
+    time_point m_last_taken_time;
     // When delegate mode is enabled, incoming sockets with failed handshake are not closed
     // immediately because in this mode socket object will be immediately destroyed in the middle of
     // socket processing. This leads to access after destroy in related flows. Instead, we keep the

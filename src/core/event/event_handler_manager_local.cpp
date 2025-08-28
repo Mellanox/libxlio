@@ -25,13 +25,13 @@ void event_handler_manager_local::post_new_reg_action(reg_action_t &reg_action)
 
 void event_handler_manager_local::do_tasks()
 {
-    auto curr_time = steady_clock::now();
+    m_last_taken_time = steady_clock::now();
     if (likely(safe_mce_sys().tcp_timer_resolution_msec >
-               duration_cast<milliseconds>(curr_time - m_last_run_time).count())) {
+               duration_cast<milliseconds>(m_last_taken_time - m_last_run_time).count())) {
         return;
     }
 
-    m_last_run_time = curr_time;
+    m_last_run_time = m_last_taken_time;
 
     do_tasks_for_thread_local();
 }

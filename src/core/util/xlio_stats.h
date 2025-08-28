@@ -23,6 +23,7 @@
 
 #define NUM_OF_SUPPORTED_CQS         16
 #define NUM_OF_SUPPORTED_RINGS       16
+#define NUM_OF_SUPPORTED_ENTITY_CTX  16
 #define NUM_OF_SUPPORTED_BPOOLS      4
 #define NUM_OF_SUPPORTED_GLOBALS     1
 #define NUM_OF_SUPPORTED_EPFDS       32
@@ -59,7 +60,7 @@ typedef struct {
 
 typedef enum { e_totals = 1, e_deltas } print_details_mode_t;
 
-typedef enum { e_basic = 1, e_medium, e_full, e_mc_groups, e_netstat_like } view_mode_t;
+typedef enum { e_basic = 1, e_medium, e_full, e_mc_groups, e_netstat_like, e_entctx } view_mode_t;
 
 typedef enum { e_by_pid_str, e_by_app_name, e_by_runn_proccess } proc_ident_mode_t;
 
@@ -383,6 +384,27 @@ typedef struct {
 
 CACHELINE_BOUNDARY_SIZE_ASSERT(ring_instance_block_t);
 
+typedef struct {
+    int64_t idle_time;
+    int64_t hit_poll_time;
+    int64_t job_proc_time;
+    uint64_t socket_num_added;
+    uint64_t socket_num_removed;
+    uint32_t listen_rsschild_num;
+    uint32_t job_queue_size_max;
+    uint32_t job_queue_size_acc;
+    uint32_t job_queue_hits;
+} entity_context_stats_t;
+
+typedef struct {
+    entity_context_stats_t entity_ctx_stats;
+    uint32_t tot_socket;
+    bool b_enabled;
+    PADDING(3); // Pad to cache line boundary
+} entity_context_instance_block_t;
+
+CACHELINE_BOUNDARY_SIZE_ASSERT(entity_context_instance_block_t);
+
 // Buffer Pool stat info
 typedef struct {
     uint32_t n_buffer_pool_size;
@@ -439,6 +461,7 @@ typedef struct {
 typedef struct sh_mem_t {
     cq_instance_block_t cq_inst_arr[NUM_OF_SUPPORTED_CQS];
     ring_instance_block_t ring_inst_arr[NUM_OF_SUPPORTED_RINGS];
+    entity_context_instance_block_t ent_ctx_inst_arr[NUM_OF_SUPPORTED_ENTITY_CTX];
     bpool_instance_block_t bpool_inst_arr[NUM_OF_SUPPORTED_BPOOLS];
     iomux_stats_t iomux;
     global_instance_block_t global_inst_arr[NUM_OF_SUPPORTED_GLOBALS];
@@ -530,6 +553,9 @@ void xlio_stats_instance_remove_ring_block(ring_stats_t *);
 
 void xlio_stats_instance_create_cq_block(cq_stats_t *);
 void xlio_stats_instance_remove_cq_block(cq_stats_t *);
+
+void xlio_stats_instance_create_ent_ctx_block(entity_context_stats_t *);
+void xlio_stats_instance_remove_ent_ctx_block(entity_context_stats_t *);
 
 void xlio_stats_instance_create_bpool_block(bpool_stats_t *);
 void xlio_stats_instance_remove_bpool_block(bpool_stats_t *);
