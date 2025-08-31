@@ -5218,7 +5218,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
         }
     }
 
-    // Do another poll to avoid request notofication race with incoming packets.
+    // Do another poll to avoid request notification race with incoming packets.
     prev_sndbuf = sndbuf_available();
     all_drained = poll_and_progress_rx(poll_sn);
     m_rx_ring_map_lock.unlock();
@@ -5694,7 +5694,7 @@ struct tcp_seg *sockinfo_tcp::get_tcp_seg_cached()
 // Assumed seg != nullptr
 void sockinfo_tcp::put_tcp_seg_direct(struct tcp_seg *seg)
 {
-    seg->next = nullptr; // Very important. We occasionaly get here trashed seg->next.
+    seg->next = nullptr; // We occasionally get here trashed seg->next.
     return_tcp_segs(seg);
 }
 
@@ -5726,17 +5726,17 @@ tcp_timers_collection::tcp_timers_collection(int intervals)
     m_p_intervals.resize(m_n_intervals_size);
 }
 
-/**
- * @brief Destructor for tcp_timers_collection class
- *
- * Cleans up all timer resources by calling free_tta_resources()
- *
- * @note The coverity[UNCAUGHT_EXCEPT] was added as it's a False Positive
- */
 // coverity[UNCAUGHT_EXCEPT]
 tcp_timers_collection::~tcp_timers_collection()
 {
-    free_tta_resources();
+    for (auto &bucket : m_p_intervals) {
+        while (!bucket.empty()) {
+            remove_timer(bucket.front());
+        }
+    }
+    if (m_n_count) {
+        __log_dbg("Not all TCP socket timers have been removed, count=%d", m_n_count);
+    }
 }
 
 event_handler_manager *tcp_timers_collection::get_event_mgr()
@@ -5748,19 +5748,6 @@ event_handler_manager *tcp_timers_collection::get_event_mgr()
         return &g_event_handler_manager_local;
     } else {
         return g_p_event_handler_manager;
-    }
-}
-
-void tcp_timers_collection::free_tta_resources()
-{
-    for (auto &bucket : m_p_intervals) {
-        while (!bucket.empty()) {
-            remove_timer(bucket.front());
-        }
-    }
-
-    if (m_n_count) {
-        __log_dbg("Not all TCP socket timers have been removed, count=%d", m_n_count);
     }
 }
 
@@ -5790,16 +5777,10 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
     auto iter = bucket.begin();
     while (iter != bucket.end()) {
         sockinfo_tcp *p_sock = *iter;
-        // Must inc iter first bacause handle_timer_expired can erase
-        // the socket that the iter points to, with delegated timers.
+        // Must increment iterator first, the socket can be erased below in case of local timers.
         iter++;
 
-        /* It is not guaranteed that the same sockinfo object is met once
-         * in this loop.
-         * So in case sockinfo object is destroyed other processing
-         * of the same object mast be ingored.
-         * TODO Check on is_cleaned() is not safe completely.
-         */
+        // TODO Trylock can miss a timer tick and we don't trigger it in unlock() anymore.
         if (!p_sock->trylock_tcp_con()) {
             bool destroyable = false;
             if (!p_sock->is_cleaned()) {
@@ -5834,12 +5815,12 @@ void tcp_timers_collection::add_new_timer(sockinfo_tcp *sock)
 
     sock_list &bucket = m_p_intervals[m_n_next_insert_bucket];
     bucket.emplace_back(sock);
-    auto rc =
+    auto result =
         m_sock_remove_map.emplace(sock, std::make_tuple(m_n_next_insert_bucket, --(bucket.end())));
 
-    // If the socket already exists in m_sock_remove_map, emplace returns false in rc.second
-    // Mainly for sanity check, we dont expect it.
-    if (unlikely(!rc.second)) {
+    // If the socket already exists in m_sock_remove_map, emplace returns false in result.second
+    // Mainly for sanity check, we don't expect it.
+    if (unlikely(!result.second)) {
         __log_warn("Trying to add timer twice for TCP socket %p", sock);
         bucket.pop_back();
         return;
@@ -5871,9 +5852,7 @@ void tcp_timers_collection::remove_timer(sockinfo_tcp *sock)
 
         __log_dbg("TCP socket [%p] timer was removed", sock);
     } else {
-        // Listen sockets are not added to timers.
-        // As part of socket general unregister and destroy they will get here and will no be
-        // found.
+        // Listen sockets are not added to timers but this method is still called.
         __log_dbg("TCP socket [%p] timer was not found (listen socket)", sock);
     }
 }
@@ -5886,6 +5865,7 @@ thread_local_tcp_timers::thread_local_tcp_timers()
 thread_local_tcp_timers::~thread_local_tcp_timers()
 {
     m_timer_handle = nullptr;
+    // We don't call base class destructor. All leftover timers are ignored.
 }
 
 void sockinfo_tcp::update_header_field(data_updater *updater)
