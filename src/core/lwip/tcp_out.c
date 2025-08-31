@@ -244,7 +244,6 @@ static struct pbuf *tcp_pbuf_prealloc(u32_t length, struct tcp_pcb *pcb, pbuf_ty
 /** Checks if tcp_write is allowed or not ().
  *
  * @param pcb the tcp pcb to check for
- * @param len length of data to send (checked agains snd_buf)
  * @return ERR_OK if tcp_write is allowed to proceed, another err_t otherwise
  */
 static err_t tcp_write_is_state_valid(struct tcp_pcb *pcb)
@@ -469,7 +468,6 @@ err_t tcp_write(struct tcp_pcb *pcb, const void *arg, u32_t len, u16_t apiflags,
 
     /* Finally update the pcb state. */
     pcb->snd_lbb += len;
-    pcb->snd_buf -= len;
 
     /* Set the PSH flag in the last segment that we enqueued. */
     if (enable_push_flag && seg != NULL && seg->tcphdr != NULL) {
@@ -627,7 +625,6 @@ err_t tcp_write_express(struct tcp_pcb *pcb, const struct iovec *iov, u32_t iovc
 
     /* Update the pcb state. */
     pcb->snd_lbb += total_len;
-    pcb->snd_buf -= total_len;
 
     /* TODO Move Minshall's logic to tcp_output(). */
     if (total_len < pcb->mss) {
@@ -739,8 +736,6 @@ err_t tcp_enqueue_flags(struct tcp_pcb *pcb, u8_t flags)
     /* SYN and FIN bump the sequence number */
     if (flags & (TCP_SYN | TCP_FIN)) {
         pcb->snd_lbb++;
-        /* optlen does not influence snd_buf */
-        pcb->snd_buf--;
     }
     if (flags & TCP_FIN) {
         pcb->flags |= TF_FIN;

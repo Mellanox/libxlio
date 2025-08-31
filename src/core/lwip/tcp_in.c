@@ -563,7 +563,6 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
         /* received SYN ACK with expected sequence number? */
         if ((in_data->flags & TCP_ACK) && (in_data->flags & TCP_SYN) &&
             in_data->ackno == pcb->unacked->seqno + 1) {
-            // pcb->snd_buf++; SND_BUF_FOR_SYN_FIN
             pcb->rcv_nxt = in_data->seqno + 1;
             pcb->rcv_ann_right_edge = pcb->rcv_nxt;
             pcb->lastack = in_data->ackno;
@@ -1115,8 +1114,6 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
 
             /* Update the send buffer space.*/
             pcb->acked = in_data->ackno - pcb->lastack;
-
-            pcb->snd_buf += pcb->acked;
 
             /* Reset the fast retransmit variables. */
             pcb->dupacks = 0;

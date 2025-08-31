@@ -73,8 +73,9 @@ enum xlio_express_flags : uint32_t {
     XLIO_EXPRESS_OP_TYPE_DESC,
     XLIO_EXPRESS_OP_TYPE_FILE_ZEROCOPY,
     XLIO_EXPRESS_OP_TYPE_MASK = 0x000fu,
-    XLIO_EXPRESS_MSG_MORE,
-    XLIO_EXPRESS_MSG_MASK = 0x00f0u,
+    XLIO_EXPRESS_MSG_MORE = 0x0010u,
+    XLIO_EXPRESS_MSG_SND_BUF = 0x0020u,
+    XLIO_EXPRESS_MSG_MASK = 0x0ff0u,
 };
 
 struct socket_option_t {

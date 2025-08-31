@@ -421,6 +421,8 @@ void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
 
     tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb_xlio_socket);
     tcp_err(&m_pcb, sockinfo_tcp::err_lwip_cb_xlio_socket);
+    // We don't track send buffer and unacked length statistics for now.
+    tcp_acked(&m_pcb, nullptr);
     set_blocking(false);
     m_is_xlio_socket = true;
 }
@@ -1359,6 +1361,7 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
             tx_ptr = (void *)((char *)tx_ptr + tx_size);
             pos += tx_size;
             total_tx += tx_size;
+            m_pcb.snd_buf -= tx_size;
         }
     }
 
@@ -1386,8 +1389,18 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
         }
     }
 
-    int sndbuf = tcp_sndbuf(&m_pcb);
-    if (sndbuf <= 0) {
+    size_t bytes_to_send =
+        std::accumulate(&p_iov[0], &p_iov[sz_iov], 0U,
+                        [](size_t sum, const iovec &curr) { return sum + curr.iov_len; });
+
+    // TODO Move snd_buf to sockinfo_tcp and make it atomic.
+    lock_tcp_con();
+    bytes_to_send = std::min<size_t>(bytes_to_send, sndbuf_available());
+    // We reserve space in advance. Further, tcp_tx_express() doesn't track snd_buf.
+    m_pcb.snd_buf -= bytes_to_send;
+    unlock_tcp_con();
+
+    if (bytes_to_send == 0) {
         errno = EAGAIN;
         return -1;
     }
@@ -1420,11 +1433,16 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
                 ++sge_nr;
             }
             size_t len = std::min(p_iov[i].iov_len - offset, last->sz_buffer - last->sz_data);
+            len = std::min(len, bytes_to_send);
             memcpy((uint8_t *)last->p_buffer + last->sz_data, (uint8_t *)p_iov[i].iov_base + offset,
                    len);
             last->sz_data += len;
             offset += len;
             sent_bytes += static_cast<ssize_t>(len);
+            bytes_to_send -= len;
+            if (bytes_to_send == 0) {
+                goto exit;
+            }
         }
     }
 
@@ -1442,10 +1460,11 @@ void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf_list)
 {
     struct iovec iov[JOB_SOCK_TX_IOV_MAX];
     unsigned iov_len = 0;
-
+    unsigned bytes_to_send = 0;
 
     for (mem_buf_desc_t *buf = buf_list; buf; buf = buf->p_next_desc) {
         iov[iov_len++] = iovec {.iov_base = buf->p_buffer, .iov_len = buf->sz_data};
+        bytes_to_send += buf->sz_data;
     }
 
     int rc = tcp_tx_express(iov, iov_len, buf_list->lkey,
@@ -1456,6 +1475,9 @@ void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf_list)
         // TODO In case of memory allocation issue (internal error), fail the socket
         // TODO Free the buf_list
         si_tcp_logwarn("tcp_tx_express() failed (errno=%d)", errno);
+    } else {
+        // tcp_tx_express() doesn't account this counter.
+        IF_STATS(m_p_socket_stats->n_tx_ready_byte_count += bytes_to_send);
     }
 }
 
@@ -1606,6 +1628,7 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
             }
             pos += tx_size;
             total_tx += tx_size;
+            m_pcb.snd_buf -= tx_size;
         }
     }
 
@@ -1953,6 +1976,8 @@ err_t sockinfo_tcp::ack_recvd_lwip_cb(void *arg, struct tcp_pcb *tpcb, u32_t ack
     ASSERT_LOCKED(conn->m_tcp_con_lock);
 
     IF_STATS_O(conn, conn->m_p_socket_stats->n_tx_ready_byte_count -= acked);
+
+    conn->m_pcb.snd_buf += acked;
 
     if (conn->sndbuf_available()) {
         // This method can be called for closing socket. In this case there is no epoll context.
@@ -6082,6 +6107,11 @@ int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint
         m_error_status = ENOMEM;
         return tcp_tx_handle_errno_and_unlock(ENOMEM);
     }
+
+    if (flags & XLIO_EXPRESS_MSG_SND_BUF) {
+        m_pcb.snd_buf -= bytes_written;
+    }
+
     if (!(flags & XLIO_EXPRESS_MSG_MORE)) {
         tcp_output(&m_pcb);
         m_b_xlio_socket_dirty = false;
@@ -6231,8 +6261,7 @@ ssize_t sockinfo_tcp::tcp_tx_handle_sndbuf_unavailable(ssize_t total_tx, int err
                 // do not check for EV_OUT.
                 g_event_handler_manager_local.do_tasks();
             }
-            // in case of zero sndbuf and non-blocking just try once polling CQ for
-            // ACK
+            // in case of zero sndbuf and non-blocking just try once polling CQ for ACK
             int poll_count = 0;
             rx_wait(poll_count, false);
             m_tx_consecutive_eagain_count = 0;
