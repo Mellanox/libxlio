@@ -220,10 +220,10 @@ PACK_STRUCT_END
             (pcb)->accepted_pcb((newpcb));                                                         \
     } while (0)
 
-#define TCP_EVENT_SENT(pcb, space, ret)                                                            \
+#define TCP_EVENT_ACKED(pcb, acked, ret)                                                           \
     do {                                                                                           \
-        if ((pcb)->sent != NULL)                                                                   \
-            (ret) = (pcb)->sent((pcb)->callback_arg, (pcb), (space));                              \
+        if ((pcb)->acked_cb != NULL)                                                               \
+            (ret) = (pcb)->acked_cb((pcb)->callback_arg, (pcb), (acked));                          \
         else                                                                                       \
             (ret) = ERR_OK;                                                                        \
     } while (0)

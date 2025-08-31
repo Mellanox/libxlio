@@ -461,8 +461,7 @@ private:
     void handle_incoming_handshake_failure(sockinfo_tcp *child_conn);
 
     // rx
-    // int rx_wait(int &poll_count, bool blocking = true);
-    static err_t ack_recvd_lwip_cb(void *arg, struct tcp_pcb *tpcb, u16_t space);
+    static err_t ack_recvd_lwip_cb(void *arg, struct tcp_pcb *tpcb, u32_t acked);
 
     ssize_t tcp_tx_handle_done_and_unlock(ssize_t total_tx, int errno_tmp);
     ssize_t tcp_tx_handle_errno_and_unlock(int error_number);
