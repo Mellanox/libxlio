@@ -1119,11 +1119,11 @@ void tcp_recv(struct tcp_pcb *pcb, tcp_recv_fn recv)
  * has been successfully delivered to the remote host.
  *
  * @param pcb tcp_pcb to set the sent callback
- * @param sent callback function to call for this pcb when data is successfully sent
+ * @param acked_cb callback function to call for this pcb when data is acknowledged
  */
-void tcp_sent(struct tcp_pcb *pcb, tcp_sent_fn sent)
+void tcp_acked(struct tcp_pcb *pcb, tcp_acked_fn acked_cb)
 {
-    pcb->sent = sent;
+    pcb->acked_cb = acked_cb;
 }
 
 /**

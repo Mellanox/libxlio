@@ -128,18 +128,18 @@ typedef void (*tcp_accepted_pcb_fn)(struct tcp_pcb *accepted_pcb);
  */
 typedef err_t (*tcp_recv_fn)(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
 
-/** Function prototype for tcp sent callback functions. Called when sent data has
+/** Function prototype for tcp acked callback functions. Called when data has
  * been acknowledged by the remote side. Use it to free corresponding resources.
  * This also means that the pcb has now space available to send new data.
  *
  * @param arg Additional argument to pass to the callback function (@see tcp_arg())
  * @param tpcb The connection pcb for which data has been acknowledged
- * @param len The amount of bytes acknowledged
+ * @param acked The amount of bytes acknowledged
  * @return ERR_OK: try to send some data by calling tcp_output
  *            Only return ERR_ABRT if you have called tcp_abort from within the
  *            callback function!
  */
-typedef err_t (*tcp_sent_fn)(void *arg, struct tcp_pcb *tpcb, u16_t len);
+typedef err_t (*tcp_acked_fn)(void *arg, struct tcp_pcb *tpcb, u32_t acked);
 
 /** Function prototype for tcp error callback functions. Called when the pcb
  * receives a RST or is unexpectedly closed for any other reason.
@@ -341,8 +341,8 @@ struct tcp_pcb {
     struct tcp_seg *seg_alloc; /* Available tcp_seg element for use */
     struct pbuf *pbuf_alloc; /* Available pbuf element for use */
 
-    /* Function to be called when more send buffer space is available. */
-    tcp_sent_fn sent;
+    /* Function to be called when data is acknowledged. */
+    tcp_acked_fn acked_cb;
     /* Function to be called when (in-sequence) data has arrived. */
     tcp_recv_fn recv;
     /* Function to be called when a connection has been set up. */
@@ -418,7 +418,7 @@ void tcp_syn_handled(struct tcp_pcb *pcb, tcp_syn_handled_fn syn_handled);
 void tcp_clone_conn(struct tcp_pcb *pcb, tcp_clone_conn_fn clone_conn);
 void tcp_accepted_pcb(struct tcp_pcb *pcb, tcp_accepted_pcb_fn accepted_pcb);
 void tcp_recv(struct tcp_pcb *pcb, tcp_recv_fn recv);
-void tcp_sent(struct tcp_pcb *pcb, tcp_sent_fn sent);
+void tcp_acked(struct tcp_pcb *pcb, tcp_acked_fn sent);
 void tcp_err(struct tcp_pcb *pcb, tcp_err_fn err);
 
 #define tcp_mss(pcb)            (((pcb)->flags & TF_TIMESTAMP) ? ((pcb)->mss - 12) : (pcb)->mss)

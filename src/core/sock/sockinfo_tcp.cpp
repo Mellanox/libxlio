@@ -317,7 +317,7 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     tcp_ip_output(&m_pcb, sockinfo_tcp::ip_output);
     tcp_recv(&m_pcb, sockinfo_tcp::rx_lwip_cb);
     tcp_err(&m_pcb, sockinfo_tcp::err_lwip_cb);
-    tcp_sent(&m_pcb, sockinfo_tcp::ack_recvd_lwip_cb);
+    tcp_acked(&m_pcb, sockinfo_tcp::ack_recvd_lwip_cb);
 
     m_parent = nullptr;
     m_iomux_ready_fd_array = nullptr;
@@ -1026,7 +1026,6 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
             prepare_listen_to_close(); // close pending to accept sockets
         } else {
             tcp_recv(&m_pcb, sockinfo_tcp::rx_drop_lwip_cb);
-            tcp_sent(&m_pcb, nullptr);
             if (m_linger.l_onoff && m_linger.l_linger) {
                 // TODO Should we do this each time we get into prepare_to_close?
                 handle_socket_linger();
@@ -1941,7 +1940,8 @@ void sockinfo_tcp::handle_incoming_handshake_failure(sockinfo_tcp *child_conn)
     }
 }
 
-err_t sockinfo_tcp::ack_recvd_lwip_cb(void *arg, struct tcp_pcb *tpcb, u16_t ack)
+/*static*/
+err_t sockinfo_tcp::ack_recvd_lwip_cb(void *arg, struct tcp_pcb *tpcb, u32_t acked)
 {
     sockinfo_tcp *conn = (sockinfo_tcp *)arg;
 
@@ -1952,9 +1952,10 @@ err_t sockinfo_tcp::ack_recvd_lwip_cb(void *arg, struct tcp_pcb *tpcb, u16_t ack
 
     ASSERT_LOCKED(conn->m_tcp_con_lock);
 
-    IF_STATS_O(conn, conn->m_p_socket_stats->n_tx_ready_byte_count -= ack);
+    IF_STATS_O(conn, conn->m_p_socket_stats->n_tx_ready_byte_count -= acked);
 
     if (conn->sndbuf_available()) {
+        // This method can be called for closing socket. In this case there is no epoll context.
         NOTIFY_ON_EVENTS(conn, EPOLLOUT);
     }
     vlog_func_exit();
@@ -3855,7 +3856,7 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     new_sock->m_parent = listen_sock;
     tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb);
     tcp_err(&new_sock->m_pcb, sockinfo_tcp::err_lwip_cb);
-    tcp_sent(&new_sock->m_pcb, sockinfo_tcp::ack_recvd_lwip_cb);
+    tcp_acked(&new_sock->m_pcb, sockinfo_tcp::ack_recvd_lwip_cb);
     new_sock->m_pcb.syn_tw_handled_cb = nullptr;
     new_sock->m_sock_wakeup_pipe.wakeup_clear();
     new_sock->m_rcvbuff_max = std::max(listen_sock->m_rcvbuff_max, 2 * new_sock->m_pcb.mss);

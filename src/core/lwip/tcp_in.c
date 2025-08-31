@@ -202,7 +202,7 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb)
                        called when new send buffer space is available, we call it
                        now. */
                     if (pcb->acked > 0) {
-                        TCP_EVENT_SENT(pcb, pcb->acked, err);
+                        TCP_EVENT_ACKED(pcb, pcb->acked, err);
                         if (err == ERR_ABRT) {
                             goto aborted;
                         }
