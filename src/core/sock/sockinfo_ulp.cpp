@@ -802,10 +802,10 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
         retry:
             if (!block_this_run) {
                 m_p_sock->rx_poll_on_tx_if_needed();
-                ret2 = m_p_sock->tcp_tx_express(tls_arg.attr.iov, tls_arg.attr.sz_iov, 0,
-                                                XLIO_EXPRESS_OP_TYPE_FILE_ZEROCOPY,
-                                                reinterpret_cast<void *>(rec));
-
+                ret2 = m_p_sock->tcp_tx_express(
+                    tls_arg.attr.iov, tls_arg.attr.sz_iov, 0,
+                    XLIO_EXPRESS_OP_TYPE_FILE_ZEROCOPY | XLIO_EXPRESS_MSG_SND_BUF,
+                    reinterpret_cast<void *>(rec));
             } else {
                 ret2 = m_p_sock->tcp_tx(tls_arg);
             }
