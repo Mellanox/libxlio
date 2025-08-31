@@ -118,9 +118,6 @@ public:
     void set_group(poll_group *group) { m_p_group = group; }
     inline event_handler_manager *get_event_mgr();
 
-private:
-    void free_tta_resources();
-
 protected:
     void *m_timer_handle = nullptr;
 
