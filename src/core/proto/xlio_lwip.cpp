@@ -74,9 +74,7 @@ xlio_lwip::xlio_lwip()
     lwip_cc_algo_module = (enum cc_algo_mod)safe_mce_sys().lwip_cc_algo_mod;
 
     lwip_tcp_mss = get_lwip_tcp_mss(safe_mce_sys().mtu, safe_mce_sys().lwip_mss);
-    lwip_tcp_snd_buf = safe_mce_sys().tcp_send_buffer_size;
     lwip_tcp_nodelay_treshold = safe_mce_sys().tcp_nodelay_treshold;
-    BULLSEYE_EXCLUDE_BLOCK_END
 
     enable_push_flag = !!safe_mce_sys().tcp_push_flag;
     enable_ts_option = read_tcp_timestamp_option();

@@ -235,7 +235,7 @@ public:
 
     inline unsigned sndbuf_available()
     {
-        return static_cast<unsigned>(std::max(tcp_sndbuf(&m_pcb), 0));
+        return static_cast<unsigned>(std::max(m_snd_buf.load(), 0));
     }
 
     inline unsigned get_mss() { return m_pcb.mss; }
@@ -579,7 +579,7 @@ private:
     inline int rx_wait_lockless(int &poll_count, bool blocking);
     int rx_wait_helper(int &poll_count, bool blocking);
     void fit_rcv_wnd(bool force_fit);
-    void fit_snd_bufs(unsigned int new_max);
+    void fit_snd_bufs(uint32_t new_snd_buf_max);
     bool rx_tls_msg(struct msghdr *__msg, mem_buf_desc_t *out_buf);
 
     inline struct tcp_seg *get_tcp_seg_cached();
@@ -609,6 +609,8 @@ private:
     timestamps_t m_rx_timestamps;
     tcp_sock_offload_e m_sock_offload;
     tcp_sock_state_e m_sock_state;
+    std::atomic<int32_t> m_snd_buf;
+    uint32_t m_snd_buf_max;
     sockinfo_tcp *m_parent;
     // received packet source (true if its from internal thread)
     bool m_b_incoming;

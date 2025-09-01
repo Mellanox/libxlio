@@ -306,6 +306,8 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     si_tcp_logdbg("tcp socket created, lock_name=%s", m_tcp_con_lock.to_str());
 
     tcp_pcb_init(&m_pcb, TCP_PRIO_NORMAL, this);
+    m_snd_buf_max = safe_mce_sys().tcp_send_buffer_size;
+    m_snd_buf = m_snd_buf_max;
 
     const tcp_keepalive_info keepalive_info = safe_mce_sys().sysctl_reader.get_tcp_keepalive_info();
     tcp_set_keepalive(&m_pcb, static_cast<u32_t>(1000U * keepalive_info.idle_secs),
@@ -1361,7 +1363,7 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
             tx_ptr = (void *)((char *)tx_ptr + tx_size);
             pos += tx_size;
             total_tx += tx_size;
-            m_pcb.snd_buf -= tx_size;
+            m_snd_buf -= tx_size;
         }
     }
 
@@ -1393,16 +1395,16 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
         std::accumulate(&p_iov[0], &p_iov[sz_iov], 0U,
                         [](size_t sum, const iovec &curr) { return sum + curr.iov_len; });
 
-    // TODO Move snd_buf to sockinfo_tcp and make it atomic.
-    lock_tcp_con();
-    bytes_to_send = std::min<size_t>(bytes_to_send, sndbuf_available());
-    // We reserve space in advance. Further, tcp_tx_express() doesn't track snd_buf.
-    m_pcb.snd_buf -= bytes_to_send;
-    unlock_tcp_con();
-
-    if (bytes_to_send == 0) {
+    int32_t prev_sndbuf = m_snd_buf.fetch_sub(bytes_to_send);
+    if (prev_sndbuf <= 0) {
+        m_snd_buf += bytes_to_send;
         errno = EAGAIN;
         return -1;
+    }
+    if (prev_sndbuf < static_cast<int32_t>(bytes_to_send)) {
+        // TODO Allow to make m_snd_buf negative not to send too small buffers.
+        m_snd_buf += bytes_to_send - prev_sndbuf;
+        bytes_to_send = prev_sndbuf;
     }
 
     // TODO Optimize buffers allocation
@@ -1628,7 +1630,7 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
             }
             pos += tx_size;
             total_tx += tx_size;
-            m_pcb.snd_buf -= tx_size;
+            m_snd_buf -= tx_size;
         }
     }
 
@@ -1977,7 +1979,7 @@ err_t sockinfo_tcp::ack_recvd_lwip_cb(void *arg, struct tcp_pcb *tpcb, u32_t ack
 
     IF_STATS_O(conn, conn->m_p_socket_stats->n_tx_ready_byte_count -= acked);
 
-    conn->m_pcb.snd_buf += acked;
+    conn->m_snd_buf += acked;
 
     if (conn->sndbuf_available()) {
         // This method can be called for closing socket. In this case there is no epoll context.
@@ -3884,6 +3886,8 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     tcp_acked(&new_sock->m_pcb, sockinfo_tcp::ack_recvd_lwip_cb);
     new_sock->m_pcb.syn_tw_handled_cb = nullptr;
     new_sock->m_sock_wakeup_pipe.wakeup_clear();
+    new_sock->m_snd_buf_max = safe_mce_sys().tcp_send_buffer_size;
+    new_sock->m_snd_buf = new_sock->m_snd_buf_max;
     new_sock->m_rcvbuff_max = std::max(listen_sock->m_rcvbuff_max, 2 * new_sock->m_pcb.mss);
     new_sock->fit_rcv_wnd(true);
 
@@ -4490,11 +4494,11 @@ void sockinfo_tcp::fit_rcv_wnd(bool force_fit)
     }
 }
 
-void sockinfo_tcp::fit_snd_bufs(unsigned int new_max_snd_buff)
+void sockinfo_tcp::fit_snd_bufs(uint32_t new_snd_buf_max)
 {
-    // snd_buf can become negative
-    m_pcb.snd_buf += ((int)new_max_snd_buff - m_pcb.max_snd_buff);
-    m_pcb.max_snd_buff = new_max_snd_buff;
+    // m_snd_buf can become negative
+    m_snd_buf += ((int32_t)new_snd_buf_max - m_snd_buf_max);
+    m_snd_buf_max = new_snd_buf_max;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4757,7 +4761,7 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             // OS allocates double the size of memory requested by the application - not sure we
             // need it.
             val = std::max(2 * m_pcb.mss, 2 * val);
-            fit_snd_bufs(val);
+            fit_snd_bufs(static_cast<uint32_t>(val));
             unlock_tcp_con();
             si_tcp_logdbg("setsockopt SO_SNDBUF: requested %d, set %d", *(int *)__optval, val);
             break;
@@ -5121,7 +5125,7 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
             break;
         case SO_SNDBUF:
             if (*__optlen >= sizeof(int)) {
-                *(int *)__optval = m_pcb.max_snd_buff;
+                *(int *)__optval = static_cast<int>(m_snd_buf_max);
                 si_tcp_logdbg("(SO_SNDBUF) sndbuf=%d", *(int *)__optval);
                 ret = 0;
             } else {
@@ -5607,8 +5611,8 @@ void sockinfo_tcp::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
                 pcb.snd_wl1, pcb.snd_wl2);
 
     // Send buffer
-    vlog_printf(log_level, "Send buffer : snd_buf %d, max_snd_buff %u\n", pcb.snd_buf,
-                pcb.max_snd_buff);
+    vlog_printf(log_level, "Send buffer : snd_buf %d, snd_buf_max %u\n", m_snd_buf.load(),
+                m_snd_buf_max);
 
     // Retransmission
     vlog_printf(log_level, "Retransmission : rtime %hd, rto %u, nrtx %u\n", pcb.rtime, pcb.rto,
@@ -6109,7 +6113,7 @@ int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint
     }
 
     if (flags & XLIO_EXPRESS_MSG_SND_BUF) {
-        m_pcb.snd_buf -= bytes_written;
+        m_snd_buf -= bytes_written;
     }
 
     if (!(flags & XLIO_EXPRESS_MSG_MORE)) {

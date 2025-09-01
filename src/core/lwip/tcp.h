@@ -47,7 +47,6 @@ typedef u32_t (*sys_now_fn)(void);
 void register_sys_now(sys_now_fn fn);
 
 extern u16_t lwip_tcp_mss;
-extern u32_t lwip_tcp_snd_buf;
 extern u32_t lwip_tcp_nodelay_treshold;
 
 struct tcp_seg;
@@ -323,9 +322,6 @@ struct tcp_pcb {
 
     u32_t acked;
 
-    s32_t snd_buf; /* Available buffer space for sending (in bytes). */
-    u32_t max_snd_buff;
-
     u32_t snd_sml_snt; /* maintain state for minshall's algorithm */
     u32_t snd_sml_add; /* maintain state for minshall's algorithm */
 
@@ -422,7 +418,6 @@ void tcp_acked(struct tcp_pcb *pcb, tcp_acked_fn sent);
 void tcp_err(struct tcp_pcb *pcb, tcp_err_fn err);
 
 #define tcp_mss(pcb)            (((pcb)->flags & TF_TIMESTAMP) ? ((pcb)->mss - 12) : (pcb)->mss)
-#define tcp_sndbuf(pcb)         ((pcb)->snd_buf)
 #define tcp_nagle_disable(pcb)  ((pcb)->flags |= TF_NODELAY)
 #define tcp_nagle_enable(pcb)   ((pcb)->flags &= ~TF_NODELAY)
 #define tcp_nagle_disabled(pcb) (((pcb)->flags & TF_NODELAY) != 0)

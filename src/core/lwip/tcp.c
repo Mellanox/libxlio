@@ -93,7 +93,6 @@ enum cc_algo_mod lwip_cc_algo_module = CC_MOD_LWIP;
 u16_t lwip_tcp_mss = CONST_TCP_MSS;
 u8_t enable_push_flag = 1;
 u8_t enable_ts_option = 0;
-u32_t lwip_tcp_snd_buf = 0;
 u32_t lwip_tcp_nodelay_treshold = 0;
 
 /* slow timer value */
@@ -914,8 +913,6 @@ void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
     pcb->my_container = container;
     pcb->is_last_seg_dropped = false;
     pcb->prio = prio;
-    pcb->max_snd_buff = lwip_tcp_snd_buf;
-    pcb->snd_buf = pcb->max_snd_buff;
     pcb->snd_scale = 0;
     pcb->rcv_scale = 0;
     pcb->rcv_wnd = TCP_WND_SCALED(pcb);
@@ -987,8 +984,6 @@ void tcp_pcb_recycle(struct tcp_pcb *pcb)
     u32_t iss;
 
     pcb->flags = 0;
-    pcb->max_snd_buff = lwip_tcp_snd_buf;
-    pcb->snd_buf = pcb->max_snd_buff;
     pcb->user_timeout_ms = 0;
     pcb->ticks_since_data_sent = -1;
     pcb->rto = 3000 / slow_tmr_interval;

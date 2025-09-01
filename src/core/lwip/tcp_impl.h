@@ -89,8 +89,7 @@ void set_tmr_resolution(u32_t v);
     ((((tpcb)->unacked == NULL) || (((tpcb)->flags & TF_NODELAY) && tcp_nodelay_treshold(tpcb)) || \
       ((tpcb)->flags & TF_INFR) ||                                                                 \
       (((tpcb)->unsent != NULL) &&                                                                 \
-       (((tpcb)->unsent->next != NULL) || ((tpcb)->unsent->len >= (tpcb)->mss))) ||                \
-      (tcp_sndbuf(tpcb) <= 0))                                                                     \
+       (((tpcb)->unsent->next != NULL) || ((tpcb)->unsent->len >= (tpcb)->mss))))                  \
          ? 1                                                                                       \
          : 0)
 #define tcp_output_nagle(tpcb) (tcp_do_output_nagle(tpcb) ? tcp_output(tpcb) : ERR_OK)
