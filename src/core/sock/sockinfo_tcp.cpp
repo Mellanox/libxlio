@@ -1469,14 +1469,20 @@ void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf_list)
         bytes_to_send += buf->sz_data;
     }
 
-    int rc = tcp_tx_express(iov, iov_len, buf_list->lkey,
-                            XLIO_EXPRESS_OP_TYPE_DESC | XLIO_EXPRESS_MSG_MORE, buf_list);
-
+    int rc = unlikely(!is_connected_and_ready_to_send())
+        ? -1
+        : tcp_tx_express(iov, iov_len, buf_list->lkey,
+                         XLIO_EXPRESS_OP_TYPE_DESC | XLIO_EXPRESS_MSG_MORE, buf_list);
     if (rc < 0) {
-        // TODO Make sure failure happened due to terminal state of the socket
-        // TODO In case of memory allocation issue (internal error), fail the socket
-        // TODO Free the buf_list
-        si_tcp_logwarn("tcp_tx_express() failed (errno=%d)", errno);
+        /* TODO
+         * tcp_tx_express() doesn't fail socket properly on ENOMEM. m_sock_state remains connected
+         * and is_rts() remains positive. So, repeated TX operations will try to send data and
+         * can be successful after discarding previous data due to ENOMEM. Also, is_rtr() remains
+         * positive. We need a way to fail the socket, but still perform TCP FIN handshake on
+         * close().
+         * Need to trigger epoll EPOLLERR event in case of ENOMEM.
+         */
+        buf_list->p_desc_owner->mem_buf_tx_release(buf_list, true);
     } else {
         // tcp_tx_express() doesn't account this counter.
         IF_STATS(m_p_socket_stats->n_tx_ready_byte_count += bytes_to_send);
