@@ -435,7 +435,7 @@ bool dst_entry::conf_l2_hdr_and_snd_wqe_eth()
             init_sge();
             ret_val = true;
         } else {
-            dst_logerr("Can't build proper L2 header, L2 address is not available");
+            dst_logerr("Unable to build L2 header, L2 address unresolved src=%p, dst=%p", src, dst);
         }
     } else {
         dst_logerr("Dynamic cast failed, can't build proper L2 header");
@@ -554,8 +554,12 @@ bool dst_entry::prepare_to_send_entity_context(struct xlio_rate_limit_t &rate_li
 {
     if (resolve_ring()) {
         modify_ratelimit(rate_limit);
-        configure_headers();
-        generate_id();
+
+        if (is_valid()) {
+            configure_headers();
+            generate_id();
+        }
+
         dst_logdbg("Ring resolved, dst entry is offloaded.");
         return true;
     }
