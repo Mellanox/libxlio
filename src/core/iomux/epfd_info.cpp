@@ -645,15 +645,18 @@ bool epfd_info::ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *
 
     m_ring_map_lock.lock();
 
-    bool all_drained = true;
+    int all_drained = 1;
     for (ring_map_t::iterator iter = m_ring_map.begin(); iter != m_ring_map.end(); iter++) {
-        all_drained &= iter->first->poll_and_process_element_rx(p_poll_sn_rx, pv_fd_ready_array);
-        all_drained &= (iter->first->poll_and_process_element_tx(p_poll_sn_tx) >= 0);
+        all_drained = std::min(
+            all_drained,
+            std::abs(iter->first->poll_and_process_element_rx(p_poll_sn_rx, pv_fd_ready_array)));
+        all_drained =
+            std::min(all_drained, std::abs(iter->first->poll_and_process_element_tx(p_poll_sn_tx)));
     }
 
     m_ring_map_lock.unlock();
 
-    return all_drained;
+    return !!all_drained;
 }
 
 int epfd_info::ring_request_notification(uint64_t poll_sn_rx, uint64_t poll_sn_tx)

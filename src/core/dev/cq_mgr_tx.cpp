@@ -207,7 +207,7 @@ int cq_mgr_tx::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
         return opcode == MLX5_CQE_REQ_ERR || opcode == MLX5_CQE_RESP_ERR;
     };
 
-    int ret = 0;
+    int ret = -1;
     uint32_t num_polled_cqes = 0;
     xlio_mlx5_cqe *cqe = get_cqe_tx(num_polled_cqes);
 
