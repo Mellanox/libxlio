@@ -1375,6 +1375,9 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
     iovec *p_iov = tx_arg.attr.iov;
     size_t sz_iov = tx_arg.attr.sz_iov;
     ssize_t sent_bytes = 0;
+    mem_buf_desc_t *head;
+    mem_buf_desc_t *last;
+    unsigned sge_nr;
     int errno_tmp = errno;
 
     // TODO Flags aren't supported now. They usually affect blocking mode and zerocopy.
@@ -1387,6 +1390,7 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
     if (!is_rts()) {
         std::lock_guard<decltype(m_tcp_con_lock)> _lock(m_tcp_con_lock);
         if (!is_connected_and_ready_to_send()) {
+            stats_update_tx_errors(errno);
             return -1;
         }
     }
@@ -1398,8 +1402,7 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
     int32_t prev_sndbuf = m_snd_buf.fetch_sub(bytes_to_send);
     if (prev_sndbuf <= 0) {
         m_snd_buf += bytes_to_send;
-        errno = EAGAIN;
-        return -1;
+        goto exit;
     }
     if (prev_sndbuf < static_cast<int32_t>(bytes_to_send)) {
         // TODO Allow to make m_snd_buf negative not to send too small buffers.
@@ -1408,15 +1411,14 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
     }
 
     // TODO Optimize buffers allocation
-    mem_buf_desc_t *head = m_p_connected_dst_entry->get_tx_buffer();
-    mem_buf_desc_t *last = head;
-
+    head = m_p_connected_dst_entry->get_tx_buffer();
+    last = head;
     if (!head) {
-        errno = EAGAIN;
-        return -1;
+        goto exit;
     }
+
     head->sz_data = 0;
-    unsigned sge_nr = 1;
+    sge_nr = 1;
 
     for (size_t i = 0; i < sz_iov; ++i) {
         size_t offset = 0;
@@ -1449,6 +1451,12 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
     }
 
 exit:
+    if (unlikely(sent_bytes == 0)) {
+        // Only user thread increments the EAGAIN counter, so no need to lock
+        stats_update_tx_errors(EAGAIN);
+        errno = EAGAIN;
+        return -1;
+    }
 
     last->p_next_desc = nullptr;
     m_entity_context->add_job(
@@ -1463,16 +1471,15 @@ void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf_list)
     struct iovec iov[JOB_SOCK_TX_IOV_MAX];
     unsigned iov_len = 0;
     unsigned bytes_to_send = 0;
+    int rc;
 
     for (mem_buf_desc_t *buf = buf_list; buf; buf = buf->p_next_desc) {
         iov[iov_len++] = iovec {.iov_base = buf->p_buffer, .iov_len = buf->sz_data};
         bytes_to_send += buf->sz_data;
     }
 
-    int rc = unlikely(!is_connected_and_ready_to_send())
-        ? -1
-        : tcp_tx_express(iov, iov_len, buf_list->lkey,
-                         XLIO_EXPRESS_OP_TYPE_DESC | XLIO_EXPRESS_MSG_MORE, buf_list);
+    rc = tcp_tx_express(iov, iov_len, buf_list->lkey,
+                        XLIO_EXPRESS_OP_TYPE_DESC | XLIO_EXPRESS_MSG_MORE, buf_list);
     if (rc < 0) {
         /* TODO
          * tcp_tx_express() doesn't fail socket properly on ENOMEM. m_sock_state remains connected
@@ -1484,7 +1491,7 @@ void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf_list)
          */
         buf_list->p_desc_owner->mem_buf_tx_release(buf_list, true);
     } else {
-        // tcp_tx_express() doesn't account this counter.
+        // tcp_tx_express() doesn't account this counter, but ack_recvd_lwip_cb() does
         IF_STATS(m_p_socket_stats->n_tx_ready_byte_count += bytes_to_send);
     }
 }
@@ -6075,8 +6082,6 @@ void sockinfo_tcp::make_dirty()
         m_b_xlio_socket_dirty = true;
         if (m_p_group) {
             m_p_group->add_dirty_socket(this);
-        } else {
-            m_entity_context->add_dirty_socket(this);
         }
     }
 }
@@ -6094,6 +6099,7 @@ int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint
         mdesc.attr = PBUF_DESC_MDESC;
         break;
     default:
+        errno = ENOPROTOOPT;
         return -1;
     };
     mdesc.mkey = mkey;
@@ -6104,18 +6110,27 @@ int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint
         bytes_written += iov[i].iov_len;
     }
 
-    lock_tcp_con();
+    std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
 
     if (unlikely(!is_connected_and_ready_to_send())) {
-        return tcp_tx_handle_errno_and_unlock(errno);
+        stats_update_tx_errors(errno);
+        return -1;
     }
 
     err_t err = tcp_write_express(&m_pcb, iov, iov_len, &mdesc);
     if (unlikely(err != ERR_OK)) {
         // The only error in tcp_write_express() is a memory error.
+        // TODO Need to fail subsequent is_rts(), but trigger FIN handshake on close().
         m_conn_state = TCP_CONN_ERROR;
         m_error_status = ENOMEM;
-        return tcp_tx_handle_errno_and_unlock(ENOMEM);
+        errno = ENOMEM;
+        stats_update_tx_errors(ENOMEM);
+        return -1;
+    }
+
+    if (unlikely(m_p_socket_stats)) {
+        m_p_socket_stats->counters.n_tx_sent_byte_count += bytes_written;
+        m_p_socket_stats->counters.n_tx_sent_pkt_count++;
     }
 
     if (flags & XLIO_EXPRESS_MSG_SND_BUF) {
@@ -6129,8 +6144,6 @@ int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint
         make_dirty();
     }
 
-    unlock_tcp_con();
-
     return bytes_written;
 }
 
@@ -6142,10 +6155,11 @@ int sockinfo_tcp::tcp_tx_express_inline(const struct iovec *iov, unsigned iov_le
     memset(&mdesc, 0, sizeof(mdesc));
     mdesc.attr = PBUF_DESC_NONE;
 
-    lock_tcp_con();
+    std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
 
     if (unlikely(!is_connected_and_ready_to_send())) {
-        return tcp_tx_handle_errno_and_unlock(errno);
+        stats_update_tx_errors(errno);
+        return -1;
     }
 
     for (unsigned i = 0; i < iov_len; ++i) {
@@ -6155,9 +6169,17 @@ int sockinfo_tcp::tcp_tx_express_inline(const struct iovec *iov, unsigned iov_le
             // XXX tcp_write() can return multiple errors.
             m_conn_state = TCP_CONN_ERROR;
             m_error_status = ENOMEM;
-            return tcp_tx_handle_errno_and_unlock(ENOMEM);
+            errno = ENOMEM;
+            stats_update_tx_errors(ENOMEM);
+            return -1;
         }
     }
+
+    if (unlikely(m_p_socket_stats)) {
+        m_p_socket_stats->counters.n_tx_sent_byte_count += bytes_written;
+        m_p_socket_stats->counters.n_tx_sent_pkt_count++;
+    }
+
     if (!(flags & XLIO_EXPRESS_MSG_MORE)) {
         m_b_xlio_socket_dirty = false;
         tcp_output(&m_pcb);
@@ -6165,17 +6187,14 @@ int sockinfo_tcp::tcp_tx_express_inline(const struct iovec *iov, unsigned iov_le
         make_dirty();
     }
 
-    unlock_tcp_con();
-
     return bytes_written;
 }
 
 void sockinfo_tcp::flush()
 {
-    lock_tcp_con();
+    std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
     m_b_xlio_socket_dirty = false;
     tcp_output(&m_pcb);
-    unlock_tcp_con();
 }
 
 ssize_t sockinfo_tcp::tcp_tx_handle_done_and_unlock(ssize_t total_tx, int errno_tmp)
