@@ -85,7 +85,8 @@ const char *xlio_version_str = "XLIO_VERSION: " PACKAGE_VERSION "-" STR(PRJ_LIBR
 bool g_b_exit = false;
 bool g_init_ibv_fork_done = false;
 bool g_is_forked_child = false;
-bool g_init_global_ctors_done = true;
+bool g_init_global_ctors_done = false;
+bool g_init_xlio_init_done = false;
 static command_netlink *s_cmd_nl = nullptr;
 #define MAX_VERSION_STR_LEN 128
 
@@ -991,7 +992,7 @@ static void do_global_ctors_helper()
     static lock_spin_recursive g_globals_lock;
     std::lock_guard<decltype(g_globals_lock)> lock(g_globals_lock);
 
-    if (g_init_global_ctors_done) {
+    if (!g_init_xlio_init_done || g_init_global_ctors_done) {
         return;
     }
     PROFILE_BLOCK("xlio_ctors")
@@ -1256,12 +1257,16 @@ extern "C" int xlio_init(void)
 {
     PROFILE_FUNC
 
+    if (g_init_xlio_init_done) {
+        return 0;
+    }
+
 #ifndef XLIO_STATIC_BUILD
     get_orig_funcs();
 #endif /* XLIO_STATIC_BUILD */
     safe_mce_sys();
 
-    g_init_global_ctors_done = false;
+    g_init_xlio_init_done = true;
 
     vlog_start(PRODUCT_NAME, safe_mce_sys().log_level, safe_mce_sys().log_filename,
                safe_mce_sys().log_details, safe_mce_sys().log_colors);
@@ -1288,6 +1293,7 @@ extern "C" EXPORT_SYMBOL int xlio_exit(void)
     if (g_init_global_ctors_done) {
         rc = free_libxlio_resources();
         g_init_global_ctors_done = false;
+        g_init_xlio_init_done = false;
     }
 
     return rc;
