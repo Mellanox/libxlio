@@ -330,51 +330,47 @@ int ring_bond::send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
     return -1;
 }
 
-bool ring_bond::poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
-                                            void *pv_fd_ready_array /*NULL*/)
+int ring_bond::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array /*NULL*/)
 {
     if (m_lock_ring_rx.trylock()) {
         return false;
     }
 
-    bool all_drained = true;
+    int all_drained = 1;
+    int all_empty = -1;
 
     for (uint32_t i = 0; i < m_recv_rings.size(); i++) {
         if (m_recv_rings[i]->is_up()) {
             // TODO consider returning immediately after finding something, continue next time from
             // next ring
-            all_drained &=
-                m_recv_rings[i]->poll_and_process_element_rx(p_cq_poll_sn, pv_fd_ready_array);
+            int rc = m_recv_rings[i]->poll_and_process_element_rx(p_cq_poll_sn, pv_fd_ready_array);
+            all_drained = std::min(all_drained, std::abs(rc));
+            all_empty = std::max(all_empty, std::min(rc, 1));
         }
     }
     m_lock_ring_rx.unlock();
 
-    return all_drained;
+    return all_drained * all_empty;
 }
 
 int ring_bond::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
 {
     if (m_lock_ring_tx.trylock()) {
-        errno = EAGAIN;
         return 0;
     }
 
-    int temp = 0;
-    int ret = 0;
+    int all_drained = 1;
+    int all_empty = -1;
     for (uint32_t i = 0; i < m_bond_rings.size(); i++) {
         if (m_bond_rings[i]->is_up()) {
-            temp = m_bond_rings[i]->poll_and_process_element_tx(p_cq_poll_sn);
-            if (temp > 0) {
-                ret += temp;
-            }
+            int rc = m_bond_rings[i]->poll_and_process_element_tx(p_cq_poll_sn);
+            all_drained = std::min(all_drained, std::abs(rc));
+            all_empty = std::max(all_empty, std::min(rc, 1));
         }
     }
     m_lock_ring_tx.unlock();
-    if (ret > 0) {
-        return ret;
-    } else {
-        return temp;
-    }
+
+    return all_drained * all_empty;
 }
 
 int ring_bond::drain_and_proccess()

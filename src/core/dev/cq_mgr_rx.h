@@ -83,10 +83,10 @@ public:
 
     /**
      * Poll RX CQ. Each CQE processed directly.
-     * @return True if CQ was drained.
+     * @return Zero - Not drained, Positive - Drained with packets, Negative - No packets.
      */
-    virtual bool poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
-                                             void *pv_fd_ready_array = nullptr) = 0;
+    virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
+                                            void *pv_fd_ready_array = nullptr) = 0;
 
     /**
      * This will check if the cq was drained, and if it wasn't it will drain it.

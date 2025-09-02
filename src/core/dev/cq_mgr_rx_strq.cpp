@@ -409,7 +409,7 @@ mem_buf_desc_t *cq_mgr_rx_strq::process_strq_cq_element_rx(mem_buf_desc_t *p_mem
     return p_mem_buf_desc;
 }
 
-bool cq_mgr_rx_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array)
+int cq_mgr_rx_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array)
 {
     cq_logfuncall("");
 
@@ -447,11 +447,11 @@ bool cq_mgr_rx_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *p
 
     if (likely(rx_polled > 0)) {
         m_p_ring->m_gro_mgr.flush_all(pv_fd_ready_array);
-    } else {
-        compensate_qp_poll_failed();
+        return static_cast<int>(m_n_sysvar_cq_poll_batch_max - rx_polled);
     }
 
-    return (rx_polled < m_n_sysvar_cq_poll_batch_max);
+    compensate_qp_poll_failed();
+    return -1;
 }
 
 void cq_mgr_rx_strq::add_hqrx(hw_queue_rx *hqrx)
