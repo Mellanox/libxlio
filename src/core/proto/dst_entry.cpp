@@ -530,8 +530,8 @@ bool dst_entry::prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_
                     if (!skip_resolve_ring) {
                         configure_headers();
                         generate_id();
+                        resolved = true;
                     }
-                    resolved = true;
                 }
             }
         }
