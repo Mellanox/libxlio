@@ -66,7 +66,6 @@ public:
 
     bool prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_rules = false,
                          bool skip_resolve_ring = false);
-    bool prepare_to_send_entity_context(struct xlio_rate_limit_t &rate_limit);
     void generate_id();
     virtual ssize_t fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr) = 0;
     virtual ssize_t slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr,
