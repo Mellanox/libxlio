@@ -113,10 +113,8 @@ static bool is_inherited_option(int __level, int __optname)
 
 event_handler_manager *sockinfo_tcp::get_event_mgr()
 {
-    if (is_xlio_socket()) {
+    if (m_p_group) {
         return m_p_group->get_event_handler();
-    } else if (m_entity_context) {
-        return m_entity_context->get_event_handler();
     } else if (safe_mce_sys().tcp_ctl_thread ==
                option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
         return &g_event_handler_manager_local;
@@ -127,10 +125,8 @@ event_handler_manager *sockinfo_tcp::get_event_mgr()
 
 tcp_timers_collection *sockinfo_tcp::get_tcp_timer_collection()
 {
-    if (is_xlio_socket()) {
+    if (m_p_group) {
         return m_p_group->get_tcp_timers();
-    } else if (m_entity_context) {
-        return m_entity_context->get_tcp_timers();
     } else if (safe_mce_sys().tcp_ctl_thread ==
                option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
         return &g_thread_local_tcp_timers;
@@ -390,8 +386,6 @@ void sockinfo_tcp::rx_add_ring_cb(ring *p_ring)
 {
     if (m_p_group) {
         m_p_group->add_ring(p_ring, &m_ring_alloc_log_rx);
-    } else if (m_entity_context) {
-        m_entity_context->add_ring(p_ring, &m_ring_alloc_log_rx);
     }
 
     sockinfo::rx_add_ring_cb(p_ring);
@@ -432,7 +426,7 @@ void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
 void sockinfo_tcp::set_entity_context(entity_context *ctx)
 {
     m_entity_context = ctx;
-    // To reuse Ultra API path of TX completions
+    // To reuse Ultra API path, TX completions for instance
     m_p_group = ctx;
 
     assert(m_ops == m_ops_tcp);
@@ -653,14 +647,6 @@ void sockinfo_tcp::add_tx_ring_to_group()
     ring *rng = get_tx_ring();
     if (m_p_group && rng) {
         m_p_group->add_ring(rng, &m_ring_alloc_log_tx);
-    }
-}
-
-void sockinfo_tcp::add_tx_ring_to_entity_context()
-{
-    ring *rng = get_tx_ring();
-    if (m_entity_context && rng) {
-        m_entity_context->add_ring(rng, &m_ring_alloc_log_tx);
     }
 }
 
@@ -1143,9 +1129,7 @@ bool sockinfo_tcp::prepare_dst_to_send(bool is_accepted_socket /* = false */)
     if (m_p_connected_dst_entry) {
         ret_val = m_p_connected_dst_entry->prepare_to_send(m_so_ratelimit, is_accepted_socket);
         if (ret_val) {
-            /* dst_entry has resolved tx ring,
-             * so it is a time to provide TSO information to PCB
-             */
+            // Set TSO information.
             auto *ring = m_p_connected_dst_entry->get_ring();
             uint32_t max_tso_sz = std::min(ring->get_max_payload_sz(), safe_mce_sys().max_tso_sz);
             m_pcb.tso.max_buf_sz = std::min(safe_mce_sys().tx_buf_size, max_tso_sz);
@@ -1154,32 +1138,10 @@ bool sockinfo_tcp::prepare_dst_to_send(bool is_accepted_socket /* = false */)
             m_pcb.tso.max_send_sge = ring->get_max_send_sge();
         }
     }
-    if (ret_val && is_xlio_socket()) {
+    if (ret_val && m_p_group) {
         add_tx_ring_to_group();
-    } else if (ret_val && m_entity_context) {
-        // Add the rings of the incoming socket to the entity context.
-        add_tx_ring_to_entity_context();
     }
     return ret_val;
-}
-
-bool sockinfo_tcp::prepare_dst_to_send_entity_context()
-{
-    if (m_p_connected_dst_entry &&
-        m_p_connected_dst_entry->prepare_to_send_entity_context(m_so_ratelimit)) {
-        // Set TSO information
-        auto *ring = m_p_connected_dst_entry->get_ring();
-        uint32_t max_tso_sz = std::min(ring->get_max_payload_sz(), safe_mce_sys().max_tso_sz);
-        m_pcb.tso.max_buf_sz = std::min(safe_mce_sys().tx_buf_size, max_tso_sz);
-        m_pcb.tso.max_payload_sz = max_tso_sz;
-        m_pcb.tso.max_header_sz = ring->get_max_header_sz();
-        m_pcb.tso.max_send_sge = ring->get_max_send_sge();
-
-        add_tx_ring_to_entity_context();
-        return true;
-    }
-
-    return false;
 }
 
 unsigned sockinfo_tcp::tx_wait(bool blocking)
@@ -2968,7 +2930,7 @@ void sockinfo_tcp::connect_entity_context()
 
     std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
 
-    if (!prepare_dst_to_send_entity_context()) {
+    if (!prepare_dst_to_send(false)) {
         si_tcp_logerr("Unable to prepare dst entry.");
         handle_err(this);
         return;
@@ -3917,10 +3879,8 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
 
     IF_STATS_O(listen_sock, listen_sock->m_p_socket_stats->listen_counters.n_rx_syn_tw++);
     listen_sock->m_tcp_con_lock.unlock();
-    if (new_sock->is_xlio_socket()) {
-        new_sock->get_poll_group()->reuse_sockfd(new_sock->m_fd, new_sock);
-    } else if (new_sock->m_entity_context) {
-        new_sock->m_entity_context->reuse_sockfd(new_sock->m_fd, new_sock);
+    if (new_sock->m_p_group) {
+        new_sock->m_p_group->reuse_sockfd(new_sock->m_fd, new_sock);
     } else {
         assert(g_p_fd_collection);
         g_p_fd_collection->reuse_sockfd(new_sock->m_fd, new_sock);
@@ -4002,8 +3962,8 @@ err_t sockinfo_tcp::syn_received_drop_lwip_cb(void *arg, struct tcp_pcb *newpcb)
     new_sock->set_conn_properties_from_pcb();
     new_sock->create_dst_entry();
     if (new_sock->m_p_connected_dst_entry) {
-        new_sock->prepare_dst_to_send(
-            true); // true for passive socket to skip the transport rules checking
+        // True for passive socket to skip the transport rules checking
+        new_sock->prepare_dst_to_send(true);
         tcp_arg(&(new_sock->m_pcb), new_sock);
         new_sock->abort_connection();
     }
@@ -5932,10 +5892,8 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
             }
             p_sock->unlock_tcp_con();
             if (destroyable) {
-                if (p_sock->is_xlio_socket()) {
+                if (p_sock->get_poll_group()) {
                     p_sock->get_poll_group()->mark_socket_to_destroy(p_sock);
-                } else if (p_sock->get_entity_context()) {
-                    p_sock->get_entity_context()->mark_socket_to_destroy(p_sock);
                 } else {
                     g_p_fd_collection->destroy_sockfd(p_sock);
                 }

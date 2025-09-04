@@ -550,26 +550,6 @@ bool dst_entry::prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_
     return m_b_is_offloaded;
 }
 
-bool dst_entry::prepare_to_send_entity_context(struct xlio_rate_limit_t &rate_limit)
-{
-    if (resolve_ring()) {
-        modify_ratelimit(rate_limit);
-
-        if (is_valid()) {
-            configure_headers();
-            generate_id();
-        }
-
-        dst_logdbg("Ring resolved, dst entry is offloaded.");
-        return true;
-    }
-
-    m_b_is_offloaded = false;
-    set_state(false);
-    dst_logdbg("Unable to resolve ring, dst enty is not offloaded.");
-    return false;
-}
-
 void dst_entry::generate_id()
 {
     m_id = m_p_ring->generate_id(m_p_net_dev_val->get_l2_address()->get_address(),

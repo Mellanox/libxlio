@@ -486,8 +486,6 @@ private:
     bool connect_bind_any_and_check_rules();
     void connect_async_set_errs();
     void connect_threads_mode();
-    void add_tx_ring_to_entity_context();
-    bool prepare_dst_to_send_entity_context();
     int rx_wait_for_data(int in_flags, struct msghdr *__msg, loops_timer &rcv_timeout);
     int rx_sleep_wait(loops_timer &rcv_timeout);
 

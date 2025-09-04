@@ -866,6 +866,7 @@ void ring_simple::return_tx_pool_to_global_pool()
     return_to_global_pool();
 }
 
+// Returns number of freed buffers.
 int ring_simple::put_tx_buffer_helper(mem_buf_desc_t *buff)
 {
     if (buff->tx.dev_mem_length) {
@@ -885,7 +886,6 @@ int ring_simple::put_tx_buffer_helper(mem_buf_desc_t *buff)
         buff->p_next_desc = nullptr;
         free_lwip_pbuf(&buff->lwip_pbuf);
         pool.push_back(buff);
-        // Return number of freed buffers
         return 1;
     }
     return 0;

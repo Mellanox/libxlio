@@ -348,8 +348,8 @@ public:
 #endif
 
     // XLIO Ultra API
-    bool is_xlio_socket() const;
-    poll_group *get_poll_group() const;
+    bool is_xlio_socket() const { return m_is_xlio_socket; }
+    poll_group *get_poll_group() const { return m_p_group; }
 
 protected:
     static const char *setsockopt_so_opt_to_str(int opt);
