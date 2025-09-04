@@ -292,7 +292,7 @@ public:
 
     // Update parameters for multi-process applications
     void update_multi_process_params();
-
+    void fixup_params();
     char *app_name;
     char app_id[MAX_APP_ID_LENGHT];
 
