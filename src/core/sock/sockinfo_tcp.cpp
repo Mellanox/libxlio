@@ -1435,6 +1435,11 @@ void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf_list)
     unsigned bytes_to_send = 0;
     int rc;
 
+    // To suppress clang analyzer warning about buf_list->lkey dereference.
+    if (unlikely(!buf_list)) {
+        return;
+    }
+
     for (mem_buf_desc_t *buf = buf_list; buf; buf = buf->p_next_desc) {
         iov[iov_len++] = iovec {.iov_base = buf->p_buffer, .iov_len = buf->sz_data};
         bytes_to_send += buf->sz_data;
