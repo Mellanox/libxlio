@@ -1,10 +1,13 @@
 # XLIO - Accelerated IO SW library
 
-The NVIDIA® Accelerated IO (XLIO) SW library boosts the performance of TCP/IP applications based on NGINX (CDN, DoH Etc.) and storage solutions as part of the SPDK. XLIO is a user-space software library that exposes standard socket APIs with kernel-bypass architecture, enabling a hardware-based direct copy between an application’s user-space memory and the network interface.
+The NVIDIA® Accelerated IO (XLIO) SW library boosts the performance of TCP/IP network applications providing high bandwidth and low CPU usage.
+XLIO is a user-space software library which exposes standard POSIX and XLIO Ultra socket APIs with kernel-bypass architecture, enabling a hardware-based direct copy between an application user-space memory and the network interface.
 
-Coupling XLIO with NVIDIA ConnectX®-6 Dx, NVIDIA ConnectX®-7 or NVIDIA BlueField®-2 data processing unit (DPU) acceleration capabilities provides breakthrough performance of Transport Layer Security (TLS) encryption/decryption. It also enables working with features such as HW LRO/TSO and Striding-RQ which increase TCP performance, without application code changes and using a standard socket API.
+Coupling XLIO with Crypto Enabled NVIDIA ConnectX, NVIDIA BlueField data processing unit (DPU) acceleration capabilities, provides a breakthrough performance of Transport Layer Security (TLS) encryption and decryption.
+XLIO is capable of utilizing HW features such as LRO/TSO and Striding-RQ which increase TCP performance, without application code changes for both
+POSIX socket and XLIO Ultra APIs.
 
-Please visit our [documentation site](https://docs.nvidia.com/networking/category/xlio) for more details.
+Please visit our [documentation website](https://docs.nvidia.com/networking/category/xlio) for more details.
 
 <hr>
 
@@ -16,24 +19,28 @@ Please visit our [documentation site](https://docs.nvidia.com/networking/categor
 * [Licenses](#licenses)
 * [Information](#information)
 * [Contribution](#contribution)
-* [Configuration](#configuration)
 
 <hr>
 
 ## Getting Started
 
-### Prerequisits
+### Installing XLIO
 
-#### Driver Stack
+XLIO is available as part of DOCA Software Stack.
+Please visit [DOCA website](https://developer.nvidia.com/networking/doca) for more details.
 
-XLIO can work on top of both MLNX_OFED driver stack that supports Ethernet and on a lighter driver stack, MLNX_EN that supports only Ethernet.
+### Building XLIO
 
-[MLNX_OFED](https://network.nvidia.com/products/infiniband-drivers/linux/mlnx_ofed/)
-[MLNX_EN](https://network.nvidia.com/products/ethernet-drivers/linux/mlnx_en/)
+#### Prerequisits
 
-#### DPCP
+##### DOCA Software stack
 
-DPCP (Direct Packet Control Plane) is mandatory to enable advanced HW features for supported NVIDIA HW.
+XLIO requires NVIDIA DOCA-Host software stack or NVIDIA Bluefiled bundle to be installed on the system.
+Please visit [DOCA website](https://developer.nvidia.com/networking/doca) for more details.
+
+##### DPCP
+
+DPCP (Direct Packet Control Plane) is mandatory to run XLIO.
 Repository: [libdpcp](https://github.com/Mellanox/libdpcp.git)
 
 ```sh
@@ -43,7 +50,11 @@ $ make -j
 $ make install
 ```
 
-### Building XLIO
+##### Tools
+
+Autoconf, Automake, libtool, unzip, patch, libnl-devel (netlink 3)
+
+#### Compiling XLIO
 
 Run the following commands from within the directory at the top of the tree:
 
@@ -55,7 +66,7 @@ $ make install
 ```
 --enable-utls : Enables uTLS HW offload for supported NVIDIA HW.
 
-### Building XLIO using preinstalled dpcp
+#### Compiling XLIO using preinstalled dpcp
 
 ```sh
 $ ./autogen.sh
@@ -63,6 +74,9 @@ $ ./configure --prefix=/where/to/install --with-dpcp --enable-utls
 $ make -j
 $ make install
 ```
+
+#### Configure
+See more [Options](./docs/configuration.md)
 
 ### Usage Examples
 
@@ -88,26 +102,20 @@ N - Number of Nginx workers.
 * TCP
 * UDP
 
-## Supported CPU Architectures
+## Supported CPU Architecturess
 
 * [x86_64](https://en.wikipedia.org/wiki/X86-64)
 * [Arm](https://www.arm.com/)
 
-## Supported NICs
+## Supported HW
 
-* NVIDIA ConnectX®-6
-* NVIDIA ConnectX®-7
-* NVIDIA BlueField®-2
-* NVIDIA BlueField®-3
+* Please refer to the [User Manual](https://docs.nvidia.com/networking/software/accelerator-software/index.html#xlio) for supported device list.
 
 ## Licenses
 See [LICENSE](./LICENSE) file
 
 ## Information
-See [README](./README) file
+See [README](./README) file for XLIO features and parameters.
 
 ## Contribution
 [Contribution](./docs/contributing.md) guidelines for this project
-
-## Configuration
-[Configuration](./docs/configuration.md) options description

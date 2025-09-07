@@ -8,41 +8,33 @@ accelerated network hardware.
 XLIO dynamically links with these applications at run-time, redirect standard socket API calls allowing them to be
 be accelerated without modification.
 
-Build library from source
-========================
+XLIO execution modes
+====================
+XLIO supports two execution modes.
+1 - Run to completion (R2C)
+2 - Worker Threads
 
-Prerequisites:
-1. rdma-core upstream kernel and userspace verbs libraries (libibverbs, libmlx4, libmlx5, librdmacm)
-2. Autoconf, Automake, libtool, unzip, patch, libnl-devel (netlink 1 or 3)
+Run to completion
+-----------------
+By default, XLIO works in R2C mode, meaning, the execution context is
+provided to XLIO by the application. In particular, XLIO code such as reading/writing packets,
+polling CQs, handling sockets, etc, is performed as part of POSIX socket calls or Ultra API calls,
+on the same thread which called the API.
+In terms of performance this mode is the preferred one, however,
+this mode requires from the application to work with sockets in an efficient way,
+by avoiding sharing sockets between threads, provide enough execution time to XLIO, use per thread epoll and more.
+In case of listen sockets, each thread should have its own listen socket.
 
-Build:
-1. ./autogen.sh
-2. ./configure --prefix=/usr
-3. make
-4. sudo make install
-
-
-Install library from rpm or debian
-=================================
-
-Installing:
-Install the package as any other rpm or debian package [rpm -i libxlio.X.Y.Z-R.rpm].
-The installation copies the XLIO library to: /usr/lib[64]/libxlio.so
-The XLIO monitoring utility is installed at: /usr/bin/xlio_stats
-The XLIO extra socket API is located at: /usr/include/mellanox/xlio_extra.h
-
-Upgrading:
-Use rpm update procedure: # rpm -U libxlio.X.Y.Z-R.rpm
-You can upgrade by uninstalling (rpm -e) the previously installed package
-before starting to install the new library rpm.
-
-Uninstalling:
-When uninstalling remember to uninstall (rpm -e) the package before you
-uninstall ofed.
-
-Running:
-Set the environment variable LD_PRELOAD to libxlio.so and run your application.
-Example: # LD_PRELOAD=libxlio.so iperf -uc 224.22.22.22 -t 5
+Worker Threads
+--------------
+In this mode XLIO spawns XLIO worker threads. These threads run in the background and perform network operations.
+This mode requires minimal network awareness from the aplication,
+i.e applications may share sockets between threads, use single listening thread,
+use single epoll context or rarely call socket APIs.
+While R2C mode provides best performance, Worker Threads mode provides greater flexibility.
+The number of XLIO worker threads is controlled by the performance.threading.worker_threads parameter.
+XLIO Ultra API is not supported with this mode.
+Please see User Manual for additional details and current limitations.
 
 Configuration Subsystem
 =======================
@@ -986,8 +978,22 @@ automatically to reach a desired rate of interrupts.
 4. Disable CQ moderation with XLIO_CQ_MODERATION_ENABLE=0
 5. Disable Adaptive CQ moderation with XLIO_CQ_AIM_INTERVAL_MSEC=0
 
+Install library from rpm or debian
+=================================
 
+Installing:
+Install the package as any other rpm or debian package [rpm -i libxlio.X.Y.Z-R.rpm].
+The installation copies the XLIO library to: /usr/lib[64]/libxlio.so
+The XLIO monitoring utility is installed at: /usr/bin/xlio_stats
+The XLIO extra socket API is located at: /usr/include/mellanox/xlio_extra.h
 
+Upgrading:
+Use rpm update procedure: # rpm -U libxlio.X.Y.Z-R.rpm
+You can upgrade by uninstalling (rpm -e) the previously installed package
+before starting to install the new library rpm.
+
+Uninstalling:
+When uninstalling remember to uninstall (rpm -e) the package before you uninstall DOCA.
 
 Troubleshooting
 ===============
@@ -1003,7 +1009,6 @@ Troubleshooting
 This warning message means that you are using XLIO with high log level:
 XLIO_TRACELEVEL variable value is set to 4 or more.
 In order to fix it - set XLIO_TRACELEVEL to it's default value: 3
-
 
 * CAP_NET_RAW and root access
 
