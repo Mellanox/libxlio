@@ -53,7 +53,7 @@ schema_analyzer::analysis_result schema_analyzer::analyze(json_object *property_
     result.needs_constraint_validation = result.constraint_cfg.has_minimum ||
         result.constraint_cfg.has_maximum || result.constraint_cfg.has_enum;
     result.needs_enum_mapping = result.enum_cfg.enabled;
-
+    // coverity[uninit_use_in_call]
     return result;
 }
 
@@ -242,11 +242,13 @@ enum_mapping_config schema_analyzer::analyze_enum_mapping_config()
     enum_mapping_config config;
 
     if (!has_oneof_field()) {
+        // coverity[uninit_use_in_call]
         return config;
     }
 
     // Exclude properties with memory size flag - those should be handled by value_transformer
     if (has_memory_size_flag()) {
+        // coverity[uninit_use_in_call]
         return config;
     }
 

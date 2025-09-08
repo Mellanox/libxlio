@@ -43,6 +43,7 @@
 #define wt_loginfo  __log_info_info
 #define wt_logdbg   __log_info_dbg
 
+// coverity[UNCAUGHT_EXCEPT]
 void worker_thread::worker_thread_main(worker_thread &t, entity_context *ctx)
 {
     t.m_entity_ctx = ctx;

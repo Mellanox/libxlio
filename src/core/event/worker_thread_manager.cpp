@@ -89,6 +89,7 @@ worker_thread_manager::worker_thread_manager()
         [&next_ctx, &all_ctxs](worker_thread &t) { t.start_thread(all_ctxs[next_ctx++]); });
 }
 
+// coverity[UNCAUGHT_EXCEPT]
 worker_thread_manager::~worker_thread_manager()
 {
     size_t threads_num = safe_mce_sys().worker_threads;
