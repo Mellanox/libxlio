@@ -2155,6 +2155,7 @@ ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
 
         // Condition for cache optimization
         if (unlikely(safe_mce_sys().ring_migration_ratio_tx > 0)) {
+            /* coverity[sleep] */
             if (unlikely(p_dst_entry->try_migrate_ring_tx(m_lock_snd))) {
                 IF_STATS(m_p_socket_stats->counters.n_tx_migrations++);
             }

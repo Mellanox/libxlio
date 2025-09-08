@@ -624,7 +624,7 @@ void dst_entry::do_ring_migration_tx(lock_base &socket_lock, resource_allocation
     new_key->set_user_id_key(new_calc_id);
     m_slow_path_lock.unlock();
     socket_lock.unlock();
-
+    /* coverity[sleep] */
     ring *new_ring = m_p_net_dev_val->reserve_ring(new_key);
     if (!new_ring) {
         socket_lock.lock();
