@@ -119,7 +119,7 @@ void entity_context::tx_data_job(const job_desc &job)
         ctx_logwarn("Invalid TX job");
         return;
     }
-    job.sock->tx_thread_commit(job.buf);
+    job.sock->tx_thread_commit(job.buf, job.offset, job.tot_size, job.flags);
 }
 
 void entity_context::rx_data_recvd_job(const job_desc &job)
@@ -180,10 +180,15 @@ void entity_context::close_socket_job(const job_desc &job)
 void entity_context::entity_context_comp_cb(xlio_socket_t sock, uintptr_t userdata_sq,
                                             uintptr_t userdata_op)
 {
-    mem_buf_desc_t *buf_list = reinterpret_cast<mem_buf_desc_t *>(userdata_op);
+    mem_buf_desc_t *buf = reinterpret_cast<mem_buf_desc_t *>(userdata_op);
 
     NOT_IN_USE(sock);
     NOT_IN_USE(userdata_sq);
 
-    buf_list->p_desc_owner->mem_buf_tx_release(buf_list, true);
+    if (buf->lwip_pbuf.ref > 1) {
+        // Optimization to reduce the number of ring locks.
+        --buf->lwip_pbuf.ref;
+    } else {
+        buf->p_desc_owner->mem_buf_tx_release(buf, true);
+    }
 }

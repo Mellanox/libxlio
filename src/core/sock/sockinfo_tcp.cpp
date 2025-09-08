@@ -827,6 +827,11 @@ sockinfo_tcp::~sockinfo_tcp()
     delete m_ops;
     m_ops = nullptr;
 
+    if (m_store) {
+        m_store->p_desc_owner->mem_buf_tx_release(m_store, true);
+        m_store = nullptr;
+    }
+
     // Release unread RX buffers that may have been received before OR during TCP termination
     // handshake
     clear_rx_ready_buffers();
@@ -1337,9 +1342,7 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
     iovec *p_iov = tx_arg.attr.iov;
     size_t sz_iov = tx_arg.attr.sz_iov;
     ssize_t sent_bytes = 0;
-    mem_buf_desc_t *head;
-    mem_buf_desc_t *last;
-    unsigned sge_nr;
+    uint32_t store_used = m_store_offset;
     int errno_tmp = errno;
 
     // TODO Flags aren't supported now. They usually affect blocking mode and zerocopy.
@@ -1372,40 +1375,35 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
         bytes_to_send = prev_sndbuf;
     }
 
-    // TODO Optimize buffers allocation
-    head = m_p_connected_dst_entry->get_tx_buffer();
-    last = head;
-    if (!head) {
-        goto exit;
-    }
-
-    head->sz_data = 0;
-    sge_nr = 1;
-
     for (size_t i = 0; i < sz_iov; ++i) {
         size_t offset = 0;
         while (offset < p_iov[i].iov_len) {
-            if (last->sz_data >= last->sz_buffer) {
-                if (unlikely(sge_nr >= JOB_SOCK_TX_IOV_MAX)) {
+            if (!m_store) {
+                m_store = m_p_connected_dst_entry->get_tx_buffer();
+                if (unlikely(!m_store)) {
                     goto exit;
                 }
-                mem_buf_desc_t *buf = m_p_connected_dst_entry->get_tx_buffer();
-                if (unlikely(!buf)) {
-                    goto exit;
-                }
-                buf->sz_data = 0;
-                last->p_next_desc = buf;
-                last = buf;
-                ++sge_nr;
+                m_store_offset = 0;
+                store_used = 0;
+                m_store->p_next_desc = nullptr;
             }
-            size_t len = std::min(p_iov[i].iov_len - offset, last->sz_buffer - last->sz_data);
+
+            size_t len = std::min(p_iov[i].iov_len - offset, m_store->sz_buffer - store_used);
             len = std::min(len, bytes_to_send);
-            memcpy((uint8_t *)last->p_buffer + last->sz_data, (uint8_t *)p_iov[i].iov_base + offset,
-                   len);
-            last->sz_data += len;
+            memcpy(m_store->p_buffer + store_used, (uint8_t *)p_iov[i].iov_base + offset, len);
+
             offset += len;
+            store_used += len;
             sent_bytes += static_cast<ssize_t>(len);
             bytes_to_send -= len;
+
+            if (store_used == m_store->sz_buffer) {
+                m_entity_context->add_job(entity_context::job_desc {
+                    entity_context::JOB_TYPE_SOCK_TX, entity_context::JOB_FLAG_TX_LAST_CHUNK, this,
+                    m_store, m_store_offset, store_used - m_store_offset});
+                m_store = nullptr;
+            }
+
             if (bytes_to_send == 0) {
                 goto exit;
             }
@@ -1420,33 +1418,50 @@ exit:
         return -1;
     }
 
-    last->p_next_desc = nullptr;
-    m_entity_context->add_job(
-        entity_context::job_desc {entity_context::JOB_TYPE_SOCK_TX, this, head, 0});
+// Complete buffer with <= threshold available bytes left.
+#define STORE_FREE_THRESHOLD 64
+
+    if (m_store) {
+        bool last_chunk = (m_store->sz_buffer - store_used) <= STORE_FREE_THRESHOLD;
+
+        m_entity_context->add_job(entity_context::job_desc {
+            entity_context::JOB_TYPE_SOCK_TX, !!last_chunk * entity_context::JOB_FLAG_TX_LAST_CHUNK,
+            this, m_store, m_store_offset, store_used - m_store_offset});
+
+        m_store_offset = store_used;
+        if (last_chunk) {
+            m_store = nullptr;
+        }
+    }
 
     errno = errno_tmp;
     return sent_bytes;
 }
 
-void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf_list)
+void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf, uint32_t offset, uint32_t size, int flags)
 {
-    struct iovec iov[JOB_SOCK_TX_IOV_MAX];
-    unsigned iov_len = 0;
-    unsigned bytes_to_send = 0;
+    const struct iovec iov = {.iov_base = buf->p_buffer + offset, .iov_len = size};
     int rc;
 
-    // To suppress clang analyzer warning about buf_list->lkey dereference.
-    if (unlikely(!buf_list)) {
+    // To suppress clang analyzer warning about buf->lkey dereference.
+    if (unlikely(!buf)) {
         return;
     }
 
-    for (mem_buf_desc_t *buf = buf_list; buf; buf = buf->p_next_desc) {
-        iov[iov_len++] = iovec {.iov_base = buf->p_buffer, .iov_len = buf->sz_data};
-        bytes_to_send += buf->sz_data;
+    /*
+     * Reference counting mechanism in the Threads mode.
+     * Initially, user thread allocates a big buffer and takes ownership (ref == 1). Further,
+     * the buffer is distributed across multiple send operations and each operation increases
+     * reference in the XLIO thread. With the last buffer chunk, user thread passes its reference
+     * to the XLIO thread. Every TX completion decreases reference and frees the buffer when
+     * the counter drops to zero.
+     * After initialization, all the reference counting is done within socket's entity context.
+     */
+    if (!(flags & entity_context::JOB_FLAG_TX_LAST_CHUNK)) {
+        ++buf->lwip_pbuf.ref;
     }
 
-    rc = tcp_tx_express(iov, iov_len, buf_list->lkey,
-                        XLIO_EXPRESS_OP_TYPE_DESC | XLIO_EXPRESS_MSG_MORE, buf_list);
+    rc = tcp_tx_express(&iov, 1, buf->lkey, XLIO_EXPRESS_OP_TYPE_DESC | XLIO_EXPRESS_MSG_MORE, buf);
     if (rc < 0) {
         /* TODO
          * tcp_tx_express() doesn't fail socket properly on ENOMEM. m_sock_state remains connected
@@ -1456,10 +1471,11 @@ void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf_list)
          * close().
          * Need to trigger epoll EPOLLERR event in case of ENOMEM.
          */
-        buf_list->p_desc_owner->mem_buf_tx_release(buf_list, true);
+        // Handles reference of the current operation and buffer release if needed.
+        buf->p_desc_owner->mem_buf_tx_release(buf, true);
     } else {
         // tcp_tx_express() doesn't account this counter, but ack_recvd_lwip_cb() does
-        IF_STATS(m_p_socket_stats->n_tx_ready_byte_count += bytes_to_send);
+        IF_STATS(m_p_socket_stats->n_tx_ready_byte_count += size);
     }
 }
 
@@ -2398,7 +2414,7 @@ size_t sockinfo_tcp::rx_fetch_ready_buffers(iovec *p_iov, iovec *p_iov_end, stru
 {
     std::lock_guard<decltype(m_app_lock)> lock_app(m_app_lock);
     decltype(m_rx_pkt_ready_list) temp_list;
-    int temp_ready_byte_count;
+    size_t temp_ready_byte_count;
     int temp_rx_ready_list_count;
 
     {
@@ -2462,7 +2478,7 @@ size_t sockinfo_tcp::rx_fetch_ready_buffers(iovec *p_iov, iovec *p_iov_end, stru
         }
     }
 
-    size_t tot_read = prev_ready_byte_count - temp_ready_byte_count;
+    uint32_t tot_read = prev_ready_byte_count - temp_ready_byte_count;
     if (tot_read > 0) {
         mem_buf_desc_t *return_buffer = free_buf_first;
         if (free_buf_last) { // Only if complete buffers were consumed.
@@ -2471,7 +2487,7 @@ size_t sockinfo_tcp::rx_fetch_ready_buffers(iovec *p_iov, iovec *p_iov_end, stru
             return_buffer = nullptr;
         }
         m_entity_context->add_job(entity_context::job_desc {
-            entity_context::JOB_TYPE_SOCK_RX_DATA_RECVD, this, return_buffer, tot_read});
+            entity_context::JOB_TYPE_SOCK_RX_DATA_RECVD, 0, this, return_buffer, 0U, tot_read});
 
         if (unlikely(m_p_socket_stats)) {
             m_p_socket_stats->n_rx_ready_byte_count -= tot_read;
@@ -2488,9 +2504,9 @@ size_t sockinfo_tcp::rx_fetch_ready_buffers(iovec *p_iov, iovec *p_iov_end, stru
         m_n_rx_pkt_ready_list_count += temp_rx_ready_list_count;
     }
 
-    si_tcp_logfunc("tot_read=%zu", tot_read);
+    si_tcp_logfunc("tot_read=%u", tot_read);
 
-    return tot_read;
+    return static_cast<ssize_t>(tot_read);
 }
 
 bool sockinfo_tcp::rx_tls_msg(struct msghdr *__msg, mem_buf_desc_t *out_buf)
@@ -2512,12 +2528,12 @@ bool sockinfo_tcp::rx_tls_msg(struct msghdr *__msg, mem_buf_desc_t *out_buf)
     return false;
 }
 
-void sockinfo_tcp::rx_data_recvd(size_t tot_size)
+void sockinfo_tcp::rx_data_recvd(uint32_t tot_size)
 {
     // We need to have this lock because this method can be called from a worker thread
     // while application may call setsockopt with SO_RCVBUF which updates the same fields.
     std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
-    if (tcp_recved(&m_pcb, static_cast<uint32_t>(tot_size), false)) {
+    if (tcp_recved(&m_pcb, tot_size, false)) {
         // The tcp_receved marks socket to have ACK on next output.
         // This way marking the socket as dirty is enough to have flush and output
         // which will trigger the ACK. This also allows reduce empty acks,

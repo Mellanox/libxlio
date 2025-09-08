@@ -88,7 +88,8 @@ entity_context_manager::~entity_context_manager()
 void entity_context_manager::distribute_socket(sockinfo *si, entity_context::job_type jobtype)
 {
     uint16_t next_idx = m_next_distribute.fetch_add(1U) % safe_mce_sys().worker_threads;
-    m_entity_contexts[next_idx]->add_job(entity_context::job_desc {jobtype, si, nullptr, 0U});
+    m_entity_contexts[next_idx]->add_job(
+        entity_context::job_desc {jobtype, 0, si, nullptr, 0U, 0U});
 }
 
 void entity_context_manager::distribute_listen_socket(sockinfo_tcp *si)
@@ -99,7 +100,7 @@ void entity_context_manager::distribute_listen_socket(sockinfo_tcp *si)
         sockinfo_tcp *listen_rss_child = si->get_listen_context()->get_listen_rss_child(i);
         listen_rss_child->get_listen_context()->set_steering_index(i);
         m_entity_contexts[i]->add_job(entity_context::job_desc {
-            entity_context::JOB_TYPE_SOCK_ADD_AND_LISTEN, listen_rss_child, nullptr, 0U});
+            entity_context::JOB_TYPE_SOCK_ADD_AND_LISTEN, 0, listen_rss_child, nullptr, 0U, 0U});
     }
 }
 
