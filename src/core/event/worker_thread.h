@@ -50,7 +50,7 @@ private:
 
     void worker_thread_loop();
     std::thread m_thread;
-    entity_context *m_entity_ctx;
+    entity_context *m_entity_ctx = nullptr;
 
     // The context of the thread.
     // Must be atomic for the start and stop to synchronize.
