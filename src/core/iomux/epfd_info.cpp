@@ -822,7 +822,7 @@ void epfd_info_entity_context_events::add_epoll_ready_socket(uint64_t events, so
 
     si->set_epoll_event_flags_thread(si->get_epoll_event_flags_thread() | events);
     m_epoll_ready_sockets.push_back_if_absent(si);
-    __log_dbg("Adding (threads mode) event %u (fd=%d)", events, si->get_fd());
+    __log_dbg("Adding (threads mode) event %" PRIu64 " (fd=%d)", events, si->get_fd());
 
     // For interrupt mode need to consider moderation and wakeup the epoll context.
 }

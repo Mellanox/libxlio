@@ -521,8 +521,7 @@ inline bool sockinfo_tcp::try_harvest_from_rss_child(size_t rss_child_index)
                rss_child->m_p_socket_stats->listen_counters.n_conn_accepted += conn_count);
     IF_STATS(m_p_socket_stats->listen_counters.n_conn_backlog += conn_count);
 
-    si_tcp_logdbg("Harvested %zu connections from rss_child %zu", m_ready_conn_cnt,
-                  rss_child_index);
+    si_tcp_logdbg("Harvested %u connections from rss_child %zu", m_ready_conn_cnt, rss_child_index);
     return true;
 }
 
