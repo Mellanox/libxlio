@@ -3159,9 +3159,11 @@ int sockinfo_tcp::rx_verify_available_data()
 {
     int poll_count = 0;
 
-    // Poll CQ to verify the latest amount of ready bytes for R2C mode
-    // Otherwise, check exiting m_rx_ready_byte_count.
-    int ret = (!m_entity_context ? rx_wait_helper(poll_count, false) : m_rx_ready_byte_count);
+    int ret = 0;
+    if (!m_entity_context) {
+        // Poll CQ to verify the latest amount of ready bytes for R2C mode
+        ret = rx_wait_helper(poll_count, false);
+    }
 
     if (ret >= 0 || errno == EAGAIN) {
         errno = 0;
