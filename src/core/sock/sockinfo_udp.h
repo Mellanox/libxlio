@@ -68,7 +68,7 @@ public:
     bool isPassthrough() override { return !m_sock_offload; }
 
     int prepare_to_connect(const sockaddr *__to, socklen_t __tolen);
-    void rx_data_recvd(size_t) override {}
+    void rx_data_recvd(uint32_t) override {}
     int bind_no_os();
     int bind(const struct sockaddr *__addr, socklen_t __addrlen) override;
     int connect(const struct sockaddr *__to, socklen_t __tolen) override;
@@ -135,6 +135,8 @@ public:
      * true)
      */
     ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
+    void tx_thread_commit(mem_buf_desc_t *buf_list, uint32_t offset, uint32_t size,
+                          int flags) override;
     /**
      * Check that a call to this sockinof rx() will not block
      * -> meaning, we got a ready rx packet

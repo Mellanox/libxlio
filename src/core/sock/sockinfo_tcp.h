@@ -187,7 +187,7 @@ public:
     void create_dst_entry();
     void destructor_helper_tcp();
     bool prepare_dst_to_send(bool is_accepted_socket = false);
-    void rx_data_recvd(size_t tot_size) override;
+    void rx_data_recvd(uint32_t tot_size) override;
     void clear_rx_ready_buffers();
 
     int fcntl(int __cmd, unsigned long int __arg) override;
@@ -243,7 +243,8 @@ public:
     ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
     ssize_t tcp_tx(xlio_tx_call_attr_t &tx_arg);
     ssize_t tcp_tx_thread(xlio_tx_call_attr_t &tx_arg);
-    void tx_thread_commit(mem_buf_desc_t *buf_list) override;
+    void tx_thread_commit(mem_buf_desc_t *buf_list, uint32_t offset, uint32_t size,
+                          int flags) override;
     ssize_t rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
                sockaddr *__from = nullptr, socklen_t *__fromlen = nullptr,
                struct msghdr *__msg = nullptr) override;
@@ -640,7 +641,6 @@ private:
     uint32_t m_ready_conn_cnt;
     int m_backlog;
 
-private:
     multilock m_tcp_con_lock;
 
     // used for reporting 'connected' on second non-blocking call to connect or
@@ -668,6 +668,9 @@ private:
     bool m_b_xlio_socket_dirty = false;
     uintptr_t m_xlio_socket_userdata = 0;
     rfs_rule *m_p_rule_extracted = nullptr;
+
+    mem_buf_desc_t *m_store = nullptr;
+    uint32_t m_store_offset = 0;
 
     // Listen context - allocated only for listen sockets
     sockinfo_tcp_listen_context *m_listen_ctx = nullptr;

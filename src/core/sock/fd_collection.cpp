@@ -497,7 +497,7 @@ void fd_collection::handle_socket_close_job_worker_threads_mode(sockinfo_tcp *si
     // Send close job to socket's entity context
     assert(si->get_entity_context());
     si->get_entity_context()->add_job(
-        entity_context::job_desc {entity_context::JOB_TYPE_SOCK_CLOSE, si, nullptr, 0U});
+        entity_context::job_desc {entity_context::JOB_TYPE_SOCK_CLOSE, 0, si, nullptr, 0U, 0U});
 }
 
 int fd_collection::del_epfd(int fd, bool b_cleanup /*=false*/)

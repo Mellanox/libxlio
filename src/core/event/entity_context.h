@@ -43,8 +43,6 @@
 class sockinfo;
 class mem_buf_desc_t;
 
-#define JOB_SOCK_TX_IOV_MAX 32
-
 class entity_context : public poll_group {
 public:
     enum job_type {
@@ -55,11 +53,17 @@ public:
         JOB_TYPE_SOCK_CLOSE
     };
 
+    enum job_flag {
+        JOB_FLAG_TX_LAST_CHUNK = 0x0001,
+    };
+
     struct job_desc {
         job_type job_id;
+        int flags;
         sockinfo *sock;
         mem_buf_desc_t *buf;
-        size_t tot_size;
+        uint32_t offset;
+        uint32_t tot_size;
     };
 
     entity_context(size_t index);
