@@ -982,6 +982,7 @@ net_device_resources_t *sockinfo::create_nd_resources(const ip_addr &ip_local)
             key = m_ring_alloc_logic_rx.create_new_key(ip_local);
         }
         m_rx_ring_map_lock.unlock();
+        /* coverity[sleep] */
         nd_resources.p_ring = nd_resources.p_ndv->reserve_ring(key);
         m_rx_migration_lock.unlock();
         lock_rx_q();
@@ -1081,6 +1082,7 @@ void sockinfo::do_rings_migration_rx(resource_allocation_key &old_key)
         net_device_resources_t *p_nd_resources = &(rx_nd_iter->second);
         ring *p_old_ring = p_nd_resources->p_ring;
         unlock_rx_q();
+        /* coverity[sleep] */
         ring *new_ring = p_nd_resources->p_ndv->reserve_ring(new_key);
         if (new_ring == p_old_ring) {
             rc = p_nd_resources->p_ndv->release_ring(&old_key);

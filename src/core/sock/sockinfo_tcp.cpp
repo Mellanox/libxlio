@@ -3366,6 +3366,7 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
+    // coverity[overflow_const:FALSE] /*Turn off coverity check for overflow
     m_ready_conn_cnt--;
     IF_STATS(m_p_socket_stats->listen_counters.n_conn_backlog--);
 

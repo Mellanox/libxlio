@@ -26,7 +26,7 @@ enum poll_group_socket_op {
     POLL_GROUP_SOCKET_CLOSE,
     POLL_GROUP_SOCKET_DESTROY,
 };
-
+/* coverity[no_virtual_dtor] */
 class poll_group {
 public:
     poll_group(const struct xlio_poll_group_attr &attr);
