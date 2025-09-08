@@ -2373,9 +2373,7 @@ ssize_t sockinfo_tcp::rx_read_ready_packets(iovec *p_iov, ssize_t sz_iov, int *p
         return rc;
     }
 
-    // Handle cmsg including TLS-RX only on the first received packet.
-    rx_tot_size +=
-        rx_fetch_ready_buffers(p_iov, p_iov + sz_iov, (rx_tot_size == 0 ? __msg : nullptr));
+    rx_tot_size += rx_fetch_ready_buffers(p_iov, p_iov + sz_iov, __msg);
 
     // Currently MSG_WAITALL and MSG_PEEK are not supported.
     // In case of MSG_WAITALL we should loop here until all data is received.
@@ -2457,6 +2455,8 @@ size_t sockinfo_tcp::rx_fetch_ready_buffers(iovec *p_iov, iovec *p_iov_end, stru
     }
 
     if (__msg && __msg->msg_control && free_buf_first) {
+        // Handle cmsg including TLS-RX only on the first received packet.
+        // free_buf_first is the first packet in the list.
         if (!rx_tls_msg(__msg, free_buf_first)) {
             rx_handle_cmsg(__msg, free_buf_first);
         }
