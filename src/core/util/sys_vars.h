@@ -473,6 +473,7 @@ private:
     void initialize_base_variables(const config_registry &registry);
     void read_hypervisor_info();
     void configure_striding_rq(const config_registry &registry);
+    void configure_running_mode(const config_registry &registry);
     void detect_application_profile(const config_registry &registry);
     void apply_spec_profile_optimizations();
     void apply_sockperf_ultra_latency_profile();
