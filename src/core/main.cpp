@@ -1052,7 +1052,6 @@ static void do_global_ctors_helper()
 
     NEW_CTOR(g_zc_cache, mapping_cache(safe_mce_sys().zc_cache_threshold));
 
-    safe_mce_sys().rx_buf_size = std::min(safe_mce_sys().rx_buf_size, 0xFF00U);
     if (safe_mce_sys().rx_buf_size <=
         get_lwip_tcp_mss(g_p_net_device_table_mgr->get_max_mtu(), safe_mce_sys().lwip_mss)) {
         safe_mce_sys().rx_buf_size = 0;
@@ -1069,7 +1068,6 @@ static void do_global_ctors_helper()
         g_buffer_pool_rx_ptr = g_buffer_pool_rx_rwqe;
     }
 
-    safe_mce_sys().tx_buf_size = std::min(safe_mce_sys().tx_buf_size, 0xFF00U);
     if (safe_mce_sys().tx_buf_size <=
         get_lwip_tcp_mss(g_p_net_device_table_mgr->get_max_mtu(), safe_mce_sys().lwip_mss)) {
         safe_mce_sys().tx_buf_size = 0;
