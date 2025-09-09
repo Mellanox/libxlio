@@ -347,12 +347,12 @@ sockinfo_udp::sockinfo_udp(int fd, int domain)
     , m_port_map_lock("sockinfo_udp::m_ports_map_lock")
     , m_port_map_index(0)
     , m_p_last_dst_entry(nullptr)
-    , m_tos(0)
     , m_n_sysvar_rx_poll_yield_loops(safe_mce_sys().rx_poll_yield_loops)
     , m_n_sysvar_rx_udp_poll_os_ratio(safe_mce_sys().rx_udp_poll_os_ratio)
     , m_n_sysvar_rx_ready_byte_min_limit(safe_mce_sys().rx_ready_byte_min_limit)
     , m_n_sysvar_rx_cq_drain_rate_nsec(safe_mce_sys().rx_cq_drain_rate_nsec)
     , m_n_sysvar_rx_delta_tsc_between_cq_polls(safe_mce_sys().rx_delta_tsc_between_cq_polls)
+    , m_tos(0)
     , m_sockopt_mapped(false)
     , m_is_connected(false)
     , m_multicast(false)
@@ -2264,72 +2264,27 @@ int sockinfo_udp::rx_verify_available_data()
     return ret;
 }
 
-void sockinfo_udp::register_callback(xlio_recv_callback_t callback, void *context)
-{
-    m_rx_callback = callback;
-    m_rx_callback_context = context;
-}
-
-/**
- *	Performs inspection by registered user callback
- *
- */
-inline xlio_recv_callback_retval_t sockinfo_udp::inspect_by_user_cb(mem_buf_desc_t *p_desc)
-{
-    xlio_info_t pkt_info;
-
-    pkt_info.struct_sz = sizeof(pkt_info);
-    pkt_info.packet_id = (void *)p_desc;
-    pkt_info.src = p_desc->rx.src.get_p_sa();
-    pkt_info.dst = p_desc->rx.dst.get_p_sa();
-    pkt_info.socket_ready_queue_pkt_count = m_n_rx_pkt_ready_list_count;
-    pkt_info.socket_ready_queue_byte_count = m_rx_ready_byte_count;
-
-    if (m_n_tsing_flags & SOF_TIMESTAMPING_RAW_HARDWARE) {
-        pkt_info.hw_timestamp = p_desc->rx.timestamps.hw;
-    }
-    if (p_desc->rx.timestamps.sw.tv_sec) {
-        pkt_info.sw_timestamp = p_desc->rx.timestamps.sw;
-    }
-
-    // fill io vector array with data buffer pointers
-    iovec iov[p_desc->rx.n_frags];
-    int nr_frags = 0;
-
-    for (mem_buf_desc_t *tmp = p_desc; tmp; tmp = tmp->p_next_desc) {
-        iov[nr_frags++] = tmp->rx.frag;
-    }
-
-    // call user callback
-    return m_rx_callback(m_fd, nr_frags, iov, &pkt_info, m_rx_callback_context);
-}
-
 /**
  *	Performs packet processing and store packet
  *	in ready queue.
  */
-inline void sockinfo_udp::update_ready(mem_buf_desc_t *p_desc, void *pv_fd_ready_array,
-                                       xlio_recv_callback_retval_t cb_ret)
+inline void sockinfo_udp::update_ready(mem_buf_desc_t *p_desc, void *pv_fd_ready_array)
 {
-    // In ZERO COPY case we let the user's application manage the ready queue
-    if (cb_ret != XLIO_PACKET_HOLD) {
-        m_lock_rcv.lock();
-        // Save rx packet info in our ready list
-        m_rx_pkt_ready_list.push_back(p_desc);
-        m_n_rx_pkt_ready_list_count++;
-        m_rx_ready_byte_count += p_desc->rx.sz_payload;
-        if (unlikely(m_p_socket_stats)) {
-            m_p_socket_stats->n_rx_ready_byte_count += p_desc->rx.sz_payload;
-            m_p_socket_stats->n_rx_ready_pkt_count++;
-            m_p_socket_stats->counters.n_rx_ready_pkt_max =
-                std::max((uint32_t)m_n_rx_pkt_ready_list_count,
-                         m_p_socket_stats->counters.n_rx_ready_pkt_max);
-            m_p_socket_stats->counters.n_rx_ready_byte_max = std::max(
-                (uint32_t)m_rx_ready_byte_count, m_p_socket_stats->counters.n_rx_ready_byte_max);
-        }
-        m_sock_wakeup_pipe.do_wakeup();
-        m_lock_rcv.unlock();
+    m_lock_rcv.lock();
+    // Save rx packet info in our ready list
+    m_rx_pkt_ready_list.push_back(p_desc);
+    m_n_rx_pkt_ready_list_count++;
+    m_rx_ready_byte_count += p_desc->rx.sz_payload;
+    if (unlikely(m_p_socket_stats)) {
+        m_p_socket_stats->n_rx_ready_byte_count += p_desc->rx.sz_payload;
+        m_p_socket_stats->n_rx_ready_pkt_count++;
+        m_p_socket_stats->counters.n_rx_ready_pkt_max = std::max(
+            (uint32_t)m_n_rx_pkt_ready_list_count, m_p_socket_stats->counters.n_rx_ready_pkt_max);
+        m_p_socket_stats->counters.n_rx_ready_byte_max = std::max(
+            (uint32_t)m_rx_ready_byte_count, m_p_socket_stats->counters.n_rx_ready_byte_max);
     }
+    m_sock_wakeup_pipe.do_wakeup();
+    m_lock_rcv.unlock();
 
     NOTIFY_ON_EVENTS(this, EPOLLIN);
 
@@ -2482,17 +2437,10 @@ bool sockinfo_udp::rx_input_cb(mem_buf_desc_t *p_desc, void *pv_fd_ready_array)
 
     process_timestamps(p_desc);
 
-    xlio_recv_callback_retval_t cb_ret = XLIO_PACKET_RECV;
-    if (m_rx_callback && ((cb_ret = inspect_by_user_cb(p_desc)) == XLIO_PACKET_DROP)) {
-        si_udp_logfunc("rx packet discarded - by user callback");
-        return false;
-    }
-    // Yes, we want to keep this packet!
-    // And we must increment ref_counter before pushing this packet into the ready queue
-    //  to prevent race condition with the 'if( (--ref_count) <= 0)' in ib_comm_mgr
+    // We must increment ref_counter before pushing this packet into the ready queue
     p_desc->inc_ref_count();
     save_strq_stats(p_desc->rx.strides_num);
-    update_ready(p_desc, pv_fd_ready_array, cb_ret);
+    update_ready(p_desc, pv_fd_ready_array);
     if (unlikely(m_p_socket_stats)) {
         m_p_socket_stats->counters.n_rx_bytes += p_desc->rx.sz_payload;
         m_p_socket_stats->counters.n_rx_data_pkts++;

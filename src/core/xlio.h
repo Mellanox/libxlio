@@ -163,18 +163,6 @@ int xlio_thread_offload(int offload, pthread_t tid);
  */
 int xlio_dump_fd_stats(int fd, int log_level);
 
-/*
- * Register a received packet notification callback.
- *
- * @param s Socket file descriptor.
- * @param callback Callback function.
- * @param context user contex for callback function.
- * @return 0 - success, -1 - error
- *
- * errno is set to: EINVAL - not offloaded socket
- */
-int xlio_register_recv_callback(int s, xlio_recv_callback_t callback, void *context);
-
 /**
  * @defgroup xlio_ultra_api XLIO Ultra API
  * @brief High-performance zero-copy networking interface
