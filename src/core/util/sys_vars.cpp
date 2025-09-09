@@ -925,6 +925,13 @@ void mce_sys_var::legacy_get_env_params()
         mce_spec = (uint32_t)xlio_spec::from_str(env_ptr, MCE_SPEC_NONE);
     }
 
+    if ((env_ptr = getenv(SYS_VAR_WORKER_THREADS))) {
+        worker_threads = (uint16_t)atoi(env_ptr);
+        if (worker_threads > 0) {
+            tx_buf_size = 256U * 1024U;
+        }
+    }
+
     /*
      * Check for specific application configuration first. We can make decisions
      * based on number of workers or application type further.
@@ -1689,10 +1696,6 @@ void mce_sys_var::legacy_get_env_params()
         max_tso_sz = option_size::from_str(env_ptr);
     }
 
-    if ((env_ptr = getenv(SYS_VAR_WORKER_THREADS))) {
-        worker_threads = (uint16_t)atoi(env_ptr);
-    }
-
     if ((enable_tso != option_3::OFF) && (ring_migration_ratio_tx != -1)) {
         ring_migration_ratio_tx = -1;
         vlog_printf(VLOG_DEBUG, "%s parameter is forced to %d in case %s is enabled\n",
@@ -2091,6 +2094,15 @@ void mce_sys_var::configure_striding_rq(const config_registry &registry)
     if (enable_striding_rq) {
         rx_num_wr = MCE_DEFAULT_STRQ_NUM_WRE;
         rx_num_wr_to_post_recv = MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV;
+    }
+}
+
+void mce_sys_var::configure_running_mode(const config_registry &registry)
+{
+    set_value_from_registry_if_exists(worker_threads, "performance.threading.worker_threads",
+                                      registry);
+    if (worker_threads > 0) {
+        tx_buf_size = 256U * 1024U;
     }
 }
 
@@ -2810,9 +2822,6 @@ void mce_sys_var::configure_application_specifics(const config_registry &registr
                     SYS_VAR_RING_MIGRATION_RATIO_TX, -1, SYS_VAR_TSO);
     }
 
-    set_value_from_registry_if_exists(worker_threads, "performance.threading.worker_threads",
-                                      registry);
-
 #ifdef DEFINED_UTLS
     set_value_from_registry_if_exists(enable_utls_rx, "hardware_features.tcp.tls_offload.rx_enable",
                                       registry);
@@ -2914,6 +2923,7 @@ void mce_sys_var::apply_config_from_registry()
     read_hypervisor_info();
 
     configure_striding_rq(registry);
+    configure_running_mode(registry);
     detect_application_profile(registry);
     apply_spec_profile_optimizations();
 
