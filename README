@@ -593,7 +593,7 @@ Number of TCP segments fetched from segments pool by a socket at once. Maps to *
 Default value is 64
 
 performance.buffers.tx.buf_size
-Size of Tx data buffer elements allocation. Cannot be less than MTU (Maximum Transfer Unit) and greater than 0xFF00. Default value is calculated based on MTU and MSS. Maps to **XLIO_TX_BUF_SIZE** environment variable.
+Size of Tx data buffer elements allocation. Cannot be less than MTU (Maximum Transfer Unit) and greater than 256KB. Default value is calculated based on MTU and MSS. Maps to **XLIO_TX_BUF_SIZE** environment variable.
 Default value is 0
 
 performance.buffers.tx.global_array_size

@@ -1162,6 +1162,7 @@ void mce_sys_var::legacy_get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_TX_BUF_SIZE))) {
         tx_buf_size = (uint32_t)option_size::from_str(env_ptr);
+        tx_buf_size = std::min(tx_buf_size, 256U * 1024U);
     }
 
     if ((env_ptr = getenv(SYS_VAR_TCP_NODELAY_TRESHOLD))) {
@@ -1255,6 +1256,7 @@ void mce_sys_var::legacy_get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_RX_BUF_SIZE))) {
         rx_buf_size = (uint32_t)option_size::from_str(env_ptr);
+        rx_buf_size = std::min(rx_buf_size, 0xFF00U);
     }
 
     if ((env_ptr = getenv(SYS_VAR_RX_NUM_WRE_TO_POST_RECV))) {
