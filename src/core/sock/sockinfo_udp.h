@@ -159,7 +159,6 @@ public:
 
     bool prepare_to_close(bool process_shutdown = false) override;
     void update_header_field(data_updater *updater) override;
-    void register_callback(xlio_recv_callback_t callback, void *context);
 
 #if defined(DEFINED_NGINX)
     void prepare_to_close_socket_pool(bool _push_pop) override;
@@ -241,9 +240,7 @@ private:
         }
     }
 
-    inline xlio_recv_callback_retval_t inspect_by_user_cb(mem_buf_desc_t *p_desc);
-    inline void update_ready(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array,
-                             xlio_recv_callback_retval_t cb_ret);
+    inline void update_ready(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array);
 
     void post_dequeue() override;
     size_t handle_msg_trunc(size_t total_rx, size_t payload_size, int in_flags,
@@ -289,18 +286,13 @@ private:
 
     chunk_list_t<mem_buf_desc_t *> m_rx_pkt_ready_list;
 
-    // Callback function pointer to support XLIO extra API (xlio_extra.h)
-    xlio_recv_callback_t m_rx_callback = nullptr;
-    void *m_rx_callback_context = nullptr; // user context
-
-    uint8_t m_tos;
-
     const uint32_t m_n_sysvar_rx_poll_yield_loops;
     const uint32_t m_n_sysvar_rx_udp_poll_os_ratio;
     const uint32_t m_n_sysvar_rx_ready_byte_min_limit;
     const uint32_t m_n_sysvar_rx_cq_drain_rate_nsec;
     const uint32_t m_n_sysvar_rx_delta_tsc_between_cq_polls;
 
+    uint8_t m_tos;
     bool m_sockopt_mapped; // setsockopt IPPROTO_UDP UDP_MAP_ADD
     bool m_is_connected; // to inspect for in_addr.src
     bool m_multicast; // true when socket set MC rule
