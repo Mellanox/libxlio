@@ -929,6 +929,7 @@ void mce_sys_var::legacy_get_env_params()
         worker_threads = (uint16_t)atoi(env_ptr);
         if (worker_threads > 0) {
             tx_buf_size = 256U * 1024U;
+            tx_bufs_batch_tcp = 1;
         }
     }
 
@@ -2103,6 +2104,7 @@ void mce_sys_var::configure_running_mode(const config_registry &registry)
                                       registry);
     if (worker_threads > 0) {
         tx_buf_size = 256U * 1024U;
+        tx_bufs_batch_tcp = 1;
     }
 }
 
