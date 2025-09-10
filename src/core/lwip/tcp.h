@@ -335,7 +335,6 @@ struct tcp_pcb {
 #endif /* TCP_QUEUE_OOSEQ */
 
     struct tcp_seg *seg_alloc; /* Available tcp_seg element for use */
-    struct pbuf *pbuf_alloc; /* Available pbuf element for use */
 
     /* Function to be called when data is acknowledged. */
     tcp_acked_fn acked_cb;

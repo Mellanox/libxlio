@@ -1390,11 +1390,6 @@ err_t tcp_output(struct tcp_pcb *pcb)
         pcb->seg_alloc = tcp_create_segment(pcb, NULL, 0, 0, 0);
     }
 
-    if (!pcb->pbuf_alloc) {
-        // Fetch pbuf for the next packet.
-        pcb->pbuf_alloc = tcp_tx_pbuf_alloc(pcb, 0, PBUF_RAM, NULL, NULL);
-    }
-
     return rc == ERR_WOULDBLOCK ? ERR_OK : rc;
 }
 
