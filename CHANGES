@@ -1,3 +1,18 @@
+Version 3.60.2-1:
+Date + Time 2025-09-10
+=============================================================
+Added:
+        - RM #4315534 Optimize XLIO for Multithreaded Applications
+        - RM #4493519 NGINX Dual port support
+        - RM #4315534 Improve buffer management in the Threads mode
+        - RM #4624249 Remove deadcode in rx_read_ready_packets 
+        - RM #4610737 Skip Ultra API rings in CQ moderation
+        - RM #4367367 Handle passthrough in XLIO Ultra API
+Fixed:
+        - RM #4624249 Fix Coverity issues
+        - RM #4573723 Fix XLIO double init
+        - RM #4553157 Release RX ready buffers in ~sockinfo_tcp
+
 Version 3.60.1-1:
 Date + Time 2025-08-18
 =============================================================
