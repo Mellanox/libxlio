@@ -164,9 +164,9 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
              * We don't change data, only pointer to buffer descriptor.
              */
             pbuf_type type = (pbuf_type)p_tcp_iov[0].p_desc->lwip_pbuf.type;
-            mem_buf_desc_t *p_mem_buf_desc =
-                get_buffer(type, &(p_tcp_iov[0].p_desc->lwip_pbuf.desc),
-                           is_set(attr.flags, XLIO_TX_PACKET_BLOCK));
+            mem_buf_desc_t *p_mem_buf_desc = get_buffer(
+                type, &(p_tcp_iov[0].p_desc->lwip_pbuf.desc),
+                is_set(attr.flags, XLIO_TX_PACKET_BLOCK), is_set(attr.flags, XLIO_TX_SKIP_POLL));
             if (!p_mem_buf_desc) {
                 return -1;
             }
@@ -256,12 +256,6 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
         p_send_wqe->wr_id = (uintptr_t)p_mem_buf_desc;
 
         m_p_ring->send_ring_buffer(m_id, p_send_wqe, attr.flags);
-    }
-
-    if (unlikely(!m_p_tx_mem_buf_desc_list)) {
-        m_p_tx_mem_buf_desc_list = m_p_ring->mem_buf_tx_get(
-            m_id, is_set(attr.flags, XLIO_TX_PACKET_BLOCK), PBUF_RAM, m_n_sysvar_tx_bufs_batch_tcp,
-            is_set(attr.flags, XLIO_TX_SKIP_POLL));
     }
 
 out:
