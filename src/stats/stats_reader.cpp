@@ -625,6 +625,7 @@ void print_entity_context_stats(entity_context_instance_block_t *p_ent_ctx_inst_
            "------------\n");
 
     for (int i = 0; i < NUM_OF_SUPPORTED_ENTITY_CTX; i++) {
+        // coverity[missing_lock:FALSE] /* Turn off coverity missing_lock check*/
         if (p_ent_ctx_inst_arr[i].b_enabled) {
             entity_context_stats_t &p_ent_ctx_stats = p_ent_ctx_inst_arr[i].entity_ctx_stats;
             int64_t tot_time = p_ent_ctx_stats.hit_poll_time + p_ent_ctx_stats.idle_time +
