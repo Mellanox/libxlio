@@ -23,6 +23,11 @@ define([prj_ver_release], esyscmd([echo ${PRJ_RELEASE:=0}]))
 #
 AC_INIT(libxlio, [prj_ver_major.prj_ver_minor.prj_ver_revision], support@mellanox.com)
 
+# Force sysconfdir to /etc regardless of prefix
+# e.g. - "xlio_config_schema.json" will always be placed at "/etc"
+sysconfdir="/etc"
+AC_SUBST([sysconfdir])
+
 # Definitions will be placed in this file rather than
 # in the DEFS variable
 #
