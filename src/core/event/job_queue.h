@@ -45,10 +45,7 @@ public:
 
     job_queue();
 
-    void insert_job(T &&job);
     void insert_job(const T &job);
-
-    template <typename... Args> void insert_job(Args &&...args);
 
     queue_type &get_all();
 
@@ -65,24 +62,10 @@ template <typename T> job_queue<T>::job_queue()
 }
 
 // Should be called only from the producer.
-template <typename T> void job_queue<T>::insert_job(T &&job)
-{
-    std::lock_guard<decltype(m_queue_lock)> lock(m_queue_lock);
-    m_queue_insert.push_back(job);
-}
-
-// Should be called only from the producer.
 template <typename T> void job_queue<T>::insert_job(const T &job)
 {
     std::lock_guard<decltype(m_queue_lock)> lock(m_queue_lock);
     m_queue_insert.push_back(job);
-}
-
-// Should be called only from the producer.
-template <typename T> template <typename... Args> void job_queue<T>::insert_job(Args &&...args)
-{
-    std::lock_guard<decltype(m_queue_lock)> lock(m_queue_lock);
-    m_queue_insert.empalce_back(std::forward<Args>(args)...);
 }
 
 // Should be called only from a single consumer.
