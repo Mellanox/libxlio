@@ -599,8 +599,6 @@ TEST(config, json_descriptor_provider_memory_size_transformer_applied)
     int64_t transformed_value = std::experimental::any_cast<int64_t>(transformed);
     ASSERT_EQ(1073741824LL, transformed_value); // 1GB in bytes
 
-    // Test that parameter without transformer doesn't transform strings
-    std::experimental::any untransformed = without_transformer.get_value(gb_string);
-    std::string untransformed_value = std::experimental::any_cast<std::string>(untransformed);
-    ASSERT_EQ("1GB", untransformed_value); // Should remain as string
+    // Test that parameter without transformer throws an exception
+    ASSERT_THROW(without_transformer.get_value(gb_string), std::experimental::bad_any_cast);
 }

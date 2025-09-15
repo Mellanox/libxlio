@@ -18,23 +18,27 @@ protected:
     value_transformer_t transformer = parameter_descriptor::create_memory_size_transformer();
 
     // Helper function to test valid parsing
-    void test_valid_transform(const std::string& input, int64_t expected) {
+    void test_valid_transform(const std::string &input, int64_t expected)
+    {
         std::experimental::any val = transformer(input);
         ASSERT_EQ(val.type(), typeid(int64_t));
         ASSERT_EQ(std::experimental::any_cast<int64_t>(val), expected);
     }
 
     // Helper function to test invalid parsing with exception
-    void test_invalid_transform(const std::string& input) {
+    void test_invalid_transform(const std::string &input)
+    {
         ASSERT_THROW(transformer(input), xlio_exception);
     }
 
     // Helper function to test invalid parsing with specific error message
-    void test_invalid_transform_with_message(const std::string& input, const std::string& expected_message) {
+    void test_invalid_transform_with_message(const std::string &input,
+                                             const std::string &expected_message)
+    {
         try {
             transformer(input);
             FAIL() << "Expected xlio_exception for input: " << input;
-        } catch (const xlio_exception& e) {
+        } catch (const xlio_exception &e) {
             ASSERT_TRUE(std::string(e.what()).find(expected_message) != std::string::npos)
                 << "Expected error message to contain: " << expected_message
                 << ", but got: " << e.what();
@@ -49,7 +53,7 @@ TEST_F(memory_size_transformer_test, valid_bytes)
     test_valid_transform("1", 1);
     test_valid_transform("1024", 1024);
     test_valid_transform("123456789", 123456789);
-    
+
     test_valid_transform("0B", 0);
     test_valid_transform("1B", 1);
     test_valid_transform("1024B", 1024);
@@ -62,7 +66,7 @@ TEST_F(memory_size_transformer_test, valid_kilobytes)
     test_valid_transform("1K", 1024);
     test_valid_transform("2K", 2 * 1024);
     test_valid_transform("1024K", 1024 * 1024);
-    
+
     test_valid_transform("1KB", 1024);
     test_valid_transform("2KB", 2 * 1024);
     test_valid_transform("1024KB", 1024 * 1024);
@@ -74,7 +78,7 @@ TEST_F(memory_size_transformer_test, valid_megabytes)
     test_valid_transform("1M", 1024 * 1024);
     test_valid_transform("4M", 4 * 1024 * 1024);
     test_valid_transform("512M", 512 * 1024 * 1024);
-    
+
     test_valid_transform("1MB", 1024 * 1024);
     test_valid_transform("4MB", 4 * 1024 * 1024);
     test_valid_transform("512MB", 512 * 1024 * 1024);
@@ -86,7 +90,7 @@ TEST_F(memory_size_transformer_test, valid_gigabytes)
     test_valid_transform("1G", 1024LL * 1024 * 1024);
     test_valid_transform("2G", 2LL * 1024 * 1024 * 1024);
     test_valid_transform("8G", 8LL * 1024 * 1024 * 1024);
-    
+
     test_valid_transform("1GB", 1024LL * 1024 * 1024);
     test_valid_transform("2GB", 2LL * 1024 * 1024 * 1024);
     test_valid_transform("8GB", 8LL * 1024 * 1024 * 1024);
@@ -95,34 +99,34 @@ TEST_F(memory_size_transformer_test, valid_gigabytes)
 // Test valid inputs with lowercase letters
 TEST_F(memory_size_transformer_test, valid_lowercase_units)
 {
-    // Test lowercase 'b' suffix  
+    // Test lowercase 'b' suffix
     test_valid_transform("0b", 0);
     test_valid_transform("1b", 1);
     test_valid_transform("1024b", 1024);
-    
+
     // Test lowercase kilobytes
     test_valid_transform("1k", 1024);
     test_valid_transform("2k", 2 * 1024);
     test_valid_transform("1024k", 1024 * 1024);
-    
+
     test_valid_transform("1kb", 1024);
     test_valid_transform("2kb", 2 * 1024);
     test_valid_transform("1024kb", 1024 * 1024);
-    
+
     // Test lowercase megabytes
     test_valid_transform("1m", 1024 * 1024);
     test_valid_transform("4m", 4 * 1024 * 1024);
     test_valid_transform("512m", 512 * 1024 * 1024);
-    
+
     test_valid_transform("1mb", 1024 * 1024);
     test_valid_transform("4mb", 4 * 1024 * 1024);
     test_valid_transform("512mb", 512 * 1024 * 1024);
-    
+
     // Test lowercase gigabytes
     test_valid_transform("1g", 1024LL * 1024 * 1024);
     test_valid_transform("2g", 2LL * 1024 * 1024 * 1024);
     test_valid_transform("8g", 8LL * 1024 * 1024 * 1024);
-    
+
     test_valid_transform("1gb", 1024LL * 1024 * 1024);
     test_valid_transform("2gb", 2LL * 1024 * 1024 * 1024);
     test_valid_transform("8gb", 8LL * 1024 * 1024 * 1024);
@@ -136,13 +140,13 @@ TEST_F(memory_size_transformer_test, valid_mixed_case)
     test_valid_transform("2kB", 2 * 1024);
     test_valid_transform("1024Kb", 1024 * 1024);
     test_valid_transform("1024kB", 1024 * 1024);
-    
+
     // Test mixed case megabytes
     test_valid_transform("1Mb", 1024 * 1024);
     test_valid_transform("4mB", 4 * 1024 * 1024);
     test_valid_transform("512Mb", 512 * 1024 * 1024);
     test_valid_transform("512mB", 512 * 1024 * 1024);
-    
+
     // Test mixed case gigabytes
     test_valid_transform("1Gb", 1024LL * 1024 * 1024);
     test_valid_transform("2gB", 2LL * 1024 * 1024 * 1024);
@@ -190,13 +194,15 @@ TEST_F(memory_size_transformer_test, invalid_format_inputs)
 TEST_F(memory_size_transformer_test, overflow_conditions)
 {
     // Test value that would overflow during multiplication
-    test_invalid_transform_with_message("9223372036854775808G", "is too large and would cause an overflow");
-    
+    test_invalid_transform_with_message("9223372036854775808G",
+                                        "is too large and would cause an overflow");
+
     // Test value that fits in uint64_t but exceeds int64_t max
     test_invalid_transform_with_message("9223372036854775808", "exceeds maximum supported size");
-    
+
     // Test large value that would overflow
-    test_invalid_transform_with_message("18446744073709551615G", "is too large and would cause an overflow");
+    test_invalid_transform_with_message("18446744073709551615G",
+                                        "is too large and would cause an overflow");
 }
 
 // Test edge cases near maximum values
@@ -204,10 +210,10 @@ TEST_F(memory_size_transformer_test, edge_cases_max_values)
 {
     // Test maximum int64_t value
     test_valid_transform("9223372036854775807", LLONG_MAX);
-    
+
     // Test maximum value for different units that still fit in int64_t
     test_valid_transform("8G", 8LL * 1024 * 1024 * 1024); // 8GB should be fine
-    test_valid_transform("8192M", 8192LL * 1024 * 1024);   // 8GB in MB
+    test_valid_transform("8192M", 8192LL * 1024 * 1024); // 8GB in MB
 }
 
 // Test cases for inputs with whitespace (should fail)
@@ -379,4 +385,66 @@ TEST_F(memory_size_transformer, test_overflow)
 {
     // A very large number without suffix that fits uint64_t but not int64_t
     ASSERT_THROW(transformer(std::string("10000000000000000000")), xlio_exception);
+}
+
+TEST(config, parameter_descriptor_valid_integer_passes)
+{
+    // Test that valid integer values pass through unchanged
+    constexpr int64_t DEFAULT_INT_VALUE = 16;
+    parameter_descriptor int_param_descriptor {std::experimental::any(int64_t(DEFAULT_INT_VALUE))};
+
+    std::experimental::any valid_int = int64_t(32);
+    std::experimental::any result = int_param_descriptor.get_value(valid_int);
+    ASSERT_EQ(typeid(int64_t), result.type());
+    ASSERT_EQ(32LL, std::experimental::any_cast<int64_t>(result));
+}
+
+TEST(config, parameter_descriptor_boolean_rejected)
+{
+    // Test that boolean values are rejected for integer parameters (this was the bug)
+    constexpr int64_t DEFAULT_INT_VALUE = 16;
+    parameter_descriptor int_param_descriptor {std::experimental::any(int64_t(DEFAULT_INT_VALUE))};
+
+    std::experimental::any bool_value = true;
+    ASSERT_THROW(int_param_descriptor.get_value(bool_value), std::experimental::bad_any_cast);
+}
+
+TEST(config, parameter_descriptor_string_rejected)
+{
+    // Test that string values are rejected for integer parameters
+    constexpr int64_t DEFAULT_INT_VALUE = 16;
+    parameter_descriptor int_param_descriptor {std::experimental::any(int64_t(DEFAULT_INT_VALUE))};
+
+    std::experimental::any string_value = std::string("invalid");
+    ASSERT_THROW(int_param_descriptor.get_value(string_value), std::experimental::bad_any_cast);
+}
+
+TEST(config, parameter_descriptor_double_rejected)
+{
+    // Test that double values are rejected for integer parameters
+    constexpr int64_t DEFAULT_INT_VALUE = 16;
+    parameter_descriptor int_param_descriptor {std::experimental::any(int64_t(DEFAULT_INT_VALUE))};
+
+    std::experimental::any double_value = 3.14;
+    ASSERT_THROW(int_param_descriptor.get_value(double_value), std::experimental::bad_any_cast);
+}
+
+TEST(config, parameter_descriptor_boolean_accepts_boolean)
+{
+    // Test that boolean parameters accept boolean values
+    parameter_descriptor bool_param_descriptor(std::experimental::any(bool(false)));
+
+    std::experimental::any bool_value = true;
+    std::experimental::any result = bool_param_descriptor.get_value(bool_value);
+    ASSERT_EQ(typeid(bool), result.type());
+    ASSERT_EQ(true, std::experimental::any_cast<bool>(result));
+}
+
+TEST(config, parameter_descriptor_boolean_rejects_integer)
+{
+    // Test that boolean parameters reject integer values
+    parameter_descriptor bool_param_descriptor(std::experimental::any(bool(false)));
+
+    std::experimental::any int_value = int64_t(1);
+    ASSERT_THROW(bool_param_descriptor.get_value(int_value), std::experimental::bad_any_cast);
 }

@@ -179,32 +179,74 @@ void parameter_descriptor::add_constraint(constraint_t constraint)
     m_constraints.push_back(std::move(constraint));
 }
 
-std::experimental::any parameter_descriptor::get_value(const std::experimental::any &val) const
+std::experimental::any parameter_descriptor::convert_string_to_int64(const std::string &val) const
 {
-    std::experimental::any result = val;
-
-    // First, apply string mappings if applicable
-    if (result.type() == typeid(std::string)) {
-        auto it = m_string_mapping.find(std::experimental::any_cast<std::string>(result));
-        if (it != m_string_mapping.end()) {
-            result = it->second;
-        }
-    }
-
-    // Then apply value transformer if available
+    // Try value transformer first (e.g., "1GB" -> 1073741824)
     if (m_value_transformer) {
-        result = m_value_transformer(result);
+        std::experimental::any result = m_value_transformer(std::experimental::any(val));
+        if (std::type_index(result.type()) != m_type) {
+            throw std::experimental::bad_any_cast();
+        }
+        return result;
     }
 
-    // Validate type compatibility for string mappings
-    if (!m_string_mapping.empty() && result.type() != typeid(int64_t) &&
-        result.type() != typeid(std::string)) {
-        // If there is a string mapping, then the value must be a string or an int as it represents
-        // an enum
+    // Try string mapping (e.g., "enabled" -> 1)
+    auto it = m_string_mapping.find(val);
+    if (it != m_string_mapping.end()) {
+        return it->second;
+    }
+
+    throw std::experimental::bad_any_cast();
+}
+
+std::experimental::any parameter_descriptor::get_value(bool val) const
+{
+    // For boolean values, no string mapping or transformation is typically needed
+    // Just validate that the parameter type is boolean
+    if (m_type != typeid(bool)) {
         throw std::experimental::bad_any_cast();
     }
 
-    return result;
+    return std::experimental::any(val);
+}
+
+std::experimental::any parameter_descriptor::get_value(const std::string &val) const
+{
+    // Case 1: Parameter expects string - direct pass-through
+    if (m_type == typeid(std::string)) {
+        return std::experimental::any(val);
+    }
+
+    // Case 2: Parameter expects int64_t - convert string via transformer or mapping
+    if (m_type == typeid(int64_t)) {
+        return convert_string_to_int64(val);
+    }
+
+    // Case 3: Unsupported type conversion
+    throw std::experimental::bad_any_cast();
+}
+
+std::experimental::any parameter_descriptor::get_value(int64_t val) const
+{
+    if (m_type != typeid(int64_t)) {
+        throw std::experimental::bad_any_cast();
+    }
+    return std::experimental::any(val);
+}
+
+std::experimental::any parameter_descriptor::get_value(const std::experimental::any &val) const
+{
+    // Dispatch to type-specific convenience methods based on the input type
+    if (val.type() == typeid(bool)) {
+        return get_value(std::experimental::any_cast<bool>(val));
+    } else if (val.type() == typeid(std::string)) {
+        return get_value(std::experimental::any_cast<std::string>(val));
+    } else if (val.type() == typeid(int64_t)) {
+        return get_value(std::experimental::any_cast<int64_t>(val));
+    } else {
+        // For unsupported types, throw an exception
+        throw std::experimental::bad_any_cast();
+    }
 }
 
 void parameter_descriptor::validate_constraints(const std::experimental::any &value) const

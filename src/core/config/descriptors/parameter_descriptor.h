@@ -111,6 +111,28 @@ public:
     std::experimental::any get_value(const std::experimental::any &val) const;
 
     /**
+     * @brief Type-specific get_value for boolean values
+     * @param val Boolean input value
+     * @return Resolved boolean value as std::experimental::any
+     */
+    std::experimental::any get_value(bool val) const;
+
+    /**
+     * @brief Type-specific get_value for string values
+     * @param val String input value
+     * @return Resolved value (mapped and transformed value if applicable, original otherwise) as
+     * std::experimental::any
+     */
+    std::experimental::any get_value(const std::string &val) const;
+
+    /**
+     * @brief Type-specific get_value for int64_t values
+     * @param val int64_t input value
+     * @return Resolved int64_t value as std::experimental::any
+     */
+    std::experimental::any get_value(int64_t val) const;
+
+    /**
      * @brief Gets the type of the parameter
      * @return The type of the parameter
      */
@@ -124,6 +146,21 @@ public:
 
 private:
     static int64_t parse_memory_size(const char *str);
+
+    /**
+     * @brief Check if the given type matches the expected parameter type
+     * @param type The type to check
+     * @return True if the type matches the expected parameter type
+     */
+    bool is_expected_type(const std::type_index &type) const;
+
+    /**
+     * @brief Convert a string value to int64_t using transformer or string mapping
+     * @param val The string value to convert
+     * @return The converted int64_t value as std::experimental::any
+     * @throws std::experimental::bad_any_cast if conversion fails
+     */
+    std::experimental::any convert_string_to_int64(const std::string &val) const;
 
     std::experimental::any m_default_value; /**< Default parameter value */
     std::vector<constraint_t> m_constraints; /**< Validation constraints */

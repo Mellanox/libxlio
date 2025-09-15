@@ -666,10 +666,6 @@ performance.polling.iomux.skip_os
 For select() or poll() this will force XLIO to check the non offloaded fd even though an offloaded socket has ready packets found while polling. Maps to **XLIO_SELECT_SKIP_OS** environment variable.
 Default value is 4
 
-performance.polling.kernel_fd_attention_level
-Controls threshold for checking kernel file descriptors during polling. 0 means never check. Maps to **XLIO_RING_KERNEL_FD_ATTENTION_LEVEL** environment variable. This setting affects how often XLIO checks for activity on non-offloaded kernel file descriptors while processing offloaded sockets.
-Default value is 10
-
 performance.polling.max_rx_poll_batch
 Maximum number of receive buffers processed in a single poll operation. Maps to **XLIO_CQ_POLL_BATCH_MAX** environment variable. Max size of the array while polling the CQs in the XLIO.
 Default value is 16
