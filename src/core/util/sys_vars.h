@@ -734,7 +734,7 @@ extern mce_sys_var &safe_mce_sys();
 #define NEW_CONFIG_VAR_TCP_2T_RULES                  "performance.steering_rules.tcp.2t_rules"
 #define NEW_CONFIG_VAR_TCP_3T_RULES                  "performance.steering_rules.tcp.3t_rules"
 #define NEW_CONFIG_VAR_UDP_3T_RULES                  "performance.steering_rules.udp.3t_rules"
-#define NEW_CONFIG_VAR_ETH_MC_L2_ONLY_RULES          "performance.steering_rules.only_mc_l2_rules"
+#define NEW_CONFIG_VAR_ETH_MC_L2_ONLY_RULES          "performance.steering_rules.udp.only_mc_l2_rules"
 #define NEW_CONFIG_VAR_MC_FORCE_FLOWTAG              "network.multicast.mc_flowtag_acceleration"
 #define NEW_CONFIG_VAR_TX_SEGS_RING_BATCH_TCP        "performance.buffers.tcp_segments.ring_batch_size"
 #define NEW_CONFIG_VAR_TX_SEGS_POOL_BATCH_TCP        "performance.buffers.tcp_segments.pool_batch_size"
