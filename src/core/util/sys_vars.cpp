@@ -2094,8 +2094,11 @@ void mce_sys_var::read_hypervisor_info()
 
 void mce_sys_var::configure_striding_rq(const config_registry &registry)
 {
-    set_value_from_registry_if_exists(enable_strq_env, "hardware_features.striding_rq.enable",
-                                      registry);
+    if (registry.value_exists("hardware_features.striding_rq.enable")) {
+        enable_strq_env = registry.get_value<bool>("hardware_features.striding_rq.enable")
+            ? option_3::ON
+            : option_3::OFF;
+    }
 
     enable_striding_rq = (enable_strq_env == option_3::ON || enable_strq_env == option_3::AUTO);
 
