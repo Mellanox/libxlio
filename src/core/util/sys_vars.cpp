@@ -2734,9 +2734,20 @@ void mce_sys_var::configure_memory_limits(const config_registry &registry)
 
     // handle internal thread affinity - default is CPU-0
     if (registry.value_exists("performance.threading.cpu_affinity")) {
-        int n =
-            snprintf(internal_thread_affinity_str, sizeof(internal_thread_affinity_str), "%s",
-                     registry.get_value<std::string>("performance.threading.cpu_affinity").c_str());
+        std::string cpu_affinity_str;
+        try {
+            // Try as string first (for complex values like "0,4,8", "0x00000001")
+            cpu_affinity_str =
+                registry.get_value<std::string>("performance.threading.cpu_affinity");
+        } catch (const xlio_exception &) {
+            // If string fails, try as integer (for simple values like -1, 0, 2)
+            int64_t cpu_affinity_int =
+                registry.get_value<int64_t>("performance.threading.cpu_affinity");
+            cpu_affinity_str = std::to_string(cpu_affinity_int);
+        }
+
+        int n = snprintf(internal_thread_affinity_str, sizeof(internal_thread_affinity_str), "%s",
+                         cpu_affinity_str.c_str());
         if (unlikely(((int)sizeof(internal_thread_affinity_str) < n) || (n < 0))) {
             vlog_printf(VLOG_WARNING, "Failed to process: %s.\n", SYS_VAR_INTERNAL_THREAD_AFFINITY);
         }
