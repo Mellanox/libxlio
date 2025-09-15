@@ -59,6 +59,8 @@ extern const char *JSON_TYPE_ARRAY; /**< Array type identifier */
  */
 namespace schema_extensions {
 extern const char *JSON_EXTENSION_MEMORY_SIZE; /**< Memory size extension identifier */
+extern const char
+    *JSON_EXTENSION_POWER_OF_2_OR_ZERO; /**< Power of 2 validation extension identifier */
 } //namespace schema_extensions
 
 /**

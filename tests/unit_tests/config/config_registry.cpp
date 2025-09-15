@@ -632,3 +632,141 @@ TEST(config, config_registry_missing_uses_default)
 
     ASSERT_EQ(16LL, registry.get_value<int64_t>("performance.rings.tx.udp_buffer_batch"));
 }
+
+TEST(config, config_registry_power_of_2_validation_valid_integers)
+{
+    // Test valid power-of-2 configurations with integer values
+    conf_file_writer json_config(R"({
+        "core": {
+            "resources": {
+                "hugepages": {
+                    "size": 2048
+                }
+            }
+        },
+        "hardware_features": {
+            "striding_rq": {
+                "strides_num": 1024,
+                "stride_size": 128
+            }
+        }
+    })");
+
+    env_setter config_file_setter("XLIO_CONFIG_FILE", json_config.get());
+
+    config_registry registry;
+
+    // All values should be accepted (valid powers of 2)
+    ASSERT_EQ(2048LL, registry.get_value<int64_t>("core.resources.hugepages.size"));
+    ASSERT_EQ(1024LL, registry.get_value<int64_t>("hardware_features.striding_rq.strides_num"));
+    ASSERT_EQ(128LL, registry.get_value<int64_t>("hardware_features.striding_rq.stride_size"));
+}
+
+TEST(config, config_registry_power_of_2_validation_valid_strings)
+{
+    // Test valid power-of-2 configurations with string values (memory sizes)
+    conf_file_writer json_config(R"({
+        "core": {
+            "resources": {
+                "hugepages": {
+                    "size": "2KB"
+                }
+            }
+        },
+        "hardware_features": {
+            "striding_rq": {
+                "strides_num": 2048,
+                "stride_size": 64
+            }
+        }
+    })");
+
+    env_setter config_file_setter("XLIO_CONFIG_FILE", json_config.get());
+
+    config_registry registry;
+
+    // All values should be accepted (valid powers of 2)
+    ASSERT_EQ(2048LL,
+              registry.get_value<int64_t>("core.resources.hugepages.size")); // 2KB = 2048 bytes
+    ASSERT_EQ(2048LL, registry.get_value<int64_t>("hardware_features.striding_rq.strides_num"));
+    ASSERT_EQ(64LL, registry.get_value<int64_t>("hardware_features.striding_rq.stride_size"));
+}
+
+TEST(config, config_registry_power_of_2_validation_invalid_integers)
+{
+    // Test invalid power-of-2 configurations with integer values - should throw exceptions
+    conf_file_writer json_config(R"({
+        "core": {
+            "resources": {
+                "hugepages": {
+                    "size": 1000
+                }
+            }
+        },
+        "hardware_features": {
+            "striding_rq": {
+                "strides_num": 1000,
+                "stride_size": 100
+            }
+        }
+    })");
+
+    env_setter config_file_setter("XLIO_CONFIG_FILE", json_config.get());
+
+    // Should throw exception due to invalid power-of-2 values
+    ASSERT_THROW(config_registry(), xlio_exception);
+}
+
+TEST(config, config_registry_power_of_2_validation_invalid_strings)
+{
+    // Test invalid power-of-2 configurations with string values - should throw exceptions
+    conf_file_writer json_config(R"({
+        "core": {
+            "resources": {
+                "hugepages": {
+                    "size": "3KB"
+                }
+            }
+        },
+        "hardware_features": {
+            "striding_rq": {
+                "strides_num": 2048,
+                "stride_size": 64
+            }
+        }
+    })");
+
+    env_setter config_file_setter("XLIO_CONFIG_FILE", json_config.get());
+
+    // Should throw exception due to invalid power-of-2 values (3KB = 3072 bytes, not power of 2)
+    ASSERT_THROW(config_registry(), xlio_exception);
+}
+
+TEST(config, config_registry_power_of_2_validation_zero_values)
+{
+    // Test zero values - should be valid (zero is explicitly allowed for hugepages.size)
+    conf_file_writer json_config(R"({
+        "core": {
+            "resources": {
+                "hugepages": {
+                    "size": 0
+                }
+            }
+        },
+        "hardware_features": {
+            "striding_rq": {
+                "strides_num": 512,
+                "stride_size": 64
+            }
+        }
+    })");
+
+    env_setter config_file_setter("XLIO_CONFIG_FILE", json_config.get());
+
+    config_registry registry;
+
+    // Zero should be accepted for hugepages.size (explicitly allowed)
+    ASSERT_EQ(0LL, registry.get_value<int64_t>("core.resources.hugepages.size"));
+    ASSERT_EQ(512LL, registry.get_value<int64_t>("hardware_features.striding_rq.strides_num"));
+    ASSERT_EQ(64LL, registry.get_value<int64_t>("hardware_features.striding_rq.stride_size"));
+}

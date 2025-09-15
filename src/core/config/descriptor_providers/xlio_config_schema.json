@@ -54,8 +54,9 @@
                                         }
                                     ],
                                     "title": "Hugepage size (bytes)",
-                                    "description": "Force specific hugepage size for XLIO internal memory allocations. Value 0 allows to use any supported and available hugepages. The size may be specified with suffixes such as KB, MB, GB. Maps to XLIO_HUGEPAGE_SIZE environment variable.",
-                                    "x-memory-size": true
+                                    "description": "Force specific hugepage size for XLIO internal memory allocations. Value 0 allows to use any supported and available hugepages. Must be a power of 2 or 0. The size may be specified with suffixes such as KB, MB, GB. Maps to XLIO_HUGEPAGE_SIZE environment variable.",
+                                    "x-memory-size": true,
+                                    "x-power-of-2-or-zero": true
                                 }
                             }
                         },
@@ -526,7 +527,8 @@
                             "minimum": 512,
                             "maximum": 65536,
                             "title": "Number of strides per WQE",
-                            "description": "The number of strides in each receive WQE. Maps to XLIO_STRQ_NUM_STRIDES environment variable. Must be power of two and in range [512 - 65536].\nDefault: 2048"
+                            "description": "The number of strides in each receive WQE. Maps to XLIO_STRQ_NUM_STRIDES environment variable. Must be power of two and in range [512 - 65536].\nDefault: 2048",
+                            "x-power-of-2-or-zero": true
                         },
                         "stride_size": {
                             "type": "integer",
@@ -534,7 +536,8 @@
                             "minimum": 64,
                             "maximum": 8192,
                             "title": "Size of each stride (bytes)",
-                            "description": "The size, in bytes, of each stride in a receive WQE. Maps to XLIO_STRQ_STRIDE_SIZE_BYTES environment variable. Must be power of two and in range [64 - 8192].\nDefault: 64"
+                            "description": "The size, in bytes, of each stride in a receive WQE. Maps to XLIO_STRQ_STRIDE_SIZE_BYTES environment variable. Must be power of two and in range [64 - 8192].\nDefault: 64",
+                            "x-power-of-2-or-zero": true
                         }
                     },
                     "additionalProperties": false

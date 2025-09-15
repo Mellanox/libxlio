@@ -51,7 +51,8 @@ schema_analyzer::analysis_result schema_analyzer::analyze(json_object *property_
     // Set component applicability flags
     result.needs_value_transformation = result.memory_cfg.enabled;
     result.needs_constraint_validation = result.constraint_cfg.has_minimum ||
-        result.constraint_cfg.has_maximum || result.constraint_cfg.has_enum;
+        result.constraint_cfg.has_maximum || result.constraint_cfg.has_enum ||
+        result.constraint_cfg.has_power_of_2_or_zero;
     result.needs_enum_mapping = result.enum_cfg.enabled;
     // coverity[uninit_use_in_call]
     return result;
@@ -220,6 +221,9 @@ constraint_config schema_analyzer::analyze_constraint_config()
     // Extract direct constraints
     extract_constraints_from_json(m_property_obj, config);
 
+    // Check for power-of-2-or-zero extension
+    config.has_power_of_2_or_zero = has_power_of_2_or_zero_flag();
+
     // For oneOf, also check constraints in the integer option
     if (has_oneof_field()) {
         json_object *one_of_field =
@@ -312,6 +316,18 @@ bool schema_analyzer::has_memory_size_flag()
 
     return json_object_get_type(memory_size_flag) == json_type_boolean &&
         json_object_get_boolean(memory_size_flag);
+}
+
+bool schema_analyzer::has_power_of_2_or_zero_flag()
+{
+    json_object *power_of_2_or_zero_flag = json_utils::try_get_field(
+        m_property_obj, config_strings::schema_extensions::JSON_EXTENSION_POWER_OF_2_OR_ZERO);
+    if (!power_of_2_or_zero_flag) {
+        return false;
+    }
+
+    return json_object_get_type(power_of_2_or_zero_flag) == json_type_boolean &&
+        json_object_get_boolean(power_of_2_or_zero_flag);
 }
 
 bool schema_analyzer::has_constraint_fields()
