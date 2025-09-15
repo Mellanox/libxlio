@@ -483,7 +483,8 @@ static ssize_t sendfile_helper(sockinfo *p_socket_object, int in_fd, __off64_t *
 
         /* fallback on read() approach */
         if (totSent == 0) {
-            char buf[sysconf(_SC_PAGE_SIZE)];
+            std::vector<char> buf_container(sysconf(_SC_PAGE_SIZE));
+            char *buf = buf_container.data();
             ssize_t toRead, numRead, numSent = 0;
 
             if (s->get_sock_stats()) {
