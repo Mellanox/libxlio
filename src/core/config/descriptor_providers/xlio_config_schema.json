@@ -342,6 +342,7 @@
                                         "byte_threshold": {
                                             "type": "integer",
                                             "default": 0,
+                                            "minimum": 0,
                                             "title": "Data threshold for flush",
                                             "description": "Triggers TCP nodelay only if unsent data is larger than this value. The value is in bytes. Default 0 means no threshold - immediate sending. Maps to XLIO_TCP_NODELAY_TRESHOLD environment variable."
                                         }
