@@ -2713,7 +2713,10 @@ void mce_sys_var::configure_memory_limits(const config_registry &registry)
 
     // TODO: this should be replaced by calling "exception_handling.init()" that
     // will be called from init()
-    set_value_from_registry_if_exists(exception_handling, "core.exception_handling.mode", registry);
+    if (registry.value_exists("core.exception_handling.mode")) {
+        exception_handling = static_cast<xlio_exception_handling>(
+            registry.get_value<int64_t>("core.exception_handling.mode"));
+    }
 
     set_value_from_registry_if_exists(avoid_sys_calls_on_tcp_fd, "core.syscall.avoid_ctl_syscalls",
                                       registry);
