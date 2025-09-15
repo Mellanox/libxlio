@@ -67,8 +67,8 @@ public:
     bool prepare_to_send(struct xlio_rate_limit_t &rate_limit, bool skip_rules = false,
                          bool skip_resolve_ring = false);
     void generate_id();
-    virtual ssize_t fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr) = 0;
-    virtual ssize_t slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr,
+    virtual ssize_t fast_send(const iovec *p_iov, size_t sz_iov, xlio_send_attr attr) = 0;
+    virtual ssize_t slow_send(const iovec *p_iov, size_t sz_iov, xlio_send_attr attr,
                               struct xlio_rate_limit_t &rate_limit, int flags = 0,
                               sockinfo *sock = nullptr, tx_call_t call_type = TX_UNDEF) = 0;
 

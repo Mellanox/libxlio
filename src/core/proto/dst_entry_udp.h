@@ -15,12 +15,12 @@ public:
                   resource_allocation_key &ring_alloc_logic);
     virtual ~dst_entry_udp();
 
-    ssize_t fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr);
-    ssize_t slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr,
+    ssize_t fast_send(const iovec *p_iov, size_t sz_iov, xlio_send_attr attr);
+    ssize_t slow_send(const iovec *p_iov, size_t sz_iov, xlio_send_attr attr,
                       struct xlio_rate_limit_t &rate_limit, int flags = 0, sockinfo *sock = nullptr,
                       tx_call_t call_type = TX_UNDEF);
     static bool fast_send_fragmented_ipv6(mem_buf_desc_t *p_mem_buf_desc, const iovec *p_iov,
-                                          const ssize_t sz_iov, xlio_wr_tx_packet_attr attr,
+                                          size_t sz_iov, xlio_wr_tx_packet_attr attr,
                                           size_t sz_udp_payload, int n_num_frags,
                                           xlio_ibv_send_wr *p_send_wqe, ring_user_id_t user_id,
                                           ibv_sge *p_sge, header *p_header,
@@ -42,18 +42,17 @@ private:
 
     inline uint32_t gen_packet_id_ip6() { return htonl(m_frag_tx_pkt_id++); }
 
-    inline ssize_t fast_send_not_fragmented(const iovec *p_iov, const ssize_t sz_iov,
+    inline ssize_t fast_send_not_fragmented(const iovec *p_iov, size_t sz_iov,
                                             xlio_wr_tx_packet_attr attr, size_t sz_udp_payload,
                                             ssize_t sz_data_payload);
     inline bool fast_send_fragmented_ipv4(mem_buf_desc_t *p_mem_buf_desc, const iovec *p_iov,
-                                          const ssize_t sz_iov, xlio_wr_tx_packet_attr attr,
+                                          size_t sz_iov, xlio_wr_tx_packet_attr attr,
                                           size_t sz_udp_payload, int n_num_frags);
     inline bool fast_send_fragmented_ipv6(mem_buf_desc_t *p_mem_buf_desc, const iovec *p_iov,
-                                          const ssize_t sz_iov, xlio_wr_tx_packet_attr attr,
+                                          size_t sz_iov, xlio_wr_tx_packet_attr attr,
                                           size_t sz_udp_payload, int n_num_frags);
-    ssize_t fast_send_fragmented(const iovec *p_iov, const ssize_t sz_iov,
-                                 xlio_wr_tx_packet_attr attr, size_t sz_udp_payload,
-                                 ssize_t sz_data_payload);
+    ssize_t fast_send_fragmented(const iovec *p_iov, size_t sz_iov, xlio_wr_tx_packet_attr attr,
+                                 size_t sz_udp_payload, ssize_t sz_data_payload);
 
     uint32_t m_frag_tx_pkt_id = 0U;
     const uint32_t m_n_sysvar_tx_bufs_batch_udp;
