@@ -10,11 +10,32 @@
 #include <algorithm>
 #include <sstream>
 #include <vector>
+#include <set>
+#include <cctype>
+#include <charconv>
+#include <experimental/optional>
 
-static std::vector<std::string> split(const std::string &s, char delimiter);
+// Static constants for magic characters
+static const char DOUBLE_QUOTE = '"';
+static const char SINGLE_QUOTE = '\'';
+static const char SPACE = ' ';
+static const char EQUALS = '=';
+static const char COMMA = ',';
+
+static std::vector<std::string> split_strict(const std::string &s, char delimiter);
 static std::string remove_spaces(std::string str);
-
-static std::experimental::any parse_value(const std::string &val);
+static std::experimental::any parse_value_strict(const std::string &val, const std::string &key);
+static std::experimental::optional<int64_t> try_parse_integer(const std::string &val);
+static void validate_input_format(const std::string &config);
+static void validate_key_value_pair(const std::string &kv);
+static void validate_key_format(const std::string &key);
+static void validate_value_characters(const std::string &val, const std::string &key,
+                                      const std::string &config);
+static void validate_key_characters(const std::string &key);
+static bool contains_quotes(const std::string &str);
+static void validate_characters(const std::string &str, const std::string &allowed_chars,
+                                const std::string &error_message, const std::string &config);
+static void throw_parsing_error(const std::string &message, const std::string &config);
 
 inline_loader::inline_loader(const char *inline_config_key)
     : loader(inline_config_key)
@@ -50,50 +71,78 @@ bool inline_loader::check_unsupported_key(const std::string &key) const
 
 void inline_loader::parse_inline_data()
 {
-    std::vector<std::string> pairs = split(m_inline_config, ',');
+    validate_input_format(m_inline_config);
+
+    std::vector<std::string> pairs = split_strict(m_inline_config, COMMA);
+
+    std::set<std::string> seen_keys;
+
     for (const std::string &kv : pairs) {
-        const std::string trimmed_kv = remove_spaces(kv);
+        validate_key_value_pair(kv);
 
-        if (trimmed_kv.empty()) {
-            continue;
+        const std::string::size_type eq_pos = kv.find(EQUALS);
+        std::string key = kv.substr(0, eq_pos);
+        std::string val = kv.substr(eq_pos + 1);
+
+        if (contains_quotes(key)) {
+            throw_parsing_error("Key contains quotes: " + key + "=" + val, m_inline_config);
+        }
+        if (contains_quotes(val)) {
+            throw_parsing_error("Value contains quotes: " + key + "=" + val, m_inline_config);
         }
 
-        const std::string::size_type eq_pos = trimmed_kv.find('=');
-        if (eq_pos == std::string::npos) {
-            throw_xlio_exception("Invalid key=value pair: " + trimmed_kv);
+        if (val.find(SPACE) != std::string::npos) {
+            throw_parsing_error("Value contains spaces: " + key + "=" + val, m_inline_config);
         }
 
-        std::string key = trimmed_kv.substr(0, eq_pos);
-        std::string val = trimmed_kv.substr(eq_pos + 1);
+        validate_value_characters(val, key, m_inline_config);
 
-        // If either the key is empty, it's invalid
-        if (trimmed_kv.empty()) {
-            throw_xlio_exception("Empty key found in pair: " + kv);
+        key = remove_spaces(key);
+        val = remove_spaces(val);
+
+        if (key.empty()) {
+            throw_parsing_error("Key cannot be empty", m_inline_config);
         }
-
-        // Check for unsupported parameters
         if (check_unsupported_key(key)) {
             throw_xlio_exception("Key not supported in inline config: " + key +
                                  ".\nSee description for unsupported keys.");
         }
 
-        // Attempt to parse the value as bool/int, otherwise store string
-        m_data[key] = parse_value(val);
+        if (val.empty()) {
+            throw_parsing_error("Value cannot be empty", m_inline_config);
+        }
+
+        if (seen_keys.find(key) != seen_keys.end()) {
+            throw_parsing_error("Duplicate parameter: " + key, m_inline_config);
+        }
+        seen_keys.insert(key);
+
+        validate_key_format(key);
+
+        m_data[key] = parse_value_strict(val, key);
     }
 
     if (m_data.empty()) {
-        throw_xlio_exception("Invalid config: " + std::string(m_inline_config));
+        throw_parsing_error("No valid configuration found", m_inline_config);
     }
 }
 
-static std::vector<std::string> split(const std::string &s, char delimiter)
+static std::vector<std::string> split_strict(const std::string &s, char delimiter)
 {
     std::vector<std::string> tokens;
     std::string token;
     std::istringstream token_stream(s);
+
     while (std::getline(token_stream, token, delimiter)) {
+        // Don't trim spaces here - we need to check for them later
+        // Skip empty tokens
+        if (token.empty()) {
+            continue;
+        }
+
         tokens.push_back(token);
     }
+
     return tokens;
 }
 
@@ -103,20 +152,127 @@ static std::string remove_spaces(std::string str)
     return str;
 }
 
-static std::experimental::any parse_value(const std::string &val)
+static std::experimental::any parse_value_strict(const std::string &val, const std::string &key)
 {
-    if (val == "true") {
-        return true;
-    }
-    if (val == "false") {
-        return false;
+    if (val.empty()) {
+        throw_parsing_error("Empty value for key: " + key, "");
     }
 
-    std::istringstream str_stream(val);
-    int64_t int_val = 0;
-    if (str_stream >> int_val && str_stream.eof()) {
-        return int_val;
+    if (val == "true" || val == "false") {
+        return val == "true";
+    }
+
+    if (std::experimental::optional<int64_t> int_val = try_parse_integer(val)) {
+        return *int_val;
     }
 
     return val;
+}
+
+static std::experimental::optional<int64_t> try_parse_integer(const std::string &val)
+{
+    int64_t result;
+    const char *ptr = val.data();
+    const char *end = val.data() + val.size();
+    auto parse_result = std::from_chars(ptr, end, result);
+
+    // Return the parsed value if successful, empty optional otherwise
+    if (parse_result.ec == std::errc {} && parse_result.ptr == end) {
+        return result;
+    }
+    return std::experimental::nullopt;
+}
+
+static void validate_input_format(const std::string &config)
+{
+    if (config.empty()) {
+        throw_parsing_error("Empty configuration string", config);
+    }
+
+    // Check for leading/trailing commas
+    if (config.front() == COMMA || config.back() == COMMA) {
+        throw_parsing_error("Leading or trailing comma not allowed", config);
+    }
+
+    // Check for consecutive commas
+    if (config.find(std::string(2, COMMA)) != std::string::npos) {
+        throw_parsing_error("Consecutive commas not allowed", config);
+    }
+}
+
+static void validate_key_value_pair(const std::string &kv)
+{
+    // Must contain exactly one equals sign
+    size_t eq_count = std::count(kv.begin(), kv.end(), EQUALS);
+    if (eq_count == 0) {
+        throw_parsing_error("Missing equals sign in pair: " + kv, "");
+    }
+    if (eq_count > 1) {
+        throw_parsing_error("Multiple equals signs in pair: " + kv, "");
+    }
+
+    // Must not start or end with equals
+    if (kv.front() == EQUALS || kv.back() == EQUALS) {
+        throw_parsing_error("Key or value cannot be empty in pair: " + kv, "");
+    }
+}
+
+static void validate_key_format(const std::string &key)
+{
+    // Keys should match pattern: [a-zA-Z][a-zA-Z0-9._]*
+    if (key.empty()) {
+        throw_parsing_error("Empty key not allowed", "");
+    }
+
+    if (!std::isalpha(key[0])) {
+        throw_parsing_error("Key must start with letter: " + key, "");
+    }
+
+    validate_key_characters(key);
+}
+
+static void validate_value_characters(const std::string &val, const std::string &key,
+                                      const std::string &config)
+{
+    // values can only have underscores, dots, hyphens, and slashes
+    // aside from alphanumeric characters
+    // underscores - for enums
+    // dots - for paths
+    // hyphens - for negative numbers
+    // slashes - for paths
+    static const std::string ALLOWED_VALUE_CHARS = ".-_/";
+    validate_characters(val, ALLOWED_VALUE_CHARS,
+                        "Value contains invalid character: " + key + "=" + val, config);
+}
+
+static void validate_key_characters(const std::string &key)
+{
+    // keys can only have underscores and dots aside from alphanumeric characters
+    static const std::string ALLOWED_KEY_CHARS = "._";
+    validate_characters(key, ALLOWED_KEY_CHARS, "Invalid character in key: " + key, "");
+}
+
+static bool contains_quotes(const std::string &str)
+{
+    return str.find(DOUBLE_QUOTE) != std::string::npos ||
+        str.find(SINGLE_QUOTE) != std::string::npos;
+}
+
+static void validate_characters(const std::string &str, const std::string &allowed_chars,
+                                const std::string &error_message, const std::string &config)
+{
+    for (char c : str) {
+        if (!std::isalnum(c) && allowed_chars.find(c) == std::string::npos) {
+            throw_parsing_error(error_message, config);
+        }
+    }
+}
+
+static void throw_parsing_error(const std::string &message, const std::string &config)
+{
+    std::string full_message = "XLIO_INLINE_CONFIG parsing error: " + message;
+    if (!config.empty()) {
+        full_message += "\nConfiguration: " + config;
+    }
+    throw_xlio_exception(full_message);
 }
