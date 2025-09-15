@@ -448,3 +448,122 @@ TEST(config, parameter_descriptor_boolean_rejects_integer)
     std::experimental::any int_value = int64_t(1);
     ASSERT_THROW(bool_param_descriptor.get_value(int_value), std::experimental::bad_any_cast);
 }
+// Test suite for power-of-2 constraint validation
+class power_of_2_or_zero_constraint_test : public ::testing::Test {
+protected:
+    constraint_t constraint = parameter_descriptor::create_power_of_2_or_zero_constraint();
+
+    // Helper function to test valid power-of-2 values
+    void test_valid_power_of_2(const std::experimental::any &value)
+    {
+        constraint_result result = constraint(value);
+        ASSERT_TRUE(result.result()) << "Expected power-of-2 validation to pass for value";
+    }
+
+    // Helper function to test invalid power-of-2 values
+    void test_invalid_power_of_2(const std::experimental::any &value,
+                                 const std::string &expected_error_substring = "")
+    {
+        constraint_result result = constraint(value);
+        ASSERT_FALSE(result.result()) << "Expected power-of-2 validation to fail for value";
+        if (!expected_error_substring.empty()) {
+            ASSERT_TRUE(result.error_message().find(expected_error_substring) != std::string::npos)
+                << "Expected error message to contain: " << expected_error_substring
+                << ", but got: " << result.error_message();
+        }
+    }
+};
+
+// Test valid power-of-2 integer values
+TEST_F(power_of_2_or_zero_constraint_test, valid_power_of_2_integers)
+{
+    // Test powers of 2 from 1 to 2^30
+    for (int i = 0; i <= 30; ++i) {
+        int64_t power_of_2 = 1LL << i;
+        test_valid_power_of_2(static_cast<int64_t>(power_of_2));
+    }
+
+    // Test some specific common values
+    test_valid_power_of_2(static_cast<int64_t>(1));
+    test_valid_power_of_2(static_cast<int64_t>(2));
+    test_valid_power_of_2(static_cast<int64_t>(4));
+    test_valid_power_of_2(static_cast<int64_t>(8));
+    test_valid_power_of_2(static_cast<int64_t>(16));
+    test_valid_power_of_2(static_cast<int64_t>(32));
+    test_valid_power_of_2(static_cast<int64_t>(64));
+    test_valid_power_of_2(static_cast<int64_t>(128));
+    test_valid_power_of_2(static_cast<int64_t>(256));
+    test_valid_power_of_2(static_cast<int64_t>(512));
+    test_valid_power_of_2(static_cast<int64_t>(1024));
+    test_valid_power_of_2(static_cast<int64_t>(2048));
+    test_valid_power_of_2(static_cast<int64_t>(4096));
+    test_valid_power_of_2(static_cast<int64_t>(8192));
+    test_valid_power_of_2(static_cast<int64_t>(16384));
+    test_valid_power_of_2(static_cast<int64_t>(32768));
+    test_valid_power_of_2(static_cast<int64_t>(65536));
+}
+
+// Test invalid power-of-2 integer values
+TEST_F(power_of_2_or_zero_constraint_test, invalid_power_of_2_integers)
+{
+    // Test non-powers of 2
+    test_invalid_power_of_2(static_cast<int64_t>(3), "is not a power of 2");
+    test_invalid_power_of_2(static_cast<int64_t>(5), "is not a power of 2");
+    test_invalid_power_of_2(static_cast<int64_t>(6), "is not a power of 2");
+    test_invalid_power_of_2(static_cast<int64_t>(7), "is not a power of 2");
+    test_invalid_power_of_2(static_cast<int64_t>(9), "is not a power of 2");
+    test_invalid_power_of_2(static_cast<int64_t>(10), "is not a power of 2");
+    test_invalid_power_of_2(static_cast<int64_t>(15), "is not a power of 2");
+    test_invalid_power_of_2(static_cast<int64_t>(100), "is not a power of 2");
+    test_invalid_power_of_2(static_cast<int64_t>(1000), "is not a power of 2");
+    test_invalid_power_of_2(static_cast<int64_t>(3000), "is not a power of 2");
+    test_invalid_power_of_2(static_cast<int64_t>(5000), "is not a power of 2");
+    test_invalid_power_of_2(static_cast<int64_t>(10000), "is not a power of 2");
+}
+
+// Test zero and negative values
+TEST_F(power_of_2_or_zero_constraint_test, zero_and_negative_values)
+{
+    // Zero should be valid (explicitly allowed)
+    test_valid_power_of_2(static_cast<int64_t>(0));
+
+    // Negative values should fail
+    test_invalid_power_of_2(static_cast<int64_t>(-1), "must be non-negative");
+    test_invalid_power_of_2(static_cast<int64_t>(-2), "must be non-negative");
+    test_invalid_power_of_2(static_cast<int64_t>(-4), "must be non-negative");
+    test_invalid_power_of_2(static_cast<int64_t>(-1024), "must be non-negative");
+}
+
+// Test unsupported value types
+TEST_F(power_of_2_or_zero_constraint_test, unsupported_value_types)
+{
+    // Test unsupported types
+    test_invalid_power_of_2(true, "only supports integer values");
+    test_invalid_power_of_2(false, "only supports integer values");
+    test_invalid_power_of_2(static_cast<int>(42), "only supports integer values");
+    test_invalid_power_of_2(static_cast<double>(42.0), "only supports integer values");
+    test_invalid_power_of_2(static_cast<float>(42.0f), "only supports integer values");
+    test_invalid_power_of_2(std::string("42"), "only supports integer values");
+    test_invalid_power_of_2(std::string("42MB"), "only supports integer values");
+}
+
+// Test edge cases and boundary values
+TEST_F(power_of_2_or_zero_constraint_test, edge_cases_and_boundaries)
+{
+    // Test very large powers of 2
+    test_valid_power_of_2(static_cast<int64_t>(1LL << 30)); // 2^30
+    test_valid_power_of_2(static_cast<int64_t>(1LL << 40)); // 2^40
+    test_valid_power_of_2(static_cast<int64_t>(1LL << 50)); // 2^50
+    test_valid_power_of_2(static_cast<int64_t>(1LL << 60)); // 2^60
+    // Test values just below and above powers of 2
+    test_invalid_power_of_2(static_cast<int64_t>((1LL << 30) - 1), "is not a power of 2");
+    test_invalid_power_of_2(static_cast<int64_t>((1LL << 30) + 1), "is not a power of 2");
+    test_invalid_power_of_2(static_cast<int64_t>((1LL << 40) - 1), "is not a power of 2");
+    test_invalid_power_of_2(static_cast<int64_t>((1LL << 40) + 1), "is not a power of 2");
+
+    // Test maximum int64_t value (not a power of 2)
+    test_invalid_power_of_2(static_cast<int64_t>(LLONG_MAX), "is not a power of 2");
+
+    // Test maximum power of 2 that fits in int64_t
+    test_valid_power_of_2(static_cast<int64_t>(1LL << 62)); // 2^62
+}

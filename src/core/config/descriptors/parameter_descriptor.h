@@ -144,9 +144,25 @@ public:
      */
     static value_transformer_t create_memory_size_transformer();
 
-private:
-    static int64_t parse_memory_size(const char *str);
+    /**
+     * @brief Creates a power-of-2-or-zero validation constraint
+     * @return Constraint function that validates power-of-2 values or zero
+     */
+    static constraint_t create_power_of_2_or_zero_constraint();
 
+private:
+    std::experimental::any m_default_value; /**< Default parameter value */
+    std::vector<constraint_t> m_constraints; /**< Validation constraints */
+    std::map<std::string, std::experimental::any> m_string_mapping; /**< String-to-value mappings */
+    value_transformer_t m_value_transformer; /**< Value transformation function */
+    std::type_index m_type;
+
+    /**
+     * @brief Parses a memory size string with suffixes (KB, MB, GB)
+     * @param str String to parse
+     * @return Parsed value in bytes
+     */
+    static int64_t parse_memory_size(const char *str);
     /**
      * @brief Check if the given type matches the expected parameter type
      * @param type The type to check
@@ -161,10 +177,4 @@ private:
      * @throws std::experimental::bad_any_cast if conversion fails
      */
     std::experimental::any convert_string_to_int64(const std::string &val) const;
-
-    std::experimental::any m_default_value; /**< Default parameter value */
-    std::vector<constraint_t> m_constraints; /**< Validation constraints */
-    std::map<std::string, std::experimental::any> m_string_mapping; /**< String-to-value mappings */
-    value_transformer_t m_value_transformer; /**< Value transformation function */
-    std::type_index m_type;
 };

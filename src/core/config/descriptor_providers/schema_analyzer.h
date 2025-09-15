@@ -40,6 +40,7 @@ struct constraint_config {
     bool has_minimum = false;
     bool has_maximum = false;
     bool has_enum = false;
+    bool has_power_of_2_or_zero = false;
     int64_t minimum_value = 0;
     int64_t maximum_value = 0;
     std::vector<int64_t> enum_int_values;
@@ -116,6 +117,7 @@ private:
 
     // Helper methods
     bool has_memory_size_flag();
+    bool has_power_of_2_or_zero_flag();
     bool has_constraint_fields();
     bool has_oneof_field();
     std::experimental::any extract_oneof_value(json_object *one_of_field, std::type_index type,

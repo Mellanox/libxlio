@@ -263,3 +263,30 @@ std::type_index parameter_descriptor::type() const
 {
     return m_type;
 }
+
+constraint_t parameter_descriptor::create_power_of_2_or_zero_constraint()
+{
+    return [](const std::experimental::any &value) -> constraint_result {
+        // Handle integer values
+        if (value.type() == typeid(int64_t)) {
+            int64_t int_value = std::experimental::any_cast<int64_t>(value);
+            if (int_value == 0) {
+                return constraint_result(true); // Zero is explicitly allowed
+            }
+            if (int_value < 0) {
+                return constraint_result(
+                    false, "Value must be non-negative for power-of-2-or-zero validation");
+            }
+            // Check if it's a power of 2: (n & (n-1)) == 0
+            if ((int_value & (int_value - 1)) == 0) {
+                return constraint_result(true);
+            } else {
+                return constraint_result(
+                    false, "Value " + std::to_string(int_value) + " is not a power of 2");
+            }
+        }
+
+        return constraint_result(false,
+                                 "Power-of-2-or-zero validation only supports integer values");
+    };
+}

@@ -221,6 +221,11 @@ void json_descriptor_provider::apply_constraints(parameter_descriptor *descripto
             return constraint_result(true);
         });
     }
+
+    // Apply power-of-2-or-zero constraint if enabled
+    if (config.has_power_of_2_or_zero) {
+        descriptor->add_constraint(parameter_descriptor::create_power_of_2_or_zero_constraint());
+    }
 }
 
 void json_descriptor_provider::apply_value_transformation(parameter_descriptor *descriptor)
