@@ -386,3 +386,65 @@ TEST_F(memory_size_transformer, test_overflow)
     // A very large number without suffix that fits uint64_t but not int64_t
     ASSERT_THROW(transformer(std::string("10000000000000000000")), xlio_exception);
 }
+
+TEST(config, parameter_descriptor_valid_integer_passes)
+{
+    // Test that valid integer values pass through unchanged
+    constexpr int64_t DEFAULT_INT_VALUE = 16;
+    parameter_descriptor int_param_descriptor {std::experimental::any(int64_t(DEFAULT_INT_VALUE))};
+
+    std::experimental::any valid_int = int64_t(32);
+    std::experimental::any result = int_param_descriptor.get_value(valid_int);
+    ASSERT_EQ(typeid(int64_t), result.type());
+    ASSERT_EQ(32LL, std::experimental::any_cast<int64_t>(result));
+}
+
+TEST(config, parameter_descriptor_boolean_rejected)
+{
+    // Test that boolean values are rejected for integer parameters (this was the bug)
+    constexpr int64_t DEFAULT_INT_VALUE = 16;
+    parameter_descriptor int_param_descriptor {std::experimental::any(int64_t(DEFAULT_INT_VALUE))};
+
+    std::experimental::any bool_value = true;
+    ASSERT_THROW(int_param_descriptor.get_value(bool_value), std::experimental::bad_any_cast);
+}
+
+TEST(config, parameter_descriptor_string_rejected)
+{
+    // Test that string values are rejected for integer parameters
+    constexpr int64_t DEFAULT_INT_VALUE = 16;
+    parameter_descriptor int_param_descriptor {std::experimental::any(int64_t(DEFAULT_INT_VALUE))};
+
+    std::experimental::any string_value = std::string("invalid");
+    ASSERT_THROW(int_param_descriptor.get_value(string_value), std::experimental::bad_any_cast);
+}
+
+TEST(config, parameter_descriptor_double_rejected)
+{
+    // Test that double values are rejected for integer parameters
+    constexpr int64_t DEFAULT_INT_VALUE = 16;
+    parameter_descriptor int_param_descriptor {std::experimental::any(int64_t(DEFAULT_INT_VALUE))};
+
+    std::experimental::any double_value = 3.14;
+    ASSERT_THROW(int_param_descriptor.get_value(double_value), std::experimental::bad_any_cast);
+}
+
+TEST(config, parameter_descriptor_boolean_accepts_boolean)
+{
+    // Test that boolean parameters accept boolean values
+    parameter_descriptor bool_param_descriptor(std::experimental::any(bool(false)));
+
+    std::experimental::any bool_value = true;
+    std::experimental::any result = bool_param_descriptor.get_value(bool_value);
+    ASSERT_EQ(typeid(bool), result.type());
+    ASSERT_EQ(true, std::experimental::any_cast<bool>(result));
+}
+
+TEST(config, parameter_descriptor_boolean_rejects_integer)
+{
+    // Test that boolean parameters reject integer values
+    parameter_descriptor bool_param_descriptor(std::experimental::any(bool(false)));
+
+    std::experimental::any int_value = int64_t(1);
+    ASSERT_THROW(bool_param_descriptor.get_value(int_value), std::experimental::bad_any_cast);
+}

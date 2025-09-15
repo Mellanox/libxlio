@@ -85,7 +85,6 @@ config_mapping = {
     "performance.polling.iomux.poll_os_ratio": "XLIO_SELECT_POLL_OS_RATIO",
     "performance.polling.iomux.poll_usec": "XLIO_SELECT_POLL",
     "performance.polling.iomux.skip_os": "XLIO_SELECT_SKIP_OS",
-    "performance.polling.kernel_fd_attention_level": "XLIO_RING_KERNEL_FD_ATTENTION_LEVEL",
     "performance.polling.max_rx_poll_batch": "XLIO_CQ_POLL_BATCH_MAX",
     "performance.polling.nonblocking_eagain": "XLIO_TX_NONBLOCKED_EAGAINS",
     "performance.polling.offload_transition_poll_count": "XLIO_RX_POLL_INIT",

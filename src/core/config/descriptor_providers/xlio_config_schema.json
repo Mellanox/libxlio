@@ -1026,13 +1026,6 @@
                             "title": "Offload transition poll count",
                             "description": "XLIO maps all UDP sockets as potential offloaded capable. Only after the ADD_MEMBERSHIP does the offload start to work and the CQ polling kicks in XLIO. This parameter controls the polling count during this transition phase where the socket is a UDP unicast socket and no multicast addresses were added to it. Once the first ADD_MEMBERSHIP is called the RX poll duration setting takes effect. Value range is similar to the RX poll duration; -1 means infinite, 0 disables. Maps to XLIO_RX_POLL_INIT environment variable."
                         },
-                        "kernel_fd_attention_level": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "default": 10,
-                            "title": "Kernel FD attention threshold",
-                            "description": "Controls threshold for checking kernel file descriptors during polling. 0 means never check. Maps to XLIO_RING_KERNEL_FD_ATTENTION_LEVEL environment variable. This setting affects how often XLIO checks for activity on non-offloaded kernel file descriptors while processing offloaded sockets."
-                        },
                         "max_rx_poll_batch": {
                             "type": "integer",
                             "minimum": 0,

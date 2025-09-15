@@ -504,3 +504,131 @@ TEST(config, config_registry_memory_size_transformer_inline_config)
     // 2GB = 2 * 1024 * 1024 * 1024 = 2147483648 bytes
     ASSERT_EQ(2147483648LL, registry.get_value<int64_t>("core.memory_limit"));
 }
+
+// Helper descriptor for type validation tests
+static const char *sample_type_validation_descriptor = R"({
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "XLIO Configuration Schema",
+    "description": "Schema for XLIO configuration",
+    "type": "object",
+    "properties": {
+        "performance": {
+            "type": "object",
+            "description": "Performance-related settings",
+            "properties": {
+                "rings": {
+                    "type": "object",
+                    "description": "Ring configuration",
+                    "properties": {
+                        "tx": {
+                            "type": "object",
+                            "description": "Transmission ring settings",
+                            "properties": {
+                                "udp_buffer_batch": {
+                                    "type": "integer",
+                                    "default": 16,
+                                    "minimum": 1,
+                                    "title": "TX buffer batch size",
+                                    "description": "Number of TX buffers fetched by a UDP socket at once"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+})";
+
+TEST(config, config_registry_boolean_type_mismatch_throws)
+{
+    // Test that boolean values are rejected for integer parameters during loading
+    // This test specifically catches the bug where boolean values were accepted for integer
+    // parameters
+
+    conf_file_writer json_config(R"({
+        "performance": {
+            "rings": {
+                "tx": {
+                    "udp_buffer_batch": true
+                }
+            }
+        }
+    })");
+
+    std::queue<std::unique_ptr<loader>> loaders;
+    loaders.push(std::make_unique<json_loader>(json_config.get()));
+
+    ASSERT_THROW(config_registry(
+                     std::move(loaders),
+                     std::make_unique<json_descriptor_provider>(sample_type_validation_descriptor)),
+                 xlio_exception);
+}
+
+TEST(config, config_registry_string_type_mismatch_throws)
+{
+    // Test that string values are rejected for integer parameters during loading
+
+    conf_file_writer json_config(R"({
+        "performance": {
+            "rings": {
+                "tx": {
+                    "udp_buffer_batch": "invalid"
+                }
+            }
+        }
+    })");
+
+    std::queue<std::unique_ptr<loader>> loaders;
+    loaders.push(std::make_unique<json_loader>(json_config.get()));
+
+    ASSERT_THROW(config_registry(
+                     std::move(loaders),
+                     std::make_unique<json_descriptor_provider>(sample_type_validation_descriptor)),
+                 xlio_exception);
+}
+
+TEST(config, config_registry_valid_integer_works)
+{
+    // Test that valid integer values work correctly
+    conf_file_writer json_config(R"({
+        "performance": {
+            "rings": {
+                "tx": {
+                    "udp_buffer_batch": 32
+                }
+            }
+        }
+    })");
+
+    std::queue<std::unique_ptr<loader>> loaders;
+    loaders.push(std::make_unique<json_loader>(json_config.get()));
+
+    config_registry registry(
+        std::move(loaders),
+        std::make_unique<json_descriptor_provider>(sample_type_validation_descriptor));
+
+    ASSERT_EQ(32LL, registry.get_value<int64_t>("performance.rings.tx.udp_buffer_batch"));
+}
+
+TEST(config, config_registry_missing_uses_default)
+{
+    // Test that missing parameters use their default values
+
+    conf_file_writer json_config(R"({
+        "performance": {
+            "rings": {
+                "tx": {}
+            }
+        }
+    })");
+
+    std::queue<std::unique_ptr<loader>> loaders;
+    loaders.push(std::make_unique<json_loader>(json_config.get()));
+
+    config_registry registry(
+        std::move(loaders),
+        std::make_unique<json_descriptor_provider>(sample_type_validation_descriptor));
+
+    ASSERT_EQ(16LL, registry.get_value<int64_t>("performance.rings.tx.udp_buffer_batch"));
+}
