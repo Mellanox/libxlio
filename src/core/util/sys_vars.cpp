@@ -3006,11 +3006,8 @@ void mce_sys_var::get_params()
     get_app_name();
 
     // legacy method - config registry is not relevant for this case
-    if (!std::getenv("XLIO_USE_NEW_CONFIG")) {
-        vlog_printf(VLOG_WARNING, "Using deprecated environment variables.\n");
-        vlog_printf(VLOG_WARNING,
-                    "------------------------------------------------"
-                    "---------------------------\n");
+    const char *use_new_config = std::getenv("XLIO_USE_NEW_CONFIG");
+    if (!use_new_config || std::string(use_new_config) != "1") {
         legacy_get_env_params();
     } else {
         try {
