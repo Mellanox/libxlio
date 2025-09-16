@@ -125,9 +125,9 @@ void entity_context::connect_socket_job(const job_desc &job)
         add_socket(reinterpret_cast<sockinfo_tcp *>(sock));
         reinterpret_cast<sockinfo_tcp *>(sock)->connect_entity_context();
         ++m_stats.socket_num_added;
-        ctx_loginfo("New TCP socket added (sock: %p)", sock);
+        ctx_logdbg("New TCP socket added (sock: %p)", sock);
     } else {
-        ctx_loginfo("Unsupported socket protocol %hd for Threads mode", sock->get_protocol());
+        ctx_logdbg("Unsupported socket protocol %hd for Threads mode", sock->get_protocol());
     }
 }
 
