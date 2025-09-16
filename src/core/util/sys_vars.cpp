@@ -101,6 +101,46 @@ void mce_sys_var::print_xlio_load_failure_msg()
                 "***********************\n");
 }
 
+namespace option_ts_conversion_mode {
+const char *to_str(ts_conversion_mode_t mode)
+{
+    switch (mode) {
+    case TS_CONVERSION_MODE_DISABLE:
+        return "disable";
+    case TS_CONVERSION_MODE_RAW:
+        return "raw_hw";
+    case TS_CONVERSION_MODE_BEST_POSSIBLE:
+        return "best_possible";
+    case TS_CONVERSION_MODE_SYNC:
+        return "system";
+    case TS_CONVERSION_MODE_PTP:
+        return "ptp";
+    case TS_CONVERSION_MODE_RTC:
+        return "rtc";
+    default:
+        break;
+    }
+    return "unknown";
+}
+} //namespace option_ts_conversion_mode
+
+namespace option_tcp_ts {
+const char *to_str(tcp_ts_opt_t mode)
+{
+    switch (mode) {
+    case TCP_TS_OPTION_DISABLE:
+        return "disable";
+    case TCP_TS_OPTION_ENABLE:
+        return "enable";
+    case TCP_TS_OPTION_FOLLOW_OS:
+        return "os";
+    default:
+        break;
+    }
+    return "unknown";
+}
+} //namespace option_tcp_ts
+
 namespace xlio_spec {
 typedef struct {
     xlio_spec_t level;

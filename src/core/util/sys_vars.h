@@ -44,6 +44,10 @@ typedef enum {
     TS_CONVERSION_MODE_LAST
 } ts_conversion_mode_t;
 
+namespace option_ts_conversion_mode {
+const char *to_str(ts_conversion_mode_t mode);
+} // namespace option_ts_conversion_mode
+
 static inline bool is_ring_logic_valid(ring_logic_t logic)
 {
     switch (logic) {
@@ -63,17 +67,17 @@ static inline const char *ring_logic_str(ring_logic_t logic)
 {
     switch (logic) {
     case RING_LOGIC_PER_INTERFACE:
-        return "(Ring per interface)";
+        return "per_interface";
     case RING_LOGIC_PER_IP:
-        return "(Ring per ip)";
+        return "per_ip_address";
     case RING_LOGIC_PER_SOCKET:
-        return "(Ring per socket)";
+        return "per_socket";
     case RING_LOGIC_PER_THREAD:
-        return "(Ring per thread)";
+        return "per_thread";
     case RING_LOGIC_PER_CORE:
-        return "(Ring per core)";
+        return "per_cpuid";
     case RING_LOGIC_PER_CORE_ATTACH_THREADS:
-        return "(Ring per core - attach threads)";
+        return "per_cpu";
     default:
         break;
     }
@@ -122,6 +126,10 @@ typedef enum {
     TCP_TS_OPTION_FOLLOW_OS,
     TCP_TS_OPTION_LAST
 } tcp_ts_opt_t;
+
+namespace option_tcp_ts {
+const char *to_str(tcp_ts_opt_t mode);
+} //namespace option_tcp_ts
 
 typedef enum {
     SKIP_POLL_IN_RX_DISABLE = 0,

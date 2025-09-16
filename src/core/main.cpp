@@ -349,11 +349,11 @@ const char *buffer_batching_mode_str(buffer_batching_mode_t buffer_batching_mode
 {
     switch (buffer_batching_mode) {
     case BUFFER_BATCHING_NONE:
-        return "(No batching buffers)";
+        return "disable";
     case BUFFER_BATCHING_WITH_RECLAIM:
-        return "(Batch and reclaim buffers)";
+        return "enable_and_reuse";
     case BUFFER_BATCHING_NO_RECLAIM:
-        return "(Batch and don't reclaim buffers)";
+        return "enable";
     default:
         break;
     }
@@ -482,10 +482,10 @@ void print_xlio_global_settings()
     VLOG_PARAM_BOOL("Quick start", safe_mce_sys().quick_start, MCE_DEFAULT_QUICK_START,
                     NEW_CONFIG_VAR_QUICK_START);
 
-    VLOG_PARAM_NUMSTR("Ring allocation logic TX", safe_mce_sys().ring_allocation_logic_tx,
+    VLOG_PARAM_STRING("Ring allocation logic TX", safe_mce_sys().ring_allocation_logic_tx,
                       MCE_DEFAULT_RING_ALLOCATION_LOGIC_TX, NEW_CONFIG_VAR_RING_ALLOCATION_LOGIC_TX,
                       ring_logic_str(safe_mce_sys().ring_allocation_logic_tx));
-    VLOG_PARAM_NUMSTR("Ring allocation logic RX", safe_mce_sys().ring_allocation_logic_rx,
+    VLOG_PARAM_STRING("Ring allocation logic RX", safe_mce_sys().ring_allocation_logic_rx,
                       MCE_DEFAULT_RING_ALLOCATION_LOGIC_RX, NEW_CONFIG_VAR_RING_ALLOCATION_LOGIC_RX,
                       ring_logic_str(safe_mce_sys().ring_allocation_logic_rx));
     if (safe_mce_sys().ring_allocation_logic_rx == RING_LOGIC_PER_USER_ID) {
@@ -570,8 +570,9 @@ void print_xlio_global_settings()
                           "(Disabled)");
     }
 
-    VLOG_PARAM_NUMBER("HW TS Conversion", safe_mce_sys().hw_ts_conversion_mode,
-                      MCE_DEFAULT_HW_TS_CONVERSION_MODE, NEW_CONFIG_VAR_HW_TS_CONVERSION_MODE);
+    VLOG_PARAM_STRING("HW TS Conversion", safe_mce_sys().hw_ts_conversion_mode,
+                      MCE_DEFAULT_HW_TS_CONVERSION_MODE, NEW_CONFIG_VAR_HW_TS_CONVERSION_MODE,
+                      option_ts_conversion_mode::to_str(safe_mce_sys().hw_ts_conversion_mode));
 
     if (safe_mce_sys().rx_poll_yield_loops) {
         VLOG_PARAM_NUMBER("Rx Poll Yield", safe_mce_sys().rx_poll_yield_loops,
@@ -694,8 +695,9 @@ void print_xlio_global_settings()
         "TCP control thread", option_tcp_ctl_thread::to_str(safe_mce_sys().tcp_ctl_thread),
         option_tcp_ctl_thread::to_str(MCE_DEFAULT_TCP_CTL_THREAD), NEW_CONFIG_VAR_TCP_CTL_THREAD,
         option_tcp_ctl_thread::to_str(safe_mce_sys().tcp_ctl_thread));
-    VLOG_PARAM_NUMBER("TCP timestamp option", safe_mce_sys().tcp_ts_opt,
-                      MCE_DEFAULT_TCP_TIMESTAMP_OPTION, NEW_CONFIG_VAR_TCP_TIMESTAMP_OPTION);
+    VLOG_PARAM_STRING("TCP timestamp option", safe_mce_sys().tcp_ts_opt,
+                      MCE_DEFAULT_TCP_TIMESTAMP_OPTION, NEW_CONFIG_VAR_TCP_TIMESTAMP_OPTION,
+                      option_tcp_ts::to_str(safe_mce_sys().tcp_ts_opt));
     VLOG_PARAM_BOOL("TCP nodelay", safe_mce_sys().tcp_nodelay, MCE_DEFAULT_TCP_NODELAY,
                     NEW_CONFIG_VAR_TCP_NODELAY);
     VLOG_PARAM_NUMBER("TCP nodelay treshold", safe_mce_sys().tcp_nodelay_treshold,
@@ -720,7 +722,7 @@ void print_xlio_global_settings()
     VLOG_STR_PARAM_STRING("Internal Thread Cpuset", safe_mce_sys().internal_thread_cpuset,
                           MCE_DEFAULT_INTERNAL_THREAD_CPUSET, NEW_CONFIG_VAR_INTERNAL_THREAD_CPUSET,
                           safe_mce_sys().internal_thread_cpuset);
-    VLOG_PARAM_NUMSTR("Buffer batching mode", safe_mce_sys().buffer_batching_mode,
+    VLOG_PARAM_STRING("Buffer batching mode", safe_mce_sys().buffer_batching_mode,
                       MCE_DEFAULT_BUFFER_BATCHING_MODE, NEW_CONFIG_VAR_BUFFER_BATCHING_MODE,
                       buffer_batching_mode_str(safe_mce_sys().buffer_batching_mode));
     VLOG_PARAM_STRING(
@@ -809,7 +811,7 @@ void print_xlio_global_settings()
         VLOG_PARAM_NUMBER("MSS", safe_mce_sys().lwip_mss, MCE_DEFAULT_MSS, NEW_CONFIG_VAR_MSS);
         break;
     }
-    VLOG_PARAM_NUMSTR("TCP CC Algorithm", safe_mce_sys().lwip_cc_algo_mod,
+    VLOG_PARAM_STRING("TCP CC Algorithm", safe_mce_sys().lwip_cc_algo_mod,
                       MCE_DEFAULT_LWIP_CC_ALGO_MOD, NEW_CONFIG_VAR_TCP_CC_ALGO,
                       lwip_cc_algo_str(safe_mce_sys().lwip_cc_algo_mod));
     VLOG_PARAM_BOOL("Deferred close", safe_mce_sys().deferred_close, MCE_DEFAULT_DEFERRED_CLOSE,

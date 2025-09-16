@@ -57,12 +57,12 @@ static inline const char *lwip_cc_algo_str(uint32_t algo)
 {
     switch (algo) {
     case CC_MOD_CUBIC:
-        return "(CUBIC)";
+        return "cubic";
     case CC_MOD_NONE:
-        return "(NONE)";
+        return "disable";
     case CC_MOD_LWIP:
     default:
-        return "(LWIP)";
+        return "lwip";
     }
 }
 
