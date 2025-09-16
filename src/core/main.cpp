@@ -1136,6 +1136,7 @@ void reset_globals()
 {
     worker_thread_manager::fork_nullify();
     entity_context_manager::fork_nullify();
+    poll_group::fork_nullify();
     g_p_fd_collection = nullptr;
     g_p_ip_frag_manager = nullptr;
     g_zc_cache = nullptr;
