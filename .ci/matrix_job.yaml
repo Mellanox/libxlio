@@ -138,6 +138,15 @@ runs_on_dockers:
       runAsUser: '0',
       runAsGroup: '0'
     }
+  - {
+      file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
+      arch: 'x86_64',
+      name: 'unit-test',
+      uri: 'xlio/$arch/ubuntu22.04/$name',
+      tag: '20250928',
+      build_args: '--no-cache --target unit-test',
+      category: 'tool',
+    }
 
 runs_on_agents:
   - {nodeLabel: 'beni09', category: 'base'}
@@ -348,6 +357,20 @@ steps:
     run: |
       [ "x${do_test}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_run=${action} ./contrib/test_jenkins.sh
+    parallel: false
+    onfail: |
+      ./.ci/artifacts.sh
+    archiveArtifacts-onfail: |
+      jenkins/**/arch-*.tar.gz
+
+  - name: Unit Tests
+    #enable: ${do_unit_test}
+    containerSelector:
+      - "{name: 'unit-test', category: 'tool', variant: 1}"
+    agentSelector:
+      - "{nodeLabel: 'skip-agent'}"
+    run: |
+      env WORKSPACE=$PWD ./contrib/jenkins_tests/unit_test.sh
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
