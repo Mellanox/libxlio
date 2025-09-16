@@ -1879,8 +1879,8 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
 
     service_enable = registry.get_default_value<bool>("core.daemon.enable");
 
-    print_report =
-        registry.get_default_value<bool>("monitor.exit_report") ? option_3::ON : option_3::AUTO;
+    print_report = static_cast<decltype(print_report)>(
+        registry.get_default_value<int64_t>("monitor.exit_report"));
     quick_start = registry.get_default_value<bool>("core.quick_init");
     log_level =
         static_cast<decltype(log_level)>(registry.get_default_value<int>("monitor.log.level"));
@@ -2302,7 +2302,7 @@ void mce_sys_var::configure_monitor(const config_registry &registry)
 {
     if (registry.value_exists("monitor.exit_report")) {
         print_report =
-            registry.get_value<bool>("monitor.exit_report") ? option_3::ON : option_3::AUTO;
+            static_cast<decltype(print_report)>(registry.get_value<int64_t>("monitor.exit_report"));
     }
 
     set_value_from_registry_if_exists(quick_start, "core.quick_init", registry);
