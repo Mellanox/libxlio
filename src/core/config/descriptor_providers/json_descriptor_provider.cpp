@@ -128,10 +128,10 @@ void json_descriptor_provider::process_schema_property(json_object *property_obj
         }
 
         // For terminal properties, create descriptor and add to config
-        validate_terminal_property(property_obj, current_path);
-
         auto descriptor = create_descriptor(analysis);
         if (descriptor) {
+            // Only validate terminal properties that will get descriptors
+            validate_terminal_property(property_obj, current_path);
             desc.set_parameter(current_path, std::move(*descriptor));
         }
     } catch (const xlio_exception &e) {
@@ -143,6 +143,12 @@ void json_descriptor_provider::process_schema_property(json_object *property_obj
 std::unique_ptr<parameter_descriptor> json_descriptor_provider::create_descriptor(
     const schema_analyzer::analysis_result &analysis)
 {
+    // Object types are containers, not direct configuration values
+    // They should not have parameter descriptors - only their nested properties should
+    if (analysis.json_property_type == property_type::OBJECT) {
+        return nullptr;
+    }
+
     // Create parameter descriptor with default value
     auto descriptor = std::make_unique<parameter_descriptor>(analysis.default_value);
 

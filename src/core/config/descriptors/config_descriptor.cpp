@@ -9,6 +9,7 @@
 #include "core/util/xlio_exception.h"
 #include <limits>
 #include <algorithm>
+#include <experimental/any>
 
 static const size_t MAX_LEVENSHTEIN_DISTANCE = 2;
 static size_t calculate_levenshtein_distance(const std::string &s1, const std::string &s2);
@@ -45,6 +46,38 @@ parameter_descriptor config_descriptor::get_parameter(const std::string &key) co
 void config_descriptor::set_parameter(const std::string &key, parameter_descriptor &&descriptor)
 {
     parameter_map.insert({key, std::move(descriptor)});
+    update_parameter_keys(key);
+}
+
+bool config_descriptor::is_parent_of_parameter_keys(const std::string &key) const
+{
+    std::string parent_key = key + ".";
+
+    // Use lower_bound to find the first key that is >= parent_key
+    auto it = parameter_keys.lower_bound(parent_key);
+
+    // Check if the found key starts with our parent_key prefix
+    if (it != parameter_keys.end() && it->find(parent_key) == 0) {
+        return true;
+    }
+
+    return false;
+}
+
+void config_descriptor::update_parameter_keys(const std::string &key)
+{
+    parameter_keys.insert(key);
+}
+
+std::type_index config_descriptor::get_parent_expected_type(const std::string &key) const
+{
+    if (!is_parent_of_parameter_keys(key)) {
+        throw_xlio_exception("Key '" + key + "' is not a parent of parameter keys");
+    }
+
+    // Parent objects in JSON schema are always objects (they contain nested properties)
+    // We return the type for a JSON object, which is typically represented as a map
+    return typeid(std::map<std::string, std::experimental::any>);
 }
 
 /**

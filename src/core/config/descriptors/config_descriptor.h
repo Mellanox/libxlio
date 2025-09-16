@@ -8,6 +8,9 @@
 
 #include "parameter_descriptor.h"
 #include <map>
+#include <set>
+#include <string>
+#include <typeindex>
 
 /**
  * @brief Collection of parameter descriptors
@@ -37,9 +40,36 @@ public:
      */
     void set_parameter(const std::string &key, parameter_descriptor &&descriptor);
 
+    /**
+     * @brief Checks if a key is a parent of any parameter keys
+     * @param key Parameter name to check
+     * @return True if key is a parent of parameter keys, false otherwise
+     */
+    bool is_parent_of_parameter_keys(const std::string &key) const;
+
+    /**
+     * @brief Gets the expected type for a parent object key
+     * @param key Parent key to get expected type for
+     * @return The expected type for the parent object
+     * @throws xlio_exception If key is not a parent of parameter keys
+     */
+    std::type_index get_parent_expected_type(const std::string &key) const;
+
 private:
     /**
      * @brief Map from parameter name to its descriptor
      */
     std::map<std::string, parameter_descriptor> parameter_map;
+
+    /**
+     * @brief Set of all parameter keys for efficient prefix-based lookups
+     * This allows O(log n) parent-child relationship checks instead of O(n) linear search
+     */
+    std::set<std::string> parameter_keys;
+
+    /**
+     * @brief Updates the parameter keys set when parameters are added
+     * @param key The parameter key to add
+     */
+    void update_parameter_keys(const std::string &key);
 };

@@ -92,6 +92,16 @@ void config_registry::initialize_registry(std::queue<std::unique_ptr<loader>> &&
                 param_desc.validate_constraints(canonical_value);
 
             } catch (const xlio_exception &e) {
+                // Check if this is a type mismatch for a parent object
+                if (m_config_descriptor.is_parent_of_parameter_keys(key)) {
+                    std::type_index expected_type =
+                        m_config_descriptor.get_parent_expected_type(key);
+                    throw_xlio_exception("In '" + loader->source() + "': Type mismatch for key '" +
+                                         key + "': expected " +
+                                         get_user_friendly_type_name(expected_type) + ", got " +
+                                         get_user_friendly_type_name(value.type()));
+                }
+                // Otherwise, use the original error message
                 throw_xlio_exception("In '" + loader->source() + "': " + e.message);
             } catch (const std::experimental::bad_any_cast &) {
                 const parameter_descriptor param_desc = m_config_descriptor.get_parameter(key);

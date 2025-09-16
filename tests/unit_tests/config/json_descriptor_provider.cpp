@@ -8,6 +8,8 @@
 #include "descriptor_providers/json_descriptor_provider.h"
 #include "xlio_exception.h"
 #include "utils.h"
+#include <typeindex>
+#include <experimental/any>
 
 TEST(config, json_descriptor_provider_sanity)
 {
@@ -603,4 +605,116 @@ TEST(config, json_descriptor_provider_memory_size_transformer_applied)
     std::experimental::any untransformed = without_transformer.get_value(gb_string);
     std::string untransformed_value = std::experimental::any_cast<std::string>(untransformed);
     ASSERT_EQ("1GB", untransformed_value); // Should remain as string
+}
+
+/**
+ * Test that verifies object properties in schema do not get parameter descriptors.
+ *
+ * Object properties are containers for nested properties and should not have
+ * direct parameter descriptors. Only their nested properties (like "nodelay.enable")
+ * should have descriptors, not the parent object itself (like "nodelay").
+ */
+TEST(config, object_properties_do_not_get_parameter_descriptors)
+{
+    const char *schema_with_nodelay_object = R"({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "XLIO Configuration Schema",
+        "description": "Schema for XLIO configuration",
+        "type": "object",
+        "properties": {
+            "network": {
+                "type": "object",
+                "description": "Network configuration",
+                "properties": {
+                    "protocols": {
+                        "type": "object",
+                        "description": "Protocol settings",
+                        "properties": {
+                            "tcp": {
+                                "type": "object",
+                                "description": "TCP protocol settings",
+                                "properties": {
+                                    "nodelay": {
+                                        "type": "object",
+                                        "description": "TCP_NODELAY behavior configuration",
+                                        "properties": {
+                                            "enable": {
+                                                "type": "boolean",
+                                                "default": false,
+                                                "title": "Disable Nagle's algorithm",
+                                                "description": "When enabled, disables Nagle's algorithm"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })";
+
+    json_descriptor_provider provider(schema_with_nodelay_object);
+    config_descriptor descriptor = provider.load_descriptors();
+
+    // Object properties should not have parameter descriptors
+    EXPECT_THROW(descriptor.get_parameter("network.protocols.tcp.nodelay"), xlio_exception);
+
+    // Only nested properties should have descriptors
+    EXPECT_NO_THROW(descriptor.get_parameter("network.protocols.tcp.nodelay.enable"));
+}
+
+/**
+ * Test that verifies parent objects return the correct expected type.
+ * This tests the improved error message that derives the expected type
+ * from the schema rather than hardcoding "expected object".
+ */
+TEST(config, parent_objects_return_correct_expected_type)
+{
+    const char *schema_with_nested_objects = R"({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "XLIO Configuration Schema",
+        "description": "Schema for XLIO configuration",
+        "type": "object",
+        "properties": {
+            "network": {
+                "type": "object",
+                "description": "Network configuration",
+                "properties": {
+                    "tcp": {
+                        "type": "object",
+                        "description": "TCP settings",
+                        "properties": {
+                            "enable": {
+                                "type": "boolean",
+                                "default": true,
+                                "title": "Enable TCP",
+                                "description": "Enable TCP protocol"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })";
+
+    json_descriptor_provider provider(schema_with_nested_objects);
+    config_descriptor descriptor = provider.load_descriptors();
+
+    // Test that parent objects are correctly identified
+    EXPECT_TRUE(descriptor.is_parent_of_parameter_keys("network"));
+    EXPECT_TRUE(descriptor.is_parent_of_parameter_keys("network.tcp"));
+
+    // Test that non-parent keys are not identified as parents
+    EXPECT_FALSE(descriptor.is_parent_of_parameter_keys("network.tcp.enable"));
+    EXPECT_FALSE(descriptor.is_parent_of_parameter_keys("nonexistent"));
+
+    // Test that get_parent_expected_type returns the correct type
+    std::type_index expected_type = descriptor.get_parent_expected_type("network");
+    EXPECT_EQ(expected_type, typeid(std::map<std::string, std::experimental::any>));
+
+    // Test that get_parent_expected_type throws for non-parent keys
+    EXPECT_THROW(descriptor.get_parent_expected_type("network.tcp.enable"), xlio_exception);
+    EXPECT_THROW(descriptor.get_parent_expected_type("nonexistent"), xlio_exception);
 }
