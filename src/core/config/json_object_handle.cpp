@@ -14,7 +14,7 @@ json_object_handle::json_object_handle(json_object *obj)
 json_object_handle::~json_object_handle()
 {
     if (m_obj) {
-        json_object_put(m_obj);
+        doca_third_party_json_object_put(m_obj);
     }
 }
 
