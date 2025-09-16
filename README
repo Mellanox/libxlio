@@ -864,11 +864,11 @@ PROFILES
 profiles.spec
 XLIO predefined specification profiles. Maps to **XLIO_SPEC** environment variable.
 
-latency/sockperf_latency
+latency
     Optimized for use cases that are keen on latency.
     Example: XLIO_SPEC=latency
 
-ultra-latency/sockperf_ultra_latency
+ultra-latency
     Optimized for use cases that are keen on latency even more. This mode uses
     single threaded model, avoids OS polling and progress engine.
     Example: XLIO_SPEC=ultra-latency
