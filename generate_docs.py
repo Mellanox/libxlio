@@ -16,8 +16,8 @@ class DocConstants:
     README_FILE = "README"
     
     # Units for formatting
-    KB = 1024
     MB = 1024 * 1024
+    GB = 1024 * 1024 * 1024
 
 
 class ConfigPropertyParser:
@@ -50,18 +50,18 @@ class ConfigPropertyParser:
             Formatted string representation of the value
         """
         if isinstance(value, bool):
-            return "1 (Enabled)" if value else "0 (Disabled)"
+            return "true" if value else "false"
         elif isinstance(value, int):
             # Format large integers with more readable units
+            if value >= DocConstants.GB and value % DocConstants.GB == 0:
+                return f"{value // DocConstants.GB}GB"
             if value >= DocConstants.MB and value % DocConstants.MB == 0:
-                return f"{value // DocConstants.MB} MB"
-            elif value >= DocConstants.KB and value % DocConstants.KB == 0:
-                return f"{value // DocConstants.KB} KB"
+                return f"{value // DocConstants.MB}MB"
             return str(value)
         elif isinstance(value, str):
             if value.lower() in ["true", "false", "enabled", "disabled"]:
                 return value.lower()
-            return value
+            return value if value != "" else "\"\""
         else:
             return str(value)
 
@@ -114,6 +114,9 @@ class SchemaProcessor:
             
             # Skip if we've already processed this property
             if current_path in self.processed_props:
+                continue
+
+            if prop_name == "additionalProperties":
                 continue
             
             self.processed_props.add(current_path)
@@ -217,7 +220,7 @@ class DocumentationGenerator:
             output += f"{description}\n"
         
         # Add default value if available
-        if default is not None:
+        if default is not None and "Default value is" not in description:
             default_str = ConfigPropertyParser.format_default_value(default)
             output += f"Default value is {default_str}\n"
         
@@ -357,4 +360,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()
