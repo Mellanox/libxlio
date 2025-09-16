@@ -7,6 +7,8 @@
 #ifndef TESTS_GTEST_COMMON_BASE_H_
 #define TESTS_GTEST_COMMON_BASE_H_
 
+#include "src/core/util/sock_addr.h"
+
 #define DO_WHILE0(x)                                                                               \
     do {                                                                                           \
         x                                                                                          \

@@ -6,6 +6,7 @@
 
 #ifndef TESTS_GTEST_TCP_BASE_H_
 #define TESTS_GTEST_TCP_BASE_H_
+#include <time.h>
 #include <linux/errqueue.h>
 #include <linux/if_packet.h>
 
@@ -32,6 +33,17 @@ public:
 protected:
     virtual void SetUp() override { errno = EOK; }
     virtual void TearDown() override {}
+
+    int wait_for_event(int fd, uint32_t expected_events)
+    {
+        struct epoll_event event;
+        event.events = expected_events;
+        event.data.fd = fd;
+        int rc = test_base::event_wait(&event);
+        EXPECT_LT(0, rc);
+        EXPECT_EQ(expected_events, event.events);
+        return rc;
+    }
 
     void peer_wait(int fd)
     {
