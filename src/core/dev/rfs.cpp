@@ -247,7 +247,6 @@ bool rfs::attach_flow(sockinfo *sink)
             if (!create_flow()) {
                 return false;
             }
-            rfs_logdbg("Added secondary rule to worker: %d", g_p_app->get_worker_id());
         }
     } else {
         rfs_logdbg("rfs: Joining existing flow");

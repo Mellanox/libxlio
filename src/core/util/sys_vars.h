@@ -949,9 +949,9 @@ extern mce_sys_var &safe_mce_sys();
 #endif
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
 #define MCE_DEFAULT_APP_WORKERS_NUM (0)
-#define MCE_DEFAULT_SRC_PORT_STRIDE (2)
 #define MCE_DEFAULT_DISTRIBUTE_CQ   (false)
 #endif
+#define MCE_DEFAULT_SRC_PORT_STRIDE              (2)
 #define MCE_DEFAULT_MSS                          (0)
 #define MCE_DEFAULT_LWIP_CC_ALGO_MOD             (0)
 #define MCE_DEFAULT_INTERNAL_THREAD_AFFINITY     (-1)
