@@ -2781,6 +2781,8 @@ void mce_sys_var::configure_network_protocols(const config_registry &registry)
                                       registry);
 
     if (registry.value_exists("core.resources.hugepages.enable")) {
+        // TODO: simulate (mem_alloc_type -> bool) and not as we do it now - (bool ->
+        // mem_alloc_type).
         mem_alloc_type = registry.get_value<bool>("core.resources.hugepages.enable")
             ? option_alloc_type::HUGE
             : option_alloc_type::ANON;
