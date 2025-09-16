@@ -105,6 +105,14 @@ void poll_group::destroy_all_groups()
     }
 }
 
+/*static*/
+void poll_group::fork_nullify()
+{
+    s_poll_groups_lock.lock();
+    s_poll_groups.clear();
+    s_poll_groups_lock.unlock();
+}
+
 int poll_group::update(const struct xlio_poll_group_attr *attr)
 {
     if (m_group_flags != attr->flags) {
