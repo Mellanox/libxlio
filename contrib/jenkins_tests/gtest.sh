@@ -113,6 +113,25 @@ rc=$(($rc+$?))
 eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=ultra_api* --gtest_output=xml:${WORKSPACE}/${prefix}/test-xlio_ultra_api-ipv6.xml"
 rc=$(($rc+$?))
 
+# Worker Threads Mode tests
+
+# Worker Threads Mode test filter
+worker_threads_filter="tcp_listen*:sock_socket.ti_2:tcp_bind*:-tcp_bind.mapped_ipv4_bind:tcp_event*"
+
+eval "${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads.xml"
+rc=$(($rc+$?))
+
+# Worker Threads Mode tests IPv6
+eval "${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-ipv6.xml"
+rc=$(($rc+$?))
+
+# Worker Threads Mode - Power of 2 (2 threads)
+eval "${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=2 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-pow2.xml"
+rc=$(($rc+$?))
+
+# Worker Threads Mode - Non-Power of 2 (3 threads)
+eval "${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=3 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-not-pow2.xml"
+rc=$(($rc+$?))
 
 eval "${sudo_cmd} pkill -9 ${prj_service} 2>/dev/null || true"
 
