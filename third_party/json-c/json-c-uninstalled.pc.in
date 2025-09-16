@@ -3,9 +3,8 @@ exec_prefix=
 libdir=@abs_top_builddir@
 includedir=@abs_top_srcdir@
 
-Name: json
-Description: JSON implementation in C
-Version: @VERSION@
-Requires:
-Libs:  -L@abs_top_builddir@ -ljson-c
-Cflags: -I@abs_top_srcdir@
+Name: json-c
+Description: JSON library in C
+Version: @PACKAGE_VERSION@
+Libs: -L${libdir} -ljson-c
+Cflags: -I${includedir}
