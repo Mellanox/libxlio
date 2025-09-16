@@ -394,6 +394,10 @@ const char *buffer_batching_mode_str(buffer_batching_mode_t buffer_batching_mode
     VLOG_NUM_PARAM_DETAILS(param_val, param_def_val, FORMAT_STRING, param_desc, val_desc_str,      \
                            param_name)
 
+#define VLOG_PARAM_BOOL(param_desc, param_val, param_def_val, param_name)                          \
+    VLOG_NUM_PARAM_DETAILS(param_val, param_def_val, FORMAT_STRING, param_desc,                    \
+                           param_val ? "true" : "false", param_name)
+
 #define VLOG_PARAM_NUMSTR(param_desc, param_val, param_def_val, param_name, val_desc_str)          \
     VLOG_NUM_PARAM_DETAILS(param_val, param_def_val, FORMAT_NUMSTR, param_desc, param_val,         \
                            val_desc_str, param_name)
@@ -451,9 +455,8 @@ void print_xlio_global_settings()
                           NEW_CONFIG_VAR_LOG_LEVEL, log_level::to_str(safe_mce_sys().log_level));
     VLOG_PARAM_NUMBER("Log Details", safe_mce_sys().log_details, MCE_DEFAULT_LOG_DETAILS,
                       NEW_CONFIG_VAR_LOG_DETAILS);
-    VLOG_PARAM_STRING("Log Colors", safe_mce_sys().log_colors, MCE_DEFAULT_LOG_COLORS,
-                      NEW_CONFIG_VAR_LOG_COLORS,
-                      safe_mce_sys().log_colors ? "Enabled " : "Disabled");
+    VLOG_PARAM_BOOL("Log Colors", safe_mce_sys().log_colors, MCE_DEFAULT_LOG_COLORS,
+                    NEW_CONFIG_VAR_LOG_COLORS);
     VLOG_STR_PARAM_STRING("Log File", safe_mce_sys().log_filename, MCE_DEFAULT_LOG_FILE,
                           NEW_CONFIG_VAR_LOG_FILENAME, safe_mce_sys().log_filename);
     VLOG_STR_PARAM_STRING("Stats File", safe_mce_sys().stats_filename, MCE_DEFAULT_STATS_FILE,
@@ -468,21 +471,16 @@ void print_xlio_global_settings()
                       MCE_DEFAULT_STATS_FD_NUM, NEW_CONFIG_VAR_STATS_FD_NUM);
     VLOG_STR_PARAM_STRING("Application ID", safe_mce_sys().app_id, MCE_DEFAULT_APP_ID,
                           NEW_CONFIG_VAR_APPLICATION_ID, safe_mce_sys().app_id);
-    VLOG_PARAM_STRING("Polling CPU idle usage", safe_mce_sys().select_handle_cpu_usage_stats,
-                      MCE_DEFAULT_SELECT_CPU_USAGE_STATS, NEW_CONFIG_VAR_SELECT_CPU_USAGE_STATS,
-                      safe_mce_sys().select_handle_cpu_usage_stats ? "Enabled " : "Disabled");
-    VLOG_PARAM_STRING("SigIntr Ctrl-C Handle", safe_mce_sys().handle_sigintr,
-                      MCE_DEFAULT_HANDLE_SIGINTR, NEW_CONFIG_VAR_HANDLE_SIGINTR,
-                      safe_mce_sys().handle_sigintr ? "Enabled " : "Disabled");
-    VLOG_PARAM_STRING("SegFault Backtrace", safe_mce_sys().handle_segfault,
-                      MCE_DEFAULT_HANDLE_SIGFAULT, NEW_CONFIG_VAR_HANDLE_SIGSEGV,
-                      safe_mce_sys().handle_segfault ? "Enabled " : "Disabled");
-    VLOG_PARAM_STRING("Print a report", safe_mce_sys().print_report, MCE_DEFAULT_PRINT_REPORT,
-                      NEW_CONFIG_VAR_PRINT_REPORT,
-                      safe_mce_sys().print_report ? "Enabled " : "Disabled");
-    VLOG_PARAM_STRING("Quick start", safe_mce_sys().quick_start, MCE_DEFAULT_QUICK_START,
-                      NEW_CONFIG_VAR_QUICK_START,
-                      safe_mce_sys().quick_start ? "Enabled " : "Disabled");
+    VLOG_PARAM_BOOL("Polling CPU idle usage", safe_mce_sys().select_handle_cpu_usage_stats,
+                    MCE_DEFAULT_SELECT_CPU_USAGE_STATS, NEW_CONFIG_VAR_SELECT_CPU_USAGE_STATS);
+    VLOG_PARAM_BOOL("SigIntr Ctrl-C Handle", safe_mce_sys().handle_sigintr,
+                    MCE_DEFAULT_HANDLE_SIGINTR, NEW_CONFIG_VAR_HANDLE_SIGINTR);
+    VLOG_PARAM_BOOL("SegFault Backtrace", safe_mce_sys().handle_segfault,
+                    MCE_DEFAULT_HANDLE_SIGFAULT, NEW_CONFIG_VAR_HANDLE_SIGSEGV);
+    VLOG_PARAM_BOOL("Print a report", safe_mce_sys().print_report, MCE_DEFAULT_PRINT_REPORT,
+                    NEW_CONFIG_VAR_PRINT_REPORT);
+    VLOG_PARAM_BOOL("Quick start", safe_mce_sys().quick_start, MCE_DEFAULT_QUICK_START,
+                    NEW_CONFIG_VAR_QUICK_START);
 
     VLOG_PARAM_NUMSTR("Ring allocation logic TX", safe_mce_sys().ring_allocation_logic_tx,
                       MCE_DEFAULT_RING_ALLOCATION_LOGIC_TX, NEW_CONFIG_VAR_RING_ALLOCATION_LOGIC_TX,
@@ -534,12 +532,10 @@ void print_xlio_global_settings()
                       MCE_DEFAULT_TX_NUM_WRE_TO_SIGNAL, NEW_CONFIG_VAR_TX_NUM_WRE_TO_SIGNAL);
     VLOG_PARAM_NUMBER("Tx Max QP INLINE", safe_mce_sys().tx_max_inline, MCE_DEFAULT_TX_MAX_INLINE,
                       NEW_CONFIG_VAR_TX_MAX_INLINE);
-    VLOG_PARAM_STRING("Tx MC Loopback", safe_mce_sys().tx_mc_loopback_default,
-                      MCE_DEFAULT_TX_MC_LOOPBACK, NEW_CONFIG_VAR_TX_MC_LOOPBACK,
-                      safe_mce_sys().tx_mc_loopback_default ? "Enabled " : "Disabled");
-    VLOG_PARAM_STRING("Tx non-blocked eagains", safe_mce_sys().tx_nonblocked_eagains,
-                      MCE_DEFAULT_TX_NONBLOCKED_EAGAINS, NEW_CONFIG_VAR_TX_NONBLOCKED_EAGAINS,
-                      safe_mce_sys().tx_nonblocked_eagains ? "Enabled " : "Disabled");
+    VLOG_PARAM_BOOL("Tx MC Loopback", safe_mce_sys().tx_mc_loopback_default,
+                    MCE_DEFAULT_TX_MC_LOOPBACK, NEW_CONFIG_VAR_TX_MC_LOOPBACK);
+    VLOG_PARAM_BOOL("Tx non-blocked eagains", safe_mce_sys().tx_nonblocked_eagains,
+                    MCE_DEFAULT_TX_NONBLOCKED_EAGAINS, NEW_CONFIG_VAR_TX_NONBLOCKED_EAGAINS);
     VLOG_PARAM_NUMBER("Tx Prefetch Bytes", safe_mce_sys().tx_prefetch_bytes,
                       MCE_DEFAULT_TX_PREFETCH_BYTES, NEW_CONFIG_VAR_TX_PREFETCH_BYTES);
     VLOG_PARAM_NUMBER("Tx Bufs Batch TCP", safe_mce_sys().tx_bufs_batch_tcp,
@@ -602,27 +598,21 @@ void print_xlio_global_settings()
 
     VLOG_PARAM_NUMBER("GRO max streams", safe_mce_sys().gro_streams_max,
                       MCE_DEFAULT_GRO_STREAMS_MAX, NEW_CONFIG_VAR_GRO_STREAMS_MAX);
-    VLOG_PARAM_NUMBER("Disable flow tag", safe_mce_sys().disable_flow_tag,
-                      MCE_DEFAULT_DISABLE_FLOW_TAG, NEW_CONFIG_VAR_DISABLE_FLOW_TAG);
+    VLOG_PARAM_BOOL("Disable flow tag", safe_mce_sys().disable_flow_tag,
+                    MCE_DEFAULT_DISABLE_FLOW_TAG, NEW_CONFIG_VAR_DISABLE_FLOW_TAG);
 
-    VLOG_PARAM_STRING("TCP 2T rules", safe_mce_sys().tcp_2t_rules, MCE_DEFAULT_TCP_2T_RULES,
-                      NEW_CONFIG_VAR_TCP_2T_RULES,
-                      safe_mce_sys().tcp_2t_rules ? "Enabled " : "Disabled");
-    VLOG_PARAM_STRING("TCP 3T rules", safe_mce_sys().tcp_3t_rules, MCE_DEFAULT_TCP_3T_RULES,
-                      NEW_CONFIG_VAR_TCP_3T_RULES,
-                      safe_mce_sys().tcp_3t_rules ? "Enabled " : "Disabled");
-    VLOG_PARAM_STRING("UDP 3T rules", safe_mce_sys().udp_3t_rules, MCE_DEFAULT_UDP_3T_RULES,
-                      NEW_CONFIG_VAR_UDP_3T_RULES,
-                      safe_mce_sys().udp_3t_rules ? "Enabled " : "Disabled");
-    VLOG_PARAM_STRING("ETH MC L2 only rules", safe_mce_sys().eth_mc_l2_only_rules,
-                      MCE_DEFAULT_ETH_MC_L2_ONLY_RULES, NEW_CONFIG_VAR_ETH_MC_L2_ONLY_RULES,
-                      safe_mce_sys().eth_mc_l2_only_rules ? "Enabled " : "Disabled");
-    VLOG_PARAM_STRING("Force Flowtag for MC", safe_mce_sys().mc_force_flowtag,
-                      MCE_DEFAULT_MC_FORCE_FLOWTAG, NEW_CONFIG_VAR_MC_FORCE_FLOWTAG,
-                      safe_mce_sys().mc_force_flowtag ? "Enabled " : "Disabled");
-    VLOG_STR_PARAM_STRING("Striding RQ", option_3::to_str(safe_mce_sys().enable_strq_env),
-                          option_3::to_str(MCE_DEFAULT_STRQ), NEW_CONFIG_VAR_STRQ,
-                          option_3::to_str(safe_mce_sys().enable_strq_env));
+    VLOG_PARAM_BOOL("TCP 2T rules", safe_mce_sys().tcp_2t_rules, MCE_DEFAULT_TCP_2T_RULES,
+                    NEW_CONFIG_VAR_TCP_2T_RULES);
+    VLOG_PARAM_BOOL("TCP 3T rules", safe_mce_sys().tcp_3t_rules, MCE_DEFAULT_TCP_3T_RULES,
+                    NEW_CONFIG_VAR_TCP_3T_RULES);
+    VLOG_PARAM_BOOL("UDP 3T rules", safe_mce_sys().udp_3t_rules, MCE_DEFAULT_UDP_3T_RULES,
+                    NEW_CONFIG_VAR_UDP_3T_RULES);
+    VLOG_PARAM_BOOL("ETH MC L2 only rules", safe_mce_sys().eth_mc_l2_only_rules,
+                    MCE_DEFAULT_ETH_MC_L2_ONLY_RULES, NEW_CONFIG_VAR_ETH_MC_L2_ONLY_RULES);
+    VLOG_PARAM_BOOL("Force Flowtag for MC", safe_mce_sys().mc_force_flowtag,
+                    MCE_DEFAULT_MC_FORCE_FLOWTAG, NEW_CONFIG_VAR_MC_FORCE_FLOWTAG);
+    VLOG_PARAM_BOOL("Striding RQ", safe_mce_sys().enable_strq_env, MCE_DEFAULT_STRQ,
+                    NEW_CONFIG_VAR_STRQ);
     VLOG_PARAM_NUMBER("STRQ Strides per RWQE", safe_mce_sys().strq_stride_num_per_rwqe,
                       MCE_DEFAULT_STRQ_NUM_STRIDES, NEW_CONFIG_VAR_STRQ_NUM_STRIDES);
     VLOG_PARAM_NUMBER("STRQ Stride Size (Bytes)", safe_mce_sys().strq_stride_size_bytes,
@@ -664,9 +654,8 @@ void print_xlio_global_settings()
                           NEW_CONFIG_VAR_PROGRESS_ENGINE_WCE_MAX);
     }
 
-    VLOG_PARAM_STRING("CQ Interrupts Moderation", safe_mce_sys().cq_moderation_enable,
-                      MCE_DEFAULT_CQ_MODERATION_ENABLE, NEW_CONFIG_VAR_CQ_MODERATION_ENABLE,
-                      safe_mce_sys().cq_moderation_enable ? "Enabled " : "Disabled");
+    VLOG_PARAM_BOOL("CQ Interrupts Moderation", safe_mce_sys().cq_moderation_enable,
+                    MCE_DEFAULT_CQ_MODERATION_ENABLE, NEW_CONFIG_VAR_CQ_MODERATION_ENABLE);
     VLOG_PARAM_NUMBER("CQ Moderation Count", safe_mce_sys().cq_moderation_count,
                       MCE_DEFAULT_CQ_MODERATION_COUNT, NEW_CONFIG_VAR_CQ_MODERATION_COUNT);
     VLOG_PARAM_NUMBER("CQ Moderation Period (usec)", safe_mce_sys().cq_moderation_period_usec,
@@ -689,14 +678,12 @@ void print_xlio_global_settings()
 
     VLOG_PARAM_NUMBER("CQ Poll Batch (max)", safe_mce_sys().cq_poll_batch_max,
                       MCE_DEFAULT_CQ_POLL_BATCH, NEW_CONFIG_VAR_CQ_POLL_BATCH_MAX);
-    VLOG_PARAM_STRING("CQ Keeps QP Full", safe_mce_sys().cq_keep_qp_full,
-                      MCE_DEFAULT_CQ_KEEP_QP_FULL, NEW_CONFIG_VAR_CQ_KEEP_QP_FULL,
-                      safe_mce_sys().cq_keep_qp_full ? "Enabled" : "Disabled");
+    VLOG_PARAM_BOOL("CQ Keeps QP Full", safe_mce_sys().cq_keep_qp_full, MCE_DEFAULT_CQ_KEEP_QP_FULL,
+                    NEW_CONFIG_VAR_CQ_KEEP_QP_FULL);
     VLOG_PARAM_NUMBER("QP Compensation Level", safe_mce_sys().qp_compensation_level,
                       safe_mce_sys().rx_num_wr / 2U, NEW_CONFIG_VAR_QP_COMPENSATION_LEVEL);
-    VLOG_PARAM_STRING("Offloaded Sockets", safe_mce_sys().offloaded_sockets,
-                      MCE_DEFAULT_OFFLOADED_SOCKETS, NEW_CONFIG_VAR_OFFLOADED_SOCKETS,
-                      safe_mce_sys().offloaded_sockets ? "Enabled" : "Disabled");
+    VLOG_PARAM_BOOL("Offloaded Sockets", safe_mce_sys().offloaded_sockets,
+                    MCE_DEFAULT_OFFLOADED_SOCKETS, NEW_CONFIG_VAR_OFFLOADED_SOCKETS);
     VLOG_PARAM_NUMBER("Timer Resolution (msec)", safe_mce_sys().timer_resolution_msec,
                       MCE_DEFAULT_TIMER_RESOLUTION_MSEC, NEW_CONFIG_VAR_TIMER_RESOLUTION_MSEC);
     VLOG_PARAM_NUMBER("TCP Timer Resolution (msec)", safe_mce_sys().tcp_timer_resolution_msec,
@@ -708,23 +695,21 @@ void print_xlio_global_settings()
         option_tcp_ctl_thread::to_str(safe_mce_sys().tcp_ctl_thread));
     VLOG_PARAM_NUMBER("TCP timestamp option", safe_mce_sys().tcp_ts_opt,
                       MCE_DEFAULT_TCP_TIMESTAMP_OPTION, NEW_CONFIG_VAR_TCP_TIMESTAMP_OPTION);
-    VLOG_PARAM_NUMBER("TCP nodelay", safe_mce_sys().tcp_nodelay, MCE_DEFAULT_TCP_NODELAY,
-                      NEW_CONFIG_VAR_TCP_NODELAY);
+    VLOG_PARAM_BOOL("TCP nodelay", safe_mce_sys().tcp_nodelay, MCE_DEFAULT_TCP_NODELAY,
+                    NEW_CONFIG_VAR_TCP_NODELAY);
     VLOG_PARAM_NUMBER("TCP nodelay treshold", safe_mce_sys().tcp_nodelay_treshold,
                       MCE_DEFAULT_TCP_NODELAY_TRESHOLD, NEW_CONFIG_VAR_TCP_NODELAY_TRESHOLD);
-    VLOG_PARAM_NUMBER("TCP quickack", safe_mce_sys().tcp_quickack, MCE_DEFAULT_TCP_QUICKACK,
-                      NEW_CONFIG_VAR_TCP_QUICKACK);
+    VLOG_PARAM_BOOL("TCP quickack", safe_mce_sys().tcp_quickack, MCE_DEFAULT_TCP_QUICKACK,
+                    NEW_CONFIG_VAR_TCP_QUICKACK);
     VLOG_PARAM_NUMSTR(xlio_exception_handling::getName(), (int)safe_mce_sys().exception_handling,
                       xlio_exception_handling::MODE_DEFAULT, xlio_exception_handling::getSysVar(),
                       safe_mce_sys().exception_handling.to_str());
-    VLOG_PARAM_STRING("Avoid sys-calls on tcp fd", safe_mce_sys().avoid_sys_calls_on_tcp_fd,
-                      MCE_DEFAULT_AVOID_SYS_CALLS_ON_TCP_FD,
-                      NEW_CONFIG_VAR_AVOID_SYS_CALLS_ON_TCP_FD,
-                      safe_mce_sys().avoid_sys_calls_on_tcp_fd ? "Enabled" : "Disabled");
-    VLOG_PARAM_STRING("Allow privileged sock opt", safe_mce_sys().allow_privileged_sock_opt,
-                      MCE_DEFAULT_ALLOW_PRIVILEGED_SOCK_OPT,
-                      NEW_CONFIG_VAR_ALLOW_PRIVILEGED_SOCK_OPT,
-                      safe_mce_sys().allow_privileged_sock_opt ? "Enabled" : "Disabled");
+    VLOG_PARAM_BOOL("Avoid sys-calls on tcp fd", safe_mce_sys().avoid_sys_calls_on_tcp_fd,
+                    MCE_DEFAULT_AVOID_SYS_CALLS_ON_TCP_FD,
+                    NEW_CONFIG_VAR_AVOID_SYS_CALLS_ON_TCP_FD);
+    VLOG_PARAM_BOOL("Allow privileged sock opt", safe_mce_sys().allow_privileged_sock_opt,
+                    MCE_DEFAULT_ALLOW_PRIVILEGED_SOCK_OPT,
+                    NEW_CONFIG_VAR_ALLOW_PRIVILEGED_SOCK_OPT);
     VLOG_PARAM_NUMBER("Delay after join (msec)", safe_mce_sys().wait_after_join_msec,
                       MCE_DEFAULT_WAIT_AFTER_JOIN_MSEC, NEW_CONFIG_VAR_WAIT_AFTER_JOIN_MSEC);
     VLOG_STR_PARAM_STRING("Internal Thread Affinity", safe_mce_sys().internal_thread_affinity_str,
@@ -738,9 +723,9 @@ void print_xlio_global_settings()
                       MCE_DEFAULT_BUFFER_BATCHING_MODE, NEW_CONFIG_VAR_BUFFER_BATCHING_MODE,
                       buffer_batching_mode_str(safe_mce_sys().buffer_batching_mode));
     VLOG_PARAM_STRING(
-        "Mem Allocation type", option_alloc_type::to_str(safe_mce_sys().mem_alloc_type),
-        option_alloc_type::to_str(MCE_DEFAULT_MEM_ALLOC_TYPE), NEW_CONFIG_VAR_MEM_ALLOC_TYPE,
-        option_alloc_type::to_str(safe_mce_sys().mem_alloc_type));
+        "Use hugepages", safe_mce_sys().mem_alloc_type, MCE_DEFAULT_MEM_ALLOC_TYPE,
+        NEW_CONFIG_VAR_MEM_ALLOC_TYPE,
+        (safe_mce_sys().mem_alloc_type == option_alloc_type::HUGE) ? "true" : "false");
     VLOG_PARAM_STRING("Memory limit", safe_mce_sys().memory_limit, MCE_DEFAULT_MEMORY_LIMIT,
                       NEW_CONFIG_VAR_MEMORY_LIMIT,
                       option_size::to_str(safe_mce_sys().memory_limit));
@@ -766,12 +751,10 @@ void print_xlio_global_settings()
                           option_3::to_str(MCE_DEFAULT_LRO), NEW_CONFIG_VAR_LRO,
                           option_3::to_str(safe_mce_sys().enable_lro));
 #ifdef DEFINED_UTLS
-    VLOG_PARAM_STRING("UTLS RX support", safe_mce_sys().enable_utls_rx, MCE_DEFAULT_UTLS_RX,
-                      NEW_CONFIG_VAR_UTLS_RX,
-                      safe_mce_sys().enable_utls_rx ? "Enabled " : "Disabled");
-    VLOG_PARAM_STRING("UTLS TX support", safe_mce_sys().enable_utls_tx, MCE_DEFAULT_UTLS_TX,
-                      NEW_CONFIG_VAR_UTLS_TX,
-                      safe_mce_sys().enable_utls_tx ? "Enabled " : "Disabled");
+    VLOG_PARAM_BOOL("UTLS RX support", safe_mce_sys().enable_utls_rx, MCE_DEFAULT_UTLS_RX,
+                    NEW_CONFIG_VAR_UTLS_RX);
+    VLOG_PARAM_BOOL("UTLS TX support", safe_mce_sys().enable_utls_tx, MCE_DEFAULT_UTLS_TX,
+                    NEW_CONFIG_VAR_UTLS_TX);
     VLOG_PARAM_NUMBER("UTLS high watermark DEK cache size",
                       static_cast<uint32_t>(safe_mce_sys().utls_high_wmark_dek_cache_size),
                       MCE_DEFAULT_UTLS_HIGH_WMARK_DEK_CACHE_SIZE,
@@ -803,11 +786,10 @@ void print_xlio_global_settings()
     VLOG_PARAM_NUMBER("Src port stirde", safe_mce_sys().app.src_port_stride,
                       MCE_DEFAULT_SRC_PORT_STRIDE, NEW_CONFIG_VAR_SRC_PORT_STRIDE);
 #endif
-    VLOG_PARAM_STRING("fork() support", safe_mce_sys().handle_fork, MCE_DEFAULT_FORK_SUPPORT,
-                      NEW_CONFIG_VAR_FORK, safe_mce_sys().handle_fork ? "Enabled " : "Disabled");
-    VLOG_PARAM_STRING("close on dup2()", safe_mce_sys().close_on_dup2, MCE_DEFAULT_CLOSE_ON_DUP2,
-                      NEW_CONFIG_VAR_CLOSE_ON_DUP2,
-                      safe_mce_sys().close_on_dup2 ? "Enabled " : "Disabled");
+    VLOG_PARAM_BOOL("fork() support", safe_mce_sys().handle_fork, MCE_DEFAULT_FORK_SUPPORT,
+                    NEW_CONFIG_VAR_FORK);
+    VLOG_PARAM_BOOL("close on dup2()", safe_mce_sys().close_on_dup2, MCE_DEFAULT_CLOSE_ON_DUP2,
+                    NEW_CONFIG_VAR_CLOSE_ON_DUP2);
     switch (safe_mce_sys().mtu) {
     case MTU_FOLLOW_INTERFACE:
         VLOG_PARAM_NUMSTR("MTU", safe_mce_sys().mtu, MCE_DEFAULT_MTU, NEW_CONFIG_VAR_MTU,
@@ -829,27 +811,23 @@ void print_xlio_global_settings()
     VLOG_PARAM_NUMSTR("TCP CC Algorithm", safe_mce_sys().lwip_cc_algo_mod,
                       MCE_DEFAULT_LWIP_CC_ALGO_MOD, NEW_CONFIG_VAR_TCP_CC_ALGO,
                       lwip_cc_algo_str(safe_mce_sys().lwip_cc_algo_mod));
-    VLOG_PARAM_STRING("Deferred close", safe_mce_sys().deferred_close, MCE_DEFAULT_DEFERRED_CLOSE,
-                      NEW_CONFIG_VAR_DEFERRED_CLOSE,
-                      safe_mce_sys().deferred_close ? "Enabled " : "Disabled");
-    VLOG_PARAM_STRING("TCP abort on close", safe_mce_sys().tcp_abort_on_close,
-                      MCE_DEFAULT_TCP_ABORT_ON_CLOSE, NEW_CONFIG_VAR_TCP_ABORT_ON_CLOSE,
-                      safe_mce_sys().tcp_abort_on_close ? "Enabled " : "Disabled");
-    VLOG_PARAM_STRING("Polling Rx on Tx TCP", safe_mce_sys().rx_poll_on_tx_tcp,
-                      MCE_DEFAULT_RX_POLL_ON_TX_TCP, NEW_CONFIG_VAR_RX_POLL_ON_TX_TCP,
-                      safe_mce_sys().rx_poll_on_tx_tcp ? "Enabled " : "Disabled");
-    VLOG_PARAM_STRING("RX CQ wait control", safe_mce_sys().rx_cq_wait_ctrl,
-                      MCE_DEFAULT_RX_CQ_WAIT_CTRL, NEW_CONFIG_VAR_RX_CQ_WAIT_CTRL,
-                      safe_mce_sys().rx_cq_wait_ctrl ? "Enabled " : "Disabled");
+    VLOG_PARAM_BOOL("Deferred close", safe_mce_sys().deferred_close, MCE_DEFAULT_DEFERRED_CLOSE,
+                    NEW_CONFIG_VAR_DEFERRED_CLOSE);
+    VLOG_PARAM_BOOL("TCP abort on close", safe_mce_sys().tcp_abort_on_close,
+                    MCE_DEFAULT_TCP_ABORT_ON_CLOSE, NEW_CONFIG_VAR_TCP_ABORT_ON_CLOSE);
+    VLOG_PARAM_BOOL("Polling Rx on Tx TCP", safe_mce_sys().rx_poll_on_tx_tcp,
+                    MCE_DEFAULT_RX_POLL_ON_TX_TCP, NEW_CONFIG_VAR_RX_POLL_ON_TX_TCP);
+    VLOG_PARAM_BOOL("RX CQ wait control", safe_mce_sys().rx_cq_wait_ctrl,
+                    MCE_DEFAULT_RX_CQ_WAIT_CTRL, NEW_CONFIG_VAR_RX_CQ_WAIT_CTRL);
     VLOG_PARAM_STRING(
         "Skip CQ polling in rx", safe_mce_sys().skip_poll_in_rx, MCE_DEFAULT_SKIP_POLL_IN_RX,
         NEW_CONFIG_VAR_SKIP_POLL_IN_RX,
         safe_mce_sys().skip_poll_in_rx
-            ? (safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_ENABLE ? "Enabled " : "Epoll Only")
-            : "Disabled");
-    VLOG_PARAM_STRING("Lock Type", safe_mce_sys().multilock, MCE_DEFAULT_MULTILOCK,
+            ? (safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_ENABLE ? "true" : "Epoll Only")
+            : "false");
+    VLOG_PARAM_STRING("Mutex over spinlock", safe_mce_sys().multilock, MCE_DEFAULT_MULTILOCK,
                       NEW_CONFIG_VAR_MULTILOCK,
-                      (safe_mce_sys().multilock == MULTILOCK_SPIN ? "Spin " : "Mutex"));
+                      (safe_mce_sys().multilock != MULTILOCK_SPIN) ? "true" : "false");
     VLOG_PARAM_NUMBER("Worker Threads", safe_mce_sys().worker_threads, MCE_DEFAULT_WORKER_THREADS,
                       NEW_CONFIG_VAR_WORKER_THREADS);
     vlog_printf(VLOG_INFO,
