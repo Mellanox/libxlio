@@ -313,10 +313,21 @@
                             "description": "TCP protocol settings.",
                             "properties": {
                                 "wmem": {
-                                    "type": "integer",
-                                    "default": 1048576,
+                                    "oneOf": [
+                                        {
+                                            "type": "integer",
+                                            "minimum": 0,
+                                            "default": 1048576
+                                        },
+                                        {
+                                            "type": "string",
+                                            "default": "1MB",
+                                            "pattern": "^[0-9]+[KMGkmg]?[B]?$"
+                                        }
+                                    ],
                                     "title": "Write buffer size (bytes)",
-                                    "description": "TCP send buffer size of LWIP. Maps to XLIO_TCP_SEND_BUFFER_SIZE environment variable."
+                                    "description": "TCP send buffer size of LWIP. Maps to XLIO_TCP_SEND_BUFFER_SIZE environment variable.",
+                                    "x-memory-size": true
                                 },
                                 "nodelay": {
                                     "type": "object",
@@ -584,11 +595,21 @@
                                     "description": "With Segmentation Offload, or TCP Large Send, TCP can pass a buffer to be transmitted that is bigger than the maximum transmission unit (MTU) supported by the medium. Maps to XLIO_TSO environment variable. Intelligent adapters implement large sends by using the prototype TCP and IP headers of the incoming send buffer to carve out segments of required size. Copying the prototype header and options, then calculating the sequence number and checksum fields creates TCP segment headers. Expected benefits: Throughput increase and CPU unload.\nDefault value: auto\n\nauto\n    Depends on ethtool setting and adapter ability.\n    See ethtool -k <eth0> | grep tcp-segmentation-offload\non\n    Enabled in case adapter supports it\noff\n    Disabled"
                                 },
                                 "max_size": {
-                                    "type": "integer",
-                                    "default": 262144,
-                                    "minimum": 1,
+                                    "oneOf": [
+                                        {
+                                            "type": "integer",
+                                            "default": 262144,
+                                            "minimum": 1
+                                        },
+                                        {
+                                            "type": "string",
+                                            "default": "256KB",
+                                            "pattern": "^[0-9]+[KMGkmg]?[B]?$"
+                                        }
+                                    ],
                                     "title": "Maximum TSO size",
-                                    "description": "Maximum size in bytes of a TCP segment that can be transmitted with TSO. Maps to XLIO_TSO_MAX_SIZE environment variable."
+                                    "description": "Maximum size in bytes of a TCP segment that can be transmitted with TSO. Maps to XLIO_TSO_MAX_SIZE environment variable.",
+                                    "x-memory-size": true
                                 }
                             },
                             "additionalProperties": false
@@ -1144,12 +1165,22 @@
                             "description": "Transmit buffer settings.",
                             "properties": {
                                 "buf_size": {
-                                    "type": "integer",
-                                    "default": 0,
-                                    "minimum": 0,
-                                    "maximum": 262144,
+                                    "oneOf": [
+                                        {
+                                            "type": "integer",
+                                            "default": 0,
+                                            "minimum": 0,
+                                            "maximum": 262144
+                                        },
+                                        {
+                                            "type": "string",
+                                            "default": "0B",
+                                            "pattern": "^[0-9]+[KMGkmg]?[B]?$"
+                                        }
+                                    ],
                                     "title": "TX buffer size",
-                                    "description": "Size of Tx data buffer elements allocation. Cannot be less than MTU (Maximum Transfer Unit) and greater than 256KB. Default value is calculated based on MTU and MSS. Maps to XLIO_TX_BUF_SIZE environment variable."
+                                    "description": "Size of Tx data buffer elements allocation. Cannot be less than MTU (Maximum Transfer Unit) and greater than 256KB. Default value is calculated based on MTU and MSS. Maps to XLIO_TX_BUF_SIZE environment variable.",
+                                    "x-memory-size": true
                                 },
                                 "global_array_size": {
                                     "type": "integer",
@@ -1172,12 +1203,22 @@
                             "description": "Receive buffer settings.",
                             "properties": {
                                 "buf_size": {
-                                    "type": "integer",
-                                    "default": 0,
-                                    "minimum": 0,
-                                    "maximum": 65280,
+                                    "oneOf": [
+                                        {
+                                            "type": "integer",
+                                            "default": 0,
+                                            "minimum": 0,
+                                            "maximum": 65280
+                                        },
+                                        {
+                                            "type": "string",
+                                            "default": "0B",
+                                            "pattern": "^[0-9]+[KMGkmg]?[B]?$"
+                                        }
+                                    ],
                                     "title": "RX buffer size",
-                                    "description": "Size of Rx data buffer elements allocation. Cannot be less than MTU (Maximum Transfer Unit) and greater than 0xFF00. Default value is calculated based on maximum MTU. Maps to XLIO_RX_BUF_SIZE environment variable."
+                                    "description": "Size of Rx data buffer elements allocation. Cannot be less than MTU (Maximum Transfer Unit) and greater than 0xFF00. Default value is calculated based on maximum MTU. Maps to XLIO_RX_BUF_SIZE environment variable.",
+                                    "x-memory-size": true
                                 },
                                 "prefetch_size": {
                                     "type": "integer",
