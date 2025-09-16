@@ -108,21 +108,29 @@ typedef struct {
     const char **input_names;
 } xlio_spec_names;
 
-static const char *names_none[] = {"none", nullptr};
-static const char *spec_names_ulatency[] = {"ultra-latency", nullptr};
-static const char *spec_names_latency[] = {"latency", nullptr};
-static const char *spec_names_nginx[] = {"nginx", nullptr};
-static const char *spec_names_nginx_dpu[] = {"nginx_dpu", nullptr};
-static const char *spec_names_nvme_bf3[] = {"nvme_bf3", nullptr};
+// String constants to avoid duplication
+static const char *const STR_NONE = "none";
+static const char *const STR_ULTRA_LATENCY = "ultra-latency";
+static const char *const STR_LATENCY = "latency";
+static const char *const STR_NGINX = "nginx";
+static const char *const STR_NGINX_DPU = "nginx_dpu";
+static const char *const STR_NVME_BF3 = "nvme_bf3";
+
+static const char *names_none[] = {STR_NONE, nullptr};
+static const char *spec_names_ulatency[] = {STR_ULTRA_LATENCY, nullptr};
+static const char *spec_names_latency[] = {STR_LATENCY, nullptr};
+static const char *spec_names_nginx[] = {STR_NGINX, nullptr};
+static const char *spec_names_nginx_dpu[] = {STR_NGINX_DPU, nullptr};
+static const char *spec_names_nvme_bf3[] = {STR_NVME_BF3, nullptr};
 
 // must be by order because "to_str" relies on that!
 static const xlio_spec_names specs[] = {
-    {MCE_SPEC_NONE, "NONE", (const char **)names_none},
-    {MCE_SPEC_SOCKPERF_ULTRA_LATENCY, "Ultra Latency", (const char **)spec_names_ulatency},
-    {MCE_SPEC_SOCKPERF_LATENCY, "Latency", (const char **)spec_names_latency},
-    {MCE_SPEC_NGINX, "Nginx Profile", (const char **)spec_names_nginx},
-    {MCE_SPEC_NGINX_DPU, "Nginx Profile for DPU", (const char **)spec_names_nginx_dpu},
-    {MCE_SPEC_NVME_BF3, "NVMEoTCP Profile for BF3", (const char **)spec_names_nvme_bf3}};
+    {MCE_SPEC_NONE, STR_NONE, (const char **)names_none},
+    {MCE_SPEC_ULTRA_LATENCY, STR_ULTRA_LATENCY, (const char **)spec_names_ulatency},
+    {MCE_SPEC_LATENCY, STR_LATENCY, (const char **)spec_names_latency},
+    {MCE_SPEC_NGINX, STR_NGINX, (const char **)spec_names_nginx},
+    {MCE_SPEC_NGINX_DPU, STR_NGINX_DPU, (const char **)spec_names_nginx_dpu},
+    {MCE_SPEC_NVME_BF3, STR_NVME_BF3, (const char **)spec_names_nvme_bf3}};
 
 // convert str to _spec_t; upon error - returns the given 'def_value'
 xlio_spec_t from_str(const char *str, xlio_spec_t def_value)
@@ -960,7 +968,7 @@ void mce_sys_var::legacy_get_env_params()
 #endif /* DEFINED_ENVOY */
 
     switch (mce_spec) {
-    case MCE_SPEC_SOCKPERF_ULTRA_LATENCY:
+    case MCE_SPEC_ULTRA_LATENCY:
         memory_limit = 128LU * 1024 * 1024;
         tx_num_wr = 256;
         tx_num_wr_to_signal = 4;
@@ -992,7 +1000,7 @@ void mce_sys_var::legacy_get_env_params()
         }
         break;
 
-    case MCE_SPEC_SOCKPERF_LATENCY:
+    case MCE_SPEC_LATENCY:
         tx_num_wr = 256;
         tx_num_wr_to_signal = 4;
         tx_bufs_batch_udp = 1;
@@ -2140,12 +2148,12 @@ void mce_sys_var::detect_application_profile(const config_registry &registry)
 void mce_sys_var::apply_spec_profile_optimizations()
 {
     switch (mce_spec) {
-    case MCE_SPEC_SOCKPERF_ULTRA_LATENCY:
-        apply_sockperf_ultra_latency_profile();
+    case MCE_SPEC_ULTRA_LATENCY:
+        apply_ultra_latency_profile();
         break;
 
-    case MCE_SPEC_SOCKPERF_LATENCY:
-        apply_sockperf_latency_profile();
+    case MCE_SPEC_LATENCY:
+        apply_latency_profile();
         break;
 
 #ifdef DEFINED_NGINX
@@ -2165,7 +2173,7 @@ void mce_sys_var::apply_spec_profile_optimizations()
     }
 }
 
-void mce_sys_var::apply_sockperf_ultra_latency_profile()
+void mce_sys_var::apply_ultra_latency_profile()
 {
     memory_limit = 128LU * 1024 * 1024;
     tx_num_wr = 256;
@@ -2198,7 +2206,7 @@ void mce_sys_var::apply_sockperf_ultra_latency_profile()
     }
 }
 
-void mce_sys_var::apply_sockperf_latency_profile()
+void mce_sys_var::apply_latency_profile()
 {
     tx_num_wr = 256;
     tx_num_wr_to_signal = 4;

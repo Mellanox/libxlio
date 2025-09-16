@@ -1471,8 +1471,8 @@
                             "type": "string",
                             "enum": [
                                 "none",
-                                "sockperf_ultra_latency",
-                                "sockperf_latency",
+                                "ultra_latency",
+                                "latency",
                                 "nginx",
                                 "nginx_dpu",
                                 "nvme_bf3",
@@ -1482,7 +1482,7 @@
                         }
                     ],
                     "title": "Application spec profile",
-                    "description": "XLIO predefined specification profiles. Maps to XLIO_SPEC environment variable.\n\nlatency/sockperf_latency\n    Optimized for use cases that are keen on latency.\n    Example: XLIO_SPEC=latency\n\nultra-latency/sockperf_ultra_latency\n    Optimized for use cases that are keen on latency even more. This mode uses\n    single threaded model, avoids OS polling and progress engine.\n    Example: XLIO_SPEC=ultra-latency\n\nnginx\n    Optimized for nginx. This profile must be used to offload nginx. This profile\n    is turned indirectly by setting:\n    XLIO_NGINX_WORKERS_NUM=<N> where N is the number of nginx workers.\n\nnginx_dpu\n    Optimized for nginx running inside NVIDIA DPU.\n    Example: XLIO_SPEC=nginx_dpu XLIO_NGINX_WORKERS_NUM=<N>\n\nnvme_bf3\n    Optimized for SPDK solution over NVIDIA DPU BF3\n    Example: XLIO_SPEC=nvme_bf3"
+                    "description": "XLIO predefined specification profiles. Maps to XLIO_SPEC environment variable.\n\nlatency\n    Optimized for use cases that are keen on latency.\n    Example: XLIO_SPEC=latency\n\nultra-latency\n    Optimized for use cases that are keen on latency even more. This mode uses\n    single threaded model, avoids OS polling and progress engine.\n    Example: XLIO_SPEC=ultra-latency\n\nnginx\n    Optimized for nginx. This profile must be used to offload nginx. This profile\n    is turned indirectly by setting:\n    XLIO_NGINX_WORKERS_NUM=<N> where N is the number of nginx workers.\n\nnginx_dpu\n    Optimized for nginx running inside NVIDIA DPU.\n    Example: XLIO_SPEC=nginx_dpu XLIO_NGINX_WORKERS_NUM=<N>\n\nnvme_bf3\n    Optimized for SPDK solution over NVIDIA DPU BF3\n    Example: XLIO_SPEC=nvme_bf3"
                 }
             },
             "additionalProperties": false

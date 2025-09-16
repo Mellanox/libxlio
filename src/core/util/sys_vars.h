@@ -23,8 +23,8 @@
 
 typedef enum {
     MCE_SPEC_NONE = 0,
-    MCE_SPEC_SOCKPERF_ULTRA_LATENCY,
-    MCE_SPEC_SOCKPERF_LATENCY,
+    MCE_SPEC_ULTRA_LATENCY,
+    MCE_SPEC_LATENCY,
     MCE_SPEC_NGINX,
     MCE_SPEC_NGINX_DPU,
     MCE_SPEC_NVME_BF3,
@@ -476,8 +476,8 @@ private:
     void configure_running_mode(const config_registry &registry);
     void detect_application_profile(const config_registry &registry);
     void apply_spec_profile_optimizations();
-    void apply_sockperf_ultra_latency_profile();
-    void apply_sockperf_latency_profile();
+    void apply_ultra_latency_profile();
+    void apply_latency_profile();
     void apply_nginx_profile();
     void apply_nvme_bf3_profile();
     void configure_monitor(const config_registry &registry);
