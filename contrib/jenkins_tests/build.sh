@@ -29,7 +29,7 @@ for build_name in "${!build_list[@]}"; do
     build_option="${build_list[$build_name]}"
     mkdir -p ${build_dir}/${test_id}
     cd ${build_dir}/${test_id}
-    test_exec='${WORKSPACE}/configure --prefix=${build_dir}/${test_id}/install $build_option $jenkins_test_custom_configure && make $make_opt install'
+    test_exec="${WORKSPACE}/configure --prefix=${build_dir}/${test_id}/install $build_option $jenkins_test_custom_configure && make $make_opt install"
     do_check_result "$test_exec" "$test_id" "$build_name" "$build_tap" "${build_dir}/build-${test_id}"
     cd ${build_dir}
     test_id=$((test_id+1))
