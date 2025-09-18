@@ -565,9 +565,9 @@ void print_xlio_global_settings()
         VLOG_PARAM_NUMBER("Rx UDP Poll OS Ratio", safe_mce_sys().rx_udp_poll_os_ratio,
                           MCE_DEFAULT_RX_UDP_POLL_OS_RATIO, NEW_CONFIG_VAR_RX_UDP_POLL_OS_RATIO);
     } else {
-        VLOG_PARAM_STRING("Rx UDP Poll OS Ratio", safe_mce_sys().rx_udp_poll_os_ratio,
+        VLOG_PARAM_NUMSTR("Rx UDP Poll OS Ratio", safe_mce_sys().rx_udp_poll_os_ratio,
                           MCE_DEFAULT_RX_UDP_POLL_OS_RATIO, NEW_CONFIG_VAR_RX_UDP_POLL_OS_RATIO,
-                          "Disabled");
+                          "(Disabled)");
     }
 
     VLOG_PARAM_NUMBER("HW TS Conversion", safe_mce_sys().hw_ts_conversion_mode,
@@ -628,22 +628,23 @@ void print_xlio_global_settings()
         VLOG_PARAM_NUMBER("Select Poll OS Ratio", safe_mce_sys().select_poll_os_ratio,
                           MCE_DEFAULT_SELECT_POLL_OS_RATIO, NEW_CONFIG_VAR_SELECT_POLL_OS_RATIO);
     } else {
-        VLOG_PARAM_STRING("Select Poll OS Ratio", safe_mce_sys().select_poll_os_ratio,
+        VLOG_PARAM_NUMSTR("Select Poll OS Ratio", safe_mce_sys().select_poll_os_ratio,
                           MCE_DEFAULT_SELECT_POLL_OS_RATIO, NEW_CONFIG_VAR_SELECT_POLL_OS_RATIO,
-                          "Disabled");
+                          "(Disabled)");
     }
 
     if (safe_mce_sys().select_skip_os_fd_check) {
         VLOG_PARAM_NUMBER("Select Skip OS", safe_mce_sys().select_skip_os_fd_check,
                           MCE_DEFAULT_SELECT_SKIP_OS, NEW_CONFIG_VAR_SELECT_SKIP_OS);
     } else {
-        VLOG_PARAM_STRING("Select Skip OS", safe_mce_sys().select_skip_os_fd_check,
-                          MCE_DEFAULT_SELECT_SKIP_OS, NEW_CONFIG_VAR_SELECT_SKIP_OS, "Disabled");
+        VLOG_PARAM_NUMSTR("Select Skip OS", safe_mce_sys().select_skip_os_fd_check,
+                          MCE_DEFAULT_SELECT_SKIP_OS, NEW_CONFIG_VAR_SELECT_SKIP_OS, "(Disabled)");
     }
 
     if (safe_mce_sys().progress_engine_interval_msec == MCE_CQ_DRAIN_INTERVAL_DISABLED ||
         safe_mce_sys().progress_engine_wce_max == 0) {
-        vlog_printf(VLOG_INFO, FORMAT_STRING, "CQ Drain Thread", "Disabled",
+        vlog_printf(VLOG_INFO, FORMAT_NUMSTR, "CQ Drain Interval (msec)",
+                    safe_mce_sys().progress_engine_interval_msec, "(Disabled)",
                     NEW_CONFIG_VAR_PROGRESS_ENGINE_INTERVAL);
     } else {
         VLOG_PARAM_NUMBER("CQ Drain Interval (msec)", safe_mce_sys().progress_engine_interval_msec,
