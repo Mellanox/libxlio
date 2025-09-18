@@ -791,7 +791,7 @@
                                 },
                                 "udp_buffer_batch": {
                                     "type": "integer",
-                                    "default": 16,
+                                    "default": 8,
                                     "minimum": 1,
                                     "title": "TX buffer batch size",
                                     "description": "Number of TX buffers fetched by a UDP socket at once. Maps to TX_BUFS_BATCH_UDP environment variable."
@@ -848,14 +848,14 @@
                                 },
                                 "ring_elements_count": {
                                     "type": "integer",
-                                    "default": 16000,
+                                    "default": 32768,
                                     "minimum": 0,
                                     "title": "RX WRE global array size",
                                     "description": "Number of Work Request Elements allocated in all RQs. Maps to XLIO_RX_WRE environment variable. "
                                 },
                                 "spare_buffers": {
                                     "type": "integer",
-                                    "default": 64,
+                                    "default": 32768,
                                     "title": "Spare RX buffers",
                                     "description": "Number of spare receive buffer a ring holds to allow for filling up QP while full receive buffers are being processed inside XLIO. Maps to XLIO_QP_COMPENSATION_LEVEL environment variable.\nDefault value is XLIO_RX_WRE / 2"
                                 },
@@ -1256,7 +1256,7 @@
                                 },
                                 "pool_batch_size": {
                                     "type": "integer",
-                                    "default": 1024,
+                                    "default": 16384,
                                     "minimum": 1,
                                     "title": "Pool segment batch size",
                                     "description": "Number of TCP segments batched when fetched from the segments pool. Maps to XLIO_TX_SEGS_POOL_BATCH_TCP environment variable. Min value is 1"
