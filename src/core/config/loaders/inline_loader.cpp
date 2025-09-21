@@ -7,7 +7,6 @@
 #include "inline_loader.h"
 #include "core/config/config_strings.h"
 #include "core/util/xlio_exception.h"
-
 #include <algorithm>
 #include <sstream>
 #include <vector>
@@ -40,6 +39,29 @@ std::map<std::string, std::experimental::any> inline_loader::load_all() &
     return m_data;
 }
 
+bool inline_loader::check_unsupported_key_value_pair(const std::string &key,
+                                                     const std::string &val) const
+{
+    // CPU affinity values may contain commas, which conflict with the inline format.
+    // Hence - only hex values are supported for this parameter.
+    if (key != "performance.threading.cpu_affinity") {
+        return false;
+    }
+
+    // Only allow hexadecimal values (e.g., "0xCAFECAFE")
+    if (val.size() >= 3 && val[0] == '0' && (val[1] == 'x' || val[1] == 'X')) {
+        // Check that all remaining characters are valid hex digits
+        for (size_t i = 2; i < val.size(); ++i) {
+            if (!isxdigit(val[i])) {
+                return true; // Not a valid hex number, so unsupported
+            }
+        }
+        return false;
+    }
+
+    return true; // Not a hex value, so unsupported
+}
+
 void inline_loader::parse_inline_data()
 {
     std::vector<std::string> pairs = split(m_inline_config, ',');
@@ -61,6 +83,12 @@ void inline_loader::parse_inline_data()
         // If either the key is empty, it's invalid
         if (trimmed_kv.empty()) {
             throw_xlio_exception("Empty key found in pair: " + kv);
+        }
+
+        // Check for unsupported parameters
+        if (check_unsupported_key_value_pair(key, val)) {
+            throw_xlio_exception("Value not supported in inline config: " + key +
+                                 ".\nSee description for supported values.");
         }
 
         // Attempt to parse the value as bool/int, otherwise store string
