@@ -1,5 +1,6 @@
 #!/bin/bash -eExl
 
+ulimit -n 50000
 source $(dirname $0)/globals.sh
 
 # Fix hugepages for docker environments
@@ -42,6 +43,7 @@ fi
 
 test_list="tcp-pp tcp-tp tcp-ul"
 test_lib=$install_dir/lib/${prj_lib}
+WORKER_THREADS=${WORKER_THREADS:-"false"}
 
 if [[ -f /.dockerenv ]] || [[ -f /run/.containerenv ]] || [[ -n "${KUBERNETES_SERVICE_HOST}" ]]; then
 	test_ip_list_v4=$(ip -f inet addr show net1 | awk '/inet / {print $2}' | cut -d/ -f1)
@@ -70,6 +72,15 @@ fi
 
 nerrors=0
 
+# Enable params based on the mode choice - given by WORKER_THREADS variable
+if [[ "$WORKER_THREADS" = "true" ]]; then
+	echo "Testing mode: Worker Threads"
+	test_params='-x "--nonblocked" -e "XLIO_WORKER_THREADS=2"'
+else
+	echo "Testing mode: R2C"
+	test_params='-x "--debug" '
+fi
+
 for test_link in ${test_ip_list}; do
 	for test in ${test_list}; do
 		IFS=':' read test_in test_ip <<< "$test_link"
@@ -79,9 +90,8 @@ for test_link in ${test_ip_list}; do
 		for i in $(seq 3); do
 			rm -fv ${test_dir}/${test_name}.log ${test_dir}/${test_name}.dump || :
 			set +e
-			${sudo_cmd} ${timeout_exe} ${PWD}/tests/verifier/verifier.pl -a ${test_app} -x " --debug  " \
-				-t ${test}:tc[1-9]$ -s ${test_ip} -l ${test_dir}/${test_name}.log \
-				-e " LD_PRELOAD=${test_lib} " --progress=0
+			${sudo_cmd} ${timeout_exe} ${PWD}/tests/verifier/verifier.pl ${test_params} -e "LD_PRELOAD=${test_lib}" \
+				-a ${test_app} -t ${test}:tc[1-9]$ -s ${test_ip} -l ${test_dir}/${test_name}.log --progress=0
 			# make sure to catch the error
 			ret=$?
 			set -e
