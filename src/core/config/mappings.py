@@ -66,7 +66,6 @@ config_mapping = {
     "performance.buffers.tcp_segments.ring_batch_size": "XLIO_TX_SEGS_RING_BATCH_TCP",
     "performance.buffers.tcp_segments.socket_batch_size": "XLIO_TX_SEGS_BATCH_TCP",
     "performance.buffers.tx.buf_size": "XLIO_TX_BUF_SIZE",
-    "performance.buffers.tx.global_array_size": "XLIO_TX_BUFS",
     "performance.buffers.tx.prefetch_size": "XLIO_TX_PREFETCH_BYTES",
     "performance.completion_queue.interrupt_moderation.adaptive_change_frequency_msec": "XLIO_CQ_AIM_INTERVAL_MSEC",
     "performance.completion_queue.interrupt_moderation.adaptive_count": "XLIO_CQ_AIM_MAX_COUNT",
