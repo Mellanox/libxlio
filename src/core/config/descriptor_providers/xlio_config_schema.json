@@ -1176,13 +1176,6 @@
                                     "description": "Size of Tx data buffer elements allocation. Cannot be less than MTU (Maximum Transfer Unit) and greater than 256KB. Default value is calculated based on MTU and MSS. Maps to XLIO_TX_BUF_SIZE environment variable.",
                                     "x-memory-size": true
                                 },
-                                "global_array_size": {
-                                    "type": "integer",
-                                    "default": 200000,
-                                    "minimum": 0,
-                                    "title": "Global TX buffer array size",
-                                    "description": "Number of global zerocopy data buffer elements allocation. Maps to XLIO_TX_BUFS environment variable. Controls how many buffers are pre-allocated for TX operations."
-                                },
                                 "prefetch_size": {
                                     "type": "integer",
                                     "default": 256,

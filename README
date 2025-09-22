@@ -588,10 +588,6 @@ performance.buffers.tx.buf_size
 Size of Tx data buffer elements allocation. Cannot be less than MTU (Maximum Transfer Unit) and greater than 256KB. Default value is calculated based on MTU and MSS. Maps to **XLIO_TX_BUF_SIZE** environment variable.
 Default value is 0
 
-performance.buffers.tx.global_array_size
-Number of global zerocopy data buffer elements allocation. Maps to **XLIO_TX_BUFS** environment variable. Controls how many buffers are pre-allocated for TX operations.
-Default value is 200000
-
 performance.buffers.tx.prefetch_size
 Accelerate offloaded send operation by optimizing cache. Maps to **XLIO_TX_PREFETCH_BYTES** environment variable. Different values give optimized send rate on different machines. We recommend you tune this for your specific hardware.
 Value range is 0 to MTU size
