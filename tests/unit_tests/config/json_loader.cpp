@@ -170,6 +170,110 @@ TEST(config, json_loader_array_simple)
     ASSERT_EQ(true, std::experimental::any_cast<bool>(bool_array[2]));
 }
 
+// Test for dot validation - prevents keys with dots in JSON
+TEST(config, json_loader_rejects_keys_with_dots)
+{
+    // Test Method A from the ticket - should be rejected
+    conf_file_writer json_config(R"({
+        "core": {
+            "resources.memory_limit": "50GB"
+        }
+    })");
+
+    json_loader loader(json_config.get());
+    ASSERT_THROW(loader.load_all(), xlio_exception);
+}
+
+// Test that proper nested structure (Method B) still works
+TEST(config, json_loader_accepts_proper_nested_structure)
+{
+    // Test Method B from the ticket - should work correctly
+    conf_file_writer json_config(R"({
+        "core": {
+            "resources": {
+                "memory_limit": "50GB"
+            }
+        }
+    })");
+
+    json_loader loader(json_config.get());
+    std::map<std::string, std::experimental::any> data = loader.load_all();
+
+    ASSERT_EQ("50GB",
+              std::experimental::any_cast<std::string>(data["core.resources.memory_limit"]));
+}
+
+// Test various edge cases for dot validation
+TEST(config, json_loader_dot_validation_edge_cases)
+{
+    // Test key with multiple dots
+    {
+        conf_file_writer json_config(R"({
+            "core": {
+                "a.b.c": "value"
+            }
+        })");
+        json_loader loader(json_config.get());
+        ASSERT_THROW(loader.load_all(), xlio_exception);
+    }
+
+    // Test key starting with dot
+    {
+        conf_file_writer json_config(R"({
+            "core": {
+                ".hidden": "value"
+            }
+        })");
+        json_loader loader(json_config.get());
+        ASSERT_THROW(loader.load_all(), xlio_exception);
+    }
+
+    // Test key ending with dot
+    {
+        conf_file_writer json_config(R"({
+            "core": {
+                "suffix.": "value"
+            }
+        })");
+        json_loader loader(json_config.get());
+        ASSERT_THROW(loader.load_all(), xlio_exception);
+    }
+
+    // Test key with only dots
+    {
+        conf_file_writer json_config(R"({
+            "core": {
+                "...": "value"
+            }
+        })");
+        json_loader loader(json_config.get());
+        ASSERT_THROW(loader.load_all(), xlio_exception);
+    }
+}
+
+// Test that valid keys without dots still work
+TEST(config, json_loader_valid_keys_without_dots)
+{
+    conf_file_writer json_config(R"({
+        "core": {
+            "log_level": 2,
+            "memory_limit": "1GB",
+            "enable_feature": true,
+            "nested": {
+                "value": "test"
+            }
+        }
+    })");
+
+    json_loader loader(json_config.get());
+    std::map<std::string, std::experimental::any> data = loader.load_all();
+
+    ASSERT_EQ(2, std::experimental::any_cast<int64_t>(data["core.log_level"]));
+    ASSERT_EQ("1GB", std::experimental::any_cast<std::string>(data["core.memory_limit"]));
+    ASSERT_EQ(true, std::experimental::any_cast<bool>(data["core.enable_feature"]));
+    ASSERT_EQ("test", std::experimental::any_cast<std::string>(data["core.nested.value"]));
+}
+
 TEST(config, json_loader_array_of_objects)
 {
     conf_file_writer json_config(R"({

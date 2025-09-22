@@ -45,7 +45,13 @@ void json_loader::process_json_object(const std::string &prefix, json_object *ob
 {
     json_object_object_foreach(obj, key, value)
     {
-        std::string current_key = prefix.empty() ? key : (prefix + config_strings::misc::DOT + key);
+        std::string key_str(key);
+        if (key_str.find('.') != std::string::npos) {
+            throw_xlio_exception("Key cannot contain dots: " + key_str);
+        }
+
+        std::string current_key =
+            prefix.empty() ? std::move(key_str) : (prefix + config_strings::misc::DOT + key_str);
 
         json_type type = json_object_get_type(value);
         if (type == json_type_object) {
