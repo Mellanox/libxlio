@@ -72,12 +72,11 @@ public:
     parameter_descriptor(const parameter_descriptor &pd);
 
     /**
-     * @brief Adds a string-to-value mapping
-     * @param str String representation
-     * @param val Value to map to
-     * @throws xlio_exception If mapping already exists
+     * @brief Sets string-to-value mappings
+     * @param mappings Map of string-to-value mappings
+     * @throws xlio_exception If double-mapping is detected
      */
-    void add_string_mapping(const std::string &str, const std::experimental::any &val);
+    void set_string_mappings(const std::map<std::string, int64_t> &mappings);
 
     /**
      * @brief Sets a value transformer function

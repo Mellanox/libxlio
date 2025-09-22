@@ -154,14 +154,14 @@ parameter_descriptor::parameter_descriptor(const parameter_descriptor &pd)
 {
 }
 
-void parameter_descriptor::add_string_mapping(const std::string &str,
-                                              const std::experimental::any &val)
+void parameter_descriptor::set_string_mappings(const std::map<std::string, int64_t> &mappings)
 {
-    if (m_string_mapping.find(str) != m_string_mapping.end()) {
-        throw_xlio_exception("String mapping already exists for value: " + str);
+    for (const auto &mapping : mappings) {
+        if (m_string_mapping.find(mapping.first) != m_string_mapping.end()) {
+            throw_xlio_exception("String mapping already exists for value: " + mapping.first);
+        }
+        m_string_mapping[mapping.first] = std::experimental::any(mapping.second);
     }
-
-    m_string_mapping[str] = val;
 }
 
 void parameter_descriptor::set_value_transformer(value_transformer_t transformer)

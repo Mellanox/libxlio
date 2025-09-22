@@ -92,8 +92,7 @@ private:
     static void apply_value_transformation(parameter_descriptor *descriptor);
 
     static void apply_enum_mapping(parameter_descriptor *descriptor,
-                                   const enum_mapping_config &config);
-
+                                   const enum_mapping_config_t &config);
     /**
      * @brief Processes an object property (nested object)
      * @param property_obj JSON property object

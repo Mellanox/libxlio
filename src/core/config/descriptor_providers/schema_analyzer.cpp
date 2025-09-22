@@ -10,6 +10,7 @@
 #include "core/util/xlio_exception.h"
 #include <stdexcept>
 #include <functional>
+#include <algorithm>
 
 static void for_each_oneof_option(json_object *one_of_field,
                                   std::function<void(json_object *)> func)
@@ -34,27 +35,8 @@ schema_analyzer::analysis_result schema_analyzer::analyze(json_object *property_
 
     schema_analyzer analyzer(property_obj, path);
 
-    analysis_result result;
+    analysis_result result(analyzer);
 
-    // Core analysis
-    result.json_property_type = analyzer.determine_property_type();
-    result.value_type = analyzer.determine_value_type();
-    if (result.json_property_type != property_type::OBJECT) {
-        result.default_value = analyzer.determine_default_value(result.value_type);
-    }
-
-    // Component configuration analysis
-    result.memory_cfg = analyzer.analyze_memory_size_extension_config();
-    result.constraint_cfg = analyzer.analyze_constraint_config();
-    result.enum_cfg = analyzer.analyze_enum_mapping_config();
-
-    // Set component applicability flags
-    result.needs_value_transformation = result.memory_cfg.enabled;
-    result.needs_constraint_validation = result.constraint_cfg.has_minimum ||
-        result.constraint_cfg.has_maximum || result.constraint_cfg.has_enum ||
-        result.constraint_cfg.has_power_of_2_or_zero;
-    result.needs_enum_mapping = result.enum_cfg.enabled;
-    // coverity[uninit_use_in_call]
     return result;
 }
 
@@ -157,8 +139,14 @@ std::type_index schema_analyzer::determine_value_type()
     throw_xlio_exception("Unsupported type: " + type_str + " for key: " + m_path);
 }
 
-std::experimental::any schema_analyzer::determine_default_value(std::type_index type)
+std::experimental::optional<std::experimental::any> schema_analyzer::determine_default_value(
+    std::type_index type)
 {
+    // Object type doesn't have a default value
+    if (type == typeid(json_object *)) {
+        return std::experimental::nullopt;
+    }
+
     // Check for oneOf first - default values are nested inside oneOf options
     json_object *one_of_field =
         json_utils::try_get_field(m_property_obj, config_strings::schema::JSON_ONE_OF);
@@ -173,23 +161,22 @@ std::experimental::any schema_analyzer::determine_default_value(std::type_index 
     return json_utils::to_any_value(default_field);
 }
 
-memory_size_extension_config schema_analyzer::analyze_memory_size_extension_config()
+memory_size_extension_config_t schema_analyzer::analyze_memory_size_extension_config()
 {
-    memory_size_extension_config config;
-    config.enabled = has_memory_size_flag();
-
-    if (config.enabled) {
-        json_object *one_of_field =
-            json_utils::get_field(m_property_obj, config_strings::schema::JSON_ONE_OF);
-        config.pattern = std::experimental::any_cast<std::string>(extract_oneof_value(
-            one_of_field, typeid(std::string), config_strings::schema::JSON_PATTERN));
-
-        if (config.pattern != "^[0-9]+[KMGkmg]?[B]?$") {
-            throw_xlio_exception("Pattern is not supported for: " + m_path);
-        }
+    if (!has_memory_size_flag()) {
+        return memory_size_extension_config_t(false);
     }
 
-    return config;
+    json_object *one_of_field =
+        json_utils::get_field(m_property_obj, config_strings::schema::JSON_ONE_OF);
+    std::string pattern = std::experimental::any_cast<std::string>(extract_oneof_value(
+        one_of_field, typeid(std::string), config_strings::schema::JSON_PATTERN));
+
+    if (pattern != "^[0-9]+[KMGkmg]?[B]?$") {
+        throw_xlio_exception("Pattern is not supported for: " + m_path);
+    }
+
+    return memory_size_extension_config_t(true);
 }
 
 static void extract_constraints_from_json(json_object *obj, constraint_config &config)
@@ -241,19 +228,15 @@ constraint_config schema_analyzer::analyze_constraint_config()
     return config;
 }
 
-enum_mapping_config schema_analyzer::analyze_enum_mapping_config()
+enum_mapping_config_t schema_analyzer::analyze_enum_mapping_config()
 {
-    enum_mapping_config config;
-
     if (!has_oneof_field()) {
-        // coverity[uninit_use_in_call]
-        return config;
+        return std::experimental::nullopt;
     }
 
     // Exclude properties with memory size flag - those should be handled by value_transformer
     if (has_memory_size_flag()) {
-        // coverity[uninit_use_in_call]
-        return config;
+        return std::experimental::nullopt;
     }
 
     json_object *one_of_field =
@@ -269,9 +252,6 @@ enum_mapping_config schema_analyzer::analyze_enum_mapping_config()
         std::string type_str = json_object_get_string(type_field);
         if (type_str == config_strings::schema_types::JSON_TYPE_INTEGER) {
             int_option = option;
-            json_object *default_field =
-                json_utils::get_field(option, config_strings::schema::JSON_DEFAULT);
-            config.default_from_int_option = json_object_get_int64(default_field);
         } else if (type_str == config_strings::schema_types::JSON_TYPE_STRING) {
             string_option = option;
         }
@@ -299,9 +279,10 @@ enum_mapping_config schema_analyzer::analyze_enum_mapping_config()
         throw_xlio_exception("OneOf field must have equal length of enum options for: " + m_path);
     }
 
-    config.enabled = true;
-    config.int_values = int_values;
-    config.string_values = string_values;
+    enum_mapping_config_t config = std::map<std::string, int64_t>();
+    std::transform(string_values.begin(), string_values.end(), int_values.begin(),
+                   std::inserter(*config, config->end()),
+                   [](const std::string &s, int64_t v) { return std::make_pair(s, v); });
 
     return config;
 }
@@ -399,4 +380,41 @@ std::experimental::any schema_analyzer::extract_oneof_value(json_object *one_of_
     }
 
     throw_xlio_exception("No " + key + " value found in oneOf field for: " + m_path);
+}
+
+constraint_config::constraint_config()
+    : has_minimum(false)
+    , has_maximum(false)
+    , has_enum(false)
+    , has_power_of_2_or_zero(false)
+    , minimum_value(0)
+    , maximum_value(0)
+    , enum_int_values()
+{
+}
+
+schema_analyzer::analysis_result::analysis_result(schema_analyzer &analyzer)
+    : json_property_type(analyzer.determine_property_type())
+    , value_type(analyzer.determine_value_type())
+    , default_value(analyzer.determine_default_value(value_type))
+    , memory_cfg(analyzer.analyze_memory_size_extension_config())
+    , constraint_cfg(analyzer.analyze_constraint_config())
+    , enum_cfg(analyzer.analyze_enum_mapping_config())
+{
+}
+
+bool schema_analyzer::analysis_result::needs_value_transformation() const
+{
+    return memory_cfg;
+}
+
+bool schema_analyzer::analysis_result::needs_constraint_validation() const
+{
+    return constraint_cfg.has_minimum || constraint_cfg.has_maximum || constraint_cfg.has_enum ||
+        constraint_cfg.has_power_of_2_or_zero;
+}
+
+bool schema_analyzer::analysis_result::needs_enum_mapping() const
+{
+    return static_cast<bool>(enum_cfg);
 }
