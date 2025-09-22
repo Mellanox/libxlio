@@ -52,6 +52,7 @@ entity_context::entity_context(size_t index)
     , m_index(index)
     , m_prev_proc_time(steady_clock::now())
 {
+    memset(&m_stats, 0, sizeof(m_stats));
     xlio_stats_instance_create_ent_ctx_block(&m_stats);
 
     get_event_handler()->do_tasks(); // Update last_taken_time
