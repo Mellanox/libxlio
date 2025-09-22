@@ -12,6 +12,7 @@
 #include <string>
 #include <typeindex>
 #include <vector>
+#include <map>
 
 /**
  * @brief Property type classification for JSON schema properties
@@ -26,35 +27,29 @@ enum class property_type {
 };
 
 /**
- * @brief Configuration for memory size transformation
- */
-struct memory_size_extension_config {
-    bool enabled = false;
-    std::string pattern;
-};
-
-/**
  * @brief Configuration for constraint validation
  */
 struct constraint_config {
-    bool has_minimum = false;
-    bool has_maximum = false;
-    bool has_enum = false;
-    bool has_power_of_2_or_zero = false;
-    int64_t minimum_value = 0;
-    int64_t maximum_value = 0;
+    bool has_minimum;
+    bool has_maximum;
+    bool has_enum;
+    bool has_power_of_2_or_zero;
+    int64_t minimum_value;
+    int64_t maximum_value;
     std::vector<int64_t> enum_int_values;
+
+    constraint_config();
 };
+
+/**
+ * @brief Configuration for memory size transformation
+ */
+using memory_size_extension_config_t = bool;
 
 /**
  * @brief Configuration for enum mapping (oneOf properties)
  */
-struct enum_mapping_config {
-    bool enabled = false;
-    std::vector<int64_t> int_values;
-    std::vector<std::string> string_values;
-    std::experimental::any default_from_int_option;
-};
+using enum_mapping_config_t = std::experimental::optional<std::map<std::string, int64_t>>;
 
 /**
  * @brief Unified schema analyzer that provides comprehensive analysis of JSON schema properties
@@ -71,20 +66,35 @@ public:
      */
     struct analysis_result {
         // Core property information
-        property_type json_property_type =
-            property_type::UNKNOWN; /**< Property type for routing decisions */
-        std::type_index value_type = typeid(void); /**< C++ type for the parameter value */
-        std::experimental::any default_value; /**< Default value ready for use */
-
-        // Component applicability flags
-        bool needs_value_transformation = false; /**< Whether value transformation is needed */
-        bool needs_constraint_validation = false; /**< Whether constraint validation is needed */
-        bool needs_enum_mapping = false; /**< Whether enum mapping is needed */
+        property_type json_property_type; /**< Property type for routing decisions */
+        std::type_index value_type; /**< C++ type for the parameter value */
+        std::experimental::optional<std::experimental::any>
+            default_value; /**< Default value ready for use */
 
         // Pre-parsed component configurations
-        memory_size_extension_config memory_cfg; /**< Memory size transformation configuration */
+        memory_size_extension_config_t memory_cfg; /**< Memory size transformation configuration */
         constraint_config constraint_cfg; /**< Constraint validation configuration */
-        enum_mapping_config enum_cfg; /**< Enum mapping configuration */
+        enum_mapping_config_t enum_cfg; /**< Enum mapping configuration */
+
+        /**
+         * @brief Checks if value transformation is needed for this property
+         * @return True if the property requires value transformation (e.g., memory size parsing)
+         */
+        bool needs_value_transformation() const;
+
+        /**
+         * @brief Checks if constraint validation is needed for this property
+         * @return True if the property has constraints (minimum, maximum, enum, or power-of-2)
+         */
+        bool needs_constraint_validation() const;
+
+        /**
+         * @brief Checks if enum mapping is needed for this property
+         * @return True if the property requires string-to-integer enum mapping
+         */
+        bool needs_enum_mapping() const;
+
+        analysis_result(schema_analyzer &analyzer);
     };
 
     /**
@@ -108,12 +118,13 @@ private:
     // Core analysis methods
     property_type determine_property_type();
     std::type_index determine_value_type();
-    std::experimental::any determine_default_value(std::type_index type);
+    std::experimental::optional<std::experimental::any> determine_default_value(
+        std::type_index type);
 
     // Component configuration methods
-    memory_size_extension_config analyze_memory_size_extension_config();
+    memory_size_extension_config_t analyze_memory_size_extension_config();
     constraint_config analyze_constraint_config();
-    enum_mapping_config analyze_enum_mapping_config();
+    enum_mapping_config_t analyze_enum_mapping_config();
 
     // Helper methods
     bool has_memory_size_flag();

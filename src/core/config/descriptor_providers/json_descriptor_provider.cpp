@@ -150,20 +150,20 @@ std::unique_ptr<parameter_descriptor> json_descriptor_provider::create_descripto
     }
 
     // Create parameter descriptor with default value
-    auto descriptor = std::make_unique<parameter_descriptor>(analysis.default_value);
+    auto descriptor = std::make_unique<parameter_descriptor>(*analysis.default_value);
 
     // Apply constraints if present
-    if (analysis.needs_constraint_validation) {
+    if (analysis.needs_constraint_validation()) {
         apply_constraints(descriptor.get(), analysis.constraint_cfg);
     }
 
     // Apply value transformation if needed
-    if (analysis.needs_value_transformation) {
+    if (analysis.needs_value_transformation()) {
         apply_value_transformation(descriptor.get());
     }
 
     // Apply enum mapping if needed
-    if (analysis.needs_enum_mapping) {
+    if (analysis.needs_enum_mapping()) {
         apply_enum_mapping(descriptor.get(), analysis.enum_cfg);
     }
 
@@ -234,11 +234,9 @@ void json_descriptor_provider::apply_value_transformation(parameter_descriptor *
 }
 
 void json_descriptor_provider::apply_enum_mapping(parameter_descriptor *descriptor,
-                                                  const enum_mapping_config &config)
+                                                  const enum_mapping_config_t &config)
 {
-    if (config.enabled && config.int_values.size() == config.string_values.size()) {
-        for (size_t i = 0; i < config.int_values.size(); i++) {
-            descriptor->add_string_mapping(config.string_values[i], config.int_values[i]);
-        }
+    if (static_cast<bool>(config) && config->size() > 0) {
+        descriptor->set_string_mappings(*config);
     }
 }

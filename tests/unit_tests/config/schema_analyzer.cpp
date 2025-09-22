@@ -100,12 +100,12 @@ TEST_F(schema_analyzer_test, analyze_simple_property)
 
     ASSERT_EQ(analysis.json_property_type, property_type::SIMPLE);
     ASSERT_EQ(analysis.value_type, typeid(int64_t));
-    ASSERT_FALSE(analysis.needs_value_transformation);
-    ASSERT_FALSE(analysis.needs_constraint_validation);
-    ASSERT_FALSE(analysis.needs_enum_mapping);
+    ASSERT_FALSE(analysis.needs_value_transformation());
+    ASSERT_FALSE(analysis.needs_constraint_validation());
+    ASSERT_FALSE(analysis.needs_enum_mapping());
 
     // Test default value
-    ASSERT_EQ(std::experimental::any_cast<int64_t>(analysis.default_value), 42);
+    ASSERT_EQ(std::experimental::any_cast<int64_t>(*analysis.default_value), 42);
 }
 
 TEST_F(schema_analyzer_test, analyze_extended_property)
@@ -114,12 +114,12 @@ TEST_F(schema_analyzer_test, analyze_extended_property)
 
     ASSERT_EQ(analysis.json_property_type, property_type::EXTENDED);
     ASSERT_EQ(analysis.value_type, typeid(int64_t));
-    ASSERT_TRUE(analysis.needs_value_transformation);
-    ASSERT_TRUE(analysis.memory_cfg.enabled);
-    ASSERT_FALSE(analysis.needs_constraint_validation);
-    ASSERT_FALSE(analysis.needs_enum_mapping);
-    ASSERT_EQ(std::experimental::any_cast<int64_t>(analysis.default_value), 32 * 1024 * 1024);
-    ASSERT_EQ(analysis.memory_cfg.pattern, "^[0-9]+[KMGkmg]?[B]?$");
+    ASSERT_TRUE(analysis.needs_value_transformation());
+    ASSERT_TRUE(analysis.memory_cfg);
+    ASSERT_FALSE(analysis.needs_constraint_validation());
+    ASSERT_FALSE(analysis.needs_enum_mapping());
+    ASSERT_EQ(std::experimental::any_cast<int64_t>(*analysis.default_value), 32 * 1024 * 1024);
+    ASSERT_EQ(analysis.memory_cfg, true);
 }
 
 TEST_F(schema_analyzer_test, analyze_one_of_property)
@@ -134,9 +134,9 @@ TEST_F(schema_analyzer_test, analyze_object_property)
 
     ASSERT_EQ(analysis.json_property_type, property_type::OBJECT);
     ASSERT_EQ(analysis.value_type, typeid(json_object *));
-    ASSERT_FALSE(analysis.needs_value_transformation);
-    ASSERT_FALSE(analysis.needs_constraint_validation);
-    ASSERT_FALSE(analysis.needs_enum_mapping);
+    ASSERT_FALSE(analysis.needs_value_transformation());
+    ASSERT_FALSE(analysis.needs_constraint_validation());
+    ASSERT_FALSE(analysis.needs_enum_mapping());
 }
 
 TEST_F(schema_analyzer_test, analyze_array_property)
@@ -145,9 +145,9 @@ TEST_F(schema_analyzer_test, analyze_array_property)
 
     ASSERT_EQ(analysis.json_property_type, property_type::ARRAY);
     ASSERT_EQ(analysis.value_type, typeid(std::vector<std::experimental::any>));
-    ASSERT_FALSE(analysis.needs_value_transformation);
-    ASSERT_FALSE(analysis.needs_constraint_validation);
-    ASSERT_FALSE(analysis.needs_enum_mapping);
+    ASSERT_FALSE(analysis.needs_value_transformation());
+    ASSERT_FALSE(analysis.needs_constraint_validation());
+    ASSERT_FALSE(analysis.needs_enum_mapping());
 }
 
 TEST_F(schema_analyzer_test, analyze_null_property_throws)
@@ -179,12 +179,12 @@ TEST_F(schema_analyzer_test, analyze_property_with_constraints)
     auto analysis = schema_analyzer::analyze(constrained_property, "test.constrained");
 
     ASSERT_EQ(analysis.json_property_type, property_type::SIMPLE);
-    ASSERT_TRUE(analysis.needs_constraint_validation);
+    ASSERT_TRUE(analysis.needs_constraint_validation());
     ASSERT_TRUE(analysis.constraint_cfg.has_minimum);
     ASSERT_TRUE(analysis.constraint_cfg.has_maximum);
     ASSERT_FALSE(analysis.constraint_cfg.has_enum);
     ASSERT_EQ(analysis.constraint_cfg.minimum_value, 0);
     ASSERT_EQ(analysis.constraint_cfg.maximum_value, 100);
-    ASSERT_EQ(std::experimental::any_cast<int64_t>(analysis.default_value), 50);
+    ASSERT_EQ(std::experimental::any_cast<int64_t>(*analysis.default_value), 50);
     json_object_put(constrained_property);
 }
