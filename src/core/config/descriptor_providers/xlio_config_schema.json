@@ -1016,10 +1016,10 @@
                             }
                         },
                         "yield_on_poll": {
-                            "type": "integer",
-                            "default": 0,
+                            "type": "boolean",
+                            "default": false,
                             "title": "Yield CPU when no UDP packets found",
-                            "description": "When an application is running with multiple threads, on a limited number of cores, there is a need for each thread polling inside XLIO (read, readv, recv & recvfrom) to yield the CPU to other polling thread so not to starve them from processing incoming packets. Maps to XLIO_RX_POLL_YIELD environment variable. The value is the number of iterations before yielding the CPU. Disable with 0."
+                            "description": "When an application is running with multiple threads, on a limited number of cores, there is a need for each thread polling inside XLIO (read, readv, recv & recvfrom) to yield the CPU to other polling thread so not to starve them from processing incoming packets. Maps to XLIO_RX_POLL_YIELD environment variable."
                         },
                         "offload_transition_poll_count": {
                             "type": "integer",
@@ -1298,10 +1298,10 @@
                             "description": "The size of UDP socket pool for NGINX. Maps to XLIO_NGINX_UDP_POOL_SIZE environment variable. For any value different than 0 - close() socket will not destroy the socket, but will place it in a pool for next socket UDP creation.\nDisable with 0"
                         },
                         "udp_socket_pool_reuse": {
-                            "type": "integer",
-                            "default": 0,
+                            "type": "boolean",
+                            "default": false,
                             "title": "Enable UDP socket pool reuse",
-                            "description": "Controls the reuse of UDP socket pools for NGINX deployments. Maps to XLIO_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE environment variable. Disable with 0."
+                            "description": "Allows reuse of UDP socket pools for NGINX deployments. Maps to XLIO_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE environment variable."
                         },
                         "distribute_cq": {
                             "type": "boolean",
