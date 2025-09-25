@@ -39,27 +39,13 @@ std::map<std::string, std::experimental::any> inline_loader::load_all() &
     return m_data;
 }
 
-bool inline_loader::check_unsupported_key_value_pair(const std::string &key,
-                                                     const std::string &val) const
+bool inline_loader::check_unsupported_key(const std::string &key) const
 {
-    // CPU affinity values may contain commas, which conflict with the inline format.
-    // Hence - only hex values are supported for this parameter.
-    if (key != "performance.threading.cpu_affinity") {
-        return false;
+    // Do not support the cpu_affinity key in inline config
+    if (key == "performance.threading.cpu_affinity") {
+        return true;
     }
-
-    // Only allow hexadecimal values (e.g., "0xCAFECAFE")
-    if (val.size() >= 3 && val[0] == '0' && (val[1] == 'x' || val[1] == 'X')) {
-        // Check that all remaining characters are valid hex digits
-        for (size_t i = 2; i < val.size(); ++i) {
-            if (!isxdigit(val[i])) {
-                return true; // Not a valid hex number, so unsupported
-            }
-        }
-        return false;
-    }
-
-    return true; // Not a hex value, so unsupported
+    return false;
 }
 
 void inline_loader::parse_inline_data()
@@ -86,9 +72,9 @@ void inline_loader::parse_inline_data()
         }
 
         // Check for unsupported parameters
-        if (check_unsupported_key_value_pair(key, val)) {
-            throw_xlio_exception("Value not supported in inline config: " + key +
-                                 ".\nSee description for supported values.");
+        if (check_unsupported_key(key)) {
+            throw_xlio_exception("Key not supported in inline config: " + key +
+                                 ".\nSee description for unsupported keys.");
         }
 
         // Attempt to parse the value as bool/int, otherwise store string
