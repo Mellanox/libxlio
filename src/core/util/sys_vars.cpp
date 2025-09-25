@@ -1940,7 +1940,7 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
         registry.get_default_value<uint32_t>("performance.polling.rx_kernel_fd_attention_level");
     hw_ts_conversion_mode = static_cast<ts_conversion_mode_t>(
         registry.get_default_value<int>("network.timing.hw_ts_conversion"));
-    rx_poll_yield_loops = registry.get_default_value<bool>("performance.polling.yield_on_poll");
+    rx_poll_yield_loops = registry.get_default_value<int>("performance.polling.yield_on_poll");
     select_handle_cpu_usage_stats = registry.get_default_value<bool>("monitor.stats.cpu_usage");
     rx_ready_byte_min_limit =
         registry.get_default_value<uint32_t>("performance.override_rcvbuf_limit");
@@ -2053,7 +2053,7 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
     nginx_udp_socket_pool_size =
         registry.get_default_value<uint32_t>("applications.nginx.udp_pool_size");
     nginx_udp_socket_pool_rx_num_buffs_reuse =
-        registry.get_default_value<bool>("applications.nginx.udp_socket_pool_reuse");
+        registry.get_default_value<int>("applications.nginx.udp_socket_pool_reuse");
 #endif
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     app.type = APP_NONE;
