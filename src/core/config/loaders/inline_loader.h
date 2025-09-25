@@ -42,18 +42,16 @@ private:
     const char *m_inline_config; /**< Environment variable name */
 
     /**
-     * @brief Checks if a given parameter key and value pair is unsupported in the inline
-     * configuration.
+     * @brief Checks if a given parameter key is unsupported in the inline configuration.
      *
      * Certain parameters are not supported in the inline configuration due to value format
      * conflicts (e.g., values containing commas, which interfere with the comma-delimited
      * format of the inline config). This function provides an abstraction for checking
-     * unsupported key value pairs, and can be extended in the future if additional key value pairs
+     * unsupported keys, and can be extended in the future if additional keys
      * need to be disallowed.
      *
      * @param key    The parameter key to check.
-     * @param val    The parameter value to check.
-     * @return true if the parameter is unsupported in the inline config; false otherwise.
+     * @return true if the parameter key is unsupported in the inline config; false otherwise.
      */
-    bool check_unsupported_key_value_pair(const std::string &key, const std::string &val) const;
+    bool check_unsupported_key(const std::string &key) const;
 };
