@@ -165,12 +165,19 @@ int xlio_register_recv_callback(int s, xlio_recv_callback_t callback, void *cont
  * high-performance networking.
  *
  * @section features Key Features
- * - Zero-copy receive and transmit operations
- * - Event-driven architecture with callbacks
- * - Memory management with user-provided allocators
- * - TCP socket abstraction with non-blocking operations
- * - Polling groups for efficient event handling
- * - Support for both IPv4 and IPv6
+ * - Native zero-copy TX and RX operations
+ * - Immediate callback-based event notification without accumulation
+ * - Optimized data path with fewer corner cases and non-performance-oriented features
+ *   - No blocking mode
+ *   - No partial writes
+ * - Simplified application development:
+ *   - Fewer error conditions and corner cases to handle
+ *   - Flexible control of TX data aggregation
+ *   - High-level TX operation completion
+ * - Concurrency and scalability:
+ *   - No global namespace - sockets grouped by polling groups
+ *   - Clear concurrency boundaries and scalability model
+ *   - Each group can be handled independently by different threads
  *
  * @section architecture Architecture Overview
  * The API is built around three main concepts:
@@ -200,9 +207,9 @@ int xlio_register_recv_callback(int s, xlio_recv_callback_t callback, void *cont
  *
  * @subsection polling_group_concurrency Polling Group Concurrency
  * Polling groups are the primary mechanism for achieving concurrency:
- * - **Multiple polling groups can be polled concurrently** from different threads
- * - **Polling groups do not share resources** with each other
- * - **Sockets from different groups can be handled concurrently** without serialization
+ * - Multiple polling groups can be polled concurrently from different threads
+ * - Polling groups do not share resources with each other
+ * - Sockets from different groups can be handled concurrently without serialization
  *
  * @subsection serialization_requirements Serialization Requirements
  * - **Within a polling group**: All operations require serialization
@@ -220,6 +227,7 @@ int xlio_register_recv_callback(int s, xlio_recv_callback_t callback, void *cont
  *
  * @section limitations Current Limitations
  * - TCP sockets only (no UDP support)
+ * - No crypto offload support
  * - No bonding support
  * - Only busy polling is supported
  * - fork() is supported only without created polling groups
