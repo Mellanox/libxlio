@@ -2234,7 +2234,7 @@ int sockinfo_tcp::handle_rx_error(bool blocking)
         errno = EAGAIN;
     }
 
-    if (m_p_socket_stats) {
+    if (unlikely(m_p_socket_stats) && ret == -1) {
         if (errno == EAGAIN) {
             m_p_socket_stats->counters.n_rx_eagain++;
         } else {

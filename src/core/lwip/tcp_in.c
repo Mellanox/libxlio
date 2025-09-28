@@ -198,7 +198,7 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb)
                        PCB. */
                     tcp_pcb_remove(pcb);
                 } else {
-                    /* If the application has registered a "sent" function to be
+                    /* If the application has registered an "acked" function to be
                        called when new send buffer space is available, we call it
                        now. */
                     if (pcb->acked > 0) {
@@ -225,7 +225,7 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb)
                         if (err == ERR_ABRT) {
                             goto aborted;
                         }
-                        /* If the upper layer can't receive this data, store it */
+                        /* If the upper layer can't receive this data, drop it */
                         if (err != ERR_OK) {
                             pcb->rcv_wnd += in_data.recv_data->tot_len;
                             pbuf_free(in_data.recv_data);
