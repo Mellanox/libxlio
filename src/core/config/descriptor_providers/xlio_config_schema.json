@@ -1511,8 +1511,7 @@
                                 2,
                                 3,
                                 4,
-                                5,
-                                6
+                                5
                             ],
                             "default": 0
                         },
@@ -1524,8 +1523,7 @@
                                 "latency",
                                 "nginx",
                                 "nginx_dpu",
-                                "nvme_bf3",
-                                "all"
+                                "nvme_bf3"
                             ],
                             "default": "none"
                         }
