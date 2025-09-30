@@ -220,6 +220,20 @@ protected:
     void handle_registration_action(reg_action_t &reg_action);
     void process_ibverbs_event(event_handler_map_t::iterator &i);
     void process_rdma_cm_event(event_handler_map_t::iterator &i);
+    /**
+     * @brief Process any remaining registration actions in the queue after thread loop exits
+     *
+     * This method is called after the event handler thread loop has exited to ensure
+     * that any pending registration actions (such as socket cleanup actions) are
+     * processed before the event handler manager is destroyed. This prevents memory
+     * leaks by ensuring that UNREGISTER_TCP_SOCKET_TIMER_AND_DELETE actions are
+     * executed even when the thread stops before processing them.
+     *
+     * @note This method should only be called after m_b_continue_running is set to false
+     *       and the event handler thread has exited, as no new actions can be added
+     *       to the queue at that point.
+     */
+    void process_remaining_registration_actions();
     int start_thread();
 
     void event_channel_post_process_for_rdma_events(void *p_event);
