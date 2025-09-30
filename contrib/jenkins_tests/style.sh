@@ -36,6 +36,7 @@ ln -sf $WORKSPACE/contrib/jenkins_tests/style.conf $WORKSPACE/.clang-format
 
 check_files="$(find $WORKSPACE/src/ ! -name 'config_*' -a \( -iname '*.c' -o -iname '*.cpp' -o -iname '*.h' -o -name '*.cc' \))"
 check_files+=" $(find $WORKSPACE/tools/daemon/ \( -iname '*.c' -o -iname '*.cpp' -o -iname '*.h' -o -iname '*.cc' \))"
+check_files+=" $(find $WORKSPACE/examples/ \( -iname '*.c' -o -iname '*.cpp' -o -iname '*.h' -o -iname '*.cc' \))"
 check_files+=" $(find $WORKSPACE/tests/gtest/ \( -path "*/googletest" \) ! -prune -o ! \( -name 'tap.h' -o -name 'gtest.h' -o -name 'gtest-all.cc' \) -a \( -iname '*.c' -o -iname '*.cpp' -o -iname '*.h' -o -iname '*.cc' \))"
 
 i=0
