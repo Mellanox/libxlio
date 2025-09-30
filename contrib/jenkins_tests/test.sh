@@ -117,6 +117,5 @@ for test_link in ${test_ip_list}; do
 done
 
 rc=$(($rc+$nerrors))
-
 echo "[${0##*/}]..................exit code = ${rc}"
 exit ${rc}
