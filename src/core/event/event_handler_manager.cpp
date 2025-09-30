@@ -680,10 +680,6 @@ void event_handler_manager::priv_unregister_command_events(command_reg_info_t &i
 
 void event_handler_manager::handle_registration_action(reg_action_t &reg_action)
 {
-    if (!m_b_continue_running && reg_action.type != UNREGISTER_TIMERS_AND_DELETE) {
-        return;
-    }
-
     evh_logfunc("event action %d", reg_action.type);
     sockinfo_tcp *sock;
     switch (reg_action.type) {
@@ -1019,7 +1015,20 @@ void *event_handler_manager::thread_loop()
 
     } // while (m_b_continue_running)
 
+    process_remaining_registration_actions();
+
     free(p_events);
 
     return nullptr;
+}
+
+void event_handler_manager::process_remaining_registration_actions()
+{
+    assert(m_p_reg_action_q_to_pop_from->empty());
+
+    while (!m_p_reg_action_q_to_push_to->empty()) {
+        reg_action_t reg_action = m_p_reg_action_q_to_push_to->front();
+        m_p_reg_action_q_to_push_to->pop_front();
+        handle_registration_action(reg_action);
+    }
 }
