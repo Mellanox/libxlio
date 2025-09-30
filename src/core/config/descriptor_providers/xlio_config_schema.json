@@ -318,6 +318,7 @@
                                         {
                                             "type": "integer",
                                             "minimum": 0,
+                                            "maximum": 4294967295,
                                             "default": 1048576
                                         },
                                         {
@@ -344,6 +345,7 @@
                                             "type": "integer",
                                             "default": 0,
                                             "minimum": 0,
+                                            "maximum": 4294967295,
                                             "title": "Data threshold for flush",
                                             "description": "Triggers TCP nodelay only if unsent data is larger than this value. The value is in bytes. Default 0 means no threshold - immediate sending. Maps to XLIO_TCP_NODELAY_TRESHOLD environment variable."
                                         }
@@ -418,6 +420,7 @@
                                 "timer_msec": {
                                     "type": "integer",
                                     "minimum": 0,
+                                    "maximum": 4294967295,
                                     "default": 100,
                                     "title": "TCP timer interval (msec)",
                                     "description": "Control internal TCP timer resolution (fast timer) in milliseconds. Minimum value is the thread wakeup timer resolution configured in 'performance.threading.internal_handler.timer_msec'. Maps to XLIO_TCP_TIMER_RESOLUTION_MSEC environment variable."
@@ -456,6 +459,7 @@
                             "type": "integer",
                             "default": 0,
                             "minimum": 0,
+                            "maximum": 4294967295,
                             "title": "Delay after multicast join (msec)",
                             "description": "This parameter indicates the time of delay in milliseconds for the first packet sent after receiving the multicast JOINED event from the SM. Maps to XLIO_WAIT_AFTER_JOIN_MSEC environment variable. This is helpful to overcome loss of first few packets of an outgoing stream due to SM lengthy handling of MFT configuration on the switch chips."
                         }
@@ -469,6 +473,7 @@
                         "update_interval_msec": {
                             "type": "integer",
                             "minimum": 0,
+                            "maximum": 4294967295,
                             "default": 10000,
                             "title": "Neighbor update interval (msec)",
                             "description": "Sets the interval in milliseconds between neighbor table updates. Maps to XLIO_NETLINK_TIMER environment variable."
@@ -476,6 +481,7 @@
                         "errors_before_reset": {
                             "type": "integer",
                             "minimum": 0,
+                            "maximum": 4294967295,
                             "default": 1,
                             "title": "Errors before neighbor reset",
                             "description": "Number of retries to restart the neighbor state machine after receiving an ERROR event. Maps to XLIO_NEIGH_NUM_ERR_RETRIES environment variable."
@@ -487,6 +493,7 @@
                                 "uc_retries": {
                                     "type": "integer",
                                     "minimum": 0,
+                                    "maximum": 4294967295,
                                     "default": 3,
                                     "title": "Unicast ARP retries",
                                     "description": "Number of unicast ARP retries before sending broadcast ARP when neigh state is NUD_STALE. Maps to XLIO_NEIGH_UC_ARP_QUATA environment variable."
@@ -494,6 +501,7 @@
                                 "uc_delay_msec": {
                                     "type": "integer",
                                     "minimum": 0,
+                                    "maximum": 4294967295,
                                     "default": 10000,
                                     "title": "Unicast ARP delay (msec)",
                                     "description": "Time in milliseconds to wait between unicast ARP attempts. Maps to XLIO_NEIGH_UC_ARP_DELAY_MSEC environment variable."
@@ -603,7 +611,8 @@
                                         {
                                             "type": "integer",
                                             "default": 262144,
-                                            "minimum": 1
+                                            "minimum": 1,
+                                            "maximum": 4294967295
                                         },
                                         {
                                             "type": "string",
@@ -637,12 +646,16 @@
                                 "dek_cache_max_size": {
                                     "type": "integer",
                                     "default": 1024,
+                                    "minimum": 0,
+                                    "maximum": 2147483647,
                                     "title": "DEK max cache size",
                                     "description": "Maximum size of the Data Encryption Key cache for TLS offload operations. Maps to XLIO_HIGH_WMARK_DEK_CACHE_SIZE environment variable."
                                 },
                                 "dek_cache_min_size": {
                                     "type": "integer",
                                     "default": 512,
+                                    "minimum": 0,
+                                    "maximum": 2147483647,
                                     "title": "DEK min cache size",
                                     "description": "Minimum size of the Data Encryption Key cache for TLS offload operations. Maps to XLIO_LOW_WMARK_DEK_CACHE_SIZE environment variable."
                                 }
@@ -718,6 +731,8 @@
                         "max_per_interface": {
                             "type": "integer",
                             "default": 0,
+                            "minimum": 0,
+                            "maximum": 2147483647,
                             "title": "Maximum rings per interface",
                             "description": "Limit on rings per interface. Maps to XLIO_RING_LIMIT_PER_INTERFACE environment variable. Limit the number of rings that can be allocated per interface. For example, in ring allocation per socket logic, if the number of sockets using the same interface is larger than the limit, then several sockets will be sharing the same ring. Use a value of 0 for unlimited number of rings."
                         },
@@ -757,6 +772,8 @@
                                 },
                                 "migration_ratio": {
                                     "type": "integer",
+                                    "minimum": -1,
+                                    "maximum": 2147483647,
                                     "default": -1,
                                     "title": "TX ring migration ratio",
                                     "description": "Controls when to replace a socket's ring with the current thread's ring. Maps to XLIO_RING_MIGRATION_RATIO_TX environment variable. Ring migration ratio is used with the \"ring per thread\" logic in order to decide when it is beneficial to replace the socket's ring with the ring allocated for the current thread. Each XLIO_RING_MIGRATION_RATIO iterations (of accessing the ring) we check the current thread ID and see if our ring is matching the current thread. If not, we consider ring migration. If we keep accessing the ring from the same thread for some iterations, we migrate the socket to this thread ring. Use a value of -1 in order to disable migration.\nDefault value is -1"
@@ -773,6 +790,7 @@
                                     "type": "integer",
                                     "default": 32768,
                                     "minimum": 0,
+                                    "maximum": 4294967295,
                                     "title": "TX WRE global array size",
                                     "description": "Number of Work Request Elements allocated in all transmit QPs. Maps to XLIO_TX_WRE environment variable. The number of QP's can change according to the number of network offloaded interfaces."
                                 },
@@ -796,6 +814,7 @@
                                     "type": "integer",
                                     "default": 8,
                                     "minimum": 1,
+                                    "maximum": 4294967295,
                                     "title": "TX buffer batch size",
                                     "description": "Number of TX buffers fetched by a UDP socket at once. Maps to TX_BUFS_BATCH_UDP environment variable."
                                 },
@@ -803,6 +822,7 @@
                                     "type": "integer",
                                     "default": 16,
                                     "minimum": 1,
+                                    "maximum": 2147483647,
                                     "title": "TCP buffer batch size",
                                     "description": "Number of TX buffers fetched by a TCP socket at once. Maps to XLIO_TX_BUFS_BATCH_TCP environment variable. Higher number for less ring accesses to fetch buffers. Lower number for less memory consumption by a socket.\nMin value is 1"
                                 },
@@ -846,6 +866,8 @@
                                 "migration_ratio": {
                                     "type": "integer",
                                     "default": -1,
+                                    "minimum": -1,
+                                    "maximum": 2147483647,
                                     "title": "RX ring migration ratio",
                                     "description": "Controls when to replace a socket's ring with the current thread's ring. Maps to XLIO_RING_MIGRATION_RATIO_RX environment variable. Ring migration ratio is used with the \"ring per thread\" logic in order to decide when it is beneficial to replace the socket's ring with the ring allocated for the current thread. Each XLIO_RING_MIGRATION_RATIO iterations (of accessing the ring) we check the current thread ID and see if our ring is matching the current thread. If not, we consider ring migration. If we keep accessing the ring from the same thread for some iterations, we migrate the socket to this thread ring. Use a value of -1 in order to disable migration.\nDefault value is -1"
                                 },
@@ -853,18 +875,23 @@
                                     "type": "integer",
                                     "default": 32768,
                                     "minimum": 0,
+                                    "maximum": 4294967295,
                                     "title": "RX WRE global array size",
                                     "description": "Number of Work Request Elements allocated in all RQs. Maps to XLIO_RX_WRE environment variable. "
                                 },
                                 "spare_buffers": {
                                     "type": "integer",
                                     "default": 32768,
+                                    "minimum": 0,
+                                    "maximum": 4294967295,
                                     "title": "Spare RX buffers",
                                     "description": "Number of spare receive buffer a ring holds to allow for filling up QP while full receive buffers are being processed inside XLIO. Maps to XLIO_QP_COMPENSATION_LEVEL environment variable.\nDefault value is XLIO_RX_WRE / 2"
                                 },
                                 "spare_strides": {
                                     "type": "integer",
                                     "default": 32768,
+                                    "minimum": 0,
+                                    "maximum": 4294967295,
                                     "title": "Extra strides reserved",
                                     "description": "Number of spare stride objects a ring holds to allow faster allocation of a stride object when a packet arrives. Maps to XLIO_STRQ_STRIDES_COMPENSATION_LEVEL environment variable.\nDefault: 32768"
                                 },
@@ -919,6 +946,7 @@
                                 "timer_msec": {
                                     "type": "integer",
                                     "minimum": 0,
+                                    "maximum": 4294967295,
                                     "default": 10,
                                     "title": "Timer resolution (msec)",
                                     "description": "Control XLIO internal thread wakeup timer resolution (in milliseconds). Maps to XLIO_TIMER_RESOLUTION_MSEC environment variable."
@@ -976,6 +1004,8 @@
                         "skip_cq_on_rx": {
                             "type": "integer",
                             "default": 0,
+                            "minimum": 0,
+                            "maximum": 2,
                             "title": "Skip completion queue checks on RX",
                             "description": "Allow TCP socket to skip CQ polling in rx socket call. 0 - Disabled; 1 - Skip always; 2 - Skip only if this socket was added to epoll before. Maps to XLIO_SKIP_POLL_IN_RX environment variable."
                         },
@@ -1002,6 +1032,7 @@
                                 "poll_os_ratio": {
                                     "type": "integer",
                                     "minimum": 0,
+                                    "maximum": 2147483647,
                                     "default": 10,
                                     "title": "OS file descriptor polling ratio",
                                     "description": "This will enable polling of the OS file descriptors while user thread calls select() or poll() and XLIO is busy in the offloaded sockets polling loop. This will result in a single poll of the not-offloaded sockets every N offloaded sockets (CQ) polls. When disabled (value of 0), only offloaded sockets are polled. Maps to XLIO_SELECT_POLL_OS_RATIO environment variable."
@@ -1009,6 +1040,7 @@
                                 "skip_os": {
                                     "type": "integer",
                                     "minimum": 0,
+                                    "maximum": 4294967295,
                                     "default": 4,
                                     "title": "Skip OS polling frequency",
                                     "description": "For select() or poll() this will force XLIO to check the non offloaded fd even though an offloaded socket has ready packets found while polling. Maps to XLIO_SELECT_SKIP_OS environment variable."
@@ -1017,6 +1049,8 @@
                         },
                         "yield_on_poll": {
                             "type": "integer",
+                            "minimum": 0,
+                            "maximum": 4294967295,
                             "default": 0,
                             "title": "Yield CPU when no UDP packets found",
                             "description": "When an application is running with multiple threads, on a limited number of cores, there is a need for each thread polling inside XLIO (read, readv, recv & recvfrom) to yield the CPU to other polling thread so not to starve them from processing incoming packets. Maps to XLIO_RX_POLL_YIELD environment variable. The value is the number of iterations before yielding the CPU. Disable with 0."
@@ -1032,6 +1066,7 @@
                         "max_rx_poll_batch": {
                             "type": "integer",
                             "minimum": 0,
+                            "maximum": 4294967295,
                             "default": 16,
                             "title": "Max RX buffers per poll",
                             "description": "Maximum number of receive buffers processed in a single poll operation. Maps to XLIO_CQ_POLL_BATCH_MAX environment variable. Max size of the array while polling the CQs in the XLIO."
@@ -1040,6 +1075,7 @@
                             "type": "integer",
                             "default": 100,
                             "minimum": 0,
+                            "maximum": 4294967295,
                             "title": "RX kernel FD attention level",
                             "description": "Ratio between XLIO CQ poll and OS FD poll. 0 means only poll offloaded sockets. Maps to XLIO_RX_UDP_POLL_OS_RATIO environment variable. This will result in a single poll of the not-offloaded sockets every XLIO_RX_UDP_POLL_OS_RATIO offloaded socket (CQ) polls. No matter if the CQ poll was a hit or miss. No matter if the socket is blocking or non-blocking. When disabled, only offloaded sockets are polled.\nDisable with 0"
                         }
@@ -1060,6 +1096,7 @@
                             "type": "integer",
                             "default": 10,
                             "minimum": 0,
+                            "maximum": 4294967295,
                             "title": "Periodic drain interval (msec)",
                             "description": "XLIO internal thread safe check that the CQ is drained at least once every N milliseconds. This mechanism allows the library to progress the TCP stack even when the application does not access its socket (so it does not provide a context to XLIO). If CQ was already drained by the application receive socket API calls then this thread goes back to sleep without any processing. Disable with 0. Maps to XLIO_PROGRESS_ENGINE_INTERVAL environment variable."
                         },
@@ -1067,6 +1104,7 @@
                             "type": "integer",
                             "default": 10000,
                             "minimum": 0,
+                            "maximum": 4294967295,
                             "title": "Max CQEs per periodic drain",
                             "description": "Each time XLIO's internal thread starts its CQ draining, it will stop when it reaches this max value. The application is not limited by this value in the number of CQ elements it can process from calling any of the receive path socket APIs. Maps to XLIO_PROGRESS_ENGINE_WCE_MAX environment variable."
                         },
@@ -1074,6 +1112,7 @@
                             "type": "integer",
                             "default": 0,
                             "minimum": 0,
+                            "maximum": 2147483647,
                             "title": "RX drain rate (nsec)",
                             "description": "Socket's receive path CQ drain logic rate control. When disabled (Default) the socket's receive path will first try to return a ready packet from the socket's receive ready packet queue. Only if that queue is empty will the socket check the CQ for ready completions for processing. When enabled, even if the socket's receive ready packet queue is not empty it will still check the CQ for ready completions for processing. This CQ polling rate is controlled in nano-second resolution to prevent CPU consumption because of over CQ polling. This will enable a more 'real time' monitoring of the sockets ready packet queue. Recommended value is 100-5000 (nsec). Disable with 0. Maps to XLIO_RX_CQ_DRAIN_RATE_NSEC environment variable."
                         },
@@ -1090,36 +1129,48 @@
                                 "packet_count": {
                                     "type": "integer",
                                     "default": 48,
+                                    "minimum": 0,
+                                    "maximum": 4294967295,
                                     "title": "Packet count threshold",
                                     "description": "Number of packets to hold before generating interrupt. Maps to XLIO_CQ_MODERATION_COUNT environment variable."
                                 },
                                 "period_usec": {
                                     "type": "integer",
                                     "default": 50,
+                                    "minimum": 0,
+                                    "maximum": 4294967295,
                                     "title": "Moderation period (µsec)",
                                     "description": "Period in micro-seconds for holding the packet before generating interrupt. Maps to XLIO_CQ_MODERATION_PERIOD_USEC environment variable."
                                 },
                                 "adaptive_count": {
                                     "type": "integer",
                                     "default": 500,
+                                    "minimum": 0,
+                                    "maximum": 4294967295,
                                     "title": "Adaptive moderation count threshold",
                                     "description": "Maximum count value to use in the adaptive interrupt moderation algorithm. Maps to XLIO_CQ_AIM_MAX_COUNT environment variable."
                                 },
                                 "adaptive_period_usec": {
                                     "type": "integer",
                                     "default": 1000,
+                                    "minimum": 0,
+                                    "maximum": 4294967295,
                                     "title": "Adaptive moderation period (µsec)",
                                     "description": "Maximum period value to use in the adaptive interrupt moderation algorithm. Maps to XLIO_CQ_AIM_MAX_PERIOD_USEC environment variable."
                                 },
                                 "adaptive_change_frequency_msec": {
                                     "type": "integer",
                                     "default": 1000,
+                                    "minimum": 0,
+                                    "maximum": 4294967295,
                                     "title": "Adaptive change frequency (msec)",
                                     "description": "Frequency of interrupt moderation adaptation. Maps to XLIO_CQ_AIM_INTERVAL_MSEC environment variable. Interval in milliseconds between adaptation attempts. Use value of 0 to disable adaptive interrupt moderation."
                                 },
                                 "adaptive_interrupt_per_sec": {
                                     "type": "integer",
                                     "default": 10000,
+                                    "minimum": 0,
+                                    "maximum": 4294967295,
                                     "title": "Target interrupts per second",
                                     "description": "Desired interrupts rate per second for each ring (CQ). Maps to XLIO_CQ_AIM_INTERRUPTS_RATE_PER_SEC environment variable. The count and period parameters for CQ moderation will change automatically to achieve the desired interrupt rate for the current traffic rate."
                                 }
@@ -1183,6 +1234,7 @@
                                     "type": "integer",
                                     "default": 256,
                                     "minimum": 0,
+                                    "maximum": 4294967295,
                                     "title": "TX prefetch size",
                                     "description": "Accelerate offloaded send operation by optimizing cache. Maps to XLIO_TX_PREFETCH_BYTES environment variable. Different values give optimized send rate on different machines. We recommend you tune this for your specific hardware.\nValue range is 0 to MTU size\nDisable with a value of 0"
                                 }
@@ -1214,12 +1266,15 @@
                                     "type": "integer",
                                     "default": 256,
                                     "minimum": 32,
+                                    "maximum": 4294967295,
                                     "title": "RX prefetch size",
                                     "description": "Size of receive buffer in bytes to prefetch into cache while processing ingress packets. Maps to XLIO_RX_PREFETCH_BYTES environment variable. The default is a single cache line of 64 bytes which should be at least 32 bytes to cover the IP+UDP headers and a small part of the users payload. Increasing this can help improve performance for larger user payload sizes.\nValue range is 32 bytes to MTU size"
                                 },
                                 "prefetch_before_poll": {
                                     "type": "integer",
                                     "default": 0,
+                                    "minimum": 0,
+                                    "maximum": 4294967295,
                                     "title": "Prefetch before polling",
                                     "description": "Same as RX prefetch size, only that prefetch is done before actually getting the packets. This benefits low pps traffic latency. Disable with 0. Maps to XLIO_RX_PREFETCH_BYTES_BEFORE_POLL environment variable."
                                 }
@@ -1233,6 +1288,7 @@
                                     "type": "integer",
                                     "default": 64,
                                     "minimum": 1,
+                                    "maximum": 2147483647,
                                     "title": "Socket segment batch size",
                                     "description": "Number of TCP segments fetched from segments pool by a socket at once. Maps to XLIO_TX_SEGS_BATCH_TCP environment variable. Min value is 1"
                                 },
@@ -1240,6 +1296,7 @@
                                     "type": "integer",
                                     "default": 1024,
                                     "minimum": 1,
+                                    "maximum": 2147483647,
                                     "title": "Ring segment batch size",
                                     "description": "Number of TCP segments fetched from segments pool by a ring at once. Maps to XLIO_TX_SEGS_RING_BATCH_TCP environment variable. Min value is 1"
                                 },
@@ -1247,6 +1304,7 @@
                                     "type": "integer",
                                     "default": 16384,
                                     "minimum": 1,
+                                    "maximum": 2147483647,
                                     "title": "Pool segment batch size",
                                     "description": "Number of TCP segments batched when fetched from the segments pool. Maps to XLIO_TX_SEGS_POOL_BATCH_TCP environment variable. Min value is 1"
                                 }
@@ -1258,12 +1316,16 @@
                 "max_gro_streams": {
                     "type": "integer",
                     "default": 32,
+                    "minimum": 0,
+                    "maximum": 4294967295,
                     "title": "Maximum GRO streams",
                     "description": "Control the number of TCP streams to perform Generic Receive Offload simultaneously. Maps to XLIO_GRO_STREAMS_MAX environment variable. Disable GRO with a value of 0."
                 },
                 "override_rcvbuf_limit": {
                     "type": "integer",
                     "default": 65536,
+                    "minimum": 0,
+                    "maximum": 4294967295,
                     "title": "Override OS receive buffer limit",
                     "description": "Minimum value in bytes that will be used per socket by XLIO when applications call to setsockopt(SO_RCVBUF). If application tries to set a smaller value than configured here, XLIO will force this minimum limit value on the socket. XLIO offloaded socket's receive max limit of ready bytes count. If the application does not drain a socket and the byte limit is reached, new received datagrams will be dropped. Monitor of the applications socket's usage of current, max and dropped bytes and packet counters can be done with xlio_stats. Maps to XLIO_RX_BYTES_MIN environment variable."
                 }
@@ -1282,24 +1344,32 @@
                         "src_port_stride": {
                             "type": "integer",
                             "default": 2,
+                            "minimum": 0,
+                            "maximum": 65535,
                             "title": "Source port stride",
                             "description": "Controls how source ports are distributed across Nginx worker processes. Maps to XLIO_NGINX_SRC_PORT_STRIDE environment variable."
                         },
                         "workers_num": {
                             "type": "integer",
                             "default": 0,
+                            "minimum": 0,
+                            "maximum": 2147483647,
                             "title": "Number of workers",
                             "description": "Number of Nginx worker processes to optimize for. This parameter must be set to offload Nginx. Maps to XLIO_NGINX_WORKERS_NUM environment variable."
                         },
                         "udp_pool_size": {
                             "type": "integer",
                             "default": 0,
+                            "minimum": 0,
+                            "maximum": 4294967295,
                             "title": "UDP buffer pool size",
                             "description": "The size of UDP socket pool for NGINX. Maps to XLIO_NGINX_UDP_POOL_SIZE environment variable. For any value different than 0 - close() socket will not destroy the socket, but will place it in a pool for next socket UDP creation.\nDisable with 0"
                         },
                         "udp_socket_pool_reuse": {
                             "type": "integer",
                             "default": 0,
+                            "minimum": 0,
+                            "maximum": 2147483647,
                             "title": "Enable UDP socket pool reuse",
                             "description": "Controls the reuse of UDP socket pools for NGINX deployments. Maps to XLIO_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE environment variable. Disable with 0."
                         },
