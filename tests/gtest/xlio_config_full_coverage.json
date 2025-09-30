@@ -1,0 +1,231 @@
+{
+    "core": {
+        "resources": {
+            "memory_limit": 2147483648,
+            "hugepages": {
+                "enable": true,
+                "size": 0
+            },
+            "external_memory_limit": 0,
+            "heap_metadata_block_size": 33554432
+        },
+        "quick_init": false,
+        "exception_handling": {
+            "mode": -1
+        },
+        "signals": {
+            "sigint": {
+                "exit": true
+            },
+            "sigsegv": {
+                "backtrace": false
+            }
+        },
+        "syscall": {
+            "dup2_close_fd": true,
+            "fork_support": true,
+            "deferred_close": false,
+            "allow_privileged_sockopt": true,
+            "avoid_ctl_syscalls": false,
+            "sendfile_cache_limit": 10737418240
+        },
+        "daemon": {
+            "enable": false,
+            "dir": "/tmp/xlio"
+        }
+    },
+    "network": {
+        "timing": {
+            "hw_ts_conversion": 3
+        },
+        "protocols": {
+            "ip": {
+                "mtu": 0
+            },
+            "tcp": {
+                "wmem": 1048576,
+                "nodelay": {
+                    "enable": false,
+                    "byte_threshold": 0
+                },
+                "quickack": false,
+                "push": true,
+                "linger_0": false,
+                "congestion_control": 0,
+                "timestamps": 0,
+                "timer_msec": 100,
+                "mss": 0
+            }
+        },
+        "multicast": {
+            "mc_loopback": true,
+            "mc_flowtag_acceleration": false,
+            "wait_after_join_msec": 0
+        },
+        "neighbor": {
+            "update_interval_msec": 10000,
+            "errors_before_reset": 1,
+            "arp": {
+                "uc_retries": 3,
+                "uc_delay_msec": 10000
+            }
+        }
+    },
+    "hardware_features": {
+        "striding_rq": {
+            "enable": true,
+            "strides_num": 2048,
+            "stride_size": 64
+        },
+        "tcp": {
+            "lro": -1,
+            "tso": {
+                "enable": -1,
+                "max_size": 262144
+            },
+            "tls_offload": {
+                "tx_enable": true,
+                "rx_enable": false,
+                "dek_cache_max_size": 1024,
+                "dek_cache_min_size": 512
+            }
+        }
+    },
+    "performance": {
+        "steering_rules": {
+            "tcp": {
+                "2t_rules": false,
+                "3t_rules": false
+            },
+            "udp": {
+                "3t_rules": true,
+                "only_mc_l2_rules": false
+            },
+            "disable_flowtag": false
+        },
+        "rings": {
+            "max_per_interface": 0,
+            "tx": {
+                "allocation_logic": 20,
+                "migration_ratio": -1,
+                "max_on_device_memory": 0,
+                "ring_elements_count": 32768,
+                "completion_batch_size": 64,
+                "max_inline_size": 204,
+                "udp_buffer_batch": 8,
+                "tcp_buffer_batch": 16
+            },
+            "rx": {
+                "allocation_logic": 20,
+                "migration_ratio": -1,
+                "ring_elements_count": 32768,
+                "spare_buffers": 32768,
+                "spare_strides": 32768,
+                "post_batch_size": 1024
+            }
+        },
+        "threading": {
+            "worker_threads": 0,
+            "mutex_over_spinlock": false,
+            "cpu_affinity": "-1",
+            "cpuset": "",
+            "internal_handler": {
+                "timer_msec": 10,
+                "behavior": 0
+            }
+        },
+        "polling": {
+            "nonblocking_eagain": false,
+            "rx_poll_on_tx_tcp": false,
+            "rx_cq_wait_ctrl": false,
+            "skip_cq_on_rx": 0,
+            "blocking_rx_poll_usec": 100000,
+            "iomux": {
+                "poll_usec": 100000,
+                "poll_os_ratio": 10,
+                "skip_os": 4
+            },
+            "yield_on_poll": 0,
+            "offload_transition_poll_count": 0,
+            "max_rx_poll_batch": 16,
+            "rx_kernel_fd_attention_level": 100
+        },
+        "completion_queue": {
+            "keep_full": true,
+            "periodic_drain_msec": 10,
+            "periodic_drain_max_cqes": 10000,
+            "rx_drain_rate_nsec": 0,
+            "interrupt_moderation": {
+                "enable": true,
+                "packet_count": 48,
+                "period_usec": 50,
+                "adaptive_count": 500,
+                "adaptive_period_usec": 1000,
+                "adaptive_change_frequency_msec": 1000,
+                "adaptive_interrupt_per_sec": 10000
+            }
+        },
+        "buffers": {
+            "batching_mode": 1,
+            "tx": {
+                "buf_size": 0,
+                "prefetch_size": 256
+            },
+            "rx": {
+                "buf_size": 0,
+                "prefetch_size": 256,
+                "prefetch_before_poll": 0
+            },
+            "tcp_segments": {
+                "socket_batch_size": 64,
+                "ring_batch_size": 1024,
+                "pool_batch_size": 16384
+            }
+        },
+        "max_gro_streams": 32,
+        "override_rcvbuf_limit": 65536
+    },
+    "applications": {
+        "nginx": {
+            "src_port_stride": 2,
+            "workers_num": 0,
+            "udp_pool_size": 0,
+            "udp_socket_pool_reuse": 0,
+            "distribute_cq": false
+        }
+    },
+    "acceleration_control": {
+        "default_acceleration": true,
+        "app_id": "XLIO_DEFAULT_APPLICATION_ID",
+        "rules": [{
+            "id": "1",
+            "name": "nginx",
+            "actions": ["use os tcp_server 127.0.0.1:80"]
+        },
+        {
+            "id": "2",
+            "name": "sockperf",
+            "actions": ["use os tcp_client 127.0.0.1:80"]
+        }
+    ]
+    },
+    "monitor": {
+        "log": {
+            "level": 3,
+            "file_path": "",
+            "details": 0,
+            "colors": true
+        },
+        "stats": {
+            "file_path": "",
+            "fd_num": 0,
+            "shmem_dir": "/tmp/xlio",
+            "cpu_usage": false
+        },
+        "exit_report": -1
+    },
+    "profiles": {
+        "spec": 0
+    }
+}
+

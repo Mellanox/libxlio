@@ -234,6 +234,15 @@ std::experimental::any parameter_descriptor::get_value(int64_t val) const
     return std::experimental::any(val);
 }
 
+std::experimental::any parameter_descriptor::get_value(
+    const std::vector<std::experimental::any> &val) const
+{
+    if (m_type != typeid(std::vector<std::experimental::any>)) {
+        throw std::experimental::bad_any_cast();
+    }
+    return std::experimental::any(val);
+}
+
 std::experimental::any parameter_descriptor::get_value(const std::experimental::any &val) const
 {
     // Dispatch to type-specific convenience methods based on the input type
@@ -243,6 +252,8 @@ std::experimental::any parameter_descriptor::get_value(const std::experimental::
         return get_value(std::experimental::any_cast<std::string>(val));
     } else if (val.type() == typeid(int64_t)) {
         return get_value(std::experimental::any_cast<int64_t>(val));
+    } else if (val.type() == typeid(std::vector<std::experimental::any>)) {
+        return get_value(std::experimental::any_cast<std::vector<std::experimental::any>>(val));
     } else {
         // For unsupported types, throw an exception
         throw std::experimental::bad_any_cast();

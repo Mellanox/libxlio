@@ -74,6 +74,8 @@ set_value_from_registry_if_exists(T &key, const std::string &name, const config_
 
 void check_netperf_flags();
 
+bool g_use_new_config = false;
+
 // Do not rely on global variable initialization in code that might be called
 // from library constructor
 mce_sys_var &safe_mce_sys()
@@ -110,7 +112,7 @@ typedef struct {
 
 // String constants to avoid duplication
 static const char *const STR_NONE = "none";
-static const char *const STR_ULTRA_LATENCY = "ultra-latency";
+static const char *const STR_ULTRA_LATENCY = "ultra_latency";
 static const char *const STR_LATENCY = "latency";
 static const char *const STR_NGINX = "nginx";
 static const char *const STR_NGINX_DPU = "nginx_dpu";
@@ -764,7 +766,7 @@ void mce_sys_var::update_multi_process_params()
 #endif /* DEFINED_NGINX */
 }
 
-void mce_sys_var::legacy_get_env_params()
+void mce_sys_var::get_env_params()
 {
     char *env_ptr;
     memset(log_filename, 0, sizeof(log_filename));
@@ -3008,8 +3010,9 @@ void mce_sys_var::get_params()
     // legacy method - config registry is not relevant for this case
     const char *use_new_config = std::getenv("XLIO_USE_NEW_CONFIG");
     if (!use_new_config || std::string(use_new_config) != "1") {
-        legacy_get_env_params();
+        get_env_params();
     } else {
+        g_use_new_config = true;
         try {
             // coverity[fun_call_w_exception]
             apply_config_from_registry();
