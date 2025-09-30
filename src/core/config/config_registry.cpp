@@ -24,6 +24,9 @@ static std::string get_user_friendly_type_name(const std::type_index &type)
     if (type == typeid(std::string)) {
         return "string";
     }
+    if (type == typeid(std::vector<std::experimental::any>)) {
+        return "array";
+    }
     return "unknown type";
 }
 

@@ -133,6 +133,13 @@ public:
     std::experimental::any get_value(int64_t val) const;
 
     /**
+     * @brief Type-specific get_value for vector<std::experimental::any> values
+     * @param val vector<std::experimental::any> input value
+     * @return Resolved vector<std::experimental::any> value as std::experimental::any
+     */
+    std::experimental::any get_value(const std::vector<std::experimental::any> &val) const;
+
+    /**
      * @brief Gets the type of the parameter
      * @return The type of the parameter
      */
