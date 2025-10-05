@@ -138,6 +138,21 @@ runs_on_dockers:
       runAsUser: '0',
       runAsGroup: '0'
     }
+  - {
+     file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
+     arch: 'x86_64',
+     name: 'gtest',
+     uri: 'xlio/$arch/ubuntu22.04/$name',
+     tag: '20250219',
+     build_args: '--no-cache --target gtest',
+     category: 'tests',
+     annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p1@net1,sriov-cx6dx-p2@net2' }],
+     limits: '{memory: 8Gi, cpu: 8000m, hugepages-2Mi: 8Gi, nvidia.com/sriov-cx6dx-p1: 1, nvidia.com/sriov-cx6dx-p2: 1}',
+     requests: '{memory: 8Gi, cpu: 8000m, hugepages-2Mi: 8Gi, nvidia.com/sriov-cx6dx-p1: 1, nvidia.com/sriov-cx6dx-p2: 1}',
+     caps_add: '[ IPC_LOCK, SYS_RESOURCE ]',
+     runAsUser: '0',
+     runAsGroup: '0'
+    }
 
 runs_on_agents:
   - {nodeLabel: 'beni09', category: 'base'}
@@ -357,9 +372,9 @@ steps:
   - name: Gtest
     enable: ${do_gtest}
     containerSelector:
-      - "{name: 'skip-container'}"
+      - "{name: 'gtest'}"
     agentSelector:
-      - "{nodeLabel: 'beni09'}"
+      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_gtest}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_gtest=${action} ./contrib/test_jenkins.sh
@@ -407,6 +422,7 @@ steps:
     containerSelector:
       - "{category: 'base'}"
       - "{name: 'vg'}"
+      - "{name: 'gtest'}"
       - "{category: 'tests'}"
     agentSelector:
       - "{nodeLabel: 'beni09'}"
