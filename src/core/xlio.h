@@ -4,6 +4,26 @@
  * SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
  */
 
+/**
+ * @file xlio.h
+ * @brief XLIO Ultra API and POSIX socket API
+ *
+ * This file provides the XLIO Ultra API for high-performance zero-copy networking, as well as the
+ * POSIX socket API implementation.
+ */
+
+/**
+ * @mainpage XLIO Ultra API Documentation
+ *
+ * @section intro_sec Introduction
+ *
+ * The NVIDIA® Accelerated IO (XLIO) SW library accelerates the performance of TCP/IP network
+ * applications providing high bandwidth and low CPU usage.
+ *
+ * XLIO provides the @ref xlio_ultra_api "XLIO Ultra API" - high-performance, zero-copy
+ * event-driven interface.
+ */
+
 #ifndef XLIO_H
 #define XLIO_H
 

@@ -4,6 +4,13 @@
  * SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
  */
 
+/**
+ * @file xlio_types.h
+ * @brief XLIO API type definitions and structures
+ *
+ * This file contains all type definitions, structures, and constants used by the XLIO API.
+ */
+
 #ifndef XLIO_TYPES_H
 #define XLIO_TYPES_H
 
