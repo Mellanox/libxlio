@@ -18,6 +18,7 @@ general:
         - ".*COPYING"
         - ".*TODO"
         - ".*license"
+        - ".*Doxyfile"
         - ".*\\.md"
         - ".*\\.sh"
         - ".*configure\\.ac"
