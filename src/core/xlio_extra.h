@@ -4,6 +4,15 @@
  * SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
  */
 
+/**
+ * @file xlio_extra.h
+ * @brief XLIO Extended API for advanced features
+ *
+ * This file provides the extended XLIO API structure for accessing advanced features and the
+ * XLIO Ultra API functions through a function pointer interface. This approach enables dynamic
+ * API discovery when using LD_PRELOAD or dlopen/dlsym mechanisms.
+ */
+
 #ifndef XLIO_EXTRA_H
 #define XLIO_EXTRA_H
 
