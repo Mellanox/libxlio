@@ -70,15 +70,15 @@ struct xlio_rate_limit_t {
 };
 
 typedef enum {
-    RING_LOGIC_PER_INTERFACE = 0, //!< RING_LOGIC_PER_INTERFACE
-    RING_LOGIC_PER_IP = 1, //!< RING_LOGIC_PER_IP
-    RING_LOGIC_PER_SOCKET = 10, //!< RING_LOGIC_PER_SOCKET
-    RING_LOGIC_PER_USER_ID = 11, //!< RING_LOGIC_PER_USER_ID
-    RING_LOGIC_PER_THREAD = 20, //!< RING_LOGIC_PER_THREAD
-    RING_LOGIC_PER_CORE = 30, //!< RING_LOGIC_PER_CORE
-    RING_LOGIC_PER_CORE_ATTACH_THREADS = 31, //!< RING_LOGIC_PER_CORE_ATTACH_THREADS
-    RING_LOGIC_PER_OBJECT = 32, //!< RING_LOGIC_PER_OBJECT
-    RING_LOGIC_LAST //!< RING_LOGIC_LAST
+    RING_LOGIC_PER_INTERFACE = 0,
+    RING_LOGIC_PER_IP = 1,
+    RING_LOGIC_PER_SOCKET = 10,
+    RING_LOGIC_PER_USER_ID = 11,
+    RING_LOGIC_PER_THREAD = 20,
+    RING_LOGIC_PER_CORE = 30,
+    RING_LOGIC_PER_CORE_ATTACH_THREADS = 31,
+    RING_LOGIC_PER_OBJECT = 32,
+    RING_LOGIC_LAST
 } ring_logic_t;
 
 typedef enum {
@@ -87,7 +87,7 @@ typedef enum {
     XLIO_RING_ALLOC_MASK_RING_ENGRESS = (1 << 2),
 } xlio_ring_alloc_logic_attr_comp_mask;
 
-/**
+/*
  * @brief pass this struct to process by the library using setsockopt with
  * @ref SO_XLIO_RING_ALLOC_LOGIC
  * 	to set the allocation logic of this FD when he requests a ring.
@@ -110,8 +110,7 @@ struct xlio_ring_alloc_logic_attr {
     uint32_t reserved : 30;
 };
 
-/**
- *
+/*
  * Notification callback for incoming packet on socket
  * @param fd Socket's file descriptor which this packet refers to
  * @param iov iovector structure array point holding the packet

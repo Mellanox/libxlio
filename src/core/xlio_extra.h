@@ -13,13 +13,13 @@
 
 #include "xlio_types.h"
 
-/** Magic value for xlio_get_api (NVDAXLIO) */
+/* Magic value for xlio_get_api (NVDAXLIO) */
 #define XLIO_MAGIC_NUMBER (0x4f494c584144564eULL)
 
 /* Forward declaration. */
 struct ibv_pd;
 
-/**
+/*
  * XLIO Extended Socket API
  */
 
@@ -33,13 +33,13 @@ enum {
 
 struct __attribute__((packed)) xlio_api_t {
 
-    /**
+    /*
      * Used to verify that API structure returned from xlio_get_api call is
      * compatible with current XLIO library version.
      */
     uint64_t magic;
 
-    /**
+    /*
      * Used to identify which methods were initialized by XLIO as part of xlio_get_api().
      * The value content is based on cap_mask bit field.
      * Order of fields in this structure should not be changed to keep abi compatibility.
@@ -73,19 +73,19 @@ struct __attribute__((packed)) xlio_api_t {
      */
     int (*dump_fd_stats)(int fd, int log_level);
 
-    /**
+    /*
      * Register a received packet notification callback.
      *
      * @param s Socket file descriptor.
      * @param callback Callback function.
-     * @param context user contex for callback function.
+     * @param context user context for callback function.
      * @return 0 - success, -1 - error
      *
      * errno is set to: EINVAL - not offloaded socket
      */
     int (*register_recv_callback)(int s, xlio_recv_callback_t callback, void *context);
 
-    /**
+    /*
      * XLIO Ultra API.
      */
     int (*xlio_init_ex)(const struct xlio_init_attr *attr);
@@ -117,14 +117,14 @@ struct __attribute__((packed)) xlio_api_t {
     void (*xlio_poll_group_buf_free)(xlio_poll_group_t group, struct xlio_buf *buf);
 };
 
-/**
+/*
  * Retrieve XLIO extended API.
  * This function can be called as an alternative to getsockopt() call
  * when library is preloaded using LD_PRELOAD
  * getsockopt() call should be used in case application loads library
  * using dlopen()/dlsym().
  *
- * @return Pointer to the XLIO Extended Socket API, of NULL if XLIO not found.
+ * @return Pointer to the XLIO Extended Socket API, or NULL if XLIO not found.
  */
 static inline struct xlio_api_t *xlio_get_api()
 {
