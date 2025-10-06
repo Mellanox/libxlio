@@ -143,7 +143,7 @@ int xlio_thread_offload(int offload, pthread_t tid);
  */
 int xlio_dump_fd_stats(int fd, int log_level);
 
-/**
+/*
  * Register a received packet notification callback.
  *
  * @param s Socket file descriptor.
