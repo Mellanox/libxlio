@@ -75,6 +75,7 @@ debian/changelog
 contrib/scripts/libxlio.spec
 contrib/scripts/xlio.init
 contrib/scripts/xlio.service
+docs/doxygen
 docs/man/xlio.7
 docs/man/xlio_stats.8
 docs/man/xliod.8
