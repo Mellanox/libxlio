@@ -568,7 +568,7 @@
                                 }
                             ],
                             "title": "Large Receive Offload policy",
-                            "description": "Maps to XLIO_LRO environment variable.\nLarge receive offload (LRO) is a technique for increasing inbound throughput\nof high-bandwidth network connections by reducing CPU overhead.\nIt works by aggregating multiple incoming packets from a single stream\ninto a larger buffer before they are passed higher up the networking stack,\nthus reducing the number of packets that must be processed.\n   - \"auto\" or -1\n      Depends on ethtool setting and adapter ability.\n      See ethtool -k <eth0> | grep large-receive-offload\n   - \"off\" or 0\n      Disabled\n   - \"on\" or 1\n      Enabled in case adapter supports it"
+                            "description": "Maps to XLIO_LRO environment variable.\nLarge receive offload (LRO) is a technique for increasing inbound throughput\nof high-bandwidth network connections by reducing CPU overhead.\nIt works by aggregating multiple incoming packets from a single stream\ninto a larger buffer before they are passed higher up the networking stack,\nthus reducing the number of packets that must be processed.\n   - \"auto\" or -1\n      Depends on ethtool setting and adapter ability.\n      See ethtool -k <eth0> | grep large-receive-offload\n   - \"disable\" or 0\n      Disabled\n   - \"enable\" or 1\n      Enabled in case adapter supports it"
                         },
                         "tso": {
                             "type": "object",
@@ -596,7 +596,7 @@
                                         }
                                     ],
                                     "title": "TCP segmentation offload policy",
-                                    "description": "Maps to XLIO_TSO environment variable.\nWith Segmentation Offload, or TCP Large Send,\nTCP can pass a buffer to be transmitted that is bigger than the\nmaximum transmission unit (MTU) supported by the medium.\nIntelligent adapters implement large sends by using the prototype TCP and IP headers\nof the incoming send buffer to carve out segments of required size.\nCopying the prototype header and options, then calculating the sequence number and\nchecksum fields creates TCP segment headers.\nExpected benefits: Throughput increase and CPU unload.\n   - \"auto\" or -1\n      Depends on ethtool setting and adapter ability.\n      See ethtool -k <eth0> | grep tcp-segmentation-offload\n   - \"off\" or 0\n      Disabled\n   - \"on\" or 1\n      Enabled in case adapter supports it"
+                                    "description": "Maps to XLIO_TSO environment variable.\nWith Segmentation Offload, or TCP Large Send,\nTCP can pass a buffer to be transmitted that is bigger than the\nmaximum transmission unit (MTU) supported by the medium.\nIntelligent adapters implement large sends by using the prototype TCP and IP headers\nof the incoming send buffer to carve out segments of required size.\nCopying the prototype header and options, then calculating the sequence number and\nchecksum fields creates TCP segment headers.\nExpected benefits: Throughput increase and CPU unload.\n   - \"auto\" or -1\n      Depends on ethtool setting and adapter ability.\n      See ethtool -k <eth0> | grep tcp-segmentation-offload\n   - \"disable\" or 0\n      Disabled\n   - \"enable\" or 1\n      Enabled in case adapter supports it"
                                 },
                                 "max_size": {
                                     "oneOf": [
@@ -974,10 +974,28 @@
                             "description": "Maps to XLIO_RX_CQ_WAIT_CTRL environment variable.\nEnsures FDs are added only to sleeping sockets epoll descriptors,\nreducing kernel scan overhead."
                         },
                         "skip_cq_on_rx": {
-                            "type": "integer",
-                            "default": 0,
+                            "oneOf": [
+                                {
+                                    "type": "integer",
+                                    "enum": [
+                                        0,
+                                        1,
+                                        2
+                                    ],
+                                    "default": 0
+                                },
+                                {
+                                    "type": "string",
+                                    "enum": [
+                                        "disable",
+                                        "enable",
+                                        "enable_epoll_only"
+                                    ],
+                                    "default": "disable"
+                                }
+                            ],
                             "title": "Skip completion queue checks on RX",
-                            "description": "Maps to XLIO_SKIP_POLL_IN_RX environment variable.\nAllow TCP socket to skip CQ polling in rx socket call.Use:\n   - 0 - Disabled\n   - 1 - Skip always\n   - 2 - Skip only if this socket was added to epoll before."
+                            "description": "Maps to XLIO_SKIP_POLL_IN_RX environment variable.\nAllow TCP socket to skip CQ polling in rx socket call.\nUse:\n   - \"disable\" or 0 - Disabled\n   - \"enable\" or 1 - Skip always\n   - \"enable_epoll_only\" or 2 - Skip only if this socket was added to epoll before."
                         },
                         "blocking_rx_poll_usec": {
                             "type": "integer",
@@ -1485,14 +1503,14 @@
                                     "type": "string",
                                     "enum": [
                                         "auto",
-                                        "off",
-                                        "on"
+                                        "disable",
+                                        "enable"
                                     ],
                                     "default": "auto"
                                 }
                     ],
                     "title": "Enable exit report",
-                    "description": "Maps to XLIO_PRINT_REPORT environment variable.\nPrint a human readable report of resources usage at exit.\nThe report is printed during termination phase.\nTherefore, it can be missed if the process is killed with the SIGKILL signal.\nUse:\n   - \"auto\" or -1\n      Print report only if anomaly is detected on process exit.\n   - \"off\" or 0\n      Never print report.\n   - \"on\" or 1\n      Always print report."
+                    "description": "Maps to XLIO_PRINT_REPORT environment variable.\nPrint a human readable report of resources usage at exit.\nThe report is printed during termination phase.\nTherefore, it can be missed if the process is killed with the SIGKILL signal.\nUse:\n   - \"auto\" or -1\n      Print report only if anomaly is detected on process exit.\n   - \"disable\" or 0\n      Never print report.\n   - \"enable\" or 1\n      Always print report."
                 }
             },
             "additionalProperties": false

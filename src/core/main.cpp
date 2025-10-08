@@ -910,8 +910,8 @@ void print_xlio_global_settings()
                     MCE_DEFAULT_HANDLE_SIGINTR, CONFIG_VAR_HANDLE_SIGINTR);
     VLOG_PARAM_BOOL("SegFault Backtrace", safe_mce_sys().handle_segfault,
                     MCE_DEFAULT_HANDLE_SIGFAULT, CONFIG_VAR_HANDLE_SIGSEGV);
-    VLOG_PARAM_BOOL("Print a report", safe_mce_sys().print_report, MCE_DEFAULT_PRINT_REPORT,
-                    CONFIG_VAR_PRINT_REPORT);
+    VLOG_PARAM_STRING("Print a report", safe_mce_sys().print_report, MCE_DEFAULT_PRINT_REPORT,
+                      CONFIG_VAR_PRINT_REPORT, option_3::to_str(safe_mce_sys().print_report));
     VLOG_PARAM_BOOL("Quick start", safe_mce_sys().quick_start, MCE_DEFAULT_QUICK_START,
                     CONFIG_VAR_QUICK_START);
 
@@ -1249,8 +1249,9 @@ void print_xlio_global_settings()
         "Skip CQ polling in rx", safe_mce_sys().skip_poll_in_rx, MCE_DEFAULT_SKIP_POLL_IN_RX,
         CONFIG_VAR_SKIP_POLL_IN_RX,
         safe_mce_sys().skip_poll_in_rx
-            ? (safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_ENABLE ? "true" : "Epoll Only")
-            : "false");
+            ? (safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_ENABLE ? "enable"
+                                                                        : "enable_epoll_only")
+            : "disable");
     VLOG_PARAM_STRING("Mutex over spinlock", safe_mce_sys().multilock, MCE_DEFAULT_MULTILOCK,
                       CONFIG_VAR_MULTILOCK,
                       (safe_mce_sys().multilock != MULTILOCK_SPIN) ? "true" : "false");
