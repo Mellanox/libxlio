@@ -397,9 +397,9 @@ thus reducing the number of packets that must be processed.
    - "auto" or -1
       Depends on ethtool setting and adapter ability.
       See ethtool -k <eth0> | grep large-receive-offload
-   - "off" or 0
+   - "disable" or 0
       Disabled
-   - "on" or 1
+   - "enable" or 1
       Enabled in case adapter supports it
 Default value is -1
 
@@ -441,9 +441,9 @@ Expected benefits: Throughput increase and CPU unload.
    - "auto" or -1
       Depends on ethtool setting and adapter ability.
       See ethtool -k <eth0> | grep tcp-segmentation-offload
-   - "off" or 0
+   - "disable" or 0
       Disabled
-   - "on" or 1
+   - "enable" or 1
       Enabled in case adapter supports it
 Default value is -1
 
@@ -466,9 +466,9 @@ Therefore, it can be missed if the process is killed with the SIGKILL signal.
 Use:
    - "auto" or -1
       Print report only if anomaly is detected on process exit.
-   - "off" or 0
+   - "disable" or 0
       Never print report.
-   - "on" or 1
+   - "enable" or 1
       Always print report.
 Default value is -1
 
@@ -1004,10 +1004,11 @@ Default value is false
 
 performance.polling.skip_cq_on_rx
 Maps to **XLIO_SKIP_POLL_IN_RX** environment variable.
-Allow TCP socket to skip CQ polling in rx socket call.Use:
-   - 0 - Disabled
-   - 1 - Skip always
-   - 2 - Skip only if this socket was added to epoll before.
+Allow TCP socket to skip CQ polling in rx socket call.
+Use:
+   - "disable" or 0 - Disabled
+   - "enable" or 1 - Skip always
+   - "enable_epoll_only" or 2 - Skip only if this socket was added to epoll before.
 Default value is 0
 
 performance.polling.yield_on_poll

@@ -27,6 +27,10 @@ static std::string get_user_friendly_type_name(const std::type_index &type)
     if (type == typeid(std::vector<std::experimental::any>)) {
         return "array";
     }
+    if (type == typeid(std::map<std::string, std::experimental::any>)) {
+        return "object";
+    }
+
     return "unknown type";
 }
 
@@ -102,7 +106,8 @@ void config_registry::initialize_registry(std::queue<std::unique_ptr<loader>> &&
                     throw_xlio_exception("In '" + loader->source() + "': Type mismatch for key '" +
                                          key + "': expected " +
                                          get_user_friendly_type_name(expected_type) + ", got " +
-                                         get_user_friendly_type_name(value.type()));
+                                         get_user_friendly_type_name(value.type()) +
+                                         ".\nDid you mean to access keys under '" + key + "'?");
                 }
                 // Otherwise, use the original error message
                 throw_xlio_exception("In '" + loader->source() + "': " + e.message);
