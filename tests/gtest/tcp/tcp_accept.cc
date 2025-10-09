@@ -40,6 +40,9 @@ TEST_F(tcp_accept, mapped_ipv4_accept)
                 EXPECT_EQ_ERRNO(0, rc);
                 if (0 == rc) {
                     rc = connect(fd, &server_addr.addr, sizeof(server_addr));
+                    printf("connect rc: %d\n", rc);
+                    printf("connect errno: %d\n", errno);
+
                     EXPECT_TRUE(rc == 0 || (rc < 0 && errno == EINPROGRESS));
                     if (0 == rc) {
                         log_trace("Established connection: fd=%d to %s from %s\n", fd,
