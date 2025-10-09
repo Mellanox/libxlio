@@ -2323,8 +2323,12 @@ EXPORT_SYMBOL pid_t XLIO_SYMBOL(fork)(void)
         // Child inherits parent's m_last_run_time which causes timers to be
         // rate-limited for up to 100ms, breaking TCP retransmit logic.
         if (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+            __log_err("[FORK_FIX] About to call reset_after_fork() in child PID=%d", getpid());
             g_event_handler_manager_local.reset_after_fork();
-            srdr_logdbg("Child Process: reset delegate mode timers after fork");
+            __log_err("[FORK_FIX] Completed reset_after_fork() in child");
+        } else {
+            __log_err("[FORK_FIX] NOT calling reset_after_fork() - delegate mode NOT active, tcp_ctl_thread=%d", 
+                      (int)safe_mce_sys().tcp_ctl_thread);
         }
 
         const char *stats_filename = getenv(SYS_VAR_STATS_FILENAME);
