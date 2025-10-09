@@ -72,14 +72,65 @@ fi
 eval "${sudo_cmd} pkill -9 ${prj_service} 2>/dev/null || true"
 eval "${sudo_cmd} ${install_dir}/sbin/${prj_service} --console -v5 &"
 
+# Test with full coverage of the new config
+eval "${sudo_cmd} $timeout_exe env XLIO_USE_NEW_CONFIG=1 XLIO_CONFIG_FILE=${WORKSPACE}/tests/gtest/xlio_config_full_coverage.json GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=-xlio_*:-ultra* --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic.xml"
+rc=$(($rc+$?))
+
+# Exclude EXTRA API tests IPv6
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=-xlio_*:-ultra* --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic-ipv6.xml"
+rc=$(($rc+$?))
+
 # Verify Delegated TCP Timers tests
-eval "${sudo_cmd} $timeout_exe env XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=*delegate_mode_fork_debug* --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate.xml"
+eval "${sudo_cmd} $timeout_exe env XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=-xlio*:-ultra* --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate.xml"
 rc=$(($rc+$?))
 
 # Verify Delegated TCP Timers tests IPv6
-eval "${sudo_cmd} $timeout_exe env XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=*delegate_mode_fork_debug* --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate-ipv6.xml"
+eval "${sudo_cmd} $timeout_exe env XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=-xlio*:-ultra* --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate-ipv6.xml"
 rc=$(($rc+$?))
 
+if [[ -z "${MANUAL_RUN}" ]]; then
+	make -C tests/gtest clean
+	make $make_opt -C tests/gtest CPPFLAGS="-DEXTRA_API_ENABLED=1"
+	rc=$(($rc+$?))
+fi
+
+# Verify XLIO EXTRA API tests
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=xlio_* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra.xml"
+rc=$(($rc+$?))
+
+# Verify XLIO EXTRA API tests IPv6
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=xlio_* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra-ipv6.xml"
+rc=$(($rc+$?))
+
+# XLIO Ultra API
+
+#IPV4
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=ultra_api* --gtest_output=xml:${WORKSPACE}/${prefix}/test-xlio_ultra_api.xml"
+rc=$(($rc+$?))
+
+#IPV6
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=ultra_api* --gtest_output=xml:${WORKSPACE}/${prefix}/test-xlio_ultra_api-ipv6.xml"
+rc=$(($rc+$?))
+
+# Worker Threads Mode tests
+
+# Worker Threads Mode test filter
+worker_threads_filter="tcp_listen*:sock_socket.ti_2:tcp_bind*:-tcp_bind.mapped_ipv4_bind:tcp_event*"
+
+eval "${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads.xml"
+rc=$(($rc+$?))
+
+# Worker Threads Mode tests IPv6
+eval "${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-ipv6.xml"
+rc=$(($rc+$?))
+
+# Worker Threads Mode - Power of 2 (2 threads)
+eval "${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=2 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-pow2.xml"
+rc=$(($rc+$?))
+
+# Worker Threads Mode - Non-Power of 2 (3 threads)
+eval "${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=3 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-not-pow2.xml"
+rc=$(($rc+$?))
 
 eval "${sudo_cmd} pkill -9 ${prj_service} 2>/dev/null || true"
 

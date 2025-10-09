@@ -2319,6 +2319,14 @@ EXPORT_SYMBOL pid_t XLIO_SYMBOL(fork)(void)
         srdr_logdbg_exit("Child Process: starting with %d", getpid());
         g_is_forked_child = false;
 
+        // In delegate mode, reset thread-local timer state after fork.
+        // Child inherits parent's m_last_run_time which causes timers to be
+        // rate-limited for up to 100ms, breaking TCP retransmit logic.
+        if (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+            g_event_handler_manager_local.reset_after_fork();
+            srdr_logdbg("Child Process: reset delegate mode timers after fork");
+        }
+
         const char *stats_filename = getenv(SYS_VAR_STATS_FILENAME);
         if (stats_filename && strstr(stats_filename, "%d")) {
             // Re-open the stats file in case of per-process filename.
