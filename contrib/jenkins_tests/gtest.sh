@@ -7,9 +7,10 @@ do_hugepages
 ulimit -l unlimited
 ulimit -c unlimited
 
-# add route entry to have DG in docker environments
-ip route add default via 10.213.0.1 dev net1 metric 100
-ip -6 route add default via fd52:2eb5:44::1810 dev net1 metric 100
+# test communication between two interfaces - needed for tests
+ping -c 1 -I 10.213.0.19 10.213.0.20
+ping -c 1 -I 10.213.0.20 10.213.0.19
+
 
 echo "Checking for gtest ..."
 
