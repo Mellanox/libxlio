@@ -2650,6 +2650,8 @@ void sockinfo_tcp::register_timer()
      * internal-thread locks contention.
      */
     if (!is_timer_registered()) {
+        __log_err("[DELEGATE_DEBUG] register_timer: socket=%p, pid=%d, tid=%ld, timer-col=%p, delegate_mode=%d",
+                        this, getpid(), gettid(), get_tcp_timer_collection(), (int)(safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS));
         si_tcp_logdbg("Registering TCP socket timer: socket: %p, timer-col: %p, global-col: %p",
                       this, get_tcp_timer_collection(), g_tcp_timers_collection);
 
@@ -4090,6 +4092,7 @@ err_t sockinfo_tcp::connect_lwip_cb(void *arg, struct tcp_pcb *tpcb, err_t err)
 int sockinfo_tcp::wait_for_conn_ready_blocking()
 {
     int poll_count = 0;
+    __log_err("[DELEGATE_DEBUG] wait_for_conn_ready_blocking: socket=%p, pid=%d, m_conn_state=%d", this, getpid(), m_conn_state);
 
     si_tcp_logfuncall("");
 
@@ -5322,6 +5325,7 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
         // There are scenarios when rx_wait_helper is called in an infinite loop but exits before
         // OS epoll_wait. Delegated TCP timers must be attempted in such case.
         // This is a slow path. So calling chrono::now(), even with every iteration, is OK here.
+        __log_err("[DELEGATE_DEBUG] rx_wait_helper: calling do_tasks(), socket=%p, pid=%d, poll_count=%d", this, getpid(), poll_count);
         g_event_handler_manager_local.do_tasks();
     }
 
@@ -5953,6 +5957,7 @@ void tcp_timers_collection::add_new_timer(sockinfo_tcp *sock)
 {
     if (!sock) {
         __log_warn("Trying to add timer for null TCP socket %p", sock);
+        __log_err("[DELEGATE_DEBUG] add_new_timer: NULL socket!");
         return;
     }
 
@@ -5968,7 +5973,7 @@ void tcp_timers_collection::add_new_timer(sockinfo_tcp *sock)
         bucket.pop_back();
         return;
     }
-
+    __log_err("[DELEGATE_DEBUG] add_new_timer: socket=%p, pid=%d, collection=%p", sock, getpid(), this);
     m_n_next_insert_bucket = (m_n_next_insert_bucket + 1) % m_n_intervals_size;
     if (0 == m_n_count++) {
         m_timer_handle = get_event_mgr()->register_timer_event(safe_mce_sys().timer_resolution_msec,
