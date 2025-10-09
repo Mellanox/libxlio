@@ -7,9 +7,11 @@ do_hugepages
 ulimit -l unlimited
 ulimit -c unlimited
 
+apt update
+apt install iputils-ping
 # test communication between two interfaces - needed for tests
-ping -c 1 -I 10.213.0.19 10.213.0.20
-ping -c 1 -I 10.213.0.20 10.213.0.19
+ping -c 1 -I $(ip -f inet addr show net1 | awk '/inet / {print $2}' | cut -d/ -f1) $(ip -f inet addr show net2 | awk '/inet / {print $2}' | cut -d/ -f1)
+ping -c 1 -I $(ip -f inet6 addr show net2 | grep global | awk '/inet6 / {print $2}' | cut -d/ -f1) $(ip -f inet6 addr show net1 | grep global | awk '/inet6 / {print $2}' | cut -d/ -f1)
 
 
 echo "Checking for gtest ..."
