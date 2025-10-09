@@ -1124,6 +1124,7 @@ void sockinfo_tcp::unlock_rx_q()
 
 void sockinfo_tcp::tcp_timer()
 {
+    __log_err("[DELEGATE_DEBUG] tcp_timer: socket=%p, pid=%d, m_state=%d, pcb_state=%d", this, getpid(), m_state, get_tcp_state(&m_pcb));
     if (m_state == SOCKINFO_DESTROYING) {
         return;
     }
