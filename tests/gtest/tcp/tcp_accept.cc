@@ -39,7 +39,6 @@ TEST_F(tcp_accept, mapped_ipv4_accept)
                 int rc = bind(fd, &client_addr.addr, sizeof(client_addr));
                 EXPECT_EQ_ERRNO(0, rc);
                 if (0 == rc) {
-                    sleep(10);
                     rc = connect(fd, &server_addr.addr, sizeof(server_addr));
                     printf("connect rc: %d\n", rc);
                     printf("connect errno: %d\n", errno);
