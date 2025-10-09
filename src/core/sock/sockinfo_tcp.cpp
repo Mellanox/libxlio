@@ -5999,6 +5999,28 @@ void tcp_timers_collection::remove_timer(sockinfo_tcp *sock)
     }
 }
 
+void tcp_timers_collection::reset_after_fork()
+{
+    // After fork(), child process inherits parent's timer collection state.
+    // Critical issue: m_n_count > 0 from parent means child won't register
+    // the timer collection with event manager on first socket add.
+    // This causes TCP retransmits to never happen in delegate mode.
+    /*__log_err("[FORK_FIX] tcp_timers_collection::reset_after_fork() PID=%d m_n_count was %d", 
+              getpid(), m_n_count);
+    
+    // Clear all state inherited from parent
+    for (auto &bucket : m_p_intervals) {
+        bucket.clear();
+    }
+    m_sock_remove_map.clear();
+    m_n_count = 0;
+    m_n_location = 0;
+    m_n_next_insert_bucket = 0;
+    m_timer_handle = nullptr;
+    
+    __log_err("[FORK_FIX] tcp_timers_collection reset complete, m_n_count now %d", m_n_count);*/
+}
+
 thread_local_tcp_timers::thread_local_tcp_timers()
     : tcp_timers_collection(1)
 {

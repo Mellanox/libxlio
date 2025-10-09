@@ -21,6 +21,7 @@ public:
     void add_close_postponed_socket(sockinfo *sock);
     void do_tasks();
     void reset_after_fork();
+    void reset_timer_collection_state();
     const time_point &last_taken_time() { return m_last_taken_time; }
 
 protected:

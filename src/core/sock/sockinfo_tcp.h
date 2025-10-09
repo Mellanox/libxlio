@@ -116,6 +116,8 @@ public:
 
     void remove_timer(sockinfo_tcp *sock);
 
+    void reset_after_fork();
+
     void set_group(poll_group *group) { m_p_group = group; }
     inline event_handler_manager *get_event_mgr();
 

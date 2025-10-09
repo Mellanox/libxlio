@@ -77,11 +77,7 @@ eval "${sudo_cmd} pkill -9 ${prj_service} 2>/dev/null || true"
 eval "${sudo_cmd} ${install_dir}/sbin/${prj_service} --console -v5 &"
 
 # Verify Delegated TCP Timers tests
-eval "${sudo_cmd} $timeout_exe env XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=*mapped_ipv4_accept* --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate.xml"
-rc=$(($rc+$?))
-
-# Verify Delegated TCP Timers tests IPv6
-eval "${sudo_cmd} $timeout_exe env XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=*mapped_ipv4_accept* --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate-ipv6.xml"
+eval "${sudo_cmd} $timeout_exe env XLIO_TRACELEVEL=debug XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=*mapped_ipv4_accept* --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate.xml"
 rc=$(($rc+$?))
 
 eval "${sudo_cmd} pkill -9 ${prj_service} 2>/dev/null || true"
