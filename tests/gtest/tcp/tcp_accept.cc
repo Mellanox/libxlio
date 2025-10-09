@@ -40,13 +40,27 @@ TEST_F(tcp_accept, mapped_ipv4_accept)
                 EXPECT_EQ_ERRNO(0, rc);
                 if (0 == rc) {
                     rc = connect(fd, &server_addr.addr, sizeof(server_addr));
-                    EXPECT_EQ_ERRNO(0, rc);
+                    EXPECT_TRUE(rc == 0 || (rc < 0 && errno == EINPROGRESS));
                     if (0 == rc) {
                         log_trace("Established connection: fd=%d to %s from %s\n", fd,
                                   SOCK_STR(server_addr), SOCK_STR(client_addr));
-
-                        peer_wait(fd);
                     }
+                    if (rc < 0 && errno == EINPROGRESS) {
+                        // Wait for connection with epoll (drives timers in delegate mode)
+                        struct epoll_event ev = {.events = EPOLLOUT, .data = {.fd = fd}};
+                        int epfd = epoll_create1(0);
+                        epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev);
+                        epoll_wait(epfd, &ev, 1, 30000);  // 30 sec timeout
+                        close(epfd);
+                        
+                        // Check if connected
+                        int error = 0;
+                        socklen_t len = sizeof(error);
+                        getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &len);
+                        EXPECT_EQ(0, error);
+                    }
+
+                    peer_wait(fd);
                 }
 
                 close(fd);
