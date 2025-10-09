@@ -1,3 +1,39 @@
+Version 3.60.4-1:
+Date + Time 2025-10-09
+=============================================================
+Added:
+        - RM #4655843 Add doxygen description to the public headers
+        - RM #4649710 Add XLIO Ultra API example application
+Fixed:
+        - RM #4551257 standardize enum - disable/enable
+        - RM #4625345 Fix Coverity uninitialized use
+        - RM #4649652 fix config parameter display
+        - RM #4578714 Remove "all" and 6 from profiles
+        - RM #4583806 config inline loader strict
+        - RM #4633470 fix generate_docs.py +update README
+        - RM #4367367 Polish Ultra API documentation
+        - RM #4603449 Guarantee TERMINATED event after xlio_socket_destroy()
+        - RM #4315534 Ultra API remove unused functions
+        - RM #4555151 fix XLIO_USE_NEW_CONFIG env check
+        - RM #4545376 reject JSON keys containing dots
+        - RM #4578243 remove support for cpu_affinity in inline config
+        - RM #4642277 Reorder socket cleanup in poll_group::close_socket
+        - RM #4640792 Fix incorrect type definitions in config file
+        - RM #4552090 add power-of-2-or-zero validation in config file
+        - RM #4578243 add unsupported parameter check in config file
+        - RM #4561511 remove obsolete global_array_size
+        - RM #4561820 Fix type validation for integers in config file
+        - RM #4551257 improve display clarity
+        - RM #4579042 Fix new/old defaults discrepancy in config file
+        - RM #4578714 standardize XLIO spec profile names
+        - RM #4570015 standardize boolean display values
+        - RM #4551255 fix any_cast error - exception mode in config file
+        - RM #4634818 fix mismatches from unknown keys
+        - RM #4555854 fix bad any_cast error -striding_rq in config file
+        - RM #4567877 fix multicast L2 rules config path
+        - RM #4550864 add minimum for nodelay_threshold in config file
+        - RM #4633383 add x-memory-size to buf config
+
 Version 3.60.3-1:
 Date + Time 2025-09-18
 =============================================================
