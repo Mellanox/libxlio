@@ -444,6 +444,27 @@ private:
     int fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit);
     bool attach_as_uc_receiver_anyip(sa_family_t family, role_t role, bool skip_rules);
 
+    /**
+     * @brief Update the RX ring fast-path pointer based on ring map size.
+     *
+     * This method maintains the m_p_rx_ring optimization pointer for single-ring sockets.
+     * Performance optimization: When a socket has exactly one RX ring (the common case),
+     * m_p_rx_ring provides direct pointer access, avoiding map iteration overhead.
+     *
+     * Behavior:
+     * - If m_rx_ring_map contains exactly 1 ring: m_p_rx_ring points to that ring (fast path)
+     * - Otherwise (0 or multiple rings): m_p_rx_ring is set to nullptr (use map iteration)
+     *
+     * Must be called after any operation that modifies m_rx_ring_map:
+     * - Adding rings (rx_add_ring_cb)
+     * - Removing rings (rx_del_ring_cb)
+     * - Ring migration (do_rings_migration_rx)
+     *
+     * @note This fixes a bug where m_p_rx_ring wasn't consistently nullified when
+     *       transitioning from single-ring to multi-ring configurations.
+     */
+    void update_rx_ring_ptr();
+
 protected:
     dst_entry *m_p_connected_dst_entry = nullptr;
     sockinfo_state m_state = SOCKINFO_OPENED; // socket current state
