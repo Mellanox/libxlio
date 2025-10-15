@@ -18,6 +18,7 @@ RUN apt-get update && \
     valgrind \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+FROM tests AS gtest
 FROM tests AS test
 RUN apt-get update && \
     apt-get install -y \
