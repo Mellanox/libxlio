@@ -1170,9 +1170,7 @@ void sockinfo::do_rings_migration_rx(resource_allocation_key &old_key)
         unlock_rx_q();
         m_rx_ring_map_lock.lock();
         lock_rx_q();
-        if (!m_p_rx_ring && m_rx_ring_map.size() == 1) {
-            m_p_rx_ring = m_rx_ring_map.begin()->first;
-        }
+        update_rx_ring_ptr();
         unlock_rx_q();
         m_rx_ring_map_lock.unlock();
 
@@ -1530,9 +1528,7 @@ void sockinfo::rx_add_ring_cb(ring *p_ring)
          *  - rx_del_ring_cb()
          *  - do_rings_migration_rx()
          */
-        if (m_rx_ring_map.size() == 1) {
-            m_p_rx_ring = m_rx_ring_map.begin()->first;
-        }
+        update_rx_ring_ptr();
 
         notify_epoll = true;
 
@@ -1620,11 +1616,7 @@ void sockinfo::rx_del_ring_cb(ring *p_ring)
             delete p_ring_info;
 
             if (m_p_rx_ring == base_ring) {
-                if (m_rx_ring_map.size() == 1) {
-                    m_p_rx_ring = m_rx_ring_map.begin()->first;
-                } else {
-                    m_p_rx_ring = nullptr;
-                }
+                update_rx_ring_ptr();
 
                 move_descs(base_ring, &temp_rx_reuse, &m_rx_reuse_buff.rx_reuse, true);
                 move_descs(base_ring, &temp_rx_reuse_global, &m_rx_reuse_buff.rx_reuse, false);
@@ -1826,6 +1818,15 @@ bool sockinfo::attach_as_uc_receiver_anyip(sa_family_t family, role_t role, bool
     }
 
     return ret;
+}
+
+void sockinfo::update_rx_ring_ptr()
+{
+    if (m_rx_ring_map.size() == 1) {
+        m_p_rx_ring = m_rx_ring_map.begin()->first;
+    } else {
+        m_p_rx_ring = nullptr;
+    }
 }
 
 transport_t sockinfo::find_target_family(role_t role, const struct sockaddr *sock_addr_first,
