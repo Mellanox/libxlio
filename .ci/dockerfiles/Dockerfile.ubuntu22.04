@@ -41,6 +41,7 @@ RUN mkdir -p /var/run/sshd ~/.ssh && \
     echo "   LogLevel ERROR" >> ~/.ssh/config
 
 # Style target, installs clang-format-15
+FROM tests AS gtest
 FROM build AS style
 RUN apt-get update \
  && apt-get install -y clang-15 clang-format-15 \

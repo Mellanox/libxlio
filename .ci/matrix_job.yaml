@@ -1,8 +1,6 @@
 ---
 job: LIBXLIO
 
-step_allow_single_selector: false
-
 registry_host: nbu-harbor.gtm.nvidia.com
 registry_auth: swx-infra_harbor_credentials
 registry_path: /swx-infra/media
@@ -179,8 +177,21 @@ runs_on_dockers:
     }
   - {name: 'secret-scan', url: '${registry_host}/toolbox/secret_scan:0.0.27', arch: 'x86_64', tag: '0.0.27', category: 'tool'}
 
-runs_on_agents:
-  - {nodeLabel: 'beni09', category: 'base'}
+  - {
+     file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
+     arch: 'x86_64',
+     name: 'gtest',
+     uri: 'xlio/$arch/ubuntu22.04/$name',
+     tag: '20251016',
+     build_args: '--no-cache --target gtest',
+     category: 'tests',
+     annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p1@net1,sriov-cx6dx-p2@net2' }],
+     limits: '{memory: 8Gi, cpu: 8000m, hugepages-2Mi: 8Gi, nvidia.com/sriov-cx6dx-p1: 1, nvidia.com/sriov-cx6dx-p2: 1}',
+     requests: '{memory: 8Gi, cpu: 8000m, hugepages-2Mi: 8Gi, nvidia.com/sriov-cx6dx-p1: 1, nvidia.com/sriov-cx6dx-p2: 1}',
+     caps_add: '[ IPC_LOCK, SYS_RESOURCE ]',
+     runAsUser: '0',
+     runAsGroup: '0'
+    }
 
 matrix:
   axes:
@@ -228,20 +239,10 @@ steps:
       - "{category: 'tests'}"
       - "{name: 'vg'}"
       - "{name: 'vg-worker-threads'}"
-    agentSelector:
-      - "{nodeLabel: 'skip-agent'}"
-    run: |
-      echo "Installing DOCA: ${DOCA_VERSION} ..."
-      .ci/scripts/doca_install.sh
-
-  - name: Install Doca-host on Tools
-    run: |
-      echo "Installing DOCA: ${DOCA_VERSION} ..."
-      .ci/scripts/doca_install.sh
-    containerSelector:
       - "{name: 'style', category: 'tool', variant: 1}"
-    agentSelector:
-      - "{nodeLabel: 'skip-agent'}"
+    run: |
+      echo "Installing DOCA: ${DOCA_VERSION} ..."
+      .ci/scripts/doca_install.sh 
 
   - name: Copyrights
     enable: ${do_copyrights}
@@ -249,8 +250,6 @@ steps:
     run: env WORKSPACE=$PWD GITHUB_TOKEN=$MELLANOX_GH_TOKEN ./contrib/jenkins_tests/copyrights.sh
     containerSelector:
       - "{name: 'header-check', category: 'tool', variant: 1}"
-    agentSelector:
-      - "{nodeLabel: 'skip-agent'}"
     archiveArtifacts: '*.log,*.tar.gz'
     parallel: false
 
@@ -264,8 +263,6 @@ steps:
     containerSelector:
       - "{category: 'base'}"
       - "{category: 'tests'}"
-    agentSelector:
-      - "{category: 'base'}"
     run: |
       [ "x${do_build}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_build=${action} ./contrib/test_jenkins.sh
@@ -278,8 +275,6 @@ steps:
   - name: Service
     enable: ${do_service}
     containerSelector:
-      - "{category: 'base', variant:1}"
-    agentSelector:
       - "{category: 'base', variant:1}"
     run: |
       [ "x${do_service}" == "xtrue" ] && action=yes || action=no
@@ -294,8 +289,6 @@ steps:
     enable: ${do_package}
     containerSelector:
       - "{category: 'base'}"
-    agentSelector:
-      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_package}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_rpm=${action} ./contrib/test_jenkins.sh
@@ -309,8 +302,6 @@ steps:
     enable: ${do_style}
     containerSelector:
       - "{name: 'style', category: 'tool'}"
-    agentSelector:
-      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_style}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_style=${action} ./contrib/test_jenkins.sh
@@ -324,8 +315,6 @@ steps:
     enable: ${do_compiler}
     containerSelector:
       - "{name: 'toolbox', category: 'tool'}"
-    agentSelector:
-      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_compiler}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_compiler=${action} ./contrib/test_jenkins.sh
@@ -340,8 +329,6 @@ steps:
     credentialsId: 'media_coverity_credentials'
     containerSelector:
       - "{name: 'toolbox', category: 'tool'}"
-    agentSelector:
-      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_coverity}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_cov=${action} ./contrib/test_jenkins.sh
@@ -356,8 +343,6 @@ steps:
     enable: ${do_cppcheck}
     containerSelector:
       - "{name: 'xlio_static.cppcheck', category: 'tool', variant: 1}"
-    agentSelector:
-      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_cppcheck}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_cppcheck=${action} ./contrib/test_jenkins.sh
@@ -371,8 +356,6 @@ steps:
     enable: ${do_csbuild}
     containerSelector:
       - "{name: 'xlio_static.csbuild', category: 'tool', variant: 1}"
-    agentSelector:
-      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_csbuild}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_csbuild=${action} ./contrib/test_jenkins.sh
@@ -386,8 +369,6 @@ steps:
     enable: ${do_test}
     containerSelector:
       - "{name: 'sockperf'}"
-    agentSelector:
-      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_test}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_run=${action} WORKER_THREADS=false ./contrib/test_jenkins.sh
@@ -401,8 +382,6 @@ steps:
     enable: ${do_test}
     containerSelector:
       - "{name: 'sockperf-worker-threads'}"
-    agentSelector:
-      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_test}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_run=${action} WORKER_THREADS=true ./contrib/test_jenkins.sh
@@ -416,8 +395,6 @@ steps:
     #enable: ${do_unit_test}
     containerSelector:
       - "{name: 'unit-test', category: 'tool', variant: 1}"
-    agentSelector:
-      - "{nodeLabel: 'skip-agent'}"
     run: |
       env WORKSPACE=$PWD ./contrib/jenkins_tests/unit_test.sh
     parallel: false
@@ -429,9 +406,7 @@ steps:
   - name: Gtest
     enable: ${do_gtest}
     containerSelector:
-      - "{name: 'skip-container'}"
-    agentSelector:
-      - "{nodeLabel: 'beni09'}"
+      - "{name: 'gtest'}"
     run: |
       [ "x${do_gtest}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_gtest=${action} ./contrib/test_jenkins.sh
@@ -447,8 +422,6 @@ steps:
     enable: ${do_valgrind}
     containerSelector:
       - "{name: 'vg'}"
-    agentSelector:
-      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_valgrind}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_vg=${action} WORKER_THREADS=false ./contrib/test_jenkins.sh
@@ -463,8 +436,6 @@ steps:
     enable: ${do_valgrind}
     containerSelector:
       - "{name: 'vg-worker-threads'}"
-    agentSelector:
-      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_valgrind}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_vg=${action} WORKER_THREADS=true ./contrib/test_jenkins.sh
@@ -479,8 +450,6 @@ steps:
     enable: ${do_commit}
     containerSelector:
       - "{name: 'toolbox', category: 'tool', variant:1}"
-    agentSelector:
-      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_commit}" == "xtrue" ] && action=yes || action=no
       env WORKSPACE=$PWD TARGET=${flags} jenkins_test_commit=${action} ./contrib/test_jenkins.sh
@@ -497,8 +466,6 @@ steps:
       - "{name: 'vg'}"
       - "{name: 'vg-worker-threads'}"
       - "{category: 'tests'}"
-    agentSelector:
-      - "{nodeLabel: 'beni09'}"
     run: |
       ./.ci/artifacts.sh
     parallel: false
@@ -511,8 +478,6 @@ steps:
     enable: ${do_blackduck}
     containerSelector:
       - "{name: 'xlio_static.bduck', category:'tool'}"
-    agentSelector:
-      - "{nodeLabel: 'skip-agent'}"
     run: |
       # WA for possible CI-Demo bug: HPCINFRA-1614
       if ${do_blackduck} ; then
@@ -525,8 +490,6 @@ steps:
     enable: ${do_documentation_test}
     containerSelector:
       - "{name: 'documentation_test'}"
-    agentSelector:
-      - "{nodeLabel: 'skip-agent'}"
     run: |
       python3 generate_docs.py
       python3 src/core/config/generate_mappings.py
