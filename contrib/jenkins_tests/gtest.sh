@@ -2,17 +2,17 @@
 
 source $(dirname $0)/globals.sh
 
+# Fix hugepages for docker environments
+do_hugepages
+ulimit -l unlimited
+ulimit -c unlimited
+
 echo "Checking for gtest ..."
 
 if [[ -z "${MANUAL_RUN}" ]]; then
 	# Check dependencies
 	if [ $(test -d ${install_dir} >/dev/null 2>&1 || echo $?) ]; then
 		echo "[SKIP] Not found ${install_dir} : build should be done before this stage"
-		exit 1
-	fi
-
-	if [ $(command -v ibdev2netdev >/dev/null 2>&1 || echo $?) ]; then
-		echo "[SKIP] ibdev2netdev tool does not exist"
 		exit 1
 	fi
 
@@ -58,8 +58,8 @@ function do_get_addrs()
 	echo $gtest_ip_list
 }
 
-gtest_opt="--addr=$(do_get_addrs 'eth' ${opt2})"
-gtest_opt_ipv6="--addr=$(do_get_addrs 'inet6' ${opt2}) -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff" # Remote - Dummy Address
+gtest_opt="--addr=$(ip -f inet addr show net1 | awk '/inet / {print $2}' | cut -d/ -f1),$(ip -f inet addr show net2 | awk '/inet / {print $2}' | cut -d/ -f1)"
+gtest_opt_ipv6="--addr=$(ip -f inet6 addr show net1 | grep global | awk '/inet6 / {print $2}' | cut -d/ -f1),$(ip -f inet6 addr show net2 | grep global | awk '/inet6 / {print $2}' | cut -d/ -f1) -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff" #
 
 set +eE
 
