@@ -31,8 +31,29 @@ static std::vector<xlio_socket_t> accepted_sockets;
 
 class ultra_api_socket_migrate : public ultra_api_base {
 public:
-    virtual void SetUp() { errno = EOK; };
-    virtual void TearDown() {};
+    virtual void SetUp()
+    {
+        errno = EOK;
+        // Reset static variables between test runs
+        connected_counter = 0;
+        terminated_counter = 0;
+        rx_cb_counter = 0;
+        comp_cb_counter = 0;
+        data_sent_completed = 0;
+        data_received = 0;
+        pd = NULL;
+        mr_buf = NULL;
+        do_migrate = false;
+        accepted_sockets.clear();
+    };
+    virtual void TearDown()
+    {
+        // Clean up memory registration if it exists (parent process only)
+        if (mr_buf) {
+            ibv_dereg_mr(mr_buf);
+            mr_buf = NULL;
+        }
+    };
     void destroy_poll_group(xlio_poll_group_t group) { base_destroy_poll_group(group); }
     static void socket_event_cb(xlio_socket_t sock, uintptr_t userdata_sq, int event, int value)
     {
@@ -142,7 +163,13 @@ TEST_F(ultra_api_socket_migrate, ti_1)
             xlio_api->xlio_poll_group_poll(group);
         }
 
+        if (mr_buf) {
+            ibv_dereg_mr(mr_buf);
+            mr_buf = NULL;
+        }
+
         destroy_poll_group(group);
+        destroy_poll_group(group_2);
         exit(testing::Test::HasFailure());
     } else {
         base_create_socket(&sattr, &sock);
