@@ -146,7 +146,7 @@ runs_on_dockers:
      tag: '20250219',
      build_args: '--no-cache --target gtest',
      category: 'tests',
-     annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p1@net1,sriov-cx6dx-p2@net2' }],
+     annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p1@net1,sriov-cx6dx-p2@net2,sriov-cx6-gw@gw1' }],
      limits: '{memory: 8Gi, cpu: 8000m, hugepages-2Mi: 8Gi, nvidia.com/sriov-cx6dx-p1: 1, nvidia.com/sriov-cx6dx-p2: 1}',
      requests: '{memory: 8Gi, cpu: 8000m, hugepages-2Mi: 8Gi, nvidia.com/sriov-cx6dx-p1: 1, nvidia.com/sriov-cx6dx-p2: 1}',
      caps_add: '[ IPC_LOCK, SYS_RESOURCE ]',
