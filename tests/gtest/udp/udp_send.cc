@@ -521,8 +521,10 @@ TEST_F(udp_send, null_iov_elements)
                         break;
                     }
 
-                    received += static_cast<size_t>(rc);
-                    log_trace("Received %zd\n", received);
+                    if (rc > 0) {
+                        received += static_cast<size_t>(rc);
+                        log_trace("Received %zd\n", received);
+                    }
                 }
 
                 log_trace("Received Final %zd\n", received);
@@ -739,8 +741,10 @@ TEST_F(udp_send, DISABLED_null_iov_elements_fragmented)
                         break;
                     }
 
-                    received += static_cast<size_t>(rc);
-                    log_trace("Received %d\n", rc);
+                    if (rc > 0) {
+                        received += static_cast<size_t>(rc);
+                        log_trace("Received %d\n", rc);
+                    }
                 }
 
                 log_trace("Received Final %zd\n", received);
