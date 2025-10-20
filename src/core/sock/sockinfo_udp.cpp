@@ -570,6 +570,7 @@ int sockinfo_udp::connect(const struct sockaddr *__to, socklen_t __tolen)
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
+    validate_and_convert_mapped_ipv4(addr);
     m_is_connected = true; // will inspect for SRC
     on_sockname_change(addr.get_p_sa(), addr_len);
 
