@@ -196,7 +196,7 @@ typedef enum {
 ////////////////////////////////////////////////////////////////////////////////
 
 #define SYS_VAR_EXCEPTION_HANDLING    "XLIO_EXCEPTION_HANDLING"
-#define CONFIG_VAR_EXCEPTION_HANDLING "core.exception_handling"
+#define CONFIG_VAR_EXCEPTION_HANDLING "core.exception_handling.mode"
 
 class xlio_exception_handling {
 public:
