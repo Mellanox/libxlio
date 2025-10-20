@@ -31,7 +31,8 @@ static std::vector<xlio_socket_t> accepted_sockets;
 
 class ultra_api_socket_migrate : public ultra_api_base {
 public:
-    virtual void SetUp() {
+    virtual void SetUp()
+    {
         errno = EOK;
         // Reset static variables between test runs
         connected_counter = 0;
@@ -45,7 +46,8 @@ public:
         do_migrate = false;
         accepted_sockets.clear();
     };
-    virtual void TearDown() {
+    virtual void TearDown()
+    {
         // Clean up memory registration if it exists (parent process only)
         if (mr_buf) {
             ibv_dereg_mr(mr_buf);

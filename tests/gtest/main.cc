@@ -65,8 +65,7 @@ static void set_def_remote_address()
                                            gtest_conf.server_addr.addr.sa_family);
 
     // Validate gateway is not link-local (non-routable for testing)
-    if (gtest_conf.def_gw_exists &&
-        sys_is_link_local(&gtest_conf.remote_addr.addr)) {
+    if (gtest_conf.def_gw_exists && sys_is_link_local(&gtest_conf.remote_addr.addr)) {
         log_trace("Gateway %s is link-local, treating as no gateway for tests\n",
                   sys_addr2str(&gtest_conf.remote_addr.addr));
         gtest_conf.def_gw_exists = false;
