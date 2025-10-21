@@ -15,7 +15,7 @@ kubernetes:
   arch_table:
     x86_64:
       nodeSelector: 'kubernetes.io/arch=amd64'
-      jnlpImage: 'harbor.mellanox.com/toolbox/c3po-jnlp:latest'
+      jnlpImage: 'nbu-harbor.gtm.nvidia.com/toolbox/c3po-jnlp:latest'
 
 env:
   MAIL_FROM: jenkins@nvidia.com
@@ -52,7 +52,10 @@ steps:
   - name: Release
     parallel: false
     run: |
-     .ci/do_release.sh
+      if ${do_dr_build}; then
+        git checkout tags/${release_tag}
+      fi
+      .ci/do_release.sh
     archiveArtifacts: "**/build_pkg.log,**/packages/*.rpm"
 
   - name: Antivirus
@@ -65,6 +68,9 @@ pipeline_start:
     shell: action
     module: groovy
     run: |
+      if (params.do_dr_build) {
+        env.release_tag = sh (returnStdout: true, script: "git describe --tags --abbrev=0 2>/dev/null").trim()
+      }
       echo "Starting release process for LibXLIO-${release_tag}"
       currentBuild.displayName += "-${release_tag}"
 
@@ -76,7 +82,7 @@ pipeline_stop:
         mail from: "${MAIL_FROM}",
           mimeType: 'text/html',
           to: "${notification_email}",
-          subject: "Release build ended for LibXLIO - ${release_tag}",
+          subject: "${params.do_dr_build ? 'Weekly DR' : 'Release'} build ended for LibXLIO - ${release_tag}",
           body: """
             <p><b>Tag:</b> ${release_tag}</p>
             <p><b>Build url:</b> <a href=${currentBuild.absoluteUrl}>link</a></p>
