@@ -223,7 +223,9 @@ TEST_F(udp_connect, mapped_ipv4_connect)
                     barrier_fork(pid);
 
                     char buffer[8] = {0};
-                    rc = recv(fd, buffer, sizeof(buffer), 0);
+                    do {
+                        rc = recv(fd, buffer, sizeof(buffer), 0);
+                    } while (rc < 0 && errno == EINTR);
                     EXPECT_EQ_ERRNO(8, rc);
                 }
 
