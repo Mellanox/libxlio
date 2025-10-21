@@ -203,6 +203,10 @@ TEST_F(udp_connect, mapped_ipv4_connect)
 
                         char buffer[8] = {0};
                         rc = send(fd, buffer, sizeof(buffer), 0);
+                        if (rc != 8) {
+                            log_error("Child send() failed: rc=%d, errno=%d (%s)\n", 
+                                      rc, errno, strerror(errno));
+                        }
                         EXPECT_EQ_ERRNO(8, rc);
                     }
                 }
@@ -224,6 +228,10 @@ TEST_F(udp_connect, mapped_ipv4_connect)
 
                     char buffer[8] = {0};
                     rc = recv(fd, buffer, sizeof(buffer), 0);
+                    if (rc != 8) {
+                        log_error("Parent recv() failed: rc=%d, errno=%d (%s)\n", 
+                                  rc, errno, strerror(errno));
+                    }
                     EXPECT_EQ_ERRNO(8, rc);
                 }
 
