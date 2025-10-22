@@ -448,6 +448,32 @@ TEST(config, parameter_descriptor_boolean_rejects_integer)
     std::experimental::any int_value = int64_t(1);
     ASSERT_THROW(bool_param_descriptor.get_value(int_value), std::experimental::bad_any_cast);
 }
+
+TEST(config, parameter_descriptor_convert_int64_to_string_with_mapping)
+{
+    // Test behavior when string mappints are defined
+    constexpr int64_t DEFAULT_INT_VALUE = 16;
+    parameter_descriptor int_param_descriptor {std::experimental::any(int64_t(DEFAULT_INT_VALUE))};
+    int_param_descriptor.set_string_mappings({{"a", 1}, {"b", 2}, {"c", 3}});
+
+    // Values in the map are converted
+    ASSERT_EQ("a", int_param_descriptor.convert_int64_to_mapped_string_or(1, "x"));
+    ASSERT_EQ("b", int_param_descriptor.convert_int64_to_mapped_string_or(2, "x"));
+    // Values not in the map are converted to the default value supplied
+    ASSERT_EQ("x", int_param_descriptor.convert_int64_to_mapped_string_or(4, "x"));
+}
+
+TEST(config, parameter_descriptor_convert_int64_to_string_without_mapping)
+{
+    // Test that without mapping, integers are converted trivially
+    constexpr int64_t DEFAULT_INT_VALUE = 16;
+    parameter_descriptor int_param_descriptor {std::experimental::any(int64_t(DEFAULT_INT_VALUE))};
+
+    ASSERT_EQ("1", int_param_descriptor.convert_int64_to_mapped_string_or(1, "x"));
+    ASSERT_EQ("2", int_param_descriptor.convert_int64_to_mapped_string_or(2, "x"));
+    ASSERT_EQ("4", int_param_descriptor.convert_int64_to_mapped_string_or(4, "x"));
+}
+
 // Test suite for power-of-2 constraint validation
 class power_of_2_or_zero_constraint_test : public ::testing::Test {
 protected:

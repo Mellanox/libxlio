@@ -76,6 +76,12 @@ protected:
         json_object_object_add(items, "type", json_object_new_string("string"));
         json_object_object_add(array_property, "items", items);
         json_object_object_add(array_property, "default", json_object_new_array());
+
+        simple_property_no_title = json_object_new_object();
+        json_object_object_add(simple_property_no_title, "type", json_object_new_string("integer"));
+        json_object_object_add(simple_property_no_title, "description",
+                               json_object_new_string("A test property"));
+        json_object_object_add(simple_property_no_title, "default", json_object_new_int(42));
     }
 
     void TearDown() override
@@ -85,6 +91,7 @@ protected:
         json_object_put(one_of_property);
         json_object_put(object_property);
         json_object_put(array_property);
+        json_object_put(simple_property_no_title);
     }
 
     json_object *simple_property;
@@ -92,6 +99,7 @@ protected:
     json_object *one_of_property;
     json_object *object_property;
     json_object *array_property;
+    json_object *simple_property_no_title;
 };
 
 TEST_F(schema_analyzer_test, analyze_simple_property)
@@ -106,6 +114,21 @@ TEST_F(schema_analyzer_test, analyze_simple_property)
 
     // Test default value
     ASSERT_EQ(std::experimental::any_cast<int64_t>(*analysis.default_value), 42);
+    ASSERT_EQ(*analysis.title, "Test Property");
+}
+
+TEST_F(schema_analyzer_test, analyze_simple_property_no_title_throws)
+{
+    // We want to verify the error message, so not using ASSERT_THROW
+    //ASSERT_THROW(schema_analyzer::analyze(simple_property_no_title, "test.simple_no_title"), xlio_exception);
+    try {
+        schema_analyzer::analyze(simple_property_no_title, "test.simple_no_title");
+        FAIL() << "Expected xlio_exception";
+    } catch (const xlio_exception& e) {
+        EXPECT_NE(std::string(e.what()).find("Title must be a defined for"), std::string::npos);
+    } catch (...) {
+        FAIL() << "Expected xlio_exception";
+    }
 }
 
 TEST_F(schema_analyzer_test, analyze_extended_property)

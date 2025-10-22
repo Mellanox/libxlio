@@ -1,0 +1,21 @@
+{
+  "acceleration_control": {
+    "rules": [
+      {
+        "id": "0",
+        "name": "a",
+        "actions": [
+          "Action 0 of rule a"
+        ]
+      },
+      {
+        "id": "1",
+        "name": "b",
+        "actions": [
+          "Action 0 of rule b",
+          "xx"
+        ]
+      }
+    ]
+  }
+}

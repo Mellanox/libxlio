@@ -770,3 +770,28 @@ TEST(config, config_registry_power_of_2_validation_zero_values)
     ASSERT_EQ(512LL, registry.get_value<int64_t>("hardware_features.striding_rq.strides_num"));
     ASSERT_EQ(64LL, registry.get_value<int64_t>("hardware_features.striding_rq.stride_size"));
 }
+
+TEST(config, config_registry_bad_enum_string)
+{
+    conf_file_writer json_config(R"({
+        "monitor":{
+            "log":{
+                "level":"invalid-value"
+          }
+        }
+    })");
+
+    env_setter config_file_setter("XLIO_CONFIG_FILE", json_config.get());
+
+    try {
+        config_registry registry;
+        FAIL() << "Expected exception was not thrown";
+    } catch (const xlio_exception &e) {
+        std::string msg = e.what();
+        // Make sure exception contains proper error message
+        EXPECT_NE(msg.find("Invalid value for Log level: invalid-value, not one of: "
+                           "[all,debug,details,error,fine,finer,info,init,none,panic,warn]"),
+                  std::string::npos)
+            << msg;
+    }
+}

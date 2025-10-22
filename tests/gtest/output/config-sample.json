@@ -1,0 +1,112 @@
+{
+  "monitor": {
+    "log": {
+      "level": 3
+    },
+    "exit_report": 1
+  },
+  "core": {
+    "daemon": {
+      "enable": true,
+      "dir": "/funny-dir"
+    },
+    "resources": {
+      "hugepages": {
+        "enable": true
+      }
+    }
+  },
+  "hardware_features": {
+    "tcp": {
+      "tls_offload": {
+        "dek_cache_max_size": 4096,
+        "rx_enable": true,
+        "tx_enable": true
+      },
+      "lro": "enable"
+    }
+  },
+  "applications": {
+    "nginx": {
+      "src_port_stride": 3
+    }
+  },
+  "acceleration_control": {
+    "rules": [
+      {
+        "id": "0",
+        "name": "a",
+        "actions": [
+          "Action 0 of rule a"
+        ]
+      },
+      {
+        "id": "1",
+        "name": "b",
+        "actions": [
+          "Action 0 of rule b",
+          "xx"
+        ]
+      },
+      {
+        "id": "2",
+        "name": "c",
+        "actions": [
+          "Action 0 of rule c"
+        ]
+      },
+      {
+        "id": "3",
+        "name": "d",
+        "actions": [
+          "Action 0 of rule d"
+        ]
+      },
+      {
+        "id": "4",
+        "name": "e",
+        "actions": [
+          "Action 0 of rule e"
+        ]
+      },
+      {
+        "id": "5",
+        "name": "f",
+        "actions": [
+          "Action 0 of rule f"
+        ]
+      }
+    ]
+  },
+  "performance": {
+    "buffers": {
+      "tx": {
+        "buf_size": "1K"
+      }
+    },
+    "rings": {
+      "tx": {
+        "allocation_logic": 10
+      }
+    },
+    "threading": {
+      "cpu_affinity": "1,2,3",
+      "internal_handler": {
+        "behavior": "delegate"
+      }
+    },
+    "polling": {
+      "skip_cq_on_rx": 1,
+      "blocking_rx_poll_usec": 2049
+    },
+    "completion_queue": {
+      "interrupt_moderation": {
+        "adaptive_change_frequency_msec": 0
+      },
+      "periodic_drain_msec": 75
+    }
+  },
+  "profiles": {
+    "spec": "nginx_dpu"
+  }
+}

@@ -12,6 +12,17 @@
 #include <climits>
 #include <sstream>
 #include <cctype>
+#include <numeric>
+
+void parameter_descriptor::set_title(const std::experimental::optional<std::string> &title)
+{
+    m_title = title;
+}
+
+const std::experimental::optional<std::string> &parameter_descriptor::get_title() const
+{
+    return m_title;
+}
 
 /**
  * @brief Parse memory size string with suffixes (e.g., "4GB", "512MB", "1024KB", "1024B", "5G")
@@ -151,6 +162,7 @@ parameter_descriptor::parameter_descriptor(const parameter_descriptor &pd)
     , m_string_mapping(pd.m_string_mapping)
     , m_value_transformer(pd.m_value_transformer)
     , m_type(pd.m_type)
+    , m_title(pd.m_title)
 {
 }
 
@@ -162,6 +174,11 @@ void parameter_descriptor::set_string_mappings(const std::map<std::string, int64
         }
         m_string_mapping[mapping.first] = std::experimental::any(mapping.second);
     }
+}
+
+bool parameter_descriptor::has_string_mappings() const
+{
+    return !m_string_mapping.empty();
 }
 
 void parameter_descriptor::set_value_transformer(value_transformer_t transformer)
@@ -196,7 +213,19 @@ std::experimental::any parameter_descriptor::convert_string_to_int64(const std::
         return it->second;
     }
 
-    throw std::experimental::bad_any_cast();
+    // If no string mappings are defined, throw an exception which has no further information
+    if (m_string_mapping.empty()) {
+        throw std::experimental::bad_any_cast();
+    }
+
+    // We have string mappings but value is not one of them - make an effort and create a nice error
+    // message
+    std::string valid_values = std::accumulate(
+        next(m_string_mapping.begin()), m_string_mapping.end(), m_string_mapping.begin()->first,
+        [](const std::string &a, const auto &b) { return a + "," + b.first; });
+
+    throw std::runtime_error("Invalid value for " + m_title.value_or("") + ": " + val +
+                             ", not one of: [" + valid_values + "]");
 }
 
 std::experimental::any parameter_descriptor::get_value(bool val) const
@@ -224,6 +253,23 @@ std::experimental::any parameter_descriptor::get_value(const std::string &val) c
 
     // Case 3: Unsupported type conversion
     throw std::experimental::bad_any_cast();
+}
+
+std::string parameter_descriptor::convert_int64_to_mapped_string_or(
+    int64_t val, const std::string &default_value) const
+{
+    if (m_string_mapping.empty()) {
+        return std::to_string(val);
+    }
+
+    for (const auto &mapping : m_string_mapping) {
+        if ((mapping.second.type() == typeid(int64_t)) &&
+            (std::experimental::any_cast<int64_t>(mapping.second) == val)) {
+            return mapping.first;
+        }
+    }
+
+    return default_value;
 }
 
 std::experimental::any parameter_descriptor::get_value(int64_t val) const

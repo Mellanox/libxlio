@@ -69,64 +69,41 @@ public:
     std::vector<std::string> get_sources() const;
 
     /**
-     * @brief Gets default value for non-integer types
+     * @brief Gets default value
      * @tparam T Value type
      * @param key Configuration parameter key
      * @return Default value for the parameter
      */
-    template <typename T>
-    typename std::enable_if<!is_integer<T>::value, T>::type get_default_value(
-        const std::string &key) const
+    template <typename T> T get_default_value(const std::string &key) const
     {
         return get_value_impl<T>(
             key, [this](const std::string &k) { return get_default_value_as_any(k); });
     }
 
     /**
-     * @brief Gets default value for integer types with bounds checking
-     * @tparam T Integer type
-     * @param key Configuration parameter key
-     * @return Default value for the parameter
-     * @note For enums, use int instead since C++14 doesn't support bound checking for enums
-     */
-    template <typename T>
-    typename std::enable_if<is_integer<T>::value, T>::type get_default_value(
-        const std::string &key) const
-    {
-        return get_value_impl<T>(
-            key, [this](const std::string &k) { return get_default_value_as_any(k); });
-    }
-
-    /**
-     * @brief Gets configured value for non-integer types
+     * @brief Gets configured value. For integer types, also does bounds checking
      * @tparam T Value type
      * @param key Configuration parameter key
      * @return Current value for the parameter
      */
-    template <typename T>
-    typename std::enable_if<!is_integer<T>::value, T>::type get_value(const std::string &key) const
+    template <typename T> T get_value(const std::string &key) const
     {
         return get_value_impl<T>(key, [this](const std::string &k) { return get_value_as_any(k); });
     }
 
     /**
-     * @brief Gets configured value for integer types with bounds checking
-     * @tparam T Integer type
+     * @brief Gets configured value as any
      * @param key Configuration parameter key
-     * @return Current value for the parameter
-     * @note For enums, use int instead since C++14 doesn't support bound checking for enums
+     * @return Current value for the parameter, as any
      */
-    template <typename T>
-    typename std::enable_if<is_integer<T>::value, T>::type get_value(const std::string &key) const
-    {
-        return get_value_impl<T>(key, [this](const std::string &k) { return get_value_as_any(k); });
-    }
+    std::experimental::any get_value_as_any(const std::string &key) const;
+
+    const config_descriptor &get_config_descriptor() const { return m_config_descriptor; }
 
 private:
     std::map<std::string, std::experimental::any> m_config_data;
     config_descriptor m_config_descriptor;
     std::vector<std::string> m_sources;
-    std::experimental::any get_value_as_any(const std::string &key) const;
     std::experimental::any get_default_value_as_any(const std::string &key) const;
     void initialize_registry(std::queue<std::unique_ptr<loader>> &&value_loaders,
                              std::unique_ptr<descriptor_provider> descriptor_provider);
