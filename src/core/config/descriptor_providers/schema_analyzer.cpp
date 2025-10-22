@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <functional>
 #include <algorithm>
+#include "vlogger/vlogger.h"
 
 static void for_each_oneof_option(json_object *one_of_field,
                                   std::function<void(json_object *)> func)
@@ -159,6 +160,25 @@ std::experimental::optional<std::experimental::any> schema_analyzer::determine_d
         json_utils::get_field(m_property_obj, config_strings::schema::JSON_DEFAULT);
 
     return json_utils::to_any_value(default_field);
+}
+
+std::experimental::optional<std::string> schema_analyzer::determine_title()
+{
+    json_object *title_field =
+        json_utils::try_get_field(m_property_obj, config_strings::schema::JSON_TITLE);
+    if (!title_field) {
+        // Enforce title definition only for leafs and arrays. Objects are exempt.
+        if (determine_value_type() != typeid(json_object *)) {
+            throw_xlio_exception("Title must be a defined for: " + m_path + " - " +
+                                 std::to_string(json_object_get_type(title_field)));
+        }
+        return std::experimental::nullopt;
+    }
+    if (json_object_get_type(title_field) != json_type_string) {
+        throw_xlio_exception("Title must be a string for: " + m_path + " - " +
+                             std::to_string(json_object_get_type(title_field)));
+    }
+    return std::experimental::optional<std::string>(json_object_get_string(title_field));
 }
 
 memory_size_extension_config_t schema_analyzer::analyze_memory_size_extension_config()
@@ -397,6 +417,7 @@ schema_analyzer::analysis_result::analysis_result(schema_analyzer &analyzer)
     : json_property_type(analyzer.determine_property_type())
     , value_type(analyzer.determine_value_type())
     , default_value(analyzer.determine_default_value(value_type))
+    , title(analyzer.determine_title())
     , memory_cfg(analyzer.analyze_memory_size_extension_config())
     , constraint_cfg(analyzer.analyze_constraint_config())
     , enum_cfg(analyzer.analyze_enum_mapping_config())

@@ -9,6 +9,7 @@
 #include <experimental/any>
 #include <functional>
 #include <map>
+#include <experimental/optional>
 #include <stdexcept>
 #include <string>
 #include <typeindex>
@@ -79,10 +80,28 @@ public:
     void set_string_mappings(const std::map<std::string, int64_t> &mappings);
 
     /**
+     * @brief returns true if string-to-value mappings were set by set_string_mappings()
+     * @return true if string-to-value mappings were set by set_string_mappings(), false otherwise
+     */
+    bool has_string_mappings() const;
+
+    /**
      * @brief Sets a value transformer function
      * @param transformer Function to transform input values
      */
     void set_value_transformer(value_transformer_t transformer);
+
+    /**
+     * @brief Sets the title of the parameter
+     * @param title Title of the parameter
+     */
+
+    void set_title(const std::experimental::optional<std::string> &title);
+    /**
+     * @brief Gets the title of the parameter. Note that it may be nullopt if not set
+     * @return Title of the parameter
+     */
+    const std::experimental::optional<std::string> &get_title() const;
 
     /**
      * @brief Validates a value against all constraints
@@ -139,6 +158,17 @@ public:
     std::experimental::any get_value(const std::vector<std::experimental::any> &val) const;
 
     /**
+     * @brief Converts an integer to a string. If string mappings were set by set_string_mappings(),
+     *        use them.
+     * @param val Integer value to convert
+     * @param default_value Default value to return if string mappings were set but the value is not
+     *        in the mappings
+     * @return Converted value.
+     */
+    std::string convert_int64_to_mapped_string_or(int64_t val,
+                                                  const std::string &default_value) const;
+
+    /**
      * @brief Gets the type of the parameter
      * @return The type of the parameter
      */
@@ -162,6 +192,8 @@ private:
     std::map<std::string, std::experimental::any> m_string_mapping; /**< String-to-value mappings */
     value_transformer_t m_value_transformer; /**< Value transformation function */
     std::type_index m_type;
+    std::experimental::optional<std::string>
+        m_title; /**< Title of the parameter as defined in schema */
 
     /**
      * @brief Parses a memory size string with suffixes (KB, MB, GB)

@@ -240,6 +240,7 @@ const char *to_str(size_t size)
     static char str[64];
     return to_str(size, str, sizeof(str));
 }
+
 } // namespace option_size
 
 namespace option_x {
@@ -2927,9 +2928,9 @@ void mce_sys_var::configure_network_timing(const config_registry &registry)
 
 void mce_sys_var::apply_config_from_registry()
 {
-    config_registry registry;
-
     std::string sources;
+    m_registry = config_registry();
+    config_registry &registry = m_registry.value();
     const auto &source_list = registry.get_sources();
     if (!source_list.empty()) {
         sources = std::accumulate(

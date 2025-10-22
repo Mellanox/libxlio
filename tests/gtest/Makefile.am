@@ -95,6 +95,8 @@ gtest_SOURCES = \
 	mix/ip_address.cc \
 	mix/mix_list.cc \
 	\
+	output/config.cc \
+	\
 	tcp/tcp_accept.cc \
 	tcp/tcp_bind.cc \
 	tcp/tcp_connect.cc \

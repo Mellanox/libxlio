@@ -20,6 +20,8 @@
  */
 class config_descriptor {
 public:
+    typedef std::map<std::string, parameter_descriptor> parameter_map_t;
+
     /**
      * @brief Default constructor
      */
@@ -55,11 +57,18 @@ public:
      */
     std::type_index get_parent_expected_type(const std::string &key) const;
 
+    /**
+     * @brief Gets the parameter map, allowing external users to iterate
+     *        over all parameters
+     * @return The parameter map
+     */
+    const parameter_map_t &get_parameter_map() const;
+
 private:
     /**
      * @brief Map from parameter name to its descriptor
      */
-    std::map<std::string, parameter_descriptor> parameter_map;
+    parameter_map_t parameter_map;
 
     /**
      * @brief Set of all parameter keys for efficient prefix-based lookups

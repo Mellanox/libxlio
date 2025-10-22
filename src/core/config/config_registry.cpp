@@ -117,6 +117,8 @@ void config_registry::initialize_registry(std::queue<std::unique_ptr<loader>> &&
                                      key + "': expected " +
                                      get_user_friendly_type_name(param_desc.type()) + ", got " +
                                      get_user_friendly_type_name(value.type()));
+            } catch (const std::runtime_error &e) {
+                throw_xlio_exception("In '" + loader->source() + "': " + e.what());
             }
         }
 

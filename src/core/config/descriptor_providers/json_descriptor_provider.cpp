@@ -152,6 +152,8 @@ std::unique_ptr<parameter_descriptor> json_descriptor_provider::create_descripto
     // Create parameter descriptor with default value
     auto descriptor = std::make_unique<parameter_descriptor>(*analysis.default_value);
 
+    descriptor->set_title(analysis.title);
+
     // Apply constraints if present
     if (analysis.needs_constraint_validation()) {
         apply_constraints(descriptor.get(), analysis.constraint_cfg);

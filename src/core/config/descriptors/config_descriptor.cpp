@@ -80,6 +80,11 @@ std::type_index config_descriptor::get_parent_expected_type(const std::string &k
     return typeid(std::map<std::string, std::experimental::any>);
 }
 
+const config_descriptor::parameter_map_t &config_descriptor::get_parameter_map() const
+{
+    return parameter_map;
+}
+
 /**
  * @brief Calculates the Levenshtein distance between two strings.
  *

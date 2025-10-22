@@ -70,6 +70,8 @@ public:
         std::type_index value_type; /**< C++ type for the parameter value */
         std::experimental::optional<std::experimental::any>
             default_value; /**< Default value ready for use */
+        std::experimental::optional<std::string>
+            title; /**< Title of the parameter as defined in schema */
 
         // Pre-parsed component configurations
         memory_size_extension_config_t memory_cfg; /**< Memory size transformation configuration */
@@ -120,6 +122,7 @@ private:
     std::type_index determine_value_type();
     std::experimental::optional<std::experimental::any> determine_default_value(
         std::type_index type);
+    std::experimental::optional<std::string> determine_title();
 
     // Component configuration methods
     memory_size_extension_config_t analyze_memory_size_extension_config();

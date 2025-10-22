@@ -7,6 +7,7 @@
 #ifndef SYS_VARS_H
 #define SYS_VARS_H
 
+#include <experimental/optional>
 #include <netinet/in.h>
 #include <sched.h>
 #include <stdio.h>
@@ -299,6 +300,11 @@ public:
     void get_params();
     bool is_threads_mode() const { return worker_threads > 0; }
 
+    // Returns the config registry
+    const std::experimental::optional<config_registry> &get_registry() const { return m_registry; }
+    // Once we are done with the registry, we can destroy it to free the memory
+    void destroy_registry() { m_registry = std::experimental::nullopt; }
+
     // Update parameters for multi-process applications
     void update_multi_process_params();
     void fixup_params();
@@ -517,6 +523,12 @@ private:
     void read_strq_stride_size_bytes(const config_registry &registry);
     void legacy_read_strq_strides_num();
     void legacy_read_strq_stride_size_bytes();
+
+    // The configuration registry
+    // Defined after all other members to not to disturb alignment and division to cache-lines
+    // of previous members, some of which are accessed at run-time.
+    // Once the main code is done with it
+    std::experimental::optional<config_registry> m_registry;
 
     // prevent unautothrized creation of objects
     // coverity[CTOR_DTOR_LEAK] suppression for app_name member is needed because Coverity
