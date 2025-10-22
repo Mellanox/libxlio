@@ -1,13 +1,13 @@
 #!/bin/bash -eExl
 
+ulimit -n 50000
+ulimit -l unlimited
 source $(dirname $0)/globals.sh
 
 # Fix hugepages for docker environments
 do_hugepages
 
 echo "Checking for valgrind ..."
-
-#do_module "tools/valgrind-3.12.0"
 
 set +eE
 
@@ -45,12 +45,25 @@ if [ "$test_ip_list" == "eth_ip4: eth_ip6:" ] || [ -z "${test_ip_list}" ]; then
 	exit 1
 fi
 
-test_list="tcp:--tcp udp:"
 test_lib=${vg_dir}/install/lib/${prj_lib}
-test_lib_env="XLIO_MEM_ALLOC_TYPE=ANON XLIO_MEMORY_LIMIT=256MB XLIO_TX_WRE=2000 XLIO_RX_WRE=2000 XLIO_STRQ=off"
+test_lib_env="XLIO_MEM_ALLOC_TYPE=ANON XLIO_TX_WRE=2000 XLIO_RX_WRE=2000 XLIO_STRQ=off LD_PRELOAD=$test_lib"
 test_app=sockperf
 test_app_path=${test_dir}/sockperf/install/bin/sockperf
 vg_tool=/bin/valgrind
+WORKER_THREADS=${WORKER_THREADS:-"false"}
+
+# Enable params based on the mode choice - given by WORKER_THREADS variable
+if [[ "$WORKER_THREADS" == "true" ]]; then
+	echo "Testing mode: Worker Threads"
+	test_list="tcp:--tcp"
+	test_lib_env="${test_lib_env} XLIO_WORKER_THREADS=1 XLIO_MEMORY_LIMIT=512MB"
+	test_params="--nonblocked"
+else
+	echo "Testing mode: R2C"
+	test_list="tcp:--tcp udp:"
+	test_lib_env="${test_lib_env} XLIO_MEMORY_LIMIT=256MB"
+	test_params=""
+fi
 
 if [ $(command -v $test_app_path >/dev/null 2>&1 || echo $?) ]; then
 	test_app_path=sockperf
@@ -92,10 +105,11 @@ for test_link in $test_ip_list; do
 			--undef-value-errors=yes --track-fds=yes --num-callers=32 \
 			--fullpath-after=${WORKSPACE} --gen-suppressions=all \
 			--suppressions=${WORKSPACE}/contrib/valgrind/valgrind_xlio.supp \
+			--fair-sched=yes \
 			"
-		eval "${sudo_cmd} $timeout_exe env $test_lib_env LD_PRELOAD=$test_lib \
+		eval "${sudo_cmd} $timeout_exe env $test_lib_env \
 			${vg_tool} --log-file=${vg_dir}/${test_name}-valgrind-sr.log $vg_args \
-			$test_app_path sr ${test_opt} -i ${test_ip} 2>&1 | tee ${vg_dir}/${test_name}-output-sr.log &"
+			$test_app_path sr ${test_opt} -i ${test_ip} ${test_params} 2>&1 | tee ${vg_dir}/${test_name}-output-sr.log &"
 
 		wait=0
 		while [ $wait -lt $sockperf_max_wait ]; do
@@ -108,9 +122,9 @@ for test_link in $test_ip_list; do
 			sleep 2
 		done
 
-		eval "${sudo_cmd} $timeout_exe_short env $test_lib_env LD_PRELOAD=$test_lib \
+		eval "${sudo_cmd} $timeout_exe_short env $test_lib_env \
 			${vg_tool} --log-file=${vg_dir}/${test_name}-valgrind-cl.log $vg_args \
-			$test_app_path pp ${test_opt} -i ${test_ip} -t 10 2>&1 | tee ${vg_dir}/${test_name}-output-cl.log"
+			$test_app_path pp ${test_opt} -i ${test_ip} -t 10 ${test_params} 2>&1 | tee ${vg_dir}/${test_name}-output-cl.log"
 
 		if [ `ps -ef | grep $test_app | wc -l` -gt 1 ];
 		then
