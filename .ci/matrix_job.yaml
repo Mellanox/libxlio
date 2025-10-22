@@ -124,6 +124,18 @@ runs_on_dockers:
      runAsGroup: '0'
     }
   - {
+     arch: 'x86_64',
+     name: 'vg-worker-threads',
+     url: 'harbor.mellanox.com/swx-infra/media/xlio/x86_64/ubuntu22.04/vg:20250219',
+     category: 'tool',
+     annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p2' }],
+     limits: '{memory: 10Gi, cpu: 10000m, hugepages-2Mi: 10Gi, nvidia.com/sriov-cx6dx-p2: 1}',
+     requests: '{memory: 10Gi, cpu: 10000m, hugepages-2Mi: 10Gi, nvidia.com/sriov-cx6dx-p2: 1}',
+     caps_add: '[ IPC_LOCK, SYS_RESOURCE ]',
+     runAsUser: '0',
+     runAsGroup: '0'
+    }
+  - {
       file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
       arch: 'x86_64',
       name: 'sockperf',
@@ -139,12 +151,9 @@ runs_on_dockers:
       runAsGroup: '0'
     }
   - {
-      file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
       arch: 'x86_64',
       name: 'sockperf-worker-threads',
-      uri: 'xlio/$arch/ubuntu22.04/$name',
-      tag: '20251015',
-      build_args: '--no-cache --target test',
+      url: 'harbor.mellanox.com/swx-infra/media/xlio/x86_64/ubuntu22.04/sockperf:20251015',
       category: 'tests',
       annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p1' }],
       limits: '{memory: 10Gi, cpu: 10000m, hugepages-2Mi: 10Gi, nvidia.com/sriov-cx6dx-p1: 1}',
@@ -208,6 +217,7 @@ steps:
       - "{category: 'base'}"
       - "{category: 'tests'}"
       - "{name: 'vg'}"
+      - "{name: 'vg-worker-threads'}"
     agentSelector:
       - "{nodeLabel: 'skip-agent'}"
     run: |
@@ -441,7 +451,23 @@ steps:
       - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_valgrind}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_vg=${action} ./contrib/test_jenkins.sh
+      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_vg=${action} WORKER_THREADS=false ./contrib/test_jenkins.sh
+    parallel: false
+    onfail: |
+      ./.ci/artifacts.sh
+    archiveArtifacts-onfail: |
+      jenkins/**/arch-*.tar.gz,
+      jenkins/**/vg/*valgrind*.log
+
+  - name: Valgrind (Worker thread mode)
+    enable: ${do_valgrind}
+    containerSelector:
+      - "{name: 'vg-worker-threads'}"
+    agentSelector:
+      - "{nodeLabel: 'skip-agent'}"
+    run: |
+      [ "x${do_valgrind}" == "xtrue" ] && action=yes || action=no
+      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_vg=${action} WORKER_THREADS=true ./contrib/test_jenkins.sh
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -469,6 +495,7 @@ steps:
     containerSelector:
       - "{category: 'base'}"
       - "{name: 'vg'}"
+      - "{name: 'vg-worker-threads'}"
       - "{category: 'tests'}"
     agentSelector:
       - "{nodeLabel: 'beni09'}"
