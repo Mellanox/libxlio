@@ -89,6 +89,23 @@
    fun:create_rdma_channel
    fun:_ZN15neigh_table_mgrC1Ev
 }
+{
+   rdma_create_event_channel_fp
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   obj:/usr/lib/x86_64-linux-gnu/librdmacm.so.1.3.54.0
+   obj:/usr/lib/x86_64-linux-gnu/librdmacm.so.1.3.54.0
+   obj:/usr/lib/x86_64-linux-gnu/librdmacm.so.1.3.54.0
+   fun:rdma_create_event_channel
+   fun:_ZN15neigh_table_mgr19create_rdma_channelEv
+   fun:_ZN15neigh_table_mgrC1Ev
+   fun:_ZL22do_global_ctors_helperv
+   fun:_Z15do_global_ctorsv
+   fun:_Z15socket_internaliiibb
+   fun:socket
+   fun:_Z7bringupPKi
+}
 ###########################################################
 # false positive libmlx5\4
 {
@@ -179,4 +196,16 @@
    fun:_ZN5agent4sendEP9agent_msg
    fun:_ZN5agent8progressEv
    ...
+}
+###########################################################
+{
+   tp_leak_to_be_fixed_on_pr_468
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:_Znwm
+   fun:_ZN13fd_collection9addsocketEiiib
+   fun:_Z15socket_internaliiibb
+   fun:socket
+   fun:_Z7bringupPKi
+   fun:main
 }
