@@ -479,7 +479,7 @@ cq_mgr_tx *hw_queue_tx::init_tx_cq_mgr()
                          m_p_ring->get_tx_comp_event_channel());
 }
 
-inline void hw_queue_tx::ring_doorbell(int num_wqebb, bool skip_comp /*=false*/)
+inline void hw_queue_tx::ring_doorbell(uint8_t num_wqebb, bool skip_comp /*=false*/)
 {
     uint64_t *dst = (uint64_t *)m_mlx5_qp.bf.reg;
     uint64_t *src = reinterpret_cast<uint64_t *>(m_sq_wqe_hot);
@@ -537,7 +537,7 @@ inline int hw_queue_tx::fill_inl_segment(sg_array &sga, uint8_t *cur_seg, uint8_
 }
 
 //! Fill WQE dynamically, based on amount of free WQEBB in SQ
-inline int hw_queue_tx::fill_wqe(xlio_ibv_send_wr *pswr)
+inline uint8_t hw_queue_tx::fill_wqe(xlio_ibv_send_wr *pswr)
 {
     // control segment is mostly filled by preset after previous packet
     // we always inline ETH header
@@ -587,14 +587,9 @@ inline int hw_queue_tx::fill_wqe(xlio_ibv_send_wr *pswr)
                           sizeof(struct mlx5_wqe_eth_seg)) = htonl(0x80000000 | inline_len);
             rest_space = align_to_octoword_up(inline_len + 4); // align to OCTOWORDs
             wqe_size += rest_space / OCTOWORD;
-            // assert((data_len-inline_len)==0);
-            // configuring control
-            m_sq_wqe_hot->ctrl.data[1] = htonl((m_mlx5_qp.qpn << 8) | wqe_size);
-            rest_space = align_to_WQEBB_up(wqe_size) / 4;
-            hwqtx_logfunc("data_len: %d inline_len: %d wqe_size: %d wqebbs: %d",
-                          data_len - inline_len, inline_len, wqe_size, rest_space);
-            ring_doorbell(rest_space);
-            return rest_space;
+
+            hwqtx_logfunc("data_len: %d inline_len: %d wqe_size: %d", data_len - inline_len,
+                          inline_len, wqe_size * OCTOWORD);
         } else {
             // wrap around case, first filling till the end of m_sq_wqes
             int wrap_up_size = max_inline_len - rest_space;
@@ -608,14 +603,11 @@ inline int hw_queue_tx::fill_wqe(xlio_ibv_send_wr *pswr)
             data_len -= inline_len;
             rest_space = align_to_octoword_up(inline_len + 4);
             wqe_size += rest_space / OCTOWORD;
-            rest_space =
-                align_to_WQEBB_up(rest_space / OCTOWORD) / 4; // size of 1st chunk at the end
 
-            hwqtx_logfunc(
-                "END chunk data_addr: %p data_len: %d inline_len: %d wqe_size: %d wqebbs: %d",
-                data_addr, data_len, inline_len, wqe_size, rest_space);
+            hwqtx_logfunc("END chunk data_addr: %p data_len: %d inline_len: %d wqe_size: %d",
+                          data_addr, data_len, inline_len, wqe_size * OCTOWORD);
+
             // Wrap around
-            //
             cur_seg = (uint8_t *)m_sq_wqes;
             data_addr = sga.get_data(&wrap_up_size);
 
@@ -623,40 +615,35 @@ inline int hw_queue_tx::fill_wqe(xlio_ibv_send_wr *pswr)
             inline_len += wrap_up_size;
             max_inline_len = align_to_octoword_up(wrap_up_size);
             wqe_size += max_inline_len / OCTOWORD;
-            max_inline_len = align_to_WQEBB_up(max_inline_len / OCTOWORD) / 4;
-            // store inline data size
+
+            // Store inline data size
             *(uint32_t *)((uint8_t *)m_sq_wqe_hot + sizeof(struct mlx5_wqe_ctrl_seg) +
                           sizeof(struct mlx5_wqe_eth_seg)) = htonl(0x80000000 | inline_len);
-            hwqtx_logfunc("BEGIN_CHUNK data_addr: %p data_len: %d wqe_size: %d inline_len: %d "
-                          "end_wqebbs: %d wqebbs: %d",
-                          data_addr, data_len - wrap_up_size, wqe_size, inline_len + wrap_up_size,
-                          rest_space, max_inline_len);
-            // assert((data_len-wrap_up_size)==0);
-            // configuring control
-            m_sq_wqe_hot->ctrl.data[1] = htonl((m_mlx5_qp.qpn << 8) | wqe_size);
 
-            dbg_dump_wqe((uint32_t *)m_sq_wqe_hot, rest_space * 4 * 16);
-            dbg_dump_wqe((uint32_t *)m_sq_wqes, max_inline_len * 4 * 16);
+            hwqtx_logfunc("BEGIN_CHUNK data_addr: %p data_len: %d wqe_size: %d inline_len: %d",
+                          data_addr, data_len - wrap_up_size, wqe_size * OCTOWORD,
+                          inline_len + wrap_up_size);
 
-            ring_doorbell(rest_space + max_inline_len);
-            return rest_space + max_inline_len;
+            dbg_dump_wqe(
+                (uint32_t *)m_sq_wqe_hot,
+                sizeof(struct mlx5_wqe_ctrl_seg) + sizeof(struct mlx5_wqe_eth_seg) + rest_space);
+            dbg_dump_wqe((uint32_t *)m_sq_wqes, max_inline_len);
         }
+    } else if (xlio_send_wr_opcode(*pswr) == XLIO_IBV_WR_SEND) {
+        // Data is bigger than max to inline we inlined only ETH header + uint from IP (18
+        // bytes) the rest will be in data pointer segment adding data seg with pointer if there
+        // still data to transfer
+        wqe_size = fill_wqe_send(pswr);
     } else {
-        if (xlio_send_wr_opcode(*pswr) == XLIO_IBV_WR_SEND) {
-            /* data is bigger than max to inline we inlined only ETH header + uint from IP (18
-             * bytes) the rest will be in data pointer segment adding data seg with pointer if there
-             * still data to transfer
-             */
-            wqe_size = fill_wqe_send(pswr);
-            return wqe_size;
-        } else {
-            /* Support XLIO_IBV_WR_SEND_TSO operation
-             */
-            wqe_size = fill_wqe_lso(pswr, data_len);
-            return wqe_size;
-        }
+        // Support XLIO_IBV_WR_SEND_TSO operation
+        wqe_size = fill_wqe_lso(pswr, data_len);
     }
-    return 1;
+
+    m_sq_wqe_hot->ctrl.data[1] = htonl((m_mlx5_qp.qpn << 8) | wqe_size);
+
+    uint8_t wqebbs = static_cast<uint8_t>(align_to_WQEBB_up(wqe_size) / 4);
+    ring_doorbell(wqebbs);
+    return wqebbs;
 }
 
 inline int hw_queue_tx::fill_wqe_send(xlio_ibv_send_wr *pswr)
@@ -694,11 +681,7 @@ inline int hw_queue_tx::fill_wqe_send(xlio_ibv_send_wr *pswr)
         }
     }
 
-    m_sq_wqe_hot->ctrl.data[1] = htonl((m_mlx5_qp.qpn << 8) | wqe_size);
-    int wqebbs = align_to_WQEBB_up(wqe_size) / 4;
-    ring_doorbell(wqebbs);
-
-    return wqebbs;
+    return wqe_size;
 }
 
 //! Filling wqe for LSO
@@ -769,11 +752,8 @@ inline int hw_queue_tx::fill_wqe_lso(xlio_ibv_send_wr *pswr, int data_len)
         dpseg++;
         wqe_size += sizeof(struct mlx5_wqe_data_seg) / OCTOWORD;
     }
-    m_sq_wqe_hot->ctrl.data[1] = htonl((m_mlx5_qp.qpn << 8) | wqe_size);
 
-    int wqebbs = align_to_WQEBB_up(wqe_size) / 4;
-    ring_doorbell(wqebbs);
-    return wqebbs;
+    return wqe_size;
 }
 
 void hw_queue_tx::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits, xlio_ti *ti)
@@ -824,8 +804,8 @@ void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_a
     store_current_wqe_prop(reinterpret_cast<mem_buf_desc_t *>(p_send_wqe->wr_id), credits, tis);
 
     /* Complete WQE */
-    int wqebbs = fill_wqe(p_send_wqe);
-    assert(wqebbs > 0 && (unsigned)wqebbs <= credits);
+    uint8_t wqebbs = fill_wqe(p_send_wqe);
+    assert(wqebbs > 0 && wqebbs <= credits);
     NOT_IN_USE(wqebbs);
 
     update_next_wqe_hot();

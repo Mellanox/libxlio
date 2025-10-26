@@ -213,12 +213,12 @@ private:
 #endif /* DEFINED_UTLS */
 
     inline void store_current_wqe_prop(mem_buf_desc_t *wr_id, unsigned credits, xlio_ti *ti);
-    inline int fill_wqe(xlio_ibv_send_wr *p_send_wqe);
+    inline uint8_t fill_wqe(xlio_ibv_send_wr *p_send_wqe);
     inline int fill_wqe_send(xlio_ibv_send_wr *pswr);
     inline int fill_wqe_lso(xlio_ibv_send_wr *pswr, int data_len);
     inline int fill_inl_segment(sg_array &sga, uint8_t *cur_seg, uint8_t *data_addr,
                                 int max_inline_len, int inline_len);
-    inline void ring_doorbell(int num_wqebb, bool skip_comp = false);
+    inline void ring_doorbell(uint8_t num_wqebb, bool skip_comp = false);
 
     struct xlio_rate_limit_t m_rate_limit;
     xlio_ib_mlx5_qp_t m_mlx5_qp;
