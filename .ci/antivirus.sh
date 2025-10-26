@@ -1,47 +1,37 @@
-#!/bin/bash -Exel
+#!/bin/bash -uxe
 
 echo -e "\n\n**********************************"
 echo -e "\n\nStarting antivirus.sh script...\n\n"
 echo -e "**********************************\n\n"
 
-if [ -z "$1" ]; then
-    if [ -z "${release_folder}" ]; then
-        echo "ERROR: Please use the first script argument or env var 'release_folder'. Exit"
-    fi
-else
-    release_folder=$1
+[[ -z "${WORKSPACE:-}" ]] && { echo "ERROR: WORKSPACE variable is empty."; exit 1; }
+[[ ! -d "${WORKSPACE}" ]] && { echo "ERROR: ${WORKSPACE} does not exist."; exit 1; }
+[[ -z "${release_folder:-}" ]] && { echo "ERROR: release_folder variable is empty."; exit 1; }
+[[ ! -d "${release_folder}" ]] && { echo "ERROR: ${release_folder} does not exist."; exit 1; }
+[[ -z "${release_tag:-}" ]] && { echo "ERROR: release_tag variable is empty."; exit 1; }
+[[ ! -d "${release_folder}/${release_tag}" ]] && { echo "ERROR: ${release_folder}/${release_tag} does not exist."; exit 1; }
+
+if [ -z "${revision:-}" ]; then
+    echo "WARN: 'revision' was not set, defaulting to 1"
+    revision=1
 fi
-if [ ! -e "${release_folder}" ] || [ ! -d "${release_folder}" ]; then
-    echo "ERROR: [${release_folder}] directory doesn't exist. Exit"
+
+mkdir -p "${WORKSPACE}/logs/"
+cd "${release_folder}/${release_tag}/"
+
+pkg_name="libxlio-${release_tag}-${revision}.src.rpm"
+tarball_name="libxlio-${release_tag}.tar.gz"
+rpm_log="${WORKSPACE}/logs/${pkg_name}_antivirus.log"
+tarball_log="${WORKSPACE}/logs/${tarball_name}_antivirus.log"
+
+[[ ! -e "${pkg_name}" ]] && { echo "ERROR: ${release_folder}/${release_tag}/${pkg_name} does not exist."; exit 1; }
+[[ ! -e "${tarball_name}" ]] && { echo "ERROR: ${release_folder}/${release_tag}/${tarball_name} does not exist."; exit 1; }
+
+/auto/GLIT/SCRIPTS/HELPERS/antivirus-scan.sh "${release_folder}/${release_tag}/${pkg_name}" |& tee "${rpm_log}"
+/auto/GLIT/SCRIPTS/HELPERS/antivirus-scan.sh "${release_folder}/${release_tag}/${tarball_name}" |& tee "${tarball_log}"
+
+if grep -q 'Possibly Infected:.............     0' "${rpm_log}" && grep -q 'Possibly Infected:.............     0' "${tarball_log}"; then
+    exit 0
+else
     exit 1
 fi
-
-if [ -z "$2" ]; then
-    if [ -z "${release_version}" ]; then
-        echo "ERROR: Please use the second script argument or env var 'release_version'. Exit"
-    fi
-else
-    release_version=$2
-    echo "FULL_VERSION from script parameter: [${release_version}]"
-fi
-if [ -z "${release_version}" ]; then
-    release_version=$(git describe --tags $(git rev-list --tags --max-count=1))
-fi
-
-mkdir -p logs
-
-cd ${release_folder}/${release_version}/
-pkg_name=$(ls -1 libxlio-*.src.rpm)
-
-export PROJECT_SRC_PATH=${release_folder}/${release_version}/$pkg_name
-LOG=$WORKSPACE/logs/${name}_antivirus.log
-
-sudo -E -u swx-jenkins /auto/GLIT/SCRIPTS/HELPERS/antivirus-scan.sh $PROJECT_SRC_PATH 2>&1 | tee $LOG
-
-cat $LOG | grep 'Possibly Infected:.............     0'
-if [ $? -ne 0 ];then
-    status=1
-else
-    status=0
-fi
-exit $status

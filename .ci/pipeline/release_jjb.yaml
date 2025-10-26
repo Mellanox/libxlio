@@ -35,6 +35,10 @@
             name: "do_release"
             default: true
             description: "Release build packges into the release folder, set to false for debugging"
+        - bool:
+            name: "do_antivirus"
+            default: true
+            description: "Run Antivirus."
         - string:
             name: "notification_email"
             default: "{jjb_release_email}"

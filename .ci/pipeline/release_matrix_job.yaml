@@ -25,6 +25,9 @@ volumes:
   - {mountPath: /auto/sw/release/sw_acceleration, hostPath: /auto/sw/release/sw_acceleration}
   # User profile for release
   - {mountPath: /var/home/swx-jenkins, hostPath: /labhome/swx-jenkins}
+  # for Antivirus
+  - {mountPath: /auto/BACKUP/logs_of_LOGS, hostPath: /auto/BACKUP/logs_of_LOGS}
+  - {mountPath: /auto/GLIT/SCRIPTS/HELPERS, hostPath: /auto/GLIT/SCRIPTS/HELPERS}
 
 runs_on_dockers:
   - {
@@ -33,9 +36,10 @@ runs_on_dockers:
       uri: '$arch/$name/release',
       build_args: '--no-cache --target release',
       arch: 'x86_64',
-      tag: '20250304'
+      tag: '20250304',
+      runAsUser: '6213',
+      runAsGroup: '101'
     }
-
 
 steps:
   - name: Build-dpcp
@@ -50,6 +54,12 @@ steps:
     run: |
      .ci/do_release.sh
     archiveArtifacts: "**/build_pkg.log,**/packages/*.rpm"
+
+  - name: Antivirus
+    enable: ${do_antivirus}
+    run: |
+      env WORKSPACE=$PWD .ci/antivirus.sh
+    archiveArtifacts: 'logs/'
 
 pipeline_start:
     shell: action

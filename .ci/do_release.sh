@@ -7,7 +7,7 @@ echo "**********************************"
 set -o pipefail
 
 print_help() {
-    set +xv  
+    set +xv
     echo -e "\n\n"
     echo "--------------------------------------------------"
     echo "Usage: release_folder=<release folder> release_tag=<release tag> [revision=<revision>] [do_release=<true|false>] $0"
@@ -50,7 +50,7 @@ configure_ac_version="${MAJOR_VERSION}.${MINOR_VERSION}.${REVISION_VERSION}"
 pkg_folder=pkg/packages
 pkg_name="libxlio-${release_tag}-${revision}.src.rpm"
 tarball_name="libxlio-${release_tag}.tar.gz"
-DST_DIR=${release_folder}/${release_tag}
+DST_DIR="${release_folder}/${release_tag}"
 echo "FULL_VERSION from configure.ac: [${configure_ac_version}]"
 
 # Creating both tarball and src.rpm
@@ -63,28 +63,28 @@ fi
 
 if [ "${do_release}" = true ] ; then
     echo "do_release is set to true, will release package into ${release_folder}/${release_tag}"
-    
+
     if [ ! -d "${pkg_folder}" ]; then
         echo "ERROR: pkg folder is missing, exiting..."
         exit 1
     fi
-    
-    if [[ -e "${DST_DIR}/${pkg_name}" || -e "${DST_DIR}/${tarball_name}" ]]; then 
+
+    if [[ -e "${DST_DIR}/${pkg_name}" || -e "${DST_DIR}/${tarball_name}" ]]; then
         echo "ERROR: [${DST_DIR}/${pkg_name}] or [${DST_DIR}/${tarball_name}] file already exist. Exit"
         exit 1
     fi
 
 	files_dir=$(pwd)
 	pushd "${release_folder}" || { echo "ERROR: Failed to pushd to ${release_folder}. Exit" ; exit 1; }
-    sudo -E -u swx-jenkins mkdir -p "$DST_DIR"
+    mkdir -p "${DST_DIR}"
     # Copy both the src.rpm and the tarball to the destination
-    sudo -E -u swx-jenkins cp -v "${files_dir}/${pkg_folder}/${pkg_name}" "${DST_DIR}"
-    sudo -E -u swx-jenkins cp -v "${files_dir}/${pkg_folder}/${tarball_name}" "${DST_DIR}"
+    cp -v "${files_dir}/${pkg_folder}/${pkg_name}" "${DST_DIR}"
+    cp -v "${files_dir}/${pkg_folder}/${tarball_name}" "${DST_DIR}"
 
-    sudo -E -u swx-jenkins ln -s "$DST_DIR/${pkg_name}" "${pkg_name}"
+    ln -s "${DST_DIR}/${pkg_name}" "${pkg_name}"
     popd || { echo "ERROR: Failed to popd from ${release_folder}. Exit" ; exit 1; }
 
-    echo "INFO: Release found at $DST_DIR"
+    echo "INFO: Release found at ${DST_DIR}"
 else
     echo "INFO: do_release is set to false, skipping package release."
 fi
