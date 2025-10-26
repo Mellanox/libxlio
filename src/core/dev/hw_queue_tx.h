@@ -163,7 +163,6 @@ private:
     void init_queue();
     void init_device_memory();
     void trigger_completion_for_all_sent_packets();
-    void update_next_wqe_hot();
     void destroy_tis_cache();
     void put_tls_tis_in_cache(xlio_tis *tis);
 
@@ -212,7 +211,8 @@ private:
     inline void tls_get_progress_params_wqe(xlio_ti *ti, uint32_t tirn, void *buf, uint32_t lkey);
 #endif /* DEFINED_UTLS */
 
-    inline void store_current_wqe_prop(mem_buf_desc_t *wr_id, unsigned credits, xlio_ti *ti);
+    inline void submit_wqe(mem_buf_desc_t *buf, unsigned credits, uint8_t wqebbs, xlio_ti *ti,
+                           bool skip_comp);
     inline uint8_t fill_wqe(xlio_ibv_send_wr *p_send_wqe);
     inline int fill_wqe_send(xlio_ibv_send_wr *pswr);
     inline int fill_wqe_lso(xlio_ibv_send_wr *pswr, int data_len);

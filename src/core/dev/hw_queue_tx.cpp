@@ -465,13 +465,6 @@ void hw_queue_tx::init_device_memory()
     }
 }
 
-void hw_queue_tx::update_next_wqe_hot()
-{
-    // Preparing pointer to the next WQE after a doorbell
-    m_sq_wqe_hot = &(*m_sq_wqes)[m_sq_wqe_counter & (m_tx_num_wr - 1)];
-    m_sq_wqe_hot_index = m_sq_wqe_counter & (m_tx_num_wr - 1);
-}
-
 cq_mgr_tx *hw_queue_tx::init_tx_cq_mgr()
 {
     m_tx_num_wr = align32pow2(m_tx_num_wr);
@@ -642,7 +635,7 @@ inline uint8_t hw_queue_tx::fill_wqe(xlio_ibv_send_wr *pswr)
     m_sq_wqe_hot->ctrl.data[1] = htonl((m_mlx5_qp.qpn << 8) | wqe_size);
 
     uint8_t wqebbs = static_cast<uint8_t>(align_to_WQEBB_up(wqe_size) / 4);
-    ring_doorbell(wqebbs);
+
     return wqebbs;
 }
 
@@ -756,20 +749,6 @@ inline int hw_queue_tx::fill_wqe_lso(xlio_ibv_send_wr *pswr, int data_len)
     return wqe_size;
 }
 
-void hw_queue_tx::store_current_wqe_prop(mem_buf_desc_t *buf, unsigned credits, xlio_ti *ti)
-{
-    m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index] = sq_wqe_prop {
-        .buf = buf,
-        .credits = credits,
-        .ti = ti,
-        .next = m_sq_wqe_prop_last,
-    };
-    m_sq_wqe_prop_last = &m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index];
-    if (ti) {
-        ti->get();
-    }
-}
-
 //! Send one RAW packet
 void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr,
                                bool request_comp, xlio_tis *tis, unsigned credits)
@@ -800,20 +779,38 @@ void hw_queue_tx::send_to_wire(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_a
     eseg->rsvd2 = 0;
     eseg->cs_flags = (uint8_t)(attr & (XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM) & 0xff);
 
+    submit_wqe(reinterpret_cast<mem_buf_desc_t *>(p_send_wqe->wr_id), credits, fill_wqe(p_send_wqe),
+               tis, false);
+}
+
+inline void hw_queue_tx::submit_wqe(mem_buf_desc_t *buf, unsigned credits, uint8_t wqebbs,
+                                    xlio_ti *ti, bool skip_comp)
+{
     /* Store buffer descriptor */
-    store_current_wqe_prop(reinterpret_cast<mem_buf_desc_t *>(p_send_wqe->wr_id), credits, tis);
+    m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index] = sq_wqe_prop {
+        .buf = buf,
+        .credits = credits,
+        .ti = ti,
+        .next = m_sq_wqe_prop_last,
+    };
 
-    /* Complete WQE */
-    uint8_t wqebbs = fill_wqe(p_send_wqe);
+    m_sq_wqe_prop_last = &m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index];
+
+    if (ti) {
+        ti->get();
+    }
+
     assert(wqebbs > 0 && wqebbs <= credits);
-    NOT_IN_USE(wqebbs);
+    ring_doorbell(wqebbs, skip_comp);
 
-    update_next_wqe_hot();
+    // Preparing pointer to the next WQE after a doorbell
+    m_sq_wqe_hot = &(*m_sq_wqes)[m_sq_wqe_counter & (m_tx_num_wr - 1)];
+    m_sq_wqe_hot_index = m_sq_wqe_counter & (m_tx_num_wr - 1);
 
     hwqtx_logfunc(
-        "m_sq_wqe_hot: %p m_sq_wqe_hot_index: %d wqe_counter: %d new_hot_index: %d wr_id: %llx",
+        "m_sq_wqe_hot: %p m_sq_wqe_hot_index: %d wqe_counter: %d new_hot_index: %d buf: %p",
         m_sq_wqe_hot, m_sq_wqe_hot_index, m_sq_wqe_counter, (m_sq_wqe_counter & (m_tx_num_wr - 1)),
-        p_send_wqe->wr_id);
+        buf);
 }
 
 std::unique_ptr<xlio_tis> hw_queue_tx::create_tis(uint32_t flags)
@@ -1131,12 +1128,10 @@ inline void hw_queue_tx::tls_post_static_params_wqe(xlio_ti *ti, const struct xl
     memset(tspseg, 0, sizeof(*tspseg));
 
     tls_fill_static_params_wqe(tspseg, info, key_id, resync_tcp_sn);
-    store_current_wqe_prop(nullptr, SQ_CREDITS_UMR, ti);
 
-    ring_doorbell(TLS_SET_STATIC_PARAMS_WQEBBS, true);
     dbg_dump_wqe((uint32_t *)m_sq_wqe_hot, sizeof(mlx5_set_tls_static_params_wqe));
 
-    update_next_wqe_hot();
+    submit_wqe(nullptr, SQ_CREDITS_UMR, TLS_SET_STATIC_PARAMS_WQEBBS, ti, true);
 }
 
 inline void hw_queue_tx::tls_fill_progress_params_wqe(
@@ -1175,12 +1170,10 @@ inline void hw_queue_tx::tls_post_progress_params_wqe(xlio_ti *ti, uint32_t tis_
         (fence ? MLX5_FENCE_MODE_INITIATOR_SMALL : 0) | (is_tx ? 0 : MLX5_WQE_CTRL_CQ_UPDATE);
 
     tls_fill_progress_params_wqe(&wqe->params, tis_tir_number, next_record_tcp_sn);
-    store_current_wqe_prop(nullptr, SQ_CREDITS_SET_PSV, ti);
 
-    ring_doorbell(TLS_SET_PROGRESS_PARAMS_WQEBBS);
     dbg_dump_wqe((uint32_t *)m_sq_wqe_hot, sizeof(mlx5_set_tls_progress_params_wqe));
 
-    update_next_wqe_hot();
+    submit_wqe(nullptr, SQ_CREDITS_SET_PSV, TLS_SET_PROGRESS_PARAMS_WQEBBS, ti, false);
 }
 
 inline void hw_queue_tx::tls_get_progress_params_wqe(xlio_ti *ti, uint32_t tirn, void *buf,
@@ -1206,11 +1199,7 @@ inline void hw_queue_tx::tls_get_progress_params_wqe(xlio_ti *ti, uint32_t tirn,
     psv->psv_index[0] = htobe32(tirn);
     psv->va = htobe64((uintptr_t)buf);
 
-    store_current_wqe_prop(nullptr, SQ_CREDITS_GET_PSV, ti);
-
-    ring_doorbell(TLS_GET_PROGRESS_WQEBBS);
-
-    update_next_wqe_hot();
+    submit_wqe(nullptr, SQ_CREDITS_GET_PSV, TLS_GET_PROGRESS_WQEBBS, ti, false);
 }
 
 void hw_queue_tx::tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
@@ -1270,11 +1259,7 @@ void hw_queue_tx::post_nop_fence(void)
     cseg->qpn_ds = htobe32((m_mlx5_qp.qpn << MLX5_WQE_CTRL_QPN_SHIFT) | 0x01);
     cseg->fm_ce_se = MLX5_FENCE_MODE_INITIATOR_SMALL;
 
-    store_current_wqe_prop(nullptr, SQ_CREDITS_NOP, nullptr);
-
-    ring_doorbell(1);
-
-    update_next_wqe_hot();
+    submit_wqe(nullptr, SQ_CREDITS_NOP, XLIO_NOP_WQEBBS, nullptr, false);
 }
 
 void hw_queue_tx::post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
@@ -1297,11 +1282,7 @@ void hw_queue_tx::post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_
     dseg->lkey = htobe32(lkey);
     dseg->byte_count = htobe32(len);
 
-    store_current_wqe_prop(nullptr, SQ_CREDITS_DUMP, tis);
-
-    ring_doorbell(XLIO_DUMP_WQEBBS, true);
-
-    update_next_wqe_hot();
+    submit_wqe(nullptr, SQ_CREDITS_DUMP, XLIO_DUMP_WQEBBS, tis, true);
 }
 
 //! Handle releasing of Tx buffers
