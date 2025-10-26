@@ -548,6 +548,10 @@ void print_env_vars_xlio_global_settings()
                       MCE_DEFAULT_TX_SEGS_BATCH_TCP, SYS_VAR_TX_SEGS_BATCH_TCP);
     VLOG_PARAM_NUMBER("Tx Segs Ring Batch TCP", safe_mce_sys().tx_segs_ring_batch_tcp,
                       MCE_DEFAULT_TX_SEGS_RING_BATCH_TCP, SYS_VAR_TX_SEGS_RING_BATCH_TCP);
+    VLOG_PARAM_NUMBER("Tx Segs Pool Batch TCP", safe_mce_sys().tx_segs_pool_batch_tcp,
+                      MCE_DEFAULT_TX_SEGS_POOL_BATCH_TCP, SYS_VAR_TX_SEGS_POOL_BATCH_TCP);
+    VLOG_PARAM_NUMBER("Rx Buffer Size", safe_mce_sys().rx_buf_size, MCE_DEFAULT_RX_BUF_SIZE,
+                      CONFIG_VAR_RX_BUF_SIZE);
     VLOG_PARAM_STRING("TCP Send Buffer size", safe_mce_sys().tcp_send_buffer_size,
                       MCE_DEFAULT_TCP_SEND_BUFFER_SIZE, SYS_VAR_TCP_SEND_BUFFER_SIZE,
                       option_size::to_str(safe_mce_sys().tcp_send_buffer_size));
@@ -977,6 +981,10 @@ void print_xlio_global_settings()
                       MCE_DEFAULT_TX_SEGS_BATCH_TCP, CONFIG_VAR_TX_SEGS_BATCH_TCP);
     VLOG_PARAM_NUMBER("Tx Segs Ring Batch TCP", safe_mce_sys().tx_segs_ring_batch_tcp,
                       MCE_DEFAULT_TX_SEGS_RING_BATCH_TCP, CONFIG_VAR_TX_SEGS_RING_BATCH_TCP);
+    VLOG_PARAM_NUMBER("Tx Segs Pool Batch TCP", safe_mce_sys().tx_segs_pool_batch_tcp,
+                      MCE_DEFAULT_TX_SEGS_POOL_BATCH_TCP, SYS_VAR_TX_SEGS_POOL_BATCH_TCP);
+    VLOG_PARAM_NUMBER("Rx Buffer Size", safe_mce_sys().rx_buf_size, MCE_DEFAULT_RX_BUF_SIZE,
+                      CONFIG_VAR_RX_BUF_SIZE);
     VLOG_PARAM_STRING("TCP Send Buffer size", safe_mce_sys().tcp_send_buffer_size,
                       MCE_DEFAULT_TCP_SEND_BUFFER_SIZE, CONFIG_VAR_TCP_SEND_BUFFER_SIZE,
                       option_size::to_str(safe_mce_sys().tcp_send_buffer_size));
