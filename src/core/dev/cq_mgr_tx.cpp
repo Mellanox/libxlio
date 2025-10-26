@@ -286,9 +286,11 @@ void cq_mgr_tx::handle_sq_wqe_prop(unsigned index)
 
         prev = p;
         p = p->next;
-    } while (p && m_hqtx_ptr->is_sq_wqe_prop_valid(p, prev));
+    } while (prev != m_hqtx_ptr->m_last_sq_wqe_prop_to_complete);
 
     m_p_ring->return_tx_pool_to_global_pool();
     m_hqtx_ptr->credits_return(credits);
-    m_hqtx_ptr->m_sq_wqe_prop_last_signalled = index;
+    m_hqtx_ptr->m_last_sq_wqe_prop_to_complete =
+        &m_hqtx_ptr->m_sq_wqe_idx_to_prop[(index + m_hqtx_ptr->m_sq_wqe_idx_to_prop[index].wqebbs) %
+                                          m_hqtx_ptr->m_tx_num_wr];
 }

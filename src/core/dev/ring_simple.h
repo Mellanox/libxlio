@@ -223,13 +223,6 @@ public:
         m_hqtx->post_dump_wqe(tis, addr, len, lkey, is_first);
     }
 
-    void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx) override
-    {
-        std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
-        NOT_IN_USE(id);
-        m_hqtx->reset_inflight_zc_buffers_ctx(ctx);
-    }
-
     bool credits_get(unsigned credits) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);

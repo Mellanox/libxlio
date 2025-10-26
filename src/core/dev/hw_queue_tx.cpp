@@ -440,7 +440,7 @@ void hw_queue_tx::init_queue()
             hwqtx_logerr("Failed allocating m_sq_wqe_idx_to_prop (errno=%d %m)", errno);
             return;
         }
-        m_sq_wqe_prop_last_signalled = m_tx_num_wr - 1;
+        m_last_sq_wqe_prop_to_complete = m_sq_wqe_idx_to_prop;
         m_sq_wqe_prop_last = nullptr;
     }
 
@@ -790,6 +790,7 @@ inline void hw_queue_tx::submit_wqe(mem_buf_desc_t *buf, unsigned credits, uint8
     m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index] = sq_wqe_prop {
         .buf = buf,
         .credits = credits,
+        .wqebbs = wqebbs,
         .ti = ti,
         .next = m_sq_wqe_prop_last,
     };
@@ -1342,26 +1343,6 @@ void hw_queue_tx::trigger_completion_for_all_sent_packets()
         send_to_wire(&send_wr,
                      (xlio_wr_tx_packet_attr)(XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM),
                      true, nullptr, credits);
-    }
-}
-
-void hw_queue_tx::reset_inflight_zc_buffers_ctx(void *ctx)
-{
-    sq_wqe_prop *p = m_sq_wqe_prop_last;
-    sq_wqe_prop *prev;
-    if (p) {
-        unsigned p_i = p - m_sq_wqe_idx_to_prop;
-        if (p_i == m_sq_wqe_prop_last_signalled) {
-            return;
-        }
-        do {
-            mem_buf_desc_t *desc = p->buf;
-            if (desc && desc->tx.zc.ctx == ctx) {
-                desc->tx.zc.ctx = nullptr;
-            }
-            prev = p;
-            p = p->next;
-        } while (p && is_sq_wqe_prop_valid(p, prev));
     }
 }
 

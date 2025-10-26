@@ -42,6 +42,8 @@ struct sq_wqe_prop {
     mem_buf_desc_t *buf;
     /* Number of credits (usually number of WQEBBs). */
     unsigned credits;
+    /* Size of the WQE in WQEBBs. */
+    uint8_t wqebbs;
     /* Transport interface (TIS/TIR) current WQE holds reference to. */
     xlio_ti *ti;
     struct sq_wqe_prop *next;
@@ -100,8 +102,6 @@ public:
     std::unique_ptr<dpcp::tls_dek> get_tls_dek(const void *key, uint32_t key_size_bytes);
     void put_tls_dek(std::unique_ptr<dpcp::tls_dek> &&dek_obj);
 #endif
-
-    void reset_inflight_zc_buffers_ctx(void *ctx);
 
     void credits_return(unsigned credits) { m_sq_free_credits += credits; }
 
@@ -188,15 +188,6 @@ private:
         }
     }
 
-    bool is_sq_wqe_prop_valid(sq_wqe_prop *p, sq_wqe_prop *prev)
-    {
-        unsigned p_i = p - m_sq_wqe_idx_to_prop;
-        unsigned prev_i = prev - m_sq_wqe_idx_to_prop;
-        return (p_i != m_sq_wqe_prop_last_signalled) &&
-            ((m_tx_num_wr + p_i - m_sq_wqe_prop_last_signalled) % m_tx_num_wr <
-             (m_tx_num_wr + prev_i - m_sq_wqe_prop_last_signalled) % m_tx_num_wr);
-    }
-
 #if defined(DEFINED_UTLS)
     inline void tls_fill_static_params_wqe(struct mlx5_wqe_tls_static_params_seg *params,
                                            const struct xlio_tls_info *info, uint32_t key_id,
@@ -229,13 +220,24 @@ private:
     sq_wqe_prop *m_sq_wqe_idx_to_prop = nullptr;
     sq_wqe_prop *m_sq_wqe_prop_last = nullptr;
 
+    /**
+     * @brief Keeps track of the last Send Queue WQE (Work Queue Element) to be completed.
+     *
+     * This pointer is used to mark the last WQE in the chain that needs to be completed
+     * by a completion event (CQE). For example, if WQEs are posted in order | WQE1 | WQE2 | WQE3 |,
+     * m_last_sq_wqe_prop_to_complete will initially point to WQE1. When a CQE is received for WQE3,
+     * the completion logic will process and complete WQE3, WQE2, WQE1 (from right to left) until
+     * reaching m_last_sq_wqe_prop_to_complete. After that, m_last_sq_wqe_prop_to_complete is
+     * updated to point to the index where the next WQE (e.g., WQE4) should be tracked.
+     */
+    sq_wqe_prop *m_last_sq_wqe_prop_to_complete = nullptr;
+
     struct mlx5_eth_wqe (*m_sq_wqes)[] = nullptr;
     struct mlx5_eth_wqe *m_sq_wqe_hot = nullptr;
     uint8_t *m_sq_wqes_end = nullptr;
 
     const uint32_t m_n_sysvar_tx_num_wr_to_signal;
     uint32_t m_tx_num_wr;
-    unsigned m_sq_wqe_prop_last_signalled = 0U;
     unsigned m_sq_free_credits = 0U;
     uint32_t m_n_unsignaled_count = 0U;
     int m_sq_wqe_hot_index = 0;

@@ -104,10 +104,6 @@ public:
     uint8_t get_tos() const { return m_tos; }
     uint8_t get_ttl_hop_limit() const { return m_ttl_hop_limit; }
     void set_external_vlan_tag(uint16_t vlan_tag) { m_external_vlan_tag = vlan_tag; }
-    void reset_inflight_zc_buffers_ctx(void *ctx)
-    {
-        m_p_ring->reset_inflight_zc_buffers_ctx(m_id, ctx);
-    }
 
     inline bool is_the_same_ifname(const std::string &ifname)
     {
