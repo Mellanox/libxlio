@@ -90,21 +90,23 @@
    fun:_ZN15neigh_table_mgrC1Ev
 }
 {
-   rdma_create_event_channel_fp_leak
+   rdma_create_event_channel
+   Memcheck:Leak
+   obj:/*librdmacm.so*
+   ...
+   fun:rdma_create_event_channel
+   fun:create_rdma_channel
+   fun:_ZN15neigh_table_mgrC1Ev
+}
+{
+   rdma_create_event_channel
    Memcheck:Leak
    match-leak-kinds: possible
    fun:calloc
-   obj:/usr/lib/x86_64-linux-gnu/librdmacm.so.1.3.56.0
-   obj:/usr/lib/x86_64-linux-gnu/librdmacm.so.1.3.56.0
-   obj:/usr/lib/x86_64-linux-gnu/librdmacm.so.1.3.56.0
+   obj:/*librdmacm.so*
+   ...
    fun:rdma_create_event_channel
-   fun:_ZN15neigh_table_mgr19create_rdma_channelEv
    fun:UnknownInlinedFun
-   fun:_ZL22do_global_ctors_helperv.lto_priv.0
-   fun:_Z15do_global_ctorsv
-   fun:_Z15socket_internaliiibb
-   fun:_Z7bringupPKi
-   fun:main
 }
 ###########################################################
 # false positive libmlx5\4
@@ -196,4 +198,20 @@
    fun:_ZN5agent4sendEP9agent_msg
    fun:_ZN5agent8progressEv
    ...
+}
+###########################################################
+# sockperf
+{
+   sockperf_leak
+   Memcheck:Free
+   fun:free
+   fun:_Z9close_ifdiiP8fds_data
+   fun:server_receive_then_send_impl<RecvFromInputHandler>
+   fun:server_receive_then_send<>
+   fun:_ZN6ServerI10IoRecvfrom9SwitchOffE6doLoopEv
+   fun:doHandler
+   fun:server_handler<IoRecvfrom, SwitchOff>
+   fun:_Z14server_handlerI10IoRecvfromEviii
+   fun:_Z7do_testv
+   fun:main
 }
