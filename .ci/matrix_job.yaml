@@ -34,9 +34,6 @@ volumes:
   - {mountPath: /auto/sw_tools/Commercial, hostPath: /auto/sw_tools/Commercial}
   - {mountPath: /hpc/local/commercial, hostPath: /hpc/local/commercial}
   - {mountPath: /hpc/local/etc/modulefiles, hostPath: /hpc/local/etc/modulefiles}
-  # for Antivirus
-  - {mountPath: /auto/BACKUP/logs_of_LOGS, hostPath: /auto/BACKUP/logs_of_LOGS}
-  - {mountPath: /auto/GLIT/SCRIPTS/HELPERS, hostPath: /auto/GLIT/SCRIPTS/HELPERS}
   # Default release location
   - {mountPath: /auto/sw/release/sw_acceleration, hostPath: /auto/sw/release/sw_acceleration}
   # User profile for release
@@ -294,16 +291,6 @@ steps:
       ./.ci/artifacts.sh
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
-
-  - name: Antivirus
-    enable: ${do_antivirus}
-    containerSelector:
-      - "{name: 'rhel8.3-mofed-x86_64', category: 'base', variant: 1}"
-    agentSelector:
-      - "{nodeLabel: 'skip-agent'}"
-    run: |
-      env WORKSPACE=$PWD .ci/antivirus.sh ${release_folder}
-    archiveArtifacts: 'logs/'
 
   - name: Style
     enable: ${do_style}

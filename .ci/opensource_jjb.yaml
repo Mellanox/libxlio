@@ -54,10 +54,6 @@
             default: true
             description: "Check tar, source and binary packages."
         - bool:
-            name: "do_antivirus"
-            default: false
-            description: "Run Antivirus."
-        - bool:
             name: "do_cppcheck"
             default: true
             description: "Run static analysis using cppcheck tool."
