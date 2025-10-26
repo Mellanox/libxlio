@@ -80,10 +80,6 @@ public:
     virtual bool is_tso(void);
     void slave_create(int if_index);
 
-    void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)
-    {
-        m_xmit_rings[id]->reset_inflight_zc_buffers_ctx(id, ctx);
-    }
     virtual uint64_t get_rx_cq_out_of_buffer_drop();
 
 protected:

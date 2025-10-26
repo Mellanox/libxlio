@@ -104,12 +104,16 @@ rc=$(($rc+$?))
 
 # XLIO Ultra API
 
-#IPV4
+# IPV4
 eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=ultra_api* --gtest_output=xml:${WORKSPACE}/${prefix}/test-xlio_ultra_api.xml"
 rc=$(($rc+$?))
 
-#IPV6
+# IPV6
 eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=ultra_api* --gtest_output=xml:${WORKSPACE}/${prefix}/test-xlio_ultra_api-ipv6.xml"
+rc=$(($rc+$?))
+
+# Full SQ completion test - Needs XLIO_TCP_CC_ALGO=2 XLIO_TCP_NODELAY=1 to fill SQ deterministically without handling initially small congestion window and delayed packets.
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib XLIO_TCP_CC_ALGO=2 XLIO_TCP_NODELAY=1 $gtest_app $gtest_opt --gtest_filter=ultra_api_socket_send_receive_full_sq* --gtest_output=xml:${WORKSPACE}/${prefix}/test-xlio_ultra_api_full_sq_completion.xml"
 rc=$(($rc+$?))
 
 # Worker Threads Mode tests

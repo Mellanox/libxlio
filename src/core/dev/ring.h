@@ -191,12 +191,6 @@ public:
         NOT_IN_USE(first);
     }
 
-    virtual void reset_inflight_zc_buffers_ctx(ring_user_id_t id, void *ctx)
-    {
-        NOT_IN_USE(id);
-        NOT_IN_USE(ctx);
-    }
-
     // TODO Add id argument for bonding
     virtual bool credits_get(unsigned credits)
     {
