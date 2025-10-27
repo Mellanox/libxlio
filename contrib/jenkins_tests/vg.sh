@@ -110,7 +110,7 @@ for test_link in $test_ip_list; do
 
 		eval "${sudo_cmd} $timeout_exe_short env $test_lib_env LD_PRELOAD=$test_lib \
 			${vg_tool} --log-file=${vg_dir}/${test_name}-valgrind-cl.log $vg_args \
-			$test_app_path pp ${test_opt} -i ${test_ip} -t 10 | tee ${vg_dir}/${test_name}-output-cl.log"
+			$test_app_path pp ${test_opt} -i ${test_ip} -t 10 2>&1 | tee ${vg_dir}/${test_name}-output-cl.log"
 
 		if [ `ps -ef | grep $test_app | wc -l` -gt 1 ];
 		then
