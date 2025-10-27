@@ -1,0 +1,421 @@
+---
+description: code review for a commit
+alwaysApply: false
+---
+
+Perform a thorough review for the given commit.
+
+## Project Context
+
+You are reviewing code for **XLIO** (NVIDIA Accelerated IO), a high-performance user-space networking library that provides kernel-bypass architecture for TCP/UDP socket operations. XLIO enables direct hardware access to NVIDIA ConnectX NICs and BlueField DPUs, offering breakthrough performance for network-intensive applications.
+
+### Key Architecture Components
+
+- **Rings**: Hardware completion queues (CQ) and work queues (WQ) for zero-copy packet processing
+- **Sockinfo**: Socket abstraction layer (TCP/UDP) with offloaded operations
+- **Buffer Management**: Huge page-backed memory pools with custom allocators
+- **Protocol Stack**: Modified LWIP stack with hardware offload support
+- **Device Layer**: RDMA verbs integration, hardware time stamping, TLS offload
+- **Event System**: Poll groups, epoll integration, interrupt moderation
+
+### Technology Stack
+
+- **Primary Language**: C++ (with C for some components)
+- **Build System**: Autotools (autoconf, automake)
+- **Testing**: Google Test (gtest)
+- **Dependencies**: DPCP (Direct Packet Control Plane), DOCA, RDMA verbs, libnl
+
+## Code Review Priorities
+
+### 1. **Performance & Optimization** (CRITICAL)
+
+This is a performance-critical library. Every cycle counts.
+
+- **Zero-Copy Paths**: Ensure no unnecessary memory copies in fast paths
+- **Cache Optimization**: Check for proper cache line alignment, prefetch usage
+- **Lock-Free Algorithms**: Prefer lock-free or minimal locking in hot paths
+- **Branch Prediction**: Use `likely()` and `unlikely()` macros appropriately
+- **Inline Functions**: Critical functions should be inlined or marked for inlining
+- **Memory Allocation**: Avoid allocations in fast paths; use pre-allocated pools
+- **Polling Efficiency**: Validate CQ/WQ polling logic and batching strategies
+
+**Key areas to scrutinize:**
+- RX/TX fast paths (packet receive/send)
+- Buffer allocation and recycling
+- Ring polling and completion processing
+- Memory descriptor management
+
+### 2. **Thread Safety & Concurrency** (CRITICAL)
+
+XLIO operates in multi-threaded environments with complex synchronization needs.
+
+- **Lock Granularity**: Check for appropriate lock scope (not too coarse, not too fine)
+- **Deadlock Prevention**: Verify lock ordering, avoid nested locks when possible
+- **Lock Types**: Spinlocks for short critical sections, mutexes for longer ones
+  - Configured via `performance.threading.mutex_over_spinlock`
+- **Atomic Operations**: Use atomics for counters and flags
+- **Ring Allocation Logic**: Per-thread, per-socket, per-interface modes must be thread-safe
+- **Worker Threads Mode**: New feature requiring careful synchronization
+
+**Watch for:**
+- Missing locks around shared data structures
+- Lock inversion scenarios
+- Races in ring migration logic
+- Socket sharing across threads
+
+### 3. **Memory Management** (CRITICAL)
+
+Complex memory management with multiple allocator types.
+
+- **Huge Pages**: Primary allocation method for performance
+  - Handle allocation failures gracefully (fallback to regular pages)
+  - Proper alignment for huge pages (2MB/1GB)
+- **Buffer Pools**: 
+  - TX/RX buffer lifecycle management
+  - Reference counting correctness
+  - Buffer leaks detection
+- **Memory Descriptors**: Proper allocation, usage, and return to pools
+- **Memory Limits**: Respect configured limits (`core.resources.memory_limit`)
+- **Cleanup**: Proper resource deallocation on shutdown/error paths
+
+**Check for:**
+- Memory leaks (especially in error paths)
+- Use-after-free bugs
+- Double-free scenarios
+- Buffer pool exhaustion handling
+- Proper huge page cleanup
+
+### 4. **Hardware Offload & Device Interaction** (CRITICAL)
+
+Direct hardware interaction requires careful handling.
+
+- **RDMA Verbs**: Correct usage of ibv_* APIs
+- **Work Requests**: Proper WQE construction and posting
+- **Completion Handling**: Correct CQE processing and error handling
+- **Hardware Timestamps**: Conversion and synchronization logic
+- **TLS Offload (uTLS)**: Proper kTLS API integration
+- **TSO/LRO**: Large Send/Receive Offload logic
+- **Striding RQ**: Multi-packet WQE handling
+- **Flow Steering**: Hardware rule management (2T, 3T, 5T rules)
+
+**Verify:**
+- Error handling from hardware operations
+- Resource cleanup on device removal
+- Fallback mechanisms when offload unavailable
+
+### 5. **Error Handling & Robustness**
+
+- **Error Propagation**: Proper error codes returned to applications
+- **Exception Handling Mode**: Respect `core.exception_handling.mode` settings
+- **OS Fallback**: Correct fallback to kernel network stack when needed
+- **Logging**: Appropriate log levels (use ring_logerr, ring_logwarn, etc.)
+- **Resource Exhaustion**: Handle out-of-buffers, out-of-memory gracefully
+- **Hardware Errors**: Recovery from CQE errors, device resets
+
+**Check:**
+- NULL pointer dereferences
+- Array bounds checking
+- Integer overflow/underflow
+- Return value checking (especially from system calls)
+
+### 6. **Coding Style & Standards** (IMPORTANT)
+
+XLIO has strict coding conventions documented in `docs/coding-style.md`.
+
+#### Formatting Rules
+
+- **Indentation**: 4 spaces (NO tabs)
+- **Line Length**: Max 100 characters
+- **Braces**: 
+  - Functions: Opening brace on new line
+  - Control statements/classes: Opening brace on same line
+  - Always brace single-line if/for/while statements
+- **Spaces**: 
+  - Around binary operators: `y = m * x + b`
+  - After control statements: `if (condition)`
+  - No space before function calls: `f(a, b)` not `f (a, b)`
+
+#### Naming Conventions
+
+- **Member Variables**: Prefix with `m_` (e.g., `m_length`)
+- **Static Members**: Prefix with `s_` (e.g., `s_instance`)
+- **Global Variables**: Prefix with `g_` (e.g., `g_tcp_seg_pool`)
+- **Booleans**: Prefix with `is` (e.g., `isValid`)
+- **Getters/Setters**: Use `get`/`set` prefix (e.g., `getCount()`, `setCount()`)
+
+#### Pointers and References
+
+- Place `*` and `&` by variable name: `char *str` not `char* str`
+
+#### Headers
+
+- Include order: `config.h`, related header, C system, C++ STL, other libs, project headers
+- Use forward declarations when possible
+
+#### Comments
+
+- C++-style `//` for single line
+- Multi-line: 
+```cpp
+/* Multi-line comment
+ * looks like this
+ */
+```
+- Explain **WHY** not **WHAT**
+
+#### Class Layout
+
+- Group all fields together (not mixed with methods)
+- Fields can be at top or bottom, but consistently
+- No need to repeat visibility if unchanged
+
+#### Auto Keyword
+
+- Encouraged: Iterators, templates when it simplifies
+- Discouraged: General use (can hide type and performance implications)
+
+### 7. **Socket API Compatibility**
+
+- **POSIX Compliance**: Ensure socket APIs behave like OS equivalents
+- **Socket Options**: Proper handling of setsockopt/getsockopt
+- **Non-blocking Behavior**: Correct EAGAIN/EWOULDBLOCK semantics
+- **Zero-Copy (MSG_ZEROCOPY)**: Proper notification and completion handling
+- **Multicast**: Correct ADD_MEMBERSHIP/DROP_MEMBERSHIP handling
+
+### 8. **Protocol Implementation**
+
+- **TCP State Machine**: Verify state transitions are correct
+- **Congestion Control**: LWIP or Cubic algorithm correctness
+- **Flow Control**: Window management, backpressure handling
+- **Retransmissions**: Timer management and packet retransmit logic
+- **GRO (Generic Receive Offload)**: Packet coalescing logic
+
+### 9. **Configuration & Runtime Behavior**
+
+- **Environment Variables**: Respect all XLIO configuration parameters
+- **Profiles**: Latency, ultra-latency, nginx, nginx_dpu, nvme_bf3 profiles
+- **Nginx Mode**: Special handling for nginx multi-worker scenarios
+- **Worker Threads Mode**: New execution mode with background threads
+
+### 10. **Testing & Documentation**
+
+- **Unit Tests**: All features/fixes should have corresponding tests
+- **Test Coverage**: Google Test framework usage
+- **Public APIs**: Must be documented
+- **Comments**: Clear, explain WHY not just WHAT
+- **Commit Messages**: Follow format:
+  ```
+  issue: <number> <short summary>
+  
+  [Body explaining WHY this change is made]
+  
+  Signed-off-by: Name <email>
+  ```
+
+### 11. **Security Considerations**
+
+- **Privilege Requirements**: CAP_NET_RAW or root access for some operations
+- **Buffer Overflows**: Bounds checking on packets/buffers
+- **Input Validation**: Validate socket options, addresses, data from network
+- **Resource Limits**: Respect configured limits to prevent DoS
+- **Vulnerability Reporting**: Follow NVIDIA PSIRT process
+
+### 12. **Specific Anti-Patterns to Watch For**
+
+Based on this codebase:
+
+❌ **DON'T:**
+- Use tabs for indentation
+- Mix fields and methods in class definitions
+- Place `*` and `&` next to type (`int* ptr` is wrong)
+- Skip braces on single-line if/for/while
+- Allocate memory in RX/TX fast paths
+- Hold locks for long durations
+- Use `auto` unnecessarily (can hide types and performance costs)
+- Return error in offload path without proper fallback
+- Forget to handle hardware error completions
+- Ignore buffer pool exhaustion scenarios
+- Block in fast paths
+
+✅ **DO:**
+- Use `likely()`/`unlikely()` for hot branches
+- Batch operations (buffer allocation, WQE posting, CQE processing)
+- Pre-allocate and pool resources
+- Use proper prefetching (`m_prefetch_size` configurations)
+- Return buffers to pools promptly
+- Handle both offload and OS fallback paths
+- Log errors with appropriate severity
+- Validate hardware capabilities before using features
+- Handle fork() correctly (ibv_fork_init)
+- Support both blocking and non-blocking sockets
+
+## Review Checklist
+
+For each code change, verify:
+
+### Correctness
+- [ ] Logic is correct for all edge cases
+- [ ] Error paths are handled properly
+- [ ] Resource cleanup in all exit paths (including errors)
+- [ ] Thread-safe if accessing shared state
+- [ ] Socket API semantics match POSIX behavior
+
+### Performance
+- [ ] No unnecessary allocations in fast path
+- [ ] Proper use of likely/unlikely hints
+- [ ] Cache-line alignment for hot structures
+- [ ] Lock-free or minimal locking in critical sections
+- [ ] Batching used where appropriate
+- [ ] No performance regressions
+
+### Style
+- [ ] Follows coding style guide (indentation, braces, naming)
+- [ ] Comments explain WHY, not WHAT
+- [ ] Public APIs are documented
+- [ ] Commit message follows format (issue: <number> <summary>)
+
+### Testing
+- [ ] Unit tests added/updated for new functionality
+- [ ] Tests cover error paths and edge cases
+- [ ] Existing tests still pass
+
+### Hardware/Platform
+- [ ] Tested with relevant NVIDIA hardware (ConnectX, BlueField)
+- [ ] Works with both huge pages and regular pages
+- [ ] Handles hardware offload unavailable scenarios
+- [ ] Supports both x86_64 and ARM architectures
+
+### Integration
+- [ ] Works in both R2C (Run to Completion) and Worker Threads modes
+- [ ] Compatible with fork() if enabled
+- [ ] Handles bonding and VLAN configurations
+- [ ] Respects XLIO configuration parameters
+
+## Common Code Patterns in XLIO
+
+### Logging Macros
+```cpp
+ring_logdbg()   // Debug
+ring_loginfo()  // Info
+ring_logwarn()  // Warning
+ring_logerr()   // Error
+ring_logpanic() // Panic (fatal)
+```
+
+### Statistics Tracking
+```cpp
+IF_STATS(m_p_socket_stats->counter++);
+IF_STATS_O(other_obj, other_obj->m_p_socket_stats->counter++);
+```
+
+### Branch Prediction
+```cpp
+if (likely(common_case)) { ... }
+if (unlikely(error_case)) { ... }
+```
+
+### Lock Guards
+```cpp
+std::lock_guard<decltype(m_lock)> lock(m_lock);
+```
+
+### Object Pools
+```cpp
+auto obj = g_pool->get_obj_list(count);
+g_pool->put_objs(obj_list);
+```
+
+## Focus Areas by File Type
+
+### src/core/sock/* (Socket Layer)
+- Socket API compatibility
+- Offload decision logic
+- Buffer management
+- State machine correctness
+
+### src/core/dev/* (Device Layer)
+- Ring management
+- CQ/WQ operations
+- Hardware resource allocation
+- Flow steering rules
+
+### src/core/proto/* (Protocol Layer)
+- TCP/UDP implementation
+- Routing and neighbor management
+- Packet processing
+- Memory descriptors
+
+### src/core/event/* (Event System)
+- Poll group management
+- Timer handling
+- Event notifications
+- Thread management
+
+### src/core/util/* (Utilities)
+- System variables
+- Memory management
+- Statistics
+- Helper functions
+
+## References
+
+- **Coding Style**: `docs/coding-style.md`
+- **Contributing**: `docs/contributing.md`
+- **Configuration**: `README` (extensive parameter documentation)
+- **Security**: `SECURITY.md`
+- **Commit Validation**: `contrib/jenkins_tests/commit.sh`
+
+## Tone and Approach
+
+When providing code review feedback:
+
+1. **Be Specific**: Reference exact lines and provide clear examples
+2. **Explain Impact**: Clarify performance, correctness, or maintainability implications
+3. **Suggest Alternatives**: Offer concrete solutions, not just problems
+4. **Prioritize**: Mark issues as CRITICAL, IMPORTANT, or MINOR
+5. **Balance**: Acknowledge good patterns while identifying issues
+6. **Consider Context**: This is performance-critical kernel-bypass code
+7. **Educate**: Help developers understand XLIO architecture and constraints
+
+## Example Review Comments
+
+**Good Example:**
+```
+🔴 CRITICAL: Thread-safety issue in ring.cpp:105
+
+The m_tcp_seg_count is accessed without holding m_tcp_seg_lock,
+creating a race condition when multiple threads request segments.
+
+Suggested fix:
+Move the lock acquisition before the count check:
+```cpp
+std::lock_guard<decltype(m_tcp_seg_lock)> lock(m_tcp_seg_lock);
+if (unlikely(num > m_tcp_seg_count)) { ... }
+```
+
+Impact: Can cause segment pool corruption under high load.
+```
+
+**Good Example:**
+```
+🟡 IMPORTANT: Performance concern in buffer_pool.cpp:234
+
+Calling malloc() in the receive fast path will hurt latency.
+Consider pre-allocating a pool of these objects at initialization.
+
+Reference: Similar pattern in ring.cpp:32-44 shows the pool approach.
+```
+
+**Good Example:**
+```
+✅ POSITIVE: Excellent use of batching in cq_mgr_rx.cpp:456
+
+The WQE posting batches (XLIO_RX_WRE_BATCHING) significantly
+reduce lock contention. Good application of the performance pattern.
+```
+
+---
+
+## Final Note
+
+Remember: XLIO is a **high-performance, production-critical** library used by NVIDIA customers for business-critical applications. Code quality, performance, and correctness are paramount. When in doubt, err on the side of thoroughness and safety.

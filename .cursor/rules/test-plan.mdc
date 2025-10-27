@@ -1,0 +1,901 @@
+---
+alwaysApply: false
+---
+
+> **Instructions for AI/GenAI:**
+> 1. **Fetch Context from Confluence:**
+>    - Use `confluence_search` to find relevant documents for the feature
+>    - Use `confluence_get_page` to retrieve full content of relevant pages
+>    - Review documentation to understand requirements, architecture, APIs, performance targets
+> 
+> 2. **Generate Comprehensive Test Plan:**
+>    - Identify test cases covering functional requirements, edge cases, error handling, performance
+>    - Suggest specific test implementations for each testing layer
+>    - Use the project's testing infrastructure: gtest (C++), unit_tests, python_tests, and CI pipelines
+>
+> 3. **Be Specific:**
+>    - Reference specific modules, classes, functions from the codebase
+>    - Provide concrete test scenarios with inputs and expected outputs
+>    - Suggest actual file locations for new tests
+
+---
+
+## 1. Document Information
+
+| Field | Value |
+|-------|-------|
+| **Feature** | [Feature name or ticket number] |
+| **Author** | [Name] |
+| **Date** | [YYYY-MM-DD] |
+| **Related Documents** | [Links to Confluence architecture, design docs, PRD] |
+| **Status** | [Draft/Review/Approved/Implemented] |
+
+## 2. Test Plan Overview
+
+### 2.1 Purpose
+Describe the objective of this test plan. What quality goals does it achieve?
+
+**Example:** "The purpose of this test plan is to validate the TCP zero-copy receive functionality, ensuring correct behavior under various network conditions, error handling, and performance characteristics meet the specified requirements."
+
+### 2.2 Scope
+Define what IS and IS NOT covered in the test effort.
+
+**In Scope:**
+- List modules, features, APIs being tested (from Confluence documentation)
+- Functional correctness
+- Error handling and edge cases
+- Performance/stress testing if applicable
+
+**Out of Scope:**
+- List what won't be tested (and why)
+
+### 2.3 Testing Strategy
+Describe the overall approach:
+- Which testing layers will be used (unit, integration, system, manual)
+- Test automation level (percentage automated vs manual)
+- Testing order/dependencies
+- Risk-based testing priorities
+
+## 3. Requirements Traceability
+
+Map test cases back to requirements from Confluence documentation:
+
+| Requirement ID | Requirement Description | Test Case IDs | Source Document |
+|----------------|------------------------|---------------|-----------------|
+| REQ-001 | [from Confluence] | GT-001, GT-002 | [Confluence page link] |
+| REQ-002 | [from Confluence] | GT-003, PT-001 | [Confluence page link] |
+
+## 4. Tested Items
+
+List the specific software modules, classes, functions, or components to be tested (identified from architecture/design docs):
+
+| Component | File/Module | Type | Priority | Reference |
+|-----------|-------------|------|----------|-----------|
+| Example: `tcp_socket::recv_zerocopy()` | `src/core/tcp_socket.cpp` | Function | High | [Confluence design doc] |
+| Example: TCP RFS logic | `src/core/tcp_rfs.cpp` | Module | High | [Confluence arch doc] |
+
+## 5. Test Environment
+
+### 5.1 Build Configuration
+- **Compiler:** [e.g., GCC 11.x, Clang 14.x]
+- **Build flags:** [e.g., -O2, -g, specific CFLAGS]
+- **Configuration options:** [e.g., --enable-debug, --with-extra-api]
+
+### 5.2 Runtime Environment
+- **Operating System:** [e.g., Ubuntu 22.04, RHEL 8.x]
+- **Kernel Version:** [e.g., 5.15+]
+- **Architecture:** [e.g., x86_64, ARM64]
+- **Dependencies:** [e.g., libibverbs, librdmacm versions, MLNX_OFED]
+- **Hardware:** [e.g., Mellanox ConnectX-5/6/7, NIC requirements]
+
+### 5.3 Network Topology
+- Network setup required (back-to-back, switch, specific VLAN)
+- Two network interfaces with configured IP addresses required for gtest
+- IP addressing scheme (IPv4 and IPv6)
+- Special network configurations
+
+## 6. Test Cases
+
+**Instructions for each test case:**
+- **Test ID:** Unique identifier following naming convention
+- **Objective:** What is being tested (tied to requirements from Confluence)
+- **Category:** [Positive/Negative/Edge Case/Performance/Stress]
+- **Prerequisites:** Setup required before test
+- **Test Procedure:** Step-by-step or description of test logic
+- **Expected Result:** Pass criteria
+- **Priority:** [High/Medium/Low]
+- **Automated:** [Yes/No]
+
+### 6.1 Google Test (gtest) - Unit & Integration Tests
+
+**Location:** `tests/gtest/`
+
+Test categories available:
+- **common/**: Base system tests
+- **sock/**: Socket layer tests
+- **tcp/**: TCP protocol tests (connect, bind, send, recv, accept, listen, event, rfs, sendfile, sendto, sockopt, tls)
+- **udp/**: UDP protocol tests (socket, bind, connect, recv, send, sendto, rfs)
+- **mix/**: Mixed protocol tests (sg_array, sock_addr, ip_address, mix_list)
+- **core/**: XLIO core functionality and sockopt tests
+- **xliod/**: XLIO daemon tests (base, hash, init, state)
+- **xlio_ultra_api/** (EXTRA API): Ultra API tests (socket, listen_connect, migrate, send_receive)
+
+**Note:** Tests prefixed with `xlio_*` are EXTRA API tests and require special build configuration.
+
+| Test ID | Test Name | Objective | Category | File Location | Req ID | Priority | Automated |
+|---------|-----------|-----------|----------|---------------|--------|----------|-----------|
+| GT-001 | [test_name] | [What it tests - from requirements] | [Positive/Negative/Edge] | [e.g., tcp/tcp_recv_zerocopy.cc] | REQ-001 | High | Yes |
+| GT-002 | [test_name] | [What it tests] | [Category] | [file] | REQ-002 | Medium | Yes |
+
+**Example:**
+
+| Test ID | Test Name | Objective | Category | File Location | Req ID | Priority | Automated |
+|---------|-----------|-----------|----------|---------------|--------|----------|-----------|
+| GT-001 | tcp_recv_zerocopy_basic | Verify basic zero-copy receive on TCP socket | Positive | tcp/tcp_recv_zerocopy.cc | REQ-ZC-001 | High | Yes |
+| GT-002 | tcp_recv_zerocopy_invalid_buf | Verify error handling with NULL buffer | Negative | tcp/tcp_recv_zerocopy.cc | REQ-ZC-002 | High | Yes |
+| GT-003 | tcp_socket_ipv6only | Test IPV6_V6ONLY socket option behavior | Edge Case | tcp/tcp_socket.cc | REQ-IPV6-001 | Medium | Yes |
+
+**Test Implementation Details:**
+For each test, describe:
+- Test setup (fixture, socket creation, connection establishment)
+- Main test logic (what operations are performed)
+- Assertions (what conditions are checked)
+- Cleanup
+
+### 6.2 Unit Tests
+
+**Location:** `tests/unit_tests/`
+
+Available modules:
+- **config/**: Configuration parsing tests
+- **job_queue/**: Job queue functionality tests
+
+| Test ID | Test Name | Objective | File Location | Req ID | Priority | Automated |
+|---------|-----------|-----------|---------------|--------|----------|-----------|
+| UT-001 | [test_name] | [What it tests] | [e.g., config/test_parser.cpp] | REQ-XXX | High | Yes |
+
+**Example:**
+
+| Test ID | Test Name | Objective | File Location | Req ID | Priority | Automated |
+|---------|-----------|-----------|---------------|--------|----------|-----------|
+| UT-001 | config_parse_valid | Parse valid configuration file | config/test_config_parser.cpp | REQ-CFG-001 | High | Yes |
+| UT-002 | job_queue_enqueue_dequeue | Test basic queue operations | job_queue/test_queue.cpp | REQ-JQ-001 | High | Yes |
+
+### 6.3 Python Tests - System & Integration Tests
+
+**Location:** `tests/python_tests/`
+
+Available test suites:
+- **rfs/**: Receive Flow Steering tests (TCP/UDP servers, clients, multicast)
+  - `tcp_server.py`, `tcp_client.py`
+  - `udp_server.py`, `udp_client.py`
+  - `mc_server.py`, `mc_client.py`
+- **addr_sel/**: Address selection tests
+  - `tcp_server_1s.py`, `tcp_client_1s.py`
+  - `udp_server_1s.py`, `udp_client_1s.py`
+- **misc/**: Miscellaneous network tests (VLAN, raw packets, self-tests)
+  - `tcp_client_vlan.py`, `tcp_client_noconn.py`
+  - `udp_self.py`, `send_raw_packet.py`
+
+| Test ID | Test Name | Objective | Test Scripts | Req ID | Priority | Automated |
+|---------|-----------|-----------|--------------|--------|----------|-----------|
+| PT-001 | [test_name] | [What it tests] | [e.g., rfs/tcp_server.py, rfs/tcp_client.py] | REQ-XXX | Medium | Yes |
+
+**Example:**
+
+| Test ID | Test Name | Objective | Test Scripts | Req ID | Priority | Automated |
+|---------|-----------|-----------|--------------|--------|----------|-----------|
+| PT-001 | rfs_tcp_basic | Verify RFS with TCP traffic | rfs/tcp_server.py, rfs/tcp_client.py | REQ-RFS-001 | High | Yes |
+| PT-002 | addr_sel_udp | Test address selection for UDP | addr_sel/udp_server_1s.py, addr_sel/udp_client_1s.py | REQ-ADDR-001 | Medium | Yes |
+| PT-003 | vlan_tcp_connect | Test TCP connection over VLAN | misc/tcp_client_vlan.py | REQ-VLAN-001 | Low | Yes |
+
+**Test Execution Details:**
+- Command line to run the test
+- Required parameters (IPs, ports, etc.)
+- Expected output
+- Success criteria
+
+### 6.4 Extra API Tests
+
+**Location:** `tests/extra_api/`
+
+Test programs for XLIO Extended API:
+- `xlio_ultra_api.c`: Basic Ultra API functionality
+- `xlio_ultra_api_server.c`: Server-side Ultra API tests
+- `xlio_ultra_api_migrate.c`: Socket migration tests
+
+| Test ID | Test Name | Objective | Test Program | Req ID | Priority | Automated |
+|---------|-----------|-----------|--------------|--------|----------|-----------|
+| EA-001 | [test_name] | [What it tests] | [e.g., xlio_ultra_api.c] | REQ-XXX | Medium | Partial |
+
+### 6.5 CI/Automated Testing
+
+**Pipeline:** Jenkins (see `contrib/jenkins_tests/gtest.sh`)
+
+**CI Test Configurations:**
+
+| Test ID | Test Suite | Configuration | Environment Variables | gtest Filter | Success Criteria |
+|---------|------------|---------------|----------------------|--------------|------------------|
+| CI-001 | Basic IPv4 | Default | `GTEST_TAP=2 LD_PRELOAD=libxlio.so` | `--gtest_filter=-xlio_*` | All tests pass |
+| CI-002 | Basic IPv6 | Default | `GTEST_TAP=2 LD_PRELOAD=libxlio.so` | `--gtest_filter=-xlio_*` | All tests pass |
+| CI-003 | Delegated TCP Timers IPv4 | Delegated | `XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate` | `--gtest_filter=-xlio_*` | All tests pass |
+| CI-004 | Delegated TCP Timers IPv6 | Delegated | Same as CI-003 | `--gtest_filter=-xlio_*` | All tests pass |
+| CI-005 | EXTRA API IPv4 | EXTRA API enabled | Build with `-DEXTRA_API_ENABLED=1` | `--gtest_filter=xlio_*:-socketxtreme_poll.*:socketxtreme_ring.*:xlio_send_zc.*` | All tests pass |
+| CI-006 | Socketxtreme mode IPv4 | Socketxtreme | `XLIO_SOCKETXTREME=1` | `--gtest_filter=socketxtreme_poll.*:socketxtreme_ring.*:sock_socket.*:tcp_bind.*:tcp_connect.*:tcp_sendto.*:tcp_set_get_sockopt*:udp_bind.*:udp_connect.*:udp_sendto.*:udp_socket.*` | All tests pass |
+| CI-007 | EXTRA API IPv6 | EXTRA API enabled | Build with `-DEXTRA_API_ENABLED=1` | `--gtest_filter=xlio_*:-socketxtreme_poll.*:socketxtreme_ring.*:xlio_send_zc.*` | All tests pass |
+| CI-008 | Socketxtreme mode IPv6 | Socketxtreme | `XLIO_SOCKETXTREME=1` | Same as CI-006 | All tests pass |
+| CI-009 | Socketxtreme + Delegated IPv4 | Combined | `XLIO_SOCKETXTREME=1 XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate` | Same as CI-006 | All tests pass |
+| CI-010 | Socketxtreme + Delegated IPv6 | Combined | Same as CI-009 | Same as CI-006 | All tests pass |
+| CI-011 | Keep-alive IPv4 | Default | `LD_PRELOAD=libxlio.so` | `--gtest_filter=keep_alive*` | All tests pass |
+| CI-012 | Keep-alive IPv6 | Default | `LD_PRELOAD=libxlio.so` | `--gtest_filter=keep_alive*` | All tests pass |
+
+**Note:** The CI runs xliod daemon before tests: `xliod --console -v5 &`
+
+### 6.6 Manual/Exploratory Testing
+
+| Test ID | Scenario | Objective | Steps | Expected Result | Priority |
+|---------|----------|-----------|-------|-----------------|----------|
+| MT-001 | [scenario] | [goal] | [steps] | [expected] | Medium |
+
+**Example:**
+
+| Test ID | Scenario | Objective | Steps | Expected Result | Priority |
+|---------|----------|-----------|-------|-----------------|----------|
+| MT-001 | Nginx benchmark | Validate feature with real workload | 1. Deploy Nginx with XLIO<br>2. Run wrk benchmark<br>3. Monitor CPU, throughput | No crashes, throughput improvement vs baseline | High |
+| MT-002 | Stress test | Verify stability under load | 1. Run multiple connections<br>2. Sustained high traffic for 24h<br>3. Monitor for leaks/crashes | System stable, no memory leaks | High |
+
+## 7. Test Data & Resources
+
+### 7.1 Test Data Requirements
+- Network traffic patterns, payload sizes
+- Configuration files needed
+- Mock data or fixtures
+
+### 7.2 External Dependencies
+- External services or systems required
+- Test data repositories
+- Credentials or access requirements
+
+## 8. Entry & Exit Criteria
+
+### 8.1 Entry Criteria (when testing can begin)
+- [ ] Code implementation complete and merged
+- [ ] Unit tests written and passing
+- [ ] Test environment set up and verified (two network interfaces configured)
+- [ ] Test data prepared
+- [ ] Dependencies resolved (MLNX_OFED, libibverbs, etc.)
+
+### 8.2 Exit Criteria (when testing is complete)
+- [ ] All high-priority tests executed and passed
+- [ ] All critical/blocker bugs resolved
+- [ ] Code coverage meets threshold (specify %)
+- [ ] Performance benchmarks meet requirements (from Confluence specs)
+- [ ] All CI configurations pass (basic, delegated, EXTRA API, socketxtreme, IPv6)
+- [ ] Test report generated and reviewed
+
+## 9. Risks & Mitigation
+
+| Risk | Impact | Probability | Mitigation |
+|------|--------|-------------|------------|
+| [risk description] | High/Med/Low | High/Med/Low | [mitigation strategy] |
+
+**Example:**
+
+| Risk | Impact | Probability | Mitigation |
+|------|--------|-------------|------------|
+| Test environment unstable | High | Medium | Use containerized test environment, maintain spare hardware |
+| Edge case not covered | Medium | Medium | Code review with focus on error paths, add fuzzing tests |
+| Hardware dependencies | High | Low | Maintain inventory of test NICs (ConnectX-5/6/7), document alternatives |
+
+## 10. DevOps Requirements
+
+### 10.1 Infrastructure Needs
+- Two network interfaces per test machine (for client/server communication)
+- Network configuration (back-to-back or switch setup)
+- Mellanox NICs (ConnectX-5/6/7)
+- MLNX_OFED drivers installed
+
+### 10.2 CI/CD Changes
+- New Jenkins jobs or pipeline modifications
+- New test triggers or schedules
+- Artifact storage requirements (XML test results)
+
+### 10.3 Tickets & Tracking
+- [Link to DevOps tickets]
+- [Link to infrastructure requests]
+
+## 11. Schedule & Milestones
+
+| Milestone | Target Date | Status | Notes |
+|-----------|-------------|--------|-------|
+| Test plan approved | YYYY-MM-DD | | |
+| Test implementation complete | YYYY-MM-DD | | |
+| Test execution complete | YYYY-MM-DD | | |
+| Results reviewed & documented | YYYY-MM-DD | | |
+
+## 12. Test Metrics & Reporting
+
+### 12.1 Metrics to Track
+- Test coverage (line, branch, function)
+- Pass/fail rates across all CI configurations
+- Defect density
+- Test execution time
+- Performance metrics (throughput, latency, CPU usage) - compare against Confluence specs
+
+### 12.2 Reporting
+- **Frequency:** [Daily/Weekly/Per milestone]
+- **Format:** [Dashboard/Email/Report document, XML test results]
+- **Recipients:** [Stakeholders]
+
+## 13. References
+
+### 13.1 Confluence Documentation
+- Feature architecture document: [Confluence link - fetched via MCP]
+- Feature design document: [Confluence link - fetched via MCP]
+- Requirements/PRD: [Confluence link - fetched via MCP]
+- API documentation: [Confluence link - fetched via MCP]
+
+### 13.2 Other References
+- Related test plans: [links]
+- Bug tracking: [Jira/GitHub/Redmine links]
+- XLIO documentation: [link]
+- CI Script: `contrib/jenkins_tests/gtest.sh`
+
+---
+
+## Appendix A: Test Code Examples
+
+### Gtest Integration Tests
+
+**Integration tests should extend existing test fixtures** from the codebase rather than creating standalone test code.
+
+#### For TCP Tests: Extend `tcp_base`
+
+The `tcp_base` class is defined in `tests/gtest/tcp/tcp_base.h` and provides:
+- `sock_create()` - creates TCP socket with configured address family
+- `sock_create_nb()` - creates non-blocking TCP socket  
+- `peer_wait(fd)` - synchronization utility for peer connections
+
+`tcp_base` inherits from `test_base` (`tests/gtest/common/base.h`), which provides:
+- **Pre-configured addresses**: `client_addr`, `server_addr`, `remote_addr`, `bogus_addr`
+- **Address family**: `m_family` (AF_INET or AF_INET6 based on test configuration)
+- **Fork synchronization**: `barrier_fork(pid)`, `wait_fork(pid)`
+- **Utility functions**: `sock_noblock(fd)`, `event_wait()`, `ipv4_to_mapped()`
+- **Test lifecycle hooks**: `SetUp()`, `TearDown()`, `init()`, `cleanup()`
+
+#### Example: Extending tcp_base for New Feature Tests
+
+```cpp
+// tests/gtest/tcp/tcp_feature.cc
+#include "tcp_base.h"
+
+// Extend tcp_base to inherit all test infrastructure
+class tcp_feature_test : public tcp_base {
+protected:
+    void SetUp() override {
+        tcp_base::SetUp();  // Always call parent SetUp first
+        // Add feature-specific initialization here if needed
+    }
+    
+    void TearDown() override {
+        // Feature-specific cleanup if needed
+        tcp_base::TearDown();  // Call parent TearDown last
+    }
+};
+
+/**
+ * @test tcp_feature_test.ti_1_basic_functionality
+ * @brief Test basic feature functionality
+ * @details
+ *    Uses inherited sock_create() helper and pre-configured addresses
+ *    from tcp_base/test_base infrastructure.
+ */
+TEST_F(tcp_feature_test, ti_1_basic_functionality)
+{
+    // Use inherited sock_create() instead of raw socket() call
+    int fd = sock_create();
+    ASSERT_LE(0, fd);
+    
+    // Use inherited pre-configured client_addr and m_family
+    int rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
+    ASSERT_EQ(0, rc);
+    
+    // Feature-specific test logic here
+    
+    close(fd);
+}
+
+/**
+ * @test tcp_feature_test.ti_2_with_fork
+ * @brief Test feature with client-server interaction
+ * @details
+ *    Uses inherited barrier_fork() and wait_fork() for process synchronization
+ */
+TEST_F(tcp_feature_test, ti_2_with_fork)
+{
+    int pid = fork();
+    
+    if (0 == pid) {
+        // Child process - client
+        barrier_fork(pid);  // Inherited synchronization utility
+        
+        int fd = sock_create();
+        ASSERT_LE(0, fd);
+        
+        int rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        ASSERT_EQ(0, rc);
+        
+        // Client test logic
+        
+        close(fd);
+        exit(testing::Test::HasFailure());
+        
+    } else {
+        // Parent process - server
+        int l_fd = sock_create();
+        ASSERT_LE(0, l_fd);
+        
+        int rc = bind(l_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        ASSERT_EQ(0, rc);
+        
+        rc = listen(l_fd, 5);
+        ASSERT_EQ(0, rc);
+        
+        barrier_fork(pid);  // Inherited synchronization utility
+        
+        struct sockaddr peer_addr;
+        socklen_t socklen = sizeof(peer_addr);
+        int fd = accept(l_fd, &peer_addr, &socklen);
+        ASSERT_LE(0, fd);
+        
+        // Server test logic
+        
+        close(fd);
+        close(l_fd);
+        
+        ASSERT_EQ(0, wait_fork(pid));  // Inherited utility
+    }
+}
+```
+
+#### For UDP Tests: Extend `udp_base`
+
+Similar to TCP tests, UDP tests should extend `udp_base` from `tests/gtest/udp/udp_base.h`. The base class provides UDP-specific socket creation and utilities while inheriting all the common infrastructure from `test_base`.
+
+```cpp
+// tests/gtest/udp/udp_feature.cc
+#include "udp_base.h"
+
+class udp_feature_test : public udp_base {
+    // Inherits all udp_base and test_base functionality
+};
+```
+
+#### Reference Documentation
+
+- **Full test_base API**: See `tests/gtest/common/base.h` (lines 37-93)
+- **tcp_base implementation**: See `tests/gtest/tcp/tcp_base.h` (lines 20-49)
+- **Testing guidelines**: See `.cursor/rules/testing.mdc` for complete standards
+
+### Unit Tests
+
+Unit tests for isolated components follow standard Google Test patterns. Reference existing unit tests in `tests/unit_tests/`:
+
+```cpp
+// tests/unit_tests/feature/test_feature.cpp
+#include <gtest/gtest.h>
+#include "feature_module.h"
+
+// Simple test without fixture for stateless operations
+TEST(FeatureModuleTest, tu_1_basic_operation) {
+    FeatureModule module;
+    EXPECT_TRUE(module.initialize());
+    EXPECT_EQ(module.process(), 0);
+}
+
+// Use fixture when shared setup/teardown is needed
+class FeatureModuleFixture : public ::testing::Test {
+protected:
+    void SetUp() override {
+        module.initialize();
+    }
+    
+    void TearDown() override {
+        module.cleanup();
+    }
+    
+    FeatureModule module;
+};
+
+TEST_F(FeatureModuleFixture, tu_2_error_handling) {
+    EXPECT_FALSE(module.process_invalid_input());
+}
+```
+
+### Extra API Tests
+
+Extra API tests validate the XLIO extended API functionality. These are standalone C programs in `tests/extra_api/`:
+
+```c
+// tests/extra_api/feature_api_test.c
+#include <stdio.h>
+#include <stdlib.h>
+#include <mellanox/xlio_extra.h>
+
+int main(int argc, char **argv)
+{
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        perror("socket");
+        return 1;
+    }
+    
+    // Access XLIO Extended API
+    struct xlio_api_t *api = xlio_get_api();
+    if (!api) {
+        fprintf(stderr, "Failed to get XLIO API\n");
+        close(fd);
+        return 1;
+    }
+    
+    // Feature-specific Extended API calls here
+    // Example: api->get_socket_rings_num(fd)
+    
+    close(fd);
+    printf("Test PASSED\n");
+    return 0;
+}
+```
+
+### Key Principles
+
+1. **Extend existing fixtures** - Don't create raw socket tests from scratch
+2. **Use inherited utilities** - Leverage `sock_create()`, `barrier_fork()`, etc.
+3. **Reference base classes** - Point developers to `tests/gtest/common/base.h` and protocol-specific base classes
+4. **Follow established patterns** - Look at existing tests in `tests/gtest/tcp/`, `tests/gtest/udp/` for examples
+5. **Consult testing guidelines** - See `.cursor/rules/testing.mdc` for complete standards
+
+---
+
+## Appendix B: Test Execution Commands
+
+### B.1 Gtest Execution
+
+#### Basic Gtest Build and Run
+
+```bash
+# Build gtests (standard build)
+make -C tests/gtest
+
+# Run ALL gtests with XLIO (excluding EXTRA API tests)
+# Note: Requires two network interfaces configured with IP addresses
+env GTEST_TAP=2 LD_PRELOAD=/path/to/install/lib/libxlio.so \
+    tests/gtest/gtest \
+    --addr=192.168.1.1,192.168.1.2 \
+    -r <gateway_ip> \
+    --gtest_filter=-xlio_*
+
+# Run specific test suite (your new feature tests)
+tests/gtest/gtest \
+    --addr=192.168.1.1,192.168.1.2 \
+    -r <gateway_ip> \
+    --gtest_filter=tcp_feature_test.*
+
+# Run specific test case
+tests/gtest/gtest \
+    --addr=192.168.1.1,192.168.1.2 \
+    -r <gateway_ip> \
+    --gtest_filter=tcp_feature_test.ti_1_basic_functionality
+
+# Run in OS mode (without XLIO) for comparison
+tests/gtest/gtest \
+    --addr=192.168.1.1,192.168.1.2 \
+    -r <gateway_ip> \
+    --gtest_filter=tcp_feature_test.*
+```
+
+#### IPv6 Tests
+
+```bash
+# Run IPv6 tests (excluding EXTRA API)
+env GTEST_TAP=2 LD_PRELOAD=/path/to/install/lib/libxlio.so \
+    tests/gtest/gtest \
+    --addr=<ipv6_addr1>,<ipv6_addr2> \
+    -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff \
+    --gtest_filter=-xlio_*
+```
+
+#### Delegated TCP Timers Tests
+
+```bash
+# Verify Delegated TCP Timers (IPv4)
+env XLIO_RX_POLL_ON_TX_TCP=1 \
+    XLIO_TCP_ABORT_ON_CLOSE=1 \
+    XLIO_TCP_CTL_THREAD=delegate \
+    GTEST_TAP=2 \
+    LD_PRELOAD=/path/to/install/lib/libxlio.so \
+    tests/gtest/gtest \
+    --addr=192.168.1.1,192.168.1.2 \
+    -r <gateway_ip> \
+    --gtest_filter=-xlio_*
+
+# Delegated TCP Timers (IPv6)
+env XLIO_RX_POLL_ON_TX_TCP=1 \
+    XLIO_TCP_ABORT_ON_CLOSE=1 \
+    XLIO_TCP_CTL_THREAD=delegate \
+    GTEST_TAP=2 \
+    LD_PRELOAD=/path/to/install/lib/libxlio.so \
+    tests/gtest/gtest \
+    --addr=<ipv6_addr1>,<ipv6_addr2> \
+    -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff \
+    --gtest_filter=-xlio_*
+```
+
+#### XLIO EXTRA API Tests
+
+**Important:** EXTRA API tests require rebuilding gtests with special flag:
+
+```bash
+# Rebuild gtests for EXTRA API
+make -C tests/gtest clean
+make -C tests/gtest CPPFLAGS="-DEXTRA_API_ENABLED=1"
+
+# Run XLIO EXTRA API tests (IPv4)
+env GTEST_TAP=2 LD_PRELOAD=/path/to/install/lib/libxlio.so \
+    tests/gtest/gtest \
+    --addr=192.168.1.1,192.168.1.2 \
+    -r <gateway_ip> \
+    --gtest_filter=xlio_*:-socketxtreme_poll.*:socketxtreme_ring.*:xlio_send_zc.*
+
+# Run XLIO EXTRA API tests (IPv6)
+env GTEST_TAP=2 LD_PRELOAD=/path/to/install/lib/libxlio.so \
+    tests/gtest/gtest \
+    --addr=<ipv6_addr1>,<ipv6_addr2> \
+    -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff \
+    --gtest_filter=xlio_*:-socketxtreme_poll.*:socketxtreme_ring.*:xlio_send_zc.*
+```
+
+#### Socketxtreme Mode Tests
+
+```bash
+# Verify XLIO EXTRA API socketxtreme mode (IPv4)
+env XLIO_SOCKETXTREME=1 \
+    GTEST_TAP=2 \
+    LD_PRELOAD=/path/to/install/lib/libxlio.so \
+    tests/gtest/gtest \
+    --addr=192.168.1.1,192.168.1.2 \
+    -r <gateway_ip> \
+    --gtest_filter=socketxtreme_poll.*:socketxtreme_ring.*:sock_socket.*:tcp_bind.*:tcp_connect.*:tcp_sendto.*:tcp_set_get_sockopt*:udp_bind.*:udp_connect.*:udp_sendto.*:udp_socket.*
+
+# Socketxtreme mode (IPv6)
+env XLIO_SOCKETXTREME=1 \
+    GTEST_TAP=2 \
+    LD_PRELOAD=/path/to/install/lib/libxlio.so \
+    tests/gtest/gtest \
+    --addr=<ipv6_addr1>,<ipv6_addr2> \
+    -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff \
+    --gtest_filter=socketxtreme_poll.*:socketxtreme_ring.*:sock_socket.*:tcp_bind.*:tcp_connect.*:tcp_sendto.*:tcp_set_get_sockopt*:udp_bind.*:udp_connect.*:udp_sendto.*:udp_socket.*
+```
+
+#### Socketxtreme + Delegated TCP Timers Tests
+
+```bash
+# Verify socketxtreme mode and Delegated TCP Timers (IPv4)
+env XLIO_SOCKETXTREME=1 \
+    XLIO_RX_POLL_ON_TX_TCP=1 \
+    XLIO_TCP_ABORT_ON_CLOSE=1 \
+    XLIO_TCP_CTL_THREAD=delegate \
+    GTEST_TAP=2 \
+    LD_PRELOAD=/path/to/install/lib/libxlio.so \
+    tests/gtest/gtest \
+    --addr=192.168.1.1,192.168.1.2 \
+    -r <gateway_ip> \
+    --gtest_filter=socketxtreme_poll.*:socketxtreme_ring.*:sock_socket.*:tcp_bind.*:tcp_connect.*:tcp_sendto.*:tcp_set_get_sockopt*:udp_bind.*:udp_connect.*:udp_sendto.*:udp_socket.*
+
+# Socketxtreme + Delegated (IPv6)
+env XLIO_SOCKETXTREME=1 \
+    XLIO_RX_POLL_ON_TX_TCP=1 \
+    XLIO_TCP_ABORT_ON_CLOSE=1 \
+    XLIO_TCP_CTL_THREAD=delegate \
+    GTEST_TAP=2 \
+    LD_PRELOAD=/path/to/install/lib/libxlio.so \
+    tests/gtest/gtest \
+    --addr=<ipv6_addr1>,<ipv6_addr2> \
+    -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff \
+    --gtest_filter=socketxtreme_poll.*:socketxtreme_ring.*:sock_socket.*:tcp_bind.*:tcp_connect.*:tcp_sendto.*:tcp_set_get_sockopt*:udp_bind.*:udp_connect.*:udp_sendto.*:udp_socket.*
+```
+
+#### Keep-Alive Tests
+
+```bash
+# Verify keep_alive (IPv4)
+env GTEST_TAP=2 LD_PRELOAD=/path/to/install/lib/libxlio.so \
+    tests/gtest/gtest \
+    --addr=192.168.1.1,192.168.1.2 \
+    -r <gateway_ip> \
+    --gtest_filter=keep_alive*
+
+# Keep-alive (IPv6)
+env GTEST_TAP=2 LD_PRELOAD=/path/to/install/lib/libxlio.so \
+    tests/gtest/gtest \
+    --addr=<ipv6_addr1>,<ipv6_addr2> \
+    -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff \
+    --gtest_filter=keep_alive*
+```
+
+#### Additional Gtest Options
+
+```bash
+# Run with verbose output and timing
+tests/gtest/gtest \
+    --addr=192.168.1.1,192.168.1.2 \
+    --gtest_filter=tcp_feature_test.* \
+    --gtest_print_time=1
+
+# Generate XML output for CI
+tests/gtest/gtest \
+    --addr=192.168.1.1,192.168.1.2 \
+    --gtest_filter=tcp_feature_test.* \
+    --gtest_output=xml:test-results.xml
+
+# List all available tests without running
+tests/gtest/gtest --gtest_list_tests
+```
+
+### B.3 Unit Test Execution
+
+```bash
+# Build unit tests
+make -C tests/unit_tests
+
+# Run all unit tests
+tests/unit_tests/unit_tests
+
+# Run specific test suite
+tests/unit_tests/unit_tests --gtest_filter=FeatureModuleTest.*
+
+# Run with XML output
+tests/unit_tests/unit_tests --gtest_output=xml:unit-test-results.xml
+```
+
+### B.4 Extra API Test Execution
+
+```bash
+# Build extra API tests
+make -C tests/extra_api
+
+# Run with XLIO
+LD_PRELOAD=/path/to/install/lib/libxlio.so tests/extra_api/xlio_ultra_api
+
+# Run specific API test
+LD_PRELOAD=/path/to/install/lib/libxlio.so tests/extra_api/xlio_ultra_api_server
+
+# Run migration test
+LD_PRELOAD=/path/to/install/lib/libxlio.so tests/extra_api/xlio_ultra_api_migrate
+```
+
+### B.5 CI Test Execution Pattern
+
+The CI (Jenkins) runs tests in the following order (see `contrib/jenkins_tests/gtest.sh`):
+
+1. **Start xliod daemon**
+2. **Basic tests (IPv4 & IPv6)** - Exclude EXTRA API
+3. **Delegated TCP Timers (IPv4 & IPv6)**
+4. **Rebuild for EXTRA API** - With `-DEXTRA_API_ENABLED=1`
+5. **EXTRA API tests (IPv4 & IPv6)** - Exclude socketxtreme
+6. **Socketxtreme mode tests (IPv4 & IPv6)**
+7. **Socketxtreme + Delegated tests (IPv4 & IPv6)**
+8. **Keep-alive tests (IPv4 & IPv6)**
+10. **Collect TAP and XML results**
+
+---
+
+## Appendix C: Test Environment Setup
+
+### C.1 Network Configuration for Gtest
+
+```bash
+# Two interfaces required: back-to-back or via switch
+# Example setup:
+
+# Interface 1 (IPv4):
+sudo ip addr add 192.168.1.1/24 dev eth0
+sudo ip link set eth0 up
+
+# Interface 2 (IPv4):
+sudo ip addr add 192.168.1.2/24 dev eth1
+sudo ip link set eth1 up
+
+# Verify connectivity
+ping -c 3 192.168.1.2
+
+# IPv6 setup (if needed):
+sudo ip -6 addr add <ipv6_addr1>/64 dev eth0
+sudo ip -6 addr add <ipv6_addr2>/64 dev eth1
+ping6 -c 3 <ipv6_addr2>
+```
+
+### C.2 XLIO Configuration
+
+```bash
+# Set XLIO environment variables
+export XLIO_RING_ALLOCATION_LOGIC_TX=0
+export XLIO_RING_ALLOCATION_LOGIC_RX=0
+export XLIO_LOG_LEVEL=3
+export XLIO_SPEC=latency
+
+# For socketxtreme mode
+export XLIO_SOCKETXTREME=1
+
+# For delegated TCP timers
+export XLIO_RX_POLL_ON_TX_TCP=1
+export XLIO_TCP_ABORT_ON_CLOSE=1
+export XLIO_TCP_CTL_THREAD=delegate
+
+# Use configuration file
+export XLIO_CONFIG_FILE=/path/to/xlio.conf
+```
+
+### C.3 Build Configuration
+
+```bash
+# Standard build
+./configure --prefix=/path/to/install
+make
+make install
+
+# For EXTRA API tests, rebuild gtests:
+make -C tests/gtest clean
+make -C tests/gtest CPPFLAGS="-DEXTRA_API_ENABLED=1"
+```
+
+---
+
+## Appendix D: Test Results Template
+
+### Test Execution Summary
+
+| Metric | Value |
+|--------|-------|
+| **Total Tests** | [number] |
+| **Passed** | [number] |
+| **Failed** | [number] |
+| **Skipped** | [number] |
+| **Pass Rate** | [percentage] |
+| **Execution Time** | [duration] |
+| **Code Coverage** | [percentage] |
+
+### Failed Tests Details
+
+| Test ID | Test Name | Failure Reason | Bug Ticket | Status |
+|---------|-----------|----------------|------------|--------|
+| [ID] | [name] | [reason] | [link] | [Open/Fixed/Wontfix] |
+
+### Performance Metrics
+
+| Metric | Baseline (from Confluence) | Current | Change | Status |
+|--------|---------------------------|---------|--------|--------|
+| Throughput (Gbps) | [value] | [value] | [+/-X%] | [Pass/Fail] |
+| Latency (μs) | [value] | [value] | [+/-X%] | [Pass/Fail] |
+| CPU Usage (%) | [value] | [value] | [+/-X%] | [Pass/Fail] |
+
+---
+
+## Appendix E: Confluence Documentation Summary
+
+**Note to GenAI:** After fetching relevant Confluence pages, summarize key information here:
+
+### Architecture Summary
+- [Key architectural decisions from Confluence]
+- [Components involved]
+- [Integration points]
+
+### Design Summary
+- [Key design decisions from Confluence]
+- [API changes]
+- [Data structures]
+
+### Requirements Summary
+- [Functional requirements from Confluence]
+- [Non-functional requirements]
+- [Performance targets]

@@ -1,0 +1,145 @@
+---
+globs: **/*.c,**/*.cpp,**/*.h,**/*.cc
+alwaysApply: false
+---
+# C++ Programming Guidelines for libxlio
+
+This guide is tailored for libxlio, a performance-critical networking library.
+
+## Coding Style
+
+**All code formatting and style rules are documented in `docs/coding-style.md`.**
+
+Please refer to that document for:
+- Indentation rules
+- Line breaking conventions
+- Brace placement
+- Spacing rules
+- Naming conventions (prefixes: `m_`, `s_`, `g_`)
+- Pointer and reference declarations
+- Include statement ordering
+- Comment styles
+- Class layout
+- `auto` keyword usage
+
+## Basic Principles
+
+- Use English for all code and documentation.
+- Create necessary types and classes.
+- Use Doxygen style comments to document public classes and methods.
+- Follow the one-definition rule (ODR).
+- Prioritize performance without sacrificing code clarity.
+
+## Functions
+
+- Write focused functions with a single purpose and clear intent.
+- Keep functions readable and maintainable (avoid arbitrary instruction limits; focus on clarity).
+- Name functions with a verb and something else.
+- If it returns a boolean, use is_x or has_x, can_x, etc.
+- If it doesn't return anything (void), use execute_x or save_x, update_x, etc.
+- Avoid nesting blocks by:
+  - Early checks and returns.
+  - Extraction to utility functions.
+- Use standard library algorithms (std::for_each, std::transform, std::find, etc.) to avoid function nesting.
+- Reduce function parameters using structs or classes:
+  - Use an object to pass multiple parameters.
+  - Use an object to return multiple results.
+  - Declare necessary types for input arguments and output.
+- Use a single level of abstraction.
+
+## Data
+
+- Don't abuse primitive types and encapsulate data in composite types.
+- Avoid data validations in functions and use classes with internal validation.
+- Prefer immutability for data.
+- Use const for data that doesn't change.
+- Use constexpr for compile-time constants.
+
+## Classes
+
+- Follow SOLID principles.
+- Prefer composition over inheritance.
+- Declare interfaces as abstract classes or concepts.
+- Write small classes with a single purpose.
+  - Less than 200 instructions.
+  - Less than 10 public methods.
+  - Less than 10 properties.
+- Use the Rule of Five (or Rule of Zero) for resource management.
+- Make member variables private and provide getters/setters where necessary.
+- Use const-correctness for member functions.
+
+## Exceptions
+
+libxlio has a configurable exception handling mechanism. Follow these guidelines:
+
+- Use exceptions sparingly in performance-critical code paths.
+- Prefer error codes for expected error conditions in hot paths.
+- Use exceptions for truly exceptional situations during initialization/setup.
+- Use custom exception classes (`xlio_exception`) when exceptions are needed.
+- If you catch an exception, it should be to:
+  - Fix an expected problem.
+  - Add context with additional information.
+  - Otherwise, use a global handler.
+- **Rationale**: Exception handling overhead is inappropriate for data path operations in a performance-critical library.
+
+## Memory Management
+
+Memory management in libxlio prioritizes performance:
+
+- Use custom memory pools and allocators for performance-critical allocations.
+- Raw pointers are acceptable and often preferred in hot paths.
+- Smart pointers (std::unique_ptr, std::shared_ptr) for non-performance-critical resource management.
+- Use RAII (Resource Acquisition Is Initialization) principles where they don't impact performance.
+- Avoid memory leaks by proper resource management.
+- Consider cache alignment and padding when designing data structures.
+- Use `xlio_allocator` and related custom allocators for frequently allocated objects.
+- Prefer stack allocation over heap allocation when possible.
+
+## Performance-Critical Programming
+
+libxlio is a performance-critical library. Apply these optimizations when appropriate:
+
+- Use inline functions for hot paths where beneficial.
+- Consider cache line alignment (typically 64 bytes) for frequently accessed structures.
+- Use `likely`/`unlikely` compiler hints for branch prediction in hot paths.
+- Minimize allocations in the data path; prefer object pools and pre-allocation.
+- Prefer stack allocation over heap allocation when object lifetime allows.
+- Use `const` and `constexpr` aggressively to enable compiler optimizations.
+- Be mindful of false sharing in multi-threaded code.
+- Profile before optimizing; measure the impact of changes.
+- Document performance-critical sections and the reasoning behind optimizations.
+
+## Testing
+
+- Follow the Arrange-Act-Assert convention for tests.
+- Name test variables clearly.
+- Write unit tests for each public function.
+- Follow the Given-When-Then convention.
+- All features or bug fixes **must be tested** by unit tests.
+
+## Project Structure
+
+- Use modular architecture.
+- Organize code into logical directories.
+- Use automake and autotools.
+- Separate interface (.h) from implementation (.cpp).
+- Use namespaces to organize code logically.
+
+## Standard Library
+
+- Use the C++ Standard Library when it doesn't compromise performance.
+- Use std::vector, std::map, std::unordered_map, etc. for collections (except in hot paths).
+- Use std::chrono for time-related operations.
+- Consider custom implementations for performance-critical data structures.
+
+## Concurrency
+
+libxlio is a multi-threaded library. Thread safety is critical:
+
+- Use std::thread, std::mutex, std::lock_guard for thread safety.
+- Use std::atomic for atomic operations.
+- Avoid data races by proper synchronization.
+- Use thread-safe data structures when necessary.
+- Be mindful of lock contention in hot paths.
+- Consider lock-free algorithms for performance-critical sections.
+- Document thread-safety guarantees for all public APIs.

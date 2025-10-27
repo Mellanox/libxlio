@@ -1,0 +1,623 @@
+---
+globs: **/tests/**/*.cpp,**/tests/**/*.cc,**/tests/**/*.h
+alwaysApply: false
+---
+# Testing Guidelines for libxlio
+
+This guide provides testing standards for libxlio using the Google Test framework.
+
+## Test File Structure
+
+- Integration test files use `.cc` extension (in `tests/gtest/`)
+- Unit test files use `.cpp` extension (in `tests/unit_tests/`)
+- Include necessary headers in this order:
+  1. Google Test headers (`<gtest/gtest.h>`)
+  2. System headers (`<pthread.h>`, `<mutex>`, etc.)
+  3. Common test utilities (`common/def.h`, `common/log.h`, `common/sys.h`)
+  4. Test base classes (`tcp_base.h`, `udp_base.h`, etc.)
+  5. Module under test headers
+- Organize tests by feature/module in subdirectories:
+  - `tests/gtest/tcp/` - TCP protocol tests
+  - `tests/gtest/udp/` - UDP protocol tests
+  - `tests/gtest/core/` - Core functionality tests
+  - `tests/gtest/sock/` - Socket API tests
+  - `tests/unit_tests/` - Unit tests for specific components
+
+## Test Naming Convention
+
+Every test must have Doxygen-style documentation with specific format:
+
+```cpp
+/**
+ * @test ClassName.test_id
+ * @brief
+ *    Brief description of what is being tested
+ * @details
+ *    Additional implementation details (optional)
+ */
+TEST_F(ClassName, test_id)
+{
+    // test implementation
+}
+```
+
+### Test ID Format
+
+- **Integration tests**: Use `ti_N` prefix (test integration)
+- **Unit tests**: Use `tu_N` prefix (test unit)
+- N is a sequential number (ti_1, ti_2, ti_3, etc.)
+- Test name should be descriptive of functionality tested
+
+**Examples:**
+
+```cpp
+/**
+ * @test tcp_socket.ti_1_ip_socket
+ * @brief
+ *    Create IPv4 TCP socket
+ * @details
+ */
+TEST_F(tcp_socket, ti_1_ip_socket)
+{
+    int fd = socket(m_family, SOCK_STREAM, IPPROTO_IP);
+    EXPECT_LE(0, fd);
+    EXPECT_EQ(errno, EOK);
+    close(fd);
+}
+
+/**
+ * @test job_queue_test.tu_1
+ * @brief
+ *    Test single job insert and retrieval.
+ * @details
+ *    Test job_queue<T>::insert_job(const T &job) function insert a job with const object.
+ */
+TEST_F(job_queue_test, tu_1)
+{
+    const test_job job {1, 10};
+    queue.insert_job(job);
+    EXPECT_EQ(queue.get_all().size(), 1UL);
+}
+```
+
+## Test Fixtures
+
+Use test fixtures for shared setup and teardown:
+
+```cpp
+class my_test : public ::testing::Test {
+public:
+    // Public test data
+    
+protected:
+    void SetUp() override
+    {
+        // Setup before each test
+        // Initialize resources, clear state
+    }
+    
+    void TearDown() override
+    {
+        // Cleanup after each test
+        // Close file descriptors, free memory
+    }
+    
+    // Protected helper methods
+};
+```
+
+### Fixture Guidelines
+
+- Use `TEST_F` for tests requiring setup/teardown
+- Inherit from appropriate base class (`tcp_base`, `udp_base`, etc.) for integration tests
+- Override `SetUp()` for pre-test initialization
+- Override `TearDown()` for post-test cleanup
+- Clean up resources in teardown to avoid test interference
+- Use protected or public members for test data shared across test cases
+
+## Assertions
+
+### ASSERT vs EXPECT
+
+- **ASSERT_\***: Use for critical checks where test cannot continue if assertion fails
+  - Test aborts immediately on failure
+  - Use when subsequent code depends on the assertion
+  - Example: `ASSERT_LE(0, fd)` before using the file descriptor
+
+- **EXPECT_\***: Use for non-critical checks where test should continue
+  - Test continues even if expectation fails
+  - Multiple failures can be reported in one test run
+  - Use for independent validations
+
+### Assertion Types
+
+Prefer specific assertions over generic ones:
+
+```cpp
+// Good - specific assertions
+ASSERT_EQ(value, expected);      // Equality
+ASSERT_NE(value, unexpected);    // Inequality
+ASSERT_LT(value, limit);         // Less than
+ASSERT_LE(value, limit);         // Less than or equal
+ASSERT_GT(value, minimum);       // Greater than
+ASSERT_GE(value, minimum);       // Greater than or equal
+ASSERT_TRUE(condition);          // Boolean true
+ASSERT_FALSE(condition);         // Boolean false
+
+// Check errno after system calls
+EXPECT_EQ(errno, EOK);
+```
+
+## Fork-Based Testing
+
+libxlio tests frequently use fork() for multi-process networking scenarios:
+
+```cpp
+TEST_F(tcp_test, ti_example_fork)
+{
+    int pid = fork();
+    
+    if (0 == pid) {
+        /* Child process - typically the client */
+        barrier_fork(pid);  // Synchronize with parent
+        
+        int fd = socket(AF_INET, SOCK_STREAM, 0);
+        ASSERT_LE(0, fd);
+        
+        int rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        ASSERT_EQ(0, rc);
+        
+        close(fd);
+        
+        /* CRITICAL: Child must exit with test status
+         * This prevents fork from duplicating other tests
+         */
+        exit(testing::Test::HasFailure());
+        
+    } else {
+        /* Parent process - typically the server */
+        int l_fd = socket(AF_INET, SOCK_STREAM, 0);
+        ASSERT_LE(0, l_fd);
+        
+        int rc = bind(l_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        ASSERT_EQ(0, rc);
+        
+        rc = listen(l_fd, 5);
+        ASSERT_EQ(0, rc);
+        
+        barrier_fork(pid);  // Synchronize with child
+        
+        struct sockaddr peer_addr;
+        socklen_t socklen = sizeof(peer_addr);
+        int fd = accept(l_fd, &peer_addr, &socklen);
+        ASSERT_LE(0, fd);
+        
+        close(fd);
+        close(l_fd);
+        
+        // Wait for child and validate exit status
+        ASSERT_EQ(0, wait_fork(pid));
+    }
+}
+```
+
+### Fork Testing Rules
+
+- **Child process MUST call `exit(testing::Test::HasFailure())` at the end**
+  - Without this, the child continues running and duplicates remaining tests
+  - Pass test failure status to parent
+- Use `barrier_fork(pid)` to synchronize parent and child
+- Use `wait_fork(pid)` in parent to collect child exit status
+- Always validate child exit status: `ASSERT_EQ(0, wait_fork(pid))`
+- Child typically acts as client, parent as server
+- Close all file descriptors before exit
+
+## Thread Safety Testing
+
+For concurrent and multi-threaded tests:
+
+```cpp
+TEST_F(job_queue_test, tu_concurrent)
+{
+    const int num_threads = 4;
+    const int jobs_per_thread = 250;
+    
+    std::vector<pthread_t> threads(num_threads);
+    std::atomic<int> counter(0);
+    std::atomic<bool> stop_flag(false);
+    
+    struct thread_data {
+        job_queue_t *queue;
+        int thread_id;
+        std::atomic<int> *counter;
+    };
+    
+    auto thread_func = [](void *arg) -> void * {
+        thread_data *data = static_cast<thread_data *>(arg);
+        // Thread work here
+        data->counter->fetch_add(1);
+        return nullptr;
+    };
+    
+    // Start threads
+    std::vector<thread_data> t_data(num_threads);
+    for (int i = 0; i < num_threads; ++i) {
+        t_data[i] = {&queue, i, &counter};
+        ASSERT_EQ(0, pthread_create(&threads[i], nullptr, thread_func, &t_data[i]));
+    }
+    
+    // Wait for threads
+    for (int i = 0; i < num_threads; ++i) {
+        ASSERT_EQ(0, pthread_join(threads[i], nullptr));
+    }
+    
+    // Validate results
+    EXPECT_EQ(counter.load(), num_threads);
+}
+```
+
+### Thread Safety Guidelines
+
+- Use `pthread` or `std::thread` for concurrent testing
+- Use `std::atomic` for shared counters and flags
+- Document the thread-safety guarantee being tested in @details
+- Always join threads before test ends to avoid resource leaks
+- Use proper synchronization (mutexes, atomics, barriers)
+- Validate that all threads completed successfully
+
+## Resource Management
+
+Proper cleanup is critical to avoid test interference:
+
+```cpp
+TEST_F(resource_test, ti_example)
+{
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    ASSERT_LE(0, fd);
+    
+    // Use the socket
+    int rc = bind(fd, (struct sockaddr *)&addr, sizeof(addr));
+    ASSERT_EQ(0, rc);
+    
+    // Always close file descriptors
+    close(fd);
+}
+```
+
+### Resource Management Rules
+
+- **Always close file descriptors** (sockets, files, pipes, etc.)
+- Clean up dynamically allocated memory (use RAII when possible)
+- Reset global state if modified during test
+- Use RAII patterns in test fixtures for automatic cleanup
+- Close resources even when assertions fail (use TearDown())
+- Avoid resource leaks that cause subsequent tests to fail
+
+## LD_PRELOAD Testing
+
+libxlio tests run in two modes:
+
+1. **OS mode**: Without LD_PRELOAD (tests standard socket API)
+2. **XLIO mode**: With LD_PRELOAD=libxlio.so (tests accelerated path)
+
+```bash
+# Run tests under OS
+./tests/gtest/gtest --addr=1.1.3.6,1.1.4.6
+
+# Run tests under XLIO
+LD_PRELOAD=libxlio.so ./tests/gtest/gtest --addr=1.1.3.6,1.1.4.6
+
+# Run specific test suite
+LD_PRELOAD=libxlio.so ./tests/gtest/gtest --gtest_filter=tcp_sendfile.*
+```
+
+### LD_PRELOAD Guidelines
+
+- Tests should work correctly in **both** OS and XLIO modes
+- Document tests that are XLIO-specific (won't work in OS mode)
+- Use gtest filters to run specific test suites
+- Test behavior should be consistent across modes unless testing XLIO-specific features
+- Use `EXTRA_API_ENABLED` flag for XLIO Extended API tests
+
+## Test Configuration
+
+Tests use the global `gtest_conf` structure for configuration:
+
+```cpp
+// Access configuration in tests
+struct gtest_configure_t gtest_conf;
+
+TEST_F(my_test, ti_example)
+{
+    // Use configured addresses
+    int fd = socket(m_family, SOCK_STREAM, 0);
+    bind(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+}
+```
+
+### Configuration Options
+
+Command-line arguments supported by test runner:
+
+- `--addr=client_ip,server_ip` - Specify client and server IP addresses
+- `--if=client_if,server_if` - Specify client and server interfaces
+- `--remote=ip` - Specify remote IP address
+- `--port=num` - Listen/connect port (default: 55555)
+- `--random=seed` - Random seed for reproducibility
+- `--debug=level` - Output verbosity level
+
+### Using Test Fixtures
+
+- `m_family` - Address family (AF_INET or AF_INET6)
+- `client_addr` - Client IP address and port
+- `server_addr` - Server IP address and port
+- `remote_addr` - Remote IP address for routing tests
+- Support both IPv4 and IPv6 testing
+
+## Performance Testing
+
+When writing performance-critical tests:
+
+```cpp
+/**
+ * @test performance_test.ti_1_throughput
+ * @brief
+ *    Measure TCP throughput under load
+ * @details
+ *    Tests should achieve >10Gbps on 10GbE hardware
+ */
+TEST_F(performance_test, ti_1_throughput)
+{
+    // Warmup phase
+    for (int i = 0; i < 10; ++i) {
+        // Warmup iterations
+    }
+    
+    auto start = std::chrono::high_resolution_clock::now();
+    
+    // Actual test
+    
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    
+    log_info("Test completed in %ld ms\n", duration.count());
+}
+```
+
+### Performance Testing Guidelines
+
+- Document expected performance characteristics in @details
+- Use `std::chrono` for accurate timing measurements
+- Include warmup iterations to stabilize cache/state
+- Log performance metrics for analysis
+- Consider hardware variability in assertions
+- Document test environment requirements
+
+## Test Documentation
+
+Every test must be properly documented:
+
+```cpp
+/**
+ * @test ClassName.test_id
+ * @brief
+ *    Brief one-line description of what is being tested
+ * @details
+ *    Detailed explanation of:
+ *    - What functionality is being validated
+ *    - Why this test is important
+ *    - Special setup or requirements
+ *    - Expected behavior
+ */
+TEST_F(ClassName, test_id)
+{
+    // Test implementation
+}
+```
+
+### Documentation Requirements
+
+- Every test must have `@test`, `@brief`, and optionally (if non-obvious )`@details` tags
+- `@brief` should be a concise, one-line description
+- `@details` should explain:
+  - **WHAT** is being tested clearly
+  - **WHY** the test is important (if non-obvious)
+  - Any special setup requirements
+  - Expected behavior and edge cases
+- Use complete sentences with proper punctuation
+- Document any assumptions or prerequisites
+
+## Best Practices
+
+### Keep Tests Focused
+
+```cpp
+// Good - tests one thing
+TEST_F(socket_test, ti_1_create_socket)
+{
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    EXPECT_LE(0, fd);
+    close(fd);
+}
+
+// Bad - tests multiple unrelated things
+TEST_F(socket_test, ti_1_everything)
+{
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    bind(fd, ...);
+    listen(fd, ...);
+    connect(fd, ...);
+    send(fd, ...);
+    recv(fd, ...);
+    close(fd);
+}
+```
+
+### Use Descriptive Variable Names
+
+```cpp
+// Good
+int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+int client_fd = accept(listen_fd, &peer_addr, &socklen);
+
+// Bad
+int fd1 = socket(AF_INET, SOCK_STREAM, 0);
+int fd2 = accept(fd1, &addr, &len);
+```
+
+### Avoid Complex Logic in Tests
+
+- If tests need tests, refactor the logic into helper functions
+- Tests should be straightforward and easy to understand
+- Complex setup should go in SetUp() or helper methods
+- Keep test body simple and focused on validation
+
+### Write Deterministic Tests
+
+```cpp
+// Good - deterministic with seeded random
+srand(gtest_conf.random_seed);  // Reproducible
+int random_value = rand() % 100;
+
+// Bad - non-deterministic
+srand(time(NULL));  // Different every run
+int random_value = rand() % 100;
+```
+
+- Avoid flaky tests that pass/fail randomly
+- Use `gtest_conf.random_seed` for reproducible random tests
+- Document any timing dependencies
+- Avoid race conditions in concurrent tests
+- Use proper synchronization primitives
+
+### Clean Exit from Child Processes
+
+```cpp
+if (0 == pid) {
+    // Child process code
+    
+    /* CRITICAL: Must exit to avoid test duplication */
+    exit(testing::Test::HasFailure());
+}
+```
+
+## Common Test Patterns
+
+### Utility Functions
+
+```cpp
+// Synchronize parent and child after fork
+barrier_fork(pid);
+
+// Wait for peer to be ready on socket
+peer_wait(fd);
+
+// Create socket with appropriate address family
+int fd = sock_create();
+
+// Convert address to string for logging
+const char *addr_str = sys_addr2str(&addr);
+
+// Logging for test debugging
+log_trace("Debug message: %s\n", details);
+log_info("Info message: %s\n", details);
+```
+
+### Common Test Structure
+
+```cpp
+/**
+ * @test example_test.ti_1_pattern
+ * @brief
+ *    Example of common test pattern
+ * @details
+ */
+TEST_F(example_test, ti_1_pattern)
+{
+    // Arrange - Set up test preconditions
+    int fd = socket(m_family, SOCK_STREAM, 0);
+    ASSERT_LE(0, fd);
+    
+    // Act - Perform the operation being tested
+    int rc = bind(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+    
+    // Assert - Verify the results
+    EXPECT_EQ(0, rc);
+    EXPECT_EQ(errno, EOK);
+    
+    // Cleanup
+    close(fd);
+}
+```
+
+## Test Organization
+
+### Directory Structure
+
+```
+tests/
+├── gtest/              # Integration tests
+│   ├── tcp/           # TCP protocol tests
+│   ├── udp/           # UDP protocol tests
+│   ├── sock/          # Socket API tests
+│   ├── core/          # Core functionality tests
+│   ├── mix/           # Mixed/utility tests
+│   ├── common/        # Common test utilities
+│   └── main.cc        # Test runner
+└── unit_tests/        # Unit tests
+    ├── config/        # Configuration tests
+    ├── job_queue/     # Job queue tests
+    └── main.cpp       # Unit test runner
+```
+
+### Organizing Tests
+
+- Group related tests in the same fixture class
+- One fixture class per module/feature being tested
+- Integration tests in `tests/gtest/` (test with LD_PRELOAD)
+- Unit tests in `tests/unit_tests/` (test isolated components)
+- Common utilities in `tests/gtest/common/`
+- Keep fixture classes focused on single module/feature
+- Use inheritance for shared test infrastructure
+
+## Additional Guidelines
+
+### IPv4 and IPv6 Support
+
+```cpp
+TEST_F(dual_stack_test, ti_1_both_protocols)
+{
+    // Skip if not appropriate protocol combination
+    if (server_addr.addr.sa_family != AF_INET6 || 
+        client_addr.addr.sa_family != AF_INET) {
+        return;
+    }
+    
+    // Test IPv4-to-IPv6 connectivity
+}
+```
+
+### Error Handling in Tests
+
+```cpp
+TEST_F(error_test, ti_1_invalid_operation)
+{
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    ASSERT_LE(0, fd);
+    
+    // Test that invalid operation fails correctly
+    int rc = listen(fd, -1);
+    EXPECT_NE(0, rc);  // Should fail
+    EXPECT_NE(errno, EOK);  // Should set errno
+    
+    close(fd);
+}
+```
+
+### Testing Edge Cases
+
+- Test boundary conditions (0, -1, MAX_INT, etc.)
+- Test invalid inputs and error paths
+- Test resource exhaustion scenarios
+- Test concurrent access patterns
+- Document expected error behavior

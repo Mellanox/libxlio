@@ -1,0 +1,67 @@
+---
+description: Solving bugs
+alwaysApply: false
+---
+
+Build a comprehensive fix plan for a bug that has already been evaluated using `@evaluate-bug.mdc`. This workflow focuses on proposing solutions and creating an implementation plan.
+
+## Prerequisites
+**Stop and ask user to install Redmine MCP if unavailable.**
+
+**IMPORTANT: This workflow assumes you have already run `@evaluate-bug.mdc` for this ticket.**
+
+If evaluate-bug has not been run:
+1. Run `@evaluate-bug.mdc [ticket#]` first to complete investigation and root cause analysis
+2. Review the evaluation results before proceeding
+3. Only proceed with solve-bug once you understand the root cause
+
+**Required inputs from evaluate-bug:**
+- Ticket analysis summary
+- Root cause identification
+- Bug flow diagrams
+- Affected components list
+
+If ticket number is not provided, request it from the user.
+
+## Phase 1: Solution Proposals
+
+Propose **2-3 viable solutions**, each with:
+
+### Solution [N]: [Brief Title]
+- **Description**: Detailed explanation of the approach
+- **Changes required**: Files/functions to modify
+- **Pros**: Advantages of this approach
+- **Cons**: Disadvantages or limitations
+- **Complexity**: Low/Medium/High
+- **Risks**: Potential breaking changes or side effects
+- **Testing approach**: How to verify this fix
+
+## Phase 2: Recommendation
+
+### Recommended Solution: [Title]
+**Rationale**: Explain why this solution is best, comparing trade-offs:
+- Best balance of simplicity vs. robustness
+- Minimizes risk and scope of change
+- Aligns with codebase patterns
+- Most maintainable long-term
+
+**Implementation Steps**:
+1. [Step 1]
+2. [Step 2]
+...
+
+**Testing Strategy**:
+- Unit tests to add/modify
+- Integration test scenarios
+- Manual verification steps
+
+**Risk Mitigation**:
+- Potential side effects and how to handle them
+- Rollback strategy if issues arise
+- Monitoring/validation after deployment
+
+## Notes
+- If evaluation information is insufficient, clearly state what's missing and ask user
+- Validate all assumptions by examining actual code
+- Consider both quick fixes and proper long-term solutions
+- Think about regression prevention

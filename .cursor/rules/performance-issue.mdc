@@ -1,0 +1,776 @@
+---
+description: Performance issues
+alwaysApply: false
+---
+
+Build a comprehensive plan to investigate and resolve the performance issue described in the Redmine ticket.
+
+## Prerequisites Check
+
+Before starting, verify all requirements:
+1. **Redmine MCP**: Stop and ask user to install if unavailable
+2. **Ticket number**: Request from user if not provided
+3. **PRM document**: **CRITICAL** - Stop and ask user to supply if unavailable
+4. **xlio_config_schema.json**: Locate at `src/core/config/descriptor_providers/xlio_config_schema.json`
+
+**Do not proceed without PRM**. You must read and understand the hardware context before continuing.
+
+Make sure to read all of this document before proceeding, you don't run to implement - you propose!
+
+---
+
+## Phase 1: Problem Understanding & Data Gathering
+
+### 1.1 Ticket Analysis
+Fetch ticket using `yai__get_tickets` and extract:
+
+**Performance Metrics**:
+- Current vs. Expected: Throughput (Gbps/pps), Latency (µs), CPU%, Memory
+- Degradation pattern: Constant, intermittent, under load, specific workload
+- Performance baseline: What was expected, what was achieved
+
+**Workload Characteristics**:
+- Traffic pattern: Request/response, streaming, bursty
+- Message sizes: Small (<1KB), Medium (1-10KB), Large (>10KB)
+- Connection characteristics: Count, duration, concurrency
+- Protocol: TCP/UDP, socket options used
+
+**Environment Details**:
+- Hardware: CPU model, core count, NUMA nodes, NIC model
+- Software: OS, kernel version, XLIO version, NIC driver version
+- Configuration: Current XLIO settings, kernel tuning parameters
+- Network: Topology, switches, cables, MTU
+
+**Reproduction**:
+- Steps to trigger the issue
+- Test tools used (iperf, sockperf, custom app)
+- Consistency of reproduction
+
+### 1.2 Related Context
+- Review all ticket comments using `yai__get_comments`
+- Check attachments: logs, perf reports, flamegraphs, tcpdump
+- Search similar issues using `yai__get_similar_issues`
+- Look for recent performance regressions in git history
+
+### 1.3 Hardware Analysis (PRM Review)
+Once user supplies PRM, analyze:
+- NIC capabilities: Offloads (TSO, LRO, checksum), queues, RSS
+- PCIe bandwidth: Version (Gen3/4), lanes (x8/x16), theoretical max
+- CPU architecture: Cache hierarchy, NUMA topology, core frequencies
+- Memory subsystem: Bandwidth, latency, huge page support
+- Expected performance: Theoretical maximums for this hardware
+- Known limitations: Hardware-specific bottlenecks or issues
+
+---
+
+## Phase 2: Quick Win - Configuration Analysis
+
+**Before deep code investigation**, check if this is a configuration issue:
+
+### 2.1 Current Configuration Review
+1. Read `src/core/config/descriptor_providers/xlio_config_schema.json` to understand all options
+2. Extract current XLIO configuration from ticket/logs (look for XLIO_* env vars or config file)
+3. Document what's currently set vs. defaults
+
+### 2.2 Configuration Optimization Check
+Analyze if settings are optimal for the workload:
+
+**Ring & Buffer Management**:
+- `XLIO_RX_NUM_BUFFS`: Sufficient for workload?
+- `XLIO_TX_NUM_BUFS`: Adequate for TX rate?
+- `XLIO_RING_ALLOCATION_LOGIC`: Best strategy for this use case?
+
+**Offload & Hardware Features**:
+- `XLIO_HW_TS_CONVERSION`: Hardware timestamping if needed
+- `XLIO_TCP_CTL_THREAD`: Control thread affinity
+- `XLIO_RX_POLL`: Polling mode appropriate?
+- `XLIO_SELECT_POLL` / `XLIO_SELECT_SKIP_OS`: Event handling optimal?
+
+**Memory & NUMA**:
+- `XLIO_MEM_ALLOC_TYPE`: Huge pages enabled?
+- `XLIO_MEMORY_LIMIT`: Sufficient memory allocated?
+- NUMA pinning: Properly configured?
+
+**Performance Tuning**:
+- `XLIO_TX_SEGS_TCP`: Segmentation settings
+- `XLIO_RX_CQ_DRAIN_RATE_NSEC`: CQ moderation
+
+### 2.3 Configuration Solution?
+If misconfig identified:
+- **Recommended changes**: Specific env vars/values to set
+- **Rationale**: Why each change helps this workload
+- **Expected improvement**: Estimated performance gain
+- **Testing**: How to validate the configuration change
+
+**Decision**: If configuration likely solves it, document and stop here. Otherwise, proceed to code analysis.
+
+---
+
+## Phase 3: Code-Level Investigation
+
+### 3.1 Identify Relevant Code Path
+Based on workload type, focus on:
+- **TX path**: If sending performance is poor
+- **RX path**: If receiving performance is poor
+- **Both**: If bidirectional or latency issue
+- **Control plane**: If connection setup is slow
+- **Memory management**: If memory-related
+
+Use `codebase_search` to locate:
+- Entry points (send/sendto, recv/recvfrom wrappers)
+- Ring management logic
+- Buffer allocation/deallocation
+- Packet TX/RX processing
+- Completion queue handling
+
+### 3.2 Performance Anti-Pattern Check
+Analyze code for common issues:
+
+**Memory Management**:
+- [ ] Dynamic allocation in hot path (malloc/new)
+- [ ] Frequent buffer allocation/deallocation
+- [ ] Memory pool exhaustion causing fallback
+- [ ] Missing buffer reuse
+
+**Synchronization**:
+- [ ] Lock contention (mutexes in data path)
+- [ ] Unnecessary locking scope
+- [ ] Spinlock CPU burning
+- [ ] Lock-free algorithm issues
+
+**CPU Efficiency**:
+- [ ] Unnecessary copies in data path
+- [ ] Complex branches in hot loops
+- [ ] Cache unfriendly data structures
+- [ ] False sharing between threads
+- [ ] Poor vectorization
+
+**System Interaction**:
+- [ ] Unexpected syscalls in fast path
+- [ ] Fallback to kernel stack
+- [ ] Excessive interrupts vs. polling
+- [ ] Cross-NUMA memory access
+
+**Algorithm Issues**:
+- [ ] O(n) where O(1) is possible
+- [ ] Inefficient data structure lookups
+- [ ] Redundant work in loops
+- [ ] Missing fast-path optimizations
+
+### 3.3 Initial Code Analysis
+- Examine hottest code paths identified
+- Look for obvious inefficiencies
+- Check for recent changes that may have introduced regression
+- Review error handling overhead
+
+---
+
+## Phase 3.5: Dynamic Analysis & Profiling
+
+### When to Use Dynamic Analysis
+- Root cause unclear from static code analysis
+- Need to validate hypothesis about bottleneck location
+- Profiling data not provided in ticket
+- Want to measure actual vs. theoretical performance
+- Investigating runtime behavior (lock contention, cache misses, etc.)
+
+---
+
+### 3.5.1 Performance Profiling (CPU Hotspots)
+
+#### Linux perf + Flamegraphs
+**Purpose**: Identify CPU-intensive functions and call paths
+
+**Collection**:
+```bash
+# Record CPU samples for the workload
+sudo perf record -F 99 -a -g -- <your_test_command>
+
+# Or attach to running process
+sudo perf record -F 99 -g -p <pid> -- sleep 30
+
+# Generate report
+perf report --stdio
+
+# For flamegraph (requires flamegraph.pl)
+perf script | stackcollapse-perf.pl | flamegraph.pl > flamegraph.svg
+```
+
+**What to Look For**:
+- **Hottest functions**: Any function consuming >5% CPU unexpectedly
+- **Call path depth**: Deep stacks may indicate inefficiency
+- **Unexpected kernel time**: If significant time in kernel, XLIO may be falling back
+- **Lock functions**: Time spent in `pthread_mutex_lock`, `pthread_spin_lock`
+- **Memory functions**: `malloc`, `free`, `memcpy` in hot paths
+- **Syscalls**: `read`, `write`, `epoll_wait` that shouldn't be there
+
+**XLIO-Specific Red Flags**:
+- High time in `sockinfo_tcp::rx()` or `sockinfo_tcp::tx()` (should be fast)
+- Lock contention on `ring_slave::m_lock_ring_tx` or `m_lock_ring_rx`
+- Time in buffer allocation (`buffer_pool::get_buffers_thread_safe`)
+- High time in `mem_buf_desc_t` operations
+- Unexpected kernel functions (indicates fallback to kernel stack)
+
+**What to Check**:
+- CPI (Cycles Per Instruction): Should be low (<1.0 for data path)
+- Cache miss rates: L1/L2/L3 miss percentages
+- Branch mispredictions
+- Memory bandwidth utilization
+- NUMA remote accesses
+
+---
+
+### 3.5.2 Lock Contention Analysis
+
+#### perf with lock tracing
+**Purpose**: Identify lock bottlenecks
+
+**Collection**:
+```bash
+# Record lock contention events
+sudo perf record -e 'syscalls:sys_enter_futex' -a -g -- <test_command>
+
+# Or use lock statistics
+perf lock record -a -- <test_command>
+perf lock report
+```
+
+**What to Look For**:
+- Locks with high contention count
+- Locks with high wait time
+- Locks acquired frequently in hot path
+
+#### SystemTap / BPFtrace (for deeper analysis)
+**Purpose**: Custom lock tracking in XLIO code
+
+**Example BPFtrace script**:
+```bash
+# Track time spent in mutex locks
+sudo bpftrace -e '
+  usdt:/path/to/libxlio.so:*:mutex_lock_entry { @start[tid] = nsecs; }
+  usdt:/path/to/libxlio.so:*:mutex_lock_exit /@start[tid]/ {
+    @lock_time = hist(nsecs - @start[tid]);
+    delete(@start[tid]);
+  }
+'
+```
+
+**XLIO-Specific Locks to Monitor**:
+- `ring_slave::m_lock_ring_rx` / `m_lock_ring_tx` (inherited by ring_simple)
+- `buffer_pool::m_lock`
+- `sockinfo::m_lock_rcv` / `m_lock_snd` (inherited by sockinfo_tcp/sockinfo_udp)
+- `net_device_table_mgr::m_lock`
+
+---
+
+### 3.5.3 Memory Access Patterns
+
+#### Valgrind Cachegrind
+**Purpose**: Analyze cache miss patterns (WARNING: very slow)
+
+**Collection**:
+```bash
+valgrind --tool=cachegrind --branch-sim=yes <your_test_command>
+cg_annotate cachegrind.out.<pid>
+```
+
+**What to Look For**:
+- Functions with high D1 miss rate (L1 data cache)
+- High last-level cache (LL) miss rate
+- Instructions with poor branch prediction
+
+#### perf mem
+**Purpose**: Memory access profiling
+
+**Collection**:
+```bash
+sudo perf mem record -a -- <test_command>
+sudo perf mem report
+```
+
+**What to Check**:
+- High rate of LLC (Last Level Cache) misses
+- NUMA remote access patterns
+- False sharing between threads (same cache line, different data)
+
+---
+
+### 3.5.4 System Call Tracing
+
+#### strace
+**Purpose**: Identify unexpected syscalls in fast path
+
+**Collection**:
+```bash
+# Attach to running process
+sudo strace -p <pid> -c -f  # Summary mode
+sudo strace -p <pid> -T -f  # Detailed with timing
+
+# Or launch with strace
+strace -c -f <your_test_command>
+```
+
+**What to Look For**:
+- **Red flags in fast path**:
+  - `read`/`write`: XLIO should bypass these for sockets
+  - `recvfrom`/`sendto`: Should be rare after initialization
+  - `epoll_wait`: Indicates event handling, check if necessary
+  - `futex`: Lock operations, check frequency
+  - `mmap`/`munmap`: Memory allocation, shouldn't be in data path
+  
+- **Expected syscalls** (setup/control plane):
+  - Device initialization (ioctl, open)
+  - Memory registration (one-time)
+  - Thread setup
+
+#### ebpf/bpftrace for selective tracing
+**Purpose**: Low-overhead tracing of specific events
+
+**Example: Track sendto syscalls that shouldn't happen**:
+```bash
+sudo bpftrace -e '
+  tracepoint:syscalls:sys_enter_sendto /comm == "your_app"/ {
+    @sendto_calls = count();
+    printf("Unexpected sendto from %s\n", ustack);
+  }
+'
+```
+
+---
+
+### 3.5.5 Network-Level Analysis
+
+#### tcpdump / Wireshark
+**Purpose**: Verify packet-level behavior
+
+**Collection**:
+```bash
+sudo tcpdump -i <interface> -w capture.pcap -s 96 'host <ip>'
+```
+
+**What to Check**:
+- Retransmissions (indicates packet loss)
+- Out-of-order packets
+- TCP window size issues
+- Unexpected protocol behavior
+- Latency between request/response
+
+#### NIC Statistics
+**Purpose**: Hardware-level packet processing
+
+**Collection**:
+```bash
+ethtool -S <interface>
+```
+
+**What to Look For**:
+- `rx_dropped`: Packets dropped by NIC (buffer overflow)
+- `rx_errors`: Hardware errors
+- `rx_missed_errors`: Driver couldn't keep up
+- `tx_errors`: Transmission failures
+- Queue statistics: Imbalanced queue usage
+
+---
+
+### 3.5.6 XLIO-Specific Instrumentation
+
+#### XLIO Statistics
+**Purpose**: Internal XLIO metrics
+
+**Collection**:
+```bash
+# Enable XLIO statistics
+export XLIO_STATS_FILE=/tmp/xlio_stats.txt
+export XLIO_STATS_FD_NUM=100  # Number of FDs to track
+
+# Application prints stats on exit or signal
+kill -SIGUSR1 <pid>
+```
+
+**What to Analyze**:
+- **RX statistics**:
+  - Poll cycles vs. packets received (efficiency)
+  - Buffer allocation failures
+  - CQ polling overhead
+  
+- **TX statistics**:
+  - Send queue depth
+  - Buffer reuse rate
+  - Segmentation efficiency
+
+- **Memory statistics**:
+  - Buffer pool utilization
+  - Allocation/deallocation rates
+  - Memory registration hits/misses
+
+#### XLIO Logging
+**Purpose**: Debug-level insights
+
+**Collection**:
+```bash
+export XLIO_TRACELEVEL=DEBUG
+export XLIO_LOG_FILE=/tmp/xlio_debug.log
+export XLIO_LOG_DETAILS=2  # High verbosity
+```
+
+**Caution**: Debug logging adds significant overhead, use only for targeted investigation
+
+**What to Check**:
+- Unexpected code paths taken
+- Fallback to kernel mode
+- Error conditions or warnings
+- Configuration parsing and application
+
+---
+
+### 3.5.7 GDB for Runtime Inspection
+
+#### When to Use GDB
+- Need to inspect data structures at specific points
+- Understand runtime state during issue
+- Validate assumptions about variable values
+- Debug complex race conditions (with rr)
+
+#### Attaching to Running Process
+```bash
+# Attach without stopping (for inspection)
+sudo gdb -p <pid>
+
+# In GDB
+(gdb) info threads                    # List threads
+(gdb) thread <n>                      # Switch to thread
+(gdb) bt                              # Backtrace
+(gdb) frame <n>                       # Select frame
+(gdb) print <variable>                # Inspect variable
+(gdb) print/x <pointer>               # Hex format
+(gdb) ptype <variable>                # Show type
+```
+
+#### Useful for XLIO
+```gdb
+# Inspect ring state
+(gdb) print *(ring_simple*)0x<addr>
+(gdb) print ring->m_p_ring_stat->n_tx_pkt_count
+(gdb) print ring->m_p_ring_stat->n_tx_num_bufs
+
+# Buffer pool status
+(gdb) print *(buffer_pool*)0x<addr>
+(gdb) print pool->m_n_buffers
+(gdb) call pool->get_free_count()
+
+# Socket state  
+(gdb) print *(sockinfo_tcp*)0x<addr>
+(gdb) print sock->m_conn_state
+(gdb) print sock->m_pcb
+```
+
+#### Setting Conditional Breakpoints
+```gdb
+# Break when specific condition occurs
+(gdb) break sockinfo_tcp::tx
+(gdb) condition 1 tx_arg.attr.sz_iov > 65536
+(gdb) commands
+>print "Large send detected"
+>print tx_arg.attr.sz_iov
+>backtrace
+>continue
+>end
+```
+
+#### rr (Record and Replay) for Race Conditions
+**Purpose**: Deterministic debugging of race conditions
+
+```bash
+# Record execution
+rr record <your_test_command>
+
+# Replay and debug
+rr replay
+# Now in GDB with time-travel capabilities
+(gdb) reverse-continue
+(gdb) reverse-step
+```
+
+**Use Cases**:
+- Intermittent crashes
+- Race conditions that are hard to reproduce
+- Understanding event sequences
+
+---
+
+### 3.5.8 Analysis Workflow
+
+#### Recommended Flow
+
+1. **Start with flamegraph** (perf + flamegraph)
+   - Quickest way to find CPU hotspots
+   - Guides where to focus deeper analysis
+   
+2. **If hotspot unclear, check syscalls** (strace)
+   - Rule out unexpected kernel interaction
+   - Identify if XLIO is bypassed
+   
+3. **If lock-related, analyze contention** (perf lock / bpftrace)
+   - Measure wait times
+   - Identify most contended locks
+   
+4. **If memory-related, profile cache** (perf mem / cachegrind)
+   - Check for false sharing
+   - NUMA issues
+   - Cache miss rates
+   
+5. **Validate with XLIO stats**
+   - Confirm findings with XLIO's internal metrics
+   - Check for resource exhaustion
+   
+6. **Deep dive with GDB if needed**
+   - Inspect runtime state
+   - Validate hypotheses
+   - Understand complex interactions
+
+---
+
+### 3.5.9 Tool Selection Guide
+
+| Scenario | Tool | Purpose |
+|----------|------|---------|
+| Unknown bottleneck | `perf record` + flamegraph | Find CPU hotspots |
+| High latency | `perf record` with `-g` | Call path analysis |
+| Lock issues suspected | `perf lock` or bpftrace | Lock contention |
+| Memory/cache issues | `perf mem`, cachegrind | Cache analysis |
+| Unexpected syscalls | `strace` | Syscall tracing |
+| Packet-level issues | `tcpdump` | Network capture |
+| XLIO-specific | XLIO stats + logging | Internal metrics |
+| Race conditions | `rr` + gdb | Deterministic debugging |
+| General inspection | `gdb` | Runtime state |
+
+---
+
+### 3.5.10 Profiling Best Practices
+
+**Do's**:
+- ✅ Profile under realistic workload (production-like)
+- ✅ Run for sufficient duration (at least 30 seconds for statistical significance)
+- ✅ Compare before/after when testing fixes
+- ✅ Profile with optimizations enabled (`-O2`/`-O3`)
+- ✅ Use multiple tools to cross-validate findings
+- ✅ Capture baseline performance metrics first
+
+**Don'ts**:
+- ❌ Don't profile debug builds (unless debugging specific issue)
+- ❌ Don't use heavyweight tools (valgrind) for initial exploration
+- ❌ Don't profile with insufficient load (won't trigger bottlenecks)
+- ❌ Don't draw conclusions from single samples
+- ❌ Don't ignore statistical noise (small percentages may not matter)
+
+**Safety**:
+- Most tools (perf, strace, gdb) have performance impact
+- Test in non-production environment first
+- Some tools (strace -T) can slow down application 10-100x
+- Cachegrind can slow down 20-100x
+- Flamegraph/perf record typically <5% overhead
+
+---
+
+## Phase 4: Root Cause Analysis
+
+Using insights from static code analysis (Phase 3) and dynamic profiling (Phase 3.5), provide structured analysis:
+
+### Bottleneck Identification
+**Component**: [e.g., "RX ring buffer management"]
+
+**Symptom**: [e.g., "Throughput caps at 15Gbps instead of expected 40Gbps"]
+
+**Root Cause**: [e.g., "Lock contention on ring->m_lock_ring_rx during buffer allocation. Under high packet rate, multiple threads compete for this lock, causing serialization of the RX path"]
+
+**Evidence from Profiling**:
+- Example: "Flamegraph shows 35% CPU time in `pthread_mutex_lock` via `ring_simple::poll_and_process_element_rx()`"
+- Example: "`perf lock report` shows `m_lock_ring_rx` has 450K contentions/sec"
+- Example: "Under high packet rate (10Mpps), lock wait time is 2.3µs average"
+- Example: "`perf mem` shows 15% LLC miss rate with NUMA remote accesses"
+
+**Technical Details**:
+- Code location: [File and function]
+- Why it happens: [Design rationale or oversight]
+- When it manifests: [Workload conditions that trigger it]
+
+**Performance Impact**:
+- Quantified degradation: [e.g., "Adds ~500ns latency per packet"]
+- Scalability: [e.g., "Gets worse with more threads"]
+- Workload sensitivity: [e.g., "Only affects small packet workloads"]
+
+### Hardware Context
+- How this relates to hardware capabilities
+- Whether we're underutilizing hardware features
+- NUMA or affinity implications
+
+### Why It Exists
+- Historical design decisions
+- Trade-offs made
+- Assumptions that don't hold for this workload
+
+---
+
+## Phase 5: Investigation Plan (if needed)
+
+If root cause isn't clear after initial analysis and profiling, propose experiments:
+
+### Measurements Needed
+- Specific metrics to collect
+- Instrumentation points to add
+- Profiling tools to use (perf, flamegraph, etc.)
+
+### Experiments
+1. **Experiment [N]**: [Purpose]
+   - What to change
+   - What to measure
+   - Expected outcome
+
+### Hypothesis Testing
+- Primary hypothesis: [Most likely cause]
+- Alternative hypotheses: [Other possibilities]
+- Disproving criteria: [What would rule out each hypothesis]
+
+---
+
+## Phase 6: Optimization Proposals
+
+Propose **2-3 ranked solutions**:
+
+### Solution [N]: [Title]
+
+**Type**: Configuration | Code Optimization | Algorithm Change | Architectural
+
+**Description**: [Detailed explanation of the approach]
+
+**Implementation**:
+- If config: Specific XLIO parameters to change
+- If code: Files/functions to modify, approach to take
+
+**Expected Improvement**:
+- Throughput: [e.g., "+25% to ~50Gbps"]
+- Latency: [e.g., "-30% to <10µs p99"]
+- CPU: [e.g., "20% reduction in CPU usage"]
+- Based on: [Micro-benchmarks, analysis, similar changes]
+
+**Effort**: Low (hours) | Medium (days) | High (weeks)
+
+**Pros**:
+- [Advantages]
+
+**Cons**:
+- [Limitations or downsides]
+
+**Risks**:
+- Performance regression in other workloads
+- Stability concerns
+- Compatibility issues
+
+**Trade-offs**:
+- [What you give up, e.g., "Uses 10% more memory"]
+
+**Testing Strategy**:
+- Benchmarks to run
+- Workloads to test
+- Metrics to validate
+
+**Fast-Path Impact**: None | Minimal | Moderate (quantify if possible)
+
+---
+
+## Phase 7: Recommendation
+
+### Recommended Solution: [Title]
+
+**Rationale**:
+Why this solution offers the best balance:
+- **Performance gain**: [Expected improvement] for [effort level]
+- **Risk profile**: [Low/Medium risk because...]
+- **Compatibility**: [Works across workload types / or focused on this workload]
+- **Maintainability**: [Aligns with codebase patterns]
+- **Time to solution**: [Can be deployed quickly vs. requires extensive testing]
+
+**Comparison with alternatives**:
+- [Why not solution A: ...]
+- [Why not solution B: ...]
+
+### Implementation Plan
+
+**Step-by-step**:
+1. [Concrete step with code/config changes]
+2. [Testing and validation step]
+3. [...]
+
+**Code Changes** (if applicable):
+- Files to modify: [List]
+- Functions to change: [List]
+- Approach: [High-level strategy]
+
+**Configuration Changes** (if applicable):
+- Parameters to set: [Specific XLIO_ vars]
+- Values: [Specific values and why]
+- Deployment: [How to roll out]
+
+**Validation Strategy**:
+- **Micro-benchmarks**: Test isolated component
+- **Integration tests**: Full XLIO with workload
+- **Regression tests**: Ensure no degradation in other scenarios
+- **Performance gates**: Metrics that must improve
+
+**Success Criteria**:
+- Throughput: [Target]
+- Latency: [Target]
+- CPU usage: [Target]
+- Must not regress: [Other workloads]
+
+**Monitoring Post-Deployment**:
+- Metrics to track
+- How to detect if fix is working
+- Rollback criteria
+
+---
+
+## XLIO-Specific Guidelines
+
+### Fast Path Principles
+- **Zero overhead rule**: Never add latency/CPU to data path
+- **Lock-free preferred**: Avoid mutexes in TX/RX hot paths
+- **Zero-copy integrity**: Maintain zero-copy capability
+- **Hardware offloads**: Preserve NIC offload functionality
+- **Memory locality**: Maintain NUMA awareness
+
+### Common XLIO Bottlenecks
+- Ring allocation/deallocation efficiency
+- Buffer pool management and reuse
+- Completion queue polling strategy
+- Memory registration caching
+- TCP state machine overhead
+- Control thread synchronization
+
+### Red Flags
+- malloc/free in send/recv path
+- Locks during packet processing
+- Syscalls in fast path (should be rare)
+- Cross-NUMA access in data path
+- Disabled hardware offloads without reason
+- Busy-wait loops without backoff
+
+### Optimization Priority
+1. **Configuration**: Check first, easiest wins
+2. **Hot path**: Data plane optimizations, highest impact
+3. **Resource management**: Memory/buffer pools
+4. **Control plane**: Connection setup, less critical for throughput
+5. **Edge cases**: Handle correctly but don't optimize prematurely
+
+---
+
+## Process Notes
+
+- If root cause unclear after profiling, explicitly state what information is missing
+- If PRM reveals hardware limitations, set realistic expectations
+- Always consider whether issue is XLIO or environment (kernel, NIC driver, hardware)
+- Validate assumptions with actual code/data and profiling evidence, don't guess
+- Think about both throughput AND latency impacts
+- Consider different workload types (may need workload-specific solutions)
+- Reference specific profiling data when making claims about bottlenecks
+

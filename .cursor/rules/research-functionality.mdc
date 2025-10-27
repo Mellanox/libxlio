@@ -1,0 +1,196 @@
+---
+description: Research how some functionality or feature works with historical context
+alwaysApply: false
+---
+
+Follow a systematic approach to research the functionality:
+
+### 1. Initial Context Gathering
+- **If Confluence MCP is available**: Search Confluence for design docs, architecture docs, and any existing documentation about the functionality
+- **If Confluence is unavailable**: Check for local README files, docs/, design documents, or inline code documentation
+- Ask the user if they can point to any existing documentation
+
+### 2. Historical Bug & Issue Analysis (Redmine MCP)
+Use Redmine MCP tools to gather historical context about the functionality:
+
+#### 2.1 Search for Related Bugs
+- Use `yai__get_tickets` with semantic search (topic parameter) to find bugs related to the functionality
+- Search with keywords like: component names, function names, feature names
+- Filter by tracker types: Bug, Bug SW, Bug HW, etc.
+- Look for both open and closed bugs to understand:
+  - Known issues and workarounds
+  - Historical problems that were fixed
+  - Recurring patterns or problem areas
+
+#### 2.2 Analyze Issue History
+- Review bug descriptions and comments for technical insights
+- Look for:
+  - Root cause analyses
+  - Fix descriptions and implementation details
+  - Performance issues or regressions
+  - Edge cases discovered through bugs
+  - User-reported problems and their resolutions
+
+#### 2.3 Search Strategies
+- **Broad search first**: Use topic-based search with general functionality keywords
+- **Narrow down**: Apply filters for specific components, time ranges, or status
+- **Search patterns to try**:
+  - Feature/component name + "crash" or "failure"
+  - Function names mentioned in the code
+  - Related subsystem or module names
+  - Error messages or symptoms
+  
+#### 2.4 Extract Key Insights
+Document findings from Redmine:
+- **Common failure modes**: What typically goes wrong
+- **Critical fixes**: Important bugs that shaped current implementation
+- **Known limitations**: Documented constraints or TODOs
+- **Performance history**: Past performance issues and optimizations
+- **Integration issues**: Problems with other components or systems
+
+#### 2.5 Cross-reference with Code
+- Validate bug descriptions against current code state
+- Check if mentioned workarounds are still in place
+- Identify if fixed bugs might indicate important logic to preserve
+- Look for comments in code referencing bug/ticket numbers
+
+### 3. Code Discovery & Mapping
+- Use semantic search to locate relevant code paths
+- Identify entry points (API endpoints, public functions, main classes)
+- Map out key components, classes, and modules involved
+- Note any configuration files or environment dependencies
+- Look for comments referencing bug numbers found in Redmine
+
+### 4. Deep Code Analysis
+- Read through the main code paths thoroughly
+- Understand data flows and transformations
+- Identify dependencies and integrations
+- Note error handling and edge cases (especially those from bug history)
+- Track state management and lifecycle
+- Pay special attention to areas with historical bug fixes
+
+### 5. Visual Documentation
+Create appropriate diagrams based on the functionality:
+- **Sequence diagrams**: For interaction flows and temporal ordering
+- **Component diagrams**: For system architecture and relationships
+- **Flow diagrams**: For decision logic and branching
+- **Data flow diagrams**: For data transformations and pipelines
+
+Use mermaid.js syntax for all diagrams.
+
+### 6. Structured Summary
+Provide a comprehensive explanation including:
+- **Purpose**: What the functionality does and why it exists
+- **Architecture**: High-level design and key components
+- **Flow**: Step-by-step walkthrough of the main path
+- **Key Implementation Details**: Important patterns, algorithms, or techniques
+- **Configuration**: Relevant settings or environment variables
+- **Dependencies**: External libraries or services used
+- **Edge Cases**: Known limitations or special handling
+- **Historical Context**: Summary of important bugs and how they shaped the implementation
+- **Known Issues**: Current open bugs or limitations from Redmine
+- **Areas of Concern**: Components with high bug history or complexity
+- **Related Code**: Links to related functionality or utilities
+
+### 7. Risk Assessment
+Based on historical bug data:
+- **Stability**: How stable has this functionality been historically?
+- **Common pitfalls**: What mistakes have been made before?
+- **Testing gaps**: Areas where bugs suggest insufficient test coverage
+- **Maintenance burden**: Frequency of bug fixes and changes
+
+### 8. Verification
+- Cross-reference findings with any available tests
+- Check for examples or usage in the codebase
+- Validate understanding by explaining how modifications would impact the system
+- Verify that historical bugs would not be reintroduced by proposed changes
+
+## Output Format
+Present findings in a clear, hierarchical document with:
+
+1. **Executive Summary** (2-3 paragraphs)
+   - What the functionality does
+   - Overall stability and maturity
+   - Key risks or concerns
+
+2. **Historical Context** (from Redmine)
+   - Summary of bug history (count, severity, patterns)
+   - Important resolved issues that shaped current design
+   - Current open issues or known limitations
+   - Links to key tickets for reference
+
+3. **Visual Diagrams**
+   - Architecture/component diagrams
+   - Sequence/flow diagrams
+   - Data flow diagrams
+
+4. **Detailed Technical Explanation**
+   - Purpose and design rationale
+   - Architecture and key components
+   - Main execution flow
+   - Key algorithms or patterns
+   - Configuration and dependencies
+
+5. **Code References**
+   - File paths and line numbers
+   - Important functions and classes
+   - Critical sections with bug history
+   - Test files and examples
+
+6. **Edge Cases & Special Handling**
+   - Known limitations
+   - Special cases from bug history
+   - Error handling strategies
+   - Performance considerations
+
+7. **Questions & Uncertainties**
+   - Unclear aspects requiring clarification
+   - Potential issues identified
+   - Suggested areas for further investigation
+
+## Redmine MCP Tool Usage Examples
+
+### Search for bugs related to a feature:
+```python
+# Step 1: Broad semantic search
+yai__get_tickets(
+    topic="your feature or component name",
+    limit=20
+)
+
+# Step 2: Filter by bug tracker types
+tracker_bugs = yai__validate_field_value("Bug")
+yai__get_tickets(
+    topic="your feature name",
+    payload_filters={"tracker": tracker_bugs},
+    limit=30
+)
+
+# Step 3: Find similar issues to a specific bug
+yai__get_similar_issues(
+    ticket_id=12345,
+    limit=10
+)
+```
+
+### Get bug counts and trends:
+```python
+# Count related bugs
+yai__count_tickets(
+    payload_filters={"component": "component-name", "tracker": "Bug"}
+)
+
+# Get open vs closed status
+open_statuses = yai__get_open_statuses()
+closed_statuses = yai__get_closed_statuses()
+```
+
+### Search bug comments for technical details:
+```python
+# Find comments discussing specific aspects
+yai__get_comments(
+    topic="crash analysis or root cause",
+    payload_filters={"component": "component-name"},
+    limit=20
+)
+```

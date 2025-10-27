@@ -1,0 +1,93 @@
+{
+  "comment": "AI-generated code review for libxlio - High-performance network acceleration library",
+  "commentTypes": ["logic", "syntax", "style"],
+  "instructions": "This is a performance-critical C++11 networking library with kernel-bypass architecture. Review code with focus on: performance optimizations (cache alignment, zero-copy, memory pools), thread safety, memory management (avoid allocations in hot paths), adherence to coding style guidelines in docs/coding-style.md, proper testing patterns per .cursor/rules/testing.mdc, and architectural patterns per .cursor/rules/architecture.mdc. Pay special attention to data path operations, InfiniBand/RDMA integration, and socket interception mechanisms. Ensure compliance with C++11 standards, proper use of const/constexpr, and RAII principles.",
+  "strictness": 2,
+  "fixWithAI": true,
+  "triggerOnUpdates": true,
+  "shouldUpdateDescription": false,
+  "statusCheck": true,
+  "includeBranches": ["master", "vNext"],
+  "excludeBranches": ["draft", "wip", "temp"],
+  "labels": ["ready-for-review"],
+  "disabledLabels": ["wip", "draft", "do-not-review"],
+  "ignoreKeywords": "greptile-ignore\nwork in progress\nWIP\ndo not review",
+  "ignorePatterns": "*.diff\n*.patch\nautom4te.cache/**\nthird_party/**\ndebian/**\nconfig.h\nconfig.h.in\nconfig.log\nconfig.status\nconfigure\nMakefile\nMakefile.in\nlibtool\nstamp-h1\naclocal.m4\n*.o\n*.lo\n*.la\n*.so\n*.so.*\n.libs/**\n.deps/**\n*.pyc\n__pycache__/**\n*.txt\nLICENSE\nCOPYING\nCHANGES",
+  "summarySection": {
+    "included": true,
+    "collapsible": false,
+    "defaultOpen": true
+  },
+  "issuesTableSection": {
+    "included": true,
+    "collapsible": true,
+    "defaultOpen": true
+  },
+  "confidenceScoreSection": {
+    "included": true,
+    "collapsible": true,
+    "defaultOpen": false
+  },
+  "sequenceDiagramSection": {
+    "included": true,
+    "collapsible": true,
+    "defaultOpen": false
+  },
+  "customContext": {
+    "rules": [
+      {
+        "scope": ["src/**/*.cpp", "src/**/*.h", "src/**/*.cc"],
+        "rule": "Enforce coding style from docs/coding-style.md: snake_case for functions/variables, PascalCase for classes, m_ prefix for private members, s_ prefix for static members, g_ prefix for globals. Function opening brace on new line, other braces on same line. Always use braces for control statements. Avoid auto except for iterators and templates. Prefer const and constexpr. Use raw pointers in hot paths for performance. Check for proper include order: config.h, related header, C system headers, C++ standard library, other libraries, project headers."
+      },
+      {
+        "scope": ["src/core/**/*.cpp", "src/core/**/*.h"],
+        "rule": "Critical performance path code. Verify: minimal allocations in data path, use of object pools and pre-allocation, proper cache alignment (64 bytes), appropriate use of likely/unlikely hints, zero-copy operations where possible, thread safety with minimal lock contention, proper memory barriers and atomics. Check for false sharing in multi-threaded code."
+      },
+      {
+        "scope": ["tests/**/*.cpp", "tests/**/*.cc", "tests/**/*.h"],
+        "rule": "Enforce testing guidelines from .cursor/rules/testing.mdc: Every test must have Doxygen comments with @test, @brief, @details. Use ti_N for integration tests, tu_N for unit tests. Fork-based tests must call exit(testing::Test::HasFailure()) in child process. Always close file descriptors. Use ASSERT_* for critical checks, EXPECT_* for non-critical. Use barrier_fork() and wait_fork() for synchronization."
+      },
+      {
+        "scope": ["src/core/sock/*.h", "src/core/dev/*.h", "src/core/event/*.h"],
+        "rule": "Core architecture components. Verify: proper socket abstraction hierarchy (sockinfo base class), event-driven patterns, ring buffer implementations, hardware abstraction for InfiniBand verbs, proper inheritance and virtual method usage, adherence to architectural patterns described in .cursor/rules/architecture.mdc."
+      },
+      {
+        "scope": ["src/core/config/**/*.cpp", "src/core/config/**/*.h"],
+        "rule": "Configuration system code. Ensure: type-safe parameter access, proper JSON schema validation, correct priority handling (JSON file > inline config > env vars > defaults), thread-safe registry access, proper error handling for invalid configurations."
+      }
+    ],
+    "files": [
+      {
+        "scope": ["**/*.cpp", "**/*.h", "**/*.cc", "**/*.c"],
+        "path": "docs/coding-style.md",
+        "description": "C++ coding style guidelines: nomenclature, formatting, class layout, performance-critical programming patterns"
+      },
+      {
+        "scope": ["tests/**/*.cpp", "tests/**/*.cc", "tests/**/*.h"],
+        "path": ".cursor/rules/testing.mdc",
+        "description": "Comprehensive testing guidelines: test naming conventions, fork-based testing patterns, resource management, Google Test usage"
+      },
+      {
+        "scope": ["src/**/*.cpp", "src/**/*.h"],
+        "path": ".cursor/rules/review-commit.mdc",
+        "description": "Commit review guidelines: performance optimizations, thread safety, memory management, coding style, testing patterns"
+      },
+      {
+        "scope": ["**/*"],
+        "path": "docs/contributing.md",
+        "description": "Contribution guidelines and development workflow"
+      }
+    ],
+    "other": [
+      {
+        "scope": ["src/**/*.cpp", "src/**/*.h"],
+        "content": "libxlio is a kernel-bypass networking library providing POSIX socket API acceleration through InfiniBand/RDMA. Key performance requirements: minimize memory allocations, use zero-copy operations, leverage hardware offloading (TSO/LRO/GRO), maintain cache-line awareness, avoid lock contention. Architecture uses LD_PRELOAD for transparent socket interception, event-driven I/O through polling groups, custom memory pools, and ring buffers for data transmission."
+      },
+      {
+        "scope": ["tests/**/*.cpp", "tests/**/*.cc"],
+        "content": "Tests run in both OS mode (standard sockets) and XLIO mode (with LD_PRELOAD). Must be compatible with both unless XLIO-specific. Common patterns: fork-based client/server testing, thread safety validation, resource cleanup validation. Critical: child processes must exit explicitly to avoid test duplication."
+      }
+    ]
+  }
+}
+
