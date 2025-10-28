@@ -105,8 +105,8 @@ struct gtest_configure_t {
     sockaddr_store_t client_addr;
     sockaddr_store_t server_addr;
     sockaddr_store_t remote_addr;
+    sockaddr_store_t remote_routable_addr;
     uint16_t port;
-    bool def_gw_exists;
 };
 
 #endif /* TESTS_GTEST_COMMON_DEF_H_ */

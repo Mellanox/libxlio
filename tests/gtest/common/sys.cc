@@ -157,39 +157,6 @@ out:
     return rc;
 }
 
-bool sys_gateway(struct sockaddr *addr, sa_family_t family)
-{
-    sockaddr_store_t temp_addr;
-    bool found = false;
-    char line[256];
-    const char cmd4[] = "route -n | grep 'UG[ \t]' | awk '{print $2}'";
-    const char cmd6[] = "route -6 -n | grep 'UG[ \t]' | awk '{print $2}'";
-    const char *cmd_ptr = (family == AF_INET ? cmd4 : cmd6);
-
-    FILE *file = popen(cmd_ptr, "r");
-    if (!file) {
-        log_warn("Unable to execute '%s'.\n", cmd_ptr);
-        return false;
-    }
-
-    while (fgets(line, sizeof(line), file) != NULL && !found) {
-        size_t len = strlen(line);
-        if (line[len - 1] == '\n' || line[len - 1] == '\r') {
-            line[len - 1] = 0;
-        }
-        sys_str2addr(line, &temp_addr.addr, false);
-        found = (temp_addr.addr.sa_family == family);
-        if (found) {
-            sys_str2addr(line, addr, false);
-            log_trace("%s found gateway ip: %s\n", line, sys_addr2str(addr));
-        }
-    }
-
-    pclose(file);
-
-    return found;
-}
-
 // Converts address to sockaddr structure. On an error, addr->sa_family is AF_UNSPEC.
 void sys_str2addr(const char *buf, struct sockaddr *addr, bool port)
 {

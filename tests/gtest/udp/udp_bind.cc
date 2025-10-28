@@ -110,8 +110,6 @@ TEST_F(udp_bind, ti_2)
     int rc = EOK;
     int fd;
 
-    SKIP_TRUE(def_gw_exists, "No Default Gateway");
-
     fd = udp_base::sock_create();
     ASSERT_LE(0, fd);
 

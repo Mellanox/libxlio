@@ -58,8 +58,38 @@ function do_get_addrs()
 	echo $gtest_ip_list
 }
 
-gtest_opt="--addr=$(do_get_addrs 'eth' ${opt2})"
-gtest_opt_ipv6="--addr=$(do_get_addrs 'inet6' ${opt2}) -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff" # Remote - Dummy Address
+# Retrieve default gateway address
+# $1 - family type: 'inet' for IPv4, 'inet6' for IPv6
+# Returns: gateway IP address or empty string if not found
+function do_get_gateway()
+{
+	local family=$1
+	local gateway=""
+
+	if [ "$family" = "inet6" ]; then
+		# IPv6: route -6 -n | grep 'UG[ \t]' | awk '{print $2}' | head -1
+		gateway=$(route -6 -n 2>/dev/null | grep 'UG[ \t]' | awk '{print $2}' | head -1)
+	else
+		# IPv4: route -n | grep 'UG[ \t]' | awk '{print $2}' | head -1
+		gateway=$(route -n 2>/dev/null | grep 'UG[ \t]' | awk '{print $2}' | head -1)
+	fi
+
+	echo "$gateway"
+}
+
+# Detect gateway for IPv4
+gateway_ipv4=$(do_get_gateway 'inet')
+if [ -z "$gateway_ipv4" ]; then
+	echo "[FAIL] No IPv4 gateway found. Tests requiring routable address cannot run." >&2
+	exit 1
+fi
+gtest_opt="--addr=$(do_get_addrs 'eth' ${opt2}) -r 192.0.2.1 -g $gateway_ipv4" # -r is TEST-NET-1 (RFC 5737) non-routable test address
+
+# Detect gateway for IPv6
+gateway_ipv6=$(do_get_gateway 'inet6')
+
+# IpV6 tests don't need a gateway address, so we don't enforce it unlike IPv4.
+gtest_opt_ipv6="--addr=$(do_get_addrs 'inet6' ${opt2}) -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff ${gateway_ipv6:+-g $gateway_ipv6}" # -r is a dummy address
 
 set +eE
 

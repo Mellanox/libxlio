@@ -38,16 +38,25 @@ TEST_F(tcp_event, DISABLED_ti_1)
 
 TEST_F(tcp_event, ti_2)
 {
+    // Skip if running with default localhost address - test requires real gateway via -g
+    if (remote_routable_addr.addr.sa_family == AF_INET) {
+        if (remote_routable_addr.addr4.sin_addr.s_addr == htonl(INADDR_LOOPBACK)) {
+            GTEST_SKIP() << "Test requires real gateway address via -g flag (not localhost)";
+        }
+    } else if (remote_routable_addr.addr.sa_family == AF_INET6) {
+        if (IN6_IS_ADDR_LOOPBACK(&remote_routable_addr.addr6.sin6_addr)) {
+            GTEST_SKIP() << "Test requires real gateway address via -g flag (not localhost)";
+        }
+    }
+
     int rc = EOK;
     int fd;
     struct epoll_event event;
 
-    SKIP_TRUE(def_gw_exists, "No Default Gateway");
-
     fd = tcp_base::sock_create_nb();
     ASSERT_LE(0, fd);
 
-    rc = connect(fd, (struct sockaddr *)&remote_addr, sizeof(remote_addr));
+    rc = connect(fd, (struct sockaddr *)&remote_routable_addr, sizeof(remote_routable_addr));
     ASSERT_EQ(EINPROGRESS, errno);
     ASSERT_EQ((-1), rc);
 
@@ -92,7 +101,7 @@ TEST_F(tcp_event, DISABLED_ti_4)
     fd = tcp_base::sock_create_nb();
     ASSERT_LE(0, fd);
 
-    rc = connect(fd, (struct sockaddr *)&remote_addr, sizeof(remote_addr));
+    rc = connect(fd, (struct sockaddr *)&remote_routable_addr, sizeof(remote_routable_addr));
     ASSERT_EQ(EINPROGRESS, errno);
     ASSERT_EQ((-1), rc);
 

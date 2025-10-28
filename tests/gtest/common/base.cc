@@ -13,6 +13,20 @@ uint16_t test_base::m_port = 0;
 int test_base::m_family = PF_INET;
 int test_base::m_break_signal = 0;
 
+static void convert_and_copy_address(const sockaddr_store_t &source, sockaddr_store_t &dest,
+                                     sa_family_t target_family)
+{
+    if (((struct sockaddr *)&source)->sa_family != target_family) {
+        memset(&dest, 0, sizeof(dest));
+        ((struct sockaddr *)&dest)->sa_family = target_family;
+        sys_ipv4_to_ipv6(&((struct sockaddr_in *)&source)->sin_addr,
+                         &((struct sockaddr_in6 *)&dest)->sin6_addr);
+        sys_set_port((struct sockaddr *)&dest, sys_get_port((struct sockaddr *)&source));
+    } else {
+        memcpy(&dest, &source, sizeof(dest));
+    }
+}
+
 test_base::test_base()
 {
     m_port = gtest_conf.port;
@@ -23,38 +37,10 @@ test_base::test_base()
         m_family = PF_INET6;
     }
 
-    if (((struct sockaddr *)&gtest_conf.client_addr)->sa_family != m_family) {
-        memset(&client_addr, 0, sizeof(client_addr));
-        ((struct sockaddr *)&client_addr)->sa_family = m_family;
-        sys_ipv4_to_ipv6(&((struct sockaddr_in *)&gtest_conf.client_addr)->sin_addr,
-                         &((struct sockaddr_in6 *)&client_addr)->sin6_addr);
-        sys_set_port((struct sockaddr *)&client_addr,
-                     sys_get_port((struct sockaddr *)&gtest_conf.client_addr));
-    } else {
-        memcpy(&client_addr, &gtest_conf.client_addr, sizeof(client_addr));
-    }
-
-    if (((struct sockaddr *)&gtest_conf.server_addr)->sa_family != m_family) {
-        memset(&server_addr, 0, sizeof(server_addr));
-        ((struct sockaddr *)&server_addr)->sa_family = m_family;
-        sys_ipv4_to_ipv6(&((struct sockaddr_in *)&gtest_conf.server_addr)->sin_addr,
-                         &((struct sockaddr_in6 *)&server_addr)->sin6_addr);
-        sys_set_port((struct sockaddr *)&server_addr,
-                     sys_get_port((struct sockaddr *)&gtest_conf.server_addr));
-    } else {
-        memcpy(&server_addr, &gtest_conf.server_addr, sizeof(server_addr));
-    }
-
-    if (((struct sockaddr *)&gtest_conf.remote_addr)->sa_family != m_family) {
-        memset(&remote_addr, 0, sizeof(remote_addr));
-        ((struct sockaddr *)&remote_addr)->sa_family = m_family;
-        sys_ipv4_to_ipv6(&((struct sockaddr_in *)&gtest_conf.remote_addr)->sin_addr,
-                         &((struct sockaddr_in6 *)&remote_addr)->sin6_addr);
-        sys_set_port((struct sockaddr *)&remote_addr,
-                     sys_get_port((struct sockaddr *)&gtest_conf.remote_addr));
-    } else {
-        memcpy(&remote_addr, &gtest_conf.remote_addr, sizeof(remote_addr));
-    }
+    convert_and_copy_address(gtest_conf.client_addr, client_addr, m_family);
+    convert_and_copy_address(gtest_conf.server_addr, server_addr, m_family);
+    convert_and_copy_address(gtest_conf.remote_addr, remote_addr, m_family);
+    convert_and_copy_address(gtest_conf.remote_routable_addr, remote_routable_addr, m_family);
 
     memset(&bogus_addr, 0, sizeof(bogus_addr));
     ((struct sockaddr *)&bogus_addr)->sa_family = m_family;
@@ -66,8 +52,6 @@ test_base::test_base()
         inet_pton(AF_INET6, "2001:1:1:1:1:1:1:1",
                   &(((struct sockaddr_in6 *)&bogus_addr)->sin6_addr));
     }
-
-    def_gw_exists = gtest_conf.def_gw_exists;
 
     m_efd_signal = 0;
     m_efd = eventfd(m_efd_signal, 0);
