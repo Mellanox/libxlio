@@ -113,8 +113,6 @@ int sys_dev2addr(const char *dev, struct sockaddr *addr);
 
 bool sys_gateway(struct sockaddr *addr, sa_family_t family);
 
-bool sys_is_link_local(const struct sockaddr *addr);
-
 void sys_str2addr(const char *buf, struct sockaddr *addr, bool port = true);
 
 static INLINE char *sys_addr2str(const struct sockaddr *addr, bool port = true)

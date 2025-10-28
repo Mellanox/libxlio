@@ -190,28 +190,6 @@ bool sys_gateway(struct sockaddr *addr, sa_family_t family)
     return found;
 }
 
-bool sys_is_link_local(const struct sockaddr *addr)
-{
-    if (!addr) {
-        return false;
-    }
-
-    if (addr->sa_family == AF_INET) {
-        // IPv4 link-local: 169.254.0.0/16 (RFC 3927)
-        const struct sockaddr_in *addr4 = (const struct sockaddr_in *)addr;
-        uint32_t ip = ntohl(addr4->sin_addr.s_addr);
-        return ((ip & 0xFFFF0000) == 0xA9FE0000); // 169.254.0.0/16
-
-    } else if (addr->sa_family == AF_INET6) {
-        // IPv6 link-local: fe80::/10 (RFC 4291)
-        const struct sockaddr_in6 *addr6 = (const struct sockaddr_in6 *)addr;
-        return (addr6->sin6_addr.s6_addr[0] == 0xfe &&
-                (addr6->sin6_addr.s6_addr[1] & 0xc0) == 0x80);
-    }
-
-    return false;
-}
-
 // Converts address to sockaddr structure. On an error, addr->sa_family is AF_UNSPEC.
 void sys_str2addr(const char *buf, struct sockaddr *addr, bool port)
 {
