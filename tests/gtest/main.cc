@@ -52,23 +52,29 @@ static int _def_config(void)
 
     sys_str2addr("0.0.0.0[0]", (struct sockaddr *)&gtest_conf.client_addr, true);
     sys_str2addr("0.0.0.0[0]", (struct sockaddr *)&gtest_conf.server_addr, true);
-    sys_str2addr("0.0.0.0[8888]", (struct sockaddr *)&gtest_conf.remote_addr, true);
+    sys_str2addr("192.0.2.1[8888]", (struct sockaddr *)&gtest_conf.remote_unreachable_addr, true);
 
     gtest_conf.port = 55555;
 
     return rc;
 }
 
-static void set_def_remote_address()
+static void set_def_remote_address(bool user_defined_unreachable)
 {
-    gtest_conf.def_gw_exists = sys_gateway((struct sockaddr *)&gtest_conf.remote_addr,
-                                           gtest_conf.server_addr.addr.sa_family);
-    if (gtest_conf.server_addr.addr.sa_family == AF_INET6) {
-        if (!gtest_conf.def_gw_exists) {
-            sys_str2addr("::[8888]", (struct sockaddr *)&gtest_conf.remote_addr, true);
-        } else {
-            gtest_conf.remote_addr.addr6.sin6_port = htons(8888);
-        }
+    sa_family_t family = gtest_conf.server_addr.addr.sa_family;
+
+    // Set default unreachable address for IPv6 if user didn't provide one
+    if (family == AF_INET6 && !user_defined_unreachable) {
+        // RFC 3849: 2001:db8::/32 is IPv6 documentation prefix (equivalent to 192.0.2.0/24 for
+        // IPv4)
+        sys_str2addr("2001:db8::1[8888]", (struct sockaddr *)&gtest_conf.remote_unreachable_addr,
+                     true);
+    }
+
+    // If user provided an address without a port, default to 8888
+    if (user_defined_unreachable &&
+        sys_get_port((struct sockaddr *)&gtest_conf.remote_unreachable_addr) == 0) {
+        sys_set_port((struct sockaddr *)&gtest_conf.remote_unreachable_addr, 8888);
     }
 }
 
@@ -76,14 +82,17 @@ static int _set_config(int argc, char **argv)
 {
     int rc = 0;
     static struct option long_options[] = {
-        {"addr", required_argument, 0, 'a'},   {"if", required_argument, 0, 'i'},
-        {"remote", required_argument, 0, 'r'}, {"port", required_argument, 0, 'p'},
-        {"random", required_argument, 0, 's'}, {"debug", required_argument, 0, 'd'},
+        {"addr", required_argument, 0, 'a'},
+        {"if", required_argument, 0, 'i'},
+        {"remote-non-routable", required_argument, 0, 'r'},
+        {"port", required_argument, 0, 'p'},
+        {"random", required_argument, 0, 's'},
+        {"debug", required_argument, 0, 'd'},
         {"help", no_argument, 0, 'h'},
     };
     int op;
     int option_index;
-    bool user_defined_remote = false;
+    bool user_defined_unreachable = false;
 
     while ((op = getopt_long(argc, argv, "a:i:r:p:d:h", long_options, &option_index)) != -1) {
         switch (op) {
@@ -147,12 +156,12 @@ static int _set_config(int argc, char **argv)
             }
         } break;
         case 'r': {
-            rc = sys_get_addr(optarg, (struct sockaddr *)&gtest_conf.remote_addr);
+            rc = sys_get_addr(optarg, (struct sockaddr *)&gtest_conf.remote_unreachable_addr);
             if (rc < 0) {
                 rc = -EINVAL;
                 log_fatal("Failed to resolve ip address %s\n", optarg);
             } else {
-                user_defined_remote = true;
+                user_defined_unreachable = true;
             }
         } break;
         case 'p':
@@ -195,16 +204,15 @@ static int _set_config(int argc, char **argv)
         srand(gtest_conf.random_seed);
         sys_set_port((struct sockaddr *)&gtest_conf.server_addr, gtest_conf.port);
 
-        if (!user_defined_remote) {
-            set_def_remote_address();
-        }
+        set_def_remote_address(user_defined_unreachable);
 
         log_info("CONFIGURATION:\n");
         log_info("log level: %d\n", gtest_conf.log_level);
         log_info("seed: %d\n", gtest_conf.random_seed);
         log_info("client ip: %s\n", sys_addr2str((struct sockaddr *)&gtest_conf.client_addr));
         log_info("server ip: %s\n", sys_addr2str((struct sockaddr *)&gtest_conf.server_addr));
-        log_info("remote ip: %s\n", sys_addr2str((struct sockaddr *)&gtest_conf.remote_addr));
+        log_info("remote unreachable ip: %s\n",
+                 sys_addr2str((struct sockaddr *)&gtest_conf.remote_unreachable_addr));
         log_info("port: %d\n", gtest_conf.port);
     }
 
@@ -214,13 +222,13 @@ static int _set_config(int argc, char **argv)
 static void _usage(void)
 {
     printf("Usage: gtest [options]\n"
-           "\t--addr,-a <ip,ip>       IP address client,server\n"
-           "\t--if,-i <ip,ip>         Interface client,server\n"
-           "\t--remote,-r <ip>        IP address remote\n"
-           "\t--port,-p <num>         Listen/connect to port <num> (default %d).\n"
-           "\t--random,-s <count>     Seed (default %d).\n"
-           "\t--debug,-d <level>      Output verbose level (default: %d).\n"
-           "\t--help,-h               Print help and exit\n",
+           "\t--addr,-a <ip,ip>                IP address client,server\n"
+           "\t--if,-i <ip,ip>                  Interface client,server\n"
+           "\t--remote-unreachable,-r <ip>     IP address not reachable\n"
+           "\t--port,-p <num>                  Listen/connect to port <num> (default %d).\n"
+           "\t--random,-s <count>              Seed (default %d).\n"
+           "\t--debug,-d <level>               Output verbose level (default: %d).\n"
+           "\t--help,-h                        Print help and exit\n",
 
            gtest_conf.port, gtest_conf.random_seed, gtest_conf.log_level);
     exit(0);

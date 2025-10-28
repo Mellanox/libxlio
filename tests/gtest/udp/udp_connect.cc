@@ -52,7 +52,7 @@ TEST_F(udp_connect, ti_1)
 /**
  * @test udp_connect.ti_2
  * @brief
- *    Loop of blocking connect() to remote ip
+ *    Loop of blocking connect() to routable ip
  * @details
  */
 TEST_F(udp_connect, ti_2)
@@ -60,8 +60,6 @@ TEST_F(udp_connect, ti_2)
     int rc = EOK;
     int fd;
     int i;
-
-    SKIP_TRUE(def_gw_exists, "No Default Gateway");
 
     fd = udp_base::sock_create();
     ASSERT_LE(0, fd);
@@ -72,7 +70,7 @@ TEST_F(udp_connect, ti_2)
     EXPECT_EQ(0, rc);
 
     for (i = 0; i < 10; i++) {
-        rc = connect(fd, (struct sockaddr *)&remote_addr, sizeof(remote_addr));
+        rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
         ASSERT_TRUE(EOK == errno) << "connect() attempt = " << i << "\n" << close(fd);
         ASSERT_EQ(0, rc) << "connect() attempt = " << i << "\n" << close(fd);
         usleep(500);
@@ -89,11 +87,13 @@ TEST_F(udp_connect, ti_2)
  */
 TEST_F(udp_connect, ti_3)
 {
+    // TODO - remove this once we migrate to containerized environment
+    if (m_family == AF_INET6) {
+        GTEST_SKIP() << "IPv6 bare-metal environment lacks routing. Can't conduct test.";
+    }
     int rc = EOK;
     int fd;
     int i;
-
-    SKIP_TRUE(def_gw_exists, "No Default Gateway");
 
     fd = udp_base::sock_create();
     ASSERT_LE(0, fd);
@@ -103,7 +103,8 @@ TEST_F(udp_connect, ti_3)
     CHECK_ERR_OK(rc);
 
     for (i = 0; i < 10; i++) {
-        rc = connect(fd, (struct sockaddr *)&bogus_addr, sizeof(bogus_addr));
+        rc = connect(fd, (struct sockaddr *)&remote_unreachable_addr,
+                     sizeof(remote_unreachable_addr));
         EXPECT_EQ(0, rc) << "connect() attempt = " << i << "\n" << close(fd);
         if (rc < 0) {
             ASSERT_EQ(EOK, errno) << "connect() attempt = " << i << "\n" << close(fd);
