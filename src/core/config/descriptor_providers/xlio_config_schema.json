@@ -418,9 +418,10 @@
                                 "timer_msec": {
                                     "type": "integer",
                                     "minimum": 0,
+                                    "maximum": 500,
                                     "default": 100,
                                     "title": "TCP timer interval (msec)",
-                                    "description": "Maps to XLIO_TCP_TIMER_RESOLUTION_MSEC environment variable.\nControl internal TCP timer resolution (fast timer) in milliseconds.\nMinimum value is the thread wakeup timer resolution configured in\nperformance.threading.internal_handler.timer_msec."
+                                    "description": "Maps to XLIO_TCP_TIMER_RESOLUTION_MSEC environment variable.\nControl internal TCP timer resolution (fast timer) in milliseconds.\nMinimum value is the thread wakeup timer resolution configured in\nperformance.threading.internal_handler.timer_msec.\nMaximum is 500ms per RFC 1122 Section 4.2.3.2 (delayed ACK timer must not exceed 500ms)."
                                 },
                                 "mss": {
                                     "type": "integer",
