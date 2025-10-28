@@ -41,13 +41,17 @@ TEST_F(tcp_event, ti_2)
     int rc = EOK;
     int fd;
     struct epoll_event event;
+    sockaddr_store_t addr;
 
-    SKIP_TRUE(def_gw_exists, "No Default Gateway");
+    static const std::string FREE_PORT = std::to_string(8889);
+    const std::string localhost =
+        (m_family == AF_INET6) ? "::1[" + FREE_PORT + "]" : "127.0.0.1[" + FREE_PORT + "]";
+    sys_str2addr(localhost.c_str(), (struct sockaddr *)&addr, true);
 
     fd = tcp_base::sock_create_nb();
     ASSERT_LE(0, fd);
 
-    rc = connect(fd, (struct sockaddr *)&remote_addr, sizeof(remote_addr));
+    rc = connect(fd, (struct sockaddr *)&addr, sizeof(addr));
     ASSERT_EQ(EINPROGRESS, errno);
     ASSERT_EQ((-1), rc);
 
@@ -92,7 +96,7 @@ TEST_F(tcp_event, DISABLED_ti_4)
     fd = tcp_base::sock_create_nb();
     ASSERT_LE(0, fd);
 
-    rc = connect(fd, (struct sockaddr *)&remote_addr, sizeof(remote_addr));
+    rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
     ASSERT_EQ(EINPROGRESS, errno);
     ASSERT_EQ((-1), rc);
 

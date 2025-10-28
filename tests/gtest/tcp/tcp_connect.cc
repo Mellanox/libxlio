@@ -55,6 +55,7 @@ TEST_F(tcp_connect, DISABLED_ti_2)
     int rc = EOK;
     int fd;
     int i;
+    sockaddr_store_t connect_addr;
 
     fd = socket(m_family, SOCK_STREAM, IPPROTO_IP);
     ASSERT_LE(0, fd);
@@ -63,14 +64,18 @@ TEST_F(tcp_connect, DISABLED_ti_2)
     ASSERT_EQ(EOK, errno);
     ASSERT_EQ(0, rc);
 
+    // Use server_addr with port 8889 (expecting no listener and ECONNREFUSED)
+    memcpy(&connect_addr, &server_addr, sizeof(connect_addr));
+    sys_set_port((struct sockaddr *)&connect_addr, 8889);
+
     for (i = 0; i < 10; i++) {
-        rc = connect(fd, (struct sockaddr *)&remote_addr, sizeof(remote_addr));
+        rc = connect(fd, (struct sockaddr *)&connect_addr, sizeof(connect_addr));
         ASSERT_TRUE(ECONNREFUSED == errno || ETIMEDOUT == errno) << "connect() attempt = " << i;
         ASSERT_EQ((-1), rc) << "connect() attempt = " << i;
         usleep(500);
         if (ETIMEDOUT == errno) {
             log_warn("Routing issue, consider another remote address instead of %s\n",
-                     sys_addr2str((struct sockaddr *)&remote_addr));
+                     sys_addr2str((struct sockaddr *)&connect_addr));
             break;
         }
     }
