@@ -292,3 +292,58 @@ TEST(config, inline_loader_accepts_valid_configuration)
     ASSERT_TRUE(data.find("core.quick_init") != data.end());
     ASSERT_TRUE(data.find("core.daemon.dir") != data.end());
 }
+
+
+TEST(config, inline_loader_rejects_tab_in_value)
+{
+    env_setter setter("XLIO_INLINE_CONFIG", "network.protocols.ip.mtu=90\t00");
+    inline_loader loader("XLIO_INLINE_CONFIG");
+    ASSERT_THROW(loader.load_all(), xlio_exception);
+}
+
+TEST(config, inline_loader_rejects_newline_in_value)
+{
+    env_setter setter("XLIO_INLINE_CONFIG", "network.protocols.ip.mtu=90\n00");
+    inline_loader loader("XLIO_INLINE_CONFIG");
+    ASSERT_THROW(loader.load_all(), xlio_exception);
+}
+
+TEST(config, inline_loader_rejects_carriage_return_in_value)
+{
+    env_setter setter("XLIO_INLINE_CONFIG", "network.protocols.ip.mtu=90\r00");
+    inline_loader loader("XLIO_INLINE_CONFIG");
+    ASSERT_THROW(loader.load_all(), xlio_exception);
+}
+
+TEST(config, inline_loader_rejects_vertical_tab_in_value)
+{
+    env_setter setter("XLIO_INLINE_CONFIG", "network.protocols.ip.mtu=90\v00");
+    inline_loader loader("XLIO_INLINE_CONFIG");
+    ASSERT_THROW(loader.load_all(), xlio_exception);
+}
+TEST(config, inline_loader_rejects_form_feed_in_value)
+{
+    env_setter setter("XLIO_INLINE_CONFIG", "network.protocols.ip.mtu=90\f00");
+    inline_loader loader("XLIO_INLINE_CONFIG");
+    ASSERT_THROW(loader.load_all(), xlio_exception);
+}
+TEST(config, inline_loader_rejects_trailing_dot_in_key)
+{
+    env_setter setter("XLIO_INLINE_CONFIG", "core.log.=5");
+    inline_loader loader("XLIO_INLINE_CONFIG");
+    ASSERT_THROW(loader.load_all(), xlio_exception);
+}
+
+TEST(config, inline_loader_rejects_consecutive_dots_in_key)
+{
+    env_setter setter("XLIO_INLINE_CONFIG", "core..log.level=5");
+    inline_loader loader("XLIO_INLINE_CONFIG");
+    ASSERT_THROW(loader.load_all(), xlio_exception);
+}
+
+TEST(config, inline_loader_rejects_multiple_consecutive_dots_in_key)
+{
+    env_setter setter("XLIO_INLINE_CONFIG", "core...log=5");
+    inline_loader loader("XLIO_INLINE_CONFIG");
+    ASSERT_THROW(loader.load_all(), xlio_exception);
+}
