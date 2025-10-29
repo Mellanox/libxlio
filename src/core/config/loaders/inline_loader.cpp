@@ -18,7 +18,6 @@
 // Static constants for magic characters
 static const char DOUBLE_QUOTE = '"';
 static const char SINGLE_QUOTE = '\'';
-static const char SPACE = ' ';
 static const char EQUALS = '=';
 static const char COMMA = ',';
 
@@ -33,6 +32,7 @@ static void validate_value_characters(const std::string &val, const std::string 
                                       const std::string &config);
 static void validate_key_characters(const std::string &key);
 static bool contains_quotes(const std::string &str);
+static bool contains_whitespace(const std::string &str);
 static void validate_characters(const std::string &str, const std::string &allowed_chars,
                                 const std::string &error_message, const std::string &config);
 static void throw_parsing_error(const std::string &message, const std::string &config);
@@ -48,7 +48,6 @@ inline_loader::inline_loader(const char *inline_config_key)
     if (inline_config == nullptr) {
         throw_xlio_exception("inline config key not set: " + m_source);
     }
-
     m_inline_config = inline_config;
 }
 
@@ -72,7 +71,6 @@ bool inline_loader::check_unsupported_key(const std::string &key) const
 void inline_loader::parse_inline_data()
 {
     validate_input_format(m_inline_config);
-
     std::vector<std::string> pairs = split_strict(m_inline_config, COMMA);
 
     std::set<std::string> seen_keys;
@@ -94,14 +92,13 @@ void inline_loader::parse_inline_data()
             throw_parsing_error("Value contains quotes: " + key + "=" + val, m_inline_config);
         }
 
-        if (val.find(SPACE) != std::string::npos) {
-            throw_parsing_error("Value contains spaces: " + key + "=" + val, m_inline_config);
+        if (contains_whitespace(val)) {
+            throw_parsing_error("Value contains whitespace: " + key + "=" + val, m_inline_config);
         }
 
         validate_value_characters(val, key, m_inline_config);
 
         key = remove_spaces(key);
-        val = remove_spaces(val);
 
         if (key.empty()) {
             throw_parsing_error("Key cannot be empty", m_inline_config);
@@ -230,8 +227,14 @@ static void validate_key_format(const std::string &key)
     if (!std::isalpha(key[0])) {
         throw_parsing_error("Key must start with letter: " + key, "");
     }
-
     validate_key_characters(key);
+
+    if (key[key.length() - 1] == '.') {
+        throw_parsing_error("Key cannot end with dot: " + key, "");
+    }
+    if (key.find("..") != std::string::npos) {
+        throw_parsing_error("Key cannot contain consecutive dots: " + key, "");
+    }
 }
 
 static void validate_value_characters(const std::string &val, const std::string &key,
@@ -259,6 +262,16 @@ static bool contains_quotes(const std::string &str)
 {
     return str.find(DOUBLE_QUOTE) != std::string::npos ||
         str.find(SINGLE_QUOTE) != std::string::npos;
+}
+
+static bool contains_whitespace(const std::string &str)
+{
+    for (char c : str) {
+        if (std::isspace(static_cast<unsigned char>(c))) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static void validate_characters(const std::string &str, const std::string &allowed_chars,
