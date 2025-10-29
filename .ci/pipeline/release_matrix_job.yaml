@@ -17,6 +17,9 @@ kubernetes:
       nodeSelector: 'kubernetes.io/arch=amd64'
       jnlpImage: 'nbu-harbor.gtm.nvidia.com/toolbox/c3po-jnlp:latest'
 
+credentials:
+  - {credentialsId: 'blackduck_api_token', type: 'string', variable: 'BLACKDUCK_API_TOKEN'}
+
 env:
   MAIL_FROM: jenkins@nvidia.com
 
@@ -40,10 +43,23 @@ runs_on_dockers:
       runAsUser: '6213',
       runAsGroup: '101'
     }
+  - {
+     file: '.ci/dockerfiles/Dockerfile.rhel8.6',
+     arch: 'x86_64',
+     name: 'xlio_static.bduck',
+     uri: '$arch/$name',
+     tag: '20250418',
+     build_args: '--no-cache --target bduck',
+     category: 'tool',
+     runAsUser: '6213',
+     runAsGroup: '101'
+    }
 
 steps:
   - name: Build-dpcp
     parallel: false
+    containerSelector:
+      - "{name: 'rhel8.6'}"
     run: |
       git clone https://github.com/Mellanox/libdpcp.git libdpcp
       cd libdpcp
@@ -51,6 +67,8 @@ steps:
 
   - name: Release
     parallel: false
+    containerSelector:
+      - "{name: 'rhel8.6'}"
     run: |
       if ${do_dr_build}; then
         git checkout tags/${release_tag}
@@ -63,6 +81,16 @@ steps:
     run: |
       env WORKSPACE=$PWD .ci/antivirus.sh
     archiveArtifacts: 'logs/'
+
+  - name: Blackduck
+    enable: ${do_blackduck}
+    parallel: false
+    containerSelector:
+      - "{name: 'xlio_static.bduck', category:'tool'}"
+    run: |
+        .ci/blackduck_source.sh
+    archiveArtifacts: 'logs/'
+    credentialsId: 'blackduck_api_token'
 
 pipeline_start:
     shell: action

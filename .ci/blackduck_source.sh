@@ -26,7 +26,7 @@ echo "     VERSION: ${PROJECT_VERSION}"
 echo "    SRC_PATH: ${PROJECT_SRC_PATH}"
 
 [[ -d /tmp/blackduck ]] && rm -rf /tmp/blackduck
-sudo -u swx-jenkins git clone -c core.sshCommand="ssh -i ~/.ssh/id_ed25519" -b master --single-branch --depth=1 ssh://git-nbu.nvidia.com:12023/DevOps/Tools/blackduck /tmp/blackduck
+git clone -c core.sshCommand="ssh -i ~/.ssh/id_ed25519" -b master --single-branch --depth=1 ssh://git-nbu.nvidia.com:12023/DevOps/Tools/blackduck /tmp/blackduck
 cd /tmp/blackduck
 
 # disable check errors
