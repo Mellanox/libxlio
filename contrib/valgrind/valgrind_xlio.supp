@@ -215,3 +215,16 @@
    fun:_Z7do_testv
    fun:main
 }
+{
+   sockperf_leak_on_sigint
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:_Znwm
+   fun:_ZN6ServerI10IoRecvfrom9SwitchOffE13server_acceptEi
+   fun:_ZN6ServerI10IoRecvfrom9SwitchOffE6doLoopEv
+   fun:doHandler
+   fun:server_handler<IoRecvfrom, SwitchOff>
+   fun:_Z14server_handlerI10IoRecvfromEviii
+   fun:_Z7do_testv
+   fun:main
+}
