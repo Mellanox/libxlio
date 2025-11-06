@@ -455,13 +455,12 @@ int fd_collection::del_sockfd(int fd, bool is_for_udp_pool /*=false*/)
 
 bool fd_collection::handle_worker_threads_mode_close(int fd, sockinfo *p_sfd_api)
 {
-    // Clear the socket from the fd_collection
-    clear_socket(fd);
-
     if (p_sfd_api->get_protocol() == PROTO_TCP) {
         sockinfo_tcp *tcp_si = static_cast<sockinfo_tcp *>(p_sfd_api);
         if (tcp_si->get_entity_context()) {
             // Incoming/outgoing sockets - delegate to entity context and return
+            // Clear the socket from the fd_collection before delegating
+            clear_socket(fd);
             handle_socket_close_job_worker_threads_mode(tcp_si);
             return true; // Should return from del_sockfd
         } else if (tcp_si->get_listen_context()) {
