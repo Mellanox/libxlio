@@ -750,6 +750,7 @@ err_t sockinfo_tcp::rx_lwip_cb_entity_context(void *arg, struct tcp_pcb *pcb, st
         conn->m_rx_pkt_ready_list.push_back(buff);
         conn->m_n_rx_pkt_ready_list_count++;
         conn->m_rx_ready_byte_count += ptmp->len;
+        buff->rx.sz_payload = ptmp->len; // Must sync rx.sz_payload to pkt size after shrinks.
 
         ptmp = ptmp->next;
         buff->lwip_pbuf.next = nullptr;
