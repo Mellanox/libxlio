@@ -180,6 +180,21 @@ runs_on_dockers:
      category: 'tool',
      build_args: '--no-cache --target build',
     }
+  - {
+      file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
+      arch: 'x86_64',
+      name: 'xlio-tools',
+      uri: 'xlio/$arch/ubuntu22.04/$name',
+      tag: '20251109',
+      category: 'tool',
+      build_args: '--no-cache --target xlio-tools',
+      annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p1' }],
+      limits: '{memory: 24Gi, cpu: 10000m, hugepages-2Mi: 10Gi, nvidia.com/sriov-cx6dx-p1: 1}',
+      requests: '{memory: 24Gi, cpu: 10000m, hugepages-2Mi: 10Gi, nvidia.com/sriov-cx6dx-p1: 1}',
+      caps_add: '[ IPC_LOCK, SYS_RESOURCE ]',
+      runAsUser: '0',
+      runAsGroup: '0'
+   }
 
 runs_on_agents:
   - {nodeLabel: 'beni09', category: 'base'}
@@ -218,6 +233,7 @@ steps:
       - "{category: 'tests'}"
       - "{name: 'vg'}"
       - "{name: 'vg-worker-threads'}"
+      - "{name: 'xlio-tools'}"
     agentSelector:
       - "{nodeLabel: 'skip-agent'}"
     run: |
@@ -475,6 +491,21 @@ steps:
       jenkins/**/arch-*.tar.gz,
       jenkins/**/vg/*valgrind*.log
 
+  - name: Xlio benchmark
+    #enable: ${do_unit_test}
+    containerSelector:
+      - "{name: 'xlio-tools', category: 'tool', variant: 1}"
+    agentSelector:
+      - "{nodeLabel: 'skip-agent'}"
+    run: |
+      ./contrib/jenkins_tests/xlio_tools.sh
+    parallel: false
+    onfail: |
+      ./.ci/artifacts.sh
+    archiveArtifacts-onfail: |
+      jenkins/**/arch-*.tar.gz,
+      jenkins/**/xlio_tools/*.log
+
   - name: Commit
     enable: ${do_commit}
     containerSelector:
@@ -496,6 +527,7 @@ steps:
       - "{category: 'base'}"
       - "{name: 'vg'}"
       - "{name: 'vg-worker-threads'}"
+      - "{name: 'xlio-tools'}"
       - "{category: 'tests'}"
     agentSelector:
       - "{nodeLabel: 'beni09'}"
