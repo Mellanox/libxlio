@@ -529,7 +529,11 @@ TEST_F(pktinfo, check_recvmsg_returns_expected_pktinfo)
                 &client_addr.addr, sizeof(client_addr.addr), &vec, 1U, cbuf, sizeof(cbuf), 0
             };
 
-            ASSERT_GT(recvmsg(fd, &msg, 0), 0) << "Failed to receive the msg";
+            ssize_t ret;
+            do {
+                ret = recvmsg(fd, &msg, 0);
+            } while (ret < 0 && errno == EINTR);
+            ASSERT_GT(ret, 0) << "Failed to receive the msg, errno=" << errno;
 
             struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
 
