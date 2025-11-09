@@ -405,6 +405,8 @@ void register_ip_route_mtu(ip_route_mtu_fn fn);
 /*Initialization of tcp_pcb structure*/
 void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container);
 void tcp_pcb_recycle(struct tcp_pcb *pcb);
+void tcp_set_initial_cwnd_ssthresh(struct tcp_pcb *pcb);
+void tcp_reset_cwnd_on_congestion(struct tcp_pcb *pcb, bool is_rto);
 
 void tcp_arg(struct tcp_pcb *pcb, void *arg);
 void tcp_ip_output(struct tcp_pcb *pcb, ip_output_fn ip_output);
