@@ -119,7 +119,17 @@ static void cubic_ack_received(struct tcp_pcb *pcb, uint16_t type)
         /* Use the logic in NewReno ack_received() for slow start. */
         if (pcb->cwnd <= pcb->ssthresh /*||
 		    cubic_data->min_rtt_ticks == 0*/) {
-            pcb->cwnd += pcb->mss;
+            /* Slow start: Increment cwnd by the number of bytes acknowledged.
+             * RFC 5681 / RFC 9438: Standard TCP slow start with exponential growth.
+             * Modern CUBIC (Linux 2024, RFC 9438) uses the same slow start as standard TCP.
+             *
+             * Note: This XLIO implementation is based on FreeBSD CUBIC (2007-2010), which
+             * originally had a bug (cwnd += mss). Fixed to match modern behavior (cwnd += acked).
+             *
+             * Critical for TSO where one ACK can acknowledge many segments (e.g., 64KB = 44
+             * segments).
+             */
+            pcb->cwnd += pcb->acked;
         } else if (cubic_data->min_rtt_ticks > 0) {
             ticks_since_cong = ticks - cubic_data->t_last_cong;
 
@@ -212,24 +222,8 @@ static void cubic_cong_signal(struct tcp_pcb *pcb, uint32_t type)
         break;
 
     case CC_RTO:
-        /* Set ssthresh to half of the minimum of the current
-         * cwnd and the advertised window */
-        if (pcb->cwnd > pcb->snd_wnd) {
-            pcb->ssthresh = pcb->snd_wnd / 2;
-        } else {
-            pcb->ssthresh = pcb->cwnd / 2;
-        }
-
-        /* The minimum value for ssthresh should be 2 MSS */
-        if ((u32_t)pcb->ssthresh < (u32_t)2 * pcb->mss) {
-            LWIP_DEBUGF(TCP_FR_DEBUG,
-                        ("tcp_receive: The minimum value for ssthresh %" U16_F
-                         " should be min 2 mss %" U16_F "...\n",
-                         pcb->ssthresh, 2 * pcb->mss));
-            pcb->ssthresh = 2 * pcb->mss;
-        }
-
-        pcb->cwnd = pcb->mss;
+        /* Use centralized TSO-aware congestion recovery logic */
+        tcp_reset_cwnd_on_congestion(pcb, true);
 
         /*
          * Grab the current time and record it so we know when the
@@ -251,13 +245,10 @@ static void cubic_conn_init(struct tcp_pcb *pcb)
 {
     struct cubic *cubic_data = pcb->cc_data;
 
-    pcb->cwnd = ((pcb->cwnd == 1) ? (pcb->mss * 2) : pcb->mss);
-    pcb->ssthresh = pcb->mss * 3;
-    /*
-     * Ensure we have a sane initial value for max_cwnd recorded. Without
-     * this here bad things happen when entries from the TCP hostcache
-     * get used.
-     */
+    if (pcb->cwnd == 1) {
+        tcp_set_initial_cwnd_ssthresh(pcb);
+    }
+
     cubic_data->max_cwnd = pcb->cwnd;
 }
 
