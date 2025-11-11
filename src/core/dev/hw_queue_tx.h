@@ -129,23 +129,40 @@ public:
          *  3. TSO packet with inline headers
          *
          * Formulas details:
-         *  1. WQEBB is 64 bytes, the 1st WQEBB contains ctrl segment, eth segment and 18 bytes of
-         *     inline data. So, we take the 1st WQEBB and number of WQEBBs for the packet minus 18
-         *     bytes.
-         *  2. Data segment for each scatter-gather element is 16 bytes. Therefore, WQEBB can hold
-         *     up to 4 data segments. The 1st element fits into the 1st WQEBB after the eth segment.
-         *     So, we take the 1st WQEBB and number of WQEBBs for scatter-gather elements minus 1.
-         *  3. Inline header starts from offset 46 in WQE (2 bytes before 16 bytes alignment).
-         *     Decrease inline header size by 2 to align it to 16 bytes boundary at the right edge.
-         *     This compensates data segments alignment. Add the 2 bytes back and length of
-         *     scatter-gather elements. Take into account that 18 bytes goes to the 1st WQEBB and
-         *     add the 1st WQEBB to the result.
+         *  1. Inline path (≤204 bytes): 18 bytes of ETH header are inlined into the eth segment.
+         *     WQEBB is 64 bytes, the 1st WQEBB contains ctrl segment (16B), eth segment (32B with
+         *     inline header), and the remaining packet data goes into inline data segment.
+         *     Formula (length + 63 - 18) / 64 + 1 accounts for the 18 bytes already inlined.
+         *
+         *  2. Scatter-gather path (>204 bytes): NO inline header (inline_hdr_sz = 0).
+         *     ETH segment is just 16 bytes (1 octoword). Data segment for each scatter-gather
+         *     element is 16 bytes. Therefore, WQEBB can hold up to 4 data segments.
+         *     The 1st data segment fits into the 1st WQEBB after ctrl (1 octoword) + eth (1
+         * octoword). Formula: (num_sge + 3 - 1) / 4 + 1 accounts for ctrl + eth + N data segments.
          */
         if (xlio_send_wr_opcode(*p_send_wqe) != XLIO_IBV_WR_TSO) {
-            if (p_send_wqe->num_sge == 1 && p_send_wqe->sg_list->length <= 204) {
-                return (p_send_wqe->sg_list->length + 63U - 18U) / 64U + 1U;
+            if (p_send_wqe->num_sge == 1) {
+                if (p_send_wqe->sg_list->length <= 204) {
+                    // Single-SGE inline path (fast path for small packets)
+                    return (p_send_wqe->sg_list->length + 63U - 18U) / 64U + 1U;
+                } else {
+                    // 1 data segment fits into 1 WQEBB
+                    return 1U;
+                }
             } else {
-                return (p_send_wqe->num_sge + 3U - 1U) / 4U + 1U;
+                // Multi-SGE: Calculate total to differentiate inline vs scatter-gather
+                uint32_t total_len = 0;
+                for (int i = 0; i < p_send_wqe->num_sge; i++) {
+                    total_len += p_send_wqe->sg_list[i].length;
+                }
+
+                if (total_len <= 204) {
+                    // Multi-SGE inline path
+                    return (total_len + 63U - 18U) / 64U + 1U;
+                } else {
+                    // Multi-SGE scatter-gather: 1 ctrl + 1 eth + N data segments
+                    return (p_send_wqe->num_sge + 3U - 1U) / 4U + 1U;
+                }
             }
         } else {
             return (((p_send_wqe->tso.hdr_sz + 15U - 2U) & ~15U) + 2U + p_send_wqe->num_sge * 16U -
