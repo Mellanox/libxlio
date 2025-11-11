@@ -6,6 +6,11 @@ ARG _UID=6213
 ARG _GID=101
 ARG _LOGIN=swx-jenkins
 ARG _HOME=/var/home/$_LOGIN
+ARG WEBREPO_URL=webrepo.gtm.nvidia.com
+
+RUN sed -i 's|\$WEBREPO_URL|'"${WEBREPO_URL}"'|g' /etc/yum.repos.d/*.repo && \
+    yum clean all && \
+    yum makecache
 
 RUN yum install yum-utils \
  && yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/9/Everything/aarch64/ \
@@ -13,7 +18,7 @@ RUN yum install yum-utils \
     autoconf automake make libtool git gcc-c++ libtool json-c-devel \
     clang rdma-core-devel openssl-devel glib2-devel libnl3-devel \
     python3-pip sudo rpm-build gtest-devel meson ninja-build \
-    libzip-devel yara-devel libpcap-devel jsoncpp-devel \
+    libzip-devel libpcap-devel jsoncpp-devel \
  && yum clean all \
  && rm -rf /var/cache/yum && rm -rf /var/cache/dnf
 

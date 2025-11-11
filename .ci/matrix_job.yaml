@@ -49,7 +49,7 @@ runs_on_dockers:
       arch: 'aarch64',
       name: 'ol9.4-aarch64',
       uri: 'xlio/$arch/$name/build',
-      tag: '20241207',
+      tag: '20251111',
       build_args: '--build-arg ARCH=aarch64 --no-cache',
       category: 'base'
     }
