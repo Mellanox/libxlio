@@ -470,6 +470,13 @@ public:
         int fd = socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP);
         EXPECT_GT(fd, 0) << "Socket failed to open";
 
+        /* Set receive timeout to prevent indefinite blocking */
+        struct timeval timeout;
+        timeout.tv_sec = 10;
+        timeout.tv_usec = 0;
+        EXPECT_EQ(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)), 0)
+            << "Failed to set receive timeout";
+
         sockaddr_store_t server_any_sockaddr = {
             .addr6 = {
                 .sin6_family = AF_INET6,
@@ -551,5 +558,8 @@ TEST_F(pktinfo, check_recvmsg_returns_expected_pktinfo)
         };
 
         server_func(pid, server_code_under_test);
+
+        /* Wait for child process to complete and validate exit status */
+        ASSERT_EQ(0, wait_fork(pid));
     }
 }
