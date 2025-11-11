@@ -49,7 +49,7 @@ runs_on_dockers:
       arch: 'aarch64',
       name: 'ol9.4-aarch64',
       uri: 'xlio/$arch/$name/build',
-      tag: '20241207',
+      tag: '20251111',
       build_args: '--build-arg ARCH=aarch64 --no-cache',
       category: 'base'
     }
@@ -242,7 +242,7 @@ steps:
       - "{name: 'style', category: 'tool', variant: 1}"
     run: |
       echo "Installing DOCA: ${DOCA_VERSION} ..."
-      .ci/scripts/doca_install.sh 
+      .ci/scripts/doca_install.sh
 
   - name: Copyrights
     enable: ${do_copyrights}
