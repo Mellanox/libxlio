@@ -5,6 +5,7 @@ ARG _UID=6213
 ARG _GID=101
 ARG _LOGIN=swx-jenkins
 ARG _HOME=/var/home/$_LOGIN
+
 RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
     echo "root ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
     mkdir -p ${_HOME} && \
@@ -12,17 +13,24 @@ RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
     useradd -u "$_UID" -g "$_GID" -s /bin/bash -m -d ${_HOME} "${_LOGIN}" && \
     chown -R ${_LOGIN} ${_HOME} && \
     mkdir /build && chown -R ${_LOGIN} /build
+RUN rm -f /etc/yum.repos.d/sw-rivermax ubi.repo
 
 FROM core as static
 ARG _LOGIN=swx-jenkins
 
-RUN yum install -y yum-utils \
- && yum-config-manager --add-repo https://archives.fedoraproject.org/pub/archive/epel/7/x86_64/ \
- && yum --nogpgcheck install -y cppcheck \
- && yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm \
- && yum install -y csbuild clang-tools-extra sudo curl autoconf automake make libtool \
-    libnl3-devel libnl3 rdma-core-devel rdma-core bc \
- && yum clean all
+RUN echo "[sw-rivermax-rpm]" > /etc/yum.repos.d/sw-rivermax-rpm.repo && \
+    echo "name=sw-rivermax-rpm" >> /etc/yum.repos.d/sw-rivermax-rpm.repo && \
+    echo "baseurl=https://urm.nvidia.com/artifactory/sw-rivermax-rpm/" >> /etc/yum.repos.d/sw-rivermax-rpm.repo && \
+    echo "enabled=1" >> /etc/yum.repos.d/sw-rivermax-rpm.repo && \
+    echo "gpgcheck=0" >> /etc/yum.repos.d/sw-rivermax-rpm.repo && \
+    yum makecache && \
+    yum install -y yum-utils clang-tools-extra-19.1.7 sudo curl autoconf automake make libtool \
+    libnl3-devel libnl3 rdma-core-devel rdma-core bc && \ 
+    yum-config-manager --add-repo https://archives.fedoraproject.org/pub/archive/epel/7/x86_64/ && \
+    yum --nogpgcheck install -y cppcheck && \
+    yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm && \
+    yum install -y csbuild && \
+    yum clean all
 
 RUN pip3 install -U pip --no-cache-dir \
  && pip3 install compiledb --no-cache-dir
