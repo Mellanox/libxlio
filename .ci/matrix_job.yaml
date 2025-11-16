@@ -82,6 +82,10 @@ runs_on_dockers:
      category: 'tool'
     }
   - {name: 'toolbox', url: '${registry_host}/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
+  - {name: 'compiler-clang-9.0.1', url: '${registry_host}/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
+  - {name: 'compiler-icc-18.0.4', url: '${registry_host}/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
+  - {name: 'compiler-icc-19.1.1', url: '${registry_host}/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
+  - {name: 'compiler-gcc', url: '${registry_host}/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
   - {name: 'header-check', url: '${registry_host}/toolbox/header_check:0.0.58', category: 'tool', arch: 'x86_64', tag: '0.0.58'}
 # static tests
   - {
@@ -242,7 +246,7 @@ steps:
       - "{name: 'style', category: 'tool', variant: 1}"
     run: |
       echo "Installing DOCA: ${DOCA_VERSION} ..."
-      .ci/scripts/doca_install.sh 
+      .ci/scripts/doca_install.sh
 
   - name: Copyrights
     enable: ${do_copyrights}
@@ -311,13 +315,60 @@ steps:
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
 
-  - name: Compiler
+  - name: Compiler (clang-9.0.1)
     enable: ${do_compiler}
     containerSelector:
-      - "{name: 'toolbox', category: 'tool'}"
+      - "{name: 'compiler-clang-9.0.1', category: 'tool'}"
+    agentSelector:
+      - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_compiler}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_compiler=${action} ./contrib/test_jenkins.sh
+      env WORKSPACE=$PWD TARGET=${flags} COMPILER_SPEC="clang:clang++:dev/clang-9.0.1" jenkins_test_compiler=${action} ./contrib/test_jenkins.sh
+    parallel: false
+    onfail: |
+      ./.ci/artifacts.sh
+    archiveArtifacts-onfail: |
+      jenkins/**/arch-*.tar.gz
+
+  - name: Compiler (icc-18.0.4)
+    enable: ${do_compiler}
+    containerSelector:
+      - "{name: 'compiler-icc-18.0.4', category: 'tool'}"
+    agentSelector:
+      - "{nodeLabel: 'skip-agent'}"
+    run: |
+      [ "x${do_compiler}" == "xtrue" ] && action=yes || action=no
+      env WORKSPACE=$PWD TARGET=${flags} COMPILER_SPEC="icc:icpc:intel/ics-18.0.4" jenkins_test_compiler=${action} ./contrib/test_jenkins.sh
+    parallel: false
+    onfail: |
+      ./.ci/artifacts.sh
+    archiveArtifacts-onfail: |
+      jenkins/**/arch-*.tar.gz
+
+  - name: Compiler (icc-19.1.1)
+    enable: ${do_compiler}
+    containerSelector:
+      - "{name: 'compiler-icc-19.1.1', category: 'tool'}"
+    agentSelector:
+      - "{nodeLabel: 'skip-agent'}"
+    run: |
+      [ "x${do_compiler}" == "xtrue" ] && action=yes || action=no
+      env WORKSPACE=$PWD TARGET=${flags} COMPILER_SPEC="icc:icpc:intel/ics-19.1.1" jenkins_test_compiler=${action} ./contrib/test_jenkins.sh
+    parallel: false
+    onfail: |
+      ./.ci/artifacts.sh
+    archiveArtifacts-onfail: |
+      jenkins/**/arch-*.tar.gz
+
+  - name: Compiler (gcc)
+    enable: ${do_compiler}
+    containerSelector:
+      - "{name: 'compiler-gcc', category: 'tool'}"
+    agentSelector:
+      - "{nodeLabel: 'skip-agent'}"
+    run: |
+      [ "x${do_compiler}" == "xtrue" ] && action=yes || action=no
+      env WORKSPACE=$PWD TARGET=${flags} COMPILER_SPEC="gcc:g++:dev/gcc-8.3.0 gcc:g++:dev/gcc-9.3.0 gcc:g++:dev/gcc-10.1.0" jenkins_test_compiler=${action} ./contrib/test_jenkins.sh
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
