@@ -76,14 +76,14 @@ if [ $opt_binrpm -eq 1 ]; then
     if [ $opt_rpm -eq 1 ]; then
         test_exec="env RPM_BUILD_NCPUS=${NPROC} rpmbuild -bb --define='configure_options $jenkins_test_custom_configure' $rpmmacros $rpmopts $rpmspec"
     else
-        test_exec="env configure_options=\"$jenkins_test_custom_configure\" dpkg-buildpackage -us -uc -b"
+        test_exec="env make_opt=\"${make_opt}\" configure_options=\"$jenkins_test_custom_configure\" dpkg-buildpackage -us -uc -b"
     fi
     do_check_result "$test_exec" "$test_id" "binrpm" "$rpm_tap" "${rpm_dir}/rpm-${test_id}"
     test_id=$((test_id+1))
 fi
 
 if [ $opt_checkpkg -eq 1 ]; then
-    test_exec="env RPM_BUILD_NCPUS=${NPROC} PRJ_RELEASE=1 ${WORKSPACE}/contrib/build_pkg.sh -b -s -a \"configure_options=$jenkins_test_custom_configure\" -i ${WORKSPACE} -o ${rpm_dir}/dist-pkg"
+    test_exec="env RPM_BUILD_NCPUS=${NPROC} make_opt=\"${make_opt}\" PRJ_RELEASE=1 ${WORKSPACE}/contrib/build_pkg.sh -b -s -a \"configure_options=$jenkins_test_custom_configure\" -i ${WORKSPACE} -o ${rpm_dir}/dist-pkg"
     do_check_result "$test_exec" "$test_id" "checkpkg" "$rpm_tap" "${rpm_dir}/rpm-${test_id}"
     do_archive "${rpm_dir}/dist-pkg/build_pkg.log"
     test_id=$((test_id+1))

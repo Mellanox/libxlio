@@ -16,13 +16,17 @@ build-debug:
 	./configure --with-ofed=/usr --prefix=/usr \
 		--libdir=/usr/lib --includedir=/usr/include --sysconfdir=/etc \
 		--enable-opt-log=none --enable-debug ${configure_options}
-	make
+	make ${make_opt}
 	cp -f src/core/.libs/libxlio.so libxlio-debug.so
 	make clean
 
 
 # Commands not to run
 override_dh_auto_configure:
+
+# Use parallel build for production build
+override_dh_auto_build:
+	dh_auto_build -- ${make_opt}
 
 # Workaround for missing dependency information in libmongoclient package
 override_dh_shlibdeps:
