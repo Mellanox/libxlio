@@ -16,9 +16,9 @@
 static void for_each_oneof_option(json_object *one_of_field,
                                   std::function<void(json_object *)> func)
 {
-    int one_of_length = json_object_array_length(one_of_field);
+    int one_of_length = doca_third_party_json_object_array_length(one_of_field);
     for (int i = 0; i < one_of_length; i++) {
-        json_object *option = json_object_array_get_idx(one_of_field, i);
+        json_object *option = doca_third_party_json_object_array_get_idx(one_of_field, i);
         func(option);
     }
 }
@@ -47,7 +47,7 @@ bool schema_analyzer::is_applicable(json_object *property_obj)
         return false;
     }
 
-    if (json_object_get_type(property_obj) != json_type_object) {
+    if (doca_third_party_json_object_get_type(property_obj) != json_type_object) {
         return false;
     }
 
@@ -83,15 +83,15 @@ property_type schema_analyzer::determine_property_type()
     json_object *type_field =
         json_utils::get_field(m_property_obj, config_strings::schema::JSON_TYPE);
     std::string json_type_str;
-    if (json_object_get_type(type_field) == json_type_string) {
-        json_type_str = json_object_get_string(type_field);
+    if (doca_third_party_json_object_get_type(type_field) == json_type_string) {
+        json_type_str = doca_third_party_json_object_get_string(type_field);
     }
 
     // Object properties with nested properties
     if (json_type_str == config_strings::schema_types::JSON_TYPE_OBJECT) {
         json_object *properties_field =
             json_utils::get_field(m_property_obj, config_strings::schema::JSON_PROPERTIES);
-        if (json_object_get_type(properties_field) == json_type_object) {
+        if (doca_third_party_json_object_get_type(properties_field) == json_type_object) {
             return property_type::OBJECT;
         }
     }
@@ -124,7 +124,7 @@ std::type_index schema_analyzer::determine_value_type()
     json_object *type_field =
         json_utils::get_field(m_property_obj, config_strings::schema::JSON_TYPE);
 
-    std::string type_str = json_object_get_string(type_field);
+    std::string type_str = doca_third_party_json_object_get_string(type_field);
     if (type_str == config_strings::schema_types::JSON_TYPE_BOOLEAN) {
         return typeid(bool);
     } else if (type_str == config_strings::schema_types::JSON_TYPE_INTEGER) {
@@ -151,7 +151,7 @@ std::experimental::optional<std::experimental::any> schema_analyzer::determine_d
     // Check for oneOf first - default values are nested inside oneOf options
     json_object *one_of_field =
         json_utils::try_get_field(m_property_obj, config_strings::schema::JSON_ONE_OF);
-    if (one_of_field && json_object_get_type(one_of_field) == json_type_array) {
+    if (one_of_field && doca_third_party_json_object_get_type(one_of_field) == json_type_array) {
         return extract_oneof_value(one_of_field, type, config_strings::schema::JSON_DEFAULT);
     }
 
@@ -205,17 +205,17 @@ static void extract_constraints_from_json(json_object *obj, constraint_config &c
         return;
     }
     json_object *min_field = json_utils::try_get_field(obj, config_strings::schema::JSON_MINIMUM);
-    if (min_field && json_object_get_type(min_field) == json_type_int) {
+    if (min_field && doca_third_party_json_object_get_type(min_field) == json_type_int) {
         config.has_minimum = true;
-        config.minimum_value = json_object_get_int64(min_field);
+        config.minimum_value = doca_third_party_json_object_get_int64(min_field);
     }
     json_object *max_field = json_utils::try_get_field(obj, config_strings::schema::JSON_MAXIMUM);
-    if (max_field && json_object_get_type(max_field) == json_type_int) {
+    if (max_field && doca_third_party_json_object_get_type(max_field) == json_type_int) {
         config.has_maximum = true;
-        config.maximum_value = json_object_get_int64(max_field);
+        config.maximum_value = doca_third_party_json_object_get_int64(max_field);
     }
     json_object *enum_field = json_utils::try_get_field(obj, config_strings::schema::JSON_ENUM);
-    if (enum_field && json_object_get_type(enum_field) == json_type_array) {
+    if (enum_field && doca_third_party_json_object_get_type(enum_field) == json_type_array) {
         config.has_enum = true;
         config.enum_int_values = json_utils::extract_enum_values<int64_t>(enum_field);
     }
@@ -238,7 +238,7 @@ constraint_config schema_analyzer::analyze_constraint_config()
         for_each_oneof_option(one_of_field, [&](json_object *option) {
             json_object *type_field =
                 json_utils::get_field(option, config_strings::schema::JSON_TYPE);
-            std::string type_str = json_object_get_string(type_field);
+            std::string type_str = doca_third_party_json_object_get_string(type_field);
             if (type_str == config_strings::schema_types::JSON_TYPE_INTEGER) {
                 extract_constraints_from_json(option, config);
             }
@@ -269,7 +269,7 @@ enum_mapping_config_t schema_analyzer::analyze_enum_mapping_config()
     for_each_oneof_option(one_of_field, [&](json_object *option) {
         json_object *type_field = json_utils::get_field(option, config_strings::schema::JSON_TYPE);
 
-        std::string type_str = json_object_get_string(type_field);
+        std::string type_str = doca_third_party_json_object_get_string(type_field);
         if (type_str == config_strings::schema_types::JSON_TYPE_INTEGER) {
             int_option = option;
         } else if (type_str == config_strings::schema_types::JSON_TYPE_STRING) {
@@ -315,8 +315,8 @@ bool schema_analyzer::has_memory_size_flag()
         return false;
     }
 
-    return json_object_get_type(memory_size_flag) == json_type_boolean &&
-        json_object_get_boolean(memory_size_flag);
+    return doca_third_party_json_object_get_type(memory_size_flag) == json_type_boolean &&
+        doca_third_party_json_object_get_boolean(memory_size_flag);
 }
 
 bool schema_analyzer::has_power_of_2_or_zero_flag()
@@ -348,13 +348,13 @@ bool schema_analyzer::has_constraint_fields()
     if (has_oneof_field()) {
         json_object *one_of_field =
             json_utils::get_field(m_property_obj, config_strings::schema::JSON_ONE_OF);
-        int one_of_length = json_object_array_length(one_of_field);
+        int one_of_length = doca_third_party_json_object_array_length(one_of_field);
         for (int i = 0; i < one_of_length; i++) {
-            json_object *option = json_object_array_get_idx(one_of_field, i);
+            json_object *option = doca_third_party_json_object_array_get_idx(one_of_field, i);
             json_object *type_field =
                 json_utils::get_field(option, config_strings::schema::JSON_TYPE);
 
-            std::string type_str = json_object_get_string(type_field);
+            std::string type_str = doca_third_party_json_object_get_string(type_field);
 
             // For integer option, check if it has constraints
             if (type_str == config_strings::schema_types::JSON_TYPE_INTEGER) {
@@ -378,7 +378,7 @@ bool schema_analyzer::has_oneof_field()
     json_object *one_of_field =
         json_utils::try_get_field(m_property_obj, config_strings::schema::JSON_ONE_OF);
 
-    if (one_of_field && json_object_get_type(one_of_field) != json_type_array) {
+    if (one_of_field && doca_third_party_json_object_get_type(one_of_field) != json_type_array) {
         throw_xlio_exception("OneOf field must be an array for: " + m_path);
     }
 
@@ -389,9 +389,9 @@ std::experimental::any schema_analyzer::extract_oneof_value(json_object *one_of_
                                                             std::type_index type,
                                                             const std::string &key)
 {
-    int one_of_length = json_object_array_length(one_of_field);
+    int one_of_length = doca_third_party_json_object_array_length(one_of_field);
     for (int i = 0; i < one_of_length; i++) {
-        json_object *option = json_object_array_get_idx(one_of_field, i);
+        json_object *option = doca_third_party_json_object_array_get_idx(one_of_field, i);
         json_object *key_field = json_utils::try_get_field(option, key.c_str());
 
         if (key_field && std::type_index(json_utils::to_any_value(key_field).type()) == type) {
