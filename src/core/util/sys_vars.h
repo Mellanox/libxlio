@@ -421,6 +421,7 @@ public:
     bool close_on_dup2;
     uint32_t mtu; /* effective MTU. If mtu==0 then auto calculate the MTU */
     uint32_t lwip_cc_algo_mod;
+    bool tcp_cc_tso_aware;
     uint32_t lwip_mss;
     char internal_thread_cpuset[FILENAME_MAX];
     char internal_thread_affinity_str[FILENAME_MAX];
@@ -657,10 +658,11 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_SRC_PORT_STRIDE "XLIO_SRC_PORT_STRIDE"
 #define SYS_VAR_DISTRIBUTE_CQ   "XLIO_DISTRIBUTE_CQ"
 #endif
-#define SYS_VAR_MSS         "XLIO_MSS"
-#define SYS_VAR_TCP_CC_ALGO "XLIO_TCP_CC_ALGO"
-#define SYS_VAR_SPEC        "XLIO_SPEC"
-#define SYS_VAR_TSO         "XLIO_TSO"
+#define SYS_VAR_MSS              "XLIO_MSS"
+#define SYS_VAR_TCP_CC_ALGO      "XLIO_TCP_CC_ALGO"
+#define SYS_VAR_TCP_CC_TSO_AWARE "XLIO_TCP_CC_TSO_AWARE"
+#define SYS_VAR_SPEC             "XLIO_SPEC"
+#define SYS_VAR_TSO              "XLIO_TSO"
 #ifdef DEFINED_UTLS
 #define SYS_VAR_UTLS_RX                        "XLIO_UTLS_RX"
 #define SYS_VAR_UTLS_TX                        "XLIO_UTLS_TX"
@@ -961,6 +963,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_SRC_PORT_STRIDE              (2)
 #define MCE_DEFAULT_MSS                          (0)
 #define MCE_DEFAULT_LWIP_CC_ALGO_MOD             (0)
+#define MCE_DEFAULT_TCP_CC_TSO_AWARE             (true)
 #define MCE_DEFAULT_INTERNAL_THREAD_AFFINITY     (-1)
 #define MCE_DEFAULT_INTERNAL_THREAD_AFFINITY_STR ("-1")
 #define MCE_DEFAULT_INTERNAL_THREAD_CPUSET       ("")

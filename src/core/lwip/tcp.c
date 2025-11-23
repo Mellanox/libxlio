@@ -93,6 +93,7 @@ enum cc_algo_mod lwip_cc_algo_module = CC_MOD_LWIP;
 u16_t lwip_tcp_mss = CONST_TCP_MSS;
 u8_t enable_push_flag = 1;
 u8_t enable_ts_option = 0;
+u8_t tcp_cc_tso_aware = 1;
 u32_t lwip_tcp_nodelay_treshold = 0;
 
 /* slow timer value */
@@ -507,36 +508,23 @@ bool tcp_recved(struct tcp_pcb *pcb, u32_t len, bool do_output)
 /**
  * Set initial congestion window and slow start threshold.
  *
- * For TSO-enabled connections:
- * - cwnd: 0.25 * TSO_max_payload (to fill pipe immediately)
- * - ssthresh: Very high value (allows slow start to discover optimal window)
- *
- * For non-TSO connections:
- * - cwnd: RFC 3390 compliant
- * - ssthresh: 10 * MSS (allows moderate growth)
+ * With TSO and tcp_cc_tso_aware enabled:
+ *   cwnd = 0.25 * TSO_max (64KB), ssthresh = 2GB
+ * Otherwise:
+ *   cwnd = RFC 3390, ssthresh = 10*MSS
  *
  * @param pcb the tcp_pcb for which to set initial window parameters
  */
 void tcp_set_initial_cwnd_ssthresh(struct tcp_pcb *pcb)
 {
-    if (tcp_tso(pcb)) {
-        /* TSO enabled: aggressive initial window
-         * Use 25% of TSO max payload as initial cwnd.
-         * Default TSO max is 256KB, so initial cwnd = 64KB.
-         * This provides enough BDP for high-speed networks.
-         */
+    if (tcp_tso(pcb) && tcp_cc_tso_aware) {
+        /* TSO-aware: cwnd = 25% of TSO max (default 64KB) */
         pcb->cwnd = pcb->tso.max_payload_sz / 4;
 
-        /* Set ssthresh very high (following industry best practice).
-         * This keeps TCP in slow start mode until network conditions
-         * dictate otherwise, allowing exponential growth to discover
-         * the optimal sending rate.
-         */
+        /* High ssthresh allows slow start to discover optimal window */
         pcb->ssthresh = 0x7FFFFFFF; /* 2GB - effectively unlimited */
     } else {
-        /* Non-TSO: RFC 3390 compliant initial window
-         * IW = min(4*MSS, max(2*MSS, 4380 bytes))
-         */
+        /* RFC 3390: IW = min(4*MSS, max(2*MSS, 4380 bytes)) */
         if (pcb->mss * 4 <= 4380) {
             pcb->cwnd = pcb->mss * 4;
         } else {
@@ -551,59 +539,37 @@ void tcp_set_initial_cwnd_ssthresh(struct tcp_pcb *pcb)
 /**
  * Reset cwnd and ssthresh after a congestion event (RTO or fast retransmit).
  *
- * This is more conservative than initial window settings, as a congestion
- * event indicates network issues.
- *
- * For TSO connections (TSO-optimized, deviates from RFC 5681):
- * - Reset cwnd to 10% of TSO max (26KB) instead of 1 MSS
- * - Set ssthresh to 25% of TSO max (64KB) to enable slow start recovery
- * - Rationale: RFC 5681 (cwnd=1 MSS) is too conservative for modern TSO hardware
- *   that sends 256KB super-packets. Even Linux CUBIC suffers from slow RTO
- *   recovery with aggressive TSO. Our approach balances fast recovery with safety.
- *
- * For non-TSO connections:
- * - Follow RFC 5681: cwnd = 1 MSS, ssthresh = max(FlightSize/2, 2*MSS)
+ * With TSO and tcp_cc_tso_aware enabled (deviates from RFC 5681):
+ *   cwnd = 10% of TSO_max (26KB), ssthresh = max(FlightSize/2, 64KB)
+ * Otherwise:
+ *   cwnd = 1*MSS, ssthresh = max(FlightSize/2, 2*MSS) per RFC 5681
  *
  * @param pcb the tcp_pcb experiencing congestion
  * @param is_rto true if this is an RTO event, false for fast retransmit
  */
 void tcp_reset_cwnd_on_congestion(struct tcp_pcb *pcb, bool is_rto)
 {
-    if (tcp_tso(pcb)) {
-        /* TSO-aware recovery (deviates from RFC 5681 and modern CUBIC):
-         *
-         * RFC 5681 & Modern CUBIC (Linux 2024): cwnd = 1 MSS (1460 bytes)
-         * Our TSO approach: cwnd = 26KB (10% of TSO max)
-         *
-         * Rationale:
-         * - RFC 5681 was written before aggressive TSO (256KB super-packets)
-         * - Linux CUBIC follows RFC but suffers slow RTO recovery with large TSO
-         * - 1460 bytes is artificially small when hardware sends 256KB packets
-         * - 26KB restart allows reasonable BDP while still being conservative
-         *
-         * This ensures cwnd < ssthresh after RTO, allowing exponential growth
-         * from 26KB → 64KB during recovery. The 64KB threshold is the same as
-         * our initial connection window, providing consistent behavior.
+    if (tcp_tso(pcb) && tcp_cc_tso_aware) {
+        /* TSO-aware recovery: more aggressive than RFC 5681 (1 MSS)
+         * to better handle large TSO segments (256KB super-packets).
          */
         u32_t tso_recovery_cwnd = pcb->tso.max_payload_sz / 10; // 26KB
         u32_t tso_recovery_ssthresh = pcb->tso.max_payload_sz / 4; // 64KB
 
-        /* For very large windows before congestion, respect TCP's halving rule */
         u32_t eff_wnd = LWIP_MIN(pcb->cwnd, pcb->snd_wnd);
         u32_t halved_wnd = eff_wnd >> 1;
 
-        /* Use the larger of: halved window or our TSO recovery threshold */
+        /* ssthresh = max(halved window, TSO recovery threshold) */
         pcb->ssthresh = LWIP_MAX(halved_wnd, tso_recovery_ssthresh);
 
         if (is_rto) {
-            /* RTO: Conservative restart */
             pcb->cwnd = tso_recovery_cwnd;
         } else {
-            /* Fast retransmit: Less conservative, add 3*MSS for quick recovery */
+            /* Fast retransmit: add 3*MSS for quick recovery */
             pcb->cwnd = pcb->ssthresh + 3 * pcb->mss;
         }
     } else {
-        /* Non-TSO: RFC 5681 standard behavior */
+        /* RFC 5681 standard behavior */
         u32_t eff_wnd = LWIP_MIN(pcb->cwnd, pcb->snd_wnd);
         pcb->ssthresh = eff_wnd >> 1;
 
