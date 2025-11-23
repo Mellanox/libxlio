@@ -129,7 +129,9 @@ static void cubic_ack_received(struct tcp_pcb *pcb, uint16_t type)
              * Critical for TSO where one ACK can acknowledge many segments (e.g., 64KB = 44
              * segments).
              */
-            pcb->cwnd += pcb->acked;
+            if ((u32_t)(pcb->cwnd + pcb->acked) > pcb->cwnd) {
+                pcb->cwnd += pcb->acked;
+            }
         } else if (cubic_data->min_rtt_ticks > 0) {
             ticks_since_cong = ticks - cubic_data->t_last_cong;
 

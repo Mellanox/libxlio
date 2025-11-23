@@ -888,6 +888,7 @@ void mce_sys_var::get_env_params()
 #endif
     lwip_mss = MCE_DEFAULT_MSS;
     lwip_cc_algo_mod = MCE_DEFAULT_LWIP_CC_ALGO_MOD;
+    tcp_cc_tso_aware = MCE_DEFAULT_TCP_CC_TSO_AWARE;
     mce_spec = MCE_SPEC_NONE;
 
     neigh_num_err_retries = MCE_DEFAULT_NEIGH_NUM_ERR_RETRIES;
@@ -1766,6 +1767,10 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_TCP_CC_ALGO))) {
         lwip_cc_algo_mod = (uint32_t)atoi(env_ptr);
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_TCP_CC_TSO_AWARE))) {
+        tcp_cc_tso_aware = atoi(env_ptr) ? true : false;
     }
 
     if ((env_ptr = getenv(SYS_VAR_DEFERRED_CLOSE))) {

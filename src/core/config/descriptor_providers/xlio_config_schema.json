@@ -391,6 +391,12 @@
                                     "title": "TCP congestion control algorithm",
                                     "description": "Maps to XLIO_TCP_CC_ALGO environment variable.\nTCP congestion control algorithm.\nThe default algorithm coming with LwIP is a variation of Reno.\nThe new Cubic algorithm was adapted from FreeBSD implementation.\n\nUse:\n   - \"lwip\" or 0 for LwIP algorithm.\n   - \"cubic\" or 1 for Cubic algorithm.\n   - \"disable\" or 2 to disable the congestion algorithm."
                                 },
+                                "congestion_control_tso_aware": {
+                                    "type": "boolean",
+                                    "default": true,
+                                    "title": "TSO-aware congestion control",
+                                    "description": "Maps to XLIO_TCP_CC_TSO_AWARE environment variable.\nEnables TSO-aware congestion-control sizing for TCP connections that use TCP Segmentation Offload (TSO).\n\n**Behavior:**\n\n- *true* (default): Uses larger startup and recovery congestion-control thresholds sized for TSO payloads, allowing high-bandwidth flows to ramp up faster.\n- *false*: Uses conservative congestion-control thresholds.\n\n**Tradeoffs:**\n\n- *true*: Better throughput ramp-up for TSO-enabled flows; may send larger bursts during startup or recovery.\n- *false*: More conservative behavior; useful when lower burstiness or stricter legacy behavior is preferred.\n\n**Scope:** Only affects connections with TSO enabled."
+                                },
                                 "timestamps": {
                                     "oneOf": [
                                         {

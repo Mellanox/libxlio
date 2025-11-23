@@ -208,6 +208,8 @@ const config_var_info_t<bool> CONFIG_VAR_DISTRIBUTE_CQ {"applications.nginx.dist
 const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_MSS {"network.protocols.tcp.mss"};
 const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_TCP_CC_ALGO {
     "network.protocols.tcp.congestion_control"};
+const config_var_info_t<bool> CONFIG_VAR_TCP_CC_TSO_AWARE {
+    "network.protocols.tcp.congestion_control_tso_aware"};
 const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_SPEC {"profiles.spec"};
 
 const config_var_info_t<option_3::mode_t, int64_t> CONFIG_VAR_TSO {
@@ -645,6 +647,8 @@ void sys_var_configurator::initialize_base_variables()
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.lwip_mss, CONFIG_VAR_MSS);
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.lwip_cc_algo_mod,
                                                       CONFIG_VAR_TCP_CC_ALGO);
+    m_runtime_registry.register_and_set_default_value(&m_sys_vars.tcp_cc_tso_aware,
+                                                      CONFIG_VAR_TCP_CC_TSO_AWARE);
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.mce_spec, CONFIG_VAR_SPEC);
 
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.neigh_num_err_retries,

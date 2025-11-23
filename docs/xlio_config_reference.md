@@ -1,6 +1,6 @@
 # XLIO Configuration Reference
 
-This file documents all 125 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
+This file documents all 126 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
 
 > **Auto-generated** from the JSON schema by `generate_docs.py`. Do not edit manually.
 
@@ -66,6 +66,7 @@ This file documents all 125 XLIO runtime configuration parameters with their typ
   - [`network.neighbor.update_interval_msec`](#networkneighborupdate_interval_msec) — Neighbor update interval (msec)
   - [`network.protocols.ip.mtu`](#networkprotocolsipmtu) — MTU size
   - [`network.protocols.tcp.congestion_control`](#networkprotocolstcpcongestion_control) — TCP congestion control algorithm
+  - [`network.protocols.tcp.congestion_control_tso_aware`](#networkprotocolstcpcongestion_control_tso_aware) — TSO-aware congestion control
   - [`network.protocols.tcp.linger_0`](#networkprotocolstcplinger_0) — Abort TCP connections on close
   - [`network.protocols.tcp.mss`](#networkprotocolstcpmss) — Maximum Segment Size
   - [`network.protocols.tcp.nodelay.byte_threshold`](#networkprotocolstcpnodelaybyte_threshold) — Data threshold for flush
@@ -1503,6 +1504,28 @@ Use:
    - "disable" or 2 to disable the congestion algorithm.
 
 **Default:** `"lwip" (0)`
+
+### `network.protocols.tcp.congestion_control_tso_aware`
+
+> **Type:** boolean
+>
+> **Maps to:** `XLIO_TCP_CC_TSO_AWARE`
+
+Enables TSO-aware congestion-control sizing for TCP connections that use TCP Segmentation Offload (TSO).
+
+**Behavior:**
+
+- *true* (default): Uses larger startup and recovery congestion-control thresholds sized for TSO payloads, allowing high-bandwidth flows to ramp up faster.
+- *false*: Uses conservative congestion-control thresholds.
+
+**Tradeoffs:**
+
+- *true*: Better throughput ramp-up for TSO-enabled flows; may send larger bursts during startup or recovery.
+- *false*: More conservative behavior; useful when lower burstiness or stricter legacy behavior is preferred.
+
+**Scope:** Only affects connections with TSO enabled.
+
+**Default:** `true`
 
 ### `network.protocols.tcp.linger_0`
 

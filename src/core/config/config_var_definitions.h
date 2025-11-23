@@ -140,6 +140,7 @@ extern const config_var_info_t<bool> CONFIG_VAR_DISTRIBUTE_CQ;
 #endif
 extern const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_MSS;
 extern const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_TCP_CC_ALGO;
+extern const config_var_info_t<bool> CONFIG_VAR_TCP_CC_TSO_AWARE;
 extern const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_SPEC;
 
 extern const config_var_info_t<option_3::mode_t, int64_t> CONFIG_VAR_TSO;
