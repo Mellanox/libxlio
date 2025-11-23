@@ -642,6 +642,23 @@ Use:
    - "disable" or 2 to disable the congestion algorithm.
 Default value is 0
 
+network.protocols.tcp.congestion_control_tso_aware
+Maps to **XLIO_TCP_CC_TSO_AWARE** environment variable.
+Enable TSO-aware congestion control optimizations for connections
+with TCP Segmentation Offload (TSO) enabled.
+When true (default):
+   - Initial cwnd: 64KB (0.25 * TSO max payload)
+   - Initial ssthresh: 2GB (allows slow start discovery)
+   - RTO recovery cwnd: 26KB (0.1 * TSO max payload)
+   - RTO recovery ssthresh: 64KB minimum
+When false:
+   - Initial cwnd: RFC 3390 compliant (4*MSS, ~5840 bytes)
+   - Initial ssthresh: 10*MSS (~14600 bytes)
+   - RTO recovery cwnd: 1 MSS (RFC 5681, ~1460 bytes)
+   - RTO recovery ssthresh: max(FlightSize/2, 2*MSS)
+This option only affects connections with TSO enabled.
+Default value is true
+
 network.protocols.tcp.linger_0
 Maps to **XLIO_TCP_ABORT_ON_CLOSE** environment variable.
 This parameter controls how XLIO performs socket close operation.

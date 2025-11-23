@@ -78,6 +78,7 @@ xlio_lwip::xlio_lwip()
 
     enable_push_flag = !!safe_mce_sys().tcp_push_flag;
     enable_ts_option = read_tcp_timestamp_option();
+    tcp_cc_tso_aware = safe_mce_sys().tcp_cc_tso_aware ? 1 : 0;
     int is_window_scaling_enabled = safe_mce_sys().sysctl_reader.get_tcp_window_scaling();
     if (is_window_scaling_enabled) {
         int rmem_max_value = safe_mce_sys().sysctl_reader.get_tcp_rmem()->max_value;
