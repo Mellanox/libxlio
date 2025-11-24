@@ -59,13 +59,16 @@ struct app_state {
     bool terminated;
     bool quit;
 
-    /* RTT measurement */
-    struct timespec ping_sent_time; /* Timestamp when last ping was sent */
-
     /* TX zero-copy support */
     struct ibv_pd *pd;
     struct ibv_mr *mr_buf;
-    char sndbuf[256];
+    /* TX buffer pool */
+    char *tx_buffers; /* Memory block for all TX buffers */
+    char **pool_stack; /* Stack of available buffer pointers */
+    int pool_top; /* Top of stack (-1 when empty) */
+
+    /* RTT measurement */
+    struct timespec ping_sent_time; /* Timestamp when last ping was sent */
 };
 
 /* Default configuration */
@@ -88,6 +91,10 @@ static struct app_state g_state = {0};
 #define USERDATA_SERVER_CLIENT 0xcafebabe
 #define USERDATA_CLIENT        0xfeedface
 
+/* TX buffer pool configuration */
+#define TX_BUFFER_COUNT 128 /* Number of TX buffers in the pool */
+#define TX_BUFFER_SIZE  1024 /* Size of each TX buffer in bytes */
+
 /*
  * Forward declarations
  */
@@ -106,6 +113,13 @@ static void socket_rx_cb(xlio_socket_t sock, uintptr_t userdata_sq, void *data, 
                          struct xlio_buf *buf);
 static void socket_accept_cb(xlio_socket_t sock, xlio_socket_t parent,
                              uintptr_t parent_userdata_sq);
+
+/* TX buffer pool management */
+static int init_tx_buffer_pool(void);
+static int register_tx_buffer_pool(xlio_socket_t sock);
+static char *get_tx_buffer(void);
+static void return_tx_buffer(char *buffer_ptr);
+static void cleanup_tx_buffer_pool(void);
 
 /* Utility functions */
 static int send_message(xlio_socket_t sock, const char *msg);
@@ -153,6 +167,20 @@ int main(int argc, char **argv)
     rc = create_polling_group();
     if (rc != 0) {
         fprintf(stderr, "Failed to create polling group\n");
+        cleanup_resources();
+        return EXIT_FAILURE;
+    }
+
+    /*
+     * Initialize TX Buffer Pool
+     * ========================
+     * Allocate memory for TX buffers early. Memory registration will be done
+     * later after obtaining a protection domain from a connected socket.
+     */
+    rc = init_tx_buffer_pool();
+    if (rc != 0) {
+        fprintf(stderr, "Failed to initialize TX buffer pool\n");
+        cleanup_resources();
         return EXIT_FAILURE;
     }
 
@@ -662,10 +690,8 @@ static void cleanup_resources(void)
         }
     }
 
-    /* Cleanup InfiniBand resources */
-    if (g_state.mr_buf) {
-        ibv_dereg_mr(g_state.mr_buf);
-    }
+    /* Deregister and free memory for TX buffer pool */
+    cleanup_tx_buffer_pool();
 
     /* Finalize XLIO */
     rc = g_state.api->xlio_exit();
@@ -703,31 +729,21 @@ static void socket_event_cb(xlio_socket_t sock, uintptr_t userdata_sq, int event
     case XLIO_SOCKET_EVENT_ESTABLISHED:
         printf("Connection established (socket userdata=%lx)\n", userdata_sq);
 
-        /*
-         * Initialize zero-copy support
-         * ==================================================
-         * Get protection domain and register memory for zero-copy operations.
-         * This is typically needed for client-side connections.
-         * Server-side memory registration is handled in socket_accept_cb.
-         */
-        if (!g_state.pd) {
-            g_state.pd = g_state.api->xlio_socket_get_pd(sock);
-            if (g_state.pd) {
-                g_state.mr_buf = ibv_reg_mr(g_state.pd, g_state.sndbuf, sizeof(g_state.sndbuf),
-                                            IBV_ACCESS_LOCAL_WRITE);
-                if (!g_state.mr_buf) {
-                    fprintf(stderr, "Failed to register memory for zero-copy\n");
-                } else {
-                    printf("Memory registered for zero-copy operations\n");
-                }
-            }
-        }
-
-        /* Start ping-pong sequence for client */
         if (userdata_sq == USERDATA_CLIENT) {
+            /* Register TX buffer memory for client-side connections */
+            if (register_tx_buffer_pool(sock) != 0) {
+                fprintf(stderr, "Failed to register TX buffer memory\n");
+            }
+
+            /* Start ping-pong sequence for client */
             send_ping_with_timing(sock);
             g_state.pings_sent = 1;
             printf("Sent ping #%d\n", g_state.pings_sent);
+        } else {
+            /* Server side accepts connections with the socket_accept_cb callback */
+            fprintf(stderr,
+                    "Unexpected XLIO_SOCKET_EVENT_ESTABLISHED event for socket with userdata=%lx\n",
+                    userdata_sq);
         }
         break;
 
@@ -755,11 +771,15 @@ static void socket_event_cb(xlio_socket_t sock, uintptr_t userdata_sq, int event
  * Zero-copy completion callback
  * ============================
  * Called when zero-copy send operations complete, allowing buffer reuse.
+ * Returns the buffer to the TX buffer pool.
  */
 static void socket_comp_cb(xlio_socket_t sock, uintptr_t userdata_sq, uintptr_t userdata_op)
 {
-    printf("Zero-copy send completed (socket userdata=%lx, op userdata=%lx)\n", userdata_sq,
-           userdata_op);
+    char *buffer_ptr = (char *)userdata_op;
+    printf("Zero-copy send completed (socket userdata=%lx, buffer=%p)\n", userdata_sq,
+           (void *)buffer_ptr);
+
+    return_tx_buffer(buffer_ptr);
 }
 
 /*
@@ -822,25 +842,9 @@ static void socket_accept_cb(xlio_socket_t sock, xlio_socket_t parent, uintptr_t
         fprintf(stderr, "Failed to update client socket userdata\n");
     }
 
-    /*
-     * Initialize zero-copy support for server side
-     * ============================================
-     * Get protection domain and register memory for zero-copy operations.
-     * This is crucial for the server to send responses using zero-copy.
-     */
-    if (!g_state.pd) {
-        g_state.pd = g_state.api->xlio_socket_get_pd(sock);
-        if (g_state.pd) {
-            g_state.mr_buf = ibv_reg_mr(g_state.pd, g_state.sndbuf, sizeof(g_state.sndbuf),
-                                        IBV_ACCESS_LOCAL_WRITE);
-            if (!g_state.mr_buf) {
-                fprintf(stderr, "Failed to register memory for zero-copy on server\n");
-            } else {
-                printf("Server: Memory registered for zero-copy operations\n");
-            }
-        } else {
-            fprintf(stderr, "Failed to get protection domain for server socket\n");
-        }
+    /* Register TX buffer memory for server side connections */
+    if (register_tx_buffer_pool(sock) != 0) {
+        fprintf(stderr, "Failed to register TX buffer memory\n");
     }
 }
 
@@ -850,44 +854,57 @@ static void socket_accept_cb(xlio_socket_t sock, xlio_socket_t parent, uintptr_t
  */
 
 /*
- * Send message using zero-copy operation
- * =====================================
- * Demonstrates XLIO Ultra API zero-copy send with proper attributes.
+ * Send message using zero-copy operation with buffer pool
+ * =======================================================
+ * Gets a buffer from the pool, copies the message, and sends using zero-copy.
+ * The buffer pointer is stored in userdata_op for identification in completion callback.
  */
 static int send_message(xlio_socket_t sock, const char *msg)
 {
     size_t len = strlen(msg);
+    char *buffer;
 
     if (!g_state.mr_buf) {
-        fprintf(stderr, "Memory not registered for zero-copy\n");
+        fprintf(stderr, "TX buffer pool not initialized\n");
         return -1;
     }
 
-    if (len >= sizeof(g_state.sndbuf)) {
-        fprintf(stderr, "Message too long for send buffer\n");
+    if (len >= TX_BUFFER_SIZE) {
+        fprintf(stderr, "Message too long for send buffer (max %d bytes)\n", TX_BUFFER_SIZE);
         return -1;
     }
 
-    /* Copy message to registered memory */
-    memcpy(g_state.sndbuf, msg, len);
+    /* Get buffer from pool */
+    buffer = get_tx_buffer();
+    if (!buffer) {
+        fprintf(stderr, "No available TX buffers in pool\n");
+        return -1;
+    }
+
+    /* Copy message to the allocated buffer */
+    memcpy(buffer, msg, len);
 
     /*
      * Configure send attributes for zero-copy operation
      * ================================================
+     * Store the buffer pointer in userdata_op so we can return it to the pool
+     * when the completion callback is invoked.
      */
     struct xlio_socket_send_attr send_attr = {
         .flags = XLIO_SOCKET_SEND_FLAG_FLUSH, /* Flush immediately */
         .mkey = g_state.mr_buf->lkey, /* Memory key for zero-copy */
-        .userdata_op = (uintptr_t)msg /* User data for completion callback */
+        .userdata_op = (uintptr_t)buffer /* Buffer pointer for completion callback */
     };
 
     /*
      * Send data using XLIO Ultra API
      * ==============================
      */
-    int rc = g_state.api->xlio_socket_send(sock, g_state.sndbuf, len, &send_attr);
+    int rc = g_state.api->xlio_socket_send(sock, buffer, len, &send_attr);
     if (rc != 0) {
         fprintf(stderr, "Failed to send message: %s\n", strerror(errno));
+        /* Return buffer to pool on send failure */
+        return_tx_buffer(buffer);
         return rc;
     }
 
@@ -1011,4 +1028,247 @@ static int setup_timeout(int timeout_seconds)
     }
 
     return 0;
+}
+
+/*
+ * TX Buffer Pool Management Functions
+ * ===================================
+ *
+ * TX buffer pool is an application logic, but is critical for performance.
+ * An efficient TX buffer pool implementation can be complex and needs to take into
+ * account hardware nuances, such as CPU caches, and application architecture, such as
+ * multi-threading.
+ *
+ * Why Multiple TX Buffers Are Needed
+ * ----------------------------------
+ * Zero-copy send operations are asynchronous - the buffer cannot be reused immediately
+ * after the send call returns. Application gives ownership to the XLIO stack until
+ * the transmission completes, which is signaled via the completion callback.
+ *
+ * Although it is allowed to reuse a single buffer for static unchanged data, dynamic
+ * data requires multiple buffers.
+ *
+ * Note, XLIO_SOCKET_SEND_FLAG_INLINE changes behavior of the send operation along with
+ * its requirements and guarantees. Please refer to the XLIO Ultra API documentation
+ * for more details.
+ *
+ * TX Buffer Lifecycle
+ * ------------------
+ * Typically, a buffer goes through the following states in its lifecycle:
+ *
+ * 1. POOL INITIALIZATION:
+ *    - Memory allocation
+ *    - This can be a pool of fixed-sized buffers or dynamically allocated buffers from
+ *      a pre-allocated memory block
+ *
+ * 2. MEMORY REGISTRATION:
+ *    - Memory registration of the underlying memory blocks
+ *    - See memory registration section for more details
+ *
+ * 3. BUFFER ALLOCATION:
+ *    - Application allocates buffers on demand
+ *
+ * 4. MESSAGE PREPARATION:
+ *    - Application constructs the message withing the buffer
+ *
+ * 5. TRANSMISSION:
+ *    - Application sends the message using the send operation
+ *    - At this point, ownership on the buffer is transferred to the XLIO stack
+ *
+ * 6. COMPLETION:
+ *    - After completing all the related operations, XLIO generates a completion event
+ *    - Ownership on the buffer is transferred back to the application
+ *    - XLIO doesn't make access to the buffer after the completion event
+ *
+ * 7. RETURN TO POOL:
+ *    - Application returns the buffer to the TX buffer pool
+ *    - The buffer is now available for reuse
+ *
+ * The states 1-2 are initialization and the states 3-7 repeat for each message.
+ *
+ * Memory registration
+ * -------------------
+ * Before sending zero-copy data, the application must register the memory. This is
+ * done in advance due to the high cost of this operation.
+ *
+ * Memory registration pins pages in memory and allows hardware to translate userspace
+ * logical addresses to physical addresses.
+ *
+ * XLIO Ultra API requires memory to be registered for its protection domain. Protection
+ * domain is unique per device (network interface). It can determined for a socket once
+ * the outgoing network device is set for the socket. Therefore, protection domain can
+ * be obtained from a socket after the connect operation or after the accept callback
+ * is called.
+ *
+ * For the same protection domain, memory registration should be performed only once.
+ * For different protection domains, memory registration should be performed for each
+ * protection domain and respective memory key (lkey) should be used in the send
+ * operation.
+ */
+
+/*
+ * Initialize TX buffer pool
+ * ========================
+ * Allocates memory block for all TX buffers and initializes the stack-based pool
+ * with buffer pointers. This should be called once during application initialization,
+ * before any sockets are created.
+ */
+static int init_tx_buffer_pool(void)
+{
+    size_t total_size = TX_BUFFER_COUNT * TX_BUFFER_SIZE;
+    int i;
+
+    /* Allocate memory block for all TX buffers */
+    g_state.tx_buffers = malloc(total_size);
+    if (!g_state.tx_buffers) {
+        fprintf(stderr, "Failed to allocate TX buffer memory block\n");
+        return -1;
+    }
+
+    /* Allocate stack array for buffer pointer tracking */
+    g_state.pool_stack = malloc(TX_BUFFER_COUNT * sizeof(char *));
+    if (!g_state.pool_stack) {
+        fprintf(stderr, "Failed to allocate TX buffer pool stack\n");
+        free(g_state.tx_buffers);
+        g_state.tx_buffers = NULL;
+        return -1;
+    }
+
+    /* Initialize stack with all buffer pointers */
+    for (i = 0; i < TX_BUFFER_COUNT; i++) {
+        g_state.pool_stack[i] = g_state.tx_buffers + (i * TX_BUFFER_SIZE);
+    }
+    g_state.pool_top = TX_BUFFER_COUNT - 1;
+
+    printf("TX buffer pool initialized: %d buffers of %d bytes each (total %zu bytes)\n",
+           TX_BUFFER_COUNT, TX_BUFFER_SIZE, total_size);
+
+    return 0;
+}
+
+/*
+ * Register TX buffer pool
+ * =======================================
+ * Registers the pre-allocated TX buffer memory block for zero-copy operations.
+ * For simplicity, this example doesn't support multiple protection domains.
+ */
+static int register_tx_buffer_pool(xlio_socket_t sock)
+{
+    size_t total_size = TX_BUFFER_COUNT * TX_BUFFER_SIZE;
+
+    /* Check if memory is already registered */
+    if (g_state.mr_buf) {
+        printf("TX buffer memory already registered, skipping re-registration\n");
+        return 0;
+    }
+
+    /* Verify that buffer pool was initialized */
+    if (!g_state.tx_buffers) {
+        fprintf(stderr, "Cannot register TX buffers: pool not initialized\n");
+        return -1;
+    }
+
+    /* Obtain protection domain from socket */
+    if (!g_state.pd) {
+        g_state.pd = g_state.api->xlio_socket_get_pd(sock);
+        if (!g_state.pd) {
+            fprintf(stderr,
+                    "Cannot register TX buffers: failed to get protection domain from socket\n");
+            return -1;
+        }
+    }
+
+    /* Register the entire memory block */
+    g_state.mr_buf = ibv_reg_mr(g_state.pd, g_state.tx_buffers, total_size, IBV_ACCESS_LOCAL_WRITE);
+    if (!g_state.mr_buf) {
+        fprintf(stderr, "Failed to register TX buffer memory\n");
+        return -1;
+    }
+
+    printf("TX buffer memory registered\n");
+
+    return 0;
+}
+
+/*
+ * Get TX buffer from pool
+ * ======================
+ * Pops a buffer pointer from the stack and returns it.
+ * Returns buffer pointer on success, NULL if pool is empty.
+ */
+static char *get_tx_buffer(void)
+{
+    char *buffer_ptr;
+
+    /* Check if pool has available buffers */
+    if (g_state.pool_top < 0) {
+        return NULL;
+    }
+
+    /* Pop buffer pointer from stack */
+    buffer_ptr = g_state.pool_stack[g_state.pool_top--];
+
+    return buffer_ptr;
+}
+
+/*
+ * Return TX buffer to pool
+ * =======================
+ * Returns a buffer pointer back to the TX buffer pool, making it available for reuse.
+ */
+static void return_tx_buffer(char *buffer_ptr)
+{
+    size_t offset;
+    size_t total_size = TX_BUFFER_COUNT * TX_BUFFER_SIZE;
+
+    /* Validate that buffer pointer belongs to our memory block */
+    if (buffer_ptr < g_state.tx_buffers || buffer_ptr >= g_state.tx_buffers + total_size) {
+        fprintf(stderr, "Invalid buffer pointer %p (not in memory block range %p-%p)\n",
+                (void *)buffer_ptr, (void *)g_state.tx_buffers,
+                (void *)(g_state.tx_buffers + total_size));
+        return;
+    }
+
+    /* Validate that buffer pointer is properly aligned to buffer boundaries */
+    offset = buffer_ptr - g_state.tx_buffers;
+    if (offset % TX_BUFFER_SIZE != 0) {
+        fprintf(stderr, "Invalid buffer pointer %p (not aligned to buffer boundary)\n",
+                (void *)buffer_ptr);
+        return;
+    }
+
+    /* Check for stack overflow */
+    if (g_state.pool_top >= TX_BUFFER_COUNT - 1) {
+        fprintf(stderr, "TX buffer pool stack overflow (double-free of buffer %p?)\n",
+                (void *)buffer_ptr);
+        return;
+    }
+
+    /* Push buffer pointer back onto stack */
+    g_state.pool_stack[++g_state.pool_top] = buffer_ptr;
+}
+
+/*
+ * Cleanup TX buffer pool
+ * =====================
+ * Deregisters memory and frees all allocated resources.
+ */
+static void cleanup_tx_buffer_pool(void)
+{
+    if (g_state.mr_buf) {
+        ibv_dereg_mr(g_state.mr_buf);
+        g_state.mr_buf = NULL;
+    }
+
+    if (g_state.tx_buffers) {
+        free(g_state.tx_buffers);
+        g_state.tx_buffers = NULL;
+    }
+
+    if (g_state.pool_stack) {
+        free(g_state.pool_stack);
+        g_state.pool_stack = NULL;
+    }
+
+    g_state.pool_top = -1;
 }
