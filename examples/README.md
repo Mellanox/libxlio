@@ -7,7 +7,9 @@ It demonstrates:
  * XLIO Ultra API initialization using indirect function calls
  * Polling group creation and event handling
  * Socket creation, connection, and data transmission
+ * Simple TX buffer pool example with memory registration
  * Zero-copy send operations with completion callbacks
+ * Zero-copy receive operations
  * Proper resource management and cleanup
 
 Limitations:
@@ -16,7 +18,6 @@ Limitations:
  * Linkage against libxlio is out of scope
  * IPv4 only example
  * RX buffer is treated as a complete message while TCP stream doesn't guarantee this
- * Example doesn't wait for the TX completion to reuse the TX buffer
 
 The application is verbose. Simple usage:
 
