@@ -544,7 +544,7 @@ TEST_F(tcp_connect, ti_with_tcp_user_timeout)
     } else {
         reinterpret_cast<uint8_t *>(&unresponsive_server.addr6.sin6_addr)[15] = 255;
     }
-    rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+    rc = connect(fd, (struct sockaddr *)&unresponsive_server.addr, sizeof(server_addr));
     ASSERT_EQ(-1, rc);
     ASSERT_EQ(110, errno);
 
