@@ -144,7 +144,7 @@ for test_link in $test_ip_list; do
 			sleep 2
 		done
 
-		eval "${sudo_cmd} $timeout_exe_short env $test_lib_env \
+		eval "${sudo_cmd} timeout -s SIGINT 1m env $test_lib_env \
 			${vg_tool} --log-file=${vg_dir}/${test_name}-valgrind-cl.log $vg_args \
 			$test_app_path ${test_app_client_params} ${test_opt} -i ${test_ip} -t 10 ${test_params} 2>&1 | tee ${vg_dir}/${test_name}-output-cl.log"
 
