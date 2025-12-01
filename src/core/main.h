@@ -11,6 +11,7 @@
 #include <util/sys_vars.h>
 #include <util/utils.h>
 #include <sock/sock-redirect.h>
+#include <infiniband/verbs.h>
 
 void print_xlio_global_settings();
 void check_locked_mem();
@@ -21,5 +22,10 @@ extern "C" void sock_redirect_main(void);
 extern "C" void sock_redirect_exit(void);
 
 extern bool g_init_ibv_fork_done;
+
+/* Cached to avoid calling ibv_is_fork_initialized() at runtime, which internally calls close()
+ * and can cause reentrancy deadlock when called from within mapping_cache's locked section
+ */
+extern enum ibv_fork_status g_ibv_fork_status;
 
 #endif // MAIN_H
