@@ -85,6 +85,7 @@ const char *xlio_version_str = "XLIO_VERSION: " PACKAGE_VERSION "-" STR(PRJ_LIBR
 
 bool g_b_exit = false;
 bool g_init_ibv_fork_done = false;
+enum ibv_fork_status g_ibv_fork_status = IBV_FORK_DISABLED;
 bool g_is_forked_child = false;
 bool g_init_global_ctors_done = false;
 bool g_init_xlio_init_done = false;
@@ -926,6 +927,15 @@ void prepare_fork()
         {
             g_init_ibv_fork_done = true;
             vlog_printf(VLOG_DEBUG, "ibv_fork_init() succeeded, fork() may be used safely!!\n");
+
+            g_ibv_fork_status = ibv_is_fork_initialized();
+            const char *status_str = (g_ibv_fork_status == IBV_FORK_DISABLED)
+                ? "DISABLED (libibverbs will NOT protect from fork)"
+                : (g_ibv_fork_status == IBV_FORK_ENABLED)
+                ? "ENABLED (libibverbs using madvise)"
+                : "UNNEEDED (libibverbs will NOT protect from fork)";
+            vlog_printf(VLOG_DEBUG, "ibv_is_fork_initialized() returned: %d (%s)\n",
+                        g_ibv_fork_status, status_str);
         }
         ENDIF_VERBS_FAILURE;
     }
