@@ -905,6 +905,11 @@ err_t tcp_recv_null(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
     return ERR_OK;
 }
 
+static inline u32_t get_initial_rto(void)
+{
+    return (1000 + slow_tmr_interval - 1) / slow_tmr_interval;
+}
+
 void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
 {
     u32_t iss;
@@ -927,9 +932,10 @@ void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
     pcb->mss = pcb->advtsd_mss;
     pcb->user_timeout_ms = 0;
     pcb->ticks_since_data_sent = -1;
-    pcb->rto = 3000 / slow_tmr_interval;
+    // Set initial RTO to 1 second as per RFC 6298
+    pcb->rto = get_initial_rto();
     pcb->sa = 0;
-    pcb->sv = 3000 / slow_tmr_interval;
+    pcb->sv = get_initial_rto();
     pcb->rtime = -1;
 #if TCP_CC_ALGO_MOD
     switch (lwip_cc_algo_module) {
@@ -985,9 +991,10 @@ void tcp_pcb_recycle(struct tcp_pcb *pcb)
     pcb->flags = 0;
     pcb->user_timeout_ms = 0;
     pcb->ticks_since_data_sent = -1;
-    pcb->rto = 3000 / slow_tmr_interval;
+    // Set initial RTO to 1 second as per RFC 6298
+    pcb->rto = get_initial_rto();
     pcb->sa = 0;
-    pcb->sv = 3000 / slow_tmr_interval;
+    pcb->sv = get_initial_rto();
     pcb->nrtx = 0;
     pcb->dupacks = 0;
     pcb->rtime = -1;
