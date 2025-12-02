@@ -2,9 +2,9 @@ ARG ARCH=aarch64
 ARG HARBOR_URL=harbor.mellanox.com
 FROM ${HARBOR_URL}/swx-infra/media/${ARCH}/base/oraclelinux:9.4
 
-ARG _UID=6213
-ARG _GID=101
-ARG _LOGIN=swx-jenkins
+ARG _UID=152606
+ARG _GID=30
+ARG _LOGIN=svc-nbu-swx-media
 ARG _HOME=/var/home/$_LOGIN
 ARG WEBREPO_URL=webrepo.gtm.nvidia.com
 
