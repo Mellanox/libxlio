@@ -23,7 +23,6 @@ kubernetes:
 credentials:
   - {credentialsId: 'media_coverity_credentials', usernameVariable: 'XLIO_COV_USER', passwordVariable: 'XLIO_COV_PASSWORD'}
   - {credentialsId: 'mellanox_github_credentials', usernameVariable: 'MELLANOX_GH_USER', passwordVariable: 'MELLANOX_GH_TOKEN'}
-  - {credentialsId: 'blackduck_api_token', type: 'string', variable: 'BLACKDUCK_API_TOKEN'}
 
 volumes:
   - {mountPath: /hpc/local/bin, hostPath: /hpc/local/bin}
@@ -87,16 +86,6 @@ runs_on_dockers:
   - {name: 'compiler-icc-19.1.1', url: '${registry_host}/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
   - {name: 'compiler-gcc', url: '${registry_host}/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
   - {name: 'header-check', url: '${registry_host}/toolbox/header_check:0.0.58', category: 'tool', arch: 'x86_64', tag: '0.0.58'}
-# static tests
-  - {
-     file: '.ci/dockerfiles/Dockerfile.rhel8.6',
-     arch: 'x86_64',
-     name: 'xlio_static.bduck',
-     uri: '$arch/$name',
-     tag: '20251202',
-     build_args: '--no-cache --target bduck',
-     category: 'tool'
-    }
   - {file: '.ci/dockerfiles/Dockerfile.rhel8.6',
      arch: 'x86_64',
      name: 'xlio_static.cppcheck',
@@ -514,18 +503,6 @@ steps:
       jenkins/**/arch-*.tar.gz
     archiveJunit: |
       jenkins/**/*.xml
-
-  - name: Blackduck
-    enable: ${do_blackduck}
-    containerSelector:
-      - "{name: 'xlio_static.bduck', category:'tool'}"
-    run: |
-      # WA for possible CI-Demo bug: HPCINFRA-1614
-      if ${do_blackduck} ; then
-        .ci/blackduck_source.sh
-      fi
-    archiveArtifacts: 'logs/'
-    credentialsId: 'blackduck_api_token'
 
   - name: Documentation Test
     enable: ${do_documentation_test}
