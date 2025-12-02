@@ -14,7 +14,7 @@ RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
     mkdir /build && chown -R ${_LOGIN} /build
 
 FROM core as static
-ARG _LOGIN=swx-jenkins
+ARG _LOGIN=svc-nbu-swx-media
 
 RUN yum install -y yum-utils \
  && yum-config-manager --add-repo https://archives.fedoraproject.org/pub/archive/epel/7/x86_64/ \
@@ -32,9 +32,9 @@ ENTRYPOINT [ "/bin/bash", "--login", "--rcfile", "/etc/bashrc", "-c" ]
 
 
 FROM core as release
-ARG _UID=6213
-ARG _GID=101
-ARG _LOGIN=swx-jenkins
+ARG _UID=152606
+ARG _GID=30
+ARG _LOGIN=svc-nbu-swx-media
 ARG _HOME=/var/home/$_LOGIN
 ARG WEBREPO_URL=webrepo.gtm.nvidia.com
 RUN sed -i "s#http://webrepo#http://${WEBREPO_URL}#" /etc/yum.repos.d/* && \
@@ -65,6 +65,18 @@ RUN chmod +x /tmp/doca_install.sh && \
 
 
 FROM core as bduck
+ARG _UID=152606
+ARG _GID=30
+ARG _LOGIN=svc-nbu-swx-media
+ARG _HOME=/var/home/$_LOGIN
+RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
+    echo "root ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
+    mkdir -p ${_HOME} && \
+    groupadd -f -g "$_GID" "$_LOGIN" && \
+    useradd -u "$_UID" -g "$_GID" -s /bin/bash -m -d ${_HOME} "${_LOGIN}" && \
+    chown -R ${_LOGIN} ${_HOME} && \
+    mkdir /build && chown -R ${_LOGIN} /build
+
 ARG WEBREPO_URL=webrepo.gtm.nvidia.com
 RUN sed -i "s/webrepo/${WEBREPO_URL}/" /etc/yum.repos.d/* && \
     yum install --allowerasing -y \
