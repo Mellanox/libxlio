@@ -13,9 +13,15 @@ RUN sed -i 's!baseurl=.*everything.*!baseurl=http://webrepo.gtm.nvidia.com/Ctyun
     dnf clean all
 
 RUN dnf --releasever=23.01 install -y autoconf automake make libtool json-c-devel git gcc-c++ \
-    util-linux sudo rpm-build \
+    util-linux sudo rpm-build curl \
  && dnf clean all \
  && rm -rf /var/cache/dnf
+
+# Install DOCA
+COPY .ci/scripts/doca_install.sh /tmp/doca_install.sh
+RUN chmod +x /tmp/doca_install.sh && \
+    /tmp/doca_install.sh && \
+    rm -f /tmp/doca_install.sh /tmp/GPG-KEY-Mellanox.pub
 
 RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
     echo "root ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
