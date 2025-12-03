@@ -85,7 +85,7 @@ private:
         m_back = -1;
         m_size = 0;
 
-        if (allocate(CHUNK_LIST_CONTAINER_INIT)) {
+        if (likely(allocate(CHUNK_LIST_CONTAINER_INIT))) {
             m_used_containers.push_back(m_free_containers.get_and_pop_front());
         }
     }
@@ -128,11 +128,12 @@ public:
 
     inline T front() const
     {
+        container *cont = m_used_containers.front();
         // Check if the list is empty.
-        if (unlikely(empty())) {
+        if (unlikely(empty() || !cont)) {
             return NULL;
         }
-        return m_used_containers.front()->m_p_buffer[m_front];
+        return cont->m_p_buffer[m_front];
     }
 
     inline void pop_front()
@@ -172,7 +173,7 @@ public:
             m_back = 0;
             m_used_containers.push_back(m_free_containers.get_and_pop_back());
         }
-
+        /* coverity[returned_null : FALSE] */
         m_used_containers.back()->m_p_buffer[m_back] = obj;
         m_size++;
     }

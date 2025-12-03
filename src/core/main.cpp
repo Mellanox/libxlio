@@ -424,10 +424,13 @@ void print_env_vars_xlio_global_settings()
     vlog_printf(VLOG_INFO, "Cmd Line: %s\n", safe_mce_sys().app_name);
 
     // Use DEBUG level logging with more details in RPM release builds
-    vlog_levels_t log_level = VLOG_DEBUG;
+    vlog_levels_t log_level;
 #if !defined(PRJ_LIBRARY_RELEASE) || (PRJ_LIBRARY_RELEASE == 0)
     // If non RPM (development builds) use more verbosity
     log_level = VLOG_DEFAULT;
+#else
+    // RPM release builds - less verbosity
+    log_level = VLOG_DEBUG;
 #endif
     vlog_printf(log_level, "Current Time: %s", ctime(&clock));
     vlog_printf(log_level, "Pid: %5u\n", getpid());
@@ -617,9 +620,11 @@ void print_env_vars_xlio_global_settings()
     VLOG_PARAM_STRING("Force Flowtag for MC", safe_mce_sys().mc_force_flowtag,
                       MCE_DEFAULT_MC_FORCE_FLOWTAG, SYS_VAR_MC_FORCE_FLOWTAG,
                       safe_mce_sys().mc_force_flowtag ? "Enabled " : "Disabled");
-    VLOG_STR_PARAM_STRING("Striding RQ", option_3::to_str(safe_mce_sys().enable_strq_env),
-                          option_3::to_str(MCE_DEFAULT_STRQ), SYS_VAR_STRQ,
-                          option_3::to_str(safe_mce_sys().enable_strq_env));
+    const char *strq_val = option_3::to_str(safe_mce_sys().enable_strq_env);
+    const char *strq_def = option_3::to_str(MCE_DEFAULT_STRQ);
+    VLOG_STR_PARAM_STRING("Striding RQ", (strq_val ? strq_val : "Unknown"),
+                          (strq_def ? strq_def : "Unknown"), SYS_VAR_STRQ,
+                          (strq_val ? strq_val : "Unknown")); // to_str can return nullptr
     VLOG_PARAM_NUMBER("STRQ Strides per RWQE", safe_mce_sys().strq_stride_num_per_rwqe,
                       MCE_DEFAULT_STRQ_NUM_STRIDES, SYS_VAR_STRQ_NUM_STRIDES);
     VLOG_PARAM_NUMBER("STRQ Stride Size (Bytes)", safe_mce_sys().strq_stride_size_bytes,
@@ -746,14 +751,18 @@ void print_env_vars_xlio_global_settings()
                       MCE_DEFAULT_NEIGH_UC_ARP_DELAY_MSEC, SYS_VAR_NEIGH_UC_ARP_DELAY_MSEC);
     VLOG_PARAM_NUMBER("Num of neigh restart retries", safe_mce_sys().neigh_num_err_retries,
                       MCE_DEFAULT_NEIGH_NUM_ERR_RETRIES, SYS_VAR_NEIGH_NUM_ERR_RETRIES);
-    VLOG_STR_PARAM_STRING("TSO support", option_3::to_str(safe_mce_sys().enable_tso),
-                          option_3::to_str(MCE_DEFAULT_TSO), SYS_VAR_TSO,
-                          option_3::to_str(safe_mce_sys().enable_tso));
+    const char *tso_val = option_3::to_str(safe_mce_sys().enable_tso);
+    const char *tso_def = option_3::to_str(MCE_DEFAULT_TSO);
+    VLOG_STR_PARAM_STRING("TSO support", (tso_val ? tso_val : "Unknown"),
+                          (tso_def ? tso_def : "Unknown"), SYS_VAR_TSO,
+                          (tso_val ? tso_val : "Unknown")); // to_str can return nullptr
     VLOG_PARAM_STRING("TSO max size", safe_mce_sys().max_tso_sz, MCE_DEFAULT_MAX_TSO_SIZE,
                       SYS_VAR_MAX_TSO_SIZE, option_size::to_str(safe_mce_sys().max_tso_sz));
-    VLOG_STR_PARAM_STRING("LRO support", option_3::to_str(safe_mce_sys().enable_lro),
-                          option_3::to_str(MCE_DEFAULT_LRO), SYS_VAR_LRO,
-                          option_3::to_str(safe_mce_sys().enable_lro));
+    const char *lro_val = option_3::to_str(safe_mce_sys().enable_lro);
+    const char *lro_def = option_3::to_str(MCE_DEFAULT_LRO);
+    VLOG_STR_PARAM_STRING("LRO support", (lro_val ? lro_val : "Unknown"),
+                          (lro_def ? lro_def : "Unknown"), SYS_VAR_LRO,
+                          (lro_val ? lro_val : "Unknown")); // to_str can return nullptr
 #ifdef DEFINED_UTLS
     VLOG_PARAM_STRING("UTLS RX support", safe_mce_sys().enable_utls_rx, MCE_DEFAULT_UTLS_RX,
                       SYS_VAR_UTLS_RX, safe_mce_sys().enable_utls_rx ? "Enabled " : "Disabled");
@@ -857,10 +866,14 @@ void print_xlio_global_settings()
     vlog_printf(VLOG_INFO, "Cmd Line: %s\n", safe_mce_sys().app_name);
 
     // Use DEBUG level logging with more details in RPM release builds
-    vlog_levels_t log_level = VLOG_DEBUG;
+    /* coverity[value_overwrite : FALSE_POSITIVE] coverity[value_overwrite]*/
+    vlog_levels_t log_level;
 #if !defined(PRJ_LIBRARY_RELEASE) || (PRJ_LIBRARY_RELEASE == 0)
     // If non RPM (development builds) use more verbosity
     log_level = VLOG_DEFAULT;
+#else
+    // RPM release builds - less verbosity
+    log_level = VLOG_DEBUG;
 #endif
     vlog_printf(log_level, "Current Time: %s", ctime(&clock));
     vlog_printf(log_level, "Pid: %5u\n", getpid());

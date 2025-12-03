@@ -31,8 +31,14 @@ select_call::select_call(int *off_fds_buffer, offloaded_mode_t *off_modes_buffer
     , m_writefds(writefds)
     , m_exceptfds(exceptfds)
     , m_timeout(timeout)
+    , m_orig_readfds {}
+    , m_orig_writefds {}
+    , m_orig_exceptfds {}
     , m_nfds_with_cq(0)
     , m_b_run_prepare_to_poll(false)
+    , m_os_rfds {0}
+    , m_os_wfds {0}
+    , m_cq_rfds {0}
 {
     int fd;
 
@@ -49,12 +55,12 @@ select_call::select_call(int *off_fds_buffer, offloaded_mode_t *off_modes_buffer
     bool offloaded_write = !!m_writefds;
 
     if (offloaded_read || offloaded_write) {
-        FD_ZERO(&m_os_rfds, m_nfds);
-        FD_ZERO(&m_os_wfds, m_nfds);
+        //FD_ZERO(&m_os_rfds, m_nfds);
+        //FD_ZERO(&m_os_wfds, m_nfds);
 
         // covers the case of select(readfds = NULL)
         if (!m_readfds) {
-            FD_ZERO(&m_cq_rfds, m_nfds);
+            //FD_ZERO(&m_cq_rfds, m_nfds);
             m_readfds = &m_cq_rfds;
         }
 

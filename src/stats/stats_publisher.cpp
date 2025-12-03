@@ -221,6 +221,7 @@ void xlio_shmem_stats_open(vlog_levels_t **p_p_xlio_log_level, uint8_t **p_p_xli
     p_shmem = g_sh_mem_info.p_sh_stats;
 
     free(buf);
+    /* coverity[assigned_pointer] */
     buf = NULL;
 
     goto success;

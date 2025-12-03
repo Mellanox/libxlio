@@ -30,11 +30,13 @@
 #define ibch_logfuncall __log_info_funcall
 
 ib_ctx_handler::ib_ctx_handler(struct ib_ctx_handler_desc *desc)
-    : m_flow_tag_enabled(false)
+    : m_p_ibv_pd(nullptr)
+    , m_flow_tag_enabled(false)
     , m_on_device_memory(0)
     , m_removed(false)
     , m_lock_umr("spin_lock_umr")
     , m_p_ctx_time_converter(nullptr)
+    , m_str {}
 {
     if (!desc) {
         ibch_logpanic("Invalid ib_ctx_handler");
@@ -195,7 +197,7 @@ int parse_dpcp_version(const char *dpcp_ver)
 
 dpcp::adapter *ib_ctx_handler::set_dpcp_adapter()
 {
-    dpcp::status status = dpcp::DPCP_ERR_NO_SUPPORT;
+    dpcp::status status;
     dpcp::provider *p_provider = nullptr;
     dpcp::adapter_info *dpcp_lst = nullptr;
     size_t adapters_num = 0;
@@ -275,6 +277,7 @@ dpcp::adapter *ib_ctx_handler::set_dpcp_adapter()
 
                 ret = xlio_ib_mlx5dv_init_obj(&mlx5_obj, MLX5DV_OBJ_PD);
                 if (ret) {
+                    /* coverity[uninit_use_in_call] */
                     ibch_logerr("failed getting mlx5_pd for %p (errno=%d %m) ", m_p_ibv_pd, errno);
                     ibv_dealloc_pd(pd);
                     delete adapter;

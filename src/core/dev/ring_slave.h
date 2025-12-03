@@ -311,7 +311,7 @@ protected:
     template <typename KEY4T, typename KEY2T, typename HDR> friend class steering_handler;
 
 private:
-    uint8_t padding[58]; // make class size up to a whole cache line
+    uint8_t padding[58] = {}; // make class size up to a whole cache line
 };
 
 static_assert(sizeof(ring_slave) % 64 == 0, "ring_slave size is not a multiple of cache line size");

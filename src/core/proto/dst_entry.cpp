@@ -447,7 +447,7 @@ bool dst_entry::conf_l2_hdr_and_snd_wqe_eth()
 bool dst_entry::conf_hdrs_and_snd_wqe()
 {
     transport_type_t tranposrt = XLIO_TRANSPORT_ETH;
-    bool ret_val = true;
+    bool ret_val;
 
     dst_logdbg("dst_entry %s configuring the header template", to_str().c_str());
 

@@ -42,6 +42,7 @@ ring_slave::ring_slave(int if_index, ring *parent, bool use_locks)
     , m_flow_tag_enabled(false)
     , m_b_sysvar_eth_mc_l2_only_rules(safe_mce_sys().eth_mc_l2_only_rules)
     , m_b_sysvar_mc_force_flowtag(safe_mce_sys().mc_force_flowtag)
+    , padding {}
 {
     net_device_val *p_ndev = nullptr;
     const slave_data_t *p_slave = nullptr;

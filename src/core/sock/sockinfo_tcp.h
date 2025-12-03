@@ -91,7 +91,9 @@ struct socket_option_t {
         , optlen(_optlen)
         , optval(malloc(optlen))
     {
-        memcpy(optval, _optval, optlen);
+        if (likely(optval)) {
+            memcpy(optval, _optval, optlen);
+        }
     }
 
     ~socket_option_t()

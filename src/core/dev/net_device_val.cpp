@@ -129,6 +129,9 @@ const std::string ring_alloc_logic_attr::to_str() const
 
 net_device_val::net_device_val(struct net_device_val_desc *desc)
     : m_lock(MULTILOCK_RECURSIVE, "net_device_val")
+    , m_l2_if_addr {}
+    , m_l2_bc_addr {}
+    , m_base_name {}
 {
     bool valid = false;
     ib_ctx_handler *ib_ctx;
@@ -207,7 +210,6 @@ net_device_val::net_device_val(struct net_device_val_desc *desc)
 
     nd_logdbg("Check interface '%s' (index=%d flags=%X)", get_ifname(), get_if_idx(), get_flags());
 
-    valid = false;
     ib_ctx = g_p_ib_ctx_handler_collection->get_ib_ctx(get_ifname_link());
     switch (m_bond) {
     case LAG_8023ad:
@@ -1312,7 +1314,7 @@ L2_address *net_device_val::create_L2_address(const char *ifname)
         delete m_p_L2_addr;
         m_p_L2_addr = nullptr;
     }
-    unsigned char hw_addr[ETH_ALEN];
+    unsigned char hw_addr[ETH_ALEN] = {0};
     get_local_ll_addr(ifname, hw_addr, ETH_ALEN, false);
     return new ETH_addr(hw_addr);
 }
@@ -1323,7 +1325,7 @@ void net_device_val::create_br_address(const char *ifname)
         delete m_p_br_addr;
         m_p_br_addr = nullptr;
     }
-    uint8_t hw_addr[ETH_ALEN];
+    uint8_t hw_addr[ETH_ALEN] = {0};
     get_local_ll_addr(ifname, hw_addr, ETH_ALEN, true);
     m_p_br_addr = new ETH_addr(hw_addr);
 
@@ -1444,7 +1446,7 @@ bool net_device_val::verify_qp_creation(const char *ifname, enum ibv_qp_type qp_
     qp_init_attr.qp_type = qp_type;
 
     // find ib_cxt
-    char base_ifname[IFNAMSIZ];
+    char base_ifname[IFNAMSIZ] = {0};
     get_base_interface_name((const char *)(ifname), base_ifname, sizeof(base_ifname));
     int port_num = get_port_from_ifname(base_ifname);
     ib_ctx_handler *p_ib_ctx = g_p_ib_ctx_handler_collection->get_ib_ctx(base_ifname);
