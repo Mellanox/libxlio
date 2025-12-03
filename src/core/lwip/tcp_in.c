@@ -577,14 +577,12 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
             pcb->mss = LWIP_MIN(pcb->mss, tcp_send_mss(pcb));
 #endif /* TCP_CALCULATE_EFF_SEND_MSS */
 
-            /* Set ssthresh again after changing pcb->mss (already set in tcp_connect
-             * but for the default value of pcb->mss) */
-            pcb->ssthresh = pcb->mss * 10;
-#if TCP_CC_ALGO_MOD
+            /* Re-initialize cwnd/ssthresh after MSS negotiation.
+             * For TSO: maintain aggressive values independent of negotiated MSS.
+             * For non-TSO: scale with negotiated MSS per RFC 3390.
+             */
+            tcp_set_initial_cwnd_ssthresh(pcb);
             cc_conn_init(pcb);
-#else
-            pcb->cwnd = ((pcb->cwnd == 1) ? (pcb->mss * 2) : pcb->mss);
-#endif
             rseg = pcb->unacked;
             pcb->unacked = rseg->next;
 
