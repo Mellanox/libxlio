@@ -979,7 +979,7 @@ int sockinfo_udp::setsockopt(int __level, int __optname, __const void *__optval,
         } break;
 
         case IP_MULTICAST_TTL: {
-            int n_mc_ttl = -1;
+            int n_mc_ttl;
             if (__optlen == sizeof(m_n_mc_ttl_hop_lim)) {
                 n_mc_ttl = *(char *)__optval;
             } else if (__optlen == sizeof(int)) {
@@ -2192,7 +2192,7 @@ tx_packet_to_os:
         errno = EINVAL;
         ret = -1;
     } else {
-    ret = tx_os(tx_arg.opcode, p_iov, sz_iov, __flags, __dst, __dstlen);
+        ret = tx_os(tx_arg.opcode, p_iov, sz_iov, __flags, __dst, __dstlen);
     }
 
 tx_packet_to_os_stats:

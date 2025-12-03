@@ -924,8 +924,9 @@ int show_socket_stats(socket_instance_block_t *p_instance,
         size_t fd = (size_t)p_instance[i].skt_stats.fd;
         if (p_instance[i].b_enabled && g_fd_mask[fd]) {
             num_act_inst++;
-            socket_instance_block_t *prev_inst = p_prev_instance_block ? &p_prev_instance_block[i] : NULL;
-            
+            socket_instance_block_t *prev_inst =
+                p_prev_instance_block ? &p_prev_instance_block[i] : NULL;
+
             switch (user_params.view_mode) {
             case e_basic:
                 show_basic_stats(&p_instance[i], prev_inst);
@@ -1448,9 +1449,8 @@ bool check_if_process_running(char *pid_str)
 {
     char proccess_proc_dir[FILE_NAME_MAX_SIZE] = {0};
     struct stat st;
-    int n = -1;
+    int n = snprintf(proccess_proc_dir, sizeof(proccess_proc_dir), "/proc/%s", pid_str);
 
-    n = snprintf(proccess_proc_dir, sizeof(proccess_proc_dir), "/proc/%s", pid_str);
     if (likely((0 < n) && (n < (int)sizeof(proccess_proc_dir)))) {
         return stat(proccess_proc_dir, &st) == 0;
     }
@@ -1460,9 +1460,8 @@ bool check_if_process_running(char *pid_str)
 bool check_if_process_running(int pid)
 {
     char pid_str[MAX_BUFF_SIZE] = {0};
-    int n = -1;
+    int n = snprintf(pid_str, sizeof(pid_str), "%d", pid);
 
-    n = snprintf(pid_str, sizeof(pid_str), "%d", pid);
     if (likely((0 < n) && (n < (int)sizeof(pid_str)))) {
         return check_if_process_running(pid_str);
     }
@@ -1632,7 +1631,9 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
         switch (user_params.print_details_mode) {
         case e_totals:
             /* coverity[forward_null] */
-            num_act_inst = show_socket_stats(p_sh_mem->skt_inst_arr, NULL, p_sh_mem->max_skt_inst_num, &printed_line_num, &p_sh_mem->mc_info, pid);
+            num_act_inst =
+                show_socket_stats(p_sh_mem->skt_inst_arr, NULL, p_sh_mem->max_skt_inst_num,
+                                  &printed_line_num, &p_sh_mem->mc_info, pid);
             show_iomux_stats(&p_sh_mem->iomux, NULL, &printed_line_num);
             if (user_params.view_mode == e_full) {
                 show_cq_stats(p_sh_mem->cq_inst_arr, NULL);
@@ -1702,9 +1703,8 @@ bool check_if_app_match(char *app_name, char *pid_str)
     char app_full_name[PATH_MAX] = {0};
     char proccess_proc_dir[FILE_NAME_MAX_SIZE] = {0};
     char *app_base_name = NULL;
-    int n = -1;
+    int n = snprintf(proccess_proc_dir, sizeof(proccess_proc_dir), "/proc/%s/exe", pid_str);
 
-    n = snprintf(proccess_proc_dir, sizeof(proccess_proc_dir), "/proc/%s/exe", pid_str);
     if (likely((0 < n) && (n < (int)sizeof(proccess_proc_dir)))) {
         n = readlink(proccess_proc_dir, app_full_name, sizeof(app_full_name) - 1);
         if (n > 0) {
@@ -1738,10 +1738,8 @@ void clean_inactive_sh_ibj()
             proccess_running = check_if_process_running(dirent->d_name + pid_offset);
             if (!proccess_running) {
                 char to_delete[PATH_MAX + 1] = {0};
-                int n = -1;
-
-                n = snprintf(to_delete, sizeof(to_delete), "%s/%s",
-                             user_params.xlio_stats_path.c_str(), dirent->d_name);
+                int n = snprintf(to_delete, sizeof(to_delete), "%s/%s",
+                                 user_params.xlio_stats_path.c_str(), dirent->d_name);
                 if (likely((0 < n) && (n < (int)sizeof(to_delete)))) {
                     unlink(to_delete);
                 }

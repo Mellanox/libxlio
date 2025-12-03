@@ -72,7 +72,7 @@ ring_simple::ring_simple(int if_index, ring *parent, bool use_locks)
     BULLSEYE_EXCLUDE_BLOCK_END
 
     const slave_data_t *p_slave = p_ndev->get_slave(get_if_index());
-    if(unlikely(!p_slave)) {
+    if (unlikely(!p_slave)) {
         ring_logerr("Cannot find slave for a ring");
         throw_xlio_exception("Cannot find slave for a ring");
     }
@@ -199,19 +199,14 @@ void ring_simple::create_resources()
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    const slave_data_t *p_slave = p_ndev->get_slave(get_if_index());
-    if(unlikely(!p_slave)) {
-        ring_logerr("Cannot find slave for a ring");
-        throw_xlio_exception("Cannot find slave for a ring");
-    }
-    ring_logdbg("new ring_simple()");
-
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (!p_slave) {
+    const slave_data_t *p_slave = p_ndev->get_slave(get_if_index());
+    if (unlikely(!p_slave)) {
         ring_logerr("Cannot find slave for a ring");
         throw_xlio_exception("Cannot find slave for a ring");
     }
     BULLSEYE_EXCLUDE_BLOCK_END
+    ring_logdbg("new ring_simple()");
 
     save_l2_address(p_slave->p_L2_addr);
     m_p_tx_comp_event_channel = ibv_create_comp_channel(m_p_ib_ctx->get_ibv_context());
@@ -390,7 +385,7 @@ void ring_simple::create_resources()
 
 int ring_simple::request_notification(cq_type_t cq_type, uint64_t poll_sn)
 {
-    int ret = 1;
+    int ret;
     if (likely(CQT_RX == cq_type)) {
         m_lock_ring_rx.lock();
         ret = m_p_cq_mgr_rx->request_notification(poll_sn);

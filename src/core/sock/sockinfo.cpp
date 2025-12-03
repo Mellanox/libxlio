@@ -878,11 +878,12 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
                         flow_key.get_protocol(), flow_key.get_family(), flow_key.get_local_if());
                     p_nd_resources =
                         create_nd_resources(ip_addr(new_key.get_local_if(), new_key.get_family()));
-                    if (!p_nd_resources || !p_nd_resources->p_ring->attach_flow(new_key, this, false)) {
+                    if (!p_nd_resources ||
+                        !p_nd_resources->p_ring->attach_flow(new_key, this, false)) {
                         lock_rx_q();
-                        si_logerr("Failed to %s for %s", 
-                                p_nd_resources ? "attach flow" : "create ND resources",
-                                new_key.to_str().c_str());
+                        si_logerr("Failed to %s for %s",
+                                  p_nd_resources ? "attach flow" : "create ND resources",
+                                  new_key.to_str().c_str());
                         g_p_app->add_second_4t_rule = false;
                         return false;
                     }
@@ -1661,10 +1662,11 @@ void sockinfo::move_descs(ring *p_ring, descq_t *toq, descq_t *fromq, bool own)
     mem_buf_desc_t *temp;
     const size_t size = fromq->size();
     for (size_t i = 0; i < size; i++) {
+        /* coverity[returned_null] */
         temp = fromq->front();
         fromq->pop_front();
         toq->push_back(temp);
-        /* coverity[null_deref] */
+        /* coverity[nonnull] */
         if (!__xor(own, p_ring->is_member(temp->p_desc_owner))) {
         } else {
             fromq->push_back(temp);
@@ -1703,10 +1705,11 @@ void sockinfo::push_descs_rx_ready(descq_t *cache)
     const size_t size = (cache ? cache->size() : 0);
 
     for (size_t i = 0; i < size; i++) {
+        /* coverity[returned_null] */
         temp = cache->front();
         cache->pop_front();
         m_n_rx_pkt_ready_list_count++;
-        /* coverity[null_deref] */
+        /* coverity[nonnull] */
         m_rx_ready_byte_count += temp->rx.sz_payload;
         if (m_p_socket_stats) {
             m_p_socket_stats->n_rx_ready_pkt_count++;

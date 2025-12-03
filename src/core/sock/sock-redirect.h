@@ -71,9 +71,9 @@
 #define SYSCALL_ERRNO_UNSUPPORTED(_func, ...) SYSCALL(_func, __VA_ARGS__)
 #define VALID_SYSCALL(_func)                  (true)
 #else
-#define XLIO_SYMBOL(_func)   _func
+#define XLIO_SYMBOL(_func) _func
 #ifdef __COVERITY__
-#define COVERITY_VAR_DEREF_OP \
+#define COVERITY_VAR_DEREF_OP                                                                      \
     _Pragma("coverity compliance deviate \"var_deref_op\" \
              \"Intentional dereference; pointer validated elsewhere\"")
 #else
@@ -88,13 +88,13 @@
      orig_os_api._func(__VA_ARGS__)) /* coverity[var_deref_op] */
 =======
 
-#define SYSCALL(_func, ...)                                                    \
-    __extension__({                                                            \
-        if (!VALID_SYSCALL(_func)) {                                           \
-            get_orig_funcs();                                                  \
-        }                                                                      \
-        COVERITY_VAR_DEREF_OP                                                  \
-        orig_os_api._func(__VA_ARGS__);                                        \
+#define SYSCALL(_func, ...)                                                                        \
+    __extension__({                                                                                \
+        if (!VALID_SYSCALL(_func)) {                                                               \
+            get_orig_funcs();                                                                      \
+        }                                                                                          \
+        COVERITY_VAR_DEREF_OP                                                                      \
+        orig_os_api._func(__VA_ARGS__);                                                            \
     })
 >>>>>>> 0ce2a0c2 (issue: 4583806 Coverity FORWARD_NULL fixes)
 #define SYSCALL_ERRNO_UNSUPPORTED(_func, ...)                                                      \
