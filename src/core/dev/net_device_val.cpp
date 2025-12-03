@@ -1312,7 +1312,7 @@ L2_address *net_device_val::create_L2_address(const char *ifname)
         delete m_p_L2_addr;
         m_p_L2_addr = nullptr;
     }
-    unsigned char hw_addr[ETH_ALEN];
+    unsigned char hw_addr[ETH_ALEN] = {0};
     get_local_ll_addr(ifname, hw_addr, ETH_ALEN, false);
     return new ETH_addr(hw_addr);
 }
@@ -1323,7 +1323,7 @@ void net_device_val::create_br_address(const char *ifname)
         delete m_p_br_addr;
         m_p_br_addr = nullptr;
     }
-    uint8_t hw_addr[ETH_ALEN];
+    uint8_t hw_addr[ETH_ALEN] = {0};
     get_local_ll_addr(ifname, hw_addr, ETH_ALEN, true);
     m_p_br_addr = new ETH_addr(hw_addr);
 
@@ -1444,6 +1444,7 @@ bool net_device_val::verify_qp_creation(const char *ifname, enum ibv_qp_type qp_
     qp_init_attr.qp_type = qp_type;
 
     // find ib_cxt
+    /* coverity[uninit_use_in_call : FALSE] */
     char base_ifname[IFNAMSIZ];
     get_base_interface_name((const char *)(ifname), base_ifname, sizeof(base_ifname));
     int port_num = get_port_from_ifname(base_ifname);

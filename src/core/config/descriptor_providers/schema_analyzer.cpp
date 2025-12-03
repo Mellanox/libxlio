@@ -82,11 +82,16 @@ property_type schema_analyzer::determine_property_type()
     // Get JSON type for further classification
     json_object *type_field =
         json_utils::get_field(m_property_obj, config_strings::schema::JSON_TYPE);
-    std::string json_type_str;
-    if (json_object_get_type(type_field) == json_type_string) {
-        json_type_str = json_object_get_string(type_field);
-    }
-
+        std::string json_type_str;
+        if (json_object_get_type(type_field) == json_type_string) {
+            const char *type_cstr = json_object_get_string(type_field);
+            if (type_cstr) {
+                json_type_str = type_cstr;
+            }
+        } else {
+            throw_xlio_exception("Type field is not a string for: " + m_path);
+        }
+        
     // Object properties with nested properties
     if (json_type_str == config_strings::schema_types::JSON_TYPE_OBJECT) {
         json_object *properties_field =
@@ -122,22 +127,28 @@ std::type_index schema_analyzer::determine_value_type()
 
     // Standard type determination
     json_object *type_field =
-        json_utils::get_field(m_property_obj, config_strings::schema::JSON_TYPE);
+    json_utils::get_field(m_property_obj, config_strings::schema::JSON_TYPE);
 
-    std::string type_str = json_object_get_string(type_field);
-    if (type_str == config_strings::schema_types::JSON_TYPE_BOOLEAN) {
-        return typeid(bool);
-    } else if (type_str == config_strings::schema_types::JSON_TYPE_INTEGER) {
-        return typeid(int64_t);
-    } else if (type_str == config_strings::schema_types::JSON_TYPE_STRING) {
-        return typeid(std::string);
-    } else if (type_str == config_strings::schema_types::JSON_TYPE_OBJECT) {
-        return typeid(json_object *);
-    } else if (type_str == config_strings::schema_types::JSON_TYPE_ARRAY) {
-        return typeid(std::vector<std::experimental::any>);
+    const char *type_cstr = json_object_get_string(type_field);
+    if (type_cstr) {
+        std::string type_str = type_cstr;
+        if (type_str == config_strings::schema_types::JSON_TYPE_BOOLEAN) {
+            return typeid(bool);
+        } else if (type_str == config_strings::schema_types::JSON_TYPE_INTEGER) {
+            return typeid(int64_t);
+        } else if (type_str == config_strings::schema_types::JSON_TYPE_STRING) {
+            return typeid(std::string);
+        } else if (type_str == config_strings::schema_types::JSON_TYPE_OBJECT) {
+            return typeid(json_object *);
+        } else if (type_str == config_strings::schema_types::JSON_TYPE_ARRAY) {
+            return typeid(std::vector<std::experimental::any>);
+        }
+        // If we reach here, type_cstr was valid but unrecognized
+        throw_xlio_exception("Unsupported type: " + type_str + " for key: " + m_path);
     }
+    // type_cstr was NULL
+    throw_xlio_exception("Missing type for property at: " + m_path);
 
-    throw_xlio_exception("Unsupported type: " + type_str + " for key: " + m_path);
 }
 
 std::experimental::optional<std::experimental::any> schema_analyzer::determine_default_value(
@@ -178,7 +189,11 @@ std::experimental::optional<std::string> schema_analyzer::determine_title()
         throw_xlio_exception("Title must be a string for: " + m_path + " - " +
                              std::to_string(json_object_get_type(title_field)));
     }
-    return std::experimental::optional<std::string>(json_object_get_string(title_field));
+    const char *title_str = json_object_get_string(title_field);
+    if (title_str) {
+        return std::experimental::optional<std::string>(title_str);
+    }
+    return std::experimental::optional<std::string>();  // No title available
 }
 
 memory_size_extension_config_t schema_analyzer::analyze_memory_size_extension_config()
@@ -272,7 +287,14 @@ enum_mapping_config_t schema_analyzer::analyze_enum_mapping_config()
     for_each_oneof_option(one_of_field, [&](json_object *option) {
         json_object *type_field = json_utils::get_field(option, config_strings::schema::JSON_TYPE);
 
-        std::string type_str = json_object_get_string(type_field);
+        // Check for NULL before creating std::string
+        const char *type_cstr = json_object_get_string(type_field);
+        if (!type_cstr) {
+            // Skip this option if type is not a string or doesn't exist
+            throw_xlio_exception("Type is not a string or doesn't exist for: " + m_path);
+        }
+        
+        std::string type_str = type_cstr;
         if (type_str == config_strings::schema_types::JSON_TYPE_INTEGER) {
             int_option = option;
         } else if (type_str == config_strings::schema_types::JSON_TYPE_STRING) {
@@ -354,10 +376,12 @@ bool schema_analyzer::has_constraint_fields()
         int one_of_length = json_object_array_length(one_of_field);
         for (int i = 0; i < one_of_length; i++) {
             json_object *option = json_object_array_get_idx(one_of_field, i);
-            json_object *type_field =
-                json_utils::get_field(option, config_strings::schema::JSON_TYPE);
-
-            std::string type_str = json_object_get_string(type_field);
+            json_object *type_field = json_utils::get_field(option, config_strings::schema::JSON_TYPE);
+            const char *type_str_cstr = type_field ? json_object_get_string(type_field) : nullptr;
+            if (!type_str_cstr) {
+                continue;  // Skip this option if no valid type
+            }
+            std::string type_str = type_str_cstr;
 
             // For integer option, check if it has constraints
             if (type_str == config_strings::schema_types::JSON_TYPE_INTEGER) {

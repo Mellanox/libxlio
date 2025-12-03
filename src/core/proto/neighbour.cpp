@@ -1596,13 +1596,13 @@ bool neigh_eth::send_arp_request(bool is_broadcast)
         dst = m_p_dev->get_br_address();
     }
 
-    const unsigned char *peer_mac = dst->get_address();
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!src || !dst) {
         neigh_logdbg("src or dst is NULL not sending ARP");
         return false;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
+    const unsigned char *peer_mac = dst->get_address();
 
     m_id = m_p_ring->generate_id(src->get_address(), dst->get_address(),
                                  m_p_dev->get_vlan() ? htons(ETH_P_8021Q) : htons(ETH_P_ARP),

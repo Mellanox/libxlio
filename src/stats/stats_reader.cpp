@@ -106,7 +106,7 @@ typedef enum { e_K = 1024, e_M = 1048576 } units_t;
 #define VLOG_DETAILS_NUM        4
 #define INIT_XLIO_LOG_DETAILS   -1
 #define NANO_TO_MICRO(n)        (((n) + 500) / 1000)
-#define SEC_TO_MICRO(n)         ((n)*1000000)
+#define SEC_TO_MICRO(n)         ((n)*1000000ULL) // dealing with overflow
 #define INFO_TABS               "\t\t\t\t"
 #define TIME_DIFF_in_MICRO(start, end)                                                             \
     (SEC_TO_MICRO((end).tv_sec - (start).tv_sec) + (NANO_TO_MICRO((end).tv_nsec - (start).tv_nsec)))
@@ -924,17 +924,19 @@ int show_socket_stats(socket_instance_block_t *p_instance,
         size_t fd = (size_t)p_instance[i].skt_stats.fd;
         if (p_instance[i].b_enabled && g_fd_mask[fd]) {
             num_act_inst++;
+            socket_instance_block_t *prev_inst = p_prev_instance_block ? &p_prev_instance_block[i] : NULL;
+            
             switch (user_params.view_mode) {
             case e_basic:
-                show_basic_stats(&p_instance[i], &p_prev_instance_block[i]);
+                show_basic_stats(&p_instance[i], prev_inst);
                 *p_printed_lines_num += BASIC_STATS_LINES_NUM;
                 break;
             case e_medium:
-                print_medium_stats(&p_instance[i], &p_prev_instance_block[i]);
+                print_medium_stats(&p_instance[i], prev_inst);
                 *p_printed_lines_num += MEDIUM_STATS_LINES_NUM;
                 break;
             case e_full:
-                show_full_stats(&p_instance[i], &p_prev_instance_block[i], p_mc_grp_info);
+                show_full_stats(&p_instance[i], prev_inst, p_mc_grp_info);
                 break;
             case e_netstat_like:
                 print_netstat_like(&p_instance[i].skt_stats, p_mc_grp_info, g_stats_file, pid);
@@ -1598,7 +1600,10 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
         if (user_params.csv_stream.is_open()) {
             char buf[64] = "N/A,N/A,";
             time_t t = time(nullptr);
-            strftime(buf, sizeof(buf), "%F,%T,", localtime(&t));
+            struct tm tm_info;
+            if (localtime_r(&t, &tm_info) != nullptr) {
+                strftime(buf, sizeof(buf), "%F,%T,", &tm_info);
+            }
             user_params.csv_stream
                 << buf << ring_packets.update(p_sh_mem) << socket_counters.update(p_sh_mem)
                 << tls_counters.update(p_sh_mem) << global_counters.update(p_sh_mem)
@@ -1627,8 +1632,7 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
         switch (user_params.print_details_mode) {
         case e_totals:
             /* coverity[forward_null] */
-            num_act_inst = show_socket_stats(p_sh_mem->skt_inst_arr, NULL, p_sh_mem->max_skt_inst_num,
-                                  &printed_line_num, &p_sh_mem->mc_info, pid);
+            num_act_inst = show_socket_stats(p_sh_mem->skt_inst_arr, NULL, p_sh_mem->max_skt_inst_num, &printed_line_num, &p_sh_mem->mc_info, pid);
             show_iomux_stats(&p_sh_mem->iomux, NULL, &printed_line_num);
             if (user_params.view_mode == e_full) {
                 show_cq_stats(p_sh_mem->cq_inst_arr, NULL);

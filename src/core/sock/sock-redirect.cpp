@@ -1521,6 +1521,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(recvmmsg)(int __fd, struct mmsghdr *__mmsghdr, uns
     }
 
     if (__timeout) {
+        // coverity[check_return]
         gettime(&start_time);
     }
     sockinfo *p_socket_object = nullptr;
@@ -1543,6 +1544,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(recvmmsg)(int __fd, struct mmsghdr *__mmsghdr, uns
                 __flags |= MSG_DONTWAIT;
             }
             if (__timeout) {
+                // coverity[check_return]
                 gettime(&current_time);
                 ts_sub(&current_time, &start_time, &delta_time);
                 if (ts_cmp(&delta_time, __timeout, >)) {

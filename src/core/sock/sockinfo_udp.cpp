@@ -1707,6 +1707,7 @@ void sockinfo_udp::drop_rx_ready_byte_count(size_t n_rx_bytes_limit)
 {
     m_lock_rcv.lock();
     while (m_n_rx_pkt_ready_list_count) {
+        /* coverity[returned_null : FALSE] */
         mem_buf_desc_t *p_rx_pkt_desc = m_rx_pkt_ready_list.front();
         if (m_rx_ready_byte_count > n_rx_bytes_limit || p_rx_pkt_desc->rx.sz_payload == 0U) {
             m_rx_pkt_ready_list.pop_front();
@@ -2191,7 +2192,7 @@ tx_packet_to_os:
         errno = EINVAL;
         ret = -1;
     } else {
-        ret = tx_os(tx_arg.opcode, p_iov, sz_iov, __flags, __dst, __dstlen);
+    ret = tx_os(tx_arg.opcode, p_iov, sz_iov, __flags, __dst, __dstlen);
     }
 
 tx_packet_to_os_stats:
@@ -2239,6 +2240,7 @@ int sockinfo_udp::rx_verify_available_data()
     if (!m_rx_pkt_ready_list.empty()) {
         std::lock_guard<decltype(m_lock_rcv)> locker(m_lock_rcv);
         if (!m_rx_pkt_ready_list.empty()) {
+            /* coverity[null_deref] */
             return m_rx_pkt_ready_list.front()->rx.sz_payload;
         }
     }
@@ -3047,6 +3049,7 @@ timestamps_t *sockinfo_udp::get_socket_timestamps()
         si_udp_logdbg("m_rx_pkt_ready_list empty");
         return nullptr;
     }
+    /* coverity[null_deref] */
     return &m_rx_pkt_ready_list.front()->rx.timestamps;
 }
 

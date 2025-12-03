@@ -585,7 +585,7 @@ int get_iftype_from_ifname(const char *ifname)
     __log_func("find interface type for ifname '%s'", ifname);
 
     char iftype_filename[100];
-    char iftype_value_str[32];
+    char iftype_value_str[32] = {0};
     char base_ifname[32];
     int iftype_value = -1;
 
@@ -1015,7 +1015,7 @@ out:
 bool get_bond_name(IN const char *ifname, OUT char *bond_name, IN int sz)
 {
     char upper_path[256];
-    char base_ifname[IFNAMSIZ];
+    char base_ifname[IFNAMSIZ]={0};
     get_base_interface_name(ifname, base_ifname, sizeof(base_ifname));
     struct ifaddrs *ifaddr, *ifa;
     bool ret = false;

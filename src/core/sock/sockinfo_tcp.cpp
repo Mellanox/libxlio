@@ -457,9 +457,11 @@ void sockinfo_tcp::listen_entity_context()
 {
 
     std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
-
+    sockinfo_tcp_listen_context *parent_listen_context = get_parent_listen_context();
     if (!attach_as_uc_receiver(ROLE_TCP_SERVER)) {
-        get_parent_listen_context()->increment_error_counter();
+        if (likely(parent_listen_context)) {
+            parent_listen_context->increment_error_counter();
+        }
         si_tcp_logerr(
             "Unable to attach uc receiver for listen socket rss_child in entity context.");
         return;
@@ -467,7 +469,9 @@ void sockinfo_tcp::listen_entity_context()
 
     // Set socket state to accept ready
     m_sock_state = TCP_SOCK_ACCEPT_READY;
-    get_parent_listen_context()->increment_finish_counter();
+    if (likely(parent_listen_context)) {
+        parent_listen_context->increment_finish_counter();
+    }
 
     si_tcp_logdbg("Listen socket successfully setup in entity context (sock: %p, backlog: %d)",
                   this, m_backlog);
@@ -897,8 +901,10 @@ void sockinfo_tcp::clear_rx_ready_buffers()
     m_rx_ready_byte_count += m_rx_pkt_ready_offset;
     IF_STATS(m_p_socket_stats->n_rx_ready_byte_count += m_rx_pkt_ready_offset);
     while (m_n_rx_pkt_ready_list_count) {
+        // coverity[returned_null : FALSE]
         mem_buf_desc_t *p_rx_pkt_desc = m_rx_pkt_ready_list.get_and_pop_front();
         m_n_rx_pkt_ready_list_count--;
+        /* coverity[null_dereference] */
         m_rx_ready_byte_count -= p_rx_pkt_desc->rx.sz_payload;
         if (m_p_socket_stats) {
             m_p_socket_stats->n_rx_ready_pkt_count--;
