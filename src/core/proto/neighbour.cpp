@@ -820,6 +820,7 @@ void neigh_entry::handle_neigh_event(neigh_nl_event *nl_ev)
         }
 
         // Check if neigh L2 address changed (HA event) and restart the state machine
+        /* coverity[check_return] */
         priv_handle_neigh_is_l2_changed(nl_info->lladdr);
         break;
     }

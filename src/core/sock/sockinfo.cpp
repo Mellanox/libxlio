@@ -911,7 +911,9 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
         rx_flow_map_t::iterator rx_flow_iter = m_rx_flow_map.find(flow_key_3t);
         if (rx_flow_iter != m_rx_flow_map.end()) {
             si_logdbg("Removing (and detaching) 3 tuple now that we added a stronger 5 tuple");
-            detach_receiver(flow_key_3t);
+            if (!detach_receiver(flow_key_3t)) {
+                si_logwarn("Failed to detach 3 tuple flow key %s", flow_key_3t.to_str().c_str());
+            }
         }
     }
 
@@ -1870,7 +1872,9 @@ void sockinfo::shutdown_rx()
     rx_flow_map_t::iterator rx_flow_iter = m_rx_flow_map.begin();
     while (rx_flow_iter != m_rx_flow_map.end()) {
         flow_tuple_with_local_if detach_key = rx_flow_iter->first;
-        detach_receiver(detach_key);
+        if (!detach_receiver(detach_key)) {
+            si_logwarn("Failed to detach receiver for socket %p", this);
+        }
         rx_flow_iter = m_rx_flow_map.begin(); // Pop next flow rule
     }
 

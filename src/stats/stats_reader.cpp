@@ -1626,6 +1626,7 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
         }
         switch (user_params.print_details_mode) {
         case e_totals:
+            /* coverity[forward_null] */
             num_act_inst =
                 show_socket_stats(p_sh_mem->skt_inst_arr, NULL, p_sh_mem->max_skt_inst_num,
                                   &printed_line_num, &p_sh_mem->mc_info, pid);

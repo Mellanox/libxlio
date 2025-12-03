@@ -2804,8 +2804,11 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
         connect_threads_mode();
         return -1; // Currently no blocking socket support.
     }
-
-    prepare_dst_to_send(false);
+    /* coverity[check_return] */
+    if (!prepare_dst_to_send(false)) {
+        si_tcp_logwarn("Unable to prepare dst entry.");
+        return -1;
+    }
 
     if (!connect_bind_any_and_check_rules()) {
         return -1;
@@ -2900,8 +2903,10 @@ bool sockinfo_tcp::connect_bind_any_and_check_rules()
     }
 
     if (bound_any_addr) {
-        tcp_bind(&m_pcb, reinterpret_cast<const ip_addr_t *>(&m_bound.get_ip_addr()),
-                 ntohs(m_bound.get_in_port()), m_pcb.is_ipv6);
+        if (unlikely(tcp_bind(&m_pcb, reinterpret_cast<const ip_addr_t *>(&m_bound.get_ip_addr()),
+                              ntohs(m_bound.get_in_port()), m_pcb.is_ipv6) != 0)) {
+            return false;
+        }
     }
 
     m_conn_state = TCP_CONN_CONNECTING;
@@ -3720,7 +3725,9 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     /* if attach failed, we should continue getting traffic through the listen socket */
     // todo register as 3-tuple rule for the case the listener is gone?
     if (!new_sock->m_b_attached) {
-        new_sock->attach_as_uc_receiver(role_t(NULL), true);
+        if (!new_sock->attach_as_uc_receiver(role_t(NULL), true)) {
+            __log_dbg("Unable to attach uc receiver.");
+        }
         new_sock->m_b_attached = true;
     }
 
