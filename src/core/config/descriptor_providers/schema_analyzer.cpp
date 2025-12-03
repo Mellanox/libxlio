@@ -238,10 +238,13 @@ constraint_config schema_analyzer::analyze_constraint_config()
         for_each_oneof_option(one_of_field, [&](json_object *option) {
             json_object *type_field =
                 json_utils::get_field(option, config_strings::schema::JSON_TYPE);
-            std::string type_str = json_object_get_string(type_field);
-            if (type_str == config_strings::schema_types::JSON_TYPE_INTEGER) {
-                extract_constraints_from_json(option, config);
-            }
+                const char *type_cstr = json_object_get_string(type_field);
+                if (type_cstr) {
+                    std::string type_str = type_cstr;
+                    if (type_str == config_strings::schema_types::JSON_TYPE_INTEGER) {
+                        extract_constraints_from_json(option, config);
+                    }
+                }
         });
     }
 

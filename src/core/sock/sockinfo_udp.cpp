@@ -2187,7 +2187,12 @@ ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
 
 tx_packet_to_os:
     // Calling OS transmit
-    ret = tx_os(tx_arg.opcode, p_iov, sz_iov, __flags, __dst, __dstlen);
+    if (unlikely(!p_iov)) {
+        errno = EINVAL;
+        ret = -1;
+    } else {
+        ret = tx_os(tx_arg.opcode, p_iov, sz_iov, __flags, __dst, __dstlen);
+    }
 
 tx_packet_to_os_stats:
     save_stats_tx_os(ret);

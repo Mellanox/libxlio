@@ -661,6 +661,10 @@ memerr:
             assert(pcb->last_unsent->p->tot_len == last_seglen);
         }
     }
+    /* Restore desc->opaque on error path to match success path behavior. */
+    if (desc->attr == PBUF_DESC_EXPRESS) {
+        desc->opaque = opaque;
+    }
     return ERR_MEM;
 }
 

@@ -227,6 +227,7 @@ int state_machine::process_event(int event, void *ev_data)
 
     // Run print event info function
     if (m_new_event_notify_func) {
+        /* coverity[check_return][unchecked_value] */
         m_new_event_notify_func(get_curr_state(), event, m_info.app_hndl);
     }
 
