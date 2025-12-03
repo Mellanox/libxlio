@@ -7,6 +7,9 @@
 #include "allocator.h"
 
 #include <stdlib.h>
+#include <sys/mman.h>
+#include <errno.h>
+#include <string.h>
 
 #include <mutex>
 
@@ -20,6 +23,9 @@
 
 // See description at the xlio_memory_cb_t definition.
 xlio_memory_cb_t g_user_memory_cb = nullptr;
+
+extern bool g_init_ibv_fork_done;
+extern enum ibv_fork_status g_ibv_fork_status;
 
 xlio_allocator::xlio_allocator()
     : xlio_allocator(nullptr, nullptr)
@@ -250,6 +256,21 @@ uint32_t xlio_registrator::register_memory_single(void *data, size_t size,
     errno = 0; // ibv_reg_mr() set errno=12 despite successful returning
     __log_info_dbg("Registered memory on dev %s addr=%p size=%zu", p_ib_ctx_h->get_ibname(), data,
                    size);
+
+    /*
+     * Explicit madvise(MADV_DONTFORK) to protect RDMA memory from CoW during fork().
+     * libibverbs may incorrectly skip this when reporting IBV_FORK_UNNEEDED.
+     */
+    if (g_init_ibv_fork_done && g_ibv_fork_status != IBV_FORK_ENABLED) {
+        __log_info_dbg("no libibverbs fork protection, calling madvise(MADV_DONTFORK): dev=%s "
+                       "addr=%p size=%zu",
+                       p_ib_ctx_h->get_ibname(), data, size);
+        const int rc = madvise(data, size, MADV_DONTFORK);
+        if (rc != 0) {
+            __log_info_warn("madvise(MADV_DONTFORK) FAILED: dev=%s addr=%p size=%zu, errno=%d (%s)",
+                            p_ib_ctx_h->get_ibname(), data, size, errno, strerror(errno));
+        }
+    }
 
     return lkey;
 }
