@@ -1664,7 +1664,7 @@ void sockinfo::move_descs(ring *p_ring, descq_t *toq, descq_t *fromq, bool own)
         temp = fromq->front();
         fromq->pop_front();
         toq->push_back(temp);
-        /* coverity[FORWARD_NULL : FALSE][var_deref_op] */
+        /* coverity[null_deref] */
         if (!__xor(own, p_ring->is_member(temp->p_desc_owner))) {
         } else {
             fromq->push_back(temp);
@@ -1698,6 +1698,7 @@ void sockinfo::pop_descs_rx_ready(descq_t *cache, ring *p_ring)
 void sockinfo::push_descs_rx_ready(descq_t *cache)
 {
     // Assume locked by owner!!!
+    /* coverity[returned_null] */
     mem_buf_desc_t *temp;
     const size_t size = (cache ? cache->size() : 0);
 
@@ -1705,7 +1706,7 @@ void sockinfo::push_descs_rx_ready(descq_t *cache)
         temp = cache->front();
         cache->pop_front();
         m_n_rx_pkt_ready_list_count++;
-        /* coverity[FORWARD_NULL : FALSE][var_deref_op] */
+        /* coverity[null_deref] */
         m_rx_ready_byte_count += temp->rx.sz_payload;
         if (m_p_socket_stats) {
             m_p_socket_stats->n_rx_ready_pkt_count++;

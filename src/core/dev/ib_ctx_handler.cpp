@@ -35,6 +35,7 @@ ib_ctx_handler::ib_ctx_handler(struct ib_ctx_handler_desc *desc)
     , m_removed(false)
     , m_lock_umr("spin_lock_umr")
     , m_p_ctx_time_converter(nullptr)
+    , m_str{}
 {
     if (!desc) {
         ibch_logpanic("Invalid ib_ctx_handler");

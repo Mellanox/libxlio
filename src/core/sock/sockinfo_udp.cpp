@@ -2240,7 +2240,7 @@ int sockinfo_udp::rx_verify_available_data()
     if (!m_rx_pkt_ready_list.empty()) {
         std::lock_guard<decltype(m_lock_rcv)> locker(m_lock_rcv);
         if (!m_rx_pkt_ready_list.empty()) {
-            /* coverity[null_deref] */
+            /* coverity[returned_null][null_deref] */
             return m_rx_pkt_ready_list.front()->rx.sz_payload;
         }
     }
@@ -3049,7 +3049,7 @@ timestamps_t *sockinfo_udp::get_socket_timestamps()
         si_udp_logdbg("m_rx_pkt_ready_list empty");
         return nullptr;
     }
-    /* coverity[null_deref] */
+    /* coverity[returned_null][null_deref] */
     return &m_rx_pkt_ready_list.front()->rx.timestamps;
 }
 

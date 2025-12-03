@@ -603,9 +603,9 @@ int get_if_mtu_from_ifname(const char *ifname)
 {
     __log_func("find interface mtu for ifname '%s'", ifname);
 
-    char if_mtu_len_filename[100];
-    char if_mtu_value_str[32];
-    char base_ifname[32];
+    char if_mtu_len_filename[100] = {0};
+    char if_mtu_value_str[32] = {0};
+    char base_ifname[32] = {0};
     int if_mtu_value = 0;
 
     /* initially try reading MTU from ifname. In case of failure (expected in alias ifnames) - try
@@ -649,7 +649,8 @@ class socket_context_manager {
     netlink_buffer m_buf;
 
 public:
-    socket_context_manager()
+    socket_context_manager() 
+    : m_buf{{}}
     {
         struct timeval tv = {
             .tv_sec = 0,

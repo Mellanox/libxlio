@@ -305,6 +305,7 @@ bool route_table_mgr::route_resolve(IN route_rule_table_key key, OUT route_resul
 
 void route_table_mgr::update_entry(INOUT route_entry *p_ent, bool b_register_to_net_dev /*= false*/)
 {
+    /* coverity[null_deref] */
     rt_mgr_logdbg("entry [%p]", p_ent);
 
     route_table_t &rt = p_ent->get_key().get_family() == AF_INET ? m_table_in4 : m_table_in6;

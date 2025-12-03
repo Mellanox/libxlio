@@ -31,6 +31,9 @@ select_call::select_call(int *off_fds_buffer, offloaded_mode_t *off_modes_buffer
     , m_writefds(writefds)
     , m_exceptfds(exceptfds)
     , m_timeout(timeout)
+    , m_orig_readfds{}
+    , m_orig_writefds{}
+    , m_orig_exceptfds{}
     , m_nfds_with_cq(0)
     , m_b_run_prepare_to_poll(false)
 {
