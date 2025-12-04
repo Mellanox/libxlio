@@ -126,6 +126,14 @@ int netlink_socket_mgr::recv_info(int sockfd, uint32_t pid, uint32_t seq, char *
         buf_ptr += readLen;
         msgLen += readLen;
 
+        // Particularly in vm environment MSG_DONE is set in the last chunk
+        for (; NLMSG_OK(nlHdr, readLen); nlHdr = NLMSG_NEXT(nlHdr, readLen)) {
+            // We should exit the while loop as this is the last header
+            // if none of them has NLMSG_DONE then we should expect more data
+            if (nlHdr->nlmsg_type == NLMSG_DONE)
+                break;
+        }
+
         // Loop until this is the last message of expected reply
     } while (nlHdr->nlmsg_type != NLMSG_DONE && (nlHdr->nlmsg_flags & NLM_F_MULTI));
 
