@@ -210,7 +210,6 @@ net_device_val::net_device_val(struct net_device_val_desc *desc)
 
     nd_logdbg("Check interface '%s' (index=%d flags=%X)", get_ifname(), get_if_idx(), get_flags());
 
-    valid = false;
     ib_ctx = g_p_ib_ctx_handler_collection->get_ib_ctx(get_ifname_link());
     switch (m_bond) {
     case LAG_8023ad:
