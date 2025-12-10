@@ -424,11 +424,13 @@ void print_env_vars_xlio_global_settings()
     }
     vlog_printf(VLOG_INFO, "Cmd Line: %s\n", safe_mce_sys().app_name);
 
-    // Use DEBUG level logging with more details in RPM release builds
-    vlog_levels_t log_level = VLOG_DEBUG;
+    vlog_levels_t log_level;
 #if !defined(PRJ_LIBRARY_RELEASE) || (PRJ_LIBRARY_RELEASE == 0)
     // If non RPM (development builds) use more verbosity
     log_level = VLOG_DEFAULT;
+#else
+    // Use DEBUG level logging with more details in RPM release builds
+    log_level = VLOG_DEBUG;
 #endif
     vlog_printf(log_level, "Current Time: %s", ctime(&clock));
     vlog_printf(log_level, "Pid: %5u\n", getpid());
@@ -860,11 +862,13 @@ void print_xlio_global_settings()
     }
     vlog_printf(VLOG_INFO, "Cmd Line: %s\n", safe_mce_sys().app_name);
 
-    // Use DEBUG level logging with more details in RPM release builds
-    vlog_levels_t log_level = VLOG_DEBUG;
+    vlog_levels_t log_level;
 #if !defined(PRJ_LIBRARY_RELEASE) || (PRJ_LIBRARY_RELEASE == 0)
     // If non RPM (development builds) use more verbosity
     log_level = VLOG_DEFAULT;
+#else
+    // Use DEBUG level logging with more details in RPM release builds
+    log_level = VLOG_DEBUG;
 #endif
     vlog_printf(log_level, "Current Time: %s", ctime(&clock));
     vlog_printf(log_level, "Pid: %5u\n", getpid());
