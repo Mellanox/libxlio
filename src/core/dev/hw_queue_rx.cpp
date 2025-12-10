@@ -87,14 +87,15 @@ bool hw_queue_rx::configure_rq(ibv_comp_channel *rx_comp_event_channel)
 
     xlio_ib_mlx5_cq_t mlx5_cq;
     memset(&mlx5_cq, 0, sizeof(mlx5_cq));
-    xlio_ib_mlx5_get_cq(m_p_cq_mgr_rx->get_ibv_cq_hndl(), &mlx5_cq);
-
-    hwqrx_logdbg(
-        "Creating RQ of transport type '%s' on ibv device '%s' [%p], cq: %p(%u), wre: %d, sge: %d",
-        priv_xlio_transport_type_str(m_p_ring->get_transport_type()),
-        m_p_ib_ctx_handler->get_ibname(), m_p_ib_ctx_handler->get_ibv_device(), m_p_cq_mgr_rx,
-        mlx5_cq.cq_num, m_rx_num_wr, m_rx_sge);
-
+    if (unlikely(xlio_ib_mlx5_get_cq(m_p_cq_mgr_rx->get_ibv_cq_hndl(), &mlx5_cq) != 0)) {
+        hwqrx_logwarn("Failed to get CQ (errno=%d %m)", errno);
+    } else {
+        hwqrx_logdbg("Creating RQ of transport type '%s' on ibv device '%s' [%p], cq: %p(%u), wre: "
+                     "%d, sge: %d",
+                     priv_xlio_transport_type_str(m_p_ring->get_transport_type()),
+                     m_p_ib_ctx_handler->get_ibname(), m_p_ib_ctx_handler->get_ibv_device(),
+                     m_p_cq_mgr_rx, mlx5_cq.cq_num, m_rx_num_wr, m_rx_sge);
+    }
     if (safe_mce_sys().enable_striding_rq) {
         m_rx_sge = 2U; // Striding-RQ needs a reserved segment.
         m_strq_wqe_reserved_seg = 1U;

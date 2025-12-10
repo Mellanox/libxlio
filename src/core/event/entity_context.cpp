@@ -152,6 +152,7 @@ void entity_context::add_incoming_socket(sockinfo *sock)
 void entity_context::rx_data_recvd_job(const job_desc &job)
 {
     if (job.buf) {
+        /* coverity[check_return] */
         job.buf->p_desc_owner->reclaim_recv_buffers(job.buf);
     }
 

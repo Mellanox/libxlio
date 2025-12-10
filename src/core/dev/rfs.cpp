@@ -254,8 +254,12 @@ bool rfs::attach_flow(sockinfo *sink)
         if (g_p_app->type != APP_NONE && g_p_app->add_second_4t_rule) {
             // This is second 4 tuple rule for the same worker (when number
             // of workers is not power of two)
-            create_flow();
-            rfs_logdbg("Added second rule to worker: %d", g_p_app->get_worker_id());
+            if (unlikely(!create_flow())) {
+                rfs_logwarn("Failed to create second rule for worker: %d",
+                            g_p_app->get_worker_id());
+            } else {
+                rfs_logdbg("Added second rule to worker: %d", g_p_app->get_worker_id());
+            }
         }
 #endif
     }
