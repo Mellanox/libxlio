@@ -617,6 +617,7 @@ void print_env_vars_xlio_global_settings()
     VLOG_PARAM_STRING("Force Flowtag for MC", safe_mce_sys().mc_force_flowtag,
                       MCE_DEFAULT_MC_FORCE_FLOWTAG, SYS_VAR_MC_FORCE_FLOWTAG,
                       safe_mce_sys().mc_force_flowtag ? "Enabled " : "Disabled");
+    /* coverity[returned_null][dereference] */
     VLOG_STR_PARAM_STRING("Striding RQ", option_3::to_str(safe_mce_sys().enable_strq_env),
                           option_3::to_str(MCE_DEFAULT_STRQ), SYS_VAR_STRQ,
                           option_3::to_str(safe_mce_sys().enable_strq_env));
@@ -746,11 +747,13 @@ void print_env_vars_xlio_global_settings()
                       MCE_DEFAULT_NEIGH_UC_ARP_DELAY_MSEC, SYS_VAR_NEIGH_UC_ARP_DELAY_MSEC);
     VLOG_PARAM_NUMBER("Num of neigh restart retries", safe_mce_sys().neigh_num_err_retries,
                       MCE_DEFAULT_NEIGH_NUM_ERR_RETRIES, SYS_VAR_NEIGH_NUM_ERR_RETRIES);
+    /* coverity[returned_null][dereference] */
     VLOG_STR_PARAM_STRING("TSO support", option_3::to_str(safe_mce_sys().enable_tso),
                           option_3::to_str(MCE_DEFAULT_TSO), SYS_VAR_TSO,
                           option_3::to_str(safe_mce_sys().enable_tso));
     VLOG_PARAM_STRING("TSO max size", safe_mce_sys().max_tso_sz, MCE_DEFAULT_MAX_TSO_SIZE,
                       SYS_VAR_MAX_TSO_SIZE, option_size::to_str(safe_mce_sys().max_tso_sz));
+    /* coverity[returned_null][dereference] */
     VLOG_STR_PARAM_STRING("LRO support", option_3::to_str(safe_mce_sys().enable_lro),
                           option_3::to_str(MCE_DEFAULT_LRO), SYS_VAR_LRO,
                           option_3::to_str(safe_mce_sys().enable_lro));

@@ -794,6 +794,7 @@ mem_buf_desc_t *ring_simple::get_tx_buffers(pbuf_type type, uint32_t n_num_mem_b
     }
     /* coverity[returned_null] */
     head = pool.get_and_pop_back();
+    /* coverity[null_deref] */
     head->lwip_pbuf.ref = 1;
     assert(head->lwip_pbuf.type == type);
     head->lwip_pbuf.type = type;

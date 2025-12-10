@@ -1665,6 +1665,7 @@ void sockinfo::move_descs(ring *p_ring, descq_t *toq, descq_t *fromq, bool own)
         /* coverity[returned_null] */
         temp = fromq->front();
         fromq->pop_front();
+        /* coverity[nonnull] */
         if (!__xor(own, p_ring->is_member(temp->p_desc_owner))) {
             toq->push_back(temp);
         } else {
@@ -1708,6 +1709,7 @@ void sockinfo::push_descs_rx_ready(descq_t *cache)
         temp = cache->front();
         cache->pop_front();
         m_n_rx_pkt_ready_list_count++;
+        /* coverity[nonnull] */
         m_rx_ready_byte_count += temp->rx.sz_payload;
         if (m_p_socket_stats) {
             m_p_socket_stats->n_rx_ready_pkt_count++;
@@ -2142,18 +2144,22 @@ ssize_t sockinfo::tx_os(const tx_call_t call_type, const iovec *p_iov, const ssi
     switch (call_type) {
     case TX_WRITE:
         __log_info_func("calling os transmit with orig write");
+        /* coverity[null_dereference][forward_null]*/
         return SYSCALL(write, m_fd, p_iov[0].iov_base, p_iov[0].iov_len);
 
     case TX_WRITEV:
         __log_info_func("calling os transmit with orig writev");
+        /* coverity[null_dereference][forward_null]*/
         return SYSCALL(writev, m_fd, p_iov, sz_iov);
 
     case TX_SEND:
         __log_info_func("calling os transmit with orig send");
+        /* coverity[null_dereference][forward_null]*/
         return SYSCALL(send, m_fd, p_iov[0].iov_base, p_iov[0].iov_len, __flags);
 
     case TX_SENDTO:
         __log_info_func("calling os transmit with orig sendto");
+        /* coverity[null_dereference][forward_null]*/
         return SYSCALL(sendto, m_fd, p_iov[0].iov_base, p_iov[0].iov_len, __flags, __to, __tolen);
 
     case TX_SENDMSG: {
