@@ -543,6 +543,7 @@ inline uint8_t hw_queue_tx::fill_wqe(xlio_ibv_send_wr *pswr)
 
     // assume packet is full inline
     if (data_len <= max_inline_len && xlio_send_wr_opcode(*pswr) == XLIO_IBV_WR_SEND) {
+        /* coverity[returned_null] */
         uint8_t *data_addr = sga.get_data(&inline_len); // data for inlining in ETH header
         data_len -= inline_len;
         hwqtx_logfunc(
@@ -555,6 +556,7 @@ inline uint8_t hw_queue_tx::fill_wqe(xlio_ibv_send_wr *pswr)
 
         // Fill Ethernet segment with header inline, static data
         // were populated in preset after previous packet send
+        /* coverity[null_deref] */
         memcpy(cur_seg + offsetof(struct mlx5_wqe_eth_seg, inline_hdr_start), data_addr,
                MLX5_ETH_INLINE_HEADER_SIZE);
         cur_seg += sizeof(struct mlx5_wqe_eth_seg);
