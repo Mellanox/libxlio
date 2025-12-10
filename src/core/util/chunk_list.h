@@ -132,7 +132,7 @@ public:
         if (unlikely(empty())) {
             return NULL;
         }
-        /* coverity[null_dereference] [check_return]*/
+        /* coverity[returned_null][dereference] */
         return m_used_containers.front()->m_p_buffer[m_front];
     }
 

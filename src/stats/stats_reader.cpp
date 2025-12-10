@@ -924,17 +924,20 @@ int show_socket_stats(socket_instance_block_t *p_instance,
         size_t fd = (size_t)p_instance[i].skt_stats.fd;
         if (p_instance[i].b_enabled && g_fd_mask[fd]) {
             num_act_inst++;
+            socket_instance_block_t *prev_inst =
+                p_prev_instance_block ? &p_prev_instance_block[i] : NULL;
+
             switch (user_params.view_mode) {
             case e_basic:
-                show_basic_stats(&p_instance[i], &p_prev_instance_block[i]);
+                show_basic_stats(&p_instance[i], prev_inst);
                 *p_printed_lines_num += BASIC_STATS_LINES_NUM;
                 break;
             case e_medium:
-                print_medium_stats(&p_instance[i], &p_prev_instance_block[i]);
+                print_medium_stats(&p_instance[i], prev_inst);
                 *p_printed_lines_num += MEDIUM_STATS_LINES_NUM;
                 break;
             case e_full:
-                show_full_stats(&p_instance[i], &p_prev_instance_block[i], p_mc_grp_info);
+                show_full_stats(&p_instance[i], prev_inst, p_mc_grp_info);
                 break;
             case e_netstat_like:
                 print_netstat_like(&p_instance[i].skt_stats, p_mc_grp_info, g_stats_file, pid);
@@ -1598,6 +1601,7 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
         if (user_params.csv_stream.is_open()) {
             char buf[64] = "N/A,N/A,";
             time_t t = time(nullptr);
+            /* coverity[returned_null][dereference] */
             strftime(buf, sizeof(buf), "%F,%T,", localtime(&t));
             user_params.csv_stream
                 << buf << ring_packets.update(p_sh_mem) << socket_counters.update(p_sh_mem)
@@ -1626,6 +1630,7 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
         }
         switch (user_params.print_details_mode) {
         case e_totals:
+            /* coverity[forward_null] */
             num_act_inst =
                 show_socket_stats(p_sh_mem->skt_inst_arr, NULL, p_sh_mem->max_skt_inst_num,
                                   &printed_line_num, &p_sh_mem->mc_info, pid);

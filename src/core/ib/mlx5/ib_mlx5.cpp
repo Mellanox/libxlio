@@ -38,6 +38,7 @@ int xlio_ib_mlx5_get_qp_tx(xlio_ib_mlx5_qp_t *mlx5_qp)
 
     VALGRIND_MAKE_MEM_DEFINED(&dqp, sizeof(dqp));
     mlx5_qp->qpn = mlx5_qp->qp->qp_num;
+    /* coverity[var_deref_op] */
     mlx5_qp->sq.dbrec = &dqp.dbrec[MLX5_SND_DBR];
     mlx5_qp->sq.buf = dqp.sq.buf;
     mlx5_qp->sq.wqe_cnt = dqp.sq.wqe_cnt;

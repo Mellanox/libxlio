@@ -207,6 +207,7 @@ void hw_queue_rx::post_recv_buffers(descq_t *p_buffers, size_t count)
     hwqrx_logfuncall("");
     // Called from cq_mgr_rx context under cq_mgr_rx::LOCK!
     while (count--) {
+        /* coverity[returned_null][dereference] */
         post_recv_buffer(p_buffers->get_and_pop_front());
     }
 }
