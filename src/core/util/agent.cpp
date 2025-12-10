@@ -171,7 +171,9 @@ err:
     if (m_pid_fd > 0) {
         int ret = 0;
         NOT_IN_USE(ret);
+        /* coverity[RESOURCE_LEAK] */
         sys_call(ret, close, m_pid_fd);
+        /* coverity[leaked_handle] */
         m_pid_fd = -1;
         unlink(m_pid_file);
     }

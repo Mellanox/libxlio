@@ -255,11 +255,13 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb)
                Below this line, 'pcb' may not be dereferenced! */
         aborted:
             pcb->is_in_input = 0;
+            /* coverity[assigned_pointer] */
             in_data.recv_data = NULL;
 
             /* tcp_receive() sets in_data.inseg.p to NULL in case of recv_data */
             if (in_data.inseg.p != NULL) {
                 pbuf_free(in_data.inseg.p);
+                /* coverity[assigned_pointer] */
                 in_data.inseg.p = NULL;
             }
         } else if (PCB_IN_LISTEN_STATE(pcb)) {
