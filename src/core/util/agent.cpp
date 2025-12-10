@@ -71,6 +71,8 @@ agent::agent()
     : m_state(AGENT_CLOSED)
     , m_sock_fd(-1)
     , m_pid_fd(-1)
+    , m_sock_file {}
+    , m_pid_file {}
     , m_msg_num(AGENT_DEFAULT_MSG_NUM)
 {
     int rc = 0;

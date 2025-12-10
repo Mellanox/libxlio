@@ -159,7 +159,7 @@ void route_table_mgr::parse_entry(struct nlmsghdr *nl_header)
 
 void route_table_mgr::parse_attr(struct rtattr *rt_attribute, route_val &val)
 {
-    char if_name[IFNAMSIZ];
+    char if_name[IFNAMSIZ] = {0};
 
     switch (rt_attribute->rta_type) {
     case RTA_DST:
