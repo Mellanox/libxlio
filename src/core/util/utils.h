@@ -443,9 +443,11 @@ public:
         m_timer_countdown = m_interval_it;
 
         if (!ts_isset(&m_start)) {
+            // coverity[check_return]
             gettime(&m_start);
         }
         // update timer
+        // coverity[check_return]
         gettime(&m_current);
         ts_sub(&m_current, &m_start, &m_elapsed);
         vlog_printf(VLOG_FUNC_ALL, "update loops_timer (elapsed time=%ld sec %ld usec\n",
