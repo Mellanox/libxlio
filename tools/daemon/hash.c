@@ -86,6 +86,7 @@ void hash_destroy(hash_t ht)
             ht->hash_table = NULL;
         }
         free(ht);
+        /* coverity[assigned_pointer] */
         ht = NULL;
     }
 }

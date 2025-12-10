@@ -29,6 +29,7 @@ int xlio_ib_mlx5_get_qp_tx(xlio_ib_mlx5_qp_t *mlx5_qp)
     obj.qp.in = mlx5_qp->qp;
     obj.qp.out = &dqp;
 #if defined(DEFINED_DV_RAW_QP_HANDLES)
+    /* coverity[assigned_value] */
     dqp.comp_mask |= MLX5DV_QP_MASK_RAW_QP_HANDLES;
 #endif /* DEFINED_DV_RAW_QP_HANDLES */
     ret = xlio_ib_mlx5dv_init_obj(&obj, MLX5DV_OBJ_QP);
