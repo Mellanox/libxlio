@@ -150,7 +150,7 @@ public:
     bool enabled = true;
 
 private:
-    size_t times[TOTAL_CONTEXTS];
+    size_t times[TOTAL_CONTEXTS] = {};
 };
 
 struct cpu_usage_show {
