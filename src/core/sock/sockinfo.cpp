@@ -878,10 +878,12 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
                         flow_key.get_protocol(), flow_key.get_family(), flow_key.get_local_if());
                     p_nd_resources =
                         create_nd_resources(ip_addr(new_key.get_local_if(), new_key.get_family()));
-                    if (!p_nd_resources->p_ring->attach_flow(new_key, this, false)) {
+                    if (!p_nd_resources ||
+                        !p_nd_resources->p_ring->attach_flow(new_key, this, false)) {
                         lock_rx_q();
-                        si_logerr("Failed to attach %s to ring %p", new_key.to_str().c_str(),
-                                  p_nd_resources->p_ring);
+                        si_logerr("Failed to %s for %s",
+                                  p_nd_resources ? "attach flow" : "create ND resources",
+                                  new_key.to_str().c_str());
                         g_p_app->add_second_4t_rule = false;
                         return false;
                     }
@@ -911,7 +913,9 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
         rx_flow_map_t::iterator rx_flow_iter = m_rx_flow_map.find(flow_key_3t);
         if (rx_flow_iter != m_rx_flow_map.end()) {
             si_logdbg("Removing (and detaching) 3 tuple now that we added a stronger 5 tuple");
-            detach_receiver(flow_key_3t);
+            if (unlikely(!detach_receiver(flow_key_3t))) {
+                si_logwarn("Failed to detach 3 tuple flow key %s", flow_key_3t.to_str().c_str());
+            }
         }
     }
 
@@ -1658,6 +1662,7 @@ void sockinfo::move_descs(ring *p_ring, descq_t *toq, descq_t *fromq, bool own)
     mem_buf_desc_t *temp;
     const size_t size = fromq->size();
     for (size_t i = 0; i < size; i++) {
+        /* coverity[returned_null] */
         temp = fromq->front();
         fromq->pop_front();
         if (!__xor(own, p_ring->is_member(temp->p_desc_owner))) {
@@ -1694,10 +1699,12 @@ void sockinfo::pop_descs_rx_ready(descq_t *cache, ring *p_ring)
 void sockinfo::push_descs_rx_ready(descq_t *cache)
 {
     // Assume locked by owner!!!
+    /* coverity[returned_null] */
     mem_buf_desc_t *temp;
     const size_t size = (cache ? cache->size() : 0);
 
     for (size_t i = 0; i < size; i++) {
+        /* coverity[returned_null] */
         temp = cache->front();
         cache->pop_front();
         m_n_rx_pkt_ready_list_count++;
@@ -1870,7 +1877,9 @@ void sockinfo::shutdown_rx()
     rx_flow_map_t::iterator rx_flow_iter = m_rx_flow_map.begin();
     while (rx_flow_iter != m_rx_flow_map.end()) {
         flow_tuple_with_local_if detach_key = rx_flow_iter->first;
-        detach_receiver(detach_key);
+        if (unlikely(!detach_receiver(detach_key))) {
+            si_logwarn("Failed to detach receiver for socket %p", this);
+        }
         rx_flow_iter = m_rx_flow_map.begin(); // Pop next flow rule
     }
 

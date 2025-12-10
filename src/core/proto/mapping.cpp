@@ -293,6 +293,10 @@ mapping_t *mapping_cache::get_mapping(int local_fd, void *p_ctx)
         uid.dev = st.st_dev;
         uid.ino = st.st_ino;
         mapping = get_mapping_by_uid_unlocked(uid, p_ib_ctx);
+        if (!mapping) {
+            map_logwarn("Failed to create mapping for uid (dev=%lu, ino=%lu)", uid.dev, uid.ino);
+            goto quit;
+        }
         m_cache_fd[local_fd] = mapping;
         ++mapping->m_owners;
     }

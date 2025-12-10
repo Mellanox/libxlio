@@ -72,7 +72,9 @@ ring_simple::ring_simple(int if_index, ring *parent, bool use_locks)
     BULLSEYE_EXCLUDE_BLOCK_END
 
     const slave_data_t *p_slave = p_ndev->get_slave(get_if_index());
-
+    if (unlikely(!p_slave)) {
+        ring_logpanic("Cannot find slave for a ring");
+    }
     ring_logdbg("new ring_simple()");
 
     BULLSEYE_EXCLUDE_BLOCK_START
@@ -198,6 +200,9 @@ void ring_simple::create_resources()
     BULLSEYE_EXCLUDE_BLOCK_END
 
     const slave_data_t *p_slave = p_ndev->get_slave(get_if_index());
+    if (unlikely(!p_slave)) {
+        ring_logpanic("Cannot find slave for a ring");
+    }
 
     save_l2_address(p_slave->p_L2_addr);
     m_p_tx_comp_event_channel = ibv_create_comp_channel(m_p_ib_ctx->get_ibv_context());
@@ -787,7 +792,7 @@ mem_buf_desc_t *ring_simple::get_tx_buffers(pbuf_type type, uint32_t n_num_mem_b
             return nullptr;
         }
     }
-
+    /* coverity[returned_null] */
     head = pool.get_and_pop_back();
     head->lwip_pbuf.ref = 1;
     assert(head->lwip_pbuf.type == type);

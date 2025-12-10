@@ -74,9 +74,13 @@ void json_descriptor_provider::validate_schema(json_object *schema)
     }
 
     json_object *type_field = json_utils::get_field(schema, config_strings::schema::JSON_TYPE);
-    if (std::string(json_object_get_string(type_field)) !=
-        config_strings::schema_types::JSON_TYPE_OBJECT) {
-        throw_xlio_exception("Schema root must have type 'object'.");
+    if (type_field) {
+        const char *type_str = json_object_get_string(type_field);
+        if (type_str && std::string(type_str) != config_strings::schema_types::JSON_TYPE_OBJECT) {
+            throw_xlio_exception("Schema root must have type 'object'.");
+        }
+    } else {
+        throw_xlio_exception("Type field not found in schema");
     }
 }
 

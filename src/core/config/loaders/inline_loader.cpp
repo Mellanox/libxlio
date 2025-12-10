@@ -81,6 +81,9 @@ void inline_loader::parse_inline_data()
         validate_key_value_pair(kv);
 
         const std::string::size_type eq_pos = kv.find(EQUALS);
+        if (eq_pos == std::string::npos) {
+            throw_parsing_error("Missing equals sign in pair: " + kv, m_inline_config);
+        }
         std::string key = kv.substr(0, eq_pos);
         std::string val = kv.substr(eq_pos + 1);
 
