@@ -1118,9 +1118,8 @@ bool check_device_exist(const char *ifname, const char *path)
 {
     char device_path[256] = {0};
     int fd = -1;
-    int n = -1;
+    int n = snprintf(device_path, sizeof(device_path), path, ifname);
 
-    n = snprintf(device_path, sizeof(device_path), path, ifname);
     if (likely((0 < n) && (n < (int)sizeof(device_path)))) {
         fd = SYSCALL(open, device_path, O_RDONLY);
         if (fd >= 0) {
@@ -1136,7 +1135,7 @@ bool check_device_exist(const char *ifname, const char *path)
 
 bool check_device_name_ib_name(const char *ifname, const char *ibname)
 {
-    int n = -1;
+    int n;
     int fd = -1;
     char ib_path[IBV_SYSFS_PATH_MAX] = {0};
     const char *str_ifname = ifname;
