@@ -2015,6 +2015,7 @@ int sockinfo_udp::rx_request_notification(uint64_t poll_sn)
 
 ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
 {
+    /* coverity[nonnull] */
     const iovec *p_iov = tx_arg.attr.iov;
     const ssize_t sz_iov = tx_arg.attr.sz_iov;
     const int __flags = tx_arg.attr.flags;
@@ -2188,7 +2189,9 @@ ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
 
 tx_packet_to_os:
     // Calling OS transmit
-    /* coverity[null_dereference] [check_return]*/
+    // coverity[FORWARD_NULL : FALSE]
+    // coverity[var_deref_model : FALSE]
+    // coverity[null_dereference : FALSE]
     ret = tx_os(tx_arg.opcode, p_iov, sz_iov, __flags, __dst, __dstlen);
 
 tx_packet_to_os_stats:
