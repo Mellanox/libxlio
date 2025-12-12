@@ -795,3 +795,16 @@ TEST(config, config_registry_bad_enum_string)
             << msg;
     }
 }
+
+TEST(config, config_registry_string_to_boolean_type_mismatch_throws)
+{
+    // Test that uppercase TRUE in inline config is rejected for boolean parameters
+    env_setter inline_setter("XLIO_INLINE_CONFIG", "core.append_pid_to_path=TRUE");
+
+    std::queue<std::unique_ptr<loader>> loaders;
+    loaders.push(std::make_unique<inline_loader>("XLIO_INLINE_CONFIG"));
+
+    ASSERT_THROW(config_registry(std::move(loaders),
+                                 std::make_unique<json_descriptor_provider>(sample_descriptor)),
+                 xlio_exception);
+}
