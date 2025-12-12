@@ -82,8 +82,19 @@ static void lwip_ack_received(struct tcp_pcb *pcb, uint16_t type)
         }
     } else if (type == CC_ACK) {
         if (pcb->cwnd < pcb->ssthresh) {
-            if ((u32_t)(pcb->cwnd + pcb->mss) > pcb->cwnd) {
-                pcb->cwnd += pcb->mss;
+            /* Slow start: Increment cwnd by the number of bytes acknowledged.
+             * RFC 5681: "During slow start, a TCP increments cwnd by at most SMSS
+             * bytes for each ACK received that cumulatively acknowledges new data."
+             * This means cwnd grows by N*MSS when N segments are ACKed, giving
+             * exponential growth (e.g., cwnd doubles per RTT if all segments are ACKed).
+             *
+             * Fixed from incorrect linear growth (cwnd += mss) to proper exponential
+             * growth (cwnd += acked). This matches modern TCP implementations including
+             * Linux CUBIC and is critical for TSO where one ACK can acknowledge many
+             * segments (e.g., 64KB = 44 segments at 1460 MSS).
+             */
+            if ((u32_t)(pcb->cwnd + pcb->acked) > pcb->cwnd) {
+                pcb->cwnd += pcb->acked;
             }
             LWIP_DEBUGF(TCP_CWND_DEBUG, ("tcp_receive: slow start cwnd %" U32_F "\n", pcb->cwnd));
         } else {
@@ -99,28 +110,9 @@ static void lwip_ack_received(struct tcp_pcb *pcb, uint16_t type)
 
 static void lwip_cong_signal(struct tcp_pcb *pcb, uint32_t type)
 {
-    /* Set ssthresh to half of the minimum of the current
-     * cwnd and the advertised window */
-    if (pcb->cwnd > pcb->snd_wnd) {
-        pcb->ssthresh = pcb->snd_wnd / 2;
-    } else {
-        pcb->ssthresh = pcb->cwnd / 2;
-    }
-
-    /* The minimum value for ssthresh should be 2 MSS */
-    if ((u32_t)pcb->ssthresh < (u32_t)2 * pcb->mss) {
-        LWIP_DEBUGF(TCP_FR_DEBUG,
-                    ("tcp_receive: The minimum value for ssthresh %" U16_F
-                     " should be min 2 mss %" U16_F "...\n",
-                     pcb->ssthresh, 2 * pcb->mss));
-        pcb->ssthresh = 2 * pcb->mss;
-    }
-
-    if (type == CC_NDUPACK) {
-        pcb->cwnd = pcb->ssthresh + 3 * pcb->mss;
-    } else if (type == CC_RTO) {
-        pcb->cwnd = pcb->mss;
-    }
+    /* Use centralized TSO-aware congestion recovery logic */
+    bool is_rto = (type == CC_RTO);
+    tcp_reset_cwnd_on_congestion(pcb, is_rto);
 }
 
 static void lwip_post_recovery(struct tcp_pcb *pcb)
@@ -130,7 +122,12 @@ static void lwip_post_recovery(struct tcp_pcb *pcb)
 
 static void lwip_conn_init(struct tcp_pcb *pcb)
 {
-    pcb->cwnd = ((pcb->cwnd == 1) ? (pcb->mss * 2) : pcb->mss);
+    /* Only set cwnd if it's still uninitialized (placeholder value of 1).
+     * Otherwise, preserve the value set by tcp_set_initial_cwnd_ssthresh().
+     */
+    if (pcb->cwnd == 1) {
+        tcp_set_initial_cwnd_ssthresh(pcb);
+    }
 }
 
 #endif // TCP_CC_ALGO_MOD
