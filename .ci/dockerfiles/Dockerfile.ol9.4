@@ -18,9 +18,15 @@ RUN yum install yum-utils \
     autoconf automake make libtool git gcc-c++ libtool json-c-devel \
     clang rdma-core-devel openssl-devel glib2-devel libnl3-devel \
     python3-pip sudo rpm-build gtest-devel meson ninja-build \
-    libzip-devel libpcap-devel jsoncpp-devel \
+    libzip-devel libpcap-devel jsoncpp-devel curl \
  && yum clean all \
  && rm -rf /var/cache/yum && rm -rf /var/cache/dnf
+
+# Install DOCA
+COPY .ci/scripts/doca_install.sh /tmp/doca_install.sh
+RUN chmod +x /tmp/doca_install.sh && \
+    /tmp/doca_install.sh && \
+    rm -f /tmp/doca_install.sh /tmp/GPG-KEY-Mellanox.pub
 
 RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
     echo "root ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \

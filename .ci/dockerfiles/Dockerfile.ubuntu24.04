@@ -1,5 +1,12 @@
 ARG ARCH=x86_64
 FROM harbor.mellanox.com/hpcx/$ARCH/ubuntu22.04/base AS build
+
 RUN apt-get update \
- && apt-get install -y libjson-c-dev \
+ && apt-get install -y libjson-c-dev curl \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install DOCA
+COPY .ci/scripts/doca_install.sh /tmp/doca_install.sh
+RUN chmod +x /tmp/doca_install.sh && \
+    /tmp/doca_install.sh && \
+    rm -f /tmp/doca_install.sh /tmp/GPG-KEY-Mellanox.pub
