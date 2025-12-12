@@ -1,0 +1,91 @@
+---
+description: Write a commit message
+alwaysApply: false
+---
+
+Generate a well-formatted commit message for the currently staged changes following the project's conventions.
+
+## Prerequisites
+Before writing the commit message:
+1. Review the staged changes using `git diff --staged` to understand what was modified
+2. Identify the Redmine issue ID (check branch name, recent commits, or ask user if not found)
+3. Retrieve git configuration:
+   - User name: `git config user.name`
+   - User email: `git config user.email`
+
+## Template Format
+```
+issue: <redmine_issue_id> <concise-title>
+
+<detailed-body>
+
+Signed-off-by: <user_full_name> <user_email>
+```
+
+## Writing Guidelines
+
+### Subject Line (First Line)
+- **Format**: `issue: <redmine_issue_id> <concise-title>`
+- **Maximum length**: 51 characters (for optimal git log display)
+- **Style**: Use imperative mood (e.g., "Add feature" not "Added feature")
+- **Content**: Brief, actionable description of the change
+- **Example**: `issue: 12345 Fix memory leak in buffer pool`
+
+### Body
+- **Line length**: Maximum 72 characters per line (for readability in various git tools)
+- **Content**: 
+  - Explain WHAT changed and WHY (not HOW - the code shows that)
+  - Reference any technical decisions or trade-offs
+  - Mention side effects or related changes
+  - Use bullet points for multiple changes
+- **Tone**: Clear, technical, and informative
+- Leave a blank line between subject and body
+
+### Sign-off
+- **Format**: `Signed-off-by: Full Name <email@domain.com>`
+- Use values from git config (never hardcode)
+
+## Error Handling
+- If Redmine issue ID is missing: Check branch name first (e.g., "bugfix/12345-description"), then ask user
+- If staged changes are empty: Alert user and abort
+- If git config is incomplete: Ask user to configure git first
+
+## Examples
+
+### Example 1: Feature Addition
+```
+issue: 12345 Add zero-copy receive path
+
+Implement zero-copy receive mechanism using memory mapping
+to reduce CPU overhead in high-throughput scenarios.
+
+- Add new RX buffer pool with mmap allocation
+- Integrate with existing ring buffer architecture
+- Add configuration option XLIO_RX_ZERO_COPY
+
+Performance tests show 15% reduction in CPU usage for
+large packet workloads.
+
+Signed-off-by: John Doe <john.doe@example.com>
+```
+
+### Example 2: Bug Fix
+```
+issue: 45678 Fix race condition in CQ polling
+
+Resolve race between CQ event handler and polling thread
+that caused occasional missed completions.
+
+Added mutex protection around CQ state transitions and
+ensured proper ordering of event acknowledgment.
+
+Signed-off-by: Jane Smith <jane.smith@example.com>
+```
+
+## Process
+1. Run `git diff --staged` to analyze changes
+2. Extract/confirm Redmine issue ID
+3. Generate subject line (check 51 char limit)
+4. Write body explaining the changes clearly
+5. Add sign-off with git config values
+6. Verify format compliance before presenting to user
