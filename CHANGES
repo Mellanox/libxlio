@@ -1,3 +1,28 @@
+Version 3.61.0-1:
+Date + Time 2025-12-14
+=============================================================
+Fixed:
+	-RM #4745056 Explicit madvise fork protection
+	-RM #4432879 Start event handler thread during XLIO init
+	-RM #4728517 Fix credit prediction mismatch in hw_queue_tx
+	-RM #4556521 Unified Configuration: missing fields
+	-RM #4669942 Don't increase error counter on TCP EOF
+	-RM #4680622 Fix pktinfo test EINTR failures
+	-RM #4693625 Fixing rx.sz_payload sync with threads mode
+	-RM #4720794 Fix leak in worker threads mode
+	-RM #4642229 sockperf SIGINT leak
+	-RM #4392235 Fixing SQ corruption on full SQ completion
+	-RM #4636978 add clang-format pre-commit hook
+	-RM #4642229 Valgrind leak suppression
+	-RM #4664603 fix rx ring fast-path pointer
+	-RM #4669986 Fix integer underflow on EINTR
+	-RM #4680622 Fix sporadic udp_connect fails
+	-RM #4642229 fix memory leaks during termination
+	-RM #3886011 Removing UDP RX callback API
+	-RM #4664781 Fix job_queue_test.cpp style
+	-RM #4649652 fix exception config var display
+	-RM #4669087 fix resource leaks- ultra API tests
+
 Version 3.60.4-1:
 Date + Time 2025-10-09
 =============================================================
