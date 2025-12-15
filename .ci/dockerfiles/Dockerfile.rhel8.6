@@ -1,9 +1,9 @@
 ARG ARCH=x86_64
 ARG HARBOR_URL=nbu-harbor.gtm.nvidia.com
 FROM $HARBOR_URL/hpcx/$ARCH/rhel8.6/core:latest as core
-ARG _UID=6213
-ARG _GID=101
-ARG _LOGIN=swx-jenkins
+ARG _UID=152606
+ARG _GID=30
+ARG _LOGIN=svc-nbu-swx-media
 ARG _HOME=/var/home/$_LOGIN
 RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
     echo "root ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
@@ -14,7 +14,7 @@ RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
     mkdir /build && chown -R ${_LOGIN} /build
 
 FROM core as static
-ARG _LOGIN=swx-jenkins
+ARG _LOGIN=svc-nbu-swx-media
 
 RUN yum install -y yum-utils \
  && yum-config-manager --add-repo https://archives.fedoraproject.org/pub/archive/epel/7/x86_64/ \
@@ -32,9 +32,9 @@ ENTRYPOINT [ "/bin/bash", "--login", "--rcfile", "/etc/bashrc", "-c" ]
 
 
 FROM core as release
-ARG _UID=6213
-ARG _GID=101
-ARG _LOGIN=swx-jenkins
+ARG _UID=152606
+ARG _GID=30
+ARG _LOGIN=svc-nbu-swx-media
 ARG _HOME=/var/home/$_LOGIN
 ARG WEBREPO_URL=webrepo.gtm.nvidia.com
 RUN sed -i "s#http://webrepo#http://${WEBREPO_URL}#" /etc/yum.repos.d/* && \
