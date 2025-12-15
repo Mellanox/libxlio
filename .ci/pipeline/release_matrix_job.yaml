@@ -51,8 +51,6 @@ runs_on_dockers:
      tag: '20250418',
      build_args: '--no-cache --target bduck',
      category: 'tool',
-     runAsUser: '6213',
-     runAsGroup: '101'
     }
 
 steps:
