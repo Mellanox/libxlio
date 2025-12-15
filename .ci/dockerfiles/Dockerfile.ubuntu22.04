@@ -24,6 +24,12 @@ RUN apt-get update && \
     librdmacm-dev rdma-core libibverbs-dev g++ libtool automake autoconf pkgconf libnl-route-3-dev libnl-3-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+FROM unit-test AS ultra-api
+RUN apt-get update && \
+    apt-get install -y \
+    netcat \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Valgrind target, installs valgrind
 FROM tests AS vg
 RUN apt-get update && \

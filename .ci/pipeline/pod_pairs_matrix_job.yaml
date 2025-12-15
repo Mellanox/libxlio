@@ -1,0 +1,108 @@
+---
+job: LIBXLIO-pod-pairs
+
+registry_host: nbu-harbor.gtm.nvidia.com
+registry_auth: swx-infra_harbor_credentials
+registry_path: /swx-infra/media/xlio
+
+kubernetes:
+  privileged: true
+  cloud: il-ipp-blossom-prod
+  nodeSelector: 'beta.kubernetes.io/os=linux'
+  namespace: swx-media
+  limits: '{memory: 8Gi, cpu: 4000m}'
+  requests: '{memory: 8Gi, cpu: 4000m}'
+  arch_table:
+    x86_64:
+      nodeSelector: 'kubernetes.io/arch=amd64'
+      jnlpImage: 'nbu-harbor.gtm.nvidia.com/toolbox/c3po-jnlp:latest'
+
+runs_on_dockers:
+  - {
+      file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
+      arch: 'x86_64',
+      name: 'server',
+      uri: '$arch/ubuntu22.04/ultra-api',
+      tag: '20251215',
+      build_args: '--no-cache --target ultra-api',
+      category: 'server',
+      annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-port1-vlan11@net1' }],
+      limits: '{memory: 12Gi, cpu: 8000m, hugepages-2Mi: 10Gi, nvidia.com/sriov-cx6dx-p1: 1}',
+      requests: '{memory: 12Gi, cpu: 8000m, hugepages-2Mi: 10Gi, nvidia.com/sriov-cx6dx-p1: 1}',
+      caps_add: '[ IPC_LOCK, SYS_RESOURCE ]'
+    }
+  - {
+      arch: 'x86_64',
+      name: 'client',
+      url: '${registry_host}${registry_path}/${arch}/ubuntu22.04/ultra-api:20251215',
+      category: 'client',
+      annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-port2-vlan11@net1' }],
+      limits: '{memory: 12Gi, cpu: 8000m, hugepages-2Mi: 10Gi, nvidia.com/sriov-cx6dx-p2: 1}',
+      requests: '{memory: 12Gi, cpu: 8000m, hugepages-2Mi: 10Gi, nvidia.com/sriov-cx6dx-p2: 1}',
+      caps_add: '[ IPC_LOCK, SYS_RESOURCE ]'
+    }
+
+pipeline_start:
+    shell: action
+    module: groovy
+    run: |
+      echo "Starting pod pairs tests for LibXLIO-${sha1}"
+      currentBuild.displayName += "-${sha1}"
+      env.SERVER_IP = ""
+      env.TEST_COMPLETED = "false"
+
+steps:
+  - name: Set env
+    shell: action
+    module: groovy
+    parallel: false
+    run: |
+      def status =sh(returnStatus: true, script: "MODE=${env.category} .ci/scripts/prepare_pod_pair_test.sh") == 0
+      if (!status) {
+        currentBuild.result = 'FAILURE'
+        error "${env.category} preparation failed"
+      }
+      if (env.category == 'server') {
+        env.SERVER_IP = sh(returnStdout: true, script: "ip -f inet addr show net1 | awk '/inet / {print \$2}' | cut -d/ -f1").trim()
+      }
+
+  - name: Run client
+    shell: action
+    module: groovy
+    parallel: false
+    containerSelector:
+      - "{category: 'client'}"
+    run: |
+      try {
+        waitUntil(initialRecurrencePeriod: 5000, quiet: false) {
+            return env.SERVER_IP?.trim() as boolean
+        }
+        sh ".ci/scripts/run_pod_pair_client_tests.sh"
+      } finally {
+        env.TEST_COMPLETED = "true"
+      }
+
+  - name: Collect ultra api logs
+    shell: action
+    module: groovy
+    parallel: false
+    run: |
+      waitUntil(initialRecurrencePeriod: 5000, quiet: false) {
+          return env.TEST_COMPLETED == "true"
+      }
+      try {
+        archiveArtifacts artifacts: "jenkins/**/*.log"
+      } catch (Exception e) {
+        echo "No logs found, skipping..."
+      }
+
+  - name: Check results
+    shell: action
+    module: groovy
+    parallel: false
+    run: |
+      def status = sh(returnStatus: true, script: "MODE=${env.category} .ci/scripts/analyze_pod_pair_results.sh") == 0
+      if (!status) {
+        currentBuild.result = 'FAILURE'
+        error "Pod pair results are not OK, check the logs for details..."
+      }
