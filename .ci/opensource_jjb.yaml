@@ -1,7 +1,7 @@
 - job-template:
     name: "{jjb_proj}"
     project-type: pipeline
-    folder: libxlio
+    folder: "{jjb_folder}"
     properties:
         - github:
              url: "https://github.com/Mellanox/libxlio"
@@ -131,11 +131,69 @@
                 browser: githubweb
                 browser-url: "{jjb_git}"
         script-path: ".ci/Jenkinsfile"
+
+- job-template:
+    name: "{jjb_proj}-ultra-api"
+    project-type: pipeline
+    folder: "{jjb_folder}"
+    properties:
+        - github:
+             url: "https://github.com/Mellanox/libxlio"
+        - build-discarder:
+            days-to-keep: 120
+            num-to-keep: 20
+        - inject:
+            keep-system-variables: true
+            properties-content: |
+              jjb_proj={jjb_proj}-ultra-api
+    description: Do NOT edit this job through the Web GUI !
+    concurrent: true
+    parameters:
+        - string:
+            name: sha1
+            default: 'vNext'
+            description: 'commit to use, defaults to the commit tag provided under release_tag'
+        - bool:
+            name: "do_ultra_api"
+            default: true
+            description: "Run Ultra API tests."
+        - string:
+            name: "conf_file"
+            default: ".ci/pipeline/ultra_api_matrix_job.yaml"
+            description: "job config file. Do not change it"
+    triggers:
+        - github-pull-request:
+            cron: 'H/5 * * * *'
+            trigger-phrase: '.*\bbot:uapi:retest\b.*'
+            status-context: "xlio-test-ultra-api"
+            success-status: "[PASS]"
+            failure-status: "[FAIL]"
+            error-status:   "[FAIL]"
+            status-add-test-results: true
+            auth-id: 'svc-nbu-swx-media_GHPRB_ID'
+            org-list: ["Mellanox"]
+            allow-whitelist-orgs-as-admins: true
+            cancel-builds-on-update: true
+            status-url: "${{JENKINS_URL}}blue/organizations/jenkins/libxlio%2F{jjb_proj}-ultra-api/detail/{jjb_proj}-ultra-api/${{BUILD_NUMBER}}/pipeline"
+    pipeline-scm:
+        scm:
+            - git:
+                url: "{jjb_git}"
+                credentials-id: 'svc-nbu-swx-media_ssh_key'
+                branches: ['$sha1']
+                shallow-clone: false
+                refspec: "+refs/pull/*:refs/remotes/origin/pr/*"
+                browser: githubweb
+                browser-url: "{jjb_git}"
+        script-path: ".ci/Jenkinsfile"
+
 - project:
     name: LibXLIO-opensource
     jjb_email: 'nwolfer@nvidia.com'
     jjb_proj: 'LibXLIO-opensource'
     jjb_git: 'git@github.com:Mellanox/libxlio.git'
     jjb_owner: 'Nir Wolfer'
+    jjb_folder: 'libxlio'
     jobs:
         - "{jjb_proj}"
+        - "{jjb_proj}-ultra-api"
