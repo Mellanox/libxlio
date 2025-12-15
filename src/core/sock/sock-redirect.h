@@ -70,10 +70,30 @@
 #define SYSCALL_ERRNO_UNSUPPORTED(_func, ...) SYSCALL(_func, __VA_ARGS__)
 #define VALID_SYSCALL(_func)                  (true)
 #else
-#define XLIO_SYMBOL(_func)   _func
+#define XLIO_SYMBOL(_func) _func
+#ifdef __COVERITY__
+#define COVERITY_VAR_DEREF_OP                                                                      \
+    _Pragma("coverity compliance deviate \"var_deref_op\" \
+             \"Intentional dereference; pointer validated elsewhere\"")
+#else
+#define COVERITY_VAR_DEREF_OP
+#endif
 #define VALID_SYSCALL(_func) ((orig_os_api._func) != nullptr)
+/* Coverity warns falsely for null deref on orig_os_api even though it is populated in
+ * get_orig_funcs(). We can't add a comment inside a macro because the preprocessor strips it, and
+ * we can't attach a pragma to a comma operator. So we replace the comma operator with a GNU
+ * statement expression (__extension__) and insert the pragma inside that block, ensuring
+ * suppression is applied at preprocess time while preserving original semantics (return last
+ * expression value).
+ */
 #define SYSCALL(_func, ...)                                                                        \
-    ((VALID_SYSCALL(_func) ? (void)0 : get_orig_funcs()), orig_os_api._func(__VA_ARGS__))
+    __extension__({                                                                                \
+        if (unlikely(!VALID_SYSCALL(_func))) {                                                     \
+            get_orig_funcs();                                                                      \
+        }                                                                                          \
+        COVERITY_VAR_DEREF_OP                                                                      \
+        orig_os_api._func(__VA_ARGS__);                                                            \
+    })
 #define SYSCALL_ERRNO_UNSUPPORTED(_func, ...)                                                      \
     (VALID_SYSCALL(_func) ? orig_os_api._func(__VA_ARGS__) : ((errno = EOPNOTSUPP), -1))
 #define XLIO_CALL(_func, ...) _func(__VA_ARGS__)

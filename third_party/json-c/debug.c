@@ -1,4 +1,6 @@
 /*
+ * Original work:
+ *
  * $Id: debug.c,v 1.5 2006/01/26 02:16:28 mclark Exp $
  *
  * Copyright (c) 2004, 2005 Metaparadigm Pte. Ltd.
@@ -7,21 +9,33 @@
  * This library is free software; you can redistribute it and/or modify
  * it under the terms of the MIT license. See COPYING for details.
  *
+ * Modified Work:
+ *
+ * Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES, ALL RIGHTS RESERVED.
+ *
+ * This software product is a proprietary product of NVIDIA CORPORATION &
+ * AFFILIATES (the "Company") and all right, title, and interest in and to the
+ * software product, including all associated intellectual property rights, are
+ * and shall remain exclusively with the Company.
+ *
+ * This software product is governed by the End User License Agreement
+ * provided with the software product.
+ *
  */
 
 #include "config.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdarg.h>
 
 #if HAVE_SYSLOG_H
-# include <syslog.h>
+#include <syslog.h>
 #endif /* HAVE_SYSLOG_H */
 
 #if HAVE_UNISTD_H
-# include <unistd.h>
+#include <unistd.h>
 #endif /* HAVE_UNISTD_H */
 
 #if HAVE_SYS_PARAM_H
@@ -33,51 +47,64 @@
 static int _syslog = 0;
 static int _debug = 0;
 
-void mc_set_debug(int debug) { _debug = debug; }
-int mc_get_debug(void) { return _debug; }
-
-extern void mc_set_syslog(int syslog)
+void doca_third_party_mc_set_debug(int debug)
 {
-  _syslog = syslog;
+	_debug = debug;
+}
+int doca_third_party_mc_get_debug(void)
+{
+	return _debug;
 }
 
-void mc_debug(const char *msg, ...)
+extern void doca_third_party_mc_set_syslog(int syslog)
 {
-  va_list ap;
-  if(_debug) {
-    va_start(ap, msg);
+	_syslog = syslog;
+}
+
+void doca_third_party_mc_debug(const char *msg, ...)
+{
+	va_list ap;
+	if (_debug)
+	{
+		va_start(ap, msg);
 #if HAVE_VSYSLOG
-    if(_syslog) {
-		vsyslog(LOG_DEBUG, msg, ap);
-	} else
+		if (_syslog)
+		{
+			vsyslog(LOG_DEBUG, msg, ap);
+		}
+		else
 #endif
-		vprintf(msg, ap);
-    va_end(ap);
-  }
+			vprintf(msg, ap);
+		va_end(ap);
+	}
 }
 
-void mc_error(const char *msg, ...)
+void doca_third_party_mc_error(const char *msg, ...)
 {
-  va_list ap;
-  va_start(ap, msg);
+	va_list ap;
+	va_start(ap, msg);
 #if HAVE_VSYSLOG
-    if(_syslog) {
+	if (_syslog)
+	{
 		vsyslog(LOG_ERR, msg, ap);
-	} else
+	}
+	else
 #endif
 		vfprintf(stderr, msg, ap);
-  va_end(ap);
+	va_end(ap);
 }
 
-void mc_info(const char *msg, ...)
+void doca_third_party_mc_info(const char *msg, ...)
 {
-  va_list ap;
-  va_start(ap, msg);
+	va_list ap;
+	va_start(ap, msg);
 #if HAVE_VSYSLOG
-    if(_syslog) {
+	if (_syslog)
+	{
 		vsyslog(LOG_INFO, msg, ap);
-	} else
+	}
+	else
 #endif
 		vfprintf(stderr, msg, ap);
-  va_end(ap);
+	va_end(ap);
 }

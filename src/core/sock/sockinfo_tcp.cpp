@@ -457,9 +457,13 @@ void sockinfo_tcp::listen_entity_context()
 {
 
     std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
-
+    sockinfo_tcp_listen_context *parent_listen_context = get_parent_listen_context();
+    if (unlikely(!parent_listen_context)) {
+        si_tcp_logerr("Parent listen context is NULL");
+        return;
+    }
     if (!attach_as_uc_receiver(ROLE_TCP_SERVER)) {
-        get_parent_listen_context()->increment_error_counter();
+        parent_listen_context->increment_error_counter();
         si_tcp_logerr(
             "Unable to attach uc receiver for listen socket rss_child in entity context.");
         return;
@@ -467,7 +471,7 @@ void sockinfo_tcp::listen_entity_context()
 
     // Set socket state to accept ready
     m_sock_state = TCP_SOCK_ACCEPT_READY;
-    get_parent_listen_context()->increment_finish_counter();
+    parent_listen_context->increment_finish_counter();
 
     si_tcp_logdbg("Listen socket successfully setup in entity context (sock: %p, backlog: %d)",
                   this, m_backlog);
@@ -897,8 +901,10 @@ void sockinfo_tcp::clear_rx_ready_buffers()
     m_rx_ready_byte_count += m_rx_pkt_ready_offset;
     IF_STATS(m_p_socket_stats->n_rx_ready_byte_count += m_rx_pkt_ready_offset);
     while (m_n_rx_pkt_ready_list_count) {
+        // coverity[returned_null : FALSE]
         mem_buf_desc_t *p_rx_pkt_desc = m_rx_pkt_ready_list.get_and_pop_front();
         m_n_rx_pkt_ready_list_count--;
+        /* coverity[null_dereference] */
         m_rx_ready_byte_count -= p_rx_pkt_desc->rx.sz_payload;
         if (m_p_socket_stats) {
             m_p_socket_stats->n_rx_ready_pkt_count--;
@@ -2805,7 +2811,9 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
         return -1; // Currently no blocking socket support.
     }
 
-    prepare_dst_to_send(false);
+    if (unlikely(!prepare_dst_to_send(false))) {
+        si_tcp_logwarn("Unable to prepare dst entry.");
+    }
 
     if (!connect_bind_any_and_check_rules()) {
         return -1;
@@ -2900,8 +2908,10 @@ bool sockinfo_tcp::connect_bind_any_and_check_rules()
     }
 
     if (bound_any_addr) {
-        tcp_bind(&m_pcb, reinterpret_cast<const ip_addr_t *>(&m_bound.get_ip_addr()),
-                 ntohs(m_bound.get_in_port()), m_pcb.is_ipv6);
+        if (unlikely(tcp_bind(&m_pcb, reinterpret_cast<const ip_addr_t *>(&m_bound.get_ip_addr()),
+                              ntohs(m_bound.get_in_port()), m_pcb.is_ipv6) != 0)) {
+            return false;
+        }
     }
 
     m_conn_state = TCP_CONN_CONNECTING;
@@ -3720,7 +3730,9 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     /* if attach failed, we should continue getting traffic through the listen socket */
     // todo register as 3-tuple rule for the case the listener is gone?
     if (!new_sock->m_b_attached) {
-        new_sock->attach_as_uc_receiver(role_t(NULL), true);
+        if (unlikely(!new_sock->attach_as_uc_receiver(role_t(NULL), true))) {
+            __log_dbg("Unable to attach uc receiver.");
+        }
         new_sock->m_b_attached = true;
     }
 

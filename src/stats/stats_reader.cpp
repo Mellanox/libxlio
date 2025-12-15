@@ -106,7 +106,7 @@ typedef enum { e_K = 1024, e_M = 1048576 } units_t;
 #define VLOG_DETAILS_NUM        4
 #define INIT_XLIO_LOG_DETAILS   -1
 #define NANO_TO_MICRO(n)        (((n) + 500) / 1000)
-#define SEC_TO_MICRO(n)         ((n)*1000000)
+#define SEC_TO_MICRO(n)         ((n)*1000000ULL)
 #define INFO_TABS               "\t\t\t\t"
 #define TIME_DIFF_in_MICRO(start, end)                                                             \
     (SEC_TO_MICRO((end).tv_sec - (start).tv_sec) + (NANO_TO_MICRO((end).tv_nsec - (start).tv_nsec)))
@@ -924,17 +924,20 @@ int show_socket_stats(socket_instance_block_t *p_instance,
         size_t fd = (size_t)p_instance[i].skt_stats.fd;
         if (p_instance[i].b_enabled && g_fd_mask[fd]) {
             num_act_inst++;
+            socket_instance_block_t *prev_inst =
+                p_prev_instance_block ? &p_prev_instance_block[i] : NULL;
+
             switch (user_params.view_mode) {
             case e_basic:
-                show_basic_stats(&p_instance[i], &p_prev_instance_block[i]);
+                show_basic_stats(&p_instance[i], prev_inst);
                 *p_printed_lines_num += BASIC_STATS_LINES_NUM;
                 break;
             case e_medium:
-                print_medium_stats(&p_instance[i], &p_prev_instance_block[i]);
+                print_medium_stats(&p_instance[i], prev_inst);
                 *p_printed_lines_num += MEDIUM_STATS_LINES_NUM;
                 break;
             case e_full:
-                show_full_stats(&p_instance[i], &p_prev_instance_block[i], p_mc_grp_info);
+                show_full_stats(&p_instance[i], prev_inst, p_mc_grp_info);
                 break;
             case e_netstat_like:
                 print_netstat_like(&p_instance[i].skt_stats, p_mc_grp_info, g_stats_file, pid);
@@ -1446,9 +1449,8 @@ bool check_if_process_running(char *pid_str)
 {
     char proccess_proc_dir[FILE_NAME_MAX_SIZE] = {0};
     struct stat st;
-    int n = -1;
+    int n = snprintf(proccess_proc_dir, sizeof(proccess_proc_dir), "/proc/%s", pid_str);
 
-    n = snprintf(proccess_proc_dir, sizeof(proccess_proc_dir), "/proc/%s", pid_str);
     if (likely((0 < n) && (n < (int)sizeof(proccess_proc_dir)))) {
         return stat(proccess_proc_dir, &st) == 0;
     }
@@ -1458,9 +1460,8 @@ bool check_if_process_running(char *pid_str)
 bool check_if_process_running(int pid)
 {
     char pid_str[MAX_BUFF_SIZE] = {0};
-    int n = -1;
+    int n = snprintf(pid_str, sizeof(pid_str), "%d", pid);
 
-    n = snprintf(pid_str, sizeof(pid_str), "%d", pid);
     if (likely((0 < n) && (n < (int)sizeof(pid_str)))) {
         return check_if_process_running(pid_str);
     }
@@ -1598,6 +1599,7 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
         if (user_params.csv_stream.is_open()) {
             char buf[64] = "N/A,N/A,";
             time_t t = time(nullptr);
+            /* coverity[returned_null][dereference] */
             strftime(buf, sizeof(buf), "%F,%T,", localtime(&t));
             user_params.csv_stream
                 << buf << ring_packets.update(p_sh_mem) << socket_counters.update(p_sh_mem)
@@ -1626,6 +1628,7 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
         }
         switch (user_params.print_details_mode) {
         case e_totals:
+            /* coverity[forward_null] */
             num_act_inst =
                 show_socket_stats(p_sh_mem->skt_inst_arr, NULL, p_sh_mem->max_skt_inst_num,
                                   &printed_line_num, &p_sh_mem->mc_info, pid);
@@ -1698,9 +1701,8 @@ bool check_if_app_match(char *app_name, char *pid_str)
     char app_full_name[PATH_MAX] = {0};
     char proccess_proc_dir[FILE_NAME_MAX_SIZE] = {0};
     char *app_base_name = NULL;
-    int n = -1;
+    int n = snprintf(proccess_proc_dir, sizeof(proccess_proc_dir), "/proc/%s/exe", pid_str);
 
-    n = snprintf(proccess_proc_dir, sizeof(proccess_proc_dir), "/proc/%s/exe", pid_str);
     if (likely((0 < n) && (n < (int)sizeof(proccess_proc_dir)))) {
         n = readlink(proccess_proc_dir, app_full_name, sizeof(app_full_name) - 1);
         if (n > 0) {
@@ -1734,10 +1736,9 @@ void clean_inactive_sh_ibj()
             proccess_running = check_if_process_running(dirent->d_name + pid_offset);
             if (!proccess_running) {
                 char to_delete[PATH_MAX + 1] = {0};
-                int n = -1;
+                int n = snprintf(to_delete, sizeof(to_delete), "%s/%s",
+                                 user_params.xlio_stats_path.c_str(), dirent->d_name);
 
-                n = snprintf(to_delete, sizeof(to_delete), "%s/%s",
-                             user_params.xlio_stats_path.c_str(), dirent->d_name);
                 if (likely((0 < n) && (n < (int)sizeof(to_delete)))) {
                     unlink(to_delete);
                 }

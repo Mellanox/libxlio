@@ -37,7 +37,7 @@ json_descriptor_provider::json_descriptor_provider(const char *json_string)
 
 config_descriptor json_descriptor_provider::load_descriptors()
 {
-    json_object_handle schema_handle(json_tokener_parse(m_json_string));
+    json_object_handle schema_handle(doca_third_party_json_tokener_parse(m_json_string));
     if (!schema_handle.get()) {
         throw_xlio_exception("Failed to parse JSON schema.");
     }
@@ -49,7 +49,7 @@ config_descriptor json_descriptor_provider::load_descriptors()
     json_object *properties =
         json_utils::get_field(schema_handle.get(), config_strings::schema::JSON_PROPERTIES);
 
-    json_object_object_foreach(properties, key, val)
+    doca_third_party_json_object_object_foreach(properties, key, val)
     {
         process_schema_property(val, key, result_desc);
     }
@@ -59,24 +59,28 @@ config_descriptor json_descriptor_provider::load_descriptors()
 
 void json_descriptor_provider::validate_schema(json_object *schema)
 {
-    if (json_object_get_type(schema) != json_type_object) {
+    if (doca_third_party_json_object_get_type(schema) != json_type_object) {
         throw_xlio_exception("Schema root must be an object.");
     }
 
     json_object *properties =
         json_utils::get_field(schema, config_strings::schema::JSON_PROPERTIES);
 
-    json_object_object_foreach(properties, key, val)
+    doca_third_party_json_object_object_foreach(properties, key, val)
     {
-        if (json_object_get_type(val) != json_type_object) {
+        if (doca_third_party_json_object_get_type(val) != json_type_object) {
             throw_xlio_exception("Property '" + std::string(key) + "' must be an object.");
         }
     }
 
     json_object *type_field = json_utils::get_field(schema, config_strings::schema::JSON_TYPE);
-    if (std::string(json_object_get_string(type_field)) !=
-        config_strings::schema_types::JSON_TYPE_OBJECT) {
-        throw_xlio_exception("Schema root must have type 'object'.");
+    if (type_field) {
+        const char *type_str = doca_third_party_json_object_get_string(type_field);
+        if (type_str && std::string(type_str) != config_strings::schema_types::JSON_TYPE_OBJECT) {
+            throw_xlio_exception("Schema root must have type 'object'.");
+        }
+    } else {
+        throw_xlio_exception("Type field not found in schema");
     }
 }
 
@@ -84,7 +88,7 @@ void json_descriptor_provider::validate_terminal_property(json_object *property_
                                                           const std::string &current_path)
 {
     // Basic validation for terminal properties
-    if (!property_obj || json_object_get_type(property_obj) != json_type_object) {
+    if (!property_obj || doca_third_party_json_object_get_type(property_obj) != json_type_object) {
         throw_xlio_exception("Invalid property object for: " + current_path);
     }
 
@@ -92,7 +96,7 @@ void json_descriptor_provider::validate_terminal_property(json_object *property_
     json_object *description_field =
         json_utils::get_field(property_obj, config_strings::schema::JSON_DESCRIPTION);
 
-    if (json_object_get_type(description_field) != json_type_string) {
+    if (doca_third_party_json_object_get_type(description_field) != json_type_string) {
         throw_xlio_exception("Invalid 'description' field type for terminal property: " +
                              current_path);
     }
@@ -119,8 +123,9 @@ void json_descriptor_provider::process_schema_property(json_object *property_obj
         if (analysis.json_property_type == property_type::OBJECT) {
             json_object *properties =
                 json_utils::try_get_field(property_obj, config_strings::schema::JSON_PROPERTIES);
-            if (properties && json_object_get_type(properties) == json_type_object) {
-                json_object_object_foreach(properties, key, val)
+            if (properties &&
+                doca_third_party_json_object_get_type(properties) == json_type_object) {
+                doca_third_party_json_object_object_foreach(properties, key, val)
                 {
                     process_schema_property(val, key, desc, current_path);
                 }

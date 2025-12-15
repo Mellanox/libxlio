@@ -483,6 +483,11 @@ int mce_sys_var::env_to_cpuset(char *orig_start, cpu_set_t *cpu_set)
     int ret;
     char *start = strdup(orig_start); // save the caller string from strtok destruction.
 
+    if (!start) {
+        vlog_printf(VLOG_WARNING, "Failed to allocate memory for CPU set");
+        return -1;
+    }
+
     /*
      * We expect a hex number or comma delimited cpulist.  Check for
      * starting characters of "0x" or "0X" and if present then parse
@@ -502,7 +507,7 @@ int mce_sys_var::env_to_cpuset(char *orig_start, cpu_set_t *cpu_set)
 void mce_sys_var::read_env_variable_with_pid(char *mce_sys_name, size_t mce_sys_max_size,
                                              const char *env_ptr)
 {
-    int n = -1;
+    int n;
     const char *d_pos = nullptr;
 
     if (!env_ptr || !mce_sys_name || mce_sys_max_size < 2) {

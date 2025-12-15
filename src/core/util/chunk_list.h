@@ -132,6 +132,7 @@ public:
         if (unlikely(empty())) {
             return NULL;
         }
+        /* coverity[returned_null][dereference] */
         return m_used_containers.front()->m_p_buffer[m_front];
     }
 
@@ -172,7 +173,7 @@ public:
             m_back = 0;
             m_used_containers.push_back(m_free_containers.get_and_pop_back());
         }
-
+        /* coverity[returned_null] */
         m_used_containers.back()->m_p_buffer[m_back] = obj;
         m_size++;
     }

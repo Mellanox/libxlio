@@ -159,7 +159,7 @@ void route_table_mgr::parse_entry(struct nlmsghdr *nl_header)
 
 void route_table_mgr::parse_attr(struct rtattr *rt_attribute, route_val &val)
 {
-    char if_name[IFNAMSIZ];
+    char if_name[IFNAMSIZ] = {0};
 
     switch (rt_attribute->rta_type) {
     case RTA_DST:
@@ -305,12 +305,11 @@ bool route_table_mgr::route_resolve(IN route_rule_table_key key, OUT route_resul
 
 void route_table_mgr::update_entry(INOUT route_entry *p_ent, bool b_register_to_net_dev /*= false*/)
 {
-    rt_mgr_logdbg("entry [%p]", p_ent);
-
-    route_table_t &rt = p_ent->get_key().get_family() == AF_INET ? m_table_in4 : m_table_in6;
 
     std::lock_guard<decltype(m_lock)> lock(m_lock);
     if (p_ent && !p_ent->is_valid()) { // if entry is found in the collection and is not valid
+        rt_mgr_logdbg("entry [%p]", p_ent);
+        route_table_t &rt = p_ent->get_key().get_family() == AF_INET ? m_table_in4 : m_table_in6;
         rt_mgr_logdbg("route_entry is not valid-> update value");
         rule_entry *p_rr_entry = p_ent->get_rule_entry();
         std::deque<rule_val *> *p_rr_val;

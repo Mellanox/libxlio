@@ -979,7 +979,7 @@ int sockinfo_udp::setsockopt(int __level, int __optname, __const void *__optval,
         } break;
 
         case IP_MULTICAST_TTL: {
-            int n_mc_ttl = -1;
+            int n_mc_ttl;
             if (__optlen == sizeof(m_n_mc_ttl_hop_lim)) {
                 n_mc_ttl = *(char *)__optval;
             } else if (__optlen == sizeof(int)) {
@@ -1707,6 +1707,7 @@ void sockinfo_udp::drop_rx_ready_byte_count(size_t n_rx_bytes_limit)
 {
     m_lock_rcv.lock();
     while (m_n_rx_pkt_ready_list_count) {
+        /* coverity[returned_null : FALSE] */
         mem_buf_desc_t *p_rx_pkt_desc = m_rx_pkt_ready_list.front();
         if (m_rx_ready_byte_count > n_rx_bytes_limit || p_rx_pkt_desc->rx.sz_payload == 0U) {
             m_rx_pkt_ready_list.pop_front();
@@ -2014,6 +2015,7 @@ int sockinfo_udp::rx_request_notification(uint64_t poll_sn)
 
 ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
 {
+    /* coverity[nonnull] */
     const iovec *p_iov = tx_arg.attr.iov;
     const ssize_t sz_iov = tx_arg.attr.sz_iov;
     const int __flags = tx_arg.attr.flags;
@@ -2187,6 +2189,9 @@ ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)
 
 tx_packet_to_os:
     // Calling OS transmit
+    // coverity[FORWARD_NULL : FALSE]
+    // coverity[var_deref_model : FALSE]
+    // coverity[null_dereference : FALSE]
     ret = tx_os(tx_arg.opcode, p_iov, sz_iov, __flags, __dst, __dstlen);
 
 tx_packet_to_os_stats:
@@ -2234,6 +2239,7 @@ int sockinfo_udp::rx_verify_available_data()
     if (!m_rx_pkt_ready_list.empty()) {
         std::lock_guard<decltype(m_lock_rcv)> locker(m_lock_rcv);
         if (!m_rx_pkt_ready_list.empty()) {
+            /* coverity[returned_null][null_deref] */
             return m_rx_pkt_ready_list.front()->rx.sz_payload;
         }
     }
@@ -3042,6 +3048,7 @@ timestamps_t *sockinfo_udp::get_socket_timestamps()
         si_udp_logdbg("m_rx_pkt_ready_list empty");
         return nullptr;
     }
+    /* coverity[returned_null][null_deref] */
     return &m_rx_pkt_ready_list.front()->rx.timestamps;
 }
 

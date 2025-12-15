@@ -585,8 +585,8 @@ int get_iftype_from_ifname(const char *ifname)
     __log_func("find interface type for ifname '%s'", ifname);
 
     char iftype_filename[100];
-    char iftype_value_str[32];
-    char base_ifname[32];
+    char iftype_value_str[32] = {0};
+    char base_ifname[32] = {0};
     int iftype_value = -1;
 
     get_base_interface_name(ifname, base_ifname, sizeof(base_ifname));
@@ -603,9 +603,9 @@ int get_if_mtu_from_ifname(const char *ifname)
 {
     __log_func("find interface mtu for ifname '%s'", ifname);
 
-    char if_mtu_len_filename[100];
-    char if_mtu_value_str[32];
-    char base_ifname[32];
+    char if_mtu_len_filename[100] = {0};
+    char if_mtu_value_str[32] = {0};
+    char base_ifname[32] = {0};
     int if_mtu_value = 0;
 
     /* initially try reading MTU from ifname. In case of failure (expected in alias ifnames) - try
@@ -650,6 +650,7 @@ class socket_context_manager {
 
 public:
     socket_context_manager()
+        : m_buf {{}}
     {
         struct timeval tv = {
             .tv_sec = 0,
@@ -668,7 +669,10 @@ public:
     }
 
     socket_context_manager(int fd) noexcept
-        : m_fd(fd) {};
+        : m_fd(fd)
+        , m_buf {{}}
+    {
+    }
     ~socket_context_manager() { SYSCALL(close, m_fd); };
 
     void send_getaddr_request(uint8_t family)
@@ -1015,7 +1019,7 @@ out:
 bool get_bond_name(IN const char *ifname, OUT char *bond_name, IN int sz)
 {
     char upper_path[256];
-    char base_ifname[IFNAMSIZ];
+    char base_ifname[IFNAMSIZ] = {0};
     get_base_interface_name(ifname, base_ifname, sizeof(base_ifname));
     struct ifaddrs *ifaddr, *ifa;
     bool ret = false;
@@ -1114,9 +1118,8 @@ bool check_device_exist(const char *ifname, const char *path)
 {
     char device_path[256] = {0};
     int fd = -1;
-    int n = -1;
+    int n = snprintf(device_path, sizeof(device_path), path, ifname);
 
-    n = snprintf(device_path, sizeof(device_path), path, ifname);
     if (likely((0 < n) && (n < (int)sizeof(device_path)))) {
         fd = SYSCALL(open, device_path, O_RDONLY);
         if (fd >= 0) {
@@ -1132,7 +1135,7 @@ bool check_device_exist(const char *ifname, const char *path)
 
 bool check_device_name_ib_name(const char *ifname, const char *ibname)
 {
-    int n = -1;
+    int n;
     int fd = -1;
     char ib_path[IBV_SYSFS_PATH_MAX] = {0};
     const char *str_ifname = ifname;

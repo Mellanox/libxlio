@@ -154,6 +154,7 @@ mem_buf_desc_t *cq_mgr_rx_strq::poll(enum buff_status_e &status, mem_buf_desc_t 
     }
 
     if (likely(!_hot_buffer_stride)) {
+        /* coverity[returned_null] */
         _hot_buffer_stride = next_stride();
         prefetch((void *)_hot_buffer_stride);
         prefetch((uint8_t *)m_mlx5_cq.cq_buf +
