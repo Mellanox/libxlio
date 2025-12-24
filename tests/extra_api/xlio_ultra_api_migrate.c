@@ -4,13 +4,14 @@
  * SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
  */
 
-/* g++ -I./install/include -L./install/lib -L../dpcp/install/lib -o test xlio_ultra_api_migration.c -lxlio -lm -lnl-3 -ldpcp -libverbs -lmlx5 -lrdmacm -lnl-route-3 -g3 */
-/* LD_LIBRARY_PATH=./install/lib:../dpcp/install/lib ./test */
-/* Use `nc <IP> <PORT>` on the remote side */
-/* Send 'mg' to migrate */
+/* gcc -o test tests/extra_api/xlio_ultra_api_migrate.c -libverbs -g */
+/* sudo LD_PRELOAD=libxlio.so ./test [IP [PORT]] */
+/* Use `nc <IP> <PORT>` on the remote side, the default port is 5555 */
+/* Send 'mg' to migrate, 'quit' or 'exit' to terminate */
 
 #include <assert.h>
 #include <stdbool.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,48 +23,47 @@
 #include <stdarg.h>
 #include <time.h>
 
-#include <mellanox/xlio.h>
+#include <mellanox/xlio_extra.h>
 #include <infiniband/verbs.h>
 
-#define LISTEN_MAGIC 0xdeadc0de
 #define MIGRATE_GROUP_CMD "mg"
+#define LISTEN_MAGIC      0xdeadc0de
+#define SEND_OP_MAGIC     0xfeedbeef
+#define BUF_SIZE          256
+#define MAX_SOCKETS       32
+
+static struct xlio_api_t *xlio_api = NULL;
 
 static bool quit = false;
 static bool terminated = false;
-static int g_comp_events = 0;
 static int g1_comp_events = 0;
 static int g2_comp_events = 0;
 static size_t g1_rx_bytes = 0;
 static size_t g2_rx_bytes = 0;
-static char     sndbuf[256];
+static char *sndbuf = NULL;
+static size_t page_size = 0;
 
-static struct ibv_pd *pd = NULL;
-static struct ibv_mr *mr_buf;
-
+/* sock_nr doesn't have to be atomic because it's protected by sock_arr_mutex */
 static unsigned sock_nr = 0;
-static unsigned destroyed_sock_nr = 0;
+static atomic_uint destroyed_sock_nr = 0;
 
-typedef enum {
-    NORMAL = 1,
-    WANT_TO_MIGRATE,
-    MOVE_TO_GROUP2,
-    MOVE_TO_GROUP1
-} socket_phase_t;
+typedef enum { NORMAL = 1, WANT_TO_MIGRATE, MOVE_TO_GROUP2, MOVE_TO_GROUP1 } socket_phase_t;
 
 typedef struct {
     xlio_socket_t sock;
     socket_phase_t phase;
     xlio_poll_group_t current_group;
-    time_t detach_time;  // Timestamp when socket was detached
+    time_t detach_time; // Timestamp when socket was detached
+    struct ibv_pd *pd;
+    struct ibv_mr *mr_buf;
 } socket_info_t;
 
-static socket_info_t sock_arr[32] = {0};
+static socket_info_t sock_arr[MAX_SOCKETS] = {};
 static pthread_mutex_t sock_arr_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-
-static unsigned short listen_port = 8080;
+static unsigned short listen_port = 5555;
 static const char *listen_ip = "";
-static int jitter_seconds = 0;  // New global variable for jitter control
+static int jitter_seconds = 0; // New global variable for jitter control
 
 static xlio_poll_group_t group_1;
 static xlio_poll_group_t group_2;
@@ -84,40 +84,61 @@ static void memory_cb(void *data, size_t size, size_t page_size)
     log_print("Memory area allocated data=%p size=%zu page_size=%zu\n", data, size, page_size);
 }
 
+static inline int find_socket_index(xlio_socket_t sock)
+{
+    for (unsigned i = 0; i < sock_nr; i++) {
+        if (sock_arr[i].sock == sock) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* Update or initialize pd and mr_buf for a socket. Must be called under sock_arr_mutex */
+static inline void update_pd_and_mr(unsigned i)
+{
+    struct ibv_pd *new_pd = xlio_api->xlio_socket_get_pd(sock_arr[i].sock);
+    assert(new_pd != NULL);
+    if (sock_arr[i].pd == NULL || new_pd->handle != sock_arr[i].pd->handle) {
+        if (sock_arr[i].mr_buf != NULL) {
+            ibv_dereg_mr(sock_arr[i].mr_buf);
+        }
+        sock_arr[i].pd = new_pd;
+        sock_arr[i].mr_buf = ibv_reg_mr(new_pd, sndbuf, BUF_SIZE, IBV_ACCESS_LOCAL_WRITE);
+        assert(sock_arr[i].mr_buf != NULL);
+    }
+}
+
 static void send_single_msg(xlio_socket_t sock, const void *data, size_t len, uintptr_t userdata_op,
                             unsigned flags)
 {
+    pthread_mutex_lock(&sock_arr_mutex);
+    int idx = find_socket_index(sock);
+    assert(idx >= 0);
+    uint32_t lkey = sock_arr[idx].mr_buf->lkey;
+    pthread_mutex_unlock(&sock_arr_mutex);
+
     struct xlio_socket_send_attr attr = {
         .flags = flags,
-        .mkey = mr_buf->lkey,
+        .mkey = lkey,
         .userdata_op = userdata_op,
     };
     memcpy(sndbuf, data, len);
-    int ret = xlio_socket_send(sock, sndbuf, len, &attr);
+    int ret = xlio_api->xlio_socket_send(sock, sndbuf, len, &attr);
     assert(ret == 0);
-    xlio_socket_flush(sock);
+    xlio_api->xlio_socket_flush(sock);
 }
 
-static void send_inline_msg(xlio_socket_t sock, const void *data, size_t len, uintptr_t userdata_op,
-                            unsigned flags)
+static void send_single_msg_with_prefix(xlio_socket_t sock, const char *msg, size_t len,
+                                        uintptr_t userdata_op, unsigned flags)
 {
-    struct xlio_socket_send_attr attr = {
-        .flags = flags | XLIO_SOCKET_SEND_FLAG_INLINE,
-        .mkey = 0,
-        .userdata_op = userdata_op,
-    };
-    int ret = xlio_socket_send(sock, data, len, &attr);
-    assert(ret == 0);
-    xlio_socket_flush(sock);
-}
-
-static void send_single_msg_with_prefix(xlio_socket_t sock, const char *msg, size_t len, uintptr_t userdata_op, unsigned flags)
-{
-    char prefixed_msg[256];
+    char prefixed_msg[BUF_SIZE];
     prefixed_msg[0] = '>';
     prefixed_msg[1] = ' ';
+    len = len > BUF_SIZE - 3 ? BUF_SIZE - 3 : len;
     memcpy(prefixed_msg + 2, msg, len);
-    send_single_msg(sock, prefixed_msg, len + 2, userdata_op, flags);
+    prefixed_msg[2 + len] = '\n';
+    send_single_msg(sock, prefixed_msg, len + 3, userdata_op, flags);
 }
 
 static void socket_event_cb(xlio_socket_t sock, uintptr_t userdata_sq, int event, int value)
@@ -131,7 +152,7 @@ static void socket_event_cb(xlio_socket_t sock, uintptr_t userdata_sq, int event
         if (userdata_sq == LISTEN_MAGIC) {
             terminated = true;
         } else {
-            ++destroyed_sock_nr;
+            atomic_fetch_add(&destroyed_sock_nr, 1);
         }
     } else {
         log_print("Event callback: event=%d value=%d (sock=%lx).\n", event, value, userdata_sq);
@@ -141,25 +162,14 @@ static void socket_event_cb(xlio_socket_t sock, uintptr_t userdata_sq, int event
     }
 }
 
-static inline int find_socket_index(xlio_socket_t sock)
-{
-    for (unsigned i = 0; i < sock_nr; i++) {
-        if (sock_arr[i].sock == sock) {
-            return i;
-        }
-    }
-    return -1;
-}
-
 static void socket_comp_cb(xlio_socket_t sock, uintptr_t userdata_sq, uintptr_t userdata_op)
 {
-    const char *reply_msg = "> comp_cb\n";
-
-    log_print("Completed zcopy buffer userdata_sq=%lx userdata_op=%lx.\n", userdata_sq, userdata_op);
+    log_print("Completed zcopy buffer userdata_sq=%lx userdata_op=%lx.\n", userdata_sq,
+              userdata_op);
     assert(userdata_sq != 0);
     assert(userdata_op != 0);
 
-    ++g_comp_events;
+    pthread_mutex_lock(&sock_arr_mutex);
     int idx = find_socket_index(sock);
     if (idx >= 0) {
         if (sock_arr[idx].current_group == group_1) {
@@ -168,21 +178,26 @@ static void socket_comp_cb(xlio_socket_t sock, uintptr_t userdata_sq, uintptr_t 
             ++g2_comp_events;
         }
     }
+    pthread_mutex_unlock(&sock_arr_mutex);
 }
 
-static void handle_quit_exit_and_migrategroup(xlio_socket_t sock, const char *msg, uintptr_t userdata_sq)
+static void handle_rx_message(xlio_socket_t sock, const char *msg)
 {
     if (strstr(msg, "quit") || strstr(msg, "exit")) {
         quit = true;
         return;
     }
-    
+
     if (strstr(msg, MIGRATE_GROUP_CMD)) {
+        pthread_mutex_lock(&sock_arr_mutex);
         int idx = find_socket_index(sock);
         if (idx >= 0) {
             sock_arr[idx].phase = WANT_TO_MIGRATE;
-            log_print("Socket %d marked for migration\n",idx);
+            log_print("Socket %d marked for migration\n", idx);
         }
+        pthread_mutex_unlock(&sock_arr_mutex);
+    } else {
+        send_single_msg_with_prefix(sock, msg, strlen(msg), SEND_OP_MAGIC, 0);
     }
 }
 
@@ -198,6 +213,9 @@ static inline void mem_copy_and_add_nl(const void *data, size_t len, char *msg)
 static void socket_rx_cb(xlio_socket_t sock, uintptr_t userdata_sq, void *data, size_t len,
                          struct xlio_buf *buf)
 {
+    (void)userdata_sq;
+
+    pthread_mutex_lock(&sock_arr_mutex);
     int idx = find_socket_index(sock);
     if (idx >= 0) {
         if (sock_arr[idx].current_group == group_1) {
@@ -206,13 +224,14 @@ static void socket_rx_cb(xlio_socket_t sock, uintptr_t userdata_sq, void *data, 
             g2_rx_bytes += len;
         }
     }
-    
+    pthread_mutex_unlock(&sock_arr_mutex);
+
     char *msg = (char *)malloc(len + 1);
     mem_copy_and_add_nl(data, len, msg);
 
-    handle_quit_exit_and_migrategroup(sock, msg, userdata_sq);
+    handle_rx_message(sock, msg);
     free(msg);
-    xlio_socket_buf_free(sock, buf);
+    xlio_api->xlio_socket_buf_free(sock, buf);
 }
 
 static void socket_accept_cb(xlio_socket_t sock, xlio_socket_t parent_sock,
@@ -224,10 +243,14 @@ static void socket_accept_cb(xlio_socket_t sock, xlio_socket_t parent_sock,
     unsigned short port = 0;
     char buf[64] = "";
 
-    rc = xlio_socket_getpeername(sock, (struct sockaddr *)&sa, &len);
+    (void)parent_sock;
+    (void)parent_userdata;
+
+    rc = xlio_api->xlio_socket_getpeername(sock, (struct sockaddr *)&sa, &len);
     if (rc != 0) {
         log_print("Failed to get peername of an incoming socket.\n");
-        // XXX Cannot close the socket in this callback in the current implementation.
+        xlio_api->xlio_socket_destroy(sock);
+        quit = true;
         return;
     }
 
@@ -244,96 +267,93 @@ static void socket_accept_cb(xlio_socket_t sock, xlio_socket_t parent_sock,
         log_print("Unknown AF: %u.\n", sa.sin6_family);
     }
 
-    sock_arr[sock_nr].sock = sock;
-    sock_arr[sock_nr].phase = NORMAL;
-    sock_arr[sock_nr].current_group = group_1;
+    pthread_mutex_lock(&sock_arr_mutex);
+    if (sock_nr >= MAX_SOCKETS) {
+        pthread_mutex_unlock(&sock_arr_mutex);
+        log_print("Too many connections (%u), closing connection from %s:%u.\n", sock_nr, buf,
+                  port);
+        xlio_api->xlio_socket_destroy(sock);
+        return;
+    }
+    unsigned idx = sock_nr;
+    sock_arr[idx].sock = sock;
+    sock_arr[idx].phase = NORMAL;
+    sock_arr[idx].current_group = group_1;
+    sock_arr[idx].pd = NULL;
+    sock_arr[idx].mr_buf = NULL;
+    update_pd_and_mr(idx);
     sock_nr++;
-
     uintptr_t userdata_sq = (uintptr_t)sock_nr;
-    rc = xlio_socket_update(sock, 0, userdata_sq);
+    pthread_mutex_unlock(&sock_arr_mutex);
+
+    rc = xlio_api->xlio_socket_update(sock, 0, userdata_sq);
     if (rc != 0) {
         log_print("Failed to update context of an incoming socket.\n");
     }
 
-    if (!pd) {
-        pd = xlio_socket_get_pd(sock);
-        assert(pd != NULL);
-        mr_buf = ibv_reg_mr(pd, sndbuf, sizeof(sndbuf), IBV_ACCESS_LOCAL_WRITE);
-        assert(mr_buf != NULL);
-    }
-
     log_print("Accepted incoming connection from %s:%u userdata_sq=%lx.\n", buf, port, userdata_sq);
-
-    const char* reply_msg = "Connected to group1\n";
 }
 
 static inline void handle_socket_want_to_migrate(xlio_poll_group_t group, unsigned i)
 {
     log_print("Detaching socket %d from group%d\n", i, (group == group_1) ? 1 : 2);
-    int rc = xlio_socket_detach_group(sock_arr[i].sock);
+    int rc = xlio_api->xlio_socket_detach_group(sock_arr[i].sock);
     assert(rc == 0);
     sock_arr[i].phase = (group == group_1) ? MOVE_TO_GROUP2 : MOVE_TO_GROUP1;
     sock_arr[i].current_group = 0;
-    sock_arr[i].detach_time = time(NULL);  // Set detach_time when we actually detach
+    sock_arr[i].detach_time = time(NULL); // Set detach_time when we actually detach
 }
 
 static void check_if_socket_want_to_migrate(xlio_poll_group_t group)
 {
+    pthread_mutex_lock(&sock_arr_mutex);
     for (unsigned i = 0; i < sock_nr; i++) {
         if (sock_arr[i].current_group == group && sock_arr[i].phase == WANT_TO_MIGRATE) {
             handle_socket_want_to_migrate(group, i);
         }
     }
-}
-
-static inline void update_pd_and_mr(xlio_socket_t sock)
-{
-    struct ibv_pd *new_pd = xlio_socket_get_pd(sock);
-    if (new_pd->handle != pd->handle) {
-        ibv_dereg_mr(mr_buf);
-        pd = new_pd;
-        mr_buf = ibv_reg_mr(pd, sndbuf, sizeof(sndbuf), IBV_ACCESS_LOCAL_WRITE);
-        assert(mr_buf != NULL);
-    }
+    pthread_mutex_unlock(&sock_arr_mutex);
 }
 
 static void handle_socket_migration_to_us(xlio_poll_group_t group, unsigned i)
 {
     time_t current_time = time(NULL);
     time_t elapsed = current_time - sock_arr[i].detach_time;
-    
+
     if (jitter_seconds > 0 && elapsed < jitter_seconds) {
         // Not enough time has passed, skip this socket for now
         return;
     }
 
-    log_print("Socket %d: Attaching to group%d after %ld seconds delay (detached at: %ld, attaching at: %ld)\n", 
-             i, (group == group_1) ? 1 : 2, elapsed, sock_arr[i].detach_time, current_time);
-    int rc = xlio_socket_attach_group(sock_arr[i].sock, group);
+    log_print("Socket %d: Attaching to group%d after %ld seconds delay (detached at: %ld, "
+              "attaching at: %ld)\n",
+              i, (group == group_1) ? 1 : 2, elapsed, sock_arr[i].detach_time, current_time);
+    int rc = xlio_api->xlio_socket_attach_group(sock_arr[i].sock, group);
     assert(rc == 0);
     sock_arr[i].phase = NORMAL;
     sock_arr[i].current_group = group;
-    
-    update_pd_and_mr(sock_arr[i].sock);
-    
-    const char* msg = (group == group_1) ? "Migrated to group1\n" : "Migrated to group2\n";
 
+    update_pd_and_mr(i);
 }
 
 static void check_if_some_socket_want_to_migrate_to_us(xlio_poll_group_t group)
 {
+    pthread_mutex_lock(&sock_arr_mutex);
     for (unsigned i = 0; i < sock_nr; i++) {
         if ((group == group_1 && sock_arr[i].phase == MOVE_TO_GROUP1) ||
             (group == group_2 && sock_arr[i].phase == MOVE_TO_GROUP2)) {
             handle_socket_migration_to_us(group, i);
         }
     }
+    pthread_mutex_unlock(&sock_arr_mutex);
 }
 
 static void *thread_group2_func(void *arg)
 {
+    (void)arg;
+
     while (!quit) {
-        xlio_poll_group_poll(group_2);
+        xlio_api->xlio_poll_group_poll(group_2);
         check_if_socket_want_to_migrate(group_2);
         check_if_some_socket_want_to_migrate_to_us(group_2);
     }
@@ -348,6 +368,8 @@ int main(int argc, char **argv)
     struct xlio_init_attr iattr = {
         .flags = 0,
         .memory_cb = &memory_cb,
+        .memory_alloc = NULL,
+        .memory_free = NULL,
     };
     struct xlio_poll_group_attr gattr = {
         .flags = 0,
@@ -382,23 +404,44 @@ int main(int argc, char **argv)
         arg_offset += 2;
     }
 
-    rc = xlio_init_ex(&iattr);
+    // Obtain XLIO API pointers
+    xlio_api = xlio_get_api();
+    if (xlio_api == NULL) {
+        log_print("Error: Failed to get XLIO API. Make sure XLIO library is loaded.\n");
+        return 1;
+    }
+    if (!(xlio_api->cap_mask & XLIO_EXTRA_API_XLIO_ULTRA)) {
+        log_print("Error: XLIO Ultra API is not supported by this XLIO version.\n");
+        return 1;
+    }
+
+    rc = xlio_api->xlio_init_ex(&iattr);
     assert(rc == 0);
 
-    rc = xlio_poll_group_create(&gattr, &group_1);
+    /*
+     * Allocate send buffer aligned to page size.
+     * Memory must be page-aligned because ibv_reg_mr() may call madvise()
+     * which requires the address to be aligned to the page boundary.
+     */
+    page_size = sysconf(_SC_PAGESIZE);
+    rc = posix_memalign((void **)&sndbuf, page_size, BUF_SIZE);
+    assert(rc == 0 && sndbuf != NULL);
+
+    rc = xlio_api->xlio_poll_group_create(&gattr, &group_1);
     assert(rc == 0);
     log_print("Group_1 created.\n");
-    rc = xlio_poll_group_create(&gattr, &group_2);
+    rc = xlio_api->xlio_poll_group_create(&gattr, &group_2);
     assert(rc == 0);
     log_print("Group_2 created.\n");
 
     struct xlio_socket_attr sattr = {
+        .flags = 0,
         .domain = AF_INET,
         .group = group_1,
         .userdata_sq = LISTEN_MAGIC,
     };
 
-    rc = xlio_socket_create(&sattr, &sock);
+    rc = xlio_api->xlio_socket_create(&sattr, &sock);
     assert(rc == 0);
 
     log_print("Listen socket created.\n");
@@ -416,11 +459,11 @@ int main(int argc, char **argv)
         rc = inet_aton(argv[arg_offset], &addr.sin_addr);
         assert(rc != 0);
     }
-    rc = xlio_socket_bind(sock, (struct sockaddr *)&addr, sizeof(addr));
+    rc = xlio_api->xlio_socket_bind(sock, (struct sockaddr *)&addr, sizeof(addr));
     assert(rc == 0);
 
     log_print("Listen socket bound to %s:%u.\n", listen_ip, listen_port);
-    rc = xlio_socket_listen(sock);
+    rc = xlio_api->xlio_socket_listen(sock);
     assert(rc == 0);
 
     log_print("Listen.\n");
@@ -431,7 +474,7 @@ int main(int argc, char **argv)
 
     // Main thread handles group1 polling
     while (!quit) {
-        xlio_poll_group_poll(group_1);
+        xlio_api->xlio_poll_group_poll(group_1);
         check_if_socket_want_to_migrate(group_1);
         check_if_some_socket_want_to_migrate_to_us(group_1);
     }
@@ -441,36 +484,40 @@ int main(int argc, char **argv)
     // Wait for thread2 to finish
     pthread_join(thread_2, NULL);
 
-    rc = xlio_socket_destroy(sock);
+    rc = xlio_api->xlio_socket_destroy(sock);
     assert(rc == 0);
-    for (unsigned i = 0; i < sock_nr; ++i) {
-        rc = xlio_socket_destroy(sock_arr[i].sock);
+    pthread_mutex_lock(&sock_arr_mutex);
+    unsigned local_sock_nr = sock_nr;
+    for (unsigned i = 0; i < local_sock_nr; ++i) {
+        if (sock_arr[i].mr_buf != NULL) {
+            ibv_dereg_mr(sock_arr[i].mr_buf);
+            sock_arr[i].mr_buf = NULL;
+        }
+        rc = xlio_api->xlio_socket_destroy(sock_arr[i].sock);
         assert(rc == 0);
     }
-    while (!terminated || destroyed_sock_nr < sock_nr) {
-        xlio_poll_group_poll(group_1);
-        xlio_poll_group_poll(group_2);
+    pthread_mutex_unlock(&sock_arr_mutex);
+    while (!terminated || atomic_load(&destroyed_sock_nr) < local_sock_nr) {
+        xlio_api->xlio_poll_group_poll(group_1);
+        xlio_api->xlio_poll_group_poll(group_2);
     }
 
     log_print("All the sockets are destroyed.\n");
 
-    rc = xlio_poll_group_destroy(group_1);
+    rc = xlio_api->xlio_poll_group_destroy(group_1);
     assert(rc == 0);
-    rc = xlio_poll_group_destroy(group_2);
+    rc = xlio_api->xlio_poll_group_destroy(group_2);
     assert(rc == 0);
 
-    log_print("Total zerocopy completion events: %d\n", g_comp_events);
+    log_print("Total zerocopy completion events: %d\n", g1_comp_events + g2_comp_events);
     log_print("Group1 zerocopy completion events: %d\n", g1_comp_events);
     log_print("Group2 zerocopy completion events: %d\n", g2_comp_events);
     log_print("Group1 received bytes: %zu\n", g1_rx_bytes);
     log_print("Group2 received bytes: %zu\n", g2_rx_bytes);
     log_print("Total received bytes: %zu\n", g1_rx_bytes + g2_rx_bytes);
-
-    if (mr_buf) {
-        ibv_dereg_mr(mr_buf);
-    }
+    free(sndbuf);
     pthread_mutex_destroy(&sock_arr_mutex);
-    xlio_exit();
+    xlio_api->xlio_exit();
 
     return 0;
 }
