@@ -284,6 +284,8 @@ typedef void (*xlio_socket_accept_cb_t)(xlio_socket_t sock, xlio_socket_t parent
  *
  * @par External Allocator Notes:
  * - When external allocator is provided, XLIO uses it instead of internal allocation
+ * - External allocator should provide page-aligned memory allocation, because
+ *   madvise(MADV_DONTFORK) may be called for the memory block
  * - Current implementation allocates a single memory block during xlio_init_ex()
  * - For external allocators, hugepage_size in memory_cb is always reported as zero
  *
