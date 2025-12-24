@@ -9,11 +9,12 @@ Build-Depends: debhelper (>= 7),
  libibverbs-dev,
  librdmacm-dev,
  libnl-route-3-dev | libnl-dev,
+ dpcp (>= 1.1.43),
 Homepage: https://github.com/Mellanox-lab/libxlio
 
 Package: libxlio
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, dpcp (>= 1.1.43)
 Description: LD_PRELOAD-able library that boosts performance
  libxlio is a LD_PRELOAD-able library that boosts performance of TCP and
  UDP traffic. It allows application written over standard socket API to
