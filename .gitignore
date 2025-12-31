@@ -27,6 +27,7 @@ config.h.in
 config.h.in~
 config.log
 config.status
+third_party/json-c/json_config.h
 config/aux/config.guess
 config/aux/config.sub
 config/aux/install-sh
