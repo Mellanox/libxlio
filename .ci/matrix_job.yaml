@@ -266,6 +266,14 @@ steps:
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
 
+# Workaround for OL9.4 arm64-sbsa due to libdpcp dependencies missing
+  - name: Install DPCP for OL9.4 
+    containerSelector:
+      - "{name: 'ol9.4-aarch64'}"
+    run: |
+      .ci/scripts/dpcp_install.sh
+    parallel: false
+
   - name: Package
     enable: ${do_package}
     containerSelector:
