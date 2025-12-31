@@ -14,5 +14,5 @@ AC_DEFUN([CHECK_JSON_LIB],
 [
 # Use the internal json-c library built from third_party directory
 AC_SUBST([LIBJSON_LIBS], "\$(top_builddir)/third_party/json-c/libjson-c.la")
-AC_SUBST([LIBJSON_CFLAGS], "-I\$(top_srcdir)/third_party/json-c -I\$(top_srcdir)/third_party/")
+AC_SUBST([LIBJSON_CFLAGS], "-I\$(top_builddir)/third_party/json-c -I\$(top_srcdir)/third_party/json-c -I\$(top_srcdir)/third_party/")
 ])
