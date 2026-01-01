@@ -1638,10 +1638,13 @@ void mce_sys_var::get_env_params()
             vlog_printf(VLOG_WARNING, "Failed to process: %s.\n", SYS_VAR_INTERNAL_THREAD_AFFINITY);
         }
     }
-    if (env_to_cpuset(internal_thread_affinity_str, &internal_thread_affinity)) {
-        vlog_printf(VLOG_WARNING,
-                    "Failed to set internal thread affinity: %s...  deferring to cpu-0.\n",
-                    internal_thread_affinity_str);
+    // Value of "-1" means "disable internal thread affinity setting by XLIO" - skip parsing.
+    if (strcmp(internal_thread_affinity_str, "-1") != 0) {
+        if (env_to_cpuset(internal_thread_affinity_str, &internal_thread_affinity)) {
+            vlog_printf(VLOG_WARNING,
+                        "Failed to set internal thread affinity: %s...  deferring to cpu-0.\n",
+                        internal_thread_affinity_str);
+        }
     }
 
     if ((env_ptr = getenv(SYS_VAR_WAIT_AFTER_JOIN_MSEC))) {
@@ -2763,10 +2766,13 @@ void mce_sys_var::configure_memory_limits(const config_registry &registry)
             vlog_printf(VLOG_WARNING, "Failed to process: %s.\n", SYS_VAR_INTERNAL_THREAD_AFFINITY);
         }
     }
-    if (env_to_cpuset(internal_thread_affinity_str, &internal_thread_affinity)) {
-        vlog_printf(VLOG_WARNING,
-                    "Failed to set internal thread affinity: %s...  deferring to cpu-0.\n",
-                    internal_thread_affinity_str);
+    // Value of "-1" means "disable internal thread affinity setting by XLIO" - skip parsing.
+    if (strcmp(internal_thread_affinity_str, "-1") != 0) {
+        if (env_to_cpuset(internal_thread_affinity_str, &internal_thread_affinity)) {
+            vlog_printf(VLOG_WARNING,
+                        "Failed to set internal thread affinity: %s...  deferring to cpu-0.\n",
+                        internal_thread_affinity_str);
+        }
     }
 }
 
