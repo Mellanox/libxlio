@@ -315,3 +315,62 @@ TEST_F(output, config_show_negative_values)
                {// These huge values should NOT appear - they indicate the signed-to-unsigned bug
                 "18446744073709551614", "18446744073709551615"});
 }
+
+/**
+ * @test misc.config_values_at_schema_default_not_shown
+ * @brief
+ *    When setting config values to their schema defaults, they should NOT be shown at INFO level
+ *
+ * @details
+ *    This test verifies the fix for the bug where setting:
+ *    - performance.rings.rx.post_batch_size=1024 (schema default)
+ *    - performance.rings.rx.spare_buffers=32768 (schema default)
+ *    was incorrectly displaying these values at INFO level.
+ *    The expected behavior is that default values are not displayed.
+ */
+TEST_F(output, config_values_at_schema_default_not_shown)
+{
+    check_file("config-default-rx-values.json",
+               {
+                   // clang-format off
+            // The config sources are shown
+            "output/config-default-rx-values.json",
+            // Log level is always shown
+            "XLIO INFO   : Log level                      INFO                       [monitor.log.level]"
+                   // clang-format on
+               },
+               {
+                   // These should NOT be shown because they are set to schema defaults
+                   // clang-format off
+            "[performance.rings.rx.post_batch_size]",
+            "[performance.rings.rx.spare_buffers]"
+                   // clang-format on
+               });
+}
+
+/**
+ * @test misc.config_values_not_at_schema_default_shown
+ * @brief
+ *    When setting config values to non-default values, they SHOULD be shown at INFO level
+ *
+ * @details
+ *    This test verifies that non-default values for:
+ *    - performance.rings.rx.post_batch_size
+ *    - performance.rings.rx.spare_buffers
+ *    are correctly displayed at INFO level.
+ */
+TEST_F(output, config_values_not_at_schema_default_shown)
+{
+    check_file("config-nondefault-rx-values.json",
+               {
+                   // clang-format off
+            // The config sources are shown
+            "output/config-nondefault-rx-values.json",
+            // Log level is always shown
+            "XLIO INFO   : Log level                      INFO                       [monitor.log.level]",
+            // Non-default RX values should be shown
+            "XLIO INFO   : RX WRE batch size              512                        [performance.rings.rx.post_batch_size]",
+            "XLIO INFO   : Spare RX buffers               16K                        [performance.rings.rx.spare_buffers]"
+                   // clang-format on
+               });
+}
