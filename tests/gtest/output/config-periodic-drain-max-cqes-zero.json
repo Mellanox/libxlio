@@ -1,0 +1,13 @@
+{
+  "monitor": {
+    "log": {
+      "level": 3
+    }
+  },
+  "performance": {
+    "completion_queue": {
+      "periodic_drain_max_cqes": 0
+    }
+  }
+}
+
