@@ -248,3 +248,27 @@ TEST_F(output, config_show_sample_values_5rules)
             // clang-format on
         });
 }
+
+/**
+ * @test misc.config_periodic_drain_max_cqes_zero
+ * @brief
+ *    Tests that periodic_drain_max_cqes=0 shows the correct parameter in output
+ *
+ * @details
+ *    When user sets periodic_drain_max_cqes to 0, the log should show that specific
+ *    parameter with value 0 and the correct config key, not a different parameter name.
+ */
+TEST_F(output, config_periodic_drain_max_cqes_zero)
+{
+    check_file("config-periodic-drain-max-cqes-zero.json",
+               {
+                   // clang-format off
+            // Should show the parameter that was explicitly set to 0 with correct key
+            "Periodic drain max CQEs",
+            "0 (Disabled)",
+            "[performance.completion_queue.periodic_drain_max_cqes]"
+                   // clang-format on
+               },
+               {// Should NOT show the old combined "CQ Drain Thread" message
+                "CQ Drain Thread"});
+}
