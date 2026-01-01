@@ -1,0 +1,13 @@
+{
+  "monitor": {
+    "log": {
+      "level": 3
+    }
+  },
+  "performance": {
+    "threading": {
+      "cpu_affinity": "sdfsdf"
+    }
+  }
+}
+

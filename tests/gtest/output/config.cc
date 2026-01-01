@@ -145,6 +145,47 @@ TEST_F(output, config_show_sample_values)
 }
 
 /**
+ * @test misc.config_cpu_affinity_invalid_value
+ * @brief
+ *    Tests that invalid cpu_affinity value triggers a WARNING
+ *
+ * @details
+ *    When setting performance.threading.cpu_affinity to an invalid value like "sdfsdf",
+ *    XLIO should emit a WARNING log message and fall back to cpu-0.
+ */
+TEST_F(output, config_cpu_affinity_invalid_value)
+{
+    check_file(
+        "config-cpu-affinity-invalid.json",
+        {
+            // We expect a WARNING message for invalid cpu_affinity value
+            // clang-format off
+            "XLIO WARNING: Failed to set internal thread affinity: sdfsdf...  deferring to cpu-0."
+            // clang-format on
+        });
+}
+
+/**
+ * @test misc.config_cpu_affinity_default_value
+ * @brief
+ *    Tests that default cpu_affinity value "-1" does not trigger any error or warning
+ *
+ * @details
+ *    When setting performance.threading.cpu_affinity to "-1" (which means
+ *    "disable internal thread affinity setting"), XLIO should NOT emit any
+ *    error or warning. Value of -1 is a valid documented special value.
+ *    Note: Since "-1" is the default, XLIO won't print it in the config output.
+ */
+TEST_F(output, config_cpu_affinity_default_value)
+{
+    check_file("config-cpu-affinity-default.json",
+               {// Just verify the config file is loaded
+                "config-cpu-affinity-default.json"},
+               {// This should NOT appear - "-1" is a valid value meaning "disabled"
+                "Failed to set internal thread affinity"});
+}
+
+/**
  * @test misc.config_show_sample_values_2rules
  * @brief
  *    With only 2 acceleration control rules, we should not see the "element(s) not shown" message
