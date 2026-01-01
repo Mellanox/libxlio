@@ -977,12 +977,12 @@ void sys_var_configurator::configure_after_user_settings()
                     MAX_STATS_FD_NUM);
     }
 
-    if (m_sys_vars.tx_num_wr <= (m_sys_vars.tx_num_wr_to_signal * 2)) {
-        m_runtime_registry.set_value(CONFIG_VAR_TX_NUM_WRE,
-                                     static_cast<int64_t>(m_sys_vars.tx_num_wr_to_signal * 2),
-                                     change_reason::AutoCorrected,
-                                     std::string(CONFIG_VAR_TX_NUM_WRE.name) + " must be > 2 * " +
-                                         CONFIG_VAR_TX_NUM_WRE_TO_SIGNAL.name);
+    if (m_sys_vars.tx_num_wr < (m_sys_vars.tx_num_wr_to_signal * 2)) {
+        m_runtime_registry.set_value(
+            CONFIG_VAR_TX_NUM_WRE, static_cast<int64_t>(m_sys_vars.tx_num_wr_to_signal * 2),
+            change_reason::AutoCorrected,
+            std::string(CONFIG_VAR_TX_NUM_WRE.name) + " must be at least " +
+                CONFIG_VAR_TX_NUM_WRE_TO_SIGNAL.name + " * 2");
     }
 
     if (m_sys_vars.enable_striding_rq &&
@@ -998,12 +998,12 @@ void sys_var_configurator::configure_after_user_settings()
                     CONFIG_VAR_STRQ_NUM_STRIDES.name, CONFIG_VAR_RX_NUM_WRE.name,
                     MAX_MLX5_CQ_SIZE_ITEMS, CONFIG_VAR_RX_NUM_WRE.name, m_sys_vars.rx_num_wr);
     }
-    if (m_sys_vars.rx_num_wr <= (m_sys_vars.rx_num_wr_to_post_recv * 2)) {
-        m_runtime_registry.set_value(CONFIG_VAR_RX_NUM_WRE,
-                                     static_cast<int64_t>(m_sys_vars.rx_num_wr_to_post_recv * 2),
-                                     change_reason::AutoCorrected,
-                                     std::string(CONFIG_VAR_RX_NUM_WRE.name) + " must be > 2 * " +
-                                         CONFIG_VAR_RX_NUM_WRE_TO_POST_RECV.name);
+    if (m_sys_vars.rx_num_wr < (m_sys_vars.rx_num_wr_to_post_recv * 2)) {
+        m_runtime_registry.set_value(
+            CONFIG_VAR_RX_NUM_WRE, static_cast<int64_t>(m_sys_vars.rx_num_wr_to_post_recv * 2),
+            change_reason::AutoCorrected,
+            std::string(CONFIG_VAR_RX_NUM_WRE.name) + " must be at least " +
+                CONFIG_VAR_RX_NUM_WRE_TO_POST_RECV.name + " * 2");
     }
 
     if (m_sys_vars.rx_poll_num == 0) {
