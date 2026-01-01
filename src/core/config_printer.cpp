@@ -170,19 +170,24 @@ void config_printer::print_rx_num_wre_to_post_recv(const std::string &key, const
 void config_printer::print_progress_engine_interval(const std::string &key,
                                                     const std::string &title)
 {
-    const std::string key_display = key_with_reason(key);
-    if (m_mce_sys_var.progress_engine_interval_msec == MCE_CQ_DRAIN_INTERVAL_DISABLED ||
-        m_mce_sys_var.progress_engine_wce_max == 0) {
+    const std::string interval_key = key_with_reason(key);
+    const std::string max_cqes_key = key_with_reason(CONFIG_VAR_PROGRESS_ENGINE_WCE_MAX.name);
+
+    if (m_mce_sys_var.progress_engine_interval_msec == MCE_CQ_DRAIN_INTERVAL_DISABLED) {
         LOG_NUM_PARAM_AS_NUMSTR(title.c_str(), m_mce_sys_var.progress_engine_interval_msec,
-                                INT_MAX, // Ensure it is always shown - we want the user to
-                                         // know it is disabled
-                                key_display.c_str(), "(Disabled)");
+                                INT_MAX, interval_key.c_str(), "(Disabled)");
     } else {
         LOG_NUM_PARAM(title.c_str(), m_mce_sys_var.progress_engine_interval_msec,
-                      MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC, key_display.c_str());
+                      MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC, interval_key.c_str());
+    }
+
+    if (m_mce_sys_var.progress_engine_wce_max == 0) {
+        LOG_NUM_PARAM_AS_NUMSTR("Max CQEs per periodic drain",
+                                m_mce_sys_var.progress_engine_wce_max, INT_MAX,
+                                max_cqes_key.c_str(), "(Disabled)");
+    } else {
         LOG_NUM_PARAM("Max CQEs per periodic drain", m_mce_sys_var.progress_engine_wce_max,
-                      MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX,
-                      key_with_reason(CONFIG_VAR_PROGRESS_ENGINE_WCE_MAX.name).c_str());
+                      MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX, max_cqes_key.c_str());
     }
 }
 
