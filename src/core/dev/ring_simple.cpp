@@ -759,7 +759,8 @@ void ring_simple::inc_cq_moderation_stats()
 // call under m_lock_ring_tx lock
 mem_buf_desc_t *ring_simple::get_tx_buffers(pbuf_type type, uint32_t n_num_mem_bufs)
 {
-    mem_buf_desc_t *head;
+    mem_buf_desc_t *head = nullptr;
+    mem_buf_desc_t **next;
     descq_t &pool = type == PBUF_ZEROCOPY ? m_zc_pool : m_tx_pool;
 
     if (unlikely(pool.size() < n_num_mem_bufs)) {
@@ -783,24 +784,18 @@ mem_buf_desc_t *ring_simple::get_tx_buffers(pbuf_type type, uint32_t n_num_mem_b
             return nullptr;
         }
     }
-    /* coverity[returned_null] */
-    head = pool.get_and_pop_back();
-    /* coverity[null_deref] */
-    head->lwip_pbuf.ref = 1;
-    assert(head->lwip_pbuf.type == type);
-    head->lwip_pbuf.type = type;
-    n_num_mem_bufs--;
 
-    mem_buf_desc_t *next = head;
-    while (n_num_mem_bufs) {
-        next->p_next_desc = pool.get_and_pop_back();
-        next = next->p_next_desc;
-        next->lwip_pbuf.ref = 1;
-        assert(head->lwip_pbuf.type == type);
-        next->lwip_pbuf.type = type;
-        n_num_mem_bufs--;
+    for (next = &head; n_num_mem_bufs > 0; --n_num_mem_bufs) {
+        mem_buf_desc_t *pdesc = pool.get_and_pop_back();
+        // We track number of elements in the list, so this check is to silent static analyzers.
+        if (likely(pdesc)) {
+            assert(pdesc->lwip_pbuf.type == type);
+            pdesc->lwip_pbuf.ref = 1;
+            *next = pdesc;
+            next = &pdesc->p_next_desc;
+        }
     }
-    next->p_next_desc = nullptr;
+    *next = nullptr;
 
     return head;
 }
