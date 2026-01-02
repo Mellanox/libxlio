@@ -44,15 +44,6 @@ runs_on_dockers:
   - {file: '.ci/dockerfiles/Dockerfile.ubuntu24.04', name: 'ub24.04-x86_64', uri: 'xlio/$arch/$name/build', tag: '20251202', category: 'base', arch: 'x86_64', build_args: '--build-arg ARCH=x86_64 --no-cache --target build'}
   - {file: '.ci/dockerfiles/Dockerfile.ubuntu24.04', name: 'ub24.04-aarch64', uri: 'xlio/$arch/$name/build', tag: '20251202', category: 'base', arch: 'aarch64', build_args: '--build-arg ARCH=aarch64 --no-cache --target build'}
   - {
-      file: '.ci/dockerfiles/Dockerfile.ol9.4',
-      arch: 'aarch64',
-      name: 'ol9.4-aarch64',
-      uri: 'xlio/$arch/$name/build',
-      tag: '20251202',
-      build_args: '--build-arg ARCH=aarch64 --no-cache',
-      category: 'base'
-    }
-  - {
       file: '.ci/dockerfiles/Dockerfile.ctyunos23.01',
       arch: 'x86_64',
       name: 'ctyunos23.01-x86_64',
