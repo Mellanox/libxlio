@@ -758,6 +758,7 @@
                                 "migration_ratio": {
                                     "type": "integer",
                                     "default": -1,
+                                    "minimum": -1,
                                     "title": "TX ring migration ratio",
                                     "description": "Maps to XLIO_RING_MIGRATION_RATIO_TX environment variable.\nControls when to replace a socket ring with the current thread ring.\nRing migration ratio is used with the \"ring per thread\" logic in order to\ndecide when it is beneficial to replace the socket ring with the ring\nallocated for the current thread.\nEach performance.rings.tx.migration_ratio iterations (of accessing the ring)\nXLIO checks the current thread ID and see if our ring is matching the current thread.\nIf not, we consider ring migration.\nIf we keep accessing the ring from the same thread for some iterations,\nwe migrate the socket to this thread ring.\nUse a value of -1 in order to disable migration."
                                 },
@@ -846,6 +847,7 @@
                                 "migration_ratio": {
                                     "type": "integer",
                                     "default": -1,
+                                    "minimum": -1,
                                     "title": "RX ring migration ratio",
                                     "description": "Maps to XLIO_RING_MIGRATION_RATIO_RX environment variable.\nControls when to replace a socket ring with the current thread ring.\nRing migration ratio is used with the \"ring per thread\" logic in order to\ndecide when it is beneficial to replace the socket ring with the ring allocated\nfor the current thread.\nEach performance.rings.rx.migration_ratio iterations (of accessing the ring) XLIO\nchecks the current thread ID and see if our ring is matching the current thread.\nIf not, we consider ring migration.\nIf we keep accessing the ring from the same thread for some iterations,\nwe migrate the socket to this thread ring.\nUse a value of -1 in order to disable migration."
                                 },
