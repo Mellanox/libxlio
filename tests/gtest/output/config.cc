@@ -248,3 +248,29 @@ TEST_F(output, config_show_sample_values_5rules)
             // clang-format on
         });
 }
+
+/**
+ * @test misc.config_show_negative_values
+ * @brief
+ *    Tests that negative config values are displayed correctly (not as huge unsigned values)
+ *
+ * @details
+ *    When setting negative values (like -1 or -2) on integer config parameters that allow them,
+ *    XLIO should display the actual negative value, not a huge number from signed-to-unsigned
+ *    conversion.
+ */
+TEST_F(output, config_show_negative_values)
+{
+    check_file("config-negative-values.json",
+               {
+                   // clang-format off
+            // Negative values should be displayed as-is, not as huge unsigned values
+            // -1 should appear as "-1", not as "18446744073709551615"
+            "XLIO INFO   : RX poll duration (µsec)       -1                         [performance.polling.blocking_rx_poll_usec]",
+            "XLIO INFO   : Select/poll duration (µsec)   -1                         [performance.polling.iomux.poll_usec]",
+            "XLIO INFO   : Offload transition poll count  -1                         [performance.polling.offload_transition_poll_count]"
+                   // clang-format on
+               },
+               {// These huge values should NOT appear - they indicate the signed-to-unsigned bug
+                "18446744073709551614", "18446744073709551615"});
+}

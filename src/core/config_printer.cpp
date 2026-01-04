@@ -232,8 +232,10 @@ void config_printer::print_int64_config_element(const std::string &key, const st
     // No string ? Show the number as-is (But use K/M/G suffixes if it is a power of 1K, for
     // clarity)
     if (cur_value_str.empty()) {
-        LOG_NUM_PARAM_AS(title.c_str(), cur_value, def_value, key.c_str(),
-                         to_str_accurate(cur_value).c_str());
+        // Sentinel values (negative) should not be K/M/G formatted - they're not sizes
+        std::string value_str =
+            (cur_value < 0) ? std::to_string(cur_value) : to_str_accurate(cur_value);
+        LOG_NUM_PARAM_AS(title.c_str(), cur_value, def_value, key.c_str(), value_str.c_str());
     } else {
         LOG_STR_PARAM_AS(title.c_str(), cur_value_str.c_str(), def_value_str.c_str(), key.c_str(),
                          cur_value_str.c_str());
