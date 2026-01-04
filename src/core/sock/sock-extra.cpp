@@ -26,8 +26,8 @@
 
 #define SET_EXTRA_API(__dst, __func, __mask)                                                       \
     do {                                                                                           \
-        xlio_api->__dst = __func;                                                                  \
-        xlio_api->cap_mask |= __mask;                                                              \
+        xlio_api.__dst = __func;                                                                   \
+        xlio_api.cap_mask |= __mask;                                                               \
     } while (0);
 
 //-----------------------------------------------------------------------------
@@ -67,14 +67,13 @@ extern "C" int xlio_dump_fd_stats(int fd, int log_level)
 
 struct xlio_api_t *extra_api()
 {
-    static struct xlio_api_t *xlio_api = nullptr;
+    // xlio_api is zerod-out by linker
+    static struct xlio_api_t xlio_api;
 
-    if (!xlio_api) {
-        xlio_api = new struct xlio_api_t();
+    if (xlio_api.magic != XLIO_MAGIC_NUMBER) {
+        memset(&xlio_api, 0, sizeof(struct xlio_api_t));
+        xlio_api.magic = XLIO_MAGIC_NUMBER;
 
-        memset(xlio_api, 0, sizeof(struct xlio_api_t));
-        xlio_api->magic = XLIO_MAGIC_NUMBER;
-        xlio_api->cap_mask = 0;
         SET_EXTRA_API(add_conf_rule, xlio_add_conf_rule, XLIO_EXTRA_API_ADD_CONF_RULE);
         SET_EXTRA_API(thread_offload, xlio_thread_offload, XLIO_EXTRA_API_THREAD_OFFLOAD);
         SET_EXTRA_API(dump_fd_stats, xlio_dump_fd_stats, XLIO_EXTRA_API_DUMP_FD_STATS);
@@ -108,7 +107,7 @@ struct xlio_api_t *extra_api()
                       XLIO_EXTRA_API_XLIO_ULTRA);
     }
 
-    return xlio_api;
+    return &xlio_api;
 }
 
 /*
