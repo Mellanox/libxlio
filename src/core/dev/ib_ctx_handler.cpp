@@ -6,6 +6,7 @@
 
 #include <array>
 #include <mutex>
+#include <cinttypes>
 #include <infiniband/verbs.h>
 
 #include "utils/bullseye.h"
@@ -320,6 +321,9 @@ void ib_ctx_handler::check_capabilities()
     if (rc == dpcp::DPCP_OK) {
         set_flow_tag_capability(caps.flow_table_caps.receive.is_flow_action_tag_supported);
         ibch_logdbg("Flow Tag Support: %s", get_flow_tag_capability() ? "Yes" : "No");
+
+        m_max_sq_wqebbs = (1U << caps.log_max_qp_sz);
+        ibch_logdbg("Max SQ WQEBBs: %" PRIu32, m_max_sq_wqebbs);
     }
 }
 

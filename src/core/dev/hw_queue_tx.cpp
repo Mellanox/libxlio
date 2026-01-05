@@ -194,12 +194,13 @@ int hw_queue_tx::configure(const slave_data_t *slave)
 
     // In case of enabled TSO we need to take into account amount of SGE together with header inline
     // Per PRM maximum of CTRL + ETH + ETH_HEADER_INLINE+DATA_PTR*NUM_SGE+MAX_INLINE+INLINE_SIZE
-    // MLX5 return 32678 WQEBBs at max so minimal number
+    // Converting WQEBBs to WQEs for ibv_create_qp API.
     int max_wqe_sz =
         16 + 14 + 16 * qp_init_attr.cap.max_send_sge + qp_init_attr.cap.max_inline_data + 4;
     max_wqe_sz += (m_p_ring->is_tso() ? m_p_ring->m_tso.max_header_sz : 94);
-    int num_wr = 32678 * 64 / max_wqe_sz;
-    hwqtx_logdbg("calculated max_wqe_sz=%d num_wr=%d", max_wqe_sz, num_wr);
+    int num_wr = m_p_ib_ctx_handler->get_max_sq_wqebbs() * 64 / max_wqe_sz;
+    hwqtx_logdbg("calculated max_wqe_sz=%d num_wr=%d, m_tx_num_wr=%u", max_wqe_sz, num_wr,
+                 m_tx_num_wr);
     if (num_wr < (signed)m_tx_num_wr) {
         qp_init_attr.cap.max_send_wr =
             num_wr; // force min for create_qp or you will have error of memory allocation
@@ -420,6 +421,7 @@ void hw_queue_tx::init_queue()
 
     // We use the min between CQ size and the QP size (that might be increases by ibv creation).
     m_sq_free_credits = std::min(m_tx_num_wr, old_wr_val);
+    hwqtx_logdbg("SQ total credits: %u", m_sq_free_credits);
 
     /* Maximum BF inlining consists of:
      * - CTRL:
