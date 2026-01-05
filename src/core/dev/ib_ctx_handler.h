@@ -69,6 +69,7 @@ public:
     bool get_burst_capability() { return m_pacing_caps.burst; }
     bool is_packet_pacing_supported(uint32_t rate = 1);
     size_t get_on_device_memory_size() { return m_on_device_memory; }
+    uint32_t get_max_sq_wqebbs() { return m_max_sq_wqebbs; }
     bool is_active(int port_num);
     bool is_mlx4() { return is_mlx4(get_ibname()); }
     static bool is_mlx4(const char *dev) { return strncmp(dev, "mlx4", 4) == 0; }
@@ -92,6 +93,7 @@ private:
     bool m_flow_tag_enabled;
     pacing_caps_t m_pacing_caps;
     size_t m_on_device_memory;
+    uint32_t m_max_sq_wqebbs = 0U;
     bool m_removed;
     lock_spin m_lock_umr;
     time_converter *m_p_ctx_time_converter;

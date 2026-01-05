@@ -40,8 +40,8 @@ BuildRequires: pkgconfig(libnl-3.0)
 BuildRequires: pkgconfig(libnl-route-3.0)
 %endif
 BuildRequires: make
-BuildRequires: dpcp >= 1.1.43
-Requires: dpcp >= 1.1.43
+BuildRequires: dpcp >= 1.1.58
+Requires: dpcp >= 1.1.58
 
 %description
 libxlio is a LD_PRELOAD-able library that boosts performance of TCP and
