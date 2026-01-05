@@ -248,3 +248,27 @@ TEST_F(output, config_show_sample_values_5rules)
             // clang-format on
         });
 }
+
+/**
+ * @test misc.config_ring_elements_count_warning
+ * @brief
+ *    Tests that a warning is shown when ring_elements_count is set too low
+ *
+ * @details
+ *    When ring_elements_count is set to a value <= batch_size * 2, it must be
+ *    increased. This test verifies that a warning is logged when this happens.
+ */
+TEST_F(output, config_ring_elements_count_warning)
+{
+    check_file("config-ring-elements-warning.json",
+               {
+                   // clang-format off
+            // TX warning: ring_elements_count=0 must be > completion_batch_size * 2 (128)
+            "XLIO WARNING: performance.rings.tx.ring_elements_count=0 must be at least "
+            "performance.rings.tx.completion_batch_size * 2 (128). Increasing to 128",
+            // RX warning: ring_elements_count=0 must be > post_batch_size * 2 (2)
+            "XLIO WARNING: performance.rings.rx.ring_elements_count=0 must be at least "
+            "performance.rings.rx.post_batch_size * 2 (2). Increasing to 2"
+                   // clang-format on
+               });
+}
