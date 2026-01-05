@@ -37,7 +37,7 @@ transport_t dst_entry_tcp::get_transport(const sock_addr &to)
     return TRANS_XLIO;
 }
 
-ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr)
+ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, size_t sz_iov, xlio_send_attr attr)
 {
     int ret = 0;
     void *p_pkt;
@@ -187,7 +187,7 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
          * needed for processing send wr completion (tx batching mode)
          */
         ib_ctx_handler *ib_ctx = m_p_ring->get_ctx(m_id);
-        for (int i = 0; i < sz_iov; ++i) {
+        for (size_t i = 0; i < sz_iov; ++i) {
             m_sge[i].addr = (uintptr_t)p_tcp_iov[i].iovec.iov_base;
             m_sge[i].length = p_tcp_iov[i].iovec.iov_len;
             if (is_zerocopy) {
@@ -228,7 +228,7 @@ ssize_t dst_entry_tcp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
         // of the copy
         total_packet_len = m_header->m_aligned_l2_l3_len;
 
-        for (int i = 0; i < sz_iov; ++i) {
+        for (size_t i = 0; i < sz_iov; ++i) {
             memcpy(p_mem_buf_desc->p_buffer + total_packet_len, p_tcp_iov[i].iovec.iov_base,
                    p_tcp_iov[i].iovec.iov_len);
             total_packet_len += p_tcp_iov[i].iovec.iov_len;
@@ -266,7 +266,7 @@ out:
     return ret;
 }
 
-ssize_t dst_entry_tcp::slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr,
+ssize_t dst_entry_tcp::slow_send(const iovec *p_iov, size_t sz_iov, xlio_send_attr attr,
                                  struct xlio_rate_limit_t &rate_limit, int flags /*= 0*/,
                                  sockinfo *sock /*= 0*/, tx_call_t call_type /*= 0*/)
 {

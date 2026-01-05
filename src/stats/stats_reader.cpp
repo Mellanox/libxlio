@@ -2383,9 +2383,12 @@ void get_all_processes_pids(std::vector<int> &pids)
 int print_processes_stats(const std::vector<int> &pids)
 {
     const int SIZE = pids.size();
-
     int num_instances = 0;
-    sh_mem_info_t sh_mem_info[SIZE];
+
+    sh_mem_info_t *sh_mem_info = new sh_mem_info_t[SIZE];
+    if (!sh_mem_info) {
+        return 1;
+    }
 
     // 1. N * prepare shmem and indicate XLIO to update shmem
     for (int i = 0; i < SIZE; ++i) {
@@ -2405,6 +2408,7 @@ int print_processes_stats(const std::vector<int> &pids)
         complete_print_process_stats(sh_mem_info[i]);
     }
 
+    delete[] sh_mem_info;
     return 0;
 }
 
