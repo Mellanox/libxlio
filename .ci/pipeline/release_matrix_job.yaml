@@ -40,8 +40,8 @@ runs_on_dockers:
       build_args: '--no-cache --target release',
       arch: 'x86_64',
       tag: '20251214',
-      runAsUser: '152606',
-      runAsGroup: '30'
+      runAsUser: '6213',
+      runAsGroup: '101'
     }
   - {
      file: '.ci/dockerfiles/Dockerfile.rhel8.6',
