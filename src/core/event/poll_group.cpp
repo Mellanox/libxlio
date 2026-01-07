@@ -138,10 +138,8 @@ bool poll_group::poll()
 
     int empty_poll = -1;
     for (ring *rng : m_rings) {
-        uint64_t sn = 0;
-        empty_poll = std::max(empty_poll, rng->poll_and_process_element_tx(&sn));
-        sn = 0;
-        empty_poll = std::max(empty_poll, rng->poll_and_process_element_rx(&sn));
+        empty_poll = std::max(empty_poll, rng->poll_and_process_element_tx());
+        empty_poll = std::max(empty_poll, rng->poll_and_process_element_rx());
     }
     m_event_handler->do_tasks();
 

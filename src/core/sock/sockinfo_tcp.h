@@ -276,7 +276,7 @@ public:
 
     static void tcp_express_zc_callback(mem_buf_desc_t *p_desc);
 
-    bool is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_array = NULL) override;
+    bool is_readable(bool do_poll = true, fd_array_t *p_fd_array = NULL) override;
     bool is_writeable() override;
     bool is_errorable(int *errors) override;
     bool is_closable() override
@@ -416,7 +416,7 @@ private:
     inline void lwip_pbuf_init_custom(mem_buf_desc_t *p_desc);
 
     void tcp_timer();
-    bool poll_and_progress_rx(uint64_t &poll_sn);
+    bool poll_and_progress_rx();
     bool check_last_rx_poll_progress(unsigned int prev_sndbuf, bool all_drained);
     bool prepare_listen_to_close();
     void remove_received_syn_socket(sockinfo_tcp *accepted);

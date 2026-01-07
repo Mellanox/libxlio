@@ -106,7 +106,6 @@ void cq_mgr_rx_strq::return_stride(mem_buf_desc_t *desc)
 uint32_t cq_mgr_rx_strq::clean_cq()
 {
     uint32_t ret_total = 0;
-    uint64_t cq_poll_sn = 0;
 
     if (!m_hqrx_ptr) { // Sanity check
         return 0;
@@ -122,8 +121,6 @@ uint32_t cq_mgr_rx_strq::clean_cq()
         ++ret_total;
         stride_buf = nullptr;
     }
-
-    update_global_sn_rx(cq_poll_sn, ret_total);
 
     return ret_total;
 }
@@ -354,7 +351,6 @@ int cq_mgr_rx_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id)
 
     // CQ polling loop until max wce limit is reached for this interval or CQ is drained
     uint32_t ret_total = 0;
-    uint64_t cq_poll_sn = 0;
 
     // drain_and_proccess() is mainly called in following cases as
     // Internal thread:
@@ -369,7 +365,6 @@ int cq_mgr_rx_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id)
         mem_buf_desc_t *buff = nullptr;
         mem_buf_desc_t *buff_wqe = poll(status, buff);
         if (!buff && !buff_wqe) {
-            update_global_sn_rx(cq_poll_sn, ret_total);
             m_p_ring->m_gro_mgr.flush_all(nullptr);
             return ret_total;
         }
@@ -377,8 +372,6 @@ int cq_mgr_rx_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id)
         ret_total +=
             drain_and_proccess_helper(buff, buff_wqe, status, p_recycle_buffers_last_wr_id);
     }
-
-    update_global_sn_rx(cq_poll_sn, ret_total);
 
     m_p_ring->m_gro_mgr.flush_all(nullptr);
 
@@ -410,7 +403,7 @@ mem_buf_desc_t *cq_mgr_rx_strq::process_strq_cq_element_rx(mem_buf_desc_t *p_mem
     return p_mem_buf_desc;
 }
 
-int cq_mgr_rx_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array)
+int cq_mgr_rx_strq::poll_and_process_element_rx(void *pv_fd_ready_array)
 {
     cq_logfuncall("");
 
@@ -443,8 +436,6 @@ int cq_mgr_rx_strq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv
             break;
         }
     }
-
-    update_global_sn_rx(*p_cq_poll_sn, rx_polled);
 
     if (likely(rx_polled > 0)) {
         m_p_ring->m_gro_mgr.flush_all(pv_fd_ready_array);

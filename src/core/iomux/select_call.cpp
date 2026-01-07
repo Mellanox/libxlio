@@ -91,7 +91,7 @@ select_call::select_call(int *off_fds_buffer, offloaded_mode_t *off_modes_buffer
                     if (!psock->skip_os_select()) {
                         if (check_read) {
                             FD_SET(fd, &m_os_rfds);
-                            if (psock->is_readable(nullptr)) {
+                            if (psock->is_readable(false)) {
                                 io_mux_call::update_fd_array(&m_fd_ready_array, fd);
                                 m_n_ready_rfds++;
                                 m_n_all_ready_fds++;

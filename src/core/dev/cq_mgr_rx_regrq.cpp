@@ -34,7 +34,6 @@ cq_mgr_rx_regrq::cq_mgr_rx_regrq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_h
 uint32_t cq_mgr_rx_regrq::clean_cq()
 {
     uint32_t ret_total = 0;
-    uint64_t cq_poll_sn = 0;
     mem_buf_desc_t *buff;
 
     if (!m_hqrx_ptr) { // Sanity check
@@ -48,7 +47,6 @@ uint32_t cq_mgr_rx_regrq::clean_cq()
         }
         ++ret_total;
     }
-    update_global_sn_rx(cq_poll_sn, ret_total);
 
     return ret_total;
 }
@@ -182,7 +180,6 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
 
     /* CQ polling loop until max wce limit is reached for this interval or CQ is drained */
     uint32_t ret_total = 0;
-    uint64_t cq_poll_sn = 0;
 
     /* drain_and_proccess() is mainly called in following cases as
      * Internal thread:
@@ -197,7 +194,6 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
         buff_status_e status = BS_OK;
         mem_buf_desc_t *buff = poll(status);
         if (!buff) {
-            update_global_sn_rx(cq_poll_sn, ret_total);
             m_p_ring->m_gro_mgr.flush_all(nullptr);
             return ret_total;
         }
@@ -234,8 +230,6 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
         ++ret_total;
     }
 
-    update_global_sn_rx(cq_poll_sn, ret_total);
-
     m_p_ring->m_gro_mgr.flush_all(nullptr);
 
     // Update cq statistics
@@ -246,7 +240,7 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
     return ret_total;
 }
 
-int cq_mgr_rx_regrq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array)
+int cq_mgr_rx_regrq::poll_and_process_element_rx(void *pv_fd_ready_array)
 {
     cq_logfuncall("");
 
@@ -281,8 +275,6 @@ int cq_mgr_rx_regrq::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *p
             break;
         }
     }
-
-    update_global_sn_rx(*p_cq_poll_sn, rx_polled);
 
     if (likely(rx_polled > 0)) {
         m_p_ring->m_gro_mgr.flush_all(pv_fd_ready_array);
