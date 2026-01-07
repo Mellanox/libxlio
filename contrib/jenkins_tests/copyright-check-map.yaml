@@ -32,6 +32,7 @@ general:
         - ".*\\.png"
         - ".*\\.conf"
         - "tests/nginx/constant_reply_module/config"
+        - "jenkins/.*"
         #
         # Auto generated files
         #
