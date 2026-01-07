@@ -295,52 +295,12 @@ do_version_check()
 do_check_dpcp()
 {
     local ret=0
-    local version=$(echo "${jenkins_ofed}" | cut -f1-2 -d.)
-
-    if do_version_check $version '<' '5.2' ; then
-        return
-    fi
-    echo "Checking dpcp usage"
-
-    ret=0
-    pushd $(pwd) > /dev/null 2>&1
-    dpcp_dir=${WORKSPACE}/${prefix}/_dpcp-last
-    mkdir -p ${dpcp_dir}
-    cd ${dpcp_dir}
-
-    # libdpcp_path="<repo>|<branch>|<commit>"
-    # Example:
-    # https://<user>:<password>@<repo>|<branch>|<sha>
-    # https://<repo>|<branch>
-    # git@<repo>
-    #
-    libdpcp_path=${libdpcp_path:="https://github.com/Mellanox/libdpcp|master"}
-    libdpcp_repo=$(echo $libdpcp_path | cut -d'|' -f1)
-    libdpcp_branch=$(echo $libdpcp_path | cut -d'|' -f2)
-    libdpcp_commit=$(echo $libdpcp_path | cut -d'|' -f3)
-    echo "dpcp repo: $libdpcp_repo"
-    echo "dpcp branch: $libdpcp_branch"
-    echo "dpcp commit: $libdpcp_commit"
-
+	local dpcp_dir="${WORKSPACE}/${prefix}/_dpcp-last"
+	
+	echo "Checking dpcp usage"
+	pushd "${dpcp_dir}" > /dev/null 2>&1
     set +e
-    if [ ! -d ${dpcp_dir}/install -a $ret -eq 0 ]; then
-		eval "timeout -s SIGKILL 30s git clone -b ${libdpcp_branch} ${libdpcp_repo} . "
-        ret=$?
-    fi
-
-    if [ -z "$libdpcp_commit" -a $ret -eq 0 ]; then
-        libdpcp_commit=$(git describe --tags $(git rev-list --tags --max-count=1))
-        if [ -z "$libdpcp_commit" ]; then
-            libdpcp_commit=$(git rev-parse --short HEAD)
-        fi
-    fi
-
-    if [ ! -d ${dpcp_dir}/install -a $ret -eq 0 ]; then
-        eval "git checkout $libdpcp_commit"
-        ret=$?
-    fi
-
-    if [ ! -d ${dpcp_dir}/install -a $ret -eq 0 ]; then
+    if [ ! -d "${dpcp_dir}/install" ]; then
         eval "./autogen.sh && ./configure --prefix=${dpcp_dir}/install && make $make_opt install"
         ret=$?
     fi
@@ -349,7 +309,7 @@ do_check_dpcp()
     popd > /dev/null 2>&1
     if [ $ret -eq 0 ]; then
         eval "$1=${dpcp_dir}/install"
-        echo "dpcp: $last_tag : ${dpcp_dir}/install"
+        echo "dpcp: ${dpcp_dir}/install"
     else
         echo "dpcp: no"
     fi
