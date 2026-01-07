@@ -76,7 +76,7 @@ public:
 protected:
     virtual bool ring_poll_and_process_element();
 
-    virtual int ring_request_notification();
+    virtual bool ring_request_notification();
 
     virtual void ring_wait_for_notification_and_process_element(void *pv_fd_ready_array);
 

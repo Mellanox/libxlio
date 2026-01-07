@@ -74,20 +74,18 @@ public:
         return m_p_n_rx_channel_fds;
     }
     virtual int get_tx_channel_fd() const { return -1; }
-    virtual int request_notification(cq_type_t cq_type, uint64_t poll_sn) = 0;
+    virtual bool request_notification(cq_type_t cq_type) = 0;
     virtual bool reclaim_recv_buffers(descq_t *rx_reuse) = 0;
     virtual bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst) = 0;
     virtual bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *) { return false; }
     virtual int drain_and_proccess() = 0;
-    virtual void wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
-                                                           void *pv_fd_ready_array = nullptr) = 0;
+    virtual void wait_for_notification_and_process_element(void *pv_fd_ready_array = nullptr) = 0;
 
     // @return Zero - Not drained, Positive - Drained with packets, Negative - No packets.
-    virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
-                                            void *pv_fd_ready_array = nullptr) = 0;
+    virtual int poll_and_process_element_rx(void *pv_fd_ready_array = nullptr) = 0;
 
     // @return Zero - Not drained, Positive - Drained with packets, Negative - No packets.
-    virtual int poll_and_process_element_tx(uint64_t *p_cq_poll_sn) = 0;
+    virtual int poll_and_process_element_tx() = 0;
 
     virtual void adapt_cq_moderation() = 0;
     virtual void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc) = 0;

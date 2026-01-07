@@ -401,9 +401,7 @@ void net_device_table_mgr::get_ip_list(local_ip_list_t &ip_list, sa_family_t fam
     m_lock.unlock();
 }
 
-bool net_device_table_mgr::global_ring_poll_and_process_element(uint64_t *p_poll_sn_rx,
-                                                                uint64_t *p_poll_sn_tx,
-                                                                void *pv_fd_ready_array /*= NULL*/)
+bool net_device_table_mgr::global_ring_poll_and_process_element(void *pv_fd_ready_array /*= NULL*/)
 {
     ndtm_logfunc("");
     bool all_drained = true;
@@ -411,31 +409,28 @@ bool net_device_table_mgr::global_ring_poll_and_process_element(uint64_t *p_poll
     net_device_map_index_t::iterator net_dev_iter;
     for (net_dev_iter = m_net_device_map_index.begin();
          net_dev_iter != m_net_device_map_index.end(); net_dev_iter++) {
-        all_drained &= net_dev_iter->second->global_ring_poll_and_process_element(
-            p_poll_sn_rx, p_poll_sn_tx, pv_fd_ready_array);
+        all_drained &=
+            net_dev_iter->second->global_ring_poll_and_process_element(pv_fd_ready_array);
     }
 
     return all_drained;
 }
 
-int net_device_table_mgr::global_ring_request_notification(uint64_t poll_sn_rx, uint64_t poll_sn_tx)
+bool net_device_table_mgr::global_ring_request_notification()
 {
     ndtm_logfunc("");
-    int ret_total = 0;
     net_device_map_index_t::iterator net_dev_iter;
     for (net_dev_iter = m_net_device_map_index.begin();
          m_net_device_map_index.end() != net_dev_iter; net_dev_iter++) {
-        int ret = net_dev_iter->second->global_ring_request_notification(poll_sn_rx, poll_sn_tx);
         BULLSEYE_EXCLUDE_BLOCK_START
-        if (ret < 0) {
+        if (!net_dev_iter->second->global_ring_request_notification()) {
             ndtm_logerr("Error in net_device_val[%p]->request_notification() (errno=%d %m)",
                         net_dev_iter->second, errno);
-            return ret;
+            return false;
         }
         BULLSEYE_EXCLUDE_BLOCK_END
-        ret_total += ret;
     }
-    return ret_total;
+    return true;
 }
 
 int net_device_table_mgr::global_ring_epfd_get()
@@ -467,7 +462,7 @@ void net_device_table_mgr::print_report(vlog_levels_t log_level,
 }
 
 void net_device_table_mgr::global_ring_wait_for_notification_and_process_element(
-    uint64_t *p_poll_sn, void *pv_fd_ready_array /*=NULL*/)
+    void *pv_fd_ready_array /*=NULL*/)
 {
     ndtm_logfunc("");
     int max_fd = 16;
@@ -482,8 +477,7 @@ void net_device_table_mgr::global_ring_wait_for_notification_and_process_element
             if (p_cq_ch_info) {
                 ring *p_ready_ring = p_cq_ch_info->get_ring();
                 // Handle the CQ notification channel
-                p_ready_ring->wait_for_notification_and_process_element(p_poll_sn,
-                                                                        pv_fd_ready_array);
+                p_ready_ring->wait_for_notification_and_process_element(pv_fd_ready_array);
             } else {
                 ndtm_logdbg("removing wakeup fd from epfd");
                 BULLSEYE_EXCLUDE_BLOCK_START

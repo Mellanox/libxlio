@@ -24,17 +24,12 @@
 
 #define WQEBB_SIZE 64
 
-atomic_t cq_mgr_tx::m_n_cq_id_counter_tx = ATOMIC_INIT(1);
-
-uint64_t cq_mgr_tx::m_n_global_sn_tx = 0U;
-
 cq_mgr_tx::cq_mgr_tx(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int cq_size,
                      ibv_comp_channel *p_comp_event_channel)
     : m_p_ring(p_ring)
     , m_p_ib_ctx_handler(p_ib_ctx_handler)
     , m_comp_event_channel(p_comp_event_channel)
 {
-    m_cq_id_tx = atomic_fetch_and_inc(&m_n_cq_id_counter_tx); // cq id is nonzero
     configure(cq_size);
 
     memset(&m_mlx5_cq, 0, sizeof(m_mlx5_cq));
@@ -117,18 +112,9 @@ void cq_mgr_tx::del_qp_tx(hw_queue_tx *hqtx_ptr)
     m_hqtx_ptr = nullptr;
 }
 
-int cq_mgr_tx::request_notification(uint64_t poll_sn)
+bool cq_mgr_tx::request_notification()
 {
-    int ret = -1;
-
     cq_logfuncall("");
-
-    if ((m_n_global_sn_tx > 0 && poll_sn != m_n_global_sn_tx)) {
-        // The cq_mgr_tx's has receive packets pending processing (or got processed since
-        // cq_poll_sn)
-        cq_logfunc("miss matched poll sn (user=0x%lx, cq=0x%lx)", poll_sn, m_n_cq_poll_sn_tx);
-        return 1;
-    }
 
     if (m_b_notification_armed == false) {
 
@@ -141,17 +127,13 @@ int cq_mgr_tx::request_notification(uint64_t poll_sn)
         }
         else
         {
-            ret = 0;
             m_b_notification_armed = true;
         }
         ENDIF_VERBS_FAILURE;
-    } else {
-        // cq_mgr_tx notification channel already armed
-        ret = 0;
     }
 
-    cq_logfuncall("returning with %d", ret);
-    return ret;
+    cq_logfuncall("returning with %d", m_b_notification_armed ? 1 : 0);
+    return m_b_notification_armed;
 }
 
 cq_mgr_tx *cq_mgr_tx::get_cq_mgr_from_cq_event(struct ibv_comp_channel *p_cq_channel)
@@ -199,7 +181,7 @@ std::string cq_mgr_tx::wqe_to_hexstring(uint16_t index, uint32_t credits) const
     return oss.str();
 }
 
-int cq_mgr_tx::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
+int cq_mgr_tx::poll_and_process_element_tx()
 {
     cq_logfuncall("");
 
@@ -208,8 +190,7 @@ int cq_mgr_tx::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
     };
 
     int ret = -1;
-    uint32_t num_polled_cqes = 0;
-    xlio_mlx5_cqe *cqe = get_cqe_tx(num_polled_cqes);
+    xlio_mlx5_cqe *cqe = get_cqe_tx();
 
     if (likely(cqe)) {
         unsigned index = ntohs(cqe->wqe_counter) & (m_hqtx_ptr->m_tx_num_wr - 1);
@@ -225,7 +206,6 @@ int cq_mgr_tx::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
         handle_sq_wqe_prop(index);
         ret = 1;
     }
-    update_global_sn_tx(*p_cq_poll_sn, num_polled_cqes);
 
     return ret;
 }

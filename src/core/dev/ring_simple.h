@@ -37,18 +37,16 @@ public:
     ring_simple(int if_index, ring *parent, bool use_locks);
     virtual ~ring_simple();
 
-    int request_notification(cq_type_t cq_type, uint64_t poll_sn) override;
-    int poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
-                                    void *pv_fd_ready_array = nullptr) override;
-    int poll_and_process_element_tx(uint64_t *p_cq_poll_sn) override;
+    bool request_notification(cq_type_t cq_type) override;
+    int poll_and_process_element_rx(void *pv_fd_ready_array = nullptr) override;
+    int poll_and_process_element_tx() override;
     void adapt_cq_moderation() override;
     bool reclaim_recv_buffers(descq_t *rx_reuse) override;
     bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst) override;
     bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst) override; // No locks
     void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc) override;
     int drain_and_proccess() override;
-    void wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
-                                                   void *pv_fd_ready_array = nullptr) override;
+    void wait_for_notification_and_process_element(void *pv_fd_ready_array = nullptr) override;
     void mem_buf_desc_return_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc);
     void mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc,
                                          void *pv_fd_ready_array = nullptr);
@@ -124,8 +122,7 @@ public:
         }
 
         /* Do polling to speedup handling of the completion. */
-        uint64_t dummy_poll_sn = 0;
-        m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
+        m_p_cq_mgr_tx->poll_and_process_element_tx();
 
         return tis;
     }
@@ -151,8 +148,7 @@ public:
         }
 
         /* Do polling to speedup handling of the completion. */
-        uint64_t dummy_poll_sn = 0;
-        m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
+        m_p_cq_mgr_tx->poll_and_process_element_tx();
 
         return rc;
     }
@@ -162,8 +158,7 @@ public:
         m_hqtx->tls_context_resync_tx(info, tis, skip_static);
         ++(m_p_ring_stat->n_tx_tls_resyncs);
 
-        uint64_t dummy_poll_sn = 0;
-        m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
+        m_p_cq_mgr_tx->poll_and_process_element_tx();
     }
     void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn) override
     {
@@ -179,8 +174,7 @@ public:
         }
         m_hqtx->tls_get_progress_params_rx(tir, buf, lkey);
         /* Do polling to speedup handling of the completion. */
-        uint64_t dummy_poll_sn = 0;
-        m_p_cq_mgr_tx->poll_and_process_element_tx(&dummy_poll_sn);
+        m_p_cq_mgr_tx->poll_and_process_element_tx();
     }
     void tls_release_tis(xlio_tis *tis) override
     {
