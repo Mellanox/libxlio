@@ -300,16 +300,16 @@ do_check_dpcp()
 	echo "Checking dpcp usage"
 	pushd "${dpcp_dir}" > /dev/null 2>&1
     set +e
-    if [ ! -d "${dpcp_dir}/install" ]; then
-        eval "./autogen.sh && ./configure --prefix=${dpcp_dir}/install && make $make_opt install"
+    if [ ! -f "/usr/include/mellanox/dpcp.h" ]; then
+        eval "./autogen.sh && ./configure --prefix=/usr && make $make_opt install"
         ret=$?
     fi
     set -e
 
     popd > /dev/null 2>&1
     if [ $ret -eq 0 ]; then
-        eval "$1=${dpcp_dir}/install"
-        echo "dpcp: ${dpcp_dir}/install"
+        eval "$1=/usr"
+        echo "dpcp: /usr"
     else
         echo "dpcp: no"
     fi
