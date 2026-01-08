@@ -792,25 +792,17 @@ mem_buf_desc_t *ring_simple::get_tx_buffers(pbuf_type type, uint32_t n_num_mem_b
             return nullptr;
         }
     }
-    /* coverity[returned_null] */
-    head = pool.get_and_pop_back();
-    /* coverity[null_deref] */
-    head->lwip_pbuf.ref = 1;
-    assert(head->lwip_pbuf.type == type);
-    head->lwip_pbuf.type = type;
-    n_num_mem_bufs--;
 
-    mem_buf_desc_t *next = head;
-    while (n_num_mem_bufs) {
-        next->p_next_desc = pool.get_and_pop_back();
-        next = next->p_next_desc;
-        next->lwip_pbuf.ref = 1;
-        assert(head->lwip_pbuf.type == type);
-        next->lwip_pbuf.type = type;
-        n_num_mem_bufs--;
+    for (head = nullptr; n_num_mem_bufs > 0; --n_num_mem_bufs) {
+        mem_buf_desc_t *pdesc = pool.get_and_pop_back();
+        // We track number of elements in the list, so this check is to silent static analyzers.
+        if (likely(pdesc)) {
+            assert(pdesc->lwip_pbuf.type == type);
+            pdesc->lwip_pbuf.ref = 1;
+            pdesc->p_next_desc = head;
+            head = pdesc;
+        }
     }
-    next->p_next_desc = nullptr;
-
     return head;
 }
 
