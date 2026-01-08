@@ -59,8 +59,7 @@ steps:
     containerSelector:
       - "{name: 'rhel8.6'}"
     run: |
-      git clone https://github.com/Mellanox/libdpcp.git libdpcp
-      cd libdpcp
+      cd "${WORKSPACE}/jenkins/default/_dpcp-last"
       ./autogen.sh && ./configure --prefix=/usr && sudo make install
 
   - name: Release
