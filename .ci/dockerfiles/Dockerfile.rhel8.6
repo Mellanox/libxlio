@@ -50,7 +50,7 @@ RUN yum install --allowerasing -y \
     git autoconf automake libtool gcc \
     sudo gcc-c++ libibverbs-devel json-c-devel rdma-core \
     librdmacm unzip patch wget make \
-    libnl3-devel rpm-build
+    libnl3-devel rpm-build net-tools
 
 
 FROM harbor.mellanox.com/hpcx/$ARCH/rhel8.6/base as build
