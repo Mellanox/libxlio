@@ -1,3 +1,20 @@
+Version 3.61.1-1:
+Date + Time 2025-01-08
+=============================================================
+Fixed:
+	- RM #4807454 Using DPCP for max SQ WQEBBs
+	- RM #4639355 Fix cpu_affinity validation
+	- RM #4745207 display negative config values
+	- RM #4669908 Fix leak in xlio_get_api()
+	- RM #4809280 Add dpcp dependency to the DEB/RPM specs
+	- RM #4809498 Remove auto-generated json_config.h
+	- RM #4583806 Inline configuration anomalies detection
+	- RM #4050516 Fix TCP segment leak in SYN flood
+	- RM #4219010 XLIO support for kernel 6.10
+	- RM #4687559 Add simple communication protocol and refactor the code
+	- RM #4687559 Add TX buffer pool to the Ultra API example
+	- RM #4583806 Fix Coverity issues
+
 Version 3.61.0-1:
 Date + Time 2025-12-14
 =============================================================
