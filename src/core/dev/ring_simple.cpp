@@ -379,49 +379,47 @@ void ring_simple::create_resources()
     ring_logdbg("new ring_simple() completed");
 }
 
-int ring_simple::request_notification(cq_type_t cq_type, uint64_t poll_sn)
+int ring_simple::request_notification(cq_type_t cq_type)
 {
     int ret;
     if (likely(CQT_RX == cq_type)) {
         m_lock_ring_rx.lock();
-        ret = m_p_cq_mgr_rx->request_notification(poll_sn);
+        ret = m_p_cq_mgr_rx->request_notification();
         ++m_p_ring_stat->n_rx_interrupt_requests;
         m_lock_ring_rx.unlock();
     } else {
         m_lock_ring_tx.lock();
-        ret = m_p_cq_mgr_tx->request_notification(poll_sn);
+        ret = m_p_cq_mgr_tx->request_notification();
         m_lock_ring_tx.unlock();
     }
 
     return ret;
 }
 
-int ring_simple::poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
-                                             void *pv_fd_ready_array /*NULL*/)
+int ring_simple::poll_and_process_element_rx(void *pv_fd_ready_array /*NULL*/)
 {
     int ret = 0; // CQ was not drained.
     if (!m_lock_ring_rx.trylock()) {
-        ret = m_p_cq_mgr_rx->poll_and_process_element_rx(p_cq_poll_sn, pv_fd_ready_array);
+        ret = m_p_cq_mgr_rx->poll_and_process_element_rx(pv_fd_ready_array);
         m_lock_ring_rx.unlock();
     }
     return ret;
 }
 
-int ring_simple::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
+int ring_simple::poll_and_process_element_tx()
 {
     int ret = 0; // CQ was not drained - If trylock fails.
     if (!m_lock_ring_tx.trylock()) {
-        ret = m_p_cq_mgr_tx->poll_and_process_element_tx(p_cq_poll_sn);
+        ret = m_p_cq_mgr_tx->poll_and_process_element_tx();
         m_lock_ring_tx.unlock();
     }
     return ret;
 }
 
-void ring_simple::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
-                                                            void *pv_fd_ready_array /*NULL*/)
+void ring_simple::wait_for_notification_and_process_element(void *pv_fd_ready_array /*NULL*/)
 {
     m_lock_ring_rx.lock();
-    m_p_cq_mgr_rx->wait_for_notification_and_process_element(p_cq_poll_sn, pv_fd_ready_array);
+    m_p_cq_mgr_rx->wait_for_notification_and_process_element(pv_fd_ready_array);
     ++m_p_ring_stat->n_rx_interrupt_received;
     m_lock_ring_rx.unlock();
 }
@@ -498,7 +496,6 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
 {
     NOT_IN_USE(id);
     mem_buf_desc_t *buff_list = nullptr;
-    uint64_t poll_sn = 0;
 
     ring_logfuncall("n_num_mem_bufs=%d", n_num_mem_bufs);
 
@@ -508,7 +505,7 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
         int ret = -1;
         // Try to poll once in the hope that we get a few freed tx mem_buf_desc
         if (!tx_skip_poll) {
-            ret = m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
+            ret = m_p_cq_mgr_tx->poll_and_process_element_tx();
         }
         if (ret > 0) {
             ring_logfunc("polling succeeded on cq_mgr_tx");
@@ -528,9 +525,8 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
             buff_list = get_tx_buffers(type, n_num_mem_bufs);
             if (!buff_list) {
                 // Arm the CQ event channel for next Tx buffer release (tx cqe)
-                ret = m_p_cq_mgr_tx->request_notification(poll_sn);
+                ret = m_p_cq_mgr_tx->request_notification();
                 if (ret < 0) {
-                    // this is most likely due to cq_poll_sn out of sync, need to poll_cq again
                     ring_logdbg("failed arming cq_mgr_tx (hqtx=%p, cq_mgr_tx=%p) (errno=%d %m)",
                                 m_hqtx, m_p_cq_mgr_tx, errno);
                 } else if (ret == 0) {
@@ -571,7 +567,7 @@ mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbu
                         p_cq_mgr_tx->reset_notification_armed();
 
                         // Perform a non blocking event read, clear the fd channel
-                        p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
+                        p_cq_mgr_tx->poll_and_process_element_tx();
                     }
                 }
                 buff_list = get_tx_buffers(type, n_num_mem_bufs);
@@ -675,13 +671,12 @@ int ring_simple::send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wq
 bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
 {
     bool granted;
-    uint64_t poll_sn = 0;
 
     // TODO credits_get() does TX polling. Call current method only for bocking mode?
 
     do {
         // Try to poll once in the hope that we get space in SQ
-        m_p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
+        m_p_cq_mgr_tx->poll_and_process_element_tx();
         granted = m_hqtx->credits_get(credits);
         if (granted) {
             break;
@@ -698,9 +693,8 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
             m_lock_ring_tx.lock();
 
             // TODO Resolve race window between previous polling and request_notification
-            int ret = m_p_cq_mgr_tx->request_notification(poll_sn);
+            int ret = m_p_cq_mgr_tx->request_notification();
             if (ret < 0) {
-                // this is most likely due to cq_poll_sn out of sync, need to poll_cq again
                 ring_logdbg("failed arming cq_mgr_tx (hqtx=%p, cq_mgr_tx=%p) (errno=%d %m)", m_hqtx,
                             m_p_cq_mgr_tx, errno);
             } else if (ret == 0) {
@@ -737,7 +731,7 @@ bool ring_simple::is_available_qp_wr(bool b_block, unsigned credits)
                     p_cq_mgr_tx->reset_notification_armed();
 
                     // Perform a non blocking event read, clear the fd channel
-                    p_cq_mgr_tx->poll_and_process_element_tx(&poll_sn);
+                    p_cq_mgr_tx->poll_and_process_element_tx();
                 }
             }
 
