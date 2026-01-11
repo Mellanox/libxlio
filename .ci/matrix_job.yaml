@@ -40,7 +40,7 @@ runs_on_dockers:
 # build
   - {file: '.ci/dockerfiles/Dockerfile.ubuntu22.04', name: 'ub22.04-x86_64', uri: 'xlio/$arch/$name/build', tag: '20251202', category: 'base', arch: 'x86_64', build_args: '--build-arg ARCH=x86_64 --no-cache --target build'}
   - {file: '.ci/dockerfiles/Dockerfile.ubuntu22.04', name: 'ub22.04-aarch64', uri: 'xlio/$arch/$name/build', tag: '20251202', category: 'base', arch: 'aarch64', build_args: '--build-arg ARCH=aarch64 --no-cache --target build'}
-  - {file: '.ci/dockerfiles/Dockerfile.rhel8.6', name: 'rhel8.6-x86_64',  uri: 'xlio/$arch/$name/build', tag: '20251202', category: 'base', arch: 'x86_64', build_args: '--no-cache --target build'}
+  - {file: '.ci/dockerfiles/Dockerfile.rhel9.6', name: 'rhel9.6-x86_64',  uri: 'xlio/$arch/$name/build', tag: '20260111', category: 'base', arch: 'x86_64', build_args: '--no-cache --target build'}
   - {file: '.ci/dockerfiles/Dockerfile.ubuntu24.04', name: 'ub24.04-x86_64', uri: 'xlio/$arch/$name/build', tag: '20251202', category: 'base', arch: 'x86_64', build_args: '--build-arg ARCH=x86_64 --no-cache --target build'}
   - {file: '.ci/dockerfiles/Dockerfile.ubuntu24.04', name: 'ub24.04-aarch64', uri: 'xlio/$arch/$name/build', tag: '20251202', category: 'base', arch: 'aarch64', build_args: '--build-arg ARCH=aarch64 --no-cache --target build'}
   - {
@@ -77,11 +77,11 @@ runs_on_dockers:
   - {name: 'compiler-icc-19.1.1', url: '${registry_host}/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
   - {name: 'compiler-gcc', url: '${registry_host}/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
   - {name: 'header-check', url: '${registry_host}/toolbox/header_check:0.0.58', category: 'tool', arch: 'x86_64', tag: '0.0.58'}
-  - {file: '.ci/dockerfiles/Dockerfile.rhel8.6',
+  - {file: '.ci/dockerfiles/Dockerfile.rhel9.6',
      arch: 'x86_64',
      name: 'xlio_static.cppcheck',
      uri: '$arch/$name',
-     tag: '20251202',
+     tag: '20260111',
      build_args: '--no-cache --target static',
      category: 'tool'
      }
