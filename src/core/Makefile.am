@@ -174,6 +174,7 @@ libxlio_la_SOURCES := \
 	config/config_registry.h \
 	config/loaders/inline_loader.h \
 	config/loaders/json_loader.h \
+	config/loaders/key_resolver.h \
 	config/loaders/loader.h \
 	config/descriptors/parameter_descriptor.h \
 	config/descriptors/config_descriptor.h \
@@ -183,10 +184,12 @@ libxlio_la_SOURCES := \
 	config/config_strings.h \
 	config/json_object_handle.h \
 	config/json_utils.h \
+	config/string_utils.h \
 	\
 	config/config_registry.cpp \
 	config/loaders/inline_loader.cpp \
 	config/loaders/json_loader.cpp \
+	config/loaders/key_resolver.cpp \
 	config/descriptors/parameter_descriptor.cpp \
 	config/descriptors/config_descriptor.cpp \
 	config/descriptor_providers/json_descriptor_provider.cpp \
@@ -194,6 +197,7 @@ libxlio_la_SOURCES := \
 	config/config_strings.cpp \
 	config/json_object_handle.cpp \
 	config/json_utils.cpp \
+	config/string_utils.cpp \
 	\
 	$(top_builddir)/src/core/config/descriptor_providers/xlio_config_schema.h \
 	\

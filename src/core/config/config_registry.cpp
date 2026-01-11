@@ -40,13 +40,24 @@ static const char *get_config_path()
     return custom_path ? custom_path : config_strings::paths::DEFAULT_CONFIG_FILE;
 }
 
-static std::queue<std::unique_ptr<loader>> create_default_loaders()
+/**
+ * @brief Creates loaders with access to the config descriptor
+ *
+ * The descriptor is needed by inline_loader for short name resolution.
+ * json_loader doesn't need it since JSON files use full paths.
+ *
+ * @param descriptor The config descriptor for key resolution
+ * @return Queue of loaders in priority order
+ */
+static std::queue<std::unique_ptr<loader>> create_loaders_with_descriptor(
+    const config_descriptor &descriptor)
 {
     std::queue<std::unique_ptr<loader>> loaders;
 
     const char *inline_env = std::getenv(config_strings::env::XLIO_INLINE_CONFIG);
     if (inline_env) {
-        loaders.push(std::make_unique<inline_loader>(config_strings::env::XLIO_INLINE_CONFIG));
+        loaders.push(
+            std::make_unique<inline_loader>(config_strings::env::XLIO_INLINE_CONFIG, descriptor));
     }
 
     loaders.push(std::make_unique<json_loader>(get_config_path()));
@@ -55,14 +66,21 @@ static std::queue<std::unique_ptr<loader>> create_default_loaders()
 }
 
 config_registry::config_registry()
-    : config_registry(create_default_loaders(), std::make_unique<json_descriptor_provider>())
 {
+    // Load descriptor first (needed by inline_loader for key resolution)
+    auto provider = std::make_unique<json_descriptor_provider>();
+    m_config_descriptor = provider->load_descriptors();
+
+    auto loaders = create_loaders_with_descriptor(m_config_descriptor);
+
+    initialize_from_loaders(std::move(loaders));
 }
 
 config_registry::config_registry(std::queue<std::unique_ptr<loader>> &&value_loaders,
-                                 std::unique_ptr<descriptor_provider> descriptor_provider)
+                                 config_descriptor descriptor)
 {
-    initialize_registry(std::move(value_loaders), std::move(descriptor_provider));
+    m_config_descriptor = std::move(descriptor);
+    initialize_from_loaders(std::move(value_loaders));
 }
 
 std::vector<std::string> config_registry::get_sources() const
@@ -70,14 +88,11 @@ std::vector<std::string> config_registry::get_sources() const
     return m_sources;
 }
 
-void config_registry::initialize_registry(std::queue<std::unique_ptr<loader>> &&value_loaders,
-                                          std::unique_ptr<descriptor_provider> descriptor_provider)
+void config_registry::initialize_from_loaders(std::queue<std::unique_ptr<loader>> &&value_loaders)
 {
-    if (value_loaders.empty() || !descriptor_provider) {
-        throw_xlio_exception("loader/descriptor_provider cannot be null");
+    if (value_loaders.empty()) {
+        throw_xlio_exception("At least one loader must be provided");
     }
-
-    m_config_descriptor = descriptor_provider->load_descriptors();
 
     // Load raw config data - first in queue means higher priority
     while (!value_loaders.empty()) {
