@@ -43,12 +43,16 @@ public:
     config_registry();
 
     /**
-     * @brief Constructor with custom loaders and descriptor provider
+     * @brief Constructor with custom loaders and pre-loaded descriptor
+     *
+     * This constructor is primarily used for testing, where loaders and
+     * descriptor are created independently.
+     *
      * @param value_loaders Queue of loaders to use (in priority order)
-     * @param descriptor_provider Provider for parameter descriptors
+     * @param descriptor Pre-loaded config descriptor
      */
     config_registry(std::queue<std::unique_ptr<loader>> &&value_loaders,
-                    std::unique_ptr<descriptor_provider> descriptor_provider);
+                    config_descriptor descriptor);
 
     /**
      * @brief Virtual destructor
@@ -105,8 +109,7 @@ private:
     config_descriptor m_config_descriptor;
     std::vector<std::string> m_sources;
     std::experimental::any get_default_value_as_any(const std::string &key) const;
-    void initialize_registry(std::queue<std::unique_ptr<loader>> &&value_loaders,
-                             std::unique_ptr<descriptor_provider> descriptor_provider);
+    void initialize_from_loaders(std::queue<std::unique_ptr<loader>> &&value_loaders);
 
     /**
      * @brief Helper implementation for retrieving non-integer values

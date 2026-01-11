@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "key_resolver.h"
 #include "loader.h"
 #include <experimental/any>
 #include <map>
@@ -15,15 +16,19 @@
  * @brief Loads configuration from environment variables
  *
  * Parses inline configuration data from environment variables,
- * formatted as key-value pairs.
+ * formatted as semicolon-separated key-value pairs. Supports short
+ * parameter names that are automatically resolved to full paths.
+ *
+ * Example: XLIO_INLINE_CONFIG="memory_limit=8GB; daemon.enable=true"
  */
 class inline_loader : public loader {
 public:
     /**
-     * @brief Constructor with environment variable name
+     * @brief Constructor with environment variable name and config descriptor
      * @param inline_config_key Name of the environment variable containing inline config
+     * @param descriptor The config descriptor for key resolution
      */
-    explicit inline_loader(const char *inline_config_key);
+    inline_loader(const char *inline_config_key, const config_descriptor &descriptor);
 
     /**
      * @brief Loads all configuration values from the environment variable
@@ -34,24 +39,12 @@ public:
 private:
     /**
      * @brief Parses the inline configuration data
-     * Extracts key-value pairs from the environment variable
+     * Extracts key-value pairs from the environment variable and resolves
+     * short names to full paths.
      */
     void parse_inline_data();
 
 private:
-    const char *m_inline_config; /**< Environment variable name */
-
-    /**
-     * @brief Checks if a given parameter key is unsupported in the inline configuration.
-     *
-     * Certain parameters are not supported in the inline configuration due to value format
-     * conflicts (e.g., values containing commas, which interfere with the comma-delimited
-     * format of the inline config). This function provides an abstraction for checking
-     * unsupported keys, and can be extended in the future if additional keys
-     * need to be disallowed.
-     *
-     * @param key    The parameter key to check.
-     * @return true if the parameter key is unsupported in the inline config; false otherwise.
-     */
-    bool check_unsupported_key(const std::string &key) const;
+    const char *m_inline_config; /**< Raw inline config string */
+    key_resolver m_resolver; /**< Resolver for short key names */
 };

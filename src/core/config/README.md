@@ -55,10 +55,42 @@ Multiple configuration values can be set in a single environment variable using 
 
 ```bash
 # Set multiple configuration values in one line
-export XLIO_INLINE_CONFIG="core.resources.memory_limit=4294967296, monitor.log.file_path=/tmp/xlio.log, network.protocols.tcp.nodelay.enable=true"
+export XLIO_INLINE_CONFIG="core.resources.memory_limit=4294967296; monitor.log.file_path=/tmp/xlio.log; network.protocols.tcp.nodelay.enable=true"
 ```
 
-The syntax supports comma-separated key-value pairs where each key uses the dot notation of the configuration hierarchy.
+The syntax supports semicolon-separated key-value pairs. Leading and trailing whitespace around keys and values is automatically trimmed.
+
+##### Short Name Resolution
+
+XLIO_INLINE_CONFIG supports short names (leaf names) and partial paths for configuration parameters, making it easier to configure common settings:
+
+```bash
+# Instead of the full path:
+export XLIO_INLINE_CONFIG="core.resources.memory_limit=4GB"
+
+# You can use the short name:
+export XLIO_INLINE_CONFIG="memory_limit=4GB"
+
+# Or partial paths:
+export XLIO_INLINE_CONFIG="resources.memory_limit=4GB"
+```
+
+**Resolution Rules:**
+- Unique leaf names resolve automatically (e.g., `memory_limit` → `core.resources.memory_limit`)
+- Ambiguous names require enough path to disambiguate (e.g., `daemon.enable` instead of just `enable`)
+- Full paths always work
+
+**Helpful Error Messages:**
+When a short name is ambiguous, XLIO provides helpful suggestions:
+```
+In 'XLIO_INLINE_CONFIG': Ambiguous key 'enable'. Did you mean:
+  - daemon.enable (core.daemon.enable)
+  - hugepages.enable (core.resources.hugepages.enable)
+  - striding_rq.enable (hardware_features.striding_rq.enable)  
+```
+
+**Forward Compatibility Warning:**
+If a future schema update adds a parameter with the same leaf name as an existing parameter, your short name may become ambiguous. For configurations that need to remain stable across versions, use longer paths or full paths.
 
 #### 2. Using JSON Configuration Files
 
