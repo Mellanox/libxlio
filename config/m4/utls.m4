@@ -20,7 +20,23 @@ AC_ARG_ENABLE([utls],
 )
 
 prj_cv_dpcp_1_1_44=0
-AS_IF([test "$prj_cv_dpcp" -ne 0],
+AS_IF([test "x$dpcp_explicitly_specified" = "xno"],
+    [
+    # Built-in DPCP is configured but not installed yet, so probe its source header.
+    prj_cv_utls_save_CPPFLAGS="$CPPFLAGS"
+    CPPFLAGS="-I$DPCP_SOURCE_DIR/src/api $CPPFLAGS"
+    AC_LANG_PUSH([C++])
+    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <dpcp.h>]],
+         [[dpcp::tis* _tis;
+           dpcp::tls_dek* _dek;
+           int tis_bit = (int)dpcp::TIS_ATTR_TLS;
+           (void)_tis; (void)_dek;
+           (void)tis_bit;]])],
+         [prj_cv_dpcp_1_1_44=1])
+    AC_LANG_POP()
+    CPPFLAGS="$prj_cv_utls_save_CPPFLAGS"
+    ],
+    [test "$prj_cv_dpcp" -ne 0],
     [
     AC_LANG_PUSH([C++])
     AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <mellanox/dpcp.h>]],

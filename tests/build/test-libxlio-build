@@ -1,0 +1,1109 @@
+#!/usr/bin/env python3
+"""
+Exercise XLIO build-system combinations from clone through make install.
+
+The script creates ./test-build in the current directory. The script may remain
+in the XLIO source tree; all clones, logs, build directories, and staged
+installs are created below ./test-build. If ./test-build already exists, the
+script fails.
+
+Example:
+    mkdir /tmp/xlio-build-tests
+    cd /tmp/xlio-build-tests
+    /path/to/libxlio/tests/build/test-libxlio-build -j 4
+
+Before running the matrix, the script clones and builds an external libdpcp
+under ./test-build/libdpcp. Its ./test-build/libdpcp/install prefix is used for
+--with-dpcp cases.
+
+By default, the repository URL and branch are read from the Git checkout
+containing this script. Set REPO_URL and/or BRANCH in the environment to
+override either value.
+"""
+
+import argparse
+import itertools
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+CASE_PREFIX = "libxlio-TEST"
+SHORT_CASE_COUNT = 10
+DPCP_REPOSITORY_URL = "https://github.com/Mellanox/libdpcp.git"
+DPCP_DUPLICATE_MEMBER_NAME = "dpcp_duplicate_member.o"
+DPCP_DUPLICATE_SYMBOLS = (
+    "xlio_test_dpcp_duplicate_member_one",
+    "xlio_test_dpcp_duplicate_member_two",
+)
+HEARTBEAT_INTERVAL_SECONDS = 30
+OUTPUT_LOCK = threading.Lock()
+
+
+class CaseFailure(RuntimeError):
+    pass
+
+
+class CaseReport(list):
+    def __init__(self, log_path):
+        super().__init__()
+        self.log_path = log_path
+
+    def append(self, line):
+        super().append(line)
+        with self.log_path.open("a", encoding="utf-8") as log:
+            log.write(f"{line}\n")
+
+    def extend(self, lines):
+        for line in lines:
+            self.append(line)
+
+
+@dataclass(frozen=True)
+class BuildCase:
+    layout: str
+    xlio_mode: str
+    dpcp_source: str
+    dpcp_link_mode: str
+    flags_mode: str
+    prefix_mode: str
+    utls_mode: str
+
+    @property
+    def name(self):
+        return "-".join(
+            (
+                self.layout,
+                self.xlio_mode,
+                self.dpcp_source,
+                self.dpcp_link_mode,
+                self.flags_mode,
+                self.prefix_mode,
+                self.utls_mode,
+            )
+        )
+
+
+@dataclass
+class CaseResult:
+    case: BuildCase
+    passed: bool
+    report: list
+
+
+def positive_int(value):
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return parsed
+
+
+def regex_pattern(value):
+    try:
+        return re.compile(value)
+    except re.error as error:
+        raise argparse.ArgumentTypeError(f"invalid regular expression: {error}")
+
+
+def format_duration(total_seconds):
+    total_seconds = int(total_seconds)
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+def emit(lines):
+    if isinstance(lines, str):
+        lines = (lines,)
+    with OUTPUT_LOCK:
+        for line in lines:
+            print(line, flush=True)
+
+
+def command_text(args):
+    return "$ " + " ".join(shlex.quote(str(arg)) for arg in args)
+
+
+def cd_command_text(directory, args):
+    command = " ".join(shlex.quote(str(arg)) for arg in args)
+    return f"$ (cd {shlex.quote(str(directory))} && {command})"
+
+
+def require_command(command):
+    if shutil.which(command) is None:
+        raise CaseFailure(f"Required command not found: {command}")
+
+
+def git_value(repository, *arguments):
+    process = subprocess.run(
+        ("git", "-C", str(repository), *arguments),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if process.returncode != 0:
+        detail = process.stderr.strip() or "git command failed"
+        raise CaseFailure(detail)
+    return process.stdout.strip()
+
+
+def repository_settings():
+    repository_root_value = git_value(SCRIPT_DIR, "rev-parse", "--show-toplevel")
+    if not repository_root_value:
+        raise CaseFailure("Unable to determine the repository containing this script")
+    repository_root = Path(repository_root_value).resolve()
+
+    if "REPO_URL" in os.environ:
+        repository_url = os.environ["REPO_URL"]
+    else:
+        repository_url = git_value(
+            repository_root, "remote", "get-url", "origin"
+        )
+
+    if "BRANCH" in os.environ:
+        branch = os.environ["BRANCH"]
+    else:
+        branch = git_value(repository_root, "branch", "--show-current")
+        if not branch:
+            raise CaseFailure(
+                "The working repository has a detached HEAD; set BRANCH explicitly"
+            )
+
+    if not repository_url:
+        raise CaseFailure("REPO_URL is empty")
+    if not branch:
+        raise CaseFailure("BRANCH is empty")
+
+    return repository_url, branch
+
+
+def run_logged(args, cwd, log_path, environment, case_name):
+    display_command = cd_command_text(cwd, args)
+    emit(f"[{case_name}] running: {display_command}")
+
+    with log_path.open("a", encoding="utf-8") as log:
+        log.write(f"ACTION running: {display_command}\n")
+        log.flush()
+        process = subprocess.Popen(
+            [str(arg) for arg in args],
+            cwd=str(cwd),
+            env=environment,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+        )
+        while True:
+            try:
+                return process.wait(timeout=HEARTBEAT_INTERVAL_SECONDS)
+            except subprocess.TimeoutExpired:
+                emit(
+                    f"[{case_name}] still running: {display_command} "
+                    f"(output: {log_path})"
+                )
+
+
+def run_captured(args, cwd, log_path, environment):
+    display_command = cd_command_text(cwd, args)
+    with log_path.open("a", encoding="utf-8") as log:
+        log.write(f"ACTION running: {display_command}\n")
+
+    process = subprocess.run(
+        [str(arg) for arg in args],
+        cwd=str(cwd),
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    with log_path.open("a", encoding="utf-8") as log:
+        log.write(process.stdout)
+    return process
+
+
+def prepare_external_dpcp(work_root, environment):
+    dpcp_dir = work_root / "libdpcp"
+    install_dir = dpcp_dir / "install"
+    log_path = work_root / "libdpcp-build.log"
+    setup_name = "external-dpcp"
+
+    if dpcp_dir.exists():
+        raise CaseFailure(
+            f"External DPCP directory already exists; remove it before rerunning: "
+            f"{dpcp_dir}"
+        )
+
+    log_path.write_text("", encoding="utf-8")
+    commands = (
+        (
+            ("git", "clone", DPCP_REPOSITORY_URL, dpcp_dir.name),
+            work_root,
+            "clone",
+        ),
+        (
+            (
+                "cmake",
+                "-S",
+                ".",
+                "-B",
+                "build-shared",
+                "-DCMAKE_INSTALL_PREFIX=install",
+            ),
+            dpcp_dir,
+            "configure shared build",
+        ),
+        (
+            ("cmake", "--build", "build-shared", "-j", "10"),
+            dpcp_dir,
+            "build shared library",
+        ),
+        (
+            ("cmake", "--install", "build-shared"),
+            dpcp_dir,
+            "install shared library",
+        ),
+        (
+            (
+                "cmake",
+                "-S",
+                ".",
+                "-B",
+                "build-static",
+                "-DCMAKE_INSTALL_PREFIX=install",
+                "-DDPCP_STATIC=ON",
+            ),
+            dpcp_dir,
+            "configure static build",
+        ),
+        (
+            ("cmake", "--build", "build-static", "-j", "10"),
+            dpcp_dir,
+            "build static library",
+        ),
+        (
+            ("cmake", "--install", "build-static"),
+            dpcp_dir,
+            "install static library",
+        ),
+    )
+
+    emit(
+        (
+            "Preparing external DPCP",
+            f"  Source: {DPCP_REPOSITORY_URL}",
+            f"  Directory: {dpcp_dir}",
+            f"  Build output: {log_path}",
+        )
+    )
+    for command, cwd, action in commands:
+        if run_logged(command, cwd, log_path, environment, setup_name) != 0:
+            raise CaseFailure(f"Failed to {action}; see {log_path}")
+
+    duplicate_objects = []
+    for index, symbol in enumerate(DPCP_DUPLICATE_SYMBOLS, start=1):
+        member_dir = dpcp_dir / f"duplicate-member-{index}"
+        member_dir.mkdir()
+        source_path = member_dir / "member.c"
+        object_path = member_dir / DPCP_DUPLICATE_MEMBER_NAME
+        source_path.write_text(
+            f"int {symbol}(void) {{ return {index}; }}\n",
+            encoding="utf-8",
+        )
+        if (
+            run_logged(
+                ("cc", "-c", source_path, "-o", object_path),
+                dpcp_dir,
+                log_path,
+                environment,
+                setup_name,
+            )
+            != 0
+        ):
+            raise CaseFailure(
+                f"Failed to compile duplicate DPCP member fixture; see {log_path}"
+            )
+        duplicate_objects.append(object_path)
+
+    static_library = find_dpcp_library(install_dir, "libdpcp.a")
+    if (
+        run_logged(
+            ("ar", "qs", static_library, *duplicate_objects),
+            dpcp_dir,
+            log_path,
+            environment,
+            setup_name,
+        )
+        != 0
+    ):
+        raise CaseFailure(
+            f"Failed to add duplicate DPCP member fixture; see {log_path}"
+        )
+
+    return install_dir
+
+
+def find_dpcp_library(prefix, library_name):
+    for library_dir in (prefix / "lib", prefix / "lib64"):
+        library = library_dir / library_name
+        if library.is_file():
+            return library
+    raise CaseFailure(f"{library_name} not found below {prefix}")
+
+
+def check_file(path, report):
+    report.append(f"  CHECK file exists: {path}")
+    if not path.is_file():
+        raise CaseFailure(f"Expected file not found: {path}")
+
+
+def check_absent(path, report):
+    report.append(f"  CHECK path does not exist: {path}")
+    if path.exists():
+        raise CaseFailure(f"Unexpected artifact exists: {path}")
+
+
+def archive_members(path, work_root, log_path, environment):
+    result = run_captured(
+        ("ar", "t", path),
+        work_root,
+        log_path,
+        environment,
+    )
+    if result.returncode != 0:
+        raise CaseFailure(f"ar failed for {path}")
+    return result.stdout.splitlines()
+
+
+def check_embedded_dpcp_objects(
+    xlio_library,
+    dpcp_library,
+    check_duplicate_fixture,
+    work_root,
+    log_path,
+    environment,
+    report,
+):
+    report.append(
+        f"  CHECK {xlio_library} contains every renamed object from {dpcp_library}"
+    )
+    dpcp_members = archive_members(
+        dpcp_library, work_root, log_path, environment
+    )
+    xlio_members = archive_members(
+        xlio_library, work_root, log_path, environment
+    )
+    expected_members = []
+    for index, member in enumerate(dpcp_members, start=1):
+        member_name = Path(member).name
+        if not member_name.endswith(".o"):
+            raise CaseFailure(
+                f"Unexpected non-object member in {dpcp_library}: {member}"
+            )
+        expected_members.append(
+            f"dpcp_{index:04d}_{member_name[:-2]}.o"
+        )
+
+    missing_members = [
+        member for member in expected_members if member not in xlio_members
+    ]
+    if missing_members:
+        raise CaseFailure(
+            f"{xlio_library} is missing renamed DPCP member "
+            f"{missing_members[0]}"
+        )
+
+    if check_duplicate_fixture:
+        report.append(
+            f"  CHECK both occurrences of {DPCP_DUPLICATE_MEMBER_NAME} "
+            f"retain their symbols"
+        )
+        nm_result = run_captured(
+            ("nm", "-g", "--defined-only", xlio_library),
+            work_root,
+            log_path,
+            environment,
+        )
+        if nm_result.returncode != 0:
+            raise CaseFailure(f"nm failed for {xlio_library}")
+        for symbol in DPCP_DUPLICATE_SYMBOLS:
+            if re.search(rf"\b{re.escape(symbol)}$", nm_result.stdout, re.M) is None:
+                raise CaseFailure(
+                    f"{xlio_library} is missing symbol {symbol} from a "
+                    f"duplicate DPCP member"
+                )
+
+
+def snapshot_mtimes(paths):
+    return {path: path.stat().st_mtime_ns for path in paths}
+
+
+def touch_after_artifacts(source, artifacts):
+    newest_mtime = max(path.stat().st_mtime_ns for path in artifacts)
+    while True:
+        source.touch()
+        if source.stat().st_mtime_ns > newest_mtime:
+            return
+        time.sleep(0.05)
+
+
+def check_artifacts_updated(before, report):
+    for path, old_mtime in before.items():
+        report.append(f"  CHECK artifact was rebuilt: {path}")
+        if path.stat().st_mtime_ns <= old_mtime:
+            raise CaseFailure(f"Artifact was not rebuilt: {path}")
+
+
+def create_cases():
+    dimensions = (
+        ("in-tree", "out"),
+        ("shared", "static"),
+        ("built-in", "external"),
+        ("static", "shared"),
+        ("no-flags", "flags"),
+        ("default-prefix", "prefix"),
+        ("without-utls", "with-utls"),
+    )
+    return [BuildCase(*values) for values in itertools.product(*dimensions)]
+
+
+def run_case(
+    case,
+    work_root,
+    repository_url,
+    branch,
+    external_dpcp_prefix,
+    make_jobs,
+    environment,
+):
+    case_dir_name = f"{CASE_PREFIX}-{case.name}"
+    case_dir = work_root / case_dir_name
+    case_log = work_root / f"{case_dir_name}.log"
+    stage_dir = case_dir / "stage"
+    xlio_prefix = case_dir / "xlio-install"
+    expect_configure_failure = (
+        case.dpcp_source == "external" and case.flags_mode == "flags"
+    )
+
+    if case.layout == "in-tree":
+        build_dir = case_dir
+        display_build_dir = Path(case_dir_name)
+        configure_command = "./configure"
+        dpcp_build_dir = case_dir / "submodules/libdpcp"
+    else:
+        build_dir = case_dir / "out"
+        display_build_dir = Path(case_dir_name) / "out"
+        configure_command = "../configure"
+        dpcp_build_dir = build_dir / "submodules/libdpcp"
+
+    configure_args = []
+    if case.dpcp_source == "external":
+        configure_args.append(f"--with-dpcp={external_dpcp_prefix}")
+    if case.xlio_mode == "static":
+        configure_args.extend(("--enable-static", "--disable-shared"))
+    if case.dpcp_link_mode == "shared":
+        configure_args.append("--enable-dpcp-shared")
+    if case.flags_mode == "flags":
+        configure_args.append("--with-dpcp-flags=-DCMAKE_BUILD_TYPE=Debug")
+    if case.prefix_mode == "prefix":
+        configure_args.append(f"--prefix={xlio_prefix}")
+    if case.utls_mode == "with-utls":
+        configure_args.append("--enable-utls")
+
+    clone_command = ("git", "clone", repository_url, case_dir_name)
+    checkout_command = ("git", "checkout", branch)
+    autogen_command = ("./autogen.sh",)
+    configure_args_full = (configure_command, *configure_args)
+    make_command = ("make", "-C", str(build_dir), f"-j{make_jobs}", "install")
+    if case.prefix_mode == "default-prefix":
+        make_command = (*make_command, f"DESTDIR={stage_dir}")
+
+    case_log.write_text("", encoding="utf-8")
+    report = CaseReport(case_log)
+    report.extend([
+        "",
+        f"=== {case.name} ===",
+        "Commands:",
+        f"  {command_text(clone_command)}",
+        f"  {cd_command_text(case_dir_name, checkout_command)}",
+        f"  {cd_command_text(case_dir_name, autogen_command)}",
+    ])
+    if case.layout == "out":
+        report.append(f"  {command_text(('mkdir', '-p', display_build_dir))}")
+    report.append(f"  {cd_command_text(display_build_dir, configure_args_full)}")
+    if expect_configure_failure:
+        report.append(
+            "  EXPECT configure to reject --with-dpcp with --with-dpcp-flags"
+        )
+    else:
+        report.append(f"  {command_text(make_command)}")
+    report.append(f"  Build output: {case_log}")
+    emit(report)
+    report.clear()
+
+    try:
+        if case_dir.exists():
+            raise CaseFailure(
+                f"Case directory already exists; remove it before rerunning: {case_dir}"
+            )
+        if (
+            run_logged(
+                clone_command, work_root, case_log, environment, case.name
+            )
+            != 0
+        ):
+            raise CaseFailure(f"Clone failed; see {case_log}")
+        if (
+            run_logged(
+                checkout_command, case_dir, case_log, environment, case.name
+            )
+            != 0
+        ):
+            raise CaseFailure(f"Branch checkout failed; see {case_log}")
+        if (
+            run_logged(
+                autogen_command, case_dir, case_log, environment, case.name
+            )
+            != 0
+        ):
+            raise CaseFailure(f"autogen.sh failed; see {case_log}")
+
+        if case.layout == "out":
+            build_dir.mkdir(parents=True)
+
+        configure_status = run_logged(
+            configure_args_full,
+            build_dir,
+            case_log,
+            environment,
+            case.name,
+        )
+
+        if expect_configure_failure:
+            report.extend(
+                (
+                    "Checks after configure:",
+                    "  CHECK configure rejects mutually exclusive dpcp options",
+                )
+            )
+            if configure_status == 0:
+                raise CaseFailure(
+                    "configure unexpectedly accepted --with-dpcp "
+                    "with --with-dpcp-flags"
+                )
+            configure_log = case_log.read_text(encoding="utf-8", errors="replace")
+            expected_error = (
+                "--with-dpcp and --with-dpcp-flags are mutually exclusive"
+            )
+            if expected_error not in configure_log:
+                raise CaseFailure(
+                    f"configure failed for an unexpected reason; see {case_log}"
+                )
+            check_absent(dpcp_build_dir / "CMakeCache.txt", report)
+            check_absent(dpcp_build_dir / "install", report)
+            with case_log.open("a", encoding="utf-8") as log:
+                log.write(f"RESULT PASS: {case.name}\n")
+            return CaseResult(case, True, report)
+
+        if configure_status != 0:
+            raise CaseFailure(f"configure failed; see {case_log}")
+        if (
+            run_logged(
+                make_command, work_root, case_log, environment, case.name
+            )
+            != 0
+        ):
+            raise CaseFailure(f"make install failed; see {case_log}")
+
+        if case.prefix_mode == "prefix":
+            xlio_install_root = xlio_prefix
+        else:
+            xlio_install_root = stage_dir / "usr/local"
+
+        report.append("Checks after build:")
+        if case.xlio_mode == "static":
+            xlio_library = xlio_install_root / "lib/libxlio.a"
+            check_file(xlio_library, report)
+
+            if case.dpcp_link_mode == "static":
+                dpcp_library = (
+                    dpcp_build_dir / "install/lib/libdpcp.a"
+                    if case.dpcp_source == "built-in"
+                    else find_dpcp_library(external_dpcp_prefix, "libdpcp.a")
+                )
+                check_embedded_dpcp_objects(
+                    xlio_library,
+                    dpcp_library,
+                    case.dpcp_source == "external",
+                    work_root,
+                    case_log,
+                    environment,
+                    report,
+                )
+            else:
+                report.append(
+                    f"  CHECK {xlio_library} contains unresolved references "
+                    "to libdpcp symbols"
+                )
+                nm_result = run_captured(
+                    ("nm", "-C", "-u", xlio_library),
+                    work_root,
+                    case_log,
+                    environment,
+                )
+                if nm_result.returncode != 0:
+                    raise CaseFailure(f"nm failed for {xlio_library}")
+                if "dpcp::" not in nm_result.stdout:
+                    raise CaseFailure(
+                        f"No unresolved DPCP symbols found in {xlio_library}"
+                    )
+        else:
+            report.append(
+                f"  CHECK installed libxlio.so exists under "
+                f"{xlio_install_root / 'lib'}"
+            )
+            shared_libraries = sorted(
+                (xlio_install_root / "lib").glob("libxlio.so*")
+            )
+            if not shared_libraries:
+                raise CaseFailure(
+                    f"Installed libxlio.so not found below "
+                    f"{xlio_install_root / 'lib'}"
+                )
+            xlio_library = shared_libraries[0]
+
+            report.append(
+                f"  CHECK {xlio_library} does not export DPCP symbols"
+            )
+            nm_result = run_captured(
+                ("nm", "-D", "--defined-only", "-C", xlio_library),
+                work_root,
+                case_log,
+                environment,
+            )
+            if nm_result.returncode != 0:
+                raise CaseFailure(f"nm failed for {xlio_library}")
+            dpcp_exports = [
+                line for line in nm_result.stdout.splitlines() if "dpcp::" in line
+            ]
+            if dpcp_exports:
+                raise CaseFailure(
+                    f"{xlio_library} exports {len(dpcp_exports)} DPCP symbols; "
+                    f"first export: {dpcp_exports[0]}"
+                )
+
+            ldd_result = run_captured(
+                ("ldd", xlio_library), work_root, case_log, environment
+            )
+            if ldd_result.returncode != 0:
+                raise CaseFailure(f"ldd failed for {xlio_library}")
+
+            if case.dpcp_link_mode == "shared":
+                report.append(
+                    f"  CHECK ldd reports a resolved libdpcp.so dependency "
+                    f"for {xlio_library}"
+                )
+                if re.search(r"libdpcp\.so", ldd_result.stdout) is None:
+                    raise CaseFailure(
+                        f"ldd does not report a libdpcp.so dependency "
+                        f"for {xlio_library}"
+                    )
+                if re.search(
+                    r"libdpcp\.so.*not found", ldd_result.stdout
+                ) is not None:
+                    raise CaseFailure(
+                        f"ldd reports that libdpcp.so cannot be resolved "
+                        f"for {xlio_library}"
+                    )
+            else:
+                report.append(
+                    f"  CHECK ldd reports no libdpcp.so dependency "
+                    f"for {xlio_library}"
+                )
+                if re.search(r"libdpcp\.so", ldd_result.stdout) is not None:
+                    raise CaseFailure(
+                        f"Unexpected dynamic libdpcp dependency in {xlio_library}"
+                    )
+
+        if case.dpcp_source == "built-in":
+            cache_path = dpcp_build_dir / "CMakeCache.txt"
+            check_file(cache_path, report)
+            check_file(
+                dpcp_build_dir / "install/include/mellanox/dpcp.h", report
+            )
+            cache = cache_path.read_text(encoding="utf-8", errors="replace")
+
+            if case.dpcp_link_mode == "shared":
+                check_file(dpcp_build_dir / "libdpcp.so", report)
+                check_file(dpcp_build_dir / "install/lib/libdpcp.so", report)
+                report.append("  CHECK CMake cache contains DPCP_STATIC=OFF")
+                if "DPCP_STATIC:BOOL=OFF" not in cache:
+                    raise CaseFailure(
+                        "Built-in DPCP was not configured as a shared library"
+                    )
+            else:
+                check_file(dpcp_build_dir / "libdpcp.a", report)
+                check_file(dpcp_build_dir / "install/lib/libdpcp.a", report)
+                report.append("  CHECK CMake cache contains DPCP_STATIC=ON")
+                if "DPCP_STATIC:BOOL=ON" not in cache:
+                    raise CaseFailure(
+                        "Built-in DPCP was not configured as a static library"
+                    )
+
+            if case.flags_mode == "flags":
+                report.append(
+                    "  CHECK CMake cache contains CMAKE_BUILD_TYPE=Debug"
+                )
+                if "CMAKE_BUILD_TYPE:STRING=Debug" not in cache:
+                    raise CaseFailure("CMAKE_BUILD_TYPE=Debug was not forwarded")
+            else:
+                report.append(
+                    "  CHECK CMake cache does not set CMAKE_BUILD_TYPE=Debug"
+                )
+                if "CMAKE_BUILD_TYPE:STRING=Debug" in cache:
+                    raise CaseFailure(
+                        "CMAKE_BUILD_TYPE unexpectedly equals Debug"
+                    )
+        else:
+            check_absent(dpcp_build_dir / "CMakeCache.txt", report)
+            check_absent(dpcp_build_dir / "install", report)
+
+        if case.dpcp_source == "built-in":
+            dpcp_extension = "so" if case.dpcp_link_mode == "shared" else "a"
+            dpcp_libraries = (
+                dpcp_build_dir / f"libdpcp.{dpcp_extension}",
+                dpcp_build_dir / "install/lib" / f"libdpcp.{dpcp_extension}",
+            )
+            dpcp_source = case_dir / "submodules/libdpcp/src/dpcp/dpcp.cpp"
+            check_file(dpcp_source, report)
+            dpcp_mtimes = snapshot_mtimes(dpcp_libraries)
+            xlio_mtime = snapshot_mtimes((xlio_library,))
+
+            report.append("Checks after touching a DPCP source file:")
+            report.append(f"  ACTION touch: {dpcp_source}")
+            touch_after_artifacts(
+                dpcp_source, (*dpcp_libraries, xlio_library)
+            )
+            if (
+                run_logged(
+                    make_command, work_root, case_log, environment, case.name
+                )
+                != 0
+            ):
+                raise CaseFailure(
+                    f"make install after touching DPCP failed; see {case_log}"
+                )
+            check_artifacts_updated(dpcp_mtimes, report)
+            check_artifacts_updated(xlio_mtime, report)
+
+        xlio_source = case_dir / "src/core/sock/sockinfo.cpp"
+        check_file(xlio_source, report)
+        xlio_mtime = snapshot_mtimes((xlio_library,))
+
+        report.append("Checks after touching an XLIO source file:")
+        report.append(f"  ACTION touch: {xlio_source}")
+        touch_after_artifacts(xlio_source, (xlio_library,))
+        if (
+            run_logged(
+                make_command, work_root, case_log, environment, case.name
+            )
+            != 0
+        ):
+            raise CaseFailure(
+                f"make install after touching XLIO failed; see {case_log}"
+            )
+        check_artifacts_updated(xlio_mtime, report)
+
+        with case_log.open("a", encoding="utf-8") as log:
+            log.write(f"RESULT PASS: {case.name}\n")
+        return CaseResult(case, True, report)
+    except (CaseFailure, OSError) as error:
+        report.append(f"ERROR: {error}")
+        with case_log.open("a", encoding="utf-8") as log:
+            log.write(f"RESULT FAIL: {case.name}\n")
+        return CaseResult(case, False, report)
+
+
+def print_result(result):
+    status = "PASS" if result.passed else "FAIL"
+    emit((*result.report, f"{status}: {result.case.name}"))
+
+
+def print_progress(completed, total, failures):
+    remaining = total - completed
+    emit(
+        (
+            f"Progress: case {completed} of {total}, "
+            f"{remaining} cases remaining",
+            f"Failures so far: {failures}",
+        )
+    )
+
+
+def print_estimated_time(completed, total, started_at):
+    elapsed = time.monotonic() - started_at
+    remaining = total - completed
+    estimated_time_left = elapsed * remaining / completed
+    emit(f"Estimated runtime left: {format_duration(estimated_time_left)}")
+
+
+def print_failed_cases(failed_results, work_root):
+    if not failed_results:
+        return
+
+    lines = ("", "Failed cases:")
+    for result in failed_results:
+        case_log = work_root / f"{CASE_PREFIX}-{result.case.name}.log"
+        lines += (f"  {result.case.name}: {case_log}",)
+    emit(lines)
+
+
+def validate_environment():
+    for command in ("ar", "cc", "cmake", "git", "make", "ldd", "nm"):
+        require_command(command)
+
+
+def validate_external_dpcp(external_dpcp_prefix):
+    header = external_dpcp_prefix / "include/mellanox/dpcp.h"
+    if not header.is_file():
+        raise CaseFailure(
+            f"libdpcp header was not installed by the external build: {header}"
+        )
+
+    library_dirs = (
+        external_dpcp_prefix / "lib",
+        external_dpcp_prefix / "lib64",
+    )
+    if not any((directory / "libdpcp.a").is_file() for directory in library_dirs):
+        raise CaseFailure(
+            "Static libdpcp archive was not installed by the external build"
+        )
+    if not any((directory / "libdpcp.so").exists() for directory in library_dirs):
+        raise CaseFailure(
+            "Shared libdpcp library was not installed by the external build"
+        )
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "-j",
+        "--jobs",
+        type=positive_int,
+        metavar="N",
+        help="run N test cases concurrently",
+    )
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        help="list test names (optionally filtered by --filter), then exit",
+    )
+    parser.add_argument(
+        "--filter",
+        type=regex_pattern,
+        metavar="REGEX",
+        help="run only tests whose names match REGEX",
+    )
+    parser.add_argument(
+        "--short",
+        action="store_true",
+        help="run 10 representative cases covering both states of every option",
+    )
+    return parser.parse_args()
+
+
+def main():
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True, write_through=True)
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(line_buffering=True, write_through=True)
+
+    args = parse_arguments()
+    work_root = Path.cwd() / "test-build"
+    run_started_at = time.monotonic()
+    environment = os.environ.copy()
+    environment.pop("CMAKE_BUILD_TYPE", None)
+    all_cases = create_cases()
+    if args.short:
+        half = SHORT_CASE_COUNT // 2
+        # The last five cases complement the first five in every binary
+        # dimension, so each state of every option is represented.
+        all_cases = all_cases[:half] + all_cases[-half:]
+    cases = (
+        [case for case in all_cases if args.filter.search(case.name)]
+        if args.filter
+        else all_cases
+    )
+
+    if work_root.exists():
+        print(
+            f"ERROR: Build directory already exists; remove it before rerunning: "
+            f"{work_root}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return 1
+
+    if not cases:
+        print(
+            "ERROR: No test names match --filter",
+            file=sys.stderr,
+            flush=True,
+        )
+        return 1
+
+    if args.list:
+        emit(case.name for case in cases)
+        return 0
+
+    if args.jobs is None:
+        emit(
+            "Tip: use -j N to run test cases concurrently; "
+            "continuing sequentially."
+        )
+
+    try:
+        validate_environment()
+        repository_url, branch = repository_settings()
+    except CaseFailure as error:
+        print(f"ERROR: {error}", file=sys.stderr, flush=True)
+        emit(f"Total runtime: {format_duration(time.monotonic() - run_started_at)}")
+        return 1
+
+    cpu_count = os.cpu_count() or 1
+    if args.jobs:
+        make_jobs = args.jobs
+    elif "JOBS" in os.environ:
+        try:
+            make_jobs = positive_int(os.environ["JOBS"])
+        except (ValueError, argparse.ArgumentTypeError):
+            print(
+                "ERROR: JOBS must be a positive integer",
+                file=sys.stderr,
+                flush=True,
+            )
+            return 1
+    else:
+        make_jobs = cpu_count
+
+    try:
+        work_root.mkdir()
+    except FileExistsError:
+        print(
+            f"ERROR: Build directory already exists; remove it before rerunning: "
+            f"{work_root}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return 1
+    except OSError as error:
+        print(
+            f"ERROR: Unable to create build directory {work_root}: {error}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return 1
+
+    total = len(cases)
+    summary = (
+        f"Repository: {repository_url}",
+        f"Branch: {branch}",
+        f"Build directory: {work_root}",
+        f"Tests selected: {total}",
+    )
+    if args.jobs is None:
+        summary += (f"Running {total} tests sequentially",)
+    else:
+        summary += (
+            f"Running {total} tests with {args.jobs} concurrent workers "
+            f"and make -j{make_jobs} per test",
+        )
+    emit(summary)
+
+    try:
+        external_dpcp_prefix = prepare_external_dpcp(work_root, environment)
+        validate_external_dpcp(external_dpcp_prefix)
+    except CaseFailure as error:
+        print(f"ERROR: {error}", file=sys.stderr, flush=True)
+        emit(f"Total runtime: {format_duration(time.monotonic() - run_started_at)}")
+        return 1
+
+    passed = 0
+    failed = 0
+    completed = 0
+    failed_results = []
+    tests_started_at = time.monotonic()
+
+    if args.jobs is None:
+        for case in cases:
+            case_started_at = time.monotonic()
+            result = run_case(
+                case,
+                work_root,
+                repository_url,
+                branch,
+                external_dpcp_prefix,
+                make_jobs,
+                environment,
+            )
+            case_elapsed = time.monotonic() - case_started_at
+            completed += 1
+            passed += int(result.passed)
+            failed += int(not result.passed)
+            if not result.passed:
+                failed_results.append(result)
+
+            print_result(result)
+            print_progress(completed, total, failed)
+            emit(f"Case runtime: {format_duration(case_elapsed)}")
+            print_estimated_time(completed, total, tests_started_at)
+
+        emit(
+            (
+                "",
+                f"Verification summary: {passed} passed, {failed} failed",
+            )
+        )
+    else:
+        with ThreadPoolExecutor(max_workers=args.jobs) as executor:
+            futures = {
+                executor.submit(
+                    run_case,
+                    case,
+                    work_root,
+                    repository_url,
+                    branch,
+                    external_dpcp_prefix,
+                    make_jobs,
+                    environment,
+                ): case
+                for case in cases
+            }
+            for future in as_completed(futures):
+                result = future.result()
+                completed += 1
+                passed += int(result.passed)
+                failed += int(not result.passed)
+                if not result.passed:
+                    failed_results.append(result)
+
+                print_result(result)
+                print_progress(completed, total, failed)
+                print_estimated_time(completed, total, tests_started_at)
+
+        emit(("", f"Verification summary: {passed} passed, {failed} failed"))
+
+    print_failed_cases(failed_results, work_root)
+    emit(f"Total runtime: {format_duration(time.monotonic() - run_started_at)}")
+    return int(failed != 0)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
