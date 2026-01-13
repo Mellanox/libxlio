@@ -18,19 +18,39 @@ This option manages  debugging information in the executable, such as the names 
 
 ### --enable-nginx
 
-This option allows to use the library with popular open source software for web serving, reverse proxying, caching, load balancing, media streaming, and more as NGINX.
+This option allows using the library with popular open source software for web serving, reverse proxying, caching, load balancing, media streaming, and more as NGINX.
 
 ### --enable-utls
 
 This option enables uTLS HW offload for supported NVIDIA HW.
 
-### --with-dpcp
+### --with-dpcp=<libdpcp-install-path>
 
-This option allows to use DPCP library for programming Infiniband devices.
-DPCP (Direct Packet Control Plane) is mandatory to enable advanced HW features for supported NVIDIA HW.
-This library should be installed on your system.
+DPCP (Direct Packet Control Plane) is a library for programming Infiniband devices.
+DPCP is mandatory to enable advanced HW features for supported NVIDIA HW.
+By default, libxlio configures the libdpcp submodule with CMake and installs it
+under `submodules/libdpcp/install` in the XLIO build tree.
+This option allows using a non-default location for libdpcp.
 
-Git repository: https://github.com/Mellanox/libdpcp
+DPCP Git repository: https://github.com/Mellanox/libdpcp
+
+### --with-dpcp-flags=<cmake-options>
+
+This option passes additional, whitespace-separated options to the initial
+CMake configuration of the built-in libdpcp. XLIO's required CMake options,
+including the install prefix and static/shared selection, take precedence.
+This option cannot be combined with `--with-dpcp`, because an external
+libdpcp is not configured or built by XLIO.
+
+Example:
+```sh
+./configure --with-dpcp-flags='-DCMAKE_BUILD_TYPE=Debug'
+```
+
+### --enable-dpcp-shared
+
+This option builds and links the built-in libdpcp as a shared library.
+By default, libdpcp is built statically and linked into libxlio.
 
 ### --with-ibprof
 

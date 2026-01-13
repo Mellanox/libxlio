@@ -13,12 +13,12 @@ apt-get update
 cd /etc/xlio_pkg/xlio
 rm -rf libxlio/
 
-git clone https://github.com/Mellanox/libxlio.git 
+git clone --recurse-submodules https://github.com/Mellanox/libxlio.git 
 
 cd libxlio/
 git checkout $BRTG
 
-`QA_RPATHS=0x0002 PRJ_RELEASE=${BUILD_ID} contrib/build_pkg.sh -s -b -a "configure_options=--with-dpcp --disable-nginx --disable-utls" &`
+`QA_RPATHS=0x0002 PRJ_RELEASE=${BUILD_ID} contrib/build_pkg.sh -s -b -a "configure_options=--disable-nginx --disable-utls" &`
 
 PUBLISH="/hpc/noarch/xlio_artifacts/"
 PKGDIR="/etc/xlio_pkg/xlio/libxlio/pkg/packages/"

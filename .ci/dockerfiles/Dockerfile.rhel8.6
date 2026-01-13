@@ -18,7 +18,7 @@ FROM core as static
 ARG _LOGIN=svc-nbu-swx-media
 
 RUN yum makecache && \
-    yum install -y yum-utils clang-tools-extra-21.1.8 sudo curl autoconf automake make libtool \
+    yum install -y cmake yum-utils clang-tools-extra-21.1.8 sudo curl autoconf automake make libtool \
     libnl3-devel libnl3 rdma-core-devel rdma-core openssl-devel bc && \
     yum-config-manager --add-repo https://archives.fedoraproject.org/pub/archive/epel/7/x86_64/ && \
     yum --nogpgcheck install -y cppcheck && \
@@ -49,7 +49,7 @@ RUN sed -i "s#http://webrepo#http://${WEBREPO_URL}#" /etc/yum.repos.d/* && \
     yum makecache
 
 RUN yum install --allowerasing -y \
-    git autoconf automake libtool gcc \
+    cmake git autoconf automake libtool gcc \
     sudo gcc-c++ libibverbs-devel json-c-devel rdma-core \
     librdmacm unzip patch wget make \
     libnl3-devel openssl-devel rpm-build net-tools
@@ -57,7 +57,7 @@ RUN yum install --allowerasing -y \
 
 FROM harbor.mellanox.com/hpcx/$ARCH/rhel8.6/base as build
 
-RUN yum install -y json-c-devel openssl-devel curl
+RUN yum install -y cmake json-c-devel openssl-devel curl
 
 # Install DOCA
 COPY .ci/scripts/doca_install.sh /tmp/doca_install.sh

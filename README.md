@@ -41,39 +41,51 @@ Please visit [DOCA website](https://developer.nvidia.com/networking/doca) for mo
 ##### DPCP
 
 DPCP (Direct Packet Control Plane) is mandatory to run XLIO.
-Repository: [libdpcp](https://github.com/Mellanox/libdpcp.git)
 
-```sh
-$ ./autogen.sh
-$ ./configure --prefix=/where/to/install
-$ make -j
-$ make install
-```
+XLIO utilises libdpcp as a git submodule, by that specifying a built-in DPCP version.
+The built-in DPCP is configured and built with CMake as part of the XLIO build.
+
+Note that if git is installed, and the root directory looks like a git directory, running ./autogen.sh runs
+'git submodule update --init --recursive', so there is no need to run it explicitly.
+Otherwise, you need to run that git command after cloning, or use 'git clone --recurse-submodules' when cloning.
+
+By default libdpcp is linked statically into libxlio, this can be changed to dynamic linkage by running the 
+libxlio `./configure` script with the `--enable-dpcp-shared` flag.
+
+To link against an external DPCP version, run libxlio's `./configure` with the `--with-dpcp=/path/to/dpcp/install`
+flag. In this case, libdpcp is not built as part of the XLIO build.
+Alternatively, if some non-standard flags are needed for the DPCP build, run libxlio's `./configure` with the
+`--with-dpcp-flags='-DOPTION=VALUE ...'` flag. It allows passing additional options to the built-in libdpcp CMake 
+configuration. This option cannot be combined with `--with-dpcp`.
+
+After pulling libxlio, which might trigger an update of the libdpcp submodule, it is advised to clean libdpcp
+to protect against the unlikely case that old libdpcp artifacts remain and interfere with the build.
 
 ##### Tools
 
-Autoconf, Automake, libtool, unzip, patch, libnl-devel (netlink 3)
+Autoconf, Automake, libtool, cmake, unzip, patch, libnl-devel (netlink 3)
 
 #### Compiling XLIO
 
-Run the following commands from within the directory at the top of the tree:
+Building XLIO is done like this:
 
 ```sh
-$ ./autogen.sh
-$ ./configure --prefix=/where/to/install --with-dpcp=/where/dpcp/installed --enable-utls
-$ make -j
-$ make install
+./autogen.sh
+./configure --prefix=/where/to/install
+make -j
+make install
 ```
---enable-utls : Enables uTLS HW offload for supported NVIDIA HW.
+Commonly used flags for `./configure`:
 
-#### Compiling XLIO using preinstalled dpcp
+- `--disable-utls` : Disables uTLS HW offload for supported NVIDIA HW.
+- `--enable-static --disable-shared` : Build XLIO as a static library and not as a shared object.
 
-```sh
-$ ./autogen.sh
-$ ./configure --prefix=/where/to/install --with-dpcp --enable-utls
-$ make -j
-$ make install
-```
+Summary of `./configure` flags related to dpcp:
+- `--with-dpcp=/where/dpcp/is/installed` : Use libdpcp from a pre-installed location. When this flag
+   is used, libdpcp is not built. It is assumed that it is already built and installed at the specified directory.
+- `--with-dpcp-flags='-DOPTION=VALUE ...'` : Pass additional options to the built-in libdpcp CMake configuration.
+   This option cannot be combined with `--with-dpcp`.
+- `--enable-dpcp-shared` : Link with dpcp dynamically instead of statically
 
 #### Configure
 See more [Options](./docs/configuration.md)

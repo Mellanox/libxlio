@@ -15,7 +15,7 @@ Group: System Environment/Libraries
 
 License: GPLv2 or BSD
 Url: https://github.com/Mellanox/%{name}
-Source0: %{url}/archive/%{version}/%{name}-%{version}.tar.gz
+Source0: %{name}-%{version}.tar.gz
 
 # library currently supports only the following architectures
 ExclusiveArch: x86_64 ppc64le ppc64 aarch64
@@ -32,8 +32,7 @@ BuildRequires: pkgconfig(libnl-3.0)
 BuildRequires: pkgconfig(libnl-route-3.0)
 %endif
 BuildRequires: make
-BuildRequires: dpcp >= 1.1.58
-Requires: dpcp >= 1.1.58
+BuildRequires: cmake >= 3.17
 
 %description
 libxlio is a LD_PRELOAD-able library that boosts performance of TCP and

@@ -50,7 +50,7 @@ DISTCLEANFILES = config/descriptor_providers/xlio_config_schema.h
 libxlio_la_CFLAGS = $(XLIO_STATIC_BUILD) $(XLIO_LTO) $(XLIO_PROFILE)
 libxlio_la_CXXFLAGS = $(XLIO_STATIC_BUILD) $(XLIO_LTO) $(XLIO_PROFILE)
 
-libxlio_la_LDFLAGS := $(XLIO_LTO) $(XLIO_PROFILE) -no-undefined \
+libxlio_la_LDFLAGS := $(XLIO_LTO) $(XLIO_PROFILE) -Wl,--exclude-libs,libdpcp.a -no-undefined \
 	-version-number @PRJ_LIBRARY_MAJOR@:@PRJ_LIBRARY_MINOR@:@PRJ_LIBRARY_REVISION@
 
 libxlio_la_LIBADD = \
@@ -64,7 +64,6 @@ libxlio_la_LIBADD = \
 	libconfig_parser.la
 
 dist_noinst_DATA = config/descriptor_providers/xlio_config_schema.json
-
 
 libxlio_la_SOURCES := \
 	dev/allocator.cpp \
@@ -368,4 +367,46 @@ libxlio_la_DEPENDENCIES = \
 	$(top_builddir)/src/core/netlink/libnetlink.la \
 	$(top_builddir)/src/core/infra/libinfra.la \
 	libconfig_parser.la \
-	$(LIBJSON_LIBS)
+	$(LIBJSON_LIBS) \
+	$(DPCP_LIB_DEPENDENCY)
+
+if XLIO_AND_DPCP_ARE_STATIC
+
+# Adding libdpcp.a into libxlio.so is easy - ar does this automatically.
+# For adding the .o files from libdpcp.a into libxlio.a, we need to use a trick, since
+# simply specifying libdpcp.a, or libdpcp.la, as a dependancy of libxlio, does not work.
+# After Automake links libxlio.la, extract the .o files from libdpcp.a and add them
+# to libxlio.a.
+# Extract each archive member occurrence separately so duplicate member names do
+# not overwrite each other. Rename every object before adding it to libxlio.a so
+# it cannot replace an XLIO object with the same member name.
+# Make the command fail if no DPCP object files were extracted.
+all-local: libxlio.la
+	@echo "Merging $(DPCP_STATIC_LIB) into .libs/libxlio.a ..."; \
+	cd .libs && rm -rf dpcp_objs && mkdir -p dpcp_objs && \
+	$(AR) t $(DPCP_STATIC_LIB) | \
+		awk '{ occurrences[$$0]++; print occurrences[$$0], $$0 }' > dpcp_objs/members && \
+	index=0; \
+	while read -r occurrence member; do \
+		index=$$((index + 1)); \
+		case "$$member" in \
+			*.o) ;; \
+			*) echo "Error: Non-object member $$member found in $(DPCP_STATIC_LIB)"; exit 1 ;; \
+		esac; \
+		object_dir=$$(printf "dpcp_objs/%04d" "$$index"); \
+		mkdir -p "$$object_dir" && \
+		(cd "$$object_dir" && $(AR) xN "$$occurrence" "$(DPCP_STATIC_LIB)" "$$member") && \
+		member_name=$${member##*/} && \
+		renamed_name=$$(printf "dpcp_%04d_%s" "$$index" "$$member_name") && \
+		mv "$$object_dir/$$member_name" "dpcp_objs/$$renamed_name" || exit 1; \
+	done < dpcp_objs/members && \
+	rm -f dpcp_objs/members && rm -rf dpcp_objs/[0-9][0-9][0-9][0-9] && \
+	if [ -n "$$(ls -A dpcp_objs/*.o 2>/dev/null)" ]; then \
+		$(AR) rcs libxlio.a dpcp_objs/*.o; \
+	else \
+		echo "Error: No object files extracted from $(DPCP_STATIC_LIB), look at src/core/.libs/dpcp_objs/"; \
+		false; \
+	fi && \
+	rm -rf dpcp_objs;
+
+endif

@@ -93,8 +93,39 @@ m4_include([config/m4/nl.m4])
 m4_include([config/m4/prof.m4])
 m4_include([config/m4/compiler.m4])
 
-FUNC_CONFIGURE_INIT()
+AC_ARG_WITH([dpcp],
+    AS_HELP_STRING([--with-dpcp@<:@=DIR@:>@],
+                   [Search for dpcp headers and libraries in DIR @<:@default: /usr@:>@]),
+    [dpcp_explicitly_specified=yes],
+    [dpcp_explicitly_specified=no]
+)
 
+dpcp_enabled=yes
+case "$with_dpcp" in
+    yes)
+        with_dpcp=/usr
+        ;;
+    no)
+        dpcp_enabled=no
+        ;;
+esac
+
+AC_ARG_WITH([dpcp-flags],
+    AS_HELP_STRING([--with-dpcp-flags=FLAGS],
+                   [Pass additional FLAGS to the built-in libdpcp CMake configuration]),
+    [],
+    [with_dpcp_flags=""]
+)
+
+if test "x$dpcp_enabled" = "xno"; then
+    AC_MSG_ERROR([--without-dpcp is not supported; use the built-in DPCP or --with-dpcp=DIR])
+fi
+
+if test "x$dpcp_explicitly_specified" = "xyes" && test -n "$with_dpcp_flags"; then
+    AC_MSG_ERROR([--with-dpcp and --with-dpcp-flags are mutually exclusive])
+fi
+
+FUNC_CONFIGURE_INIT()
 
 dnl===-----------------------------------------------------------------------===
 dnl===

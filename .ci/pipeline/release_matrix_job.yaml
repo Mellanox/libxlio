@@ -57,15 +57,6 @@ runs_on_dockers:
     }
 
 steps:
-  - name: Build-dpcp
-    parallel: false
-    containerSelector:
-      - "{name: 'rhel8.6'}"
-    run: |
-      git clone git@github.com:Mellanox/libdpcp.git libdpcp
-      cd libdpcp
-      ./autogen.sh && ./configure --prefix=/usr && sudo make install
-
   - name: Release
     parallel: false
     containerSelector:
