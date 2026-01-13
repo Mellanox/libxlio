@@ -1,0 +1,3 @@
+[submodule "submodules/libdpcp"]
+	path = submodules/libdpcp
+	url = https://github.com/Mellanox/libdpcp.git

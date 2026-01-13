@@ -24,13 +24,14 @@ This option allows to use the library with popular open source software for web 
 
 This option enables uTLS HW offload for supported NVIDIA HW.
 
-### --with-dpcp
+### --with-dpcp=<libdpcp-install-path>
 
-This option allows to use DPCP library for programming Infiniband devices.
-DPCP (Direct Packet Control Plane) is mandatory to enable advanced HW features for supported NVIDIA HW.
-This library should be installed on your system.
+DPCP (Direct Packet Control Plane) is a library for programming Infiniband devices.
+DPCP is mandatory to enable advanced HW features for supported NVIDIA HW.
+By default, libxlio uses the libdpcp submodule, which is installed to submodules/libdpcp/install
+This option allows to use a non-default location for libdpcp.
 
-Git repository: https://github.com/Mellanox/libdpcp
+DPCP Git repository: https://github.com/Mellanox/libdpcp
 
 ### --with-ibprof
 
