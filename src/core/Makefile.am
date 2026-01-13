@@ -64,7 +64,6 @@ libxlio_la_LIBADD = \
 
 dist_noinst_DATA = config/descriptor_providers/xlio_config_schema.json
 
-
 libxlio_la_SOURCES := \
 	dev/allocator.cpp \
 	dev/buffer_pool.cpp \
@@ -359,3 +358,26 @@ libxlio_la_DEPENDENCIES = \
 	$(top_builddir)/src/core/infra/libinfra.la \
 	libconfig_parser.la \
 	$(LIBJSON_LIBS)
+
+if XLIO_AND_DPCP_ARE_STATIC
+
+# Adding libdpcp.a into libxlio.so is easy - ar does this automatically.
+# For adding the .o files from libdpcp.a into libxlio.a, we need to use a trick, since
+# simply specifying libdpcp.a, or libdpcp.la, as a dependancy of libxlio, does not work.
+# So we override the rule for libxlio.la which is normally generated into Makefile.
+# After standard linking , we extract the .o files out of libdpcp.a and add them into libxlio.a .
+libxlio.la: $(libxlio_la_OBJECTS) $(libxlio_la_DEPENDENCIES) $(EXTRA_libxlio_la_DEPENDENCIES) 
+	@echo Running the standard link step for static library...
+	$(AM_V_CXXLD)$(libxlio_la_LINK) -rpath $(libdir) $(libxlio_la_OBJECTS) $(libxlio_la_LIBADD) $(LIBS)
+	@echo "Merging $(DPCP_STATIC_LIB) into .libs/libxlio.a ..."; \
+	cd .libs && rm -rf dpcp_objs && mkdir -p dpcp_objs && \
+	cd dpcp_objs && $(AR) x $(DPCP_STATIC_LIB) && cd .. && \
+	if [ -n "$$(ls -A dpcp_objs/*.o 2>/dev/null)" ]; then \
+		$(AR) rcs libxlio.a dpcp_objs/*.o; \
+	else \
+		echo "Error: No object files extracted from $(DPCP_STATIC_LIB), look at src/core/.libs/dpcp_objs/"; \
+		false;     # Make the command fail \
+	fi && \
+	rm -rf dpcp_objs;
+
+endif
