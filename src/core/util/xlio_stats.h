@@ -424,7 +424,7 @@ typedef struct {
 BOUNDARY_SIZE_ASSERT(bpool_instance_block_t, CACHELINE_SIZE / 2);
 
 // Global stat info
-typedef struct {
+typedef struct global_stats {
     uint32_t n_tcp_seg_pool_size;
     uint32_t n_tcp_seg_pool_no_segs;
     int n_pending_sockets;
@@ -438,9 +438,26 @@ typedef struct {
         socket_tcp_destructor_counter = 0;
         socket_udp_destructor_counter = 0;
     }
+    global_stats &operator=(const global_stats &other)
+    {
+        if (this != &other) {
+            n_tcp_seg_pool_size = other.n_tcp_seg_pool_size;
+            n_tcp_seg_pool_no_segs = other.n_tcp_seg_pool_no_segs;
+            n_pending_sockets = other.n_pending_sockets;
+
+            socket_tcp_destructor_counter.store(
+                other.socket_tcp_destructor_counter.load(std::memory_order_relaxed),
+                std::memory_order_relaxed);
+
+            socket_udp_destructor_counter.store(
+                other.socket_udp_destructor_counter.load(std::memory_order_relaxed),
+                std::memory_order_relaxed);
+        }
+        return *this;
+    }
 } global_stats_t;
 
-typedef struct {
+typedef struct global_instance_block {
     global_stats_t global_stats;
     bool b_enabled;
     void init()
@@ -448,6 +465,14 @@ typedef struct {
         b_enabled = false;
         global_stats.init();
     };
+    global_instance_block &operator=(const global_instance_block &other)
+    {
+        if (this != &other) {
+            b_enabled = other.b_enabled;
+            global_stats = other.global_stats;
+        }
+        return *this;
+    }
 } global_instance_block_t;
 
 // Version info
