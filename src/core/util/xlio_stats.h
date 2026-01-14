@@ -438,6 +438,16 @@ typedef struct {
         socket_tcp_destructor_counter = 0;
         socket_udp_destructor_counter = 0;
     }
+    void copy_from(const global_stats_t& other)
+    {
+        n_tcp_seg_pool_size = other.n_tcp_seg_pool_size;
+        n_tcp_seg_pool_no_segs = other.n_tcp_seg_pool_no_segs;
+        n_pending_sockets = other.n_pending_sockets;
+        socket_tcp_destructor_counter.store(
+            other.socket_tcp_destructor_counter.load(std::memory_order_relaxed));
+        socket_udp_destructor_counter.store(
+            other.socket_udp_destructor_counter.load(std::memory_order_relaxed));
+    }
 } global_stats_t;
 
 typedef struct {
@@ -448,6 +458,11 @@ typedef struct {
         b_enabled = false;
         global_stats.init();
     };
+    void copy_from(const global_instance_block_t& other)
+    {
+        b_enabled = other.b_enabled;
+        global_stats.copy_from(other.global_stats);
+    }
 } global_instance_block_t;
 
 // Version info
