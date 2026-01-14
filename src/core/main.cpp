@@ -65,6 +65,7 @@ void check_netperf_flags();
 // Start of xlio_version_str - used in "$ strings libxlio.so | grep XLIO_VERSION"
 #define STR_EXPAND(x) #x
 #define STR(x)        STR_EXPAND(x)
+/* cppcheck-suppress unknownMacro */
 const char *xlio_version_str = "XLIO_VERSION: " PACKAGE_VERSION "-" STR(PRJ_LIBRARY_RELEASE)
 
 #if _BullseyeCoverage

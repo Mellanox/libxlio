@@ -1521,10 +1521,12 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
         return;
     }
 
-    memset((void *)prev_instance_blocks, 0,
-           sizeof(socket_instance_block_t) * p_sh_mem->max_skt_inst_num);
-    memset((void *)curr_instance_blocks, 0,
-           sizeof(socket_instance_block_t) * p_sh_mem->max_skt_inst_num);
+    for (size_t i = 0; i < p_sh_mem->max_skt_inst_num;
+         i++) { // can't use memset because of non POD types
+        prev_instance_blocks[i].reset();
+        curr_instance_blocks[i].reset();
+    }
+
     memset((void *)prev_cq_blocks, 0, sizeof(cq_instance_block_t) * NUM_OF_SUPPORTED_CQS);
     memset((void *)curr_cq_blocks, 0, sizeof(cq_instance_block_t) * NUM_OF_SUPPORTED_CQS);
     memset((void *)prev_ring_blocks, 0, sizeof(ring_instance_block_t) * NUM_OF_SUPPORTED_RINGS);
@@ -1539,10 +1541,6 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
         prev_global_blocks[i].init();
         curr_global_blocks[i].init();
     }
-    memset((void *)prev_global_blocks, 0,
-           sizeof(global_instance_block_t) * NUM_OF_SUPPORTED_GLOBALS);
-    memset((void *)curr_global_blocks, 0,
-           sizeof(global_instance_block_t) * NUM_OF_SUPPORTED_GLOBALS);
     memset(&prev_iomux_blocks, 0, sizeof(prev_iomux_blocks));
     memset(&curr_iomux_blocks, 0, sizeof(curr_iomux_blocks));
 
@@ -1550,16 +1548,18 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
            NUM_OF_SUPPORTED_ENTITY_CTX * sizeof(entity_context_instance_block_t));
 
     if (user_params.print_details_mode == e_deltas) {
-        memcpy((void *)prev_instance_blocks, (void *)p_sh_mem->skt_inst_arr,
-               p_sh_mem->max_skt_inst_num * sizeof(socket_instance_block_t));
+        for (size_t i = 0; i < p_sh_mem->max_skt_inst_num; i++) {
+            prev_instance_blocks[i] = p_sh_mem->skt_inst_arr[i];
+        }
         memcpy((void *)prev_cq_blocks, (void *)p_sh_mem->cq_inst_arr,
                NUM_OF_SUPPORTED_CQS * sizeof(cq_instance_block_t));
         memcpy((void *)prev_ring_blocks, (void *)p_sh_mem->ring_inst_arr,
                NUM_OF_SUPPORTED_RINGS * sizeof(ring_instance_block_t));
         memcpy((void *)prev_bpool_blocks, (void *)p_sh_mem->bpool_inst_arr,
                NUM_OF_SUPPORTED_BPOOLS * sizeof(bpool_instance_block_t));
-        memcpy((void *)prev_global_blocks, (void *)p_sh_mem->global_inst_arr,
-               NUM_OF_SUPPORTED_GLOBALS * sizeof(global_instance_block_t));
+        for (int i = 0; i < NUM_OF_SUPPORTED_GLOBALS; i++) {
+            prev_global_blocks[i].copy_from(p_sh_mem->global_inst_arr[i]);
+        }
         prev_iomux_blocks = curr_iomux_blocks;
         uint64_t delay_int_micro = SEC_TO_MICRO(user_params.interval);
         if (!g_b_exit && check_if_process_running(pid)) {
@@ -1583,16 +1583,18 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
         }
 
         if (user_params.print_details_mode == e_deltas) {
-            memcpy((void *)curr_instance_blocks, (void *)p_sh_mem->skt_inst_arr,
-                   p_sh_mem->max_skt_inst_num * sizeof(socket_instance_block_t));
+            for (size_t i = 0; i < p_sh_mem->max_skt_inst_num; i++) {
+                curr_instance_blocks[i] = p_sh_mem->skt_inst_arr[i];
+            }
             memcpy((void *)curr_cq_blocks, (void *)p_sh_mem->cq_inst_arr,
                    NUM_OF_SUPPORTED_CQS * sizeof(cq_instance_block_t));
             memcpy((void *)curr_ring_blocks, (void *)p_sh_mem->ring_inst_arr,
                    NUM_OF_SUPPORTED_RINGS * sizeof(ring_instance_block_t));
             memcpy((void *)curr_bpool_blocks, (void *)p_sh_mem->bpool_inst_arr,
                    NUM_OF_SUPPORTED_BPOOLS * sizeof(bpool_instance_block_t));
-            memcpy((void *)curr_global_blocks, (void *)p_sh_mem->global_inst_arr,
-                   NUM_OF_SUPPORTED_GLOBALS * sizeof(global_instance_block_t));
+            for (int i = 0; i < NUM_OF_SUPPORTED_GLOBALS; i++) {
+                curr_global_blocks[i].copy_from(p_sh_mem->global_inst_arr[i]);
+            }
             curr_iomux_blocks = p_sh_mem->iomux;
         }
 
@@ -1651,16 +1653,18 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
                 show_bpool_stats(curr_bpool_blocks, prev_bpool_blocks);
                 show_global_stats(curr_global_blocks, prev_global_blocks);
             }
-            memcpy((void *)prev_instance_blocks, (void *)curr_instance_blocks,
-                   p_sh_mem->max_skt_inst_num * sizeof(socket_instance_block_t));
+            for (size_t i = 0; i < p_sh_mem->max_skt_inst_num; i++) {
+                prev_instance_blocks[i] = curr_instance_blocks[i];
+            }
             memcpy((void *)prev_cq_blocks, (void *)curr_cq_blocks,
                    NUM_OF_SUPPORTED_CQS * sizeof(cq_instance_block_t));
             memcpy((void *)prev_ring_blocks, (void *)curr_ring_blocks,
                    NUM_OF_SUPPORTED_RINGS * sizeof(ring_instance_block_t));
             memcpy((void *)prev_bpool_blocks, (void *)curr_bpool_blocks,
                    NUM_OF_SUPPORTED_BPOOLS * sizeof(bpool_instance_block_t));
-            memcpy((void *)prev_global_blocks, (void *)curr_global_blocks,
-                   NUM_OF_SUPPORTED_GLOBALS * sizeof(global_instance_block_t));
+            for (int i = 0; i < NUM_OF_SUPPORTED_GLOBALS; i++) {
+                prev_global_blocks[i].copy_from(curr_global_blocks[i]);
+            }
             prev_iomux_blocks = curr_iomux_blocks;
             break;
         default:

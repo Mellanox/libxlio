@@ -293,7 +293,6 @@ TEST(config, inline_loader_accepts_valid_configuration)
     ASSERT_TRUE(data.find("core.daemon.dir") != data.end());
 }
 
-
 TEST(config, inline_loader_rejects_tab_in_value)
 {
     env_setter setter("XLIO_INLINE_CONFIG", "network.protocols.ip.mtu=90\t00");
