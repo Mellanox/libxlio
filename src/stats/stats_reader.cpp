@@ -20,6 +20,7 @@
 #include <string.h>
 #include <ctime>
 #include <iomanip>
+#include <new>
 #include <vector>
 #include <cinttypes>
 #include <sys/mman.h>
@@ -1509,22 +1510,14 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
         return;
     }
 
-    prev_instance_blocks = (socket_instance_block_t *)malloc(sizeof(*prev_instance_blocks) *
-                                                             p_sh_mem->max_skt_inst_num);
+    prev_instance_blocks = new (std::nothrow) socket_instance_block_t[p_sh_mem->max_skt_inst_num]();
     if (NULL == prev_instance_blocks) {
         return;
     }
-    curr_instance_blocks = (socket_instance_block_t *)malloc(sizeof(*curr_instance_blocks) *
-                                                             p_sh_mem->max_skt_inst_num);
+    curr_instance_blocks = new (std::nothrow) socket_instance_block_t[p_sh_mem->max_skt_inst_num]();
     if (NULL == curr_instance_blocks) {
-        free(prev_instance_blocks);
+        delete[] prev_instance_blocks;
         return;
-    }
-
-    for (size_t i = 0; i < p_sh_mem->max_skt_inst_num;
-         i++) { // can't use memset because of non POD types
-        prev_instance_blocks[i].reset();
-        curr_instance_blocks[i].reset();
     }
 
     memset((void *)prev_cq_blocks, 0, sizeof(cq_instance_block_t) * NUM_OF_SUPPORTED_CQS);
@@ -1537,7 +1530,7 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
            sizeof(entity_context_instance_block_t) * NUM_OF_SUPPORTED_ENTITY_CTX);
     memset((void *)prev_bpool_blocks, 0, sizeof(bpool_instance_block_t) * NUM_OF_SUPPORTED_BPOOLS);
     memset((void *)curr_bpool_blocks, 0, sizeof(bpool_instance_block_t) * NUM_OF_SUPPORTED_BPOOLS);
-    for (size_t i = 0; i < NUM_OF_SUPPORTED_GLOBALS; i++) {
+    for (int i = 0; i < NUM_OF_SUPPORTED_GLOBALS; i++) {
         prev_global_blocks[i].init();
         curr_global_blocks[i].init();
     }
@@ -1696,8 +1689,8 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
     }
 
 out:
-    free(prev_instance_blocks);
-    free(curr_instance_blocks);
+    delete[] prev_instance_blocks;
+    delete[] curr_instance_blocks;
 }
 
 bool check_if_app_match(char *app_name, char *pid_str)
