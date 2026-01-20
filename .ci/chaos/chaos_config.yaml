@@ -1,0 +1,8 @@
+patches:
+  - file: break_copyright.diff
+    expect_fail:
+      - step: Copyrights
+
+  - file: break_style.diff
+    expect_fail:
+      - step: Style
