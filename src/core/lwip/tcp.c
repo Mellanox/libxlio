@@ -93,6 +93,7 @@ enum cc_algo_mod lwip_cc_algo_module = CC_MOD_LWIP;
 u16_t lwip_tcp_mss = CONST_TCP_MSS;
 u8_t enable_push_flag = 1;
 u8_t enable_ts_option = 0;
+u8_t tcp_cc_tso_aware = 1;
 u32_t lwip_tcp_nodelay_treshold = 0;
 
 /* slow timer value */
@@ -505,6 +506,86 @@ bool tcp_recved(struct tcp_pcb *pcb, u32_t len, bool do_output)
 }
 
 /**
+ * Set initial congestion window and slow start threshold.
+ *
+ * With TSO and tcp_cc_tso_aware enabled:
+ *   cwnd = 0.25 * TSO_max (64KB), ssthresh = 2GB
+ * Otherwise:
+ *   cwnd = RFC 3390, ssthresh = 10*MSS
+ *
+ * @param pcb the tcp_pcb for which to set initial window parameters
+ */
+void tcp_set_initial_cwnd_ssthresh(struct tcp_pcb *pcb)
+{
+    if (tcp_tso(pcb) && tcp_cc_tso_aware) {
+        /* TSO-aware: cwnd = 25% of TSO max (default 64KB) */
+        pcb->cwnd = pcb->tso.max_payload_sz / 4;
+
+        /* High ssthresh allows slow start to discover optimal window */
+        pcb->ssthresh = 0x7FFFFFFF; /* 2GB - effectively unlimited */
+    } else {
+        /* RFC 3390: IW = min(4*MSS, max(2*MSS, 4380 bytes)) */
+        if (pcb->mss * 4 <= 4380) {
+            pcb->cwnd = pcb->mss * 4;
+        } else {
+            pcb->cwnd = (pcb->mss * 2 > 4380) ? pcb->mss * 2 : 4380;
+        }
+
+        /* Set ssthresh higher than IW to allow slow start growth */
+        pcb->ssthresh = pcb->mss * 10;
+    }
+}
+
+/**
+ * Reset cwnd and ssthresh after a congestion event (RTO or fast retransmit).
+ *
+ * With TSO and tcp_cc_tso_aware enabled (deviates from RFC 5681):
+ *   cwnd = 10% of TSO_max (26KB), ssthresh = max(FlightSize/2, 64KB)
+ * Otherwise:
+ *   cwnd = 1*MSS, ssthresh = max(FlightSize/2, 2*MSS) per RFC 5681
+ *
+ * @param pcb the tcp_pcb experiencing congestion
+ * @param is_rto true if this is an RTO event, false for fast retransmit
+ */
+void tcp_reset_cwnd_on_congestion(struct tcp_pcb *pcb, bool is_rto)
+{
+    if (tcp_tso(pcb) && tcp_cc_tso_aware) {
+        /* TSO-aware recovery: more aggressive than RFC 5681 (1 MSS)
+         * to better handle large TSO segments (256KB super-packets).
+         */
+        u32_t tso_recovery_cwnd = pcb->tso.max_payload_sz / 10; // 26KB
+        u32_t tso_recovery_ssthresh = pcb->tso.max_payload_sz / 4; // 64KB
+
+        u32_t eff_wnd = LWIP_MIN(pcb->cwnd, pcb->snd_wnd);
+        u32_t halved_wnd = eff_wnd >> 1;
+
+        /* ssthresh = max(halved window, TSO recovery threshold) */
+        pcb->ssthresh = LWIP_MAX(halved_wnd, tso_recovery_ssthresh);
+
+        if (is_rto) {
+            pcb->cwnd = tso_recovery_cwnd;
+        } else {
+            /* Fast retransmit: add 3*MSS for quick recovery */
+            pcb->cwnd = pcb->ssthresh + 3 * pcb->mss;
+        }
+    } else {
+        /* RFC 5681 standard behavior */
+        u32_t eff_wnd = LWIP_MIN(pcb->cwnd, pcb->snd_wnd);
+        pcb->ssthresh = eff_wnd >> 1;
+
+        if (pcb->ssthresh < (u32_t)(2 * pcb->mss)) {
+            pcb->ssthresh = 2 * pcb->mss;
+        }
+
+        if (is_rto) {
+            pcb->cwnd = pcb->mss;
+        } else {
+            pcb->cwnd = pcb->ssthresh + 3 * pcb->mss;
+        }
+    }
+}
+
+/**
  * Connects to another host. The function given as the "connected"
  * argument will be called when the connection has been established.
  *
@@ -553,8 +634,10 @@ err_t tcp_connect(struct tcp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port, bool
 
     pcb->advtsd_mss = tcp_send_mss(pcb);
     pcb->mss = pcb->advtsd_mss;
-    pcb->cwnd = 1;
-    pcb->ssthresh = pcb->mss * 10;
+
+    /* Set initial congestion window and slow start threshold */
+    tcp_set_initial_cwnd_ssthresh(pcb);
+
     pcb->connected = connected;
 
     /* Send a SYN together with the MSS option. */
@@ -946,7 +1029,10 @@ void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
     }
     cc_init(pcb);
 #endif
-    pcb->cwnd = 1;
+
+    /* Set initial congestion window and slow start threshold */
+    tcp_set_initial_cwnd_ssthresh(pcb);
+
     iss = tcp_next_iss();
     pcb->snd_wl2 = iss;
     pcb->snd_nxt = iss;
@@ -994,7 +1080,10 @@ void tcp_pcb_recycle(struct tcp_pcb *pcb)
 #if TCP_CC_ALGO_MOD
     cc_init(pcb);
 #endif
-    pcb->cwnd = 1;
+
+    /* Set initial congestion window and slow start threshold */
+    tcp_set_initial_cwnd_ssthresh(pcb);
+
     iss = tcp_next_iss();
     pcb->acked = 0;
     pcb->snd_wl2 = iss;

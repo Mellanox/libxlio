@@ -405,6 +405,8 @@ void register_ip_route_mtu(ip_route_mtu_fn fn);
 /*Initialization of tcp_pcb structure*/
 void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container);
 void tcp_pcb_recycle(struct tcp_pcb *pcb);
+void tcp_set_initial_cwnd_ssthresh(struct tcp_pcb *pcb);
+void tcp_reset_cwnd_on_congestion(struct tcp_pcb *pcb, bool is_rto);
 
 void tcp_arg(struct tcp_pcb *pcb, void *arg);
 void tcp_ip_output(struct tcp_pcb *pcb, ip_output_fn ip_output);
@@ -421,6 +423,10 @@ void tcp_err(struct tcp_pcb *pcb, tcp_err_fn err);
 #define tcp_nagle_enable(pcb)   ((pcb)->flags &= ~TF_NODELAY)
 #define tcp_nagle_disabled(pcb) (((pcb)->flags & TF_NODELAY) != 0)
 
+/* Returns pcb->tso.max_payload_sz. Acts as both:
+ * - Boolean check: 0 (false) when TSO not configured
+ * - Value provider: max payload size when TSO configured
+ * Safe to use in conditionals followed by division. */
 #define tcp_tso(pcb) ((pcb)->tso.max_payload_sz)
 
 bool tcp_recved(struct tcp_pcb *pcb, u32_t len, bool do_output);

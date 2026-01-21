@@ -909,6 +909,7 @@ void mce_sys_var::get_env_params()
 #endif
     lwip_mss = MCE_DEFAULT_MSS;
     lwip_cc_algo_mod = MCE_DEFAULT_LWIP_CC_ALGO_MOD;
+    tcp_cc_tso_aware = MCE_DEFAULT_TCP_CC_TSO_AWARE;
     mce_spec = MCE_SPEC_NONE;
 
     neigh_num_err_retries = MCE_DEFAULT_NEIGH_NUM_ERR_RETRIES;
@@ -1781,6 +1782,10 @@ void mce_sys_var::get_env_params()
         lwip_cc_algo_mod = (uint32_t)atoi(env_ptr);
     }
 
+    if ((env_ptr = getenv(SYS_VAR_TCP_CC_TSO_AWARE))) {
+        tcp_cc_tso_aware = atoi(env_ptr) ? true : false;
+    }
+
     if ((env_ptr = getenv(SYS_VAR_DEFERRED_CLOSE))) {
         deferred_close = atoi(env_ptr) ? true : false;
     }
@@ -2077,6 +2082,8 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
     lwip_mss = registry.get_default_value<uint32_t>("network.protocols.tcp.mss");
     lwip_cc_algo_mod =
         registry.get_default_value<uint32_t>("network.protocols.tcp.congestion_control");
+    tcp_cc_tso_aware =
+        registry.get_default_value<bool>("network.protocols.tcp.congestion_control_tso_aware");
     mce_spec = static_cast<decltype(mce_spec)>(registry.get_default_value<int>("profiles.spec"));
 
     neigh_num_err_retries =
@@ -2905,6 +2912,9 @@ void mce_sys_var::configure_syscall_behavior(const config_registry &registry)
 
     set_value_from_registry_if_exists(lwip_cc_algo_mod, "network.protocols.tcp.congestion_control",
                                       registry);
+
+    set_value_from_registry_if_exists(
+        tcp_cc_tso_aware, "network.protocols.tcp.congestion_control_tso_aware", registry);
 
     set_value_from_registry_if_exists(deferred_close, "core.syscall.deferred_close", registry);
 
