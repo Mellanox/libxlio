@@ -30,8 +30,8 @@ public:
     void *alloc_aligned(size_t size, size_t align);
 
     void *alloc_huge(size_t size);
+    void *alloc_mmap(size_t size);
     void *alloc_posix_memalign(size_t size, size_t align);
-    void *alloc_malloc(size_t size);
 
     void dealloc();
 
