@@ -470,7 +470,7 @@ void net_device_table_mgr::global_ring_wait_for_notification_and_process_element
     uint64_t *p_poll_sn, void *pv_fd_ready_array /*=NULL*/)
 {
     ndtm_logfunc("");
-    int max_fd = 16;
+    constexpr int max_fd = 16;
     struct epoll_event events[max_fd];
 
     int res = SYSCALL(epoll_wait, global_ring_epfd_get(), events, max_fd, 0);
