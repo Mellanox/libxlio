@@ -1626,6 +1626,16 @@ void mce_sys_var::get_env_params()
         tcp_timer_resolution_msec = timer_resolution_msec;
     }
 
+    // RFC 1122 Section 4.2.3.2: Delayed ACK timer must not exceed 500ms
+    // This limits TCP timer resolution to ensure protocol compliance and proper RTO calculations
+    if (tcp_timer_resolution_msec > 500) {
+        vlog_printf(VLOG_WARNING,
+                    "TCP timer resolution [%s=%d] exceeds RFC 1122 maximum of 500ms. "
+                    "Clamping to 500ms to ensure protocol compliance.\n",
+                    SYS_VAR_TCP_TIMER_RESOLUTION_MSEC, tcp_timer_resolution_msec);
+        tcp_timer_resolution_msec = 500;
+    }
+
     if ((env_ptr = getenv(SYS_VAR_INTERNAL_THREAD_CPUSET))) {
         snprintf(internal_thread_cpuset, FILENAME_MAX, "%s", env_ptr);
     }
@@ -2750,6 +2760,16 @@ void mce_sys_var::configure_memory_limits(const config_registry &registry)
                     SYS_VAR_TCP_TIMER_RESOLUTION_MSEC, tcp_timer_resolution_msec,
                     SYS_VAR_TIMER_RESOLUTION_MSEC, timer_resolution_msec, timer_resolution_msec);
         tcp_timer_resolution_msec = timer_resolution_msec;
+    }
+
+    // RFC 1122 Section 4.2.3.2: Delayed ACK timer must not exceed 500ms
+    // This limits TCP timer resolution to ensure protocol compliance and proper RTO calculations
+    if (tcp_timer_resolution_msec > 500) {
+        vlog_printf(VLOG_WARNING,
+                    "TCP timer resolution [%s=%d] exceeds RFC 1122 maximum of 500ms. "
+                    "Clamping to 500ms to ensure protocol compliance.\n",
+                    SYS_VAR_TCP_TIMER_RESOLUTION_MSEC, tcp_timer_resolution_msec);
+        tcp_timer_resolution_msec = 500;
     }
 
     if (registry.value_exists("performance.threading.cpuset")) {

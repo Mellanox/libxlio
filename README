@@ -693,6 +693,7 @@ Maps to **XLIO_TCP_TIMER_RESOLUTION_MSEC** environment variable.
 Control internal TCP timer resolution (fast timer) in milliseconds.
 Minimum value is the thread wakeup timer resolution configured in
 performance.threading.internal_handler.timer_msec.
+Maximum is 500ms per RFC 1122 Section 4.2.3.2 (delayed ACK timer must not exceed 500ms).
 Default value is 100
 
 network.protocols.tcp.timestamps
