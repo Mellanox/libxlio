@@ -126,18 +126,18 @@ void config_printer::print_log_level(const std::string &key, const std::string &
 
 void config_printer::print_rx_num_wre(const std::string &key, const std::string &title)
 {
-    LOG_NUM_PARAM(
-        title.c_str(), m_mce_sys_var.rx_num_wr,
-        (m_mce_sys_var.enable_striding_rq ? MCE_DEFAULT_STRQ_NUM_WRE : MCE_DEFAULT_RX_NUM_WRE),
-        key.c_str());
+    const config_registry &registry = m_mce_sys_var.get_registry().value();
+    LOG_NUM_PARAM_AS(title.c_str(), m_mce_sys_var.rx_num_wr,
+                     registry.get_default_value<int64_t>(key), key.c_str(),
+                     to_str_accurate(m_mce_sys_var.rx_num_wr).c_str());
 }
 
 void config_printer::print_rx_num_wre_to_post_recv(const std::string &key, const std::string &title)
 {
-    LOG_NUM_PARAM(title.c_str(), m_mce_sys_var.rx_num_wr_to_post_recv,
-                  (m_mce_sys_var.enable_striding_rq ? MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV
-                                                    : MCE_DEFAULT_RX_NUM_WRE_TO_POST_RECV),
-                  key.c_str());
+    const config_registry &registry = m_mce_sys_var.get_registry().value();
+    LOG_NUM_PARAM_AS(title.c_str(), m_mce_sys_var.rx_num_wr_to_post_recv,
+                     registry.get_default_value<int64_t>(key), key.c_str(),
+                     to_str_accurate(m_mce_sys_var.rx_num_wr_to_post_recv).c_str());
 }
 
 void config_printer::print_progress_engine_interval(const std::string &key,
@@ -163,8 +163,10 @@ void config_printer::print_nothing(const std::string & /*key*/, const std::strin
 
 void config_printer::print_qp_compensation_level(const std::string &key, const std::string &title)
 {
-    LOG_NUM_PARAM(title.c_str(), m_mce_sys_var.qp_compensation_level, m_mce_sys_var.rx_num_wr / 2U,
-                  key.c_str());
+    const config_registry &registry = m_mce_sys_var.get_registry().value();
+    LOG_NUM_PARAM_AS(title.c_str(), m_mce_sys_var.qp_compensation_level,
+                     registry.get_default_value<int64_t>(key), key.c_str(),
+                     to_str_accurate(m_mce_sys_var.qp_compensation_level).c_str());
 }
 
 #if defined(DEFINED_NGINX)

@@ -1,0 +1,16 @@
+{
+  "monitor": {
+    "log": {
+      "level": 3
+    }
+  },
+  "performance": {
+    "rings": {
+      "rx": {
+        "post_batch_size": 512,
+        "spare_buffers": 16384
+      }
+    }
+  }
+}
+
