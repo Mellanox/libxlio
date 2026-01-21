@@ -1,0 +1,60 @@
+---
+description: Evaluate and analyze bugs
+alwaysApply: false
+---
+
+Investigate and analyze a Redmine ticket to understand the root cause of a bug.
+
+## Prerequisites
+**Stop and ask user to install Redmine MCP if unavailable.**
+
+If ticket number is not provided, request it from the user.
+
+## Phase 1: Investigation
+
+### Ticket Analysis
+1. Fetch the full ticket using Redmine MCP with ticket ID
+2. Extract key information:
+   - Bug description and reproduction steps
+   - Affected versions, components, priority
+   - Attachments (logs, screenshots, stack traces)
+3. Review comments using Redmine MCP
+4. Search for similar issues using Redmine MCP
+
+### Codebase Investigation
+1. Locate affected code components (use semantic search and grep)
+2. Trace execution path from entry point to bug location
+3. Review recent changes to affected files (git history)
+4. Examine error handling and edge cases
+5. Check existing tests related to the functionality
+
+### Data Gathering
+- Collect error messages, stack traces, logs
+- Document current vs. expected behavior
+- Note environmental factors (OS, versions, config)
+
+## Phase 2: Root Cause Analysis
+
+Provide a clear explanation of:
+- **What the user experiences**: Observable symptoms
+- **Technical root cause**: The actual defect in code/logic
+- **Why it exists**: Contributing factors (race condition, missing validation, incorrect assumption, etc.)
+- **Impact scope**: Which features/users are affected
+
+## Phase 3: Visual Illustration
+
+Create diagrams to illustrate:
+1. **Bug flow diagram**: Sequence/flow showing how the bug manifests
+2. **Architecture context**: Components involved and their relationships
+
+Use mermaid or ASCII diagrams for clarity.
+
+## Notes
+- If insufficient information exists, clearly state what's missing and ask user
+- Validate all assumptions by examining actual code
+
+## Next Steps
+
+After completing this evaluation:
+- **If more investigation needed**: Document questions and continue research
+- **If ticket is invalid**: Update ticket status with findings
