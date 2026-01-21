@@ -28,6 +28,7 @@ volumes:
   - {mountPath: /auto/sw/release/sw_acceleration, hostPath: /auto/sw/release/sw_acceleration}
   # User profile for release
   - {mountPath: /var/home/svc-nbu-swx-media, hostPath: /labhome/svc-nbu-swx-media}
+  - {mountPath: /var/home/swx-jenkins, hostPath: /labhome/swx-jenkins}
   # for Antivirus
   - {mountPath: /auto/BACKUP/logs_of_LOGS, hostPath: /auto/BACKUP/logs_of_LOGS}
   - {mountPath: /auto/GLIT/SCRIPTS/HELPERS, hostPath: /auto/GLIT/SCRIPTS/HELPERS}
@@ -39,7 +40,7 @@ runs_on_dockers:
       uri: '$arch/$name/release',
       build_args: '--no-cache --target release',
       arch: 'x86_64',
-      tag: '20251214',
+      tag: '20260112',
       runAsUser: '6213',
       runAsGroup: '101'
     }
@@ -54,13 +55,13 @@ runs_on_dockers:
     }
 
 steps:
+# We are getting internal dpcp fron cidemo-init.sh at the start of the run, source is stored in ${WORKSPACE}/jenkins/default/_dpcp-last
   - name: Build-dpcp
     parallel: false
     containerSelector:
       - "{name: 'rhel8.6'}"
     run: |
-      git clone https://github.com/Mellanox/libdpcp.git libdpcp
-      cd libdpcp
+      cd "${WORKSPACE}/jenkins/default/_dpcp-last"
       ./autogen.sh && ./configure --prefix=/usr && sudo make install
 
   - name: Release
