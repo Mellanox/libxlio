@@ -8,9 +8,17 @@
 #include "loaders/json_loader.h"
 #include "loaders/inline_loader.h"
 #include "descriptor_providers/json_descriptor_provider.h"
+#include "descriptors/config_descriptor.h"
 #include "xlio_exception.h"
 #include "config_registry.h"
 #include "utils.h"
+
+// Helper function to create config_descriptor from schema string
+static config_descriptor load_descriptor(const char *schema)
+{
+    json_descriptor_provider provider(schema);
+    return provider.load_descriptors();
+}
 
 static const char *sample_descriptor = R"({
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -75,8 +83,7 @@ TEST(config, config_registry_sanity)
 
     std::queue<std::unique_ptr<loader>> loaders;
     loaders.push(std::make_unique<json_loader>(json_config.get()));
-    config_registry registry(std::move(loaders),
-                             std::make_unique<json_descriptor_provider>(sample_descriptor));
+    config_registry registry(std::move(loaders), load_descriptor(sample_descriptor));
 
     ASSERT_EQ(5, registry.get_value<int64_t>("core.log.level"));
 }
@@ -87,8 +94,7 @@ TEST(config, config_registry_value_not_respecting_constraints_throws)
 
     std::queue<std::unique_ptr<loader>> loaders;
     loaders.push(std::make_unique<json_loader>(json_config.get()));
-    ASSERT_THROW(config_registry(std::move(loaders),
-                                 std::make_unique<json_descriptor_provider>(sample_descriptor)),
+    ASSERT_THROW(config_registry(std::move(loaders), load_descriptor(sample_descriptor)),
                  xlio_exception);
 }
 
@@ -103,8 +109,7 @@ TEST(config, config_registry_value_last_loader_prioritized)
     loaders.push(std::make_unique<json_loader>(json_config2.get()));
     loaders.push(std::make_unique<json_loader>(json_config3.get()));
 
-    config_registry registry(std::move(loaders),
-                             std::make_unique<json_descriptor_provider>(sample_descriptor));
+    config_registry registry(std::move(loaders), load_descriptor(sample_descriptor));
 
     ASSERT_EQ(1, registry.get_value<int64_t>("core.log.level"));
 }
@@ -171,9 +176,7 @@ TEST(config, config_registry_missing_gets_defaults)
     std::queue<std::unique_ptr<loader>> loaders;
     loaders.push(std::make_unique<json_loader>(json_config.get()));
 
-    config_registry registry(
-        std::move(loaders),
-        std::make_unique<json_descriptor_provider>(descriptor_with_missing_property));
+    config_registry registry(std::move(loaders), load_descriptor(descriptor_with_missing_property));
 
     ASSERT_EQ("hello", registry.get_value<std::string>("core.missing"));
 }
@@ -185,8 +188,7 @@ TEST(config, config_registry_get_value_wrong_type_throws)
     std::queue<std::unique_ptr<loader>> loaders;
     loaders.push(std::make_unique<json_loader>(json_config.get()));
 
-    config_registry registry(std::move(loaders),
-                             std::make_unique<json_descriptor_provider>(sample_descriptor));
+    config_registry registry(std::move(loaders), load_descriptor(sample_descriptor));
 
     ASSERT_THROW(registry.get_value<std::string>("core.log.level"), xlio_exception);
 }
@@ -198,8 +200,7 @@ TEST(config, config_registry_missing_descriptor_for_key_throws)
     std::queue<std::unique_ptr<loader>> loaders;
     loaders.push(std::make_unique<json_loader>(json_config.get()));
 
-    config_registry registry(std::move(loaders),
-                             std::make_unique<json_descriptor_provider>(sample_descriptor));
+    config_registry registry(std::move(loaders), load_descriptor(sample_descriptor));
 
     // Attempting to get a key that neither exists in the loaded data nor in the descriptor
     // should result in an exception.
@@ -210,10 +211,8 @@ TEST(config, config_registry_empty_loaders_throw)
 {
     std::queue<std::unique_ptr<loader>> empty_loaders;
 
-    ASSERT_THROW(
-        config_registry registry(std::move(empty_loaders),
-                                 std::make_unique<json_descriptor_provider>(sample_descriptor)),
-        xlio_exception);
+    ASSERT_THROW(config_registry(std::move(empty_loaders), load_descriptor(sample_descriptor)),
+                 xlio_exception);
 }
 
 TEST(config, config_registry_boundary_constraint)
@@ -223,8 +222,7 @@ TEST(config, config_registry_boundary_constraint)
     std::queue<std::unique_ptr<loader>> loaders;
     loaders.push(std::make_unique<json_loader>(json_config1.get()));
 
-    config_registry registry(std::move(loaders),
-                             std::make_unique<json_descriptor_provider>(sample_descriptor));
+    config_registry registry(std::move(loaders), load_descriptor(sample_descriptor));
 
     ASSERT_EQ(-2, registry.get_value<int64_t>("core.log.level"));
 
@@ -234,8 +232,7 @@ TEST(config, config_registry_boundary_constraint)
     std::queue<std::unique_ptr<loader>> loaders2;
     loaders2.push(std::make_unique<json_loader>(json_config2.get()));
 
-    config_registry registry2(std::move(loaders2),
-                              std::make_unique<json_descriptor_provider>(sample_descriptor));
+    config_registry registry2(std::move(loaders2), load_descriptor(sample_descriptor));
 
     ASSERT_EQ(8, registry2.get_value<int64_t>("core.log.level"));
 }
@@ -249,10 +246,6 @@ TEST(config, config_registry_mixed_loaders_merge)
     })");
 
     env_setter inline_setter("XLIO_INLINE_CONFIG", "core.inline_only=from_inline");
-
-    std::queue<std::unique_ptr<loader>> loaders;
-    loaders.push(std::make_unique<json_loader>(json_config.get()));
-    loaders.push(std::make_unique<inline_loader>("XLIO_INLINE_CONFIG"));
 
     const char *descriptor = R"({
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -275,14 +268,20 @@ TEST(config, config_registry_mixed_loaders_merge)
                     "default": "from_inline",
                     "title": "Inline only",
                     "description": "dummy description"
-                },
+                }
             }
         }
     }
 })";
 
-    config_registry registry(std::move(loaders),
-                             std::make_unique<json_descriptor_provider>(descriptor));
+    // Load descriptor first, then create loaders with it
+    config_descriptor config_desc = load_descriptor(descriptor);
+
+    std::queue<std::unique_ptr<loader>> loaders;
+    loaders.push(std::make_unique<json_loader>(json_config.get()));
+    loaders.push(std::make_unique<inline_loader>("XLIO_INLINE_CONFIG", config_desc));
+
+    config_registry registry(std::move(loaders), std::move(config_desc));
 
     ASSERT_EQ("from_json", registry.get_value<std::string>("core.json_only"));
     ASSERT_EQ("from_inline", registry.get_value<std::string>("core.inline_only"));
@@ -291,6 +290,7 @@ TEST(config, config_registry_mixed_loaders_merge)
 TEST(config, config_registry_default_ctr_inline_has_precedence)
 {
     conf_file_writer json_config(R"({ "monitor": { "log": { "level": 2 } } })");
+    // Note: semicolon is now the delimiter for XLIO_INLINE_CONFIG
     env_setter inline_setter("XLIO_INLINE_CONFIG", "monitor.log.level=5");
     env_setter config_file_setter("XLIO_CONFIG_FILE", json_config.get());
 
@@ -359,8 +359,7 @@ TEST(config, config_registry_memory_size_transformer_gb_suffix)
     std::queue<std::unique_ptr<loader>> loaders;
     loaders.push(std::make_unique<json_loader>(json_config.get()));
 
-    config_registry registry(std::move(loaders),
-                             std::make_unique<json_descriptor_provider>(memory_schema));
+    config_registry registry(std::move(loaders), load_descriptor(memory_schema));
 
     // 4GB = 4 * 1024 * 1024 * 1024 = 4294967296 bytes
     ASSERT_EQ(4294967296LL, registry.get_value<int64_t>("core.memory_limit"));
@@ -405,8 +404,7 @@ TEST(config, config_registry_memory_size_transformer_mb_suffix)
     std::queue<std::unique_ptr<loader>> loaders;
     loaders.push(std::make_unique<json_loader>(json_config.get()));
 
-    config_registry registry(std::move(loaders),
-                             std::make_unique<json_descriptor_provider>(memory_schema));
+    config_registry registry(std::move(loaders), load_descriptor(memory_schema));
 
     // 512MB = 512 * 1024 * 1024 = 536870912 bytes
     ASSERT_EQ(536870912LL, registry.get_value<int64_t>("core.memory_limit"));
@@ -451,8 +449,7 @@ TEST(config, config_registry_memory_size_transformer_plain_number_backwards_comp
     std::queue<std::unique_ptr<loader>> loaders;
     loaders.push(std::make_unique<json_loader>(json_config.get()));
 
-    config_registry registry(std::move(loaders),
-                             std::make_unique<json_descriptor_provider>(memory_schema));
+    config_registry registry(std::move(loaders), load_descriptor(memory_schema));
 
     // Plain number should work as before (1GB in bytes)
     ASSERT_EQ(1073741824LL, registry.get_value<int64_t>("core.memory_limit"));
@@ -495,11 +492,13 @@ TEST(config, config_registry_memory_size_transformer_inline_config)
 }
 })";
 
-    std::queue<std::unique_ptr<loader>> loaders;
-    loaders.push(std::make_unique<inline_loader>("XLIO_INLINE_CONFIG"));
+    // Load descriptor first, then create loaders with it
+    config_descriptor config_desc = load_descriptor(memory_schema);
 
-    config_registry registry(std::move(loaders),
-                             std::make_unique<json_descriptor_provider>(memory_schema));
+    std::queue<std::unique_ptr<loader>> loaders;
+    loaders.push(std::make_unique<inline_loader>("XLIO_INLINE_CONFIG", config_desc));
+
+    config_registry registry(std::move(loaders), std::move(config_desc));
 
     // 2GB = 2 * 1024 * 1024 * 1024 = 2147483648 bytes
     ASSERT_EQ(2147483648LL, registry.get_value<int64_t>("core.memory_limit"));
@@ -559,10 +558,9 @@ TEST(config, config_registry_boolean_type_mismatch_throws)
     std::queue<std::unique_ptr<loader>> loaders;
     loaders.push(std::make_unique<json_loader>(json_config.get()));
 
-    ASSERT_THROW(config_registry(
-                     std::move(loaders),
-                     std::make_unique<json_descriptor_provider>(sample_type_validation_descriptor)),
-                 xlio_exception);
+    ASSERT_THROW(
+        config_registry(std::move(loaders), load_descriptor(sample_type_validation_descriptor)),
+        xlio_exception);
 }
 
 TEST(config, config_registry_string_type_mismatch_throws)
@@ -582,10 +580,9 @@ TEST(config, config_registry_string_type_mismatch_throws)
     std::queue<std::unique_ptr<loader>> loaders;
     loaders.push(std::make_unique<json_loader>(json_config.get()));
 
-    ASSERT_THROW(config_registry(
-                     std::move(loaders),
-                     std::make_unique<json_descriptor_provider>(sample_type_validation_descriptor)),
-                 xlio_exception);
+    ASSERT_THROW(
+        config_registry(std::move(loaders), load_descriptor(sample_type_validation_descriptor)),
+        xlio_exception);
 }
 
 TEST(config, config_registry_valid_integer_works)
@@ -604,9 +601,8 @@ TEST(config, config_registry_valid_integer_works)
     std::queue<std::unique_ptr<loader>> loaders;
     loaders.push(std::make_unique<json_loader>(json_config.get()));
 
-    config_registry registry(
-        std::move(loaders),
-        std::make_unique<json_descriptor_provider>(sample_type_validation_descriptor));
+    config_registry registry(std::move(loaders),
+                             load_descriptor(sample_type_validation_descriptor));
 
     ASSERT_EQ(32LL, registry.get_value<int64_t>("performance.rings.tx.udp_buffer_batch"));
 }
@@ -626,9 +622,8 @@ TEST(config, config_registry_missing_uses_default)
     std::queue<std::unique_ptr<loader>> loaders;
     loaders.push(std::make_unique<json_loader>(json_config.get()));
 
-    config_registry registry(
-        std::move(loaders),
-        std::make_unique<json_descriptor_provider>(sample_type_validation_descriptor));
+    config_registry registry(std::move(loaders),
+                             load_descriptor(sample_type_validation_descriptor));
 
     ASSERT_EQ(16LL, registry.get_value<int64_t>("performance.rings.tx.udp_buffer_batch"));
 }
