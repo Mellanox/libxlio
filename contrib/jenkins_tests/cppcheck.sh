@@ -23,8 +23,9 @@ cd $cppcheck_dir
 ${WORKSPACE}/configure $jenkins_test_custom_configure > "${cppcheck_dir}/cppcheck.log" 2>&1
 
 set +eE
-eval "find ${WORKSPACE}/src -name '*.h' -o -name '*.cpp' -o -name '*.c' -o -name '*.hpp' | \
+eval "find ${WORKSPACE}/src ${WORKSPACE}/tools ${WORKSPACE}/examples -name '*.h' -o -name '*.cpp' -o -name '*.c' -o -name '*.hpp' | \
 	${tool_app} --std=c++11 --language=c++ --force --enable=information \
+	-j${NPROC} \
 	-I${WORKSPACE}/src \
 	-I${WORKSPACE}/src/stats \
 	-I${WORKSPACE}/src/utils \
@@ -39,6 +40,8 @@ eval "find ${WORKSPACE}/src -name '*.h' -o -name '*.cpp' -o -name '*.c' -o -name
 	-I${WORKSPACE}/src/core/proto \
 	-I${WORKSPACE}/src/core/sock \
 	-I${WORKSPACE}/src/core/util \
+	-I${WORKSPACE}/tools \
+	-I${WORKSPACE}/examples \
 	--inline-suppr --suppress=memleak:config_parser.y \
 	--template='{severity}: {id}: {file}:{line}: {message}' \
 	--file-list=- 2> ${cppcheck_dir}/cppcheck.err 1> ${cppcheck_dir}/cppcheck.log"
