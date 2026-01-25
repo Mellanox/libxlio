@@ -1,0 +1,53 @@
+- job-template:
+    name: "{jjb_proj}"
+    project-type: pipeline
+    folder: libxlio
+    properties:
+        - github:
+             url: "https://github.com/Mellanox/libxlio"
+        - build-discarder:
+            days-to-keep: 50
+            num-to-keep: 20
+        - inject:
+            keep-system-variables: true
+            properties-content: |
+              jjb_proj={jjb_proj}
+    description: Do NOT edit this job through the Web GUI !
+    concurrent: true
+    sandbox: true
+    parameters:
+        - string:
+            name: "sha1"
+            default: "vNext"
+            description: "Branch or commit to run chaos testing on"
+        - string:
+            name: "notification_email"
+            default: ""
+            description: "Email for chaos test results"
+        - string:
+            name: "conf_file"
+            default: ".ci/chaos/chaos_matrix_job.yaml"
+            description: "Chaos launcher config file. Do not change it"
+    triggers:
+        - timed: '0 2 * * 6'
+    pipeline-scm:
+        scm:
+            - git:
+                url: "{jjb_git}"
+                credentials-id: 'svc-nbu-swx-media_ssh_key'
+                branches: ['$sha1']
+                shallow-clone: false
+                do-not-fetch-tags: false
+                refspec: "+refs/heads/*:refs/remotes/origin/* +refs/pull/*:refs/remotes/origin/pr/* +refs/tags/*:refs/remotes/origin/tags/*"
+                browser: githubweb
+                browser-url: "{jjb_git}"
+        script-path: ".ci/Jenkinsfile"
+
+- project:
+    name: LibXLIO-chaos
+    jjb_email: 'ntsemah@nvidia.com'
+    jjb_proj: 'LibXLIO-chaos'
+    jjb_git: 'git@github.com:Mellanox/libxlio.git'
+    jjb_owner: 'Noam Tsemah'
+    jobs:
+        - "{jjb_proj}"

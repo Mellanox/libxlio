@@ -201,22 +201,23 @@ steps:
     agentSelector:
       - "{nodeLabel: 'skip-agent'}"
     run: |
-      env GITHUB_TOKEN=$MELLANOX_GH_TOKEN /opt/nvidia/secret_scan.py --path $WORKSPACE --git-repo $WORKSPACE --report-file secret_scan.html
-    archiveArtifacts: '*.html'
+      .ci/scripts/run_step.sh "Secret Scan" env GITHUB_TOKEN=$MELLANOX_GH_TOKEN /opt/nvidia/secret_scan.py --path $WORKSPACE --git-repo $WORKSPACE --report-file secret_scan.html
+    archiveArtifacts: '*.html,chaos_results/*.txt'
     parallel: false
 
   - name: Copyrights
     enable: ${do_copyrights}
     credentialsId: 'mellanox_github_credentials'
-    run: env WORKSPACE=$PWD GITHUB_TOKEN=$MELLANOX_GH_TOKEN ./contrib/jenkins_tests/copyrights.sh
+    run: .ci/scripts/run_step.sh "Copyrights" env WORKSPACE=$PWD GITHUB_TOKEN=$MELLANOX_GH_TOKEN ./contrib/jenkins_tests/copyrights.sh
     containerSelector:
       - "{name: 'header-check', category: 'tool', variant: 1}"
-    archiveArtifacts: '*.log,*.tar.gz'
+    archiveArtifacts: '*.log,*.tar.gz,chaos_results/*.txt'
     parallel: false
 
   - name: Autogen
     run: |
-      ./autogen.sh -s
+      .ci/scripts/run_step.sh "Autogen" ./autogen.sh -s
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
 
   - name: Build
@@ -226,7 +227,8 @@ steps:
       - "{category: 'tests'}"
     run: |
       [ "x${do_build}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_build=${action} ./contrib/test_jenkins.sh
+      .ci/scripts/run_step.sh "Build" env WORKSPACE=$PWD TARGET=${flags} jenkins_test_build=${action} ./contrib/test_jenkins.sh
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -239,7 +241,8 @@ steps:
       - "{category: 'base', variant:1}"
     run: |
       [ "x${do_service}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_tool=${action} ./contrib/test_jenkins.sh
+      .ci/scripts/run_step.sh "Service" env WORKSPACE=$PWD TARGET=${flags} jenkins_test_tool=${action} ./contrib/test_jenkins.sh
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -252,7 +255,8 @@ steps:
       - "{category: 'base'}"
     run: |
       [ "x${do_package}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_rpm=${action} ./contrib/test_jenkins.sh
+      .ci/scripts/run_step.sh "Package" env WORKSPACE=$PWD TARGET=${flags} jenkins_test_rpm=${action} ./contrib/test_jenkins.sh
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -265,7 +269,8 @@ steps:
       - "{name: 'style', category: 'tool'}"
     run: |
       [ "x${do_style}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_style=${action} ./contrib/test_jenkins.sh
+      .ci/scripts/run_step.sh "Style" env WORKSPACE=$PWD TARGET=${flags} jenkins_test_style=${action} ./contrib/test_jenkins.sh
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -280,7 +285,8 @@ steps:
       - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_compiler}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} COMPILER_SPEC="clang:clang++:dev/clang-9.0.1" jenkins_test_compiler=${action} ./contrib/test_jenkins.sh
+      .ci/scripts/run_step.sh "Compiler (clang-9.0.1)" env WORKSPACE=$PWD TARGET=${flags} COMPILER_SPEC="clang:clang++:dev/clang-9.0.1" jenkins_test_compiler=${action} ./contrib/test_jenkins.sh
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -295,7 +301,8 @@ steps:
       - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_compiler}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} COMPILER_SPEC="icc:icpc:intel/ics-18.0.4" jenkins_test_compiler=${action} ./contrib/test_jenkins.sh
+      .ci/scripts/run_step.sh "Compiler (icc-18.0.4)" env WORKSPACE=$PWD TARGET=${flags} COMPILER_SPEC="icc:icpc:intel/ics-18.0.4" jenkins_test_compiler=${action} ./contrib/test_jenkins.sh
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -310,7 +317,8 @@ steps:
       - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_compiler}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} COMPILER_SPEC="icc:icpc:intel/ics-19.1.1" jenkins_test_compiler=${action} ./contrib/test_jenkins.sh
+      .ci/scripts/run_step.sh "Compiler (icc-19.1.1)" env WORKSPACE=$PWD TARGET=${flags} COMPILER_SPEC="icc:icpc:intel/ics-19.1.1" jenkins_test_compiler=${action} ./contrib/test_jenkins.sh
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -325,7 +333,8 @@ steps:
       - "{nodeLabel: 'skip-agent'}"
     run: |
       [ "x${do_compiler}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} COMPILER_SPEC="gcc:g++:dev/gcc-8.3.0 gcc:g++:dev/gcc-9.3.0 gcc:g++:dev/gcc-10.1.0" jenkins_test_compiler=${action} ./contrib/test_jenkins.sh
+      .ci/scripts/run_step.sh "Compiler (gcc)" env WORKSPACE=$PWD TARGET=${flags} COMPILER_SPEC="gcc:g++:dev/gcc-8.3.0 gcc:g++:dev/gcc-9.3.0 gcc:g++:dev/gcc-10.1.0" jenkins_test_compiler=${action} ./contrib/test_jenkins.sh
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -339,7 +348,8 @@ steps:
       - "{name: 'toolbox', category: 'tool'}"
     run: |
       [ "x${do_coverity}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_cov=${action} ./contrib/test_jenkins.sh
+      .ci/scripts/run_step.sh "Coverity" env WORKSPACE=$PWD TARGET=${flags} jenkins_test_cov=${action} ./contrib/test_jenkins.sh
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -353,7 +363,8 @@ steps:
       - "{name: 'xlio_static.cppcheck', category: 'tool', variant: 1}"
     run: |
       [ "x${do_cppcheck}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_cppcheck=${action} ./contrib/test_jenkins.sh
+      .ci/scripts/run_step.sh "Cppcheck" env WORKSPACE=$PWD TARGET=${flags} jenkins_test_cppcheck=${action} ./contrib/test_jenkins.sh
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -366,7 +377,8 @@ steps:
       - "{name: 'xlio_static.csbuild', category: 'tool', variant: 1}"
     run: |
       [ "x${do_csbuild}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_csbuild=${action} ./contrib/test_jenkins.sh
+      .ci/scripts/run_step.sh "Csbuild" env WORKSPACE=$PWD TARGET=${flags} jenkins_test_csbuild=${action} ./contrib/test_jenkins.sh
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -379,7 +391,8 @@ steps:
       - "{name: 'sockperf'}"
     run: |
       [ "x${do_test}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_run=${action} WORKER_THREADS=false ./contrib/test_jenkins.sh
+      .ci/scripts/run_step.sh "Test" env WORKSPACE=$PWD TARGET=${flags} jenkins_test_run=${action} WORKER_THREADS=false ./contrib/test_jenkins.sh
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -392,7 +405,8 @@ steps:
       - "{name: 'sockperf-worker-threads'}"
     run: |
       [ "x${do_test}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_run=${action} WORKER_THREADS=true ./contrib/test_jenkins.sh
+      .ci/scripts/run_step.sh "Test (Worker thread mode)" env WORKSPACE=$PWD TARGET=${flags} jenkins_test_run=${action} WORKER_THREADS=true ./contrib/test_jenkins.sh
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -404,7 +418,8 @@ steps:
     containerSelector:
       - "{name: 'unit-test', category: 'tool', variant: 1}"
     run: |
-      env WORKSPACE=$PWD ./contrib/jenkins_tests/unit_test.sh
+      .ci/scripts/run_step.sh "Unit Tests" env WORKSPACE=$PWD ./contrib/jenkins_tests/unit_test.sh
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -417,7 +432,8 @@ steps:
       - "{name: 'gtest'}"
     run: |
       [ "x${do_gtest}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_gtest=${action} ./contrib/test_jenkins.sh
+      .ci/scripts/run_step.sh "Gtest" env WORKSPACE=$PWD TARGET=${flags} jenkins_test_gtest=${action} ./contrib/test_jenkins.sh
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -432,7 +448,8 @@ steps:
       - "{name: 'vg'}"
     run: |
       [ "x${do_valgrind}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_vg=${action} TEST_MODE=r2c ./contrib/test_jenkins.sh
+      .ci/scripts/run_step.sh "Valgrind (R2C)" env WORKSPACE=$PWD TARGET=${flags} jenkins_test_vg=${action} TEST_MODE=r2c ./contrib/test_jenkins.sh
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -446,7 +463,8 @@ steps:
       - "{name: 'vg'}"
     run: |
       [ "x${do_valgrind}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_vg=${action} TEST_MODE=worker_threads ./contrib/test_jenkins.sh
+      .ci/scripts/run_step.sh "Valgrind (Worker thread mode)" env WORKSPACE=$PWD TARGET=${flags} jenkins_test_vg=${action} TEST_MODE=worker_threads ./contrib/test_jenkins.sh
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -460,7 +478,8 @@ steps:
       - "{name: 'vg'}"
     run: |
       [ "x${do_valgrind}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_vg=${action} TEST_MODE=ultra_api ./contrib/test_jenkins.sh
+      .ci/scripts/run_step.sh "Valgrind (Ultra API)" env WORKSPACE=$PWD TARGET=${flags} jenkins_test_vg=${action} TEST_MODE=ultra_api ./contrib/test_jenkins.sh
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -474,12 +493,28 @@ steps:
       - "{name: 'toolbox', category: 'tool', variant:1}"
     run: |
       [ "x${do_commit}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_commit=${action} ./contrib/test_jenkins.sh
+      .ci/scripts/run_step.sh "Commit" env WORKSPACE=$PWD TARGET=${flags} jenkins_test_commit=${action} ./contrib/test_jenkins.sh
+    archiveArtifacts: 'chaos_results/*.txt'
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
+
+  - name: Verify Chaos Patches
+    containerSelector:
+      - "{name: 'toolbox', category: 'tool', variant: 1}"
+    run: |
+      set -e
+      ls .ci/chaos/patches/*.diff &>/dev/null || { echo "No chaos patches to verify"; exit 0; }
+      # Check files in config exist and patches apply cleanly
+      for file in $(awk '/- file:/ {print $3}' .ci/chaos/chaos_config.yaml); do
+        [ -f ".ci/chaos/patches/$file" ] || { echo "ERROR: $file missing from patches/"; exit 1; }
+      done
+      for patch in .ci/chaos/patches/*.diff; do
+        git apply --check "$patch"
+      done
+    parallel: false
 
   - name: Artifacts
     enable: ${do_artifact}
@@ -492,6 +527,7 @@ steps:
     parallel: false
     archiveArtifacts: |
       jenkins/**/arch-*.tar.gz
+      chaos_results/*.txt
     archiveJunit: |
       jenkins/**/*.xml
 
@@ -500,8 +536,8 @@ steps:
     containerSelector:
       - "{name: 'documentation_test'}"
     run: |
-      python3 generate_docs.py
-      python3 src/core/config/generate_mappings.py
+      .ci/scripts/run_step.sh "Documentation Test" bash -c "python3 generate_docs.py && python3 src/core/config/generate_mappings.py"
+    archiveArtifacts: 'chaos_results/*.txt'
 
 pipeline_start:
   run: |
