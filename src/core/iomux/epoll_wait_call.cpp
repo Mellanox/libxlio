@@ -90,7 +90,7 @@ int epoll_wait_call::get_current_events()
         }
 
         if (mutual_events & EPOLLIN) {
-            if (handle_epoll_event(si->is_readable(nullptr), EPOLLIN, si, i)) {
+            if (handle_epoll_event(si->is_readable(false), EPOLLIN, si, i)) {
                 ready_rfds++;
                 got_event = true;
             }
@@ -330,25 +330,24 @@ bool epoll_wait_call::handle_epoll_event(bool is_ready, uint32_t events, sockinf
 bool epoll_wait_call::ring_poll_and_process_element()
 {
     if (!safe_mce_sys().is_threads_mode()) {
-        return m_epfd_info->ring_poll_and_process_element(&m_poll_sn_rx, &m_poll_sn_tx, nullptr);
+        return m_epfd_info->ring_poll_and_process_element(nullptr);
     }
 
     return true;
 }
 
-int epoll_wait_call::ring_request_notification()
+bool epoll_wait_call::ring_request_notification()
 {
     if (!safe_mce_sys().is_threads_mode()) {
-        return m_epfd_info->ring_request_notification(m_poll_sn_rx, m_poll_sn_tx);
+        return m_epfd_info->ring_request_notification();
     }
 
-    return 0;
+    return true;
 }
 
 void epoll_wait_call::ring_wait_for_notification_and_process_element(void *pv_fd_ready_array)
 {
     if (!safe_mce_sys().is_threads_mode()) {
-        m_epfd_info->ring_wait_for_notification_and_process_element(&m_poll_sn_rx,
-                                                                    pv_fd_ready_array);
+        m_epfd_info->ring_wait_for_notification_and_process_element(pv_fd_ready_array);
     }
 }

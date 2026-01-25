@@ -34,16 +34,13 @@ public:
      * Arm the managed CQ's notification channel
      * Calling this more then once without get_event() will return without
      * doing anything (arm flag is changed to true on first call).
-     * This call will also check if a wce was processes between the
-     * last poll and this arm request - if true it will not arm the CQ
-     * @return ==0 cq is armed
-     *         ==1 cq not armed (cq poll_sn out of sync)
-     *         < 0 on error
+     * @return == true cq is armed (or already armed)
+     *         false on error
      */
-    int request_notification(uint64_t poll_sn);
+    bool request_notification();
 
     // @return Positive - Drained with completions, Negative - No completions.
-    int poll_and_process_element_tx(uint64_t *p_cq_poll_sn);
+    int poll_and_process_element_tx();
 
     void reset_notification_armed() { m_b_notification_armed = false; }
 
@@ -54,11 +51,7 @@ private:
 
     void get_cq_event(int count = 1) { xlio_ib_mlx5_get_cq_event(&m_mlx5_cq, count); };
 
-    inline void update_global_sn_tx(uint64_t &cq_poll_sn, uint32_t rettotal);
-    inline struct xlio_mlx5_cqe *get_cqe_tx(uint32_t &num_polled_cqes);
-
-    static atomic_t m_n_cq_id_counter_tx;
-    static uint64_t m_n_global_sn_tx;
+    inline struct xlio_mlx5_cqe *get_cqe_tx();
 
     xlio_ib_mlx5_cq_t m_mlx5_cq;
     ring_simple *m_p_ring;
@@ -66,33 +59,10 @@ private:
     ibv_comp_channel *m_comp_event_channel;
     hw_queue_tx *m_hqtx_ptr = nullptr;
     struct ibv_cq *m_p_ibv_cq = nullptr;
-    uint32_t m_cq_id_tx = 0U;
-    uint32_t m_n_cq_poll_sn_tx = 0U;
     bool m_b_notification_armed = false;
 };
 
-inline void cq_mgr_tx::update_global_sn_tx(uint64_t &cq_poll_sn, uint32_t num_polled_cqes)
-{
-    if (num_polled_cqes > 0) {
-        // spoil the global sn if we have packets ready
-        union __attribute__((packed)) {
-            uint64_t global_sn;
-            struct {
-                uint32_t cq_id;
-                uint32_t cq_sn;
-            } bundle;
-        } next_sn;
-        m_n_cq_poll_sn_tx += num_polled_cqes;
-        next_sn.bundle.cq_sn = m_n_cq_poll_sn_tx;
-        next_sn.bundle.cq_id = m_cq_id_tx;
-
-        m_n_global_sn_tx = next_sn.global_sn;
-    }
-
-    cq_poll_sn = m_n_global_sn_tx;
-}
-
-inline struct xlio_mlx5_cqe *cq_mgr_tx::get_cqe_tx(uint32_t &num_polled_cqes)
+inline struct xlio_mlx5_cqe *cq_mgr_tx::get_cqe_tx()
 {
     struct xlio_mlx5_cqe *cqe_ret = nullptr;
     struct xlio_mlx5_cqe *cqe =
@@ -107,7 +77,6 @@ inline struct xlio_mlx5_cqe *cq_mgr_tx::get_cqe_tx(uint32_t &num_polled_cqes)
     while (((cqe->op_own & MLX5_CQE_OWNER_MASK) == !!(m_mlx5_cq.cq_ci & m_mlx5_cq.cqe_count)) &&
            ((cqe->op_own >> 4) != MLX5_CQE_INVALID)) {
         ++m_mlx5_cq.cq_ci;
-        ++num_polled_cqes;
         cqe_ret = cqe;
         if (unlikely(cqe->op_own & 0x80)) {
             // This is likely an error CQE. Return it explicitly to log the errors.

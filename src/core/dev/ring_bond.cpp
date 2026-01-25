@@ -180,14 +180,10 @@ void ring_bond::restart()
     }
     popup_xmit_rings();
 
-    int ret = 0;
-    uint64_t poll_sn = cq_mgr_rx::m_n_global_sn_rx;
-    ret = request_notification(CQT_RX, poll_sn);
-    if (ret < 0) {
+    if (!request_notification(CQT_RX)) {
         ring_logdbg("failed arming cq_mgr_rx (errno=%d %m)", errno);
     }
-    ret = request_notification(CQT_TX, poll_sn);
-    if (ret < 0) {
+    if (!request_notification(CQT_TX)) {
         ring_logdbg("failed arming cq_mgr_tx (errno=%d %m)", errno);
     }
 
@@ -330,7 +326,7 @@ int ring_bond::send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
     return -1;
 }
 
-int ring_bond::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_ready_array /*NULL*/)
+int ring_bond::poll_and_process_element_rx(void *pv_fd_ready_array /*NULL*/)
 {
     if (m_lock_ring_rx.trylock()) {
         return false;
@@ -343,7 +339,7 @@ int ring_bond::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_r
         if (m_recv_rings[i]->is_up()) {
             // TODO consider returning immediately after finding something, continue next time from
             // next ring
-            int rc = m_recv_rings[i]->poll_and_process_element_rx(p_cq_poll_sn, pv_fd_ready_array);
+            int rc = m_recv_rings[i]->poll_and_process_element_rx(pv_fd_ready_array);
             all_drained = std::min(all_drained, std::abs(rc));
             all_empty = std::max(all_empty, std::min(rc, 1));
         }
@@ -353,7 +349,7 @@ int ring_bond::poll_and_process_element_rx(uint64_t *p_cq_poll_sn, void *pv_fd_r
     return all_drained * all_empty;
 }
 
-int ring_bond::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
+int ring_bond::poll_and_process_element_tx()
 {
     if (m_lock_ring_tx.trylock()) {
         return 0;
@@ -363,7 +359,7 @@ int ring_bond::poll_and_process_element_tx(uint64_t *p_cq_poll_sn)
     int all_empty = -1;
     for (uint32_t i = 0; i < m_bond_rings.size(); i++) {
         if (m_bond_rings[i]->is_up()) {
-            int rc = m_bond_rings[i]->poll_and_process_element_tx(p_cq_poll_sn);
+            int rc = m_bond_rings[i]->poll_and_process_element_tx();
             all_drained = std::min(all_drained, std::abs(rc));
             all_empty = std::max(all_empty, std::min(rc, 1));
         }
@@ -401,25 +397,22 @@ int ring_bond::drain_and_proccess()
     }
 }
 
-void ring_bond::wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
-                                                          void *pv_fd_ready_array /*NULL*/)
+void ring_bond::wait_for_notification_and_process_element(void *pv_fd_ready_array /*NULL*/)
 {
     m_lock_ring_rx.lock();
 
     for (uint32_t i = 0; i < m_recv_rings.size(); i++) {
         if (m_recv_rings[i]->is_up()) {
-            m_recv_rings[i]->wait_for_notification_and_process_element(p_cq_poll_sn,
-                                                                       pv_fd_ready_array);
+            m_recv_rings[i]->wait_for_notification_and_process_element(pv_fd_ready_array);
         }
     }
 
     m_lock_ring_rx.unlock();
 }
 
-int ring_bond::request_notification(cq_type_t cq_type, uint64_t poll_sn)
+bool ring_bond::request_notification(cq_type_t cq_type)
 {
-    int ret = 0;
-    int temp;
+    bool ret = true;
     lock_mutex_recursive &ring_lock = (CQT_RX == cq_type ? m_lock_ring_rx : m_lock_ring_tx);
 
     ring_lock.lock();
@@ -427,12 +420,9 @@ int ring_bond::request_notification(cq_type_t cq_type, uint64_t poll_sn)
     ring_slave_vector_t *bond_rings = (cq_type == CQT_RX ? &m_recv_rings : &m_xmit_rings);
     for (uint32_t i = 0; i < (*bond_rings).size(); i++) {
         if ((*bond_rings)[i]->is_up()) {
-            temp = (*bond_rings)[i]->request_notification(cq_type, poll_sn);
-            if (temp < 0) {
-                ret = temp;
+            if (!(*bond_rings)[i]->request_notification(cq_type)) {
+                ret = false;
                 break;
-            } else {
-                ret += temp;
             }
         }
     }

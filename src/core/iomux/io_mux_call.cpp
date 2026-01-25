@@ -149,8 +149,6 @@ io_mux_call::io_mux_call(int *off_fds_buffer, offloaded_mode_t *off_modes_buffer
     , m_p_offloaded_modes(off_modes_buffer)
     , m_num_all_offloaded_fds(0)
     , m_cqepfd(-1)
-    , m_poll_sn_rx(0)
-    , m_poll_sn_tx(0)
     , m_p_stats(nullptr)
     , m_n_all_ready_fds(0)
     , m_n_ready_rfds(0)
@@ -202,7 +200,7 @@ void io_mux_call::check_offloaded_rsockets()
             fd_ready_array.fd_count = 0;
 
             // Poll the socket object
-            if (p_socket_object->is_readable(&m_poll_sn_rx, &fd_ready_array)) {
+            if (p_socket_object->is_readable(true, &fd_ready_array)) {
                 set_offloaded_rfd_ready(offloaded_index);
                 // We have offloaded traffic. Don't sample the OS immediately
                 p_socket_object->unset_immediate_os_sample();
@@ -377,36 +375,32 @@ void io_mux_call::blocking_loops()
             xlio_throw_object(io_mux_call::io_error);
         }
 
-        int ret = ring_request_notification();
-        __log_func("arming cq with poll_sn=%lx ret=%d", m_poll_sn_rx, ret);
-        if (ret < 0) {
+        bool ret = ring_request_notification();
+        __log_func("arming cq ret=%d", ret ? 1 : 0);
+        if (!ret) {
             xlio_throw_object(io_mux_call::io_error);
-        } else if (ret > 0) {
-            // Arm failed - process pending wce
+        }
+
+        timer_update();
+
+        // This poll attempt is necessary to resolve a race where CQE arrrives
+        // between we checked the CQ is empty but before we requested notification.
+        if (!check_all_offloaded_sockets() || m_n_all_ready_fds) {
+            continue;
+        }
+
+        __log_func("going to sleep (elapsed time: %d sec, %d usec)", m_elapsed.tv_sec,
+                   m_elapsed.tv_usec);
+
+        if (wait(m_elapsed)) {
             fd_ready_array.fd_count = 0;
+            ring_wait_for_notification_and_process_element(&fd_ready_array);
+            // TCP sockets can be accept ready!
+            __log_func("before check_all_offloaded_sockets");
             check_all_offloaded_sockets();
-        } else /* ret == 0 */ {
-            timer_update();
-
-            // This poll attempt is necessary to resolve a race where CQE arrrives
-            // between we checked the CQ is empty but before we requested notification.
-            if (!check_all_offloaded_sockets() || m_n_all_ready_fds) {
-                continue;
-            }
-
-            __log_func("going to sleep (elapsed time: %d sec, %d usec)", m_elapsed.tv_sec,
-                       m_elapsed.tv_usec);
-
-            if (wait(m_elapsed)) {
-                fd_ready_array.fd_count = 0;
-                ring_wait_for_notification_and_process_element(&fd_ready_array);
-                // TCP sockets can be accept ready!
-                __log_func("before check_all_offloaded_sockets");
-                check_all_offloaded_sockets();
-            } else if (!m_n_all_ready_fds && !is_timeout(m_elapsed)) {
-                __log_func("woke up by wake up mechanism, check current events");
-                check_all_offloaded_sockets();
-            }
+        } else if (!m_n_all_ready_fds && !is_timeout(m_elapsed)) {
+            __log_func("woke up by wake up mechanism, check current events");
+            check_all_offloaded_sockets();
         }
     } while (!m_n_all_ready_fds && !is_timeout(m_elapsed));
 }
@@ -496,28 +490,26 @@ bool io_mux_call::ring_poll_and_process_element()
 {
     if (!safe_mce_sys().is_threads_mode()) {
         // TODO: (select, poll) this access all CQs, it is better to check only relevant ones
-        return g_p_net_device_table_mgr->global_ring_poll_and_process_element(
-            &m_poll_sn_rx, &m_poll_sn_tx, nullptr);
+        return g_p_net_device_table_mgr->global_ring_poll_and_process_element(nullptr);
     }
 
     return true;
 }
 
-int io_mux_call::ring_request_notification()
+bool io_mux_call::ring_request_notification()
 {
     if (!safe_mce_sys().is_threads_mode()) {
-        return g_p_net_device_table_mgr->global_ring_request_notification(m_poll_sn_rx,
-                                                                          m_poll_sn_tx);
+        return g_p_net_device_table_mgr->global_ring_request_notification();
     }
 
-    return 0;
+    return true;
 }
 
 void io_mux_call::ring_wait_for_notification_and_process_element(void *pv_fd_ready_array)
 {
     if (!safe_mce_sys().is_threads_mode()) {
         g_p_net_device_table_mgr->global_ring_wait_for_notification_and_process_element(
-            &m_poll_sn_rx, pv_fd_ready_array);
+            pv_fd_ready_array);
     }
 }
 

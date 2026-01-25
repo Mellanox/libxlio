@@ -39,9 +39,6 @@ class ring_simple;
 #define MLX5_CQE_OWNER(op_own) ((op_own)&MLX5_CQE_OWNER_MASK)
 
 class cq_mgr_rx {
-    friend class ring; // need to expose the m_n_global_sn_rx only to ring
-    friend class ring_simple; // need to expose the m_n_global_sn_rx only to ring
-    friend class ring_bond; // need to expose the m_n_global_sn_rx only to ring
     friend class rfs_uc_tcp_gro; // need for stats
 
 public:
@@ -66,27 +63,22 @@ public:
      * Arm the managed CQ's notification channel
      * Calling this more then once without get_event() will return without
      * doing anything (arm flag is changed to true on first call).
-     * This call will also check if a wce was processes between the
-     * last poll and this arm request - if true it will not arm the CQ
-     * @return ==0 cq is armed
-     *         ==1 cq not armed (cq poll_sn out of sync)
-     *         < 0 on error
+     * @return == true cq is armed (or already armed)
+     *         false on error
      */
-    int request_notification(uint64_t poll_sn);
+    bool request_notification();
 
     /**
      * Block on the CQ's notification channel for the next event and process
      * it before exiting.
      */
-    void wait_for_notification_and_process_element(uint64_t *p_cq_poll_sn,
-                                                   void *pv_fd_ready_array = nullptr);
+    void wait_for_notification_and_process_element(void *pv_fd_ready_array = nullptr);
 
     /**
      * Poll RX CQ. Each CQE processed directly.
      * @return Zero - Not drained, Positive - Drained with packets, Negative - No packets.
      */
-    virtual int poll_and_process_element_rx(uint64_t *p_cq_poll_sn,
-                                            void *pv_fd_ready_array = nullptr) = 0;
+    virtual int poll_and_process_element_rx(void *pv_fd_ready_array = nullptr) = 0;
 
     /**
      * This will check if the cq was drained, and if it wasn't it will drain it.
@@ -120,14 +112,11 @@ protected:
      * Poll the CQ that is managed by this object
      * @p_wce pointer to array where to save the wce in
      * @num_entries Size of the p_wce (max number of wce to poll at once)
-     * @p_cq_poll_sn global unique wce id that maps last wce polled
      * @return Number of successfully polled wce
      */
     void compensate_qp_poll_failed();
     void lro_update_hdr(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc);
     inline void process_recv_buffer(mem_buf_desc_t *buff, void *pv_fd_ready_array = nullptr);
-
-    inline void update_global_sn_rx(uint64_t &cq_poll_sn, uint32_t rettotal);
 
     inline struct xlio_mlx5_cqe *check_cqe(void);
 
@@ -147,9 +136,6 @@ protected:
     mem_buf_desc_t *m_rx_hot_buffer = nullptr;
     struct ibv_cq *m_p_ibv_cq = nullptr;
     descq_t m_rx_queue;
-    static uint64_t m_n_global_sn_rx;
-    uint32_t m_cq_id_rx = 0U;
-    uint32_t m_n_cq_poll_sn_rx = 0U;
     ring_simple *m_p_ring;
     bool m_b_is_rx_hw_csum_on = false;
     int m_debt = 0;
@@ -171,7 +157,6 @@ private:
     const uint32_t m_rx_lkey;
     const bool m_b_sysvar_cq_keep_qp_full;
     cq_stats_t m_cq_stat_static;
-    static atomic_t m_n_cq_id_counter_rx;
 
     // requests safe_mce_sys().qp_compensation_level buffers from global pool
     bool request_more_buffers() __attribute__((noinline));
@@ -179,27 +164,6 @@ private:
     // returns safe_mce_sys().qp_compensation_level buffers to global pool
     void return_extra_buffers() __attribute__((noinline));
 };
-
-inline void cq_mgr_rx::update_global_sn_rx(uint64_t &cq_poll_sn, uint32_t num_polled_cqes)
-{
-    if (num_polled_cqes > 0) {
-        // spoil the global sn if we have packets ready
-        union __attribute__((packed)) {
-            uint64_t global_sn;
-            struct {
-                uint32_t cq_id;
-                uint32_t cq_sn;
-            } bundle;
-        } next_sn;
-        m_n_cq_poll_sn_rx += num_polled_cqes;
-        next_sn.bundle.cq_sn = m_n_cq_poll_sn_rx;
-        next_sn.bundle.cq_id = m_cq_id_rx;
-
-        m_n_global_sn_rx = next_sn.global_sn;
-    }
-
-    cq_poll_sn = m_n_global_sn_rx;
-}
 
 inline struct xlio_mlx5_cqe *cq_mgr_rx::check_cqe(void)
 {

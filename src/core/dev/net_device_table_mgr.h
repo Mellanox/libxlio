@@ -46,17 +46,15 @@ public:
      * Polling RX and TX of all ring on all devices.
      * @return >0 All CQs were drained. ==0 All CQs were drained.
      */
-    bool global_ring_poll_and_process_element(uint64_t *p_poll_sn_rx, uint64_t *p_poll_sn_tx,
-                                              void *pv_fd_ready_array = nullptr);
+    bool global_ring_poll_and_process_element(void *pv_fd_ready_array = nullptr);
 
     /**
      * This will poll one time on the ALL the managed CQ's
      * If a wce was found 'processing' will occur.
      */
-    void global_ring_wait_for_notification_and_process_element(uint64_t *p_poll_sn,
-                                                               void *pv_fd_ready_array = nullptr);
+    void global_ring_wait_for_notification_and_process_element(void *pv_fd_ready_array = nullptr);
 
-    int global_ring_request_notification(uint64_t poll_sn_rx, uint64_t poll_sn_tx);
+    bool global_ring_request_notification();
 
     /**
      * This will poll one time on the ALL the managed CQ's

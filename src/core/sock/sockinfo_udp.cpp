@@ -94,7 +94,6 @@ inline int sockinfo_udp::rx_wait(bool blocking)
     int32_t loops = 0;
     int32_t loops_to_go = blocking ? m_loops_to_go : 1;
     epoll_event rx_epfd_events[SI_RX_EPFD_EVENT_MAX];
-    uint64_t poll_sn = 0;
 
     m_loops_timer.start();
 
@@ -118,7 +117,7 @@ inline int sockinfo_udp::rx_wait(bool blocking)
 
         // Poll cq for offloaded ready packets ...
         m_rx_udp_poll_os_ratio_counter++;
-        if (is_readable(&poll_sn)) {
+        if (is_readable()) {
             IF_STATS(m_p_socket_stats->counters.n_rx_poll_hit++);
             return 0;
         }
@@ -156,21 +155,14 @@ inline int sockinfo_udp::rx_wait(bool blocking)
             return -1;
         }
 
-        if (rx_request_notification(poll_sn) > 0) {
-            // Check if a wce became available while arming the cq's notification channel
-            // A ready wce can be pending due to the drain logic
-            if (is_readable(&poll_sn)) {
-                return 0;
-            }
-            continue; // retry to arm cq notification channel in case there was no ready packet
-        } else {
-            // Check if we have a packet in receive queue before we go to sleep
-            //(can happen if another thread was polling & processing the wce)
-            // and update is_sleeping flag under the same lock to synchronize between
-            // this code and wakeup mechanism.
-            if (is_readable(nullptr)) {
-                return 0;
-            }
+        rx_request_notification();
+
+        // Inside is_readable, we do another poll to avoid request notification race with incoming
+        // packets. Check if we have a packet in receive queue before we go to sleep (can happen if
+        // another thread was polling & processing the wce) and update is_sleeping flag under the
+        // same lock to synchronize between this code and wakeup mechanism.
+        if (is_readable()) {
+            return 0;
         }
 
         // Block with epoll_wait()
@@ -221,7 +213,7 @@ inline int sockinfo_udp::rx_wait(bool blocking)
              * This is the classical case of wakeup, but we don't want to
              * waist time on removing wakeup fd, it will be done next time
              */
-            if (is_readable(nullptr)) {
+            if (is_readable(false)) {
                 return 0;
             }
 
@@ -251,7 +243,7 @@ inline int sockinfo_udp::rx_wait(bool blocking)
                 if (p_cq_ch_info) {
                     ring *p_ring = p_cq_ch_info->get_ring();
                     if (p_ring) {
-                        p_ring->wait_for_notification_and_process_element(&poll_sn);
+                        p_ring->wait_for_notification_and_process_element();
                     }
                 }
             }
@@ -262,7 +254,7 @@ inline int sockinfo_udp::rx_wait(bool blocking)
         // ..or some other sockinfo::rx might have added a ready rx datagram to our list
         // In case of multiple frag we'de like to try and get all parts out of the corresponding
         // ring, so we do want to poll the cq besides the select notification
-        if (is_readable(&poll_sn)) {
+        if (is_readable()) {
             return 0;
         }
 
@@ -1732,7 +1724,6 @@ ssize_t sockinfo_udp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
 {
     int errno_tmp = errno;
     int ret;
-    uint64_t poll_sn = 0;
     int out_flags = 0;
     int in_flags = *p_flags;
 
@@ -1779,7 +1770,7 @@ ssize_t sockinfo_udp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
     // First check if we have a packet in the ready list
     if ((m_n_rx_pkt_ready_list_count > 0 &&
          m_n_sysvar_rx_cq_drain_rate_nsec == MCE_RX_CQ_DRAIN_RATE_DISABLED) ||
-        is_readable(&poll_sn)) {
+        is_readable()) {
         /* coverity[double_lock] TODO: RM#1049980 */
         m_lock_rcv.lock();
         m_rx_udp_poll_os_ratio_counter++;
@@ -1908,7 +1899,7 @@ void sockinfo_udp::unset_immediate_os_sample()
     m_rx_udp_poll_os_ratio_counter = 0;
 }
 
-bool sockinfo_udp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_ready_array)
+bool sockinfo_udp::is_readable(bool do_poll, fd_array_t *p_fd_ready_array)
 {
     si_udp_logfuncall("");
 
@@ -1938,7 +1929,7 @@ bool sockinfo_udp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_ready_array
 
     // Loop on rx cq_list and process waiting wce (non blocking! polling only from this context)
     // AlexR todo: would be nice to start after the last cq_pos for better cq coverage
-    if (p_poll_sn) {
+    if (do_poll) {
         consider_rings_migration_rx();
         si_udp_logfuncall("try poll rx cq's");
         rx_ring_map_t::iterator rx_ring_iter;
@@ -1952,7 +1943,7 @@ bool sockinfo_udp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_ready_array
             ring *p_ring = rx_ring_iter->first;
             while (1) {
                 // We need here a lock() version of poll_and_process_element_rx.
-                bool was_drained = p_ring->poll_and_process_element_rx(p_poll_sn, p_fd_ready_array);
+                bool was_drained = p_ring->poll_and_process_element_rx(p_fd_ready_array);
 
                 if (m_n_rx_pkt_ready_list_count) {
                     // Get out of the CQ polling loop
@@ -1965,6 +1956,7 @@ bool sockinfo_udp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_ready_array
                 }
             }
         }
+
         m_rx_ring_map_lock.unlock();
     }
 
@@ -1984,33 +1976,30 @@ bool sockinfo_udp::is_readable(uint64_t *p_poll_sn, fd_array_t *p_fd_ready_array
     return false;
 }
 
-int sockinfo_udp::rx_request_notification(uint64_t poll_sn)
+bool sockinfo_udp::rx_request_notification()
 {
     si_udp_logfuncall("");
-    int ring_ready_count = 0, ring_armed_count = 0;
+    int ring_armed_count = 0;
+    bool success = true;
     rx_ring_map_t::iterator rx_ring_iter;
     m_rx_ring_map_lock.lock();
     for (rx_ring_iter = m_rx_ring_map.begin(); rx_ring_iter != m_rx_ring_map.end();
          rx_ring_iter++) {
         ring *p_ring = rx_ring_iter->first;
-        int ret = p_ring->request_notification(CQT_RX, poll_sn);
-        if (ret > 0) {
-            // cq not armed and might have ready completions for processing
-            ring_ready_count++;
-        } else if (ret == 0) {
+        if (p_ring->request_notification(CQT_RX)) {
             // cq armed
             ring_armed_count++;
-        } else { // if (ret < 0)
+        } else {
             si_udp_logerr("failure from ring[%p]->request_notification() (errno=%d %m)", p_ring,
                           errno);
+            success = false;
         }
     }
     m_rx_ring_map_lock.unlock();
 
-    si_udp_logfunc("armed or busy %d ring(s) and %d ring are pending processing", ring_armed_count,
-                   ring_ready_count);
+    si_udp_logfunc("armed %d ring(s)", ring_armed_count);
     NOT_IN_USE(ring_armed_count);
-    return ring_ready_count;
+    return success;
 }
 
 ssize_t sockinfo_udp::tx(xlio_tx_call_attr_t &tx_arg)

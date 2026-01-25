@@ -209,7 +209,7 @@ public:
 protected:
     virtual bool ring_poll_and_process_element();
 
-    virtual int ring_request_notification();
+    virtual bool ring_request_notification();
 
     virtual void ring_wait_for_notification_and_process_element(void *pv_fd_ready_array);
 
@@ -229,10 +229,6 @@ protected:
     //--
     /// CQ epoll file descriptor (wrapper)
     int m_cqepfd;
-
-    /// poll sn
-    uint64_t m_poll_sn_rx;
-    uint64_t m_poll_sn_tx;
 
     /// xlio statistics. each implementation must initialize this.
     iomux_func_stats_t *m_p_stats;
