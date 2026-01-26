@@ -65,27 +65,31 @@ runs_on_dockers:
   - {
      file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
      arch: 'x86_64',
+     limits: '{memory: 5Gi, cpu: 5000m}',
+     requests: '{memory: 5Gi, cpu: 5000m}',
      name: 'style',
      uri: 'xlio/$arch/ubuntu22.04/$name',
      tag: '20251202',
      build_args: '--no-cache --target style',
      category: 'tool'
     }
-  - {name: 'toolbox', url: '${registry_host}/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
+  - {name: 'toolbox', url: '${registry_host}/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64', limits: '{memory: 5Gi, cpu: 2000m}', requests: '{memory: 5Gi, cpu: 2000m}'}
   - {name: 'compiler-clang-9.0.1', url: '${registry_host}/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
   - {name: 'compiler-icc-18.0.4', url: '${registry_host}/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
   - {name: 'compiler-icc-19.1.1', url: '${registry_host}/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
   - {name: 'compiler-gcc', url: '${registry_host}/hpcx/x86_64/rhel8.6/builder:inbox', category: 'tool', arch: 'x86_64'}
-  - {name: 'header-check', url: '${registry_host}/toolbox/header_check:0.0.58', category: 'tool', arch: 'x86_64', tag: '0.0.58'}
+  - {name: 'header-check', url: '${registry_host}/toolbox/header_check:0.0.58', category: 'tool', arch: 'x86_64', tag: '0.0.58', limits: '{memory: 2Gi, cpu: 1000m}', requests: '{memory: 2Gi, cpu: 1000m}'}
   - {file: '.ci/dockerfiles/Dockerfile.rhel8.6',
      arch: 'x86_64',
      name: 'xlio_static.cppcheck',
      uri: '$arch/$name',
      tag: '20251202',
      build_args: '--no-cache --target static',
-     category: 'tool'
+     category: 'tool',
+     limits: '{memory: 8Gi, cpu: 4000m}',
+     requests: '{memory: 8Gi, cpu: 4000m}'
      }
-  - {name: 'xlio_static.csbuild', url: '${registry_host}/swx-infra/media/x86_64/xlio_static.csbuild-clang18:20250515', category: 'tool', arch: 'x86_64' }
+  - {name: 'xlio_static.csbuild', url: '${registry_host}/swx-infra/media/x86_64/xlio_static.csbuild-clang18:20250515', category: 'tool', arch: 'x86_64', limits: '{memory: 8Gi, cpu: 3000m}', requests: '{memory: 8Gi, cpu: 3000m}'}
 # tests
   - {
      file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
@@ -137,6 +141,8 @@ runs_on_dockers:
       tag: '20251202',
       build_args: '--no-cache --target unit-test',
       category: 'tool',
+      limits: '{memory: 8Gi, cpu: 5000m}',
+      requests: '{memory: 8Gi, cpu: 5000m}'
     }
   - {
      file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
@@ -146,6 +152,8 @@ runs_on_dockers:
      tag: '20251202',
      category: 'tool',
      build_args: '--no-cache --target build',
+     limits: '{memory: 8Gi, cpu: 3000m}',
+     requests: '{memory: 8Gi, cpu: 3000m}',
     }
   - {name: 'secret-scan', url: '${registry_host}/toolbox/secret_scan:0.0.27', arch: 'x86_64', tag: '0.0.27', category: 'tool'}
 
