@@ -50,7 +50,9 @@ runs_on_dockers:
      uri: '$arch/$name',
      tag: '20251214',
      build_args: '--no-cache --target bduck',
-     category: 'tool'
+     category: 'tool',
+     limits: '{memory: 3Gi, cpu: 2000m}',
+     requests: '{memory: 3Gi, cpu: 2000m}'
     }
 
 steps:
