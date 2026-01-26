@@ -20,6 +20,24 @@ cov_exclude_file_list="tests third_party"
 cov_build_id="cov_build_${BUILD_NUMBER}"
 cov_build="${cov_dir}/$cov_build_id"
 
+analyze_coverity_db() {
+    local db_dir=$1
+    eval "cov-analyze --config ${cov_dir}/coverity_config.xml \
+        --all --aggressiveness-level medium \
+        --enable-fnptr --fnptr-models --paths 20000 \
+        --disable-parse-warnings \
+        --dir ${db_dir}"
+    rc=$(($rc+$?))
+}
+
+generate_coverity_report() {
+    local db_dir=$1
+    local exclude_pattern=$2
+    cov-format-errors --exclude-files "${exclude_pattern}" \
+        --dir "${db_dir}" --html-output "${db_dir}/output/errors" | \
+        awk '/Processing [0-9]+ errors?/ { print $2 }'
+}
+
 set +eE
 
 eval "${WORKSPACE}/configure --prefix=${cov_dir}/install $jenkins_test_custom_configure > ${cov_dir}/cov.log 2>&1"
@@ -39,12 +57,18 @@ done
 eval "cov-manage-emit --config ${cov_dir}/coverity_config.xml --dir ${cov_build} list >> ${cov_dir}/cov.log 2>&1"
 sleep 1
 
-eval "cov-analyze --config ${cov_dir}/coverity_config.xml \
-	--all --aggressiveness-level medium \
-	--enable-fnptr --fnptr-models --paths 20000 \
-	--disable-parse-warnings \
-	--dir ${cov_build}"
+analyze_coverity_db "${cov_build}"
+
+# Install headers needed for examples
+make install >> "${cov_dir}/cov.log" 2>&1
+
+# Analyze examples directory
+cov_build_examples="${cov_dir}/cov_build_examples_${BUILD_NUMBER}"
+eval "cov-build --config ${cov_dir}/coverity_config.xml --dir ${cov_build_examples} \
+    gcc -I${cov_dir}/install/include -o ${cov_dir}/xlio_ultra_api_ping_pong ${WORKSPACE}/examples/xlio_ultra_api_ping_pong.c -libverbs >> ${cov_dir}/cov.log 2>&1"
 rc=$(($rc+$?))
+
+analyze_coverity_db "${cov_build_examples}"
 
 if [[ "${do_coverity_snapshot}" == true ]]; then
     cov-commit-defects --ssl --on-new-cert trust \
@@ -63,26 +87,38 @@ set -eEo pipefail
 #  * ${WORKSPACE}/third_party/.* (third party code)
 
 # shellcheck disable=SC2001
-nerrors=$(cov-format-errors --exclude-files "(/usr/include/.*$|${WORKSPACE}/third_party/.*$)" \
-    --dir $cov_build --html-output "$cov_build/output/errors" | awk '/Processing [0-9]+ errors?/ { print $2 }')
+nerrors=$(generate_coverity_report "$cov_build" "(/usr/include/.*$|${WORKSPACE}/third_party/.*$)")
 rc=$((rc + nerrors))
+
+# shellcheck disable=SC2001
+nerrors_examples=$(generate_coverity_report "$cov_build_examples" "(/usr/include/.*$)")
+rc=$((rc + nerrors_examples))
 
 index_html=$(cd $cov_build && find . -name index.html | cut -c 3-)
 cov_file="$cov_build/${index_html}"
+index_html_examples=$(cd "$cov_build_examples" && find . -name index.html | cut -c 3-)
+cov_file_examples="$cov_build_examples/${index_html_examples}"
 
 coverity_tap=${WORKSPACE}/${prefix}/coverity.tap
 
-echo 1..1 > $coverity_tap
-if [ $rc -gt 0 ]; then
+echo 1..2 > "$coverity_tap"
+if [ "$nerrors" -gt 0 ]; then
     echo "not ok 1 Coverity Detected $nerrors in-project errors at ${cov_file}" >> $coverity_tap
     do_err "coverity" "${cov_build}/output/summary.txt"
 else
     echo ok 1 Coverity found no in-project errors >> $coverity_tap
 fi
 
+if [ "$nerrors_examples" -gt 0 ]; then
+    echo "not ok 2 Coverity Detected $nerrors_examples example errors at ${cov_file_examples}" >> "$coverity_tap"
+    do_err "coverity" "${cov_build_examples}/output/summary.txt"
+else
+    echo "ok 2 Coverity found no example errors" >> "$coverity_tap"
+fi
+
 module unload "${COVERITY_MODULE}"
 
-do_archive "$( find ${cov_build}/output -type f -name "*.txt" -or -name "*.html" -or -name "*.xml" )"
+do_archive "$( find "${cov_build}/output" "${cov_build_examples}/output" -type f -name "*.txt" -or -name "*.html" -or -name "*.xml" )"
 
 echo "[${0##*/}]..................exit code = $rc"
 exit $rc
