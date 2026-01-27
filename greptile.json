@@ -1,0 +1,7 @@
+{
+    "patternRepositories": [
+        "Mellanox/libvma",
+        "lwip-tcpip/lwip"
+    ],
+    "context": "libxlio is a high-performance kernel-bypass TCP/IP networking library. It evolved from libvma (Mellanox VMA) and shares its architectural patterns for RDMA-based networking. libxlio embeds a modified lwip TCP/IP stack in src/core/lwip/ for protocol handling. When analyzing this codebase, patterns from libvma inform the networking abstractions and device management, while lwip patterns inform the TCP state machine and protocol implementation."
+}
