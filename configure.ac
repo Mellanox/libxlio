@@ -79,7 +79,7 @@ AM_INIT_AUTOMAKE(foreign [subdir-objects])
 
 # Configure third party libs
 AC_CONFIG_SUBDIRS([third_party/json-c])
-
+ 
 # Set non-verbose make by default
 #
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
@@ -92,9 +92,18 @@ m4_include([config/m4/dpcp.m4])
 m4_include([config/m4/nl.m4])
 m4_include([config/m4/prof.m4])
 m4_include([config/m4/compiler.m4])
+m4_include([config/m4/ax_subdirs_configure.m4])
+
+# Configure libdpcp - need to come after the m4_include ax_subdirs_configure above
+AX_SUBDIRS_CONFIGURE(
+    [submodules/libdpcp],
+    [--prefix=${ac_abs_top_builddir}/submodules/libdpcp/install],
+    [],
+    [],
+    [])
+
 
 FUNC_CONFIGURE_INIT()
-
 
 dnl===-----------------------------------------------------------------------===
 dnl===
@@ -415,6 +424,9 @@ EOF
 else
     AC_MSG_ERROR([${CONFIG_SCHEMA_JSON} not found])
 fi
+
+# Define conditional for building built-in libdpcp
+AM_CONDITIONAL([BUILD_BUILTIN_DPCP], [test "x$dpcp_explicitly_specified" != "xyes"])
 
 AC_CONFIG_FILES([
 		Makefile
