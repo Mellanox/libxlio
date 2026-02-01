@@ -21,7 +21,7 @@ cd ${test_dir}
 test_app="sockperf"
 
 # Download sockperf to use verifier
-do_cmd "wget -O sockperf_v2.zip https://github.com/Mellanox/sockperf/archive/sockperf_v2.zip && unzip sockperf_v2.zip && mv sockperf-sockperf_v2 sockperf"
+do_cmd "wget --tries=3 --waitretry=10 --timeout=30 -O sockperf_v2.zip https://github.com/Mellanox/sockperf/archive/sockperf_v2.zip && unzip sockperf_v2.zip && mv sockperf-sockperf_v2 sockperf"
 cd sockperf
 
 # This unit requires sockperf so check for existence

@@ -89,7 +89,7 @@ else
 	if [ $(command -v "${test_app_path}" >/dev/null 2>&1 || echo $?) ]; then
 		test_app_path=sockperf
 		if [ $(command -v "${test_app_path}" >/dev/null 2>&1 || echo $?) ]; then
-			do_cmd "wget -O sockperf_v2.zip https://github.com/Mellanox/sockperf/archive/sockperf_v2.zip && unzip sockperf_v2.zip && mv sockperf-sockperf_v2 sockperf"
+			do_cmd "wget --tries=3 --waitretry=10 --timeout=30 -O sockperf_v2.zip https://github.com/Mellanox/sockperf/archive/sockperf_v2.zip && unzip sockperf_v2.zip && mv sockperf-sockperf_v2 sockperf"
 			cd sockperf
 
 			./autogen.sh
