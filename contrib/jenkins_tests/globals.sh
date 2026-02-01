@@ -31,7 +31,29 @@ tidy_dir=${WORKSPACE}/${prefix}/tidy
 prj_lib=libxlio.so
 prj_service=xliod
 
-NPROC=8
+NPROC=$(nproc 2>/dev/null || echo 2)
+# Set NPROC based on container cgroup
+if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || [ -n "${KUBERNETES_SERVICE_HOST}" ]; then
+    # Try to get CPU limit from container cgroup
+    if [ -f /sys/fs/cgroup/cpu.max ]; then
+        # cgroup v2
+        cpu_max=$(cat /sys/fs/cgroup/cpu.max)
+        quota=$(echo "${cpu_max}" | cut -d' ' -f1)
+        period=$(echo "${cpu_max}" | cut -d' ' -f2)
+        if [ -n "$quota" ] && [ "$quota" != "max" ] && [ -n "$period" ] && [ "$period" -gt 0 ]; then
+            NPROC=$((quota / period))
+            [ $NPROC -lt 1 ] && NPROC=1
+        fi
+    elif [ -f /sys/fs/cgroup/cpu/cpu.cfs_quota_us ] && [ -f /sys/fs/cgroup/cpu/cpu.cfs_period_us ]; then
+        # cgroup v1
+        quota=$(cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us)
+        period=$(cat /sys/fs/cgroup/cpu/cpu.cfs_period_us)
+        if [ -n "$quota" ] && [ "$quota" -gt 0 ] && [ -n "$period" ] && [ "$period" -gt 0 ]; then
+            NPROC=$((quota / period))
+            [ $NPROC -lt 1 ] && NPROC=1
+        fi
+    fi
+fi
 make_opt="-j${NPROC}"
 
 if [ $(command -v timeout >/dev/null 2>&1 && echo $?) ]; then
@@ -296,7 +318,7 @@ do_check_dpcp()
 {
     local ret=0
 	local dpcp_dir="${WORKSPACE}/${prefix}/_dpcp-last"
-	
+
 	echo "Checking dpcp usage"
 	pushd "${dpcp_dir}" > /dev/null 2>&1
     set +e

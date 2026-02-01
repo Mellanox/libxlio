@@ -51,8 +51,8 @@ runs_on_dockers:
      tag: '20251214',
      build_args: '--no-cache --target bduck',
      category: 'tool',
-     limits: '{memory: 3Gi, cpu: 2000m}',
-     requests: '{memory: 3Gi, cpu: 2000m}'
+     limits: '{memory: 5Gi, cpu: 4000m}',
+     requests: '{memory: 5Gi, cpu: 4000m}'
     }
 
 steps:
