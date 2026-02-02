@@ -781,9 +781,6 @@ void print_env_vars_xlio_global_settings()
                       MCE_DEFAULT_APP_WORKERS_NUM, SYS_VAR_NGINX_WORKERS_NUM);
     VLOG_PARAM_NUMBER("Size of UDP socket pool", safe_mce_sys().nginx_udp_socket_pool_size,
                       MCE_DEFAULT_NGINX_UDP_POOL_SIZE, SYS_VAR_NGINX_UDP_POOL_SIZE);
-    VLOG_PARAM_NUMBER(
-        "Max RX reuse buffs UDP pool", safe_mce_sys().nginx_udp_socket_pool_rx_num_buffs_reuse,
-        MCE_DEFAULT_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE, SYS_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE);
 #endif
 #if defined(DEFINED_ENVOY)
     VLOG_PARAM_NUMBER("Number of Envoy workers",
