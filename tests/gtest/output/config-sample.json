@@ -8,10 +8,6 @@
     }
   },
   "core": {
-    "daemon": {
-      "enable": true,
-      "dir": "/funny-dir"
-    },
     "resources": {
       "hugepages": {
         "enable": false

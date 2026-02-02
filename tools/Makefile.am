@@ -1,5 +1,1 @@
-SUBDIRS := \
-	daemon
-
-EXTRA_DIST = \
-	daemon
+EXTRA_DIST =

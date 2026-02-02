@@ -219,25 +219,6 @@
                         }
                     },
                     "additionalProperties": false
-                },
-                "daemon": {
-                    "type": "object",
-                    "description": "XLIO daemon (xliod) configuration for TCP connection cleanup on abnormal process termination.",
-                    "properties": {
-                        "enable": {
-                            "type": "boolean",
-                            "default": false,
-                            "title": "Enable XLIO daemon",
-                            "description": "Maps to XLIO_SERVICE_ENABLE environment variable.\nEnables xliod daemon communication for TCP connection cleanup on abnormal process termination.\n\n**Why This Matters:** When XLIO offloads TCP to userspace, the kernel is unaware of connections.\nIf an application crashes, remote peers never receive RST packets and wait for TCP timeout\n(potentially minutes). The daemon monitors process termination via fanotify/inotify and sends\nRST packets to all established TCP peers on behalf of crashed processes.\n\n**Tradeoffs:**\n\n*false (default):*\nNo overhead. Connection state changes are not reported. Remote peers wait for TCP timeout\non application crashes.\n\n*true:*\nEach TCP state change sends a message to xliod via Unix socket. Adds slight latency to\nconnection setup for high connection-rate workloads. Crash cleanup ensures immediate\nnotification to remote peers.\n\n**Auto-enabled** on Microsoft Hyper-V environments regardless of user configuration."
-                        },
-                        "dir": {
-                            "type": "string",
-                            "default": "/tmp/xlio",
-                            "title": "Daemon working directory",
-                            "description": "Maps to XLIO_SERVICE_NOTIFY_DIR environment variable.\nDirectory where XLIO writes files for communication with xliod daemon.\n\n**Files created per process:**\n\n- `xlioagent.<pid>.sock` - Unix domain socket for state messages\n- `xlioagent.<pid>.pid` - PID file for termination monitoring\n\nIf you override this path, pass the same value to xliod\nvia `--notify-dir`. Both default to `/tmp/xlio`.\n\n**Recommendation:** Use tmpfs (default /tmp/xlio is typically tmpfs on Linux).\nSlow filesystems (NFS, spinning disk) add latency to socket initialization.\n\n**Permissions:** Directory must be readable and writable by all XLIO processes\nand the xliod daemon. Default /tmp/xlio with mode 0777 satisfies this."
-                        }
-                    },
-                    "additionalProperties": false
                 }
             },
             "additionalProperties": false

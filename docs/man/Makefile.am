@@ -1,6 +1,5 @@
 xlio_man_pages = \
 	xlio.7 \
-	xliod.8 \
 	xlio_stats.8
 
 man_MANS = $(xlio_man_pages)

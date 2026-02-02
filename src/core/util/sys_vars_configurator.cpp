@@ -24,7 +24,6 @@ const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_LOG_DETAILS {"monitor.log.
 const config_var_info_t<std::string> CONFIG_VAR_LOG_FILENAME {"monitor.log.file_path"};
 const config_var_info_t<std::string> CONFIG_VAR_STATS_FILENAME {"monitor.stats.file_path"};
 const config_var_info_t<std::string> CONFIG_VAR_STATS_SHMEM_DIRNAME {"monitor.stats.shmem_dir"};
-const config_var_info_t<std::string> CONFIG_VAR_SERVICE_DIR {"core.daemon.dir"};
 const config_var_info_t<std::string> CONFIG_VAR_APPLICATION_ID {"acceleration_control.app_id"};
 const config_var_info_t<std::string> CONFIG_VAR_ACCEL_CONTROL_RULES {"acceleration_control.rules"};
 const config_var_info_t<std::string> CONFIG_VAR_INTERNAL_THREAD_AFFINITY {
@@ -32,7 +31,6 @@ const config_var_info_t<std::string> CONFIG_VAR_INTERNAL_THREAD_AFFINITY {
 const config_var_info_t<std::string> CONFIG_VAR_INTERNAL_THREAD_CPUSET {
     "performance.threading.cpuset"};
 
-const config_var_info_t<bool> CONFIG_VAR_SERVICE_ENABLE {"core.daemon.enable"};
 const config_var_info_t<bool> CONFIG_VAR_LOG_COLORS {"monitor.log.colors"};
 const config_var_info_t<bool> CONFIG_VAR_HANDLE_SIGINTR {"core.signals.sigint.exit"};
 const config_var_info_t<bool> CONFIG_VAR_HANDLE_SIGSEGV {"core.signals.sigsegv.backtrace"};
@@ -365,9 +363,6 @@ void sys_var_configurator::initialize_base_variables()
     m_runtime_registry.register_char_array_and_set_default_value(
         m_sys_vars.stats_shmem_dirname, sizeof(m_sys_vars.stats_shmem_dirname),
         CONFIG_VAR_STATS_SHMEM_DIRNAME);
-    m_runtime_registry.register_char_array_and_set_default_value(
-        m_sys_vars.service_notify_dir, sizeof(m_sys_vars.service_notify_dir),
-        CONFIG_VAR_SERVICE_DIR);
 
     // Accelaration rules read actual value from registry (not default) and
     // need translation to legacy format
@@ -386,9 +381,6 @@ void sys_var_configurator::initialize_base_variables()
     m_runtime_registry.register_char_array_and_set_default_value(
         m_sys_vars.internal_thread_affinity_str, sizeof(m_sys_vars.internal_thread_affinity_str),
         CONFIG_VAR_INTERNAL_THREAD_AFFINITY);
-
-    m_runtime_registry.register_and_set_default_value(&m_sys_vars.service_enable,
-                                                      CONFIG_VAR_SERVICE_ENABLE);
 
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.print_report,
                                                       CONFIG_VAR_PRINT_REPORT);
@@ -981,13 +973,6 @@ void sys_var_configurator::configure_before_user_settings()
 void sys_var_configurator::configure_after_user_settings()
 {
     // Here are configuration changes which are stronger than user settings
-
-    if (m_sys_vars.hypervisor == mce_sys_var::HYPER_MSHV && !m_sys_vars.service_enable) {
-        m_runtime_registry.set_value(CONFIG_VAR_SERVICE_ENABLE, true, change_reason::AutoCorrected,
-                                     "Forced for MSHV hypervisor");
-        vlog_printf(VLOG_DEBUG, "%s parameter is forced to 'true' for MSHV hypervisor\n",
-                    CONFIG_VAR_SERVICE_ENABLE.name);
-    }
 
     m_sys_vars.stats_fd_num_monitor =
         std::min(m_sys_vars.stats_fd_num_max, MAX_STATS_FD_NUM); // not a config key

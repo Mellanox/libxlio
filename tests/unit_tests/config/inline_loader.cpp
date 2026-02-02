@@ -11,9 +11,9 @@
 #include "utils.h"
 
 // Minimal test schema with:
-// - "enable" is ambiguous (exists in core.daemon.enable and hardware.offloads.enable)
+// - "enable" is ambiguous (exists in core.resources.hugepages.enable and hardware.offloads.enable)
 // - "memory_limit" is unique (only in core.memory_limit)
-// - "daemon.enable" is unique (disambiguates core.daemon.enable)
+// - "resources.hugepages.enable" is unique (disambiguates core.resources.hugepages.enable)
 // - "offloads.enable" is unique (disambiguates hardware.offloads.enable)
 static const char *test_schema = R"({
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -56,23 +56,6 @@ static const char *test_schema = R"({
                     "default": false,
                     "title": "Quick Init",
                     "description": "Enable quick initialization"
-                },
-                "daemon": {
-                    "type": "object",
-                    "properties": {
-                        "enable": {
-                            "type": "boolean",
-                            "default": false,
-                            "title": "Daemon Enable",
-                            "description": "Enable daemon mode"
-                        },
-                        "dir": {
-                            "type": "string",
-                            "default": "/tmp",
-                            "title": "Daemon Directory",
-                            "description": "Daemon working directory"
-                        }
-                    }
                 },
                 "resources": {
                     "type": "object",
@@ -201,8 +184,8 @@ TEST_F(InlineLoaderTest, resolves_unique_leaf_name)
 
 TEST_F(InlineLoaderTest, rejects_ambiguous_leaf_name)
 {
-    // "enable" exists in multiple paths: core.daemon.enable, hardware.offloads.enable,
-    // core.resources.hugepages.enable, hardware_features.tcp.tso.enable
+    // "enable" exists in multiple paths: core.resources.hugepages.enable,
+    // hardware.offloads.enable, hardware_features.tcp.tso.enable
     env_setter setter("XLIO_INLINE_CONFIG", "enable=true");
     inline_loader loader("XLIO_INLINE_CONFIG", m_descriptor);
 
@@ -211,30 +194,31 @@ TEST_F(InlineLoaderTest, rejects_ambiguous_leaf_name)
 
 TEST_F(InlineLoaderTest, resolves_partial_path_to_disambiguate)
 {
-    env_setter setter("XLIO_INLINE_CONFIG", "daemon.enable=true");
+    env_setter setter("XLIO_INLINE_CONFIG", "resources.hugepages.enable=true");
     inline_loader loader("XLIO_INLINE_CONFIG", m_descriptor);
 
     auto data = loader.load_all();
 
-    EXPECT_TRUE(data.count("core.daemon.enable"));
-    EXPECT_EQ(true, std::experimental::any_cast<bool>(data["core.daemon.enable"]));
+    EXPECT_TRUE(data.count("core.resources.hugepages.enable"));
+    EXPECT_EQ(true, std::experimental::any_cast<bool>(data["core.resources.hugepages.enable"]));
 }
 
 TEST_F(InlineLoaderTest, resolves_full_path)
 {
-    env_setter setter("XLIO_INLINE_CONFIG", "core.daemon.enable=true");
+    env_setter setter("XLIO_INLINE_CONFIG", "core.resources.hugepages.enable=true");
     inline_loader loader("XLIO_INLINE_CONFIG", m_descriptor);
 
     auto data = loader.load_all();
 
-    EXPECT_TRUE(data.count("core.daemon.enable"));
-    EXPECT_EQ(true, std::experimental::any_cast<bool>(data["core.daemon.enable"]));
+    EXPECT_TRUE(data.count("core.resources.hugepages.enable"));
+    EXPECT_EQ(true, std::experimental::any_cast<bool>(data["core.resources.hugepages.enable"]));
 }
 
 TEST_F(InlineLoaderTest, detects_duplicate_after_resolution)
 {
-    // Both "daemon.enable" and "core.daemon.enable" resolve to the same full path
-    env_setter setter("XLIO_INLINE_CONFIG", "daemon.enable=true; core.daemon.enable=false");
+    // Both paths resolve to the same full parameter name.
+    env_setter setter("XLIO_INLINE_CONFIG",
+                      "resources.hugepages.enable=true; core.resources.hugepages.enable=false");
     inline_loader loader("XLIO_INLINE_CONFIG", m_descriptor);
 
     EXPECT_THROW(loader.load_all(), xlio_exception);
@@ -526,36 +510,37 @@ TEST_F(InlineLoaderTest, rejects_empty_boolean_value)
 
 TEST_F(InlineLoaderTest, rejects_multiple_equals_in_string)
 {
-    env_setter setter("XLIO_INLINE_CONFIG", "core.daemon.dir==Checking_Syntax");
+    env_setter setter("XLIO_INLINE_CONFIG", "monitor.log.file_path==Checking_Syntax");
     inline_loader loader("XLIO_INLINE_CONFIG", m_descriptor);
     ASSERT_THROW(loader.load_all(), xlio_exception);
 }
 
 TEST_F(InlineLoaderTest, rejects_empty_string_value)
 {
-    env_setter setter("XLIO_INLINE_CONFIG", "core.daemon.dir=");
+    env_setter setter("XLIO_INLINE_CONFIG", "monitor.log.file_path=");
     inline_loader loader("XLIO_INLINE_CONFIG", m_descriptor);
     ASSERT_THROW(loader.load_all(), xlio_exception);
 }
 
 TEST_F(InlineLoaderTest, rejects_single_quote_in_string_value)
 {
-    env_setter setter("XLIO_INLINE_CONFIG", "core.daemon.dir='Checking_Syntax");
+    env_setter setter("XLIO_INLINE_CONFIG", "monitor.log.file_path='Checking_Syntax");
     inline_loader loader("XLIO_INLINE_CONFIG", m_descriptor);
     ASSERT_THROW(loader.load_all(), xlio_exception);
 }
 
 TEST_F(InlineLoaderTest, rejects_quotes_in_string_value)
 {
-    env_setter setter("XLIO_INLINE_CONFIG", "core.daemon.dir=Checkin\"\"\"\"g_Syntax");
+    env_setter setter("XLIO_INLINE_CONFIG", "monitor.log.file_path=Checkin\"\"\"\"g_Syntax");
     inline_loader loader("XLIO_INLINE_CONFIG", m_descriptor);
     ASSERT_THROW(loader.load_all(), xlio_exception);
 }
 
 TEST_F(InlineLoaderTest, rejects_spaces_in_string_value)
 {
-    env_setter setter("XLIO_INLINE_CONFIG",
-                      "core.daemon.dir=Checking_Syntax core.daemon.dir=Checking_Syntax");
+    env_setter setter(
+        "XLIO_INLINE_CONFIG",
+        "monitor.log.file_path=Checking_Syntax monitor.log.file_path=Checking_Syntax");
     inline_loader loader("XLIO_INLINE_CONFIG", m_descriptor);
     ASSERT_THROW(loader.load_all(), xlio_exception);
 }
@@ -563,8 +548,9 @@ TEST_F(InlineLoaderTest, rejects_spaces_in_string_value)
 TEST_F(InlineLoaderTest, rejects_comma_as_delimiter)
 {
     // Comma is no longer accepted as delimiter - semicolon is the new delimiter
-    env_setter setter("XLIO_INLINE_CONFIG",
-                      "core.daemon.dir=Checking_Syntax,core.daemon.dir=Checking_Syntax");
+    env_setter setter(
+        "XLIO_INLINE_CONFIG",
+        "monitor.log.file_path=Checking_Syntax,monitor.log.file_path=Checking_Syntax");
     inline_loader loader("XLIO_INLINE_CONFIG", m_descriptor);
     ASSERT_THROW(loader.load_all(), xlio_exception);
 }
@@ -612,7 +598,7 @@ TEST_F(InlineLoaderTest, accepts_comma_and_range_in_value)
 TEST_F(InlineLoaderTest, accepts_valid_configuration_with_semicolons)
 {
     env_setter setter("XLIO_INLINE_CONFIG",
-                      "network.protocols.ip.mtu=1500;core.quick_init=true;core.daemon.dir=/tmp");
+                      "network.protocols.ip.mtu=1500;core.quick_init=true;core.log.file_path=/tmp");
     inline_loader loader("XLIO_INLINE_CONFIG", m_descriptor);
     ASSERT_NO_THROW(loader.load_all());
 
@@ -621,7 +607,7 @@ TEST_F(InlineLoaderTest, accepts_valid_configuration_with_semicolons)
     ASSERT_EQ(data.size(), 3UL);
     ASSERT_TRUE(data.find("network.protocols.ip.mtu") != data.end());
     ASSERT_TRUE(data.find("core.quick_init") != data.end());
-    ASSERT_TRUE(data.find("core.daemon.dir") != data.end());
+    ASSERT_TRUE(data.find("core.log.file_path") != data.end());
 }
 
 TEST_F(InlineLoaderTest, rejects_tab_in_value)

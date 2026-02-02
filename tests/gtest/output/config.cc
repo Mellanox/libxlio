@@ -122,8 +122,6 @@ TEST_F(output, config_show_sample_values)
             "XLIO INFO   : Log level                      INFO                       [monitor.log.level]",
             // Simple number
             "XLIO INFO   : Source port stride             3                          [applications.nginx.src_port_stride, Reason: User-configured]",
-            // Simple string
-            "Daemon working directory       /funny-dir                 [core.daemon.dir, Reason: User-configured]",
         #ifdef DEFINED_UTLS
             // Simple boolean
             "Enable TLS RX offload          true                       [hardware_features.tcp.tls_offload.rx_enable, Reason: User-configured]",

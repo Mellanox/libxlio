@@ -1,6 +1,6 @@
 # XLIO Configuration Reference
 
-This file documents all 124 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
+This file documents all 122 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
 
 > **Auto-generated** from the JSON schema by `generate_docs.py`. Do not edit manually.
 
@@ -17,8 +17,6 @@ This file documents all 124 XLIO runtime configuration parameters with their typ
   - [`applications.nginx.udp_socket_pool_reuse`](#applicationsnginxudp_socket_pool_reuse) — RX buffer reclaim threshold for pooled sockets
   - [`applications.nginx.workers_num`](#applicationsnginxworkers_num) — Number of Nginx workers
 - **[CORE](#core)**
-  - [`core.daemon.dir`](#coredaemondir) — Daemon working directory
-  - [`core.daemon.enable`](#coredaemonenable) — Enable XLIO daemon
   - [`core.exception_handling.mode`](#coreexception_handlingmode) — Exception handling mode
   - [`core.quick_init`](#corequick_init) — Quick initialization
   - [`core.resources.external_memory_limit`](#coreresourcesexternal_memory_limit) — External memory limit (bytes)
@@ -397,58 +395,6 @@ secondary rule), Workers 1-2 get 1 slot each. Using 4 workers avoids this imbala
 ---
 
 ## CORE
-
-### `core.daemon.dir`
-
-> **Type:** string
->
-> **Maps to:** `XLIO_SERVICE_NOTIFY_DIR`
-
-Directory where XLIO writes files for communication with xliod daemon.
-
-**Files created per process:**
-
-- `xlioagent.<pid>.sock` - Unix domain socket for state messages
-- `xlioagent.<pid>.pid` - PID file for termination monitoring
-
-If you override this path, pass the same value to xliod
-via `--notify-dir`. Both default to `/tmp/xlio`.
-
-**Recommendation:** Use tmpfs (default /tmp/xlio is typically tmpfs on Linux).
-Slow filesystems (NFS, spinning disk) add latency to socket initialization.
-
-**Permissions:** Directory must be readable and writable by all XLIO processes
-and the xliod daemon. Default /tmp/xlio with mode 0777 satisfies this.
-
-**Default:** `/tmp/xlio`
-
-### `core.daemon.enable`
-
-> **Type:** boolean
->
-> **Maps to:** `XLIO_SERVICE_ENABLE`
-
-Enables xliod daemon communication for TCP connection cleanup on abnormal process termination.
-
-**Why This Matters:** When XLIO offloads TCP to userspace, the kernel is unaware of connections.
-If an application crashes, remote peers never receive RST packets and wait for TCP timeout
-(potentially minutes). The daemon monitors process termination via fanotify/inotify and sends
-RST packets to all established TCP peers on behalf of crashed processes.
-
-**Tradeoffs:**
-
-*false (default):*
-No overhead. Connection state changes are not reported. Remote peers wait for TCP timeout
-on application crashes.
-
-*true:*
-Each TCP state change sends a message to xliod via Unix socket. Adds slight latency to
-connection setup for high connection-rate workloads. Crash cleanup ensures immediate
-notification to remote peers.
-
-**Auto-enabled** on Microsoft Hyper-V environments regardless of user configuration.
-
-**Default:** `false`
 
 ### `core.exception_handling.mode`
 

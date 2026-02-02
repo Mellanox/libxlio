@@ -29,13 +29,11 @@ extern const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_LOG_DETAILS;
 extern const config_var_info_t<std::string> CONFIG_VAR_LOG_FILENAME;
 extern const config_var_info_t<std::string> CONFIG_VAR_STATS_FILENAME;
 extern const config_var_info_t<std::string> CONFIG_VAR_STATS_SHMEM_DIRNAME;
-extern const config_var_info_t<std::string> CONFIG_VAR_SERVICE_DIR;
 extern const config_var_info_t<std::string> CONFIG_VAR_APPLICATION_ID;
 extern const config_var_info_t<std::string> CONFIG_VAR_ACCEL_CONTROL_RULES;
 extern const config_var_info_t<std::string> CONFIG_VAR_INTERNAL_THREAD_AFFINITY;
 extern const config_var_info_t<std::string> CONFIG_VAR_INTERNAL_THREAD_CPUSET;
 
-extern const config_var_info_t<bool> CONFIG_VAR_SERVICE_ENABLE;
 extern const config_var_info_t<bool> CONFIG_VAR_LOG_COLORS;
 extern const config_var_info_t<bool> CONFIG_VAR_HANDLE_SIGINTR;
 extern const config_var_info_t<bool> CONFIG_VAR_HANDLE_SIGSEGV;

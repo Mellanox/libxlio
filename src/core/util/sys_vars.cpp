@@ -753,18 +753,14 @@ void mce_sys_var::get_env_params()
     memset(log_filename, 0, sizeof(log_filename));
     memset(stats_filename, 0, sizeof(stats_filename));
     memset(stats_shmem_dirname, 0, sizeof(stats_shmem_dirname));
-    memset(service_notify_dir, 0, sizeof(service_notify_dir));
     memset(report_file_path, 0, sizeof(report_file_path));
     memset(cached_ofed_version, 0, sizeof(cached_ofed_version));
     strcpy(stats_filename, MCE_DEFAULT_STATS_FILE);
-    strcpy(service_notify_dir, MCE_DEFAULT_SERVICE_FOLDER);
     strcpy(stats_shmem_dirname, MCE_DEFAULT_STATS_SHMEM_DIR);
     strcpy(acceleration_rules, MCE_DEFAULT_CONF_FILE);
     strcpy(app_id, MCE_DEFAULT_APP_ID);
     strcpy(internal_thread_cpuset, MCE_DEFAULT_INTERNAL_THREAD_CPUSET);
     strcpy(internal_thread_affinity_str, MCE_DEFAULT_INTERNAL_THREAD_AFFINITY_STR);
-
-    service_enable = MCE_DEFAULT_SERVICE_ENABLE;
 
     print_report = MCE_DEFAULT_PRINT_REPORT;
     quick_start = MCE_DEFAULT_QUICK_START;
@@ -1099,19 +1095,6 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_CONF_FILENAME))) {
         read_env_variable_with_pid(acceleration_rules, sizeof(acceleration_rules), env_ptr);
-    }
-
-    if ((env_ptr = getenv(SYS_VAR_SERVICE_DIR))) {
-        read_env_variable_with_pid(service_notify_dir, sizeof(service_notify_dir), env_ptr);
-    }
-
-    if ((env_ptr = getenv(SYS_VAR_SERVICE_ENABLE))) {
-        service_enable = atoi(env_ptr) ? true : false;
-    }
-    if (HYPER_MSHV == hypervisor && !service_enable) {
-        service_enable = true;
-        vlog_printf(VLOG_DEBUG, "%s parameter is forced to 'true' for MSHV hypervisor\n",
-                    SYS_VAR_SERVICE_ENABLE);
     }
 
     if ((env_ptr = getenv(SYS_VAR_REPORT_FILE))) {
@@ -1800,14 +1783,9 @@ void mce_sys_var::get_env_params()
     }
 }
 
-void mce_sys_var::read_hypervisor_info()
-{
-    read_hv();
-}
-
 void mce_sys_var::apply_config_from_registry()
 {
-    read_hypervisor_info();
+    read_hv();
 
     m_runtime_registry = runtime_registry();
     sys_var_configurator configurator(*m_runtime_registry, *this);

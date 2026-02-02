@@ -1,6 +1,0 @@
-#!/bin/bash
-
-if command -v systemctl >/dev/null 2>&1; then
-    systemctl --no-reload disable xlio.service >/dev/null 2>&1 || true
-    systemctl stop xlio.service || true
-fi

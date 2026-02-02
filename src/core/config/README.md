@@ -77,16 +77,16 @@ export XLIO_INLINE_CONFIG="resources.memory_limit=4GB"
 
 **Resolution Rules:**
 - Unique leaf names resolve automatically (e.g., `memory_limit` → `core.resources.memory_limit`)
-- Ambiguous names require enough path to disambiguate (e.g., `daemon.enable` instead of just `enable`)
+- Ambiguous names require enough path to disambiguate (e.g., `hugepages.enable` instead of just `enable`)
 - Full paths always work
 
 **Helpful Error Messages:**
 When a short name is ambiguous, XLIO provides helpful suggestions:
 ```
 In 'XLIO_INLINE_CONFIG': Ambiguous key 'enable'. Did you mean:
-  - daemon.enable (core.daemon.enable)
   - hugepages.enable (core.resources.hugepages.enable)
   - striding_rq.enable (hardware_features.striding_rq.enable)  
+  - tso.enable (hardware_features.tcp.tso.enable)
 ```
 
 **Forward Compatibility Warning:**

@@ -34,17 +34,6 @@ static const char *test_schema = R"({
                         }
                     }
                 },
-                "daemon": {
-                    "type": "object",
-                    "properties": {
-                        "enable": {
-                            "type": "boolean",
-                            "default": false,
-                            "title": "Daemon Enable",
-                            "description": "Enable daemon mode"
-                        }
-                    }
-                },
                 "resources": {
                     "type": "object",
                     "properties": {
@@ -175,8 +164,8 @@ TEST_F(KeyResolverTest, partial_path_disambiguates_enable)
 {
     key_resolver resolver(m_descriptor, "TEST_SOURCE");
 
-    // daemon.enable should resolve to core.daemon.enable
-    EXPECT_EQ("core.daemon.enable", resolver.resolve("daemon.enable"));
+    // tcp.nodelay.enable should resolve to network.protocols.tcp.nodelay.enable
+    EXPECT_EQ("network.protocols.tcp.nodelay.enable", resolver.resolve("tcp.nodelay.enable"));
 }
 
 TEST_F(KeyResolverTest, partial_path_offloads_enable)
@@ -237,8 +226,7 @@ TEST_F(KeyResolverTest, ambiguous_key_error_contains_suggestions)
     } catch (const xlio_exception &e) {
         std::string msg = e.what();
         // Should suggest at least one of the valid options
-        bool has_suggestion = msg.find("daemon.enable") != std::string::npos ||
-            msg.find("offloads.enable") != std::string::npos ||
+        bool has_suggestion = msg.find("offloads.enable") != std::string::npos ||
             msg.find("hugepages.enable") != std::string::npos ||
             msg.find("nodelay.enable") != std::string::npos;
         EXPECT_TRUE(has_suggestion) << "Error message should contain suggestions: " << msg;

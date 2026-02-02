@@ -19,7 +19,7 @@
  * formatted as semicolon-separated key-value pairs. Supports short
  * parameter names that are automatically resolved to full paths.
  *
- * Example: XLIO_INLINE_CONFIG="memory_limit=8GB; daemon.enable=true"
+ * Example: XLIO_INLINE_CONFIG="memory_limit=8GB; quick_init=true"
  */
 class inline_loader : public loader {
 public:

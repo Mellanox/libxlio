@@ -69,9 +69,6 @@ if [[ -z "${MANUAL_RUN}" ]]; then
 	rc=$(($rc+$?))
 fi
 
-eval "${sudo_cmd} pkill -9 ${prj_service} 2>/dev/null || true"
-eval "${sudo_cmd} ${install_dir}/sbin/${prj_service} --console -v5 &"
-
 # Test with full coverage of the config-file feature
 eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_USE_NEW_CONFIG=1 XLIO_CONFIG_FILE=${WORKSPACE}/tests/gtest/xlio_config_full_coverage.json GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=-xlio_*:-ultra* --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic.xml"
 rc=$(($rc+$?))
@@ -170,9 +167,6 @@ rc=$(($rc+$?))
 rm -f "$passthrough_conf"
 ###### End of Passthrough via XLIO offload rules
 
-
-
-eval "${sudo_cmd} pkill -9 ${prj_service} 2>/dev/null || true"
 
 set -eE
 

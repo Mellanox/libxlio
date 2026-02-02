@@ -27,10 +27,6 @@
             "deferred_close": false,
             "avoid_ctl_syscalls": false,
             "sendfile_cache_limit": 10737418240
-        },
-        "daemon": {
-            "enable": false,
-            "dir": "/tmp/xlio"
         }
     },
     "network": {

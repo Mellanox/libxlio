@@ -430,11 +430,8 @@ AC_CONFIG_FILES([
 		tests/gtest/Makefile
 		tests/unit_tests/Makefile
 		tools/Makefile
-		tools/daemon/Makefile
 		docs/man/Makefile
 		third_party/Makefile
-		contrib/scripts/xlio.init
-		contrib/scripts/xlio.service
 		contrib/scripts/libxlio.spec
 		debian/changelog
 		])

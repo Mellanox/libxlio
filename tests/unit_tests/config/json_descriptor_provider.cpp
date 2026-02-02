@@ -28,7 +28,7 @@ TEST(config, json_descriptor_provider_sanity)
                     "type": "boolean",
                     "default": false,
                     "title": "Append PID to dirs",
-                    "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
+                    "description": "Append PID to core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
                 },
                 "log": {
                     "type": "object",
@@ -94,7 +94,7 @@ TEST(config, json_descriptor_provider_invalid_json_throws)
                             "type": "boolean",
                             "default": false,
                             "title": "Append PID to dirs",
-                            "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
+                            "description": "Append PID to core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
                         },
                         "log": {
                             "type": "object",
@@ -154,7 +154,7 @@ TEST(config, json_descriptor_provider_no_description_throws)
                     "type": "boolean",
                     "default": false,
                     "title": "Append PID to dirs",
-                    "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
+                    "description": "Append PID to core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
                 },
                 "log": {
                     "type": "object",
@@ -213,13 +213,13 @@ TEST(config, json_descriptor_provider_duplication_last_is_taken)
                     "type": "boolean",
                     "default": false,
                     "title": "Append PID to dirs",
-                    "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
+                    "description": "Append PID to core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
                 },
                 "append_pid_to_path": {
                     "type": "boolean",
                     "default": true,
                     "title": "Append PID to dirs",
-                    "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
+                    "description": "Append PID to core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
                 }
             }
         }
@@ -248,7 +248,7 @@ TEST(config, json_descriptor_provider_unrecognized_type_throws)
                     "type": "float",
                     "default": 3.5,
                     "title": "Sets log level.",
-                    "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
+                    "description": "Append PID to core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
                 },
             }
         }
