@@ -16,11 +16,11 @@ if [[ -z "${MANUAL_RUN}" ]]; then
 		exit 1
 	fi
 
-	cd $WORKSPACE
+	sleep 400
 
-	rm -rf $gtest_dir
-	mkdir -p $gtest_dir
-	cd $gtest_dir
+	# Use the already-configured build directory from Build stage
+	gtest_dir=${build_dir}/0
+	cd "$gtest_dir"
 
 	gtest_app="$PWD/tests/gtest/gtest"
 	gtest_lib=$install_dir/lib/${prj_lib}
@@ -64,7 +64,6 @@ gtest_opt_ipv6="--addr=$(ip -f inet6 addr show net1 | grep global | awk '/inet6 
 set +eE
 
 if [[ -z "${MANUAL_RUN}" ]]; then
-	${WORKSPACE}/configure --prefix=$install_dir $jenkins_test_custom_configure
 	make $make_opt -C tests/gtest
 	rc=$(($rc+$?))
 fi

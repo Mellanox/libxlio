@@ -6,7 +6,7 @@ DOCA_REPO_PATH="https://doca-repo-prod.nvidia.com/internal/repo/doca"
 TARGET=${TARGET:=all}
 
 DOCA_VERSION='3.3.0'
-DOCA_BRANCH="latest"
+DOCA_BRANCH="dev"
 GPG_KEY="GPG-KEY-Mellanox.pub"
 
 function error_handler() {
