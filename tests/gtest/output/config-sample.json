@@ -6,10 +6,6 @@
     "exit_report": 1
   },
   "core": {
-    "daemon": {
-      "enable": true,
-      "dir": "/funny-dir"
-    },
     "resources": {
       "hugepages": {
         "enable": true

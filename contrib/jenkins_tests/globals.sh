@@ -29,7 +29,6 @@ commit_dir=${WORKSPACE}/${prefix}/commit
 tidy_dir=${WORKSPACE}/${prefix}/tidy
 
 prj_lib=libxlio.so
-prj_service=xliod
 
 NPROC=8
 make_opt="-j${NPROC}"
@@ -48,7 +47,6 @@ function on_exit()
     echo "[${0##*/}]..................exit code = $rc"
     pkill -9 sockperf
     pkill -9 xlio
-    pkill -9 ${prj_service}
 }
 
 function do_cmd()

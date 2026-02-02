@@ -62,8 +62,7 @@ Print version.
 .TP
 
 .SH SEE ALSO
-.BR xlio (7),
-.BR xliod (8)
+.BR xlio (7)
 
 .SH "AUTHORS"
 .TP

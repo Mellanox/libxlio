@@ -589,7 +589,6 @@ private:
     inline void put_tcp_seg_direct(struct tcp_seg *seg);
     inline void return_tcp_segs(struct tcp_seg *seg);
 
-    static void put_agent_msg(void *arg);
     bool is_connected_and_ready_to_send();
 
     inline event_handler_manager *get_event_mgr();

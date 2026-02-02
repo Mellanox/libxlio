@@ -220,28 +220,28 @@ TEST(config, inline_loader_rejects_empty_boolean_value)
 
 TEST(config, inline_loader_rejects_multiple_equals_in_string)
 {
-    env_setter setter("XLIO_INLINE_CONFIG", "core.daemon.dir==Checking_Syntax");
+    env_setter setter("XLIO_INLINE_CONFIG", "monitor.log.file_path==Checking_Syntax");
     inline_loader loader("XLIO_INLINE_CONFIG");
     ASSERT_THROW(loader.load_all(), xlio_exception);
 }
 
 TEST(config, inline_loader_rejects_empty_string_value)
 {
-    env_setter setter("XLIO_INLINE_CONFIG", "core.daemon.dir=");
+    env_setter setter("XLIO_INLINE_CONFIG", "monitor.log.file_path=");
     inline_loader loader("XLIO_INLINE_CONFIG");
     ASSERT_THROW(loader.load_all(), xlio_exception);
 }
 
 TEST(config, inline_loader_rejects_single_quote_in_string_value)
 {
-    env_setter setter("XLIO_INLINE_CONFIG", "core.daemon.dir='Checking_Syntax");
+    env_setter setter("XLIO_INLINE_CONFIG", "monitor.log.file_path='Checking_Syntax");
     inline_loader loader("XLIO_INLINE_CONFIG");
     ASSERT_THROW(loader.load_all(), xlio_exception);
 }
 
 TEST(config, inline_loader_rejects_quotes_in_string_value)
 {
-    env_setter setter("XLIO_INLINE_CONFIG", "core.daemon.dir=Checkin\"\"\"\"g_Syntax");
+    env_setter setter("XLIO_INLINE_CONFIG", "monitor.log.file_path=Checkin\"\"\"\"g_Syntax");
     inline_loader loader("XLIO_INLINE_CONFIG");
     ASSERT_THROW(loader.load_all(), xlio_exception);
 }
@@ -249,7 +249,7 @@ TEST(config, inline_loader_rejects_quotes_in_string_value)
 TEST(config, inline_loader_rejects_spaces_in_string_value)
 {
     env_setter setter("XLIO_INLINE_CONFIG",
-                      "core.daemon.dir=Checking_Syntax core.daemon.dir=Checking_Syntax");
+                      "monitor.log.file_path=Checking_Syntax monitor.log.file_path=Checking_Syntax");
     inline_loader loader("XLIO_INLINE_CONFIG");
     ASSERT_THROW(loader.load_all(), xlio_exception);
 }
@@ -257,7 +257,7 @@ TEST(config, inline_loader_rejects_spaces_in_string_value)
 TEST(config, inline_loader_rejects_invalid_delimiter)
 {
     env_setter setter("XLIO_INLINE_CONFIG",
-                      "core.daemon.dir=Checking_Syntax;core.daemon.dir=Checking_Syntax");
+                      "monitor.log.file_path=Checking_Syntax;monitor.log.file_path=Checking_Syntax");
     inline_loader loader("XLIO_INLINE_CONFIG");
     ASSERT_THROW(loader.load_all(), xlio_exception);
 }
@@ -281,7 +281,7 @@ TEST(config, inline_loader_rejects_invalid_characters_in_value)
 TEST(config, inline_loader_accepts_valid_configuration)
 {
     env_setter setter("XLIO_INLINE_CONFIG",
-                      "network.protocols.ip.mtu=1500,core.quick_init=true,core.daemon.dir=/tmp");
+                      "network.protocols.ip.mtu=1500,core.quick_init=true,monitor.log.file_path=/tmp");
     inline_loader loader("XLIO_INLINE_CONFIG");
     ASSERT_NO_THROW(loader.load_all());
 
@@ -290,7 +290,7 @@ TEST(config, inline_loader_accepts_valid_configuration)
     ASSERT_EQ(data.size(), 3UL);
     ASSERT_TRUE(data.find("network.protocols.ip.mtu") != data.end());
     ASSERT_TRUE(data.find("core.quick_init") != data.end());
-    ASSERT_TRUE(data.find("core.daemon.dir") != data.end());
+    ASSERT_TRUE(data.find("monitor.log.file_path") != data.end());
 }
 
 

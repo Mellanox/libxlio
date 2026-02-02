@@ -57,7 +57,6 @@
 #include "config/descriptors/config_descriptor.h"
 
 #include "util/instrumentation.h"
-#include "util/agent.h"
 #include "xlio.h"
 
 void check_netperf_flags();
@@ -235,11 +234,6 @@ static int free_libxlio_resources()
         delete g_p_event_handler_manager;
     }
     g_p_event_handler_manager = nullptr;
-
-    if (g_p_agent) {
-        delete g_p_agent;
-    }
-    g_p_agent = nullptr;
 
     if (safe_mce_sys().app_name) {
         free(safe_mce_sys().app_name);
@@ -468,9 +462,6 @@ void print_env_vars_xlio_global_settings()
     VLOG_STR_PARAM_STRING("Stats shared memory directory", safe_mce_sys().stats_shmem_dirname,
                           MCE_DEFAULT_STATS_SHMEM_DIR, SYS_VAR_STATS_SHMEM_DIRNAME,
                           safe_mce_sys().stats_shmem_dirname);
-    VLOG_STR_PARAM_STRING("SERVICE output directory", safe_mce_sys().service_notify_dir,
-                          MCE_DEFAULT_SERVICE_FOLDER, SYS_VAR_SERVICE_DIR,
-                          safe_mce_sys().service_notify_dir);
     VLOG_PARAM_NUMBER("Stats FD Num (max)", safe_mce_sys().stats_fd_num_max,
                       MCE_DEFAULT_STATS_FD_NUM, SYS_VAR_STATS_FD_NUM);
     VLOG_STR_PARAM_STRING("Application ID", safe_mce_sys().app_id, MCE_DEFAULT_APP_ID,
@@ -1087,15 +1078,6 @@ static void do_global_ctors_helper()
     NEW_CTOR(g_p_app, app_conf());
 #endif
 
-    /* Open communication with daemon */
-    if (safe_mce_sys().service_enable) {
-        NEW_CTOR(g_p_agent, agent());
-        vlog_printf(VLOG_DEBUG, "Agent setup state: g_p_agent=%p active=%d\n", g_p_agent,
-                    (g_p_agent ? g_p_agent->state() : -1));
-    } else {
-        vlog_printf(VLOG_DEBUG, "Agent is disabled\n");
-    }
-
     // Create all global management objects
     NEW_CTOR(g_p_event_handler_manager, event_handler_manager());
     rc = g_p_event_handler_manager->start_thread();
@@ -1248,7 +1230,6 @@ void reset_globals()
     g_tcp_timers_collection = nullptr;
     g_p_vlogger_timer_handler = nullptr;
     g_p_event_handler_manager = nullptr;
-    g_p_agent = nullptr;
     g_p_route_table_mgr = nullptr;
     g_bind_no_port = nullptr;
     g_p_rule_table_mgr = nullptr;

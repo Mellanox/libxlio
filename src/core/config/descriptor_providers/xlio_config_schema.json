@@ -225,25 +225,6 @@
                         }
                     },
                     "additionalProperties": false
-                },
-                "daemon": {
-                    "type": "object",
-                    "description": "XLIO daemon configuration.",
-                    "properties": {
-                        "enable": {
-                            "type": "boolean",
-                            "default": false,
-                            "title": "Enable XLIO daemon",
-                            "description": "Maps to XLIO_SERVICE_ENABLE environment variable.\nEnable the XLIO daemon service for additional monitoring capabilities."
-                        },
-                        "dir": {
-                            "type": "string",
-                            "default": "/tmp/xlio",
-                            "title": "Daemon working directory",
-                            "description": "Maps to XLIO_SERVICE_NOTIFY_DIR environment variable.\nSet the directory path for XLIO to write files used by xliod.\nNote: when used xliod must be run with --notify-dir directing the same folder."
-                        }
-                    },
-                    "additionalProperties": false
                 }
             },
             "additionalProperties": false

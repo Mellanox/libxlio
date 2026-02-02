@@ -778,16 +778,12 @@ void mce_sys_var::get_env_params()
     memset(log_filename, 0, sizeof(log_filename));
     memset(stats_filename, 0, sizeof(stats_filename));
     memset(stats_shmem_dirname, 0, sizeof(stats_shmem_dirname));
-    memset(service_notify_dir, 0, sizeof(service_notify_dir));
     strcpy(stats_filename, MCE_DEFAULT_STATS_FILE);
-    strcpy(service_notify_dir, MCE_DEFAULT_SERVICE_FOLDER);
     strcpy(stats_shmem_dirname, MCE_DEFAULT_STATS_SHMEM_DIR);
     strcpy(acceleration_rules, MCE_DEFAULT_CONF_FILE);
     strcpy(app_id, MCE_DEFAULT_APP_ID);
     strcpy(internal_thread_cpuset, MCE_DEFAULT_INTERNAL_THREAD_CPUSET);
     strcpy(internal_thread_affinity_str, MCE_DEFAULT_INTERNAL_THREAD_AFFINITY_STR);
-
-    service_enable = MCE_DEFAULT_SERVICE_ENABLE;
 
     print_report = MCE_DEFAULT_PRINT_REPORT;
     quick_start = MCE_DEFAULT_QUICK_START;
@@ -1121,19 +1117,6 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_CONF_FILENAME))) {
         read_env_variable_with_pid(acceleration_rules, sizeof(acceleration_rules), env_ptr);
-    }
-
-    if ((env_ptr = getenv(SYS_VAR_SERVICE_DIR))) {
-        read_env_variable_with_pid(service_notify_dir, sizeof(service_notify_dir), env_ptr);
-    }
-
-    if ((env_ptr = getenv(SYS_VAR_SERVICE_ENABLE))) {
-        service_enable = atoi(env_ptr) ? true : false;
-    }
-    if (HYPER_MSHV == hypervisor && !service_enable) {
-        service_enable = true;
-        vlog_printf(VLOG_DEBUG, "%s parameter is forced to 'true' for MSHV hypervisor\n",
-                    SYS_VAR_SERVICE_ENABLE);
     }
 
     if ((env_ptr = getenv(SYS_VAR_LOG_LEVEL))) {
@@ -1855,14 +1838,9 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
     memset(log_filename, 0, sizeof(log_filename));
     memset(stats_filename, 0, sizeof(stats_filename));
     memset(stats_shmem_dirname, 0, sizeof(stats_shmem_dirname));
-    memset(service_notify_dir, 0, sizeof(service_notify_dir));
-
     strncpy(stats_filename,
             registry.get_default_value<std::string>("monitor.stats.file_path").c_str(),
             sizeof(stats_filename) - 1);
-
-    strncpy(service_notify_dir, registry.get_default_value<std::string>("core.daemon.dir").c_str(),
-            sizeof(service_notify_dir) - 1);
 
     strncpy(stats_shmem_dirname,
             registry.get_default_value<std::string>("monitor.stats.shmem_dir").c_str(),
@@ -1884,8 +1862,6 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
     strncpy(internal_thread_affinity_str,
             registry.get_default_value<std::string>("performance.threading.cpu_affinity").c_str(),
             sizeof(internal_thread_affinity_str) - 1);
-
-    service_enable = registry.get_default_value<bool>("core.daemon.enable");
 
     print_report = static_cast<decltype(print_report)>(
         registry.get_default_value<int64_t>("monitor.exit_report"));
@@ -2094,11 +2070,6 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
     multilock = registry.get_default_value<bool>("performance.threading.mutex_over_spinlock")
         ? MULTILOCK_MUTEX
         : MULTILOCK_SPIN;
-}
-
-void mce_sys_var::read_hypervisor_info()
-{
-    read_hv();
 }
 
 void mce_sys_var::configure_striding_rq(const config_registry &registry)
@@ -2331,19 +2302,6 @@ void mce_sys_var::configure_monitor(const config_registry &registry)
         read_env_variable_with_pid(
             stats_shmem_dirname, sizeof(stats_shmem_dirname),
             registry.get_value<std::string>("monitor.stats.shmem_dir").c_str());
-    }
-
-    if (registry.value_exists("core.daemon.dir")) {
-        read_env_variable_with_pid(service_notify_dir, sizeof(service_notify_dir),
-                                   registry.get_value<std::string>("core.daemon.dir").c_str());
-    }
-
-    set_value_from_registry_if_exists(service_enable, "core.daemon.enable", registry);
-
-    if (HYPER_MSHV == hypervisor && !service_enable) {
-        service_enable = true;
-        vlog_printf(VLOG_DEBUG, "%s parameter is forced to 'true' for MSHV hypervisor\n",
-                    SYS_VAR_SERVICE_ENABLE);
     }
 
     set_value_from_registry_if_exists(log_level, "monitor.log.level", registry);
@@ -2946,7 +2904,7 @@ void mce_sys_var::apply_config_from_registry()
     vlog_printf(VLOG_INFO, "Config sources: %s\n", sources.c_str());
 
     initialize_base_variables(registry);
-    read_hypervisor_info();
+    read_hv();
 
     configure_striding_rq(registry);
     configure_running_mode(registry);

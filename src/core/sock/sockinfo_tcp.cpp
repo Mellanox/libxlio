@@ -18,7 +18,6 @@
 #include "util/libxlio.h"
 #include "util/instrumentation.h"
 #include "util/list.h"
-#include "util/agent.h"
 #include "event/event_handler_manager.h"
 #include "event/event_handler_manager_local.h"
 #include "event/poll_group.h"
@@ -353,9 +352,6 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
         }
     }
 
-    if (g_p_agent) {
-        g_p_agent->register_cb((agent_cb_t)&sockinfo_tcp::put_agent_msg, (void *)this);
-    }
     si_tcp_logdbg("TCP PCB FLAGS: 0x%x", m_pcb.flags);
     si_tcp_logfunc("done");
 }
@@ -883,10 +879,6 @@ sockinfo_tcp::~sockinfo_tcp()
             (int)m_rx_ring_map.size(), m_rx_reuse_buff.n_buff_num, m_rx_reuse_buff.rx_reuse.size());
     }
 
-    if (g_p_agent) {
-        g_p_agent->unregister_cb((agent_cb_t)&sockinfo_tcp::put_agent_msg, (void *)this);
-    }
-
     si_tcp_logdbg("sock closed");
 }
 
@@ -1193,47 +1185,6 @@ unsigned sockinfo_tcp::tx_wait(bool blocking)
     }
     si_tcp_logfunc("end sz=%u rx_count=%d", sz, m_n_rx_pkt_ready_list_count);
     return sz;
-}
-
-void sockinfo_tcp::put_agent_msg(void *arg)
-{
-    sockinfo_tcp *p_si_tcp = (sockinfo_tcp *)arg;
-    struct xlio_msg_state data;
-
-    /* Ignore listen socket at the moment */
-    if (p_si_tcp->is_server() || get_tcp_state(&p_si_tcp->m_pcb) == LISTEN) {
-        return;
-    }
-    if (unlikely(!g_p_agent)) {
-        return;
-    }
-
-    data.hdr.code = XLIO_MSG_STATE;
-    data.hdr.ver = XLIO_AGENT_VER;
-    data.hdr.pid = getpid();
-    data.hdr.status = 0;
-    data.hdr.reserve[0] = 0; // suppress coverity warning
-    data.fid = p_si_tcp->get_fd();
-    data.state = get_tcp_state(&p_si_tcp->m_pcb);
-    data.type = SOCK_STREAM;
-    data.src.family = p_si_tcp->m_bound.get_sa_family();
-    data.src.port = p_si_tcp->m_bound.get_in_port();
-    if (data.src.family == AF_INET) {
-        data.src.addr.ipv4 = p_si_tcp->m_bound.get_ip_addr().get_in4_addr().s_addr;
-    } else {
-        memcpy(&data.src.addr.ipv6[0], &p_si_tcp->m_bound.get_ip_addr().get_in6_addr(),
-               sizeof(data.src.addr.ipv6));
-    }
-    data.dst.family = p_si_tcp->m_connected.get_sa_family();
-    data.dst.port = p_si_tcp->m_connected.get_in_port();
-    if (data.dst.family == AF_INET) {
-        data.dst.addr.ipv4 = p_si_tcp->m_connected.get_ip_addr().get_in4_addr().s_addr;
-    } else {
-        memcpy(&data.dst.addr.ipv6[0], &p_si_tcp->m_connected.get_ip_addr().get_in6_addr(),
-               sizeof(data.src.addr.ipv6));
-    }
-
-    g_p_agent->put((const void *)&data, sizeof(data), (intptr_t)data.fid);
 }
 
 ssize_t sockinfo_tcp::tx(xlio_tx_call_attr_t &tx_arg)
@@ -1831,11 +1782,6 @@ void sockinfo_tcp::tcp_state_observer(void *pcb_container, enum tcp_state new_st
          * the main thread to mitigate ring lock contention.
          */
         p_si_tcp->reset_ops();
-    }
-
-    /* Update daemon about actual state for offloaded connection */
-    if (g_p_agent && likely(p_si_tcp->m_sock_offload == TCP_SOCK_LWIP)) {
-        p_si_tcp->put_agent_msg((void *)p_si_tcp);
     }
 }
 
@@ -5963,11 +5909,6 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
                 }
             }
         }
-    }
-
-    /* Processing all messages for the daemon */
-    if (g_p_agent) {
-        g_p_agent->progress();
     }
 }
 

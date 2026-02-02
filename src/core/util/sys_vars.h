@@ -18,7 +18,6 @@
 
 #include "core/config/config_registry.h"
 #include "core/ib/base/verbs_extra.h"
-#include "core/util/agent_def.h"
 #include "core/util/sysctl_reader.h"
 #include "core/xlio_extra.h"
 
@@ -324,8 +323,6 @@ public:
     // can be used both for legacy config file path and transport control rules
     char acceleration_rules[PATH_MAX];
 
-    char service_notify_dir[PATH_MAX];
-    bool service_enable;
     bool log_colors;
     bool handle_sigintr;
     bool handle_segfault;
@@ -486,7 +483,6 @@ private:
     void get_app_name();
     void get_env_params();
     void initialize_base_variables(const config_registry &registry);
-    void read_hypervisor_info();
     void configure_striding_rq(const config_registry &registry);
     void configure_running_mode(const config_registry &registry);
     void detect_application_profile(const config_registry &registry);
@@ -561,8 +557,6 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_LOG_FILENAME        "XLIO_LOG_FILE"
 #define SYS_VAR_STATS_FILENAME      "XLIO_STATS_FILE"
 #define SYS_VAR_STATS_SHMEM_DIRNAME "XLIO_STATS_SHMEM_DIR"
-#define SYS_VAR_SERVICE_DIR         "XLIO_SERVICE_NOTIFY_DIR"
-#define SYS_VAR_SERVICE_ENABLE      "XLIO_SERVICE_ENABLE"
 #define SYS_VAR_CONF_FILENAME       "XLIO_CONFIG_FILE"
 #define SYS_VAR_LOG_COLORS          "XLIO_LOG_COLORS"
 #define SYS_VAR_APPLICATION_ID      "XLIO_APPLICATION_ID"
@@ -705,8 +699,6 @@ extern mce_sys_var &safe_mce_sys();
 #define CONFIG_VAR_LOG_FILENAME        "monitor.log.file_path"
 #define CONFIG_VAR_STATS_FILENAME      "monitor.stats.file_path"
 #define CONFIG_VAR_STATS_SHMEM_DIRNAME "monitor.stats.shmem_dir"
-#define CONFIG_VAR_SERVICE_DIR         "core.daemon.dir"
-#define CONFIG_VAR_SERVICE_ENABLE      "core.daemon.enable"
 #define CONFIG_VAR_LOG_COLORS          "monitor.log.colors"
 #define CONFIG_VAR_APPLICATION_ID      "acceleration_control.app_id"
 #define CONFIG_VAR_HANDLE_SIGINTR      "core.signals.sigint.exit"
@@ -861,9 +853,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_LOG_FILE                 ("")
 #define MCE_DEFAULT_CONF_FILE                ("/etc/libxlio.conf")
 #define MCE_DEFAULT_STATS_FILE               ("")
-#define MCE_DEFAULT_STATS_SHMEM_DIR          (XLIO_AGENT_PATH)
-#define MCE_DEFAULT_SERVICE_FOLDER           (XLIO_AGENT_PATH)
-#define MCE_DEFAULT_SERVICE_ENABLE           (false)
+#define MCE_DEFAULT_STATS_SHMEM_DIR          ("/tmp/xlio")
 #define MCE_DEFAULT_LOG_DETAILS              (0)
 #define MCE_DEFAULT_LOG_COLORS               (true)
 #define MCE_DEFAULT_APP_ID                   ("XLIO_DEFAULT_APPLICATION_ID")

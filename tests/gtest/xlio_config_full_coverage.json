@@ -28,10 +28,6 @@
             "allow_privileged_sockopt": true,
             "avoid_ctl_syscalls": false,
             "sendfile_cache_limit": 10737418240
-        },
-        "daemon": {
-            "enable": false,
-            "dir": "/tmp/xlio"
         }
     },
     "network": {

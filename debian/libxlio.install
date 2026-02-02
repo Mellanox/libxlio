@@ -2,9 +2,6 @@ usr/lib/libxlio*.so.*
 usr/lib/libxlio.so
 usr/share/doc/libxlio/README
 usr/share/doc/libxlio/CHANGES
-usr/sbin/
 etc/xlio_config_schema.json
 etc/libxlio_config.json
-contrib/scripts/xlio.service lib/systemd/system
 usr/share/man/man7/xlio.*
-usr/share/man/man8/xliod.*
