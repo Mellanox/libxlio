@@ -162,11 +162,7 @@ public:
 
 #if defined(DEFINED_NGINX)
     void prepare_to_close_socket_pool(bool _push_pop) override;
-    void set_params_for_socket_pool() override
-    {
-        m_is_for_socket_pool = true;
-        set_rx_num_buffs_reuse(safe_mce_sys().nginx_udp_socket_pool_rx_num_buffs_reuse);
-    }
+    void set_params_for_socket_pool() override { m_is_for_socket_pool = true; }
     bool is_closable() override { return !m_is_for_socket_pool; }
 #else
     bool is_closable() override { return true; }

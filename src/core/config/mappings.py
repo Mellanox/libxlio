@@ -123,7 +123,6 @@ config_mapping = {
     "applications.nginx.distribute_cq": "XLIO_DISTRIBUTE_CQ",
     "applications.nginx.src_port_stride": "XLIO_NGINX_SRC_PORT_STRIDE",
     "applications.nginx.udp_pool_size": "XLIO_NGINX_UDP_POOL_SIZE",
-    "applications.nginx.udp_socket_pool_reuse": "XLIO_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE",
     "applications.nginx.workers_num": "XLIO_NGINX_WORKERS_NUM",
     
     # acceleration_control section

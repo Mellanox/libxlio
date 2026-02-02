@@ -1317,12 +1317,6 @@
                             "title": "UDP buffer pool size",
                             "description": "Maps to XLIO_NGINX_UDP_POOL_SIZE environment variable.\nThe size of UDP socket pool for NGINX.\nFor any value different than 0 - close() socket will not destroy the socket,\nbut will place it in a pool for next socket UDP creation.\nDisable with 0"
                         },
-                        "udp_socket_pool_reuse": {
-                            "type": "integer",
-                            "default": 0,
-                            "title": "Enable UDP socket pool reuse",
-                            "description": "Maps to XLIO_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE environment variable.\nControls the reuse of UDP socket pools for NGINX deployments.\nDisable with 0."
-                        },
                         "distribute_cq": {
                             "type": "boolean",
                             "default": false,

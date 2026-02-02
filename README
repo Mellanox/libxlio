@@ -208,12 +208,6 @@ but will place it in a pool for next socket UDP creation.
 Disable with 0
 Default value is 0
 
-applications.nginx.udp_socket_pool_reuse
-Maps to **XLIO_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE** environment variable.
-Controls the reuse of UDP socket pools for NGINX deployments.
-Disable with 0.
-Default value is 0
-
 applications.nginx.workers_num
 Maps to **XLIO_NGINX_WORKERS_NUM** environment variable.
 Number of Nginx worker processes to optimize for.
@@ -1284,10 +1278,10 @@ Use:
       Optimized for use cases that are keen on latency.
       Example: profiles.spec=latency
 
-   - "ultra-latency" or 1
+   - "ultra_latency" or 1
      Optimized for use cases that are keen on latency even more. This mode uses
       single threaded model, avoids OS polling and progress engine.
-      Example: profiles.spec=ultra-latency
+      Example: profiles.spec=ultra_latency
 
    - "nginx" or 2
       Optimized for nginx. This profile must be used to offload nginx. This profile
