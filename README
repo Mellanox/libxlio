@@ -68,7 +68,6 @@ Example:
  XLIO DETAILS: SigIntr Ctrl-C Handle          Enabled                    [core.signals.sigint.exit]
  XLIO DETAILS: SegFault Backtrace             Disabled                   [core.signals.sigsegv.backtrace]
  XLIO DETAILS: Print a report                 Disabled                   [monitor.exit_report]
- XLIO DETAILS: Quick start                    Disabled                   [core.quick_init]
  XLIO DETAILS: Ring allocation logic TX       0 (Ring per interface)     [performance.rings.tx.allocation_logic]
  XLIO DETAILS: Ring allocation logic RX       0 (Ring per interface)     [performance.rings.rx.allocation_logic]
  XLIO INFO   : Ring migration ratio TX        -1                         [performance.rings.tx.migration_ratio]
@@ -253,14 +252,6 @@ Use:
    - "log_error_abort" or 3 - to log ERROR message and
       abort application (throw xlio_error exception).
 Default value is -1
-
-core.quick_init
-Maps to **XLIO_QUICK_START** environment variable.
-Avoid expensive extra checks to reduce the initialization time.
-This may result in failures in case of a system misconfiguration.
-For example, if the parameter is enabled and hugepages are requested
-beyond the cgroup limit, XLIO crashes due to an access to an unmapped page.
-Default value is false
 
 core.resources.external_memory_limit
 Maps to **XLIO_MEMORY_LIMIT_USER** environment variable.
@@ -1284,10 +1275,10 @@ Use:
       Optimized for use cases that are keen on latency.
       Example: profiles.spec=latency
 
-   - "ultra-latency" or 1
+   - "ultra_latency" or 1
      Optimized for use cases that are keen on latency even more. This mode uses
       single threaded model, avoids OS polling and progress engine.
-      Example: profiles.spec=ultra-latency
+      Example: profiles.spec=ultra_latency
 
    - "nginx" or 2
       Optimized for nginx. This profile must be used to offload nginx. This profile

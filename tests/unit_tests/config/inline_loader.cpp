@@ -280,16 +280,14 @@ TEST(config, inline_loader_rejects_invalid_characters_in_value)
 // Valid configuration test
 TEST(config, inline_loader_accepts_valid_configuration)
 {
-    env_setter setter("XLIO_INLINE_CONFIG",
-                      "network.protocols.ip.mtu=1500,core.quick_init=true,core.daemon.dir=/tmp");
+    env_setter setter("XLIO_INLINE_CONFIG", "network.protocols.ip.mtu=1500,core.daemon.dir=/tmp");
     inline_loader loader("XLIO_INLINE_CONFIG");
     ASSERT_NO_THROW(loader.load_all());
 
     std::map<std::string, std::experimental::any> data = loader.load_all();
 
-    ASSERT_EQ(data.size(), 3UL);
+    ASSERT_EQ(data.size(), 2UL);
     ASSERT_TRUE(data.find("network.protocols.ip.mtu") != data.end());
-    ASSERT_TRUE(data.find("core.quick_init") != data.end());
     ASSERT_TRUE(data.find("core.daemon.dir") != data.end());
 }
 
