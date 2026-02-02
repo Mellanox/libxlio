@@ -595,15 +595,14 @@ TEST_F(InlineLoaderTest, accepts_comma_and_range_in_value)
 TEST_F(InlineLoaderTest, accepts_valid_configuration_with_semicolons)
 {
     env_setter setter("XLIO_INLINE_CONFIG",
-                      "network.protocols.ip.mtu=1500;core.quick_init=true;core.log.file_path=/tmp");
+                      "network.protocols.ip.mtu=1500;core.log.file_path=/tmp");
     inline_loader loader("XLIO_INLINE_CONFIG", m_descriptor);
     ASSERT_NO_THROW(loader.load_all());
 
     std::map<std::string, std::experimental::any> data = loader.load_all();
 
-    ASSERT_EQ(data.size(), 3UL);
+    ASSERT_EQ(data.size(), 2UL);
     ASSERT_TRUE(data.find("network.protocols.ip.mtu") != data.end());
-    ASSERT_TRUE(data.find("core.quick_init") != data.end());
     ASSERT_TRUE(data.find("core.log.file_path") != data.end());
 }
 
