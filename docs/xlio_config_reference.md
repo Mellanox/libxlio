@@ -1,6 +1,6 @@
 # XLIO Configuration Reference
 
-This file documents all 121 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
+This file documents all 120 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
 
 > **Auto-generated** from the JSON schema by `generate_docs.py`. Do not edit manually.
 
@@ -17,7 +17,6 @@ This file documents all 121 XLIO runtime configuration parameters with their typ
   - [`applications.nginx.workers_num`](#applicationsnginxworkers_num) — Number of Nginx workers
 - **[CORE](#core)**
   - [`core.exception_handling.mode`](#coreexception_handlingmode) — Exception handling mode
-  - [`core.quick_init`](#corequick_init) — Quick initialization
   - [`core.resources.external_memory_limit`](#coreresourcesexternal_memory_limit) — External memory limit (bytes)
   - [`core.resources.heap_metadata_block_size`](#coreresourcesheap_metadata_block_size) — Heap metadata block size
   - [`core.resources.hugepages.enable`](#coreresourceshugepagesenable) — Enable hugepages
@@ -345,34 +344,6 @@ Strict modes (2, 3) surface incompatibilities immediately but may break applicat
 **Guidance:** Production: -1 or 0. Development/testing: 2 or 3.
 
 **Default:** `"handle_debug" (-1)`
-
-### `core.quick_init`
-
-> **Type:** boolean
->
-> **Maps to:** `XLIO_QUICK_START`
-
-Skips hugepage residency validation during startup when enabled.
-
-**Behavior:** When disabled (false), XLIO calls mincore() for each allocated hugepage to verify
-pages are resident before use. When enabled (true), this validation is skipped.
-
-**Value Tradeoffs:**
-
-*false (Default):*
-Safe. Catches cgroup misconfigurations that would cause SIGBUS crashes on first memory access.
-Adds startup latency proportional to hugepage count.
-
-*true:*
-Faster startup. Risk: In cgroup-limited environments (containers, Kubernetes), mmap() may succeed
-even when hugepages exceed the limit. First memory access triggers SIGBUS with no earlier warning.
-
-**Decision guide:**
-
-- Containers, Kubernetes, cgroup-limited: Keep disabled (runtime SIGBUS is worse than startup delay)
-- Bare metal with verified hugepage config: Safe to enable for faster startup
-
-**Default:** `false`
 
 ### `core.resources.external_memory_limit`
 

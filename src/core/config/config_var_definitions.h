@@ -38,7 +38,6 @@ extern const config_var_info_t<bool> CONFIG_VAR_LOG_COLORS;
 extern const config_var_info_t<bool> CONFIG_VAR_HANDLE_SIGINTR;
 extern const config_var_info_t<bool> CONFIG_VAR_HANDLE_SIGSEGV;
 extern const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_STATS_FD_NUM;
-extern const config_var_info_t<bool> CONFIG_VAR_QUICK_START;
 
 extern const config_var_info_t<ring_logic_t, int64_t> CONFIG_VAR_RING_ALLOCATION_LOGIC_TX;
 extern const config_var_info_t<ring_logic_t, int64_t> CONFIG_VAR_RING_ALLOCATION_LOGIC_RX;

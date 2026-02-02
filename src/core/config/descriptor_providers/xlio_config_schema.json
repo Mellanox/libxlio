@@ -97,12 +97,6 @@
                     },
                     "additionalProperties": false
                 },
-                "quick_init": {
-                    "type": "boolean",
-                    "default": false,
-                    "title": "Quick initialization",
-                    "description": "Maps to XLIO_QUICK_START environment variable.\nSkips hugepage residency validation during startup when enabled.\n\n**Behavior:** When disabled (false), XLIO calls mincore() for each allocated hugepage to verify\npages are resident before use. When enabled (true), this validation is skipped.\n\n**Value Tradeoffs:**\n\n*false (Default):*\nSafe. Catches cgroup misconfigurations that would cause SIGBUS crashes on first memory access.\nAdds startup latency proportional to hugepage count.\n\n*true:*\nFaster startup. Risk: In cgroup-limited environments (containers, Kubernetes), mmap() may succeed\neven when hugepages exceed the limit. First memory access triggers SIGBUS with no earlier warning.\n\n**Decision guide:**\n\n- Containers, Kubernetes, cgroup-limited: Keep disabled (runtime SIGBUS is worse than startup delay)\n- Bare metal with verified hugepage config: Safe to enable for faster startup"
-                },
                 "exception_handling": {
                     "type": "object",
                     "description": "How XLIO handles exceptions and errors.",

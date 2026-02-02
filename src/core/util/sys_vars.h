@@ -156,7 +156,6 @@ public:
     char report_file_path[PATH_MAX]; // Tuning report output file path
     char cached_ofed_version[128]; // OFED version (populated at init, used at exit)
     struct timespec init_time_monotonic; // Monotonic clock at lib init (for process duration)
-    bool quick_start;
     vlog_levels_t log_level;
     uint32_t log_details;
     char log_filename[PATH_MAX];
@@ -398,7 +397,6 @@ extern const mce_sys_var &safe_mce_sys();
 #define SYS_VAR_HANDLE_SIGINTR      "XLIO_HANDLE_SIGINTR"
 #define SYS_VAR_HANDLE_SIGSEGV      "XLIO_HANDLE_SIGSEGV"
 #define SYS_VAR_STATS_FD_NUM        "XLIO_STATS_FD_NUM"
-#define SYS_VAR_QUICK_START         "XLIO_QUICK_START"
 
 #define SYS_VAR_RING_ALLOCATION_LOGIC_TX "XLIO_RING_ALLOCATION_LOGIC_TX"
 #define SYS_VAR_RING_ALLOCATION_LOGIC_RX "XLIO_RING_ALLOCATION_LOGIC_RX"
@@ -542,7 +540,6 @@ extern const mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_HANDLE_SIGINTR           (true)
 #define MCE_DEFAULT_HANDLE_SIGFAULT          (false)
 #define MCE_DEFAULT_STATS_FD_NUM             (0)
-#define MCE_DEFAULT_QUICK_START              (false)
 #define MCE_DEFAULT_RING_ALLOCATION_LOGIC_TX (RING_LOGIC_PER_THREAD)
 #define MCE_DEFAULT_RING_ALLOCATION_LOGIC_RX (RING_LOGIC_PER_THREAD)
 #define MCE_DEFAULT_RING_MIGRATION_RATIO_TX  (-1)
