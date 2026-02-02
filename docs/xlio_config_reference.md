@@ -1,6 +1,6 @@
 # XLIO Configuration Reference
 
-This file documents all 121 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
+This file documents all 120 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
 
 > **Auto-generated** from the JSON schema by `generate_docs.py`. Do not edit manually.
 
@@ -13,7 +13,6 @@ This file documents all 121 XLIO runtime configuration parameters with their typ
 - **[APPLICATIONS](#applications)**
   - [`applications.nginx.distribute_cq`](#applicationsnginxdistribute_cq) — Distribute completion queue interrupts across workers
   - [`applications.nginx.udp_pool_size`](#applicationsnginxudp_pool_size) — UDP socket pool size
-  - [`applications.nginx.udp_socket_pool_reuse`](#applicationsnginxudp_socket_pool_reuse) — RX buffer reclaim threshold for pooled sockets
   - [`applications.nginx.workers_num`](#applicationsnginxworkers_num) — Number of Nginx workers
 - **[CORE](#core)**
   - [`core.exception_handling.mode`](#coreexception_handlingmode) — Exception handling mode
@@ -242,36 +241,7 @@ For rapid socket cycling (sub-second lifetimes): size to expected concurrent cou
 *Memory cost:* udp_pool_size × ~2-4KB per worker.
 (100 pool × 8 workers ≈ 1.6-3.2MB held in reserve)
 
-**Related:** [`applications.nginx.udp_socket_pool_reuse`](#applicationsnginxudp_socket_pool_reuse) controls receive buffer recycling.
-
-**Default:** `0`
-
-### `applications.nginx.udp_socket_pool_reuse`
-
-> **Type:** integer (min: 0)
->
-> **Maps to:** `XLIO_NGINX_UDP_POOL_REUSE_BUFFS`
-
-How many receive buffers a pooled UDP socket accumulates
-before returning them in bulk. Only applies when
-[`applications.nginx.udp_pool_size`](#applicationsnginxudp_pool_size) > 0.
-
-For most deployments, leave at 0 (default). The nginx
-profile ([`profiles.spec`](#profilesspec)) sets a batch size that balances
-throughput and resource usage without tuning.
-
-**When to adjust:**
-
-- *Value too high:* Each buffered descriptor holds a
-  hardware receive slot. If too many slots are held
-  across pooled sockets, the NIC cannot post new
-  receives and drops packets.
-  **Symptom:** "HW RX Packets dropped:" counter
-  increases in `xlio_stats` CQ output (`xlio_stats -v3`).
-- *Value too low:* Buffers are returned one at a time,
-  increasing internal lock contention.
-  **Symptom:** reduced throughput under high packet
-  rates with no other bottleneck visible.
+**Related:** `applications.nginx.udp_socket_pool_reuse` controls receive buffer recycling.
 
 **Default:** `0`
 

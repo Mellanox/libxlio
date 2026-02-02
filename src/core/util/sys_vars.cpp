@@ -873,7 +873,6 @@ void mce_sys_var::get_env_params()
     mtu = MCE_DEFAULT_MTU;
 #if defined(DEFINED_NGINX)
     nginx_udp_socket_pool_size = MCE_DEFAULT_NGINX_UDP_POOL_SIZE;
-    nginx_udp_socket_pool_rx_num_buffs_reuse = MCE_DEFAULT_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE;
 #endif
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     app.type = APP_NONE;
@@ -1724,9 +1723,6 @@ void mce_sys_var::get_env_params()
 #if defined(DEFINED_NGINX)
     if ((env_ptr = getenv(SYS_VAR_NGINX_UDP_POOL_SIZE))) {
         nginx_udp_socket_pool_size = (uint32_t)atoi(env_ptr);
-    }
-    if ((env_ptr = getenv(SYS_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE))) {
-        nginx_udp_socket_pool_rx_num_buffs_reuse = (uint32_t)atoi(env_ptr);
     }
 #endif // DEFINED_NGINX
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
