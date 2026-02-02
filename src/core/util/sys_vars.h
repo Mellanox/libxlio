@@ -470,7 +470,6 @@ public:
     struct {
         app_type_t type;
         int workers_num;
-        int src_port_stride;
         bool distribute_cq_interrupts;
     } app;
 #endif
@@ -666,8 +665,7 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_ENVOY_WORKERS_NUM "XLIO_ENVOY_WORKERS_NUM"
 #endif /* DEFINED_ENVOY */
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-#define SYS_VAR_SRC_PORT_STRIDE "XLIO_SRC_PORT_STRIDE"
-#define SYS_VAR_DISTRIBUTE_CQ   "XLIO_DISTRIBUTE_CQ"
+#define SYS_VAR_DISTRIBUTE_CQ "XLIO_DISTRIBUTE_CQ"
 #endif
 #define SYS_VAR_MSS         "XLIO_MSS"
 #define SYS_VAR_TCP_CC_ALGO "XLIO_TCP_CC_ALGO"
@@ -816,8 +814,7 @@ extern mce_sys_var &safe_mce_sys();
 #define CONFIG_VAR_ENVOY_WORKERS_NUM "XLIO_ENVOY_WORKERS_NUM"
 #endif /* DEFINED_ENVOY */
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-#define CONFIG_VAR_SRC_PORT_STRIDE "applications.nginx.src_port_stride"
-#define CONFIG_VAR_DISTRIBUTE_CQ   "applications.nginx.distribute_cq"
+#define CONFIG_VAR_DISTRIBUTE_CQ "applications.nginx.distribute_cq"
 #endif
 #define CONFIG_VAR_MSS         "network.protocols.tcp.mss"
 #define CONFIG_VAR_TCP_CC_ALGO "network.protocols.tcp.congestion_control"
@@ -970,7 +967,6 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_APP_WORKERS_NUM (0)
 #define MCE_DEFAULT_DISTRIBUTE_CQ   (false)
 #endif
-#define MCE_DEFAULT_SRC_PORT_STRIDE              (2)
 #define MCE_DEFAULT_MSS                          (0)
 #define MCE_DEFAULT_LWIP_CC_ALGO_MOD             (0)
 #define MCE_DEFAULT_INTERNAL_THREAD_AFFINITY     (-1)

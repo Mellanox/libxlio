@@ -187,7 +187,6 @@
     },
     "applications": {
         "nginx": {
-            "src_port_stride": 2,
             "workers_num": 0,
             "udp_pool_size": 0,
             "udp_socket_pool_reuse": 0,

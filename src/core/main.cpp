@@ -791,10 +791,6 @@ void print_env_vars_xlio_global_settings()
                                                             : MCE_DEFAULT_APP_WORKERS_NUM),
                       MCE_DEFAULT_APP_WORKERS_NUM, SYS_VAR_ENVOY_WORKERS_NUM);
 #endif /* DEFINED_ENVOY */
-#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    VLOG_PARAM_NUMBER("Src port stirde", safe_mce_sys().app.src_port_stride,
-                      MCE_DEFAULT_SRC_PORT_STRIDE, SYS_VAR_SRC_PORT_STRIDE);
-#endif
     VLOG_PARAM_STRING("fork() support", safe_mce_sys().handle_fork, MCE_DEFAULT_FORK_SUPPORT,
                       SYS_VAR_FORK, safe_mce_sys().handle_fork ? "Enabled " : "Disabled");
     VLOG_PARAM_STRING("close on dup2()", safe_mce_sys().close_on_dup2, MCE_DEFAULT_CLOSE_ON_DUP2,

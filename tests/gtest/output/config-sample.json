@@ -26,9 +26,13 @@
       "lro": "enable"
     }
   },
-  "applications": {
-    "nginx": {
-      "src_port_stride": 3
+  "network": {
+    "protocols": {
+      "tcp": {
+        "nodelay": {
+          "byte_threshold": 42
+        }
+      }
     }
   },
   "acceleration_control": {
