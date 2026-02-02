@@ -120,11 +120,13 @@ TEST_F(output, config_show_sample_values)
 
             // Log level is always shown
             "XLIO INFO   : Log level                      INFO                       [monitor.log.level]",
-            // Simple number
-            "XLIO INFO   : Source port stride             3                          [applications.nginx.src_port_stride, Reason: User-configured]",
         #ifdef DEFINED_UTLS
             // Simple boolean
             "Enable TLS RX offload          true                       [hardware_features.tcp.tls_offload.rx_enable, Reason: User-configured]",
+        #endif
+            // Simple number
+            "Data threshold for flush       42                         [network.protocols.tcp.nodelay.byte_threshold, Reason: User-configured]",
+        #ifdef DEFINED_UTLS
             // 4096 is shown as 4K
             "DEK max cache size             4K                         [hardware_features.tcp.tls_offload.dek_cache_max_size, Reason: User-configured]",
         #endif

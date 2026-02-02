@@ -878,7 +878,6 @@ void mce_sys_var::get_env_params()
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     app.type = APP_NONE;
     app.workers_num = MCE_DEFAULT_APP_WORKERS_NUM;
-    app.src_port_stride = MCE_DEFAULT_SRC_PORT_STRIDE;
     app.distribute_cq_interrupts = MCE_DEFAULT_DISTRIBUTE_CQ;
 #endif
     lwip_mss = MCE_DEFAULT_MSS;
@@ -1731,9 +1730,6 @@ void mce_sys_var::get_env_params()
     }
 #endif // DEFINED_NGINX
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    if ((env_ptr = getenv(SYS_VAR_SRC_PORT_STRIDE))) {
-        app.src_port_stride = (uint32_t)atoi(env_ptr);
-    }
     if ((env_ptr = getenv(SYS_VAR_DISTRIBUTE_CQ))) {
         app.distribute_cq_interrupts = atoi(env_ptr) ? true : false;
     }

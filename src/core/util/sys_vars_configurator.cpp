@@ -197,8 +197,6 @@ const config_var_info_t<int, int64_t> CONFIG_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REU
 const config_var_info_t<int, int64_t> CONFIG_VAR_NGINX_WORKERS_NUM {
     "applications.nginx.workers_num"};
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-const config_var_info_t<int, int64_t> CONFIG_VAR_SRC_PORT_STRIDE {
-    "applications.nginx.src_port_stride"};
 const config_var_info_t<bool> CONFIG_VAR_DISTRIBUTE_CQ {"applications.nginx.distribute_cq"};
 #endif
 const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_MSS {"network.protocols.tcp.mss"};
@@ -624,8 +622,6 @@ void sys_var_configurator::initialize_base_variables()
     m_sys_vars.app.type = APP_NONE; // not a config key
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.app.workers_num,
                                                       CONFIG_VAR_NGINX_WORKERS_NUM);
-    m_runtime_registry.register_and_set_default_value(&m_sys_vars.app.src_port_stride,
-                                                      CONFIG_VAR_SRC_PORT_STRIDE);
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.app.distribute_cq_interrupts,
                                                       CONFIG_VAR_DISTRIBUTE_CQ);
 #endif

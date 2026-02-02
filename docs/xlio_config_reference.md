@@ -1,6 +1,6 @@
 # XLIO Configuration Reference
 
-This file documents all 122 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
+This file documents all 121 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
 
 > **Auto-generated** from the JSON schema by `generate_docs.py`. Do not edit manually.
 
@@ -12,7 +12,6 @@ This file documents all 122 XLIO runtime configuration parameters with their typ
   - [`acceleration_control.rules`](#acceleration_controlrules) — Acceleration control rules
 - **[APPLICATIONS](#applications)**
   - [`applications.nginx.distribute_cq`](#applicationsnginxdistribute_cq) — Distribute completion queue interrupts across workers
-  - [`applications.nginx.src_port_stride`](#applicationsnginxsrc_port_stride) — Source port stride
   - [`applications.nginx.udp_pool_size`](#applicationsnginxudp_pool_size) — UDP socket pool size
   - [`applications.nginx.udp_socket_pool_reuse`](#applicationsnginxudp_socket_pool_reuse) — RX buffer reclaim threshold for pooled sockets
   - [`applications.nginx.workers_num`](#applicationsnginxworkers_num) — Number of Nginx workers
@@ -210,93 +209,6 @@ spreading interrupts across 8 different completion vectors instead of concentrat
 completion vector 0.
 
 **Default:** `false`
-
-### `applications.nginx.src_port_stride`
-
-> **Type:** integer (min: 2)
->
-> **Maps to:** `XLIO_NGINX_SRC_PORT_STRIDE`
-
-Controls how incoming connections are distributed across Nginx worker processes using hardware flow
-steering rules based on source port patterns.
-
-**How It Works:**
-XLIO creates hardware flow steering rules that match incoming packets based on their source port.
-Each Nginx worker is assigned a unique range of source port values. The stride controls how far
-apart these ranges are spaced.
-
-Internally, XLIO rounds the worker count up to the nearest power of 2, then builds a bitmask from
-the rounded count and the stride. The bitmask intentionally excludes the least significant bit of
-the port number (see "Why Minimum is 2" below). Each worker is assigned a unique value within that
-mask, and the NIC routes packets whose source port matches the worker's value.
-
-**Why Minimum is 2:**
-The minimum value of 2 ensures the least significant bit of
-the source port is excluded from steering decisions. Linux
-connect() preferentially allocates even ephemeral ports, so
-the least significant bit is typically 0 for all incoming
-connections — including it in the mask would provide no
-differentiation between workers.
-
-**Example with 4 workers and stride=2 (default):**
-XLIO examines bits 1-2 of each source port (ignoring bit 0). The four workers receive packets
-based on those two bits:
-
-- Worker 0: source ports where bits 1-2 are 00 (e.g., 0, 1, 8, 9, 16, 17, ...)
-- Worker 1: source ports where bits 1-2 are 01 (e.g., 2, 3, 10, 11, 18, 19, ...)
-- Worker 2: source ports where bits 1-2 are 10 (e.g., 4, 5, 12, 13, 20, 21, ...)
-- Worker 3: source ports where bits 1-2 are 11 (e.g., 6, 7, 14, 15, 22, 23, ...)
-
-**Low Values (e.g., 2 - default):**
-
-**Benefits:**
-
-- Supports more workers with the same hardware flow steering capacity
-- Uses fewer bits from the 16-bit port space per steering rule
-- Works well with high worker counts (8, 16, 32+ Nginx workers)
-- Lower hardware resource usage per steering rule
-
-**Drawbacks:**
-
-- Connection distribution depends more heavily on client source port patterns
-- Adjacent workers may receive similar traffic volumes if client ports cluster
-
-**High Values (e.g., 4, 8, 16):**
-
-**Benefits:**
-
-- May provide more uniform distribution for certain client traffic patterns
-- Greater separation between worker port ranges reduces steering conflicts
-- Can help when clients generate ports with specific bit patterns
-
-**Drawbacks:**
-
-- Limits maximum supported workers: the product of the rounded worker count
-  and the stride must fit within the 16-bit port space
-- Uses more bits in the port mask, potentially overlapping with meaningful port ranges
-- Diminishing returns for most real-world traffic patterns
-
-**Non-Power-of-2 Workers:**
-When [`workers_num`](#applicationsnginxworkers_num) is not a power of 2 (e.g., 3, 5, 6, 7 workers), XLIO automatically:
-1. Rounds up to the next power of 2 for flow steering rules
-2. Creates secondary rules for some workers to balance the load
-3. Workers with lower IDs receive additional connection slots
-
-For example, with 3 workers (rounded to 4 slots):
-
-- Worker 0: receives 2 slots (primary + secondary rule)
-- Worker 1: receives 1 slot
-- Worker 2: receives 1 slot
-
-**Recommended Settings:**
-
-- For most deployments: Use default value of 2
-- For power-of-2 worker counts (2, 4, 8, 16): Default works optimally
-- For high worker counts (32+): Stick with 2 to maximize supported workers
-- Only increase if you observe uneven distribution with default settings
-  and have analyzed your client source port patterns
-
-**Default:** `2`
 
 ### `applications.nginx.udp_pool_size`
 
