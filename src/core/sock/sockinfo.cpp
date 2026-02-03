@@ -1926,7 +1926,7 @@ int sockinfo::modify_ratelimit(dst_entry *p_dst_entry, struct xlio_rate_limit_t 
 }
 
 int sockinfo::setsockopt_kernel(int __level, int __optname, const void *__optval,
-                                socklen_t __optlen, int supported, bool allow_privileged)
+                                socklen_t __optlen, int supported)
 {
     if (!supported) {
         char buf[256];
@@ -1960,13 +1960,7 @@ int sockinfo::setsockopt_kernel(int __level, int __optname, const void *__optval
     int ret = SYSCALL(setsockopt, m_fd, __level, __optname, __optval, __optlen);
     BULLSEYE_EXCLUDE_BLOCK_START
     if (ret) {
-        if (EPERM == errno && allow_privileged) {
-            si_logdbg("setsockopt failure is suppressed (ret=%d %m)", ret);
-            ret = 0;
-            errno = 0;
-        } else {
-            si_logdbg("setsockopt failed (ret=%d %m)", ret);
-        }
+        si_logdbg("setsockopt failed (ret=%d %m)", ret);
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 

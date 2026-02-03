@@ -1,6 +1,6 @@
 # XLIO Configuration Reference
 
-This file documents all 125 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
+This file documents all 124 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
 
 > **Auto-generated** from the JSON schema by `generate_docs.py`. Do not edit manually.
 
@@ -28,7 +28,6 @@ This file documents all 125 XLIO runtime configuration parameters with their typ
   - [`core.resources.memory_limit`](#coreresourcesmemory_limit) — Memory limit (bytes)
   - [`core.signals.sigint.exit`](#coresignalssigintexit) — Exit on SIGINT
   - [`core.signals.sigsegv.backtrace`](#coresignalssigsegvbacktrace) — Print backtrace on SIGSEGV
-  - [`core.syscall.allow_privileged_sockopt`](#coresyscallallow_privileged_sockopt) — Allow privileged socket options
   - [`core.syscall.avoid_ctl_syscalls`](#coresyscallavoid_ctl_syscalls) — Avoid system control calls on TCP
   - [`core.syscall.deferred_close`](#coresyscalldeferred_close) — Defer closing of file descriptors
   - [`core.syscall.dup2_close_fd`](#coresyscalldup2_close_fd) — Support dup2 calls
@@ -739,30 +738,6 @@ Registers a SIGSEGV handler to print stack backtraces on crash.
 - *false*: Full core dump and debugger support. Better for production post-mortem analysis.
 
 **Default:** `false`
-
-### `core.syscall.allow_privileged_sockopt`
-
-> **Type:** boolean
->
-> **Maps to:** `XLIO_ALLOW_PRIVILEGED_SOCK_OPT`
-
-Suppresses EPERM errors from privileged socket options, returning success to the application.
-
-**How it works:**
-Some socket options (e.g., SO_BINDTODEVICE) require CAP_NET_RAW or root privileges.
-When enabled and the kernel returns EPERM, XLIO suppresses the error and returns success.
-XLIO still processes the option internally regardless of kernel result.
-
-**Affected socket option:** SO_BINDTODEVICE (bind socket to a specific network interface)
-
-**Tradeoffs:**
-
-- *true* (default): Applications can use SO_BINDTODEVICE without root. XLIO handles
-  binding internally. May mask permission issues indicating configuration problems.
-- *false*: EPERM errors propagate to application. Stricter error handling exposes
-  actual kernel failures. Better for debugging permission-related issues.
-
-**Default:** `true`
 
 ### `core.syscall.avoid_ctl_syscalls`
 

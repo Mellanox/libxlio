@@ -118,7 +118,6 @@ extern const config_var_info_t<bool> CONFIG_VAR_TCP_NODELAY;
 extern const config_var_info_t<bool> CONFIG_VAR_TCP_QUICKACK;
 extern const config_var_info_t<bool> CONFIG_VAR_TCP_PUSH_FLAG;
 extern const config_var_info_t<bool> CONFIG_VAR_AVOID_SYS_CALLS_ON_TCP_FD;
-extern const config_var_info_t<bool> CONFIG_VAR_ALLOW_PRIVILEGED_SOCK_OPT;
 extern const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_WAIT_AFTER_JOIN_MSEC;
 extern const config_var_info_t<buffer_batching_mode_t, int64_t> CONFIG_VAR_BUFFER_BATCHING_MODE;
 extern const config_var_info_t<option_alloc_type::mode_t, bool> CONFIG_VAR_MEM_ALLOC_TYPE;

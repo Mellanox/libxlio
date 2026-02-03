@@ -175,8 +175,6 @@ const config_var_info_t<bool> CONFIG_VAR_TCP_QUICKACK {"network.protocols.tcp.qu
 const config_var_info_t<bool> CONFIG_VAR_TCP_PUSH_FLAG {"network.protocols.tcp.push"};
 const config_var_info_t<bool> CONFIG_VAR_AVOID_SYS_CALLS_ON_TCP_FD {
     "core.syscall.avoid_ctl_syscalls"};
-const config_var_info_t<bool> CONFIG_VAR_ALLOW_PRIVILEGED_SOCK_OPT {
-    "core.syscall.allow_privileged_sockopt"};
 const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_WAIT_AFTER_JOIN_MSEC {
     "network.multicast.wait_after_join_msec"};
 const config_var_info_t<buffer_batching_mode_t, int64_t> CONFIG_VAR_BUFFER_BATCHING_MODE {
@@ -584,9 +582,6 @@ void sys_var_configurator::initialize_base_variables()
 
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.avoid_sys_calls_on_tcp_fd,
                                                       CONFIG_VAR_AVOID_SYS_CALLS_ON_TCP_FD);
-
-    m_runtime_registry.register_and_set_default_value(&m_sys_vars.allow_privileged_sock_opt,
-                                                      CONFIG_VAR_ALLOW_PRIVILEGED_SOCK_OPT);
 
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.wait_after_join_msec,
                                                       CONFIG_VAR_WAIT_AFTER_JOIN_MSEC);
