@@ -878,7 +878,6 @@ void mce_sys_var::get_env_params()
     tcp_push_flag = MCE_DEFAULT_TCP_PUSH_FLAG;
     //	exception_handling is handled by its CTOR
     avoid_sys_calls_on_tcp_fd = MCE_DEFAULT_AVOID_SYS_CALLS_ON_TCP_FD;
-    allow_privileged_sock_opt = MCE_DEFAULT_ALLOW_PRIVILEGED_SOCK_OPT;
     wait_after_join_msec = MCE_DEFAULT_WAIT_AFTER_JOIN_MSEC;
     buffer_batching_mode = MCE_DEFAULT_BUFFER_BATCHING_MODE;
     mem_alloc_type = MCE_DEFAULT_MEM_ALLOC_TYPE;
@@ -1613,10 +1612,6 @@ void mce_sys_var::get_env_params()
         avoid_sys_calls_on_tcp_fd = atoi(env_ptr) ? true : false;
     }
 
-    if ((env_ptr = getenv(SYS_VAR_ALLOW_PRIVILEGED_SOCK_OPT))) {
-        allow_privileged_sock_opt = atoi(env_ptr) ? true : false;
-    }
-
     if (tcp_timer_resolution_msec < timer_resolution_msec) {
         vlog_printf(VLOG_WARNING,
                     "TCP timer resolution [%s=%d] cannot be smaller than timer resolution "
@@ -2029,8 +2024,6 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
     tcp_push_flag = registry.get_default_value<bool>("network.protocols.tcp.push");
     // Exception_handling is handled by its CTOR
     avoid_sys_calls_on_tcp_fd = registry.get_default_value<bool>("core.syscall.avoid_ctl_syscalls");
-    allow_privileged_sock_opt =
-        registry.get_default_value<bool>("core.syscall.allow_privileged_sockopt");
     wait_after_join_msec =
         registry.get_default_value<uint32_t>("network.multicast.wait_after_join_msec");
     buffer_batching_mode = static_cast<buffer_batching_mode_t>(
@@ -2739,9 +2732,6 @@ void mce_sys_var::configure_memory_limits(const config_registry &registry)
 
     set_value_from_registry_if_exists(avoid_sys_calls_on_tcp_fd, "core.syscall.avoid_ctl_syscalls",
                                       registry);
-
-    set_value_from_registry_if_exists(allow_privileged_sock_opt,
-                                      "core.syscall.allow_privileged_sockopt", registry);
 
     if (tcp_timer_resolution_msec < timer_resolution_msec) {
         vlog_printf(VLOG_WARNING,

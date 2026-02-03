@@ -130,7 +130,6 @@ Example:
  XLIO DETAILS: TCP quickack                   0                          [network.protocols.tcp.quickack]
  XLIO DETAILS: Exception handling mode        -1(just log debug message) [core.exception_handling.mode]
  XLIO DETAILS: Avoid sys-calls on tcp fd      Disabled                   [core.syscall.avoid_ctl_syscalls]
- XLIO DETAILS: Allow privileged sock opt      Enabled                    [core.syscall.allow_privileged_sockopt]
  XLIO DETAILS: Delay after join (msec)        0                          [network.multicast.wait_after_join_msec]
  XLIO DETAILS: Internal Thread Affinity       -1                         [performance.threading.cpu_affinity]
  XLIO DETAILS: Internal Thread Cpuset                                    [performance.threading.cpuset]
@@ -316,11 +315,6 @@ core.signals.sigsegv.backtrace
 Maps to **XLIO_HANDLE_SIGSEGV** environment variable.
 When enabled, print backtrace if segmentation fault happens.
 Default value is false
-
-core.syscall.allow_privileged_sockopt
-Maps to **XLIO_ALLOW_PRIVILEGED_SOCK_OPT** environment variable.
-Permit the use of privileged socket options that might require special permissions.
-Default value is true
 
 core.syscall.avoid_ctl_syscalls
 Maps to **XLIO_AVOID_SYS_CALLS_ON_TCP_FD** environment variable.

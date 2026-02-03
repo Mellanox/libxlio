@@ -717,9 +717,6 @@ void print_env_vars_xlio_global_settings()
     VLOG_PARAM_STRING("Avoid sys-calls on tcp fd", safe_mce_sys().avoid_sys_calls_on_tcp_fd,
                       MCE_DEFAULT_AVOID_SYS_CALLS_ON_TCP_FD, SYS_VAR_AVOID_SYS_CALLS_ON_TCP_FD,
                       safe_mce_sys().avoid_sys_calls_on_tcp_fd ? "Enabled" : "Disabled");
-    VLOG_PARAM_STRING("Allow privileged sock opt", safe_mce_sys().allow_privileged_sock_opt,
-                      MCE_DEFAULT_ALLOW_PRIVILEGED_SOCK_OPT, SYS_VAR_ALLOW_PRIVILEGED_SOCK_OPT,
-                      safe_mce_sys().allow_privileged_sock_opt ? "Enabled" : "Disabled");
     VLOG_PARAM_NUMBER("Delay after join (msec)", safe_mce_sys().wait_after_join_msec,
                       MCE_DEFAULT_WAIT_AFTER_JOIN_MSEC, SYS_VAR_WAIT_AFTER_JOIN_MSEC);
     VLOG_STR_PARAM_STRING("Internal Thread Affinity", safe_mce_sys().internal_thread_affinity_str,
