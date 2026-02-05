@@ -10,6 +10,7 @@
 #include "dev/ring_simple.h"
 #include <netinet/ip6.h>
 #include <sock/sockinfo_tcp.h>
+#include <proto/tls.h>
 
 #define MODULE_NAME "rfs_uc_tcp_gro"
 
@@ -64,6 +65,15 @@ bool rfs_uc_tcp_gro::rx_dispatch_packet(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_in
     struct tcphdr *p_tcp_h = p_rx_pkt_mem_buf_desc_info->rx.tcp.p_tcp_h;
     uint16_t explicit_hdr_len; // L3 header size is not included in IPv6 payload field.
     uint16_t tot_len;
+
+#ifdef DEFINED_UTLS
+    // Do not allow packets with HW TLS RX Resync into GRO.
+    // To avoid the need to propogate that information to the socket.
+    // The resync flag could be on any packet inside a big GRO.
+    if (p_rx_pkt_mem_buf_desc_info->rx.tls_decrypted == TLS_RX_RESYNC) {
+        goto out;
+    }
+#endif
 
     if (!m_b_active) {
         if (!m_b_reserved && m_p_gro_mgr->is_stream_max()) {

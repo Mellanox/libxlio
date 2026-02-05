@@ -12,7 +12,7 @@
 #include "cq_mgr_rx_inl.h"
 #include "hw_queue_rx.h"
 #include "ring_simple.h"
-
+#include "proto/tls.h"
 #include <netinet/ip6.h>
 
 #define MODULE_NAME "cq_mgr_rx_regrq"
@@ -113,6 +113,10 @@ void cq_mgr_rx_regrq::cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe,
         p_rx_wc_buf_desc->sz_data = ntohl(cqe->byte_cnt);
 #ifdef DEFINED_UTLS
         p_rx_wc_buf_desc->rx.tls_decrypted = (cqe->pkt_info >> 3) & 0x3;
+        if (unlikely(p_rx_wc_buf_desc->rx.tls_decrypted == TLS_RX_RESYNC)) {
+            // The branch prevents another cache line to be fetched.
+            ++(m_p_cq_stat->n_rx_tls_resync);
+        }
 #endif /* DEFINED_UTLS */
         p_rx_wc_buf_desc->rx.timestamps.hw_raw = ntohll(cqe->timestamp);
         uint32_t sop_rxdrop_qpn_flowtag_h_byte = ntohl(cqe->sop_rxdrop_qpn_flowtag);

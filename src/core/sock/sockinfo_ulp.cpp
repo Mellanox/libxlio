@@ -13,6 +13,71 @@
 #include <errno.h>
 #include <sys/socket.h>
 
+// ------------------------------------------------------------------------------------------------
+// HW TLS RX Resync
+// ------------------------------------------------------------------------------------------------
+// HW TLS RX Resync happnes when HW looses tracking of the TLS records. It can be due to out of
+// order packets or retransmissions. HW generates a resync flag on the CQE of the packet where
+// it lost tracking. Once HW lost tracking it moves to a Searching mode where it looks for next
+// TLS record magic number.
+// Once HW finds that magic number it stores the found TCP seq no in the static HW TLS RX context.
+// Application should fetch that TCP seq no via get-psv WQE and read that TCP seq.
+// Application should verify if that TCP seq no belongs to a TLS record and approve that via
+// set-psv WQE. However, it is not enough just to approve the TCP seq no, in the set-psv WQE
+// the application should also state what is the correct TLS record number that belongs to that
+// TCP seq no. HW will try to authenticate next record using the record number. And only if it
+// succedes it will resume offloading.
+// HW context contains two parameters:
+// MLX5E_TLS_PROGRESS_PARAMS_RECORD_TRACKER_STATE:
+// - MLX5E_TLS_PROGRESS_PARAMS_RECORD_TRACKER_STATE_START -
+//   The state at the beggining of the TLS session - Set by a progress WQE.
+// - MLX5E_TLS_PROGRESS_PARAMS_RECORD_TRACKER_STATE_TRACKING -
+//   HW is locked on the TLS stream while offloading or not. In the resync process
+//   HW may find the next record magic number but untill we approve it and it can authenticate
+//   the next record it will not offload bubt continue tracking.
+// - MLX5E_TLS_PROGRESS_PARAMS_RECORD_TRACKER_STATE_SEARCHING -
+//   HW lost tracking of the TLS stream and is now searching for next record magic number.
+//   In this state HW is not offloading.
+// MLX5E_TLS_PROGRESS_PARAMS_AUTH_STATE
+// - MLX5E_TLS_PROGRESS_PARAMS_AUTH_STATE_NO_OFFLOAD -
+//   HW is not offloading whether it is now tracking, searching or starting.
+// - MLX5E_TLS_PROGRESS_PARAMS_AUTH_STATE_OFFLOAD -
+//   HW is offloading. And obviously tracking (The desired state).
+// - MLX5E_TLS_PROGRESS_PARAMS_AUTH_STATE_AUTHENTICATION -
+//   We approved the HW found TCP seqno but the HW now in process of authenticating the next record.
+//   No offload at this stage. If authentication succeeds, HW will move to Offload state.
+//   If it fails, it will not offload (Not described in PRM).
+// Resync special cases:
+// HW generates resync request then we generate get-psv WQE
+// Case 1 - HW is still searching (MLX5E_TLS_PROGRESS_PARAMS_RECORD_TRACKER_STATE_SEARCHING)
+//          Nothing to do at this stage. We should generate another get-psv to try again.
+// Case 2 - HW is tracking
+// Case 2.1 HW returns the found seqno that belongs to a record that we alrady have parsed
+//          We approve the HW with static param WQE.
+// Case 2.2 HW returns a TCP seqno that does not belong to a known record
+// - Case 2.2.1 We still didn't parse/read to that record - We will try to recheck when we parse
+//              to that TCP seq no.
+// - Case 2.2.2 We already parsed beyond the given TCP seqno. We retry with another get-psv
+//              (Not described well in PRM).
+// Case 2.3 Multi-Resync (Not described in PRM - From Observations)
+// - Case 2.3.1 HW completes the get-psv wqe with info but immediately looses tracking again
+//              before we could read the result. HW should generate another resync request (Not
+//              described in PRM). Once we receive the result, we still do not know that it lost
+//              tracking again, we should procced as normal. We will approve with outdated TCP seqno
+//              which will not match the HW context.
+// - Case 2.3.2 HW looses tracking and finds new magic number before it completes out first get-psv.
+//              Since get-psv is performed on the TX queue, there is n o sync between get-psv and RX
+//              packets. HW will generate a resync and complete out get-psv with the new TCP seqno.
+//              We will receive the new TCPseq no and approve. But then we get another resync
+//              request. We send get-psv and will receive TRACKING and OFFLOAD state as result. We
+//              should igonre this result as the HW already offloads.
+// - Case 2.3.3 Same as 2.3.2, but our second get-psv returns AUTHENTICATION state, since the HW
+//              may still be in trying to authenticate next record. We should ignore this result
+//              and if auth fails, we should get another resync request eventually, being HW
+//              sending another resync if TCP seqno match but auth fails or being it loosing
+//              tracking eventually.
+// ------------------------------------------------------------------------------------------------
+
 #define MODULE_NAME "si_ulp"
 
 #define si_ulp_logdbg  __log_info_dbg
@@ -369,7 +434,6 @@ sockinfo_tcp_ops_tls::sockinfo_tcp_ops_tls(sockinfo_tcp *sock)
     m_refused_data = nullptr;
     m_rx_rule = nullptr;
     m_rx_psv_buf = nullptr;
-    m_rx_resync_recno = 0;
 }
 
 sockinfo_tcp_ops_tls::~sockinfo_tcp_ops_tls()
@@ -635,6 +699,11 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
                                                        &rx_comp_callback, this);
                 if (unlikely(rc != 0)) {
                     m_p_tx_ring->credits_return(SQ_CREDITS_TLS_RX_CONTEXT);
+                } else {
+                    m_rx_next_rec_tcp_seq = next_seqno_rx;
+                    m_recno_tcp_seq.emplace_back(m_next_recno_rx, m_rx_next_rec_tcp_seq);
+                    si_ulp_logdbg("TLS RX initial record num: %" PRIu64 " TCP sqeno %" PRIu32,
+                                  m_next_recno_rx, m_rx_next_rec_tcp_seq);
                 }
             } else {
                 si_ulp_logdbg("No available space in SQ to create TLS RX context");
@@ -1260,9 +1329,6 @@ int sockinfo_tcp_ops_tls::tls_rx_encrypt(struct pbuf *plist)
 
 err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
 {
-    bool resync_requested = false;
-    err_t err;
-
     if (m_rx_bufs.empty()) {
         m_rx_offset = 0;
     }
@@ -1272,9 +1338,6 @@ err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
         mem_buf_desc_t *pdesc = reinterpret_cast<mem_buf_desc_t *>(p);
         struct pbuf *ptmp = p->next;
 
-        if (unlikely(pdesc->rx.tls_decrypted == TLS_RX_RESYNC)) {
-            resync_requested = true;
-        }
         pdesc->rx.n_frags = 1;
         p->tot_len = p->len;
         p->next = nullptr;
@@ -1282,23 +1345,20 @@ err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
         p = ptmp;
     }
 
-    if (unlikely(resync_requested && !m_rx_psv_buf) &&
+    if (unlikely((!m_pending_resync_seqno) && (m_tls_rx_need_resync) && !m_rx_psv_buf) &&
         m_p_tx_ring->credits_get(SQ_CREDITS_TLS_RX_GET_PSV)) {
         /* If we fail to request credits we will retry resync flow with the next incoming packet. */
         m_rx_psv_buf = m_p_sock->tcp_tx_mem_buf_alloc(PBUF_RAM);
         m_rx_psv_buf->lwip_pbuf.payload =
             (void *)(((uintptr_t)m_rx_psv_buf->p_buffer + 63U) >> 6U << 6U);
         uint8_t *payload = (uint8_t *)m_rx_psv_buf->lwip_pbuf.payload;
-        if (likely(m_rx_psv_buf->sz_buffer >= (size_t)(payload - m_rx_psv_buf->p_buffer + 64))) {
-            memset(m_rx_psv_buf->lwip_pbuf.payload, 0, 64);
-            m_rx_resync_recno = m_next_recno_rx;
-            m_p_tx_ring->tls_get_progress_params_rx(m_p_tir, payload, LKEY_TX_DEFAULT);
-            if (m_p_sock->get_sock_stats()) {
-                ++m_p_sock->get_sock_stats()->tls_counters.n_tls_rx_resync;
-            }
-        }
+        // We always should have sz_buffer bigger than 64 since it must be at least MTU.
+        memset(m_rx_psv_buf->lwip_pbuf.payload, 0, 64);
+        m_p_tx_ring->tls_get_progress_params_rx(m_p_tir, payload, LKEY_TX_DEFAULT);
+        IF_STATS_OB(m_p_sock, ++(TLS_STATS(m_p_sock).n_tls_rx_resync_attempt));
     }
 
+    err_t err;
     if (unlikely(m_refused_data)) {
         err =
             sockinfo_tcp::rx_lwip_cb((void *)m_p_sock, m_p_sock->get_pcb(), m_refused_data, ERR_OK);
@@ -1483,6 +1543,13 @@ check_single_record:
     }
 
     ++m_next_recno_rx;
+    m_rx_next_rec_tcp_seq += m_rx_rec_len;
+    if (m_tls_rx_need_resync) {
+        m_recno_tcp_seq.emplace_back(m_next_recno_rx, m_rx_next_rec_tcp_seq);
+        if (m_pending_resync_seqno) {
+            rx_comp_callback(this);
+        }
+    }
 
     tcp_recved(m_p_sock->get_pcb(), m_tls_rec_overhead, true);
     if (likely(pres)) {
@@ -1541,14 +1608,30 @@ err_t sockinfo_tcp_ops_tls::rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct p
 
 uint64_t sockinfo_tcp_ops_tls::find_recno(uint32_t seqno)
 {
-    /*
-     * TODO Find proper record number for specific seqno.
-     * Current implementation is a speculation. We need to track TCP seqno
-     * of TLS records to provide correct record number and verify that the
-     * seqno points to a TLS header.
-     */
-    NOT_IN_USE(seqno);
-    return m_rx_resync_recno;
+    while (!m_recno_tcp_seq.empty()) {
+        auto item = m_recno_tcp_seq.front();
+        if (item.second == seqno) {
+            m_recno_tcp_seq.pop_front();
+            return item.first;
+        }
+
+        if (TCP_SEQ_LT(item.second, seqno)) {
+            m_recno_tcp_seq.pop_front();
+        } else {
+            break;
+        }
+    }
+
+    return 0U;
+}
+
+void sockinfo_tcp_ops_tls::rx_resync_success()
+{
+    if (!(--m_tls_rx_need_resync)) {
+        m_recno_tcp_seq.clear();
+    }
+
+    IF_STATS_OB(m_p_sock, ++(TLS_STATS(m_p_sock).n_tls_rx_resync_success));
 }
 
 /* static */
@@ -1556,27 +1639,61 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
 {
     sockinfo_tcp_ops_tls *utls = reinterpret_cast<sockinfo_tcp_ops_tls *>(arg);
 
-    if (utls->m_rx_psv_buf) {
-        /* Resync flow, GET_PSV is completed. */
+    utls->m_p_sock->lock_tcp_con();
+
+    if (utls->m_rx_psv_buf) { // Resync flow, GET_PSV is completed.
         struct xlio_tls_progress_params *params =
-            (struct xlio_tls_progress_params *)utls->m_rx_psv_buf->lwip_pbuf.payload;
+            reinterpret_cast<struct xlio_tls_progress_params *>(
+                utls->m_rx_psv_buf->lwip_pbuf.payload);
         uint32_t resync_seqno = be32toh(params->hw_resync_tcp_sn);
         int tracker = params->state >> 6U;
         int auth = (params->state >> 4U) & 0x3U;
-        if (tracker == TLS_TRACKER_TRACKING && auth == TLS_AUTH_NO_OFFLOAD) {
-            if (utls->m_p_tx_ring->credits_get(SQ_CREDITS_TLS_RX_RESYNC)) {
+        utls->m_pending_resync_seqno = false;
+
+        if (tracker == TLS_TRACKER_TRACKING) {
+            // The HW is tracking the stream (TLS record Magic number found)
+            if (auth == TLS_AUTH_NO_OFFLOAD) { // The HW not offloading yet.
                 uint64_t recno_be64 = htobe64(utls->find_recno(resync_seqno));
-                memcpy(utls->m_tls_info_rx.rec_seq, &recno_be64, TLS_AES_GCM_REC_SEQ_LEN);
-                utls->m_p_tx_ring->tls_resync_rx(utls->m_p_tir, &utls->m_tls_info_rx, resync_seqno);
+                if (recno_be64) { // We found a TLS record for the reported TCP sequence
+                    if (utls->m_p_tx_ring->credits_get(SQ_CREDITS_TLS_RX_RESYNC)) {
+                        memcpy(utls->m_tls_info_rx.rec_seq, &recno_be64, TLS_AES_GCM_REC_SEQ_LEN);
+                        utls->m_p_tx_ring->tls_resync_rx(utls->m_p_tir, &utls->m_tls_info_rx,
+                                                         resync_seqno);
+                        utls->rx_resync_success();
+                    } else { // No TX credits - We will retry RX resync with the next incoming
+                             // packet.
+                        utls->m_pending_resync_seqno = true;
+                        vlog_printf(VLOG_DEBUG, "Skip TLS RX resync due to full SQ\n");
+                    }
+                } else if (utls->m_recno_tcp_seq.empty()) {
+                    // We still have not parsed to the point of HW reported TCP-seq.
+                    utls->m_pending_resync_seqno = true;
+                } else {
+                    // Wrong TCP Seq was found by the HW, since we parsed bayond the reported TCP
+                    // seq. See comment at top of this file.
+                    IF_STATS_OB(utls->m_p_sock,
+                                ++(TLS_STATS(utls->m_p_sock).n_tls_rx_resync_retry));
+                    vlog_printf(VLOG_DEBUG, "TLS RX Record number not found: seqno: %u\n",
+                                resync_seqno);
+                }
             } else {
-                /* We will retry RX resync with the next incoming packet. */
-                vlog_printf(VLOG_DEBUG, "Skip TLS RX resync due to full SQ\n");
+                // HW is already offloading or authenticating.
+                // Possible in case of multi Resync - See comment at top of this file.
+                utls->rx_resync_success();
             }
         } else {
-            /* TODO Investigate this case. It isn't described in PRM. */
+            // TLS_TRACKER_SEARCHING - HW still didnt find the Magic number.
+            // TLS_TRACKER_START - Should happen only upon session start but observed also later in
+            // the connection randomly. We have nothing to do in this case but to retry the psv
+            // until HW locks on a TLS record. See comment at top of this file.
+            IF_STATS_OB(utls->m_p_sock, ++(TLS_STATS(utls->m_p_sock).n_tls_rx_resync_long));
+            vlog_printf(VLOG_DEBUG, "TLS RX Not Tracking T: %d, A: %d\n", tracker, auth);
         }
-        utls->m_p_tx_ring->mem_buf_desc_return_single_to_owner_tx(utls->m_rx_psv_buf);
-        utls->m_rx_psv_buf = nullptr;
+
+        if (!utls->m_pending_resync_seqno) {
+            utls->m_p_tx_ring->mem_buf_desc_return_single_to_owner_tx(utls->m_rx_psv_buf);
+            utls->m_rx_psv_buf = nullptr;
+        }
     } else if (!utls->m_rx_rule) {
         /* Initial setup flow. */
         const flow_tuple_with_local_if &tuple = utls->m_p_sock->get_flow_tuple();
@@ -1585,5 +1702,7 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
             vlog_printf(VLOG_ERROR, "TLS rule failed for %s\n", tuple.to_str().c_str());
         }
     }
+
+    utls->m_p_sock->unlock_tcp_con();
 }
 #endif /* DEFINED_UTLS */

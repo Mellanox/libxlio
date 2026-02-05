@@ -165,7 +165,10 @@ typedef struct {
     uint32_t n_tls_rx_records_mix_enc;
     uint32_t n_tls_rx_records_hw_auth_fail;
     uint32_t n_tls_rx_records_sw_dec_fail;
-    uint32_t n_tls_rx_resync;
+    uint32_t n_tls_rx_resync_attempt;
+    uint32_t n_tls_rx_resync_success;
+    uint32_t n_tls_rx_resync_retry;
+    uint32_t n_tls_rx_resync_long;
 } socket_tls_counters_t;
 #endif /* DEFINED_UTLS */
 
@@ -319,12 +322,13 @@ typedef struct {
     uint64_t n_rx_hw_pkt_drops;
     uint64_t n_rx_packet_count;
     uint64_t n_rx_consumed_rwqe_count;
-    uint64_t n_rx_sw_pkt_drops;
     uint64_t n_rx_lro_packets;
     uint64_t n_rx_lro_bytes;
     uint64_t n_rx_gro_packets;
     uint64_t n_rx_gro_bytes;
     uint64_t n_rx_gro_frags;
+    uint64_t n_rx_sw_pkt_drops;
+    uint32_t n_rx_tls_resync;
     uint32_t n_rx_sw_queue_len;
     uint32_t n_rx_drained_at_once_max;
     uint32_t n_buffer_pool_len;
