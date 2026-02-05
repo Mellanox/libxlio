@@ -17,7 +17,6 @@ config_mapping = {
     "core.signals.sigsegv.backtrace": "XLIO_HANDLE_SIGSEGV",
     "core.syscall.avoid_ctl_syscalls": "XLIO_AVOID_SYS_CALLS_ON_TCP_FD",
     "core.syscall.deferred_close": "XLIO_DEFERRED_CLOSE",
-    "core.syscall.dup2_close_fd": "XLIO_CLOSE_ON_DUP2",
     "core.syscall.fork_support": "XLIO_FORK",
     "core.syscall.sendfile_cache_limit": "XLIO_ZC_CACHE_THRESHOLD",
     
