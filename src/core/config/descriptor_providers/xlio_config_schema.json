@@ -176,12 +176,6 @@
                     "type": "object",
                     "description": "System call handling behavior.",
                     "properties": {
-                        "dup2_close_fd": {
-                            "type": "boolean",
-                            "default": true,
-                            "title": "Support dup2 calls",
-                            "description": "Maps to XLIO_CLOSE_ON_DUP2 environment variable.\nWhen enabled, XLIO cleans up internal socket structures before dup2() forwards to the kernel.\n\n**How it works:**\ndup2(oldfd, newfd) atomically closes newfd and makes it a copy of oldfd.\nWhen newfd is an XLIO-managed socket, XLIO must release its internal resources first.\n\n**Tradeoffs:**\n\n- *true* (default): Small per-call overhead. Prevents resource leaks and undefined behavior\n  when dup2() closes XLIO sockets.\n- *false*: No interception overhead. Only safe if application never uses dup2() to close\n  XLIO-offloaded sockets; otherwise causes memory leaks and stale internal state."
-                        },
                         "fork_support": {
                             "type": "boolean",
                             "default": true,

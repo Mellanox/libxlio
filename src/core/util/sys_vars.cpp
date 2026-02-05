@@ -869,7 +869,6 @@ void mce_sys_var::get_env_params()
 #endif /* DEFINED_UTLS */
     enable_lro = MCE_DEFAULT_LRO;
     handle_fork = MCE_DEFAULT_FORK_SUPPORT;
-    close_on_dup2 = MCE_DEFAULT_CLOSE_ON_DUP2;
     mtu = MCE_DEFAULT_MTU;
 #if defined(DEFINED_NGINX)
     nginx_udp_socket_pool_size = MCE_DEFAULT_NGINX_UDP_POOL_SIZE;
@@ -1711,10 +1710,6 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_LRO))) {
         enable_lro = option_3::from_str(env_ptr, MCE_DEFAULT_LRO);
-    }
-
-    if ((env_ptr = getenv(SYS_VAR_CLOSE_ON_DUP2))) {
-        close_on_dup2 = atoi(env_ptr) ? true : false;
     }
 
     if ((env_ptr = getenv(SYS_VAR_MTU))) {

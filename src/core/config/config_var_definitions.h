@@ -124,7 +124,6 @@ extern const config_var_info_t<size_t, int64_t> CONFIG_VAR_MEMORY_LIMIT_USER;
 extern const config_var_info_t<size_t, int64_t> CONFIG_VAR_HEAP_METADATA_BLOCK;
 extern const config_var_info_t<size_t, int64_t> CONFIG_VAR_HUGEPAGE_SIZE;
 extern const config_var_info_t<bool> CONFIG_VAR_FORK;
-extern const config_var_info_t<bool> CONFIG_VAR_CLOSE_ON_DUP2;
 extern const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_MTU;
 #if defined(DEFINED_NGINX)
 extern const config_var_info_t<int, int64_t> CONFIG_VAR_NGINX_UDP_POOL_SIZE;
