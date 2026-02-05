@@ -11,7 +11,6 @@
 #include "dev/buffer_pool.h"
 #include "dev/ring_simple.h"
 #include "dev/rfs_rule.h"
-#include "dev/cq_mgr_rx_regrq.h"
 #include "dev/cq_mgr_rx_strq.h"
 
 #undef MODULE_NAME
@@ -96,10 +95,9 @@ bool hw_queue_rx::configure_rq(ibv_comp_channel *rx_comp_event_channel)
                      m_p_ib_ctx_handler->get_ibname(), m_p_ib_ctx_handler->get_ibv_device(),
                      m_p_cq_mgr_rx, mlx5_cq.cq_num, m_rx_num_wr, m_rx_sge);
     }
-    if (safe_mce_sys().enable_striding_rq) {
-        m_rx_sge = 2U; // Striding-RQ needs a reserved segment.
-        m_strq_wqe_reserved_seg = 1U;
-    }
+    // Striding-RQ needs a reserved segment.
+    m_rx_sge = 2U;
+    m_strq_wqe_reserved_seg = 1U;
 
     m_ibv_rx_wr_array = new ibv_recv_wr[m_n_sysvar_rx_num_wr_to_post_recv];
     m_ibv_rx_sg_array = new ibv_sge[m_n_sysvar_rx_num_wr_to_post_recv * m_rx_sge];
@@ -112,12 +110,11 @@ bool hw_queue_rx::configure_rq(ibv_comp_channel *rx_comp_event_channel)
 
     m_ibv_rx_wr_array[m_n_sysvar_rx_num_wr_to_post_recv - 1].next = nullptr;
 
-    if (safe_mce_sys().enable_striding_rq) {
-        for (uint32_t wr_idx = 0; wr_idx < m_n_sysvar_rx_num_wr_to_post_recv; wr_idx++) {
-            memset(m_ibv_rx_wr_array[wr_idx].sg_list, 0, sizeof(ibv_sge));
-            // To bypass a check inside xlio_ib_mlx5_post_recv.
-            m_ibv_rx_wr_array[wr_idx].sg_list[0].length = 1U;
-        }
+    // Initialize for Striding-RQ
+    for (uint32_t wr_idx = 0; wr_idx < m_n_sysvar_rx_num_wr_to_post_recv; wr_idx++) {
+        memset(m_ibv_rx_wr_array[wr_idx].sg_list, 0, sizeof(ibv_sge));
+        // To bypass a check inside xlio_ib_mlx5_post_recv.
+        m_ibv_rx_wr_array[wr_idx].sg_list[0].length = 1U;
     }
 
     // Create the QP
@@ -398,14 +395,10 @@ cq_mgr_rx *hw_queue_rx::init_rx_cq_mgr(struct ibv_comp_channel *p_rx_comp_event_
         return nullptr;
     }
 
-    if (safe_mce_sys().enable_striding_rq) {
-        return new cq_mgr_rx_strq(m_p_ring, m_p_ib_ctx_handler,
-                                  safe_mce_sys().strq_stride_num_per_rwqe * m_rx_num_wr,
-                                  safe_mce_sys().strq_stride_size_bytes,
-                                  safe_mce_sys().strq_stride_num_per_rwqe, p_rx_comp_event_channel);
-    }
-
-    return new cq_mgr_rx_regrq(m_p_ring, m_p_ib_ctx_handler, m_rx_num_wr, p_rx_comp_event_channel);
+    return new cq_mgr_rx_strq(m_p_ring, m_p_ib_ctx_handler,
+                              safe_mce_sys().strq_stride_num_per_rwqe * m_rx_num_wr,
+                              safe_mce_sys().strq_stride_size_bytes,
+                              safe_mce_sys().strq_stride_num_per_rwqe, p_rx_comp_event_channel);
 }
 
 #if defined(DEFINED_UTLS)
@@ -521,25 +514,16 @@ bool hw_queue_rx::prepare_rq(uint32_t cqn)
         rqattrs.ts_format = dpcp::rq_ts_format::RQ_TS_REAL_TIME;
     }
 
-    std::unique_ptr<dpcp::basic_rq> new_rq;
-    dpcp::status rc = dpcp::DPCP_OK;
+    rqattrs.buf_stride_sz = safe_mce_sys().strq_stride_size_bytes;
+    rqattrs.buf_stride_num = safe_mce_sys().strq_stride_num_per_rwqe;
 
-    if (safe_mce_sys().enable_striding_rq) {
-        rqattrs.buf_stride_sz = safe_mce_sys().strq_stride_size_bytes;
-        rqattrs.buf_stride_num = safe_mce_sys().strq_stride_num_per_rwqe;
+    // Striding-RQ WQE format is as of Shared-RQ (PRM, page 381, wq_type).
+    // In this case the WQE minimum size is 2 * 16, and the first segment is reserved.
+    rqattrs.wqe_sz = m_rx_sge * 16U;
 
-        // Striding-RQ WQE format is as of Shared-RQ (PRM, page 381, wq_type).
-        // In this case the WQE minimum size is 2 * 16, and the first segment is reserved.
-        rqattrs.wqe_sz = m_rx_sge * 16U;
-
-        dpcp::striding_rq *new_rq_ptr = nullptr;
-        rc = dpcp_adapter->create_striding_rq(rqattrs, new_rq_ptr);
-        new_rq.reset(new_rq_ptr);
-    } else {
-        dpcp::regular_rq *new_rq_ptr = nullptr;
-        rc = dpcp_adapter->create_regular_rq(rqattrs, new_rq_ptr);
-        new_rq.reset(new_rq_ptr);
-    }
+    dpcp::striding_rq *new_rq_ptr = nullptr;
+    dpcp::status rc = dpcp_adapter->create_striding_rq(rqattrs, new_rq_ptr);
+    std::unique_ptr<dpcp::basic_rq> new_rq(new_rq_ptr);
 
     if (dpcp::DPCP_OK != rc) {
         hwqrx_logerr("Failed to create dpcp rq, rc: %d, cqn: %" PRIu32, static_cast<int>(rc), cqn);
@@ -592,9 +576,8 @@ bool hw_queue_rx::store_rq_mlx5_params(dpcp::basic_rq &new_rq)
 
     new_rq.get_wqe_num(m_rq_data.wqe_cnt);
     new_rq.get_wq_stride_sz(m_rq_data.stride);
-    if (safe_mce_sys().enable_striding_rq) {
-        m_rq_data.stride /= 16U;
-    }
+    // Striding-RQ stride adjustment
+    m_rq_data.stride /= 16U;
 
     m_rq_data.wqe_shift = ilog_2(m_rq_data.stride);
     m_rq_data.head = 0;

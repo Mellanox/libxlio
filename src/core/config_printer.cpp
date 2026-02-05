@@ -126,18 +126,15 @@ void config_printer::print_log_level(const std::string &key, const std::string &
 
 void config_printer::print_rx_num_wre(const std::string &key, const std::string &title)
 {
-    LOG_NUM_PARAM(
-        title.c_str(), m_mce_sys_var.rx_num_wr,
-        (m_mce_sys_var.enable_striding_rq ? MCE_DEFAULT_STRQ_NUM_WRE : MCE_DEFAULT_RX_NUM_WRE),
-        key.c_str());
+    // Striding RQ is always enabled
+    LOG_NUM_PARAM(title.c_str(), m_mce_sys_var.rx_num_wr, MCE_DEFAULT_STRQ_NUM_WRE, key.c_str());
 }
 
 void config_printer::print_rx_num_wre_to_post_recv(const std::string &key, const std::string &title)
 {
+    // Striding RQ is always enabled
     LOG_NUM_PARAM(title.c_str(), m_mce_sys_var.rx_num_wr_to_post_recv,
-                  (m_mce_sys_var.enable_striding_rq ? MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV
-                                                    : MCE_DEFAULT_RX_NUM_WRE_TO_POST_RECV),
-                  key.c_str());
+                  MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV, key.c_str());
 }
 
 void config_printer::print_progress_engine_interval(const std::string &key,

@@ -16,11 +16,8 @@
 
 #define MODULE_NAME "bpool"
 
-// A pointer to differentiate between g_buffer_pool_rx_stride and g_buffer_pool_rx_rwqe
-// and create an abstraction to the layers above device layer for cases when Striding RQ is on/off.
-// When Striding RQ is on, it points to g_buffer_pool_rx_stride since the upper layers work with
-// strides. When Striding RQ is off, it points to g_buffer_pool_rx_rwqe since the upper layers work
-// with RWQEs buffers themselves.
+// Points to g_buffer_pool_rx_stride since Striding RQ is always enabled
+// and upper layers work with strides.
 buffer_pool *g_buffer_pool_rx_ptr = nullptr;
 
 // This buffer-pool holds buffer descriptors which represent strides in strided RWQEs.

@@ -230,7 +230,7 @@ public:
     }
 
     friend class cq_mgr_rx;
-    friend class cq_mgr_rx_regrq;
+    friend class cq_mgr_rx_dummy;
     friend class cq_mgr_rx_strq;
     friend class hw_queue_tx;
     friend class hw_queue_rx;

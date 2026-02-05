@@ -69,7 +69,7 @@ libxlio_la_SOURCES := \
 	dev/allocator.cpp \
 	dev/buffer_pool.cpp \
 	dev/cq_mgr_rx.cpp \
-	dev/cq_mgr_rx_regrq.cpp \
+	dev/cq_mgr_rx_dummy.cpp \
 	dev/cq_mgr_rx_strq.cpp \
 	dev/cq_mgr_tx.cpp \
 	dev/dm_mgr.cpp \
@@ -205,7 +205,7 @@ libxlio_la_SOURCES := \
 	dev/buffer_pool.h \
 	dev/cq_mgr_rx.h \
 	dev/cq_mgr_rx_inl.h \
-	dev/cq_mgr_rx_regrq.h \
+	dev/cq_mgr_rx_dummy.h \
 	dev/cq_mgr_rx_strq.h \
 	dev/cq_mgr_tx.h \
 	dev/dm_mgr.h \

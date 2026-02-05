@@ -555,14 +555,10 @@ void print_env_vars_xlio_global_settings()
     VLOG_PARAM_STRING("TCP Send Buffer size", safe_mce_sys().tcp_send_buffer_size,
                       MCE_DEFAULT_TCP_SEND_BUFFER_SIZE, SYS_VAR_TCP_SEND_BUFFER_SIZE,
                       option_size::to_str(safe_mce_sys().tcp_send_buffer_size));
-    VLOG_PARAM_NUMBER(
-        "Rx QP WRE", safe_mce_sys().rx_num_wr,
-        (safe_mce_sys().enable_striding_rq ? MCE_DEFAULT_STRQ_NUM_WRE : MCE_DEFAULT_RX_NUM_WRE),
-        SYS_VAR_RX_NUM_WRE);
+    VLOG_PARAM_NUMBER("Rx QP WRE", safe_mce_sys().rx_num_wr, MCE_DEFAULT_STRQ_NUM_WRE,
+                      SYS_VAR_RX_NUM_WRE);
     VLOG_PARAM_NUMBER("Rx QP WRE Batching", safe_mce_sys().rx_num_wr_to_post_recv,
-                      (safe_mce_sys().enable_striding_rq ? MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV
-                                                         : MCE_DEFAULT_RX_NUM_WRE_TO_POST_RECV),
-                      SYS_VAR_RX_NUM_WRE_TO_POST_RECV);
+                      MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV, SYS_VAR_RX_NUM_WRE_TO_POST_RECV);
     VLOG_PARAM_NUMBER("Rx Byte Min Limit", safe_mce_sys().rx_ready_byte_min_limit,
                       MCE_DEFAULT_RX_BYTE_MIN_LIMIT, SYS_VAR_RX_BYTE_MIN_LIMIT);
     VLOG_PARAM_NUMBER("Rx Poll Loops", safe_mce_sys().rx_poll_num, MCE_DEFAULT_RX_NUM_POLLS,
@@ -620,10 +616,7 @@ void print_env_vars_xlio_global_settings()
     VLOG_PARAM_STRING("Force Flowtag for MC", safe_mce_sys().mc_force_flowtag,
                       MCE_DEFAULT_MC_FORCE_FLOWTAG, SYS_VAR_MC_FORCE_FLOWTAG,
                       safe_mce_sys().mc_force_flowtag ? "Enabled " : "Disabled");
-    /* coverity[returned_null][dereference] */
-    VLOG_STR_PARAM_STRING("Striding RQ", option_3::to_str(safe_mce_sys().enable_strq_env),
-                          option_3::to_str(MCE_DEFAULT_STRQ), SYS_VAR_STRQ,
-                          option_3::to_str(safe_mce_sys().enable_strq_env));
+    VLOG_PARAM_STRING("Striding RQ", true, true, "", "Enabled (always)");
     VLOG_PARAM_NUMBER("STRQ Strides per RWQE", safe_mce_sys().strq_stride_num_per_rwqe,
                       MCE_DEFAULT_STRQ_NUM_STRIDES, SYS_VAR_STRQ_NUM_STRIDES);
     VLOG_PARAM_NUMBER("STRQ Stride Size (Bytes)", safe_mce_sys().strq_stride_size_bytes,
@@ -1009,19 +1002,16 @@ static std::string get_invalid_calc_info_message()
 }
 static size_t calc_rx_wqe_buff_size()
 {
+    // Striding RQ is always enabled - calculate buffer size based on strides
+    size_t min_puff_size = g_p_net_device_table_mgr->get_max_mtu() + ETH_VLAN_HDR_LEN;
     size_t buff_size =
-        RX_BUF_SIZE(safe_mce_sys().rx_buf_size ? safe_mce_sys().rx_buf_size
-                                               : g_p_net_device_table_mgr->get_max_mtu());
-    if (safe_mce_sys().enable_striding_rq) {
-        size_t min_puff_size = g_p_net_device_table_mgr->get_max_mtu() + ETH_VLAN_HDR_LEN;
-        buff_size = safe_mce_sys().strq_stride_num_per_rwqe * safe_mce_sys().strq_stride_size_bytes;
-        if (buff_size < min_puff_size) {
-            const std::string message = get_invalid_calc_info_message();
-            vlog_printf(VLOG_INFO, message.c_str(), safe_mce_sys().strq_stride_num_per_rwqe,
-                        safe_mce_sys().strq_stride_size_bytes, buff_size, min_puff_size);
+        safe_mce_sys().strq_stride_num_per_rwqe * safe_mce_sys().strq_stride_size_bytes;
+    if (buff_size < min_puff_size) {
+        const std::string message = get_invalid_calc_info_message();
+        vlog_printf(VLOG_INFO, message.c_str(), safe_mce_sys().strq_stride_num_per_rwqe,
+                    safe_mce_sys().strq_stride_size_bytes, buff_size, min_puff_size);
 
-            buff_size = g_p_net_device_table_mgr->get_max_mtu() + ETH_VLAN_HDR_LEN;
-        }
+        buff_size = g_p_net_device_table_mgr->get_max_mtu() + ETH_VLAN_HDR_LEN;
     }
 
     return buff_size;
@@ -1140,12 +1130,9 @@ static void do_global_ctors_helper()
              buffer_pool(BUFFER_POOL_RX, calc_rx_wqe_buff_size(),
                          safe_mce_sys().user_alloc.memalloc, safe_mce_sys().user_alloc.memfree));
 
-    if (safe_mce_sys().enable_striding_rq) {
-        NEW_CTOR(g_buffer_pool_rx_stride, buffer_pool(BUFFER_POOL_RX, 0));
-        g_buffer_pool_rx_ptr = g_buffer_pool_rx_stride;
-    } else {
-        g_buffer_pool_rx_ptr = g_buffer_pool_rx_rwqe;
-    }
+    // Striding RQ is always enabled
+    NEW_CTOR(g_buffer_pool_rx_stride, buffer_pool(BUFFER_POOL_RX, 0));
+    g_buffer_pool_rx_ptr = g_buffer_pool_rx_stride;
 
     if (safe_mce_sys().tx_buf_size <=
         get_lwip_tcp_mss(g_p_net_device_table_mgr->get_max_mtu(), safe_mce_sys().lwip_mss)) {

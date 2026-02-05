@@ -367,13 +367,10 @@ Default value is 10GB
 HARDWARE_FEATURES
 -----------------
 
-hardware_features.striding_rq.enable
-Maps to **XLIO_STRQ** environment variable.
-Enable/Disable Striding Receive Queues.
+Striding Receive Queues are always enabled in XLIO.
 Each WQE in a Striding RQ may receive several packets.
-Thus, the WQE buffer size is controlled by:
+The WQE buffer size is controlled by:
 hardware_features.striding_rq.strides_num x hardware_features.striding_rq.stride_size.
-Default value is true
 
 hardware_features.striding_rq.stride_size
 Maps to **XLIO_STRQ_STRIDE_SIZE_BYTES** environment variable.
@@ -1066,20 +1063,18 @@ Maps to **XLIO_RX_WRE_BATCHING** environment variable.
 Number of Work Request Elements and RX buffers to batch before recycling.
 Batching decrease latency mean, but might increase latency STD.
 Value range is 1-1024.
-Default value is 1024
+Default value is 1 (striding RQ is always enabled).
 
 performance.rings.rx.ring_elements_count
 Maps to **XLIO_RX_WRE** environment variable.
 Number of Work Request Elements allocated in all RQs.
-Default value is 128 for hardware_features.striding_rq.enable=true (default)
-or 32768 for hardware_features.striding_rq.enable=false.
+Default value is 128 (striding RQ is always enabled).
 
 performance.rings.rx.spare_buffers
 Maps to **XLIO_QP_COMPENSATION_LEVEL** environment variable.
 Number of spare receive buffer a ring holds to allow for filling up QP while
 full receive buffers are being processed inside XLIO.
-Default value is 128 for hardware_features.striding_rq.enable=true (default)
-or 32768 for hardware_features.striding_rq.enable=false.
+Default value is 128 (striding RQ is always enabled).
 
 performance.rings.rx.spare_strides
 Maps to **XLIO_STRQ_STRIDES_COMPENSATION_LEVEL** environment variable.

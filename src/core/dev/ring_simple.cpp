@@ -274,13 +274,13 @@ void ring_simple::create_resources()
             /* calculate possible payload size w/o using max_msg_sz_mode
              * because during memory buffer allocation L2+L3+L4 is reserved
              * adjust payload size to 256 bytes
+             * Striding RQ is always enabled
              */
-            uint32_t actual_buf_size =
-                (!safe_mce_sys().rx_buf_size && safe_mce_sys().enable_striding_rq
-                     ? std::min(65280U,
-                                safe_mce_sys().strq_stride_num_per_rwqe *
-                                    safe_mce_sys().strq_stride_size_bytes)
-                     : safe_mce_sys().rx_buf_size);
+            uint32_t actual_buf_size = safe_mce_sys().rx_buf_size
+                ? safe_mce_sys().rx_buf_size
+                : std::min(65280U,
+                           safe_mce_sys().strq_stride_num_per_rwqe *
+                               safe_mce_sys().strq_stride_size_bytes);
             m_lro.max_payload_sz =
                 std::min(actual_buf_size, XLIO_MLX5_PARAMS_LRO_PAYLOAD_SIZE) / 256U * 256U;
         }

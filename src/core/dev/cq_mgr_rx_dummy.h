@@ -4,27 +4,27 @@
  * SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
  */
 
-#ifndef CQ_MGR_REGRQ_H
-#define CQ_MGR_REGRQ_H
+#ifndef CQ_MGR_RX_DUMMY_H
+#define CQ_MGR_RX_DUMMY_H
 
 #include "cq_mgr_rx.h"
 
-class cq_mgr_rx_regrq : public cq_mgr_rx {
+/**
+ * Minimal CQ manager used only for QP initialization in TX queues.
+ * This CQ is never used for actual packet processing - it only provides
+ * an ibv_cq handle required for QP creation.
+ */
+class cq_mgr_rx_dummy : public cq_mgr_rx {
 public:
-    cq_mgr_rx_regrq(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
+    cq_mgr_rx_dummy(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, uint32_t cq_size,
                     struct ibv_comp_channel *p_comp_event_channel);
 
-    virtual ~cq_mgr_rx_regrq() override;
+    virtual ~cq_mgr_rx_dummy() override = default;
 
+    // These methods are never called - stub implementations
     virtual int drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id = nullptr) override;
     virtual int poll_and_process_element_rx(void *pv_fd_ready_array = nullptr) override;
-
     virtual uint32_t clean_cq() override;
-
-protected:
-    mem_buf_desc_t *poll(enum buff_status_e &status);
-    inline void cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe, mem_buf_desc_t *p_rx_wc_buf_desc,
-                                     enum buff_status_e &status);
 };
 
-#endif // CQ_MGR_MLX5_H
+#endif // CQ_MGR_RX_DUMMY_H

@@ -639,8 +639,8 @@ void mce_sys_var::read_hv()
 
 void mce_sys_var::legacy_read_strq_strides_num()
 {
-    char *env_ptr = nullptr;
-    if (!enable_striding_rq || !((env_ptr = getenv(SYS_VAR_STRQ_NUM_STRIDES)))) {
+    char *env_ptr = getenv(SYS_VAR_STRQ_NUM_STRIDES);
+    if (!env_ptr) {
         return;
     }
 
@@ -669,8 +669,7 @@ void mce_sys_var::legacy_read_strq_strides_num()
 
 void mce_sys_var::read_strq_strides_num(const config_registry &registry)
 {
-    if (!enable_striding_rq ||
-        !((registry.value_exists("hardware_features.striding_rq.strides_num")))) {
+    if (!registry.value_exists("hardware_features.striding_rq.strides_num")) {
         return;
     }
 
@@ -693,8 +692,8 @@ void mce_sys_var::read_strq_strides_num(const config_registry &registry)
 
 void mce_sys_var::legacy_read_strq_stride_size_bytes()
 {
-    char *env_ptr = nullptr;
-    if (!enable_striding_rq || !((env_ptr = getenv(SYS_VAR_STRQ_STRIDE_SIZE_BYTES)))) {
+    char *env_ptr = getenv(SYS_VAR_STRQ_STRIDE_SIZE_BYTES);
+    if (!env_ptr) {
         return;
     }
 
@@ -723,8 +722,7 @@ void mce_sys_var::legacy_read_strq_stride_size_bytes()
 
 void mce_sys_var::read_strq_stride_size_bytes(const config_registry &registry)
 {
-    if (!enable_striding_rq ||
-        !((registry.value_exists("hardware_features.striding_rq.stride_size")))) {
+    if (!registry.value_exists("hardware_features.striding_rq.stride_size")) {
         return;
     }
 
@@ -822,8 +820,9 @@ void mce_sys_var::get_env_params()
     tx_segs_pool_batch_tcp = MCE_DEFAULT_TX_SEGS_POOL_BATCH_TCP;
     rx_buf_size = MCE_DEFAULT_RX_BUF_SIZE;
     rx_bufs_batch = MCE_DEFAULT_RX_BUFS_BATCH;
-    rx_num_wr = MCE_DEFAULT_RX_NUM_WRE;
-    rx_num_wr_to_post_recv = MCE_DEFAULT_RX_NUM_WRE_TO_POST_RECV;
+    // Striding RQ is always enabled
+    rx_num_wr = MCE_DEFAULT_STRQ_NUM_WRE;
+    rx_num_wr_to_post_recv = MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV;
     rx_poll_num = MCE_DEFAULT_RX_NUM_POLLS;
     rx_poll_num_init = MCE_DEFAULT_RX_NUM_POLLS_INIT;
     rx_udp_poll_os_ratio = MCE_DEFAULT_RX_UDP_POLL_OS_RATIO;
@@ -836,7 +835,6 @@ void mce_sys_var::get_env_params()
     rx_cq_drain_rate_nsec = MCE_DEFAULT_RX_CQ_DRAIN_RATE;
     rx_delta_tsc_between_cq_polls = 0;
 
-    enable_strq_env = MCE_DEFAULT_STRQ;
     strq_stride_num_per_rwqe = MCE_DEFAULT_STRQ_NUM_STRIDES;
     strq_stride_size_bytes = MCE_DEFAULT_STRQ_STRIDE_SIZE_BYTES;
     strq_strides_compensation_level = MCE_DEFAULT_STRQ_STRIDES_COMPENSATION_LEVEL;
@@ -926,17 +924,6 @@ void mce_sys_var::get_env_params()
 
     read_hv();
 
-    if ((env_ptr = getenv(SYS_VAR_STRQ))) {
-        enable_strq_env = option_3::from_str(env_ptr, MCE_DEFAULT_STRQ);
-    }
-
-    enable_striding_rq = (enable_strq_env == option_3::ON || enable_strq_env == option_3::AUTO);
-
-    if (enable_striding_rq) {
-        rx_num_wr = MCE_DEFAULT_STRQ_NUM_WRE;
-        rx_num_wr_to_post_recv = MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV;
-    }
-
     if ((env_ptr = getenv(SYS_VAR_SPEC))) {
         mce_spec = (uint32_t)xlio_spec::from_str(env_ptr, MCE_SPEC_NONE);
     }
@@ -1000,12 +987,7 @@ void mce_sys_var::get_env_params()
         ring_dev_mem_tx = 16384;
         strcpy(internal_thread_affinity_str, "0");
 
-        if (enable_striding_rq) {
-            rx_num_wr = 4U;
-        } else {
-            rx_num_wr = 256;
-            rx_num_wr_to_post_recv = 4;
-        }
+        rx_num_wr = 4U;
         break;
 
     case MCE_SPEC_LATENCY:
@@ -1028,12 +1010,7 @@ void mce_sys_var::get_env_params()
         tcp_nodelay = true;
         ring_dev_mem_tx = 16384;
 
-        if (enable_striding_rq) {
-            rx_num_wr = 4U;
-        } else {
-            rx_num_wr = 256;
-            rx_num_wr_to_post_recv = 4;
-        }
+        rx_num_wr = 4U;
 
         break;
 
@@ -1291,7 +1268,7 @@ void mce_sys_var::get_env_params()
         rx_num_wr = (uint32_t)atoi(env_ptr);
     }
 
-    if (enable_striding_rq && (strq_stride_num_per_rwqe * rx_num_wr > MAX_MLX5_CQ_SIZE_ITEMS)) {
+    if (strq_stride_num_per_rwqe * rx_num_wr > MAX_MLX5_CQ_SIZE_ITEMS) {
         rx_num_wr = MAX_MLX5_CQ_SIZE_ITEMS / strq_stride_num_per_rwqe;
 
         vlog_printf(VLOG_WARNING,
@@ -1446,8 +1423,7 @@ void mce_sys_var::get_env_params()
         cq_moderation_count = (uint32_t)atoi(env_ptr);
     }
 
-    uint32_t max_cq_moderation_count =
-        (!enable_striding_rq ? rx_num_wr : (strq_stride_num_per_rwqe * rx_num_wr)) / 2U;
+    uint32_t max_cq_moderation_count = (strq_stride_num_per_rwqe * rx_num_wr) / 2U;
     if (cq_moderation_count > max_cq_moderation_count) {
         cq_moderation_count = max_cq_moderation_count;
     }
@@ -1460,8 +1436,7 @@ void mce_sys_var::get_env_params()
         cq_aim_max_count = (uint32_t)atoi(env_ptr);
     }
 
-    uint32_t max_cq_aim_max_count =
-        (!enable_striding_rq ? rx_num_wr : (strq_stride_num_per_rwqe * rx_num_wr)) / 2U;
+    uint32_t max_cq_aim_max_count = (strq_stride_num_per_rwqe * rx_num_wr) / 2U;
     if (cq_aim_max_count > max_cq_aim_max_count) {
         cq_aim_max_count = max_cq_aim_max_count;
     }
@@ -1963,8 +1938,6 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
         registry.get_default_value<int>("performance.completion_queue.rx_drain_rate_nsec");
     rx_delta_tsc_between_cq_polls = 0;
 
-    enable_strq_env = static_cast<decltype(enable_strq_env)>(
-        registry.get_default_value<bool>("hardware_features.striding_rq.enable"));
     strq_stride_num_per_rwqe =
         registry.get_default_value<uint32_t>("hardware_features.striding_rq.strides_num");
     strq_stride_size_bytes =
@@ -2104,22 +2077,6 @@ void mce_sys_var::read_hypervisor_info()
     read_hv();
 }
 
-void mce_sys_var::configure_striding_rq(const config_registry &registry)
-{
-    if (registry.value_exists("hardware_features.striding_rq.enable")) {
-        enable_strq_env = registry.get_value<bool>("hardware_features.striding_rq.enable")
-            ? option_3::ON
-            : option_3::OFF;
-    }
-
-    enable_striding_rq = (enable_strq_env == option_3::ON || enable_strq_env == option_3::AUTO);
-
-    if (enable_striding_rq) {
-        rx_num_wr = MCE_DEFAULT_STRQ_NUM_WRE;
-        rx_num_wr_to_post_recv = MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV;
-    }
-}
-
 void mce_sys_var::configure_running_mode(const config_registry &registry)
 {
     set_value_from_registry_if_exists(worker_threads, "performance.threading.worker_threads",
@@ -2211,13 +2168,7 @@ void mce_sys_var::apply_ultra_latency_profile()
     tcp_nodelay = true;
     ring_dev_mem_tx = 16384;
     strcpy(internal_thread_affinity_str, "0");
-
-    if (enable_striding_rq) {
-        rx_num_wr = 4U;
-    } else {
-        rx_num_wr = 256;
-        rx_num_wr_to_post_recv = 4;
-    }
+    rx_num_wr = 4U;
 }
 
 void mce_sys_var::apply_latency_profile()
@@ -2240,13 +2191,7 @@ void mce_sys_var::apply_latency_profile()
     select_poll_os_ratio = 100;
     tcp_nodelay = true;
     ring_dev_mem_tx = 16384;
-
-    if (enable_striding_rq) {
-        rx_num_wr = 4U;
-    } else {
-        rx_num_wr = 256;
-        rx_num_wr_to_post_recv = 4;
-    }
+    rx_num_wr = 4U;
 }
 
 #ifdef DEFINED_NGINX
@@ -2459,7 +2404,7 @@ void mce_sys_var::configure_buffer_sizes(const config_registry &registry)
     set_value_from_registry_if_exists(rx_num_wr, "performance.rings.rx.ring_elements_count",
                                       registry);
 
-    if (enable_striding_rq && (strq_stride_num_per_rwqe * rx_num_wr > MAX_MLX5_CQ_SIZE_ITEMS)) {
+    if (strq_stride_num_per_rwqe * rx_num_wr > MAX_MLX5_CQ_SIZE_ITEMS) {
         rx_num_wr = MAX_MLX5_CQ_SIZE_ITEMS / strq_stride_num_per_rwqe;
 
         vlog_printf(VLOG_WARNING,
@@ -2574,8 +2519,7 @@ void mce_sys_var::configure_completion_queue(const config_registry &registry)
         cq_moderation_count, "performance.completion_queue.interrupt_moderation.packet_count",
         registry);
 
-    uint32_t max_cq_moderation_count =
-        (!enable_striding_rq ? rx_num_wr : (strq_stride_num_per_rwqe * rx_num_wr)) / 2U;
+    uint32_t max_cq_moderation_count = (strq_stride_num_per_rwqe * rx_num_wr) / 2U;
     if (cq_moderation_count > max_cq_moderation_count) {
         cq_moderation_count = max_cq_moderation_count;
     }
@@ -2588,8 +2532,7 @@ void mce_sys_var::configure_completion_queue(const config_registry &registry)
         cq_aim_max_count, "performance.completion_queue.interrupt_moderation.adaptive_count",
         registry);
 
-    uint32_t max_cq_aim_max_count =
-        (!enable_striding_rq ? rx_num_wr : (strq_stride_num_per_rwqe * rx_num_wr)) / 2U;
+    uint32_t max_cq_aim_max_count = (strq_stride_num_per_rwqe * rx_num_wr) / 2U;
     if (cq_aim_max_count > max_cq_aim_max_count) {
         cq_aim_max_count = max_cq_aim_max_count;
     }
@@ -2954,7 +2897,10 @@ void mce_sys_var::apply_config_from_registry()
     initialize_base_variables(registry);
     read_hypervisor_info();
 
-    configure_striding_rq(registry);
+    // Striding RQ is always enabled - set defaults
+    rx_num_wr = MCE_DEFAULT_STRQ_NUM_WRE;
+    rx_num_wr_to_post_recv = MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV;
+
     configure_running_mode(registry);
     detect_application_profile(registry);
     apply_spec_profile_optimizations();

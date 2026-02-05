@@ -513,14 +513,8 @@
             "properties": {
                 "striding_rq": {
                     "type": "object",
-                    "description": "Striding Receive Queue settings for optimized packet processing.",
+                    "description": "Striding Receive Queue settings for optimized packet processing. Striding RQ is always enabled.",
                     "properties": {
-                        "enable": {
-                            "type": "boolean",
-                            "default": true,
-                            "title": "Enable striding receive queues",
-                            "description": "Maps to XLIO_STRQ environment variable.\nEnable/Disable Striding Receive Queues.\nEach WQE in a Striding RQ may receive several packets.\nThus, the WQE buffer size is controlled by:\nhardware_features.striding_rq.strides_num x hardware_features.striding_rq.stride_size."
-                        },
                         "strides_num": {
                             "type": "integer",
                             "default": 2048,
@@ -853,16 +847,16 @@
                                 },
                                 "ring_elements_count": {
                                     "type": "integer",
-                                    "default": 32768,
+                                    "default": 128,
                                     "minimum": 0,
                                     "title": "RX WRE global array size",
-                                    "description": "Maps to XLIO_RX_WRE environment variable.\nNumber of Work Request Elements allocated in all RQs.\nDefault value is 128 for hardware_features.striding_rq.enable=true (default)\nor 32768 for hardware_features.striding_rq.enable=false."
+                                    "description": "Maps to XLIO_RX_WRE environment variable.\nNumber of Work Request Elements allocated in all RQs.\nDefault value is 128 (striding RQ is always enabled)."
                                 },
                                 "spare_buffers": {
                                     "type": "integer",
-                                    "default": 32768,
+                                    "default": 128,
                                     "title": "Spare RX buffers",
-                                    "description": "Maps to XLIO_QP_COMPENSATION_LEVEL environment variable.\nNumber of spare receive buffer a ring holds to allow for filling up QP while\nfull receive buffers are being processed inside XLIO.\nDefault value is 128 for hardware_features.striding_rq.enable=true (default)\nor 32768 for hardware_features.striding_rq.enable=false."
+                                    "description": "Maps to XLIO_QP_COMPENSATION_LEVEL environment variable.\nNumber of spare receive buffer a ring holds to allow for filling up QP while\nfull receive buffers are being processed inside XLIO.\nDefault value is 128 (striding RQ is always enabled)."
                                 },
                                 "spare_strides": {
                                     "type": "integer",
@@ -872,11 +866,11 @@
                                 },
                                 "post_batch_size": {
                                     "type": "integer",
-                                    "default": 1024,
+                                    "default": 1,
                                     "minimum": 1,
                                     "maximum": 1024,
                                     "title": "RX WRE batch size",
-                                    "description": "Maps to XLIO_RX_WRE_BATCHING environment variable.\nNumber of Work Request Elements and RX buffers to batch before recycling.\nBatching decrease latency mean, but might increase latency STD.\nValue range is 1-1024."
+                                    "description": "Maps to XLIO_RX_WRE_BATCHING environment variable.\nNumber of Work Request Elements and RX buffers to batch before recycling.\nBatching decrease latency mean, but might increase latency STD.\nValue range is 1-1024.\nDefault value is 1 (striding RQ is always enabled)."
                                 }
                             },
                             "additionalProperties": false

@@ -9,7 +9,7 @@
 #include <netinet/ip.h>
 #include "dev/hw_queue_tx.h"
 #include "dev/ring_simple.h"
-#include "dev/cq_mgr_rx_regrq.h"
+#include "dev/cq_mgr_rx_dummy.h"
 #include "proto/tls.h"
 #include "util/valgrind.h"
 
@@ -159,14 +159,14 @@ int hw_queue_tx::configure(const slave_data_t *slave)
                  m_p_ib_ctx_handler->get_ibname(), m_p_ib_ctx_handler->get_ibv_device(),
                  m_port_num);
 
-    // Create associated cq_mgr_tx and unused cq_mgr_rx_regrq just for QP sake.
+    // Create associated cq_mgr_tx and unused cq_mgr_rx_dummy just for QP sake.
     BULLSEYE_EXCLUDE_BLOCK_START
     m_p_cq_mgr_tx = init_tx_cq_mgr();
     if (!m_p_cq_mgr_tx) {
         hwqtx_logerr("Failed allocating m_p_cq_mgr_tx (errno=%d %m)", errno);
         return -1;
     }
-    m_p_cq_mgr_rx_unused = new cq_mgr_rx_regrq(m_p_ring, m_p_ib_ctx_handler, 2, nullptr);
+    m_p_cq_mgr_rx_unused = new cq_mgr_rx_dummy(m_p_ring, m_p_ib_ctx_handler, 2, nullptr);
     if (!m_p_cq_mgr_rx_unused) {
         hwqtx_logerr("Failed allocating m_p_cq_mgr_rx_unused (errno=%d %m)", errno);
         return -1;

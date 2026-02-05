@@ -377,7 +377,6 @@ public:
     uint32_t gro_streams_max;
     bool disable_flow_tag;
 
-    bool enable_striding_rq;
     bool tcp_2t_rules;
     bool tcp_3t_rules;
     bool udp_3t_rules;
@@ -435,7 +434,6 @@ public:
     multilock_t multilock;
     option_3::mode_t enable_tso;
     option_3::mode_t enable_lro;
-    option_3::mode_t enable_strq_env;
 #ifdef DEFINED_UTLS
     bool enable_utls_rx;
     bool enable_utls_tx;
@@ -487,7 +485,6 @@ private:
     void get_env_params();
     void initialize_base_variables(const config_registry &registry);
     void read_hypervisor_info();
-    void configure_striding_rq(const config_registry &registry);
     void configure_running_mode(const config_registry &registry);
     void detect_application_profile(const config_registry &registry);
     void apply_spec_profile_optimizations();
@@ -590,7 +587,6 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_TX_BUFS_BATCH_TCP     "XLIO_TX_BUFS_BATCH_TCP"
 #define SYS_VAR_TX_SEGS_BATCH_TCP     "XLIO_TX_SEGS_BATCH_TCP"
 
-#define SYS_VAR_STRQ                            "XLIO_STRQ"
 #define SYS_VAR_STRQ_NUM_STRIDES                "XLIO_STRQ_NUM_STRIDES"
 #define SYS_VAR_STRQ_STRIDE_SIZE_BYTES          "XLIO_STRQ_STRIDE_SIZE_BYTES"
 #define SYS_VAR_STRQ_STRIDES_COMPENSATION_LEVEL "XLIO_STRQ_STRIDES_COMPENSATION_LEVEL"
@@ -733,7 +729,6 @@ extern mce_sys_var &safe_mce_sys();
 #define CONFIG_VAR_TX_BUFS_BATCH_TCP     "performance.rings.tx.tcp_buffer_batch"
 #define CONFIG_VAR_TX_SEGS_BATCH_TCP     "performance.buffers.tcp_segments.socket_batch_size"
 
-#define CONFIG_VAR_STRQ                            "hardware_features.striding_rq.enable"
 #define CONFIG_VAR_STRQ_NUM_STRIDES                "hardware_features.striding_rq.strides_num"
 #define CONFIG_VAR_STRQ_STRIDE_SIZE_BYTES          "hardware_features.striding_rq.stride_size"
 #define CONFIG_VAR_STRQ_STRIDES_COMPENSATION_LEVEL "performance.rings.rx.spare_strides"
@@ -894,7 +889,6 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_TX_SEGS_POOL_BATCH_TCP   (16384)
 #define MCE_DEFAULT_TX_NUM_SGE               (4)
 
-#define MCE_DEFAULT_STRQ                            (option_3::ON)
 #define MCE_DEFAULT_STRQ_NUM_STRIDES                (2048)
 #define MCE_DEFAULT_STRQ_STRIDE_SIZE_BYTES          (64)
 #define MCE_DEFAULT_STRQ_NUM_WRE                    (128)
@@ -903,8 +897,6 @@ extern mce_sys_var &safe_mce_sys();
 
 #define MCE_DEFAULT_RX_BUF_SIZE                   (0)
 #define MCE_DEFAULT_RX_BUFS_BATCH                 (64)
-#define MCE_DEFAULT_RX_NUM_WRE                    (32768)
-#define MCE_DEFAULT_RX_NUM_WRE_TO_POST_RECV       (1024)
 #define MCE_DEFAULT_RX_NUM_POLLS                  (100000)
 #define MCE_DEFAULT_RX_NUM_POLLS_INIT             (0)
 #define MCE_DEFAULT_RX_UDP_POLL_OS_RATIO          (100)
@@ -1015,7 +1007,6 @@ extern mce_sys_var &safe_mce_sys();
 /*
  * This block consists of auxiliary constants
  */
-#define RX_BUF_SIZE(mtu) (mtu)
 // Add room for the L2-L4 headers
 #define TX_BUF_SIZE(mtu) ((mtu) + 92)
 

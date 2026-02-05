@@ -43,6 +43,10 @@
 #define nd_logfunc    __log_info_func
 #define nd_logfuncall __log_info_funcall
 
+// Large max_recv_wr value used for QP capability verification during bond failover detection.
+// This intentionally differs from the actual STRQ default (128) to test hardware/driver limits.
+#define QP_VERIFICATION_MAX_RECV_WR 32768
+
 // The value given in this constructor is later always overriden
 ring_alloc_logic_attr::ring_alloc_logic_attr()
     : m_ring_alloc_logic(RING_LOGIC_PER_THREAD)
@@ -1427,7 +1431,7 @@ bool net_device_val::verify_qp_creation(const char *ifname, enum ibv_qp_type qp_
     memset(&qp_init_attr, 0, sizeof(qp_init_attr));
 
     qp_init_attr.cap.max_send_wr = 2048;
-    qp_init_attr.cap.max_recv_wr = MCE_DEFAULT_RX_NUM_WRE;
+    qp_init_attr.cap.max_recv_wr = QP_VERIFICATION_MAX_RECV_WR;
     qp_init_attr.cap.max_inline_data = MCE_DEFAULT_TX_MAX_INLINE;
     qp_init_attr.cap.max_send_sge = MCE_DEFAULT_TX_NUM_SGE;
     qp_init_attr.cap.max_recv_sge = 1U;

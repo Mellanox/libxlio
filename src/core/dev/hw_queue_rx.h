@@ -22,7 +22,6 @@ class ring_simple;
 // Once created it requests from the system a CQ to work with.
 class hw_queue_rx : public xlio_ti_owner {
     friend class cq_mgr_rx;
-    friend class cq_mgr_rx_regrq;
     friend class cq_mgr_rx_strq;
 
 public:

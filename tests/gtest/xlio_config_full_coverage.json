@@ -73,7 +73,6 @@
     },
     "hardware_features": {
         "striding_rq": {
-            "enable": true,
             "strides_num": 2048,
             "stride_size": 64
         },

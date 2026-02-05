@@ -13,7 +13,7 @@ set +eE
 
 # Initialize variables
 test_lib="${vg_dir}/install/lib/${prj_lib}"
-test_lib_env="XLIO_MEM_ALLOC_TYPE=ANON XLIO_TX_WRE=2000 XLIO_RX_WRE=2000 XLIO_STRQ=off LD_PRELOAD=$test_lib"
+test_lib_env="XLIO_MEM_ALLOC_TYPE=ANON XLIO_TX_WRE=2000 XLIO_RX_WRE=2000 LD_PRELOAD=$test_lib"
 test_app="sockperf"
 test_app_path="${test_dir}/sockperf/install/bin/sockperf"
 test_app_server_params="sr"
