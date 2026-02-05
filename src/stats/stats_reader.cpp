@@ -269,8 +269,21 @@ void update_delta_stat(socket_stats_t *p_curr_stat, socket_stats_t *p_prev_stat)
     p_prev_stat->tls_counters.n_tls_rx_bytes =
         (p_curr_stat->tls_counters.n_tls_rx_bytes - p_prev_stat->tls_counters.n_tls_rx_bytes) /
         delay;
-    p_prev_stat->tls_counters.n_tls_rx_resync =
-        (p_curr_stat->tls_counters.n_tls_rx_resync - p_prev_stat->tls_counters.n_tls_rx_resync) /
+    p_prev_stat->tls_counters.n_tls_rx_resync_attempt =
+        (p_curr_stat->tls_counters.n_tls_rx_resync_attempt -
+         p_prev_stat->tls_counters.n_tls_rx_resync_attempt) /
+        delay;
+    p_prev_stat->tls_counters.n_tls_rx_resync_success =
+        (p_curr_stat->tls_counters.n_tls_rx_resync_success -
+         p_prev_stat->tls_counters.n_tls_rx_resync_success) /
+        delay;
+    p_prev_stat->tls_counters.n_tls_rx_resync_retry =
+        (p_curr_stat->tls_counters.n_tls_rx_resync_retry -
+         p_prev_stat->tls_counters.n_tls_rx_resync_retry) /
+        delay;
+    p_prev_stat->tls_counters.n_tls_rx_resync_long =
+        (p_curr_stat->tls_counters.n_tls_rx_resync_long -
+         p_prev_stat->tls_counters.n_tls_rx_resync_long) /
         delay;
 #endif /* DEFINED_UTLS */
 
@@ -427,6 +440,8 @@ void update_delta_cq_stat(cq_stats_t *p_curr_cq_stats, cq_stats_t *p_prev_cq_sta
         p_prev_cq_stats->n_rx_max_stirde_per_packet = p_curr_cq_stats->n_rx_max_stirde_per_packet;
         p_prev_cq_stats->n_rx_cqe_error =
             (p_curr_cq_stats->n_rx_cqe_error - p_prev_cq_stats->n_rx_cqe_error) / delay;
+        p_prev_cq_stats->n_rx_tls_resync =
+            (p_curr_cq_stats->n_rx_tls_resync - p_prev_cq_stats->n_rx_tls_resync) / delay;
     }
 }
 
@@ -602,6 +617,9 @@ void print_cq_stats(cq_instance_block_t *p_cq_inst_arr)
                 printf(
                     FORMAT_STATS_double, "GRO frags per packet:",
                     static_cast<double>(p_cq_stats->n_rx_gro_frags) / p_cq_stats->n_rx_gro_packets);
+            }
+            if (p_cq_stats->n_rx_tls_resync) {
+                printf("%-20s %u\n", "HW TLS RX Resync:", p_cq_stats->n_rx_tls_resync);
             }
         }
     }

@@ -2711,6 +2711,14 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
     lwip_pbuf_init_custom(p_rx_pkt_mem_buf_desc_info);
 
     sockinfo_tcp *sock = (sockinfo_tcp *)pcb->my_container;
+
+#ifdef DEFINED_UTLS
+    // We must keep the TLS RX Resync indication even if the stack rejects the packet.
+    if (p_rx_pkt_mem_buf_desc_info->rx.tls_decrypted == TLS_RX_RESYNC) {
+        sock->get_ops()->incr_tls_rx_need_resync();
+    }
+#endif
+
     if (sock == this) {
         L3_level_tcp_input((pbuf *)p_rx_pkt_mem_buf_desc_info, pcb);
     } else {
