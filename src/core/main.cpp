@@ -797,9 +797,6 @@ void print_env_vars_xlio_global_settings()
 #endif
     VLOG_PARAM_STRING("fork() support", safe_mce_sys().handle_fork, MCE_DEFAULT_FORK_SUPPORT,
                       SYS_VAR_FORK, safe_mce_sys().handle_fork ? "Enabled " : "Disabled");
-    VLOG_PARAM_STRING("close on dup2()", safe_mce_sys().close_on_dup2, MCE_DEFAULT_CLOSE_ON_DUP2,
-                      SYS_VAR_CLOSE_ON_DUP2,
-                      safe_mce_sys().close_on_dup2 ? "Enabled " : "Disabled");
     switch (safe_mce_sys().mtu) {
     case MTU_FOLLOW_INTERFACE:
         VLOG_PARAM_NUMSTR("MTU", safe_mce_sys().mtu, MCE_DEFAULT_MTU, SYS_VAR_MTU,
