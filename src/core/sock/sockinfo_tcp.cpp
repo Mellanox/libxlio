@@ -4674,8 +4674,6 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                 struct cc_algo *algo = nullptr;
                 if (cc_name == "reno" || cc_name == "newreno") {
                     algo = &lwip_cc_algo;
-                } else if (cc_name == "cubic") {
-                    algo = &cubic_cc_algo;
                 } else if (cc_name == "none") {
                     algo = &none_cc_algo;
                 }

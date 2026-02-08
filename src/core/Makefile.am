@@ -125,7 +125,6 @@ libxlio_la_SOURCES := \
 	lwip/tcp_out.c \
 	lwip/cc.c \
 	lwip/cc_lwip.c \
-	lwip/cc_cubic.c \
 	lwip/cc_none.c \
 	\
 	proto/ip_frag.cpp \
@@ -265,7 +264,6 @@ libxlio_la_SOURCES := \
 	iomux/poll_call.h \
 	iomux/select_call.h \
 	\
-	lwip/cc_cubic.h \
 	lwip/cc.h \
 	lwip/def.h \
 	lwip/err.h \

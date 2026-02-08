@@ -635,11 +635,9 @@ network.protocols.tcp.congestion_control
 Maps to **XLIO_TCP_CC_ALGO** environment variable.
 TCP congestion control algorithm.
 The default algorithm coming with LWIP is a variation of Reno/New-Reno.
-The new Cubic algorithm was adapted from FreeBSD implementation.
 Use:
    - "lwip" or 0 for LWIP algorithm.
-   - "cubic" or 1 for Cubic algorithm.
-   - "disable" or 2 to disable the congestion algorithm.
+   - "disable" or 1 to disable the congestion algorithm.
 Default value is 0
 
 network.protocols.tcp.linger_0
