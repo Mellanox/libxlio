@@ -421,14 +421,6 @@
                                     "default": 100,
                                     "title": "TCP timer interval (msec)",
                                     "description": "Maps to XLIO_TCP_TIMER_RESOLUTION_MSEC environment variable.\nControl internal TCP timer resolution (fast timer) in milliseconds.\nMinimum value is the thread wakeup timer resolution configured in\nperformance.threading.internal_handler.timer_msec."
-                                },
-                                "mss": {
-                                    "type": "integer",
-                                    "minimum": 0,
-                                    "maximum": 8960,
-                                    "default": 0,
-                                    "title": "Maximum Segment Size",
-                                    "description": "Maps to XLIO_MSS environment variable.\nDefines the max TCP payload size that can be sent without IP fragmentation.\n0 will set TCP MSS to be aligned with network.protocols.ip.mtu configuration,\nleaving 40 bytes room for IP + TCP headers, as:\n\"TCP MSS = network.protocols.ip.mtu - 40\".\nOther network.protocols.tcp.mss values will force TCP MSS to that specific value."
                                 }
                             },
                             "additionalProperties": false

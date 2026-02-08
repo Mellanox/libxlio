@@ -85,6 +85,6 @@ private:
 
 extern xlio_lwip *g_p_lwip;
 
-uint32_t get_lwip_tcp_mss(uint32_t mtu, uint32_t lwip_mss);
+uint32_t get_lwip_tcp_mss(uint32_t mtu);
 
 #endif

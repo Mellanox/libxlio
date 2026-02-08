@@ -109,8 +109,6 @@ static inline const char *priv_xlio_transport_type_str(transport_type_t transpor
     BULLSEYE_EXCLUDE_BLOCK_END
 }
 
-typedef enum { MSS_FOLLOW_MTU = 0 } mss_mode_t;
-
 typedef enum { MTU_FOLLOW_INTERFACE = 0 } mtu_mode_t;
 
 typedef enum {
@@ -427,7 +425,6 @@ public:
     bool close_on_dup2;
     uint32_t mtu; /* effective MTU. If mtu==0 then auto calculate the MTU */
     uint32_t lwip_cc_algo_mod;
-    uint32_t lwip_mss;
     char internal_thread_cpuset[FILENAME_MAX];
     char internal_thread_affinity_str[FILENAME_MAX];
     cpu_set_t internal_thread_affinity;
@@ -669,7 +666,6 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_SRC_PORT_STRIDE "XLIO_SRC_PORT_STRIDE"
 #define SYS_VAR_DISTRIBUTE_CQ   "XLIO_DISTRIBUTE_CQ"
 #endif
-#define SYS_VAR_MSS         "XLIO_MSS"
 #define SYS_VAR_TCP_CC_ALGO "XLIO_TCP_CC_ALGO"
 #define SYS_VAR_SPEC        "XLIO_SPEC"
 #define SYS_VAR_TSO         "XLIO_TSO"
@@ -819,7 +815,6 @@ extern mce_sys_var &safe_mce_sys();
 #define CONFIG_VAR_SRC_PORT_STRIDE "applications.nginx.src_port_stride"
 #define CONFIG_VAR_DISTRIBUTE_CQ   "applications.nginx.distribute_cq"
 #endif
-#define CONFIG_VAR_MSS         "network.protocols.tcp.mss"
 #define CONFIG_VAR_TCP_CC_ALGO "network.protocols.tcp.congestion_control"
 #define CONFIG_VAR_SPEC        "profiles.spec"
 
@@ -971,7 +966,6 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_DISTRIBUTE_CQ   (false)
 #endif
 #define MCE_DEFAULT_SRC_PORT_STRIDE              (2)
-#define MCE_DEFAULT_MSS                          (0)
 #define MCE_DEFAULT_LWIP_CC_ALGO_MOD             (0)
 #define MCE_DEFAULT_INTERNAL_THREAD_AFFINITY     (-1)
 #define MCE_DEFAULT_INTERNAL_THREAD_AFFINITY_STR ("-1")

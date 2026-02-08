@@ -809,15 +809,6 @@ void print_env_vars_xlio_global_settings()
         VLOG_PARAM_NUMBER("MTU", safe_mce_sys().mtu, MCE_DEFAULT_MTU, SYS_VAR_MTU);
         break;
     }
-    switch (safe_mce_sys().lwip_mss) {
-    case MSS_FOLLOW_MTU:
-        VLOG_PARAM_NUMSTR("MSS", safe_mce_sys().lwip_mss, MCE_DEFAULT_MSS, SYS_VAR_MSS,
-                          "(follow XLIO_MTU)");
-        break;
-    default:
-        VLOG_PARAM_NUMBER("MSS", safe_mce_sys().lwip_mss, MCE_DEFAULT_MSS, SYS_VAR_MSS);
-        break;
-    }
     VLOG_PARAM_NUMSTR("TCP CC Algorithm", safe_mce_sys().lwip_cc_algo_mod,
                       MCE_DEFAULT_LWIP_CC_ALGO_MOD, SYS_VAR_TCP_CC_ALGO,
                       lwip_cc_algo_str(safe_mce_sys().lwip_cc_algo_mod));
@@ -1132,7 +1123,7 @@ static void do_global_ctors_helper()
     NEW_CTOR(g_zc_cache, mapping_cache(safe_mce_sys().zc_cache_threshold));
 
     if (safe_mce_sys().rx_buf_size <=
-        get_lwip_tcp_mss(g_p_net_device_table_mgr->get_max_mtu(), safe_mce_sys().lwip_mss)) {
+        get_lwip_tcp_mss(g_p_net_device_table_mgr->get_max_mtu())) {
         safe_mce_sys().rx_buf_size = 0;
     }
 
@@ -1148,15 +1139,14 @@ static void do_global_ctors_helper()
     }
 
     if (safe_mce_sys().tx_buf_size <=
-        get_lwip_tcp_mss(g_p_net_device_table_mgr->get_max_mtu(), safe_mce_sys().lwip_mss)) {
+        get_lwip_tcp_mss(g_p_net_device_table_mgr->get_max_mtu())) {
         safe_mce_sys().tx_buf_size = 0;
     }
     NEW_CTOR(g_buffer_pool_tx,
              buffer_pool(BUFFER_POOL_TX,
                          TX_BUF_SIZE(safe_mce_sys().tx_buf_size
                                          ? safe_mce_sys().tx_buf_size
-                                         : get_lwip_tcp_mss(g_p_net_device_table_mgr->get_max_mtu(),
-                                                            safe_mce_sys().lwip_mss)),
+                                         : get_lwip_tcp_mss(g_p_net_device_table_mgr->get_max_mtu())),
                          safe_mce_sys().user_alloc.memalloc, safe_mce_sys().user_alloc.memfree));
 
     NEW_CTOR(g_buffer_pool_zc, buffer_pool(BUFFER_POOL_TX, 0));

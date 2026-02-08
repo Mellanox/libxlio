@@ -152,7 +152,6 @@ Example:
  XLIO DETAILS: fork() support                 Enabled                    [core.syscall.fork_support]
  XLIO DETAILS: close on dup2()                Enabled                    [core.syscall.dup2_close_fd]
  XLIO DETAILS: MTU                            0 (follow actual MTU)      [network.protocols.ip.mtu]
- XLIO DETAILS: MSS                            0 (follow network.protocols.ip.mtu)        [network.protocols.tcp.mss]
  XLIO DETAILS: TCP CC Algorithm               0 (LWIP)                   [network.protocols.tcp.congestion_control]
  XLIO DETAILS: TCP abort on close             Disabled                   [network.protocols.tcp.linger_0]
  XLIO DETAILS: Polling Rx on Tx TCP           Disabled                   [performance.polling.rx_poll_on_tx_tcp]
@@ -649,15 +648,6 @@ If true, XLIO sends RST segment and discards TCP state for the socket.
 Notice, in this scenario pending data segments may be unsent.
 If false, XLIO sends pending data segments and then FIN segment.
 Default value is false
-
-network.protocols.tcp.mss
-Maps to **XLIO_MSS** environment variable.
-Defines the max TCP payload size that can be sent without IP fragmentation.
-0 will set TCP MSS to be aligned with network.protocols.ip.mtu configuration,
-leaving 40 bytes room for IP + TCP headers, as:
-"TCP MSS = network.protocols.ip.mtu - 40".
-Other network.protocols.tcp.mss values will force TCP MSS to that specific value.
-Default value is 0
 
 network.protocols.tcp.nodelay.byte_threshold
 Maps to **XLIO_TCP_NODELAY_TRESHOLD** environment variable.

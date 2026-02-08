@@ -53,8 +53,7 @@
                 "linger_0": false,
                 "congestion_control": 0,
                 "timestamps": 0,
-                "timer_msec": 100,
-                "mss": 0
+                "timer_msec": 100
             }
         },
         "multicast": {

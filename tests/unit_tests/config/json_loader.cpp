@@ -21,9 +21,6 @@ const char *valid_cfg_str = R"({
                         "mtu": 1500,
                         "offload": {
                             "enable": true
-                        },
-                        "tcp": {
-                            "mss": 1000
                         }
                     }
                     })";
@@ -46,7 +43,6 @@ TEST(config, json_loader_sanity)
     ASSERT_EQ(true, std::experimental::any_cast<bool>(data["core.exit_report"]));
     ASSERT_EQ(1500, std::experimental::any_cast<int64_t>(data["net.mtu"]));
     ASSERT_EQ(true, std::experimental::any_cast<bool>(data["net.offload.enable"]));
-    ASSERT_EQ(1000, std::experimental::any_cast<int64_t>(data["net.tcp.mss"]));
 }
 
 // missing '}' in the end of the json string

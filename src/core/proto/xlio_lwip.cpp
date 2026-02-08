@@ -73,7 +73,7 @@ xlio_lwip::xlio_lwip()
 
     lwip_cc_algo_module = (enum cc_algo_mod)safe_mce_sys().lwip_cc_algo_mod;
 
-    lwip_tcp_mss = get_lwip_tcp_mss(safe_mce_sys().mtu, safe_mce_sys().lwip_mss);
+    lwip_tcp_mss = get_lwip_tcp_mss(safe_mce_sys().mtu);
     lwip_tcp_nodelay_treshold = safe_mce_sys().tcp_nodelay_treshold;
 
     enable_push_flag = !!safe_mce_sys().tcp_push_flag;
@@ -133,37 +133,15 @@ void xlio_lwip::handle_timer_expired(void *user_data)
     tcp_ticks++;
 }
 
-uint32_t get_lwip_tcp_mss(uint32_t mtu, uint32_t lwip_mss)
+uint32_t get_lwip_tcp_mss(uint32_t mtu)
 {
-    uint32_t _lwip_tcp_mss;
-
     /*
-     * lwip_tcp_mss calculation
-     * 1. safe_mce_sys().mtu==0 && safe_mce_sys().lwip_mss==0 ==> lwip_tcp_mss = 0 (namelyl-must be
-     * calculated per interface)
-     * 2. safe_mce_sys().mtu==0 && safe_mce_sys().lwip_mss!=0 ==> lwip_tcp_mss =
-     * safe_mce_sys().lwip_mss
-     * 3. safe_mce_sys().mtu!=0 && safe_mce_sys().lwip_mss==0 ==> lwip_tcp_mss = safe_mce_sys().mtu
-     * - IP header len - TCP header len (must be positive)
-     * 4. safe_mce_sys().mtu!=0 && safe_mce_sys().lwip_mss!=0 ==> lwip_tcp_mss =
-     * safe_mce_sys().lwip_mss
+     * TCP MSS is derived from MTU: MSS = MTU - 40 (IP + TCP headers).
+     * mtu==0: follow per-interface MTU (return 0, lwIP calculates per connection).
+     * mtu!=0: use fixed MSS = mtu - 40, at least 1.
      */
-    switch (lwip_mss) {
-    case MSS_FOLLOW_MTU: /* 0 */
-        switch (mtu) {
-        case MTU_FOLLOW_INTERFACE:
-            _lwip_tcp_mss = 0; /* MSS must follow the specific MTU per interface */
-            break;
-        default:
-            // set MSS to match XLIO_MTU, MSS is equal to (XLIO_MTU-40), but forced to be at
-            // least 1.
-            _lwip_tcp_mss = (std::max(mtu, (IP_HLEN + TCP_HLEN + 1)) - IP_HLEN - TCP_HLEN);
-            break;
-        }
-        break;
-    default:
-        _lwip_tcp_mss = (std::max(lwip_mss, 1U));
-        break;
+    if (mtu == 0) {
+        return 0;
     }
-    return _lwip_tcp_mss;
+    return (std::max(mtu, (IP_HLEN + TCP_HLEN + 1)) - IP_HLEN - TCP_HLEN);
 }

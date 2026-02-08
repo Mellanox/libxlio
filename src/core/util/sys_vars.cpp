@@ -907,7 +907,6 @@ void mce_sys_var::get_env_params()
     app.src_port_stride = MCE_DEFAULT_SRC_PORT_STRIDE;
     app.distribute_cq_interrupts = MCE_DEFAULT_DISTRIBUTE_CQ;
 #endif
-    lwip_mss = MCE_DEFAULT_MSS;
     lwip_cc_algo_mod = MCE_DEFAULT_LWIP_CC_ALGO_MOD;
     mce_spec = MCE_SPEC_NONE;
 
@@ -1773,10 +1772,6 @@ void mce_sys_var::get_env_params()
         app.distribute_cq_interrupts = atoi(env_ptr) ? true : false;
     }
 #endif
-    if ((env_ptr = getenv(SYS_VAR_MSS))) {
-        lwip_mss = (uint32_t)atoi(env_ptr);
-    }
-
     if ((env_ptr = getenv(SYS_VAR_TCP_CC_ALGO))) {
         lwip_cc_algo_mod = (uint32_t)atoi(env_ptr);
     }
@@ -2074,7 +2069,6 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
     app.distribute_cq_interrupts =
         registry.get_default_value<bool>("applications.nginx.distribute_cq");
 #endif
-    lwip_mss = registry.get_default_value<uint32_t>("network.protocols.tcp.mss");
     lwip_cc_algo_mod =
         registry.get_default_value<uint32_t>("network.protocols.tcp.congestion_control");
     mce_spec = static_cast<decltype(mce_spec)>(registry.get_default_value<int>("profiles.spec"));
@@ -2901,8 +2895,6 @@ void mce_sys_var::configure_application_specifics(const config_registry &registr
 
 void mce_sys_var::configure_syscall_behavior(const config_registry &registry)
 {
-    set_value_from_registry_if_exists(lwip_mss, "network.protocols.tcp.mss", registry);
-
     set_value_from_registry_if_exists(lwip_cc_algo_mod, "network.protocols.tcp.congestion_control",
                                       registry);
 
