@@ -63,7 +63,7 @@ struct tcp_pcb;
 #include <stdint.h>
 
 /* types of different cc algorithms */
-enum cc_algo_mod { CC_MOD_LWIP, CC_MOD_CUBIC, CC_MOD_NONE };
+enum cc_algo_mod { CC_MOD_LWIP, CC_MOD_NONE };
 
 /* ACK types passed to the ack_received() hook. */
 #define CC_ACK        0x0001 /* Regular in sequence ACK. */
@@ -115,7 +115,6 @@ struct cc_algo {
 };
 
 extern struct cc_algo lwip_cc_algo;
-extern struct cc_algo cubic_cc_algo;
 extern struct cc_algo none_cc_algo;
 
 void cc_init(struct tcp_pcb *pcb);

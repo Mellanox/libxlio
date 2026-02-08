@@ -465,7 +465,7 @@ def _format_memory_size_type(info: TypeInfo) -> str | None:
 
 
 def _format_paired_enum_type(variants: list[TypeVariant]) -> str | None:
-    """Format paired integer/string enums (e.g. 0/"lwip", 1/"cubic").
+    """Format paired integer/string enums (e.g. 0/"foo", 1/"bar").
 
     Returns ``None`` if the variants don't match the expected pattern.
     """
@@ -475,7 +475,7 @@ def _format_paired_enum_type(variants: list[TypeVariant]) -> str | None:
         return None
 
     # Assumes integer and string enums are listed in corresponding
-    # positional order (e.g. [0, 1, 2] pairs with ["lwip", "os", "cubic"]).
+    # positional order (e.g. [0, 1] pairs with ["foo", "bar"]).
     pairs = [f'{i}/"{s}"' for i, s in zip(int_v.enum, str_v.enum)]
     return (
         f"> **Type:** integer or string\n>\n"

@@ -1489,18 +1489,16 @@ sent by the library.
 
 > **Type:** integer or string
 >
-> **Values:** 0/"lwip", 1/"cubic", 2/"disable"
+> **Values:** 0/"lwip", 1/"disable"
 >
 > **Maps to:** `XLIO_TCP_CC_ALGO`
 
 TCP congestion control algorithm.
 The default algorithm coming with LwIP is a variation of Reno.
-The new Cubic algorithm was adapted from FreeBSD implementation.
 
 Use:
    - "lwip" or 0 for LwIP algorithm.
-   - "cubic" or 1 for Cubic algorithm.
-   - "disable" or 2 to disable the congestion algorithm.
+   - "disable" or 1 to disable the congestion algorithm.
 
 **Default:** `"lwip" (0)`
 
