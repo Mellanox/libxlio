@@ -135,9 +135,9 @@ extern "C" int xlio_init_ex(const struct xlio_init_attr *attr)
     g_user_memory_cb = attr->memory_cb;
 
     if (attr->memory_alloc) {
-        safe_mce_sys().user_alloc.memalloc = attr->memory_alloc;
-        safe_mce_sys().user_alloc.memfree = attr->memory_free;
-        safe_mce_sys().memory_limit_user =
+        mce_sys_var::safe_instance().user_alloc.memalloc = attr->memory_alloc;
+        mce_sys_var::safe_instance().user_alloc.memfree = attr->memory_free;
+        mce_sys_var::safe_instance().memory_limit_user =
             std::max(safe_mce_sys().memory_limit_user, safe_mce_sys().memory_limit);
     }
 

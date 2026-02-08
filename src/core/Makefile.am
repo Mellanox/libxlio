@@ -168,35 +168,41 @@ libxlio_la_SOURCES := \
 	util/utils.cpp \
 	util/instrumentation.cpp \
 	util/sys_vars.cpp \
+	util/sys_vars_configurator.cpp \
 	util/agent.cpp \
 	util/data_updater.cpp \
 	\
+	config/change_reason.h \
 	config/config_registry.h \
+	config/config_strings.h \
+	config/descriptors/config_descriptor.h \
+	config/descriptors/parameter_descriptor.h \
+	config/descriptor_providers/descriptor_provider.h \
+	config/descriptor_providers/json_descriptor_provider.h \
+	config/descriptor_providers/schema_analyzer.h \
+	config/json_object_handle.h \
+	config/json_utils.h \
 	config/loaders/inline_loader.h \
 	config/loaders/json_loader.h \
 	config/loaders/key_resolver.h \
 	config/loaders/loader.h \
-	config/descriptors/parameter_descriptor.h \
-	config/descriptors/config_descriptor.h \
-	config/descriptor_providers/descriptor_provider.h \
-	config/descriptor_providers/json_descriptor_provider.h \
-	config/descriptor_providers/schema_analyzer.h \
-	config/config_strings.h \
-	config/json_object_handle.h \
-	config/json_utils.h \
+	config/runtime_registry.h \
+	config/config_var_definitions.h \
+	config/config_var_info.h \
 	config/string_utils.h \
 	\
 	config/config_registry.cpp \
+	config/config_strings.cpp \
+	config/descriptors/config_descriptor.cpp \
+	config/descriptors/parameter_descriptor.cpp \
+	config/descriptor_providers/json_descriptor_provider.cpp \
+	config/descriptor_providers/schema_analyzer.cpp \
+	config/json_object_handle.cpp \
+	config/json_utils.cpp \
 	config/loaders/inline_loader.cpp \
 	config/loaders/json_loader.cpp \
 	config/loaders/key_resolver.cpp \
-	config/descriptors/parameter_descriptor.cpp \
-	config/descriptors/config_descriptor.cpp \
-	config/descriptor_providers/json_descriptor_provider.cpp \
-	config/descriptor_providers/schema_analyzer.cpp \
-	config/config_strings.cpp \
-	config/json_object_handle.cpp \
-	config/json_utils.cpp \
+	config/runtime_registry.cpp \
 	config/string_utils.cpp \
 	\
 	$(top_builddir)/src/core/config/descriptor_providers/xlio_config_schema.h \
@@ -335,6 +341,8 @@ libxlio_la_SOURCES := \
 	util/sock_addr.h \
 	util/sysctl_reader.h \
 	util/sys_vars.h \
+	util/sys_vars_configurator.h \
+	util/sys_vars_types.h \
 	util/to_str.h \
 	util/utils.h \
 	util/valgrind.h \

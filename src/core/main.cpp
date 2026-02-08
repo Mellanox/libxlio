@@ -24,6 +24,7 @@
 #include <sstream>
 #include <algorithm>
 
+#include "config/config_var_definitions.h"
 #include "vlogger/vlogger.h"
 #include "utils/compiler.h"
 #include "utils/rdtsc.h"
@@ -241,10 +242,12 @@ static int free_libxlio_resources()
     }
     g_p_agent = nullptr;
 
+    // Allow config to change as part of exit
+    mce_sys_var::safe_instance().unfreeze();
     if (safe_mce_sys().app_name) {
         free(safe_mce_sys().app_name);
     }
-    safe_mce_sys().app_name = nullptr;
+    mce_sys_var::safe_instance_non_const().app_name = nullptr;
 
     vlog_printf(VLOG_DEBUG, "Stopping logger module\n");
 
@@ -499,14 +502,16 @@ void print_env_vars_xlio_global_settings()
         vlog_printf(VLOG_WARNING,
                     "user_id is not supported using "
                     "environment variable , use etra_api, using default\n");
-        safe_mce_sys().ring_allocation_logic_rx = MCE_DEFAULT_RING_ALLOCATION_LOGIC_RX;
+        mce_sys_var::safe_instance_non_const().ring_allocation_logic_rx =
+            MCE_DEFAULT_RING_ALLOCATION_LOGIC_RX;
     }
 
     if (safe_mce_sys().ring_allocation_logic_tx == RING_LOGIC_PER_USER_ID) {
         vlog_printf(VLOG_WARNING,
                     "user_id is not supported using "
                     "environment variable , use etra_api, using default\n");
-        safe_mce_sys().ring_allocation_logic_tx = MCE_DEFAULT_RING_ALLOCATION_LOGIC_TX;
+        mce_sys_var::safe_instance_non_const().ring_allocation_logic_tx =
+            MCE_DEFAULT_RING_ALLOCATION_LOGIC_TX;
     }
 
     VLOG_PARAM_NUMBER("Ring migration ratio TX", safe_mce_sys().ring_migration_ratio_tx,
@@ -890,25 +895,12 @@ void print_xlio_global_settings()
 
     config_printer printer = config_printer(safe_mce_sys());
     printer.print_to_log();
-    // Once we are done with the registry, destroy it to free the memory
-    safe_mce_sys().destroy_registry();
-
-    if (safe_mce_sys().ring_allocation_logic_rx == RING_LOGIC_PER_USER_ID) {
-        vlog_printf(VLOG_WARNING,
-                    "user_id is not supported using "
-                    "environment variable , use etra_api, using default\n");
-        safe_mce_sys().ring_allocation_logic_rx = MCE_DEFAULT_RING_ALLOCATION_LOGIC_RX;
-    }
-
-    if (safe_mce_sys().ring_allocation_logic_tx == RING_LOGIC_PER_USER_ID) {
-        vlog_printf(VLOG_WARNING,
-                    "user_id is not supported using "
-                    "environment variable , use etra_api, using default\n");
-        safe_mce_sys().ring_allocation_logic_tx = MCE_DEFAULT_RING_ALLOCATION_LOGIC_TX;
-    }
 
     vlog_printf(VLOG_INFO,
                 "---------------------------------------------------------------------------\n");
+
+    // Once we are done with the registry, destroy it to free the memory
+    mce_sys_var::safe_instance().destroy_registry();
 }
 
 void prepare_fork()
@@ -1000,9 +992,9 @@ extern "C" void sock_redirect_exit(void)
 static std::string get_invalid_calc_info_message()
 {
     const std::string strq_num_strides =
-        g_use_new_config ? CONFIG_VAR_STRQ_NUM_STRIDES : SYS_VAR_STRQ_NUM_STRIDES;
+        g_use_new_config ? CONFIG_VAR_STRQ_NUM_STRIDES.name : SYS_VAR_STRQ_NUM_STRIDES;
     const std::string strq_stride_size_bytes =
-        g_use_new_config ? CONFIG_VAR_STRQ_STRIDE_SIZE_BYTES : SYS_VAR_STRQ_STRIDE_SIZE_BYTES;
+        g_use_new_config ? CONFIG_VAR_STRQ_STRIDE_SIZE_BYTES.name : SYS_VAR_STRQ_STRIDE_SIZE_BYTES;
 
     return "The requested " + strq_num_strides + "(%" PRIu32 + ") * " + strq_stride_size_bytes +
         "(%" PRIu32 ") = %zu " + "is less then MTU + Headers (%zu)";
@@ -1070,12 +1062,15 @@ static void do_global_ctors_helper()
     PROFILE_BLOCK("xlio_ctors")
 
     g_init_global_ctors_done = true;
+
+    // Unfreeze in case it was already frozen
+    safe_mce_sys().unfreeze();
     set_env_params();
     prepare_fork();
 
     // Adjust configuration before subsystems initialization. We do this here
     // not to affect XLIO header output.
-    safe_mce_sys().update_multi_process_params();
+    mce_sys_var::safe_instance_non_const().update_multi_process_params();
 
     if (g_is_forked_child == true) {
         g_is_forked_child = false;
@@ -1133,7 +1128,7 @@ static void do_global_ctors_helper()
 
     if (safe_mce_sys().rx_buf_size <=
         get_lwip_tcp_mss(g_p_net_device_table_mgr->get_max_mtu(), safe_mce_sys().lwip_mss)) {
-        safe_mce_sys().rx_buf_size = 0;
+        mce_sys_var::safe_instance_non_const().rx_buf_size = 0;
     }
 
     NEW_CTOR(g_buffer_pool_rx_rwqe,
@@ -1149,7 +1144,7 @@ static void do_global_ctors_helper()
 
     if (safe_mce_sys().tx_buf_size <=
         get_lwip_tcp_mss(g_p_net_device_table_mgr->get_max_mtu(), safe_mce_sys().lwip_mss)) {
-        safe_mce_sys().tx_buf_size = 0;
+        mce_sys_var::safe_instance_non_const().tx_buf_size = 0;
     }
     NEW_CTOR(g_buffer_pool_tx,
              buffer_pool(BUFFER_POOL_TX,
@@ -1233,6 +1228,7 @@ int do_global_ctors()
 
 void reset_globals()
 {
+    safe_mce_sys().unfreeze();
     worker_thread_manager::fork_nullify();
     entity_context_manager::fork_nullify();
     poll_group::fork_nullify();
@@ -1353,6 +1349,7 @@ extern "C" int xlio_init(void)
     } else {
         print_env_vars_xlio_global_settings();
     }
+    mce_sys_var::safe_instance().freeze();
 
     check_debug();
     check_cpu_speed();

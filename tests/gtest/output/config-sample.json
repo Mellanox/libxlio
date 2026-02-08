@@ -12,8 +12,11 @@
     },
     "resources": {
       "hugepages": {
-        "enable": true
+        "enable": false
       }
+    },
+    "exception_handling": {
+      "mode": "log_error_undo_offload"
     }
   },
   "hardware_features": {
@@ -93,7 +96,8 @@
       "cpu_affinity": "1,2,3",
       "internal_handler": {
         "behavior": "delegate"
-      }
+      },
+      "mutex_over_spinlock": true
     },
     "polling": {
       "skip_cq_on_rx": 1,

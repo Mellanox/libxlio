@@ -9,8 +9,10 @@
 #include <cassert>
 #include <functional>
 
+#include "config/change_reason.h"
 #include "config/descriptors/config_descriptor.h"
 #include "config/config_registry.h"
+#include "config/config_var_definitions.h"
 #include "util/sys_vars.h"
 #include "vlogger/vlogger.h"
 
@@ -56,6 +58,27 @@
     VLOG_NUM_PARAM_DETAILS(param_val, param_def_val, FORMAT_NUMSTR, param_desc, param_val,         \
                            val_desc_str, param_name)
 
+std::string config_printer::key_with_reason(const std::string &key) const
+{
+    const auto &opt_registry = m_mce_sys_var.get_runtime_registry();
+    if (!opt_registry) {
+        return key;
+    }
+    // If key is not registered in the runtime registry, show it as-is
+    if (!opt_registry->is_registered(key)) {
+        return key;
+    }
+    try {
+        change_reason::change_reason_t reason = opt_registry->get_last_change_reason(key);
+        if (reason != change_reason::NotChanged) {
+            return key + ", Reason: " + change_reason::to_string(reason);
+        }
+    } catch (...) {
+        // Key not in runtime registry (e.g. nested); show key only
+    }
+    return key;
+}
+
 /**
  * @brief Constructor
  * @param mce_sys_var Reference to the mce_sys_var object
@@ -71,7 +94,8 @@ void config_printer::print_to_log()
     // The VLOG_PARAM_XXX macros show:
     // - When logging level is INFO: non-default parameters only
     // - When logging level is DETAILS: all parameters
-    const config_registry &registry = m_mce_sys_var.get_registry().value();
+    const config_registry &registry =
+        m_mce_sys_var.get_runtime_registry().value().get_config_registry();
     const config_descriptor &descriptor = registry.get_config_descriptor();
     const config_descriptor::parameter_map_t &parameter_map = descriptor.get_parameter_map();
     for (const auto &it : parameter_map) {
@@ -85,22 +109,19 @@ void config_printer::print_to_log()
             std::string,
             std::function<void(config_printer *, const std::string &, const std::string &)>>
             special_treatments = {
-                {CONFIG_VAR_LOG_LEVEL, &config_printer::print_log_level},
-                {CONFIG_VAR_RX_NUM_WRE, &config_printer::print_rx_num_wre},
-                {CONFIG_VAR_RX_NUM_WRE_TO_POST_RECV,
+                {CONFIG_VAR_LOG_LEVEL.name, &config_printer::print_log_level},
+                {CONFIG_VAR_RX_NUM_WRE.name, &config_printer::print_rx_num_wre},
+                {CONFIG_VAR_RX_NUM_WRE_TO_POST_RECV.name,
                  &config_printer::print_rx_num_wre_to_post_recv},
-                {CONFIG_VAR_PROGRESS_ENGINE_INTERVAL,
+                {CONFIG_VAR_PROGRESS_ENGINE_INTERVAL.name,
                  &config_printer::print_progress_engine_interval},
                 // NOP - handled by prev case CONFIG_VAR_PROGRESS_ENGINE_INTERVAL
-                {CONFIG_VAR_PROGRESS_ENGINE_WCE_MAX, &config_printer::print_nothing},
-                {CONFIG_VAR_QP_COMPENSATION_LEVEL, &config_printer::print_qp_compensation_level}
+                {CONFIG_VAR_PROGRESS_ENGINE_WCE_MAX.name, &config_printer::print_nothing},
+                {CONFIG_VAR_QP_COMPENSATION_LEVEL.name,
+                 &config_printer::print_qp_compensation_level}
 #if defined(DEFINED_NGINX)
                 ,
-                {CONFIG_VAR_NGINX_WORKERS_NUM, &config_printer::print_nginx_workers_num}
-#endif
-#if defined(DEFINED_ENVOY)
-                ,
-                {CONFIG_VAR_ENVOY_WORKERS_NUM, &config_printer::print_envoy_workers_num}
+                {CONFIG_VAR_NGINX_WORKERS_NUM.name, &config_printer::print_nginx_workers_num}
 #endif
             };
 
@@ -121,7 +142,8 @@ void config_printer::print_log_level(const std::string &key, const std::string &
     // Specific treatment to ensure log level is always shown
     LOG_NUM_PARAM_AS(title.c_str(), m_mce_sys_var.log_level,
                      // VLOG_INIT is never == m_mce_sys_var.log_level, so we always show log level
-                     VLOG_INIT, key.c_str(), log_level::to_str(m_mce_sys_var.log_level));
+                     VLOG_INIT, key_with_reason(key).c_str(),
+                     log_level::to_str(m_mce_sys_var.log_level));
 }
 
 void config_printer::print_rx_num_wre(const std::string &key, const std::string &title)
@@ -129,7 +151,7 @@ void config_printer::print_rx_num_wre(const std::string &key, const std::string 
     LOG_NUM_PARAM(
         title.c_str(), m_mce_sys_var.rx_num_wr,
         (m_mce_sys_var.enable_striding_rq ? MCE_DEFAULT_STRQ_NUM_WRE : MCE_DEFAULT_RX_NUM_WRE),
-        key.c_str());
+        key_with_reason(key).c_str());
 }
 
 void config_printer::print_rx_num_wre_to_post_recv(const std::string &key, const std::string &title)
@@ -137,23 +159,25 @@ void config_printer::print_rx_num_wre_to_post_recv(const std::string &key, const
     LOG_NUM_PARAM(title.c_str(), m_mce_sys_var.rx_num_wr_to_post_recv,
                   (m_mce_sys_var.enable_striding_rq ? MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV
                                                     : MCE_DEFAULT_RX_NUM_WRE_TO_POST_RECV),
-                  key.c_str());
+                  key_with_reason(key).c_str());
 }
 
 void config_printer::print_progress_engine_interval(const std::string &key,
                                                     const std::string &title)
 {
+    const std::string key_display = key_with_reason(key);
     if (m_mce_sys_var.progress_engine_interval_msec == MCE_CQ_DRAIN_INTERVAL_DISABLED ||
         m_mce_sys_var.progress_engine_wce_max == 0) {
         LOG_NUM_PARAM_AS_NUMSTR(title.c_str(), m_mce_sys_var.progress_engine_interval_msec,
                                 INT_MAX, // Ensure it is always shown - we want the user to
                                          // know it is disabled
-                                key.c_str(), "(Disabled)");
+                                key_display.c_str(), "(Disabled)");
     } else {
         LOG_NUM_PARAM(title.c_str(), m_mce_sys_var.progress_engine_interval_msec,
-                      MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC, key.c_str());
+                      MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC, key_display.c_str());
         LOG_NUM_PARAM("Max CQEs per periodic drain", m_mce_sys_var.progress_engine_wce_max,
-                      MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX, CONFIG_VAR_PROGRESS_ENGINE_WCE_MAX);
+                      MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX,
+                      key_with_reason(CONFIG_VAR_PROGRESS_ENGINE_WCE_MAX.name).c_str());
     }
 }
 
@@ -164,7 +188,7 @@ void config_printer::print_nothing(const std::string & /*key*/, const std::strin
 void config_printer::print_qp_compensation_level(const std::string &key, const std::string &title)
 {
     LOG_NUM_PARAM(title.c_str(), m_mce_sys_var.qp_compensation_level, m_mce_sys_var.rx_num_wr / 2U,
-                  key.c_str());
+                  key_with_reason(key).c_str());
 }
 
 #if defined(DEFINED_NGINX)
@@ -173,7 +197,7 @@ void config_printer::print_nginx_workers_num(const std::string &key, const std::
     LOG_NUM_PARAM(title.c_str(),
                   (m_mce_sys_var.app.type == APP_NGINX ? m_mce_sys_var.app.workers_num
                                                        : MCE_DEFAULT_APP_WORKERS_NUM),
-                  MCE_DEFAULT_APP_WORKERS_NUM, key.c_str());
+                  MCE_DEFAULT_APP_WORKERS_NUM, key_with_reason(key).c_str());
 }
 #endif
 
@@ -183,7 +207,7 @@ void config_printer::print_envoy_workers_num(const std::string &key, const std::
     LOG_NUM_PARAM(title.c_str(),
                   (m_mce_sys_var.app.type == APP_ENVOY ? m_mce_sys_var.app.workers_num
                                                        : MCE_DEFAULT_APP_WORKERS_NUM),
-                  MCE_DEFAULT_APP_WORKERS_NUM, key.c_str());
+                  MCE_DEFAULT_APP_WORKERS_NUM, key_with_reason(key).c_str());
 }
 #endif
 
@@ -202,14 +226,16 @@ std::string config_printer::to_str_accurate(size_t size)
 
 /**
   * @brief Shows a configured int64 value using log messages
-  * @param key Configuration parameter name
+  * @param bracket_display Configuration parameter name plus other info, to show inside '[]'
+  brackets
   * @param title Configuration parameter title
   * @param param_descriptor Configuration parameter descriptor. nullptr for sub-objects.
   * @param element Current value for the parameter, as any
   * @param def_value_any Default value for the parameter, as std::any.
            When there is no default value defined, it is empty
   */
-void config_printer::print_int64_config_element(const std::string &key, const std::string &title,
+void config_printer::print_int64_config_element(const std::string &bracket_display,
+                                                const std::string &title,
                                                 const parameter_descriptor *param_descriptor,
                                                 const std::experimental::any &element,
                                                 const std::experimental::any &def_value_any)
@@ -220,6 +246,7 @@ void config_printer::print_int64_config_element(const std::string &key, const st
         ? std::experimental::any_cast<int64_t>(def_value_any)
         : 0;
     int64_t cur_value = std::experimental::any_cast<int64_t>(element);
+
     // Check if this int has a string mapping
     std::string def_value_str;
     std::string cur_value_str;
@@ -235,23 +262,26 @@ void config_printer::print_int64_config_element(const std::string &key, const st
         // Sentinel values (negative) should not be K/M/G formatted - they're not sizes
         std::string value_str =
             (cur_value < 0) ? std::to_string(cur_value) : to_str_accurate(cur_value);
-        LOG_NUM_PARAM_AS(title.c_str(), cur_value, def_value, key.c_str(), value_str.c_str());
+        LOG_NUM_PARAM_AS(title.c_str(), cur_value, def_value, bracket_display.c_str(),
+                         value_str.c_str());
     } else {
-        LOG_STR_PARAM_AS(title.c_str(), cur_value_str.c_str(), def_value_str.c_str(), key.c_str(),
-                         cur_value_str.c_str());
+        LOG_STR_PARAM_AS(title.c_str(), cur_value_str.c_str(), def_value_str.c_str(),
+                         bracket_display.c_str(), cur_value_str.c_str());
     }
 }
 
 /**
   * @brief Shows a configured boolean value using log messages
-  * @param key Configuration parameter name
+  * @param bracket_display Configuration parameter name plus other info, to show inside '[]'
+  brackets
   * @param title Configuration parameter title
   * @param param_descriptor Configuration parameter descriptor. nullptr for sub-objects.
   * @param element Current value for the parameter, as any
   * @param def_value_any Default value for the parameter, as std::any.
            When there is no default value defined, it is empty
   */
-void config_printer::print_bool_config_element(const std::string &key, const std::string &title,
+void config_printer::print_bool_config_element(const std::string &bracket_display,
+                                               const std::string &title,
                                                const std::experimental::any &element,
                                                const std::experimental::any &def_value_any)
 {
@@ -261,19 +291,21 @@ void config_printer::print_bool_config_element(const std::string &key, const std
         ? std::experimental::any_cast<bool>(def_value_any)
         : false;
     bool cur_value = std::experimental::any_cast<bool>(element);
-    LOG_BOOL_PARAM(title.c_str(), cur_value, def_value, key.c_str());
+    LOG_BOOL_PARAM(title.c_str(), cur_value, def_value, bracket_display.c_str());
 }
 
 /**
   * @brief Shows a configured string value using log messages
-  * @param key Configuration parameter name
+  * @param bracket_display Configuration parameter name plus other info, to show inside '[]'
+  brackets
   * @param title Configuration parameter title
   * @param param_descriptor Configuration parameter descriptor. nullptr for sub-objects.
   * @param element Current value for the parameter, as any
   * @param def_value_any Default value for the parameter, as std::any.
            When there is no default value defined, it is empty
   */
-void config_printer::print_string_config_element(const std::string &key, const std::string &title,
+void config_printer::print_string_config_element(const std::string &bracket_display,
+                                                 const std::string &title,
                                                  const std::experimental::any &element,
                                                  const std::experimental::any &def_value_any)
 {
@@ -282,7 +314,8 @@ void config_printer::print_string_config_element(const std::string &key, const s
         ? std::experimental::any_cast<std::string>(def_value_any)
         : std::string();
     std::string cur_value = std::experimental::any_cast<std::string>(element);
-    LOG_NUM_PARAM_AS(title.c_str(), cur_value, def_value, key.c_str(), cur_value.c_str());
+    LOG_NUM_PARAM_AS(title.c_str(), cur_value, def_value, bracket_display.c_str(),
+                     cur_value.c_str());
 }
 
 /*
@@ -408,21 +441,32 @@ void config_printer::print_config_element(const std::string &key,
                                           const std::experimental::any &element,
                                           const std::experimental::any &def_value_any)
 {
+    auto &runtime_registry = m_mce_sys_var.get_runtime_registry().value();
     const std::string title = param_descriptor ? param_descriptor->get_title().value_or("") : "";
-    const std::type_info &type = element.type();
+    const std::type_info &config_type = element.type();
+    // Certain build configurations remove some variables out of the runtime registry,
+    // so we need to check if the key is registered in the runtime registry before we get it.
+    // If the key is not registered, we use the value in the config registry - it does not matter
+    // anyway.
+    const std::experimental::any &runtime_value =
+        runtime_registry.is_registered(key) ? runtime_registry.get_value_as_any(key) : element;
+    const std::string bracket_display = key_with_reason(key);
 
-    if (type == typeid(bool)) {
-        print_bool_config_element(key, title, element, def_value_any);
-    } else if (type == typeid(std::string)) {
-        print_string_config_element(key, title, element, def_value_any);
-    } else if (type == typeid(int64_t)) {
-        print_int64_config_element(key, title, param_descriptor, element, def_value_any);
-    } else if (type == typeid(std::vector<std::experimental::any>)) {
+    // For basic types (bool, integers, strings), print the runtime value
+    // For vectors/maps, we do not have runtime pointer, so we print the config value
+    if (config_type == typeid(bool)) {
+        print_bool_config_element(bracket_display, title, runtime_value, def_value_any);
+    } else if (config_type == typeid(std::string)) {
+        print_string_config_element(bracket_display, title, runtime_value, def_value_any);
+    } else if (config_type == typeid(int64_t)) {
+        print_int64_config_element(bracket_display, title, param_descriptor, runtime_value,
+                                   def_value_any);
+    } else if (config_type == typeid(std::vector<std::experimental::any>)) {
         print_config_vector(key, title, element);
-    } else if (type == typeid(std::map<std::string, std::experimental::any>)) {
+    } else if (config_type == typeid(std::map<std::string, std::experimental::any>)) {
         print_config_map(key, element);
     } else {
-        vlog_printf(VLOG_ERROR, "%s : Unsupported type: %s\n", key.c_str(), type.name());
+        vlog_printf(VLOG_ERROR, "%s : Unsupported type: %s\n", key.c_str(), config_type.name());
         throw_xlio_exception("Unsupported type - See error output for details\n");
     }
 }

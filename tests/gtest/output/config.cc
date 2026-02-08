@@ -25,11 +25,24 @@ public:
     }
 
 protected:
-    void exec_cmd(const std::string &cmd)
+    void exec_cmd_to_file(const std::string &cmd, const std::string &file_to_quote)
     {
-        int rc = system(cmd.c_str());
+        // The syntax '[command] > [file] 2>&1' works for both bash and dash
+        std::string command = cmd + " > " + file_to_quote + " 2>&1";
+        int rc = system(command.c_str());
         if (rc != 0) {
-            throw std::runtime_error("system('" + cmd + "') failed!");
+            std::cout << "system('" << command << "') failed!" << std::endl;
+            // Show content of the file to quote
+            try {
+                std::ifstream ifs(file_to_quote);
+                std::string text(std::istreambuf_iterator<char>(ifs), {});
+                ifs.close();
+                std::cout << "Content of '" << file_to_quote << "':\n" << text << std::endl;
+            } catch (const std::exception &e) {
+                std::cout << "Failed to read file '" << file_to_quote << "': " << e.what()
+                          << std::endl;
+            }
+            throw std::runtime_error("Aborting test due to system command failure");
         }
     }
 
@@ -50,10 +63,8 @@ protected:
 
         // LD_PRELOAD is already set for the gtest, it is inherited by the new process, no need
         // to do anything
-        // The syntax '[command] > [file] 2>&1' works for both bash and dash
-        std::string cmd = "XLIO_USE_NEW_CONFIG=1 XLIO_CONFIG_FILE=" + full_filename + " ls > " +
-            output_file + " 2>&1";
-        exec_cmd(cmd);
+        std::string cmd = "XLIO_USE_NEW_CONFIG=1 XLIO_CONFIG_FILE=" + full_filename + " ls";
+        exec_cmd_to_file(cmd, output_file);
 
         // Read the output file
         std::ifstream ifs(output_file);
@@ -109,21 +120,26 @@ TEST_F(output, config_show_sample_values)
             // Log level is always shown
             "XLIO INFO   : Log level                      INFO                       [monitor.log.level]",
             // Simple number
-            "XLIO INFO   : Source port stride             3                          [applications.nginx.src_port_stride]",
+            "XLIO INFO   : Source port stride             3                          [applications.nginx.src_port_stride, Reason: Configuration-file]",
             // Simple string
-            "Daemon working directory       /funny-dir                 [core.daemon.dir]",
+            "Daemon working directory       /funny-dir                 [core.daemon.dir, Reason: Configuration-file]",
+        #ifdef DEFINED_UTLS
             // Simple boolean
-            "Enable TLS RX offload          true                       [hardware_features.tcp.tls_offload.rx_enable]",
+            "Enable TLS RX offload          true                       [hardware_features.tcp.tls_offload.rx_enable, Reason: Configuration-file]",
             // 4096 is shown as 4K
-            "DEK max cache size             4K                         [hardware_features.tcp.tls_offload.dek_cache_max_size]",
+            "DEK max cache size             4K                         [hardware_features.tcp.tls_offload.dek_cache_max_size, Reason: Configuration-file]",
+        #endif
+            "Enable hugepages               false                      [core.resources.hugepages.enable, Reason: Configuration-file]",
+            // Boolean with translation from bool to multilock_t and back
+            "Use mutex instead of spinlocks true                       [performance.threading.mutex_over_spinlock, Reason: Configuration-file]",
             // CONFIG_VAR_PROGRESS_ENGINE_INTERVAL is a special case, 0 is shown as '0 (Disabled)'
-            "Periodic drain interval (msec) 0 (Disabled)               [performance.completion_queue.periodic_drain_msec]",
+            "Periodic drain interval (msec) 0 (Disabled)               [performance.completion_queue.periodic_drain_msec, Reason: Auto-Corrected]",
             // Another simple string
-            "CPU affinity                   1,2,3                      [performance.threading.cpu_affinity]",
+            "CPU affinity                   1,2,3                      [performance.threading.cpu_affinity, Reason: Configuration-file]",
             // Enum value is shown as a string
-            "TX ring allocation logic       per_socket                 [performance.rings.tx.allocation_logic]",
+            "XLIO INFO   : Exception handling mode        log_error_undo_offload     [core.exception_handling.mode, Reason: Configuration-file]",
             // Not a power of 1024, hence shown in full accuracy
-            "XLIO INFO   : RX poll duration (µsec)       2049                       [performance.polling.blocking_rx_poll_usec]",
+            "XLIO INFO   : RX poll duration (µsec)       2049                       [performance.polling.blocking_rx_poll_usec, Reason: Configuration-file]",
             // The accelaration rules array - Yey, recursion !
             "XLIO INFO   : Acceleration control rules                                [acceleration_control.rules]",
             "XLIO INFO   :                                0                          [acceleration_control.rules[0].id]",
@@ -139,8 +155,17 @@ TEST_F(output, config_show_sample_values)
             "XLIO INFO   :                                Action 0 of rule e         [acceleration_control.rules[4].actions[0]]",
             "XLIO INFO   :                                5                          [acceleration_control.rules[5].id]",
             "XLIO INFO   :                                f                          [acceleration_control.rules[5].name]",
-            "XLIO INFO   :                                Action 0 of rule f         [acceleration_control.rules[5].actions[0]]"
+            "XLIO INFO   :                                Action 0 of rule f         [acceleration_control.rules[5].actions[0]]",
+            // This comes from the NGINX profile, not from the .json - checks that we read runtime values and not from config registry
+            "XLIO INFO   : Timer resolution (msec)        32                         [performance.threading.internal_handler.timer_msec, Reason: Profile]"
             // clang-format on
+        },
+        {
+            // This should not be shown, despite being set in the json to 10 (= per socket), because
+            // setting threading.internal_handler.behavior to "delegate" resets this value to
+            // default
+            "TX ring allocation logic       per_socket                 "
+            "[performance.rings.tx.allocation_logic]",
         });
 }
 
@@ -307,9 +332,9 @@ TEST_F(output, config_show_negative_values)
                    // clang-format off
             // Negative values should be displayed as-is, not as huge unsigned values
             // -1 should appear as "-1", not as "18446744073709551615"
-            "XLIO INFO   : RX poll duration (µsec)       -1                         [performance.polling.blocking_rx_poll_usec]",
-            "XLIO INFO   : Select/poll duration (µsec)   -1                         [performance.polling.iomux.poll_usec]",
-            "XLIO INFO   : Offload transition poll count  -1                         [performance.polling.offload_transition_poll_count]"
+            "XLIO INFO   : RX poll duration (µsec)       -1                         [performance.polling.blocking_rx_poll_usec, Reason: Configuration-file]",
+            "XLIO INFO   : Select/poll duration (µsec)   -1                         [performance.polling.iomux.poll_usec, Reason: Configuration-file]",
+            "XLIO INFO   : Offload transition poll count  -1                         [performance.polling.offload_transition_poll_count, Reason: Configuration-file]"
                    // clang-format on
                },
                {// These huge values should NOT appear - they indicate the signed-to-unsigned bug

@@ -49,7 +49,7 @@ using namespace std;
 #undef MODULE_NAME
 #define MODULE_NAME "utils:"
 
-int check_if_regular_file(char *path)
+int check_if_regular_file(const char *path)
 {
     static struct stat __sys_st;
 

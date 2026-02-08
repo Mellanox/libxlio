@@ -40,7 +40,7 @@
 /**
  * Check if file type is regular
  */
-int check_if_regular_file(char *path);
+int check_if_regular_file(const char *path);
 
 void open_stats_file();
 
