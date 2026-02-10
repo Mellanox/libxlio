@@ -6,8 +6,6 @@
 
 config_mapping = {
     # core section
-    "core.daemon.dir": "XLIO_SERVICE_NOTIFY_DIR",
-    "core.daemon.enable": "XLIO_SERVICE_ENABLE",
     "core.exception_handling.mode": "XLIO_EXCEPTION_HANDLING",
     "core.quick_init": "XLIO_QUICK_START",
     "core.resources.external_memory_limit": "XLIO_MEMORY_LIMIT_USER",

@@ -25,8 +25,8 @@ static const char *sample_descriptor = R"({
                 "append_pid_to_path": {
                     "type": "boolean",
                     "default": false,
-                    "title": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path.",
-                    "description": "Append PID to xlio.daemon.dir, core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
+                    "title": "Append PID to core.stats.shmem_dir, core.stats.file_path, core.log.file_path.",
+                    "description": "Append PID to core.stats.shmem_dir, core.stats.file_path, core.log.file_path."
                 },
                 "log": {
                     "description": "controls logging behavior.",

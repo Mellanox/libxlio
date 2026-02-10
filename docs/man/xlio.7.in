@@ -29,7 +29,6 @@ General XLIO Library description.
 .RE
 
 .SH SEE ALSO
-.BR xliod (8),
 .BR xlio_stats (8)
 
 .SH "AUTHORS"

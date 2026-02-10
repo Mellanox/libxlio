@@ -168,7 +168,6 @@ libxlio_la_SOURCES := \
 	util/utils.cpp \
 	util/instrumentation.cpp \
 	util/sys_vars.cpp \
-	util/agent.cpp \
 	util/data_updater.cpp \
 	\
 	config/config_registry.h \
@@ -340,8 +339,6 @@ libxlio_la_SOURCES := \
 	util/vtypes.h \
 	util/wakeup.h \
 	util/wakeup_pipe.h \
-	util/agent.h \
-	util/agent_def.h \
 	util/data_updater.h \
 	\
 	$(top_builddir)/third_party/legacy_config_parser/config_parser.h \

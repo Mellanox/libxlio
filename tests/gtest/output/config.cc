@@ -110,8 +110,6 @@ TEST_F(output, config_show_sample_values)
             "XLIO INFO   : Log level                      INFO                       [monitor.log.level]",
             // Simple number
             "XLIO INFO   : Source port stride             3                          [applications.nginx.src_port_stride]",
-            // Simple string
-            "Daemon working directory       /funny-dir                 [core.daemon.dir]",
             // Simple boolean
             "Enable TLS RX offload          true                       [hardware_features.tcp.tls_offload.rx_enable]",
             // 4096 is shown as 4K
