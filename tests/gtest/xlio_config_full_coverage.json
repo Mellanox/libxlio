@@ -25,7 +25,6 @@
             "dup2_close_fd": true,
             "fork_support": true,
             "deferred_close": false,
-            "allow_privileged_sockopt": true,
             "avoid_ctl_syscalls": false,
             "sendfile_cache_limit": 10737418240
         },

@@ -435,7 +435,7 @@ protected:
                   sockaddr *__from, socklen_t *__fromlen, struct msghdr *__msg);
 
     int setsockopt_kernel(int __level, int __optname, const void *__optval, socklen_t __optlen,
-                          int supported, bool allow_priv);
+                          int supported);
 
     transport_t find_target_family(role_t role, const struct sockaddr *sock_addr_first,
                                    const struct sockaddr *sock_addr_second = nullptr);

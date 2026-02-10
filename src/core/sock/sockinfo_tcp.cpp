@@ -4558,13 +4558,12 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
         }
 
         return (ret_opt == SOCKOPT_HANDLE_BY_OS
-                    ? setsockopt_kernel(__level, __optname, __optval, __optlen, true, false)
+                    ? setsockopt_kernel(__level, __optname, __optval, __optlen, true)
                     : ret_opt);
     }
 
     int val = 0;
     bool supported = true;
-    bool allow_privileged_sock_opt = false;
     bool pass_to_os_cond = true; // Pass to OS depending on a condition below
     bool pass_to_os_always = false; // Pass to OS regardless the condition below.
     int ret = 0;
@@ -4816,7 +4815,6 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
         }
         case SO_BINDTODEVICE: {
             ip_addr addr {0};
-            allow_privileged_sock_opt = safe_mce_sys().allow_privileged_sock_opt;
             if (__optlen == 0 || ((char *)__optval)[0] == '\0') {
                 m_so_bindtodevice_ip = ip_addr(ip_address::any_addr(), m_family);
             } else if (get_ip_addr_from_ifname((char *)__optval, addr, m_family) &&
@@ -4959,8 +4957,7 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
     }
 
     return ((pass_to_os_always || pass_to_os_cond)
-                ? setsockopt_kernel(__level, __optname, __optval, __optlen, supported,
-                                    allow_privileged_sock_opt)
+                ? setsockopt_kernel(__level, __optname, __optval, __optlen, supported)
                 : ret);
 }
 

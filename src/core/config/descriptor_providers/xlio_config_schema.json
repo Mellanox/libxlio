@@ -194,12 +194,6 @@
                             "title": "Defer closing of file descriptors",
                             "description": "Maps to XLIO_DEFERRED_CLOSE environment variable.\nDefers closing of file descriptors until the socket is actually closed,\nuseful for multi-threaded applications."
                         },
-                        "allow_privileged_sockopt": {
-                            "type": "boolean",
-                            "default": true,
-                            "title": "Allow privileged socket options",
-                            "description": "Maps to XLIO_ALLOW_PRIVILEGED_SOCK_OPT environment variable.\nPermit the use of privileged socket options that might require special permissions."
-                        },
                         "avoid_ctl_syscalls": {
                             "type": "boolean",
                             "default": false,

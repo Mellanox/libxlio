@@ -762,7 +762,7 @@ int sockinfo_udp::setsockopt(int __level, int __optname, __const void *__optval,
     int ret = sockinfo::setsockopt(__level, __optname, __optval, __optlen);
     if (ret != SOCKOPT_PASS_TO_OS) {
         return (ret == SOCKOPT_HANDLE_BY_OS
-                    ? setsockopt_kernel(__level, __optname, __optval, __optlen, true, false)
+                    ? setsockopt_kernel(__level, __optname, __optval, __optlen, true)
                     : ret);
     }
 
@@ -1433,7 +1433,7 @@ int sockinfo_udp::setsockopt(int __level, int __optname, __const void *__optval,
         supported = false;
     } break;
     }
-    return setsockopt_kernel(__level, __optname, __optval, __optlen, supported, false);
+    return setsockopt_kernel(__level, __optname, __optval, __optlen, supported);
 }
 
 int sockinfo_udp::multicast_membership_setsockopt_ip6(int optname, const void *optval,

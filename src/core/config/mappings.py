@@ -17,7 +17,6 @@ config_mapping = {
     "core.resources.memory_limit": "XLIO_MEMORY_LIMIT",
     "core.signals.sigint.exit": "XLIO_HANDLE_SIGINTR",
     "core.signals.sigsegv.backtrace": "XLIO_HANDLE_SIGSEGV",
-    "core.syscall.allow_privileged_sockopt": "XLIO_ALLOW_PRIVILEGED_SOCK_OPT",
     "core.syscall.avoid_ctl_syscalls": "XLIO_AVOID_SYS_CALLS_ON_TCP_FD",
     "core.syscall.deferred_close": "XLIO_DEFERRED_CLOSE",
     "core.syscall.dup2_close_fd": "XLIO_CLOSE_ON_DUP2",

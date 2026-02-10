@@ -415,7 +415,6 @@ public:
     bool tcp_push_flag;
     xlio_exception_handling exception_handling;
     bool avoid_sys_calls_on_tcp_fd;
-    bool allow_privileged_sock_opt;
     uint32_t wait_after_join_msec;
     buffer_batching_mode_t buffer_batching_mode;
     option_alloc_type::mode_t mem_alloc_type;
@@ -646,7 +645,6 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_TCP_QUICKACK              "XLIO_TCP_QUICKACK"
 #define SYS_VAR_TCP_PUSH_FLAG             "XLIO_TCP_PUSH_FLAG"
 #define SYS_VAR_AVOID_SYS_CALLS_ON_TCP_FD "XLIO_AVOID_SYS_CALLS_ON_TCP_FD"
-#define SYS_VAR_ALLOW_PRIVILEGED_SOCK_OPT "XLIO_ALLOW_PRIVILEGED_SOCK_OPT"
 #define SYS_VAR_WAIT_AFTER_JOIN_MSEC      "XLIO_WAIT_AFTER_JOIN_MSEC"
 #define SYS_VAR_BUFFER_BATCHING_MODE      "XLIO_BUFFER_BATCHING_MODE"
 #define SYS_VAR_MEM_ALLOC_TYPE            "XLIO_MEM_ALLOC_TYPE"
@@ -796,7 +794,6 @@ extern mce_sys_var &safe_mce_sys();
 #define CONFIG_VAR_TCP_QUICKACK              "network.protocols.tcp.quickack"
 #define CONFIG_VAR_TCP_PUSH_FLAG             "network.protocols.tcp.push"
 #define CONFIG_VAR_AVOID_SYS_CALLS_ON_TCP_FD "core.syscall.avoid_ctl_syscalls"
-#define CONFIG_VAR_ALLOW_PRIVILEGED_SOCK_OPT "core.syscall.allow_privileged_sockopt"
 #define CONFIG_VAR_WAIT_AFTER_JOIN_MSEC      "network.multicast.wait_after_join_msec"
 #define CONFIG_VAR_BUFFER_BATCHING_MODE      "performance.buffers.batching_mode"
 #define CONFIG_VAR_MEM_ALLOC_TYPE            "core.resources.hugepages.enable"
@@ -950,7 +947,6 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_TCP_QUICKACK                   (false)
 #define MCE_DEFAULT_TCP_PUSH_FLAG                  (true)
 #define MCE_DEFAULT_AVOID_SYS_CALLS_ON_TCP_FD      (false)
-#define MCE_DEFAULT_ALLOW_PRIVILEGED_SOCK_OPT      (true)
 #define MCE_DEFAULT_WAIT_AFTER_JOIN_MSEC           (0)
 #define MCE_DEFAULT_BUFFER_BATCHING_MODE           (BUFFER_BATCHING_WITH_RECLAIM)
 #define MCE_DEFAULT_MEM_ALLOC_TYPE                 (option_alloc_type::HUGE)
