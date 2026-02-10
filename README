@@ -150,7 +150,6 @@ Example:
  XLIO DETAILS: Size of UDP socket pool        0                          [applications.nginx.udp_pool_size]
  XLIO DETAILS: Number of Nginx workers        0                          [applications.nginx.workers_num]
  XLIO DETAILS: fork() support                 Enabled                    [core.syscall.fork_support]
- XLIO DETAILS: close on dup2()                Enabled                    [core.syscall.dup2_close_fd]
  XLIO DETAILS: MTU                            0 (follow actual MTU)      [network.protocols.ip.mtu]
  XLIO DETAILS: MSS                            0 (follow network.protocols.ip.mtu)        [network.protocols.tcp.mss]
  XLIO DETAILS: TCP CC Algorithm               0 (LWIP)                   [network.protocols.tcp.congestion_control]
@@ -334,15 +333,6 @@ Maps to **XLIO_DEFERRED_CLOSE** environment variable.
 Defers closing of file descriptors until the socket is actually closed,
 useful for multi-threaded applications.
 Default value is false
-
-core.syscall.dup2_close_fd
-Maps to XLIO_CLOSE_ON_DUP2 environment variable.
-When this parameter is enabled, XLIO will handle the duplicate fd (oldfd)
-as if it was closed (clear internal data structures) and only then,
-will forward the call to the OS.
-This is, in practice, a very rudimentary dup2 support.
-It only supports the case where dup2 is used to close file descriptors.
-Default value is true
 
 core.syscall.fork_support
 Maps to **XLIO_FORK** environment variable.
@@ -1284,10 +1274,10 @@ Use:
       Optimized for use cases that are keen on latency.
       Example: profiles.spec=latency
 
-   - "ultra-latency" or 1
+   - "ultra_latency" or 1
      Optimized for use cases that are keen on latency even more. This mode uses
       single threaded model, avoids OS polling and progress engine.
-      Example: profiles.spec=ultra-latency
+      Example: profiles.spec=ultra_latency
 
    - "nginx" or 2
       Optimized for nginx. This profile must be used to offload nginx. This profile

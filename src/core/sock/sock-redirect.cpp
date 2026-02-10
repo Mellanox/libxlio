@@ -2233,7 +2233,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(dup2)(int __fd, int __fd2)
 {
     PROFILE_FUNC
 
-    if (safe_mce_sys().close_on_dup2 && __fd != __fd2) {
+    if (__fd != __fd2) {
         srdr_logdbg("oldfd=%d, newfd=%d. Closing %d in XLIO.", __fd, __fd2, __fd2);
         handle_close(__fd2);
     }

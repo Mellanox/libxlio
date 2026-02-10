@@ -176,12 +176,6 @@
                     "type": "object",
                     "description": "System call handling behavior.",
                     "properties": {
-                        "dup2_close_fd": {
-                            "type": "boolean",
-                            "default": true,
-                            "title": "Support dup2 calls",
-                            "description": "Maps to XLIO_CLOSE_ON_DUP2 environment variable.\nWhen this parameter is enabled, XLIO will handle the duplicate fd (oldfd)\nas if it was closed (clear internal data structures) and only then,\nwill forward the call to the OS.\nThis is, in practice, a very rudimentary dup2 support.\nIt only supports the case where dup2 is used to close file descriptors."
-                        },
                         "fork_support": {
                             "type": "boolean",
                             "default": true,

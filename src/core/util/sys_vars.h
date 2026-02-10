@@ -424,7 +424,6 @@ public:
     size_t heap_metadata_block;
     size_t hugepage_size;
     bool handle_fork;
-    bool close_on_dup2;
     uint32_t mtu; /* effective MTU. If mtu==0 then auto calculate the MTU */
     uint32_t lwip_cc_algo_mod;
     uint32_t lwip_mss;
@@ -655,7 +654,6 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_HEAP_METADATA_BLOCK       "XLIO_HEAP_METADATA_BLOCK"
 #define SYS_VAR_HUGEPAGE_SIZE             "XLIO_HUGEPAGE_SIZE"
 #define SYS_VAR_FORK                      "XLIO_FORK"
-#define SYS_VAR_CLOSE_ON_DUP2             "XLIO_CLOSE_ON_DUP2"
 #define SYS_VAR_MTU                       "XLIO_MTU"
 #if defined(DEFINED_NGINX)
 #define SYS_VAR_NGINX_WORKERS_NUM                 "XLIO_NGINX_WORKERS_NUM"
@@ -805,7 +803,6 @@ extern mce_sys_var &safe_mce_sys();
 #define CONFIG_VAR_HEAP_METADATA_BLOCK       "core.resources.heap_metadata_block_size"
 #define CONFIG_VAR_HUGEPAGE_SIZE             "core.resources.hugepages.size"
 #define CONFIG_VAR_FORK                      "core.syscall.fork_support"
-#define CONFIG_VAR_CLOSE_ON_DUP2             "core.syscall.dup2_close_fd"
 #define CONFIG_VAR_MTU                       "network.protocols.ip.mtu"
 #if defined(DEFINED_NGINX)
 #define CONFIG_VAR_NGINX_WORKERS_NUM                 "applications.nginx.workers_num"
@@ -960,7 +957,6 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_HUGEPAGE_SIZE                  (0)
 #define MCE_MAX_HUGEPAGE_SIZE                      (1ULL << 63ULL) - 1
 #define MCE_DEFAULT_FORK_SUPPORT                   (true)
-#define MCE_DEFAULT_CLOSE_ON_DUP2                  (true)
 #define MCE_DEFAULT_MTU                            (0)
 #if defined(DEFINED_NGINX)
 #define MCE_DEFAULT_NGINX_UDP_POOL_SIZE               (0)
