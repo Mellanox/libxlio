@@ -2978,11 +2978,13 @@ void mce_sys_var::get_params()
     } else {
         g_use_new_config = true;
         try {
-            // coverity[fun_call_w_exception]
             apply_config_from_registry();
         } catch (const xlio_exception &e) {
             vlog_printf(VLOG_ERROR, "Error: Configuration failed to load.\n%s\n",
                         e.message.c_str());
+            exit(-1);
+        } catch (const std::exception &e) {
+            vlog_printf(VLOG_ERROR, "Error: Configuration failed to load.\n%s\n", e.what());
             exit(-1);
         }
     }
