@@ -1,0 +1,20 @@
+{
+  "monitor": {
+    "log": {
+      "level": 3
+    }
+  },
+  "performance": {
+    "rings": {
+      "tx": {
+        "ring_elements_count": 0,
+        "completion_batch_size": 64
+      },
+      "rx": {
+        "ring_elements_count": 0,
+        "post_batch_size": 1
+      }
+    }
+  }
+}
+
