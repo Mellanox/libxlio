@@ -651,15 +651,24 @@ void print_env_vars_xlio_global_settings()
                           MCE_DEFAULT_SELECT_SKIP_OS, SYS_VAR_SELECT_SKIP_OS, "Disabled");
     }
 
-    if (safe_mce_sys().progress_engine_interval_msec == MCE_CQ_DRAIN_INTERVAL_DISABLED ||
-        safe_mce_sys().progress_engine_wce_max == 0) {
-        vlog_printf(VLOG_INFO, FORMAT_STRING, "CQ Drain Thread", "Disabled",
-                    SYS_VAR_PROGRESS_ENGINE_INTERVAL);
-    } else {
-        VLOG_PARAM_NUMBER("CQ Drain Interval (msec)", safe_mce_sys().progress_engine_interval_msec,
+    // Always show both parameters individually
+    if (safe_mce_sys().progress_engine_interval_msec == MCE_CQ_DRAIN_INTERVAL_DISABLED) {
+        VLOG_PARAM_STRING("Periodic drain interval (msec)",
+                          safe_mce_sys().progress_engine_interval_msec,
                           MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC,
-                          SYS_VAR_PROGRESS_ENGINE_INTERVAL);
-        VLOG_PARAM_NUMBER("CQ Drain WCE (max)", safe_mce_sys().progress_engine_wce_max,
+                          SYS_VAR_PROGRESS_ENGINE_INTERVAL, "0 (Disabled)");
+    } else {
+        VLOG_PARAM_NUMBER(
+            "Periodic drain interval (msec)", safe_mce_sys().progress_engine_interval_msec,
+            MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC, SYS_VAR_PROGRESS_ENGINE_INTERVAL);
+    }
+
+    if (safe_mce_sys().progress_engine_wce_max == 0) {
+        VLOG_PARAM_STRING("Periodic drain max CQEs", safe_mce_sys().progress_engine_wce_max,
+                          MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX, SYS_VAR_PROGRESS_ENGINE_WCE_MAX,
+                          "0 (Disabled)");
+    } else {
+        VLOG_PARAM_NUMBER("Periodic drain max CQEs", safe_mce_sys().progress_engine_wce_max,
                           MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX, SYS_VAR_PROGRESS_ENGINE_WCE_MAX);
     }
 
