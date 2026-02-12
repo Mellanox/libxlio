@@ -9,7 +9,6 @@ config_mapping = {
     "core.daemon.dir": "XLIO_SERVICE_NOTIFY_DIR",
     "core.daemon.enable": "XLIO_SERVICE_ENABLE",
     "core.exception_handling.mode": "XLIO_EXCEPTION_HANDLING",
-    "core.quick_init": "XLIO_QUICK_START",
     "core.resources.external_memory_limit": "XLIO_MEMORY_LIMIT_USER",
     "core.resources.heap_metadata_block_size": "XLIO_HEAP_METADATA_BLOCK",
     "core.resources.hugepages.enable": "XLIO_MEM_ALLOC_TYPE",

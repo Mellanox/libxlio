@@ -790,7 +790,6 @@ void mce_sys_var::get_env_params()
     service_enable = MCE_DEFAULT_SERVICE_ENABLE;
 
     print_report = MCE_DEFAULT_PRINT_REPORT;
-    quick_start = MCE_DEFAULT_QUICK_START;
     log_level = VLOG_DEFAULT;
     log_details = MCE_DEFAULT_LOG_DETAILS;
     log_colors = MCE_DEFAULT_LOG_COLORS;
@@ -1101,10 +1100,6 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_PRINT_REPORT))) {
         print_report = option_3::from_str(env_ptr, MCE_DEFAULT_PRINT_REPORT);
-    }
-
-    if ((env_ptr = getenv(SYS_VAR_QUICK_START))) {
-        quick_start = atoi(env_ptr) ? true : false;
     }
 
     if ((env_ptr = getenv(SYS_VAR_LOG_FILENAME))) {
@@ -1892,7 +1887,6 @@ void mce_sys_var::initialize_base_variables(const config_registry &registry)
 
     print_report = static_cast<decltype(print_report)>(
         registry.get_default_value<int64_t>("monitor.exit_report"));
-    quick_start = registry.get_default_value<bool>("core.quick_init");
     log_level =
         static_cast<decltype(log_level)>(registry.get_default_value<int>("monitor.log.level"));
     log_details = registry.get_default_value<uint32_t>("monitor.log.details");
@@ -2315,8 +2309,6 @@ void mce_sys_var::configure_monitor(const config_registry &registry)
         print_report =
             static_cast<decltype(print_report)>(registry.get_value<int64_t>("monitor.exit_report"));
     }
-
-    set_value_from_registry_if_exists(quick_start, "core.quick_init", registry);
 
     if (registry.value_exists("monitor.log.file_path")) {
         read_env_variable_with_pid(

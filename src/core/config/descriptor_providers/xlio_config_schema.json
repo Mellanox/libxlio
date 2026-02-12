@@ -97,12 +97,6 @@
                     },
                     "additionalProperties": false
                 },
-                "quick_init": {
-                    "type": "boolean",
-                    "default": false,
-                    "title": "Quick initialization",
-                    "description": "Maps to XLIO_QUICK_START environment variable.\nAvoid expensive extra checks to reduce the initialization time.\nThis may result in failures in case of a system misconfiguration.\nFor example, if the parameter is enabled and hugepages are requested\nbeyond the cgroup limit, XLIO crashes due to an access to an unmapped page."
-                },
                 "exception_handling": {
                     "type": "object",
                     "description": "How XLIO handles exceptions and errors.",
