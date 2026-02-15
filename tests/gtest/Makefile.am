@@ -96,6 +96,7 @@ gtest_SOURCES = \
 	mix/mix_list.cc \
 	\
 	output/config.cc \
+	output/tuning_report.cc \
 	\
 	tcp/tcp_accept.cc \
 	tcp/tcp_bind.cc \

@@ -193,7 +193,7 @@ public:
     inline int get_type() { return m_type; }
     inline int get_if_idx() const { return m_if_idx; }
     inline int get_flags() { return m_flags; }
-    inline int get_mtu() { return m_mtu; }
+    inline int get_mtu() const { return m_mtu; }
     inline const char *get_ifname() const { return m_name.c_str(); }
     inline const char *get_ifname_link() const { return m_base_name; }
     inline uint8_t *get_l2_if_addr() { return m_l2_if_addr; }

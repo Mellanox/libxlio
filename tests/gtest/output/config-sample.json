@@ -3,7 +3,9 @@
     "log": {
       "level": 3
     },
-    "exit_report": 1
+    "report": {
+      "mode": "enable"
+    }
   },
   "core": {
     "daemon": {

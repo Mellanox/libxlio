@@ -222,7 +222,10 @@
             "shmem_dir": "/tmp/xlio",
             "cpu_usage": false
         },
-        "exit_report": -1
+        "report": {
+            "mode": "auto",
+            "file_path": "/tmp/xlio_report_%d.txt"
+        }
     },
     "profiles": {
         "spec": 0

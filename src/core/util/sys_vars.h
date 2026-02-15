@@ -154,6 +154,9 @@ public:
     uint32_t mce_spec;
 
     option_3::mode_t print_report;
+    char report_file_path[PATH_MAX]; // Tuning report output file path
+    char cached_ofed_version[128]; // OFED version (populated at init, used at exit)
+    struct timespec init_time_monotonic; // Monotonic clock at lib init (for process duration)
     bool quick_start;
     vlog_levels_t log_level;
     uint32_t log_details;
@@ -389,6 +392,7 @@ extern const mce_sys_var &safe_mce_sys();
  * environment variables
  */
 #define SYS_VAR_PRINT_REPORT        "XLIO_PRINT_REPORT"
+#define SYS_VAR_REPORT_FILE         "XLIO_REPORT_FILE"
 #define SYS_VAR_LOG_LEVEL           "XLIO_TRACELEVEL"
 #define SYS_VAR_LOG_DETAILS         "XLIO_LOG_DETAILS"
 #define SYS_VAR_LOG_FILENAME        "XLIO_LOG_FILE"

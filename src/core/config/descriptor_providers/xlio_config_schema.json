@@ -1490,8 +1490,12 @@
                     },
                     "additionalProperties": false
                 },
-                "exit_report": {
-                    "oneOf": [
+                "report": {
+                    "type": "object",
+                    "description": "Tuning report settings. Replaces the old exit_report parameter.\nGenerates a comprehensive diagnostic report at process exit\ncontaining system context, effective configuration, runtime\nstatistics, and performance indicators.",
+                    "properties": {
+                        "mode": {
+                            "oneOf": [
                                 {
                                     "type": "integer",
                                     "enum": [
@@ -1510,9 +1514,18 @@
                                     ],
                                     "default": "auto"
                                 }
-                    ],
-                    "title": "Enable exit report",
-                    "description": "Maps to XLIO_PRINT_REPORT environment variable.\nPrint a human readable report of resources usage at exit.\nThe report is printed during termination phase.\nTherefore, it can be missed if the process is killed with the SIGKILL signal.\nUse:\n   - \"auto\" or -1\n      Print report only if anomaly is detected on process exit.\n   - \"disable\" or 0\n      Never print report.\n   - \"enable\" or 1\n      Always print report."
+                            ],
+                            "title": "Tuning report mode",
+                            "description": "Maps to XLIO_PRINT_REPORT environment variable.\nControls when the tuning report is generated at process exit.\nUse:\n   - \"auto\" or -1 (default)\n      Generate report only if anomalies are detected (buffer\n      allocation failures, HW RX drops). A brief summary is\n      logged to vlog with the path to the full report.\n   - \"disable\" or 0\n      Never generate report.\n   - \"enable\" or 1\n      Always generate report."
+                        },
+                        "file_path": {
+                            "type": "string",
+                            "default": "/tmp/xlio_report_%d.txt",
+                            "title": "Tuning report file path",
+                            "description": "Maps to XLIO_REPORT_FILE environment variable.\nPath to write the comprehensive tuning report.\nThe report includes effective configuration, system context,\nruntime statistics, and performance indicators.\nDesigned to be pasted into an LLM chatbot or shared with\nengineers for configuration optimization.\nLibrary will replace a single '%d' appearing in the file name\nwith the pid of the process loaded with XLIO.\nUse '%d' in multi-process scenarios (e.g., nginx workers) to\navoid all workers overwriting the same file.\nNote: '%d' is substituted at config-read time (library init),\nnot at write time. If a process forks after XLIO init, the\nchild inherits the parent's substituted path. Use pre-fork\nworker models (nginx, gunicorn) where each worker initializes\nXLIO independently to get correct per-worker PID substitution.\nExample: \"/tmp/xlio_report_%d.txt\""
+                        }
+                    },
+                    "additionalProperties": false
                 }
             },
             "additionalProperties": false

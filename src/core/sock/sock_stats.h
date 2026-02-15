@@ -23,6 +23,9 @@ public:
     socket_stats_t *get_stats_obj();
     void return_stats_obj(socket_stats_t *stats);
 
+    /** Read-only access to the stats vector for diagnostic reporting. */
+    const std::vector<socket_stats_t> &get_all_stats() const { return _socket_stats_vec; }
+
 private:
     sock_stats() {}
     void init_sock_stats(size_t max_stats);
