@@ -34,6 +34,7 @@ config_mapping = {
     "network.neighbor.update_interval_msec": "XLIO_NETLINK_TIMER",
     "network.protocols.ip.mtu": "XLIO_MTU",
     "network.protocols.tcp.congestion_control": "XLIO_TCP_CC_ALGO",
+    "network.protocols.tcp.congestion_control_tso_aware": "XLIO_TCP_CC_TSO_AWARE",
     "network.protocols.tcp.linger_0": "XLIO_TCP_ABORT_ON_CLOSE",
     "network.protocols.tcp.mss": "XLIO_MSS",
     "network.protocols.tcp.nodelay.byte_threshold": "XLIO_TCP_NODELAY_TRESHOLD",
