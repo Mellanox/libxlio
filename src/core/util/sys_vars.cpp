@@ -754,6 +754,9 @@ void mce_sys_var::get_env_params()
     memset(stats_filename, 0, sizeof(stats_filename));
     memset(stats_shmem_dirname, 0, sizeof(stats_shmem_dirname));
     memset(service_notify_dir, 0, sizeof(service_notify_dir));
+    memset(report_file_path, 0, sizeof(report_file_path));
+    memset(cached_ofed_version, 0, sizeof(cached_ofed_version));
+    memset(&init_time_monotonic, 0, sizeof(init_time_monotonic));
     strcpy(stats_filename, MCE_DEFAULT_STATS_FILE);
     strcpy(service_notify_dir, MCE_DEFAULT_SERVICE_FOLDER);
     strcpy(stats_shmem_dirname, MCE_DEFAULT_STATS_SHMEM_DIR);
@@ -1111,6 +1114,17 @@ void mce_sys_var::get_env_params()
         service_enable = true;
         vlog_printf(VLOG_DEBUG, "%s parameter is forced to 'true' for MSHV hypervisor\n",
                     SYS_VAR_SERVICE_ENABLE);
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_REPORT_FILE))) {
+        read_env_variable_with_pid(report_file_path, sizeof(report_file_path), env_ptr);
+    }
+
+    // If reporting is enabled but no file path was set, apply the default.
+    // This covers XLIO_PRINT_REPORT=1 without XLIO_REPORT_FILE.
+    if (print_report != option_3::OFF && report_file_path[0] == '\0') {
+        read_env_variable_with_pid(report_file_path, sizeof(report_file_path),
+                                   "/tmp/xlio_report_%d.txt");
     }
 
     if ((env_ptr = getenv(SYS_VAR_LOG_LEVEL))) {
@@ -1849,6 +1863,11 @@ void mce_sys_var::get_app_name()
 void mce_sys_var::get_params()
 {
     get_app_name();
+
+    // Capture library init time for tuning report duration calculation.
+    // Must be here (not in get_env_params) so it runs in both legacy
+    // and new-config paths. CLOCK_MONOTONIC is immune to NTP adjustments.
+    clock_gettime(CLOCK_MONOTONIC, &init_time_monotonic);
 
     // legacy method - config registry is not relevant for this case
     const char *use_new_config = std::getenv("XLIO_USE_NEW_CONFIG");

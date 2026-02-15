@@ -67,7 +67,8 @@ Example:
  XLIO DETAILS: Polling CPU idle usage         Disabled                   [monitor.stats.cpu_usage]
  XLIO DETAILS: SigIntr Ctrl-C Handle          Enabled                    [core.signals.sigint.exit]
  XLIO DETAILS: SegFault Backtrace             Disabled                   [core.signals.sigsegv.backtrace]
- XLIO DETAILS: Print a report                 Disabled                   [monitor.exit_report]
+ XLIO DETAILS: Tuning report mode              Disabled                   [monitor.report.mode]
+ XLIO DETAILS: Tuning report file              /tmp/xlio_report_%d.txt    [monitor.report.file_path]
  XLIO DETAILS: Quick start                    Disabled                   [core.quick_init]
  XLIO DETAILS: Ring allocation logic TX       0 (Ring per interface)     [performance.rings.tx.allocation_logic]
  XLIO DETAILS: Ring allocation logic RX       0 (Ring per interface)     [performance.rings.rx.allocation_logic]
@@ -458,20 +459,6 @@ Default value is 262144
 MONITOR
 -------
 
-monitor.exit_report
-Maps to **XLIO_PRINT_REPORT** environment variable.
-Print a human readable report of resources usage at exit.
-The report is printed during termination phase.
-Therefore, it can be missed if the process is killed with the SIGKILL signal.
-Use:
-   - "auto" or -1
-      Print report only if anomaly is detected on process exit.
-   - "disable" or 0
-      Never print report.
-   - "enable" or 1
-      Always print report.
-Default value is -1
-
 monitor.log.colors
 Maps to **XLIO_LOG_COLORS** environment variable.
 Use color scheme when logging.
@@ -542,6 +529,39 @@ Logging level the library will be using.
       today this level is identical to finer.
 Example: monitor.log.level="debug"
 Default value is 3
+
+monitor.report.file_path
+Maps to **XLIO_REPORT_FILE** environment variable.
+Path to write the comprehensive tuning report.
+The report includes effective configuration, system context,
+runtime statistics, and performance indicators.
+Designed to be pasted into an LLM chatbot or shared with
+engineers for configuration optimization.
+Library will replace a single '%d' appearing in the file name
+with the pid of the process loaded with XLIO.
+Use '%d' in multi-process scenarios (e.g., nginx workers) to
+avoid all workers overwriting the same file.
+Note: '%d' is substituted at config-read time (library init),
+not at write time. If a process forks after XLIO init, the
+child inherits the parent's substituted path. Use pre-fork
+worker models (nginx, gunicorn) where each worker initializes
+XLIO independently to get correct per-worker PID substitution.
+Example: "/tmp/xlio_report_%d.txt"
+Default value is /tmp/xlio_report_%d.txt
+
+monitor.report.mode
+Maps to **XLIO_PRINT_REPORT** environment variable.
+Controls when the tuning report is generated at process exit.
+Use:
+   - "auto" or -1 (default)
+      Generate report only if anomalies are detected (buffer
+      allocation failures, HW RX drops). A brief summary is
+      logged to vlog with the path to the full report.
+   - "disable" or 0
+      Never generate report.
+   - "enable" or 1
+      Always generate report.
+Default value is -1
 
 monitor.stats.cpu_usage
 Maps to **XLIO_CPU_USAGE_STATS** environment variable.
