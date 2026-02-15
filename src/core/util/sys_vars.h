@@ -464,7 +464,6 @@ public:
     hyper_t hypervisor;
 #if defined(DEFINED_NGINX)
     int nginx_udp_socket_pool_size;
-    int nginx_udp_socket_pool_rx_num_buffs_reuse;
 #endif
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     struct {
@@ -658,9 +657,8 @@ extern mce_sys_var &safe_mce_sys();
 #define SYS_VAR_CLOSE_ON_DUP2             "XLIO_CLOSE_ON_DUP2"
 #define SYS_VAR_MTU                       "XLIO_MTU"
 #if defined(DEFINED_NGINX)
-#define SYS_VAR_NGINX_WORKERS_NUM                 "XLIO_NGINX_WORKERS_NUM"
-#define SYS_VAR_NGINX_UDP_POOL_SIZE               "XLIO_NGINX_UDP_POOL_SIZE"
-#define SYS_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE "XLIO_NGINX_UDP_POOL_REUSE_BUFFS"
+#define SYS_VAR_NGINX_WORKERS_NUM   "XLIO_NGINX_WORKERS_NUM"
+#define SYS_VAR_NGINX_UDP_POOL_SIZE "XLIO_NGINX_UDP_POOL_SIZE"
 #endif
 #if defined(DEFINED_ENVOY)
 #define SYS_VAR_ENVOY_WORKERS_NUM "XLIO_ENVOY_WORKERS_NUM"
@@ -808,9 +806,8 @@ extern mce_sys_var &safe_mce_sys();
 #define CONFIG_VAR_CLOSE_ON_DUP2             "core.syscall.dup2_close_fd"
 #define CONFIG_VAR_MTU                       "network.protocols.ip.mtu"
 #if defined(DEFINED_NGINX)
-#define CONFIG_VAR_NGINX_WORKERS_NUM                 "applications.nginx.workers_num"
-#define CONFIG_VAR_NGINX_UDP_POOL_SIZE               "applications.nginx.udp_pool_size"
-#define CONFIG_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE "applications.nginx.udp_socket_pool_reuse"
+#define CONFIG_VAR_NGINX_WORKERS_NUM   "applications.nginx.workers_num"
+#define CONFIG_VAR_NGINX_UDP_POOL_SIZE "applications.nginx.udp_pool_size"
 #endif
 #if defined(DEFINED_ENVOY)
 #define CONFIG_VAR_ENVOY_WORKERS_NUM "XLIO_ENVOY_WORKERS_NUM"
@@ -963,8 +960,7 @@ extern mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_CLOSE_ON_DUP2                  (true)
 #define MCE_DEFAULT_MTU                            (0)
 #if defined(DEFINED_NGINX)
-#define MCE_DEFAULT_NGINX_UDP_POOL_SIZE               (0)
-#define MCE_DEFAULT_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE (0)
+#define MCE_DEFAULT_NGINX_UDP_POOL_SIZE (0)
 #endif
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
 #define MCE_DEFAULT_APP_WORKERS_NUM (0)
