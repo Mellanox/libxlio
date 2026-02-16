@@ -763,6 +763,20 @@ uint64_t ring_bond::get_rx_cq_out_of_buffer_drop()
     return accumulator;
 }
 
+// m_bond_rings vector is structurally stable (only ctor/dtor modify it;
+// event handler modifies m_xmit_rings/m_recv_rings, not m_bond_rings),
+// so iterating without synchronization is safe for the vector structure.
+// Uses m_bond_rings (all slaves) rather than m_recv_rings (active subset)
+// to capture historical traffic from all slaves across failovers.
+void ring_bond::accumulate_ring_stats(aggregated_ring_stats &agg) const
+{
+    for (const ring_slave *slave : m_bond_rings) {
+        if (slave) {
+            slave->accumulate_ring_stats(agg);
+        }
+    }
+}
+
 void ring_bond::slave_create(int if_index)
 {
     ring_slave *cur_slave;
