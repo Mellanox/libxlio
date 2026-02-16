@@ -104,9 +104,6 @@ static int free_libxlio_resources()
 
     worker_thread_manager::destroy();
 
-    finalize_tuning_report();
-    safe_mce_sys().destroy_registry();
-
     entity_context_manager::destroy();
 
     // Destroy polling groups before fd_collection to clear XLIO sockets from the fd_collection
@@ -138,6 +135,12 @@ static int free_libxlio_resources()
     if (g_p_fd_collection_temp) {
         delete g_p_fd_collection_temp;
     }
+
+    // Generate the tuning report after all socket destructors have run,
+    // so destructor counters are complete and sock_stats data is finalized.
+    // Must precede net_device_table_mgr and sock_stats destruction.
+    finalize_tuning_report();
+    safe_mce_sys().destroy_registry();
 
     if (g_p_lwip) {
         delete g_p_lwip;

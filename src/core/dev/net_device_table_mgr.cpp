@@ -449,6 +449,20 @@ uint64_t net_device_table_mgr::get_rx_drop_counter()
     return accumulator;
 }
 
+aggregated_ring_stats net_device_table_mgr::get_aggregated_ring_stats() const
+{
+    // Start from stats accumulated from destroyed rings, then add live rings.
+    aggregated_ring_stats agg = m_closed_rings_stats;
+    for (const auto &entry : m_net_device_map_index) {
+        const net_device_val *dev = entry.second;
+        if (!dev) {
+            continue;
+        }
+        dev->accumulate_ring_stats(agg);
+    }
+    return agg;
+}
+
 void net_device_table_mgr::print_report(vlog_levels_t log_level,
                                         bool print_only_critical /*=false*/)
 {

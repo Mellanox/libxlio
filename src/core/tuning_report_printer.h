@@ -6,6 +6,17 @@
 
 #pragma once
 
+#include <atomic>
+#include <cstdint>
+
+// Process-local tuning-report counters, incremented in socket destructors.
+struct tuning_report_counters_t {
+    std::atomic<uint64_t> socket_offloaded_destructor_counter {0};
+    std::atomic<uint64_t> socket_non_offloaded_destructor_counter {0};
+};
+
+extern tuning_report_counters_t g_tuning_report_counters;
+
 /**
  * Check if anomalies were detected during this process run.
  *

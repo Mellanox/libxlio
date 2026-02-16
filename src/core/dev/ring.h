@@ -7,6 +7,7 @@
 #ifndef RING_H
 #define RING_H
 
+#include <cstdint>
 #include <memory>
 #include "ib/base/verbs_extra.h"
 #include "dev/buffer_pool.h"
@@ -39,6 +40,31 @@ typedef size_t ring_user_id_t;
 typedef cached_obj_pool<tcp_seg> tcp_seg_pool;
 extern tcp_seg_pool *g_tcp_seg_pool;
 
+// Aggregated ring-level traffic counters for tuning report.
+// Defined here rather than in a separate header — all consumers already
+// include ring.h transitively, so a separate header would provide no
+// build isolation benefit.
+struct aggregated_ring_stats {
+    uint64_t total_rx_packets = 0;
+    uint64_t total_rx_bytes = 0;
+    uint64_t total_tx_packets = 0;
+    uint64_t total_tx_bytes = 0;
+    uint64_t total_tx_retransmits = 0;
+    uint64_t total_tx_dropped_wqes = 0;
+
+    // TSO validation: if tso=enable but these are 0, TSO is misconfigured or unsupported.
+    uint64_t total_tx_tso_pkt_count = 0;
+    uint64_t total_tx_tso_byte_count = 0;
+
+    // TLS anomaly counters — unconditional here (matching ring_stats_t), output
+    // gated by #ifdef DEFINED_UTLS.
+    // Uses uint64_t (wider than ring_stats_t's uint32_t) because aggregation
+    // sums across all rings — bonded NICs with many slaves could overflow uint32_t.
+    uint64_t total_rx_tls_resyncs = 0;
+    uint64_t total_tx_tls_resyncs = 0;
+    uint64_t total_rx_tls_auth_fail = 0;
+};
+
 class ring {
 public:
     ring();
@@ -47,6 +73,7 @@ public:
 
     virtual void print_val();
     virtual uint64_t get_rx_cq_out_of_buffer_drop() = 0;
+    virtual void accumulate_ring_stats(aggregated_ring_stats &agg) const = 0;
 
     virtual bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t = false) = 0;
     virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, rfs_rule **rule_extract) = 0;

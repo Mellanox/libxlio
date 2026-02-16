@@ -34,6 +34,7 @@
 #include "proto/dst_entry_udp_mc.h"
 #include "iomux/epfd_info.h"
 #include "iomux/io_mux_call.h"
+#include "tuning_report_printer.h"
 #include "util/instrumentation.h"
 #include "dev/ib_ctx_handler_collection.h"
 
@@ -401,6 +402,13 @@ sockinfo_udp::~sockinfo_udp()
 {
     si_udp_logfunc("");
     g_global_stat_static.socket_udp_destructor_counter.fetch_add(1, std::memory_order_relaxed);
+    if (isPassthrough()) {
+        g_tuning_report_counters.socket_non_offloaded_destructor_counter.fetch_add(
+            1, std::memory_order_relaxed);
+    } else {
+        g_tuning_report_counters.socket_offloaded_destructor_counter.fetch_add(
+            1, std::memory_order_relaxed);
+    }
 
     // Remove all RX ready queue buffers (Push into reuse queue per ring)
     si_udp_logdbg("Releasing %d ready rx packets (total of %lu bytes)", m_n_rx_pkt_ready_list_count,
@@ -3013,7 +3021,7 @@ void sockinfo_udp::save_stats_tx_offload(int bytes)
             m_p_socket_stats->counters.n_tx_sent_byte_count += bytes;
             m_p_socket_stats->counters.n_tx_sent_pkt_count++;
         } else if (errno == EAGAIN) {
-            m_p_socket_stats->counters.n_rx_os_eagain++;
+            m_p_socket_stats->counters.n_tx_eagain++;
         } else {
             m_p_socket_stats->counters.n_tx_errors++;
         }
