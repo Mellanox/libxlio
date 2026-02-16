@@ -1299,12 +1299,6 @@
                     "type": "object",
                     "description": "NGINX-specific optimizations.",
                     "properties": {
-                        "src_port_stride": {
-                            "type": "integer",
-                            "default": 2,
-                            "title": "Source port stride",
-                            "description": "Maps to XLIO_NGINX_SRC_PORT_STRIDE environment variable.\nControls how source ports are distributed across Nginx worker processes."
-                        },
                         "workers_num": {
                             "type": "integer",
                             "default": 0,

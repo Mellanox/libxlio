@@ -29,7 +29,6 @@ struct app_conf {
     lock_spin_recursive m_lock;
     int workers_num;
     int workers_pow2;
-    int src_port_stride;
     bool add_second_4t_rule;
     /* Map listen fd with thread(process) */
     std::unordered_map<int, pid_t> map_listen_fd;
@@ -47,7 +46,6 @@ struct app_conf {
         m_lock = lock_spin_recursive("app_conf");
         workers_num = 0;
         workers_pow2 = 0;
-        src_port_stride = 2;
         add_second_4t_rule = false;
         map_listen_fd.clear();
         map_thread_id.clear();
@@ -64,7 +62,6 @@ struct app_conf {
     {
         type = safe_mce_sys().app.type;
         workers_num = safe_mce_sys().app.workers_num;
-        src_port_stride = safe_mce_sys().app.src_port_stride;
 
         // Round up to a power of 2 value. Assume the number doesn't exceed 32bit.
         workers_pow2 = workers_num - 1;

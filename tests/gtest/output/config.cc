@@ -108,12 +108,12 @@ TEST_F(output, config_show_sample_values)
 
             // Log level is always shown
             "XLIO INFO   : Log level                      INFO                       [monitor.log.level]",
-            // Simple number
-            "XLIO INFO   : Source port stride             3                          [applications.nginx.src_port_stride]",
             // Simple string
             "Daemon working directory       /funny-dir                 [core.daemon.dir]",
             // Simple boolean
             "Enable TLS RX offload          true                       [hardware_features.tcp.tls_offload.rx_enable]",
+            // Simple number
+            "Data threshold for flush       42                         [network.protocols.tcp.nodelay.byte_threshold]",
             // 4096 is shown as 4K
             "DEK max cache size             4K                         [hardware_features.tcp.tls_offload.dek_cache_max_size]",
             // CONFIG_VAR_PROGRESS_ENGINE_INTERVAL is a special case, 0 is shown as '0 (Disabled)'
