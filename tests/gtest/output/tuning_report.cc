@@ -33,7 +33,7 @@ protected:
 
     // Run XLIO with report config via XLIO_INLINE_CONFIG.
     void run_with_report(const std::string &report_path, const std::string &mode = "enable",
-                         const std::string &extra_inline = "")
+                         const std::string &extra_inline = "", const char *app_cmd = SOCKET_CMD)
     {
         std::string inline_cfg =
             "monitor.report.mode=" + mode + ",monitor.report.file_path=" + report_path;
@@ -41,7 +41,7 @@ protected:
             inline_cfg += "," + extra_inline;
         }
         std::string cmd = "XLIO_USE_NEW_CONFIG=1 XLIO_INLINE_CONFIG=\"" + inline_cfg + "\" " +
-            SOCKET_CMD + " > " + m_output_file + " 2>&1";
+            std::string(app_cmd) + " > " + m_output_file + " 2>&1";
         int rc = system(cmd.c_str());
         ASSERT_EQ(rc, 0) << "Command failed: " << cmd;
     }
@@ -65,10 +65,10 @@ protected:
     void check_report(const std::string &report_path,
                       const std::vector<const char *> &expected_strings,
                       const std::vector<const char *> &unexpected_strings = {},
-                      const std::string &extra_inline = "")
+                      const std::string &extra_inline = "", const char *app_cmd = SOCKET_CMD)
     {
         unlink(report_path.c_str());
-        run_with_report(report_path, "enable", extra_inline);
+        run_with_report(report_path, "enable", extra_inline, app_cmd);
         if (HasFatalFailure()) {
             return;
         }
@@ -119,8 +119,8 @@ TEST_F(tuning_report, basic)
             "xlio_version:",
             "kernel:",
             "## Active Profile",
-            "## Effective Config",
-            "performance.polling.blocking_rx_poll_usec: 500000 *",
+            "## Effective Config (non-default only)",
+            "performance.polling.blocking_rx_poll_usec: 500000",
             "# default: 100000",
             "# End of XLIO Tuning Report"
             // clang-format on
@@ -237,7 +237,7 @@ TEST_F(tuning_report, section_ordering)
 
     const char *sections[] = {
         "# XLIO Tuning Report",      "## System Context",
-        "## Active Profile",         "## Effective Config",
+        "## Active Profile",         "## Effective Config (non-default only)",
         "## Runtime Stats",          "## Socket Summary",
         "## Performance Indicators", "# End of XLIO Tuning Report",
     };
@@ -356,6 +356,59 @@ TEST_F(tuning_report, legacy_env_vars)
     ASSERT_TRUE(text.find("## Active Profile") != std::string::npos);
     ASSERT_TRUE(text.find("Config registry not available") != std::string::npos)
         << "Expected 'Config registry not available' in legacy mode report";
+
+    unlink(report_path.c_str());
+}
+
+/**
+ * @test tuning_report.socket_counts_without_stats_pool
+ * @brief Verify that socket counts appear in the report even when
+ *        monitor.stats.fd_num is 0 (default — no per-socket stats pool).
+ */
+TEST_F(tuning_report, socket_counts_without_stats_pool)
+{
+    std::string report_path = m_prefix + "/report_socket_counts.txt";
+    check_report(report_path,
+                 {"## Socket Summary", "total_sockets:", "tcp_sockets:", "offloaded_sockets:",
+                  "non_offloaded_sockets: 0", "monitor.stats.fd_num"},
+                 {"# Socket stats not available", "# No sockets were created"});
+}
+
+/**
+ * @test tuning_report.socket_counts_with_undersized_stats_pool
+ * @brief Verify that socket counts are accurate even when stats_fd_num is too
+ *        small for the actual number of sockets.
+ */
+TEST_F(tuning_report, socket_counts_with_undersized_stats_pool)
+{
+    static constexpr const char *MANY_SOCKETS_CMD = "python3 -c '"
+                                                    "import socket;"
+                                                    "socks=[socket.socket() for _ in range(5)];"
+                                                    "[s.close() for s in socks]"
+                                                    "'";
+
+    std::string report_path = m_prefix + "/report_undersized_pool.txt";
+    unlink(report_path.c_str());
+
+    run_with_report(report_path, "enable", "monitor.stats.fd_num=1", MANY_SOCKETS_CMD);
+    if (HasFatalFailure()) {
+        return;
+    }
+
+    std::string text = read_report(report_path);
+    ASSERT_FALSE(text.empty());
+
+    ASSERT_NE(text.find("## Socket Summary"), std::string::npos);
+
+    std::string key = "total_sockets: ";
+    auto pos = text.find(key);
+    ASSERT_NE(pos, std::string::npos) << "total_sockets not found in report";
+    char *endptr = nullptr;
+    long long total = std::strtoll(text.c_str() + pos + key.size(), &endptr, 10);
+    ASSERT_NE(endptr, text.c_str() + pos + key.size()) << "Failed to parse total_sockets value";
+    EXPECT_GE(total, 5LL) << "Expected total_sockets >= 5 despite stats_fd_num=1, got " << total
+                          << std::endl
+                          << text;
 
     unlink(report_path.c_str());
 }

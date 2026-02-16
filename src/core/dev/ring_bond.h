@@ -79,6 +79,7 @@ public:
     void slave_create(int if_index);
 
     virtual uint64_t get_rx_cq_out_of_buffer_drop();
+    virtual void accumulate_ring_stats(aggregated_ring_stats &agg) const override;
 
 protected:
     void update_cap(ring_slave *slave = nullptr);

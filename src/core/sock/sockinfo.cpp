@@ -812,7 +812,7 @@ void sockinfo::save_stats_tx_os(int bytes)
             m_p_socket_stats->counters.n_tx_os_bytes += bytes;
             m_p_socket_stats->counters.n_tx_os_packets++;
         } else if (errno == EAGAIN) {
-            m_p_socket_stats->counters.n_rx_os_eagain++;
+            m_p_socket_stats->counters.n_tx_os_eagain++;
         } else {
             m_p_socket_stats->counters.n_tx_os_errors++;
         }

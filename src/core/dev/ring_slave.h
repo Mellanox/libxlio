@@ -275,6 +275,8 @@ public:
 
     transport_type_t get_transport_type() const { return m_transport_type; }
 
+    void accumulate_ring_stats(aggregated_ring_stats &agg) const override;
+
     bool m_active; /* State indicator */
 
     virtual mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
