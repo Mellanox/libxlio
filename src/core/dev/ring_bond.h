@@ -24,61 +24,69 @@ public:
     ring_bond(int if_index);
     virtual ~ring_bond();
 
-    virtual void print_val();
+    virtual void print_val() override;
 
-    virtual int *get_rx_channel_fds(size_t &length) const
+    virtual int *get_rx_channel_fds(size_t &length) const override
     {
         length = m_recv_rings.size();
         return m_p_n_rx_channel_fds;
     };
-    virtual bool request_notification(cq_type_t cq_type);
-    virtual int poll_and_process_element_rx(void *pv_fd_ready_array = nullptr);
-    virtual int poll_and_process_element_tx();
-    virtual void adapt_cq_moderation();
-    virtual bool reclaim_recv_buffers(descq_t *rx_reuse);
-    virtual bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst);
-    virtual void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc);
-    virtual int drain_and_proccess();
-    virtual void wait_for_notification_and_process_element(void *pv_fd_ready_array = nullptr);
-    virtual int get_num_resources() const { return m_bond_rings.size(); };
-    virtual bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t = false);
-    virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, rfs_rule **rule_extract);
-    virtual void restart();
+    virtual bool request_notification(cq_type_t cq_type) override;
+    virtual int poll_and_process_element_rx(void *pv_fd_ready_array = nullptr) override;
+    virtual int poll_and_process_element_tx() override;
+    virtual void adapt_cq_moderation() override;
+    virtual bool reclaim_recv_buffers(descq_t *rx_reuse) override;
+    virtual bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst) override;
+    virtual void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc) override;
+    virtual int drain_and_proccess() override;
+    virtual void wait_for_notification_and_process_element(
+        void *pv_fd_ready_array = nullptr) override;
+    virtual int get_num_resources() const override { return m_bond_rings.size(); };
+    virtual bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink,
+                             bool force_5t = false) override;
+    virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink,
+                             rfs_rule **rule_extract) override;
+    virtual void restart() override;
     virtual mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
-                                           int n_num_mem_bufs = 1, bool tx_skip_poll = false);
+                                           int n_num_mem_bufs = 1,
+                                           bool tx_skip_poll = false) override;
     virtual int mem_buf_tx_release(mem_buf_desc_t *p_mem_buf_desc_list, bool b_accounting,
-                                   bool trylock = false);
-    virtual void inc_tx_retransmissions_stats(ring_user_id_t id);
+                                   bool trylock = false) override;
+    virtual void inc_tx_retransmissions_stats(ring_user_id_t id) override;
     virtual void send_ring_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                                  xlio_wr_tx_packet_attr attr);
+                                  xlio_wr_tx_packet_attr attr) override;
     virtual int send_lwip_buffer(ring_user_id_t id, xlio_ibv_send_wr *p_send_wqe,
-                                 xlio_wr_tx_packet_attr attr, xlio_tis *tis);
-    virtual void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc);
-    virtual void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc, unsigned ref);
-    virtual bool is_member(ring_slave *rng);
-    virtual bool is_active_member(ring_slave *rng, ring_user_id_t id);
+                                 xlio_wr_tx_packet_attr attr, xlio_tis *tis) override;
+    virtual void mem_buf_desc_return_single_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc) override;
+    virtual void mem_buf_desc_return_single_multi_ref(mem_buf_desc_t *p_mem_buf_desc,
+                                                      unsigned ref) override;
+    virtual bool is_member(ring_slave *rng) override;
+    virtual bool is_active_member(ring_slave *rng, ring_user_id_t id) override;
     virtual ring_user_id_t generate_id(const address_t src_mac, const address_t dst_mac,
                                        uint16_t eth_proto, uint16_t encap_proto,
                                        const ip_address &src_ip, const ip_address &dst_ip,
-                                       uint16_t src_port, uint16_t dst_port);
-    virtual int modify_ratelimit(struct xlio_rate_limit_t &rate_limit);
+                                       uint16_t src_port, uint16_t dst_port) override;
+    virtual int modify_ratelimit(struct xlio_rate_limit_t &rate_limit) override;
     /* XXX TODO We have to support ring_bond for zerocopy. */
-    virtual uint32_t get_tx_user_lkey(void *addr, size_t length)
+    virtual uint32_t get_tx_user_lkey(void *addr, size_t length) override
     {
         NOT_IN_USE(addr);
         NOT_IN_USE(length);
         return LKEY_ERROR;
     }
-    virtual uint32_t get_max_inline_data();
-    ib_ctx_handler *get_ctx(ring_user_id_t id) { return m_xmit_rings[id]->get_ctx(0); }
-    virtual uint32_t get_max_send_sge(void);
-    virtual uint32_t get_max_payload_sz(void);
-    virtual uint16_t get_max_header_sz(void);
-    virtual uint32_t get_tx_lkey(ring_user_id_t id) { return m_xmit_rings[id]->get_tx_lkey(id); }
-    virtual bool is_tso(void);
+    virtual uint32_t get_max_inline_data() override;
+    ib_ctx_handler *get_ctx(ring_user_id_t id) override { return m_xmit_rings[id]->get_ctx(0); }
+    virtual uint32_t get_max_send_sge(void) override;
+    virtual uint32_t get_max_payload_sz(void) override;
+    virtual uint16_t get_max_header_sz(void) override;
+    virtual uint32_t get_tx_lkey(ring_user_id_t id) override
+    {
+        return m_xmit_rings[id]->get_tx_lkey(id);
+    }
+    virtual bool is_tso(void) override;
     void slave_create(int if_index);
 
-    virtual uint64_t get_rx_cq_out_of_buffer_drop();
+    virtual uint64_t get_rx_cq_out_of_buffer_drop() override;
     virtual void accumulate_ring_stats(aggregated_ring_stats &agg) const override;
 
 protected:
