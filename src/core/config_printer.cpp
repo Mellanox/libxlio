@@ -71,7 +71,12 @@ std::string config_printer::key_with_reason(const std::string &key) const
     try {
         change_reason::change_reason_t reason = opt_registry->get_last_change_reason(key);
         if (reason != change_reason::NotChanged) {
-            return key + ", Reason: " + change_reason::to_string(reason);
+            std::string result = key + ", Reason: " + change_reason::to_string(reason);
+            const std::string &desc = opt_registry->get_last_change_description(key);
+            if (!desc.empty()) {
+                result += " (" + desc + ")";
+            }
+            return result;
         }
     } catch (...) {
         // Key not in runtime registry (e.g. nested); show key only

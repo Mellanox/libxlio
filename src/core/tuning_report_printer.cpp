@@ -4,13 +4,21 @@
  * SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
  */
 
+// NOTE: If you modify WARNING text, add/remove report fields,
+// change thresholds, or change profile defaults, update
+// docs/xlio_tuning_report_reference.md and run
+// tests/validate_tuning_report_reference.py to verify consistency.
+// Adding a new top-level config namespace also requires doc updates.
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
+#include "config/change_reason.h"
 #include "config/config_registry.h"
 #include "config/descriptors/config_descriptor.h"
 #include "config/descriptors/parameter_descriptor.h"
+#include "config/runtime_registry.h"
 #include "dev/buffer_pool.h"
 #include "dev/net_device_table_mgr.h"
 #include "dev/net_device_val.h"
@@ -28,6 +36,7 @@
 #include <inttypes.h>
 #include <locale.h>
 #include <map>
+#include <numeric>
 #include <string>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -118,7 +127,12 @@ static aggregated_socket_stats aggregate_socket_stats()
     collect_total_socket_counts(agg);
 
     // 2. If the sock_stats pool is populated, enrich with per-socket traffic
-    // stats.
+    // stats. Pool entries retain their last socket's data after return
+    // (return_stats_obj only manipulates the free-list pointer, not the
+    // payload). Reused slots contain only the last occupant's counters
+    // (reset() zeros them on acquisition). For high-churn workloads the
+    // aggregated traffic may undercount — ring-level stats provide
+    // cumulative totals as a cross-check.
     const auto &all_stats = sock_stats::instance().get_all_stats();
     for (const auto &stat : all_stats) {
         if (stat.fd <= 0) {
@@ -228,7 +242,8 @@ static std::string format_throughput(uint64_t bytes, double duration_sec)
 
 bool tuning_report_has_errors()
 {
-    buffer_pool *pools[] = {g_buffer_pool_rx_rwqe, g_buffer_pool_rx_stride, g_buffer_pool_tx};
+    buffer_pool *pools[] = {g_buffer_pool_rx_rwqe, g_buffer_pool_rx_stride, g_buffer_pool_tx,
+                            g_buffer_pool_zc};
     for (auto *pool : pools) {
         if (pool) {
             const bpool_stats_t *stats = pool->get_stats();
@@ -270,7 +285,10 @@ int generate_tuning_report(const char *file_path)
     // Set 0600 (owner rw only) — no reason for other users on a shared
     // machine to read diagnostic data. The owner can share explicitly.
     // fchmod is safer than chmod (no TOCTOU race on the path).
-    fchmod(fileno(f), 0600);
+    const int fd = fileno(f);
+    if (fd >= 0 && fchmod(fd, 0600) != 0) {
+        vlog_printf(VLOG_WARNING, "Tuning report: fchmod(%s, 0600) failed: %m\n", file_path);
+    }
 
     // Force C locale for this function so decimal points are always '.'
     // regardless of the application's LC_NUMERIC setting. Without this,
@@ -291,6 +309,7 @@ int generate_tuning_report(const char *file_path)
     // Wrap section writers in a try block — if any section throws
     // (e.g., bad any_cast), we still get partial report rather than
     // a crash during shutdown.
+    bool all_sections_ok = true;
     try {
         write_preamble(f, duration_sec);
         write_system_context(f);
@@ -301,14 +320,19 @@ int generate_tuning_report(const char *file_path)
         write_socket_summary(f, agg);
         write_performance_indicators(f, agg);
     } catch (const std::exception &e) {
+        all_sections_ok = false;
         fprintf(f, "\n# ERROR: report generation failed: %s\n", e.what());
         vlog_printf(VLOG_WARNING, "Tuning report: exception during generation: %s\n", e.what());
     } catch (...) {
+        all_sections_ok = false;
         fprintf(f, "\n# ERROR: report generation failed (unknown exception)\n");
         vlog_printf(VLOG_WARNING, "Tuning report: unknown exception during generation\n");
     }
 
     fprintf(f, "# End of XLIO Tuning Report\n");
+    if (all_sections_ok) {
+        fprintf(f, "# Report generated successfully\n");
+    }
 
     // Restore original locale
     if (c_locale != (locale_t)0) {
@@ -330,18 +354,31 @@ static void write_preamble(FILE *f, double duration_sec)
     struct tm tm_storage;
     struct tm *tm_info = localtime_r(&now, &tm_storage);
     char time_buf[64];
-    strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", tm_info);
+    if (tm_info) {
+        strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", tm_info);
+    } else {
+        snprintf(time_buf, sizeof(time_buf), "(unknown)");
+    }
 
     fprintf(f, "# XLIO Tuning Report\n");
     fprintf(f, "# report_format_version: 1\n");
-    // Show milliseconds for sub-second durations (e.g., trivial commands)
+    char dur_buf[64];
     if (duration_sec < 1.0) {
-        fprintf(f, "# Generated: %s | PID: %d | Duration: %.0fms\n", time_buf, getpid(),
-                duration_sec * 1000.0);
+        snprintf(dur_buf, sizeof(dur_buf), "%.0fms", duration_sec * 1000.0);
+    } else if (duration_sec < 60.0) {
+        snprintf(dur_buf, sizeof(dur_buf), "%.1fs", duration_sec);
     } else {
-        fprintf(f, "# Generated: %s | PID: %d | Duration: %.1fs\n", time_buf, getpid(),
-                duration_sec);
+        unsigned long total = static_cast<unsigned long>(duration_sec);
+        unsigned long h = total / 3600;
+        unsigned long m = (total % 3600) / 60;
+        unsigned long s = total % 60;
+        if (h > 0) {
+            snprintf(dur_buf, sizeof(dur_buf), "%luh %lum %lus", h, m, s);
+        } else {
+            snprintf(dur_buf, sizeof(dur_buf), "%lum %lus", m, s);
+        }
     }
+    fprintf(f, "# Generated: %s | PID: %d | Duration: %s\n", time_buf, getpid(), dur_buf);
     fprintf(f, "#\n");
     fprintf(f,
             "# This is a post-run diagnostic report from XLIO (network "
@@ -506,7 +543,9 @@ static std::string format_any_value(const std::experimental::any &value,
  */
 static bool values_differ(const std::experimental::any &a, const std::experimental::any &b)
 {
-    // Different types or one is empty → consider them different
+    if (a.empty() && b.empty()) {
+        return false;
+    }
     if (a.empty() || b.empty()) {
         return true;
     }
@@ -565,13 +604,14 @@ static void write_effective_config(FILE *f)
 {
     fprintf(f, "## Effective Config (non-default only)\n");
 
-    const auto &registry_opt = safe_mce_sys().get_registry();
-    if (!registry_opt) {
+    const auto &runtime_reg_opt = safe_mce_sys().get_runtime_registry();
+    if (!runtime_reg_opt) {
         fprintf(f, "# Config registry not available\n\n");
         return;
     }
 
-    const config_registry &registry = registry_opt.value();
+    const runtime_registry &runtime_reg = runtime_reg_opt.value();
+    const config_registry &registry = runtime_reg.get_config_registry();
     const config_descriptor &descriptor = registry.get_config_descriptor();
     const config_descriptor::parameter_map_t &parameter_map = descriptor.get_parameter_map();
 
@@ -580,8 +620,19 @@ static void write_effective_config(FILE *f)
         const std::string &key = it.first;
         const parameter_descriptor &param_descriptor = it.second;
 
-        const std::experimental::any element = registry.get_value_as_any(key);
+        std::experimental::any element = runtime_reg.is_registered(key)
+            ? runtime_reg.get_value_as_any(key)
+            : registry.get_value_as_any(key);
         const std::experimental::any def_value = param_descriptor.default_value();
+
+        // The runtime registry stores some non-scalar parameters (e.g.,
+        // acceleration_control.rules) as legacy char arrays (strings), while
+        // the schema defines them as arrays/maps.  Fall back to the config
+        // registry which preserves the schema type so values_differ can
+        // compare like-for-like.
+        if (!element.empty() && !def_value.empty() && element.type() != def_value.type()) {
+            element = registry.get_value_as_any(key);
+        }
 
         if (!values_differ(element, def_value)) {
             continue;
@@ -592,12 +643,30 @@ static void write_effective_config(FILE *f)
         std::string def_str = format_any_value(def_value, &param_descriptor);
 
         fprintf(f, "%s: %s\n", key.c_str(), value_str.c_str());
+
+        std::vector<std::string> parts = {"default: " + def_str};
+
+        if (runtime_reg.is_registered(key)) {
+            change_reason::change_reason_t reason = runtime_reg.get_last_change_reason(key);
+            if (reason != change_reason::NotChanged) {
+                std::string reason_str = "reason: " + std::string(change_reason::to_string(reason));
+                const std::string &desc = runtime_reg.get_last_change_description(key);
+                if (!desc.empty()) {
+                    reason_str += " (" + desc + ")";
+                }
+                parts.push_back(std::move(reason_str));
+            }
+        }
+
         const auto &title_opt = param_descriptor.get_title();
         if (title_opt && !title_opt.value().empty()) {
-            fprintf(f, "  # default: %s | %s\n", def_str.c_str(), title_opt.value().c_str());
-        } else {
-            fprintf(f, "  # default: %s\n", def_str.c_str());
+            parts.push_back(title_opt.value());
         }
+
+        const std::string comment = std::accumulate(
+            std::next(parts.begin()), parts.end(), parts.front(),
+            [](const std::string &a, const std::string &b) { return a + " | " + b; });
+        fprintf(f, "  # %s\n", comment.c_str());
     }
 
     if (!any_non_default) {
@@ -970,14 +1039,14 @@ static void write_performance_indicators(FILE *f, const aggregated_socket_stats 
 static void log_summary_to_vlog(const char *path, vlog_levels_t level)
 {
     uint64_t hw_drops = 0;
-    uint32_t alloc_failures = 0;
+    uint64_t alloc_failures = 0;
 
     if (g_p_net_device_table_mgr) {
         hw_drops = g_p_net_device_table_mgr->get_rx_drop_counter();
     }
 
     buffer_pool *pools[] = {g_buffer_pool_rx_rwqe, g_buffer_pool_rx_stride, g_buffer_pool_tx,
-                            g_buffer_pool_rx_ptr, g_buffer_pool_zc};
+                            g_buffer_pool_zc};
     for (auto *pool : pools) {
         if (pool) {
             const bpool_stats_t *stats = pool->get_stats();
@@ -989,7 +1058,7 @@ static void log_summary_to_vlog(const char *path, vlog_levels_t level)
 
     vlog_printf(level,
                 "Tuning report: %s "
-                "(hw_rx_drops=%" PRIu64 ", buf_alloc_failures=%" PRIu32 ")\n",
+                "(hw_rx_drops=%" PRIu64 ", buf_alloc_failures=%" PRIu64 ")\n",
                 path, hw_drops, alloc_failures);
 }
 

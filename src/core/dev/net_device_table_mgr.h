@@ -87,32 +87,12 @@ public:
 
     void get_net_devices(local_dev_vector &vec);
 
-    void increase_closed_rings_rx_cq_drop_counter(uint64_t count)
-    {
-        m_closed_rings_rx_cq_drop_counter_lock.lock();
-        m_closed_rings_rx_cq_drop_counter += count;
-        m_closed_rings_rx_cq_drop_counter_lock.unlock();
-    }
+    void increase_closed_rings_rx_cq_drop_counter(uint64_t count);
 
     // Accumulate ring stats from a ring that is about to be destroyed.
     // Called from ring_slave::~ring_slave() so that get_aggregated_ring_stats()
     // returns correct totals even after ring objects are gone.
-    void accumulate_closed_ring_stats(const ring_stats_t &stats)
-    {
-        m_closed_rings_stats_lock.lock();
-        m_closed_rings_stats.total_rx_packets += stats.n_rx_pkt_count;
-        m_closed_rings_stats.total_rx_bytes += stats.n_rx_byte_count;
-        m_closed_rings_stats.total_tx_packets += stats.n_tx_pkt_count;
-        m_closed_rings_stats.total_tx_bytes += stats.n_tx_byte_count;
-        m_closed_rings_stats.total_tx_retransmits += stats.n_tx_retransmits;
-        m_closed_rings_stats.total_tx_dropped_wqes += stats.n_tx_dropped_wqes;
-        m_closed_rings_stats.total_tx_tso_pkt_count += stats.n_tx_tso_pkt_count;
-        m_closed_rings_stats.total_tx_tso_byte_count += stats.n_tx_tso_byte_count;
-        m_closed_rings_stats.total_rx_tls_resyncs += stats.n_rx_tls_resyncs;
-        m_closed_rings_stats.total_tx_tls_resyncs += stats.n_tx_tls_resyncs;
-        m_closed_rings_stats.total_rx_tls_auth_fail += stats.n_rx_tls_auth_fail;
-        m_closed_rings_stats_lock.unlock();
-    }
+    void accumulate_closed_ring_stats(const ring_stats_t &stats);
 
 private:
     void del_link_event(const netlink_link_info *info);

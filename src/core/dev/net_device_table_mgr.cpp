@@ -451,7 +451,17 @@ uint64_t net_device_table_mgr::get_rx_drop_counter()
 
 aggregated_ring_stats net_device_table_mgr::get_aggregated_ring_stats() const
 {
-    // Start from stats accumulated from destroyed rings, then add live rings.
+    // Aggregate ring stats: m_closed_rings_stats (destroyed rings) + live rings.
+    // Called during shutdown from finalize_tuning_report(). At this point in
+    // free_libxlio_resources(), fd_collection has already been deleted — socket
+    // destructors released ring references via release_ring(), destroying all
+    // refcount-zero rings and accumulating their stats into m_closed_rings_stats.
+    // In a normal run this covers all rings, so the live-ring iteration below is
+    // effectively a no-op; it exists for completeness of the aggregation.
+    // No lock needed: worker threads (worker_thread_manager::destroy()) and the
+    // event handler (stop_thread()) were both stopped before this call, so neither
+    // m_closed_rings_stats nor live ring_stats have concurrent writers.
+    // coverity[missing_lock:FALSE]
     aggregated_ring_stats agg = m_closed_rings_stats;
     for (const auto &entry : m_net_device_map_index) {
         const net_device_val *dev = entry.second;
@@ -604,6 +614,29 @@ void net_device_table_mgr::new_link_event(const netlink_link_info *info)
      * It is important that interface can be removed w/o putting it into
      * DOWN state (see RTM_DELLINK).
      */
+}
+
+void net_device_table_mgr::increase_closed_rings_rx_cq_drop_counter(uint64_t count)
+{
+    m_closed_rings_rx_cq_drop_counter_lock.lock();
+    m_closed_rings_rx_cq_drop_counter += count;
+    m_closed_rings_rx_cq_drop_counter_lock.unlock();
+}
+
+void net_device_table_mgr::accumulate_closed_ring_stats(const ring_stats_t &stats)
+{
+    std::lock_guard<decltype(m_closed_rings_stats_lock)> lock(m_closed_rings_stats_lock);
+    m_closed_rings_stats.total_rx_packets += stats.n_rx_pkt_count;
+    m_closed_rings_stats.total_rx_bytes += stats.n_rx_byte_count;
+    m_closed_rings_stats.total_tx_packets += stats.n_tx_pkt_count;
+    m_closed_rings_stats.total_tx_bytes += stats.n_tx_byte_count;
+    m_closed_rings_stats.total_tx_retransmits += stats.n_tx_retransmits;
+    m_closed_rings_stats.total_tx_dropped_wqes += stats.n_tx_dropped_wqes;
+    m_closed_rings_stats.total_tx_tso_pkt_count += stats.n_tx_tso_pkt_count;
+    m_closed_rings_stats.total_tx_tso_byte_count += stats.n_tx_tso_byte_count;
+    m_closed_rings_stats.total_rx_tls_resyncs += stats.n_rx_tls_resyncs;
+    m_closed_rings_stats.total_tx_tls_resyncs += stats.n_tx_tls_resyncs;
+    m_closed_rings_stats.total_rx_tls_auth_fail += stats.n_rx_tls_auth_fail;
 }
 
 void net_device_table_mgr::notify_cb(event *ev)

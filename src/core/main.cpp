@@ -881,11 +881,8 @@ void print_xlio_global_settings()
     if (!ret && strlen(ofed_version_info) > 0) {
         vlog_printf(VLOG_INFO, "OFED Version: %s\n", ofed_version_info);
         // Cache for tuning report — avoids popen() during shutdown.
-        // Explicit null-termination after strncpy: strncpy does NOT
-        // null-terminate if source length >= n.
-        strncpy(safe_mce_sys().cached_ofed_version, ofed_version_info,
-                sizeof(safe_mce_sys().cached_ofed_version) - 1);
-        safe_mce_sys().cached_ofed_version[sizeof(safe_mce_sys().cached_ofed_version) - 1] = '\0';
+        auto &cached = mce_sys_var::safe_instance_non_const().cached_ofed_version;
+        snprintf(cached, sizeof(cached), "%s", ofed_version_info);
     }
 
     if (!uname(&sys_info)) {
@@ -902,9 +899,6 @@ void print_xlio_global_settings()
 
     vlog_printf(VLOG_INFO,
                 "---------------------------------------------------------------------------\n");
-
-    // Once we are done with the registry, destroy it to free the memory
-    mce_sys_var::safe_instance().destroy_registry();
 }
 
 void prepare_fork()

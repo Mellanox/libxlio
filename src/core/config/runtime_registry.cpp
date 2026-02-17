@@ -6,6 +6,8 @@
 
 #include "runtime_registry.h"
 
+#include <unistd.h>
+
 #include "vlogger/vlogger.h"
 
 runtime_registry::runtime_registry()
@@ -17,8 +19,10 @@ void runtime_registry::register_char_array_and_set_default_value(
 {
     register_pointer_and_check_duplicates(key.name, char_p);
     memset(char_p, 0, size);
-    m_runtime_values[key.name] = runtime_entry_t {
-        std::make_unique<runtime_char_array_t>(char_p, size, false), change_reason::NotChanged};
+    m_runtime_values[key.name] =
+        runtime_entry_t {std::make_unique<runtime_char_array_t>(char_p, size, false),
+                         change_reason::NotChanged,
+                         {}};
     m_runtime_values[key.name].value_adapter->set_default_value_from_config_registry(
         m_config_registry, key.name);
 }
@@ -28,8 +32,10 @@ void runtime_registry::register_char_array_and_set_explicit_value(
 {
     register_pointer_and_check_duplicates(key.name, char_p);
     memset(char_p, 0, size);
-    m_runtime_values[key.name] = runtime_entry_t {
-        std::make_unique<runtime_char_array_t>(char_p, size, true), change_reason::NotChanged};
+    m_runtime_values[key.name] =
+        runtime_entry_t {std::make_unique<runtime_char_array_t>(char_p, size, true),
+                         change_reason::NotChanged,
+                         {}};
     strncpy(char_p, value.c_str(), size - 1);
 }
 
@@ -97,6 +103,7 @@ void runtime_registry::set_value_from_any(const std::string &key,
                     old_value.c_str(), new_value.c_str(), change_reason::to_string(reason),
                     description.c_str());
         it->second.last_change_reason = reason;
+        it->second.last_change_description = description;
     }
 }
 
@@ -108,6 +115,15 @@ change_reason::change_reason_t runtime_registry::get_last_change_reason(
         throw_xlio_exception("Key " + key + " not registered into runtime registry");
     }
     return it->second.last_change_reason;
+}
+
+const std::string &runtime_registry::get_last_change_description(const std::string &key) const
+{
+    auto it = m_runtime_values.find(key);
+    if (it == m_runtime_values.end()) {
+        throw_xlio_exception("Key " + key + " not registered into runtime registry");
+    }
+    return it->second.last_change_description;
 }
 
 bool runtime_registry::is_registered(const std::string &key) const
@@ -159,7 +175,17 @@ void runtime_registry::runtime_char_array_t::set_value_from_any(const std::exper
 
 void runtime_registry::runtime_char_array_t::set_value(const std::string &value)
 {
-    strncpy(m_ptr, value.c_str(), m_size - 1);
+    // Replace the first '%d' with the process PID. The XLIO config schema
+    // documents this substitution for path-type char-array fields (log file,
+    // stats file, report file, app_id). Matches the legacy env-var path
+    // (mce_sys_var::read_env_variable_with_pid).
+    auto pos = value.find("%d");
+    if (pos == std::string::npos) {
+        strncpy(m_ptr, value.c_str(), m_size - 1);
+        return;
+    }
+    std::string resolved = value.substr(0, pos) + std::to_string(getpid()) + value.substr(pos + 2);
+    strncpy(m_ptr, resolved.c_str(), m_size - 1);
 }
 
 std::experimental::any runtime_registry::runtime_char_array_t::get_value_as_any() const

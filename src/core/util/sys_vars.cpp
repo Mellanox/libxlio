@@ -756,7 +756,6 @@ void mce_sys_var::get_env_params()
     memset(service_notify_dir, 0, sizeof(service_notify_dir));
     memset(report_file_path, 0, sizeof(report_file_path));
     memset(cached_ofed_version, 0, sizeof(cached_ofed_version));
-    memset(&init_time_monotonic, 0, sizeof(init_time_monotonic));
     strcpy(stats_filename, MCE_DEFAULT_STATS_FILE);
     strcpy(service_notify_dir, MCE_DEFAULT_SERVICE_FOLDER);
     strcpy(stats_shmem_dirname, MCE_DEFAULT_STATS_SHMEM_DIR);
@@ -1864,11 +1863,6 @@ void mce_sys_var::get_params()
 {
     get_app_name();
 
-    // Capture library init time for tuning report duration calculation.
-    // Must be here (not in get_env_params) so it runs in both legacy
-    // and new-config paths. CLOCK_MONOTONIC is immune to NTP adjustments.
-    clock_gettime(CLOCK_MONOTONIC, &init_time_monotonic);
-
     // legacy method - config registry is not relevant for this case
     const char *use_new_config = std::getenv("XLIO_USE_NEW_CONFIG");
     if (!use_new_config || std::string(use_new_config) != "1") {
@@ -1885,6 +1879,11 @@ void mce_sys_var::get_params()
             exit(-1);
         }
     }
+
+    // Capture library init time for tuning report duration calculation.
+    // Placed after config init because get_env_params() bulk-zeroes members.
+    // CLOCK_MONOTONIC is immune to NTP adjustments.
+    clock_gettime(CLOCK_MONOTONIC, &init_time_monotonic);
 }
 
 void mce_sys_var::fixup_params()
