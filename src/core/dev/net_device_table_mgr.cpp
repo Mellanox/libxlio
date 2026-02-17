@@ -451,7 +451,17 @@ uint64_t net_device_table_mgr::get_rx_drop_counter()
 
 aggregated_ring_stats net_device_table_mgr::get_aggregated_ring_stats() const
 {
-    // Start from stats accumulated from destroyed rings, then add live rings.
+    // Aggregate ring stats: m_closed_rings_stats (destroyed rings) + live rings.
+    // Called during shutdown from finalize_tuning_report(). At this point in
+    // free_libxlio_resources(), fd_collection has already been deleted — socket
+    // destructors released ring references via release_ring(), destroying all
+    // refcount-zero rings and accumulating their stats into m_closed_rings_stats.
+    // In a normal run this covers all rings, so the live-ring iteration below is
+    // effectively a no-op; it exists for completeness of the aggregation.
+    // No lock needed: worker threads (worker_thread_manager::destroy()) and the
+    // event handler (stop_thread()) were both stopped before this call, so neither
+    // m_closed_rings_stats nor live ring_stats have concurrent writers.
+    // coverity[missing_lock:FALSE]
     aggregated_ring_stats agg = m_closed_rings_stats;
     for (const auto &entry : m_net_device_map_index) {
         const net_device_val *dev = entry.second;

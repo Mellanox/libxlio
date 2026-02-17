@@ -21,11 +21,11 @@ struct change_reason {
         case NotChanged:
             return "Not-changed";
         case ConfigurationFile:
-            return "Configuration-file";
+            return "User-configured";
         case Profile:
             return "Profile";
         case AutoCorrected:
-            return "Auto-Corrected";
+            return "Auto-corrected";
         }
         return "Unknown";
     }

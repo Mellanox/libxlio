@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
  */
 
+#include <climits>
 #include <cstdlib>
 #include <fstream>
 
@@ -19,12 +20,19 @@ public:
         m_workspace = std::getenv("WORKSPACE");
         if (m_workspace) {
             std::cout << "WORKSPACE: '" << m_workspace << "'" << std::endl;
+            m_prefix = std::string(m_workspace) + "/tests/gtest/output";
         } else {
             std::cout << "WORKSPACE is not set" << std::endl;
+            m_prefix = "output";
         }
+        m_output_file = m_prefix + "/output.txt";
     }
 
+    void TearDown() override { unlink(m_output_file.c_str()); }
+
 protected:
+    static constexpr const char *SOCKET_CMD =
+        "python3 -c 'import socket; s=socket.socket(); s.close()'";
     void exec_cmd_to_file(const std::string &cmd, const std::string &file_to_quote)
     {
         // The syntax '[command] > [file] 2>&1' works for both bash and dash
@@ -49,25 +57,15 @@ protected:
     void check_file(const std::string &filename, const std::vector<const char *> &expected_strings,
                     const std::vector<const char *> &unexpected_strings = {})
     {
-        std::string full_filename = filename;
-
-        std::string prefix;
-        if (m_workspace) {
-            prefix = std::string(m_workspace) + "/tests/gtest/output";
-        } else {
-            // Assume we are running from gtest/
-            prefix = "output";
-        }
-        full_filename = prefix + "/" + filename;
-        std::string output_file = prefix + "/output.txt";
+        std::string full_filename = m_prefix + "/" + filename;
 
         // LD_PRELOAD is already set for the gtest, it is inherited by the new process, no need
         // to do anything
         std::string cmd = "XLIO_USE_NEW_CONFIG=1 XLIO_CONFIG_FILE=" + full_filename + " ls";
-        exec_cmd_to_file(cmd, output_file);
+        exec_cmd_to_file(cmd, m_output_file);
 
         // Read the output file
-        std::ifstream ifs(output_file);
+        std::ifstream ifs(m_output_file);
         std::string text(std::istreambuf_iterator<char>(ifs), {});
         ifs.close();
 
@@ -91,8 +89,9 @@ protected:
         }
     }
 
-    // nullptr if WORKSPACE env var is not set
     char *m_workspace {nullptr};
+    std::string m_prefix;
+    std::string m_output_file;
 };
 
 /**
@@ -120,26 +119,26 @@ TEST_F(output, config_show_sample_values)
             // Log level is always shown
             "XLIO INFO   : Log level                      INFO                       [monitor.log.level]",
             // Simple number
-            "XLIO INFO   : Source port stride             3                          [applications.nginx.src_port_stride, Reason: Configuration-file]",
+            "XLIO INFO   : Source port stride             3                          [applications.nginx.src_port_stride, Reason: User-configured]",
             // Simple string
-            "Daemon working directory       /funny-dir                 [core.daemon.dir, Reason: Configuration-file]",
+            "Daemon working directory       /funny-dir                 [core.daemon.dir, Reason: User-configured]",
         #ifdef DEFINED_UTLS
             // Simple boolean
-            "Enable TLS RX offload          true                       [hardware_features.tcp.tls_offload.rx_enable, Reason: Configuration-file]",
+            "Enable TLS RX offload          true                       [hardware_features.tcp.tls_offload.rx_enable, Reason: User-configured]",
             // 4096 is shown as 4K
-            "DEK max cache size             4K                         [hardware_features.tcp.tls_offload.dek_cache_max_size, Reason: Configuration-file]",
+            "DEK max cache size             4K                         [hardware_features.tcp.tls_offload.dek_cache_max_size, Reason: User-configured]",
         #endif
-            "Enable hugepages               false                      [core.resources.hugepages.enable, Reason: Configuration-file]",
+            "Enable hugepages               false                      [core.resources.hugepages.enable, Reason: User-configured]",
             // Boolean with translation from bool to multilock_t and back
-            "Use mutex instead of spinlocks true                       [performance.threading.mutex_over_spinlock, Reason: Configuration-file]",
+            "Use mutex instead of spinlocks true                       [performance.threading.mutex_over_spinlock, Reason: User-configured]",
             // CONFIG_VAR_PROGRESS_ENGINE_INTERVAL is a special case, 0 is shown as '0 (Disabled)'
-            "Periodic drain interval (msec) 0 (Disabled)               [performance.completion_queue.periodic_drain_msec, Reason: Auto-Corrected]",
+            "Periodic drain interval (msec) 0 (Disabled)               [performance.completion_queue.periodic_drain_msec, Reason: Auto-corrected (Forced when performance.threading.internal_handler.behavior=DELEGATE_TCP_TIMERS)]",
             // Another simple string
-            "CPU affinity                   1,2,3                      [performance.threading.cpu_affinity, Reason: Configuration-file]",
+            "CPU affinity                   1,2,3                      [performance.threading.cpu_affinity, Reason: User-configured]",
             // Enum value is shown as a string
-            "XLIO INFO   : Exception handling mode        log_error_undo_offload     [core.exception_handling.mode, Reason: Configuration-file]",
+            "XLIO INFO   : Exception handling mode        log_error_undo_offload     [core.exception_handling.mode, Reason: User-configured]",
             // Not a power of 1024, hence shown in full accuracy
-            "XLIO INFO   : RX poll duration (µsec)       2049                       [performance.polling.blocking_rx_poll_usec, Reason: Configuration-file]",
+            "XLIO INFO   : RX poll duration (µsec)       2049                       [performance.polling.blocking_rx_poll_usec, Reason: User-configured]",
             // The accelaration rules array - Yey, recursion !
             "XLIO INFO   : Acceleration control rules                                [acceleration_control.rules]",
             "XLIO INFO   :                                0                          [acceleration_control.rules[0].id]",
@@ -157,7 +156,7 @@ TEST_F(output, config_show_sample_values)
             "XLIO INFO   :                                f                          [acceleration_control.rules[5].name]",
             "XLIO INFO   :                                Action 0 of rule f         [acceleration_control.rules[5].actions[0]]",
             // This comes from the NGINX profile, not from the .json - checks that we read runtime values and not from config registry
-            "XLIO INFO   : Timer resolution (msec)        32                         [performance.threading.internal_handler.timer_msec, Reason: Profile]"
+            "XLIO INFO   : Timer resolution (msec)        32                         [performance.threading.internal_handler.timer_msec, Reason: Profile (Nginx profile)]"
             // clang-format on
         },
         {
@@ -332,11 +331,113 @@ TEST_F(output, config_show_negative_values)
                    // clang-format off
             // Negative values should be displayed as-is, not as huge unsigned values
             // -1 should appear as "-1", not as "18446744073709551615"
-            "XLIO INFO   : RX poll duration (µsec)       -1                         [performance.polling.blocking_rx_poll_usec, Reason: Configuration-file]",
-            "XLIO INFO   : Select/poll duration (µsec)   -1                         [performance.polling.iomux.poll_usec, Reason: Configuration-file]",
-            "XLIO INFO   : Offload transition poll count  -1                         [performance.polling.offload_transition_poll_count, Reason: Configuration-file]"
+            "XLIO INFO   : RX poll duration (µsec)       -1                         [performance.polling.blocking_rx_poll_usec, Reason: User-configured]",
+            "XLIO INFO   : Select/poll duration (µsec)   -1                         [performance.polling.iomux.poll_usec, Reason: User-configured]",
+            "XLIO INFO   : Offload transition poll count  -1                         [performance.polling.offload_transition_poll_count, Reason: User-configured]"
                    // clang-format on
                },
                {// These huge values should NOT appear - they indicate the signed-to-unsigned bug
                 "18446744073709551614", "18446744073709551615"});
+}
+
+/**
+ * @test output.config_pid_substitution_legacy
+ * @brief %d in XLIO_REPORT_FILE (legacy env vars) is replaced with the process PID.
+ */
+TEST_F(output, config_pid_substitution_legacy)
+{
+    std::string report_dir = "/tmp/xlio_test_pid_" + std::to_string(getpid());
+    ASSERT_EQ(system(("mkdir -p " + report_dir).c_str()), 0) << "Failed to create test directory";
+
+    std::string report_pattern = "xlio_report_";
+
+    // Use legacy env vars: XLIO_INLINE_CONFIG's parser rejects '%' in values.
+    // Force legacy config path — CI may inherit XLIO_USE_NEW_CONFIG=1 which
+    // would skip get_env_params() and ignore XLIO_PRINT_REPORT/XLIO_REPORT_FILE.
+    std::string cmd = "XLIO_USE_NEW_CONFIG=0 XLIO_PRINT_REPORT=1 XLIO_REPORT_FILE=" + report_dir +
+        "/" + report_pattern + "%d.txt " + SOCKET_CMD + " > " + m_output_file + " 2>&1";
+    int rc = system(cmd.c_str());
+    ASSERT_EQ(rc, 0) << "Command failed: " << cmd;
+
+    std::string find_cmd = "ls " + report_dir + "/" + report_pattern + "*.txt 2>/dev/null";
+    FILE *pipe = popen(find_cmd.c_str(), "r");
+    ASSERT_NE(pipe, nullptr);
+    char found_path[PATH_MAX];
+    bool found = (fgets(found_path, sizeof(found_path), pipe) != nullptr);
+    pclose(pipe);
+
+    ASSERT_TRUE(found) << "No report file matching " << report_pattern << "*.txt found in "
+                       << report_dir;
+
+    size_t len = strlen(found_path);
+    if (len > 0 && found_path[len - 1] == '\n') {
+        found_path[len - 1] = '\0';
+    }
+
+    std::string found_str(found_path);
+    ASSERT_TRUE(found_str.find("%d") == std::string::npos)
+        << "Report filename still contains literal %d: " << found_str;
+
+    std::ifstream ifs(found_path);
+    ASSERT_TRUE(ifs.is_open()) << "Cannot open report file: " << found_str;
+    std::string text(std::istreambuf_iterator<char>(ifs), {});
+    ASSERT_TRUE(text.find("# XLIO Tuning Report") != std::string::npos)
+        << "Report file is missing preamble";
+
+    int unused __attribute__((unused)) = system(("rm -rf " + report_dir).c_str());
+}
+
+/**
+ * @test output.config_pid_substitution_new_config
+ * @brief %d in monitor.report.file_path (new config system) is replaced with the process PID.
+ */
+TEST_F(output, config_pid_substitution_new_config)
+{
+    std::string report_dir = "/tmp/xlio_test_pid_nc_" + std::to_string(getpid());
+    ASSERT_EQ(system(("mkdir -p " + report_dir).c_str()), 0) << "Failed to create test directory";
+
+    std::string report_pattern = "xlio_report_";
+
+    // Write a JSON config with %d in the report path.
+    // Unlike XLIO_INLINE_CONFIG (which rejects '%'), JSON config files
+    // handle '%d' in string values without issue.
+    std::string config_file = m_prefix + "/pid_test_config.json";
+    {
+        std::ofstream cfg(config_file);
+        cfg << R"({ "monitor": { "report": { "mode": "enable", "file_path": ")" << report_dir << "/"
+            << report_pattern << R"(%d.txt" } } })";
+    }
+
+    std::string cmd = "XLIO_USE_NEW_CONFIG=1 XLIO_CONFIG_FILE=" + config_file + " " +
+        std::string(SOCKET_CMD) + " > " + m_output_file + " 2>&1";
+    int rc = system(cmd.c_str());
+    ASSERT_EQ(rc, 0) << "Command failed: " << cmd;
+
+    std::string find_cmd = "ls " + report_dir + "/" + report_pattern + "*.txt 2>/dev/null";
+    FILE *pipe = popen(find_cmd.c_str(), "r");
+    ASSERT_NE(pipe, nullptr);
+    char found_path[PATH_MAX];
+    bool found = (fgets(found_path, sizeof(found_path), pipe) != nullptr);
+    pclose(pipe);
+
+    ASSERT_TRUE(found) << "No report file matching " << report_pattern << "*.txt found in "
+                       << report_dir;
+
+    size_t len = strlen(found_path);
+    if (len > 0 && found_path[len - 1] == '\n') {
+        found_path[len - 1] = '\0';
+    }
+
+    std::string found_str(found_path);
+    ASSERT_TRUE(found_str.find("%d") == std::string::npos)
+        << "Report filename still contains literal %d: " << found_str;
+
+    std::ifstream ifs(found_path);
+    ASSERT_TRUE(ifs.is_open()) << "Cannot open report file: " << found_str;
+    std::string text(std::istreambuf_iterator<char>(ifs), {});
+    ASSERT_TRUE(text.find("# XLIO Tuning Report") != std::string::npos)
+        << "Report file is missing preamble";
+
+    unlink(config_file.c_str());
+    int unused __attribute__((unused)) = system(("rm -rf " + report_dir).c_str());
 }

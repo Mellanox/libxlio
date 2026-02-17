@@ -1148,6 +1148,8 @@ void ring_slave::accumulate_ring_stats(aggregated_ring_stats &agg) const
     if (!m_p_ring_stat) {
         return;
     }
+    // agg is a caller-local object, not the shared m_closed_rings_stats member.
+    // coverity[missing_lock:FALSE]
     agg.total_rx_packets += m_p_ring_stat->n_rx_pkt_count;
     agg.total_rx_bytes += m_p_ring_stat->n_rx_byte_count;
     agg.total_tx_packets += m_p_ring_stat->n_tx_pkt_count;

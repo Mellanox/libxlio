@@ -250,23 +250,25 @@ public:
     ring_slave(int if_index, ring *parent, bool use_locks);
     virtual ~ring_slave();
 
-    virtual void print_val();
-    virtual void restart();
-    virtual int get_num_resources() const { return 1; };
-    virtual bool is_member(ring_slave *rng);
-    virtual bool is_active_member(ring_slave *rng, ring_user_id_t id);
+    virtual void print_val() override;
+    virtual void restart() override;
+    virtual int get_num_resources() const override { return 1; };
+    virtual bool is_member(ring_slave *rng) override;
+    virtual bool is_active_member(ring_slave *rng, ring_user_id_t id) override;
     virtual ring_user_id_t generate_id();
     virtual ring_user_id_t generate_id(const address_t src_mac, const address_t dst_mac,
                                        uint16_t eth_proto, uint16_t encap_proto,
                                        const ip_address &src_ip, const ip_address &dst_ip,
-                                       uint16_t src_port, uint16_t dst_port);
+                                       uint16_t src_port, uint16_t dst_port) override;
     virtual bool is_up() = 0;
-    virtual void inc_tx_retransmissions_stats(ring_user_id_t id);
+    virtual void inc_tx_retransmissions_stats(ring_user_id_t id) override;
     bool rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd_ready_array);
     virtual void inc_cq_moderation_stats() = 0;
 
-    virtual bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t = false);
-    virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, rfs_rule **rule_extract);
+    virtual bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink,
+                             bool force_5t = false) override;
+    virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink,
+                             rfs_rule **rule_extract) override;
 
 #ifdef DEFINED_UTLS
     /* Call this method in an RX ring. */
@@ -281,7 +283,7 @@ public:
 
     virtual mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
                                            int n_num_mem_bufs = 1 /* default = 1 */,
-                                           bool tx_skip_poll = false) = 0;
+                                           bool tx_skip_poll = false) override = 0;
 
 protected:
     bool request_more_tx_buffers(pbuf_type type, uint32_t count, uint32_t lkey);

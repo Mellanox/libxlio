@@ -99,7 +99,7 @@ public:
     // returns correct totals even after ring objects are gone.
     void accumulate_closed_ring_stats(const ring_stats_t &stats)
     {
-        m_closed_rings_stats_lock.lock();
+        std::lock_guard<decltype(m_closed_rings_stats_lock)> lock(m_closed_rings_stats_lock);
         m_closed_rings_stats.total_rx_packets += stats.n_rx_pkt_count;
         m_closed_rings_stats.total_rx_bytes += stats.n_rx_byte_count;
         m_closed_rings_stats.total_tx_packets += stats.n_tx_pkt_count;
@@ -111,7 +111,6 @@ public:
         m_closed_rings_stats.total_rx_tls_resyncs += stats.n_rx_tls_resyncs;
         m_closed_rings_stats.total_tx_tls_resyncs += stats.n_tx_tls_resyncs;
         m_closed_rings_stats.total_rx_tls_auth_fail += stats.n_rx_tls_auth_fail;
-        m_closed_rings_stats_lock.unlock();
     }
 
 private:
