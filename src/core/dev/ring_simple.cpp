@@ -841,6 +841,13 @@ int ring_simple::put_tx_buffer_helper(mem_buf_desc_t *buff)
     if (buff->lwip_pbuf.ref == 0) {
         descq_t &pool = buff->lwip_pbuf.type == PBUF_ZEROCOPY ? m_zc_pool : m_tx_pool;
         buff->p_next_desc = nullptr;
+
+        // Workaround for RM#4917604:
+        // During ring teardown, suppress ZCOPY completion callbacks to avoid
+        // use-after-free: the socket referenced by tx.zc.ctx has already been destroyed.
+        if (buff->lwip_pbuf.type == PBUF_ZEROCOPY && unlikely(!m_up_tx)) {
+            buff->m_flags &= ~mem_buf_desc_t::ZCOPY;
+        }
         free_lwip_pbuf(&buff->lwip_pbuf);
         pool.push_back(buff);
         return 1;
