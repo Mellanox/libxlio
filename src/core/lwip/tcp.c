@@ -197,6 +197,12 @@ static err_t tcp_close_shutdown(struct tcp_pcb *pcb, u8_t rst_on_unacked_data)
         err = tcp_send_fin(pcb);
         if (err == ERR_OK) {
             set_tcp_state(pcb, FIN_WAIT_1);
+            tcp_output(pcb);
+            /* FIN is on the wire. Purge the PCB since the peer never completed
+             * the handshake and won't ACK the FIN. Without this, the segment
+             * leaks when the socket is destroyed. */
+            tcp_pcb_purge(pcb);
+            pcb = NULL;
         }
         break;
     case ESTABLISHED:
