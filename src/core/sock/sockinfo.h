@@ -312,6 +312,7 @@ public:
     bool has_epoll_context() { return (!!m_econtext); }
     bool get_rx_pkt_ready_list_count() const { return m_n_rx_pkt_ready_list_count; }
     int get_fd() const { return m_fd; };
+    const sock_addr &get_peername() const { return m_connected; }
     sa_family_t get_family() { return m_family; }
     bool get_reuseaddr(void) { return m_reuseaddr; }
     bool get_reuseport(void) { return m_reuseport; }
