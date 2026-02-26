@@ -35,6 +35,7 @@
 #include "entity_context.h"
 #include "vlogger/vlogger.h"
 #include "sock/sockinfo_tcp.h"
+#include "sock/sock-redirect.h"
 
 using namespace std::chrono;
 
@@ -125,6 +126,14 @@ void entity_context::connect_socket_job(const job_desc &job)
         sock->set_entity_context(this);
         add_socket(reinterpret_cast<sockinfo_tcp *>(sock));
         reinterpret_cast<sockinfo_tcp *>(sock)->connect_entity_context();
+        if (sock->isPassthrough()) {
+            int fd = sock->get_fd();
+            /* copy before handle_close may destroy sock */
+            sock_addr peer = sock->get_peername();
+            handle_close(fd, false, true);
+            SYSCALL(connect, fd, peer.get_p_sa(), peer.get_socklen());
+            return;
+        }
         ++m_stats.socket_num_added;
         ctx_logdbg("New TCP socket added (sock: %p)", sock);
     } else {
@@ -198,7 +207,7 @@ void entity_context::close_socket_job(const job_desc &job)
             sockinfo_tcp *parent = tcp_si->get_listen_context()->get_parent_listen_socket();
             parent->get_listen_context()->increment_finish_counter();
             --m_stats.listen_rsschild_num;
-        } else {
+        } else if (!tcp_si->isPassthrough()) {
             ++m_stats.socket_num_removed;
         }
         // Use poll_group::close_socket_helper which handles :

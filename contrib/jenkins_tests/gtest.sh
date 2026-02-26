@@ -136,6 +136,42 @@ rc=$(($rc+$?))
 eval "${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=3 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-not-pow2.xml"
 rc=$(($rc+$?))
 
+# Passthrough tests
+
+passthrough_filter="tcp_listen_connect_nb.server_client_nb"
+
+# Passthrough via non-offloadable NIC (loopback)
+
+# worker threads mode
+gtest_opt_lo="--addr=127.0.0.1,127.0.0.1"
+eval "${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_lo --gtest_filter=$passthrough_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-passthrough-loopback-wt.xml"
+rc=$(($rc+$?))
+
+# R2C mode
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_lo --gtest_filter=$passthrough_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-passthrough-loopback-r2c.xml"
+rc=$(($rc+$?))
+
+###### Passthrough via XLIO offload rules
+
+
+# Create a temporary libxlio.conf with passthrough rules and point XLIO_CONFIG_FILE to it.
+server_ip=$(ip -f inet addr show net2 | awk '/inet / {print $2}' | cut -d/ -f1)
+passthrough_conf=$(mktemp /tmp/libxlio-passthrough-XXXXXX.conf)
+printf "use os tcp_client %s:*:*:*\nuse os tcp_server %s:*\n" "$server_ip" "$server_ip" > "$passthrough_conf"
+
+# worker threads mode
+eval "${sudo_cmd} $timeout_exe env XLIO_CONFIG_FILE=$passthrough_conf XLIO_WORKER_THREADS=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$passthrough_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-passthrough-rules-wt.xml"
+rc=$(($rc+$?))
+
+# R2C mode
+eval "${sudo_cmd} $timeout_exe env XLIO_CONFIG_FILE=$passthrough_conf GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$passthrough_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-passthrough-rules-r2c.xml"
+rc=$(($rc+$?))
+
+rm -f "$passthrough_conf"
+###### End of Passthrough via XLIO offload rules
+
+
+
 eval "${sudo_cmd} pkill -9 ${prj_service} 2>/dev/null || true"
 
 set -eE

@@ -2962,25 +2962,17 @@ void sockinfo_tcp::connect_threads_mode()
 
 void sockinfo_tcp::connect_entity_context()
 {
-    static auto handle_err = [](sockinfo_tcp *sock) {
-        sock->destructor_helper_tcp();
-        sock->m_conn_state = TCP_CONN_FAILED;
-        errno = ECONNREFUSED;
-        sock->m_error_status = errno;
-        NOTIFY_ON_EVENTS(sock, EPOLLERR);
-    };
-
     std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
 
     if (!prepare_dst_to_send(false)) {
-        si_tcp_logerr("Unable to prepare dst entry.");
-        handle_err(this);
+        si_tcp_logdbg("non offloaded socket --> connect only via OS (prepare_dst_to_send failed)");
+        setPassthrough();
         return;
     }
 
     if (!attach_as_uc_receiver((role_t)NULL, true)) {
-        si_tcp_logerr("Unable to attach uc receiver.");
-        handle_err(this);
+        si_tcp_logdbg("Unable to attach uc receiver, falling back to passthrough.");
+        setPassthrough();
         return;
     }
 
@@ -2989,8 +2981,12 @@ void sockinfo_tcp::connect_entity_context()
                     ntohs(m_connected.get_in_port()), m_pcb.is_ipv6, sockinfo_tcp::connect_lwip_cb);
 
     if (err != ERR_OK) {
-        si_tcp_logerr("Unable to tcp_connect, err=%d", err);
-        handle_err(this);
+        /* tcp_connect return != ERR_OK means the SYN was not sent yet. We can fall back to
+         * passthrough only in that case: once the SYN was sent, the remote has seen XLIO's initial
+         * sequence number and we cannot hand off to the OS from that point. */
+        si_tcp_logdbg("Unable to send SYN packet, falling back to passthrough.");
+
+        setPassthrough();
         return;
     }
 
