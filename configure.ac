@@ -61,6 +61,12 @@ dnl=== SECTION 2: Initialization & Setup
 dnl===
 dnl===-----------------------------------------------------------------------===
 
+# Initialize git submodules if git is available and we're in a git repo
+if command -v git >/dev/null 2>&1 && test -d "$srcdir/.git" ; then
+    echo "Updating git submodules..."
+    git submodule update --init --recursive
+fi
+
 # Verify that the source directory is valid.
 #
 AC_CONFIG_SRCDIR(src)
@@ -92,9 +98,41 @@ m4_include([config/m4/dpcp.m4])
 m4_include([config/m4/nl.m4])
 m4_include([config/m4/prof.m4])
 m4_include([config/m4/compiler.m4])
+m4_include([third_party/config/m4/ax_subdirs_configure.m4])
+
+# This belongs in dpcp.m4 but when placed there, it executes only when 
+# DPCP_CAPABILITY_SETUP() is called, and by then we cannot use AX_SUBDIRS_CONFIGURE()
+# any more.
+
+AC_ARG_WITH([dpcp],
+    AS_HELP_STRING([--with-dpcp@<:@=DIR@:>@],
+                   [Search for dpcp headers and libraries in DIR @<:@default: /usr@:>@]),
+    [dpcp_explicitly_specified=yes],
+    [dpcp_explicitly_specified=no]
+)
+
+# Configure libdpcp - only if using the built-in version
+if test "x$dpcp_explicitly_specified" = "xno"; then
+
+    if test ! -f "$srcdir/submodules/libdpcp/configure.ac" ; then
+  	    AC_MSG_ERROR([$srcdir/submodules/libdpcp/configure.ac not found, did you run ./autogen.sh ? 
+                      This should have populated $srcdir/submodules/libdpcp, as it runs 'git submodule update --init --recursive'.
+                      For working with libdpcp from another location, use --with-dpcp])
+    fi
+
+    # Configure libdpcp - need to come after the m4_include ax_subdirs_configure above
+    # This macro is used instead of AC_CONFIG_SUBDIRS because we need to specify a --prefix
+    # for libdpcp so that it does not install itself into libxlio's install dir
+    AX_SUBDIRS_CONFIGURE(
+        [submodules/libdpcp],
+        [--prefix=${ac_abs_top_builddir}/submodules/libdpcp/install],
+        [],
+        [],
+        [])
+
+fi
 
 FUNC_CONFIGURE_INIT()
-
 
 dnl===-----------------------------------------------------------------------===
 dnl===
@@ -415,6 +453,9 @@ EOF
 else
     AC_MSG_ERROR([${CONFIG_SCHEMA_JSON} not found])
 fi
+
+# Define conditional for building built-in libdpcp
+AM_CONDITIONAL([BUILD_BUILTIN_DPCP], [test "x$dpcp_explicitly_specified" != "xyes"])
 
 AC_CONFIG_FILES([
 		Makefile
