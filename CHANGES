@@ -1,3 +1,12 @@
+Version 3.70.0-1:
+Date + Time 2026-03-01
+=============================================================
+Fixed:
+        - RM #4050516 Fix TCP segment leak on SYN_RCVD close
+        - RM #4845077 XLIO startup logs print incorrect configuration values
+        - RM #4825221 Inline config short name resolution and delimiter change
+        - RM #4668249 Remove poll_sn mechanism to fix multi-ring CQ arming bug
+
 Version 3.61.2-1:
 Date + Time 2025-01-21
 =============================================================
