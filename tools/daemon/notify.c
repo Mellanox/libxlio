@@ -513,6 +513,7 @@ static int get_seqno_ip4(struct rst_info *rst)
                           ntohl(rst->seqno));
                 return 0;
             }
+            /* cppcheck-suppress syntaxError */
         } while (tv_cmp(&t_now, &t_end, <));
     } while (--attempt);
 
@@ -617,6 +618,7 @@ static int get_seqno_ip6(struct rst_info *rst)
                           ntohl(rst->seqno));
                 return 0;
             }
+            /* cppcheck-suppress syntaxError */
         } while (tv_cmp(&t_now, &t_end, <));
     } while (--attempt);
 

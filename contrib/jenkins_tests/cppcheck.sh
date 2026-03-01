@@ -23,8 +23,9 @@ cd $cppcheck_dir
 ${WORKSPACE}/configure $jenkins_test_custom_configure > "${cppcheck_dir}/cppcheck.log" 2>&1
 
 set +eE
-eval "find ${WORKSPACE}/src -name '*.h' -o -name '*.cpp' -o -name '*.c' -o -name '*.hpp' | \
-	${tool_app} --std=c++11 --language=c++ --force --enable=information \
+eval "find ${WORKSPACE}/src ${WORKSPACE}/examples ${WORKSPACE}/tools -name '*.h' -o -name '*.cpp' -o -name '*.c' -o -name '*.hpp' | \
+	${tool_app} --std=c++14 --language=c++ --force --enable=information\
+	-j${NPROC} \
 	-I${WORKSPACE}/src \
 	-I${WORKSPACE}/src/stats \
 	-I${WORKSPACE}/src/utils \
