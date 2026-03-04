@@ -1676,12 +1676,12 @@ err_t sockinfo_tcp::ip_output(struct pbuf *p, struct tcp_seg *seg, void *v_p_con
 {
     sockinfo_tcp *p_si_tcp = (sockinfo_tcp *)(((struct tcp_pcb *)v_p_conn)->my_container);
     dst_entry *p_dst = p_si_tcp->m_p_connected_dst_entry;
-    int max_count = p_si_tcp->m_pcb.tso.max_send_sge;
-    tcp_iovec lwip_iovec[max_count];
+    unsigned count = 0;
+    unsigned max_count = std::min(p_si_tcp->m_pcb.tso.max_send_sge, 32U);
+    tcp_iovec lwip_iovec[32];
     xlio_send_attr attr = {
         (xlio_wr_tx_packet_attr)(flags | (!!p_si_tcp->is_xlio_socket() * XLIO_TX_SKIP_POLL)),
         p_si_tcp->m_pcb.mss, 0, nullptr};
-    int count = 0;
 
     if (unlikely(flags & XLIO_TX_PACKET_REXMIT)) {
         if (unlikely(inspect_socket_error_state(reinterpret_cast<const mem_buf_desc_t *>(seg->p),
@@ -1765,13 +1765,15 @@ send_iov:
 err_t sockinfo_tcp::ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void *v_p_conn,
                                       uint16_t flags)
 {
-    iovec iovec[64];
-    struct iovec *p_iovec = iovec;
+    iovec iov[32];
+    constexpr unsigned max_iov = ARRAY_SIZE(iov);
+
+    struct iovec *p_iov = iov;
     tcp_iovec tcp_iovec_temp; // currently we pass p_desc only for 1 size iovec, since for bigger
                               // size we allocate new buffers
     sockinfo_tcp *p_si_tcp = (sockinfo_tcp *)(((struct tcp_pcb *)v_p_conn)->my_container);
     dst_entry *p_dst = p_si_tcp->m_p_connected_dst_entry;
-    int count = 1;
+    unsigned count = 1;
     xlio_wr_tx_packet_attr attr;
 
     NOT_IN_USE(seg);
@@ -1782,17 +1784,17 @@ err_t sockinfo_tcp::ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void 
         tcp_iovec_temp.iovec.iov_len = p->len;
         tcp_iovec_temp.p_desc = (mem_buf_desc_t *)p;
         __log_dbg("p_desc=%p,p->len=%d ", p, p->len);
-        p_iovec = (struct iovec *)&tcp_iovec_temp;
+        p_iov = (struct iovec *)&tcp_iovec_temp;
     } else {
-        for (count = 0; count < 64 && p; ++count) {
-            iovec[count].iov_base = p->payload;
-            iovec[count].iov_len = p->len;
+        for (count = 0; count < max_iov && p; ++count) {
+            iov[count].iov_base = p->payload;
+            iov[count].iov_len = p->len;
             p = p->next;
         }
 
         // We don't expect pbuf chain at all
-        if (p) {
-            vlog_printf(VLOG_ERROR, "pbuf chain size > 64!!! silently dropped.\n");
+        if (unlikely(p)) {
+            vlog_printf(VLOG_ERROR, "pbuf chain size > %u!!! silently dropped.\n", max_iov);
             return ERR_OK;
         }
     }
@@ -1802,7 +1804,7 @@ err_t sockinfo_tcp::ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void 
         p_si_tcp->m_p_socket_stats->counters.n_tx_retransmits++;
     }
 
-    ((dst_entry_tcp *)p_dst)->slow_send_neigh(p_iovec, count, p_si_tcp->m_so_ratelimit);
+    ((dst_entry_tcp *)p_dst)->slow_send_neigh(p_iov, count, p_si_tcp->m_so_ratelimit);
 
     return ERR_OK;
 }

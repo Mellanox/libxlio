@@ -49,7 +49,7 @@ void dst_entry_udp::configure_headers()
 
 // Static function to server both neigh (slow) path and dst_entry (fast) path
 bool dst_entry_udp::fast_send_fragmented_ipv6(mem_buf_desc_t *p_mem_buf_desc, const iovec *p_iov,
-                                              const ssize_t sz_iov, xlio_wr_tx_packet_attr attr,
+                                              size_t sz_iov, xlio_wr_tx_packet_attr attr,
                                               size_t sz_udp_payload, int n_num_frags,
                                               xlio_ibv_send_wr *p_send_wqe, ring_user_id_t user_id,
                                               ibv_sge *p_sge, header *p_header,
@@ -168,7 +168,7 @@ bool dst_entry_udp::fast_send_fragmented_ipv6(mem_buf_desc_t *p_mem_buf_desc, co
     return true;
 }
 
-inline ssize_t dst_entry_udp::fast_send_not_fragmented(const iovec *p_iov, const ssize_t sz_iov,
+inline ssize_t dst_entry_udp::fast_send_not_fragmented(const iovec *p_iov, size_t sz_iov,
                                                        xlio_wr_tx_packet_attr attr,
                                                        size_t sz_udp_payload,
                                                        ssize_t sz_data_payload)
@@ -289,7 +289,7 @@ inline ssize_t dst_entry_udp::fast_send_not_fragmented(const iovec *p_iov, const
 }
 
 inline bool dst_entry_udp::fast_send_fragmented_ipv4(mem_buf_desc_t *p_mem_buf_desc,
-                                                     const iovec *p_iov, const ssize_t sz_iov,
+                                                     const iovec *p_iov, size_t sz_iov,
                                                      xlio_wr_tx_packet_attr attr,
                                                      size_t sz_udp_payload, int n_num_frags)
 {
@@ -396,7 +396,7 @@ inline bool dst_entry_udp::fast_send_fragmented_ipv4(mem_buf_desc_t *p_mem_buf_d
     return true;
 }
 
-ssize_t dst_entry_udp::fast_send_fragmented(const iovec *p_iov, const ssize_t sz_iov,
+ssize_t dst_entry_udp::fast_send_fragmented(const iovec *p_iov, size_t sz_iov,
                                             xlio_wr_tx_packet_attr attr, size_t sz_udp_payload,
                                             ssize_t sz_data_payload)
 {
@@ -448,7 +448,7 @@ ssize_t dst_entry_udp::fast_send_fragmented(const iovec *p_iov, const ssize_t sz
     return sz_data_payload;
 }
 
-ssize_t dst_entry_udp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr)
+ssize_t dst_entry_udp::fast_send(const iovec *p_iov, size_t sz_iov, xlio_send_attr attr)
 {
     /* Suppress flags that should not be used anymore
      * to avoid conflicts with XLIO_TX_PACKET_L3_CSUM and XLIO_TX_PACKET_L4_CSUM
@@ -467,7 +467,7 @@ ssize_t dst_entry_udp::fast_send(const iovec *p_iov, const ssize_t sz_iov, xlio_
     }
 }
 
-ssize_t dst_entry_udp::slow_send(const iovec *p_iov, const ssize_t sz_iov, xlio_send_attr attr,
+ssize_t dst_entry_udp::slow_send(const iovec *p_iov, size_t sz_iov, xlio_send_attr attr,
                                  struct xlio_rate_limit_t &rate_limit, int flags /*= 0*/,
                                  sockinfo *sock /*= 0*/, tx_call_t call_type /*= 0*/)
 {
