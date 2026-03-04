@@ -32,7 +32,7 @@ RUN pip3 install -U pip --no-cache-dir \
 FROM core AS build
 
 RUN dnf install --allowerasing -y json-c-devel curl \
-    autoconf automake make libtool gcc-c++ rpm-build \
+    git autoconf automake make libtool gcc-c++ rpm-build \
  && dnf clean all \
  && rm -rf /var/cache/dnf
 
