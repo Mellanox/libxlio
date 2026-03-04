@@ -57,13 +57,13 @@ runs_on_dockers:
     }
 
 steps:
-# We are getting internal dpcp from cidemo-init.sh at the start of the run, source is stored in ${WORKSPACE}/jenkins/default/_dpcp-last
   - name: Build-dpcp
     parallel: false
     containerSelector:
       - "{name: 'rhel8.6'}"
     run: |
-      cd "${WORKSPACE}/jenkins/default/_dpcp-last"
+      git clone https://github.com/Mellanox/libdpcp.git libdpcp
+      cd libdpcp
       ./autogen.sh && ./configure --prefix=/usr && sudo make install
 
   - name: Release
