@@ -35,6 +35,8 @@
 #ifndef ENTITY_CONTEXT_H
 #define ENTITY_CONTEXT_H
 
+#include <atomic>
+
 #include "event/poll_group.h"
 #include "event/job_queue.h"
 #include "util/xlio_stats.h"
@@ -45,6 +47,13 @@ class mem_buf_desc_t;
 
 class entity_context : public poll_group {
 public:
+    enum wakeup_reason {
+        WAKEUP_NONE = 0,
+        WAKEUP_CQ_EVENT,
+        WAKEUP_JOB_POSTED,
+        WAKEUP_TIMEOUT,
+    };
+
     enum job_type {
         JOB_TYPE_SOCK_ADD_AND_CONNECT,
         JOB_TYPE_SOCK_TX,
@@ -67,11 +76,18 @@ public:
     };
 
     entity_context(size_t index);
-    ~entity_context();
+    virtual ~entity_context();
 
     size_t get_index() const { return m_index; }
-    void process();
+    bool process();
     void add_job(const job_desc &job);
+
+    void notify_ring_added(ring *rng) override;
+
+    wakeup_reason wait_for_interrupt(int timeout_ms);
+    void wakeup();
+
+    bool is_sleeping() const { return m_sleeping.load(std::memory_order_acquire); }
 
     // Called only by the XLIO thread executing this context.
     void add_incoming_socket(sockinfo *sock);
@@ -86,12 +102,19 @@ private:
     static void entity_context_comp_cb(xlio_socket_t sock, uintptr_t userdata_sq,
                                        uintptr_t userdata_op);
 
+    void arm_cq_notifications();
+    void drain_wakeup_fd();
+
     job_queue<job_desc> m_job_queue;
     size_t m_index;
     size_t m_last_job_size = 0U;
     event_handler_manager_local::time_point m_prev_proc_time;
     bool m_last_poll_hit = false;
     entity_context_stats_t m_stats;
+
+    std::atomic<bool> m_sleeping {false};
+    int m_wakeup_fd = -1;
+    int m_epoll_fd = -1;
 };
 
 #endif

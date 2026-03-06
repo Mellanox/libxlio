@@ -49,10 +49,13 @@ public:
 
     queue_type &get_all();
 
+    bool has_pending() const;
+
 private:
     queue_type m_queue_insert;
     queue_type m_queue_fetch;
-    lock_spin m_queue_lock;
+    mutable lock_spin m_queue_lock;
+    std::atomic<bool> m_has_pending {false};
 };
 
 template <typename T> job_queue<T>::job_queue()
@@ -66,20 +69,27 @@ template <typename T> void job_queue<T>::insert_job(const T &job)
 {
     std::lock_guard<decltype(m_queue_lock)> lock(m_queue_lock);
     m_queue_insert.push_back(job);
+    m_has_pending.store(true, std::memory_order_release);
 }
 
 // Should be called only from a single consumer.
 template <typename T> typename job_queue<T>::queue_type &job_queue<T>::get_all()
 {
     // Avoid heavy lock activity in case of busy loop and empty queue.
-    std::atomic_thread_fence(std::memory_order::memory_order_acquire);
-    if (m_queue_insert.size() <= 0U) {
+    if (!m_has_pending.load(std::memory_order_acquire)) {
         return m_queue_fetch;
     }
 
     std::lock_guard<decltype(m_queue_lock)> lock(m_queue_lock);
     m_queue_insert.swap(m_queue_fetch);
+    m_has_pending.store(false, std::memory_order_release);
     return m_queue_fetch;
+}
+
+template <typename T> bool job_queue<T>::has_pending() const
+{
+    std::lock_guard<decltype(m_queue_lock)> lock(m_queue_lock);
+    return !m_queue_insert.empty();
 }
 
 #endif // JOB_QUEUE_H
