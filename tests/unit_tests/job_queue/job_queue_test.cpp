@@ -216,3 +216,16 @@ TEST_F(job_queue_test, ti_6)
     auto &remaining_jobs = queue.get_all();
     EXPECT_EQ(remaining_jobs.size(), 0UL);
 }
+
+TEST_F(job_queue_test, pending_state)
+{
+    EXPECT_FALSE(queue.has_pending());
+
+    queue.insert_job(test_job {1, 10});
+    EXPECT_TRUE(queue.has_pending());
+
+    auto &jobs = queue.get_all();
+    EXPECT_EQ(jobs.size(), 1UL);
+    EXPECT_FALSE(queue.has_pending());
+    jobs.clear();
+}

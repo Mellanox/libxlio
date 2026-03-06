@@ -135,6 +135,7 @@ public:
 
     void get_params();
     bool is_threads_mode() const { return worker_threads > 0; }
+    bool is_interrupt_mode() const { return select_poll_num >= 0; }
 
     // Returns the runtime registry (optional reference)
     const std::experimental::optional<runtime_registry> &get_runtime_registry() const
