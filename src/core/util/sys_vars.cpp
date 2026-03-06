@@ -1858,7 +1858,6 @@ void mce_sys_var::get_params()
 void mce_sys_var::fixup_params()
 {
     if (is_threads_mode()) {
-        select_poll_num = -1;
         progress_engine_interval_msec = 0;
     }
 }

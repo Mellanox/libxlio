@@ -158,6 +158,9 @@ bool epoll_wait_call::_wait(int timeout)
 
     if (timeout) {
         lock();
+        if (safe_mce_sys().is_threads_mode()) {
+            m_epfd_info->move_entity_context_ready_events();
+        }
         if (m_epfd_info->m_ready_fds.empty()) {
             m_epfd_info->going_to_sleep();
         } else {

@@ -169,6 +169,7 @@ bool epfd_info::is_cq_fd(uint64_t data)
 
     lock();
     // todo consider making m_ready_cq_fd_q a set instead of queue
+    // TODO: Modifying the queue is unexpected and confusing in the method with name is_cq_fd().
     m_ready_cq_fd_q.push_back((int)(data & 0xffff));
     unlock();
 
@@ -582,6 +583,12 @@ void epfd_info::insert_epoll_event_cb(sockinfo *sock_fd, uint32_t event_flags)
             size_t vecindex =
                 sock_fd->get_entity_context()->get_index() % m_entity_context_events.size();
             m_entity_context_events[vecindex].add_epoll_ready_socket(event_flags, sock_fd);
+            // TODO: Consider wakeup moderation to reduce excessive wakeups under high event rate.
+            if (safe_mce_sys().select_poll_num != -1) {
+                lock();
+                do_wakeup();
+                unlock();
+            }
         }
         return;
     }
@@ -823,8 +830,6 @@ void epfd_info_entity_context_events::add_epoll_ready_socket(uint64_t events, so
     si->set_epoll_event_flags_thread(si->get_epoll_event_flags_thread() | events);
     m_epoll_ready_sockets.push_back_if_absent(si);
     __log_dbg("Adding (threads mode) event %" PRIu64 " (fd=%d)", events, si->get_fd());
-
-    // For interrupt mode need to consider moderation and wakeup the epoll context.
 }
 
 void epfd_info_entity_context_events::remove_epoll_ready_socket(sockinfo *si)
@@ -855,4 +860,5 @@ void epfd_info_entity_context_events::move_epoll_ready_events(ep_ready_fd_list_t
 
         si = m_epoll_ready_sockets.next(si);
     }
+    m_epoll_ready_sockets.clear();
 }

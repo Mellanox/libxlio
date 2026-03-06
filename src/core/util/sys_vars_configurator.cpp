@@ -1251,9 +1251,6 @@ void sys_var_configurator::configure_after_user_settings()
     // From fixup_params
     if (m_sys_vars.worker_threads > 0) {
         m_runtime_registry.set_value(
-            CONFIG_VAR_SELECT_NUM_POLLS, static_cast<int64_t>(-1), change_reason::AutoCorrected,
-            "Working in threads mode:" + std::string(CONFIG_VAR_WORKER_THREADS.name) + " > 0");
-        m_runtime_registry.set_value(
             CONFIG_VAR_PROGRESS_ENGINE_INTERVAL, static_cast<int64_t>(0),
             change_reason::AutoCorrected,
             "Working in threads mode:" + std::string(CONFIG_VAR_WORKER_THREADS.name) + " > 0");
