@@ -397,6 +397,19 @@ int ring_bond::drain_and_proccess()
     }
 }
 
+void ring_bond::ack_cq_events()
+{
+    m_lock_ring_rx.lock();
+
+    for (uint32_t i = 0; i < m_recv_rings.size(); i++) {
+        if (m_recv_rings[i]->is_up()) {
+            m_recv_rings[i]->ack_cq_events();
+        }
+    }
+
+    m_lock_ring_rx.unlock();
+}
+
 void ring_bond::wait_for_notification_and_process_element(void *pv_fd_ready_array /*NULL*/)
 {
     m_lock_ring_rx.lock();
