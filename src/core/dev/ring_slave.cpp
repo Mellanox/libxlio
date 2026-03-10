@@ -84,6 +84,14 @@ ring_slave::~ring_slave()
     print_val();
 
     if (m_p_ring_stat) {
+        // Accumulate ring stats before the stats block is removed.
+        // get_aggregated_ring_stats() starts from these accumulated values,
+        // so callers (including the tuning report) see correct totals even
+        // after ring objects are destroyed.
+        if (g_p_net_device_table_mgr) {
+            g_p_net_device_table_mgr->accumulate_closed_ring_stats(*m_p_ring_stat);
+        }
+
         xlio_stats_instance_remove_ring_block(m_p_ring_stat.get());
     }
 
@@ -1133,6 +1141,26 @@ void ring_slave::flow_del_all_rfs()
 {
     m_steering_ipv4.flow_del_all_rfs();
     m_steering_ipv6.flow_del_all_rfs();
+}
+
+void ring_slave::accumulate_ring_stats(aggregated_ring_stats &agg) const
+{
+    if (!m_p_ring_stat) {
+        return;
+    }
+    // agg is a caller-local object, not the shared m_closed_rings_stats member.
+    // coverity[missing_lock:FALSE]
+    agg.total_rx_packets += m_p_ring_stat->n_rx_pkt_count;
+    agg.total_rx_bytes += m_p_ring_stat->n_rx_byte_count;
+    agg.total_tx_packets += m_p_ring_stat->n_tx_pkt_count;
+    agg.total_tx_bytes += m_p_ring_stat->n_tx_byte_count;
+    agg.total_tx_retransmits += m_p_ring_stat->n_tx_retransmits;
+    agg.total_tx_dropped_wqes += m_p_ring_stat->n_tx_dropped_wqes;
+    agg.total_tx_tso_pkt_count += m_p_ring_stat->n_tx_tso_pkt_count;
+    agg.total_tx_tso_byte_count += m_p_ring_stat->n_tx_tso_byte_count;
+    agg.total_rx_tls_resyncs += m_p_ring_stat->n_rx_tls_resyncs;
+    agg.total_tx_tls_resyncs += m_p_ring_stat->n_tx_tls_resyncs;
+    agg.total_rx_tls_auth_fail += m_p_ring_stat->n_rx_tls_auth_fail;
 }
 
 bool ring_slave::request_more_tx_buffers(pbuf_type type, uint32_t count, uint32_t lkey)

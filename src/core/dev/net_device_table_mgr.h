@@ -19,6 +19,7 @@
 #include "infra/cache_subject_observer.h"
 #include "net_device_val.h"
 #include "net_device_entry.h"
+#include "ring.h"
 
 typedef std::unordered_map<ip_address, net_device_val *> net_device_map_addr;
 typedef std::unordered_map<int, net_device_val *> net_device_map_index_t;
@@ -75,6 +76,7 @@ public:
      * for all net devices.
      */
     uint64_t get_rx_drop_counter(void);
+    aggregated_ring_stats get_aggregated_ring_stats() const;
     void print_report(vlog_levels_t log_level, bool print_only_critical = false);
 
     void handle_timer_expired(void *user_data);
@@ -90,6 +92,25 @@ public:
         m_closed_rings_rx_cq_drop_counter_lock.lock();
         m_closed_rings_rx_cq_drop_counter += count;
         m_closed_rings_rx_cq_drop_counter_lock.unlock();
+    }
+
+    // Accumulate ring stats from a ring that is about to be destroyed.
+    // Called from ring_slave::~ring_slave() so that get_aggregated_ring_stats()
+    // returns correct totals even after ring objects are gone.
+    void accumulate_closed_ring_stats(const ring_stats_t &stats)
+    {
+        std::lock_guard<decltype(m_closed_rings_stats_lock)> lock(m_closed_rings_stats_lock);
+        m_closed_rings_stats.total_rx_packets += stats.n_rx_pkt_count;
+        m_closed_rings_stats.total_rx_bytes += stats.n_rx_byte_count;
+        m_closed_rings_stats.total_tx_packets += stats.n_tx_pkt_count;
+        m_closed_rings_stats.total_tx_bytes += stats.n_tx_byte_count;
+        m_closed_rings_stats.total_tx_retransmits += stats.n_tx_retransmits;
+        m_closed_rings_stats.total_tx_dropped_wqes += stats.n_tx_dropped_wqes;
+        m_closed_rings_stats.total_tx_tso_pkt_count += stats.n_tx_tso_pkt_count;
+        m_closed_rings_stats.total_tx_tso_byte_count += stats.n_tx_tso_byte_count;
+        m_closed_rings_stats.total_rx_tls_resyncs += stats.n_rx_tls_resyncs;
+        m_closed_rings_stats.total_tx_tls_resyncs += stats.n_tx_tls_resyncs;
+        m_closed_rings_stats.total_rx_tls_auth_fail += stats.n_rx_tls_auth_fail;
     }
 
 private:
@@ -112,6 +133,8 @@ private:
     uint32_t m_max_mtu;
     lock_mutex m_closed_rings_rx_cq_drop_counter_lock;
     uint64_t m_closed_rings_rx_cq_drop_counter;
+    lock_mutex m_closed_rings_stats_lock;
+    aggregated_ring_stats m_closed_rings_stats;
 };
 
 extern net_device_table_mgr *g_p_net_device_table_mgr;

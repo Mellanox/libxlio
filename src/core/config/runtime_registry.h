@@ -64,7 +64,8 @@ public:
             runtime_entry_t {std::make_unique<runtime_integer_t<RUNTIME_T, REGISTRY_T>>(
                                  runtime_pointer, std::move(translator_config_registry_to_runtime),
                                  std::move(translator_runtime_to_config_registry)),
-                             change_reason::NotChanged};
+                             change_reason::NotChanged,
+                             {}};
         m_runtime_values[key.name].value_adapter->set_default_value_from_config_registry(
             m_config_registry, key.name);
     }
@@ -144,6 +145,14 @@ public:
     change_reason::change_reason_t get_last_change_reason(const std::string &key) const;
 
     /**
+     * @brief Returns the description associated with the last change for the given key.
+     * @param key Configuration key name
+     * @return Description string (empty if no change was recorded or no description was provided)
+     * @throws xlio_exception if the key is not registered into the runtime registry
+     */
+    const std::string &get_last_change_description(const std::string &key) const;
+
+    /**
      * @brief Checks if the given key is registered in the runtime registry.
      * @param key Configuration key name
      * @return true if it is registered, false otherwise
@@ -179,6 +188,7 @@ private:
     struct runtime_entry_t {
         std::unique_ptr<runtime_base_t> value_adapter;
         change_reason::change_reason_t last_change_reason {change_reason::NotChanged};
+        std::string last_change_description;
     };
 
     /* @brief Base class for all runtime values.

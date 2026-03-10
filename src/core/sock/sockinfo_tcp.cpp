@@ -30,6 +30,7 @@
 #include "fd_collection.h"
 #include "sockinfo_tcp.h"
 #include "sockinfo_tcp_listen_context.h"
+#include "tuning_report_printer.h"
 #include "bind_no_port.h"
 #include "xlio.h"
 #include "event/entity_context_manager.h"
@@ -813,6 +814,13 @@ sockinfo_tcp::~sockinfo_tcp()
 {
     si_tcp_logfunc("");
     g_global_stat_static.socket_tcp_destructor_counter.fetch_add(1, std::memory_order_relaxed);
+    if (isPassthrough()) {
+        g_tuning_report_counters.socket_non_offloaded_destructor_counter.fetch_add(
+            1, std::memory_order_relaxed);
+    } else {
+        g_tuning_report_counters.socket_offloaded_destructor_counter.fetch_add(
+            1, std::memory_order_relaxed);
+    }
 
     lock_tcp_con();
 

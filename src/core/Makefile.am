@@ -208,6 +208,7 @@ libxlio_la_SOURCES := \
 	$(top_builddir)/src/core/config/descriptor_providers/xlio_config_schema.h \
 	\
 	config_printer.cpp \
+	tuning_report_printer.cpp \
 	libxlio.c \
 	main.cpp \
 	\
@@ -358,6 +359,7 @@ libxlio_la_SOURCES := \
 	\
 	$(top_builddir)/third_party/legacy_config_parser/config_parser.h \
 	config_printer.h \
+	tuning_report_printer.h \
 	main.h \
 	xlio.h \
 	xlio_extra.h \

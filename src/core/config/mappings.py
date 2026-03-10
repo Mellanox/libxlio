@@ -131,7 +131,8 @@ config_mapping = {
     "acceleration_control.default_acceleration": "XLIO_OFFLOADED_SOCKETS",
     
     # monitor section
-    "monitor.exit_report": "XLIO_PRINT_REPORT",
+    "monitor.report.mode": "XLIO_PRINT_REPORT",
+    "monitor.report.file_path": "XLIO_REPORT_FILE",
     "monitor.log.colors": "XLIO_LOG_COLORS",
     "monitor.log.details": "XLIO_LOG_DETAILS",
     "monitor.log.file_path": "XLIO_LOG_FILE",

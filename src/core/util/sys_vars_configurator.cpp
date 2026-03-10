@@ -16,7 +16,8 @@
 #include "util/sys_vars.h"
 #include "vlogger/vlogger.h"
 
-const config_var_info_t<option_3::mode_t, int64_t> CONFIG_VAR_PRINT_REPORT {"monitor.exit_report"};
+const config_var_info_t<option_3::mode_t, int64_t> CONFIG_VAR_PRINT_REPORT {"monitor.report.mode"};
+const config_var_info_t<std::string> CONFIG_VAR_REPORT_FILE_PATH {"monitor.report.file_path"};
 const config_var_info_t<vlog_levels_t, int64_t> CONFIG_VAR_LOG_LEVEL {"monitor.log.level"};
 const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_LOG_DETAILS {"monitor.log.details"};
 
@@ -393,6 +394,9 @@ void sys_var_configurator::initialize_base_variables()
 
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.print_report,
                                                       CONFIG_VAR_PRINT_REPORT);
+    m_runtime_registry.register_char_array_and_set_default_value(
+        m_sys_vars.report_file_path, sizeof(m_sys_vars.report_file_path),
+        CONFIG_VAR_REPORT_FILE_PATH);
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.quick_start,
                                                       CONFIG_VAR_QUICK_START);
 

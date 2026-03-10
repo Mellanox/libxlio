@@ -63,7 +63,8 @@ public:
 
     void setPassthrough() override
     {
-        IF_STATS(m_p_socket_stats->b_is_offloaded = m_sock_offload = false);
+        m_sock_offload = false;
+        IF_STATS(m_p_socket_stats->b_is_offloaded = false);
     }
     bool isPassthrough() override { return !m_sock_offload; }
 

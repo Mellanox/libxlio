@@ -10,6 +10,7 @@
 
 #include "main.h"
 #include "config_printer.h"
+#include "tuning_report_printer.h"
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/resource.h>
@@ -103,15 +104,6 @@ static int free_libxlio_resources()
 
     worker_thread_manager::destroy();
 
-    if (safe_mce_sys().print_report != option_3::OFF) {
-        bool print_only_critical = (safe_mce_sys().print_report == option_3::AUTO);
-        buffer_pool::print_full_report(VLOG_INFO, print_only_critical);
-        g_hugepage_mgr.print_report(VLOG_INFO, print_only_critical);
-        if (g_p_net_device_table_mgr) {
-            g_p_net_device_table_mgr->print_report(VLOG_INFO, print_only_critical);
-        }
-    }
-
     entity_context_manager::destroy();
 
     // Destroy polling groups before fd_collection to clear XLIO sockets from the fd_collection
@@ -143,6 +135,12 @@ static int free_libxlio_resources()
     if (g_p_fd_collection_temp) {
         delete g_p_fd_collection_temp;
     }
+
+    // Generate the tuning report after all socket destructors have run,
+    // so destructor counters are complete and sock_stats data is finalized.
+    // Must precede net_device_table_mgr and sock_stats destruction.
+    finalize_tuning_report();
+    safe_mce_sys().destroy_registry();
 
     if (g_p_lwip) {
         delete g_p_lwip;
@@ -882,6 +880,9 @@ void print_xlio_global_settings()
     int ret = get_ofed_version_info(ofed_version_info, MAX_VERSION_STR_LEN);
     if (!ret && strlen(ofed_version_info) > 0) {
         vlog_printf(VLOG_INFO, "OFED Version: %s\n", ofed_version_info);
+        // Cache for tuning report — avoids popen() during shutdown.
+        auto &cached = mce_sys_var::safe_instance_non_const().cached_ofed_version;
+        snprintf(cached, sizeof(cached), "%s", ofed_version_info);
     }
 
     if (!uname(&sys_info)) {
@@ -898,9 +899,6 @@ void print_xlio_global_settings()
 
     vlog_printf(VLOG_INFO,
                 "---------------------------------------------------------------------------\n");
-
-    // Once we are done with the registry, destroy it to free the memory
-    mce_sys_var::safe_instance().destroy_registry();
 }
 
 void prepare_fork()
