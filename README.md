@@ -78,6 +78,8 @@ $ make install
 #### Configure
 See more [Options](./docs/configuration.md)
 
+For the complete runtime parameter reference, see the [Configuration Reference](./docs/xlio_config_reference.md).
+
 ### Usage Examples
 
 #### Sockperf
