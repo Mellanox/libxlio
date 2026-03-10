@@ -55,7 +55,7 @@ config_mapping = {
     "hardware_features.tcp.tls_offload.rx_enable": "XLIO_UTLS_RX",
     "hardware_features.tcp.tls_offload.tx_enable": "XLIO_UTLS_TX",
     "hardware_features.tcp.tso.enable": "XLIO_TSO",
-    "hardware_features.tcp.tso.max_size": "XLIO_TSO_MAX_SIZE",
+    "hardware_features.tcp.tso.max_size": "XLIO_MAX_TSO_SIZE",
     
     # performance section
     "performance.buffers.batching_mode": "XLIO_BUFFER_BATCHING_MODE",
