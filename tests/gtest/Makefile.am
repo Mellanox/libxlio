@@ -65,7 +65,7 @@ libgtest_la_SOURCES = \
 	googletest/src/gtest_main.cc
 
 # gtest
-gtest_LDADD = libgtest.la  $(VERBS_LIBS)
+gtest_LDADD = libgtest.la  $(VERBS_LIBS) -lssl -lcrypto
 
 gtest_CPPFLAGS = \
 	-I$(top_srcdir)/ \
@@ -83,6 +83,7 @@ gtest_SOURCES = \
 	main.cc \
 	\
 	common/sys.cc \
+	common/utils.cc \
 	\
 	common/base.cc \
 	\
@@ -111,6 +112,7 @@ gtest_SOURCES = \
 	tcp/tcp_socket.cc \
 	tcp/tcp_sockopt.cc \
 	tcp/tcp_tls.cc \
+	tcp/tcp_ktls_openssl.cc \
 	\
 	udp/udp_socket.cc \
 	udp/udp_bind.cc \
@@ -142,6 +144,7 @@ noinst_HEADERS = \
 	common/sys.h \
 	common/log.h \
 	common/cmn.h \
+	common/utils.h \
 	\
 	common/base.h \
 	\

@@ -218,6 +218,8 @@ const config_var_info_t<size_t, int64_t> CONFIG_VAR_UTLS_HIGH_WMARK_DEK_CACHE_SI
     "hardware_features.tcp.tls_offload.dek_cache_max_size"};
 const config_var_info_t<size_t, int64_t> CONFIG_VAR_UTLS_LOW_WMARK_DEK_CACHE_SIZE {
     "hardware_features.tcp.tls_offload.dek_cache_min_size"};
+const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_UTLS_MAX_SESSIONS {
+    "hardware_features.tcp.tls_offload.max_sessions"};
 #endif /* DEFINED_UTLS */
 
 const config_var_info_t<option_3::mode_t, int64_t> CONFIG_VAR_LRO {"hardware_features.tcp.lro"};
@@ -616,6 +618,8 @@ void sys_var_configurator::initialize_base_variables()
                                                       CONFIG_VAR_UTLS_HIGH_WMARK_DEK_CACHE_SIZE);
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.utls_low_wmark_dek_cache_size,
                                                       CONFIG_VAR_UTLS_LOW_WMARK_DEK_CACHE_SIZE);
+    m_runtime_registry.register_and_set_default_value(&m_sys_vars.utls_max_sessions,
+                                                      CONFIG_VAR_UTLS_MAX_SESSIONS);
 #endif /* DEFINED_UTLS */
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.enable_lro, CONFIG_VAR_LRO);
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.handle_fork, CONFIG_VAR_FORK);

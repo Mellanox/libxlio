@@ -778,6 +778,8 @@ void print_env_vars_xlio_global_settings()
                       static_cast<uint32_t>(safe_mce_sys().utls_low_wmark_dek_cache_size),
                       MCE_DEFAULT_UTLS_LOW_WMARK_DEK_CACHE_SIZE,
                       SYS_VAR_UTLS_LOW_WMARK_DEK_CACHE_SIZE);
+    VLOG_PARAM_NUMBER("TLS offload max sessions", safe_mce_sys().utls_max_sessions,
+                      MCE_DEFAULT_UTLS_MAX_SESSIONS, SYS_VAR_UTLS_MAX_SESSIONS);
 #endif /* DEFINED_UTLS */
 #if defined(DEFINED_NGINX)
     VLOG_PARAM_NUMBER("Number of Nginx workers",
