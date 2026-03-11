@@ -5,4 +5,7 @@
 @Library('github.com/Mellanox/ci-demo@stable_media')
 def matrix = new com.mellanox.cicd.Matrix()
 
+// Pass job params to env so matrix steps can use them (e.g. chaos email_to)
+if (params?.email_to?.trim()) env.CHAOS_EMAIL = params.email_to.trim()
+
 matrix.main()

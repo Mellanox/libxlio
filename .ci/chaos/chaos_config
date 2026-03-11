@@ -1,0 +1,5 @@
+# Chaos testing config: maps each patch file to the CI steps it is expected to break.
+# Format: patch_file: StepName1 StepName2
+# Step names must match the step "name" in matrix_job.yaml (e.g. Copyrights, Style).
+
+hw_queue_tx.diff: Style Copyrights
