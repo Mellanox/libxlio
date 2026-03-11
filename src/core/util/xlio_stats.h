@@ -430,6 +430,10 @@ typedef struct {
     int n_pending_sockets;
     std::atomic<int> socket_tcp_destructor_counter;
     std::atomic<int> socket_udp_destructor_counter;
+    /* Counts total number of sockinfo_tcp_ops_tls objects with TLS offload enabled (TX or RX).
+     * Used for enforcing the limit on the number of TLS offload sessions.
+     */
+     std::atomic<uint32_t> n_tcp_tls_sessions;
     void init()
     {
         n_tcp_seg_pool_size = 0;
@@ -437,6 +441,7 @@ typedef struct {
         n_pending_sockets = 0;
         socket_tcp_destructor_counter = 0;
         socket_udp_destructor_counter = 0;
+        n_tcp_tls_sessions = 0;
     }
 } global_stats_t;
 

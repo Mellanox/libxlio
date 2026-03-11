@@ -710,6 +710,8 @@ void print_global_stats(global_instance_block_t *p_global_inst_arr)
                    "Destructed TCP sockets:", p_global_stats->socket_tcp_destructor_counter.load());
             printf(FORMAT_STATS_s_32bit,
                    "Destructed UDP sockets:", p_global_stats->socket_udp_destructor_counter.load());
+            printf(FORMAT_STATS_s_32bit,
+                   "HW-TLS sessions:", p_global_stats->n_tcp_tls_sessions.load());
         }
     }
     printf("======================================================\n");

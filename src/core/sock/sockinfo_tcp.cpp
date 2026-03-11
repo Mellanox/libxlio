@@ -19,6 +19,7 @@
 #include "util/instrumentation.h"
 #include "util/list.h"
 #include "util/agent.h"
+#include "util/xlio_stats.h"
 #include "event/event_handler_manager.h"
 #include "event/event_handler_manager_local.h"
 #include "event/poll_group.h"
@@ -4626,6 +4627,16 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                     si_tcp_logdbg("(TCP_ULP) val: tls");
                     if (unlikely(!is_rts())) {
                         errno = ENOTCONN;
+                        ret = -1;
+                        break;
+                    }
+                    auto max_sessions = safe_mce_sys().utls_max_sessions;
+                    auto num_tls = g_global_stat_static.n_tcp_tls_sessions.load();
+                    si_tcp_logdbg(
+                        "setsockopt() called with TCP_ULP: max_sessions=%d, num_tls=%d",
+                        max_sessions, num_tls);
+                    if ((max_sessions > 0) && (num_tls >= max_sessions)) {
+                        errno = ENOPROTOOPT;
                         ret = -1;
                         break;
                     }

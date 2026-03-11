@@ -12,6 +12,7 @@
 #include "proto/tls.h" /* xlio_tls_info */
 #include "lwip/err.h" /* err_t */
 
+#include <atomic> /* std::atomic */
 #include <stdint.h>
 
 /*
