@@ -12,6 +12,7 @@
 #include "proto/tls.h" /* xlio_tls_info */
 #include "lwip/err.h" /* err_t */
 
+#include <atomic> /* std::atomic */
 #include <stdint.h>
 
 /*
@@ -75,6 +76,8 @@ public:
     bool handle_send_ret(ssize_t ret, struct tcp_seg *seg) override;
 
     void get_record_buf(mem_buf_desc_t *&buf, uint8_t *&data, bool is_zerocopy);
+
+    static uint32_t get_num_tls() { return s_num_tls.load(); }
 
 private:
     inline bool is_tx_tls13() { return m_tls_info_tx.tls_version == TLS_1_3_VERSION; }
@@ -175,6 +178,12 @@ private:
     mem_buf_desc_t *m_rx_psv_buf;
     /* Record number where resync request was received. */
     uint64_t m_rx_resync_recno;
+
+    /* Counts total number of sockinfo_tcp_ops_tls objects with TLS offload enabled (TX or RX).
+     * Used for enforcing the limit on the number of TLS offload sessions.
+     * Must be incremented/decremented in tandem with m_is_tls_tx (and RX when applicable).
+     */
+    static std::atomic<uint32_t> s_num_tls;
 };
 
 #endif /* DEFINED_UTLS */

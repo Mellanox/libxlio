@@ -4629,6 +4629,16 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                         ret = -1;
                         break;
                     }
+                    auto max_sessions = safe_mce_sys().utls_max_sessions;
+                    auto num_tls = sockinfo_tcp_ops_tls::get_num_tls();
+                    si_tcp_logdbg(
+                        "setsockopt() called with TCP_ULP: max_sessions=%d, num_tls=%d",
+                        max_sessions, num_tls);
+                    if ((max_sessions > 0) && (num_tls >= max_sessions)) {
+                        errno = ENOPROTOOPT;
+                        ret = -1;
+                        break;
+                    }
                     ops = dynamic_cast<sockinfo_tcp_ops_tls *>(m_ops);
                     if (ops) {
                         si_tcp_loginfo("(TCP_ULP) val: tls, ULP is already TLS");

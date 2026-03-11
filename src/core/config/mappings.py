@@ -44,7 +44,7 @@ config_mapping = {
     "network.protocols.tcp.timestamps": "XLIO_TCP_TIMESTAMP_OPTION",
     "network.protocols.tcp.wmem": "XLIO_TCP_SEND_BUFFER_SIZE",
     "network.timing.hw_ts_conversion": "XLIO_HW_TS_CONVERSION",
-    
+
     # hardware_features section
     "hardware_features.striding_rq.enable": "XLIO_STRQ",
     "hardware_features.striding_rq.stride_size": "XLIO_STRQ_STRIDE_SIZE_BYTES",
@@ -52,11 +52,12 @@ config_mapping = {
     "hardware_features.tcp.lro": "XLIO_LRO",
     "hardware_features.tcp.tls_offload.dek_cache_max_size": "XLIO_HIGH_WMARK_DEK_CACHE_SIZE",
     "hardware_features.tcp.tls_offload.dek_cache_min_size": "XLIO_LOW_WMARK_DEK_CACHE_SIZE",
+    "hardware_features.tcp.tls_offload.max_tx_sessions": "XLIO_UTLS_TX_MAX_SESSIONS",
     "hardware_features.tcp.tls_offload.rx_enable": "XLIO_UTLS_RX",
     "hardware_features.tcp.tls_offload.tx_enable": "XLIO_UTLS_TX",
     "hardware_features.tcp.tso.enable": "XLIO_TSO",
-    "hardware_features.tcp.tso.max_size": "XLIO_TSO_MAX_SIZE",
-    
+    "hardware_features.tcp.tso.max_size": "XLIO_MAX_TSO_SIZE",
+
     # performance section
     "performance.buffers.batching_mode": "XLIO_BUFFER_BATCHING_MODE",
     "performance.buffers.rx.buf_size": "XLIO_RX_BUF_SIZE",
@@ -118,18 +119,18 @@ config_mapping = {
     "performance.threading.internal_handler.timer_msec": "XLIO_TIMER_RESOLUTION_MSEC",
     "performance.threading.worker_threads": "XLIO_WORKER_THREADS",
     "performance.threading.mutex_over_spinlock": "XLIO_MULTILOCK",
-    
+
     # applications section
     "applications.nginx.distribute_cq": "XLIO_DISTRIBUTE_CQ",
     "applications.nginx.src_port_stride": "XLIO_NGINX_SRC_PORT_STRIDE",
     "applications.nginx.udp_pool_size": "XLIO_NGINX_UDP_POOL_SIZE",
     "applications.nginx.udp_socket_pool_reuse": "XLIO_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE",
     "applications.nginx.workers_num": "XLIO_NGINX_WORKERS_NUM",
-    
+
     # acceleration_control section
     "acceleration_control.app_id": "XLIO_APPLICATION_ID",
     "acceleration_control.default_acceleration": "XLIO_OFFLOADED_SOCKETS",
-    
+
     # monitor section
     "monitor.exit_report": "XLIO_PRINT_REPORT",
     "monitor.log.colors": "XLIO_LOG_COLORS",
@@ -140,9 +141,9 @@ config_mapping = {
     "monitor.stats.fd_num": "XLIO_STATS_FD_NUM",
     "monitor.stats.file_path": "XLIO_STATS_FILE",
     "monitor.stats.shmem_dir": "XLIO_STATS_SHMEM_DIR",
-    
+
     # profiles section
     "profiles.spec": "XLIO_SPEC",
 
-} 
+}
 
