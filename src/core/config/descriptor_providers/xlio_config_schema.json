@@ -634,6 +634,13 @@
                                     "title": "Enable TLS RX offload",
                                     "description": "Maps to XLIO_UTLS_RX environment variable.\nWhen this parameter is enabled,\nXLIO offloads TLS RX path through the kTLS API if possible.\nUTLS provides TLS data path acceleration by offloading Linux kTLS API.\nRefer to your TLS library documentation for kTLS support information."
                                 },
+                                "max_sessions": {
+                                    "type": "integer",
+                                    "default": 0,
+                                    "minimum": 0,
+                                    "title": "Max TLS offload sessions",
+                                    "description": "Maps to XLIO_UTLS_MAX_SESSIONS environment variable.\nMaximum number of TLS offload sessions (TX and RX). 0 means no limit."
+                                },
                                 "dek_cache_max_size": {
                                     "type": "integer",
                                     "default": 1024,

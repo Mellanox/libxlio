@@ -339,6 +339,8 @@ public:
  * sockinfo_tcp_ops_tls
  */
 
+std::atomic<uint32_t> sockinfo_tcp_ops_tls::s_num_tls(0);
+
 sockinfo_tcp_ops_tls::sockinfo_tcp_ops_tls(sockinfo_tcp *sock)
     : sockinfo_tcp_ops(sock)
 {
@@ -374,6 +376,11 @@ sockinfo_tcp_ops_tls::sockinfo_tcp_ops_tls(sockinfo_tcp *sock)
 
 sockinfo_tcp_ops_tls::~sockinfo_tcp_ops_tls()
 {
+    // Decrement only if we counted this object in the first place
+    if (m_is_tls_tx || m_is_tls_rx) {
+        s_num_tls--;
+    }
+
     /* Destroy TLS object under TCP connection lock. */
 
     if (m_is_tls_tx) {
@@ -581,6 +588,9 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
     m_tls_rec_overhead =
         (base_info->version == TLS_1_2_VERSION) ? TLS_12_RECORD_OVERHEAD : TLS_13_RECORD_OVERHEAD;
 
+    // If one of these flags is set, then this socket was already counted, no need to count again.
+    bool was_counted = m_is_tls_tx || m_is_tls_rx;
+
     if (__optname == TLS_TX) {
         if (!m_p_tx_ring->credits_get(SQ_CREDITS_TLS_TX_CONTEXT)) {
             si_ulp_logdbg("No available space in SQ to create TLS TX context");
@@ -657,6 +667,12 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
             m_p_sock->get_sock_stats()->tls_rx_offload = true;
         }
         m_p_sock->unlock_tcp_con();
+    }
+
+    // When we get here surely one of m_is_tls_tx/m_is_tls_rx is set for this socket.
+    // Need to count it only if they were both false before this call.
+    if (! was_counted) {
+        s_num_tls++;
     }
 
     if (m_p_sock->get_sock_stats()) {

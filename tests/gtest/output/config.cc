@@ -8,6 +8,7 @@
 #include <fstream>
 
 #include "common/def.h"
+#include "common/utils.h"
 
 /**
  * Base class for output tests
@@ -25,32 +26,9 @@ public:
     }
 
 protected:
-    void exec_cmd_to_file(const std::string &cmd, const std::string &file_to_quote)
-    {
-        // The syntax '[command] > [file] 2>&1' works for both bash and dash
-        std::string command = cmd + " > " + file_to_quote + " 2>&1";
-        int rc = system(command.c_str());
-        if (rc != 0) {
-            std::cout << "system('" << command << "') failed!" << std::endl;
-            // Show content of the file to quote
-            try {
-                std::ifstream ifs(file_to_quote);
-                std::string text(std::istreambuf_iterator<char>(ifs), {});
-                ifs.close();
-                std::cout << "Content of '" << file_to_quote << "':\n" << text << std::endl;
-            } catch (const std::exception &e) {
-                std::cout << "Failed to read file '" << file_to_quote << "': " << e.what()
-                          << std::endl;
-            }
-            throw std::runtime_error("Aborting test due to system command failure");
-        }
-    }
-
     void check_file(const std::string &filename, const std::vector<const char *> &expected_strings,
                     const std::vector<const char *> &unexpected_strings = {})
     {
-        std::string full_filename = filename;
-
         std::string prefix;
         if (m_workspace) {
             prefix = std::string(m_workspace) + "/tests/gtest/output";
@@ -58,13 +36,13 @@ protected:
             // Assume we are running from gtest/
             prefix = "output";
         }
-        full_filename = prefix + "/" + filename;
+        std::string full_filename = prefix + "/" + filename;
         std::string output_file = prefix + "/output.txt";
 
         // LD_PRELOAD is already set for the gtest, it is inherited by the new process, no need
         // to do anything
         std::string cmd = "XLIO_USE_NEW_CONFIG=1 XLIO_CONFIG_FILE=" + full_filename + " ls";
-        exec_cmd_to_file(cmd, output_file);
+        utils::exec_cmd_to_file(cmd, output_file);
 
         // Read the output file
         std::ifstream ifs(output_file);
