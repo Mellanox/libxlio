@@ -562,15 +562,89 @@ int fd_collection::del_socket(int fd, sockinfo **map_type)
     return -1;
 }
 
-void fd_collection::remove_from_all_epfds(int fd, bool passthrough)
+void fd_collection::set_non_offloaded_epfd(int fd, epfd_info *epfd)
 {
     lock();
-    for (epfd_info *ep = m_epfd_lst.front(); ep; ep = m_epfd_lst.next(ep)) {
-        ep->fd_closed(fd, passthrough);
+    auto it = m_non_offloaded_epfd_map.find(fd);
+    if (it == m_non_offloaded_epfd_map.end()) {
+        m_non_offloaded_epfd_map[fd] = epfd;
+        fdcoll_logdbg("fd=%d added to non_offloaded_epfd_map (epfd=%d)", fd, epfd->get_epoll_fd());
+    } else if (it->second != epfd && it->second != multi_epfd_sentinel()) {
+        fdcoll_logdbg("fd=%d in multiple epfds, marking as multi-epfd sentinel", fd);
+        it->second = multi_epfd_sentinel();
     }
     unlock();
+}
 
-    return;
+void fd_collection::clear_non_offloaded_epfd(int fd, epfd_info *epfd)
+{
+    lock();
+    auto it = m_non_offloaded_epfd_map.find(fd);
+    if (it != m_non_offloaded_epfd_map.end() && it->second == epfd) {
+        m_non_offloaded_epfd_map.erase(it);
+        fdcoll_logdbg("fd=%d cleared from non_offloaded_epfd_map (epfd=%d)", fd,
+                      epfd->get_epoll_fd());
+    }
+    // If multi_epfd_sentinel(), we can't know if other epfds still reference it, so leave it.
+    // It will be cleared when all epfds remove this fd or on fd reuse.
+    unlock();
+}
+
+epfd_info *fd_collection::get_non_offloaded_epfd(int fd)
+{
+    lock();
+    auto it = m_non_offloaded_epfd_map.find(fd);
+    epfd_info *result = (it != m_non_offloaded_epfd_map.end()) ? it->second : nullptr;
+    unlock();
+    return result;
+}
+
+void fd_collection::remove_from_all_epfds(int fd, bool passthrough)
+{
+    fdcoll_logfunc("fd=%d passthrough=%d", fd, passthrough);
+
+    // Fast path for offloaded sockets:
+    // XLIO limits each socket to at most one epfd, tracked by m_econtext.
+    // Target that epfd directly instead of walking the entire list
+    // and contending on every epfd_info lock.
+    sockinfo *sockfd = get_sockfd(fd);
+    if (sockfd) {
+        epfd_info *ep = sockfd->get_epoll_context();
+        if (ep) {
+            fdcoll_logdbg("fd=%d offloaded socket fast path: epfd=%d", fd, ep->get_epoll_fd());
+            ep->fd_closed(fd, passthrough);
+        } else {
+            fdcoll_logdbg("fd=%d offloaded socket not in any epfd", fd);
+        }
+        return;
+    }
+
+    // Non-offloaded fd path:
+    lock();
+
+    auto it = m_non_offloaded_epfd_map.find(fd);
+    if (it == m_non_offloaded_epfd_map.end()) {
+        fdcoll_logdbg("fd=%d not in non_offloaded_epfd_map, skipping", fd);
+        unlock();
+        return;
+    }
+
+    epfd_info *epfd = it->second;
+    m_non_offloaded_epfd_map.erase(it);
+
+    if (epfd != multi_epfd_sentinel()) {
+        // Fast path: fd is in exactly one epfd
+        fdcoll_logdbg("fd=%d non-offloaded fast path: single epfd=%d", fd, epfd->get_epoll_fd());
+        epfd->fd_closed(fd, passthrough);
+    } else {
+        // Slow path: fd is in multiple epfds, walk all
+        fdcoll_logdbg("fd=%d non-offloaded slow path: walking all epfds (multi-epfd case)", fd);
+        for (epfd_info *ep = m_epfd_lst.front(); ep; ep = m_epfd_lst.next(ep)) {
+            ep->fd_closed(fd, passthrough);
+        }
+    }
+
+    unlock();
 }
 
 #if defined(DEFINED_NGINX)

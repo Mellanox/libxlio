@@ -185,6 +185,18 @@ private:
     epfd_info **m_p_epfd_map;
     cq_channel_info **m_p_cq_channel_map;
 
+    // Reverse-index: maps fd -> epfd for non-offloaded fds.
+    // Value is the epfd_info* that contains the fd, or multi_epfd_sentinel() if in multiple epfds.
+    std::unordered_map<int, epfd_info *> m_non_offloaded_epfd_map;
+
+public:
+    static inline epfd_info *multi_epfd_sentinel() { return reinterpret_cast<epfd_info *>(1); }
+
+    void set_non_offloaded_epfd(int fd, epfd_info *epfd);
+    void clear_non_offloaded_epfd(int fd, epfd_info *epfd);
+    epfd_info *get_non_offloaded_epfd(int fd);
+
+private:
     epfd_info_list_t m_epfd_lst;
     // Contains fds which are in closing process
     sockinfo_list_t m_pending_to_remove_lst;

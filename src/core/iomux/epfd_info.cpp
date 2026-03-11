@@ -114,6 +114,13 @@ epfd_info::~epfd_info()
         BULLSEYE_EXCLUDE_BLOCK_END
     }
 
+    // Clear m_non_offloaded_epfd_map for all non-offloaded fds in this epfd
+    if (g_p_fd_collection) {
+        for (const auto &entry : m_fd_non_offloaded_map) {
+            g_p_fd_collection->clear_non_offloaded_epfd(entry.first, this);
+        }
+    }
+
     unlock();
 
     xlio_stats_instance_remove_epoll_block(&m_stats->stats);
@@ -294,6 +301,9 @@ int epfd_info::add_fd(int fd, epoll_event *event)
     } else {
         fd_rec.offloaded_index = -1;
         m_fd_non_offloaded_map[fd] = fd_rec;
+        if (g_p_fd_collection) {
+            g_p_fd_collection->set_non_offloaded_epfd(fd, this);
+        }
     }
 
     __log_func("fd %d added in epfd %d with events=%#x and data=%#x", fd, m_epfd, event->events,
@@ -439,6 +449,9 @@ int epfd_info::del_fd(int fd, bool passthrough)
             // This can happen after bind(), listen() or accept() calls.
             m_fd_non_offloaded_map[fd] = *fi;
             m_fd_non_offloaded_map[fd].offloaded_index = -1;
+            if (g_p_fd_collection) {
+                g_p_fd_collection->set_non_offloaded_epfd(fd, this);
+            }
         }
 
         remove_socket_from_ready_list(temp_sock_fd_api);
@@ -466,6 +479,9 @@ int epfd_info::del_fd(int fd, bool passthrough)
         fd_info_map_t::iterator fd_iter = m_fd_non_offloaded_map.find(fd);
         if (fd_iter != m_fd_non_offloaded_map.end()) {
             m_fd_non_offloaded_map.erase(fd_iter);
+            if (g_p_fd_collection) {
+                g_p_fd_collection->clear_non_offloaded_epfd(fd, this);
+            }
         }
     }
 
