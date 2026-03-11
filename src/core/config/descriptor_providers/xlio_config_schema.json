@@ -373,8 +373,7 @@
                                             "type": "integer",
                                             "enum": [
                                                 0,
-                                                1,
-                                                2
+                                                1
                                             ],
                                             "default": 0
                                         },
@@ -382,14 +381,13 @@
                                             "type": "string",
                                             "enum": [
                                                 "lwip",
-                                                "cubic",
                                                 "disable"
                                             ],
                                             "default": "lwip"
                                         }
                                     ],
                                     "title": "TCP congestion control algorithm",
-                                    "description": "Maps to XLIO_TCP_CC_ALGO environment variable.\nTCP congestion control algorithm.\nThe default algorithm coming with LWIP is a variation of Reno/New-Reno.\nThe new Cubic algorithm was adapted from FreeBSD implementation.\nUse:\n   - \"lwip\" or 0 for LWIP algorithm.\n   - \"cubic\" or 1 for Cubic algorithm.\n   - \"disable\" or 2 to disable the congestion algorithm."
+                                    "description": "Maps to XLIO_TCP_CC_ALGO environment variable.\nTCP congestion control algorithm.\nThe default algorithm coming with LWIP is a variation of Reno/New-Reno.\nUse:\n   - \"lwip\" or 0 for LWIP algorithm.\n   - \"disable\" or 1 to disable the congestion algorithm."
                                 },
                                 "timestamps": {
                                     "oneOf": [

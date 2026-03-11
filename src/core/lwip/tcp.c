@@ -939,9 +939,6 @@ void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
     pcb->rtime = -1;
 #if TCP_CC_ALGO_MOD
     switch (lwip_cc_algo_module) {
-    case CC_MOD_CUBIC:
-        pcb->cc_algo = &cubic_cc_algo;
-        break;
     case CC_MOD_NONE:
         pcb->cc_algo = &none_cc_algo;
         break;
