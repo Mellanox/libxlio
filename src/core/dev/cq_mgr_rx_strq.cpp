@@ -13,6 +13,7 @@
 #include "hw_queue_rx.h"
 #include "ring_simple.h"
 #include <cinttypes>
+#include "proto/tls.h"
 
 #define MODULE_NAME "cq_mgr_rx_strq"
 
@@ -233,6 +234,10 @@ inline bool cq_mgr_rx_strq::strq_cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe,
               (cqe->hds_ip_ext & MLX5_CQE_L3_OK));
 #ifdef DEFINED_UTLS
         _hot_buffer_stride->rx.tls_decrypted = (cqe->pkt_info >> 3) & 0x3;
+        if (unlikely(_hot_buffer_stride->rx.tls_decrypted == TLS_RX_RESYNC)) {
+            // The branch prevents another cache line to be fetched.
+            ++(m_p_cq_stat->n_rx_tls_resync);
+        }
 #endif /* DEFINED_UTLS */
         if (cqe->lro_num_seg > 1) {
             lro_update_hdr(cqe, _hot_buffer_stride);
