@@ -337,6 +337,7 @@ libxlio_la_SOURCES := \
 	util/list.h \
 	util/cached_obj_pool.h \
 	util/sg_array.h \
+	util/sharded_map.h \
 	util/ip_address.h \
 	util/sock_addr.h \
 	util/sysctl_reader.h \
