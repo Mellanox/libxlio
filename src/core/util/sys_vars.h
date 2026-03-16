@@ -286,6 +286,7 @@ public:
     // DEK cache size low-watermark. Min number of available DEKs required in the
     // cache to perform Crypto-Sync and reuse.
     size_t utls_low_wmark_dek_cache_size;
+    uint32_t utls_max_sessions;
 #endif /* DEFINED_UTLS */
     uint32_t timer_netlink_update_msec;
 
@@ -511,6 +512,7 @@ extern const mce_sys_var &safe_mce_sys();
 #define SYS_VAR_UTLS_TX                        "XLIO_UTLS_TX"
 #define SYS_VAR_UTLS_HIGH_WMARK_DEK_CACHE_SIZE "XLIO_UTLS_HIGH_WMARK_DEK_CACHE_SIZE"
 #define SYS_VAR_UTLS_LOW_WMARK_DEK_CACHE_SIZE  "XLIO_UTLS_LOW_WMARK_DEK_CACHE_SIZE"
+#define SYS_VAR_UTLS_MAX_SESSIONS           "XLIO_UTLS_MAX_SESSIONS"
 #endif /* DEFINED_UTLS */
 
 #define SYS_VAR_LRO "XLIO_LRO"
@@ -681,6 +683,7 @@ extern const mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_UTLS_TX                        (true)
 #define MCE_DEFAULT_UTLS_HIGH_WMARK_DEK_CACHE_SIZE (1024)
 #define MCE_DEFAULT_UTLS_LOW_WMARK_DEK_CACHE_SIZE  (512)
+#define MCE_DEFAULT_UTLS_MAX_SESSIONS           (0)
 #endif /* DEFINED_UTLS */
 
 #define MCE_DEFAULT_LRO                (option_3::AUTO)

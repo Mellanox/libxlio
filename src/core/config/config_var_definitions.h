@@ -148,6 +148,7 @@ extern const config_var_info_t<bool> CONFIG_VAR_UTLS_RX;
 extern const config_var_info_t<bool> CONFIG_VAR_UTLS_TX;
 extern const config_var_info_t<size_t, int64_t> CONFIG_VAR_UTLS_HIGH_WMARK_DEK_CACHE_SIZE;
 extern const config_var_info_t<size_t, int64_t> CONFIG_VAR_UTLS_LOW_WMARK_DEK_CACHE_SIZE;
+extern const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_UTLS_MAX_SESSIONS;
 #endif /* DEFINED_UTLS */
 
 extern const config_var_info_t<option_3::mode_t, int64_t> CONFIG_VAR_LRO;

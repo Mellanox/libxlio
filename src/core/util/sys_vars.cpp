@@ -869,6 +869,7 @@ void mce_sys_var::get_env_params()
     enable_utls_tx = MCE_DEFAULT_UTLS_TX;
     utls_high_wmark_dek_cache_size = MCE_DEFAULT_UTLS_HIGH_WMARK_DEK_CACHE_SIZE;
     utls_low_wmark_dek_cache_size = MCE_DEFAULT_UTLS_LOW_WMARK_DEK_CACHE_SIZE;
+    utls_max_sessions = MCE_DEFAULT_UTLS_MAX_SESSIONS;
 #endif /* DEFINED_UTLS */
     enable_lro = MCE_DEFAULT_LRO;
     handle_fork = MCE_DEFAULT_FORK_SUPPORT;
@@ -1716,6 +1717,11 @@ void mce_sys_var::get_env_params()
         if (utls_low_wmark_dek_cache_size >= utls_high_wmark_dek_cache_size) {
             utls_low_wmark_dek_cache_size = utls_high_wmark_dek_cache_size / 2U;
         }
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_UTLS_MAX_SESSIONS)) != NULL) {
+        int temp = atoi(env_ptr);
+        utls_max_sessions = (temp >= 0 ? static_cast<uint32_t>(temp) : 0);
     }
 #endif /* DEFINED_UTLS */
 
