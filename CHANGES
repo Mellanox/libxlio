@@ -1,3 +1,14 @@
+Version 3.70.1-1:
+Date + Time 2026-03-17
+=============================================================
+Added:
+	- RM #4684689 Improve OOB experience with AI-Driven Configuration
+	- RM #4683517 Add passthrough in worker threds mode
+
+Fixed:
+	- RM #4892549 Fix UAF in ZCOPY TX callback during ring teardown
+	- RM #4818421 Refactor ring_simple::get_tx_buffers()
+
 Version 3.70.0-1:
 Date + Time 2026-03-01
 =============================================================
