@@ -62,7 +62,7 @@ steps:
     containerSelector:
       - "{name: 'rhel8.6'}"
     run: |
-      git clone https://github.com/Mellanox/libdpcp.git libdpcp
+      git clone git@github.com:Mellanox/libdpcp.git libdpcp
       cd libdpcp
       ./autogen.sh && ./configure --prefix=/usr && sudo make install
 
