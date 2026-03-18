@@ -29,6 +29,9 @@
 #define fdcoll_logdbg     __log_dbg
 #define fdcoll_logfunc    __log_func
 
+// Sentinel value indicating fd is mapped to multiple epfds (caller should walk all)
+#define MULTI_EPFD_SENTINEL reinterpret_cast<epfd_info *>(1)
+
 fd_collection *g_p_fd_collection = nullptr;
 
 fd_collection::fd_collection()
@@ -506,6 +509,7 @@ int fd_collection::del_epfd(int fd, bool b_cleanup /*=false*/)
 
 void fd_collection::remove_epfd_from_list(epfd_info *epfd)
 {
+    m_non_offloaded_epfd_map.remove_all_for_value(epfd);
     lock();
     m_epfd_lst.erase(epfd);
     unlock();
@@ -562,15 +566,53 @@ int fd_collection::del_socket(int fd, sockinfo **map_type)
     return -1;
 }
 
+void fd_collection::add_non_offloaded_fd(int fd, epfd_info *epfd)
+{
+    m_non_offloaded_epfd_map.add_or_replace(fd, epfd, MULTI_EPFD_SENTINEL);
+    fdcoll_logdbg("fd=%d epfd=%p add_non_offloaded_fd", fd, epfd);
+}
+
+void fd_collection::remove_non_offloaded_fd(int fd, epfd_info *epfd)
+{
+    m_non_offloaded_epfd_map.remove_if_equals(fd, epfd);
+}
+
 void fd_collection::remove_from_all_epfds(int fd, bool passthrough)
 {
+    fdcoll_logfunc("fd=%d passthrough=%d", fd, passthrough);
+
+    // Hold lock to prevent epfd destruction while we use it.
+    // del_epfd() takes this lock before destroying epfd_info.
     lock();
-    for (epfd_info *ep = m_epfd_lst.front(); ep; ep = m_epfd_lst.next(ep)) {
-        ep->fd_closed(fd, passthrough);
+
+    // Offloaded sockets: use m_econtext (limited to one epfd)
+    sockinfo *sockfd = get_sockfd(fd);
+    if (sockfd) {
+        epfd_info *ep = sockfd->get_epoll_context();
+        if (ep) {
+            ep->fd_closed(fd, passthrough);
+        }
+        unlock();
+        return;
+    }
+
+    // Non-offloaded fds: use sharded map
+    epfd_info *epfd = m_non_offloaded_epfd_map.remove_and_get(fd, nullptr);
+    if (!epfd) {
+        fdcoll_logdbg("fd=%d not in non_offloaded_epfd_map", fd);
+        unlock();
+        return;
+    }
+
+    if (epfd != MULTI_EPFD_SENTINEL) {
+        epfd->fd_closed(fd, passthrough);
+    } else {
+        // fd is in multiple epfds: walk all
+        for (epfd_info *ep = m_epfd_lst.front(); ep; ep = m_epfd_lst.next(ep)) {
+            ep->fd_closed(fd, passthrough);
+        }
     }
     unlock();
-
-    return;
 }
 
 #if defined(DEFINED_NGINX)

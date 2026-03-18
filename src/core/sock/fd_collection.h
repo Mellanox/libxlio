@@ -17,6 +17,7 @@
 #include "sock/sockinfo.h"
 #include "iomux/epfd_info.h"
 #include "utils/lock_wrapper.h"
+#include <util/sharded_map.h>
 
 typedef xlio_list_t<sockinfo, sockinfo::pending_to_remove_node_offset> sockinfo_list_t;
 typedef xlio_list_t<epfd_info, epfd_info::epfd_info_node_offset> epfd_info_list_t;
@@ -157,6 +158,10 @@ public:
      */
     void statistics_print(int fd, vlog_levels_t log_level);
 
+    // Add/remove non-offloaded fd->epfd mapping (called from epfd_info)
+    void add_non_offloaded_fd(int fd, epfd_info *epfd);
+    void remove_non_offloaded_fd(int fd, epfd_info *epfd);
+
 #if defined(DEFINED_NGINX)
     bool pop_socket_pool(int &fd, bool &add_to_udp_pool, int type);
     void push_socket_pool(sockinfo *sockfd);
@@ -188,6 +193,9 @@ private:
     epfd_info_list_t m_epfd_lst;
     // Contains fds which are in closing process
     sockinfo_list_t m_pending_to_remove_lst;
+
+    // Sharded map for non-offloaded fd -> epfd reverse lookup.
+    sharded_map<int, epfd_info *> m_non_offloaded_epfd_map;
 
     const bool m_b_sysvar_offloaded_sockets;
 
