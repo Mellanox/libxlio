@@ -15,7 +15,7 @@ json=$(jq -n \
 
 export SPRING_APPLICATION_JSON="$json"
 export PROJECT_NAME=libxlio
-export PROJECT_VERSION="$sha1"
+export PROJECT_VERSION=${release_tag:-${sha1}}
 export PROJECT_SRC_PATH="$topdir"/
 
 echo "Running BlackDuck (SRC) on $name"
