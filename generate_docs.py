@@ -111,6 +111,7 @@ class Property:
     env_var: str | None
     default: Any
     type_info: TypeInfo
+    title: str = ""
 
     @property
     def section(self) -> str:
@@ -202,6 +203,7 @@ def _build_property(path: str, data: dict) -> Property:
         env_var=_extract_env_var(description),
         default=_resolve_default(data, path),
         type_info=_extract_type_info(data, path),
+        title=data.get("title", ""),
     )
 
 
@@ -359,9 +361,27 @@ def _linkify_xrefs(text: str, xref: _XRefIndex, self_path: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _build_toc(properties: list[Property], xref: _XRefIndex) -> str:
+    """Return a two-level Markdown table of contents with anchor links."""
+    parts: list[str] = ["## Table of Contents\n\n"]
+    current_section: str | None = None
+
+    for prop in properties:
+        if prop.section != current_section:
+            section_slug = _gfm_heading_slug(prop.section.upper())
+            parts.append(f"- **[{prop.section.upper()}](#{section_slug})**\n")
+            current_section = prop.section
+        slug = xref.path_to_slug[prop.path]
+        suffix = f" — {prop.title}" if prop.title else ""
+        parts.append(f"  - [`{prop.path}`](#{slug}){suffix}\n")
+
+    parts.append("\n---\n\n")
+    return "".join(parts)
+
+
 def _format_reference_body(properties: list[Property], xref: _XRefIndex) -> str:
-    """Return the Markdown body (section headers + parameter entries)."""
-    parts: list[str] = []
+    """Return the Markdown body (TOC + section headers + parameter entries)."""
+    parts: list[str] = [_build_toc(properties, xref)]
     current_section: str | None = None
 
     for prop in properties:
