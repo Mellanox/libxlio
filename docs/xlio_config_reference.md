@@ -4,6 +4,144 @@ This file documents all 125 XLIO runtime configuration parameters with their typ
 
 > **Auto-generated** from the JSON schema by `generate_docs.py`. Do not edit manually.
 
+## Table of Contents
+
+- **[ACCELERATION_CONTROL](#acceleration_control)**
+  - [`acceleration_control.app_id`](#acceleration_controlapp_id) — Application ID
+  - [`acceleration_control.default_acceleration`](#acceleration_controldefault_acceleration) — Enable acceleration by default for all sockets
+  - [`acceleration_control.rules`](#acceleration_controlrules) — Acceleration control rules
+- **[APPLICATIONS](#applications)**
+  - [`applications.nginx.distribute_cq`](#applicationsnginxdistribute_cq) — Distribute completion queue interrupts across workers
+  - [`applications.nginx.src_port_stride`](#applicationsnginxsrc_port_stride) — Source port stride
+  - [`applications.nginx.udp_pool_size`](#applicationsnginxudp_pool_size) — UDP socket pool size
+  - [`applications.nginx.udp_socket_pool_reuse`](#applicationsnginxudp_socket_pool_reuse) — RX buffer reclaim threshold for pooled sockets
+  - [`applications.nginx.workers_num`](#applicationsnginxworkers_num) — Number of Nginx workers
+- **[CORE](#core)**
+  - [`core.daemon.dir`](#coredaemondir) — Daemon working directory
+  - [`core.daemon.enable`](#coredaemonenable) — Enable XLIO daemon
+  - [`core.exception_handling.mode`](#coreexception_handlingmode) — Exception handling mode
+  - [`core.quick_init`](#corequick_init) — Quick initialization
+  - [`core.resources.external_memory_limit`](#coreresourcesexternal_memory_limit) — External memory limit (bytes)
+  - [`core.resources.heap_metadata_block_size`](#coreresourcesheap_metadata_block_size) — Heap metadata block size
+  - [`core.resources.hugepages.enable`](#coreresourceshugepagesenable) — Enable hugepages
+  - [`core.resources.hugepages.size`](#coreresourceshugepagessize) — Hugepage size (bytes)
+  - [`core.resources.memory_limit`](#coreresourcesmemory_limit) — Memory limit (bytes)
+  - [`core.signals.sigint.exit`](#coresignalssigintexit) — Exit on SIGINT
+  - [`core.signals.sigsegv.backtrace`](#coresignalssigsegvbacktrace) — Print backtrace on SIGSEGV
+  - [`core.syscall.allow_privileged_sockopt`](#coresyscallallow_privileged_sockopt) — Allow privileged socket options
+  - [`core.syscall.avoid_ctl_syscalls`](#coresyscallavoid_ctl_syscalls) — Avoid system control calls on TCP
+  - [`core.syscall.deferred_close`](#coresyscalldeferred_close) — Defer closing of file descriptors
+  - [`core.syscall.dup2_close_fd`](#coresyscalldup2_close_fd) — Support dup2 calls
+  - [`core.syscall.fork_support`](#coresyscallfork_support) — Enable fork support
+  - [`core.syscall.sendfile_cache_limit`](#coresyscallsendfile_cache_limit) — Sendfile byte limit
+- **[HARDWARE_FEATURES](#hardware_features)**
+  - [`hardware_features.striding_rq.enable`](#hardware_featuresstriding_rqenable) — Enable striding receive queues
+  - [`hardware_features.striding_rq.stride_size`](#hardware_featuresstriding_rqstride_size) — Size of each stride (bytes)
+  - [`hardware_features.striding_rq.strides_num`](#hardware_featuresstriding_rqstrides_num) — Number of strides per WQE
+  - [`hardware_features.tcp.lro`](#hardware_featurestcplro) — Large Receive Offload policy
+  - [`hardware_features.tcp.tls_offload.dek_cache_max_size`](#hardware_featurestcptls_offloaddek_cache_max_size) — DEK max cache size
+  - [`hardware_features.tcp.tls_offload.dek_cache_min_size`](#hardware_featurestcptls_offloaddek_cache_min_size) — DEK min cache size
+  - [`hardware_features.tcp.tls_offload.rx_enable`](#hardware_featurestcptls_offloadrx_enable) — Enable TLS RX offload
+  - [`hardware_features.tcp.tls_offload.tx_enable`](#hardware_featurestcptls_offloadtx_enable) — Enable TLS TX offload
+  - [`hardware_features.tcp.tso.enable`](#hardware_featurestcptsoenable) — TCP segmentation offload policy
+  - [`hardware_features.tcp.tso.max_size`](#hardware_featurestcptsomax_size) — Maximum TSO size
+- **[MONITOR](#monitor)**
+  - [`monitor.log.colors`](#monitorlogcolors) — Colored log output
+  - [`monitor.log.details`](#monitorlogdetails) — Log details level
+  - [`monitor.log.file_path`](#monitorlogfile_path) — Log file path
+  - [`monitor.log.level`](#monitorloglevel) — Log level
+  - [`monitor.report.file_path`](#monitorreportfile_path) — Tuning report file path
+  - [`monitor.report.mode`](#monitorreportmode) — Tuning report mode
+  - [`monitor.stats.cpu_usage`](#monitorstatscpu_usage) — Enable CPU usage statistics
+  - [`monitor.stats.fd_num`](#monitorstatsfd_num) — Max tracked file descriptors
+  - [`monitor.stats.file_path`](#monitorstatsfile_path) — Statistics file path
+  - [`monitor.stats.shmem_dir`](#monitorstatsshmem_dir) — Shared memory directory
+- **[NETWORK](#network)**
+  - [`network.multicast.mc_flowtag_acceleration`](#networkmulticastmc_flowtag_acceleration) — Accelerate flowtag for multicast
+  - [`network.multicast.mc_loopback`](#networkmulticastmc_loopback) — Enable multicast loopback
+  - [`network.multicast.wait_after_join_msec`](#networkmulticastwait_after_join_msec) — Delay after multicast join (msec)
+  - [`network.neighbor.arp.uc_delay_msec`](#networkneighborarpuc_delay_msec) — Unicast ARP delay (msec)
+  - [`network.neighbor.arp.uc_retries`](#networkneighborarpuc_retries) — Unicast ARP retries
+  - [`network.neighbor.errors_before_reset`](#networkneighborerrors_before_reset) — Errors before neighbor reset
+  - [`network.neighbor.update_interval_msec`](#networkneighborupdate_interval_msec) — Neighbor update interval (msec)
+  - [`network.protocols.ip.mtu`](#networkprotocolsipmtu) — MTU size
+  - [`network.protocols.tcp.congestion_control`](#networkprotocolstcpcongestion_control) — TCP congestion control algorithm
+  - [`network.protocols.tcp.linger_0`](#networkprotocolstcplinger_0) — Abort TCP connections on close
+  - [`network.protocols.tcp.mss`](#networkprotocolstcpmss) — Maximum Segment Size
+  - [`network.protocols.tcp.nodelay.byte_threshold`](#networkprotocolstcpnodelaybyte_threshold) — Data threshold for flush
+  - [`network.protocols.tcp.nodelay.enable`](#networkprotocolstcpnodelayenable) — Disable Nagle's algorithm
+  - [`network.protocols.tcp.push`](#networkprotocolstcppush) — Set TCP Push flag
+  - [`network.protocols.tcp.quickack`](#networkprotocolstcpquickack) — Enable quick ACKs
+  - [`network.protocols.tcp.timer_msec`](#networkprotocolstcptimer_msec) — TCP timer interval (msec)
+  - [`network.protocols.tcp.timestamps`](#networkprotocolstcptimestamps) — TCP timestamps mode
+  - [`network.protocols.tcp.wmem`](#networkprotocolstcpwmem) — Write buffer size (bytes)
+  - [`network.timing.hw_ts_conversion`](#networktiminghw_ts_conversion) — Timestamp conversion mode
+- **[PERFORMANCE](#performance)**
+  - [`performance.buffers.batching_mode`](#performancebuffersbatching_mode) — Buffer batching mode
+  - [`performance.buffers.rx.buf_size`](#performancebuffersrxbuf_size) — RX buffer size
+  - [`performance.buffers.rx.prefetch_before_poll`](#performancebuffersrxprefetch_before_poll) — Prefetch before polling
+  - [`performance.buffers.rx.prefetch_size`](#performancebuffersrxprefetch_size) — RX prefetch size
+  - [`performance.buffers.tcp_segments.pool_batch_size`](#performancebufferstcp_segmentspool_batch_size) — Pool segment batch size
+  - [`performance.buffers.tcp_segments.ring_batch_size`](#performancebufferstcp_segmentsring_batch_size) — Ring segment batch size
+  - [`performance.buffers.tcp_segments.socket_batch_size`](#performancebufferstcp_segmentssocket_batch_size) — Socket segment batch size
+  - [`performance.buffers.tx.buf_size`](#performancebufferstxbuf_size) — TX buffer size
+  - [`performance.buffers.tx.prefetch_size`](#performancebufferstxprefetch_size) — TX prefetch size
+  - [`performance.completion_queue.interrupt_moderation.adaptive_change_frequency_msec`](#performancecompletion_queueinterrupt_moderationadaptive_change_frequency_msec) — Adaptive change frequency (msec)
+  - [`performance.completion_queue.interrupt_moderation.adaptive_count`](#performancecompletion_queueinterrupt_moderationadaptive_count) — Adaptive moderation count threshold
+  - [`performance.completion_queue.interrupt_moderation.adaptive_interrupt_per_sec`](#performancecompletion_queueinterrupt_moderationadaptive_interrupt_per_sec) — Target interrupts per second
+  - [`performance.completion_queue.interrupt_moderation.adaptive_period_usec`](#performancecompletion_queueinterrupt_moderationadaptive_period_usec) — Adaptive moderation period (µsec)
+  - [`performance.completion_queue.interrupt_moderation.enable`](#performancecompletion_queueinterrupt_moderationenable) — Enable interrupt moderation
+  - [`performance.completion_queue.interrupt_moderation.packet_count`](#performancecompletion_queueinterrupt_moderationpacket_count) — Packet count threshold
+  - [`performance.completion_queue.interrupt_moderation.period_usec`](#performancecompletion_queueinterrupt_moderationperiod_usec) — Moderation period (µsec)
+  - [`performance.completion_queue.keep_full`](#performancecompletion_queuekeep_full) — Keep completion queue full
+  - [`performance.completion_queue.periodic_drain_max_cqes`](#performancecompletion_queueperiodic_drain_max_cqes) — Max CQEs per periodic drain
+  - [`performance.completion_queue.periodic_drain_msec`](#performancecompletion_queueperiodic_drain_msec) — Periodic drain interval (msec)
+  - [`performance.completion_queue.rx_drain_rate_nsec`](#performancecompletion_queuerx_drain_rate_nsec) — RX drain rate (nsec)
+  - [`performance.max_gro_streams`](#performancemax_gro_streams) — Maximum GRO streams
+  - [`performance.override_rcvbuf_limit`](#performanceoverride_rcvbuf_limit) — Override OS receive buffer limit
+  - [`performance.polling.blocking_rx_poll_usec`](#performancepollingblocking_rx_poll_usec) — RX poll duration (µsec)
+  - [`performance.polling.iomux.poll_os_ratio`](#performancepollingiomuxpoll_os_ratio) — OS file descriptor polling ratio
+  - [`performance.polling.iomux.poll_usec`](#performancepollingiomuxpoll_usec) — Select/poll duration (µsec)
+  - [`performance.polling.iomux.skip_os`](#performancepollingiomuxskip_os) — Skip OS polling frequency
+  - [`performance.polling.max_rx_poll_batch`](#performancepollingmax_rx_poll_batch) — Max RX buffers per poll
+  - [`performance.polling.nonblocking_eagain`](#performancepollingnonblocking_eagain) — Return EAGAIN on nonblocking send
+  - [`performance.polling.offload_transition_poll_count`](#performancepollingoffload_transition_poll_count) — Offload transition poll count
+  - [`performance.polling.rx_cq_wait_ctrl`](#performancepollingrx_cq_wait_ctrl) — RX completion queue wait control
+  - [`performance.polling.rx_kernel_fd_attention_level`](#performancepollingrx_kernel_fd_attention_level) — RX kernel FD attention level
+  - [`performance.polling.rx_poll_on_tx_tcp`](#performancepollingrx_poll_on_tx_tcp) — Poll RX queues on transmit
+  - [`performance.polling.skip_cq_on_rx`](#performancepollingskip_cq_on_rx) — Skip completion queue checks on RX
+  - [`performance.polling.yield_on_poll`](#performancepollingyield_on_poll) — Yield CPU during RX polling loop
+  - [`performance.rings.max_per_interface`](#performanceringsmax_per_interface) — Maximum rings per interface
+  - [`performance.rings.rx.allocation_logic`](#performanceringsrxallocation_logic) — RX ring allocation logic
+  - [`performance.rings.rx.migration_ratio`](#performanceringsrxmigration_ratio) — RX ring migration ratio
+  - [`performance.rings.rx.post_batch_size`](#performanceringsrxpost_batch_size) — RX WRE batch size
+  - [`performance.rings.rx.ring_elements_count`](#performanceringsrxring_elements_count) — RX Receive Queue depth (WREs per ring)
+  - [`performance.rings.rx.spare_buffers`](#performanceringsrxspare_buffers) — Spare RX buffers
+  - [`performance.rings.rx.spare_strides`](#performanceringsrxspare_strides) — Spare stride descriptor cache size
+  - [`performance.rings.tx.allocation_logic`](#performanceringstxallocation_logic) — TX ring allocation logic
+  - [`performance.rings.tx.completion_batch_size`](#performanceringstxcompletion_batch_size) — TX WRE completion batch size
+  - [`performance.rings.tx.max_inline_size`](#performanceringstxmax_inline_size) — Max TX inline size
+  - [`performance.rings.tx.max_on_device_memory`](#performanceringstxmax_on_device_memory) — Max TX memory on device (KB)
+  - [`performance.rings.tx.migration_ratio`](#performanceringstxmigration_ratio) — TX ring migration ratio
+  - [`performance.rings.tx.ring_elements_count`](#performanceringstxring_elements_count) — TX Send Queue depth (WREs per ring)
+  - [`performance.rings.tx.tcp_buffer_batch`](#performanceringstxtcp_buffer_batch) — TCP buffer batch size
+  - [`performance.rings.tx.udp_buffer_batch`](#performanceringstxudp_buffer_batch) — TX buffer batch size
+  - [`performance.steering_rules.disable_flowtag`](#performancesteering_rulesdisable_flowtag) — Disable hardware flow tag
+  - [`performance.steering_rules.tcp.2t_rules`](#performancesteering_rulestcp2t_rules) — Enable 2-tuple rules
+  - [`performance.steering_rules.tcp.3t_rules`](#performancesteering_rulestcp3t_rules) — Enable 3-tuple rules
+  - [`performance.steering_rules.udp.3t_rules`](#performancesteering_rulesudp3t_rules) — Enable 3-tuple rules
+  - [`performance.steering_rules.udp.only_mc_l2_rules`](#performancesteering_rulesudponly_mc_l2_rules) — Use only L2 rules for multicast
+  - [`performance.threading.cpu_affinity`](#performancethreadingcpu_affinity) — CPU affinity
+  - [`performance.threading.cpuset`](#performancethreadingcpuset) — CPU set path
+  - [`performance.threading.internal_handler.behavior`](#performancethreadinginternal_handlerbehavior) — TCP control flow behavior
+  - [`performance.threading.internal_handler.timer_msec`](#performancethreadinginternal_handlertimer_msec) — Timer resolution (msec)
+  - [`performance.threading.mutex_over_spinlock`](#performancethreadingmutex_over_spinlock) — Use mutex instead of spinlocks
+  - [`performance.threading.worker_threads`](#performancethreadingworker_threads) — XLIO Worker Threads number
+- **[PROFILES](#profiles)**
+  - [`profiles.spec`](#profilesspec) — Application spec profile
+
+---
+
 ## ACCELERATION_CONTROL
 
 ### `acceleration_control.app_id`
@@ -13,6 +151,7 @@ This file documents all 125 XLIO runtime configuration parameters with their typ
 > **Maps to:** `XLIO_APPLICATION_ID`
 
 Specify a group of rules from libxlio.conf for XLIO to apply.
+
 **Example:** 'XLIO_APPLICATION_ID=iperf_server'.
 The default matches only the '*' group rule.
 
@@ -52,6 +191,7 @@ specific applications or processes.
 Distributes completion queue interrupts across CPU cores.
 
 **Behavior:**
+
 - Enabled: Each worker's completion queues are assigned to a distinct completion vector,
   spreading interrupt processing across CPUs.
 - Disabled: All completion queues share the same completion vector, typically concentrating
@@ -60,12 +200,13 @@ Distributes completion queue interrupts across CPU cores.
 Only affects interrupt-driven I/O (epoll/blocking). No effect in busy polling mode.
 
 **Tradeoffs:**
+
 - *false* (default): All completion queues share a single completion vector. Simple and
   predictable. Interrupt processing for all workers is handled by one CPU.
 - *true*: Distributes interrupts across CPUs, which can improve latency in interrupt-driven
   mode by reducing per-CPU interrupt processing load.
 
-**Auto-enabled** when nginx profile is active ([`workers_num`](#applicationsnginxworkers_num) > 0 or [`profiles.spec`](#profilesspec)=nginx).
+**Auto-enabled** by the nginx profile ([`profiles.spec`](#profilesspec)=nginx).
 
 **Example:** 8 Nginx workers with 16 completion vectors: Workers 0-7 use comp_vectors 0-7,
 spreading interrupts across 8 different completion vectors instead of concentrating all on
@@ -93,36 +234,46 @@ the port number (see "Why Minimum is 2" below). Each worker is assigned a unique
 mask, and the NIC routes packets whose source port matches the worker's value.
 
 **Why Minimum is 2:**
-The minimum value of 2 ensures the least significant bit of the source port is excluded from
-steering decisions. Client ephemeral source ports have no predictable pattern in their lowest bit,
-so including it would cause uneven distribution across workers.
+The minimum value of 2 ensures the least significant bit of
+the source port is excluded from steering decisions. Linux
+connect() preferentially allocates even ephemeral ports, so
+the least significant bit is typically 0 for all incoming
+connections — including it in the mask would provide no
+differentiation between workers.
 
 **Example with 4 workers and stride=2 (default):**
 XLIO examines bits 1-2 of each source port (ignoring bit 0). The four workers receive packets
 based on those two bits:
+
 - Worker 0: source ports where bits 1-2 are 00 (e.g., 0, 1, 8, 9, 16, 17, ...)
 - Worker 1: source ports where bits 1-2 are 01 (e.g., 2, 3, 10, 11, 18, 19, ...)
 - Worker 2: source ports where bits 1-2 are 10 (e.g., 4, 5, 12, 13, 20, 21, ...)
 - Worker 3: source ports where bits 1-2 are 11 (e.g., 6, 7, 14, 15, 22, 23, ...)
 
 **Low Values (e.g., 2 - default):**
+
 **Benefits:**
+
 - Supports more workers with the same hardware flow steering capacity
 - Uses fewer bits from the 16-bit port space per steering rule
 - Works well with high worker counts (8, 16, 32+ Nginx workers)
 - Lower hardware resource usage per steering rule
 
 **Drawbacks:**
+
 - Connection distribution depends more heavily on client source port patterns
 - Adjacent workers may receive similar traffic volumes if client ports cluster
 
 **High Values (e.g., 4, 8, 16):**
+
 **Benefits:**
+
 - May provide more uniform distribution for certain client traffic patterns
 - Greater separation between worker port ranges reduces steering conflicts
 - Can help when clients generate ports with specific bit patterns
 
 **Drawbacks:**
+
 - Limits maximum supported workers: the product of the rounded worker count
   and the stride must fit within the 16-bit port space
 - Uses more bits in the port mask, potentially overlapping with meaningful port ranges
@@ -135,11 +286,13 @@ When [`workers_num`](#applicationsnginxworkers_num) is not a power of 2 (e.g., 3
 3. Workers with lower IDs receive additional connection slots
 
 For example, with 3 workers (rounded to 4 slots):
+
 - Worker 0: receives 2 slots (primary + secondary rule)
 - Worker 1: receives 1 slot
 - Worker 2: receives 1 slot
 
 **Recommended Settings:**
+
 - For most deployments: Use default value of 2
 - For power-of-2 worker counts (2, 4, 8, 16): Default works optimally
 - For high worker counts (32+): Stick with 2 to maximize supported workers
@@ -175,9 +328,9 @@ For rapid socket cycling (sub-second lifetimes): size to expected concurrent cou
 
 *Example:*
 8 workers, expecting 1000 concurrent UDP upstream sockets with rapid turnover:
-~125 sockets/worker → pool_size of 100-150 captures most reuse benefit.
+~125 sockets/worker → udp_pool_size of 100-150 captures most reuse benefit.
 
-*Memory cost:* pool_size × ~2-4KB per worker.
+*Memory cost:* udp_pool_size × ~2-4KB per worker.
 (100 pool × 8 workers ≈ 1.6-3.2MB held in reserve)
 
 **Related:** [`applications.nginx.udp_socket_pool_reuse`](#applicationsnginxudp_socket_pool_reuse) controls receive buffer recycling.
@@ -190,28 +343,26 @@ For rapid socket cycling (sub-second lifetimes): size to expected concurrent cou
 >
 > **Maps to:** `XLIO_NGINX_UDP_POOL_REUSE_BUFFS`
 
-RX buffer reclaim threshold for pooled UDP sockets.
+How many receive buffers a pooled UDP socket accumulates
+before returning them in bulk. Only applies when
+[`applications.nginx.udp_pool_size`](#applicationsnginxudp_pool_size) > 0.
 
-**Behavior:** Used RX buffers accumulate in a local queue per socket. When the queue reaches
-this threshold, buffers are batch-returned to the ring's shared pool.
+For most deployments, leave at 0 (default). The nginx
+profile ([`profiles.spec`](#profilesspec)) sets a batch size that balances
+throughput and resource usage without tuning.
 
-Only applies when [`applications.nginx.udp_pool_size`](#applicationsnginxudp_pool_size) > 0.
+**When to adjust:**
 
-**Value Tradeoffs:**
-
-*0 (Default):*
-Pooled sockets use the profile default buffer batch size (64 normally, 8 with the NGINX profile).
-
-*Non-zero values:*
-Lower values = more frequent reclamation, less memory per socket, more lock acquisitions.
-Higher values = better batching efficiency, more memory held per socket.
-
-*Memory formula:*
-Total pooled buffer memory ≈ [`udp_pool_size`](#applicationsnginxudp_pool_size) × this_value × buffer_size
-
-*Example:*
-[`udp_pool_size`](#applicationsnginxudp_pool_size)=50, `udp_socket_pool_reuse`=64, MTU=1500:
-50 × 64 × 1500 ≈ 4.8MB per worker in reserve.
+- *Value too high:* Each buffered descriptor holds a
+  hardware receive slot. If too many slots are held
+  across pooled sockets, the NIC cannot post new
+  receives and drops packets.
+  **Symptom:** "HW RX Packets dropped:" counter
+  increases in `xlio_stats` CQ output (`xlio_stats -v3`).
+- *Value too low:* Buffers are returned one at a time,
+  increasing internal lock contention.
+  **Symptom:** reduced throughput under high packet
+  rates with no other bottleneck visible.
 
 **Default:** `0`
 
@@ -223,8 +374,9 @@ Total pooled buffer memory ≈ [`udp_pool_size`](#applicationsnginxudp_pool_size
 
 Number of Nginx worker processes. **Must be > 0 to enable XLIO offloading for Nginx.**
 
-**Behavior:** When set to a value greater than 0, XLIO enables the nginx profile (ring per
-interface, TSO, 3-tuple rules), creates hardware flow steering rules per worker, and scales
+**Behavior:** When set to a value greater than 0, XLIO
+activates the nginx profile ([`profiles.spec`](#profilesspec)), creates
+hardware flow steering rules per worker, and scales
 memory allocation.
 
 **Sizing:** Set to match your Nginx worker_processes configuration exactly.
@@ -235,8 +387,8 @@ memory allocation.
 steering slots are distributed as secondary rules to the lowest-numbered workers, so those
 workers handle more traffic.
 
-**Memory:** 4GB per worker (16 workers or fewer) or 3GB per worker (more than 16 workers).
-Master process uses minimal memory.
+**Memory:** Auto-scaled per worker by the nginx profile;
+see [`core.resources.memory_limit`](#coreresourcesmemory_limit) for sizing details.
 
 **Example:** 3 workers (rounded up to 4 slots): Worker 0 gets 2 port slots (primary +
 secondary rule), Workers 1-2 get 1 slot each. Using 4 workers avoids this imbalance.
@@ -256,11 +408,12 @@ secondary rule), Workers 1-2 get 1 slot each. Using 4 workers avoids this imbala
 Directory where XLIO writes files for communication with xliod daemon.
 
 **Files created per process:**
+
 - `xlioagent.<pid>.sock` - Unix domain socket for state messages
 - `xlioagent.<pid>.pid` - PID file for termination monitoring
 
-**Critical:** This path must match the `--notify-dir` argument passed to xliod.
-Mismatched paths prevent daemon monitoring of XLIO processes.
+If you override this path, pass the same value to xliod
+via `--notify-dir`. Both default to `/tmp/xlio`.
 
 **Recommendation:** Use tmpfs (default /tmp/xlio is typically tmpfs on Linux).
 Slow filesystems (NFS, spinning disk) add latency to socket initialization.
@@ -351,13 +504,14 @@ pages are resident before use. When enabled (true), this validation is skipped.
 
 *false (Default):*
 Safe. Catches cgroup misconfigurations that would cause SIGBUS crashes on first memory access.
-Adds startup latency proportional to hugepage count (2GB with 2MB hugepages = 1024 syscalls).
+Adds startup latency proportional to hugepage count.
 
 *true:*
 Faster startup. Risk: In cgroup-limited environments (containers, Kubernetes), mmap() may succeed
 even when hugepages exceed the limit. First memory access triggers SIGBUS with no earlier warning.
 
 **Decision guide:**
+
 - Containers, Kubernetes, cgroup-limited: Keep disabled (runtime SIGBUS is worse than startup delay)
 - Bare metal with verified hugepage config: Safe to enable for faster startup
 
@@ -369,25 +523,30 @@ even when hugepages exceed the limit. First memory access triggers SIGBUS with n
 >
 > **Maps to:** `XLIO_MEMORY_LIMIT_USER`
 
-Maximum memory block size XLIO requests from a user-provided allocator.
+Memory block size XLIO requests from a user-provided
+allocator.
 
-**Applies only** to applications using XLIO's Extra API (xlio_init_ex) with custom
-memory_alloc and memory_free callbacks. No effect for standard POSIX applications.
+**Applies only** to applications using XLIO's Extra API
+(xlio_init_ex) with custom memory_alloc and memory_free
+callbacks. No effect for standard POSIX applications.
 
-**Behavior:**
-- 0 (default): XLIO requests blocks sized by [`core.resources.memory_limit`](#coreresourcesmemory_limit)
-- Non-zero: XLIO requests blocks up to this size from the user allocator
+**Behavior:** The effective block size is
+max(this value, [`core.resources.memory_limit`](#coreresourcesmemory_limit)). XLIO
+will never request less than [`memory_limit`](#coreresourcesmemory_limit) — this
+parameter can only increase the block size, not
+decrease it.
 
-Memory blocks are registered with RDMA hardware for DMA operations (RX/TX buffer pools).
+- 0 (default): XLIO requests blocks sized by
+  [`core.resources.memory_limit`](#coreresourcesmemory_limit).
+- Non-zero: XLIO requests blocks of
+  max(this value, [`memory_limit`](#coreresourcesmemory_limit)).
 
-**Sizing:** XLIO requests exactly one block of this size from your allocator. If your
-allocator cannot provide it, or if the block is too small for XLIO's buffer pools,
-initialization fails with an exception. Set to your allocator's maximum available
-contiguous block, ensuring it meets XLIO's memory requirements.
+**Sizing:** Your allocator must be able to provide a
+contiguous block of at least [`core.resources.memory_limit`](#coreresourcesmemory_limit).
+Set this parameter only if your allocator can provide
+a larger block than [`memory_limit`](#coreresourcesmemory_limit) and XLIO needs it.
 
-**Profile override:** nvme_bf3 profile sets this to 2GB for optimal SPDK performance.
-
-**Example:** DPDK/SPDK integration with 1GB hugepage pools: set to 1GB to match pool size.
+**Profile override:** nvme_bf3 profile sets this to 2GB.
 
 **Supports suffixes:** B, KB, MB, GB.
 
@@ -399,27 +558,32 @@ contiguous block, ensuring it meets XLIO's memory requirements.
 >
 > **Maps to:** `XLIO_HEAP_METADATA_BLOCK`
 
-Block size for metadata heap allocations (buffer descriptors, not packet data).
+Block size for metadata heap allocations. This is regular
+heap memory, NOT registered with RDMA hardware.
 
-**Behavior:** When XLIO's metadata heap needs to expand, it allocates blocks of this size.
-Metadata stores buffer descriptors for tracking buffer state, ownership,
-and reference counts. This is regular heap memory, NOT registered with RDMA hardware.
+**What it stores:** Buffer descriptors (tracking buffer
+state, ownership, reference counts) and TCP segment
+objects share the same metadata heap.
 
-**Sizing:** Each buffer descriptor is ~256 bytes. A 32MB block holds ~125,000 descriptors.
-One descriptor is needed per in-flight buffer (RX queued + TX pending).
+**Behavior:** The heap grows in blocks of this size
+during warmup as buffer pools and TCP segment pools
+expand. Once the pools have enough cached objects for
+steady-state traffic, the heap stabilizes and does not
+grow further.
 
-*Sizing formula:*
-block_size ≈ (max_concurrent_buffers × 256 bytes) rounded up to reduce expansions.
-
-*Example:*
-Expecting 50,000 concurrent buffers per process: 50,000 × 256 = 12.8MB minimum.
-32MB default provides headroom for bursts without expansion.
+**Sizing:** The default (32MB) is sufficient for most
+workloads. Only reduce if memory is constrained and you
+accept more mmap syscalls during warmup.
 
 **Tradeoffs:**
-- *Higher values:* Fewer heap expansions (fewer mmap syscalls), more initial memory.
-- *Lower values:* Less memory waste, but more frequent expansions under load.
 
-**Profile override:** Nginx master processes automatically use 2MB (no traffic handling).
+- *Higher values:* Fewer heap expansions during warmup,
+  more memory allocated upfront.
+- *Lower values:* Less initial memory, but more mmap
+  syscalls during warmup.
+
+**Profile override:** Nginx master processes
+automatically use 2MB (no traffic handling).
 
 **Supports suffixes:** B, KB, MB, GB.
 
@@ -431,22 +595,27 @@ Expecting 50,000 concurrent buffers per process: 50,000 × 256 = 12.8MB minimum.
 >
 > **Maps to:** `XLIO_MEM_ALLOC_TYPE`
 
-Controls whether XLIO uses huge pages (2MB/1GB) instead of regular 4KB pages for buffer
-allocation.
+Controls whether XLIO uses huge pages instead of regular pages
+for buffer allocation. XLIO supports all hugepage sizes
+available on the system (auto-detected from
+`/sys/kernel/mm/hugepages/`); see
+[`hugepages.size`](#coreresourceshugepagessize) to override.
 
-**Why it matters:** With 4KB pages and 2GB memory, the Translation Lookaside Buffer needs
-524,288 mappings. With 2MB hugepages, only 1,024. Each TLB miss costs ~100-200 CPU cycles
-(vs ~4 for hit), directly impacting packet latency.
+**Why it matters:** Huge pages improve TLB cache footprint and
+NIC internal cache utilization, reducing address-translation
+overhead for both CPU and network hardware.
 
 **Behavior:**
-- true (default): Allocates via mmap() with MAP_HUGETLB. Falls back to malloc() if unavailable.
-- false: Uses standard malloc() or posix_memalign().
+
+- true (default): Allocates using huge pages. Falls back to regular pages if unavailable.
+- false: Uses regular pages for all memory allocation, including metadata (buffer descriptors, TCP segments), which normally uses huge pages.
 
 **rdma-core integration:** When enabled, sets RDMAV_HUGEPAGES_SAFE=1 and MLX_QP_ALLOC_TYPE/
 MLX_CQ_ALLOC_TYPE to "ALL" (if default hugepage ≤32MB) or "PREFER_CONTIG".
 When disabled, sets to "ANON".
 
 **Tradeoffs:**
+
 - *true*: Lower latency (fewer TLB misses), faster RDMA registration. Requires system
   hugepage config. May waste memory due to alignment.
 - *false*: No system config required. Higher TLB miss rate with large allocations.
@@ -464,6 +633,7 @@ When disabled, sets to "ANON".
 Forces a specific hugepage size for XLIO memory allocations.
 
 **Behavior:**
+
 - 0 (default): Auto-selects optimal size per allocation from /sys/kernel/mm/hugepages/
 - Non-zero: Uses specified size (must be power of 2, system-supported)
 
@@ -473,6 +643,7 @@ Forces a specific hugepage size for XLIO memory allocations.
 
 **Sizing guidance:**
 Leave at 0 (auto) for most deployments. Force a specific size only if:
+
 - Auto-selection wastes excessive memory for your allocation pattern
 - You need to reserve larger hugepages (1GB) for other applications
 
@@ -493,30 +664,30 @@ Pre-allocates memory for XLIO's hardware-registered buffer pools (RX/TX buffers,
 **Behavior:** XLIO allocates a contiguous block at startup, registers it with RDMA hardware for
 DMA operations, and carves it into buffer pools. Memory is reserved upfront even when idle.
 
-**Sizing:** Match to peak buffer demand. Each ring consumes approximately:
-- With Striding RQ (default): ~2GB — the product of receive queue depth, strides per
-  element, and stride size (see hardware_features.striding_rq settings)
-- Without Striding RQ: ~32MB — the product of receive queue depth and receive buffer size
-
-Multiply per-ring memory by the number of rings (determined by
-[`performance.rings.rx.allocation_logic`](#performanceringsrxallocation_logic)).
+**Sizing:** Match to peak buffer demand. Both RX and TX buffer
+pools draw from this pool. RX consumption depends on ring count
+and whether Striding RQ is enabled (see
+hardware_features.striding_rq settings). TX consumption grows
+with active connections.
 
 **Profile defaults:**
+
 - ultra_latency: 128MB (single-ring focus)
 - nginx: 4GB per worker (16 workers or fewer) or 3GB per worker (more than 16), divided per worker
 - nginx_dpu: 1GB per worker (or 512MB per worker with exactly 16 workers), divided per worker
 - nvme_bf3: 256MB
 
 **Tradeoffs:**
+
 - *Higher values*: Handle traffic bursts without drops. Essential for multi-ring deployments.
   Requires more hugepages, reserves memory even when idle.
 - *Lower values*: Smaller footprint, faster startup. Risk pool exhaustion under load
   ("No buffers error" stat increases, packets dropped).
 
 **Monitoring:** Run `xlio_stats -p <pid> -v 3` (full view) to check buffer pool stats:
+
 - "No buffers error:" non-zero → increase `memory_limit` (pool exhaustion)
 - "Expands:" continuously increasing → increase `memory_limit` (reduce runtime growth overhead)
-- "SW RX Packets dropped:" non-zero → increase `memory_limit` or [`spare_buffers`](#performanceringsrxspare_buffers)
 
 **Supports suffixes:** B, KB, MB, GB.
 
@@ -531,6 +702,7 @@ Multiply per-ring memory by the number of rings (determined by
 Controls whether XLIO intercepts SIGINT (Ctrl+C) to enable graceful shutdown.
 
 **Behavior:**
+
 - true (default): XLIO wraps signal()/sigaction() for SIGINT. Sets internal exit flag
   that terminates polling loops and socket operations. Chains to application's original
   handler. Ensures cleanup of buffer pools, hugepages, and completion queues.
@@ -538,6 +710,7 @@ Controls whether XLIO intercepts SIGINT (Ctrl+C) to enable graceful shutdown.
   and socket operations won't exit gracefully. May cause resource leaks during shutdown.
 
 **Tradeoffs:**
+
 - *true*: Graceful shutdown, proper resource cleanup. Slight signal interception overhead.
 - *false*: Application has full signal control. Use for complex signal handling that
   conflicts with XLIO, custom process managers, or signal debugging.
@@ -553,12 +726,14 @@ Controls whether XLIO intercepts SIGINT (Ctrl+C) to enable graceful shutdown.
 Registers a SIGSEGV handler to print stack backtraces on crash.
 
 **Behavior:**
+
 - true: On segfault, XLIO prints a demangled C++ backtrace, then terminates with SIGKILL.
   No core dump is generated (SIGKILL prevents it).
 - false (default): Standard OS crash behavior. Core dumps generated if ulimit allows.
   Debuggers (gdb, valgrind) work normally.
 
 **Tradeoffs:**
+
 - *true*: Immediate crash visibility without core dumps. Useful in development or when
   core dumps are impractical.
 - *false*: Full core dump and debugger support. Better for production post-mortem analysis.
@@ -581,6 +756,7 @@ XLIO still processes the option internally regardless of kernel result.
 **Affected socket option:** SO_BINDTODEVICE (bind socket to a specific network interface)
 
 **Tradeoffs:**
+
 - *true* (default): Applications can use SO_BINDTODEVICE without root. XLIO handles
   binding internally. May mask permission issues indicating configuration problems.
 - *false*: EPERM errors propagate to application. Stricter error handling exposes
@@ -598,6 +774,7 @@ For connected TCP sockets, handles common control operations in userspace withou
 kernel syscalls.
 
 **Intercepted operations (connected sockets only):**
+
 - fcntl(F_GETFL/F_SETFL): Get/set blocking state from XLIO internal flag
 - ioctl(FIONBIO): Set non-blocking mode in XLIO only
 - setsockopt(): Supported options apply to XLIO state only
@@ -605,9 +782,10 @@ kernel syscalls.
 Unsupported operations still go to kernel.
 
 **Tradeoffs:**
+
 - *false* (default): All control operations go through kernel. Guaranteed
   kernel/XLIO state consistency. Higher latency for control operations.
-- *true*: Eliminates syscall overhead (~100-500ns per call). Significant latency
+- *true*: Eliminates syscall overhead. Significant latency
   improvement for apps that frequently toggle blocking mode or query socket flags.
   Risk: kernel and XLIO state may diverge for edge cases.
 
@@ -627,24 +805,30 @@ debugging requires kernel state inspection.
 Postpones the kernel close(2) syscall from close() to the socket destructor,
 ensuring the file descriptor is released only after all XLIO cleanup is complete.
 
-**The Problem (multi-threaded apps only):**
-XLIO derives a hardware flow steering tag from the file descriptor number. Without deferral:
-1. Thread A calls close() on a socket, the kernel releases the file descriptor immediately
-2. Thread B creates a new socket and receives the same file descriptor number
-3. Hardware still has the old flow steering rule (being destroyed by Thread A)
-4. Packets for the new socket may be misrouted or dropped
+**The Problem:**
+XLIO derives flow steering rules from file descriptor numbers and
+port bindings. Without deferral, close() releases the fd immediately
+but socket destruction (including flow rule teardown) can be
+delayed — for example, by TCP TIME_WAIT (up to ~2 minutes).
+During this window:
 
-This race does NOT affect single-threaded apps or apps with long-lived sockets,
-because cleanup completes before any new socket is created.
+- A new socket may receive the same fd, reusing the old flow tag
+- A new socket may bind the same port while the old steering rule
+  is still active
+
+This can cause steering rule creation failure for the new socket,
+packet misrouting, or other hard-to-diagnose symptoms.
+Primarily relevant for outgoing and listening sockets;
+incoming (accepted) TCP sockets are generally unaffected.
 
 **Tradeoffs:**
-- *false* (default): Immediate fd release for faster resource recycling. Lower fd usage.
-  Safe for single-threaded apps or apps with long-lived sockets.
-- *true*: File descriptors remain open until destructor runs. Higher fd usage, may hit
-  fd limits sooner. Required for multi-threaded apps with rapid socket churn.
 
-**When to enable:** Multi-threaded applications creating/destroying sockets rapidly,
-or applications experiencing unexplained packet loss after socket close.
+- *false* (default): Immediate fd release for faster resource recycling. Lower fd usage.
+- *true*: File descriptors remain open until destructor runs. Higher fd usage, may hit
+  fd limits sooner. Required for applications with rapid socket churn.
+
+**When to enable:** Applications creating/destroying sockets rapidly,
+or applications experiencing steering rule creation failures after socket close.
 
 **Default:** `false`
 
@@ -661,6 +845,7 @@ dup2(oldfd, newfd) atomically closes newfd and makes it a copy of oldfd.
 When newfd is an XLIO-managed socket, XLIO must release its internal resources first.
 
 **Tradeoffs:**
+
 - *true* (default): Small per-call overhead. Prevents resource leaks and undefined behavior
   when dup2() closes XLIO sockets.
 - *false*: No interception overhead. Only safe if application never uses dup2() to close
@@ -682,6 +867,7 @@ from copying them to child processes. Without this, parent and child share RDMA 
 resources, causing data corruption or crashes.
 
 **Tradeoffs:**
+
 - *true* (default): Adds initialization latency and per-memory-region madvise() overhead.
   Required if the application may call fork().
 - *false*: Faster startup, no madvise() overhead. If fork() occurs, undefined behavior:
@@ -699,6 +885,7 @@ libraries. Disable only with complete control over the application and guarantee
 > **Maps to:** `XLIO_ZC_CACHE_THRESHOLD`
 
 Memory limit for the zero-copy mapping cache used by sendfile().
+
 **Supports suffixes:** B, KB, MB, GB.
 
 **How it works:**
@@ -707,10 +894,11 @@ by file identity (device + inode). Different file descriptors to the same file s
 When the cache exceeds this limit, LRU eviction removes oldest unused mappings.
 
 **Tradeoffs:**
+
 - *Higher values (default 10GB):* More files cached, better throughput for file-serving.
   Memory is only consumed when files are actually mapped.
 - *Lower values:* Smaller footprint, but more frequent cache misses trigger mmap/registration
-  overhead (~10-100 microseconds per miss).
+  overhead.
 - *0:* Disables caching. Every sendfile() performs fresh mmap/register/unmap cycle.
 
 **Sizing:** Set to total size of frequently-accessed files (working set).
@@ -742,11 +930,14 @@ With Striding Receive Queues, each Work Queue Element is divided into multiple s
 Work Queue Element replenishment overhead under high packet rates.
 
 **Tradeoffs:**
+
 - true (default): Higher packet rates with lower CPU overhead for Work Queue Element
   management. Better batching with fewer doorbell writes. Dynamic stride allocation from
   an expandable pool. Recommended for most workloads, especially high packet-rate scenarios.
 - false: Required for legacy compatibility, debugging, or environments where Striding
-  Receive Queues are not supported by hardware.
+  Receive Queues are not supported by hardware. Also disables LRO (Large Receive Offload)
+  with default settings, since LRO payload size is derived from the stride buffer
+  configuration. See [`hardware_features.tcp.lro`](#hardware_featurestcplro).
 
 **Memory:** Each Work Queue Element buffer = strides per element × stride size.
 With defaults (2048 × 64 bytes), each element can hold up to 2048 small packets
@@ -778,6 +969,7 @@ Any leftover bytes in the last stride are wasted. For example, a 1500-byte packe
 Match `stride_size` to typical packet size to minimize both waste and stride count.
 
 **Tradeoffs:**
+
 - 64 (default): Optimal for LRO (most workloads), small packets (UDP, TCP ACKs).
   Without LRO, large packets consume many strides.
 - 256-512: Better for jumbo frames (MTU 9000) with LRO disabled.
@@ -806,6 +998,7 @@ most workloads. Increase for high packet rates (millions per second) where reple
 overhead becomes significant. Decrease for memory-constrained environments.
 
 **Tradeoffs:**
+
 - *Lower (512):* Smaller buffers, faster recycling, more frequent replenishment overhead.
 - *Higher (65536):* Better for high packet rates, larger buffers held until all consumed.
 
@@ -827,11 +1020,13 @@ Large Receive Offload aggregates multiple TCP segments from the same stream into
 (up to 64KB), reducing per-packet CPU overhead at the cost of added latency.
 
 **Values:**
+
 - "auto" or -1 (default): Enabled based on ethtool setting (check: ethtool -k <iface> | grep lro)
 - "disable" or 0: Each TCP segment delivered individually
 - "enable" or 1: Force enabled if adapter supports it
 
 **Tradeoffs:**
+
 - Enabled: Higher throughput, lower CPU for bulk transfers (file serving, backup, streaming).
   Segments coalesce up to 64KB before delivery. May add latency waiting for aggregation.
 - Disabled: Lower latency, immediate per-packet delivery. Required for latency-sensitive
@@ -843,7 +1038,7 @@ With defaults (2048 × 64 = 128KB), LRO can coalesce full 64KB segments.
 Lower stride configurations may limit aggregation size.
 
 **When to change:** Disable for latency-sensitive applications. Enable (or leave auto) for
-throughput-oriented workloads. Use auto for mixed workloads.
+throughput-oriented workloads.
 
 **Default:** `"auto" (-1)`
 
@@ -855,10 +1050,9 @@ throughput-oriented workloads. Use auto for mixed workloads.
 
 Maximum number of Data Encryption Key objects to cache for TLS TX offload.
 
-**How it works:** XLIO maintains a dual-cache for DEK reuse on the TX path. Closed connections
-return DEKs to the "put cache" (limited by this value). New connections draw from the
-"get cache". When the get cache empties, a crypto-sync operation swaps them. Creating new
-DEKs requires NIC firmware operations with latency cost; caching amortizes this.
+**How it works:** XLIO caches DEK objects from closed connections
+for reuse by new ones, reducing NIC firmware operations. This
+value sets the maximum cache capacity.
 
 **Sizing:** Match to peak concurrent TLS connections. The cache holds DEKs from closed
 connections for reuse by new ones. If connection churn exceeds cache size, new DEKs must
@@ -866,8 +1060,9 @@ be created (slower). For short-lived connections with high turnover, size to exp
 concurrent count. For long-lived connections, default is sufficient.
 
 **Tradeoffs:**
-- Higher values: Fewer crypto-sync operations, smoother latency. Higher NIC memory usage.
-- Lower values: Lower NIC resource consumption. More frequent crypto-sync with high churn.
+
+- Higher values: Fewer firmware operations, smoother latency. Higher NIC memory usage.
+- Lower values: Lower NIC resource consumption. More frequent firmware operations with high churn.
 
 Only affects TLS TX offload ([`tx_enable`](#hardware_featurestcptls_offloadtx_enable)). RX offload creates DEKs directly without caching.
 
@@ -880,15 +1075,19 @@ Only affects TLS TX offload ([`tx_enable`](#hardware_featurestcptls_offloadtx_en
 > **Maps to:** `XLIO_LOW_WMARK_DEK_CACHE_SIZE`
 
 Low watermark threshold that controls when to create new Data Encryption Keys versus
-recycling existing keys via crypto-sync.
+recycling existing keys.
 
-**Behavior:** When a TLS connection needs a key and the get cache is empty:
-- Put cache size <= min_size: Create new key (firmware cost, but one-time per key)
-- Put cache size > min_size: Crypto-sync swaps caches (firmware cost, reuses keys)
+**Behavior:** When a new TLS connection needs a key and no
+recycled keys are available:
+
+- Cached keys <= min_size: Create a new key via NIC firmware
+- Cached keys > min_size: Recycle cached keys via a firmware
+  operation
 
 **Sizing:** Match to concurrent TLS connection count during peak traffic bursts.
 During connection spikes (new connections arriving faster than old ones close):
-- Value too low: Frequent crypto-sync operations cause latency spikes
+
+- Value too low: Frequent firmware operations cause latency spikes
 - Value too high: Unnecessary keys created, wasting hardware memory
 
 For workloads with gradual connection turnover, the default (512) is sufficient.
@@ -907,22 +1106,30 @@ Only affects TLS TX offload ([`tx_enable`](#hardware_featurestcptls_offloadtx_en
 
 Offloads TLS decryption to the NIC's crypto engine using the Linux kTLS API.
 
+**Limitation:** Each TLS RX session consumes a hardware TIR (Transport Interface Receive)
+object. TIRs are a system-wide resource (typically 64K total, shared across all processes
+and non-TLS uses), so the practical TLS RX session count is lower.
+
 **Why default is false:** RX offload can perform worse than software decryption due to resync
-overhead. Out-of-order packets trigger resyncs that compete with TX traffic for Send Queue
-credits. Under load, resyncs get skipped and packets fall back to CPU decryption. High
-connection counts amplify this (each connection triggers independent resyncs). In extreme
-cases, throughput drops 20-50% compared to software-only.
+overhead.
 
 **Tradeoffs:**
+
 - false (default): Predictable performance, no NIC resources, works on any hardware.
   Higher CPU usage, lower throughput ceiling.
-- true: Lower CPU, higher throughput under ideal conditions. Risk: degradation under load,
-  packet loss, or high connection count (thousands). Test with your workload before enabling.
+- true: Lower CPU, higher throughput. Packet loss or out-of-order delivery triggers
+  partial software fallback (resyncs). Monitor "TLS Rx Resyncs" in xlio_stats.
 
 **Monitoring:** Check xlio_stats for "TLS Rx Resyncs" (should be low) and "TLS Rx fallback"
 counters. High values indicate RX offload may hurt performance.
 
-**Prerequisites:** ConnectX-6 DX or later, OpenSSL required, XLIO built with --enable-utls.
+**OpenSSL dependency:** The application must be linked against OpenSSL. XLIO searches for
+OpenSSL symbols (EVP_Decrypt/EVP_Encrypt) at runtime in the application's address space.
+These symbols are required for software decryption fallback, which handles records that the
+NIC cannot decrypt (out-of-order packets, resyncs). Without OpenSSL, TLS RX offload setup
+fails per connection.
+
+**Prerequisites:** ConnectX-6 DX or later, XLIO built with --enable-utls.
 
 **Default:** `false`
 
@@ -936,6 +1143,7 @@ Offloads TLS encryption to the NIC's crypto engine using the Linux kTLS API, fre
 the CPU from AES-GCM encryption work.
 
 **Tradeoffs:**
+
 - true (default): NIC handles encryption. Lower CPU, higher throughput, lower latency.
   Requires ConnectX-6 DX+ and kTLS-enabled TLS library. Consumes NIC resources (Data
   Encryption Key cache, Transport Interface Send contexts).
@@ -946,9 +1154,8 @@ the CPU from AES-GCM encryption work.
 **Monitoring:** In xlio_stats, "TLS Tx Offload" confirms offload is active; "TLS Tx Resyncs"
 shows retransmission-triggered resyncs (unlike RX, TX resync has no performance impact).
 
-**Prerequisites:** ConnectX-6 DX or later, TLS library with kTLS support (OpenSSL 3.0+,
-GnuTLS 3.7+), XLIO built with --enable-utls. The TLS library handles kTLS setup internally
-(e.g., SSL_OP_ENABLE_KTLS in OpenSSL). No application code changes required.
+**Prerequisites:** ConnectX-6 DX or later, TLS library or application with kTLS support,
+XLIO built with --enable-utls.
 
 XLIO automatically falls back to software encryption if hardware offload is unavailable.
 
@@ -966,17 +1173,18 @@ TCP Segmentation Offload sends buffers larger than MTU to the NIC, which handles
 in hardware (sequence numbers, checksums, headers per segment).
 
 **Values:**
+
 - "auto" or -1 (default): Enables based on adapter capability and ethtool setting
 - "disable" or 0: Forces TSO off
 - "enable" or 1: Forces TSO on if hardware supports it
 
 **Tradeoffs:**
+
 - Enabled: Higher throughput (line-rate on 100Gbps+), lower CPU, fewer work requests per byte.
-- Disabled: Required for network debugging (packet capture shows pre-segmentation sizes)
-  or virtualization with known TSO bugs.
+- Disabled: Useful for network debugging (packet capture shows pre-segmentation sizes).
 
 **Note:** TSO aggregation is limited by congestion window. During slow start with small cwnd,
-TSO cannot aggregate large segments regardless of max_size.
+TSO cannot aggregate large segments regardless of [`hardware_features.tcp.tso.max_size`](#hardware_featurestcptsomax_size).
 
 **Check status:** ethtool -k <iface> | grep tcp-segmentation-offload
 
@@ -988,22 +1196,22 @@ TSO cannot aggregate large segments regardless of max_size.
 >
 > **Maps to:** `XLIO_MAX_TSO_SIZE`
 
-Maximum bytes aggregated into a single TSO super-packet before NIC segmentation.
+Maximum bytes aggregated into a single TSO segment before NIC segmentation.
 
-The actual payload per super-segment is the smallest of: the configured `max_size`,
-hardware capability, and the TCP congestion window. The transmit buffer is also
-capped at the smaller of tx_buf_size and max_size.
+The actual TSO segment payload is the smallest of: the configured `max_size`,
+hardware capability, and the TCP congestion window.
 
 **Sizing:** Default (256KB) handles most workloads. Increase for sustained bulk transfers.
 Decrease for latency-sensitive apps or to reduce burstiness on shared networks.
 
 **Tradeoffs:**
+
 - Higher: Fewer work requests per byte, higher throughput. Risk: bursty traffic.
 - Lower: Smoother traffic, faster first-byte. Risk: may not hit line-rate on 100Gbps+.
 
 **Hardware warning:** If NIC capability exceeds 256KB, XLIO logs a suggestion to increase max_size.
 
-**Supports suffixes:** B, KB, MB (e.g., "512KB", "1MB").
+**Supports suffixes:** B, KB, MB (e.g., "128KB", "256KB").
 
 **Default:** `256KB`
 
@@ -1044,11 +1252,12 @@ Add details on each log line:
 >
 > **Maps to:** `XLIO_LOG_FILE`
 
-Redirect all logging to a specific user defined file.
-This is very useful when raising the [`monitor.log.level`](#monitorloglevel).
-Library will replace a single '%d' appearing in the log file name
-with the pid of the process loaded with XLIO.
-This can help in running multiple instances of XLIO each with its own log file name.
+Redirect all logging to a file.
+Useful when raising [`monitor.log.level`](#monitorloglevel).
+
+A '%d' in the path is replaced with the process ID,
+so each process writes its own log file.
+
 **Example:** "/tmp/xlio.log"
 
 **Default:** `""`
@@ -1064,6 +1273,7 @@ This can help in running multiple instances of XLIO each with its own log file n
 Controls library logging verbosity. Use string names for consistency across config methods.
 
 **Levels (from quietest to most verbose):**
+
 - "none": No logging at all
 - "panic": Fatal errors causing exceptions (memory allocation failures). Rarely used.
 - "error": Runtime errors (OS/verbs call failures, internal logic bugs)
@@ -1081,6 +1291,7 @@ through 8=all), but numeric string aliases in XLIO_TRACELEVEL env var use differ
 mapping for some levels. Use string names to avoid confusion.
 
 **When to change:**
+
 - Production: Keep "info" (default) or use "error" to reduce log noise
 - Debugging socket issues: Use "debug"
 - Deep troubleshooting: Use "fine" or "finer" with [`monitor.log.file_path`](#monitorlogfile_path) to avoid
@@ -1097,13 +1308,8 @@ mapping for some levels. Use string names to avoid confusion.
 > **Maps to:** `XLIO_REPORT_FILE`
 
 Output path for the tuning report.
-A single '%d' in the filename is replaced with the process
-ID at library initialization time. Use '%d' in multi-process
-deployments (nginx, gunicorn) so each worker writes its own
-file. Post-fork children inherit the parent's substituted
-path, so use pre-fork worker models where each worker
-initializes the library independently.
-The default is suitable for most deployments.
+A '%d' in the path is replaced with the process ID.
+
 See [Tuning Report Reference](xlio_tuning_report_reference.md)
 for report interpretation and troubleshooting guidance.
 
@@ -1118,12 +1324,14 @@ for report interpretation and troubleshooting guidance.
 > **Maps to:** `XLIO_PRINT_REPORT`
 
 Controls tuning report generation at process exit.
+
 - "auto" (-1): Generate only when anomalies are detected
   (buffer allocation failures, hardware receive drops, or
   transmit work-request exhaustion). A summary is logged
   with the full report path.
 - "disable" (0): Never generate.
 - "enable" (1): Always generate.
+
 The default triggers reports only when something needs
 attention — no action required for most deployments.
 
@@ -1159,8 +1367,11 @@ xlio_stats tool is additionally limited by 1024 sockets.
 >
 > **Maps to:** `XLIO_STATS_FILE`
 
-Redirect socket statistics to a specific user defined file.
-Library will dump each socket statistics into a file when closing the socket.
+Redirect socket statistics to a file.
+Statistics are written per socket when the socket closes.
+
+A '%d' in the path is replaced with the process ID.
+
 **Example:** "/tmp/xlio_stats.log"
 
 **Default:** `""`
@@ -1201,8 +1412,7 @@ Applicable if there are no other sockets opened for the same flow in system.
 This parameter sets the initial value used by XLIO internally
 to control the multicast loopback packets behavior during transmission.
 An application that calls setsockopt() with IP_MULTICAST_LOOP will
-run over the initial value set by this parameter.
-Read more in 'Multicast loopback behavior' in notes section below.
+override the initial value set by this parameter.
 
 **Default:** `true`
 
@@ -1267,11 +1477,11 @@ Sets the interval in milliseconds between neighbor table updates.
 > **Maps to:** `XLIO_MTU`
 
 Size of each Rx and Tx data buffer (Maximum Transfer Unit).
-This value sets the fragmentation size of the packets sent by the library.
-If `network.protocols.ip.mtu` is 0 then for each interface
-XLIO will follow the actual MTU.
-If `network.protocols.ip.mtu` is greater than 0 then this MTU value is
-applicable to all interfaces regardless of their actual MTU.
+This value sets the fragmentation size of the packets
+sent by the library.
+
+- 0: Follow each interface's actual MTU.
+- Greater than 0: Override all interfaces with this value.
 
 **Default:** `0`
 
@@ -1284,10 +1494,11 @@ applicable to all interfaces regardless of their actual MTU.
 > **Maps to:** `XLIO_TCP_CC_ALGO`
 
 TCP congestion control algorithm.
-The default algorithm coming with LWIP is a variation of Reno/New-Reno.
+The default algorithm coming with LwIP is a variation of Reno.
 The new Cubic algorithm was adapted from FreeBSD implementation.
+
 Use:
-   - "lwip" or 0 for LWIP algorithm.
+   - "lwip" or 0 for LwIP algorithm.
    - "cubic" or 1 for Cubic algorithm.
    - "disable" or 2 to disable the congestion algorithm.
 
@@ -1302,15 +1513,17 @@ Use:
 Controls whether close() sends RST (abortive) or FIN (graceful) to terminate TCP connections.
 
 **Behavior:**
+
+- *false*: Sends FIN, completes four-way handshake, enters TIME_WAIT (120 seconds).
 - *true*: Sends RST immediately, discards TCP state and pending data. No TIME_WAIT.
-- *false*: Sends FIN, completes four-way handshake, enters TIME_WAIT (60-120 seconds).
 
 **Additional abort triggers:** Even when false, XLIO sends RST if application has unread
 data in the receive buffer, or SO_LINGER is set with l_linger=0.
 
 **Tradeoffs:**
+
 - *false* (default): Reliable delivery, all pending data transmitted. TIME_WAIT consumes
-  memory (~300-400 bytes per socket) and ephemeral ports. Keep for data integrity critical
+  memory and ephemeral ports. Keep for data integrity critical
   workloads (databases, file transfers, financial systems).
 - *true*: Instant teardown, no TIME_WAIT. Pending data is DISCARDED. Enable when TIME_WAIT
   accumulation limits throughput (10K connections/second → 600K sockets in TIME_WAIT), for
@@ -1326,22 +1539,26 @@ data in the receive buffer, or SO_LINGER is set with l_linger=0.
 >
 > **Maps to:** `XLIO_MSS`
 
-Global upper bound on TCP segment payload size. Can only LIMIT MSS, not increase it.
+Global upper bound on TCP segment payload size. Can only **limit** MSS, not increase it.
 
 **How MSS is determined:** The final MSS is the smallest of: configured MSS (if non-zero),
 interface MTU minus 40 bytes (IP + TCP headers), and the peer-advertised MSS. The default (0) auto-calculates optimally from interface MTU.
 
 This parameter is rarely needed. Common misconceptions:
+
 - Want jumbo frames? Set interface MTU instead: ip link set dev eth0 mtu 9000
 - Want larger segments? MSS cannot exceed interface MTU - 40. Configure MTU, not MSS.
 - No XLIO profiles configure this parameter.
 
 When to use (rare edge cases):
-- Path MTU Discovery broken (ICMP blocked) causing packet black-holing on paths with
-  smaller MTU than your interface. Force smaller MSS as a workaround.
+
+- An intermediate link has a smaller MTU than either endpoint.
+  Since XLIO does not perform Path MTU Discovery, oversized packets
+  are silently dropped. Force a smaller MSS as a workaround.
 - Testing/debugging TCP behavior with specific segment sizes.
 
 **Values:**
+
 - 0 (default): Auto-calculate per interface. Correct for nearly all deployments.
 - Non-zero: Force upper bound. Actual MSS may still be lower based on interface or peer.
 
@@ -1359,13 +1576,19 @@ Effective only if [`network.protocols.tcp.nodelay.enable`](#networkprotocolstcpn
 Minimum size (bytes) of the first unsent segment before send; smaller segments
 are batched until the threshold is reached.
 
+When non-zero, acts as a hybrid: writes smaller than the threshold
+fall back to Nagle's algorithm (buffered until ACK or MSS), while
+writes at or above the threshold are sent immediately (standard
+nodelay). Useful for applications that send a header and payload as
+separate write calls and want them coalesced into a single packet.
+
 **Behavior:** With nodelay enabled, data is sent only when the first unsent
 segment length is >= `byte_threshold`; smaller writes are buffered until then.
 
 **Tradeoffs:** 0 (default) = every write sends immediately (standard TCP_NODELAY),
 lowest latency, highest packet and CPU overhead. Non-zero = batches small
 writes to reduce overhead, adds latency for those writes; values >= maximum
-segment size (~1460 bytes) make nodelay largely ineffective.
+segment size (MSS) make nodelay largely ineffective.
 
 **What value to set:** Use 0 for lowest latency (trading, gaming). For mixed
 small and large writes, set slightly below your typical message size to avoid
@@ -1384,13 +1607,14 @@ When true, disables Nagle's algorithm at socket init so segments are sent as
 soon as possible; when false, small writes are batched.
 
 **Nagle (enable=false):** TCP holds small writes until all prior data is
-acknowledged or unsent data reaches about one maximum segment size (~1460 bytes).
-Fewer small packets; adds latency; can cause write-write-read deadlocks in some
-protocols.
+acknowledged or unsent data reaches one MSS.
+Fewer small packets; adds latency; can interact with the remote peer's
+delayed ACK to stall write-write-read patterns (by up to the delayed
+ACK timeout plus RTT).
 
 **Behavior:** true = send immediately (lowest latency; more packets and CPU).
 false (default) = batch until acknowledgement or segment-sized buffer (better
-throughput; latency up to ~200 ms for small writes).
+throughput; delayed ACK and RTT can add latency for small writes).
 
 **Tradeoffs:** false (default) = bulk transfer, streaming, file copy; default is
 correct for most workloads. true = low-latency or request-response (trading,
@@ -1406,9 +1630,9 @@ gaming, interactive); consider [`network.protocols.tcp.quickack`](#networkprotoc
 >
 > **Maps to:** `XLIO_TCP_PUSH_FLAG`
 
-Controls whether the TCP PUSH (PSH) flag is set on the last segment of each write.
+Controls whether the TCP PUSH (PSH) flag is set on sent segments, signaling the receiver to deliver data immediately.
 
-**Behavior:** When true, XLIO sets PUSH on the last segment of every write; the
+**Behavior:** When true, XLIO sets PUSH on sent segments; the
 receiver is signaled to deliver data immediately. When false, no PUSH flags are
 set; the receiver may buffer until more segments arrive.
 
@@ -1416,10 +1640,6 @@ set; the receiver may buffer until more segments arrive.
 request-response and interactive; more delivery events and CPU on receiver. false:
 receiver can batch; better throughput for bulk or streaming (used by NGINX
 profile); higher latency and can cause timeouts in request-response or interactive.
-
-**TSO:** This setting does not prevent TSO from merging segments; TSO can batch
-PSH-carrying segments with others, so transmission (and thus interactivity) may
-be delayed until the TSO buffer is sent.
 
 **What value to set:** Keep default (true) for interactive, request-response, or
 mixed workloads; default is correct for most applications. Set false only for
@@ -1436,17 +1656,20 @@ you see latency issues or timeouts after disabling.
 
 Disables TCP delayed acknowledgments, causing immediate ACKs after each received packet.
 
-**Delayed ACKs (when quickack=false):** TCP batches ACKs, waiting up to [`network.protocols.tcp.timer_msec`](#networkprotocolstcptimer_msec) (default
-100ms) before sending. Reduces ACK packet count by up to 50% and allows piggybacking ACKs
-on response data.
+**Delayed ACKs (when quickack=false):** TCP acknowledges every second
+full-size segment immediately (per RFC); if only one segment arrives,
+the ACK is deferred until the `timer_msec` timer fires.
+LRO/GRO aggregated segments are ACKed immediately as they represent
+multiple segments. Reduces ACK packet count by up to 50%.
 
 **Nagle interaction:** When sender uses Nagle (nodelay=false) and receiver uses delayed ACKs,
-both wait for each other, causing 40-200ms latency spikes. Enable quickack with nodelay for
+both wait for each other, causing latency spikes up to the delayed ACK timeout plus RTT. Enable quickack with nodelay for
 symmetric low latency.
 
 **Tradeoffs:**
+
 - *false* (default): Efficient for bulk transfers, streaming, high-throughput. ACKs batched,
-  lower packet rate and CPU. Adds up to 100ms ACK latency.
+  lower packet rate and CPU. Adds up to `timer_msec` ACK latency.
 - *true*: Lower round-trip latency, faster congestion window growth (more ACKs trigger cwnd
   increases in slow start). Higher packet rate and CPU overhead.
 
@@ -1466,21 +1689,26 @@ request-response protocols, or when experiencing latency spikes with small messa
 Resolution in milliseconds for TCP internal timers.
 
 **Two timer mechanisms:**
+
 - *Fast timer* (fires every timer_msec): Sends delayed ACKs. Maximum ACK delay = timer_msec.
 - *Slow timer* (fires every timer_msec × 2): Retransmission timeout detection, persist probes
   (zero-window), keepalive probes, connection state cleanup (FIN_WAIT, TIME_WAIT, etc.).
 
 **Tradeoffs:**
-- *Lower (10-50ms):* Faster packet loss detection, lower delayed ACK latency (improves sender's
-  congestion window growth). Higher CPU overhead from more frequent timer processing. Better for
-  latency-sensitive applications (trading, gaming).
-- *Higher (200-500ms):* Lower CPU overhead, better for high connection counts. Slower loss
+
+- *Lower (10-50ms):* Faster packet loss detection, lower delayed ACK
+  latency when quickack is disabled. Higher CPU overhead and more
+  frequent internal thread lock contention from timer processing.
+- *Higher (200-500ms):* Lower CPU overhead, less timer thread
+  contention, better for high connection counts. Slower loss
   detection, higher ACK latency, less responsive state machine.
 
 **Sizing:** Match to your latency tolerance. Default 100ms balances responsiveness and CPU.
-Reduce for latency-critical workloads. Increase for CPU-constrained servers with many connections.
+Reduce if delayed ACKs are in use and latency matters. Increase for CPU-constrained servers
+with many connections.
 
 **Constraints:**
+
 - Minimum: [`performance.threading.internal_handler.timer_msec`](#performancethreadinginternal_handlertimer_msec) (auto-clamped if set lower)
 - Maximum: 500ms per RFC 1122 (delayed ACK must be < 500ms)
 
@@ -1498,15 +1726,17 @@ Enables the TCP timestamp option (RFC 1323) which adds a 12-byte timestamp field
 TCP segment header.
 
 **Values:**
+
 - "disable" or 0 (default): Timestamps disabled
 - "enable" or 1: Timestamps enabled
 - "os" or 2: Follow OS setting (/proc/sys/net/ipv4/tcp_timestamps)
 
-**Limitation:** XLIO's LWIP stack does not implement RFC 1323's Round-Trip Time Measurement
+**Limitation:** XLIO's LwIP stack does not implement RFC 1323's Round-Trip Time Measurement
 or Protection Against Wrapped Sequences. Timestamps are echoed for peer compatibility but
 provide no local benefit.
 
 **Tradeoffs:**
+
 - *Disabled (default):* No header overhead. Recommended since advanced timestamp features
   are not implemented.
 - *Enabled:* 12-byte overhead per segment reduces payload efficiency, especially for small
@@ -1521,12 +1751,15 @@ provide no local benefit.
 > **Maps to:** `XLIO_TCP_SEND_BUFFER_SIZE`
 
 Maximum data queued for transmission before sender receives ACKs. Memory is allocated per socket.
+
 **Supports suffixes:** B, KB, MB, GB.
 
 **Sizing formula:** For optimal throughput, buffer >= bandwidth × round-trip-time.
+
 **Example:** 10 Gbps link with 1ms RTT = 10 Gbps × 0.001s = 1.25 MB.
 
 **Tradeoffs:**
+
 - *Higher (2MB+):* Better throughput on high bandwidth-delay product networks. Application can
   queue more data without blocking (fewer EAGAIN). Risk: higher memory per socket, bufferbloat
   (increased latency as more data queued before flow control kicks in).
@@ -1537,9 +1770,13 @@ Maximum data queued for transmission before sender receives ACKs. Memory is allo
 **When to change:** Increase for bulk transfers over high-latency links. Decrease for latency-
 sensitive apps or high connection counts. Default 1MB suits most datacenter and LAN environments.
 
-**Override:** Per-socket via setsockopt(SO_SNDBUF).
+**Override:** Per-socket via setsockopt(SO_SNDBUF). XLIO doubles the
+requested value (matching Linux kernel behavior), but counts only
+payload bytes (kernel includes metadata overhead). Ultra API ignores
+this buffer.
 
-**Auto-modified by:** nginx and nginx_dpu profiles set to 2MB.
+**Auto-modified:** set to 2MB by the nginx and
+nginx_dpu profiles ([`profiles.spec`](#profilesspec)).
 
 **Default:** `1MB`
 
@@ -1557,6 +1794,7 @@ Controls how NIC hardware timestamps (HCA clock cycles) are converted to usable 
 disable for all devices to ensure consistent behavior across interfaces.
 
 **Mode options:**
+
 - "disable" or 0: No timestamps. Zero overhead. SOF_TIMESTAMPING_RAW_HARDWARE returns EPERM.
 - "raw_hw" or 1: Converts HCA cycles to seconds.nanoseconds. No timer. Relative time only
   (not comparable to gettimeofday or other hosts). Use for latency deltas, jitter measurement.
@@ -1572,6 +1810,7 @@ disable for all devices to ensure consistent behavior across interfaces.
 **Performance (overhead low to high):** disable < raw_hw ≈ rtc < system < ptp
 
 **When to change:**
+
 - No timestamps needed: "disable" (0)
 - Relative timing only (latency deltas between packets): "raw_hw" (1)
 - Wall-clock time for most applications: "system" (3) - default is correct
@@ -1592,38 +1831,49 @@ disable for all devices to ensure consistent behavior across interfaces.
 >
 > **Maps to:** `XLIO_BUFFER_BATCHING_MODE`
 
-Controls whether sockets cache buffers locally for reuse or return them immediately to the
-shared pool. Batching amortizes lock overhead; reclaim prevents idle sockets from hoarding buffers.
+Controls whether sockets cache RX buffers locally for reuse or return them immediately.
+TX buffers are always returned to the ring immediately regardless of this setting.
+Batching amortizes lock overhead; reclaim prevents idle sockets from hoarding buffers.
 
 **Values:**
-- "disable" or 0: No caching. Every buffer operation acquires pool lock. Forces
-  [`tcp_buffer_batch`](#performanceringstxtcp_buffer_batch)=1, [`udp_buffer_batch`](#performanceringstxudp_buffer_batch)=1. Lowest memory, highest lock contention.
-- "enable_and_reuse" or 1 (default): Caching with periodic reclaim. Every TCP timer tick
-  (~100ms), idle cached buffers are returned to pool. Uses two-phase mechanism: first tick
+
+- "disable" or 0: No caching. Every buffer return goes through the ring
+  lock. With per-thread ring allocation and no socket migration,
+  contention is minimal. Forces
+  [`tcp_buffer_batch`](#performanceringstxtcp_buffer_batch)=1, [`udp_buffer_batch`](#performanceringstxudp_buffer_batch)=1. Lowest memory.
+- "enable_and_reuse" or 1 (default): Caching with periodic reclaim. Every
+  `timer_msec` tick, idle cached buffers are returned to ring. Uses two-phase mechanism: first tick
   marks buffers pending, second tick returns if still unused (prevents returning active buffers).
   Prevents buffer starvation deadlock where idle sockets hold all buffers, blocking FIN packets.
-- "enable" or 2: Caching without reclaim. Idle sockets keep buffers until destroyed. Lowest
-  latency variance, but risk of buffer pool exhaustion if many sockets go idle.
+- "enable" or 2: Caching without periodic reclaim. Buffers are still
+  returned when the batch threshold is reached, but idle sockets keep
+  buffers indefinitely. Lowest latency variance, but risk of buffer
+  exhaustion if many sockets go idle.
 
 **Threshold behavior (modes 1 and 2):** Buffers accumulate in socket's local cache until count
-reaches threshold (~64), triggering batch return. At 2x threshold, forced immediate return.
+reaches the batch threshold, triggering batch return. At 2x threshold, forced immediate return.
 
 **When to change:**
+
 - 0 (disable): Thousands of mostly-idle connections, memory-constrained, or seeing "unable to
   allocate buffer" errors with many idle sockets. Deterministic memory usage for capacity planning.
 - 1 (default): Most workloads. Safe default that balances performance with resource efficiency.
 - 2 (enable): All sockets continuously active (no idle connections), latency consistency paramount
   (high-frequency trading), memory abundant. Profile first and test under peak load.
 
-**Buffer starvation risk (mode 2):** Without reclaim, idle sockets deplete the global pool.
-New connections fail to allocate buffers; FIN packets cannot be processed, causing connection
-leaks. Only use if all sockets remain active.
+**Buffer starvation risk (mode 2):** Without periodic reclaim, idle sockets
+hold buffers indefinitely. With Striding Receive Queue (default), each
+held buffer pins an entire receive WQE, amplifying the impact. New
+connections may fail to allocate buffers; FIN packets cannot be
+processed, causing connection leaks. Only use if all sockets remain
+active.
 
 **Monitoring:** Run `xlio_stats -p <pid> -v 3` (full view). If "No buffers error:" is non-zero
 with mode=2, switch to mode=1 (idle sockets hoarding buffers). If already mode=1, see
 [`core.resources.memory_limit`](#coreresourcesmemory_limit) for memory sizing guidance.
 
-**Auto-selected by:** nginx_dpu profile sets mode 0.
+**Auto-set to mode 0** by the nginx_dpu profile
+([`profiles.spec`](#profilesspec)=nginx_dpu).
 
 **Related:** [`network.protocols.tcp.timer_msec`](#networkprotocolstcptimer_msec) controls reclaim frequency in mode 1.
 
@@ -1637,23 +1887,24 @@ with mode=2, switch to mode=1 (idle sockets hoarding buffers). If already mode=1
 
 Size of each receive buffer element. Supports suffixes: B, KB, MB, GB.
 
-**With Striding Receive Queue enabled (default): no effect.** Buffer
-size is determined by strides per element × stride size
-(see hardware_features.striding_rq settings). Keep at default (0).
+**With Striding Receive Queue enabled (default):** Does not affect
+buffer allocation size (determined by stride settings). However, a
+non-zero value caps LRO maximum aggregation size, which may reduce
+throughput. Keep at default (0) unless you need to limit LRO
+aggregation.
 
 **Without Striding Receive Queue:** Controls actual buffer allocation
-size. Memory per ring ≈ buffer size × receive queue depth × 2.
+size.
 
 **Values:**
+
 - *0* (default): Auto-calculate from max MTU across all interfaces
 - *Non-zero*: Force specific size. Clamped to max 65280 bytes.
   Reset to 0 if value <= Maximum Segment Size (MTU - 40).
 
-Match to MTU for standard use (auto does this). Higher values waste
-memory on small packets; lower values risk truncation.
-
-**When to change:** Only when Striding Receive Queue is disabled and
-you need explicit control over buffer size. Otherwise keep default (0).
+**When to change:** Without Striding RQ, set to control buffer
+allocation. With Striding RQ, set only to limit LRO aggregation.
+Otherwise keep default (0).
 
 **Default:** `0`
 
@@ -1672,19 +1923,17 @@ checking for completions. Both can be enabled simultaneously.
 
 **When it helps:** At low packet rates or bursty traffic, CPU evicts
 receive buffers from cache between packets. This keeps the next buffer
-warm (~4-10 cycle miss penalty avoided per cache line). At sustained
+warm (avoiding cache miss penalties). At sustained
 high packet rates, buffers stay warm naturally and this is redundant.
 
-**Sizing:** The value controls how many bytes of the next buffer to warm.
-Match to what the CPU reads first when processing a packet: headers
-(~40-60 bytes) plus start of payload. Cost: one prefetch per 64-byte cache line covered by this value (rounded up),
-instructions per poll, paid even when no packet is waiting. 256 bytes
-(4 instructions) covers typical headers + small payload with negligible
-overhead.
+**Sizing:** Default (256) is sufficient for most workloads. Cost: one
+prefetch per 64-byte cache line covered by this value (rounded up),
+paid even when no packet is waiting.
 
 **Striding Receive Queue:** Value automatically clamped to stride_size.
 
 **Tradeoffs:**
+
 - *0* (default): No overhead. Best for continuous high-throughput traffic.
 - *256*: Good for latency-sensitive or bursty workloads. Negligible cost.
 
@@ -1705,17 +1954,16 @@ Entry, so the subsequent memcpy to user space during recv() hits warm
 cache instead of causing L1 misses.
 
 **How it works:** After finding a packet completion, XLIO issues
-one prefetch instruction per 64-byte cache line, starting after the Ethernet
-header (~14 bytes into the buffer). The first ~30-40 prefetched bytes
-are protocol headers (IP + TCP/UDP), not application payload.
-Effective payload prefetch ≈ value - 40 bytes.
+one prefetch instruction per 64-byte cache line, starting after the
+Ethernet header. The first prefetched bytes are protocol headers
+(IP + TCP/UDP), not application payload.
 
-**Sizing:** Match to typical payload size + 40 (for headers). Default
-(256) prefetches ~216 bytes of payload with 4 instructions - sufficient
-for most workloads. Prefetching beyond packet size wastes instructions
-but is otherwise harmless.
+**Sizing:** Default (256) is sufficient for most workloads.
+Prefetching beyond packet size wastes instructions but is otherwise
+harmless.
 
 **Tradeoffs:**
+
 - *Lower (32-128):* Minimal overhead but mostly prefetches headers,
   not payload. Use at millions of packets per second where per-packet
   instruction cost matters.
@@ -1751,26 +1999,19 @@ is never returned until process exit.
 ([`ring_batch_size`](#performancebufferstcp_segmentsring_batch_size), default 1024), global pool expands by
 pool_batch_size. Each tier reduces lock contention on the tier below.
 
-**Memory per expansion:** `pool_batch_size` x 136 bytes
-(default: 16384 x 136 = ~2.1MB).
-
-**Sizing:** Each active TCP connection holds ~10-20 segments in send
-and retransmit queues. Formula: peak_connections x 15 /
-desired_expansions. Example: 1000 connections -> ~15000 segments ->
-default 16384 covers it in one expansion. For most long-running
-servers the default is sufficient.
+**Memory per expansion:** With the default value, each expansion
+allocates approximately 2-4 MB. With hugepages (default), allocation
+rounds up to hugepage boundaries, so the actual segment count per
+expansion may exceed the configured value.
 
 **Tradeoffs:**
+
 - *Higher:* Fewer pool expansions (each acquires global spinlock),
   lower latency variance during startup and traffic spikes. More
   memory upfront.
 - *Lower:* Smaller footprint, gradual growth. More pool expansions
   under load cause brief latency hits from heap allocation and
   spinlock.
-
-**Symptom of too-low value:** In xlio_stats, TCP_SEG_POOL section:
-"No segments error:" non-zero or rising. With debug logging
-([`monitor.log.level`](#monitorloglevel)=5), shutdown log shows "expands=N" count.
 
 **Default:** `16384`
 
@@ -1787,18 +2028,8 @@ pool expands from heap ([`pool_batch_size`](#performancebufferstcp_segmentspool_
 accumulates > 2 x `ring_batch_size` segments, half are returned
 (hysteresis).
 
-**Memory:** Up to 2 x `ring_batch_size` x 136 bytes per ring
-(default: ~272KB). Total = per-ring memory x ring count (set
-by [`performance.rings.rx.allocation_logic`](#performanceringsrxallocation_logic)).
-
-**Sizing by ring allocation mode:**
-- *per_interface* (1 ring): Default is more than sufficient.
-- *per_thread* (default): Default works for most thread counts.
-  Reduce to 512 for 32+ threads to limit total memory.
-- *per_socket*: Use 256-512 to limit memory (1000 sockets x 2
-  x 512 x 136 = ~139MB in segments alone).
-
 **Tradeoffs:**
+
 - *Higher:* Fewer global pool lock acquisitions, lower send
   latency variance. More memory per ring.
 - *Lower:* Less memory, faster redistribution across rings.
@@ -1815,7 +2046,7 @@ Default is sufficient for most per_thread deployments.
 >
 > **Maps to:** `XLIO_TX_SEGS_BATCH_TCP`
 
-Segments (136 bytes each) a socket fetches from its ring cache
+Segments a socket fetches from its ring cache
 at once. Top tier of the 3-level segment cache (socket > ring >
 global pool). Socket access is lock-free; only ring refills
 acquire the per-ring lock.
@@ -1827,23 +2058,14 @@ acquire the per-ring lock.
 Better CPU cache locality for single-stream latency workloads
 only.
 
-**Sizing:** Each TCP connection holds ~10-20 segments in
-send/retransmit queues. Memory per connection =
-`socket_batch_size` x 136 bytes (default: ~8.5KB). Ring lock
-acquired once per `socket_batch_size` sends. For 10K connections
-at default: ~87MB in segment metadata alone.
-
 **Tradeoffs:**
+
 - *Higher (64-256):* Fewer ring lock acquisitions, better
   throughput. Higher memory per connection.
 - *Lower (2-16):* Less memory, faster redistribution. More
   ring lock contention under high send rates.
 - *1:* Best CPU cache for single-stream. Every send touches
   ring lock.
-
-**Ring allocation:** With per_thread (default), higher values
-reduce lock contention between connections sharing a ring.
-With per_socket, value mainly affects memory.
 
 Default is sufficient for most workloads.
 
@@ -1859,23 +2081,26 @@ Size of each transmit buffer element (allocated as buf_size + 92
 bytes for Ethernet/IP/TCP headers). Supports suffixes: B, KB, MB, GB.
 
 **Values:**
+
 - 0 (default): Auto-calculate as Maximum Segment Size (MTU - 40).
   Standard MTU 1500 gives ~1460 bytes; jumbo MTU 9000 gives ~8960.
 - Non-zero: Force specific size. Clamped to max 256KB.
   Reset to 0 if value <= Maximum Segment Size.
 
-**TCP Segmentation Offload interaction:** Controls maximum data per
-super-segment is the smaller of this buffer size and the TSO max payload size.
+**TCP Segmentation Offload interaction:** Maximum data per TSO segment is the smaller of this buffer size and the TSO max payload size.
 Without TCP Segmentation Offload, segments stay at Maximum Segment
-Size regardless of buffer size.
+Size regardless of buffer size — setting a larger value only wastes
+memory.
 
-**Sizing:** Match to typical send() payload size. For bulk transfers
-(streaming, file serving), 64KB+ enables full hardware aggregation.
-For small-message latency-sensitive apps, default (0) is sufficient.
+**Sizing:** For non-zerocopy heavy TX workloads, increase to improve
+TSO utilization (64KB+ for bulk transfers). For TLS TX offload,
+16KB is optimal (matches TLS record size). For zerocopy sends
+without TLS, keep default (0) to minimize memory.
 
 **Tradeoffs:**
+
 - 0/auto: Lowest memory. TCP Segmentation Offload limited to one
-  Maximum Segment Size per super-segment, limiting bulk throughput.
+  Maximum Segment Size per TSO segment, limiting bulk throughput.
 - 64KB+: Full TCP Segmentation Offload utilization, fewer buffer
   allocations, higher throughput. More memory per buffer.
 
@@ -1902,14 +2127,12 @@ one prefetch instruction per 64-byte cache line covered by
 this value (rounded up). The actual prefetch is limited to
 the payload size. 0 disables.
 
-**Sizing:** Match to typical UDP payload size. Default (256) covers
-headers plus ~200 bytes of payload with 4 instructions -
-sufficient for most workloads. Increase for large-payload UDP
-(jumbo frames). At millions of packets per second, reduce or
-disable if profiling (perf stat -e cache-misses) shows prefetch
-overhead.
+**Sizing:** Default (256) is sufficient for most workloads. Increase
+for large-payload UDP (jumbo frames). Reduce or disable if profiling
+shows prefetch overhead at high packet rates.
 
 **Tradeoffs:**
+
 - 0: No overhead. Risk: CPU write-stalls on cold TX buffers.
 - 256 (default): Good balance for small-to-medium payloads.
 - Higher: Warms more buffer for large payloads. Risk: L1 cache
@@ -1929,7 +2152,7 @@ recalculations.
 **How it works:** A periodic timer measures packets received per ring
 over this interval, computes the average packet rate, and adjusts
 hardware Completion Queue moderation count and period. Computed values
-are capped by [`adaptive_count`](#performancecompletion_queueinterrupt_moderationadaptive_count) and adaptive_period_usec.
+are capped by [`adaptive_count`](#performancecompletion_queueinterrupt_moderationadaptive_count) and [`adaptive_period_usec`](#performancecompletion_queueinterrupt_moderationadaptive_period_usec).
 
 **Value of 0:** Disables adaptive moderation entirely. Moderation uses
 static [`packet_count`](#performancecompletion_queueinterrupt_moderationpacket_count) and [`period_usec`](#performancecompletion_queueinterrupt_moderationperiod_usec) values only.
@@ -1944,6 +2167,7 @@ benefit; for short-lived connections, tune [`packet_count`](#performancecompleti
 [`period_usec`](#performancecompletion_queueinterrupt_moderationperiod_usec) instead.
 
 **Tradeoffs:**
+
 - *Lower (e.g., 250ms):* Faster adaptation when traffic rate shifts
   frequently. Slightly more overhead from recalculations.
 - *Higher (e.g., 2000ms):* Stable settings, less overhead. May miss
@@ -1977,6 +2201,7 @@ per second with default 10000 interrupts per second = 500, which the
 default handles. Only increase if your peak rate requires it.
 
 **Tradeoffs:**
+
 - *Higher:* More batching under heavy traffic, fewer interrupts,
   lower CPU. Risk: worst-case interrupt latency grows proportionally.
 - *Lower:* Bounds maximum batching even during bursts. More
@@ -2009,6 +2234,7 @@ Default (10000) targets ~100 microsecond intervals, sufficient for
 most general-purpose workloads.
 
 **Tradeoffs:**
+
 - *Higher (e.g., 20000 = 50 microsecond intervals):* Lower latency,
   higher CPU usage. Better for request-response workloads.
 - *Lower (e.g., 2000 = 500 microsecond intervals):* Lower CPU,
@@ -2044,6 +2270,7 @@ most workloads. Only reduce if worst-case latency matters more
 than CPU efficiency (e.g., 250-500 for latency-sensitive apps).
 
 **Tradeoffs:**
+
 - *Lower (250-500):* Tighter worst-case latency bound. May cause
   unnecessary interrupts when traffic is near the target rate.
 - *Higher (2000-5000):* More algorithm flexibility, better CPU
@@ -2065,6 +2292,7 @@ the NIC batches completion notifications and generates interrupts based
 on [`packet_count`](#performancecompletion_queueinterrupt_moderationpacket_count) and [`period_usec`](#performancecompletion_queueinterrupt_moderationperiod_usec) thresholds rather than per-packet.
 
 **Tradeoffs:**
+
 - *true* (default): Hardware coalesces interrupts. Lower CPU usage at
   the cost of added latency (bounded by [`period_usec`](#performancecompletion_queueinterrupt_moderationperiod_usec), default
   50 microseconds). Adaptive algorithm dynamically adjusts thresholds
@@ -2114,6 +2342,7 @@ drops to zero. Set to your desired packets-per-interrupt for those
 transition periods. Default (48) is a balanced starting point.
 
 **Tradeoffs:**
+
 - *Lower:* More frequent interrupts, lower latency, higher CPU
   overhead from interrupt processing.
 - *Higher:* Fewer interrupts, better CPU efficiency, packets wait
@@ -2142,6 +2371,7 @@ mainly affects light or bursty traffic where packets arrive slower
 than the count threshold.
 
 **Tradeoffs:**
+
 - *Lower (e.g., 25):* Tighter worst-case latency bound under light
   traffic. Higher interrupt rate when few packets arrive, more CPU
   overhead from interrupt processing.
@@ -2167,6 +2397,7 @@ hardware Receive Queue after processing received packets.
 
 **Behavior:** XLIO tracks a "debt" of consumed-but-not-replenished
 buffers.
+
 - *true* (default): Replenish after every packet. If no buffers
   available, re-post the same buffer (packet data is dropped) to
   keep the Receive Queue at full capacity. Drops are counted in
@@ -2176,6 +2407,7 @@ buffers.
   consumed). Lower per-packet CPU overhead and latency jitter.
 
 **Tradeoffs:**
+
 - *true*: Receive Queue always full, best for bursty traffic or
   throughput workloads. Risk: software packet drops under memory
   pressure (visible in xlio_stats).
@@ -2206,12 +2438,12 @@ the internal thread. Does NOT affect application-path polling
 attempts to lock each ring (non-blocking) and drains up to this many
 completions. The lock is held for the entire drain of each ring.
 
-**Latency impact:** Lock hold time is approximately max_cqes
-multiplied by 100-500 nanoseconds per completion. Default (10000)
-can hold the lock 1-5 milliseconds under heavy load, blocking
-application threads on the same ring. Reduce to bound jitter.
+**Latency impact:** Lock hold time scales linearly with max_cqes.
+High values can block application threads on the same ring under
+heavy load. Reduce to bound jitter.
 
 **Sizing:** Match to acceptable worst-case lock hold time:
+
 - Latency-sensitive: 100-500 (lock hold 10-250 microseconds)
 - Throughput: 10000 (default, clears backlogs efficiently)
 - Apps that poll sockets frequently: 0 (disables periodic
@@ -2244,6 +2476,7 @@ already drained the Completion Queue, the thread returns immediately
 socket API calls. Tight event loops or busy-poll should disable (0).
 
 **Tradeoffs:**
+
 - *10* (default): Balanced for most applications.
 - *Lower:* Faster retransmission detection during application idle
   phases. Higher CPU and lock contention with application threads.
@@ -2271,6 +2504,7 @@ UDP only. Minimum interval (nanoseconds) between forced Completion
 Queue polls when the socket's ready queue already has packets.
 
 **Behavior:** When a UDP recv() finds packets already queued:
+
 - *0* (default): Returns immediately. Only polls when queue is empty.
 - *Non-zero*: Polls the Completion Queue if at least this many
   nanoseconds elapsed since the last poll. Otherwise returns
@@ -2281,11 +2515,13 @@ sockets in the process. Any socket's poll resets the timer for all
 others, naturally throttling poll rate with many active sockets.
 
 **Sizing:** Set to the maximum staleness your application tolerates.
-Each forced poll costs 50-200 nanoseconds. At millions of recv()
+At millions of recv()
 calls per second, even small values add measurable CPU overhead.
+
 **Recommended range when enabled:** 100-5000 nanoseconds.
 
 **Tradeoffs:**
+
 - *0* (default): Lowest latency, no extra CPU. Application may miss
   recently-arrived packets until the ready queue empties. Sufficient
   for single-threaded apps or apps that drain sockets completely.
@@ -2311,6 +2547,7 @@ Only flows with pending packets consume slots; idle connections
 do not. Default (32) handles most server workloads.
 
 **Tradeoffs:**
+
 - *0*: Disabled. Lowest per-packet latency, higher CPU. Use when
   latency-sensitive or Large Receive Offload already coalesces.
 - *32* (default): Typical server workloads (web, proxy).
@@ -2350,6 +2587,7 @@ Size to cover the longest gap between recv() calls (including garbage
 collection pauses, context switches, or computation phases).
 
 **Tradeoffs:**
+
 - *Lower (8-16KB):* Less latency (stale data discarded), lower memory.
   Risk: drops during any processing hiccup.
 - *64KB* (default): Handles typical jitter (~40-50 full-size packets).
@@ -2372,12 +2610,11 @@ rate. At socket close, XLIO logs "Rx byte : max X / dropped Y (Z%)".
 
 Busy-poll loop count on the hardware Completion Queue before
 switching to interrupt-driven sleep. Despite the name, this is
-a loop count, not microseconds (~100-500ns per iteration).
+a loop count, not microseconds.
 
 On blocking recv()/read(), XLIO loops up to this count checking
 for completions (sub-microsecond return on hit). When exhausted,
-arms interrupts and sleeps (~10-100 microseconds added wakeup
-latency). Non-blocking sockets always perform exactly 1 poll.
+arms interrupts and sleeps (added wakeup latency). Non-blocking sockets always perform exactly 1 poll.
 
 **Special values:** -1 = infinite polling (never sleeps, 100%
 CPU -- pin thread to a dedicated core). 0 = converted to 1
@@ -2389,6 +2626,7 @@ Use -1 when latency is critical and dedicated cores are
 available. Decrease to 1000-10000 when CPU is constrained.
 
 **Symptoms:** Too high: receive thread at 100% CPU during idle.
+
 **Too low:** elevated latency; in xlio_stats full view (mode 3),
 "Rx poll: X / Y (Z%) [miss/hit]" shows >50% miss rate.
 
@@ -2411,6 +2649,7 @@ Completion Queue poll. At zero, a zero-timeout OS syscall checks
 non-offloaded file descriptors, then resets.
 
 **Sizing:**
+
 - **0:** OS never polled; non-offloaded file descriptors only
   checked entering blocking mode (starvation risk).
   Set by the "ultra_latency" profile.
@@ -2418,6 +2657,7 @@ non-offloaded file descriptors, then resets.
   The "latency" profile uses 100.
 
 **Cause-effect:**
+
 - *Too low:* Excessive kernel transitions per OS poll, higher
   latency variance for offloaded traffic.
 - *Too high:* Non-offloaded traffic (timers, signals,
@@ -2449,7 +2689,7 @@ without data, arms Completion Queue interrupts and sleeps.
   "ultra_latency" and "latency" profiles. Auto-disables
   Completion Queue interrupt moderation.
 - **0:** Single poll then sleep (interrupt-driven). Set by
-  the "nginx" profile.
+  the nginx profile ([`profiles.spec`](#profilesspec)).
 
 **Sizing:** Match to expected packet inter-arrival time.
 Monitor "Polls [miss/hit]" in xlio_stats: a high miss
@@ -2457,8 +2697,9 @@ rate means the budget exceeds traffic frequency, wasting
 CPU spinning before every sleep transition.
 
 **Cause-effect:**
+
 - *Too low:* Frequent misses cause interrupt + context-switch
-  latency (~10-100 microseconds per wakeup).
+  latency on each wakeup.
 - *Too high / -1:* Thread spins idle, starving co-located
   threads on the same core.
 
@@ -2486,15 +2727,18 @@ offloaded sockets.
 OS-priority poll and decrements every iomux call. At zero,
 the OS is polled first; otherwise [`poll_os_ratio`](#performancepollingiomuxpoll_os_ratio) governs
 the Completion Queue-to-OS ratio within the polling loop.
+
 **Effective frequency:** one OS-priority poll every N calls.
 
 **Sizing:**
+
 - **0 or 1:** OS gets priority every call (most overhead).
   Set by the "ultra_latency" profile (0).
 - **Higher values:** Fewer OS-priority polls per sequence.
-  The "nginx" profile uses 1000.
+  The nginx profile ([`profiles.spec`](#profilesspec)) uses 1000.
 
 **Cause-effect:**
+
 - *Too low:* Syscall on each iomux entry; offloaded packets
   wait while OS is checked first.
 - *Too high:* Non-offloaded file descriptors (timers,
@@ -2527,6 +2771,7 @@ is reached (Completion Queue not fully drained).
 **Sizing:** Only matters when packets arrive faster than
 the application consumes; otherwise the queue empties
 before the limit. Default (16) suits most workloads.
+
 - **Latency-sensitive:** 4-8. Delivers first queued
   packet sooner; holds ring lock briefly.
 - **Throughput-oriented:** 64-256. Amortizes per-call
@@ -2534,12 +2779,14 @@ before the limit. Default (16) suits most workloads.
 - **Shared rings:** 8-32 to limit ring lock hold time.
 
 **Cause-effect:**
+
 - *Too low:* More poll calls, lock acquisitions, flushes;
   lower peak throughput.
 - *Too high:* First-packet latency and jitter increase;
   ring lock starves threads on shared rings.
 
-**Set to 128** by the "nginx" profile.
+**Set to 128** by the nginx profile
+([`profiles.spec`](#profilesspec)=nginx).
 
 **Related:** [`blocking_rx_poll_usec`](#performancepollingblocking_rx_poll_usec) (recv() poll duration),
 [`hardware_features.tcp.lro`](#hardware_featurestcplro) (larger batches improve coalescing).
@@ -2596,6 +2843,7 @@ Applies to passthrough/non-offloaded sockets where rings
 never attach.
 
 **Sizing:**
+
 - **UDP multicast:** Default (0) is sufficient; transition
   (creation to ADD_MEMBERSHIP) is typically brief.
 - **UDP unicast (offloaded):** Only applies before rings
@@ -2606,8 +2854,9 @@ never attach.
 - **0:** No polling; immediate interrupt-driven wait.
 
 **Cause-effect:**
+
 - *Too low / 0:* recv() falls to epoll wait sooner
-  (~10-100 microsecond wakeup latency per call).
+  (added wakeup latency per call).
 - *Too high / -1:* CPU spins, starving co-located threads.
 
 **Related:** [`blocking_rx_poll_usec`](#performancepollingblocking_rx_poll_usec) (takes over post-ring
@@ -2627,6 +2876,7 @@ used for blocking receives. These file descriptors must be on the epoll
 so the socket wakes when packets arrive on a shared ring.
 
 **Tradeoffs:**
+
 - *false* (default): Registered permanently when ring is associated.
   One syscall per blocking wait. Kernel wakeup cost is O(total sockets
   sharing the ring) -- at 100,000+ connections this causes high kernel
@@ -2642,8 +2892,8 @@ with many idle connections, latency spikes scaling with connection
 count. For fewer than 10,000 connections, per_socket ring allocation,
 or primarily non-blocking I/O, the default (false) is sufficient.
 
-**Auto-enabled** by nginx and nginx_dpu profiles
-(XLIO_SPEC=nginx or XLIO_SPEC=nginx_dpu).
+**Auto-enabled** by the nginx and nginx_dpu profiles
+([`profiles.spec`](#profilesspec)=nginx or nginx_dpu).
 
 **Default:** `false`
 
@@ -2668,6 +2918,7 @@ fragments, traffic before multicast join).
 **Sizing:** Value = Completion Queue polls per OS check.
 Lower catches non-offloaded packets faster; higher
 reduces ioctl syscall overhead.
+
 - *0:* OS packets arrive only via epoll sleep/wake. Use
   when all UDP traffic is hardware-steered.
 - *Smaller values:* Check OS more often. For frequent
@@ -2697,6 +2948,7 @@ POSIX sockets; XLIO Ultra API sockets poll independently
 and ignore this setting.
 
 **Tradeoffs:**
+
 - *false* (default): send() transmits without polling
   receive. Lower per-call latency, but the send buffer
   can fill when acknowledgments accumulate unprocessed
@@ -2729,6 +2981,7 @@ Controls whether TCP recv() skips direct Completion Queue
 polling, checking only the socket's ready packet list.
 
 **Values:**
+
 - *disable (0, default):* recv() polls the Completion
   Queue, acquires ring locks, and processes completions.
   Lowest arrival-to-delivery latency. Works with or
@@ -2765,6 +3018,7 @@ receive busy-poll loop (controlled by
 multiple threads share CPU cores.
 
 **Protocol behavior:**
+
 - *UDP:* Yields every N iterations (at N-1, 2N-1, ...).
 - *TCP:* No yield for the first N iterations; yields on
   every iteration thereafter.
@@ -2772,9 +3026,10 @@ multiple threads share CPU cores.
 **Sizing:** Match to thread-to-core oversubscription.
 With dedicated cores (threads <= cores), leave at 0. At
 4:1 oversubscription, ~100-500 balances fairness and
-polling density. Each yield costs ~1-10 microseconds.
+polling density.
 
 **Cause-effect:**
+
 - *Too low:* Frequent context switches add latency
   variance to receives.
 - *Too high or 0:* Threads monopolize the core for the
@@ -2806,6 +3061,7 @@ CPU-intensive workloads with continuous packet
 processing -- sharing adds lock contention there.
 
 **Cause-effect:**
+
 - *Too few rings:* Per-ring lock contention reduces
   throughput under load.
 - *Too many (or 0):* Higher memory use; global buffer
@@ -2829,6 +3085,7 @@ Determines how receive rings (Queue Pair, Completion
 Queue, buffers, per-ring lock) are grouped.
 
 **Values:**
+
 - *per_interface (0):* One ring per network interface.
   Lowest memory; highest lock contention.
 - *per_ip_address (1):* One ring per local IP.
@@ -2849,8 +3106,9 @@ those calls iterate every ring each invocation.
 processing. Too many: memory grows linearly and at
 32+ rings buffer pool contention can hurt throughput.
 
-**Auto-set to per_interface (0)** by nginx and
-nginx_dpu profiles. Forced to per_thread (20) when
+**Auto-set to per_interface (0)** by the nginx and
+nginx_dpu profiles ([`profiles.spec`](#profilesspec)). Forced to
+per_thread (20) when
 [`performance.threading.internal_handler.behavior`](#performancethreadinginternal_handlerbehavior)=delegate.
 
 **Default:** `"per_thread" (20)`
@@ -2874,6 +3132,7 @@ updates hardware flow steering, drains the old Completion
 Queue, and transfers buffers — expensive.
 
 **Sizing:** Based on how often sockets change threads:
+
 - **-1** (default): Disabled; zero overhead.
 - **50-100:** Fast adaptation for connection hand-off or
   work-stealing patterns.
@@ -2881,6 +3140,7 @@ Queue, and transfers buffers — expensive.
   overhead but slower adaptation.
 
 **Cause-effect:**
+
 - *Too low:* Transient thread sharing triggers needless
   migrations (flow steering updates, lock contention).
 - *Too high:* Socket polls the wrong ring longer; every
@@ -2923,6 +3183,7 @@ workloads; the "ultra_latency" and "latency" profiles
 reduce to 4 for lowest jitter.
 
 **Cause-effect:**
+
 - *Too low:* More doorbell writes per packet, lower peak
   throughput.
 - *Too high:* Replenishment bursts increase tail latency.
@@ -2953,16 +3214,20 @@ capacity = this value × strides per element. Without Striding
 Receive Queue, each element holds one packet.
 
 **Memory per ring:** With Striding Receive Queue: this value ×
-strides per element × stride size (128 × 2048 × 64 = 16 MB).
-**Without:** this value × receive buffer size (32768 × 2048 = 64 MB).
+strides per element × stride size. Without: this value × receive
+buffer size. Actual footprint depends on hugepage allocation
+rounding.
 
 **Sizing:** Match to burst depth (packets arriving faster
 than the application drains). Profile values:
+
 - "ultra_latency" / "latency": 4 (Striding Receive Queue)
   or 256 (without).
+
 For most workloads the defaults are sufficient.
 
 **Cause-effect:**
+
 - *Too low:* NIC silently drops packets. Check
   `ethtool -S <dev>` counter "rx_out_of_buffer".
 - *Too high:* Higher per-ring memory; larger Completion
@@ -2994,11 +3259,10 @@ cache exceeds 2x this value, excess drains back to 1x.
 **Runtime default:** Half the receive queue depth. Striding Receive Queue: 64; without: 16384.
 
 **Sizing:** Match to expected burst depth (packets arriving
-faster than the application drains). Memory per ring =
-value x buffer_size (~128 KB with Striding Receive Queue,
-~MTU without).
+faster than the application drains).
 
 **Cause-effect:**
+
 - *Too low:* Frequent global pool lock contention.
   "SW RX Packets dropped:" in xlio_stats Completion Queue
   view signals buffer exhaustion.
@@ -3023,8 +3287,7 @@ behavior on buffer shortage).
 
 Per-ring stride descriptor cache size. Only applies with
 Striding Receive Queue enabled (the default). Stride
-descriptors (~350 bytes) are metadata tracking packet
-positions; they hold no packet data ([`spare_buffers`](#performanceringsrxspare_buffers)
+descriptors are metadata tracking packet positions; they hold no packet data ([`spare_buffers`](#performanceringsrxspare_buffers)
 manages data buffers).
 
 **Mechanism:** On empty cache, XLIO fetches this many
@@ -3032,13 +3295,12 @@ from the global pool (one lock acquisition). At 2x
 this value, excess returns to the global pool. If the
 pool cannot supply the batch, XLIO panics.
 
-**Sizing:** Worst-case memory per ring = value x ~700
-bytes (cache grows to 2x). Total = value x 700 x
-ring count. Default with 32 rings = ~717 MB. To fit
-a budget: value = budget / (700 x ring count), or
-cap rings via max_per_interface.
+**Sizing:** Memory scales with value × ring count (cache
+grows to 2x). Cap rings via [`max_per_interface`](#performanceringsmax_per_interface) to
+limit total memory.
 
 **Cause-effect:**
+
 - *Too low:* Global pool lock contention hurts
   throughput. On exhaustion XLIO panics with "Unable
   to retrieve strides from global pool".
@@ -3065,6 +3327,7 @@ Determines how transmit rings (Queue Pair, Completion
 Queue, buffers, per-ring lock) are grouped.
 
 **Values:**
+
 - *per_interface (0):* One ring per network interface.
   Lowest memory; highest lock contention.
 - *per_ip_address (1):* One ring per local IP.
@@ -3082,12 +3345,14 @@ contention. select()/poll() callers should prefer
 fewer rings (each invocation iterates every ring).
 
 **Cause-effect:**
+
 - *Too few:* Lock contention serializes sends.
 - *Too many:* Memory grows linearly; buffer pool
   contention rises with ring count.
 
-**Auto-set to per_interface (0)** by nginx and
-nginx_dpu profiles. Forced to per_thread (20) when
+**Auto-set to per_interface (0)** by the nginx and
+nginx_dpu profiles ([`profiles.spec`](#profilesspec)). Forced to
+per_thread (20) when
 [`performance.threading.internal_handler.behavior`](#performancethreadinginternal_handlerbehavior)=delegate.
 
 **Related:** [`max_per_interface`](#performanceringsmax_per_interface) (ring cap),
@@ -3113,6 +3378,7 @@ credits, and invoking callbacks. Zero-copy sends always request
 immediate completion. The first send always triggers one.
 
 **Tradeoffs:**
+
 - *High (64):* Higher throughput, lower CPU per packet. But each
   completion processes all accumulated sends in one burst, causing
   tail latency spikes. More transmit buffers held in-flight.
@@ -3146,6 +3412,7 @@ round-trip. (3) Host DMA: NIC reads from host via PCIe. The
 18-byte Ethernet header is always inlined. Range: 0-884.
 
 **Tradeoffs:**
+
 - *High (toward 884):* More packets skip DMA, lower per-packet
   latency. But larger Work Queue Entries reduce Send Queue depth
   (fewer in-flight packets) and more CPU from memcpy.
@@ -3171,7 +3438,7 @@ those exceed any inline threshold. On-Device Memory
 
 Bytes of NIC-internal memory allocated per transmit ring,
 eliminating PCIe round-trip latency for packets exceeding
-the Work Queue Entry inline size (~204 bytes by default).
+the Work Queue Entry inline size ([`max_inline_size`](#performanceringstxmax_inline_size), default 204).
 
 **Behavior:** Circular buffer per transmit ring. When full,
 XLIO falls back to host DMA — no data loss, only higher
@@ -3179,6 +3446,7 @@ latency for overflow packets. Requires BlueFlame; disabled
 on virtual machines and when the NIC has no device memory.
 
 **Tradeoffs:**
+
 - *0 (default):* All non-inlined packets use host DMA.
   No NIC memory consumed.
 - *Non-zero:* Non-inlined packets bypass PCIe. Lower
@@ -3215,6 +3483,7 @@ migration. Migration acquires both ring locks, may
 reallocate Queue Pairs, and invalidates cached state.
 
 **Tradeoffs:**
+
 - *-1 (default):* Disabled. Socket stays on the
   creating thread's ring permanently. Zero overhead.
 - *Positive:* Adapts ring to the active thread. Lower
@@ -3243,10 +3512,10 @@ can be in-flight (posted to the NIC, not yet completed).
 free space, non-blocking sends silently drop the packet;
 blocking sends poll and wait. Automatically capped to the
 NIC's maximum Queue Pair work requests, and raised to at
-least [`completion_batch_size`](#performanceringstxcompletion_batch_size) × 2. Memory per ring ≈ value
-× 64 bytes.
+least [`completion_batch_size`](#performanceringstxcompletion_batch_size) × 2.
 
 **Tradeoffs:**
+
 - *Low (256):* Less memory, faster queue drain, more
   predictable latency. But higher risk of Send Queue full
   when sends outpace completions.
@@ -3258,9 +3527,7 @@ least [`completion_batch_size`](#performanceringstxcompletion_batch_size) × 2. 
 sufficient. For latency-sensitive workloads (trading,
 real-time), start with 256 (LATENCY and ULTRA_LATENCY
 profiles) and increase only if "TX Dropped Send Reqs:" in
-xlio_stats -v 3 (full view) is non-zero. Total memory:
-value × 64 × ring count × interface count (with per-thread
-allocation, ring count equals thread count).
+xlio_stats -v 3 (full view) is non-zero.
 
 **Default:** `32768`
 
@@ -3280,6 +3547,7 @@ the rest stay cached. Zero-copy sends use a separate cache
 with the same batch size.
 
 **Tradeoffs:**
+
 - *High (16, default):* Fewer pool lock acquisitions,
   better streaming throughput. But more memory per
   connection; idle connections may hoard buffers (mitigated
@@ -3314,6 +3582,7 @@ proactively pre-fetches. On socket close, unused cached
 buffers return to the pool.
 
 **Tradeoffs:**
+
 - *High (8, default):* Fewer pool lock acquisitions,
   better burst performance. But more memory held per
   socket; idle sockets may hoard buffers (mitigated by
@@ -3350,6 +3619,7 @@ the destination socket. Auto-disabled when the network
 adapter lacks flow tag support.
 
 **Tradeoffs:**
+
 - *false (default):* Fast receive path (direct array
   lookup per packet). Required for 2-step socket
   migration (fails with ENOTSUP if true).
@@ -3387,6 +3657,7 @@ local IP covers all connections — software demultiplexes
 to sockets via hash lookup.
 
 **Tradeoffs:**
+
 - *false (default):* Per-connection rules with flow-tag
   acceleration. Each connection uses one flow table entry.
 - *true:* One rule per local IP, unlimited connections.
@@ -3397,6 +3668,7 @@ to sockets via hash lookup.
 **Sizing:** For TCP clients (outgoing connect()) where
 ephemeral ports would exhaust the hardware flow table.
 For servers (incoming accept()), prefer [`performance.steering_rules.tcp.3t_rules`](#performancesteering_rulestcp3t_rules) instead.
+
 **Symptom of exhaustion:** "attach_flow" failures in XLIO
 error logs. With per-thread ring allocation, each thread
 needs its own local IP. For low-to-moderate connection
@@ -3416,6 +3688,7 @@ connections (listen()/accept()); for outgoing
 (connect()), see 2t_rules.
 
 **Tradeoffs:**
+
 - *false (default):* Each accepted connection gets
   its own 5-tuple steering rule with flow-tag
   acceleration. Each connection uses one flow table
@@ -3449,6 +3722,7 @@ connected UDP sockets (those that called connect());
 non-connected sockets always use 3-tuple rules.
 
 **Tradeoffs:**
+
 - *true (default):* All connected sockets on the same
   local IP:port share one hardware rule; remote address
   and port are wildcarded. Software demultiplexes
@@ -3489,6 +3763,7 @@ port in software. Rule is created on first join per
 multicast IP, removed on last leave.
 
 **Tradeoffs:**
+
 - *false (default):* Hardware dispatches directly to
   the matching flow — lowest latency and CPU. Each
   (multicast IP, port) consumes one flow table entry.
@@ -3513,6 +3788,7 @@ sufficient.
 > **Maps to:** `XLIO_INTERNAL_THREAD_AFFINITY`
 
 CPU core(s) on which the XLIO internal thread runs.
+
 **Format:** same as taskset — hex bitmask (0x0F) or
 comma-delimited list with ranges (0,2,4-7). The
 internal thread processes TCP retransmission/keepalive
@@ -3521,9 +3797,9 @@ cleanup, and asynchronous hardware events. It wakes
 every [`performance.threading.internal_handler.timer_msec`](#performancethreadinginternal_handlertimer_msec) (default 10 ms) via epoll_wait.
 
 **Tradeoffs:**
+
 - *-1 (default):* No affinity; OS scheduler picks
-  cores. Thread may migrate across NUMA nodes (~50-100
-  ns penalty per cross-node access), causing less
+  cores. Thread may migrate across NUMA nodes, causing less
   deterministic timer processing.
 - *Pinned (single core):* Predictable, low-jitter
   timer processing. Best on the same NUMA node as
@@ -3562,6 +3838,7 @@ the cpuset is joined first; [`cpu_affinity`](#performancethreadingcpu_affinity) 
 it (must reference CPUs inside the cpuset).
 
 **Tradeoffs:**
+
 - *"" (default):* Thread inherits the process's cpuset
   (root unless restricted by container or cgroup).
   No configuration needed.
@@ -3589,6 +3866,7 @@ delayed acknowledgment, persist, state cleanup) run on
 XLIO's internal thread or on each application thread.
 
 **Tradeoffs:**
+
 - *"disable" (0, default):* Internal thread handles all
   TCP timers. Sockets use real locks — safe to share
   across threads. poll(), select(), and epoll all work.
@@ -3628,6 +3906,7 @@ below this are raised automatically. Timer buckets =
 integer multiple.
 
 **Tradeoffs:**
+
 - *Low (10, default):* Faster reaction to timer
   expirations (retransmissions, keepalives, link
   failures). But more epoll_wait wakeups and higher CPU
@@ -3658,6 +3937,7 @@ if contended), so the type matters mainly when contention
 forces a blocking wait.
 
 **Tradeoffs:**
+
 - *false (default, spinlock):* Lowest uncontended
   latency. But the waiting thread burns 100 percent
   CPU; when threads outnumber cores this starves
@@ -3670,6 +3950,7 @@ with per-thread rings, dedicated cores, or
 busy-polling. Switch to true only when threads
 outnumber cores and spinning wastes cycles (cloud
 virtual machines, containers, CPU-limited cgroups).
+
 **Symptom:** high CPU with low throughput; confirm with
 "perf lock report". If mutex latency is unacceptable,
 reduce contention via ring allocation (per-thread or
@@ -3689,6 +3970,7 @@ API only (not the Ultra API). TCP only — UDP sockets
 are unaffected.
 
 **Behavior:**
+
 - *0 (default, run-to-completion):* Application threads
   process networking inline during socket calls. Lowest
   latency, no extra CPU. Requires per-thread socket
