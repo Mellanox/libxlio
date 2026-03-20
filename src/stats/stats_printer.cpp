@@ -252,9 +252,12 @@ void print_full_stats(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, 
                 p_si_stats->tls_counters.n_tls_rx_records_sw_dec_fail, post_fix);
         b_any_activiy = true;
     }
-    if (p_si_stats->tls_counters.n_tls_rx_resync) {
-        fprintf(filename, "TLS Rx Resyncs: %u [total]%s\n",
-                p_si_stats->tls_counters.n_tls_rx_resync, post_fix);
+    if (p_si_stats->tls_counters.n_tls_rx_resync_attempt) {
+        fprintf(filename, "TLS Rx Resyncs: %u / %u / %u / %u [attempt/success/retry/long]%s\n",
+                p_si_stats->tls_counters.n_tls_rx_resync_attempt,
+                p_si_stats->tls_counters.n_tls_rx_resync_success,
+                p_si_stats->tls_counters.n_tls_rx_resync_retry,
+                p_si_stats->tls_counters.n_tls_rx_resync_long, post_fix);
     }
 #endif /* DEFINED_UTLS */
 

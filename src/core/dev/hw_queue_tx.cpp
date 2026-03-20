@@ -1009,6 +1009,7 @@ int hw_queue_tx::tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info,
 
 void hw_queue_tx::tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn)
 {
+    // In case of Multi-Resync, we avoid fence and in worst case will get another resync.
     tls_post_static_params_wqe(tir, info, tir->get_tirn(), tir->get_dek_id(), hw_resync_tcp_sn,
                                false, false);
 }
