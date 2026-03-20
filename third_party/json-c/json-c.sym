@@ -1,0 +1,196 @@
+/*
+ * Original work:
+ *
+ * json-c (copyright was originally missing from this file)
+ *
+ * Modified Work:
+ *
+ * Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES, ALL RIGHTS RESERVED.
+ *
+ * This software product is a proprietary product of NVIDIA CORPORATION &
+ * AFFILIATES (the "Company") and all right, title, and interest in and to the
+ * software product, including all associated intellectual property rights, are
+ * and shall remain exclusively with the Company.
+ *
+ * This software product is governed by the End User License Agreement
+ * provided with the software product.
+ *
+ */
+
+/*
+ * Symbol versioning for libjson-c.
+ * All exported symbols must be listed here.
+ *
+ * See
+ *   https://software.intel.com/sites/default/files/m/a/1/e/dsohowto.pdf
+ */
+
+/*
+ * Symbols in JSONC_PRIVATE are exported for historical
+ * reasons, but should not be used outside of json-c.
+ */
+JSONC_PRIVATE {
+    doca_third_party_array_list_add;
+    doca_third_party_array_list_del_idx;
+    doca_third_party_array_list_free;
+    doca_third_party_array_list_new;
+    doca_third_party_array_list_put_idx;
+    doca_third_party_array_list_sort;
+    doca_third_party_json_hex_chars;
+    doca_third_party_json_parse_double;
+    doca_third_party_json_parse_int64;
+    doca_third_party_json_parse_uint64;
+    doca_third_party_lh_table_delete;
+    doca_third_party_lh_table_delete_entry;
+    doca_third_party_lh_table_free;
+    doca_third_party_lh_table_insert;
+    doca_third_party_lh_table_insert_w_hash;
+    doca_third_party_lh_table_new;
+    doca_third_party_lh_table_resize;
+    doca_third_party_mc_debug;
+    doca_third_party_mc_error;
+    doca_third_party_mc_get_debug;
+    doca_third_party_mc_info;
+    doca_third_party_mc_set_debug;
+    doca_third_party_mc_set_syslog;
+    doca_third_party_printbuf_free;
+    doca_third_party_printbuf_memappend;
+    doca_third_party_printbuf_memset;
+    doca_third_party_printbuf_new;
+    doca_third_party_printbuf_reset;
+    doca_third_party_sprintbuf;
+    # Used by tests:
+    doca_third_party__json_c_strerror;
+};
+
+JSONC_0.14 {
+  global:
+    doca_third_party_doca_third_party_array_list_bsearch;
+    doca_third_party_doca_third_party_array_list_get_idx;
+    doca_third_party_doca_third_party_array_list_length;
+    doca_third_party_doca_third_party_json_c_get_random_seed;
+    doca_third_party_json_c_object_sizeof;
+    doca_third_party_json_c_set_serialization_double_format;
+    doca_third_party_json_c_shallow_copy_default;
+    doca_third_party_json_c_version;
+    doca_third_party_json_c_version_num;
+    doca_third_party_json_c_visit;
+    doca_third_party_json_global_set_string_hash;
+    doca_third_party_json_number_chars;
+    doca_third_party_json_object_array_add;
+    doca_third_party_json_object_array_bsearch;
+    doca_third_party_json_object_array_del_idx;
+    doca_third_party_json_object_array_get_idx;
+    doca_third_party_json_object_array_length;
+    doca_third_party_json_object_array_put_idx;
+    doca_third_party_json_object_array_sort;
+    doca_third_party_json_object_deep_copy;
+    doca_third_party_json_object_double_to_json_string;
+    doca_third_party_json_object_equal;
+    doca_third_party_json_object_free_userdata;
+    doca_third_party_json_object_from_fd;
+    doca_third_party_json_object_from_fd_ex;
+    doca_third_party_json_object_from_file;
+    doca_third_party_json_object_get;
+    doca_third_party_json_object_get_array;
+    doca_third_party_json_object_get_boolean;
+    doca_third_party_json_object_get_double;
+    doca_third_party_json_object_get_int64;
+    doca_third_party_json_object_get_int;
+    doca_third_party_json_object_get_object;
+    doca_third_party_json_object_get_string;
+    doca_third_party_json_object_get_string_len;
+    doca_third_party_json_object_get_type;
+    doca_third_party_json_object_get_uint64;
+    doca_third_party_json_object_get_userdata;
+    doca_third_party_json_object_int_inc;
+    doca_third_party_json_object_is_type;
+    doca_third_party_json_object_iter_begin;
+    doca_third_party_json_object_iter_end;
+    doca_third_party_json_object_iter_equal;
+    doca_third_party_json_object_iter_init_default;
+    doca_third_party_json_object_iter_next;
+    doca_third_party_json_object_iter_peek_name;
+    doca_third_party_json_object_iter_peek_value;
+    doca_third_party_json_object_new_array;
+    doca_third_party_json_object_new_boolean;
+    doca_third_party_json_object_new_double;
+    doca_third_party_json_object_new_double_s;
+    doca_third_party_json_object_new_int64;
+    doca_third_party_json_object_new_int;
+    doca_third_party_json_object_new_null;
+    doca_third_party_json_object_new_object;
+    doca_third_party_json_object_new_string;
+    doca_third_party_json_object_new_string_len;
+    doca_third_party_json_object_new_uint64;
+    doca_third_party_json_object_object_add;
+    doca_third_party_json_object_object_add_ex;
+    doca_third_party_json_object_object_del;
+    doca_third_party_json_object_object_get;
+    doca_third_party_json_object_object_get_ex;
+    doca_third_party_json_object_object_length;
+    doca_third_party_json_object_put;
+    doca_third_party_json_object_set_boolean;
+    doca_third_party_json_object_set_double;
+    doca_third_party_json_object_set_int64;
+    doca_third_party_json_object_set_int;
+    doca_third_party_json_object_set_serializer;
+    doca_third_party_json_object_set_string;
+    doca_third_party_json_object_set_string_len;
+    doca_third_party_json_object_set_uint64;
+    doca_third_party_json_object_set_userdata;
+    doca_third_party_json_object_to_fd;
+    doca_third_party_json_object_to_file;
+    doca_third_party_json_object_to_file_ext;
+    doca_third_party_json_object_to_json_string;
+    doca_third_party_json_object_to_json_string_ext;
+    doca_third_party_json_object_to_json_string_length;
+    doca_third_party_json_object_userdata_to_json_string;
+    doca_third_party_json_pointer_get;
+    doca_third_party_json_pointer_getf;
+    doca_third_party_json_pointer_set;
+    doca_third_party_json_pointer_setf;
+    doca_third_party_json_tokener_error_desc;
+    doca_third_party_json_tokener_free;
+    doca_third_party_json_tokener_get_error;
+    doca_third_party_json_tokener_get_parse_end;
+    doca_third_party_json_tokener_new;
+    doca_third_party_json_tokener_new_ex;
+    doca_third_party_json_tokener_parse;
+    doca_third_party_json_tokener_parse_ex;
+    doca_third_party_json_tokener_parse_verbose;
+    doca_third_party_json_tokener_reset;
+    doca_third_party_json_tokener_set_flags;
+    doca_third_party_json_type_to_name;
+    doca_third_party_json_util_get_last_err;
+    doca_third_party_lh_char_equal;
+    doca_third_party_lh_kchar_table_new;
+    doca_third_party_lh_kptr_table_new;
+    doca_third_party_lh_ptr_equal;
+    doca_third_party_lh_table_length;
+    doca_third_party_lh_table_lookup_entry;
+    doca_third_party_lh_table_lookup_entry_w_hash;
+    doca_third_party_lh_table_lookup_ex;
+
+  local:
+    *;
+};
+
+JSONC_0.15 {
+  global:
+    doca_third_party_array_list_new2;
+    doca_third_party_array_list_shrink;
+    doca_third_party_json_object_array_shrink;
+    doca_third_party_json_object_new_array_ext;
+} JSONC_0.14;
+
+JSONC_0.16 {
+# No new symbols in 0.16
+} JSONC_0.15;
+
+JSONC_0.17 {
+  global:
+    doca_third_party_json_object_array_insert_idx;
+    doca_third_party_json_patch_apply;
+#    array_list_insert_idx is intentionally not exported
+} JSONC_0.16;
