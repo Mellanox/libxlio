@@ -96,7 +96,7 @@ u8_t enable_ts_option = 0;
 u32_t lwip_tcp_nodelay_treshold = 0;
 
 /* slow timer value */
-static u32_t slow_tmr_interval;
+u32_t slow_tmr_interval;
 /* Incremented every coarse grained timer shot (typically every slow_tmr_interval ms). */
 u32_t tcp_ticks = 0;
 const u8_t tcp_backoff[13] = {1, 2, 3, 4, 5, 6, 7, 7, 7, 7, 7, 7, 7};
@@ -655,29 +655,28 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
                                 ("tcp_slowtmr: rtime %" S16_F " pcb->rto %" S16_F "\n", pcb->rtime,
                                  pcb->rto));
 
-                    /* Double retransmission time-out unless we are trying to
-                     * connect to somebody (i.e., we are in SYN_SENT). */
-                    if (get_tcp_state(pcb) != SYN_SENT) {
-                        pcb->rto = ((pcb->sa >> 3) + pcb->sv) << tcp_backoff[pcb->nrtx];
-                    }
+                    /* RFC 6298 5.5: Exponential backoff of the retransmission timer. */
+                    pcb->rto = ((pcb->sa >> 3) + pcb->sv) << tcp_backoff[pcb->nrtx];
 
                     /* Reset the retransmission timer. */
                     pcb->rtime = 0;
 
+                    if (get_tcp_state(pcb) != SYN_SENT) {
 #if TCP_CC_ALGO_MOD
-                    cc_cong_signal(pcb, CC_RTO);
+                        cc_cong_signal(pcb, CC_RTO);
 #else
-                    /* Reduce congestion window and ssthresh. */
-                    eff_wnd = LWIP_MIN(pcb->cwnd, pcb->snd_wnd);
-                    pcb->ssthresh = eff_wnd >> 1;
-                    if (pcb->ssthresh < (u32_t)(pcb->mss << 1)) {
-                        pcb->ssthresh = (pcb->mss << 1);
-                    }
-                    pcb->cwnd = pcb->mss;
+                        /* Reduce congestion window and ssthresh. */
+                        eff_wnd = LWIP_MIN(pcb->cwnd, pcb->snd_wnd);
+                        pcb->ssthresh = eff_wnd >> 1;
+                        if (pcb->ssthresh < (u32_t)(pcb->mss << 1)) {
+                            pcb->ssthresh = (pcb->mss << 1);
+                        }
+                        pcb->cwnd = pcb->mss;
 #endif
-                    LWIP_DEBUGF(TCP_CWND_DEBUG,
-                                ("tcp_slowtmr: cwnd %" U16_F " ssthresh %" U16_F "\n", pcb->cwnd,
-                                 pcb->ssthresh));
+                        LWIP_DEBUGF(TCP_CWND_DEBUG,
+                                    ("tcp_slowtmr: cwnd %" U16_F " ssthresh %" U16_F "\n",
+                                     pcb->cwnd, pcb->ssthresh));
+                    }
 
                     /* The following needs to be called AFTER cwnd is set to one
                        mss - STJ */
@@ -913,7 +912,10 @@ err_t tcp_recv_null(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
 
 static inline u32_t get_initial_rto(void)
 {
-    return (1000 + slow_tmr_interval - 1) / slow_tmr_interval;
+    u32_t ticks = tcp_ms_to_ticks(TCP_INITIAL_RTO_MS);
+    /* With coarse timer granularity, 1 tick can fire in [0, interval) actual
+     * time. Minimum of 2 ticks guarantees at least one full interval elapses. */
+    return ticks > 1 ? ticks : 2;
 }
 
 void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
@@ -938,7 +940,6 @@ void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
     pcb->mss = pcb->advtsd_mss;
     pcb->user_timeout_ms = 0;
     pcb->ticks_since_data_sent = -1;
-    // Set initial RTO to 1 second as per RFC 6298
     pcb->rto = get_initial_rto();
     pcb->sa = 0;
     pcb->sv = get_initial_rto();
@@ -997,7 +998,6 @@ void tcp_pcb_recycle(struct tcp_pcb *pcb)
     pcb->flags = 0;
     pcb->user_timeout_ms = 0;
     pcb->ticks_since_data_sent = -1;
-    // Set initial RTO to 1 second as per RFC 6298
     pcb->rto = get_initial_rto();
     pcb->sa = 0;
     pcb->sv = get_initial_rto();
