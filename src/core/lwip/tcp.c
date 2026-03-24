@@ -577,7 +577,8 @@ err_t tcp_connect(struct tcp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port, bool
 
 static inline bool tcp_user_timeout_occured(struct tcp_pcb *pcb)
 {
-    u32_t user_timeout_ticks = (pcb->user_timeout_ms + slow_tmr_interval - 1U) / slow_tmr_interval;
+    u32_t user_timeout_ticks =
+        pcb->user_timeout_ms / slow_tmr_interval + (pcb->user_timeout_ms % slow_tmr_interval != 0);
 
     return pcb->user_timeout_ms != 0 && pcb->ticks_since_data_sent > 0 &&
         (u32_t)pcb->ticks_since_data_sent > user_timeout_ticks &&
@@ -702,13 +703,23 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
         /* Check if KEEPALIVE should be sent */
         if ((pcb->so_options & SOF_KEEPALIVE) &&
             ((get_tcp_state(pcb) == ESTABLISHED) || (get_tcp_state(pcb) == CLOSE_WAIT))) {
-#if LWIP_TCP_KEEPALIVE
-            if ((u32_t)(tcp_ticks - pcb->tmr) >
-                (pcb->keep_idle + (pcb->keep_cnt * pcb->keep_intvl)) / slow_tmr_interval)
-#else
-            if ((u32_t)(tcp_ticks - pcb->tmr) > (pcb->keep_idle + TCP_MAXIDLE) / slow_tmr_interval)
-#endif /* LWIP_TCP_KEEPALIVE */
-            {
+            u32_t ka_elapsed = (u32_t)(tcp_ticks - pcb->tmr);
+            u8_t ka_abort = 0;
+
+            if (pcb->user_timeout_ms != 0) {
+                /* When TCP_USER_TIMEOUT is set, abort based on elapsed time
+                 * since last received data, requiring at least one probe sent.
+                 * This matches Linux tcp_keepalive_timer() behavior where
+                 * TCP_USER_TIMEOUT overrides TCP_KEEPCNT for the abort decision. */
+                u32_t user_timeout_ticks = pcb->user_timeout_ms / slow_tmr_interval +
+                    (pcb->user_timeout_ms % slow_tmr_interval != 0);
+                ka_abort = (ka_elapsed >= user_timeout_ticks && pcb->keep_cnt_sent > 0);
+            } else {
+                ka_abort = (ka_elapsed >
+                            (pcb->keep_idle + pcb->keep_cnt * pcb->keep_intvl) / slow_tmr_interval);
+            }
+
+            if (ka_abort) {
                 LWIP_DEBUGF_IP_ADDR(TCP_DEBUG,
                                     "tcp_slowtmr: KEEPALIVE timeout. Aborting connection to ",
                                     pcb->remote_ip, pcb->is_ipv6);
@@ -716,18 +727,12 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
                 ++pcb_remove;
                 err = ERR_TIMEOUT;
                 ++pcb_reset;
-            }
-#if LWIP_TCP_KEEPALIVE
-            else if ((u32_t)(tcp_ticks - pcb->tmr) >
-                     (pcb->keep_idle + pcb->keep_cnt_sent * pcb->keep_intvl) / slow_tmr_interval)
-#else
-            else if ((u32_t)(tcp_ticks - pcb->tmr) >
-                     (pcb->keep_idle + pcb->keep_cnt_sent * TCP_KEEPINTVL_DEFAULT) /
-                         slow_tmr_interval)
-#endif /* LWIP_TCP_KEEPALIVE */
-            {
+            } else if (ka_elapsed > (pcb->keep_idle + pcb->keep_cnt_sent * pcb->keep_intvl) /
+                           slow_tmr_interval) {
                 tcp_keepalive(pcb);
-                pcb->keep_cnt_sent++;
+                if (pcb->keep_cnt_sent < UINT8_MAX) {
+                    pcb->keep_cnt_sent++;
+                }
             }
         }
 
@@ -967,11 +972,8 @@ void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
 
     /* Init KEEPALIVE timer */
     pcb->keep_idle = TCP_KEEPIDLE_DEFAULT;
-
-#if LWIP_TCP_KEEPALIVE
     pcb->keep_intvl = TCP_KEEPINTVL_DEFAULT;
     pcb->keep_cnt = TCP_KEEPCNT_DEFAULT;
-#endif /* LWIP_TCP_KEEPALIVE */
 
     pcb->keep_cnt_sent = 0;
     pcb->quickack = 0;
@@ -1288,13 +1290,8 @@ u16_t tcp_send_mss(struct tcp_pcb *pcb)
 void tcp_set_keepalive(struct tcp_pcb *pcb, u32_t idle, u32_t intvl, u32_t cnt)
 {
     pcb->keep_idle = idle;
-#if LWIP_TCP_KEEPALIVE
     pcb->keep_intvl = intvl;
     pcb->keep_cnt = cnt;
-#else
-    (void)intvl;
-    (void)cnt;
-#endif /* LWIP_TCP_KEEPALIVE */
 }
 
 #if TCP_DEBUG || TCP_INPUT_DEBUG || TCP_OUTPUT_DEBUG
