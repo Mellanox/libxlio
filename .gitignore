@@ -69,6 +69,9 @@ src/stats/xlio_stats
 src/vlogger/vlogger_test
 src/state_machine/state_machine_test
 tests/gtest/gtest
+tests/gtest/hash.c
+tests/gtest/poll_group_worker_threads_helper
+tests/gtest/xlio_init_ex_worker_threads_helper
 
 # build products
 build/libxlio.spec

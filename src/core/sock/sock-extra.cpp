@@ -116,6 +116,15 @@ struct xlio_api_t *extra_api()
 
 extern "C" int xlio_init_ex(const struct xlio_init_attr *attr)
 {
+    if (safe_mce_sys().is_threads_mode()) {
+        vlog_printf(VLOG_ERROR,
+                    "Ultra API (xlio_init_ex) is incompatible with worker threads mode "
+                    "(performance.threading.worker_threads > 0). "
+                    "Disable worker threads or use standard socket API.\n");
+        errno = EINVAL;
+        return -1;
+    }
+
     if (g_init_global_ctors_done) {
         vlog_printf(VLOG_DEBUG, "XLIO is already initialized!!\n");
         // If XLIO global memory is already allocated, we can't
@@ -151,6 +160,15 @@ extern "C" int xlio_poll_group_create(const struct xlio_poll_group_attr *attr,
 {
     // Validate input arguments
     if (!group_out || !attr || !attr->socket_event_cb) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    if (safe_mce_sys().is_threads_mode()) {
+        vlog_printf(VLOG_ERROR,
+                    "Cannot create poll group: Ultra API is incompatible with worker threads mode "
+                    "(performance.threading.worker_threads > 0). "
+                    "Disable worker threads or use standard socket API.\n");
         errno = EINVAL;
         return -1;
     }

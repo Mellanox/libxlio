@@ -441,3 +441,96 @@ TEST_F(output, config_pid_substitution_new_config)
     unlink(config_file.c_str());
     int unused __attribute__((unused)) = system(("rm -rf " + report_dir).c_str());
 }
+
+/**
+ * @test output.config_reject_worker_threads_with_poll_group
+ * @brief
+ *    XLIO rejects poll group creation when worker_threads is configured.
+ *
+ * @details
+ *    Setting performance.threading.worker_threads > 0 alongside Ultra API
+ *    poll groups is an invalid configuration combination.  XLIO must detect
+ *    this at xlio_poll_group_create() time and fail with EINVAL plus a clear
+ *    error message.
+ *
+ *    A compiled helper binary (inheriting LD_PRELOAD from the gtest runner)
+ *    retrieves the API via xlio_get_api() and attempts xlio_poll_group_create().
+ *    The config file sets worker_threads=1, causing the call to be rejected.
+ */
+TEST_F(output, config_reject_worker_threads_with_poll_group)
+{
+    std::string full_config = m_prefix + "/config-ultra-api-worker-threads.json";
+
+    // Locate the helper binary relative to the gtest binary.
+    std::string helper;
+    if (m_workspace) {
+        helper = std::string(m_workspace) + "/tests/gtest/poll_group_worker_threads_helper";
+    } else {
+        helper = "./poll_group_worker_threads_helper";
+    }
+
+    std::string cmd = "XLIO_USE_NEW_CONFIG=1 XLIO_CONFIG_FILE=" + full_config + " " + helper +
+        " > " + m_output_file + " 2>&1";
+
+    int rc = system(cmd.c_str());
+    ASSERT_NE(rc, 0) << "xlio_poll_group_create should have failed with worker threads configured";
+
+    std::ifstream ifs(m_output_file);
+    std::string text(std::istreambuf_iterator<char>(ifs), {});
+    ifs.close();
+
+    ASSERT_TRUE(text.find("Cannot create poll group") != std::string::npos)
+        << "Expected error about poll group incompatibility with worker threads in output:"
+        << std::endl
+        << text;
+    ASSERT_TRUE(text.find("incompatible with worker threads") != std::string::npos)
+        << "Expected specific incompatibility message in output:" << std::endl
+        << text;
+}
+
+/**
+ * @test output.config_reject_worker_threads_with_xlio_init_ex
+ * @brief
+ *    XLIO rejects xlio_init_ex() when worker_threads is configured.
+ *
+ * @details
+ *    When performance.threading.worker_threads > 0, xlio_init_ex() must
+ *    reject the call before any Ultra API initialization proceeds.  The
+ *    check runs before the g_init_global_ctors_done early-return gate,
+ *    ensuring it fires even when XLIO is already fully initialized via
+ *    LD_PRELOAD (as opposed to the defense-in-depth check in
+ *    xlio_poll_group_create tested above).
+ *
+ *    A compiled helper binary (inheriting LD_PRELOAD from the gtest runner)
+ *    retrieves the API via xlio_get_api() and calls xlio_init_ex() as the
+ *    very first XLIO Ultra API call.  The config file sets worker_threads=1,
+ *    causing xlio_init_ex() to detect the incompatibility and return an error.
+ */
+TEST_F(output, config_reject_worker_threads_with_xlio_init_ex)
+{
+    std::string full_config = m_prefix + "/config-ultra-api-worker-threads.json";
+
+    std::string helper;
+    if (m_workspace) {
+        helper = std::string(m_workspace) + "/tests/gtest/xlio_init_ex_worker_threads_helper";
+    } else {
+        helper = "./xlio_init_ex_worker_threads_helper";
+    }
+
+    std::string cmd = "XLIO_USE_NEW_CONFIG=1 XLIO_CONFIG_FILE=" + full_config + " " + helper +
+        " > " + m_output_file + " 2>&1";
+
+    int rc = system(cmd.c_str());
+    ASSERT_NE(rc, 0) << "xlio_init_ex should have failed with worker threads configured";
+
+    std::ifstream ifs(m_output_file);
+    std::string text(std::istreambuf_iterator<char>(ifs), {});
+    ifs.close();
+
+    ASSERT_TRUE(text.find("Ultra API (xlio_init_ex)") != std::string::npos)
+        << "Expected incompatibility error from xlio_init_ex in output:" << std::endl
+        << text;
+    ASSERT_TRUE(text.find("incompatible with worker threads") != std::string::npos)
+        << "Expected incompatibility message in output:" << std::endl
+        << text;
+}

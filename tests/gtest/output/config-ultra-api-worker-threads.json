@@ -1,0 +1,7 @@
+{
+  "performance": {
+    "threading": {
+      "worker_threads": 1
+    }
+  }
+}

@@ -1,4 +1,4 @@
-noinst_PROGRAMS = gtest
+noinst_PROGRAMS = gtest poll_group_worker_threads_helper xlio_init_ex_worker_threads_helper
 
 # google test shows some warnings that are suppressed
 AM_CXXFLAGS = \
@@ -58,7 +58,16 @@ EXTRA_DIST = \
 	googletest/include \
 	googletest/src \
 	googletest/README.md \
-	googletest/LICENSE
+	googletest/LICENSE \
+	\
+	output/config-cpu-affinity-default.json \
+	output/config-cpu-affinity-invalid.json \
+	output/config-negative-values.json \
+	output/config-sample-2rules.json \
+	output/config-sample-4rules.json \
+	output/config-sample-5rules.json \
+	output/config-sample.json \
+	output/config-ultra-api-worker-threads.json
 
 libgtest_la_SOURCES = \
 	googletest/src/gtest-all.cc \
@@ -171,4 +180,16 @@ CLEANFILES = hash.c
 
 hash.c:
 	@echo "#include \"$(top_builddir)/tools/daemon/$@\"" >$@
+
+# Helper binary for testing Ultra API / worker threads incompatibility
+poll_group_worker_threads_helper_SOURCES = output/poll_group_worker_threads_helper.c
+poll_group_worker_threads_helper_CPPFLAGS = -I$(top_srcdir)/src/core
+poll_group_worker_threads_helper_CFLAGS = -Wall
+poll_group_worker_threads_helper_LDFLAGS = -no-install
+
+# Helper binary for testing xlio_init_ex primary check with worker threads
+xlio_init_ex_worker_threads_helper_SOURCES = output/xlio_init_ex_worker_threads_helper.c
+xlio_init_ex_worker_threads_helper_CPPFLAGS = -I$(top_srcdir)/src/core
+xlio_init_ex_worker_threads_helper_CFLAGS = -Wall
+xlio_init_ex_worker_threads_helper_LDFLAGS = -no-install
 
