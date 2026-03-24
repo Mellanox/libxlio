@@ -574,6 +574,14 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
             pcb->snd_wl1 = in_data->seqno - 1; /* initialise to seqno - 1 to force window update */
             set_tcp_state(pcb, ESTABLISHED);
 
+            /* RFC 6298 5.7: If SYN was retransmitted with initial RTO < 3s,
+             * re-initialize RTO to 3s when data transmission begins. */
+            if (pcb->nrtx > 0) {
+                u32_t fallback = tcp_fallback_rto();
+                pcb->rto = fallback;
+                pcb->sv = fallback;
+            }
+
 #if TCP_CALCULATE_EFF_SEND_MSS
             // mss can be changed by tcp_parseopt, need to take the MIN
             pcb->mss = LWIP_MIN(pcb->mss, tcp_send_mss(pcb));
@@ -625,6 +633,14 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
             if (TCP_SEQ_BETWEEN(in_data->ackno, pcb->lastack + 1, pcb->snd_nxt)) {
                 u32_t old_cwnd;
                 set_tcp_state(pcb, ESTABLISHED);
+
+                /* RFC 6298 5.7: If SYN-ACK was retransmitted with initial RTO < 3s,
+                 * re-initialize RTO to 3s when data transmission begins. */
+                if (pcb->nrtx > 0) {
+                    u32_t fallback = tcp_fallback_rto();
+                    pcb->rto = fallback;
+                    pcb->sv = fallback;
+                }
                 LWIP_DEBUGF(TCP_DEBUG,
                             ("TCP connection established %" U16_F " -> %" U16_F ".\n",
                              in_data->inseg.tcphdr->src, in_data->inseg.tcphdr->dest));
