@@ -353,10 +353,8 @@ struct tcp_pcb {
 
     /* idle time before KEEPALIVE is sent */
     u32_t keep_idle;
-#if LWIP_TCP_KEEPALIVE
     u32_t keep_intvl;
     u32_t keep_cnt;
-#endif /* LWIP_TCP_KEEPALIVE */
 
     /* Persist timer counter */
     u32_t persist_cnt;
