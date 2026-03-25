@@ -2813,7 +2813,7 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
         return -1;
     }
 
-    if (safe_mce_sys().is_threads_mode()) {
+    if (should_use_threads_mode()) {
         // For Threads mode need to do partial preparation and the rest will be done by the Thread.
         connect_threads_mode();
         return -1; // Currently no blocking socket support.
@@ -3252,8 +3252,7 @@ int sockinfo_tcp::listen(int backlog)
     tcp_accepted_pcb(&m_pcb, sockinfo_tcp::accepted_pcb_cb);
 
     bool success = false;
-    // Check if XLIO threads are enforced (> 0) for entity context distribution
-    if (safe_mce_sys().worker_threads > 0) {
+    if (should_use_threads_mode()) {
         create_listen_context();
         start_sockinfo_tcp_listen_objects();
         success = wait_for_listen_rss_children_ready();
@@ -3384,8 +3383,8 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
             }
         }
 
-        int tmp_ret = safe_mce_sys().worker_threads > 0 ? harvest_sockinfo_tcp_listen_objects()
-                                                        : rx_wait(poll_count, m_b_blocking);
+        int tmp_ret = should_use_threads_mode() ? harvest_sockinfo_tcp_listen_objects()
+                                                : rx_wait(poll_count, m_b_blocking);
         if (tmp_ret < 0) {
             si_tcp_logdbg("interrupted accept");
             unlock_tcp_con();
