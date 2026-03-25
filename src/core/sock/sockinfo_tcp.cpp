@@ -776,6 +776,14 @@ void sockinfo_tcp::err_lwip_cb_xlio_socket(void *pcb_container, err_t err)
 {
     sockinfo_tcp *conn = reinterpret_cast<sockinfo_tcp *>(pcb_container);
 
+    // Handshake failed before accept_callback delivered this socket to the application.
+    // The application has no reference to this socket, so clean up internally without
+    // firing socket_event_cb. This mirrors the m_parent check in err_lwip_cb.
+    if (conn->m_parent) {
+        conn->m_parent->handle_incoming_handshake_failure(conn);
+        return;
+    }
+
     // TODO Reduce copy-paste
     conn->m_conn_state = TCP_CONN_FAILED;
     conn->m_error_status = ECONNABORTED;
@@ -1970,7 +1978,14 @@ void sockinfo_tcp::handle_incoming_handshake_failure(sockinfo_tcp *child_conn)
 
     child_conn->lock_tcp_con();
 
-    if (safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+    if (child_conn->is_xlio_socket()) {
+        // This socket was never delivered to the application (accept_callback never
+        // fired). Revoke xlio_socket status so that prepare_to_close and
+        // tcp_state_observer won't fire application-level events during cleanup.
+        child_conn->m_is_xlio_socket = false;
+        child_conn->m_p_group->mark_socket_to_close(child_conn);
+    } else if (safe_mce_sys().tcp_ctl_thread !=
+               option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
         // Object destruction is expected to happen in internal thread. Unless XLIO is in late
         // terminating stage, in which case we don't expect to handle packets.
         // Calling close() under lock will prevent internal thread to delete the object before
