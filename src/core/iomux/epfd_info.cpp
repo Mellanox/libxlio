@@ -30,7 +30,7 @@ int epfd_info::remove_fd_from_epoll_os(int fd)
 }
 
 epfd_info::epfd_info(int epfd, int size)
-    : lock_mutex_recursive("epfd_info")
+    : lock_spin_recursive("epfd_info")
     , m_epfd(epfd)
     , m_size(size)
     , m_ring_map_lock("epfd_ring_map_lock")
