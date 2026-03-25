@@ -40,7 +40,7 @@ enum class epoll_poll_type_t {
     POLL_BOTH // Poll both RX and TX rings (default epoll_wait behavior)
 };
 
-class epfd_info : public lock_mutex_recursive, public cleanable_obj, public wakeup_pipe {
+class epfd_info : public lock_spin_recursive, public cleanable_obj, public wakeup_pipe {
 public:
     epfd_info(int epfd, int size);
     ~epfd_info();
