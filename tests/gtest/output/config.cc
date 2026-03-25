@@ -5,54 +5,25 @@
  */
 
 #include <climits>
-#include <cstdlib>
-#include <fstream>
 
-#include "common/def.h"
+#include "common/subprocess_test.h"
 
 /**
- * Base class for output tests
+ * Base class for output/config tests.
+ * Extends subprocess_test with config-file helpers.
  */
-class output : virtual public testing::Test {
+class output : public subprocess_test {
 public:
     void SetUp() override
     {
-        m_workspace = std::getenv("WORKSPACE");
-        if (m_workspace) {
-            std::cout << "WORKSPACE: '" << m_workspace << "'" << std::endl;
-            m_prefix = std::string(m_workspace) + "/tests/gtest/output";
-        } else {
-            std::cout << "WORKSPACE is not set" << std::endl;
-            m_prefix = "output";
-        }
-        m_output_file = m_prefix + "/output.txt";
+        subprocess_test::SetUp();
+        m_prefix = workspace_path("tests/gtest/output");
+        m_output_file = "/tmp/xlio_gtest_config_" + std::to_string(getpid()) + ".txt";
     }
-
-    void TearDown() override { unlink(m_output_file.c_str()); }
 
 protected:
     static constexpr const char *SOCKET_CMD =
         "python3 -c 'import socket; s=socket.socket(); s.close()'";
-    void exec_cmd_to_file(const std::string &cmd, const std::string &file_to_quote)
-    {
-        // The syntax '[command] > [file] 2>&1' works for both bash and dash
-        std::string command = cmd + " > " + file_to_quote + " 2>&1";
-        int rc = system(command.c_str());
-        if (rc != 0) {
-            std::cout << "system('" << command << "') failed!" << std::endl;
-            // Show content of the file to quote
-            try {
-                std::ifstream ifs(file_to_quote);
-                std::string text(std::istreambuf_iterator<char>(ifs), {});
-                ifs.close();
-                std::cout << "Content of '" << file_to_quote << "':\n" << text << std::endl;
-            } catch (const std::exception &e) {
-                std::cout << "Failed to read file '" << file_to_quote << "': " << e.what()
-                          << std::endl;
-            }
-            throw std::runtime_error("Aborting test due to system command failure");
-        }
-    }
 
     void check_file(const std::string &filename, const std::vector<const char *> &expected_strings,
                     const std::vector<const char *> &unexpected_strings = {})
@@ -64,10 +35,7 @@ protected:
         std::string cmd = "XLIO_USE_NEW_CONFIG=1 XLIO_CONFIG_FILE=" + full_filename + " ls";
         exec_cmd_to_file(cmd, m_output_file);
 
-        // Read the output file
-        std::ifstream ifs(m_output_file);
-        std::string text(std::istreambuf_iterator<char>(ifs), {});
-        ifs.close();
+        std::string text = read_file(m_output_file);
 
         for (const auto &expected : expected_strings) {
             // ASSERT and not EXPECT because if there are multiple failures the test output
@@ -89,9 +57,7 @@ protected:
         }
     }
 
-    char *m_workspace {nullptr};
     std::string m_prefix;
-    std::string m_output_file;
 };
 
 /**
