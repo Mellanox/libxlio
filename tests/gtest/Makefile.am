@@ -1,4 +1,4 @@
-noinst_PROGRAMS = gtest
+noinst_PROGRAMS = gtest ultra_api_connect_worker_threads_helper
 
 # google test shows some warnings that are suppressed
 AM_CXXFLAGS = \
@@ -73,6 +73,7 @@ gtest_CPPFLAGS = \
 	-I$(top_srcdir)/src/core \
 	-I$(top_srcdir)/tests/gtest \
 	-I$(top_srcdir)/tests/gtest/googletest/include \
+	-DGTEST_BUILDDIR=\"$(abs_builddir)\" \
 	$(AM_CPPFLAGS)
 
 gtest_LDFLAGS = -no-install
@@ -135,7 +136,8 @@ gtest_SOURCES = \
 	xlio_ultra_api/xlio_socket_migrate_2.cc \
 	xlio_ultra_api/xlio_socket_send_receive.cc \
 	xlio_ultra_api/xlio_socket_send_receive_2.cc \
-	xlio_ultra_api/xlio_socket_send_receive_full_sq.cc
+	xlio_ultra_api/xlio_socket_send_receive_full_sq.cc \
+	xlio_ultra_api/xlio_socket_worker_threads.cc
 
 noinst_HEADERS = \
 	common/tap.h \
@@ -143,6 +145,7 @@ noinst_HEADERS = \
 	common/sys.h \
 	common/log.h \
 	common/cmn.h \
+	common/subprocess_test.h \
 	\
 	common/base.h \
 	\
@@ -171,4 +174,10 @@ CLEANFILES = hash.c
 
 hash.c:
 	@echo "#include \"$(top_builddir)/tools/daemon/$@\"" >$@
+
+# Helper binary for Ultra API + worker_threads smoke test
+ultra_api_connect_worker_threads_helper_SOURCES = xlio_ultra_api/ultra_api_connect_worker_threads_helper.c
+ultra_api_connect_worker_threads_helper_CPPFLAGS = -I$(top_srcdir)/src/core
+ultra_api_connect_worker_threads_helper_CFLAGS = -Wall
+ultra_api_connect_worker_threads_helper_LDFLAGS = -no-install
 
