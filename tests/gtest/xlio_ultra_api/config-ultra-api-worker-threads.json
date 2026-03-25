@@ -1,0 +1,12 @@
+{
+  "monitor": {
+    "log": {
+      "level": 5
+    }
+  },
+  "performance": {
+    "threading": {
+      "worker_threads": 1
+    }
+  }
+}

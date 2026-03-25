@@ -69,6 +69,7 @@ src/stats/xlio_stats
 src/vlogger/vlogger_test
 src/state_machine/state_machine_test
 tests/gtest/gtest
+tests/gtest/ultra_api_connect_worker_threads_helper
 
 # build products
 build/libxlio.spec
