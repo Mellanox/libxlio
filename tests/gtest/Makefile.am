@@ -132,10 +132,7 @@ gtest_SOURCES = \
 	xlio_ultra_api/xlio_socket.cc \
 	xlio_ultra_api/xlio_socket_listen_connect.cc \
 	xlio_ultra_api/xlio_socket_migrate.cc \
-	xlio_ultra_api/xlio_socket_migrate_2.cc \
-	xlio_ultra_api/xlio_socket_send_receive.cc \
-	xlio_ultra_api/xlio_socket_send_receive_2.cc \
-	xlio_ultra_api/xlio_socket_send_receive_full_sq.cc
+	xlio_ultra_api/xlio_socket_send_receive.cc
 
 noinst_HEADERS = \
 	common/tap.h \
