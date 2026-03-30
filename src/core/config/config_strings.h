@@ -61,6 +61,7 @@ namespace schema_extensions {
 extern const char *JSON_EXTENSION_MEMORY_SIZE; /**< Memory size extension identifier */
 extern const char
     *JSON_EXTENSION_POWER_OF_2_OR_ZERO; /**< Power of 2 validation extension identifier */
+extern const char *JSON_EXTENSION_DEPRECATED; /**< Deprecation marker extension */
 } //namespace schema_extensions
 
 /**

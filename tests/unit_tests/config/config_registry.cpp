@@ -766,6 +766,71 @@ TEST(config, config_registry_power_of_2_validation_zero_values)
     ASSERT_EQ(64LL, registry.get_value<int64_t>("hardware_features.striding_rq.stride_size"));
 }
 
+TEST(config, config_registry_deprecated_no_warning_when_not_set)
+{
+    const char *schema = R"({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "Test",
+        "description": "Test",
+        "type": "object",
+        "properties": {
+            "old_param": {
+                "type": "integer",
+                "default": 10,
+                "title": "Old param",
+                "description": "Deprecated param.",
+                "x-deprecated": "Use 'new_param' instead."
+            },
+            "current_param": {
+                "type": "integer",
+                "default": 20,
+                "title": "Current param",
+                "description": "Current param."
+            }
+        }
+    })";
+
+    conf_file_writer empty_config(R"({})");
+    auto descriptor = load_descriptor(schema);
+    auto loader_queue = std::queue<std::unique_ptr<loader>>();
+    loader_queue.push(std::make_unique<json_loader>(empty_config.get()));
+    config_registry registry(std::move(loader_queue), std::move(descriptor));
+    ASSERT_TRUE(registry.get_deprecation_warnings().empty());
+}
+
+TEST(config, config_registry_deprecated_warning_on_explicit_set)
+{
+    const char *schema = R"({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "Test",
+        "description": "Test",
+        "type": "object",
+        "properties": {
+            "old_param": {
+                "type": "integer",
+                "default": 10,
+                "title": "Old param",
+                "description": "Deprecated param.",
+                "x-deprecated": "Use 'new_param' instead."
+            }
+        }
+    })";
+
+    conf_file_writer json_config(R"({ "old_param": 99 })");
+    env_setter config_file_setter("XLIO_CONFIG_FILE", json_config.get());
+
+    auto descriptor = load_descriptor(schema);
+    auto loader_queue = std::queue<std::unique_ptr<loader>>();
+    loader_queue.push(std::make_unique<json_loader>(json_config.get()));
+    config_registry registry(std::move(loader_queue), std::move(descriptor));
+
+    ASSERT_EQ(registry.get_deprecation_warnings().size(), 1U);
+    EXPECT_NE(registry.get_deprecation_warnings()[0].find("old_param"), std::string::npos);
+    EXPECT_NE(registry.get_deprecation_warnings()[0].find("deprecated"), std::string::npos);
+    EXPECT_NE(registry.get_deprecation_warnings()[0].find("Use 'new_param' instead."),
+              std::string::npos);
+}
+
 TEST(config, config_registry_bad_enum_string)
 {
     conf_file_writer json_config(R"({

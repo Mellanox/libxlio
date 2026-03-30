@@ -42,6 +42,7 @@ const char *JSON_TYPE_ARRAY = "array";
 namespace schema_extensions {
 const char *JSON_EXTENSION_MEMORY_SIZE = "x-memory-size";
 const char *JSON_EXTENSION_POWER_OF_2_OR_ZERO = "x-power-of-2-or-zero";
+const char *JSON_EXTENSION_DEPRECATED = "x-deprecated";
 } // namespace schema_extensions
 
 // Error messages

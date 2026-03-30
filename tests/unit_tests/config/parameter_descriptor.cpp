@@ -593,3 +593,45 @@ TEST_F(power_of_2_or_zero_constraint_test, edge_cases_and_boundaries)
     // Test maximum power of 2 that fits in int64_t
     test_valid_power_of_2(static_cast<int64_t>(1LL << 62)); // 2^62
 }
+
+TEST(config, parameter_descriptor_not_deprecated_by_default)
+{
+    parameter_descriptor desc(std::experimental::any(int64_t(42)));
+    ASSERT_FALSE(desc.is_deprecated());
+    ASSERT_FALSE(static_cast<bool>(desc.get_deprecation_message()));
+}
+
+TEST(config, parameter_descriptor_deprecated_without_message)
+{
+    parameter_descriptor desc(std::experimental::any(int64_t(42)));
+    desc.set_deprecation_message(std::string(""));
+    ASSERT_TRUE(desc.is_deprecated());
+    ASSERT_TRUE(static_cast<bool>(desc.get_deprecation_message()));
+    ASSERT_TRUE(desc.get_deprecation_message()->empty());
+}
+
+TEST(config, parameter_descriptor_deprecated_with_message)
+{
+    parameter_descriptor desc(std::experimental::any(bool(true)));
+    desc.set_deprecation_message(std::string("Use 'new_param' instead."));
+    ASSERT_TRUE(desc.is_deprecated());
+    ASSERT_EQ(*desc.get_deprecation_message(), "Use 'new_param' instead.");
+}
+
+TEST(config, parameter_descriptor_deprecated_cleared_by_nullopt)
+{
+    parameter_descriptor desc(std::experimental::any(int64_t(10)));
+    desc.set_deprecation_message(std::string("old message"));
+    ASSERT_TRUE(desc.is_deprecated());
+    desc.set_deprecation_message(std::experimental::nullopt);
+    ASSERT_FALSE(desc.is_deprecated());
+}
+
+TEST(config, parameter_descriptor_deprecated_survives_copy)
+{
+    parameter_descriptor desc(std::experimental::any(int64_t(5)));
+    desc.set_deprecation_message(std::string("Copied msg"));
+    parameter_descriptor copy(desc);
+    ASSERT_TRUE(copy.is_deprecated());
+    ASSERT_EQ(*copy.get_deprecation_message(), "Copied msg");
+}
