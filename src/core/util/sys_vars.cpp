@@ -1875,6 +1875,7 @@ static void check_deprecated_env_vars()
     static const deprecated_env_var table[] = {
         // Add entries here as env variables are deprecated, e.g.:
         // {SYS_VAR_SOME_PARAM, "Use XLIO_NEW_PARAM instead."},
+        {SYS_VAR_MEMORY_LIMIT_USER, "Use XLIO_MEMORY_LIMIT instead."},
     };
 
     for (const auto &entry : table) {

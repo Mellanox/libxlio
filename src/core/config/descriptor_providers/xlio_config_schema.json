@@ -75,7 +75,8 @@
                             ],
                             "title": "External memory limit (bytes)",
                             "description": "Maps to XLIO_MEMORY_LIMIT_USER environment variable.\nMaximum memory block size XLIO requests from a user-provided allocator.\n\n**Applies only** to applications using XLIO's Extra API (xlio_init_ex) with custom\nmemory_alloc and memory_free callbacks. No effect for standard POSIX applications.\n\n**Behavior:**\n- 0 (default): XLIO requests blocks sized by `core.resources.memory_limit`\n- Non-zero: XLIO requests blocks up to this size from the user allocator\n\nMemory blocks are registered with RDMA hardware for DMA operations (RX/TX buffer pools).\n\n**Sizing:** XLIO requests exactly one block of this size from your allocator. If your\nallocator cannot provide it, or if the block is too small for XLIO's buffer pools,\ninitialization fails with an exception. Set to your allocator's maximum available\ncontiguous block, ensuring it meets XLIO's memory requirements.\n\n**Profile override:** nvme_bf3 profile sets this to 2GB for optimal SPDK performance.\n\n**Example:** DPDK/SPDK integration with 1GB hugepage pools: set to 1GB to match pool size.\n\n**Supports suffixes:** B, KB, MB, GB.",
-                            "x-memory-size": true
+                            "x-memory-size": true,
+                            "x-deprecated": "Use core.resources.memory_limit instead."
                         },
                         "heap_metadata_block_size": {
                             "oneOf": [
