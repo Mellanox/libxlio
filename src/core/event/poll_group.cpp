@@ -244,7 +244,7 @@ void poll_group::close_socket(sockinfo_tcp *si, bool force /*=false*/)
 {
     int fd = si->get_fd();
     close_socket_helper(si, force);
-    g_p_fd_collection->clear_socket(fd);
+    g_p_fd_collection->clear_socket(fd, si);
 }
 
 void poll_group::close_socket_helper(sockinfo_tcp *si, bool force /*=false*/)
