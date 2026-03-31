@@ -320,7 +320,18 @@ extern u32_t rcv_wnd_scale;
 extern u8_t enable_push_flag;
 extern u8_t enable_ts_option;
 extern u32_t tcp_ticks;
+extern u32_t slow_tmr_interval;
 extern ip_route_mtu_fn external_ip_route_mtu;
+
+static inline u32_t tcp_ms_to_ticks(u32_t ms)
+{
+    return (ms + slow_tmr_interval - 1) / slow_tmr_interval;
+}
+
+static inline u32_t tcp_fallback_rto(void)
+{
+    return tcp_ms_to_ticks(TCP_FALLBACK_RTO_MS);
+}
 
 #if defined(__GNUC__) && (((__GNUC__ == 4) && (__GNUC_MINOR__ >= 4)) || (__GNUC__ > 4))
 #pragma GCC visibility push(hidden)
