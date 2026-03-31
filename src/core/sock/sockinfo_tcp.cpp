@@ -422,6 +422,9 @@ void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
     tcp_acked(&m_pcb, nullptr);
     set_blocking(false);
     m_is_xlio_socket = true;
+    // Application-created sockets (xlio_socket_create, attach_xlio_group) are delivered
+    // by definition. accept_clone() overrides this to false for pre-accepted children.
+    m_xlio_socket_delivered = true;
 }
 
 void sockinfo_tcp::set_entity_context(entity_context *ctx)
@@ -656,8 +659,10 @@ void sockinfo_tcp::add_tx_ring_to_group()
 
 void sockinfo_tcp::xlio_socket_event(int event, int value)
 {
-    if (is_xlio_socket()) {
-        /* poll_group::m_socket_event_cb must be always set. */
+    // Only fire events for sockets the application knows about. Between accept_clone()
+    // (SYN) and accept_callback (post-ACK), the socket is xlio but userdata_sq is 0.
+    // Firing events in that window would crash the application.
+    if (is_xlio_socket() && m_xlio_socket_delivered) {
         m_p_group->m_socket_event_cb(reinterpret_cast<xlio_socket_t>(this), m_xlio_socket_userdata,
                                      event, value);
     }
@@ -775,6 +780,14 @@ err_t sockinfo_tcp::rx_lwip_cb_entity_context(void *arg, struct tcp_pcb *pcb, st
 void sockinfo_tcp::err_lwip_cb_xlio_socket(void *pcb_container, err_t err)
 {
     sockinfo_tcp *conn = reinterpret_cast<sockinfo_tcp *>(pcb_container);
+
+    // Handshake failed before accept_callback delivered this socket to the application.
+    // The application has no reference to this socket, so clean up internally without
+    // firing socket_event_cb. This mirrors the m_parent check in err_lwip_cb.
+    if (conn->m_parent) {
+        conn->m_parent->handle_incoming_handshake_failure(conn);
+        return;
+    }
 
     // TODO Reduce copy-paste
     conn->m_conn_state = TCP_CONN_FAILED;
@@ -963,7 +976,15 @@ bool sockinfo_tcp::prepare_listen_to_close()
         new_sock->m_parent = nullptr;
         new_sock->abort_connection();
         new_sock->unlock_tcp_con();
-        close(new_sock->get_fd());
+        // Sockets in the poll_group (via add_socket in accept_clone) must be closed
+        // through close_socket() so they are removed from m_sockets_list atomically.
+        // Plain close(fd) only goes through fd_collection, leaving the socket in the
+        // poll_group's list — ~poll_group() would then double-destroy it.
+        if (new_sock->m_p_group) {
+            new_sock->m_p_group->close_socket(new_sock);
+        } else {
+            close(new_sock->get_fd());
+        }
     }
 
     // remove the sockets from the syn_received connections list
@@ -978,7 +999,11 @@ bool sockinfo_tcp::prepare_listen_to_close()
         new_sock->m_parent = NULL;
         new_sock->abort_connection();
         new_sock->unlock_tcp_con();
-        close(new_sock->get_fd());
+        if (new_sock->m_p_group) {
+            new_sock->m_p_group->close_socket(new_sock);
+        } else {
+            close(new_sock->get_fd());
+        }
     }
 
     return true;
@@ -1970,7 +1995,14 @@ void sockinfo_tcp::handle_incoming_handshake_failure(sockinfo_tcp *child_conn)
 
     child_conn->lock_tcp_con();
 
-    if (safe_mce_sys().tcp_ctl_thread != option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+    if (child_conn->is_xlio_socket()) {
+        // This socket was never delivered to the application (accept_callback never
+        // fired). Revoke xlio_socket status so that prepare_to_close and
+        // tcp_state_observer won't fire application-level events during cleanup.
+        child_conn->m_is_xlio_socket = false;
+        child_conn->m_p_group->mark_socket_to_close(child_conn);
+    } else if (safe_mce_sys().tcp_ctl_thread !=
+               option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
         // Object destruction is expected to happen in internal thread. Unless XLIO is in late
         // terminating stage, in which case we don't expect to handle packets.
         // Calling close() under lock will prevent internal thread to delete the object before
@@ -3512,6 +3544,9 @@ sockinfo_tcp *sockinfo_tcp::accept_clone()
             .userdata_sq = 0,
         };
         si->set_xlio_socket(&attr);
+        // Pre-accepted child: the application doesn't know about this socket yet.
+        // Suppress events until accept_lwip_cb delivers it via accept_callback.
+        si->m_xlio_socket_delivered = false;
         m_p_group->add_socket(si);
     }
 
@@ -3752,6 +3787,7 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     conn->lock_tcp_con();
 
     if (conn->is_xlio_socket()) {
+        new_sock->m_xlio_socket_delivered = true;
         conn->accept_connection_xlio_socket(new_sock);
     } else {
         conn->m_accepted_conns.push_back(new_sock);
@@ -3979,7 +4015,13 @@ err_t sockinfo_tcp::syn_received_lwip_cb(void *arg, struct tcp_pcb *newpcb)
          */
         new_sock->unlock_tcp_con();
 
-        close(new_sock->get_fd());
+        // See comment in prepare_listen_to_close: poll_group sockets must go
+        // through close_socket() to avoid double-destroy with fd_collection.
+        if (new_sock->m_p_group) {
+            new_sock->m_p_group->close_socket(new_sock);
+        } else {
+            close(new_sock->get_fd());
+        }
         listen_sock->m_tcp_con_lock.lock();
         IF_STATS_O(listen_sock, listen_sock->m_p_socket_stats->listen_counters.n_conn_dropped++);
         return ERR_ABRT;
