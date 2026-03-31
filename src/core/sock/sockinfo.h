@@ -539,6 +539,9 @@ protected:
     poll_group *m_p_group = nullptr;
     // Flag indicating if this is an XLIO socket
     bool m_is_xlio_socket = false;
+    // Set when accept_callback delivers this socket to the application.
+    // Gates xlio_socket_event: events only fire for sockets the app knows about.
+    bool m_xlio_socket_delivered = false;
     // Flag indicating if this is an XLIO socket terminat CB was called
     bool m_is_xlio_socket_terminated = false;
 
