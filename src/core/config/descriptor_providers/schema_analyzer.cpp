@@ -445,6 +445,7 @@ schema_analyzer::analysis_result::analysis_result(schema_analyzer &analyzer)
     , memory_cfg(analyzer.analyze_memory_size_extension_config())
     , constraint_cfg(analyzer.analyze_constraint_config())
     , enum_cfg(analyzer.analyze_enum_mapping_config())
+    , deprecation_info(analyzer.determine_deprecated_info())
 {
 }
 
@@ -462,4 +463,28 @@ bool schema_analyzer::analysis_result::needs_constraint_validation() const
 bool schema_analyzer::analysis_result::needs_enum_mapping() const
 {
     return static_cast<bool>(enum_cfg);
+}
+
+std::experimental::optional<std::string> schema_analyzer::determine_deprecated_info()
+{
+    json_object *deprecated_field = json_utils::try_get_field(
+        m_property_obj, config_strings::schema_extensions::JSON_EXTENSION_DEPRECATED);
+    if (!deprecated_field) {
+        return std::experimental::nullopt;
+    }
+
+    json_type type = json_object_get_type(deprecated_field);
+    if (type == json_type_boolean) {
+        if (json_object_get_boolean(deprecated_field)) {
+            return std::string();
+        }
+        return std::experimental::nullopt;
+    }
+
+    if (type == json_type_string) {
+        const char *msg = json_object_get_string(deprecated_field);
+        return std::string(msg ? msg : "");
+    }
+
+    throw_xlio_exception("x-deprecated must be boolean or string for: " + m_path);
 }

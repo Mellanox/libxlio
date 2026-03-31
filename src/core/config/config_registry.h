@@ -106,6 +106,15 @@ public:
 
     const config_descriptor &get_config_descriptor() const { return m_config_descriptor; }
 
+    /**
+     * @brief Returns deprecation warnings collected during loading
+     * @return Vector of human-readable deprecation warning strings
+     */
+    const std::vector<std::string> &get_deprecation_warnings() const
+    {
+        return m_deprecation_warnings;
+    }
+
 private:
     // Holds all values set by config file / inline config
     std::map<std::string, std::experimental::any> m_config_data;
@@ -114,6 +123,8 @@ private:
     config_descriptor m_config_descriptor;
     // Holds all sources that contributed to the configuration
     std::vector<std::string> m_sources;
+    // Deprecation warnings collected during loading
+    std::vector<std::string> m_deprecation_warnings;
 
     std::experimental::any get_default_value_as_any(const std::string &key) const;
     void initialize_from_loaders(std::queue<std::unique_ptr<loader>> &&value_loaders);

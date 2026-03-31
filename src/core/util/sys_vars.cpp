@@ -1815,6 +1815,12 @@ void mce_sys_var::apply_config_from_registry()
     read_hypervisor_info();
 
     m_runtime_registry = runtime_registry();
+
+    for (const auto &warning :
+         m_runtime_registry->get_config_registry().get_deprecation_warnings()) {
+        vlog_printf(VLOG_WARNING, "%s\n", warning.c_str());
+    }
+
     sys_var_configurator configurator(*m_runtime_registry, *this);
     configurator.configure();
 }
@@ -1859,6 +1865,27 @@ void mce_sys_var::get_app_name()
     fclose(fp);
 }
 
+static void check_deprecated_env_vars()
+{
+    struct deprecated_env_var {
+        const char *name;
+        const char *message;
+    };
+
+    static const deprecated_env_var table[] = {
+        // Add entries here as env variables are deprecated, e.g.:
+        // {SYS_VAR_SOME_PARAM, "Use XLIO_NEW_PARAM instead."},
+        {SYS_VAR_MEMORY_LIMIT_USER, "Use XLIO_MEMORY_LIMIT instead."},
+    };
+
+    for (const auto &entry : table) {
+        if (std::getenv(entry.name)) {
+            vlog_printf(VLOG_WARNING, "Environment variable '%s' is deprecated. %s\n", entry.name,
+                        entry.message ? entry.message : "");
+        }
+    }
+}
+
 void mce_sys_var::get_params()
 {
     get_app_name();
@@ -1867,6 +1894,7 @@ void mce_sys_var::get_params()
     const char *use_new_config = std::getenv("XLIO_USE_NEW_CONFIG");
     if (!use_new_config || std::string(use_new_config) != "1") {
         get_env_params();
+        check_deprecated_env_vars();
         fixup_params();
     } else {
         g_use_new_config = true;

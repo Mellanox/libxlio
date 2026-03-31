@@ -77,6 +77,9 @@ public:
         memory_size_extension_config_t memory_cfg; /**< Memory size transformation configuration */
         constraint_config constraint_cfg; /**< Constraint validation configuration */
         enum_mapping_config_t enum_cfg; /**< Enum mapping configuration */
+        std::experimental::optional<std::string>
+            deprecation_info; /**< nullopt = not deprecated, empty = deprecated without message,
+                                   non-empty = deprecated with message */
 
         /**
          * @brief Checks if value transformation is needed for this property
@@ -128,6 +131,7 @@ private:
     memory_size_extension_config_t analyze_memory_size_extension_config();
     constraint_config analyze_constraint_config();
     enum_mapping_config_t analyze_enum_mapping_config();
+    std::experimental::optional<std::string> determine_deprecated_info();
 
     // Helper methods
     bool has_memory_size_flag();

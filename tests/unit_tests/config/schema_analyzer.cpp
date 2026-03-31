@@ -212,3 +212,67 @@ TEST_F(schema_analyzer_test, analyze_property_with_constraints)
     ASSERT_EQ(std::experimental::any_cast<int64_t>(*analysis.default_value), 50);
     json_object_put(constrained_property);
 }
+
+TEST_F(schema_analyzer_test, not_deprecated_by_default)
+{
+    auto analysis = schema_analyzer::analyze(simple_property, "test.simple");
+    ASSERT_FALSE(static_cast<bool>(analysis.deprecation_info));
+}
+
+TEST_F(schema_analyzer_test, deprecated_boolean_true)
+{
+    json_object *prop = json_object_new_object();
+    json_object_object_add(prop, "type", json_object_new_string("integer"));
+    json_object_object_add(prop, "default", json_object_new_int(10));
+    json_object_object_add(prop, "title", json_object_new_string("Deprecated Param"));
+    json_object_object_add(prop, "description", json_object_new_string("A deprecated param"));
+    json_object_object_add(prop, "x-deprecated", json_object_new_boolean(true));
+
+    auto analysis = schema_analyzer::analyze(prop, "test.deprecated_bool");
+    ASSERT_TRUE(static_cast<bool>(analysis.deprecation_info));
+    ASSERT_TRUE(analysis.deprecation_info->empty());
+    json_object_put(prop);
+}
+
+TEST_F(schema_analyzer_test, deprecated_boolean_false_means_not_deprecated)
+{
+    json_object *prop = json_object_new_object();
+    json_object_object_add(prop, "type", json_object_new_string("integer"));
+    json_object_object_add(prop, "default", json_object_new_int(10));
+    json_object_object_add(prop, "title", json_object_new_string("Not Deprecated"));
+    json_object_object_add(prop, "description", json_object_new_string("Not deprecated"));
+    json_object_object_add(prop, "x-deprecated", json_object_new_boolean(false));
+
+    auto analysis = schema_analyzer::analyze(prop, "test.not_deprecated_false");
+    ASSERT_FALSE(static_cast<bool>(analysis.deprecation_info));
+    json_object_put(prop);
+}
+
+TEST_F(schema_analyzer_test, deprecated_with_string_message)
+{
+    json_object *prop = json_object_new_object();
+    json_object_object_add(prop, "type", json_object_new_string("boolean"));
+    json_object_object_add(prop, "default", json_object_new_boolean(true));
+    json_object_object_add(prop, "title", json_object_new_string("Old Toggle"));
+    json_object_object_add(prop, "description", json_object_new_string("An old toggle"));
+    json_object_object_add(prop, "x-deprecated",
+                           json_object_new_string("Use 'new_toggle' instead."));
+
+    auto analysis = schema_analyzer::analyze(prop, "test.deprecated_msg");
+    ASSERT_TRUE(static_cast<bool>(analysis.deprecation_info));
+    ASSERT_EQ(*analysis.deprecation_info, "Use 'new_toggle' instead.");
+    json_object_put(prop);
+}
+
+TEST_F(schema_analyzer_test, deprecated_invalid_type_throws)
+{
+    json_object *prop = json_object_new_object();
+    json_object_object_add(prop, "type", json_object_new_string("integer"));
+    json_object_object_add(prop, "default", json_object_new_int(1));
+    json_object_object_add(prop, "title", json_object_new_string("Bad Deprecated"));
+    json_object_object_add(prop, "description", json_object_new_string("Bad deprecated type"));
+    json_object_object_add(prop, "x-deprecated", json_object_new_int(42));
+
+    ASSERT_THROW(schema_analyzer::analyze(prop, "test.bad_deprecated"), xlio_exception);
+    json_object_put(prop);
+}

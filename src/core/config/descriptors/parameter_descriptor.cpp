@@ -24,6 +24,23 @@ const std::experimental::optional<std::string> &parameter_descriptor::get_title(
     return m_title;
 }
 
+void parameter_descriptor::set_deprecation_message(
+    const std::experimental::optional<std::string> &msg)
+{
+    m_deprecation_message = msg;
+}
+
+bool parameter_descriptor::is_deprecated() const
+{
+    return static_cast<bool>(m_deprecation_message);
+}
+
+const std::experimental::optional<std::string> &parameter_descriptor::get_deprecation_message()
+    const
+{
+    return m_deprecation_message;
+}
+
 /**
  * @brief Parse memory size string with suffixes (e.g., "4GB", "512MB", "1024KB", "1024B", "5G")
  * @param str The string to parse. Must match "^[0-9]+[KMGkmg]?[B]?$" (case insensitive)
@@ -163,6 +180,7 @@ parameter_descriptor::parameter_descriptor(const parameter_descriptor &pd)
     , m_value_transformer(pd.m_value_transformer)
     , m_type(pd.m_type)
     , m_title(pd.m_title)
+    , m_deprecation_message(pd.m_deprecation_message)
 {
 }
 

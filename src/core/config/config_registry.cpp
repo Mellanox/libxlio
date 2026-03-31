@@ -113,6 +113,16 @@ void config_registry::initialize_from_loaders(std::queue<std::unique_ptr<loader>
                 // Now, validate constraints on the canonical value.
                 param_desc.validate_constraints(canonical_value);
 
+                if (param_desc.is_deprecated()) {
+                    std::string warn =
+                        "In '" + loader->source() + "': Parameter '" + key + "' is deprecated.";
+                    const auto &msg = param_desc.get_deprecation_message();
+                    if (msg && !msg->empty()) {
+                        warn += " " + *msg;
+                    }
+                    m_deprecation_warnings.push_back(std::move(warn));
+                }
+
             } catch (const xlio_exception &e) {
                 // Check if this is a type mismatch for a parent object
                 if (m_config_descriptor.is_parent_of_parameter_keys(key)) {

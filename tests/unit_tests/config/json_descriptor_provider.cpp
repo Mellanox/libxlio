@@ -716,3 +716,64 @@ TEST(config, parent_objects_return_correct_expected_type)
     EXPECT_THROW(descriptor.get_parent_expected_type("network.tcp.enable"), xlio_exception);
     EXPECT_THROW(descriptor.get_parent_expected_type("nonexistent"), xlio_exception);
 }
+
+TEST(config, json_descriptor_provider_deprecated_boolean)
+{
+    const char *schema = R"({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "Test Schema",
+        "description": "Test",
+        "type": "object",
+        "properties": {
+            "old_param": {
+                "type": "integer",
+                "default": 100,
+                "title": "Old parameter",
+                "description": "This parameter is deprecated.",
+                "x-deprecated": true
+            },
+            "current_param": {
+                "type": "integer",
+                "default": 200,
+                "title": "Current parameter",
+                "description": "This parameter is current."
+            }
+        }
+    })";
+
+    json_descriptor_provider provider(schema);
+    config_descriptor descriptor = provider.load_descriptors();
+
+    auto old_desc = descriptor.get_parameter("old_param");
+    ASSERT_TRUE(old_desc.is_deprecated());
+    ASSERT_TRUE(old_desc.get_deprecation_message()->empty());
+
+    auto current_desc = descriptor.get_parameter("current_param");
+    ASSERT_FALSE(current_desc.is_deprecated());
+}
+
+TEST(config, json_descriptor_provider_deprecated_with_message)
+{
+    const char *schema = R"({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "Test Schema",
+        "description": "Test",
+        "type": "object",
+        "properties": {
+            "old_toggle": {
+                "type": "boolean",
+                "default": false,
+                "title": "Old toggle",
+                "description": "Deprecated toggle.",
+                "x-deprecated": "Use 'new_toggle' instead."
+            }
+        }
+    })";
+
+    json_descriptor_provider provider(schema);
+    config_descriptor descriptor = provider.load_descriptors();
+
+    auto desc = descriptor.get_parameter("old_toggle");
+    ASSERT_TRUE(desc.is_deprecated());
+    ASSERT_EQ(*desc.get_deprecation_message(), "Use 'new_toggle' instead.");
+}

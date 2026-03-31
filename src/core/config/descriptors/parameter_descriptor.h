@@ -104,6 +104,25 @@ public:
     const std::experimental::optional<std::string> &get_title() const;
 
     /**
+     * @brief Marks this parameter as deprecated with an optional message
+     * @param msg nullopt = not deprecated, empty string = deprecated without message,
+     *            non-empty = deprecated with the given message
+     */
+    void set_deprecation_message(const std::experimental::optional<std::string> &msg);
+
+    /**
+     * @brief Checks whether this parameter is deprecated
+     * @return True if the parameter is deprecated
+     */
+    bool is_deprecated() const;
+
+    /**
+     * @brief Gets the deprecation message, if any
+     * @return nullopt if not deprecated, otherwise the deprecation message (may be empty)
+     */
+    const std::experimental::optional<std::string> &get_deprecation_message() const;
+
+    /**
      * @brief Validates a value against all constraints
      * @param value Value to validate
      */
@@ -194,6 +213,8 @@ private:
     std::type_index m_type;
     std::experimental::optional<std::string>
         m_title; /**< Title of the parameter as defined in schema */
+    std::experimental::optional<std::string>
+        m_deprecation_message; /**< nullopt = not deprecated; set = deprecated (may have message) */
 
     /**
      * @brief Parses a memory size string with suffixes (KB, MB, GB)

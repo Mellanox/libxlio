@@ -173,6 +173,10 @@ std::unique_ptr<parameter_descriptor> json_descriptor_provider::create_descripto
         apply_enum_mapping(descriptor.get(), analysis.enum_cfg);
     }
 
+    if (analysis.deprecation_info) {
+        descriptor->set_deprecation_message(analysis.deprecation_info);
+    }
+
     return descriptor;
 }
 
