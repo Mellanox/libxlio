@@ -580,8 +580,7 @@ static inline bool tcp_user_timeout_occured(struct tcp_pcb *pcb)
     u32_t user_timeout_ticks = tcp_ms_to_ticks(pcb->user_timeout_ms);
 
     return pcb->user_timeout_ms != 0 && pcb->ticks_since_data_sent > 0 &&
-        (u32_t)pcb->ticks_since_data_sent > user_timeout_ticks &&
-        (get_tcp_state(pcb) == ESTABLISHED || get_tcp_state(pcb) == SYN_SENT);
+        (u32_t)pcb->ticks_since_data_sent > user_timeout_ticks;
 }
 
 /**
@@ -620,11 +619,12 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
             err = ERR_TIMEOUT;
             pcb_reset += (pcb->so_options & SOF_KEEPALIVE);
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: user timeout occurred\n"));
-        } else if (get_tcp_state(pcb) == SYN_SENT && pcb->nrtx == TCP_SYNMAXRTX) {
+        } else if (get_tcp_state(pcb) == SYN_SENT && pcb->nrtx >= TCP_SYNMAXRTX &&
+                   pcb->user_timeout_ms == 0) {
             ++pcb_remove;
             err = ERR_TIMEOUT;
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: max SYN retries reached\n"));
-        } else if (pcb->nrtx == TCP_MAXRTX) {
+        } else if (pcb->nrtx >= TCP_MAXRTX && pcb->user_timeout_ms == 0) {
             ++pcb_remove;
             err = ERR_ABRT;
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: max DATA retries reached\n"));
@@ -635,7 +635,7 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
                 pcb->persist_cnt++;
                 if (pcb->persist_cnt >= tcp_persist_backoff[pcb->persist_backoff - 1]) {
                     pcb->persist_cnt = 0;
-                    if (pcb->persist_backoff < sizeof(tcp_persist_backoff)) {
+                    if (pcb->persist_backoff < ARRAY_SIZE(tcp_persist_backoff)) {
                         pcb->persist_backoff++;
                     }
                     /* Use tcp_keepalive() instead of tcp_zero_window_probe() to probe for window
@@ -659,10 +659,26 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
                         pcb->flags |= TF_SYN_RTO_REXMITTED;
                     }
 
-                    /* RFC 6298 5.5: Exponential backoff of the retransmission timer. */
-                    pcb->rto =
-                        tcp_clamp_rto_ticks(tcp_clamp_rto_signed_ticks((pcb->sa >> 3) + pcb->sv)
-                                            << tcp_backoff[pcb->nrtx]);
+                    /* RFC 6298 5.5: Exponential backoff of the retransmission timer.
+                     * With TCP_USER_TIMEOUT set the count-based abort (TCP_MAXRTX) is
+                     * skipped, so nrtx can grow past the tcp_backoff[] bounds; cap the
+                     * index to the last (maximum) backoff slot. Use an explicit guard
+                     * (not LWIP_MIN) so Coverity tracks the bound without a cast_overflow
+                     * warning. */
+                    u8_t backoff_idx = pcb->nrtx;
+                    if (backoff_idx >= ARRAY_SIZE(tcp_backoff)) {
+                        backoff_idx = (u8_t)(ARRAY_SIZE(tcp_backoff) - 1);
+                    }
+                    u32_t rto_ticks = tcp_clamp_rto_signed_ticks((pcb->sa >> 3) + pcb->sv)
+                        << tcp_backoff[backoff_idx];
+                    /* Cap the backed-off RTO at TCP_RTO_MAX (RFC 6298 2.5 / Linux
+                     * 120s). The ~1s initial RTO would otherwise reach ~150s via
+                     * the tcp_backoff shift. */
+                    u32_t max_rto_ticks = TCP_RTO_MAX / slow_tmr_interval;
+                    if (rto_ticks > max_rto_ticks) {
+                        rto_ticks = max_rto_ticks;
+                    }
+                    pcb->rto = tcp_clamp_rto_ticks(rto_ticks);
 
                     /* Reset the retransmission timer. */
                     pcb->rtime = 0;
