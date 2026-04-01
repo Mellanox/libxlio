@@ -1615,7 +1615,9 @@ void tcp_rexmit_rto(struct tcp_pcb *pcb)
     pcb->last_unacked = NULL;
 
     /* increment number of retransmissions */
-    ++pcb->nrtx;
+    if (pcb->nrtx < UINT8_MAX) {
+        ++pcb->nrtx;
+    }
 
     /* Don't take any RTT measurements after retransmitting. */
     pcb->rttest = 0;
@@ -1660,7 +1662,9 @@ void tcp_rexmit(struct tcp_pcb *pcb)
         pcb->last_unsent = seg;
     }
 
-    ++pcb->nrtx;
+    if (pcb->nrtx < UINT8_MAX) {
+        ++pcb->nrtx;
+    }
 
     /* Don't take any rtt measurements after retransmitting. */
     pcb->rttest = 0;
