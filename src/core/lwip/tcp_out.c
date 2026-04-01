@@ -1660,7 +1660,9 @@ void tcp_rexmit(struct tcp_pcb *pcb)
         pcb->last_unsent = seg;
     }
 
-    ++pcb->nrtx;
+    if (pcb->nrtx < TCP_MAXRTX) {
+        ++pcb->nrtx;
+    }
 
     /* Don't take any rtt measurements after retransmitting. */
     pcb->rttest = 0;
