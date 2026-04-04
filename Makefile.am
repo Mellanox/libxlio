@@ -1,7 +1,33 @@
 SUBDIRS := third_party src tools docs/man
-
-
 DIST_SUBDIRS := third_party src tests tools docs/man
+
+# Build and install dpcp only if it is the built-in one.
+# So we do not put submodules/libdpcp in SUBDIRS, instead we do this:
+if BUILD_BUILTIN_DPCP
+
+# When working with the built-in dpcp, also add it to the source dist
+DIST_SUBDIRS += submodules/libdpcp
+
+# BUILT_SOURCES are built before anything else
+BUILT_SOURCES = .libdpcp-installed
+CLEANFILES = .libdpcp-installed
+
+LIBDPCP_DIR = $(top_builddir)/submodules/libdpcp
+
+.libdpcp-installed:
+	@test -f "$(LIBDPCP_DIR)/Makefile" || { echo "Error: libdpcp submodule at $(LIBDPCP_DIR) not configured."; exit 1; }
+	$(MAKE) -C "$(LIBDPCP_DIR)"
+	$(MAKE) -C "$(LIBDPCP_DIR)" install
+	touch $@
+
+clean-local:
+	-$(MAKE) -C "$(LIBDPCP_DIR)" clean 2>/dev/null || true
+	rm -f .libdpcp-installed
+
+distclean-local:
+	-$(MAKE) -C "$(LIBDPCP_DIR)" distclean 2>/dev/null || true
+
+endif  # of BUILD_BUILTIN_DPCP
 
 noinst_SCRIPTS = \
 	$(wildcard contrib/scripts/*)
